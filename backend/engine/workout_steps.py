@@ -4,7 +4,7 @@ work, rest, cool-down and other steps, ×N repeat blocks (one level of nesting),
 each step with a duration and a target. The 課表 page's editor shows and edits
 it; sync/coros_workouts pushes it.
 
-    {"v": 1, "origin": "derived" | "template:<variant key>" | "user",
+    {"v": 1, "origin": "derived" | "template:<variant key>" | "user", ["tpl": <user template id>,]
      "items": [
        {"id": "a1", "kind": "warm", "dur": {"type": "time", "value": 600},
         "target": {"type": "auto", "intent": "easy"}, "note": "輕鬆跑暖身（跑到間歇地點）"},
@@ -667,7 +667,12 @@ def normalize(d) -> dict:
     origin = str(d.get("origin") or "user")
     if not (origin in ("derived", "user") or origin.startswith("template:")):
         origin = "user"
-    return {"v": V, "origin": origin[:40], "items": items}
+    out = {"v": V, "origin": origin[:40], "items": items}
+    # the user template it was made from (engine/user_templates.py: its route GPX on the chart)
+    tpl = d.get("tpl")
+    if isinstance(tpl, (int, str)) and not isinstance(tpl, bool) and str(tpl).isdigit() and 0 < int(tpl) < 10 ** 9:
+        out["tpl"] = int(tpl)
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -1449,7 +1454,7 @@ def template_steps(key: str, level: str = "std") -> Optional[dict]:
     return from_variant(v, level) if v is not None else None
 
 
-def templates(prefs=None) -> dict:
+def templates(prefs=None, user: Optional[dict] = None) -> dict:
     """The editor's 插入範本 (static/workout_editor.js): {"cats": [{id, label, subs?}],
     "groups": [{"group", "cat", "sub", "title", "rows": [{key, label, title, src, url,
     src_kind, items (main set), full, equiv, family, purpose}]}]}. Each category: the
@@ -1457,11 +1462,14 @@ def templates(prefs=None) -> dict:
     variants — both split by workout_templates.family_of (有氧間歇 / VO2max 間歇 / 速度), 速度 also
     strides and short hill sprints (SP-32 follow-up: they are 速度 by family_of, but live in
     other categories); 測試 also the app's CP protocols; 越野跑 split by its kind (結構化爬升 /
-    技術地形 / 下坡, SP-62)."""
+    技術地形 / 下坡, SP-62). `user` ({"templates", "cats"}, engine/user_templates.py, SP-36):
+    the user's own templates first in every category they are in (「我的範本」), and their
+    own categories as extra tabs."""
     from backend.engine import cp_protocols as CPP
+    from backend.engine import user_templates as UT
     from backend.engine import workout_templates as WT
     lib = [(t, WT.row(t)) for t in WT.TEMPLATES]
-    groups = []
+    groups = UT.groups((user or {}).get("templates") or [])
 
     def g(cat, title, rows, sub=None):
         if rows:
@@ -1527,7 +1535,8 @@ def templates(prefs=None) -> dict:
         for r in gr["rows"]:
             # the editor badges these when there is no threshold pace (their pace is × it)
             r["needs_tpace"] = needs_tpace(r.get("full") or r.get("items"))
-    return {"cats": WT.cats(), "groups": groups, "no_tpace_text": no_tpace_text()}
+    return {"cats": WT.cats() + list((user or {}).get("cats") or []), "groups": groups,
+            "no_tpace_text": no_tpace_text()}
 
 
 def zones_table(c: Ctx) -> dict:
