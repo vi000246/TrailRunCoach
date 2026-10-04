@@ -27,16 +27,16 @@ FIT 資料集（COROS／TP）的規則寫在 `backend/engine/wko5expr/fitdataset
 | 順序 | 來源 | 程式 | 管哪些值 |
 |---|---|---|---|
 | 1 | 季計畫 `app 資料目錄裡的 `plan.json`` 有日期的 thresholds 列 | `planning.Plan.threshold_on`（`backend/engine/planning.py:205-218`）。從 2026-10-01 起，測試只往後生效，不再往前套 | lthr、aethr、mhr、cp |
-| 2 | app DB `athlete_settings` | `fitdataset._load_db_settings`（`fitdataset.py:675-701`） | **只用** weight_kg、run_ftp_w、threshold_pace_s_per_km |
-| 3 | 從 FIT 推估、每 30 天一格的 as-of 值 | `fitdataset._estimate_settings`（`fitdataset.py:703-748`），`ESTIMATE_STEP_DAYS = 30`（`fitdataset.py:68-72`） | runthr（LTHR）。CP 另有一條 Stryd-only PD 擬合：`_estimate_cp`（`fitdataset.py:844-878`） |
+| 2 | app DB `athlete_settings` | `fitdataset._load_db_settings`（`backend/engine/wko5expr/fitdataset.py:675-701`） | **只用** weight_kg、run_ftp_w、threshold_pace_s_per_km |
+| 3 | 從 FIT 推估、每 30 天一格的 as-of 值 | `fitdataset._estimate_settings`（`backend/engine/wko5expr/fitdataset.py:703-748`），`ESTIMATE_STEP_DAYS = 30`（`backend/engine/wko5expr/fitdataset.py:68-72`） | runthr（LTHR）。CP 另有一條 Stryd-only PD 擬合：`_estimate_cp`（`backend/engine/wko5expr/fitdataset.py:844-878`） |
 | 4 | 未設定 | — | — |
 
-- WKO5 athlete 檔只在明確開啟 `charts.fit_settings_from_wko5` 時才用（`fitdataset.py:33-35`、`:481-495`）。
+- WKO5 athlete 檔只在明確開啟 `charts.fit_settings_from_wko5` 時才用（`backend/engine/wko5expr/fitdataset.py:33-35`、`:481-495`）。
 - `Dataset.setting` 對 `*thr`／`*mhr` 會先查計畫（`backend/engine/wko5expr/dataset.py:474-485`）。
-- CP 的順序是：計畫 → `athlete_settings.run_ftp_w` → Stryd PD 擬合（`fitdataset.py:887-916`）。
-- AeT 的順序是：計畫 aethr → 0.89 × LTHR（`dataset.py:504-512`）。
+- CP 的順序是：計畫 → `athlete_settings.run_ftp_w` → Stryd PD 擬合（`backend/engine/wko5expr/fitdataset.py:887-916`）。
+- AeT 的順序是：計畫 aethr → 0.89 × LTHR（`backend/engine/wko5expr/dataset.py:504-512`）。
 
-**COROS 帳號那一列（LTHR 182／FTP 200）被忽略**（`fitdataset.py:676-682`、`:698-701`，原因字串 `IGNORED_WHY` 在 `:90-91`）：
+**COROS 帳號那一列（LTHR 182／FTP 200）被忽略**（`backend/engine/wko5expr/fitdataset.py:676-682`、`:698-701`，原因字串 `IGNORED_WHY` 在 `:90-91`）：
 
 - 這一列是 `coros_client.login` 寫進去的 COROS zoneData，沒記錄是哪個運動。
 - DB 目前有兩列，都是 `ftp_w 200, weight 70, lthr 182`。
@@ -48,17 +48,17 @@ FIT 資料集（COROS／TP）的規則寫在 `backend/engine/wko5expr/fitdataset
 
 | 值 | 今天的數字 | 來源（app 顯示） | 實際是什麼 |
 |---|---|---|---|
-| LTHR | **160 bpm** | 「你的測試（測試日）」（`zones.threshold_info`，`backend/engine/zones.py:155-159`；`training_targets` 的 `lthr_src`，`zones.py:277-278`） | **不是測試**。是 `apply-estimate` 套用的自動估算（`backend/api/plan.py:286-312`），標籤誤導，見 §3.4 改動 1 |
-| AeT | **142.4 ≈ 142 bpm** | 「0.89 × LTHR（Friel Z2 上限）」（`zones.py:281-287`；`racepower/athlete.py:445-449`） | 沒有實測。自動估算 `estimate_aet` 和 B3 聚合 `aet_aggregate` 都**算不出來**，見下 |
+| LTHR | **160 bpm** | 「你的測試（測試日）」（`zones.threshold_info`，`backend/engine/zones.py:155-159`；`training_targets` 的 `lthr_src`，`backend/engine/zones.py:277-278`） | **不是測試**。是 `apply-estimate` 套用的自動估算（`backend/api/plan.py:286-312`），標籤誤導，見 §3.4 改動 1 |
+| AeT | **142.4 ≈ 142 bpm** | 「0.89 × LTHR（Friel Z2 上限）」（`backend/engine/zones.py:281-287`；`backend/engine/racepower/athlete.py:445-449`） | 沒有實測。自動估算 `estimate_aet` 和 B3 聚合 `aet_aggregate` 都**算不出來**，見下 |
 | CP | **220 W** | 「你的測試（測試日）」 | 3′/12′ 測試，3′ 段沒有全力，兩點法無效。用 W′ 先驗 13.1 kJ 單點推：12′ 段平均功率 − 13100/720 = 220 W |
-| 閾值配速 | **6.01 min/km（6:01 /km）** | 「推估：CP 220 W × 近 90 天 41 次 Stryd 路跑的速度／功率比（中位數 12.6 mm/s/W）」（`backend/engine/thresholds.py:194-224`） | 推估（`thresholds.py:112-133`） |
+| 閾值配速 | **6.01 min/km（6:01 /km）** | 「推估：CP 220 W × 近 90 天 41 次 Stryd 路跑的速度／功率比（中位數 12.6 mm/s/W）」（`backend/engine/thresholds.py:194-224`） | 推估（`backend/engine/thresholds.py:112-133`） |
 | 體重 | 70 kg | athlete_settings | — |
 | 最大心率 | **不在任何區間計算裡**。計畫 mhr 是空的，FIT 資料集沒有 runmhr | — | 觀測值見 §1.5 |
 
 **AeT 自動估算的實際輸出**（`thresholds.estimate`，180 天窗）：
 
 - 10 個穩定跑的飄移點，心率 133–162 bpm。
-- 斜率是**負的**：每 +10 bpm 飄移 −2.1 pp。→「心率越高飄移沒有跟著變大」，value = None（`algorithms/threshold_estimate.py:181-184`）。
+- 斜率是**負的**：每 +10 bpm 飄移 −2.1 pp。→「心率越高飄移沒有跟著變大」，value = None（`backend/engine/algorithms/threshold_estimate.py:181-184`）。
 - 飄移 < 5% 的跑步裡，前半段心率最高到 **162**（`below`）。
 
 **B3 聚合**（`drift_agg.aet_validity`，`backend/engine/drift_agg.py:146-158`）：
@@ -73,43 +73,43 @@ FIT 資料集（COROS／TP）的規則寫在 `backend/engine/wko5expr/fitdataset
 ### 1.3 輕鬆跑上限到底是什麼
 
 - **不是最大心率，也不是 %HRR。** 是 AeT。沒有 AeT 時用 `0.89 × LTHR`。這條規則分散在下面這些地方：
-  - `Dataset.aethr`（`dataset.py:504-512`）
-  - `zones.training_targets`（`zones.py:281-287`）
-  - `racepower.athlete.thresholds_as_of`（`racepower/athlete.py:419-451`）
-  - `racepower/intensity.py:17-18,57-58`（`aet_frac_lthr 0.89`）
-  - `api/plan.py:70-71`（`_effective` 顯示 `round(0.89 × LTHR, 1)`）
+  - `Dataset.aethr`（`backend/engine/wko5expr/dataset.py:504-512`）
+  - `zones.training_targets`（`backend/engine/zones.py:281-287`）
+  - `racepower.athlete.thresholds_as_of`（`backend/engine/racepower/athlete.py:419-451`）
+  - `backend/engine/racepower/intensity.py:17-18,57-58`（`aet_frac_lthr 0.89`）
+  - `backend/api/plan.py:70-71`（`_effective` 顯示 `round(0.89 × LTHR, 1)`）
   - COROS 課表推送 `backend/sync/coros_workouts.py:124-130`（上限 = AeT 或 0.89 × LTHR，下限 0.75 × LTHR）
 - 0.89 是 WKO5 Friel HR 表的 Z2（Aerobic）上緣。Friel 原文 Z2 = 85–89% LTHR（§2.1）。
 - **今天的數字**：
   - 0.89 × 160 = **142.4 → 142 bpm**。
   - 課表推送是 120–142。
   - 判定「這次是不是輕鬆跑」時多給 3 bpm：平均 ≤ AeT + 3 = **145**（`workout_review.AET_MARGIN`，`backend/engine/workout_review.py:138`；`equivalence.EASY_HR_TOL`，`backend/engine/equivalence.py:81`）。
-- 同一張表的**功率上限**是 Palladino 1C：75–80% CP = **153–163 W**；長跑 80–88% CP = 163–180 W（`zones.py:248-252`）。
+- 同一張表的**功率上限**是 Palladino 1C：75–80% CP = **153–163 W**；長跑 80–88% CP = 163–180 W（`backend/engine/zones.py:248-252`）。
 
 ### 1.4 有哪些區間模型
 
 | 模型 | 錨點 | 程式 | 用在哪 |
 |---|---|---|---|
-| Friel 心率 7 區 | LTHR（Z1 < 85%、Z2 85–89%、Z3 90–94%、Z4 95–99%、5a 100–102%、5b 103–106%、5c > 106%） | `zones.FRIEL_HR`（`zones.py:53-61`）。邊界改成接續，沒有 1% 空隙（`:39-44`） | 區間表、課表心率、load focus（`panels/loadfocus.py:12,39`） |
-| Classic（Coggan）心率 5 區 | LTHR（69／84／95／106%） | `zones.CLASSIC_HR`（`zones.py:46-52`） | WKO5 對照 |
-| Friel 配速 7 區 | 閾值配速 | `zones.FRIEL_PACE`（`zones.py:63-71`） | 區間表 |
-| Palladino 功率 10 區＋三區 | CP（1A 50% … 7 > 150%；三區 < 80%／80–95%／≥ 95%） | `zones.PALLADINO_POWER_ZONES`、`PALLADINO_3ZONE`（`zones.py:15-29`） | 功率區間、課表功率 |
-| Seiler 三區 | 低 < AeT、中 AeT–LTHR、高 ≥ LTHR | `racepower/intensity.py:11-23`、`status.SRC_SEILER`（`backend/engine/status.py:37`） | 強度分配卡、回測分類 |
+| Friel 心率 7 區 | LTHR（Z1 < 85%、Z2 85–89%、Z3 90–94%、Z4 95–99%、5a 100–102%、5b 103–106%、5c > 106%） | `zones.FRIEL_HR`（`backend/engine/zones.py:53-61`）。邊界改成接續，沒有 1% 空隙（`:39-44`） | 區間表、課表心率、load focus（`backend/engine/panels/loadfocus.py:12,39`） |
+| Classic（Coggan）心率 5 區 | LTHR（69／84／95／106%） | `zones.CLASSIC_HR`（`backend/engine/zones.py:46-52`） | WKO5 對照 |
+| Friel 配速 7 區 | 閾值配速 | `zones.FRIEL_PACE`（`backend/engine/zones.py:63-71`） | 區間表 |
+| Palladino 功率 10 區＋三區 | CP（1A 50% … 7 > 150%；三區 < 80%／80–95%／≥ 95%） | `zones.PALLADINO_POWER_ZONES`、`PALLADINO_3ZONE`（`backend/engine/zones.py:15-29`） | 功率區間、課表功率 |
+| Seiler 三區 | 低 < AeT、中 AeT–LTHR、高 ≥ LTHR | `backend/engine/racepower/intensity.py:11-23`、`status.SRC_SEILER`（`backend/engine/status.py:37`） | 強度分配卡、回測分類 |
 
-- 沒有 %HRmax 或 %HRR（Karvonen）模型。HRmax 只用在 racepower 的「這場是不是全力」檢查（`racepower/maximal.py:69-75,106-112`）。
+- 沒有 %HRmax 或 %HRR（Karvonen）模型。HRmax 只用在 racepower 的「這場是不是全力」檢查（`backend/engine/racepower/maximal.py:69-75,106-112`）。
 
 ### 1.5 今天算出來的數字
 
 | 項目 | 數字 | 怎麼算的 |
 |---|---|---|
 | LTHR | 160（計畫，CP 測試那天）。as-of 推估歷史（近 8 格，每 30 天一格）：156–166 之間 | `ds.athlete.settings["runthr"]` |
-| 套用 160 時用的 CP | **cp_as_of = 189 W**（夏天的 Stryd PD 擬合，約現行 CP 的 86%），不是 220。≥ 95% 的門檻是 180 W | `racepower.athlete.cp_as_of`（`racepower/athlete.py:382-399`）。套用前的 estimate：7 次、IQR 158–161 |
+| 套用 160 時用的 CP | **cp_as_of = 189 W**（夏天的 Stryd PD 擬合，約現行 CP 的 86%），不是 220。≥ 95% 的門檻是 180 W | `racepower.athlete.cp_as_of`（`backend/engine/racepower/athlete.py:382-399`）。套用前的 estimate：7 次、IQR 158–161 |
 | AeT | 142（0.89 × 160）。自動與聚合估計都失敗（§1.2） | — |
 | 觀測最大心率 | **185 bpm**：365 天內每次「撐 ≥ 120 秒」的峰值，取前 5 的中位數，同 `maximal.hrmax_observed` | 前幾名大多是越野（187–199），其次是路跑（187–189） |
 | 原始峰值（多半是光學雜訊） | **223**、**220**、208 | 單一取樣最大值。撐 120 秒後只剩 187／189／182 |
 | CP 測試（夜間、悶熱，Hadley > 150） | 3′ 段約 106% CP、心率均 145、峰值 154（沒有全力）。**12′ 段 109% CP、心率均 160、後半 168、最後 2′ 169、峰值 176** | 30 秒功率 > 93% CP 且 ≥ 90 秒的段落 |
 | 閾值配速 | 6:29 /km（推估，CP 法） | `thresholds.estimate_tpace` |
-| 近期穩定跑的「HR at CP」 | 180 天內只有 1 次 ≥ 10 分鐘在 97–103% × 220 W，心率 164。近 120 天的路跑沒有一次 | `threshold_estimate.run_threshold`（`threshold_estimate.py:70-86`） |
+| 近期穩定跑的「HR at CP」 | 180 天內只有 1 次 ≥ 10 分鐘在 97–103% × 220 W，心率 164。近 120 天的路跑沒有一次 | `threshold_estimate.run_threshold`（`backend/engine/algorithms/threshold_estimate.py:70-86`） |
 
 **穩定平路段的心率–功率**：
 
@@ -130,7 +130,7 @@ FIT 資料集（COROS／TP）的規則寫在 `backend/engine/wko5expr/fitdataset
 
 ### 1.6 為什麼 LTHR 160 很可能偏低
 
-1. **估算的定義是「30 分鐘窗 ≥ 95% CP」**（`threshold_estimate.py:11-14,45-46`）。程式自己的 docstring 也寫了：「otherwise the run wasn't a threshold effort and the HR would underestimate LTHR」。
+1. **估算的定義是「30 分鐘窗 ≥ 95% CP」**（`backend/engine/algorithms/threshold_estimate.py:11-14,45-46`）。程式自己的 docstring 也寫了：「otherwise the run wasn't a threshold effort and the HR would underestimate LTHR」。
 2. 套用 160 時的 CP 是 **189 W**（Stryd PD 擬合，夏天）。所以入選的 30 分鐘窗只要 ≥ 180 W。以真實的 220 W 來看，那只是 **81–85% CP**，是 Palladino Z2「Endurance」。這 7 次是夏天的一般跑，不是閾值跑。
 3. 這些窗後 20 分鐘的平均心率約 160。意思是「熱天 ~83% CP 的心率」，不是乳酸閾值的心率。
 4. 交叉證據都指向 > 160（都是推估）：
@@ -145,10 +145,10 @@ FIT 資料集（COROS／TP）的規則寫在 `backend/engine/wko5expr/fitdataset
 
 | 項目 | 現在的觸發方式 | 程式 |
 |---|---|---|
-| CP | 套用 CP 測試結果：`POST /plan/thresholds/apply-cp`，寫成測試日那一列（`api/plan.py:324-359`；`cp_protocols.apply_payload`，`backend/engine/cp_protocols.py:377`）。測試日以前沒有計畫 CP 時，用每 30 天的 Stryd PD 擬合 | `fitdataset._estimate_cp` |
-| CP 提醒 | 測試超過 42 天 → WATCH，超過 90 天 → BAD（`status.py:60`，`TEST_DAYS_WATCH, TEST_DAYS_BAD = 42, 90`，「CP test every 4–6 weeks (notes)」）。停跑後回來要重測（`status.py:713-726`） | `status.i_testing`（`status.py:686`） |
-| LTHR | (a) 每 30 天的 as-of 推估，只在沒有計畫列時用；(b) 使用者在季計畫頁按「套用估計」（`apply-estimate`，`api/plan.py:286-312`）。沒有「LTHR 測試」的流程 | `fitdataset._estimate_settings`、`thresholds.estimate`（`thresholds.py:50-109`，90 → 180 天窗） |
-| AeT | B3：不用天數判斷過期，有理由才排測試（`aet_test.py:70-72`）。理由包括：`no_data`（約 6 週沒有可判讀的跑步）、`se`（聚合 SE > 3 bpm）、`shift`（最近 6 點單向偏 > 5 bpm）、`moved`（和計畫 AeT 差 > max(SE, 3)）、`break`（停跑 ≥ 4 週）（`quality_gate.aet_test_reason`，`backend/engine/quality_gate.py:750-790`）。門檻常數在 `threshold_estimate.py:207-210` | `drift_agg.aet_validity`、`aet_test.apply_body`（`aet_test.py:421`） |
+| CP | 套用 CP 測試結果：`POST /plan/thresholds/apply-cp`，寫成測試日那一列（`backend/api/plan.py:324-359`；`cp_protocols.apply_payload`，`backend/engine/cp_protocols.py:377`）。測試日以前沒有計畫 CP 時，用每 30 天的 Stryd PD 擬合 | `fitdataset._estimate_cp` |
+| CP 提醒 | 測試超過 42 天 → WATCH，超過 90 天 → BAD（`backend/engine/status.py:60`，`TEST_DAYS_WATCH, TEST_DAYS_BAD = 42, 90`，「CP test every 4–6 weeks (notes)」）。停跑後回來要重測（`backend/engine/status.py:713-726`） | `status.i_testing`（`backend/engine/status.py:686`） |
+| LTHR | (a) 每 30 天的 as-of 推估，只在沒有計畫列時用；(b) 使用者在季計畫頁按「套用估計」（`apply-estimate`，`backend/api/plan.py:286-312`）。沒有「LTHR 測試」的流程 | `fitdataset._estimate_settings`、`thresholds.estimate`（`backend/engine/thresholds.py:50-109`，90 → 180 天窗） |
+| AeT | B3：不用天數判斷過期，有理由才排測試（`backend/engine/aet_test.py:70-72`）。理由包括：`no_data`（約 6 週沒有可判讀的跑步）、`se`（聚合 SE > 3 bpm）、`shift`（最近 6 點單向偏 > 5 bpm）、`moved`（和計畫 AeT 差 > max(SE, 3)）、`break`（停跑 ≥ 4 週）（`quality_gate.aet_test_reason`，`backend/engine/quality_gate.py:750-790`）。門檻常數在 `backend/engine/algorithms/threshold_estimate.py:207-210` | `drift_agg.aet_validity`、`aet_test.apply_body`（`backend/engine/aet_test.py:421`） |
 | 區間 | 區間跟著「當天生效的閾值」即時重算（`zones.zone_table`、`training_targets`）。改計畫閾值會重建資料集（`wko5views.plan_changed`） | — |
 
 ---
@@ -188,7 +188,7 @@ FIT 資料集（COROS／TP）的規則寫在 `backend/engine/wko5expr/fitdataset
 **CP 測試段的心率能不能用**
 
 - 3′、12′ 都高於 CP（嚴重強度區）。這個區間裡 VO2 和心率會一直升（Nixon 2021：CS 之上 VO2 升到最大），不會穩定在「閾值心率」。所以 12′ 段後半的心率是 **LTHR 的上界**，不是 LTHR。
-- 心率對功率變化的反應有約 1 分鐘延遲（τ 55–70 s，Hunt 2015／2019，引自 `zones.py:233-235`）。3′ 段的心率幾乎還在爬升，沒有參考價值。
+- 心率對功率變化的反應有約 1 分鐘延遲（τ 55–70 s，Hunt 2015／2019，引自 `backend/engine/zones.py:233-235`）。3′ 段的心率幾乎還在爬升，沒有參考價值。
 - **Friel 30 分鐘 TT** 跑出來的平均功率，大約落在 CP 附近（CP 只撐得了 20–30 分，Jones 2019）。它的後 20 分鐘平均心率，就是 Friel 定義的 LTHR（教練，對實驗室的驗證**未驗證**）。也就是說，**30 分 TT 同一次就能得到 LTHR，又能交叉驗證 CP**，比 3′/12′ 的心率更適合拿來推 LTHR。
 
 **同一個功率的心率能不能跨天比**
@@ -233,7 +233,7 @@ FIT 資料集（COROS／TP）的規則寫在 `backend/engine/wko5expr/fitdataset
 | **錶的心率感測器** | Gillinov 2017（*MSSE* 49:1697–1703，DOI 10.1249/MSS.0000000000001284，摘要）：胸帶 Polar H7 對 ECG 的 rc = 0.996，腕式 0.67–0.92，Garmin FR235 0.81。Gielen 2026（*JMIR Form Res*，DOI 10.2196/85186）：10 款光學裝置的 MAE 4.5–14 bpm。徐國峰：「因為手腕的血流量會有延遲，所以腕式心率比胸式心率沒那麼即時」（`跑者都該懂的跑步數據，讀書心得.md:41`） | 原始峰值 223、220、208 bpm，撐 120 秒後只剩 187／189／182 → 有尖峰雜訊。FIT 的 device_info 只記錄手錶型號，**無法從檔案判斷那幾次有沒有戴胸帶（未驗證）**，要問使用者 | **能修**：測試一律戴胸帶（Polar H10／COROS HRM）；app 標記沒有胸帶的測試 |
 | **很少全力跑** | Friel：「the more times you do this test the more accurate your LTHR is likely to become」 | 路跑 20 分鐘最高心率前幾名幾乎都在夏天，而且功率只有 66–84% CP | 一年 2–3 次 30 分 TT 或 10K 比賽（頻率是推估） |
 | **閾值是推估的，不是測的** | §1.6 | LTHR 160 = 熱天 83% CP 的心率；AeT 142 = 0.89 × 這個推估值，推估疊推估 | **能修**：LTHR 用 30 分 TT 測；AeT 用徐國峰 90 分鐘或 UA 飄移測試測 |
-| AeT 飄移回歸失敗 | 單次飄移誤差 ±4–6 pp（`drift_agg.py:5-8`） | 10–16 點的心率範圍 133–162，飄移沒有跟著心率上升，大多是熱天 40–47 分鐘的短跑 | 一次正式的 AeT 測試，比一百次被動資料有用 |
+| AeT 飄移回歸失敗 | 單次飄移誤差 ±4–6 pp（`backend/engine/drift_agg.py:5-8`） | 10–16 點的心率範圍 133–162，飄移沒有跟著心率上升，大多是熱天 40–47 分鐘的短跑 | 一次正式的 AeT 測試，比一百次被動資料有用 |
 | 實驗室 | Iannetta 2020、Seiler 2006 | — | 最準。一次乳酸／氣體分析的跑步機測試同時拿到 LT1、LT2、HRmax（可選） |
 
 ### 2.4 「閾值心率變高 → 輕鬆跑配速變快」這個想法
@@ -253,8 +253,8 @@ FIT 資料集（COROS／TP）的規則寫在 `backend/engine/wko5expr/fitdataset
 **教練建議**
 
 - Friel：在 Base、Build 期初各測一次 LTHR（原文 "early in the Base and Build periods"）。
-- 筆記：CP 每 4–6 週（`status.py:60`）。
-- UA：AeT 4–6 週重測（措辭**未驗證**，見 `quality_gate.py:754`）。
+- 筆記：CP 每 4–6 週（`backend/engine/status.py:60`）。
+- UA：AeT 4–6 週重測（措辭**未驗證**，見 `backend/engine/quality_gate.py:754`）。
 - 徐國峰：每次目標賽後、跑力提升後，用新的 E 配速重新打底，再做 90 分鐘檢測（`跑者都該懂的跑步數據，讀書心得.md:77`）。
 
 **證據**
@@ -315,7 +315,7 @@ FIT 資料集（COROS／TP）的規則寫在 `backend/engine/wko5expr/fitdataset
 |---|---|---|
 | 輕鬆跑／長跑上限 | **實測 AeT**（徐國峰 90 分鐘或 UA 40–60 分鐘飄移測試，< 25 °C） | Seiler／UA 用的是 LT1／AeT 本身。0.89 × LTHR 是兩層推估 |
 | 中、高強度心率 | **實測 LTHR**（30 分獨跑 TT 的後 20 分平均，涼天、胸帶） | Friel 定義；同一次 TT 也驗證 CP |
-| 功率（主） | **CP 220 W**（3′/12′ 測試，W′ 用先驗）→ Palladino % CP | 爬坡、間歇、熱天都看功率（`zones.py:229-247`）。下一次在涼天重測，最好用兩點法量到 W′ |
+| 功率（主） | **CP 220 W**（3′/12′ 測試，W′ 用先驗）→ Palladino % CP | 爬坡、間歇、熱天都看功率（`backend/engine/zones.py:229-247`）。下一次在涼天重測，最好用兩點法量到 W′ |
 | 最大心率 | **不拿來分區**。只當資料清理用（尖峰）和 4×4 的參考（90–95% HRmax，Helgerud） | %HRmax 個人誤差大（Iannetta 2020） |
 
 ### 3.2 每一套區間怎麼算
@@ -360,10 +360,10 @@ FIT 資料集（COROS／TP）的規則寫在 `backend/engine/wko5expr/fitdataset
 ### 3.4 app 該做的改動
 
 1. **LTHR 的來源標籤**（最重要）：
-   - 現在 `apply-estimate` 寫進去的 LTHR，在 `zones.threshold_info`（`zones.py:155-159`）、`zones.training_targets`（`zones.py:277-278`）、`racepower.athlete.thresholds_as_of`（「測試 …」）都顯示成「你的測試」。
+   - 現在 `apply-estimate` 寫進去的 LTHR，在 `zones.threshold_info`（`backend/engine/zones.py:155-159`）、`zones.training_targets`（`backend/engine/zones.py:277-278`）、`racepower.athlete.thresholds_as_of`（「測試 …」）都顯示成「你的測試」。
    - 改法：`planning.Threshold` 加 `lthr_method`／`aethr_method`（比照 `cp_method`）。值可以是 `estimate`、`friel30`、`race`、`lab`、`manual`。
    - `api/plan.apply_estimate` 寫 `estimate`。顯示時改成「自動估算（已套用 YYYY-MM-DD）」。
-2. **LTHR 估算的門檻不該只看 as-of CP**（`threshold_estimate.run_threshold`／`RunThreshold.qualifies`，`threshold_estimate.py:45-46`；`thresholds.estimate`）：
+2. **LTHR 估算的門檻不該只看 as-of CP**（`threshold_estimate.run_threshold`／`RunThreshold.qualifies`，`backend/engine/algorithms/threshold_estimate.py:45-46`；`thresholds.estimate`）：
    - (a) 只收 Hadley < 150（或 < 25 °C）的跑步。天氣從 `heat_data.exposures` 讀；FIT 資料集要用開始時間對應 WKO5 的天氣檔名，現在只對到 440／803 筆。
    - (b) 30 分鐘窗還要 ≥ 該跑者 90 天最佳 30 分鐘功率的 97%（推估）。
    - (c) 結果標「推估」，旁邊附上 `hr_at_cp` 的交叉檢查與 ±16 bpm 的說明（Micheli 2025）。
@@ -371,20 +371,20 @@ FIT 資料集（COROS／TP）的規則寫在 `backend/engine/wko5expr/fitdataset
 3. **新增 30 分 TT 的分析與套用**：
    - 在 `cp_protocols`（已有 `tt20` 方法）加 `tt30`。偵測一段 ≥ 28 分鐘的連續全力段，產出 LTHR（後 20 分心率）、30 分平均功率，加上天氣和胸帶的提醒。
    - 套用時走 `apply-estimate`（`lthr_method="friel30"`）和 `apply-cp`。
-   - `workout_review` 加一個「套用這次的 LTHR」動作，比照 `_aet_test_lines`（`workout_review.py:2064`）。
-4. **LTHR 也接上 B3 的事件觸發**：在 `quality_gate`（比照 `aet_test_reason`，`quality_gate.py:750-790`）加 `lthr_test_reason`。理由包括：
+   - `workout_review` 加一個「套用這次的 LTHR」動作，比照 `_aet_test_lines`（`backend/engine/workout_review.py:2064`）。
+4. **LTHR 也接上 B3 的事件觸發**：在 `quality_gate`（比照 `aet_test_reason`，`backend/engine/quality_gate.py:750-790`）加 `lthr_test_reason`。理由包括：
    - LTHR 的 method 是 `estimate`。
    - 涼天 HR-at-CP 中位數和 LTHR 差 > 5 bpm（≥ 3 次，推估）。
    - 停跑 ≥ 4 週。
    - 第一次轉涼（連續 3 個路跑日清晨 < 25 °C 且 Hadley < 150，推估；見 §2.5 第 5 點，`zone_events.cool_season`）。
-   - `status.i_testing`（`status.py:686-735`）的 LTHR 不要只看日期。
+   - `status.i_testing`（`backend/engine/status.py:686-735`）的 LTHR 不要只看日期。
 5. **熱天的輕鬆跑判定**：
    - `workout_review` 的 easy 規則與 `adapt` 的規則 D，目前只要心率 > AeT + 3 就算「偏強」。熱天（Hadley > 150）時改成：**功率 ≤ 80% CP 且 RPE 輕鬆**也算達成，心率超標只提醒「熱天心率偏高是正常的，放慢或走」（推估；方向和 `unsourced-rules.md` B5 對規則 D 的建議一致）。
    - 課表推送的心率上限（`coros_workouts.easy_hr`）維持原樣。
 6. **最大心率清理**：
    - `maximal.hrmax_observed` 已經用「撐 120 秒的前 5 名中位數」。前 5 名大多是越野賽，可能混入光學尖峰。
    - 建議再排除「心率 > 前 30 秒中位數 + 15 bpm 的跳變」（推估），並在 UI 標「觀測值，非實測」。
-7. **文件／程式用字**：`fitdataset.py:68`、`racepower/intensity.py:9,27,38`、`racepower/maximal.py:69,74-75` 的「推估」依本專案用語改成「推估」。這只是用字，不影響行為。
+7. **文件／程式用字**：`backend/engine/wko5expr/fitdataset.py:68`、`backend/engine/racepower/intensity.py:9,27,38`、`backend/engine/racepower/maximal.py:69,74-75` 的「推估」依本專案用語改成「推估」。這只是用字，不影響行為。
 
 ### 3.5 一句話總結
 
