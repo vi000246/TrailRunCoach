@@ -373,6 +373,7 @@ async def add_session(data: dict = Body(...), db: AsyncSession = Depends(get_db)
     data = _with_variant(data, inp, None, data.get("day"))
     if data.get("steps"):
         data = await _with_steps(data, inp, {})
+        await _with_route(db, data["steps"], None)
     try:
         async with _wlock():
             return await PS.add(db, data, _today(inp), blocked=PS.blocked_map(inp))
@@ -389,6 +390,7 @@ async def edit_session(uid: str, patch: dict = Body(...), db: AsyncSession = Dep
     if patch.get("steps"):
         cur = next((s for s in await PS.load(db) if s["uid"] == uid), None)
         patch = await _with_steps(patch, inp, cur or {})
+        await _with_route(db, patch["steps"], (cur or {}).get("steps"))
     try:
         async with _wlock():
             out = await PS.edit(db, uid, patch, _today(inp), blocked=PS.blocked_map(inp))
@@ -1186,10 +1188,11 @@ async def steps_check(body: dict = Body(...), db: AsyncSession = Depends(get_db)
     env = await _steps_env(s, inp)
     out = {**WS.view(st, env["ctx"], env["cap"], env["cap_mode"], env["rung"]),
            "basis_label": _context(env)["basis_label"], "policy": env["policy"]}
-    if st.get("tpl"):
-        # made from a user template with a route GPX: its elevation on the chart's time axis
+    if st.get("route") or st.get("tpl"):
+        # made from a user template with a route GPX: the chart on the route's distance axis, the
+        # session's own copy of the profile first (it outlives the template), else the template's
         from backend.engine import user_templates as UT
-        prof = await UT.profile_of(db, st["tpl"])
+        prof = st.get("route") or await UT.profile_of(db, st["tpl"])
         out["elev"] = UT.route_elevation(st, env["ctx"], prof) if prof else None
     return out
 
@@ -1450,6 +1453,22 @@ async def _with_steps(patch: dict, inp: dict, cur: dict) -> dict:
         out["target"] = v["summary"]
     out.setdefault("tss", v["totals"]["tss"])
     return out
+
+
+async def _with_route(db: AsyncSession, st: dict, was: Optional[dict]) -> None:
+    """A structure made from a user template with a route GPX keeps its own copy of the
+    profile (`route`, user_templates.route_copy), so deleting the template or its GPX later
+    doesn't take it off the session: the stored copy carried over while the template is the
+    same (a re-save from the editor), else taken from the template now."""
+    if not st.get("tpl") or st.get("route"):
+        return
+    if was and was.get("tpl") == st["tpl"] and was.get("route"):
+        st["route"] = was["route"]
+        return
+    from backend.engine import user_templates as UT
+    r = UT.route_copy(await UT.profile_of(db, st["tpl"]))
+    if r:
+        st["route"] = r
 
 
 @router.get("/variants")

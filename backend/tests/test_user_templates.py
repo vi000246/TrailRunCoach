@@ -1,8 +1,8 @@
 """
 The user's own templates (engine/user_templates.py, api/plan_sessions.py /steps/templates/user,
 SP-36): CRUD, categories (built-in + custom, several per template), 儲存成範本, 複製成我的範本,
-relative targets resolved when applied, the route GPX and its profile on the chart's time
-axis, and a 「長間歇、自由模式」 uphill template pushed to COROS.
+relative targets resolved when applied, the route GPX (the chart on its distance axis, a
+session's own copy of the profile), and a 「長間歇、自由模式」 uphill template pushed to COROS.
 """
 import copy
 import math
@@ -51,6 +51,10 @@ def gpx_bytes(n=60, climb_m=300.0, km=3.0):
         pts.append(f'<trkpt lat="{lat:.6f}" lon="121.5"><ele>{ele:.1f}</ele></trkpt>')
     return ('<?xml version="1.0"?><gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1"><trk><name>坡</name>'
             "<trkseg>" + "".join(pts) + "</trkseg></trk></gpx>").encode()
+
+
+def kept_steps(e):
+    return _session(e, "hike")["steps"]
 
 
 def _session(e, kind):
@@ -174,44 +178,81 @@ def test_gpx_upload_replace_remove_and_profile_on_the_chart(monkeypatch):
         assert g["filename"] == "slope.gpx" and math.isclose(g["km"], 3.0, rel_tol=0.05) and g["gain_m"] > 200
         assert UT.gpx_path(t["id"]).exists()
         assert e.c.get(f"{UAPI}/{t['id']}/gpx/file").content == gpx_bytes()
-        # the editor's check of a structure made from it: the profile on the time axis
+        # the editor's check of a structure made from it: the chart on the route's distance axis
         tpl = e.c.get(f"{API}/steps/templates").json()
         row = next(r for g_ in tpl["groups"] for r in g_["rows"] if r["key"] == f"user:{t['id']}")
         assert row["gpx"]["filename"] == "slope.gpx"
         chk = e.c.post(f"{API}/steps/check", json={"kind": "hike", "steps": {"items": row["full"], "tpl": t["id"]}}).json()
         el = chk["elev"]
-        total = sum(o["sec"] for o in chk["order"])
-        assert el["t"][0] == 0 and el["t"] == sorted(el["t"]) and el["t"][-1] <= total + 1
+        assert len(el["x"]) == len(chk["order"]) + 1 and el["x"][0] == 0 and el["x"] == sorted(el["x"])
+        assert el["d"][0] == 0 and el["d"] == sorted(el["d"]) and el["d"][-1] <= el["x"][-1] + 1e-6
+        assert "t" not in el and el["complete"] is True and el["total_km"] == pytest.approx(el["x"][-1], abs=0.01)
         assert max(el["z"]) == pytest.approx(el["z_max"], abs=15) and el["note"]
-        # replace with a longer route: not covered by the hour → ends at the workout's end
+        # replace with a longer route: not covered by the hour → drawn up to the workout's end
         e.c.post(f"{UAPI}/{t['id']}/gpx", files={"file": ("long.gpx", gpx_bytes(km=30.0), "application/gpx+xml")})
         el2 = e.c.post(f"{API}/steps/check", json={"kind": "hike", "steps": {"items": row["full"], "tpl": t["id"]}}).json()["elev"]
-        assert el2["complete"] is False and el2["t"][-1] == pytest.approx(total, abs=1) and 0 < el2["km"] < 30
-        # a session saved from it keeps the link (its chart shows the same profile)
+        assert el2["complete"] is False and el2["d"][-1] == pytest.approx(el2["x"][-1], abs=0.01) and 0 < el2["km"] < 30
+        # a session saved from it keeps the link and its own copy of the profile (compact)
         s = e.c.post(f"{API}/sessions", json={"day": "2026-10-03", "kind": "hike", "title": "坡道",
                                               "steps": {"items": row["full"], "tpl": t["id"]}}).json()
         assert s["steps"]["tpl"] == t["id"]
+        route = s["steps"]["route"]
+        assert route["name"] == "long.gpx" and 2 <= len(route["km"]) == len(route["z"]) <= UT.PROFILE_OUT
+        assert route["km"][-1] == pytest.approx(30.0, rel=0.05)
         d = e.c.post(f"{API}/steps/derive", json={"uid": s["uid"]}).json()
-        assert d["steps"]["tpl"] == t["id"]
-        assert e.c.post(f"{API}/steps/check", json={"uid": s["uid"], "steps": d["steps"]}).json()["elev"]["t"]
-        # remove: no profile any more, the file is gone
+        assert d["steps"]["tpl"] == t["id"] and d["steps"]["route"] == route
+        assert e.c.post(f"{API}/steps/check", json={"uid": s["uid"], "steps": d["steps"]}).json()["elev"]["x"]
+        # the template's GPX replaced: a re-save from the editor without the copy keeps the session's
+        e.c.post(f"{UAPI}/{t['id']}/gpx", files={"file": ("slope.gpx", gpx_bytes(), "application/gpx+xml")})
+        p = e.c.patch(f"{API}/sessions/{s['uid']}", json={"steps": {"items": row["full"], "tpl": t["id"]}}).json()
+        assert p["steps"]["route"] == route
+        # remove: no profile on the template any more, the file is gone — the session keeps its own
         assert e.c.delete(f"{UAPI}/{t['id']}/gpx").json()["gpx"] is None
         assert not UT.gpx_path(t["id"]).exists()
         assert e.c.delete(f"{UAPI}/{t['id']}/gpx").status_code == 404
         assert e.c.post(f"{API}/steps/check", json={"kind": "hike", "steps": {"items": row["full"], "tpl": t["id"]}}).json()["elev"] is None
+        assert e.c.post(f"{API}/steps/check", json={"uid": s["uid"], "steps": d["steps"]}).json()["elev"]["name"] == "long.gpx"
+        # a template never stores a copy (儲存成範本 from such a session)
+        t2 = e.c.post(UAPI, json={"name": "副本", "cats": ["trail"], "steps": kept_steps(e)}).json()
+        assert "route" not in t2["steps"] and "tpl" not in t2["steps"]
+        # the template deleted too: still there
+        assert e.c.delete(f"{UAPI}/{t['id']}").status_code == 200
+        kept = _session(e, "hike")["steps"]
+        assert kept["route"] == route
+        assert e.c.post(f"{API}/steps/check", json={"uid": s["uid"], "steps": kept}).json()["elev"]["km"] > 0
 
 
-def test_route_elevation_aligns_by_estimated_speed():
+def test_route_copy_is_normalized():
+    prof = {"km": [i / 100 for i in range(1501)], "z": [float(i % 50) for i in range(1501)], "route_km": 15.0,
+            "gain_m": 700.0, "filename": "r.gpx"}
+    r = UT.route_copy(prof)
+    assert len(r["km"]) <= UT.PROFILE_OUT and r["km"][0] == 0 and r["km"][-1] == 15.0
+    d = WS.normalize({"items": [st("work", 600)], "tpl": 3, "route": r})
+    assert d["route"]["km"] == r["km"] and d["route"]["name"] == "r.gpx" and d["route"]["gain_m"] == 700.0
+    # malformed / oversized copies are dropped (the structure itself still saves)
+    for bad in ({"km": [0, 1], "z": [1]}, {"km": [1, 0], "z": [1, 2]}, {"km": ["a", 1], "z": [1, 2]},
+                {"km": list(range(WS.ROUTE_MAX + 1)), "z": [0] * (WS.ROUTE_MAX + 1)}, [1, 2], "x"):
+        assert "route" not in WS.normalize({"items": [st("work", 600)], "route": bad})
+
+
+def test_route_elevation_places_steps_by_distance():
     prof = {"km": [0.0, 1.0, 2.0], "z": [0.0, 100.0, 100.0], "route_km": 2.0}
-    # 1 km + 100 m climb = 2 km effort; 1 km flat = 1 km effort. At 6 km/h EP the climb takes 20′, the flat 10′
+    # 1 km + 100 m climb = 2 km effort; 1 km flat = 1 km effort. At 6 km/h EP: 20′ cover the climb's
+    # 1 km, 10′ more the flat km; a distance step its own 500 m; past the end 1 : 1
     c = WS.Ctx.of({"cp": 250.0}, "power", speeds={"v_easy": 6.0, "ep_kmh": 6.0, "terrain": "trail"})
-    steps = WS.normalize({"items": [st("work", 3600, {"type": "power", "mode": "pct", "lo": 0.77, "hi": 0.79})]})
+    tg = {"type": "power", "mode": "pct", "lo": 0.77, "hi": 0.79}
+    steps = WS.normalize({"items": [st("warm", 1200, tg), st("work", 600, tg),
+                                    st("work", {"type": "distance", "value": 500}, tg), st("cool", 600, tg)]})
     el = UT.route_elevation(steps, c, prof)
-    assert el["t"][:3] == [0.0, 1200.0, 1800.0] and el["complete"] is True and el["km"] == 2.0
-    # a lap-button step is drawn 90 s wide: the route is mapped onto that width
-    lap = WS.normalize({"items": [st("work", {"type": "open"}, {"type": "power", "mode": "pct", "lo": 0.77, "hi": 0.79})]})
+    assert el["x"] == [0.0, 1.0, 2.0, 2.5, 3.5]
+    assert el["d"] == [0.0, 1.0, 2.0] and el["complete"] is True and el["km"] == 2.0 and el["total_km"] == 3.5
+    # a lap-button step is the chart's 90 s at that speed: 0.15 km effort on the climb = 0.075 km
+    lap = WS.normalize({"items": [st("work", {"type": "open"}, tg)]})
     el = UT.route_elevation(lap, c, prof)
-    assert el["t"][-1] == WS.OPEN_CHART_S and el["complete"] is False
+    assert el["x"] == [0.0, 0.075] and el["complete"] is False and el["d"][-1] == 0.075
+    # a profile that doesn't start at 0 (a cut course): the axis starts at the route's start
+    el = UT.route_elevation(steps, c, {"km": [5.0, 6.0, 7.0], "z": [0.0, 100.0, 100.0]})
+    assert el["x"] == [0.0, 1.0, 2.0, 2.5, 3.5] and el["d"][0] == 0.0
 
 
 def test_free_mode_uphill_template_pushes_to_coros(monkeypatch):
