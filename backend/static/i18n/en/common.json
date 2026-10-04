@@ -31,9 +31,10 @@
   "workout.saved_tpl": "Saved as template “{name}”",
   "workout.to_templates": "Open templates",
   "workout.mine": "Mine",
-  "workout.elev_legend": "Elevation ({name}, {km} km)",
+  "workout.elev_legend": "Elevation ({name}, {km} km; distance across)",
   "workout.elev_partial": "At the estimated speed this workout doesn't cover the whole route: drawn up to where the workout ends",
-  "workout.elev_aria": "; background: route elevation {lo}–{hi} m",
+  "workout.elev_km": "≈ {a}–{b} km",
+  "workout.elev_aria": "; distance across ({km} km in all), background: route elevation {lo}–{hi} m",
   "autoplan.log_title": "Automatic adjustment log",
   "autoplan.log_count": "({n})",
   "workout.thr_low_badge": "HR threshold uncertain"
