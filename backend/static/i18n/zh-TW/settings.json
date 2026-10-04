@@ -64,5 +64,18 @@
   "thr.empty": "還沒有測試紀錄。",
   "thr.remove": "移除",
   "thr.failed": "失敗：{msg}",
-  "thr.load_failed": "讀取失敗：{msg}"
+  "thr.load_failed": "讀取失敗：{msg}",
+  "thr.chk_k": "{name} 可信度（推估）",
+  "thr.chk_conf_high": "高",
+  "thr.chk_conf_medium": "中",
+  "thr.chk_conf_low": "低",
+  "thr.chk_now": "現在 {v} bpm · {src}",
+  "thr.chk_hrmax": "最大心率",
+  "thr.chk_tt30": "{date} 的 30 分鐘測試：第 10–30 分平均心率 {v} bpm；30 分平均功率 {p}（和 CP 差 {cp}）",
+  "thr.chk_hrmax_test": "{date} 的最大心率測試：撐 ≥ 5 秒的最高心率 {v} bpm（濾掉尖峰）",
+  "thr.chk_apply": "套用 {v} bpm",
+  "thr.chk_applied": "已套用",
+  "thr.chk_cand": "候選值：撐 {hold} 秒的最高心率 {v} bpm（{date}，推估）",
+  "thr.chk_cand_note": "撐 {hold} 秒的最高心率（{date}，推估）",
+  "thr.chk_confirm": "把 {name} 設成 {v} bpm（從 {date} 起）？區間和課表心率目標會重算"
 }

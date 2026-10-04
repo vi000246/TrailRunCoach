@@ -375,6 +375,8 @@ def test_testing_indicator_carries_suggestions_but_never_cp_due(monkeypatch):
     sug = {"suggestions": [ZE._suggestion("cool_season", ["tt30", "aet"], "天氣轉涼了", "x", TODAY)],
            "events": [], "checks": {}}
     monkeypatch.setattr(ZE, "suggestions", lambda *a, **k: sug)
+    from backend.engine import threshold_confidence as TC
+    monkeypatch.setattr(TC, "check", lambda *a, **k: None)        # SP-64's check: its own tests
     st = S.Status.__new__(S.Status)
     st.ds = SimpleNamespace(workouts=[], plan=None)
     st.plan = Plan(thresholds=[Threshold(TODAY.isoformat(), cp=204, lthr=155,

@@ -35,5 +35,6 @@
   "workout.elev_partial": "依預估速度，這份課表跑不完整條路線：只畫到課表結束的位置",
   "workout.elev_aria": "；背景是路線海拔 {lo}–{hi} m",
   "autoplan.log_title": "自動調整紀錄",
-  "autoplan.log_count": "{n} 筆"
+  "autoplan.log_count": "{n} 筆",
+  "workout.thr_low_badge": "心率門檻可信度低"
 }

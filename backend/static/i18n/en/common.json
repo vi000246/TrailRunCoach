@@ -35,5 +35,6 @@
   "workout.elev_partial": "At the estimated speed this workout doesn't cover the whole route: drawn up to where the workout ends",
   "workout.elev_aria": "; background: route elevation {lo}–{hi} m",
   "autoplan.log_title": "Automatic adjustment log",
-  "autoplan.log_count": "({n})"
+  "autoplan.log_count": "({n})",
+  "workout.thr_low_badge": "HR threshold uncertain"
 }

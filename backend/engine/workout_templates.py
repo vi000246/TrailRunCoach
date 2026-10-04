@@ -159,6 +159,12 @@ UA = "Uphill Athlete（House／Johnston）"
 FRIEL_URL = "https://www.trainingpeaks.com/learn/articles/joe-friel-s-quick-guide-to-setting-zones/"
 GARMIN_DSW = "https://www.garmin.com/zh-TW/blog/running/the-climbing-ability-of-trail-running/"
 HRMAX = "% LTHR 由來源的 % HRmax ÷ 0.9 換算（推估）"
+MAXHR_SRC = "Polar「How to determine your maximum heart rate」上坡測試（2016，2024 更新）；Boudet 2002"
+MAXHR_URL = "https://www.polar.com/blog/calculate-maximum-heart-rate/"
+MAXHR_NOTE = ("條件：戴胸帶（手腕光學常有尖峰）、休息充足（前 48 小時沒有硬課）、沒生病、涼爽、找 2–3 分鐘的坡、"
+              "最好有人陪。有心血管疾病或風險、胸痛、頭暈的人不要做，先問醫師（ACSM 運動前篩檢，Riebe 2015）；"
+              "不舒服立刻停。替代：最近一場 5 K 比賽的最後衝刺也可以（現場、比賽與實驗室的最高心率沒有差別，Boudet 2002）。"
+              "app 的讀法：濾掉尖峰與步頻鎖定後，撐 ≥ 5 秒的最高心率（推估）；結果要在設定頁按「套用」才會寫入")
 TP = "配速是閾值配速的倍數（app 的 T 配速，推估）"
 
 
@@ -346,7 +352,20 @@ TEMPLATES: list[Template] = [
     Template("friel_lthr30", "test", "Friel 30′ 閾值心率測試", "Joe Friel「Quick Guide to Setting Zones」TrainingPeaks", FRIEL_URL, lambda b: [
         b.warm(15), b.t("work", 10 * 60, OPEN, "獨自全力 30′ 的前 10′：第 10′ 按圈"),
         b.t("work", 20 * 60, OPEN, "後 20′：平均心率＝LTHR"), b.cool(10)],
-        note="只看全力，不設目標；手腕光學心率的平均誤差比胸帶大", purpose=PURPOSE["test"]),
+        note=("只看全力，不設目標；手腕光學心率的平均誤差比胸帶大。條件：< 25 °C、平路環線或田徑場、戴胸帶、"
+              "前 48 小時沒有硬課、不在減量期／比賽週；自己一個人跑，不要跟人跑、不要在比賽中測"),
+        purpose=PURPOSE["test"]),
+    # SP-64: Polar's hill field test (docs/research/zones-and-thresholds.md 附錄 C); the app reads
+    # the highest HR held ≥ 5 s after spike / cadence-lock filtering (threshold_confidence.hrmax_result)
+    Template("maxhr_hill", "test", "最大心率測試：3 趟上坡、最後一趟全力", MAXHR_SRC, MAXHR_URL, lambda b: [
+        b.t("warm", 15 * 60, AET, "平路暖身 15′，慢慢加到平常的訓練配速"),
+        b.lap("work", 150, "上坡 ≥ 2′：能撐 20 分鐘的強度，記下心率"),
+        b.lap("rest", 180, "慢跑／走下來，心率降 30–40 bpm"),
+        b.lap("work", 150, "同一段上坡再跑一次，更快（約 3 km 比賽的力）"),
+        b.lap("rest", 180, "慢跑／走下來，心率降 30–40 bpm"),
+        b.lap("work", 60, "最後一趟：全力衝 1′（上半段坡），結束前的心率最接近最大心率"),
+        b.cool(10, "走路／慢跑緩和 ≥ 10′")],
+        note=MAXHR_NOTE, purpose=PURPOSE["test"]),
     Template("ua_aet_drift", "test", "AeT 心率飄移測試 60′", "Steve House, Uphill Athlete「Heart Rate Drift」",
              "https://uphillathlete.com/aerobic-training/heart-rate-drift/", lambda b: [
         b.warm(15, "慢慢加到心率穩定"),
