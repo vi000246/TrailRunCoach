@@ -587,7 +587,6 @@
         r = R("pace", { lo: a, hi: b, frac: f, text: `${mmss(a)}–${mmss(b)} /km`, sub, auto: false, intensity: ["pace", pyRound(a), pyRound(b)] });
       }
       if (r.lo != null && r.hi != null && r.lo > r.hi && r.type !== "pace") r.err = "下限比上限高";
-      if (r.type === "power" && c.cp && (r.lo < 0.4 * c.cp || r.hi > 2.0 * c.cp)) r.err = r.err || "功率不在 40–200% CP（推估的合理範圍）";
       return r;
     }
     const asDict = (r, D) => ({ type: r.type, lo: r.lo, hi: r.hi, frac: r.frac, text: r.text, sub: r.sub, auto: r.auto, warn: r.warn,
