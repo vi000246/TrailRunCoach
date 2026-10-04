@@ -5,6 +5,7 @@ export (racepower/watch_export.py → 匯出至課表, plan_store.upsert_externa
 weather falling back to the event GPX's start. Synthetic data only; no network
 (Open-Meteo and COROS are faked).
 """
+import json
 import math
 
 import httpx
@@ -276,6 +277,146 @@ def test_race_tss_estimate():
     tss = WE.tss_estimate(legs, {"cp": 300.0, "lthr": 170.0})
     assert tss == approx(round((250 / 300) ** 2 * 100 + (148 / 170) ** 2 * 100 + 0.5 * WE.DEFAULT_IF ** 2 * 100, 1))
     assert WE.tss_estimate([], {}) is None
+
+
+def test_race_tss_open_legs_use_the_predicted_race_hr():
+    legs = [{"t": 3600, "target": {"type": "power", "lo": 240, "hi": 260}},
+            {"t": 1800, "target": {"type": "none"}}]
+    th = {"cp": 300.0, "lthr": 170.0}
+    ti = WE.tss_info(legs, th, 153.0, "越野心率模型 90% LTHR")
+    assert ti["tss"] == approx(round((250 / 300) ** 2 * 100 + 0.5 * 0.9 ** 2 * 100, 1))
+    assert ti["open_h"] == 0.5 and ti["open_if"] == approx(0.9) and not ti["fallback"] and "越野" in ti["open_src"]
+    # no prediction (or no LTHR): DEFAULT_IF, flagged
+    fb = WE.tss_info(legs, {"cp": 300.0, "lthr": None}, 153.0)
+    assert fb["fallback"] and fb["open_if"] == WE.DEFAULT_IF
+    # every leg with a target: nothing open, no fallback
+    assert not WE.tss_info(legs[:1], th)["fallback"]
+
+
+def test_race_hr_is_the_calculators_own_prediction():
+    th = {"lthr": 170.0}
+    hr, src = WE.race_hr({"type": "trail", "summary": {"trail_hr": {"x": 0.86, "x_star": 0.88}}}, th)
+    assert hr == approx(0.88 * 170) and "越野心率模型" in src
+    assert WE.race_hr({"type": "baiyue", "summary": {"hr_cap": 142.0}}, th) == (142.0, "百岳心率帶 AeT")
+    assert WE.race_hr({"type": "road", "summary": {}}, th) == (None, "")
+    assert WE.race_hr({"type": "trail", "summary": {}}, th) == (None, "")          # no trail HR model
+
+
+def test_tss_calibration_shrinks_toward_one_and_counts_a_race_once():
+    from backend.engine.racepower import tss_calib as TC
+    assert TC.factor(None) == {"factor": 1.0, "n": 0, "k": TC.CALIB_K, "ratio": None, "badge": "推估"}
+    st = TC.record(None, "racecalc:a", 200.0, "2099-05-01")
+    st = TC.record(st, "racecalc:a", 250.0, "2099-05-01")                 # a re-export replaces the estimate
+    assert st["races"]["racecalc:a"]["raw"] == 250.0
+    done = [{"ext_key": "racecalc:a", "state": "done", "done_by": {"tss": 300.0}}]
+    st, ch = TC.refresh(st, done)
+    assert ch and st["races"]["racecalc:a"]["actual"] == 300.0
+    st2, ch2 = TC.refresh(st, done)                                        # idempotent
+    assert not ch2 and st2 == st
+    f = TC.factor(st)
+    w = 1 / (1 + TC.CALIB_K)
+    assert f["n"] == 1 and f["ratio"] == approx(1.2) and f["factor"] == approx(round(1.2 ** w, 3))
+    # a done race keeps its sample: exporting it again does not reset it
+    assert TC.record(st, "racecalc:a", 999.0, "2099-05-01") == st
+    # more races: closer to the personal ratio; an absurd ratio is clipped
+    for i in range(5):
+        st = TC.record(st, f"racecalc:r{i}", 100.0, f"2099-06-0{i + 1}")
+    st, _ = TC.refresh(st, done + [{"ext_key": f"racecalc:r{i}", "state": "done", "done_by": {"tss": 120.0}}
+                                   for i in range(5)])
+    f6 = TC.factor(st)
+    assert f6["n"] == 6 and f["factor"] < f6["factor"] < 1.2
+    st, _ = TC.refresh(st, [{"ext_key": "racecalc:r0", "state": "done", "done_by": {"tss": 900.0}}])
+    assert TC.factor({"races": {"racecalc:r0": st["races"]["racecalc:r0"]}})["ratio"] == TC.RATIO_RANGE[1]
+    # unlinked again (still in the plan, not done): the sample goes; a race no longer in the plan keeps it
+    st, ch = TC.refresh(st, [{"ext_key": "racecalc:a", "state": "active"}])
+    assert ch and st["races"]["racecalc:a"]["actual"] is None and st["races"]["racecalc:r1"]["actual"] == 120.0
+
+
+def test_export_applies_the_post_race_correction(client, monkeypatch):   # noqa: F811
+    from sqlalchemy import update
+
+    from backend.db.models import PlanSession
+    from backend.engine import plan_store as PS
+    from backend.engine.racepower import tss_calib as TC
+    from backend.settings.repository import SettingsRepository
+    db, run, body = _export_env(client, monkeypatch)
+    url = "/api/v1/racepower/export/plan"
+    w = client.post(url, json={**body, "push": True}).json()
+    ti = w["tss_info"]
+    assert ti["factor"] == 1.0 and ti["n"] == 0 and ti["raw"] == w["tss"] > 0
+    stored = run(SettingsRepository(db).get(TC.KEY))
+    assert stored["races"]["racecalc:race1"] == {"raw": ti["raw"], "day": "2099-05-01", "actual": None}
+    # the race is run: matched to an activity with 30 % more TSS than estimated
+    actual = round(ti["raw"] * 1.3, 1)
+    run(db.execute(update(PlanSession).where(PlanSession.uid == w["uid"]).values(
+        state="done", done_by=json.dumps({"index": 7, "tss": actual, "date": "2099-05-01"}))))
+    run(db.commit())
+    # another race exported later gets the corrected estimate (n = 1, shrunk toward 1)
+    ev2 = type("E", (), {"id": "race2", "name": "第二場", "date": "2099-06-01", "days": 1})()
+    from backend.api import racepower as RP
+    monkeypatch.setattr(RP, "_event", lambda eid: ev2 if eid == "race2" else (_ for _ in ()).throw(RP.HTTPException(404, "x")))
+    b2 = {**body, "event_id": "race2", "date": "2099-06-01"}
+    pv = client.post(url, json=b2).json()["tss_info"]
+    want = round(1.3 ** (1 / (1 + TC.CALIB_K)), 3)
+    assert pv["n"] == 1 and pv["factor"] == approx(want) and pv["tss"] == approx(round(pv["raw"] * want, 1), abs=0.11)
+    w2 = client.post(url, json={**b2, "push": True}).json()
+    assert w2["tss"] == pv["tss"]
+    s2 = next(s for s in run(PS.load(db)) if s["ext_key"] == "racecalc:race2")
+    assert s2["tss"] == pv["tss"] and "賽後校正" in s2["detail"]
+    # writing the same export again never counts race1 twice
+    client.post(url, json={**b2, "push": True, "step_mode": "distance"})
+    again = client.post(url, json=b2).json()["tss_info"]
+    assert again["n"] == 1 and again["factor"] == approx(want)
+    races = run(SettingsRepository(db).get(TC.KEY))["races"]
+    assert races["racecalc:race1"]["actual"] == actual and races["racecalc:race2"]["actual"] is None
+
+
+def test_baiyue_targets_are_heart_rate_only():
+    rows = [dict(r, kind="flat", basis="hr") for r in _rows(3, grade=0.0, basis="hr")] + \
+        [dict(r, start_km=r["start_km"] + 3, end_km=r["end_km"] + 3, kind="run_climb", basis="hr")
+         for r in _rows(3, grade=0.05, basis="hr")] + \
+        [dict(r, start_km=r["start_km"] + 6, end_km=r["end_km"] + 6, kind="descent", hr_cap=None)
+         for r in _rows(3, grade=-0.10, basis="safe")]
+    legs = WE.steps_for({"type": "baiyue"}, rows)["legs"]
+    assert {lg["target"]["type"] for lg in legs} <= {"hr", "none"}
+    assert any(lg["target"]["type"] == "hr" for lg in legs) and legs[-1]["target"] == {"type": "none"}
+    # no AeT: open steps, never a pace (the trail fallback) or a power
+    bare = WE.steps_for({"type": "baiyue"}, [dict(r, hr_cap=None, power=250.0) for r in rows])["legs"]
+    assert all(lg["target"] == {"type": "none"} for lg in bare)
+
+
+def test_multi_day_baiyue_is_not_exported():
+    one = {"type": "baiyue", "summary": {"days": 1, "clock_s": 9 * 3600}, "days": [{"day": 1}]}
+    assert WE.multi_day(one, "05:00") is None
+    assert "2 天" in WE.multi_day({**one, "days": [{"day": 1}, {"day": 2}]}, "05:00")
+    assert "2 天" in WE.multi_day(one, "05:00", days=2)
+    assert "午夜" in WE.multi_day(one, "18:00")                           # 18:00 + 9 h crosses midnight
+    assert "午夜" in WE.multi_day({**one, "summary": {"clock_s": 25 * 3600}})
+    assert WE.multi_day({"type": "trail", "summary": {"clock_s": 30 * 3600}}, "20:00") is None
+
+
+def test_baiyue_export_single_day_only(client, monkeypatch):   # noqa: F811
+    from backend.engine import plan_store as PS
+    from backend.tests.test_racepower_v2 import synthetic_track as track
+    db, run, _ = _export_env(client, monkeypatch)
+    tr = track({"len": 12000, "z": lambda x: 2600 + (x * 0.1 if x < 6000 else (12000 - x) * 0.1)})
+    cid = client.post("/api/v1/racepower/course",
+                      files={"file": ("h.gpx", GPX.write_gpx(tr).encode(), "application/gpx+xml")}).json()["course_id"]
+    body = {"type": "baiyue", "course": {"course_id": cid}, "date": "2099-05-01", "event_id": "race1",
+            "start_time": "05:30"}
+    plan = client.post("/api/v1/racepower/plan", json=body).json()
+    assert plan["export_block"] is None
+    ok = client.post("/api/v1/racepower/export/plan", json={**body, "push": True})
+    assert ok.status_code == 200, ok.text
+    j = ok.json()
+    assert {lg["target"]["type"] for lg in j["legs"]} <= {"hr", "none"}
+    assert j["tss_info"]["open_src"] in ("百岳心率帶 AeT", "") and j["tss"] > 0
+    # two days: blocked on the page (export_block) and by the API
+    multi = {**body, "day_splits_km": [6]}
+    assert "2 天" in client.post("/api/v1/racepower/plan", json=multi).json()["export_block"]
+    r = client.post("/api/v1/racepower/export/plan", json={**multi, "push": True})
+    assert r.status_code == 400 and "多日" in r.json()["detail"]
+    assert len(run(PS.load(db))) == 1
 
 
 # ---- race-day weather location ----------------------------------------------------------

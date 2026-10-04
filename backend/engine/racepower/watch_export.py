@@ -19,7 +19,9 @@ Targets per leg (seg_targets.chart_rows): power ± 3 % where power is valid (roa
 trail flat / runnable 3–8 %), the HR cap on steep / walked climbs (and wherever there
 is no power), nothing on trail descents (控制、安全), pace on a road with no CP. A trail /
 百岳 leg that is mostly steep / walked climbing (seg_targets.kind_of steep_climb) never
-gets the estimated power or a pace: the HR cap, else no target (自由). When a leg merges
+gets the estimated power or a pace: the HR cap, else no target (自由). A 百岳 plan (單日 /
+單攻 only: multi_day blocks a multi-day trip) gets heart rate only on every leg — never power
+or pace (no power meter for 百岳); descents 控制、安全. When a leg merges
 segments of different kinds, the kind with the most time decides; merged power is
 time-weighted. Pure functions on the /plan payload.
 
@@ -28,6 +30,7 @@ reach the watch with the plan's own push.
 """
 from __future__ import annotations
 
+import re
 from typing import Optional
 
 from backend.engine import workout_steps as WS
@@ -145,6 +148,14 @@ def _target(pc: dict, plan_type: str) -> tuple[dict, str]:
     """(workout_steps target, basis) of one leg."""
     basis = max(pc["kt"].items(), key=lambda kv: kv[1])[0] if pc["kt"] else "pace"
     kind = max(pc["kd"].items(), key=lambda kv: kv[1])[0] if pc.get("kd") else ""
+    if plan_type == "baiyue":
+        # 百岳 (單攻): heart rate only — no power meter, and pace is no target with a pack;
+        # descents 控制、安全 as on a trail, without a cap the step is open (自由)
+        if basis == "safe" or pc["group"] == "descent":
+            return {"type": "none"}, "safe"
+        if pc["hr"]:
+            return {"type": "hr", "mode": "abs", "lo": round(pc["hr"] * HR_LO_FRAC), "hi": round(pc["hr"])}, "hr"
+        return {"type": "none"}, "none"
     if kind == "steep_climb" and plan_type != "road":
         # a steep / walked climb: the HR cap only, never the estimated power or a pace —
         # without a cap the step is open (自由)
@@ -236,16 +247,37 @@ def steps_for(plan: dict, rows: list[dict], *, mode: Optional[str] = None, stops
             "merged": merged, "limit": limit, "notes": notes}
 
 
-DEFAULT_IF = 0.75                # 推估: a leg with no power / HR target (descent, 自由, pace only)
+DEFAULT_IF = 0.75                # 推估: a leg with no power / HR target when the calculator has no HR prediction
 IF_RANGE = (0.5, 1.15)
 
 
-def tss_estimate(legs: list[dict], th: dict) -> Optional[float]:
+def race_hr(plan: dict, th: dict) -> tuple[Optional[float], str]:
+    """The race HR the calculator itself predicts (bpm, source): trail = the trail HR model's
+    race level x* × LTHR (planner.trail_hr_estimate, the measured level before the heat shift —
+    the same HR the fuelling uses); 百岳 = the hiking HR band the walking time is planned at
+    (summary.hr_cap: AeT). One level for the whole race (the model has no per-segment HR).
+    (None, "") for road and without a model / LTHR."""
+    s = plan.get("summary") or {}
+    lthr = th.get("lthr")
+    if plan.get("type") == "trail":
+        m = s.get("trail_hr") or {}
+        x = m.get("x_star") or m.get("x")
+        if x and lthr:
+            return float(x) * float(lthr), f"越野心率模型 {float(x):.0%} LTHR"
+    elif plan.get("type") == "baiyue" and s.get("hr_cap"):
+        return float(s["hr_cap"]), "百岳心率帶 AeT"
+    return None, ""
+
+
+def tss_info(legs: list[dict], th: dict, hr_pred: Optional[float] = None, hr_src: str = "") -> dict:
     """The race session's planned TSS (推估) from its legs: Σ hours × IF² × 100, IF = the
-    middle of the leg's power band ÷ CP, or of its HR band ÷ LTHR (hrTSS-like), else
-    DEFAULT_IF. None when the legs have no time."""
+    middle of the leg's power band ÷ CP, or of its HR band ÷ LTHR (hrTSS-like); a leg with
+    neither (descent, 自由, pace only) runs at the calculator's predicted race HR ÷ LTHR
+    (`hr_pred`, race_hr), DEFAULT_IF only without one. {tss (None when the legs have no
+    time), open_h (hours of such legs), open_if, open_src, fallback (DEFAULT_IF used)}."""
     cp, lthr = th.get("cp"), th.get("lthr")
-    tot = 0.0
+    pred = min(IF_RANGE[1], max(IF_RANGE[0], hr_pred / lthr)) if hr_pred and lthr else None
+    tot, open_h = 0.0, 0.0
     for lg in legs or []:
         t, tg = float(lg.get("t") or 0.0), lg.get("target") or {}
         mid = (float(tg["lo"]) + float(tg["hi"])) / 2.0 if tg.get("lo") and tg.get("hi") else None
@@ -254,7 +286,38 @@ def tss_estimate(legs: list[dict], th: dict) -> Optional[float]:
         elif mid and tg.get("type") == "hr" and lthr:
             f = mid / lthr
         else:
-            f = DEFAULT_IF
+            f = pred or DEFAULT_IF
+            open_h += t / 3600.0
         f = min(IF_RANGE[1], max(IF_RANGE[0], f))
         tot += t / 3600.0 * f * f * 100.0
-    return round(min(2000.0, tot), 1) if tot > 0 else None
+    return {"tss": round(min(2000.0, tot), 1) if tot > 0 else None, "open_h": round(open_h, 2),
+            "open_if": round(pred or DEFAULT_IF, 3), "open_src": hr_src if pred else "",
+            "fallback": open_h > 0 and pred is None}
+
+
+def tss_estimate(legs: list[dict], th: dict, hr_pred: Optional[float] = None) -> Optional[float]:
+    """tss_info's TSS alone."""
+    return tss_info(legs, th, hr_pred)["tss"]
+
+
+def _start_s(start_time: Optional[str]) -> Optional[float]:
+    m = re.match(r"^(\d{1,2}):(\d{2})", start_time or "")
+    return int(m.group(1)) * 3600.0 + int(m.group(2)) * 60.0 if m else None
+
+
+def multi_day(plan: dict, start_time: Optional[str] = None, days: Optional[int] = None) -> Optional[str]:
+    """Why a 百岳 plan cannot be exported as one race-day session (None when it can): a
+    multi-day trip — the calculator's own days (`days` asked for, day splits, the plan's
+    per-day rows) or a clock time that crosses midnight (start + clock time; > 24 h without
+    a start time). Road / trail plans are never blocked here."""
+    if plan.get("type") != "baiyue":
+        return None
+    s = plan.get("summary") or {}
+    n = max(int(days or 1), int(s.get("days") or 1), len(plan.get("days") or []) or 1)
+    if n > 1:
+        return f"多日行程（{n} 天）不匯出至課表：課表一天一堂，只有單日（單攻）百岳可以匯出"
+    clock = float(s.get("clock_s") or s.get("time_s") or 0.0)
+    st = _start_s(start_time)
+    if (st if st is not None else 0.0) + clock > 24 * 3600.0:
+        return "行程會跨過午夜（多日）不匯出至課表：只有當天來回的單攻百岳可以匯出"
+    return None
