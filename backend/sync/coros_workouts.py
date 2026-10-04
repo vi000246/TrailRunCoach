@@ -21,7 +21,9 @@ jgretz/coros-run-plan-mcp and wtcollote/coros-workout-mcp:
 
 Program codes: sportType 1 run, 2 bike, 4 strength. exerciseType 0 group,
 1 warm-up, 2 training, 3 cool-down, 4 rest. targetType 1 open (lap button),
-2 time (s), 5 distance (cm). intensityType 0 none, 2 heart rate, 3 pace
+2 time (s), 5 distance (cm), 6 training load (targetValue = COROS TL, an integer — read back
+2026-10-04 from a Training Hub workout with a 「TL 100」 end condition: targetType 6,
+targetValue 100, the step's HR target kept as usual). intensityType 0 none, 2 heart rate, 3 pace
 (seconds per km in intensityValue = the faster bound / intensityValueExtend = the slower,
 intensityDisplayUnit 1 — verified on a COROS watch 2026-10-02: 270 / 285 showed
 4'30"–4'45"/km; 270000 showed 4500'00"), 6 power (W). HR: isIntensityPercent false = absolute bpm in
@@ -60,6 +62,9 @@ log = logging.getLogger(__name__)
 SPORT_RUN = 1
 EX_GROUP, EX_WARMUP, EX_TRAIN, EX_COOLDOWN, EX_REST = 0, 1, 2, 3, 4
 TARGET_OPEN, TARGET_TIME, TARGET_DIST = 1, 2, 5
+# 「負荷」 steps (SP-38): COROS's training-load end condition. Set to None to push them as an
+# estimated-time step instead (the name then carries 「負荷 X TSS（約 Y TL）」)
+COROS_TARGET_TYPE_LOAD: Optional[int] = 6
 INT_NONE, INT_HR, INT_PACE, INT_POWER = 0, 2, 3, 6
 PACE_DISPLAY_UNIT = 1            # min/km on the watch (verified 2026-10-02)
 HR_TYPE_LTHR = 3
@@ -101,6 +106,11 @@ class Step:
     intensity: Optional[tuple] = None   # ("hr", lo, hi) | ("power", lo, hi)
     name: str = ""
     meters: int = 0               # > 0: a distance step (targetType 5, cm) — engine/workout_steps.py
+    # a 「負荷」 step (engine/workout_steps.py, SP-38): the planned TSS and its COROS TL
+    # (engine/coros_tl.py, 推估); `seconds` is then the estimated time, which every provider
+    # without a load end condition gets instead
+    load_tss: float = 0.0
+    load_tl: float = 0.0
 
 
 @dataclass
@@ -472,12 +482,30 @@ def session_steps(s: dict, th: Thresholds) -> list[StepLike]:
 # steps -> COROS program payload
 # ---------------------------------------------------------------------------
 
+def load_note(st: Step) -> str:
+    """「負荷 80 TSS（約 100 TL）」: what a load step pushed as estimated time says in its name."""
+    return f"負荷 {st.load_tss:g} TSS（約 {round(st.load_tl)} TL）"
+
+
+def native_load(st: Step) -> bool:
+    return bool(st.load_tl) and COROS_TARGET_TYPE_LOAD is not None
+
+
 def _exercise(st: Step, ex_id: int, sort_no: int, group_id: str, th: Thresholds) -> dict:
+    name = st.name or STEP_NAME[st.kind]
+    if st.load_tl and not native_load(st):
+        # COROS_TARGET_TYPE_LOAD unset: the estimated time stands in, the name says the load
+        name = f"{st.name} · {load_note(st)}" if st.name else load_note(st)
+    if native_load(st):
+        ttype, tval = COROS_TARGET_TYPE_LOAD, max(1, int(round(st.load_tl)))
+    else:
+        ttype = TARGET_DIST if st.meters else TARGET_TIME if st.seconds else TARGET_OPEN
+        tval = int(st.meters) * 100 if st.meters else st.seconds
     ex = {
-        "id": ex_id, "name": st.name or STEP_NAME[st.kind], "overview": OVERVIEW[st.kind],
+        "id": ex_id, "name": name, "overview": OVERVIEW[st.kind],
         "exerciseType": st.kind, "sportType": SPORT_RUN,
-        "targetType": TARGET_DIST if st.meters else TARGET_TIME if st.seconds else TARGET_OPEN,
-        "targetValue": int(st.meters) * 100 if st.meters else st.seconds,
+        "targetType": ttype,
+        "targetValue": tval,
         "targetDisplayUnit": 0,
         "intensityType": INT_NONE, "intensityValue": 0, "intensityValueExtend": 0,
         "intensityDisplayUnit": 0, "hrType": 0, "isIntensityPercent": False,
@@ -550,6 +578,8 @@ class WorkoutSpec:
     name: str
     payload: dict
     fingerprint: str
+    # 「負荷」 steps sent with COROS's load target [{i, n, tss, tl}] (engine/coros_tl.record_push)
+    load_steps: list = field(default_factory=list)
 
 
 def workout_name(s: dict) -> str:
@@ -569,9 +599,24 @@ def session_workout(s: dict, thresholds: Optional[dict], today: Optional[str] = 
     steps = session_steps(s, th)
     name = workout_name(s)
     payload = build_program(name, steps, th, s.get("detail") or "")
+    # the payload is the fingerprint: a TSS → TL refit changes it only for sessions with a
+    # 「負荷」 step whose sent TL actually moved (no other field depends on the conversion)
     fp = hashlib.sha256(json.dumps({"day": s["day"], "program": payload}, sort_keys=True,
                                    ensure_ascii=False).encode()).hexdigest()
-    return WorkoutSpec(s["id"], s["day"], name, payload, fp)
+    return WorkoutSpec(s["id"], s["day"], name, payload, fp, _load_records(s, th))
+
+
+def _load_records(s: dict, th: Thresholds) -> list:
+    """The session's 「負荷」 steps as sent natively (closed loop, engine/coros_tl.py)."""
+    if COROS_TARGET_TYPE_LOAD is None or not s.get("steps") or s.get("kind") == "notice":
+        return []
+    from backend.engine import workout_steps as WS
+    try:
+        st = WS.normalize(s["steps"])
+    except WS.StepsError:
+        return []
+    c = WS.Ctx(cp=th.cp, lthr=th.lthr, aet=th.aet, tpace=th.tpace, basis=_basis(s), hrz=th.hrz)
+    return WS.load_records(st, c)
 
 
 # ---------------------------------------------------------------------------
@@ -792,6 +837,24 @@ def status_of(s: dict, thresholds: Optional[dict], row: Optional[CorosPlanPush],
     return {**out, "status": st, "name": spec.name, **_row_view(row)}
 
 
+async def _record_load(db: AsyncSession, athlete_id: int, s: dict, spec: WorkoutSpec) -> None:
+    """The planned TSS / sent TL of the pushed load steps, for the closed-loop correction once the
+    session is run (engine/coros_tl.py LOAD_KEY; one entry per session key). Never fails a push."""
+    try:
+        from backend.engine import coros_tl as TL
+        from backend.settings.repository import SettingsRepository
+        repo = SettingsRepository(db, athlete_id)
+        old = await repo.get(TL.LOAD_KEY)
+        new = TL.record_push(old, s["key"], spec.day, spec.load_steps)
+        if new != old:
+            await repo.set(TL.LOAD_KEY, new)
+            await db.commit()
+            TL.forget_reads()
+    except Exception as e:                       # noqa: BLE001
+        await db.rollback()
+        log.warning("load step record failed: %s", type(e).__name__)
+
+
 def _monday(day: Optional[str], default: Optional[str]) -> Optional[str]:
     if not day:
         return default
@@ -928,6 +991,8 @@ async def _push_one(db, hub: TrainingHub, athlete_id: int, s: dict,
         row.status = "pushed"
         row.pushed_at = dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
         await db.commit()
+        if spec.load_steps:
+            await _record_load(db, athlete_id, s, spec)
         return {**out, "status": "updated" if replacing else "pushed", "name": spec.name,
                 "changed": True, **_row_view(row)}
     except CorosAuthError:

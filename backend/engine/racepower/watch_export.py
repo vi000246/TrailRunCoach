@@ -242,7 +242,7 @@ def steps_for(plan: dict, rows: list[dict], *, mode: Optional[str] = None, stops
         out_legs.append({"name": name[:WS.MAX_NOTE], "start_km": pc["start_km"], "end_km": pc["end_km"], "t": pc["t"],
                          "gain_m": pc["gain_m"], "loss_m": pc["loss_m"], "basis": basis, "target": tg})
     if mode == "lap":
-        notes.append("每段按圈（lap）結束：到步驟名稱寫的地點時按一下")
+        notes.append("每段「直到按下計圈」：到步驟名稱寫的地點時按一下計圈（lap）")
     return {"mode": mode, "doc": {"v": WS.V, "origin": "user", "items": items}, "legs": out_legs,
             "merged": merged, "limit": limit, "notes": notes}
 

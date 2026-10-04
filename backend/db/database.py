@@ -112,6 +112,7 @@ async def _migrate_schema():
         ("workout_files", "duplicate_of", "INTEGER"),
         ("workout_files", "rpe", "REAL"),
         ("workout_files", "feel", "INTEGER"),
+        ("workout_files", "coros_training_load", "REAL"),      # COROS list trainingLoad (SP-38)
         ("sync_state", "coros_access_token", "TEXT"),
         ("sync_state", "tp_web_cookie", "TEXT"),
         ("sync_state", "coros_token_expires", "DATETIME"),

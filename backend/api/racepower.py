@@ -603,7 +603,7 @@ def race_session(body: ExportIn, p: dict, ev, calib: Optional[dict] = None) -> t
     ex = WE.steps_for(p, p.get("chart_rows") or [], mode=body.step_mode, stops=[x.model_dump() for x in body.stops],
                       day_splits_km=body.day_splits_km if p["type"] == "baiyue" else None)
     badge = "（推估）" if sm.get("badge") else ""
-    hint = "每段按圈結束" if ex["mode"] == "lap" else "每段依距離"
+    hint = "每段直到按下計圈" if ex["mode"] == "lap" else "每段依距離"
     detail = f"{hint}；{PL.HINT_30S}；分段目標{badge}" if p["type"] != "baiyue" else f"{hint}；只看心率（≤ AeT）；分段目標{badge}"
     th = _thresholds(p)
     hr, hr_src = WE.race_hr(p, th)

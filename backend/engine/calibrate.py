@@ -238,7 +238,17 @@ async def calibrate(db, athlete_id: int = 1, ds=None, today: Optional[dt.date] =
     for n, e in updates.items():
         await repo.set(key(n), e)
     await db.commit()
-    return {"written": sorted(updates), "skipped": skipped}
+    out = {"written": sorted(updates), "skipped": skipped}
+    # the COROS TL conversion (engine/coros_tl.py, SP-38): a multi-parameter fit with its own
+    # backtest, so not an Item — same trigger, same Dataset; it never stops the items above
+    try:
+        from backend.engine import coros_tl
+        out["coros_tl"] = await coros_tl.refit_and_store(db, athlete_id, ds, today)
+    except Exception as e:                  # noqa: BLE001
+        await db.rollback()
+        log.warning("COROS TL refit failed: %s", type(e).__name__)
+        out["coros_tl"] = {"error": type(e).__name__}
+    return out
 
 
 SESSION_FACTORY: Optional[Callable] = None      # tests replace; default AsyncSessionLocal
@@ -258,8 +268,11 @@ async def run_safe(athlete_id: int = 1) -> dict:
 
 
 def _after_sync(source: str, result: dict, athlete_id: int = 1) -> Optional[asyncio.Task]:
-    """sync/runner.py calls this when a run ends: ≥ 1 new activity -> a background fit."""
-    if (result or {}).get("status") not in ("ok", "partial") or int((result or {}).get("downloaded") or 0) < 1:
+    """sync/runner.py calls this when a run ends: ≥ 1 new activity, or COROS TL stored on
+    already-imported ones (`tl_filled`, for the TL refit) -> a background fit."""
+    r = result or {}
+    if r.get("status") not in ("ok", "partial") or (int(r.get("downloaded") or 0) < 1
+                                                    and int(r.get("tl_filled") or 0) < 1):
         return None
     try:
         t = asyncio.get_running_loop().create_task(run_safe(athlete_id))

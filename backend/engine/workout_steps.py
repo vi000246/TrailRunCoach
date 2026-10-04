@@ -19,7 +19,9 @@ it; sync/coros_workouts pushes it.
 kind      warm | work | rest | cool | other, and the container `repeat` (times 1–99;
           `last_rest` false = no rest after the last rep, which a COROS group can't
           express: such a block is pushed unrolled, one lap per step)
-dur       time (s) | distance (m) | open (ends with the lap button)
+dur       time (s) | distance (m) | open (ends with the lap button) | load (TSS, SP-38: main-set
+          work steps only; COROS gets its TL end condition — engine/coros_tl.py, 推估 — and every
+          other provider an estimated time = TSS ÷ (IF² × 100) h at the step's intensity)
 target    auto — what 「目標用：自動／心率／功率」 (engine/target_policy.py) gives the step:
              intent easy   HR ≤ AeT (with plo/phi: the power band when the session runs by power)
              intent band   lo/hi × CP on power; on HR the class's % LTHR (or the text's bpm)
@@ -60,8 +62,11 @@ TYPES = ("auto", "power", "hr", "pace", "rpe", "none")
 TYPE_LABEL = {"auto": "自動", "power": "功率", "hr": "心率", "pace": "配速", "rpe": "RPE", "none": "無"}
 MODES = ("pct", "zone", "abs")
 INTENTS = ("easy", "band", "open")
-DUR_TYPES = ("time", "distance", "open")
-OPEN_LABEL = "直到按下計圈"      # the "open" end condition (lap button; SP-38: was 「按圈」)
+DUR_TYPES = ("time", "distance", "open", "load")
+OPEN_LABEL = "直到按下計圈"      # the "open" end condition (lap button; renamed in SP-38)
+LOAD_LABEL = "負荷"              # the "load" end condition (TSS here; COROS TL on the watch)
+LOAD_RANGE = (1, 500)            # TSS of one load step
+LOAD_KINDS = ("work",)           # 「負荷」 only on main-set steps (SP-38, the user 2026-10-04)
 MAX_TIMES = 99
 MAX_DEPTH = 2                    # a repeat may hold one more level of repeats
 MAX_ITEMS = 120                  # steps in the model (the editor's limit; COROS is checked apart)
@@ -156,6 +161,15 @@ class Ctx:
     # 課表心率區間 (engine/hr_profile.plan_hr_zones; the plan thresholds' "hr_model"): the
     # automatic easy / interval HR targets and the editor's HR 區間 choice (hr_model_zones)
     hrz: Optional[dict] = None
+    # the push target (sync/workout_targets, setting plan.push.provider): its end conditions
+    # (empty = not checked) and name, for the 「負荷」 issue on providers without one
+    end_conditions: tuple = ()
+    provider_label: str = ""
+    tl: Optional[object] = None             # engine/coros_tl.Model; None = the stored one
+
+    def tl_model(self):
+        from backend.engine import coros_tl
+        return self.tl if self.tl is not None else coros_tl.current()
 
     @classmethod
     def of(cls, th: Optional[dict], basis: Optional[str] = None, hr_cap: bool = False,
@@ -643,8 +657,13 @@ def normalize(d) -> dict:
         dur = x.get("dur") or {}
         dt_ = dur.get("type") if isinstance(dur, dict) else None
         if dt_ not in DUR_TYPES:
-            errs.append("時長類型要是 時間／距離／直到按下計圈")
+            errs.append(f"時長類型要是 時間／距離／{OPEN_LABEL}／{LOAD_LABEL}")
             dur = {"type": "open"}
+        elif dt_ == "load":
+            if k not in LOAD_KINDS:
+                errs.append(f"「{LOAD_LABEL}」只能用在主課")
+            v = _f(dur.get("value"), "負荷（TSS）", errs, *LOAD_RANGE)
+            dur = {"type": "load", "value": round(v, 1)} if v else {"type": "open"}
         elif dt_ == "time":
             v = _f(dur.get("value"), "時間", errs, 5, 6 * 3600)
             dur = {"type": "time", "value": int(round(v))} if v else {"type": "open"}
@@ -690,6 +709,8 @@ def fmt_dur(d: dict) -> str:
     if d.get("type") == "distance":
         m = d["value"]
         return f"{m / 1000:g} km" if m >= 1000 else f"{m} m"
+    if d.get("type") == "load":
+        return f"{LOAD_LABEL} {d['value']:g} TSS"
     return OPEN_LABEL
 
 
@@ -956,6 +977,9 @@ def _secs(st: dict, r: Resolved, c: Ctx) -> tuple[float, bool]:
     d = st["dur"]
     if d["type"] == "time":
         return float(d["value"]), False
+    if d["type"] == "load":
+        f = load_if(st, r)
+        return d["value"] * 3600.0 / (f * f * 100.0), True
     if d["type"] == "distance":
         km = d["value"] / 1000.0
         if r.type == "pace" and r.lo:
@@ -973,6 +997,33 @@ def _secs(st: dict, r: Resolved, c: Ctx) -> tuple[float, bool]:
     if d.get("est"):
         return float(d["est"]), True
     return 0.0, False
+
+
+def load_if(st: dict, r: Resolved) -> float:
+    """The IF a 「負荷」 step is timed and converted at: its target's ≈ % CP, else the kind's."""
+    return r.frac if r.frac else NONE_IF.get(st["kind"], 0.7)
+
+
+def load_tl(st: dict, r: Resolved, c: Ctx) -> dict:
+    """{"tl", "err", "group", "fitted"}: the COROS TL of a 「負荷」 step (engine/coros_tl.py, 推估)."""
+    return c.tl_model().tl(st["dur"]["value"], "power" if r.type == "power" else "hr", load_if(st, r))
+
+
+def load_records(steps: dict, c: Ctx) -> list[dict]:
+    """[{i (run-order index), n (steps run), tss, tl, basis, if, f (the closed-loop factor in
+    effect)}] of the 「負荷」 steps (engine/coros_tl.py closed loop)."""
+    rows = flat(steps["items"])
+    out = []
+    m = c.tl_model()
+    for i, row in enumerate(rows):
+        st = row["st"]
+        if st["dur"]["type"] == "load":
+            r = resolve(st, c)
+            out.append({"i": i, "n": len(rows), "tss": st["dur"]["value"],
+                        "tl": max(1, round(load_tl(st, r, c)["tl"])),
+                        "basis": "power" if r.type == "power" else "hr", "if": round(load_if(st, r), 4),
+                        "f": m.factor})
+    return out
 
 
 def estimate_note(steps: dict, c: Ctx) -> str:
@@ -993,6 +1044,8 @@ def estimate_note(steps: dict, c: Ctx) -> str:
                          (f"，用你的越野 EP 速度 {c.ep_kmh:.1f} km/h" if c.ep_kmh else "，你的越野紀錄不夠，先用路跑速度"))
     if lap:
         parts.append("「直到按下計圈」段：用課表原本寫的最短時間")
+    if any(s["dur"]["type"] == "load" for s in rows):
+        parts.append(f"「{LOAD_LABEL}」段：TSS ÷（該段強度 IF² × 100）換成時間")
     return "；".join(parts) + "（推估）" if parts else ""
 
 
@@ -1093,6 +1146,12 @@ def issues(steps: dict, c: Ctx, cap: Optional[float] = None, cap_mode: str = "so
             add("err" if hard else "warn", f"總時間 {mins:.0f} 分超過這天上限 {cap:.0f} 分（課表偏好：{'硬上限' if hard else '軟上限，只提醒'}）")
     if t["open"]:
         add("info", f"{t['open']} 段「直到按下計圈」不算進總時間")
+    for row in rows:
+        st = row["st"]
+        if st["dur"]["type"] == "load" and c.end_conditions and "load" not in c.end_conditions:
+            s_, _e = _secs(st, resolve(st, c), c)
+            add("warn", f"{c.provider_label or '這個平台'}沒有「{LOAD_LABEL}」結束條件：推送時換成預估時間 "
+                        f"{mmss(s_)}（推估）", st["id"])
     role = rpe_role(steps["items"])
     if role:
         add("info", ("RPE 目標：心率、功率只當參考，負荷照手錶記錄算（不用 RPE 校正）；這堂依 RPE 算"
@@ -1271,6 +1330,11 @@ def _one(st: dict, em: _Emit, grouped: bool):
     d = st["dur"]
     secs = d["value"] if d["type"] == "time" else 0
     meters = d["value"] if d["type"] == "distance" else 0
+    if d["type"] == "load":
+        # COROS: its TL end condition; `seconds` = the estimated time the others get (SP-38)
+        s_, _e = _secs(st, r, em.c)
+        return CW.Step(EX[st["kind"]], max(5, int(round(s_))), r.intensity, _name(st, r, em, grouped),
+                       load_tss=float(d["value"]), load_tl=float(max(1, round(load_tl(st, r, em.c)["tl"]))))
     return CW.Step(EX[st["kind"]], int(secs), r.intensity, _name(st, r, em, grouped), int(meters))
 
 
@@ -1343,6 +1407,8 @@ def _ex_line(ex: dict) -> dict:
         dur = IL.fmt_s(ex["targetValue"])
     elif ex["targetType"] == 5:
         dur = f"{ex['targetValue'] / 100000:g} km"
+    elif ex["targetType"] == _cw().COROS_TARGET_TYPE_LOAD:
+        dur = f"{LOAD_LABEL} {ex['targetValue']} TL"
     else:
         dur = OPEN_LABEL
     it = ex.get("intensityType")
@@ -1396,6 +1462,9 @@ def watch_preview(steps: dict, c: Ctx, name: str = "TRC", overview: str = "") ->
         lost.append("「最後一趟不休息」或重複裡的重複：COROS 群組做不到，推送時攤平成一段一段")
     if dist:
         lost.append("距離段：COROS 欄位（公分）依第三方整理，這個 app 還沒實際送過（未驗證）")
+    if any(st["dur"]["type"] == "load" for st, _ in res):
+        lost.append(f"「{LOAD_LABEL}」段：這裡填 TSS，推到 COROS 換算成它的 TL（推估，誤差約 ±20 %；"
+                    "每次同步後用你的活動重新校正）")
     n = len(program["exercises"])
     if n > COROS_MAX_STEPS:
         lost.append(f"{n} 段超過 {COROS_MAX_STEPS} 段：COROS 的上限未驗證")
@@ -1416,10 +1485,16 @@ def view(steps: dict, c: Ctx, cap: Optional[float] = None, cap_mode: str = "soft
         st = row["st"]
         r = resolve(st, c)
         s, e = _secs(st, r, c)
-        by_id.setdefault(st["id"], r.as_dict())
-        order.append({"id": st["id"], "kind": st["kind"], "sec": round(s), "est": e,
-                      "open": st["dur"]["type"] == "open", "frac": r.frac, "level": level(r.frac),
-                      "type": r.type, "rep": [{"id": a, "i": i, "n": n} for a, i, n in row["rep"]]})
+        rd = by_id.setdefault(st["id"], r.as_dict())
+        o = {"id": st["id"], "kind": st["kind"], "sec": round(s), "est": e,
+             "open": st["dur"]["type"] == "open", "frac": r.frac, "level": level(r.frac),
+             "type": r.type, "rep": [{"id": a, "i": i, "n": n} for a, i, n in row["rep"]]}
+        if st["dur"]["type"] == "load":
+            # the editor: 「≈ 98 TL（推估 ±20）」 next to the TSS, and the estimated time
+            lt = load_tl(st, r, c)
+            o["load"] = rd["load"] = {"tss": st["dur"]["value"], "tl": round(lt["tl"]), "err": round(lt["err"]),
+                                      "fitted": lt["fitted"], "sec": round(s), "if": round(load_if(st, r), 3)}
+        order.append(o)
     eq = equivalence(steps, rung, c) if rung else None
     return {"resolved": by_id, "order": order, "totals": totals(steps, c),
             "issues": issues(steps, c, cap, cap_mode, rung), "watch": watch_preview(steps, c),

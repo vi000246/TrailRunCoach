@@ -19,7 +19,9 @@ class CorosProvider(WorkoutProvider):
         targets=("power", "hr", "pace"), repeat_groups=True, nested_repeats=False, open_steps=True,
         distance_steps=True, distance_unit="cm", max_steps=None,
         notes=("功率只收絕對瓦數", "配速：秒／公里（2026-10-02 手錶驗證）",
-               "「最後一趟不休息」的重複要攤平", "距離段單位依第三方整理（未驗證）"))
+               "「最後一趟不休息」的重複要攤平", "距離段單位依第三方整理（未驗證）",
+               "負荷：app 填 TSS，送 COROS 的 TL（推估換算）"),
+        end_conditions=("time", "distance", "open", "load"), load_unit="TL")
 
     def build_payload(self, session: dict, thresholds: Optional[dict]) -> dict:
         return CW.session_workout(session, thresholds).payload
