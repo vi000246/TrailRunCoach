@@ -309,6 +309,28 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
   easy run of a 專項期 week becomes a 40–50 min steep walk at the Pandolf grade that costs what
   the pack would (no pack in training).
 - **熱適應課** (`engine/heat_plan.py`): below.
+- **技術地形課** (SP-74, `engine/technical.py`; applied last, after placement, the climb / steep
+  walk and heat hooks, `backend/engine/overview.py:1484`, and the same per projected week,
+  `backend/engine/projection.py:575`): 主要訓練項目 越野跑 only (路跑: none), base / 專項期, not
+  in a recovery / re-entry week (`week_context`, `backend/engine/technical.py:56`).
+  - **基礎期**: every other week (an even ISO week number, `base_week`; 推估) the week's LSD
+    becomes 「技術地形 N′（低 RPE 3–4）」 of the same minutes on the same day — it stays the `long`
+    session (an easy one, so the long-run rules hold) with the structure warm-up 10′ + RPE 3–4
+    work (+ ≈ 5 m climb per minute, the template's 300 m / 60′) + 5′, no HR / power target. Not
+    in a B2B week, when the long run is done or carries the heat session.
+  - **專項期**: one session a week out of a placed easy run (id `tech`, kind `hike` 越野跑),
+    near the race's terrain. RPE 6–7 (a quality session by `workout_steps.rpe_role`) when an easy
+    run's day is ≥ 2 days from the long run, the B2B days, the race-climb repeats, every quality /
+    test session and the hard runs done this week, and the week's budget has ≥ 30′ left
+    (`SPEC_WORK_MIN`, 推估): work = min(90′ (the template), 20 % of the week − the intervals'
+    time in zone (`budget_room`, `backend/engine/technical.py:111`; the technical work is not
+    put in the Zone 3 ≤ 10 % bucket — HR stays low on technical trail, SP-62; 推估), the day's
+    cap − 25′); weekend days first; the other easy runs give the extra minutes (≥ 20′ each).
+    Otherwise the same session at RPE 4–5 (an easy one) on that easy run's time. A week note
+    (`src: technical`) says which and why (budget left, no spaced day, the day cap).
+  - The generated session carries its `steps` (`Session.steps`, `backend/engine/overview.py:459`)
+    so reconcile stores the structure on the auto row and the push sends time + RPE + climb.
+    Load stays the watch's (SP-62).
 
 **Done-matching** (the generated week; stored sessions are matched by `plan_match`, reconcile
 rule 1): strength ← a strength workout; long (by id, so a long day of kind `hike` too,
@@ -319,7 +341,7 @@ test ← a road run ≥ 55 min (`backend/engine/overview.py:1207`); quality / te
 library variant ← its own time at ≥ 85 % CP (it never reaches 95 % CP);
 a planned **Zone 5** session (library class Z5, or rung `z5*`; `quality_gate.is_z5_variant`)
 ← only a run classified 「Z5 間歇」 (`workout_review.classify` stimulus `z5`, owner 2026-10-02);
-easy ← any other endurance session. Week activities and `done_by` rows carry `session`
+easy / hike (the 技術地形 session, `backend/engine/overview.py:1334`) ← any other endurance session. Week activities and `done_by` rows carry `session`
 (`overview.session_of`: type, label, stimulus, dashicon), shown on the 本週 tiles / 課表 chips.
 **Done hard days** (Z5 / Z3 / 高強度長跑 / CP test, planned or not; `workout_review.HARD_TYPES`)
 keep the remaining interval 48 h away (`plan_prefs.place(hard_done=…)` and the no-prefs path, `backend/engine/overview.py:1257`).
@@ -1436,6 +1458,7 @@ deleted / superseded) are returned as reconcile `changes` (`backend/engine/recon
 | 2026-10-04 | feature | SP-39 | 3 區／5 區 independent gates: Zone 5 needs a measured AeT (tested AeT + measured LTHR ≤ 10 % or Friel) + the soft 「近 6 週 ≥ 2 堂 3 區」 (`z5_track`, shared by week_decision and the card); low-intensity share blocks Zone 5 only with a tested AeT; the card renamed 3 區／5 區解鎖流程 and redrawn as two parallel tracks with their own 「下一步」; 「安排課表」 links into the 課表 dialog (`schedule.html?add=` / `?test=`, `WorkoutEditor.applyKey`) |
 | 2026-10-04 | feature | SP-64 | Threshold confidence (`threshold_confidence.py`): 8 LTHR signals + max-HR plausibility (120-s sustained peak, spike / cadence-lock filter), diagnosis of the wrong value, `thr_check` test suggestions (max-HR / LTHR test) with 「安排課表」 links and test conditions, `extra.thr_check` on the 測試 card, `GET /plan/threshold-check`, 「套用」 on 設定 (`mhr_method`), HR-target warning badge in the editor, `maxhr_hill` test template |
 | 2026-10-04 | feature | SP-63 | Relative CTL ramp lines (`load_guard`), startup seed / 28-day skip, running-time volume step vs max(last week, 4-week mean), weekly CTL goal max(2, 5 %) / max(2.5, 7 %) in `week_plan` and the projection |
+| 2026-10-04 | feature | SP-74 | 技術地形課 in week_plan and the projection for 越野跑 athletes (`engine/technical.py`): 基礎期 every other week's LSD → 技術地形 RPE 3–4 of the same time; 專項期 one a week from an easy run, RPE 6–7 (quality: 48 h spacing, ≤ 20 % budget with the intervals, work 30–90′) or RPE 4–5 when there is no room / spaced day; week notes; generated `steps`; road athletes none |
 | 2026-10-04 | feature | SP-73 | 轉換期 after each A race's recovery (`planning.auto_phases`; 課表偏好 `transition_weeks` 0–4, default 3): shortened / skipped before the next A race's 專項期 with a phase note, manual phases win; volume 50 % of the 4 weeks before the taper (week_plan and projection agree), easy runs ≤ 60 min (Canova), no CP-test suggestion |
 | 2026-10-04 | feature | SP-31 follow-ups | 專項期 applies this week's CTL-ramp / volume-step guardrails to both tracks; 2 a week with only Zone 3 open = rung + a different 巡航版; the weekday-cap 巡航版 counts as the Zone 3 rung |
 | 2026-10-04 | sp-36-template-manager | SP-36 | 範本 page (third tab of 課表): the user's own templates (`workout_templates_user`, `engine/user_templates.py`) with several categories (built-in + custom, add / rename / delete), 目標用, relative targets resolved when used, CRUD + 複製成我的範本 + 儲存成範本 (`/sessions/{uid}/save-as-template`); 「我的範本」 in 插入範本 by category / family / trail kind, custom tabs; a training-route GPX per template (race calculator's parser), its elevation behind the step chart on the time axis by estimated speed (`elev`, `tpl` in the steps); demo sandbox writes, static demo read-only; zh-TW + en |

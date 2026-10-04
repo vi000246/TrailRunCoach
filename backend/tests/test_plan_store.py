@@ -126,7 +126,8 @@ def test_projection_sessions_placed_like_week_plan():
     assert len(main_days) == len(set(main_days))
     total = sum(s["minutes"] for s in w["sessions"] if s["kind"] != "strength")
     assert abs(total - w["hours"] * 60) <= 15
-    assert w["sessions"][0]["target"]                                # target text from the thresholds
+    # target text from the thresholds (the 技術地形 LSD of an even ISO week has none — RPE, SP-74)
+    assert next(s for s in w["sessions"] if "技術地形" not in s["title"])["target"]
 
 
 def test_projection_stops_at_horizon():
