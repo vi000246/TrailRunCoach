@@ -78,7 +78,7 @@ def _compute_inputs(blackouts: Optional[list] = None) -> dict:
     ph = st.phase
     phase_end = dt.date.fromisoformat(ph.end) if ph else cap
     horizon = min(cap, max(phase_end, monday + dt.timedelta(days=13)))
-    phases = [{"kind": p.kind, "start": p.start, "end": p.end}
+    phases = [{"kind": p.kind, "start": p.start, "end": p.end, "note": p.note}
               for p in planning.phases(st.plan, today - dt.timedelta(days=400), today + dt.timedelta(days=400))]
     try:
         from backend.engine import heat_data as HD

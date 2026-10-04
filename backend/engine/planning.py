@@ -6,13 +6,17 @@ Stored as a user overlay at ~/.wko5coach/plan.json — nothing here touches the
 WKO5 files. Phases are generated backwards from each A event unless the user
 has saved manual phases:
 
-    base  →  specific (8 wk)  →  taper (2 wk)  →  event  →  recovery
+    base  →  specific (8 wk)  →  taper (2 wk)  →  event  →  recovery  →  transition (3 wk)
 
 Sources (docs/research/periodization-phase-metrics.md):
   * taper 14 days — Bosquet et al. 2007 meta-analysis (8–14 days most effective)
   * specific block before the taper, general → specific — Koop; Uphill Athlete
   * recovery / transition after the goal event — Uphill Athlete (2–4 weeks);
     shortened to 1 week for events shorter than ~6 h (a heuristic, not a finding)
+  * transition after the recovery (SP-73) — Friel (Transition 1–8 weeks, usually 3–4)
+    and Canova (4 weeks of easy running ≤ 1 h), coach-schools-zones-periodization.md R5:
+    `transition_weeks` (課表偏好, default 3, 0 = off). It never takes days from the next A
+    race's backward-planned 專項期: too close → shortened, < 7 days → skipped, with a note
 B events get a short mini-taper and recovery inside the surrounding phase;
 C events are training days and don't change the plan.
 """
@@ -40,6 +44,10 @@ SPECIFIC_WEEKS = 8
 MINI_TAPER_DAYS = 5          # B event
 LONG_EVENT_HOURS = 6.0       # recovery: 14 d at/above this, else 7 d
 B_RECOVERY_DAYS = 3
+TRANSITION_WEEKS = 3          # 轉換期 after an A race's recovery (SP-73; Friel 3–4, Canova 4 — the low end, 推估)
+TRANSITION_WEEKS_RANGE = (0, 4)   # 0 = off; 4 = Friel's / Canova's upper end
+TRANSITION_MIN_DAYS = 7       # less room before the next race's 專項期 → no 轉換期 (推估)
+TRANSITION_SETTING = "plan.prefs.transition_weeks"
 
 PHASES = {
     "transition": "轉換期",
@@ -116,6 +124,8 @@ class Phase:
     end: str                        # inclusive
     event_id: Optional[str] = None
     auto: bool = True
+    # why an automatic phase is not the standard length (SP-73: a shortened / skipped 轉換期)
+    note: str = ""
 
     @property
     def label(self) -> str:
@@ -308,23 +318,32 @@ class Plan:
 # phases
 # ---------------------------------------------------------------------------
 
-def auto_phases(events: list[Event], begin: dt.date, end: dt.date) -> list[Phase]:
-    """Phases covering [begin, end], built backwards from each A event."""
+def auto_phases(events: list[Event], begin: dt.date, end: dt.date,
+                transition_weeks: int = TRANSITION_WEEKS) -> list[Phase]:
+    """Phases covering [begin, end], built backwards from each A event.
+    After each A event's recovery: `transition_weeks` of 轉換期 (0 = none), ending before
+    the next A event's 專項期 — shortened when that starts sooner (`note` says so), skipped
+    when fewer than TRANSITION_MIN_DAYS are left (the recovery phase's `note` says so)."""
     one = dt.timedelta(days=1)
     a_events = sorted((e for e in events if e.priority == "A"), key=lambda e: e.start)
     out: list[Phase] = []
     cursor = begin                  # first day not yet assigned
 
-    def add(kind, s, e, eid=None):
+    def add(kind, s, e, eid=None, note=""):
         s = max(s, cursor)
         if s <= e:
-            out.append(Phase(kind, s.isoformat(), e.isoformat(), eid))
+            out.append(Phase(kind, s.isoformat(), e.isoformat(), eid, note=note))
+            return out[-1]
+        return None
 
-    for ev in a_events:
+    def spec_start_of(ev: Event) -> dt.date:
+        return ev.start - dt.timedelta(days=TAPER_DAYS) - dt.timedelta(weeks=SPECIFIC_WEEKS)
+
+    for i, ev in enumerate(a_events):
         if ev.end < cursor:
             continue
         taper_start = ev.start - dt.timedelta(days=TAPER_DAYS)
-        spec_start = taper_start - dt.timedelta(weeks=SPECIFIC_WEEKS)
+        spec_start = spec_start_of(ev)
         add("base", cursor, spec_start - one)
         add("specific", spec_start, taper_start - one, ev.id)
         add("taper", taper_start, ev.start - one, ev.id)
@@ -332,23 +351,79 @@ def auto_phases(events: list[Event], begin: dt.date, end: dt.date) -> list[Phase
         cursor = max(cursor, ev.end + one)
         rec_days = 14 if ev.is_long else 7
         rec_end = ev.end + dt.timedelta(days=rec_days)
-        add("recovery", cursor, rec_end, ev.id)
+        rec = add("recovery", cursor, rec_end, ev.id)
         cursor = max(cursor, rec_end + one)
+        if transition_weeks and transition_weeks > 0:
+            # 轉換期 (SP-73): never into the next A race's 專項期 — that phase is planned backwards
+            # from its race and wins
+            t_end = rec_end + dt.timedelta(weeks=int(transition_weeks))
+            nxt = next((x for x in a_events[i + 1:] if x.start > ev.end), None)
+            limit = spec_start_of(nxt) - one if nxt is not None else None
+            if limit is not None and limit < t_end:
+                days = (limit - cursor).days + 1
+                if days >= TRANSITION_MIN_DAYS:
+                    note = (f"轉換期縮短為 {days} 天：下一場 A 賽事「{nxt.name}」的專項期 "
+                            f"{(limit + one).isoformat()} 開始")
+                    add("transition", cursor, limit, ev.id, note)
+                    cursor = max(cursor, limit + one)
+                elif rec is not None:
+                    rec.note = (f"沒有轉換期：下一場 A 賽事「{nxt.name}」的專項期 "
+                                f"{(limit + one).isoformat()} 開始，只剩 {max(0, days)} 天")
+            else:
+                add("transition", cursor, t_end, ev.id)
+                cursor = max(cursor, t_end + one)
     if cursor <= end:
         add("base", cursor, end)    # no A event ahead: open-ended base
     return [p for p in out if _d(p.start) <= end]
 
 
-def phases(plan: Plan, begin: dt.date, end: dt.date) -> list[Phase]:
-    return plan.phases if plan.phases else auto_phases(plan.events, begin, end)
+def transition_weeks_setting(user_id: int = 1) -> int:
+    """課表偏好 轉換期週數 (plan.prefs.transition_weeks), read-only like plan_prefs.load;
+    TRANSITION_WEEKS when unset or unreadable."""
+    try:
+        from backend.engine.wko5expr.datasource import read_setting
+        v = read_setting(TRANSITION_SETTING, TRANSITION_WEEKS, user_id)
+    except Exception:                       # noqa: BLE001 — phases must still build
+        return TRANSITION_WEEKS
+    if isinstance(v, bool) or not isinstance(v, int):
+        return TRANSITION_WEEKS
+    return max(TRANSITION_WEEKS_RANGE[0], min(TRANSITION_WEEKS_RANGE[1], v))
 
 
-def phase_on(plan: Plan, day: dt.date, begin: Optional[dt.date] = None) -> Optional[Phase]:
+def phases(plan: Plan, begin: dt.date, end: dt.date, transition_weeks: Optional[int] = None) -> list[Phase]:
+    """The manual phases when the user saved any (they win), else auto_phases.
+    `transition_weeks` None = the 課表偏好 setting (transition_weeks_setting)."""
+    if plan.phases:
+        return plan.phases
+    tw = transition_weeks_setting() if transition_weeks is None else transition_weeks
+    return auto_phases(plan.events, begin, end, tw)
+
+
+def phase_on(plan: Plan, day: dt.date, begin: Optional[dt.date] = None,
+             transition_weeks: Optional[int] = None) -> Optional[Phase]:
     begin = begin or day - dt.timedelta(days=400)
-    for p in phases(plan, begin, day + dt.timedelta(days=400)):
+    for p in phases(plan, begin, day + dt.timedelta(days=400), transition_weeks):
         if _d(p.start) <= day <= _d(p.end):
             return p
     return None
+
+
+def pre_race_mondays(phases_: list, day: dt.date, n: int = 4) -> list[dt.date]:
+    """The Mondays of the `n` complete weeks before the taper of the A race whose 轉換期 /
+    恢復期 contains `day` (the last `event` phase that ended before `day`; its `taper` phase
+    start, else the event start − TAPER_DAYS) — the training level the 轉換期 volume is a share
+    of (SP-73). [] without such an event. `phases_`: Phase objects or dicts."""
+    def get(p, k):
+        return p[k] if isinstance(p, dict) else getattr(p, k)
+    evs = [p for p in phases_ if get(p, "kind") == "event" and _d(get(p, "end")) < day]
+    if not evs:
+        return []
+    ev = max(evs, key=lambda p: _d(get(p, "start")))
+    ev_start = _d(get(ev, "start"))
+    tap = [p for p in phases_ if get(p, "kind") == "taper" and _d(get(p, "end")) == ev_start - dt.timedelta(days=1)]
+    t0 = _d(get(tap[0], "start")) if tap else ev_start - dt.timedelta(days=TAPER_DAYS)
+    first = t0 - dt.timedelta(days=t0.weekday())        # the taper's own week is not counted
+    return [first - dt.timedelta(weeks=k) for k in range(n, 0, -1)]
 
 
 def b_event_windows(events: list[Event]) -> list[dict]:

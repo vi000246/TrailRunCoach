@@ -133,6 +133,8 @@ DEFAULTS: dict[str, Any] = {
     "plan.prefs.pref_days": {},
     "plan.prefs.pref_keep": [],               # conflict codes kept anyway (照我的偏好)
     "plan.prefs.b2b": True,                   # suggest a due B2B weekend (engine/b2b.py); off = never
+    # 轉換期 after an A race's 恢復期 (engine/planning.auto_phases, SP-73): weeks, 0 = off
+    "plan.prefs.transition_weeks": 3,
     # accepted B2B weekends (engine/b2b.py ACCEPTED_KEY): [{week, days, minutes, uids, at}]
     "plan.b2b.accepted": [],
     # the floating suggestion box (engine/suggestions.py): {suggestion id: {action, at, week}}
@@ -218,6 +220,7 @@ PREF_INTS = {                                 # key -> (lo, hi); None always all
     "plan.prefs.quality_gate_weeks": (2, 16),
     "plan.prefs.warmup_commute_min": (0, 30),
     "plan.prefs.cooldown_min": (0, 20),
+    "plan.prefs.transition_weeks": (0, 4),
 }
 
 
