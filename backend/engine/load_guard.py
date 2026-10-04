@@ -39,7 +39,11 @@ and Damsted 2019 measured running), last week against
 max(the week before, the mean of the 4 weeks before) — the planner's own
 reference (overview.week_plan / projection.week_hours: max(4-week mean, last
 week)), so a week back to normal after a recovery week is not a 「spike」.
-> 20 % block, 10–20 % hold (unchanged classes).
+> 20 % block, 10–20 % hold (unchanged classes). Exempt: the week after a short
+unplanned break — SHORT_BREAK_MIN–5 days without a run (shorter than a re-entry
+block, reentry.MIN_BREAK) touching the week before it — since the break pulled
+that week and the 4-week mean down, coming back to normal reads as a spike
+(owner 2026-10-04; ≥ 6 days is reentry.py's block). The week note says so.
 
 Weekly CTL goal of the planner: base max(2, 5 % CTL), specific max(2.5, 7 % CTL)
 (推估: equal to the old +3 / +4 at CTL 55–60; Palladino writes 2–5 %).
@@ -51,6 +55,8 @@ import statistics
 from typing import Optional, Sequence
 
 import numpy as np
+
+from backend.engine.reentry import MIN_BREAK
 
 # ---- CTL ramp ---------------------------------------------------------------
 WATCH_PCT, WATCH_MIN = 0.10, 3.0               # 推估 (Friel 5–8 over CTL 60–80, the lower end)
@@ -67,6 +73,7 @@ STARTUP_DAYS = 28              # 推估: no ramp check before the seed window is
 STEP_HOLD, STEP_BLOCK = 0.10, 0.20     # > 20 % block: Nielsen 2014, Damsted 2019 (peer-reviewed); 10–20 % hold 推估
 STEP_AVG_WEEKS = 4
 STEP_SPORTS = ("run",)                 # road + trail runs (sport group "run")
+SHORT_BREAK_MIN = 3                    # 推估: ≥ 3 days without a run is a break (routine rest = 1–2 days)
 
 # ---- planner's weekly CTL goal -------------------------------------------------
 GOAL = {"base": (0.05, 2.0), "specific": (0.07, 2.5)}   # (share of CTL, floor in points) 推估
@@ -272,6 +279,19 @@ def volume_step(last: float, prev_weeks: Sequence[float]) -> tuple[Optional[floa
     """(step, base): last week's running time against step_base(prev_weeks)."""
     b = step_base(prev_weeks)
     return (None, None) if b is None else ((float(last or 0.0) - b) / b, b)
+
+
+def short_break(run_days: Sequence[int], lo: int, hi: int) -> Optional[tuple[int, int]]:
+    """(first, last) day of the latest short break — SHORT_BREAK_MIN ≤ days without a run <
+    MIN_BREAK (no re-entry block), between two runs — with a day in [lo, hi] (day indices, the
+    week before the one measured); None without one."""
+    ds = sorted({int(d) for d in run_days})
+    out = None
+    for a, b in zip(ds, ds[1:]):
+        n = b - a - 1
+        if SHORT_BREAK_MIN <= n < MIN_BREAK and a + 1 <= hi and b - 1 >= lo:
+            out = (a + 1, b - 1)
+    return out
 
 
 # ---- planner -------------------------------------------------------------------------

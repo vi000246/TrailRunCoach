@@ -129,7 +129,11 @@ then); the volume step still runs. Rule E's TSB < −30 reads `week_plan`'s `loa
 the same started PMC (SP-63 Q3), so a new user's startup weeks give no false fatigue trigger. Last week's **running-time** step against
 max(the week before, the 4 weeks before's mean) > 20 % → no interval (Nielsen et al. 2014, JOSPT
 44:739; Damsted et al. 2019, JOSPT 49:230 — peer-reviewed, they measured running; the 「10 %
-法則」 itself has no evidence); 10–20 % → hold the dose (推估, conservative); TSB −30…−20 → hold
+法則」 itself has no evidence); 10–20 % → hold the dose (推估, conservative). Exempt: the week after
+a short unplanned break — 3–5 days without a run (3 推估; ≥ 6 is a re-entry block, `reentry.MIN_BREAK`)
+touching the week before, which pulled the base down (`short_break`,
+`backend/engine/load_guard.py:284`; owner 2026-10-04): the status card says so and the week gets
+an info note (`guard`'s `step_note` → `week_plan`, `backend/engine/overview.py:914`). TSB −30…−20 → hold
 (Friel / TrainingPeaks). B2B weekends and the B2B TSB exemption use the block line too.
 
 ## Interval progression (`backend/engine/quality_gate.py`)
@@ -151,7 +155,9 @@ planned at.
 Thresholds: 98 % in-band, 50 % AeT-at-60 s and the 5 % last-rep fade are 推估 (doc §4.2–4.3).
 RPE is not recorded, so the RPE rows are skipped. Reps come from power (`count_reps`, or
 `detect_efforts`). A session judged by: the structure the user edited in the 課表 editor
-(`steps_spec`: its own reps / band, counted only when equivalent to the rung), else the stored
+(`steps_spec`: its own reps / band, counted only when equivalent to the rung; a 「負荷」 main-set
+step counts by its estimated time TSS ÷ (IF² × 100) h at the band's middle — `load_work_s`,
+`backend/engine/workout_steps.py:1289`, SP-38, 推估), else the stored
 variant, else the planned title. An unplanned interval run is neutral.
 
 ### The ladder: two tracks, Zone 3 and Zone 5 (SP-31, 2026-10-04)
@@ -259,8 +265,13 @@ intensity). Each rung is the canonical variant of `backend/engine/interval_libra
      (`aet_tested`: the latest plan aethr row on or before the day whose method is not
      `estimate` — an estimate applied later doesn't undo it) **and** a measured LTHR (`lthr_info
      ["measured"]`: a plan row from a test / race / lab / by hand, or the athlete's own WKO5
-     setting — not the WKO5 default, not an applied estimate) with LTHR ÷ AeT − 1 ≤ 10 %
-     (`aet_ua_gap`, dated the later of the two rows; `z5_ua_gap`); **or** ≥ 60 min near the
+     setting — not the WKO5 default, not an applied estimate) **tested in the last 12 weeks**
+     (`LTHR_FRESH_DAYS` 84, `backend/engine/quality_gate.py:104`; owner 2026-10-04, 推估 — not
+     `threshold_confidence.TEST_AGE_DAYS` 56, which is Friel's retest hint; a dateless LTHR is not
+     aged) with LTHR ÷ AeT − 1 ≤ 10 % (`aet_ua_gap`, dated the later of the two rows;
+     `z5_ua_gap`). The paths are re-read every day, so a Zone 5 confirmed only through this path
+     goes back to 未確認 85 days after the LTHR test until it is retested (the flow item reads
+     「LTHR 是 N 天前測的，超過 12 週」 and offers the 30-min LTHR test); **or** ≥ 60 min near the
      tested AeT with first vs second half drift < 5 % (`aet_friel_drift`, Friel). **The 90-min
      test is not an AeT test** (it yields no AeT number) — it opens Zone 3 only. Modes: `auto`,
      `xu_drift`, `plateau`, `weeks` use both AeT paths (their own method opens Zone 3 only);
@@ -310,6 +321,10 @@ intensity). Each rung is the canonical variant of `backend/engine/interval_libra
   (`schedule.html` `openPreset`) opens its new-session dialog with that session preselected
   (`WorkoutEditor.applyKey`, or the dialog's 測試 kind / 方式), the user picks the day and saves
   through `POST /sessions` (a variant keeps its `variant_key` → rung, so it counts on its ladder).
+  A 徐國峰 90-min test saved there (by its title, or the template row `lib:xu_e_drift` — `_is_xu90`,
+  `backend/api/plan_sessions.py:390`) replaces that day's active long run, as 排入測試 does
+  (`_replace_long`, shared; owner 2026-10-04) — for the dialog's own 測試 › 徐國峰 too, which posts
+  the same body.
   The 總覽 card and the 基礎期 panel draw it with `static/z5flow.js` (`wko5views.z5_progress`).
 - **Re-confirmation**: a new measured AeT (UA gap or Friel) re-confirms. The AeT test is
   scheduled only for a reason (`quality_gate.aet_test_reason`): no interpretable run for ~6
@@ -533,3 +548,7 @@ overview has `data-log="none"`. The settings are in 課表偏好 (above).
 | 2026-10-04 | feature | SP-39 | Zone 3 and Zone 5 independent gates: Zone 5 needs a measured AeT (tested AeT + measured LTHR, gap ≤ 10 %, or Friel < 5 % at the tested AeT; the 90-min test and plateau / weeks open Zone 3 only) and the soft 「近 6 週 ≥ 2 堂 3 區」 (`Z5_Z3_NEED` / `Z5_Z3_DAYS`, 推估; replaces `Z3_MET_FOR_Z5`), one flag `z5_track` for week_decision / flow / 推薦 / change log; low-intensity share blocks Zone 5 only with a tested AeT; flow = two parallel tracks with 「安排課表」 actions (`?add=` / `?test=` deep links into the 課表 dialog); passive 90-min re-confirmation removed |
 | 2026-10-04 | feature | SP-31 | Two interval tracks: Zone 3 A1–A4 (2×15 → 3×12 → 2×20 → 1×30, 88–95 % CP) and Zone 5 V1–V4, own steps / 達標 counts; T1–T3 kept as 巡航版 and legacy; Zone 3 gate (4 weeks ≥ 3 runs, no 7-day gap, sticky, ≥ 21-day break re-locks / 90-min test / UA gap); low-intensity share blocks Zone 5 only; Zone 3 ≤ 10 % of the week, Zone 3 + Zone 5 ≤ 20 %; 2 a week = one of each, 1 a week 1:1 / 2:1 by the A race; 專項期 / 減量期 two-track sessions; z3_note / warn notes; flow stage 1 = the Zone 3 gate |
 | 2026-10-04 | feature | SP-68 | Guardrail CTL = the PMC's started CTL (manual at a date → first-4-week mean → 0); rule E's TSB < −30 reads the same PMC (SP-63 Q3); a manual start skips the ramp for 7 days |
+| 2026-10-04 | feature | SP-38 follow-up | A main set ended by 「負荷」 counts toward the Zone 3 / Zone 5 ladder: `variant_from_steps` times each load step at TSS ÷ (IF² × 100) h, IF = the band's middle (`load_work_s`, 推估) |
+| 2026-10-04 | feature | SP-63 follow-up | The week after a short unplanned break (3–5 days without a run, no re-entry block) is exempt from the running-volume step check (`load_guard.short_break`); the week plan gets an info note |
+| 2026-10-04 | feature | SP-39 follow-up | Zone 5's UA path counts a measured LTHR only when tested in the last 12 weeks (`LTHR_FRESH_DAYS` 84, 推估); WKO5-sourced LTHRs carry their setting date; an older one re-locks that path until a retest |
+| 2026-10-04 | feature | SP-39 follow-up | A 徐國峰 90-min test saved through `POST /sessions` (the 「安排課表」 deep link, or the dialog's 測試 › 徐國峰 / the `lib:xu_e_drift` row) replaces that day's long run — the 排入測試 code path (`_replace_long`) |

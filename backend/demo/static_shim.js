@@ -863,8 +863,12 @@
         const st = row.st;
         if (st.kind === "work") {
           const b = workBand(st, c, D);
-          if (b == null || st.dur.type !== "time") return;
-          ws.push(st.dur.value); bands.push(b.slice(0, 2)); est = est || b[2]; lastWork = i;
+          if (b == null || !["time", "load"].includes(st.dur.type)) return;
+          if (st.dur.type === "load") {                 // load_work_s: TSS ÷ (IF² × 100) h at the band's middle (SP-38)
+            const f = (b[0] + b[1]) / 2;
+            ws.push(f > 0 ? pyRound(st.dur.value * 3600 / (f * f * 100)) : 0); est = true;
+          } else ws.push(st.dur.value);
+          bands.push(b.slice(0, 2)); est = est || b[2]; lastWork = i;
         } else if (st.kind === "rest" && lastWork != null && st.dur.type === "time") {
           const nxt = rows.slice(i + 1).map((r) => r.st).find((x) => x.kind === "work" || x.kind === "cool");
           if (nxt && nxt.kind === "work") rests.push(st.dur.value);
@@ -886,7 +890,8 @@
       const v = variantFromSteps(steps, rung, c, D);
       if (v == null) return { ok: false, why: ["找不到有強度的主課段"], text: `${name}：找不到有功率／心率目標的主課段，這堂不算進階` };
       const [ok, why] = equivalent(v, canon, D);
-      const est = v.src_kind === "推估" ? "（心率結構換算強度，推估）" : "";
+      const load = flat(steps.items || []).some((r) => r.st.kind === "work" && r.st.dur.type === "load");
+      const est = v.src_kind === "推估" ? (load ? "（「負荷」段用 TSS 換算時間，推估）" : "（心率結構換算強度，推估）") : "";
       return { ok, why, text: `和 ${name} 標準課表 ${structure(canon)} ` + (ok ? "等效：這堂算進階" : "不等效：這堂不算進階（" + why.join("；") + "）") + est };
     }
 

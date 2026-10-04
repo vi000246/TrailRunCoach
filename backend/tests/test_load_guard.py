@@ -401,6 +401,22 @@ def test_moving_knob_on_still_covers_runs(tmp_path, no_plan_lthr):
     assert w["hike"].metrics["hrtss_moving"] == w["hike"].metrics["tss"]
 
 
+def test_strength_is_zero_tss_even_with_a_plan_lthr(tmp_path, no_plan_lthr, monkeypatch):
+    """SP-63 (owner 2026-10-04): a dated plan LTHR used to reach strength through
+    setting("otherthr") and give it hrTSS; own formulas now keep it at 0. Parity unchanged."""
+    from backend.engine import planning
+    from backend.engine.wko5expr.config import EngineConfig
+    plan = planning.Plan(thresholds=[planning.Threshold(date="2026-08-15", lthr=165.0)])
+    monkeypatch.setattr(planning.Plan, "load", classmethod(lambda cls, *a, **k: plan))
+    w, ds = _ds(tmp_path, EngineConfig(parity=False))
+    assert ds.sport_setting("thr", w["strength"]) == 165.0       # the plan row still reaches otherthr
+    assert ds.hr_lthr(w["strength"]) is None
+    assert w["strength"].metrics["tss"] is None and w["strength"].metrics.get("tss_source") is None
+    assert w["run"].metrics["tss"] is not None                    # runs keep their hrTSS
+    w, ds = _ds(tmp_path, EngineConfig(parity=True))
+    assert ds.hr_lthr(w["strength"]) == ds.sport_setting("thr", w["strength"])   # parity: WKO5's own rule
+
+
 def test_parity_mode_is_untouched(tmp_path, no_plan_lthr):
     from backend.engine.wko5expr.config import EngineConfig
     w, ds = _ds(tmp_path, EngineConfig(parity=True))
@@ -434,6 +450,65 @@ def _weekly(today, weeks, run_h, extra=()):
         s = mon - dt.timedelta(weeks=weeks - i)
         out += [(s + dt.timedelta(days=k), "run", h / 3, 60.0 * h / 3) for k in (1, 3, 5)]
     return out + list(extra)
+
+
+def _week(mon, days_h):
+    """[(date, "run", hours, tss)] for runs on weekday offsets {day: hours} of the week at `mon`."""
+    return [(mon + dt.timedelta(days=k), "run", h, 60.0 * h) for k, h in days_h.items()]
+
+
+def test_short_break_exempts_the_next_weeks_volume_step():
+    """SP-63 (owner 2026-10-04): 3–5 days without a run in the week before (no re-entry block)
+    pulled the base down; coming back to normal last week is not a spike."""
+    today = dt.date(2026, 9, 30)
+    mon = today - dt.timedelta(days=today.weekday())
+    normal = {1: 5 / 3, 3: 5 / 3, 5: 5 / 3}
+    weeks = [normal] * 4
+
+    def status(prev):
+        ss = []
+        for i, w in enumerate(weeks + [prev, normal]):
+            ss += _week(mon - dt.timedelta(weeks=6 - i), w)
+        return _status(ss, today)
+    v = status({1: 0.75, 5: 0.75}).i_volume()                     # Tue + Sat: Wed–Fri off (3 days)
+    assert v.extra["step"] > LG.STEP_BLOCK and v.extra["step_exempt"]
+    assert v.level == "good" and "停跑 3 天" in v.verdict
+    g = QG.guard(step=v.extra["step"], step_exempt=v.extra["step_exempt"])
+    assert not g["block"] and not g["hold"] and "停跑 3 天" in g["step_note"]
+    # 2 days off is routine rest: still a spike
+    v = status({1: 0.5, 3: 0.5, 5: 0.5}).i_volume()
+    assert v.extra["step"] > LG.STEP_BLOCK and not v.extra["step_exempt"] and v.level == "bad"
+    # ≥ 6 days is a re-entry block (reentry.py), not this exemption
+    v = status({5: 1.5}).i_volume()
+    assert not v.extra["step_exempt"]
+    assert QG.guard(step=0.3)["block"] and not QG.guard(step=0.3)["step_note"]
+
+
+def test_short_break_note_reaches_the_week_plan():
+    from backend.engine import overview as O
+    from backend.engine import plan_prefs as PP
+    from backend.engine.status import Status
+    from backend.tests.test_b2b import _history, _plan_with
+    from backend.tests.test_quality_gate import TODAY as T
+    ds = _history(T)
+    ds.plan = _plan_with("2027-06-05", 1, T)
+    st = Status(ds, ds.plan, T, prefs=PP.Prefs()).compute()
+    g = next(i for i in st.indicators if i.id == "gate")
+    assert g.extra["guard"]["step_note"] == ""
+    assert not [n for n in O.week_plan(ds, st, T)["notes"] if n.get("src") == "volume"]
+    g.extra["guard"]["step_note"] = "前一週停跑 4 天：這週不算增幅"
+    wp = O.week_plan(ds, st, T)
+    assert wp["phase"] == "base"
+    assert {"level": "info", "src": "volume", "text": "前一週停跑 4 天：這週不算增幅"} in wp["notes"]
+
+
+def test_short_break_window():
+    assert LG.short_break([0, 4, 5], 0, 6) == (1, 3)              # 3 days off inside the week
+    assert LG.short_break([0, 4, 8], 0, 6) == (5, 7)              # the latest one
+    assert LG.short_break([0, 3, 8], 0, 6) == (4, 7)              # 4 days, reaching into the next week
+    assert LG.short_break([0, 3], 0, 6) is None                   # 2 days: routine rest
+    assert LG.short_break([0, 7], 0, 6) is None                   # 6 days: re-entry block
+    assert LG.short_break([0, 4], 10, 16) is None                 # not in the week before
 
 
 def test_status_startup_has_no_guardrail_ramp():

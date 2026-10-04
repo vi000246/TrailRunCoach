@@ -427,6 +427,37 @@ def test_fingerprint_moves_only_with_a_load_steps_sent_value(monkeypatch):
     assert fp(LOAD_DOC) != load0                       # the sent TL moved
 
 
+def test_a_small_refit_keeps_the_sent_tl(monkeypatch):
+    """SP-38 (owner 2026-10-04): a refit moving a load step's TL by < 3 keeps the TL last pushed
+    (the closed-loop record) — no 需更新, no re-push; ≥ 3 sends the new one."""
+    s = _session(LOAD_DOC)
+    pushed = CW.session_workout(s, TH)                     # pushed with the default model
+    want = pushed.load_steps[0]["tl"]
+    store = {"sessions": {"u1": {"day": s["day"], "steps": pushed.load_steps, "actual": None}}}
+    monkeypatch.setattr(TL, "_read", lambda key, user_id=1: store if key == TL.LOAD_KEY else None)
+
+    class Shifted:
+        def __init__(self, d):
+            self.d, self.factor = d, 1.0
+
+        def tl(self, tss, group, f):
+            return {**TL.Model.of().tl(tss, group, f), "tl": want + self.d}
+    for d, same in ((1, True), (-2, True), (3, False), (-3, False)):
+        monkeypatch.setattr(TL, "current", lambda user_id=1, d=d: Shifted(d))
+        spec = CW.session_workout(s, TH)
+        ex = spec.payload["exercises"][1]
+        assert (spec.fingerprint == pushed.fingerprint) is same, d
+        assert ex["targetValue"] == (want if same else want + d)
+        assert spec.load_steps[0]["tl"] == ex["targetValue"]
+    # a different planned TSS is a new step: the record doesn't hold it back
+    other = json.loads(json.dumps(LOAD_DOC))
+    for it in other["items"]:
+        if it.get("dur", {}).get("type") == "load":
+            it["dur"]["value"] += 1
+    monkeypatch.setattr(TL, "current", lambda user_id=1: Shifted(1))
+    assert CW.session_workout(_session(other), TH).payload["exercises"][1]["targetValue"] == want + 1
+
+
 def test_push_records_the_load_steps_for_the_closed_loop():
     from backend.settings.repository import SettingsRepository
     from backend.sync import http

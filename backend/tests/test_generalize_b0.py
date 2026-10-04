@@ -42,6 +42,18 @@ def test_parity_default_follows_the_wko5_folder(tmp_path, monkeypatch):
     assert EngineConfig.load(cfg).parity is False                   # an explicit choice wins
 
 
+def test_presets_load_without_the_zone1_floor(tmp_path):
+    """SP-52: hr_tss_zone1_floor is gone (nothing read it); an old engine.json that still
+    has it loads, and the preset round-trips."""
+    from backend.engine.wko5expr.config import MOUNTAIN_PRESET, EngineConfig
+    assert "hr_tss_zone1_floor" not in MOUNTAIN_PRESET.to_dict()
+    assert EngineConfig.from_dict(MOUNTAIN_PRESET.to_dict()) == MOUNTAIN_PRESET
+    cfg = tmp_path / "engine.json"
+    cfg.write_text(json.dumps({**MOUNTAIN_PRESET.to_dict(), "hr_tss_zone1_floor": 0.7}), "utf-8")
+    c = EngineConfig.load(cfg)
+    assert c == MOUNTAIN_PRESET and not hasattr(c, "hr_tss_zone1_floor")
+
+
 def test_wko5_dataset_without_a_folder_says_so(tmp_path):
     from backend.engine.wko5expr.dataset import Dataset
     from backend.engine.wko5expr.config import EngineConfig

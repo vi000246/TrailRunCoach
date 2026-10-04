@@ -438,6 +438,41 @@ def test_api_tests_are_suggested_and_put_in_by_the_user(monkeypatch):
         assert [t["protocol"] for t in cal_t["aet"]] == list(AT.PROTOCOLS)
 
 
+def test_api_xu90_test_added_on_a_long_day_replaces_the_long_run(monkeypatch):
+    """SP-39 (owner 2026-10-04): 「安排課表」 on the 90-min test opens the 課表 dialog, which saves
+    through POST /sessions — it takes that day's long run like 排入測試 does; other AeT tests don't."""
+    from backend.engine import aet_test as AT
+    with Env(monkeypatch) as e:
+        ss = e.c.get(f"{API}/sessions").json()["sessions"]
+        long = next(s for s in ss if s["kind"] == "long" and s["day"] == "2026-10-04")
+        ua = AT.session({"cp": 250.0, "lthr": 165.0}, 140.0, 190.0, 50, "ua60")
+        r = e.c.post(f"{API}/sessions", json={"day": "2026-10-04", "kind": "test", "title": ua["title"],
+                                              "minutes": ua["minutes"], "protocol": "aet"})
+        assert r.status_code == 200
+        live = e.c.get(f"{API}/sessions").json()["sessions"]
+        assert any(s["uid"] == long["uid"] for s in live)                     # UA 60′: the long run stays
+        xu = AT.session({"cp": 250.0, "lthr": 165.0}, 140.0, 190.0, 150, "xu90")
+        bad = e.c.post(f"{API}/sessions", json={"day": "2020-01-04", "kind": "test", "title": xu["title"], "minutes": 90})
+        assert bad.status_code == 400                                          # a refused day deletes nothing
+        e.c.delete(f"{API}/sessions/{r.json()['uid']}")
+        xu = AT.session({"cp": 250.0, "lthr": 165.0}, 140.0, 190.0, 150, "xu90")
+        r = e.c.post(f"{API}/sessions", json={"day": "2026-10-04", "kind": "test", "title": xu["title"],
+                                              "minutes": xu["minutes"], "protocol": "aet"})
+        assert r.status_code == 200 and AT.is_xu(r.json())
+        live = e.c.get(f"{API}/sessions").json()["sessions"]
+        assert not any(s["kind"] == "long" and s["day"] == "2026-10-04" for s in live)
+        assert [s["uid"] for s in live if s["day"] == "2026-10-04" and s["kind"] == "test"] == [r.json()["uid"]]
+        # the template-library row (排入測試's template path) is the same test
+        from backend.api.plan_sessions import _test_rows
+        assert any(s["kind"] == "long" and s["day"] == "2026-10-18" for s in live)
+        t = _test_rows()["lib:xu_e_drift"]
+        r = e.c.post(f"{API}/sessions", json={"day": "2026-10-18", "kind": "test", "title": t.get("title") or t["label"],
+                                              "minutes": 90, "protocol": "aet"})
+        assert r.status_code == 200
+        live = e.c.get(f"{API}/sessions").json()["sessions"]
+        assert not any(s["kind"] == "long" and s["day"] == "2026-10-18" for s in live)
+
+
 def _b2b_sg(week="2026-09-28"):
     return {"id": f"b2b:{week}", "type": "b2b", "week": week, "title": "建議這週做一次 B2B", "reason": "上週是恢復週",
             "minutes": [150, 100], "long_day": "2026-10-04", "event": "嘉明湖", "event_days": 3,

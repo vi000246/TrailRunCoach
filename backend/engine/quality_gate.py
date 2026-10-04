@@ -98,6 +98,10 @@ SRC_OWN = "自訂"
 # ---- numbers (the doc's §7 lists which are ours) ----------------------------
 UA_GAP_MAX = 0.10
 AET_FRESH_DAYS = 16 * 7        # 自訂: a plan AeT older than this is stale for `auto`
+# 推估 (owner 2026-10-04, SP-39): a measured LTHR counts for the Zone 5 UA path only when tested in the
+# last 12 weeks. Not threshold_confidence.TEST_AGE_DAYS (56, Friel's 4–8-week retest *hint*): this is the
+# validity of a gate input, so it is longer and separate.
+LTHR_FRESH_DAYS = 12 * 7
 LOOKBACK_DAYS = 56             # 自訂: 8-week window for friel / xu / the dose count
 FRIEL_HR_BAND = (-5.0, 3.0)    # 自訂: "at AeT" = AeT−5 … AeT+3
 FRIEL_MIN_S = 70 * 60          # ≥ 60 min after drift_of's 10-min warm-up
@@ -301,8 +305,11 @@ def lthr_info(ds, plan, today: dt.date) -> dict:
     except Exception:
         val = None
     default = bool(hist) and all(d == dt.date(1980, 1, 1) for d, _ in hist)
+    # the dated WKO5 setting in effect (its age: LTHR_FRESH_DAYS); WKO5's 1980 placeholder has none
+    dated = [d.date() if isinstance(d, dt.datetime) else d for d, v in hist if v is not None and isinstance(d, dt.date)]
+    dated = [d for d in dated if dt.date(1980, 1, 1) < d <= today]
     return {"value": val, "default": default, "source": "wko5", "measured": val is not None and not default,
-            "date": None}
+            "date": max(dated).isoformat() if dated and val is not None and not default else None}
 
 
 def ua_gap(aet: Optional[float], lthr: Optional[float]) -> Optional[float]:
@@ -638,16 +645,20 @@ def planned_variant_spec(row: dict):
 def guard(low_share: Optional[float] = None, power_low_share: Optional[float] = None,
           ramp: Optional[float] = None, step: Optional[float] = None, tsb: Optional[float] = None,
           aet: Optional[float] = None, injury: Optional[str] = None, aet_tested: bool = True,
-          ramp_base: Optional[float] = None) -> dict:
+          ramp_base: Optional[float] = None, step_exempt: str = "") -> dict:
     """This week's check: {"block", "sub", "hold", "verdict", "action"} — the
     first failing rule speaks. Missing numbers don't block. `injury`: an open
     傷病紀錄 with 「受傷期間暫停強度課」 ticked (engine/injuries.pause_reason)
     blocks intervals until it is resolved — the user's own choice, so it
     speaks first. `aet_tested`: the AeT in effect is a tested one (aet_info["tested"]) — without
     it the low-intensity share is only a warning for Zone 5 too (SP-39). `ramp_base`: CTL 7 days
-    ago, for the relative ramp lines (load_guard; None = the floors 3 / 5)."""
+    ago, for the relative ramp lines (load_guard; None = the floors 3 / 5). `step_exempt`: the
+    volume step comes right after a short break (status.i_volume, load_guard.short_break) — the
+    volume rule is skipped and the text goes to "step_note" (the week note)."""
     out = {"block": False, "sub": False, "hold": False, "verdict": "", "action": "", "rule": "", "blocks": [],
-           "verdicts": {}, "warn": ""}
+           "verdicts": {}, "warn": "", "step_note": step_exempt or ""}
+    if step_exempt:
+        step = None
     aet_t = f"{aet:.0f} bpm" if aet else "AeT"
 
     def say(rule, verdict, action, **flags):
@@ -1089,7 +1100,7 @@ def evaluate(ds, plan, today: dt.date, prefs=None, by: Optional[dict] = None, ph
     ie = _extra(by, "intensity")
     g = guard(low_share=ie.get("low_share"), power_low_share=ie.get("power_low_share"),
               ramp=_extra(by, "fitness").get("ramp_week"), ramp_base=_extra(by, "fitness").get("ramp_base"),
-              step=_extra(by, "volume").get("step"),
+              step=_extra(by, "volume").get("step"), step_exempt=_extra(by, "volume").get("step_exempt") or "",
               tsb=_value(by, "form"), aet=ae["value"] if ae["measured"] else None,
               injury=_injury_pause(today), aet_tested=bool(ae.get("tested")))
     hist = []
@@ -1332,11 +1343,25 @@ def track_ratio(events, today: dt.date) -> dict:
     return {"z3": 2, "z5": 1, "why": f"A 賽{what}"}
 
 
-def z5_ua_gap(ta: Optional[dict], lt: dict) -> Optional[dict]:
+def lthr_age(lt: dict, today: Optional[dt.date]) -> Optional[int]:
+    """Days since the measured LTHR row (lthr_info["date"]); None without a date or `today`."""
+    if today is None or not lt.get("date"):
+        return None
+    try:
+        return (today - dt.date.fromisoformat(str(lt["date"])[:10])).days
+    except ValueError:
+        return None
+
+
+def z5_ua_gap(ta: Optional[dict], lt: dict, today: Optional[dt.date] = None) -> Optional[dict]:
     """The Zone 5 gate's UA path (SP-39): a tested AeT (aet_tested) and a measured LTHR
     (lthr_info["measured"]) with LTHR ÷ AeT − 1 ≤ 10 % → {"gap", "date" (the later of the two
-    rows), "ok"}; None when either isn't measured."""
+    rows), "ok"}; None when either isn't measured, or (with `today`) the LTHR was tested more
+    than LTHR_FRESH_DAYS ago (12 weeks; a dateless LTHR is not aged)."""
     if not ta or lt.get("value") is None or lt.get("default") or not lt.get("measured"):
+        return None
+    age = lthr_age(lt, today)
+    if age is not None and age > LTHR_FRESH_DAYS:
         return None
     g = ua_gap(ta["value"], lt["value"])
     if g is None:
@@ -1409,7 +1434,7 @@ def _z5(ds, today: dt.date, mode: str, state: Optional[str], ae: dict, lt: dict,
         if ta is None and ae.get("measured") and ae.get("tested", True) and ae.get("value") is not None:
             ta = {"value": ae["value"], "date": ae.get("date")}      # a caller without the plan: the AeT in effect
         if ta and "aet_ua_gap" in p:
-            u = z5_ua_gap(ta, lt)
+            u = z5_ua_gap(ta, lt, today)
             if u and u["ok"]:
                 paths["aet_ua_gap"] = u["date"]
         if ta and "aet_friel_drift" in p:
@@ -1692,12 +1717,15 @@ def z5_card(gate: dict, today: dt.date) -> dict:
     tests = []
     ap = z.get("aet_paths") or {}
     if mode_has(mode, "aet_ua_gap"):
-        u = z5_ua_gap(ta, lt)
+        u = z5_ua_gap(ta, lt, today)
+        age = lthr_age(lt, today)
         if u is not None:
             val = f"AeT {ta['value']:.0f}（{ta['date']} 實測）/ LTHR {lt['value']:.0f} → {u['gap'] * 100:.0f}%"
         elif not ta:
             val = ("—（AeT 是估計值，不算：要做一次 AeT 測試）" if ae.get("measured") or ae.get("value")
                    else "—（還沒做過：沒有實測 AeT）")
+        elif lt.get("measured") and not lt.get("default") and age is not None and age > LTHR_FRESH_DAYS:
+            val = f"—（LTHR 是 {age} 天前測的，超過 12 週：要重測 30 分鐘 LTHR）"
         else:
             val = "—（LTHR 不是實測：要做一次 30 分鐘 LTHR 測試）"
         tests.append({"key": "aet_ua_gap", "label": "實測 AeT＋實測 LTHR：LTHR ÷ AeT − 1 ≤ 10%",

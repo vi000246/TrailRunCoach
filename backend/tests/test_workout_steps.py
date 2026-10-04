@@ -295,6 +295,34 @@ def test_variant_from_steps_equivalence():
     assert hr_reps(1.0, 1.04).cls == "Z4"
 
 
+def test_load_main_set_counts_on_the_ladder():
+    """SP-38 (owner 2026-10-04): a main set ended by 「負荷」 counts toward the ladder through
+    its estimated time — TSS ÷ (IF² × 100) at the band's middle."""
+    canon = WS.normalize(WS.template_steps("v1a"))
+
+    def as_load(scale):
+        d = copy.deepcopy(canon)
+        for row in WS.flat(d["items"]):
+            st = row["st"]
+            if st["kind"] == "work" and st["dur"]["type"] == "time":
+                lo, hi, _e = WS._work_band(st, None)
+                f = (lo + hi) / 2
+                st["dur"] = {"type": "load", "value": round(st["dur"]["value"] * scale * f * f * 100 / 3600, 1)}
+        return WS.normalize(d)
+    d = as_load(1.0)
+    v = WS.variant_from_steps(d, "z5a")
+    assert v is not None and v.src_kind == "推估" and abs(v.works[0] - 120) <= 2
+    eq = WS.equivalence(d, "z5a")
+    assert eq["ok"], eq["why"]
+    assert "負荷" in eq["text"]
+    from backend.engine import quality_gate as QG                # the dose history counts it
+    h = {"steps": {**d, "origin": "user"}, "rung_key": "z5a"}
+    assert QG.track_spec("z5", 0)[0] == "z5a"
+    assert QG.steps_spec(h, 0, "z5")[2] is True and h["steps_estimated"]
+    eq = WS.equivalence(as_load(1.5), "z5a")                     # 1.5× the time in zone: not the rung
+    assert not eq["ok"] and any("15%" in w for w in eq["why"])
+
+
 def test_rescale_abs_power():
     d = WS.normalize({"items": [
         {"kind": "work", "dur": {"type": "time", "value": 600}, "target": {"type": "power", "mode": "abs", "lo": 200, "hi": 210}},
