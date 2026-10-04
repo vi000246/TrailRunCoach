@@ -85,3 +85,12 @@ def test_templates_and_new_session_with_steps(monkeypatch):
         assert d["derived"] and d["steps"]["items"][0]["kind"] == "work"
         none = e.c.post(f"{API}/steps/derive", json={"kind": "strength", "minutes": 30}).json()
         assert none["steps"] is None and none["reason"]
+
+
+def test_sessions_carry_the_quality_family(monkeypatch):
+    with Env(monkeypatch) as e:
+        ss = e.c.get(f"{API}/sessions").json()["sessions"]
+        q = [s for s in ss if s["kind"] == "quality"]
+        assert q and all(s["quality_family"]["id"] in ("aerobic", "vo2max", "speed") and s["quality_family"]["text"]
+                         for s in q)
+        assert all(s["quality_family"] is None for s in ss if s["kind"] != "quality")
