@@ -14,8 +14,10 @@ Kinds (the `type` of a row):
                test_suggestions; the interval-library merge) — a day.
   zone_test    a zone-update retest (engine/zone_events.py suggestions:
                HR shift at the same power, a ≥ 4-week break, the first cool
-               spell) — a test (AeT / CP; the 30-min TT is described, not
-               scheduled here) and a day.
+               spell; engine/threshold_confidence.py: LTHR / max HR not
+               believable, SP-64) — a test (AeT / CP) and a day; the 30-min TT
+               and the max-HR test are not scheduled here but carry `links`
+               (「安排課表」 → the 課表 page's new-session dialog).
   zone_update  a test applied in the last 14 days: the zones were recomputed
                (zone_events.applied_events) — information, ✕ only.
   injury_rest  an open 重（停跑） injury: the next 7 days as 不排課日期 (confirm).
@@ -119,16 +121,26 @@ def zone_rows(zone: dict, covered_kinds: set, scheduled: callable, days_for) -> 
             continue
         help_ = "；".join(sg.get("conditions") or [])
         if manual:
-            help_ += f"。{'、'.join(manual)}請自己在課表新增（這裡不排）"
+            help_ += f"。{'、'.join(manual)}請按「安排課表」自己挑一天（這裡不排）"
+        # the tests not scheduled here (30-min TT, max-HR test): a 「安排課表」 deep link to the
+        # 課表 page's new-session dialog with the template preselected (SP-39 / SP-64)
+        links = sg.get("links") or [_manual_link(t, sg.get("earliest")) for t in sg.get("tests") or []
+                                    if t not in ZONE_TESTS]
         out.append({"id": f"zone:{sg['id']}", "type": "zone_test", "title": sg["title"], "reason": sg.get("text") or "",
                     "help": (help_ + "。" + (sg.get("caveat") or "")).strip("。") + "。觸發規則為推估。",
                     "src": sg.get("source"), "pick": "test_day" if tests else None, "tests": tests,
+                    "links": [x for x in links if x], "wait_cool": bool(sg.get("wait_cool")),
                     "detected": sg.get("detected"), "earliest": sg.get("earliest")})
     for ev in zone.get("events") or []:
         out.append({"id": f"zone_update:{ev.get('field')}:{ev.get('date')}", "type": "zone_update",
                     "title": "區間已更新", "reason": ev.get("text") or "", "pick": None,
                     "help": "套用新的測試後，從那天起的區間、TSS 都用新門檻重算（不會改到之前的日子）。"})
     return out
+
+
+def _manual_link(test: str, earliest: Optional[str]) -> Optional[dict]:
+    from backend.engine import threshold_confidence as TC
+    return TC.schedule_link(test, earliest) if test in TC.TEST_TEMPLATE else None
 
 
 REST_DAYS = 7                         # plan §4.2: 「要不要把今天起 7 天設成不排課日期？」

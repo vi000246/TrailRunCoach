@@ -142,18 +142,23 @@ class Threshold:
     # zones-and-thresholds.md §3.4 change 1: an applied estimate is not a test.
     lthr_method: Optional[str] = None
     aethr_method: Optional[str] = None
+    # how `mhr` was obtained (MHR_METHODS; SP-64): test = a max-HR test read by
+    # engine/threshold_confidence.py, estimate = its sustained-peak candidate,
+    # manual = 設定 → 心率; None = a legacy row (= manual)
+    mhr_method: Optional[str] = None
 
     THRESHOLD_FIELDS = ("lthr", "aethr", "mhr", "rhr", "cp")
 
 
 _THRESHOLD_KEYS = ("date", "lthr", "aethr", "mhr", "rhr", "cp", "note", "wprime", "cp_method",
-                   "lthr_method", "aethr_method")
+                   "lthr_method", "aethr_method", "mhr_method")
 
 # estimate = thresholds.estimate applied with 「套用估計」; friel30 = Friel's
 # 30-min solo TT (last 20 min HR); test = an AeT drift test (engine/aet_test.py);
 # race / lab / manual = entered from a race, a lab test, by hand
 LTHR_METHODS = ("estimate", "friel30", "race", "lab", "manual")
 AETHR_METHODS = ("estimate", "test", "lab", "manual")
+MHR_METHODS = ("test", "race", "lab", "estimate", "manual")
 METHOD_LABEL = {"estimate": "自動估算", "friel30": "30 分鐘測試", "test": "AeT 測試", "race": "比賽",
                 "lab": "實驗室測試", "manual": "手動輸入"}
 _FIELD_NAME = {"lthr": "LTHR", "aethr": "AeT"}
