@@ -21,7 +21,7 @@ import threading
 from typing import Optional
 
 from backend.i18n.pages import render_page
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, File, HTTPException, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
 
@@ -1159,14 +1159,177 @@ async def steps_check(body: dict = Body(...), db: AsyncSession = Depends(get_db)
     s = _session_of(body, stored)
     st = _norm_or_400(body.get("steps"))
     env = await _steps_env(s, inp)
-    return {**WS.view(st, env["ctx"], env["cap"], env["cap_mode"], env["rung"]),
-            "basis_label": _context(env)["basis_label"], "policy": env["policy"]}
+    out = {**WS.view(st, env["ctx"], env["cap"], env["cap_mode"], env["rung"]),
+           "basis_label": _context(env)["basis_label"], "policy": env["policy"]}
+    if st.get("tpl"):
+        # made from a user template with a route GPX: its elevation on the chart's time axis
+        from backend.engine import user_templates as UT
+        prof = await UT.profile_of(db, st["tpl"])
+        out["elev"] = UT.route_elevation(st, env["ctx"], prof) if prof else None
+    return out
 
 
 @router.get("/steps/templates")
-async def steps_templates():
+async def steps_templates(db: AsyncSession = Depends(get_db)):
+    from backend.engine import user_templates as UT
     from backend.engine import workout_steps as WS
-    return WS.templates()
+    return WS.templates(user={"templates": await UT.list_all(db), "cats": await UT.custom_cats(db)})
+
+
+# ---------------------------------------------------------------------------
+# the user's own templates (engine/user_templates.py; 範本 page static/templates.html, SP-36)
+#
+#   GET    /steps/templates/user                   {templates, cats (built-in + custom)}
+#   POST   /steps/templates/user                   {name, cats, steps, target_basis?, note?}
+#   POST   /steps/templates/user/copy              {key}: a built-in 插入範本 row → 我的範本
+#   PATCH  /steps/templates/user/{id}              any of name / cats / steps / target_basis / note
+#   DELETE /steps/templates/user/{id}
+#   POST   /steps/templates/user/{id}/gpx          upload / replace the training route (multipart file)
+#   DELETE /steps/templates/user/{id}/gpx
+#   GET    /steps/templates/user/{id}/gpx/file     the stored file
+#   POST   /steps/templates/cats {label} · PATCH / DELETE /steps/templates/cats/{cid}
+#   POST   /sessions/{uid}/save-as-template        {name, cats, steps?}: the session's structure
+#          (the body's — the editor's current one —, else the stored, else derived)
+# ---------------------------------------------------------------------------
+
+def _tpl_err(e) -> HTTPException:
+    return HTTPException(e.status, {"errors": e.errors} if e.status != 404 else e.errors[0])
+
+
+async def _tpl_call(fn, *a, **kw):
+    from backend.engine import user_templates as UT
+    try:
+        return await fn(*a, **kw)
+    except UT.TemplateError as e:
+        raise _tpl_err(e)
+
+
+@router.get("/steps/templates/user")
+async def user_templates_list(db: AsyncSession = Depends(get_db)):
+    from backend.engine import user_templates as UT
+    from backend.engine import workout_templates as WTP
+    return {"templates": [{**t, "row": UT.row(t)} for t in await UT.list_all(db)],
+            "cats": WTP.cats() + await UT.custom_cats(db),
+            "limits": {"name": UT.NAME_MAX, "cat": UT.CAT_MAX, "cats": UT.MAX_CATS, "templates": UT.MAX_TEMPLATES}}
+
+
+@router.post("/steps/templates/user")
+async def user_templates_create(body: dict = Body(...), db: AsyncSession = Depends(get_db)):
+    from backend.engine import user_templates as UT
+    return await _tpl_call(UT.create, db, body)
+
+
+def _builtin_row(key: str) -> Optional[dict]:
+    from backend.engine import workout_steps as WS
+    for g in WS.templates()["groups"]:
+        for r in g["rows"]:
+            if r["key"] == key:
+                return {**r, "cat": g["cat"]}
+    return None
+
+
+@router.post("/steps/templates/user/copy")
+async def user_templates_copy(body: dict = Body(...), db: AsyncSession = Depends(get_db)):
+    """「複製成我的範本」: a built-in row (read-only) becomes the user's own, to change."""
+    from backend.engine import user_templates as UT
+    from backend.i18n import _
+    r = _builtin_row(str(body.get("key") or ""))
+    if r is None:
+        raise HTTPException(404, _("找不到這個範本"))
+    name = str(body.get("name") or "").strip() or r["title"] or r["label"]
+    data = {"name": name[:UT.NAME_MAX], "cats": body.get("cats") or [r["cat"]], "steps": {"items": r.get("full") or r["items"]},
+            "target_basis": r.get("basis") if r.get("basis") in UT.BASES else None,
+            "note": r.get("src") or ""}
+    return await _tpl_call(UT.create, db, data, copied_from=r["key"])
+
+
+@router.patch("/steps/templates/user/{tid}")
+async def user_templates_update(tid: int, body: dict = Body(...), db: AsyncSession = Depends(get_db)):
+    from backend.engine import user_templates as UT
+    return await _tpl_call(UT.update, db, tid, body)
+
+
+@router.delete("/steps/templates/user/{tid}")
+async def user_templates_delete(tid: int, db: AsyncSession = Depends(get_db)):
+    from backend.engine import user_templates as UT
+    return await _tpl_call(UT.delete, db, tid)
+
+
+@router.post("/steps/templates/user/{tid}/gpx")
+async def user_templates_gpx(tid: int, file: UploadFile = File(...), db: AsyncSession = Depends(get_db)):
+    from backend.engine import user_templates as UT
+    from backend.engine.racepower import gpx as GPX
+    data = await file.read(GPX.MAX_BYTES + 1)
+    await _tpl_call(UT.get, db, tid)                   # 404 before the parse
+    try:
+        got = await run_in_threadpool(UT.parse_profile, data, file.filename or "")
+    except UT.TemplateError as e:
+        raise _tpl_err(e)
+    return await _tpl_call(UT.save_gpx, db, tid, data, file.filename or "", parsed=got)
+
+
+@router.delete("/steps/templates/user/{tid}/gpx")
+async def user_templates_gpx_delete(tid: int, db: AsyncSession = Depends(get_db)):
+    from backend.engine import user_templates as UT
+    return await _tpl_call(UT.delete_gpx, db, tid)
+
+
+@router.get("/steps/templates/user/{tid}/gpx/file")
+async def user_templates_gpx_file(tid: int, db: AsyncSession = Depends(get_db)):
+    from urllib.parse import quote
+
+    from fastapi.responses import Response
+
+    from backend.engine import user_templates as UT
+    from backend.i18n import _
+    t = await _tpl_call(UT.get, db, tid)
+    data = UT.read_gpx(tid) if t.get("gpx") else None
+    if data is None:
+        raise HTTPException(404, _("這個範本沒有 GPX"))
+    name = t["gpx"].get("filename") or "route.gpx"
+    mt = "application/gpx+xml" if not name.lower().endswith(".fit") else "application/octet-stream"
+    return Response(content=data, media_type=mt,
+                    headers={"Content-Disposition": f"attachment; filename=\"route\"; filename*=UTF-8''{quote(name)}"})
+
+
+@router.post("/steps/templates/cats")
+async def user_template_cat_add(body: dict = Body(...), db: AsyncSession = Depends(get_db)):
+    from backend.engine import user_templates as UT
+    return await _tpl_call(UT.add_cat, db, body.get("label"))
+
+
+@router.patch("/steps/templates/cats/{cid}")
+async def user_template_cat_rename(cid: str, body: dict = Body(...), db: AsyncSession = Depends(get_db)):
+    from backend.engine import user_templates as UT
+    return await _tpl_call(UT.rename_cat, db, cid, body.get("label"))
+
+
+@router.delete("/steps/templates/cats/{cid}")
+async def user_template_cat_delete(cid: str, db: AsyncSession = Depends(get_db)):
+    from backend.engine import user_templates as UT
+    return await _tpl_call(UT.delete_cat, db, cid)
+
+
+@router.post("/sessions/{uid}/save-as-template")
+async def save_as_template(uid: str, body: dict = Body(...), db: AsyncSession = Depends(get_db)):
+    """儲存成範本: the editor's current structure when sent, else the stored one, else derived
+    from the session's kind / text; the session's 目標用 goes with it."""
+    from backend.engine import user_templates as UT
+    from backend.engine import workout_steps as WS
+    from backend.i18n import _
+    s = next((x for x in await PS.load(db) if x["uid"] == uid), None)
+    if s is None:
+        raise HTTPException(404, _("找不到這堂課"))
+    steps = body.get("steps") or s.get("steps")
+    if not steps:
+        inp = await _inputs()
+        env = await _steps_env(s, inp)
+        steps = WS.derive(s, env["th"])
+    if not steps:
+        raise HTTPException(400, {"errors": [_("這堂課看不出結構，沒辦法存成範本")]})
+    data = {"name": body.get("name") or s.get("title") or "", "cats": body.get("cats") or [], "steps": steps,
+            "target_basis": body.get("target_basis", s.get("target_basis")), "note": body.get("note")}
+    return await _tpl_call(UT.create, db, data)
 
 
 def _phase_on(inp: dict, day: Optional[str]) -> Optional[str]:
