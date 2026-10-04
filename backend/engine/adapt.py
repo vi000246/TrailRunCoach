@@ -215,31 +215,33 @@ def _r5(x: float) -> int:
     return int(round(x / 5.0) * 5)
 
 
-def _dose_index(title: str) -> Optional[int]:
+def _prev_row(title: str) -> Optional[tuple]:
+    """The ladder row one step below the rung titled `title` (interval_library.PREV_RUNG: within
+    its track; A1 / V1 → T3), None when there is none."""
+    from backend.engine import interval_library as IL
     from backend.engine import quality_gate as QG
-    for i, s in enumerate(QG.LADDER):
-        if s[1] == title:
-            return i
-    return None
+    s = next((s for s in QG.LADDER if s[1] == title), None)
+    prev = IL.PREV_RUNG.get(s[0]) if s is not None else None
+    return next((r for r in QG.LADDER if r[0] == prev), None) if prev else None
 
 
 def _downgrade(g: dict, th: dict) -> str:
-    """One dose step down (quality_gate.DOSE), else an easy run. Returns what it became."""
+    """One step down its track (interval_library.PREV_RUNG), else an easy run. Returns what it became."""
     from backend.engine import interval_library as IL
     from backend.engine import quality_gate as QG
     rung = g.get("rung_key") if g.get("kind") == "quality" else None
-    if rung in IL.RUNG_ORDER and IL.RUNG_ORDER.index(rung) > 0:
+    if rung in IL.PREV_RUNG:
         # a library variant: the rung before's standard session, as maintenance (not progress)
-        prev = IL.RUNG_ORDER[IL.RUNG_ORDER.index(rung) - 1]
+        prev = IL.PREV_RUNG[rung]
         f = IL.fit(prev, g.get("minutes") or None)
         s = IL.session_for({**f, "equiv": False, "progress": False,
                             "reason": f"自動調整：降一階到 {IL.RUNG_NAME[prev]}（不算進階）"}, th or {}, swap="auto")
         g.update({k: s.get(k) for k in ("title", "minutes", "target", "detail", "tss", "variant_key", "rung_key",
                                         "equiv", "swap", "swap_reason", "variant_reps", "variant_blocks", "variant_adj")})
         return s["title"]
-    i = _dose_index(g.get("title") or "") if g.get("kind") == "quality" and not g.get("variant_key") else None
-    if i is not None and i > 0:
-        s = QG.session(QG.LADDER[i - 1], th or {})
+    p = _prev_row(g.get("title") or "") if g.get("kind") == "quality" and not g.get("variant_key") else None
+    if p is not None:
+        s = QG.session(p, th or {})
         g.update({k: s[k] for k in ("title", "minutes", "target", "detail", "tss")})
         return s["title"]
     rate = 50.0 / 60.0

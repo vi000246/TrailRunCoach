@@ -1520,8 +1520,8 @@ def streak_of(drifts: Sequence[Optional[float]], good: float = DRIFT_GOOD) -> in
 
 def quality_gate(kind: Optional[str], levels: dict, gate=None) -> bool:
     """allow_quality for a week: engine/quality_gate.week_decision with `gate`
-    (the dict status.i_gate returns). Outside base: intensity and drift not
-    bad. A legacy bool / None `gate` = no method (the drift streak is gone)."""
+    (the dict status.i_gate returns). Outside base: drift not bad (intensity bad keeps
+    Zone 5 out only, SP-31). A legacy bool / None `gate` = no method (the drift streak is gone)."""
     from backend.engine import quality_gate as QG
     g = gate if isinstance(gate, dict) and not QG.legacy(gate) else {
         "state": "none", "guard": {"block": levels.get("intensity") == "bad", "rule": "intensity"}}

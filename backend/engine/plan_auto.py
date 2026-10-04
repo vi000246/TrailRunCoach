@@ -536,10 +536,17 @@ def reentry_weeks(inp: dict) -> set:
 
 
 def state_changes(inp: dict, state: dict) -> list[str]:
-    """Log lines for a Zone 5 state change and a new re-entry block (both are
-    plan rules, not sessions); updates `state` in place (keys z5, reentry)."""
+    """Log lines for a Zone 3 gate change (SP-31), a Zone 5 state change and a new re-entry
+    block (plan rules, not sessions); updates `state` in place (keys z3, z5, reentry)."""
     out = []
     cur = inp.get("cur") or {}
+    z3 = (cur.get("quality_gate") or {}).get("z3") or {}
+    z3key = f"{bool(z3.get('open'))}|{z3.get('path')}" if z3 else None
+    if z3 and z3key != state.get("z3"):
+        if state.get("z3") is not None or z3.get("open"):
+            # the first record of a closed gate says nothing new; opening (or closing again) is logged
+            out.append(z3.get("text") or ("Zone 3：已解鎖" if z3.get("open") else "Zone 3：未解鎖"))
+        state["z3"] = z3key
     z5 = (cur.get("quality_gate") or {}).get("z5") or {}
     key = f"{z5.get('state')}|{z5.get('since')}|{z5.get('path')}" if z5 else None
     if z5 and key != state.get("z5"):

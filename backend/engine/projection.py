@@ -115,9 +115,10 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
     `long_min`: the 專項期 long day (engine/specific_phase.long_minutes); None = the base rule.
     `b2b` (engine/b2b.py): {"event", "state", "prev_mode", "weight"} — the
     week's B2B is decided here and written back as b2b["info"].
-    `base_quality`: the base-phase session the gate picked for this week
-    (engine/quality_gate.py dose step, the recovery-week fartlek, or the AeT
-    test, kind "test"); None in base with `allow_quality` = 閾值 3×10.
+    `base_quality`: the session(s) the gate picked for this week — a list of the
+    two-track intervals (overview.quality_sessions: base / 專項期 / 減量期), or one dict
+    (the recovery-week fartlek, the AeT test, kind "test"); None in base with
+    `allow_quality` = 閾值 3×10, in 專項期 the old fixed session, in 減量期 4×3′.
     `quality_cap`: 1 = at most one interval (the gate's guardrail mode).
     `prefs` (課表偏好, engine/plan_prefs.py): shaped and placed like week_plan();
     `rates` = TSS / h per category for it, `notes` collects its notes.
@@ -127,6 +128,8 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
     road = sport == "road"
     total = hours * 60.0
     ss: list[dict] = []
+    # one session (older callers, the AeT test) or the week's interval list (two tracks, SP-31)
+    bqs = [b for b in (base_quality if isinstance(base_quality, list) else [base_quality]) if b]
     cap_txt = easy_cap_label(None, aet, aet_measured)
 
     def add(**kw):
@@ -156,25 +159,29 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
                 source=O.SRC_KOOP if kind == "specific" else O.SRC_UA, tss=long_min / 60.0 * tph)
             if info is not None and info.get("due"):
                 ss.extend(B2B.followers(ss[-1], info))     # out of the easy minutes (Koop)
-        if allow_quality and kind == "specific" and base_quality:
-            add(**_bq(base_quality))                # Zone 3 ladder: Zone 5 not confirmed yet
+        if allow_quality and kind == "specific" and bqs:
+            for b in bqs:                           # the two-track pick (SP-31; overview.quality_sessions)
+                add(**_bq(b))
         elif allow_quality and kind == "specific" and road:
             add(**O.ROAD_SPECIFIC_Q, target=tgt.get("threshold", ""))
         elif allow_quality and kind == "specific":
             add(id="quality", kind="quality", title="爬坡間歇 5×4 分", minutes=60, target=tgt.get("supra", ""),
                 detail="上坡 4 分鐘（6–10% 坡），慢跑或走下來恢復；暖身 15 分、緩和 10 分",
                 source=O.SRC_PALLADINO + "（Supra-threshold）", tss=75.0)
-        elif allow_quality and kind == "base" and base_quality:
-            add(**_bq(base_quality))
+        elif allow_quality and kind == "base" and bqs:
+            for b in bqs:
+                add(**_bq(b))
         elif allow_quality:
             add(id="quality", kind="quality", title="閾值 3×10 分", minutes=60, target=tgt.get("threshold", ""),
                 detail="休 2–3 分鐘；暖身 15 分、緩和 10 分", source=O.SRC_PALLADINO + "（3B）", tss=70.0)
-    elif kind == "base" and mode == "recovery_week" and allow_quality and base_quality \
-            and base_quality.get("kind", "quality") == "quality":
-        add(**_bq(base_quality))                   # 3:1 recovery week: the short fartlek (Palladino)
+    elif kind == "base" and mode == "recovery_week" and allow_quality and bqs \
+            and bqs[0].get("kind", "quality") == "quality":
+        add(**_bq(bqs[0]))                         # 3:1 recovery week: the short fartlek (Palladino)
+    elif kind == "taper" and bqs:
+        for b in bqs:                               # 減量期's two-track pick (overview.quality_sessions)
+            add(**_bq(b))
     elif kind == "taper":
-        add(id="quality", kind="quality", title="短強度 4×3 分", minutes=45, target=tgt.get("threshold", ""),
-            detail="保留強度、不累積疲勞（98–102% CP）", source=O.SRC_BOSQUET, tss=45 / 60 * 65)
+        add(**O.TAPER_Q, target=tgt.get("threshold", ""))
     n_strength = 2 if kind in ("base", "transition", "recovery") else 1
     for i in range(n_strength):
         add(id=f"strength{i + 1}", kind="strength", title="肌力（下肢單腳＋核心）", minutes=35,
@@ -238,6 +245,7 @@ def _bq(b: dict) -> dict:
             "minutes": b["minutes"], "target": b.get("target", ""), "detail": b.get("detail", ""),
             "source": b.get("source", ""), "tss": float(b.get("tss") or 65.0),
             **({"protocol": b["protocol"]} if b.get("protocol") else {}),   # the AeT test: "aet"
+            **({"terrain": b["terrain"]} if b.get("terrain") else {}),
             # the interval library variant (engine/interval_library.py)
             **{k: b[k] for k in VARIANT_FIELDS if b.get(k) is not None}}
 
@@ -315,14 +323,26 @@ def _gate_inputs(cur: dict) -> dict:
             "dose": {"done": 0, "step": 0, "faded": False}}
 
 
-def allow_quality(kind: str, gate: dict, monday: Optional[dt.date] = None, step: Optional[int] = None,
-                  mode: Optional[str] = None) -> dict:
+def allow_quality(kind: str, gate: dict, monday: Optional[dt.date] = None, step=None,
+                  mode: Optional[str] = None, n: int = 1) -> dict:
     """week_plan()'s rule for one projected week: quality_gate.week_decision
     with the week's phase, mode (a recovery week gets the fartlek) and Monday
-    (weeks mode) and the dose step reached by then; this week's ramp / volume /
-    TSB guardrails are not carried forward (re-checked when the week comes)."""
+    (weeks mode, the Zone 3 gate's time path, the 1-a-week turn) and the track steps
+    reached by then ({"z3", "z5", "met"}; an int = the Zone 3 step); this week's ramp /
+    volume / TSB guardrails are not carried forward (re-checked when the week comes)."""
     from backend.engine import quality_gate as QG
-    return QG.week_decision(gate, kind, mode or kind, monday, step, first=False)
+    return QG.week_decision(gate, kind, mode or kind, monday, step, first=False, n=n)
+
+
+def _advance(steps: dict, rung: Optional[str]) -> None:
+    """One step of the track `rung` serves (a projected session assumed 達標)."""
+    from backend.engine import interval_library as IL
+    t = IL.track_of(rung)
+    if t == "z3":
+        steps["z3"] += 1
+        steps["met"] += 1
+    elif t == "z5":
+        steps["z5"] += 1
 
 
 def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 42.0,
@@ -360,14 +380,14 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
     road = sport == "road"
     rates = cur.get("tss_per_category") if PR is not None else None
     gate = _gate_inputs(cur)
-    step = int((gate.get("dose") or {}).get("step") or 0)
-    cur_q = next((s for s in cur_s if s.get("kind") == "quality"), None)
-    ladder_now = (cur.get("phase") == "base" and gate.get("allowed") and (gate.get("this_week") or "") not in
-                  ("", QG.RECOVERY[1], QG.SUB[1])) or \
-        (cur.get("phase") == "specific" and cur_q is not None and cur_q.get("rung_key") in QG.ladder_keys())
-    if ladder_now and not (cur_q is not None and cur_q.get("progress") is False):
-        step += 1                              # this week's interval is one step of the dose
-        # (a 縮量版 / the step before under a tight cap is maintenance: no step — §C5.3)
+    # each track's step (SP-31): the gate's, plus this week's intervals — a 縮量版 / the step before
+    # under a tight cap is maintenance and moves nothing (§C5.3)
+    d3, d5 = QG._track_doses(gate)
+    steps = {"z3": int(d3.get("step") or 0), "z5": int(d5.get("step") or 0), "met": int(d3.get("met") or 0)}
+    if cur.get("phase") in ("base", "specific"):
+        for q in cur_s:
+            if q.get("kind") == "quality" and q.get("rung_key") in QG.ladder_keys() and q.get("progress") is not False:
+                _advance(steps, q.get("rung_key"))
     last_aet = (gate.get("aet_test") or {}).get("last")
     # the interval library's rotation (engine/interval_library.fit): the stored variants done
     # before this week, then this week's pick and each projected week's
@@ -428,7 +448,8 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
                 hours *= f
                 why = why + [f"不排課 {BL.range_text(lost)}：少 {len(lost)} 個可練日，週量 × {f:.0%}"]
                 notes.append(BL.week_note(bmap, lost, lost_h))
-        dec = allow_quality(kind, gate, week, step, mode)
+        q_n = O.quality_per_week(PR, kind, mode, gate)
+        dec = allow_quality(kind, gate, week, dict(steps), mode, q_n)
         no_q = mode == "reentry" and rp is not None and not RE.quality_ok(rp, week)
         if no_q:
             dec = {**dec, "allow": False, "spec": None, "advance": False}
@@ -441,28 +462,20 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
             # tests are suggested for the current week only (overview.week_plan test_suggestions),
             # never put into the plan — projected weeks keep their long run and interval
             last_aet = week.isoformat()
-        z5g = gate.get("z5") or {}
-        if base_q is None and kind == "specific" and dec["allow"] and not z5g.get("open") and z5g.get("state") != "open" \
-                and mode not in ("recovery_week", "reentry"):
-            # 專項期 without a confirmed base: the Zone 3 ladder instead of the 5×4′ hill set (台灣教練)
-            dz = QG.week_decision({**gate, "z5": {**z5g, "open": False}}, "base", "base", week, step, first=False)
-            if dz["allow"] and dz["spec"] is not None:
-                q_cap, q_alt = O.quality_caps(PR, PP_long(PR, long_wd))
-                base_q = O._gate_session(gate, dz, th, hours, prefs, vhist, not road, q_cap, q_alt)
-                if base_q.get("variant_key"):
-                    vhist.append({"day": week.isoformat(), "rung_key": base_q.get("rung_key"),
-                                  "variant_key": base_q["variant_key"], "state": "done", "outcome": None})
-                if dz["advance"] and base_q.get("progress", True) is not False:
-                    step += 1
-        if base_q is None and kind == "base" and dec["allow"] and dec["spec"] is not None:
+        if base_q is None and dec["allow"] and dec.get("items") and kind in ("base", "specific", "taper"):
+            # the two-track pick (SP-31): the same sessions as week_plan (overview.quality_sessions)
             q_cap, q_alt = O.quality_caps(PR, PP_long(PR, long_wd))
-            base_q = O._gate_session(gate, dec, th, hours, prefs, vhist, mountain, q_cap, q_alt)
-            if base_q.get("variant_key"):
-                # this week's pick joins the rotation history of the weeks after it
-                vhist.append({"day": week.isoformat(), "rung_key": base_q.get("rung_key"),
-                              "variant_key": base_q["variant_key"], "state": "done", "outcome": None})
-            if dec["advance"] and dec["spec"] not in (QG.RECOVERY, QG.SUB) and base_q.get("progress", True) is not False:
-                step += 1
+            base_q = O.quality_sessions(gate, dec, kind, th, tgt, hours, prefs, vhist,
+                                        mountain if kind == "base" else not road, road, q_cap, q_alt)
+            for q, it in zip(base_q, dec["items"]):
+                if q.get("variant_key"):
+                    # this week's pick joins the rotation history of the weeks after it
+                    vhist.append({"day": week.isoformat(), "rung_key": q.get("rung_key"),
+                                  "variant_key": q["variant_key"], "state": "done", "outcome": None})
+                if it.get("advance") and q.get("rung_key") in QG.ladder_keys() and q.get("progress", True) is not False:
+                    _advance(steps, q.get("rung_key"))
+        elif base_q is None and kind == "taper":
+            base_q = O.quality_sessions(gate, dec, kind, th, tgt, hours)
         b2b = None if road else {"event": cb.get("event"), "state": b2b_state, "prev_mode": prev_mode,
                                  "weight": cb.get("weight"), "accepted": b2b_accepted}
         sp_info = SP.projected_context(kind, mode, week, sp_cur) if sp_cur.get("race") else None

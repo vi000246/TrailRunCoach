@@ -411,7 +411,7 @@ class Status:
             why += f"；跑步依功率 < 80% CP 佔 {_pct(pshare)}"
         k = self.kind
         if share >= LOW_SHARE_GOOD:
-            lvl, v, act = GOOD, "低強度佔比達標（目標 75–80%）", ""
+            lvl, v, act = GOOD, "低強度佔比過底線（底線 75%、目標 80%，基礎期目標 ≥ 90%）", ""
         elif share >= LOW_SHARE_WATCH:
             lvl, v, act = WATCH, "輕鬆跑有點太快", "把輕鬆跑心率壓在 AeT 以下（{aet} bpm）"
         else:
