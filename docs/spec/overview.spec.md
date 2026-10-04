@@ -201,8 +201,10 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
     maintenance and re-entry rules in plan-auto.spec.md).
   - **Dose** (`Z3` / `Z5` / `LADDER`, `dose_spec(step, z5_open)`; `dose_step`): step = 達標
     sessions in the last 8 weeks (`dose_history`, counting ≥ 4 short reps at ≥ 95 % CP with
-    `count_reps`): 閾值 3×8′ → 4×8′ → 3×10′, then (Zone 5 open) 5×2′ → 4×3′ → 5×3′ → 4×4′,
-    then 4×4′ / 3×10′ alternating; Zone 5 closed → the top Zone 3 rungs and the step waits.
+    `count_reps`): 閾值 3×6′ → 3×8′ → 2×12′ at 90–95 % CP (`interval_library` z3a–z3c), then
+    (Zone 5 open) 5×2′ → 4×3′ → 5×3′ → 4×4′, then V3 / V4 / T+ rotating with T+ (near-threshold)
+    every 3rd week (`backend/engine/quality_gate.py:39`); Zone 5 closed → the top Zone 3 rungs and
+    the step waits. Rung details in plan-auto.spec.md.
     The step moves by the progression state machine (`interval_outcome` / `dose_step`,
     plan-auto.spec.md): 達標 forward, 邊界 / 無法判定 repeat, 未適應 rest +1 min then back one,
     first rep short = target −5 %.
@@ -328,15 +330,15 @@ defaults reproduce today's plan exactly.
 | 每週時數 | `plan.prefs.weekly_hours` | 1–40 h cap (`null` = CTL ramp rules) |
 | 地形偏好 | `plan.prefs.terrain_easy` / `_long` / `_quality` | easy `road`/`trail`/`any`; long `road`/`trail`/`auto` (a stored `hike` reads as `trail` — 登山 is not a workout type; kind `hike` is labelled 越野跑); quality `flat`/`hill`/`any` |
 | 目標依據 | `plan.prefs.target_basis` | `auto` (by session type: HR for easy / long / trail days, power for intervals and 3–8 % hill repeats) / `hr` / `power` (`auto`; `engine/target_policy.py`). The legacy 間歇目標 `plan.prefs.interval_target` = `hr` reads as `hr` |
-| 間歇門檻 | `plan.prefs.quality_gate`, `plan.prefs.quality_gate_weeks` | `auto` / `ua_gap` / `friel_drift` / `xu_drift` / `plateau` / `weeks` / `none` (`auto`); weeks 2–16 (8). **Not part of `active`** (`GATE_FIELDS`, `backend/engine/plan_prefs.py:87`): read by status `i_gate`. Panel: a chip per mode, each with a `?` whose fixed-position popup (ported from the viewer's `.qtip`, appended inside the open dialog so the modal top layer and its scroll box never hide it) gives the source, the exact criterion, what to do and whether it runs on your data now (`GET /prefs` `gate_options` + `GET /prefs/gate`; `backend/static/schedule.html:752`, `backend/static/schedule.html:1883`, `backend/static/schedule.html:1920`) |
-| CP 測試方式 | `plan.prefs.cp_test_protocol` | `quick` 約 37 分 / `standard` 約 70 分 / `race` 不另外排 (`quick`). **Not part of `active`**: it only changes the test session (`NOT_SHAPING`, `backend/engine/plan_prefs.py:95`). Panel: three chips, the details behind `?` (`backend/static/schedule.html:761`, `backend/static/schedule.html:1897`) |
+| 間歇門檻 | `plan.prefs.quality_gate`, `plan.prefs.quality_gate_weeks` | `auto` / `ua_gap` / `friel_drift` / `xu_drift` / `plateau` / `weeks` / `none` (`auto`); weeks 2–16 (8). **Not part of `active`** (`GATE_FIELDS`, `backend/engine/plan_prefs.py:87`): read by status `i_gate`. Panel: a chip per mode, each with a `?` whose fixed-position popup (ported from the viewer's `.qtip`, appended inside the open dialog so the modal top layer and its scroll box never hide it) gives the source, the exact criterion, what to do and whether it runs on your data now (`GET /prefs` `gate_options` + `GET /prefs/gate`; `backend/static/schedule.html:758`, `backend/static/schedule.html:1946`, `backend/static/schedule.html:1983`) |
+| CP 測試方式 | `plan.prefs.cp_test_protocol` | `quick` 約 37 分 / `standard` 約 70 分 / `race` 不另外排 (`quick`). **Not part of `active`**: it only changes the test session (`NOT_SHAPING`, `backend/engine/plan_prefs.py:95`). Panel: three chips, the details behind `?` (`backend/static/schedule.html:767`, `backend/static/schedule.html:1960`) |
 | AeT 測試方式 | `plan.prefs.aet_test_protocol` | `auto` (徐國峰 90′ on the weekend LSD, UA 40′ backup) / `xu90` / `ua60` / `ua40` / `evoke60` / `friel` (`auto`). **Not part of `active`**. Protocols in plan-auto.spec.md |
 | AeT 飄移測試 | `plan.prefs.aet_test_days` | `weekday` / `any` (`weekday`: weekends are often trail days). **Not part of `active`** (`NOT_SHAPING`): every placement path reads it (`aet_test.test_days` / `pick_day`): weekday = Mon–Fri in Tue-first order, ≥ 2 days from the long run and other hard days where possible, never the day after the long run unless nothing else; the 80′ standard test may fall back to a weekend day that isn't the long run's, the 50′ short one never; `any` = the interval rule. The test's **length** follows `cap_weekday` (`aet_test.variant_for`): no cap or ≥ 80 → 15′ + 60′ + 5′; < 80 → UA's minimum 10′ + 40′ (never shorter, exempt below 50). Panel: `#pf-aet` chips + AeT 排在 |
 | 間歇暖身／緩和 | `plan.prefs.warmup_commute_min`, `plan.prefs.cooldown_min` | 0–30 (10) / 0–20 (5) min: the interval's easy warm-up run and cool-down (`engine/interval_library.py`). **Not part of `active`** |
 | 建議 B2B | `plan.prefs.b2b` | `true` / `false` (`true`): whether a due B2B weekend is suggested at all. **Not part of `active`** |
 | 熱適應 | `plan.prefs.heat`, `plan.prefs.heat_method` | `auto` / `off` (`auto`); `run` / `overdress` / `bath` / `sauna` / `mixed` (`run`). **Not part of `active`** (`NOT_SHAPING`): they only add heat sessions before a hot A/B race (`engine/heat_plan.py`). Panel: switch + select with the current S and the rules (`#pf-heat`) |
 
-**Panel** (⚙ 課表偏好, redesigned 2026-10-02, `backend/static/schedule.html:671`): sections 每週時間
+**Panel** (⚙ 課表偏好, redesigned 2026-10-02, `backend/static/schedule.html:677`): sections 每週時間
 (可練日, runs, weekly hours, caps, 超過上限時) / 偏好的星期 (one row per type: type + weekday chips +
 delete, ＋ 新增; a weekday given to another row is disabled) / 課表內容／目標 / 自動調整 (the
 `plan.auto.*` settings, saved with the dialog — plan-auto.spec.md) / 進階 (collapsed: 間歇門檻,
@@ -405,7 +407,7 @@ generator's output and reconcile rule 3 keeps edited sessions.
 **Saving** (`PUT /plan/prefs`, `backend/api/plan_sessions.py:1557`) validates the whole set,
 writes every key and commits; when a 偏好的星期 breaks a default rule the dialog first shows the
 conflicts once (照我的偏好), then the page opens the existing reconcile preview
-(`backend/static/schedule.html:2244`). Cancelling keeps the preferences
+(`backend/static/schedule.html:2307`). Cancelling keeps the preferences
 saved and the plan unchanged until the next reconcile. The generator inputs are memoised with
 the preference stamp in the key (`backend/api/plan_sessions.py:66`), so a saved change
 regenerates immediately. COROS pushes read the stored sessions, so they follow too; an HR
@@ -476,16 +478,16 @@ reconciles with the user's `decisions`. `POST /plan/reconcile` also takes `{deci
 **Page** (`backend/static/schedule.html`): blocked days get a faint 45° hatch (the provisional
 week hatch is 135°, so both read when stacked) and a small 🏖 label chip on the first day of the
 range in each week row (every blocked day in the phone agenda); no ＋, no add-on-click, no drop
-target (`boOf`, `backend/static/schedule.html:976`). Ranges are set by dragging across days
-(mouse / pen, 8 px threshold, never starting on a chip or button; `backend/static/schedule.html:2365`),
+target (`boOf`, `backend/static/schedule.html:986`). Ranges are set by dragging across days
+(mouse / pen, 8 px threshold, never starting on a chip or button; `backend/static/schedule.html:2428`),
 by clicking a day and Shift-clicking another, or from ⋯ → 「🏖 設定不排課日期」
-(`backend/static/schedule.html:558`), which also works on the phone. The dialog
-(`backend/static/schedule.html:793`, `openBo` `backend/static/schedule.html:2252`) takes start,
+(`backend/static/schedule.html:563`), which also works on the phone. The dialog
+(`backend/static/schedule.html:799`, `openBo` `backend/static/schedule.html:2315`) takes start,
 end and an optional label, checks overlap / length client-side, and shows how many sessions sit
 in the range; clicking the chip edits or removes the range. Creating, editing and removing all
-go through the reconcile preview first (`applyBlackouts`, `backend/static/schedule.html:2289`),
+go through the reconcile preview first (`applyBlackouts`, `backend/static/schedule.html:2352`),
 where each conflicting edited session gets 移到… / 刪除 / 先留著 (`changesHtml`,
-`backend/static/schedule.html:1183`). Blackout notes show above the calendar with a 🏖 mark.
+`backend/static/schedule.html:1197`). Blackout notes show above the calendar with a 🏖 mark.
 
 ## Same-load conversion (`equivalence.py`)
 
@@ -529,17 +531,17 @@ Flat easy road speed from 7 runs. Trail samples span 55–111 m/km; the page war
 that range. A terrain whose MAPE is above 15 % (`ESTIMATE_MAPE`) or that cannot be backtested is
 labelled **推估** — on that data hike is 推估, trail is 依你的紀錄.
 
-**Dialog** (`backend/static/schedule.html:618`; the 「地形與同負荷換算」 fold is collapsed by default
+**Dialog** (`backend/static/schedule.html:623`; the 「地形與同負荷換算」 fold is collapsed by default
 since 2026-10-03, the 結構 editor above it open): terrain 路跑 / 越野跑 (kind `hike` is 越野跑;
 choosing 路跑 on it goes back to a road kind), a
 爬升比例 slider 0–150 m/km, a 套用目標賽事 button (the goal's climb per km), distance / climb /
 TSS fields, a lock (鎖時間 / 鎖 TSS / 鎖距離) and 完全自由調整; editing any unlocked field
-recomputes the rest with the same formula in JS (`eqH`, `backend/static/schedule.html:1328`;
-`eqRecalc`, `backend/static/schedule.html:1367`). An inline grade readout shows the average grade
+recomputes the rest with the same formula in JS (`eqH`, `backend/static/schedule.html:1391`;
+`eqRecalc`, `backend/static/schedule.html:1430`). An inline grade readout shows the average grade
 (on trail, climbing sections ≈ 2 × the average, 推估); for a 陡坡健走 the grade is given, so
 distance and climb fill each other. It shows the live TSS and its difference vs
 the original (「比原本多 15 %」), warns above the preference cap (`capFor`,
-`backend/static/schedule.html:1316`), when the typed distance / climb would take a different
+`backend/static/schedule.html:1379`), when the typed distance / climb would take a different
 time, and outside the data range; a trail / hike target becomes HR-only ≤ AeT. The session is
 saved with `terrain`, `distance_km`, `climb_m`.
 
@@ -582,13 +584,13 @@ The horizon is the current phase end, at least two weeks out, capped at `MAX_WEE
 
 ## Stored plan (`plan_store.py`, `reconcile.py`)
 
-**Table** `plan_sessions` (`backend/db/models.py:160`): one row per planned session — `uid`,
+**Table** `plan_sessions` (`backend/db/models.py:157`): one row per planned session — `uid`,
 `week_start`, `gen_key` (the generator's id: long / quality / easy1 …; none for custom), `day`,
 `kind`, `title`, `minutes`, `target`, `detail`, `source`, `tss`, `origin` (auto / custom),
 `edited`, `provisional`, `state` (active / done / missed / deleted / superseded), `done_by`
 (JSON activity row), `note`, and `terrain` / `distance_km` / `climb_m`, `protocol`, the
 interval-library `variant_*` columns, `target_basis` (目標用 hr / power, None = 自動) and `steps`
-(the structure saved in the 課表 editor, JSON) (`backend/db/models.py:187`, added by
+(the structure saved in the 課表 editor, JSON) (`backend/db/models.py:184`, added by
 `_migrate_schema`, `backend/db/database.py:101`).
 
 **Kinds** (`backend/engine/plan_store.py:20`): easy 輕鬆跑, long **LSD** (was 長時間, 2026-10-03;
@@ -720,11 +722,11 @@ which one. The response keeps the `coros` field names.
   absolute bpm with the LTHR zone scheme; names `TRC <title> <m>/<d>`, ≤ 30 chars
   (`workout_name`, `backend/sync/coros_workouts.py:553`).
 - **Idempotency** (`_push_one`, `backend/sync/coros_workouts.py:880`): each push is recorded in
-  `coros_plan_push` (`backend/db/models.py:133`) with the COROS program / plan / schedule ids
+  `coros_plan_push` (`backend/db/models.py:130`) with the COROS program / plan / schedule ids
   and a SHA-256 fingerprint of day + payload. Same fingerprint → left alone; changed → the old
   COROS entry is removed and a new one created; an entry already executed on the watch is kept
   as done. The stored-plan push keys rows by session `uid` (`session_key`,
-  `backend/db/models.py:145`).
+  `backend/db/models.py:142`).
 - **Clean-up** (`push_sessions`, `backend/sync/coros_workouts.py:939`): pushed sessions that
   left the plan (deleted / superseded / regenerated away) are removed unless on a past day;
   missed sessions and expired ones the athlete deleted are removed from the calendar
@@ -797,20 +799,20 @@ which one. The response keeps the `coros` field names.
   and test-session stamps.
 - Plan editing, drag-to-move, reconcile preview and COROS push by day / week / phase live on
   the 課表 page (`backend/static/schedule.html`: session dialog `openDlg`
-  `backend/static/schedule.html:1731`, reconcile `backend/static/schedule.html:1202`, push
-  `backend/static/schedule.html:1222`, unpush `backend/static/schedule.html:1253`), which also has
-  the ⚙ 課表偏好 panel (`backend/static/schedule.html:671`, `openPrefs`
-  `backend/static/schedule.html:2198`), its client-side checks (`pfError`,
-  `backend/static/schedule.html:1993`) and the preference notes above the calendar
-  (`backend/static/schedule.html:1042`). Since 2026-10-02/03 the 課表 page also has:
-  - **日曆 ｜ 課表統計** mode cards (`backend/static/schedule.html:518`);
+  `backend/static/schedule.html:1794`, reconcile `backend/static/schedule.html:1216`, push
+  `backend/static/schedule.html:1236`, unpush `backend/static/schedule.html:1267`), which also has
+  the ⚙ 課表偏好 panel (`backend/static/schedule.html:677`, `openPrefs`
+  `backend/static/schedule.html:2261`), its client-side checks (`pfError`,
+  `backend/static/schedule.html:2056`) and the preference notes above the calendar
+  (`backend/static/schedule.html:1052`). Since 2026-10-02/03 the 課表 page also has:
+  - **日曆 ｜ 課表統計** mode cards (`backend/static/schedule.html:520`);
   - a **context menu** (right-click, long-press on touch; `ctxItems`,
-    `backend/static/schedule.html:2431`): on a session 編輯 / 移到… / 刪除 (an expired one too);
+    `backend/static/schedule.html:2494`): on a session 編輯 / 移到… / 刪除 (an expired one too);
     on a free day 新增 / 排入測試 ▸ (the suggested tests with their templates and day rules) /
     設為休息日, on a 休息日 取消休息日;
-  - ⋯ → 「刪除所有過期未完成」 (`backend/static/schedule.html:559`);
+  - ⋯ → 「刪除所有過期未完成」 (`backend/static/schedule.html:564`);
   - on a done session, planned vs actual (compliance, 「沒照課表」 ≠) and a manual link / unlink to
-    an activity (`backend/static/schedule.html:1693`);
+    an activity (`backend/static/schedule.html:1756`);
   - the session dialog's 結構 (step editor, `engine/workout_steps.py`) open by default and the
     地形與同負荷換算 fold collapsed; the push preview's pace-target warnings.
 - **課表統計** page (`backend/static/compliance.html`, a tab of 課表; `GET /plan/compliance` →
@@ -985,7 +987,7 @@ which one. The response keeps the `coros` field names.
 | GET | `/api/v1/overview/plan/schedule/page` | `backend/static/schedule.html` (`backend/api/plan_sessions.py:2017`) |
 | GET | `/api/v1/overview/plan/compliance?start=&end=` | the 課表統計 dashboard (≤ 371 days): due sessions with status and %, totals, weeks and days planned vs actual, streak, per kind, the current phase's progress, `plan_phases` (`backend/api/plan_sessions.py:2034`) |
 | GET | `/api/v1/overview/plan/compliance/page` | `backend/static/compliance.html` (`backend/api/plan_sessions.py:2069`) |
-| GET | `/` | redirects to the overview page when no `frontend/dist` build exists (`backend/main.py:199`); in demo mode to `/demo` |
+| GET | `/` | always redirects to the overview page (`backend/main.py:207`; the React SPA was removed 2026-10-04 — old SPA paths such as `/activities`, `/achievements`, `/sync`, `/config` redirect to their static pages, `backend/main.py:33`); in demo mode to `/demo` |
 
 The same router also serves the suggestion box (`/suggestions`, `/suggestions/accept`,
 `/suggestions/dismiss`, `/test-suggestions*`), the test templates / options and the 課表

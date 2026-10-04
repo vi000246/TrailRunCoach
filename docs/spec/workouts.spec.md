@@ -144,7 +144,7 @@ and `FitFolderDataset` (decided while loading). `ds.excluded` / `ds.exclusion_ke
 `cptest.curves` / `scan` (synced FIT files read beside the dataset) drop them via
 `cptest.bad_files` (`racepower_bad_activity.json`). `source_stamp` includes the setting and an
 overrides hash, so a change rebuilds the cached datasets. The legacy DB-row APIs
-(`/api/v1/pmc`, `/api/v1/analytics/*`, the unbuilt React `frontend/`) are not covered.
+(`/api/v1/pmc`, `/api/v1/analytics/*` and the React `frontend/`) were removed with the React SPA on 2026-10-04.
 
 Review scan: `python -m backend.scripts.scan_bad_activities` (read-only; flagged files and the
 closest calls). On one runner's history (~680 WKO5, ~515 COROS, ~690 TP foot activities; ratio =
