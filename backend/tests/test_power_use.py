@@ -18,6 +18,8 @@ def _ch(*exprs, **kw):
     (("sum(sum(if(runpower >= 0.8*cp, deltatime)), startofweek(date))",), True),
     (("if(sport=\"run\", drift(\"power\"))", "(,0.05)"), True),
     (("pwhr",), True),
+    (("tisaerobic", "tisanaerobic"), True),                       # TIS built-ins read power
+    (("tl((tisaerobic), ctlconstant)", "tl((tisanaerobic), atlconstant)"), True),
     (("heartrate", "(,cp)"), False),                              # HR data, power only as a reference
     (("ctl", "atl", "(,0)"), False),
     (("if(sport=\"run\", drift(\"pace\"))",), False),
@@ -59,6 +61,8 @@ def test_repo_views_hide_only_power_charts():
     assert ("周期化訓練", "Palladino 功率區間（跑步）") in hidden
     assert ("單次活動判讀", "功率區間時間") in hidden
     assert ("單次活動判讀", "CP 測試結果（3 分／12 分）") in hidden
+    assert ("我的訓練", "有氧／無氧刺激 TIS（每次活動）") in hidden
+    assert ("我的訓練", "有氧／無氧刺激的長期與短期負荷（TIS）") in hidden
     for keep in (("我的訓練", "狀況 Form%（TSB ÷ CTL）"), ("我的訓練", "這段時間在各區間的時數"),
                  ("我的訓練", "有氧效率 EF（輕鬆路跑）"), ("單次活動判讀", "心率區間時間"),
                  ("單次活動判讀", "飄移判讀"), ("單次活動判讀", "心率與功率（拖曳選一段看統計）")):
