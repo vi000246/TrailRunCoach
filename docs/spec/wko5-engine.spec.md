@@ -137,7 +137,18 @@ Parity mode is unchanged. History changes with it (TSS is computed on the fly):
 CTL rises in the weeks with hikes.
 
 `tl()` is linear: `v += (x − v) / constant`, daily sums, inputs outside 0–5000
-ignored (`backend/engine/wko5expr/evaluator.py:2426` `_tl`).
+ignored (`backend/engine/wko5expr/evaluator.py:2429` `_tl`).
+
+The builtins `ctl` / `atl` / `tsb` (`backend/engine/wko5expr/evaluator.py:760`) are not plain
+`tl(tss, ctl/atlconstant)` since SP-68: `Evaluator.pmc`
+(`backend/engine/wko5expr/evaluator.py:2443`) starts the same recurrence from
+`load_guard.pmc_start` — the manual CTL / ATL at a date (user_settings `athlete.pmc_start`,
+read once per evaluator), else CTL = ATL = the mean daily TSS of the first 28 days with TSS,
+else 0. With years of data the start has decayed away (WKO5 parity of today's CTL / ATL / TSB
+holds); in the first months, or with a manual start, they differ from WKO5. An expression's
+own `tl()` is unchanged (WKO5, v = 0 before the first input). A sport-filtered evaluator or a
+`sport(x)` context takes the automatic seed only. The chart render cache keys on the manual
+start (`backend/engine/wko5expr/render_cache.py`).
 
 ## Modes
 
@@ -705,6 +716,7 @@ source (synthetic FITs).
 
 | Date | Source | SRS | Change |
 |------|--------|-----|--------|
+| 2026-10-04 | feature | SP-68 | Builtins `ctl` / `atl` / `tsb` start from `load_guard.pmc_start` (manual at a date → first-28-day mean → 0); `tl()` unchanged; render cache keys on the manual start |
 | 2026-10-04 | feature | SP-63 | Walks / hikes without their own LTHR score hrTSS on the run LTHR over moving time (own formulas only; strength stays 0; parity unchanged) |
 | 2026-10-04 | feature | SP-41 | Custom views accept `kind: "map"`; 單次活動判讀's first page has the route map; the viewer's basemap list, layer switch, tile-error hint, route drawing and nearest-point lookup moved to the shared `basemaps.js` (`MapLayers`) |
 | 2026-09-29 | code-sync | N/A | Created from brownfield analysis — WKO5 file readers, verified metric algorithms, expression engine, parity/own-formula modes, approved data corrections, custom views |
