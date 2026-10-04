@@ -998,6 +998,52 @@ which one. The response keeps the `coros` field names.
   (`TRAIL_SPECIFIC`, `backend/engine/template_recs.py:43`). Not done: week_plan does not generate
   技術地形 sessions itself, and a user's own quality-kind session is not counted into the
   generator's 20 % interval budget.
+- **範本 page and 我的範本** (2026-10-04, SP-36, the user's answers). 課表's third mode card
+  **範本** (`backend/static/templates.html`, `GET /plan/templates/page`,
+  `backend/api/plan_sessions.py:2256`; also on 課表統計) lists the user's own templates and the
+  built-in library (filter 全部／我的／內建, by category, by name); the chosen one opens in the
+  same step editor (`WorkoutEditor.load`, `backend/static/workout_editor.js:287`) with its name,
+  categories, 目標用 (自動／心率／功率) and note. Built-in rows are read-only with their source;
+  「複製成我的範本」 copies one (`backend/api/plan_sessions.py:1232`). Storage: tables
+  `workout_templates_user` / `workout_template_cats` (`backend/db/models.py:345`,
+  `backend/db/models.py:369`; created by create_all, and on demand in a DB made before them,
+  `_ensure`, `backend/engine/user_templates.py:92`) through `engine/user_templates.py`:
+  `clean` (`backend/engine/user_templates.py:174`: name 1–40, categories from the built-in ids
+  easy / quality / test / trail and the user's own `c<id>`, several per template, steps through
+  `workout_steps.normalize`, 目標用 hr / power / 自動) and custom categories add / rename / delete
+  (`backend/engine/user_templates.py:121`; deleting one takes it off its templates). **Targets are
+  stored as written**: % CP / % LTHR / zones / 自動 / RPE / 不設目標 and 「直到按下計圈」 resolve
+  with the day's thresholds when used; absolute W / bpm / pace stay. 「自由模式」 = 直到按下計圈 +
+  no target (or RPE＋爬升) — the existing step model, nothing new; the 「長間歇、自由模式」
+  uphill template pushes as an open-ended COROS group with no intensity. In the editor's
+  插入範本, `workout_steps.templates(user=…)` (`backend/engine/workout_steps.py:1457`) puts
+  「我的範本」 first in every category a template is in (`groups`,
+  `backend/engine/user_templates.py:487`: 強度課 under its `family_of` sub-tab — none → every
+  sub-tab —, 越野跑 under its `trail_type_of` kind) and adds the custom categories as tabs; rows are
+  tagged 我的 / ▲ GPX. Applying one in the session dialog also sets the session's `target_basis`
+  (`backend/static/schedule.html:1640`, saved with it, `backend/static/schedule.html:1899`).
+  **儲存成範本** in the editor (`saveForm`, `backend/static/workout_editor.js:879`): name +
+  categories, the current structure; `POST /sessions/{uid}/save-as-template`
+  (`backend/api/plan_sessions.py:1314`: the body's steps, else the stored, else derived; the
+  session's 目標用) or `POST /steps/templates/user` for an unsaved session. **Route GPX**: a
+  template may carry a training-route GPX / FIT (upload, replace, remove, download); parsed with the
+  race calculator's reader and builder (`parse_profile`, `backend/engine/user_templates.py:309`:
+  `racepower/gpx.parse` + `course.build_course`, no parser of its own), the file gzipped per tenant
+  (`<HOME>/template_gpx/<id>.gz`, a demo sandbox's private dir), the profile cached in the row. A
+  structure made from it keeps the template id (`tpl`, kept by `normalize`,
+  `backend/engine/workout_steps.py:672`), so the session's chart shows it too; POST /steps/check
+  then returns `elev` (`backend/api/plan_sessions.py:1155`): `route_elevation`
+  (`backend/engine/user_templates.py:398`) walks the run order — each step covers its effort
+  distance (km + climb ÷ 100 on the route's own climb) at the athlete's speed for its intensity
+  (`speed_kmh`, scaled to the trail EP speed; untargeted rests walk; a distance step covers its km;
+  a lap-button step without an estimate its 90 s chart width) — and maps the profile onto the
+  chart's time axis (推估; a route longer than the workout is drawn up to where it ends, the legend
+  says so). The editor draws it behind the bars as a light area + thin line with its own m scale
+  (`elev`, `backend/static/workout_editor.js:550`), in the chart viewer's neutral elevation colour.
+  Demo: the routes are sandbox writes (`backend/tenancy_mw.py:49`), each visitor's own; the static
+  demo shows the page read-only (the write controls locked, `backend/demo/export_static.py:106`).
+  i18n: page namespace `templates`, editor strings `common.workout.*`, server messages via `_()`,
+  zh-TW + en.
 
 ## Status engine change
 
@@ -1151,6 +1197,13 @@ which one. The response keeps the `coros` field names.
 | GET / HEAD | `/share/calendar/<token>.ics` | public, token-only: the stored plan as `text/calendar` (see 課表訂閱 above); 404 for any other token; not in the demo (`backend/api/calendar_feed.py:122`) |
 | GET | `/api/v1/overview/plan/compliance?start=&end=` | the 課表統計 dashboard (≤ 371 days): due sessions with status and %, totals, weeks and days planned vs actual, streak, per kind, the current phase's progress, `plan_phases` (`backend/api/plan_sessions.py:1816`) |
 | GET | `/api/v1/overview/plan/compliance/page` | `backend/static/compliance.html` (`backend/api/plan_sessions.py:2087`) |
+| GET | `/api/v1/overview/plan/templates/page` | `backend/static/templates.html`, the 範本 tab (`backend/api/plan_sessions.py:2256`) |
+| GET / POST | `/api/v1/overview/plan/steps/templates/user` | `{templates (each with its menu row), cats (built-in + custom), limits}` / create `{name, cats, steps, target_basis?, note?}` → 400 `{errors}` (`backend/api/plan_sessions.py:1208`) |
+| POST | `/api/v1/overview/plan/steps/templates/user/copy` | `{key}` of a built-in 插入範本 row → a template of the user's (`copied_from`); 404 for an unknown key (`backend/api/plan_sessions.py:1232`) |
+| PATCH / DELETE | `/api/v1/overview/plan/steps/templates/user/{id}` | any of name / cats / steps / target_basis / note; delete (and its GPX file); 404 when unknown |
+| POST / DELETE / GET | `/api/v1/overview/plan/steps/templates/user/{id}/gpx` (`/gpx/file`) | multipart upload or replace (400 on a file that isn't a course) / remove / the stored file (`backend/api/plan_sessions.py:1259`) |
+| POST / PATCH / DELETE | `/api/v1/overview/plan/steps/templates/cats`, `/cats/{cid}` | `{label}` → a custom category / rename / delete (taken off its templates) |
+| POST | `/api/v1/overview/plan/sessions/{uid}/save-as-template` | `{name, cats, steps?, target_basis?}` → a template from the session's structure (`backend/api/plan_sessions.py:1314`) |
 | GET | `/` | always redirects to the overview page (`backend/main.py:207`; the React SPA was removed 2026-10-04 — old SPA paths such as `/activities`, `/achievements`, `/sync`, `/config` redirect to their static pages, `backend/main.py:33`); in demo mode to `/demo` |
 
 The same router also serves the suggestion box (`/suggestions`, `/suggestions/accept`,
@@ -1312,3 +1365,4 @@ deleted / superseded) are returned as reconcile `changes` (`backend/engine/recon
 | 2026-10-04 | feat/sp-43-calc-export | SP-43 | Stored plan: kind `race` in `KINDS` (not added by hand), `ext_key` / `ext_sig` columns and `plan_store.upsert_external` for the 賽事計算機's 「匯出至課表」 (one row per event, claims the generator's 比賽 row, restore / move, `user_edited` by fingerprint, `updated_at` kept on an identical export); reconcile: a kept race blocks the generator's race of that week; push: a race with steps is pushed, the old `racecalc:` watch workout is removed on that push (`calc_to_replace` in the preview); 課表 dialog keeps kind 比賽 |
 | 2026-10-04 | feat/sp-62-trail-types | SP-32 | 速度 tab of 插入範本 also lists strides and short hill sprints (they were 速度 by `family_of` but filed under 輕鬆跑 / 越野跑) |
 | 2026-10-04 | feat/sp-62-trail-types | SP-62 | 越野跑 templates in three kinds (結構化爬升 / 技術地形 / 下坡技術／離心; sub-tabs, `trail_type_of`); target type `rpe` (CR-10 + 爬升 / 下降, reference HR as text, pushed with no target and the RPE in the step name); two 技術地形 templates, `downhill_ecc` by RPE + descent; `rpe_role` (RPE ≥ 7 = 強度課) in /steps/check, the menu and the session dialog (type follows) |
+| 2026-10-04 | sp-36-template-manager | SP-36 | 範本 page (third tab of 課表): the user's own templates (`workout_templates_user`, `engine/user_templates.py`) with several categories (built-in + custom, add / rename / delete), 目標用, relative targets resolved when used, CRUD + 複製成我的範本 + 儲存成範本 (`/sessions/{uid}/save-as-template`); 「我的範本」 in 插入範本 by category / family / trail kind, custom tabs; a training-route GPX per template (race calculator's parser), its elevation behind the step chart on the time axis by estimated speed (`elev`, `tpl` in the steps); demo sandbox writes, static demo read-only; zh-TW + en |
