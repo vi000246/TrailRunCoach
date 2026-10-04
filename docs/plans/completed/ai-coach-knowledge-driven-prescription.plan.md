@@ -22,7 +22,7 @@ So that 我知道現在該練 zone 幾、間歇怎麼排（時間/瓦數）。
 - **Parent Plan**: N/A
 - **Source PRD**: docs/prd/wko5-trail-multipage-sync-coach.prd.md
 - **Source Feature SRS**: docs/srs/ai-coach-knowledge-driven-prescription.srs.md
-- **Source Module Spec**: docs/spec/ai-coach-training-analysis.spec.md
+- **Source Module Spec**: docs/srs/completed/ai-coach-training-analysis.srs.md
 - **Source Linear Issue**: N/A
 - **Type**: feature
 - **Size**: M
@@ -64,7 +64,7 @@ chat 上方 quick-prompt：[今天該練什麼] [我的間歇怎麼排] [現在�
 | Priority | File | Lines | Why |
 |---|---|---|---|
 | P0 | `docs/srs/ai-coach-knowledge-driven-prescription.srs.md` | all | AC、delta |
-| P0 | `docs/spec/ai-coach-training-analysis.spec.md` | all | 既有 AI 架構 |
+| P0 | `docs/srs/completed/ai-coach-training-analysis.srs.md` | all | 既有 AI 架構 |
 | P0 | `backend/engine/ai/context.py` | 1-88 | SYSTEM_PROMPT + build_context（要改） |
 | P0 | `backend/api/ai.py` | 1-70 | chat 端點（zones 端點比照註冊） |
 | P0 | `backend/api/workouts.py` | 20-38 | POWER_ZONES_DEF / HR_ZONES_DEF（zone 計算沿用） |

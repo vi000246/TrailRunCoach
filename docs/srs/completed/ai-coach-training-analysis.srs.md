@@ -1,5 +1,7 @@
 # SRS: AI Coach — 訓練分析與圖表理解
 
+> ⛔ **CANCELED（2026-10-04）**：AI 教練（對話、Smart Dashboard、圖表解讀號誌、單次越野分析）隨 React SPA 一起取消並刪除：`backend/api/ai.py`、`backend/engine/ai/`、`/api/v1/analytics/*`、`/api/v1/workouts/{id}/trail`、`frontend/`。日後若重做，會以 static 頁新版設計另開規格。本文是當時的設計紀錄。
+
 ## Metadata
 - **Source PRDs**:
   - `docs/prd/ai-coach-training-analysis.prd.md` — initial（chat/dashboard/trail analysis）

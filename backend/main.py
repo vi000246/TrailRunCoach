@@ -11,8 +11,8 @@ from backend.db.database import init_db
 from backend.i18n import UserError
 from backend.i18n.pages import STATIC as PAGES_DIR, render_page
 from backend.request_context import RequestContextMiddleware
-from backend.api import workouts, pmc, expr, dashboard, scan, sync, auth, athletes, analytics
-from backend.api import ai, sports, wko5views
+from backend.api import workouts, expr, sync, auth
+from backend.api import wko5views
 from backend.api import achievements as achievements_api
 from backend.api import overview as overview_api
 from backend.api import plan as plan_api
@@ -29,20 +29,33 @@ from backend.api import region as region_api
 # pages the demo never serves: the WKO5 comparison, the settings and the injury log
 DEMO_HIDDEN_PAGES = {"compare", "settings", "injuries"}
 
+# the removed React SPA's routes that have a static page (bookmarks keep working)
+OLD_SPA_PATHS = {
+    "/overview": "/api/v1/overview/page",
+    "/activities": "/api/v1/wko5/activities/page",
+    "/achievements": "/api/v1/achievements/page",
+    "/sync": "/api/v1/wko5/settings",
+    "/config": "/api/v1/wko5/settings",
+}
+
 
 async def _ensure_athlete() -> None:
-    """A runner without a WKO5 folder gets an empty athlete row on first start
-    (db/current.py); with WKO5 the rows come from /athletes/bootstrap as before."""
+    """The install's athlete row, created on first start (db/current.py): pointing
+    at the WKO5 athlete folder when there is one, else empty (a COROS / TP-only
+    runner). Replaces POST /api/v1/athletes/bootstrap, removed with the React SPA
+    that was its only caller (2026-10-04)."""
     from backend.settings.paths import athlete_dir
     from backend.db.database import AsyncSessionLocal
     from backend.db.current import ensure_athlete
+    data_dir = ""
     try:
-        if any(athlete_dir().glob("*.wko5athlete")):
-            return
+        d = athlete_dir()
+        if any(d.glob("*.wko5athlete")):
+            data_dir = str(d)
     except OSError:
         pass
     async with AsyncSessionLocal() as db:
-        if await ensure_athlete(db):
+        if await ensure_athlete(db, data_dir):
             await db.commit()
 
 
@@ -97,7 +110,7 @@ async def _user_error(request, exc: UserError):
 
 def build_app(demo: bool | None = None) -> FastAPI:
     """The app. demo=True: the demo instance (auth-and-demo plan §3): no sync /
-    connect / upload / AI / backup routers, the demo landing at /demo, and the
+    connect / upload / backup routers, the demo landing at /demo, and the
     tenant middleware enforcing the demo rules. Default: WKO5COACH_MODE."""
     from backend import tenancy
     from backend.tenancy_mw import TenancyMiddleware
@@ -108,7 +121,7 @@ def build_app(demo: bool | None = None) -> FastAPI:
 
     _cors_origins = os.getenv(
         "CORS_ORIGINS",
-        "http://localhost:5173,http://localhost:8000",
+        "http://localhost:8000",
     ).split(",")
 
     app.add_middleware(
@@ -123,12 +136,12 @@ def build_app(demo: bool | None = None) -> FastAPI:
 
     app.add_exception_handler(UserError, _user_error)
 
-    owner_only = {id(r) for r in (scan.router, sync.router, auth.router, athletes.router, ai.router,
+    owner_only = {id(r) for r in (sync.router, auth.router,
                                   plan_auto_api.router, injuries_api.router, backup_api.router, calib_api.router)}
     routers = [
-        workouts.router, pmc.router, expr.router, dashboard.router,
-        scan.router, sync.router, auth.router, athletes.router,          # owner only (sync, connect, scan)
-        analytics.router, ai.router, sports.router, wko5views.router, achievements_api.router,
+        workouts.router, expr.router,
+        sync.router, auth.router,        # owner only (sync, connect)
+        wko5views.router, achievements_api.router,
         plan_api.router, plan_auto_api.router, plan_sessions_api.router, overview_api.router,
         racepower_api.router,
         racepower_api.share_router,      # /share/<id>: the only path meant to skip the tunnel's password
@@ -140,7 +153,7 @@ def build_app(demo: bool | None = None) -> FastAPI:
         session_api.router,              # GET /api/v1/session (the shell), POST /api/v1/demo/reset
     ]
     for r in routers:
-        # the demo never mounts sync / connect / scan / AI / auto-plan / backup / injuries (§3.1 item 4),
+        # the demo never mounts sync / connect / auto-plan / backup / injuries (§3.1 item 4),
         # nor the public share pages (it creates no shares)
         if demo and (id(r) in owner_only or r is racepower_api.share_router):
             continue
@@ -173,7 +186,6 @@ def build_app(demo: bool | None = None) -> FastAPI:
 
     app.mount("/api/v1/static", _RevalidatingStatic(directory=str(Path(__file__).parent / "static")), name="pages-static")
 
-    frontend_dist = Path(__file__).parent.parent / "frontend" / "dist"
     if demo:
         @app.get("/demo", include_in_schema=False)
         def _demo_landing():
@@ -191,12 +203,20 @@ def build_app(demo: bool | None = None) -> FastAPI:
         @app.get("/healthz", include_in_schema=False)
         def _healthz():
             return {"ok": True}
-    elif frontend_dist.exists():
-        app.mount("/", StaticFiles(directory=str(frontend_dist), html=True), name="static")
     else:
         @app.get("/", include_in_schema=False)
         def _home():
             return RedirectResponse("/api/v1/overview/page")
+
+        # bookmarks of the removed React SPA (frontend/, 2026-10-04) → their static page;
+        # its pages without one (/running, /trail, /ai) are gone and 404
+        def _to(target: str):
+            return lambda: RedirectResponse(target)
+
+        for old, target in OLD_SPA_PATHS.items():
+            app.add_api_route(old, _to(target), methods=["GET"], include_in_schema=False)
+        app.add_api_route("/activities/{workout_id}", _to(OLD_SPA_PATHS["/activities"]),
+                          methods=["GET"], include_in_schema=False)
     return app
 
 

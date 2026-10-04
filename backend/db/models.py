@@ -32,9 +32,6 @@ class AthleteSettings(Base):
     run_ftp_w: Mapped[Optional[float]] = mapped_column(nullable=True)
     initial_ctl_run: Mapped[Optional[float]] = mapped_column(nullable=True)
     initial_atl_run: Mapped[Optional[float]] = mapped_column(nullable=True)
-    ai_provider: Mapped[Optional[str]] = mapped_column(nullable=True)
-    ai_api_key:  Mapped[Optional[str]] = mapped_column(nullable=True)
-    ai_model:    Mapped[Optional[str]] = mapped_column(nullable=True)
     athlete: Mapped["Athlete"] = relationship(back_populates="settings")
 
 
@@ -349,14 +346,3 @@ class UserSetting(Base):
     key: Mapped[str] = mapped_column(String(100))
     value_json: Mapped[str] = mapped_column(Text)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-
-
-class DashboardConfig(Base):
-    __tablename__ = "dashboard_configs"
-    id: Mapped[int] = mapped_column(primary_key=True)
-    athlete_id: Mapped[int] = mapped_column(ForeignKey("athletes.id"))
-    name: Mapped[str] = mapped_column(String(100))
-    is_default: Mapped[bool] = mapped_column(Boolean, default=False)
-    layout_json: Mapped[str] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

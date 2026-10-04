@@ -1,6 +1,6 @@
 # SRS: WKO5 Frontend Enhancement — Multi-Tab Dashboard + MCP Server
 
-> ⛔ **CANCELED（2026-10-04）**：5 月版的設計已作廢——React SPA 與 5 月的舊程式移除，相關功能之後另做新版。本文件只留作歷史紀錄；現行實作以 `docs/spec/` 為準。
+> ⛔ **CANCELED（2026-10-04）**：React SPA（`frontend/`）的多分頁 dashboard、Config 頁與相關端點（`/api/v1/pmc`、`/api/v1/athletes/{id}/settings`）已刪除。本文是當時的設計紀錄。
 
 ## Metadata
 - **Source PRD**: `docs/prd/wko5-training-ai.prd.md`

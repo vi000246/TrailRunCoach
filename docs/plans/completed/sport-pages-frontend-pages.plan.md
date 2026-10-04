@@ -22,7 +22,7 @@ So that 不費力就能判讀訓練狀態並在運動別間切換檢視。
 - **Parent Plan**: docs/plans/sport-pages-backend-foundation.plan.md
 - **Source PRD**: docs/prd/wko5-trail-multipage-sync-coach.prd.md
 - **Source Feature SRS**: docs/srs/sport-pages-multi-sport-views-trail-analytics.srs.md
-- **Source Module Spec**: docs/spec/sport-pages.spec.md
+- **Source Module Spec**: docs/srs/completed/sport-pages.srs.md
 - **Source Linear Issue**: N/A
 - **Type**: feature
 - **Size**: L

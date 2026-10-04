@@ -137,20 +137,15 @@ async def _session():
     return s
 
 
-def test_patch_activity_sets_user_values_and_list_shows_them():
+def test_patch_activity_sets_user_values():
     async def _inner():
-        from backend.api.workouts import update_activity, ActivityUpdate, list_workouts, get_workout
+        from backend.api.workouts import update_activity, ActivityUpdate
         s = await _session()
         r = await update_activity(10, ActivityUpdate(activity_type="training", effort="moderate", note="平日"), s)
         assert r["activity_type"] == "training" and r["activity_type_overridden"]
         assert r["effort"] == "moderate" and r["effort_overridden"] and r["note"] == "平日"
         r = await update_activity(10, ActivityUpdate(effort=None), s)          # null → back to auto
         assert r["effort"] is None and not r["effort_overridden"] and r["activity_type"] == "training"
-        lst = await list_workouts(athlete_id=1, page=1, per_page=20, sport=None, date_from=None, date_to=None, db=s)
-        it = next(x for x in lst["items"] if x["id"] == 10)
-        assert it["activity"]["activity_type"] == "training" and it["trail_classification"] == "road"
-        det = await get_workout(10, s)
-        assert det["activity"]["note"] == "平日"
     _run(_inner())
 
 

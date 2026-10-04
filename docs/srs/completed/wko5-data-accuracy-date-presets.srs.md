@@ -1,6 +1,6 @@
 # SRS: Chart Data Accuracy Fix + Date Range Presets
 
-> ⛔ **CANCELED（2026-10-04）**：5 月版的設計已作廢——React SPA 與 5 月的舊程式移除，相關功能之後另做新版。本文件只留作歷史紀錄；現行實作以 `docs/spec/` 為準。
+> ⛔ **CANCELED（2026-10-04）**：初始 CTL/ATL 種子、Config 頁、`/api/v1/analytics/run-load` 與 React 日期預設按鈕已隨 `frontend/` 刪除（`backfill-tss` 端點從未實作）。本文是當時的設計紀錄。
 
 ## Metadata
 - **Source PRD**: `docs/prd/wko5-training-ai.prd.md` (Milestones 4.6, 4.7)

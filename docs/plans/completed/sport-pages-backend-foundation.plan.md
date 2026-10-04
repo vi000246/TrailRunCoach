@@ -22,7 +22,7 @@ So that 三個頁面能拿到數字可信、運動別獨立的資料。
 - **Parent Plan**: N/A
 - **Source PRD**: docs/prd/wko5-trail-multipage-sync-coach.prd.md
 - **Source Feature SRS**: docs/srs/sport-pages-multi-sport-views-trail-analytics.srs.md
-- **Source Module Spec**: docs/spec/sport-pages.spec.md
+- **Source Module Spec**: docs/srs/completed/sport-pages.srs.md
 - **Source Linear Issue**: N/A
 - **Type**: feature
 - **Size**: L
@@ -45,7 +45,7 @@ N/A — 後端/內部變更，UX 由前端計畫承載。新增的 PATCH/GET 端
 | Priority | File | Lines | Why |
 |---|---|---|---|
 | P0 | `docs/srs/sport-pages-multi-sport-views-trail-analytics.srs.md` | all | 功能 delta、AC、端點合約 |
-| P0 | `docs/spec/sport-pages.spec.md` | all | 架構上下文、決策、schema |
+| P0 | `docs/srs/completed/sport-pages.srs.md` | all | 架構上下文、決策、schema |
 | P0 | `backend/db/database.py` | 19-53 | `_migrate_schema()` idempotent ALTER 模式 |
 | P0 | `backend/db/models.py` | 41-94 | WorkoutFile / WorkoutMetric / PmcCache 結構 |
 | P0 | `backend/api/analytics.py` | 140-310 | run-load / intensity-load / run-volume 寫死 sport 篩選的起點 |

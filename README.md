@@ -72,7 +72,7 @@ WKO5COACH_MODE=demo WKO5COACH_HOME=~/trc-demo WKO5COACH_COOKIE_SECURE=0 \
   python -m uvicorn backend.main:app --port 8001
 ```
 
-示範模式有自己的資料夾（拒絕使用 `~/.wko5coach`），同步、上傳、AI、分享都關閉；每位訪客第一次修改時
+示範模式有自己的資料夾（拒絕使用 `~/.wko5coach`），同步、上傳、分享都關閉；每位訪客第一次修改時
 才建立自己的沙盒，24 小時後清除。
 
 **公開示範預設是靜態網站**（免費放在 GitHub Pages，不需要伺服器）：

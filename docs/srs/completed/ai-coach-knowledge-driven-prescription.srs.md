@@ -5,7 +5,7 @@ linear_issue: null
 
 ## Metadata
 - **Module**: `ai-coach`
-- **Module Spec**: `docs/spec/ai-coach-training-analysis.spec.md`
+- **Module Spec**: `docs/srs/completed/ai-coach-training-analysis.srs.md`
 - **Source PRD**: `docs/prd/wko5-trail-multipage-sync-coach.prd.md`（Milestone 4）
 - **Source Linear Issue**: N/A
 - **Created**: 2026-06-13
@@ -17,7 +17,7 @@ linear_issue: null
 
 ## Delta from Current Module State
 
-> 既有架構詳見 `docs/spec/ai-coach-training-analysis.spec.md`。本節只描述變更。現有 chat SSE、`build_context`、`SYSTEM_PROMPT` 皆已存在。
+> 既有架構詳見 `docs/srs/completed/ai-coach-training-analysis.srs.md`。本節只描述變更。現有 chat SSE、`build_context`、`SYSTEM_PROMPT` 皆已存在。
 
 ### New / Changed API Endpoints
 
@@ -65,7 +65,7 @@ linear_issue: null
 
 ## Architecture Notes
 
-採 curated 知識（靜態程式碼）而非 RAG——單一使用者、知識穩定、零成本、可離線、可測。zone 計算沿用既有 `POWER_ZONES_DEF`/`HR_ZONES_DEF`（`workouts.py`）避免兩套定義。處方能力靠 context（具體 zone 數值 + 負荷）+ system prompt 指示達成，不需新模型或工具。詳見 `docs/spec/ai-coach-training-analysis.spec.md`。
+採 curated 知識（靜態程式碼）而非 RAG——單一使用者、知識穩定、零成本、可離線、可測。zone 計算沿用既有 `POWER_ZONES_DEF`/`HR_ZONES_DEF`（`workouts.py`）避免兩套定義。處方能力靠 context（具體 zone 數值 + 負荷）+ system prompt 指示達成，不需新模型或工具。詳見 `docs/srs/completed/ai-coach-training-analysis.srs.md`。
 
 ## Acceptance Criteria
 

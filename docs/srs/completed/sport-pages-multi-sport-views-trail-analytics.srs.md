@@ -5,7 +5,7 @@ linear_issue: null
 
 ## Metadata
 - **Module**: `sport-pages`
-- **Module Spec**: `docs/spec/sport-pages.spec.md`
+- **Module Spec**: `docs/srs/completed/sport-pages.srs.md`
 - **Source PRD**: `docs/prd/wko5-trail-multipage-sync-coach.prd.md`（Milestone 1 + 2）
 - **Source Linear Issue**: N/A
 - **Created**: 2026-06-13
@@ -18,7 +18,7 @@ linear_issue: null
 
 ## Delta from Current Module State
 
-> 既有架構詳見 `docs/spec/sport-pages.spec.md`。本節只描述變更。
+> 既有架構詳見 `docs/srs/completed/sport-pages.srs.md`。本節只描述變更。
 
 ### New / Changed API Endpoints
 
@@ -70,7 +70,7 @@ linear_issue: null
 
 ## Architecture Notes
 
-採「同端點 + 篩選參數化」而非「每頁一套端點」：三頁面差異只在 `sports[]` / `trail_classification` 篩選組合，最小化重複。Trail 分類採持久化欄位（解析時算、可手動覆寫），優於查詢期動態判斷的邊緣不穩。可讀性層抽自既有 `SmartDashboardSection`。詳見 `docs/spec/sport-pages.spec.md`。
+採「同端點 + 篩選參數化」而非「每頁一套端點」：三頁面差異只在 `sports[]` / `trail_classification` 篩選組合，最小化重複。Trail 分類採持久化欄位（解析時算、可手動覆寫），優於查詢期動態判斷的邊緣不穩。可讀性層抽自既有 `SmartDashboardSection`。詳見 `docs/srs/completed/sport-pages.srs.md`。
 
 ## Acceptance Criteria
 
