@@ -1034,7 +1034,7 @@ which one. The response keeps the `coros` field names.
   (`PURPOSE`, `backend/engine/workout_templates.py:123`, from the report's Finding 7 with the
   coaches it cites, msgids through `_()`); the interval ladder's rows take the purpose of their
   family. The 插入範本 menu shows it under each row's title, and a 強度課 row also shows its sub
-  (長 tempo ／ 巡航間歇 ／ 短間歇) as a small tag (`menuHtml`, `backend/static/workout_editor.js:771`).
+  (長 tempo ／ 巡航間歇 ／ 短間歇) as a small tag (`menuHtml`, `backend/static/workout_editor.js:822`).
 - **速度 tab add-ons** (2026-10-04, SP-32 follow-up): strides (快步跑 4×20″) and short hill sprints
   (上坡衝刺 8×10″, UA 陡坡衝刺 8×10″) are 速度 by `family_of`, but the menu only gave family tabs to
   the `quality` category, so only Daniels R showed there. `workout_steps.templates`
@@ -1090,7 +1090,7 @@ which one. The response keeps the `coros` field names.
   (`load_records`, `backend/engine/workout_steps.py:1066`) for the closed-loop correction.
   `workout_templates.session_role` (`backend/engine/workout_templates.py:689`) gives the same
   answer for a stored session. The editor's target menu adds 「RPE＋爬升」 with RPE / 爬升 / 下降
-  fields (`tgHtml`, `backend/static/workout_editor.js:435`); the static demo's JS port follows.
+  fields (`tgHtml`, `backend/static/workout_editor.js:470`); the static demo's JS port follows.
   The 推薦 block: 基礎期 favours the low-RPE technical session, 專項期 the race-like one
   (`TRAIL_SPECIFIC`, `backend/engine/template_recs.py:49`). Not done: week_plan does not generate
   技術地形 sessions itself, and a user's own quality-kind session is not counted into the
@@ -1099,7 +1099,7 @@ which one. The response keeps the `coros` field names.
   **範本** (`backend/static/templates.html`, `GET /plan/templates/page`,
   `backend/api/plan_sessions.py:2314`; also on 課表統計) lists the user's own templates and the
   built-in library (filter 全部／我的／內建, by category, by name); the chosen one opens in the
-  same step editor (`WorkoutEditor.load`, `backend/static/workout_editor.js:295`) with its name,
+  same step editor (`WorkoutEditor.load`, `backend/static/workout_editor.js:309`) with its name,
   categories, 目標用 (自動／心率／功率) and note. Built-in rows are read-only with their source;
   「複製成我的範本」 copies one (`backend/api/plan_sessions.py:1270`). Storage: tables
   `workout_templates_user` / `workout_template_cats` (`backend/db/models.py:345`,
@@ -1119,7 +1119,7 @@ which one. The response keeps the `coros` field names.
   sub-tab —, 越野跑 under its `trail_type_of` kind) and adds the custom categories as tabs; rows are
   tagged 我的 / ▲ GPX. Applying one in the session dialog also sets the session's `target_basis`
   (`backend/static/schedule.html:1609`, saved with it, `backend/static/schedule.html:1899`).
-  **儲存成範本** in the editor (`saveForm`, `backend/static/workout_editor.js:915`): name +
+  **儲存成範本** in the editor (`saveForm`, `backend/static/workout_editor.js:967`): name +
   categories, the current structure; `POST /sessions/{uid}/save-as-template`
   (`backend/api/plan_sessions.py:1352`: the body's steps, else the stored, else derived; the
   session's 目標用) or `POST /steps/templates/user` for an unsaved session. **Route GPX**: a
@@ -1167,7 +1167,7 @@ which one. The response keeps the `coros` field names.
 - `Status.weekly_hours()` sums moving time (fallback recorded time) instead of recorded
   time (`backend/engine/status.py:181`), so the volume indicators aren't inflated by multi-day
   trips.
-- **`i_drift`** (`backend/engine/status.py:480`) is **informational**: the same per-run drift as
+- **`i_drift`** (`backend/engine/status.py:505`) is **informational**: the same per-run drift as
   the single-activity review (`workout_review.drift_series`, `backend/engine/workout_review.py:2209`):
   road runs, ≥ 40 min, avg HR ≤ AeT+3, hilly / stopped / unsteady runs refused. It reads
   `drift_series(ref=True)`: the 參考 tier (30–40 min after the warm-up, 推估) counts for the
@@ -1217,7 +1217,7 @@ which one. The response keeps the `coros` field names.
   race − 21 days. `spark` = S over 120 days; `extra` = s_race, doses (bars), HRC trend
   (`heat.hr_cost` on steady flat stretches, 「觀測不支持模型」 when S rises and HRC does not fall),
   a, badge 推估. Without exposure data the verdict asks for a weather-enabled routes build.
-- **`i_gate`** 「間歇門檻」 (`backend/engine/status.py:564`): `quality_gate.evaluate` +
+- **`i_gate`** 「間歇門檻」 (`backend/engine/status.py:589`): `quality_gate.evaluate` +
   `indicator` (`backend/engine/quality_gate.py:2390`) with the status' 課表偏好 (`Status(prefs=…)`;
   the API's status cache keys on `prefs.stamp()`, `backend/api/overview.py:53`). Second in
   `PHASE_PRIORITY["base"]` (`backend/engine/status.py:1013`), so its WATCH action lands in 還缺什麼.
@@ -1227,12 +1227,12 @@ which one. The response keeps the `coros` field names.
   good 「差距 9% ≤ 10%：可以加 Zone 3」; forced + missing → watch 「沒有實測 AeT，差距法算不出來：先照
   護欄排（自訂…）」, action 「先做 AeT 飄移測試，或把間歇門檻改回自動」. `why` names the mode and
   the AeT source (「AeT 146（活動資料估算）」 / 「（{date} 飄移測試）」). `extra` is the gate dict incl.
-  `options` (per mode usable + why, `backend/engine/quality_gate.py:1129`).
+  `options` (per mode usable + why, `backend/engine/quality_gate.py:2034`).
 - `PHASE_GOAL["base"]` no longer says 飄移 < 5 %; `PHASE_FOCUS["base"]` cites UA for the easy long
   run and Palladino for the 8–15 s hill sprints (`backend/engine/status.py:1023`).
 - `i_data`'s action for a missing AeT is 「排一次 AeT 飄移測試（平日，10 分暖身＋40 分固定功率，跑步機或平路）；
   測了可以改用有氧基礎門檻」 (`backend/engine/status.py:942`).
-- **`i_testing`** (`backend/engine/status.py:734`) — a CP row older than 42 days → watch, 90 →
+- **`i_testing`** (`backend/engine/status.py:759`) — a CP row older than 42 days → watch, 90 →
   bad (`backend/engine/status.py:62`); LTHR is event-driven (an applied estimate is said as one,
   not judged by age) and AeT goes by reason (B3); event-driven retests (`zone_events`: HR shift
   at the same power, a ≥ 4-week break, the first cool spell) are **suggestions only** — they turn
