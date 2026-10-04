@@ -98,10 +98,9 @@ SRC_OWN = "自訂"
 # ---- numbers (the doc's §7 lists which are ours) ----------------------------
 UA_GAP_MAX = 0.10
 AET_FRESH_DAYS = 16 * 7        # 自訂: a plan AeT older than this is stale for `auto`
-# 推估 (owner 2026-10-04, SP-39): a measured LTHR counts for the Zone 5 UA path only when tested in the
-# last 12 weeks. Not threshold_confidence.TEST_AGE_DAYS (56, Friel's 4–8-week retest *hint*): this is the
-# validity of a gate input, so it is longer and separate.
-LTHR_FRESH_DAYS = 12 * 7
+# A measured LTHR has no fixed expiry for the Zone 5 UA path (owner 2026-10-05; zones-and-thresholds.md
+# §2.5: no direct evidence for a fixed retest period) — an event invalidates it (lthr_invalid). The
+# time since the test stays threshold_confidence's weak reminder (TEST_AGE_DAYS, a hint) only.
 LOOKBACK_DAYS = 56             # 自訂: 8-week window for friel / xu / the dose count
 FRIEL_HR_BAND = (-5.0, 3.0)    # 自訂: "at AeT" = AeT−5 … AeT+3
 FRIEL_MIN_S = 70 * 60          # ≥ 60 min after drift_of's 10-min warm-up
@@ -305,7 +304,7 @@ def lthr_info(ds, plan, today: dt.date) -> dict:
     except Exception:
         val = None
     default = bool(hist) and all(d == dt.date(1980, 1, 1) for d, _ in hist)
-    # the dated WKO5 setting in effect (its age: LTHR_FRESH_DAYS); WKO5's 1980 placeholder has none
+    # the dated WKO5 setting in effect (events since it: lthr_invalid); WKO5's 1980 placeholder has none
     dated = [d.date() if isinstance(d, dt.datetime) else d for d, v in hist if v is not None and isinstance(d, dt.date)]
     dated = [d for d in dated if dt.date(1980, 1, 1) < d <= today]
     return {"value": val, "default": default, "source": "wko5", "measured": val is not None and not default,
@@ -1006,6 +1005,7 @@ def evaluate(ds, plan, today: dt.date, prefs=None, by: Optional[dict] = None, ph
         val = {**val, "valid": False, "reason": f"停跑 {brk['days']} 天（≥ 4 週）：之前的 AeT 視同過期（Uphill Athlete）"}
     ae = {**ae, "valid": bool(val.get("valid")), "fresh": bool(ae["measured"] and val.get("valid")),
           "validity": val}
+    lt = {**lt, "invalid": lthr_invalid(ds, plan, today, lt, ae)}
     gap = ua_gap(ae["value"], lt["value"]) if ae["measured"] and lthr_ok else None
     levels = {i: getattr(by.get(i), "level", "na") for i in ("intensity", "drift")}
     ef = _extra(by, "efficiency").get("change")
@@ -1123,7 +1123,7 @@ def evaluate(ds, plan, today: dt.date, prefs=None, by: Optional[dict] = None, ph
         "stale_aet": stale, "weeks_need": need_weeks, "base_start": str(base_start)[:10] if base_start else None,
         "base_weeks": base_weeks, "aet": ae,
         "lthr": {"value": lt["value"], "default": lt["default"], "measured": bool(lt.get("measured")),
-                 "date": lt.get("date")},
+                 "date": lt.get("date"), "invalid": lt.get("invalid")},
         "gap": gap, "ef_change": ef, "levels": levels, "guard": g,
         "dose": {**dose, "history": hist[-8:]},
         "kind": kind, "week_hours": _extra(by, "volume").get("last_week"),
@@ -1169,19 +1169,32 @@ def run_days(ds, today: dt.date, days: int = Z3_HISTORY_DAYS) -> list[dt.date]:
                    if w.sport == "run" and tday - days < math.floor(w.day) <= tday})
 
 
-def z3_consistency(days: list, today: dt.date, need: int = Z3_WEEKS_NEED) -> dict:
+def z3_consistency(days: list, today: dt.date, need: int = Z3_WEEKS_NEED, skip=()) -> dict:
     """The Zone 3 gate's consistency path on the run dates (SP-31): a window of `need` complete
     weeks, each with ≥ Z3_RUNS_PER_WEEK runs and no Z3_MAX_GAP_DAYS-day stretch without running,
     after the last break of ≥ Z3_RELOCK_DAYS days (which re-locks; a break still going on too).
     Once such a window exists the path stays open (sticky — a 6–20-day break only gets the
-    re-entry block). {"open", "since", "weeks" (the trailing complete weeks that pass, for
-    the progress line), "rows" (the last `need` weeks: monday, runs, ok), "break"}."""
+    re-entry block). `skip`: 轉換期 days (planning.transition_days; SP-73, owner 2026-10-05) —
+    they are no running gap: not counted in the 7-day stretch nor the 21-day re-lock, and a week
+    touching the transition that fails on its own is left out of the run of weeks (neither counts
+    nor breaks it; a transition week with ≥ 3 runs counts as usual). {"open", "since", "weeks"
+    (the trailing complete weeks that pass, for the progress line), "rows" (the last `need` weeks:
+    monday, runs, ok[, transition]), "break"}."""
+    skip = set(skip or ())
+    one = dt.timedelta(days=1)
+
+    def gap(a: dt.date, b: dt.date) -> int:
+        """Days without a run between `a` and `b`, 轉換期 days left out."""
+        n = (b - a).days - 1
+        if not skip or n <= 0:
+            return n
+        return n - sum(1 for k in range(1, n + 1) if a + k * one in skip)
     mon = today - dt.timedelta(days=today.weekday())
     brk = None
     prev = None
-    for d in list(days) + [today + dt.timedelta(days=1)]:
-        if prev is not None and (d - prev).days - 1 >= Z3_RELOCK_DAYS:
-            brk = {"last_run": prev.isoformat(), "days": (d - prev).days - 1,
+    for d in list(days) + [today + one]:
+        if prev is not None and gap(prev, d) >= Z3_RELOCK_DAYS:
+            brk = {"last_run": prev.isoformat(), "days": gap(prev, d),
                    "return": d.isoformat() if d <= today else None}
         prev = d
     if not days:
@@ -1199,18 +1212,24 @@ def z3_consistency(days: list, today: dt.date, need: int = Z3_WEEKS_NEED) -> dic
 
     def gap_ok(w0: dt.date, w1: dt.date) -> bool:
         ds_ = [d for d in days if w0 <= d < w1]
-        return all((b - a).days - 1 < Z3_MAX_GAP_DAYS for a, b in zip(ds_, ds_[1:]))
+        return all(gap(a, b) < Z3_MAX_GAP_DAYS for a, b in zip(ds_, ds_[1:]))
+
+    def in_transition(w: dt.date) -> bool:
+        return any(w + k * one in skip for k in range(7))
+    # a transition week that fails on its own is transparent (SP-73)
+    clear = {w for w in weeks if in_transition(w) and not (runs[w] >= Z3_RUNS_PER_WEEK
+                                                          and gap_ok(w, w + dt.timedelta(weeks=1)))}
+    seq = [w for w in weeks if w not in clear]
     since = None
     if not (brk and brk["return"] is None):
-        for i in range(len(weeks) - need + 1):
-            win = weeks[i:i + need]
+        for i in range(len(seq) - need + 1):
+            win = seq[i:i + need]
             if all(runs[w] >= Z3_RUNS_PER_WEEK for w in win) and gap_ok(win[0], win[-1] + dt.timedelta(weeks=1)):
                 since = (win[-1] + dt.timedelta(weeks=1)).isoformat()
                 break
     trail = 0
-    for k in range(len(weeks), 0, -1):
-        win = weeks[k - 1:]
-        if runs[weeks[k - 1]] >= Z3_RUNS_PER_WEEK and gap_ok(win[0], mon):
+    for k in range(len(seq), 0, -1):
+        if runs[seq[k - 1]] >= Z3_RUNS_PER_WEEK and gap_ok(seq[k - 1], mon):
             trail += 1
         else:
             break
@@ -1218,8 +1237,20 @@ def z3_consistency(days: list, today: dt.date, need: int = Z3_WEEKS_NEED) -> dic
     for k in range(need, 0, -1):
         w = mon - dt.timedelta(weeks=k)
         n = sum(1 for d in days if w <= d < w + dt.timedelta(weeks=1))
-        rows.append({"monday": w.isoformat(), "runs": n, "ok": n >= Z3_RUNS_PER_WEEK and w >= first_mon})
+        row = {"monday": w.isoformat(), "runs": n, "ok": (n >= Z3_RUNS_PER_WEEK or w in clear) and w >= first_mon}
+        if w in clear:
+            row["transition"] = True
+        rows.append(row)
     return {"open": since is not None, "since": since, "weeks": trail, "rows": rows, "break": brk}
+
+
+def _transition_skip(ds, days: list, today: dt.date) -> set:
+    """The 轉換期 days over the run history (planning.transition_days; SP-73); empty without a plan."""
+    plan_ = getattr(ds, "plan", None)
+    if plan_ is None or not days:
+        return set()
+    from backend.engine.planning import transition_days
+    return transition_days(plan_, days[0], today)
 
 
 def z3_gate(ds, today: dt.date, mode: str, state: Optional[str], ae: dict, lt: dict, z5: dict,
@@ -1239,7 +1270,8 @@ def z3_gate(ds, today: dt.date, mode: str, state: Optional[str], ae: dict, lt: d
     {"open", "path", "path_label", "weeks", "weeks_need", "weekly", "tests", "reason", "text", "src", "break"}."""
     need = Z3_WEEKS_NEED
     try:
-        cons = z3_consistency(run_days(ds, today), today, need)
+        rd = run_days(ds, today)
+        cons = z3_consistency(rd, today, need, _transition_skip(ds, rd, today))
     except Exception:                       # noqa: BLE001 — the gate must still evaluate
         cons = {"open": False, "since": None, "weeks": 0, "rows": [], "break": None}
     brk = cons.get("break")
@@ -1343,25 +1375,48 @@ def track_ratio(events, today: dt.date) -> dict:
     return {"z3": 2, "z5": 1, "why": f"A 賽{what}"}
 
 
-def lthr_age(lt: dict, today: Optional[dt.date]) -> Optional[int]:
-    """Days since the measured LTHR row (lthr_info["date"]); None without a date or `today`."""
-    if today is None or not lt.get("date"):
+def lthr_invalid(ds, plan, today: dt.date, lt: dict, ae: dict) -> Optional[dict]:
+    """Why a measured LTHR no longer counts for the Zone 5 UA path, or None (owner 2026-10-05;
+    replaces SP-39's 12-week age limit — zones-and-thresholds.md §2.5: no evidence for a fixed
+    retest period; unsourced-rules.md B3: event / evidence triggers, not a date). {"code", "text"}:
+      break      a running break ≥ 4 weeks after the test (reentry.find_all: a 29–56-day or
+                 longer block, `reconfirm`; detraining.md: Zone 5 waits for re-confirmation)
+      evidence   threshold_confidence.lthr_evidence since the test: a cool long effort above
+                 it, a 40–60-min race < 95 % of it, the CP-band cross-check, CP changed > 5 %
+                 (not its age, not its source)
+      aet_shift / aet_moved   the AeT aggregate shifts or moved (_aet_shift: the same easy
+                 running now shows a different HR / power relationship)
+    A dateless LTHR counts every event within reach. Never raises."""
+    if lt.get("value") is None or lt.get("default") or not lt.get("measured"):
         return None
+    d0 = str(lt.get("date") or "")[:10]
     try:
-        return (today - dt.date.fromisoformat(str(lt["date"])[:10])).days
-    except ValueError:
-        return None
+        from backend.engine import reentry as RE
+        horizon = (today - dt.date.fromisoformat(d0)).days + 1 if d0 else 182
+        for p in reversed(RE.find_all(ds, today, horizon_days=max(1, horizon))):
+            if p.get("reconfirm") and p["return"] <= today.isoformat() and (not d0 or p["last_run"] >= d0):
+                return {"code": "break", "text": f"LTHR 測完後停跑 {p['days']} 天（≥ 4 週）"}
+    except Exception:                       # noqa: BLE001
+        pass
+    try:
+        from backend.engine import threshold_confidence as TC
+        ev = TC.lthr_evidence(ds, plan, today)
+    except Exception:                       # noqa: BLE001
+        ev = []
+    if ev:
+        return {"code": "evidence", "text": ev[0]["text"], "signals": [s["id"] for s in ev]}
+    sh = _aet_shift(ae, ae.get("validity") or {})
+    if sh:
+        return {"code": "aet_" + sh["code"], "text": sh["text"]}
+    return None
 
 
-def z5_ua_gap(ta: Optional[dict], lt: dict, today: Optional[dt.date] = None) -> Optional[dict]:
+def z5_ua_gap(ta: Optional[dict], lt: dict) -> Optional[dict]:
     """The Zone 5 gate's UA path (SP-39): a tested AeT (aet_tested) and a measured LTHR
     (lthr_info["measured"]) with LTHR ÷ AeT − 1 ≤ 10 % → {"gap", "date" (the later of the two
-    rows), "ok"}; None when either isn't measured, or (with `today`) the LTHR was tested more
-    than LTHR_FRESH_DAYS ago (12 weeks; a dateless LTHR is not aged)."""
-    if not ta or lt.get("value") is None or lt.get("default") or not lt.get("measured"):
-        return None
-    age = lthr_age(lt, today)
-    if age is not None and age > LTHR_FRESH_DAYS:
+    rows), "ok"}; None when either isn't measured or an event invalidated the LTHR
+    (lt["invalid"], lthr_invalid — no age limit)."""
+    if not ta or lt.get("value") is None or lt.get("default") or not lt.get("measured") or lt.get("invalid"):
         return None
     g = ua_gap(ta["value"], lt["value"])
     if g is None:
@@ -1434,7 +1489,7 @@ def _z5(ds, today: dt.date, mode: str, state: Optional[str], ae: dict, lt: dict,
         if ta is None and ae.get("measured") and ae.get("tested", True) and ae.get("value") is not None:
             ta = {"value": ae["value"], "date": ae.get("date")}      # a caller without the plan: the AeT in effect
         if ta and "aet_ua_gap" in p:
-            u = z5_ua_gap(ta, lt, today)
+            u = z5_ua_gap(ta, lt)
             if u and u["ok"]:
                 paths["aet_ua_gap"] = u["date"]
         if ta and "aet_friel_drift" in p:
@@ -1472,15 +1527,9 @@ def aet_test_reason(ds, today: dt.date, ae: dict, z5: dict, brk: Optional[dict] 
     return _aet_test_reason(today, ae, z5, brk, val, recent, xu_recent, False)
 
 
-def _aet_test_reason(today: dt.date, ae: dict, z5: dict, brk: Optional[dict], val: dict, recent, xu_recent,
-                     passive) -> Optional[dict]:
-    from backend.engine import base_check as BC
+def _aet_shift(ae: dict, val: dict) -> Optional[dict]:
+    """The AeT aggregate's shift / moved reasons (aet_test_reason; also lthr_invalid), or None."""
     v, se = val.get("value"), val.get("se")
-    if brk and brk.get("aet_stale") and brk["end"] <= today.isoformat() and not (
-            z5.get("state") == "confirmed" and (z5.get("since") or "") >= brk["return"]):
-        # after the re-entry block of a break ≥ 4 weeks (UA: re-read after a layoff); a
-        # passive re-confirmation after the break stands in for it
-        return {"code": "break", "text": f"停跑 {brk['days']} 天（≥ 4 週）：恢復期結束後重新讀一次 AeT（Uphill Athlete）"}
     if v is not None and se is not None and se <= 3.0 and val.get("shift_bpm") is not None and \
             abs(val["shift_bpm"]) > 5.0:
         return {"code": "shift", "text": val.get("reason") or "最近 6 次的飄移有系統性偏移"}
@@ -1490,6 +1539,20 @@ def _aet_test_reason(today: dt.date, ae: dict, z5: dict, brk: Optional[dict], va
         return {"code": "moved", "text": _("從最近的輕鬆跑推估 AeT 約 {v:.0f} bpm，和目前 {now:.0f} 差 {d:+.0f}："
                                            "測一次確認（UA：基礎變好 AeT 會往 AnT 靠）",
                                            v=v, now=float(ae["value"]), d=v - float(ae["value"]))}
+    return None
+
+
+def _aet_test_reason(today: dt.date, ae: dict, z5: dict, brk: Optional[dict], val: dict, recent, xu_recent,
+                     passive) -> Optional[dict]:
+    from backend.engine import base_check as BC
+    if brk and brk.get("aet_stale") and brk["end"] <= today.isoformat() and not (
+            z5.get("state") == "confirmed" and (z5.get("since") or "") >= brk["return"]):
+        # after the re-entry block of a break ≥ 4 weeks (UA: re-read after a layoff); a
+        # passive re-confirmation after the break stands in for it
+        return {"code": "break", "text": f"停跑 {brk['days']} 天（≥ 4 週）：恢復期結束後重新讀一次 AeT（Uphill Athlete）"}
+    sh = _aet_shift(ae, val)
+    if sh:
+        return sh
     if passive:
         return None
     if not recent and not xu_recent:
@@ -1717,15 +1780,15 @@ def z5_card(gate: dict, today: dt.date) -> dict:
     tests = []
     ap = z.get("aet_paths") or {}
     if mode_has(mode, "aet_ua_gap"):
-        u = z5_ua_gap(ta, lt, today)
-        age = lthr_age(lt, today)
+        u = z5_ua_gap(ta, lt)
+        inv = lt.get("invalid") or {}
         if u is not None:
             val = f"AeT {ta['value']:.0f}（{ta['date']} 實測）/ LTHR {lt['value']:.0f} → {u['gap'] * 100:.0f}%"
         elif not ta:
             val = ("—（AeT 是估計值，不算：要做一次 AeT 測試）" if ae.get("measured") or ae.get("value")
                    else "—（還沒做過：沒有實測 AeT）")
-        elif lt.get("measured") and not lt.get("default") and age is not None and age > LTHR_FRESH_DAYS:
-            val = f"—（LTHR 是 {age} 天前測的，超過 12 週：要重測 30 分鐘 LTHR）"
+        elif lt.get("measured") and not lt.get("default") and inv:
+            val = f"—（{inv.get('text') or 'LTHR 已失效'}：要重測 30 分鐘 LTHR）"
         else:
             val = "—（LTHR 不是實測：要做一次 30 分鐘 LTHR 測試）"
         tests.append({"key": "aet_ua_gap", "label": "實測 AeT＋實測 LTHR：LTHR ÷ AeT − 1 ≤ 10%",
@@ -1786,6 +1849,11 @@ def _test_todo(t: dict, gate: dict, z: dict) -> tuple[str, Optional[dict]]:
         return _("做 1 次 AeT 測試（UA 40–60 分，量出 AeT 數字；90 分鐘測試不算）"), aet_test
     if k == "aet_ua_gap":
         if miss == "lthr":
+            inv = (gate.get("lthr") or {}).get("invalid") or {}
+            if inv.get("text"):
+                # an event invalidated the measured LTHR (lthr_invalid): say which
+                return (_("重測 1 次 30 分鐘 LTHR（{why}）", why=inv["text"]),
+                        schedule_action("template", "lib:friel_lthr30", "race"))
             return _("做 1 次 30 分鐘 LTHR 測試（LTHR 也要實測）"), schedule_action("template", "lib:friel_lthr30", "race")
         if miss == "gap":
             u = z5_ua_gap(z.get("aet_tested"), gate.get("lthr") or {})
@@ -1999,7 +2067,9 @@ def _z5_next(card: dict, z: dict, gate: dict, tests: list) -> dict:
                      + ("，LTHR 也要實測，差距 ≤ 10%" if ua else "") + ("；或之後在 AeT 附近跑 ≥ 60 分鐘、飄移 < 5%" if fr else ""))
     else:
         if ua and ua.get("missing") == "lthr":
-            parts.append("做一次 30 分鐘 LTHR 測試（LTHR 也要實測，差距 ≤ 10% 就算）")
+            inv = (gate.get("lthr") or {}).get("invalid") or {}
+            parts.append(f"重測一次 30 分鐘 LTHR（{inv['text']}）" if inv.get("text") else
+                         "做一次 30 分鐘 LTHR 測試（LTHR 也要實測，差距 ≤ 10% 就算）")
         elif ua and ua.get("missing") == "gap":
             parts.append("AeT 和 LTHR 的差距降到 ≤ 10%：繼續有氧基礎，之後重測 AeT")
         elif ua and ua.get("ok") is not True:

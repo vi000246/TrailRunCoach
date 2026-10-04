@@ -357,3 +357,44 @@ def test_plan_auto_logs_z5_state_and_reentry_changes():
     weeks = PA.reentry_weeks({"cur": {"reentry": brk, "mode": "reentry", "week": {"start": "2026-09-21"}},
                               "weeks": [{"start": "2026-09-28", "mode": "reentry"}]})
     assert {"2026-09-21", "2026-09-28"} <= weeks
+
+
+# ---------------------------------------------------------------------------
+# 轉換期 days are not break days (SP-73, owner 2026-10-05)
+# ---------------------------------------------------------------------------
+
+def _with_transition(ws, start_ago, end_ago):
+    from backend.engine.planning import Phase
+    ds = _ds(ws)
+    ds.plan.phases = [Phase("transition", (TODAY - dt.timedelta(days=start_ago)).isoformat(),
+                            (TODAY - dt.timedelta(days=end_ago)).isoformat(), auto=False)]
+    return ds
+
+
+def test_transition_with_only_cross_training_starts_no_reentry_block():
+    off = set(range(2, 25))                                     # 23 days without a run, back yesterday
+    assert RE.find(_ds(_daily_except(off)), TODAY)["days"] == 23
+    ds = _with_transition(_daily_except(off), 24, 4)            # 21 of them in a 轉換期: 2 left
+    assert RE.find(ds, TODAY) is None
+    # still off today: the transition part doesn't count either
+    ds = _with_transition(_daily_except(set(range(1, 25))), 24, 4)
+    assert RE.find(ds, TODAY) is None
+
+
+def test_days_off_beyond_the_transition_still_make_a_block():
+    ds = _with_transition(_daily_except(set(range(2, 35)), n=70), 34, 14)   # 33 off, 21 in the transition
+    p = RE.find(ds, TODAY)
+    assert p["days"] == 12 and p["category"] == "6-13" and p["transition_days"] == 21
+    assert p["last_run"] == (TODAY - dt.timedelta(days=35)).isoformat()
+    assert "停跑 12 天（不含轉換期 21 天）" in p["text"]
+    assert RE.find(_ds(_daily_except(set(range(2, 35)), n=70)), TODAY)["category"] == "29-56"
+
+
+def test_transition_days_of_an_auto_plan():
+    from backend.engine.planning import Event, Plan, transition_days
+    pl = Plan(events=[Event("a", "A 賽", "2026-06-06", distance_km=21)])     # short: 7-day recovery
+    t = transition_days(pl, date(2026, 6, 1), date(2026, 8, 31), transition_weeks=3)
+    assert min(t) == date(2026, 6, 14) and max(t) == date(2026, 7, 4) and len(t) == 21
+    assert transition_days(pl, date(2026, 6, 1), date(2026, 8, 31), transition_weeks=0) == set()
+    assert transition_days(pl, date(2026, 6, 20), date(2026, 6, 21), transition_weeks=3) == \
+        {date(2026, 6, 20), date(2026, 6, 21)}
