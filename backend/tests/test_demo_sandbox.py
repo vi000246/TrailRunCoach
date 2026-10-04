@@ -222,8 +222,8 @@ def test_every_write_route_is_classified(demo):
     assert not bad, "\n".join(bad)
 
 
-@pytest.mark.parametrize("path", ["/api/v1/sync/auto", "/api/v1/auth/tp/callback", "/api/v1/ai/chat",
-                                  "/api/v1/athletes", "/api/v1/scan", "/api/v1/backup/list",
+@pytest.mark.parametrize("path", ["/api/v1/sync/auto", "/api/v1/auth/tp/callback",
+                                  "/api/v1/backup/list",
                                   "/api/v1/wko5/injuries/meta", "/api/v1/static/compare.html",
                                   "/api/v1/static/settings.html", "/api/v1/wko5/settings", "/share/abc"])
 def test_owner_only_routes_are_not_mounted(demo, path):
@@ -318,3 +318,23 @@ def test_owner_session(monkeypatch, tmp_path):
     with TestClient(build_app(demo=False), raise_server_exceptions=False) as c:
         s = c.get("/api/v1/session").json()
     assert s["mode"] == "owner" and "sync" in s["caps"] and s["user"] is None and s["csrf"]
+
+
+def test_owner_home_and_old_spa_bookmarks(monkeypatch):
+    """No React SPA any more (removed 2026-10-04): / is the 總覽 page, the SPA's
+    routes with a static page redirect there, the rest 404."""
+    monkeypatch.delenv("WKO5COACH_MODE", raising=False)
+    from fastapi.testclient import TestClient
+    from backend.main import build_app
+    with TestClient(build_app(demo=False), raise_server_exceptions=False) as c:
+        def loc(path):
+            r = c.get(path, follow_redirects=False)
+            return r.status_code, r.headers.get("location")
+        assert loc("/") == (307, "/api/v1/overview/page")
+        assert loc("/overview") == (307, "/api/v1/overview/page")
+        assert loc("/activities") == (307, "/api/v1/wko5/activities/page")
+        assert loc("/activities/12") == (307, "/api/v1/wko5/activities/page")
+        assert loc("/achievements") == (307, "/api/v1/achievements/page")
+        assert loc("/sync")[1] == loc("/config")[1] == "/api/v1/wko5/settings"
+        for gone in ("/running", "/trail", "/ai"):
+            assert c.get(gone).status_code == 404

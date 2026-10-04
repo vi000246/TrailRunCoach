@@ -1,7 +1,7 @@
 """Unsourced rules are labelled 「推估」, never the old self-made label (owner rule).
 
 Fails when the old word shows up in anything the user can see: the static
-pages / scripts, the view JSON, the React frontend, and Python string literals
+pages / scripts, the view JSON, and Python string literals
 under backend/ (API / engine text ends up in the UI). Fix: run
 `python -m backend.scripts.relabel_estimate`.
 
@@ -60,8 +60,7 @@ def test_relabel_is_idempotent():
 
 def _ui_text_files():
     pats = [("backend/static", "*.html"), ("backend/static", "*.js"), ("backend/static", "*.css"),
-            ("views", "*.json"), ("frontend/src", "*.ts"), ("frontend/src", "*.tsx"),
-            ("frontend/src", "*.js"), ("frontend/src", "*.css"), ("frontend", "index.html")]
+            ("views", "*.json")]
     for base, pat in pats:
         d = ROOT / base
         if d.is_dir():

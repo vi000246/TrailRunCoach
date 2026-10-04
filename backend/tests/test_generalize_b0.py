@@ -1,7 +1,6 @@
 """generalize-athlete plan B0: what broke or misbehaved for a runner without
 the original single-user setup — the parity default without WKO5, the empty athlete row,
-the hard-coded athlete id, the W′ prior by sex, and the AI coach's system
-prompt built from the athlete's own data. Synthetic data only."""
+the hard-coded athlete id and the W′ prior by sex. Synthetic data only."""
 from __future__ import annotations
 
 import asyncio
@@ -14,7 +13,7 @@ import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from backend.engine import cp_protocols as CPP
-from backend.engine.planning import Plan, Threshold
+from backend.engine.planning import Plan
 
 
 def _run(c):
@@ -97,6 +96,30 @@ def test_ensure_athlete_and_current_id(monkeypatch):
     assert CUR.current_athlete_id() == 1
 
 
+def test_startup_creates_the_athlete_row_also_with_wko5(tmp_path, monkeypatch):
+    """main._ensure_athlete (was POST /athletes/bootstrap): one row on first start,
+    pointing at the WKO5 athlete folder when there is one; idempotent."""
+    import backend.db.database as DB
+    from backend import main as M
+    from backend.db.models import Athlete
+    from sqlalchemy import select
+    monkeypatch.delenv("WKO5COACH_ATHLETE_ID", raising=False)
+    monkeypatch.setenv("WKO5_ATHLETE_DIR", str(_wko5_folder(tmp_path)))
+
+    async def go():
+        engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        async with engine.begin() as conn:
+            await conn.run_sync(Athlete.metadata.create_all)
+        monkeypatch.setattr(DB, "AsyncSessionLocal", async_sessionmaker(engine, expire_on_commit=False))
+        await M._ensure_athlete()
+        await M._ensure_athlete()
+        async with DB.AsyncSessionLocal() as s:
+            rows = (await s.execute(select(Athlete))).scalars().all()
+        assert [(a.id, a.data_dir) for a in rows] == [(1, str(tmp_path / "wko5"))]
+        await engine.dispose()
+    _run(go())
+
+
 # ---- W′ prior by sex --------------------------------------------------------------
 
 def _ds(sex=None, wko5_sex=None):
@@ -139,51 +162,6 @@ def test_cp_test_single_bout_prior_by_sex():
     assert WR.cp_test_for_sex(res, "male") is res and WR.cp_test_for_sex(res, None) is res
     f = WR.cp_test_for_sex(res, "female")
     assert f["cp"] == pytest.approx(250 - 6400 / 720) and f["wprime"] == 6400.0 and "6.4 kJ" in f["note"]
-
-
-# ---- AI system prompt -------------------------------------------------------------
-
-def test_knowledge_has_no_one_runners_traits():
-    from backend.engine import status as ST
-    from backend.engine.ai.knowledge import build_knowledge
-    kb = build_knowledge()
-    assert "30 min/km" not in kb and "偏無氧型" not in kb and "HR 160" not in kb
-    lo, hi = ST.TSB_PRODUCTIVE
-    assert f"{lo:.0f}~{hi:.0f}" in kb                                  # the overview's bands
-
-
-def test_athlete_traits():
-    from backend.engine.ai.knowledge import athlete_traits
-    assert athlete_traits() == ""
-    t = athlete_traits(cp=250, wprime_j=20000, lthr=170, sex="male", trail_climb_m_per_h=400, trail_n=5)
-    assert "250 W" in t and "偏無氧型" in t and "170 bpm" in t and "400 m" in t
-    assert "偏有氧型" in athlete_traits(cp=250, wprime_j=8000, sex="male")
-    assert "均衡" in athlete_traits(cp=200, wprime_j=7000, sex="female")   # female prior 6.4 ± 2.2 kJ
-
-
-def test_system_prompt_from_the_athletes_data(tmp_path, monkeypatch):
-    from backend.db.models import Athlete, WorkoutFile
-    from backend.engine.ai import context as C
-    today = dt.date.today()
-
-    async def go():
-        s = await _session()()
-        s.add(Athlete(id=1, name="a", data_dir=""))
-        await s.commit()
-        empty = await C.build_system_prompt(s, 1, plan=Plan())
-        assert empty == C.SYSTEM_PROMPT                                  # nothing known: no traits
-        plan = Plan(thresholds=[Threshold(date=(today - dt.timedelta(days=10)).isoformat(), cp=230.0,
-                                          wprime=15000.0, cp_method="2pt", lthr=165.0)],
-                    profile={"sex": "male"})
-        for i in range(3):
-            s.add(WorkoutFile(athlete_id=1, file_path=f"/x/{i}.fit", file_format="fit",
-                              workout_date=today - dt.timedelta(days=5 + i), duration_s=7200.0,
-                              elevation_gain_m=800.0, trail_classification="trail"))
-        await s.commit()
-        p = await C.build_system_prompt(s, 1, plan=plan)
-        assert p.startswith(C.SYSTEM_PROMPT)
-        assert "230 W" in p and "165 bpm" in p and "400 m" in p and "3 次" in p
-    _run(go())
 
 
 # ---- routes without WKO5: tracks from the synced FITs ------------------------------

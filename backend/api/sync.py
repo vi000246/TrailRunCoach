@@ -6,10 +6,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select
 
 from backend.db.database import get_db
-from backend.db.models import SyncState, WorkoutFile
+from backend.db.models import SyncState
 from backend.settings.repository import SettingsRepository
 from backend.sync.tp_client import sync_workouts, fetch_tp_settings
 from backend.sync import coros_client, dedup, purge, runner, storage
@@ -19,43 +19,6 @@ async def _disabled(db: AsyncSession, athlete_id: int, source: str) -> bool:
     return not await SettingsRepository(db, athlete_id).get(f"sync.{source}.enabled")
 
 router = APIRouter(prefix="/api/v1/sync", tags=["sync"])
-
-
-@router.get("/inventory")
-async def sync_inventory(athlete_id: int = 1, db: AsyncSession = Depends(get_db)):
-    """Loaded-data inventory: counts by source/sport, date range, per-source last sync."""
-    base = WorkoutFile.athlete_id == athlete_id
-    total = (await db.execute(
-        select(func.count(WorkoutFile.id)).where(base))).scalar() or 0
-    by_source = {
-        (k or "unknown"): v for k, v in (await db.execute(
-            select(WorkoutFile.source, func.count(WorkoutFile.id))
-            .where(base).group_by(WorkoutFile.source))).all()
-    }
-    by_sport = {
-        (k or "unknown"): v for k, v in (await db.execute(
-            select(WorkoutFile.sport, func.count(WorkoutFile.id))
-            .where(base).group_by(WorkoutFile.sport))).all()
-    }
-    dr = (await db.execute(
-        select(func.min(WorkoutFile.workout_date), func.max(WorkoutFile.workout_date))
-        .where(base))).first()
-    st = (await db.execute(
-        select(SyncState).where(SyncState.athlete_id == athlete_id))).scalar_one_or_none()
-    duplicates = (await db.execute(
-        select(func.count(WorkoutFile.id)).where(base, WorkoutFile.duplicate_of.isnot(None)))).scalar() or 0
-    return {
-        "total": total,
-        "duplicates": duplicates,     # same activity from the source not in use (not in totals)
-        "by_source": by_source,
-        "by_sport": by_sport,
-        "date_min": dr[0].isoformat() if dr and dr[0] else None,
-        "date_max": dr[1].isoformat() if dr and dr[1] else None,
-        "last_sync": {
-            "coros": st.coros_last_sync_at.isoformat() if st and st.coros_last_sync_at else None,
-            "tp": st.last_sync_at.isoformat() if st and st.last_sync_at else None,
-        },
-    }
 
 
 @router.post("/start")

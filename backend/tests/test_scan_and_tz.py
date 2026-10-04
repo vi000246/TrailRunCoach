@@ -1,4 +1,4 @@
-"""/api/v1/scan on the per-source sync layout, and FitFolderDataset's time zone."""
+"""scan_and_import on the per-source sync layout, and FitFolderDataset's time zone."""
 import datetime as dt
 import json
 import sqlite3
