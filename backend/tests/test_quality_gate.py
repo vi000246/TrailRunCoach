@@ -1057,3 +1057,30 @@ def test_ladder_pick_and_the_change_log_follow_the_tracks():
     opened = {"cur": {"quality_gate": {"z3": {"open": True, "path": "weeks", "text": "Zone 3：已解鎖（連續 4 週規律訓練）"}}}}
     assert PA.state_changes(opened, state) == ["Zone 3：已解鎖（連續 4 週規律訓練）"]
     assert PA.state_changes(opened, state) == []
+
+
+def test_specific_phase_applies_the_ramp_and_volume_guardrails_to_both_tracks():
+    # owner 2026-10-04: no school exempts 專項期 from load-progression caution (Friel ramp 5–8; Nielsen
+    # 2014 / Damsted 2019 > 20 %); 減量期 and projected weeks stay exempt (re-checked when they come)
+    spec = types.SimpleNamespace(kind="specific", start="2026-09-01", end="2026-12-31")
+    both = {"z5": {"open": True, "state": "confirmed"}, "z3_recent": {"done": 2},
+            "dose": {"z3": {"step": 3, "met": 3, "done": 3}, "z5": {"step": 1, "done": 1}}}
+    ok = {**_gate(phase=spec), **both}
+    assert [it["track"] for it in QG.week_decision(ok, "specific", "specific", n=2)["items"]] == ["z3", "z5"]
+    ramp8 = {**_gate(phase=spec, by={**GOOD_BY, "fitness": _ind(extra={"ramp_week": QG.RAMP_BLOCK + 0.2})}), **both}
+    d = QG.week_decision(ramp8, "specific", "specific", n=2)
+    assert not d["allow"] and not d["items"] and "Friel" in d["z3_note"] and "本週不排間歇" in d["z3_note"]
+    vol = {**_gate(phase=spec, by={**GOOD_BY, "volume": _ind(extra={"step": 0.3, "last_week": 5.0})}), **both}
+    d = QG.week_decision(vol, "specific", "specific", n=2)
+    assert not d["allow"] and "上週量增 +30%" in d["z3_note"]
+    ramp5 = {**_gate(phase=spec, by={**GOOD_BY, "fitness": _ind(extra={"ramp_week": QG.RAMP_SUB + 0.5})}), **both}
+    d = QG.week_decision(ramp5, "specific", "specific", n=2)
+    assert d["spec"] is QG.SUB and [it["track"] for it in d["items"]] == ["z3"] and "只排閾值下" in d["note"]
+    from backend.engine import overview as O
+    q = O.quality_sessions(ramp5, d, "specific", {"cp": 250.0}, {"threshold": "x"}, 6.0, None, [], road=True)
+    assert [s["title"] for s in q] == [QG.SUB[1]]
+    # 減量期 and a projected week: not blocked by this week's load
+    for g in (ramp8, vol):
+        assert QG.week_decision(g, "taper", "taper")["allow"]
+        assert QG.week_decision(g, "specific", "reentry", n=2)["items"]     # the re-entry block has its own rules
+        assert QG.week_decision(g, "specific", "specific", first=False, n=2)["items"]

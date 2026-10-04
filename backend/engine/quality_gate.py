@@ -60,7 +60,9 @@ short = target −5 %. The old "last rep 5 % below the first -> back one" rule i
 gone (the WKO5 speakers oppose it).
 
 專項期 / 減量期 run the same two-track choice with their own sessions (overview.quality_sessions);
-their guard stays the old rule: intensity and drift not bad.
+their guard: intensity and drift not bad, and in 專項期 (owner 2026-10-04) this week's CTL ramp
+(RAMP_SUB threshold only / RAMP_BLOCK none) and > STEP_BLOCK volume step on both tracks, as in the
+base phase — 減量期, race / recovery weeks and the re-entry block stay exempt.
 """
 from __future__ import annotations
 
@@ -2111,6 +2113,24 @@ def week_decision(gate: dict, kind: str, mode: str, monday: Optional[dt.date] = 
             return {**none(""), "allow": ok, "z3_note": ""}
         if levels.get("drift") == "bad":
             return none("", "本週沒排 3 區：心率飄移是 bad，先不排強度課")
+        if kind == "specific" and first and mode != "reentry":
+            # this week's load-progression guardrails apply in 專項期 too, to both tracks, as in the base
+            # phase (owner 2026-10-04: no school exempts it — Friel ramp 5–8, Nielsen 2014 / Damsted 2019
+            # > 20 % steps; unsourced-rules.md B2): CTL ramp ≥ RAMP_BLOCK or a > STEP_BLOCK volume step →
+            # no interval, ramp ≥ RAMP_SUB → threshold only. 減量期, race / recovery weeks and the re-entry
+            # block stay exempt; projected weeks are re-checked when they come
+            g = gate.get("guard") or {}
+            blocks = g.get("blocks") if g.get("blocks") is not None else ([g.get("rule")] if g.get("block") else [])
+            load = [r for r in blocks if r in ("ramp", "volume")]
+            if load:
+                return none((g.get("verdicts") or {}).get(load[0]) or g.get("verdict", ""))
+            if g.get("sub"):
+                v = (g.get("verdicts") or {}).get("ramp") or g.get("verdict", "")
+                if "z3" not in avail:
+                    return none(v)
+                return {"allow": True, "spec": SUB, "advance": False, "adjust": None, "track": "z3", "note": v,
+                        "items": [{"track": "z3", "spec": SUB, "advance": False, "adjust": None, "first": False}],
+                        "z3_note": ""}
         warn = ""
         if levels.get("intensity") == "bad":
             # the low-intensity share keeps Zone 5 out, Zone 3 goes on with a warning (SP-31); with an
