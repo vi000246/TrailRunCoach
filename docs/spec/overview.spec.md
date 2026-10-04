@@ -1039,8 +1039,8 @@ which one. The response keeps the `coros` field names.
   「複製成我的範本」 copies one (`backend/api/plan_sessions.py:1245`). Storage: tables
   `workout_templates_user` / `workout_template_cats` (`backend/db/models.py:345`,
   `backend/db/models.py:369`; created by create_all, and on demand in a DB made before them,
-  `_ensure`, `backend/engine/user_templates.py:92`) through `engine/user_templates.py`:
-  `clean` (`backend/engine/user_templates.py:174`: name 1–40, categories from the built-in ids
+  `_ensure`, `backend/engine/user_templates.py:95`) through `engine/user_templates.py`:
+  `clean` (`backend/engine/user_templates.py:177`: name 1–40, categories from the built-in ids
   easy / quality / test / trail and the user's own `c<id>`, several per template, steps through
   `workout_steps.normalize`, 目標用 hr / power / 自動) and custom categories add / rename / delete
   (`backend/engine/user_templates.py:121`; deleting one takes it off its templates). **Targets are
@@ -1050,7 +1050,7 @@ which one. The response keeps the `coros` field names.
   uphill template pushes as an open-ended COROS group with no intensity. In the editor's
   插入範本, `workout_steps.templates(user=…)` (`backend/engine/workout_steps.py:1457`) puts
   「我的範本」 first in every category a template is in (`groups`,
-  `backend/engine/user_templates.py:487`: 強度課 under its `family_of` sub-tab — none → every
+  `backend/engine/user_templates.py:514`: 強度課 under its `family_of` sub-tab — none → every
   sub-tab —, 越野跑 under its `trail_type_of` kind) and adds the custom categories as tabs; rows are
   tagged 我的 / ▲ GPX. Applying one in the session dialog also sets the session's `target_basis`
   (`backend/static/schedule.html:1640`, saved with it, `backend/static/schedule.html:1899`).
@@ -1059,19 +1059,39 @@ which one. The response keeps the `coros` field names.
   (`backend/api/plan_sessions.py:1327`: the body's steps, else the stored, else derived; the
   session's 目標用) or `POST /steps/templates/user` for an unsaved session. **Route GPX**: a
   template may carry a training-route GPX / FIT (upload, replace, remove, download); parsed with the
-  race calculator's reader and builder (`parse_profile`, `backend/engine/user_templates.py:309`:
+  race calculator's reader and builder (`parse_profile`, `backend/engine/user_templates.py:313`:
   `racepower/gpx.parse` + `course.build_course`, no parser of its own), the file gzipped per tenant
   (`<HOME>/template_gpx/<id>.gz`, a demo sandbox's private dir), the profile cached in the row. A
   structure made from it keeps the template id (`tpl`, kept by `normalize`,
-  `backend/engine/workout_steps.py:595`), so the session's chart shows it too; POST /steps/check
-  then returns `elev` (`backend/api/plan_sessions.py:1168`): `route_elevation`
-  (`backend/engine/user_templates.py:398`) walks the run order — each step covers its effort
-  distance (km + climb ÷ 100 on the route's own climb) at the athlete's speed for its intensity
-  (`speed_kmh`, scaled to the trail EP speed; untargeted rests walk; a distance step covers its km;
-  a lap-button step without an estimate its 90 s chart width) — and maps the profile onto the
-  chart's time axis (推估; a route longer than the workout is drawn up to where it ends, the legend
-  says so). The editor draws it behind the bars as a light area + thin line with its own m scale
-  (`elev`, `backend/static/workout_editor.js:559`), in the chart viewer's neutral elevation colour.
+  `backend/engine/workout_steps.py:699`) and, once saved as a session, **its own copy of the
+  profile** (`route` {km, z, route_km, gain_m, name}: `route_copy`,
+  `backend/engine/user_templates.py:385`, the ≤ 400-point downsample; validated by `_norm_route`,
+  `backend/engine/workout_steps.py:705`, malformed copies dropped; a template never stores one).
+  The copy is embedded on save (`_with_route`, `backend/api/plan_sessions.py:1462`, from
+  POST / PATCH /sessions; a re-save with the same `tpl` keeps the stored copy, so the session's
+  profile doesn't follow later changes to the template's GPX), and deleting the template or its
+  GPX leaves it on the session (2026-10-04 follow-up, the user's decision). POST /steps/check
+  returns `elev` (`backend/api/plan_sessions.py:1191`, the copy first, else the template's):
+  **with a GPX the step chart switches to a distance axis** — real km along the route, as the race
+  calculator's course profile (2026-10-04 follow-up, the user's decision; without a GPX the time
+  axis stays). `route_elevation` (`backend/engine/user_templates.py:422`) walks the run order and
+  gives each step's start km (`x`, one per `view` order row plus the end): a distance step covers
+  its own km of the route; a time / 直到按下計圈 / 負荷 / RPE step covers its effort distance
+  (km + climb ÷ 100 on the route's own climb) at the athlete's speed for its intensity
+  (`speed_kmh`, scaled to the trail EP speed; untargeted rests walk; a lap-button step without an
+  estimate its 90 s chart width), turned back into km through the route's climb; past the route's
+  end 1 : 1 (推估). The profile (`d` km, `z` m) is drawn up to where the workout ends (a route
+  longer than the workout: the legend says so). The editor (`chart`,
+  `backend/static/workout_editor.js:546`) places the bars by `x` with km ticks and the step's km
+  range in the tooltip, the elevation behind them as a light area + thin line with its own m scale
+  (`elev`, `backend/static/workout_editor.js:601`), in the chart viewer's neutral elevation colour.
+  **我的範本 in 推薦** (2026-10-04 follow-up, the user's decision): GET /steps/templates/recs
+  (`backend/api/plan_sessions.py:1377`) ranks the user's templates with the built-ins by the same
+  `_score` rules (family, Zone 5, phase, the ladder rung's 同一類 bonus, time, terrain, type); the
+  key-listed trail phase rules take a user row by its 越野跑 kind (`_trail_key`,
+  `backend/engine/template_recs.py:214`: 結構化爬升 → the long climb, 下坡 → 下坡離心 incl. its
+  taper exclusion, 技術地形 hard / easy by `rpe_role`); a pick carries `mine` and the menu tags it
+  我的; custom category tabs get 推薦 too.
   Demo: the routes are sandbox writes (`backend/tenancy_mw.py:49`), each visitor's own; the static
   demo shows the page read-only (the write controls locked, `backend/demo/export_static.py:106`).
   i18n: page namespace `templates`, editor strings `common.workout.*`, server messages via `_()`,
@@ -1427,3 +1447,4 @@ deleted / superseded) are returned as reconcile `changes` (`backend/engine/recon
 | 2026-10-04 | feature | SP-31 follow-ups | 專項期 applies this week's CTL-ramp / volume-step guardrails to both tracks; 2 a week with only Zone 3 open = rung + a different 巡航版; the weekday-cap 巡航版 counts as the Zone 3 rung |
 | 2026-10-04 | sp-36-template-manager | SP-36 | 範本 page (third tab of 課表): the user's own templates (`workout_templates_user`, `engine/user_templates.py`) with several categories (built-in + custom, add / rename / delete), 目標用, relative targets resolved when used, CRUD + 複製成我的範本 + 儲存成範本 (`/sessions/{uid}/save-as-template`); 「我的範本」 in 插入範本 by category / family / trail kind, custom tabs; a training-route GPX per template (race calculator's parser), its elevation behind the step chart on the time axis by estimated speed (`elev`, `tpl` in the steps); demo sandbox writes, static demo read-only; zh-TW + en |
 | 2026-10-04 | sp-38-load-step | SP-38 | Step end conditions from the provider's capabilities (`end_conditions` / `end_labels` / `load_unit`); new 「負荷」 end condition (TSS, main-set only; COROS targetType 6 with the converted TL, else estimated time); 「按圈」 → 「直到按下計圈」 on the race-calculator export and template notes too |
+| 2026-10-04 | sp-36-gpx-followup | SP-36 | Follow-ups: a GPX template's / session's step chart on the route's distance axis (`elev.x` per step, distance steps by their km, others by estimated speed); sessions keep their own compact copy of the route profile (`route` in the steps) that outlives the template or its GPX; 我的範本 ranked into the 插入範本 推薦 block by the same rules (trail phase rules by kind), tagged 我的 |
