@@ -394,12 +394,12 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
     <div class="toolbar" id="daysplit-bar" style="margin-top:8px"><label class="meta bf"><input type="checkbox" id="splitmode"> 在剖面上點選分日點</label>
       <span class="meta bf" id="splits-line"></span><button class="btn bf" id="clearsplits">清除分日</button>
       <button class="btn rf" id="unlock">解除全部鎖定</button>
-      <button class="btn primary" id="coros" data-i18n="racepower.coros.btn">📅 匯出至課表</button>
+      <button class="btn primary" id="coros" data-i18n="racepower.coros.btn">📅 匯出至課表</button><span class="meta" id="coros-why" hidden></span>
       <button class="btn" id="csv">匯出 CSV</button><span class="meta" id="csv-meta"></span>
       <button class="btn" id="share">🔗 分享</button></div>
     <dialog id="coros-dlg" class="dlg">
       <h2><span data-i18n="racepower.coros.title">匯出至課表</span> <span class="meta" id="cx-prov"></span>
-        <span class="help" tabindex="0">?<span class="tip" data-i18n="racepower.coros.tip">把這場比賽的分段寫成課表上比賽日的一堂課：可以在課表頁編輯每一步，再從課表頁推到手錶。越野的手錶距離常常不準（之字形、樹林遮蔽），所以越野／百岳預設每段用「按圈結束」：到步驟名稱寫的地點（補給站、坡頂、坡底）按一下 lap，名稱也寫了預估時間和爬升。路跑 GPS 準，預設用距離。每段的目標跟著分段目標：功率段 ± 3 %；陡坡和走路段只看心率上限（不設推估功率，沒有心率上限就是自由）；越野下坡不設目標。一場賽事只有一堂：再匯出會覆蓋上次匯出的課。</span></span></h2>
+        <span class="help" tabindex="0">?<span class="tip" data-i18n="racepower.coros.tip">把這場比賽的分段寫成課表上比賽日的一堂課：可以在課表頁編輯每一步，再從課表頁推到手錶。越野的手錶距離常常不準（之字形、樹林遮蔽），所以越野／百岳預設每段用「按圈結束」：到步驟名稱寫的地點（補給站、坡頂、坡底）按一下 lap，名稱也寫了預估時間和爬升。路跑 GPS 準，預設用距離。每段的目標跟著分段目標：功率段 ± 3 %；陡坡和走路段只看心率上限（不設推估功率，沒有心率上限就是自由）；越野下坡不設目標。百岳只帶心率（不帶功率、配速）；多日百岳不能匯出，只有單日（單攻）可以。預估 TSS 的無目標段用計算機預測的比賽心率 ÷ LTHR，比賽完成後跟實際 TSS 比對，自動算出個人校正（場數少時接近 1）。一場賽事只有一堂：再匯出會覆蓋上次匯出的課。</span></span></h2>
       <div class="toolbar"><span class="meta" data-i18n="racepower.coros.end">每段結束</span>
         <div class="seg" id="cx-mode"><button data-x="lap" data-i18n="racepower.coros.lap">按圈</button><button data-x="distance" data-i18n="racepower.coros.dist">距離</button></div>
         <span class="meta" id="cx-where"></span></div>
@@ -1071,7 +1071,7 @@ function planBody(extra = {}) {
 }
 function renderAll() {
   renderResults(); renderFuel(); renderProfile(); renderSegCompact(); renderSegments(); renderInputs(); renderEnv(); renderZones(); renderHeatLine();
-  renderStops();
+  renderStops(); renderExportBtn();
   if (LAST.type !== "baiyue" && $("rg-sec").querySelector("details").open) renderRiegel();
 }
 let RUN_SEQ = 0;
@@ -1695,6 +1695,20 @@ function renderSegments() {
 let CX_MODE = null, CX_LAST = null;
 const cxMode = () => CX_MODE || (type === "road" ? "distance" : "lap");
 function cxBody(push, overwrite = false) { return { ...planBody(), push, overwrite, name: null, event_id: $("event").value || null, step_mode: cxMode() }; }
+// a multi-day 百岳 trip is not exported (one race-day session): the button is off, with the reason
+function renderExportBtn() {
+  const why = PLAN?.export_block || "";
+  $("coros").disabled = !!why; $("coros").title = why;
+  $("coros-why").hidden = !why; $("coros-why").textContent = why ? T("coros.blocked", { why }) : "";
+}
+// the session's planned TSS: how the open legs were counted, and the post-race correction (tss_calib)
+function cxTss(r) {
+  const t = r.tss_info; if (!t || !t.tss) return "";
+  let h = T("coros.tss", { tss: Math.round(t.tss) });
+  if (t.open_h > 0) h += " · " + (t.fallback ? T("coros.tss_default", { f: t.open_if.toFixed(2) }) : T("coros.tss_hr", { f: t.open_if.toFixed(2), src: t.open_src }));
+  h += " · " + (t.n ? T("coros.tss_calib", { f: t.factor.toFixed(2), n: t.n, raw: Math.round(t.raw) }) : T("coros.tss_nocalib"));
+  return `<div class="meta">${esc(h)}</div>`;
+}
 const cxLink = (r) => `<a href="${esc(r.plan_url)}">${esc(T("coros.open"))}</a>`;
 function renderCx(r) {
   CX_LAST = r;
@@ -1705,6 +1719,7 @@ function renderCx(r) {
   const what = r.action === "claim" ? T("coros.claim") : r.action === "restore" ? T("coros.restored")
     : pv ? T("coros.again", { at: (pv.updated_at || "").slice(0, 16).replace("T", " ") }) : T("coros.new");
   let h = `<div class="note">${esc(r.title)} · ${T("coros.n_steps", { n: lines.length })} · ${esc(what)}${pv ? " · " + cxLink(r) : ""}</div>`;
+  h += cxTss(r);
   if (pv && pv.user_edited) h += `<div class="err">⚠ ${esc(T("coros.edited"))}</div>`;
   h += `<div class="tablewrap" style="max-height:340px;overflow:auto"><table><thead><tr><th>#</th><th>${esc(T("coros.step"))}</th><th>${esc(T("coros.end_col"))}</th><th>${esc(T("coros.target"))}</th></tr></thead><tbody>` +
     lines.map((ln, i) => `<tr><td>${i + 1}</td><td class="wrap">${esc(ln.name || legs[i]?.name || "")}</td><td class="num">${esc(ln.dur)}</td><td class="num">${esc(ln.target)}</td></tr>`).join("") +

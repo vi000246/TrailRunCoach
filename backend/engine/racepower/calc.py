@@ -551,6 +551,9 @@ def make_plan(ctx: Context, body: PlanIn) -> dict:
     out["seg_targets"] = ST.plan_targets(out, aet=aet_d.get("aet"), lthr=aet_d.get("lthr"))
     # the main chart / table: pace, power and HR target per segment, null where not valid
     out["chart_rows"] = ST.chart_rows(out, aet=aet_d.get("aet"), lthr=aet_d.get("lthr"))
+    # 「匯出至課表」 is one race-day session: a multi-day 百岳 trip is not exported (the reason, else None)
+    from backend.engine.racepower import watch_export as WE
+    out["export_block"] = WE.multi_day(out, body.start_time, body.days)
     if course.get("source") == "gpx":
         from backend.engine.racepower import fuel as FU
         out["stop_suggestions"] = FU.stops_from_wpts(course.get("wpts") or [], course["totals"]["km"])
