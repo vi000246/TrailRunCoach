@@ -314,6 +314,38 @@ dialog::backdrop { background: rgba(0,0,0,.35); }
       <button class="danger primary" id="pd-ok" disabled>確認刪除</button><button id="pd-cancel">取消</button></div>
   </dialog>
 
+  <section id="calendar">
+    <h2 data-i18n="settings.cal.title">課表訂閱（Google 日曆／iPhone）</h2>
+    <p class="meta" data-i18n="settings.cal.intro">把課表變成一個行事曆訂閱網址：每堂課是一個全天事件（過去 2 週到未來 8 週），標題是課名，完成的課前面有 ✓、沒做的有 ✗；事件內容有時間、TSS、步驟，和「在課表打開這堂課」的連結。改課、移到別天、刪課都會跟著更新（休息日和不排課日期不會出現）。</p>
+    <div id="cal-off" hidden>
+      <div class="row"><span class="meta" data-i18n="settings.cal.off">還沒有訂閱網址。</span>
+        <button class="primary" id="cal-create" data-i18n="settings.cal.create">產生訂閱網址</button></div>
+    </div>
+    <div id="cal-on" hidden>
+      <div class="row"><label for="cal-https" data-i18n="settings.cal.https">訂閱網址</label>
+        <input type="text" id="cal-https" readonly style="flex:1;min-width:240px">
+        <button data-cal-copy="cal-https" data-i18n="settings.cal.copy">複製</button></div>
+      <div class="row"><label for="cal-webcal" data-i18n="settings.cal.webcal">iPhone／Mac 用</label>
+        <input type="text" id="cal-webcal" readonly style="flex:1;min-width:240px">
+        <button data-cal-copy="cal-webcal" data-i18n="settings.cal.copy">複製</button></div>
+      <div class="sub"><b data-i18n="settings.cal.google_h">Google 日曆</b>
+        <ul class="meta" style="margin:4px 0;padding-left:18px">
+          <li data-i18n="settings.cal.google">在電腦上打開 Google 日曆，左側「其他日曆」旁的 ＋ ›「從網址新增」，貼上訂閱網址。</li>
+          <li data-i18n="settings.cal.google_lag">Google 會自己決定多久重新抓一次（通常幾個小時，最久大約一天），沒有辦法手動強制更新；剛改的課不會馬上出現在 Google 日曆。</li>
+        </ul></div>
+      <div class="sub"><b data-i18n="settings.cal.iphone_h">iPhone</b>
+        <ul class="meta" style="margin:4px 0;padding-left:18px">
+          <li data-i18n="settings.cal.iphone">設定 › 行事曆 › 帳號 › 新增帳號 › 其他 ›「新增訂閱的行事曆」，貼上網址（或在 iPhone 上直接點 webcal 網址）。</li>
+          <li data-i18n="settings.cal.iphone_lag">到 設定 › 行事曆 › 帳號 ›「擷取新資料」把更新頻率設成每 15 分鐘，改課後大約 5–15 分鐘就會更新。</li>
+          <li data-i18n="settings.cal.iphone_widget">在主畫面加上「行事曆」小工具，就會顯示今天的課；點開事件裡的連結會打開課表上這堂課的編輯視窗（第一次要先登入這個網站）。</li>
+        </ul></div>
+      <p class="meta" data-i18n="settings.cal.secret">這個網址就是鑰匙，不用登入就能讀到課表，不要公開分享；外流了就按「重設網址」，舊網址立刻失效。</p>
+      <div class="row"><button class="danger" id="cal-reset" data-i18n="settings.cal.reset">重設網址</button>
+        <button id="cal-disable" data-i18n="settings.cal.disable">停用</button></div>
+    </div>
+    <p class="meta" data-i18n="settings.cal.reach">網址用你現在開這一頁的位址。Google 日曆要從網際網路抓得到它（例如經過 Cloudflare Tunnel）；只在本機 localhost 跑的話 Google 抓不到，iPhone 也要連得到才行。</p>
+  </section>
+
   <section id="map">
     <h2>地圖</h2>
     <p class="meta">單次活動的路線地圖一開始用的底圖和疊圖。在地圖右上角可以臨時切換，這台瀏覽器會記住；這裡的預設改了之後，會回到新的預設。</p>
@@ -1009,7 +1041,36 @@ $("calib-run").onclick = async (e) => {
   b.disabled = false;
 };
 
-loadMode(); loadApplied(); loadProfile(); loadHr(); loadExclusions(); loadBackup(); loadCalib();
+// ---- 課表訂閱 (api/calendar_feed.py): the secret ICS address ------------------------------
+const CAL_FEED = "/api/v1/plan/calendar";
+function showCal(d) {
+  $("cal-off").hidden = !!d.enabled; $("cal-on").hidden = !d.enabled;
+  $("cal-https").value = d.url || ""; $("cal-webcal").value = (d.url || "").replace(/^https?:/, "webcal:");
+}
+async function loadCal() {
+  try { showCal(await j(CAL_FEED)); } catch (e) { toast(t("settings.cal.failed", { msg: e.message.slice(0, 80) })); }
+}
+async function newCal() {
+  showCal(await j(CAL_FEED + "/token", { method: "POST", headers: { "Content-Type": "application/json" },
+                                     body: JSON.stringify({ origin: location.origin }) }));
+}
+$("cal-create").onclick = () => newCal().catch((e) => toast(t("settings.cal.failed", { msg: e.message.slice(0, 80) })));
+$("cal-reset").onclick = async () => {
+  if (!confirm(t("settings.cal.confirm_reset"))) return;
+  try { await newCal(); toast(t("settings.cal.done_reset")); }
+  catch (e) { toast(t("settings.cal.failed", { msg: e.message.slice(0, 80) })); }
+};
+$("cal-disable").onclick = async () => {
+  if (!confirm(t("settings.cal.confirm_disable"))) return;
+  try { showCal(await j(CAL_FEED + "/token", { method: "DELETE" })); toast(t("settings.cal.done_disable")); }
+  catch (e) { toast(t("settings.cal.failed", { msg: e.message.slice(0, 80) })); }
+};
+document.querySelectorAll("[data-cal-copy]").forEach((b) => b.onclick = async () => {
+  const inp = $(b.dataset.calCopy);
+  try { await navigator.clipboard.writeText(inp.value); toast(t("settings.cal.copied")); }
+  catch { inp.select(); toast(t("settings.cal.copy_fail")); }
+});
+loadMode(); loadApplied(); loadProfile(); loadHr(); loadExclusions(); loadBackup(); loadCalib(); loadCal();
 loadSyncSettings().then(loadSources).catch((e) => toast("同步設定載入失敗：" + e.message.slice(0, 80)));
 </script>
 </body>

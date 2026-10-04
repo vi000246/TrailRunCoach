@@ -170,6 +170,10 @@ DEFAULTS: dict[str, Any] = {
     "backup.include_fit": False,
     "backup.last_result": None,
     "backup.last_ok": None,
+    # 課表訂閱 (engine/calendar_feed.py, api/calendar_feed.py): {token, origin} of the
+    # secret ICS feed URL /share/calendar/<token>.ics; None = off. origin = the address the
+    # settings page was opened at (the feed's 「編輯」 links); 重設網址 replaces the token
+    "plan.calendar": None,
 }
 # keys that were removed: db/database.py init_db deletes any stored row
 # (backup.encryption held the sealed scrypt-derived backup key)
@@ -344,6 +348,9 @@ def validate(key: str, value: Any) -> None:
         raise ValueError(f"{key} must be true/false")
     if key in ("backup.last_result", "backup.last_ok") and value is not None and not isinstance(value, dict):
         raise ValueError(f"{key} must be an object or null")
+    if key == "plan.calendar" and value is not None:
+        from backend.engine.calendar_feed import validate_setting
+        validate_setting(value)
     if key == "plan.match.unlinked" and not (isinstance(value, list) and all(
             isinstance(e, dict) and isinstance(e.get("start"), str) for e in value)):
         raise ValueError("plan.match.unlinked must be a list of {start, index}")

@@ -26,5 +26,29 @@
   "近 12 週越野＋登山佔跑步時間 {share:.0%}（≥ {min:.0%} 算越野跑，推估）": {
     "draft": true,
     "src": "backend/engine/primary_sport.py:79"
+  },
+  "{m} 分": {
+    "draft": true,
+    "src": "backend/engine/calendar_feed.py:150"
+  },
+  "計畫：{text}": {
+    "draft": true,
+    "src": "backend/engine/calendar_feed.py:154"
+  },
+  "實際：{text}": {
+    "draft": true,
+    "src": "backend/engine/calendar_feed.py:163"
+  },
+  "爬升 {m} m": {
+    "draft": true,
+    "src": "backend/engine/calendar_feed.py:168"
+  },
+  "在課表打開這堂課：{url}": {
+    "draft": true,
+    "src": "backend/engine/calendar_feed.py:176"
+  },
+  "課表（TrailRunCoach）": {
+    "draft": true,
+    "src": "backend/engine/calendar_feed.py:196"
   }
 }
