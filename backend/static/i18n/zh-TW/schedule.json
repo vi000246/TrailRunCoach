@@ -246,5 +246,7 @@
   "legend.pushed": "已推送",
   "legend.outdated": "需更新",
   "legend.failed": "失敗",
-  "legend.not_pushed": "未推送"
+  "legend.not_pushed": "未推送",
+  "preset.not_found": "找不到課表範本「{key}」",
+  "preset.pick_day": "選日期後儲存"
 }

@@ -2715,7 +2715,34 @@ loadPrimary();
   const qp = new URLSearchParams(location.search), qu = qp.get("uid"), qa = qp.get("act");
   if (D && qu && findS(qu)) { S.sel = findS(qu).day; render(); openDlg(findS(qu)); }
   else if (D && qa && /^\d+$/.test(qa)) openAct(+qa);
+  // 「安排課表」 from the 3 區／5 區 flow (SP-39): ?add=<template / variant key>[&proto=] or
+  // ?test=aet|cp&proto=<protocol> opens the new-session dialog with that session preselected
+  else if (D && (qp.get("add") || qp.get("test"))) openPreset(qp.get("add"), qp.get("test"), qp.get("proto"), q);
 })();
+async function openPreset(add, test, proto, day) {
+  const d = day && /^\d{4}-\d\d-\d\d$/.test(day) && day >= D.today ? day : D.today;
+  const setKind = (k) => {
+    const r = F.querySelector(`input[name="kind"][value="${k}"]`);
+    if (r) { r.checked = true; r.dispatchEvent(new Event("change", { bubbles: true })); }
+  };
+  S.sel = d; render();
+  openDlg(null, d);
+  try {
+    if (test) {
+      setKind("test");
+      $("sd-tkind").value = test; $("sd-tkind").dispatchEvent(new Event("change"));
+      if (proto) { $("sd-tproto").value = proto; $("sd-tproto").dispatchEvent(new Event("change")); }
+    } else {
+      const f = await WE.findKey(add);
+      if (!f) { $("sd-err").textContent = tt("preset.not_found", { key: add }); return; }
+      setKind({ test: "test", quality: "quality", trail: "hike" }[f.cat] || "easy");
+      await WE.applyKey(add);
+      if (f.cat === "test" && proto) dlg.test = { protocol: proto };
+    }
+    $("sd-sub").textContent += " · " + tt("preset.pick_day");
+    F.day.focus();
+  } catch (e) { $("sd-err").textContent = e.message; }
+}
 </script>
 </body>
 </html>

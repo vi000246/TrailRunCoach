@@ -537,7 +537,7 @@ def reentry_weeks(inp: dict) -> set:
 
 def state_changes(inp: dict, state: dict) -> list[str]:
     """Log lines for a Zone 3 gate change (SP-31), a Zone 5 state change and a new re-entry
-    block (plan rules, not sessions); updates `state` in place (keys z3, z5, reentry)."""
+    block (plan rules, not sessions); updates `state` in place (keys z3, z5, z5_track, reentry)."""
     out = []
     cur = inp.get("cur") or {}
     z3 = (cur.get("quality_gate") or {}).get("z3") or {}
@@ -554,6 +554,16 @@ def state_changes(inp: dict, state: dict) -> list[str]:
         from backend.engine.base_check import STATE_LABEL
         out.append(f"Zone 5：{STATE_LABEL.get(old, '—') if old else '—'} → {z5.get('text') or z5.get('label')}")
         state["z5"] = key
+    # the Zone 5 track itself (SP-39, quality_gate.z5_track: measured AeT + the soft 「3 區先」):
+    # unlocking and re-locking are logged; the first record of a closed track says nothing new
+    zt = (cur.get("quality_gate") or {}).get("z5_gate") or {}
+    if zt:
+        tkey = "open" if zt.get("open") else "closed"
+        if tkey != state.get("z5_track") and (state.get("z5_track") is not None or zt.get("open")):
+            out.append(zt.get("text") if zt.get("open") else
+                       f"Zone 5：重新上鎖（{zt.get('reason') or ''}）" if state.get("z5_track") == "open"
+                       else zt.get("text") or "Zone 5：未解鎖")
+        state["z5_track"] = tkey
     rp = cur.get("reentry")
     rkey = f"{rp['return']}|{rp['days']}" if rp else None
     if rp and rkey != state.get("reentry"):

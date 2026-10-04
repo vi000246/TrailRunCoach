@@ -751,6 +751,10 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       if (sb) { this.tplSub = sb.dataset.sub; this.menuHtml(); return; }
       const b = e.target.closest("button[data-t]"); if (!b) return;
       const [g, i] = b.dataset.t.split(".").map(Number), row = this.tpls.groups[g].rows[i];
+      this.applyRow(row);
+    }
+    // one template row into the structure (整份換 / 只換主課 by tplFull), as a click in 插入範本 does
+    applyRow(row) {
       const fresh = (xs) => xs.map(clone);
       if (!this.doc) this.doc = { origin: "user", items: [] };
       const items = this.doc.items;
@@ -767,6 +771,27 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       this.$("we-pop").hidden = true;
       this.touch();
       this.o.onTemplate && this.o.onTemplate(row, this.tplFull);
+    }
+    // a template by its key (the 課表 page's ?add= deep link, SP-39 「安排課表」): the whole session
+    // (warm-up and cool-down included); the row, or null when the key isn't a template
+    async findKey(key) {
+      if (!this.tpls) {
+        const r = await req("GET", `${this.o.api}/steps/templates`);
+        this.tpls = r.ok ? r.body : { cats: [], groups: [] };
+      }
+      for (const g of this.tpls.groups || []) {
+        const row = (g.rows || []).find((r) => r.key === key);
+        if (row) return { row, cat: g.cat };
+      }
+      return null;
+    }
+    async applyKey(key) {
+      const f = await this.findKey(key);
+      if (!f) return null;
+      const row = f.row;
+      this.tplFull = true;
+      this.applyRow(row);
+      return row;
     }
     // the session's total from outside (同負荷換算 changed the time): the longest top-level
     // timed step takes the difference
