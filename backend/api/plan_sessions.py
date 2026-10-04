@@ -2250,3 +2250,9 @@ async def compliance(start: str, end: str, db: AsyncSession = Depends(get_db)):
 @router.get("/compliance/page", include_in_schema=False)
 def compliance_page():
     return render_page("compliance")
+
+
+@router.get("/templates/page", include_in_schema=False)
+def templates_page():
+    """範本 (static/templates.html, SP-36): a tab of 課表 — the user's own templates and the library."""
+    return render_page("templates")

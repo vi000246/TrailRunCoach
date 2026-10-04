@@ -7,6 +7,13 @@
  *   we.refresh()                    the dialog's fields changed (目標用, kind, minutes …)
  *   we.rederive(extra)              a new library template was chosen in the dialog
  *   we.payload()                    {steps} to save, {steps: null} to clear, or null (untouched)
+ *   we.load(doc, {ro})              show a given structure (the 範本 page: a template, not a session)
+ *
+ * Options: saveTemplate (default true): the 「儲存成範本」 button (POST /sessions/{uid}/save-as-template,
+ * else /steps/templates/user; SP-36). A structure made from a user template keeps its id (`tpl`):
+ * when that template has a route GPX, POST /steps/check returns its elevation on the chart's time
+ * axis (`elev`, engine/user_templates.route_elevation), drawn as a light background like the
+ * chart viewer's elevation (wko5_viewer.html drawClimbProfile).
  *
  * Every number shown (targets, totals, issues, the watch preview) comes from
  * POST /steps/check — the server resolves; this file only edits the structure.
@@ -20,6 +27,21 @@
 :root { --wz1: #86b6ef; --wz2: #5598e7; --wz3: #2a78d6; --wz4: #1c5cab; --wz5: #104281; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --wz1: #184f95; --wz2: #256abf; --wz3: #3987e5; --wz4: #6da7ec; --wz5: #9ec5f4; } }
 :root[data-theme="dark"] { --wz1: #184f95; --wz2: #256abf; --wz3: #3987e5; --wz4: #6da7ec; --wz5: #9ec5f4; }
+/* the route's elevation behind the bars: the chart viewer's neutral --cp-elev (light area + thin line) */
+:root { --we-elev: #77756f; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --we-elev: #9a9890; } }
+:root[data-theme="dark"] { --we-elev: #9a9890; }
+.we-save { display: grid; gap: 6px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); font-size: 12.5px; }
+.we-save .row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.we-save input.nm { flex: 1 1 200px; min-width: 0; }
+.we-save .cats { display: flex; flex-wrap: wrap; gap: 4px; }
+.we-save .cats label { display: inline-flex !important; align-items: center; gap: 4px; border: 1px solid var(--line); border-radius: 12px; padding: 1px 9px;
+  cursor: pointer; font-size: 12px !important; color: var(--text) !important; }
+.we-save .cats label:has(input:checked) { border-color: var(--accent); color: var(--accent) !important; background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.we-save .cats input { width: auto !important; margin: 0; }
+.we-save .msg:empty { display: none; }
+.we-save .msg.err { color: var(--bad); } .we-save .msg.ok { color: var(--good); }
+.we-pop button.t .mine { font-size: 11px; color: var(--accent); border: 1px solid var(--accent); border-radius: 8px; padding: 0 5px; white-space: nowrap; }
 dialog.sd.we-wide { width: min(880px, 96vw); }
 .we-tpb { color: var(--watch); font-size: 11.5px; white-space: nowrap; }
 .we-tpl { font-size: 11.5px; margin-left: 4px; }
@@ -114,7 +136,8 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
 .we-lim li::before { content: "· "; }
 .we-lim li.hit::before { content: "! "; font-weight: 700; }
 .we-empty { color: var(--muted); font-size: 12.5px; }
-.we-ro .we-acts, .we-ro .we-tools, .we-ro .grip, .we-ro .we-sumtpl { display: none; }
+.we-ro .we-acts, .we-ro .we-tools, .we-ro .we-sumtpl, .we-ro .we-save { display: none; }
+.we-ro .grip { visibility: hidden; }        /* (kept in the row's grid: the columns stay aligned) */
 @media (max-width: 699px) {
   .we-chart svg { height: 96px; }
   .we-row { grid-template-columns: 18px minmax(0, 1fr) auto; grid-template-areas: "g k a" "g d d" "g t t" "g n n"; row-gap: 4px; }
@@ -140,8 +163,10 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
   const RPE_F = [0, 0.55, 0.62, 0.70, 0.76, 0.82, 0.88, 0.94, 1.00, 1.05, 1.10];
   const opt = (v, l, cur, extra = "") => `<option value="${esc(v)}"${String(v) === String(cur) ? " selected" : ""}${extra}>${esc(l)}</option>`;
   const q = (tip) => `<button type="button" class="qtip" aria-label="說明" data-tip="${esc(tip)}">?</button>`;
-  // i18n (static/i18n/i18n.js t(key, fallback)); the zh-TW text is the fallback
-  const tr = (k, fb, p) => (window.I18N && window.I18N.t ? window.I18N.t(k, fb, p) : fb);
+  // i18n (static/i18n/i18n.js t(key, fallback)): the keys live in the common namespace (common.workout.*,
+  // inlined on every page); the zh-TW text is the fallback
+  const tr = (k, fb, p) => (window.I18N && window.I18N.t ? window.I18N.t("common." + k, fb, p) : typeof fb === "string" ? fb : k);
+  // (new strings: tr(key) / tr(key, params) with no Chinese fallback — the common catalog is always inlined)
   const noTpaceText = () => tr("workout.no_tpace", "沒有閾值配速：這段推到手錶不會有配速目標");
   // where threshold pace is estimated (GET /steps/context tpace_link: the Friel pace-zone chart)
   const tpaceLink = (ctx) => {
@@ -200,8 +225,10 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
             <button class="btn" type="button" data-a="add-rep">＋ 重複</button>
             <span class="sp"></span>
             <button class="btn" type="button" data-a="reset" id="we-reset" hidden>還原成系統排的</button>
+            <button class="btn" type="button" data-a="savetpl" id="we-savetpl"${opts.saveTemplate === false ? " hidden" : ""}>${esc(tr("workout.save_tpl"))}</button>
             ${q(TIP.basis)}
           </div>
+          <div class="we-save" id="we-save" hidden></div>
           <div class="we-chart" id="we-chart"><svg id="we-svg" role="img" aria-label="區段圖：強度隨時間"></svg><div class="we-tip" id="we-tip" hidden></div></div>
           <div class="we-legend" id="we-legend"></div>
           <div class="we-stats" id="we-stats" aria-live="polite"></div>
@@ -232,7 +259,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       if (my !== this.seq) return;
       if (!r.ok) { this.doc = null; this.$("we-sum").textContent = "結構讀取失敗"; return; }
       this.ctx = r.body.context; this.stored = !r.body.derived && !extra.rederive;
-      this.doc = r.body.steps ? { origin: r.body.steps.origin, items: r.body.steps.items } : null;
+      this.doc = r.body.steps ? { origin: r.body.steps.origin, items: r.body.steps.items, tpl: r.body.steps.tpl } : null;
       this.reason = r.body.reason || "";
       if (this.stored) this.$("we-box").open = true;
       this.$("we-reset").hidden = !this.stored || this.ro;
@@ -252,12 +279,29 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
     payload() {
       if (this.cleared) return { steps: null };
       if (!this.dirty || !this.doc) return null;
-      return { steps: { origin: "user", items: this.doc.items } };
+      return { steps: this.stepsDoc() };
+    }
+    // the structure as sent: origin user, plus the user template it came from (its route GPX)
+    stepsDoc() { const d = { origin: "user", items: this.doc.items }; if (this.doc.tpl) d.tpl = this.doc.tpl; return d; }
+    // the 範本 page: show a given structure (a template), with the context of a derive for the session fields
+    async load(doc, { ro } = {}) {
+      this.dirty = false; this.cleared = false; this.sel = null; this.openT = null; this.auto = {};
+      this.ro = !!ro; this.uid = null;
+      this.root.classList.toggle("we-ro", this.ro);
+      this.$("we-box").open = true;
+      const my = ++this.seq;
+      const r = await req("POST", `${this.o.api}/steps/derive`, { ...this.sess() });
+      if (my !== this.seq) return;
+      this.ctx = r.ok ? r.body.context : null;
+      this.stored = false; this.reason = "";
+      this.doc = doc && (doc.items || []).length ? { origin: "user", items: JSON.parse(JSON.stringify(doc.items)), tpl: doc.tpl } : null;
+      this.$("we-reset").hidden = true;
+      await this.check();
     }
     async check() {
       if (!this.doc) { this.view = null; this.render(); this.o.onView && this.o.onView(null, this); return; }
       const my = ++this.seq;
-      const r = await req("POST", `${this.o.api}/steps/check`, { ...this.sess(), uid: this.uid, steps: { origin: "user", items: this.doc.items } });
+      const r = await req("POST", `${this.o.api}/steps/check`, { ...this.sess(), uid: this.uid, steps: this.stepsDoc() });
       if (my !== this.seq) return;
       if (r.ok) this.view = r.body;
       else this.view = { ...(this.view || {}), issues: ((r.body.detail || {}).errors || ["結構有誤"]).map((t) => ({ level: "err", text: t })) };
@@ -420,7 +464,16 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
     legend() {
       const z = [[1, "< 75% CP"], [2, "75–88%"], [3, "88–101%"], [4, "101–106%"], [5, "≥ 106%"]];
       this.$("we-legend").innerHTML = z.map(([c, l]) => `<span><i style="background:var(--wz${c})"></i>${l}</span>`).join("") +
-        `<span><i style="background:var(--bar)"></i>不設目標</span><span><i style="background:repeating-linear-gradient(45deg,var(--bar) 0 3px,var(--panel) 3px 5px)"></i>直到按下計圈</span>${q(TIP.chart)}`;
+        `<span><i style="background:var(--bar)"></i>不設目標</span><span><i style="background:repeating-linear-gradient(45deg,var(--bar) 0 3px,var(--panel) 3px 5px)"></i>直到按下計圈</span>${q(TIP.chart)}` +
+        this.elevLegend();
+    }
+    elevLegend() {
+      const ev = (this.view || {}).elev;
+      if (!ev) return "";
+      const km = (x) => (Math.round((x || 0) * 10) / 10).toString();
+      const txt = tr("workout.elev_legend", { name: ev.name || "GPX", km: ev.complete ? km(ev.route_km) : `${km(ev.km)}/${km(ev.route_km)}` });
+      const tip = `${ev.note || ""}` + (ev.complete ? "" : "\n" + tr("workout.elev_partial"));
+      return `<span><i style="background:color-mix(in srgb, var(--we-elev) 30%, transparent);border-top:1px solid var(--we-elev)"></i>${esc(txt)}</span>${q(tip)}`;
     }
     stats() {
       const v = this.view || {}, t = v.totals || {}, c = this.ctx || {};
@@ -461,6 +514,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       const total = v.order.reduce((a, o) => a + (o.open && !o.sec ? OPEN_W : o.sec), 0) || 1;
       const sx = (W - 2) / total, maxF = 1.3;
       const yCP = base - (1 / maxF) * (base - top);
+      this.elev(el, v.elev, sx, base, top);
       el("line", { x1: 0, x2: W, y1: yCP, y2: yCP, stroke: "var(--faint)", "stroke-dasharray": "3 3", "stroke-width": 1 });
       el("text", { x: W - 2, y: yCP - 3, "text-anchor": "end", "font-size": 10.5, fill: "var(--muted)" }).textContent = "CP";
       el("line", { x1: 0, x2: W, y1: base, y2: base, stroke: "var(--line)" });
@@ -488,7 +542,22 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
         el("path", { d: `M${a + 2} ${y + 6} V${y} H${b - 2} V${y + 6}`, fill: "none", stroke: "var(--muted)", "stroke-width": 1 });
         if (b - a > 18) el("text", { x: (a + b) / 2, y: y - 2, "text-anchor": "middle", "font-size": 11, fill: "var(--text)", "font-weight": 600 }).textContent = `×${n}`;
       }
-      svg.setAttribute("aria-label", `區段圖：${v.structure || ""}，總長 ${mmss((v.totals || {}).sec || 0)}`);
+      svg.setAttribute("aria-label", `區段圖：${v.structure || ""}，總長 ${mmss((v.totals || {}).sec || 0)}` +
+        (v.elev ? tr("workout.elev_aria", { lo: Math.round(v.elev.z_min), hi: Math.round(v.elev.z_max) }) : ""));
+    }
+    // the route GPX's elevation (POST /steps/check elev, already on the chart's time axis): a light
+    // area + thin line behind the bars, its own scale (min–max of the route), labelled at the left
+    elev(el, ev, sx, base, top) {
+      if (!ev || !ev.t || ev.t.length < 2) return;
+      const lo = ev.z_min, hi = Math.max(ev.z_max, lo + 10);
+      const ey = (z) => base - 2 - ((z - lo) / (hi - lo)) * (base - top - 8);
+      const ex = (t) => 1 + t * sx;
+      const pts = ev.t.map((t, i) => `${ex(t).toFixed(1)},${ey(ev.z[i]).toFixed(1)}`);
+      const a = ex(ev.t[0]).toFixed(1), b = ex(ev.t[ev.t.length - 1]).toFixed(1);
+      el("path", { d: `M${a},${base} L${pts.join(" L")} L${b},${base} Z`, fill: "var(--we-elev)", "fill-opacity": 0.16, stroke: "none", "pointer-events": "none" });
+      el("path", { d: `M${pts.join(" L")}`, fill: "none", stroke: "var(--we-elev)", "stroke-opacity": 0.6, "stroke-width": 1, "pointer-events": "none" });
+      el("text", { x: 3, y: ey(hi) - 3, "font-size": 10, fill: "var(--muted)" }).textContent = `${Math.round(hi)} m`;
+      el("text", { x: 3, y: base - 4, "font-size": 10, fill: "var(--muted)" }).textContent = `${Math.round(lo)} m`;
     }
     tip(e, o, r) {
       const t = this.$("we-tip"), box = this.$("we-chart").getBoundingClientRect(), f = this.find(o.id);
@@ -653,6 +722,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       const b = e.target.closest("button[data-a]"); if (!b || this.ro) return;
       const a = b.dataset.a;
       if (a === "tpl") { this.menu(b); return; }
+      if (a === "savetpl") { this.saveForm(); return; }
       if (!this.doc) this.doc = { origin: "user", items: [] };
       if (a === "add-step") { const s = this.newStep("work"); this.doc.items.splice(this.insertAt(), 0, s); this.sel = s.id; this.touch(); }
       else if (a === "add-rep") { this.doc.items.splice(this.insertAt(), 0, this.newRep()); this.touch(); }
@@ -697,14 +767,16 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       (T.groups || []).forEach((g, gi) => { if (g.cat === cat) g.rows.forEach((r, i) => { where[r.key] ??= `${gi}.${i}`; }); });
       const recs = ((this.recs || {}).cats || {})[cat]?.filter((x) => where[x.key]) || [];
       const recKeys = new Set(recs.map((x) => x.key));
-      const gs = (T.groups || []).map((g, gi) => ({ g, gi })).filter(({ g }) => g.cat === cat && (!subs.length || g.sub === this.tplSub));
+      // 我的範本 with no sub-tab of its own (a 強度課 one with no interval family): in every sub-tab
+      const gs = (T.groups || []).map((g, gi) => ({ g, gi })).filter(({ g }) => g.cat === cat && (!subs.length || g.sub === this.tplSub || (g.mine && !g.sub)));
       const tab = (k, id, l, on, tip) => `<button type="button" data-${k}="${esc(id)}" class="${on ? "on" : ""}" aria-pressed="${on}"${tip ? ` title="${esc(tip)}"` : ""}>${esc(l)}</button>`;
       // pace × threshold pace (Daniels / Canova / Billat …) with no threshold pace: badge it
       const noTp = !(((this.ctx || {}).thresholds || {}).tpace);
       const tpBadge = (r) => r.needs_tpace && noTp
         ? ` <span class="we-tpb" title="${esc(T.no_tpace_text || noTpaceText())}">⚠ ${esc(tr("workout.no_tpace_badge", "沒有閾值配速"))}</span>` : "";
       // 技術地形／下坡 rows: how the scheduler counts them (workout_steps.rpe_role)
-      const fsub = (r) => (r.family && r.family.sub_label ? ` <span class="fam">${esc(r.family.sub_label)}</span>` : "") +
+      const fsub = (r) => (r.mine ? ` <span class="mine">${esc(tr("workout.mine"))}</span>` : "") + (r.gpx ? ` <span class="fam">▲ GPX</span>` : "") +
+        (r.family && r.family.sub_label ? ` <span class="fam">${esc(r.family.sub_label)}</span>` : "") +
         (r.role ? ` <span class="fam">${r.role === "quality" ? "算強度課" : "算輕鬆課"}</span>` : "");
       const btn = (r, at, sub) => `<button type="button" class="t" data-t="${at}">${this.mini(r.full || r.items)}<span>${esc(r.label)}${fsub(r)}${r.src_kind === "推估" ? ` <span class="faint">（推估）</span>` : ""}${tpBadge(r)}</span>` +
         `${r.purpose ? `<span class="pur">${esc(r.purpose)}</span>` : ""}<span class="src${sub ? " why" : ""}">${esc(sub || r.src || "")}</span></button>`;
@@ -782,6 +854,10 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
         while (z > a && items[z - 1].kind === "cool") z--;
         items.splice(a, z - a, ...fresh(row.items));
       }
+      // a user template with a route GPX: the structure keeps its id (the chart's elevation); another
+      // template replacing the whole structure drops it
+      if (row.mine && row.gpx) this.doc.tpl = row.id;
+      else if (this.tplFull || !items.length) delete this.doc.tpl;
       this.$("we-pop").hidden = true;
       this.touch();
       this.o.onTemplate && this.o.onTemplate(row, this.tplFull);
@@ -798,6 +874,48 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       st.dur = { type: "time", value: Math.max(60, st.dur.value + want - cur) };
       this.touch();
       return true;
+    }
+    // 儲存成範本 (SP-36): name + categories (built-in and the user's own, several), the current structure
+    async saveForm() {
+      const box = this.$("we-save");
+      if (!box.hidden) { box.hidden = true; return; }
+      if (!this.doc || !this.doc.items.length) { this.$("we-sum").textContent = tr("workout.save_tpl_empty"); return; }
+      if (!this.tpls) {
+        const r = await req("GET", `${this.o.api}/steps/templates`);
+        this.tpls = r.ok ? r.body : { cats: [], groups: [] };
+      }
+      const s = this.sess(), def = this.catOf(s.kind);
+      const cats = (this.tpls.cats || []).map((c) => `<label><input type="checkbox" value="${esc(c.id)}"${c.id === def ? " checked" : ""}>${esc(c.label)}</label>`).join("");
+      box.innerHTML = `<div class="row"><b>${esc(tr("workout.save_tpl"))}</b><input class="nm" id="we-save-nm" maxlength="40" value="${esc(s.title || "")}" aria-label="${esc(tr("workout.tpl_name"))}" placeholder="${esc(tr("workout.tpl_name"))}"></div>
+        <div class="cats" role="group" aria-label="${esc(tr("workout.tpl_cats"))}">${cats}</div>
+        <div class="row"><button type="button" class="btn primary" data-s="ok">${esc(tr("workout.save"))}</button><button type="button" class="btn" data-s="no">${esc(tr("workout.cancel"))}</button>
+          <span class="meta">${esc(tr("workout.save_tpl_hint"))}</span></div>
+        <div class="msg" id="we-save-msg" aria-live="polite"></div>`;
+      box.hidden = false;
+      box.onclick = (e) => {
+        const b = e.target.closest("button[data-s]"); if (!b) return;
+        if (b.dataset.s === "no") { box.hidden = true; return; }
+        this.saveTemplate();
+      };
+      this.$("we-save-nm").focus();
+    }
+    async saveTemplate() {
+      const box = this.$("we-save"), m = this.$("we-save-msg");
+      const name = this.$("we-save-nm").value.trim();
+      const cats = [...box.querySelectorAll(".cats input:checked")].map((x) => x.value);
+      const s = this.sess();
+      const body = { name, cats, steps: this.stepsDoc(), target_basis: s.target_basis || undefined };
+      const url = this.uid ? `${this.o.api}/sessions/${encodeURIComponent(this.uid)}/save-as-template` : `${this.o.api}/steps/templates/user`;
+      const r = await req("POST", url, body);
+      if (!r.ok) {
+        const d = r.body.detail || {};
+        m.className = "msg err";
+        m.textContent = (d.errors || [typeof d === "string" ? d : (r.body.message || tr("workout.save_failed"))]).join(" · ");
+        return;
+      }
+      this.tpls = null;                                 // the menu shows it next time
+      m.className = "msg ok";
+      m.innerHTML = `${esc(tr("workout.saved_tpl", { name: r.body.name }))} <a href="${esc(this.o.api)}/templates/page#${r.body.id}">${esc(tr("workout.to_templates"))}</a>`;
     }
     openBox() { this.$("we-box").open = true; const t = this.root.querySelector(".we-row input.dur"); if (t && !this.ro) t.focus(); }
   }

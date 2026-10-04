@@ -82,6 +82,8 @@
   "list.tss_pct": "TSS {pct}%",
   "tabs.calendar_sub": "What's on each day",
   "tabs.compliance_sub": "Planned vs actual, load",
+  "tabs.templates": "Templates",
+  "tabs.templates_sub": "Your own workout templates",
   "period.phases": "Season plan phases",
   "period.phase_tip": "{label}: {start} – {end}",
   "ratio.title": "Load ratio ATL ÷ CTL",
