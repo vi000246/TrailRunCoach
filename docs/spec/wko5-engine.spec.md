@@ -218,7 +218,7 @@ athlete's own JSON are not translated.
 
 Custom views use the same shape as parsed WKO5 views (`customviews.py`); a
 later file with the same `name` overrides an earlier one
-(`backend/engine/wko5expr/customviews.py:265`). A chart's `kind`
+(`backend/engine/wko5expr/customviews.py:266`). A chart's `kind`
 (`backend/engine/wko5expr/customviews.py:86`) is `athlete` (default),
 `workout`, `zones`, `targets`, `map` (the workout's GPS route, same as WKO5's map panel), `review` (needs a `section`; a single-activity
 card — see [workout-review.spec.md](./workout-review.spec.md)), `activity`
@@ -227,7 +227,7 @@ card — see [workout-review.spec.md](./workout-review.spec.md)), `activity`
 (the 5 區開放流程 replay over the season) or `climbvam` (steady-climb VAM:HR
 per route). Two optional chart keys drive the period toggle: `period` (day /
 week / month / quarter / year, the default bucket) and `min_days` (look-back
-floor for that default bucket) (`backend/engine/wko5expr/customviews.py:116`).
+floor for that default bucket) (`backend/engine/wko5expr/customviews.py:117`).
 
 Other optional chart keys, each validated in `_chart`:
 
@@ -310,7 +310,7 @@ custom views only. The response adds `x_period`, `period_default`,
 (`recentbests.py`): a chart-level spec, a server rewrite, a per-chart viewer
 toggle.
 
-- **Spec** (`backend/engine/wko5expr/customviews.py:138-149`): `"basis":
+- **Spec** (`backend/engine/wko5expr/customviews.py:139-150`): `"basis":
   {"default": "pace", "choices": ["pace", "power"], "power_note": "…"}`. Series
   carry `"basis": "pace"` or `"power"` (`SERIES_DEFAULTS`,
   `backend/engine/wko5expr/customviews.py:59`); untagged series are drawn in
@@ -334,10 +334,10 @@ toggle.
   `basis_choices`, `basis_labels` and `basis_toggle`. Review cards receive the
   basis through `_render` (`backend/api/wko5views.py:517`).
 - **Charts using it**: 輕鬆路跑的心率飄移 and 耐久度 in 我的訓練 › 能力
-  (`views/training.json:280`, `views/training.json:352`), 長時間輕鬆跑的心率飄移
+  (`views/training.json:302`, `views/training.json:374`), 長時間輕鬆跑的心率飄移
   and 耐久度 in 周期化訓練 (`views/periodization.json:67`,
   `views/periodization.json:194`), and the 有氧／心率飄移 dashboard of
-  單次活動判讀: 飄移判讀 (`views/workout.json:33`). 滾動有氧效率 EF and 每公里心率與速度 were
+  單次活動判讀: 飄移判讀 (`views/workout.json:35`). 滾動有氧效率 EF and 每公里心率與速度 were
   dropped in 2026-10 (covered by 耐久曲線 and 每 10% 距離的配速與心率).
   The two 心率飄移 season charts plot the card's `drift(basis, "all")` as
   verdict-coloured bars (`drift_bars`: < 5 % / 5–10 % / > 10 %, one 5 % line);
@@ -477,9 +477,9 @@ unchanged files and unchanged code reads no FIT file at all.
 
 `backend/static/wko5_viewer.html`, served at `/api/v1/wko5/viewer`.
 
-- **Mode cards** (`backend/static/wko5_viewer.html:382`): the page opens on
+- **Mode cards** (`backend/static/wko5_viewer.html:383`): the page opens on
   two big cards, 趨勢 (season charts) and 單次活動 (one workout's charts).
-- **Data-source chip** (`backend/static/wko5_viewer.html:392`): `#source-chip` +
+- **Data-source chip** (`backend/static/wko5_viewer.html:393`): `#source-chip` +
   `sourcechip.js` switch `charts.data_source` between the 資料來源 (the one
   synced source in use, COROS or TrainingPeaks) and the WKO5 folder
   (cross-check), then reload; hidden in the demo. The chart, overview and
@@ -488,10 +488,10 @@ unchanged files and unchanged code reads no FIT file at all.
 - **Chart directory** (`backend/static/wko5_viewer.html:657`): custom views are
   one flat list of dashboard tabs with no view level, ordered by
   `CUSTOM_ORDER` = 我的訓練, 周期化訓練, then the rest
-  (`backend/static/wko5_viewer.html:538`); imported WKO5 views stay grouped per
+  (`backend/static/wko5_viewer.html:539`); imported WKO5 views stay grouped per
   view with a 匯入 tag and collapsible headers. Charts marked `power` are hidden
   when 使用功率 is off, and charts whose `sports` excludes the 主要訓練項目 are
-  hidden (`backend/static/wko5_viewer.html:546`).
+  hidden (`backend/static/wko5_viewer.html:547`).
 - **Deep link** (`backend/static/wko5_viewer.html:590`): `?view=<name>&dash=<index
   or title>`, plus `&chart=<index>` to load that chart first and open it
   enlarged; `?workout=<index>&label=<name>` (from the 課表 page) opens that
@@ -501,7 +501,7 @@ unchanged files and unchanged code reads no FIT file at all.
   remembered per chart in local storage (`wko5viewer.period`,
   `backend/static/wko5_viewer.html:1011`) and re-fetches that card only. A chart
   with a `calendar` series (a day calendar such as 肌力訓練日曆,
-  `backend/static/wko5_viewer.html:2128`) never gets the toggle.
+  `backend/static/wko5_viewer.html:2053`) never gets the toggle.
 - **Basis toggle** (`backend/static/wko5_viewer.html:1020`,
   `backend/static/wko5_viewer.html:1142`): when the response says `basis_toggle`,
   the header gets 配速／功率, remembered per chart in `wko5viewer.basis` and sent
@@ -523,9 +523,9 @@ unchanged files and unchanged code reads no FIT file at all.
   JSON.
 - **Stack total.** A stacked chart's tooltip adds a 合計 row over the
   categories currently shown in the legend (hidden ones drop out); skipped for
-  percent shares (`backend/static/wko5_viewer.html:2490`). Its unit, like every
+  percent shares (`backend/static/wko5_viewer.html:2415`). Its unit, like every
   tooltip row's, comes from the source series of the ECharts series
-  (`srcOf[seriesIndex]`, `backend/static/wko5_viewer.html:2328`).
+  (`srcOf[seriesIndex]`, `backend/static/wko5_viewer.html:2253`).
 - **Route map** (`backend/static/wko5_viewer.html:1953`): WKO5's map panel
   (`PKMapPanelConfig`, `backend/api/wko5views.py:292`) or a custom view's `kind: "map"` chart
   is drawn with Leaflet from the workout samples; the panel JSON (`render_map`,
@@ -536,7 +536,7 @@ unchanged files and unchanged code reads no FIT file at all.
   come from the shared `backend/static/basemaps.js:15` (also the routes page and the race
   calculator's course map). The defaults come from the settings keys `charts.map.basemap` /
   `charts.map.overlays` (`backend/settings/repository.py:95`; basemap unset = by 地區: tw 魯地圖, intl OSM), read as `map_basemap` /
-  `map_overlays` from `GET /api/v1/sync/settings` (`backend/api/sync.py:224`,
+  `map_overlays` from `GET /api/v1/sync/settings` (`backend/api/sync.py:203`,
   `backend/static/wko5_viewer.html:571`; storage side in
   [wko5-coros-sync.spec.md](./wko5-coros-sync.spec.md)); a per-browser switch is kept only
   while that default is unchanged (`backend/static/basemaps.js:52`; the viewer keeps its
@@ -552,10 +552,10 @@ unchanged files and unchanged code reads no FIT file at all.
   them (tooltip on charts, a marker with a time / distance / HR / power /
   elevation / grade readout on the map), one flush per animation frame. Hovering
   within 24 px of the route drives the charts
-  (`backend/static/wko5_viewer.html:2112`). Every workout series that joins the
+  (`backend/static/wko5_viewer.html:2042`). Every workout series that joins the
   synced hover (time or distance x) skips `lttb` sampling so every chart's
-  tooltip lands on the same point (`backend/static/wko5_viewer.html:2388`).
-- **Samples** (`backend/api/wko5views.py:1152`): per-sample `t`, `d` (km),
+  tooltip lands on the same point (`backend/static/wko5_viewer.html:2313`).
+- **Samples** (`backend/api/wko5views.py:1157`): per-sample `t`, `d` (km),
   `lat` / `lng`, `elev`, `hr`, `power`, `grade` (%), downsampled with the same
   step as the workout charts (`MAX_POINTS` 3000, `backend/engine/wko5expr/render.py:55`),
   so chart x maps exactly to a sample index; NaN and (0, 0) GPS become null. The
@@ -706,10 +706,10 @@ source (synthetic FITs).
 
 ## Banded charts and the 使用功率 setting (2026-10)
 
-- **`zoned`** (`backend/engine/wko5expr/customviews.py:150`): a chart option
+- **`zoned`** (`backend/engine/wko5expr/customviews.py:151`): a chart option
   `{"line": "<series name>"}`, optionally with `"ref": {"y": …, "label": …}`
   (a thin dashed reference line, e.g. 負荷比's 「1 = 跟平常一樣」). The viewer
-  (`zonedSetup`, `backend/static/wko5_viewer.html:2208`) turns the chart's
+  (`zonedSetup`, `backend/static/wko5_viewer.html:2133`) turns the chart's
   `{lo:hi}` band series into shaded bands with solid edges and the band's
   short name in the right margin, draws reference lines solid,
   colours the named line by the band it is in (ECharts piecewise visualMap,

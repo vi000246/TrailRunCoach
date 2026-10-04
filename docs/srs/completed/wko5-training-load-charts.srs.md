@@ -1,10 +1,12 @@
 # SRS: WKO5 Training Load Charts — Run-Specific Analytics
 
+> ⛔ **CANCELED（2026-10-04）**：5 月版的設計已作廢——`/api/v1/analytics/*`、`/api/v1/pmc` 與 React 圖表元件隨 React SPA（`frontend/`）一起刪除，這幾張跑步負荷圖目前沒有畫面，之後另做新版。仍在的只有演算法（`backend/engine/algorithms/metrics.py` 的 `compute_run_pmc`、`compute_intensity_load_series`）與匯入時寫入的 intensity 指標。本文只留作歷史紀錄。
+
 ## Metadata
 - **Source PRD**: N/A — standalone technical spec
 - **Source Linear Issue**: N/A
 - **Owner**: maintainer
-- **Status**: IMPLEMENTED — 2026-05-15
+- **Status**: CANCELED (2026-10-04)
 - **Generated**: 2026-05-15
 - **Last Updated**: 2026-10-04
 - **Implementation Report**: `docs/reports/wko5-training-load-charts-feature-report.md`

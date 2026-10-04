@@ -10,7 +10,6 @@
 |--------|------|--------------|-------------|-------------|
 | wko5-engine | [wko5-engine.spec.md](./wko5-engine.spec.md) | Core Domain | 直接讀 WKO5 二進位檔、逐位元驗證的指標演算法、WKO5 表達式引擎、parity/自有算式雙模式、核准制資料校正、自訂圖表；圖表頁：日/週/月/季/年切換、render cache、放大與 &chart= 連結、Leaflet 路線地圖與同步 hover | — |
 | coros-sync | [wko5-coros-sync.spec.md](./wko5-coros-sync.spec.md) | Supporting | COROS / TrainingPeaks 同步：每來源 FIT 資料夾、增量 cursor、跨來源去重、排程與開站自動同步、資料夾掃描、同步設定（含圖表資料來源、路線圖預設） | — |
-| training-load-charts | [wko5-training-load-charts.spec.md](./wko5-training-load-charts.spec.md) | Core Domain | 逆向 WKO5 的五張 run-specific 訓練負荷圖表 | — |
 | overview | [overview.spec.md](./overview.spec.md) | Core Domain | 首頁「總覽」：全部運動合計的訓練狀況、週/月/年紀錄、整合 PMC；可編輯的儲存課表（reconcile、多週預估），可依日/週/周期推送到 COROS | — |
 | racepower | [racepower.spec.md](./racepower.spec.md) | Core Domain | 賽事功率：SuperPower 計算機移植到自己的活動資料，含越野／百岳模型與賽日天氣 | — |
 | wko5-chart-units | [wko5-chart-units.spec.md](./wko5-chart-units.spec.md) | Supporting | 圖表單位登錄表、公制顯示、WKO5 圖表設計修正（views/wko5_fixes.json）、週期切換後的標題/圖例/分桶軸顯示 | — |

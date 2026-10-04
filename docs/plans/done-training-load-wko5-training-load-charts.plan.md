@@ -18,7 +18,7 @@ Currently the dashboard shows all-sport combined CTL/ATL/TSB only. → Add run-f
 - **Module**: training-load
 - **Parent Plan**: N/A
 - **Source PRD**: N/A
-- **Source SRS**: `docs/spec/wko5-training-load-charts.spec.md`
+- **Source SRS**: `docs/srs/completed/wko5-training-load-charts.srs.md`
 - **Source Linear Issue**: N/A
 - **Type**: feature
 - **Size**: L

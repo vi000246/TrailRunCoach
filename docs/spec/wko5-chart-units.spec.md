@@ -77,19 +77,19 @@ The toggle and the cache themselves are `wko5-engine` features (see
   words like 年齡 are left alone (`backend/engine/wko5expr/periods.py:72`).
 - **Category x axis.** A period chart draws one category per bucket from the response's
   `buckets` (empty buckets included); a bucket total sits on the bucket's first day and
-  per-workout values become dots in their bucket (`backend/static/wko5_viewer.html:2273`,
-  `backend/static/wko5_viewer.html:2365`). The tooltip heads with the bucket label
-  (`backend/static/wko5_viewer.html:2465`); on stacked charts it ends with a 合計 row in the
-  series' unit, left out for percent shares (`backend/static/wko5_viewer.html:2488`).
+  per-workout values become dots in their bucket (`backend/static/wko5_viewer.html:2198`,
+  `backend/static/wko5_viewer.html:2290`). The tooltip heads with the bucket label
+  (`backend/static/wko5_viewer.html:2390`); on stacked charts it ends with a 合計 row in the
+  series' unit, left out for percent shares (`backend/static/wko5_viewer.html:2413`).
 - **Tooltip units follow the drawn series.** Each ECharts series records the source series it
-  came from (`srcOf`, `backend/static/wko5_viewer.html:2331`), and the tooltip rows and the 合計
+  came from (`srcOf`, `backend/static/wko5_viewer.html:2256`), and the tooltip rows and the 合計
   row take their unit from `srcOf[p.seriesIndex]`, so a vline skipped on a category axis no
   longer shifts units onto the wrong series.
 - **Look-back note.** When the floor widens the range the card shows `range_note`, e.g.
   「顯示近 12 個月」 (`backend/api/wko5views.py:466`, `backend/static/wko5_viewer.html:1172`).
 - **Enlarged chart.** The overlay shows the full legend and a zoom slider under the x axis,
   now also on the log (duration) axis with duration tick labels
-  (`backend/static/wko5_viewer.html:2526`); the "已修正單位" notes are printed in full above the
+  (`backend/static/wko5_viewer.html:2451`); the "已修正單位" notes are printed in full above the
   chart (`backend/static/wko5_viewer.html:1221`).
 - **Source stamp in the cache key.** A COROS / TP FIT-folder dataset's file stamp is part of
   the data fingerprint, so a chart never shows another source's cached numbers

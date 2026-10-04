@@ -55,7 +55,7 @@ N/A — 後端/內部變更，UX 由前端計畫承載。新增的 PATCH/GET 端
 | P1 | `backend/tests/test_run_pmc.py` | all | 測試風格（sys.path 注入、pytest.approx、純函式測試） |
 | P1 | `backend/tests/test_migration.py` | all | migration 與 ORM 欄位測試風格 |
 | P1 | `backend/main.py` | 10-43 | router 註冊 |
-| P2 | `docs/spec/wko5-training-load-charts.spec.md` | all | WKO5 逆向公式常數（驗證器對照來源） |
+| P2 | `docs/srs/completed/wko5-training-load-charts.srs.md` | all | WKO5 逆向公式常數（驗證器對照來源） |
 
 ## External Documentation
 
@@ -482,7 +482,7 @@ async def _inner():
 - **IMPLEMENT**: `validator.py`
   ```python
   """Validate core metric formulas against WKO5 reverse-engineered constants.
-  Authoritative constants from docs/spec/wko5-training-load-charts.spec.md."""
+  Authoritative constants from docs/srs/completed/wko5-training-load-charts.srs.md."""
   import math
   from datetime import date, timedelta
   from backend.engine.algorithms.metrics import compute_run_pmc, pace_rtss
@@ -504,7 +504,7 @@ async def _inner():
   ```
   （隨後可擴充 bike/run FTP、MMP 對照。climb_load 標記原創、不納入。）
 - **MIRROR**: test_run_pmc.py 的數學斷言風格
-- **GOTCHA**: 驗證常數須引自 `wko5-training-load-charts.spec.md`（τ=42/7 等）——逐項註明來源行。
+- **GOTCHA**: 驗證常數須引自 `wko5-training-load-charts.srs.md`（τ=42/7 等）——逐項註明來源行。
 - **VALIDATE**: pytest — expect PASS；落報告 `python -c "from backend.engine.algorithms.validator import validate_core_formulas as v; print(v())"`
 - **COMMIT**: `feat(sport-pages): formula validator against WKO5 constants`
 

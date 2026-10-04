@@ -51,8 +51,8 @@ heuristics; the knee / form card always says 參考 (`backend/engine/workout_rev
 | Progression hooks | Drift series (informational), latest CP test; the AeT test lives in `engine/aet_test.py` | `backend/engine/workout_review.py:2207` |
 | Verdicts | Line builders for aerobic, interval, stimulus and CP cards | `backend/engine/workout_review.py:2323` |
 | Review JSON | One card per section, in the shape the viewer's `draw()` renders; small tiles in `cards` | `backend/engine/workout_review.py:2510`, `backend/engine/workout_review.py:2536-2551` |
-| View definition | Kind `review` with a `section` | `backend/engine/wko5expr/customviews.py:193-198` |
-| API | Render branch and the review endpoint | `backend/api/wko5views.py:528`, `backend/api/wko5views.py:667` |
+| View definition | Kind `review` with a `section` | `backend/engine/wko5expr/customviews.py:194-199` |
+| API | Render branch and the review endpoint | `backend/api/wko5views.py:528`, `backend/api/wko5views.py:672` |
 
 ## Measurement (`measure`)
 
@@ -305,7 +305,7 @@ Verdict rules:
 ### Basis (配速／功率)
 
 The 飄移判讀 card has the chart-level `basis` toggle
-(`views/workout.json:33`; mechanism in
+(`views/workout.json:35`; mechanism in
 [wko5-engine.spec.md](./wko5-engine.spec.md) "Drift basis toggle").
 `review(ds, w, section, basis)` (`backend/engine/workout_review.py:2510`) puts the
 basis on the card; only `_aerobic` reads it. The summary card, `drift_series` /
@@ -334,7 +334,7 @@ points and statistics) both charts are **verdict bars** (`drift_bars: true`,
 series per basis split at `DRIFT_GOOD` 5 % / `DRIFT_WATCH` 10 % (穩定 green, 有點飄 amber,
 飄很多 red); the panel adds each bar's hover (date, duration, temperature band, 參考 tier)
 and the latest bar's label. Switched: 我的訓練 能力「輕鬆路跑的心率飄移」
-(`views/training.json:276`) and 周期化訓練 ②「長時間輕鬆跑的心率飄移」
+(`views/training.json:298`) and 周期化訓練 ②「長時間輕鬆跑的心率飄移」
 (`views/periodization.json:63`); the basis toggle is unchanged (series tagged pace /
 power), and the descriptions say which definition is used. **Not
 switched**: the two 耐久度 charts (trail runs > 90 min) stay on stored `pahr` /
@@ -418,11 +418,11 @@ card (`views/workout.json:2-5`): 本次重點 `highlights` (重點數字 summary
 (interval_verdict, interval_reps, interval_power, interval_tiz, interval_hr, 每組 = `intervals`),
 爬坡與地形 `climbing` (climbs, grades), 配速與耐久 `pacing-durability` (durability,
 durability_curve, pacing), 跑姿與膝蓋負荷（參考） `form-knee` (form 前半對後半（依作功切分）,
-form_grades, form_work, form_cadence) (`views/workout.json:28`, `views/workout.json:44`,
-`views/workout.json:61`, `views/workout.json:72`, `views/workout.json:85`). The scatter charts the
+form_grades, form_work, form_cadence) (`views/workout.json:30`, `views/workout.json:46`,
+`views/workout.json:63`, `views/workout.json:74`, `views/workout.json:87`). The scatter charts the
 old dashboards carried were removed (2026-10-02). Charts tagged `"sports": ["trail"]` (路線難度,
 爬坡段, 坡度分組, 跑姿依坡度) show only when 主要訓練項目 is trail (`engine/primary_sport.py`,
-`backend/engine/wko5expr/customviews.py:175-180`).
+`backend/engine/wko5expr/customviews.py:176-181`).
 
 ### Activity charts (kind `activity`, `backend/engine/panels/activity_charts.py`)
 
@@ -440,8 +440,8 @@ Daniels' %HRmax ranges overlap (E 65–79, M 80–90, T 88–92), so they are no
 Tests: `backend/tests/test_activity_charts.py` (synthetic).
 
 `customviews` accepts kind `review` and requires `section` in
-`SECTIONS + EXTRA_SECTIONS` (`backend/engine/wko5expr/customviews.py:91`,
-`backend/engine/wko5expr/customviews.py:193-198`). The API reports a review card to
+`SECTIONS + EXTRA_SECTIONS` (`backend/engine/wko5expr/customviews.py:92`,
+`backend/engine/wko5expr/customviews.py:194-199`). The API reports a review card to
 the viewer as panel kind `workout` (`backend/api/wko5views.py:295-300`), so it
 needs a selected workout (`backend/api/wko5views.py:366-368`) and renders through
 `review()` with the chart's title and description (`backend/api/wko5views.py:528-532`).
@@ -450,7 +450,7 @@ needs a selected workout (`backend/api/wko5views.py:366-368`) and renders throug
 
 | Method | Path | Line | Purpose |
 |---|---|---|---|
-| GET | `/api/v1/wko5/workouts/{i}/review` | `backend/api/wko5views.py:667` | `basis` pace (default) or power, 400 otherwise. `section` given: that card (400 if not a known section). Otherwise `{workout, classification, suggested_dashboard, sections}` with the six `SECTIONS` cards. `parity` selects the dataset mode; 404 for an unknown index |
+| GET | `/api/v1/wko5/workouts/{i}/review` | `backend/api/wko5views.py:672` | `basis` pace (default) or power, 400 otherwise. `section` given: that card (400 if not a known section). Otherwise `{workout, classification, suggested_dashboard, sections}` with the six `SECTIONS` cards. `parity` selects the dataset mode; 404 for an unknown index |
 | GET | `/api/v1/wko5/views/{view}/dashboards/{d}/charts/{c}` | `backend/api/wko5views.py:350`, `backend/api/wko5views.py:528` | A review chart renders through the same branch (with the chart's chosen `basis`) |
 | POST | `/api/v1/plan/thresholds/apply-cp` | `backend/api/plan.py:629` | 「套用這次的 CP」: the card's `action.body`; writes / merges the test day's threshold row (cp, wprime, cp_method, note). 400 for a future date, unknown method, W′ without `2pt`, CP outside 50–700 W |
 

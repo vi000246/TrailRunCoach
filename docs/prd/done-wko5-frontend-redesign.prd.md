@@ -124,7 +124,7 @@ Config Tab（FTP/LTHR 設定 → 儲存 → PMC 重算）
 | 3 | Activity List 頁面 | 可看到所有訓練列表，可篩選 sport / 日期 | complete | 2 | same | same |
 | 4 | Activity Detail 頁面 | 點開單次訓練可看功率曲線、MMP、指標 | complete | 3 | same | same |
 | 5 | Season + Config 頁面重構 | PMC/週載量有新設計；Config 可設定 FTP/LTHR | complete | 1 | same | same |
-| 5.1 | Run Training Load Charts | 5 個跑步訓練負荷圖表（Run PMC、Daily %CTL、Ramp Rate、Intensity Load、Volume Log）出現在 Season 頁面 | complete | 5 | wko5-training-load-charts.spec.md | docs/plans/completed/wko5-training-load-charts.plan.md |
+| 5.1 | Run Training Load Charts | 5 個跑步訓練負荷圖表（Run PMC、Daily %CTL、Ramp Rate、Intensity Load、Volume Log）出現在 Season 頁面 | complete | 5 | wko5-training-load-charts.srs.md | docs/plans/completed/wko5-training-load-charts.plan.md |
 | 6 | AI 頁面入口 | 有說明頁告知如何連接 MCP server | pending | 2 | same | same |
 
 ---
