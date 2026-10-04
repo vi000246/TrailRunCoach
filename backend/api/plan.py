@@ -280,6 +280,22 @@ class ThresholdIn(BaseModel):
     aethr_method: Optional[str] = None
 
 
+@router.get("/thresholds")
+def get_thresholds():
+    """設定 → 閾值測試紀錄 (settings.html, SP-46): the dated rows and what is in effect
+    today, without the rest of the season plan. Same data as GET "" (plan.thresholds)."""
+    today = today_local()
+    plan = P.Plan.load()
+    eff = _effective(plan, today)
+    return {
+        "today": today.isoformat(),
+        "thresholds": [t.__dict__ for t in sorted(plan.thresholds, key=lambda t: t.date)],
+        "effective_thresholds": eff,
+        "power_zones": {"source": SOURCE, "zones": zones_json(eff["cp"]["value"])},
+        "wko5_settings": _wko5_settings(),
+    }
+
+
 @router.put("/thresholds")
 def put_thresholds(body: list[ThresholdIn]):
     plan = P.Plan.load()

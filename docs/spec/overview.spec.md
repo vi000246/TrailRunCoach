@@ -247,6 +247,17 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
   evaluator). `workout_review` again labels about three dozen past hard 5 km runs `test_cp` by
   power pattern against the WKO5 mFTP snapshot (≈ 80 % of CP). None of them falls in the
   28 / 42-day windows the overview reads.
+- **Where the rows are edited** (2026-10-04, SP-46): the settings page's 「閾值測試紀錄（LTHR／AeT／CP）」
+  section (`backend/static/settings.html:191`, between 心率 and 資料同步) is the one editor of
+  `plan.thresholds`: the dated table (LTHR / AeT / CP / note), the LTHR / AeT 自動估算 cards with
+  套用, the WKO5 settings line, 怎麼測 and the Palladino power-zone table. It reads
+  `GET /api/v1/plan/thresholds` and saves with the whole-table `PUT` as before. 最大心率 is edited
+  only in 設定 → 心率 (`hr-profile`): the table has no max-HR column, hides rows that hold only
+  `mhr` / `rhr` but sends them back unchanged, and 移除 on a row that also holds them clears only its
+  LTHR / AeT / CP; a 心率 save reloads the table so a stale copy never overwrites it. The 賽事周期
+  page (`backend/static/plan.html:159`) shows a read-only line — what is in effect, the latest test
+  date and count — with 「到設定修改」 (`/api/v1/wko5/settings#thresholds`); the status action for a
+  default LTHR points to 設定 too (`backend/engine/status.py:907`). No data-model change.
 - With active preferences the template is then shaped by `plan_prefs.shape()`
   (`backend/engine/overview.py:928`; see 課表偏好 below).
 
@@ -737,7 +748,7 @@ logging in (`build`, `backend/engine/calendar_feed.py:189`; served by `feed`,
 - **Refresh latency**: the iPhone fetches as often as 設定 › 行事曆 › 帳號 › 擷取新資料 allows
   (every 15 min ⇒ about 5–15 min); Google Calendar refreshes subscribed URLs on its own schedule
   (typically several hours, up to about a day) and can't be forced. The settings page says so
-  (`backend/static/settings.html:317`).
+  (`backend/static/settings.html:360`).
 
 ## COROS push (`coros_workouts.py`)
 
@@ -1025,7 +1036,8 @@ which one. The response keeps the `coros` field names.
 | GET | `/api/v1/overview/plan/prefs` | `{prefs, defaults, active, day_conflicts, pref_dropped, gate_options, aet_options}` — `gate_options` = the 間歇門檻 hover texts (`quality_gate.option_texts`, `backend/engine/quality_gate.py:1766`) (`backend/api/plan_sessions.py:1538`) |
 | GET | `/api/v1/overview/plan/prefs/gate` | per mode `{usable, why}` on the athlete's data, plus the active mode / state / verdict (status `i_gate`, `backend/api/plan_sessions.py:1526`) |
 | POST | `/api/v1/overview/plan/prefs/conflicts` | an unsaved preference set → `{day_conflicts, overlaps}`; nothing stored (`backend/api/plan_sessions.py:1546`) |
-| POST | `/api/v1/plan/thresholds/apply-estimate` | now takes an optional `date` (the test day; not in the future) so 「套用這次的 AeT」 dates the row on the test (`backend/api/plan.py:587`) |
+| GET | `/api/v1/plan/thresholds` | 設定 › 閾值測試紀錄 (SP-46): `{today, thresholds, effective_thresholds, power_zones, wko5_settings}` — the same rows and effective values as `GET /api/v1/plan`, without the rest of the season plan (`backend/api/plan.py:284`); saved with `PUT /api/v1/plan/thresholds` (whole table, `backend/api/plan.py:300`) |
+| POST | `/api/v1/plan/thresholds/apply-estimate` | now takes an optional `date` (the test day; not in the future) so 「套用這次的 AeT」 dates the row on the test (`backend/api/plan.py:603`) |
 | PUT | `/api/v1/overview/plan/prefs` | the whole preference set (Prefs field names, missing = default); 400 on a bad / unknown value or a cross-field rule (`backend/api/plan_sessions.py:1557`) |
 | GET | `/api/v1/overview/plan/blackouts` | `{blackouts}` — the stored 不排課日期 (`backend/api/plan_sessions.py:1594`) |
 | POST | `/api/v1/overview/plan/blackouts/preview` | `{blackouts}` → the reconcile preview with that list; nothing saved; 400 on a bad range (`backend/api/plan_sessions.py:1601`) |
@@ -1195,3 +1207,4 @@ deleted / superseded) are returned as reconcile `changes` (`backend/engine/recon
 | 2026-10-04 | code-sync | N/A | Synced ~140 commits: dashboard 總覽 (KPI tiles, 90-day PMC without projection, day-cards, Z5 card renamed, 待辦 at the bottom, B2B card); tests / B2B / race sim are suggestions; 主要訓練項目, 專項期, B2B, 陡坡健走, 輕鬆跑上限 (課表心率區間) in week_plan; LSD label, kind hike = 越野跑, 登山 long terrain dropped; prefs redesign (偏好的星期, 目標依據, warm-up / cool-down, B2B switch); 休息日, expired-session delete, manual link, compliance + 課表統計 page, context menu; push via the workout-sync provider, MP / pace steps; i_drift plain words, i_testing event-driven; AeT test by reason (no cadence, not projected); new API rows; all file:line pointers refreshed |
 | 2026-10-04 | feat/sp-34-35-schedule | SP-34, SP-35 | 課表: ⟳ 從 COROS 抓活動 button (資料來源 only, shared `syncrun.js`, reload + one re-poll for 自動調整); push button renamed 推送到手錶; push status drawn as a watch (neutral when up to date, coloured only for 需更新／失敗), ✓ reserved for 完成, legend split into 完成 / 手錶 groups |
 | 2026-10-04 | feat/sp-54-ics-feed | SP-54 | 課表訂閱: `/share/calendar/<token>.ics` ICS feed of the stored plan (all-day events, ✓ / ✗, steps + deep link, −14 / +56 days), `plan.calendar` token with 重設 / 停用 and 404 on mismatch, owner only (not mounted in the demo); `plan_sessions.updated_at` moves only on a real change (LAST-MODIFIED / SEQUENCE); settings page section with Google / iPhone steps (zh-TW + en) |
+| 2026-10-04 | feat/sp-46-thresholds-settings | SP-46 | 閾值測試紀錄 (LTHR / AeT / CP) edited on the settings page (table, 自動估算 cards, power zones; zh-TW + en), `GET /api/v1/plan/thresholds`; 賽事周期 page shows a read-only summary + link; 最大心率 only in 設定 → 心率 (no max-HR column; mhr / rhr rows kept on save); status / chart hints point to 設定. Same `plan.thresholds` data, no model change |

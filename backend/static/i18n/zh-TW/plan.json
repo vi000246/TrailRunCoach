@@ -1,0 +1,8 @@
+{
+  "thr.title": "閾值測試紀錄（LTHR／AeT／CP）",
+  "thr.edit": "到設定修改",
+  "thr.now": "目前使用：AeT {aet} / LTHR {lthr} / CP {cp} W",
+  "thr.latest": "；最新一筆測試 {date}（共 {n} 筆）。",
+  "thr.none": "；還沒有測試紀錄。",
+  "thr.lthr_default": "⚠ LTHR 是 WKO5 預設值，請到設定填測試結果"
+}
