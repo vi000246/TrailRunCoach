@@ -730,7 +730,7 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
         if tech.get("active"):
             try:
                 TECH.apply(ss, tech, hours=hours, rates=cur.get("tss_per_category"), prefs=prefs, notes=notes,
-                           user=user_q)
+                           user=user_q, walk=th.get("walk_cap"))
             except Exception:              # noqa: BLE001 — never breaks the projection
                 tech = {"active": False}
         # 賽前停肌力 (SP-86): week_plan's A-event windows, the same rule (overview.drop_strength_before_a)

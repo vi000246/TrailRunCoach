@@ -439,6 +439,25 @@ def walk_cap_label(w: Optional[dict]) -> str:
     return f"{_(WALK_CAP)} {w['value']:.0f} bpm（{how}）"
 
 
+def walk_cap_hint(w: Optional[dict]) -> str:
+    """The 技術地形 session's HR guidance (owner 2026-10-05: text only — its target, step bands and
+    push stay as they are): 「心率參考上限約 146 bpm（75% 最大心率）或 RPE ≤ 13；技術路段以安全為主，
+    不用硬壓心率」; 「（75% × (220 − 年齡)，推估）」 without a max HR; "" without a max HR or an age."""
+    if not w or not w.get("value"):
+        return ""
+    pct = round(w["pct"] * 100)
+    if w.get("floor"):
+        how = _("{pct}% 最大心率 {v:.0f} 低於輕鬆跑上限，取輕鬆跑上限", pct=pct, v=w["pct"] * w["mhr"])
+    elif w.get("basis") == "age":
+        how = _("{pct}% × (220 − 年齡)，推估", pct=pct)
+    elif w.get("estimate"):
+        how = _("{pct}% 最大心率，最大心率是推估", pct=pct)
+    else:
+        how = _("{pct}% 最大心率", pct=pct)
+    return _("心率參考上限約 {v:.0f} bpm（{how}）或 RPE ≤ {rpe}；技術路段以安全為主，不用硬壓心率",
+             v=w["value"], how=how, rpe=WALK_RPE)
+
+
 def walk_cap_hr(w: Optional[dict], aet: Optional[float] = None, measured: bool = False) -> str:
     """The target text of a walking session: 「心率 ≤ 爬坡上限 146 bpm（75% 最大心率）或 RPE ≤ 13，
     先到的為準」 — without a cap (no max HR, no age) the easy-run cap stands in."""

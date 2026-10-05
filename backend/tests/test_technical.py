@@ -284,3 +284,31 @@ def test_user_rpe_rows_reads_the_users_own_structured_sessions(tmp_path):
     assert sorted(r["uid"] for r in got) == ["c", "e"]       # custom / edited, active / done, with steps
     assert [x["uid"] for x in T.user_quality(got, MON)] == ["c", "e"]
     assert T.user_stamp(got) and PS.user_rpe_rows(tmp_path / "missing.db") == []
+
+
+def test_the_walking_cap_is_named_in_the_text_only():
+    """Owner 2026-10-05: the 技術地形 session names SP-115's walking cap (75 % HRmax, or 220 − age 推估)
+    as a reference in its detail — never as its target, steps or push (target_policy stays 「hike」,
+    HR ≤ AeT on the watch). Without a max HR or an age the figure is left out."""
+    from backend.engine import hr_profile as HP
+    from backend.engine import target_policy as TP
+    from backend.sync import coros_workouts as CW
+    w = HP.walk_cap(195.0, aet=145.0)
+    for mon, kind in ((EVEN, "base"), (MON, "specific")):
+        info = T.week_context(kind=kind, mode=kind, monday=mon, road=False)
+        ss = _week(mon)
+        T.apply(ss, info, hours=8.0, rates={"trail": 60.0}, walk=w)
+        t = next(s for s in ss if "技術地形" in (s.get("title") or ""))
+        assert "心率參考上限約 146 bpm（75% 最大心率）或 RPE ≤ 13；技術路段以安全為主，不用硬壓心率" in t["detail"]
+        assert t["target"] == "" and TP.target_policy(t)["type"] in ("hike", "trail_long")
+        th = CW.Thresholds.of({"lthr": 165.0, "aet": 145.0, "walk_cap": w})
+        steps = CW.session_steps({**t, "basis": "hr"}, th)
+        assert all(not st.intensity or st.intensity[0] != "hr" or st.intensity[2] <= 145 for st in steps)
+    age = HP.walk_cap(None, aet=130.0, age=40)
+    ss = _week(MON)
+    T.apply(ss, T.week_context(kind="specific", mode="specific", monday=MON, road=False), hours=8.0, walk=age)
+    t = next(s for s in ss if s["id"] == "tech")
+    assert "心率參考上限約 135 bpm（75% × (220 − 年齡)，推估）" in t["detail"]
+    ss = _week(MON)
+    T.apply(ss, T.week_context(kind="specific", mode="specific", monday=MON, road=False), hours=8.0, walk=None)
+    assert "心率參考上限" not in next(s for s in ss if s["id"] == "tech")["detail"]

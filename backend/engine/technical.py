@@ -23,6 +23,10 @@ never flips a week back and forth):
 
 The load stays the watch's (no RPE correction, SP-62); the planned TSS uses the trail rate.
 
+HR (owner 2026-10-05): the detail names SP-115's walking cap as a reference only — 「心率參考上限約 N
+bpm（75% 最大心率）或 RPE ≤ 13；技術路段以安全為主，不用硬壓心率」 (hr_profile.walk_cap_hint; omitted
+without a max HR or an age); the target policy, the watch steps and the push are not changed.
+
 A 技術地形 session the user added (or an auto one they edited) whose RPE makes it a quality session
 (workout_templates.session_role) counts like the generated one (SP-74 follow-up): its RPE ≥ 7 work
 (`user_work_min`) comes off the week's 20 % before the intervals are fitted
@@ -217,11 +221,22 @@ def budget_room(ss: list, hours: Optional[float]) -> tuple[Optional[float], str]
                      share=QG.QUALITY_SHARE_MAX, total=total)
 
 
+def _hint(walk: Optional[dict]) -> str:
+    """「；心率參考上限約 N bpm（75% 最大心率）或 RPE ≤ 13；…」 (hr_profile.walk_cap_hint), "" without one."""
+    from backend.engine.hr_profile import walk_cap_hint
+    h = walk_cap_hint(walk)
+    return "；" + h if h else ""
+
+
 def apply(ss: list, info: Optional[dict], *, hours: Optional[float] = None, rates: Optional[dict] = None,
-          prefs=None, notes: Optional[list] = None, hard_done=(), user=(), **_kw) -> list:
+          prefs=None, notes: Optional[list] = None, hard_done=(), user=(), walk: Optional[dict] = None,
+          **_kw) -> list:
     """Turn the week's LSD (基礎期) or one easy run (專項期) into the 技術地形 session, in place;
     sets info["planned"]. `hard_done`: hard days already done this week (dates). `user`: the
-    user's own RPE ≥ 7 sessions this week (user_quality) — the 專項期 one already, none added."""
+    user's own RPE ≥ 7 sessions this week (user_quality) — the 專項期 one already, none added.
+    `walk` (hr_profile.walk_cap, SP-115; owner 2026-10-05): the 75 % HRmax figure goes into the
+    detail as guidance only — the session keeps no HR target (target_policy: kind hike, HR ≤ AeT on
+    the watch), its steps and push are unchanged."""
     if not info or not info.get("active"):
         return ss
     info["planned"] = []
@@ -243,7 +258,8 @@ def apply(ss: list, info: Optional[dict], *, hours: Optional[float] = None, rate
         climb = steps["items"][1]["target"].get("up")
         s.update(title=f"技術地形 {m}′（低 {_rpe_txt(BASE_RPE)}）", terrain="trail", target="", steps=steps,
                  detail=(f"技術路段跑走混合，{_rpe_txt(BASE_RPE)}（輕鬆、可以講話）"
-                         + (f"，爬升約 {climb} m" if climb else "") + "；心率、功率不當目標（腳步才是瓶頸）"),
+                         + (f"，爬升約 {climb} m" if climb else "") + "；心率、功率不當目標（腳步才是瓶頸）"
+                         + _hint(walk)),
                  source=SRC, climb_m=float(climb) if climb else None, tss=round(rate * m / 60.0, 1))
         info["planned"].append({"day": s["day"], "minutes": m, "rpe": list(BASE_RPE), "role": "easy",
                                 "replaces": "long"})
@@ -313,7 +329,7 @@ def apply(ss: list, info: Optional[dict], *, hours: Optional[float] = None, rate
     pick.update(id="tech", kind="hike", terrain="trail", minutes=m, target="", steps=steps,
                 title=f"技術地形 {m}′（{_rpe_txt(rpe)}）",
                 detail=(f"找接近比賽路況的技術路段，{_rpe_txt(rpe)}" + (f"，爬升約 {climb} m" if climb else "")
-                        + "；心率、功率不當目標" + ("；算強度課，前後一天輕鬆" if role == "quality" else "")),
+                        + "；心率、功率不當目標" + _hint(walk) + ("；算強度課，前後一天輕鬆" if role == "quality" else "")),
                 source=SRC, climb_m=float(climb) if climb else None, tss=round(rate * m / 60.0, 1))
     if delta > 0:
         _rebalance(ss, pick, delta)

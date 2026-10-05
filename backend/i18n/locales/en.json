@@ -514,6 +514,7 @@
   "心率 %": "Heart rate %",
   "心率 {lo}–{hi} bpm": "Heart rate {lo}–{hi} bpm",
   "心率區間": "HR zone",
+  "心率參考上限約 {v:.0f} bpm（{how}）或 RPE ≤ {rpe}；技術路段以安全為主，不用硬壓心率": "Heart rate for reference: up to about {v:.0f} bpm ({how}) or RPE ≤ {rpe}; on technical ground safety comes first, no need to hold the heart rate down",
   "心率恢復變快但功率沒到，可能累積疲勞：休 60 秒心率降 {d:.0f} bpm，比同規格課 8 週中位數 {b:.0f} 快 {x:.0%}（連續 {k} 堂 ≥ {t:.0%}）": "HR recovers faster but the power fell short, possibly accumulated fatigue: HR drops {d:.0f} bpm in 60 s of rest, {x:.0%} faster than the 8-week median of the same session ({b:.0f}) ({k} sessions in a row ≥ {t:.0%})",
   "心率最高的 {k} 次平均飄移 {m:.1f}%，算上誤差可能到 {u:.1f}%（≥ 5%）：還不夠確定": "The {k} highest-HR runs average {m:.1f}% drift, up to {u:.1f}% with error (≥ 5%): not certain enough yet",
   "心率跟上強度變化的時間常數；算 Pw:HR 時先把功率延遲這麼多。": "The time constant of heart rate catching up with a change in intensity; power is delayed by this much before Pw:HR is computed.",
