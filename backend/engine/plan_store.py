@@ -736,7 +736,7 @@ TEXT_COLS = ("minutes", "target", "detail", "source", "tss", "terrain", "distanc
 
 def _plan_rows(db_path, kinds: tuple, cache: dict, more: tuple = ()) -> list[dict]:
     """Rows of plan_sessions (kinds) as dicts with the variant columns that exist (+ `more`).
-    Read-only sqlite, cached on the file's mtime; [] when the DB is missing."""
+    Read-only sqlite, cached on the file's stamp (WAL included); [] when the DB is missing."""
     import sqlite3
     from pathlib import Path
     if db_path is None:
@@ -745,9 +745,9 @@ def _plan_rows(db_path, kinds: tuple, cache: dict, more: tuple = ()) -> list[dic
     if db_path is None:
         return []
     p = Path(db_path)
-    try:
-        mt = p.stat().st_mtime_ns
-    except OSError:
+    from backend.db.filestamp import db_stamp
+    mt = db_stamp(p)                            # the WAL too: a commit may not touch the main file yet
+    if mt is None:
         return []
     from backend.engine import activity_key as AK
     hit = cache.get((str(p), kinds, more))
@@ -884,7 +884,7 @@ def done_session(index, db_path=None) -> Optional[dict]:
 def test_sessions(db_path=None) -> list[dict]:
     """Stored kind 'test' sessions: {uid, day, state, title, protocol, done_by, gen_key}.
     Read-only sqlite; [] when the DB / table / column is missing. Cached on
-    the file's mtime."""
+    the file's stamp (WAL included)."""
     import sqlite3
     from pathlib import Path
     if db_path is None:
@@ -893,9 +893,9 @@ def test_sessions(db_path=None) -> list[dict]:
     if db_path is None:
         return []
     p = Path(db_path)
-    try:
-        mt = p.stat().st_mtime_ns
-    except OSError:
+    from backend.db.filestamp import db_stamp
+    mt = db_stamp(p)                            # the WAL too: a commit may not touch the main file yet
+    if mt is None:
         return []
     from backend.engine import activity_key as AK
     hit = _TEST_CACHE.get(str(p))

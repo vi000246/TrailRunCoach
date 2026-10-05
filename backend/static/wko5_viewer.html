@@ -512,13 +512,32 @@ function axisName(u) {
 const DUR_TICKS = [1, 5, 15, 30, 60, 120, 300, 600, 1200, 1800, 3600, 7200, 10800, 21600, 43200, 86400, 172800];
 const DUR_TICKS_SPARSE = [1, 5, 30, 60, 300, 1200, 3600, 10800, 36000, 86400, 172800];
 const durTick = (s) => s < 60 ? `${s}s` : s < 3600 ? `${Math.round(s / 60)}m` : `${+(s / 3600).toFixed(1)}h`;
-// GET JSON; a dropped connection or a 5xx (server busy / reloading) is retried once
+// GET JSON; a dropped connection or a 5xx (server busy / reloading) is retried once.
+// No answer in J_TIMEOUT_MS: keep waiting while the data is still being built
+// (GET /dataset/status says building: a cold start parses every FIT), else
+// give up with a message instead of 「載入中」 forever (a server out of memory
+// accepted the request and never answered)
+const J_TIMEOUT_MS = 120000;
+async function stillBuilding() {
+  try {
+    const s = await (await fetch(`${API}/dataset/status`, { cache: "no-store" })).json();
+    return s && s.state === "building";
+  } catch (_) { return false; }
+}
 async function j(url, retry = 1) {
   let r;
-  try { r = await fetch(url); }
-  catch (e) {
-    if (retry > 0) { await new Promise((ok) => setTimeout(ok, 1200)); return j(url, retry - 1); }
-    throw new Error(`連不上伺服器（${e.message}）`);
+  for (;;) {
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), J_TIMEOUT_MS);
+    try { r = await fetch(url, { signal: ctl.signal }); break; }
+    catch (e) {
+      if (e && e.name === "AbortError") {
+        if (await stillBuilding()) continue;
+        throw new Error("伺服器超過 2 分鐘沒有回應，請稍後重新整理");
+      }
+      if (retry > 0) { await new Promise((ok) => setTimeout(ok, 1200)); return j(url, retry - 1); }
+      throw new Error(`連不上伺服器（${e.message}）`);
+    } finally { clearTimeout(timer); }
   }
   if (!r.ok) {
     if (r.status >= 500 && retry > 0) { await new Promise((ok) => setTimeout(ok, 1200)); return j(url, retry - 1); }

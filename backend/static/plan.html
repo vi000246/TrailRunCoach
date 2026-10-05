@@ -399,7 +399,13 @@ async function loadFeas() {
     if (r.chart_href) $("#feaschart").href = r.chart_href;
     sec.hidden = !(r.races || []).length;
     box.innerHTML = (r.races || []).map(Feas.html).join("");
-  } catch (x) { sec.hidden = false; box.innerHTML = `<p class="meta warn">${esc(tC("failed"))}</p>`; }
+  } catch (x) {
+    // an error, or no answer in 90 s (Feas.load): say so, with 重試
+    sec.hidden = false;
+    box.innerHTML = `<p class="meta warn">${esc(tC(x && x.timeout ? "timeout" : "failed"))} `
+      + `<button type="button" class="feas-retry">${esc(tC("retry"))}</button></p>`;
+    box.querySelector(".feas-retry").onclick = () => loadFeas();
+  }
 }
 // 賽事: 關門時間; 百岳: 撤退時間 (from the summit day's start) + where the summit is
 function cutoffLabels() {
