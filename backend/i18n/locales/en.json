@@ -111,5 +111,13 @@
   "最大心率": "Max HR",
   "{name} 可信度{c}": "{name} confidence {c}",
   "；": "; ",
-  "：": ": "
+  "：": ": ",
+  "% CP 功率區間": "% CP power band",
+  "絕對功率": "Absolute power",
+  "% LTHR 心率": "% LTHR heart rate",
+  "心率區間": "HR zone",
+  "絕對心率": "Absolute HR",
+  "配速": "Pace",
+  "自動（依課表類型）": "Auto (by workout type)",
+  "負荷": "Load"
 }

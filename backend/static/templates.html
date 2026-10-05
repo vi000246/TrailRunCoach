@@ -8,7 +8,9 @@
 /* 範本 (SP-36; engine/user_templates.py, api/plan_sessions.py /steps/templates/user): the third tab of
    課表. Left: every template (我的 + the built-in library) filtered by category; right: the chosen one
    in the structured editor (static/workout_editor.js) with its name, categories (several, built-in and
-   the user's own), 目標用 and route GPX. Built-in templates are read-only: 複製成我的範本 to change one.
+   the user's own), 目標用 and route GPX. Under the categories, 主課強度 (SP-84): the main set's target
+   types (workout_steps.target_types, each row's `target_types`), only the ones in the listed rows;
+   the choice is kept per viewer (localStorage, shared with 插入範本 in workout_editor.js). Built-in templates are read-only: 複製成我的範本 to change one.
    Tokens as schedule.html (light / dark / data-theme). */
 :root {
   color-scheme: light;
@@ -142,6 +144,7 @@ details.cm li input { flex: 1; min-width: 0; font-size: 13px; padding: 3px 6px; 
         <button type="button" data-src="all" aria-pressed="true" data-i18n="templates.src.all">全部</button><button type="button" data-src="mine" aria-pressed="false" data-i18n="templates.src.mine">我的</button><button type="button" data-src="lib" aria-pressed="false" data-i18n="templates.src.lib">內建</button>
       </div>
       <div class="chips" id="tm-cats" role="group" data-i18n-attr="aria-label:templates.cats" aria-label="分類"></div>
+      <div class="chips" id="tm-tt" role="group" data-i18n-attr="aria-label:templates.tt" aria-label="主課強度"></div>
       <input class="text" id="tm-q" type="search" data-i18n-attr="placeholder:templates.search;aria-label:templates.search" placeholder="搜尋名稱" aria-label="搜尋名稱">
       <ul class="items" id="tm-items"></ul>
       <details class="cm" id="tm-cm">
@@ -190,7 +193,11 @@ const req = (m, u, b) => WorkoutEditor.request(m, u, b);
 const errText = (r) => { const d = r.body.detail || {}; return (d.errors || [typeof d === "string" ? d : (r.body.message || T("failed"))]).join("；"); };
 const KIND_OF = (cats) => cats.includes("quality") ? "quality" : cats.includes("test") ? "test" : cats.includes("trail") ? "hike" : "easy";
 
-const S = { src: "all", cat: "all", q: "", mine: [], lib: [], cats: [], sel: null, form: null };
+// 主課強度 filter: kept per viewer (the same key as 插入範本's, workout_editor.js); storage may be blocked
+const TT_KEY = "templates.target_type";
+const ttLoad = () => { try { return localStorage.getItem(TT_KEY) || "all"; } catch (e) { return "all"; } };
+const ttSave = (v) => { try { localStorage.setItem(TT_KEY, v); } catch (e) { /* not kept */ } };
+const S = { src: "all", cat: "all", tt: ttLoad(), q: "", mine: [], lib: [], cats: [], tts: [], sel: null, form: null };
 // the template being edited: {kind: "mine" | "lib" | "new", id?, key?, name, cats, basis, note, gpx}
 const WE = WorkoutEditor.mount($("tm-we"), { api: PAPI, saveTemplate: false, session: () => {
   const f = S.form || { cats: [] };
@@ -203,6 +210,7 @@ async function load() {
   const [u, b] = await Promise.all([req("GET", UAPI), req("GET", PAPI + "/steps/templates")]);
   S.mine = u.ok ? u.body.templates : [];
   S.cats = u.ok ? u.body.cats : [];
+  S.tts = (u.ok && u.body.target_types) || (b.ok && b.body.target_types) || [];
   // the built-in library, once per key (a row can be in several groups), with its category
   const seen = new Set();
   S.lib = [];
@@ -221,12 +229,23 @@ function renderCats() {
 function rows() {
   const q = S.q.trim().toLowerCase();
   const hit = (name) => !q || String(name).toLowerCase().includes(q);
-  const mine = S.src === "lib" ? [] : S.mine.filter((t) => (S.cat === "all" || t.cats.includes(S.cat)) && hit(t.name));
-  const lib = S.src === "mine" ? [] : S.lib.filter((r) => (S.cat === "all" || r.cat === S.cat) && hit(r.label));
-  return { mine, lib };
+  const mine = S.src === "lib" ? [] : S.mine.filter((t) => S.cat === "all" || t.cats.includes(S.cat));
+  const lib = S.src === "mine" ? [] : S.lib.filter((r) => S.cat === "all" || r.cat === S.cat);
+  // the 主課強度 chips: the types these rows use; a kept choice none of them has shows 全部 (kept still)
+  const types = (t) => (t.row ? t.row.target_types : t.target_types) || [];
+  const avail = new Set([...mine, ...lib].flatMap(types));
+  const tt = avail.has(S.tt) ? S.tt : "all";
+  const ok = (t) => tt === "all" || types(t).includes(tt);
+  return { mine: mine.filter((t) => ok(t) && hit(t.name)), lib: lib.filter((r) => ok(r) && hit(r.label)), avail, tt };
+}
+function renderTT(avail, tt) {
+  const all = [{ id: "all", label: T("tt_all") }, ...S.tts.filter((x) => avail.has(x.id))];
+  $("tm-tt").hidden = all.length < 3;                 // one type (or none): nothing to choose
+  $("tm-tt").innerHTML = all.map((c) => `<button type="button" data-tt="${esc(c.id)}" class="${c.id === tt ? "on" : ""}" aria-pressed="${c.id === tt}">${esc(c.label)}</button>`).join("");
 }
 function renderList() {
-  const { mine, lib } = rows();
+  const { mine, lib, avail, tt } = rows();
+  renderTT(avail, tt);
   const cur = S.sel || {};
   const li = (attr, on, title, tag, mineTag, src) => `<li><button type="button" ${attr} aria-current="${on}"><span>${esc(title)}</span>` +
     `${tag ? `<span class="tag${mineTag ? " mine" : ""}">${esc(tag)}</span>` : ""}<span class="src">${esc(src || "")}</span></button></li>`;
@@ -312,6 +331,7 @@ $("tm-src").addEventListener("click", (e) => {
   renderList();
 });
 $("tm-cats").addEventListener("click", (e) => { const b = e.target.closest("button[data-cat]"); if (!b) return; S.cat = b.dataset.cat; renderCats(); renderList(); });
+$("tm-tt").addEventListener("click", (e) => { const b = e.target.closest("button[data-tt]"); if (!b) return; S.tt = b.dataset.tt; ttSave(S.tt); renderList(); });
 $("tm-q").addEventListener("input", (e) => { S.q = e.target.value; renderList(); });
 $("tm-items").addEventListener("click", (e) => {
   const b = e.target.closest("button"); if (!b) return;

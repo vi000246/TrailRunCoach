@@ -1263,9 +1263,10 @@ async def _tpl_call(fn, *a, **kw):
 @router.get("/steps/templates/user")
 async def user_templates_list(db: AsyncSession = Depends(get_db)):
     from backend.engine import user_templates as UT
+    from backend.engine import workout_steps as WS
     from backend.engine import workout_templates as WTP
     return {"templates": [{**t, "row": UT.row(t)} for t in await UT.list_all(db)],
-            "cats": WTP.cats() + await UT.custom_cats(db),
+            "cats": WTP.cats() + await UT.custom_cats(db), "target_types": WS.target_type_list(),
             "limits": {"name": UT.NAME_MAX, "cat": UT.CAT_MAX, "cats": UT.MAX_CATS, "templates": UT.MAX_TEMPLATES}}
 
 
