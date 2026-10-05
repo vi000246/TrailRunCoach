@@ -207,9 +207,9 @@
     "draft": true,
     "src": "backend/engine/technical.py:67"
   },
-  "C 賽當訓練，不判定": {
+  "C 賽當練習，不評估": {
     "draft": true,
-    "src": "backend/engine/race_feasibility.py:206"
+    "src": "backend/engine/race_feasibility.py:220"
   },
   "COROS 乳酸閾": {
     "draft": true,
@@ -298,14 +298,6 @@
   "ITRA km-effort（健行筆記也用）": {
     "draft": true,
     "src": "backend/engine/terrain_calib.py:76"
-  },
-  "Koop 最低量：賽前 {w} 週起每週 {h:g} 小時、連續 {n} 週；預估最多連續 {b} 週達到（高峰約 {p:.1f} 小時）": {
-    "draft": true,
-    "src": "backend/engine/race_feasibility.py:260"
-  },
-  "Koop〈How Much Do You Need To Train〉：50 km 賽前 6 週起每週 6 小時、連續 3 週；100 km 賽前 9 週起每週 9 小時、連續 6 週": {
-    "draft": true,
-    "src": "backend/engine/race_feasibility.py:55"
   },
   "LTHR {lthr:.0f} ＝ 最大心率 {mhr:.0f} 的 {r:.0%}（一般 85–95%，個人範圍 80–98%）": {
     "draft": false,
@@ -406,10 +398,6 @@
   "TrainingPeaks 閾值通知：60 分鐘峰值心率，或 20 分鐘峰值 × 95%，高於現值就建議調高": {
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:133"
-  },
-  "Uphill Athlete〈Big Vert Ultra Marathon〉：每週距離和爬升從賽事最大單日的 50 % 開始，長的賽事練到 90–100 %": {
-    "draft": true,
-    "src": "backend/engine/race_feasibility.py:54"
   },
   "V1–V4": {
     "draft": true,
@@ -975,9 +963,9 @@
     "draft": true,
     "src": "backend/engine/racepower/calc.py:384"
   },
-  "來不及": {
+  "來得及": {
     "draft": true,
-    "src": "backend/engine/race_feasibility.py:37"
+    "src": "backend/engine/race_feasibility.py:50"
   },
   "來源只有 RPE：心率推估": {
     "draft": true,
@@ -1187,10 +1175,6 @@
     "draft": true,
     "src": "backend/engine/aet_test.py:107"
   },
-  "剩 {n} 天：賽前 3 週內練不出體能，只剩減量（Koop）": {
-    "draft": true,
-    "src": "backend/engine/race_feasibility.py:218"
-  },
   "剩下的每一天都排了東西；覺得累就把一次輕鬆跑換成休息": {
     "draft": true,
     "src": "backend/engine/overview.py:1452"
@@ -1230,6 +1214,10 @@
   "原研究是自行車功率：跑步的 % CP 推估": {
     "draft": true,
     "src": "backend/engine/workout_templates.py:318"
+  },
+  "只剩 {n} 天：最後 3 週練不出新的體能了，只能減量休息": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:232"
   },
   "只在基礎期、專項期（恢復週、停訓後恢復期不排）": {
     "draft": true,
@@ -1275,17 +1263,9 @@
     "draft": true,
     "src": "backend/engine/workout_review.py:2954"
   },
-  "可行": {
-    "draft": true,
-    "src": "backend/engine/race_feasibility.py:36"
-  },
   "吃": {
     "draft": true,
     "src": "backend/engine/racepower/seg_targets.py:87"
-  },
-  "吃力": {
-    "draft": true,
-    "src": "backend/engine/race_feasibility.py:36"
   },
   "同步": {
     "draft": true,
@@ -1407,6 +1387,10 @@
     "draft": true,
     "src": "backend/engine/panels/drift_bars.py:54"
   },
+  "太難了": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:50"
+  },
   "安排課表：{test}": {
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:625"
@@ -1503,6 +1487,10 @@
     "draft": true,
     "src": "backend/engine/interval_library.py:381"
   },
+  "差一點": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:321"
+  },
   "差距 {gap}% → 繼續打底，之後重測 AeT": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:1869"
@@ -1543,9 +1531,13 @@
     "draft": true,
     "src": "backend/engine/quality_gate.py:1993"
   },
-  "建議改成 B 或 C 賽，照現有體能跑；不要為它硬加量": {
+  "建議報短一點的組別：照推算，你大約應付得了一天 {km} km、爬升 {cl} m 的比賽": {
     "draft": true,
-    "src": "backend/engine/race_feasibility.py:219"
+    "src": "backend/engine/race_feasibility.py:267"
+  },
+  "建議改成 B 或 C 賽，用現在的體能去跑就好，不要臨時猛加量": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:233"
   },
   "建議：做{tests}": {
     "draft": false,
@@ -1731,9 +1723,9 @@
     "draft": false,
     "src": "backend/engine/user_templates.py:57"
   },
-  "或換一場更晚的比賽，或放棄這場": {
+  "或換一場晚一點的比賽，或這場先不跑": {
     "draft": true,
-    "src": "backend/engine/race_feasibility.py:252"
+    "src": "backend/engine/race_feasibility.py:269"
   },
   "所有輕鬆跑壓在 AeT 以下": {
     "draft": true,
@@ -1891,6 +1883,10 @@
     "draft": true,
     "src": "backend/engine/workout_steps.py:675"
   },
+  "時間不夠": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:51"
+  },
   "時間：{t} ／ 計畫 {m} 分（{pct}%）": {
     "draft": true,
     "src": "backend/engine/workout_review.py:2723"
@@ -1991,6 +1987,26 @@
     "draft": true,
     "src": "backend/engine/panels/drift_bars.py:82"
   },
+  "最近 6 週最硬的一次（{d}，{h:.1f} 小時）難度是比賽最難那天的 {p:.0f} %": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:396"
+  },
+  "最近 6 週最長跑了 {b:.1f} km，是長跑目標 {w:.0f} km 的 {p:.0f} %": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:387"
+  },
+  "最近 6 週沒有跑步或健行紀錄": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:381"
+  },
+  "最近 6 週練最多的一週：{km:.0f} km、爬升 {cl:.0f} m，是比賽最難那天的 {p:.0f} %（最好到 {a:.0f} %）": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:410"
+  },
+  "最近 6 週跑最多的一週：{km:.0f} km，是比賽距離的 {p:.0f} %（最好到 {a:.0f} %）": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:413"
+  },
   "最近 {days} 天有溫度的穩定路跑只有 {n} 次（要 {need} 次）": {
     "draft": true,
     "src": "backend/engine/zone_events.py:473"
@@ -2014,6 +2030,14 @@
   "最近 {n} 次輕鬆路跑（{chip}）的平均；一次跑步會有誤差，所以看平均": {
     "draft": true,
     "src": "backend/engine/status.py:586"
+  },
+  "最近 {n} 週沒有跑步或健行紀錄，沒辦法推算": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:247"
+  },
+  "最近 {w} 週做過 {n} 次連續兩天的長距離（B2B）": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:432"
   },
   "最近一次 {date} 飄移 {d:.0f}%": {
     "draft": true,
@@ -2047,9 +2071,9 @@
     "draft": true,
     "src": "backend/engine/quality_gate.py:1943"
   },
-  "有撤退時間，但不知道山頂在哪：上傳 GPX，或填「山頂在第幾公里」": {
+  "有填撤退時間，但不知道山頂在哪：上傳 GPX，或填「山頂在第幾 km」": {
     "draft": true,
-    "src": "backend/engine/race_feasibility.py:268"
+    "src": "backend/engine/race_feasibility.py:284"
   },
   "有氧 TIS {a}、無氧 TIS {an}（WKO5 的 Training Impact Score，1–10）。": {
     "draft": false,
@@ -2074,6 +2098,10 @@
   "有氧／閾值：主課 ≤ 101% CP（心率 ≤ 102% LTHR、配速不快於閾值配速）。長 tempo 每趟 15–30 分或連續一段，巡航間歇每趟 6–15 分（更短的也算巡航）": {
     "draft": true,
     "src": "backend/engine/workout_templates.py:432"
+  },
+  "有點趕": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:50"
   },
   "有點飄": {
     "draft": true,
@@ -2379,6 +2407,10 @@
     "draft": true,
     "src": "backend/engine/zones.py:225"
   },
+  "準備好了": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:321"
+  },
   "溫度不明": {
     "draft": true,
     "src": "backend/engine/panels/drift_bars.py:38"
@@ -2395,13 +2427,21 @@
     "draft": true,
     "src": "backend/engine/hr_profile.py:65"
   },
-  "照現有體能設定目標、保守配速": {
+  "照現在每週慢慢加量，賽前你一週最多大約練到 {km:.0f} km、爬升 {cl:.0f} m，是比賽最難那天的 {p:.0f} %": {
     "draft": true,
-    "src": "backend/engine/race_feasibility.py:254"
+    "src": "backend/engine/race_feasibility.py:256"
   },
-  "照現有體能跑，不要為它硬加量": {
+  "照現在每週慢慢加量，賽前你一週最多大約跑到 {km:.0f} km，是比賽距離的 {p:.0f} %": {
     "draft": true,
-    "src": "backend/engine/race_feasibility.py:220"
+    "src": "backend/engine/race_feasibility.py:258"
+  },
+  "照現在的體能，預估 {f:.1f} 小時完賽；關門是 {c:g} 小時": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:299"
+  },
+  "照現在的體能，預估第 {d} 天出發後 {eta:.1f} 小時到山頂；撤退時間是 {c:g} 小時": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:289"
   },
   "熟悉比賽配速與補給，代謝效益接近輕鬆跑，量以週量 15–20% 為限（Daniels）": {
     "draft": true,
@@ -2451,6 +2491,10 @@
     "draft": true,
     "src": "backend/engine/workout_templates.py:134"
   },
+  "用現在的體能去跑就好，不要臨時猛加量": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:234"
+  },
   "用短休息讓乳酸維持穩定，在閾值強度累積比連續跑更多的時間（Daniels）": {
     "draft": true,
     "src": "backend/engine/workout_templates.py:131"
@@ -2494,6 +2538,10 @@
   "目標用要是 自動／心率／功率：{v!r}": {
     "draft": true,
     "src": "backend/engine/plan_store.py:310"
+  },
+  "目標設保守一點，前半段放慢": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:271"
   },
   "目標類型不對：{x}": {
     "draft": true,
@@ -2831,10 +2879,6 @@
     "draft": true,
     "src": "backend/engine/race_calc_store.py:53"
   },
-  "賽事沒有距離或預估時間，算不出比賽的需求": {
-    "draft": true,
-    "src": "backend/engine/race_feasibility.py:223"
-  },
   "賽事計算器預測的完賽時間": {
     "draft": true,
     "src": "backend/engine/race_feasibility.py:344"
@@ -2859,10 +2903,6 @@
     "draft": true,
     "src": "backend/engine/status.py:319"
   },
-  "超出": {
-    "draft": true,
-    "src": "backend/engine/race_feasibility.py:36"
-  },
   "超出建議的 {n} 天內": {
     "draft": true,
     "src": "backend/api/plan_sessions.py:517"
@@ -2870,6 +2910,18 @@
   "超過今天上限 {cap:.0f} 分（最短也要 {need:.0f} 分）": {
     "draft": true,
     "src": "backend/engine/interval_library.py:774"
+  },
+  "超馬建議賽前 {w} 週開始，每週練 {h:g} 小時、連續 {n} 週；照推算最多能連續做到 {b} 週（一週最多約 {p:.1f} 小時）": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:277"
+  },
+  "超馬建議連續 {k} 週、每週練 {h:g} 小時；最近 {n} 週你連續做到 {b} 週": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:424"
+  },
+  "超馬週時數：Jason Koop——50 km 賽前 6 週起每週 6 小時、連續 3 週；100 km 賽前 9 週起每週 9 小時、連續 6 週": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:69"
   },
   "越野全力的最短時間": {
     "draft": true,
@@ -3027,10 +3079,6 @@
     "draft": true,
     "src": "backend/engine/thresholds.py:264"
   },
-  "近 {n} 週沒有跑步或健行紀錄，算不出週量": {
-    "draft": true,
-    "src": "backend/engine/race_feasibility.py:233"
-  },
   "近 {weeks} 週 {n} 次輕鬆路跑的中位數": {
     "draft": true,
     "src": "backend/engine/equivalence.py:192"
@@ -3074,6 +3122,10 @@
   "這堂課看不出結構，沒辦法存成範本": {
     "draft": false,
     "src": "backend/api/plan_sessions.py:1385"
+  },
+  "這場比賽沒填距離或預估時間，沒辦法估": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:372"
   },
   "這場賽事沒有 GPX": {
     "draft": true,
@@ -3167,6 +3219,10 @@
     "draft": true,
     "src": "backend/engine/plan_prefs.py:309"
   },
+  "週量：Uphill Athlete〈Big Vert Ultra Marathon〉——每週的距離和爬升，從比賽最難那天的一半開始，長的比賽練到 90–100 %": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:68"
+  },
   "過去的日子": {
     "draft": true,
     "src": "backend/api/plan_sessions.py:515"
@@ -3179,9 +3235,17 @@
     "draft": true,
     "src": "backend/engine/workout_review.py:2683"
   },
+  "還不夠": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:321"
+  },
   "還剩 {n} 天：{date} 前只排輕鬆跑": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:1920"
+  },
+  "還沒到賽前 10 週的專項期：下面的數字會隨著長天和週量慢慢長上來": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:370"
   },
   "還沒有 CP：不判讀間歇、不算 W′（先做一次 CP 測試）": {
     "draft": true,
@@ -3291,9 +3355,9 @@
     "draft": true,
     "src": "backend/engine/workout_templates.py:441"
   },
-  "長天只當參考：Koop 帶過的完賽者最長長跑佔比賽 20–80 %；比賽超過約 6 小時，長天停在 4–6 小時": {
+  "長天：練到比賽最難那天的 80 % 以上算夠（圖表「每次路線難度」的目標帶）；江晏慶「抓比賽距離和爬升的七成」；比賽超過 6 小時，長天練到 6 小時的量就夠": {
     "draft": true,
-    "src": "backend/engine/race_feasibility.py:264"
+    "src": "backend/engine/race_feasibility.py:332"
   },
   "長跑日上限不能比平日上限短": {
     "draft": true,
@@ -3322,10 +3386,6 @@
   "關門／撤退時間要在 0–{max:g} 小時": {
     "draft": true,
     "src": "backend/engine/planning.py:303"
-  },
-  "降組別：以預估的高峰週，大約撐得起單日 {km} km、爬升 {cl} m 的賽事（同樣的爬升密度，推估）": {
-    "draft": true,
-    "src": "backend/engine/race_feasibility.py:250"
   },
   "階梯步道、坡度穩定的路線（登山王、Koop 上坡 tempo、陡坡健走）：每組時間＋強度，心率／功率上下限照設": {
     "draft": true,
@@ -3363,21 +3423,13 @@
     "draft": true,
     "src": "backend/engine/interval_library.py:822"
   },
-  "預估到不了山頂就得撤退：不適合這座百岳。換短一點的路線、多排一天，或放棄": {
+  "預估會超過關門時間：建議報短一點的組別，或這場先不跑": {
     "draft": true,
-    "src": "backend/engine/race_feasibility.py:278"
+    "src": "backend/engine/race_feasibility.py:303"
   },
-  "預估第 {d} 天出發後 {eta:.1f} 小時到山頂，撤退時間是出發後 {c:g} 小時": {
+  "預估還沒到山頂就得撤退：這座百岳可能還不適合現在的你。可以換短一點的路線、多排一天，或先不去": {
     "draft": true,
-    "src": "backend/engine/race_feasibility.py:273"
-  },
-  "預測完賽 {f:.1f} 小時（{src}），關門 {c:g} 小時＝{p:.0f} %": {
-    "draft": true,
-    "src": "backend/engine/race_feasibility.py:283"
-  },
-  "預測完賽超過關門時間：建議降組別或放棄": {
-    "draft": true,
-    "src": "backend/engine/race_feasibility.py:287"
+    "src": "backend/engine/race_feasibility.py:294"
   },
   "預設 −0.07": {
     "draft": true,
@@ -3455,10 +3507,6 @@
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:124"
   },
-  "高峰週預估 {km:.0f} km、爬升 {cl:.0f} m（+10 %／週推到賽前第 3 週）＝比賽最難那天的 {p:.0f} %": {
-    "draft": true,
-    "src": "backend/engine/race_feasibility.py:241"
-  },
   "（LTHR 有獨立證據：{s}）": {
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:518"
@@ -3475,13 +3523,17 @@
     "draft": true,
     "src": "backend/engine/technical.py:173"
   },
+  "（最好到 {a:.0f} %，不到 {b:.0f} % 就太少）": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:260"
+  },
   "（每次約 {g:.0f} g 碳水）": {
     "draft": true,
     "src": "backend/engine/racepower/seg_targets.py:88"
   },
-  "（沒有 GPX：假設當天的爬升都在山頂之前，推估）": {
+  "（沒有 GPX，所以假設當天的爬升都在登頂前）": {
     "draft": true,
-    "src": "backend/engine/race_feasibility.py:275"
+    "src": "backend/engine/race_feasibility.py:291"
   },
   "（熱天或不知道氣溫：只當提示）": {
     "draft": false,
@@ -3527,10 +3579,6 @@
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:592"
   },
-  "；UA：這個長度要練到 {a:.0f} %，起點 {b:.0f} %": {
-    "draft": false,
-    "src": "backend/engine/race_feasibility.py:243"
-  },
   "；{c}": {
     "draft": true,
     "src": "backend/engine/status.py:587"
@@ -3570,6 +3618,10 @@
   "；本週不另外排技術地形課": {
     "draft": true,
     "src": "backend/engine/technical.py:173"
+  },
+  "；比賽超過 6 小時，長天練到 6 小時的量就夠，等於 {p:.0f} %": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:399"
   },
   "；注意線 +{watch:.1f}、擋線 +{block:.1f}（7 天前 CTL {base:.0f}）": {
     "draft": true,

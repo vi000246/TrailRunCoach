@@ -107,9 +107,17 @@
   "workout.load_rpe_default": "default factor, no activity with a watch-recorded RPE yet",
   "feas.grade": "{g} race",
   "feas.days_to": "{n} days to go",
-  "feas.suggest": "Suggestions",
-  "feas.how": "How it's judged",
-  "feas.how_text": "The peak week (+10 % a week, a recovery week every 4th, up to 3 weeks before the race): its distance and climb against the race's hardest day; for ultras also Koop's minimum weekly hours; with a cutoff / turnaround time, the predicted time against it; under 3 weeks to go is too late. Advice only, your event is never changed. The thresholds are estimates.",
-  "feas.loading": "Assessing feasibility… (the first read of your activities takes about a minute)",
-  "feas.failed": "Feasibility assessment failed"
+  "feas.how_text": "\"Time to get ready?\": your last 4 weeks, a little more each week with an easy week every 4th, up to 3 weeks before the race. \"Ready now?\": the longest outing and the biggest week you actually did in the last 6 weeks. Both are compared with the race's hardest day. Advice only, your event is never changed; the thresholds are estimates.",
+  "feas.loading": "Assessing… (about a minute the first time)",
+  "feas.failed": "Assessment failed",
+  "feas.feas": "Time to get ready?",
+  "feas.ready": "Ready now?",
+  "feas.detail": "Details",
+  "feas.src": "Based on",
+  "feas.k_week": "Weekly training: {p}% of the race",
+  "feas.k_long": "Longest outing: {p}% of the race",
+  "feas.k_summit": "Summit at {eta} h (turn back {c})",
+  "feas.k_finish": "Finish {f} h (cutoff {c})",
+  "feas.k_b2b": "Back-to-back long days: {n}",
+  "feas.chart": "Build-phase charts →"
 }

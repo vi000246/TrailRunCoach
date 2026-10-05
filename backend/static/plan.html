@@ -146,10 +146,11 @@ button.link { border: 0; background: none; color: var(--accent); padding: 0 4px;
     </form>
   </section>
 
-  <!-- 賽事可行性 (engine/race_feasibility.py, SP-105): the upcoming A / B races — how the training
-       stands against each race (owner 2026-10-05: here, not on the overview) -->
-  <section id="feassec" aria-labelledby="feas-h" hidden>
-    <h2 id="feas-h"><span data-i18n="plan.feas.title">賽事可行性</span> <span class="meta" data-i18n="plan.feas.sub">照現在的訓練推到賽前，評估跑這場會有多吃力；難度過高或來不及時建議降組別、改 B／C 賽或放棄</span></h2>
+  <!-- 賽事評估 (engine/race_feasibility.py, SP-105): one card per upcoming A / B race — 可行性 (來不來得及練)
+       then 完備程度 (現在練得夠不夠); here, not on the overview (owner 2026-10-05); the charts are 圖表分析 → 專項期 -->
+  <section id="feassec" aria-labelledby="feas-h">
+    <h2 id="feas-h"><span data-i18n="plan.feas.title">賽事評估</span> <span class="meta" data-i18n="plan.feas.sub">每場比賽：來不來得及練、現在練得夠不夠</span>
+      <a id="feaschart" href="/api/v1/wko5/viewer" style="float:right" data-i18n="common.feas.chart">看專項期圖表 →</a></h2>
     <div id="feas" aria-live="polite"></div>
   </section>
 
@@ -382,15 +383,16 @@ $("#evform").addEventListener("submit", async (ev) => {
   ev.target.reset(); ev.target.id.value = ""; $("#evsubmit").textContent = "新增"; $("#evcancel").hidden = true; cutoffLabels();
   toast("已儲存"); load(); loadFeas();
 });
-// 賽事可行性 of the upcoming A / B races (static/feasibility.js; GET /api/v1/overview/feasibility):
-// fetched apart from the plan — the first race-calculator read of the activities takes ~1 min
+// 賽事評估 of the upcoming A / B races (static/feasibility.js; GET /api/v1/overview/feasibility):
+// fetched apart from the plan — the first race-calculator read of the activities takes ~1 min, so the
+// section shows 「評估中」 from the start and only hides once it knows there is no A / B race
 async function loadFeas() {
   const sec = $("#feassec"), box = $("#feas"), tC = (k) => (window.I18N ? I18N.t("common.feas." + k) : k);
-  if (!window.Feas) return;
-  if (sec.hidden) box.innerHTML = "";
-  else box.innerHTML = `<p class="meta">${esc(tC("loading"))}</p>`;
+  if (!window.Feas) { sec.hidden = true; return; }
+  box.innerHTML = `<p class="meta">${esc(tC("loading"))}</p>`;
   try {
     const r = await Feas.load();
+    if (r.chart_href) $("#feaschart").href = r.chart_href;
     sec.hidden = !(r.races || []).length;
     box.innerHTML = (r.races || []).map(Feas.html).join("");
   } catch (x) { sec.hidden = false; box.innerHTML = `<p class="meta warn">${esc(tC("failed"))}</p>`; }

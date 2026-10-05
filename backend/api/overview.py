@@ -163,8 +163,8 @@ def b2b_card():
 
 @router.get("/feasibility")
 def feasibility(event_id: Optional[str] = None):
-    """The 「賽事可行性」 card (engine/race_feasibility.py, SP-105): the upcoming A / B races, or the
-    one `event_id` (the season-plan page asks after saving an event). Only advice."""
+    """「賽事完備程度」 on the season-plan page (engine/race_feasibility.py, SP-105): the upcoming A / B
+    races, or the one `event_id`. Only advice; the detail charts are the 專項期 dashboard (chart_href)."""
     from backend.engine import race_feasibility as RF
     from backend.engine.planning import Plan
     from backend.i18n import _
@@ -174,7 +174,22 @@ def feasibility(event_id: Optional[str] = None):
     if event_id and not any(e.id == event_id for e in plan.events):
         raise HTTPException(404, "no such event")
     return {"today": today.isoformat(), "races": RF.races(plan, ds, today, event_id=event_id),
-            "levels": {k: _(v) for k, v in RF.LEVEL_LABEL.items()}}
+            "levels": {k: _(v) for k, v in RF.LEVEL_LABEL.items()}, "chart_href": _specific_chart_href()}
+
+
+def _specific_chart_href() -> str:
+    """The viewer deep link of the 專項期 dashboard (custom views: a dashboard with id "build"),
+    where the long days are charted against the race; the plain viewer when there is none."""
+    from urllib.parse import urlencode
+    from backend.engine.wko5expr.customviews import load_custom_views
+    try:
+        for name, v in load_custom_views().items():
+            for di, d in enumerate(v.get("dashboards") or []):
+                if d.get("id") == "build":
+                    return "/api/v1/wko5/viewer?" + urlencode({"view": name, "dash": di})
+    except Exception:                          # noqa: BLE001 — a broken view file: plain viewer link
+        pass
+    return "/api/v1/wko5/viewer"
 
 
 def _z5_chart_href() -> str:

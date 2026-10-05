@@ -1,5 +1,5 @@
 """
-賽事可行性 (SP-105): is the race too hard for the time left? docs/research/race-feasibility.md §3.
+賽事可行性 (SP-105): is the race too hard for the time left? With 賽事完備程度 (readiness(), below) in one card per race. docs/research/race-feasibility.md §3.
 
 Only advice — nothing here changes the plan or the event. Each check gives a level
 (ok < tight < over < late); the race's level is the worst one.
@@ -23,6 +23,20 @@ Only advice — nothing here changes the plan or the event. Each check gives a l
 
 The long day is shown, not graded (Koop: 20–80 % of the race; past ~6 h coaches stop the
 long run — §1). C races are training days: not assessed.
+
+賽事完備程度 — readiness(): what the training has ACTUALLY reached against the race (owner
+2026-10-05: feasibility = will the training get there in time; readiness = is what was done
+enough, how hard will the race feel). Shown after the feasibility in the same card per race;
+the trends are charted in 圖表分析 → 專項期. Levels ok (準備好了) < tight (接近) < short (還差):
+
+  long     the best single foot session of the last 6 weeks against the race's hardest day:
+           trail / 百岳 by コース定数 (the target capped at 6 h of the race day — SP-106),
+           road by km (the target ≤ 35 km — Pfitzinger's longest). ok ≥ 80 % (race_refs'
+           band), tight ≥ 70 % (江晏慶「抓比賽距離爬升的七成」), short below (推估 as lines).
+  weekly   the biggest actual week of the last 6 against the hardest day (UA, as above).
+  hours    ultras: the longest run of weeks at Koop's hours in the last 9; never worse than tight.
+  b2b      multi-day / ≥ 6 h events (b2b.qualifies): B2B weekends done in the last 10 weeks;
+           ≥ 2 ok, else tight (推估).
 """
 from __future__ import annotations
 
@@ -33,8 +47,8 @@ from typing import Callable, Optional
 from backend.i18n import N_, _
 
 LEVELS = ("unknown", "ok", "tight", "over", "late")       # worst last
-LEVEL_LABEL = {"unknown": N_("資料不足"), "ok": N_("可行"), "tight": N_("吃力"), "over": N_("超出"),
-               "late": N_("來不及")}
+LEVEL_LABEL = {"unknown": N_("資料不足"), "ok": N_("來得及"), "tight": N_("有點趕"), "over": N_("太難了"),
+               "late": N_("時間不夠")}   # plain words (owner 2026-10-05)
 
 STEP = 1.10                  # SP-89 decision 1: ≤ +10 % a week
 RECOVERY_EVERY = 4           # 3:1 — every 4th week a recovery week (no growth)
@@ -51,8 +65,8 @@ CUTOFF_TIGHT = 0.90          # 推估: a finish within 10 % of the cutoff
 SUMMIT_SPARE_H = 0.5         # 推估: < 30 min to spare at the summit
 # Koop〈How Much Do You Need To Train〉: (race km ≥, hours a week, weeks in a row, from weeks out)
 KOOP = ((100.0, 9.0, 6, 9), (50.0, 6.0, 3, 6))
-SRC_UA = N_("Uphill Athlete〈Big Vert Ultra Marathon〉：每週距離和爬升從賽事最大單日的 50 % 開始，長的賽事練到 90–100 %")
-SRC_KOOP = N_("Koop〈How Much Do You Need To Train〉：50 km 賽前 6 週起每週 6 小時、連續 3 週；100 km 賽前 9 週起每週 9 小時、連續 6 週")
+SRC_UA = N_("週量：Uphill Athlete〈Big Vert Ultra Marathon〉——每週的距離和爬升，從比賽最難那天的一半開始，長的比賽練到 90–100 %")
+SRC_KOOP = N_("超馬週時數：Jason Koop——50 km 賽前 6 週起每週 6 小時、連續 3 週；100 km 賽前 9 週起每週 9 小時、連續 6 週")
 
 
 def _worse(a: str, b: str) -> str:
@@ -203,7 +217,7 @@ def assess(e, line: Optional[dict], today: dt.date, hist: list[dict], summit: Op
     out = {"event_id": e.id, "name": e.name, "date": e.date, "priority": e.priority, "kind": e.kind,
            "days_to": (e.start - today).days, "checks": [], "suggestions": [], "src": [_(SRC_UA)]}
     if e.priority == "C":
-        out.update(level="ok", label=_(LEVEL_LABEL["ok"]), skipped=_("C 賽當訓練，不判定"))
+        out.update(level="ok", label=_(LEVEL_LABEL["ok"]), skipped=_("C 賽當練習，不評估"))
         return out
     level = "unknown"
     days_to = out["days_to"]
@@ -215,12 +229,12 @@ def assess(e, line: Optional[dict], today: dt.date, hist: list[dict], summit: Op
             level = lv if level == "unknown" else _worse(level, lv)
 
     if days_to < WINDOW_DAYS:
-        check("late", "late", _("剩 {n} 天：賽前 3 週內練不出體能，只剩減量（Koop）", n=days_to))
-        out["suggestions"].append(_("建議改成 B 或 C 賽，照現有體能跑；不要為它硬加量") if e.priority == "A"
-                                  else _("照現有體能跑，不要為它硬加量"))
+        check("late", "late", _("只剩 {n} 天：最後 3 週練不出新的體能了，只能減量休息", n=days_to))
+        out["suggestions"].append(_("建議改成 B 或 C 賽，用現在的體能去跑就好，不要臨時猛加量") if e.priority == "A"
+                                  else _("用現在的體能去跑就好，不要臨時猛加量"))
     if line is None:
         out["checks"].append({"id": "weekly", "level": "unknown", "label": _(LEVEL_LABEL["unknown"]),
-                              "text": _("賽事沒有距離或預估時間，算不出比賽的需求")})
+                              "text": _("這場比賽沒填距離或預估時間，沒辦法估")})
     else:
         hd = hardest_day(line)
         base = base_week(hist)
@@ -230,7 +244,7 @@ def assess(e, line: Optional[dict], today: dt.date, hist: list[dict], summit: Op
         out["base_week"] = {k: round(v, 1) for k, v in base.items()}
         out["peak_week"] = {k: round(v, 1) for k, v in pk.items()}
         if base["km"] <= 0:
-            check("weekly", "unknown", _("近 {n} 週沒有跑步或健行紀錄，算不出週量", n=BASE_WEEKS))
+            check("weekly", "unknown", _("最近 {n} 週沒有跑步或健行紀錄，沒辦法推算", n=BASE_WEEKS))
         else:
             r_km = pk["km"] / hd["km"] if hd["km"] else None
             r_cl = pk["climb_m"] / hd["climb_m"] if hd["climb_m"] >= CLIMB_MIN_M else None
@@ -238,53 +252,55 @@ def assess(e, line: Optional[dict], today: dt.date, hist: list[dict], summit: Op
             ok_at = WEEK_OK_LONG if hd["hours"] >= LONG_DAY_H else WEEK_OK_SHORT
             if ratio is not None:
                 lv = "ok" if ratio >= ok_at else "over" if ratio < WEEK_OVER else "tight"
-                txt = _("高峰週預估 {km:.0f} km、爬升 {cl:.0f} m（+10 %／週推到賽前第 3 週）＝比賽最難那天的 {p:.0f} %",
-                        km=pk["km"], cl=pk["climb_m"], p=ratio * 100)
-                txt += _("；UA：這個長度要練到 {a:.0f} %，起點 {b:.0f} %", a=ok_at * 100, b=WEEK_OVER * 100)
+                # a race day under CLIMB_MIN_M (路跑) is judged on km only: no climb in the text either
+                txt = (_("照現在每週慢慢加量，賽前你一週最多大約練到 {km:.0f} km、爬升 {cl:.0f} m，是比賽最難那天的 {p:.0f} %",
+                         km=pk["km"], cl=pk["climb_m"], p=ratio * 100) if r_cl is not None else
+                       _("照現在每週慢慢加量，賽前你一週最多大約跑到 {km:.0f} km，是比賽距離的 {p:.0f} %",
+                         km=pk["km"], p=ratio * 100))
+                txt += _("（最好到 {a:.0f} %，不到 {b:.0f} % 就太少）", a=ok_at * 100, b=WEEK_OVER * 100)
                 check("weekly", lv, txt, ratio=round(ratio, 3), ok_at=ok_at, over_below=WEEK_OVER,
                       ratio_km=None if r_km is None else round(r_km, 3),
                       ratio_climb=None if r_cl is None else round(r_cl, 3))
                 if lv == "over":
                     s = ratio / ok_at
                     out["downgrade"] = {"km": round(hd["km"] * s), "climb_m": round(hd["climb_m"] * s / 10) * 10}
-                    out["suggestions"].append(_("降組別：以預估的高峰週，大約撐得起單日 {km} km、爬升 {cl} m 的賽事（同樣的爬升密度，推估）",
+                    out["suggestions"].append(_("建議報短一點的組別：照推算，你大約應付得了一天 {km} km、爬升 {cl} m 的比賽",
                                                 km=out["downgrade"]["km"], cl=out["downgrade"]["climb_m"]))
-                    out["suggestions"].append(_("或換一場更晚的比賽，或放棄這場"))
+                    out["suggestions"].append(_("或換一場晚一點的比賽，或這場先不跑"))
                 elif lv == "tight" and days_to >= WINDOW_DAYS:     # late already says 「照現有體能跑」
-                    out["suggestions"].append(_("照現有體能設定目標、保守配速"))
+                    out["suggestions"].append(_("目標設保守一點，前半段放慢"))
             need = koop_need(line, e.kind)
             if need:
                 kr = koop_run(base["hours"], weeks, e.start, need)
                 out["koop"] = {k: round(v, 1) if isinstance(v, float) else v for k, v in kr.items()}
                 out["src"].append(_(SRC_KOOP))
-                txt = _("Koop 最低量：賽前 {w} 週起每週 {h:g} 小時、連續 {n} 週；預估最多連續 {b} 週達到（高峰約 {p:.1f} 小時）",
+                txt = _("超馬建議賽前 {w} 週開始，每週練 {h:g} 小時、連續 {n} 週；照推算最多能連續做到 {b} 週（一週最多約 {p:.1f} 小時）",
                         w=need[3], h=need[1], n=need[2], b=kr["best_run"], p=kr["peak_h"])
                 check("hours", "ok" if kr["best_run"] >= need[2] else "tight", txt)
         # the long day: shown, not graded
-        out["long_day_note"] = _("長天只當參考：Koop 帶過的完賽者最長長跑佔比賽 20–80 %；比賽超過約 6 小時，長天停在 4–6 小時")
         cut = getattr(e, "cutoff_hours", None)
         if cut and e.kind == "baiyue":
             if summit is None:
-                check("cutoff", "unknown", _("有撤退時間，但不知道山頂在哪：上傳 GPX，或填「山頂在第幾公里」"))
+                check("cutoff", "unknown", _("有填撤退時間，但不知道山頂在哪：上傳 GPX，或填「山頂在第幾 km」"))
             else:
                 eta = summit["hours"]
                 spare = cut - eta
                 lv = "ok" if spare >= SUMMIT_SPARE_H else "tight" if spare >= 0 else "over"
-                txt = _("預估第 {d} 天出發後 {eta:.1f} 小時到山頂，撤退時間是出發後 {c:g} 小時", d=summit["day"], eta=eta, c=cut)
+                txt = _("照現在的體能，預估第 {d} 天出發後 {eta:.1f} 小時到山頂；撤退時間是 {c:g} 小時", d=summit["day"], eta=eta, c=cut)
                 if summit.get("assumed_climb"):
-                    txt += _("（沒有 GPX：假設當天的爬升都在山頂之前，推估）")
+                    txt += _("（沒有 GPX，所以假設當天的爬升都在登頂前）")
                 check("cutoff", lv, txt, eta_h=round(eta, 2), cutoff_h=cut)
                 if lv == "over":
-                    out["suggestions"].insert(0, _("預估到不了山頂就得撤退：不適合這座百岳。換短一點的路線、多排一天，或放棄"))
+                    out["suggestions"].insert(0, _("預估還沒到山頂就得撤退：這座百岳可能還不適合現在的你。可以換短一點的路線、多排一天，或先不去"))
         elif cut:
             fin = float(line["hours"])
             r = fin / cut
             lv = "ok" if r <= CUTOFF_TIGHT else "tight" if r <= 1.0 else "over"
-            check("cutoff", lv, _("預測完賽 {f:.1f} 小時（{src}），關門 {c:g} 小時＝{p:.0f} %",
-                                  f=fin, src=line.get("time_source") or "", c=cut, p=r * 100),
+            check("cutoff", lv, _("照現在的體能，預估 {f:.1f} 小時完賽；關門是 {c:g} 小時",
+                                  f=fin, c=cut),
                   finish_h=round(fin, 2), cutoff_h=cut)
             if lv == "over":
-                out["suggestions"].insert(0, _("預測完賽超過關門時間：建議降組別或放棄"))
+                out["suggestions"].insert(0, _("預估會超過關門時間：建議報短一點的組別，或這場先不跑"))
     out["level"] = level
     out["label"] = _(LEVEL_LABEL[level])
     # one suggestion per text, the hard ones first
@@ -294,6 +310,127 @@ def assess(e, line: Optional[dict], today: dt.date, hist: list[dict], summit: Op
             seen.add(s)
             sugg.append(s)
     out["suggestions"] = sugg
+    return out
+
+
+# ---------------------------------------------------------------------------
+# 賽事完備程度 (readiness): what was actually done
+# ---------------------------------------------------------------------------
+
+READY_LEVELS = ("unknown", "ok", "tight", "short")       # worst last
+READY_LABEL = {"unknown": N_("資料不足"), "ok": N_("準備好了"), "tight": N_("差一點"), "short": N_("還不夠")}
+READY_DAYS = 42              # the long day / the weeks looked at: the last 6 weeks
+READY_WEEKS = 6
+KOOP_WEEKS = 9               # Koop's longest window (100 km: from 9 weeks out)
+B2B_WEEKS = 10               # 推估: a 專項期's worth of B2B weekends
+B2B_OK = 2                   # 推估
+LONG_OK = 0.80               # race_refs.BAND_LO: the chart's 80–100 % band
+LONG_TIGHT = 0.70            # 江晏慶「抓比賽距離爬升的七成」
+LONG_CAP_H = 6.0             # specific_phase.TRAIL_LONG_MAX_MIN (SP-106)
+ROAD_LONG_KM = 35.0          # specific_phase.ROAD_LONG_MAX_KM (Pfitzinger)
+SPECIFIC_DAYS = 70           # 專項期 = 賽前 10–3 週: before it readiness is still growing
+SRC_LONG = N_("長天：練到比賽最難那天的 80 % 以上算夠（圖表「每次路線難度」的目標帶）；江晏慶「抓比賽距離和爬升的七成」；比賽超過 6 小時，長天練到 6 小時的量就夠")
+
+
+def activity_rows(ds, today: dt.date, days: int = READY_DAYS) -> list[dict]:
+    """The endurance activities of the last `days`: {date, km, climb_m, descent_m, hours, minutes, idx, foot}."""
+    from backend.engine import overview as O
+    out = []
+    for w in O.workouts_between(ds, today - dt.timedelta(days=days), today + dt.timedelta(days=1)):
+        c = O.category(w)
+        if c not in O.ENDURANCE:
+            continue
+        m = w.metrics
+        out.append({"date": O.wdate(w), "km": O._n(m.get("distance")) or 0.0, "climb_m": O._n(m.get("climbing")) or 0.0,
+                    "descent_m": O._n(m.get("descending")) or 0.0, "hours": O.moving_s(w) / 3600.0,
+                    "minutes": O.moving_s(w) / 60.0, "idx": w.idx, "foot": c in O.FOOT})
+    return out
+
+
+def _worse_r(a: str, b: str) -> str:
+    return a if READY_LEVELS.index(a) >= READY_LEVELS.index(b) else b
+
+
+def readiness(e, line: Optional[dict], today: dt.date, hist: list[dict], acts: list[dict]) -> dict:
+    """賽事完備程度 of event `e`: `hist` = weekly_history (≥ KOOP_WEEKS weeks, oldest first), `acts` =
+    activity_rows of the last READY_DAYS (B2B: the endurance ones of the last B2B_WEEKS)."""
+    from backend.engine import b2b as B2B
+    from backend.engine.algorithms.chart_metrics import course_constant
+    out = {"checks": [], "src": [_(SRC_LONG), _(SRC_UA)]}
+    level = "unknown"
+
+    def check(cid: str, lv: str, text: str, **kw) -> None:
+        nonlocal level
+        out["checks"].append({"id": cid, "level": lv, "label": _(READY_LABEL[lv]), "text": text, **kw})
+        if lv != "unknown":
+            level = lv if level == "unknown" else _worse_r(level, lv)
+
+    days_to = (e.start - today).days
+    if days_to > SPECIFIC_DAYS:
+        out["note"] = _("還沒到賽前 10 週的專項期：下面的數字會隨著長天和週量慢慢長上來")
+    if line is None:
+        check("long", "unknown", _("這場比賽沒填距離或預估時間，沒辦法估"))
+        out.update(level=level, label=_(READY_LABEL[level]))
+        return out
+    hd = hardest_day(line)
+    since = today - dt.timedelta(days=READY_DAYS)
+    foot = [a for a in acts if a["foot"] and a["date"] >= since]
+    road = e.kind == "road" or hd["climb_m"] < CLIMB_MIN_M
+    # 1. the long day
+    if not foot:
+        check("long", "unknown", _("最近 6 週沒有跑步或健行紀錄"))
+    elif road:
+        want = min(hd["km"], ROAD_LONG_KM)
+        best = max(a["km"] for a in foot)
+        r = best / want if want else 0.0
+        lv = "ok" if r >= LONG_OK else "tight" if r >= LONG_TIGHT else "short"
+        check("long", lv, _("最近 6 週最長跑了 {b:.1f} km，是長跑目標 {w:.0f} km 的 {p:.0f} %", b=best, w=want, p=r * 100),
+              ratio=round(r, 3))
+    else:
+        cap = min(1.0, LONG_CAP_H / hd["hours"]) if hd["hours"] else 1.0
+        want = hd["cc"] * cap
+        best_a = max(foot, key=lambda a: course_constant(a["hours"], a["km"], a["climb_m"], a["descent_m"]))
+        best = course_constant(best_a["hours"], best_a["km"], best_a["climb_m"], best_a["descent_m"])
+        r = best / want if want else 0.0
+        lv = "ok" if r >= LONG_OK else "tight" if r >= LONG_TIGHT else "short"
+        txt = _("最近 6 週最硬的一次（{d}，{h:.1f} 小時）難度是比賽最難那天的 {p:.0f} %",
+                d=best_a["date"].strftime("%m/%d"), h=best_a["hours"], p=best / hd["cc"] * 100 if hd["cc"] else 0)
+        if cap < 1:
+            txt += _("；比賽超過 6 小時，長天練到 6 小時的量就夠，等於 {p:.0f} %", p=r * 100)
+        check("long", lv, txt, ratio=round(r, 3))
+    # 2. the biggest week
+    weeks = hist[-READY_WEEKS:]
+    if weeks and any(w["km"] > 0 for w in weeks):
+        ok_at = WEEK_OK_LONG if hd["hours"] >= LONG_DAY_H else WEEK_OK_SHORT
+        rk = max(w["km"] for w in weeks) / hd["km"] if hd["km"] else None
+        rc = max(w["climb_m"] for w in weeks) / hd["climb_m"] if not road else None
+        r = min(x for x in (rk, rc) if x is not None) if (rk is not None or rc is not None) else None
+        if r is not None:
+            lv = "ok" if r >= ok_at else "tight" if r >= WEEK_OVER else "short"
+            txt = (_("最近 6 週練最多的一週：{km:.0f} km、爬升 {cl:.0f} m，是比賽最難那天的 {p:.0f} %（最好到 {a:.0f} %）",
+                     km=max(w["km"] for w in weeks), cl=max(w["climb_m"] for w in weeks), p=r * 100, a=ok_at * 100)
+                   if rc is not None else
+                   _("最近 6 週跑最多的一週：{km:.0f} km，是比賽距離的 {p:.0f} %（最好到 {a:.0f} %）",
+                     km=max(w["km"] for w in weeks), p=r * 100, a=ok_at * 100))
+            check("weekly", lv, txt, ratio=round(r, 3), ok_at=ok_at)
+    # 3. Koop's weekly hours (ultras)
+    need = koop_need(line, e.kind)
+    if need:
+        run = best = 0
+        for w in hist[-KOOP_WEEKS:]:
+            run = run + 1 if w["hours"] >= need[1] else 0
+            best = max(best, run)
+        check("hours", "ok" if best >= need[2] else "tight",
+              _("超馬建議連續 {k} 週、每週練 {h:g} 小時；最近 {n} 週你連續做到 {b} 週", n=KOOP_WEEKS, b=best, h=need[1], k=need[2]))
+        out["src"].append(_(SRC_KOOP))
+    # 4. B2B (multi-day / ≥ 6 h events)
+    if B2B.qualifies(e) and e.kind != "road":
+        lo = today - dt.timedelta(weeks=B2B_WEEKS)
+        rows = [(a["date"], a["minutes"], a["idx"]) for a in acts if a["date"] >= lo]
+        n = len(B2B.detect(rows))
+        check("b2b", "ok" if n >= B2B_OK else "tight",
+              _("最近 {w} 週做過 {n} 次連續兩天的長距離（B2B）", w=B2B_WEEKS, n=n), count=n)
+    out.update(level=level, label=_(READY_LABEL[level]))
     return out
 
 
@@ -334,7 +471,8 @@ def races(plan, ds, today: dt.date, event_id: Optional[str] = None,
     gpx = gpx or RR.stored_course
     evs = [e for e in plan.events if e.end >= today]
     evs = [e for e in evs if e.id == event_id] if event_id else [e for e in evs if e.priority in ("A", "B")]
-    hist = weekly_history(ds, today)
+    hist = weekly_history(ds, today, KOOP_WEEKS)
+    acts = activity_rows(ds, today, B2B_WEEKS * 7)
     out = []
     for e in sorted(evs, key=lambda x: x.start):
         line = summit = None
@@ -344,5 +482,8 @@ def races(plan, ds, today: dt.date, event_id: Optional[str] = None,
             line = RR.race_line(e, hs, _("賽事計算器預測的完賽時間"), course)
             if line is not None:
                 summit = event_summit(e, course, [d["hours"] for d in line["per_day"]])
-        out.append(assess(e, line, today, hist, summit))
+        r = assess(e, line, today, hist[-BASE_WEEKS:], summit)
+        if not r.get("skipped"):
+            r["readiness"] = readiness(e, line, today, hist, acts)
+        out.append(r)
     return out

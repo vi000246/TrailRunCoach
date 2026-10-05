@@ -74,7 +74,7 @@ def test_over_below_half_with_a_downgrade():
     assert lv(r, "weekly") == "over" and r["level"] == "over"
     d = r["downgrade"]
     assert 0 < d["km"] < 100 and 0 < d["climb_m"] < 6000
-    assert any("降組別" in s for s in r["suggestions"]) and any("放棄" in s for s in r["suggestions"])
+    assert any("短一點的組別" in s for s in r["suggestions"]) and any("先不跑" in s for s in r["suggestions"])
 
 
 def test_the_hardest_day_not_the_mean_for_a_multi_day_trip():
@@ -134,7 +134,7 @@ def test_summit_eta_and_the_turnaround():
     assert F.summit_eta(course, [8.0], 2.5, pieces)["hours"] == pytest.approx(8 * (2.5 + 5) / 20)
     e = ev(kind="baiyue", distance_km=10, climbing_m=1000, est_hours=8, cutoff_hours=5.5)
     r = F.assess(e, line(e), TODAY, hist(km=30.0, climb=2000.0), s)
-    assert lv(r, "cutoff") == "over" and "不適合這座百岳" in r["suggestions"][0]
+    assert lv(r, "cutoff") == "over" and "不適合現在的你" in r["suggestions"][0]
     e = ev(kind="baiyue", distance_km=10, climbing_m=1000, est_hours=8, cutoff_hours=6.2)
     assert lv(F.assess(e, line(e), TODAY, hist(km=30.0, climb=2000.0), s), "cutoff") == "tight"
     r = F.assess(e, line(e), TODAY, hist(km=30.0, climb=2000.0), None)
@@ -159,7 +159,8 @@ def test_event_fields_are_validated():
 
 
 def test_races_lists_a_and_b_only(monkeypatch):
-    monkeypatch.setattr(F, "weekly_history", lambda ds, today, weeks=4: hist(km=40.0, climb=2000.0))
+    monkeypatch.setattr(F, "weekly_history", lambda ds, today, weeks=4: hist(km=40.0, climb=2000.0, n=weeks))
+    monkeypatch.setattr(F, "activity_rows", lambda ds, today, days=42: [])
     plan = Plan(events=[ev(eid="a"), ev(eid="b", priority="B"), ev(eid="c", priority="C"),
                         ev(eid="old", start="2026-09-01")])
     no_gpx = lambda e: None
@@ -177,7 +178,8 @@ def test_api_lists_the_races_and_404s_an_unknown_event(tmp_path, monkeypatch):
     monkeypatch.setattr(P, "PLAN_PATH", tmp_path / "plan.json")
     Plan(events=[ev(eid="a"), ev(eid="c", priority="C")]).save()
     monkeypatch.setattr(OA, "_dataset", lambda: type("DS", (), {"today": date_to_day(TODAY)})())
-    monkeypatch.setattr(F, "weekly_history", lambda ds, today, weeks=4: hist(km=40.0, climb=2000.0))
+    monkeypatch.setattr(F, "weekly_history", lambda ds, today, weeks=4: hist(km=40.0, climb=2000.0, n=weeks))
+    monkeypatch.setattr(F, "activity_rows", lambda ds, today, days=42: [])
     monkeypatch.setattr(RR, "calculator_hours", lambda e, c=None: None)
     monkeypatch.setattr(RR, "stored_course", lambda e: None)
     r = OA.feasibility()
@@ -193,3 +195,80 @@ def test_late_does_not_repeat_the_tight_advice():
     r = F.assess(e, line(e), TODAY, hist(km=25.0, climb=1500.0))
     assert lv(r, "weekly") == "tight" and r["level"] == "late"
     assert len(r["suggestions"]) == 1 and "B 或 C" in r["suggestions"][0]
+
+
+def test_road_races_are_judged_and_described_on_km_only():
+    e = ev(kind="road", distance_km=21.1, climbing_m=0, est_hours=2.0)
+    r = F.assess(e, line(e), TODAY, hist(km=40.0, climb=700.0))
+    w = next(c for c in r["checks"] if c["id"] == "weekly")
+    assert w["ratio_climb"] is None and "爬升" not in w["text"] and "比賽距離的" in w["text"]
+    assert r["label"] == "來得及"
+
+
+def test_api_links_the_specific_phase_dashboard(monkeypatch):
+    from backend.api import overview as OA
+    monkeypatch.setattr("backend.engine.wko5expr.customviews.load_custom_views",
+                        lambda: {"周期化訓練": {"dashboards": [{"id": "base", "charts": []}, {"id": "build", "charts": []}]}})
+    assert OA._specific_chart_href() == "/api/v1/wko5/viewer?view=%E5%91%A8%E6%9C%9F%E5%8C%96%E8%A8%93%E7%B7%B4&dash=1"
+
+
+def acts(*rows):
+    """(date, km, climb, hours) foot activities."""
+    return [{"date": d, "km": km, "climb_m": cl, "descent_m": cl, "hours": h, "minutes": h * 60, "idx": i, "foot": True}
+            for i, (d, km, cl, h) in enumerate(rows)]
+
+
+def test_readiness_long_day_by_course_constant_against_the_hardest_day():
+    e = ev(est_hours=5.5)                                # < 6 h: no B2B check in the way
+    ln = line(e)
+    cc = ln["per_day"][0]["cc"]
+    r = F.readiness(e, ln, TODAY, hist(km=60.0, climb=3000.0, n=9), acts((TODAY - dt.timedelta(days=5), 25, 1700, 5.0)))
+    lg = next(c for c in r["checks"] if c["id"] == "long")
+    assert lg["ratio"] >= F.LONG_OK and lg["level"] == "ok" and r["label"] == "準備好了"
+    r = F.readiness(e, ln, TODAY, hist(km=60.0, climb=3000.0, n=9), acts((TODAY - dt.timedelta(days=5), 12, 600, 2.0)))
+    assert next(c for c in r["checks"] if c["id"] == "long")["level"] == "short" and r["label"] == "還不夠"
+    assert cc > 30
+
+
+def test_readiness_caps_the_long_day_target_at_6_hours():
+    e = ev(distance_km=80, climbing_m=5000, est_hours=16.0)
+    r = F.readiness(e, line(e), TODAY, hist(km=60.0, climb=3000.0, n=9), acts((TODAY - dt.timedelta(days=3), 32, 2200, 6.0)))
+    lg = next(c for c in r["checks"] if c["id"] == "long")
+    assert lg["level"] == "ok" and "6 小時" in lg["text"]
+
+
+def test_readiness_road_uses_km_and_old_sessions_do_not_count():
+    e = ev(kind="road", distance_km=42.2, climbing_m=0, est_hours=3.5)
+    old = TODAY - dt.timedelta(days=60)
+    r = F.readiness(e, line(e), TODAY, hist(km=50.0, climb=0.0, n=9),
+                    acts((old, 34, 0, 3.0), (TODAY - dt.timedelta(days=4), 25, 0, 2.2)))
+    lg = next(c for c in r["checks"] if c["id"] == "long")
+    assert "25.0 km" in lg["text"] and lg["level"] == "tight"          # 25 / 35 = 71 %: the 60-day 34 km is ignored
+    assert not any(c["id"] == "b2b" for c in r["checks"])
+
+
+def test_readiness_weekly_koop_and_b2b():
+    e = ev(distance_km=100, climbing_m=5000, est_hours=16.0)
+    h = hist(km=70.0, climb=4000.0, hours=10.0, n=9)
+    sat = TODAY - dt.timedelta(days=9)
+    r = F.readiness(e, line(e), TODAY, h, acts((sat, 30, 1500, 4.0), (sat + dt.timedelta(days=1), 25, 1200, 3.5)))
+    by = {c["id"]: c for c in r["checks"]}
+    assert by["hours"]["level"] == "ok"
+    assert by["b2b"]["count"] == 1 and by["b2b"]["level"] == "tight"
+    assert by["weekly"]["level"] in ("tight", "short")
+
+
+def test_readiness_before_the_specific_phase_says_so():
+    e = ev(start="2027-04-01")
+    r = F.readiness(e, line(e), TODAY, hist(n=9), acts((TODAY - dt.timedelta(days=2), 20, 1000, 3.0)))
+    assert r.get("note")
+
+
+def test_races_attach_readiness_but_not_to_c_races(monkeypatch):
+    monkeypatch.setattr(F, "weekly_history", lambda ds, today, weeks=4: hist(km=40.0, climb=2000.0, n=weeks))
+    monkeypatch.setattr(F, "activity_rows", lambda ds, today, days=42: acts((TODAY - dt.timedelta(days=3), 20, 1200, 4.0)))
+    plan = Plan(events=[ev(eid="a"), ev(eid="c", priority="C")])
+    out = F.races(plan, None, TODAY, predict=lambda e, c=None: None, gpx=lambda e: None)
+    assert [r["event_id"] for r in out] == ["a"] and out[0]["readiness"]["checks"]
+    c = F.races(plan, None, TODAY, event_id="c", predict=lambda e, c=None: None, gpx=lambda e: None)[0]
+    assert "readiness" not in c
