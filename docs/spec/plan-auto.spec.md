@@ -1,6 +1,6 @@
 # Module Spec: plan-auto (自動調整課表)
 
-> **Last Updated**: 2026-10-04
+> **Last Updated**: 2026-10-05
 > **Status**: Active
 > **Domain Layer**: Core Domain
 
@@ -421,7 +421,8 @@ the tissue has to re-adapt too); FVDOT stays the real break's.
 ## Big changes (held for approval; thresholds 推估)
 
 - A week's planned TSS rises more than 20 % above the stored (last pushed) version.
-  Reductions are the safe direction and apply on their own.
+  Reductions are the safe direction and apply on their own — e.g. the strength sessions taken out
+  of an A event's last 14 days (SP-86, overview.spec.md).
 - A long, quality or test session is removed within 14 days before an A race.
 - The training phase changed since the last run.
 - More than 3 sessions change in the push window and they are not all reductions.
@@ -597,3 +598,4 @@ overview has `data-log="none"`. The settings are in 課表偏好 (above).
 | 2026-10-04 | change | SP-73 follow-up | 轉換期 days are not a running break: no re-entry block from a cross-training-only transition (`reentry.find_all` counts days outside it), and the Zone 3 gate's 7-day gap / 21-day re-lock skip them, its weeks see-through (`planning.transition_days`; owner 2026-10-05) |
 | 2026-10-04 | change | SP-39 follow-up | Zone 5's UA path: no LTHR age limit any more (`LTHR_FRESH_DAYS` removed) — a measured LTHR is invalidated only by an event (`lthr_invalid`: a ≥ 4-week running break after the test, evidence since the test from `threshold_confidence.lthr_evidence`, an AeT aggregate shift / moved); the flow names the event and offers the 30-min LTHR test (owner 2026-10-05) |
 | 2026-10-04 | sp-79-quality-families | SP-79 | Generated 強度課 titles name the family (有氧間歇／有氧間歇（巡航）／VO2max 間歇) instead of 閾值／近閾值／VO2max; stored older titles are mapped on read and in reconcile (no spurious change), and the ladder's title matchers accept both spellings |
+| 2026-10-05 | feature | SP-86 | Strength removed from an A event's last 14 days is a reduction: auto-adjust removes stored ones without asking |
