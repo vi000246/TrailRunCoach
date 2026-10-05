@@ -684,6 +684,7 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
                             allow=q_ok and not ((b2b or {}).get("info") or {}).get("post"),
                             rate=(cur.get("tss_per_category") or {}).get("trail") or 60.0, notes=notes)
                 SP.walk_targets(ss, th.get("walk_cap"), th.get("aet"), th_meas)   # SP-115, as week_plan
+                STP.refresh(ss, STP.week_context(a_evs, phases, week, kind))      # SP-119 × ME, as week_plan
                 SP.apply_climb(ss, sp_info, aet=th.get("aet"), prefs=prefs, b2b=(b2b or {}).get("info"), notes=notes,
                                rates=cur.get("tss_per_category"), aet_measured=th_meas)
             except Exception:              # noqa: BLE001 — never breaks the projection

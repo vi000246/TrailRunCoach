@@ -1624,7 +1624,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     # 肌力課依期別 (engine/strength_plan.py, SP-119): a 越野賽 / 百岳 A race next — AA / 最大肌力 / 維持
     from backend.engine import strength_plan as STP
     a_evs = getattr(getattr(status, "plan", None), "events", None) or ()
-    st_s = STP.session(STP.week_context(a_evs, phs, monday, kind), [asdict(s) for s in sessions])
+    st_ctx = STP.week_context(a_evs, phs, monday, kind)
+    st_s = STP.session(st_ctx, [asdict(s) for s in sessions])
     for i in range(strength_n):
         add(id=f"strength{i + 1}", kind="strength", title=st_s["title"], minutes=st_s["minutes"],
             detail=st_s["detail"], source=st_s["source"] or SRC_UA,
@@ -1690,6 +1691,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         SP.apply_me(dd, sp, gate.get("gap"), wkg, allow=allow_quality and not b2b.get("post"),
                     rate=tph["trail"], notes=notes)
         SP.walk_targets(dd, walk, aet, aet_meas)       # 攻頂日模擬 / ME: the 75 % HRmax uphill cap (SP-115)
+        STP.refresh(dd, st_ctx)                        # SP-119: a 百岳 維持 week with the ME just added
         sessions = [Session(**d) for d in dd]
         for s in sessions:
             s._long_day = flags.get(s.id, False)
