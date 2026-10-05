@@ -32,8 +32,9 @@ The same three checks as workout_review.drift_of (the daily runs):
   * a fast finish (last 10 % of the block > 5 % above the rest) is refused — 自訂;
   * heat is a band, not a refusal (heat bands, 2026-10-02): the result
     carries `temp_band` / `heat` (the route_weather archive's air
-    temperature when it has the activity, else the watch's minus the wrist
-    bias — workout_review.activity_temp / watch_air). In heat the verdict
+    temperature when it has the activity, else the watch's minus the
+    athlete's wrist bias: their own with ≥ 10 paired runs, else 3.7 °C —
+    workout_review.activity_temp / watch_air / watch_bias_of). In heat the verdict
     adds 「熱環境，結果可能偏高」: a pass (or UA's 「at」 band, whose AeT is then
     on the low side) still counts — conservative; a fail may be the heat.
     The session text keeps 「氣溫 25 °C 以下時開始」 as advice (HEAT_TEXT).
@@ -183,13 +184,15 @@ def is_xu(s: dict) -> bool:
 
 def analyze(t, hr, speed=None, power=None, temp=None, climb_m_per_km: Optional[float] = None,
             trail: bool = False, warm_s: float = WARM_S, main_s: float = MAIN_MAX_S,
-            temp_c: Optional[float] = None, temp_src: Optional[str] = None, judge: str = "ua") -> dict:
+            temp_c: Optional[float] = None, temp_src: Optional[str] = None, judge: str = "ua",
+            watch_bias: Optional[dict] = None) -> dict:
     """Halves drift test on one recording (UA / Evoke / Friel by `judge`;
     徐國峰's 10-vs-90 is analyze_xu). `ok` False with `reason` when it isn't a
     fair test. `temp_c` (with `temp_src`, route_weather / watch) overrides the
-    mean of the `temp` channel over the block."""
+    mean of the `temp` channel over the block; that mean is air minus
+    `watch_bias` (zone_events.dataset_watch_bias's dict; None = the 3.7 °C default)."""
     if judge == "xu":
-        return analyze_xu(t, hr, speed, temp, climb_m_per_km, trail, temp_c, temp_src)
+        return analyze_xu(t, hr, speed, temp, climb_m_per_km, trail, temp_c, temp_src, watch_bias)
     from backend.engine.workout_review import DRIFT_MAX_VI, MAX_DT, STOP_KMH, _arr, _grid1, _hms, power_vi
     out = {"ok": False, "reason": "", "drift": None, "pw_drift": None, "pa_drift": None, "hr1": None, "hr2": None,
            "main_s": None, "band": None, "basis": None, "judge": judge, "vi": None, "cv30": None}
@@ -260,8 +263,8 @@ def analyze(t, hr, speed=None, power=None, temp=None, climb_m_per_km: Optional[f
         return out
     tp = series.get("temp")
     if temp_c is None and tp is not None and np.isfinite(tp[m]).any():
-        temp_c, temp_src = _watch_air(float(np.nanmean(tp[m]))), "watch"
-    _tag_heat(out, temp_c, temp_src)
+        temp_c, temp_src = _watch_air(float(np.nanmean(tp[m])), watch_bias), "watch"
+    _tag_heat(out, temp_c, temp_src, watch_bias)
     cum = np.cumsum(m.astype(float))
     half = cum[-1] / 2.0
     a, b = m & (cum <= half), m & (cum > half)
@@ -287,7 +290,8 @@ def analyze(t, hr, speed=None, power=None, temp=None, climb_m_per_km: Optional[f
 
 
 def analyze_xu(t, hr, speed=None, temp=None, climb_m_per_km: Optional[float] = None, trail: bool = False,
-               temp_c: Optional[float] = None, temp_src: Optional[str] = None) -> dict:
+               temp_c: Optional[float] = None, temp_src: Optional[str] = None,
+               watch_bias: Optional[dict] = None) -> dict:
     """徐國峰's 90-minute test (blog 2016-12): flat, every stop ≤ 30 s (the
     ≤ 25 °C line, 台灣教練: a temperature band on the result, _tag_heat); HR at minute 10
     (A) vs minute 90 (B), each the ±1-min mean;
@@ -312,25 +316,29 @@ def analyze_xu(t, hr, speed=None, temp=None, climb_m_per_km: Optional[float] = N
     if temp_c is None and temp is not None:
         tp = np.asarray(temp, dtype=float)
         if np.isfinite(tp).any():
-            temp_c, temp_src = _watch_air(float(np.nanmean(tp))), "watch"
-    _tag_heat(out, temp_c, temp_src)
+            temp_c, temp_src = _watch_air(float(np.nanmean(tp)), watch_bias), "watch"
+    _tag_heat(out, temp_c, temp_src, watch_bias)
     d = r["drift"]
     out.update(ok=True, drift=d, hr1=r["hr10"], hr2=r["hr90"], main_s=80 * 60.0, band=band_of(d, "xu"))
     return out
 
 
-def _watch_air(t: float) -> float:
+def _watch_air(t: float, bias: Optional[dict] = None) -> float:
+    """The block's watch mean as air: minus the dataset's wrist bias (None = 3.7 °C)."""
     from backend.engine.workout_review import watch_air
-    return watch_air(t)
+    return watch_air(t, (bias or {}).get("bias_c"))
 
 
-def _tag_heat(out: dict, temp_c: Optional[float], temp_src: Optional[str]) -> None:
+def _tag_heat(out: dict, temp_c: Optional[float], temp_src: Optional[str], bias: Optional[dict] = None) -> None:
     """Heat bands: the temperature is a band on the result, not a refusal
-    (> 25 °C was one). `temp_band`, `heat` (warm / hot), `chip`."""
+    (> 25 °C was one). `temp_band`, `heat` (warm / hot), `chip`; on the
+    watch, `temp_bias` (workout_review.bias_of_watch) when the bias is known."""
     from backend.engine import workout_review as WR
     band = WR.temp_band(temp_c)
     out.update(temp_c=temp_c, temp_src=temp_src if temp_c is not None else None, temp_band=band,
                heat=WR.is_heat(band), chip="🌡 " + WR.TEMP_BAND_LABEL.get(band, "溫度不明"))
+    if temp_c is not None and temp_src == "watch" and bias:
+        out["temp_bias"] = WR.bias_of_watch(bias)
 
 
 def lines(r: dict, aet_now: Optional[float] = None) -> list[str]:
@@ -406,6 +414,7 @@ def analyze_workout(ds, w, m: Optional[dict] = None) -> Optional[dict]:
     m = m if m is not None else (WR.measure(ds, w) or {})
     temp = ds.channel(w.idx, "temperature")
     tc, src = WR.activity_temp(ds, w, None)       # the archive only; the watch is averaged over the block
+    wb = WR.watch_bias_of(ds) if tc is None and temp is not None else None   # …minus the athlete's wrist bias
     sched = WR.scheduled_aet_test(ds, w) or {}
     own = WR._title(w) or ""
     title = own if (TITLE_RE.search(own) or AT_TITLE_LEN.search(own)) else (sched.get("title") or own)
@@ -415,7 +424,7 @@ def analyze_workout(ds, w, m: Optional[dict] = None) -> Optional[dict]:
     main = PROTOCOLS[proto]["main"] * 60.0 if proto in ("evoke60", "friel") else MAIN_MAX_S
     return {**analyze(s["t"], s["hr"], s["speed"], s["power"], temp, m.get("climb_m_per_km"),
                       trail="runningtrail" in w.tags, warm_s=warm, main_s=main, temp_c=tc, temp_src=src,
-                      judge=judge), "warm_s": warm, "protocol": proto}
+                      judge=judge, watch_bias=wb), "warm_s": warm, "protocol": proto}
 
 
 def latest_aet_test(ds, today: dt.date, days: int = 120) -> Optional[dict]:

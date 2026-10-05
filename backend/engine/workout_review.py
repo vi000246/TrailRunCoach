@@ -122,14 +122,15 @@ DRIFT_HOT_C = 28.0            # 推估: the warm / hot split. Beiter 2025 (Physi
 TEMP_BANDS = ("cool", "warm", "hot")
 TEMP_BAND_LABEL = {"cool": "< 25 °C", "warm": "25–28 °C", "hot": "> 28 °C", "none": "溫度不明"}
 HEAT_NOTE = "熱環境，結果可能偏高"
-HEAT_TIP = ("溫度分區（推估）：< 25 °C、25–28 °C、> 28 °C，只和同一區的跑步比。25 °C 是台灣教練的條件"
-            "（Lafrenz 2008：35 °C 心率升 11%、22 °C 升 2%）；28 °C 是推估的分界（Beiter 2025：28.7 對 19.2 °C，"
-            "最高心率 +16 bpm）。熱會讓飄移偏高：熱天通過門檻仍算數（保守），沒通過可能是熱造成的。"
-            "溫度先用 Open-Meteo 路線天氣；沒有時用手錶溫度扣掉手腕偏差（本人有 10 對以上用本人的，"
-            "否則用單一使用者的 3.7 °C，推估；較不準）。"
-            "不做「熱校正後的飄移」：熱 β（bpm／Hadley）是跑步之間的心率位移，不是一次跑步裡心率往上飄的速度。")
-# watch temperature → air: the wrist warms the sensor (zone_events.WATCH_BIAS_C: one runner's 72 paired
-# route efforts, watch − Open-Meteo median +3.7 °C, SD 2.7; no literature source — 推估)
+HEAT_TIP = N_("溫度分區（推估）：< 25 °C、25–28 °C、> 28 °C，只和同一區的跑步比。25 °C 是台灣教練的條件"
+              "（Lafrenz 2008：35 °C 心率升 11%、22 °C 升 2%）；28 °C 是推估的分界（Beiter 2025：28.7 對 19.2 °C，"
+              "最高心率 +16 bpm）。熱會讓飄移偏高：熱天通過門檻仍算數（保守），沒通過可能是熱造成的。"
+              "溫度先用 Open-Meteo 路線天氣；沒有時用手錶溫度扣掉手腕偏差：本人有 10 次以上跑步同時有路線天氣和"
+              "手錶溫度時，用本人的中位數；不夠時用單一使用者 72 次的 3.7 °C（推估；較不準）。「溫度」那行會寫用的是哪一個。"
+              "不做「熱校正後的飄移」：熱 β（bpm／Hadley）是跑步之間的心率位移，不是一次跑步裡心率往上飄的速度。")
+# watch temperature → air: the wrist warms the sensor. The athlete's own median watch − archive °C when ≥ 10
+# of their runs have both (zone_events.dataset_watch_bias, the heat page's rule), else zone_events.WATCH_BIAS_C
+# (one runner's 72 paired route efforts, watch − Open-Meteo median +3.7 °C, SD 2.7; no literature source — 推估)
 from backend.engine.zone_events import WATCH_BIAS_C  # noqa: E402
 DRIFT_POWER_COVER = 0.95      # 推估: Pw:HR only when power covers ≥ 95 % of the Pa:HR window (same samples)
 DRIFT_EARLY_S = 1200          # 推估 (adaptive start): stops that begin in the first 20 min are the city section
@@ -405,16 +406,44 @@ def band_chip(dr: dict) -> str:
     return "🌡 " + TEMP_BAND_LABEL.get(dr.get("temp_band") or temp_band(dr.get("temp_c")), "溫度不明")
 
 
-def heat_band(dr: dict, temp_c: Optional[float], src: Optional[str]) -> dict:
+def heat_band(dr: dict, temp_c: Optional[float], src: Optional[str], bias: Optional[dict] = None) -> dict:
     """drift_of's heat rule on its own (heat-bands): the drift is kept in every
     temperature band — no refusal any more — and tagged `temp_band` (cool /
     warm / hot / none) and `heat` (warm or hot: 「熱環境，結果可能偏高」).
     Returns a new dict carrying `temp_c` / `temp_src` (route_weather / watch /
-    None); idempotent, so measure() re-applies it to the cached result on
-    every read (the cache never holds the heat rule)."""
+    None) and, on the watch, `temp_bias` (bias_of_watch: the wrist bias
+    subtracted, the athlete's own or the default); idempotent, so measure()
+    re-applies it to the cached result on every read (the cache never holds
+    the heat rule)."""
     band = temp_band(temp_c)
-    return {**dr, "temp_c": temp_c, "temp_src": src if temp_c is not None else None,
-            "temp_band": band, "heat": is_heat(band)}
+    out = {**dr, "temp_c": temp_c, "temp_src": src if temp_c is not None else None,
+           "temp_band": band, "heat": is_heat(band)}
+    out.pop("temp_bias", None)
+    if temp_c is not None and src == "watch" and bias:
+        out["temp_bias"] = bias_of_watch(bias)
+    return out
+
+
+def bias_of_watch(bias: dict) -> dict:
+    """{"bias_c", "own", "pairs"} — what the 溫度 line says about the wrist bias
+    (zone_events.dataset_watch_bias's result, kept small)."""
+    return {"bias_c": round(float(bias["bias_c"]), 2), "own": bias.get("src") == "dataset",
+            "pairs": int(bias.get("pairs") or 0)}
+
+
+WATCH_BIAS_OWN = N_("扣本人的手腕偏差 {b:.1f} °C（{n} 次跑步配對）")
+WATCH_BIAS_DEFAULT = N_("扣預設的手腕偏差 {b:.1f} °C（本人配對 {n} 次，未滿 {min} 次；單一使用者推估）")
+
+
+def bias_text(dr: dict) -> Optional[str]:
+    """「扣本人的手腕偏差 3.2 °C（15 次跑步配對）」 for a watch temperature, else None."""
+    tb = dr.get("temp_bias") if dr.get("temp_src") == "watch" else None
+    if not isinstance(tb, dict) or _f(tb.get("bias_c")) is None:
+        return None
+    from backend.engine.zone_events import WATCH_PAIR_MIN
+    if tb.get("own"):
+        return _(WATCH_BIAS_OWN, b=tb["bias_c"], n=tb.get("pairs") or 0)
+    return _(WATCH_BIAS_DEFAULT, b=tb["bias_c"], n=tb.get("pairs") or 0, min=WATCH_PAIR_MIN)
 
 
 heat_gate = heat_band       # the old name (callers, scripts)
@@ -1808,10 +1837,23 @@ def _by_start(arch: dict):
     return hit[1]
 
 
-def watch_air(t_watch: Optional[float]) -> Optional[float]:
-    """The watch's temperature as air: minus the wrist bias (WATCH_BIAS_C, 推估)."""
+def watch_air(t_watch: Optional[float], bias: Optional[float] = None) -> Optional[float]:
+    """The watch's temperature as air: minus the wrist bias — `bias` (°C, the
+    athlete's own: zone_events.dataset_watch_bias), else WATCH_BIAS_C (推估)."""
     t = _f(t_watch)
-    return None if t is None else t - WATCH_BIAS_C
+    b = _f(bias)
+    return None if t is None else t - (WATCH_BIAS_C if b is None else b)
+
+
+def watch_bias_of(ds) -> dict:
+    """The wrist bias in effect for this dataset (zone_events.dataset_watch_bias:
+    the athlete's own median with ≥ 10 paired runs, else 3.7 °C); the default
+    when it can't be read."""
+    from backend.engine import zone_events as ZE
+    try:
+        return ZE.dataset_watch_bias(ds)
+    except Exception:                       # noqa: BLE001 — a test double, an unreadable archive
+        return {**ZE.watch_bias([]), "pairs": 0}
 
 
 def activity_temp(ds, w, m: Optional[dict] = None) -> tuple[Optional[float], Optional[str]]:
@@ -1819,7 +1861,8 @@ def activity_temp(ds, w, m: Optional[dict] = None) -> tuple[Optional[float], Opt
     route_weather archive's air temperature when it has this activity — by
     file, else the only archive row of that date (the air is what the
     < 25 °C line means) — else the watch's mean over the drift window minus the
-    wrist bias (watch_air, lower confidence); (None, None) without either.
+    athlete's wrist bias (watch_air + watch_bias_of: their own with ≥ 10 paired
+    runs, else 3.7 °C; lower confidence); (None, None) without either.
     A dataset may carry its own {file: temp_c} (`activity_temps`, tests)."""
     arch = getattr(ds, "activity_temps", None)
     if arch is None:
@@ -1837,8 +1880,9 @@ def activity_temp(ds, w, m: Optional[dict] = None) -> tuple[Optional[float], Opt
             v = None
     if v is not None:
         return v, "route_weather"
-    wt = watch_air((m or {}).get("watch_temp_c"))
-    return (wt, "watch") if wt is not None else (None, None)
+    if _f((m or {}).get("watch_temp_c")) is None:
+        return None, None
+    return watch_air(m["watch_temp_c"], watch_bias_of(ds)["bias_c"]), "watch"
 
 
 _CAL_INT = ("DRIFT_EARLY_S", "DRIFT_TAIL_S", "WALK_MAX_S")
@@ -1877,7 +1921,8 @@ def apply_calibration() -> str:
 def measure(ds, w) -> Optional[dict]:
     """Per-workout measurements (disk-memoised on CACHE_KEY + the drift
     calibration in effect), with drift_of's temperature band applied on read
-    (heat_band + activity_temp: the archive is not part of the cache stamp)."""
+    (heat_band + activity_temp: neither the archive nor the dataset's wrist
+    bias is part of the cache stamp, so a new bias needs no cache flush)."""
     suffix = apply_calibration()
     cache = getattr(ds, "cached_series", None)
     if cache is None:
@@ -1885,7 +1930,10 @@ def measure(ds, w) -> Optional[dict]:
     else:
         m = cache(CACHE_KEY + suffix, w, lambda: _nan_free(_measure(ds, w)))
     if m and isinstance(m.get("drift"), dict):
-        m = {**m, "drift": heat_band(m["drift"], *activity_temp(ds, w, m))}
+        # the band (and the same-band baseline's peers, each through here) follows the dataset's
+        # wrist bias too: it is read here, never cached with the measurements
+        tc, src = activity_temp(ds, w, m)
+        m = {**m, "drift": heat_band(m["drift"], tc, src, watch_bias_of(ds) if src == "watch" else None)}
     if m and m.get("cp_test"):
         from backend.engine import cp_protocols as CPP
         ct = cp_test_for_sex(m["cp_test"], CPP.athlete_sex(ds))
@@ -2908,8 +2956,10 @@ def _aerobic_cards(ds, w, m: dict, c: dict, basis: str, lines: list[str]) -> lis
     tc = dr.get("temp_c")
     if tc is not None:
         chip(id="heat", icon="temp", text=f"{tc:.0f} °C", level="good" if tc <= DRIFT_HEAT_C else "warn",
-             tip=_("{src} {tc:.0f} °C；> {hot:.0f} °C 熱會讓心率飄得比較多，只和同樣溫度的跑步比（台灣教練 < 25 °C；Lafrenz 2008）",
-                   src=TEMP_SRC_LABEL.get(dr.get("temp_src"), "溫度"), tc=tc, hot=DRIFT_HEAT_C))
+             tip="\n".join(x for x in (
+                 _("{src} {tc:.0f} °C；> {hot:.0f} °C 熱會讓心率飄得比較多，只和同樣溫度的跑步比（台灣教練 < 25 °C；Lafrenz 2008）",
+                   src=TEMP_SRC_LABEL.get(dr.get("temp_src"), "溫度"), tc=tc, hot=DRIFT_HEAT_C),
+                 bias_text(dr)) if x))
     elif m.get("category") in ("road", "trail"):
         chip(id="heat", icon="temp", text="沒有溫度", level="na",
              tip=f"沒有溫度資料：> {DRIFT_HEAT_C:.0f} °C 的熱檢查不到")
@@ -3020,11 +3070,13 @@ def _aerobic(ds, w, m, c, base):
     band = dr.get("temp_band") or temp_band(dr.get("temp_c"))
     if m.get("category") in ("road", "trail"):
         tc = dr.get("temp_c")
+        bt = bias_text(dr)
         rows.append(_row("溫度", (f"{TEMP_SRC_LABEL.get(dr.get('temp_src'), '溫度')} {tc:.0f} °C · {band_chip(dr)}"
-                                  + (f"（{HEAT_NOTE}）" if dr.get("heat") and d is not None else ""))
-                         if tc is not None else "沒有溫度資料（溫度不明，只和溫度不明的跑步比）", HEAT_TIP))
+                                  + (f"（{HEAT_NOTE}）" if dr.get("heat") and d is not None else "")
+                                  + (f" · {bt}" if bt else ""))
+                         if tc is not None else "沒有溫度資料（溫度不明，只和溫度不明的跑步比）", _(HEAT_TIP)))
         # the band chip (the viewer's card header): every drift value says its band
-        base = {**base, "chip": {"text": band_chip(dr), "tip": HEAT_TIP, "heat": bool(dr.get("heat")),
+        base = {**base, "chip": {"text": band_chip(dr), "tip": _(HEAT_TIP), "heat": bool(dr.get("heat")),
                                  "band": band}}
     over, tot = m.get("over_aet_s"), m.get("hr_s") or 0
     if over is not None and tot > 0:
