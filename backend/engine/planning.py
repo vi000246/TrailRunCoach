@@ -12,7 +12,8 @@ Sources (docs/research/periodization-phase-metrics.md):
   * taper 14 days — Bosquet et al. 2007 meta-analysis (8–14 days most effective)
   * specific block before the taper, general → specific — Koop; Uphill Athlete
   * recovery / transition after the goal event — Uphill Athlete (2–4 weeks);
-    shortened to 1 week for events shorter than ~6 h (a heuristic, not a finding)
+    shortened to 1 week below 超馬級 (event_size: ~6 h predicted, else EP 60 — SP-111; a
+    heuristic, not a finding)
   * transition after the recovery (SP-73) — Friel (Transition 1–8 weeks, usually 3–4)
     and Canova (4 weeks of easy running ≤ 1 h), coach-schools-zones-periodization.md R5:
     `transition_weeks` (課表偏好, default 3, 0 = off). It never takes days from the next A
@@ -44,7 +45,25 @@ def plan_path() -> Path:
 TAPER_DAYS = 14
 SPECIFIC_WEEKS = 8
 MINI_TAPER_DAYS = 5          # B event
-LONG_EVENT_HOURS = 6.0       # recovery: 14 d at/above this, else 7 d
+LONG_EVENT_HOURS = 6.0       # recovery: 14 d at/above this (= the 超馬級 size), else 7 d
+
+# 賽事大小 (SP-111, owner 2026-10-05): predicted time → EP → km, never the horizontal km alone
+# when more is known — a 30 km / 2000 m trail race (EP 50, ~7 h) is not a short race.
+#   short < 2 h / EP 21 · medium < 4 h / 42 · marathon < 6 h / 60 · ultra < 20 h / 160 · hundred
+# 2 h / 4 h ≈ an amateur half / full marathon; EP 21 / 42 = the owner's anchors (EP 42 ≈ a road
+# marathon); 6 h = LONG_EVENT_HOURS; 20 h from the SP-98 research (100-mile coaches); EP 60 / 160
+# from ~7–10 EP an hour on trails. All 推估.
+SIZES = ("short", "medium", "marathon", "ultra", "hundred")
+SHORT, MEDIUM, MARATHON, ULTRA, HUNDRED = range(len(SIZES))
+SIZE_LABEL = {"short": "短", "medium": "中", "marathon": "馬拉松級", "ultra": "超馬級", "hundred": "100 英里級"}
+SIZE_HOURS = (2.0, 4.0, LONG_EVENT_HOURS, 20.0)
+SIZE_EP = (21.0, 42.0, 60.0, 160.0)
+EP_DIVISOR = 100.0           # ITRA km-effort; terrain_calib's personal divisor when installed
+# The race calculator's predicted hours (race_refs.calculator_hours) and the personal climb divisor
+# (terrain_calib.divisor), installed by the app (install_size_inputs); None = est_hours / ITRA's 100,
+# so the engine and its tests stay pure.
+HOURS_OF = None              # Callable[[Event], Optional[float]]
+DIVISOR_OF = None            # Callable[[], float]
 B_RECOVERY_DAYS = 3
 TRANSITION_WEEKS = 3          # 轉換期 after an A race's recovery (SP-73; Friel 3–4, Canova 4 — the low end, 推估)
 TRANSITION_WEEKS_RANGE = (0, 4)   # 0 = off; 4 = Friel's / Canova's upper end
@@ -124,9 +143,96 @@ class Event:
 
     @property
     def is_long(self) -> bool:
-        if self.est_hours is not None:
-            return self.est_hours >= LONG_EVENT_HOURS
-        return (self.days or 1) > 1 or (self.distance_km or 0) >= 42
+        """超馬級 or bigger (event_size): the 14-day recovery and B2B (b2b.qualifies)."""
+        return event_size(self) >= ULTRA
+
+    @property
+    def size(self) -> str:
+        return SIZES[event_size(self)]
+
+
+def _tier(x: float, cuts: tuple) -> int:
+    return next((i for i, c in enumerate(cuts) if x < c), len(cuts))
+
+
+def event_ep(ev, divisor: Optional[float] = None) -> Optional[float]:
+    """EP (effort km) = km + climb ÷ divisor (overview.ep_km's ITRA convention; the personal
+    divisor when installed, terrain_calib); None without a distance or a climb."""
+    if not ev.distance_km or ev.climbing_m is None:
+        return None
+    if divisor is None:
+        try:
+            divisor = float(DIVISOR_OF()) if DIVISOR_OF is not None else EP_DIVISOR
+        except Exception:                   # noqa: BLE001 — a size must still come out
+            divisor = EP_DIVISOR
+    return float(ev.distance_km) + float(ev.climbing_m) / (divisor if divisor and divisor > 0 else EP_DIVISOR)
+
+
+def event_hours(ev) -> Optional[float]:
+    """The race calculator's predicted moving hours when installed (HOURS_OF), else est_hours."""
+    if HOURS_OF is not None:
+        try:
+            h = HOURS_OF(ev)
+        except Exception:                   # noqa: BLE001 — the plan's own estimate is the fallback
+            h = None
+        if h:
+            return float(h)
+    return float(ev.est_hours) if ev.est_hours else None
+
+
+def event_size(ev, hours: Optional[float] = None, divisor: Optional[float] = None) -> int:
+    """賽事大小 SHORT … HUNDRED (SP-111): the predicted time (`hours`, else event_hours) →
+    EP → km when not even the climb is known. A multi-day trip (百岳縱走, stage race) is
+    超馬級: low intensity each day, so its whole-trip EP would overstate the recovery — 百岳's
+    own rules are left for later research (as `days > 1` was before)."""
+    if (ev.days or 1) > 1:
+        return ULTRA
+    h = hours if hours else event_hours(ev)
+    if h:
+        return _tier(h, SIZE_HOURS)
+    ep = event_ep(ev, divisor)
+    if ep is None:
+        ep = float(ev.distance_km or 0.0)
+    return _tier(ep, SIZE_EP)
+
+
+def install_size_inputs() -> None:
+    """The app's 賽事大小 inputs: the race calculator (memoised per tenant / event / day, 10 min)
+    and the personal climb divisor. Called once at startup; tests leave them unset."""
+    global HOURS_OF, DIVISOR_OF
+    import contextvars
+    import threading
+    import time
+    from dataclasses import astuple
+    lock, memo, busy = threading.Lock(), {}, contextvars.ContextVar("event_size_busy", default=False)
+
+    def hours_of(ev) -> Optional[float]:
+        if busy.get() or not ev.distance_km:  # the calculator itself reads the plan: no recursion
+            return None
+        from backend import tenancy
+        key = (tenancy.current().id, astuple(ev), dt.date.today())
+        with lock:
+            hit = memo.get(key)
+        if hit and time.time() - hit[0] < 600.0:
+            return hit[1]
+        tok = busy.set(True)
+        try:
+            from backend.engine.panels.race_refs import calculator_hours, course_of
+            hs = calculator_hours(ev, course_of(ev))
+        finally:
+            busy.reset(tok)
+        h = sum(hs) if hs else None
+        with lock:
+            if len(memo) > 256:
+                memo.clear()
+            memo[key] = (time.time(), h)
+        return h
+
+    def divisor_of() -> float:
+        from backend.engine import terrain_calib
+        return terrain_calib.divisor()
+
+    HOURS_OF, DIVISOR_OF = hours_of, divisor_of
 
 
 @dataclass
@@ -368,7 +474,7 @@ def auto_phases(events: list[Event], begin: dt.date, end: dt.date,
         add("taper", taper_start, ev.start - one, ev.id)
         add("event", ev.start, ev.end, ev.id)
         cursor = max(cursor, ev.end + one)
-        rec_days = 14 if ev.is_long else 7
+        rec_days = 14 if ev.is_long else 7      # 超馬級 and up (event_size, SP-111)
         rec_end = ev.end + dt.timedelta(days=rec_days)
         rec = add("recovery", cursor, rec_end, ev.id)
         cursor = max(cursor, rec_end + one)

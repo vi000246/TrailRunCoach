@@ -210,9 +210,19 @@ def test_race_by_title_or_plan_event():
     ds = _ds(race)
     c = R.classify(ds, ds.workouts[0])
     assert c["type"] == "test_cp" and c["protocol"] == "race"
-    ev = PL.Event(id="e1", name="城市 10K", date="2026-09-30", kind="race", priority="C", distance_km=10.0)
+    ev = PL.Event(id="e1", name="城市 10K", date="2026-09-30", kind="road", priority="C", distance_km=10.0)
     untitled = _act([(900, 150.0, 140), (1500, 245.0, 175), (600, 130.0, 130)])
     assert R.classify(_ds(untitled, events=[ev]), _ds(untitled).workouts[0])["protocol"] == "race"
+
+
+@pytest.mark.parametrize("climb, is_test", [(500.0, False), (50.0, True), (None, False)])
+def test_a_trail_race_is_a_cp_race_only_when_flat(climb, is_test):
+    """SP-111: a 10 km 越野賽 with 500 m of climbing is not a road 10K; a flat one (< 20 m/km) is."""
+    ev = PL.Event(id="e1", name="山徑", date="2026-09-30", kind="race", priority="C", distance_km=10.0,
+                  climbing_m=climb)
+    untitled = _act([(900, 150.0, 140), (1500, 245.0, 175), (600, 130.0, 130)])
+    c = R.classify(_ds(untitled, events=[ev]), _ds(untitled).workouts[0])
+    assert (c.get("protocol") == "race") is is_test
 
 
 # ---------------------------------------------------------------------------

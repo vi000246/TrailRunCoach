@@ -70,6 +70,10 @@ async def lifespan(app: FastAPI):
         DI.startup_checks()          # refuses to start next to the owner's data (§3.1)
     await init_db()
     await _ensure_athlete()
+    # 賽事大小 (SP-111): planning.event_size reads the race calculator and the personal climb
+    # divisor; the engine stays pure (and its tests) until the app installs them
+    from backend.engine import planning as _planning
+    _planning.install_size_inputs()
     # 資料來源: an old 自動 / unset setting becomes the source it picked, before
     # the synchronous readers (chart Dataset, CP scan) look at it
     try:

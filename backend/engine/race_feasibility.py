@@ -12,7 +12,8 @@ Only advice — nothing here changes the plan or the event. Each check gives a l
            higher) growing +10 % a week (SP-89 decision 1) with every 4th week a recovery week
            (3:1, no growth), up to the week holding race − 21 days (Koop: no fitness gained in
            the last 2–3 weeks).
-  hours    ultras only (trail race ≥ 50 km): Koop's minimum — 50 km / 50 mi: 6 h a week for
+  hours    ultras only (a trail race of 超馬級 or bigger, planning.event_size — SP-111; the 100 km
+           row from EP 100): Koop's minimum — 50 km / 50 mi: 6 h a week for
            ≥ 3 weeks in a row from 6 weeks out; 100 km / 100 mi: 9 h for ≥ 6 weeks from 9 weeks
            out (coach experience). Never worse than tight.
   cutoff   races: the predicted finish ÷ the cutoff (ok ≤ 90 %, tight ≤ 100 %, over above).
@@ -153,11 +154,20 @@ def peak_week(base: dict, weeks: list[dict]) -> dict:
     return {**{k: base[k] * STEP ** n for k in ("km", "climb_m", "hours")}, "builds": n}
 
 
-def koop_need(line: dict, kind: str) -> Optional[tuple]:
-    if kind not in ("race", "other"):
+def koop_need(line: dict, e) -> Optional[tuple]:
+    """Koop's row for a 超馬級 or bigger trail race (planning.event_size on the line's predicted
+    hours — SP-111, not the horizontal km): the 100 km / 100 mi row from EP 100 or the 100 英里級,
+    else the 50 km / 50 mi row (推估: Koop names distances). 百岳 is left out (SP-111: decide later)."""
+    if e.kind not in ("race", "other"):
         return None
-    km = float(line.get("km") or 0.0)
-    return next((k for k in KOOP if km >= k[0]), None)
+    from backend.engine import planning as P
+    size = P.event_size(e, hours=line.get("hours") if int(line.get("days") or 1) == 1 else None)
+    if size < P.ULTRA:
+        return None
+    ep = P.event_ep(e)
+    if ep is None:
+        ep = float(line.get("km") or 0.0) + float(line.get("climb_m") or 0.0) / P.EP_DIVISOR
+    return KOOP[0] if size >= P.HUNDRED or ep >= KOOP[0][0] else KOOP[1]
 
 
 def koop_run(base_h: float, weeks: list[dict], race: dt.date, need: tuple) -> dict:
@@ -287,7 +297,7 @@ def assess(e, line: Optional[dict], today: dt.date, hist: list[dict], summit: Op
                     out["suggestions"].append(_("或換一場晚一點的比賽，或這場先不跑"))
                 elif lv == "tight" and days_to >= WINDOW_DAYS:     # late already says 「照現有體能跑」
                     out["suggestions"].append(_("目標設保守一點，前半段放慢"))
-            need = koop_need(line, e.kind)
+            need = koop_need(line, e)
             if need:
                 kr = koop_run(base["hours"], weeks, e.start, need)
                 out["koop"] = {k: round(v, 1) if isinstance(v, float) else v for k, v in kr.items()}
@@ -432,7 +442,7 @@ def readiness(e, line: Optional[dict], today: dt.date, hist: list[dict], acts: l
                      km=max(w["km"] for w in weeks), p=r * 100, a=ok_at * 100))
             check("weekly", lv, txt, ratio=round(r, 3), ok_at=ok_at)
     # 3. Koop's weekly hours (ultras)
-    need = koop_need(line, e.kind)
+    need = koop_need(line, e)
     if need:
         run = best = 0
         for w in hist[-KOOP_WEEKS:]:
