@@ -89,6 +89,9 @@ STOP_TYPES = {
     "big": {"label": "大補給站（含電解質、熱食）", "water": True, "food": True, "sodium": True, "minutes": 5.0},
     "medical": {"label": "醫護站", "water": False, "food": False, "sodium": False, "minutes": 0.0},
     "self": {"label": "自備補給點", "water": True, "food": True, "sodium": True, "minutes": 2.0},
+    # SP-114: a 連續 race's sleep point (offered only for 賽制 連續); minutes = how long you sleep (推估
+    # default 90 = one sleep cycle); you eat and refill there before sleeping (推估)
+    "sleep": {"label": "睡眠點", "water": True, "food": True, "sodium": False, "minutes": 90.0},
 }
 STOP_DEFAULT = "aid"             # the old 「km:分」 text had no type
 # GPX waypoint names that look like aid stations (「從路線匯入」)

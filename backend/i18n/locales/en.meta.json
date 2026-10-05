@@ -2303,6 +2303,10 @@
     "draft": true,
     "src": "backend/engine/racepower/watch_export.py:46"
   },
+  "沒填睡眠點，整場當一段來比；會睡的話，在賽事計算器的補給站加睡眠點會更準": {
+    "draft": true,
+    "src": "backend/engine/panels/race_refs.py:140"
+  },
   "沒有 AeT 或 LTHR": {
     "draft": true,
     "src": "backend/engine/panels/activity_charts.py:310"
@@ -3314,6 +3318,10 @@
   "速度低於中位 75% 的慢段，最長的一段超過這麼久就當跑走課，不判讀飄移。": {
     "draft": true,
     "src": "backend/engine/drift_calib.py:137"
+  },
+  "連續賽事以兩個睡眠點之間最硬的一段來比：第 {n} 段 {km:.1f} km、爬升 {cl:.0f} m（共 {k} 段）": {
+    "draft": true,
+    "src": "backend/engine/panels/race_refs.py:166"
   },
   "週{day}已給{taken}，不能再排{kind}（一天只能指定一種課）": {
     "draft": true,

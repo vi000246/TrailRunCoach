@@ -83,6 +83,7 @@
       if (rd.note) out.push(`<span class="feas-a feas-m">${esc(rd.note)}</span>`);
     }
     if (r.split_note) out.push(`<span class="feas-a feas-m">⚠ ${esc(r.split_note)}</span>`);
+    if (r.stretch_note) out.push(`<span class="feas-a feas-m">${esc(r.stretch_note)}</span>`);   // SP-114: a 連續 race
     out.push(`</div><details><summary>${esc(T("detail"))}</summary><h4>${esc(T("feas"))}</h4>${list(r.checks)}`);
     if (sg.length > 1) out.push(`<ul class="feas-more">${sg.slice(1).map((s) => `<li>${esc(s)}</li>`).join("")}</ul>`);
     if (rd) out.push(`<h4>${esc(T("ready"))}</h4>${list(rd.checks)}`);
