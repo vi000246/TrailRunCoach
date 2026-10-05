@@ -327,6 +327,10 @@
     "draft": true,
     "src": "backend/engine/hr_profile.py:77"
   },
+  "COROS 帳號少了這組區間要用的數值，沒辦法比": {
+    "draft": true,
+    "src": "backend/engine/coros_compare.py:158"
+  },
   "COROS 最大心率": {
     "draft": true,
     "src": "backend/engine/hr_profile.py:73"
@@ -458,6 +462,10 @@
   "LTHR 還是 WKO5 預設值": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:2127"
+  },
+  "LTHR：COROS 的 {watch} 不能自己輸入，只會由 COROS 的演算法更新（依 COROS 支援文件，還沒實測）。想讓手錶的乳酸閾值區間和 app 一樣，可以在同一頁把區間的五條邊界改成 {edges}（COROS 收不收任意邊界還沒實測，填不進去就維持原樣）": {
+    "draft": true,
+    "src": "backend/engine/coros_compare.py:199"
   },
   "ME 負重爬坡（爬升 {cl:.0f} m、背 {kg:g} kg）": {
     "draft": true,
@@ -711,6 +719,10 @@
     "draft": true,
     "src": "backend/engine/plan_store.py:344"
   },
+  "{names}差超過 {bpm} bpm，建議到 COROS app 手動改成 app 的數值": {
+    "draft": true,
+    "src": "backend/engine/coros_compare.py:211"
+  },
   "{name} {pct}（3.5–5%）：前半段心率 {hr:.0f} bpm 就是 AeT": {
     "draft": true,
     "src": "backend/engine/workout_review.py:2357"
@@ -762,6 +774,10 @@
   "{name} 超出範圍": {
     "draft": true,
     "src": "backend/engine/workout_steps.py:549"
+  },
+  "{name}：把 COROS 的 {watch} 改成 {app}": {
+    "draft": true,
+    "src": "backend/engine/coros_compare.py:205"
   },
   "{note}（不算 AeT 測試）": {
     "draft": true,
@@ -930,6 +946,10 @@
   "≥ 20% 坡 8–10 秒全力，訓練爆發力與肌肉徵召，不是有氧課（Uphill Athlete；Lydiard）": {
     "draft": true,
     "src": "backend/engine/workout_templates.py:137"
+  },
+  "、": {
+    "draft": true,
+    "src": "backend/engine/coros_compare.py:110"
   },
   "「{a}」和「{b}」只隔 {n} 天：硬課之間建議隔 ≥ 2 天，可以再拖動調整": {
     "draft": true,
@@ -1443,6 +1463,10 @@
     "draft": true,
     "src": "backend/engine/workout_review.py:2633"
   },
+  "兩邊的差距都在 {bpm} bpm 以內，不用改": {
+    "draft": true,
+    "src": "backend/engine/coros_compare.py:212"
+  },
   "公里數 {km:.0f}": {
     "draft": true,
     "src": "backend/engine/planning.py:255"
@@ -1559,9 +1583,17 @@
     "draft": true,
     "src": "backend/sync/workout_targets/garmin.py:22"
   },
+  "區間設定改過": {
+    "draft": true,
+    "src": "backend/engine/coros_compare.py:109"
+  },
   "原研究是自行車功率：跑步的 % CP 推估": {
     "draft": true,
     "src": "backend/engine/workout_templates.py:318"
+  },
+  "去哪裡改：COROS app 的「個人頁 → 設定 → 心率區間」（選單名稱可能隨 app 版本不同）": {
+    "draft": true,
+    "src": "backend/engine/coros_compare.py:51"
   },
   "只剩 {n} 天：最後 3 週練不出新的體能了，只能減量休息": {
     "draft": true,
@@ -2051,6 +2083,10 @@
     "draft": false,
     "src": "backend/engine/workout_steps.py:1296"
   },
+  "心率區間（{model}）：把最大心率和靜息心率改成 app 的數值後，這組區間就會一樣": {
+    "draft": true,
+    "src": "backend/engine/coros_compare.py:208"
+  },
   "心率參考上限約 {v:.0f} bpm（{how}）或 RPE ≤ {rpe}；技術路段以安全為主，不用硬壓心率": {
     "draft": true,
     "src": "backend/engine/hr_profile.py:457"
@@ -2298,6 +2334,10 @@
   "推到手錶是 {n} 段，超過 {max} 段：COROS 的上限未驗證": {
     "draft": true,
     "src": "backend/engine/workout_steps.py:1219"
+  },
+  "推到手錶的課表心率目標直接送 bpm，用的是 app 的數值，不受手錶設定影響。手錶和 COROS app 上顯示的心率區間、COROS 的訓練負荷用的是手錶自己的數值，所以兩邊差太多時，同一次跑步在兩邊看到的區間會不一樣。": {
+    "draft": true,
+    "src": "backend/engine/coros_compare.py:48"
   },
   "推薦（依你目前的階段與時間上限）：": {
     "draft": true,
@@ -4259,6 +4299,10 @@
     "draft": true,
     "src": "backend/engine/overview.py:1540"
   },
+  "開始記錄": {
+    "draft": true,
+    "src": "backend/engine/coros_compare.py:122"
+  },
   "間歇門檻要是 {choices} 其中之一": {
     "draft": true,
     "src": "backend/engine/plan_prefs.py:295"
@@ -4294,6 +4338,10 @@
   "需要距離或 GPX 路線": {
     "draft": true,
     "src": "backend/engine/racepower/calc.py:458"
+  },
+  "靜息心率": {
+    "draft": true,
+    "src": "backend/engine/coros_compare.py:52"
   },
   "靜息心率 {hr:g} 不合理（25–120）": {
     "draft": true,
@@ -4530,6 +4578,10 @@
   "，遠超過你練過的，賽後前幾天特別注意": {
     "draft": true,
     "src": "backend/engine/planning.py:382"
+  },
+  "／": {
+    "draft": true,
+    "src": "backend/engine/coros_compare.py:172"
   },
   "：": {
     "draft": false,
