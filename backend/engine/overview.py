@@ -742,9 +742,10 @@ def _reserved_out(notes: Optional[list], reserved: float, left: float, track: Op
     from backend.engine import quality_gate as QG
     if notes is not None:
         notes.append({"level": "info", "src": "quality_share",
-                      "text": f"你排的技術地形課（RPE ≥ 7）主課 {reserved:.0f} 分算進本週強度預算"
-                              f"（週量 {QG.QUALITY_SHARE_MAX:.0%}，80/20；推估），只剩 {max(0.0, left):.0f} 分："
-                              f"這週不排{' 5 區' if track == 'z5' else ' 3 區' if track == 'z3' else ''}間歇"})
+                      "text": _("你排的技術地形課（RPE ≥ 7）主課 {reserved:.0f} 分算進本週強度預算"
+                                "（週量 {share:.0%}，80/20；推估），只剩 {left:.0f} 分：這週不排{zone}間歇",
+                                reserved=reserved, share=QG.QUALITY_SHARE_MAX, left=max(0.0, left),
+                                zone=_(" 5 區") if track == "z5" else _(" 3 區") if track == "z3" else "")})
 
 
 CRUISE_REP_MIN_S = 6 * 60   # 巡航 = reps of 6–15 min (coach-schools-zones-periodization.md R1: Friel 6–12′, Daniels
@@ -1712,7 +1713,8 @@ def drop_strength_before_a(ss: list, stops: list, monday: dt.date, notes: Option
     if gone and notes is not None:
         x = hit[min(hit)]
         notes.append({"level": "info", "src": "strength",
-                      "text": f"A 賽事「{x['race']}」前 {STRENGTH_STOP_DAYS} 天不排肌力（{x['from'][5:]} 起，含比賽週；"
-                              f"課表偏好的每週肌力／肌力日也一樣）：把體力留給比賽——長距離耐力項目主要比賽前 2 週停肌力，"
-                              f"停 4 週以上才會退步（Bompa & Buzzichelli）"})
+                      "text": _("A 賽事「{race}」前 {days} 天不排肌力（{start} 起，含比賽週；"
+                                "課表偏好的每週肌力／肌力日也一樣）：把體力留給比賽——長距離耐力項目主要比賽前 2 週停肌力，"
+                                "停 4 週以上才會退步（Bompa & Buzzichelli）",
+                                race=x["race"], days=STRENGTH_STOP_DAYS, start=x["from"][5:])})
     return out

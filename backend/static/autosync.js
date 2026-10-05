@@ -19,7 +19,7 @@
   const KEY = "wko5coach.autosync.last";
   const MIN_GAP_MS = 10 * 60 * 1000;
   const SRC = { coros: "COROS", tp: "TP" };
-  const T = (k, fb, p) => (window.I18N && window.I18N.t ? window.I18N.t("common." + k, fb, p) : fb);
+  const T = (k, p) => (window.I18N && window.I18N.t ? window.I18N.t("common." + k, p) : k);
 
   function el() {
     let e = document.getElementById("nav-sync-status");
@@ -58,7 +58,7 @@
         const failed = sources.filter((s) => st[s] && st[s].last_result && st[s].last_result.status === "failed");
         const done = sources.filter((s) => !failed.includes(s));
         if (failed.length) {
-          show(T("autosync.failed", "同步失敗：{src}", { src: failed.map((s) => SRC[s]).join("、") }), false, true);
+          show(T("autosync.failed", { src: failed.map((s) => SRC[s]).join("、") }), false, true);
         } else {
           const res = done.map((s) => {
             const r = st[s] && st[s].last_result;
