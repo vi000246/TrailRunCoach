@@ -45,8 +45,10 @@ block, reentry.MIN_BREAK) touching the week before it — since the break pulled
 that week and the 4-week mean down, coming back to normal reads as a spike
 (owner 2026-10-04; ≥ 6 days is reentry.py's block). The week note says so.
 Only UNPLANNED days count toward SHORT_BREAK_MIN (owner 2026-10-05): days of the user's
-own 不排課日期 or 休息日 (engine/blackouts.py, both kinds) are a chosen rest, so a gap that
-is planned, or whose unplanned part is < SHORT_BREAK_MIN days, is not exempt.
+own 不排課日期 or 休息日 (engine/blackouts.py, both kinds) and the weekdays not ticked as
+可練日 in 課表偏好 (plan_prefs.days: a Fri–Sun runner's Mon–Thu gap is their week, not a
+break) are a chosen rest, so a gap that is planned, or whose unplanned part is
+< SHORT_BREAK_MIN days, is not exempt.
 
 Weekly CTL goal of the planner: base max(2, 5 % CTL), specific max(2.5, 7 % CTL)
 (推估: equal to the old +3 / +4 at CTL 55–60; Palladino writes 2–5 %).
@@ -288,8 +290,8 @@ def short_break(run_days: Sequence[int], lo: int, hi: int,
                 planned: Sequence[int] = ()) -> Optional[tuple[int, int, int]]:
     """(first, last, planned) of the latest short unplanned break — fewer than MIN_BREAK days
     without a run (no re-entry block), between two runs, with ≥ SHORT_BREAK_MIN of them NOT
-    `planned` (day indices of the user's own 不排課日期 / 休息日: a rest the user chose; owner
-    2026-10-05) — with a day in [lo, hi] (day indices, the week before the one measured);
+    `planned` (day indices of the user's own 不排課日期 / 休息日 / unticked 可練日: a rest the
+    user chose; owner 2026-10-05) — with a day in [lo, hi] (day indices, the week before the one measured);
     `planned` in the result = how many of its days were planned. Counted, not contiguous:
     2 planned days inside a 5-day gap leave 3 unplanned → exempt. None without one."""
     ds = sorted({int(d) for d in run_days})
