@@ -42,6 +42,15 @@ don't start a re-entry block when base resumes. A break counts its days outside
 those phases only (≥ 6 still makes a block, as long as those days, e.g. a
 transition + 10 more days off = a 10-day 6–13 block; the block text says how
 many post-race days were left out).
+
+Illness (SP-117, engine/injuries.py): a break that overlaps a 生病 event of the 傷病紀錄 says
+「生病停跑 N 天（輕微感冒／發燒或全身症狀）」 and takes the block of its length — never the injury
+step-up (that one is for tissue healing; 推估). With a 傷停 overlapping too, both are named and
+the injury's step-up applies. What a cold / fever allows before the first run back (Z1 only; no
+run until a day after the fever) is injuries.illness_rule, applied by the week plan.
+
+A 賽後重新打底 (SP-116): after an A race the Zone 3 / Zone 5 gates need a new confirmation
+whatever the break length (base_check.a_race_rebase) — not only after ≥ 29 days as here.
 """
 from __future__ import annotations
 
@@ -99,7 +108,7 @@ STEP_UP_MIN = {"6-13": 14, "14-28": 29, "29-56": 57}   # 推估: an injury layof
 def plan(last: dt.date, ret: dt.date, cross: bool = False, planned: bool = False,
          prev_hours: Optional[float] = None, prev_long_min: Optional[float] = None,
          ongoing: bool = False, injury: Optional[dict] = None, step_up: bool = False,
-         days: Optional[int] = None, transition_days: int = 0) -> Optional[dict]:
+         days: Optional[int] = None, transition_days: int = 0, illness: Optional[dict] = None) -> Optional[dict]:
     """The re-entry block for a break from the day after `last` (the last run)
     to the day before `ret` (the first run back, or the day after a blackout).
     None for a break < 6 days. `injury` (engine/injuries.py): the 傷病紀錄 the
@@ -108,7 +117,8 @@ def plan(last: dt.date, ret: dt.date, cross: bool = False, planned: bool = False
     and length) — after an injury the tissue, not only the fitness, has to
     re-adapt. FVDOT stays the one of the real break (it is a fitness loss). `days`: the break's
     length when not every day between counts (find_all: the post-race phase days, `transition_days` of
-    them, are left out); None = all of them."""
+    them, are left out); None = all of them. `illness` (SP-117): the 生病 event the break overlaps —
+    the text says 生病停跑 and its type; no step-up from it."""
     if days is None:
         days = (ret - last).days - 1
     cat = category(days)
@@ -140,10 +150,14 @@ def plan(last: dt.date, ret: dt.date, cross: bool = False, planned: bool = False
             d = seg(d, 21, f)
         end = d
         q_from = ret + dt.timedelta(weeks=CAT4_Z3_WEEKS)
-    inj = None
+    inj = ill = None
     if injury:
         from backend.engine import injuries as INJ
         inj = {"id": injury.get("id"), "label": INJ.full_label(injury.get("area"), injury.get("side"))}
+    if illness:
+        from backend.engine import injuries as INJ
+        ill = {"id": illness.get("id"), "illness": illness.get("illness"),
+               "label": _(INJ.ILLNESS[illness["illness"]]) if illness.get("illness") in INJ.ILLNESS else _("未指定")}
     return {"last_run": last.isoformat(), "return": ret.isoformat(), "days": real_days, "category": cat,
             "end": end.isoformat(), "quality_from": q_from.isoformat(), "segments": segs,
             "fvdot": round(fvdot(real_days, cross), 4), "cross": cross, "planned": planned, "ongoing": ongoing,
@@ -151,17 +165,24 @@ def plan(last: dt.date, ret: dt.date, cross: bool = False, planned: bool = False
             "z3_before_z5": 1 if cat == "6-13" else 2,
             "drift_check": cat == "14-28", "reconfirm": cat in ("29-56", "long"),
             "aet_stale": cat in ("29-56", "long"), "cp_retest": cat == "long" or real_days >= 50,
-            "restart_base": cat == "long", "injury": inj, "stepped_up": stepped, "days_effective": days,
+            "restart_base": cat == "long", "injury": inj, "illness": ill, "stepped_up": stepped, "days_effective": days,
             "transition_days": int(transition_days),
-            "text": text_of(real_days, cat, ret, end, inj, stepped, transition_days)}
+            "text": text_of(real_days, cat, ret, end, inj, stepped, transition_days, ill)}
 
 
 def text_of(days: int, cat: str, ret: dt.date, end: dt.date, injury: Optional[dict] = None,
-            stepped: bool = False, transition_days: int = 0) -> str:
+            stepped: bool = False, transition_days: int = 0, illness: Optional[dict] = None) -> str:
     how = {"6-13": _("前半 50%、後半 75%"), "14-28": _("前半 50%、後半 75%，強度目標打折"),
            "29-56": _("三段 33／50／75%，5 區要重新確認有氧基礎"), "long": _("15 週重新打底（33→50→70→85→100%）")}[cat]
-    head = (_("傷停 {days} 天（{label}，傷病紀錄 #{id}）", days=days, label=injury["label"], id=injury["id"])
-            if injury else _("停跑 {days} 天", days=days))
+    if injury and illness:
+        head = _("傷停＋生病停跑 {days} 天（{label}，傷病紀錄 #{id}；{ill}，#{ill_id}）", days=days,
+                 label=injury["label"], id=injury["id"], ill=illness["label"], ill_id=illness["id"])
+    elif illness:
+        head = _("生病停跑 {days} 天（{ill}，傷病紀錄 #{id}）", days=days, ill=illness["label"], id=illness["id"])
+    elif injury:
+        head = _("傷停 {days} 天（{label}，傷病紀錄 #{id}）", days=days, label=injury["label"], id=injury["id"])
+    else:
+        head = _("停跑 {days} 天", days=days)
     up = _("；傷後往上一級排（推估）") if stepped else ""
     if transition_days:
         head += _("（不含賽後恢復期／轉換期 {n} 天）", n=transition_days)
@@ -312,9 +333,11 @@ def find_all(ds, today: dt.date, blackouts=(), horizon_days: int = 182, injuries
         ph, pl = prev_volume(ds, last)
         inj = INJ.overlapping(injuries, last + dt.timedelta(days=1), ret - dt.timedelta(days=1), today) \
             if injuries else None
+        ill = INJ.overlapping(injuries, last + dt.timedelta(days=1), ret - dt.timedelta(days=1), today, "illness") \
+            if injuries else None
         n, t = off(last, ret)
         p = plan(last, ret, _cross(ds, last + dt.timedelta(days=1), ret - dt.timedelta(days=1)), planned, ph, pl,
-                 ongoing, injury=inj, step_up=step_up, days=n if t else None, transition_days=t)
+                 ongoing, injury=inj, step_up=step_up, days=n if t else None, transition_days=t, illness=ill)
         if p is not None:
             out.append(p)
     return out

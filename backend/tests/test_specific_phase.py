@@ -82,9 +82,9 @@ def test_progression_reaches_the_band_twice_in_weeks_6_to_3():
     ctx = lambda m, **kw: SP.week_context(kind="specific", mode="specific", monday=m, race=r, **kw)
     a = ctx(MON)
     assert a["active"] and a["weeks_out"] == 6 and a["frac"] == 0.85
-    # plenty of base: 85 % of the race day; the +15 % rule caps it otherwise
+    # plenty of base: 85 % of the race day; the +10 % rule caps it otherwise (SP-66)
     assert SP.long_minutes(a, 400) == pytest.approx(0.85 * 300)
-    assert SP.long_minutes(a, 150) == pytest.approx(150 * 1.15)
+    assert SP.long_minutes(a, 150) == pytest.approx(150 * 1.10)
     assert ctx(MON - dt.timedelta(weeks=5))["frac"] == SP.FRAC[10]             # a longer 專項期: the first step
     assert not ctx(MON + dt.timedelta(weeks=4))["active"]                      # taper
     assert not SP.week_context(kind="base", mode="base", monday=MON, race=r)["active"]
@@ -101,7 +101,7 @@ def test_decorate_says_the_target_and_the_route(store):
     pct = round(170 / 300 * 100)
     assert s["detail"].startswith(f"這次目標定數約 {0.01 * pct * r['goal']:.0f}（單日目標的 {pct}%）")
     assert "挑每公里爬升" not in s["detail"] and "全程心率壓在輕鬆跑上限以下" in s["detail"]
-    assert "+15%" in s["detail"]                                               # 85 % wanted, capped
+    assert "+10%" in s["detail"]                                               # 85 % wanted, capped
     assert s["distance_km"] == pytest.approx(r["km"] * 170 / 300, abs=0.2)
     assert s["climb_m"] == pytest.approx(r["climb_m"] * 170 / 300, abs=2) and "江晏慶" in s["source"]
     assert info["long"]["pct"] == pct
@@ -149,7 +149,7 @@ def test_race_sim_suggested_4_to_3_weeks_out(store):
         assert sg["id"] == "race_sim:e1" and sg["type"] == "race_sim" and not sg["multi"]
     assert SP.sim_suggestion(ctx(date(2026, 10, 26)), date(2026, 10, 26), 200) is None
     sg = SP.sim_suggestion(ctx(date(2026, 10, 12)), date(2026, 10, 12), 200, aet=150.0)
-    assert sg["minutes"] == [230]                                              # +15 % over 200, < the race's 300
+    assert sg["minutes"] == [220]                                              # +10 % over 200, < the race's 300
     s = sg["sessions"][0]
     assert s["title"].startswith("賽事模擬") and s["kind"] == "long"
     assert "g 醣" in s["detail"] and "鞋" in s["detail"] and "配速" in s["detail"] and "單日目標的" in s["detail"]
@@ -200,7 +200,7 @@ def test_api_race_sim_accept_replaces_the_weeks_long_day(monkeypatch):
         assert e.c.post(f"{API}/suggestions/accept", json={"id": row["id"], "day": "2026-09-01"}).status_code == 400
         out = e.c.post(f"{API}/suggestions/accept", json={"id": row["id"], "day": "2026-10-03"}).json()
         (s,) = out["sessions"]
-        assert s["origin"] == "custom" and s["kind"] == "long" and s["title"].startswith("賽事模擬") and s["minutes"] == 230
+        assert s["origin"] == "custom" and s["kind"] == "long" and s["title"].startswith("賽事模擬") and s["minutes"] == 220
         live = e.c.get(f"{API}/sessions").json()["sessions"]
         longs = [x for x in live if x["kind"] == "long" and "2026-09-28" <= x["day"] <= "2026-10-04"]
         assert [x["uid"] for x in longs] == [s["uid"]]                                     # the auto long day is gone
@@ -209,8 +209,8 @@ def test_api_race_sim_accept_replaces_the_weeks_long_day(monkeypatch):
 
 def test_week_plan_and_projection_follow_the_target(store):
     """A built athlete (Sat 150′ long days) 6 weeks before an A trail race with a GPX: the
-    long day is the +15 % step towards the target with its share and route; the
-    projected 專項期 weeks keep rising (+15 % each) and get the race-climb session."""
+    long day is the +10 % step towards the target with its share and route; the
+    projected 專項期 weeks keep rising (+10 % each, SP-66) and get the race-climb session."""
     from backend.engine import overview as O
     from backend.engine import plan_prefs as PP
     from backend.engine import projection as P
@@ -226,15 +226,15 @@ def test_week_plan_and_projection_follow_the_target(store):
     wp = O.week_plan(ds, st, TODAY)
     assert wp["phase"] == "specific" and wp["specific"]["active"] and wp["specific"]["weeks_out"] == 6
     long_s = next(s for s in wp["sessions"] if s["id"] == "long")
-    assert long_s["minutes"] == 170                                            # 150 × 1.15, not 85 % of 300
-    assert long_s["detail"].startswith("這次目標定數約") and "單日目標的 57%" in long_s["detail"]
+    assert long_s["minutes"] == 165                                            # 150 × 1.10, not 85 % of 300
+    assert long_s["detail"].startswith("這次目標定數約") and "單日目標的 55%" in long_s["detail"]
     assert long_s["distance_km"] and long_s["climb_m"]
     assert wp["race_sim_suggestion"] is None                                   # 賽前第 6 週
     weeks = P.project_weeks(wp, _phases(plan, TODAY), date(2026, 11, 8))
     longs = [next((x for x in w["sessions"] if x["id"] == "long"), None) for w in weeks if w["mode"] == "specific"]
     assert len(longs) >= 2 and all(x is not None and x["detail"].startswith("這次目標定數約") for x in longs)
-    mins = [170] + [x["minutes"] for x in longs]
-    assert all(b > a and b <= a * 1.15 + 5 for a, b in zip(mins, mins[1:]))
+    mins = [165] + [x["minutes"] for x in longs]
+    assert all(b > a and b <= a * 1.10 + 5 for a, b in zip(mins, mins[1:]))
     assert any(x["id"] == "climb" for w in weeks for x in w["sessions"])
 
 
@@ -245,10 +245,10 @@ def test_trail_long_day_stops_at_the_cap_for_long_races(store):
     a = SP.week_context(kind="specific", mode="specific", monday=MON, race=long_race)
     assert a["frac"] * long_race["day"]["hours"] * 60 > SP.TRAIL_LONG_MAX_MIN
     assert SP.long_minutes(a, 1000) == SP.TRAIL_LONG_MAX_MIN                 # plenty of base: the cap
-    assert SP.long_minutes(a, 200) == pytest.approx(200 * 1.15)              # the +15 % step still rules below it
+    assert SP.long_minutes(a, 200) == pytest.approx(200 * 1.10)              # the +10 % step still rules below it
     ss = [{"id": "long", "kind": "long", "minutes": SP.TRAIL_LONG_MAX_MIN, "title": "LSD（山路）", "detail": ""}]
     SP.decorate(ss, a)
-    assert "長天上限" in ss[0]["detail"] and "B2B" in ss[0]["detail"] and "+15%" not in ss[0]["detail"]
+    assert "長天上限" in ss[0]["detail"] and "B2B" in ss[0]["detail"] and "+10%" not in ss[0]["detail"]
     sg = SP.sim_suggestion(SP.week_context(kind="specific", mode="specific", monday=date(2026, 10, 12), race=long_race),
                            date(2026, 10, 12), 1000)
     assert sg["minutes"][0] == SP.TRAIL_LONG_MAX_MIN                          # the simulation stops there too

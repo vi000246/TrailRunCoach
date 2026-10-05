@@ -57,6 +57,20 @@ break) are a chosen rest, so a gap that is planned, or whose unplanned part is
 
 Weekly CTL goal of the planner: base max(2, 5 % CTL), specific max(2.5, 7 % CTL)
 (推估: equal to the old +3 / +4 at CTL 55–60; Palladino writes 2–5 %).
+
+Single-session spike (SP-66): one run longer than LONG_CAP × the longest of the LONG_DAYS before
+it. Frandsen 2025 (BJSM, Garmin-RUNSAFE: 5,205 runners, 588,071 sessions, ≤ 18 months; full text,
+https://pmc.ncbi.nlm.nih.gov/articles/PMC12421110): the session's distance ÷ the longest distance
+of the preceding 30 days; against ≤ 10 %, overuse-injury HRR 1.64 (1.31–2.05) for > 10–30 %, 1.52
+(1.16–2.00) for > 30–100 %, 2.28 (1.50–3.48) for > 100 %; the week-to-week ratio showed no relation
+and an ACWR spike was protective. The authors: avoid a session over 10 % above the longest distance
+of the previous 30 days. Their runners were recreational (mean 46 y, 78 % men, ~9.5 years of
+running), the measure distance only (no climb, no time). For trail the 「longest」 is not km alone
+(owner 2026-10-04): the planner caps MINUTES (the unit it plans in: time on feet); a done run is
+compared by effort-km (km + climb / 100, ITRA), by time when a distance is missing (推估). Foot
+sessions (road, trail, hike) make the reference — a long hike is time on feet (推估) — a ride does
+not. The planner's long day stays ≤ the cap (overview.week_plan, projection.week_sessions,
+specific_phase); a done run over it is a 提醒 in status (最長單次), never a block.
 """
 from __future__ import annotations
 
@@ -67,7 +81,7 @@ from typing import Optional, Sequence
 import numpy as np
 
 from backend.engine.reentry import MIN_BREAK
-from backend.i18n import _
+from backend.i18n import N_, _
 
 # ---- CTL ramp ---------------------------------------------------------------
 WATCH_PCT, WATCH_MIN = 0.10, 3.0               # 推估 (Friel 5–8 over CTL 60–80, the lower end)
@@ -88,6 +102,12 @@ STEP_LOOKBACK_WEEKS = 26               # 推估: covers taper + race + 恢復期
 
 # ---- planner's weekly CTL goal -------------------------------------------------
 GOAL = {"base": (0.05, 2.0), "specific": (0.07, 2.5)}   # (share of CTL, floor in points) 推估
+
+# ---- single-session spike (SP-66) ------------------------------------------------
+LONG_CAP = 1.10                # Frandsen 2025 (BJSM, peer-reviewed): ≤ +10 % over the longest of 30 days
+LONG_DAYS = 30                 # Frandsen 2025: the preceding 30 days
+LONG_RECENT_DAYS = 7           # 推估: status reminds of a spike run in the last 7 days
+SRC_SPIKE = N_("Frandsen 2025（BJSM，Garmin-RUNSAFE 世代研究，5,205 位跑者）")
 
 
 def _base(ctl_prev: Optional[float]) -> float:
@@ -346,3 +366,65 @@ def ramp_goal(kind: str, ctl: Optional[float]) -> Optional[float]:
     if g is None:
         return None
     return max(g[1], g[0] * _base(ctl))
+
+
+# ---- single-session spike (SP-66) ----------------------------------------------------
+
+def long_cap(longest: Optional[float]) -> Optional[float]:
+    """The ceiling of a planned long day: LONG_CAP × `longest` (minutes: the longest foot session
+    of the LONG_DAYS before); None without one (no history: the planner keeps its defaults)."""
+    try:
+        v = float(longest or 0.0)
+    except (TypeError, ValueError):
+        return None
+    return v * LONG_CAP if v > 0 and v == v else None
+
+
+def cap_long(minutes: float, longest: Optional[float]) -> tuple[float, bool]:
+    """(the long day ≤ long_cap(longest), whether the cap cut it). A cut day is rounded DOWN to
+    5 min (the sessions round to 5; rounding up would cross the line), never below 5."""
+    cap = long_cap(longest)
+    if cap is None or float(minutes) <= cap + 1e-9:
+        return float(minutes), False
+    return max(5.0, float(int(cap // 5) * 5)), True
+
+
+def cap_note(planned: float, longest: float) -> str:
+    """The week note when the cap shortened the long day."""
+    return _("長跑縮短為 {m:.0f} 分：過去 {d} 天最長一次 {l:.0f} 分，單次不超過它的 {pct:.0%}"
+             "（原本排 {p:.0f} 分；{src}：超過 30 天內最長 10 % 以上，過度使用傷害風險上升）",
+             m=cap_long(planned, longest)[0], d=LONG_DAYS, l=longest, pct=LONG_CAP, p=planned, src=_(SRC_SPIKE))
+
+
+def session_spikes(rows: Sequence[dict], lo: int, hi: int) -> list[dict]:
+    """The runs of days [lo, hi] longer than LONG_CAP × the longest foot session of the LONG_DAYS
+    before their day (that day itself not counted). `rows` = every foot session: {"day" (int),
+    "minutes", "ekm" (effort-km, None without a distance), "run" (True for road / trail runs), …}.
+    Measure: effort-km when the run and the reference both have one, else minutes. Each hit is
+    the row plus {"by": "ekm" | "min", "value", "ref", "excess" (0.25 = +25 %)}; a run without a
+    foot session in the window has no reference (a re-entry, reentry.py) and is skipped."""
+    out = []
+    for r in rows:
+        d = int(r["day"])
+        if not r.get("run") or not lo <= d <= hi:
+            continue
+        prior = [p for p in rows if d - LONG_DAYS <= int(p["day"]) <= d - 1]
+        if not prior:
+            continue
+        ref_k = max((float(p.get("ekm") or 0.0) for p in prior), default=0.0)
+        if r.get("ekm") and ref_k > 0:
+            by, v, ref = "ekm", float(r["ekm"]), ref_k
+        else:
+            by, v, ref = "min", float(r.get("minutes") or 0.0), max(float(p.get("minutes") or 0.0) for p in prior)
+        if ref > 0 and v > LONG_CAP * ref + 1e-9:
+            out.append({**r, "by": by, "value": v, "ref": ref, "excess": v / ref - 1.0})
+    return out
+
+
+def spike_text(hit: dict, when: str) -> str:
+    """「10/3 那次跑步 25.0 努力 km，比前 30 天最長一次（19.0）多 32 %」"""
+    if hit["by"] == "ekm":
+        return _("{when}那次跑步 {v:.1f} 努力 km（km＋爬升÷100），比前 {d} 天最長一次（{ref:.1f}）多 {x:.0%}",
+                 when=when, v=hit["value"], d=LONG_DAYS, ref=hit["ref"], x=hit["excess"])
+    return _("{when}那次跑步 {v:.0f} 分，比前 {d} 天最長一次（{ref:.0f} 分）多 {x:.0%}",
+             when=when, v=hit["value"], d=LONG_DAYS, ref=hit["ref"], x=hit["excess"])

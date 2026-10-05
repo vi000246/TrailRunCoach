@@ -235,7 +235,7 @@ def test_road_specific_phase_follows_the_race_distance_not_the_course_constant()
     info = {"active": True, "frac": 0.8, "race": race, "sport": "road"}
     p = 3.5 * 60 / 42.195 * SP.ROAD_EASY_SLOW
     assert SP.long_minutes(info, 1e9) == pytest.approx(min(min(0.8 * 42.195, 35.0) * p, 180.0))
-    assert SP.long_minutes(info, 100) == pytest.approx(115)                       # +15 % over the longest
+    assert SP.long_minutes(info, 100) == pytest.approx(110)                       # +10 % over the longest (SP-66)
     # the race simulation stays: a flat long run in race kit, never the whole marathon
     sg = SP.sim_suggestion({**info, "race": {**race, "id": "e1", "name": "台北馬", "start": "2026-12-05", "days": 1,
                                              "kind": "road", "hours": 3.5, "km": 42.195}},

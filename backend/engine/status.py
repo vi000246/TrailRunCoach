@@ -695,7 +695,43 @@ class Status:
         else:
             why = f"4 週內最長 {_hms(longest)}，一年內最長 {_hms(ymax)}"
             lvl, v, act = INFO, "沒有目標賽事，只看趨勢", "到「賽事周期」頁填目標賽事的預估時間"
-        return Indicator("long", "最長單次", lvl, txt, v, why, act, SRC_CHIANG, longest, spark)
+        src, extra = SRC_CHIANG, {}
+        hits = self._long_spikes()
+        if hits:
+            # SP-66: a run of the last week > +10 % over the longest of the 30 days before it — a 提醒
+            h = max(hits, key=lambda x: x["excess"])
+            d = day_to_date(h["day"])
+            lvl = BAD if lvl == BAD else WATCH
+            v = _("單次跑太長：比前 {d} 天最長一次多 {x:.0%}（> {cap:.0%}）", d=LG.LONG_DAYS, x=h["excess"],
+                  cap=LG.LONG_CAP - 1)
+            why = LG.spike_text(h, f"{d.month}/{d.day} ") + "；" + why
+            act = _("接下來 1–2 週的長跑不要比這次長；之後每次長跑 ≤ 前 {d} 天最長一次的 {pct:.0%}，有疼痛就先減量",
+                    d=LG.LONG_DAYS, pct=LG.LONG_CAP)
+            src = _(LG.SRC_SPIKE) + "；" + SRC_CHIANG
+            extra = {"spike": {"date": d.isoformat(), "by": h["by"], "value": h["value"], "ref": h["ref"],
+                               "excess": h["excess"]}}
+        return Indicator("long", "最長單次", lvl, txt, v, why, act, src, longest, spark, extra)
+
+    def _long_spikes(self) -> list[dict]:
+        """load_guard.session_spikes on the runs of the last LONG_RECENT_DAYS (SP-66): foot sessions
+        (road / trail / hike) of the LONG_DAYS before make the reference; a race or 百岳 day (any
+        event of the plan) is not a training spike and is left out."""
+        ev_days = set()
+        for e in getattr(self.plan, "events", None) or ():
+            try:
+                ev_days |= {e.start + dt.timedelta(days=k) for k in range((e.end - e.start).days + 1)}
+            except Exception:               # noqa: BLE001 — a bad event never hides the reminder
+                continue
+        rows = []
+        for w in self.since(LG.LONG_RECENT_DAYS + LG.LONG_DAYS):
+            if not (self.mountain(w) or self.is_road(w)):
+                continue
+            km = self.m(w, "distance")
+            rows.append({"day": int(math.floor(w.day)), "run": w.sport == "run",
+                         "minutes": (self.m(w, "movingduration") or self.m(w, "duration") or 0) / 60.0,
+                         "ekm": km + (self.m(w, "climbing") or 0.0) / 100.0 if km else None})
+        hits = LG.session_spikes(rows, self.tday - LG.LONG_RECENT_DAYS + 1, self.tday)
+        return [h for h in hits if day_to_date(h["day"]) not in ev_days]
 
     def i_density(self) -> Indicator:
         ws = [w for w in self.since(28) if self.mountain(w) and (self.m(w, "distance") or 0) > 3]
