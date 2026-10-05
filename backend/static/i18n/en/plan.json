@@ -4,5 +4,12 @@
   "thr.now": "In use: AeT {aet} / LTHR {lthr} / CP {cp} W",
   "thr.latest": "; latest test {date} ({n} in all). ",
   "thr.none": "; no tests yet. ",
-  "thr.lthr_default": "⚠ LTHR is WKO5's default: enter a test result in Settings"
+  "thr.lthr_default": "⚠ LTHR is WKO5's default: enter a test result in Settings",
+  "ev.cutoff": "Cutoff h",
+  "ev.turnaround": "Turnaround (h after start)",
+  "ev.optional": "optional",
+  "ev.summit_km": "Summit at km",
+  "ev.summit_ph": "blank = the GPX's highest point",
+  "ev.cutoff_tip": "The organiser's cutoff (hours). When set, the feasibility check compares the race calculator's predicted finish with it.",
+  "ev.turnaround_tip": "Turn back if the summit isn't reached this many hours after starting on summit day. The feasibility check compares the predicted time to the summit with it; too late = not a fit for this Taiwan's 100 Peaks (Baiyue) route."
 }

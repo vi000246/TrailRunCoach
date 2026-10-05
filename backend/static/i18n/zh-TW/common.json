@@ -104,5 +104,12 @@
   "workout.load_min": "分鐘",
   "workout.load_rpe_tip": "用感覺填：輕鬆／稍累／累／很累／極限對到 Borg CR-10 的 2／4／5／7／10，TSS ＝ {factor} × RPE × 分鐘（Foster session RPE，{src}，推估）。只用來排課填目標，實際負荷照手錶記錄算。",
   "workout.load_rpe_mine": "係數用你手錶記錄的 RPE 和實際 TSS 校正",
-  "workout.load_rpe_default": "預設係數，還沒有手錶記錄 RPE 的活動"
+  "workout.load_rpe_default": "預設係數，還沒有手錶記錄 RPE 的活動",
+  "feas.grade": "{g} 賽",
+  "feas.days_to": "倒數 {n} 天",
+  "feas.suggest": "建議",
+  "feas.how": "怎麼判定",
+  "feas.how_text": "高峰週（每週 +10 %、每 4 週一次恢復週，推到賽前第 3 週）的距離和爬升，對照比賽最難那一天；超馬再看 Koop 的最低週時數；有填關門／撤退時間就對照預測時間；剩不到 3 週判定來不及。只是建議，不會改你的賽事。門檻是推估。",
+  "feas.loading": "評估可行性中…（第一次讀活動資料約需一分鐘）",
+  "feas.failed": "可行性評估失敗"
 }

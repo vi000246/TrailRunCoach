@@ -161,6 +161,22 @@ def b2b_card():
     return B2B.card(ds, today, st.plan.events, st.phase, cur, weeks, aet_of)
 
 
+@router.get("/feasibility")
+def feasibility(event_id: Optional[str] = None):
+    """The 「賽事可行性」 card (engine/race_feasibility.py, SP-105): the upcoming A / B races, or the
+    one `event_id` (the season-plan page asks after saving an event). Only advice."""
+    from backend.engine import race_feasibility as RF
+    from backend.engine.planning import Plan
+    from backend.i18n import _
+    ds = _dataset()
+    today = O.day_to_date(ds.today)
+    plan = Plan.load()                 # the season plan's events (ds.plan is empty in parity mode)
+    if event_id and not any(e.id == event_id for e in plan.events):
+        raise HTTPException(404, "no such event")
+    return {"today": today.isoformat(), "races": RF.races(plan, ds, today, event_id=event_id),
+            "levels": {k: _(v) for k, v in RF.LEVEL_LABEL.items()}}
+
+
 def _z5_chart_href() -> str:
     """The viewer deep link of the first z5gate panel in the custom views (the 基礎期 chart)."""
     from urllib.parse import urlencode

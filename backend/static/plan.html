@@ -77,6 +77,7 @@ button.primary { background: var(--accent); border-color: var(--accent); color: 
 button.link { border: 0; background: none; color: var(--accent); padding: 0 4px; }
 .form { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: end; margin-top: 10px; }
 .form label { display: flex; flex-direction: column; font-size: 12px; color: var(--muted); gap: 2px; }
+.form label[hidden] { display: none; }
 .pri { display: inline-block; min-width: 20px; text-align: center; border-radius: 4px; font-weight: 700; font-size: 12px; padding: 0 4px; }
 .pri.A { background: var(--bad); color: #fff; } .pri.B { background: var(--warn); color: #fff; } .pri.C { background: var(--line); }
 .dot { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
@@ -91,6 +92,7 @@ button.link { border: 0; background: none; color: var(--accent); padding: 0 4px;
 </head>
 <body>
 <script src="/api/v1/static/shell.js" data-page="plan"></script>
+<script src="/api/v1/static/feasibility.js"></script>
 <header>
   <h1>賽事周期</h1>
   <span class="meta" id="todayinfo"></span>
@@ -135,10 +137,14 @@ button.link { border: 0; background: none; color: var(--accent); padding: 0 4px;
       <label>爬升 m<input type="number" name="climbing_m" step="10" min="0"></label>
       <label>預估移動時間 h<input type="number" name="est_hours" step="0.5" min="0"></label>
       <label title="百岳／多日行程第 1 天的背包重量；空白 = 體重 × 13 %（沒有體重時 9 kg，推估）。百岳預測用它，賽前的陡坡健走也用它算模擬負重的坡度">行程背包 kg<input type="number" name="pack_kg" step="0.5" min="0" max="40" placeholder="9"></label>
+      <!-- SP-105 (engine/race_feasibility.py): 賽事 = 關門時間; 百岳 = 撤退時間 (hours from the summit day's start) + the summit km -->
+      <label id="cutwrap"><span id="cutlab" data-i18n="plan.ev.cutoff">關門時間 h</span><input type="number" name="cutoff_hours" step="0.25" min="0" max="240" data-i18n-attr="placeholder:plan.ev.optional" placeholder="選填"></label>
+      <label id="summitwrap" hidden><span data-i18n="plan.ev.summit_km">山頂在第幾 km</span><input type="number" name="summit_km" step="0.1" min="0" data-i18n-attr="placeholder:plan.ev.summit_ph" placeholder="空白＝GPX 最高點"></label>
       <label>備註<input name="note"></label>
       <button class="primary" type="submit" id="evsubmit">新增</button>
       <button type="button" id="evcancel" hidden>取消編輯</button>
     </form>
+    <div id="evfeas" aria-live="polite"></div>
   </section>
 
   <section>
@@ -284,6 +290,7 @@ function renderGoals() {
 function renderEvents() {
   const kinds = S.kinds;
   $("#kindsel").innerHTML = Object.entries(kinds).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join("");
+  cutoffLabels();
   // finished events (last day already past) are hidden; one row at the bottom reveals them for
   // editing — they stay in the plan because the race-power back-test uses past races
   const done = (e) => e.days_to + Math.max(1, e.days || 1) - 1 < 0;
@@ -363,18 +370,39 @@ $("#evform").addEventListener("submit", async (ev) => {
   ev.preventDefault();
   const f = new FormData(ev.target), body = {};
   for (const [k, v] of f.entries()) body[k] = v === "" ? null : v;
-  for (const k of ["days", "distance_km", "climbing_m", "est_hours", "pack_kg"]) if (body[k] != null) body[k] = Number(body[k]);
+  for (const k of ["days", "distance_km", "climbing_m", "est_hours", "pack_kg", "cutoff_hours", "summit_km"]) if (body[k] != null) body[k] = Number(body[k]);
   body.days = body.days || 1; body.note = body.note || "";
-  await call("PUT", "/events", body);
-  ev.target.reset(); ev.target.id.value = ""; $("#evsubmit").textContent = "新增"; $("#evcancel").hidden = true;
+  const saved = await call("PUT", "/events", body);
+  ev.target.reset(); ev.target.id.value = ""; $("#evsubmit").textContent = "新增"; $("#evcancel").hidden = true; cutoffLabels();
   toast("已儲存"); load();
+  showFeas(saved.event);
 });
-$("#evcancel").onclick = () => { $("#evform").reset(); $("#evform").id.value = ""; $("#evsubmit").textContent = "新增"; $("#evcancel").hidden = true; };
+// 賽事可行性 of the event just saved (static/feasibility.js; GET /api/v1/overview/feasibility?event_id=…):
+// asked after the save, not inside it — the first race-calculator read of the activities takes ~1 min
+async function showFeas(e) {
+  const box = $("#evfeas"), tC = (k) => (window.I18N ? I18N.t("common.feas." + k) : k);
+  if (!e || !window.Feas || !e.distance_km) { box.innerHTML = ""; return; }
+  box.innerHTML = `<p class="meta">${esc(tC("loading"))}</p>`;
+  try {
+    const r = await Feas.load(e.id);
+    box.innerHTML = (r.races || []).map(Feas.html).join("");
+  } catch (x) { box.innerHTML = `<p class="meta warn">${esc(tC("failed"))}</p>`; }
+}
+// 賽事: 關門時間; 百岳: 撤退時間 (from the summit day's start) + where the summit is
+function cutoffLabels() {
+  const hike = $("#kindsel").value === "baiyue", tP = (k) => (window.I18N ? I18N.t("plan.ev." + k) : k);
+  $("#cutlab").textContent = tP(hike ? "turnaround" : "cutoff");
+  $("#cutwrap").title = tP(hike ? "turnaround_tip" : "cutoff_tip");
+  $("#summitwrap").hidden = !hike;
+}
+$("#kindsel").addEventListener("change", cutoffLabels);
+$("#evcancel").onclick = () => { $("#evform").reset(); $("#evform").id.value = ""; $("#evsubmit").textContent = "新增"; $("#evcancel").hidden = true; cutoffLabels(); };
 $("#events").addEventListener("click", async (ev) => {
   const ed = ev.target.dataset.edit, del = ev.target.dataset.del;
   if (ed) {
     const e = S.events.find((x) => x.id === ed), f = $("#evform");
-    for (const k of ["id", "name", "date", "kind", "priority", "days", "distance_km", "climbing_m", "est_hours", "pack_kg", "note"]) f[k].value = e[k] ?? "";
+    for (const k of ["id", "name", "date", "kind", "priority", "days", "distance_km", "climbing_m", "est_hours", "pack_kg", "cutoff_hours", "summit_km", "note"]) f[k].value = e[k] ?? "";
+    cutoffLabels();
     $("#evsubmit").textContent = "更新"; $("#evcancel").hidden = false; f.scrollIntoView({ behavior: "smooth", block: "center" });
   }
   if (ev.target.dataset.gpxup) { gpxFor = ev.target.dataset.gpxup; $("#gpxpick").click(); }
