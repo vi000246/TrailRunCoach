@@ -220,6 +220,12 @@ input.need, .drop.need { border-color: var(--bad); box-shadow: 0 0 0 1px var(--b
 .legend i { display: inline-block; width: 12px; height: 8px; border-radius: 2px; margin-right: 4px; vertical-align: 0; }
 dialog.dlg { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--text); width: min(680px, 94vw); }
 dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
+.form label:has(> .ll-row) { grid-column: span 2; }
+.ll-row { display: flex; gap: 4px; align-items: center; }
+.ll-row input { flex: 1; min-width: 0; }
+.ll-row .btn { white-space: nowrap; }
+#pick-map { height: min(60vh, 440px); border-radius: 8px; border: 1px solid var(--line); }
+#pick-ok:disabled { opacity: .45; cursor: default; }
 .saved { font-size: 12px; color: var(--good); }
 @media (max-width: 700px) {
   main { padding: 10px 10px 40px; gap: 10px; }
@@ -354,9 +360,18 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
         <option value="itra">km + 爬升/100（ITRA / 健行筆記）</option>
         <option value="scarf">km + 爬升/126（Scarf）</option></select></label>
       <label data-tw-only>地點（山名，天氣用）<input id="peak" list="peaklist" placeholder="例：玉山"></label>
-      <label>或 緯度, 經度<input id="latlon" placeholder="23.47, 120.957" data-intl-placeholder="46.55, 7.98"></label>
+      <label>或 緯度, 經度<span class="ll-row"><input id="latlon" placeholder="23.47, 120.957" data-intl-placeholder="46.55, 7.98"><button class="btn" id="ll-pick" type="button" data-i18n="racepower.pick.btn">🗺 地圖選點</button></span></label>
     </div>
     <datalist id="peaklist"></datalist>
+    <!-- 地圖選點 for the 緯度, 經度 field: Leaflet + basemaps.js (open tiles, no API key) -->
+    <dialog id="pick-dlg" class="dlg">
+      <h2 data-i18n="racepower.pick.title">在地圖上選地點</h2>
+      <p class="meta" style="margin:0 0 6px" data-i18n="racepower.pick.hint">點一下地圖放標記，可以拖動微調；右上角換底圖。點在山頭附近（300 m 內）會一起帶入山頭的海拔。</p>
+      <div id="pick-map"></div>
+      <div class="toolbar" style="justify-content:flex-end;margin-top:10px"><span class="meta num" id="pick-msg"></span>
+        <button class="btn primary" id="pick-ok" type="button" disabled data-i18n="racepower.pick.ok">使用這個位置</button>
+        <button class="btn" id="pick-close" type="button" data-i18n="racepower.close">關閉</button></div>
+    </dialog>
     <div class="stops-box" id="stops-box">
       <div class="row"><span class="lbl">補給站</span>
         <button class="btn" id="stop-add" type="button">＋ 新增補給站</button>
@@ -2159,6 +2174,70 @@ $("heat-s").addEventListener("input", () => { S.heatAccl = { mode: "custom", s: 
 ["tripdays", "packdays", "heatz"].forEach((id) => $(id).addEventListener("input", schedule));
 $("date").addEventListener("change", () => { loadHeat(); autoWeather(); });
 $("latlon").addEventListener("change", () => autoWeather());
+
+// ---------------- 地圖選點: fills the 緯度, 經度 field (Leaflet + basemaps.js, open tiles, no API key) ----------------
+const PICK_SNAP_M = 300;                  // a click this close to a known peak takes its elevation (推估)
+const PICK_HOME = { tw: [23.7, 121.0, 8], intl: [46.5, 8.0, 5] };
+let PICK = null;                          // { map, mark, ll }
+function distM(a, b) {                    // haversine, m
+  const r = Math.PI / 180, dLat = (b.lat - a.lat) * r, dLon = (b.lon - a.lon) * r;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(dLon / 2) ** 2;
+  return 2 * 6371000 * Math.asin(Math.sqrt(h));
+}
+function nearPeak(lat, lon) {
+  let best = null, bd = Infinity;
+  for (const p of PEAKS) {
+    if (!ok(p.lat) || !ok(p.lon)) continue;
+    const d = distM({ lat, lon }, p);
+    if (d < bd) { bd = d; best = p; }
+  }
+  return best && bd <= PICK_SNAP_M ? best : null;
+}
+function pickSet(ll) {
+  const lat = +ll.lat.toFixed(5), lon = +L.Util.wrapNum(ll.lng, [-180, 180], true).toFixed(5);
+  const pk = nearPeak(lat, lon);
+  PICK.ll = { lat, lon, peak: pk };
+  PICK.mark.setLatLng([lat, lon]);
+  if (!PICK.map.hasLayer(PICK.mark)) PICK.mark.addTo(PICK.map);
+  $("pick-msg").textContent = `${lat}, ${lon}` + (pk ? ` · ${T("pick.near", { name: pk.name, z: Math.round(pk.elevation_m) })}` : "");
+  $("pick-ok").disabled = false;
+}
+async function openPicker() {
+  if (typeof L === "undefined" || !window.MapLayers) return;
+  $("pick-dlg").showModal();
+  if (!MAP_DEF) MAP_DEF = await MapLayers.defaults();
+  if (!PICK) {
+    const map = L.map($("pick-map"), { zoomSnap: 0.5 });
+    MapLayers.attach(map, MAP_DEF, "racepower.pickmap");
+    L.control.scale({ imperial: false }).addTo(map);
+    const mark = L.marker([0, 0], { draggable: true, keyboard: false });
+    mark.on("dragend", () => pickSet(mark.getLatLng()));
+    map.on("click", (e) => pickSet(e.latlng));
+    PICK = { map, mark, ll: null };
+  }
+  PICK.map.invalidateSize();
+  const loc = getLoc();
+  if (loc && ok(+loc.lat) && ok(+loc.lon)) {
+    PICK.map.setView([+loc.lat, +loc.lon], 13);
+    pickSet(L.latLng(+loc.lat, +loc.lon));
+  } else {
+    const r = await window.AppRegion?.catch(() => null), h = PICK_HOME[r?.region === "intl" ? "intl" : "tw"];
+    PICK.map.setView([h[0], h[1]], h[2]);
+    if (PICK.map.hasLayer(PICK.mark)) PICK.map.removeLayer(PICK.mark);
+    PICK.ll = null; $("pick-msg").textContent = ""; $("pick-ok").disabled = true;
+  }
+}
+$("ll-pick").addEventListener("click", openPicker);
+$("pick-close").addEventListener("click", () => $("pick-dlg").close());
+$("pick-ok").addEventListener("click", () => {
+  const p = PICK?.ll;
+  if (!p) return;
+  // a third number = elevation (getLoc): only when the click landed on a known peak
+  $("latlon").value = [p.lat, p.lon].concat(p.peak ? [Math.round(p.peak.elevation_m)] : []).join(", ");
+  $("pick-dlg").close();
+  $("latlon").dispatchEvent(new Event("change"));
+  saveForm();
+});
 $("amount").addEventListener("input", () => { S.amount = Number($("amount").value); syncForm(); schedule(); });
 ["hup", "hdown"].forEach((id) => $(id).addEventListener("input", () => { S[id] = num(id) ?? S[id]; schedule(); }));
 ["dist", "gain", "loss", "date", "target", "tpace", "tpower", "tspeed", "pack", "start", "stops", "ogain", "sigma", "eps", "minlen", "flatpct"].forEach((id) => $(id).addEventListener("input", schedule));
