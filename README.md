@@ -100,6 +100,19 @@ python -m pytest backend/tests -q -m "not golden"
 
 預設只用合成資料，不碰 `~/.wko5coach`。
 
+**瀏覽器冒煙測試**（`backend/tests/e2e/`，Playwright）：用示範跑者的合成資料在暫存資料夾起一個本機伺服器，
+用 Chromium 打開每一頁，檢查沒有 JS 錯誤、主要區塊有畫出來、主要按鈕按得動。預設的 `pytest` 會跳過它們；
+要跑時：
+
+```bash
+pip install -r requirements-dev.txt && python -m playwright install chromium   # 第一次
+./e2e.sh                       # = python -m pytest backend/tests/e2e -m e2e；其他參數照傳（例 -k templates）
+TRC_E2E_HEADED=1 ./e2e.sh -x   # 開視窗看它跑
+```
+
+頁面的 ECharts／Leaflet 從 cdnjs 載入，所以要有網路；地圖圖磚在測試裡以空白圖回應，不連圖磚伺服器。
+不會連 COROS（「抓活動」的同步由測試自己回應）。
+
 ---
 
 ## English summary
