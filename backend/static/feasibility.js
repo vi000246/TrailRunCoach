@@ -61,6 +61,9 @@
       else if (c.id === "cutoff" && c.eta_h != null) t = T("k_summit", { eta: f1(c.eta_h), c: f1(c.cutoff_h) });
       else if (c.id === "cutoff" && c.finish_h != null) t = T("k_finish", { f: f1(c.finish_h), c: f1(c.cutoff_h) });
       else if (c.id === "b2b" && c.count != null) t = T("k_b2b", { n: c.count });
+      // SP-114 a multi-day 百岳: summit-day simulations still possible / done
+      else if (c.id === "summit_sim" && c.projected != null) t = T("k_sims_plan", { n: c.projected + (c.done || 0), k: c.need });
+      else if (c.id === "summit_sim" && c.count != null) t = T("k_sims", { n: c.count, k: c.need });
       if (t) out.push(`<span title="${esc(c.text)}">${esc(t)}</span>`);
     }
     return out.join("");

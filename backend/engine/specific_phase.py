@@ -64,6 +64,20 @@ ROAD_LONG_MAX_KM = 35.0
 ROAD_LONG_MAX_MIN = 180.0
 TRAIL_LONG_MAX_MIN = 360.0         # SP-106 推估: iRunFar's 5–6 h for 100 mi, the upper end; past it B2B (race-feasibility.md §1)
 ROAD_EASY_SLOW = 1.15
+# SP-114 攻頂日模擬 (a multi-day 百岳 only; baiyue-mountaineering-training.md §1.2, §4, owner 2026-10-05): from
+# 8 weeks before the trip the long day climbs the summit day's whole climb in one day with the trip's pack
+# (UA〈Training for Mountaineering〉: 「8 weeks out … at least one workout per week where you ascend [the
+# summit day's climb] in one day, with a backpack of approximately the same weight」). The summit day = the
+# day with the most climb. Its minutes: the climb at 山本's 430 m/h up (10 % pack) and ~650 m/h down
+# (research §1.4: 1,500 m ≈ 3.5 h up, 5.5–6 h in all — 推估); still ≤ +15 % over the last 4 weeks' longest.
+# Weeks 8–3 out, so the last one is ≥ 10 days before the trip (baiyue_multiday.SIM_LAST_DAYS). The
+# weekday steep-hill walk (steep_hill.py) stays without a pack (UA: aerobic sessions needn't carry the
+# trip's weight).
+SUMMIT_SIM_WEEKS = 8
+SUMMIT_UP_MPH = 430.0
+SUMMIT_DOWN_MPH = 650.0
+SRC_SUMMIT = ("攻頂日模擬：Uphill Athlete〈Training for Mountaineering〉——行程前 8 週起每週一次，一天爬完攻頂日的爬升，"
+              "背和行程差不多重的背包；時間用山本正嘉背 10% 體重每小時 430 m 上、下山約 650 m/h 估（推估）")
 
 SRC = ("單日目標＝コース定數（山本正嘉）；進度：江晏慶「抓比賽距離爬升的七成」（賽前約 1.5 個月）、"
        "Koop 最長一次 20–80% 賽事距離、CTS 賽前 4–6 週最大量；每週比例為推估")
@@ -225,7 +239,13 @@ def race_day(plan, today: dt.date, predict: Optional[Callable] = None, gpx: Opti
     ekm = day["km"] + day["climb_m"] / 100.0
     hpe = day["hours"] / ekm if ekm > 0 else None
     from backend.engine.race_feasibility import split_note
-    return {"id": e.id, "name": e.name, "start": e.start.isoformat(), "days": n, "kind": e.kind,
+    summit = None
+    if e.kind == "baiyue" and n > 1 and ln.get("per_day"):
+        # SP-114: the summit day = the trip's day with the most climb (攻頂日模擬)
+        sd = max(ln["per_day"], key=lambda d: d["climb_m"])
+        summit = {"day": sd["day"], "km": sd["km"], "climb_m": sd["climb_m"], "descent_m": sd["descent_m"],
+                  "hours": sd["hours"], "pack_kg": e.pack}
+    return {"id": e.id, "name": e.name, "start": e.start.isoformat(), "days": n, "kind": e.kind, "summit": summit,
             "pack_kg": e.pack_kg, "goal": round(RR.goal_of(ln), 1), "cc": ln["cc"], "time_source": ln["time_source"],
             "hours": ln["hours"], "km": ln["km"], "climb_m": ln["climb_m"], "descent_m": ln["descent_m"],
             "descent_assumed": ln.get("descent_assumed"), "day": day, "h_per_ekm": hpe,
@@ -252,6 +272,8 @@ def week_context(*, kind: str, mode: str, monday: dt.date, race: Optional[dict],
         info["why"].append("只在專項期（賽前第 10–3 週）")
         return info
     info.update(active=True, frac=frac(w, info["sport"]), sim_week=w in SIM_WEEKS)
+    if race.get("summit") and not road and w <= SUMMIT_SIM_WEEKS and mode not in ("recovery_week", "reentry"):
+        info["summit_sim"] = True                   # SP-114: this week's long day is the 攻頂日模擬
     if road:
         info["climb_why"] = "主要訓練項目是路跑：不排長爬坡、下坡"
         return info
@@ -285,7 +307,7 @@ def projected_context(kind: str, mode: str, monday: dt.date, cur: Optional[dict]
 
 
 PUBLIC = ("active", "race", "weeks_out", "frac", "sim_week", "climb", "climb_why", "why", "src", "longest28",
-          "long", "planned", "error", "sport")
+          "long", "planned", "error", "sport", "summit_sim")
 
 
 def public(info: Optional[dict]) -> Optional[dict]:
@@ -300,6 +322,8 @@ def long_minutes(info: dict, longest: float) -> Optional[float]:
     if not info or not info.get("active"):
         return None
     want = trail_aim(info)[0]
+    if info.get("summit_sim"):
+        want = summit_minutes(info["race"]["summit"])       # SP-114: the whole summit-day climb, no 6-h cap
     if is_road(info):
         # 路跑: frac × the race distance (≤ 35 km) at long-run pace, ≤ 3 h
         p = road_pace(info["race"])
@@ -365,6 +389,9 @@ def decorate(ss: list[dict], info: Optional[dict]) -> None:
         s["source"] = ((s.get("source") or "") + "；" + SRC_ROAD).lstrip("；")
         info["long"] = {"minutes": int(m), "pct": round(pct), "km": round(km, 1)}
         return
+    if info.get("summit_sim"):
+        summit_session(s, info, m)
+        return
     want, cut = trail_aim(info)
     r = route(race, m)
     parts = [p for p in (s.get("detail") or "").split("；") if p and not p.startswith(_OLD_TERRAIN)]
@@ -374,6 +401,33 @@ def decorate(ss: list[dict], info: Optional[dict]) -> None:
     s["source"] = ((s.get("source") or "") + "；" + SRC).lstrip("；")
     info["long"] = {"minutes": int(m), "cc": round(r["cc"], 1), "pct": round(r["f"] * 100), "km": round(r["km"], 1),
                     "climb_m": round(r["climb_m"]), "descent_m": round(r["descent_m"])}
+
+
+def summit_minutes(summit: dict) -> float:
+    """The minutes of a 攻頂日模擬 climbing the whole summit-day climb (up and down, 推估)."""
+    cl = float(summit.get("climb_m") or 0.0)
+    return cl / SUMMIT_UP_MPH * 60.0 + cl / SUMMIT_DOWN_MPH * 60.0
+
+
+def summit_session(s: dict, info: dict, minutes: float) -> None:
+    """The long day as the 攻頂日模擬 (SP-114, in place): the summit day's climb (a share of it when
+    the +15 % rule or the week's volume shortened the day), the trip's pack, the plain how-to."""
+    race = info["race"]
+    sm = race["summit"]
+    full = summit_minutes(sm)
+    f = min(1.0, minutes / full) if full else 1.0
+    climb = f * float(sm["climb_m"])
+    parts = [p for p in (s.get("detail") or "").split("；") if p and not p.startswith(_OLD_TERRAIN)]
+    head = _("一天爬升約 {cl:.0f} m（攻頂日＝第 {d} 天 {need:.0f} m 的 {p:.0f}%），背 {kg:g} kg 的背包（行程背包），"
+             "爬上去再下來", cl=climb, d=sm["day"], need=sm["climb_m"], p=f * 100, kg=round(float(sm["pack_kg"]), 1))
+    if f < 0.95:
+        head += _("；受「每次最多 +15%」和週量限制，這次先爬到 {p:.0f}%，之後每週加一點", p=f * 100)
+    tail = _("做完在活動頁記下這次背多少，賽事評估才會算這次（爬升到攻頂日的 100% 而且有背包，3 次算夠）")
+    s.update(title=_("攻頂日模擬｜{name}", name=race["name"]), detail="；".join([head] + parts + [tail]),
+             climb_m=round(climb), terrain="trail",
+             source=((s.get("source") or "") + "；" + SRC_SUMMIT).lstrip("；"))
+    info["long"] = {"minutes": int(minutes), "summit_sim": True, "climb_m": round(climb), "pct": round(f * 100),
+                    "pack_kg": sm["pack_kg"], "need_m": round(sm["climb_m"])}
 
 
 # ---------------------------------------------------------------------------

@@ -524,5 +524,8 @@ def races(plan, ds, today: dt.date, event_id: Optional[str] = None,
             r["stretch_note"] = RR.hardest_stretch_note(line)
         if not r.get("skipped"):
             r["readiness"] = readiness(e, line, today, hist, acts)
+        # SP-114: a multi-day 百岳 is judged on the 攻頂日模擬, not the weekly volume (its own module)
+        from backend.engine import baiyue_multiday as BM
+        BM.apply(r, e, line, today, ds)
         out.append(r)
     return out
