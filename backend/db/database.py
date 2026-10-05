@@ -11,7 +11,7 @@ from collections import OrderedDict
 from pathlib import Path
 from typing import Optional
 
-from sqlalchemy import text
+from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from backend.db.models import Base
 from backend import tenancy
@@ -34,6 +34,18 @@ def url_for(path: Path) -> str:
     return f"sqlite+aiosqlite:///{path}"
 
 
+def _on_connect(dbapi_con, _record) -> None:
+    """WAL lets readers run beside the long sync writers (Dataset warm-up,
+    plan_auto), and busy_timeout waits instead of failing after 5 s: the
+    scheduler / backup ticks died with "database is locked" (OperationalError)."""
+    cur = dbapi_con.cursor()
+    try:
+        cur.execute("PRAGMA busy_timeout=30000")
+        cur.execute("PRAGMA journal_mode=WAL")
+    finally:
+        cur.close()
+
+
 def _entry(path: Optional[Path] = None) -> tuple:
     p = Path(path) if path is not None else db_path()
     key = str(p)
@@ -44,6 +56,7 @@ def _entry(path: Optional[Path] = None) -> tuple:
             return hit
         p.parent.mkdir(parents=True, exist_ok=True)
         eng = create_async_engine(url_for(p), echo=False)
+        event.listen(eng.sync_engine, "connect", _on_connect)
         hit = _POOL[key] = (eng, async_sessionmaker(eng, expire_on_commit=False))
         while len(_POOL) > _POOL_MAX:
             _k, (old, _m) = _POOL.popitem(last=False)
