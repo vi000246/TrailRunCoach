@@ -783,6 +783,28 @@ def test_aet_analysis_in_heat_counts_and_says_so():
     assert cool["temp_band"] == "cool" and not any("熱環境" in x for x in AT.lines(cool))
 
 
+def test_aet_analysis_subtracts_the_athletes_own_wrist_bias(monkeypatch):
+    # SP-51: the watch's block mean minus the dataset's wrist bias (zone_events.dataset_watch_bias)
+    from backend.engine import workout_review as R
+    own = {"bias_c": 2.0, "sd_c": 0.5, "n": 12, "src": "dataset", "pairs": 12}
+    t, h, s, p, tp = _aet_series(12.9, temp=29.0)
+    r = AT.analyze(t, h, s, p, tp, watch_bias=own)               # 29 − 2.0 = 27: warm, not 25.3 cool
+    assert r["temp_c"] == pytest.approx(27.0) and r["temp_band"] == "warm"
+    assert r["temp_bias"] == {"bias_c": 2.0, "own": True, "pairs": 12}
+    assert AT.analyze(t, h, s, p, tp)["temp_c"] == pytest.approx(29.0 - 3.7)     # no bias given: the default
+    xt, xh, xv = _xu_series(rise=5)
+    xu = AT.analyze(xt, xh, xv, None, np.full(len(xt), 29.0), judge="xu", watch_bias=own)
+    assert xu["temp_c"] == pytest.approx(27.0) and xu["temp_bias"]["own"]
+    # analyze_workout: no archive temperature → the dataset's bias
+    w = _aet_workout(TODAY - dt.timedelta(days=3))
+    w.channels["temperature"] = [29.0] * len(w.channels["elapsedtime"])
+    ds = _ds([w])
+    ds.activity_temps = {}
+    monkeypatch.setattr(R, "watch_bias_of", lambda _ds: own)
+    r = AT.analyze_workout(ds, ds.workouts[0])
+    assert r["ok"] and r["temp_src"] == "watch" and r["temp_c"] == pytest.approx(27.0)
+
+
 def _aet_workout(day, rise=12.9, title="WKO5 AeT 飄移測試 40 分", main=40):
     t, h, s, p, _ = _aet_series(rise, main=main)
     ch = {"elapsedtime": list(t), "heartrate": list(h), "speed": list(s), "power": list(p),

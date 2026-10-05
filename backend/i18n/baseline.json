@@ -110,7 +110,7 @@
     "backend/engine/wko5expr/render.py": 27,
     "backend/engine/wko5expr/render_units.py": 2,
     "backend/engine/wko5expr/units.py": 10,
-    "backend/engine/workout_review.py": 467,
+    "backend/engine/workout_review.py": 466,
     "backend/engine/workout_steps.py": 161,
     "backend/engine/workout_templates.py": 166,
     "backend/engine/zone_events.py": 46,

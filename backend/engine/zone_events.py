@@ -253,6 +253,87 @@ def watch_bias(pairs: list[tuple[float, float]]) -> dict:
     return {"bias_c": WATCH_BIAS_C, "sd_c": WATCH_BIAS_SD_C, "n": 72, "src": "default_single_user"}
 
 
+_BIAS_MEMO = ("zone_events", "dataset_watch_bias")
+WATCH_TEMP_SERIES = "zone_watch_temp_v1"     # Dataset.cached_series key: watch_temp per run (one float)
+
+
+def _bias_source(ds) -> tuple[tuple, Optional[list]]:
+    """(cache stamp, archive rows or None = read them on a miss) for
+    dataset_watch_bias: a dataset's own {file: °C} (`activity_temps`, tests —
+    workout_review.activity_temp reads it too), else route_weather's
+    activity_weather.json, stamped by its mtime. The workout count is in the
+    stamp: a sync adds runs (and builds a new Dataset anyway)."""
+    n = len(getattr(ds, "workouts", None) or [])
+    arch = getattr(ds, "activity_temps", None)
+    if isinstance(arch, dict):
+        items = sorted((str(f), _f(v)) for f, v in arch.items() if not isinstance(v, dict))
+        return ("ds", hash(tuple(items)), n), [{"file": f, "temp_c": v} for f, v in items if v is not None]
+    try:
+        from backend.engine import route_weather as RW
+        from backend.engine.routes import home
+        mt = (home() / RW.ACTIVITY_WX_FILE).stat().st_mtime_ns
+    except Exception:                               # noqa: BLE001 — no archive (yet), no routes module
+        mt = None
+    return ("archive", mt, n), None
+
+
+def _run_watch_temp(ds, w) -> Optional[float]:
+    """watch_temp, disk-memoised per file where the Dataset can (cached_series):
+    the pairs are rebuilt after a sync without opening every FIT again."""
+    cs = getattr(ds, "cached_series", None)
+    if cs is None:
+        return watch_temp(ds, w)
+    try:
+        return _f(cs(WATCH_TEMP_SERIES, w, lambda: watch_temp(ds, w)))
+    except Exception:                               # noqa: BLE001 — a cache write / stamp problem
+        return watch_temp(ds, w)
+
+
+def dataset_watch_bias(ds) -> dict:
+    """watch_bias over the dataset's runs that have both an archive air
+    temperature (weather_of) and a watch temperature (watch_temp), with
+    "pairs" = how many of the athlete's own there are (watch_bias's "n" is
+    72 when it falls back to the single-user default). The single-activity
+    review and the AeT test subtract this (workout_review.watch_air), the same
+    rule as run_heat. Memoised in ds.memo as (stamp, the small dict) — only
+    the result is kept, not the pairs."""
+    stamp, acts = _bias_source(ds)
+    memo = getattr(ds, "memo", None)
+    hit = memo.get(_BIAS_MEMO) if isinstance(memo, dict) else None
+    if hit is not None and hit[0] == stamp:
+        return hit[1]
+    if acts is None:
+        # the file the stamp is taken from (heat_data.exposures' rows)
+        try:
+            from backend.engine import route_weather as RW
+            from backend.engine.routes import home
+            doc = RW.load_activity_weather(home())
+            acts = [dict(v, file=f) for f, v in (doc.get("activities") or {}).items() if isinstance(v, dict)]
+        except Exception:                           # noqa: BLE001 — no archive: the default
+            acts = []
+    weather = weather_of(ds, acts) if acts else {}
+    pairs = []
+    by_idx = {w.idx: w for w in ds.workouts}
+    for i, wx in weather.items():
+        w = by_idx.get(i)
+        if w is None or getattr(w, "sport", None) != "run":
+            continue
+        t = _run_watch_temp(ds, w)
+        if t is not None:
+            pairs.append((wx["temp_c"], t))
+    if pairs:
+        flush = getattr(ds, "flush_series", None)
+        if flush is not None:
+            try:
+                flush()
+            except Exception:                       # noqa: BLE001 — the memo is only a speed-up
+                pass
+    out = {**watch_bias(pairs), "pairs": len(pairs)}
+    if isinstance(memo, dict):
+        memo[_BIAS_MEMO] = (stamp, out)
+    return out
+
+
 def rh_default() -> float:
     """The RH to assume without a season of archive days (engine/heat_calib humidity_default)."""
     try:
