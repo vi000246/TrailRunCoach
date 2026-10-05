@@ -241,7 +241,9 @@ def test_activity_temp_reads_the_route_weather_archive(tmp_path, monkeypatch):
     w0 = next(w for w in ds.workouts if w.entry.file == "fake/0.wko4")
     w1 = next(w for w in ds.workouts if w.entry.file == "fake/1.wko4")
     assert R.activity_temp(ds, w0) == (26.3, "route_weather")
-    # the watch: minus the wrist bias
+    # the watch: minus the wrist bias — the 3.7 °C default, no run here has both temperatures
+    b = R.watch_bias_of(ds)
+    assert b["src"] == "default_single_user" and b["pairs"] == 0
     assert R.activity_temp(ds, w1, {"watch_temp_c": 21.0}) == (pytest.approx(21.0 - R.WATCH_BIAS_C), "watch")
     assert R.activity_temp(ds, w1) == (None, None)
     d = R.measure(ds, w0)["drift"]
@@ -267,6 +269,75 @@ def test_activity_temp_falls_back_to_the_only_archive_row_of_that_date(tmp_path,
     assert R.activity_temp(ds, by_day["2026-09-30"]) == (27.0, "route_weather")
     assert R.activity_temp(ds, by_day["2026-09-29"]) == (None, None)        # two rows that day: ambiguous
     R._WX_CACHE.clear()
+
+
+def _paired_dataset(today, n, extra_watch_days=()):
+    """n older runs whose watch reads the archive's air + 2.0 °C (± 0.3: median 2.0), and runs with
+    only a watch temperature of 28 °C on `today` and `extra_watch_days` days before it."""
+    noise = (0.0, -0.3, 0.3)
+    air = {today - dt.timedelta(days=30 + i): 20.0 + 0.5 * i for i in range(n)}
+    ws = [_hot_run(day, a + 2.0 + noise[i % 3]) for i, (day, a) in enumerate(air.items())]
+    ws += [_hot_run(today - dt.timedelta(days=k), 28.0) for k in (0, *extra_watch_days)]
+    ds = FakeDataset(ws, today, settings=SETTINGS)
+    files = {R._wdate(w): w.entry.file for w in ds.workouts}
+    return ds, {files[d]: a for d, a in air.items()}
+
+
+@pytest.mark.parametrize("n, own", [(10, True), (9, False)])
+def test_watch_temperature_uses_the_athletes_own_wrist_bias(n, own):
+    # SP-51: ≥ 10 runs with both an archive and a watch temperature → their own median bias, else 3.7 °C
+    today = dt.date(2026, 9, 30)
+    ds, temps = _paired_dataset(today, n)
+    ds.activity_temps = temps
+    w = next(w for w in ds.workouts if R._wdate(w) == today)
+    dr = R.measure(ds, w)["drift"]
+    assert dr["temp_src"] == "watch"
+    if own:      # 28 − 2.0 = 26 °C: the warm band (the default's 24.3 °C would be cool)
+        assert dr["temp_c"] == pytest.approx(26.0) and dr["temp_band"] == "warm"
+        assert dr["temp_bias"] == {"bias_c": 2.0, "own": True, "pairs": 10}
+        note = "扣本人的手腕偏差 2.0 °C（10 次跑步配對）"
+    else:
+        assert dr["temp_c"] == pytest.approx(28.0 - R.WATCH_BIAS_C) and dr["temp_band"] == "cool"
+        assert dr["temp_bias"] == {"bias_c": 3.7, "own": False, "pairs": 9}
+        note = "扣預設的手腕偏差 3.7 °C（本人配對 9 次，未滿 10 次；單一使用者推估）"
+    res = R.review(ds, w, "aerobic")
+    rows = {s["name"]: s["data"]["value"] for s in res["series"]}
+    assert rows["溫度"].startswith(R.TEMP_SRC_LABEL["watch"]) and rows["溫度"].endswith(" · " + note)
+    heat = next(x for x in res["cards"] if x.get("id") == "heat")
+    assert heat["tip"].endswith("\n" + note)                         # the temperature chip's hover too
+    # an archive temperature carries no bias note
+    ds.activity_temps = {**temps, w.entry.file: 22.0}
+    dr = R.measure(ds, w)["drift"]
+    assert dr["temp_src"] == "route_weather" and "temp_bias" not in dr and R.bias_text(dr) is None
+
+
+def test_a_new_wrist_bias_rebands_cached_measurements_and_the_same_band_peers():
+    # the bias is read with the band on every measure() (never in its disk cache): one more pair
+    # flips the review's band and the same-band baseline's peers without a cache flush
+    today = dt.date(2026, 9, 30)
+    ds, temps = _paired_dataset(today, 10, extra_watch_days=(7,))
+    computed = []
+    store = {}
+
+    def cached_series(key, w, compute):
+        if (key, w.entry.file) not in store:
+            computed.append((key, w.entry.file))
+            store[(key, w.entry.file)] = compute()
+        return store[(key, w.entry.file)]
+    ds.cached_series = cached_series
+    tenth = sorted(temps)[-1]
+    ds.activity_temps = {f: t for f, t in temps.items() if f != tenth}          # 9 pairs: 3.7 °C
+    w = next(w for w in ds.workouts if R._wdate(w) == today)
+    assert R.measure(ds, w)["drift"]["temp_band"] == "cool"
+    assert {pm["drift"]["temp_band"] for p, pm, _c in R.peers(ds, w, 8) if p.entry.file not in temps} == {"cool"}
+    n_computed = len(computed)
+    ds.activity_temps = temps                                                    # the 10th pair: 2.0 °C
+    dr = R.measure(ds, w)["drift"]
+    assert dr["temp_band"] == "warm" and dr["temp_bias"]["own"]
+    assert {pm["drift"]["temp_band"] for p, pm, _c in R.peers(ds, w, 8) if p.entry.file not in temps} == {"warm"}
+    # only the 10th run's watch temperature was read again (zone_events.watch_temp, memoised per file);
+    # no measurement was recomputed
+    assert computed[n_computed:] == [("zone_watch_temp_v1", tenth)]
 
 
 @pytest.mark.parametrize("channel", ["speed", "power"])

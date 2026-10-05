@@ -230,6 +230,41 @@ def test_watch_bias_from_the_datasets_own_pairs():
     assert ZE.watch_bias([(20.0, 25.0)])["bias_c"] == ZE.WATCH_BIAS_C
 
 
+def test_dataset_watch_bias_pairs_the_archive_with_the_watch_and_is_memoised(tmp_path, monkeypatch):
+    # SP-51: the single-activity review's wrist bias — route_weather's archive (by file) × watch_temp
+    import json
+    import os
+    from backend.engine import route_weather as RW
+    from backend.engine import routes as RT
+    monkeypatch.setattr(RT, "HOME", tmp_path)
+    d = dt.date(2026, 7, 1)
+    runs = [_run(i, d + dt.timedelta(days=i)) for i in range(12)]
+    runs[11].sport = "bike"                        # a ride: the wrist is cooled by the wind, not a pair
+    watch = {i: 22.0 + i + (0.0, -0.3, 0.3)[i % 3] for i in range(12)}
+    watch[11] = 10.0
+
+    def write(n):
+        p = tmp_path / RW.ACTIVITY_WX_FILE
+        p.write_text(json.dumps({"version": RW.ACTIVITY_WX_VERSION, "activities": {
+            f"{i}.fit": {"date": (d + dt.timedelta(days=i)).isoformat(), "temp_c": 20.0 + i}
+            for i in [*range(n), 11]}}), "utf-8")
+        st = p.stat().st_mtime_ns
+        os.utime(p, ns=(st + n * 10 ** 9, st + n * 10 ** 9))     # a new mtime even within the clock's tick
+
+    ds = _ds(runs, watch)
+    ds.memo = {}
+    write(9)                                       # 9 runs with both: the single-user default
+    b = ZE.dataset_watch_bias(ds)
+    assert b["src"] == "default_single_user" and b["bias_c"] == ZE.WATCH_BIAS_C and b["pairs"] == 9
+    seen = []
+    ds.channel = (lambda ch: lambda idx, name: seen.append(idx) or ch(idx, name))(ds.channel)
+    assert ZE.dataset_watch_bias(ds) is b and not seen            # memoised: no file opened again
+    assert len(ds.memo) == 1 and len(next(iter(ds.memo.values()))[1]) == 5   # only the small result
+    write(10)                                      # the archive grows (a routes build): recomputed
+    b = ZE.dataset_watch_bias(ds)
+    assert b["src"] == "dataset" and b["pairs"] == 10 and b["bias_c"] == pytest.approx(2.0)
+
+
 # ---- the first cool spell -------------------------------------------------------------
 
 def _days(start, n, temp):
