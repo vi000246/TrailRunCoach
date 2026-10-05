@@ -80,7 +80,8 @@ ROAD_EASY_SLOW = 1.15
 # (UA〈Training for Mountaineering〉: 「8 weeks out … at least one workout per week where you ascend [the
 # summit day's climb] in one day, with a backpack of approximately the same weight」). The summit day = the
 # day with the most climb. Its minutes: the climb at 山本's 430 m/h up (10 % pack) and ~650 m/h down
-# (research §1.4: 1,500 m ≈ 3.5 h up, 5.5–6 h in all — 推估); still ≤ +15 % over the last 4 weeks' longest.
+# (research §1.4: 1,500 m ≈ 3.5 h up, 5.5–6 h in all — 推估); still ≤ STEP (load_guard.LONG_CAP, +10 % over
+# the longest of the last 30 days, SP-66) — long_minutes caps it like any long day.
 # Weeks 8–3 out, so the last one is ≥ 10 days before the trip (baiyue_multiday.SIM_LAST_DAYS). The
 # weekday steep-hill walk (steep_hill.py) stays without a pack (UA: aerobic sessions needn't carry the
 # trip's weight).
@@ -457,7 +458,8 @@ def summit_minutes(summit: dict) -> float:
 
 def summit_session(s: dict, info: dict, minutes: float) -> None:
     """The long day as the 攻頂日模擬 (SP-114, in place): the summit day's climb (a share of it when
-    the +15 % rule or the week's volume shortened the day), the trip's pack, the plain how-to."""
+    the +10 % single-run cap (STEP, SP-66) or the week's volume shortened the day), the trip's pack,
+    the plain how-to."""
     race = info["race"]
     sm = race["summit"]
     full = summit_minutes(sm)
@@ -467,7 +469,7 @@ def summit_session(s: dict, info: dict, minutes: float) -> None:
     head = _("一天爬升約 {cl:.0f} m（攻頂日＝第 {d} 天 {need:.0f} m 的 {p:.0f}%），背 {kg:g} kg 的背包（行程背包），"
              "爬上去再下來", cl=climb, d=sm["day"], need=sm["climb_m"], p=f * 100, kg=round(float(sm["pack_kg"]), 1))
     if f < 0.95:
-        head += _("；受「每次最多 +15%」和週量限制，這次先爬到 {p:.0f}%，之後每週加一點", p=f * 100)
+        head += _("；受「每次最多 +10%」和週量限制，這次先爬到 {p:.0f}%，之後每週加一點", p=f * 100)
     tail = _("做完在活動頁記下這次背多少，賽事評估才會算這次（爬升到攻頂日的 100% 而且有背包，3 次算夠）")
     s.update(title=_("攻頂日模擬｜{name}", name=race["name"]), detail="；".join([head] + parts + [tail]),
              climb_m=round(climb), terrain="trail",

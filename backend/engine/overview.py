@@ -389,7 +389,7 @@ def recovery_reason(kind: str, monday: dt.date, race_start: Optional[dt.date], s
 def recovery_long_minutes(usual: float, total_min: float, spec_min: Optional[float] = None) -> float:
     """A recovery week's long run (SP-97): RECOVERY_LONG_SHARE × the usual long run (`usual`, ≥ 60 min),
     ≥ RECOVERY_LONG_MIN; in the 專項期 ≤ `spec_min` (specific_phase.long_minutes at FRAC's low point);
-    ≤ half the week."""
+    ≤ half the week. The callers then apply load_guard.cap_long (SP-66), which wins over the floor."""
     m = max(float(RECOVERY_LONG_MIN), RECOVERY_LONG_SHARE * max(float(usual or 0.0), 60.0))
     if spec_min:
         m = max(float(RECOVERY_LONG_MIN), min(m, float(spec_min)))
@@ -1537,16 +1537,17 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         else:
             long_min = max(60.0, min(0.30 * minutes_total, max(longest28, 60.0) * LG.LONG_CAP))
         long_min = min(long_min, 0.5 * minutes_total) if minutes_total >= 120 else long_min
-        # SP-66: ≤ +10 % over the longest of 30 days wins over the 60 / 90-min floors (Frandsen 2025)
-        capped, cut = LG.cap_long(long_min, longest28)
-        if cut:
-            notes.append({"level": "info", "src": "long_cap", "text": LG.cap_note(long_min, longest28)})
-            long_min = capped
         if rec_wk:
             # SP-97: a recovery week keeps a shorter long run (the usual one × 65 %; the 專項期's ≤ FRAC's low point)
             usual = longest28 if kind == "specific" else min(longest28, 0.30 * norm_hours * 60.0)
             long_min = recovery_long_minutes(usual, minutes_total, long_min if kind == "specific" and sp.get("active")
                                              else None)
+        # SP-66: ≤ +10 % over the longest of 30 days wins over the 60 / 90-min floors (Frandsen 2025) —
+        # and over a recovery week's RECOVERY_LONG_MIN floor (SP-97), so it comes last
+        capped, cut = LG.cap_long(long_min, longest28)
+        if cut:
+            notes.append({"level": "info", "src": "long_cap", "text": LG.cap_note(long_min, longest28)})
+            long_min = capped
         if in_reentry:
             # the longest run before the break × the block's % (6–13 days: ≤ 90 min) — detraining.md §6.2
             fr = max((RE.frac_on(rp, monday + dt.timedelta(days=i)) or 0.0) for i in range(7)) or 1.0

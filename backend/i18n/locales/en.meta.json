@@ -4607,7 +4607,7 @@
     "draft": true,
     "src": "backend/engine/status.py:570"
   },
-  "；受「每次最多 +15%」和週量限制，這次先爬到 {p:.0f}%，之後每週加一點": {
+  "；受「每次最多 +10%」和週量限制，這次先爬到 {p:.0f}%，之後每週加一點": {
     "draft": true,
     "src": "backend/engine/specific_phase.py:424"
   },
