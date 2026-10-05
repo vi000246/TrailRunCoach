@@ -473,6 +473,17 @@ def _week_hours(ds: Dataset, monday: dt.date) -> tuple[float, float]:
             sum(_n(w.metrics.get("tss")) or 0.0 for w in ws))
 
 
+def _normal_weeks(ds: Dataset, status, monday: dt.date, hours4: list) -> list[float]:
+    """The hours of the last 4 normal weeks before `monday` (load_guard.normal_weeks: no 減量期 /
+    race week / post-race 恢復期 / 轉換期, up to STEP_LOOKBACK_WEEKS back; SP-73) — `hours4`
+    (the last 4 weeks) when none of them is skipped or without a plan."""
+    mons = [monday - dt.timedelta(weeks=i) for i in range(LG.STEP_LOOKBACK_WEEKS, 0, -1)]
+    skip = LG.skip_mondays(getattr(status, "plan", None), mons)
+    if not skip & set(mons[-LG.STEP_AVG_WEEKS:]):
+        return list(hours4)
+    return LG.normal_weeks([(m, _week_hours(ds, m)[0]) for m in mons], skip)
+
+
 def _transition_ref(ds: Dataset, status, today: dt.date, monday: dt.date) -> dict:
     """transition_ref for the 轉換期 that holds `today` or comes next (within the planning
     window): its race's pre-race weeks read from the activities when they are all past, else
@@ -666,8 +677,8 @@ def quality_sessions(gate: dict, dec: dict, kind: str, th: dict, tgt: dict, hour
     items (SP-31: one per track). Base: the track's ladder rung (_gate_session). 專項期: the
     track's specific session — road Zone 3 = ROAD_SPECIFIC_Q 2×15′, trail Zone 5 = the 5×4′ hill
     set; the other two are the ladder (trail Zone 3 uphill versions allowed). 減量期: Zone 3 =
-    TAPER_Z3, Zone 5 = the 4×3′ short intensity — which a taper week also keeps when neither
-    track is open (the session predates the gates). Shared by week_plan and projection."""
+    TAPER_Z3, Zone 5 = TAPER_Q 有氧間歇（巡航）4×3′ (98–102 % CP) — which a taper week also keeps
+    when neither track is open (the session predates the gates). Shared by week_plan and projection."""
     from backend.engine import quality_gate as QG
     items = dec.get("items") or []
     if kind == "taper" and not items:
@@ -901,9 +912,9 @@ ROAD_SPECIFIC_Q = dict(id="quality", kind="quality", title="有氧間歇 2×15 �
 TRAIL_SPECIFIC_Z5 = dict(id="quality", kind="quality", title="VO2max 間歇 5×4 分上坡", minutes=60,
                          detail="上坡 4 分鐘（6–10% 坡），慢跑或走下來恢復；暖身 15 分、緩和 10 分",
                          source=SRC_PALLADINO + "（Supra-threshold）", tss=60 / 60 * 75)
-# 減量期: the old short-intensity session (the Zone 5 side / no track open) and a Zone 3 one — the
-# volume about halved, the intensity kept (Bosquet 2007; Daniels Phase IV keeps T running)
-TAPER_Q = dict(id="quality", kind="quality", title="短強度 4×3 分", minutes=45,
+# 減量期: TAPER_Q (Zone 5 / no track open; 98–102 % CP short reps = 有氧間歇・巡航, ex-「短強度 4×3 分」) and a
+# Zone 3 one — the volume about halved, the intensity kept (Bosquet 2007; Daniels Phase IV keeps T running)
+TAPER_Q = dict(id="quality", kind="quality", title="有氧間歇（巡航）4×3 分", minutes=45,
                detail="保留強度、不累積疲勞（98–102% CP）", source=SRC_BOSQUET, tss=45 / 60 * 65)
 TAPER_Z3 = dict(id="quality", kind="quality", title="有氧間歇（巡航）2×8 分", minutes=45,
                 detail="保留強度、量減半（88–95% CP）；休 2 分慢跑；暖身 15 分、緩和 10 分",
@@ -960,6 +971,9 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     base4 = statistics.mean(hours4) if hours4 else 0.0
     last_h = hist[-1][1] if hist else 0.0
     ref = max(base4, last_h)
+    # the +10 % cap reads normal weeks only, like the volume-step guardrail (SP-73, load_guard.normal_ref)
+    norm_wk = _normal_weeks(ds, status, monday, hours4)
+    cap_ref = LG.step_base(norm_wk) or ref
     tph = _tss_per_hour(ds, today)
     # 轉換期 (SP-73): the pre-race level of the current / next 轉換期 (projection reads it too)
     tr_ref = _transition_ref(ds, status, today, monday)
@@ -988,11 +1002,14 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     if kind in ("base", "specific"):
         need_tss = 7.0 * (ctl0 + ramp_goal / f7)
         need_h = need_tss / r_all
-        cap = max(1.10 * ref, ref + 0.5)
+        cap = max(1.10 * cap_ref, cap_ref + 0.5)
         hours = min(max(need_h, base4), cap)
         why.append(_("CTL {ctl:.0f} 要每週 +{ramp:.1f}，需要約 {tss:.0f} TSS（≈ {h:.1f} h）",
                       ctl=ctl0, ramp=ramp_goal, tss=need_tss, h=need_h))
-        if need_h > cap:
+        if need_h > cap and cap_ref != ref:
+            why.append(_("但週量上限 = 最近的正常訓練週 {ref:.1f} h（不含減量期／比賽週／賽後恢復期／轉換期）"
+                         "的 +10%（至少 +0.5 h）→ {cap:.1f} h", ref=cap_ref, cap=cap))
+        elif need_h > cap:
             why.append(_("但週量上限 = 近 4 週 {base4:.1f} h / 上週 {last:.1f} h 的 +10%（至少 +0.5 h）→ {cap:.1f} h",
                           base4=base4, last=last_h, cap=cap))
         # B2B (engine/b2b.py): a planned B2B's TSB drop doesn't make this / next week a recovery week
@@ -1561,7 +1578,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         # 主要訓練項目 (engine/primary_sport.py): trail | road — projection.project_weeks follows it
         "primary_sport": sport,
         "mp_goal_pace_s": mp_goal,          # the A marathon's goal pace (s/km) for the MP segment; None = threshold
-        "target": {"hours": hours, "tss": tss_target, "tss_per_hour": r_all},
+        "target": {"hours": hours, "tss": tss_target, "tss_per_hour": r_all, "ref_weeks": norm_wk},
         "done": {"hours": done_h, "tss": done_tss, "sessions": len(week_ws),
                  "activities": [activity_row(w, ds) for w in sorted(week_ws, key=lambda w: w.day)]},
         "remaining": {"hours": max(0.0, hours - done_h), "tss": max(0.0, tss_target - done_tss)},

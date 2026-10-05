@@ -600,3 +600,8 @@ def test_zone3_gate_reads_the_plans_transition():
     s = QG._transition_skip(ds, days, TODAY)
     assert len(s) == 21 and min(s) == mon - dt.timedelta(weeks=4)
     assert QG._transition_skip(_ds([]), days, TODAY) == set()
+    # SP-73 (owner 2026-10-05): the A race's 恢復期 before it is skipped the same way
+    ds.plan.phases = [Phase("recovery", (mon - dt.timedelta(weeks=6)).isoformat(),
+                            (mon - dt.timedelta(weeks=4, days=1)).isoformat(), auto=False)] + ds.plan.phases
+    s = QG._transition_skip(ds, days, TODAY)
+    assert len(s) == 35 and min(s) == mon - dt.timedelta(weeks=6)

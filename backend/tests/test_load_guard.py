@@ -429,7 +429,7 @@ def test_parity_mode_is_untouched(tmp_path, no_plan_lthr):
 # status: the fitness / volume indicators carry the guardrail values
 # ---------------------------------------------------------------------------
 
-def _status(sessions, today=dt.date(2026, 9, 30), blackouts=()):
+def _status(sessions, today=dt.date(2026, 9, 30), blackouts=(), prefs=None):
     """sessions: [(date, sport, hours, tss)] → a Status on a FakeDataset (no channels)."""
     from backend.engine.planning import Plan
     from backend.engine.status import Status
@@ -439,7 +439,7 @@ def _status(sessions, today=dt.date(2026, 9, 30), blackouts=()):
           for d, sp, h, tss in sessions]
     ds = FakeDataset(ws, today)
     ds.plan = Plan()
-    return Status(ds, ds.plan, today, blackouts=blackouts)
+    return Status(ds, ds.plan, today, blackouts=blackouts, prefs=prefs)
 
 
 def _weekly(today, weeks, run_h, extra=()):
@@ -511,9 +511,38 @@ def test_planned_break_is_not_exempt_from_the_volume_step():
     five = {0: 0.75, 6: 0.75}                                     # Tue–Sat off (5 days)
     v = status(five, (rng(1, 2),)).i_volume()                     # 2 planned, 3 unplanned: exempt
     assert v.extra["step_exempt"] and v.level == "good"
-    assert "非計畫停跑 3 天" in v.verdict and "另 2 天是自己排的不排課／休息日" in v.verdict
+    assert "非計畫停跑 3 天" in v.verdict and "另 2 天是自己排的休息" in v.verdict
     v = status(three, (rng(10, 12),)).i_volume()                  # a blackout elsewhere: no effect
     assert v.extra["step_exempt"] and "非計畫停跑 3 天" in v.verdict and "另" not in v.verdict
+
+
+def test_unticked_training_days_are_a_planned_rest():
+    """SP-63 (owner 2026-10-05): weekdays not ticked as 可練日 in 課表偏好 count as planned rest,
+    like 不排課日期 / 休息日 — a Fri–Sun-only runner's weekly Mon–Thu gap is not an exemption."""
+    from backend.engine import plan_prefs as PP
+    today = dt.date(2026, 9, 30)
+    mon = today - dt.timedelta(days=today.weekday())
+    normal = {4: 5 / 3, 5: 5 / 3, 6: 5 / 3}                       # Fri–Sun only
+    low = {4: 0.3, 5: 0.3, 6: 0.3}
+
+    def status(prefs):
+        ss = []
+        for i, w in enumerate([normal] * 4 + [low, normal]):
+            ss += _week(mon - dt.timedelta(weeks=6 - i), w)
+        return _status(ss, today, prefs=prefs)
+    weekend = PP.Prefs(days=(False,) * 4 + (True,) * 3)
+    v = status(weekend).i_volume()
+    assert v.extra["step"] > LG.STEP_BLOCK and not v.extra["step_exempt"] and v.level == "bad"
+    # every day ticked: the same Mon–Thu gap is 4 unplanned days → exempt (unchanged)
+    v = status(PP.Prefs()).i_volume()
+    assert v.extra["step_exempt"] and v.level == "good" and "非計畫停跑 4 天" in v.verdict
+    # Mon–Wed unticked, Thu ticked: 1 unplanned day left → not exempt
+    v = status(PP.Prefs(days=(False,) * 3 + (True,) * 4)).i_volume()
+    assert not v.extra["step_exempt"]
+    # Mon unticked only: 3 unplanned → exempt, the note names the planned day
+    v = status(PP.Prefs(days=(False,) + (True,) * 6)).i_volume()
+    assert v.extra["step_exempt"] and "非計畫停跑 3 天" in v.verdict and "另 1 天是自己排的休息" in v.verdict
+    assert "沒勾的可練日" in v.verdict
 
 
 def test_short_break_note_reaches_the_week_plan():
@@ -555,6 +584,45 @@ def test_status_startup_has_no_guardrail_ramp():
     f = st.i_fitness()
     assert f.extra["ramp_startup"] and f.extra["ramp_week"] is None and "起算期" in f.verdict
     assert f.value is not None                               # the PMC CTL is still shown
+
+
+def test_volume_step_base_skips_taper_race_recovery_and_transition_weeks():
+    """SP-73 (owner 2026-10-05): the base is the most recent normal weeks — a week touching a
+    減量期 / race week / 恢復期 / 轉換期 is left out — so the second week after a transition isn't
+    measured against the transition."""
+    from backend.engine.planning import Phase
+    today = dt.date(2026, 9, 30)
+    mon = today - dt.timedelta(days=today.weekday())
+    w = lambda i: mon - dt.timedelta(weeks=10 - i)            # week i of the 10 before this one
+    # 4 normal weeks, taper, race, 恢復期, 2 × 轉換期, then the first base week (last week)
+    hours = [5, 5, 5, 5, 3, 1, 1.5, 2.5, 2.5, 4.5]
+    st = _status(_weekly(today, 10, hours), today)
+    v = st.i_volume()
+    assert v.extra["run_base"] == pytest.approx(2.5) and v.level == "bad"          # no plan: as before
+    st = _status(_weekly(today, 10, hours), today)
+    st.plan.phases = [Phase("base", w(0).isoformat(), (w(4) - dt.timedelta(days=1)).isoformat(), auto=False),
+                      Phase("taper", w(4).isoformat(), (w(5) - dt.timedelta(days=2)).isoformat(), auto=False),
+                      Phase("event", (w(5) - dt.timedelta(days=1)).isoformat(), (w(5) - dt.timedelta(days=1)).isoformat(),
+                            auto=False),
+                      Phase("recovery", w(5).isoformat(), (w(7) - dt.timedelta(days=1)).isoformat(), auto=False),
+                      Phase("transition", w(7).isoformat(), (w(9) - dt.timedelta(days=1)).isoformat(), auto=False),
+                      Phase("base", w(9).isoformat(), "2027-06-30", auto=False)]
+    v = st.i_volume()
+    assert v.extra["run_base"] == pytest.approx(5.0) and v.extra["step"] == pytest.approx(-0.1)
+    assert v.level == "good" and "不含減量期／比賽週／賽後恢復期／轉換期的週" in v.why
+    # a week touched by the taper is not normal either: the race on Sunday of week 4 skips weeks 4–8
+    assert LG.skip_mondays(st.plan, [w(i) for i in range(10)]) == {w(i) for i in range(4, 9)}
+    assert LG.normal_weeks([(w(i), h) for i, h in enumerate(hours[:9])], {w(i) for i in range(4, 9)}) == [5, 5, 5, 5]
+    assert LG.normal_ref([(w(0), 4), (w(1), 6), (w(2), 1)], {w(2)}) == pytest.approx(6.0)
+    assert LG.skip_mondays(None, [w(0)]) == set() and LG.normal_ref([], ()) is None
+
+
+def test_projection_cap_reads_the_normal_weeks():
+    from backend.engine import projection as PJ
+    h, _, _ = PJ.week_hours("base", [2, 2, 2, 2], [False] * 4, 50.0, 50.0, 42.0, None)
+    assert h == pytest.approx(2.5)                                    # max(2.2, 2 + 0.5)
+    h, _, why = PJ.week_hours("base", [2, 2, 2, 2], [False] * 4, 50.0, 50.0, 42.0, None, cap_ref=5.0)
+    assert h == pytest.approx(5.5)
 
 
 def test_status_volume_step_is_running_time_against_the_larger_base():
