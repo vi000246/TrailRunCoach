@@ -114,11 +114,17 @@ def week_ok_at(e, line: dict) -> float:
 
 
 def split_note(line: dict) -> Optional[str]:
-    """A multi-day trip split equally (no GPX day ends): its hardest day is likely underestimated."""
+    """A multi-day trip split equally (no per-day numbers, no GPX day ends — an event saved before
+    SP-114 made them required): its hardest day is likely underestimated."""
     if line.get("multi") and line.get("split_source") == "equal":
-        return _("沒有 GPX 的分日點，{n} 天是平均分配：攻頂那天通常最硬，可能被低估。上傳 GPX 並標好每天的終點會更準",
-                 n=line["days"])
+        return day_plan_hint(line["days"])
     return None
+
+
+def day_plan_hint(days: int) -> str:
+    """SP-114: the hint for an old multi-day event without its per-day numbers (not blocked)."""
+    return _("請補每天的距離和爬升：現在 {n} 天是平均分配，最硬的那天（攻頂日、最難的一站）可能被低估。"
+             "在賽季計畫按「編輯」填每一天，或上傳 GPX 並標好每天的終點", n=days)
 
 
 def hardest_day(line: dict) -> dict:
