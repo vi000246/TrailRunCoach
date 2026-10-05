@@ -132,8 +132,10 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
                   aet_test_days: Optional[str] = None, xu_test: Optional[dict] = None,
                   b2b: Optional[dict] = None, long_min: Optional[float] = None,
                   sport: str = "trail", goal_pace: Optional[float] = None,
-                  aet_measured: bool = False) -> list[dict]:
+                  aet_measured: bool = False, taper: Optional[dict] = None) -> list[dict]:
     """The week_plan() session template for a projected week, placed on days.
+    `taper` (SP-96, a 減量期 week): {"runs": the pre-taper runs a week, "long": whether a last long
+    run ≤ 90 min fits, "sore"} — the run count is kept (overview.taper_easy_count).
     `aet` = the easy-run cap (hr_profile; `aet_measured`: a measured AeT).
     `long_min`: the 專項期 long day (engine/specific_phase.long_minutes); None = the base rule.
     `b2b` (engine/b2b.py): {"event", "state", "prev_mode", "weight"} — the
@@ -205,6 +207,11 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
             add(**_bq(b))
     elif kind == "taper":
         add(**O.TAPER_Q, target=tgt.get("threshold", ""))
+    if kind == "taper" and (taper or {}).get("long"):
+        lm = O.taper_long_minutes(total)          # the last long run (SP-96), as week_plan
+        add(id="long", kind="long", title=f"長跑（減量期，≤ {O.TAPER_LONG_MAX_MIN} 分）", minutes=int(round(lm / 5) * 5),
+            target=tgt.get("long", ""), detail=f"心率不超過{cap_txt}；"
+            + ("平路或緩坡，不跑長下坡" if taper.get("sore") else "輕鬆跑"), source=O.SRC_TAPER_WEEK, tss=lm / 60.0 * tph)
     n_strength = 2 if kind in ("base", "transition", "recovery") else 1
     for i in range(n_strength):
         add(id=f"strength{i + 1}", kind="strength", title="肌力（下肢單腳＋核心）", minutes=35,
@@ -212,6 +219,8 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
     used = sum(s["minutes"] for s in ss if s["kind"] != "strength")
     left = max(0.0, total - used)
     n_easy = O.easy_count(left, kind)
+    if kind == "taper" and taper:
+        n_easy = O.taper_easy_count(left, taper.get("runs"), sum(1 for s in ss if s["kind"] in O.RUN_KINDS))
     for i in range(n_easy):
         m = min(left / n_easy, O.TRANSITION_RUN_MAX) if kind == "transition" else left / n_easy
         strides = kind == "base" and i == 0 and mode not in ("recovery_week", "reentry")
@@ -483,9 +492,18 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
     s_stops = cur.get("strength_stop") or []                 # 賽前停肌力 (SP-86): the A events' windows
     from backend.engine import technical as TECH
     user_rows = TECH.load_user()                             # the user's own RPE sessions (SP-74)
+    # 減量期 (SP-96): this week's taper context and pre-taper level (week_plan), the run count of the
+    # last projected week before a taper, its hours (the share the climb follows)
+    cur_t = cur.get("taper") or {}
+    last_runs = cur_t.get("pre_runs") or sum(1 for s in cur_s if s.get("kind") in O.RUN_KINDS) or None
+    pre_h = cur_t.get("pre_hours")
     week = monday + dt.timedelta(weeks=1)
     while week <= until:
         kind = phase_kind(phases, week)
+        tc = O.taper_context(phases, events, week) if events is not None else None
+        same = bool(tc and cur_t.get("id") == tc["id"])
+        if kind == "taper" and not same and pre_h is None:
+            pre_h = statistics.mean(hist[-4:]) if hist else None
         ev = _next_event_start(phases, week)
         days_to = (ev - week).days if ev else None
         tr_h = None
@@ -571,7 +589,10 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
                            quality_cap=1 if kind == "base" and QG.guardrail_mode(gate) else None,
                            aet_test_days=getattr(prefs, "aet_test_days", None), xu_test=xu_q, b2b=b2b,
                            long_min=sp_long, sport=sport, goal_pace=cur.get("mp_goal_pace_s"),
-                           aet_measured=th_meas)
+                           aet_measured=th_meas,
+                           taper={"runs": cur_t.get("pre_runs") if same else last_runs, "sore": tc.get("sore"),
+                                  "long": (_d(tc["start"]) - week).days > tc["long_days"]}
+                           if tc and kind == "taper" else None)
         if kind == "transition":
             notes.append({"level": "info", "src": "transition", "text": O.TRANSITION_NOTE})
         ph_notes = _phase_notes(phases, week)
@@ -625,6 +646,17 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
         # 賽前停肌力 (SP-86): week_plan's A-event windows, the same rule (overview.drop_strength_before_a)
         n_notes = len(notes)
         ss = O.drop_strength_before_a(ss, s_stops, week, notes)
+        # 減量期規則 (SP-96): the same rule as week_plan (overview.taper_rules)
+        ss = O.taper_rules(ss, tc, week, notes, road)
+        if tc and kind == "taper":
+            n = O.taper_climb_note(tc, cur_t.get("pre_climb") if same else cur.get("climb4"),
+                                   hours / (cur_t.get("pre_hours") if same else pre_h)
+                                   if (cur_t.get("pre_hours") if same else pre_h) else None)
+            if n:
+                notes.append(n)
+        elif kind in ("base", "specific"):
+            last_runs = sum(1 for s in ss if s["kind"] in O.RUN_KINDS and s["day"]) or last_runs
+            pre_h = None
         s_note = len(notes) > n_notes
         prev_lost = lost
         drop = [s for s in ss if not s["day"] and s["kind"] != "strength"] if lost else []
@@ -655,7 +687,7 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
                     **({"heat": heat_w} if (heat_w or {}).get("active") else {}),
                     **({"technical": TECH.public(tech)} if tech.get("active") else {}),
                     **({"blackout_days": [d.isoformat() for d in lost]} if lost else {})})
-        long_n = next((s for s in ss if s["id"] == "long"), None)
+        long_n = next((s for s in ss if s["id"] == "long"), None) if kind != "taper" else None
         recent_long.append(float(long_n["minutes"]) if long_n else 0.0)
         if long_n:
             # a B2B day 1 shortened to fit the pair (engine/b2b.py) doesn't lower the long-run base

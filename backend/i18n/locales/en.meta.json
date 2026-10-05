@@ -831,6 +831,10 @@
     "draft": true,
     "src": "backend/api/plan_sessions.py:521"
   },
+  "不排長爬坡反覆": {
+    "draft": true,
+    "src": "backend/engine/overview.py:1999"
+  },
   "不採用": {
     "draft": true,
     "src": "backend/engine/workout_review.py:2614"
@@ -2007,6 +2011,10 @@
     "draft": true,
     "src": "backend/engine/workout_review.py:2670"
   },
+  "最後一次長跑 ≤ {max} 分": {
+    "draft": true,
+    "src": "backend/engine/overview.py:1971"
+  },
   "最新 {v:.1f}%": {
     "draft": true,
     "src": "backend/engine/panels/drift_bars.py:82"
@@ -2427,9 +2435,29 @@
     "draft": true,
     "src": "backend/engine/overview.py:1554"
   },
+  "減量期不排長爬坡反覆、高強度下坡：平路或緩坡輕鬆跑": {
+    "draft": true,
+    "src": "backend/engine/overview.py:1998"
+  },
+  "減量期天數要在 {lo}–{hi} 天": {
+    "draft": true,
+    "src": "backend/engine/plan_prefs.py:314"
+  },
+  "減量期最後一次長跑：≤ {max} 分輕鬆跑": {
+    "draft": true,
+    "src": "backend/engine/overview.py:1967"
+  },
+  "減量期爬升跟著時數一起減：減量前每週約 {pre:.0f} m × {share:.0%} → 這週約 {m:.0f} m（推估）；不排短距離高強度爬坡、高強度下坡（江晏慶，教練級）": {
+    "draft": true,
+    "src": "backend/engine/overview.py:1903"
+  },
   "減量期縮短為 {days} 天：上一場 A 賽事「{name}」{date} 才結束": {
     "draft": true,
     "src": "backend/engine/planning.py:593"
+  },
+  "減量期（A 賽事「{race}」前 {days} 天）：跑步次數照舊、每次變短；最後一次完整強度課在賽前 10–14 天，之後同一種課縮短，賽前 3–5 天一次量減半的短強度；最後一次長跑賽前 ≥ {long} 天、≤ {max} 分": {
+    "draft": true,
+    "src": "backend/engine/overview.py:2002"
   },
   "減量期／比賽週不測，賽後再測": {
     "draft": false,
@@ -2438,6 +2466,10 @@
   "減量期：平常 {h:.1f} h × {share:.0%}": {
     "draft": true,
     "src": "backend/engine/overview.py:1020"
+  },
+  "減量期：賽前 {n} 天內不跑長跑": {
+    "draft": true,
+    "src": "backend/engine/overview.py:1961"
   },
   "測試": {
     "draft": true,
@@ -2935,6 +2967,18 @@
     "draft": true,
     "src": "backend/engine/panels/race_refs.py:187"
   },
+  "賽前 {n} 天內不排強度課": {
+    "draft": true,
+    "src": "backend/engine/overview.py:1995"
+  },
+  "賽前 {n} 天內不排強度課：輕鬆跑": {
+    "draft": true,
+    "src": "backend/engine/overview.py:1994"
+  },
+  "賽前 {n} 天內不跑長跑": {
+    "draft": true,
+    "src": "backend/engine/overview.py:1962"
+  },
   "賽前 ≥ 2 週做；效果約 9 週，之後 2–3 天輕鬆；下坡功率、心率都不準，看 RPE": {
     "draft": true,
     "src": "backend/engine/workout_templates.py:418"
@@ -3415,6 +3459,10 @@
     "draft": true,
     "src": "backend/engine/plan_prefs.py:292"
   },
+  "長跑（減量期，≤ {max} 分）": {
+    "draft": true,
+    "src": "backend/engine/overview.py:1342"
+  },
   "門檻過期或沒測過": {
     "draft": true,
     "src": "backend/engine/overview.py:1540"
@@ -3614,6 +3662,10 @@
   "，另 {k} 天是自己排的休息（不排課日期／休息日／沒勾的可練日）": {
     "draft": true,
     "src": "backend/engine/status.py:438"
+  },
+  "，平路或緩坡、不跑長下坡": {
+    "draft": true,
+    "src": "backend/engine/overview.py:1968"
   },
   "，或": {
     "draft": true,

@@ -790,6 +790,10 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
         <button type="button" class="qtip" data-i18n-attr="aria-label:schedule.pf.about;data-tip:schedule.pf.transition_tip" aria-label="說明" data-tip="A 賽事的恢復期之後接幾週轉換期：只排輕鬆跑（每次 ≤ 60 分）和肌力，沒有長跑、強度課，量是賽前 4 週平均的一半（推估）；可以用交叉訓練取代輕鬆跑。Friel 一般 3–4 週、Canova 4 週。下一場 A 賽事的專項期太近時會自動縮短或取消。自己設定周期時不會加。">?</button>
         <span class="pf-c"><select id="pf-trw" name="transition_weeks">
           <option value="0" data-i18n="schedule.pf.tr_off">關閉</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select><span class="u" data-i18n="schedule.pf.u_wk">週</span></span></div>
+      <div class="pf-r" id="pf-tp"><label class="pf-l" for="pf-tpd" data-i18n="schedule.pf.taper">馬拉松／超馬減量期</label>
+        <button type="button" class="qtip" data-i18n-attr="aria-label:schedule.pf.about;data-tip:schedule.pf.taper_tip" aria-label="說明" data-tip="A 賽事前減量幾天。預設 14 天（統合分析 8–14 天效果最好）；路跑全馬、超馬可以拉長到最多 21 天（休閒馬拉松跑者 3 週比 2 週好，4 週沒有更好；超馬套用是推估）。其他賽事固定 14 天，2–3 天的百岳 7 天。自己設定周期時不會套用。">?</button>
+        <span class="pf-c"><select id="pf-tpd" name="taper_days">
+          <option value="14">14</option><option value="17">17</option><option value="21">21</option></select><span class="u" data-i18n="schedule.pf.u_days">天</span></span></div>
       <div class="pf-r" id="pf-heat"><label class="pf-l" for="pf-heatx"><span data-i18n="schedule.pf.heat">熱適應課</span> <span class="badge watch" data-i18n="schedule.pf.est">推估</span></label>
         <button type="button" class="qtip" id="pf-heat-q" data-i18n-attr="aria-label:schedule.pf.about;data-tip:schedule.pf.heat_tip" aria-label="說明" data-tip="開：只在 30 天內有熱天 A / B 賽時自動排。比賽前 21–8 天誘導（5–10 天）、前 7–3 天每 4 天維持一次；熱適應跑需要 ≥ 60 分鐘（Racinais 2015），不受單次上限；上限設「絕對不超過」時改成跑 40 分＋熱水浴（Zurawlew 2016）。熱水浴 / 桑拿不推到 COROS，做完請在課表打勾。">?</button>
         <input type="checkbox" class="sw pf-c" id="pf-heatx" name="heat" role="switch"></div>
@@ -2104,6 +2108,7 @@ function pfFill(p) {
   PFF.elements.heat_method.value = p.heat_method || "run";
   PFF.elements.b2b.checked = p.b2b !== false;
   PFF.elements.transition_weeks.value = String(p.transition_weeks ?? 3);
+  PFF.elements.taper_days.value = String([14, 17, 21].includes(p.taper_days) ? p.taper_days : 14);
   pfHeatLine();
   pfSync();
 }
@@ -2131,7 +2136,8 @@ function pfRead() {
     aet_test_protocol: radioVal("aet_test_protocol") || "auto",
     quality_gate: radioVal("quality_gate") || "auto", quality_gate_weeks: numOrNull(E.quality_gate_weeks.value) ?? 8,
     heat: E.heat.checked ? "auto" : "off", heat_method: E.heat_method.value || "run",
-    b2b: E.b2b.checked, transition_weeks: Number(E.transition_weeks.value || 3) };
+    b2b: E.b2b.checked, transition_weeks: Number(E.transition_weeks.value || 3),
+    taper_days: Number(E.taper_days.value || 14) };
 }
 function pfError(p) {                     // mirrors plan_prefs.check + the per-key validation
   const n = p.days.filter(Boolean).length;

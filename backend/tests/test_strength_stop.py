@@ -23,7 +23,7 @@ def _ev(day, prio="A", name="越野賽"):
 def test_strength_stops_a_events_only_from_14_days_before():
     evs = [_ev("2026-10-24"), _ev("2026-10-31", "B", "B 賽"), _ev("2026-09-01", name="過去")]
     st = O.strength_stops(evs, date(2026, 9, 28))
-    assert st == [{"from": "2026-10-10", "to": "2026-10-24", "race": "越野賽"}]
+    assert st == [{"from": "2026-10-10", "to": "2026-10-24", "race": "越野賽", "days": 14}]
 
 
 def test_drop_strength_before_a_keeps_done_and_days_before_the_window():
@@ -61,7 +61,7 @@ def test_week_plan_race_week_and_taper_have_no_strength_b_race_keeps_it():
     plan, wp = _plan("2026-10-10")
     assert not _strength(wp["sessions"])
     assert any(n.get("src") == "strength" for n in wp["notes"])
-    assert wp["strength_stop"] == [{"from": "2026-09-26", "to": "2026-10-10", "race": "越野賽"}]
+    assert wp["strength_stop"] == [{"from": "2026-09-26", "to": "2026-10-10", "race": "越野賽", "days": 14}]
     weeks = PJ.project_weeks(wp, _phases(plan, TODAY), date(2026, 10, 25))
     by = {w["start"]: w for w in weeks}
     assert not _strength(by["2026-10-05"]["sessions"])                              # race week
