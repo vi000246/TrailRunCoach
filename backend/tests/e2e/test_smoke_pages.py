@@ -350,6 +350,15 @@ def test_single_activity_with_map(app):
     expect(page.locator("#grid .card .lmap.leaflet-container")).to_be_visible(timeout=30_000)
     page.wait_for_function("() => document.querySelectorAll('#grid .lmap .leaflet-overlay-pane canvas, "
                            "#grid .lmap .leaflet-overlay-pane svg path').length > 0", timeout=30_000)
+    # SP-80: the activity chart beside the map; hovering it marks the map and the HR / power chart
+    mc = page.locator("#grid .mapwrap .mapchart")
+    expect(mc).to_be_visible(timeout=30_000)
+    page.click('#grid .maplayout button[data-l="left"]')
+    expect(page.locator("#grid .mapwrap")).to_have_class(re.compile(r"\bleft\b"))
+    box = mc.bounding_box()
+    page.mouse.move(box["x"] + box["width"] / 2, box["y"] + 40)
+    expect(page.locator("#grid .lmap .leaflet-tooltip.hovtip")).to_be_visible(timeout=5_000)
+    page.click('#grid .maplayout button[data-l="top"]')
     # another dashboard of the same activity (目錄), then back to the trends
     dbs = page.locator("#tree .db")
     if dbs.count() > 1:

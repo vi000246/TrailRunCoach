@@ -292,7 +292,7 @@
       },
       "route-map": {
         "title": "Route map",
-        "description": "This activity's route (GPS track).\nHow to read: line colour can switch between HR, power, grade or a single colour; the top-right corner changes the base map and the contour and road overlays.\nLook for: hover the route and the HR and power charts mark the same point; moving over the charts marks the position on the map.\nMethod: drawn from this activity's GPS samples; indoor activities or ones without location show \"No GPS data\". The base map defaults to the one on the settings page."
+        "description": "This activity's route (GPS track).\nHow to read: line colour can switch between HR, power, grade or a single colour; the top-right corner changes the base map and the contour and road overlays; beside the map are this activity's elevation, heart rate, power, pace and grade (buttons pick which ones, together or alone); \"Layout\" puts the map on top or on the left.\nLook for: hover the route, the chart beside it or this activity's other charts, and the map and every chart mark the same moment (tap on a phone).\nMethod: drawn from this activity's GPS samples; indoor activities or ones without location show \"No GPS data\". The base map defaults to the one on the settings page."
       },
       "route-difficulty": {
         "title": "Route difficulty",
