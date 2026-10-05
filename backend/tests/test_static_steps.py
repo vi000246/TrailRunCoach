@@ -95,12 +95,22 @@ CUSTOM = {
             {"id": "h", "kind": "work", "dur": {"type": "load", "value": "12.5"}, "target": {"type": "hr", "mode": "pct", "lo": 0.95, "hi": 1.0}},
             {"id": "x", "kind": "rest", "dur": {"type": "time", "value": 120}, "target": T(intent="open")}]},
         {"id": "n", "kind": "work", "dur": {"type": "load", "value": 20}, "target": {"type": "none"}}],
+    # 「負荷」 by RPE (SP-57): level + minutes → TSS by the default factor, timed by its minutes
+    "load_rpe": [
+        {"id": "w", "kind": "warm", "dur": {"type": "time", "value": 600}, "target": T(intent="easy")},
+        {"id": "a", "kind": "work", "dur": {"type": "load", "value": 1, "rpe": "very_hard", "min": 40}, "target": {"type": "none"}},
+        {"id": "b", "kind": "work", "dur": {"type": "load", "rpe": "easy", "min": "25"},
+         "target": {"type": "hr", "mode": "pct", "lo": 0.8, "hi": 0.85}},
+        {"id": "c", "kind": "work", "dur": {"type": "load", "rpe": "max", "min": 1}, "target": {"type": "power", "mode": "pct", "lo": 1.1, "hi": 1.2}}],
 }
 BAD = [{"items": [{"kind": "x"}]}, {"items": []}, {"nope": 1},
        {"items": [{"kind": "repeat", "times": 0, "items": [{"kind": "work", "dur": {"type": "time", "value": 2}}]}]},
        {"items": [{"kind": "work", "dur": {"type": "lap"}, "target": {"type": "power", "mode": "zone", "zone": "9"}}]},
        {"items": [{"kind": "work", "dur": {"type": "time", "value": "abc"}, "target": {"type": "hr", "mode": "pct", "lo": 2, "hi": None}}]},
-       {"items": [{"kind": "warm", "dur": {"type": "load", "value": 40}}, {"kind": "work", "dur": {"type": "load", "value": 900}}]}]
+       {"items": [{"kind": "warm", "dur": {"type": "load", "value": 40}}, {"kind": "work", "dur": {"type": "load", "value": 900}}]},
+       {"items": [{"kind": "work", "dur": {"type": "load", "rpe": "meh", "min": 30}},
+                  {"kind": "work", "dur": {"type": "load", "rpe": "max", "min": 360}},
+                  {"kind": "work", "dur": {"type": "load", "rpe": "hard", "min": 0}}]}]
 
 DERIVE = [
     {"kind": "easy", "title": "輕鬆跑", "minutes": 45},

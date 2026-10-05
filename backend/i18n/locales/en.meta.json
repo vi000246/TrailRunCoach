@@ -3334,5 +3334,25 @@
   "🌡 {t:.0f} °C（{band}）": {
     "draft": true,
     "src": "backend/engine/panels/drift_bars.py:42"
+  },
+  "輕鬆": {
+    "draft": true,
+    "src": "backend/engine/rpe_load.py:55"
+  },
+  "稍累": {
+    "draft": true,
+    "src": "backend/engine/rpe_load.py:55"
+  },
+  "累": {
+    "draft": true,
+    "src": "backend/engine/rpe_load.py:55"
+  },
+  "很累": {
+    "draft": true,
+    "src": "backend/engine/rpe_load.py:55"
+  },
+  "極限": {
+    "draft": true,
+    "src": "backend/engine/rpe_load.py:55"
   }
 }
