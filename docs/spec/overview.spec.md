@@ -1,6 +1,6 @@
 # Module Spec: overview
 
-> **Last Updated**: 2026-10-04
+> **Last Updated**: 2026-10-05
 > **Status**: Active
 > **Domain Layer**: Core Domain
 
@@ -1031,7 +1031,7 @@ which one. The response keeps the `coros` field names.
   Above threshold with reps > 5′ is 巡航（超閾值）. Distance reps use T pace (4:48/km without one,
   推估). Used by: the editor's 插入範本 強度課 tabs (有氧間歇 ／ VO2max 間歇 ／ 速度, labels and
   tips through `_()`, `cats`, `backend/engine/workout_templates.py:511`; groups in
-  `workout_steps.templates`, `backend/engine/workout_steps.py:1601`, for the published templates
+  `workout_steps.templates`, `backend/engine/workout_steps.py:1660`, for the published templates
   and the interval ladder's rows alike — Palladino 4×2:40 now files as VO2max, 4×4:30 @ 98–104 %
   as 巡航); the 推薦 block (`template_recs._score`, `backend/engine/template_recs.py:131`: Zone 5
   closed → no VO2max / 速度 template; 基礎期 favours 有氧間歇, 強化期／專項期 巡航間歇; the
@@ -1071,7 +1071,7 @@ which one. The response keeps the `coros` field names.
   (`PURPOSE`, `backend/engine/workout_templates.py:123`, from the report's Finding 7 with the
   coaches it cites, msgids through `_()`); the interval ladder's rows take the purpose of their
   family. The 插入範本 menu shows it under each row's title, and a 強度課 row also shows its sub
-  (長 tempo ／ 巡航間歇 ／ 短間歇) as a small tag (`menuHtml`, `backend/static/workout_editor.js:822`).
+  (長 tempo ／ 巡航間歇 ／ 短間歇) as a small tag (`menuHtml`, `backend/static/workout_editor.js:830`).
 - **速度 tab add-ons** (2026-10-04, SP-32 follow-up): strides (快步跑 4×20″) and short hill sprints
   (上坡衝刺 8×10″, UA 陡坡衝刺 8×10″) are 速度 by `family_of`, but the menu only gave family tabs to
   the `quality` category, so only Daniels R showed there. `workout_steps.templates`
@@ -1092,7 +1092,7 @@ which one. The response keeps the `coros` field names.
   (`rpe_hint`, `backend/engine/workout_steps.py:838`: ≤ 4 under the easy cap, 5–6 up to 95 %
   LTHR, ≥ 7 from 95 % LTHR, 推估); its ≈ % CP sizes only the chart and the TSS estimate.
   **Push**: no intensity — the step keeps its time / distance / 直到按下計圈 end and its name
-  carries 「RPE 6–7 · 爬升 600 m」 (`rpe_name`, `backend/engine/workout_steps.py:1375`); the watch
+  carries 「RPE 6–7 · 爬升 600 m」 (`rpe_name`, `backend/engine/workout_steps.py:1434`); the watch
   preview lists that limit. **Load / PMC stay the watch's record** (no RPE correction).
   **Easy or quality by RPE**: `rpe_role` (`backend/engine/workout_steps.py:1226`) — a work step
   reaching RPE 7 (很累) = 強度課, else 輕鬆課; POST /steps/check returns it (`rpe_role`), the menu
@@ -1105,14 +1105,14 @@ which one. The response keeps the `coros` field names.
   `load_unit`, `backend/sync/workout_targets/base.py:55`): COROS 時間／距離／直到按下計圈／負荷 (TL),
   Garmin 時間／直到按下 Lap 鍵, intervals.icu 時間. `/steps/derive` returns the active one
   (`context.provider`, read from `plan.push.provider`, `backend/api/plan_sessions.py:1160`) and the
-  editor builds the 時長類型 dropdown from it (`endOpts`, `backend/static/workout_editor.js:443`); a
+  editor builds the 時長類型 dropdown from it (`endOpts`, `backend/static/workout_editor.js:460`); a
   stored type the provider lacks stays listed as 「（… 不支援）」. 「按圈」 is now 「直到按下計圈」
   everywhere (editor, chart legend, watch preview, issues, race-calculator export switch and hint,
   template step notes). **`load`** = `{"type": "load", "value": TSS}` (1–500), **main-set (work)
   steps only** (`normalize`, `backend/engine/workout_steps.py:616`). Its time is estimated
   TSS ÷ (IF² × 100) h at the step's ≈ % CP (`load_if`, `backend/engine/workout_steps.py:1042`; 推估),
   so the chart, the total and TSS 估 include it; the ladder counts such a main set by the same
-  formula at the band's middle (`load_work_s`, `backend/engine/workout_steps.py:1289` — see
+  formula at the band's middle (`load_work_s`, `backend/engine/workout_steps.py:1348` — see
   plan-auto.spec.md). The editor shows the provider's conversion next to
   the TSS: COROS 「≈ N TL（推估 ±E）」 (`load_tl` → `engine/coros_tl.py`, refit per athlete after
   each sync — wko5-coros-sync.spec.md). **Push**: COROS gets its training-load end condition,
@@ -1127,7 +1127,7 @@ which one. The response keeps the `coros` field names.
   (`load_records`, `backend/engine/workout_steps.py:1066`) for the closed-loop correction.
   `workout_templates.session_role` (`backend/engine/workout_templates.py:706`) gives the same
   answer for a stored session. The editor's target menu adds 「RPE＋爬升」 with RPE / 爬升 / 下降
-  fields (`tgHtml`, `backend/static/workout_editor.js:470`); the static demo's JS port follows.
+  fields (`tgHtml`, `backend/static/workout_editor.js:478`); the static demo's JS port follows.
   The 推薦 block: 基礎期 favours the low-RPE technical session, 專項期 the race-like one
   (`TRAIL_SPECIFIC`, `backend/engine/template_recs.py:49`). Not done: week_plan does not generate
   技術地形 sessions itself, and a user's own quality-kind session is not counted into the
@@ -1136,7 +1136,7 @@ which one. The response keeps the `coros` field names.
   **範本** (`backend/static/templates.html`, `GET /plan/templates/page`,
   `backend/api/plan_sessions.py:2320`; also on 課表統計) lists the user's own templates and the
   built-in library (filter 全部／我的／內建, by category, by name); the chosen one opens in the
-  same step editor (`WorkoutEditor.load`, `backend/static/workout_editor.js:309`) with its name,
+  same step editor (`WorkoutEditor.load`, `backend/static/workout_editor.js:317`) with its name,
   categories, 目標用 (自動／心率／功率) and note. Built-in rows are read-only with their source;
   「複製成我的範本」 copies one (`backend/api/plan_sessions.py:1276`). Storage: tables
   `workout_templates_user` / `workout_template_cats` (`backend/db/models.py:348`,
@@ -1156,7 +1156,7 @@ which one. The response keeps the `coros` field names.
   sub-tab —, 越野跑 under its `trail_type_of` kind) and adds the custom categories as tabs; rows are
   tagged 我的 / ▲ GPX. Applying one in the session dialog also sets the session's `target_basis`
   (`backend/static/schedule.html:1609`, saved with it, `backend/static/schedule.html:1899`).
-  **儲存成範本** in the editor (`saveForm`, `backend/static/workout_editor.js:967`): name +
+  **儲存成範本** in the editor (`saveForm`, `backend/static/workout_editor.js:984`): name +
   categories, the current structure; `POST /sessions/{uid}/save-as-template`
   (`backend/api/plan_sessions.py:1358`: the body's steps, else the stored, else derived; the
   session's 目標用) or `POST /steps/templates/user` for an unsaved session. **Route GPX**: a
@@ -1186,7 +1186,7 @@ which one. The response keeps the `coros` field names.
   longer than the workout: the legend says so). The editor (`chart`,
   `backend/static/workout_editor.js:546`) places the bars by `x` with km ticks and the step's km
   range in the tooltip, the elevation behind them as a light area + thin line with its own m scale
-  (`elev`, `backend/static/workout_editor.js:601`), in the chart viewer's neutral elevation colour.
+  (`elev`, `backend/static/workout_editor.js:609`), in the chart viewer's neutral elevation colour.
   **我的範本 in 推薦** (2026-10-04 follow-up, the user's decision): GET /steps/templates/recs
   (`backend/api/plan_sessions.py:1405`) ranks the user's templates with the built-ins by the same
   `_score` rules (family, Zone 5, phase, the ladder rung's 同一類 bonus, time, terrain, type); the
@@ -1194,6 +1194,25 @@ which one. The response keeps the `coros` field names.
   `backend/engine/template_recs.py:214`: 結構化爬升 → the long climb, 下坡 → 下坡離心 incl. its
   taper exclusion, 技術地形 hard / easy by `rpe_role`); a pick carries `mine` and the menu tags it
   我的; custom category tabs get 推薦 too.
+  **主課強度 filter** (2026-10-05, SP-84): after the category, both lists filter by the main
+  set's target type. One helper, `workout_steps.target_types` (`backend/engine/workout_steps.py:1274`):
+  the targets of the work steps (inside repeats too; none → the 「其他」 steps, e.g. strides; none
+  → every step), each type a mixed main set uses, in `TARGET_TYPE_IDS` order
+  (`backend/engine/workout_steps.py:1240`): % CP 功率區間 (pct and Palladino zones) / 絕對功率 /
+  % LTHR 心率 / 心率區間 (≤ AeT, Friel, 課表心率區間) / 絕對心率 / 配速 / RPE / 自動（依課表類型）/
+  不設目標 (incl. a 自動 open step) / 負荷 (a 「負荷」 end condition on the main set). A 「自動」 band
+  takes the template's 目標用 (library `basis`, user `target_basis`: power → % CP, hr → % LTHR),
+  else stays 自動 — so the interval ladder's variants are 自動 (the session's 目標用 decides); an
+  自動 easy step is 心率區間 unless a power band under 目標用 power. Every row of
+  GET /steps/templates (`backend/engine/workout_steps.py:1742`) and GET /steps/templates/user
+  (`row`, `backend/engine/user_templates.py:499`) carries `target_types`; both responses carry
+  the type list `target_types` [{id, label}] (translated labels, `backend/api/plan_sessions.py:1269`). The UIs
+  show only the types the listed rows use (by category and source; one type → no chips) plus
+  全部強度: the 範本 page under its category chips (`rows`, `backend/static/templates.html:229`),
+  插入範本 under its category tabs, over the 推薦 block and the rows (`menuHtml`,
+  `backend/static/workout_editor.js:837`). The choice is kept per viewer in localStorage
+  (`templates.target_type`, shared by both, try/catch; `backend/static/templates.html:197`,
+  `backend/static/workout_editor.js:223`); a kept type the current category doesn't use shows 全部.
   Demo: the routes are sandbox writes (`backend/tenancy_mw.py:49`), each visitor's own; the static
   demo shows the page read-only (the write controls locked, `backend/demo/export_static.py:106`).
   i18n: page namespace `templates`, editor strings `common.workout.*`, server messages via `_()`,
@@ -1564,3 +1583,4 @@ deleted / superseded) are returned as reconcile `changes` (`backend/engine/recon
 | 2026-10-04 | change | SP-73 follow-up | Zone 3 gate / re-entry block: 轉換期 days are not a running break (no block, no 7-day gap, no 21-day re-lock; plan-auto.spec.md) |
 | 2026-10-04 | change | SP-39 follow-up | Zone 5 UA path: no LTHR age limit; `threshold_confidence.lthr_evidence` (evidence since the LTHR date) feeds `quality_gate.lthr_invalid` (plan-auto.spec.md) |
 | 2026-10-04 | sp-79-quality-families | SP-79 | 強度課's three families in the main UI: `plan_sessions.family` (picked in the 課表 editor's 類型 — 有氧間歇／VO2max 間歇／速度 — else read from the steps), a mismatch hint, per-family chip colours and legend, 課表統計 by family; generated titles name the family and older stored titles are mapped on read (`display_title` → `interval_library.renamed`), so the watch names and the calendar feed SUMMARY follow (a pushed session with an old name is re-pushed once) |
+| 2026-10-05 | sp-84-template-filter | SP-84 | 範本 page and 插入範本 filter by 主課強度 (the main set's target type: `workout_steps.target_types`, `target_types` on every template row and the type list in both template APIs), after the category; kept per viewer in localStorage |

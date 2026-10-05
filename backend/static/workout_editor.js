@@ -9,6 +9,9 @@
  *   we.payload()                    {steps} to save, {steps: null} to clear, or null (untouched)
  *   we.load(doc, {ro})              show a given structure (the 範本 page: a template, not a session)
  *
+ * 插入範本: category tabs, then 主課強度 (SP-84: each row's `target_types`, workout_steps.target_types;
+ * kept per viewer in localStorage under the 範本 page's key), then the 推薦 block and the rows.
+ *
  * Options: saveTemplate (default true): the 「儲存成範本」 button (POST /sessions/{uid}/save-as-template,
  * else /steps/templates/user; SP-36). A structure made from a user template keeps its id (`tpl`)
  * and, once saved as a session, its own copy of the route profile (`route`, carried through as is):
@@ -216,6 +219,11 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
   const nid = () => `u${Date.now().toString(36).slice(-4)}${(++uidN).toString(36)}`;
   const clone = (it) => { const c = JSON.parse(JSON.stringify(it)); const re = (x) => { x.id = nid(); (x.items || []).forEach(re); }; re(c); return c; };
 
+  // the 主課強度 filter of 插入範本, shared with the 範本 page (templates.html); storage may be blocked
+  const TT_KEY = "templates.target_type";
+  const ttLoad = () => { try { return localStorage.getItem(TT_KEY) || "all"; } catch (e) { return "all"; } };
+  const ttSave = (v) => { try { localStorage.setItem(TT_KEY, v); } catch (e) { /* not kept */ } };
+
   async function req(method, url, body) {
     const r = await fetch(url, { method, headers: body ? { "Content-Type": "application/json" } : {}, body: body ? JSON.stringify(body) : undefined });
     const b = await r.json().catch(() => ({}));
@@ -231,7 +239,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       this.dirty = false; this.cleared = false; this.stored = false; this.ro = false;
       this.sel = null; this.openT = null; this.auto = {};
       this.seq = 0; this.timer = null; this.key = "";
-      this.tpls = null; this.tplFull = true; this.tplCat = null; this.tplSub = null;
+      this.tpls = null; this.tplFull = true; this.tplCat = null; this.tplSub = null; this.tplTT = ttLoad();
       root.innerHTML = `<details class="we" id="we-box"><summary><b>結構</b><span class="we-sumtxt" id="we-sum">載入中…</span><button type="button" class="we-sumtpl" id="we-sumtpl">範本</button></summary>
         <div class="we-body">
           <div class="we-tools" id="we-tools">
@@ -825,7 +833,12 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       if (subs.length && !subs.some((s) => s.id === this.tplSub)) this.tplSub = subs[0].id;
       const where = {};                                      // row key -> "gi.i" in this tab
       (T.groups || []).forEach((g, gi) => { if (g.cat === cat) g.rows.forEach((r, i) => { where[r.key] ??= `${gi}.${i}`; }); });
-      const recs = ((this.recs || {}).cats || {})[cat]?.filter((x) => where[x.key]) || [];
+      // 主課強度: the types this category's rows use; a kept choice none of them has shows 全部 (kept still)
+      const avail = new Set((T.groups || []).filter((g) => g.cat === cat).flatMap((g) => g.rows.flatMap((r) => r.target_types || [])));
+      const tt = avail.has(this.tplTT) ? this.tplTT : "all";
+      const ttOk = (r) => tt === "all" || (r.target_types || []).includes(tt);
+      const rowAt = (at) => { const [g, i] = at.split(".").map(Number); return T.groups[g].rows[i]; };
+      const recs = ((this.recs || {}).cats || {})[cat]?.filter((x) => where[x.key] && ttOk(rowAt(where[x.key]))) || [];
       const recKeys = new Set(recs.map((x) => x.key));
       // 我的範本 with no sub-tab of its own (a 強度課 one with no interval family): in every sub-tab
       const gs = (T.groups || []).map((g, gi) => ({ g, gi })).filter(({ g }) => g.cat === cat && (!subs.length || g.sub === this.tplSub || (g.mine && !g.sub)));
@@ -842,17 +855,19 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
         (r.role ? ` <span class="fam">${r.role === "quality" ? "算強度課" : "算輕鬆課"}</span>` : "");
       const btn = (r, at, sub) => `<button type="button" class="t" data-t="${at}">${this.mini(r.full || r.items)}<span>${esc(r.label)}${fsub(r)}${r.src_kind === "推估" ? ` <span class="faint">（推估）</span>` : ""}${tpBadge(r)}</span>` +
         `${r.purpose ? `<span class="pur">${esc(r.purpose)}</span>` : ""}<span class="src${sub ? " why" : ""}">${esc(sub || r.src || "")}</span></button>`;
-      const rowAt = (at) => { const [g, i] = at.split(".").map(Number); return T.groups[g].rows[i]; };
       const rec = recs.length ? `<div class="g rec">推薦 ${q((this.recs || {}).tip || "")}</div>` +
         recs.map((x, n) => btn(rowAt(where[x.key]), where[x.key], `${n + 1}. ${x.reason}`)).join("") : "";
       const others = gs.map(({ g, gi }) => {
-        const rows = g.rows.map((r, i) => [r, i]).filter(([r]) => !recKeys.has(r.key));
+        const rows = g.rows.map((r, i) => [r, i]).filter(([r]) => !recKeys.has(r.key) && ttOk(r));
         return rows.length ? (gs.length > 1 || g.title ? `<div class="g">${esc(g.title || g.group)}</div>` : "") + rows.map(([r, i]) => btn(r, `${gi}.${i}`)).join("") : "";
       }).join("");
       const subTabs = subs.length ? `<div class="tabs sub" role="group" aria-label="類別">${subs.map((s) => tab("sub", s.id, s.label, s.id === this.tplSub, s.tip)).join("")}</div>` : "";
-      const list = subTabs + (others || `<p class="empty">${gs.length ? "都在上面的推薦裡" : "這一類還沒有範本"}</p>`);
-      const n = (T.groups || []).filter((g) => g.cat === cat).reduce((a, g) => a + g.rows.filter((r) => !recKeys.has(r.key)).length, 0);
-      this.$("we-pop").innerHTML = `<div class="tabs" role="group" aria-label="類型">${cats.map((c) => tab("cat", c.id, c.label, c.id === cat)).join("")}</div>` +
+      const list = subTabs + (others || `<p class="empty">${!gs.length ? "這一類還沒有範本"
+        : gs.some(({ g }) => g.rows.some(ttOk)) ? "都在上面的推薦裡" : esc(tr("workout.tt_none"))}</p>`);
+      const n = (T.groups || []).filter((g) => g.cat === cat).reduce((a, g) => a + g.rows.filter((r) => !recKeys.has(r.key) && ttOk(r)).length, 0);
+      const tts = [{ id: "all", label: tr("workout.tt_all") }, ...(T.target_types || []).filter((x) => avail.has(x.id))];
+      const ttTabs = tts.length > 2 ? `<div class="tabs sub" role="group" aria-label="${esc(tr("workout.tt"))}">${tts.map((x) => tab("tt", x.id, x.label, x.id === tt)).join("")}</div>` : "";
+      this.$("we-pop").innerHTML = `<div class="tabs" role="group" aria-label="類型">${cats.map((c) => tab("cat", c.id, c.label, c.id === cat)).join("")}</div>` + ttTabs +
         (rec ? rec + `<details class="more" id="we-more"${this.tplMore ? " open" : ""}><summary>其他範本（${n}）</summary>${list}</details>` : list) +
         `<div class="mode" role="radiogroup" aria-label="插入方式"><label><input type="radio" name="we-tm" value="full"${this.tplFull ? " checked" : ""}>整份換（含暖身、緩和）</label><label><input type="radio" name="we-tm" value="main"${this.tplFull ? "" : " checked"}>只換主課</label></div>`;
       this.$("we-more")?.addEventListener("toggle", (e) => { this.tplMore = e.target.open; });
@@ -901,6 +916,8 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       if (c) { this.tplCat = c.dataset.cat; this.tplSub = null; this.menuHtml(); return; }
       const sb = e.target.closest("button[data-sub]");
       if (sb) { this.tplSub = sb.dataset.sub; this.menuHtml(); return; }
+      const tb = e.target.closest("button[data-tt]");
+      if (tb) { this.tplTT = tb.dataset.tt; ttSave(this.tplTT); this.menuHtml(); return; }
       const b = e.target.closest("button[data-t]"); if (!b) return;
       const [g, i] = b.dataset.t.split(".").map(Number), row = this.tpls.groups[g].rows[i];
       this.applyRow(row);
