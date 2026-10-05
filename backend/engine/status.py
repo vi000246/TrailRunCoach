@@ -376,9 +376,10 @@ class Status:
                 lvl, v, act = WATCH, "TSB > +25，體能在流失", "恢復規律訓練"
         return Indicator("form", "狀況 TSB", lvl, txt, v, why, act, SRC_TP_TSB, now, spark)
 
-    def _planned_off_days(self) -> list[int]:
-        """Day indices of the user's 不排課日期 and 休息日 (both blackout kinds) — a chosen rest,
-        not an unplanned break (load_guard.short_break)."""
+    def _planned_off_days(self, lo: Optional[int] = None, hi: Optional[int] = None) -> list[int]:
+        """Day indices of a chosen rest, not an unplanned break (load_guard.short_break): the
+        user's 不排課日期 and 休息日 (both blackout kinds) and, within [lo, hi], the weekdays not
+        ticked as 可練日 in 課表偏好 (owner 2026-10-05: a Fri–Sun runner's Mon–Thu are planned)."""
         bos = self.blackouts
         if bos is None:
             try:
@@ -390,6 +391,17 @@ class Status:
         for b in bos or ():
             for d in b.days():
                 out.append(int(math.floor(date_to_day(d))))
+        if lo is not None and hi is not None:
+            prefs = self.prefs
+            if prefs is None:
+                try:
+                    from backend.engine import plan_prefs as PP
+                    prefs = PP.load()
+                except Exception:           # noqa: BLE001 — no settings: every day allowed
+                    prefs = None
+            days = getattr(prefs, "days", None)
+            if days and not all(days):
+                out += [d for d in range(lo, hi + 1) if not days[day_to_date(d).weekday()]]
         return out
 
     def i_volume(self) -> Indicator:
@@ -405,16 +417,16 @@ class Status:
         run_last = run[-2]
         step, run_base = LG.volume_step(run_last, run[-6:-2])
         # the week after a short unplanned break (< 6 days, no re-entry block) is exempt (load_guard);
-        # the user's own 不排課日期／休息日 don't count as unplanned (owner 2026-10-05)
+        # the user's own 不排課日期／休息日 and unticked 可練日 don't count as unplanned (owner 2026-10-05)
         exempt = ""
         if step is not None and step > LG.STEP_HOLD:
             lo = math.floor(date_to_day(wk[-3][0]))
             brk = LG.short_break([math.floor(w.day) for w in self.ds.workouts if w.sport in LG.STEP_SPORTS],
-                                 lo, lo + 6, self._planned_off_days())
+                                 lo, lo + 6, self._planned_off_days(lo - MIN_BREAK, lo + 6 + MIN_BREAK))
             if brk is not None:
                 n = brk[1] - brk[0] + 1
                 k = brk[2]
-                own = f"，另 {k} 天是自己排的不排課／休息日" if k else ""
+                own = f"，另 {k} 天是自己排的休息（不排課日期／休息日／沒勾的可練日）" if k else ""
                 exempt = (f"上週跑步時間比基準多 {step * 100:+.0f}%，但前一週非計畫停跑 {n - k} 天{own}"
                           f"（< {MIN_BREAK} 天、不進恢復期）把基準拉低了：這週不算增幅（推估）")
         base6 = _mean([h for _, h in wk[-8:-2]]) or 0

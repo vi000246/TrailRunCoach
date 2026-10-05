@@ -136,11 +136,13 @@ max(the week before, the 4 weeks before's mean) > 20 % → no interval (Nielsen 
 法則」 itself has no evidence); 10–20 % → hold the dose (推估, conservative). Exempt: the week after
 a short unplanned break — 3–5 days without a run (3 推估; ≥ 6 is a re-entry block, `reentry.MIN_BREAK`)
 touching the week before, which pulled the base down (`short_break`,
-`backend/engine/load_guard.py:287`; owner 2026-10-04). Only unplanned days count (owner
+`backend/engine/load_guard.py:289`; owner 2026-10-04). Only unplanned days count (owner
 2026-10-05): days of the user's own 不排課日期 or 休息日 (both blackout kinds, `Status(blackouts=)`,
-default `blackouts.load()`) are a chosen rest, so a planned gap is still checked and a partly
-planned one is exempt only when its unplanned days alone are ≥ 3 (counted, not contiguous). The
-status card says so (「前一週非計畫停跑 N 天，另 M 天是自己排的不排課／休息日…」) and the week gets
+default `blackouts.load()`) and the weekdays not ticked as 可練日 in 課表偏好 (`plan_prefs.days`,
+`Status(prefs=)`: a Fri–Sun runner's weekly Mon–Thu gap is their week, not a break) are a chosen
+rest, so a planned gap is still checked and a partly planned one is exempt only when its unplanned
+days alone are ≥ 3 (counted, not contiguous). The status card says so (「前一週非計畫停跑 N 天，另 M
+天是自己排的休息（不排課日期／休息日／沒勾的可練日）…」) and the week gets
 an info note (`guard`'s `step_note` → `week_plan`, `backend/engine/overview.py:914`). TSB −30…−20 → hold
 (Friel / TrainingPeaks). B2B weekends and the B2B TSB exemption use the block line too.
 
@@ -599,3 +601,4 @@ overview has `data-log="none"`. The settings are in 課表偏好 (above).
 | 2026-10-04 | change | SP-39 follow-up | Zone 5's UA path: no LTHR age limit any more (`LTHR_FRESH_DAYS` removed) — a measured LTHR is invalidated only by an event (`lthr_invalid`: a ≥ 4-week running break after the test, evidence since the test from `threshold_confidence.lthr_evidence`, an AeT aggregate shift / moved); the flow names the event and offers the 30-min LTHR test (owner 2026-10-05) |
 | 2026-10-04 | sp-79-quality-families | SP-79 | Generated 強度課 titles name the family (有氧間歇／有氧間歇（巡航）／VO2max 間歇) instead of 閾值／近閾值／VO2max; stored older titles are mapped on read and in reconcile (no spurious change), and the ladder's title matchers accept both spellings |
 | 2026-10-05 | change | SP-79 follow-up | Taper 「短強度 4×3 分」 renamed 「有氧間歇（巡航）4×3 分」 (intensity unchanged); the stored old title maps through `interval_library.renamed` / `plan_store.display_title` |
+| 2026-10-05 | change | SP-63 follow-up | Weekdays not ticked as 可練日 in 課表偏好 count as planned rest for the short-break exemption (like 不排課日期 / 休息日), so a Fri–Sun-only runner's weekly Mon–Thu gap is not exempt from the running-volume step (owner 2026-10-05) |

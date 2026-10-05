@@ -105,7 +105,7 @@ categorical palette in fixed slot order (`backend/engine/overview.py:36`).
 0 ≤ x ≤ 5000 (`backend/engine/overview.py:280`). TSB is yesterday's CTL − ATL.
 
 **Start values (SP-68).** CTL / ATL start from `load_guard.pmc_start()`
-(`backend/engine/load_guard.py:188`), one source order:
+(`backend/engine/load_guard.py:190`), one source order:
 1. **manual** — the user's CTL / ATL at the start of a date (設定 → 閾值 → 起始 CTL／ATL;
    user_settings `athlete.pmc_start` = {date, ctl, atl}, 0–300, date ≤ today). The series
    restarts on that date; the days before it keep the automatic start. A date after today is
@@ -146,7 +146,7 @@ B2B weekends, the race calculator (for the 專項期 target) and the 主要訓�
 **Volume target**
 1. Base / specific: the weekly TSS that raises CTL by the phase goal (base max(2, 5 % of CTL),
    specific max(2.5, 7 %) per week, 推估 — SP-63; `load_guard.ramp_goal`,
-   `backend/engine/load_guard.py:309`) — `7·(CTL₀ + Δ/(1 − (1 − 1/42)⁷))` —
+   `backend/engine/load_guard.py:311`) — `7·(CTL₀ + Δ/(1 − (1 − 1/42)⁷))` —
    converted to hours with the athlete's TSS per hour over 6 weeks.
 2. Capped at `max(1.10 × ref, ref + 0.5 h)`, ref = max(4-week mean, last week) (UA 10 %).
    Floored at the 4-week mean (hold).
@@ -229,7 +229,7 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
     target; the AeT is often estimated, climbs inflate HR) — with an untested AeT in effect a
     warning for Zone 5 too (SP-39, `guard(aet_tested=False)`); CTL ramp ≥ max(3, 10 % CTL₋₇) →
     threshold only, ≥ min(10, max(5, 15 % CTL₋₇)) → none (Friel as a share of CTL, 推估; not in the
-    first 28 days of data — `backend/engine/load_guard.py:188`); last week's running-time step
+    first 28 days of data — `backend/engine/load_guard.py:190`); last week's running-time step
     against max(the week before, 4-week mean) > 20 % → none (Nielsen 2014, Damsted 2019), 10–20 % →
     hold the dose (推估) — not the week after a 3–5-day break without a run, which gets an info note
     instead (`src: "volume"`, plan-auto.spec.md); TSB −30…−20 → hold (Friel / TrainingPeaks). Projected weeks keep only the
@@ -314,7 +314,7 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
   LTHR / AeT / CP; a 心率 save reloads the table so a stale copy never overwrites it. The 賽事周期
   page (`backend/static/plan.html:159`) shows a read-only line — what is in effect, the latest test
   date and count — with 「到設定修改」 (`/api/v1/wko5/settings#thresholds`); the status action for a
-  default LTHR points to 設定 too (`backend/engine/status.py:940`). No data-model change.
+  default LTHR points to 設定 too (`backend/engine/status.py:952`). No data-model change.
 - With active preferences the template is then shaped by `plan_prefs.shape()`
   (`backend/engine/overview.py:1168`; see 課表偏好 below).
 
@@ -1204,7 +1204,7 @@ which one. The response keeps the `coros` field names.
 - `Status.weekly_hours()` sums moving time (fallback recorded time) instead of recorded
   time (`backend/engine/status.py:181`), so the volume indicators aren't inflated by multi-day
   trips.
-- **`i_drift`** (`backend/engine/status.py:526`) is **informational**: the same per-run drift as
+- **`i_drift`** (`backend/engine/status.py:538`) is **informational**: the same per-run drift as
   the single-activity review (`workout_review.drift_series`, `backend/engine/workout_review.py:2209`):
   road runs, ≥ 40 min, avg HR ≤ AeT+3, hilly / stopped / unsteady runs refused. It reads
   `drift_series(ref=True)`: the 參考 tier (30–40 min after the warm-up, 推估) counts for the
@@ -1237,11 +1237,11 @@ which one. The response keeps the `coros` field names.
   ramp at `load_guard`'s block line bad, watch line watch (SP-63: relative lines; SP-68: on the
   PMC's own started CTL, so the CTL shown and the guardrail's agree; 起算期 info in the first 28
   days of an automatic start, the first 7 after a manual one, with `ramp_week = None`; `extra`
-  adds `ramp_base`, `ramp_level`, `ramp_lines`, `ramp_startup`, `pmc_start` = the source). `i_volume` (`backend/engine/status.py:395`): the
+  adds `ramp_base`, `ramp_level`, `ramp_lines`, `ramp_startup`, `pmc_start` = the source). `i_volume` (`backend/engine/status.py:407`): the
   headline stays all-sport moving hours; the step is running time against max(the week before,
   4-week mean) — > 20 % bad (Nielsen 2014 / Damsted 2019), 10–20 % watch (推估), good with the reason
   when the week before had a 3–5-day break without a run, ≥ 3 of its days unplanned (not on the user's
-  不排課日期 / 休息日; `load_guard.short_break`, `Status(blackouts=)`); `extra` adds
+  不排課日期 / 休息日 / unticked 可練日; `load_guard.short_break`, `Status(blackouts=, prefs=)`); `extra` adds
   `run_last_week`, `run_base`, `step_exempt`.
 - **`i_gate`** hover adds the Zone 5 track (「Zone 5：已解鎖（…）／未解鎖（AeT 已通過，還差 3 區：…）」)
   or the AeT state (「Zone 5：未確認／已確認／暫停（原因）／恢復期」) and 「建議測試：…」; a locked method reads 「5 區未開」 and
@@ -1255,10 +1255,10 @@ which one. The response keeps the `coros` field names.
   race − 21 days. `spark` = S over 120 days; `extra` = s_race, doses (bars), HRC trend
   (`heat.hr_cost` on steady flat stretches, 「觀測不支持模型」 when S rises and HRC does not fall),
   a, badge 推估. Without exposure data the verdict asks for a weather-enabled routes build.
-- **`i_gate`** 「間歇門檻」 (`backend/engine/status.py:610`): `quality_gate.evaluate` +
+- **`i_gate`** 「間歇門檻」 (`backend/engine/status.py:622`): `quality_gate.evaluate` +
   `indicator` (`backend/engine/quality_gate.py:2468`) with the status' 課表偏好 (`Status(prefs=…)`;
   the API's status cache keys on `prefs.stamp()`, `backend/api/overview.py:53`). Second in
-  `PHASE_PRIORITY["base"]` (`backend/engine/status.py:1013`), so its WATCH action lands in 還缺什麼.
+  `PHASE_PRIORITY["base"]` (`backend/engine/status.py:1025`), so its WATCH action lands in 還缺什麼.
   Texts per the design doc §4.6: auto without AeT → info 「沒有 AeT 實測：照 80/20 原則每週 1
   次間歇（第 N 步：…）」; a blocking guardrail → watch with its number (e.g. 「本週不排間歇：低強度只有
   68%（< 75%）」); ua_gap locked → 「AeT 142 / LTHR 165：差距 16%（> 10%，有氧不足）」; unlocked →
@@ -1267,16 +1267,16 @@ which one. The response keeps the `coros` field names.
   the AeT source (「AeT 146（活動資料估算）」 / 「（{date} 飄移測試）」). `extra` is the gate dict incl.
   `options` (per mode usable + why, `backend/engine/quality_gate.py:2112`).
 - `PHASE_GOAL["base"]` no longer says 飄移 < 5 %; `PHASE_FOCUS["base"]` cites UA for the easy long
-  run and Palladino for the 8–15 s hill sprints (`backend/engine/status.py:1023`).
+  run and Palladino for the 8–15 s hill sprints (`backend/engine/status.py:1035`).
 - `i_data`'s action for a missing AeT is 「排一次 AeT 飄移測試（平日，10 分暖身＋40 分固定功率，跑步機或平路）；
-  測了可以改用有氧基礎門檻」 (`backend/engine/status.py:942`).
-- **`i_testing`** (`backend/engine/status.py:780`) — a CP row older than 42 days → watch, 90 →
+  測了可以改用有氧基礎門檻」 (`backend/engine/status.py:954`).
+- **`i_testing`** (`backend/engine/status.py:792`) — a CP row older than 42 days → watch, 90 →
   bad (`backend/engine/status.py:62`); LTHR is event-driven (an applied estimate is said as one,
   not judged by age) and AeT goes by reason (B3); event-driven retests (`zone_events`: HR shift
   at the same power, a ≥ 4-week break, the first cool spell) are **suggestions only** — they turn
   the card watch (「建議測」) and go to the floating box, never into the plan; 10–21 days before
   the A event is named the right time; < 10 days → 「賽前 10 天內不要測，賽後再測」, watch. The
-  action names the 課表偏好 protocol (`_cp_protocol`, `backend/engine/status.py:768`); `race` →
+  action names the 課表偏好 protocol (`_cp_protocol`, `backend/engine/status.py:780`); `race` →
   「用 5–10 K 比賽或計時跑代替 CP 測試」. It also reads the latest CP test in the data
   (`workout_review.latest_cp_test`, 120 days, `backend/engine/workout_review.py:2296`), whose
   `delta` is against the **previous result of the same method** (`cp_protocols.reference`;
@@ -1286,9 +1286,9 @@ which one. The response keeps the `coros` field names.
   `extra.cp_test` carries method, quality, `ref`, `apply`, `applied`; the 總覽 測試 card draws
   the apply button from it (`applyCpBtn`, `backend/static/overview.html:538`), POSTing
   `/api/v1/plan/thresholds/apply-cp` (see `workout-review.spec.md`).
-  `extra.cp_due` (CP missing / > 42 days, `backend/engine/status.py:900`) decides the CP-test
+  `extra.cp_due` (CP missing / > 42 days, `backend/engine/status.py:912`) decides the CP-test
   suggestion in `week_plan` (the CP test measures CP only). The latest AeT drift test
-  (`aet_test.latest_aet_test`) → `extra.aet_test` (`backend/engine/status.py:832`): band "at" and
+  (`aet_test.latest_aet_test`) → `extra.aet_test` (`backend/engine/status.py:844`): band "at" and
   not applied → watch 「{date} 的 AeT 測試：飄移 4.2%，AeT = 146 bpm（目前 142）」, action 「套用這次的
   AeT（146 bpm）」, and the 總覽 測試 card's button (`aetApply`, `backend/static/overview.html:494`)
   POSTs `extra.aet_test.apply` to `/api/v1/plan/thresholds/apply-estimate` with the test `date`;
@@ -1296,7 +1296,7 @@ which one. The response keeps the `coros` field names.
   check with no AeT to apply. The old 「AeT 已經 N 週沒測」 age rule is gone (B3: a reason, not a
   date).
   **Threshold confidence (SP-64)**: `i_testing` also runs `threshold_confidence.check`
-  (`backend/engine/threshold_confidence.py:925`, wired at `backend/engine/status.py:866`): LTHR /
+  (`backend/engine/threshold_confidence.py:925`, wired at `backend/engine/status.py:878`): LTHR /
   max HR / resting HR confidence (high / medium / low) from 8 LTHR signals (source, estimate
   premise, easy cap ≥ LTHR and % HRmax / % HRR, long efforts above LTHR, 40–60 min races < 95 %,
   the CP-band cross-check, events, age) and the max-HR plausibility check (highest HR held 120 s,
@@ -1565,3 +1565,4 @@ deleted / superseded) are returned as reconcile `changes` (`backend/engine/recon
 | 2026-10-04 | change | SP-39 follow-up | Zone 5 UA path: no LTHR age limit; `threshold_confidence.lthr_evidence` (evidence since the LTHR date) feeds `quality_gate.lthr_invalid` (plan-auto.spec.md) |
 | 2026-10-04 | sp-79-quality-families | SP-79 | 強度課's three families in the main UI: `plan_sessions.family` (picked in the 課表 editor's 類型 — 有氧間歇／VO2max 間歇／速度 — else read from the steps), a mismatch hint, per-family chip colours and legend, 課表統計 by family; generated titles name the family and older stored titles are mapped on read (`display_title` → `interval_library.renamed`), so the watch names and the calendar feed SUMMARY follow (a pushed session with an old name is re-pushed once) |
 | 2026-10-05 | change | SP-79 follow-up | Taper short session renamed 「短強度 4×3 分」 → 「有氧間歇（巡航）4×3 分」 (98–102 % CP unchanged); `interval_library.renamed` maps the stored old title (no reconcile change; the 「N×M 分」 parsers read both) |
+| 2026-10-05 | change | SP-63 follow-up | `i_volume`: weekdays not ticked as 可練日 (課表偏好) count as planned rest for the short-break exemption, like 不排課日期 / 休息日 |
