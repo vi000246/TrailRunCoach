@@ -51,6 +51,10 @@
     "draft": true,
     "src": "backend/engine/reentry.py:161"
   },
+  "20 cm 左右的階梯或矮箱": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:178"
+  },
   "20 分鐘峰值心率 × 95%": {
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:369"
@@ -63,13 +67,13 @@
     "draft": true,
     "src": "backend/engine/hr_profile.py:397"
   },
-  "2–3 個動作各 2 組，不做到力竭：高踏階 8 下／腳（可背包）、引體向上（留 2 下）、農夫走路 2 × 30–40 m。這週有 ME 負重爬坡，腿的負荷夠了，這堂不做離心下階": {
+  "2–3 個動作各 2 組，不做到力竭：{moves}。這週有 ME 負重爬坡，腿的負荷夠了，這堂不做{name}": {
     "draft": true,
-    "src": "backend/engine/strength_plan.py:154"
+    "src": "backend/engine/strength_plan.py:222"
   },
-  "2–4 個動作各 2 組，不做到力竭、不加新動作：高踏階 8 下／腳（可背包）、離心下階 8–10 下／腳、引體向上（留 2 下）、棒式 30 秒": {
+  "2–4 個動作各 2 組，不做到力竭、不加新動作：{moves}": {
     "draft": true,
-    "src": "backend/engine/strength_plan.py:158"
+    "src": "backend/engine/strength_plan.py:226"
   },
   "3 區已解鎖": {
     "draft": true,
@@ -151,9 +155,9 @@
     "draft": true,
     "src": "backend/engine/workout_templates.py:294"
   },
-  "6 站做 2–3 輪，每站 12–15 下、留 1–2 下不做到力竭，站間休 30–60 秒：離心下階（箱 15–30 cm，3 秒慢慢往下點地）、分腿蹲、高踏階（箱高約膝高，踩上去站穩再下）、引體向上（做不到用彈力帶輔助，或跳上去 3–5 秒慢放）、農夫走路 30–40 m、棒式 30 秒或懸吊抬腿": {
+  "6 站做 2–3 輪，每站 12–15 下、留 1–2 下不做到力竭，站間休 30–60 秒：{moves}": {
     "draft": true,
-    "src": "backend/engine/strength_plan.py:140"
+    "src": "backend/engine/strength_plan.py:209"
   },
   "60 分鐘平均心率": {
     "draft": false,
@@ -663,6 +667,10 @@
     "draft": true,
     "src": "backend/engine/panels/drift_bars.py:32"
   },
+  "{knee}；{ecc}；{pull}；最後{core}。{name}是平日補強，不取代真的下坡": {
+    "draft": true,
+    "src": "backend/engine/strength_plan.py:213"
+  },
   "{label} {tss:g} TSS（{rpe} {min} 分）": {
     "draft": true,
     "src": "backend/engine/workout_steps.py:788"
@@ -710,6 +718,30 @@
   "{m}/{d} 是不排課日期{label}，不能排課": {
     "draft": true,
     "src": "backend/engine/plan_store.py:344"
+  },
+  "{name} 2 組 × 8–12 下": {
+    "draft": true,
+    "src": "backend/engine/strength_plan.py:58"
+  },
+  "{name} 3 組 × 8–12 下／腳": {
+    "draft": true,
+    "src": "backend/engine/strength_plan.py:57"
+  },
+  "{name} 3 組（留 2 下）": {
+    "draft": true,
+    "src": "backend/engine/strength_plan.py:58"
+  },
+  "{name} 3–4 組 × 3–6 下（留 2 下以上，組間休 2–3 分）": {
+    "draft": true,
+    "src": "backend/engine/strength_plan.py:57"
+  },
+  "{name} 8–10 下／腳": {
+    "draft": true,
+    "src": "backend/engine/strength_plan.py:59"
+  },
+  "{name} 8–12 下": {
+    "draft": true,
+    "src": "backend/engine/strength_plan.py:59"
   },
   "{name} {pct}（3.5–5%）：前半段心率 {hr:.0f} bpm 就是 AeT": {
     "draft": true,
@@ -762,6 +794,14 @@
   "{name} 超出範圍": {
     "draft": true,
     "src": "backend/engine/workout_steps.py:549"
+  },
+  "{name}（{grade}）": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:268"
+  },
+  "{name}（留 2 下）": {
+    "draft": true,
+    "src": "backend/engine/strength_plan.py:59"
   },
   "{note}（不算 AeT 測試）": {
     "draft": true,
@@ -931,6 +971,10 @@
     "draft": true,
     "src": "backend/engine/workout_templates.py:137"
   },
+  "、": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:270"
+  },
   "「{a}」和「{b}」只隔 {n} 天：硬課之間建議隔 ≥ 2 天，可以再拖動調整": {
     "draft": true,
     "src": "backend/engine/rest_days.py:120"
@@ -983,6 +1027,10 @@
     "draft": true,
     "src": "backend/engine/quality_gate.py:1999"
   },
+  "一手扶椅子，另一手把啞鈴拉向腰。": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:112"
+  },
   "一次跑步的飄移本來就會差個幾 %，看最近幾次的走向比只看一次準。\n方法：單次誤差約 ±4–6 個百分點（心率樣本前後高度相關），用回歸法的標準誤估；心率延遲 τ = 60 s 取自 Hunt 2015／2019、Wang & Hunt 2021，接成一個回歸是推估。": {
     "draft": true,
     "src": "backend/engine/workout_review.py:510"
@@ -1006,6 +1054,10 @@
   "上坡{hr}；{down}": {
     "draft": true,
     "src": "backend/engine/specific_phase.py:495"
+  },
+  "上坡往上推、下坡煞車用的單腳力量。基礎循環、最大肌力期和一般肌力課會練。": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:72"
   },
   "上坡心率 ≤ {cap}或 RPE ≤ {rpe}；下坡看感覺": {
     "draft": true,
@@ -1039,6 +1091,10 @@
     "draft": true,
     "src": "backend/engine/workout_templates.py:483"
   },
+  "下坡時大腿煞車的力量。基礎循環、最大肌力期和維持課會練；它是平日補強，不取代真的下坡。": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:88"
+  },
   "下坡看腿的感覺，不看心率": {
     "draft": true,
     "src": "backend/engine/hr_profile.py:379"
@@ -1070,6 +1126,10 @@
   "下限 {v:.0f}": {
     "draft": true,
     "src": "backend/engine/load_guard.py:128"
+  },
+  "下階單腳落地": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:178"
   },
   "不排課 {range}：少 {n} 個可練日，週量 × {f:.0%}": {
     "draft": true,
@@ -1111,6 +1171,22 @@
     "draft": true,
     "src": "backend/engine/interval_eval.py:476"
   },
+  "不用器材": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:125"
+  },
+  "不用器材（可加彈力帶）": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:132"
+  },
+  "不用器材（可加重量）": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:80"
+  },
+  "不用器材（可在腳踝套彈力帶）": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:141"
+  },
   "不背包；百岳前的專項期，第 1 階段": {
     "draft": true,
     "src": "backend/engine/workout_templates.py:408"
@@ -1142,6 +1218,10 @@
   "不設門檻（Seiler）：5 區照 80/20 安排": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:2067"
+  },
+  "不跳：往前跨一步，落地停住 2 秒。剛開始練，或腳踝還在恢復時用。": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:176"
   },
   "中": {
     "draft": false,
@@ -1183,6 +1263,10 @@
     "draft": true,
     "src": "backend/engine/hr_profile.py:71"
   },
+  "仰躺，對側的手腳慢慢伸出去再收回。下背不舒服時選這個。": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:133"
+  },
   "休 {d}（{mode}）": {
     "draft": true,
     "src": "backend/engine/interval_library.py:512"
@@ -1194,6 +1278,14 @@
   "休息日已經在這天": {
     "draft": true,
     "src": "backend/api/plan_sessions.py:1977"
+  },
+  "伸手碰三個方向": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:165"
+  },
+  "伸腳點地": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:159"
   },
   "但週量上限 = 最近的正常訓練週 {ref:.1f} h（不含減量期／比賽週／賽後恢復期／轉換期）的 +10%（至少 +0.5 h）→ {cap:.1f} h": {
     "draft": true,
@@ -1359,6 +1451,10 @@
     "draft": true,
     "src": "backend/engine/quality_gate.py:1384"
   },
+  "做不到就用彈力帶輔助，或跳上去用 3–5 秒慢慢放下來。不要一天做幾十下，手肘會發炎。": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:105"
+  },
   "做完在活動頁記下這次背多少，賽事評估才會算這次（爬升到攻頂日的 100% 而且有背包，3 次算夠）": {
     "draft": true,
     "src": "backend/engine/specific_phase.py:425"
@@ -1399,6 +1495,14 @@
     "draft": true,
     "src": "backend/engine/workout_review.py:2686"
   },
+  "側躺抬腿": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:141"
+  },
+  "側躺，膝蓋像蚌殼一樣打開。入門動作；不用硬打開，臀部側邊有出力就好。": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:140"
+  },
   "傷": {
     "draft": true,
     "src": "backend/engine/injuries.py:69"
@@ -1418,6 +1522,10 @@
   "儲備心率（COROS % HRR 6 區）": {
     "draft": true,
     "src": "backend/engine/hr_profile.py:71"
+  },
+  "先張眼，站穩了再閉眼。": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:150"
   },
   "先解鎖 3 區": {
     "draft": true,
@@ -1443,6 +1551,10 @@
     "draft": true,
     "src": "backend/engine/workout_review.py:2633"
   },
+  "兩手提重物走 30–40 公尺。只提一手，多練側邊的核心。": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:117"
+  },
   "公里數 {km:.0f}": {
     "draft": true,
     "src": "backend/engine/planning.py:255"
@@ -1463,9 +1575,25 @@
     "draft": true,
     "src": "backend/engine/effort_calib.py:94"
   },
-  "分腿蹲或後腳抬高蹲 3–4 組 × 3–6 下（留 2 下以上，組間休 2–3 分）；離心下階 3 組 × 8–12 下／腳，背包 5 → 10 % 體重；引體向上 3 組（留 2 下）；最後棒式 2 × 30 秒。離心下階是平日補強，不取代真的下坡": {
+  "分腿蹲": {
     "draft": true,
-    "src": "backend/engine/strength_plan.py:147"
+    "src": "backend/engine/strength_moves.py:73"
+  },
+  "分腿蹲底部停住": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:80"
+  },
+  "分腿蹲底部停住 30 秒／腳": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:82"
+  },
+  "分腿蹲底部停住 3–4 組 × 30 秒／腳（組間休 2–3 分）": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:83"
+  },
+  "分腿蹲或後腳抬高蹲 3–4 組 × 3–6 下（留 2 下以上，組間休 2–3 分）": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:75"
   },
   "分鐘要在 0–1440": {
     "draft": true,
@@ -1523,6 +1651,10 @@
     "draft": true,
     "src": "backend/engine/aet_test.py:107"
   },
+  "前跨步落地": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:175"
+  },
   "剩下的每一天都排了東西；覺得累就把一次輕鬆跑換成休息": {
     "draft": true,
     "src": "backend/engine/overview.py:1452"
@@ -1562,6 +1694,14 @@
   "原研究是自行車功率：跑步的 % CP 推估": {
     "draft": true,
     "src": "backend/engine/workout_templates.py:318"
+  },
+  "反式划船": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:109"
+  },
+  "另一腳前後擺": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:162"
   },
   "只剩 {n} 天：最後 3 週練不出新的體能了，只能減量休息": {
     "draft": true,
@@ -1627,6 +1767,14 @@
     "draft": true,
     "src": "backend/engine/racepower/seg_targets.py:87"
   },
+  "吊在單槓上不動，練握力。": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:120"
+  },
+  "吊在單槓上抬腿，同時練握力。百岳、岩稜適合。": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:135"
+  },
   "同步": {
     "draft": true,
     "src": "backend/api/auth.py:175"
@@ -1651,13 +1799,113 @@
     "draft": true,
     "src": "backend/demo/export_static.py:243"
   },
+  "啞鈴": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:130"
+  },
+  "啞鈴、椅子": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:111"
+  },
+  "啞鈴、水壺或背包": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:73"
+  },
+  "啞鈴或水壺": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:84"
+  },
+  "單手啞鈴划船": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:111"
+  },
+  "單槓": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:35"
+  },
   "單次跑太長：比前 {d} 天最長一次多 {x:.0%}（> {cap:.0%}）": {
     "draft": true,
     "src": "backend/engine/status.py:702"
   },
+  "單腳小跳落地": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:172"
+  },
+  "單腳往前、側小跳，落地停住 2 秒": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:174"
+  },
+  "單腳往前、往旁邊小跳，落地停住 2 秒。": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:173"
+  },
+  "單腳提踵": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:183"
+  },
+  "單腳提踵慢放": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:185"
+  },
+  "單腳硬舉觸地": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:168"
+  },
+  "單腳站": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:148"
+  },
+  "單腳站、伸手往前、左、右三個方向碰地": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:167"
+  },
+  "單腳站、另一腳前後擺": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:164"
+  },
+  "單腳站、另一腳往前、側、後伸出去點地": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:161"
+  },
+  "單腳站的時候骨盆不掉、膝蓋不往內夾。一般肌力課（下一場 A 賽不是越野賽或百岳時）會練。": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:138"
+  },
+  "單腳站轉頭": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:151"
+  },
+  "單腳站（張眼 → 閉眼）": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:149"
+  },
   "單腳站（張眼 → 閉眼）；單腳站、另一腳往前、側、後伸出去點地；單腳往前、側小跳，落地停住 2 秒；單腳提踵慢放": {
     "draft": true,
     "src": "backend/engine/balance_plan.py:38"
+  },
+  "單腳站，另一腳像鐘擺一樣前後擺。剛開始練時用。": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:163"
+  },
+  "單腳站，另一腳往前、往旁邊、往後伸出去點地。": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:160"
+  },
+  "單腳站，彎下去用手碰前面、左邊、右邊的地面。": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:166"
+  },
+  "單腳站，身體往前傾、手碰到地再站直；膝蓋不要往內夾。": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:169"
+  },
+  "單腳蹲": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:78"
+  },
+  "單腳蹲下去坐到箱子再站起來。墊軟墊調深度；深度、次數一次只改一樣。雙腳蹲穩了再練。": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:79"
   },
   "回量期": {
     "draft": true,
@@ -1727,6 +1975,10 @@
     "draft": true,
     "src": "backend/engine/workout_templates.py:138"
   },
+  "地墊或矮箱": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:93"
+  },
   "坡底": {
     "draft": true,
     "src": "backend/engine/racepower/watch_export.py:194"
@@ -1759,6 +2011,26 @@
     "draft": true,
     "src": "backend/engine/workout_templates.py:426"
   },
+  "壺鈴、水桶或背包": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:116"
+  },
+  "壺鈴擺盪": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:98"
+  },
+  "壺鈴擺盪 3 組 × 8–12 下": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:100"
+  },
+  "壺鈴擺盪 8–10 下": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:100"
+  },
+  "壺鈴，或裝水的水桶": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:98"
+  },
   "外部 key 不對": {
     "draft": true,
     "src": "backend/engine/plan_store.py:533"
@@ -1786,6 +2058,10 @@
   "多日行程（{n} 天）不匯出至課表：課表一天一堂，只有單日（單攻）百岳可以匯出": {
     "draft": true,
     "src": "backend/engine/racepower/watch_export.py:319"
+  },
+  "大多數人從這個開始。重量抱在胸前比兩手垂著更練核心；拿在前腳的另一側，多練臀中肌。": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:74"
   },
   "大補給站": {
     "draft": true,
@@ -1887,9 +2163,21 @@
     "draft": true,
     "src": "backend/engine/panels/race_refs.py:183"
   },
+  "小腿、腳踝": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:182"
+  },
   "少一趟（仍同等）": {
     "draft": true,
     "src": "backend/engine/interval_library.py:801"
+  },
+  "屈膝單腳提踵慢放": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:188"
+  },
+  "屈膝提踵": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:186"
   },
   "山頂公里數要大於 0": {
     "draft": true,
@@ -1939,6 +2227,10 @@
     "draft": true,
     "src": "backend/engine/workout_review.py:2641"
   },
+  "平棒式划船": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:130"
+  },
   "平衡／腳踝 {m} 分：熱身 1–2 分承重式腳踝活動度——彈性站姿、體重壓在腳上，慢慢做內翻、外翻（徐國峰）；接著 4 個動作，每個 2 組 × 20–40 秒／腳：{moves}": {
     "draft": true,
     "src": "backend/engine/balance_plan.py:67"
@@ -1966,6 +2258,18 @@
   "建議：做{tests}": {
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:590"
+  },
+  "引體向上": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:104"
+  },
+  "引體向上（做不到用彈力帶輔助，或跳上去 3–5 秒慢放）": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:106"
+  },
+  "張著眼，頭慢慢左右轉。剛開始練、閉眼還站不穩時用。": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:152"
   },
   "強度上限": {
     "draft": true,
@@ -1995,6 +2299,30 @@
     "draft": true,
     "src": "backend/engine/interval_library.py:364"
   },
+  "彈力帶": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:35"
+  },
+  "彈力帶划船": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:107"
+  },
+  "彈力帶套在腿上，半蹲橫著走：用踩地那條腿把身體推出去，腳尖朝前。": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:146"
+  },
+  "彈力帶或壺鈴": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:128"
+  },
+  "彈力帶（綁在門把或柱子上）": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:107"
+  },
+  "往前跨一步，落地停住 2 秒": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:177"
+  },
   "很累": {
     "draft": true,
     "src": "backend/engine/rpe_load.py:55"
@@ -2019,6 +2347,26 @@
     "draft": true,
     "src": "backend/engine/workout_review.py:2668"
   },
+  "後腳抬高前弓步": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:93"
+  },
+  "後腳抬高前弓步（前腳落下馬上停住）": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:95"
+  },
+  "後腳抬高蹲": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:76"
+  },
+  "後腳放在椅子上的分腿蹲，前腳更吃力。分腿蹲加不了重量時再換；後腳腳背不舒服就回分腿蹲。": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:77"
+  },
+  "後腳踩在墊高的地方，前腳往前落下、馬上停住：練快的煞車，比較像真的下坡。墊子從低的開始。": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:94"
+  },
   "徐國峰 90 分測試排在週末或長跑那天": {
     "draft": true,
     "src": "backend/api/plan_sessions.py:528"
@@ -2031,9 +2379,17 @@
     "draft": true,
     "src": "backend/engine/base_check.py:104"
   },
+  "從 20 cm 的階往下跳，單腳落地停住 2 秒": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:180"
+  },
   "從最近的輕鬆跑推估 AeT 約 {v:.0f} bpm，和目前 {now:.0f} 差 {d:+.0f}：測一次確認（UA：基礎變好 AeT 會往 AnT 靠）": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:1547"
+  },
+  "從矮階往下跳，單腳落地停住。小跳落地不晃、膝蓋不往內夾了再做。": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:179"
   },
   "心率": {
     "draft": true,
@@ -2099,9 +2455,17 @@
     "draft": true,
     "src": "backend/engine/interval_library.py:757"
   },
+  "快速放下再甩上來。有壺鈴、會用髖部往後坐的人再選。": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:99"
+  },
   "怎麼看：越高 = 這次對那個能量系統的刺激越大；WKO5 沒有官方的分級名稱，只看數字、和自己平常的課比。\n看什麼：長時間、接近門檻的課有氧分數高；無氧分數要功率超過門檻（mFTP 的 85%）才會加，輕鬆跑通常是 1。\n方法：WKO5 的 TIS：以活動當天往前 90 天 PD 模型的 mFTP（有氧）與 FRC（無氧）為基準，把平滑後的功率逐秒加權累加（和「我的訓練」的 TIS 圖同一個數字）。需要功率。": {
     "draft": false,
     "src": "backend/engine/workout_review.py:2693"
+  },
+  "怪獸走路": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:145"
   },
   "恢復": {
     "draft": true,
@@ -2179,6 +2543,22 @@
     "draft": true,
     "src": "backend/engine/interval_library.py:62"
   },
+  "懸吊": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:119"
+  },
+  "懸吊 2 × 20–40 秒": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:121"
+  },
+  "懸吊 20–40 秒": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:121"
+  },
+  "懸吊抬腿": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:134"
+  },
   "我的範本": {
     "draft": false,
     "src": "backend/engine/user_templates.py:56"
@@ -2242,6 +2622,22 @@
   "技術地形": {
     "draft": true,
     "src": "backend/engine/workout_templates.py:481"
+  },
+  "折起來的瑜珈墊或枕頭": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:153"
+  },
+  "抬到大約 45 度就好，慢慢上下；上面那隻腳的腳尖朝下。": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:142"
+  },
+  "拉": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:102"
+  },
+  "拉繩、岩稜要拉得住自己。基礎循環、最大肌力期和維持課會練。": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:103"
   },
   "接下來 1–2 週的長跑不要比這次長；之後每次長跑 ≤ 前 {d} 天最長一次的 {pct:.0%}，有疼痛就先減量": {
     "draft": true,
@@ -2307,6 +2703,14 @@
     "draft": true,
     "src": "backend/api/auth.py:175"
   },
+  "提腳尖": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:189"
+  },
+  "換上的動作：{moves}": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:270"
+  },
   "換成 3 區：這週沒有 5 區，不算進階": {
     "draft": true,
     "src": "backend/engine/interval_library.py:806"
@@ -2314,6 +2718,14 @@
   "換算到路線最高點 {z:.0f} m（{how}）": {
     "draft": true,
     "src": "backend/engine/race_feasibility.py:205"
+  },
+  "握、提": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:114"
+  },
+  "握力和軀幹。基礎循環，和有 ME 負重爬坡那一週的維持課會練。": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:115"
   },
   "撐 120 秒的心率（推估）": {
     "draft": true,
@@ -2327,6 +2739,10 @@
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:463"
   },
+  "撐在棒式上，兩手輪流划船。先求身體不晃，不求重量。": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:131"
+  },
   "攻頂日是第 {d} 天，爬升 {need:.0f} m。你最近 8 週一天最多爬 {best:.0f} m；照每週最多 +10% 慢慢加，行程前還能做 {n} 次攻頂日模擬（一天爬完攻頂日的爬升、背行程的背包），要 {k} 次": {
     "draft": true,
     "src": "backend/engine/baiyue_multiday.py:155"
@@ -2339,6 +2755,10 @@
     "draft": true,
     "src": "backend/engine/specific_phase.py:426"
   },
+  "教練級": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:34"
+  },
   "整趟時間是推估：{note}；沒有跑步資料可建能力模型，用 Tobler 步行函數": {
     "draft": true,
     "src": "backend/engine/racepower/calc.py:402"
@@ -2350,6 +2770,10 @@
   "文字欄位最多 {n} 字": {
     "draft": true,
     "src": "backend/tenancy_mw.py:183"
+  },
+  "斜向推拉": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:128"
   },
   "方法：8 週內 {k} 次、取最近 {n} 次加權平均 {agg}，中位數 {med}；速度÷心率（Pa:HR）前後半比較（Friel）。": {
     "draft": true,
@@ -2555,6 +2979,10 @@
     "draft": true,
     "src": "backend/engine/zone_events.py:491"
   },
+  "最難的一種：軟墊加閉眼。旁邊要有東西可以扶。": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:156"
+  },
   "最難那天比你走過最大的一天高了兩級以上：先走一條低一級的路線（攻頂日的距離和爬升少一點）累積經驗，再來這一座": {
     "draft": true,
     "src": "backend/engine/baiyue_multiday.py:152"
@@ -2675,13 +3103,45 @@
     "draft": true,
     "src": "backend/engine/racepower/calc.py:348"
   },
+  "核心": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:123"
+  },
   "條件：戴胸帶（手腕光學常有尖峰）、休息充足（前 48 小時沒有硬課）、沒生病、涼爽、找 2–3 分鐘的坡、最好有人陪。有心血管疾病或風險、胸痛、頭暈的人不要做，先問醫師（ACSM 運動前篩檢，Riebe 2015）；不舒服立刻停。替代：最近一場 5 K 比賽的最後衝刺也可以（現場、比賽與實驗室的最高心率沒有差別，Boudet 2002）。app 的讀法：濾掉尖峰與步頻鎖定後，撐 ≥ 5 秒的最高心率（推估）；結果要在設定頁按「套用」才會寫入": {
     "draft": true,
     "src": "backend/engine/workout_templates.py:165"
   },
+  "棒式": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:125"
+  },
+  "棒式 2 × 30 秒": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:127"
+  },
+  "棒式 30 秒": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:127"
+  },
+  "棒式 30 秒或懸吊抬腿": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:127"
+  },
+  "椅子或箱子，加重量": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:76"
+  },
   "極限": {
     "draft": true,
     "src": "backend/engine/rpe_load.py:55"
+  },
+  "樓梯一階或板凳": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:89"
+  },
+  "樓梯一階（平地也可以）": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:183"
   },
   "標了「當作間歇」，但找不到用力段（≥ 95% CP 的短趟或 3 區以上 ≥ 2.5 分）": {
     "draft": true,
@@ -2695,6 +3155,10 @@
     "draft": true,
     "src": "backend/api/backup.py:225"
   },
+  "正面撐或側撐。撐不到 30 秒，代表軀幹還不夠。": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:126"
+  },
   "步驟太多（> {n}）": {
     "draft": true,
     "src": "backend/engine/workout_steps.py:690"
@@ -2706,6 +3170,10 @@
   "步驟類型不對：{x}": {
     "draft": true,
     "src": "backend/engine/workout_steps.py:662"
+  },
+  "死蟲式": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:132"
   },
   "每段「直到按下計圈」：到步驟名稱寫的地點時按一下計圈（lap）": {
     "draft": true,
@@ -2827,6 +3295,10 @@
     "draft": true,
     "src": "backend/engine/panels/activity_charts.py:318"
   },
+  "沒有{gear}：{old}改成{new}": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:261"
+  },
   "沒有「負荷」結束條件：送預估時間": {
     "draft": true,
     "src": "backend/sync/workout_targets/garmin.py:23"
@@ -2842,6 +3314,10 @@
   "沒有功率：不判讀間歇、不算 W′（間歇用心率看）": {
     "draft": true,
     "src": "backend/engine/interval_eval.py:461"
+  },
+  "沒有單槓時用：把彈力帶拉向肚子，兩邊肩胛往後夾。": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:108"
   },
   "沒有回量期：下一場 A 賽事「{name}」{date} 太近": {
     "draft": true,
@@ -2878,6 +3354,10 @@
   "沒有漸進（ramp）步驟：漸進只寫在步驟名稱": {
     "draft": true,
     "src": "backend/engine/workout_steps.py:1524"
+  },
+  "沒有的器材要是 {choices} 其中幾個": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:224"
   },
   "沒有背包資料": {
     "draft": true,
@@ -3271,6 +3751,34 @@
     "draft": true,
     "src": "backend/engine/drift_calib.py:128"
   },
+  "穩的桌子或低槓": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:109"
+  },
+  "站在箱上往前跨下去、落地停住，再回箱上。箱子越高衝擊越大，從低的開始；上一個做穩了再換這個。": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:97"
+  },
+  "站在箱上，一腳用 3 秒慢慢往下點地，再兩腳回去。箱子從 15 cm 加到 30 cm，之後再背包。": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:90"
+  },
+  "站在軟的東西上。平地閉眼能站 20 秒以上再換這個。": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:154"
+  },
+  "站姿髖外展": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:143"
+  },
+  "站穩伸出去": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:158"
+  },
+  "站著把腿往旁邊抬；可以靠牆，骨盆不要歪。": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:144"
+  },
   "第 {a} 晚到第 {b} 晚的睡眠高度升高 {d:,.0f} m：CDC 建議 3,000 m 以上每晚升高不超過 500 m": {
     "draft": true,
     "src": "backend/engine/altitude.py:207"
@@ -3314,6 +3822,18 @@
   "算不出需要的爬升速度（沒有爬升或時間）": {
     "draft": true,
     "src": "backend/engine/race_feasibility.py:214"
+  },
+  "箱上原地前弓步": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:96"
+  },
+  "箱子": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:96"
+  },
+  "箱子或椅子、軟墊": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:78"
   },
   "範本名稱不能空白": {
     "draft": false,
@@ -3407,21 +3927,33 @@
     "draft": true,
     "src": "backend/engine/workout_review.py:2669"
   },
-  "肌力維持（高踏階＋引體向上）": {
+  "肌力動作沒有「{type}：{move}」這個選項": {
     "draft": true,
-    "src": "backend/engine/strength_plan.py:153"
+    "src": "backend/engine/strength_moves.py:210"
   },
-  "肌力維持（高踏階＋離心下階＋引體向上）": {
+  "肌力動作的格式不對": {
     "draft": true,
-    "src": "backend/engine/strength_plan.py:157"
+    "src": "backend/engine/strength_moves.py:203"
+  },
+  "肌力維持（高踏階＋{ecc}＋{pull}）": {
+    "draft": true,
+    "src": "backend/engine/strength_plan.py:225"
+  },
+  "肌力維持（高踏階＋{pull}）": {
+    "draft": true,
+    "src": "backend/engine/strength_plan.py:221"
+  },
+  "肌力課最後的平衡／腳踝段（下一場 A 賽是越野賽或百岳時才有）。平衡要越練越難才有效，穩了就換難一點的。": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:68"
+  },
+  "肌力（{knee}＋{ecc}＋{pull}）": {
+    "draft": true,
+    "src": "backend/engine/strength_plan.py:212"
   },
   "肌力（下肢單腳＋核心）": {
     "draft": true,
     "src": "backend/engine/strength_plan.py:34"
-  },
-  "肌力（分腿蹲＋離心下階＋引體向上）": {
-    "draft": true,
-    "src": "backend/engine/strength_plan.py:146"
   },
   "肌力（基礎循環 6 站）": {
     "draft": true,
@@ -3447,9 +3979,25 @@
     "draft": true,
     "src": "backend/engine/racepower/athlete.py:1527"
   },
+  "背靠牆、腳跟著地，把腳尖抬起來再慢慢放下，練小腿前側。下坡時腳掌會拍地，或小腿前側容易痠的人用。": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:190"
+  },
+  "膝主導單腳": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:71"
+  },
   "膝主導＋臀中肌；安排在輕鬆日或跑完後": {
     "draft": true,
     "src": "backend/engine/strength_plan.py:34"
+  },
+  "膝蓋微彎做提踵，練小腿深層的比目魚肌：長下坡、長時間跑的小腿耐力。": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:187"
+  },
+  "臀中肌": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:137"
   },
   "自動估算": {
     "draft": false,
@@ -3479,9 +4027,17 @@
     "draft": true,
     "src": "backend/engine/hr_profile.py:381"
   },
+  "落地停住": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:171"
+  },
   "虛線＝接下來 {n} 場賽事一天的難度（紅 A、橘 B、藍其他；多天行程用每天平均）；滑過線看整趟和每一天": {
     "draft": true,
     "src": "backend/engine/panels/race_refs.py:181"
+  },
+  "蚌殼式": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:139"
   },
   "行動糧": {
     "draft": true,
@@ -3815,13 +4371,41 @@
     "draft": true,
     "src": "backend/engine/primary_sport.py:32"
   },
+  "踮起來，慢慢放下。練小腿、阿基里斯腱和足弓。": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:184"
+  },
+  "蹲到底停 30 秒。膝蓋前側不舒服，或跑山量很大、不想再加疲勞時改做。站不穩可以前腳踩矮箱、後腳踮腳尖。": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:81"
+  },
+  "身體不跟著轉。先跪姿、再弓步；每邊 8 下起，每週加 2 下，到 12 下換下一階。": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:129"
+  },
   "身高 {cm} cm 不合理": {
     "draft": true,
     "src": "backend/api/plan.py:470"
   },
+  "躺在桌子或低槓下面，把胸口拉上去。沒有單槓，或引體向上一下都做不到時用。": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:110"
+  },
+  "軀幹穩住，手腳才出得了力。每一期的肌力課都有。": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:124"
+  },
   "軟上限，只提醒": {
     "draft": true,
     "src": "backend/engine/workout_steps.py:1201"
+  },
+  "軟墊上單腳站": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:153"
+  },
+  "軟墊上閉眼單腳站": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:155"
   },
   "輕微感冒": {
     "draft": true,
@@ -3895,6 +4479,18 @@
     "draft": true,
     "src": "backend/engine/overview.py:362"
   },
+  "農夫走路": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:116"
+  },
+  "農夫走路 2 × 30–40 m": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:118"
+  },
+  "農夫走路 30–40 m": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:118"
+  },
   "近 12 週的跑步資料不夠，先用越野跑（原本的設定）": {
     "draft": true,
     "src": "backend/engine/primary_sport.py:75"
@@ -3943,6 +4539,10 @@
     "draft": true,
     "src": "backend/engine/quality_gate.py:2046"
   },
+  "迷你彈力帶": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:139"
+  },
   "透過重複回合效應減少賽後肌肉損傷，放在賽前最後幾週（Roche）": {
     "draft": true,
     "src": "backend/engine/workout_templates.py:140"
@@ -3958,6 +4558,10 @@
   "這個間歇門檻不開 5 區": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:1818"
+  },
+  "這堂用你挑的動作：{moves}": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:258"
   },
   "這堂課不是過期未完成的課：{uid}": {
     "draft": true,
@@ -4255,6 +4859,10 @@
     "draft": true,
     "src": "backend/engine/post_race.py:361"
   },
+  "門框單槓": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:104"
+  },
   "門檻過期或沒測過": {
     "draft": true,
     "src": "backend/engine/overview.py:1540"
@@ -4287,6 +4895,26 @@
     "draft": true,
     "src": "backend/engine/quality_gate.py:2149"
   },
+  "雙腳蹲，重量抱在胸前。單腳還做不穩時先練這個；腳跟墊高，下背比較舒服。": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:85"
+  },
+  "離心下階": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:89"
+  },
+  "離心下階 3 組 × 8–12 下／腳，背包 5 → 10 % 體重": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:92"
+  },
+  "離心下階（箱 15–30 cm，3 秒慢慢往下點地）": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:91"
+  },
+  "離心（下坡）": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:87"
+  },
   "需要 {x}": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:1902"
@@ -4314,6 +4942,14 @@
   "非同等（不算進階）": {
     "draft": true,
     "src": "backend/engine/interval_library.py:822"
+  },
+  "靠牆": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:189"
+  },
+  "靠牆提腳尖慢放": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:191"
   },
   "預估時間 {h:.1f} h": {
     "draft": true,
@@ -4410,6 +5046,18 @@
   "高": {
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:124"
+  },
+  "高腳杯深蹲": {
+    "draft": true,
+    "src": "backend/engine/strength_moves.py:84"
+  },
+  "高踏階 8 下／腳（可背包）": {
+    "draft": true,
+    "src": "backend/engine/strength_plan.py:54"
+  },
+  "高踏階（箱高約膝高，踩上去站穩再下）": {
+    "draft": true,
+    "src": "backend/engine/strength_plan.py:54"
   },
   "（LTHR 有獨立證據：{s}）": {
     "draft": false,

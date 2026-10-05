@@ -668,7 +668,7 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
                                   "long": (_d(tc["start"]) - week).days > tc["long_days"]}
                            if tc and kind == "taper" else None,
                            transition_week=O.transition_week(phases, week) if kind == "transition" else None,
-                           strength=STP.week_context(a_evs, phases, week, kind))
+                           strength=STP.week_context(a_evs, phases, week, kind, prefs))
         if kind in ("transition", "rebuild"):
             notes.append({"level": "info", "src": "transition",
                           "text": O.TRANSITION_NOTE if kind == "transition" else O.REBUILD_NOTE})
@@ -687,7 +687,7 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
                             allow=q_ok and not ((b2b or {}).get("info") or {}).get("post"),
                             rate=(cur.get("tss_per_category") or {}).get("trail") or 60.0, notes=notes)
                 SP.walk_targets(ss, th.get("walk_cap"), th.get("aet"), th_meas)   # SP-115, as week_plan
-                STP.refresh(ss, STP.week_context(a_evs, phases, week, kind))      # SP-119 × ME, as week_plan
+                STP.refresh(ss, STP.week_context(a_evs, phases, week, kind, prefs))   # SP-119 × ME, as week_plan
                 SP.apply_climb(ss, sp_info, aet=th.get("aet"), prefs=prefs, b2b=(b2b or {}).get("info"), notes=notes,
                                rates=cur.get("tss_per_category"), aet_measured=th_meas)
             except Exception:              # noqa: BLE001 — never breaks the projection
@@ -763,7 +763,7 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
             notes.append({"level": "info", "src": "blackout", "text": f"剩下的日子排不下 {len(drop)} 堂課（約 {sum(s['minutes'] for s in drop)} 分鐘）——不用補"})
         # 平衡／腳踝 (engine/balance_plan.py, SP-120 — part of strength): the same rule as week_plan
         try:
-            bal = BP.week_context(a_evs, week, kind)
+            bal = BP.week_context(a_evs, week, kind, prefs)
             if bal.get("active"):
                 BP.attach(ss, bal)
                 BP.ensure(ss, bal, [week + dt.timedelta(days=i) for i in range(7)
