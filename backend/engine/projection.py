@@ -533,6 +533,10 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
         if kind == "specific":
             # 中間訓練 (SP-95): the same cap as week_plan (overview.inter_cap)
             hours = O.inter_cap(phases, week, hours, why, lambda m: hours_at.get(m.isoformat()))
+        b_f, b_why = PR_.b_week_factor(events or (), week, kind)     # a B race's week: 75 % (SP-95)
+        if b_why:
+            hours *= b_f
+            why = why + [b_why]
         if PR is not None and PR.weekly_hours is not None and hours > PR.weekly_hours:
             hours = PR.weekly_hours
             why = why + [f"你的每週時數上限 {PR.weekly_hours:g} h"]
@@ -670,6 +674,10 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
         ss = O.taper_rules(ss, tc, week, notes, road)
         # 賽後的日子 (SP-98): the same rule as week_plan (post_race.apply)
         ss = PR_.apply(ss, PR_.a_windows(phases, events, week), week, notes, blocked=set(bmap))
+        # B / C races (SP-95): the same rules as week_plan (post_race.bc_apply / b_hints)
+        ss = PR_.bc_apply(ss, events or (), week, notes, blocked=set(bmap),
+                          rate=float((cur.get("tss_per_category") or {}).get("trail") or tph))
+        notes.extend(PR_.b_hints(events or (), week))
         if tc and kind == "taper":
             n = O.taper_climb_note(tc, cur_t.get("pre_climb") if same else cur.get("climb4"),
                                    hours / (cur_t.get("pre_hours") if same else pre_h)

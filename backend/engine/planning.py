@@ -25,8 +25,8 @@ Sources (docs/research/periodization-phase-metrics.md):
   * two A races close together (SP-90): the first one's recovery yields to the second one's
     taper (recovery_and_taper, 推估), the phases say what was cut short, and A races < 12
     weeks apart get TrainerRoad's hint (periodization-cross-sport.md §4.8)
-B events get a short mini-taper and recovery inside the surrounding phase;
-C events are training days and don't change the plan.
+B events get a mini-taper and a recovery by size inside the surrounding phase, a C event replaces a
+quality session or the long run of its week (SP-95, engine/post_race.py) — neither makes phases.
 """
 from __future__ import annotations
 
@@ -60,7 +60,8 @@ BAIYUE_SHORT_DAYS = (2, 3)
 TAPER_DAYS_RANGE = (TAPER_DAYS, 21)
 TAPER_SETTING = "plan.prefs.taper_days"
 SPECIFIC_WEEKS = 8
-MINI_TAPER_DAYS = 5          # B event
+MINI_TAPER_DAYS = 5          # B event: no interval in the 5 days before, no tempo / long run in 4 (SP-95;
+                             # Pfitzinger via [437], Friel [431] — 教練級; engine/post_race.py)
 LONG_EVENT_HOURS = 6.0       # recovery: 14 d at/above this (= the 超馬級 size), else 7 d
 
 # 賽事大小 (SP-111, owner 2026-10-05): predicted time → EP → km, never the horizontal km alone
@@ -81,7 +82,7 @@ EP_DIVISOR = 100.0           # ITRA km-effort; terrain_calib's personal divisor 
 # so the engine and its tests stay pure.
 HOURS_OF = None              # Callable[[Event], Optional[float]]
 DIVISOR_OF = None            # Callable[[], float]
-B_RECOVERY_DAYS = 3
+B_RECOVERY_DAYS = 3           # a short B race's recovery (B_REC_DAYS, SP-95)
 TRANSITION_WEEKS = 3          # 轉換期 after an A race's recovery (SP-73; Friel 3–4, Canova 4 — the low end, 推估)
 # The setting's range (課表偏好 transition_weeks; 0 = off). What an A race gets (transition_weeks_for,
 # SP-109): ≤ TRANSITION_WEEKS_MAX (Friel's / Canova's upper end), ≤ TRANSITION_WEEKS_ULTRA_MAX after
@@ -1006,17 +1007,19 @@ def taper_start(phases_: list, ev, pref: Optional[int] = None) -> dt.date:
 
 
 def b_event_windows(events: list[Event]) -> list[dict]:
-    """Mini-taper / recovery windows around B events (markers, not phases)."""
+    """Mini-taper / recovery windows around B events (markers, not phases; the week plan applies
+    them — engine/post_race.py, SP-95): MINI_TAPER_DAYS before, recovery_plan(b=True) days after."""
     out = []
     for e in events:
         if e.priority != "B":
             continue
+        rp = recovery_plan(e, b=True)
         out.append({"event_id": e.id, "kind": "mini_taper",
                     "start": (e.start - dt.timedelta(days=MINI_TAPER_DAYS)).isoformat(),
                     "end": (e.start - dt.timedelta(days=1)).isoformat()})
         out.append({"event_id": e.id, "kind": "mini_recovery",
                     "start": (e.end + dt.timedelta(days=1)).isoformat(),
-                    "end": (e.end + dt.timedelta(days=B_RECOVERY_DAYS)).isoformat()})
+                    "end": (e.end + dt.timedelta(days=rp["days"])).isoformat(), "text": rp["text"]})
     return out
 
 

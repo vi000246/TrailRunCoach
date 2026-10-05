@@ -151,10 +151,6 @@
     "draft": true,
     "src": "backend/engine/post_race.py:57"
   },
-  "A 賽事「{race}」{date} 後：前 {n} 天不排跑步和肌力，第 1 週每次 ≤ {max} 分輕鬆跑": {
-    "draft": true,
-    "src": "backend/engine/post_race.py:126"
-  },
   "A 賽事「{race}」前 {days} 天不排肌力（{start} 起，含比賽週；課表偏好的每週肌力／肌力日也一樣）：把體力留給比賽——長距離耐力項目主要比賽前 2 週停肌力，停 4 週以上才會退步（Bompa & Buzzichelli）": {
     "draft": true,
     "src": "backend/engine/overview.py:1716"
@@ -215,9 +211,57 @@
     "draft": true,
     "src": "backend/engine/quality_gate.py:1956"
   },
+  "B 賽事「{race}」{date} 後 {n} 天只排輕鬆跑（依賽事大小：短 3 天、中 5 天、馬拉松級以上照 A 賽的恢復期；Pfitzinger，推估）": {
+    "draft": true,
+    "src": "backend/engine/post_race.py:313"
+  },
+  "B 賽事「{race}」{date}：賽前 {a} 天不排間歇、{b} 天不排節奏跑和長跑，比賽是這週的重點課（Pfitzinger、Friel，教練級）": {
+    "draft": true,
+    "src": "backend/engine/post_race.py:295"
+  },
+  "B 賽事「{race}」{date}：這週量 {share:.0%}（推估），不排長跑，比賽算這週的重點課": {
+    "draft": true,
+    "src": "backend/engine/post_race.py:198"
+  },
+  "B 賽事「{race}」前 {n} 天內不排節奏跑、長跑：輕鬆跑": {
+    "draft": true,
+    "src": "backend/engine/post_race.py:281"
+  },
+  "B 賽事「{race}」前 {n} 天內不排間歇：輕鬆跑": {
+    "draft": true,
+    "src": "backend/engine/post_race.py:285"
+  },
+  "B 賽事「{race}」後 {n} 天只排輕鬆跑": {
+    "draft": true,
+    "src": "backend/engine/post_race.py:305"
+  },
+  "B 賽事「{race}」那週不排長跑：輕鬆跑": {
+    "draft": true,
+    "src": "backend/engine/post_race.py:278"
+  },
+  "B 賽太多，等於一直在減量：CTL 從近 {w} 週的高點 {p:.0f} 掉到 {n:.0f}（−{d:.0%}；Friel 的案例掉 13 % 就沒力）": {
+    "draft": true,
+    "src": "backend/engine/post_race.py:372"
+  },
+  "B 賽太多，等於一直在減量：「{race}」前後 30 天內還有 {n} 場 B 賽（CTS：訓練用的比賽一個月最多 1 場）": {
+    "draft": true,
+    "src": "backend/engine/post_race.py:355"
+  },
   "B2B 週：長跑照 B2B 排": {
     "draft": true,
     "src": "backend/engine/technical.py:67"
+  },
+  "C 賽事「{race}」{date} 當訓練跑，其他照常": {
+    "draft": true,
+    "src": "backend/engine/post_race.py:340"
+  },
+  "C 賽事「{race}」{date} 當訓練跑：取代這週的{what}，其他照常": {
+    "draft": true,
+    "src": "backend/engine/post_race.py:338"
+  },
+  "C 賽事當訓練跑，取代這週一堂強度課或長跑": {
+    "draft": true,
+    "src": "backend/engine/post_race.py:240"
   },
   "C 賽當練習，不評估": {
     "draft": true,
@@ -410,6 +454,10 @@
   "TSS：{a:.0f} ／ 計畫 {p:.0f}（{pct}%）": {
     "draft": true,
     "src": "backend/engine/workout_review.py:2725"
+  },
+  "TrainerRoad；Pfitzinger；CTS（教練級）": {
+    "draft": true,
+    "src": "backend/engine/post_race.py:241"
   },
   "TrainingPeaks 閾值通知：60 分鐘峰值心率，或 20 分鐘峰值 × 95%，高於現值就建議調高": {
     "draft": false,
@@ -655,6 +703,18 @@
     "draft": true,
     "src": "backend/engine/workout_review.py:2944"
   },
+  "{p} 賽事「{race}」{date} 後": {
+    "draft": true,
+    "src": "backend/engine/post_race.py:149"
+  },
+  "{p} 賽事「{race}」{date} 後：前 {n} 天不排跑步和肌力，第 1 週每次 ≤ {max} 分輕鬆跑": {
+    "draft": true,
+    "src": "backend/engine/post_race.py:145"
+  },
+  "{p} 賽事：{name}": {
+    "draft": true,
+    "src": "backend/engine/post_race.py:238"
+  },
   "{p}沒有「{x}」結束條件：推送時換成預估時間 {d}（推估）": {
     "draft": true,
     "src": "backend/engine/workout_steps.py:1208"
@@ -767,6 +827,10 @@
     "draft": false,
     "src": "backend/engine/user_templates.py:198"
   },
+  "一堂強度課": {
+    "draft": true,
+    "src": "backend/engine/post_race.py:336"
+  },
   "一堂最多 50 步（Garmin 文件）": {
     "draft": true,
     "src": "backend/sync/workout_targets/garmin.py:23"
@@ -850,6 +914,10 @@
   "不排長爬坡反覆": {
     "draft": true,
     "src": "backend/engine/overview.py:1999"
+  },
+  "不排長跑": {
+    "draft": true,
+    "src": "backend/engine/post_race.py:279"
   },
   "不採用": {
     "draft": true,
@@ -2347,6 +2415,10 @@
     "draft": true,
     "src": "backend/engine/specific_phase.py:603"
   },
+  "比賽本身算這週的重點課": {
+    "draft": true,
+    "src": "backend/engine/post_race.py:239"
+  },
   "比賽課由賽季計畫排入，或從賽事計算機「匯出至課表」，不能自己新增": {
     "draft": true,
     "src": "backend/engine/plan_store.py:338"
@@ -3043,6 +3115,14 @@
     "draft": true,
     "src": "backend/engine/overview.py:1994"
   },
+  "賽前 {n} 天內不排節奏跑、長跑": {
+    "draft": true,
+    "src": "backend/engine/post_race.py:283"
+  },
+  "賽前 {n} 天內不排間歇": {
+    "draft": true,
+    "src": "backend/engine/post_race.py:287"
+  },
   "賽前 {n} 天內不跑長跑": {
     "draft": true,
     "src": "backend/engine/overview.py:1962"
@@ -3531,6 +3611,10 @@
     "draft": true,
     "src": "backend/engine/race_feasibility.py:332"
   },
+  "長跑": {
+    "draft": true,
+    "src": "backend/engine/post_race.py:336"
+  },
   "長跑日上限不能比平日上限短": {
     "draft": true,
     "src": "backend/engine/plan_prefs.py:292"
@@ -3538,6 +3622,10 @@
   "長跑（減量期，≤ {max} 分）": {
     "draft": true,
     "src": "backend/engine/overview.py:1342"
+  },
+  "長距離 B 賽「{race}」在 A 賽事「{a}」前 {n} 天：A 賽前 2–4 週只建議較短、地形相似的熱身賽，或把它改成 C 賽輕鬆跑（CTS）": {
+    "draft": true,
+    "src": "backend/engine/post_race.py:361"
   },
   "門檻過期或沒測過": {
     "draft": true,
