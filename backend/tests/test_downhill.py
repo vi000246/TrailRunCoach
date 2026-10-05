@@ -125,7 +125,8 @@ def test_week_plan_and_projection():
     wk = [DH.weeks_out(RACE, date.fromisoformat(d) - dt.timedelta(days=date.fromisoformat(d).weekday())) for d in days]
     assert wk == [9, 6, 3]
     ds_ = [date.fromisoformat(d) for d in days]
-    assert all((b - a).days <= 21 for a, b in zip(ds_, ds_[1:]))
+    # every 3rd week (the day inside the week follows the easy days, so ± a few days around 21)
+    assert all(17 <= (b - a).days <= 25 for a, b in zip(ds_, ds_[1:]))
     assert 14 <= (RACE - ds_[-1]).days <= 21
     first = next(s for w in weeks for s in w["sessions"] if s["id"] == "downhill")
     assert "第一次" in first["title"]

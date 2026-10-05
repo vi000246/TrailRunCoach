@@ -448,6 +448,13 @@ def transition_hours(ref_h: Optional[float], base4: float) -> tuple[float, str]:
     return TRANSITION_OLD_SHARE * base4, _("轉換期：近 4 週的 {share:.0%}", share=TRANSITION_OLD_SHARE)
 
 
+def auto_easy_cap(n_easy: int, other_runs: int) -> int:
+    """The easy runs that keep the week at ≤ rest_days.AUTO_MAX_RUNS runs (SP-82: at least one rest day; the
+    minutes go to the others), never below 1 when there were any. 課表偏好 每週跑步次數 is plan_prefs.shape's."""
+    from backend.engine.rest_days import AUTO_MAX_RUNS
+    return min(n_easy, max(1, AUTO_MAX_RUNS - other_runs)) if n_easy > 0 else 0
+
+
 def easy_count(left: float, kind: str) -> int:
     """How many easy runs fill `left` minutes: ~50 min each (1–5); in the 轉換期 each ≤
     TRANSITION_RUN_MAX (1–6)."""
@@ -1520,6 +1527,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     if kind == "taper":
         # keep the run count, each run shorter (SP-96)
         n_easy = taper_easy_count(left, t_ref.get("runs"), sum(1 for s in sessions if s.kind in RUN_KINDS))
+    n_easy = auto_easy_cap(n_easy, sum(1 for s in sessions if s.kind in RUN_KINDS))   # ≥ 1 rest day (SP-82)
     for i in range(n_easy):
         m = min(left / n_easy, TRANSITION_RUN_MAX) if kind == "transition" else left / n_easy
         st = strides_for(kind, mode, i, road, tr_wk)       # base; 轉換期 from week 2 (SP-103)
@@ -1645,7 +1653,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         long_wd = PP.long_weekday(PR, long_wd)
         ds_ = [{**asdict(s), "long_day": getattr(s, "_long_day", False)} for s in todo]
         notes.extend(PP.blocked_pref_notes(PR, monday, bmap))          # a preferred weekday on a 不排課日期
-        left_out = PP.place(ds_, free, long_wd, PR, notes=notes, long_done=long_done, hard_done=hard_done)
+        left_out = PP.place(ds_, free, long_wd, PR, notes=notes, long_done=long_done, hard_done=hard_done,
+                            run_done=[wdate(w) for w in week_ws if category(w) in ENDURANCE])
         for s, d in zip(todo, ds_):
             if d["day"]:
                 put(s, dt.date.fromisoformat(d["day"]))
@@ -1660,6 +1669,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         # keep one rest day when there is room
         keep_rest = len(avail) > len(main_todo) + 0
     aet_days = AT.test_days(prefs)            # 課表偏好 aet_test_days; Mon–Fri without prefs too
+    easy_q: list = []
     for s in sorted(main_todo, key=lambda s: -1 if AT.is_xu(asdict(s)) else
                     {"long": 0, "test": 1, "quality": 1}.get(s.kind, 2)):
         if not avail:
@@ -1694,10 +1704,25 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
             if not cands and lost and any(abs((d - long_day).days) <= 1 for d in avail):
                 continue          # 不排課日期 left no room: drop it rather than stack two hard days
             pick = (cands or avail)[0]
+        elif s.kind == "easy":
+            easy_q.append(s)            # placed together below: where the rest days fall (SP-82)
+            continue
         else:
             pick = avail[0]
         put(s, pick)
         avail.remove(pick)
+    if easy_q and avail:
+        # 休息日的位置 (engine/rest_days.py, SP-82): the easy runs take the days that leave the rest days
+        # next to the long run and between hard days, not the earliest free days
+        from backend.engine import rest_days as RD
+        ld = next((dt.date.fromisoformat(x.day) for x in main_todo if x.kind == "long" and x.day), long_done)
+        runs = [dt.date.fromisoformat(x.day) for x in main_todo if x.day] + \
+            [wdate(w) for w in week_ws if category(w) in ENDURANCE]
+        qd = [dt.date.fromisoformat(x.day) for x in main_todo if x.kind in ("quality", "test") and x.day] + hard_done
+        for s, d in zip(easy_q, RD.pick_days(len(easy_q), avail, [monday + dt.timedelta(days=i) for i in range(7)],
+                                             runs, ld, long_wd, qd)):
+            put(s, d)
+            avail.remove(d)
     unplaced = [s for s in main_todo if s.day is None]
     if unplaced:
         drop_min = sum(s.minutes for s in unplaced)
@@ -1709,11 +1734,13 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     # strength on easy days (or free days), never the day before the long session
     easy_days = [dt.date.fromisoformat(s.day) for s in main_todo if s.kind == "easy" and s.day]
     long_day = next((dt.date.fromisoformat(s.day) for s in main_todo if s.kind == "long" and s.day), None)
+    from backend.engine import rest_days as RD
     for s in [s for s in todo if s.kind == "strength"]:
-        cands = [d for d in avail + easy_days if long_day is None or d != long_day - dt.timedelta(days=1)]
+        # an easy-run day first, a free day only when none fits (SP-82: strength doesn't take the rest day)
+        cands = RD.strength_days(easy_days, avail, [long_day - dt.timedelta(days=1)] if long_day else [])
         cands = [d for d in cands if d.isoformat() not in [x.day for x in sessions if x.kind == "strength" and x.day]]
         if cands:
-            d = sorted(cands)[0]
+            d = cands[0]
             put(s, d)
             if d in avail:
                 avail.remove(d)
