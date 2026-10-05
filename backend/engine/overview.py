@@ -331,6 +331,92 @@ SRC_RAMP = ("每週 CTL 目標：基礎期 max(2, CTL 的 5%)、專項期 max(2.
 SRC_TEN = ("週量增幅 ≤ 10%：保守做法（推估；系統性回顧找不到「10% 法則」的證據）；受傷風險線 > 20–30%："
            "Nielsen 2014、Damsted 2019（同儕審查）")
 SRC_31 = "3:1 週期（三週加量、一週恢復，恢復週減 35%，教練建議減 20–35%；Friel / Uphill Athlete 常見做法，沒有試驗比較過 3:1 和 2:1）"
+SRC_RECOVERY_WEEK = ("恢復週保留次數和強度、每堂縮短（挪威教練）；一段加量最多 6 週（Koop）；"
+                     "長跑縮到平常的 65%、專項期恢復週排在賽前第 5、3 週為推估")
+
+# ---- 恢復週 (SP-97; periodization-cross-sport.md §4.3, §6.1 SP-97) -------------------------------
+# * 專項期: the recovery weeks are counted back from the race (specific_phase.EASY_WEEKS, FRAC's low
+#   points 賽前第 5、3 週), so one never lands on the biggest long day (week 4, 90 %); the
+#   history-triggered 3:1 (three weeks each ≥ 0.95 × the one before) stays the base phase's.
+# * Both phases: after RECOVERY_MAX_GAP weeks without a recovery week the next one is one (Koop: a
+#   block is ≤ 6 weeks — 教練級 [211]); a 專項期 week whose next week is a countdown one waits for it,
+#   and a countdown week right after a recovery-like week is a normal one (no two easy weeks in a row).
+#   A past week counts as a recovery week when it touches a 減量期 / race / 恢復期 / 轉換期 phase or its
+#   hours are ≤ RECOVERY_DROP × the (up to 3) weeks before it (runners cut 20–35 % [194]: 80 % is
+#   the edge of that range, 推估).
+# * The TSB < −30 protection is unchanged.
+# * The week keeps a shorter long run (RECOVERY_LONG_SHARE of the usual, the ticket's 60–70 %, 推估)
+#   and the short fartlek (quality_gate.RECOVERY 4×1′, Palladino) in both phases — the Norwegian
+#   coaches keep the sessions and their intensity and shorten each [30]; tapering keeps the
+#   intensity too (Wang 2023 [105], indirect).
+RECOVERY_MAX_GAP = 6
+RECOVERY_DROP = 0.80
+RECOVERY_LONG_SHARE = 0.65
+RECOVERY_LONG_MIN = 45              # 推估: shorter is just another easy run
+
+
+def weeks_since_recovery(hours: list, skip: list) -> int:
+    """Complete weeks (newest last in `hours`) since the last recovery-like one (SP-97): a week in
+    `skip` (it touches a 減量期 / race / 恢復期 / 轉換期 phase) or one ≤ RECOVERY_DROP × the mean of the
+    (up to 3) weeks before it. len(hours) when none is found."""
+    n = 0
+    for i in range(len(hours) - 1, -1, -1):
+        prev = [float(h) for h in hours[max(0, i - 3):i]]
+        if (i < len(skip) and skip[i]) or (prev and float(hours[i]) <= RECOVERY_DROP * statistics.mean(prev) + 1e-9):
+            return n
+        n += 1
+    return n
+
+
+def recovery_reason(kind: str, monday: dt.date, race_start: Optional[dt.date], since: int) -> Optional[str]:
+    """Why this base / 專項期 week is a recovery week by the calendar (SP-97): the 專項期 countdown
+    (specific_phase.EASY_WEEKS) or RECOVERY_MAX_GAP weeks without one (`since`: weeks_since_recovery);
+    None = neither (the base phase's 3:1 trigger is checked by the caller). `race_start` = the next A
+    race's first day."""
+    from backend.engine import specific_phase as SP
+    if kind not in ("base", "specific"):
+        return None
+    w = SP.easy_week(race_start, monday) if kind == "specific" else None
+    if w is not None and since >= 1:        # (not two easy weeks in a row: last week was already light)
+        return _("專項期賽前第 {w} 週是恢復週（從比賽往回數，對齊長天逐週表的低點；前 3 週平均的 65%）", w=w)
+    nxt = kind == "specific" and SP.easy_week(race_start, monday + dt.timedelta(weeks=1)) is not None
+    if since >= RECOVERY_MAX_GAP and not nxt:
+        return _("已經連續 {n} 週沒有恢復週（Koop：一段加量最多 6 週）：這週是恢復週（前 3 週平均的 65%）", n=since)
+    return None
+
+
+def recovery_long_minutes(usual: float, total_min: float, spec_min: Optional[float] = None) -> float:
+    """A recovery week's long run (SP-97): RECOVERY_LONG_SHARE × the usual long run (`usual`, ≥ 60 min),
+    ≥ RECOVERY_LONG_MIN; in the 專項期 ≤ `spec_min` (specific_phase.long_minutes at FRAC's low point);
+    ≤ half the week."""
+    m = max(float(RECOVERY_LONG_MIN), RECOVERY_LONG_SHARE * max(float(usual or 0.0), 60.0))
+    if spec_min:
+        m = max(float(RECOVERY_LONG_MIN), min(m, float(spec_min)))
+    return min(m, 0.5 * total_min) if total_min >= 120 else m
+
+
+def recovery_long(s) -> None:
+    """Mark a long run (Session or dict, in place) as the recovery week's shorter one (SP-97)."""
+    is_d = isinstance(s, dict)
+    det = s.get("detail") if is_d else s.detail
+    src = s.get("source") if is_d else s.source
+    det = _("恢復週：長跑縮短到平常的 {share:.0%}、全程輕鬆", share=RECOVERY_LONG_SHARE) + ("；" + det if det else "")
+    src = (src + "；" if src else "") + SRC_RECOVERY_WEEK
+    if is_d:
+        s["detail"], s["source"] = det, src
+    else:
+        s.detail, s.source = det, src
+
+
+def next_a_start(phases: list, monday: dt.date) -> Optional[dt.date]:
+    """The first day of the next A race on / after `monday` (its planning 「event」 phase)."""
+    out = None
+    for p in phases or ():
+        kind = p["kind"] if isinstance(p, dict) else p.kind
+        s = dt.date.fromisoformat(str(p["start"] if isinstance(p, dict) else p.start)[:10])
+        if kind == "event" and s >= monday and (out is None or s < out):
+            out = s
+    return out
 SRC_BOSQUET = "Bosquet 2007、Wang 2023 統合分析：減量 2 週、量減 41–60%、強度與次數維持"
 SRC_UA = "Uphill Athlete"
 SRC_KOOP = "Koop《Training Essentials for Ultrarunning》"
@@ -363,6 +449,13 @@ def transition_hours(ref_h: Optional[float], base4: float) -> tuple[float, str]:
                 _("轉換期：賽前 4 週平均 {h:.1f} h × {share:.0%}（推估），每次輕鬆跑 ≤ {max} 分",
                   h=ref_h, share=TRANSITION_SHARE, max=TRANSITION_RUN_MAX))
     return TRANSITION_OLD_SHARE * base4, _("轉換期：近 4 週的 {share:.0%}", share=TRANSITION_OLD_SHARE)
+
+
+def auto_easy_cap(n_easy: int, other_runs: int) -> int:
+    """The easy runs that keep the week at ≤ rest_days.AUTO_MAX_RUNS runs (SP-82: at least one rest day; the
+    minutes go to the others), never below 1 when there were any. 課表偏好 每週跑步次數 is plan_prefs.shape's."""
+    from backend.engine.rest_days import AUTO_MAX_RUNS
+    return min(n_easy, max(1, AUTO_MAX_RUNS - other_runs)) if n_easy > 0 else 0
 
 
 def easy_count(left: float, kind: str) -> int:
@@ -1047,6 +1140,49 @@ TAPER_Z3 = dict(id="quality", kind="quality", title="有氧間歇（巡航）2×
 ROAD_STRIDES = ("＋加速跑 6×20 秒", "；最後 6 趟 20 秒平路加速跑（快而放鬆，不是衝刺），慢跑回來",
                 f"；{SRC_DANIELS} strides")
 HILL_STRIDES = ("＋坡道衝刺 8×10 秒", "；最後 8 趟 10 秒上坡衝刺，走下來恢復", "；Palladino 基礎中期坡衝刺")
+# 轉換期 (SP-103; periodization-cross-sport.md §4.7, §4.7.1): from its 2nd week, the week's first easy
+# run ends with 4 × 15 s strides at about 5K pace (Jay Johnson: 3–5 × 15 s after 20–30 min easy from
+# week 2, 教練級; most coaches run once or not at all in week 1). Once a week as in the cyclists' trials
+# (one short-sprint session a week in the transition kept the 20-min power, +7.3 % 6 weeks into the
+# next preparation — Almquist 2020, Taylor 2021); carrying it over to running is 推估. Not in the 恢復期.
+TRANSITION_STRIDES = ("＋加速跑 4×15 秒",
+                      "；跑完 20–30 分輕鬆跑後 4 趟 15 秒加速（約 5K 比賽配速，快而放鬆，不是衝刺），每趟之間走或慢跑到呼吸平順",
+                      "；Jay Johnson（轉換期第 2 週起每次輕鬆跑後 3–5×15 秒，教練級）；Almquist 2020、Taylor 2021"
+                      "（自行車選手轉換期每週一次短衝刺）；套到跑步為推估")
+TRANSITION_STRIDES_WEEK = 2
+
+
+def transition_week(phases: list, monday: dt.date) -> Optional[int]:
+    """Which week of its 轉換期 the week of `monday` is (1 = the week the phase starts); None when no
+    轉換期 touches the week."""
+    sunday = monday + dt.timedelta(days=6)
+    for p in phases or ():
+        kind = p["kind"] if isinstance(p, dict) else p.kind
+        s = dt.date.fromisoformat(str(p["start"] if isinstance(p, dict) else p.start)[:10])
+        e = dt.date.fromisoformat(str(p["end"] if isinstance(p, dict) else p.end)[:10])
+        if kind == "transition" and s <= sunday and e >= monday:
+            return (monday - (s - dt.timedelta(days=s.weekday()))).days // 7 + 1
+    return None
+
+
+def transition_strides_note(kind: str = "transition") -> dict:
+    """The week note of the 轉換期's strides (SP-103)."""
+    return {"level": "info", "src": "transition",
+            "text": _("轉換期第 {w} 週起，每週第一次輕鬆跑後加 4 趟 15 秒加速（約 5K 配速）：量很小，保留一點速度"
+                      "（Jay Johnson，教練級；自行車選手的對照試驗，套到跑步為推估）", w=TRANSITION_STRIDES_WEEK)}
+
+
+def strides_for(kind: str, mode: str, i: int, road: bool, tr_week: Optional[int]) -> Optional[tuple]:
+    """The strides (title, detail, source suffixes) the i-th easy run of the week carries, None = none:
+    base (not a recovery / re-entry week) — the hill sprints / road strides; 轉換期 from its 2nd week —
+    TRANSITION_STRIDES (SP-103)."""
+    if i != 0:
+        return None
+    if kind == "base" and mode not in ("recovery_week", "reentry"):
+        return ROAD_STRIDES if road else HILL_STRIDES
+    if kind == "transition" and (tr_week or 0) >= TRANSITION_STRIDES_WEEK:
+        return TRANSITION_STRIDES
+    return None
 
 
 def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, blackouts=None,
@@ -1128,8 +1264,12 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     # 3:1 (SRC_31): three build weeks, each ≥ 0.95 × the one before (0.95 推估: a small dip still
     # counts as building), → a recovery week at 65 % of them (−35 %: Norwegian coaches −25–35 %,
     # runners' coaches −20–35 %, periodization-cross-sport.md §4.3 [30][194]; no trial of 3:1 [198])
-    build3 = len(hist) >= 4 and all(hist[i][1] >= 0.95 * hist[i - 1][1] and hist[i][1] > 0.5
-                                    for i in range(len(hist) - 3, len(hist)))
+    # 3:1 from the history: the base phase only (SP-97 — the 專項期 counts back from the race)
+    build3 = kind == "base" and len(hist) >= 4 and all(hist[i][1] >= 0.95 * hist[i - 1][1] and hist[i][1] > 0.5
+                                                       for i in range(len(hist) - 3, len(hist)))
+    rec_skip = LG.skip_mondays(getattr(status, "plan", None), [m for m, _, _ in hist])
+    rec_since = weeks_since_recovery([h for _, h, _ in hist], [m in rec_skip for m, _, _ in hist])
+    rec_why = None if build3 else recovery_reason(kind, monday, next_a_start(phs, monday), rec_since)
     if kind in ("base", "specific"):
         need_tss = 7.0 * (ctl0 + ramp_goal / f7)
         need_h = need_tss / r_all
@@ -1146,14 +1286,19 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         # B2B (engine/b2b.py): a planned B2B's TSB drop doesn't make this / next week a recovery week
         # (主要訓練項目 = 路跑: no B2B weekend — an ultra / mountain tool, Koop; Uphill Athlete)
         b2b = {} if road else B2B.plan_context(ds, status, today, monday, [h for _, h, _ in hist], ctl_s, atl_s,
-                                               d_prev_sun, by, "recovery_week" if build3 else kind,
+                                               d_prev_sun, by, "recovery_week" if build3 or rec_why else kind,
                                                accepted=b2b_accepted)
         b2b_exempt = B2B.tsb_exempt(b2b, tsb_today, b2b.get("ramp"), b2b.get("ramp_base"))
         if b2b_exempt:
             why.append(b2b_exempt)
+        norm_hours = hours                  # a normal week's volume (SP-97: the recovery week's usual long run)
         if tsb_today < -30 and not b2b_exempt:
             mode, hours = "recovery_week", 0.6 * base4
             why.append(_("TSB {tsb:+.0f} < −30：改成恢復週（近 4 週的 60%）", tsb=tsb_today))
+        elif rec_why:
+            # SP-97: the 專項期 countdown / the 6-week cap — planned, so a TSB of −20…−30 doesn't skip it
+            mode, hours = "recovery_week", 0.65 * statistics.mean(h for _, h, _ in hist[-3:])
+            why.append(rec_why)
         elif tsb_today < -20 and not b2b_exempt:
             hours = min(hours, base4)
             why.append(_("TSB {tsb:+.0f} < −20：先維持量，不加", tsb=tsb_today))
@@ -1372,7 +1517,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     if user_q:
         notes.append(TECH.user_note(user_q, hours, kind))
 
-    if kind in ("base", "specific") and mode != "recovery_week":
+    rec_wk = mode == "recovery_week"
+    if kind in ("base", "specific"):
         if kind == "specific" and sp.get("active"):
             long_min = SP.long_minutes(sp, longest28)
         elif kind == "specific" and goal_h:
@@ -1385,6 +1531,11 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         if cut:
             notes.append({"level": "info", "src": "long_cap", "text": LG.cap_note(long_min, longest28)})
             long_min = capped
+        if rec_wk:
+            # SP-97: a recovery week keeps a shorter long run (the usual one × 65 %; the 專項期's ≤ FRAC's low point)
+            usual = longest28 if kind == "specific" else min(longest28, 0.30 * norm_hours * 60.0)
+            long_min = recovery_long_minutes(usual, minutes_total, long_min if kind == "specific" and sp.get("active")
+                                             else None)
         if in_reentry:
             # the longest run before the break × the block's % (6–13 days: ≤ 90 min) — detraining.md §6.2
             fr = max((RE.frac_on(rp, monday + dt.timedelta(days=i)) or 0.0) for i in range(7)) or 1.0
@@ -1396,13 +1547,17 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         # a due CP / AeT test is SUGGESTED, never put into the plan (the user, 2026-10-01): the
         # athlete picks the day (test_suggestions below → 「排入」 on the overview / 課表 page)
         if road:
-            add(**road_long_session(long_min, kind, aet, tph["road"], mp_goal, aet_meas), target=tgt.get("long", ""))
+            # (a recovery week's long run is easy: no marathon-pace segment)
+            add(**road_long_session(long_min, "base" if rec_wk else kind, aet, tph["road"], mp_goal, aet_meas),
+                target=tgt.get("long", ""))
         else:
             add(id="long", kind="long", title="LSD" + ("（山路）" if mountain_goal else ""),
                 minutes=int(round(long_min / 5) * 5), target=tgt.get("long", ""),
                 detail=f"{terrain}；全程心率壓在{below(cap_txt)}，爬坡可以走",
                 source=SRC_KOOP if kind == "specific" else SRC_UA,
                 tss=long_min / 60.0 * tph["trail" if mountain_goal else "road"])
+        if rec_wk:
+            recovery_long(sessions[-1])
         if b2b.get("candidate") and not in_reentry:
             # a due B2B is a SUGGESTION (b2b_suggestion below); only an accepted one is planned
             B2B.finalize(b2b, sessions[-1].minutes, b2b.get("longest_before") or 0.0, minutes_total)
@@ -1412,7 +1567,12 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
             sessions[-1] = Session(**ls)
             for f in fol:
                 add(**f)
-        if allow_quality and kind in ("base", "specific") and dec.get("items"):
+        if rec_wk:
+            if allow_quality and dec["spec"] is not None:
+                # a recovery week (3:1, the 專項期 countdown, the 6-week cap — SP-97): the short fartlek
+                # instead of intervals (Palladino), in the 專項期 too
+                add(**_gate_session(gate, dec, tt, hours))
+        elif allow_quality and kind in ("base", "specific") and dec.get("items"):
             # two tracks (engine/quality_gate.py week_decision, SP-31): each item is a ladder rung as a
             # library variant fitted into the weekday cap (engine/interval_library.py), or the 專項期's
             # own session (road Zone 3 = 2×15′ flat, trail Zone 5 = 5×4′ uphill)
@@ -1421,9 +1581,6 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
                                       mountain_goal if kind == "base" else not road, road, q_cap, q_alt, notes,
                                       reserved=sum(u["work"] for u in user_q)):
                 add(**q)
-    elif kind == "base" and mode == "recovery_week" and allow_quality and dec["spec"] is not None:
-        # 3:1 recovery week: a short fartlek instead of intervals (Palladino)
-        add(**_gate_session(gate, dec, tt, hours))
     elif kind == "taper":
         # 減量期: one session, the two-track choice (SP-31) — Zone 3 節奏 2×8′ or the 4×3′ short intensity;
         # its content follows the days to the race after the placement (taper_rules, SP-96)
@@ -1458,14 +1615,17 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
             tss=35 / 60 * tph["strength"])
     used = sum(s.minutes for s in sessions if s.kind not in ("strength",))
     left = max(0.0, minutes_total - used)
+    tr_wk = transition_week(phs, monday) if kind == "transition" else None
     n_easy = easy_count(left, kind)
     if kind == "taper":
         # keep the run count, each run shorter (SP-96)
         n_easy = taper_easy_count(left, t_ref.get("runs"), sum(1 for s in sessions if s.kind in RUN_KINDS))
+    n_easy = auto_easy_cap(n_easy, sum(1 for s in sessions if s.kind in RUN_KINDS))   # ≥ 1 rest day (SP-82)
     for i in range(n_easy):
         m = min(left / n_easy, TRANSITION_RUN_MAX) if kind in ("transition", "rebuild") else left / n_easy
-        strides = kind == "base" and i == 0 and mode not in ("recovery_week", "reentry")
-        st_t, st_d, st_s = ROAD_STRIDES if road else HILL_STRIDES
+        st = strides_for(kind, mode, i, road, tr_wk)       # base; 轉換期 from week 2 (SP-103)
+        strides = st is not None
+        st_t, st_d, st_s = st or ("", "", "")
         add(id=f"easy{i + 1}", kind="easy", title="輕鬆跑" + (st_t if strides else ""),
             minutes=int(round(m / 5) * 5), target=tgt.get("z2", ""),
             detail=f"心率不超過{cap_txt}" + (st_d if strides else ""),
@@ -1486,6 +1646,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         cap_transition_runs(sessions, notes)
         notes.append({"level": "info", "src": "transition",
                       "text": _(TRANSITION_NOTE) if kind == "transition" else _(REBUILD_NOTE)})
+        if any(TRANSITION_STRIDES[0] in s.title for s in sessions):
+            notes.append(transition_strides_note(kind))
     # a 轉換期 shortened / skipped for the next A race's 專項期; two A races close together — a
     # 恢復期 / 專項期 / 減量期 cut short, the 12-week hint (SP-90) (planning.auto_phases)
     for pk, t in _week_phase_notes(status, monday):
@@ -1585,7 +1747,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         long_wd = PP.long_weekday(PR, long_wd)
         ds_ = [{**asdict(s), "long_day": getattr(s, "_long_day", False)} for s in todo]
         notes.extend(PP.blocked_pref_notes(PR, monday, bmap))          # a preferred weekday on a 不排課日期
-        left_out = PP.place(ds_, free, long_wd, PR, notes=notes, long_done=long_done, hard_done=hard_done)
+        left_out = PP.place(ds_, free, long_wd, PR, notes=notes, long_done=long_done, hard_done=hard_done,
+                            run_done=[wdate(w) for w in week_ws if category(w) in ENDURANCE])
         for s, d in zip(todo, ds_):
             if d["day"]:
                 put(s, dt.date.fromisoformat(d["day"]))
@@ -1600,6 +1763,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         # keep one rest day when there is room
         keep_rest = len(avail) > len(main_todo) + 0
     aet_days = AT.test_days(prefs)            # 課表偏好 aet_test_days; Mon–Fri without prefs too
+    easy_q: list = []
     for s in sorted(main_todo, key=lambda s: -1 if AT.is_xu(asdict(s)) else
                     {"long": 0, "test": 1, "quality": 1}.get(s.kind, 2)):
         if not avail:
@@ -1634,10 +1798,25 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
             if not cands and lost and any(abs((d - long_day).days) <= 1 for d in avail):
                 continue          # 不排課日期 left no room: drop it rather than stack two hard days
             pick = (cands or avail)[0]
+        elif s.kind == "easy":
+            easy_q.append(s)            # placed together below: where the rest days fall (SP-82)
+            continue
         else:
             pick = avail[0]
         put(s, pick)
         avail.remove(pick)
+    if easy_q and avail:
+        # 休息日的位置 (engine/rest_days.py, SP-82): the easy runs take the days that leave the rest days
+        # next to the long run and between hard days, not the earliest free days
+        from backend.engine import rest_days as RD
+        ld = next((dt.date.fromisoformat(x.day) for x in main_todo if x.kind == "long" and x.day), long_done)
+        runs = [dt.date.fromisoformat(x.day) for x in main_todo if x.day] + \
+            [wdate(w) for w in week_ws if category(w) in ENDURANCE]
+        qd = [dt.date.fromisoformat(x.day) for x in main_todo if x.kind in ("quality", "test") and x.day] + hard_done
+        for s, d in zip(easy_q, RD.pick_days(len(easy_q), avail, [monday + dt.timedelta(days=i) for i in range(7)],
+                                             runs, ld, long_wd, qd)):
+            put(s, d)
+            avail.remove(d)
     unplaced = [s for s in main_todo if s.day is None]
     if unplaced:
         drop_min = sum(s.minutes for s in unplaced)
@@ -1649,11 +1828,13 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     # strength on easy days (or free days), never the day before the long session
     easy_days = [dt.date.fromisoformat(s.day) for s in main_todo if s.kind == "easy" and s.day]
     long_day = next((dt.date.fromisoformat(s.day) for s in main_todo if s.kind == "long" and s.day), None)
+    from backend.engine import rest_days as RD
     for s in [s for s in todo if s.kind == "strength"]:
-        cands = [d for d in avail + easy_days if long_day is None or d != long_day - dt.timedelta(days=1)]
+        # an easy-run day first, a free day only when none fits (SP-82: strength doesn't take the rest day)
+        cands = RD.strength_days(easy_days, avail, [long_day - dt.timedelta(days=1)] if long_day else [])
         cands = [d for d in cands if d.isoformat() not in [x.day for x in sessions if x.kind == "strength" and x.day]]
         if cands:
-            d = sorted(cands)[0]
+            d = cands[0]
             put(s, d)
             if d in avail:
                 avail.remove(d)
@@ -1736,6 +1917,18 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
             sessions = [Session(**{k: v for k, v in d.items() if k in Session.__dataclass_fields__}) for d in sd]
     except Exception as e:                  # noqa: BLE001 — heat sessions never break the plan
         heat_info = {"active": False, "reason": _("熱適應資料讀取失敗（{err}）", err=type(e).__name__)}
+
+    # ---- 下坡課 (engine/downhill.py, SP-99): 專項期 賽前第 9、6、3 週 before an A race with a clear descent
+    from backend.engine import downhill as DH
+    dh = DH.week_context(kind=kind, mode=mode, monday=monday, events=getattr(getattr(status, "plan", None),
+                                                                              "events", None), phases=phs, road=road)
+    if dh.get("active"):
+        try:
+            dd = [asdict(s) for s in sessions]
+            DH.apply(dd, dh, prefs=prefs, rates=tph, notes=notes, hard_done=hard_done, b2b=b2b)
+            sessions = [Session(**{k: v for k, v in d.items() if k in Session.__dataclass_fields__}) for d in dd]
+        except Exception as e:              # noqa: BLE001 — the plan must still build
+            dh = {**dh, "error": type(e).__name__}
 
     # ---- 技術地形課 (engine/technical.py, SP-74): 越野跑 only; 基礎期 every other week's LSD,
     # 專項期 one a week out of an easy run (RPE 6–7 = a quality session: spacing + budget)
@@ -1857,6 +2050,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         "race_sim_suggestion": race_sim,
         # 技術地形課 (engine/technical.py, SP-74): this week's rule and the session it made
         "technical": TECH.public(tech),
+        # 下坡課 (engine/downhill.py, SP-99): this week's countdown rule and the session it made
+        "downhill": DH.public(dh),
         # 賽前停肌力 (SP-86): the A events' no-strength windows, for the projection
         "strength_stop": s_stops,
         # 減量期 (SP-96): the next A race's taper touching this week and the pre-taper level, for the projection

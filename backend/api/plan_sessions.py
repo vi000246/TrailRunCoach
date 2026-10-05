@@ -1976,6 +1976,41 @@ async def remove_rest_day(day: str, db: AsyncSession = Depends(get_db)):
     return await _save_blackouts(db, BL.normalize(keep))
 
 
+# 移動休息日 (SP-82; the 課表 calendar's 「休息」 chip dragged onto another day): `from` is a future
+# day with nothing planned, `to` gets the rest — its active sessions move to `from` (each a user move,
+# like dragging a session, so reconcile keeps them). Warnings say when a moved hard session lands
+# < 2 days from another hard one.
+#   POST /api/v1/overview/plan/rest-days/move   {from, to}
+@router.post("/rest-days/move")
+async def move_rest_day(body: dict = Body(...), db: AsyncSession = Depends(get_db)):
+    from backend.engine import rest_days as RD
+    from backend.i18n import _
+    frm, to = _iso_day((body or {}).get("from")), _iso_day((body or {}).get("to"))
+    inp = await _inputs()
+    today, blocked = _today(inp), PS.blocked_map(inp)
+    if frm == to:
+        raise HTTPException(400, _("休息日已經在這天"))
+    if min(frm, to) < today:
+        raise HTTPException(400, _("過去的日子不能移動休息日"))
+    if frm in blocked or to in blocked:
+        raise HTTPException(400, _("不排課日期不能移動休息日"))
+    stored = await PS.load(db)
+    if any(s.get("day") == frm and s["state"] in ("active", "done") for s in stored):
+        raise HTTPException(400, _("{day} 有課，不是休息日", day=frm))
+    go = [s for s in stored if s.get("day") == to and s["state"] == "active"]
+    moved = []
+    try:
+        async with _wlock():
+            for s in go:
+                moved.append(await PS.edit(db, s["uid"], {"day": frm}, today, blocked=blocked))
+    except PS.PlanError as e:
+        raise _err(e)
+    for s in moved:
+        await _b2b_moved(db, s["uid"], frm)
+    after = await PS.load(db)
+    return {"from": frm, "to": to, "moved": moved, "warnings": RD.swap_warnings(after, [s["uid"] for s in moved])}
+
+
 async def _accept_injury_rest(db: AsyncSession, sg: dict) -> dict:
     """「設成不排課」 of an injury_rest suggestion: the days of [start, end] not
     blocked yet become 不排課日期 (label 傷停), then the plan reconciles as a

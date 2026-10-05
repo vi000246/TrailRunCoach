@@ -158,8 +158,13 @@ B2B weekends, the race calculator (for the 專項期 target) and the 主要訓�
    mean (hold).
 3. Guards: TSB < −30 → recovery week (60 % of the 4-week mean); TSB < −20 → hold (TSB from the
    started PMC above — SP-63 Q3: a new user's first weeks no longer read a CTL still filling up
-   from 0 as a false TSB < −30, `backend/engine/overview.py:1018`); three
-   building weeks in a row → recovery week (65 % of their mean, 3:1 cycle). An accepted B2B's
+   from 0 as a false TSB < −30, `backend/engine/overview.py:1018`); base: three
+   building weeks in a row → recovery week (65 % of their mean, 3:1 cycle). 專項期 (SP-97): no 3:1
+   from the history — 賽前第 5、3 週 are the recovery weeks (`specific_phase.EASY_WEEKS`, FRAC's low
+   points; not right after another light week), so one never takes the week 4 long day. Both:
+   after 6 weeks without a recovery week the next is one (Koop; a 專項期 week waits for the
+   countdown week right after it; `recovery_reason`, `weeks_since_recovery` — a week ≤ 80 % of the
+   3 before it, or touching a 減量期 / race / 恢復期 / 轉換期, counts). An accepted B2B's
    own TSB drop is exempt (`B2B.tsb_exempt`, `backend/engine/overview.py:919`).
 4. Taper: 50 % of the 6-week mean (40 % in the last 7 days to the A event); event week 30 %;
    recovery 50 %. **Transition** (SP-73, `backend/engine/overview.py:1036`): 50 % of the race's
@@ -170,8 +175,12 @@ B2B weekends, the race calculator (for the 專項期 target) and the 主要訓�
    after week); no race known (a manual 轉換期) → the old 65 % of the 4-week mean. Easy runs
    only, each ≤ 60 min (`TRANSITION_RUN_MAX`, Canova's 4 weeks of easy running ≤ 1 h; enforced
    after the 課表偏好 shaping too, `cap_transition_runs`, `backend/engine/overview.py:373`),
-   strength ×2, no long run, interval, strides or CP-test suggestion; a week note says so and
-   that cross-training may replace an easy run (`src: transition`).
+   strength ×2, no long run, interval or CP-test suggestion; a week note says so and
+   that cross-training may replace an easy run (`src: transition`). From the phase's 2nd week
+   (`transition_week`) the week's first easy run ends with 「＋加速跑 4×15 秒」 (~5K pace, after
+   20–30′ easy; `TRANSITION_STRIDES`, SP-103: Jay Johnson 3–5 × 15 s from week 2, 教練級; the
+   cyclists' one-sprint-session-a-week trials, 推估 for running), with a note; never in week 1 or
+   the 恢復期. A 課表偏好 越野 easy run keeps these strides (not the base hill sprints).
 5. A custom weekly-hours preference only lowers the result (`backend/engine/overview.py:944`).
 6. A break ≥ 6 days without running — a 不排課日期 range or simply no runs — gives the re-entry
    block instead (`reentry.find`, `backend/engine/overview.py:952`; Daniels; plan-auto.spec.md);
@@ -195,8 +204,10 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
   3. base → the **間歇門檻**'s dose step as an interval-library variant fitted to the weekday
      cap (`_gate_session`, `backend/engine/overview.py:573`, `backend/engine/overview.py:1152`;
      see below).
-  - Base **recovery week** (3:1): the gate's 「恢復週 fartlek 4×1 分」 instead of intervals
-    (Palladino, `backend/engine/overview.py:1145`).
+  - **Recovery week** (base and 專項期, SP-97): a shorter long run (`recovery_long_minutes`: 65 %
+    of the usual, ≥ 45 min; 專項期 ≤ FRAC's share; easy, no MP segment) and the gate's
+    「恢復週 fartlek 4×1 分」 instead of intervals (Palladino; the Norwegian coaches keep the
+    sessions and intensity, shorten each). The projection doesn't lower the next long-run base.
 - **Tests are suggested, never planned** (2026-10-01/02): a due CP test (`testing` bad / watch,
   `extra.cp_due`, A event > 10 days away, not inside a re-entry block) and a due AeT test
   (`aet_test.due`, for a reason only) become `test_suggestions` (`backend/engine/overview.py:1588`)
@@ -353,6 +364,16 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
   easy run of a 專項期 week becomes a 40–50 min steep walk at the Pandolf grade that costs what
   the pack would (no pack in training).
 - **熱適應課** (`engine/heat_plan.py`): below.
+- **下坡課** (SP-99, `engine/downhill.py`; after placement, just before the 技術地形課, in week_plan
+  and per projected week): 專項期 賽前第 9、6、3 週 (`DOWNHILL_WEEKS`: ≤ 3 weeks apart — one
+  downhill run protects 3–6 weeks, not 9, controlled trials — and the last 14–21 days out, 推估)
+  before an A race that is not road and descends ≥ 20 m/km (推估; GPX, else descent = climb);
+  主要訓練項目 路跑: none. One easy run becomes SP-62's 下坡離心 (−10～−15 %, RPE 3–5, warm-up /
+  cool-down 10′, the template's steps; 25′ downhill, the first one of the phase 15′) on a day ≥ 14
+  days before the race, not on / the day before a hard day, not in the easy days after a B2B; the
+  first keeps the 2 days after it easy. The weekday cap shrinks the downhill part (≥ 10′); the
+  other easy runs give the extra minutes. The 技術地形 session keeps ≥ 2 days from it
+  (`technical.HARD_IDS`). A week note (`src: downhill`) says when / why or that no day fit.
 - **技術地形課** (SP-74, `engine/technical.py`; applied last, after placement, the climb / steep
   walk and heat hooks, `backend/engine/overview.py:1509`, and the same per projected week,
   `backend/engine/projection.py:591`): 主要訓練項目 越野跑 only (路跑: none), base / 專項期, not
@@ -408,13 +429,30 @@ keep the remaining interval 48 h away (`plan_prefs.place(hard_done=…)` and the
 **Placement**: remaining days from today (tomorrow when something is already logged today)
 to Sunday. The long session goes on the athlete's usual long-day weekday (mode over 12 weeks,
 `backend/engine/overview.py:415`) or the last free day; quality ≥ 2 days from the long one;
-easy on the next free days; strength on easy or free days, never the day before the long one.
+easy on the days that put the rest days where they belong (below); strength on easy days first.
 Sessions that don't fit are reported as a note, not squeezed in. Active preferences place
 with `plan_prefs.place()` instead (`backend/engine/overview.py:1288`). Blocked days are removed
 from the candidate days first (`backend/engine/overview.py:1268`); when they leave a quality /
 test session only a day next to the long one, it is dropped rather than stacked
 (`backend/engine/overview.py:1333`). An accepted B2B keeps its own two days and the rest moves
 around them (`B2B.place`, fixed).
+
+**Rest days** (SP-82, `engine/rest_days.py`; rest-day-placement.md, the owner's decisions §4.4):
+the run count still follows the week's minutes (easy runs ~50′, `easy_count`; 課表偏好 每週跑步次數
+when set), so a week can leave 可練日 free on purpose — before SP-82 those free days were simply
+what the easy runs (earliest free day first) left over, piled up late in the week. Now, in all three
+placement paths (no prefs, `plan_prefs.place`, `projection._place`), the easy runs take the
+combination of days with the smallest penalty (ties → earliest): a run the day after the long run
+(a Sunday long run → this Monday too) 8, the day before it while the week has a rest day 4, the day
+after an interval in a ≤ 4-run week 2, each training day past 3 in a row / rest day past 2 in a row
+1 (weights and streak limits 推估); the 休息日偏好 (pref_days `rest`, first / second choice) 32 / 16,
+above every rule. Auto mode runs ≤ 6 days (`AUTO_MAX_RUNS`, `auto_easy_cap`, `shape`'s room; 推估 —
+Bompa / UA / Koop keep ≥ 1 full rest day); 每週跑步次數 7 is honoured. Strength goes on an easy-run
+day first, a free day only when none fits (a 休息日偏好 day last), never the interval's day or the
+day before the long run. The 課表 calendar shows 「休息」 on an empty planned day (week view /
+agenda): dragged onto another day it calls `POST /rest-days/move {from, to}` — that day's active
+sessions move to `from` as user moves, with a warning when a moved hard session ends up < 2 days
+from another (`rest_days.swap_warnings`).
 
 **Output**: target / done / remaining (hours, TSS), the reasons (`why`), the rules cited,
 8-week history, load now and at Sunday (CTL, ATL, next-Monday TSB, weekly ramp), the daily

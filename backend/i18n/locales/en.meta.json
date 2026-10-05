@@ -595,6 +595,10 @@
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:420"
   },
+  "{day} 有課，不是休息日": {
+    "draft": true,
+    "src": "backend/api/plan_sessions.py:1984"
+  },
   "{day}→ {to} · 約 {t}{climb}": {
     "draft": true,
     "src": "backend/engine/racepower/watch_export.py:235"
@@ -895,6 +899,10 @@
     "draft": true,
     "src": "backend/engine/workout_templates.py:137"
   },
+  "「{a}」和「{b}」只隔 {n} 天：硬課之間建議隔 ≥ 2 天，可以再拖動調整": {
+    "draft": true,
+    "src": "backend/engine/rest_days.py:120"
+  },
   "「{label}」段用 RPE 填：用你填的分鐘數，TSS 由 RPE × 分鐘換算": {
     "draft": true,
     "src": "backend/engine/workout_steps.py:1152"
@@ -995,6 +1003,18 @@
     "draft": true,
     "src": "backend/engine/hr_profile.py:379"
   },
+  "下坡課排在賽前第 {weeks} 週": {
+    "draft": true,
+    "src": "backend/engine/downhill.py:101"
+  },
+  "下坡離心（下坡 {work}′）": {
+    "draft": true,
+    "src": "backend/engine/downhill.py:188"
+  },
+  "下坡離心（第一次，下坡 {work}′）": {
+    "draft": true,
+    "src": "backend/engine/downhill.py:188"
+  },
   "下週安排恢復週": {
     "draft": true,
     "src": "backend/engine/status.py:333"
@@ -1014,6 +1034,10 @@
   "不排課 {range}：少 {n} 個可練日，週量 × {f:.0%}": {
     "draft": true,
     "src": "backend/engine/overview.py:1071"
+  },
+  "不排課日期不能移動休息日": {
+    "draft": true,
+    "src": "backend/api/plan_sessions.py:1981"
   },
   "不排課日期／休息日": {
     "draft": true,
@@ -1126,6 +1150,10 @@
   "休息": {
     "draft": true,
     "src": "backend/engine/workout_steps.py:1472"
+  },
+  "休息日已經在這天": {
+    "draft": true,
+    "src": "backend/api/plan_sessions.py:1977"
   },
   "但週量上限 = 最近的正常訓練週 {ref:.1f} h（不含減量期／比賽週／賽後恢復期／轉換期）的 +10%（至少 +0.5 h）→ {cap:.1f} h": {
     "draft": true,
@@ -1487,6 +1515,10 @@
     "draft": true,
     "src": "backend/engine/technical.py:64"
   },
+  "只在專項期排（停訓後恢復期不排）": {
+    "draft": true,
+    "src": "backend/engine/downhill.py:82"
+  },
   "只排恢復、回量、減量：越野／超馬級的 A 賽和下一場「{name}」相隔不到 {w} 週，中間不排訓練（推估）": {
     "draft": true,
     "src": "backend/engine/planning.py:770"
@@ -1771,6 +1803,10 @@
     "draft": true,
     "src": "backend/engine/planning.py:598"
   },
+  "專項期賽前第 {w} 週是恢復週（從比賽往回數，對齊長天逐週表的低點；前 3 週平均的 65%）": {
+    "draft": true,
+    "src": "backend/engine/overview.py:381"
+  },
   "專項期（賽前約 10–3 週）每 1–2 週排一次長天，點要一步步靠近最近那場的線（推估）": {
     "draft": true,
     "src": "backend/engine/panels/race_refs.py:183"
@@ -1806,6 +1842,10 @@
   "已經有這個分類": {
     "draft": false,
     "src": "backend/engine/user_templates.py:130"
+  },
+  "已經連續 {n} 週沒有恢復週（Koop：一段加量最多 6 週）：這週是恢復週（前 3 週平均的 65%）": {
+    "draft": true,
+    "src": "backend/engine/overview.py:384"
   },
   "已解鎖": {
     "draft": true,
@@ -2043,6 +2083,10 @@
     "draft": true,
     "src": "backend/engine/overview.py:1555"
   },
+  "恢復週：長跑縮短到平常的 {share:.0%}、全程輕鬆": {
+    "draft": true,
+    "src": "backend/engine/overview.py:403"
+  },
   "慢跑": {
     "draft": true,
     "src": "backend/engine/interval_library.py:62"
@@ -2078,6 +2122,10 @@
   "手錶帳號": {
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:289"
+  },
+  "找 −10～−15% 的下坡（步道或產業道路），下坡 {work} 分、約 ↓{down} m，RPE 3–5、放鬆不衝，上坡用走的回去；暖身、緩和各 10 分平路": {
+    "draft": true,
+    "src": "backend/engine/downhill.py:189"
   },
   "找不到備份檔": {
     "draft": true,
@@ -2662,6 +2710,10 @@
   "沒有「負荷」結束條件：送預估時間": {
     "draft": true,
     "src": "backend/sync/workout_targets/garmin.py:23"
+  },
+  "沒有下一場 A 賽事": {
+    "draft": true,
+    "src": "backend/engine/downhill.py:86"
   },
   "沒有到 VO2max": {
     "draft": true,
@@ -3383,6 +3435,10 @@
     "draft": true,
     "src": "backend/engine/race_calc_store.py:53"
   },
+  "賽事下降不明顯（每公里 ↓{d:.0f} m < {min:.0f} m）：不排下坡課": {
+    "draft": true,
+    "src": "backend/engine/downhill.py:96"
+  },
   "賽事計算器預測的完賽時間": {
     "draft": true,
     "src": "backend/engine/race_feasibility.py:344"
@@ -3418,6 +3474,14 @@
   "賽前一週最多大約爬 {cl:.0f} m，是比賽最難那天爬升 {hd:.0f} m 的 {p:.0f} %": {
     "draft": true,
     "src": "backend/engine/race_feasibility.py:363"
+  },
+  "賽前第 {w} 週排一次下坡課（{day}）：下坡跑一次的保護效果維持 3–6 週，所以專項期每 3 週一次、最後一次在賽前 14–21 天（推估）{first}": {
+    "draft": true,
+    "src": "backend/engine/downhill.py:201"
+  },
+  "賽前第 {w} 週該排下坡課，但這週沒有適合的輕鬆日（長跑、強度課的當天和前一天不放{first}；賽前 {days} 天內不放）": {
+    "draft": true,
+    "src": "backend/engine/downhill.py:176"
   },
   "賽後第 1 週：輕鬆跑 ≤ {max} 分": {
     "draft": true,
@@ -3539,6 +3603,10 @@
     "draft": true,
     "src": "backend/engine/racepower/watch_export.py:226"
   },
+  "路跑賽事不排下坡課": {
+    "draft": true,
+    "src": "backend/engine/downhill.py:89"
+  },
   "路跑／馬拉松": {
     "draft": true,
     "src": "backend/engine/primary_sport.py:32"
@@ -3598,6 +3666,10 @@
   "轉換期每次跑步 ≤ {max} 分（Canova）：本週少排 {cut} 分，不用補": {
     "draft": true,
     "src": "backend/engine/overview.py:393"
+  },
+  "轉換期第 {w} 週起，每週第一次輕鬆跑後加 4 趟 15 秒加速（約 5K 配速）：量很小，保留一點速度（Jay Johnson，教練級；自行車選手的對照試驗，套到跑步為推估）": {
+    "draft": true,
+    "src": "backend/engine/overview.py:1114"
   },
   "轉換期縮短為 {days} 天：下一場 A 賽事「{name}」的專項期 {start} 開始": {
     "draft": true,
@@ -3814,6 +3886,10 @@
   "過去的日子": {
     "draft": true,
     "src": "backend/api/plan_sessions.py:515"
+  },
+  "過去的日子不能移動休息日": {
+    "draft": true,
+    "src": "backend/api/plan_sessions.py:1979"
   },
   "過去的日子不能設成休息日": {
     "draft": true,
@@ -4211,6 +4287,10 @@
     "draft": true,
     "src": "backend/engine/planning.py:367"
   },
+  "，第一次之後 2 天也要輕鬆": {
+    "draft": true,
+    "src": "backend/engine/downhill.py:178"
+  },
   "，賽後 {h} 小時內不排硬課、不跑下坡": {
     "draft": true,
     "src": "backend/engine/planning.py:384"
@@ -4299,6 +4379,10 @@
     "draft": true,
     "src": "backend/engine/status.py:588"
   },
+  "；其餘 {m} 分平路輕鬆跑": {
+    "draft": true,
+    "src": "backend/engine/downhill.py:191"
+  },
   "；分溫度區：{bands}": {
     "draft": true,
     "src": "backend/engine/status.py:570"
@@ -4306,6 +4390,10 @@
   "；另外 {x}": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:2095"
+  },
+  "；心率、功率在下坡不準，看 RPE": {
+    "draft": true,
+    "src": "backend/engine/downhill.py:193"
   },
   "；或": {
     "draft": true,
@@ -4327,6 +4415,10 @@
     "draft": true,
     "src": "backend/engine/status.py:308"
   },
+  "；第一次量小，之後 2 天只排輕鬆課": {
+    "draft": true,
+    "src": "backend/engine/downhill.py:192"
+  },
   "；聚合估計還不夠準或有偏移": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:2122"
@@ -4334,6 +4426,10 @@
   "；近 365 天跑步最高 {v:.0f}（推估）": {
     "draft": true,
     "src": "backend/engine/hr_profile.py:198"
+  },
+  "；這是第一次，量小、之後 2 天輕鬆": {
+    "draft": true,
+    "src": "backend/engine/downhill.py:204"
   },
   "；這次誤差約 ±{se:.1f} 個百分點（回歸標準誤）": {
     "draft": true,
