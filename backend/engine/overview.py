@@ -1224,9 +1224,11 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     goal_d = (goals["targets"].get("climb_per_km") or {}).get("value")
     mountain_goal = not road and (bool(goal_d) or any(e.kind in ("race", "baiyue") for e in status.plan.events
                                                       if e.end >= today))
-    longest28 = max((moving_s(w) for w in workouts_between(ds, today - dt.timedelta(days=28),
+    # the longest foot session of the last LG.LONG_DAYS (SP-66, Frandsen 2025: 30 days; was 28 days
+    # incl. rides — a ride is no reference for a run); the name is kept (specific_phase's "longest28")
+    longest28 = max((moving_s(w) for w in workouts_between(ds, today - dt.timedelta(days=LG.LONG_DAYS),
                                                           today + dt.timedelta(days=1))
-                     if category(w) in ENDURANCE), default=0.0) / 60.0
+                     if category(w) in FOOT), default=0.0) / 60.0
     minutes_total = hours * 60.0
     sessions: list[Session] = []
     # 間歇門檻 (engine/quality_gate.py): status.i_gate's result; the method, this
@@ -1288,10 +1290,15 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         if kind == "specific" and sp.get("active"):
             long_min = SP.long_minutes(sp, longest28)
         elif kind == "specific" and goal_h:
-            long_min = max(90.0, min(goal_h * 0.7 * 60.0, max(longest28, 60.0) * 1.15))
+            long_min = max(90.0, min(goal_h * 0.7 * 60.0, max(longest28, 60.0) * LG.LONG_CAP))
         else:
-            long_min = max(60.0, min(0.30 * minutes_total, max(longest28, 60.0) * 1.15))
+            long_min = max(60.0, min(0.30 * minutes_total, max(longest28, 60.0) * LG.LONG_CAP))
         long_min = min(long_min, 0.5 * minutes_total) if minutes_total >= 120 else long_min
+        # SP-66: ≤ +10 % over the longest of 30 days wins over the 60 / 90-min floors (Frandsen 2025)
+        capped, cut = LG.cap_long(long_min, longest28)
+        if cut:
+            notes.append({"level": "info", "src": "long_cap", "text": LG.cap_note(long_min, longest28)})
+            long_min = capped
         if in_reentry:
             # the longest run before the break × the block's % (6–13 days: ≤ 90 min) — detraining.md §6.2
             fr = max((RE.frac_on(rp, monday + dt.timedelta(days=i)) or 0.0) for i in range(7)) or 1.0

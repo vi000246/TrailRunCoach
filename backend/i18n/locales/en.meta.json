@@ -271,6 +271,10 @@
     "draft": true,
     "src": "backend/engine/quality_gate.py:2145"
   },
+  "Frandsen 2025（BJSM，Garmin-RUNSAFE 世代研究，5,205 位跑者）": {
+    "draft": true,
+    "src": "backend/engine/load_guard.py:110"
+  },
   "Friel 1 小時心率飄移": {
     "draft": true,
     "src": "backend/engine/aet_test.py:104"
@@ -682,6 +686,14 @@
   "{what} {n} 次": {
     "draft": true,
     "src": "backend/engine/racepower/seg_targets.py:88"
+  },
+  "{when}那次跑步 {v:.0f} 分，比前 {d} 天最長一次（{ref:.0f} 分）多 {x:.0%}": {
+    "draft": true,
+    "src": "backend/engine/load_guard.py:429"
+  },
+  "{when}那次跑步 {v:.1f} 努力 km（km＋爬升÷100），比前 {d} 天最長一次（{ref:.1f}）多 {x:.0%}": {
+    "draft": true,
+    "src": "backend/engine/load_guard.py:427"
   },
   "{why}：區間、TSS、賽事計算機都靠 CP": {
     "draft": true,
@@ -1307,6 +1319,10 @@
     "draft": true,
     "src": "backend/demo/export_static.py:243"
   },
+  "單次跑太長：比前 {d} 天最長一次多 {x:.0%}（> {cap:.0%}）": {
+    "draft": true,
+    "src": "backend/engine/status.py:702"
+  },
   "在 AeT 附近跑 1 次 ≥ 60 分鐘，飄移 < 5%": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:1877"
@@ -1798,6 +1814,10 @@
   "技術地形": {
     "draft": true,
     "src": "backend/engine/workout_templates.py:481"
+  },
+  "接下來 1–2 週的長跑不要比這次長；之後每次長跑 ≤ 前 {d} 天最長一次的 {pct:.0%}，有疼痛就先減量": {
+    "draft": true,
+    "src": "backend/engine/status.py:705"
   },
   "推估": {
     "draft": true,
@@ -3458,6 +3478,10 @@
   "長跑日上限不能比平日上限短": {
     "draft": true,
     "src": "backend/engine/plan_prefs.py:292"
+  },
+  "長跑縮短為 {m:.0f} 分：過去 {d} 天最長一次 {l:.0f} 分，單次不超過它的 {pct:.0%}（原本排 {p:.0f} 分；{src}：超過 30 天內最長 10 % 以上，過度使用傷害風險上升）": {
+    "draft": true,
+    "src": "backend/engine/load_guard.py:394"
   },
   "長跑（減量期，≤ {max} 分）": {
     "draft": true,
