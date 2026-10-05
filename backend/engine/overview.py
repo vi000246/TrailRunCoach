@@ -470,6 +470,17 @@ def _week_hours(ds: Dataset, monday: dt.date) -> tuple[float, float]:
             sum(_n(w.metrics.get("tss")) or 0.0 for w in ws))
 
 
+def _normal_weeks(ds: Dataset, status, monday: dt.date, hours4: list) -> list[float]:
+    """The hours of the last 4 normal weeks before `monday` (load_guard.normal_weeks: no 減量期 /
+    race week / post-race 恢復期 / 轉換期, up to STEP_LOOKBACK_WEEKS back; SP-73) — `hours4`
+    (the last 4 weeks) when none of them is skipped or without a plan."""
+    mons = [monday - dt.timedelta(weeks=i) for i in range(LG.STEP_LOOKBACK_WEEKS, 0, -1)]
+    skip = LG.skip_mondays(getattr(status, "plan", None), mons)
+    if not skip & set(mons[-LG.STEP_AVG_WEEKS:]):
+        return list(hours4)
+    return LG.normal_weeks([(m, _week_hours(ds, m)[0]) for m in mons], skip)
+
+
 def _transition_ref(ds: Dataset, status, today: dt.date, monday: dt.date) -> dict:
     """transition_ref for the 轉換期 that holds `today` or comes next (within the planning
     window): its race's pre-race weeks read from the activities when they are all past, else
@@ -957,6 +968,9 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     base4 = statistics.mean(hours4) if hours4 else 0.0
     last_h = hist[-1][1] if hist else 0.0
     ref = max(base4, last_h)
+    # the +10 % cap reads normal weeks only, like the volume-step guardrail (SP-73, load_guard.normal_ref)
+    norm_wk = _normal_weeks(ds, status, monday, hours4)
+    cap_ref = LG.step_base(norm_wk) or ref
     tph = _tss_per_hour(ds, today)
     # 轉換期 (SP-73): the pre-race level of the current / next 轉換期 (projection reads it too)
     tr_ref = _transition_ref(ds, status, today, monday)
@@ -985,10 +999,13 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     if kind in ("base", "specific"):
         need_tss = 7.0 * (ctl0 + ramp_goal / f7)
         need_h = need_tss / r_all
-        cap = max(1.10 * ref, ref + 0.5)
+        cap = max(1.10 * cap_ref, cap_ref + 0.5)
         hours = min(max(need_h, base4), cap)
         why.append(f"CTL {ctl0:.0f} 要每週 +{ramp_goal:.1f}，需要約 {need_tss:.0f} TSS（≈ {need_h:.1f} h）")
-        if need_h > cap:
+        if need_h > cap and cap_ref != ref:
+            why.append(f"但週量上限 = 最近的正常訓練週 {cap_ref:.1f} h（不含減量期／比賽週／賽後恢復期／轉換期）"
+                       f"的 +10%（至少 +0.5 h）→ {cap:.1f} h")
+        elif need_h > cap:
             why.append(f"但週量上限 = 近 4 週 {base4:.1f} h / 上週 {last_h:.1f} h 的 +10%（至少 +0.5 h）→ {cap:.1f} h")
         # B2B (engine/b2b.py): a planned B2B's TSB drop doesn't make this / next week a recovery week
         # (主要訓練項目 = 路跑: no B2B weekend — an ultra / mountain tool, Koop; Uphill Athlete)
@@ -1552,7 +1569,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         # 主要訓練項目 (engine/primary_sport.py): trail | road — projection.project_weeks follows it
         "primary_sport": sport,
         "mp_goal_pace_s": mp_goal,          # the A marathon's goal pace (s/km) for the MP segment; None = threshold
-        "target": {"hours": hours, "tss": tss_target, "tss_per_hour": r_all},
+        "target": {"hours": hours, "tss": tss_target, "tss_per_hour": r_all, "ref_weeks": norm_wk},
         "done": {"hours": done_h, "tss": done_tss, "sessions": len(week_ws),
                  "activities": [activity_row(w, ds) for w in sorted(week_ws, key=lambda w: w.day)]},
         "remaining": {"hours": max(0.0, hours - done_h), "tss": max(0.0, tss_target - done_tss)},

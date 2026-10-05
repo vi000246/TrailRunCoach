@@ -132,19 +132,22 @@ data, else 0 (`load_guard.pmc_start`); the ramp is not checked in the first 28 d
 automatic start or the first 7 after a manual one (推估; `status` passes `ramp_week = None`
 then); the volume step still runs. Rule E's TSB < −30 reads `week_plan`'s `load.tsb_today` from
 the same started PMC (SP-63 Q3), so a new user's startup weeks give no false fatigue trigger. Last week's **running-time** step against
-max(the week before, the 4 weeks before's mean) > 20 % → no interval (Nielsen et al. 2014, JOSPT
+max(the week before, the 4 weeks before's mean) — normal weeks only (SP-73, owner 2026-10-05: a week
+touching a 減量期 / race week / post-race 恢復期 / 轉換期, `load_guard.STEP_SKIP_KINDS`, is left out and
+the most recent normal weeks before it count, up to 26 weeks back; the planner's +10 % cap reads the
+same weeks, overview.spec.md) — > 20 % → no interval (Nielsen et al. 2014, JOSPT
 44:739; Damsted et al. 2019, JOSPT 49:230 — peer-reviewed, they measured running; the 「10 %
 法則」 itself has no evidence); 10–20 % → hold the dose (推估, conservative). Exempt: the week after
 a short unplanned break — 3–5 days without a run (3 推估; ≥ 6 is a re-entry block, `reentry.MIN_BREAK`)
 touching the week before, which pulled the base down (`short_break`,
-`backend/engine/load_guard.py:289`; owner 2026-10-04). Only unplanned days count (owner
+`backend/engine/load_guard.py:322`; owner 2026-10-04). Only unplanned days count (owner
 2026-10-05): days of the user's own 不排課日期 or 休息日 (both blackout kinds, `Status(blackouts=)`,
 default `blackouts.load()`) and the weekdays not ticked as 可練日 in 課表偏好 (`plan_prefs.days`,
 `Status(prefs=)`: a Fri–Sun runner's weekly Mon–Thu gap is their week, not a break) are a chosen
 rest, so a planned gap is still checked and a partly planned one is exempt only when its unplanned
 days alone are ≥ 3 (counted, not contiguous). The status card says so (「前一週非計畫停跑 N 天，另 M
 天是自己排的休息（不排課日期／休息日／沒勾的可練日）…」) and the week gets
-an info note (`guard`'s `step_note` → `week_plan`, `backend/engine/overview.py:914`). TSB −30…−20 → hold
+an info note (`guard`'s `step_note` → `week_plan`, `backend/engine/overview.py:925`). TSB −30…−20 → hold
 (Friel / TrainingPeaks). B2B weekends and the B2B TSB exemption use the block line too.
 
 ## Interval progression (`backend/engine/quality_gate.py`)
@@ -604,3 +607,4 @@ overview has `data-log="none"`. The settings are in 課表偏好 (above).
 | 2026-10-05 | change | SP-79 follow-up | Taper 「短強度 4×3 分」 renamed 「有氧間歇（巡航）4×3 分」 (intensity unchanged); the stored old title maps through `interval_library.renamed` / `plan_store.display_title` |
 | 2026-10-05 | change | SP-63 follow-up | Weekdays not ticked as 可練日 in 課表偏好 count as planned rest for the short-break exemption (like 不排課日期 / 休息日), so a Fri–Sun-only runner's weekly Mon–Thu gap is not exempt from the running-volume step (owner 2026-10-05) |
 | 2026-10-05 | change | SP-73 follow-up | The A race's 恢復期 (7–14 days) is a planned post-race phase like the 轉換期: its days are no running break for the re-entry block or the Zone 3 gate's gap / re-lock (`planning.post_race_days`; the block text says 「不含賽後恢復期／轉換期 M 天」; owner 2026-10-05) |
+| 2026-10-05 | change | SP-73 follow-up | The running-volume step's base (and the planner's +10 % volume cap) skips weeks touching a 減量期 / race week / post-race 恢復期 / 轉換期 and uses the most recent normal weeks, so the second week after a transition isn't blocked (`load_guard.skip_mondays` / `normal_weeks`; owner 2026-10-05) |

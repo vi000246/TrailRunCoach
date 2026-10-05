@@ -586,6 +586,45 @@ def test_status_startup_has_no_guardrail_ramp():
     assert f.value is not None                               # the PMC CTL is still shown
 
 
+def test_volume_step_base_skips_taper_race_recovery_and_transition_weeks():
+    """SP-73 (owner 2026-10-05): the base is the most recent normal weeks — a week touching a
+    減量期 / race week / 恢復期 / 轉換期 is left out — so the second week after a transition isn't
+    measured against the transition."""
+    from backend.engine.planning import Phase
+    today = dt.date(2026, 9, 30)
+    mon = today - dt.timedelta(days=today.weekday())
+    w = lambda i: mon - dt.timedelta(weeks=10 - i)            # week i of the 10 before this one
+    # 4 normal weeks, taper, race, 恢復期, 2 × 轉換期, then the first base week (last week)
+    hours = [5, 5, 5, 5, 3, 1, 1.5, 2.5, 2.5, 4.5]
+    st = _status(_weekly(today, 10, hours), today)
+    v = st.i_volume()
+    assert v.extra["run_base"] == pytest.approx(2.5) and v.level == "bad"          # no plan: as before
+    st = _status(_weekly(today, 10, hours), today)
+    st.plan.phases = [Phase("base", w(0).isoformat(), (w(4) - dt.timedelta(days=1)).isoformat(), auto=False),
+                      Phase("taper", w(4).isoformat(), (w(5) - dt.timedelta(days=2)).isoformat(), auto=False),
+                      Phase("event", (w(5) - dt.timedelta(days=1)).isoformat(), (w(5) - dt.timedelta(days=1)).isoformat(),
+                            auto=False),
+                      Phase("recovery", w(5).isoformat(), (w(7) - dt.timedelta(days=1)).isoformat(), auto=False),
+                      Phase("transition", w(7).isoformat(), (w(9) - dt.timedelta(days=1)).isoformat(), auto=False),
+                      Phase("base", w(9).isoformat(), "2027-06-30", auto=False)]
+    v = st.i_volume()
+    assert v.extra["run_base"] == pytest.approx(5.0) and v.extra["step"] == pytest.approx(-0.1)
+    assert v.level == "good" and "不含減量期／比賽週／賽後恢復期／轉換期的週" in v.why
+    # a week touched by the taper is not normal either: the race on Sunday of week 4 skips weeks 4–8
+    assert LG.skip_mondays(st.plan, [w(i) for i in range(10)]) == {w(i) for i in range(4, 9)}
+    assert LG.normal_weeks([(w(i), h) for i, h in enumerate(hours[:9])], {w(i) for i in range(4, 9)}) == [5, 5, 5, 5]
+    assert LG.normal_ref([(w(0), 4), (w(1), 6), (w(2), 1)], {w(2)}) == pytest.approx(6.0)
+    assert LG.skip_mondays(None, [w(0)]) == set() and LG.normal_ref([], ()) is None
+
+
+def test_projection_cap_reads_the_normal_weeks():
+    from backend.engine import projection as PJ
+    h, _, _ = PJ.week_hours("base", [2, 2, 2, 2], [False] * 4, 50.0, 50.0, 42.0, None)
+    assert h == pytest.approx(2.5)                                    # max(2.2, 2 + 0.5)
+    h, _, why = PJ.week_hours("base", [2, 2, 2, 2], [False] * 4, 50.0, 50.0, 42.0, None, cap_ref=5.0)
+    assert h == pytest.approx(5.5)
+
+
 def test_status_volume_step_is_running_time_against_the_larger_base():
     today = dt.date(2026, 9, 30)
     # 4 normal weeks, a recovery week (65 %), back to normal last week
