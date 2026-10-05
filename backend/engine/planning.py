@@ -63,6 +63,11 @@ KINDS = {"race": "越野賽", "baiyue": "百岳", "road": "路跑賽", "other": 
 PRIORITIES = ("A", "B", "C")
 EVENT_HEAT = ("auto", "hot", "cool")      # Event.heat (heat-acclimation.md §5.4)
 PACK_MAX_KG = 40.0                         # Event.pack_kg: as athlete.set_hike_meta's 0–40 kg check
+CUTOFF_MAX_H = 240.0                       # Event.cutoff_hours: 10 days, past the longest stage race's cutoff
+
+
+class EventError(ValueError):
+    """A bad event field (the message is for the user, translated); a bad date stays a plain ValueError."""
 
 
 def _d(s) -> Optional[dt.date]:
@@ -89,6 +94,11 @@ class Event:
     # the trip pack (kg, day 1 = the heaviest) — loaded-carry-training.md §5.1;
     # None = capacity.PACK_DEFAULT_MULTI / _SINGLE (9 kg), see pack()
     pack_kg: Optional[float] = None
+    # SP-105 (engine/race_feasibility.py): a race's 關門時間 (h); a 百岳's 撤退時間 = hours from the
+    # summit day's start with no summit yet → turn back. None = not set
+    cutoff_hours: Optional[float] = None
+    # 百岳: km of the summit along the whole trip; None = the GPX's highest point
+    summit_km: Optional[float] = None
 
     @property
     def pack(self) -> float:
@@ -287,7 +297,14 @@ class Plan:
         if data.get("pack_kg") is not None:
             data["pack_kg"] = float(data["pack_kg"])
             if not 0 <= data["pack_kg"] <= PACK_MAX_KG:
-                raise ValueError(_("行程背包要在 0–{max:g} kg", max=PACK_MAX_KG))
+                raise EventError(_("行程背包要在 0–{max:g} kg", max=PACK_MAX_KG))
+        for k, hi in (("cutoff_hours", CUTOFF_MAX_H), ("summit_km", None)):
+            if data.get(k) in ("",):
+                data[k] = None
+            if data.get(k) is not None:
+                data[k] = float(data[k])
+                if data[k] <= 0 or (hi is not None and data[k] > hi):
+                    raise EventError(_("關門／撤退時間要在 0–{max:g} 小時", max=hi) if hi else _("山頂公里數要大於 0"))
         _d(data["date"])  # validate
         eid = data.get("id") or uuid.uuid4().hex[:8]
         ev = Event(**{**data, "id": eid})
