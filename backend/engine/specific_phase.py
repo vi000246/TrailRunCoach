@@ -9,7 +9,9 @@
    out, Koop: longest run 20–80 % of the race distance, CTS's biggest block 4–6 weeks
    out — back-to-back-and-long-day.md §2.2). The existing guardrails still cap it:
    ≤ +15 % over the longest of the last 4 weeks, the week's volume, recovery weeks
-   (no long day), re-entry. The course constant is linear (1.8 h + 0.3 km + 10 climb
+   (no long day), re-entry. A trail long day stops at TRAIL_LONG_MAX_MIN (SP-106): past ~6 h
+   coaches stop the long run and cover the rest with B2B and weekly volume (iRunFar 5–6 h for
+   100 mi; Koop: no magic long run — race-feasibility.md §1). The course constant is linear (1.8 h + 0.3 km + 10 climb
    km + 0.6 descent km), so N % of the race day = N % of its time, km, climb and
    descent at the athlete's own speeds (the race calculator's predicted day): the
    session says the minutes and the route that gives that constant.
@@ -38,6 +40,8 @@ from __future__ import annotations
 import datetime as dt
 from typing import Callable, Optional
 
+from backend.i18n import _
+
 WEEKS = (3, 10)                     # 專項期 weeks before the race (planning: 8-week specific + 14-day taper)
 FRAC = {10: 0.50, 9: 0.55, 8: 0.60, 7: 0.70, 6: 0.85, 5: 0.70, 4: 0.90, 3: 0.70}   # 推估
 SIM_WEEKS = (4, 3)                  # the race simulation (推估 inside Koop's 「not the last 2–3 weeks」)
@@ -58,6 +62,7 @@ FUEL_MIN_H = 4.0                    # Koop: a fuelling long run is ≥ 4 h (b2b.
 ROAD_FRAC = {10: 0.55, 9: 0.60, 8: 0.65, 7: 0.70, 6: 0.75, 5: 0.70, 4: 0.80, 3: 0.65}
 ROAD_LONG_MAX_KM = 35.0
 ROAD_LONG_MAX_MIN = 180.0
+TRAIL_LONG_MAX_MIN = 360.0         # SP-106 推估: iRunFar's 5–6 h for 100 mi, the upper end; past it B2B (race-feasibility.md §1)
 ROAD_EASY_SLOW = 1.15
 
 SRC = ("單日目標＝コース定數（山本正嘉）；進度：江晏慶「抓比賽距離爬升的七成」（賽前約 1.5 個月）、"
@@ -291,7 +296,7 @@ def long_minutes(info: dict, longest: float) -> Optional[float]:
     longest of the last 4 weeks); never below min(90 min, the aim)."""
     if not info or not info.get("active"):
         return None
-    want = info["frac"] * info["race"]["day"]["hours"] * 60.0
+    want = trail_aim(info)[0]
     if is_road(info):
         # 路跑: frac × the race distance (≤ 35 km) at long-run pace, ≤ 3 h
         p = road_pace(info["race"])
@@ -300,6 +305,13 @@ def long_minutes(info: dict, longest: float) -> Optional[float]:
         want = min(min(info["frac"] * info["race"]["day"]["km"], ROAD_LONG_MAX_KM) * p, ROAD_LONG_MAX_MIN)
     cap = max(float(longest or 0.0), 60.0) * STEP
     return max(min(FLOOR_MIN, want), min(want, cap))
+
+
+def trail_aim(info: dict) -> tuple[float, bool]:
+    """(this week's trail long-day aim in minutes, whether TRAIL_LONG_MAX_MIN cut it): frac × the
+    race day's time, ≤ the cap (SP-106)."""
+    want = info["frac"] * info["race"]["day"]["hours"] * 60.0
+    return min(want, TRAIL_LONG_MAX_MIN), want > TRAIL_LONG_MAX_MIN
 
 
 def route(race: dict, minutes: float) -> dict:
@@ -312,7 +324,7 @@ def route(race: dict, minutes: float) -> dict:
             "descent_per_km": day["descent_m"] / day["km"] if day["km"] else 0.0}
 
 
-def route_text(race: dict, minutes: float, capped: bool = False) -> str:
+def route_text(race: dict, minutes: float, capped: bool = False, at_max: bool = False) -> str:
     r = route(race, minutes)
     s = (f"這次目標定數約 {r['cc']:.0f}（單日目標的 {r['f'] * 100:.0f}%）：約 {r['km']:.0f} km、"
          f"↑{r['climb_m']:.0f} ↓{r['descent_m']:.0f} m 的路線")
@@ -320,6 +332,8 @@ def route_text(race: dict, minutes: float, capped: bool = False) -> str:
         s += f"（每公里 ↑{r['climb_per_km']:.0f} ↓{r['descent_per_km']:.0f} m，像{race['name']}）"
     if capped:
         s += "；受「每次最多 +15%」限制"
+    elif at_max:
+        s += _("；長天上限 {h:g} 小時：比賽更長的部分交給 B2B 和週量", h=TRAIL_LONG_MAX_MIN / 60)
     return s
 
 
@@ -348,10 +362,10 @@ def decorate(ss: list[dict], info: Optional[dict]) -> None:
         s["source"] = ((s.get("source") or "") + "；" + SRC_ROAD).lstrip("；")
         info["long"] = {"minutes": int(m), "pct": round(pct), "km": round(km, 1)}
         return
-    want = info["frac"] * race["day"]["hours"] * 60.0
+    want, cut = trail_aim(info)
     r = route(race, m)
     parts = [p for p in (s.get("detail") or "").split("；") if p and not p.startswith(_OLD_TERRAIN)]
-    s["detail"] = "；".join([route_text(race, m, want > m + 5)] + parts)
+    s["detail"] = "；".join([route_text(race, m, want > m + 5, cut and m >= want - 5)] + parts)
     s["distance_km"] = round(r["km"], 1)
     s["climb_m"] = round(r["climb_m"])
     s["source"] = ((s.get("source") or "") + "；" + SRC).lstrip("；")
@@ -572,6 +586,8 @@ def sim_suggestion(info: Optional[dict], monday: dt.date, longest: float, aet: O
                          f"路跑不跑全程，長度是專項期最長的那一次，一樣守「每次最多 +15%」。補給：{fuel_text(race)}。"
                          "選一天按「排入」才會進課表；不排也不影響其他課。時間點與長度為推估。"),
                 "src": SRC_SIM, "sessions": sim_sessions(race, [d1], aet, rate, "road", aet_measured)}
+    long_day = day_min > TRAIL_LONG_MAX_MIN
+    d1 = min(d1, _r5(TRAIL_LONG_MAX_MIN))       # SP-106: the simulation stops at the long-day cap too
     multi = int(race.get("days") or 1) > 1
     from backend.engine.b2b import DAY2_RATIO, MIN_DAY2
     mins = [d1] + ([max(MIN_DAY2, _r5(DAY2_RATIO * d1))] if multi else [])
@@ -584,5 +600,7 @@ def sim_suggestion(info: Optional[dict], monday: dt.date, longest: float, aet: O
             "help": ("Koop、Uphill Athlete：賽前在像比賽的地形演練裝備、補給和配速，問題在比賽前就發現。"
                      f"這天換掉那週的長天；長度一樣守「每次最多 +15%」。補給：{fuel_text(race)}。"
                      + ("多日行程做連續兩天，第 2 天約第 1 天的 2/3（CTS 30:20）。" if multi else "")
+                     + (_("比賽單日超過 {h:g} 小時：模擬只到長天上限，更長的部分交給 B2B。",
+                          h=TRAIL_LONG_MAX_MIN / 60) if long_day else "")
                      + "選一天按「排入」才會進課表；不排也不影響其他課。時間點與目標比例為推估。"),
             "src": SRC_SIM, "sessions": sim_sessions(race, mins, aet, rate, aet_measured=aet_measured)}
