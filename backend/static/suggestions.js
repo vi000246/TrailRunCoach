@@ -26,8 +26,10 @@
   const ls = { get() { try { const v = localStorage.getItem(LS); return v == null ? narrow() : v === "1"; } catch (_) { return narrow(); } },
     set(v) { try { localStorage.setItem(LS, v ? "1" : "0"); } catch (_) {} } };
   const ICON = `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.6 10.8c.7.6 1.1 1.3 1.1 2.2h5c0-.9.4-1.6 1.1-2.2A6 6 0 0 0 12 3z"/></svg>`;
-  const KIND = { b2b: "B2B", test: "測試", zone_test: "重測", zone_update: "區間",
-    injury_rest: "傷病", injury_hold: "傷病", injury_pattern: "傷病" };
+  // i18n: common.sugg.* (static/i18n/i18n.js; the common catalog is inlined on every page)
+  const T = (k, p) => (window.I18N ? window.I18N.t("common.sugg." + k, p) : k);
+  const KIND = { b2b: "B2B", test: T("kind.test"), zone_test: T("kind.zone_test"), zone_update: T("kind.zone_update"),
+    injury_rest: T("kind.injury"), injury_hold: T("kind.injury"), injury_pattern: T("kind.injury") };
 
   const CSS = `
   .sugbox { --sg-acc: var(--accent, #2563eb); position: fixed; right: 16px; bottom: 16px; z-index: 60; width: 340px;
@@ -84,7 +86,7 @@
   let rows = [];
   const box = document.createElement("aside");
   box.className = "sugbox"; box.hidden = true;
-  box.setAttribute("aria-label", "建議");
+  box.setAttribute("aria-label", T("title"));
   const mount = () => {
     const st = document.createElement("style");
     st.id = "suggestions-css"; st.textContent = CSS;
@@ -117,14 +119,14 @@
         ${r.help ? `<button type="button" class="sg-ico" data-act="help" aria-expanded="false" aria-label="說明" title="說明">?</button>` : ""}
         <button type="button" class="sg-ico" data-act="dismiss" aria-label="關掉這個建議" title="關掉（不再顯示）">✕</button>
       </div>
-      <div class="sg-title"><span class="sg-tag">${esc(KIND[r.type] || "建議")}</span>${esc(r.title)}</div>
+      <div class="sg-title"><span class="sg-tag">${esc(KIND[r.type] || T("title"))}</span>${esc(r.title)}</div>
       ${r.reason ? `<div class="sg-reason">${esc(r.reason)}</div>` : ""}
       ${r.help ? `<div class="sg-help" hidden>${esc(r.help)}</div>` : ""}
-      ${(r.links || []).length ? `<div class="sg-act">${r.wait_cool ? `<span class="sg-none" style="flex-basis:100%">等天氣轉涼再測比較準（還是可以先排）</span>` : ""}
+      ${(r.links || []).length ? `<div class="sg-act">${r.wait_cool ? `<span class="sg-none" style="flex-basis:100%">${esc(T("wait_cool"))}</span>` : ""}
         ${r.links.map((l) => `<a class="sg-btn" href="${esc(l.href)}">${esc(l.label)}</a>`).join("")}</div>` : ""}
       ${r.pick ? `<div class="sg-act">${picker(r)}
-        ${canPick ? `<button type="button" class="sg-btn pri" data-act="accept">${esc(r.accept_label || "排入")}</button>` : ""}
-        <button type="button" class="sg-btn" data-act="decline">不要</button></div>` : ""}
+        ${canPick ? `<button type="button" class="sg-btn pri" data-act="accept">${esc(r.accept_label || T("accept"))}</button>` : ""}
+        <button type="button" class="sg-btn" data-act="decline">${esc(T("decline"))}</button></div>` : ""}
     </div>`;
   }
 
@@ -133,7 +135,7 @@
     if (!rows.length) { box.innerHTML = ""; return; }
     box.classList.toggle("collapsed", ls.get());
     box.innerHTML = `<div class="sg-card"><button type="button" class="sg-head" data-act="toggle" aria-expanded="${!ls.get()}">
-        ${ICON}<span>建議</span><span class="sg-n" aria-label="${rows.length} 個建議">${rows.length}</span>
+        ${ICON}<span>${esc(T("title"))}</span><span class="sg-n" aria-label="${rows.length} 個建議">${rows.length}</span>
         <svg class="sg-chev" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg>
       </button><div class="sg-list">${rows.map(item).join("")}</div></div>`;
   }
