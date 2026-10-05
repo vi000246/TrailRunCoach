@@ -113,7 +113,9 @@ def test_projection_ramp_31_and_cap():
 def test_projection_sessions_placed_like_week_plan():
     weeks = P.project_weeks(cur_plan(), PHASES, date(2026, 10, 25))
     assert weeks[0]["mode"] == "recovery_week"                      # history already built 3 weeks
-    assert not [s for s in weeks[0]["sessions"] if s["kind"] == "long"]
+    # SP-97: the recovery week keeps a shorter long run (65 % of the usual 120′)
+    (lr,) = [s for s in weeks[0]["sessions"] if s["kind"] == "long"]
+    assert lr["minutes"] == 80 and lr["detail"].startswith("恢復週")
     # base recovery week: the short Palladino fartlek instead of intervals (engine/quality_gate.py)
     assert [s["title"] for s in weeks[0]["sessions"] if s["kind"] == "quality"] == ["恢復週 fartlek 4×1 分"]
     w = weeks[1]
@@ -773,10 +775,21 @@ def test_projection_gate_per_week_cp_test_and_drift_gate_do_not_leak():
     open5 = {"levels": good, "state": "none", "mode": "auto", "resolved": "none", "guard": {},
              "dose": {"step": 0, "done": 0, "faded": False}, "z5": {"open": True, "state": "confirmed"},
              "ratio": {"z3": 1, "z5": 1, "why": "A 賽 10 km 路跑"}}
-    q5, base5, spec5 = split(P.project_weeks(_test_week(open5), PHASES, date(2027, 3, 1)))
+    w5 = P.project_weeks(_test_week(open5), PHASES, date(2027, 3, 1))
+    q5, base5, spec5 = split(w5)
     assert [q5[d][0] for d in base5][:3] == ["有氧間歇（巡航）3×6 分", "有氧間歇（巡航）3×8 分", "有氧間歇（巡航）2×12 分"]
-    assert len(spec5) == 2 and sorted(q5[d][0].startswith("有氧間歇") for d in spec5) == [False, True]
-    assert any(q5[d] == ["VO2max 間歇 5×4 分上坡"] for d in spec5)
+    # SP-97: 賽前第 3 週 (11/16) is the 專項期's recovery week (the fartlek); 11/9 is Zone 3's turn …
+    assert spec5 == ["2026-11-09"] and q5["2026-11-09"][0].startswith("有氧間歇")
+    rec = next(w for w in w5 if w["start"] == "2026-11-16")
+    assert rec["mode"] == "recovery_week" and [s["title"] for s in rec["sessions"] if s["kind"] == "quality"] \
+        == ["恢復週 fartlek 4×1 分"]
+    # … and with a longer 專項期, Zone 5's turn is the trail 5×4′ hill set
+    longer = [{"kind": "base", "start": "2026-08-01", "end": "2026-11-01"},
+              {"kind": "specific", "start": "2026-11-02", "end": "2026-11-29"},
+              {"kind": "taper", "start": "2026-11-30", "end": "2026-12-13"},
+              {"kind": "event", "start": "2026-12-14", "end": "2026-12-14"}]
+    q5, _b, spec5 = split(P.project_weeks(_test_week(open5), longer, date(2027, 3, 1)))
+    assert spec5 and any(q5[d] == ["VO2max 間歇 5×4 分上坡"] for d in spec5)
     # a locked method (data there, criterion not met): Zone 3 still goes on, never Zone 5
     locked = {"state": "locked", "mode": "ua_gap", "resolved": "ua_gap", "verdict": "差距 16%", "levels": good,
               "guard": {}, "dose": {"step": 0, "done": 0, "faded": False}, "z5": {"open": False}}

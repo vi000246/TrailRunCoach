@@ -210,7 +210,8 @@ def test_api_race_sim_accept_replaces_the_weeks_long_day(monkeypatch):
 def test_week_plan_and_projection_follow_the_target(store):
     """A built athlete (Sat 150′ long days) 6 weeks before an A trail race with a GPX: the
     long day is the +15 % step towards the target with its share and route; the
-    projected 專項期 weeks keep rising (+15 % each) and get the race-climb session."""
+    projected 專項期 build weeks keep rising (≤ +15 % each); 賽前第 5、3 週 are the recovery
+    weeks (SP-97) with a shorter long day."""
     from backend.engine import overview as O
     from backend.engine import plan_prefs as PP
     from backend.engine import projection as P
@@ -231,11 +232,14 @@ def test_week_plan_and_projection_follow_the_target(store):
     assert long_s["distance_km"] and long_s["climb_m"]
     assert wp["race_sim_suggestion"] is None                                   # 賽前第 6 週
     weeks = P.project_weeks(wp, _phases(plan, TODAY), date(2026, 11, 8))
-    longs = [next((x for x in w["sessions"] if x["id"] == "long"), None) for w in weeks if w["mode"] == "specific"]
-    assert len(longs) >= 2 and all(x is not None and x["detail"].startswith("這次目標定數約") for x in longs)
-    mins = [170] + [x["minutes"] for x in longs]
-    assert all(b > a and b <= a * 1.15 + 5 for a, b in zip(mins, mins[1:]))
-    assert any(x["id"] == "climb" for w in weeks for x in w["sessions"])
+    spec = [w for w in weeks if w["phase"] == "specific"]
+    assert [w["mode"] for w in spec] == ["recovery_week", "specific", "recovery_week"]     # 賽前第 5、4、3 週
+    longs = [next((x for x in w["sessions"] if x["id"] == "long"), None) for w in spec]
+    assert all(x is not None and x["detail"].startswith("這次目標定數約") for x in longs)
+    assert 150 <= longs[1]["minutes"] <= 170 * 1.15 + 5 and "恢復週" not in longs[1]["detail"]
+    for w, x in zip(spec[::2], longs[::2]):
+        assert x["minutes"] <= 0.65 * 170 + 5 and "恢復週" in x["detail"] and "+15%" not in x["detail"]
+        assert w["specific"]["recovery"] and not any(s["id"] == "climb" for s in w["sessions"])
 
 
 def test_trail_long_day_stops_at_the_cap_for_long_races(store):

@@ -157,8 +157,13 @@ B2B weekends, the race calculator (for the 專項期 target) and the 主要訓�
    mean (hold).
 3. Guards: TSB < −30 → recovery week (60 % of the 4-week mean); TSB < −20 → hold (TSB from the
    started PMC above — SP-63 Q3: a new user's first weeks no longer read a CTL still filling up
-   from 0 as a false TSB < −30, `backend/engine/overview.py:1018`); three
-   building weeks in a row → recovery week (65 % of their mean, 3:1 cycle). An accepted B2B's
+   from 0 as a false TSB < −30, `backend/engine/overview.py:1018`); base: three
+   building weeks in a row → recovery week (65 % of their mean, 3:1 cycle). 專項期 (SP-97): no 3:1
+   from the history — 賽前第 5、3 週 are the recovery weeks (`specific_phase.EASY_WEEKS`, FRAC's low
+   points; not right after another light week), so one never takes the week 4 long day. Both:
+   after 6 weeks without a recovery week the next is one (Koop; a 專項期 week waits for the
+   countdown week right after it; `recovery_reason`, `weeks_since_recovery` — a week ≤ 80 % of the
+   3 before it, or touching a 減量期 / race / 恢復期 / 轉換期, counts). An accepted B2B's
    own TSB drop is exempt (`B2B.tsb_exempt`, `backend/engine/overview.py:919`).
 4. Taper: 50 % of the 6-week mean (40 % in the last 7 days to the A event); event week 30 %;
    recovery 50 %. **Transition** (SP-73, `backend/engine/overview.py:1036`): 50 % of the race's
@@ -194,8 +199,10 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
   3. base → the **間歇門檻**'s dose step as an interval-library variant fitted to the weekday
      cap (`_gate_session`, `backend/engine/overview.py:573`, `backend/engine/overview.py:1152`;
      see below).
-  - Base **recovery week** (3:1): the gate's 「恢復週 fartlek 4×1 分」 instead of intervals
-    (Palladino, `backend/engine/overview.py:1145`).
+  - **Recovery week** (base and 專項期, SP-97): a shorter long run (`recovery_long_minutes`: 65 %
+    of the usual, ≥ 45 min; 專項期 ≤ FRAC's share; easy, no MP segment) and the gate's
+    「恢復週 fartlek 4×1 分」 instead of intervals (Palladino; the Norwegian coaches keep the
+    sessions and intensity, shorten each). The projection doesn't lower the next long-run base.
 - **Tests are suggested, never planned** (2026-10-01/02): a due CP test (`testing` bad / watch,
   `extra.cp_due`, A event > 10 days away, not inside a re-entry block) and a due AeT test
   (`aet_test.due`, for a reason only) become `test_suggestions` (`backend/engine/overview.py:1588`)

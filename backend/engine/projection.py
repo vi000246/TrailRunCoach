@@ -91,19 +91,23 @@ def _next_event_start(phases: list, day: dt.date) -> Optional[dt.date]:
 
 def week_hours(kind: str, hist: list[float], build: list[bool], ctl0: float, r: float,
                cc: float, days_to_a: Optional[int], tr_ref: Optional[float] = None,
-               cap_ref: Optional[float] = None) -> tuple[float, str, list[str]]:
+               cap_ref: Optional[float] = None, recovery: Optional[str] = None) -> tuple[float, str, list[str]]:
     """(hours, mode, why) for one projected week; `hist` = weekly hours, oldest first.
     `tr_ref`: a 轉換期 week's pre-race level (overview.transition_ref; None = the old 65 % rule).
     `cap_ref`: the +10 % cap's reference on normal weeks (load_guard.step_base of the normal
-    weeks, SP-73); None = max(4-week mean, last week) of `hist`."""
+    weeks, SP-73); None = max(4-week mean, last week) of `hist`.
+    `recovery`: why the week is a recovery week by the calendar (overview.recovery_reason, SP-97: the
+    專項期 countdown, the 6-week cap); the 3:1 after three build weeks is the base phase's only."""
     base4 = statistics.mean(hist[-4:]) if hist else 0.0
     last = hist[-1] if hist else 0.0
     ref = cap_ref if cap_ref else max(base4, last)
     why: list[str] = []
     if kind in ("base", "specific"):
-        if len(build) >= 3 and all(build[-3:]):
+        if kind == "base" and len(build) >= 3 and all(build[-3:]):
+            recovery = "連續 3 週加量後的恢復週（前 3 週平均的 65%）"
+        if recovery:
             h = 0.65 * statistics.mean(hist[-3:])
-            return h, "recovery_week", ["連續 3 週加量後的恢復週（前 3 週平均的 65%）"]
+            return h, "recovery_week", [recovery]
         f7 = 1.0 - (1.0 - 1.0 / cc) ** 7
         goal = LG.ramp_goal(kind, ctl0)
         need_h = 7.0 * (ctl0 + goal / f7) / max(r, 1.0)
@@ -161,9 +165,14 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
         ss.append({"target": "", "detail": "", "source": "", "tss": 0.0, "day": None,
                    "done": False, "done_by": None, **kw})
 
+    spec_long = long_min
     if long_min is None:
         long_min = max(60.0, min(0.30 * total, max(longest, 60.0) * 1.15))
     long_min = min(long_min, 0.5 * total) if total >= 120 else long_min
+    rec_wk = kind in ("base", "specific") and mode == "recovery_week"
+    if rec_wk:
+        # SP-97: the recovery week keeps a shorter long run (overview.recovery_long_minutes, as week_plan)
+        long_min = O.recovery_long_minutes(longest, total, spec_long)
     info = None
     if b2b is not None:
         info = b2b["info"] = B2B.projected(kind, mode, monday, b2b.get("event"), b2b.get("prev_mode"),
@@ -171,20 +180,25 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
                                            accepted=b2b.get("accepted"))
         if info.get("post"):
             allow_quality = False                   # the easy days after a B2B (engine/b2b.py)
-    if kind in ("base", "specific") and mode != "recovery_week":
-        if xu_test and kind == "base":
+    if kind in ("base", "specific"):
+        if xu_test and kind == "base" and not rec_wk:
             add(**_bq(xu_test))                     # 徐國峰's 90-min test = this week's LSD
         elif road:
-            add(**O.road_long_session(long_min, kind, aet, tph, goal_pace, aet_measured), target=tgt.get("long", ""))
+            add(**O.road_long_session(long_min, "base" if rec_wk else kind, aet, tph, goal_pace, aet_measured),
+                target=tgt.get("long", ""))
         else:
             add(id="long", kind="long", title="LSD" + ("（山路）" if mountain else ""),
                 minutes=int(round(long_min / 5) * 5), target=tgt.get("long", ""),
                 detail=("有山路就走山路，陡坡用走的" if mountain else "平路或緩坡")
                 + f"；全程心率壓在{below(cap_txt)}，爬坡可以走",
                 source=O.SRC_KOOP if kind == "specific" else O.SRC_UA, tss=long_min / 60.0 * tph)
-            if info is not None and info.get("due"):
+            if info is not None and info.get("due") and not rec_wk:
                 ss.extend(B2B.followers(ss[-1], info))     # out of the easy minutes (Koop)
-        if allow_quality and kind == "specific" and bqs:
+        if rec_wk:
+            O.recovery_long(next(s for s in ss if s["id"] == "long"))
+            if allow_quality and bqs and bqs[0].get("kind", "quality") == "quality":
+                add(**_bq(bqs[0]))                 # the recovery week's short fartlek (Palladino; SP-97: 專項期 too)
+        elif allow_quality and kind == "specific" and bqs:
             for b in bqs:                           # the two-track pick (SP-31; overview.quality_sessions)
                 add(**_bq(b))
         elif allow_quality and kind == "specific" and road:
@@ -199,9 +213,6 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
         elif allow_quality:
             add(id="quality", kind="quality", title="有氧間歇（巡航）3×10 分", minutes=60, target=tgt.get("threshold", ""),
                 detail="休 2–3 分鐘；暖身 15 分、緩和 10 分", source=O.SRC_PALLADINO + "（3B）", tss=70.0)
-    elif kind == "base" and mode == "recovery_week" and allow_quality and bqs \
-            and bqs[0].get("kind", "quality") == "quality":
-        add(**_bq(bqs[0]))                         # 3:1 recovery week: the short fartlek (Palladino)
     elif kind == "taper" and bqs:
         for b in bqs:                               # 減量期's two-track pick (overview.quality_sessions)
             add(**_bq(b))
@@ -476,6 +487,14 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
     build = [False] * (len(hist) - 1) + [cur.get("mode") in ("base", "specific")]
     for i in range(1, len(hist) - 1):
         build[i] = hist[i] >= 0.95 * hist[i - 1] and hist[i] > 0.5
+    # SP-97: the weeks touching a 減量期 / race / 恢復期 / 轉換期 (a recovery-like week for the 6-week cap)
+    def _skip_h(h: dict) -> bool:
+        try:
+            return _skip_week(phases, _d(h["start"]))
+        except (KeyError, TypeError, ValueError):
+            return False
+    skips = [_skip_h(h) for h in cur.get("history") or []] \
+        + [_skip_week(phases, monday) or cur.get("mode") == "recovery_week"]
     ctl = float((cur.get("load") or {}).get("ctl_end") or 0.0)
     atl = float((cur.get("load") or {}).get("atl_end") or 0.0)
     out = []
@@ -511,8 +530,9 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
             ref = O.transition_ref(phases, week, lambda m: hours_at.get(m.isoformat()))
             tr_h = cur_tr.get("hours") if cur_tr.get("hours") and cur_tr.get("mondays") == ref["mondays"] \
                 else ref["hours"]
+        rec = O.recovery_reason(kind, week, O.next_a_start(phases, week), O.weeks_since_recovery(hist, skips))
         hours, mode, why = week_hours(kind, hist, build, ctl, tph, ctlconstant, days_to, tr_h,
-                                      LG.step_base(norm) if norm else None)
+                                      LG.step_base(norm) if norm else None, rec)
         notes: list = []
         if PR is not None and PR.weekly_hours is not None and hours > PR.weekly_hours:
             hours = PR.weekly_hours
@@ -689,7 +709,8 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
                     **({"blackout_days": [d.isoformat() for d in lost]} if lost else {})})
         long_n = next((s for s in ss if s["id"] == "long"), None) if kind != "taper" else None
         recent_long.append(float(long_n["minutes"]) if long_n else 0.0)
-        if long_n:
+        if long_n and mode != "recovery_week":
+            # (SP-97: a recovery week's shorter long run doesn't lower the next week's base)
             # a B2B day 1 shortened to fit the pair (engine/b2b.py) doesn't lower the long-run base
             longest = max(longest, float(long_n["minutes"])) if b2b_info.get("due") else \
                 float(long_n["minutes"])
@@ -702,6 +723,7 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
         h_hist = full_h if lost and mode != "reentry" else hours
         build.append(mode in ("base", "specific") and h_hist >= 0.95 * hist[-1] and h_hist > 0.5)
         hist.append(h_hist)
+        skips.append(_skip_week(phases, week) or mode == "recovery_week")
         if norm is not None and not _skip_week(phases, week):
             norm.append(h_hist)
         hours_at[week.isoformat()] = h_hist
