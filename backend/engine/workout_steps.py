@@ -23,7 +23,12 @@ kind      warm | work | rest | cool | other, and the container `repeat` (times 1
           express: such a block is pushed unrolled, one lap per step)
 dur       time (s) | distance (m) | open (ends with the lap button) | load (TSS, SP-38: main-set
           work steps only; COROS gets its TL end condition — engine/coros_tl.py, 推估 — and every
-          other provider an estimated time = TSS ÷ (IF² × 100) h at the step's intensity)
+          other provider an estimated time = TSS ÷ (IF² × 100) h at the step's intensity);
+          entered by feel (SP-57): {"type": "load", "value": TSS, "rpe": easy | moderate | hard |
+          very_hard | max, "min": minutes} — normalize sets `value` from the RPE level × minutes
+          (engine/rpe_load.py, Foster session RPE × the athlete's factor, 推估); the step is then
+          timed by its minutes and converted at the IF those imply. Planning only: the load the
+          PMC uses stays the watch's record
 target    auto — what 「目標用：自動／心率／功率」 (engine/target_policy.py) gives the step:
              intent easy   HR ≤ AeT (with plo/phi: the power band when the session runs by power)
              intent band   lo/hi × CP on power; on HR the class's % LTHR (or the text's bpm)
@@ -174,9 +179,15 @@ class Ctx:
     # from engine/coros_tl's closed-loop record): sent_tl keeps it while a refit moves it < TL_RESEND_MIN
     sent_tl: Optional[dict] = None
 
+    rpe: Optional[object] = None            # engine/rpe_load.Model; None = the stored one (SP-57)
+
     def tl_model(self):
         from backend.engine import coros_tl
         return self.tl if self.tl is not None else coros_tl.current()
+
+    def rpe_model(self):
+        from backend.engine import rpe_load
+        return self.rpe if self.rpe is not None else rpe_load.current()
 
     @classmethod
     def of(cls, th: Optional[dict], basis: Optional[str] = None, hr_cap: bool = False,
@@ -613,9 +624,10 @@ def _norm_target(t, errs: list) -> dict:
     return out
 
 
-def normalize(d) -> dict:
+def normalize(d, rpe_model=None) -> dict:
     """The stored form of an editor structure (ids filled in, numbers checked), or
-    StepsError. Shape only — the training rules are `issues()`."""
+    StepsError. Shape only — the training rules are `issues()`. `rpe_model`: the
+    engine/rpe_load.Model for 「負荷」 steps entered by RPE (None = the stored one)."""
     if isinstance(d, str):
         import json
         try:
@@ -669,8 +681,11 @@ def normalize(d) -> dict:
         elif dt_ == "load":
             if k not in LOAD_KINDS:
                 errs.append(_("「{x}」只能用在主課", x=_(LOAD_LABEL)))
-            v = _f(dur.get("value"), _("負荷（TSS）"), errs, *LOAD_RANGE)
-            dur = {"type": "load", "value": round(v, 1)} if v else {"type": "open"}
+            if dur.get("rpe") is not None:
+                dur = _norm_rpe_load(dur, errs, rpe_model)
+            else:
+                v = _f(dur.get("value"), _("負荷（TSS）"), errs, *LOAD_RANGE)
+                dur = {"type": "load", "value": round(v, 1)} if v else {"type": "open"}
         elif dt_ == "time":
             v = _f(dur.get("value"), _("時間"), errs, 5, 6 * 3600)
             dur = {"type": "time", "value": int(round(v))} if v else {"type": "open"}
@@ -704,6 +719,24 @@ def normalize(d) -> dict:
     if route:
         out["route"] = route
     return out
+
+
+def _norm_rpe_load(dur: dict, errs: list, model=None) -> dict:
+    """A 「負荷」 step entered by feel (SP-57): {"type": "load", "value": TSS, "rpe", "min"}, the
+    TSS = the RPE level × minutes by the athlete's factor (engine/rpe_load.py, 推估)."""
+    from backend.engine import rpe_load as RL
+    lvl = dur.get("rpe")
+    if lvl not in RL.CR10:
+        errs.append(f"RPE 要是 {'／'.join(_(l) for _k, l, _v in RL.LEVELS)}")
+        return {"type": "open"}
+    m = _f(dur.get("min"), "負荷（RPE）的分鐘", errs, *RL.MIN_RANGE)
+    if not m:
+        return {"type": "open"}
+    tss = (model or RL.current()).tss(lvl, m)
+    if tss is None or tss > LOAD_RANGE[1]:
+        errs.append(f"負荷（RPE）換算超過 {LOAD_RANGE[1]} TSS：分鐘數太多")
+        return {"type": "open"}
+    return {"type": "load", "value": max(float(LOAD_RANGE[0]), tss), "rpe": lvl, "min": int(round(m))}
 
 
 def _norm_route(r) -> Optional[dict]:
@@ -750,6 +783,9 @@ def fmt_dur(d: dict) -> str:
         m = d["value"]
         return f"{m / 1000:g} km" if m >= 1000 else f"{m} m"
     if d.get("type") == "load":
+        if d.get("rpe"):
+            from backend.engine.rpe_load import LABEL
+            return f"{_(LOAD_LABEL)} {d['value']:g} TSS（{_(LABEL.get(d['rpe'], d['rpe']))} {d.get('min')} 分）"
         return f"{_(LOAD_LABEL)} {d['value']:g} TSS"
     return _(OPEN_LABEL)
 
@@ -1018,6 +1054,8 @@ def _secs(st: dict, r: Resolved, c: Ctx) -> tuple[float, bool]:
     if d["type"] == "time":
         return float(d["value"]), False
     if d["type"] == "load":
+        if d.get("rpe") and d.get("min"):
+            return float(d["min"]) * 60.0, True          # entered by feel: its minutes (SP-57)
         f = load_if(st, r)
         return d["value"] * 3600.0 / (f * f * 100.0), True
     if d["type"] == "distance":
@@ -1039,8 +1077,17 @@ def _secs(st: dict, r: Resolved, c: Ctx) -> tuple[float, bool]:
     return 0.0, False
 
 
+RPE_IF_RANGE = (0.4, 1.3)        # 推估: the IF an RPE-entered load step may imply
+
+
 def load_if(st: dict, r: Resolved) -> float:
-    """The IF a 「負荷」 step is timed and converted at: its target's ≈ % CP, else the kind's."""
+    """The IF a 「負荷」 step is timed and converted at: its target's ≈ % CP, else the kind's.
+    Entered by feel (SP-57): the IF its TSS and minutes imply, √(TSS ÷ (100 × h))."""
+    d = st["dur"]
+    if d.get("type") == "load" and d.get("rpe") and d.get("min"):
+        import math
+        f = math.sqrt(float(d["value"]) / (100.0 * float(d["min"]) / 60.0))
+        return round(max(RPE_IF_RANGE[0], min(RPE_IF_RANGE[1], f)), 4)
     return r.frac if r.frac else NONE_IF.get(st["kind"], 0.7)
 
 
@@ -1098,8 +1145,10 @@ def estimate_note(steps: dict, c: Ctx) -> str:
                          (f"，用你的越野 EP 速度 {c.ep_kmh:.1f} km/h" if c.ep_kmh else "，你的越野紀錄不夠，先用路跑速度"))
     if lap:
         parts.append("「直到按下計圈」段：用課表原本寫的最短時間")
-    if any(s["dur"]["type"] == "load" for s in rows):
+    if any(s["dur"]["type"] == "load" and not s["dur"].get("rpe") for s in rows):
         parts.append(f"「{_(LOAD_LABEL)}」段：TSS ÷（該段強度 IF² × 100）換成時間")
+    if any(s["dur"]["type"] == "load" and s["dur"].get("rpe") for s in rows):
+        parts.append(f"「{_(LOAD_LABEL)}」段用 RPE 填：用你填的分鐘數，TSS 由 RPE × 分鐘換算")
     return "；".join(parts) + "（推估）" if parts else ""
 
 
@@ -1121,7 +1170,10 @@ def totals(steps: dict, c: Ctx) -> dict:
             n_open += 1
             continue
         sec += s
-        f = r.frac if r.frac is not None else NONE_IF.get(st["kind"], 0.7)
+        if st["dur"]["type"] == "load":
+            f = load_if(st, r)                  # = the step's TSS back (typed or by RPE)
+        else:
+            f = r.frac if r.frac is not None else NONE_IF.get(st["kind"], 0.7)
         tss += s * f * f * 100.0 / 3600.0
         if f >= 0.88:
             hard += s
@@ -1610,6 +1662,7 @@ def view(steps: dict, c: Ctx, cap: Optional[float] = None, cap_mode: str = "soft
     for the chart, totals, issues, the watch preview, the target summary."""
     by_id: dict = {}
     order = []
+    rpe_m = c.rpe_model()
     for row in flat(steps["items"]):
         st = row["st"]
         r = resolve(st, c)
@@ -1623,6 +1676,11 @@ def view(steps: dict, c: Ctx, cap: Optional[float] = None, cap_mode: str = "soft
             lt = load_tl(st, r, c)
             o["load"] = rd["load"] = {"tss": st["dur"]["value"], "tl": round(lt["tl"]), "err": round(lt["err"]),
                                       "fitted": lt["fitted"], "sec": round(s), "if": round(load_if(st, r), 3)}
+            if st["dur"].get("rpe"):
+                # entered by feel (SP-57): the level, minutes and the factor used (推估)
+                o["load"]["rpe"] = {"level": st["dur"]["rpe"], "min": st["dur"].get("min"),
+                                    "factor": round(rpe_m.factor, 4), "fitted": rpe_m.fitted,
+                                    "err_pct": round(rpe_m.err_frac() * 100)}
         order.append(o)
     eq = equivalence(steps, rung, c) if rung else None
     return {"resolved": by_id, "order": order, "totals": totals(steps, c),

@@ -144,5 +144,8 @@
   "sync.failed": "Sync failed",
   "sync.done": "Sync complete",
   "sync.stopped": "Sync interrupted",
-  "sync.conn_failed": "Connection failed: {msg}"
+  "sync.conn_failed": "Connection failed: {msg}",
+  "rpe_load.fitted": "“Load” by RPE (estimate) — TSS = {factor} × RPE × minutes (yours: n={n}, weight {w}%, leave-one-out error {err})",
+  "rpe_load.default": "“Load” by RPE (estimate) — TSS = {factor} × RPE × minutes (default, ±{err}%; no activity with a watch-recorded RPE yet)",
+  "rpe_load.help": "A workout's “Load” can also be entered by feel: pick Easy / Somewhat hard / Hard / Very hard / Max (Borg CR-10 2 / 4 / 5 / 7 / 10) and the minutes; TSS = factor × RPE × minutes (Foster's session RPE). The default factor 0.30 is an estimate; after each sync it is calibrated on the RPE your watch recorded and that activity's actual TSS, pulled toward the default while there is little data (weight = n ÷ (n + 10)). Planning targets only: the overview and the PMC always use the watch's recorded load, never corrected by RPE."
 }

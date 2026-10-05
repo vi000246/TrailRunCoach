@@ -144,5 +144,8 @@
   "sync.failed": "同步失敗",
   "sync.done": "同步完成",
   "sync.stopped": "同步中斷",
-  "sync.conn_failed": "連線失敗：{msg}"
+  "sync.conn_failed": "連線失敗：{msg}",
+  "rpe_load.fitted": "「負荷」用 RPE 填（推估）— TSS ＝ {factor} × RPE × 分鐘（本人 n={n}，權重 {w}%，留一誤差 {err}）",
+  "rpe_load.default": "「負荷」用 RPE 填（推估）— TSS ＝ {factor} × RPE × 分鐘（預設，±{err}%；還沒有手錶記錄 RPE 的活動）",
+  "rpe_load.help": "課表的「負荷」也可以用感覺填：選 輕鬆／稍累／累／很累／極限（對到 Borg CR-10 的 2／4／5／7／10），再填分鐘數，TSS ＝ 係數 × RPE × 分鐘（Foster 的 session RPE）。預設係數 0.30 是推估；每次同步後用你手錶記錄的 RPE 和那次活動的實際 TSS 校正，資料少時向預設靠攏（權重＝n ÷（n＋10））。只用來排課填目標：總覽、PMC 的負荷一律用手錶記錄，不會用 RPE 修正。"
 }

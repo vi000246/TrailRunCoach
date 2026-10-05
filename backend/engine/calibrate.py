@@ -253,6 +253,15 @@ async def calibrate(db, athlete_id: int = 1, ds=None, today: Optional[dt.date] =
         await db.rollback()
         log.warning("COROS TL refit failed: %s", type(e).__name__)
         out["coros_tl"] = {"error": type(e).__name__}
+    # 「負荷」 by RPE (engine/rpe_load.py, SP-57): TSS per session-RPE unit from the activities
+    # with a watch RPE — planning targets only, never a correction of the recorded load
+    try:
+        from backend.engine import rpe_load
+        out["rpe_load"] = await rpe_load.refit_and_store(db, athlete_id, ds, today)
+    except Exception as e:                  # noqa: BLE001
+        await db.rollback()
+        log.warning("RPE load refit failed: %s", type(e).__name__)
+        out["rpe_load"] = {"error": type(e).__name__}
     return out
 
 

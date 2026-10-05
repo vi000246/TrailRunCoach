@@ -193,6 +193,22 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
   const END_DEFAULT = ["time", "distance", "open"];
   const END_LABEL = { time: tr("workout.end.time"), distance: tr("workout.end.distance"), open: tr("workout.end.open"), load: tr("workout.end.load") };
   const provCaps = (ctx) => (((ctx || {}).provider || {}).capabilities) || null;
+  // 「負荷」 entered by feel (SP-57, engine/rpe_load.py): five levels (Borg CR-10 2/4/5/7/10) + minutes;
+  // the server turns them into the step's TSS (dur.value) with the athlete's factor (推估)
+  const RPE_LEVELS = ["easy", "moderate", "hard", "very_hard", "max"];
+  const RPE_MIN = [1, 360];
+  // the new dur of a 「負荷」 step after one of its fields changed (null = refuse the input); pure
+  // (tests/test_rpe_load.py): lmode tss|rpe, lrpe a level, lmin minutes; estMin = the step's minutes now
+  function loadDur(dur, f, v, estMin) {
+    const d = { ...dur };
+    if (f === "lmode") {
+      if (v === "rpe") return d.rpe ? d : { type: "load", value: d.value, rpe: "hard", min: Math.max(RPE_MIN[0], Math.min(RPE_MIN[1], Math.round(estMin || 30))) };
+      return { type: "load", value: d.value };
+    }
+    if (f === "lrpe") return RPE_LEVELS.includes(v) ? { ...d, rpe: v } : null;
+    if (f === "lmin") { const m = Math.round(+v); return m >= RPE_MIN[0] && m <= RPE_MIN[1] ? { ...d, min: m } : null; }
+    return null;
+  }
   const TIP = {
     basis: tr("workout.tip.basis"),
     chart: tr("workout.tip.chart"),
@@ -466,13 +482,22 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       if (!list.includes(dt)) h += opt(dt, `${labels[dt] || dt}（${esc(((this.ctx || {}).provider || {}).label || "這個平台")}不支援）`, dt);
       return h;
     }
-    // a 「負荷」 step: TSS in, the provider's conversion next to it (COROS TL ± error, else the time; 推估)
+    // a 「負荷」 step: TSS in — or by feel, an RPE level + minutes (SP-57) — and the provider's
+    // conversion next to it (COROS TL ± error, else the time; 推估)
     loadIn(st, r, dis) {
-      const caps = provCaps(this.ctx), unit = caps ? caps.load_unit : "TL", L = r && r.load;
+      const caps = provCaps(this.ctx), unit = caps ? caps.load_unit : "TL", L = r && r.load, byRpe = !!st.dur.rpe;
       const conv = !L ? "" : unit ? `≈ ${L.tl} ${esc(unit)}（推估 ±${L.err}）` : `≈ ${mmss(L.sec)}（推估）`;
       const tip = unit ? `這裡填 TSS；推到手錶換算成 ${unit}（用你同步的活動擬合，誤差約 ±20%）。圖表和總時間用 TSS ÷（這段強度 IF² × 100）換成時間：約 ${L ? mmss(L.sec) : "?"}`
         : "這個平台沒有負荷結束條件：推送時換成預估時間 TSS ÷（這段強度 IF² × 100）";
-      return `<input class="num" type="number" step="1" min="1" max="500" data-f="tss" value="${st.dur.value}" aria-label="負荷 TSS"${dis}><span class="faint">TSS</span>` +
+      const mode = `<select data-f="lmode" aria-label="${esc(tr("workout.load_mode"))}"${dis}>${opt("tss", "TSS", byRpe ? "rpe" : "tss")}${opt("rpe", tr("workout.load_by_rpe"), byRpe ? "rpe" : "tss")}</select>`;
+      if (byRpe) {
+        const R = (L && L.rpe) || {};
+        const rtip = tr("workout.load_rpe_tip", { factor: R.factor != null ? R.factor : "?", src: tr(R.fitted ? "workout.load_rpe_mine" : "workout.load_rpe_default") });
+        return mode + `<select data-f="lrpe" aria-label="RPE"${dis}>${RPE_LEVELS.map((k) => opt(k, tr("workout.rpe_" + k), st.dur.rpe)).join("")}</select>` +
+          `<input class="num" type="number" step="1" min="${RPE_MIN[0]}" max="${RPE_MIN[1]}" data-f="lmin" value="${st.dur.min ?? ""}" aria-label="${esc(tr("workout.load_min"))}"${dis}><span class="faint">${esc(tr("workout.load_min"))}</span>` +
+          (L ? `<span class="we-lap" title="${esc(rtip + "\n" + tip)}">≈ ${L.tss} TSS ${conv}</span>` : "");
+      }
+      return mode + `<input class="num" type="number" step="1" min="1" max="500" data-f="tss" value="${st.dur.value}" aria-label="負荷 TSS"${dis}><span class="faint">TSS</span>` +
         (conv ? `<span class="we-lap" title="${esc(tip)}">${conv}</span>` : "");
     }
     tgHtml(st, r) {
@@ -729,7 +754,12 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       } else if (k === "dtype") it.dur = v === "open" ? { type: "open" } : v === "distance" ? { type: "distance", value: 1000 }
         : v === "load" ? { type: "load", value: this.estTss(it) }
         : { type: "time", value: it.dur.value && it.dur.type === "time" ? it.dur.value : it.dur.type === "load" ? this.estSec(it) : 300 };
-      else if (k === "tss") { const x = +v; if (x >= 1 && x <= 500) it.dur = { type: "load", value: Math.round(x * 10) / 10 }; else { e.target.value = it.dur.value; return; } }
+      else if (k === "lmode" || k === "lrpe" || k === "lmin") {
+        // the TSS the server computed from the RPE (normalize) is the value kept when switching back to TSS
+        const L = (((this.view || {}).resolved || {})[it.id] || {}).load;
+        const nd = loadDur(L ? { ...it.dur, value: L.tss } : it.dur, k, v, this.estSec(it) / 60);
+        if (nd) it.dur = nd; else { e.target.value = k === "lmin" ? (it.dur.min ?? "") : it.dur.rpe; return; }
+      } else if (k === "tss") { const x = +v; if (x >= 1 && x <= 500) it.dur = { type: "load", value: Math.round(x * 10) / 10 }; else { e.target.value = it.dur.value; return; } }
       else if (k === "sec") { const s = parseSec(v); if (s && s >= 5) it.dur = { type: "time", value: s }; else { e.target.value = mmss(it.dur.value); return; } }
       else if (k === "km") { const m = Math.round(+v * 1000); if (m >= 50) it.dur = { type: "distance", value: m }; }
       else if (k === "note") it.note = v.slice(0, 60);
@@ -1027,5 +1057,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
 
   // endOptions: the 時長類型 <option>s of one step for a context (pure; tests/test_static_steps.py)
   window.WorkoutEditor = { mount: (root, opts) => new Editor(root, opts), request: req,
-    endOptions: (ctx, st) => Editor.prototype.endOpts.call({ ctx }, st) };
+    endOptions: (ctx, st) => Editor.prototype.endOpts.call({ ctx }, st),
+    // SP-57 (tests/test_rpe_load.py): a 「負荷」 step's dur after an edit, and its input html
+    loadDur, loadInput: (ctx, st, r) => Editor.prototype.loadIn.call({ ctx }, st, r, "") };
 })();

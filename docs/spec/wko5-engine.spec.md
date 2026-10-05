@@ -108,7 +108,7 @@ compare):
 1. **Power:** `NP² × tssduration / (FTP² × 36)` when there is a power stream
    and an FTP in effect. Skipped for a file whose power is watch-estimated
    unless `power.accept_watch_power` is on (`power_tss_blocked`). The FTP
-   (`tss_ftp`, `backend/engine/wko5expr/dataset.py:654`) is WKO5's rule: the
+   (`tss_ftp`, `backend/engine/wko5expr/dataset.py:659`) is WKO5's rule: the
    FTP stored with the workout, else the sport's dated FTP setting. On a COROS
    / TP source a run instead divides by the CP in effect — the plan's CP test,
    else the athlete's `run_ftp_w`, else the Stryd-only PD-model mFTP as of

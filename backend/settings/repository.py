@@ -196,6 +196,10 @@ DEFAULTS: dict[str, Any] = {
     # closed loop: pushed 「負荷」 steps and the TSS actually run in them
     # {sessions: {uid: {day, steps: [{i, n, tss, tl}], actual}}} (engine/coros_tl.py)
     "coros.tl_load_calib": None,
+    # 「負荷」 entered by RPE (engine/rpe_load.py, SP-57): TSS per session-RPE unit fitted on the
+    # activities with a watch RPE {factor, n, w, ratio, loo, fitted_at}; None = the default (推估).
+    # Planning targets only — the recorded load is never corrected by RPE. Written by the refit only
+    "rpe.load_model": None,
 }
 # keys that were removed: db/database.py init_db deletes any stored row
 # (backup.encryption held the sealed scrypt-derived backup key)
@@ -381,6 +385,9 @@ def validate(key: str, value: Any) -> None:
     if key == "coros.tl_model":
         from backend.engine.coros_tl import validate as validate_tl
         validate_tl(value)
+    if key == "rpe.load_model":
+        from backend.engine.rpe_load import validate as validate_rpe
+        validate_rpe(value)
     if key == "coros.tl_load_calib":
         from backend.engine.coros_tl import validate_load
         validate_load(value)
