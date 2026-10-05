@@ -279,12 +279,15 @@ async def _store_login(result: dict, email: str, region: str, base: str, db: Asy
 # the three COROS zone tables (zoneData.lthrZone / rhrZone / maxHrZone). Read from
 # the login response and refreshed on every sync with GET /account/query (one
 # read-only call; checked 2026-10-03: it returns the same zoneData). Stored in
-# user_settings 「athlete.coros_profile」, labelled 「來自手錶」 where used.
+# user_settings 「athlete.coros_profile」, labelled 「來自手錶」 where used. Every change
+# of those values is also kept in 「athlete.coros_profile_history」 (engine/coros_compare.py,
+# SP-67: COROS moved this account's LTHR from 182 to 152 and nothing recorded when).
 # ---------------------------------------------------------------------------
 
 async def store_hr_profile(db: AsyncSession, athlete_id: int, data: Optional[dict]) -> Optional[dict]:
     """Parse and store the HR part of a COROS account response; no commit. None
     (nothing stored) when the response has no HR settings."""
+    from backend.engine import coros_compare as CC
     from backend.engine import hr_profile as HP
     from backend.settings.repository import SettingsRepository
     prof = HP.parse_account(data)
@@ -296,6 +299,9 @@ async def store_hr_profile(db: AsyncSession, athlete_id: int, data: Optional[dic
     if {k: v for k, v in old.items() if k != "at"} != {k: v for k, v in prof.items() if k != "at"}:
         await repo.set(HP.ACCOUNT_KEY, prof)
         log.info("Coros HR profile: max=%s rest=%s", prof.get("max_hr"), prof.get("rest_hr"))
+    hist = CC.history_add(await repo.get(CC.HISTORY_KEY), prof, old)
+    if hist is not None:
+        await repo.set(CC.HISTORY_KEY, hist)
     return prof
 
 

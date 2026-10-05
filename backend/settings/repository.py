@@ -91,6 +91,10 @@ DEFAULTS: dict[str, Any] = {
     # login / sync — {max_hr, rest_hr, lthr, ratios: {lthr, hrr, hrmax}, hr_zone_type, at};
     # None = never read. Max / rest HR the user enters are dated plan thresholds (mhr / rhr).
     "athlete.coros_profile": None,
+    # the COROS account's HR settings over time (engine/coros_compare.py, SP-67): one entry per
+    # change [{at, lthr, max_hr, rest_hr, ratios, hr_zone_type}], oldest first; written by the
+    # COROS login / sync only. None = nothing recorded yet
+    "athlete.coros_profile_history": None,
     # 起始 CTL／ATL (engine/load_guard.py PMC_START_KEY, SP-68): {date: ISO, ctl, atl} — the
     # PMC's values at the start of that date (charts, status, guardrails); None = automatic
     # (the first 4 weeks' mean daily TSS). Replaces athlete_settings.initial_ctl_run /
@@ -368,6 +372,9 @@ def validate(key: str, value: Any) -> None:
             raise ValueError(f"injury.custom_areas must be distinct labels of 1-{INJ.CUSTOM_MAX_LEN} characters")
     if key == "athlete.coros_profile" and value is not None and not isinstance(value, dict):
         raise ValueError("athlete.coros_profile must be an object or null")
+    if key == "athlete.coros_profile_history":
+        from backend.engine.coros_compare import validate as validate_history
+        validate_history(value)
     if key == "athlete.pmc_start" and value is not None:
         from backend.engine.load_guard import parse_manual
         if parse_manual(value) is None:
