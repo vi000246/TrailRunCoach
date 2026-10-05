@@ -502,6 +502,22 @@ def _transition_ref(ds: Dataset, status, today: dt.date, monday: dt.date) -> dic
     return transition_ref(phs, P._d(tr.start), lambda m: _week_hours(ds, m)[0] if m < monday else None)
 
 
+def _week_phase_notes(status, monday: dt.date) -> list[tuple[str, str]]:
+    """planning.week_phase_notes of the week (the phase holding Monday and the ones starting later
+    that week); a status without a plan: the current phase's own note."""
+    from backend.engine import planning as P
+    plan = getattr(status, "plan", None)
+    if plan is not None:
+        try:
+            return P.week_phase_notes(P.phases(plan, monday - dt.timedelta(days=400), monday + dt.timedelta(days=400)),
+                                      monday)
+        except Exception:                   # noqa: BLE001 — the plan must still build
+            pass
+    ph = getattr(status, "phase", None)
+    note = getattr(ph, "note", "") or ""
+    return [(ph.kind, t) for t in note.split("；") if t] if ph is not None else []
+
+
 def _tss_per_hour(ds: Dataset, today: dt.date) -> dict[str, float]:
     """Median TSS per moving hour by category over the last 180 days."""
     lo = today - dt.timedelta(days=180)
@@ -1330,10 +1346,11 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         # 轉換期 (SP-73): each run ≤ 60 min (Canova) — also after the 課表偏好 shaping
         cap_transition_runs(sessions, notes)
         notes.append({"level": "info", "src": "transition", "text": _(TRANSITION_NOTE)})
-    ph_note = getattr(getattr(status, "phase", None), "note", "") or ""
-    if ph_note and kind in ("recovery", "transition"):
-        # a 轉換期 shortened / skipped for the next A race's 專項期 (planning.auto_phases)
-        notes.append({"level": "info", "src": "transition", "text": ph_note})
+    # a 轉換期 shortened / skipped for the next A race's 專項期; two A races close together — a
+    # 恢復期 / 專項期 / 減量期 cut short, the 12-week hint (SP-90) (planning.auto_phases)
+    for pk, t in _week_phase_notes(status, monday):
+        notes.append({"level": "info", "src": "transition" if pk in ("recovery", "transition") else "phase",
+                      "text": t})
     if b2b.get("due"):
         # B2B texts / caps after the 課表偏好 shaping (it may rename, re-kind or cap the long run)
         flags = {s.id: getattr(s, "_long_day", False) for s in sessions}

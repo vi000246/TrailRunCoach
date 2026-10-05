@@ -18,6 +18,9 @@ Sources (docs/research/periodization-phase-metrics.md):
     and Canova (4 weeks of easy running ≤ 1 h), coach-schools-zones-periodization.md R5:
     `transition_weeks` (課表偏好, default 3, 0 = off). It never takes days from the next A
     race's backward-planned 專項期: too close → shortened, < 7 days → skipped, with a note
+  * two A races close together (SP-90): the first one's recovery yields to the second one's
+    taper (recovery_and_taper, 推估), the phases say what was cut short, and A races < 12
+    weeks apart get TrainerRoad's hint (periodization-cross-sport.md §4.8)
 B events get a short mini-taper and recovery inside the surrounding phase;
 C events are training days and don't change the plan.
 """
@@ -25,12 +28,13 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import math
 import uuid
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Optional
 
-from backend.i18n import _
+from backend.i18n import N_, _
 
 PLAN_PATH: Optional[Path] = None      # fixed file (tests); None = the tenant's plan.json
 
@@ -55,7 +59,8 @@ LONG_EVENT_HOURS = 6.0       # recovery: 14 d at/above this (= the 超馬級 siz
 # from ~7–10 EP an hour on trails. All 推估.
 SIZES = ("short", "medium", "marathon", "ultra", "hundred")
 SHORT, MEDIUM, MARATHON, ULTRA, HUNDRED = range(len(SIZES))
-SIZE_LABEL = {"short": "短", "medium": "中", "marathon": "馬拉松級", "ultra": "超馬級", "hundred": "100 英里級"}
+SIZE_LABEL = {"short": N_("短"), "medium": N_("中"), "marathon": N_("馬拉松級"), "ultra": N_("超馬級"),
+              "hundred": N_("100 英里級")}
 SIZE_HOURS = (2.0, 4.0, LONG_EVENT_HOURS, 20.0)
 SIZE_EP = (21.0, 42.0, 60.0, 160.0)
 EP_DIVISOR = 100.0           # ITRA km-effort; terrain_calib's personal divisor when installed
@@ -69,6 +74,13 @@ TRANSITION_WEEKS = 3          # 轉換期 after an A race's recovery (SP-73; Fri
 TRANSITION_WEEKS_RANGE = (0, 4)   # 0 = off; 4 = Friel's / Canova's upper end
 TRANSITION_MIN_DAYS = 7       # less room before the next race's 專項期 → no 轉換期 (推估)
 TRANSITION_SETTING = "plan.prefs.transition_weeks"
+# Two A races close together (SP-90): the first one's 恢復期 yields to the second one's 減量期 —
+# shortened, never below REC_MIN_DAYS while the taper keeps ≥ REC_MIN_DAYS too; below that the
+# free days are split (half taper, rounded up). Both 推估 (no study of re-peaking 3–8 weeks apart,
+# periodization-cross-sport.md §4.8). A_GAP_HINT_WEEKS: TrainerRoad's rule — A races ≥ 12 weeks
+# apart (§4.8, §6.2); closer ones get a hint to make one of them a B race.
+REC_MIN_DAYS = 7
+A_GAP_HINT_WEEKS = 12
 
 PHASES = {
     "transition": "轉換期",
@@ -448,11 +460,19 @@ def auto_phases(events: list[Event], begin: dt.date, end: dt.date,
     """Phases covering [begin, end], built backwards from each A event.
     After each A event's recovery: `transition_weeks` of 轉換期 (0 = none), ending before
     the next A event's 專項期 — shortened when that starts sooner (`note` says so), skipped
-    when fewer than TRANSITION_MIN_DAYS are left (the recovery phase's `note` says so)."""
+    when fewer than TRANSITION_MIN_DAYS are left (the recovery phase's `note` says so).
+
+    Two A races close together (SP-90): the first one's 恢復期 yields to the second one's 減量期
+    (recovery_and_taper) — the second race keeps its event days and a taper, its 專項期 gets what
+    is left, and the phases say so (`note`, shown with the week plan and on the timeline), with a
+    hint when they are < A_GAP_HINT_WEEKS apart. A race starting inside the previous one's own
+    days has nothing left to plan and is skipped."""
     one = dt.timedelta(days=1)
     a_events = sorted((e for e in events if e.priority == "A"), key=lambda e: e.start)
     out: list[Phase] = []
     cursor = begin                  # first day not yet assigned
+    taper_of: dict[str, int] = {}   # a taper shortened for the previous A race (SP-90)
+    prev: Optional[Event] = None    # the last A race planned
 
     def add(kind, s, e, eid=None, note=""):
         s = max(s, cursor)
@@ -461,28 +481,43 @@ def auto_phases(events: list[Event], begin: dt.date, end: dt.date,
             return out[-1]
         return None
 
+    def taper_len(ev: Event) -> int:
+        return taper_of.get(ev.id, TAPER_DAYS)
+
     def spec_start_of(ev: Event) -> dt.date:
-        return ev.start - dt.timedelta(days=TAPER_DAYS) - dt.timedelta(weeks=SPECIFIC_WEEKS)
+        return ev.start - dt.timedelta(days=taper_len(ev)) - dt.timedelta(weeks=SPECIFIC_WEEKS)
 
     for i, ev in enumerate(a_events):
         if ev.end < cursor:
-            continue
-        taper_start = ev.start - dt.timedelta(days=TAPER_DAYS)
+            continue                # inside the previous A race's own days: nothing left to plan
+        taper_start = ev.start - dt.timedelta(days=taper_len(ev))
         spec_start = spec_start_of(ev)
         add("base", cursor, spec_start - one)
-        add("specific", spec_start, taper_start - one, ev.id)
-        add("taper", taper_start, ev.start - one, ev.id)
-        add("event", ev.start, ev.end, ev.id)
+        notes = _after_prev_notes(ev, prev, cursor, spec_start, taper_start, taper_len(ev)) if prev else []
+        firsts = [add("specific", spec_start, taper_start - one, ev.id), add("taper", taper_start, ev.start - one, ev.id),
+                  add("event", ev.start, ev.end, ev.id)]
+        first = next((p for p in firsts if p is not None), None)
+        if first is not None and notes:
+            first.note = "；".join(notes)
         cursor = max(cursor, ev.end + one)
+        prev = ev
+        nxt = next((x for x in a_events[i + 1:] if x.start > ev.end), None)
         rec_days = 14 if ev.is_long else 7      # 超馬級 and up (event_size, SP-111)
+        rec_note = ""
+        if nxt is not None:
+            rec_days, t = recovery_and_taper((nxt.start - ev.end).days - 1, rec_days, taper_len(nxt))
+            if t < taper_len(nxt):
+                taper_of[nxt.id] = t
+            if rec_days < (14 if ev.is_long else 7):
+                rec_note = _("恢復期縮短為 {days} 天：下一場 A 賽事「{name}」{date}",
+                             days=rec_days, name=nxt.name, date=_md(nxt.start))
         rec_end = ev.end + dt.timedelta(days=rec_days)
-        rec = add("recovery", cursor, rec_end, ev.id)
+        rec = add("recovery", cursor, rec_end, ev.id, rec_note)
         cursor = max(cursor, rec_end + one)
         if transition_weeks and transition_weeks > 0:
             # 轉換期 (SP-73): never into the next A race's 專項期 — that phase is planned backwards
             # from its race and wins
             t_end = rec_end + dt.timedelta(weeks=int(transition_weeks))
-            nxt = next((x for x in a_events[i + 1:] if x.start > ev.end), None)
             limit = spec_start_of(nxt) - one if nxt is not None else None
             if limit is not None and limit < t_end:
                 days = (limit - cursor).days + 1
@@ -491,15 +526,87 @@ def auto_phases(events: list[Event], begin: dt.date, end: dt.date,
                              days=days, name=nxt.name, start=(limit + one).isoformat())
                     add("transition", cursor, limit, ev.id, note)
                     cursor = max(cursor, limit + one)
-                elif rec is not None:
+                elif rec is not None and not rec_note and days > 0:
                     rec.note = _("沒有轉換期：下一場 A 賽事「{name}」的專項期 {start} 開始，只剩 {days} 天",
-                                 name=nxt.name, start=(limit + one).isoformat(), days=max(0, days))
+                                 name=nxt.name, start=(limit + one).isoformat(), days=days)
+                elif rec is not None and not rec_note:
+                    # its 專項期 already started (SP-90: never cite a date in the past)
+                    rec.note = _("沒有轉換期：離下一場 A 賽事「{name}」只剩 {span}，恢復期後直接進專項期",
+                                 name=nxt.name, span=_span((nxt.start - cursor).days))
             else:
                 add("transition", cursor, t_end, ev.id)
                 cursor = max(cursor, t_end + one)
     if cursor <= end:
         add("base", cursor, end)    # no A event ahead: open-ended base
     return [p for p in out if _d(p.start) <= end]
+
+
+def recovery_and_taper(free: int, rec_days: int, taper_days: int) -> tuple[int, int]:
+    """(recovery days, taper days) between two A races with `free` days between them (SP-90):
+    the full `rec_days` + `taper_days` when they fit; else the recovery shrinks first (the taper
+    is what the next race is run on, Bosquet 2007), down to REC_MIN_DAYS; below REC_MIN_DAYS +
+    REC_MIN_DAYS both are short and the free days are split, the taper getting the odd day. 推估."""
+    free = max(0, free)
+    if free >= rec_days + taper_days:
+        return rec_days, taper_days
+    if free - taper_days >= REC_MIN_DAYS:
+        return free - taper_days, taper_days
+    if free >= 2 * REC_MIN_DAYS:
+        return REC_MIN_DAYS, free - REC_MIN_DAYS
+    t = min(taper_days, math.ceil(free / 2))
+    return free - t, t
+
+
+def week_phase_notes(phases_: list, monday: dt.date) -> list[tuple[str, str]]:
+    """[(phase kind, text)] of the automatic phase notes a week shows: the phase holding `monday`
+    and every phase starting later that week (a 減量期 cut short from a Thursday, SP-90); a
+    phase's notes are joined by 「；」. `phases_`: Phase objects or dicts."""
+    def get(p, k):
+        return p.get(k) if isinstance(p, dict) else getattr(p, k, None)
+    sunday = monday + dt.timedelta(days=6)
+    out: list[tuple[str, str]] = []
+    for p in phases_:
+        s, e = _d(get(p, "start")), _d(get(p, "end"))
+        if not get(p, "note") or s is None or e is None:
+            continue
+        if s <= monday <= e or monday < s <= sunday:
+            out += [(get(p, "kind"), t) for t in str(get(p, "note")).split("；") if t and (get(p, "kind"), t) not in out]
+    return out
+
+
+def _md(d: dt.date) -> str:
+    return f"{d.month}/{d.day}"
+
+
+def _span(days: int) -> str:
+    """「N 週」 from 14 days on, else 「N 天」."""
+    days = max(0, int(days))
+    return _("{n} 週", n=days // 7) if days >= 14 else _("{n} 天", n=days)
+
+
+def _after_prev_notes(ev: Event, prev: Event, cursor: dt.date, spec_start: dt.date, taper_start: dt.date,
+                      taper_days: int) -> list[str]:
+    """The notes of an A race planned right after another (SP-90): a 專項期 / 減量期 cut short by
+    the previous race's recovery, and TrainerRoad's ≥ A_GAP_HINT_WEEKS hint."""
+    out = []
+    left = (taper_start - max(cursor, spec_start)).days
+    when = _md(prev.end)
+    t_left = (ev.start - max(cursor, taper_start)).days
+    if taper_days < TAPER_DAYS and t_left > 0:
+        out.append(_("減量期縮短為 {days} 天：上一場 A 賽事「{name}」{date} 才結束",
+                     days=t_left, name=prev.name, date=when))
+    elif taper_days < TAPER_DAYS:
+        out.append(_("沒有減量期：上一場 A 賽事「{name}」{date} 才結束", name=prev.name, date=when))
+    elif spec_start < cursor and left > 0:
+        out.append(_("專項期縮短為 {days} 天（原本 {weeks} 週）：上一場 A 賽事「{name}」{date} 才結束",
+                     days=left, weeks=SPECIFIC_WEEKS, name=prev.name, date=when))
+    elif spec_start < cursor:
+        out.append(_("沒有專項期：上一場 A 賽事「{name}」{date} 才結束", name=prev.name, date=when))
+    gap = (ev.start - prev.end).days
+    if gap < A_GAP_HINT_WEEKS * 7:
+        out.append(_("和上一場 A 賽事只隔 {span}：教練建議至少 {weeks} 週，考慮把其中一場改成 B 賽",
+                     span=_span(gap), weeks=A_GAP_HINT_WEEKS))
+    return out
 
 
 def transition_weeks_setting(user_id: int = 1) -> int:
