@@ -121,6 +121,7 @@
   "feas.k_summit": "到山頂 {eta} 小時（撤退 {c}）",
   "feas.k_finish": "完賽 {f} 小時（關門 {c}）",
   "feas.k_b2b": "連續兩天長距離 {n} 次",
+  "feas.k_step": "分級 {a} → {b}",
   "feas.chart": "看專項期圖表 →",
   "feas.k_week_day": "一週練量：最難那天的 {p}%",
   "feas.k_long_day": "最長一次：最難那天的 {p}%"
