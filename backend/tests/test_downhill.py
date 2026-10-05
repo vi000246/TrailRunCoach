@@ -136,3 +136,26 @@ def test_week_plan_and_projection():
     plan.events[0].kind = "road"
     weeks = P.project_weeks(wp, _phases(plan, TODAY), RACE, events=plan.events)
     assert not any(s["id"] == "downhill" for w in weeks for s in w["sessions"])
+
+
+def test_never_in_the_real_taper_a_21_day_one_starting_mid_week():
+    """Integration SP-96 × SP-99: the session stays out of the race's real 減量期 (planning.taper_start),
+    not only the last DOWNHILL_LAST_DAYS — a 17-day taper (課表偏好 / a manual phase) starting on the
+    Wednesday of 賽前第 3 週 leaves only its Monday, the day before the interval."""
+    m3 = RACE - dt.timedelta(days=RACE.weekday()) - dt.timedelta(weeks=2)     # 賽前第 3 週 (Mon 11/16)
+    t0 = RACE - dt.timedelta(days=17)                                          # Wed 11/18
+    ph = [{"kind": "specific", "start": (t0 - dt.timedelta(days=56)).isoformat(),
+           "end": (t0 - dt.timedelta(days=1)).isoformat()},
+          {"kind": "taper", "start": t0.isoformat(), "end": (RACE - dt.timedelta(days=1)).isoformat(), "event_id": "e1"}]
+    info = ctx(m3, phases=ph)
+    assert info["active"] and info["taper_start"] == t0.isoformat()
+    ss = _ss(m3)
+    DH.apply(ss, info)
+    assert not any(s["id"] == "downhill" for s in ss)          # Wed / Thu / Sun in the taper, Mon before the interval
+    # the default 14-day taper: week 3 keeps it
+    info = ctx(m3)
+    assert info["taper_start"] == (RACE - dt.timedelta(days=14)).isoformat()
+    ss = _ss(m3)
+    DH.apply(ss, info)
+    d = next(s for s in ss if s["id"] == "downhill")
+    assert d["day"] == t0.isoformat() and (RACE - date.fromisoformat(d["day"])).days >= 14

@@ -18,8 +18,8 @@ Applied after the week is placed, like engine/technical.py, in week_plan and in 
 week (the same rule, so reconcile never flips a week back and forth), just before the 技術地形
 session (which then keeps ≥ 2 days from it, technical.HARD_IDS): one easy run (not the
 長爬坡反覆 / 陡坡健走 / heat session, not the easy days after a B2B) on a day ≥ 14 days before the
-race, not on / the day before a hard day (the long run, an interval, the 長爬坡反覆); the first one
-also keeps the 2 days after it easy. RPE 3–5 is an easy session (workout_templates.session_role),
+race and before its 減量期 (planning.taper_start), not on / the day before a hard day (the long
+run, an interval, the 長爬坡反覆); the first one also keeps the 2 days after it easy. RPE 3–5 is an easy session (workout_templates.session_role),
 so a recovery week keeps it. A weekday keeps the weekday cap
 (the downhill part shrinks, ≥ DOWNHILL_MIN_WORK). The week's minutes stay: the other easy runs
 give the difference. A road race (or 主要訓練項目 = 路跑) gets none.
@@ -102,7 +102,15 @@ def week_context(*, kind: str, mode: str, monday: dt.date, events, phases=None, 
     s0 = _phase_start(phases, monday)
     w0 = weeks_out(e.start, s0 - dt.timedelta(days=s0.weekday())) if s0 is not None else max(DOWNHILL_WEEKS)
     first = w == max((x for x in DOWNHILL_WEEKS if x <= w0), default=w)
-    return {**info, "active": True, "first": first}
+    # the race's real 減量期 (SP-96 / SP-114: 7–21 days, planning.taper_start — the planned phase, else
+    # taper_days): no downhill on its days, whatever DOWNHILL_LAST_DAYS says (a 21-day taper starting
+    # mid-week would otherwise get week 3's session)
+    from backend.engine import planning as PL
+    try:
+        t0 = PL.taper_start(phases or (), e)
+    except Exception:                       # noqa: BLE001 — the plan must still build
+        t0 = None
+    return {**info, "active": True, "first": first, "taper_start": t0.isoformat() if t0 else None}
 
 
 def _steps(work: int) -> dict:
@@ -141,6 +149,7 @@ def apply(ss: list, info: Optional[dict], *, prefs=None, rates: Optional[dict] =
     if any(s.get("id") == "downhill" for s in ss):
         return ss
     race = _d(info["race"]["start"])
+    taper = _d(info.get("taper_start"))
     hard = [_d(s["day"]) for s in ss if s.get("day") and (s.get("kind") in ("quality", "test", "race")
                                                            or s.get("id") in HARD_IDS)]
     hard += [_d(d) for d in hard_done or ()]
@@ -163,7 +172,8 @@ def apply(ss: list, info: Optional[dict], *, prefs=None, rates: Optional[dict] =
         if s.get("kind") != "easy" or s.get("done") or not s.get("day") or s.get("id") in SKIP_IDS or s.get("heat"):
             continue
         d = _d(s["day"])
-        if (race - d).days < DOWNHILL_LAST_DAYS or (until is not None and d <= until) or not free_of_hard(d):
+        if (race - d).days < DOWNHILL_LAST_DAYS or (taper is not None and d >= taper) \
+                or (until is not None and d <= until) or not free_of_hard(d):
             continue
         c = long_cap if d.weekday() >= 5 else cap
         work = want if c is None else min(want, int(c) - WARM - COOL)
