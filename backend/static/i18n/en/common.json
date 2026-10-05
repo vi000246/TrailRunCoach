@@ -104,5 +104,12 @@
   "workout.load_min": "min",
   "workout.load_rpe_tip": "By feel: Easy / Somewhat hard / Hard / Very hard / Max are Borg CR-10 2 / 4 / 5 / 7 / 10; TSS = {factor} × RPE × minutes (Foster session RPE, {src}, estimate). Planning targets only: the actual load is the watch's record.",
   "workout.load_rpe_mine": "factor calibrated on your watch-recorded RPE vs actual TSS",
-  "workout.load_rpe_default": "default factor, no activity with a watch-recorded RPE yet"
+  "workout.load_rpe_default": "default factor, no activity with a watch-recorded RPE yet",
+  "feas.grade": "{g} race",
+  "feas.days_to": "{n} days to go",
+  "feas.suggest": "Suggestions",
+  "feas.how": "How it's judged",
+  "feas.how_text": "The peak week (+10 % a week, a recovery week every 4th, up to 3 weeks before the race): its distance and climb against the race's hardest day; for ultras also Koop's minimum weekly hours; with a cutoff / turnaround time, the predicted time against it; under 3 weeks to go is too late. Advice only, your event is never changed. The thresholds are estimates.",
+  "feas.loading": "Assessing feasibility… (the first read of your activities takes about a minute)",
+  "feas.failed": "Feasibility assessment failed"
 }

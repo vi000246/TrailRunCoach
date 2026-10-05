@@ -7,6 +7,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.5.0/echarts.min.js"></script>
 <script src="/api/v1/static/dashicons.js"></script>
 <script src="/api/v1/static/z5flow.js"></script>
+<script src="/api/v1/static/feasibility.js"></script>
 <style>
 :root {
   color-scheme: light;
@@ -312,6 +313,11 @@ td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
       <h2 id="b2b-h">B2B 連續長天 <span class="meta" id="b2b-sub"></span><span id="b2b-q"></span></h2>
       <div id="b2b"><div class="loading">…</div></div>
     </section>
+    <!-- 賽事可行性 (engine/race_feasibility.py, SP-105): the upcoming A / B races; only advice -->
+    <section id="feascard" aria-labelledby="feas-h" style="grid-column:1 / -1" hidden>
+      <h2 id="feas-h"><span data-i18n="overview.feas.title">賽事可行性</span> <span class="meta" data-i18n="overview.feas.sub">難度過高或訓練來不及時，建議降組別、改 B／C 賽或放棄</span></h2>
+      <div id="feas"><div class="loading">…</div></div>
+    </section>
   </div>
 </main>
 <script>
@@ -613,6 +619,14 @@ async function loadB2B() {
   if (c.done.length) out.push(`<p class="meta" style="margin:6px 0 0">${I("fitness")} ${esc(T.text || "")}${T.judged ? ` · ${T.judged} 次有判讀` : ""}</p>`);
   if (ahead.length > 1) out.push(`<p class="meta" style="margin:4px 0 0">之後：${ahead.slice(1).map((p) => p.sessions.filter((s) => s.day).map((s) => md(s.day)).join("–")).join("、")} <span class="faint">暫定</span></p>`);
   $("b2b").innerHTML = out.join("");
+}
+
+// ---------------- 賽事可行性 (GET /feasibility = engine/race_feasibility.py, static/feasibility.js) ----------------
+async function loadFeas() {
+  const r = await Feas.load();
+  if (!(r.races || []).length) return;               // no upcoming A / B race: the card stays hidden
+  $("feascard").hidden = false;
+  $("feas").innerHTML = r.races.map(Feas.html).join("");
 }
 
 // ---------------- this week ----------------
@@ -948,6 +962,7 @@ $("wk-ic").innerHTML = I("time");
   loadPmc().catch(fail("pmc"));
   loadZ5().catch(fail("z5"));
   loadB2B().catch(() => {});                  // optional card: stays hidden when it can't load
+  loadFeas().catch(() => {});                 // optional card: stays hidden when it can't load
   await Promise.all([loadWeek().then(() => loadPlan().catch(fail("wk-days"))).catch(fail("week")), loadPeriod().catch(fail("period"))]);
 })();
 </script>

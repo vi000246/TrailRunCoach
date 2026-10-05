@@ -154,6 +154,8 @@ class EventIn(BaseModel):
     note: str = ""
     heat: str = "auto"                      # auto | hot | cool (heat-acclimation.md §5.4)
     pack_kg: Optional[float] = None         # trip pack kg; None = 9 kg (loaded-carry-training.md §5.1)
+    cutoff_hours: Optional[float] = None    # 關門／撤退時間 h (SP-105, engine/race_feasibility.py)
+    summit_km: Optional[float] = None       # 百岳: km of the summit; None = the GPX's highest point
 
 
 @router.put("/events")
@@ -161,8 +163,10 @@ def put_event(body: EventIn):
     plan = P.Plan.load()
     try:
         ev = plan.upsert_event(body.model_dump())
+    except P.EventError as e:                  # a bad field: the message is for the user
+        raise HTTPException(400, str(e))
     except ValueError as e:
-        raise HTTPException(400, str(e) if "背包" in str(e) else f"bad date: {e}")
+        raise HTTPException(400, f"bad date: {e}")
     plan.save()
     _notify(False)
     return {"event": P.event_json(ev, today_local())}
