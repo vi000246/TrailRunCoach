@@ -1663,6 +1663,10 @@
     "draft": true,
     "src": "backend/engine/overview.py:1741"
   },
+  "回量期照轉換期，每週第一次輕鬆跑後加 4 趟 15 秒加速（約 5K 配速）：量很小，保留一點速度（Jay Johnson，教練級；自行車選手的對照試驗，套到跑步為推估）": {
+    "draft": true,
+    "src": "backend/engine/overview.py:1173"
+  },
   "回量期第 {i}/{n} 週：賽前 4 週平均 {h:.1f} h × {share:.0%}（照減量期倒過來，比例推估），不排強度課": {
     "draft": true,
     "src": "backend/engine/overview.py:424"

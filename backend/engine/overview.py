@@ -341,7 +341,8 @@ SRC_RECOVERY_WEEK = ("恢復週保留次數和強度、每堂縮短（挪威教�
 # * Both phases: after RECOVERY_MAX_GAP weeks without a recovery week the next one is one (Koop: a
 #   block is ≤ 6 weeks — 教練級 [211]); a 專項期 week whose next week is a countdown one waits for it,
 #   and a countdown week right after a recovery-like week is a normal one (no two easy weeks in a row).
-#   A past week counts as a recovery week when it touches a 減量期 / race / 恢復期 / 轉換期 phase or its
+#   A past week counts as a recovery week when it touches a 減量期 / race / 恢復期 / 轉換期 / 回量期 phase
+#   (load_guard.STEP_SKIP_KINDS, SP-98's 回量期 included) or its
 #   hours are ≤ RECOVERY_DROP × the (up to 3) weeks before it (runners cut 20–35 % [194]: 80 % is
 #   the edge of that range, 推估).
 # * The TSB < −30 protection is unchanged.
@@ -357,7 +358,7 @@ RECOVERY_LONG_MIN = 45              # 推估: shorter is just another easy run
 
 def weeks_since_recovery(hours: list, skip: list) -> int:
     """Complete weeks (newest last in `hours`) since the last recovery-like one (SP-97): a week in
-    `skip` (it touches a 減量期 / race / 恢復期 / 轉換期 phase) or one ≤ RECOVERY_DROP × the mean of the
+    `skip` (it touches a 減量期 / race / 恢復期 / 轉換期 / 回量期 phase, load_guard.skip_mondays) or one ≤ RECOVERY_DROP × the mean of the
     (up to 3) weeks before it. len(hours) when none is found."""
     n = 0
     for i in range(len(hours) - 1, -1, -1):
@@ -1166,7 +1167,11 @@ def transition_week(phases: list, monday: dt.date) -> Optional[int]:
 
 
 def transition_strides_note(kind: str = "transition") -> dict:
-    """The week note of the 轉換期's strides (SP-103)."""
+    """The week note of the 轉換期's strides (SP-103); `kind` "rebuild": the 回量期 keeps them."""
+    if kind == "rebuild":
+        return {"level": "info", "src": "transition",
+                "text": _("回量期照轉換期，每週第一次輕鬆跑後加 4 趟 15 秒加速（約 5K 配速）：量很小，保留一點速度"
+                          "（Jay Johnson，教練級；自行車選手的對照試驗，套到跑步為推估）")}
     return {"level": "info", "src": "transition",
             "text": _("轉換期第 {w} 週起，每週第一次輕鬆跑後加 4 趟 15 秒加速（約 5K 配速）：量很小，保留一點速度"
                       "（Jay Johnson，教練級；自行車選手的對照試驗，套到跑步為推估）", w=TRANSITION_STRIDES_WEEK)}
@@ -1175,12 +1180,15 @@ def transition_strides_note(kind: str = "transition") -> dict:
 def strides_for(kind: str, mode: str, i: int, road: bool, tr_week: Optional[int]) -> Optional[tuple]:
     """The strides (title, detail, source suffixes) the i-th easy run of the week carries, None = none:
     base (not a recovery / re-entry week) — the hill sprints / road strides; 轉換期 from its 2nd week —
-    TRANSITION_STRIDES (SP-103)."""
+    TRANSITION_STRIDES (SP-103); the 回量期 (SP-98: after the ≥ 7-day 恢復期 and the 轉換期, so always
+    past week 2 after the race) — TRANSITION_STRIDES every week (not a re-entry week)."""
     if i != 0:
         return None
     if kind == "base" and mode not in ("recovery_week", "reentry"):
         return ROAD_STRIDES if road else HILL_STRIDES
     if kind == "transition" and (tr_week or 0) >= TRANSITION_STRIDES_WEEK:
+        return TRANSITION_STRIDES
+    if kind == "rebuild" and mode != "reentry":
         return TRANSITION_STRIDES
     return None
 
