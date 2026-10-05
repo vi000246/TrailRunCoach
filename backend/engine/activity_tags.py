@@ -167,17 +167,17 @@ def name_of(row: Optional[dict]) -> Optional[str]:
 
 def load(db_path=None, athlete_id: int = 1) -> list[dict]:
     """Every stored user tag (sync, read-only, memoised on the DB file's
-    mtime). [] when the DB or the table is missing. A table from before a
-    column was added (e.g. `exclusion`, until init_db migrates it) still
-    loads: the missing columns read as None."""
+    stamp, its WAL included: db/filestamp.py). [] when the DB or the table is
+    missing. A table from before a column was added (e.g. `exclusion`, until
+    init_db migrates it) still loads: the missing columns read as None."""
+    from backend.db.filestamp import db_stamp
     p = _db_path(db_path)
     if p is None or not p.exists():
         return []
-    try:
-        stt = os.stat(p)
-        stamp = (str(p), stt.st_mtime_ns, stt.st_size, athlete_id)
-    except OSError:
+    fs = db_stamp(p)
+    if fs is None:
         return []
+    stamp = (str(p), *fs, athlete_id)
     if _memo.get("stamp") == stamp:
         return _memo["rows"]
     try:
@@ -425,16 +425,16 @@ _rec_memo: dict = {}
 def load_recorded(db_path=None) -> list[dict]:
     """The workout_files rows with a recorded RPE / feel, as {start_local,
     file, rpe, feel} (start_local = the athlete-local start minute, the tag
-    key). Read-only, memoised on the DB file; [] without a DB, the table or
-    the columns (a DB from before the migration)."""
+    key). Read-only, memoised on the DB file (WAL included); [] without a
+    DB, the table or the columns (a DB from before the migration)."""
+    from backend.db.filestamp import db_stamp
     p = _db_path(db_path)
     if p is None or not p.exists():
         return []
-    try:
-        stt = os.stat(p)
-        stamp = (str(p), stt.st_mtime_ns, stt.st_size)
-    except OSError:
+    fs = db_stamp(p)
+    if fs is None:
         return []
+    stamp = (str(p), *fs)
     if _rec_memo.get("stamp") == stamp:
         return _rec_memo["rows"]
     try:
