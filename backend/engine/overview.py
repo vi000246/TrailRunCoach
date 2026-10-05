@@ -1609,10 +1609,14 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         # the days after a B2B: easy only (UA / Johnston); the minutes go to the easy runs
         sessions = [s for s in sessions if s.kind not in ("quality", "test")]
         notes.append(B2B.post_note(b2b))
+    # 肌力課依期別 (engine/strength_plan.py, SP-119): a 越野賽 / 百岳 A race next — AA / 最大肌力 / 維持
+    from backend.engine import strength_plan as STP
+    a_evs = getattr(getattr(status, "plan", None), "events", None) or ()
+    st_s = STP.session(STP.week_context(a_evs, phs, monday, kind), [asdict(s) for s in sessions])
     for i in range(strength_n):
-        add(id=f"strength{i + 1}", kind="strength", title="肌力（下肢單腳＋核心）", minutes=35,
-            detail="膝主導＋臀中肌；安排在輕鬆日或跑完後", source=SRC_UA,
-            tss=35 / 60 * tph["strength"])
+        add(id=f"strength{i + 1}", kind="strength", title=st_s["title"], minutes=st_s["minutes"],
+            detail=st_s["detail"], source=st_s["source"] or SRC_UA,
+            tss=st_s["minutes"] / 60 * tph["strength"])
     used = sum(s.minutes for s in sessions if s.kind not in ("strength",))
     left = max(0.0, minutes_total - used)
     tr_wk = transition_week(phs, monday) if kind == "transition" else None
@@ -1941,6 +1945,19 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         except Exception as e:              # noqa: BLE001 — the plan must still build
             tech = {**tech, "error": type(e).__name__}
 
+    # ---- 平衡／腳踝小課 (engine/balance_plan.py, SP-120): a 越野賽 / 百岳 A race next, the
+    # 減量期 and race week included (not strength: the SP-86 stop doesn't touch it)
+    from backend.engine import balance_plan as BP
+    bal: dict = {"active": False}
+    try:
+        bal = BP.week_context(a_evs, phs, monday, kind, BP.first_day(monday - dt.timedelta(days=400)))
+        if bal.get("active"):
+            dd = [asdict(s) for s in sessions]
+            BP.apply(dd, bal, [d for d in free if d.isoformat() not in bmap], allowed_fn)
+            sessions = [Session(**{k: v for k, v in d.items() if k in Session.__dataclass_fields__}) for d in dd]
+    except Exception:                       # noqa: BLE001 — the plan must still build
+        pass
+
     # ---- projection to Sunday -------------------------------------------
     planned_by_day = {}
     for s in sessions:
@@ -2054,6 +2071,10 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         "downhill": DH.public(dh),
         # 賽前停肌力 (SP-86): the A events' no-strength windows, for the projection
         "strength_stop": s_stops,
+        # the A races ahead (engine/strength_plan.py): the projection's 肌力課依期別 / 平衡小課 (SP-119, SP-120)
+        "a_races": STP.a_races(a_evs, monday),
+        # 平衡／腳踝小課 (SP-120): this week's stage, count and the week its count starts from (the projection)
+        "balance": bal,
         # 減量期 (SP-96): the next A race's taper touching this week and the pre-taper level, for the projection
         "taper": {**t_ctx, **{f"pre_{k}": v for k, v in t_ref.items()}} if t_ctx else None,
         # the last 4 weeks' mean run climb (m): a projected 減量期's pre-taper climb (SP-96)

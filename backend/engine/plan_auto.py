@@ -316,7 +316,7 @@ def notice_day(stored: list[dict], acts: list[dict], today: str) -> str:
     if not any(a.get("date") == today for a in acts):
         return today
     nxt = sorted(s["day"] for s in stored if s["state"] == "active" and s.get("day") and s["day"] > today
-                 and s["kind"] not in ("strength", "heat_passive", NOTICE_KIND))
+                 and s["kind"] not in ("strength", "heat_passive", "balance", NOTICE_KIND))
     return nxt[0] if nxt else (dt.date.fromisoformat(today) + dt.timedelta(days=1)).isoformat()
 
 

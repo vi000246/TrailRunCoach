@@ -65,7 +65,7 @@ from backend.engine.hr_profile import easy_cap_label
 from backend.i18n import fmt
 
 HARD = ("quality", "test")
-SIDE = ("strength", "heat_passive", "notice")
+SIDE = ("strength", "heat_passive", "notice", "balance")
 
 # D. easy run done too hard (unsourced-rules.md §B5): HR = both conditions together; power / TSS either alone (推估)
 OVER_HR_BPM = 3.0          # workout_review.AET_MARGIN: "easy" = avg HR ≤ AeT + 3
