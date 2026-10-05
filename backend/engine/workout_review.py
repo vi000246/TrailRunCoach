@@ -2671,6 +2671,48 @@ def _durability_card(ds, w) -> Optional[dict]:
                      f"≥ 95% 撐得住；90–95% 開始累（95% 推估）；< 90% 補給或配速要調整。詳細在「配速與耐久」。")
 
 
+def tis_scores(ds, w) -> Optional[tuple[Optional[float], Optional[float]]]:
+    """(aerobic, anaerobic) TIS of this activity — WKO5's own built-ins `tisaerobic` /
+    `tisanaerobic` (wko5expr/evaluator.py BUILTIN_EXPRS, the same numbers as 我的訓練's TIS
+    charts), 1–10 each, None where the evaluator gives na. None without a power channel.
+    Not in measure(): the score reads the athlete's 90-day PD model (other workouts), so it
+    lives under the render cache's data fingerprint instead of the per-file cache."""
+    if not _has(ds.channel(w.idx, "power")):
+        return None
+    out = []
+    for name in ("tisaerobic", "tisanaerobic"):
+        try:
+            from backend.engine.wko5expr.evaluator import Evaluator
+            d = math.floor(w.day)
+            out.append(_f(Evaluator(ds, d, d).evaluate(name, w)))
+        except Exception:                   # noqa: BLE001 — no PD model / unreadable: na
+            out.append(None)
+    return out[0], out[1]
+
+
+TIS_TIP = N_("怎麼看：越高 = 這次對那個能量系統的刺激越大；WKO5 沒有官方的分級名稱，只看數字、和自己平常的課比。\n"
+             "看什麼：長時間、接近門檻的課有氧分數高；無氧分數要功率超過門檻（mFTP 的 85%）才會加，輕鬆跑通常是 1。\n"
+             "方法：WKO5 的 TIS：以活動當天往前 90 天 PD 模型的 mFTP（有氧）與 FRC（無氧）為基準，"
+             "把平滑後的功率逐秒加權累加（和「我的訓練」的 TIS 圖同一個數字）。需要功率。")
+
+
+def _tis_card(ds, w) -> Optional[dict]:
+    """「刺激 TIS」: this activity's aerobic / anaerobic TIS; none without power (like 平均功率).
+    `power` marks it for the viewer's 使用功率 switch (off = the tile is hidden)."""
+    s = tis_scores(ds, w)
+    if s is None:
+        return None
+    a, an = s
+    if a is None and an is None:
+        return _card("stat", id="tis", icon="gauge", label=_("刺激 TIS"), value="–", sub=_("算不出"), power=True,
+                     tip=_("有功率，但活動前 90 天的功率資料不夠擬合 PD 模型（mFTP、FRC），TIS 算不出。") + "\n"
+                         + _(TIS_TIP))
+    return _card("stat", id="tis", icon="gauge", label=_("刺激 TIS"), value=f"{_num(a)}／{_num(an)}",
+                 sub=_("有氧／無氧（1–10）"), power=True,
+                 tip=_("有氧 TIS {a}、無氧 TIS {an}（WKO5 的 Training Impact Score，1–10）。",
+                       a=_num(a), an=_num(an)) + "\n" + _(TIS_TIP))
+
+
 def _stimulus_card(c: dict) -> dict:
     """「VO2max 刺激」 for a Z5 session (equivalent T@VO2max vs the 10-min goal), 「閾值刺激」
     (Zone 3 minutes) for a Z3 session or a hard long run."""
@@ -2752,6 +2794,9 @@ def _summary_cards(ds, w, m: dict, c: dict, lines: list[str], ev: Optional[dict]
     zc = _zones_card(m)
     if zc:
         cards.append(zc)
+    tc = _tis_card(ds, w)
+    if tc:
+        cards.append(tc)
     if typ in ("strength", "bike", "walk", "other"):
         cards.append(_card("chip", id="only", icon="info", text="只看時間與心率", level="info",
                            tip=f"{c['type_label']}：只看時間與心率，沒有其他判讀"))
