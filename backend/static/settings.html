@@ -107,7 +107,7 @@ dialog::backdrop { background: rgba(0,0,0,.35); }
 </header>
 <main>
   <section id="general">
-    <h2>一般設定 <button type="button" class="q" aria-label="說明" title="資料推不出來、只有你知道的幾項。體重用在 W/kg、跑步效能 RE、功率計算機和背包預設（體重 × 13 %）；每次量體重記一筆，圖表依日期套用當時的體重。性別決定 W′ 先驗（女性 6.4、男性 13.1 kJ）和熱量估算；出生年用在熱量估算。功率來源：只有 Stryd 的功率會進功率模型，沒有 Stryd 就用心率（手錶推估功率要到下面「功率」的進階設定打開）。其他數字都自動估算。">?</button></h2>
+    <h2>一般設定 <button type="button" class="q" aria-label="說明" title="資料推不出來、只有你知道的幾項。體重用在 W/kg、跑步效能 RE、功率計算機和背包預設（體重 × 13 %）；只記一筆（日期＋體重），儲存會直接覆寫上一筆，所有圖表都用這個體重。性別決定 W′ 先驗（女性 6.4、男性 13.1 kJ）和熱量估算；出生年用在熱量估算。功率來源：只有 Stryd 的功率會進功率模型，沒有 Stryd 就用心率（手錶推估功率要到下面「功率」的進階設定打開）。其他數字都自動估算。">?</button></h2>
     <div class="row">
       <label>性別 <select id="p-sex"><option value="">（未填）</option><option value="male">男</option><option value="female">女</option></select></label>
       <label>身高 <input type="number" id="p-height" min="100" max="250" step="1" style="width:72px"> cm</label>
@@ -115,9 +115,11 @@ dialog::backdrop { background: rgba(0,0,0,.35); }
       <label>功率來源 <select id="p-meter"><option value="">自動（依資料）</option><option value="stryd">Stryd</option>
         <option value="watch">手錶推估功率</option><option value="none">沒有功率計</option></select></label>
     </div>
-    <table class="wt"><thead><tr><th>日期</th><th>體重 kg</th><th></th></tr></thead><tbody id="weights"></tbody></table>
     <div class="row">
-      <button id="addw">＋ 新增一筆體重</button>
+      <label>體重 <input type="number" id="p-kg" step="0.1" min="25" max="250" style="width:90px"> kg</label>
+      <label>量測日期 <input type="date" id="p-kgdate"></label>
+    </div>
+    <div class="row">
       <button class="primary" id="saveprof">儲存</button>
       <span class="meta" id="profnow"></span>
     </div>
@@ -566,7 +568,7 @@ async function loadProfile() {
   $("p-height").placeholder = wk.height_cm || "";
   renderWeights();
   $("profnow").textContent = e.weight != null ? `目前使用：${e.weight} kg（${e.weight_source || "–"}）`
-    : "還沒有體重：請新增一筆（W/kg、功率計算機、背包預設都會用到）";
+    : "還沒有體重：請填體重後儲存（W/kg、功率計算機、背包預設都會用到）";
   const hasWko5 = wk.height_cm || wk.sex || wk.weights.length;
   $("profwko5").textContent = !hasWko5 ? "" : `WKO5 裡的資料：身高 ${wk.height_cm ?? "–"} cm、性別 ${({ male: "男", female: "女" })[wk.sex] || "–"}、體重紀錄 `
     + (wk.weights.length ? wk.weights.map((w) => `${w.date} ${w.kg} kg`).join("、") : "無");
@@ -577,25 +579,17 @@ async function loadProfile() {
     PROF.appWeight = d.weight;
   }).catch(() => {});
 }
+// one weight only (date + kg): saving overwrites the stored list with this single entry
 function renderWeights() {
-  $("weights").innerHTML = PROF.weights.map((w, i) => `<tr>
-    <td><input type="date" data-i="${i}" data-f="date" value="${esc(w.date)}"></td>
-    <td><input type="number" data-i="${i}" data-f="kg" step="0.1" min="25" max="250" value="${w.kg}" style="width:90px"></td>
-    <td><button class="x" data-rm="${i}">移除</button></td></tr>`).join("")
-    || `<tr><td colspan="3" class="meta">還沒有紀錄${PROF.wko5.weights.length ? "（目前沿用 WKO5 的體重）" : ""}</td></tr>`;
+  const last = PROF.weights.at(-1);
+  $("p-kg").value = last ? last.kg : "";
+  $("p-kgdate").value = last ? last.date : new Date().toISOString().slice(0, 10);
+  $("p-kg").placeholder = PROF.wko5.weights.at(-1)?.kg ?? PROF.effective.weight ?? "";
 }
-$("weights").addEventListener("change", (e) => {
-  const i = e.target.dataset.i; if (i == null) return;
-  PROF.weights[i][e.target.dataset.f] = e.target.dataset.f === "kg" ? Number(e.target.value) : e.target.value;
-});
-$("weights").addEventListener("click", (e) => { const i = e.target.dataset.rm; if (i == null) return; PROF.weights.splice(+i, 1); renderWeights(); });
-$("addw").onclick = () => {
-  const last = PROF.weights.at(-1) || PROF.wko5.weights.at(-1);
-  const kg = last ? last.kg : (PROF.effective.weight ?? PROF.appWeight ?? "");
-  PROF.weights.push({ date: new Date().toISOString().slice(0, 10), kg }); renderWeights();
-};
+$("p-kg").addEventListener("change", () => { $("p-kgdate").value = new Date().toISOString().slice(0, 10); });
 $("saveprof").onclick = async () => {
-  const body = { weights: PROF.weights.filter((w) => w.date && w.kg),
+  const kg = Number($("p-kg").value), date = $("p-kgdate").value;
+  const body = { weights: kg && date ? [{ date, kg }] : [],
     sex: $("p-sex").value || null, height_cm: $("p-height").value ? Number($("p-height").value) : null,
     birth_year: $("p-birth").value ? Number($("p-birth").value) : null,
     power_source: $("p-meter").value || null };
