@@ -124,7 +124,7 @@ h2 .di { font-size: 16px; color: var(--muted); }
 .sx .offp { color: var(--watch); font-weight: 800; }
 .sx[data-go] { cursor: pointer; }
 .ty-easy { --c: var(--s3); } .ty-long, .ty-hike { --c: var(--s1); } .ty-z3 { --c: var(--s4); } .ty-z5 { --c: var(--s2); }
-.ty-test { --c: var(--s5); } .ty-b2b { --c: var(--s7); } .ty-loaded { --c: var(--s6); } .ty-strength, .ty-heat, .ty-notice, .ty-balance { --c: var(--faint); }
+.ty-test { --c: var(--s5); } .ty-b2b { --c: var(--s7); } .ty-loaded { --c: var(--s6); } .ty-strength, .ty-heat, .ty-notice { --c: var(--faint); }
 .ty-race { --c: var(--text); }
 .rest { margin-top: auto; margin-bottom: auto; display: flex; align-items: center; justify-content: center; gap: 5px; color: var(--faint); font-size: 12px; }
 .badges { display: flex; gap: 4px; flex-wrap: wrap; }
@@ -619,7 +619,7 @@ async function loadB2B() {
 // session type -> icon + colour + label (identity is icon + word, never colour alone)
 const TYPES = {
   easy: "輕鬆", z3: "3 區間歇", z5: "5 區間歇", long: "LSD", hike: "健行", b2b: "B2B", loaded: "負重", test: "測試",
-  strength: "肌力", race: "比賽", heat: "熱適應", notice: "提醒", rest: "休息", balance: "平衡" };
+  strength: "肌力", race: "比賽", heat: "熱適應", notice: "提醒", rest: "休息" };
 function stype(s) {
   const k = s.kind, t = s.title || "";
   if (k === "test") return "test";
@@ -632,7 +632,6 @@ function stype(s) {
   if (k === "hike") return "hike";
   if (k === "heat_passive" || (s.heat && k !== "easy")) return "heat";
   if (k === "notice") return "notice";
-  if (k === "balance") return "balance";           // 平衡／腳踝小課 (SP-120)
   return "easy";
 }
 // an activity's session class -> the .ty-* colour (the icon comes from the server)

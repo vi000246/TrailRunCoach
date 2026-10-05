@@ -1,8 +1,9 @@
 """
-SP-120: the 平衡／腳踝 mini-session (engine/balance_plan.py) — only before a 越野賽 / 百岳 A race,
-2–3 a week, stage 1 → 2 → 3 by the weeks since the cycle's start, stage 4 (pack) in the 專項期,
-2 a week after 12 weeks; kept in the 減量期 and race week (not strength: SP-86 doesn't drop it),
-stage 1–2 only in the last 7 days; never pushed to the watch. Synthetic.
+SP-120 平衡／腳踝, as reworked by the owner 2026-10-05 (engine/balance_plan.py): part of strength —
+a 12-minute block at the end of the week's strength session(s), one fixed set of moves (no stages,
+no week counter), only before a 越野賽 / 百岳 A race, in the 轉換期 / 回量期 / 基礎期 / 專項期 / 減量期;
+with the strength gone (SP-86 stop, race week) one balance-only strength session on an easy day,
+before the race. No kind of its own. Synthetic.
 """
 import datetime as dt
 from datetime import date
@@ -10,139 +11,113 @@ from datetime import date
 import pytest
 
 from backend.engine import balance_plan as BP
-from backend.engine import overview as O
-from backend.engine import plan_match as PM
-from backend.engine import plan_prefs as PP
 from backend.engine import projection as PJ
-from backend.engine.planning import Event
 from backend.sync import coros_workouts as CW
 from backend.tests.test_b2b import _phases
 from backend.tests.test_quality_gate import TODAY            # Wed 2026-09-30
 from backend.tests.test_strength_plan import _ev, _week
 
-
-def _bal(ss):
-    return [s for s in ss if s["kind"] == "balance"]
+TAG = "＋平衡／腳踝"
 
 
-def _ph(*rows):
-    return [{"kind": k, "start": s, "end": e} for k, s, e in rows]
+def _strength(ss):
+    return [s for s in ss if s["kind"] == "strength"]
 
 
-# a race 2027-01-16 after an earlier one: 恢復期, 轉換期 from 9/07, 基礎期, 專項期 11/07–1/01, 減量期
-PH = _ph(("event", "2026-08-29", "2026-08-29"), ("recovery", "2026-08-30", "2026-09-06"),
-         ("transition", "2026-09-07", "2026-09-27"), ("base", "2026-09-28", "2026-11-06"),
-         ("specific", "2026-11-07", "2027-01-01"), ("taper", "2027-01-02", "2027-01-15"),
-         ("event", "2027-01-16", "2027-01-16"))
-RACE = [_ev("2027-01-16")]
-
-
-def test_stage_follows_the_weeks_since_the_cycle_start():
-    mon = date(2026, 9, 7)
-    got = [BP.week_context(RACE, PH, mon + dt.timedelta(weeks=i),
-                           "transition" if i < 3 else "base")["stage"] for i in range(8)]
-    assert got == [1, 1, 1, 2, 2, 2, 3, 3]
-    sp = BP.week_context(RACE, PH, date(2026, 11, 9), "specific")
-    assert sp["stage"] == 4 and sp["weeks_in"] == 10 and sp["n"] == 3
-    # after 12 weeks: 2 a week to keep it
-    late = BP.week_context(RACE, PH, date(2026, 11, 30), "specific")
-    assert late["weeks_in"] == 13 and late["n"] == 2 and late["stage"] == 4
-    assert BP.week_context(RACE, PH, date(2027, 1, 4), "taper")["stage"] == 4
-    # not in the 恢復期 / race days
-    assert not BP.week_context(RACE, PH, date(2026, 8, 31), "recovery")["active"]
-
-
-def test_an_open_ended_base_counts_from_the_first_planned_session():
-    ph = _ph(("base", "2025-09-01", "2026-11-06"), ("specific", "2026-11-07", "2027-01-01"),
-             ("taper", "2027-01-02", "2027-01-15"), ("event", "2027-01-16", "2027-01-16"))
-    mon = date(2026, 9, 28)
-    assert BP.week_context(RACE, ph, mon, "base")["stage"] == 1                         # starts now
-    c = BP.week_context(RACE, ph, mon, "base", start=date(2026, 9, 2))
-    assert c["weeks_in"] == 5 and c["stage"] == 2 and c["start"] == "2026-08-31"
-
-
-def test_only_a_trail_or_baiyue_a_race():
+def test_week_context_only_a_trail_or_baiyue_a_race_and_these_phases():
     mon = date(2026, 10, 5)
-    assert BP.week_context([_ev("2027-01-16", "baiyue")], PH, mon, "base")["active"]
-    assert not BP.week_context([_ev("2027-01-16", "road")], PH, mon, "base")["active"]
-    assert not BP.week_context([_ev("2027-01-16", "other")], PH, mon, "base")["active"]
-    assert not BP.week_context([], PH, mon, "base")["active"]
+    for k in ("transition", "rebuild", "base", "specific", "taper"):
+        assert BP.week_context([_ev("2027-01-16")], mon, k)["active"]
+    assert not BP.week_context([_ev("2027-01-16")], mon, "recovery")["active"]
+    assert not BP.week_context([_ev("2027-01-16")], mon, "event")["active"]
+    assert BP.week_context([_ev("2027-01-16", "baiyue")], mon, "base")["active"]
+    assert not BP.week_context([_ev("2027-01-16", "road")], mon, "base")["active"]
+    assert not BP.week_context([_ev("2027-01-16", "other")], mon, "base")["active"]
+    assert not BP.week_context([], mon, "base")["active"]
+    # the pack line: a 百岳's 專項期 / 減量期 only
+    assert BP.week_context([_ev("2027-01-16", "baiyue")], mon, "specific")["pack"]
+    assert not BP.week_context([_ev("2027-01-16", "baiyue")], mon, "base")["pack"]
+    assert not BP.week_context([_ev("2027-01-16")], mon, "specific")["pack"]
 
 
-def test_session_text_warm_up_sources_and_estimates():
-    s = BP.session(1, "2026-10-01")
-    assert s["kind"] == "balance" and s["minutes"] == 12 and s["tss"] == 0.0
-    assert s["title"] == "平衡／腳踝 12 分（階段 1）"
-    assert s["detail"].startswith("熱身 1–2 分：承重式腳踝活動度") and "內翻、外翻（徐國峰）" in s["detail"]
-    assert "2 組 × 20–40 秒／腳" in s["detail"] and "單腳站（張眼）" in s["detail"] and "推估" in s["detail"]
+def test_one_fixed_block_warm_up_sources_no_stages():
+    ctx = BP.week_context([_ev("2027-01-16")], date(2026, 10, 5), "base")
+    t = BP.block(ctx)
+    assert t.startswith("平衡／腳踝 12 分：熱身 1–2 分承重式腳踝活動度") and "內翻、外翻（徐國峰）" in t
+    assert "2 組 × 20–40 秒／腳" in t and "單腳站（張眼 → 閉眼）" in t and "小跳" in t and "提踵" in t
+    assert "階段" not in t and "賽前 7 天" not in t and "背包" not in t
+    assert "單腳站和伸腳點地可以背 5–10% 體重的背包" in BP.block({**ctx, "pack": True})
+    s = BP.session(ctx, "2026-10-08")
+    assert s["kind"] == "strength" and s["id"] == "balance" and s["minutes"] == 12 and s["tss"] == 0.0
     for src in ("Schiftan 2015", "Hupperets 2009", "Lesinski 2015", "徐國峰", "推估"):
         assert src in s["source"]
-    assert "背包 5–10 % 體重" in BP.session(4, None)["detail"]
-    assert "賽前 7 天" in BP.session(2, None, race_week=True)["detail"]
+    assert not hasattr(BP, "first_day") and not hasattr(BP, "KIND")
 
 
-def test_days_easy_runs_first_spread_never_the_race_or_after():
-    mon = date(2026, 10, 5)
-    ss = [{"id": "easy1", "kind": "easy", "day": "2026-10-06"}, {"id": "quality", "kind": "quality", "day": "2026-10-07"},
-          {"id": "easy2", "kind": "easy", "day": "2026-10-08"}, {"id": "long", "kind": "long", "day": "2026-10-10"}]
-    days = [mon + dt.timedelta(days=i) for i in range(7)]
-    ctx = {"active": True, "stage": 2, "n": 3, "race_start": "2026-12-01"}
-    BP.apply(ss, ctx, days)
-    got = [s["day"] for s in _bal(ss)]
-    assert got == ["2026-10-06", "2026-10-08", "2026-10-11"]          # Tue / Thu easy days, then a free Sun
-    # 課表偏好 可練日 and the race day
-    ss = [{"id": "easy1", "kind": "easy", "day": "2026-10-06"}]
-    BP.apply(ss, {**ctx, "race_start": "2026-10-09"}, days, allowed=lambda d: d.weekday() != 0)
-    got = [s["day"] for s in _bal(ss)]
-    assert got and all("2026-10-06" <= d < "2026-10-09" for d in got)
-    # 5 and 3 days out: stage 1–2 only, with the race-week line
-    assert all("階段 2" in s["title"] and "賽前 7 天" in s["detail"] for s in _bal(ss))
+def test_attach_adds_the_block_and_12_minutes_to_each_strength_session():
+    ctx = {"active": True, "race_start": "2026-10-17"}
+    ss = [{"id": "strength1", "kind": "strength", "title": "肌力（基礎循環 6 站）", "minutes": 35, "tss": 20.0,
+           "detail": "6 站", "source": "Bompa", "day": "2026-10-06", "done": False},
+          {"id": "strength2", "kind": "strength", "title": "肌力", "minutes": 35, "tss": 20.0, "detail": "",
+           "source": "", "day": "2026-10-17", "done": False},                            # the race day
+          {"id": "easy1", "kind": "easy", "title": "輕鬆跑", "minutes": 40, "day": "2026-10-07"}]
+    assert BP.attach(ss, ctx) == 1
+    s = ss[0]
+    assert s["title"] == "肌力（基礎循環 6 站）" + TAG and s["minutes"] == 47 and s["tss"] == 20.0
+    assert s["detail"].startswith("6 站；平衡／腳踝 12 分") and "Schiftan 2015" in s["source"]
+    assert ss[1]["minutes"] == 35 and TAG not in ss[1]["title"]                         # not on / after the race
+    assert BP.attach(ss, ctx) == 1 and ss[0]["minutes"] == 47                           # once
+    assert BP.ensure(ss, ctx, [date(2026, 10, 5) + dt.timedelta(days=i) for i in range(7)]) is None
 
 
-def test_week_plan_trail_race_three_sessions_road_none():
+def test_ensure_adds_a_balance_only_strength_session_on_an_easy_day_before_the_race():
+    ctx = {"active": True, "race_start": "2026-10-10"}
+    days = [date(2026, 10, 5) + dt.timedelta(days=i) for i in range(7)]
+    ss = [{"id": "quality", "kind": "quality", "day": "2026-10-06"}, {"id": "easy1", "kind": "easy", "day": "2026-10-08"}]
+    s = BP.ensure(ss, ctx, days)
+    assert s is ss[-1] and s["day"] == "2026-10-08" and s["kind"] == "strength" and "平衡照做" in s["detail"]
+    # no easy day: a free day; 可練日; never on / after the race
+    ss = [{"id": "quality", "kind": "quality", "day": "2026-10-06"}]
+    s = BP.ensure(ss, ctx, days, allowed=lambda d: d.weekday() != 0)
+    assert s["day"] == "2026-10-07"
+    assert BP.ensure([], ctx, [date(2026, 10, 10), date(2026, 10, 11)]) is None
+
+
+def test_week_plan_trail_race_strength_carries_it_road_none():
     _plan, wp = _week([_ev("2027-01-02")])
-    bs = _bal(wp["sessions"])
-    assert len(bs) == 3 and all(s["title"] == "平衡／腳踝 12 分（階段 1）" for s in bs)
-    assert len({s["day"] for s in bs}) == 3 and all(s["day"] >= TODAY.isoformat() for s in bs)
-    assert wp["balance"]["active"] and wp["balance"]["n"] == 3
-    # the run minutes are untouched: same easy runs as a road race week
+    st = _strength(wp["sessions"])
+    assert st and all(s["title"].endswith(TAG) and "平衡／腳踝 12 分" in s["detail"] for s in st)
+    assert not any(s["kind"] == "balance" for s in wp["sessions"]) and "balance" not in wp
     _plan, wr = _week([_ev("2027-01-02", "road")])
-    assert not _bal(wr["sessions"]) and not wr["balance"]["active"]
-    _plan, wn = _week([])
-    assert not _bal(wn["sessions"])
+    assert _strength(wr["sessions"]) and not any(TAG in s["title"] for s in wr["sessions"])
+    # the week's run minutes don't move (strength is not run time)
+    run = lambda w: sum(s["minutes"] for s in w["sessions"] if s["kind"] != "strength")
+    assert run(wp) == run(wr)
 
 
-def test_taper_and_race_week_keep_it_strength_stops():
-    # trail A race Sat 10/17: 減量期 from 10/03; the projection's race week is stage 1–2, no strength
+def test_taper_and_race_week_keep_balance_when_strength_stops():
+    # trail A race Sat 10/17: 減量期 from 10/03 — SP-86 stops strength; balance stays (one a week)
     plan, wp = _week([_ev("2026-10-17")])
     weeks = PJ.project_weeks(wp, _phases(plan, TODAY), date(2026, 10, 18))
     by = {w["start"]: w for w in weeks}
-    w1, w2 = by["2026-10-05"], by["2026-10-12"]
-    assert w1["phase"] == w2["phase"] == "taper"
-    assert not [s for s in w1["sessions"] + w2["sessions"] if s["kind"] == "strength"]     # SP-86
-    b1, b2 = _bal(w1["sessions"]), _bal(w2["sessions"])
-    assert len(b1) == 3 and len(b2) == 3
-    for s in b1 + b2:
-        late = (date(2026, 10, 17) - date.fromisoformat(s["day"])).days <= 7
-        assert ("階段 4" in s["title"]) != late and (("賽前 7 天" in s["detail"]) == late)
-    assert all(s["day"] < "2026-10-17" for s in b2)
-    # a 12-minute session is not training hours
-    assert O.drop_strength_before_a(b2, wp["strength_stop"], date(2026, 10, 12)) == b2
+    for mon in ("2026-10-05", "2026-10-12"):
+        w = by[mon]
+        assert w["phase"] == "taper"
+        st = _strength(w["sessions"])
+        assert [s["id"] for s in st] == ["balance"] and st[0]["day"] < "2026-10-17" and st[0]["minutes"] == 12
 
 
-def test_projection_stage_switches_and_specific_gets_the_pack():
-    # trail A race 1/02 (專項期 from 10/24); the count starts this week (no stored session)
-    plan, wp = _week([_ev("2027-01-02")])
+def test_projection_specific_baiyue_gets_the_pack_line():
+    plan, wp = _week([_ev("2027-01-02", "baiyue", name="嘉明湖")])
     weeks = PJ.project_weeks(wp, _phases(plan, TODAY), date(2026, 11, 22))
-    st = {w["start"]: {s["title"][-5:] for s in _bal(w["sessions"])} for w in weeks}
-    assert st["2026-10-12"] == {"階段 1）"} and st["2026-10-19"] == {"階段 2）"}
-    assert st["2026-10-26"] == {"階段 4）"}
-    assert all(len(_bal(w["sessions"])) == 3 for w in weeks)
+    spec = [w for w in weeks if w["phase"] == "specific"]
+    pack = "單腳站和伸腳點地可以背"
+    assert spec and all(any(pack in s["detail"] for s in _strength(w["sessions"])) for w in spec)
+    base = [w for w in weeks if w["phase"] == "base"]
+    assert base and all(not any(pack in s["detail"] for s in _strength(w["sessions"])) for w in base)
 
 
-def test_never_pushed_or_matched():
-    s = BP.session(1, "2026-10-01")
+def test_never_pushed():
+    s = BP.session({"active": True}, "2026-10-01")
     with pytest.raises(CW.Unsupported):
         CW.session_steps(s, CW.Thresholds(cp=250.0, lthr=165.0, aet=140.0))
-    assert "balance" in PM.NEVER
-    assert PP.Prefs is not None

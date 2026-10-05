@@ -33,7 +33,6 @@
   "kind.hike": "越野跑",
   "kind.strength": "肌力",
   "kind.heat_passive": "被動熱適應",
-  "kind.balance": "平衡／腳踝",
   "kind.notice": "課表待確認",
   "kpi.rate": "完成率",
   "kpi.rate_tip": "到期的課裡，有做的比例（完成＋部分＋沒照課表都算有做）。\n到期＝日期在今天以前，或今天已經做完。\n「待同步」＝日期已過、但同步的資料還沒涵蓋那天，先不算。\n刪掉的過期課不算。",

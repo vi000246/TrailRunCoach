@@ -53,7 +53,10 @@ def _plan(ev_day, prio="A", prefs=None):
 
 
 def _strength(ss):
-    return [s for s in ss if s["kind"] == "strength" and not s.get("done")]
+    """The strength sessions SP-86 stops — not SP-120's balance-only one, which stays before the race
+    (balance_plan.ensure, owner 2026-10-05)."""
+    from backend.engine import balance_plan as BP
+    return [s for s in ss if s["kind"] == "strength" and not s.get("done") and s.get("id") != BP.ID]
 
 
 def test_week_plan_race_week_and_taper_have_no_strength_b_race_keeps_it():
@@ -85,6 +88,9 @@ def test_projection_and_preferences_respect_the_window():
     assert [s["day"] for s in _strength(w19["sessions"])] == ["2026-10-20"]
     assert any(n.get("src") == "strength" for n in w19["notes"])
     assert not _strength(by["2026-10-26"]["sessions"]) and not _strength(by["2026-11-02"]["sessions"])
+    # SP-120: the balance-only session stays in the stopped weeks, before the race
+    bal = [s for w in weeks for s in w["sessions"] if s.get("id") == "balance"]
+    assert bal and all("2026-10-24" <= s["day"] < "2026-11-07" for s in bal)
 
 
 def test_auto_adjust_removes_stored_strength_without_asking():

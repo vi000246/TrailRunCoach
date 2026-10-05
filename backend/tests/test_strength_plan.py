@@ -33,7 +33,17 @@ def _week(events, prefs=None):
 
 
 def _strength(ss):
-    return [s for s in ss if s["kind"] == "strength" and not s.get("done")]
+    """The strength sessions as SP-119 makes them: SP-120's balance block (owner 2026-10-05: part of
+    strength — a title tag, +12 min) taken off, the balance-only session left out."""
+    from backend.engine import balance_plan as BP
+    out = []
+    for s in ss:
+        if s["kind"] != "strength" or s.get("done") or s.get("id") == BP.ID:
+            continue
+        if BP.title_tag() in s["title"]:
+            s = {**s, "title": s["title"].replace(BP.title_tag(), ""), "minutes": s["minutes"] - BP.MINUTES}
+        out.append(s)
+    return out
 
 
 def _ph(*rows):
@@ -100,6 +110,7 @@ def test_week_plan_trail_transition_is_the_aa_circuit():
     assert wp["phase"] == "transition"
     ss = _strength(wp["sessions"])
     assert len(ss) == 2 and all(s["title"] == "肌力（基礎循環 6 站）" for s in ss)
+    assert all(s["title"].endswith("＋平衡／腳踝") for s in wp["sessions"] if s["kind"] == "strength")   # SP-120
     assert all("Bompa" in s["source"] for s in ss)
     assert wp["a_races"][0]["name"] == "越野賽" and wp["a_races"][0]["kind"] == "race"
 

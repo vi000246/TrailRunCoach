@@ -101,7 +101,7 @@ def week_compliance(planned_tss: float, done_tss: float, planned_hours: float,
 # a past day the synced data doesn't cover yet (not counted)
 STATUSES = ("done", "partial", "off_plan", "missed", "open")
 DONE_STATUSES = ("done", "partial", "off_plan")
-SKIP_KINDS = ("notice", "heat_passive", "balance")  # the 課表待確認 reminder; a bath / sauna / 平衡小課 is ticked, not matched
+SKIP_KINDS = ("notice", "heat_passive")      # the 課表待確認 reminder; a bath / sauna is ticked, not matched
 STREAK_RATE = 0.80                           # a week "達標" = ≥ 80 % of its due sessions done (推估)
 KIND_ORDER = ("easy", "long", "quality", "test", "hike", "strength")
 # 強度課 split by family (SP-79; workout_templates.session_family — the stored one, else read from
