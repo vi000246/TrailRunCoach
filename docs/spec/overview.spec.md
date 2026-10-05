@@ -148,7 +148,8 @@ B2B weekends, the race calculator (for the 專項期 target) and the 主要訓�
    specific max(2.5, 7 %) per week, 推估 — SP-63; `load_guard.ramp_goal`,
    `backend/engine/load_guard.py:344`) — `7·(CTL₀ + Δ/(1 − (1 − 1/42)⁷))` —
    converted to hours with the athlete's TSS per hour over 6 weeks.
-2. Capped at `max(1.10 × ref, ref + 0.5 h)`, ref = max(4-week mean, last week) (UA 10 %) over
+2. Capped at `max(1.10 × ref, ref + 0.5 h)`, ref = max(4-week mean, last week) (10 % 推估: a systematic
+   review found no evidence for the 10 % rule — periodization-cross-sport.md [169]) over
    normal weeks only (SP-73, owner 2026-10-05): a week touching a 減量期 / race week / post-race
    恢復期 / 轉換期 is left out and the most recent normal weeks before it count instead
    (`_normal_weeks` → `load_guard.normal_weeks`, up to 26 weeks back; returned as

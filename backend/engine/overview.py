@@ -328,10 +328,10 @@ def project(ctl0: float, atl0: float, planned: list[float], cc: float, ac: float
 
 SRC_RAMP = ("每週 CTL 目標：基礎期 max(2, CTL 的 5%)、專項期 max(2.5, CTL 的 7%)（推估；"
             "Palladino 每週 +1～3、約 2～5% 可長期維持）")
-SRC_TEN = ("週量增幅 ≤ 10%：保守做法（推估；「10% 法則」本身沒有證據）；受傷風險線 > 20–30%："
+SRC_TEN = ("週量增幅 ≤ 10%：保守做法（推估；系統性回顧找不到「10% 法則」的證據）；受傷風險線 > 20–30%："
            "Nielsen 2014、Damsted 2019（同儕審查）")
-SRC_31 = "3:1 週期（三週加量、一週恢復；Friel / Uphill Athlete 常見做法）"
-SRC_BOSQUET = "Bosquet 2007：減量 2 週、量減 41–60%、強度與次數維持"
+SRC_31 = "3:1 週期（三週加量、一週恢復，恢復週減 35%，教練建議減 20–35%；Friel / Uphill Athlete 常見做法，沒有試驗比較過 3:1 和 2:1）"
+SRC_BOSQUET = "Bosquet 2007、Wang 2023 統合分析：減量 2 週、量減 41–60%、強度與次數維持"
 SRC_UA = "Uphill Athlete"
 SRC_KOOP = "Koop《Training Essentials for Ultrarunning》"
 SRC_PALLADINO = "Palladino 功率區間"
@@ -343,7 +343,10 @@ SRC_TRANSITION = "Friel（Transition 3–4 週，for fun rather than fitness）�
 # The volume is a share of the training level before the race (the 4 complete weeks before its
 # taper, planning.pre_race_mondays) — not of the last 4 weeks, which hold the taper, the race and
 # the recovery and would shrink the 轉換期 week after week. 50 % = the 恢復期's share (推估: no
-# school gives a %; Friel 「for fun rather than fitness」). Each easy run ≤ 60 min: Canova's 轉換
+# school gives a %; Friel 「for fun rather than fitness」). Reduced, not stopped: kayakers who
+# stopped lost 10.1 % VO2max vs 4.8 % on reduced training (Garcia-Pallares 2009,
+# periodization-cross-sport.md §4.7 [412]) — the direction has a source, the 50 % does not.
+# Each easy run ≤ 60 min: Canova's 轉換
 # 4 週「輕鬆跑 ≤ 1 小時」. No long run, no interval, no strides; strength ×2 (as before).
 TRANSITION_SHARE = 0.5
 TRANSITION_RUN_MAX = 60
@@ -1122,6 +1125,9 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     hours = ref
     why: list[str] = []
     ramp_goal = LG.ramp_goal(kind, ctl0)
+    # 3:1 (SRC_31): three build weeks, each ≥ 0.95 × the one before (0.95 推估: a small dip still
+    # counts as building), → a recovery week at 65 % of them (−35 %: Norwegian coaches −25–35 %,
+    # runners' coaches −20–35 %, periodization-cross-sport.md §4.3 [30][194]; no trial of 3:1 [198])
     build3 = len(hist) >= 4 and all(hist[i][1] >= 0.95 * hist[i - 1][1] and hist[i][1] > 0.5
                                     for i in range(len(hist) - 3, len(hist)))
     if kind in ("base", "specific"):
@@ -1157,6 +1163,9 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     elif kind == "taper":
         base6 = statistics.mean(h for _, h, _ in hist[-6:]) if hist else 0.0
         days_to = goals.get("days_to_next_a")
+        # 50 % → 40 % in the last 7 days (SRC_BOSQUET): Bosquet 2007 / Wang 2023 −41–60 % (a cut ≤ 40 %
+        # is too small), intensity kept [206][105]; Pfitzinger (中譯本) race week −60 % [459]; 徐國峰
+        # 8–14 days [453] (periodization-cross-sport.md §4.5, §4.10)
         share = 0.4 if days_to is not None and days_to <= 7 else 0.5
         hours = base6 * share
         why.append(_("減量期：平常 {h:.1f} h × {share:.0%}", h=base6, share=share))
@@ -1331,6 +1340,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     aet_proto = AT.resolve_protocol(getattr(prefs, "aet_test_protocol", None) or "auto",
                                     getattr(prefs, "cap_weekday", None),
                                     getattr(prefs, "long_cap", None) if prefs is not None else None)
+    # strength: 2 a week outside the season, 1 in it — once a week kept cyclists' strength for 13 weeks
+    # (Rønnestad 2010, periodization-cross-sport.md §4.7 [407])
     strength_n = 2 if kind in ("base", "transition", "recovery", "rebuild") or lvl("strength") in ("bad", "watch") else 1
 
     def add(**kw):

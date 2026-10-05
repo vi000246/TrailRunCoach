@@ -8,7 +8,9 @@
    80–100 % band twice in weeks 6–3; 江晏慶「抓比賽距離爬升的七成」 about 1.5 months
    out, Koop: longest run 20–80 % of the race distance, CTS's biggest block 4–6 weeks
    out — back-to-back-and-long-day.md §2.2). The existing guardrails still cap it:
-   ≤ +15 % over the longest of the last 4 weeks, the week's volume, recovery weeks
+   ≤ +15 % over the longest of the last 4 weeks — except that the 90-min floor (FLOOR_MIN)
+   wins over it: when that longest is < 78 min (90 / 1.15) the day is still 90 min (or the
+   aim, if lower), more than +15 %; the behaviour is SP-66's — the week's volume, recovery weeks
    (no long day), re-entry. A trail long day stops at TRAIL_LONG_MAX_MIN (SP-106): past ~6 h
    coaches stop the long run and cover the rest with B2B and weekly volume (iRunFar 5–6 h for
    100 mi; Koop: no magic long run — race-feasibility.md §1). The course constant is linear (1.8 h + 0.3 km + 10 climb
@@ -293,7 +295,8 @@ def public(info: Optional[dict]) -> Optional[dict]:
 
 def long_minutes(info: dict, longest: float) -> Optional[float]:
     """This week's long day: frac × the race day's time, ≤ +15 % over `longest` (the
-    longest of the last 4 weeks); never below min(90 min, the aim)."""
+    longest of the last 4 weeks); never below min(90 min, the aim) — the floor wins over the
+    +15 % cap when `longest` < 78 min (SP-66)."""
     if not info or not info.get("active"):
         return None
     want = trail_aim(info)[0]

@@ -11,7 +11,9 @@ has saved manual phases:
 Sources (docs/research/periodization-phase-metrics.md):
   * taper 14 days — Bosquet et al. 2007 meta-analysis (8–14 days most effective)
     (SP-96: 7 days before a 2–3 day 百岳, up to 21 by 課表偏好 for a road marathon / an ultra — taper_days)
-  * specific block before the taper, general → specific — Koop; Uphill Athlete
+  * specific block before the taper, general → specific — Koop; Uphill Athlete; its 8 weeks
+    (SPECIFIC_WEEKS) — Friel Build 8–9 wk, Canova 6–8 wk, vert.run last 8–10 wk, 江晏慶 強化
+    2–3 wk + 巔峰 ~6 wk (coaches; periodization-cross-sport.md §6.1 [18][130][131][454])
   * recovery / transition after the goal event — Uphill Athlete (2–4 weeks);
     shortened to 1 week below 超馬級 (event_size: ~6 h predicted, else EP 60 — SP-111; a
     heuristic, not a finding)
@@ -59,9 +61,11 @@ BAIYUE_TAPER_DAYS = 7
 BAIYUE_SHORT_DAYS = (2, 3)
 TAPER_DAYS_RANGE = (TAPER_DAYS, 21)
 TAPER_SETTING = "plan.prefs.taper_days"
-SPECIFIC_WEEKS = 8
+SPECIFIC_WEEKS = 8           # coaches 6–10 wk, 8 inside all of them (module docstring; 江晏慶 → 8 is 推估)
+# B event's mini-taper (coaches, periodization-cross-sport.md §4.8.1): TrainerRoad race-week taper
+# [362]; Friel 2–3 rest days [431]; Pfitzinger no intervals 5 d / tempo + long 4 d before [437] (二手轉述)
 MINI_TAPER_DAYS = 5          # B event: no interval in the 5 days before, no tempo / long run in 4 (SP-95;
-                             # Pfitzinger via [437], Friel [431] — 教練級; engine/post_race.py)
+                             # engine/post_race.py)
 LONG_EVENT_HOURS = 6.0       # recovery: 14 d at/above this (= the 超馬級 size), else 7 d
 
 # 賽事大小 (SP-111, owner 2026-10-05): predicted time → EP → km, never the horizontal km alone
@@ -82,7 +86,8 @@ EP_DIVISOR = 100.0           # ITRA km-effort; terrain_calib's personal divisor 
 # so the engine and its tests stay pure.
 HOURS_OF = None              # Callable[[Event], Optional[float]]
 DIVISOR_OF = None            # Callable[[], float]
-B_RECOVERY_DAYS = 3           # a short B race's recovery (B_REC_DAYS, SP-95)
+B_RECOVERY_DAYS = 3          # a short B race's recovery (B_REC_DAYS, SP-95); Pfitzinger ~5 d after a
+                             # tune-up [437] (二手轉述); 3 推估 (§4.8.1)
 TRANSITION_WEEKS = 3          # 轉換期 after an A race's recovery (SP-73; Friel 3–4, Canova 4 — the low end, 推估)
 # The setting's range (課表偏好 transition_weeks; 0 = off). What an A race gets (transition_weeks_for,
 # SP-109): ≤ TRANSITION_WEEKS_MAX (Friel's / Canova's upper end), ≤ TRANSITION_WEEKS_ULTRA_MAX after
