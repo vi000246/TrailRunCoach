@@ -19,8 +19,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
+from backend.i18n import N_, _
 
-END_LABELS = {"time": "時間", "distance": "距離", "open": "直到按下計圈", "load": "負荷"}
+
+END_LABELS = {"time": N_("時間"), "distance": N_("距離"), "open": N_("直到按下計圈"), "load": N_("負荷")}
 
 
 class SyncError(Exception):
@@ -72,7 +74,7 @@ class WorkoutProvider:
 
     def status_of(self, session: dict, thresholds: Optional[dict], row, today: Optional[str] = None) -> dict:
         """Offline push status of one session against its record."""
-        raise ProviderDisabled(f"{self.label} 尚未開放")
+        raise ProviderDisabled(_("{label} 尚未開放", label=_(self.label)))
 
     def row_view(self, row) -> dict:
         return {}
@@ -87,28 +89,28 @@ class WorkoutProvider:
     # -- network ---------------------------------------------------------------
     async def push_sessions(self, db, sessions: list[dict], thresholds: Optional[dict], today: str,
                             *, stale_keys=(), missed_keys=()) -> dict:
-        raise ProviderDisabled(f"{self.label} 尚未開放，沒有送出任何東西")
+        raise ProviderDisabled(_("{label} 尚未開放，沒有送出任何東西", label=_(self.label)))
 
     async def push_workout(self, db, session: dict, thresholds: Optional[dict], today: str) -> dict:
         """One workout outside the week plan (the race calculator), idempotent per
         session["key"]: on session["day"] when that is today or later, else into the
         provider's library only."""
-        raise ProviderDisabled(f"{self.label} 尚未開放，沒有送出任何東西")
+        raise ProviderDisabled(_("{label} 尚未開放，沒有送出任何東西", label=_(self.label)))
 
     async def remove_keys(self, db, keys) -> list[dict]:
-        raise ProviderDisabled(f"{self.label} 尚未開放")
+        raise ProviderDisabled(_("{label} 尚未開放", label=_(self.label)))
 
     async def list_remote(self, db) -> list[dict]:
-        raise ProviderDisabled(f"{self.label} 尚未開放")
+        raise ProviderDisabled(_("{label} 尚未開放", label=_(self.label)))
 
     def describe(self) -> dict:
         c = self.capabilities
-        return {"id": self.id, "label": self.label, "enabled": self.enabled,
+        return {"id": self.id, "label": _(self.label), "enabled": self.enabled,
                 "capabilities": {"targets": list(c.targets), "repeat_groups": c.repeat_groups,
                                  "nested_repeats": c.nested_repeats, "open_steps": c.open_steps,
                                  "distance_steps": c.distance_steps, "distance_unit": c.distance_unit,
-                                 "max_steps": c.max_steps, "notes": list(c.notes),
+                                 "max_steps": c.max_steps, "notes": [_(n) for n in c.notes],
                                  "end_conditions": list(c.end_conditions),
-                                 "end_labels": {k: c.end_labels.get(k, END_LABELS.get(k, k))
+                                 "end_labels": {k: _(c.end_labels.get(k, END_LABELS.get(k, k)))
                                                 for k in c.end_conditions},
                                  "load_unit": c.load_unit}}

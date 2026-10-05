@@ -57,6 +57,8 @@ from typing import Optional
 
 import numpy as np
 
+from backend.i18n import _
+
 TIZ_GOAL = 0.85                  # 推估 (§C2 ±15 %)
 TIZ_PART = 0.60                  # 推估
 TIZ_RUN_S = 30                   # 推估: a stretch in the zone counts from 30 s
@@ -453,10 +455,10 @@ def evaluate_test(ds, w, m: dict, c: dict, s: dict, cp: float) -> Optional[dict]
 def _no_power_why(ds, w, s) -> str:
     try:
         if s is not None and s.get("power") is not None and hasattr(ds, "power_ok") and not ds.power_ok(w):
-            return "只有手錶推估功率（未採用，設定可改）：不判讀間歇、不算 W′"
+            return _("只有手錶推估功率（未採用，設定可改）：不判讀間歇、不算 W′")
     except Exception:                       # noqa: BLE001
         pass
-    return "沒有功率：不判讀間歇、不算 W′（間歇用心率看）"
+    return _("沒有功率：不判讀間歇、不算 W′（間歇用心率看）")
 
 
 def card(ds, w) -> dict:
@@ -469,9 +471,9 @@ def card(ds, w) -> dict:
     from backend.engine import workout_review as WR
     m = WR.measure(ds, w)
     if not m:
-        return {"ok": False, "state": "none", "why": "這筆活動沒有逐秒資料"}
+        return {"ok": False, "state": "none", "why": _("這筆活動沒有逐秒資料")}
     if w.sport != "run":
-        return {"ok": False, "state": "none", "why": "不是跑步：不判讀間歇"}
+        return {"ok": False, "state": "none", "why": _("不是跑步：不判讀間歇")}
     s = WR._samples(ds, w)
     cp = m.get("cp")
     power_ok = s is not None and s.get("power") is not None
@@ -482,7 +484,7 @@ def card(ds, w) -> dict:
     if not power_ok:
         return {"ok": False, "state": "no_power", "why": _no_power_why(ds, w, s)}
     if not cp:
-        return {"ok": False, "state": "no_power", "why": "還沒有 CP：不判讀間歇、不算 W′（先做一次 CP 測試）"}
+        return {"ok": False, "state": "no_power", "why": _("還沒有 CP：不判讀間歇、不算 W′（先做一次 CP 測試）")}
     c = WR.classify(ds, w, m)
     if c["type"] in ("test_cp", "test_aet"):
         e = evaluate_test(ds, w, m, c, s, cp)
@@ -496,10 +498,12 @@ def card(ds, w) -> dict:
         return {**e, "state": "no_power"}
     bat = battery(ds, w, s, cp)
     n = len(IR.find_reps(ds, w, s, cp, None)["bouts"])
-    why = ("標了「當作間歇」，但找不到用力段（≥ 95% CP 的短趟或 3 區以上 ≥ 2.5 分）" if fl else
-           f"這次算{c['type_label']}，但找不到一趟一趟的用力段（例如一路爬坡），沒有趟可判讀" if c["type"] == "quality" else
-           f"這次不是間歇課（{c['type_label']}：有閾值強度，算硬課、不算間歇次數）" if c["type"] == "hard_long" else
-           f"這次不是間歇課（{c['type_label']}，課表也沒有對應的間歇）")
+    why = (_("標了「當作間歇」，但找不到用力段（≥ 95% CP 的短趟或 3 區以上 ≥ 2.5 分）") if fl else
+           _("這次算{type}，但找不到一趟一趟的用力段（例如一路爬坡），沒有趟可判讀", type=c["type_label"])
+           if c["type"] == "quality" else
+           _("這次不是間歇課（{type}：有閾值強度，算硬課、不算間歇次數）", type=c["type_label"])
+           if c["type"] == "hard_long" else
+           _("這次不是間歇課（{type}，課表也沒有對應的間歇）", type=c["type_label"]))
     return {"ok": False, "state": "offer", "why": why, "flagged": fl, "n_bouts": n, "type_label": c["type_label"],
             **(_public(bat) if bat else {})}
 

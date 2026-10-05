@@ -11,25 +11,27 @@
  *   const near = MapLayers.picker(map, latlngs);   // near(e.layerPoint) -> index within 24 px, or -1
  */
 (() => {
+  // i18n: common.map.* (static/i18n/i18n.js; the common catalog is inlined on every page)
+  const T = (k, p) => (window.I18N ? window.I18N.t("common.map." + k, p) : k);
   const NLSC_ATTR = '© <a href="https://maps.nlsc.gov.tw/" target="_blank" rel="noopener">內政部國土測繪中心</a>';
   const BASEMAPS = [
     { id: "rudy", name: "魯地圖", url: "https://tile.happyman.idv.tw/map/rudy/{z}/{x}/{y}.png", maxZoom: 18,
       attr: '<a href="https://rudy.basecamp.tw/" target="_blank" rel="noopener">魯地圖</a> · © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> 貢獻者' },
-    { id: "google-terrain", name: "Google 地形", url: "https://mt1.google.com/vt/lyrs=p&x={x}&y={y}&z={z}", maxZoom: 15,
+    { id: "google-terrain", name: T("google_terrain"), url: "https://mt1.google.com/vt/lyrs=p&x={x}&y={y}&z={z}", maxZoom: 15,
       attr: "地圖資料 © Google" },
-    { id: "nlsc-emap", name: "NLSC 電子地圖", url: "https://wmts.nlsc.gov.tw/wmts/EMAP/default/GoogleMapsCompatible/{z}/{y}/{x}",
+    { id: "nlsc-emap", name: T("nlsc_emap"), url: "https://wmts.nlsc.gov.tw/wmts/EMAP/default/GoogleMapsCompatible/{z}/{y}/{x}",
       maxZoom: 19, attr: NLSC_ATTR },
-    { id: "nlsc-photo", name: "正射影像", url: "https://wmts.nlsc.gov.tw/wmts/PHOTO2/default/GoogleMapsCompatible/{z}/{y}/{x}",
+    { id: "nlsc-photo", name: T("nlsc_photo"), url: "https://wmts.nlsc.gov.tw/wmts/PHOTO2/default/GoogleMapsCompatible/{z}/{y}/{x}",
       maxZoom: 19, attr: NLSC_ATTR },
     { id: "osm", name: "OSM", url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png", maxZoom: 19,
       attr: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> 貢獻者' },
   ];
   const OVERLAYS = [
-    { id: "contour", name: "等高線", url: "https://tile.happyman.idv.tw/map/moi_osm/{z}/{x}/{y}.png", opacity: 0.8, maxZoom: 18,
+    { id: "contour", name: T("contour"), url: "https://tile.happyman.idv.tw/map/moi_osm/{z}/{x}/{y}.png", opacity: 0.8, maxZoom: 18,
       attr: '等高線：<a href="https://rudy.basecamp.tw/" target="_blank" rel="noopener">魯地圖</a>' },
-    { id: "google-roads", name: "Google 道路", url: "https://mt1.google.com/vt/lyrs=h&x={x}&y={y}&z={z}", opacity: 0.9, maxZoom: 19,
+    { id: "google-roads", name: T("google_roads"), url: "https://mt1.google.com/vt/lyrs=h&x={x}&y={y}&z={z}", opacity: 0.9, maxZoom: 19,
       attr: "道路 © Google" },
-    { id: "nlsc-roads", name: "NLSC 道路", url: "https://wmts.nlsc.gov.tw/wmts/EMAP2/default/GoogleMapsCompatible/{z}/{y}/{x}",
+    { id: "nlsc-roads", name: T("nlsc_roads"), url: "https://wmts.nlsc.gov.tw/wmts/EMAP2/default/GoogleMapsCompatible/{z}/{y}/{x}",
       opacity: 0.9, maxZoom: 19, attr: NLSC_ATTR },
   ];
   const BASE_BY_ID = Object.fromEntries(BASEMAPS.map((b) => [b.id, b]));
@@ -76,7 +78,7 @@
           layer._err++;
           if (layer !== active || layer._ok > 0 || layer._err < 3 || !hint.hidden) return;
           const alt = BASEMAPS.filter((x) => x.id !== b.id && x.id !== "google-terrain").slice(0, 3);
-          hint.innerHTML = `「${b.name}」的圖磚載入失敗（主機可能沒有回應），換個底圖：`
+          hint.innerHTML = T("tiles_failed", { name: b.name })
             + alt.map((x) => `<button type="button" data-b="${x.id}">${x.name}</button>`).join("");
           hint.hidden = false;
         });
@@ -119,8 +121,8 @@
     }
     const dot = (ll, fill, tip) => L.circleMarker(ll, { radius: 6, color: "#fff", weight: 2, fillColor: fill, fillOpacity: 1 })
       .bindTooltip(tip).addTo(group);
-    dot(latlngs[0], "#16a34a", opts.start || "起點");
-    dot(latlngs[latlngs.length - 1], "#dc2626", opts.end || "終點");
+    dot(latlngs[0], "#16a34a", opts.start || T("start"));
+    dot(latlngs[latlngs.length - 1], "#dc2626", opts.end || T("finish"));
   }
 
   // the hover marker: a dark dot with a permanent readout above it

@@ -18,6 +18,7 @@ from backend.engine.algorithms.threshold_estimate import (
     DriftPoint, RunThreshold, estimate_aet, estimate_lthr, run_threshold, steady_drift,
 )
 from backend.engine.wko5expr.dataset import Dataset, date_to_day
+from backend.i18n import _
 
 WINDOWS = (90, 180)          # try 90 days, widen to 180 if too few runs
 # 「HR at CP」 is a cross-check only — never the LTHR value, never written to the
@@ -226,8 +227,9 @@ def _tpace_at_cp(ds: Dataset, today: dt.date, runs: list) -> Optional[dict]:
             spw = statistics.median(vals)
             return {"value": 1000.0 / (cp * spw) / 60.0, "n": len(vals), "days": days, "method": "cp",
                     "cp": cp, "speed_per_watt": spw,
-                    "reason": f"推估：CP {cp:.0f} W × 近 {days} 天 {len(vals)} 次 Stryd 路跑的速度／功率比"
-                              f"（中位數 {spw * 1000:.1f} mm/s/W）＝ CP 對應的平路配速"}
+                    "reason": _("推估：CP {cp:.0f} W × 近 {days} 天 {n} 次 Stryd 路跑的速度／功率比"
+                                "（中位數 {spw:.1f} mm/s/W）＝ CP 對應的平路配速",
+                                cp=cp, days=days, n=len(vals), spw=spw * 1000)}
     return None
 
 
@@ -256,10 +258,11 @@ def estimate_tpace(ds: Dataset, today: dt.date) -> dict:
         vals = [per[w.idx]["pace"] for w in runs if w.idx in per and math.floor(w.day) > tday - days]
         if len(vals) >= TPACE_MIN_RUNS:
             return {"value": statistics.median(vals), "n": len(vals), "days": days, "method": "lthr",
-                    "reason": f"推估：近 {days} 天 {len(vals)} 次路跑中，心率在 LTHR ±3% 的最快 20 分鐘配速中位數"
-                              "（Friel 30 分鐘測試的後 20 分鐘）"}
+                    "reason": _("推估：近 {days} 天 {n} 次路跑中，心率在 LTHR ±3% 的最快 20 分鐘配速中位數"
+                                "（Friel 30 分鐘測試的後 20 分鐘）", days=days, n=len(vals))}
     return {"value": None, "n": len(per), "days": WINDOWS[-1],
-            "reason": f"近 {WINDOWS[-1]} 天只有 {len(per)} 次路跑有 20 分鐘心率在 LTHR ±3%（需要 ≥ {TPACE_MIN_RUNS} 次）"}
+            "reason": _("近 {days} 天只有 {n} 次路跑有 20 分鐘心率在 LTHR ±3%（需要 ≥ {need} 次）",
+                        days=WINDOWS[-1], n=len(per), need=TPACE_MIN_RUNS)}
 
 
 # ---------------------------------------------------------------------------

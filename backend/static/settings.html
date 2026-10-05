@@ -172,19 +172,19 @@ dialog::backdrop { background: rgba(0,0,0,.35); }
   </section>
 
   <section id="hr">
-    <h2>心率 <button type="button" class="q" aria-label="說明" title="最大心率：自動從近 365 天的跑步估（持續 5 秒以上的最高心率，濾掉光學心率的尖刺），沒有資料才用手錶（COROS 帳號）的值；你填的值優先。靜息心率：用手錶（COROS 帳號）的值，或你填的值。兩個都用在儲備心率（HRR）和最大心率區間。填的值從今天起生效，以前的圖表照當時的值。">?</button></h2>
-    <dl class="kv" id="hr-kv"><dt>最大心率</dt><dd class="meta">載入中…</dd></dl>
+    <h2><span data-i18n="settings.hr.title">心率</span> <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.hr.help" title="最大心率：自動從近 365 天的跑步估（持續 5 秒以上的最高心率，濾掉光學心率的尖刺），沒有資料才用手錶（COROS 帳號）的值；你填的值優先。靜息心率：用手錶（COROS 帳號）的值，或你填的值。兩個都用在儲備心率（HRR）和最大心率區間。填的值從今天起生效，以前的圖表照當時的值。">?</button></h2>
+    <dl class="kv" id="hr-kv"><dt data-i18n="settings.hr.max">最大心率</dt><dd class="meta" data-i18n="settings.pmc.loading">載入中…</dd></dl>
     <div class="est" id="hr-check" hidden></div>
     <div class="row">
-      <label>課表心率區間 <select id="hr-model"></select></label>
-      <button type="button" class="q" aria-label="說明" id="hr-model-q" title="只決定課表（自動排課、課表步驟、推到手錶）的心率目標：恢復跑 Z1、輕鬆跑／長跑／越野 Z2、節奏 Z3、閾值 Z4、Supra／VO2max Z5。量過的 AeT（AeT 測試）一定當輕鬆跑上限。缺最大心率或靜息心率時改用乳酸閾值區間。圖表的心率區間各自在圖上選，不受這裡影響。">?</button>
+      <label><span data-i18n="settings.hr.model">課表心率區間</span> <select id="hr-model"></select></label>
+      <button type="button" class="q" aria-label="說明" id="hr-model-q" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.hr.model_help" title="只決定課表（自動排課、課表步驟、推到手錶）的心率目標：恢復跑 Z1、輕鬆跑／長跑／越野 Z2、節奏 Z3、閾值 Z4、Supra／VO2max Z5。量過的 AeT（AeT 測試）一定當輕鬆跑上限。缺最大心率或靜息心率時改用乳酸閾值區間。圖表的心率區間各自在圖上選，不受這裡影響。">?</button>
       <span class="meta" id="hr-model-note" role="status"></span>
     </div>
-    <details style="margin-top:6px"><summary class="meta">進階設定</summary>
-      <div class="row"><label>最大心率 <input type="number" id="hr-max" min="120" max="240" step="1" style="width:72px"> bpm</label>
-        <button id="hr-max-save">儲存</button><button id="hr-max-auto" hidden>改回自動</button></div>
-      <div class="row"><label>靜息心率 <input type="number" id="hr-rest" min="25" max="120" step="1" style="width:72px"> bpm</label>
-        <button id="hr-rest-save">儲存</button><button id="hr-rest-auto" hidden>改回自動</button></div>
+    <details style="margin-top:6px"><summary class="meta" data-i18n="settings.hr.advanced">進階設定</summary>
+      <div class="row"><label><span data-i18n="settings.hr.max">最大心率</span> <input type="number" id="hr-max" min="120" max="240" step="1" style="width:72px"> bpm</label>
+        <button id="hr-max-save" data-i18n="settings.pmc.save">儲存</button><button id="hr-max-auto" data-i18n="settings.pmc.clear" hidden>改回自動</button></div>
+      <div class="row"><label><span data-i18n="settings.hr.rest">靜息心率</span> <input type="number" id="hr-rest" min="25" max="120" step="1" style="width:72px"> bpm</label>
+        <button id="hr-rest-save" data-i18n="settings.pmc.save">儲存</button><button id="hr-rest-auto" data-i18n="settings.pmc.clear" hidden>改回自動</button></div>
       <p class="meta" id="hr-est"></p>
     </details>
   </section>
@@ -263,7 +263,7 @@ dialog::backdrop { background: rgba(0,0,0,.35); }
       <div class="row"><label>課表推送到 <select id="s-push"></select></label>
         <button type="button" class="q" aria-label="說明" title="課表（手動推送和自動調整）送到哪一個平台，一次只用一個。Garmin、intervals.icu 還沒開放，先列出來。">?</button></div>
       <div class="row"><span class="meta" id="s-tl"></span>
-        <button type="button" class="q" aria-label="說明" title="課表的「負荷」結束條件在這裡填 TSS，推到 COROS 時換算成它的 TL（Training Load）。預設係數來自一位跑者的活動（推估，誤差約 ±20%）；每次同步後用你自己有 TL 的 COROS 活動重新擬合：近期活動權重較高、門檻（CP／LTHR）大改前的活動不用，資料少時只用簡單模型並向預設靠攏（權重＝n ÷（n＋30））。新係數要在最近 30 天的活動上不比舊的差才會換上。">?</button></div>
+        <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.tl.help" title="課表的「負荷」結束條件在這裡填 TSS，推到 COROS 時換算成它的 TL（Training Load）。預設係數來自一位跑者的活動（推估，誤差約 ±20%）；每次同步後用你自己有 TL 的 COROS 活動重新擬合：近期活動權重較高、門檻（CP／LTHR）大改前的活動不用，資料少時只用簡單模型並向預設靠攏（權重＝n ÷（n＋30））。新係數要在最近 30 天的活動上不比舊的差才會換上。">?</button></div>
       <p class="meta" id="s-chart-note">「圖表資料來源」決定圖表、總覽和功率計算機讀哪一份資料；儲存後重新整理頁面就會改用新來源
         （圖表頁右上角的「資料來源」也可以直接切換）。第一次載入要讀完所有 FIT 檔，會比較久。
         想先看兩個來源的差異，可以用 <a href="/api/v1/static/compare.html">資料來源比對</a>。</p>
@@ -606,16 +606,16 @@ $("saveprof").onclick = async () => {
 // ---- 心率 (api/plan.py hr-profile, engine/hr_profile.py) ---------------------
 const HRP = "/api/v1/plan/hr-profile";
 function renderHr(r) {
-  const v = (x) => x && x.value != null ? `${Math.round(x.value)} bpm` : "未設定";
+  const v = (x) => x && x.value != null ? `${Math.round(x.value)} bpm` : t("settings.hr.unset");
   const src = (x) => x && x.source ? `<span class="meta">（${esc(x.source)}）</span>` : x && x.reason ? `<span class="meta">${esc(x.reason)}</span>` : "";
-  $("hr-kv").innerHTML = `<dt>最大心率</dt><dd>${v(r.max_hr)} ${src(r.max_hr)}</dd>
-    <dt>靜息心率</dt><dd>${v(r.rest_hr)} ${src(r.rest_hr)}</dd>`;
+  $("hr-kv").innerHTML = `<dt>${esc(t("settings.hr.max"))}</dt><dd>${v(r.max_hr)} ${src(r.max_hr)}</dd>
+    <dt>${esc(t("settings.hr.rest"))}</dt><dd>${v(r.rest_hr)} ${src(r.rest_hr)}</dd>`;
   $("hr-model").innerHTML = r.models.map((m) => `<option value="${esc(m.id)}"${m.id === r.model ? " selected" : ""}>${esc(m.label)}</option>`).join("");
   const cur = r.models.find((m) => m.id === r.model);
   $("hr-model-q").title = $("hr-model-q").title.split("\n\n")[0] + (cur ? "\n\n" + cur.source : "");
   const z = r.plan_zones;
   $("hr-model-note").textContent = !z ? "" : z.fallback ? z.fallback
-    : `輕鬆跑 ${z.easy[0]}–${z.easy[1]} bpm（${z.easy_source}）`;
+    : t("settings.hr.easy", { lo: z.easy[0], hi: z.easy[1], src: z.easy_source });
   const man = (x) => x && x.kind === "manual";
   $("hr-max").value = man(r.max_hr) ? Math.round(r.max_hr.value) : "";
   $("hr-max").placeholder = r.estimate && r.estimate.value ? r.estimate.value : (r.account && r.account.max_hr) || "";
@@ -624,27 +624,27 @@ function renderHr(r) {
   $("hr-max-auto").hidden = !man(r.max_hr); $("hr-rest-auto").hidden = !man(r.rest_hr);
   const e = r.estimate || {};
   $("hr-est").textContent = [
-    e.value ? `自動估算：${e.value} bpm（${e.reason}）` : e.reason ? `自動估算：${e.reason}` : "",
-    e.peaks && e.peaks.length ? `各次跑步最高：${e.peaks.map((p) => `${p[0]} ${p[1]}`).join("、")}` : "",
-    r.account ? `手錶（COROS 帳號）：最大 ${r.account.max_hr ?? "–"}、靜息 ${r.account.rest_hr ?? "–"} bpm` : "手錶：還沒讀到（登入 COROS 或同步一次）",
+    e.value ? t("settings.hr.est", { v: e.value, reason: e.reason }) : e.reason ? t("settings.hr.est_reason", { reason: e.reason }) : "",
+    e.peaks && e.peaks.length ? t("settings.hr.peaks", { list: e.peaks.map((p) => `${p[0]} ${p[1]}`).join("、") }) : "",
+    r.account ? t("settings.hr.watch", { max: r.account.max_hr ?? "–", rest: r.account.rest_hr ?? "–" }) : t("settings.hr.watch_none"),
   ].filter(Boolean).join("　");
 }
 async function loadHr() {
   try { renderHr(await j(HRP)); }
-  catch (e) { $("hr-kv").innerHTML = `<dt>心率</dt><dd class="meta">讀取失敗：${esc(e.message.slice(0, 100))}</dd>`; }
+  catch (e) { $("hr-kv").innerHTML = `<dt>${esc(t("settings.hr.title"))}</dt><dd class="meta">${esc(t("settings.hr.load_failed", { msg: e.message.slice(0, 100) }))}</dd>`; }
 }
 async function putHr(body, msg) {
   try {
     renderHr(await j(HRP, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }));
     toast(msg);
     loadThr();          // max / resting HR are rows of the same table: never PUT a stale copy over them
-  } catch (e) { toast("失敗：" + e.message.slice(0, 80)); }
+  } catch (e) { toast(t("settings.failed", { msg: e.message.slice(0, 80) })); }
 }
-$("hr-model").onchange = (e) => putHr({ model: e.target.value }, "已儲存，課表心率目標會重算");
-$("hr-max-save").onclick = () => { const x = Number($("hr-max").value); if (x) putHr({ max_hr: x }, "已儲存最大心率"); };
-$("hr-rest-save").onclick = () => { const x = Number($("hr-rest").value); if (x) putHr({ rest_hr: x }, "已儲存靜息心率"); };
-$("hr-max-auto").onclick = () => putHr({ clear_max: true }, "最大心率改回自動");
-$("hr-rest-auto").onclick = () => putHr({ clear_rest: true }, "靜息心率改回自動");
+$("hr-model").onchange = (e) => putHr({ model: e.target.value }, t("settings.hr.model_saved"));
+$("hr-max-save").onclick = () => { const x = Number($("hr-max").value); if (x) putHr({ max_hr: x }, t("settings.hr.max_saved")); };
+$("hr-rest-save").onclick = () => { const x = Number($("hr-rest").value); if (x) putHr({ rest_hr: x }, t("settings.hr.rest_saved")); };
+$("hr-max-auto").onclick = () => putHr({ clear_max: true }, t("settings.hr.max_cleared"));
+$("hr-rest-auto").onclick = () => putHr({ clear_rest: true }, t("settings.hr.rest_cleared"));
 
 // ---- 閾值測試紀錄 (api/plan.py GET / PUT /thresholds; planning.Threshold) ------------
 // The season plan's dated rows: each applies from its date on. The table edits LTHR / AeT / CP;
@@ -839,10 +839,11 @@ function showTl(t) {
   if (!t || !t.groups) { el.textContent = ""; return; }
   const pct = (x) => x == null ? "–" : `${Math.round(x * 100)}%`;
   const g = t.groups.map((r) => `${r.label}：${r.text}` + (r.fitted
-    ? `（本人 n=${r.n}，權重 ${Math.round(r.w * 100)}%` + (r.backtest ? `，近 ${r.backtest.holdout_days} 天回測誤差 ${pct(r.backtest.mape)}` : r.loo ? `，誤差 ${pct(r.loo.mape)}` : "") + "）"
-    : `（預設，±${r.err_pct}%）`));
-  const lf = t.load && t.load.n ? `；負荷段實測校正 ×${(1 / t.load.factor).toFixed(2)}（n=${t.load.n}）` : "";
-  el.textContent = `「負荷」換算 TSS → COROS TL（推估）— ${g.join("；")}${lf}`;
+    ? I18N.t("settings.tl.fitted", { n: r.n, w: Math.round(r.w * 100), extra: r.backtest
+      ? I18N.t("settings.tl.backtest", { days: r.backtest.holdout_days, err: pct(r.backtest.mape) }) : r.loo ? I18N.t("settings.tl.loo", { err: pct(r.loo.mape) }) : "" })
+    : I18N.t("settings.tl.default", { err: r.err_pct })));
+  const lf = t.load && t.load.n ? I18N.t("settings.tl.load", { f: (1 / t.load.factor).toFixed(2), n: t.load.n }) : "";
+  el.textContent = I18N.t("settings.tl.summary", { groups: g.join("；") + lf });
 }
 
 async function loadSyncSettings() {
@@ -1083,28 +1084,29 @@ async function syncNow(src) {
   const prog = f(src, "prog"), txt = f(src, "progtxt"), btn = box(src).querySelector('[data-act="sync"]');
   f(src, "log").innerHTML = ""; prog.hidden = false; prog.removeAttribute("value");
   const label = btn.textContent;
-  btn.disabled = true; btn.textContent = "同步中…"; btn.setAttribute("aria-busy", "true");
-  txt.textContent = "同步中…（連線到 " + SRC_NAME[src] + "）";
+  btn.disabled = true; btn.textContent = t("settings.sync.running"); btn.setAttribute("aria-busy", "true");
+  txt.textContent = t("settings.sync.connecting", { src: SRC_NAME[src] });
   try {
     // the SSE stream is read by syncrun.js (shared with 課表 › 從 COROS 抓活動)
     const st = await TRCSync.run(src, { since, onEvent(ev, st) {
       const id = ev.workout_id || ev.activity_id || "";
       const day = ev.workout_date || ev.date || "";
-      if (ev.status === "downloaded") logLine(src, `✓ ${day} ${id} 已下載`, "d");
-      else if (ev.status === "skipped") logLine(src, `· ${day} ${id} 已存在`);
-      else if (ev.status === "no_file") logLine(src, `· ${day} ${id} 沒有 FIT 檔`);
-      else if (ev.status === "relogin") logLine(src, "· 登入已失效，已用記住的密碼自動重新登入", "d");
+      if (ev.status === "downloaded") logLine(src, `✓ ${t("settings.sync.ev_downloaded", { day, id })}`, "d");
+      else if (ev.status === "skipped") logLine(src, `· ${t("settings.sync.ev_skipped", { day, id })}`);
+      else if (ev.status === "no_file") logLine(src, `· ${t("settings.sync.ev_no_file", { day, id })}`);
+      else if (ev.status === "relogin") logLine(src, "· " + t("settings.sync.ev_relogin"), "d");
       else if (ev.status === "error" || ev.error) logLine(src, `✗ ${day} ${id} ${ev.error || ""} ${ev.detail || ""}`, "e");
-      else if (ev.status === "complete") logLine(src, `完成：下載 ${ev.total_downloaded}、檢查 ${ev.total_checked}、錯誤 ${(ev.errors || []).length}`, "d");
+      else if (ev.status === "complete") logLine(src, t("settings.sync.ev_complete", { dl: ev.total_downloaded, checked: ev.total_checked, err: (ev.errors || []).length }), "d");
       if (st.total) { prog.max = st.total; prog.value = Math.min(st.checked, st.total); }
-      txt.textContent = `同步中… 檢查 ${st.checked}${st.total ? " / " + st.total : ""} · 下載 ${st.downloaded} · 錯誤 ${st.errors}`;
+      txt.textContent = t("settings.sync.progress", { checked: st.checked + (st.total ? " / " + st.total : ""), dl: st.downloaded, err: st.errors });
     } });
-    if (st.busy && !st.checked) { txt.textContent = "這個來源正在同步中"; toast("這個來源正在同步中"); return; }
-    const fatal = st.fatal && (st.fatal.auth ? "登入已失效，請重新登入" : (st.fatal.detail || st.fatal.code || "失敗"));
-    txt.textContent = fatal ? `同步失敗：${fatal}`
-      : st.finished ? `同步完成：下載 ${st.downloaded}、檢查 ${st.checked}、錯誤 ${st.errors}` : `同步中斷：檢查 ${st.checked}、下載 ${st.downloaded}`;
-    toast(fatal ? "同步失敗" : st.finished ? "同步完成" : "同步中斷");
-  } catch (e) { logLine(src, "連線失敗：" + e.message, "e"); txt.textContent = "同步失敗：" + reason(e); }
+    if (st.busy && !st.checked) { txt.textContent = t("settings.sync.busy"); toast(t("settings.sync.busy")); return; }
+    const fatal = st.fatal && (st.fatal.auth ? t("settings.sync.auth_lost") : (st.fatal.detail || st.fatal.code || t("settings.sync.fail_word")));
+    txt.textContent = fatal ? t("settings.sync.failed_msg", { msg: fatal })
+      : st.finished ? t("settings.sync.done_msg", { dl: st.downloaded, checked: st.checked, err: st.errors })
+      : t("settings.sync.stopped_msg", { checked: st.checked, dl: st.downloaded });
+    toast(fatal ? t("settings.sync.failed") : st.finished ? t("settings.sync.done") : t("settings.sync.stopped"));
+  } catch (e) { logLine(src, t("settings.sync.conn_failed", { msg: e.message }), "e"); txt.textContent = t("settings.sync.failed_msg", { msg: reason(e) }); }
   finally {
     btn.disabled = false; btn.textContent = label; btn.removeAttribute("aria-busy");
     prog.hidden = true; loadSources();

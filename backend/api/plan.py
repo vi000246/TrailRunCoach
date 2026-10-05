@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Optional
 
 from backend.engine.localtime import today_local
+from backend.i18n import _
 from backend.i18n.pages import render_page
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
@@ -464,11 +465,11 @@ def put_profile(body: ProfileIn):
         except ValueError as e:
             raise HTTPException(400, f"bad date: {e}")
         if not 25 <= w.kg <= 250:
-            raise HTTPException(400, f"體重 {w.kg} kg 不合理")
+            raise HTTPException(400, _("體重 {kg} kg 不合理", kg=w.kg))
     if body.height_cm is not None and not 100 <= body.height_cm <= 250:
-        raise HTTPException(400, f"身高 {body.height_cm} cm 不合理")
+        raise HTTPException(400, _("身高 {cm} cm 不合理", cm=body.height_cm))
     if not AP.birth_year_ok(body.birth_year):
-        raise HTTPException(400, f"出生年 {body.birth_year} 不合理")
+        raise HTTPException(400, _("出生年 {year} 不合理", year=body.birth_year))
     if body.power_source is not None and body.power_source not in AP.POWER_SOURCES:
         raise HTTPException(400, f"power_source must be one of {AP.POWER_SOURCES}")
     for k in ("sex", "power_meter"):
@@ -517,7 +518,7 @@ def hr_profile_view(ds, today: dt.date) -> dict:
         tt = None
     return {"max_hr": {k: v for k, v in mx.items() if k != "estimate"}, "rest_hr": rs,
             "estimate": est, "account": acc, "model": model,
-            "models": [{"id": k, "label": HP.MODEL_LABEL[k], "source": HP.SOURCE[k]} for k in HP.PLAN_MODELS],
+            "models": [{"id": k, "label": _(HP.MODEL_LABEL[k]), "source": _(HP.SOURCE[k])} for k in HP.PLAN_MODELS],
             "plan_zones": (tt or {}).get("hr_model")}
 
 
@@ -542,9 +543,9 @@ async def put_hr_profile(body: HrProfileIn, db: AsyncSession = Depends(get_db)):
     from fastapi.concurrency import run_in_threadpool
     from backend.engine import hr_profile as HP
     if body.max_hr is not None and not 120 <= body.max_hr <= 240:
-        raise HTTPException(400, f"最大心率 {body.max_hr:g} 不合理（120–240）")
+        raise HTTPException(400, _("最大心率 {hr:g} 不合理（120–240）", hr=body.max_hr))
     if body.rest_hr is not None and not 25 <= body.rest_hr <= 120:
-        raise HTTPException(400, f"靜息心率 {body.rest_hr:g} 不合理（25–120）")
+        raise HTTPException(400, _("靜息心率 {hr:g} 不合理（25–120）", hr=body.rest_hr))
     if body.model is not None and body.model not in HP.PLAN_MODELS:
         raise HTTPException(400, f"model must be one of {HP.PLAN_MODELS}")
     today = today_local().isoformat()
@@ -706,7 +707,7 @@ def apply_estimate(body: ApplyEstimate):
             or body.mhr_method not in (None, *P.MHR_METHODS):
         raise HTTPException(400, "unknown lthr_method / aethr_method / mhr_method")
     if body.mhr is not None and not 120 <= body.mhr <= 240:
-        raise HTTPException(400, f"最大心率 {body.mhr:g} 不合理（120–240）")
+        raise HTTPException(400, _("最大心率 {hr:g} 不合理（120–240）", hr=body.mhr))
     plan = P.Plan.load()
     today = today_local().isoformat()
     if body.date:
@@ -756,15 +757,15 @@ def apply_cp(body: ApplyCP):
     except (TypeError, ValueError) as e:
         raise HTTPException(400, f"bad date: {e}")
     if d is None or d > today_local():
-        raise HTTPException(400, "測試日期不能在未來")
+        raise HTTPException(400, _("測試日期不能在未來"))
     if body.cp_method not in CPP.METHOD_LABEL:
         raise HTTPException(400, f"cp_method must be one of {tuple(CPP.METHOD_LABEL)}")
     if not 50 <= body.cp <= 700:
-        raise HTTPException(400, f"CP {body.cp} W 不合理")
+        raise HTTPException(400, _("CP {cp} W 不合理", cp=body.cp))
     if body.wprime is not None and not 0 < body.wprime <= 60000:
-        raise HTTPException(400, f"W′ {body.wprime} J 不合理")
+        raise HTTPException(400, _("W′ {wp} J 不合理", wp=body.wprime))
     if body.wprime is not None and body.cp_method != "2pt":
-        raise HTTPException(400, "W′ 只在兩點測試量得到")
+        raise HTTPException(400, _("W′ 只在兩點測試量得到"))
     plan = P.Plan.load()
     iso = d.isoformat()
     row = next((t for t in plan.thresholds if t.date == iso), None)

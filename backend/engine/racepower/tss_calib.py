@@ -21,6 +21,8 @@ from __future__ import annotations
 import math
 from typing import Optional
 
+from backend.i18n import _
+
 KEY = "racepower.race_tss_calib"
 PREFIX = "racecalc:"
 CALIB_K = 3                      # 推估: w = n / (n + 3) — 3 races = half the personal ratio
@@ -83,11 +85,11 @@ def factor(store) -> dict:
             rs.append(min(RATIO_RANGE[1], max(RATIO_RANGE[0], act / raw)))
     n = len(rs)
     if not n:
-        return {"factor": 1.0, "n": 0, "k": CALIB_K, "ratio": None, "badge": "推估"}
+        return {"factor": 1.0, "n": 0, "k": CALIB_K, "ratio": None, "badge": _("推估")}
     m = sum(math.log(r) for r in rs) / n
     w = n / (n + CALIB_K)
     return {"factor": round(math.exp(w * m), 3), "n": n, "k": CALIB_K, "ratio": round(math.exp(m), 3),
-            "badge": "推估"}
+            "badge": _("推估")}
 
 
 def validate(value) -> None:

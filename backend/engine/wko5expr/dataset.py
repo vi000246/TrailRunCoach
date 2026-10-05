@@ -24,6 +24,7 @@ from backend.engine.wko5expr.config import EngineConfig
 from backend.engine.wko5expr.corrections import CorrectionStore
 from backend.files.wko5_athlete import AUTO, Athlete, WorkoutEntry, read_athlete, EPOCH
 from backend.files.wko4_file import Wko4File, read_wko4
+from backend.i18n import N_, _
 
 # Entire Workout range field ids (VERIFIED map from WKO5.exe serializer, 2026-09-29)
 F_DURATION, F_DISTANCE, F_CLIMBING, F_NP = 4206, 4217, 4223, 4219
@@ -601,8 +602,12 @@ class Dataset:
     # ---- settings ---------------------------------------------------------
     settings_from = "wko5"           # FitFolderDataset: "app" (plan / DB / estimates) unless opted in
 
-    def setting_label(self, name: str, default: str = "WKO5 設定") -> str:
-        """Where the athlete's dated setting `name` comes from (UI labels).
+    def setting_label(self, name: str, default: str = N_("WKO5 設定")) -> str:
+        """Where the athlete's dated setting `name` comes from (UI labels), translated."""
+        return _(self.setting_source(name, default))
+
+    def setting_source(self, name: str, default: str = N_("WKO5 設定")) -> str:
+        """setting_label's msgid, untranslated (tss_ftp stores it with the cached metrics).
         Here: the WKO5 athlete file; FitFolderDataset overrides it."""
         return default
 
@@ -661,7 +666,7 @@ class Dataset:
             return w.entry.ftp, "WKO5 設定（活動當時的 FTP）"
         name = SPORT_SETTING_PREFIX.get(w.sport, "other") + "ftp"
         v = self.setting(name, w.day)
-        return (v, self.setting_label(name)) if v else (None, None)
+        return (v, self.setting_source(name)) if v else (None, None)
 
     # ---- workout metrics --------------------------------------------------
     def _metrics(self, w: Workout) -> dict[str, Optional[float]]:

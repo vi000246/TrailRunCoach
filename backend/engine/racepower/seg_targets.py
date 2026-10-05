@@ -19,6 +19,8 @@ from __future__ import annotations
 
 from typing import Optional
 
+from backend.i18n import _
+
 RUN_CLIMB = (0.03, 0.08)
 FLAT = 0.03
 DESCENT = -0.03
@@ -62,10 +64,10 @@ def hr_cap(plan: dict, aet: Optional[float], lthr: Optional[float]) -> tuple[Opt
         return cap, "AeT"
     th = s.get("trail_hr") or {}
     if th.get("x") and lthr:
-        return th["x"] * lthr, f"越野心率模型的比賽心率（{th['x']:.0%} LTHR）"
+        return th["x"] * lthr, _("越野心率模型的比賽心率（{x:.0%} LTHR）", x=th['x'])
     hours = float(s.get("time_s") or 0.0) / 3600.0
     if hours > LONG_RACE_H and aet:
-        return aet, "AeT（> 3 h 壓在 AeT 附近，推估）"
+        return aet, _("AeT（> 3 h 壓在 AeT 附近，推估）")
     if lthr:
         return lthr, "LTHR"
     return aet, "AeT" if aet else ""
@@ -82,8 +84,8 @@ def fuel_summary(plan: dict, seg: dict) -> str:
     eats = [e for e in ev if e["kind"] == "fuel"]
     if eats:
         dose = eats[0].get("cho_g")
-        txt = "行動糧" if plan.get("type") == "baiyue" else "吃"
-        parts.append(f"{txt} {len(eats)} 次" + (f"（每次約 {dose:.0f} g 碳水）" if dose else ""))
+        txt = _("行動糧") if plan.get("type") == "baiyue" else _("吃")
+        parts.append(_("{what} {n} 次", what=txt, n=len(eats)) + (_("（每次約 {g:.0f} g 碳水）", g=dose) if dose else ""))
     parts += [e["action"] for e in ev if e["kind"] == "aid"]
     return "；".join(parts)
 

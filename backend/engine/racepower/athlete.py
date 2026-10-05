@@ -22,6 +22,7 @@ from backend.engine.racepower import difficulty as DF
 from backend.engine.racepower import re as RE
 from backend.engine.racepower import riegel as R
 from backend.engine.racepower import weather as WX
+from backend.i18n import _
 
 CP_WINDOW_DAYS = 90
 RIEGEL_WINDOW_DAYS = 365
@@ -1523,7 +1524,7 @@ def set_hike_meta(file: str, pack_kg: Optional[float], path=None, start=None) ->
         trips.pop(key, None)
     else:
         if not 0 <= float(pack_kg) <= 40:
-            raise ValueError("背負要在 0–40 kg")
+            raise ValueError(_("背負要在 0–40 kg"))
         rec = {**dict.get(trips, key, {}), "pack_kg": float(pack_kg)}
         st = AK.key_of(start) if start is not None else AK.key_of(AK.start_of_file(str(file)))
         if st and not rec.get("start"):

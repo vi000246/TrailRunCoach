@@ -16,6 +16,8 @@ from __future__ import annotations
 
 from typing import Optional
 
+from backend.i18n import _
+
 FAST_WARN = 0.03       # 推估
 FAST_BAD = 0.08        # 推估: 「很可能撐不住」
 SLOW_NOTE = 0.10       # 推估
@@ -33,15 +35,15 @@ def check(goal_time_s: float, model_time_s: Optional[float], mode: str) -> dict:
     "level": ok | fast | too_fast | slow, "message"}. `faster` > 0 = the goal is
     faster than the model."""
     out = {"mode": mode, "goal_time_s": goal_time_s, "model_time_s": model_time_s,
-           "faster": None, "level": "ok", "message": None, "badge": "推估"}
+           "faster": None, "level": "ok", "message": None, "badge": _("推估")}
     if not (goal_time_s and model_time_s and goal_time_s > 0 and model_time_s > 0):
         return out
     faster = model_time_s / goal_time_s - 1.0
     out["faster"] = faster
     if faster > FAST_BAD:
-        out.update(level="too_fast", message=f"比模型預測快 {faster:.0%}，很可能撐不住")
+        out.update(level="too_fast", message=_("比模型預測快 {f:.0%}，很可能撐不住", f=faster))
     elif faster > FAST_WARN:
-        out.update(level="fast", message=f"比模型預測快 {faster:.0%}，可能撐不住")
+        out.update(level="fast", message=_("比模型預測快 {f:.0%}，可能撐不住", f=faster))
     elif faster < -SLOW_NOTE:
-        out.update(level="slow", message=f"比模型預測慢 {-faster:.0%}：很保守，體力還有餘裕")
+        out.update(level="slow", message=_("比模型預測慢 {f:.0%}：很保守，體力還有餘裕", f=-faster))
     return out

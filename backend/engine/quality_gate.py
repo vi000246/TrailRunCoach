@@ -1791,30 +1791,31 @@ def z5_card(gate: dict, today: dt.date) -> dict:
         u = z5_ua_gap(ta, lt)
         inv = lt.get("invalid") or {}
         if u is not None:
-            val = f"AeT {ta['value']:.0f}（{ta['date']} 實測）/ LTHR {lt['value']:.0f} → {u['gap'] * 100:.0f}%"
+            val = _("AeT {aet:.0f}（{date} 實測）/ LTHR {lthr:.0f} → {gap:.0f}%", aet=ta['value'], date=ta['date'],
+                    lthr=lt['value'], gap=u['gap'] * 100)
         elif not ta:
-            val = ("—（AeT 是估計值，不算：要做一次 AeT 測試）" if ae.get("measured") or ae.get("value")
-                   else "—（還沒做過：沒有實測 AeT）")
+            val = (_("—（AeT 是估計值，不算：要做一次 AeT 測試）") if ae.get("measured") or ae.get("value")
+                   else _("—（還沒做過：沒有實測 AeT）"))
         elif lt.get("measured") and not lt.get("default") and inv:
-            val = f"—（{inv.get('text') or 'LTHR 已失效'}：要重測 30 分鐘 LTHR）"
+            val = _("—（{why}：要重測 30 分鐘 LTHR）", why=inv.get('text') or _("LTHR 已失效"))
         else:
-            val = "—（LTHR 不是實測：要做一次 30 分鐘 LTHR 測試）"
-        tests.append({"key": "aet_ua_gap", "label": "實測 AeT＋實測 LTHR：LTHR ÷ AeT − 1 ≤ 10%",
+            val = _("—（LTHR 不是實測：要做一次 30 分鐘 LTHR 測試）")
+        tests.append({"key": "aet_ua_gap", "label": _("實測 AeT＋實測 LTHR：LTHR ÷ AeT − 1 ≤ 10%"),
                       "ok": (("aet_ua_gap" in ap) and counts(ap.get("aet_ua_gap"))) if u is not None else None,
                       "value": val, "need": "≤ 10%", "src": SRC_Z5["ua"],
                       "missing": "aet" if not ta else "lthr" if u is None else ("gap" if not u["ok"] else "")})
     if mode_has(mode, "aet_friel_drift"):
         fr = (gate.get("options") or {}).get("friel_drift") or {}
-        tests.append({"key": "aet_friel_drift", "label": "Friel 飄移：實測 AeT 附近跑 ≥ 60 分鐘，前後半飄移 < 5%",
+        tests.append({"key": "aet_friel_drift", "label": _("Friel 飄移：實測 AeT 附近跑 ≥ 60 分鐘，前後半飄移 < 5%"),
                       "ok": (("aet_friel_drift" in ap) and counts(ap.get("aet_friel_drift"))) if ta and fr.get("usable")
                       else None,
-                      "value": (fr.get("why") or "—") if ta else "—（還沒有實測 AeT）", "need": "< 5%",
+                      "value": (fr.get("why") or "—") if ta else _("—（還沒有實測 AeT）"), "need": "< 5%",
                       "src": SRC_Z5["friel"], "missing": "aet" if not ta else ""})
-    out["base"] = {"label": "實測 AeT（二選一，做了且達標）" if len(tests) > 1 else
-                   f"實測 AeT（{tests[0]['label'].split('：')[0]}）" if tests else "實測 AeT",
+    out["base"] = {"label": _("實測 AeT（二選一，做了且達標）") if len(tests) > 1 else
+                   _("實測 AeT（{x}）", x=tests[0]['label'].split('：')[0].split(': ')[0]) if tests else _("實測 AeT"),
                    "ok": bool(base_done), "tests": tests,
-                   "empty": ("恢復期內不判斷" if state == "reentry" else
-                             "不設門檻（Seiler）" if state == "open" else "" if tests else "這個間歇門檻不開 5 區")}
+                   "empty": (_("恢復期內不判斷") if state == "reentry" else
+                             _("不設門檻（Seiler）") if state == "open" else "" if tests else _("這個間歇門檻不開 5 區"))}
     d3, d5 = _track_doses(gate)
     out["z3"] = {"done": min(int(zt["done"]), Z5_Z3_NEED), "need": Z5_Z3_NEED, "ok": bool(zt["z3_ok"]),
                  "under_way": bool(zt["under_way"]), "days": Z5_Z3_DAYS, "src": SRC_Z5["z3"],
@@ -1833,15 +1834,15 @@ def z5_card(gate: dict, today: dt.date) -> dict:
     out["steps"] = [
         {"key": "base", "label": out["base"]["label"],
          "status": "done" if base_done else "wait" if state == "reentry" else "active"},
-        {"key": "z3", "label": f"近 {Z5_Z3_DAYS // 7} 週 3 區 {out['z3']['done']}/{Z5_Z3_NEED} 堂",
+        {"key": "z3", "label": _("近 {w} 週 3 區 {done}/{need} 堂", w=Z5_Z3_DAYS // 7, done=out['z3']['done'], need=Z5_Z3_NEED),
          "status": "done" if zt["z3_ok"] else "active"},
-        {"key": "z5", "label": "5 區開放",
+        {"key": "z5", "label": _("5 區開放"),
          "status": "done" if zt["open"] else "paused" if state in ("paused", "reentry") else "todo"},
     ]
-    out["headline"] = ("已解鎖" if zt["open"] else {
-        "confirmed": f"AeT 已通過（{z.get('since')}，{out['path_label']}）",
-        "paused": "暫停", "reentry": "恢復期", "open": "不設門檻",
-    }.get(state, "未解鎖"))
+    out["headline"] = (_("已解鎖") if zt["open"] else {
+        "confirmed": _("AeT 已通過（{since}，{path}）", since=z.get('since'), path=out['path_label']),
+        "paused": _("暫停"), "reentry": _("恢復期"), "open": _("不設門檻"),
+    }.get(state) or _("未解鎖"))
     out["flow"] = z5_flow(out, z, gate, tests, out["z3"]["step"])
     return out
 
@@ -2042,55 +2043,57 @@ def _z5_next(card: dict, z: dict, gate: dict, tests: list) -> dict:
     zt = card["z5_gate"]
     pause = z.get("pause") or {}
     R = card.get("reentry")
-    soft = (f"近 {Z5_Z3_DAYS // 7} 週再 {max(0, z3['need'] - z3['done'])} 堂 3 區"
-            f"（{z3['done']}/{z3['need']}；推估）")
+    soft = _("近 {w} 週再 {left} 堂 3 區（{done}/{need}；推估）", w=Z5_Z3_DAYS // 7,
+              left=max(0, z3['need'] - z3['done']), done=z3['done'], need=z3['need'])
     if state == "reentry" and R:
-        after = f"之後先 {R['z3_before_z5']} 堂 3 區" + ("，並重新做 AeT 測試" if R["reconfirm"] else "")
-        return {"kind": "reentry", "text": f"恢復期還剩 {R['days_left']} 天（到 {R['quality_from']} 前只排輕鬆跑）；{after}"}
+        after = _("之後先 {n} 堂 3 區", n=R['z3_before_z5']) + (_("，並重新做 AeT 測試") if R["reconfirm"] else "")
+        return {"kind": "reentry", "text": _("恢復期還剩 {n} 天（到 {date} 前只排輕鬆跑）；{after}", n=R['days_left'],
+                                             date=R['quality_from'], after=after)}
     if state == "paused":
         if pause.get("kind") == "reentry_z3":
             left = max(0, int(pause.get("need") or 1) - int(pause.get("done") or 0))
-            return {"kind": "paused", "text": f"還缺：恢復期後再 {left} 堂 3 區（已 {pause.get('done', 0)}／{pause.get('need', 1)}）"}
+            return {"kind": "paused", "text": _("還缺：恢復期後再 {left} 堂 3 區（已 {done}／{need}）", left=left,
+                                                done=pause.get('done', 0), need=pause.get('need', 1))}
         if pause.get("kind") == "drift_check":
-            return {"kind": "paused", "text": "還缺：恢復期後的長跑飄移檢查——下一次 ≥ 75 分鐘的路跑長跑，"
-                                              "後段心率、配速各在 ±5% 內（推估）"}
+            return {"kind": "paused", "text": _("還缺：恢復期後的長跑飄移檢查——下一次 ≥ 75 分鐘的路跑長跑，"
+                                                "後段心率、配速各在 ±5% 內（推估）")}
         K = card.get("keep") or {}
-        line = f"（現在是 {K['line_min']:.0f} 分）" if K.get("line_min") else ""
-        return {"kind": "paused", "text": "還缺：重新做 AeT 測試（UA 差距或 Friel 飄移）；"
-                                          f"之後每週 1 區時間別連 3 週低於確認時的 2/3{line}"}
+        line = _("（現在是 {m:.0f} 分）", m=K['line_min']) if K.get("line_min") else ""
+        return {"kind": "paused", "text": _("還缺：重新做 AeT 測試（UA 差距或 Friel 飄移）；"
+                                            "之後每週 1 區時間別連 3 週低於確認時的 2/3{line}", line=line)}
     if zt["aet_ok"]:
         if zt["z3_ok"]:
             if state == "open":
-                return {"kind": "open", "text": "不設門檻（Seiler）：5 區照 80/20 安排"}
-            return {"kind": "done", "text": "都做到了：5 區可以排（每趟 2–5 分、一週最多 2 次、隔 ≥ 2 天）"}
-        return {"kind": "missing", "text": f"還缺：{soft}（3 區解鎖後、護欄通過就照排）"}
+                return {"kind": "open", "text": _("不設門檻（Seiler）：5 區照 80/20 安排")}
+            return {"kind": "done", "text": _("都做到了：5 區可以排（每趟 2–5 分、一週最多 2 次、隔 ≥ 2 天）")}
+        return {"kind": "missing", "text": _("還缺：{x}（3 區解鎖後、護欄通過就照排）", x=soft)}
     # no measured AeT passing yet: what the cheapest way in needs
     by = {t["key"]: t for t in tests}
-    pre = f"停跑 ≥ 4 週：{R['return']} 之後" if R and R.get("reconfirm") else ""
+    pre = _("停跑 ≥ 4 週：{date} 之後", date=R['return']) if R and R.get("reconfirm") else ""
     parts = []
     ua, fr = by.get("aet_ua_gap"), by.get("aet_friel_drift")
     miss = (ua or fr or {}).get("missing")
     if miss == "aet":
-        parts.append("做一次 AeT 測試（UA 40–60 分，量出 AeT 數字；90 分鐘測試不算）"
-                     + ("，LTHR 也要實測，差距 ≤ 10%" if ua else "") + ("；或之後在 AeT 附近跑 ≥ 60 分鐘、飄移 < 5%" if fr else ""))
+        parts.append(_("做一次 AeT 測試（UA 40–60 分，量出 AeT 數字；90 分鐘測試不算）")
+                     + (_("，LTHR 也要實測，差距 ≤ 10%") if ua else "") + (_("；或之後在 AeT 附近跑 ≥ 60 分鐘、飄移 < 5%") if fr else ""))
     else:
         if ua and ua.get("missing") == "lthr":
             inv = (gate.get("lthr") or {}).get("invalid") or {}
-            parts.append(f"重測一次 30 分鐘 LTHR（{inv['text']}）" if inv.get("text") else
-                         "做一次 30 分鐘 LTHR 測試（LTHR 也要實測，差距 ≤ 10% 就算）")
+            parts.append(_("重測一次 30 分鐘 LTHR（{why}）", why=inv['text']) if inv.get("text") else
+                         _("做一次 30 分鐘 LTHR 測試（LTHR 也要實測，差距 ≤ 10% 就算）"))
         elif ua and ua.get("missing") == "gap":
-            parts.append("AeT 和 LTHR 的差距降到 ≤ 10%：繼續有氧基礎，之後重測 AeT")
+            parts.append(_("AeT 和 LTHR 的差距降到 ≤ 10%：繼續有氧基礎，之後重測 AeT"))
         elif ua and ua.get("ok") is not True:
-            parts.append("重測一次 AeT（暫停前的不算）")
+            parts.append(_("重測一次 AeT（暫停前的不算）"))
         if fr and fr.get("ok") is not True:
             ta = z.get("aet_tested") or {}
             if ta.get("value"):
                 lo, hi = float(ta["value"]) + FRIEL_HR_BAND[0], float(ta["value"]) + FRIEL_HR_BAND[1]
-                parts.append(f"在 AeT 附近（{lo:.0f}–{hi:.0f} bpm）跑一次 ≥ 60 分鐘平路穩定跑，前後半飄移 < 5%")
+                parts.append(_("在 AeT 附近（{lo:.0f}–{hi:.0f} bpm）跑一次 ≥ 60 分鐘平路穩定跑，前後半飄移 < 5%", lo=lo, hi=hi))
     if not parts:
-        return {"kind": "missing", "text": f"還缺：{z.get('reason') or '實測 AeT'}"}
-    tail = "" if z3["ok"] else f"；另外 {soft}"
-    return {"kind": "missing", "text": "還缺：" + pre + "；或".join(parts) + tail}
+        return {"kind": "missing", "text": _("還缺：{x}", x=z.get('reason') or _("實測 AeT"))}
+    tail = "" if z3["ok"] else _("；另外 {x}", x=soft)
+    return {"kind": "missing", "text": _("還缺：") + pre + _("；或").join(parts) + tail}
 
 
 def z1_target_min() -> tuple[float, float]:
@@ -2112,33 +2115,38 @@ def mode_has(mode: Optional[str], path: str) -> bool:
 def options(gate: dict, ae: dict, lt: dict, cache: dict, friel, xu, base_weeks, ef, need_weeks) -> dict:
     """Per mode: can it run on the athlete's data right now (the hover's last line)."""
     lthr_ok = lt["value"] is not None and not lt["default"]
-    aet_txt = ae["label"] if ae["measured"] else "沒有實測 AeT"
+    aet_txt = ae["label"] if ae["measured"] else _("沒有實測 AeT")
     out = {}
-    out["auto"] = {"usable": True, "why": (f"目前用差距法＋飄移法（{aet_txt}）" if gate["resolved"] != "none"
-                                           else f"目前不設門檻，只看護欄（{aet_txt}"
-                                           + ("；聚合估計還不夠準或有偏移" if gate["stale_aet"] else "") + "）")}
+    out["auto"] = {"usable": True, "why": (_("目前用差距法＋飄移法（{x}）", x=aet_txt) if gate["resolved"] != "none"
+                                           else _("目前不設門檻，只看護欄（{x}", x=aet_txt)
+                                           + (_("；聚合估計還不夠準或有偏移") if gate["stale_aet"] else "") + "）")}
     if ae["measured"] and lthr_ok:
-        out["ua_gap"] = {"usable": True, "why": f"{aet_txt}、LTHR {lt['value']:.0f} → 差距 {gate['gap'] * 100:.0f}%"}
+        out["ua_gap"] = {"usable": True, "why": _("{aet}、LTHR {lthr:.0f} → 差距 {gap:.0f}%", aet=aet_txt, lthr=lt['value'],
+                                                  gap=gate['gap'] * 100)}
     else:
-        out["ua_gap"] = {"usable": False, "why": "沒有實測 AeT" if not ae["measured"] else "LTHR 還是 WKO5 預設值"}
+        out["ua_gap"] = {"usable": False, "why": _("沒有實測 AeT") if not ae["measured"] else _("LTHR 還是 WKO5 預設值")}
     try:
         f = cache.get("friel") or friel()
         out["friel_drift"] = {"usable": f["state"] != "missing",
-                              "why": f.get("reason") or f"最近一次 {f['run']['date']} 飄移 {f['run']['drift'] * 100:.1f}%"}
+                              "why": f.get("reason") or _("最近一次 {date} 飄移 {d:.1f}%", date=f['run']['date'],
+                                                          d=f['run']['drift'] * 100)}
     except Exception as e:  # never let the hover text break the plan
-        out["friel_drift"] = {"usable": False, "why": f"算不出來（{type(e).__name__}）"}
+        out["friel_drift"] = {"usable": False, "why": _("算不出來（{x}）", x=type(e).__name__)}
     try:
         x = cache.get("xu") or xu()
         out["xu_drift"] = {"usable": x["state"] != "missing",
-                           "why": x.get("reason") or f"最近一次 {x['run']['date']} 飄移 {x['run']['drift'] * 100:.0f}%"}
+                           "why": x.get("reason") or _("最近一次 {date} 飄移 {d:.0f}%", date=x['run']['date'],
+                                                       d=x['run']['drift'] * 100)}
     except Exception as e:
-        out["xu_drift"] = {"usable": False, "why": f"算不出來（{type(e).__name__}）"}
+        out["xu_drift"] = {"usable": False, "why": _("算不出來（{x}）", x=type(e).__name__)}
     out["plateau"] = {"usable": base_weeks is not None and ef is not None,
-                      "why": (f"基礎期第 {base_weeks} 週，EF 近 6 週 {ef * 100:+.1f}%" if base_weeks is not None and ef is not None
-                              else "EF 趨勢算不出來（輕鬆路跑不夠多）" if base_weeks is not None else "現在不是基礎期")}
+                      "why": (_("基礎期第 {w} 週，EF 近 6 週 {ef:+.1f}%", w=base_weeks, ef=ef * 100)
+                              if base_weeks is not None and ef is not None
+                              else _("EF 趨勢算不出來（輕鬆路跑不夠多）") if base_weeks is not None else _("現在不是基礎期"))}
     out["weeks"] = {"usable": base_weeks is not None,
-                    "why": f"基礎期第 {base_weeks} 週 / {need_weeks} 週" if base_weeks is not None else "現在不是基礎期"}
-    out["none"] = {"usable": True, "why": "隨時可用：只看護欄"}
+                    "why": _("基礎期第 {w} 週 / {n} 週", w=base_weeks, n=need_weeks) if base_weeks is not None
+                    else _("現在不是基礎期")}
+    out["none"] = {"usable": True, "why": _("隨時可用：只看護欄")}
     return out
 
 

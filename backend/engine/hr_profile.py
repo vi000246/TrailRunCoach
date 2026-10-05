@@ -54,32 +54,34 @@ import datetime as dt
 import json
 from typing import Optional
 
+from backend.i18n import N_, _
+
 ACCOUNT_KEY = "athlete.coros_profile"       # user_settings: the COROS account's HR settings
 MODEL_KEY = "plan.hr_zone_model"            # user_settings: 課表心率區間
 PLAN_MODELS = ("lthr", "hrr", "hrmax")
 DEFAULT_PLAN_MODEL = "lthr"
 
 ZONE_IDS = ("Z1", "Z2", "Z3", "Z4", "Z5", "Z6")
-ZONE_NAMES = ("恢復", "有氧耐力", "有氧動力", "閾值", "無氧耐力", "無氧動力")
+ZONE_NAMES = (N_("恢復"), N_("有氧耐力"), N_("有氧動力"), N_("閾值"), N_("無氧耐力"), N_("無氧動力"))
 DEFAULT_RATIOS = {
     "lthr": (0.80, 0.90, 0.95, 1.02, 1.06),
     "hrr": (0.59, 0.74, 0.84, 0.88, 0.95),
     "hrmax": (0.50, 0.60, 0.70, 0.80, 0.90),
 }
-MODEL_LABEL = {"lthr": "乳酸閾值心率（COROS % LTHR 6 區）", "hrr": "儲備心率（COROS % HRR 6 區）",
-               "hrmax": "最大心率（COROS % HRmax 6 區）"}
-MODEL_SHORT = {"lthr": "COROS 乳酸閾", "hrr": "COROS 儲備心率", "hrmax": "COROS 最大心率"}
+MODEL_LABEL = {"lthr": N_("乳酸閾值心率（COROS % LTHR 6 區）"), "hrr": N_("儲備心率（COROS % HRR 6 區）"),
+               "hrmax": N_("最大心率（COROS % HRmax 6 區）")}
+MODEL_SHORT = {"lthr": N_("COROS 乳酸閾"), "hrr": N_("COROS 儲備心率"), "hrmax": N_("COROS 最大心率")}
 SOURCE = {
-    "lthr": "COROS 乳酸閾值心率區間：<80／80–90／90–95／95–102／102–106／>106% LTHR"
-            "（coros.com「COROS Heart Rate Zones: The Ultimate Guide」）",
-    "hrr": "COROS 儲備心率區間：59／74／84／88／95% HRR，HRR = 最大心率 − 靜息心率"
-           "（從 COROS 帳號讀到，和徐國峰 RQ 跑力的儲備心率表相同）",
-    "hrmax": "COROS 最大心率區間：50／60／70／80／90% 最大心率（從 COROS 帳號讀到，沒有公開文件）。"
-             "限制：同樣 % 最大心率，每個人的乳酸閾值可以落在 60–90% HRmax（Iannetta 2020），"
-             "所以這組區間對個人的強度不準，Friel／乳酸閾區間比較可靠",
+    "lthr": N_("COROS 乳酸閾值心率區間：<80／80–90／90–95／95–102／102–106／>106% LTHR"
+               "（coros.com「COROS Heart Rate Zones: The Ultimate Guide」）"),
+    "hrr": N_("COROS 儲備心率區間：59／74／84／88／95% HRR，HRR = 最大心率 − 靜息心率"
+              "（從 COROS 帳號讀到，和徐國峰 RQ 跑力的儲備心率表相同）"),
+    "hrmax": N_("COROS 最大心率區間：50／60／70／80／90% 最大心率（從 COROS 帳號讀到，沒有公開文件）。"
+                "限制：同樣 % 最大心率，每個人的乳酸閾值可以落在 60–90% HRmax（Iannetta 2020），"
+                "所以這組區間對個人的強度不準，Friel／乳酸閾區間比較可靠"),
 }
-NO_REST = "沒有靜息心率，到設定填"
-NO_MAX = "沒有最大心率，到設定填"
+NO_REST = N_("沒有靜息心率，到設定填")
+NO_MAX = N_("沒有最大心率，到設定填")
 
 # 課表 session class → COROS zones (owner 2026-10-03): recovery Z1, easy / long / hike Z2,
 # aerobic power / tempo Z3, threshold Z4, VO2 / anaerobic endurance Z5, sprints Z6 (no HR target)
@@ -171,7 +173,8 @@ def _plan_row(ds, name: str, day: dt.date) -> Optional[tuple]:
 
 
 # how a plan `mhr` row was obtained (planning.MHR_METHODS, SP-64) → the source text
-MHR_METHOD_LABEL = {"test": "最大心率測試", "race": "比賽", "lab": "實驗室測試", "estimate": "撐 120 秒的心率（推估）"}
+MHR_METHOD_LABEL = {"test": N_("最大心率測試"), "race": N_("比賽"), "lab": N_("實驗室測試"),
+                    "estimate": N_("撐 120 秒的心率（推估）")}
 
 
 def max_hr(ds, day: dt.date, acc: Optional[dict] = None, use_account: bool = True) -> dict:
@@ -182,7 +185,7 @@ def max_hr(ds, day: dt.date, acc: Optional[dict] = None, use_account: bool = Tru
         # kind stays "manual" (the user's own value, 設定 → 心率 「改回自動」); `method` says how
         lab = MHR_METHOD_LABEL.get(r[2] or "")
         return {"value": r[1], "kind": "manual", "method": r[2] or "manual",
-                "source": f"{lab} {r[0]}" if lab else f"你的設定 {r[0]}", "estimate": None}
+                "source": f"{_(lab)} {r[0]}" if lab else _("你的設定 {day}", day=r[0]), "estimate": None}
     try:
         from backend.engine.thresholds import estimate_mhr
         est = estimate_mhr(ds, day)
@@ -192,23 +195,23 @@ def max_hr(ds, day: dt.date, acc: Optional[dict] = None, use_account: bool = Tru
     watch = float(acc["max_hr"]) if acc and acc.get("max_hr") else None
     ev = float(est["value"]) if est and est.get("value") else None
     if watch is not None:
-        note = f"；近 365 天跑步最高 {ev:.0f}（推估）" if ev is not None else ""
-        return {"value": watch, "kind": "coros", "source": "來自手錶（COROS 帳號）" + note, "estimate": est}
+        note = _("；近 365 天跑步最高 {v:.0f}（推估）", v=ev) if ev is not None else ""
+        return {"value": watch, "kind": "coros", "source": _("來自手錶（COROS 帳號）") + note, "estimate": est}
     if ev is not None:
-        return {"value": ev, "kind": "estimate", "source": "推估（近 365 天跑步）", "estimate": est}
+        return {"value": ev, "kind": "estimate", "source": _("推估（近 365 天跑步）"), "estimate": est}
     return {"value": None, "kind": None, "source": None, "estimate": est,
-            "reason": NO_MAX if not est else f"{NO_MAX}（{est.get('reason')}）"}
+            "reason": _(NO_MAX) if not est else f"{_(NO_MAX)}（{est.get('reason')}）"}
 
 
 def rest_hr(ds, day: dt.date, acc: Optional[dict] = None, use_account: bool = True) -> dict:
     """{"value", "kind": manual | coros | None, "source", "reason"}."""
     r = _plan_row(ds, "rhr", day)
     if r is not None:
-        return {"value": r[1], "kind": "manual", "source": f"你的設定 {r[0]}"}
+        return {"value": r[1], "kind": "manual", "source": _("你的設定 {day}", day=r[0])}
     acc = account() if acc is None and use_account else acc
     if acc and acc.get("rest_hr"):
-        return {"value": float(acc["rest_hr"]), "kind": "coros", "source": "來自手錶（COROS 帳號）"}
-    return {"value": None, "kind": None, "source": None, "reason": NO_REST}
+        return {"value": float(acc["rest_hr"]), "kind": "coros", "source": _("來自手錶（COROS 帳號）")}
+    return {"value": None, "kind": None, "source": None, "reason": _(NO_REST)}
 
 
 # ---------------------------------------------------------------------------
@@ -222,28 +225,28 @@ def zone_rows(model: str, lthr: Optional[float] = None, mhr: Optional[float] = N
     rs = ratios(model, acc)
     if model == "lthr":
         if not lthr:
-            return {"reason": "沒有 LTHR，區間算不出來"}
+            return {"reason": _("沒有 LTHR，區間算不出來")}
         edges = [round(r * lthr) for r in rs]
         text = f"LTHR {lthr:.0f} bpm"
     elif model == "hrr":
         if not mhr:
-            return {"reason": NO_MAX}
+            return {"reason": _(NO_MAX)}
         if not rhr:
-            return {"reason": NO_REST}
+            return {"reason": _(NO_REST)}
         if mhr - rhr < 40:
-            return {"reason": f"最大心率 {mhr:.0f} − 靜息心率 {rhr:.0f} 太小，檢查設定"}
+            return {"reason": _("最大心率 {mhr:.0f} − 靜息心率 {rhr:.0f} 太小，檢查設定", mhr=mhr, rhr=rhr)}
         edges = [round(rhr + r * (mhr - rhr)) for r in rs]
-        text = f"最大心率 {mhr:.0f}、靜息心率 {rhr:.0f} bpm（HRR {mhr - rhr:.0f}）"
+        text = _("最大心率 {mhr:.0f}、靜息心率 {rhr:.0f} bpm（HRR {hrr:.0f}）", mhr=mhr, rhr=rhr, hrr=mhr - rhr)
     elif model == "hrmax":
         if not mhr:
-            return {"reason": NO_MAX}
+            return {"reason": _(NO_MAX)}
         edges = [round(r * mhr) for r in rs]
-        text = f"最大心率 {mhr:.0f} bpm"
+        text = _("最大心率 {mhr:.0f} bpm", mhr=mhr)
     else:
         raise ValueError(model)
     lo = [0.0] + [float(e) for e in edges]
     hi = [float(e) for e in edges] + [None]
-    return {"rows": [(ZONE_IDS[i], ZONE_NAMES[i], lo[i], hi[i]) for i in range(6)], "basis_text": text}
+    return {"rows": [(ZONE_IDS[i], _(ZONE_NAMES[i]), lo[i], hi[i]) for i in range(6)], "basis_text": text}
 
 
 def band(rows: list, z_from: int, z_to: int) -> tuple:
@@ -273,24 +276,24 @@ def plan_hr_zones(lthr: Optional[float], aet: Optional[float], aet_measured: boo
     use, fallback = want, None
     z = zone_rows(want, lthr, mhr, rhr, acc)
     if "reason" in z and want != "lthr":
-        fallback = f"{MODEL_SHORT[want]}：{z['reason']}，改用 COROS 乳酸閾區間"
+        fallback = _("{model}：{reason}，改用 COROS 乳酸閾區間", model=_(MODEL_SHORT[want]), reason=z["reason"])
         use = "lthr"
         z = zone_rows("lthr", lthr, mhr, rhr, acc)
     if "reason" in z:
         return None
     rows = z["rows"]
     e_lo, e_hi = band(rows, 2, 2)
-    e_src = f"{MODEL_SHORT[use]} Z2（{e_lo:.0f}–{e_hi:.0f} bpm）"
+    e_src = f"{_(MODEL_SHORT[use])} Z2（{e_lo:.0f}–{e_hi:.0f} bpm）"
     if aet and aet_measured:
         e_hi = float(aet)
-        e_src = f"量到的 AeT {aet:.0f} bpm（測試值優先於 {MODEL_SHORT[use]} Z2 上緣）"
+        e_src = _("量到的 AeT {aet:.0f} bpm（測試值優先於 {model} Z2 上緣）", aet=aet, model=_(MODEL_SHORT[use]))
     e_lo = min(e_lo or e_hi - 25, e_hi - 10)
     basis = z["basis_text"]
     if use in ("hrr", "hrmax"):
-        basis += "；" + "、".join(s for s in (f"最大心率：{mhr_source}" if mhr_source else "",
-                                            f"靜息心率：{rhr_source}" if rhr_source and use == "hrr" else "") if s)
-    return {"model": use, "requested": want, "label": MODEL_LABEL[use], "short": MODEL_SHORT[use],
-            "fallback": fallback, "basis_text": basis, "source": SOURCE[use],
+        basis += "；" + "、".join(s for s in (_("最大心率：{src}", src=mhr_source) if mhr_source else "",
+                                            _("靜息心率：{src}", src=rhr_source) if rhr_source and use == "hrr" else "") if s)
+    return {"model": use, "requested": want, "label": _(MODEL_LABEL[use]), "short": _(MODEL_SHORT[use]),
+            "fallback": fallback, "basis_text": basis, "source": _(SOURCE[use]),
             "rows": [{"id": i, "name": n, "lo": lo, "hi": hi} for i, n, lo, hi in rows],
             "mhr": float(mhr) if mhr and use in ("hrr", "hrmax") else None,    # Z6's top (workout_steps)
             "easy": [round(e_lo), round(e_hi)], "easy_source": e_src, "aet_measured": bool(aet and aet_measured),
@@ -318,7 +321,7 @@ def plan_hr_zones_for(ds, day: dt.date, lthr: Optional[float], aet: Optional[flo
 
 EASY_CAP = "輕鬆跑上限"
 EASY_CAP_MEASURED = "（實測 AeT）"
-EASY_CAP_TIP = "輕鬆跑上限＝課表心率區間的 Z2 上緣；有實測 AeT 時用實測值"
+EASY_CAP_TIP = N_("輕鬆跑上限＝課表心率區間的 Z2 上緣；有實測 AeT 時用實測值")   # _() where shown (overview)
 
 
 def easy_cap_measured(src) -> bool:

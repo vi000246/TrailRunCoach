@@ -41,6 +41,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from backend.db.models import SyncState, Athlete, WorkoutFile
+from backend.i18n import _
 from backend.sync import http, session_check, storage
 from backend.sync.http import as_utc
 from backend.settings.secrets import SecretError, SecretKeyMissing, seal, unseal
@@ -734,7 +735,7 @@ async def sync_workouts(
                 if info.get("status") in (401, 403):
                     # TP refused the token: the login is gone (sync/session_check.py)
                     session_check.mark_expired("tp", athlete_id)
-                    info = {**info, "error": "TP_AUTH_REQUIRED", "hint": "請到設定頁重新登入 TrainingPeaks"}
+                    info = {**info, "error": "TP_AUTH_REQUIRED", "hint": _("請到設定頁重新登入 TrainingPeaks")}
                 yield info
                 return
             if info:

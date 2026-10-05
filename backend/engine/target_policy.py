@@ -32,6 +32,8 @@ from __future__ import annotations
 
 from typing import Optional
 
+from backend.i18n import _
+
 BASES = ("auto", "hr", "power")
 LABEL = {"auto": "自動（依課表類型）", "hr": "心率", "power": "功率", "pace": "配速", "none": "不設目標"}
 SRC = {
@@ -131,11 +133,11 @@ def target_policy(s: dict, prefs=None, th: Optional[dict] = None) -> dict:
     # generalize-athlete P12 / owner decision: auto power only for a Stryd runner — the
     # 一般設定 power source watch / none means HR (watch power only when 進階 accepts it)
     if basis == "power" and chosen not in ("hr", "power") and not _auto_power_ok():
-        basis, fb = "hr", "功率來源不是 Stryd：用心率"
+        basis, fb = "hr", _("功率來源不是 Stryd：用心率")
     if basis == "power" and th and not th.get("cp"):
-        basis, fb = "hr", "沒有 CP：改用心率"
+        basis, fb = "hr", _("沒有 CP：改用心率")
     if basis == "hr" and th and not (th.get("aet") or th.get("lthr")):
-        basis, fb = "none", "沒有 AeT／LTHR：不設目標"
+        basis, fb = "none", _("沒有 AeT／LTHR：不設目標")
     return {"basis": basis, "chosen": own if own in ("hr", "power") else chosen, "type": t, "why": why + (f"（{fb}）" if fb else ""),
             "source": SRC[key], "hr_cap": basis == "power" and t in ("interval", "hill", "easy", "long"), "fallback": fb}
 

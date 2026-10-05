@@ -11,5 +11,18 @@
   "thr.conf_low": "低",
   "thr.hrmax": "最大心率",
   "thr.line": "{name} {v} bpm：可信度{c}",
-  "thr.wait_cool": "等天氣轉涼再做 LTHR 測試比較準（還是可以先排）"
+  "thr.wait_cool": "等天氣轉涼再做 LTHR 測試比較準（還是可以先排）",
+  "drift.ref_badge": "只當參考",
+  "drift.ref_runs": "{n} 次暖身後不到 40 分鐘",
+  "drift.value": "心率飄移 {v}%",
+  "drift.basis_power": "用功率算的心率飄移（功率÷心率，Pw:HR）",
+  "drift.basis_pace": "用配速算的心率飄移（速度÷心率，Pa:HR）",
+  "z5.title": "3 區／5 區解鎖流程",
+  "z5.history": "歷程 →",
+  "z5.pill": "5 區：{s}",
+  "z5.unlocked": "已解鎖",
+  "z5.aet_ok": "AeT 已通過",
+  "split.title": "強度分配",
+  "split.target": "低強度 底線 75%・目標 80%（基礎期 ≥ 90%）",
+  "split.tip": "這期耐力活動的移動時間，依心率分三段。\n怎麼看：低 < AeT、中 AeT–LTHR、高 ≥ LTHR，條的長度 = 佔比。\n看什麼：低強度 75% 是底線、80% 是目標（基礎期目標 ≥ 90%）；這是提醒，不是 3 區的解鎖條件。\n方法：Seiler 2006。"
 }

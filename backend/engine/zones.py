@@ -12,6 +12,8 @@ low < 80% CP, moderate 80–95%, high ≥ 95%.
 """
 from __future__ import annotations
 
+from backend.i18n import _
+
 PALLADINO_POWER_ZONES = [
     # (id, name, lo, hi)  — fractions of CP; hi is exclusive, None = open
     ("1A", "Post-interval recovery", 0.50, 0.65),
@@ -218,9 +220,9 @@ def threshold_info(ds, basis: str, ref, end_day: int) -> dict:
         rows = sorted((t for t in ds.plan.thresholds if t.cp is not None and t.date[:10] <= day.isoformat()),
                       key=lambda t: t.date)
         if rows:
-            return {**out, "value": float(rows[-1].cp), "source": f"你的測試 {rows[-1].date[:10]}",
+            return {**out, "value": float(rows[-1].cp), "source": _("你的測試 {day}", day=rows[-1].date[:10]),
                     "date": rows[-1].date[:10], "wprime": rows[-1].wprime,
-                    "wprime_source": "測試（兩點法）" if rows[-1].wprime else None}
+                    "wprime_source": _("測試（兩點法）") if rows[-1].wprime else None}
         return {**out, "value": ds.cp(ref), "source": "WKO5 mFTP" if ds.settings_from == "wko5" else None}
     if basis == "lthr":
         # an applied estimate is labelled as one, not 「你的測試」 (zones-and-thresholds.md §3.4 change 1)
@@ -241,13 +243,14 @@ def threshold_info(ds, basis: str, ref, end_day: int) -> dict:
 
 
 def _no_data_reason(basis: str, T, n_runs: int, days: int) -> str:
-    name = {"cp": "CP", "lthr": "LTHR", "tpace": "閾值配速"}[basis]
+    name = {"cp": "CP", "lthr": "LTHR", "tpace": _("閾值配速")}[basis]
     if not n_runs:
-        return f"最近 {days} 天沒有跑步"
+        return _("最近 {days} 天沒有跑步", days=days)
     if T is None:
-        return f"沒有 {name}，區間算不出來"
-    return {"cp": f"最近 {days} 天的跑步沒有可用的功率（手錶推估功率不採用）",
-            "lthr": f"最近 {days} 天的跑步沒有心率", "tpace": f"最近 {days} 天的跑步沒有速度"}[basis]
+        return _("沒有 {name}，區間算不出來", name=name)
+    return {"cp": _("最近 {days} 天的跑步沒有可用的功率（手錶推估功率不採用）", days=days),
+            "lthr": _("最近 {days} 天的跑步沒有心率", days=days),
+            "tpace": _("最近 {days} 天的跑步沒有速度", days=days)}[basis]
 
 
 def zone_table(ds, system: str, end_day: int, days: int = 30) -> dict:
@@ -287,7 +290,7 @@ def zone_table(ds, system: str, end_day: int, days: int = 30) -> dict:
         r = ev.evaluate(f"athleterange({end_day - days + 1}, {end_day}, {_in_zone_expr(system, lo, hi, op)})")
         secs = sum(float(v) for v in r.values() if v == v) if isinstance(r, WS) else 0.0
         total += secs
-        rows.append({"id": zid, "name": name, "lo": lo, "hi": hi, "seconds": secs,
+        rows.append({"id": zid, "name": _(name), "lo": lo, "hi": hi, "seconds": secs,
                      "from": None if (lo is None or T is None) else lo * T,
                      "to": None if (hi is None or T is None) else hi * T})
     for r in rows:
@@ -313,7 +316,7 @@ def _coros_source(spec: dict) -> Optional[str]:
     if not spec.get("coros"):
         return None
     from backend.engine import hr_profile as HP
-    return HP.SOURCE[spec["coros"]]
+    return _(HP.SOURCE[spec["coros"]])
 
 
 def _zone_table_bpm(ds, system: str, spec: dict, end_day: int, days: int, runs: list) -> dict:
@@ -330,8 +333,8 @@ def _zone_table_bpm(ds, system: str, spec: dict, end_day: int, days: int, runs: 
     z = HP.zone_rows(kind, None, mx.get("value"), rs.get("value"), acc)
     rat = HP.ratios(kind, acc)
     fr_lo, fr_hi = (0.0,) + tuple(rat), tuple(rat) + (None,)
-    srcs = "；".join(s for s in ((f"最大心率：{mx['source']}" if mx.get("source") else ""),
-                                (f"靜息心率：{rs['source']}" if rs.get("source") else "")) if s)
+    srcs = "；".join(s for s in ((_("最大心率：{src}", src=mx["source"]) if mx.get("source") else ""),
+                                (_("靜息心率：{src}", src=rs["source"]) if rs.get("source") else "")) if s)
     T = None
     if "rows" in z:
         T = mx["value"] - rs["value"] if kind == "hrr" else mx["value"]
@@ -358,7 +361,7 @@ def _zone_table_bpm(ds, system: str, spec: dict, end_day: int, days: int, runs: 
 
 
 def _blank_rows(kind: str) -> list[tuple]:
-    return [(i, n, None, None) for i, n, _lo, _hi in _coros_table(kind)]
+    return [(i, _(n), None, None) for i, n, _lo, _hi in _coros_table(kind)]
 
 
 # What to run by, per workout type. Power from Palladino's table; HR caps from

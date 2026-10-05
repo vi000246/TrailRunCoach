@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.db.models import PlanSession
 from backend.engine import reconcile as R
-from backend.i18n import _
+from backend.i18n import N_, _
 
 KINDS = {"easy": "輕鬆跑", "long": "LSD", "quality": "強度課", "test": "測試",
          "hike": "越野跑", "strength": "肌力", "heat_passive": "被動熱適應",
@@ -270,23 +270,23 @@ def _clean(patch: dict, today: str) -> dict:
             try:
                 v = dt.date.fromisoformat(str(v)[:10]).isoformat()
             except ValueError:
-                raise PlanError(f"日期格式不對：{v!r}")
+                raise PlanError(_("日期格式不對：{v!r}", v=v))
             if v < today:
-                raise PlanError("不能排到過去的日子")
+                raise PlanError(_("不能排到過去的日子"))
         elif k == "kind":
             if v not in KINDS or v in NOT_LOAD:
-                raise PlanError(f"不支援的類型：{v!r}")
+                raise PlanError(_("不支援的類型：{v!r}", v=v))
         elif k == "minutes":
             try:
                 v = int(v)
             except (TypeError, ValueError):
-                raise PlanError("分鐘要是數字")
+                raise PlanError(_("分鐘要是數字"))
             if not 0 <= v <= 1440:
-                raise PlanError("分鐘要在 0–1440")
+                raise PlanError(_("分鐘要在 0–1440"))
         elif k == "terrain":
             v = v or None
             if v is not None and v not in TERRAINS:
-                raise PlanError(f"不支援的地形：{v!r}")
+                raise PlanError(_("不支援的地形：{v!r}", v=v))
         elif k == "steps":
             # the editor's structure (engine/workout_steps.py): None / {} clears it (back to
             # the text); a saved structure is the user's (origin user unless a template as is)
@@ -297,51 +297,52 @@ def _clean(patch: dict, today: str) -> dict:
                 try:
                     v = WS.normalize(v)
                 except WS.StepsError as e:
-                    raise PlanError(f"課表結構有誤：{e}")
+                    raise PlanError(_("課表結構有誤：{e}", e=e))
                 if v["origin"] == "derived":
                     v["origin"] = "user"
         elif k == "family":
             v = None if v in (None, "", "auto") else v       # 自動 = derived from the steps
             if v is not None and v not in FAMILIES:
-                raise PlanError(f"強度課類型要是 有氧間歇／VO2max 間歇／速度：{v!r}")
+                raise PlanError(_("強度課類型要是 有氧間歇／VO2max 間歇／速度：{v!r}", v=v))
         elif k == "target_basis":
             v = None if v in (None, "", "auto") else v       # 自動 = None
             if v is not None and v not in ("hr", "power"):
-                raise PlanError(f"目標用要是 自動／心率／功率：{v!r}")
+                raise PlanError(_("目標用要是 自動／心率／功率：{v!r}", v=v))
         elif k in ("distance_km", "climb_m"):
             if v is not None and v != "":
                 try:
                     v = round(float(v), 2 if k == "distance_km" else 0)
                 except (TypeError, ValueError):
-                    raise PlanError("距離／爬升要是數字")
+                    raise PlanError(_("距離／爬升要是數字"))
                 if not 0 <= v <= (500 if k == "distance_km" else 20000):
-                    raise PlanError("距離要在 0–500 km、爬升 0–20000 m")
+                    raise PlanError(_("距離要在 0–500 km、爬升 0–20000 m"))
             else:
                 v = None
         else:
             v = str(v or "").strip()[:500]
             if k == "title" and not v:
-                raise PlanError("標題不能空白")
+                raise PlanError(_("標題不能空白"))
         out[k] = v
     if patch.get("tss") is not None:
         # the estimate the 課表 dialog shows (minutes × the kind's TSS per hour)
         try:
             t = float(patch["tss"])
         except (TypeError, ValueError):
-            raise PlanError("TSS 要是數字")
+            raise PlanError(_("TSS 要是數字"))
         if not 0 <= t <= 2000:
-            raise PlanError("TSS 要在 0–2000")
+            raise PlanError(_("TSS 要在 0–2000"))
         out["tss"] = round(t, 1)
     return out
 
 
-NO_RACE_ADD = "比賽課由賽季計畫排入，或從賽事計算機「匯出至課表」，不能自己新增"
+NO_RACE_ADD = N_("比賽課由賽季計畫排入，或從賽事計算機「匯出至課表」，不能自己新增")
 
 
 def _not_blocked(day: str, blocked: Optional[dict]) -> None:
     if blocked and day in blocked:
         lb = blocked[day]
-        raise PlanError(f"{int(day[5:7])}/{int(day[8:10])} 是不排課日期{f'（{lb}）' if lb else ''}，不能排課")
+        raise PlanError(_("{m}/{d} 是不排課日期{label}，不能排課", m=int(day[5:7]), d=int(day[8:10]),
+                           label=f"（{lb}）" if lb else ""))
 
 
 async def edit(db: AsyncSession, uid: str, patch: dict, today: str, athlete_id: int = 1,
@@ -350,11 +351,11 @@ async def edit(db: AsyncSession, uid: str, patch: dict, today: str, athlete_id: 
     rows = await _rows(db, athlete_id)
     r = rows.get(uid)
     if r is None or r.state != "active":
-        raise PlanError("找不到這堂課（或已經完成／錯過）")
+        raise PlanError(_("找不到這堂課（或已經完成／錯過）"))
     d = to_dict(r)
     ch = _clean(patch, today)
     if ch.get("kind") == "race" and d["kind"] != "race":
-        raise PlanError(NO_RACE_ADD)
+        raise PlanError(_(NO_RACE_ADD))
     # a library variant chosen in the swap drawer / the editor's templates (api/plan_sessions
     # builds it with interval_library.variant_patch): a user edit, kept by reconcile (rule 3)
     ch.update(patch.get("_variant") or {})
@@ -395,14 +396,14 @@ async def add(db: AsyncSession, data: dict, today: str, athlete_id: int = 1,
     data = dict(data)
     data.setdefault("kind", "easy")
     if data["kind"] in NOT_LOAD:
-        raise PlanError("課表待確認是自動調整的提醒，不能自己新增")
+        raise PlanError(_("課表待確認是自動調整的提醒，不能自己新增"))
     if data["kind"] == "race":
-        raise PlanError(NO_RACE_ADD)
+        raise PlanError(_(NO_RACE_ADD))
     if data["kind"] == "test":
         _test_default(data)
     data.setdefault("title", DEFAULT_TITLES.get(data.get("kind"), "自訂"))
     if "day" not in data:
-        raise PlanError("要選日期")
+        raise PlanError(_("要選日期"))
     ch = _clean(data, today)
     ch.update(data.get("_variant") or {})
     _not_blocked(ch["day"], blocked)
@@ -479,7 +480,7 @@ async def delete(db: AsyncSession, uid: str, athlete_id: int = 1, today: Optiona
     rows = await _rows(db, athlete_id)
     r = rows.get(uid)
     if r is None:
-        raise PlanError("找不到這堂課")
+        raise PlanError(_("找不到這堂課"))
     d = to_dict(r)
     if today and is_expired_open(d, today):
         d = _tombstone_expired(r)            # any origin: never regenerated / restored
@@ -529,9 +530,9 @@ async def upsert_external(db: AsyncSession, ext_key: str, data: dict, today: str
     Returns {session, action add | claim | update | restore | unchanged, previous}; previous
     (an earlier export) carries user_edited: changed on the 課表 page since."""
     if not ext_key or len(ext_key) > 64:
-        raise PlanError("外部 key 不對")
+        raise PlanError(_("外部 key 不對"))
     if "day" not in data or not data.get("day"):
-        raise PlanError("要選日期")
+        raise PlanError(_("要選日期"))
     ch = _clean({k: data[k] for k in EXT_FIELDS if k in data} | {"tss": data.get("tss")}, today)
     _not_blocked(ch["day"], blocked)
     rows = await _rows(db, athlete_id)
@@ -619,18 +620,18 @@ async def link(db: AsyncSession, uid: str, activity: dict, today: str, athlete_i
     rows = await _rows(db, athlete_id)
     r = rows.get(uid)
     if r is None or r.state not in ("active", "missed", "done"):
-        raise PlanError("找不到這堂課")
+        raise PlanError(_("找不到這堂課"))
     d = to_dict(r)
     if d["kind"] in ("notice", "heat_passive"):
-        raise PlanError("這種課不用配對活動")
+        raise PlanError(_("這種課不用配對活動"))
     day = activity.get("date")
     if not day or day > today:
-        raise PlanError("活動日期不對")
+        raise PlanError(_("活動日期不對"))
     if R.monday_of(day) != d["week_start"]:
-        raise PlanError("只能配對同一週的活動")
+        raise PlanError(_("只能配對同一週的活動"))
     other = _used_by([to_dict(x) for x in rows.values()], activity.get("index"), but=uid)
     if other is not None:
-        raise PlanError(f"這筆活動已經配給「{other['title']}」，先取消那邊的配對")
+        raise PlanError(_("這筆活動已經配給「{title}」，先取消那邊的配對", title=other["title"]))
     d.update(state="done", day=day, done_by={**activity, "match": "manual"})
     _fill(r, d)
     await db.commit()
@@ -643,7 +644,7 @@ async def unlink(db: AsyncSession, uid: str, today: str, athlete_id: int = 1) ->
     rows = await _rows(db, athlete_id)
     r = rows.get(uid)
     if r is None or r.state != "done":
-        raise PlanError("這堂課沒有配對的活動")
+        raise PlanError(_("這堂課沒有配對的活動"))
     d = to_dict(r)
     a = d.get("done_by") if isinstance(d.get("done_by"), dict) else None
     d.update(state="missed" if (d.get("day") or today) < today else "active", done_by=None)

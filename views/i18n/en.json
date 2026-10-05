@@ -1,49 +1,49 @@
 {
   "_about": "English for the bundled views (views/*.json), by view file and chart id; null = not translated yet (the original is shown). Format: backend/engine/wko5expr/viewi18n.py. Glossary: backend/i18n/glossary.json.",
   "training": {
-    "name": null,
+    "name": "My training",
     "dashboards": {
       "load-pmc": {
-        "title": null,
-        "description": null
+        "title": "Load (PMC)",
+        "description": "Training load of all sports combined: Fitness (CTL), Fatigue (ATL), Form (TSB) and the daily TSS; with power, the stimulus is also split into aerobic and anaerobic (TIS)."
       },
       "volume": {
-        "title": null,
-        "description": null
+        "title": "Volume",
+        "description": "How much you did each week: moving time (by category), distance, climb, descent, downhill impact, strength. Trail, Taiwan's 100 Peaks (Baiyue) and cycling have too few activities, so they are viewed together."
       },
       "intensity": {
-        "title": null,
-        "description": null
+        "title": "Intensity",
+        "description": "Were the easy days really easy: hours per zone, weekly low-intensity share, polarization index. Heart rate is in reds, power in oranges; the first two charts can switch between HR / power and zone models. Moving time only."
       },
       "capacity": {
-        "title": null,
-        "description": null
+        "title": "Capacity",
+        "description": "Evidence of progress: aerobic efficiency, HR drift, climbing speed, climb density, long duration and durability."
       }
     },
     "charts": {
       "pmc-all": {
-        "title": null,
-        "description": null
+        "title": "PMC: Fitness (CTL) · Fatigue (ATL) · Form (TSB) (all sports)",
+        "description": "Fitness (CTL), Fatigue (ATL), Form (TSB) (all sports).\nHow to read: blue line CTL = 42-day average load, orange line ATL = 7 days; bars TSB = yesterday's CTL − ATL, coloured by TSB ÷ CTL: red High Risk, green Optimal, light purple Grey Zone, purple Fresh, yellow Transition (as in Form % below).\nLook for: a blue line rising over the long run = fitness is building; a negative TSB isn't bad, training a lot makes it negative.\nMethod: TrainingPeaks' PMC (Banister model); colour bands from Friel and intervals.icu (% CTL), rules of thumb, direction only."
       },
       "daily-tss": {
-        "title": null,
-        "description": null
+        "title": "Daily TSS (vs fitness)",
+        "description": "Each day's TSS compared with the previous day's CTL.\nHow to read: grey bars = below CTL (recovery day), green = CTL to CTL+30 (building fitness), yellow = +30 to +60 (big day), red = over +60 (very heavy, recover afterwards); blue line CTL, orange line ATL. The y axis tops out at 150; hover for higher values.\nLook for: mostly green while building volume; orange above blue = training more than usual lately.\nMethod: Couzens: about CTL+30 per day while building."
       },
       "tss-total": {
-        "title": null,
-        "description": null
+        "title": "TSS total",
+        "description": "Total TSS per period.\nHow to read: each bar = one period; switch between day / week / month / quarter / year.\nLook for: the ups and downs of total load; recovery weeks and the taper should be clearly lower.\nMethod: summed TSS (TrainingPeaks)."
       },
       "ramp-rate": {
-        "title": null,
-        "description": null
+        "title": "Ramp rate (weekly CTL change)",
+        "description": "How much fitness grew in a week: each day's CTL − the CTL 7 days earlier.\nHow to read: bars green < 5 safe, yellow 5–7 only for a week or two, red ≥ 7 injury and illness risk, grey = falling (normal in a recovery week); blue line = 4-week average.\nLook for: the blue line is the pace you can sustain; 3–5 over the long run (Couzens).\nMethod: as computed by TrainingPeaks and intervals.icu; bands from TrainingPeaks (CTL ≤ 45) and Friel (5–8 for a few weeks, then a recovery week)."
       },
       "form-pct": {
-        "title": null,
-        "description": null
+        "title": "Form % (TSB ÷ CTL)",
+        "description": "Form % = TSB ÷ yesterday's CTL, so the same bands work when CTL is low.\nHow to read: line colour = that day's zone: red < −30% High Risk, green −30 to −10% Optimal, light purple −10 to +5% Grey Zone, purple +5 to +25% Fresh, yellow > +25% Transition; the rightmost point is the latest. Same colours as the TSB bars in the PMC.\nLook for: most training days in green; negative isn't bad. After a multi-day Baiyue trip it drops off the chart; hover for the number.\nMethod: Friel's TSB bands as % CTL (intervals.icu); rules of thumb, direction only."
       },
       "load-ratio": {
-        "title": null,
-        "description": null
+        "title": "Load ratio ATL ÷ CTL (7:42)",
+        "description": "Load ratio ATL ÷ CTL: the last 7 days' fatigue divided by 42-day fitness.\nHow to read: line colour = that day's band: grey < 0.8 low, green 0.8–1.3 normal, yellow 1.3–1.5 high, red > 1.5 spike; the rightmost point is the latest.\nLook for: 1 = same as usual; grey is normal in recovery weeks and the taper, and a spike after a multi-day Baiyue trip is normal too.\nMethod: bands borrowed from Runalyze (citing Gabbett 2016); direction only, research doesn't support using it to predict injury."
       },
       "tis-per-workout": {
         "title": "Aerobic / anaerobic TIS (per activity)",
@@ -57,68 +57,68 @@
                    "無氧 長期": "Anaerobic long-term", "無氧 短期": "Anaerobic short-term"}
       },
       "weekly-moving-time": {
-        "title": null,
-        "description": null
+        "title": "Weekly moving time (stacked by category)",
+        "description": "Weekly moving time, stacked by category.\nHow to read: blue road running, orange trail running, green hiking, yellow cycling, pink strength; height = total.\nLook for: the trend in total hours and where each week's focus lies.\nMethod: Koop, Jornet and Uphill Athlete all use hours as the main training volume."
       },
       "weekly-volume": {
-        "title": null,
-        "description": null
+        "title": "Weekly volume (distance / climb / EP)",
+        "description": "Weekly volume; switch between distance, climb / descent and EP.\nHow to read: bars stacked by category; click the legend to show one category only.\nLook for: in trail-only weeks distance drops and climb rises; switch to EP to see whether the total really dropped."
       },
       "weekly-downhill-load": {
-        "title": null,
-        "description": null
+        "title": "Weekly downhill impact load (reference · custom metric)",
+        "description": "Weekly downhill impact load (reference).\nHow to read: stacked by category; 1 = the impact of 1 km on the flat at 3 m/s (about 5:33/km); the steepest and fastest km is about 2.4.\nLook for: a sudden jump in knee and quad load from descending (heart rate doesn't show it).\nMethod: an estimate, no published standard formula: only stretches steeper than −3% count; steeper and faster weigh more."
       },
       "strength-calendar": {
-        "title": null,
-        "description": null
+        "title": "Strength training calendar",
+        "description": "Days with strength training.\nLook for: twice a week in the base phase.\nMethod: Uphill Athlete."
       },
       "zone-hours": {
-        "title": null,
-        "description": null
+        "title": "Hours per zone in this period",
+        "description": "Moving time (h:mm) and share per zone over the chosen period.\nHow to read: one bar per zone, darker = higher zone (HR in reds, power in oranges); the three-part bar on top = a 3-zone summary (HR < AeT / AeT–LTHR / ≥ LTHR; power < 80% / 80–95% / ≥ 95% CP). Period, zone model and sport can be changed and are remembered.\nLook for: at least 75% low intensity, ≥ 90% in the base phase; keep some high intensity in the taper.\nMethod: each activity is zoned with the thresholds valid that day (listed below the chart); moving time only (> 1.6 km/h, as WKO5); watch-estimated power doesn't count. Seiler 2006, Seiler & Tønnessen 2009, Uphill Athlete, Bosquet 2007; treating < 1% high intensity as \"none\" is an estimate."
       },
       "weekly-zone-hours": {
-        "title": null,
-        "description": null
+        "title": "Weekly hours per zone (how the distribution changes)",
+        "description": "Moving time per zone each week (each month when the range exceeds 26 weeks).\nHow to read: stacked by zone, same colours as the previous chart; small chart below = weekly low-intensity share: grey band = 75% up to this phase's target (90% in the base phase), filled circle = on target, hollow triangle = missed.\nLook for: whether the distribution shifts with the phase; weeks under 1 hour aren't judged.\nMethod: zone model, sport and thresholds shared with the previous chart."
       },
       "ef-easy-road": {
-        "title": null,
-        "description": null
+        "title": "Aerobic efficiency EF (easy road runs)",
+        "description": "Aerobic efficiency EF: speed per heartbeat (m/min per bpm).\nHow to read: each dot = one easy road run; higher = a stronger aerobic engine.\nLook for: the trend over weeks, not a single run.\nMethod: only road runs ≥ 30 min with average HR ≤ AeT + 3 (same as the overview's \"Aerobic efficiency\"); the EF concept is from Friel (TrainingPeaks)."
       },
       "hr-drift-pahr": {
-        "title": null,
-        "description": null
+        "title": "HR drift on easy road runs",
+        "description": "HR drift on long, flat easy runs: how many % higher HR drifts in the second part than the first.\nHow to read: each bar = one run; green < 5% stable, orange 5–10% some drift, red > 10% large drift; dashed line = 5%. Hover a bar for that day's temperature.\nLook for: more green and shorter bars through the base phase; lots of red = easy runs too fast, or too hot, not fuelled. Watch the trend of the latest bars, not a single one.\nMethod: steady road runs with ≥ 30 min after the warm-up and no climbs or stops, same as the overview's \"HR drift\". 5% is the Uphill Athlete aerobic threshold (AeT) test standard; 10% is the 90-min test standard (a Taiwanese coach)."
       },
       "uphill-vam": {
-        "title": null,
-        "description": null
+        "title": "Uphill speed (climb per hour, HR < LTHR)",
+        "description": "Uphill speed: metres climbed per hour (VAM).\nHow to read: orange dots = trail runs, green dots = hikes; higher = climbing faster.\nLook for: use it to plan Taiwan's 100 Peaks (Baiyue) legs: uphill time ≈ climb ÷ uphill speed; traditional hiking estimates assume about 600 m per hour.\nMethod: only time on grades ≥ 5%, moving, with HR < LTHR (keeps races and surges from inflating it; everything counts when there is no HR); activities with under 10 min of climbing aren't drawn."
       },
       "steady-climb-vam-hr": {
-        "title": null,
-        "description": null
+        "title": "Steady-climb VAM:HR (same route, reference)",
+        "description": "Aerobic efficiency on steady climbs, VAM:HR: vertical gain per heartbeat (m/h ÷ bpm), compared only on the same route (reference).\nHow to read: blue dots = each climb (filled = running, hollow = walking), orange line = this route's 8-week rolling median; pick a route from the dropdown (the reverse direction is a separate route). \"Heat-adjusted\" can be switched on. Without comparable climbs, each activity's longest climb is drawn instead.\nLook for: same route, both walking or both running: dots moving up = climbing faster at the same HR. Reference only, it doesn't unlock sessions; hover for the temperature and the start minute (HR slowly drifts up on long climbs, Coyle & González-Alonso 2001).\nMethod: the benchmark-climb idea is from Uphill Athlete; VAM ÷ HR is an estimate. Segments: grade ≥ +8%, ≥ 8 min continuous, stops ≤ 30 s don't break it (picked from your own data, estimate); the first 2 min of each segment are excluded (Hunt: HR τ ≈ 60 s); running = cadence ≥ 130 spm for over half. Heat adjustment normalizes to Hadley 120 (0.224 bpm per unit, a coefficient back-tested on your own data, estimate)."
       },
       "downhill-rate": {
-        "title": null,
-        "description": null
+        "title": "Downhill speed (descent per hour)",
+        "description": "Downhill speed: metres descended per hour.\nHow to read: orange dots = trail runs, green dots = hikes; higher = descending faster.\nLook for: estimate descent times (descent ÷ downhill speed); faster = better downhill technique or leg strength.\nMethod: moving time on grades steeper than −5%; descending is limited by legs and technique, not the cardiovascular system, so no HR filter; activities with under 10 min of descent aren't drawn."
       },
       "route-difficulty": {
-        "title": null,
-        "description": null
+        "title": "Route difficulty per activity (course constant)",
+        "description": "The course constant (route difficulty) of each trail run and hike.\nHow to read: orange dots = trail runs, green dots = hikes; grey lines 20 = moderate, 40 = usually needs an overnight (about 10 easy, 30 a very hard single day).\nLook for: what your target trip scores, and whether training included days close to it.\nMethod: the course constant (Masayoshi Yamamoto) with actual moving time; it reads low when you move faster than the standard route time."
       },
       "climb-density": {
-        "title": null,
-        "description": null
+        "title": "Climb density (climb per km)",
+        "description": "Climb density (climb per km) of each trail run and hike.\nHow to read: green dots = each activity, red line = the target race.\nLook for: long sessions in the build phase close to the red line; don't chase weekly totals.\nMethod: Koop."
       },
       "moving-time-per-activity": {
-        "title": null,
-        "description": null
+        "title": "Moving time per activity (running, trail, hiking)",
+        "description": "Moving time of each activity (road running, trail, hiking).\nHow to read: blue road running, orange trail running, green hiking.\nLook for: the longest one gradually approaching the target race's time.\nMethod: Koop."
       },
       "durability-drift": {
-        "title": null,
-        "description": null
+        "title": "Durability: late HR drift in long sessions",
+        "description": "Durability: how many % higher HR drifts in the second half than the first on trail runs over 90 min.\nHow to read: each dot = one trail run; grey dashed line = 5%, red line = 15% (big late fade).\nLook for: lower is better = you hold up better late on. Same as the overview's \"Durability\".\nMethod: WKO5's stored Pa:HR (first vs second half of the whole activity, warm-up and stops included), not the drift card's method (the drift card rejects hilly runs); hikes are excluded because they mix in rest time, and > 30% is treated as bad data and not drawn."
       },
       "run-power-recent-bests": {
-        "title": null,
-        "description": null
+        "title": "Running power curve",
+        "description": "Running power curve: best average power for each duration (MMP).\nHow to read: yellow line = MMP of the selected range; thick red line = PD model curve; orange blocks = durations with new bests in the last N days (7 / 14 / 28, switchable).\nLook for: orange = where you improved recently; yellow below red = that duration hasn't been run all-out yet.\nMethod: WKO5's PD model and PDC New Bests; \"before\" looks back at least 90 days (Stryd's auto CP and WKO5 both use the last 90 days); too short a window shows false new bests everywhere."
       },
       "long-run-km": {
         "title": "Long-run distance (road runs ≥ 90 min)",
@@ -135,109 +135,109 @@
     }
   },
   "periodization": {
-    "name": null,
+    "name": "Periodization",
     "dashboards": {
       "transition": {
-        "title": null,
-        "description": null
+        "title": "① Transition",
+        "description": "Goal: recover, rebuild habits, lay a strength foundation (Uphill Athlete: 2–4 weeks). The question isn't whether fitness improved but whether you really recovered. Success looks like: Fatigue (ATL) falling, TSB back to positive, weekly hours low but steady, regular strength training."
       },
       "base": {
-        "title": null,
-        "description": null
+        "title": "② Base",
+        "description": "Goal: build the aerobic engine, the largest part of the year (Uphill Athlete: the base phase is the core of the training year). Success looks like: faster at the same HR (EF rising), no HR drift on long easy runs (< 5%), steadily growing volume, most time at low intensity."
       },
       "build": {
-        "title": null,
-        "description": null
+        "title": "③ Build",
+        "description": "Goal: train what the target race demands (Koop: the closer the race, the more training looks like it). For trail and Taiwan's 100 Peaks (Baiyue) that means climbing, long-duration durability and back-to-back long days. Success looks like: climbing faster at the same HR, climb density close to the race, the longest session close to race time, no late slowdown in long sessions."
       },
       "taper": {
-        "title": null,
-        "description": null
+        "title": "④ Taper",
+        "description": "Goal: regain freshness before the race while keeping fitness. Bosquet 2007 meta-analysis (27 studies): a 2-week taper, volume reduced progressively by 41–60%, intensity and frequency maintained, 2.2% average improvement. Success looks like: hours inside the taper band, high intensity still there, TSB back to positive."
       },
       "zones-targets": {
-        "title": null,
-        "description": null
+        "title": "Zones and session intensity",
+        "description": "The power and heart rate for each session type, and time in each zone over the last 30 days."
       }
     },
     "charts": {
       "weekly-hours": {
-        "title": null,
-        "description": null
+        "title": "Weekly training hours (should be low and steady)",
+        "description": "Weekly training hours.\nHow to read: bars = hours per week, line = 4-week smoothing.\nLook for: no chasing volume in the transition phase; keep it low and steady.\nMethod: moving time of all sports; transition phase 2–4 weeks (Uphill Athlete)."
       },
       "fatigue-form": {
-        "title": null,
-        "description": null
+        "title": "Fatigue and form (should be heading toward recovery)",
+        "description": "Fatigue (ATL) and Form (TSB).\nHow to read: orange line = ATL (7-day fatigue); bars = TSB, coloured by TSB ÷ CTL: red High Risk, green Optimal, light purple Grey Zone, purple Fresh, yellow Transition.\nLook for: ATL falling and TSB climbing back to positive = recovering; still red or green = not rested enough yet.\nMethod: TrainingPeaks' PMC; colour bands as in \"My training → Load (PMC)\" (Friel, rules of thumb)."
       },
       "weekly-strength-count": {
-        "title": null,
-        "description": null
+        "title": "Weekly strength sessions",
+        "description": "Strength sessions per week.\nHow to read: bars = count, green line = target of 2.\nLook for: 2 a week in the transition phase, laying the groundwork for the base phase.\nMethod: Uphill Athlete: core and strength training twice a week in the transition phase."
       },
       "ef-easy-road": {
-        "title": null,
-        "description": null
+        "title": "Aerobic efficiency EF (easy road runs)",
+        "description": "Aerobic efficiency EF: speed per heartbeat.\nHow to read: each dot = one easy road run; higher = a stronger aerobic engine.\nLook for: the most important chart of the base phase; watch the trend over weeks, not a single run.\nMethod: only road runs ≥ 30 min with average HR ≤ AeT + 3 (same as the overview's \"Aerobic efficiency\"); the EF concept is from Friel (TrainingPeaks)."
       },
       "long-easy-drift": {
-        "title": null,
-        "description": null
+        "title": "HR drift on long easy runs",
+        "description": "HR drift on long, flat easy runs: how many % higher HR drifts in the second part than the first.\nHow to read: each bar = one run; green < 5% stable, orange 5–10% some drift, red > 10% large drift; dashed line = 5%. Hover a bar for that day's temperature.\nLook for: more green and shorter bars through the base phase; lots of red = easy runs too fast, or too hot, not fuelled. Watch the trend of the latest bars, not a single one.\nMethod: steady road runs with ≥ 30 min after the warm-up and no climbs or stops, same as the overview's \"HR drift\". 5% is the Uphill Athlete aerobic threshold (AeT) test standard; 10% is the 90-min test standard (a Taiwanese coach)."
       },
       "z5-gate": {
-        "title": null,
-        "description": null
+        "title": "Zone 5 (VO2max intervals) unlock path",
+        "description": "When zone 5 (VO2max) intervals open: aerobic base → zone 3 ladder (3 sessions on target) → aerobic base confirmed → zone 5 unlock → zone 5 ladder.\nHow to read: each stage lists its conditions, ☑ done, ☐ not yet (with the next step); the current stage is outlined, locked ones are grey. \"History\" below shows the day-by-day state changes.\nLook for: which stage you're stuck at and what to do next. Confirmation = 3 weeks of steady volume plus one passed test: 90-min drift < 10% (a Taiwanese coach), UA gap ≤ 10% with a measured AeT (Uphill Athlete), or ≥ 60 min near AeT with drift < 5% (Friel).\nMethod: paused = zone 1 time below 2/3 of the confirmed level for 3 weeks in a row (Hickson 1982); a break of ≥ 6 days starts a recovery period; zone 3 is scheduled whenever the guardrails pass. Same as the overview's zone 5 card."
       },
       "intensity-distribution": {
-        "title": null,
-        "description": null
+        "title": "Intensity distribution: low-intensity share",
+        "description": "Weekly share of low / moderate / high intensity time.\nHow to read: each bar = one week's time with HR; green = low (< AeT), yellow = moderate (AeT–LTHR), red = high (≥ LTHR); dashed line = 75% target.\nLook for: green reaching above the dashed line; below 65% the overview warns \"too much time at moderate intensity\".\nMethod: Seiler 2006: elite endurance athletes do about 75–80% of sessions at low intensity."
       },
       "weekly-volume-change": {
-        "title": null,
-        "description": null
+        "title": "Weekly volume increase",
+        "description": "Weekly volume increase: the 4-week average weekly hours vs the previous week's 4-week average, in %.\nHow to read: bars = 4-week average weekly increase; red line = +10%, grey line = 0.\nLook for: only 3+ weeks in a row above +10% need attention. Trend only, not an injury prediction.\nMethod: moving time of all sports, weeks without activity count as 0; a 4-week average because a single week is magnified several times by one Baiyue trip or a rest week. 10%: Uphill Athlete (averaging > 10% a week for about 8 weeks causes problems)."
       },
       "longest-session": {
-        "title": null,
-        "description": null
+        "title": "Longest single session",
+        "description": "Duration of each trail run / hike.\nHow to read: green dots = each duration, red line = the target race's estimated time.\nLook for: the longest one should gradually approach the red line.\nMethod: Koop, Training Essentials for Ultrarunning: by the end of the cycle you should run longer and slower than at any time before the race."
       },
       "climb-density-vs-race": {
-        "title": null,
-        "description": null
+        "title": "Climb density vs target race",
+        "description": "Climb density (climb per km) of each activity.\nHow to read: each dot = one activity; red dashed line = the steepest of your upcoming A / B races.\nLook for: long sessions in the build phase close to the red line; watch density, don't chase weekly total climb.\nMethod: Koop: total climb by itself has no dose–response; compare it with the race."
       },
       "uphill-vam": {
-        "title": null,
-        "description": null
+        "title": "Uphill speed (climb per hour, HR < LTHR)",
+        "description": "Uphill speed: metres climbed per hour (VAM).\nHow to read: orange dots = trail runs, green dots = hikes; higher = climbing faster.\nLook for: in the build phase, dots of the same activity type should move up. Same as \"My training → Capacity\".\nMethod: only time on grades ≥ 5%, moving, with HR < LTHR (everything counts when there is no HR); activities with under 10 min of climbing aren't drawn."
       },
       "durability-drift": {
-        "title": null,
-        "description": null
+        "title": "Durability: late HR drift in long sessions",
+        "description": "Durability: how many % higher HR drifts in the second half than the first on trail runs over 90 min.\nHow to read: each dot = one trail run; grey dashed line = 5%, red line = 15% (big late fade).\nLook for: lower is better = you hold up better late on. Same as the overview's \"Durability\".\nMethod: WKO5's stored Pa:HR (first vs second half of the whole activity, warm-up and stops included), not the drift card's method (the drift card rejects hilly runs); hikes are excluded because they mix in rest time, and > 30% is treated as bad data and not drawn."
       },
       "ramp-rate": {
-        "title": null,
-        "description": null
+        "title": "Ramp rate (weekly CTL change)",
+        "description": "How much CTL rises per week (CTL − the CTL 7 days earlier).\nHow to read: bars green < 5 safe, yellow 5–7 only for a week or two, red ≥ 7 injury and illness risk, grey = falling; blue line = 4-week average.\nLook for: the build phase can ramp faster than the base phase, but keep the blue line at 3–5 over the long run (Couzens).\nMethod: as computed by TrainingPeaks and intervals.icu; bands from TrainingPeaks and Friel. Same as \"My training → Load (PMC)\"."
       },
       "weekly-hours-vs-taper": {
-        "title": null,
-        "description": null
+        "title": "Weekly hours vs taper band",
+        "description": "Weekly hours in the taper vs the taper target band.\nHow to read: bars = weekly hours; light line = usual volume (6-week smoothing); green band = 40–59% of usual.\nLook for: the taper weeks' bars inside the green band. Usual volume drifts down slowly with the taper.\nMethod: Bosquet 2007 meta-analysis: 2-week taper, volume cut by 41–60%, intensity and frequency maintained."
       },
       "intensity-kept": {
-        "title": null,
-        "description": null
+        "title": "Keep some high intensity",
+        "description": "Weekly hours at high intensity (> LTHR).\nHow to read: red bars = weekly hours.\nLook for: it shouldn't drop to zero in the taper: cut volume, not intensity.\nMethod: Bosquet 2007."
       },
       "form-pct": {
-        "title": null,
-        "description": null
+        "title": "Freshness Form % (TSB ÷ CTL)",
+        "description": "Freshness Form % = TSB ÷ yesterday's CTL.\nHow to read: line colour = that day's zone: red < −30% High Risk, green −30 to −10% Optimal, light purple −10 to +5% Grey Zone, purple +5 to +25% Fresh, yellow > +25% Transition; the rightmost point is the latest.\nLook for: climbing into purple before the race without dropping into yellow (fitness slipping).\nMethod: Friel's TSB bands as % CTL (intervals.icu); there is no validated optimum for mountain and trail races, direction only."
       },
       "workout-targets": {
-        "title": null,
-        "description": null
+        "title": "Suggested session intensity",
+        "description": "The power and heart rate for each session type.\nLook for: easy and long runs on the road go by HR (≤ AeT); mountain trails, climbs and intervals go by power (HR lags about 1 minute), with HR as the second number; steep technical descents ignore power.\nMethod: while LTHR is still the WKO5 default, the auto-estimated value is used."
       },
       "palladino-power-zones": {
-        "title": null,
-        "description": null
+        "title": "Palladino power zones (running)",
+        "description": "Running power zones (% CP).\nMethod: Palladino's official table."
       },
       "friel-hr-zones": {
-        "title": null,
-        "description": null
+        "title": "Heart rate zones (running)",
+        "description": "Running heart rate zones; switch the zone model on the card (Friel / Classic / COROS).\nMethod: the zone model chosen on the card; default Friel HR zones (% LTHR, as WKO5)."
       },
       "friel-pace-zones": {
-        "title": null,
-        "description": null
+        "title": "Friel pace zones (running)",
+        "description": "Running pace zones from threshold pace.\nLook for: pace is unreliable on mountain trails; useful for road running only.\nMethod: Friel pace zones."
       },
       "long-run-km-specific": {
         "title": "Long-run distance (road runs ≥ 90 min)",
@@ -254,133 +254,133 @@
     }
   },
   "workout": {
-    "name": null,
+    "name": "Activity review",
     "dashboards": {
       "highlights": {
-        "title": null,
-        "description": null
+        "title": "Highlights",
+        "description": "What kind of session this was and whether it hit its purpose. The review card picks its rules by session type (easy run / long run / intervals / test / trail) and points to the tab worth checking. Strength and cycling have only this page."
       },
       "aerobic-drift": {
-        "title": null,
-        "description": null
+        "title": "Aerobic / HR drift",
+        "description": "Did you stay below AeT, and how much did HR drift: green = stable (< 5%), orange = some drift (5–10%), red = large drift (> 10%). For easy runs, long runs and AeT tests."
       },
       "intervals": {
-        "title": null,
-        "description": null
+        "title": "Intervals",
+        "description": "Did this interval session hit its targets; CP / AeT tests show each segment's pacing per the protocol; other runs can use \"Review as intervals\". \"Power, W′ and heart rate\" is there for every run with power."
       },
       "climbing": {
-        "title": null,
-        "description": null
+        "title": "Climbing and terrain",
+        "description": "Climbs, heartbeats per 100 m of climb, HR / power per grade (grade groups). Trail and hiking; most important in the build phase."
       },
       "pacing-durability": {
-        "title": null,
-        "description": null
+        "title": "Pacing and durability",
+        "description": "Did you fade late, moving vs stopped time, fuelling. Long runs, trail, hiking."
       },
       "form-knee": {
-        "title": null,
-        "description": null
+        "title": "Running form and knee load (reference)",
+        "description": "For reference, not an injury prediction: how impact and stiffness drift during the run, the share of steep descent, and comparison with your own baseline for the same session type. Activities without Stryd show only cadence, ground contact, oscillation, kleg and impact G."
       }
     },
     "charts": {
       "summary": {
-        "title": null,
-        "description": null
+        "title": "Key numbers",
+        "description": "This session's key numbers and session type.\nHow to read: each card's ? explains how to read it and its thresholds.\nLook for: whether the session hit its purpose; details are in the drift, durability and intervals tabs.\nMethod: session type comes from that day's phase, test records, title and power."
       },
       "hr-power": {
-        "title": null,
-        "description": null
+        "title": "Heart rate and power (drag to select a range for stats)",
+        "description": "Heart rate (top) and 30-s power (bottom) on a shared time axis.\nHow to read: dashed lines = AeT, LTHR, CP; drag left or right to select a range, and below it shows time, distance, moving pace, HR, average power, NP, Pw:HR, EF and the HR drift between the range's halves.\nLook for: HR creeping up while power stays the same; select a range to compare its halves.\nMethod: WKO5's definitions (Pw:HR = average power ÷ HR, EF = NP ÷ average HR, drift split at the midpoint); average power includes 0 W while stopped; precision is one point on the chart."
       },
       "route-map": {
-        "title": null,
-        "description": null
+        "title": "Route map",
+        "description": "This activity's route (GPS track).\nHow to read: line colour can switch between HR, power, grade or a single colour; the top-right corner changes the base map and the contour and road overlays.\nLook for: hover the route and the HR and power charts mark the same point; moving over the charts marks the position on the map.\nMethod: drawn from this activity's GPS samples; indoor activities or ones without location show \"No GPS data\". The base map defaults to the one on the settings page."
       },
       "route-difficulty": {
-        "title": null,
-        "description": null
+        "title": "Route difficulty",
+        "description": "This route's difficulty.\nHow to read: course constant about 10 easy, 20 moderate, 30 a very hard single day, 40+ usually needs an overnight; km-effort categories XXS < 25, XS 25–44, S 45–74, M 75–114, L 115–154, XL 155–209, XXL ≥ 210.\nLook for: compare the difficulty with your target trip.\nMethod: course constant (Masayoshi Yamamoto) with actual moving time (reads low when faster than standard); km-effort = distance km + climb m ÷ 100 (ITRA)."
       },
       "cp-test": {
-        "title": null,
-        "description": null
+        "title": "CP test result (3 min / 12 min)",
+        "description": "CP test result (3 min / 12 min).\nLook for: more than 3% off your current CP suggests updating it; blank when this isn't a test session.\nMethod: CP = (P12·720 − P3·180) / 540, W′ = (P3 − CP)·180 (two-point linear CP model)."
       },
       "wprime-battery": {
-        "title": null,
+        "title": "W′ battery",
         "description": null
       },
       "drift-verdict": {
-        "title": null,
-        "description": null
+        "title": "Drift review",
+        "description": "This session's HR drift review: how many % higher HR drifts in the second part than the first.\nHow to read: green < 5% stable, orange 5–10% some drift, red > 10% large drift.\nLook for: easy runs, long runs and AeT tests should be green. Under 40 min after the warm-up or noisy data = reference only; hills, long stops, big swings in pace or power, or too high an intensity = not used.\nMethod: speed ÷ HR (Pa:HR), first vs second half, first 10 min excluded (with traffic-light stops in the first 20 min, counting starts 1 min after the last stop, estimate); hilly = ≥ 20 m climb per km; stops > 5%, VI > 1.04 or intensity > 90% CP are not used. 5%: Uphill Athlete."
       },
       "hr-trend": {
-        "title": null,
-        "description": null
+        "title": "Heart rate variation and trend",
+        "description": "Heart rate variation and trend (a simplified WKO5 \"Heart Rate Variation and Trend\").\nHow to read: line = 1-min average HR; dashed line = linear regression of HR on time; band = mean ± 1 standard deviation.\nLook for: variation < 0.33 steady, < 0.66 mixed; a trend within ±1.8 bpm per hour counts as flat. The half-vs-half drift here includes warm-up and stops, so it differs from \"Drift review\".\nMethod: WKO5's formulas (standard deviation ÷ mean, slr slope ±0.0005 bpm/s), on raw samples."
       },
       "hr-zones": {
-        "title": null,
-        "description": null
+        "title": "Time in HR zones",
+        "description": "Time in each heart rate zone this session.\nHow to read: one bar per zone; the zone model can be changed (every coach defines them differently) and is remembered.\nLook for: whether the intensity matched the session's purpose.\nMethod: only seconds with HR; thresholds are the LTHR / AeT / max HR valid on the day."
       },
       "power-zones": {
-        "title": null,
-        "description": null
+        "title": "Time in power zones",
+        "description": "Time in each power zone this session.\nHow to read: one bar per zone; the zone model can be Palladino 10 zones or 3 zones (% CP) and is remembered.\nLook for: whether the intensity matched the session's purpose.\nMethod: only seconds with power > 0 (1-s raw power); the threshold is the CP valid on the day."
       },
       "interval-verdict": {
-        "title": null,
-        "description": null
+        "title": "Interval review",
+        "description": "Did this interval session hit its targets.\nHow to read: hit = every rep on target and time in the target zone ≥ 85% of plan; partly = borderline or 60–85%; missed = < 60%, not adapted, or target too high.\nLook for: this verdict decides the next rung. CP / AeT tests only check pacing, not targets; non-interval sessions can use \"Review as intervals\" (remove the tag on the activity edit page to undo).\nMethod: thresholds are estimates; even pacing = second half within ±5% of the first (AeT ±3%), last minute ≤ the segment × 1.08 (estimate)."
       },
       "interval-reps": {
-        "title": null,
-        "description": null
+        "title": "Power per rep vs target band",
+        "description": "How to read: x = rep number, y = average power (W); each point on the line = that rep's average power (labelled beside it). Green box = this session's target; the pale green outside it = ±2% tolerance.\nPoint colour: inside the green box = on target (green); above = high (red); below = low (yellow). Hover a point for the rep's duration, % CP and second-half HR.\nLook for: whether the whole line stays inside the green box; later reps dropping = couldn't hold it, early reps high = started too fast. High still counts as on target in the review; it is only a warning that it was too hard.\nCP / AeT tests: no target box, one point per segment, green = even pacing, yellow = uneven, dashed line = CP; the expected all-out power is in the hover text.\nMethod: expected all-out = CP + W′/t (Monod & Scherrer 1965); the ±2% tolerance is an estimate."
       },
       "interval-power": {
-        "title": null,
-        "description": null
+        "title": "Power, W′ and heart rate",
+        "description": "Power, W′ and heart rate on a shared time axis.\nHow to read: top, orange area = 30-s power, dashed line = CP, grey band = target band, blue line = W′ remaining (right axis %); bottom = 5-s HR (wrist optical HR lags a few seconds, so short reps often peak in the recovery).\nLook for: every rep in the grey band and later reps not fading; the blue line dipping deeper and not recovering = recoveries too short or target too high; HR rising at the same power = getting tired.\nMethod: W′ uses WKO5's dFRC model (recharge 30% at 25 s + 70% at 300 s; not validated for running, estimate)."
       },
       "interval-tiz": {
-        "title": null,
+        "title": "Time in target zone vs plan",
         "description": null
       },
       "interval-hr": {
-        "title": null,
+        "title": "HR at the same power (vs earlier similar sessions)",
         "description": null
       },
       "interval-sets": {
-        "title": null,
-        "description": null
+        "title": "Sets",
+        "description": "Summary of each interval set.\nLook for: whether each set's power is in the target band.\nMethod: work segments = 30-s power ≥ max(85% CP, 1.12 × this session's median power) for ≥ 1 min; the target band is the median %CP of each set (sub-threshold 88–95%, threshold 95–101%, supra-threshold 101–106%, VO2max 106–116%)."
       },
       "climbs": {
-        "title": null,
-        "description": null
+        "title": "Climbs",
+        "description": "This session's climbs.\nHow to read: top chart, light area = elevation, thick line = the chosen metric (VAM / power / %CP / HR / GAP, 60-s rolling); ①②③ = climbs, hatched ↓ = descents, short bar on a segment = its average. Bottom chart = each segment vs usual.\nLook for: fewer heartbeats per 100 m of climb = more economical; > 5% below the 8-week median = improving.\nMethod: climb = ≥ 80 m of continuous climbing at ≥ 3% grade; usual = median and middle 50% of the same activity type over the last 8 weeks within ±4 pp of grade (widened to 12, then 26 weeks with fewer than 5 segments); the 60-s rolling window and the definition of usual are estimates. The table is under \"Details\"."
       },
       "grades": {
-        "title": null,
-        "description": null
+        "title": "Grade groups",
+        "description": "Performance per grade band.\nHow to read: one row per grade (up = uphill, down = downhill); grey bar on the left = share of time; dot on the right = this session's value, grey bar = the usual middle 50%, line = median; hollow dot = under 60 s, reference only.\nLook for: which grades are better or worse than usual.\nMethod: usual = the same activity type over the last 8 weeks (widened to 12, then 26 weeks with fewer than 5) with ≥ 60 s at that grade (estimate); stops excluded. The table is under \"Details\"."
       },
       "durability": {
-        "title": null,
-        "description": null
+        "title": "Durability review",
+        "description": "Durability review: how much power or speed you still produce late on at the same HR.\nLook for: < 90% in the final 20% means fuelling or pacing needs adjusting.\nMethod: 10-min rolling (power or speed) ÷ HR vs the first 10 min after the warm-up (Maunder 2021's durability concept; 90% is an estimate)."
       },
       "durability-curve": {
-        "title": null,
-        "description": null
+        "title": "Durability curve",
+        "description": "Durability curve: how much power (or speed) you produce at the same HR, with the 10 min after the warm-up = 100%.\nHow to read: x axis = elapsed time (hours); a line flat near 100% = holding up, falling = getting tired.\nLook for: < 95% fatigue setting in, < 90% fuelling or pacing needs adjusting.\nMethod: Maunder 2021's durability concept; 95% and 90% are estimated thresholds."
       },
       "pacing": {
-        "title": null,
-        "description": null
+        "title": "Pace and HR per 10% of distance",
+        "description": "Pace and heart rate per 10% of distance.\nLook for: pace dropping late while HR still rises = too fast early or not enough fuel.\nMethod: moving pace (stops excluded)."
       },
       "form-halves": {
-        "title": null,
-        "description": null
+        "title": "First vs second half (split by work, reference)",
+        "description": "Running form, first vs second half (reference).\nHow to read: each form metric's change between halves, against your usual range for the same session type.\nLook for: changes outside the usual range = fatigue changed your form.\nMethod: split into two halves of equal total work (kJ) (so a long trail climb doesn't all fall in one half, estimate), moving time without power; cadence ≥ 130 spm only; baseline = median and IQR of the same session type over 8–12 weeks, no comparison with fewer than 5. No left/right balance channel for now."
       },
       "form-grades": {
-        "title": null,
-        "description": null
+        "title": "Running form by grade (reference)",
+        "description": "Running form by grade (reference).\nHow to read: one row per grade; grey bar on the left = share of running time; dot on the right = this session's average, grey bar = the usual middle 50%, line = median, hollow dot = under 60 s. Switch the metric at the top (ILR, impact G, LSS, kleg, ground contact, cadence, oscillation); with ILR, impact G or impact per km, the right column shows cadence at the same grade (↑↓ = above / below usual).\nLook for: grades where impact is above usual while cadence is below usual (only then is a verdict shown); raising cadence by 5–10% can reduce knee load.\nMethod: cadence ≥ 130 spm only; usual = the same activity type over the last 8 weeks (widened to 12, then 26 weeks with fewer than 5), ≥ 60 s at that grade (estimate). Impact G = fmax ÷ (body weight × g), fmax from WKO5's Maximum Force (Morin 2005). Heiderscheit 2011 (MSSE 43:296), Lenhart 2014 (MSSE 46:557); impact per km = impact G × steps per km (estimate, approach after Willson 2014; not measured knee force). The table is under \"Details\"."
       },
       "form-work": {
-        "title": null,
-        "description": null
+        "title": "Running form as fatigue builds (by work, reference)",
+        "description": "How running form changes with fatigue (reference).\nHow to read: x axis = 0–10% … 90–100% of cumulative work; blue line = this session's average per segment, grey band = the usual middle 50% for the same segment, dashed line = median; hollow dot = under 60 s. You can show one grade only; with ILR, impact G or impact per km, the second line under the x axis is that segment's cadence.\nLook for: the line straying further from the grey band later on = fatigue changed your form; when impact rises, check whether cadence dropped.\nMethod: split as in \"First vs second half\"; cadence ≥ 130 spm only; usual = the same activity type over the last 8 weeks (estimate). Heiderscheit 2011, Lenhart 2014; impact per km is an estimate (approach after Willson 2014). The table is under \"Details\"."
       },
       "form-cadence": {
-        "title": null,
-        "description": null
+        "title": "Cadence and impact (reference)",
+        "description": "Cadence and impact (reference): is impact (ILR) lower when cadence is higher.\nHow to read: each dot = 30 s of steady running, y axis = ILR normalized to this session's median speed and grade; solid line = the trend within your usual cadence range, dashed = extrapolated; grey band = this session's median cadence +5–10%.\nLook for: a downward trend inside the grey band = raising cadence may reduce impact. Correlation only, not a controlled experiment; when the trend is unclear no chart is drawn, just a sentence.\nMethod: the normalization coefficients come from your runs over the last 26 weeks (at least 5, compared within each run, estimate); the steady-segment thresholds are estimates. Heiderscheit 2011 (MSSE 43:296: cadence +5% / +10% cuts knee energy absorption by about 20% / 34%), Lenhart 2014 (MSSE 46:557), Schubert 2014 (Sports Health 6:210). ILR is Stryd's estimate with no published force-plate validation; compare only with yourself."
       }
     }
   }
