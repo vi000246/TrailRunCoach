@@ -25,3 +25,6 @@ re ^無法計算$
 re ^賽\|馬拉松\|race
 re 閾值心率測試\|LTHR
 re ^最大心率測試\|max
+# interval_library's _OLD_* regexes: they match the session titles stored in plans written before a
+# rename (the titles are re-parsed, never shown), so they stay Chinese like the titles they read
+re ^\^(?:\(\?:閾值\||VO2max \(\?!間歇\)|爬坡間歇 \?\(|短強度 \?\(\?=|間歇 \?\(5)

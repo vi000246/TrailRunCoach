@@ -424,7 +424,7 @@ class Status:
         prev = run_wk[:-2]
         skipped = LG.skip_mondays(self.plan, [m for m, _ in prev])
         step, run_base = LG.volume_step(run_last, LG.normal_weeks(prev, skipped))
-        skip_note = "；不含減量期／比賽週／賽後恢復期／轉換期的週" if skipped & {m for m, _ in prev[-LG.STEP_AVG_WEEKS:]} else ""
+        skip_note = _("；不含減量期／比賽週／賽後恢復期／轉換期的週") if skipped & {m for m, _ in prev[-LG.STEP_AVG_WEEKS:]} else ""
         # the week after a short unplanned break (< 6 days, no re-entry block) is exempt (load_guard);
         # the user's own 不排課日期／休息日 and unticked 可練日 don't count as unplanned (owner 2026-10-05)
         exempt = ""
@@ -435,7 +435,7 @@ class Status:
             if brk is not None:
                 n = brk[1] - brk[0] + 1
                 k = brk[2]
-                own = f"，另 {k} 天是自己排的休息（不排課日期／休息日／沒勾的可練日）" if k else ""
+                own = _("，另 {k} 天是自己排的休息（不排課日期／休息日／沒勾的可練日）", k=k) if k else ""
                 exempt = (f"上週跑步時間比基準多 {step * 100:+.0f}%，但前一週非計畫停跑 {n - k} 天{own}"
                           f"（< {MIN_BREAK} 天、不進恢復期）把基準拉低了：這週不算增幅（推估）")
         base6 = _mean([h for _, h in wk[-8:-2]]) or 0
