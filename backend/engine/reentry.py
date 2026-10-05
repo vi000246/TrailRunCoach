@@ -34,13 +34,14 @@ the break (推估). Planned breaks come from 不排課日期 (engine/blackouts.p
 ≥ 6 days with no run inside; unplanned ones from the activity data (the
 current gap counts as a break returning today).
 
-轉換期 (SP-73, owner 2026-10-05): days inside a 轉換期 phase (auto or manual,
-planning.transition_days) are not break days — the transition is a planned
-easy / cross-training block, so weeks of only cross-training / strength there
+Post-race phases (SP-73, owner 2026-10-05): days inside an A race's 恢復期 (7–14
+days) or the 轉換期 after it (auto or manual, planning.post_race_days) are not
+break days — both are planned rest / easy / cross-training blocks, so a 恢復期
+without a run or weeks of only cross-training / strength in the transition
 don't start a re-entry block when base resumes. A break counts its days outside
-the transition only (≥ 6 still makes a block, as long as those days, e.g. a
+those phases only (≥ 6 still makes a block, as long as those days, e.g. a
 transition + 10 more days off = a 10-day 6–13 block; the block text says how
-many transition days were left out).
+many post-race days were left out).
 """
 from __future__ import annotations
 
@@ -106,7 +107,7 @@ def plan(last: dt.date, ret: dt.date, cross: bool = False, planned: bool = False
     推估): the block of the next-longer break (停 10 天 → the 14–28-day rules
     and length) — after an injury the tissue, not only the fitness, has to
     re-adapt. FVDOT stays the one of the real break (it is a fitness loss). `days`: the break's
-    length when not every day between counts (find_all: the 轉換期 days, `transition_days` of
+    length when not every day between counts (find_all: the post-race phase days, `transition_days` of
     them, are left out); None = all of them."""
     if days is None:
         days = (ret - last).days - 1
@@ -163,7 +164,7 @@ def text_of(days: int, cat: str, ret: dt.date, end: dt.date, injury: Optional[di
             if injury else _("停跑 {days} 天", days=days))
     up = _("；傷後往上一級排（推估）") if stepped else ""
     if transition_days:
-        head += _("（不含轉換期 {n} 天）", n=transition_days)
+        head += _("（不含賽後恢復期／轉換期 {n} 天）", n=transition_days)
     return _("{head}：{start} 起恢復期到 {end}（{how}；Daniels 表 9.2，恢復期＝停訓天數{up}）",
              head=head, start=ret.isoformat(), end=(end - dt.timedelta(days=1)).isoformat(), how=how, up=up)
 
@@ -257,15 +258,15 @@ def _injuries(injuries, step_up) -> tuple[list, bool]:
 
 
 def _transition_set(ds, runs: list[dt.date], today: dt.date, horizon_days: int) -> set[dt.date]:
-    """The 轉換期 days (planning.transition_days) a break within reach can touch; empty without
-    a plan or on any error (re-entry must still work)."""
+    """The post-race 恢復期 / 轉換期 days (planning.post_race_days) a break within reach can
+    touch; empty without a plan or on any error (re-entry must still work)."""
     plan_ = getattr(ds, "plan", None)
     if plan_ is None:
         return set()
     try:
-        from backend.engine.planning import transition_days
+        from backend.engine.planning import post_race_days
         lo = min([today - dt.timedelta(days=horizon_days)] + runs[:1])
-        return transition_days(plan_, lo, today + dt.timedelta(weeks=27))
+        return post_race_days(plan_, lo, today + dt.timedelta(weeks=27))
     except Exception:                       # noqa: BLE001
         return set()
 
@@ -283,7 +284,7 @@ def find_all(ds, today: dt.date, blackouts=(), horizon_days: int = 182, injuries
     tset = _transition_set(ds, runs, today, horizon_days)
 
     def off(last: dt.date, ret: dt.date) -> tuple[int, int]:
-        """(break days outside a 轉換期, 轉換期 days) between `last` and `ret`."""
+        """(break days outside a post-race phase, post-race 恢復期／轉換期 days) between `last` and `ret`."""
         n = (ret - last).days - 1
         t = sum(1 for k in range(1, n + 1) if last + dt.timedelta(days=k) in tset) if tset else 0
         return n - t, t

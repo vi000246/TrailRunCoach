@@ -8,7 +8,8 @@ TSS per hour, CTL, the 8-week history, long-session weekday, thresholds) and
 rolls the same rules forward week by week:
 
   * base / specific: CTL ramp goal (load_guard.ramp_goal) capped at +10 % (at least
-    +0.5 h) of max(4-week mean, last week); after 3 build weeks a recovery
+    +0.5 h) of max(4-week mean, last week) over normal weeks (no taper / race / 恢復期 /
+    轉換期 week, SP-73); after 3 build weeks a recovery
     week at 65 % of those 3 (3:1)
   * taper 40–50 % of the 6-week mean, event week 30 %, recovery 50 %,
     transition 50 % of the 4 weeks before the race's taper (SP-73;
@@ -76,6 +77,11 @@ def _phase_note(phases: list, day: dt.date) -> str:
     return ""
 
 
+def _skip_week(phases: list, monday: dt.date) -> bool:
+    """The week touches a 減量期 / race week / 恢復期 / 轉換期 (load_guard.STEP_SKIP_KINDS)."""
+    return any(phase_kind(phases, monday + dt.timedelta(days=k)) in LG.STEP_SKIP_KINDS for k in range(7))
+
+
 def _next_event_start(phases: list, day: dt.date) -> Optional[dt.date]:
     for p in phases:
         kind = p["kind"] if isinstance(p, dict) else p.kind
@@ -86,12 +92,15 @@ def _next_event_start(phases: list, day: dt.date) -> Optional[dt.date]:
 
 
 def week_hours(kind: str, hist: list[float], build: list[bool], ctl0: float, r: float,
-               cc: float, days_to_a: Optional[int], tr_ref: Optional[float] = None) -> tuple[float, str, list[str]]:
+               cc: float, days_to_a: Optional[int], tr_ref: Optional[float] = None,
+               cap_ref: Optional[float] = None) -> tuple[float, str, list[str]]:
     """(hours, mode, why) for one projected week; `hist` = weekly hours, oldest first.
-    `tr_ref`: a 轉換期 week's pre-race level (overview.transition_ref; None = the old 65 % rule)."""
+    `tr_ref`: a 轉換期 week's pre-race level (overview.transition_ref; None = the old 65 % rule).
+    `cap_ref`: the +10 % cap's reference on normal weeks (load_guard.step_base of the normal
+    weeks, SP-73); None = max(4-week mean, last week) of `hist`."""
     base4 = statistics.mean(hist[-4:]) if hist else 0.0
     last = hist[-1] if hist else 0.0
-    ref = max(base4, last)
+    ref = cap_ref if cap_ref else max(base4, last)
     why: list[str] = []
     if kind in ("base", "specific"):
         if len(build) >= 3 and all(build[-3:]):
@@ -134,7 +143,7 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
     `base_quality`: the session(s) the gate picked for this week — a list of the
     two-track intervals (overview.quality_sessions: base / 專項期 / 減量期), or one dict
     (the recovery-week fartlek, the AeT test, kind "test"); None in base with
-    `allow_quality` = 有氧間歇（巡航）3×10, in 專項期 the old fixed session, in 減量期 4×3′.
+    `allow_quality` = 有氧間歇（巡航）3×10, in 專項期 the old fixed session, in 減量期 TAPER_Q 4×3′.
     `quality_cap`: 1 = at most one interval (the gate's guardrail mode).
     `prefs` (課表偏好, engine/plan_prefs.py): shaped and placed like week_plan();
     `rates` = TSS / h per category for it, `notes` collects its notes.
@@ -435,6 +444,12 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
     hours_at = {str(h.get("start")): float(h["hours"]) for h in cur.get("history") or [] if h.get("start")}
     hours_at[monday.isoformat()] = float(cur["target"]["hours"])
     cur_tr = cur.get("transition_ref") or {}
+    # the +10 % cap's normal weeks (SP-73): week_plan's, this week's, then each projected week
+    # that isn't a 減量期 / race week / 恢復期 / 轉換期 one (None = an older `cur`: the raw history)
+    ref_wk = cur["target"].get("ref_weeks")
+    norm = None if ref_wk is None else [float(h) for h in ref_wk]
+    if norm is not None and not _skip_week(phases, monday):
+        norm.append(float(cur["target"]["hours"]))
     build = [False] * (len(hist) - 1) + [cur.get("mode") in ("base", "specific")]
     for i in range(1, len(hist) - 1):
         build[i] = hist[i] >= 0.95 * hist[i - 1] and hist[i] > 0.5
@@ -461,7 +476,8 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
             ref = O.transition_ref(phases, week, lambda m: hours_at.get(m.isoformat()))
             tr_h = cur_tr.get("hours") if cur_tr.get("hours") and cur_tr.get("mondays") == ref["mondays"] \
                 else ref["hours"]
-        hours, mode, why = week_hours(kind, hist, build, ctl, tph, ctlconstant, days_to, tr_h)
+        hours, mode, why = week_hours(kind, hist, build, ctl, tph, ctlconstant, days_to, tr_h,
+                                      LG.step_base(norm) if norm else None)
         notes: list = []
         if PR is not None and PR.weekly_hours is not None and hours > PR.weekly_hours:
             hours = PR.weekly_hours
@@ -622,6 +638,8 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
         h_hist = full_h if lost and mode != "reentry" else hours
         build.append(mode in ("base", "specific") and h_hist >= 0.95 * hist[-1] and h_hist > 0.5)
         hist.append(h_hist)
+        if norm is not None and not _skip_week(phases, week):
+            norm.append(h_hist)
         hours_at[week.isoformat()] = h_hist
         week += dt.timedelta(weeks=1)
     return out

@@ -100,11 +100,12 @@ Other entry points:
 leaving the 轉換期 — and changing its length while in it — is a phase change, so it is held for
 approval like any other (Big changes below). Adapt and reconcile treat the 轉換期 as a rest
 phase (`reconcile.REST_MODES`, adapt's rest week); the re-entry block applies only in base /
-specific. Days inside a 轉換期 (auto or manual, `planning.transition_days`) are **not a running
-break** (owner 2026-10-05): a transition of only cross-training / strength starts no re-entry
-block when base resumes — `reentry.find_all` counts a break's days outside the transition only
-(still ≥ 6 → a block of that length, its text 「停跑 N 天（不含轉換期 M 天）」) — and doesn't break
-the Zone 3 gate's streak or re-lock it (below).
+specific. Days inside a planned post-race phase — the A race's 恢復期 (7–14 days) or the 轉換期
+after it (auto or manual, `planning.post_race_days`) — are **not a running break** (owner
+2026-10-05): a 恢復期 without a run or a transition of only cross-training / strength starts no
+re-entry block when base resumes — `reentry.find_all` counts a break's days outside those phases
+only (still ≥ 6 → a block of that length, its text 「停跑 N 天（不含賽後恢復期／轉換期 M 天）」) — and
+doesn't break the Zone 3 gate's streak or re-lock it (below).
 
 The toggles are in 課表 › ⚙ 課表偏好 › 自動調整 (`backend/static/schedule.html`, saved through
 `PUT /settings`); `autoplan.js` no longer draws them.
@@ -131,17 +132,22 @@ data, else 0 (`load_guard.pmc_start`); the ramp is not checked in the first 28 d
 automatic start or the first 7 after a manual one (推估; `status` passes `ramp_week = None`
 then); the volume step still runs. Rule E's TSB < −30 reads `week_plan`'s `load.tsb_today` from
 the same started PMC (SP-63 Q3), so a new user's startup weeks give no false fatigue trigger. Last week's **running-time** step against
-max(the week before, the 4 weeks before's mean) > 20 % → no interval (Nielsen et al. 2014, JOSPT
+max(the week before, the 4 weeks before's mean) — normal weeks only (SP-73, owner 2026-10-05: a week
+touching a 減量期 / race week / post-race 恢復期 / 轉換期, `load_guard.STEP_SKIP_KINDS`, is left out and
+the most recent normal weeks before it count, up to 26 weeks back; the planner's +10 % cap reads the
+same weeks, overview.spec.md) — > 20 % → no interval (Nielsen et al. 2014, JOSPT
 44:739; Damsted et al. 2019, JOSPT 49:230 — peer-reviewed, they measured running; the 「10 %
 法則」 itself has no evidence); 10–20 % → hold the dose (推估, conservative). Exempt: the week after
 a short unplanned break — 3–5 days without a run (3 推估; ≥ 6 is a re-entry block, `reentry.MIN_BREAK`)
 touching the week before, which pulled the base down (`short_break`,
-`backend/engine/load_guard.py:287`; owner 2026-10-04). Only unplanned days count (owner
+`backend/engine/load_guard.py:322`; owner 2026-10-04). Only unplanned days count (owner
 2026-10-05): days of the user's own 不排課日期 or 休息日 (both blackout kinds, `Status(blackouts=)`,
-default `blackouts.load()`) are a chosen rest, so a planned gap is still checked and a partly
-planned one is exempt only when its unplanned days alone are ≥ 3 (counted, not contiguous). The
-status card says so (「前一週非計畫停跑 N 天，另 M 天是自己排的不排課／休息日…」) and the week gets
-an info note (`guard`'s `step_note` → `week_plan`, `backend/engine/overview.py:914`). TSB −30…−20 → hold
+default `blackouts.load()`) and the weekdays not ticked as 可練日 in 課表偏好 (`plan_prefs.days`,
+`Status(prefs=)`: a Fri–Sun runner's weekly Mon–Thu gap is their week, not a break) are a chosen
+rest, so a planned gap is still checked and a partly planned one is exempt only when its unplanned
+days alone are ≥ 3 (counted, not contiguous). The status card says so (「前一週非計畫停跑 N 天，另 M
+天是自己排的休息（不排課日期／休息日／沒勾的可練日）…」) and the week gets
+an info note (`guard`'s `step_note` → `week_plan`, `backend/engine/overview.py:925`). TSB −30…−20 → hold
 (Friel / TrainingPeaks). B2B weekends and the B2B TSB exemption use the block line too.
 
 ## Interval progression (`backend/engine/quality_gate.py`)
@@ -246,8 +252,8 @@ intensity). Each rung is the canonical variant of `backend/engine/interval_libra
   for Zone 3, a Zone 3 session 達標 in the 8-week history. Once met it stays open; a break of
   ≥ 21 days without running (`Z3_RELOCK_DAYS`, 推估; Coyle 1984 VO2max −7 % at 21 days,
   detraining.md §1) re-locks it — only what comes after the break counts. Breaks of 6–20 days
-  get the re-entry block only. 轉換期 days (`z3_consistency(skip=)`, `planning.transition_days`;
-  SP-73, owner 2026-10-05) are no running gap: they count neither toward the 7-day stretch nor
+  get the re-entry block only. Post-race 恢復期 / 轉換期 days (`z3_consistency(skip=)`,
+  `planning.post_race_days`; SP-73, owner 2026-10-05) are no running gap: they count neither toward the 7-day stretch nor
   the 21-day re-lock (a 3–4-week transition alone never re-locks — chosen: the transition is a
   planned easy block, the fitness loss Coyle measured is for full inactivity), and a week touching
   the transition that fails on its own is see-through (neither counts nor breaks the 4 weeks; one
@@ -283,7 +289,7 @@ intensity). Each rung is the canonical variant of `backend/engine/interval_libra
      2026-10-05, replacing SP-39's 12-week `LTHR_FRESH_DAYS`: zones-and-thresholds.md §2.5 finds no
      direct evidence for a fixed retest period; unsourced-rules.md B3 moved the AeT to event
      triggers too) — the measured LTHR stays valid **unless an event invalidates it**
-     (`lthr_invalid`, `backend/engine/quality_gate.py:1386`, `gate["lthr"]["invalid"]`): (a) a
+     (`lthr_invalid`, `backend/engine/quality_gate.py:1387`, `gate["lthr"]["invalid"]`): (a) a
      running break ≥ 4 weeks after the test (`reentry.find_all`, a block with `reconfirm`;
      detraining.md); (b) evidence since the test (`threshold_confidence.lthr_evidence`, level weak
      or above: a cool long effort above LTHR, a 40–60-min race < 95 % LTHR, the CP-band
@@ -557,10 +563,11 @@ overview has `data-log="none"`. The settings are in 課表偏好 (above).
   「VO2max 間歇 5×4 分上坡」, 「有氧間歇（巡航）2×8 分」, the projection's 「有氧間歇（巡航）3×10 分」;
   `plan_prefs._quality_terrain` turns the new hill title flat too). Rung / ladder semantics are
   unchanged. A stored pre-SP-79 title is read in today's words (`interval_library.renamed`,
-  `backend/engine/interval_library.py:486`, through `plan_store.display_title`), and reconcile
+  `backend/engine/interval_library.py:488`, through `plan_store.display_title`), and reconcile
   renames a generated old title the same way (`_titled`, `backend/engine/reconcile.py:67`), so
   renaming alone is never a 「changed」 session or a change-log entry. Titles that were not the
-  generator's (「閾值下 3×8 分」, 「短強度 4×3 分」, your own) are left as written.
+  generator's (「閾值下 3×8 分」, your own) are left as written. The taper's 「短強度 4×3 分」 became
+  「有氧間歇（巡航）4×3 分」 (2026-10-05, 98–102 % CP unchanged) and is mapped the same way.
 - A swap from the 換一個 drawer or an editor template is a user edit (`swap = user`,
   `edited`): reconcile rule 3 keeps it, so the automatic run never overrides it. A
   non-equivalent swap is stored with `equiv = false` and doesn't move the ladder.
@@ -597,3 +604,7 @@ overview has `data-log="none"`. The settings are in 課表偏好 (above).
 | 2026-10-04 | change | SP-73 follow-up | 轉換期 days are not a running break: no re-entry block from a cross-training-only transition (`reentry.find_all` counts days outside it), and the Zone 3 gate's 7-day gap / 21-day re-lock skip them, its weeks see-through (`planning.transition_days`; owner 2026-10-05) |
 | 2026-10-04 | change | SP-39 follow-up | Zone 5's UA path: no LTHR age limit any more (`LTHR_FRESH_DAYS` removed) — a measured LTHR is invalidated only by an event (`lthr_invalid`: a ≥ 4-week running break after the test, evidence since the test from `threshold_confidence.lthr_evidence`, an AeT aggregate shift / moved); the flow names the event and offers the 30-min LTHR test (owner 2026-10-05) |
 | 2026-10-04 | sp-79-quality-families | SP-79 | Generated 強度課 titles name the family (有氧間歇／有氧間歇（巡航）／VO2max 間歇) instead of 閾值／近閾值／VO2max; stored older titles are mapped on read and in reconcile (no spurious change), and the ladder's title matchers accept both spellings |
+| 2026-10-05 | change | SP-79 follow-up | Taper 「短強度 4×3 分」 renamed 「有氧間歇（巡航）4×3 分」 (intensity unchanged); the stored old title maps through `interval_library.renamed` / `plan_store.display_title` |
+| 2026-10-05 | change | SP-63 follow-up | Weekdays not ticked as 可練日 in 課表偏好 count as planned rest for the short-break exemption (like 不排課日期 / 休息日), so a Fri–Sun-only runner's weekly Mon–Thu gap is not exempt from the running-volume step (owner 2026-10-05) |
+| 2026-10-05 | change | SP-73 follow-up | The A race's 恢復期 (7–14 days) is a planned post-race phase like the 轉換期: its days are no running break for the re-entry block or the Zone 3 gate's gap / re-lock (`planning.post_race_days`; the block text says 「不含賽後恢復期／轉換期 M 天」; owner 2026-10-05) |
+| 2026-10-05 | change | SP-73 follow-up | The running-volume step's base (and the planner's +10 % volume cap) skips weeks touching a 減量期 / race week / post-race 恢復期 / 轉換期 and uses the most recent normal weeks, so the second week after a transition isn't blocked (`load_guard.skip_mondays` / `normal_weeks`; owner 2026-10-05) |

@@ -151,6 +151,13 @@ def test_week_plan_and_projection_agree_on_the_transition_weeks():
     assert all(any(n.get("src") == "transition" for n in w.get("notes") or []) for w in tr)
     nxt = [w for w in weeks if w["start"] == "2026-10-19"][0]
     assert nxt["phase"] == "base" and any(s["kind"] == "long" for s in nxt["sessions"])
+    # SP-73 (owner 2026-10-05): the +10 % cap reads normal weeks — not the 減量期 / race / 恢復期 /
+    # 轉換期 ones — so the first base week isn't capped at the transition's level; the CTL goal binds
+    assert wp["target"]["ref_weeks"] == pytest.approx([370 / 60.0] * 4)
+    assert nxt["hours"] > 1.10 * wp["target"]["hours"] + 0.5 + 0.1
+    assert nxt["hours"] <= 1.10 * 370 / 60.0 + 1e-6
+    vol = next(i for i in st.indicators if i.id == "volume")
+    assert vol.extra["run_base"] > vol.extra["run_last_week"] and "不含減量期／比賽週／賽後恢復期／轉換期" in vol.why
     # 課表偏好 with 3 runs a week: the Canova cap still holds after the shaping
     prefs = PP.Prefs(runs=3)
     wp3 = O.week_plan(ds, st, TODAY, prefs=prefs)
