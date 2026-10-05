@@ -1151,7 +1151,7 @@
   "；其他溫度另外算（{o}）": "; other temperatures counted separately ({o})",
   "；其餘 {m} 分平路輕鬆跑": "; the other {m} min easy on the flat",
   "；分溫度區：{bands}": "; by temperature band: {bands}",
-  "；受「每次最多 +15%」和週量限制，這次先爬到 {p:.0f}%，之後每週加一點": "; held back by the \"at most +15% each time\" rule and the week's volume: {p:.0f}% this time, a little more each week",
+  "；受「每次最多 +10%」和週量限制，這次先爬到 {p:.0f}%，之後每週加一點": "; held back by the \"at most +10% each time\" rule and the week's volume: {p:.0f}% this time, a little more each week",
   "；另外 {m} 次爬升夠，但沒有記背包或太輕：在活動頁記下那次背多少就會算進來": "; {m} more had enough climb but no recorded pack or too light a pack: record the pack weight on the activity page and they count",
   "；另外 {x}": "; also {x}",
   "；已經做了 {n} 次": "; {n} done already",

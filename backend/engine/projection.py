@@ -192,7 +192,8 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
     rec_wk = kind in ("base", "specific") and mode == "recovery_week"
     if rec_wk:
         # SP-97: the recovery week keeps a shorter long run (overview.recovery_long_minutes, as week_plan)
-        long_min = O.recovery_long_minutes(longest, total, spec_long)
+        # ≤ +10 % over the last long day here too (SP-66: the cap wins over RECOVERY_LONG_MIN)
+        long_min = LG.cap_long(O.recovery_long_minutes(longest, total, spec_long), longest)[0]
     info = None
     if b2b is not None:
         info = b2b["info"] = B2B.projected(kind, mode, monday, b2b.get("event"), b2b.get("prev_mode"),

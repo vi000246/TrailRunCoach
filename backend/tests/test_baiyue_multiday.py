@@ -156,11 +156,11 @@ def test_specific_phase_long_day_is_the_summit_simulation_from_8_weeks_out():
     SP.decorate(ss, info)
     s = ss[0]
     assert s["title"] == "攻頂日模擬｜大小霸" and "背 12 kg 的背包" in s["detail"]
-    assert "+15%" in s["detail"] and s["climb_m"] < 1500 and "全程心率壓在輕鬆跑上限以下" in s["detail"]
+    assert "+10%" in s["detail"] and s["climb_m"] < 1500 and "全程心率壓在輕鬆跑上限以下" in s["detail"]
     assert "Training for Mountaineering" in s["source"] and info["long"]["summit_sim"]
     ss = [{"id": "long", "kind": "long", "minutes": round(full), "title": "LSD（山路）", "detail": ""}]
     SP.decorate(ss, info)
-    assert ss[0]["climb_m"] == 1500 and "+15%" not in ss[0]["detail"]
+    assert ss[0]["climb_m"] == 1500 and "+10%" not in ss[0]["detail"]
 
 
 def test_specific_phase_before_8_weeks_and_the_last_week():
@@ -178,7 +178,7 @@ def test_specific_phase_before_8_weeks_and_the_last_week():
 
 def test_week_plan_puts_the_simulation_on_the_long_day():
     """A built athlete (150′ long days) 5–6 weeks before a 3-day 百岳: the week's long day is the
-    攻頂日模擬 with the trip's pack, its climb the share the +15 % step allows."""
+    攻頂日模擬 with the trip's pack, its climb the share the +10 % step (SP-66) allows."""
     from backend.engine import overview as O
     from backend.engine import plan_prefs as PP
     from backend.engine.status import Status
@@ -194,6 +194,9 @@ def test_week_plan_puts_the_simulation_on_the_long_day():
     long_s = next(s for s in wp["sessions"] if s["id"] == "long")
     assert long_s["title"] == "攻頂日模擬｜大小霸" and "背 12 kg 的背包" in long_s["detail"]
     assert 0 < long_s["climb_m"] < 1500 and wp["specific"]["long"]["need_m"] == 1500
+    # SP-66 × SP-114: the simulation grows like any long day, ≤ +10 % over the longest of 30 days
+    from backend.engine import load_guard as LG
+    assert long_s["minutes"] <= LG.LONG_CAP * wp["specific"]["longest28"] + 1e-6 and "+10%" in long_s["detail"]
 
 
 # ---- ME instead of the uphill VO2max set (ADS ≤ 10 %) -----------------------------------------

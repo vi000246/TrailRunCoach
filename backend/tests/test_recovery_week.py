@@ -161,3 +161,23 @@ def test_recovery_long_minutes():
     assert O.recovery_long_minutes(150, 400, spec_min=80) == 80
     assert O.recovery_long_minutes(20, 400) == O.RECOVERY_LONG_MIN
     assert O.recovery_long_minutes(300, 200) == 100                       # ≤ half the week
+
+
+def test_recovery_week_long_run_respects_the_single_run_cap(monkeypatch):
+    """Integration SP-66 × SP-97: RECOVERY_LONG_MIN is a floor, but load_guard.LONG_CAP wins (it is
+    applied after the recovery-week long run, in week_plan and in the projection's week_sessions).
+    The floor is raised to 90′ here so it crosses the cap of an athlete whose longest run is 45′."""
+    from backend.engine import load_guard as LG
+    monkeypatch.setattr(O, "RECOVERY_LONG_MIN", 90)
+    short = {d: 35 for d in range(7)}                       # 245 min; this week's Tue run is 45′
+    light = {d: 20 for d in range(7)}                       # 140 min: ≤ 80 % → the week before three builds
+    ds, plan, wp = _week("2027-06-05", {4: light}, default=short)
+    assert wp["phase"] == "base" and wp["mode"] == "recovery_week"
+    long_s = next(s for s in wp["sessions"] if s["id"] == "long")
+    assert long_s["minutes"] <= LG.LONG_CAP * 45 and long_s["detail"].startswith("恢復週")
+    assert any(n.get("src") == "long_cap" for n in wp["notes"])
+    tgt = {"z2": "", "long": ""}
+    ss = P.week_sessions(MON + dt.timedelta(weeks=1), "base", "recovery_week", 4.0, 50.0, tgt, 5, 45.0, False,
+                         False, 20.0, 150.0)
+    lg = next(s for s in ss if s["id"] == "long")
+    assert lg["minutes"] <= LG.LONG_CAP * 45
