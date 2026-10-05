@@ -140,7 +140,9 @@ def get_plan(begin: Optional[str] = None, end: Optional[str] = None):
                   "mini_taper_days": P.MINI_TAPER_DAYS, "long_event_hours": P.LONG_EVENT_HOURS,
                   "long_event_ep": P.SIZE_EP[P.ULTRA - 1],
                   # SP-96: a 2–3 day 百岳's taper; 課表偏好 taper_days for a road marathon / an ultra
-                  "baiyue_taper_days": P.BAIYUE_TAPER_DAYS, "taper_pref_days": P.taper_days_setting()},
+                  "baiyue_taper_days": P.BAIYUE_TAPER_DAYS, "taper_pref_days": P.taper_days_setting(),
+                  # SP-114: a ≥ 4 day 百岳
+                  "baiyue_long_taper_days": P.BAIYUE_LONG_TAPER_DAYS},
     }
 
 
