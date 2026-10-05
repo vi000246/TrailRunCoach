@@ -197,6 +197,8 @@ def test_week_plan_puts_the_simulation_on_the_long_day():
     # SP-66 × SP-114: the simulation grows like any long day, ≤ +10 % over the longest of 30 days
     from backend.engine import load_guard as LG
     assert long_s["minutes"] <= LG.LONG_CAP * wp["specific"]["longest28"] + 1e-6 and "+10%" in long_s["detail"]
+    # SP-115: a walking session — the uphill cap (no max HR here: the easy cap stands in) or RPE ≤ 13
+    assert "RPE ≤ 13" in long_s["target"] and "下坡看腿的感覺" in long_s["detail"]
 
 
 # ---- ME instead of the uphill VO2max set (ADS ≤ 10 %) -----------------------------------------
@@ -304,3 +306,29 @@ def test_sp112_checks_a_multi_day_baiyue_keeps_and_drops():
     assert any("低一級的路線" in s for s in r["suggestions"]) and not any("比賽" in s for s in r["suggestions"])
     # readiness: SP-112 adds no check there; the long day / week / hours go, B2B is kept
     assert set(BM.DROP_READY) == {"long", "weekly", "hours"}
+
+
+def test_summit_simulation_and_me_are_walking_sessions():
+    """SP-115 × SP-114 (integration): the 攻頂日模擬 and 「ME 負重爬坡」 climb at the walking cap (75 %
+    HRmax or RPE ≤ 13, target_policy.is_walk → session type walk), the stored ME too (no id); the
+    技術地形 session and a plain interval stay as they were."""
+    from backend.engine import hr_profile as HP
+    from backend.engine import target_policy as TP
+    info, ss = me_week()
+    SP.apply_me(ss, info, 0.08, 60.0)
+    me = next(s for s in ss if s["id"] == "me")
+    sim = [{"id": "long", "kind": "long", "minutes": 138, "title": "LSD（山路）",
+            "detail": "有山路就走山路，陡坡用走的；全程心率壓在輕鬆跑上限以下，爬坡可以走"}]
+    SP.decorate(sim, SP.week_context(kind="specific", mode="specific", monday=date(2026, 11, 2), race=race_of(trip(), TODAY)))
+    assert sim[0]["title"].startswith("攻頂日模擬")
+    for s in (me, sim[0], {"kind": "quality", "title": me["title"]}):            # the last: a stored row, no id
+        assert TP.is_walk(s) and TP.session_type(s) == "walk"
+    assert TP.target_policy(sim[0])["basis"] == "hr" and TP.target_policy(me)["basis"] == "hr"
+    assert not TP.is_walk({"kind": "quality", "title": "VO2max 間歇 5×4 分上坡"})
+    assert not TP.is_walk({"kind": "hike", "title": "技術地形 40′（RPE 3–4）"})
+    w = HP.walk_cap(195.0, aet=145.0)
+    SP.walk_targets(ss + sim, w, 145.0)
+    for s in (me, sim[0]):
+        assert s["target"].startswith("心率 ≤ 爬坡上限 146 bpm") and "RPE ≤ 13" in s["target"]
+        assert "下坡看腿的感覺" in s["detail"] and "全程心率壓在輕鬆跑上限以下" not in s["detail"]
+    assert not any(s.get("target", "").startswith("心率 ≤ 爬坡上限") for s in ss if s["id"] not in ("me",))

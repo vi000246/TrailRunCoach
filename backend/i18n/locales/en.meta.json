@@ -1003,6 +1003,10 @@
     "draft": true,
     "src": "backend/tenancy_mw.py:240"
   },
+  "上坡{hr}；{down}": {
+    "draft": true,
+    "src": "backend/engine/specific_phase.py:495"
+  },
   "上坡心率 ≤ {cap}或 RPE ≤ {rpe}；下坡看感覺": {
     "draft": true,
     "src": "backend/engine/hr_profile.py:451"
