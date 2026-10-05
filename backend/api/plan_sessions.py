@@ -769,7 +769,7 @@ def _injury_suggestions(inp: dict, today: str, blocked: set, stored: list[dict])
             from backend.engine import injury_exposure as IE
             end = (dt.date.fromisoformat(today) + dt.timedelta(days=7)).isoformat()
             planned = [s for s in stored if s.get("state") == "active" and today <= (s.get("day") or "") < end
-                       and s.get("kind") not in ("strength", "rest")]
+                       and s.get("kind") not in ("strength", "rest", "balance")]
             rows += IE.alerts(_dataset(), events, dt.date.fromisoformat(today), planned)
     except Exception:                       # noqa: BLE001
         pass
@@ -2094,6 +2094,7 @@ def tss_rates(tph: Optional[dict], sessions: list[dict], fallback: float = 50.0)
         if k in out:
             out[k] = round(statistics.median(v), 1)
     out["heat_passive"] = 0.0          # a bath / sauna: no TSS conversion was found (heat-acclimation.md §5.4)
+    out["balance"] = 0.0               # 平衡／腳踝小課 (engine/balance_plan.py, SP-120): no conversion either
     out["notice"] = 0.0                # 課表待確認 reminder (engine/plan_auto.py): not training
     return out
 
@@ -2118,7 +2119,7 @@ def _week_rows(start: str, end: str, sessions: list[dict], acts: list[dict], pha
         a, b = d.isoformat(), (d + dt.timedelta(days=6)).isoformat()
         ss = [s for s in sessions if s.get("day") and a <= s["day"] <= b and s["state"] in ("active", "done", "missed")
               and s["kind"] not in PS.NOT_LOAD]
-        mins = sum(s["minutes"] or 0 for s in ss if s["kind"] != "strength")
+        mins = sum(s["minutes"] or 0 for s in ss if s["kind"] not in ("strength", "balance"))
         tss = sum(est_tss(s, rates) for s in ss)
         aa = [x for x in acts if a <= (x.get("date") or "") <= b]
         mid = (d + dt.timedelta(days=3)).isoformat()
@@ -2132,7 +2133,7 @@ def _week_rows(start: str, end: str, sessions: list[dict], acts: list[dict], pha
             sp = [s for s in ss if s["day"] < today or (s["day"] <= upto and s["state"] == "done")]
             ap = [x for x in aa if x["date"] <= upto]
             comp = C.week_compliance(sum(est_tss(s, rates) for s in sp), sum(float(x.get("tss") or 0) for x in ap),
-                                     sum(s["minutes"] or 0 for s in sp if s["kind"] != "strength") / 60.0,
+                                     sum(s["minutes"] or 0 for s in sp if s["kind"] not in ("strength", "balance")) / 60.0,
                                      sum(float(x.get("moving_s") or 0) for x in ap) / 3600.0) if sp else None
         out.append({"start": a, "end": b, "compliance": comp,
                     "planned_hours": mins / 60.0, "planned_tss": tss,
@@ -2155,7 +2156,7 @@ def _day_rows(start: str, end: str, sessions: list[dict], acts: list[dict], rate
               and s["kind"] not in PS.NOT_LOAD]
         aa = [x for x in acts if (x.get("date") or "")[:10] == a]
         out.append({"start": a, "end": a,
-                    "planned_hours": sum(s["minutes"] or 0 for s in ss if s["kind"] != "strength") / 60.0,
+                    "planned_hours": sum(s["minutes"] or 0 for s in ss if s["kind"] not in ("strength", "balance")) / 60.0,
                     "planned_tss": sum(est_tss(s, rates) for s in ss),
                     "done_hours": sum(float(x.get("moving_s") or 0) for x in aa) / 3600.0,
                     "done_tss": sum(float(x.get("tss") or 0) for x in aa)})

@@ -54,7 +54,7 @@ main { max-width: 1320px; margin: 0 auto; padding: 12px 16px 40px; display: grid
 /* 強度課 by family (SP-79): 有氧間歇 keeps the 強度課 orange, VO2max 間歇 red, 速度 purple
    (≥ 3:1 against --cell in both themes); one with no interval work stays orange */
 .k-quality.fam-aerobic { --k: var(--s2); } .k-quality.fam-vo2max { --k: var(--qf2); } .k-quality.fam-speed { --k: var(--qf3); }
-.k-test { --k: var(--s7); } .k-strength { --k: var(--s5); } .k-hike { --k: var(--s4); } .k-heat_passive { --k: var(--hi); } .k-race { --k: var(--hi); }
+.k-test { --k: var(--s7); } .k-strength { --k: var(--s5); } .k-hike { --k: var(--s4); } .k-heat_passive { --k: var(--hi); } .k-balance { --k: var(--s6); } .k-race { --k: var(--hi); }
 .heat-tag { display: inline-block; margin-right: 3px; padding: 0 3px; border-radius: 3px; font-size: 10px; line-height: 14px;
   background: color-mix(in srgb, var(--hi) 25%, transparent); color: var(--hi); font-weight: 700; }
 .ph-base { --ph: var(--s1); } .ph-specific { --ph: var(--s2); } .ph-taper { --ph: var(--s4); }
@@ -897,7 +897,7 @@ async function sj(method, url, body) {
 // running, the editor's trail templates); 被動熱適應 is no longer offered (an existing one
 // still opens with its own radio)
 const KIND_ORDER = ["easy", "long", "quality", "test", "hike", "strength"];
-const KINDS = { easy: "輕鬆跑", long: "LSD", quality: "強度課", test: "測試", hike: "越野跑", strength: "肌力", heat_passive: "被動熱適應",
+const KINDS = { easy: "輕鬆跑", long: "LSD", quality: "強度課", test: "測試", hike: "越野跑", strength: "肌力", heat_passive: "被動熱適應", balance: "平衡／腳踝",
   notice: "課表待確認", race: "比賽" };      // notice: the 自動調整 reminder pushed to the watch (not training; not in KIND_ORDER)
 // 強度課's three families (SP-79; workout_templates.FAMILIES) — never 「無氧間歇」. tt is defined further
 // down (and the dialog's radios are built before it), so the catalog is read directly
@@ -1366,7 +1366,7 @@ async function pull() {
 let dlg = { uid: null, targetTouched: false };
 // 強度課 is offered as its three families (SP-79): each radio is kind quality + data-fam; the
 // family is saved only when you pick one (else it is read from the steps, session_family)
-$("sd-kinds").insertAdjacentHTML("beforeend", [...KIND_ORDER, "heat_passive", "race"].map((k) => k === "quality"
+$("sd-kinds").insertAdjacentHTML("beforeend", [...KIND_ORDER, "heat_passive", "balance", "race"].map((k) => k === "quality"
   ? FAMILIES.map((f) => `<label class="k-quality fam-${f}"><input type="radio" name="kind" value="quality" data-fam="${f}">${esc(famLabel(f))}</label>`).join("")
   : `<label class="k-${k}"${KIND_ORDER.includes(k) ? "" : " hidden"}><input type="radio" name="kind" value="${k}">${KINDS[k]}</label>`).join(""));
 const F = $("sd-form");
@@ -1711,7 +1711,7 @@ function rpeKind(role, change) {
 }
 function stepsPreview() {
   const k = kindVal();
-  if (["strength", "heat_passive"].includes(k)) { $("sd-tb").hidden = true; return; }
+  if (["strength", "heat_passive", "balance"].includes(k)) { $("sd-tb").hidden = true; return; }
   $("sd-tb").hidden = false;
   WE.refresh();
 }
@@ -1889,6 +1889,7 @@ function openDlg(s, day) {
   setKind(s ? s.kind : "easy", s && s.quality_family ? s.quality_family.id : null);
   famHint();
   F.querySelector('#sd-kinds label.k-heat_passive').hidden = !(s && s.kind === "heat_passive");
+  F.querySelector('#sd-kinds label.k-balance').hidden = !(s && s.kind === "balance");   // 平衡／腳踝小課 (SP-120)
   F.querySelector('#sd-kinds label.k-race').hidden = !(s && s.kind === "race");
   F.title.value = s ? s.title : (D.default_titles || {}).easy || "輕鬆跑";
   F.minutes.value = s ? s.minutes : 45;
@@ -1900,7 +1901,7 @@ function openDlg(s, day) {
   $("sd-cancel").textContent = ro ? "關閉" : "取消";
   // a past session that wasn't done can be deleted too (it never comes back; off the watch)
   const del = $("sd-del"); del.hidden = !s || (ro && !expOpen(s)); del.classList.remove("armed"); del.textContent = "刪除";
-  $("sd-push").hidden = !s || ro || !(D.coros || {}).authenticated || s.kind === "strength" || s.kind === "heat_passive";
+  $("sd-push").hidden = !s || ro || !(D.coros || {}).authenticated || s.kind === "strength" || s.kind === "heat_passive" || s.kind === "balance";
   dlg.titleTouched = false;
   F.minutes.readOnly = false;
   eqInit(s);

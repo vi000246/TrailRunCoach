@@ -1070,7 +1070,7 @@
         target: target ? { ...target } : { ...OPEN }, note });
       const doc = (items) => ({ v: 1, origin: "derived", items });
       const kind = s.kind, sec = (toInt(s.minutes || 0) || 0) * 60, title = String(s.title || "");
-      if (["race", "rest", "strength", "heat_passive"].includes(kind)) return null;
+      if (["race", "rest", "strength", "heat_passive", "balance"].includes(kind)) return null;
       if (kind === "notice") return doc([step("warm", 60, OPEN, "課表待確認：到總覽頁同意／拒絕")]);
       if (kind === "quality" || kind === "test") return undefined;          // only from data.derive
       if (sec <= 0) return null;

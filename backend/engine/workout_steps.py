@@ -503,7 +503,7 @@ def derive(s: dict, th: Optional[dict] = None) -> Optional[dict]:
     c = Ctx.of(th)
     kind = s.get("kind")
     secs = int(s.get("minutes") or 0) * 60
-    if kind in ("race", "rest", "strength", "heat_passive"):
+    if kind in ("race", "rest", "strength", "heat_passive", "balance"):
         return None
     if kind == "notice":
         return doc([step(ids, "warm", 60, OPEN, "課表待確認：到總覽頁同意／拒絕")])

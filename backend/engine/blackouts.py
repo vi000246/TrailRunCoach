@@ -233,7 +233,7 @@ def move_to(s: dict, week: list[dict], bmap: dict, today: str,
               and not (x.get("state") == "active" and x["day"] in bmap)]
     # heat_passive (a hot bath / sauna, engine/heat_plan.py) goes with strength:
     # it never holds a main day
-    main_days = {x["day"] for x in others if x["kind"] not in ("strength", "heat_passive", "notice")}
+    main_days = {x["day"] for x in others if x["kind"] not in ("strength", "heat_passive", "notice", "balance")}
     hard_days = {dt.date.fromisoformat(x["day"]) for x in others if _hard(x)}
     str_days = {x["day"] for x in others if x["kind"] == "strength"}
     long_days = {dt.date.fromisoformat(x["day"]) for x in others if x["kind"] in ("long", "hike")
@@ -243,7 +243,7 @@ def move_to(s: dict, week: list[dict], bmap: dict, today: str,
         iso = d.isoformat()
         if iso < today or iso in bmap or (allowed is not None and not allowed(d)):
             continue
-        if s["kind"] == "heat_passive":
+        if s["kind"] in ("heat_passive", "balance"):
             pass                                  # any open day: it follows the run, not a slot
         elif s["kind"] == "strength":
             if iso in str_days or any(d == ld - dt.timedelta(days=1) for ld in long_days):
