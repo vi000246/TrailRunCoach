@@ -378,6 +378,7 @@
     if (building) {
       wasBuilding = true;
       const p = bar.querySelector("progress");
+      p.hidden = false;                       // hidden by an earlier error message
       if (s.n_total) { p.max = s.n_total; p.value = Math.min(s.n_done, s.n_total); } else p.removeAttribute("value");
       bar.querySelector(".an-b-msg").textContent = s.message || T("build.preparing");
       bar.querySelector(".an-b-sub").textContent = s.elapsed_s != null ? T("build.elapsed", { s: Math.round(s.elapsed_s) }) : "";
@@ -398,11 +399,13 @@
         if (el.textContent === el.dataset.buildMsg) el.textContent = el.dataset.buildWait;
         delete el.dataset.buildWait; delete el.dataset.buildMsg;
       }
-      if (s && s.state === "error") {
-        bar.hidden = false; bar.querySelector("progress").hidden = true;
-        bar.querySelector(".an-b-msg").textContent = T("build.failed", { error: s.error || "" });
-        bar.querySelector(".an-b-sub").textContent = "";
-      }
+    }
+    // a failed build: say so, also when it failed before this page opened
+    // (the pages behind it would otherwise wait with 「載入中」 and no reason)
+    if (s && s.state === "error") {
+      bar.hidden = false; bar.querySelector("progress").hidden = true;
+      bar.querySelector(".an-b-msg").textContent = T("build.failed", { error: s.error || "" });
+      bar.querySelector(".an-b-sub").textContent = "";
     }
     // a page's first requests may start a build a moment after load
     if (++tries < 4) setTimeout(poll, [600, 1500, 4000][tries - 1] || 4000);

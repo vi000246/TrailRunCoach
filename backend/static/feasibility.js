@@ -91,11 +91,25 @@
     return out.join("");
   }
 
+  // the first read takes about a minute; a server that never answers (the
+  // NAS out of memory) used to leave 「評估中…」 up forever: give up after
+  // TIMEOUT_MS and let the page offer 重試 (err.timeout = true)
+  const TIMEOUT_MS = 90000;
+
   async function load(eventId) {
     const q = eventId ? "?event_id=" + encodeURIComponent(eventId) : "";
-    const r = await fetch("/api/v1/overview/feasibility" + q);
-    if (!r.ok) throw new Error(`${r.status} ${(await r.text()).slice(0, 200)}`);
-    return r.json();
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), TIMEOUT_MS);
+    try {
+      const r = await fetch("/api/v1/overview/feasibility" + q, { signal: ctl.signal });
+      if (!r.ok) throw new Error(`${r.status} ${(await r.text()).slice(0, 200)}`);
+      return await r.json();
+    } catch (e) {
+      if (e && e.name === "AbortError") { const t = new Error("timeout"); t.timeout = true; throw t; }
+      throw e;
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   window.Feas = { html, load, pill };
