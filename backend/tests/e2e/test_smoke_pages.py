@@ -68,6 +68,11 @@ def test_overview(app):
     open_page(page, _server.PAGES["overview"])
     no_loading(page, "#kpis")
     chart_drawn(page, "#pmc")
+    # SP-122: 7 / 42 / 90 days, default 42
+    expect(page.locator('#pmc-days button[data-n="42"]')).to_have_class(re.compile(r"\bon\b"))
+    page.click('#pmc-days button[data-n="7"]')
+    expect(page.locator('#pmc-days button[data-n="7"]')).to_have_class(re.compile(r"\bon\b"))
+    chart_drawn(page, "#pmc")
     no_loading(page, "#ind")
     no_loading(page, "#wk-days")
     # 做了什麼: week / month / year and the period arrows
