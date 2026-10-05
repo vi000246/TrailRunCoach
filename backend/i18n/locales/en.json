@@ -542,6 +542,7 @@
   "比模型預測慢 {f:.0%}：很保守，體力還有餘裕": "{f:.0%} slower than the model predicts: conservative, with energy to spare",
   "比賽": "Race",
   "比賽 {n} 次平均心率在 95–103% LTHR": "{n} race(s) with a mean HR at 95–103% of LTHR",
+  "比賽單日超過 {h:g} 小時：模擬只到長天上限，更長的部分交給 B2B。": "Race day longer than {h:g} h: the simulation stops at the long-day cap; B2B covers the rest.",
   "比賽課由賽季計畫排入，或從賽事計算機「匯出至課表」，不能自己新增": "Race sessions come from the season plan or the race calculator's \"Export to plan\"; they cannot be added by hand",
   "比賽週": "Race week",
   "比賽週：短、輕鬆": "Race week: short and easy",
@@ -866,5 +867,6 @@
   "；聚合估計還不夠準或有偏移": "; the aggregated estimate isn't precise enough yet or has shifted",
   "；近 365 天跑步最高 {v:.0f}（推估）": "; highest in runs over the last 365 days {v:.0f} (estimate)",
   "；這次誤差約 ±{se:.1f} 個百分點（回歸標準誤）": "; this run's error about ±{se:.1f} percentage points (regression standard error)",
+  "；長天上限 {h:g} 小時：比賽更長的部分交給 B2B 和週量": "; long-day cap {h:g} h: B2B and weekly volume cover the longer race",
   "🌡 {t:.0f} °C（{band}）": "🌡 {t:.0f} °C ({band})"
 }
