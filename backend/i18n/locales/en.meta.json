@@ -59,6 +59,14 @@
     "draft": true,
     "src": "backend/engine/workout_templates.py:136"
   },
+  "2–3 個動作各 2 組，不做到力竭：高踏階 8 下／腳（可背包）、引體向上（留 2 下）、農夫走路 2 × 30–40 m。這週的 ME 已經有下階和跳，這堂不做離心下階": {
+    "draft": true,
+    "src": "backend/engine/strength_plan.py:154"
+  },
+  "2–4 個動作各 2 組，不做到力竭、不加新動作：高踏階 8 下／腳（可背包）、離心下階 8–10 下／腳、引體向上（留 2 下）、棒式 30 秒": {
+    "draft": true,
+    "src": "backend/engine/strength_plan.py:158"
+  },
   "3 區已解鎖": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:1924"
@@ -135,6 +143,10 @@
     "draft": true,
     "src": "backend/engine/workout_templates.py:294"
   },
+  "6 站做 2–3 輪，每站 12–15 下、留 1–2 下不做到力竭，站間休 30–60 秒：離心下階（箱 15–30 cm，3 秒慢慢往下點地）、分腿蹲、高踏階（箱高約膝高，踩上去站穩再下）、引體向上（做不到用彈力帶輔助，或跳上去 3–5 秒慢放）、農夫走路 30–40 m、棒式 30 秒或懸吊抬腿": {
+    "draft": true,
+    "src": "backend/engine/strength_plan.py:140"
+  },
   "60 分鐘平均心率": {
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:369"
@@ -210,6 +222,18 @@
   "B2B 週：長跑照 B2B 排": {
     "draft": true,
     "src": "backend/engine/technical.py:67"
+  },
+  "Bompa & Buzzichelli 2015（最大肌力）；山本正嘉（深蹲和下山用的肌肉相近，教練級）；動作：Uphill Athlete（教練級）": {
+    "draft": true,
+    "src": "backend/engine/strength_plan.py:150"
+  },
+  "Bompa & Buzzichelli 2015（維持：每週至少 1 次、2–4 個動作）；動作：Uphill Athlete（教練級）": {
+    "draft": true,
+    "src": "backend/engine/strength_plan.py:160"
+  },
+  "Bompa & Buzzichelli 2015（解剖適應）；動作：Uphill Athlete（教練級）": {
+    "draft": true,
+    "src": "backend/engine/strength_plan.py:144"
   },
   "C 賽當練習，不評估": {
     "draft": true,
@@ -1135,6 +1159,10 @@
     "draft": true,
     "src": "backend/engine/effort_calib.py:94"
   },
+  "分腿蹲或後腳抬高蹲 3–4 組 × 3–6 下（留 2 下以上，組間休 2–3 分）；離心下階 3 組 × 8–12 下／腳，背包 5 → 10 % 體重；引體向上 3 組（留 2 下）；最後棒式 2 × 30 秒。離心下階是平日補強，不取代真的下坡": {
+    "draft": true,
+    "src": "backend/engine/strength_plan.py:147"
+  },
   "分鐘要在 0–1440": {
     "draft": true,
     "src": "backend/engine/plan_store.py:285"
@@ -1410,6 +1438,10 @@
   "太難了": {
     "draft": true,
     "src": "backend/engine/race_feasibility.py:50"
+  },
+  "安排在輕鬆日或跑完後；組數次數是推估": {
+    "draft": true,
+    "src": "backend/engine/strength_plan.py:137"
   },
   "安排課表：{test}": {
     "draft": false,
@@ -2799,9 +2831,33 @@
     "draft": true,
     "src": "backend/engine/workout_review.py:2669"
   },
+  "肌力維持（高踏階＋引體向上）": {
+    "draft": true,
+    "src": "backend/engine/strength_plan.py:153"
+  },
+  "肌力維持（高踏階＋離心下階＋引體向上）": {
+    "draft": true,
+    "src": "backend/engine/strength_plan.py:157"
+  },
+  "肌力（下肢單腳＋核心）": {
+    "draft": true,
+    "src": "backend/engine/strength_plan.py:34"
+  },
+  "肌力（分腿蹲＋離心下階＋引體向上）": {
+    "draft": true,
+    "src": "backend/engine/strength_plan.py:146"
+  },
+  "肌力（基礎循環 6 站）": {
+    "draft": true,
+    "src": "backend/engine/strength_plan.py:139"
+  },
   "背負要在 0–40 kg": {
     "draft": true,
     "src": "backend/engine/racepower/athlete.py:1527"
+  },
+  "膝主導＋臀中肌；安排在輕鬆日或跑完後": {
+    "draft": true,
+    "src": "backend/engine/strength_plan.py:34"
   },
   "自動估算": {
     "draft": false,

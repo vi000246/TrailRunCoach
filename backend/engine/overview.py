@@ -1359,10 +1359,14 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         # the days after a B2B: easy only (UA / Johnston); the minutes go to the easy runs
         sessions = [s for s in sessions if s.kind not in ("quality", "test")]
         notes.append(B2B.post_note(b2b))
+    # 肌力課依期別 (engine/strength_plan.py, SP-119): a 越野賽 / 百岳 A race next — AA / 最大肌力 / 維持
+    from backend.engine import strength_plan as STP
+    a_evs = getattr(getattr(status, "plan", None), "events", None) or ()
+    st_s = STP.session(STP.week_context(a_evs, phs, monday, kind), [asdict(s) for s in sessions])
     for i in range(strength_n):
-        add(id=f"strength{i + 1}", kind="strength", title="肌力（下肢單腳＋核心）", minutes=35,
-            detail="膝主導＋臀中肌；安排在輕鬆日或跑完後", source=SRC_UA,
-            tss=35 / 60 * tph["strength"])
+        add(id=f"strength{i + 1}", kind="strength", title=st_s["title"], minutes=st_s["minutes"],
+            detail=st_s["detail"], source=st_s["source"] or SRC_UA,
+            tss=st_s["minutes"] / 60 * tph["strength"])
     used = sum(s.minutes for s in sessions if s.kind not in ("strength",))
     left = max(0.0, minutes_total - used)
     n_easy = easy_count(left, kind)
@@ -1739,6 +1743,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         "technical": TECH.public(tech),
         # 賽前停肌力 (SP-86): the A events' no-strength windows, for the projection
         "strength_stop": s_stops,
+        # the A races ahead (engine/strength_plan.py): the projection's 肌力課依期別 / 平衡小課 (SP-119, SP-120)
+        "a_races": STP.a_races(a_evs, monday),
         # 減量期 (SP-96): the next A race's taper touching this week and the pre-taper level, for the projection
         "taper": {**t_ctx, **{f"pre_{k}": v for k, v in t_ref.items()}} if t_ctx else None,
         # the last 4 weeks' mean run climb (m): a projected 減量期's pre-taper climb (SP-96)
