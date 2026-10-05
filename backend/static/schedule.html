@@ -447,6 +447,9 @@ dialog.sd input.sw:focus-visible { outline: 2px solid var(--accent); outline-off
 .pf-adv > summary::-webkit-details-marker { display: none; }
 .pf-adv > summary h4::after { content: "▸"; margin-left: 4px; font-size: 11px; }
 .pf-adv[open] > summary h4::after { content: "▾"; }
+/* 肌力動作 (engine/strength_moves.py, SP-191): who a move suits, under its select (no hover needed) */
+.pf-mv-grp { padding-top: 8px; font-size: 12px; font-weight: 700; }
+.pf-mv-who { flex-basis: 100%; font-size: 12px; line-height: 1.45; }
 #pf .tseg label { padding: 4px 10px; font-size: 13px !important; flex: none; }
 #pf .tseg label:has(input:checked) { background: var(--accent); border-color: var(--accent); color: #fff !important; }
 #pf .daychk label { width: 32px; height: 30px; }
@@ -739,6 +742,12 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
 功率：全部用功率區間（Palladino % CP）；測試和下坡照它們自己的規則。
 只影響系統排的課；每一段也可以在課表的「結構」裡自己改用功率、心率或配速，範本用來源自己的目標。">?</button>
         <span class="pf-c tseg" role="radiogroup" aria-labelledby="pf-tb-l"><label><input type="radio" name="target_basis" value="auto"><span data-i18n="schedule.pf.auto">自動</span></label><label><input type="radio" name="target_basis" value="hr"><span data-i18n="schedule.pf.hr">心率</span></label><label><input type="radio" name="target_basis" value="power"><span data-i18n="schedule.pf.power">功率</span></label></span></div>
+      <details class="pf-adv" id="pf-sm"><summary><div class="pf-r"><span class="pf-l"><span data-i18n="schedule.pf.g.moves">肌力動作</span> ▸</span></div></summary>
+        <div class="meta pf-st" data-i18n="schedule.pf.mv.intro">期別決定這堂練哪幾類、做幾組幾下；每一類用哪個動作由你挑，沒挑就用預設。勾了「沒有的器材」，需要它的動作會自動換成不用它的。</div>
+        <div class="pf-r"><span class="pf-l" id="pf-ng-l" data-i18n="schedule.pf.mv.no_gear">沒有的器材</span>
+          <span class="pf-c" id="pf-ng" role="group" aria-labelledby="pf-ng-l"></span></div>
+        <div id="pf-mv"></div>
+      </details>
       <div class="pf-r"><label class="pf-l" for="pf-te" data-i18n="schedule.pf.t_easy">輕鬆跑地形</label>
         <span class="pf-c"><select id="pf-te" name="terrain_easy"><option value="any" data-i18n="schedule.pf.any">都可</option><option value="road" data-i18n="schedule.pf.road">路跑</option><option value="trail" data-i18n="schedule.pf.trail_hr">越野（只看心率）</option></select></span></div>
       <div class="pf-r"><label class="pf-l" for="pf-tl" data-i18n="schedule.pf.t_long">長跑地形</label>
@@ -2090,6 +2099,48 @@ document.addEventListener("click", (e) => {
   QTIP.pinned = null; qtipHide();
 }, true);
 addEventListener("scroll", () => { if (!QTIP.pinned) qtipHide(); else qtipShow(QTIP.pinned); }, { passive: true, capture: true });
+// ---- 肌力動作 (engine/strength_moves.py, SP-191): a select per movement type (GET /prefs
+// strength_options), the equipment the athlete doesn't have; the line under each says who the move
+// suits, its equipment, and what it becomes when that equipment is missing (as strength_moves.resolve)
+let PF_SM = { types: [], equipment: [] };
+const smLack = () => [...PFF.querySelectorAll('input[name="pf-ng"]:checked')].map((b) => b.value);
+function smRender(p) {
+  const mv = p.strength_moves || {}, lack = new Set(p.strength_no_gear || []);
+  $("pf-ng").innerHTML = PF_SM.equipment.map((e) =>
+    `<label class="rb"><input type="checkbox" name="pf-ng" value="${esc(e.key)}"${lack.has(e.key) ? " checked" : ""}>${esc(e.label)}</label>`).join("");
+  let grp = "";
+  $("pf-mv").innerHTML = PF_SM.types.map((t) => {
+    const head = t.group !== grp ? ((grp = t.group), `<div class="meta pf-mv-grp">${esc(tt("pf.mv.group." + t.group))}</div>`) : "";
+    const sel = mv[t.key] || t.default;
+    const tag = (m) => m.key === t.default ? tt("pf.mv.default") : m.level < 0 ? tt("pf.mv.easier") : m.level > 0 ? tt("pf.mv.harder") : "";
+    const opts = t.moves.map((m) => `<option value="${esc(m.key)}"${m.key === sel ? " selected" : ""}>${esc(m.name + tag(m))}</option>`).join("");
+    return head + `<div class="pf-r"><label class="pf-l" for="pf-mv-${esc(t.key)}">${esc(t.label)}</label>` +
+      `<button type="button" class="qtip" aria-label="${esc(tt("pf.about_x", { x: t.label }))}" data-tip="${esc(t.tip)}">?</button>` +
+      `<span class="pf-c"><select id="pf-mv-${esc(t.key)}" data-mv="${esc(t.key)}">${opts}</select></span>` +
+      `<div class="meta pf-mv-who" id="pf-mv-w-${esc(t.key)}"></div></div>`;
+  }).join("");
+  smSync();
+}
+function smSync() {
+  const lack = new Set(smLack());
+  for (const t of PF_SM.types) {
+    const sel = $("pf-mv-" + t.key);
+    if (!sel) continue;
+    const m = t.moves.find((x) => x.key === sel.value) || t.moves[0];
+    let line = tt("pf.mv.who", { who: m.who, gear: m.gear });
+    const sub = m.needs && lack.has(m.needs) ? t.moves.find((x) => !x.needs || !lack.has(x.needs)) : null;
+    if (sub) line = tt("pf.mv.swap", { gear: (PF_SM.equipment.find((e) => e.key === m.needs) || {}).label || m.needs, name: sub.name }) + " " + line;
+    $("pf-mv-w-" + t.key).textContent = line;
+  }
+}
+function smRead() {                           // only the types not on their default (the server drops those anyway)
+  const out = {};
+  for (const t of PF_SM.types) {
+    const sel = $("pf-mv-" + t.key);
+    if (sel && sel.value !== t.default) out[t.key] = sel.value;
+  }
+  return out;
+}
 const numOrNull = (v) => v === "" || v == null ? null : +v;
 const radioVal = (name) => (PFF.querySelector(`input[name="${name}"]:checked`) || {}).value;
 function pfFill(p) {
@@ -2108,6 +2159,7 @@ function pfFill(p) {
   PFF.elements.terrain_quality.value = p.terrain_quality;
   (PFF.querySelector(`input[name="target_basis"][value="${p.target_basis || "auto"}"]`) || {}).checked = true;
   pdaysRender(p);
+  smRender(p);
   PFF.elements.warmup_commute_min.value = p.warmup_commute_min ?? 10;
   PFF.elements.cooldown_min.value = p.cooldown_min ?? 5;
   cptRender(p.cp_test_protocol || "quick");
@@ -2148,7 +2200,8 @@ function pfRead() {
     quality_gate: radioVal("quality_gate") || "auto", quality_gate_weeks: numOrNull(E.quality_gate_weeks.value) ?? 8,
     heat: E.heat.checked ? "auto" : "off", heat_method: E.heat_method.value || "run",
     b2b: E.b2b.checked, transition_weeks: Number(E.transition_weeks.value || 3),
-    taper_days: Number(E.taper_days.value || 14) };
+    taper_days: Number(E.taper_days.value || 14),
+    strength_moves: smRead(), strength_no_gear: smLack() };
 }
 function pfError(p) {                     // mirrors plan_prefs.check + the per-key validation
   const n = p.days.filter(Boolean).length;
@@ -2174,6 +2227,7 @@ function pfSync() {
   $("pf-gw-row").hidden = radioVal("quality_gate") !== "weeks";
   E.heat_method.disabled = !E.heat.checked;
   apSync();
+  smSync();
   $("pf-err").textContent = pfError(pfRead());
   pdCheckSoon();
 }
@@ -2367,6 +2421,7 @@ async function openPrefs() {
   PF_DEF = b.defaults;
   PF_GATE = b.gate_options || {};
   PF_AETP = b.aet_options || {};
+  PF_SM = b.strength_options || PF_SM;
   apFill(a && a.settings, a && a.thresholds);
   pfFill({ ...b.prefs, _conflicts: b.day_conflicts || [], _dropped: b.pref_dropped || [] });
   $("pf").showModal();

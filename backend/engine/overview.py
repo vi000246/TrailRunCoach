@@ -1624,7 +1624,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     # 肌力課依期別 (engine/strength_plan.py, SP-119): a 越野賽 / 百岳 A race next — AA / 最大肌力 / 維持
     from backend.engine import strength_plan as STP
     a_evs = getattr(getattr(status, "plan", None), "events", None) or ()
-    st_ctx = STP.week_context(a_evs, phs, monday, kind)
+    st_ctx = STP.week_context(a_evs, phs, monday, kind, prefs)       # + the picked moves (SP-191)
     st_s = STP.session(st_ctx, [asdict(s) for s in sessions])
     for i in range(strength_n):
         add(id=f"strength{i + 1}", kind="strength", title=st_s["title"], minutes=st_s["minutes"],
@@ -1979,7 +1979,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     # stop, race week) one balance-only strength session. After the day rules, so they keep it.
     from backend.engine import balance_plan as BP
     try:
-        bal = BP.week_context(a_evs, monday, kind)
+        bal = BP.week_context(a_evs, monday, kind, prefs)
         if bal.get("active"):
             dd = [asdict(s) for s in sessions]
             BP.attach(dd, bal)
