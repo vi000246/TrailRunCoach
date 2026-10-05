@@ -68,13 +68,16 @@ def test_shorter_events_need_more_than_100_percent():
     assert w["ok_at"] == F.WEEK_OK_SHORT and 0.9 <= w["ratio"] < 1.0 and w["level"] == "tight"
 
 
-def test_over_below_half_with_a_downgrade():
+def test_below_half_is_tight_with_a_downgrade_never_over():
+    """SP-112: the weekly volume does not tell finishers from non-finishers (Hoffman & Fogard 2011):
+    at most tight, the shorter course only suggested."""
     e = ev(distance_km=100, climbing_m=6000, est_hours=20.0, start="2026-12-12")
     r = F.assess(e, line(e), TODAY, hist(km=20.0, climb=500.0, hours=3.0))
-    assert lv(r, "weekly") == "over" and r["level"] == "over"
+    assert lv(r, "weekly") == "tight" and r["level"] != "over"
     d = r["downgrade"]
     assert 0 < d["km"] < 100 and 0 < d["climb_m"] < 6000
-    assert any("短一點的組別" in s for s in r["suggestions"]) and any("先不跑" in s for s in r["suggestions"])
+    assert any("短一點的組別" in s for s in r["suggestions"]) and not any("先不跑" in s for s in r["suggestions"])
+    assert any("Hoffman" in s for s in r["src"])
 
 
 def test_the_hardest_day_not_the_mean_for_a_multi_day_trip():
@@ -297,7 +300,64 @@ def test_a_multi_day_trip_is_a_long_event_and_warns_about_the_equal_split():
     assert F.week_ok_at(e, ln) == F.WEEK_OK_LONG
     r = F.assess(e, ln, TODAY, hist(km=21.7, climb=743.0, hours=3.8))
     w = next(c for c in r["checks"] if c["id"] == "weekly")
-    assert w["ok_at"] == F.WEEK_OK_LONG and 0.9 <= w["ratio"] < 1.0 and w["level"] == "ok"
+    assert w["ok_at"] == F.WEEK_OK_LONG and w["ratio"] >= 0.9 and w["level"] == "ok"       # EP (SP-112)
+    assert lv(r, "climb") == "ok"
     assert r["days"] == 3 and "平均分配" in r["split_note"]
     one = ev(est_hours=3.0)
     assert F.week_ok_at(one, line(one)) == F.WEEK_OK_SHORT and "split_note" not in F.assess(one, line(one), TODAY, hist())
+
+
+
+# ---- SP-112: EP weekly ratio, the climb sub-check, 跨級 ------------------------------------------
+
+def test_weekly_is_one_ep_ratio():
+    e = ev()                                             # 30 km ↑2000: EP 50
+    r = F.assess(e, line(e), TODAY, hist(km=30.0, climb=1500.0))
+    w = next(c for c in r["checks"] if c["id"] == "weekly")
+    pk = r["peak_week"]
+    assert w["ratio"] == pytest.approx((pk["km"] + pk["climb_m"] / 100) / 50, abs=0.01) and w["ratio_ep"] == w["ratio"]
+    assert "EP" in w["text"]
+
+
+def test_weekly_40_percent_otherwise_fine_is_tight_not_over():
+    e = ev(start="2026-11-14")
+    r = F.assess(e, line(e), TODAY, hist(km=10.0, climb=700.0, hours=3.0),
+                 best={"ep": 55.0, "date": date(2026, 5, 1)})
+    w = next(c for c in r["checks"] if c["id"] == "weekly")
+    assert w["ratio"] < 0.5 and w["level"] == "tight" and r["level"] == "tight"
+
+
+def test_step_xs_best_against_an_l_race_is_over():
+    e = ev(distance_km=80, climbing_m=4500, est_hours=16.0)                 # EP 125: L
+    r = F.assess(e, line(e), TODAY, hist(km=90.0, climb=5000.0, hours=11.0),
+                 best={"ep": 30.0, "date": date(2026, 3, 1)})                 # XS
+    st = next(c for c in r["checks"] if c["id"] == "step")
+    assert st["level"] == "over" and (st["best_class"], st["race_class"], st["up"]) == ("XS", "L", 3)
+    assert r["level"] == "over" and "低一級（M）" in r["suggestions"][0] and "B／C 賽" in r["suggestions"][0]
+    r = F.assess(e, line(e), TODAY, hist(km=90.0, climb=5000.0, hours=11.0), best={"ep": 80.0, "date": date(2026, 3, 1)})
+    assert lv(r, "step") == "ok"                                              # M → L: one class up
+    r = F.assess(e, line(e), TODAY, hist(km=90.0, climb=5000.0, hours=11.0))
+    assert not any(c["id"] == "step" for c in r["checks"])                    # no records: not judged
+
+
+def test_itra_classes_and_best_day():
+    assert [F.ITRA_CLASSES[F.itra_class(x)][0] for x in (10, 25, 50, 80, 120, 160, 250)] == \
+        ["XXS", "XS", "S", "M", "L", "XL", "XXL"]
+    d = TODAY - dt.timedelta(days=100)
+    b = F.best_day_ep(acts((d, 20, 1000, 3.0), (d, 5, 0, 0.5), (TODAY - dt.timedelta(days=3), 28, 500, 3.0)))
+    assert b["ep"] == pytest.approx(35.0) and b["date"] in (d, TODAY - dt.timedelta(days=3))
+    assert F.best_day_ep([]) is None
+
+
+def test_enough_distance_but_40_percent_climb_is_tight():
+    e = ev(start="2026-11-07")                                                # 30 km ↑2000
+    r = F.assess(e, line(e), TODAY, hist(km=60.0, climb=600.0, hours=8.0))
+    cl = next(c for c in r["checks"] if c["id"] == "climb")
+    assert cl["ratio"] < 0.5 and cl["level"] == "tight" and "爬升練得比距離少" in cl["text"]
+    assert lv(r, "weekly") == "ok" and r["level"] == "tight"
+
+
+def test_over_only_from_the_cutoff_or_the_step():
+    e = ev(distance_km=100, climbing_m=6000, est_hours=20.0, start="2026-12-12")
+    r = F.assess(e, line(e), TODAY, hist(km=5.0, climb=100.0, hours=1.0))
+    assert r["level"] in ("tight", "unknown") and all(c["level"] != "over" for c in r["checks"])

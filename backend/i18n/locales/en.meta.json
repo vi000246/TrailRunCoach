@@ -1191,6 +1191,10 @@
     "draft": true,
     "src": "backend/engine/quality_gate.py:1968"
   },
+  "先跑一場低一級（{cls}）的比賽，或把這場改成 B／C 賽": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:395"
+  },
   "全力時最多的長休息比例": {
     "draft": true,
     "src": "backend/engine/effort_calib.py:98"
@@ -1675,10 +1679,6 @@
     "draft": true,
     "src": "backend/engine/quality_gate.py:1993"
   },
-  "建議報短一點的組別：照推算，你大約應付得了一天 {km} km、爬升 {cl} m 的比賽": {
-    "draft": true,
-    "src": "backend/engine/race_feasibility.py:267"
-  },
   "建議改成 B 或 C 賽，用現在的體能去跑就好，不要臨時猛加量": {
     "draft": true,
     "src": "backend/engine/race_feasibility.py:233"
@@ -1882,10 +1882,6 @@
   "我的範本（自己排的）": {
     "draft": false,
     "src": "backend/engine/user_templates.py:57"
-  },
-  "或換一場晚一點的比賽，或這場先不跑": {
-    "draft": true,
-    "src": "backend/engine/race_feasibility.py:269"
   },
   "所有輕鬆跑壓在 AeT 以下": {
     "draft": true,
@@ -2383,6 +2379,10 @@
     "draft": true,
     "src": "backend/engine/quality_gate.py:1941"
   },
+  "每週多排一些爬坡：長跑挑爬升多的路線": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:369"
+  },
   "每週跑步次數 {runs} 比可練日（{days} 天）多": {
     "draft": true,
     "src": "backend/engine/plan_prefs.py:288"
@@ -2643,9 +2643,9 @@
     "draft": true,
     "src": "backend/engine/hr_profile.py:65"
   },
-  "照現在每週慢慢加量，賽前你一週最多大約練到 {km:.0f} km、爬升 {cl:.0f} m，是比賽最難那天的 {p:.0f} %": {
+  "照現在每週慢慢加量，賽前你一週最多大約練到 EP {ep:.0f}（{km:.0f} km、爬升 {cl:.0f} m），是比賽最難那天 EP {hd:.0f} 的 {p:.0f} %": {
     "draft": true,
-    "src": "backend/engine/race_feasibility.py:256"
+    "src": "backend/engine/race_feasibility.py:342"
   },
   "照現在每週慢慢加量，賽前你一週最多大約跑到 {km:.0f} km，是比賽距離的 {p:.0f} %": {
     "draft": true,
@@ -2927,6 +2927,10 @@
     "draft": true,
     "src": "backend/engine/workout_templates.py:484"
   },
+  "練量離比賽還遠，可以考慮報短一點的組別：照推算，你大約應付得了一天 {km} km、爬升 {cl} m 的比賽": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:356"
+  },
   "縮量版：目標區時間 {pct:.0f}%，達標也不前進": {
     "draft": true,
     "src": "backend/engine/interval_library.py:800"
@@ -3131,6 +3135,10 @@
     "draft": true,
     "src": "backend/engine/workout_templates.py:418"
   },
+  "賽前一週最多大約爬 {cl:.0f} m，是比賽最難那天爬升 {hd:.0f} m 的 {p:.0f} %": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:363"
+  },
   "賽後第 1 週：輕鬆跑 ≤ {max} 分": {
     "draft": true,
     "src": "backend/engine/post_race.py:116"
@@ -3230,6 +3238,10 @@
   "距離／爬升要是數字": {
     "draft": true,
     "src": "backend/engine/plan_store.py:316"
+  },
+  "跨級：ITRA 依 EP 分級（XXS–XXL）；UTMB 報名等於一次只能往上跳一級；完賽過越多場越不容易 DNF（Corrion 2018、Maleka 2026）；「高兩級」和「24 個月」是推估": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:88"
   },
   "路況差的技術路段：時間＋爬升＋RPE，不設心率、功率目標（只給參考）；RPE ≥ 7 算強度課": {
     "draft": true,
@@ -3471,9 +3483,17 @@
     "draft": true,
     "src": "backend/engine/plan_prefs.py:309"
   },
+  "週量最多判到「有點趕」：完賽和沒完賽的人最高週量沒有差別（Hoffman & Fogard 2011：134 對 127 km；沒完賽主要是腸胃 23 %、趕不上關門 18.7 %，練不夠只有 0.7 %），和完賽有關的是經驗（Corrion 2018、Maleka 2026）": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:86"
+  },
   "週量：Uphill Athlete〈Big Vert Ultra Marathon〉——每週的距離和爬升，從比賽最難那天的一半開始，長的比賽練到 90–100 %": {
     "draft": true,
     "src": "backend/engine/race_feasibility.py:68"
+  },
+  "過去 {m} 個月單日最大 EP {ep:.0f}（{mine}，{date}）；比賽最難那天 EP {r:.0f}（{race}）": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:387"
   },
   "過去的日子": {
     "draft": true,
@@ -3799,9 +3819,9 @@
     "draft": true,
     "src": "backend/engine/technical.py:173"
   },
-  "（最好到 {a:.0f} %，不到 {b:.0f} % 就太少）": {
+  "（最好到 {a:.0f} %；週量分不出誰跑得完，最多判到有點趕，練得少會讓預估時間變慢，看關門那項）": {
     "draft": true,
-    "src": "backend/engine/race_feasibility.py:260"
+    "src": "backend/engine/race_feasibility.py:347"
   },
   "（每次約 {g:.0f} g 碳水）": {
     "draft": true,
@@ -3883,9 +3903,25 @@
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:594"
   },
+  "：同級或更低": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:391"
+  },
   "：強度課總量上限 {total:.0f} 分（週量 {share:.0%}）扣掉後剩 {left:.0f} 分給間歇": {
     "draft": true,
     "src": "backend/engine/technical.py:167"
+  },
+  "：爬升練得比距離少，不到一半（推估）": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:366"
+  },
+  "：高 {n} 級，跳太多了": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:390"
+  },
+  "：高一級，可以": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:391"
   },
   "；": {
     "draft": false,

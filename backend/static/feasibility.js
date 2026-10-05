@@ -61,6 +61,7 @@
       else if (c.id === "cutoff" && c.eta_h != null) t = T("k_summit", { eta: f1(c.eta_h), c: f1(c.cutoff_h) });
       else if (c.id === "cutoff" && c.finish_h != null) t = T("k_finish", { f: f1(c.finish_h), c: f1(c.cutoff_h) });
       else if (c.id === "b2b" && c.count != null) t = T("k_b2b", { n: c.count });
+      else if (c.id === "step" && c.best_class) t = T("k_step", { a: c.best_class, b: c.race_class });
       if (t) out.push(`<span title="${esc(c.text)}">${esc(t)}</span>`);
     }
     return out.join("");

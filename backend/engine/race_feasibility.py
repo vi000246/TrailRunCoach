@@ -4,14 +4,24 @@
 Only advice — nothing here changes the plan or the event. Each check gives a level
 (ok < tight < over < late); the race's level is the worst one.
 
-  weekly   the projected peak week's foot km and climb ÷ the race's hardest day (UA Big Vert:
-           「weekly distance and vertical start at about 50 % of the event's largest single day
-           and progress to about 90–100 % for longer events, > 100 % for shorter ones」).
-           ok ≥ 90 % (a long event: multi-day or ≥ 6 h in all) / ≥ 100 % (shorter), over < 50 % (UA's starting point;
-           a red line is 推估). The peak week = the last 4 full weeks' mean (or the last week if
+  weekly   the projected peak week's EP (km + climb ÷ the personal divisor, planning.event_ep's —
+           SP-112) ÷ the race's hardest day's EP (UA Big Vert: 「weekly distance and vertical start
+           at about 50 % of the event's largest single day and progress to about 90–100 % for
+           longer events, > 100 % for shorter ones」; ITRA / UTMB grade races by the same EP). A road
+           race (a day climbing < CLIMB_MIN_M) by km. ok ≥ 90 % (a long event: multi-day or ≥ 6 h
+           in all) / ≥ 100 % (shorter), else tight — never over (SP-112: the weekly volume does not
+           tell finishers from non-finishers — Hoffman & Fogard 2011 134 vs 127 km, Belinchón 2019,
+           Corrion 2018, Maleka 2026; a low volume slows the predicted time, which the cutoff check
+           reads). The peak week = the last 4 full weeks' mean (or the last week if
            higher) growing +10 % a week (SP-89 decision 1) with every 4th week a recovery week
            (3:1, no growth), up to the week holding race − 21 days (Koop: no fitness gained in
            the last 2–3 weeks).
+  climb    trail / 百岳 (a day climbing ≥ CLIMB_MIN_M): the peak week's climb ÷ the hardest day's;
+           < CLIMB_TIGHT → tight 「爬升練得比距離少」, never over (推估).
+  step     跨級: the biggest single-day EP of the last STEP_MONTHS months (activity records) as an
+           ITRA class (XXS–XXL) against the hardest day's class: same or one up ok, STEP_OVER classes
+           up or more → over (UTMB entry ≈ one class up at a time; Corrion 2018, Maleka 2026:
+           experience predicts finishing; 「two classes」 and 24 months are 推估).
   hours    ultras only (a trail race of 超馬級 or bigger, planning.event_size — SP-111; the 100 km
            row from EP 100): Koop's minimum — 50 km / 50 mi: 6 h a week for
            ≥ 3 weeks in a row from 6 weeks out; 100 km / 100 mi: 9 h for ≥ 6 weeks from 9 weeks
@@ -21,6 +31,7 @@ Only advice — nothing here changes the plan or the event. Each check gives a l
            day's start): later = over (「不適合這座百岳」, the owner's rule 2026-10-05), < 30 min
            to spare = tight (推估).
   late     < 21 days to the race: late (the fitness window has closed — Koop).
+「over」 comes only from the cutoff / turnaround and 跨級 (SP-112); < 3 weeks is its own 「late」.
 
 The long day is shown, not graded (Koop: 20–80 % of the race; past ~6 h coaches stop the
 long run — §1). C races are training days: not assessed.
@@ -59,7 +70,12 @@ WINDOW_DAYS = 21             # Koop: the fitness window closes 2–3 weeks out
 TAPER_WEEKS = 2              # planning.TAPER_DAYS
 WEEK_OK_LONG = 0.90          # UA: 90–100 % for longer events
 WEEK_OK_SHORT = 1.00         # UA: > 100 % for shorter events
-WEEK_OVER = 0.50             # UA's starting point; as a red line 推估
+WEEK_OVER = 0.50             # UA's starting point: below it a shorter course is suggested (never over, SP-112)
+CLIMB_TIGHT = 0.50           # SP-112 推估: the peak week's climb < half the hardest day's → tight
+STEP_MONTHS = 24             # SP-112 推估 (UTMB Running Stones: two years)
+STEP_OVER = 2                # classes up → over (推估)
+# ITRA's race classes by EP (km-effort; race-feasibility.md §2.4, run-motion's copy of ITRA)
+ITRA_CLASSES = (("XXS", 0.0), ("XS", 25.0), ("S", 45.0), ("M", 75.0), ("L", 115.0), ("XL", 155.0), ("XXL", 210.0))
 LONG_DAY_H = 6.0             # planning.LONG_EVENT_HOURS: a longer / shorter event for UA's rule
 CLIMB_MIN_M = 200.0          # 推估: a race day climbing less is judged on km only
 CUTOFF_TIGHT = 0.90          # 推估: a finish within 10 % of the cutoff
@@ -67,6 +83,10 @@ SUMMIT_SPARE_H = 0.5         # 推估: < 30 min to spare at the summit
 # Koop〈How Much Do You Need To Train〉: (race km ≥, hours a week, weeks in a row, from weeks out)
 KOOP = ((100.0, 9.0, 6, 9), (50.0, 6.0, 3, 6))
 SRC_UA = N_("週量：Uphill Athlete〈Big Vert Ultra Marathon〉——每週的距離和爬升，從比賽最難那天的一半開始，長的比賽練到 90–100 %")
+SRC_WEEK = N_("週量最多判到「有點趕」：完賽和沒完賽的人最高週量沒有差別（Hoffman & Fogard 2011：134 對 127 km；"
+               "沒完賽主要是腸胃 23 %、趕不上關門 18.7 %，練不夠只有 0.7 %），和完賽有關的是經驗（Corrion 2018、Maleka 2026）")
+SRC_STEP = N_("跨級：ITRA 依 EP 分級（XXS–XXL）；UTMB 報名等於一次只能往上跳一級；完賽過越多場越不容易 DNF"
+              "（Corrion 2018、Maleka 2026）；「高兩級」和「24 個月」是推估")
 SRC_KOOP = N_("超馬週時數：Jason Koop——50 km 賽前 6 週起每週 6 小時、連續 3 週；100 km 賽前 9 週起每週 9 小時、連續 6 週")
 
 
@@ -104,6 +124,38 @@ def base_week(hist: list[dict]) -> dict:
         return {"km": 0.0, "climb_m": 0.0, "hours": 0.0}
     n = len(hist)
     return {k: max(sum(h[k] for h in hist) / n, hist[-1][k]) for k in ("km", "climb_m", "hours")}
+
+
+def divisor() -> float:
+    """The EP climb divisor: the personal one when installed (planning.DIVISOR_OF), else ITRA's 100."""
+    from backend.engine import planning as P
+    try:
+        d = float(P.DIVISOR_OF()) if P.DIVISOR_OF is not None else P.EP_DIVISOR
+    except Exception:                       # noqa: BLE001
+        d = P.EP_DIVISOR
+    return d if d > 0 else P.EP_DIVISOR
+
+
+def ep(km: float, climb_m: float, div: Optional[float] = None) -> float:
+    return float(km or 0.0) + float(climb_m or 0.0) / (div or divisor())
+
+
+def itra_class(e_p: float) -> int:
+    """ITRA_CLASSES index of an EP."""
+    return max(i for i, (_n, lo) in enumerate(ITRA_CLASSES) if e_p >= lo)
+
+
+def best_day_ep(acts: list[dict], div: Optional[float] = None) -> Optional[dict]:
+    """The biggest single-day EP of foot activities `acts` (activity_rows; a day's activities summed):
+    {"ep", "date"}; None without any."""
+    by: dict = {}
+    for a in acts or ():
+        if a.get("foot"):
+            by[a["date"]] = by.get(a["date"], 0.0) + ep(a["km"], a["climb_m"], div)
+    if not by:
+        return None
+    d = max(by, key=by.get)
+    return {"ep": by[d], "date": d}
 
 
 def week_ok_at(e, line: dict) -> float:
@@ -236,12 +288,14 @@ def summit_eta(course: dict, hours: list[float], summit_km: float, pieces: Optio
 # the verdict
 # ---------------------------------------------------------------------------
 
-def assess(e, line: Optional[dict], today: dt.date, hist: list[dict], summit: Optional[dict] = None) -> dict:
+def assess(e, line: Optional[dict], today: dt.date, hist: list[dict], summit: Optional[dict] = None,
+           best: Optional[dict] = None) -> dict:
     """The verdict for event `e` (planning.Event) with its race line (race_refs.race_line) and
-    the last weeks (weekly_history). `summit`: summit_eta()'s result for a 百岳 with a summit."""
+    the last weeks (weekly_history). `summit`: summit_eta()'s result for a 百岳 with a summit.
+    `best`: best_day_ep of the last STEP_MONTHS months (the 跨級 check; None = not checked)."""
     out = {"event_id": e.id, "name": e.name, "date": e.date, "priority": e.priority, "kind": e.kind,
            "days": int(e.days or 1),
-           "days_to": (e.start - today).days, "checks": [], "suggestions": [], "src": [_(SRC_UA)]}
+           "days_to": (e.start - today).days, "checks": [], "suggestions": [], "src": [_(SRC_UA), _(SRC_WEEK)]}
     if e.priority == "C":
         out.update(level="ok", label=_(LEVEL_LABEL["ok"]), skipped=_("C 賽當練習，不評估"))
         return out
@@ -274,29 +328,45 @@ def assess(e, line: Optional[dict], today: dt.date, hist: list[dict], summit: Op
         if base["km"] <= 0:
             check("weekly", "unknown", _("最近 {n} 週沒有跑步或健行紀錄，沒辦法推算", n=BASE_WEEKS))
         else:
+            div = divisor()
+            trail = hd["climb_m"] >= CLIMB_MIN_M
             r_km = pk["km"] / hd["km"] if hd["km"] else None
-            r_cl = pk["climb_m"] / hd["climb_m"] if hd["climb_m"] >= CLIMB_MIN_M else None
-            ratio = min(x for x in (r_km, r_cl) if x is not None) if (r_km or r_cl) else None
+            r_cl = pk["climb_m"] / hd["climb_m"] if trail else None
+            hd_ep, pk_ep = ep(hd["km"], hd["climb_m"], div), ep(pk["km"], pk["climb_m"], div)
+            # SP-112: one EP ratio (a road race: km), not the lower of km and climb
+            ratio = (pk_ep / hd_ep if hd_ep else None) if trail else r_km
             ok_at = week_ok_at(e, line)
             if ratio is not None:
-                lv = "ok" if ratio >= ok_at else "over" if ratio < WEEK_OVER else "tight"
+                lv = "ok" if ratio >= ok_at else "tight"          # never over (SP-112)
                 # a race day under CLIMB_MIN_M (路跑) is judged on km only: no climb in the text either
-                txt = (_("照現在每週慢慢加量，賽前你一週最多大約練到 {km:.0f} km、爬升 {cl:.0f} m，是比賽最難那天的 {p:.0f} %",
-                         km=pk["km"], cl=pk["climb_m"], p=ratio * 100) if r_cl is not None else
+                txt = (_("照現在每週慢慢加量，賽前你一週最多大約練到 EP {ep:.0f}（{km:.0f} km、爬升 {cl:.0f} m），"
+                         "是比賽最難那天 EP {hd:.0f} 的 {p:.0f} %",
+                         ep=pk_ep, km=pk["km"], cl=pk["climb_m"], hd=hd_ep, p=ratio * 100) if trail else
                        _("照現在每週慢慢加量，賽前你一週最多大約跑到 {km:.0f} km，是比賽距離的 {p:.0f} %",
                          km=pk["km"], p=ratio * 100))
-                txt += _("（最好到 {a:.0f} %，不到 {b:.0f} % 就太少）", a=ok_at * 100, b=WEEK_OVER * 100)
-                check("weekly", lv, txt, ratio=round(ratio, 3), ok_at=ok_at, over_below=WEEK_OVER,
+                txt += _("（最好到 {a:.0f} %；週量分不出誰跑得完，最多判到有點趕，練得少會讓預估時間變慢，看關門那項）",
+                         a=ok_at * 100)
+                check("weekly", lv, txt, ratio=round(ratio, 3), ok_at=ok_at, over_below=None,
+                      ratio_ep=None if not trail else round(ratio, 3),
                       ratio_km=None if r_km is None else round(r_km, 3),
                       ratio_climb=None if r_cl is None else round(r_cl, 3))
-                if lv == "over":
+                if ratio < WEEK_OVER:
                     s = ratio / ok_at
                     out["downgrade"] = {"km": round(hd["km"] * s), "climb_m": round(hd["climb_m"] * s / 10) * 10}
-                    out["suggestions"].append(_("建議報短一點的組別：照推算，你大約應付得了一天 {km} km、爬升 {cl} m 的比賽",
+                    out["suggestions"].append(_("練量離比賽還遠，可以考慮報短一點的組別：照推算，你大約應付得了一天 {km} km、爬升 {cl} m 的比賽",
                                                 km=out["downgrade"]["km"], cl=out["downgrade"]["climb_m"]))
-                    out["suggestions"].append(_("或換一場晚一點的比賽，或這場先不跑"))
                 elif lv == "tight" and days_to >= WINDOW_DAYS:     # late already says 「照現有體能跑」
                     out["suggestions"].append(_("目標設保守一點，前半段放慢"))
+            if r_cl is not None:
+                # SP-112: the climb as a sub-check — at most tight (推估)
+                lv = "ok" if r_cl >= CLIMB_TIGHT else "tight"
+                txt = _("賽前一週最多大約爬 {cl:.0f} m，是比賽最難那天爬升 {hd:.0f} m 的 {p:.0f} %",
+                        cl=pk["climb_m"], hd=hd["climb_m"], p=r_cl * 100)
+                if lv == "tight":
+                    txt += _("：爬升練得比距離少，不到一半（推估）")
+                check("climb", lv, txt, ratio=round(r_cl, 3), tight_below=CLIMB_TIGHT)
+                if lv == "tight" and days_to >= WINDOW_DAYS:
+                    out["suggestions"].append(_("每週多排一些爬坡：長跑挑爬升多的路線"))
             need = koop_need(line, e)
             if need:
                 kr = koop_run(base["hours"], weeks, e.start, need)
@@ -305,6 +375,25 @@ def assess(e, line: Optional[dict], today: dt.date, hist: list[dict], summit: Op
                 txt = _("超馬建議賽前 {w} 週開始，每週練 {h:g} 小時、連續 {n} 週；照推算最多能連續做到 {b} 週（一週最多約 {p:.1f} 小時）",
                         w=need[3], h=need[1], n=need[2], b=kr["best_run"], p=kr["peak_h"])
                 check("hours", "ok" if kr["best_run"] >= need[2] else "tight", txt)
+        # 跨級 (SP-112): the biggest single day of the last 24 months against the race's hardest day
+        if best is not None:
+            out["src"].append(_(SRC_STEP))
+            div = divisor()
+            hd_ep = ep(hd["km"], hd["climb_m"], div)
+            rc, mc = itra_class(hd_ep), itra_class(best["ep"])
+            up = rc - mc
+            lv = "over" if up >= STEP_OVER else "ok"
+            d = best["date"]
+            txt = _("過去 {m} 個月單日最大 EP {ep:.0f}（{mine}，{date}）；比賽最難那天 EP {r:.0f}（{race}）",
+                    m=STEP_MONTHS, ep=best["ep"], mine=ITRA_CLASSES[mc][0],
+                    date=d.isoformat() if hasattr(d, "isoformat") else str(d), r=hd_ep, race=ITRA_CLASSES[rc][0])
+            txt += (_("：高 {n} 級，跳太多了", n=up) if lv == "over" else
+                    _("：高一級，可以") if up == 1 else _("：同級或更低"))
+            check("step", lv, txt, race_class=ITRA_CLASSES[rc][0], best_class=ITRA_CLASSES[mc][0], up=up,
+                  best_ep=round(best["ep"], 1))
+            if lv == "over":
+                out["suggestions"].insert(0, _("先跑一場低一級（{cls}）的比賽，或把這場改成 B／C 賽",
+                                               cls=ITRA_CLASSES[max(0, rc - 1)][0]))
         # the long day: shown, not graded
         cut = getattr(e, "cutoff_hours", None)
         if cut and e.kind == "baiyue":
@@ -430,11 +519,14 @@ def readiness(e, line: Optional[dict], today: dt.date, hist: list[dict], acts: l
     weeks = hist[-READY_WEEKS:]
     if weeks and any(w["km"] > 0 for w in weeks):
         ok_at = week_ok_at(e, line)
+        div = divisor()
         rk = max(w["km"] for w in weeks) / hd["km"] if hd["km"] else None
         rc = max(w["climb_m"] for w in weeks) / hd["climb_m"] if not road else None
-        r = min(x for x in (rk, rc) if x is not None) if (rk is not None or rc is not None) else None
+        hd_ep = ep(hd["km"], hd["climb_m"], div)
+        # SP-112: the biggest week's EP ÷ the hardest day's (a road race: km); at most 「差一點」
+        r = rk if road else (max(ep(w["km"], w["climb_m"], div) for w in weeks) / hd_ep if hd_ep else None)
         if r is not None:
-            lv = "ok" if r >= ok_at else "tight" if r >= WEEK_OVER else "short"
+            lv = "ok" if r >= ok_at else "tight"
             txt = (_("最近 6 週練最多的一週：{km:.0f} km、爬升 {cl:.0f} m，是比賽最難那天的 {p:.0f} %（最好到 {a:.0f} %）",
                      km=max(w["km"] for w in weeks), cl=max(w["climb_m"] for w in weeks), p=r * 100, a=ok_at * 100)
                    if rc is not None else
@@ -501,6 +593,10 @@ def races(plan, ds, today: dt.date, event_id: Optional[str] = None,
     evs = [e for e in evs if e.id == event_id] if event_id else [e for e in evs if e.priority in ("A", "B")]
     hist = weekly_history(ds, today, KOOP_WEEKS)
     acts = activity_rows(ds, today, B2B_WEEKS * 7)
+    try:
+        best = best_day_ep(activity_rows(ds, today, STEP_MONTHS * 365 // 12))      # 跨級 (SP-112)
+    except Exception:                       # noqa: BLE001 — the other checks still run
+        best = None
     out = []
     for e in sorted(evs, key=lambda x: x.start):
         line = summit = None
@@ -510,7 +606,7 @@ def races(plan, ds, today: dt.date, event_id: Optional[str] = None,
             line = RR.race_line(e, hs, _("賽事計算器預測的完賽時間"), course)
             if line is not None:
                 summit = event_summit(e, course, [d["hours"] for d in line["per_day"]])
-        r = assess(e, line, today, hist[-BASE_WEEKS:], summit)
+        r = assess(e, line, today, hist[-BASE_WEEKS:], summit, best)
         if not r.get("skipped"):
             r["readiness"] = readiness(e, line, today, hist, acts)
         out.append(r)
