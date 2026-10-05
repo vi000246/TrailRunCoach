@@ -65,7 +65,14 @@ COROS 的每日指標拿不拿得到：
 | app 有抓明細嗎 | **沒有** | 同步只用清單和 FIT 下載。SP-37 的探測試過明細，用 GET 被拒絕（COROS 的網頁是用 POST 查），所以當時沒讀到。已驗證 |
 | app 有地方用 RPE 嗎 | 有，兩處，現在只吃得到 Garmin 檔案裡的 32 筆 | `workout_files.rpe`（`backend/db/models.py:64`）→ 活動的費力程度標籤（`activity_tags.py:402`）、RPE 換算 TSS 的個人係數（`backend/engine/rpe_load.py:205`） |
 
-結論：**拿得到，每個活動多一個唯讀查詢。** 還沒實測；本機已經有可以實測的唯讀腳本（`backend/scripts/probe_coros_tl.py --allow-post-reads`，用現有的登入、不會重新登入）。
+結論：**拿得到，每個活動多一個唯讀查詢。**
+
+**實測（2026-10-06，NAS 正式環境 `coach.yichlin.com` 的容器內，使用者同意；只讀、用現有登入、只印欄位名稱和分數分布）：**
+
+- `/activity/detail/query` 用 GET 會回 `result=1001`，**要用 POST**（和 COROS 網頁一樣）。8 筆全部讀到。已驗證
+- 回傳裡有 `sportFeelInfo`，欄位：`feelType`、`sportNote`、`voiceNoteFileUuid`、`voiceNoteStatus`、`voiceNoteWavUrl`。已驗證
+- 最近 12 筆活動：**有 `summary.trainingProgram`（照 COROS 行事曆上的課表跑）的 4 筆都有填 RPE**（值 1、1、3、5）；沒有的 8 筆全是 0（沒填）。和 COROS 說「跑完預先排好的課表後可以記 RPE」一致：自由跑不會有 RPE。已驗證
+- 1–5 的方向（1 ＝最輕還是最累）還要使用者確認：社群文件說 1 ＝ Very Light、5 ＝ Max Effort，但 5 那筆是一堂 48 分鐘、目標心率偏低的課（推估它是輕鬆課），有可能方向相反。**實作前要確認**，否則規則會反過來觸發。
 
 ## 2. 文獻
 
@@ -239,7 +246,9 @@ COROS 的每日指標拿不拿得到：
 
 **單 1：同步 COROS 的跑後 RPE，輕鬆跑自評 Hard 以上時延後強度課**（建議 P2）
 
-- [ ] 同步時每個新活動多一個唯讀查詢（`/activity/detail/query`）取 `sportFeelInfo.feelType`；失敗或沒填（0）不影響同步
+- [ ] 先確認 `feelType` 1–5 的方向（1 ＝最輕還是最累）
+- [ ] 同步時每個新活動多一個唯讀查詢（`POST /activity/detail/query`；GET 會被拒）取 `sportFeelInfo.feelType`；失敗或沒填（0）不影響同步。可以只查有 COROS 課表的活動（自由跑不會有 RPE），但清單上看不出來，要先查明細才知道
+- [ ] 正式環境在 NAS：驗收在 `coach.yichlin.com` 做
 - [ ] 回補最近 8 週；不重新登入、不寫入 COROS
 - [ ] 存原始 1–5 級，並換成現有的 10 級欄位（1→2、2→4、3→5、4→7、5→10），讓費力程度標籤和 RPE 換算係數用得到
 - [ ] 不抓 COROS 的文字筆記；備註維持 app 自己的活動備註
@@ -271,12 +280,14 @@ COROS 的每日指標拿不拿得到：
 
 還沒決定的：
 
-1. 單 2（心率÷配速的調查）要不要開。
+1. **`feelType` 的方向**：9/30 那堂 48 分鐘的課你填的是最輕還是最累？（實測讀到 5）
+2. 單 2（心率÷配速的調查）要不要開。
 2. HRV 不做這件事沒有明說，但方向一致。
 
 ## 7. 限制
 
-- 「活動明細有 RPE」的實測：2026-10-06 第一次嘗試時 COROS 的登入已過期（24 小時），唯讀腳本設計上不重新登入，所以還沒讀到；等使用者在 app 同步一次後補跑。結果見 §1.3 的補充（若還沒有，就是尚未實測）。「`dayDetail` 有夜間 HRV」只看了社群專案的文件，沒有實測。
+- 「活動明細有 RPE」已在 NAS 正式環境實測（§1.3），樣本只有最近 12 筆、4 筆有填；1–5 的方向待使用者確認。「`dayDetail` 有夜間 HRV」只看了社群專案的文件，沒有實測。
+- 正式環境在 NAS（`coach.yichlin.com`），本機 `~/.wko5coach` 的資料可能比較舊；§1.1 的 FIT 掃描用的是本機資料。
 - COROS 支援文章讀不到原文（403），RPE 的記錄方式只看到搜尋摘要。RPE 是不是只有預先排好的課表才能填，沒有確認。
 - 本機資料只有一位使用者。「只在跑步時戴錶就沒有值」是推估。
 - Figueiredo 2023 全文要付費，只讀到摘要；DALDA 怎麼用來決定課表是二手整理。
