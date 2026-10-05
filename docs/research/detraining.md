@@ -1,6 +1,6 @@
 # 停訓與恢復訓練：停多久會掉多少、怎麼回來、app 怎麼排
 
-- 日期：2026-10-01
+- 日期：2026-10-01；**2026-10-05 補查** §8 第 2–7 項（UA、Pfitzinger、生病後分階、再練速度、TrainingPeaks 原句），結果寫在 §3、§4.4、§4.6、§4.8、§4.10、§6.2、§6.3、§8。
 - 問題：長假或中斷後要不要「重新練」？Z5（和 Z3）的暫停門檻（目前是佔位值：連續 ≥ 14 天沒跑、Z1 週量 < 確認時的 70 % 持續 2 週、長跑飄移變差）該怎麼定？中斷後的課表長什麼樣子？
 - 對象：範例跑者（休閒越野跑者兼百岳登山者，用跑步功率計；假設平日 40–50 分、週末越野）。
 - 標記：
@@ -33,6 +33,12 @@
    - **長跑飄移變差**留著，而且它最敏感：停訓最早出現的就是同速心率上升。
    - 中斷 ≥ 4 週：恢復期結束後要**重新確認有氧基礎**（三種測試選一：90 分飄移、UA 差距、Friel 飄移），並重測 CP。
 7. **app 現有的 `blackouts.step_cap()` 跟 Daniels 衝突**：整週不排課、實際 0 h，下週上限只有 0.5 h，之後每週 +10 %，要好幾週才回得去。Daniels 是 50 %→75 %→100 %（§6.6）。
+8. **2026-10-05 補查後：**
+   - **起始量 50 % 多了 UA 支持**：UA 回來的第一週＝前一期平均週量的 50 %，之後每週 +7–10 %、不加高強度（§4.6）。Daniels 的復跑量不用改。
+   - **「再練比首練快」在 VO2max 層級被直接否定**：同一批人練 2 個月、停 3 個月、再練 2 個月，兩次 VO2max 進步一樣（Pilotto 2025）。跑者停 15 天、再練 15 天，VO2max 回來了，但次最大耐力仍差 9 %（Houston 1979）。**不要因為「以前練過」縮短恢復期**（§3）。
+   - **Elliott 2020 的分階數字讀到了**（從原文 PDF 的圖讀出）：休 10 天＋無症狀 7 天 → ≤ 15 分、< 70 % HRmax 2 天 → ≤ 30／45／60 分、< 80 % HRmax → 最早第 17 天恢復正常訓練（§4.10）。生病只分輕微感冒、發燒或全身症狀兩類；Elliott 是 COVID 專用，不套到一般生病，app 也不做 COVID 分支（§6.2，使用者 2026-10-05 決定）。
+   - **COVID 回到完整表現的中位數是 64 天**，回到訓練只要 16 天（Snyders 2024）。研究紀錄；app 不做 COVID 分支（使用者 2026-10-05 決定）。
+   - Pfitzinger 本人：「The body's quite good at getting back to a level it's done before」（2025 訪談）。支持「回到之前的量」不用 10 % 規則（§6.6）。他對中斷的具體天數規則仍沒讀到（原書未核對）。
 
 ---
 
@@ -107,6 +113,25 @@
 
 **「再練比第一次快」的證據：** 表現層級只有個案與教練經驗支持（Lepers 2024、WKO5）。分子層級反而否定（Lindholm 2016）。合理的說法是：**多年累積的結構（微血管、部分酵素、心臟、肌腱骨骼適應）留下來了，所以回得快；最近幾個月才加上去的那一層沒有特權。** 這是推論，沒有直接比較「首次 vs 再次」速度的耐力研究（未驗證：Europe PMC 只查到上述 retraining 研究）。
 
+#### 3.1 補查（2026-10-05）：再練到底快不快
+
+結論先講：
+
+- **VO2max 層級：再練沒有比較快。** 有一篇直接比較的研究，兩次進步一樣（Pilotto 2025）。
+- **表現層級：等長的再練不夠。** 跑者停 15 天、再練 15 天，VO2max 回來了，但次最大耐力還差 9 %，氧化酵素沒回來（Houston 1979）。
+- **「回到以前做過的量」比「加到沒做過的量」容易**：只有教練說法（Pfitzinger 2025 訪談），沒有試驗。
+- 對 app：恢復期長度＝中斷天數（Daniels）**不要再縮短**；恢復期結束時長耐力可能還沒回來，所以「結束後 2 週目標仍 × FVDOT」（`reentry.TARGETS_AFTER_DAYS`）和飄移檢查都該留著。
+
+| 來源 | 內容 | 層級 |
+|---|---|---|
+| Pilotto et al. 2025, Am J Physiol Cell Physiol 328:C258 | 20 名健康成人（25 ± 5 歲）：HIIT 2 個月 → 停 3 個月 → 再 HIIT 2 個月。「V̇o2max improved during training and retraining (P < 0.001) without differences between interventions (P > 0.58)」。肌肉有表觀遺傳記憶（DNA 甲基化留著），但「significant memory was not observed in physiological parameters」 | [同儕審查] 摘要；**唯一直接比較首練 vs 再練的耐力研究**；對象是健康年輕人，不是多年耐力選手 |
+| Houston, Bentzen, Larsen 1979, Acta Physiol Scand 105:163 | 6 名訓練有素的跑者，停 15 天、再練 15 天。停訓：SDH −24 %、VO2max −4 %、高強度次最大跑的持續時間 −25 %。再練後：VO2max 回升同樣幅度，**但持續時間仍比原本低 9 %**，SDH 沒有顯著回升。作者：「a longer period of retraining is necessary for muscle to re-adapt to its original trained state」 | [同儕審查] 摘要；n = 6 |
+| Hulmi et al. 2025, J Physiol 603:2655 | 阻力訓練 10 週 → 停 10 週 → 再練 10 週。「reversible proteins were especially involved in aerobic energy metabolism」：有氧代謝相關蛋白停訓就退、再練才回來；留下來的是肌肉收縮、骨架相關蛋白 | [同儕審查] 摘要；阻力訓練，不是耐力訓練，只當旁證 |
+| Pfitzinger（Mario Fraioli 訪談，The Morning Shakeout，2025-10-17） | 「The body's quite good at getting back to a level it's done before. Say you've done 70 miles a week in the past, and leading up to your marathon buildup you've been doing 45, you can probably get back up into that 60 to 70 range pretty quick.」但加到沒做過的量，「the body is very bad at adapting quickly to more than it's used to」 | [教練]，讀到原頁；講的是「量」，不是中斷後的體能 |
+
+- Europe PMC 檢索（2026-10-05，retraining／muscle memory × endurance × detraining × VO2max）：除了上表，其他「再練」研究都是阻力訓練、高齡者、病人或足球員，沒有耐力選手的首練 vs 再練比較。
+- 怎麼讀（推論）：Houston 的「停多久、練多久」剛好就是 Daniels 的「恢復期＝中斷天數」。VO2max 在恢復期結束時回來了，**但長耐力和酵素還沒**。這和 §2「量砍太多傷的是長耐力」一致。
+
 ---
 
 ## 4. 復跑規範（教練與運動醫學）
@@ -174,6 +199,19 @@ joefrieltraining.com/missed-workouts/：
 - **2–5 天：**「Your fitness has not significantly changed」。**6–14 天：**「Hit rewind for one to two weeks prior to the onset of the illness」。
 - 間歇先「taking them down a training zone」，恢復段稍微動態一點。
 
+**2026-10-05 補查**（重讀原頁，頁面標示 2019-06-26 發表、2026-09-22 更新）：
+- 原句：「I typically like them to be symptom-free for 24-48 hours, depending on the severity of the illness.」
+- 6–14 天的完整原句：「If you have missed six to 14 days of training, you may have to look at your overall progression and take a step back within the training progression (mesocycle).」「Hit rewind for one to two weeks prior to the onset of the illness (the longer you are out, the longer you hit rewind).」
+- **用心率降一區的例子**：「if you planned to run 3 x 1-mile intervals with walking recovery at 175 heart rate, do 3 x 5 minutes fartlek running at 165 heart rate with jogging recovery.」
+- **§8 第 6 項的那句「heart rate zone, rather than your normal power or speed zone」不在這頁。** 另查 TrainingPeaks 兩篇相關文章也沒有（見下）。這句查無出處，不再引用。
+
+TrainingPeaks 另一篇（Lynda Wallenfels，「The Athlete's Survival Guide to the Cold and Flu Season」，2026-06-03 更新）[教練]：
+- 「Wait one day after below-the-neck symptoms have resolved before resuming any training.」之後先一天「one recovery-paced session」。
+- 只有脖子以上的症狀：「I am okay with my clients completing a recovery-paced training session, keeping heart rate in zone 1」。
+- 「If you were sick for three days or less, resume your training plan after your one 'wait day' plus one recovery day. If you were sick for more than three days, resume training with one 'wait day' and two or more recovery days.」
+- 之後「gradually ramp up your duration first, then intensity, to full training loads over the course of four to seven days.」
+- 注意：這是短期生病（幾天）的做法。4–7 天回到全量，比 Daniels 對 ≥ 6 天中斷的 50 %→75 % 快。兩者不衝突：Wallenfels 講的是病了幾天，Daniels 講的是停了一段。
+
 ### 4.5 TrainerRoad 部落格（無署名）[教練]
 
 - 長假（2–4 週）：退回課表中和中斷一樣長的位置（例：第 5 週停 2 週 → 從第 3 週開始）。
@@ -185,7 +223,26 @@ joefrieltraining.com/missed-workouts/：
 - 「Aerobic Self-Assessment for Mountain Athletes」：「A clean Heart Rate Drift Test or lab test is still the right way to establish your first baseline, and the right tool to reach for when you return from a layoff or illness and want a fresh, deliberate read.」
   → **中斷後用飄移測試重新讀一次 AeT／有氧基礎**，有 UA 的來源。
 - 「Zone 2 Heart Rate Training」：每 6–10 週重測一次；這條針對進步，不是針對中斷。
-- 沒找到 UA 對復跑起始量、加量速度的具體數字（未驗證）。
+- ~~沒找到 UA 對復跑起始量、加量速度的具體數字（未驗證）。~~ **2026-10-05 補查找到了，見下。**
+
+**2026-10-05 補查：UA 的起始量與加量速度**
+
+結論先講：**起始 50 %、每週 +7–10 %、不加高強度、久休約 8 週。** UA 的數字不依中斷長度分級，是「休息後新一期訓練」通用的。
+
+- 起始量（「Making the Most of Your Uphill Athlete Training Plan」，無署名、無日期）：「As a rule of thumb, we recommend starting the first week of the Transition Period at an aerobic volume that represents 50 percent of your previous cycle's average weekly aerobic volume.」
+  - 同一頁：一週漏掉超過 2 堂課，「it is advisable to repeat that week」。
+  - 同一頁：重跑舊計畫時「bump up the aerobic training volume about 10 percent per week for each subsequent cycle」。這句的「per week for each subsequent cycle」意思不清楚，不採用成加量速度。
+- 加量速度與長度（「How to Train for Skiing」，Steve House，2026-09-24；`periodization-cross-sport.md` §4.7.1 已引 [441]，不重做）：轉換期「weekly volume rising seven to ten percent at a time with no addition of high-intensity or race-pace work」；夏季跑山轉滑雪約 3 週，久休後約 8 週。
+- 戰術運動員版（「How to Build a Transition Period for Tactical Athletes」，Drew Hammond，2020-01-13）：第一週「at half that amount, or 300 minutes」（最大週量的一半）；第 4 週比第 1–3 週 +15 %、第 6 週比第 4–5 週 +10 %、第 8 週比第 6–7 週 +5 %；「this phase will usually last about eight weeks」。也就是**每 2–3 週才加一次，而且越加越少**。
+- 中斷後的心率基準（「Continuous AeT — How and Why It Works」，Steve House，2026-06-12）：「If you are coming back from a long layoff, a major illness, or a significant change in your training environment, a manual drift test gives you a clean reset and a fresh baseline.」；「Continuous AeT needs about four weeks of training with heart rate data before the trend stabilizes」。
+  → 中斷後**先用手動飄移測試**，不要等連續估計值（要 4 週才穩）。
+- MAF 公式（「MAF Method for Determining Your Aerobic Threshold」，無署名、無日期）：180 − 年齡，「injured, regressed, frequently ill … or inconsistent training」再 −5。這是公式估算的修正，**不適用 app 的實測 AeT**。搜尋摘要說「major illness −10」，原頁沒有，查無出處、不採用。
+- 何時加強度（「When and How to Add High-Intensity Training: The 10 Percent Test」，無署名、無日期）：AeT 與 AnT 心率差 > 10 % 就是有氧不足，「focus on building your aerobic base with Zone 1 and Zone 2 training before adding any intensity」。這是一般規則，沒有講中斷；但可以當「中斷後 Z5 前要重新確認有氧基礎」的另一個依據。
+
+和 Daniels 對照（推論）：
+- 起始 50 %：和 Daniels 第 2 類（6–28 天）一樣。Daniels 第 3、4 類從 33 % 起步，比 UA 保守。
+- 加量：UA 每週 +7–10 %，Daniels 是一段一段跳（50 → 75 → 100 %）。Daniels 第 4 類每 3 週一階（33 → 50 → 70 → 85 → 100 %），換算每週約 +6–15 %，和 UA 同一量級。
+- 兩者都是「先量、後強度」，恢復期內不排高強度。
 
 ### 4.7 Palladino、WKO5 [教練／筆記]
 
@@ -199,6 +256,15 @@ joefrieltraining.com/missed-workouts/：
 ### 4.8 Pfitzinger
 
 沒查到 Pfitzinger 本人針對「中斷多久、回到多少」的一手規則。網路上流傳的「50–75 % 起步」「停 3 週要 2 週回來」都是二手整理（marathonhandbook、runnersconnect），沒附 Pfitzinger 原文。**未驗證，不採用。**
+
+**2026-10-05 補查：** 還是沒有「停幾天 → 回幾 %」的一手規則。讀到的只有兩段原話，都是原則：
+- 2025 訪談（The Morning Shakeout，Mario Fraioli，2025-10-17，讀到原頁）[教練]：「The body's quite good at getting back to a level it's done before.」以前跑過週 70 英里、現在 45，「can probably get back up into that 60 to 70 range pretty quick」；加到沒做過的量才危險。全文見 §3.1。
+  → 支持「回到之前的量」可以比 10 % 規則快（§6.6）。但他沒說「多快」，也不是在講停訓後。
+- 2005 訪談（Kevin Beck，MileSplit，2005-02-23，讀到原頁）[教練]：「I generally recommend taking off 3-6 weeks after the track season for physical and mental recovery.」理由是避免越野季中途失去熱情。這是季後休息，不是中斷後怎麼回來。
+- 讀不到的：
+  - Pfitzinger 個人網站的「stress fracture」回跑計畫（pfitzinger.com/labreports/stressfracture.shtml）：連線被拒，Wayback 也抓不到。未讀。
+  - 《進階馬拉松全書》中譯本：博客來、誠品 403；讀書共和國網域查不到；PChome、udn 頁面沒有目錄與書摘。**原書未核對。**
+  - 「Pfitzinger 的復跑規則在第 9 章」：只見於第三方工具頁（rundida.com）的搜尋摘要，**查無出處、不採用**。
 
 ### 4.9 徐國峰與台灣教練
 
@@ -214,7 +280,44 @@ joefrieltraining.com/missed-workouts/：
 |---|---|---|
 | Elliott et al. 2020, BJSM 54:1174（COVID 漸進回歸資訊圖） | 開始前：日常活動做得到、平地走 500 m 不會過度疲勞或喘；「at least 10 days' rest and be 7 days symptom-free before starting」；過程中任何症狀（含過度疲勞）就退回前一階，至少 24 小時無症狀再往上。監測：安靜心率、RPE、睡眠／壓力／疲勞／痠痛 | [同儕審查期刊的指引]；各階段的時長與心率百分比在圖檔裡，**PMC 文字版沒有，未驗證** |
 | Snyders et al. 2022, BJSM 56:223（IOC 共識小組的系統性回顧） | 急性呼吸道疾病：80 % 沒有損失訓練日；平均症狀 7.1 天；回到運動 0–8.5 天 | [同儕審查] |
-| IOC 共識 2022 Part 1（感染性）、Part 2（非感染性），Schwellnus et al., BJSM | 都有 return-to-sport 章節 | 具體分階內容**未讀全文、未驗證** |
+| IOC 共識 2022 Part 1（感染性）、Part 2（非感染性），Schwellnus et al., BJSM | 都有 return-to-sport 章節 | 具體分階內容**未讀全文、未驗證**（2026-10-05 補查仍讀不到，見下） |
+
+#### 4.10.1 補查（2026-10-05）：生病後的分階
+
+結論先講：
+
+- **Elliott 2020 的分階數字讀到了。** PMC 文字版沒有，但原文 PDF（kyma.org 轉存的 BJSM 原版，CC BY-NC）的資訊圖可以讀。合計：休 10 天＋無症狀 7 天 → 6 天漸進（每階有時間與心率上限）→ **最早第 17 天恢復正常訓練**。
+- **IOC 2022 共識的分階表還是沒讀到。** BJSM 403；Europe PMC 標示非開放取用；奧會官網的開放 PDF 試了 4 次都逾時。網路上「5 階段、< 70 % HRmax 起步、脖子以下至少 10 天、脖子以上至少 5 天、無症狀 3 天」的說法只出現在搜尋摘要（來源是 ScienceDirect 的一篇 scoping review，也 403），**查無出處、不採用**。
+- **COVID 回到「完整表現」比回到「訓練」慢很多**：中位數 64 天對 16 天（Snyders 2024）。
+- **輕微呼吸道感染對耐力影響很小**（Kaulback 2023）；「脖子檢查」沒有科學根據，但「may be partly useful」（Ruuskanen 2024）。
+
+Elliott 2020 分階（[同儕審查期刊的指引]；從原文 PDF 第 1 頁資訊圖讀出，**字很小，建議人工再對一次**）：
+
+| 階段 | 最短天數 | 內容 | 心率上限 | 每次時間 | 目的 |
+|---|---|---|---|---|---|
+| 1 | 10 天（從發病起） | 最少休息期：走路、日常活動 | — | — | 讓身體恢復、保護心肺 |
+| 2 | 2 天 | 輕活動：走路、輕鬆慢跑、固定式腳踏車；不做阻力訓練 | < 70 % HRmax | ≤ 15 分 | 讓心率上來 |
+| 3A | 1 天 | 增加頻率：簡單動作（例如跑步技巧動作） | < 80 % HRmax | ≤ 30 分 | 慢慢加負荷、處理病毒後的疲勞 |
+| 3B | 1 天 | 增加時間：較複雜的訓練 | < 80 % HRmax | ≤ 45 分 | 運動、協調、技巧 |
+| 4 | 2 天 | 增加強度：正常訓練內容 | < 80 % HRmax | ≤ 60 分 | 恢復信心、評估功能 |
+| 5 | 最早第 17 天 | 恢復正常訓練進程 | — | — | — |
+| 6 | 依運動項目 | 回到比賽 | — | — | — |
+
+- 開始前提（文字原文）：「the athlete must be able to complete activities of daily living and walk 500m on the flat without excessive fatigue or breathlessness」；「at least 10 days' rest and be 7 days symptom-free before starting」；圖上另寫要「off all treatment, e.g. paracetamol」。
+- 「Experience suggests that some athletes take over 3 weeks to recover.」
+- 圖下註：「This guidance is specific to sports with an aerobic component」；對象是輕到中度症狀的運動員，住院過的要另外評估。
+- 每階監測：主觀症狀、安靜心率、I-PRRS（心理準備度）、RPE。
+
+其他新來源：
+
+| 來源 | 內容 | 層級 |
+|---|---|---|
+| Snyders et al. 2024, J Sport Health Sci 13:280（AWARE VIII） | 84 名確診 COVID 的運動員（77 有症狀）。有症狀者回到訓練（RTT）中位數 16 天（IQR 12–24）；**回到感染前的表現（RTFP）中位數 64 天（IQR 42–91），最長 415 天**；無症狀者 RTFP 中位數 30 天。急性期症狀越多（尤其全身性症狀），RTFP 越久。作者說研究期間「no specific guidelines on RTT were available」 | [同儕審查] 全文（Europe PMC） |
+| Kaulback et al. 2023, Eur J Sport Sci 23:1356（IOC 共識小組的系統性回顧，17 篇，n = 7793） | 急性呼吸道感染：運動表現急性下降（4 篇）、肺功能下降（3 篇），但「minimal effects on cardiorespiratory endurance (seven studies in mild ARinf)」；長期影響「divided」，訓練里程、訓練負荷可能受影響 | [同儕審查] 摘要 |
+| Ruuskanen et al. 2024, J Sport Health Sci 13:663（評論） | 「Symptoms of cardiac involvement i.e., chest pain, syncope, shortness of breath, and palpitations are absolute contraindications for exercise」；脖子檢查「is nonscientific but may be partly useful」；「Even a short bed rest may rapidly decrease exercise performance which may require weeks to rebuild」 | [同儕審查期刊的評論] 全文（Europe PMC） |
+| Snyders et al. 2022（既有） | 平均症狀 7.1 天；80 % 沒有損失訓練日 | 已在上表 |
+
+- Salman et al. 2021（BMJ 372:m4721，「Returning to physical activity after covid-19」，一般民眾的分階）：Europe PMC 標示非開放，bmj.com 403。**付費牆，未讀。**
 
 **健康長假 vs 生病／受傷：**
 - 長假：身體沒有額外的發炎或組織損傷，損失只有停訓本身 → 照 Daniels 表、照中斷天數走。
@@ -277,14 +380,29 @@ Z3 暫停只在恢復期內。量下滑（第 2 列）只停 Z5、不停 Z3。�
 
 補充：
 - **加量上限：** 恢復期內用 Daniels 的 %，不用 10 % 規則。理由：這是「回到之前做過的量」，不是新的負荷。Palladino 也說 10 % 規則已過時。恢復期結束、回到 100 % 之後，才恢復正常的 ramp 規則（CTL ramp ≥ 7 的既有保護一直有效）。
+  - **2026-10-05 補查：起始量、加量速度都不改。** UA 的起始 50 % 和 Daniels 第 2 類一樣；Daniels 第 3、4 類從 33 % 起步，比 UA 保守，維持 Daniels。UA 每週 +7–10 % 和 Daniels 第 4 類換算的每週 +6–15 % 同一量級（§4.6）。
+  - **2026-10-05 補查：恢復期長度不縮短，結束後的 FVDOT 目標（`TARGETS_AFTER_DAYS` 14 天）保留。** 再練沒有比首練快（Pilotto 2025）；停 15 天、練 15 天後長耐力仍差 9 %（Houston 1979）（§3.1）。這條原本是純推估，現在有方向性的研究支持；14 天這個長度仍是推估。
 - **生病：** 起點是**無症狀**那一天，不是生病第一天：發燒或脖子以下的症狀 → 無症狀 ≥ 48 h（TrainingPeaks 上限）；COVID → ≥ 10 天休息、7 天無症狀（Elliott 2020）。中斷天數從最後一次跑步算到回來第一次跑。類別照上表，但：
   - 恢復期多一條「有症狀就退回上一段，24 h 無症狀再往上」（Elliott 2020）。
   - 恢復期後第一堂 Z3 降一區（TrainingPeaks：take intervals down a zone）。這是指引的直接套用。
+- **生病：2026-10-05 補查後改了什麼**（證據見 §4.4、§4.10.1）。注意：`reentry.py` 現在**沒有生病分支**（只有傷停 `injury`），以下都是新規則的建議：
+  - **2026-10-05 使用者決定：生病只分兩類（輕微感冒、發燒或全身症狀），不做 COVID 分支**；下表的 COVID 列和 COVID 相關的兩條只留作研究紀錄，不實作。原本「生病＋脖子以下症狀也套 Elliott」是把 COVID 指引延伸到一般生病，依據不夠，作廢。「脖子以上／以下」（neck check）是經驗法則，Ruuskanen 2024：「nonscientific but may be partly useful」，只拿來幫使用者選類別，不當成規則本身。
+    | 類別 | 例子 | 怎麼排 | 依據 |
+    |---|---|---|---|
+    | **輕微感冒** | 只有流鼻水、鼻塞、喉嚨痛，沒有發燒 | 有症狀時只排 Z1 恢復課，不排 Z3／Z5；之後照中斷天數走原本的復跑規則 | Kaulback 2023（輕微呼吸道感染對心肺耐力影響很小）；Wallenfels（脖子以上可跑心率 Z1 恢復課，教練級） |
+    | **發燒或全身症狀** | 發燒、咳嗽到胸、全身痠痛、腸胃炎 | 症狀全部消失後至少 1 天、最多 48 h 才跑；第一次跑恢復配速；之後照中斷天數 | Wallenfels（脖子以下症狀消失後至少等 1 天）、Watson／TrainingPeaks（無症狀 24–48 h），教練級 |
+    | **COVID（確診）** | — | 休 10 天＋無症狀 7 天，再照 Elliott 2020 的 6 天分階（第 1–2 天每次 ≤ 15 分、< 70 % HRmax；第 3 天 ≤ 30 分；第 4 天 ≤ 45 分；第 5–6 天 ≤ 60 分，都 < 80 % HRmax），和 Daniels 的 50 % 段取較嚴的那個（推估）；第 7 天起照原本的恢復期；**排 Z5 前一律先過飄移檢查**（比照 14–28 天的 `drift_check`；Snyders 2024 回到完整表現中位數 64 天，規則本身是推估） | Elliott 2020；Snyders 2024 |
+  - **COVID 的心率上限用 HRmax 百分比**，若比 AeT 還低就以它為準（推估）。理由：Elliott 用 HRmax；app 平常用 AeT，兩者對不上。
+  - 兩類共用：恢復過程中症狀又出現 → 退回上一階，24 h 無症狀再往上（Elliott 原文寫的是 COVID；套到一般生病是推估）。
+  - **不變：起點仍是「無症狀」那天。** 數字的出處補齊了：脖子以下症狀消失後至少等 1 天（Wallenfels）、無症狀 24–48 h（Watson）；COVID 休 10 天＋無症狀 7 天（Elliott）。
+  - **不變：有症狀就退一階、24 h 無症狀再往上**（Elliott 原文已核對：「return to the previous stage and progress again after a minimum of 24hours' period of rest without symptoms」）。
+  - **警示（研究紀錄，app 不做，使用者 2026-10-05 決定）：** 胸痛、昏厥、喘、心悸是運動的絕對禁忌（Ruuskanen 2024）。使用者標記生病時，app 顯示這四項，有就請他先看醫生。
+  - IOC 2022 共識的分階表沒讀到，**以上沒有用到 IOC 的數字**。
 - **受傷：** app 不自動排恢復計畫；請使用者手動排或照醫療的走跑進度。app 只在使用者標記「受傷」時暫停 Z3／Z5（推估）。
 
 ### 6.3 恢復期間的強度與區間
 
-- **心率區間（AeT 為基準）在恢復期內繼續有效，而且應該當主要目標。** 停訓後同速、同功率的心率會上升（Houmard 1992：+11 bpm／14 天；Coyle 1986：+11 %）。照心率跑，會自動降速度與功率，對應的是同樣的生理強度。這是推論，符合 TrainingPeaks「stay in the low end of your … heart rate zone, rather than your normal power or speed zone」的方向（該句出自搜尋摘要，原文未逐字核對，未驗證）。
+- **心率區間（AeT 為基準）在恢復期內繼續有效，而且應該當主要目標。** 停訓後同速、同功率的心率會上升（Houmard 1992：+11 bpm／14 天；Coyle 1986：+11 %）。照心率跑，會自動降速度與功率，對應的是同樣的生理強度。這是推論。~~符合 TrainingPeaks「stay in the low end of your … heart rate zone, rather than your normal power or speed zone」的方向~~（**2026-10-05 補查：這句在 TrainingPeaks 三篇相關文章都找不到，查無出處，刪除**）。改用讀到原頁的兩個教練來源：Watson 用心率降一區的例子（175 → 165 bpm，§4.4）；Wallenfels 生病後的恢復課「keeping heart rate in zone 1」（§4.4）。UA 也說中斷後用手動飄移測試重新讀心率基準（§4.6）。結論不變。
 - **功率與配速上限要降：** Z3／Z5 目標 × FVDOT（§4.2），這是 Daniels 的直接用法。功率目標套同一個係數是推估：VDOT 與 CP 都是「能持續的最高有氧輸出」，但兩者的對應沒有驗證。
 - **AeT 本身：** 中斷 ≥ 4 週，計畫裡的 AeT 標為過期，要求重測（UA：中斷後重新讀）。中斷 < 4 週照舊。
 - Easy 跑「偏強」規則 D（AeT + 3 bpm、80 % CP）在恢復期內照常。功率版會比較容易觸發，因為同心率下功率變低。80 % CP 也乘 FVDOT（推估）。
@@ -329,6 +447,7 @@ Z3 暫停只在恢復期內。量下滑（第 2 列）只停 Z5、不停 Z3。�
   - **短的不排課（例如 3 天）** 照 Daniels 是第 1 類，應該回到 100 %。step_cap 卻從那週較少的實際量起算，連續壓低幾週。
   - 「10 % 規則」在 Palladino 筆記裡被稱為過時（`palladino基礎期訓練.md:54`）。
 - **建議：** 不排課後的加量改由 §6.2 的恢復期決定（≤ 5 天回 100 %，≥ 6 天照 Daniels 的 %）。`step_cap` 只在恢復期不適用時保留（或移除）。這是程式改動，本文只提出，不改碼。
+- **2026-10-05 補查：** 多了兩個支持「回到之前的量不用 10 % 規則」的教練來源：Pfitzinger「The body's quite good at getting back to a level it's done before」（§3.1）；UA 回來第一週就是之前的 50 %，而不是從 0 慢慢加（§4.6）。建議不變。
 
 ---
 
@@ -348,6 +467,11 @@ Z3 暫停只在恢復期內。量下滑（第 2 列）只停 Z5、不停 Z3。�
 | 恢復期內再中斷 ≥ 6 天 → 重算 | §6.5 | — |
 | 受傷標記只暫停 Z3／Z5、不自動排 | §6.2 | 傷別規則未查 |
 | > 8 週：第 13 週起 Z3 | §6.2 | Daniels T 在第 5 階的對應 |
+| COVID：前 6 天 Elliott 上限與 Daniels % 取較嚴（2026-10-05） | §6.2 | 兩份來源怎麼合併沒有出處 |
+| 生病兩類共用「症狀再出現就退一階」（2026-10-05） | §6.2 | Elliott 原文只針對 COVID |
+| COVID：HRmax % 上限低於 AeT 時以它為準（2026-10-05） | §6.2 | Elliott 用 HRmax、app 用 AeT |
+| COVID：Z5 前一律飄移檢查（2026-10-05） | §6.2 | 方向來自 Snyders 2024（RTFP 64 天），規則本身是推估 |
+| 恢復期後 FVDOT 目標再留 14 天 | §6.2 | 方向有 Houston 1979 支持（2026-10-05），長度是推估 |
 
 ---
 
@@ -355,12 +479,25 @@ Z3 暫停只在恢復期內。量下滑（第 2 列）只停 Z5、不停 Z3。�
 
 1. Daniels 表 9.1 的 42 天 FVDOT-2 = 0.994（網頁）應為 0.944，要對原書。「交叉訓練」的定義也要查原書。
 2. Elliott 2020 COVID 資訊圖的各階段時長、心率百分比（只在圖檔裡）。
+   - **2026-10-05 補查：已讀到。** PMC 文字版確認沒有分階內容；原文 PDF（kyma.org 轉存的 BJSM 開放版）的資訊圖可讀：10 天休息 → 2 天（≤ 15 分、< 70 %）→ 1 天（≤ 30 分、< 80 %）→ 1 天（≤ 45 分、< 80 %）→ 2 天（≤ 60 分、< 80 %）→ 最早第 17 天正常訓練（§4.10.1）。
+   - 還缺：資訊圖字很小，是看圖讀的，建議人工對一次原圖。
 3. IOC 2022 呼吸道疾病共識的 return-to-sport 分階細節（未讀全文）。
+   - **2026-10-05 補查：仍沒讀到。** BJSM 403；Europe PMC 標示非開放；奧會官網的開放 PDF 4 次都逾時；casem-acmse.org 的轉存 PDF 回 520；academia.edu 403。
+   - 搜尋摘要裡的「5 階段、< 70 % HRmax 起步、脖子以下 ≥ 10 天、脖子以上 ≥ 5 天、無症狀 3 天、安靜心率差 > 10 bpm 不前進」都來自一篇 scoping review（ScienceDirect，403），**查無出處、不採用**。
+   - 補到的相關證據：Kaulback 2023（IOC 小組的系統性回顧，輕微感染對耐力影響小）、Snyders 2024（COVID 回到完整表現中位數 64 天）、Ruuskanen 2024（心臟症狀是絕對禁忌）。
+   - 還缺：共識原文的分階表。下次可以換網路環境再試奧會官網的 PDF（stillmed.olympics.com，開放下載，只是逾時）。
 4. Pfitzinger 對中斷的一手規則（找不到）。
+   - **2026-10-05 補查：仍沒有具體規則。** 讀到兩段原話：2025 訪談「The body's quite good at getting back to a level it's done before」；2005 訪談「taking off 3-6 weeks after the track season」（§4.8）。
+   - 還缺：《進階馬拉松全書》原書（原書未核對；博客來、誠品 403）；pfitzinger.com 的骨折回跑計畫（網站連不上）。
 5. Uphill Athlete 對復跑起始量、加量速度的具體數字（找不到）。
+   - **2026-10-05 補查：已找到。** 第一週＝前一期平均週量的 50 %；每週 +7–10 %、不加高強度；久休後約 8 週（§4.6）。戰術運動員版：50 % 起步，第 4、6、8 週各 +15 %、+10 %、+5 %。
+   - 還缺：UA 沒有依中斷長度分級的數字；不知道「停 2 週」和「停 3 個月」在 UA 是否一樣處理。
 6. TrainingPeaks「heart rate zone, rather than your normal power or speed zone」原句（來自搜尋摘要）。
+   - **2026-10-05 補查：查無出處。** Watson 原頁（help 站沒試，直接讀 blog 原頁）、Wallenfels 感冒文、Schultz 超馬回歸文都沒有這句。§6.3 已刪掉這句，改用讀到原頁的 Watson 心率降一區例子與 Wallenfels 的「heart rate in zone 1」。
 7. 「再練比首練快」在耐力表現上的直接比較研究（沒找到）。
-8. 所有同儕審查數字都取自摘要，沒有讀全文。
+   - **2026-10-05 補查：找到 1 篇直接比較。** Pilotto 2025：兩次 HIIT 的 VO2max 進步一樣，再練沒有比較快。另有 Houston 1979：跑者停 15 天、再練 15 天，VO2max 回來但耐力仍差 9 %（§3.1）。
+   - 還缺：多年耐力選手的首練 vs 再練比較（Pilotto 是健康年輕人）；兩篇都只讀摘要。
+8. 所有同儕審查數字都取自摘要，沒有讀全文。（2026-10-05 新增的 Snyders 2024、Ruuskanen 2024 讀了 Europe PMC 全文；Elliott 2020 讀了原文 PDF。其餘仍是摘要。）
 
 ---
 
@@ -390,10 +527,27 @@ Z3 暫停只在恢復期內。量下滑（第 2 列）只停 Z5、不停 Z3。�
 - Lepers R, et al. Effect of 12 weeks of detraining and retraining on the cardiorespiratory fitness in a competitive master athlete: a case study. *Front Physiol* 2024;15:1508642. doi:10.3389/fphys.2024.1508642 [摘要]
 - Joo CH. The effects of short term detraining and retraining on physical fitness in elite soccer players. *PLoS One* 2018;13:e0196212. doi:10.1371/journal.pone.0196212 [摘要]
 - Lindholm ME, et al. The impact of endurance training on human skeletal muscle memory, global isoform expression and novel transcripts. *PLoS Genet* 2016;12:e1006294. doi:10.1371/journal.pgen.1006294 [摘要]
-- Elliott N, et al. Infographic. Graduated return to play guidance following COVID-19 infection. *Br J Sports Med* 2020;54:1174–1175. doi:10.1136/bjsports-2020-102637 [PMC 文字版]
+- Elliott N, et al. Infographic. Graduated return to play guidance following COVID-19 infection. *Br J Sports Med* 2020;54:1174–1175. doi:10.1136/bjsports-2020-102637 [PMC 文字版；2026-10-05 另讀原文 PDF 資訊圖：https://kyma.org/shared/content/uploads/2020/08/BJSM-Infographic-RTP-in-athletes-with-COVID.pdf]
 - Snyders C, Pyne DB, Sewry N, Hull JH, Kaulback K, Schwellnus M. Acute respiratory illness and return to sport: a systematic review and meta-analysis by a subgroup of the IOC consensus on 'acute respiratory illness in the athlete'. *Br J Sports Med* 2022;56:223–231. doi:10.1136/bjsports-2021-104719 [摘要]
 - Schwellnus M, et al. IOC consensus statement on acute respiratory illness in athletes part 1: acute respiratory infections. *Br J Sports Med* 2022. doi:10.1136/bjsports-2022-105759 [只讀摘要]
 - Schwellnus M, et al. IOC consensus statement on acute respiratory illness in athletes part 2: non-infective acute respiratory illness. *Br J Sports Med* 2022. doi:10.1136/bjsports-2022-105567 [只讀摘要]
+
+2026-10-05 補查新增：
+
+- Pilotto AM, Turner DC, Mazzolari R, et al. Human skeletal muscle possesses an epigenetic memory of high-intensity interval training. *Am J Physiol Cell Physiol* 2025;328:C258–C272. doi:10.1152/ajpcell.00423.2024 [摘要]
+- Houston ME, Bentzen H, Larsen H. Interrelationships between skeletal muscle adaptations and performance as studied by detraining and retraining. *Acta Physiol Scand* 1979;105:163–170. doi:10.1111/j.1748-1716.1979.tb06328.x [摘要]
+- Hulmi JJ, Halonen EJ, Sharples AP, et al. Human skeletal muscle possesses both reversible proteomic signatures and a retained proteomic memory after repeated resistance training. *J Physiol* 2025;603:2655–2673. doi:10.1113/jp288104 [摘要]
+- Snyders C, Dyer M, Sewry N, et al. Increased number of symptoms during the acute phase of SARS-CoV-2 infection in athletes is associated with prolonged time to return to full sports performance (AWARE VIII). *J Sport Health Sci* 2024;13:280–287. doi:10.1016/j.jshs.2023.10.005 [全文，Europe PMC PMC11116957]
+- Kaulback K, Pyne DB, Hull JH, Snyders C, et al. The effects of acute respiratory illness on exercise and sports performance outcomes in athletes – a systematic review by a subgroup of the IOC consensus group. *Eur J Sport Sci* 2023;23:1356–1374. doi:10.1080/17461391.2022.2089914 [摘要]
+- Ruuskanen O, et al. Sport and exercise during viral acute respiratory illness – time to revisit. *J Sport Health Sci* 2024;13:663–665. doi:10.1016/j.jshs.2023.12.002 [全文，Europe PMC PMC11282332]
+
+付費牆或抓不到、未讀（2026-10-05）：
+
+- Schwellnus M, Adami PE, Bougault V, Budgett R, Clemm HH, et al. IOC consensus statement on acute respiratory illness in athletes part 1: acute respiratory infections. *Br J Sports Med* 2022;56(19). PMID 35863871. BJSM 403、Europe PMC 非開放；奧會官網開放 PDF 逾時。
+- Salman D, Vishnubala D, Le Feuvre P, et al. Returning to physical activity after covid-19. *BMJ* 2021;372:m4721. doi:10.1136/bmj.m4721。付費牆（403、Europe PMC 非開放）。
+- Serrano N, Dupont-Versteegden EE, Murach KA. Muscle memory theory: a critical evaluation. *J Physiol* 2025;603:4705–4711. doi:10.1113/jp289597。Europe PMC 沒有摘要，未讀。
+- 「Current return to sports recommendations after non-severe COVID-19 from an exercise immunology perspective: a scoping review」（ScienceDirect pii S0949328X23002326）。403，未讀。
+- Pfitzinger P, Douglas S.《進階馬拉松全書》中譯本。原書未核對。
 
 ### 教練來源
 
@@ -406,5 +560,16 @@ Z3 暫停只在恢復期內。量下滑（第 2 列）只停 Z5、不停 Z3。�
 - Uphill Athlete. Aerobic Self-Assessment for Mountain Athletes. https://uphillathlete.com/aerobic-training/aerobic-anaerobic-threshold-self-assessment/
 - Uphill Athlete. Zone 2 Heart Rate Training. https://uphillathlete.com/aerobic-training/uphill-athlete-training-zones-heart-rate-calculator/
 - 台灣教練：先 Z3 後 Z5、每週 Z1 時間。
+- （2026-10-05 補查新增）
+  - Uphill Athlete. Making the Most of Your Uphill Athlete Training Plan（無署名、無日期）. https://uphillathlete.com/making-the-most-of-your-uphill-athlete-training-plan/
+  - House S. How to Train for Skiing. Uphill Athlete, 2026-09-24. https://uphillathlete.com/skiing/how-to-train-for-skiing/（`periodization-cross-sport.md` [441]）
+  - Hammond D. How to Build a Transition Period for Tactical Athletes. Uphill Athlete, 2020-01-13. https://uphillathlete.com/tactical-training/transition-period-training-tactical/
+  - House S. Continuous AeT — How and Why It Works. Uphill Athlete, 2026-06-12. https://uphillathlete.com/aerobic-training/continuous-aet-how-and-why-it-works/
+  - Uphill Athlete. MAF Method for Determining Your Aerobic Threshold（無署名、無日期）. https://uphillathlete.com/aerobic-training/maf-method-for-determining-your-aerobic-threshold/
+  - Uphill Athlete. When and How to Add High-Intensity Training: The 10 Percent Test（無署名、無日期）. https://uphillathlete.com/when-to-add-intensity-training
+  - Wallenfels L. The Athlete's Survival Guide to the Cold and Flu Season. TrainingPeaks, 2026-06-03 更新. https://www.trainingpeaks.com/blog/the-athlete-s-survival-guide-to-the-cold-and-flu-season/
+  - Schultz M. How to Stay Healthy in the Return to Ultra Training and Racing. TrainingPeaks, 2024-07-30 更新. https://www.trainingpeaks.com/blog/how-to-stay-healthy-in-the-return-to-ultra-training-and-racing/（只用來確認沒有 §8 第 6 項那句；文中「increase your training volume by just 10-30% each week with 2-4-week blocks during your build phases」是建構期，不是中斷後，不採用）
+  - Fraioli M. Going Long: An Interview with Pete Pfitzinger. The Morning Shakeout, 2025-10-17. https://themorningshakeout.com/going-long-an-interview-with-pete-pfitzinger/
+  - Beck K. Pete Pfitzinger（訪談）. MileSplit, 2005-02-23. https://fl.milesplit.com/articles/4750/pete-pfitzinger
 - WKO5 研討會筆記：`研討會 Elements of WKO5 Training Load.md:305-306, 439-449`；`…/研討會 Training and Coaching with WKO5 part 1.md:169-170`；`wko5研討會 基礎期.md:154-162`；`…/wko5研討會 強化期.md:227-228`；`…/wko研討會 巔峰期.md:443-459, 533-537`。
 - Palladino 基礎期筆記：`palladino基礎期訓練.md:48-54`。
