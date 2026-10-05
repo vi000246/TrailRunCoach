@@ -451,6 +451,7 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
     sp_cur = cur.get("specific") or {}                      # 專項期 (engine/specific_phase.py)
     recent_long = [longest, float(sp_cur.get("longest28") or 0.0)]   # the long days of the last 4 weeks
     prev_mode = cur.get("mode")
+    s_stops = cur.get("strength_stop") or []                 # 賽前停肌力 (SP-86): the A events' windows
     week = monday + dt.timedelta(weeks=1)
     while week <= until:
         kind = phase_kind(phases, week)
@@ -578,6 +579,10 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
                 TECH.apply(ss, tech, hours=hours, rates=cur.get("tss_per_category"), prefs=prefs, notes=notes)
             except Exception:              # noqa: BLE001 — never breaks the projection
                 tech = {"active": False}
+        # 賽前停肌力 (SP-86): week_plan's A-event windows, the same rule (overview.drop_strength_before_a)
+        n_notes = len(notes)
+        ss = O.drop_strength_before_a(ss, s_stops, week, notes)
+        s_note = len(notes) > n_notes
         prev_lost = lost
         drop = [s for s in ss if not s["day"] and s["kind"] != "strength"] if lost else []
         if drop:
@@ -598,7 +603,7 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
                     "provisional": week > monday + dt.timedelta(weeks=1), "why": why,
                     "sessions": [s for s in ss if s["day"]],
                     **({"notes": notes} if PR is not None or bmap or (heat_w or {}).get("active")
-                       or kind == "transition" or ph_note or tech.get("planned") is not None
+                       or kind == "transition" or ph_note or tech.get("planned") is not None or s_note
                        or b2b_info.get("post") or b2b_info.get("due") or (lc_info or {}).get("planned") else {}),
                     **({"b2b": B2B.public(b2b_info)} if b2b_info.get("due") or b2b_info.get("post") else {}),
                     **({"b2b_suggestion": b2b_sug} if b2b_sug else {}),

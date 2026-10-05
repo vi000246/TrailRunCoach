@@ -1448,6 +1448,9 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
                          fixed=b2b.get("pair"))
         sessions = [Session(**d) for d in kept]
         B2B.placed(b2b, kept)
+    # 賽前停肌力 (SP-86): no strength in an A event's last STRENGTH_STOP_DAYS days (projection: the same)
+    s_stops = strength_stops(getattr(getattr(status, "plan", None), "events", None) or (), monday)
+    sessions = drop_strength_before_a(sessions, s_stops, monday, notes)
     b2b_suggestion = B2B.suggestion(b2b, monday, next((s.day for s in sessions if s.id == "long"), None),
                                     enabled=getattr(prefs, "b2b", True) is not False)
     # ---- 陡坡健走（模擬負重） (engine/steep_hill.py): before a 百岳 / multi-day trip, one weekday
@@ -1605,4 +1608,52 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         "race_sim_suggestion": race_sim,
         # 技術地形課 (engine/technical.py, SP-74): this week's rule and the session it made
         "technical": TECH.public(tech),
+        # 賽前停肌力 (SP-86): the A events' no-strength windows, for the projection
+        "strength_stop": s_stops,
     }
+
+
+# ---- 賽前停肌力 (SP-86; Bompa & Buzzichelli p.184 / p.327) ------------------------------------
+# No strength session in the STRENGTH_STOP_DAYS days before an A event (the 減量期 + the race
+# itself): the book's 「主要比賽」, so B / C events keep theirs (applying it to them would be 推估).
+# Shared by week_plan and projection (week_plan's `strength_stop` → project_weeks), applied after
+# the placement: a strength session the week placed (課表偏好 每週肌力 / 肌力日 included) on a day
+# in the window is dropped — a reduction, so auto-adjust removes a stored one without asking.
+STRENGTH_STOP_DAYS = 14
+
+
+def strength_stops(events, since: dt.date) -> list[dict]:
+    """[{"from", "to", "race"}] (ISO, inclusive) of every A event ending on / after `since`:
+    from STRENGTH_STOP_DAYS before its first day to its last."""
+    out = []
+    for e in events or ():
+        if getattr(e, "priority", None) != "A" or e.end < since:
+            continue
+        out.append({"from": (e.start - dt.timedelta(days=STRENGTH_STOP_DAYS)).isoformat(),
+                    "to": e.end.isoformat(), "race": e.name})
+    return sorted(out, key=lambda x: x["from"])
+
+
+def drop_strength_before_a(ss: list, stops: list, monday: dt.date, notes: Optional[list] = None) -> list:
+    """`ss` without the not-done strength sessions on a day in an A event's no-strength window
+    (strength_stops; one with no day is dropped when the window touches the week), and a week
+    note when any went. Session objects or dicts."""
+    days = [(monday + dt.timedelta(days=i)).isoformat() for i in range(7)]
+    hit = {d: x for x in stops or () for d in days if x["from"] <= d <= x["to"]}
+    if not hit:
+        return ss
+    g = (lambda s, k: s.get(k)) if ss and isinstance(ss[0], dict) else getattr
+    out, gone = [], []
+    for s in ss:
+        day = g(s, "day")
+        if g(s, "kind") == "strength" and not g(s, "done") and (day in hit or not day):
+            gone.append(s)
+        else:
+            out.append(s)
+    if gone and notes is not None:
+        x = hit[min(hit)]
+        notes.append({"level": "info", "src": "strength",
+                      "text": f"A 賽事「{x['race']}」前 {STRENGTH_STOP_DAYS} 天不排肌力（{x['from'][5:]} 起，含比賽週；"
+                              f"課表偏好的每週肌力／肌力日也一樣）：把體力留給比賽——長距離耐力項目主要比賽前 2 週停肌力，"
+                              f"停 4 週以上才會退步（Bompa & Buzzichelli）"})
+    return out

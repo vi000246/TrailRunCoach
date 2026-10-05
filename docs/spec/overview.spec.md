@@ -1,6 +1,6 @@
 # Module Spec: overview
 
-> **Last Updated**: 2026-10-04
+> **Last Updated**: 2026-10-05
 > **Status**: Active
 > **Domain Layer**: Core Domain
 
@@ -281,7 +281,17 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
   open the short intensity 4×3' (「短強度 4×3 分」: its 98–102 % CP band reads as 有氧間歇 to `family_of`,
   so its title is left as it was, SP-79). Event week: the race.
 - Strength ×2 in base / transition / recovery or when the `strength` indicator is bad / watch,
-  else ×1 (not counted in the hours).
+  else ×1 (not counted in the hours). **No strength in the 14 days before an A event**
+  (`STRENGTH_STOP_DAYS`: the 減量期 and the race itself; SP-86, Bompa & Buzzichelli
+  《Periodization Training for Sports》 p.184 — long endurance events can stop strength 2 weeks
+  before the main race — and p.327 — none in the taper's second week). After the placement,
+  `drop_strength_before_a` (`backend/engine/overview.py:1637`) removes every not-done strength
+  session on a day from `strength_stops` (`backend/engine/overview.py:1625`: each A event's first
+  day − 14 to its last), 課表偏好 每週肌力 / 肌力日 included, with a week note (`src: strength`);
+  a week partly inside keeps the strength days before the window. B / C events are unchanged
+  (the book's 「主要比賽」; applying it to them would be 推估). week_plan returns the windows as
+  `strength_stop` and the projection applies the same rule per week. Removing a stored strength
+  session is a reduction, so auto-adjust does it without asking (plan-auto.spec.md).
 - Easy runs fill the remaining minutes in 40–60 min sessions; in base the first one carries
   8×10 s hill strides.
 - Targets per session come from `zones.training_targets` (CP / LTHR / AeT, estimate-aware),
@@ -1564,3 +1574,4 @@ deleted / superseded) are returned as reconcile `changes` (`backend/engine/recon
 | 2026-10-04 | change | SP-73 follow-up | Zone 3 gate / re-entry block: 轉換期 days are not a running break (no block, no 7-day gap, no 21-day re-lock; plan-auto.spec.md) |
 | 2026-10-04 | change | SP-39 follow-up | Zone 5 UA path: no LTHR age limit; `threshold_confidence.lthr_evidence` (evidence since the LTHR date) feeds `quality_gate.lthr_invalid` (plan-auto.spec.md) |
 | 2026-10-04 | sp-79-quality-families | SP-79 | 強度課's three families in the main UI: `plan_sessions.family` (picked in the 課表 editor's 類型 — 有氧間歇／VO2max 間歇／速度 — else read from the steps), a mismatch hint, per-family chip colours and legend, 課表統計 by family; generated titles name the family and older stored titles are mapped on read (`display_title` → `interval_library.renamed`), so the watch names and the calendar feed SUMMARY follow (a pushed session with an old name is re-pushed once) |
+| 2026-10-05 | feature | SP-86 | No strength in the 14 days before an A event (減量期 + race week; Bompa & Buzzichelli p.184 / p.327): `strength_stops` / `drop_strength_before_a` in week_plan and the projection (`strength_stop`), preferences included, a week note; B / C events unchanged |
