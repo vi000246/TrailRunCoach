@@ -122,6 +122,8 @@
   "feas.k_finish": "Finish {f} h (cutoff {c})",
   "feas.k_b2b": "Back-to-back long days: {n}",
   "feas.k_step": "Class {a} → {b}",
+  "feas.k_vam": "Climb needs {n} m/h (you {s})",
+  "feas.k_power": "Climb power {w} W/kg",
   "feas.chart": "Build-phase charts →",
   "feas.k_week_day": "Weekly training: {p}% of the hardest day",
   "feas.k_long_day": "Longest outing: {p}% of the hardest day"

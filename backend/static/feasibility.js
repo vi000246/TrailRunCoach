@@ -62,6 +62,8 @@
       else if (c.id === "cutoff" && c.finish_h != null) t = T("k_finish", { f: f1(c.finish_h), c: f1(c.cutoff_h) });
       else if (c.id === "b2b" && c.count != null) t = T("k_b2b", { n: c.count });
       else if (c.id === "step" && c.best_class) t = T("k_step", { a: c.best_class, b: c.race_class });
+      else if (c.id === "vam" && c.need != null) t = T("k_vam", { n: c.need, s: c.steady });
+      else if (c.id === "power" && c.w_per_kg != null) t = T("k_power", { w: c.w_per_kg });
       if (t) out.push(`<span title="${esc(c.text)}">${esc(t)}</span>`);
     }
     return out.join("");

@@ -33,6 +33,20 @@ Only advice — nothing here changes the plan or the event. Each check gives a l
   late     < 21 days to the race: late (the fitness window has closed — Koop).
 「over」 comes only from the cutoff / turnaround and 跨級 (SP-112); < 3 weeks is its own 「late」.
 
+百岳 only (SP-112 items 6–7), never over:
+  vam      the climb rate the hardest day needs (its climb ÷ the uphill share of its time — the
+           turnaround hours when set, else the predicted hours; the uphill share = the climb's part of
+           the day's EP, 推估) against the athlete's own rates from hikehr's windows (100 m, > 1.5
+           km/h, ≥ 10 %, HR ≥ AeT): 「走得順」 = the median VAM at AeT … 0.95 LTHR, 「走得辛苦」 = at ≥ 0.95
+           LTHR; each shrunk towards 山本 2015's 430 m/h (無雪期登山, pack ~10 % of body weight; 510 m/h
+           for the hard rate, 推估) with k = CLIMB_K windows (terrain_calib's rule). Moved to the
+           route's top altitude by the athlete's own altitude factor (hikehr.altitude_factor) when it
+           is known, else Wehrlin & Hallén 2006 (−6.3 % per 1000 m); by the pack (山本: 0 → 10 → 20 %
+           of body weight = 475 → 430 → 395 m/h, 推估) when the event has one. ≤ steady ok, else tight.
+  power    with a running power meter (plan profile power_meter + a CP): CP ÷ body weight ≥ 1.5 W/kg
+           ok, else tight (Burtscher 2004: a pack at 300 m/h up to 3,500 m needs ~1.2–1.5 W/kg below
+           the anaerobic threshold). Not shown without a power meter.
+
 The long day is shown, not graded (Koop: 20–80 % of the race; past ~6 h coaches stop the
 long run — §1). C races are training days: not assessed.
 
@@ -124,6 +138,89 @@ def base_week(hist: list[dict]) -> dict:
         return {"km": 0.0, "climb_m": 0.0, "hours": 0.0}
     n = len(hist)
     return {k: max(sum(h[k] for h in hist) / n, hist[-1][k]) for k in ("km", "climb_m", "hours")}
+
+
+CLIMB_K = 10                 # terrain_calib's shrinkage strength
+YAMAMOTO_STEADY = 430.0      # m/h, 無雪期登山 with ~10 % of body weight (山本 2015)
+YAMAMOTO_HARD = 510.0        # m/h, the table's fastest row (雪山岩場) as the hard default — 推估
+YAMAMOTO_PACK = ((0.0, 475.0), (0.10, 430.0), (0.20, 395.0))   # pack share of body weight → m/h
+CLIMB_POWER_OK = 1.5         # W/kg (Burtscher 2004)
+CLIMB_POWER_LOW = 1.2
+SRC_VAM = N_("爬升速度：山本正嘉 2015（健行 350、無雪期登山 430、雪山岩場 510 m/h，背包約體重 10 %）只當資料不夠時的預設；"
+             "你的速度用心率分區的 100 m 爬坡段（AeT 到 0.95 LTHR = 走得順，≥ 0.95 LTHR = 走得辛苦）；"
+             "海拔：你的海拔因子，沒有時用 Wehrlin & Hallén 2006（每 1000 m −6.3 %）")
+SRC_POWER = N_("爬坡功率：Burtscher 2004——背包每小時爬 300 m（到 3,500 m）約需 1.2–1.5 W/kg，而且要在無氧閾值以下")
+
+
+def _shrink(v: Optional[float], n: int, prior: float) -> float:
+    return prior if not v or n <= 0 else (n * v + CLIMB_K * prior) / (n + CLIMB_K)
+
+
+def pack_factor(share: float) -> float:
+    """山本's m/h at a pack share of body weight ÷ the 10 % row (linear between the rows)."""
+    pts = YAMAMOTO_PACK
+    share = min(max(share, pts[0][0]), pts[-1][0])
+    for (a, va), (b, vb) in zip(pts, pts[1:]):
+        if a <= share <= b:
+            return (va + (vb - va) * (share - a) / (b - a)) / pts[1][1]
+    return 1.0
+
+
+def climb_rates(wins: list[dict]) -> dict:
+    """The athlete's climb rates from hikehr windows ({"vam", "hr", "z", "lthr"}): {"steady" / "hard":
+    {"vam" (median), "n", "z" (median altitude)}, "alt_pct" (% per 1000 m, None = not enough)}."""
+    from statistics import median
+    from backend.engine.racepower import hikehr as HH
+    out = {}
+    for band, keep in (("steady", lambda w: w["hr"] < 0.95 * w["lthr"]), ("hard", lambda w: w["hr"] >= 0.95 * w["lthr"])):
+        ws = [w for w in wins or () if w.get("lthr") and keep(w)]
+        zs = [w["z"] for w in ws if w.get("z") is not None]
+        out[band] = {"vam": float(median(w["vam"] for w in ws)) if ws else None, "n": len(ws),
+                     "z": float(median(zs)) if zs else None}
+    alt = HH.altitude_factor(wins or [], 0.0, 0.0) if wins else {"enough": False}
+    out["alt_pct"] = alt.get("pct_per_km") if alt.get("enough") else None
+    return out
+
+
+def vam_check(e, hd: dict, rates: dict, top_m: Optional[float], weight: Optional[float], div: float) -> dict:
+    """The 百岳 climb-rate reference (SP-112 item 6): {"level", "text", "need", "steady", "hard", ...}."""
+    hours = float(e.cutoff_hours) if getattr(e, "cutoff_hours", None) else float(hd["hours"] or 0.0)
+    eff = ep(hd["km"], hd["climb_m"], div)
+    share = (hd["climb_m"] / div) / eff if eff else 0.0
+    need = hd["climb_m"] / (hours * share) if hours > 0 and share > 0 else None
+    notes = []
+    vals = {}
+    for band, prior in (("steady", YAMAMOTO_STEADY), ("hard", YAMAMOTO_HARD)):
+        r = (rates or {}).get(band) or {}
+        v = _shrink(r.get("vam"), int(r.get("n") or 0), prior)
+        if top_m is not None and r.get("z") is not None and top_m > r["z"]:
+            dz = (top_m - r["z"]) / 1000.0
+            pct = rates.get("alt_pct")
+            v *= (1 + pct / 100.0) ** dz if pct is not None else max(0.0, 1 - 0.063 * dz)
+        vals[band] = v
+    n = int(((rates or {}).get("steady") or {}).get("n") or 0)
+    notes.append(_("你的資料 {n} 段（往山本的預設收縮）", n=n) if n >= CLIMB_K else
+                 _("資料不足（{n} 段），主要用山本的預設 430 m/h", n=n))
+    if top_m is not None:
+        notes.append(_("換算到路線最高點 {z:.0f} m（{how}）", z=top_m,
+                       how=_("你的海拔因子") if (rates or {}).get("alt_pct") is not None else _("Wehrlin & Hallén")))
+    if getattr(e, "pack_kg", None) is not None and weight:
+        f = pack_factor(float(e.pack_kg) / float(weight))
+        vals = {k: v * f for k, v in vals.items()}
+        notes.append(_("背包 {kg:g} kg（體重的 {p:.0%}）", kg=e.pack_kg, p=float(e.pack_kg) / float(weight)))
+    else:
+        notes.append(_("沒有背包資料"))
+    if need is None:
+        return {"level": "unknown", "text": _("算不出需要的爬升速度（沒有爬升或時間）"), "notes": notes}
+    lv = "ok" if need <= vals["steady"] else "tight"
+    txt = _("最難那天要每小時爬約 {need:.0f} m；你走得順約 {s:.0f} m/h、走得辛苦約 {h:.0f} m/h",
+            need=need, s=vals["steady"], h=vals["hard"])
+    if need > vals["hard"]:
+        txt += _("：要比你目前最用力的爬升還快，撤不撤退看撤退時間那項")
+    elif lv == "tight":
+        txt += _("：要靠接近閾值的強度撐")
+    return {"level": lv, "text": txt + "（" + "，".join(notes) + "）", "need": round(need), "steady": round(vals["steady"]),
+            "hard": round(vals["hard"]), "n": n}
 
 
 def divisor() -> float:
@@ -289,10 +386,12 @@ def summit_eta(course: dict, hours: list[float], summit_km: float, pieces: Optio
 # ---------------------------------------------------------------------------
 
 def assess(e, line: Optional[dict], today: dt.date, hist: list[dict], summit: Optional[dict] = None,
-           best: Optional[dict] = None) -> dict:
+           best: Optional[dict] = None, climb: Optional[dict] = None, power: Optional[dict] = None) -> dict:
     """The verdict for event `e` (planning.Event) with its race line (race_refs.race_line) and
     the last weeks (weekly_history). `summit`: summit_eta()'s result for a 百岳 with a summit.
-    `best`: best_day_ep of the last STEP_MONTHS months (the 跨級 check; None = not checked)."""
+    `best`: best_day_ep of the last STEP_MONTHS months (the 跨級 check; None = not checked).
+    百岳 only: `climb` {"rates" (climb_rates), "top_m", "weight"} — the climb-rate reference; `power`
+    {"cp", "kg"} with a running power meter — the climb-power check (None = not shown)."""
     out = {"event_id": e.id, "name": e.name, "date": e.date, "priority": e.priority, "kind": e.kind,
            "days": int(e.days or 1),
            "days_to": (e.start - today).days, "checks": [], "suggestions": [], "src": [_(SRC_UA), _(SRC_WEEK)]}
@@ -394,6 +493,20 @@ def assess(e, line: Optional[dict], today: dt.date, hist: list[dict], summit: Op
             if lv == "over":
                 out["suggestions"].insert(0, _("先跑一場低一級（{cls}）的比賽，或把這場改成 B／C 賽",
                                                cls=ITRA_CLASSES[max(0, rc - 1)][0]))
+        # 百岳: the climb rate and the climb power (SP-112 items 6–7) — never over
+        if e.kind == "baiyue" and climb is not None:
+            vc = vam_check(e, hd, climb.get("rates") or {}, climb.get("top_m"), climb.get("weight"), divisor())
+            check("vam", vc["level"], vc["text"], **{k: vc[k] for k in ("need", "steady", "hard", "n") if k in vc})
+            out["src"].append(_(SRC_VAM))
+        if e.kind == "baiyue" and power and power.get("cp") and power.get("kg"):
+            wkg = float(power["cp"]) / float(power["kg"])
+            lv = "ok" if wkg >= CLIMB_POWER_OK else "tight"
+            txt = _("CP {cp:.0f} W ÷ 體重 {kg:.1f} kg = {w:.2f} W/kg", cp=power["cp"], kg=power["kg"], w=wkg)
+            txt += (_("：夠背包爬坡（≥ {a:g}）", a=CLIMB_POWER_OK) if lv == "ok" else
+                    _("：在 {b:g}–{a:g} 之間，爬坡會吃力", a=CLIMB_POWER_OK, b=CLIMB_POWER_LOW) if wkg >= CLIMB_POWER_LOW else
+                    _("：低於 {b:g}，背包爬坡會很吃力", b=CLIMB_POWER_LOW))
+            check("power", lv, txt, w_per_kg=round(wkg, 2))
+            out["src"].append(_(SRC_POWER))
         # the long day: shown, not graded
         cut = getattr(e, "cutoff_hours", None)
         if cut and e.kind == "baiyue":
@@ -583,9 +696,35 @@ def event_summit(e, course: dict, hours: Optional[list[float]]) -> Optional[dict
     return summit_eta(course, hours, skm, pieces)
 
 
+def baiyue_inputs(plan, ds, today: dt.date, e) -> tuple[Optional[dict], Optional[dict]]:
+    """(climb, power) for a 百岳's assess(): the hikehr windows' rates, the GPX's top, the body weight;
+    CP ÷ weight only with a running power meter in the profile and a CP row. Errors → None."""
+    climb = power = None
+    kg = plan.weight_on(today) if plan is not None else None
+    try:
+        from backend.engine.racepower import athlete as A
+        wins, _th = A.hike_hr_windows(ds, A.hike_workouts(ds, today))
+        top = None
+        try:
+            from backend.engine import event_gpx as EG
+            row = EG.get(e.id)
+            top = float(row["z_max"]) if row and row.get("z_max") is not None else None
+        except Exception:                   # noqa: BLE001
+            top = None
+        climb = {"rates": climb_rates(wins), "top_m": top, "weight": kg}
+    except Exception:                       # noqa: BLE001 — the other checks still run
+        climb = None
+    cp = plan.threshold_on("cp", today) if plan is not None else None
+    if (getattr(plan, "profile", None) or {}).get("power_meter") and cp and kg:
+        power = {"cp": float(cp), "kg": float(kg)}
+    return climb, power
+
+
 def races(plan, ds, today: dt.date, event_id: Optional[str] = None,
-          predict: Optional[Callable] = None, gpx: Optional[Callable] = None) -> list[dict]:
-    """The verdicts of the upcoming A / B races (or the one `event_id`, any grade)."""
+          predict: Optional[Callable] = None, gpx: Optional[Callable] = None,
+          baiyue: Optional[Callable] = None) -> list[dict]:
+    """The verdicts of the upcoming A / B races (or the one `event_id`, any grade). `baiyue(e)` →
+    (climb, power) for a 百岳 (tests); None = baiyue_inputs."""
     from backend.engine.panels import race_refs as RR
     predict = predict or RR.calculator_hours
     gpx = gpx or RR.stored_course
@@ -606,7 +745,10 @@ def races(plan, ds, today: dt.date, event_id: Optional[str] = None,
             line = RR.race_line(e, hs, _("賽事計算器預測的完賽時間"), course)
             if line is not None:
                 summit = event_summit(e, course, [d["hours"] for d in line["per_day"]])
-        r = assess(e, line, today, hist[-BASE_WEEKS:], summit, best)
+        climb = power = None
+        if e.kind == "baiyue":
+            climb, power = baiyue_inputs(plan, ds, today, e) if baiyue is None else baiyue(e)
+        r = assess(e, line, today, hist[-BASE_WEEKS:], summit, best, climb, power)
         if not r.get("skipped"):
             r["readiness"] = readiness(e, line, today, hist, acts)
         out.append(r)

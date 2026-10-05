@@ -291,6 +291,10 @@
     "draft": true,
     "src": "backend/engine/hr_profile.py:79"
   },
+  "CP {cp:.0f} W ÷ 體重 {kg:.1f} kg = {w:.2f} W/kg": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:504"
+  },
   "CP {cp} W 不合理": {
     "draft": true,
     "src": "backend/api/plan.py:764"
@@ -486,6 +490,10 @@
   "WKO5 預設值": {
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:290"
+  },
+  "Wehrlin & Hallén": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:206"
   },
   "W′ {wp} J 不合理": {
     "draft": true,
@@ -1051,6 +1059,10 @@
     "draft": true,
     "src": "backend/engine/overview.py:1034"
   },
+  "你的海拔因子": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:206"
+  },
   "你的測試 {day}": {
     "draft": true,
     "src": "backend/engine/zones.py:223"
@@ -1058,6 +1070,10 @@
   "你的設定 {day}": {
     "draft": true,
     "src": "backend/engine/hr_profile.py:210"
+  },
+  "你的資料 {n} 段（往山本的預設收縮）": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:202"
   },
   "你的越野跑 RE 中位數（{n} 次，effort km = km + 爬升/{div:g}）": {
     "draft": true,
@@ -1991,6 +2007,10 @@
     "draft": true,
     "src": "backend/engine/interval_library.py:806"
   },
+  "換算到路線最高點 {z:.0f} m（{how}）": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:205"
+  },
   "撐 120 秒的心率（推估）": {
     "draft": true,
     "src": "backend/engine/hr_profile.py:177"
@@ -2214,6 +2234,10 @@
   "最近的穩定跑只有 {n} 次落在基準線的功率範圍（{lo:.0f}–{hi:.0f} W）": {
     "draft": true,
     "src": "backend/engine/zone_events.py:491"
+  },
+  "最難那天要每小時爬約 {need:.0f} m；你走得順約 {s:.0f} m/h、走得辛苦約 {h:.0f} m/h": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:216"
   },
   "有 GPX 時橫軸是路線距離（km）：距離段照它的距離放，時間、直到按下計圈、負荷、RPE 段依你每段的預估速度換算成距離（越野用努力距離：km＋爬升÷100），是推估": {
     "draft": false,
@@ -2507,6 +2531,10 @@
     "draft": true,
     "src": "backend/engine/workout_steps.py:1524"
   },
+  "沒有背包資料": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:212"
+  },
   "沒有資料庫": {
     "draft": true,
     "src": "backend/engine/race_calc_store.py:91"
@@ -2691,6 +2719,10 @@
     "draft": true,
     "src": "backend/engine/terrain_calib.py:75"
   },
+  "爬升速度：山本正嘉 2015（健行 350、無雪期登山 430、雪山岩場 510 m/h，背包約體重 10 %）只當資料不夠時的預設；你的速度用心率分區的 100 m 爬坡段（AeT 到 0.95 LTHR = 走得順，≥ 0.95 LTHR = 走得辛苦）；海拔：你的海拔因子，沒有時用 Wehrlin & Hallén 2006（每 1000 m −6.3 %）": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:149"
+  },
   "爬升：{a} m ／ 計畫 {p} m": {
     "draft": true,
     "src": "backend/engine/workout_review.py:2727"
@@ -2698,6 +2730,10 @@
   "爬坡功率上限 110 % 是經驗法則（非研究結論）；下坡讓功率自然掉下來": {
     "draft": true,
     "src": "backend/engine/racepower/calc.py:360"
+  },
+  "爬坡功率：Burtscher 2004——背包每小時爬 300 m（到 3,500 m）約需 1.2–1.5 W/kg，而且要在無氧閾值以下": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:152"
   },
   "現在不是基礎期": {
     "draft": true,
@@ -2855,6 +2891,10 @@
     "draft": true,
     "src": "backend/engine/quality_gate.py:2134"
   },
+  "算不出需要的爬升速度（沒有爬升或時間）": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:214"
+  },
   "範本名稱不能空白": {
     "draft": false,
     "src": "backend/engine/user_templates.py:185"
@@ -2942,6 +2982,10 @@
   "耐久": {
     "draft": true,
     "src": "backend/engine/workout_review.py:2669"
+  },
+  "背包 {kg:g} kg（體重的 {p:.0%}）": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:210"
   },
   "背負要在 0–40 kg": {
     "draft": true,
@@ -3090,6 +3134,10 @@
   "資料不足": {
     "draft": true,
     "src": "backend/engine/race_feasibility.py:36"
+  },
+  "資料不足（{n} 段），主要用山本的預設 430 m/h": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:203"
   },
   "資料不足，算不出結果（心率斷掉或不到 30 分鐘）": {
     "draft": false,
@@ -3903,9 +3951,21 @@
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:594"
   },
+  "：低於 {b:g}，背包爬坡會很吃力": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:507"
+  },
   "：同級或更低": {
     "draft": true,
     "src": "backend/engine/race_feasibility.py:391"
+  },
+  "：在 {b:g}–{a:g} 之間，爬坡會吃力": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:506"
+  },
+  "：夠背包爬坡（≥ {a:g}）": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:505"
   },
   "：強度課總量上限 {total:.0f} 分（週量 {share:.0%}）扣掉後剩 {left:.0f} 分給間歇": {
     "draft": true,
@@ -3914,6 +3974,14 @@
   "：爬升練得比距離少，不到一半（推估）": {
     "draft": true,
     "src": "backend/engine/race_feasibility.py:366"
+  },
+  "：要比你目前最用力的爬升還快，撤不撤退看撤退時間那項": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:219"
+  },
+  "：要靠接近閾值的強度撐": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:221"
   },
   "：高 {n} 級，跳太多了": {
     "draft": true,
