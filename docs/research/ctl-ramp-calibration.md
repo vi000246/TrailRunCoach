@@ -190,7 +190,7 @@ Stryd 和 intervals.icu 都指出跑步的負荷不只是代謝（機械、衝�
 ### 4.4 證據補充（第二輪複查）
 
 - TrainingPeaks 的馬拉松規劃文章：多數跑者每週 CTL +4–6 不會太吃力（範例 CTL 68–75，約 5–9 %）；Couzens（三鐵）給一般上班族選手 +3–5／週。兩者都比 Friel 低，也都在 10 % 注意線以下（教練／平台，沒有說用哪一種 TSS）。
-- 週量增幅這條護欄的證據比想像中弱：2025 年 BJSM 的大型研究（5,205 位跑者）發現「這週對上週」的比例跟受傷沒有關係，有關係的是**單次跑步距離超過過去 30 天最長那次的 10 % 以上**（同儕審查，只讀了摘要）。這條 app 目前沒有，建議另開一張單。
+- 週量增幅這條護欄的證據比想像中弱：2025 年 BJSM 的大型研究（5,205 位跑者）發現「這週對上週」的比例跟受傷沒有關係，有關係的是**單次跑步距離超過過去 30 天最長那次的 10 % 以上**（同儕審查，2026-10-05 讀了全文）。SP-66 已加上這條：排課的長跑 ≤ 過去 30 天最長的 110 %，跑完超過的在「最長單次」提醒（`load_guard.LONG_CAP`）。全文另外寫到：週對週比例的 HRR 沒有顯著（> 100 % 時 0.91，p = 0.29），急慢性負荷比的跳升反而和較低的受傷率有關（> 100 % 時 0.75）。週量增幅護欄要維持「擋」還是改「提醒」，留給使用者決定。
 
 ## 5. 程式位置（SP-63 已實作）
 
@@ -236,4 +236,4 @@ Stryd 和 intervals.icu 都指出跑步的負荷不只是代謝（機械、衝�
 - Nielsen 2014、Damsted 2019（週量）：`docs/research/unsourced-rules.md:363`（同儕審查）
 - TrainingPeaks, *Planning for a marathon PR with CTL and the ATP tool* — https://www.trainingpeaks.com/blog/planning-for-a-marathon-pr-with-fitness-ctl-and-the-atp-tool/ （平台，第二輪讀過）
 - Couzens, *CTL ramp rates, TSB floors & loading patterns* — https://www.alancouzens.com/blog/CTLramp.html （教練，第二輪讀過）
-- Frandsen 等 2025, *How much running is too much?*（BJSM）— https://portal.findresearcher.sdu.dk/en/publications/how-much-running-is-too-much-identifying-high-risk-running-sessio/ （同儕審查，只讀了摘要）
+- Frandsen 等 2025, *How much running is too much?*（BJSM）— https://portal.findresearcher.sdu.dk/en/publications/how-much-running-is-too-much-identifying-high-risk-running-sessio/ ；全文 https://pmc.ncbi.nlm.nih.gov/articles/PMC12421110 （同儕審查，已讀全文）

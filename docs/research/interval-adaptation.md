@@ -560,7 +560,7 @@
   - 原本「比 8 週中位數快」就算，太敏感。HRR60 單堂雜訊約 25%（約 9–11 bpm，§3.1），跟 f-OR 的 +8±5 bpm（Aubry 2015）一樣大。
   - 改成：`drop60` 比 8 週中位數快 **≥ 25%**（Buchheit 2014 的 CV；當門檻屬推估），**而且**連續 2 堂都這樣（Buchheit 2014 引 Brink 2010「2–3 consecutive days/weeks」），**而且**功率沒達標或 RPE 偏高。
   - 只比**同規格**的課（同每趟時間、同組休、同恢復方式）。徐國峰文字版和 Daanen 2012 都要求條件一致。
-  - 影響：`quality_gate.py`（S3 的 `interval_outcome`）。這條目前程式裡還沒做，是改提案，不是改既有行為。
+  - 影響：`quality_gate.py`（S3 的 `interval_outcome`）。**SP-110 已實作**（2026-10-05）：`quality_gate.dose_step` 的 `fatigue_check`；同規格＝每趟秒數、組休秒數、恢復方式（`spec_key`）；RPE 還沒記錄，第 3 條只看功率（`interval_outcome` 的 `power_ok`）；觸發時當未適應，原因寫進下一堂的說明和「間歇門檻」狀態。
 
 **心率煞車（邊界列的 `aet60_share`）的補充（2026-10-05 補查）：**
 - 現在的實作（`quality_gate.interval_outcome`、`AET60_MIN_SHARE = 0.5`）已經是「只踩煞車、結果是邊界」，方向跟補查結果一致，**不用改**。

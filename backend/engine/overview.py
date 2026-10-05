@@ -1300,9 +1300,11 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     goal_d = (goals["targets"].get("climb_per_km") or {}).get("value")
     mountain_goal = not road and (bool(goal_d) or any(e.kind in ("race", "baiyue") for e in status.plan.events
                                                       if e.end >= today))
-    longest28 = max((moving_s(w) for w in workouts_between(ds, today - dt.timedelta(days=28),
+    # the longest foot session of the last LG.LONG_DAYS (SP-66, Frandsen 2025: 30 days; was 28 days
+    # incl. rides — a ride is no reference for a run); the name is kept (specific_phase's "longest28")
+    longest28 = max((moving_s(w) for w in workouts_between(ds, today - dt.timedelta(days=LG.LONG_DAYS),
                                                           today + dt.timedelta(days=1))
-                     if category(w) in ENDURANCE), default=0.0) / 60.0
+                     if category(w) in FOOT), default=0.0) / 60.0
     minutes_total = hours * 60.0
     sessions: list[Session] = []
     # 間歇門檻 (engine/quality_gate.py): status.i_gate's result; the method, this
@@ -1337,11 +1339,19 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     test_s = CPP.session_for(protocol) if test_due else None      # race: nothing scheduled
     # the AeT test: base phase, a reason (quality_gate.aet_test_reason — B3 and the Z5
     # lifecycle; no fixed cadence), never the CP-test week; its protocol from 課表偏好
+    # A 賽後重新打底 (SP-116): a test from before the rebuild doesn't hold it back, and the test is
+    # the 間歇門檻's own (xu_drift → 徐國峰 90 分, friel_drift → Friel 60 分)
+    aet_reason = gate.get("aet_test_reason") or {}
+    last_aet = tx.get("aet_last_test")
+    if aet_reason.get("code") == "rebase" and last_aet and str(last_aet)[:10] < aet_reason["from"]:
+        last_aet = None
     aet_due = test_s is None and (days_to is None or days_to > 10) and not in_reentry \
         and mode != "recovery_week" and AT.due(
-        today, kind, gate.get("base_start"), gate.get("aet_test_reason"), tx.get("aet_last_test"))
-    aet_proto = AT.resolve_protocol(getattr(prefs, "aet_test_protocol", None) or "auto",
-                                    getattr(prefs, "cap_weekday", None),
+        today, kind, gate.get("base_start"), gate.get("aet_test_reason"), last_aet)
+    aet_pref = getattr(prefs, "aet_test_protocol", None) or "auto"
+    if aet_reason.get("code") == "rebase":
+        aet_pref = {"xu_drift": "xu90", "friel_drift": "friel"}.get(gate.get("mode"), aet_pref)
+    aet_proto = AT.resolve_protocol(aet_pref, getattr(prefs, "cap_weekday", None),
                                     getattr(prefs, "long_cap", None) if prefs is not None else None)
     # strength: 2 a week outside the season, 1 in it — once a week kept cyclists' strength for 13 weeks
     # (Rønnestad 2010, periodization-cross-sport.md §4.7 [407])
@@ -1366,10 +1376,15 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         if kind == "specific" and sp.get("active"):
             long_min = SP.long_minutes(sp, longest28)
         elif kind == "specific" and goal_h:
-            long_min = max(90.0, min(goal_h * 0.7 * 60.0, max(longest28, 60.0) * 1.15))
+            long_min = max(90.0, min(goal_h * 0.7 * 60.0, max(longest28, 60.0) * LG.LONG_CAP))
         else:
-            long_min = max(60.0, min(0.30 * minutes_total, max(longest28, 60.0) * 1.15))
+            long_min = max(60.0, min(0.30 * minutes_total, max(longest28, 60.0) * LG.LONG_CAP))
         long_min = min(long_min, 0.5 * minutes_total) if minutes_total >= 120 else long_min
+        # SP-66: ≤ +10 % over the longest of 30 days wins over the 60 / 90-min floors (Frandsen 2025)
+        capped, cut = LG.cap_long(long_min, longest28)
+        if cut:
+            notes.append({"level": "info", "src": "long_cap", "text": LG.cap_note(long_min, longest28)})
+            long_min = capped
         if in_reentry:
             # the longest run before the break × the block's % (6–13 days: ≤ 90 min) — detraining.md §6.2
             fr = max((RE.frac_on(rp, monday + dt.timedelta(days=i)) or 0.0) for i in range(7)) or 1.0
@@ -1654,6 +1669,13 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     # 賽前停肌力 (SP-86): no strength in an A event's last STRENGTH_STOP_DAYS days (projection: the same)
     s_stops = strength_stops(getattr(getattr(status, "plan", None), "events", None) or (), monday, phs)
     sessions = drop_strength_before_a(sessions, s_stops, monday, notes)
+    # 生病 (SP-117, engine/injuries.illness_rule): a cold = Z1 recovery runs only, a fever = no run
+    # until a day after the symptoms, then a recovery-pace first run
+    try:
+        from backend.engine import injuries as INJ
+        sessions = illness_apply(sessions, INJ.load_events(), cap_txt)
+    except Exception:                       # noqa: BLE001 — the plan must still build
+        pass
     if t_ctx and kind == "taper":
         n = taper_climb_note(t_ctx, t_ref.get("climb"), hours / t_ref["hours"] if t_ref.get("hours") else None)
         if n:
@@ -1866,6 +1888,71 @@ def strength_stops(events, since: dt.date, phases: Optional[list] = None) -> lis
         t0 = P.taper_start(phases or (), e)
         out.append({"from": t0.isoformat(), "to": e.end.isoformat(), "race": e.name, "days": (e.start - t0).days})
     return sorted(out, key=lambda x: x["from"])
+
+
+def _monday_of(iso: str) -> str:
+    d = dt.date.fromisoformat(iso[:10])
+    return (d - dt.timedelta(days=d.weekday())).isoformat()
+
+
+def illness_apply(ss: list, events: list, cap_txt: str = "") -> list:
+    """The week's not-done sessions under a 生病 event of the 傷病紀錄 (SP-117; injuries.illness_rule):
+    on an "off" day (fever, or the day after it) no run and no strength; on a "z1" day (cold
+    symptoms) every run becomes a Z1 recovery run ≤ ILL_RUN_MAX_MIN (no interval, test, long run
+    or strides); the first run on or after a "first" day (back after a fever) is a recovery-pace
+    run ≤ FIRST_RUN_MAX_MIN. The week note is injuries.week_notes'. Session objects; `ss` unchanged
+    without an illness."""
+    from backend.engine import injuries as INJ
+    if not any(INJ.is_illness(e) for e in events or ()):
+        return ss
+
+    def rule(s):
+        return INJ.illness_rule(events, dt.date.fromisoformat(s.day)) if s.day and not s.done else None
+
+    def recover(s, cap: float, title: str, why: str):
+        m = int(s.minutes or 0)
+        nm = int(min(m, cap) // 5 * 5) or m
+        s.tss = round(float(s.tss or 0.0) * (nm / m if m else 1.0) * 0.8, 1)
+        s.kind, s.title, s.minutes = "easy", title, nm
+        s.target, s.detail, s.source = "", why, ""
+        s.terrain = "road" if s.terrain in ("trail", "hike") else s.terrain      # flat, no climbing
+        for k in _VARIANT_KEYS:
+            setattr(s, k, None)
+        s.protocol = None
+    out = []
+    for s in ss:
+        r = rule(s)
+        if r is None:
+            out.append(s)
+        elif r["rule"] == "off" and (s.kind in RUN_KINDS or s.kind == "strength"):
+            continue
+        elif r["rule"] == "z1" and s.kind in RUN_KINDS:
+            recover(s, INJ.ILL_RUN_MAX_MIN, _("恢復跑（心率 1 區）"),
+                    _("{label}：心率 1 區{cap}，不加速、不衝坡；{src}", label=r["label"],
+                      cap=_("（不超過{cap}）", cap=cap_txt) if cap_txt else "", src=r["src"]))
+            out.append(s)
+        else:
+            out.append(s)
+    for e in events:
+        # back after a fever: the first run on or after the day after the symptoms (in this week)
+        if not (INJ.is_illness(e) and e.get("illness") == "fever" and e.get("status") == "resolved"
+                and e.get("resolved_date")):
+            continue
+        f = (dt.date.fromisoformat(e["resolved_date"][:10]) + dt.timedelta(days=INJ.FEVER_WAIT_DAYS)).isoformat()
+        days = sorted(s.day for s in out if s.day)
+        if not days:
+            continue
+        wk = dt.date.fromisoformat(_monday_of(days[0]))
+        if not wk.isoformat() <= f <= (wk + dt.timedelta(days=6)).isoformat() or \
+                any(s.done and s.kind in RUN_KINDS and s.day and s.day >= f for s in out):
+            continue
+        nxt = next((s for s in sorted(out, key=lambda x: x.day or "9") if not s.done and s.kind in RUN_KINDS
+                    and s.day and s.day >= f), None)
+        if nxt is not None:
+            recover(nxt, INJ.FIRST_RUN_MAX_MIN, _("恢復跑（發燒後第一次）"),
+                    _("發燒好了之後的第一次跑：恢復配速、心率 1 區{cap}，之後照停跑天數排；{src}",
+                      cap=_("（不超過{cap}）", cap=cap_txt) if cap_txt else "", src=_(INJ.SRC_FEVER)))
+    return out
 
 
 def drop_strength_before_a(ss: list, stops: list, monday: dt.date, notes: Optional[list] = None) -> list:

@@ -76,7 +76,7 @@ from typing import Optional
 import numpy as np
 
 from backend.engine import load_guard as LG
-from backend.i18n import _
+from backend.i18n import N_, _
 
 # "xu_signals" (an old unlock path) was dropped 2026-10-01: stored prefs that still say it fall back to
 # auto (plan_prefs.from_settings; evaluate() maps any unknown mode to auto too)
@@ -472,20 +472,26 @@ def count_reps(t, power, cp: Optional[float]) -> list[dict]:
 
 def _with_hr_at60(reps: list[dict], s: Optional[dict]) -> list[dict]:
     """count_reps bouts + the HR 60 s after each one ends (徐國峰's 60-s check,
-    a brake only); None when the next rep starts before that or there is no HR."""
+    a brake only); None when the next rep starts before that or there is no HR.
+    `hr_drop60` (SP-110, the fatigue check): the peak HR from 10 s before to 15 s after the
+    rep's end minus that HR — workout_review.detect_efforts' HRR60."""
     from backend.engine.workout_review import _grid1
     h = None
     if s is not None and s.get("hr") is not None:
         h = _grid1(s["t"], s["hr"])[1]
     out = []
     for i, r in enumerate(reps):
-        at = int(r["start_s"] + r["duration_s"] + 60)
+        end = int(r["start_s"] + r["duration_s"])
+        at = end + 60
         nxt = reps[i + 1]["start_s"] if i + 1 < len(reps) else None
-        v = None
+        v = drop = None
         if h is not None and at < len(h) and (nxt is None or nxt >= at) and np.isfinite(h[at]):
             v = float(h[at])
+            win = h[max(0, end - 10):end + 15]
+            if np.isfinite(win).any():
+                drop = float(np.nanmax(win)) - v
         out.append({"power": r["power"], "duration_s": r["duration_s"], "start_s": r["start_s"], "hr_at60": v,
-                    **({"source": r["source"]} if r.get("source") else {})})
+                    "hr_drop60": drop, **({"source": r["source"]} if r.get("source") else {})})
     return out
 
 
@@ -584,7 +590,8 @@ def dose_history(ds, today: dt.date, days: int = LOOKBACK_DAYS) -> list[dict]:
         elif spec is None:
             bouts = [{"power": e.get("power"), "duration_s": e.get("duration_s"), "start_s": e.get("start_s"),
                       "hr_at60": (e["hr_max"] - e["hr_drop60"]) if e.get("hr_max") is not None
-                      and e.get("hr_drop60") is not None else None} for e in (m.get("efforts") or [])]
+                      and e.get("hr_drop60") is not None else None, "hr_drop60": e.get("hr_drop60")}
+                     for e in (m.get("efforts") or [])]
         else:
             bouts = []                         # planned, nothing found: 無法判定 (dose_step), not 「目標太高」
         tiz_ratio = None
@@ -731,6 +738,19 @@ TARGET_DOWN = 0.95      # ROLE:499「下修 5～10%」: first rep already short 
 AET60_MIN_SHARE = 0.5   # 推估 (doc §4.3): HR back under AeT 60 s into the rest on < half the reps = brake
 LAST_FADE = 0.05        # 推估 (doc §4.3): only the last rep missed and it fell > 5 % = 邊界
 TIZ_GOAL = 0.85         # 推估 (interval_eval.TIZ_GOAL): time in zone ≥ 85 % of the chosen variant's plan
+# 疲勞保險 (f-OR, SP-110; doc §4.3, 2026-10-05): a faster HR recovery is not always adaptation —
+# functional overreaching speeds it up too (Aubry 2015: HRR 38 → 45 bpm while performance fell and
+# HRmax 182 → 176; Bellenger 2016 meta-analysis: both adaptation and overreaching raise HRR). It
+# fires only when all three hold: this session's 60-s HR drop (median of its reps) is ≥ FOR_FAST
+# faster than the median of the same-spec sessions (same rep length, rest and rest mode) of the
+# FOR_DAYS before it, with ≥ FOR_MIN_N of them; the same-spec session before it was that fast too;
+# and this session's power missed (RPE is not recorded yet). Then it is 未適應 (no step forward)
+# and the note says so.
+FOR_FAST = 0.25         # Buchheit 2014: HRR60 day-to-day CV ≈ 25 % — used as the threshold (推估)
+FOR_STREAK = 2          # Buchheit 2014 citing Brink 2010 (「2–3 consecutive days/weeks」): 2 sessions in a row
+FOR_MIN_N = 5           # 推估 (doc §4.3): the baseline needs ≥ 5 same-spec sessions
+FOR_DAYS = 56           # doc §4.3: the 8 weeks before
+SRC_FOR = N_("Aubry 2015；Bellenger 2016；Buchheit 2014（門檻 25 %、連續 2 堂為推估）")
 OUTCOME_LABEL = {"met": "達標", "border": "邊界", "unadapted": "未適應", "too_high": "未適應（目標太高）",
                  "unknown": "無法判定"}
 
@@ -751,7 +771,9 @@ def interval_outcome(bouts: list[dict], spec: tuple, cp: Optional[float], aet: O
     if miss is None and done < 1:
         miss = len(ps) + 1                        # stopped early: the first rep not done
     fade = (ps[-1] / ps[0] - 1.0) if len(ps) >= 2 and ps[0] else None
-    base = {"first_miss": miss, "done": round(done, 2), "fade": fade}
+    # SP-110: the power part alone — every rep in band, or only the last one ≤ LAST_FADE off
+    power_ok = done >= 1 and (miss is None or (miss == planned and (fade is None or fade >= -LAST_FADE)))
+    base = {"first_miss": miss, "done": round(done, 2), "fade": fade, "power_ok": power_ok}
     if miss == 1:
         return {**base, "outcome": "too_high", "why": f"第 1 趟就沒到 {floor:.0f} W：目標功率下修 5%"}
     if done < 1 or (miss is not None and 2 <= miss <= planned - 1):
@@ -765,6 +787,77 @@ def interval_outcome(bouts: list[dict], spec: tuple, cp: Optional[float], aet: O
     if miss == planned and fade is not None and fade < -LAST_FADE:
         return {**base, "outcome": "border", "why": f"只有最後一趟沒到、掉 {-fade * 100:.0f}%：同一份課表再做一次"}
     return {**base, "outcome": "met", "why": "每一趟都在目標帶" if miss is None else "只有最後一趟略掉（≤ 5%）"}
+
+
+def spec_key(h: dict, spec: tuple) -> tuple:
+    """The 「same spec」 of a session for the fatigue check (SP-110): (rep seconds — the pattern
+    for a pyramid —, rest seconds, rest mode). A library variant / edited structure gives the rest
+    mode; a ladder row by title has none (None: only equal to another title-only row)."""
+    v = None
+    try:
+        if user_steps(h):
+            from backend.engine import workout_steps as WS
+            v = WS.variant_from_steps(h["steps"], h.get("rung_key") or getattr(_IL.get(h.get("variant_key")), "rung", None))
+        elif h.get("variant_key"):
+            v = _IL.resolve(h["variant_key"], h.get("variant_reps"), h.get("variant_adj"))
+    except Exception:                           # noqa: BLE001 — no variant: the spec's numbers
+        v = None
+    if v is not None and hasattr(v, "rest_s"):
+        return (tuple(v.works) if getattr(v, "pattern", None) else int(v.work_s), int(v.rest_s),
+                getattr(v, "rest_mode", None))
+    return (int(round(float(spec[3]) * 60)), int(round(float(spec[4]) * 60)), None)
+
+
+def session_drop60(h: dict, n: int) -> Optional[float]:
+    """The median 60-s HR drop of the first `n` reps of a session; None when no rep has one
+    (rest < 60 s, no HR)."""
+    xs = [float(b["hr_drop60"]) for b in (h.get("bouts") or [])[:max(1, n)] if b.get("hr_drop60") is not None]
+    return float(np.median(xs)) if xs else None
+
+
+def hrr_fast(rows: list[dict], i: int) -> Optional[dict]:
+    """rows[i]'s 60-s HR drop against the median of the same-spec rows of the FOR_DAYS before it
+    (rows oldest first, each with "spec_key", "drop60", "date"): {"drop", "base", "n", "gain",
+    "fast"}; None without a drop or with < FOR_MIN_N same-spec rows."""
+    h = rows[i]
+    if h.get("drop60") is None or h.get("spec_key") is None:
+        return None
+    d0 = dt.date.fromisoformat(str(h["date"])[:10])
+    prior = [r["drop60"] for r in rows[:i] if r.get("spec_key") == h["spec_key"] and r.get("drop60") is not None
+             and 0 < (d0 - dt.date.fromisoformat(str(r["date"])[:10])).days <= FOR_DAYS]
+    if len(prior) < FOR_MIN_N:
+        return None
+    base = float(np.median(prior))
+    if base <= 0:
+        return None
+    gain = h["drop60"] / base - 1.0
+    return {"drop": h["drop60"], "base": base, "n": len(prior), "gain": gain, "fast": gain >= FOR_FAST}
+
+
+def fatigue_check(rows: list[dict], i: int, o: dict) -> Optional[dict]:
+    """The 疲勞保險 (SP-110) on rows[i] judged `o` (interval_outcome): all three conditions —
+    ≥ FOR_FAST faster than its same-spec baseline, the same-spec session before it fast too
+    (FOR_STREAK in a row), and its power missed (o["power_ok"] False). None when it doesn't fire."""
+    if o.get("power_ok") is not False:
+        return None
+    f = rows[i].get("hrr")
+    if not f or not f["fast"]:
+        return None
+    key = rows[i]["spec_key"]
+    streak, j = 1, i - 1
+    while j >= 0 and streak < FOR_STREAK:
+        r = rows[j]
+        if r.get("spec_key") == key and r.get("drop60") is not None:
+            if not (r.get("hrr") or {}).get("fast"):
+                return None
+            streak += 1
+        j -= 1
+    if streak < FOR_STREAK:
+        return None
+    return {**f, "streak": streak,
+            "text": _("心率恢復變快但功率沒到，可能累積疲勞：休 60 秒心率降 {d:.0f} bpm，比同規格課 8 週中位數 {b:.0f} 快 {x:.0%}"
+                      "（連續 {k} 堂 ≥ {t:.0%}）", d=f["drop"], b=f["base"], x=f["gain"], k=streak, t=FOR_FAST),
+            "src": _(SRC_FOR)}
 
 
 def dose_step(history: list[dict], aet: Optional[float] = None, track: str = "z3") -> dict:
@@ -781,10 +874,13 @@ def dose_step(history: list[dict], aet: Optional[float] = None, track: str = "z3
     the history: the next week repeats the step (engine/adapt.py rule B).
     Zone 3 track: a Zone 3 session off the rung (巡航版 T1–T3 — the old rungs —, T+) is still
     judged and its 達標 counts in `met` (Zone 5's 「3 區達標」), but it doesn't move the rung.
-    `faded` stays for the week card."""
+    `faded` stays for the week card.
+    疲勞保險 (SP-110, fatigue_check): a session whose 60-s HR drop is ≥ 25 % faster than its
+    same-spec baseline two sessions in a row while its power missed is 未適應, whatever the
+    power rows said; out["fatigue"] carries the numbers when the last judged session fired."""
     step, streak, adjust, last, met = 0, 0, {}, None, 0
     rows = [h for h in history if (h.get("track") or row_track(h)) == track or h.get("unplanned")]
-    for h in rows:
+    for i, h in enumerate(rows):
         if h.get("unplanned"):
             h["outcome"] = "neutral"           # not one of the plan's quality sessions
             continue
@@ -800,6 +896,12 @@ def dose_step(history: list[dict], aet: Optional[float] = None, track: str = "z3
         else:
             spec, neutral = planned_spec(h.get("title"), step, track)
             counted = True
+        try:
+            h["spec_key"] = spec_key(h, spec)
+            h["drop60"] = session_drop60(h, int(spec[2]))
+            h["hrr"] = hrr_fast(rows, i)
+        except (TypeError, ValueError):         # an odd row: no fatigue check, nothing else changes
+            h["spec_key"] = h["drop60"] = h["hrr"] = None
         off_rung = neutral and track == "z3" and spec not in (RECOVERY, SUB, ZONE3) and \
             str(h.get("title") or "") not in LEGACY_ANY and _IL.track_of(_row_rung(h, spec)) == "z3"
         if neutral and not off_rung:
@@ -817,7 +919,13 @@ def dose_step(history: list[dict], aet: Optional[float] = None, track: str = "z3
             # interval_eval's verdict: every rep in band but too little time in the zone (stopped
             # early, reps short) = 部分達到 → the same step again (≥ 85 % of the plan: 推估, §C2)
             oc = "border"
-            o = {**o, "outcome": oc, "why": f"目標區時間只有計畫的 {r * 100:.0f}%（< 85%）"}
+            o = {**o, "outcome": oc, "why": f"目標區時間只有計畫的 {r * 100:.0f}%（< 85%）", "power_ok": False}
+        fat = fatigue_check(rows, i, o) if oc != "unknown" else None
+        if fat is not None:
+            # 疲勞保險 (SP-110): a faster HR recovery with the power missing is not adaptation
+            oc = "unadapted"
+            o = {**o, "outcome": oc, "why": fat["text"], "fatigue": fat}
+            h["fatigue"] = True
         h["outcome"] = oc
         if off_rung:
             # a Zone 3 session off the track's rung (巡航版 / T+ / the old Zone 3 rungs): judged, its
@@ -849,6 +957,8 @@ def dose_step(history: list[dict], aet: Optional[float] = None, track: str = "z3
         out.update(outcome=last["outcome"], adjust=adjust,
                    note="" if last["outcome"] == "met" else f"上次 {TRACK_LABEL[track].split('（')[0]}間歇"
                                                             f"{OUTCOME_LABEL[last['outcome']]}（{last.get('why') or ''}）：")
+        if last.get("fatigue"):
+            out["fatigue"] = {**last["fatigue"], "date": last.get("date")}
     return out
 
 
@@ -1103,6 +1213,13 @@ def evaluate(ds, plan, today: dt.date, prefs=None, by: Optional[dict] = None, ph
         if r.get("state") == "unlocked":
             r = {**r, "via": resolved}
     state = r.get("state", "none")
+    # ---- A 賽後重新打底 (SP-116): only evidence from after the 恢復期 + 轉換期 counts ----------
+    from backend.engine import base_check as BC
+    rebase = BC.a_race_rebase(plan, today) if mode != "none" and plan is not None else None
+    if rebase and state == "unlocked" and not _rebased(r, ae, base_start, rebase):
+        r = {"state": "locked", "verdict": _("{text}：要用賽後的 E 配速、CP、LTHR 重新確認一次", text=rebase["text"]),
+             "action": rebase_action(mode, rebase), "rebase": True}
+        state = "locked"
 
     # ---- this week's guardrails (base phase) ------------------------------
     ie = _extra(by, "intensity")
@@ -1119,10 +1236,10 @@ def evaluate(ds, plan, today: dt.date, prefs=None, by: Optional[dict] = None, ph
     dose = dose_tracks(hist, ae.get("value"))
     # ---- Zone 5 (engine/base_check.py) and the AeT test's reason -----------
     z5 = _z5(ds, today, mode, state, ae, lt, brk, [h.get("date") for h in hist], friel,
-             aet_tested(plan, today))
-    test_reason = aet_test_reason(ds, today, ae, z5, brk)
+             aet_tested(plan, today), rebase)
     # ---- the Zone 3 gate (SP-31) and the 1-a-week track ratio ---------------
-    z3 = z3_gate(ds, today, mode, state, ae, lt, z5, dose)
+    z3 = z3_gate(ds, today, mode, state, ae, lt, z5, dose, rebase)
+    test_reason = aet_test_reason(ds, today, ae, z5, brk, rebase, z3, mode)
     out = {
         "mode": mode, "mode_label": LABEL[mode], "resolved": resolved, "state": state,
         "via": r.get("via"), "verdict": r.get("verdict", ""), "action": r.get("action", ""),
@@ -1135,7 +1252,7 @@ def evaluate(ds, plan, today: dt.date, prefs=None, by: Optional[dict] = None, ph
         "gap": gap, "ef_change": ef, "levels": levels, "guard": g,
         "dose": {**dose, "history": hist[-8:]},
         "kind": kind, "week_hours": _extra(by, "volume").get("last_week"),
-        "z5": z5, "aet_test_reason": test_reason, "reentry": brk,
+        "z5": z5, "aet_test_reason": test_reason, "reentry": brk, "rebase": rebase,
         "z3": z3, "ratio": track_ratio(getattr(plan, "events", None) or (), today),
         "monday": (today - dt.timedelta(days=today.weekday())).isoformat(),
         "z3_recent": z3_recent(hist, today),
@@ -1262,8 +1379,60 @@ def _transition_skip(ds, days: list, today: dt.date) -> set:
     return post_race_days(plan_, days[0], today)
 
 
+# ---- A 賽後重新打底 (SP-116; base_check.a_race_rebase) ------------------------------------
+REBASE_TEST = {"xu_drift": N_("做一次 90 分鐘飄移測試（用賽後的 E 配速，平路 1 區，飄移 < 10%）"),
+               "friel_drift": N_("做一次 Friel 飄移測試（AeT 附近 ≥ 60 分鐘平路，飄移 < 5%）"),
+               "ua_gap": N_("做一次 AeT 測試（配實測 LTHR，差距 ≤ 10%）"),
+               "plateau": N_("等基礎期重新累積到 EF 持平（停滯法）"),
+               "weeks": N_("等基礎期重新累積到設定的週數（週數法）"),
+               "auto": N_("做一次 90 分鐘飄移測試或 AeT 測試")}
+
+
+def rebase_test(mode: str) -> str:
+    """The re-confirmation the 間歇門檻 `mode` asks for after an A race (SP-116)."""
+    return _(REBASE_TEST.get(mode, REBASE_TEST["auto"]))
+
+
+def rebase_action(mode: str, rebase: dict) -> str:
+    d = dt.date.fromisoformat(rebase["from"])
+    return _("{d} 起{test}；通過前只排輕鬆跑、長跑和加速跑", d=f"{d.month}/{d.day}", test=rebase_test(mode))
+
+
+def _rebased(r: dict, ae: dict, base_start, rebase: dict) -> bool:
+    """Whether an unlocked method result rests on evidence from rebase["from"] on (SP-116): the
+    run of a drift method, the AeT test of the UA gap, the 基礎期 start of plateau / weeks."""
+    via = r.get("via")
+    if via in ("friel_drift", "xu_drift"):
+        d = (r.get("run") or {}).get("date")
+    elif via == "ua_gap":
+        d = ae.get("date")
+    elif via in ("plateau", "weeks"):
+        d = base_start
+    else:
+        d = None
+    return bool(d) and str(d)[:10] >= rebase["from"]
+
+
+def rebase_reason(today: dt.date, rebase: Optional[dict], z3: Optional[dict], z5: Optional[dict],
+                  mode: str = "auto") -> Optional[dict]:
+    """aet_test_reason's 「rebase」 (SP-116): from rebase["from"], while the Zone 3 gate is locked
+    by the rebuild or a Zone 5 confirmed before the race isn't confirmed again."""
+    if not rebase or today.isoformat() < rebase["from"]:
+        return None
+    paths = (z5 or {}).get("aet_paths") or {}
+    had5 = any(d and str(d)[:10] < rebase["from"] for d in paths.values())
+    new5 = any(d and str(d)[:10] >= rebase["from"] for d in paths.values())
+    need3 = bool(z3) and not z3.get("open") and bool(z3.get("rebase"))
+    if not (need3 or (had5 and not new5)):
+        return None
+    test = rebase_test(mode) if need3 else _("做一次 AeT 測試（UA 差距或 Friel 飄移），重新確認 5 區")
+    return {"code": "rebase", "from": rebase["from"],
+            "text": _("{text}：{test}（或你選的方法），通過前只排輕鬆跑、長跑和加速跑；{src}",
+                      text=rebase["text"], test=test, src=rebase["src"])}
+
+
 def z3_gate(ds, today: dt.date, mode: str, state: Optional[str], ae: dict, lt: dict, z5: dict,
-            dose: dict) -> dict:
+            dose: dict, rebase: Optional[dict] = None) -> dict:
     """Is the Zone 3 track open (SP-31, the owner's rule 2026-10-04)? Any one of:
       weeks   consistency: Z3_WEEKS_NEED complete weeks of actual training (imported history counts,
               whatever the phase label) with ≥ Z3_RUNS_PER_WEEK runs every week and no
@@ -1276,7 +1445,11 @@ def z3_gate(ds, today: dt.date, mode: str, state: Optional[str], ae: dict, lt: d
     (the AeT is often estimated and climbs inflate HR). A break of ≥ Z3_RELOCK_DAYS days without
     running re-locks it: only what comes after the break counts (and a break still going on
     locks). This week's guardrails apply on top (week_decision).
-    {"open", "path", "path_label", "weeks", "weeks_need", "weekly", "tests", "reason", "text", "src", "break"}."""
+    `rebase` (base_check.a_race_rebase, SP-116): after an A race only evidence from rebase["from"]
+    counts — the 90-min test, the UA gap's AeT, the chosen method or a Zone 5 confirmed again;
+    the consistency weeks and earlier Zone 3 達標 don't (the rebuild is a re-test).
+    {"open", "path", "path_label", "weeks", "weeks_need", "weekly", "tests", "reason", "text", "src", "break",
+    "rebase"}."""
     need = Z3_WEEKS_NEED
     try:
         rd = run_days(ds, today)
@@ -1286,7 +1459,14 @@ def z3_gate(ds, today: dt.date, mode: str, state: Optional[str], ae: dict, lt: d
     brk = cons.get("break")
     after = brk.get("return") if brk else None          # evidence before a ≥ 21-day break doesn't count
     resting = bool(brk) and not brk.get("return")
-    ok_after = lambda d: not brk or (after is not None and bool(d) and str(d)[:10] >= after)
+    rb_from = rebase["from"] if rebase and mode != "none" else None
+    if rb_from:
+        after = max(after or "", rb_from)
+
+    def ok_after(d) -> bool:
+        if rb_from and not (bool(d) and str(d)[:10] >= rb_from):
+            return False
+        return not brk or (after is not None and bool(d) and str(d)[:10] >= after)
     try:
         from backend.engine import base_check as BC
         xs = BC.xu_runs(ds, today)
@@ -1315,24 +1495,27 @@ def z3_gate(ds, today: dt.date, mode: str, state: Optional[str], ae: dict, lt: d
         path, label = "none", "不設門檻（Seiler）"
     elif resting:
         path = None
-    elif cons["open"]:
+    elif cons["open"] and not rb_from:
         path, label = "weeks", f"連續 {need} 週規律訓練（{cons['since']} 起）"
     elif xu_ok:
         path, label = "xu90", f"90 分鐘飄移 {xu_ok['drift'] * 100:.1f}% < 10%（{xu_ok['date']}）"
     elif ua_ok:
         path, label = "ua_gap", f"UA 差距 {ua['gap'] * 100:.0f}% ≤ 10%"
     elif state == "unlocked" and not brk:
+        # under a rebuild the method was already held to evidence after it (evaluate: _rebased)
         path, label = "method", f"間歇門檻已解鎖（{LABEL.get(mode, mode)}）"
     elif (z5.get("since") and ok_after(z5.get("since"))) or z5.get("open"):
         path, label = "z5", "有氧基礎已確認（5 區流程）"
     elif pause.get("kind") == "reentry_z3":
         path, label = "reentry", "恢復期後先排 3 區"
-    elif not brk and int(d3.get("met") or 0) + int(d3.get("step") or 0) > 0:
+    elif not brk and not rb_from and int(d3.get("met") or 0) + int(d3.get("step") or 0) > 0:
         path, label = "track", "8 週內有 3 區達標，繼續階梯"
     if resting:
         reason = f"3 區還沒解鎖：已經 {brk['days']} 天沒跑（≥ {Z3_RELOCK_DAYS} 天要重新累積；推估）"
     elif path:
         reason = ""
+    elif rb_from:
+        reason = _("3 區還沒解鎖：{text}，{action}", text=rebase["text"], action=rebase_action(mode, rebase))
     else:
         reason = (f"3 區還沒解鎖：連續 {min(cons['weeks'], need)}/{need} 週每週跑 ≥ {Z3_RUNS_PER_WEEK} 次（推估）"
                   + (f"——{short[-1]['monday'][5:]} 那週跑 {short[-1]['runs']} 次" if short else "")
@@ -1340,9 +1523,9 @@ def z3_gate(ds, today: dt.date, mode: str, state: Optional[str], ae: dict, lt: d
                   + "；或做一次 90 分鐘平路 1 區測試（飄移 < 10%）；或實測 AeT 且 UA 差距 ≤ 10%")
     return {"open": path is not None, "path": path, "path_label": label, "weeks": cons["weeks"],
             "weeks_need": need, "weekly": cons.get("rows") or [], "tests": tests, "reason": reason,
-            "since": cons.get("since"), "break": brk,
+            "since": cons.get("since"), "break": brk, "rebase": bool(rb_from),
             "text": f"Zone 3：已解鎖（{label}）" if path else f"Zone 3：未解鎖（{reason.split('：', 1)[-1]}）",
-            "src": SRC_Z3["weeks"]}
+            "src": rebase["src"] if rb_from and not path else SRC_Z3["weeks"]}
 
 
 def _xu_value(x: Optional[dict]) -> str:
@@ -1364,8 +1547,8 @@ def z3_open_on(z3: Optional[dict], monday: Optional[dt.date], gate_monday: Optio
         return True
     if z3.get("open"):
         return True
-    if monday is None or not gate_monday:
-        return False
+    if monday is None or not gate_monday or z3.get("rebase"):
+        return False                                # SP-116: a rebuild waits for its test, not for weeks
     ahead = (monday - dt.date.fromisoformat(str(gate_monday)[:10])).days // 7
     return ahead > 0 and int(z3.get("weeks") or 0) + ahead >= int(z3.get("weeks_need") or Z3_WEEKS_NEED)
 
@@ -1486,7 +1669,7 @@ def z5_track(gate: dict, monday: Optional[dt.date] = None, steps=None) -> dict:
 
 def _z5(ds, today: dt.date, mode: str, state: Optional[str], ae: dict, lt: dict,
         brk: Optional[dict] = None, quality_dates: Optional[list] = None, friel=None,
-        ta: Optional[dict] = None) -> dict:
+        ta: Optional[dict] = None, rebase: Optional[dict] = None) -> dict:
     """base_check.z5_status with the measured-AeT paths (SP-39): a tested AeT `ta` (aet_tested)
     and a measured LTHR within 10 % (UA gap) → the later row's date; a Friel run < 5 % near the
     tested AeT → its date. The 90-min test is not one (Zone 3 gate only). `friel`: evaluate's
@@ -1506,7 +1689,7 @@ def _z5(ds, today: dt.date, mode: str, state: Optional[str], ae: dict, lt: dict,
             f = friel() if friel is not None and same else friel_check(ds, today, ta["value"])
             if f.get("state") == "unlocked":
                 paths["aet_friel_drift"] = f["run"]["date"]
-        return {**BC.z5_status(ds, today, mode, state, paths, brk, quality_dates), "aet_paths": paths,
+        return {**BC.z5_status(ds, today, mode, state, paths, brk, quality_dates, rebase), "aet_paths": paths,
                 "aet_tested": ta}
     except Exception as e:                  # noqa: BLE001 — Z5 stays closed, the plan still builds
         return {"state": "unconfirmed", "label": BC.STATE_LABEL["unconfirmed"], "open": False, "since": None,
@@ -1514,7 +1697,8 @@ def _z5(ds, today: dt.date, mode: str, state: Optional[str], ae: dict, lt: dict,
                 "text": f"Zone 5：未確認（算不出來：{type(e).__name__}）"}
 
 
-def aet_test_reason(ds, today: dt.date, ae: dict, z5: dict, brk: Optional[dict] = None) -> Optional[dict]:
+def aet_test_reason(ds, today: dt.date, ae: dict, z5: dict, brk: Optional[dict] = None,
+                    rebase: Optional[dict] = None, z3: Optional[dict] = None, mode: str = "auto") -> Optional[dict]:
     """Why an AeT test should be scheduled now, or None (unsourced-rules.md §B3
     and the Z5 lifecycle; numbers 推估 unless noted): {"code", "text"}.
       no_data  no interpretable run (a drift_of value or a 90-min 徐國峰 run) for
@@ -1524,9 +1708,15 @@ def aet_test_reason(ds, today: dt.date, ae: dict, z5: dict, brk: Optional[dict] 
       moved    the estimate is more than max(SE, 3 bpm) away from the plan's AeT
                (UA: AeT rises toward AnT as the base improves — confirm it)
     SP-39: the 90-min run no longer confirms Zone 5, so it no longer stands in for the test
-    (the passive re-confirmation is gone); it still counts as interpretable data for no_data."""
+    (the passive re-confirmation is gone); it still counts as interpretable data for no_data.
+      rebase   SP-116: A 賽後重新打底 — from the first day after the 恢復期 + 轉換期 until the Zone 3
+               gate is open again on evidence from then and Zone 5, if it had been confirmed
+               before, is confirmed again ({"code": "rebase", "from", "text"})."""
     from backend.engine import base_check as BC
     from backend.engine import drift_agg as DA
+    rb = rebase_reason(today, rebase, z3, z5, mode)
+    if rb:
+        return rb
     val = ae.get("validity") or {}
     try:
         recent = DA.aet_points(ds, today, BC.NO_DATA_DAYS, beta={"beta": 0.0})   # presence only: no β fit
@@ -2475,7 +2665,20 @@ def is_z5_variant(key: Optional[str]) -> bool:
 # ---------------------------------------------------------------------------
 
 def indicator(gate: dict) -> dict:
-    """{"level", "text", "verdict", "why", "action", "source"} for status.i_gate."""
+    """{"level", "text", "verdict", "why", "action", "source"} for status.i_gate. A track whose last
+    session tripped the 疲勞保險 (SP-110, dose_step "fatigue") adds its reason to the verdict and
+    raises good / info to watch."""
+    out = _indicator(gate)
+    tips = [f for f in (d.get("fatigue") for d in _track_doses(gate)) if f]
+    if tips:
+        out = {**out, "verdict": "；".join([out["verdict"]] + [f["text"] for f in tips]),
+               "level": "watch" if out["level"] in ("good", "info") else out["level"],
+               "action": out["action"] or _("這週間歇不往上加；睡眠、輕鬆跑先顧好，下一堂功率回來再進階"),
+               "source": out["source"] + "；" + tips[0]["src"]}
+    return out
+
+
+def _indicator(gate: dict) -> dict:
     k = gate.get("kind") or "base"
     ae = gate.get("aet") or {}
     why_parts = [f"模式：{gate['mode_label']}" + ("（" + ("差距法＋飄移法" if gate["resolved"] != "none" else "不設門檻") + "）"

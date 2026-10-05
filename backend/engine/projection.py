@@ -173,7 +173,8 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
                    "done": False, "done_by": None, **kw})
 
     if long_min is None:
-        long_min = max(60.0, min(0.30 * total, max(longest, 60.0) * 1.15))
+        # ≤ +10 % over the last long day (SP-66, load_guard.LONG_CAP), also over the 60-min floor
+        long_min = LG.cap_long(max(60.0, min(0.30 * total, max(longest, 60.0) * LG.LONG_CAP)), longest)[0]
     long_min = min(long_min, 0.5 * total) if total >= 120 else long_min
     info = None
     if b2b is not None:

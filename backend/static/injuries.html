@@ -173,15 +173,17 @@ dialog form { padding: 14px 16px; display: grid; gap: 10px; }
 <dialog id="dlg" aria-label="傷病紀錄">
   <form method="dialog" id="fm">
     <h2 id="dlg-h">傷病紀錄</h2>
-    <div class="fr"><span>部位</span><div class="c chips" id="f-area"></div></div>
-    <div class="fr" id="f-side-r"><span>側邊</span><div class="c chips" id="f-side"></div></div>
-    <div class="fr"><span>嚴重度<button type="button" class="qtip" aria-label="說明" data-tip="用對訓練的影響分：輕＝照練、中＝減量或改練、重＝停跑（推估的分法）。">?</button></span><div class="c chips" id="f-sev"></div></div>
-    <div class="fr"><span>類型</span><div class="c chips" id="f-kind"></div></div>
-    <div class="fr"><span>最痛（選填）</span><div class="c"><input type="range" id="f-pain" min="0" max="10" step="1"><b id="f-pain-v">—</b><button type="button" class="x" id="f-pain-x" aria-label="清掉">✕</button></div></div>
+    <div class="fr"><span>種類</span><div class="c chips" id="f-cat"></div></div>
+    <div class="fr ill-only"><span>生病<button type="button" class="qtip" aria-label="說明" id="f-ill-tip" data-tip="">?</button></span><div class="c"><div class="chips" id="f-ill"></div><div class="meta" id="f-ill-help" style="flex-basis:100%"></div></div></div>
+    <div class="fr inj-only"><span>部位</span><div class="c chips" id="f-area"></div></div>
+    <div class="fr inj-only" id="f-side-r"><span>側邊</span><div class="c chips" id="f-side"></div></div>
+    <div class="fr inj-only"><span>嚴重度<button type="button" class="qtip" aria-label="說明" data-tip="用對訓練的影響分：輕＝照練、中＝減量或改練、重＝停跑（推估的分法）。">?</button></span><div class="c chips" id="f-sev"></div></div>
+    <div class="fr inj-only"><span>類型</span><div class="c chips" id="f-kind"></div></div>
+    <div class="fr inj-only"><span>最痛（選填）</span><div class="c"><input type="range" id="f-pain" min="0" max="10" step="1"><b id="f-pain-v">—</b><button type="button" class="x" id="f-pain-x" aria-label="清掉">✕</button></div></div>
     <div class="fr"><span>開始</span><div class="c"><input type="date" id="f-onset" required></div></div>
-    <div class="fr"><span>好了</span><div class="c"><input type="date" id="f-res"><button type="button" id="f-today">今天好了</button><button type="button" class="x" id="f-res-x" aria-label="清掉">✕</button></div></div>
+    <div class="fr"><span id="f-res-l">好了</span><div class="c"><input type="date" id="f-res"><button type="button" id="f-today">今天好了</button><button type="button" class="x" id="f-res-x" aria-label="清掉">✕</button></div></div>
     <div class="fr"><span>停跑天數</span><div class="c"><input type="number" id="f-days" min="0" max="730" style="width:6em"><span class="meta" id="f-days-auto"></span></div></div>
-    <div class="fr"><span>強度課</span><div class="c"><label style="display:inline-flex;gap:6px;align-items:center"><input type="checkbox" id="f-pause"> 受傷期間暫停強度課</label>
+    <div class="fr inj-only"><span>強度課</span><div class="c"><label style="display:inline-flex;gap:6px;align-items:center"><input type="checkbox" id="f-pause"> 受傷期間暫停強度課</label>
       <button type="button" class="qtip" aria-label="說明" data-tip="勾了之後，這筆還沒好以前課表不排間歇（每一週、每個階段）。預設不勾：「輕」的痛照練是常態。">?</button></div></div>
     <div class="fr"><span>備註</span><div class="c"><textarea id="f-note" rows="2" maxlength="1000" placeholder="例如：下坡右膝外側；看過復健科"></textarea></div></div>
     <div class="msg" id="f-msg"></div>
@@ -328,9 +330,9 @@ function renderList() {
     return;
   }
   $("cards").innerHTML = L.map((x) => `<div class="card ${x.status === "draft" ? "draft" : ""} ${S.sel === x.id ? "on" : ""}" data-id="${x.id}">
-      <div class="t"><span class="dot" style="background:${areaCol(x.area)}"></span>${esc(x.label)}<span class="sev ${x.severity}" title="${esc((S.meta?.severity_help || {})[x.severity] || "")}">${esc(x.severity_label)}</span>
+      <div class="t"><span class="dot" style="background:${areaCol(x.area)}"></span>${esc(x.label)}${x.category === "illness" ? "" : `<span class="sev ${x.severity}" title="${esc((S.meta?.severity_help || {})[x.severity] || "")}">${esc(x.severity_label)}</span>`}
         ${x.kind === "acute" ? `<span class="badge">急性</span>` : ""}${x.recurrence_of ? `<span class="badge" title="同部位、上次好了 42 天內">復發</span>` : ""}</div>
-      <div class="s"><span>${ymd(x.onset_date)} – ${x.status === "resolved" ? ymd(x.resolved_date) : "還沒好"}</span><span>${x.day_n} 天</span>
+      <div class="s"><span>${ymd(x.onset_date)} – ${x.status === "resolved" ? ymd(x.resolved_date) : x.category === "illness" ? "還有症狀" : "還沒好"}</span><span>${x.day_n} 天</span>
         ${x.days_off != null ? `<span>停跑 ${x.days_off} 天${x.days_missed == null ? "（自動）" : ""}</span>` : ""}
         ${x.linked ? `<span>${x.linked} 次活動</span>` : ""}${x.pain_max != null ? `<span>最痛 ${x.pain_max}/10</span>` : ""}${x.pause_quality ? `<span>暫停強度課</span>` : ""}</div>
       ${x.note ? `<div class="s" title="${esc(x.note)}" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block">${esc(x.note)}</div>` : ""}
@@ -484,16 +486,27 @@ $("set-pat").addEventListener("change", (e) => putSetting("pattern_alerts", e.ta
 $("set-up").addEventListener("change", (e) => putSetting("reentry_step_up", e.target.checked));
 
 // ---- edit dialog -------------------------------------------------------------
-const F = { area: null, side: null, severity: "mild", kind: "overuse", pain_max: null };
+const F = { category: "injury", illness: null, area: null, side: null, severity: "mild", kind: "overuse", pain_max: null };
 function chipRow(el, opts, cur, key, extra = "") {
   el.innerHTML = opts.map(([k, v, custom]) => `<button type="button" data-k="${esc(k)}" aria-pressed="${cur === k}">${esc(v)}${custom ? ` <span class="x" data-rm="${esc(k)}" title="從選單移除" aria-label="移除 ${esc(v)}">×</span>` : ""}</button>`).join("") + extra;
   el.dataset.key = key;
 }
 function renderDlg() {
   const m = S.meta;
+  // 生病 (SP-117): the same log, no body area — two types, the examples help pick one
+  const ill = F.category === "illness";
+  chipRow($("f-cat"), Object.entries(m.categories || { injury: "傷", illness: "生病" }), F.category, "category");
+  chipRow($("f-ill"), Object.entries(m.illness || {}), F.illness, "illness");
+  $("f-ill-help").textContent = F.illness ? (m.illness_help || {})[F.illness] || "" :
+    Object.entries(m.illness_help || {}).map(([k, v]) => `${(m.illness || {})[k]}：${v}`).join("；");
+  $("f-ill-tip").dataset.tip = F.illness ? (m.illness_rules || {})[F.illness] || "" : Object.values(m.illness_rules || {}).join("\n");
+  document.querySelectorAll("#fm .inj-only").forEach((el) => { el.hidden = ill; });
+  document.querySelectorAll("#fm .ill-only").forEach((el) => { el.hidden = !ill; });
+  $("f-res-l").textContent = ill ? "症狀消失" : "好了";
+  $("f-today").textContent = ill ? "今天沒症狀了" : "今天好了";
   chipRow($("f-area"), m.areas.map((a) => [a.key, a.label, a.custom]), F.area, "area",
     `<input type="text" id="f-area-new" maxlength="12" placeholder="＋其他部位" style="width:7em;border-radius:12px;font-size:12px;padding:2px 7px" aria-label="新增部位，Enter">`);
-  $("f-side-r").hidden = !F.area || m.no_side.includes(F.area);
+  if (!ill) $("f-side-r").hidden = !F.area || m.no_side.includes(F.area);
   chipRow($("f-side"), Object.entries(m.sides), F.side, "side");
   chipRow($("f-sev"), Object.entries(m.severities).map(([k, v]) => [k, `${v}・${m.severity_help[k]}`]), F.severity, "severity");
   chipRow($("f-kind"), Object.entries(m.kinds), F.kind, "kind");
@@ -508,7 +521,7 @@ function renderDlg() {
     catch (er) { $("f-msg").textContent = errText(er); $("f-msg").className = "msg err"; }
   });
 }
-document.querySelectorAll("#f-area, #f-side, #f-sev, #f-kind").forEach((el) => el.addEventListener("click", async (e) => {
+document.querySelectorAll("#f-cat, #f-ill, #f-area, #f-side, #f-sev, #f-kind").forEach((el) => el.addEventListener("click", async (e) => {
   const rm = e.target.closest("[data-rm]");
   if (rm) {
     e.stopPropagation(); e.preventDefault();
@@ -528,8 +541,8 @@ $("f-res-x").addEventListener("click", () => { $("f-res").value = ""; });
 $("f-cancel").addEventListener("click", () => $("dlg").close());
 function openDlg(x) {
   S.edit = x || null;
-  Object.assign(F, x ? { area: x.area === "unknown" ? null : x.area, side: x.side, severity: x.severity, kind: x.kind, pain_max: x.pain_max }
-    : { area: null, side: null, severity: "mild", kind: "overuse", pain_max: null });
+  Object.assign(F, x ? { category: x.category || "injury", illness: x.illness || null, area: x.area === "unknown" ? null : x.area, side: x.side, severity: x.severity, kind: x.kind, pain_max: x.pain_max }
+    : { category: "injury", illness: null, area: null, side: null, severity: "mild", kind: "overuse", pain_max: null });
   $("dlg-h").textContent = x ? `傷病紀錄 #${x.id}${x.status === "draft" ? "（補細節）" : ""}` : "新增傷病紀錄";
   $("f-onset").value = x?.onset_date || todayIso();
   $("f-onset").max = todayIso(); $("f-res").max = todayIso();
@@ -549,8 +562,10 @@ $("fm").addEventListener("submit", async (e) => {
   e.preventDefault();
   const body = { area: F.area || "unknown", side: F.area && !S.meta.no_side.includes(F.area) ? F.side : null, severity: F.severity, kind: F.kind,
     pain_max: F.pain_max, onset_date: $("f-onset").value, resolved_date: $("f-res").value || null,
-    days_missed: $("f-days").value === "" ? null : +$("f-days").value, pause_quality: $("f-pause").checked, note: $("f-note").value };
+    days_missed: $("f-days").value === "" ? null : +$("f-days").value, pause_quality: $("f-pause").checked, note: $("f-note").value,
+    category: F.category, illness: F.category === "illness" ? F.illness : null };
   if (!body.onset_date) { $("f-msg").textContent = "要填開始的日期"; $("f-msg").className = "msg err"; return; }
+  if (body.category === "illness" && !body.illness) { $("f-msg").textContent = "選一個：輕微感冒，或發燒／全身症狀"; $("f-msg").className = "msg err"; return; }
   if (body.resolved_date) body.status = "resolved"; else if (S.edit && S.edit.status === "resolved") body.status = "active";
   $("f-save").disabled = true;
   try {
