@@ -478,6 +478,31 @@ def summit_session(s: dict, info: dict, minutes: float) -> None:
                     "pack_kg": sm["pack_kg"], "need_m": round(sm["climb_m"])}
 
 
+def walk_targets(ss: list[dict], walk: Optional[dict], aet: Optional[float] = None,
+                 aet_measured: bool = False) -> None:
+    """SP-115 × SP-114, in place: the 攻頂日模擬 and the ME session are walking sessions
+    (target_policy.is_walk) — their target is the uphill cap (hr_profile.walk_cap_hr: 75 % HRmax or
+    RPE ≤ 13, never below the easy-run cap), and the long day's 「全程心率壓在輕鬆跑上限以下」 becomes the
+    uphill cap with 「下坡看腿的感覺」."""
+    from backend.engine import hr_profile as HP
+    from backend.engine.target_policy import is_walk
+    for s in ss:
+        if s.get("done") or s.get("id") not in ("long", "me") or not is_walk(s):
+            continue
+        hr = HP.walk_cap_hr(walk, aet, aet_measured)
+        s["target"] = hr
+        up = _("上坡{hr}；{down}", hr=hr, down=_(HP.WALK_DOWN))
+        det = s.get("detail") or ""
+        if up in det:
+            continue                                        # already done (a projected week re-run)
+        parts = [p for p in det.split("；") if p]
+        if any(p.startswith("全程心率壓在") for p in parts):
+            parts = [up if p.startswith("全程心率壓在") else p for p in parts]
+        else:
+            parts.append(up)
+        s["detail"] = "；".join(parts)
+
+
 def _hill_set(s: dict) -> bool:
     """The 專項期's uphill VO2max set (overview.TRAIL_SPECIFIC_Z5, maybe shortened)."""
     t = str(s.get("title") or "")

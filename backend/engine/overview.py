@@ -1689,6 +1689,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
             wkg = None
         SP.apply_me(dd, sp, gate.get("gap"), wkg, allow=allow_quality and not b2b.get("post"),
                     rate=tph["trail"], notes=notes)
+        SP.walk_targets(dd, walk, aet, aet_meas)       # 攻頂日模擬 / ME: the 75 % HRmax uphill cap (SP-115)
         sessions = [Session(**d) for d in dd]
         for s in sessions:
             s._long_day = flags.get(s.id, False)

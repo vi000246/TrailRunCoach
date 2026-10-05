@@ -250,6 +250,7 @@
   "三段 33／50／75%，5 區要重新確認有氧基礎": "three steps 33 / 50 / 75%; Zone 5 waits until the aerobic base is reconfirmed",
   "上一階（{name}）：維持，不算進階": "Previous step ({name}): maintenance, not progression",
   "上傳的資料太大": "The upload is too large",
+  "上坡{hr}；{down}": "Uphill {hr}; {down}",
   "上坡心率 ≤ {cap}或 RPE ≤ {rpe}；下坡看感覺": "Uphill heart rate ≤ {cap} or RPE ≤ {rpe}; downhill by feel",
   "上坡版用一樣的 %CP，但上坡時攝氧量比例較低（Gajer，Buchheit Part I），下坡回程有離心負荷": "The uphill version uses the same %CP, but uphill the share of VO2 is lower (Gajer, Buchheit Part I), and the downhill return adds eccentric load",
   "上次 LTHR 測試是 {n} 天前（Friel：每 4–8 週一次）": "Last LTHR test {n} days ago (Friel: every 4–8 weeks)",

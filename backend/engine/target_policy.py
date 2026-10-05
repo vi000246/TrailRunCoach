@@ -71,18 +71,28 @@ def _aet_basis(s: dict) -> str:
     return "hr" if p in ("xu90", "friel") else "power"
 
 
-# a walking session (SP-115): the 陡坡健走 the planner makes (engine/steep_hill.py), or a
-# session the user titled 登山 / 健行 / 百岳 — not the 越野跑 kind "hike" (a trail run)
-WALK_WORDS = ("陡坡健走", "登山", "健行", "百岳")
+# a walking session (SP-115): the 陡坡健走 the planner makes (engine/steep_hill.py), SP-114's
+# 攻頂日模擬 (the multi-day 百岳's long day, specific_phase.summit_session) and 「ME 負重爬坡」 (its
+# quality session, specific_phase.me_session, id "me" — kind quality, the legs not the breathing the
+# limit), or a session the user titled 登山 / 健行 / 百岳 — not the 越野跑 kind "hike" (a trail run;
+# the 技術地形 session stays one: owner 2026-10-05)
+WALK_WORDS = ("陡坡健走", "登山", "健行", "百岳", "攻頂日模擬")
 WALK_KINDS = ("easy", "long", "hike", "mountain")
+WALK_IDS = ("steep", "me")                    # the planner's own walking sessions, any kind
+ME_WORDS = ("負重爬坡",)                       # SP-114's ME title once stored (id gone): kind quality
 
 
 def is_walk(s: dict) -> bool:
     """A walking session: its uphill HR cap is 75 % HRmax (hr_profile.walk_cap)."""
+    sid = str(s.get("id") or s.get("gen_key") or "")
+    if sid in WALK_IDS:
+        return True
+    title = str(s.get("title") or "")
+    if s.get("kind") == "quality":
+        return any(w in title for w in ME_WORDS)
     if s.get("kind") not in WALK_KINDS:
         return False
-    title = str(s.get("title") or "")
-    return s.get("id") == "steep" or any(w in title for w in WALK_WORDS)
+    return any(w in title for w in WALK_WORDS)
 
 
 def session_type(s: dict) -> str:
