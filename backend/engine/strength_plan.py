@@ -8,8 +8,9 @@ the SP-86 stop (no strength in the A race's 減量期, overview.drop_strength_be
 only the title, the text, the minutes and the source change (the app has no strength data, so no
 scoring). The stage, by the week's phase (Bompa & Buzzichelli 2015, §2.4 of the bompa doc):
 
-  * 轉換期 and the first AA_WEEKS weeks of the 基礎期 (counted from the 轉換期 before it, else from the
-    基礎期's start) — 解剖適應 (AA): a 6-station circuit, 12–15 reps, 1–2 left in the tank;
+  * 轉換期, 回量期 (SP-98, the reverse taper after it) and the first AA_WEEKS weeks of the 基礎期
+    (counted from the 轉換期 / 回量期 before it, else from the 基礎期's start) — 解剖適應 (AA): a
+    6-station circuit, 12–15 reps, 1–2 left in the tank;
   * the rest of the 基礎期 — 最大肌力: split squat 3–6 reps × 3–4 sets, a loaded step-down, pull-ups;
   * 專項期 (and a 減量期 day before the stop) — 維持: 2–4 moves, 20–30 min. With a 百岳 A race and an
     ME session in the week (SP-114: box step-up / step-down, lunges, jumps), no step-down here;
@@ -79,16 +80,19 @@ def phase_at(phases, day: dt.date) -> Optional[dict]:
     return None
 
 
+BLOCK_KINDS = ("transition", "rebuild", "base")    # the post-race run up to the next build (SP-98 回量期 too)
+
+
 def block_start(phases, day: dt.date) -> Optional[dt.date]:
-    """The first day of the run of 轉換期 / 基礎期 phases holding `day` (a 基礎期 right after a
-    轉換期 counts from the 轉換期); None when `day` is in neither."""
+    """The first day of the run of 轉換期 / 回量期 / 基礎期 phases holding `day` (a 基礎期 right after
+    a 轉換期 / 回量期 counts from it); None when `day` is in none of them."""
     p = phase_at(phases, day)
-    if p is None or p["kind"] not in ("transition", "base"):
+    if p is None or p["kind"] not in BLOCK_KINDS:
         return None
     start = p["start"]
-    for _i in range(10):                 # walk back over touching 轉換期 / 基礎期 phases
+    for _i in range(10):                 # walk back over touching 轉換期 / 回量期 / 基礎期 phases
         q = phase_at(phases, start - dt.timedelta(days=1))
-        if q is None or q["kind"] not in ("transition", "base"):
+        if q is None or q["kind"] not in BLOCK_KINDS:
             break
         start = q["start"]
     return start
@@ -97,8 +101,8 @@ def block_start(phases, day: dt.date) -> Optional[dt.date]:
 def stage(kind: str, phases, monday: dt.date) -> Optional[str]:
     """aa | max | maint for the week's phase `kind` (week_plan's status.kind / the projection's
     phase_kind); None = the old session (恢復期, or no phase)."""
-    if kind == "transition":
-        return "aa"
+    if kind in ("transition", "rebuild"):
+        return "aa"                      # 回量期 (SP-98): still anatomical adaptation before the 基礎期
     if kind == "base":
         b0 = block_start(phases, monday)
         if b0 is not None and (monday - b0).days < AA_WEEKS * 7:

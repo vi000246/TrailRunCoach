@@ -262,7 +262,7 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
         add(id=f"easy{i + 1}", kind="easy", title="輕鬆跑" + (st_t if strides else ""),
             minutes=int(round(m / 5) * 5), target=tgt.get("z2", ""),
             detail=f"心率不超過{cap_txt}" + (st_d if strides else ""),
-            source=O.SRC_UA + (st_s if kind == "transition" else ""), tss=m / 60.0 * tph)
+            source=O.SRC_UA + (st_s if kind in ("transition", "rebuild") else ""), tss=m / 60.0 * tph)
     if prefs is not None and prefs.active:
         from backend.engine import plan_prefs as PP
         r = {"road": tph, "trail": tph, "hike": tph, "strength": strength_tss / 35 * 60, **(rates or {})}

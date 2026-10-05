@@ -33,7 +33,7 @@ z5_status(ds, today, …)
 a_race_rebase(plan, today)
     A 賽後重新打底 (SP-116, owner 2026-10-05): after an A race — never a B / C race — the Zone 3
     and Zone 5 gates lock again whatever the break length, and only a confirmation dated on or
-    after the first day after the race's 恢復期 + 轉換期 counts (the method in 課表偏好 間歇門檻,
+    after the first day after the race's 恢復期 + 轉換期 + 回量期 (planning.POST_RACE_KINDS, SP-98) counts (the method in 課表偏好 間歇門檻,
     run with the post-race E pace / CP / LTHR). 徐國峰's cycle 「打底 → 練強度 → 比賽 → 跑力提升 →
     用新的 E 配速重新打底」 (coach-level, no controlled trial; periodization-cross-sport.md §4.10).
     Two A races so close that no 基礎期 follows the post-race phases: no rebuild (the second
@@ -474,7 +474,7 @@ def maintenance(ds, today: dt.date, since: dt.date, brk: Optional[dict] = None) 
 
 def a_race_rebase(plan, today: dt.date) -> Optional[dict]:
     """The A 賽後重新打底 in effect on `today` (SP-116), or None: the latest A event (priority A,
-    any kind) that ended before `today`, the first day after its 恢復期 / 轉換期 (planning phases
+    any kind) that ended before `today`, the first day after its 恢復期 / 轉換期 / 回量期 (planning phases
     read through phase_days — the post-race phases themselves are planned elsewhere) and whether
     a 基礎期 follows them. {"event_id", "name", "race_end", "from" (ISO: confirmations from this
     day count), "text", "src"}. Never raises."""

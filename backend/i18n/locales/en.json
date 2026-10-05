@@ -415,6 +415,7 @@
   "單腳站閉眼；單腳站在折疊瑜珈墊或枕頭上；單腳站、另一腳往前、側、後三個方向伸出去點地；前跨步落地停住 2 秒": "Single-leg stand, eyes closed; single-leg stand on a folded yoga mat or a pillow; single-leg stand reaching the other foot forward, sideways and back to tap the floor; step forward, land and hold 2 s",
   "單腳站（張眼）；單腳站轉頭；單腳提踵慢放；單腳站、另一腳前後擺": "Single-leg stand (eyes open); single-leg stand turning the head; single-leg calf raise, lowering slowly; single-leg stand swinging the other leg forward and back",
   "回量期": "Rebuild",
+  "回量期照轉換期，每週第一次輕鬆跑後加 4 趟 15 秒加速（約 5K 配速）：量很小，保留一點速度（Jay Johnson，教練級；自行車選手的對照試驗，套到跑步為推估）": "In the rebuild phase, as in the transition phase, the week's first easy run ends with 4 × 15 s strides (about 5K pace): a tiny dose that keeps some speed (Jay Johnson, coach level; controlled trials in cyclists, applying them to running is an estimate)",
   "回量期第 {i}/{n} 週：賽前 4 週平均 {h:.1f} h × {share:.0%}（照減量期倒過來，比例推估），不排強度課": "Rebuild week {i}/{n}: {share:.0%} of the {h:.1f} h average of the 4 weeks before the race (the taper in reverse; the share is an estimate), no intensity",
   "回量期第 {i}/{n} 週：近 4 週的 {share:.0%}，不排強度課": "Rebuild week {i}/{n}: {share:.0%} of the last 4 weeks, no intensity",
   "回量期縮短為 {days} 天：下一場 A 賽事「{name}」{date}": "Rebuild shortened to {days} days: the next A race \"{name}\" is on {date}",
