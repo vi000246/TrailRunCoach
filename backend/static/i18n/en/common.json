@@ -37,5 +37,16 @@
   "workout.elev_aria": "; distance across ({km} km in all), background: route elevation {lo}–{hi} m",
   "autoplan.log_title": "Automatic adjustment log",
   "autoplan.log_count": "({n})",
-  "workout.thr_low_badge": "HR threshold uncertain"
+  "workout.thr_low_badge": "HR threshold uncertain",
+  "workout.load_mode": "How the load is entered",
+  "workout.load_by_rpe": "RPE (feel)",
+  "workout.rpe_easy": "Easy",
+  "workout.rpe_moderate": "Somewhat hard",
+  "workout.rpe_hard": "Hard",
+  "workout.rpe_very_hard": "Very hard",
+  "workout.rpe_max": "Max",
+  "workout.load_min": "min",
+  "workout.load_rpe_tip": "By feel: Easy / Somewhat hard / Hard / Very hard / Max are Borg CR-10 2 / 4 / 5 / 7 / 10; TSS = {factor} × RPE × minutes (Foster session RPE, {src}, estimate). Planning targets only: the actual load is the watch's record.",
+  "workout.load_rpe_mine": "factor calibrated on your watch-recorded RPE vs actual TSS",
+  "workout.load_rpe_default": "default factor, no activity with a watch-recorded RPE yet"
 }

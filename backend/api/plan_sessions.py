@@ -1164,6 +1164,13 @@ def _provider():
     return WT.resolve(read_setting(WT.SETTING_KEY, WT.DEFAULT))
 
 
+def _rpe_load_ctx() -> dict:
+    from backend.engine import rpe_load as RL
+    m = RL.current()
+    return {"levels": RL.levels(), "min_range": list(RL.MIN_RANGE), "factor": round(m.factor, 4),
+            "fitted": m.fitted, "n": m.n}
+
+
 def _context(env: dict) -> dict:
     from backend.engine import target_policy as TP
     from backend.engine import workout_steps as WS
@@ -1177,6 +1184,8 @@ def _context(env: dict) -> dict:
             "kinds": WS.KIND_LABEL, "types": WS.TYPE_LABEL,
             # the editor's 時長類型 dropdown: the provider's end conditions + labels (SP-38)
             "provider": env.get("provider"), "load_kinds": list(WS.LOAD_KINDS), "load_range": list(WS.LOAD_RANGE),
+            # 「負荷」 entered by feel (SP-57, engine/rpe_load.py): the five levels and the factor in effect
+            "rpe_load": _rpe_load_ctx(),
             "rules": {"z5_min_rep_s": WS.Z5_MIN_REP_S, "z3_min_rep_s": WS.Z3_MIN_REP_S,
                       "z5_max_rest_s": WS.Z5_MAX_REST_S, "coros_max_steps": WS.COROS_MAX_STEPS}}
 

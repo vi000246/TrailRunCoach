@@ -111,5 +111,10 @@
   "最大心率": "Max HR",
   "{name} 可信度{c}": "{name} confidence {c}",
   "；": "; ",
-  "：": ": "
+  "：": ": ",
+  "輕鬆": "Easy",
+  "稍累": "Somewhat hard",
+  "累": "Hard",
+  "很累": "Very hard",
+  "極限": "Max"
 }
