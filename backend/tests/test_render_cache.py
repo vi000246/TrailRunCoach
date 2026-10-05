@@ -137,3 +137,14 @@ def test_concurrent_renders_are_capped(tmp_path):
     for t in ts:
         t.join(5)
     assert peak[0] == 2
+
+
+def test_memory_is_capped_by_bytes_not_only_by_count(tmp_path):
+    # per-second workout charts are MB each: 400 of them used to stay in memory
+    c = RenderCache(tmp_path, max_memory=400, max_memory_bytes=10_000)
+    for i in range(6):
+        c.put(f"{i:02d}" + "m" * 38, {"pad": "x" * 2000})
+    assert c._mem_bytes <= 10_000 and len(c._mem) == 4
+    assert c.get("00" + "m" * 38) == {"pad": "x" * 2000}            # still on disk
+    c.put("big" + "m" * 37, {"pad": "x" * 5000})                       # > a quarter: disk only
+    assert ("big" + "m" * 37) not in c._mem and c.get("big" + "m" * 37) == {"pad": "x" * 5000}

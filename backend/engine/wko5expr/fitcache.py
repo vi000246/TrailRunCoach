@@ -637,12 +637,18 @@ class LazyFiles:
     first use, keeping at most `max_open` files in memory (LRU). A warm
     build reads no channels at all: every per-file number it needs is in the
     index, so a dataset over 800 files starts in seconds and holds only what
-    the charts look at."""
+    the charts look at.
+
+    An open file is Python lists (Channel.values), ~32 bytes a sample per
+    channel: a 5 h run is several MB. The charts that walk every file (the
+    5 區開放流程 replay) gain nothing from a big LRU, so it is small: on 300
+    synthetic runs, 12 instead of 48 kept ~80 MB less after the chart page
+    with the same render time."""
 
     def __init__(self, store: FitStore, max_open: Optional[int] = None):
         self.store = store
         self.meta: dict[int, tuple] = {}
-        self.max_open = max_open or int(os.getenv("WKO5COACH_FIT_OPEN", "48"))
+        self.max_open = max_open or int(os.getenv("WKO5COACH_FIT_OPEN", "12"))
         self._open: "OrderedDict[int, object]" = OrderedDict()
         self._lock = threading.Lock()
 

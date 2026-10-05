@@ -44,6 +44,9 @@ def cache_dir() -> Path:
 
 MAX_DISK_BYTES = 300 * 1024 * 1024
 MAX_MEMORY_ENTRIES = 400
+# JSON bytes kept in memory (the Python objects take a few times that): a
+# count alone let per-second workout charts add up to GB on the NAS
+MAX_MEMORY_BYTES = 32 * 1024 * 1024
 MAX_CONCURRENT = 2
 
 # Everything that shapes a chart's JSON: wko5expr/, algorithms/, engine/*.py
@@ -157,11 +160,14 @@ class RenderCache:
         return self._root if self._root is not None else cache_dir()
 
     def __init__(self, root: Optional[Path] = None, max_bytes: int = MAX_DISK_BYTES,
-                 max_memory: int = MAX_MEMORY_ENTRIES, max_concurrent: int = MAX_CONCURRENT):
+                 max_memory: int = MAX_MEMORY_ENTRIES, max_concurrent: int = MAX_CONCURRENT,
+                 max_memory_bytes: int = MAX_MEMORY_BYTES):
         self._root = Path(root) if root is not None else None
         self.max_bytes = max_bytes
         self.max_memory = max_memory
-        self._mem: "OrderedDict[str, Any]" = OrderedDict()
+        self.max_memory_bytes = max_memory_bytes
+        self._mem: "OrderedDict[str, tuple[Any, int]]" = OrderedDict()   # key -> (value, JSON bytes)
+        self._mem_bytes = 0
         self._lock = threading.Lock()
         self._inflight: dict[str, dict] = {}
         self._slots = threading.BoundedSemaphore(max_concurrent)
@@ -172,21 +178,32 @@ class RenderCache:
     def _path(self, key: str) -> Path:
         return self.root / key[:2] / f"{key}.json"
 
-    def _remember(self, key: str, value: Any) -> None:
-        self._mem[key] = value
-        self._mem.move_to_end(key)
-        while len(self._mem) > self.max_memory:
-            self._mem.popitem(last=False)
+    def _remember(self, key: str, value: Any, size: int) -> None:
+        """Keep `value` in memory; `size` = its JSON length. Capped by count
+        and by bytes: a workout chart is per-second data (MB as Python
+        objects), so 400 of them could hold GB; one larger than a quarter of
+        the budget stays on disk only."""
+        old = self._mem.pop(key, None)
+        if old is not None:
+            self._mem_bytes -= old[1]
+        if size > self.max_memory_bytes // 4:
+            return
+        self._mem[key] = (value, size)
+        self._mem_bytes += size
+        while self._mem and (len(self._mem) > self.max_memory or self._mem_bytes > self.max_memory_bytes):
+            _k, (_v, s) = self._mem.popitem(last=False)
+            self._mem_bytes -= s
 
     def get(self, key: str) -> Optional[Any]:
         with self._lock:
             if key in self._mem:
                 self._mem.move_to_end(key)
                 self.stats["hit_mem"] += 1
-                return self._mem[key]
+                return self._mem[key][0]
         p = self._path(key)
         try:
-            value = json.loads(p.read_text("utf-8"))
+            text = p.read_text("utf-8")
+            value = json.loads(text)
         except (OSError, ValueError):
             return None
         try:
@@ -194,18 +211,19 @@ class RenderCache:
         except OSError:
             pass
         with self._lock:
-            self._remember(key, value)
+            self._remember(key, value, len(text))
             self.stats["hit_disk"] += 1
         return value
 
     def put(self, key: str, value: Any) -> None:
+        text = json.dumps(value, ensure_ascii=False, separators=(",", ":"))
         with self._lock:
-            self._remember(key, value)
+            self._remember(key, value, len(text))
         p = self._path(key)
         try:
             p.parent.mkdir(parents=True, exist_ok=True)
             tmp = p.with_suffix(f".{threading.get_ident()}.tmp")
-            tmp.write_text(json.dumps(value, ensure_ascii=False, separators=(",", ":")), "utf-8")
+            tmp.write_text(text, "utf-8")
             os.replace(tmp, p)
         except OSError:
             return
