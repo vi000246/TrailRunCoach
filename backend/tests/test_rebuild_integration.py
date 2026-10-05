@@ -92,3 +92,14 @@ def test_a_week_touching_the_rebuild_counts_as_recovery_like():
     assert mon in skip and not (set(after) & skip)
     hours = [5.0, 6.0, 6.5, 7.0]                                              # no drop: only the phase marks it
     assert O.weeks_since_recovery(hours, [m in skip for m in [mon] + after]) == 3
+
+
+def test_rebuild_after_the_transition_keeps_the_volume_monotonic():
+    """Owner 2026-10-05 (kept): the 回量期 follows the 轉換期 — the post-race volume only goes up:
+    恢復期 → 轉換期 → 回量期 (50 → 75 %) → 基礎期."""
+    ev, ph = _post()
+    kinds = [p.kind for p in ph if p.event_id == "r" or p.kind == "base"]
+    i = kinds.index("recovery")
+    assert kinds[i:i + 3] == ["recovery", "transition", "rebuild"]
+    shares = [P.REC_SHARE, O.TRANSITION_SHARE, *P.REBUILD_SHARES]
+    assert shares == sorted(shares)
