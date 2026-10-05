@@ -174,8 +174,12 @@ B2B weekends, the race calculator (for the 專項期 target) and the 主要訓�
    after week); no race known (a manual 轉換期) → the old 65 % of the 4-week mean. Easy runs
    only, each ≤ 60 min (`TRANSITION_RUN_MAX`, Canova's 4 weeks of easy running ≤ 1 h; enforced
    after the 課表偏好 shaping too, `cap_transition_runs`, `backend/engine/overview.py:373`),
-   strength ×2, no long run, interval, strides or CP-test suggestion; a week note says so and
-   that cross-training may replace an easy run (`src: transition`).
+   strength ×2, no long run, interval or CP-test suggestion; a week note says so and
+   that cross-training may replace an easy run (`src: transition`). From the phase's 2nd week
+   (`transition_week`) the week's first easy run ends with 「＋加速跑 4×15 秒」 (~5K pace, after
+   20–30′ easy; `TRANSITION_STRIDES`, SP-103: Jay Johnson 3–5 × 15 s from week 2, 教練級; the
+   cyclists' one-sprint-session-a-week trials, 推估 for running), with a note; never in week 1 or
+   the 恢復期. A 課表偏好 越野 easy run keeps these strides (not the base hill sprints).
 5. A custom weekly-hours preference only lowers the result (`backend/engine/overview.py:944`).
 6. A break ≥ 6 days without running — a 不排課日期 range or simply no runs — gives the re-entry
    block instead (`reentry.find`, `backend/engine/overview.py:952`; Daniels; plan-auto.spec.md);

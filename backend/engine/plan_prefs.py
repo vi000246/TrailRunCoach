@@ -439,11 +439,13 @@ def _easy(template: Optional[dict], i: int, minutes: float, p: Prefs, c: Ctx) ->
         s["detail"] = f"心率不超過{c.cap()}"
     t = p.terrain_easy
     if t == "trail":
+        from backend.engine.overview import TRANSITION_STRIDES
+        tr = strides and TRANSITION_STRIDES[0] in (template or {}).get("title", "")    # 轉換期 (SP-103): kept as is
         s["terrain"] = "trail"
-        s["title"] = "輕鬆越野跑" + ("＋坡道衝刺 8×10 秒" if strides else "")
+        s["title"] = "輕鬆越野跑" + ((TRANSITION_STRIDES[0] if tr else "＋坡道衝刺 8×10 秒") if strides else "")
         s["target"] = easy_hr_text(c.aet, c.aet_measured)
         s["detail"] = f"山路或步道；只看心率 ≤ {c.cap()}，配速和功率在山路不準" + \
-            ("；最後 8 趟 10 秒上坡衝刺，走下來恢復" if strides else "")
+            ((TRANSITION_STRIDES[1] if tr else "；最後 8 趟 10 秒上坡衝刺，走下來恢復") if strides else "")
         cat = "trail"
     else:
         if t == "road":

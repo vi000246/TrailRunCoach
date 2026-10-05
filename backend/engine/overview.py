@@ -1083,6 +1083,49 @@ TAPER_Z3 = dict(id="quality", kind="quality", title="有氧間歇（巡航）2×
 ROAD_STRIDES = ("＋加速跑 6×20 秒", "；最後 6 趟 20 秒平路加速跑（快而放鬆，不是衝刺），慢跑回來",
                 f"；{SRC_DANIELS} strides")
 HILL_STRIDES = ("＋坡道衝刺 8×10 秒", "；最後 8 趟 10 秒上坡衝刺，走下來恢復", "；Palladino 基礎中期坡衝刺")
+# 轉換期 (SP-103; periodization-cross-sport.md §4.7, §4.7.1): from its 2nd week, the week's first easy
+# run ends with 4 × 15 s strides at about 5K pace (Jay Johnson: 3–5 × 15 s after 20–30 min easy from
+# week 2, 教練級; most coaches run once or not at all in week 1). Once a week as in the cyclists' trials
+# (one short-sprint session a week in the transition kept the 20-min power, +7.3 % 6 weeks into the
+# next preparation — Almquist 2020, Taylor 2021); carrying it over to running is 推估. Not in the 恢復期.
+TRANSITION_STRIDES = ("＋加速跑 4×15 秒",
+                      "；跑完 20–30 分輕鬆跑後 4 趟 15 秒加速（約 5K 比賽配速，快而放鬆，不是衝刺），每趟之間走或慢跑到呼吸平順",
+                      "；Jay Johnson（轉換期第 2 週起每次輕鬆跑後 3–5×15 秒，教練級）；Almquist 2020、Taylor 2021"
+                      "（自行車選手轉換期每週一次短衝刺）；套到跑步為推估")
+TRANSITION_STRIDES_WEEK = 2
+
+
+def transition_week(phases: list, monday: dt.date) -> Optional[int]:
+    """Which week of its 轉換期 the week of `monday` is (1 = the week the phase starts); None when no
+    轉換期 touches the week."""
+    sunday = monday + dt.timedelta(days=6)
+    for p in phases or ():
+        kind = p["kind"] if isinstance(p, dict) else p.kind
+        s = dt.date.fromisoformat(str(p["start"] if isinstance(p, dict) else p.start)[:10])
+        e = dt.date.fromisoformat(str(p["end"] if isinstance(p, dict) else p.end)[:10])
+        if kind == "transition" and s <= sunday and e >= monday:
+            return (monday - (s - dt.timedelta(days=s.weekday()))).days // 7 + 1
+    return None
+
+
+def transition_strides_note() -> dict:
+    """The week note of the 轉換期's strides (SP-103)."""
+    return {"level": "info", "src": "transition",
+            "text": _("轉換期第 {w} 週起，每週第一次輕鬆跑後加 4 趟 15 秒加速（約 5K 配速）：量很小，保留一點速度"
+                      "（Jay Johnson，教練級；自行車選手的對照試驗，套到跑步為推估）", w=TRANSITION_STRIDES_WEEK)}
+
+
+def strides_for(kind: str, mode: str, i: int, road: bool, tr_week: Optional[int]) -> Optional[tuple]:
+    """The strides (title, detail, source suffixes) the i-th easy run of the week carries, None = none:
+    base (not a recovery / re-entry week) — the hill sprints / road strides; 轉換期 from its 2nd week —
+    TRANSITION_STRIDES (SP-103)."""
+    if i != 0:
+        return None
+    if kind == "base" and mode not in ("recovery_week", "reentry"):
+        return ROAD_STRIDES if road else HILL_STRIDES
+    if kind == "transition" and (tr_week or 0) >= TRANSITION_STRIDES_WEEK:
+        return TRANSITION_STRIDES
+    return None
 
 
 def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, blackouts=None,
@@ -1472,14 +1515,16 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
             tss=35 / 60 * tph["strength"])
     used = sum(s.minutes for s in sessions if s.kind not in ("strength",))
     left = max(0.0, minutes_total - used)
+    tr_wk = transition_week(phs, monday) if kind == "transition" else None
     n_easy = easy_count(left, kind)
     if kind == "taper":
         # keep the run count, each run shorter (SP-96)
         n_easy = taper_easy_count(left, t_ref.get("runs"), sum(1 for s in sessions if s.kind in RUN_KINDS))
     for i in range(n_easy):
         m = min(left / n_easy, TRANSITION_RUN_MAX) if kind == "transition" else left / n_easy
-        strides = kind == "base" and i == 0 and mode not in ("recovery_week", "reentry")
-        st_t, st_d, st_s = ROAD_STRIDES if road else HILL_STRIDES
+        st = strides_for(kind, mode, i, road, tr_wk)       # base; 轉換期 from week 2 (SP-103)
+        strides = st is not None
+        st_t, st_d, st_s = st or ("", "", "")
         add(id=f"easy{i + 1}", kind="easy", title="輕鬆跑" + (st_t if strides else ""),
             minutes=int(round(m / 5) * 5), target=tgt.get("z2", ""),
             detail=f"心率不超過{cap_txt}" + (st_d if strides else ""),
@@ -1499,6 +1544,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         # 轉換期 (SP-73): each run ≤ 60 min (Canova) — also after the 課表偏好 shaping
         cap_transition_runs(sessions, notes)
         notes.append({"level": "info", "src": "transition", "text": _(TRANSITION_NOTE)})
+        if any(TRANSITION_STRIDES[0] in s.title for s in sessions):
+            notes.append(transition_strides_note())
     # a 轉換期 shortened / skipped for the next A race's 專項期; two A races close together — a
     # 恢復期 / 專項期 / 減量期 cut short, the 12-week hint (SP-90) (planning.auto_phases)
     for pk, t in _week_phase_notes(status, monday):
