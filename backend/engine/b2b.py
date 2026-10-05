@@ -36,7 +36,8 @@ When (doc §2.4):
     (days > 1) or a single day of 超馬級 (planning.Event.is_long: ≥ 6 h predicted, else EP ≥ 60
     — SP-111) — UA「longer
     races」, CTS, Koop;
-  * the last B2B ends ≥ 3 weeks before the event (搜尋摘要「3 weeks」未驗證;
+  * the last B2B ends ≥ 3 weeks before the event (vert.run 100-mile guide: the biggest
+    4–5 weeks out, none in the last 3 — periodization-cross-sport.md [190], coach;
     Koop: nothing hard in the last 2–3 weeks);
   * at most one per 3:1 cycle, on the first build week after the recovery week
     (Johnston「slightly below-average」week before, Koop「after rest」); the
@@ -87,7 +88,7 @@ ACCEPTED_KEY = "plan.b2b.accepted"   # user_settings: [{week, days: [d1, d2], mi
 SUGGEST_AHEAD_DAYS = 13        # suggestions for this week and the next (推估: enough notice to free a weekend)
 
 # ---- when ------------------------------------------------------------------
-LAST_BEFORE_DAYS = 21          # last B2B day ≥ 3 weeks before the event (未驗證 summary; Koop 2–3 wk)
+LAST_BEFORE_DAYS = 21          # last B2B day ≥ 3 weeks before the event (vert.run: none in the last 3 wk [190]; Koop 2–3 wk)
 SPACING_DAYS = 14              # 推估: never two B2B weekends < 2 weeks apart
 RECOVERY_SHARE = 0.85          # 推估: last week ≤ 85 % of the 3 before = the 3:1 recovery week (0.65)
 LONGEST_FRAC = 0.87            # base built: longest 28 d ≥ day 1 × 0.87 (1 / 1.15, the app's +15 % step)
@@ -108,7 +109,7 @@ AET_BAND_BPM = 10.0            # ΔVAM@AeT: windows at AeT − 10 … AeT (vo2ma
 TREND_STEP = 0.02              # 推估: the day-2 VAM ratio moved ≥ 2 points = 變好 / 變差
 
 SRC_WHEN = ("UA（專項期、longer races）；Koop（最後 2–3 週不硬塞）；"
-            "賽前 ≥ 3 週為搜尋摘要（未驗證）；每個 3:1 週期一次、次數為推估")
+            "vert.run 百英里指南（最大的在賽前 4–5 週、最後 3 週不做）；每個 3:1 週期一次、次數為推估")
 SRC_DAYS = ("Koop／CTS〈Block Training〉：第 1 天較硬、總量不加；Jones-Wilkins（CTS）30:20；"
             "UA：兩天都 ≤ AeT；Burke 2011：補給 30–60 g/h；第 2 天比例 0.67、背負進度對應次數為推估")
 SRC_POST = "Johnston（UA）「three or four light days」；4 天、不改恢復週為推估"
