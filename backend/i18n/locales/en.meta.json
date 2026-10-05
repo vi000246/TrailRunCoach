@@ -2283,6 +2283,10 @@
     "draft": true,
     "src": "backend/engine/racepower/calc.py:271"
   },
+  "沒有 GPX 的分日點，{n} 天是平均分配：攻頂那天通常最硬，可能被低估。上傳 GPX 並標好每天的終點會更準": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:118"
+  },
   "沒有 LTHR，區間算不出來": {
     "draft": true,
     "src": "backend/engine/hr_profile.py:228"

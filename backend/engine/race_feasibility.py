@@ -7,7 +7,7 @@ Only advice — nothing here changes the plan or the event. Each check gives a l
   weekly   the projected peak week's foot km and climb ÷ the race's hardest day (UA Big Vert:
            「weekly distance and vertical start at about 50 % of the event's largest single day
            and progress to about 90–100 % for longer events, > 100 % for shorter ones」).
-           ok ≥ 90 % (hardest day ≥ 6 h) / ≥ 100 % (shorter), over < 50 % (UA's starting point;
+           ok ≥ 90 % (a long event: multi-day or ≥ 6 h in all) / ≥ 100 % (shorter), over < 50 % (UA's starting point;
            a red line is 推估). The peak week = the last 4 full weeks' mean (or the last week if
            higher) growing +10 % a week (SP-89 decision 1) with every 4th week a recovery week
            (3:1, no growth), up to the week holding race − 21 days (Koop: no fitness gained in
@@ -103,6 +103,21 @@ def base_week(hist: list[dict]) -> dict:
         return {"km": 0.0, "climb_m": 0.0, "hours": 0.0}
     n = len(hist)
     return {k: max(sum(h[k] for h in hist) / n, hist[-1][k]) for k in ("km", "climb_m", "hours")}
+
+
+def week_ok_at(e, line: dict) -> float:
+    """UA's 「longer event」 (90 %) vs 「shorter」 (> 100 %) is the EVENT's length: a multi-day trip or a
+    race of ≥ 6 h in all (a 3-day 百岳 with ~5 h days is a long event, not a short one)."""
+    long_event = (e.days or 1) > 1 or float(line.get("hours") or 0.0) >= LONG_DAY_H
+    return WEEK_OK_LONG if long_event else WEEK_OK_SHORT
+
+
+def split_note(line: dict) -> Optional[str]:
+    """A multi-day trip split equally (no GPX day ends): its hardest day is likely underestimated."""
+    if line.get("multi") and line.get("split_source") == "equal":
+        return _("沒有 GPX 的分日點，{n} 天是平均分配：攻頂那天通常最硬，可能被低估。上傳 GPX 並標好每天的終點會更準",
+                 n=line["days"])
+    return None
 
 
 def hardest_day(line: dict) -> dict:
@@ -215,6 +230,7 @@ def assess(e, line: Optional[dict], today: dt.date, hist: list[dict], summit: Op
     """The verdict for event `e` (planning.Event) with its race line (race_refs.race_line) and
     the last weeks (weekly_history). `summit`: summit_eta()'s result for a 百岳 with a summit."""
     out = {"event_id": e.id, "name": e.name, "date": e.date, "priority": e.priority, "kind": e.kind,
+           "days": int(e.days or 1),
            "days_to": (e.start - today).days, "checks": [], "suggestions": [], "src": [_(SRC_UA)]}
     if e.priority == "C":
         out.update(level="ok", label=_(LEVEL_LABEL["ok"]), skipped=_("C 賽當練習，不評估"))
@@ -241,6 +257,8 @@ def assess(e, line: Optional[dict], today: dt.date, hist: list[dict], summit: Op
         weeks = weeks_ahead(today, e.start)
         pk = peak_week(base, weeks)
         out["race_day"] = hd
+        if split_note(line):
+            out["split_note"] = split_note(line)
         out["base_week"] = {k: round(v, 1) for k, v in base.items()}
         out["peak_week"] = {k: round(v, 1) for k, v in pk.items()}
         if base["km"] <= 0:
@@ -249,7 +267,7 @@ def assess(e, line: Optional[dict], today: dt.date, hist: list[dict], summit: Op
             r_km = pk["km"] / hd["km"] if hd["km"] else None
             r_cl = pk["climb_m"] / hd["climb_m"] if hd["climb_m"] >= CLIMB_MIN_M else None
             ratio = min(x for x in (r_km, r_cl) if x is not None) if (r_km or r_cl) else None
-            ok_at = WEEK_OK_LONG if hd["hours"] >= LONG_DAY_H else WEEK_OK_SHORT
+            ok_at = week_ok_at(e, line)
             if ratio is not None:
                 lv = "ok" if ratio >= ok_at else "over" if ratio < WEEK_OVER else "tight"
                 # a race day under CLIMB_MIN_M (路跑) is judged on km only: no climb in the text either
@@ -401,7 +419,7 @@ def readiness(e, line: Optional[dict], today: dt.date, hist: list[dict], acts: l
     # 2. the biggest week
     weeks = hist[-READY_WEEKS:]
     if weeks and any(w["km"] > 0 for w in weeks):
-        ok_at = WEEK_OK_LONG if hd["hours"] >= LONG_DAY_H else WEEK_OK_SHORT
+        ok_at = week_ok_at(e, line)
         rk = max(w["km"] for w in weeks) / hd["km"] if hd["km"] else None
         rc = max(w["climb_m"] for w in weeks) / hd["climb_m"] if not road else None
         r = min(x for x in (rk, rc) if x is not None) if (rk is not None or rc is not None) else None

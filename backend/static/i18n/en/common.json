@@ -119,5 +119,7 @@
   "feas.k_summit": "Summit at {eta} h (turn back {c})",
   "feas.k_finish": "Finish {f} h (cutoff {c})",
   "feas.k_b2b": "Back-to-back long days: {n}",
-  "feas.chart": "Build-phase charts →"
+  "feas.chart": "Build-phase charts →",
+  "feas.k_week_day": "Weekly training: {p}% of the hardest day",
+  "feas.k_long_day": "Longest outing: {p}% of the hardest day"
 }
