@@ -63,6 +63,7 @@ from backend.engine.wko5expr.dataset import (
 )
 from backend.files.wko4_file import Channel, Wko4File
 from backend.files.wko5_athlete import Athlete, WorkoutEntry, read_athlete
+from backend.i18n import N_
 
 log = logging.getLogger(__name__)
 
@@ -85,10 +86,10 @@ NOT_BEFORE = (dt.date.min, None)
 WKO5_OPT_IN_KEY = "charts.fit_settings_from_wko5"   # settings/repository.py DEFAULTS
 
 SETTING_LABELS = {
-    "wko5": "WKO5 athlete 檔（選用）",
+    "wko5": N_("WKO5 athlete 檔（選用）"),
     "db": "athlete_settings（app DB）",
-    "estimate": "自動估算（當天以前的跑步，Friel 30 分鐘段）",
-    "unset": "未設定",
+    "estimate": N_("自動估算（當天以前的跑步，Friel 30 分鐘段）"),
+    "unset": N_("未設定"),
 }
 IGNORED_WHY = ("COROS 帳號 zoneData 的值（登入時寫入），沒有記錄是哪個運動；"
                "不當跑步 LTHR／FTP 用")
@@ -767,7 +768,7 @@ class FitFolderDataset(Dataset):
                 continue
         if out:
             self.athlete.settings["runthr"] = [NOT_BEFORE] + out
-            self._setting_labels["runthr"] = "來自手錶（COROS 帳號的 LTHR；還沒有夠硬的跑步可以自己估）"
+            self._setting_labels["runthr"] = N_("來自手錶（COROS 帳號的 LTHR；還沒有夠硬的跑步可以自己估）")
             for r in rows:
                 r["why"] = "沒有硬的跑步可以估 LTHR：先用手錶的值（推估）"
         return out
@@ -982,7 +983,7 @@ class FitFolderDataset(Dataset):
                     "wprime": t.wprime, "wprime_source": "測試（兩點法）" if t.wprime else None}
         v = super().cp(w)
         if v is not None:
-            return {"cp": v, "source": self.setting_label("runftp"), "date": None, "kind": "setting",
+            return {"cp": v, "source": self.setting_source("runftp"), "date": None, "kind": "setting",
                     "wprime": None, "wprime_source": None}
         fit = self._cp_fit_on(day)
         if fit:
@@ -1015,8 +1016,8 @@ class FitFolderDataset(Dataset):
         """Recompute the LTHR-dependent hrTSS / hrIF after the estimates."""
         self._add_hr_fields(w, self.hr_lthr(w))
 
-    def setting_label(self, name: str, default: str = "WKO5 設定") -> str:
-        """Where a dated setting (runthr / runftp / weight ...) came from."""
+    def setting_source(self, name: str, default: str = N_("WKO5 設定")) -> str:
+        """Where a dated setting (runthr / runftp / weight ...) came from (a msgid; setting_label translates)."""
         if self.settings_from == "wko5":
             return SETTING_LABELS["wko5"]
         return self._setting_labels.get(name.lower(), SETTING_LABELS["unset"])

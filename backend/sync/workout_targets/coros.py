@@ -8,6 +8,7 @@ from __future__ import annotations
 from typing import Optional
 
 from backend.sync import coros_workouts as CW
+from backend.i18n import N_
 from backend.sync.workout_targets.base import Capabilities, WorkoutProvider
 
 
@@ -18,9 +19,9 @@ class CorosProvider(WorkoutProvider):
     capabilities = Capabilities(
         targets=("power", "hr", "pace"), repeat_groups=True, nested_repeats=False, open_steps=True,
         distance_steps=True, distance_unit="cm", max_steps=None,
-        notes=("功率只收絕對瓦數", "配速：秒／公里（2026-10-02 手錶驗證）",
-               "「最後一趟不休息」的重複要攤平", "距離段單位依第三方整理（未驗證）",
-               "負荷：app 填 TSS，送 COROS 的 TL（推估換算）"),
+        notes=(N_("功率只收絕對瓦數"), N_("配速：秒／公里（2026-10-02 手錶驗證）"),
+               N_("「最後一趟不休息」的重複要攤平"), N_("距離段單位依第三方整理（未驗證）"),
+               N_("負荷：app 填 TSS，送 COROS 的 TL（推估換算）")),
         end_conditions=("time", "distance", "open", "load"), load_unit="TL")
 
     def build_payload(self, session: dict, thresholds: Optional[dict]) -> dict:

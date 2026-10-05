@@ -76,6 +76,7 @@ from dataclasses import asdict, dataclass, field
 from typing import Callable, Optional
 
 from backend.engine.algorithms.effort import SIMPLE_FORMULAS
+from backend.i18n import _
 
 WINDOW_WEEKS = 26
 EASY_HR_TOL = 3.0              # avg HR <= AeT + 3 (workout_review drift-streak "easy")
@@ -188,7 +189,7 @@ def _flat_speed(road_all: list[Sample], aet: Optional[float],
     flat = [s for s in road_all if s.km > 0 and s.gain / s.km <= FLAT_M_PER_KM and s.minutes >= MIN_MINUTES]
     easy = [s for s in flat if s.hr is not None and aet is not None and s.hr <= aet + EASY_HR_TOL]
     if len(easy) >= MIN_ROAD:
-        return statistics.median(_speed(s) for s in easy), f"近 {WINDOW_WEEKS} 週 {len(easy)} 次輕鬆路跑的中位數", len(easy)
+        return statistics.median(_speed(s) for s in easy), _("近 {weeks} 週 {n} 次輕鬆路跑的中位數", weeks=WINDOW_WEEKS, n=len(easy)), len(easy)
     hr_ok = [s for s in flat if s.hr]
     if aet is not None and len(hr_ok) >= 8:
         xs, ys = [s.hr for s in hr_ok], [_speed(s) for s in hr_ok]
@@ -197,14 +198,14 @@ def _flat_speed(road_all: list[Sample], aet: Optional[float],
         if sxx > 0:
             b = sum((x - mx) * (y - my) for x, y in zip(xs, ys)) / sxx
             if b > 0:
-                return my + b * (aet - mx), f"{len(hr_ok)} 次路跑的速度－心率迴歸，取 AeT 的速度", len(hr_ok)
+                return my + b * (aet - mx), _("{n} 次路跑的速度－心率迴歸，取 AeT 的速度", n=len(hr_ok)), len(hr_ok)
     if flat:
-        return statistics.median(_speed(s) for s in flat), f"{len(flat)} 次路跑的中位數（沒有心率可篩）", len(flat)
+        return statistics.median(_speed(s) for s in flat), _("{n} 次路跑的中位數（沒有心率可篩）", n=len(flat)), len(flat)
     if tpace_min_per_km and tpace_min_per_km > 0:
         # generalize-athlete G1: no road run at all — easy ≈ 75 % of the threshold speed (推估)
         v = 60.0 / tpace_min_per_km * TPACE_EASY_FRAC
-        return v, f"沒有路跑資料：閾值配速的 {TPACE_EASY_FRAC:.0%} 速度（推估）", 0
-    return DEFAULT_V_FLAT, "沒有路跑資料，暫用 8 km/h（推估）", 0
+        return v, _("沒有路跑資料：閾值配速的 {frac:.0%} 速度（推估）", frac=TPACE_EASY_FRAC), 0
+    return DEFAULT_V_FLAT, _("沒有路跑資料，暫用 8 km/h（推估）"), 0
 
 
 def _ep_speed(ss: list[Sample]) -> Optional[float]:

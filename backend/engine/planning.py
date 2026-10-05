@@ -29,6 +29,8 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Optional
 
+from backend.i18n import _
+
 PLAN_PATH: Optional[Path] = None      # fixed file (tests); None = the tenant's plan.json
 
 
@@ -285,7 +287,7 @@ class Plan:
         if data.get("pack_kg") is not None:
             data["pack_kg"] = float(data["pack_kg"])
             if not 0 <= data["pack_kg"] <= PACK_MAX_KG:
-                raise ValueError(f"行程背包要在 0–{PACK_MAX_KG:g} kg")
+                raise ValueError(_("行程背包要在 0–{max:g} kg", max=PACK_MAX_KG))
         _d(data["date"])  # validate
         eid = data.get("id") or uuid.uuid4().hex[:8]
         ev = Event(**{**data, "id": eid})
@@ -362,13 +364,13 @@ def auto_phases(events: list[Event], begin: dt.date, end: dt.date,
             if limit is not None and limit < t_end:
                 days = (limit - cursor).days + 1
                 if days >= TRANSITION_MIN_DAYS:
-                    note = (f"轉換期縮短為 {days} 天：下一場 A 賽事「{nxt.name}」的專項期 "
-                            f"{(limit + one).isoformat()} 開始")
+                    note = _("轉換期縮短為 {days} 天：下一場 A 賽事「{name}」的專項期 {start} 開始",
+                             days=days, name=nxt.name, start=(limit + one).isoformat())
                     add("transition", cursor, limit, ev.id, note)
                     cursor = max(cursor, limit + one)
                 elif rec is not None:
-                    rec.note = (f"沒有轉換期：下一場 A 賽事「{nxt.name}」的專項期 "
-                                f"{(limit + one).isoformat()} 開始，只剩 {max(0, days)} 天")
+                    rec.note = _("沒有轉換期：下一場 A 賽事「{name}」的專項期 {start} 開始，只剩 {days} 天",
+                                 name=nxt.name, start=(limit + one).isoformat(), days=max(0, days))
             else:
                 add("transition", cursor, t_end, ev.id)
                 cursor = max(cursor, t_end + one)

@@ -12,6 +12,7 @@ with a manual override (engine/calibrate.py items with manual_only, no fit).
 from __future__ import annotations
 
 from backend.engine import calibrate as CAL
+from backend.i18n import N_
 
 
 def _none(ds=None, today=None):
@@ -19,15 +20,15 @@ def _none(ds=None, today=None):
 
 
 CAL.register(CAL.Item(
-    name="heat_partial_hadley", label="熱適應開始累積的熱指數", unit="Hadley", default=130.0,
-    default_src="推估（以台北夏天傍晚設定；150 以上算滿劑量）", k=1, min_n=10 ** 9, fit=_none,
+    name="heat_partial_hadley", label=N_("熱適應開始累積的熱指數"), unit="Hadley", default=130.0,
+    default_src=N_("推估（以台北夏天傍晚設定；150 以上算滿劑量）"), k=1, min_n=10 ** 9, fit=_none,
     bounds=(100.0, 149.0), digits=0, manual_only=True,
-    help="熱適應指數：每分鐘的熱劑量在這個 Hadley 以下是 0，到 150 是滿劑量。"))
+    help=N_("熱適應指數：每分鐘的熱劑量在這個 Hadley 以下是 0，到 150 是滿劑量。")))
 CAL.register(CAL.Item(
-    name="pack_daily_drop_kg", label="多日行程每天吃掉的糧食", unit="kg", default=0.7,
-    default_src="推估", k=1, min_n=10 ** 9, fit=_none,
+    name="pack_daily_drop_kg", label=N_("多日行程每天吃掉的糧食"), unit="kg", default=0.7,
+    default_src=N_("推估"), k=1, min_n=10 ** 9, fit=_none,
     bounds=(0.0, 2.0), digits=1, manual_only=True,
-    help="多日行程第 2 天起，背包每天輕這麼多（糧食）。"))
+    help=N_("多日行程第 2 天起，背包每天輕這麼多（糧食）。")))
 
 
 def partial_hadley() -> float:

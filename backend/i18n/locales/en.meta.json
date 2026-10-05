@@ -1,83 +1,1411 @@
 {
-  "下一場 A 賽「{name}」是{kind}": {
+  " · 爬 {m:.0f} m": {
     "draft": true,
-    "src": "backend/engine/primary_sport.py:65"
+    "src": "backend/engine/racepower/watch_export.py:232"
   },
-  "找不到備份檔": {
+  " · 降 {m:.0f} m": {
     "draft": true,
-    "src": "backend/api/backup.py:248"
+    "src": "backend/engine/racepower/watch_export.py:233"
   },
-  "檔案是空的": {
+  " 控制、安全": {
     "draft": true,
-    "src": "backend/api/backup.py:225"
+    "src": "backend/engine/racepower/watch_export.py:241"
   },
-  "越野跑": {
+  "% LTHR 由 % HRpeak ÷ 0.9 換算（推估）": {
     "draft": true,
-    "src": "backend/engine/primary_sport.py:32"
+    "src": "backend/engine/workout_templates.py:289"
   },
-  "路跑／馬拉松": {
+  "% LTHR 由來源的 % HRmax ÷ 0.9 換算（推估）": {
     "draft": true,
-    "src": "backend/engine/primary_sport.py:32"
+    "src": "backend/engine/workout_templates.py:161"
   },
-  "近 12 週的跑步資料不夠，先用越野跑（原本的設定）": {
+  "% LTHR 由來源的 % HRmax ÷ 0.9 換算（推估）（上緣壓在 90%）": {
     "draft": true,
-    "src": "backend/engine/primary_sport.py:75"
+    "src": "backend/engine/workout_templates.py:162"
   },
-  "近 12 週越野＋登山佔跑步時間 {share:.0%}（≥ {min:.0%} 算越野跑，推估）": {
+  "1 區時間連 3 週低於這條線，5 區會暫停": {
     "draft": true,
-    "src": "backend/engine/primary_sport.py:79"
+    "src": "backend/engine/quality_gate.py:1983"
   },
-  "{m} 分": {
+  "15 週重新打底（33→50→70→85→100%）": {
     "draft": true,
-    "src": "backend/engine/calendar_feed.py:150"
+    "src": "backend/engine/reentry.py:161"
   },
-  "計畫：{text}": {
-    "draft": true,
-    "src": "backend/engine/calendar_feed.py:154"
+  "20 分鐘峰值心率 × 95%": {
+    "draft": false,
+    "src": "backend/engine/threshold_confidence.py:369"
   },
-  "實際：{text}": {
+  "20–30 秒快而放鬆，維持神經肌肉速度與跑姿，幾乎不增加疲勞（Roche）": {
     "draft": true,
-    "src": "backend/engine/calendar_feed.py:163"
+    "src": "backend/engine/workout_templates.py:136"
   },
-  "爬升 {m} m": {
+  "3 區已解鎖": {
     "draft": true,
-    "src": "backend/engine/calendar_feed.py:168"
+    "src": "backend/engine/quality_gate.py:1924"
   },
-  "在課表打開這堂課：{url}": {
+  "3 區每趟 < 3 分": {
     "draft": true,
-    "src": "backend/engine/calendar_feed.py:176"
+    "src": "backend/engine/interval_library.py:378"
   },
-  "課表（TrailRunCoach）": {
+  "3 區每趟至少 3 分鐘（Haugen 2022 的下緣）：這段只有 {d}": {
     "draft": true,
-    "src": "backend/engine/calendar_feed.py:196"
+    "src": "backend/engine/workout_steps.py:1180"
   },
-  "有氧間歇": {
+  "3 區解鎖": {
     "draft": true,
-    "src": "backend/engine/workout_templates.py:431"
+    "src": "backend/engine/quality_gate.py:1943"
   },
-  "有氧／閾值：主課 ≤ 101% CP（心率 ≤ 102% LTHR、配速不快於閾值配速）。長 tempo 每趟 15–30 分或連續一段，巡航間歇每趟 6–15 分（更短的也算巡航）": {
+  "3 區解鎖後、護欄通過就照排，5 區開放後也照排": {
     "draft": true,
-    "src": "backend/engine/workout_templates.py:432"
+    "src": "backend/engine/quality_gate.py:1940"
+  },
+  "3 區解鎖：三選一": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1934"
+  },
+  "3 區階梯": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1946"
+  },
+  "3 區（有氧間歇／節奏跑）": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2030"
+  },
+  "30/15：算一堂 5 區（頻率照算），不算進階": {
+    "draft": true,
+    "src": "backend/engine/interval_library.py:804"
+  },
+  "5 區休息 {d} 比一趟長或超過 3 分鐘（Buchheit 工休比）": {
+    "draft": true,
+    "src": "backend/engine/workout_steps.py:1194"
+  },
+  "5 區每趟 < 2 分（台灣教練）": {
+    "draft": true,
+    "src": "backend/engine/interval_library.py:370"
+  },
+  "5 區每趟至少 2 分鐘（台灣教練）：這段只有 {d}": {
+    "draft": true,
+    "src": "backend/engine/workout_steps.py:1177"
+  },
+  "5 區解鎖": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1999"
+  },
+  "5 區開放": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1839"
+  },
+  "5 區間歇可以排：每趟 2–5 分、一週最多 2 次、隔 ≥ 2 天": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2001"
+  },
+  "5 區階梯": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2004"
+  },
+  "5 區階梯進行中": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1966"
+  },
+  "5 區（VO2max 間歇）": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2031"
+  },
+  "5K 配速 ≈ 閾值配速 × 0.93–0.96（推估）": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:294"
+  },
+  "60 分鐘平均心率": {
+    "draft": false,
+    "src": "backend/engine/threshold_confidence.py:369"
+  },
+  "8 週內同樣溫度、可以判讀的輕鬆路跑不到 2 次（{n} 次符合條件{other}）": {
+    "draft": true,
+    "src": "backend/engine/status.py:576"
+  },
+  "90 分鐘測試量不出 AeT 數字，只算 3 區的關卡": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2002"
+  },
+  "A1–A4": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1946"
+  },
+  "AeT {aet:.0f}（{date} 實測）/ LTHR {lthr:.0f} → {gap:.0f}%": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1794"
+  },
+  "AeT 可以再高": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2820"
+  },
+  "AeT 和 LTHR 的差距降到 ≤ 10%：繼續有氧基礎，之後重測 AeT": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2085"
+  },
+  "AeT 已通過（{since}，{path}）": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1843"
+  },
+  "AeT 測試排在週一到週五（課表偏好）": {
+    "draft": true,
+    "src": "backend/api/plan_sessions.py:531"
+  },
+  "AeT 測試方式要是 {choices} 其中之一": {
+    "draft": true,
+    "src": "backend/engine/plan_prefs.py:302"
+  },
+  "AeT 測試日要是 weekday 或 any": {
+    "draft": true,
+    "src": "backend/engine/plan_prefs.py:299"
+  },
+  "AeT 設太高": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2820"
+  },
+  "AeT 附近 Friel 飄移 < 5%": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1956"
+  },
+  "AeT 需要重新確認": {
+    "draft": true,
+    "src": "backend/engine/overview.py:1549"
+  },
+  "AeT 飄移測試 {date}：心率飄移 {d:.1f}%": {
+    "draft": true,
+    "src": "backend/engine/aet_test.py:458"
+  },
+  "AeT（> 3 h 壓在 AeT 附近，推估）": {
+    "draft": true,
+    "src": "backend/engine/racepower/seg_targets.py:70"
+  },
+  "AeT＋LTHR 實測：差距 ≤ 10%": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1956"
+  },
+  "B2B 週：長跑照 B2B 排": {
+    "draft": true,
+    "src": "backend/engine/technical.py:67"
+  },
+  "COROS 乳酸閾": {
+    "draft": true,
+    "src": "backend/engine/hr_profile.py:73"
+  },
+  "COROS 乳酸閾值心率區間：<80／80–90／90–95／95–102／102–106／>106% LTHR（coros.com「COROS Heart Rate Zones: The Ultimate Guide」）": {
+    "draft": true,
+    "src": "backend/engine/hr_profile.py:75"
+  },
+  "COROS 儲備心率": {
+    "draft": true,
+    "src": "backend/engine/hr_profile.py:73"
+  },
+  "COROS 儲備心率區間：59／74／84／88／95% HRR，HRR = 最大心率 − 靜息心率（從 COROS 帳號讀到，和徐國峰 RQ 跑力的儲備心率表相同）": {
+    "draft": true,
+    "src": "backend/engine/hr_profile.py:77"
+  },
+  "COROS 最大心率": {
+    "draft": true,
+    "src": "backend/engine/hr_profile.py:73"
+  },
+  "COROS 最大心率區間：50／60／70／80／90% 最大心率（從 COROS 帳號讀到，沒有公開文件）。限制：同樣 % 最大心率，每個人的乳酸閾值可以落在 60–90% HRmax（Iannetta 2020），所以這組區間對個人的強度不準，Friel／乳酸閾區間比較可靠": {
+    "draft": true,
+    "src": "backend/engine/hr_profile.py:79"
+  },
+  "CP {cp} W 不合理": {
+    "draft": true,
+    "src": "backend/api/plan.py:764"
+  },
+  "CP 心率與 MLSS 心率平均差 0.6 bpm，但個人誤差 −16～+17 bpm（Micheli 2025）：只當交叉檢查": {
+    "draft": false,
+    "src": "backend/engine/threshold_confidence.py:135"
+  },
+  "CP 附近 {n} 段心率中位數 {m:.0f}": {
+    "draft": false,
+    "src": "backend/engine/threshold_confidence.py:514"
+  },
+  "CTL {c:.0f} 的 {pct:.0%}": {
+    "draft": true,
+    "src": "backend/engine/load_guard.py:128"
+  },
+  "CTL {ctl:.0f} 要每週 +{ramp:.1f}，需要約 {tss:.0f} TSS（≈ {h:.1f} h）": {
+    "draft": true,
+    "src": "backend/engine/overview.py:993"
+  },
+  "CTL 每週 +{ramp:.1f}（≥ {line:.1f}＝{how}）": {
+    "draft": true,
+    "src": "backend/engine/load_guard.py:129"
+  },
+  "E 配速 ≈ 閾值配速 × 1.18–1.29（Friel 2 區配速，推估）": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:379"
+  },
+  "EF 趨勢算不出來（輕鬆路跑不夠多）": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2145"
+  },
+  "Friel 1 小時心率飄移": {
+    "draft": true,
+    "src": "backend/engine/aet_test.py:104"
+  },
+  "Friel 30 分鐘測試 {date}：第 10–30 分平均心率": {
+    "draft": false,
+    "src": "backend/engine/threshold_confidence.py:681"
+  },
+  "Friel 飄移：實測 AeT 附近跑 ≥ 60 分鐘，前後半飄移 < 5%": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1809"
+  },
+  "Friel：每 4–8 週測一次；30 分鐘獨跑測試的第 10–30 分平均心率＝LTHR（McGehee 2005 驗證：SEE 8 bpm）": {
+    "draft": false,
+    "src": "backend/engine/threshold_confidence.py:136"
+  },
+  "Garmin（尚未開放）": {
+    "draft": true,
+    "src": "backend/sync/workout_targets/garmin.py:17"
+  },
+  "Hunt 2015／2019、Wang & Hunt 2021：55–70 秒": {
+    "draft": true,
+    "src": "backend/engine/drift_calib.py:131"
+  },
+  "I 配速 ≈ 閾值配速 × 0.92–0.95（推估）": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:299"
+  },
+  "ITRA km-effort（健行筆記也用）": {
+    "draft": true,
+    "src": "backend/engine/terrain_calib.py:76"
+  },
+  "LTHR {lthr:.0f} ＝ 最大心率 {mhr:.0f} 的 {r:.0%}（一般 85–95%，個人範圍 80–98%）": {
+    "draft": false,
+    "src": "backend/engine/threshold_confidence.py:338"
+  },
+  "LTHR 來源是{src}，不是測試：一開始就是低信心": {
+    "draft": false,
+    "src": "backend/engine/threshold_confidence.py:297"
+  },
+  "LTHR 可信度低：心率目標可能不準（{why}）": {
+    "draft": false,
+    "src": "backend/engine/threshold_confidence.py:600"
+  },
+  "LTHR 和最大心率互相矛盾，資料分不出是哪一個錯": {
+    "draft": false,
+    "src": "backend/engine/threshold_confidence.py:521"
+  },
+  "LTHR 和最大心率都有問題": {
+    "draft": false,
+    "src": "backend/engine/threshold_confidence.py:520"
+  },
+  "LTHR 定下以後 CP 變了 {d:+.0%}（{cp0:.0f} → {cp1:.0f} W）": {
+    "draft": false,
+    "src": "backend/engine/threshold_confidence.py:424"
+  },
+  "LTHR 已失效": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1800"
+  },
+  "LTHR 是 {date} 的自動估算，當時 CP {cp0:.0f} W、現在 {cp1:.0f} W（{d:+.0%}）：估算的前提已失效（推估 > 5%）": {
+    "draft": false,
+    "src": "backend/engine/threshold_confidence.py:311"
+  },
+  "LTHR 是儲備心率的 {q:.0%}（一般 80–94%，個人範圍 73–95%）": {
+    "draft": false,
+    "src": "backend/engine/threshold_confidence.py:350"
+  },
+  "LTHR 測試（30 分鐘獨跑）": {
+    "draft": false,
+    "src": "backend/engine/threshold_confidence.py:527"
+  },
+  "LTHR 還是 WKO5 預設值": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2127"
+  },
+  "Nuuttila 2025：休閒跑者 LT2 = 90.6 ± 2.5% 最大心率、87.0 ± 3.4% 儲備心率；Davis 90% 範圍 80–98%／73–95%": {
+    "draft": false,
+    "src": "backend/engine/threshold_confidence.py:132"
+  },
+  "PD 模型重算的 TTE": {
+    "draft": true,
+    "src": "backend/engine/racepower/calc.py:280"
+  },
+  "R 配速 ≈ 閾值配速 × 0.85–0.89（推估）": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:323"
+  },
+  "RPE 上限": {
+    "draft": true,
+    "src": "backend/engine/workout_steps.py:565"
+  },
+  "RPE 下限": {
+    "draft": true,
+    "src": "backend/engine/workout_steps.py:564"
+  },
+  "RPE 下限比上限高": {
+    "draft": true,
+    "src": "backend/engine/workout_steps.py:568"
+  },
+  "RPE 目標：心率、功率只當參考，負荷照手錶記錄算（不用 RPE 校正）；這堂依 RPE 算": {
+    "draft": true,
+    "src": "backend/engine/workout_steps.py:1212"
+  },
+  "TSB {tsb:+.0f} < −20：先維持量，不加": {
+    "draft": true,
+    "src": "backend/engine/overview.py:1011"
+  },
+  "TSB {tsb:+.0f} < −30：改成恢復週（近 4 週的 60%）": {
+    "draft": true,
+    "src": "backend/engine/overview.py:1008"
+  },
+  "TSS 要在 0–2000": {
+    "draft": true,
+    "src": "backend/engine/plan_store.py:333"
+  },
+  "TSS 要是數字": {
+    "draft": true,
+    "src": "backend/engine/plan_store.py:331"
+  },
+  "TSS：{a:.0f} ／ 計畫 {p:.0f}（{pct}%）": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2725"
+  },
+  "TrainingPeaks 閾值通知：60 分鐘峰值心率，或 20 分鐘峰值 × 95%，高於現值就建議調高": {
+    "draft": false,
+    "src": "backend/engine/threshold_confidence.py:133"
+  },
+  "V1–V4": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2004"
+  },
+  "VO2max 刺激": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2682"
   },
   "VO2max 間歇": {
     "draft": true,
     "src": "backend/engine/workout_templates.py:434"
   },
+  "WKO5 athlete 檔（選用）": {
+    "draft": true,
+    "src": "backend/engine/wko5expr/fitdataset.py:89"
+  },
+  "WKO5 設定": {
+    "draft": false,
+    "src": "backend/engine/threshold_confidence.py:807"
+  },
+  "WKO5 預設值": {
+    "draft": false,
+    "src": "backend/engine/threshold_confidence.py:290"
+  },
+  "W′ {wp} J 不合理": {
+    "draft": true,
+    "src": "backend/api/plan.py:766"
+  },
+  "W′ 只在兩點測試量得到": {
+    "draft": true,
+    "src": "backend/api/plan.py:768"
+  },
+  "Zone 3：已解鎖": {
+    "draft": true,
+    "src": "backend/engine/plan_auto.py:549"
+  },
+  "Zone 3：未解鎖": {
+    "draft": true,
+    "src": "backend/engine/plan_auto.py:549"
+  },
+  "Zone 5：未解鎖": {
+    "draft": true,
+    "src": "backend/engine/plan_auto.py:566"
+  },
+  "Zone 5：重新上鎖（{reason}）": {
+    "draft": true,
+    "src": "backend/engine/plan_auto.py:565"
+  },
+  "hrTSS（依強度）": {
+    "draft": true,
+    "src": "backend/engine/coros_tl.py:78"
+  },
+  "hrTSS（比例）": {
+    "draft": true,
+    "src": "backend/engine/coros_tl.py:78"
+  },
+  "inputs 要是物件": {
+    "draft": true,
+    "src": "backend/engine/race_calc_store.py:88"
+  },
+  "intervals.icu（尚未開放）": {
+    "draft": true,
+    "src": "backend/sync/workout_targets/intervals.py:17"
+  },
+  "k {k:+.2f} 下，CP {cp:.0f} W 撐不住你 {min:.0f} 分鐘 {p:.0f} W 的紀錄：提高到 {cp_eff:.0f} W": {
+    "draft": true,
+    "src": "backend/engine/racepower/calc.py:343"
+  },
+  "vVO2max ≈ 閾值配速 × 0.86–0.90（推估）": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:310"
+  },
+  "{aet}、LTHR {lthr:.0f} → 差距 {gap:.0f}%": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2124"
+  },
+  "{date} {what} {v:.0f} bpm > LTHR {lthr:.0f}：撐得住比閾值高的心率，LTHR 可能設低了": {
+    "draft": false,
+    "src": "backend/engine/threshold_confidence.py:371"
+  },
+  "{date} 的 40–60 分鐘比賽平均心率 {hr:.0f} < 95% LTHR（{lo:.0f}）：LTHR 可能設高了（推估）": {
+    "draft": false,
+    "src": "backend/engine/threshold_confidence.py:387"
+  },
+  "{date} 起天氣轉涼，LTHR 是夏天定的": {
+    "draft": false,
+    "src": "backend/engine/threshold_confidence.py:420"
+  },
+  "{day}→ {to} · 約 {t}{climb}": {
+    "draft": true,
+    "src": "backend/engine/racepower/watch_export.py:235"
+  },
+  "{grade} {name} {goal:.0f}": {
+    "draft": true,
+    "src": "backend/engine/panels/race_refs.py:172"
+  },
+  "{grade} {name} 每天 {goal:.0f}": {
+    "draft": true,
+    "src": "backend/engine/panels/race_refs.py:171"
+  },
+  "{h:.0f} bpm 那次飄移 {d:.1f}%（扣掉誤差仍 ≥ 5%）：下限不成立": {
+    "draft": true,
+    "src": "backend/engine/algorithms/threshold_estimate.py:334"
+  },
+  "{head}：{start} 起恢復期到 {end}（{how}；Daniels 表 9.2，恢復期＝停訓天數{up}）": {
+    "draft": true,
+    "src": "backend/engine/reentry.py:167"
+  },
+  "{h} 小時 {m} 分": {
+    "draft": true,
+    "src": "backend/engine/panels/drift_bars.py:32"
+  },
+  "{label} {value} {unit}：你在進階設定手動指定，不會被自動估算覆蓋。": {
+    "draft": true,
+    "src": "backend/engine/calibrate.py:149"
+  },
+  "{label} {value} {unit}：本人 {n} 筆資料擬合 {personal}，權重 {w:.0%}，其餘用預設 {default}（{src}）。": {
+    "draft": true,
+    "src": "backend/engine/calibrate.py:153"
+  },
+  "{label} 尚未開放": {
+    "draft": true,
+    "src": "backend/sync/workout_targets/base.py:77"
+  },
+  "{label} 尚未開放，沒有送出任何東西": {
+    "draft": true,
+    "src": "backend/sync/workout_targets/base.py:92"
+  },
+  "{label}（自動：一年內心率判定為比賽強度的標準距離跑步）": {
+    "draft": true,
+    "src": "backend/engine/racepower/calc.py:317"
+  },
+  "{model} 的輕鬆跑上限 {cap:.0f} bpm ≥ LTHR {lthr:.0f}：生理上不可能": {
+    "draft": false,
+    "src": "backend/engine/threshold_confidence.py:326"
+  },
+  "{model}：{reason}，改用 COROS 乳酸閾區間": {
+    "draft": true,
+    "src": "backend/engine/hr_profile.py:279"
+  },
+  "{m} 分": {
+    "draft": true,
+    "src": "backend/engine/calendar_feed.py:150"
+  },
+  "{m}/{d} 是不排課日期{label}，不能排課": {
+    "draft": true,
+    "src": "backend/engine/plan_store.py:344"
+  },
+  "{name} {pct}（3.5–5%）：前半段心率 {hr:.0f} bpm 就是 AeT": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2357"
+  },
+  "{name} {pct}（< 3.5%）：前半段心率 {hr:.0f} bpm 還在 AeT 以下，下次 +5 bpm 再測": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2354"
+  },
+  "{name} {pct}（> 5%）：AeT 低於前半段心率 {hr:.0f} bpm，下次放慢 5 bpm 再測": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2359"
+  },
+  "{name} {plain}，但平均心率 {hr:.0f} > AeT+3，不是輕鬆跑": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2367"
+  },
+  "{name} {plain}：後段心率往上跑": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2371"
+  },
+  "{name} {plain}：有氧基礎不足或跑太快": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2373"
+  },
+  "{name} {plain}：有氧基礎穩": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2369"
+  },
+  "{name} 前 6–3 週至少 1–2 次做到線的 {lo}–100%（淺色帶；推估，參考江晏慶「抓比賽的七成」、CTS 賽前 4–6 週的最長一段）": {
+    "draft": true,
+    "src": "backend/engine/panels/race_refs.py:185"
+  },
+  "{name} 可信度{c}": {
+    "draft": false,
+    "src": "backend/engine/status.py:934"
+  },
+  "{name} 登入已過期，重新登入後才能{what}": {
+    "draft": true,
+    "src": "backend/api/auth.py:180"
+  },
+  "{name} 的 {lo}–100%": {
+    "draft": true,
+    "src": "backend/engine/panels/race_refs.py:231"
+  },
+  "{name} 要是數字": {
+    "draft": true,
+    "src": "backend/engine/workout_steps.py:546"
+  },
+  "{name} 超出範圍": {
+    "draft": true,
+    "src": "backend/engine/workout_steps.py:549"
+  },
+  "{note}（不算 AeT 測試）": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2377"
+  },
+  "{note}：看最近幾次的走向比較準。\n方法：這次誤差 {se} > ±{lim:.0f} 個百分點（門檻推估）。": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2872"
+  },
+  "{n} 次路跑的中位數（沒有心率可篩）": {
+    "draft": true,
+    "src": "backend/engine/equivalence.py:203"
+  },
+  "{n} 次路跑的速度－心率迴歸，取 AeT 的速度": {
+    "draft": true,
+    "src": "backend/engine/equivalence.py:201"
+  },
+  "{n} 段「直到按下計圈」不算進總時間": {
+    "draft": true,
+    "src": "backend/engine/workout_steps.py:1203"
+  },
+  "{n} 段超過 {max} 段：COROS 的上限未驗證": {
+    "draft": true,
+    "src": "backend/engine/workout_steps.py:1540"
+  },
+  "{plain}（{start}）": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2944"
+  },
+  "{p}沒有「{x}」結束條件：推送時換成預估時間 {d}（推估）": {
+    "draft": true,
+    "src": "backend/engine/workout_steps.py:1208"
+  },
+  "{ramp}：到注意線，只能撐一兩週": {
+    "draft": true,
+    "src": "backend/engine/status.py:332"
+  },
+  "{ramp}：超過擋線（Friel：10 以上最多撐一週）": {
+    "draft": true,
+    "src": "backend/engine/status.py:328"
+  },
+  "{src} {tc:.0f} °C；> {hot:.0f} °C 熱會讓心率飄得比較多，只和同樣溫度的跑步比（台灣教練 < 25 °C；Lafrenz 2008）": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2859"
+  },
+  "{src}；依 k {k:+.2f} 提高到下限": {
+    "draft": true,
+    "src": "backend/engine/racepower/calc.py:346"
+  },
+  "{text}：本週 = 停訓前 4 週平均 {prev:.1f} h × {f:.0%} → {h:.1f} h": {
+    "draft": true,
+    "src": "backend/engine/overview.py:1054"
+  },
+  "{title}（少 1 趟：{n} 趟）": {
+    "draft": true,
+    "src": "backend/engine/interval_library.py:802"
+  },
+  "{typ}不判讀": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2616"
+  },
+  "{warm} · 主課 {main} · 緩和 {cool} ＝ {total:.0f} 分": {
+    "draft": true,
+    "src": "backend/engine/interval_library.py:759"
+  },
+  "{what} {n} 次": {
+    "draft": true,
+    "src": "backend/engine/racepower/seg_targets.py:88"
+  },
+  "{why}：區間、TSS、賽事計算機都靠 CP": {
+    "draft": true,
+    "src": "backend/engine/overview.py:1540"
+  },
+  "{word} · {pct}": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:543"
+  },
+  "{word} · 只當參考": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2618"
+  },
+  "—（AeT 是估計值，不算：要做一次 AeT 測試）": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1797"
+  },
+  "—（LTHR 不是實測：要做一次 30 分鐘 LTHR 測試）": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1802"
+  },
+  "—（{why}：要重測 30 分鐘 LTHR）": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1800"
+  },
+  "—（還沒做過：沒有實測 AeT）": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1798"
+  },
+  "—（還沒有實測 AeT）": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1812"
+  },
+  "≤ {x:.0f} bpm 的 {n} 次飄移都穩定（< 5%；心率最高的 {k} 次平均 {m:.1f}%，算上誤差最多 {u:.1f}%）": {
+    "draft": true,
+    "src": "backend/engine/algorithms/threshold_estimate.py:350"
+  },
+  "≥ 20% 坡 8–10 秒全力，訓練爆發力與肌肉徵召，不是有氧課（Uphill Athlete；Lydiard）": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:137"
+  },
+  "「{x}」只能用在主課": {
+    "draft": true,
+    "src": "backend/engine/workout_steps.py:671"
+  },
+  "「{x}」段：這裡填 TSS，推到 COROS 換算成它的 TL（推估，誤差約 ±20 %；每次同步後用你的活動重新校正）": {
+    "draft": true,
+    "src": "backend/engine/workout_steps.py:1536"
+  },
+  "「最後一趟不休息」或重複裡的重複：COROS 群組做不到，推送時攤平成一段一段": {
+    "draft": true,
+    "src": "backend/engine/workout_steps.py:1532"
+  },
+  "「最後一趟不休息」的重複要攤平": {
+    "draft": true,
+    "src": "backend/sync/workout_targets/coros.py:23"
+  },
+  "「直到按下計圈」的步驟沒有驗證過的語法": {
+    "draft": true,
+    "src": "backend/sync/workout_targets/intervals.py:22"
+  },
+  "一個範本最多 {n} 個分類": {
+    "draft": false,
+    "src": "backend/engine/user_templates.py:198"
+  },
+  "一堂最多 50 步（Garmin 文件）": {
+    "draft": true,
+    "src": "backend/sync/workout_targets/garmin.py:23"
+  },
+  "一定要實測 AeT": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1999"
+  },
+  "一次跑步的飄移本來就會差個幾 %，看最近幾次的走向比只看一次準。\n方法：單次誤差約 ±4–6 個百分點（心率樣本前後高度相關），用回歸法的標準誤估；心率延遲 τ = 60 s 取自 Hunt 2015／2019、Wang & Hunt 2021，接成一個回歸是推估。": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:510"
+  },
+  "三區時間": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2655"
+  },
+  "三段 33／50／75%，5 區要重新確認有氧基礎": {
+    "draft": true,
+    "src": "backend/engine/reentry.py:161"
+  },
+  "上一階（{name}）：維持，不算進階": {
+    "draft": true,
+    "src": "backend/engine/interval_library.py:794"
+  },
+  "上傳的資料太大": {
+    "draft": true,
+    "src": "backend/tenancy_mw.py:240"
+  },
+  "上坡版用一樣的 %CP，但上坡時攝氧量比例較低（Gajer，Buchheit Part I），下坡回程有離心負荷": {
+    "draft": true,
+    "src": "backend/engine/interval_library.py:810"
+  },
+  "上次 LTHR 測試是 {n} 天前（Friel：每 4–8 週一次）": {
+    "draft": false,
+    "src": "backend/engine/threshold_confidence.py:429"
+  },
+  "上週 {m} 分": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1982"
+  },
+  "上限 {v:.0f}": {
+    "draft": true,
+    "src": "backend/engine/load_guard.py:124"
+  },
+  "下一場 A 賽「{name}」是{kind}": {
+    "draft": true,
+    "src": "backend/engine/primary_sport.py:65"
+  },
+  "下一次 ≥ 75 分鐘路跑，後段心率、配速各在 ±5% 內": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1978"
+  },
+  "下坡技術／離心": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:483"
+  },
+  "下週安排恢復週": {
+    "draft": true,
+    "src": "backend/engine/status.py:333"
+  },
+  "下降": {
+    "draft": true,
+    "src": "backend/engine/workout_steps.py:569"
+  },
+  "下降量 ≈ 25′ × 約 7 km/h × 12% 坡（推估）；不設心率、功率目標": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:194"
+  },
+  "下限 {v:.0f}": {
+    "draft": true,
+    "src": "backend/engine/load_guard.py:128"
+  },
+  "不排課 {range}：少 {n} 個可練日，週量 × {f:.0%}": {
+    "draft": true,
+    "src": "backend/engine/overview.py:1071"
+  },
+  "不排課日期／休息日": {
+    "draft": true,
+    "src": "backend/api/plan_sessions.py:521"
+  },
+  "不採用": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2614"
+  },
+  "不支援的地形：{v!r}": {
+    "draft": true,
+    "src": "backend/engine/plan_store.py:289"
+  },
+  "不支援的類型：{v!r}": {
+    "draft": true,
+    "src": "backend/engine/plan_store.py:278"
+  },
+  "不是可練日（課表偏好）": {
+    "draft": true,
+    "src": "backend/api/plan_sessions.py:523"
+  },
+  "不是跑步：不判讀間歇": {
+    "draft": true,
+    "src": "backend/engine/interval_eval.py:476"
+  },
+  "不背包；百岳前的專項期，第 1 階段": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:408"
+  },
+  "不背包；第 2 階段": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:410"
+  },
+  "不背包；行程背包約體重 15% 時": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:412"
+  },
+  "不能排到過去的日子": {
+    "draft": true,
+    "src": "backend/engine/plan_store.py:275"
+  },
+  "不設目標": {
+    "draft": false,
+    "src": "backend/engine/workout_steps.py:1492"
+  },
+  "不設門檻": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1844"
+  },
+  "不設門檻（Seiler）": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1818"
+  },
+  "不設門檻（Seiler）：5 區照 80/20 安排": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2067"
+  },
+  "中": {
+    "draft": false,
+    "src": "backend/engine/threshold_confidence.py:124"
+  },
+  "主要訓練項目：路跑": {
+    "draft": true,
+    "src": "backend/engine/overview.py:1476"
+  },
+  "主課 {work}′": {
+    "draft": true,
+    "src": "backend/engine/technical.py:192"
+  },
   "主課高於閾值、每趟 2–5 分、休息約 1:1；30/30、30/15 這種短趟短休也算這類": {
     "draft": true,
     "src": "backend/engine/workout_templates.py:435"
   },
-  "速度": {
+  "之前 {days} 天的穩定路跑只有 {n} 次（要 {need} 次才畫得出基準線）": {
     "draft": true,
-    "src": "backend/engine/workout_templates.py:436"
+    "src": "backend/engine/zone_events.py:480"
   },
-  "每趟 ≤ 2 分、休息 ≥ 2 倍（R、加速跑、短坡衝刺），或功率 > 116% CP": {
+  "之後先 {n} 堂 3 區": {
     "draft": true,
-    "src": "backend/engine/workout_templates.py:437"
+    "src": "backend/engine/quality_gate.py:2049"
   },
-  "長 tempo": {
+  "之後維持：A3／A4／T+ 輪替；每週 3 區量 ≤ 週量 10%": {
     "draft": true,
-    "src": "backend/engine/workout_templates.py:441"
+    "src": "backend/engine/quality_gate.py:1947"
+  },
+  "之後維持：V3／V4 輪替；3 區照排": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2005"
+  },
+  "乳酸閾值心率（COROS % LTHR 6 區）": {
+    "draft": true,
+    "src": "backend/engine/hr_profile.py:71"
+  },
+  "休 {d}（{mode}）": {
+    "draft": true,
+    "src": "backend/engine/interval_library.py:512"
+  },
+  "休息": {
+    "draft": true,
+    "src": "backend/engine/workout_steps.py:1472"
+  },
+  "但週量上限 = 近 4 週 {base4:.1f} h / 上週 {last:.1f} h 的 +10%（至少 +0.5 h）→ {cap:.1f} h": {
+    "draft": true,
+    "src": "backend/engine/overview.py:996"
+  },
+  "低": {
+    "draft": false,
+    "src": "backend/engine/threshold_confidence.py:124"
+  },
+  "低於 AeT 的短跑，促進恢復、同時累積有氧量（Pfitzinger；CTS）": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:124"
+  },
+  "你的平路 RE 中位數（{n} 次）": {
+    "draft": true,
+    "src": "backend/engine/racepower/calc.py:308"
+  },
+  "你的每週時數上限 {h:g} h": {
+    "draft": true,
+    "src": "backend/engine/overview.py:1034"
+  },
+  "你的測試 {day}": {
+    "draft": true,
+    "src": "backend/engine/zones.py:223"
+  },
+  "你的設定 {day}": {
+    "draft": true,
+    "src": "backend/engine/hr_profile.py:210"
+  },
+  "你的越野跑 RE 中位數（{n} 次，effort km = km + 爬升/{div:g}）": {
+    "draft": true,
+    "src": "backend/engine/racepower/calc.py:300"
+  },
+  "你自己走的登山日 EP/h 中位數（{n} 天，爬升 ≥ 600 m 的日子權重 3 倍）": {
+    "draft": true,
+    "src": "backend/engine/racepower/calc.py:384"
+  },
+  "來源只有 RPE：心率推估": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:270"
+  },
+  "來源只有 RPE：心率推估（3′ 的趟心率會落後）": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:304"
+  },
+  "來源是 RPE：心率推估": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:387"
+  },
+  "來源自帶": {
+    "draft": true,
+    "src": "backend/engine/racepower/calc.py:276"
+  },
+  "來源：": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1937"
+  },
+  "來源：{x}": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2002"
+  },
+  "來自手錶（COROS 帳號的 LTHR；還沒有夠硬的跑步可以自己估）": {
+    "draft": true,
+    "src": "backend/engine/wko5expr/fitdataset.py:771"
+  },
+  "來自手錶（COROS 帳號）": {
+    "draft": true,
+    "src": "backend/engine/hr_profile.py:213"
+  },
+  "修改太頻繁，請稍後再試": {
+    "draft": true,
+    "src": "backend/tenancy_mw.py:286"
+  },
+  "個人 Riegel k 不可靠（{why}），改用查表 k": {
+    "draft": true,
+    "src": "backend/engine/racepower/calc.py:334"
+  },
+  "個人擬合": {
+    "draft": true,
+    "src": "backend/engine/racepower/calc.py:326"
+  },
+  "假設：過去登山日多為輕裝（約 5 kg）": {
+    "draft": true,
+    "src": "backend/engine/racepower/calc.py:409"
+  },
+  "做 1 次 30 分鐘 LTHR 測試（LTHR 也要實測）": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1866"
+  },
+  "做 1 次 90 分鐘平路 1 區測試": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1927"
+  },
+  "做 1 次 AeT 測試（LTHR ÷ AeT − 1 ≤ 10% 就算）": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1928"
+  },
+  "做 1 次 AeT 測試（UA 40–60 分，量出 AeT 數字；90 分鐘測試不算）": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1858"
+  },
+  "做一次 30 分鐘 LTHR 測試（LTHR 也要實測，差距 ≤ 10% 就算）": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2083"
+  },
+  "做一次 AeT 測試（UA 40–60 分，量出 AeT 數字；90 分鐘測試不算）": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2077"
+  },
+  "停下 ≥ 5 分鐘的時間佔總時間超過這個比例，強度再高也算「有拼但有休息」。本人值 = 你的全力活動長休息比例的 p90 × 1.5。": {
+    "draft": true,
+    "src": "backend/engine/effort_calib.py:101"
+  },
+  "停訓後恢復期": {
+    "draft": true,
+    "src": "backend/engine/overview.py:1556"
+  },
+  "停訓：Coyle 1986、Houmard 1992": {
+    "draft": false,
+    "src": "backend/engine/threshold_confidence.py:416"
+  },
+  "停跑 {days} 天": {
+    "draft": true,
+    "src": "backend/engine/reentry.py:163"
+  },
+  "停跑 {d} 天": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1919"
+  },
+  "停跑 {n} 天後還沒重測 LTHR": {
+    "draft": false,
+    "src": "backend/engine/threshold_confidence.py:415"
+  },
+  "停跑 ≥ 4 週：{date} 之後": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2072"
+  },
+  "停跑後的恢復期結束": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1909"
+  },
+  "健行不判 5 區": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2686"
+  },
+  "傷停 {days} 天（{label}，傷病紀錄 #{id}）": {
+    "draft": true,
+    "src": "backend/engine/reentry.py:162"
+  },
+  "儲備心率（COROS % HRR 6 區）": {
+    "draft": true,
+    "src": "backend/engine/hr_profile.py:71"
+  },
+  "先解鎖 3 區": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1968"
+  },
+  "全力時最多的長休息比例": {
+    "draft": true,
+    "src": "backend/engine/effort_calib.py:98"
+  },
+  "全力段不設目標（Stryd 留給你填：模型功率 −1%～+5%）": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:335"
+  },
+  "全力衝刺：心率、功率都不當目標": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:397"
+  },
+  "全程 {t}": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2633"
+  },
+  "其中 {n} 次比較短，只當參考": {
+    "draft": true,
+    "src": "backend/engine/status.py:584"
+  },
+  "再 {n} 堂 3 區": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1975"
+  },
+  "出生年 {year} 不合理": {
+    "draft": true,
+    "src": "backend/api/plan.py:472"
+  },
+  "分": {
+    "draft": true,
+    "src": "backend/engine/effort_calib.py:94"
+  },
+  "分鐘要在 0–1440": {
+    "draft": true,
+    "src": "backend/engine/plan_store.py:285"
+  },
+  "分鐘要是數字": {
+    "draft": true,
+    "src": "backend/engine/plan_store.py:283"
+  },
+  "分類名稱不能空白": {
+    "draft": false,
+    "src": "backend/engine/user_templates.py:118"
+  },
+  "分類名稱最多 {n} 字": {
+    "draft": false,
+    "src": "backend/engine/user_templates.py:120"
+  },
+  "列為非同等（30/15：每趟 < 2 分，證據方向不一致）": {
+    "draft": true,
+    "src": "backend/engine/interval_library.py:362"
+  },
+  "前 {h} 小時不要有長跑、強度課或比賽": {
+    "draft": false,
+    "src": "backend/engine/threshold_confidence.py:538"
+  },
+  "前半 50%、後半 75%": {
+    "draft": true,
+    "src": "backend/engine/reentry.py:160"
+  },
+  "前半 50%、後半 75%，強度目標打折": {
+    "draft": true,
+    "src": "backend/engine/reentry.py:160"
+  },
+  "前半心率＝AeT": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2820"
+  },
+  "前半／後半心率 {a:.0f} → {b:.0f} bpm；功率 {p1:.0f} → {p2:.0f} W": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2596"
+  },
+  "前半／後半心率 {a:.0f} → {b:.0f} bpm；速度 {v1:.2f} → {v2:.2f} km/h": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2593"
+  },
+  "前後一天有長跑／強度課／測試：{titles}": {
+    "draft": true,
+    "src": "backend/api/plan_sessions.py:533"
+  },
+  "前後半心率飄移 < 5% 有氧耐力夠、5–10% 還在進步、> 10% 不足": {
+    "draft": true,
+    "src": "backend/engine/aet_test.py:107"
+  },
+  "剩下的每一天都排了東西；覺得累就把一次輕鬆跑換成休息": {
+    "draft": true,
+    "src": "backend/engine/overview.py:1452"
+  },
+  "功率 TSS": {
+    "draft": true,
+    "src": "backend/engine/coros_tl.py:78"
+  },
+  "功率 {lo}–{hi} W": {
+    "draft": true,
+    "src": "backend/engine/workout_steps.py:1486"
+  },
+  "功率÷心率（Pw:HR）": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:557"
+  },
+  "功率上限": {
+    "draft": true,
+    "src": "backend/engine/workout_steps.py:582"
+  },
+  "功率下限": {
+    "draft": true,
+    "src": "backend/engine/workout_steps.py:582"
+  },
+  "功率來源不是 Stryd：用心率": {
+    "draft": true,
+    "src": "backend/engine/target_policy.py:136"
+  },
+  "功率只收絕對瓦數": {
+    "draft": true,
+    "src": "backend/sync/workout_targets/coros.py:22"
+  },
+  "功率：app 的 CP 不是 Garmin 的功率，只寫在說明": {
+    "draft": true,
+    "src": "backend/sync/workout_targets/garmin.py:22"
+  },
+  "原研究是自行車功率：跑步的 % CP 推估": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:318"
+  },
+  "只在基礎期、專項期（恢復週、停訓後恢復期不排）": {
+    "draft": true,
+    "src": "backend/engine/technical.py:64"
+  },
+  "只收絕對瓦數：跑步沒有 % CP，送的是換算後的 W；CP 更新後這堂會標成「已過期」，要重推": {
+    "draft": true,
+    "src": "backend/engine/workout_steps.py:1521"
+  },
+  "只有 {n} 次資料夠乾淨的輕鬆跑（心率 ≤ LTHR − 3，要 ≥ {k} 次）": {
+    "draft": true,
+    "src": "backend/engine/algorithms/threshold_estimate.py:326"
+  },
+  "只有手錶推估功率（未採用，設定可改）：不判讀間歇、不算 W′": {
+    "draft": true,
+    "src": "backend/engine/interval_eval.py:458"
+  },
+  "只有確定時才手動指定。": {
+    "draft": true,
+    "src": "backend/engine/calibrate.py:160"
+  },
+  "只看全力，不設目標；手腕光學心率的平均誤差比胸帶大。條件：< 25 °C、平路環線或田徑場、戴胸帶、前 48 小時沒有硬課、不在減量期／比賽週；自己一個人跑，不要跟人跑、不要在比賽中測": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:356"
+  },
+  "只算暖身後還有 30 分鐘以上、平路、沒有停、配速穩、心率在 AeT 附近以下的輕鬆路跑，而且只和同樣溫度的跑步比。": {
+    "draft": true,
+    "src": "backend/engine/status.py:566"
+  },
+  "只算有心率的移動時間：< AeT（{aet} bpm）是低強度，AeT–LTHR 是中強度（灰色地帶），≥ LTHR（{lthr} bpm）是高強度。": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2659"
+  },
+  "只能配對同一週的活動": {
+    "draft": true,
+    "src": "backend/engine/plan_store.py:631"
+  },
+  "可以開始排 3 區（有氧間歇／節奏跑）": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1944"
+  },
+  "可信度": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2954"
+  },
+  "吃": {
+    "draft": true,
+    "src": "backend/engine/racepower/seg_targets.py:87"
+  },
+  "同步": {
+    "draft": true,
+    "src": "backend/api/auth.py:175"
+  },
+  "同等：不影響進階": {
+    "draft": true,
+    "src": "backend/engine/interval_library.py:776"
+  },
+  "和": {
+    "draft": false,
+    "src": "backend/engine/threshold_confidence.py:589"
+  },
+  "品質課次數要比每週跑步次數少（至少留一次輕鬆或長跑）": {
+    "draft": true,
+    "src": "backend/engine/plan_prefs.py:290"
+  },
+  "唯讀示範：這個操作在示範版不能用": {
+    "draft": true,
+    "src": "backend/demo/export_static.py:243"
+  },
+  "在 AeT 附近跑 1 次 ≥ 60 分鐘，飄移 < 5%": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1877"
+  },
+  "在 AeT 附近（{lo:.0f}–{hi:.0f} bpm）跑一次 ≥ 60 分鐘平路穩定跑，前後半飄移 < 5%": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2092"
+  },
+  "在 AeT 附近（{lo}–{hi} bpm）跑 1 次 ≥ 60 分鐘平路，飄移 < 5%": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1875"
+  },
+  "在 AeT–AnT 之間累積時間，縮小有氧缺乏差距、建立越野爬坡所需的持續力（Uphill Athlete；Koop）": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:132"
+  },
+  "在 LT1 以下建立微血管、粒線體與脂肪代謝，是一切強度的地基（Daniels；Lydiard）": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:125"
+  },
+  "在 LT2 以下的「有挑戰的有氧強度」累積長時間，提升高端有氧耐久（Koop；Lydiard）": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:128"
+  },
+  "在乳酸閾值附近跑，提升清除乳酸的能力、推高 LT2（Daniels）": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:130"
+  },
+  "在充分休息下以快於 VO2max 的速度跑，改善速度、跑姿與跑步經濟性（Daniels）": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:135"
+  },
+  "在課表打開這堂課：{url}": {
+    "draft": true,
+    "src": "backend/engine/calendar_feed.py:176"
+  },
+  "在路況差的技術路段練腳步、判斷與節奏，瓶頸是地形不是心肺，所以看 RPE 不看心率（Koop；Uphill Athlete）": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:141"
+  },
+  "在較低衝擊下達到高心肺負荷，訓練有氧能力與爬坡力量（Roche；CTS）": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:138"
+  },
+  "坡底": {
+    "draft": true,
+    "src": "backend/engine/racepower/watch_export.py:194"
+  },
+  "坡度由 Pandolf 公式換算：不背包、這個坡度的代謝量 ≈ 在 12% 坡、3.5 km/h 背這個重量（推估）；心率 ≤ 輕鬆跑上限": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:195"
+  },
+  "坡頂": {
+    "draft": true,
+    "src": "backend/engine/racepower/watch_export.py:192"
+  },
+  "基礎期": {
+    "draft": true,
+    "src": "backend/engine/overview.py:1554"
+  },
+  "基礎期第 {w} 週 / {n} 週": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2147"
+  },
+  "基礎期第 {w} 週，EF 近 6 週 {ef:+.1f}%": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2143"
+  },
+  "基礎期隔週一次：這週照常 LSD": {
+    "draft": true,
+    "src": "backend/engine/technical.py:69"
+  },
+  "基礎期：輕鬆的有氧課，可以取代部分長跑": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:426"
+  },
+  "外部 key 不對": {
+    "draft": true,
+    "src": "backend/engine/plan_store.py:533"
+  },
+  "多日行程每天吃掉的糧食": {
+    "draft": true,
+    "src": "backend/engine/advanced_params.py:28"
+  },
+  "多日行程第 2 天起，背包每天輕這麼多（糧食）。": {
+    "draft": true,
+    "src": "backend/engine/advanced_params.py:31"
+  },
+  "多日行程（{n} 天）不匯出至課表：課表一天一堂，只有單日（單攻）百岳可以匯出": {
+    "draft": true,
+    "src": "backend/engine/racepower/watch_export.py:319"
+  },
+  "大補給站": {
+    "draft": true,
+    "src": "backend/engine/racepower/watch_export.py:46"
+  },
+  "天熱，飄移本來就會偏高": {
+    "draft": true,
+    "src": "backend/engine/panels/drift_bars.py:54"
+  },
+  "安排課表：{test}": {
+    "draft": false,
+    "src": "backend/engine/threshold_confidence.py:625"
+  },
+  "完成 1 堂 3 區（「{t}」）": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1968"
+  },
+  "完成 1 堂「{t}」，達標就往上一階": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1912"
+  },
+  "定數＝時間 h×1.8＋距離 km×0.3＋爬升 km×10＋下降 km×0.6（山本正嘉）": {
+    "draft": true,
+    "src": "backend/engine/panels/race_refs.py:188"
+  },
+  "實測 AeT": {
+    "draft": false,
+    "src": "backend/engine/quality_gate.py:1815"
+  },
+  "實測 AeT 已通過": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1958"
+  },
+  "實測 AeT（{x}）": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1815"
+  },
+  "實測 AeT（二選一，做了且達標）": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1814"
+  },
+  "實測 AeT＋實測 LTHR：LTHR ÷ AeT − 1 ≤ 10%": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1803"
+  },
+  "實測 AeT：二選一，做了且達標": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2000"
+  },
+  "實際：{text}": {
+    "draft": true,
+    "src": "backend/engine/calendar_feed.py:163"
+  },
+  "實驗室測試": {
+    "draft": true,
+    "src": "backend/engine/hr_profile.py:176"
+  },
+  "專項期": {
+    "draft": true,
+    "src": "backend/engine/overview.py:1554"
+  },
+  "專項期每週 1 堂技術地形 {m}′（{rpe}，接近比賽路況）：RPE 7 算強度課，排在離長跑和其他強度課 ≥ 2 天的日子；{bits}（RPE 6–7 的時間算進每週強度預算，推估）": {
+    "draft": true,
+    "src": "backend/engine/technical.py:195"
+  },
+  "專項期每週 1 堂技術地形 {m}′，但{reason}：改成 {rpe}，算輕鬆課（不佔強度預算、不用隔 48 小時）": {
+    "draft": true,
+    "src": "backend/engine/technical.py:212"
+  },
+  "專項期每週 1 堂技術地形課：輕鬆跑只有 {m} 分，放不下（需要 ≥ {need} 分）": {
+    "draft": true,
+    "src": "backend/engine/technical.py:206"
+  },
+  "專項期每週 1 堂技術地形課：這週沒有可以換的輕鬆跑": {
+    "draft": true,
+    "src": "backend/engine/technical.py:169"
+  },
+  "專項期每週 1 堂，路況接近比賽；RPE 7 算強度課（隔 48 小時、算進強度預算）": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:430"
+  },
+  "專項期（賽前約 10–3 週）每 1–2 週排一次長天，點要一步步靠近最近那場的線（推估）": {
+    "draft": true,
+    "src": "backend/engine/panels/race_refs.py:183"
+  },
+  "少一趟（仍同等）": {
+    "draft": true,
+    "src": "backend/engine/interval_library.py:801"
   },
   "巡航間歇": {
     "draft": true,
@@ -87,44 +1415,1924 @@
     "draft": true,
     "src": "backend/engine/workout_templates.py:441"
   },
-  "短間歇": {
+  "工休比不在 3:1–6:1": {
     "draft": true,
-    "src": "backend/engine/workout_templates.py:442"
+    "src": "backend/engine/interval_library.py:381"
   },
-  "輕鬆跑": {
+  "差距 {gap}% → 繼續打底，之後重測 AeT": {
     "draft": true,
-    "src": "backend/engine/workout_templates.py:443"
+    "src": "backend/engine/quality_gate.py:1869"
+  },
+  "已經有這個分類": {
+    "draft": false,
+    "src": "backend/engine/user_templates.py:130"
+  },
+  "已解鎖": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1842"
+  },
+  "已連續 3 週加量：這週是恢復週（前 3 週平均的 65%）": {
+    "draft": true,
+    "src": "backend/engine/overview.py:1014"
+  },
+  "平均功率": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2644"
+  },
+  "平均心率": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2641"
+  },
+  "延長在有氧強度下的持續時間，提升耐久性與脂肪利用（Daniels）": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:126"
+  },
+  "建立示範沙盒的次數太多，請稍後再試；現在仍可瀏覽示範資料": {
+    "draft": true,
+    "src": "backend/tenancy_mw.py:278"
+  },
+  "建議 B2B 要是 true／false": {
+    "draft": true,
+    "src": "backend/engine/plan_prefs.py:297"
+  },
+  "建議做一次測試": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1993"
+  },
+  "建議：做{tests}": {
+    "draft": false,
+    "src": "backend/engine/threshold_confidence.py:590"
+  },
+  "強度上限": {
+    "draft": true,
+    "src": "backend/engine/workout_steps.py:584"
+  },
+  "強度下限": {
+    "draft": true,
+    "src": "backend/engine/workout_steps.py:584"
   },
   "強度課": {
     "draft": true,
     "src": "backend/engine/workout_templates.py:443"
   },
-  "測試": {
+  "強度課總量上限（週量 {share:.0%}）扣掉間歇還剩 {total:.0f} 分": {
     "draft": true,
-    "src": "backend/engine/workout_templates.py:444"
+    "src": "backend/engine/technical.py:124"
   },
-  "結構化爬升": {
+  "強度課類型要是 有氧間歇／VO2max 間歇／速度：{v!r}": {
     "draft": true,
-    "src": "backend/engine/workout_templates.py:479"
+    "src": "backend/engine/plan_store.py:306"
   },
-  "階梯步道、坡度穩定的路線（登山王、Koop 上坡 tempo、陡坡健走）：每組時間＋強度，心率／功率上下限照設": {
+  "強度課（RPE ≥ 7：和其他強度課隔 48 小時、算進每週強度預算）": {
     "draft": true,
-    "src": "backend/engine/workout_templates.py:480"
+    "src": "backend/engine/workout_steps.py:1213"
+  },
+  "強度類別不同（{a} vs {b}）": {
+    "draft": true,
+    "src": "backend/engine/interval_library.py:364"
+  },
+  "後段心率有點往上跑": {
+    "draft": true,
+    "src": "backend/engine/status.py:597"
+  },
+  "後段心率飄很多：輕鬆跑太快（或太熱、沒補給）": {
+    "draft": true,
+    "src": "backend/engine/status.py:599"
+  },
+  "後段撐得住": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2668"
+  },
+  "後段明顯掉了": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2668"
+  },
+  "後段開始累": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2668"
+  },
+  "徐國峰 90 分測試排在週末或長跑那天": {
+    "draft": true,
+    "src": "backend/api/plan_sessions.py:528"
+  },
+  "徐國峰 90 分鐘測試排在週末長跑日，本週週末沒有可練的日子：這週先不測": {
+    "draft": true,
+    "src": "backend/engine/overview.py:1403"
+  },
+  "從最近的輕鬆跑推估 AeT 約 {v:.0f} bpm，和目前 {now:.0f} 差 {d:+.0f}：測一次確認（UA：基礎變好 AeT 會往 AnT 靠）": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1547"
+  },
+  "心率": {
+    "draft": true,
+    "src": "backend/engine/workout_steps.py:589"
+  },
+  "心率 %": {
+    "draft": true,
+    "src": "backend/engine/workout_steps.py:612"
+  },
+  "心率 {lo}–{hi} bpm": {
+    "draft": true,
+    "src": "backend/engine/workout_steps.py:1488"
+  },
+  "心率最高的 {k} 次平均飄移 {m:.1f}%，算上誤差可能到 {u:.1f}%（≥ 5%）：還不夠確定": {
+    "draft": true,
+    "src": "backend/engine/algorithms/threshold_estimate.py:348"
+  },
+  "心率跟上強度變化的時間常數；算 Pw:HR 時先把功率延遲這麼多。": {
+    "draft": true,
+    "src": "backend/engine/drift_calib.py:133"
+  },
+  "心率送 % LTHR（intervals.icu 要有同一個 LTHR）": {
+    "draft": true,
+    "src": "backend/sync/workout_targets/intervals.py:22"
+  },
+  "心率飄移": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:552"
+  },
+  "心率飄移 {d:.1f}%（Evoke 60 分）": {
+    "draft": true,
+    "src": "backend/engine/aet_test.py:373"
+  },
+  "心率飄移 {d:.1f}%（Friel 1 小時）": {
+    "draft": true,
+    "src": "backend/engine/aet_test.py:369"
+  },
+  "心率飄移 {d:.1f}%（暖身後 {m:.0f} 分）": {
+    "draft": true,
+    "src": "backend/engine/aet_test.py:377"
+  },
+  "心率飄移（功率）": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:549"
+  },
+  "心率飄移（配速）": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:551"
+  },
+  "快步跑": {
+    "draft": true,
+    "src": "backend/engine/interval_library.py:757"
+  },
+  "恢復": {
+    "draft": true,
+    "src": "backend/engine/hr_profile.py:65"
+  },
+  "恢復期": {
+    "draft": true,
+    "src": "backend/engine/overview.py:1555"
+  },
+  "恢復期內不判斷": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1817"
+  },
+  "恢復期後的 3 區": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1974"
+  },
+  "恢復期後的長跑飄移檢查": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1977"
+  },
+  "恢復期結束：回到停訓前的量 {h:.1f} h（Daniels 表 9.2）": {
+    "draft": true,
+    "src": "backend/engine/overview.py:1060"
+  },
+  "恢復期還剩 {n} 天（到 {date} 前只排輕鬆跑）；{after}": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2050"
+  },
+  "恢復期：心率區間為主；功率、配速目標 × {f:.3f}（停跑 {days} 天的 FVDOT{cross}）": {
+    "draft": true,
+    "src": "backend/engine/overview.py:1103"
+  },
+  "恢復期：近 4 週的 {share:.0%}": {
+    "draft": true,
+    "src": "backend/engine/overview.py:1026"
+  },
+  "恢復週": {
+    "draft": true,
+    "src": "backend/engine/overview.py:1555"
+  },
+  "慢跑": {
+    "draft": true,
+    "src": "backend/engine/interval_library.py:62"
+  },
+  "慢跑／走下坡": {
+    "draft": true,
+    "src": "backend/engine/interval_library.py:62"
+  },
+  "我的範本": {
+    "draft": false,
+    "src": "backend/engine/user_templates.py:56"
+  },
+  "我的範本（自己排的）": {
+    "draft": false,
+    "src": "backend/engine/user_templates.py:57"
+  },
+  "所有輕鬆跑壓在 AeT 以下": {
+    "draft": true,
+    "src": "backend/engine/status.py:599"
+  },
+  "手動": {
+    "draft": true,
+    "src": "backend/engine/calibrate.py:148"
+  },
+  "手動輸入": {
+    "draft": false,
+    "src": "backend/engine/threshold_confidence.py:289"
+  },
+  "手錶 LTHR 平均誤差 9–11 bpm（COROS 8.9；Lu 2025）": {
+    "draft": false,
+    "src": "backend/engine/threshold_confidence.py:134"
+  },
+  "手錶帳號": {
+    "draft": false,
+    "src": "backend/engine/threshold_confidence.py:289"
+  },
+  "找不到備份檔": {
+    "draft": true,
+    "src": "backend/api/backup.py:248"
+  },
+  "找不到這個分類": {
+    "draft": false,
+    "src": "backend/engine/user_templates.py:148"
+  },
+  "找不到這個範本": {
+    "draft": false,
+    "src": "backend/api/plan_sessions.py:1294"
+  },
+  "找不到這堂課": {
+    "draft": false,
+    "src": "backend/api/plan_sessions.py:1378"
+  },
+  "找不到這堂課（或已經完成／錯過）": {
+    "draft": true,
+    "src": "backend/engine/plan_store.py:354"
   },
   "技術地形": {
     "draft": true,
     "src": "backend/engine/workout_templates.py:481"
   },
-  "路況差的技術路段：時間＋爬升＋RPE，不設心率、功率目標（只給參考）；RPE ≥ 7 算強度課": {
+  "推估": {
     "draft": true,
-    "src": "backend/engine/workout_templates.py:482"
+    "src": "backend/engine/advanced_params.py:29"
   },
-  "下坡技術／離心": {
+  "推估（7 場比賽 0–5 %，留餘裕）": {
     "draft": true,
-    "src": "backend/engine/workout_templates.py:483"
+    "src": "backend/engine/effort_calib.py:99"
+  },
+  "推估（8 週路跑資料校正）": {
+    "draft": true,
+    "src": "backend/engine/drift_calib.py:123"
+  },
+  "推估（以台北夏天傍晚設定；150 以上算滿劑量）": {
+    "draft": true,
+    "src": "backend/engine/advanced_params.py:24"
+  },
+  "推估（單一跑者資料校正）": {
+    "draft": true,
+    "src": "backend/engine/drift_calib.py:127"
+  },
+  "推估（市區路跑的典型值 20 分）": {
+    "draft": true,
+    "src": "backend/engine/drift_calib.py:119"
+  },
+  "推估（越野賽通常超過 10 km）": {
+    "draft": true,
+    "src": "backend/engine/effort_calib.py:90"
+  },
+  "推估（近 365 天跑步）": {
+    "draft": true,
+    "src": "backend/engine/hr_profile.py:201"
+  },
+  "推估：CP {cp:.0f} W × 近 {days} 天 {n} 次 Stryd 路跑的速度／功率比（中位數 {spw:.1f} mm/s/W）＝ CP 對應的平路配速": {
+    "draft": true,
+    "src": "backend/engine/thresholds.py:230"
+  },
+  "推估：Tobler 步行函數在這條路線的 EP/h（{note}）": {
+    "draft": true,
+    "src": "backend/engine/racepower/calc.py:401"
+  },
+  "推估：你的步行能力模型在這條路線的 EP/h（越野走路窗 + 百岳心率窗，AeT；{note}）": {
+    "draft": true,
+    "src": "backend/engine/racepower/calc.py:396"
+  },
+  "推估：近 {days} 天 {n} 次路跑中，心率在 LTHR ±3% 的最快 20 分鐘配速中位數（Friel 30 分鐘測試的後 20 分鐘）": {
+    "draft": true,
+    "src": "backend/engine/thresholds.py:261"
+  },
+  "推到手錶是 {n} 段，超過 {max} 段：COROS 的上限未驗證": {
+    "draft": true,
+    "src": "backend/engine/workout_steps.py:1219"
+  },
+  "推薦（依你目前的階段與時間上限）：": {
+    "draft": true,
+    "src": "backend/engine/interval_library.py:826"
+  },
+  "推送": {
+    "draft": true,
+    "src": "backend/api/auth.py:175"
+  },
+  "換成 3 區：這週沒有 5 區，不算進階": {
+    "draft": true,
+    "src": "backend/engine/interval_library.py:806"
+  },
+  "撐 120 秒的心率（推估）": {
+    "draft": true,
+    "src": "backend/engine/hr_profile.py:177"
+  },
+  "撐 120 秒的最高心率（濾掉 3 秒內跳 ≥ 15 bpm 的尖峰和步頻鎖定）；8 bpm 是推估。腕式對胸帶 rc 0.67–0.92 vs 0.996（Gillinov 2017）": {
+    "draft": false,
+    "src": "backend/engine/threshold_confidence.py:137"
+  },
+  "撐 60 秒的心率到過 {s:.0f}（{date}），比最大心率 {v:.0f} 還高：最大心率設低了（推估）": {
+    "draft": false,
+    "src": "backend/engine/threshold_confidence.py:463"
+  },
+  "整趟時間是推估：{note}；沒有跑步資料可建能力模型，用 Tobler 步行函數": {
+    "draft": true,
+    "src": "backend/engine/racepower/calc.py:402"
+  },
+  "整趟時間是推估：{note}；用你的步行能力模型（待回測）": {
+    "draft": true,
+    "src": "backend/engine/racepower/calc.py:398"
+  },
+  "文字欄位最多 {n} 字": {
+    "draft": true,
+    "src": "backend/tenancy_mw.py:183"
+  },
+  "方法：8 週內 {k} 次、取最近 {n} 次加權平均 {agg}，中位數 {med}；速度÷心率（Pa:HR）前後半比較（Friel）。": {
+    "draft": true,
+    "src": "backend/engine/status.py:590"
+  },
+  "方法：{ratio}前後半比較，前 10 分鐘暖身不算{err}；< 5% 穩定、5–10% 有點飄、> 10% 飄很多。": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:559"
+  },
+  "方法：前 10 分鐘暖身不算、回程市區段當緩和；有坡、停頓、跑走、功率起伏（VI > 1.04）、前後半功率差 > 5%、快速結尾的不採用；溫度分 < 25／25–28／> 28 °C（推估）。": {
+    "draft": true,
+    "src": "backend/engine/status.py:573"
+  },
+  "日期格式不對：{v!r}": {
+    "draft": true,
+    "src": "backend/engine/plan_store.py:273"
+  },
+  "時長類型要是 時間／距離／{a}／{b}": {
+    "draft": true,
+    "src": "backend/engine/workout_steps.py:667"
+  },
+  "時間": {
+    "draft": true,
+    "src": "backend/engine/workout_steps.py:675"
+  },
+  "時間：{t} ／ 計畫 {m} 分（{pct}%）": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2723"
+  },
+  "暖身": {
+    "draft": true,
+    "src": "backend/engine/workout_steps.py:1472"
+  },
+  "暖身 {m}（": {
+    "draft": true,
+    "src": "backend/engine/interval_library.py:758"
+  },
+  "暖身後不到 40 分鐘，只當參考": {
+    "draft": true,
+    "src": "backend/engine/panels/drift_bars.py:52"
+  },
+  "暖身後只跑了 30–40 分鐘，比有氧閾值測試要的 40 分鐘短：只當參考，不拿來開放間歇、不算 AeT 測試。\n方法：30 分是推估的門檻（心血管飄移約在運動 10–20 分鐘後開始，Coyle & González-Alonso 2001；40 分是 Uphill Athlete 的測試標準）。": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:106"
+  },
+  "暖身後跑滿 40 分鐘，可以判讀": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2954"
+  },
+  "暫停": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1844"
+  },
+  "暫停：每週 1 區時間連 3 週低於確認時的 2/3（{m} 分），要重新做 AeT 測試": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1986"
+  },
+  "暫時規則（推估）：輕鬆跑的心率都在 {x:.0f} bpm 附近、心率飄移都穩定（< 5%），還找不到會飄到 5% 的心率，所以只能說 AeT 至少 {x:.0f}。用 {x:.0f} 當 AeT 是保守的（真正的 AeT ≥ {x:.0f}）；區間仍照課表的 AeT。之後只要 ≤ {x:.0f} bpm 有一次飄移明顯 ≥ 5%，下限就取消、改建議測試。多跑幾次 {lo:.0f}–{hi:.0f} bpm 的真正輕鬆跑，就能找出實際的 AeT；在那之前每 8 週建議做一次 AeT 測試（可以關掉）。方法：多次飄移對心率的回歸，誤差太大的跑步不算、每次誤差加倍（GC 驗證）": {
+    "draft": true,
+    "src": "backend/engine/drift_agg.py:405"
+  },
+  "最可能錯的是 LTHR": {
+    "draft": false,
+    "src": "backend/engine/threshold_confidence.py:519"
+  },
+  "最可能錯的是最大心率": {
+    "draft": false,
+    "src": "backend/engine/threshold_confidence.py:518"
+  },
+  "最大心率": {
+    "draft": false,
+    "src": "backend/engine/status.py:931"
+  },
+  "最大心率 {hr:g} 不合理（120–240）": {
+    "draft": true,
+    "src": "backend/api/plan.py:546"
+  },
+  "最大心率 {mhr:.0f} bpm": {
+    "draft": true,
+    "src": "backend/engine/hr_profile.py:244"
+  },
+  "最大心率 {mhr:.0f} − 靜息心率 {rhr:.0f} 太小，檢查設定": {
+    "draft": true,
+    "src": "backend/engine/hr_profile.py:237"
+  },
+  "最大心率 {mhr:.0f}、靜息心率 {rhr:.0f} bpm（HRR {hrr:.0f}）": {
+    "draft": true,
+    "src": "backend/engine/hr_profile.py:239"
+  },
+  "最大心率 {v:.0f}，但 365 天內撐 120 秒的最高心率只有 {s:.0f}（{date}）：差 {d:.0f} bpm > 8（推估），高的數字多半是尖峰": {
+    "draft": false,
+    "src": "backend/engine/threshold_confidence.py:457"
+  },
+  "最大心率來自{src}，不是測試": {
+    "draft": false,
+    "src": "backend/engine/threshold_confidence.py:441"
+  },
+  "最大心率可信度低：儲備心率／最大心率區間的目標可能不準，測準之前建議改用乳酸閾區間": {
+    "draft": false,
+    "src": "backend/engine/threshold_confidence.py:603"
+  },
+  "最大心率測試": {
+    "draft": false,
+    "src": "backend/engine/hr_profile.py:176"
+  },
+  "最大心率測試 {date}：撐 ≥ 5 秒的最高心率（濾掉尖峰）": {
+    "draft": false,
+    "src": "backend/engine/threshold_confidence.py:684"
+  },
+  "最大心率（COROS % HRmax 6 區）": {
+    "draft": true,
+    "src": "backend/engine/hr_profile.py:72"
+  },
+  "最大心率：{src}": {
+    "draft": true,
+    "src": "backend/engine/hr_profile.py:293"
+  },
+  "最後 20% 的時間裡，同樣心率的輸出（功率，沒有功率時用速度）和暖身後相比。≥ 95% 撐得住；90–95% 開始累（95% 推估）；< 90% 補給或配速要調整。詳細在「配速與耐久」。": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2670"
+  },
+  "最新 {v:.1f}%": {
+    "draft": true,
+    "src": "backend/engine/panels/drift_bars.py:82"
+  },
+  "最近 {days} 天有溫度的穩定路跑只有 {n} 次（要 {need} 次）": {
+    "draft": true,
+    "src": "backend/engine/zone_events.py:473"
+  },
+  "最近 {days} 天沒有跑步": {
+    "draft": true,
+    "src": "backend/engine/zones.py:248"
+  },
+  "最近 {days} 天的跑步沒有可用的功率（手錶推估功率不採用）": {
+    "draft": true,
+    "src": "backend/engine/zones.py:251"
+  },
+  "最近 {days} 天的跑步沒有心率": {
+    "draft": true,
+    "src": "backend/engine/zones.py:252"
+  },
+  "最近 {days} 天的跑步沒有速度": {
+    "draft": true,
+    "src": "backend/engine/zones.py:253"
+  },
+  "最近 {n} 次輕鬆路跑（{chip}）的平均；一次跑步會有誤差，所以看平均": {
+    "draft": true,
+    "src": "backend/engine/status.py:586"
+  },
+  "最近一次 {date} 飄移 {d:.0f}%": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2138"
+  },
+  "最近一次 {date} 飄移 {d:.1f}%": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2131"
+  },
+  "最近氣溫 ≥ 25 °C：等天氣轉涼再做比較準（還是可以先排）": {
+    "draft": false,
+    "src": "backend/engine/threshold_confidence.py:537"
+  },
+  "最近的穩定跑只有 {n} 次落在基準線的功率範圍（{lo:.0f}–{hi:.0f} W）": {
+    "draft": true,
+    "src": "backend/engine/zone_events.py:491"
+  },
+  "有 GPX 時橫軸是路線距離（km）：距離段照它的距離放，時間、直到按下計圈、負荷、RPE 段依你每段的預估速度換算成距離（越野用努力距離：km＋爬升÷100），是推估": {
+    "draft": false,
+    "src": "backend/engine/user_templates.py:58"
+  },
+  "有刺激，目標 ≥ {m} 分": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2683"
+  },
+  "有基礎了就能做": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1943"
+  },
+  "有氧動力": {
+    "draft": true,
+    "src": "backend/engine/hr_profile.py:65"
+  },
+  "有氧耐力": {
+    "draft": true,
+    "src": "backend/engine/hr_profile.py:65"
+  },
+  "有氧間歇": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:431"
+  },
+  "有氧／閾值：主課 ≤ 101% CP（心率 ≤ 102% LTHR、配速不快於閾值配速）。長 tempo 每趟 15–30 分或連續一段，巡航間歇每趟 6–15 分（更短的也算巡航）": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:432"
+  },
+  "有點飄": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:530"
+  },
+  "未解鎖": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1845"
+  },
+  "未設定": {
+    "draft": true,
+    "src": "backend/engine/wko5expr/fitdataset.py:92"
+  },
+  "本人 n={n}": {
+    "draft": true,
+    "src": "backend/engine/calibrate.py:152"
+  },
+  "本人資料 {n} 筆，滿 {min_n} 筆才會自己擬合。": {
+    "draft": true,
+    "src": "backend/engine/calibrate.py:161"
+  },
+  "本週 LSD 換成技術地形 {m}′（{rpe}，算輕鬆課）：基礎期隔週一次，練腳步和路況判斷、不練心肺；時間和 LSD 一樣": {
+    "draft": true,
+    "src": "backend/engine/technical.py:156"
+  },
+  "本週低強度占比 < 75%（實測 AeT）：5 區先不排": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1991"
+  },
+  "本週只剩 {days} 天，{n} 堂課（約 {m} 分鐘）排不進去——不用補，下週照常": {
+    "draft": true,
+    "src": "backend/engine/overview.py:1437"
+  },
+  "本週只剩 {days} 天，{n} 次輕鬆跑（約 {m} 分鐘）排不進去——不用補，下週照常": {
+    "draft": true,
+    "src": "backend/engine/overview.py:1435"
+  },
+  "本週可練的日子只剩 {days} 天，{n} 堂課（約 {m} 分鐘）排不進去——不用補，下週照常": {
+    "draft": true,
+    "src": "backend/engine/overview.py:1386"
+  },
+  "本週強度預算不夠（{room}，需要 ≥ {need} 分）": {
+    "draft": true,
+    "src": "backend/engine/technical.py:209"
+  },
+  "本週維持或減量，不要再加": {
+    "draft": true,
+    "src": "backend/engine/status.py:330"
+  },
+  "查表": {
+    "draft": true,
+    "src": "backend/engine/racepower/calc.py:328"
+  },
+  "查表 k：": {
+    "draft": true,
+    "src": "backend/engine/racepower/calc.py:348"
+  },
+  "條件：戴胸帶（手腕光學常有尖峰）、休息充足（前 48 小時沒有硬課）、沒生病、涼爽、找 2–3 分鐘的坡、最好有人陪。有心血管疾病或風險、胸痛、頭暈的人不要做，先問醫師（ACSM 運動前篩檢，Riebe 2015）；不舒服立刻停。替代：最近一場 5 K 比賽的最後衝刺也可以（現場、比賽與實驗室的最高心率沒有差別，Boudet 2002）。app 的讀法：濾掉尖峰與步頻鎖定後，撐 ≥ 5 秒的最高心率（推估）；結果要在設定頁按「套用」才會寫入": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:165"
+  },
+  "標了「當作間歇」，但找不到用力段（≥ 95% CP 的短趟或 3 區以上 ≥ 2.5 分）": {
+    "draft": true,
+    "src": "backend/engine/interval_eval.py:501"
+  },
+  "標題不能空白": {
+    "draft": true,
+    "src": "backend/engine/plan_store.py:324"
+  },
+  "檔案是空的": {
+    "draft": true,
+    "src": "backend/api/backup.py:225"
+  },
+  "步驟太多（> {n}）": {
+    "draft": true,
+    "src": "backend/engine/workout_steps.py:690"
+  },
+  "步驟格式不對": {
+    "draft": true,
+    "src": "backend/engine/workout_steps.py:634"
+  },
+  "步驟類型不對：{x}": {
+    "draft": true,
+    "src": "backend/engine/workout_steps.py:662"
+  },
+  "每段「直到按下計圈」：到步驟名稱寫的地點時按一下計圈（lap）": {
+    "draft": true,
+    "src": "backend/engine/racepower/watch_export.py:246"
+  },
+  "每段只有一個目標：功率段的心率上限只寫在文字，手錶不會提醒": {
+    "draft": true,
+    "src": "backend/engine/workout_steps.py:1523"
+  },
+  "每趟 < 2 分：算一堂 5 區，不算進階": {
+    "draft": true,
+    "src": "backend/engine/interval_library.py:823"
+  },
+  "每趟 W′ 是標準課表的 {r:.2f} 倍（範圍 0.7–1.5）": {
+    "draft": true,
+    "src": "backend/engine/interval_library.py:375"
+  },
+  "每趟 ≤ 2 分、休息 ≥ 2 倍（R、加速跑、短坡衝刺），或功率 > 116% CP": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:437"
+  },
+  "每趟 ≥ 2 分、一週最多 2 次、隔 ≥ 2 天": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2005"
+  },
+  "每週 3 區量 ≤ 週量 10%（Daniels），放不下排巡航版 3×6／3×8／2×12": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1941"
+  },
+  "每週跑步次數 {runs} 比可練日（{days} 天）多": {
+    "draft": true,
+    "src": "backend/engine/plan_prefs.py:288"
+  },
+  "比例": {
+    "draft": true,
+    "src": "backend/engine/effort_calib.py:98"
+  },
+  "比模型預測快 {f:.0%}，可能撐不住": {
+    "draft": true,
+    "src": "backend/engine/racepower/goal.py:46"
+  },
+  "比模型預測快 {f:.0%}，很可能撐不住": {
+    "draft": true,
+    "src": "backend/engine/racepower/goal.py:44"
+  },
+  "比模型預測慢 {f:.0%}：很保守，體力還有餘裕": {
+    "draft": true,
+    "src": "backend/engine/racepower/goal.py:48"
+  },
+  "比賽": {
+    "draft": true,
+    "src": "backend/engine/hr_profile.py:176"
+  },
+  "比賽 {n} 次平均心率在 95–103% LTHR": {
+    "draft": false,
+    "src": "backend/engine/threshold_confidence.py:512"
+  },
+  "比賽課由賽季計畫排入，或從賽事計算機「匯出至課表」，不能自己新增": {
+    "draft": true,
+    "src": "backend/engine/plan_store.py:338"
+  },
+  "比賽週": {
+    "draft": true,
+    "src": "backend/engine/overview.py:1554"
+  },
+  "比賽週：短、輕鬆": {
+    "draft": true,
+    "src": "backend/engine/overview.py:1023"
+  },
+  "水站": {
+    "draft": true,
+    "src": "backend/engine/racepower/watch_export.py:46"
+  },
+  "沒有 AeT 或 LTHR": {
+    "draft": true,
+    "src": "backend/engine/panels/activity_charts.py:310"
+  },
+  "沒有 AeT／LTHR：不設目標": {
+    "draft": true,
+    "src": "backend/engine/target_policy.py:140"
+  },
+  "沒有 CP：改用心率": {
+    "draft": true,
+    "src": "backend/engine/target_policy.py:138"
+  },
+  "沒有 CP：請手動輸入": {
+    "draft": true,
+    "src": "backend/engine/racepower/calc.py:271"
+  },
+  "沒有 LTHR，區間算不出來": {
+    "draft": true,
+    "src": "backend/engine/hr_profile.py:228"
+  },
+  "沒有 {name}，區間算不出來": {
+    "draft": true,
+    "src": "backend/engine/panels/activity_charts.py:318"
+  },
+  "沒有「負荷」結束條件：送預估時間": {
+    "draft": true,
+    "src": "backend/sync/workout_targets/garmin.py:23"
+  },
+  "沒有到 VO2max": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2686"
+  },
+  "沒有功率：不判讀間歇、不算 W′（間歇用心率看）": {
+    "draft": true,
+    "src": "backend/engine/interval_eval.py:461"
+  },
+  "沒有實測 AeT": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2118"
+  },
+  "沒有最大心率，到設定填": {
+    "draft": true,
+    "src": "backend/engine/hr_profile.py:84"
+  },
+  "沒有每日行程：距離與爬升平均分配到每一天；實際行程請逐日輸入": {
+    "draft": true,
+    "src": "backend/engine/racepower/calc.py:420"
+  },
+  "沒有比賽強度的標準距離紀錄可當查表依據：k 用預設 −0.07（≈ Stryd 比賽功率表）": {
+    "draft": true,
+    "src": "backend/engine/racepower/calc.py:319"
+  },
+  "沒有漸進（ramp）步驟：漸進只寫在步驟名稱": {
+    "draft": true,
+    "src": "backend/engine/workout_steps.py:1524"
+  },
+  "沒有資料庫": {
+    "draft": true,
+    "src": "backend/engine/race_calc_store.py:91"
+  },
+  "沒有越野 RE：請手動輸入": {
+    "draft": true,
+    "src": "backend/engine/racepower/calc.py:299"
+  },
+  "沒有路跑 RE：請手動輸入": {
+    "draft": true,
+    "src": "backend/engine/racepower/calc.py:304"
+  },
+  "沒有路跑資料，暫用 8 km/h（推估）": {
+    "draft": true,
+    "src": "backend/engine/equivalence.py:208"
+  },
+  "沒有路跑資料：閾值配速的 {frac:.0%} 速度（推估）": {
+    "draft": true,
+    "src": "backend/engine/equivalence.py:207"
+  },
+  "沒有轉換期：下一場 A 賽事「{name}」的專項期 {start} 開始，只剩 {days} 天": {
+    "draft": true,
+    "src": "backend/engine/planning.py:372"
+  },
+  "沒有這個分類：{c}": {
+    "draft": false,
+    "src": "backend/engine/user_templates.py:196"
+  },
+  "沒有這個區間：{x}": {
+    "draft": true,
+    "src": "backend/engine/workout_steps.py:603"
+  },
+  "沒有閾值配速：這段推到手錶不會有配速目標": {
+    "draft": false,
+    "src": "backend/engine/workout_steps.py:117"
+  },
+  "沒有離長跑和其他強度課 ≥ 2 天的日子": {
+    "draft": true,
+    "src": "backend/engine/technical.py:211"
+  },
+  "沒有靜息心率，到設定填": {
+    "draft": true,
+    "src": "backend/engine/hr_profile.py:83"
+  },
+  "活動擬合": {
+    "draft": true,
+    "src": "backend/engine/racepower/calc.py:276"
+  },
+  "活動日期不對": {
+    "draft": true,
+    "src": "backend/engine/plan_store.py:629"
+  },
+  "涼天 60 分鐘最高平均心率 {v:.0f}": {
+    "draft": false,
+    "src": "backend/engine/threshold_confidence.py:516"
+  },
+  "涼天、97–103% CP 撐 ≥ 10 分的 {n} 段，心率中位數 {med:.0f}，和 LTHR 差 {d:+.0f} bpm（推估 > 5）": {
+    "draft": false,
+    "src": "backend/engine/threshold_confidence.py:400"
+  },
+  "減量期": {
+    "draft": true,
+    "src": "backend/engine/overview.py:1554"
+  },
+  "減量期／比賽週不測，賽後再測": {
+    "draft": false,
+    "src": "backend/engine/threshold_confidence.py:540"
+  },
+  "減量期：平常 {h:.1f} h × {share:.0%}": {
+    "draft": true,
+    "src": "backend/engine/overview.py:1020"
+  },
+  "測試": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:444"
+  },
+  "測試日期不能在未來": {
+    "draft": true,
+    "src": "backend/api/plan.py:760"
+  },
+  "測試（兩點法）": {
+    "draft": true,
+    "src": "backend/engine/zones.py:225"
+  },
+  "溫度不明": {
+    "draft": true,
+    "src": "backend/engine/panels/drift_bars.py:38"
+  },
+  "漸進": {
+    "draft": true,
+    "src": "backend/engine/interval_library.py:757"
+  },
+  "無氧動力": {
+    "draft": true,
+    "src": "backend/engine/hr_profile.py:65"
+  },
+  "無氧耐力": {
+    "draft": true,
+    "src": "backend/engine/hr_profile.py:65"
+  },
+  "熟悉比賽配速與補給，代謝效益接近輕鬆跑，量以週量 15–20% 為限（Daniels）": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:129"
+  },
+  "熱校正後的心率–功率沒有正斜率，基準線不能用": {
+    "draft": true,
+    "src": "backend/engine/zone_events.py:485"
+  },
+  "熱適應指數：每分鐘的熱劑量在這個 Hadley 以下是 0，到 150 是滿劑量。": {
+    "draft": true,
+    "src": "backend/engine/advanced_params.py:26"
+  },
+  "熱適應資料讀取失敗（{err}）": {
+    "draft": true,
+    "src": "backend/engine/overview.py:1496"
+  },
+  "熱適應開始累積的熱指數": {
+    "draft": true,
+    "src": "backend/engine/advanced_params.py:23"
+  },
+  "爬升": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2637"
+  },
+  "爬升 {m} m": {
+    "draft": true,
+    "src": "backend/engine/calendar_feed.py:168"
+  },
+  "爬升換算（每幾 m 爬升 = 1 km）": {
+    "draft": true,
+    "src": "backend/engine/terrain_calib.py:75"
+  },
+  "爬升：{a} m ／ 計畫 {p} m": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2727"
+  },
+  "爬坡功率上限 110 % 是經驗法則（非研究結論）；下坡讓功率自然掉下來": {
+    "draft": true,
+    "src": "backend/engine/racepower/calc.py:360"
+  },
+  "現在不是基礎期": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2148"
+  },
+  "用極短休息讓心肺維持在 VO2max 附近，同時限制乳酸累積（Uphill Athlete；Billat）": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:134"
+  },
+  "用短休息讓乳酸維持穩定，在閾值強度累積比連續跑更多的時間（Daniels）": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:131"
+  },
+  "百岳多為跟團": {
+    "draft": true,
+    "src": "backend/engine/racepower/calc.py:397"
+  },
+  "百岳心率帶 AeT": {
+    "draft": true,
+    "src": "backend/engine/racepower/watch_export.py:269"
+  },
+  "目前不設門檻，只看護欄（{x}": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2121"
+  },
+  "目前用差距法＋飄移法（{x}）": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2120"
+  },
+  "目標上限": {
+    "draft": true,
+    "src": "backend/engine/workout_steps.py:609"
+  },
+  "目標下限": {
+    "draft": true,
+    "src": "backend/engine/workout_steps.py:608"
+  },
+  "目標區時間 {t:.0f} 分，和 {tr:.0f} 分差 > 15%": {
+    "draft": true,
+    "src": "backend/engine/interval_library.py:367"
+  },
+  "目標填法不對：{x}": {
+    "draft": true,
+    "src": "backend/engine/workout_steps.py:597"
+  },
+  "目標用要是 自動／心率／功率": {
+    "draft": false,
+    "src": "backend/engine/user_templates.py:213"
+  },
+  "目標用要是 自動／心率／功率：{v!r}": {
+    "draft": true,
+    "src": "backend/engine/plan_store.py:310"
+  },
+  "目標類型不對：{x}": {
+    "draft": true,
+    "src": "backend/engine/workout_steps.py:559"
+  },
+  "目標：{target}": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2729"
+  },
+  "直到按下 Lap 鍵": {
+    "draft": true,
+    "src": "backend/sync/workout_targets/garmin.py:25"
+  },
+  "直到按下計圈": {
+    "draft": true,
+    "src": "backend/engine/workout_steps.py:68"
+  },
+  "直到按下計圈的預估時間": {
+    "draft": true,
+    "src": "backend/engine/workout_steps.py:682"
+  },
+  "短間歇": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:442"
+  },
+  "硬上限": {
+    "draft": true,
+    "src": "backend/engine/workout_steps.py:1201"
+  },
+  "示範伺服器忙碌中，請稍後再試": {
+    "draft": true,
+    "src": "backend/tenancy_mw.py:318"
+  },
+  "示範模式不提供這個功能": {
+    "draft": true,
+    "src": "backend/tenancy_mw.py:263"
+  },
+  "示範模式最多 {n} 個賽事": {
+    "draft": true,
+    "src": "backend/tenancy_mw.py:194"
+  },
+  "示範模式最多 {n} 個階段": {
+    "draft": true,
+    "src": "backend/tenancy_mw.py:185"
+  },
+  "示範模式最多 {n} 堂課": {
+    "draft": true,
+    "src": "backend/tenancy_mw.py:206"
+  },
+  "示範版算不出這組輸入，請換一組數字再試": {
+    "draft": true,
+    "src": "backend/demo/static_racepower.py:53"
+  },
+  "示範資料準備中，請稍候": {
+    "draft": true,
+    "src": "backend/tenancy_mw.py:245"
+  },
+  "秒": {
+    "draft": true,
+    "src": "backend/engine/drift_calib.py:118"
+  },
+  "移動時間": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2632"
+  },
+  "穩定": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:530"
+  },
+  "穩定段的 VI（NP ÷ 平均功率）超過這個值就不算穩定跑，不判讀飄移。": {
+    "draft": true,
+    "src": "backend/engine/drift_calib.py:128"
+  },
+  "第 {day} 天終點": {
+    "draft": true,
+    "src": "backend/engine/racepower/watch_export.py:190"
+  },
+  "第 {i} 趟 {d}": {
+    "draft": true,
+    "src": "backend/engine/interval_library.py:739"
+  },
+  "算不出來（{x}）": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2134"
+  },
+  "範本名稱不能空白": {
+    "draft": false,
+    "src": "backend/engine/user_templates.py:185"
+  },
+  "範本名稱最多 {n} 字": {
+    "draft": false,
+    "src": "backend/engine/user_templates.py:187"
+  },
+  "範本最多 {n} 個": {
+    "draft": false,
+    "src": "backend/engine/user_templates.py:265"
+  },
+  "累積在接近最大攝氧量的時間，提高最大有氧能力（Daniels；Buchheit & Laursen）": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:133"
+  },
+  "終點": {
+    "draft": true,
+    "src": "backend/engine/racepower/watch_export.py:186"
+  },
+  "組休比每趟長或 > 3 分": {
+    "draft": true,
+    "src": "backend/engine/interval_library.py:372"
+  },
+  "組間 {d}": {
+    "draft": true,
+    "src": "backend/engine/interval_library.py:743"
+  },
+  "結尾這段時間裡的一群停等當回程緩和，不算進飄移。本人值 = 你路跑結尾那群停等起點距結束的 p95。": {
+    "draft": true,
+    "src": "backend/engine/drift_calib.py:124"
+  },
+  "結構不是 JSON": {
+    "draft": true,
+    "src": "backend/engine/workout_steps.py:624"
+  },
+  "結構化爬升": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:479"
+  },
+  "結構是這個 app 的建議（推估）：時間＋爬升＋RPE，不設心率、功率目標；爬升量依你的路線調": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:192"
+  },
+  "結構要有 items": {
+    "draft": true,
+    "src": "backend/engine/workout_steps.py:626"
+  },
+  "維持：每週 1 區 ≥ {m} 分": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1981"
+  },
+  "緩和": {
+    "draft": true,
+    "src": "backend/engine/workout_steps.py:1472"
   },
   "練下坡：時間＋下降量，不設心率、功率目標（下坡功率不準）": {
     "draft": true,
     "src": "backend/engine/workout_templates.py:484"
+  },
+  "縮量版：目標區時間 {pct:.0f}%，達標也不前進": {
+    "draft": true,
+    "src": "backend/engine/interval_library.py:800"
+  },
+  "總時間 {m:.0f} 分超過這天上限 {cap:.0f} 分（課表偏好：{mode}）": {
+    "draft": true,
+    "src": "backend/engine/workout_steps.py:1200"
+  },
+  "耐久": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2669"
+  },
+  "背負要在 0–40 kg": {
+    "draft": true,
+    "src": "backend/engine/racepower/athlete.py:1527"
+  },
+  "自動估算": {
+    "draft": false,
+    "src": "backend/engine/threshold_confidence.py:289"
+  },
+  "自動估算（當天以前的跑步，Friel 30 分鐘段）": {
+    "draft": true,
+    "src": "backend/engine/wko5expr/fitdataset.py:91"
+  },
+  "自動目標的類型不對：{x}": {
+    "draft": true,
+    "src": "backend/engine/workout_steps.py:578"
+  },
+  "自訂分類最多 {n} 個": {
+    "draft": false,
+    "src": "backend/engine/user_templates.py:128"
+  },
+  "至少要有一個步驟": {
+    "draft": true,
+    "src": "backend/engine/workout_steps.py:688"
+  },
+  "虛線＝接下來 {n} 場賽事一天的難度（紅 A、橘 B、藍其他；多天行程用每天平均）；滑過線看整趟和每一天": {
+    "draft": true,
+    "src": "backend/engine/panels/race_refs.py:181"
+  },
+  "行動糧": {
+    "draft": true,
+    "src": "backend/engine/racepower/seg_targets.py:87"
+  },
+  "行程會跨過午夜（多日）不匯出至課表：只有當天來回的單攻百岳可以匯出": {
+    "draft": true,
+    "src": "backend/engine/racepower/watch_export.py:323"
+  },
+  "行程背包要在 0–{max:g} kg": {
+    "draft": true,
+    "src": "backend/engine/planning.py:290"
+  },
+  "補給站": {
+    "draft": true,
+    "src": "backend/engine/racepower/watch_export.py:46"
+  },
+  "補給點": {
+    "draft": true,
+    "src": "backend/engine/racepower/watch_export.py:46"
+  },
+  "要儲存的資料太大": {
+    "draft": true,
+    "src": "backend/engine/race_calc_store.py:95"
+  },
+  "要等到 {day} 以後（重測的條件）": {
+    "draft": true,
+    "src": "backend/api/plan_sessions.py:519"
+  },
+  "要選一筆活動": {
+    "draft": true,
+    "src": "backend/engine/panels/activity_charts.py:488"
+  },
+  "要選日期": {
+    "draft": true,
+    "src": "backend/engine/plan_store.py:406"
+  },
+  "規律跑：每週 ≥ {n} 次、別連續 {g} 天沒跑": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1926"
+  },
+  "計畫：{text}": {
+    "draft": true,
+    "src": "backend/engine/calendar_feed.py:154"
+  },
+  "計算太頻繁，請稍後再試": {
+    "draft": true,
+    "src": "backend/tenancy_mw.py:271"
+  },
+  "訓練": {
+    "draft": true,
+    "src": "backend/engine/workout_steps.py:1472"
+  },
+  "課表": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2734"
+  },
+  "課表待確認是自動調整的提醒，不能自己新增": {
+    "draft": true,
+    "src": "backend/engine/plan_store.py:399"
+  },
+  "課表心率用{label}：輕鬆跑上限 {aet:.0f} bpm（{src}）": {
+    "draft": true,
+    "src": "backend/engine/overview.py:1118"
+  },
+  "課表結構有誤：{e}": {
+    "draft": true,
+    "src": "backend/engine/plan_store.py:300"
+  },
+  "課表（TrailRunCoach）": {
+    "draft": true,
+    "src": "backend/engine/calendar_feed.py:196"
+  },
+  "課表：{title}（{day}，{match}）": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2719"
+  },
+  "請到設定頁重新登入 TrainingPeaks": {
+    "draft": true,
+    "src": "backend/sync/tp_client.py:738"
+  },
+  "請求太頻繁，請稍後再試": {
+    "draft": true,
+    "src": "backend/tenancy_mw.py:232"
+  },
+  "請重新整理頁面後再試一次": {
+    "draft": true,
+    "src": "backend/tenancy_mw.py:260"
+  },
+  "讓腿部在高比例最大力量下重複上千次，限制來自腿而不是呼吸（Uphill Athlete）": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:139"
+  },
+  "負荷": {
+    "draft": true,
+    "src": "backend/engine/workout_steps.py:69"
+  },
+  "負荷（TSS）": {
+    "draft": true,
+    "src": "backend/engine/workout_steps.py:672"
+  },
+  "負荷：app 填 TSS，送 COROS 的 TL（推估換算）": {
+    "draft": true,
+    "src": "backend/sync/workout_targets/coros.py:24"
+  },
+  "資料不足，算不出結果（心率斷掉或不到 30 分鐘）": {
+    "draft": false,
+    "src": "backend/engine/threshold_confidence.py:879"
+  },
+  "資料比較雜": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2871"
+  },
+  "賽事 id 格式不對": {
+    "draft": true,
+    "src": "backend/engine/race_calc_store.py:53"
+  },
+  "賽前 2 週不再做接近線的長天（減量期；UA、Koop）": {
+    "draft": true,
+    "src": "backend/engine/panels/race_refs.py:187"
+  },
+  "賽前 ≥ 2 週做；效果約 9 週，之後 2–3 天輕鬆；下坡功率、心率都不準，看 RPE": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:418"
+  },
+  "走路或極慢跑": {
+    "draft": true,
+    "src": "backend/engine/interval_library.py:62"
+  },
+  "起始 CTL 從 {date} 起算（手動設定）：前 {days} 天不看 ramp": {
+    "draft": true,
+    "src": "backend/engine/status.py:316"
+  },
+  "起算期（有 TSS 的第 {n} 天）：前 {days} 天 CTL 還在建立，不看 ramp": {
+    "draft": true,
+    "src": "backend/engine/status.py:319"
+  },
+  "超出建議的 {n} 天內": {
+    "draft": true,
+    "src": "backend/api/plan_sessions.py:517"
+  },
+  "超過今天上限 {cap:.0f} 分（最短也要 {need:.0f} 分）": {
+    "draft": true,
+    "src": "backend/engine/interval_library.py:774"
+  },
+  "越野全力的最短時間": {
+    "draft": true,
+    "src": "backend/engine/effort_calib.py:94"
+  },
+  "越野全力的最短距離": {
+    "draft": true,
+    "src": "backend/engine/effort_calib.py:89"
+  },
+  "越野心率模型 {x:.0%} LTHR": {
+    "draft": true,
+    "src": "backend/engine/racepower/watch_export.py:267"
+  },
+  "越野心率模型的比賽心率（{x:.0%} LTHR）": {
+    "draft": true,
+    "src": "backend/engine/racepower/seg_targets.py:67"
+  },
+  "越野的「等效距離」= 公里 + 爬升 ÷ 這個數。本人值 = 你一年內的跑步（平路定速度、爬坡定爬升成本）最小平方擬合。": {
+    "draft": true,
+    "src": "backend/engine/terrain_calib.py:78"
+  },
+  "越野跑": {
+    "draft": true,
+    "src": "backend/engine/primary_sport.py:32"
+  },
+  "越野跑要多久才可能算全力。本人值 = 你標記全力的越野比賽移動時間的第 10 百分位。": {
+    "draft": true,
+    "src": "backend/engine/effort_calib.py:96"
+  },
+  "越野跑要多長才可能算全力（給比賽功率／心率模型當全力樣本）。本人值 = 你標記全力的越野比賽距離的第 10 百分位。": {
+    "draft": true,
+    "src": "backend/engine/effort_calib.py:92"
+  },
+  "跑 {d}": {
+    "draft": true,
+    "src": "backend/engine/panels/drift_bars.py:49"
+  },
+  "跑步開頭這段時間裡的停等（紅綠燈、等人）都當暖身，飄移從最後一次停等後才開始算。本人值 = 你路跑前段最後一次停等時間的 p95。": {
+    "draft": true,
+    "src": "backend/engine/drift_calib.py:120"
+  },
+  "距離": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2635"
+  },
+  "距離段單位依第三方整理（未驗證）": {
+    "draft": true,
+    "src": "backend/sync/workout_targets/coros.py:23"
+  },
+  "距離段：COROS 欄位（公分）依第三方整理，這個 app 還沒實際送過（未驗證）": {
+    "draft": true,
+    "src": "backend/engine/workout_steps.py:1534"
+  },
+  "距離要在 0–500 km、爬升 0–20000 m": {
+    "draft": true,
+    "src": "backend/engine/plan_store.py:318"
+  },
+  "距離／爬升要是數字": {
+    "draft": true,
+    "src": "backend/engine/plan_store.py:316"
+  },
+  "路況差的技術路段：時間＋爬升＋RPE，不設心率、功率目標（只給參考）；RPE ≥ 7 算強度課": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:482"
+  },
+  "路線 CVI {cvi:.0f}（丘陵），已用 CVI 調整 RE；起伏很大的路線請改用「越野」": {
+    "draft": true,
+    "src": "backend/engine/racepower/calc.py:362"
+  },
+  "路線已過期（伺服器重啟過），請重新上傳 GPX": {
+    "draft": true,
+    "src": "backend/engine/racepower/calc.py:453"
+  },
+  "路線有 {n} 段，超過手錶建議的 {limit} 步：相鄰的段合併成 {m} 步": {
+    "draft": true,
+    "src": "backend/engine/racepower/watch_export.py:226"
+  },
+  "路跑／馬拉松": {
+    "draft": true,
+    "src": "backend/engine/primary_sport.py:32"
+  },
+  "身高 {cm} cm 不合理": {
+    "draft": true,
+    "src": "backend/api/plan.py:470"
+  },
+  "軟上限，只提醒": {
+    "draft": true,
+    "src": "backend/engine/workout_steps.py:1201"
+  },
+  "輕鬆課": {
+    "draft": true,
+    "src": "backend/engine/workout_steps.py:1213"
+  },
+  "輕鬆跑": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:443"
+  },
+  "輕鬆跑上限＝課表心率區間的 Z2 上緣；有實測 AeT 時用實測值": {
+    "draft": true,
+    "src": "backend/engine/hr_profile.py:324"
+  },
+  "輕鬆跑後段心率很穩": {
+    "draft": true,
+    "src": "backend/engine/status.py:595"
+  },
+  "輕鬆跑（1 區）打底。參考：每週約 {lo}–{hi} 分鐘 1 區": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1936"
+  },
+  "輸入的數字格式不對": {
+    "draft": true,
+    "src": "backend/demo/static_racepower.py:338"
+  },
+  "轉換期": {
+    "draft": true,
+    "src": "backend/engine/overview.py:1555"
+  },
+  "轉換期每次跑步 ≤ {max} 分（Canova）：本週少排 {cut} 分，不用補": {
+    "draft": true,
+    "src": "backend/engine/overview.py:393"
+  },
+  "轉換期縮短為 {days} 天：下一場 A 賽事「{name}」的專項期 {start} 開始": {
+    "draft": true,
+    "src": "backend/engine/planning.py:367"
+  },
+  "轉換期週數要在 {lo}–{hi} 週（0 = 關閉）": {
+    "draft": true,
+    "src": "backend/engine/plan_prefs.py:306"
+  },
+  "轉換期：只排輕鬆跑（每次 ≤ 60 分）和肌力，沒有長跑、強度課；想做交叉訓練（騎車、游泳、健行）可以拿來取代輕鬆跑": {
+    "draft": true,
+    "src": "backend/engine/overview.py:351"
+  },
+  "轉換期：賽前 4 週平均 {h:.1f} h × {share:.0%}（推估），每次輕鬆跑 ≤ {max} 分": {
+    "draft": true,
+    "src": "backend/engine/overview.py:360"
+  },
+  "轉換期：近 4 週的 {share:.0%}": {
+    "draft": true,
+    "src": "backend/engine/overview.py:362"
+  },
+  "近 12 週的跑步資料不夠，先用越野跑（原本的設定）": {
+    "draft": true,
+    "src": "backend/engine/primary_sport.py:75"
+  },
+  "近 12 週越野＋登山佔跑步時間 {share:.0%}（≥ {min:.0%} 算越野跑，推估）": {
+    "draft": true,
+    "src": "backend/engine/primary_sport.py:79"
+  },
+  "近 {days} 天只有 {n} 次路跑有 20 分鐘心率在 LTHR ±3%（需要 ≥ {need} 次）": {
+    "draft": true,
+    "src": "backend/engine/thresholds.py:264"
+  },
+  "近 {weeks} 週 {n} 次輕鬆路跑的中位數": {
+    "draft": true,
+    "src": "backend/engine/equivalence.py:192"
+  },
+  "近 {w} 週 3 區 {done}/{need} 堂": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1837"
+  },
+  "近 {w} 週做過 ≥ {n} 堂 3 區（推估）": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1969"
+  },
+  "近 {w} 週再 {left} 堂 3 區（{done}/{need}；推估）": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2046"
+  },
+  "透過重複回合效應減少賽後肌肉損傷，放在賽前最後幾週（Roche）": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:140"
+  },
+  "這個平台": {
+    "draft": true,
+    "src": "backend/engine/workout_steps.py:1209"
+  },
+  "這個範本沒有 GPX": {
+    "draft": false,
+    "src": "backend/api/plan_sessions.py:1344"
+  },
+  "這個間歇門檻不開 5 區": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1818"
+  },
+  "這堂課不是過期未完成的課：{uid}": {
+    "draft": true,
+    "src": "backend/engine/plan_store.py:472"
+  },
+  "這堂課沒有配對的活動": {
+    "draft": true,
+    "src": "backend/engine/plan_store.py:647"
+  },
+  "這堂課看不出結構，沒辦法存成範本": {
+    "draft": false,
+    "src": "backend/api/plan_sessions.py:1385"
+  },
+  "這場賽事沒有 GPX": {
+    "draft": true,
+    "src": "backend/engine/racepower/calc.py:435"
+  },
+  "這天不是休息日": {
+    "draft": true,
+    "src": "backend/api/plan_sessions.py:1948"
+  },
+  "這天不適合": {
+    "draft": true,
+    "src": "backend/api/plan_sessions.py:534"
+  },
+  "這天已經是不排課日期或休息日": {
+    "draft": true,
+    "src": "backend/api/plan_sessions.py:1930"
+  },
+  "這天的時間上限放不下": {
+    "draft": true,
+    "src": "backend/engine/technical.py:211"
+  },
+  "這次不是間歇課（{type}，課表也沒有對應的間歇）": {
+    "draft": true,
+    "src": "backend/engine/interval_eval.py:506"
+  },
+  "這次不是間歇課（{type}：有閾值強度，算硬課、不算間歇次數）": {
+    "draft": true,
+    "src": "backend/engine/interval_eval.py:504"
+  },
+  "這次不給 AeT 數字：這個測試看的是有氧基礎，AeT 由平常多次輕鬆跑的飄移推估": {
+    "draft": true,
+    "src": "backend/engine/aet_test.py:366"
+  },
+  "這次沒有功率": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2967"
+  },
+  "這次算{type}，但找不到一趟一趟的用力段（例如一路爬坡），沒有趟可判讀": {
+    "draft": true,
+    "src": "backend/engine/interval_eval.py:502"
+  },
+  "這次資料比較雜，只當參考": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:531"
+  },
+  "這種課不用配對活動": {
+    "draft": true,
+    "src": "backend/engine/plan_store.py:626"
+  },
+  "這筆活動已經配給「{title}」，先取消那邊的配對": {
+    "draft": true,
+    "src": "backend/engine/plan_store.py:634"
+  },
+  "這筆活動沒有可用的功率（手錶推估功率不採用）": {
+    "draft": true,
+    "src": "backend/engine/panels/activity_charts.py:387"
+  },
+  "這筆活動沒有心率": {
+    "draft": true,
+    "src": "backend/engine/panels/activity_charts.py:456"
+  },
+  "這筆活動沒有心率也沒有功率": {
+    "draft": true,
+    "src": "backend/engine/panels/activity_charts.py:162"
+  },
+  "這筆活動沒有逐秒資料": {
+    "draft": true,
+    "src": "backend/engine/interval_eval.py:474"
+  },
+  "速度": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:436"
+  },
+  "速度÷心率（Pa:HR）": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:557"
+  },
+  "速度低於中位 75% 的慢段，最長的一段超過這麼久就當跑走課，不判讀飄移。": {
+    "draft": true,
+    "src": "backend/engine/drift_calib.py:137"
+  },
+  "週{day}已給{taken}，不能再排{kind}（一天只能指定一種課）": {
+    "draft": true,
+    "src": "backend/engine/plan_prefs.py:284"
+  },
+  "週中第二個長刺激，增加耐力而不必再加一次長跑（Pfitzinger）": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:127"
+  },
+  "週數法的週數要在 {lo}–{hi} 週": {
+    "draft": true,
+    "src": "backend/engine/plan_prefs.py:309"
+  },
+  "過去的日子": {
+    "draft": true,
+    "src": "backend/api/plan_sessions.py:515"
+  },
+  "過去的日子不能設成休息日": {
+    "draft": true,
+    "src": "backend/api/plan_sessions.py:1927"
+  },
+  "達到目標（≥ 10 分）": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2683"
+  },
+  "還剩 {n} 天：{date} 前只排輕鬆跑": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1920"
+  },
+  "還沒有 CP：不判讀間歇、不算 W′（先做一次 CP 測試）": {
+    "draft": true,
+    "src": "backend/engine/interval_eval.py:487"
+  },
+  "還沒有 TSS：不看 ramp": {
+    "draft": true,
+    "src": "backend/engine/status.py:315"
+  },
+  "還缺：": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2096"
+  },
+  "還缺：{x}": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2094"
+  },
+  "還缺：{x}（3 區解鎖後、護欄通過就照排）": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2069"
+  },
+  "還缺：恢復期後再 {left} 堂 3 區（已 {done}／{need}）": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2055"
+  },
+  "還缺：恢復期後的長跑飄移檢查——下一次 ≥ 75 分鐘的路跑長跑，後段心率、配速各在 ±5% 內（推估）": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2058"
+  },
+  "還缺：重新做 AeT 測試（UA 差距或 Friel 飄移）；之後每週 1 區時間別連 3 週低於確認時的 2/3{line}": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2062"
+  },
+  "都做到了：5 區可以排（每趟 2–5 分、一週最多 2 次、隔 ≥ 2 天）": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2068"
+  },
+  "都是比較短的跑步，只當參考": {
+    "draft": true,
+    "src": "backend/engine/status.py:583"
+  },
+  "配速 {lo}–{hi} /km": {
+    "draft": true,
+    "src": "backend/engine/workout_steps.py:1490"
+  },
+  "配速、距離段：轉換器還沒做": {
+    "draft": true,
+    "src": "backend/sync/workout_targets/garmin.py:22"
+  },
+  "配速是閾值配速的倍數（app 的 T 配速，推估）": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:169"
+  },
+  "配速：秒／公里（2026-10-02 手錶驗證）": {
+    "draft": true,
+    "src": "backend/sync/workout_targets/coros.py:22"
+  },
+  "醫護站": {
+    "draft": true,
+    "src": "backend/engine/racepower/watch_export.py:46"
+  },
+  "重新校正錨點，讓所有區間跟著真實體能移動（Friel；Uphill Athlete）": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:142"
+  },
+  "重測 1 次 30 分鐘 LTHR（{why}）": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1864"
+  },
+  "重測 1 次 AeT（暫停前的不算）": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1870"
+  },
+  "重測一次 30 分鐘 LTHR（{why}）": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2082"
+  },
+  "重測一次 AeT（暫停前的不算）": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2087"
+  },
+  "重複區塊裡沒有步驟": {
+    "draft": true,
+    "src": "backend/engine/workout_steps.py:658"
+  },
+  "重複最多兩層": {
+    "draft": true,
+    "src": "backend/engine/workout_steps.py:647"
+  },
+  "重複次數要在 1–{n}": {
+    "draft": true,
+    "src": "backend/engine/workout_steps.py:654"
+  },
+  "重複裡再放重複：COROS 只確定一層，推送時會攤平": {
+    "draft": true,
+    "src": "backend/engine/workout_steps.py:1216"
+  },
+  "量到的 AeT {aet:.0f} bpm（測試值優先於 {model} Z2 上緣）": {
+    "draft": true,
+    "src": "backend/engine/hr_profile.py:289"
+  },
+  "長 tempo": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:441"
+  },
+  "長跑日上限不能比平日上限短": {
+    "draft": true,
+    "src": "backend/engine/plan_prefs.py:292"
+  },
+  "門檻過期或沒測過": {
+    "draft": true,
+    "src": "backend/engine/overview.py:1540"
+  },
+  "間歇門檻要是 {choices} 其中之一": {
+    "draft": true,
+    "src": "backend/engine/plan_prefs.py:295"
+  },
+  "閾值": {
+    "draft": true,
+    "src": "backend/engine/hr_profile.py:65"
+  },
+  "閾值刺激": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2685"
+  },
+  "閾值配速": {
+    "draft": true,
+    "src": "backend/engine/zones.py:246"
+  },
+  "階梯步道、坡度穩定的路線（登山王、Koop 上坡 tempo、陡坡健走）：每組時間＋強度，心率／功率上下限照設": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:480"
+  },
+  "隨時可用：只看護欄": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2149"
+  },
+  "需要 {x}": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1902"
+  },
+  "需要距離或 GPX 路線": {
+    "draft": true,
+    "src": "backend/engine/racepower/calc.py:458"
+  },
+  "靜息心率 {hr:g} 不合理（25–120）": {
+    "draft": true,
+    "src": "backend/api/plan.py:548"
+  },
+  "靜息心率 {v:.0f} 不太合理（30–90）": {
+    "draft": false,
+    "src": "backend/engine/threshold_confidence.py:473"
+  },
+  "靜息心率來自手錶帳號": {
+    "draft": false,
+    "src": "backend/engine/threshold_confidence.py:475"
+  },
+  "靜息心率：{src}": {
+    "draft": true,
+    "src": "backend/engine/hr_profile.py:294"
+  },
+  "非同等（不算進階）": {
+    "draft": true,
+    "src": "backend/engine/interval_library.py:822"
+  },
+  "預設 −0.07": {
+    "draft": true,
+    "src": "backend/engine/racepower/calc.py:336"
+  },
+  "預設背負 {pack}": {
+    "draft": true,
+    "src": "backend/engine/racepower/calc.py:408"
+  },
+  "預設（推估）": {
+    "draft": true,
+    "src": "backend/engine/calibrate.py:158"
+  },
+  "預設（文獻）": {
+    "draft": true,
+    "src": "backend/engine/calibrate.py:158"
+  },
+  "顏色：時間和 TSS 偏離計畫較多的那個（±20% 內算符合，TrainingPeaks 的做法）": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2732"
+  },
+  "飄很多": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:530"
+  },
+  "飄很多，但多是比較短的跑步，只當參考：輕鬆跑可能太快": {
+    "draft": true,
+    "src": "backend/engine/status.py:606"
+  },
+  "飄很多，但天熱本來就會偏高，只當參考：涼一點的日子再看": {
+    "draft": true,
+    "src": "backend/engine/status.py:609"
+  },
+  "飄移 3.5–5% 就是 AeT；< 3.5% 下次 +5 bpm、> 5% 降低（來源要胸帶，手腕心率只看趨勢）": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:375"
+  },
+  "飄移 < 10% 有氧很好、< 5% 國手級（徐國峰）": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:223"
+  },
+  "飄移是 AeT 測試用的，不是間歇門檻": {
+    "draft": true,
+    "src": "backend/engine/status.py:560"
+  },
+  "飄移：功率起伏上限（VI）": {
+    "draft": true,
+    "src": "backend/engine/drift_calib.py:126"
+  },
+  "飄移：回程段（結尾停等）": {
+    "draft": true,
+    "src": "backend/engine/drift_calib.py:122"
+  },
+  "飄移：多長的慢段算跑走": {
+    "draft": true,
+    "src": "backend/engine/drift_calib.py:135"
+  },
+  "飄移：心率延遲 τ": {
+    "draft": true,
+    "src": "backend/engine/drift_calib.py:130"
+  },
+  "飄移：暖身段（前段停等）": {
+    "draft": true,
+    "src": "backend/engine/drift_calib.py:118"
+  },
+  "馬拉松配速 ≈ 閾值配速 × 1.06（推估）": {
+    "draft": true,
+    "src": "backend/engine/workout_templates.py:216"
+  },
+  "體重 {kg} kg 不合理": {
+    "draft": true,
+    "src": "backend/api/plan.py:468"
+  },
+  "高": {
+    "draft": false,
+    "src": "backend/engine/threshold_confidence.py:124"
+  },
+  "（LTHR 有獨立證據：{s}）": {
+    "draft": false,
+    "src": "backend/engine/threshold_confidence.py:518"
+  },
+  "（不含轉換期 {n} 天）": {
+    "draft": true,
+    "src": "backend/engine/reentry.py:166"
+  },
+  "（推估的 AeT 要夠準、最近幾次沒有往同一邊偏才算；推估），改用不設門檻": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2488"
+  },
+  "（每次約 {g:.0f} g 碳水）": {
+    "draft": true,
+    "src": "backend/engine/racepower/seg_targets.py:88"
+  },
+  "（熱天或不知道氣溫：只當提示）": {
+    "draft": false,
+    "src": "backend/engine/threshold_confidence.py:373"
+  },
+  "（現在是 {m:.0f} 分）": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2061"
+  },
+  "，CVI 調整 {adj:+.2f}": {
+    "draft": true,
+    "src": "backend/engine/racepower/calc.py:308"
+  },
+  "，LTHR 也要實測，差距 ≤ 10%": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2078"
+  },
+  "，並重新做 AeT 測試": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2049"
+  },
+  "，或": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2028"
+  },
+  "，有交叉訓練": {
+    "draft": true,
+    "src": "backend/engine/overview.py:1104"
+  },
+  "：": {
+    "draft": false,
+    "src": "backend/engine/threshold_confidence.py:594"
+  },
+  "；": {
+    "draft": false,
+    "src": "backend/engine/threshold_confidence.py:592"
+  },
+  "；{c}": {
+    "draft": true,
+    "src": "backend/engine/status.py:587"
+  },
+  "；{n} 次沒有任何溫度，不能熱校正": {
+    "draft": true,
+    "src": "backend/engine/zone_events.py:475"
+  },
+  "；傷後往上一級排（推估）": {
+    "draft": true,
+    "src": "backend/engine/reentry.py:164"
+  },
+  "；其他溫度另外算（{o}）": {
+    "draft": true,
+    "src": "backend/engine/status.py:588"
+  },
+  "；分溫度區：{bands}": {
+    "draft": true,
+    "src": "backend/engine/status.py:570"
+  },
+  "；另外 {x}": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2095"
+  },
+  "；或": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2096"
+  },
+  "；或之後在 AeT 附近跑 ≥ 60 分鐘、飄移 < 5%": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2078"
+  },
+  "；注意線 +{watch:.1f}、擋線 +{block:.1f}（7 天前 CTL {base:.0f}）": {
+    "draft": true,
+    "src": "backend/engine/status.py:308"
+  },
+  "；聚合估計還不夠準或有偏移": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2122"
+  },
+  "；近 365 天跑步最高 {v:.0f}（推估）": {
+    "draft": true,
+    "src": "backend/engine/hr_profile.py:198"
+  },
+  "；這次誤差約 ±{se:.1f} 個百分點（回歸標準誤）": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:558"
+  },
+  "🌡 {t:.0f} °C（{band}）": {
+    "draft": true,
+    "src": "backend/engine/panels/drift_bars.py:42"
   }
 }

@@ -44,6 +44,8 @@ import re
 from dataclasses import dataclass, replace
 from typing import Optional
 
+from backend.i18n import N_, _
+
 # ---------------------------------------------------------------------------
 # the variants
 # ---------------------------------------------------------------------------
@@ -57,7 +59,7 @@ CLASS_LABEL = {"Z3sub": "閾值", "Z3near": "近閾值", "Z4": "超閾值", "Z5"
 from backend.engine.zones import Z3_LO as _Z3, Z4_LO as _Z4, Z5_LO as _Z5  # noqa: E402
 
 CLASS_RANGE = {"Z3sub": (_Z3, 0.95), "Z3near": (0.95, _Z4), "Z4": (_Z4, _Z5), "Z5": (_Z5, 1.50)}
-REST_LABEL = {"walk": "走路或極慢跑", "jog": "慢跑", "jog_down": "慢跑／走下坡", "none": ""}
+REST_LABEL = {"walk": N_("走路或極慢跑"), "jog": N_("慢跑"), "jog_down": N_("慢跑／走下坡"), "none": ""}
 
 
 @dataclass(frozen=True)
@@ -357,26 +359,26 @@ def equivalent(v: Variant, ref: Optional[Variant] = None) -> tuple[bool, list[st
     ref = ref or canonical(v.rung) or v
     why = []
     if not v.listed_equiv:
-        why.append("列為非同等（30/15：每趟 < 2 分，證據方向不一致）")
+        why.append(_("列為非同等（30/15：每趟 < 2 分，證據方向不一致）"))
     if class_of(v) != class_of(ref) or v.cls != ref.cls:
-        why.append(f"強度類別不同（{v.cls} vs {ref.cls}）")
+        why.append(_("強度類別不同（{a} vs {b}）", a=v.cls, b=ref.cls))
     t, tr = tiz_s(v), tiz_s(ref)
     if tr and abs(t / tr - 1.0) > TIZ_TOL + 1e-9:
-        why.append(f"目標區時間 {t / 60:.0f} 分，和 {tr / 60:.0f} 分差 > 15%")
+        why.append(_("目標區時間 {t:.0f} 分，和 {tr:.0f} 分差 > 15%", t=t / 60, tr=tr / 60))
     if is_z5(v):
         if min(v.works) < Z5_MIN_REP_S:
-            why.append("5 區每趟 < 2 分（台灣教練）")
+            why.append(_("5 區每趟 < 2 分（台灣教練）"))
         if v.rest_s > min(v.works) or v.rest_s > Z5_MAX_REST_S:
-            why.append("組休比每趟長或 > 3 分")
+            why.append(_("組休比每趟長或 > 3 分"))
         wr, wref = wprime_per_rep(v), wprime_per_rep(ref)
         if wref and not WPRIME_RATIO[0] <= wr / wref <= WPRIME_RATIO[1]:
-            why.append(f"每趟 W′ 是標準課表的 {wr / wref:.2f} 倍（範圍 0.7–1.5）")
+            why.append(_("每趟 W′ 是標準課表的 {r:.2f} 倍（範圍 0.7–1.5）", r=wr / wref))
     elif not v.continuous:
         if min(v.works) < Z3_MIN_REP_S:
-            why.append("3 區每趟 < 3 分")
+            why.append(_("3 區每趟 < 3 分"))
         ratio = (sum(v.works) / v.n) / v.rest_s if v.rest_s else None
         if ratio is None or not Z3_RATIO[0] - 1e-9 <= ratio <= Z3_RATIO[1] + 1e-9:
-            why.append("工休比不在 3:1–6:1")
+            why.append(_("工休比不在 3:1–6:1"))
     return (not why), why
 
 
@@ -507,7 +509,7 @@ def rest_text(v: Variant) -> str:
         return "不休息"
     if v.terrain == "hill":
         return f"慢跑或走下坡恢復（約 {fmt_s(v.rest_s)}）"
-    return f"休 {fmt_s(v.rest_s)}（{REST_LABEL.get(v.rest_mode, '慢跑')}）"
+    return _("休 {d}（{mode}）", d=fmt_s(v.rest_s), mode=_(REST_LABEL.get(v.rest_mode, N_("慢跑"))))
 
 
 def describe(v: Variant, cp: Optional[float] = None) -> dict:
@@ -734,14 +736,14 @@ def steps(v: Variant, level: str = "std", prefs=None) -> list[dict]:
         out.append({"kind": "warm", "code": code, "s": int(m * 60), "text": text})
     works = v.works
     for i, w in enumerate(works):
-        out.append({"kind": "work", "s": int(w), "lo": v.lo, "hi": v.hi, "text": f"第 {i + 1} 趟 {fmt_s(w)}"})
+        out.append({"kind": "work", "s": int(w), "lo": v.lo, "hi": v.hi, "text": _("第 {i} 趟 {d}", i=i + 1, d=fmt_s(w))})
         if i == len(works) - 1:
             break
         if v.sets > 1 and (i + 1) % v.reps == 0:
-            out.append({"kind": "rest", "s": int(v.set_rest_s), "mode": "jog", "text": f"組間 {fmt_s(v.set_rest_s)}"})
+            out.append({"kind": "rest", "s": int(v.set_rest_s), "mode": "jog", "text": _("組間 {d}", d=fmt_s(v.set_rest_s))})
         elif v.rest_s:
             out.append({"kind": "rest", "s": int(v.rest_s), "mode": v.rest_mode,
-                        "text": REST_LABEL.get(v.rest_mode, "慢跑") or "恢復"})
+                        "text": _(REST_LABEL.get(v.rest_mode, N_("慢跑")) or N_("恢復"))})
     out.append({"kind": "cool", "code": "cool", "s": int(b["cool_min"] * 60), "text": b["cool_text"]})
     return out
 
@@ -752,9 +754,10 @@ def steps(v: Variant, level: str = "std", prefs=None) -> list[dict]:
 
 def _split(v: Variant, level: str, prefs=None) -> str:
     b = blocks(v, level, prefs)
-    name = {"city": "輕鬆跑", "river": "漸進", "drills": "drill", "strides": "快步跑"}
-    warm = f"暖身 {b['warm_min']}（" + "＋".join(f"{name.get(c, c)} {m}" for c, m, _ in b["warm"]) + "）"
-    return f"{warm} · 主課 {_mins(main_s(v))} · 緩和 {b['cool_min']} ＝ {total_min(v, level, prefs):.0f} 分"
+    name = {"city": _("輕鬆跑"), "river": _("漸進"), "drills": "drill", "strides": _("快步跑")}
+    warm = _("暖身 {m}（", m=b['warm_min']) + "＋".join(f"{name.get(c, c)} {m}" for c, m, _x in b["warm"]) + "）"
+    return _("{warm} · 主課 {main} · 緩和 {cool} ＝ {total:.0f} 分", warm=warm, main=_mins(main_s(v)),
+             cool=b['cool_min'], total=total_min(v, level, prefs))
 
 
 def best_level(v: Variant, cap: Optional[float], prefs=None) -> Optional[str]:
@@ -768,9 +771,9 @@ def option_row(v: Variant, cp: Optional[float], cap: Optional[float], prefs=None
     last = next((h for h in reversed(list(history or [])) if h.get("variant_key") == v.key), None)
     d.update({"reps": reps, "level": lv or "min", "fits": lv is not None, "total_min": round(total_min(v, lv or "min", prefs)),
               "split": _split(v, lv or "min", prefs),
-              "why_not": "" if lv is not None else f"超過今天上限 {cap:.0f} 分（最短也要 {total_min(v, 'min', prefs):.0f} 分）",
+              "why_not": "" if lv is not None else _("超過今天上限 {cap:.0f} 分（最短也要 {need:.0f} 分）", cap=cap, need=total_min(v, 'min', prefs)),
               "last": {"date": last.get("day"), "outcome": last.get("outcome")} if last else None,
-              "equiv": equiv, "consequence": consequence or ("同等：不影響進階" if equiv else "")})
+              "equiv": equiv, "consequence": consequence or (_("同等：不影響進階") if equiv else "")})
     return d
 
 
@@ -788,23 +791,23 @@ def drawer(rung: str, cp: Optional[float] = None, cap: Optional[float] = None, p
     other = []
     if PREV_RUNG.get(rung):
         p = canonical(PREV_RUNG[rung])
-        other.append(option_row(p, cp, cap, prefs, history, f"上一階（{RUNG_NAME[p.rung]}）：維持，不算進階", False))
+        other.append(option_row(p, cp, cap, prefs, history, _("上一階（{name}）：維持，不算進階", name=RUNG_NAME[p.rung]), False))
     c = canonical(rung)
     if c.n > MIN_REPS.get(c.cls, 2):
         r = with_reps(c, c.n - 1)
         share = tiz_s(r) / tiz_s(c)
         other.append({**option_row(r, cp, cap, prefs, history,
-                                   f"縮量版：目標區時間 {share * 100:.0f}%，達標也不前進" if share < EQUIV_TIZ
-                                   else "少一趟（仍同等）", share >= EQUIV_TIZ, c.n - 1),
-                      "title": f"{title(c)}（少 1 趟：{r.n} 趟）"})
+                                   _("縮量版：目標區時間 {pct:.0f}%，達標也不前進", pct=share * 100) if share < EQUIV_TIZ
+                                   else _("少一趟（仍同等）"), share >= EQUIV_TIZ, c.n - 1),
+                      "title": _("{title}（少 1 趟：{n} 趟）", title=title(c), n=r.n)})
     if c.cls == "Z5":
-        other.append(option_row(NON_EQUIV[0], cp, cap, prefs, history, "30/15：算一堂 5 區（頻率照算），不算進階", False))
+        other.append(option_row(NON_EQUIV[0], cp, cap, prefs, history, _("30/15：算一堂 5 區（頻率照算），不算進階"), False))
         z3 = canonical("z3b")
-        other.append(option_row(z3, cp, cap, prefs, history, "換成 3 區：這週沒有 5 區，不算進階", False))
+        other.append(option_row(z3, cp, cap, prefs, history, _("換成 3 區：這週沒有 5 區，不算進階"), False))
     return {"rung": rung, "rung_name": RUNG_NAME.get(rung, rung), "current_key": current,
             "recommended_key": rec["variant"].key if rec.get("rung") == rung else None,
             "recommended_reason": rec["reason"], "equivalent": eq, "other": other,
-            "terrain_note": "上坡版用一樣的 %CP，但上坡時攝氧量比例較低（Gajer，Buchheit Part I），下坡回程有離心負荷"}
+            "terrain_note": _("上坡版用一樣的 %CP，但上坡時攝氧量比例較低（Gajer，Buchheit Part I），下坡回程有離心負荷")}
 
 
 def templates(cp: Optional[float] = None, cap: Optional[float] = None, prefs=None, history=(),
@@ -816,11 +819,11 @@ def templates(cp: Optional[float] = None, cap: Optional[float] = None, prefs=Non
     for rung in RUNG_ORDER + ("tp",):
         rows = [option_row(v, cp, cap, prefs, history) for v in LIBRARY[rung]]
         groups.append({"rung": rung, "label": f"{RUNG_NAME[rung]}（{family_word(canonical(rung))}）", "rows": rows})
-    groups.append({"rung": "x", "label": "非同等（不算進階）",
-                   "rows": [option_row(v, cp, cap, prefs, history, "每趟 < 2 分：算一堂 5 區，不算進階", False)
+    groups.append({"rung": "x", "label": _("非同等（不算進階）"),
+                   "rows": [option_row(v, cp, cap, prefs, history, _("每趟 < 2 分：算一堂 5 區，不算進階"), False)
                             for v in NON_EQUIV]})
     return {"groups": groups, "recommended_key": rec["variant"].key if rec else None,
-            "recommended_reason": "推薦（依你目前的階段與時間上限）：" + rec["reason"] if rec else ""}
+            "recommended_reason": _("推薦（依你目前的階段與時間上限）：") + rec["reason"] if rec else ""}
 
 
 def variant_patch(key: str, rung: Optional[str], th: dict, prefs=None, cap: Optional[float] = None,

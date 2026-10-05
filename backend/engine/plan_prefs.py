@@ -52,6 +52,7 @@ from dataclasses import asdict, dataclass, field, fields, replace
 from typing import Optional
 
 from backend.engine.hr_profile import below
+from backend.i18n import _
 
 KEY_FIELDS = {                       # user_settings key -> Prefs field
     "plan.prefs.days": "days",
@@ -280,33 +281,32 @@ def drop_overlaps(p: Prefs) -> tuple:
 def check(p: Prefs) -> None:
     """Cross-field rules the per-key validation can't see."""
     for b in overlaps(p):
-        from backend.i18n import _
-        raise ValueError(_("週{day}已給{owner}，不能再排{kind}（一天只能指定一種課）", day=WD_ZH[b["wd"]],
-                           owner=PREF_LABEL[b["owner"]], kind=PREF_LABEL[b["kind"]]))
+        raise ValueError(_("週{day}已給{taken}，不能再排{kind}（一天只能指定一種課）", day=WD_ZH[b["wd"]],
+                           taken=PREF_LABEL[b["owner"]], kind=PREF_LABEL[b["kind"]]))
     n_days = sum(bool(x) for x in p.days)
     if p.runs is not None and p.runs > n_days:
-        raise ValueError(f"每週跑步次數 {p.runs} 比可練日（{n_days} 天）多")
+        raise ValueError(_("每週跑步次數 {runs} 比可練日（{days} 天）多", runs=p.runs, days=n_days))
     if p.runs is not None and p.quality is not None and p.quality >= p.runs:
-        raise ValueError("品質課次數要比每週跑步次數少（至少留一次輕鬆或長跑）")
+        raise ValueError(_("品質課次數要比每週跑步次數少（至少留一次輕鬆或長跑）"))
     if p.cap_long is not None and p.cap_weekday is not None and p.cap_long < p.cap_weekday:
-        raise ValueError("長跑日上限不能比平日上限短")
+        raise ValueError(_("長跑日上限不能比平日上限短"))
     from backend.engine.quality_gate import MODES, WEEKS_RANGE
     if p.quality_gate not in MODES:
-        raise ValueError(f"間歇門檻要是 {MODES} 其中之一")
+        raise ValueError(_("間歇門檻要是 {choices} 其中之一", choices=MODES))
     if not isinstance(p.b2b, bool):
-        raise ValueError("建議 B2B 要是 true／false")
+        raise ValueError(_("建議 B2B 要是 true／false"))
     if p.aet_test_days not in ("weekday", "any"):
-        raise ValueError("AeT 測試日要是 weekday 或 any")
+        raise ValueError(_("AeT 測試日要是 weekday 或 any"))
     from backend.engine.aet_test import PROTOCOL_CHOICES
     if p.aet_test_protocol not in PROTOCOL_CHOICES:
-        raise ValueError(f"AeT 測試方式要是 {PROTOCOL_CHOICES} 其中之一")
+        raise ValueError(_("AeT 測試方式要是 {choices} 其中之一", choices=PROTOCOL_CHOICES))
     from backend.engine.planning import TRANSITION_WEEKS_RANGE as TR
     if isinstance(p.transition_weeks, bool) or not isinstance(p.transition_weeks, int) or \
             not TR[0] <= p.transition_weeks <= TR[1]:
-        raise ValueError(f"轉換期週數要在 {TR[0]}–{TR[1]} 週（0 = 關閉）")
+        raise ValueError(_("轉換期週數要在 {lo}–{hi} 週（0 = 關閉）", lo=TR[0], hi=TR[1]))
     if isinstance(p.quality_gate_weeks, bool) or not isinstance(p.quality_gate_weeks, int) or \
             not WEEKS_RANGE[0] <= p.quality_gate_weeks <= WEEKS_RANGE[1]:
-        raise ValueError(f"週數法的週數要在 {WEEKS_RANGE[0]}–{WEEKS_RANGE[1]} 週")
+        raise ValueError(_("週數法的週數要在 {lo}–{hi} 週", lo=WEEKS_RANGE[0], hi=WEEKS_RANGE[1]))
 
 
 def load(user_id: int = 1) -> Prefs:

@@ -65,8 +65,8 @@ TYPE_LABEL = {"auto": "自動", "power": "功率", "hr": "心率", "pace": "配�
 MODES = ("pct", "zone", "abs")
 INTENTS = ("easy", "band", "open")
 DUR_TYPES = ("time", "distance", "open", "load")
-OPEN_LABEL = "直到按下計圈"      # the "open" end condition (lap button; renamed in SP-38)
-LOAD_LABEL = "負荷"              # the "load" end condition (TSS here; COROS TL on the watch)
+OPEN_LABEL = N_("直到按下計圈")      # the "open" end condition (lap button; renamed in SP-38)
+LOAD_LABEL = N_("負荷")            # the "load" end condition (TSS here; COROS TL on the watch)
 LOAD_RANGE = (1, 500)            # TSS of one load step
 LOAD_KINDS = ("work",)           # 「負荷」 only on main-set steps (SP-38, the user 2026-10-04)
 TL_RESEND_MIN = 3                # 推估: a refit moving a load step's TL by less keeps the TL sent (no 需更新)
@@ -543,10 +543,10 @@ def _f(x, name: str, errs: list, lo: float = None, hi: float = None) -> Optional
     try:
         v = float(x)
     except (TypeError, ValueError):
-        errs.append(f"{name} 要是數字")
+        errs.append(_("{name} 要是數字", name=name))
         return None
     if v != v or (lo is not None and v < lo) or (hi is not None and v > hi):
-        errs.append(f"{name} 超出範圍")
+        errs.append(_("{name} 超出範圍", name=name))
         return None
     return v
 
@@ -556,17 +556,17 @@ def _norm_target(t, errs: list) -> dict:
         return dict(OPEN)
     ty = t.get("type", "auto")
     if ty not in TYPES:
-        errs.append(f"目標類型不對：{ty!r}")
+        errs.append(_("目標類型不對：{x}", x=repr(ty)))
         return dict(OPEN)
     if ty == "none":
         return {"type": "none"}
     if ty == "rpe":
-        lo = _f(t.get("lo"), "RPE 下限", errs, RPE_MIN, RPE_MAX)
-        hi = _f(t.get("hi", t.get("lo")), "RPE 上限", errs, RPE_MIN, RPE_MAX)
+        lo = _f(t.get("lo"), _("RPE 下限"), errs, RPE_MIN, RPE_MAX)
+        hi = _f(t.get("hi", t.get("lo")), _("RPE 上限"), errs, RPE_MIN, RPE_MAX)
         out = {"type": "rpe", "lo": round(lo or RPE_MIN), "hi": round(hi or lo or RPE_MIN)}
         if out["lo"] > out["hi"]:
-            errs.append("RPE 下限比上限高")
-        for k, name in (("up", "爬升"), ("down", "下降")):
+            errs.append(_("RPE 下限比上限高"))
+        for k, name in (("up", _("爬升")), ("down", _("下降"))):
             if t.get(k) not in (None, "", 0):
                 v = _f(t.get(k), name, errs, 0, MAX_CLIMB_M)
                 if v:
@@ -575,41 +575,41 @@ def _norm_target(t, errs: list) -> dict:
     if ty == "auto":
         it = t.get("intent", "open")
         if it not in INTENTS:
-            errs.append(f"自動目標的類型不對：{it!r}")
+            errs.append(_("自動目標的類型不對：{x}", x=repr(it)))
             return dict(OPEN)
         out = {"type": "auto", "intent": it}
         if it == "easy" and t.get("plo") is not None:
-            out["plo"], out["phi"] = _f(t.get("plo"), "功率下限", errs, 0.3, 2.5), _f(t.get("phi"), "功率上限", errs, 0.3, 2.5)
+            out["plo"], out["phi"] = _f(t.get("plo"), _("功率下限"), errs, 0.3, 2.5), _f(t.get("phi"), _("功率上限"), errs, 0.3, 2.5)
         if it == "band":
-            out["lo"], out["hi"] = _f(t.get("lo"), "強度下限", errs, 0.3, 2.5), _f(t.get("hi"), "強度上限", errs, 0.3, 2.5)
+            out["lo"], out["hi"] = _f(t.get("lo"), _("強度下限"), errs, 0.3, 2.5), _f(t.get("hi"), _("強度上限"), errs, 0.3, 2.5)
             out["cls"] = str(t.get("cls") or "")
             if t.get("hr"):
                 h = t["hr"]
                 if isinstance(h, (list, tuple)) and len(h) == 2:
-                    out["hr"] = [int(_f(h[0], "心率", errs, 40, 230) or 0), int(_f(h[1], "心率", errs, 40, 230) or 0)]
+                    out["hr"] = [int(_f(h[0], _("心率"), errs, 40, 230) or 0), int(_f(h[1], _("心率"), errs, 40, 230) or 0)]
             if t.get("hrp"):
                 h = t["hrp"]
                 if isinstance(h, (list, tuple)) and len(h) == 2:
-                    out["hrp"] = [_f(h[0], "心率 %", errs, 0.5, 1.2), _f(h[1], "心率 %", errs, 0.5, 1.2)]
+                    out["hrp"] = [_f(h[0], _("心率 %"), errs, 0.5, 1.2), _f(h[1], _("心率 %"), errs, 0.5, 1.2)]
         return out
     mode = t.get("mode", "pct")
     if mode not in MODES:
-        errs.append(f"目標填法不對：{mode!r}")
+        errs.append(_("目標填法不對：{x}", x=repr(mode)))
         return dict(OPEN)
     out = {"type": ty, "mode": mode}
     if mode == "zone":
         z = str(t.get("zone") or "")
         if z not in {r[0] for r in ZONES[ty]} | (set(HR_MODEL_ZONES) if ty == "hr" else set()):
-            errs.append(f"沒有這個區間：{z!r}")
+            errs.append(_("沒有這個區間：{x}", x=repr(z)))
         out["zone"] = z
         return out
     rng = {("power", "pct"): (0.2, 3.0), ("hr", "pct"): (0.3, 1.3), ("pace", "pct"): (0.5, 2.5),
            ("power", "abs"): (20, 1500), ("hr", "abs"): (40, 230), ("pace", "abs"): (120, 1200)}[(ty, mode)]
-    out["lo"] = _f(t.get("lo"), "目標下限", errs, *rng)
-    out["hi"] = _f(t.get("hi"), "目標上限", errs, *rng)
+    out["lo"] = _f(t.get("lo"), _("目標下限"), errs, *rng)
+    out["hi"] = _f(t.get("hi"), _("目標上限"), errs, *rng)
     if ty == "pace" and mode == "pct" and isinstance(t.get("hrp"), (list, tuple)) and len(t["hrp"]) == 2:
         # the HR band (× LTHR) used when there is no threshold pace (the MP segment, mp_target)
-        out["hrp"] = [_f(t["hrp"][0], "心率 %", errs, 0.5, 1.2), _f(t["hrp"][1], "心率 %", errs, 0.5, 1.2)]
+        out["hrp"] = [_f(t["hrp"][0], _("心率 %"), errs, 0.5, 1.2), _f(t["hrp"][1], _("心率 %"), errs, 0.5, 1.2)]
     return out
 
 
@@ -621,9 +621,9 @@ def normalize(d) -> dict:
         try:
             d = json.loads(d)
         except ValueError:
-            raise StepsError(["結構不是 JSON"])
+            raise StepsError([_("結構不是 JSON")])
     if not isinstance(d, dict) or not isinstance(d.get("items"), list):
-        raise StepsError(["結構要有 items"])
+        raise StepsError([_("結構要有 items")])
     errs: list[str] = []
     seen: set = set()
     ids = _Ids("n")
@@ -631,7 +631,7 @@ def normalize(d) -> dict:
 
     def item(x, depth: int) -> Optional[dict]:
         if not isinstance(x, dict):
-            errs.append("步驟格式不對")
+            errs.append(_("步驟格式不對"))
             return None
         count[0] += 1
         iid = str(x.get("id") or "")[:16]
@@ -644,50 +644,50 @@ def normalize(d) -> dict:
         k = x.get("kind")
         if k == "repeat":
             if depth >= MAX_DEPTH:
-                errs.append("重複最多兩層")
+                errs.append(_("重複最多兩層"))
                 return None
             try:
                 times = int(x.get("times"))
             except (TypeError, ValueError):
                 times = 0
             if not 1 <= times <= MAX_TIMES:
-                errs.append(f"重複次數要在 1–{MAX_TIMES}")
+                errs.append(_("重複次數要在 1–{n}", n=MAX_TIMES))
                 times = max(1, min(MAX_TIMES, times or 1))
             kids = [y for y in (item(c, depth + 1) for c in x.get("items") or []) if y]
             if not kids:
-                errs.append("重複區塊裡沒有步驟")
+                errs.append(_("重複區塊裡沒有步驟"))
             return {"id": iid, "kind": "repeat", "times": times, "last_rest": x.get("last_rest", True) is not False,
                     "note": note, "items": kids}
         if k not in KINDS:
-            errs.append(f"步驟類型不對：{k!r}")
+            errs.append(_("步驟類型不對：{x}", x=repr(k)))
             return None
         dur = x.get("dur") or {}
         dt_ = dur.get("type") if isinstance(dur, dict) else None
         if dt_ not in DUR_TYPES:
-            errs.append(f"時長類型要是 時間／距離／{OPEN_LABEL}／{LOAD_LABEL}")
+            errs.append(_("時長類型要是 時間／距離／{a}／{b}", a=_(OPEN_LABEL), b=_(LOAD_LABEL)))
             dur = {"type": "open"}
         elif dt_ == "load":
             if k not in LOAD_KINDS:
-                errs.append(f"「{LOAD_LABEL}」只能用在主課")
-            v = _f(dur.get("value"), "負荷（TSS）", errs, *LOAD_RANGE)
+                errs.append(_("「{x}」只能用在主課", x=_(LOAD_LABEL)))
+            v = _f(dur.get("value"), _("負荷（TSS）"), errs, *LOAD_RANGE)
             dur = {"type": "load", "value": round(v, 1)} if v else {"type": "open"}
         elif dt_ == "time":
-            v = _f(dur.get("value"), "時間", errs, 5, 6 * 3600)
+            v = _f(dur.get("value"), _("時間"), errs, 5, 6 * 3600)
             dur = {"type": "time", "value": int(round(v))} if v else {"type": "open"}
         elif dt_ == "distance":
-            v = _f(dur.get("value"), "距離", errs, 50, 100000)
+            v = _f(dur.get("value"), _("距離"), errs, 50, 100000)
             dur = {"type": "distance", "value": int(round(v))} if v else {"type": "open"}
         else:
             est = dur.get("est") if isinstance(dur, dict) else None
-            v = _f(est, "直到按下計圈的預估時間", errs, 5, 6 * 3600) if est else None
+            v = _f(est, _("直到按下計圈的預估時間"), errs, 5, 6 * 3600) if est else None
             dur = {"type": "open", "est": int(round(v))} if v else {"type": "open"}
         return {"id": iid, "kind": k, "dur": dur, "target": _norm_target(x.get("target"), errs), "note": note}
 
     items = [y for y in (item(x, 0) for x in d["items"]) if y]
     if not items:
-        errs.append("至少要有一個步驟")
+        errs.append(_("至少要有一個步驟"))
     if count[0] > MAX_ITEMS:
-        errs.append(f"步驟太多（> {MAX_ITEMS}）")
+        errs.append(_("步驟太多（> {n}）", n=MAX_ITEMS))
     if errs:
         raise StepsError(list(dict.fromkeys(errs)))
     origin = str(d.get("origin") or "user")
@@ -750,8 +750,8 @@ def fmt_dur(d: dict) -> str:
         m = d["value"]
         return f"{m / 1000:g} km" if m >= 1000 else f"{m} m"
     if d.get("type") == "load":
-        return f"{LOAD_LABEL} {d['value']:g} TSS"
-    return OPEN_LABEL
+        return f"{_(LOAD_LABEL)} {d['value']:g} TSS"
+    return _(OPEN_LABEL)
 
 
 def pzone(f: float) -> str:
@@ -1099,7 +1099,7 @@ def estimate_note(steps: dict, c: Ctx) -> str:
     if lap:
         parts.append("「直到按下計圈」段：用課表原本寫的最短時間")
     if any(s["dur"]["type"] == "load" for s in rows):
-        parts.append(f"「{LOAD_LABEL}」段：TSS ÷（該段強度 IF² × 100）換成時間")
+        parts.append(f"「{_(LOAD_LABEL)}」段：TSS ÷（該段強度 IF² × 100）換成時間")
     return "；".join(parts) + "（推估）" if parts else ""
 
 
@@ -1174,10 +1174,10 @@ def issues(steps: dict, c: Ctx, cap: Optional[float] = None, cap_mode: str = "so
         if r.warn:
             add("warn", r.warn, st["id"])
         if st["kind"] == "work" and st["dur"]["type"] == "time" and _is_z5(st, r) and st["dur"]["value"] < Z5_MIN_REP_S:
-            add("err", f"5 區每趟至少 2 分鐘（台灣教練）：這段只有 {mmss(st['dur']['value'])}", st["id"])
+            add("err", _("5 區每趟至少 2 分鐘（台灣教練）：這段只有 {d}", d=mmss(st['dur']['value'])), st["id"])
         if st["kind"] == "work" and st["dur"]["type"] == "time" and _is_z3(st, r) and \
                 st["dur"]["value"] < Z3_MIN_REP_S and _has_rest_after(rows, st):
-            add("warn", f"3 區每趟至少 3 分鐘（Haugen 2022 的下緣）：這段只有 {mmss(st['dur']['value'])}", st["id"])
+            add("warn", _("3 區每趟至少 3 分鐘（Haugen 2022 的下緣）：這段只有 {d}", d=mmss(st['dur']['value'])), st["id"])
     # Z5 rests: ≤ the shortest rep and ≤ 3 min (Buchheit)
     z5w = [row["st"] for row in rows if row["st"]["kind"] == "work" and row["st"]["dur"]["type"] == "time"
            and _is_z5(row["st"], resolve(row["st"], c))]
@@ -1191,31 +1191,32 @@ def issues(steps: dict, c: Ctx, cap: Optional[float] = None, cap_mode: str = "so
             if prev in z5w and st["dur"]["value"] > min(short, Z5_MAX_REST_S) and \
                     not (i + 1 < len(rows) and rows[i + 1]["st"]["kind"] == "rest"):
                 if i + 1 < len(rows) and rows[i + 1]["st"] in z5w:
-                    add("warn", f"5 區休息 {mmss(st['dur']['value'])} 比一趟長或超過 3 分鐘（Buchheit 工休比）", st["id"])
+                    add("warn", _("5 區休息 {d} 比一趟長或超過 3 分鐘（Buchheit 工休比）", d=mmss(st['dur']['value'])), st["id"])
     t = totals(steps, c)
     if cap:
         mins = t["sec"] / 60.0
         if mins > cap + 0.5:
             hard = cap_mode == "hard"
-            add("err" if hard else "warn", f"總時間 {mins:.0f} 分超過這天上限 {cap:.0f} 分（課表偏好：{'硬上限' if hard else '軟上限，只提醒'}）")
+            add("err" if hard else "warn", _("總時間 {m:.0f} 分超過這天上限 {cap:.0f} 分（課表偏好：{mode}）", m=mins, cap=cap,
+                                              mode=_("硬上限") if hard else _("軟上限，只提醒")))
     if t["open"]:
-        add("info", f"{t['open']} 段「直到按下計圈」不算進總時間")
+        add("info", _("{n} 段「直到按下計圈」不算進總時間", n=t['open']))
     for row in rows:
         st = row["st"]
         if st["dur"]["type"] == "load" and c.end_conditions and "load" not in c.end_conditions:
             s_, _e = _secs(st, resolve(st, c), c)
-            add("warn", f"{c.provider_label or '這個平台'}沒有「{LOAD_LABEL}」結束條件：推送時換成預估時間 "
-                        f"{mmss(s_)}（推估）", st["id"])
+            add("warn", _("{p}沒有「{x}」結束條件：推送時換成預估時間 {d}（推估）",
+                          p=c.provider_label or _("這個平台"), x=_(LOAD_LABEL), d=mmss(s_)), st["id"])
     role = rpe_role(steps["items"])
     if role:
-        add("info", ("RPE 目標：心率、功率只當參考，負荷照手錶記錄算（不用 RPE 校正）；這堂依 RPE 算"
-                     + ("強度課（RPE ≥ 7：和其他強度課隔 48 小時、算進每週強度預算）" if role == "quality" else "輕鬆課")))
+        add("info", (_("RPE 目標：心率、功率只當參考，負荷照手錶記錄算（不用 RPE 校正）；這堂依 RPE 算")
+                     + (_("強度課（RPE ≥ 7：和其他強度課隔 48 小時、算進每週強度預算）") if role == "quality" else _("輕鬆課"))))
     for it in steps["items"]:
         if it.get("kind") == "repeat" and any(x.get("kind") == "repeat" for x in it["items"]):
-            add("warn", "重複裡再放重複：COROS 只確定一層，推送時會攤平", it["id"])
+            add("warn", _("重複裡再放重複：COROS 只確定一層，推送時會攤平"), it["id"])
     n = coros_count(steps, c)
     if n > COROS_MAX_STEPS:
-        add("warn", f"推到手錶是 {n} 段，超過 {COROS_MAX_STEPS} 段：COROS 的上限未驗證")
+        add("warn", _("推到手錶是 {n} 段，超過 {max} 段：COROS 的上限未驗證", n=n, max=COROS_MAX_STEPS))
     if rung:
         eq = equivalence(steps, rung, c)
         if eq:
@@ -1468,7 +1469,7 @@ def structure_text(steps: dict) -> str:
     return " · ".join(one(x) for x in steps["items"])[:300]
 
 
-EX_LABEL = {1: "暖身", 2: "訓練", 3: "緩和", 4: "休息"}
+EX_LABEL = {1: N_("暖身"), 2: N_("訓練"), 3: N_("緩和"), 4: N_("休息")}
 
 
 def _ex_line(ex: dict) -> dict:
@@ -1477,19 +1478,19 @@ def _ex_line(ex: dict) -> dict:
     elif ex["targetType"] == 5:
         dur = f"{ex['targetValue'] / 100000:g} km"
     elif ex["targetType"] == _cw().COROS_TARGET_TYPE_LOAD:
-        dur = f"{LOAD_LABEL} {ex['targetValue']} TL"
+        dur = f"{_(LOAD_LABEL)} {ex['targetValue']} TL"
     else:
-        dur = OPEN_LABEL
+        dur = _(OPEN_LABEL)
     it = ex.get("intensityType")
     if it == 6:
-        tgt = f"功率 {ex['intensityValue']}–{ex['intensityValueExtend']} W"
+        tgt = _("功率 {lo}–{hi} W", lo=ex['intensityValue'], hi=ex['intensityValueExtend'])
     elif it == 2:
-        tgt = f"心率 {ex['intensityValue']}–{ex['intensityValueExtend']} bpm"
+        tgt = _("心率 {lo}–{hi} bpm", lo=ex['intensityValue'], hi=ex['intensityValueExtend'])
     elif it == 3:
-        tgt = f"配速 {mmss(ex['intensityValue'])}–{mmss(ex['intensityValueExtend'])} /km"
+        tgt = _("配速 {lo}–{hi} /km", lo=mmss(ex['intensityValue']), hi=mmss(ex['intensityValueExtend']))
     else:
-        tgt = "不設目標"
-    return {"kind": EX_LABEL.get(ex["exerciseType"], "訓練"), "dur": dur, "target": tgt, "name": ex.get("name") or ""}
+        tgt = _("不設目標")
+    return {"kind": _(EX_LABEL.get(ex["exerciseType"], N_("訓練"))), "dur": dur, "target": tgt, "name": ex.get("name") or ""}
 
 
 def watch_preview(steps: dict, c: Ctx, name: str = "TRC", overview: str = "") -> dict:
@@ -1517,10 +1518,10 @@ def watch_preview(steps: dict, c: Ctx, name: str = "TRC", overview: str = "") ->
     dist = any(st["dur"]["type"] == "distance" for st, _ in res)
     limits = [
         {"key": "watts", "hit": has_power,
-         "text": "只收絕對瓦數：跑步沒有 % CP，送的是換算後的 W；CP 更新後這堂會標成「已過期」，要重推"},
+         "text": _("只收絕對瓦數：跑步沒有 % CP，送的是換算後的 W；CP 更新後這堂會標成「已過期」，要重推")},
         {"key": "one", "hit": bool(c.hr_cap and has_power),
-         "text": "每段只有一個目標：功率段的心率上限只寫在文字，手錶不會提醒"},
-        {"key": "ramp", "hit": False, "text": "沒有漸進（ramp）步驟：漸進只寫在步驟名稱"},
+         "text": _("每段只有一個目標：功率段的心率上限只寫在文字，手錶不會提醒")},
+        {"key": "ramp", "hit": False, "text": _("沒有漸進（ramp）步驟：漸進只寫在步驟名稱")},
     ]
     if any(r.type == "rpe" for _st, r in res):
         limits.append({"key": "rpe", "hit": True, "text": RPE_LIMIT})
@@ -1528,15 +1529,15 @@ def watch_preview(steps: dict, c: Ctx, name: str = "TRC", overview: str = "") ->
     if any(r.need == "tpace" for _st, r in res):
         lost.append(no_tpace_text())
     if unrolled:
-        lost.append("「最後一趟不休息」或重複裡的重複：COROS 群組做不到，推送時攤平成一段一段")
+        lost.append(_("「最後一趟不休息」或重複裡的重複：COROS 群組做不到，推送時攤平成一段一段"))
     if dist:
-        lost.append("距離段：COROS 欄位（公分）依第三方整理，這個 app 還沒實際送過（未驗證）")
+        lost.append(_("距離段：COROS 欄位（公分）依第三方整理，這個 app 還沒實際送過（未驗證）"))
     if any(st["dur"]["type"] == "load" for st, _ in res):
-        lost.append(f"「{LOAD_LABEL}」段：這裡填 TSS，推到 COROS 換算成它的 TL（推估，誤差約 ±20 %；"
-                    "每次同步後用你的活動重新校正）")
+        lost.append(_("「{x}」段：這裡填 TSS，推到 COROS 換算成它的 TL（推估，誤差約 ±20 %；"
+                      "每次同步後用你的活動重新校正）", x=_(LOAD_LABEL)))
     n = len(program["exercises"])
     if n > COROS_MAX_STEPS:
-        lost.append(f"{n} 段超過 {COROS_MAX_STEPS} 段：COROS 的上限未驗證")
+        lost.append(_("{n} 段超過 {max} 段：COROS 的上限未驗證", n=n, max=COROS_MAX_STEPS))
     return {"lines": lines, "n": n, "limits": limits, "lost": lost, "seconds": program["estimatedTime"]}
 
 

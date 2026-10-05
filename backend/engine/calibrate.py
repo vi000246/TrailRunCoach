@@ -37,6 +37,8 @@ import math
 from dataclasses import dataclass, field
 from typing import Callable, Optional
 
+from backend.i18n import _
+
 log = logging.getLogger(__name__)
 
 KEY_PREFIX = "athlete.calib."
@@ -140,30 +142,33 @@ def resolve(item: Item, stored: Optional[dict]) -> dict:
 def chip(item: Item, entry: dict) -> dict:
     """{"text", "tip"}: 「本人 n=24」 / 「手動」 / 「預設（文獻）」 / 「預設（推估）」 and the hover help."""
     fmt = f"{{:.{item.digits}f}}"
+    label, unit, dsrc = _(item.label), _(item.unit), _(item.default_src)    # N_-marked in the registries
     src = entry.get("source")
     if src == "user":
-        text = "手動"
-        tip = f"{item.label} {fmt.format(entry['value'])} {item.unit}：你在進階設定手動指定，不會被自動估算覆蓋。"
+        text = _("手動")
+        tip = _("{label} {value} {unit}：你在進階設定手動指定，不會被自動估算覆蓋。",
+                label=label, value=fmt.format(entry["value"]), unit=unit)
     elif src == "fitted":
-        text = f"本人 n={entry.get('n')}"
-        tip = (f"{item.label} {fmt.format(entry['value'])} {item.unit}：本人 {entry.get('n')} 筆資料擬合 "
-               f"{fmt.format(entry.get('personal', entry['value']))}，權重 {float(entry.get('w') or 0):.0%}，"
-               f"其餘用預設 {fmt.format(item.default)}（{item.default_src}）。")
+        text = _("本人 n={n}", n=entry.get("n"))
+        tip = _("{label} {value} {unit}：本人 {n} 筆資料擬合 {personal}，權重 {w:.0%}，其餘用預設 {default}（{src}）。",
+                label=label, value=fmt.format(entry["value"]), unit=unit, n=entry.get("n"),
+                personal=fmt.format(entry.get("personal", entry["value"])), w=float(entry.get("w") or 0),
+                default=fmt.format(item.default), src=dsrc)
     else:
-        text = "預設（文獻）" if item.default_is_literature else "預設（推估）"
-        tip = (f"{item.label} {fmt.format(item.default)} {item.unit}：{item.default_src}。"
-               + ("只有確定時才手動指定。" if item.manual_only
-                  else f"本人資料 {entry.get('n') or 0} 筆，滿 {item.min_n} 筆才會自己擬合。"))
+        text = _("預設（文獻）") if item.default_is_literature else _("預設（推估）")
+        tip = (f"{label} {fmt.format(item.default)} {unit}：{dsrc}。"
+               + (_("只有確定時才手動指定。") if item.manual_only
+                  else _("本人資料 {n} 筆，滿 {min_n} 筆才會自己擬合。", n=entry.get("n") or 0, min_n=item.min_n)))
     if item.help:
-        tip += " " + item.help
+        tip += " " + _(item.help)
     return {"text": text, "tip": tip}
 
 
 def describe(name: str, stored: Optional[dict]) -> dict:
     item = _registry()[name]
     e = resolve(item, stored)
-    return {"name": name, "label": item.label, "unit": item.unit, "digits": item.digits,
-            "default": item.default, "default_src": item.default_src, "min_n": item.min_n, "k": item.k,
+    return {"name": name, "label": _(item.label), "unit": _(item.unit), "digits": item.digits,
+            "default": item.default, "default_src": _(item.default_src), "min_n": item.min_n, "k": item.k,
             "bounds": list(item.bounds) if item.bounds else None, **e, "chip": chip(item, e)}
 
 

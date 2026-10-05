@@ -28,6 +28,8 @@ from __future__ import annotations
 import datetime as dt
 from typing import Optional
 
+from backend.i18n import _
+
 BASE_RPE = (3, 4)            # 技術地形 60′ (低 RPE) — the template's
 SPEC_RPE = (6, 7)            # 技術地形 90′ — RPE 7 = a quality session (workout_steps.RPE_HARD_MIN)
 SPEC_EASY_RPE = (4, 5)       # 專項期 without room / a spaced day: kept easy (推估)
@@ -57,14 +59,14 @@ def week_context(*, kind: str, mode: str, monday: dt.date, road: bool, b2b: Opti
     """Whether this week gets a 技術地形 session and which rule: {"active", "phase", "why"}."""
     info = {"active": False, "phase": kind, "monday": monday.isoformat()}
     if road:
-        return {**info, "why": "主要訓練項目：路跑"}
+        return {**info, "why": _("主要訓練項目：路跑")}
     if kind not in ("base", "specific") or mode in ("recovery_week", "reentry"):
-        return {**info, "why": "只在基礎期、專項期（恢復週、停訓後恢復期不排）"}
+        return {**info, "why": _("只在基礎期、專項期（恢復週、停訓後恢復期不排）")}
     b = b2b or {}
     if kind == "base" and (b.get("due") or b.get("candidate") or b.get("post")):
-        return {**info, "why": "B2B 週：長跑照 B2B 排"}
+        return {**info, "why": _("B2B 週：長跑照 B2B 排")}
     if kind == "base" and not base_week(monday):
-        return {**info, "why": "基礎期隔週一次：這週照常 LSD"}
+        return {**info, "why": _("基礎期隔週一次：這週照常 LSD")}
     return {**info, "active": True}
 
 
@@ -119,11 +121,12 @@ def budget_room(ss: list, hours: Optional[float]) -> tuple[Optional[float], str]
         return None, ""
     qs = [s for s in ss if s.get("kind") == "quality"]
     total = max(0.0, QG.QUALITY_SHARE_MAX * hours * 60.0 - sum(_tiz(s) for s in qs))
-    return total, f"強度課總量上限（週量 {QG.QUALITY_SHARE_MAX:.0%}）扣掉間歇還剩 {total:.0f} 分"
+    return total, _("強度課總量上限（週量 {share:.0%}）扣掉間歇還剩 {total:.0f} 分",
+                     share=QG.QUALITY_SHARE_MAX, total=total)
 
 
 def apply(ss: list, info: Optional[dict], *, hours: Optional[float] = None, rates: Optional[dict] = None,
-          prefs=None, notes: Optional[list] = None, hard_done=(), **_) -> list:
+          prefs=None, notes: Optional[list] = None, hard_done=(), **_kw) -> list:
     """Turn the week's LSD (基礎期) or one easy run (專項期) into the 技術地形 session, in place;
     sets info["planned"]. `hard_done`: hard days already done this week (dates)."""
     if not info or not info.get("active"):
@@ -150,8 +153,8 @@ def apply(ss: list, info: Optional[dict], *, hours: Optional[float] = None, rate
                                 "replaces": "long"})
         if notes is not None:
             notes.append({"level": "info", "src": "technical",
-                          "text": f"本週 LSD 換成技術地形 {m}′（{_rpe_txt(BASE_RPE)}，算輕鬆課）：基礎期隔週一次，"
-                                  f"練腳步和路況判斷、不練心肺；時間和 LSD 一樣"})
+                          "text": _("本週 LSD 換成技術地形 {m}′（{rpe}，算輕鬆課）：基礎期隔週一次，"
+                                    "練腳步和路況判斷、不練心肺；時間和 LSD 一樣", m=m, rpe=_rpe_txt(BASE_RPE))})
         return ss
     # 專項期: one session out of a placed easy run
     hard = [_d(s["day"]) for s in ss if s.get("day") and (s.get("kind") in ("quality", "test", "race")
@@ -163,7 +166,7 @@ def apply(ss: list, info: Optional[dict], *, hours: Optional[float] = None, rate
     if not easy:
         if notes is not None:
             notes.append({"level": "info", "src": "technical",
-                          "text": "專項期每週 1 堂技術地形課：這週沒有可以換的輕鬆跑"})
+                          "text": _("專項期每週 1 堂技術地形課：這週沒有可以換的輕鬆跑")})
         return ss
     cap = getattr(prefs, "cap_weekday", None) if prefs is not None and getattr(prefs, "active", False) else None
     long_cap = getattr(prefs, "long_cap", None) if prefs is not None and getattr(prefs, "active", False) else None
@@ -186,11 +189,12 @@ def apply(ss: list, info: Optional[dict], *, hours: Optional[float] = None, rate
     if pick is not None:
         rpe, role = SPEC_RPE, "quality"
         m = work + warm_cool
-        bits = [f"主課 {work}′"]
+        bits = [_("主課 {work}′", work=work)]
         if room is not None and room < SPEC_WORK_MAX:
             bits.append(room_txt)
-        why = (f"專項期每週 1 堂技術地形 {m}′（{_rpe_txt(rpe)}，接近比賽路況）：RPE 7 算強度課，"
-               f"排在離長跑和其他強度課 ≥ 2 天的日子；{'、'.join(bits)}（RPE 6–7 的時間算進每週強度預算，推估）")
+        why = _("專項期每週 1 堂技術地形 {m}′（{rpe}，接近比賽路況）：RPE 7 算強度課，"
+                "排在離長跑和其他強度課 ≥ 2 天的日子；{bits}（RPE 6–7 的時間算進每週強度預算，推估）",
+                m=m, rpe=_rpe_txt(rpe), bits="、".join(bits))
     else:
         pick = easy[0]
         rpe, role = SPEC_EASY_RPE, "easy"
@@ -199,13 +203,14 @@ def apply(ss: list, info: Optional[dict], *, hours: Optional[float] = None, rate
         if work < 20:
             if notes is not None:
                 notes.append({"level": "info", "src": "technical",
-                              "text": f"專項期每週 1 堂技術地形課：輕鬆跑只有 {m} 分，放不下（需要 ≥ {warm_cool + 20} 分）"})
+                              "text": _("專項期每週 1 堂技術地形課：輕鬆跑只有 {m} 分，放不下（需要 ≥ {need} 分）",
+                                        m=m, need=warm_cool + 20)})
             return ss
-        reason = ("本週強度預算不夠（" + room_txt + f"，需要 ≥ {SPEC_WORK_MIN} 分）") \
+        reason = _("本週強度預算不夠（{room}，需要 ≥ {need} 分）", room=room_txt, need=SPEC_WORK_MIN) \
             if spaced and room is not None and room < SPEC_WORK_MIN else \
-            "沒有離長跑和其他強度課 ≥ 2 天的日子" if not spaced else "這天的時間上限放不下"
-        why = (f"專項期每週 1 堂技術地形 {m}′，但{reason}：改成 {_rpe_txt(rpe)}，算輕鬆課"
-               f"（不佔強度預算、不用隔 48 小時）")
+            _("沒有離長跑和其他強度課 ≥ 2 天的日子") if not spaced else _("這天的時間上限放不下")
+        why = _("專項期每週 1 堂技術地形 {m}′，但{reason}：改成 {rpe}，算輕鬆課（不佔強度預算、不用隔 48 小時）",
+                m=m, reason=reason, rpe=_rpe_txt(rpe))
     delta = m - int(pick.get("minutes") or 0)
     steps = _steps("specific", work, rpe)
     climb = steps["items"][1]["target"].get("up")
