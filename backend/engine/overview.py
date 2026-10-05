@@ -1928,7 +1928,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     if tech.get("active"):
         try:
             dd = [asdict(s) for s in sessions]
-            TECH.apply(dd, tech, hours=hours, rates=tph, prefs=prefs, notes=notes, hard_done=hard_done, user=user_q)
+            TECH.apply(dd, tech, hours=hours, rates=tph, prefs=prefs, notes=notes, hard_done=hard_done, user=user_q,
+                       walk=walk)
             sessions = [Session(**{k: v for k, v in d.items() if k in Session.__dataclass_fields__}) for d in dd]
         except Exception as e:              # noqa: BLE001 — the plan must still build
             tech = {**tech, "error": type(e).__name__}

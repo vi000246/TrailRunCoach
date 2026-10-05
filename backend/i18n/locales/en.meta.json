@@ -2059,6 +2059,10 @@
     "draft": false,
     "src": "backend/engine/workout_steps.py:1296"
   },
+  "心率參考上限約 {v:.0f} bpm（{how}）或 RPE ≤ {rpe}；技術路段以安全為主，不用硬壓心率": {
+    "draft": true,
+    "src": "backend/engine/hr_profile.py:457"
+  },
   "心率恢復變快但功率沒到，可能累積疲勞：休 60 秒心率降 {d:.0f} bpm，比同規格課 8 週中位數 {b:.0f} 快 {x:.0%}（連續 {k} 堂 ≥ {t:.0%}）": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:858"
