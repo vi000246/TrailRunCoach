@@ -18,7 +18,8 @@
  */
 (function () {
   "use strict";
-  const T = (k, fb, p) => (window.I18N && window.I18N.t ? window.I18N.t("common." + k, fb, p) : fb);
+  // the common catalog (static/i18n/{zh-TW,en}/common.json) is inlined on every page: keys only, no fallback
+  const T = (k, p) => (window.I18N && window.I18N.t ? window.I18N.t("common." + k, p) : k);
   const MIN_GAP_MS = 60 * 1000;            // visibility re-checks at most once a minute
   let lastRun = 0, running = false;
 
@@ -41,11 +42,11 @@
     const name = s.name;
     const push = expired.some((a) => a.source === s.source && (a.needs || []).includes("push"));
     const title = s.problem === "expired"
-      ? (push ? T("session.expired_push", "{name} 登入已過期：無法同步新活動，也無法推送課表", { name })
-              : T("session.expired_sync", "{name} 登入已過期：無法同步新活動", { name }))
+      ? (push ? T("session.expired_push", { name })
+              : T("session.expired_sync", { name }))
       : s.problem === "logged_out"
-        ? T("session.logged_out", "{name} 已登出：無法同步新活動", { name })
-        : T("session.sync_failed", "{name} 自動同步失敗", { name });
+        ? T("session.logged_out", { name })
+        : T("session.sync_failed", { name });
     const box = document.createElement("div");
     box.style.cssText = "display:grid;gap:2px";
     const head = document.createElement("div");
@@ -54,16 +55,16 @@
     b.textContent = title;
     head.appendChild(b);
     head.appendChild(s.problem === "failed"
-      ? link(url, T("session.see_settings", "查看同步設定"), true)
-      : link(url, T("session.relogin", "重新登入"), true));
+      ? link(url, T("session.see_settings"), true)
+      : link(url, T("session.relogin"), true));
     box.appendChild(head);
     const meta = [];
     meta.push(s.last_ok_at
-      ? T("session.last_ok", "上次成功同步：{when}", { when: when(s.last_ok_at) })
-      : T("session.never_ok", "還沒有成功同步過"));
+      ? T("session.last_ok", { when: when(s.last_ok_at) })
+      : T("session.never_ok"));
     const r = s.last_run;
     if (r && r.status === "failed") {
-      meta.push(T("session.last_failed", "最近一次同步失敗：{when}（{error}）", { when: when(r.at), error: r.error || "?" }));
+      meta.push(T("session.last_failed", { when: when(r.at), error: r.error || "?" }));
     }
     const sub = document.createElement("div");
     sub.style.cssText = "font-size:12px;opacity:.85";
@@ -102,9 +103,9 @@
       const line = document.createElement("div");
       const needs = a.needs || [];
       line.textContent = (needs.includes("sync")
-        ? T("session.expired_sync", "{name} 登入已過期：無法同步新活動", { name: a.name })
-        : T("session.expired_push_only", "{name} 登入已過期：無法推送課表", { name: a.name })) + " ";
-      line.appendChild(link(url, T("session.relogin", "重新登入"), true));
+        ? T("session.expired_sync", { name: a.name })
+        : T("session.expired_push_only", { name: a.name })) + " ";
+      line.appendChild(link(url, T("session.relogin"), true));
       box.appendChild(line);
     }
     host.insertBefore(box, host.firstChild);
