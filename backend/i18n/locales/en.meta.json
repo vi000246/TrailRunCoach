@@ -347,6 +347,10 @@
     "draft": true,
     "src": "backend/engine/quality_gate.py:2127"
   },
+  "ME 負重爬坡（爬升 {cl:.0f} m、背 {kg:g} kg）": {
+    "draft": true,
+    "src": "backend/engine/specific_phase.py:478"
+  },
   "Nuuttila 2025：休閒跑者 LT2 = 90.6 ± 2.5% 最大心率、87.0 ± 3.4% 儲備心率；Davis 90% 範圍 80–98%／73–95%": {
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:132"
@@ -959,6 +963,10 @@
     "draft": true,
     "src": "backend/engine/technical.py:171"
   },
+  "你的 ADS（LTHR ÷ AeT − 1）是 {g:.0f}%": {
+    "draft": true,
+    "src": "backend/engine/specific_phase.py:558"
+  },
   "你的平路 RE 中位數（{n} 次）": {
     "draft": true,
     "src": "backend/engine/racepower/calc.py:308"
@@ -1402,6 +1410,10 @@
   "多天行程要填每天的距離和爬升：{days} 天要填 {days} 列（現在 {n} 列）": {
     "draft": true,
     "src": "backend/engine/planning.py:227"
+  },
+  "多日百岳的專項期把爬坡間歇換成 ME（背重爬陡坡），前提是 ADS ≤ 10%（Uphill Athlete）；{why}，這週維持一般肌力（每週 2 次）": {
+    "draft": true,
+    "src": "backend/engine/specific_phase.py:562"
   },
   "多日行程每天吃掉的糧食": {
     "draft": true,
@@ -2599,6 +2611,10 @@
     "draft": true,
     "src": "backend/engine/racepower/calc.py:360"
   },
+  "爬最陡的坡、樓梯或跑步機最大坡度，共爬升約 {cl:.0f} m（攻頂日 {need:.0f} m 的 {f:.0f}%）；要腿先酸、呼吸不喘，心率不必拉高；背水上山、到頂把水倒掉輕裝下山，保護膝蓋；暖身 10 分。做完 3 天只排輕鬆": {
+    "draft": true,
+    "src": "backend/engine/specific_phase.py:473"
+  },
   "現在不是基礎期": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:2148"
@@ -2846,6 +2862,14 @@
   "耐久": {
     "draft": true,
     "src": "backend/engine/workout_review.py:2669"
+  },
+  "背 {kg:g} kg（沒有體重紀錄，先用這個重量）": {
+    "draft": true,
+    "src": "backend/engine/specific_phase.py:472"
+  },
+  "背 {kg:g} kg（體重的 {p:.0f}%）": {
+    "draft": true,
+    "src": "backend/engine/specific_phase.py:471"
   },
   "背負要在 0–40 kg": {
     "draft": true,
@@ -3411,6 +3435,10 @@
     "draft": true,
     "src": "backend/engine/status.py:315"
   },
+  "還沒有實測的 AeT 和 LTHR，算不出 ADS": {
+    "draft": true,
+    "src": "backend/engine/specific_phase.py:559"
+  },
   "還缺：": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:2096"
@@ -3710,6 +3738,10 @@
   "（現在是 {m:.0f} 分）": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:2061"
+  },
+  "（這週的目標是 {w:.0f} m，一次最多排 {m} 分鐘，先爬到這裡）": {
+    "draft": true,
+    "src": "backend/engine/specific_phase.py:477"
   },
   "，CVI 調整 {adj:+.2f}": {
     "draft": true,

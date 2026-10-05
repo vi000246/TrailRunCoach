@@ -194,3 +194,88 @@ def test_week_plan_puts_the_simulation_on_the_long_day():
     long_s = next(s for s in wp["sessions"] if s["id"] == "long")
     assert long_s["title"] == "攻頂日模擬｜大小霸" and "背 12 kg 的背包" in long_s["detail"]
     assert 0 < long_s["climb_m"] < 1500 and wp["specific"]["long"]["need_m"] == 1500
+
+
+# ---- ME instead of the uphill VO2max set (ADS ≤ 10 %) -----------------------------------------
+
+def me_week(mode="specific", monday=date(2026, 11, 2)):
+    r = race_of(trip(), TODAY)
+    info = SP.week_context(kind="specific", mode=mode, monday=monday, race=r)
+    d = lambda i: (monday + dt.timedelta(days=i)).isoformat()
+    ss = [{"id": "long", "kind": "long", "minutes": 200, "title": "LSD（山路）", "detail": "", "day": d(5)},
+          {"id": "quality", "kind": "quality", "minutes": 60, "title": "VO2max 間歇 5×4 分上坡", "tss": 75.0, "day": d(1)},
+          {"id": "easy1", "kind": "easy", "minutes": 60, "title": "輕鬆跑", "tss": 40.0, "day": d(2)},
+          {"id": "easy2", "kind": "easy", "minutes": 60, "title": "輕鬆跑", "tss": 40.0, "day": d(3)},
+          {"id": "strength1", "kind": "strength", "minutes": 35, "title": "肌力（下肢單腳＋核心）", "tss": 20.0}]
+    return info, ss
+
+
+def total(ss):
+    return sum(s["minutes"] for s in ss if s["kind"] != "strength")
+
+
+def test_me_replaces_the_uphill_set_when_ads_is_within_10_percent():
+    info, ss = me_week()                                  # 賽前第 7 週: 70 % of the 1500 m summit climb
+    before = total(ss)
+    SP.apply_me(ss, info, 0.08, 60.0)
+    me = next(s for s in ss if s["id"] == "me")
+    assert not any(SP._hill_set(s) for s in ss) and me["kind"] == "quality"
+    assert me["climb_m"] == 750 and me["minutes"] <= SP.ME_MAX_MIN         # 70 % = 1050 m, cut to what fits 150′
+    assert "背 9 kg（體重的 15%）" in me["detail"] and "做完 3 天只排輕鬆" in me["detail"] and "目標是 1050 m" in me["detail"]
+    assert me["day"] == (date(2026, 11, 2) + dt.timedelta(days=1)).isoformat()      # the uphill set's day
+    assert [s["minutes"] for s in ss if s["kind"] == "easy"] == [20, 20]           # the minutes come from the easy runs
+    assert total(ss) - before == me["minutes"] - 60 - 80 and "Vertical Beast Mode" in me["source"]
+    info10, ss10 = me_week(monday=date(2026, 10, 12))     # 賽前第 10 週: 50 % = 750 m
+    SP.apply_me(ss10, info10, 0.05, None)
+    me10 = next(s for s in ss10 if s["id"] == "me")
+    assert me10["climb_m"] == 750 and "沒有體重紀錄" in me10["detail"] and "目標是" not in me10["detail"]
+
+
+def test_without_ads_the_week_keeps_general_strength():
+    info, ss = me_week()
+    notes = []
+    before = total(ss)
+    SP.apply_me(ss, info, 0.15, 60.0, notes=notes)
+    assert not any(s["id"] == "me" or SP._hill_set(s) for s in ss)
+    assert [s["id"] for s in ss if s["kind"] == "strength"] == ["strength1", "strength2"]
+    assert total(ss) == before - 0 and "ADS（LTHR ÷ AeT − 1）是 15%" in notes[0]["text"]
+    info, ss = me_week()
+    notes = []
+    SP.apply_me(ss, info, None, 60.0, notes=notes)
+    assert "算不出 ADS" in notes[0]["text"]
+
+
+def test_no_me_in_a_recovery_week_a_blocked_week_or_a_trail_race():
+    info, ss = me_week(mode="recovery_week")
+    assert not SP.apply_me(ss, info, 0.05, 60.0) is None and not any(s["id"] == "me" for s in ss)
+    info, ss = me_week()
+    SP.apply_me(ss, info, 0.05, 60.0, allow=False)
+    assert not any(s["id"] == "me" for s in ss)
+    r = SP.race_day(P.Plan(events=[P.Event("r", "合歡山越野", "2026-12-19", kind="race", distance_km=30, climbing_m=2000,
+                                           est_hours=6.0)]), TODAY)
+    info = SP.week_context(kind="specific", mode="specific", monday=date(2026, 11, 2), race=r)
+    _i, ss = me_week()
+    SP.apply_me(ss, info, 0.05, 60.0)
+    assert any(SP._hill_set(s) for s in ss)                # a trail race keeps its uphill set
+
+
+def test_week_plan_uses_me_when_the_gate_has_ads(monkeypatch):
+    from backend.engine import overview as O
+    from backend.engine import plan_prefs as PP
+    from backend.engine.status import Status
+    from backend.tests.test_b2b import _history, _plan_with
+    from backend.tests.test_quality_gate import TODAY as T0
+    ds = _history(T0)
+    plan = _plan_with("2026-12-05", 1, T0)
+    plan.events = [trip(start="2026-11-07", est_hours=21.0)]
+    ds.plan = plan
+    st = Status(ds, plan, T0, prefs=PP.Prefs()).compute()
+    next(i for i in st.indicators if i.id == "gate").extra["gap"] = 0.07
+    wp = O.week_plan(ds, st, T0)
+    me = next(s for s in wp["sessions"] if s["id"] == "me")
+    assert me["day"] and me["title"].startswith("ME 負重爬坡") and wp["specific"]["me"]["climb_m"] == me["climb_m"]
+    from backend.engine import projection as PJ
+    from backend.tests.test_b2b import _phases
+    weeks = PJ.project_weeks(wp, _phases(plan, T0), date(2026, 11, 8))
+    spec = [w for w in weeks if (w.get("specific") or {}).get("me_week")]
+    assert spec and all(any(x["id"] == "me" and x["day"] for x in w["sessions"]) for w in spec)
