@@ -290,3 +290,22 @@ def test_planner_trail_hr_estimate():
     assert e["time_s"] > e["time_no_durability_s"] > 0
     assert PL.trail_hr_estimate(m, 12.0, 700.0, 0.9)["time_s"] > e["time_s"]   # easier effort → slower
     assert PL.trail_hr_estimate(None, 12.0, 700.0) is None
+
+
+def test_load_sees_a_write_still_in_the_wal(tmp_path):
+    # the app DB runs in WAL mode (db/database.py): a commit from the app's own
+    # engine goes to -wal, and the main file's mtime / size only change at a
+    # checkpoint, so a memo keyed on the main file alone served the old rows
+    import sqlite3
+    db = tmp_path / "t.db"
+    AT.upsert(db, start_local="2025-05-17T09:36", note="a")
+    app = sqlite3.connect(db)                     # stays open, like the app's pool: no checkpoint on close
+    app.execute("PRAGMA journal_mode=WAL")
+    assert [r["note"] for r in AT.load(db)] == ["a"]
+    st = db.stat()
+    app.execute("INSERT INTO activity_tags (athlete_id, start_local, note, activity_type_overridden, "
+                "effort_overridden, updated_at) VALUES (1, '2025-05-18T09:36', 'b', 0, 0, '2025-05-18')")
+    app.commit()
+    assert (db.stat().st_mtime_ns, db.stat().st_size) == (st.st_mtime_ns, st.st_size)   # only the WAL changed
+    assert sorted(r["note"] for r in AT.load(db)) == ["a", "b"]
+    app.close()

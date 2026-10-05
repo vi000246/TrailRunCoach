@@ -17,6 +17,7 @@ import json
 import os
 import threading
 import weakref
+from collections import OrderedDict
 from functools import lru_cache
 from pathlib import Path
 from typing import Optional
@@ -78,13 +79,61 @@ router = APIRouter(prefix="/api/v1/wko5", tags=["wko5-views"])
 _LIVE: "weakref.WeakSet[Dataset]" = weakref.WeakSet()
 
 
-@lru_cache(maxsize=4)
-def _dataset_cfg(cfg_json: str, source: str = "wko5", stamp: str = "", shared: str = "") -> Dataset:
+DATASETS_MAX = 2       # Datasets kept at once (all modes together)
+
+
+class _DatasetCache:
+    """The built Datasets, by (engine config, source, stamp, shared root).
+
+    One Dataset per mode (config, source, shared root): building a new stamp
+    of a mode drops the older stamp of that mode, and at most DATASETS_MAX are
+    kept overall (least recently used goes). A FIT Dataset holds hundreds of
+    MB once the charts have filled its caches; the old lru_cache(maxsize=4)
+    kept the last four stamps alive after every sync / settings change, which
+    pushed the NAS container to its memory limit. A request that still holds
+    an old Dataset finishes with it; it is freed when that request is done.
+    Same interface as the lru_cache it replaces (call, cache_clear)."""
+
+    def __init__(self, build):
+        self._build = build
+        self._lock = threading.Lock()
+        self._d: "OrderedDict[tuple, Dataset]" = OrderedDict()
+        self.__wrapped__ = build
+
+    def __call__(self, cfg_json: str, source: str = "wko5", stamp: str = "", shared: str = "") -> Dataset:
+        key = (cfg_json, source, stamp, shared)
+        with self._lock:
+            hit = self._d.get(key)
+            if hit is not None:
+                self._d.move_to_end(key)
+                return hit
+        ds = self._build(*key)
+        with self._lock:
+            mode = (cfg_json, source, shared)
+            for k in [k for k in self._d if (k[0], k[1], k[3]) == mode and k != key]:
+                del self._d[k]
+            self._d[key] = ds
+            self._d.move_to_end(key)
+            while len(self._d) > DATASETS_MAX:
+                self._d.popitem(last=False)
+        return ds
+
+    def cache_clear(self) -> None:
+        with self._lock:
+            self._d.clear()
+
+    def entries(self) -> list[tuple]:
+        with self._lock:
+            return list(self._d)
+
+
+def _build_dataset(cfg_json: str, source: str = "wko5", stamp: str = "", shared: str = "") -> Dataset:
     """The Dataset for charts.data_source: the WKO5 athlete folder, or the
     COROS / TP FIT folder (FitFolderDataset: thresholds from the plan, the
     app DB's athlete_settings and as-of estimates; WKO5 only when opted in).
     `stamp` = datasource.source_stamp: a sync that adds FITs or WKO5
-    rewriting its index gives a new stamp, so a fresh Dataset."""
+    rewriting its index gives a new stamp, so a fresh Dataset (_DatasetCache
+    then drops the one of the old stamp)."""
     from backend.engine.wko5expr import buildstate
     st = buildstate.get(source)
     st.begin()                      # runs only on a cache miss: a real build
@@ -103,6 +152,9 @@ def _dataset_cfg(cfg_json: str, source: str = "wko5", stamp: str = "", shared: s
     except Exception:               # noqa: BLE001
         pass
     return ds
+
+
+_dataset_cfg = _DatasetCache(_build_dataset)
 
 
 def plan_changed(thresholds: bool) -> None:

@@ -110,6 +110,8 @@
   "feas.how_text": "\"Time to get ready?\": your last 4 weeks, a little more each week with an easy week every 4th, up to 3 weeks before the race. \"Ready now?\": the longest outing and the biggest week you actually did in the last 6 weeks. Both are compared with the race's hardest day. Advice only, your event is never changed; the thresholds are estimates.",
   "feas.loading": "Assessing… (about a minute the first time)",
   "feas.failed": "Assessment failed",
+  "feas.timeout": "Assessment failed: the server took too long to answer",
+  "feas.retry": "Retry",
   "feas.feas": "Time to get ready?",
   "feas.ready": "Ready now?",
   "feas.detail": "Details",

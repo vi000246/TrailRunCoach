@@ -318,6 +318,99 @@ def test_chart_cp_fits_use_the_pd_cache_and_the_estimate_memo(tmp_path, monkeypa
     assert c.cp(c.workouts[0]) is None or c.cp(c.workouts[0]) == 210.0
 
 
+# ---- one bad file never stops the parse ------------------------------------
+# Production: one FIT that read fine but whose post-parse step raised made
+# ensure() raise before it saved anything, so every build re-parsed the same
+# 17 files, failed on the same one, and the chart page never got a Dataset.
+
+def _poison_folder(tmp_path):
+    root = _folder(tmp_path)
+    (root / "2026" / "poison.fit").write_bytes(build_run(datetime(2026, 9, 10, 8, tzinfo=timezone.utc), seconds=600,
+                                                         power=250, hr=150, speed_m_s=3.0))
+    return root
+
+
+def _poison_features(monkeypatch):
+    """bad_activity.features raises for the 600 s file only (a post-parse bug)."""
+    from backend.engine import bad_activity as BA
+    real = BA.features
+
+    def f(t, *a, **k):
+        if len(t) < 800:
+            raise ValueError("boom")
+        return real(t, *a, **k)
+    monkeypatch.setattr(BA, "features", f)
+
+
+def test_a_file_failing_after_the_read_is_cached_as_unreadable(tmp_path, monkeypatch):
+    root = _poison_folder(tmp_path)
+    monkeypatch.setenv(fitcache.ENV_WORKERS, "0")
+    _poison_features(monkeypatch)
+    calls = _count_parses(monkeypatch)
+    ds = _build(root)
+    assert len(ds.workouts) == 3 and len(calls) == 5
+    assert ds._store.files["2026/poison.fit"]["meta"]["error"] == "ValueError"
+    # saved: the next build reads no FIT at all
+    calls.clear()
+    paths = sorted(root.rglob("*.fit"))
+    assert fitcache.FitStore(root).ensure(paths) == 0 and calls == []
+
+
+class _ThreadPool:
+    """ProcessPoolExecutor stand-in: threads, so monkeypatches reach the workers."""
+    def __init__(self, max_workers=None, mp_context=None, initializer=None):
+        from concurrent.futures import ThreadPoolExecutor
+        self._ex = ThreadPoolExecutor(max_workers=max_workers)
+
+    def submit(self, *a, **k):
+        return self._ex.submit(*a, **k)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self._ex.shutdown(wait=True)
+        return False
+
+
+def test_a_failing_pool_future_drops_only_its_file(tmp_path, monkeypatch):
+    root = _poison_folder(tmp_path)
+    monkeypatch.setattr(fitcache, "ProcessPoolExecutor", _ThreadPool)
+    real = fitcache.parse_file
+    tried = []
+
+    def parse(path, npz):
+        tried.append(Path(path).name)
+        if path.endswith("poison.fit"):
+            raise RuntimeError("worker died")
+        return real(path, npz)
+    monkeypatch.setattr(fitcache, "parse_file", parse)
+    paths = sorted(root.rglob("*.fit"))
+    assert fitcache.FitStore(root).ensure(paths, workers=2) == 5
+    # every other file was kept from the pool; only the failed one ran again inline
+    assert sorted(tried) == sorted([p.name for p in paths] + ["poison.fit"])
+    store = fitcache.FitStore(root)                 # what was saved
+    assert store.files["2026/poison.fit"]["meta"]["error"] == "RuntimeError"
+    assert all(store.files[f"2026/{i}.fit"]["meta"].get("start") for i in range(3))
+    tried.clear()
+    assert store.ensure(paths, workers=2) == 0 and tried == []
+
+
+def test_ensure_saves_what_it_parsed_when_it_is_interrupted(tmp_path, monkeypatch):
+    root = _folder(tmp_path)
+    real = fitcache.parse_file
+
+    def parse(path, npz):
+        if path.endswith("2.fit"):
+            raise KeyboardInterrupt                 # not an Exception: escapes ensure()
+        return real(path, npz)
+    monkeypatch.setattr(fitcache, "parse_file", parse)
+    paths = sorted(root.rglob("*.fit"))             # 0, 1, 2, broken
+    with pytest.raises(KeyboardInterrupt):
+        fitcache.FitStore(root).ensure(paths, workers=0)
+    assert set(fitcache.FitStore(root).files) == {"2026/0.fit", "2026/1.fit"}
+
+
 # ---- the factory: single flight + progress --------------------------------
 
 def test_concurrent_requests_build_one_dataset(monkeypatch, tmp_path):

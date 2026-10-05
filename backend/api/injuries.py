@@ -326,13 +326,11 @@ _an_memo: dict = {}
 
 
 def _stamp() -> tuple:
+    from backend.db.filestamp import db_stamp
     from backend.engine import activity_tags as AT
     p = AT._db_path()
-    try:
-        st = p.stat() if p is not None else None
-        return (str(p), st.st_mtime_ns, st.st_size) if st else ()
-    except OSError:
-        return ()
+    fs = db_stamp(p) if p is not None else None       # the WAL too (db/filestamp.py)
+    return (str(p), *fs) if fs else ()
 
 
 def _analysis_cached(severities: Optional[tuple], season: bool, area: Optional[str]) -> dict:
