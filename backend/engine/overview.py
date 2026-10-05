@@ -1263,11 +1263,19 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     test_s = CPP.session_for(protocol) if test_due else None      # race: nothing scheduled
     # the AeT test: base phase, a reason (quality_gate.aet_test_reason — B3 and the Z5
     # lifecycle; no fixed cadence), never the CP-test week; its protocol from 課表偏好
+    # A 賽後重新打底 (SP-116): a test from before the rebuild doesn't hold it back, and the test is
+    # the 間歇門檻's own (xu_drift → 徐國峰 90 分, friel_drift → Friel 60 分)
+    aet_reason = gate.get("aet_test_reason") or {}
+    last_aet = tx.get("aet_last_test")
+    if aet_reason.get("code") == "rebase" and last_aet and str(last_aet)[:10] < aet_reason["from"]:
+        last_aet = None
     aet_due = test_s is None and (days_to is None or days_to > 10) and not in_reentry \
         and mode != "recovery_week" and AT.due(
-        today, kind, gate.get("base_start"), gate.get("aet_test_reason"), tx.get("aet_last_test"))
-    aet_proto = AT.resolve_protocol(getattr(prefs, "aet_test_protocol", None) or "auto",
-                                    getattr(prefs, "cap_weekday", None),
+        today, kind, gate.get("base_start"), gate.get("aet_test_reason"), last_aet)
+    aet_pref = getattr(prefs, "aet_test_protocol", None) or "auto"
+    if aet_reason.get("code") == "rebase":
+        aet_pref = {"xu_drift": "xu90", "friel_drift": "friel"}.get(gate.get("mode"), aet_pref)
+    aet_proto = AT.resolve_protocol(aet_pref, getattr(prefs, "cap_weekday", None),
                                     getattr(prefs, "long_cap", None) if prefs is not None else None)
     strength_n = 2 if kind in ("base", "transition", "recovery") or lvl("strength") in ("bad", "watch") else 1
 

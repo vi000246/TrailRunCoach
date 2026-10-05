@@ -83,6 +83,10 @@
     "draft": true,
     "src": "backend/engine/quality_gate.py:1934"
   },
+  "3 區還沒解鎖：{text}，{action}": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1518"
+  },
   "3 區階梯": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:1946"
@@ -146,6 +150,10 @@
   "90 分鐘測試量不出 AeT 數字，只算 3 區的關卡": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:2002"
+  },
+  "A 賽「{name}」後重新打底": {
+    "draft": true,
+    "src": "backend/engine/base_check.py:499"
   },
   "A 賽事「{race}」前 {days} 天不排肌力（{start} 起，含比賽週；課表偏好的每週肌力／肌力日也一樣）：把體力留給比賽——長距離耐力項目主要比賽前 2 週停肌力，停 4 週以上才會退步（Bompa & Buzzichelli）": {
     "draft": true,
@@ -451,6 +459,10 @@
     "draft": true,
     "src": "backend/engine/plan_auto.py:549"
   },
+  "Zone 5：未確認（{why}）": {
+    "draft": true,
+    "src": "backend/engine/base_check.py:518"
+  },
   "Zone 5：未解鎖": {
     "draft": true,
     "src": "backend/engine/plan_auto.py:566"
@@ -502,6 +514,10 @@
   "{day}→ {to} · 約 {t}{climb}": {
     "draft": true,
     "src": "backend/engine/racepower/watch_export.py:235"
+  },
+  "{d} 起{test}；通過前只排輕鬆跑、長跑和加速跑": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1398"
   },
   "{grade} {name} {goal:.0f}": {
     "draft": true,
@@ -671,9 +687,21 @@
     "draft": true,
     "src": "backend/engine/racepower/calc.py:346"
   },
+  "{text}：{d} 起做一次 AeT 測試（UA 差距或 Friel 飄移），用賽後的 E 配速、CP、LTHR": {
+    "draft": true,
+    "src": "backend/engine/base_check.py:516"
+  },
+  "{text}：{test}（或你選的方法），通過前只排輕鬆跑、長跑和加速跑；{src}": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1430"
+  },
   "{text}：本週 = 停訓前 4 週平均 {prev:.1f} h × {f:.0%} → {h:.1f} h": {
     "draft": true,
     "src": "backend/engine/overview.py:1054"
+  },
+  "{text}：要用賽後的 E 配速、CP、LTHR 重新確認一次": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1220"
   },
   "{title}（少 1 趟：{n} 趟）": {
     "draft": true,
@@ -1067,9 +1095,29 @@
     "draft": true,
     "src": "backend/engine/quality_gate.py:2083"
   },
+  "做一次 90 分鐘飄移測試或 AeT 測試": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1388"
+  },
+  "做一次 90 分鐘飄移測試（用賽後的 E 配速，平路 1 區，飄移 < 10%）": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1383"
+  },
   "做一次 AeT 測試（UA 40–60 分，量出 AeT 數字；90 分鐘測試不算）": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:2077"
+  },
+  "做一次 AeT 測試（UA 差距或 Friel 飄移），重新確認 5 區": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1428"
+  },
+  "做一次 AeT 測試（配實測 LTHR，差距 ≤ 10%）": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1385"
+  },
+  "做一次 Friel 飄移測試（AeT 附近 ≥ 60 分鐘平路，飄移 < 5%）": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1384"
   },
   "停下 ≥ 5 分鐘的時間佔總時間超過這個比例，強度再高也算「有拼但有休息」。本人值 = 你的全力活動長休息比例的 p90 × 1.5。": {
     "draft": true,
@@ -1646,6 +1694,10 @@
   "徐國峰 90 分鐘測試排在週末長跑日，本週週末沒有可練的日子：這週先不測": {
     "draft": true,
     "src": "backend/engine/overview.py:1403"
+  },
+  "徐國峰：打底 → 練強度 → 比賽 → 跑力提升 → 用新的 E 配速重新打底（教練級，沒有對照試驗）": {
+    "draft": true,
+    "src": "backend/engine/base_check.py:104"
   },
   "從最近的輕鬆跑推估 AeT 約 {v:.0f} bpm，和目前 {now:.0f} 差 {d:+.0f}：測一次確認（UA：基礎變好 AeT 會往 AnT 靠）": {
     "draft": true,
@@ -2734,6 +2786,14 @@
   "第 {i} 趟 {d}": {
     "draft": true,
     "src": "backend/engine/interval_library.py:739"
+  },
+  "等基礎期重新累積到 EF 持平（停滯法）": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1386"
+  },
+  "等基礎期重新累積到設定的週數（週數法）": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1387"
   },
   "算不出": {
     "draft": false,
