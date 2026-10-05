@@ -76,6 +76,26 @@ ROAD_EASY_SLOW = 1.15
 SUMMIT_SIM_WEEKS = 8
 SUMMIT_UP_MPH = 430.0
 SUMMIT_DOWN_MPH = 650.0
+# SP-114 ME (肌耐力, muscular endurance) — a multi-day 百岳's 專項期 quality session instead of the uphill
+# VO2max set (research §2.5, §4.3; UA〈Vertical Beast Mode〉, Evoke): a heavy pack up the steepest slope, the
+# legs (not the breathing) the limit; once a week, 3 easy days after; the climb from 50 % of the summit
+# day's to more than it (UA: 「final workouts … more vertical … than the biggest day」), one thing at a time
+# — here the climb, the pack fixed at the low end of UA's 15–40 % of body weight; no ME in the last 2
+# weeks (Evoke). Only when ADS (LTHR ÷ AeT − 1, both measured) ≤ 10 % (UA's condition); else the week
+# keeps general strength (2 sessions). Speeds 500 m/h up with the load and 1000 m/h down light (the water
+# poured out at the top) and the ME_MAX_MIN ceiling (UA podcast: ~1 h at the start, 90 min–2.5 h on a
+# weekend) are 推估: a longer climb is cut to what fits.
+ME_ADS_MAX = 0.10
+ME_CLIMB = {10: 0.50, 9: 0.55, 8: 0.60, 7: 0.70, 6: 0.80, 5: 0.90, 4: 1.00, 3: 1.10}   # 推估 steps
+ME_PACK_SHARE = 0.15
+ME_PACK_DEFAULT_KG = 10.0           # 推估: no body weight → 15 % of ~65 kg
+ME_UP_MPH = 500.0
+ME_DOWN_MPH = 1000.0
+ME_WARM_MIN = 10
+ME_MAX_MIN = 150
+SRC_ME = ("ME（肌耐力）：Uphill Athlete〈Vertical Beast Mode〉——背 15–40% 體重爬陡坡，腿先酸、呼吸不喘；每週一次、做完 3 天輕鬆，"
+          "共 6–10 次；從攻頂日爬升的 50% 開始，最後超過它；一次只加一樣；前提 AeT 在 AnT 的 10% 以內。Evoke：最後兩週不做 ME。"
+          "每週比例、背 15% 體重、上坡 350 m/h 為推估")
 SRC_SUMMIT = ("攻頂日模擬：Uphill Athlete〈Training for Mountaineering〉——行程前 8 週起每週一次，一天爬完攻頂日的爬升，"
               "背和行程差不多重的背包；時間用山本正嘉背 10% 體重每小時 430 m 上、下山約 650 m/h 估（推估）")
 
@@ -274,6 +294,8 @@ def week_context(*, kind: str, mode: str, monday: dt.date, race: Optional[dict],
     info.update(active=True, frac=frac(w, info["sport"]), sim_week=w in SIM_WEEKS)
     if race.get("summit") and not road and w <= SUMMIT_SIM_WEEKS and mode not in ("recovery_week", "reentry"):
         info["summit_sim"] = True                   # SP-114: this week's long day is the 攻頂日模擬
+    if race.get("summit") and not road and mode not in ("recovery_week", "reentry"):
+        info["me_week"] = True                      # SP-114: ME instead of the uphill VO2max set (apply_me)
     if road:
         info["climb_why"] = "主要訓練項目是路跑：不排長爬坡、下坡"
         return info
@@ -307,7 +329,7 @@ def projected_context(kind: str, mode: str, monday: dt.date, cur: Optional[dict]
 
 
 PUBLIC = ("active", "race", "weeks_out", "frac", "sim_week", "climb", "climb_why", "why", "src", "longest28",
-          "long", "planned", "error", "sport", "summit_sim")
+          "long", "planned", "error", "sport", "summit_sim", "me_week", "me")
 
 
 def public(info: Optional[dict]) -> Optional[dict]:
@@ -428,6 +450,119 @@ def summit_session(s: dict, info: dict, minutes: float) -> None:
              source=((s.get("source") or "") + "；" + SRC_SUMMIT).lstrip("；"))
     info["long"] = {"minutes": int(minutes), "summit_sim": True, "climb_m": round(climb), "pct": round(f * 100),
                     "pack_kg": sm["pack_kg"], "need_m": round(sm["climb_m"])}
+
+
+def _hill_set(s: dict) -> bool:
+    """The 專項期's uphill VO2max set (overview.TRAIL_SPECIFIC_Z5, maybe shortened)."""
+    t = str(s.get("title") or "")
+    return s.get("kind") == "quality" and t.startswith("VO2max 間歇") and "上坡" in t
+
+
+def me_session(info: dict, weight_kg: Optional[float], rate: float = 60.0) -> dict:
+    """This week's ME session (SP-114): ME_CLIMB of the summit day's climb, a pack of ME_PACK_SHARE of
+    the body weight (ME_PACK_DEFAULT_KG without one)."""
+    sm = info["race"]["summit"]
+    f = ME_CLIMB.get(int(info.get("weeks_out") or WEEKS[0]), ME_CLIMB[WEEKS[1]])
+    per_m = 60.0 / ME_UP_MPH + 60.0 / ME_DOWN_MPH                 # minutes per metre up and back down
+    want = f * float(sm["climb_m"])
+    climb = int(round(min(want, (ME_MAX_MIN - ME_WARM_MIN - 5) / per_m) / 10.0) * 10)
+    kg = round(ME_PACK_SHARE * weight_kg) if weight_kg else ME_PACK_DEFAULT_KG
+    m = _r5(ME_WARM_MIN + climb * per_m + 5)
+    detail = (_("背 {kg:g} kg（體重的 {p:.0f}%）", kg=kg, p=ME_PACK_SHARE * 100) if weight_kg
+              else _("背 {kg:g} kg（沒有體重紀錄，先用這個重量）", kg=kg))
+    detail += _("爬最陡的坡、樓梯或跑步機最大坡度，共爬升約 {cl:.0f} m（攻頂日 {need:.0f} m 的 {f:.0f}%）；"
+                "要腿先酸、呼吸不喘，心率不必拉高；背水上山、到頂把水倒掉輕裝下山，保護膝蓋；暖身 10 分。做完 3 天只排輕鬆",
+                cl=climb, need=sm["climb_m"], f=climb / float(sm["climb_m"]) * 100 if sm["climb_m"] else 0)
+    if climb < want - 10:
+        detail += _("（這週的目標是 {w:.0f} m，一次最多排 {m} 分鐘，先爬到這裡）", w=want, m=ME_MAX_MIN)
+    return {"id": "me", "kind": "quality", "title": _("ME 負重爬坡（爬升 {cl:.0f} m、背 {kg:g} kg）", cl=climb, kg=kg),
+            "minutes": int(m), "target": "", "detail": detail, "source": SRC_ME, "terrain": "trail",
+            "tss": round(rate * m / 60.0, 1), "climb_m": climb, "day": None, "done": False, "done_by": None}
+
+
+def _move_minutes(ss: list[dict], delta: int, skip) -> None:
+    """Take `delta` minutes from the week's easy runs (largest first, ≥ 20 each), or give −delta to
+    the largest one — the week's total stays (as apply_climb)."""
+    easy = sorted((x for x in ss if x is not skip and x.get("kind") == "easy" and not x.get("done")
+                   and x.get("minutes")), key=lambda x: -(x.get("minutes") or 0))
+    if delta < 0 and easy:
+        x = easy[0]
+        r = (x.get("tss") or 0.0) / x["minutes"]
+        x["minutes"] = int(x["minutes"]) - delta
+        x["tss"] = round(r * x["minutes"], 1)
+        return
+    for x in easy:
+        if delta <= 0:
+            break
+        r = (x.get("tss") or 0.0) / x["minutes"]
+        new = max(20, int(x["minutes"]) - delta)
+        delta -= int(x["minutes"]) - new
+        x["minutes"], x["tss"] = new, round(r * new, 1)
+
+
+def _me_day(ss: list[dict], info: dict) -> Optional[str]:
+    """A day for an added ME session in an already placed week (the projection): the earliest day ≥ 3
+    days before the long day (UA: 3 easy days after ME, so before the simulation) with no other hard
+    session; None in an unplaced week (week_plan places it later) or when no day fits."""
+    if not any(s.get("day") for s in ss):
+        return None
+    mon = _d(info.get("monday"))
+    hard = {s["day"] for s in ss if s.get("day") and (s.get("kind") in ("quality", "test", "long")
+                                                       or s.get("id") in ("steep", "climb", "tech"))}
+    long_day = next((_d(s["day"]) for s in ss if s.get("id") == "long" and s.get("day")), None)
+    if mon is None:
+        return None
+    days = [mon + dt.timedelta(days=i) for i in range(7)]
+    ok = [d for d in days if d.isoformat() not in hard
+          and not (long_day is not None and d <= long_day and (long_day - d).days < 3)]
+    # a day away from the other hard sessions first (≥ 2 days, 台灣教練's 48 h), else any free one
+    apart = [d for d in ok if all(abs((d - _d(h)).days) >= 2 for h in hard)]
+    pick = (apart or ok or [None])[0]
+    return pick.isoformat() if pick else None
+
+
+def apply_me(ss: list[dict], info: Optional[dict], gap: Optional[float], weight_kg: Optional[float] = None,
+             allow: bool = True, rate: float = 60.0, notes: Optional[list] = None) -> list[dict]:
+    """A multi-day 百岳's 專項期 (SP-114), in place: with ADS (`gap` = LTHR ÷ AeT − 1, both measured) ≤
+    ME_ADS_MAX the uphill VO2max set becomes the week's ME session (added when there was none);
+    otherwise the set goes, its minutes to the easy runs, and the week keeps general strength (2
+    sessions) with a note. `allow` = the week may have a hard session (the gate's guardrails, the
+    days after a B2B)."""
+    race = (info or {}).get("race") or {}
+    if not info or not info.get("active") or not info.get("me_week") or not race.get("summit") or is_road(info):
+        return ss
+    if any(s.get("id") == "me" for s in ss):
+        return ss
+    hill = next((s for s in ss if _hill_set(s) and not s.get("done")), None)
+    if gap is not None and gap <= ME_ADS_MAX:
+        if not allow:
+            return ss
+        me = me_session(info, weight_kg, rate)
+        if hill is not None:
+            me["day"] = hill.get("day")             # a placed week (the projection) keeps the day
+            ss[ss.index(hill)] = me
+            _move_minutes(ss, me["minutes"] - int(hill.get("minutes") or 0), me)
+        else:
+            me["day"] = _me_day(ss, info)
+            ss.append(me)
+            _move_minutes(ss, me["minutes"], me)
+        info["me"] = {"minutes": me["minutes"], "climb_m": me["climb_m"]}
+        return ss
+    if hill is not None:
+        ss.remove(hill)
+        _move_minutes(ss, -int(hill.get("minutes") or 0), None)
+    st = [s for s in ss if s.get("kind") == "strength"]
+    if st and len(st) < 2:
+        ss.insert(ss.index(st[-1]) + 1, {**st[-1], "id": f"strength{len(st) + 1}", "day": None, "done": False,
+                                          "done_by": None})
+    why = (_("你的 ADS（LTHR ÷ AeT − 1）是 {g:.0f}%", g=gap * 100) if gap is not None
+           else _("還沒有實測的 AeT 和 LTHR，算不出 ADS"))
+    if notes is not None:
+        notes.append({"level": "info", "src": "specific",
+                      "text": _("多日百岳的專項期把爬坡間歇換成 ME（背重爬陡坡），前提是 ADS ≤ 10%（Uphill Athlete）；{why}，"
+                                "這週維持一般肌力（每週 2 次）", why=why)})
+    info["me"] = {"skipped": True, "gap": gap}
+    return ss
 
 
 # ---------------------------------------------------------------------------
