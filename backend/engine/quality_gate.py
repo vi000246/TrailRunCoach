@@ -1213,6 +1213,13 @@ def evaluate(ds, plan, today: dt.date, prefs=None, by: Optional[dict] = None, ph
         if r.get("state") == "unlocked":
             r = {**r, "via": resolved}
     state = r.get("state", "none")
+    # ---- A 賽後重新打底 (SP-116): only evidence from after the 恢復期 + 轉換期 counts ----------
+    from backend.engine import base_check as BC
+    rebase = BC.a_race_rebase(plan, today) if mode != "none" and plan is not None else None
+    if rebase and state == "unlocked" and not _rebased(r, ae, base_start, rebase):
+        r = {"state": "locked", "verdict": _("{text}：要用賽後的 E 配速、CP、LTHR 重新確認一次", text=rebase["text"]),
+             "action": rebase_action(mode, rebase), "rebase": True}
+        state = "locked"
 
     # ---- this week's guardrails (base phase) ------------------------------
     ie = _extra(by, "intensity")
@@ -1229,10 +1236,10 @@ def evaluate(ds, plan, today: dt.date, prefs=None, by: Optional[dict] = None, ph
     dose = dose_tracks(hist, ae.get("value"))
     # ---- Zone 5 (engine/base_check.py) and the AeT test's reason -----------
     z5 = _z5(ds, today, mode, state, ae, lt, brk, [h.get("date") for h in hist], friel,
-             aet_tested(plan, today))
-    test_reason = aet_test_reason(ds, today, ae, z5, brk)
+             aet_tested(plan, today), rebase)
     # ---- the Zone 3 gate (SP-31) and the 1-a-week track ratio ---------------
-    z3 = z3_gate(ds, today, mode, state, ae, lt, z5, dose)
+    z3 = z3_gate(ds, today, mode, state, ae, lt, z5, dose, rebase)
+    test_reason = aet_test_reason(ds, today, ae, z5, brk, rebase, z3, mode)
     out = {
         "mode": mode, "mode_label": LABEL[mode], "resolved": resolved, "state": state,
         "via": r.get("via"), "verdict": r.get("verdict", ""), "action": r.get("action", ""),
@@ -1245,7 +1252,7 @@ def evaluate(ds, plan, today: dt.date, prefs=None, by: Optional[dict] = None, ph
         "gap": gap, "ef_change": ef, "levels": levels, "guard": g,
         "dose": {**dose, "history": hist[-8:]},
         "kind": kind, "week_hours": _extra(by, "volume").get("last_week"),
-        "z5": z5, "aet_test_reason": test_reason, "reentry": brk,
+        "z5": z5, "aet_test_reason": test_reason, "reentry": brk, "rebase": rebase,
         "z3": z3, "ratio": track_ratio(getattr(plan, "events", None) or (), today),
         "monday": (today - dt.timedelta(days=today.weekday())).isoformat(),
         "z3_recent": z3_recent(hist, today),
@@ -1372,8 +1379,60 @@ def _transition_skip(ds, days: list, today: dt.date) -> set:
     return post_race_days(plan_, days[0], today)
 
 
+# ---- A 賽後重新打底 (SP-116; base_check.a_race_rebase) ------------------------------------
+REBASE_TEST = {"xu_drift": N_("做一次 90 分鐘飄移測試（用賽後的 E 配速，平路 1 區，飄移 < 10%）"),
+               "friel_drift": N_("做一次 Friel 飄移測試（AeT 附近 ≥ 60 分鐘平路，飄移 < 5%）"),
+               "ua_gap": N_("做一次 AeT 測試（配實測 LTHR，差距 ≤ 10%）"),
+               "plateau": N_("等基礎期重新累積到 EF 持平（停滯法）"),
+               "weeks": N_("等基礎期重新累積到設定的週數（週數法）"),
+               "auto": N_("做一次 90 分鐘飄移測試或 AeT 測試")}
+
+
+def rebase_test(mode: str) -> str:
+    """The re-confirmation the 間歇門檻 `mode` asks for after an A race (SP-116)."""
+    return _(REBASE_TEST.get(mode, REBASE_TEST["auto"]))
+
+
+def rebase_action(mode: str, rebase: dict) -> str:
+    d = dt.date.fromisoformat(rebase["from"])
+    return _("{d} 起{test}；通過前只排輕鬆跑、長跑和加速跑", d=f"{d.month}/{d.day}", test=rebase_test(mode))
+
+
+def _rebased(r: dict, ae: dict, base_start, rebase: dict) -> bool:
+    """Whether an unlocked method result rests on evidence from rebase["from"] on (SP-116): the
+    run of a drift method, the AeT test of the UA gap, the 基礎期 start of plateau / weeks."""
+    via = r.get("via")
+    if via in ("friel_drift", "xu_drift"):
+        d = (r.get("run") or {}).get("date")
+    elif via == "ua_gap":
+        d = ae.get("date")
+    elif via in ("plateau", "weeks"):
+        d = base_start
+    else:
+        d = None
+    return bool(d) and str(d)[:10] >= rebase["from"]
+
+
+def rebase_reason(today: dt.date, rebase: Optional[dict], z3: Optional[dict], z5: Optional[dict],
+                  mode: str = "auto") -> Optional[dict]:
+    """aet_test_reason's 「rebase」 (SP-116): from rebase["from"], while the Zone 3 gate is locked
+    by the rebuild or a Zone 5 confirmed before the race isn't confirmed again."""
+    if not rebase or today.isoformat() < rebase["from"]:
+        return None
+    paths = (z5 or {}).get("aet_paths") or {}
+    had5 = any(d and str(d)[:10] < rebase["from"] for d in paths.values())
+    new5 = any(d and str(d)[:10] >= rebase["from"] for d in paths.values())
+    need3 = bool(z3) and not z3.get("open") and bool(z3.get("rebase"))
+    if not (need3 or (had5 and not new5)):
+        return None
+    test = rebase_test(mode) if need3 else _("做一次 AeT 測試（UA 差距或 Friel 飄移），重新確認 5 區")
+    return {"code": "rebase", "from": rebase["from"],
+            "text": _("{text}：{test}（或你選的方法），通過前只排輕鬆跑、長跑和加速跑；{src}",
+                      text=rebase["text"], test=test, src=rebase["src"])}
+
+
 def z3_gate(ds, today: dt.date, mode: str, state: Optional[str], ae: dict, lt: dict, z5: dict,
-            dose: dict) -> dict:
+            dose: dict, rebase: Optional[dict] = None) -> dict:
     """Is the Zone 3 track open (SP-31, the owner's rule 2026-10-04)? Any one of:
       weeks   consistency: Z3_WEEKS_NEED complete weeks of actual training (imported history counts,
               whatever the phase label) with ≥ Z3_RUNS_PER_WEEK runs every week and no
@@ -1386,7 +1445,11 @@ def z3_gate(ds, today: dt.date, mode: str, state: Optional[str], ae: dict, lt: d
     (the AeT is often estimated and climbs inflate HR). A break of ≥ Z3_RELOCK_DAYS days without
     running re-locks it: only what comes after the break counts (and a break still going on
     locks). This week's guardrails apply on top (week_decision).
-    {"open", "path", "path_label", "weeks", "weeks_need", "weekly", "tests", "reason", "text", "src", "break"}."""
+    `rebase` (base_check.a_race_rebase, SP-116): after an A race only evidence from rebase["from"]
+    counts — the 90-min test, the UA gap's AeT, the chosen method or a Zone 5 confirmed again;
+    the consistency weeks and earlier Zone 3 達標 don't (the rebuild is a re-test).
+    {"open", "path", "path_label", "weeks", "weeks_need", "weekly", "tests", "reason", "text", "src", "break",
+    "rebase"}."""
     need = Z3_WEEKS_NEED
     try:
         rd = run_days(ds, today)
@@ -1396,7 +1459,14 @@ def z3_gate(ds, today: dt.date, mode: str, state: Optional[str], ae: dict, lt: d
     brk = cons.get("break")
     after = brk.get("return") if brk else None          # evidence before a ≥ 21-day break doesn't count
     resting = bool(brk) and not brk.get("return")
-    ok_after = lambda d: not brk or (after is not None and bool(d) and str(d)[:10] >= after)
+    rb_from = rebase["from"] if rebase and mode != "none" else None
+    if rb_from:
+        after = max(after or "", rb_from)
+
+    def ok_after(d) -> bool:
+        if rb_from and not (bool(d) and str(d)[:10] >= rb_from):
+            return False
+        return not brk or (after is not None and bool(d) and str(d)[:10] >= after)
     try:
         from backend.engine import base_check as BC
         xs = BC.xu_runs(ds, today)
@@ -1425,24 +1495,27 @@ def z3_gate(ds, today: dt.date, mode: str, state: Optional[str], ae: dict, lt: d
         path, label = "none", "不設門檻（Seiler）"
     elif resting:
         path = None
-    elif cons["open"]:
+    elif cons["open"] and not rb_from:
         path, label = "weeks", f"連續 {need} 週規律訓練（{cons['since']} 起）"
     elif xu_ok:
         path, label = "xu90", f"90 分鐘飄移 {xu_ok['drift'] * 100:.1f}% < 10%（{xu_ok['date']}）"
     elif ua_ok:
         path, label = "ua_gap", f"UA 差距 {ua['gap'] * 100:.0f}% ≤ 10%"
     elif state == "unlocked" and not brk:
+        # under a rebuild the method was already held to evidence after it (evaluate: _rebased)
         path, label = "method", f"間歇門檻已解鎖（{LABEL.get(mode, mode)}）"
     elif (z5.get("since") and ok_after(z5.get("since"))) or z5.get("open"):
         path, label = "z5", "有氧基礎已確認（5 區流程）"
     elif pause.get("kind") == "reentry_z3":
         path, label = "reentry", "恢復期後先排 3 區"
-    elif not brk and int(d3.get("met") or 0) + int(d3.get("step") or 0) > 0:
+    elif not brk and not rb_from and int(d3.get("met") or 0) + int(d3.get("step") or 0) > 0:
         path, label = "track", "8 週內有 3 區達標，繼續階梯"
     if resting:
         reason = f"3 區還沒解鎖：已經 {brk['days']} 天沒跑（≥ {Z3_RELOCK_DAYS} 天要重新累積；推估）"
     elif path:
         reason = ""
+    elif rb_from:
+        reason = _("3 區還沒解鎖：{text}，{action}", text=rebase["text"], action=rebase_action(mode, rebase))
     else:
         reason = (f"3 區還沒解鎖：連續 {min(cons['weeks'], need)}/{need} 週每週跑 ≥ {Z3_RUNS_PER_WEEK} 次（推估）"
                   + (f"——{short[-1]['monday'][5:]} 那週跑 {short[-1]['runs']} 次" if short else "")
@@ -1450,9 +1523,9 @@ def z3_gate(ds, today: dt.date, mode: str, state: Optional[str], ae: dict, lt: d
                   + "；或做一次 90 分鐘平路 1 區測試（飄移 < 10%）；或實測 AeT 且 UA 差距 ≤ 10%")
     return {"open": path is not None, "path": path, "path_label": label, "weeks": cons["weeks"],
             "weeks_need": need, "weekly": cons.get("rows") or [], "tests": tests, "reason": reason,
-            "since": cons.get("since"), "break": brk,
+            "since": cons.get("since"), "break": brk, "rebase": bool(rb_from),
             "text": f"Zone 3：已解鎖（{label}）" if path else f"Zone 3：未解鎖（{reason.split('：', 1)[-1]}）",
-            "src": SRC_Z3["weeks"]}
+            "src": rebase["src"] if rb_from and not path else SRC_Z3["weeks"]}
 
 
 def _xu_value(x: Optional[dict]) -> str:
@@ -1474,8 +1547,8 @@ def z3_open_on(z3: Optional[dict], monday: Optional[dt.date], gate_monday: Optio
         return True
     if z3.get("open"):
         return True
-    if monday is None or not gate_monday:
-        return False
+    if monday is None or not gate_monday or z3.get("rebase"):
+        return False                                # SP-116: a rebuild waits for its test, not for weeks
     ahead = (monday - dt.date.fromisoformat(str(gate_monday)[:10])).days // 7
     return ahead > 0 and int(z3.get("weeks") or 0) + ahead >= int(z3.get("weeks_need") or Z3_WEEKS_NEED)
 
@@ -1596,7 +1669,7 @@ def z5_track(gate: dict, monday: Optional[dt.date] = None, steps=None) -> dict:
 
 def _z5(ds, today: dt.date, mode: str, state: Optional[str], ae: dict, lt: dict,
         brk: Optional[dict] = None, quality_dates: Optional[list] = None, friel=None,
-        ta: Optional[dict] = None) -> dict:
+        ta: Optional[dict] = None, rebase: Optional[dict] = None) -> dict:
     """base_check.z5_status with the measured-AeT paths (SP-39): a tested AeT `ta` (aet_tested)
     and a measured LTHR within 10 % (UA gap) → the later row's date; a Friel run < 5 % near the
     tested AeT → its date. The 90-min test is not one (Zone 3 gate only). `friel`: evaluate's
@@ -1616,7 +1689,7 @@ def _z5(ds, today: dt.date, mode: str, state: Optional[str], ae: dict, lt: dict,
             f = friel() if friel is not None and same else friel_check(ds, today, ta["value"])
             if f.get("state") == "unlocked":
                 paths["aet_friel_drift"] = f["run"]["date"]
-        return {**BC.z5_status(ds, today, mode, state, paths, brk, quality_dates), "aet_paths": paths,
+        return {**BC.z5_status(ds, today, mode, state, paths, brk, quality_dates, rebase), "aet_paths": paths,
                 "aet_tested": ta}
     except Exception as e:                  # noqa: BLE001 — Z5 stays closed, the plan still builds
         return {"state": "unconfirmed", "label": BC.STATE_LABEL["unconfirmed"], "open": False, "since": None,
@@ -1624,7 +1697,8 @@ def _z5(ds, today: dt.date, mode: str, state: Optional[str], ae: dict, lt: dict,
                 "text": f"Zone 5：未確認（算不出來：{type(e).__name__}）"}
 
 
-def aet_test_reason(ds, today: dt.date, ae: dict, z5: dict, brk: Optional[dict] = None) -> Optional[dict]:
+def aet_test_reason(ds, today: dt.date, ae: dict, z5: dict, brk: Optional[dict] = None,
+                    rebase: Optional[dict] = None, z3: Optional[dict] = None, mode: str = "auto") -> Optional[dict]:
     """Why an AeT test should be scheduled now, or None (unsourced-rules.md §B3
     and the Z5 lifecycle; numbers 推估 unless noted): {"code", "text"}.
       no_data  no interpretable run (a drift_of value or a 90-min 徐國峰 run) for
@@ -1634,9 +1708,15 @@ def aet_test_reason(ds, today: dt.date, ae: dict, z5: dict, brk: Optional[dict] 
       moved    the estimate is more than max(SE, 3 bpm) away from the plan's AeT
                (UA: AeT rises toward AnT as the base improves — confirm it)
     SP-39: the 90-min run no longer confirms Zone 5, so it no longer stands in for the test
-    (the passive re-confirmation is gone); it still counts as interpretable data for no_data."""
+    (the passive re-confirmation is gone); it still counts as interpretable data for no_data.
+      rebase   SP-116: A 賽後重新打底 — from the first day after the 恢復期 + 轉換期 until the Zone 3
+               gate is open again on evidence from then and Zone 5, if it had been confirmed
+               before, is confirmed again ({"code": "rebase", "from", "text"})."""
     from backend.engine import base_check as BC
     from backend.engine import drift_agg as DA
+    rb = rebase_reason(today, rebase, z3, z5, mode)
+    if rb:
+        return rb
     val = ae.get("validity") or {}
     try:
         recent = DA.aet_points(ds, today, BC.NO_DATA_DAYS, beta={"beta": 0.0})   # presence only: no β fit

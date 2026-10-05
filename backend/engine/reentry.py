@@ -42,6 +42,9 @@ don't start a re-entry block when base resumes. A break counts its days outside
 those phases only (≥ 6 still makes a block, as long as those days, e.g. a
 transition + 10 more days off = a 10-day 6–13 block; the block text says how
 many post-race days were left out).
+
+A 賽後重新打底 (SP-116): after an A race the Zone 3 / Zone 5 gates need a new confirmation
+whatever the break length (base_check.a_race_rebase) — not only after ≥ 29 days as here.
 """
 from __future__ import annotations
 

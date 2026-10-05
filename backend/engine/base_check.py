@@ -30,6 +30,14 @@ z5_status(ds, today, …)
     no Zone 3 / 5 inside it, then Zone 3 first; Zone 5 after 1–2 Zone 3
     sessions, the post-break long-run drift check (long_check), or — after
     ≥ 29 days — a new confirmation dated after the break.
+a_race_rebase(plan, today)
+    A 賽後重新打底 (SP-116, owner 2026-10-05): after an A race — never a B / C race — the Zone 3
+    and Zone 5 gates lock again whatever the break length, and only a confirmation dated on or
+    after the first day after the race's 恢復期 + 轉換期 counts (the method in 課表偏好 間歇門檻,
+    run with the post-race E pace / CP / LTHR). 徐國峰's cycle 「打底 → 練強度 → 比賽 → 跑力提升 →
+    用新的 E 配速重新打底」 (coach-level, no controlled trial; periodization-cross-sport.md §4.10).
+    Two A races so close that no 基礎期 follows the post-race phases: no rebuild (the second
+    race's build keeps the gate as it was; 推估).
 
 Zone 1 = the app's easy rule: avg HR ≤ AeT + 3 and ≤ 10 % of the time above
 AeT + 3 (workout_review). 徐國峰's 心率 1 區 is the E zone of Daniels'
@@ -51,6 +59,8 @@ import math
 from typing import Optional
 
 import numpy as np
+
+from backend.i18n import N_, _
 
 # ---- the 90-minute test (徐國峰 blog 2016-12; the 25 °C line: 台灣教練) ----------
 XU_MIN_S = 90 * 60
@@ -88,6 +98,10 @@ Z1_LOW_WEEKS = 3                     # … 3 complete weeks in a row → pause Z
 LOOKBACK_DAYS = 182                  # how far back a confirmation is looked for
 NO_DATA_DAYS = 42                    # no interpretable data for ~6 weeks → schedule the AeT test
                                      # (UA's 4–6-week retest, coach; the original wording 未驗證)
+
+# ---- A 賽後重新打底 (SP-116) -----------------------------------------------------------
+REBASE_SCAN_DAYS = 400               # how far back the latest A race is looked for
+SRC_REBASE = N_("徐國峰：打底 → 練強度 → 比賽 → 跑力提升 → 用新的 E 配速重新打底（教練級，沒有對照試驗）")
 
 # No stable-weekly-volume precondition before a test (owner 2026-10-03): the rule
 # (3 weeks within ±15 %) had no source, so tests are suggested and counted without it.
@@ -458,15 +472,61 @@ def maintenance(ds, today: dt.date, since: dt.date, brk: Optional[dict] = None) 
     return out
 
 
+def a_race_rebase(plan, today: dt.date) -> Optional[dict]:
+    """The A 賽後重新打底 in effect on `today` (SP-116), or None: the latest A event (priority A,
+    any kind) that ended before `today`, the first day after its 恢復期 / 轉換期 (planning phases
+    read through phase_days — the post-race phases themselves are planned elsewhere) and whether
+    a 基礎期 follows them. {"event_id", "name", "race_end", "from" (ISO: confirmations from this
+    day count), "text", "src"}. Never raises."""
+    try:
+        from backend.engine import planning as PL
+        evs = [e for e in getattr(plan, "events", None) or () if getattr(e, "priority", "A") == "A"
+               and e.end < today and (today - e.end).days <= REBASE_SCAN_DAYS]
+        if not evs:
+            return None
+        ev = max(evs, key=lambda e: e.end)
+        one = dt.timedelta(days=1)
+        horizon = ev.end + dt.timedelta(days=REBASE_SCAN_DAYS)
+        post = PL.phase_days(plan, ev.end + one, horizon, PL.POST_RACE_KINDS)
+        d = ev.end + one
+        while d in post:
+            d += one
+        nxt = PL.phase_on(plan, d)
+        if nxt is not None and nxt.kind != "base":
+            return None                      # no 基礎期 before the next build: nothing to rebuild in
+    except Exception:                        # noqa: BLE001 — the gates must still evaluate
+        return None
+    return {"event_id": ev.id, "name": ev.name, "race_end": ev.end.isoformat(), "from": d.isoformat(),
+            "text": _("A 賽「{name}」後重新打底", name=ev.name),
+            "src": _(SRC_REBASE)}
+
+
 def z5_status(ds, today: dt.date, mode: str = "auto", method_state: Optional[str] = None,
               aet_paths: Optional[dict] = None, brk: Optional[dict] = None,
-              quality_dates: Optional[list] = None) -> dict:
+              quality_dates: Optional[list] = None, rebase: Optional[dict] = None) -> dict:
     """z5_status_base, then the re-entry rules of the latest break `brk`
     (engine/reentry.plan; detraining.md §6.2). `quality_dates`: ISO dates of
     the interval sessions done (quality_gate.dose_history) — after a block
-    the first ones are Zone 3 (Zone 5 is closed then)."""
+    the first ones are Zone 3 (Zone 5 is closed then). `rebase` (a_race_rebase, SP-116): only
+    confirmations from rebase["from"] count, whatever the break."""
+    if rebase and mode != "none":
+        st = _z5_status(ds, today, mode, method_state, aet_paths, brk, quality_dates, rebase["from"])
+        if not st["open"] and st["state"] == "unconfirmed":
+            d = dt.date.fromisoformat(rebase["from"])
+            why = _("{text}：{d} 起做一次 AeT 測試（UA 差距或 Friel 飄移），用賽後的 E 配速、CP、LTHR",
+                    text=rebase["text"], d=f"{d.month}/{d.day}")
+            st = {**st, "reason": why, "rebase": rebase, "text": _("Zone 5：未確認（{why}）", why=why)}
+        return st
+    return _z5_status(ds, today, mode, method_state, aet_paths, brk, quality_dates)
+
+
+def _z5_status(ds, today: dt.date, mode: str, method_state: Optional[str], aet_paths: Optional[dict],
+               brk: Optional[dict], quality_dates: Optional[list], rebase_from: Optional[str] = None) -> dict:
     if brk and brk.get("return") and brk["return"] > today.isoformat():
         brk = None                                   # a planned break ahead: nothing yet
+    if rebase_from:
+        # A 賽後重新打底: confirmations before rebase_from no longer count (like a ≥ 4-week break)
+        aet_paths = {k: d for k, d in (aet_paths or {}).items() if d and str(d)[:10] >= rebase_from}
     if mode == "none" or not brk:
         return z5_status_base(ds, today, mode, method_state, aet_paths)
     ret, end, qf = brk["return"], brk["end"], brk["quality_from"]
