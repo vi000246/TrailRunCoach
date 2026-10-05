@@ -655,6 +655,14 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
                     planned_heat[d] = 1.0
             except Exception:              # noqa: BLE001 — never breaks the projection
                 heat_w = None
+        # 下坡課 (engine/downhill.py, SP-99): the same countdown rule as week_plan
+        from backend.engine import downhill as DH
+        dh = DH.week_context(kind=kind, mode=mode, monday=week, events=events, phases=phases, road=road)
+        if dh.get("active"):
+            try:
+                DH.apply(ss, dh, prefs=prefs, rates=cur.get("tss_per_category"), notes=notes, b2b=b2b_info)
+            except Exception:              # noqa: BLE001 — never breaks the projection
+                dh = {"active": False}
         # 技術地形課 (engine/technical.py, SP-74): the same rule as week_plan, per projected week
         tech = TECH.week_context(kind=kind, mode=mode, monday=week, road=road, b2b=b2b_info)
         if tech.get("active"):
@@ -699,6 +707,7 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
                     "sessions": [s for s in ss if s["day"]],
                     **({"notes": notes} if PR is not None or bmap or (heat_w or {}).get("active")
                        or kind == "transition" or ph_note or tech.get("planned") is not None or s_note or user_q
+                       or dh.get("planned") is not None
                        or b2b_info.get("post") or b2b_info.get("due") or (lc_info or {}).get("planned") else {}),
                     **({"b2b": B2B.public(b2b_info)} if b2b_info.get("due") or b2b_info.get("post") else {}),
                     **({"b2b_suggestion": b2b_sug} if b2b_sug else {}),
@@ -706,6 +715,7 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
                     **({"specific": SP.public(sp_info)} if sp_info and sp_info.get("active") else {}),
                     **({"heat": heat_w} if (heat_w or {}).get("active") else {}),
                     **({"technical": TECH.public(tech)} if tech.get("active") else {}),
+                    **({"downhill": DH.public(dh)} if dh.get("active") else {}),
                     **({"blackout_days": [d.isoformat() for d in lost]} if lost else {})})
         long_n = next((s for s in ss if s["id"] == "long"), None) if kind != "taper" else None
         recent_long.append(float(long_n["minutes"]) if long_n else 0.0)

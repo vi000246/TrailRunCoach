@@ -1726,6 +1726,18 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     except Exception as e:                  # noqa: BLE001 — heat sessions never break the plan
         heat_info = {"active": False, "reason": _("熱適應資料讀取失敗（{err}）", err=type(e).__name__)}
 
+    # ---- 下坡課 (engine/downhill.py, SP-99): 專項期 賽前第 9、6、3 週 before an A race with a clear descent
+    from backend.engine import downhill as DH
+    dh = DH.week_context(kind=kind, mode=mode, monday=monday, events=getattr(getattr(status, "plan", None),
+                                                                              "events", None), phases=phs, road=road)
+    if dh.get("active"):
+        try:
+            dd = [asdict(s) for s in sessions]
+            DH.apply(dd, dh, prefs=prefs, rates=tph, notes=notes, hard_done=hard_done, b2b=b2b)
+            sessions = [Session(**{k: v for k, v in d.items() if k in Session.__dataclass_fields__}) for d in dd]
+        except Exception as e:              # noqa: BLE001 — the plan must still build
+            dh = {**dh, "error": type(e).__name__}
+
     # ---- 技術地形課 (engine/technical.py, SP-74): 越野跑 only; 基礎期 every other week's LSD,
     # 專項期 one a week out of an easy run (RPE 6–7 = a quality session: spacing + budget)
     tech = TECH.week_context(kind=kind, mode=mode, monday=monday, road=road, b2b=b2b)
@@ -1844,6 +1856,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         "race_sim_suggestion": race_sim,
         # 技術地形課 (engine/technical.py, SP-74): this week's rule and the session it made
         "technical": TECH.public(tech),
+        # 下坡課 (engine/downhill.py, SP-99): this week's countdown rule and the session it made
+        "downhill": DH.public(dh),
         # 賽前停肌力 (SP-86): the A events' no-strength windows, for the projection
         "strength_stop": s_stops,
         # 減量期 (SP-96): the next A race's taper touching this week and the pre-taper level, for the projection

@@ -807,6 +807,18 @@
     "draft": true,
     "src": "backend/engine/workout_templates.py:483"
   },
+  "下坡課排在賽前第 {weeks} 週": {
+    "draft": true,
+    "src": "backend/engine/downhill.py:101"
+  },
+  "下坡離心（下坡 {work}′）": {
+    "draft": true,
+    "src": "backend/engine/downhill.py:188"
+  },
+  "下坡離心（第一次，下坡 {work}′）": {
+    "draft": true,
+    "src": "backend/engine/downhill.py:188"
+  },
   "下週安排恢復週": {
     "draft": true,
     "src": "backend/engine/status.py:333"
@@ -1238,6 +1250,10 @@
   "只在基礎期、專項期（恢復週、停訓後恢復期不排）": {
     "draft": true,
     "src": "backend/engine/technical.py:64"
+  },
+  "只在專項期排（停訓後恢復期不排）": {
+    "draft": true,
+    "src": "backend/engine/downhill.py:82"
   },
   "只收絕對瓦數：跑步沒有 % CP，送的是換算後的 W；CP 更新後這堂會標成「已過期」，要重推": {
     "draft": true,
@@ -1786,6 +1802,10 @@
   "手錶帳號": {
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:289"
+  },
+  "找 −10～−15% 的下坡（步道或產業道路），下坡 {work} 分、約 ↓{down} m，RPE 3–5、放鬆不衝，上坡用走的回去；暖身、緩和各 10 分平路": {
+    "draft": true,
+    "src": "backend/engine/downhill.py:189"
   },
   "找不到備份檔": {
     "draft": true,
@@ -2342,6 +2362,10 @@
   "沒有「負荷」結束條件：送預估時間": {
     "draft": true,
     "src": "backend/sync/workout_targets/garmin.py:23"
+  },
+  "沒有下一場 A 賽事": {
+    "draft": true,
+    "src": "backend/engine/downhill.py:86"
   },
   "沒有到 VO2max": {
     "draft": true,
@@ -2971,6 +2995,10 @@
     "draft": true,
     "src": "backend/engine/race_calc_store.py:53"
   },
+  "賽事下降不明顯（每公里 ↓{d:.0f} m < {min:.0f} m）：不排下坡課": {
+    "draft": true,
+    "src": "backend/engine/downhill.py:96"
+  },
   "賽事計算器預測的完賽時間": {
     "draft": true,
     "src": "backend/engine/race_feasibility.py:344"
@@ -2994,6 +3022,14 @@
   "賽前 ≥ 2 週做；效果約 9 週，之後 2–3 天輕鬆；下坡功率、心率都不準，看 RPE": {
     "draft": true,
     "src": "backend/engine/workout_templates.py:418"
+  },
+  "賽前第 {w} 週排一次下坡課（{day}）：下坡跑一次的保護效果維持 3–6 週，所以專項期每 3 週一次、最後一次在賽前 14–21 天（推估）{first}": {
+    "draft": true,
+    "src": "backend/engine/downhill.py:201"
+  },
+  "賽前第 {w} 週該排下坡課，但這週沒有適合的輕鬆日（長跑、強度課的當天和前一天不放{first}；賽前 {days} 天內不放）": {
+    "draft": true,
+    "src": "backend/engine/downhill.py:176"
   },
   "走路或極慢跑": {
     "draft": true,
@@ -3106,6 +3142,10 @@
   "路線有 {n} 段，超過手錶建議的 {limit} 步：相鄰的段合併成 {m} 步": {
     "draft": true,
     "src": "backend/engine/racepower/watch_export.py:226"
+  },
+  "路跑賽事不排下坡課": {
+    "draft": true,
+    "src": "backend/engine/downhill.py:89"
   },
   "路跑／馬拉松": {
     "draft": true,
@@ -3687,6 +3727,10 @@
     "draft": true,
     "src": "backend/engine/overview.py:1104"
   },
+  "，第一次之後 2 天也要輕鬆": {
+    "draft": true,
+    "src": "backend/engine/downhill.py:178"
+  },
   "：": {
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:594"
@@ -3719,6 +3763,10 @@
     "draft": true,
     "src": "backend/engine/status.py:588"
   },
+  "；其餘 {m} 分平路輕鬆跑": {
+    "draft": true,
+    "src": "backend/engine/downhill.py:191"
+  },
   "；分溫度區：{bands}": {
     "draft": true,
     "src": "backend/engine/status.py:570"
@@ -3726,6 +3774,10 @@
   "；另外 {x}": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:2095"
+  },
+  "；心率、功率在下坡不準，看 RPE": {
+    "draft": true,
+    "src": "backend/engine/downhill.py:193"
   },
   "；或": {
     "draft": true,
@@ -3747,6 +3799,10 @@
     "draft": true,
     "src": "backend/engine/status.py:308"
   },
+  "；第一次量小，之後 2 天只排輕鬆課": {
+    "draft": true,
+    "src": "backend/engine/downhill.py:192"
+  },
   "；聚合估計還不夠準或有偏移": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:2122"
@@ -3754,6 +3810,10 @@
   "；近 365 天跑步最高 {v:.0f}（推估）": {
     "draft": true,
     "src": "backend/engine/hr_profile.py:198"
+  },
+  "；這是第一次，量小、之後 2 天輕鬆": {
+    "draft": true,
+    "src": "backend/engine/downhill.py:204"
   },
   "；這次誤差約 ±{se:.1f} 個百分點（回歸標準誤）": {
     "draft": true,
