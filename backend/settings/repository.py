@@ -422,7 +422,7 @@ def _validate_pref(key: str, value: Any) -> None:
                                             for v in value) and len(set(value)) == len(value)):
         raise ValueError("plan.prefs.strength_days must be distinct weekdays 0-6")
     if key == "plan.prefs.pref_days" and value is not None:
-        kinds = ("quality", "aet_test", "cp_test", "strides")
+        kinds = ("quality", "aet_test", "cp_test", "strides", "rest")   # rest: 休息日偏好 (SP-82)
         ok = isinstance(value, dict) and all(
             k in kinds and isinstance(v, list) and len(v) <= 2 and len(set(v)) == len(v)
             and all(isinstance(x, int) and not isinstance(x, bool) and 0 <= x <= 6 for x in v)

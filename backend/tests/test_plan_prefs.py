@@ -112,8 +112,9 @@ def test_hard_cap_uses_the_long_day_cap_first():
 
 def test_soft_cap_without_a_long_session_uses_an_easy_run_on_the_long_day():
     notes = []
-    ss = week(PP.Prefs(cap_weekday=30, runs=3), kind="base", mode="recovery_week", hours=3.0, notes=notes)
-    assert not [s for s in ss if s["id"] == "long"]          # recovery week: no long session
+    # (a 恢復期 week: no long session — a 3:1 recovery week keeps a shorter one since SP-97)
+    ss = week(PP.Prefs(cap_weekday=30, runs=3), kind="recovery", mode="recovery", hours=3.0, notes=notes)
+    assert not [s for s in ss if s["id"] == "long"]
     big = max(main(ss), key=lambda s: s["minutes"])
     assert big["minutes"] > 30 and wd(big) == 6
     assert sum(1 for s in main(ss) if s["minutes"] > 30) == 1

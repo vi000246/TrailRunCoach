@@ -60,7 +60,7 @@
   "pd.label": "Fixed weekdays",
   "pd.auto": "Automatic (the planner picks)",
   "pd.tip_aria": "About fixed weekdays",
-  "pd.tip": "Add a row to keep a session type on certain days. Types without a row follow the default rules (the long run goes on the day you usually run long). A day can belong to one type only; a type can have two days, the first one clicked is the first choice. A row says so when it breaks a default rule.",
+  "pd.tip": "Add a row to keep a session type on certain days. Types without a row follow the default rules (the long run goes on the day you usually run long). A day can belong to one type only; a type can have two days, the first one clicked is the first choice. A row says so when it breaks a default rule. A \"Rest day\" row: the weekdays you'd rather rest, the first click is the first choice; without one, rest days go after the long run and between hard sessions.",
   "pd.add": "+ Add",
   "pd.kind.long": "LSD (long slow distance)",
   "pd.kind.quality": "Intervals",
@@ -259,5 +259,11 @@
   "family.aerobic": "Aerobic intervals",
   "family.vo2max": "VO2max intervals",
   "family.speed": "Speed",
-  "family.mismatch": "The steps look more like “{fam}”; the type is saved as your “{picked}” (just a hint)"
+  "family.mismatch": "The steps look more like “{fam}”; the type is saved as your “{picked}” (just a hint)",
+  "pd.kind.rest": "Rest day",
+  "pf.runs_tip": "Auto: the number of runs follows the weekly volume (an easy run is about 50 min), so not every training day gets a run — at most 6 days, at least 1 rest day. Training days left free are rest days, placed after the long run and between hard sessions. To run on every training day, set the number.",
+  "rest.mv": "Rest",
+  "rest.mv_tip": "No session this day (rest). Drag it to another day: the rest day moves there and that day's sessions move here",
+  "rest.mv_done": "Rest day moved to {to}: {n} session(s) moved to {from}",
+  "rest.mv_what": "Move the rest day"
 }

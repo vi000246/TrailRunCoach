@@ -224,6 +224,8 @@ dialog.sd .tp-t input { margin-top: 3px; flex: none; width: auto; }
 .chip .c-x { grid-column: 1 / -1; color: var(--muted); font-size: 10.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .chip[draggable="true"] { cursor: grab; }
 .chip.dragging { opacity: .4; }
+/* SP-82: an empty planned day's 「休息」 — drag it onto another day to swap */
+.chip.rest-mv { cursor: grab; color: var(--faint); border: 1px dashed var(--line); background: transparent; font-size: 12px; }
 .chip.st-done { background: color-mix(in srgb, var(--k) 24%, var(--cell)); }
 .chip.st-done .c-t::before { content: "✓ "; color: var(--cpc, var(--k)); font-weight: 800; }
 /* compliance: green ±20 %, yellow 20–50 %, red > 50 % or wrong type (engine/compliance.py) */
@@ -696,6 +698,7 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
       <div class="pf-r"><span class="pf-l" id="pf-days-l" data-i18n="schedule.pf.days">可練日</span>
         <span class="pf-c daychk" id="pf-days" role="group" aria-labelledby="pf-days-l"></span></div>
       <div class="pf-r"><label class="pf-l" for="pf-runs" data-i18n="schedule.pf.runs">每週跑步</label>
+        <button type="button" class="qtip" data-i18n-attr="aria-label:schedule.pf.about;data-tip:schedule.pf.runs_tip" aria-label="說明" data-tip="自動：跑步次數跟著週量走（輕鬆跑一次約 50 分），所以可練日不一定排滿，最多 6 天、至少留 1 天休息。沒排到的可練日就是休息日，會放在長跑隔天、強度課之間。想每個可練日都跑，就設定次數。">?</button>
         <span class="pf-c"><select id="pf-runs" name="runs"><option value="" data-i18n="schedule.pf.auto">自動</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option></select></span></div>
       <div class="pf-r"><label class="pf-l" for="pf-whm" data-i18n="schedule.pf.wh">每週時數</label>
         <button type="button" class="qtip" data-i18n-attr="aria-label:schedule.pf.about;data-tip:schedule.pf.wh_tip" aria-label="說明" data-tip="自動：照 CTL 爬升規則加量。自訂：每週最多幾小時。">?</button>
@@ -713,7 +716,7 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
 
     <section class="pf-g" aria-labelledby="pf-g2"><h4 id="pf-g2" class="pd-head"><span data-i18n="schedule.pf.g.days">偏好的星期</span>
         <button type="button" class="qtip" data-i18n-attr="aria-label:schedule.pd.tip_aria;data-tip:schedule.pd.tip" aria-label="固定星期的說明"
-          data-tip="想讓某種課固定在某幾天就加一列。沒加的課照預設規則排（長跑排你最常長跑的那天）。一天只能給一種課；可以選兩天的課，先點的是第一選擇。和預設規則衝突時會在那一列提醒。">?</button>
+          data-tip="想讓某種課固定在某幾天就加一列。沒加的課照預設規則排（長跑排你最常長跑的那天）。一天只能給一種課；可以選兩天的課，先點的是第一選擇。和預設規則衝突時會在那一列提醒。「休息日」列：想休息的星期，先點的是第一順位；沒設就自動放在長跑隔天、強度課之間。">?</button>
         <span class="meta" id="pf-pd-auto" data-i18n="schedule.pd.auto">自動（排課程式自己挑）</span>
         <button type="button" class="btn sm" id="pf-pd-add" data-i18n="schedule.pd.add">＋ 新增</button></h4>
       <div class="pd-list" id="pf-pdays" aria-live="polite"></div>
@@ -947,6 +950,14 @@ async function load() {
 // ---------------- rendering ----------------
 const findS = (uid) => D.sessions.find((s) => s.uid === uid);
 const editable = (s) => s.state === "active" && s.day >= D.today;
+// SP-82: a future planned day with no active session is a rest day you can drag onto another day
+// (that day's sessions move here: POST /rest-days/move)
+function restMv(d, ss) {
+  if (d < D.today || boOf(d) || (ss[d] || []).some((s) => s.state === "active" || s.state === "done")) return "";
+  const a = mondayOf(d), b = addDays(a, 6);
+  if (!(D.sessions || []).some((s) => s.state === "active" && s.day >= a && s.day <= b)) return "";
+  return `<span class="chip rest-mv" draggable="true" data-rest-from="${d}" title="${esc(tt("rest.mv_tip"))}">${esc(tt("rest.mv"))}</span>`;
+}
 function chipHtml(s, big) {
   const live = editable(s);
   const c = s.coros || {};
@@ -1062,7 +1073,7 @@ function render() {
           <div class="cell-top"><button type="button" class="dnum" data-sel="${d}" aria-label="選取 ${md(d)}（週${wd(d)}）${d === D.today ? "，今天" : ""}${bo ? "，不排課" : ""}" aria-pressed="${d === S.sel}">${dOf(d).getDate() === 1 && !week ? md(d) : dOf(d).getDate()}</button>${phl}
           ${bo && (d === bo.start || i === 0) ? boChip(bo) : ""}
           ${can ? `<button type="button" class="add" data-add="${d}" aria-label="在 ${md(d)} 新增課表" title="新增">＋</button>` : ""}</div>
-          <div class="chips">${items}</div></div>`);
+          <div class="chips">${items || (week && can ? restMv(d, ss) : "")}</div></div>`);
       }
       const ph = phaseOf(addDays(ws, 3)) || {};
       rows.push(`<div class="wk ph-${esc(w.phase || ph.kind || "none")} ${w.provisional ? "prov" : ""}" role="row" data-week="${ws}">${cells.join("")}<div class="sum" role="gridcell" aria-label="週統計">${sumHtml(w)}</div></div>`);
@@ -1113,7 +1124,7 @@ function agendaHtml(a, ss, acts) {
     const items = (ss[d] || []).map((s) => chipHtml(s, true)).join("") + (acts[d] || []).map(actHtml).join("");
     days.push(`<div class="ag-day ${d < D.today ? "past" : ""} ${d === D.today ? "today" : ""} ${d === S.sel ? "sel" : ""} ${can ? "can" : ""} ${bo ? "bo" : ""} ${bo && bo.kind === "rest" ? "rest-d" : ""}" data-day="${d}" title="${esc(dayTip(d, ss[d]))}">
       <div class="d"><button type="button" class="dnum" data-sel="${d}" aria-label="選取 ${md(d)}${bo ? "，不排課" : ""}" style="padding:0;height:auto;text-align:left">週${wd(d)}<b>${dOf(d).getDate()}</b></button>${d === D.today ? "今天" : ""}</div>
-      <div class="chips">${bo ? boChip(bo) : ""}${items || (bo ? "" : `<span class="rest">${d < D.today ? "沒有活動" : "休息"}</span>`)}</div>
+      <div class="chips">${bo ? boChip(bo) : ""}${items || (bo ? "" : restMv(d, ss) || `<span class="rest">${d < D.today ? "沒有活動" : "休息"}</span>`)}</div>
       ${can ? `<button type="button" class="add" data-add="${d}" aria-label="在 ${md(d)} 新增課表">＋</button>` : "<span></span>"}</div>`);
   }
   const future = a > D.today;
@@ -2228,7 +2239,7 @@ $("ap-run").onclick = async () => {
 // ---- 固定星期: a row per session type (engine/plan_prefs.py day_owners / overlaps /
 // day_conflicts / place). long -> long_day (one day); the others -> pref_days (≤ 2 days,
 // the first clicked = first choice). One type per row, one type per weekday; no rows = 自動.
-const PD_KINDS = ["long", "quality", "aet_test", "cp_test", "strides"];
+const PD_KINDS = ["long", "quality", "aet_test", "cp_test", "strides", "rest"];   // rest: 休息日偏好 (SP-82)
 const PD_MAX = (k) => (k === "long" ? 1 : 2);
 const WDZ = I18N.fmt.weekdays("narrow"), WDS = I18N.fmt.weekdays("short");   // 四 / T · 週四 / Thu
 const pdLabel = (k) => tt("pd.kind." + k);
@@ -2551,7 +2562,8 @@ $("cal").addEventListener("keydown", (e) => {
 // drag a chip onto another day
 $("cal").addEventListener("dragstart", (e) => {
   const el = e.target.closest(".chip[draggable]"); if (!el) return;
-  e.dataTransfer.setData("text/plain", el.dataset.uid); e.dataTransfer.effectAllowed = "move"; el.classList.add("dragging");
+  e.dataTransfer.setData("text/plain", el.dataset.restFrom ? "rest:" + el.dataset.restFrom : el.dataset.uid);
+  e.dataTransfer.effectAllowed = "move"; el.classList.add("dragging");
 });
 $("cal").addEventListener("dragend", (e) => { e.target.closest?.(".chip")?.classList.remove("dragging"); document.querySelectorAll(".drop").forEach((x) => x.classList.remove("drop")); });
 $("cal").addEventListener("dragover", (e) => {
@@ -2564,6 +2576,17 @@ $("cal").addEventListener("drop", async (e) => {
   const d = e.target.closest("[data-day]"); if (!d) return;
   e.preventDefault(); d.classList.remove("drop");
   const uid = e.dataTransfer.getData("text/plain"), s = findS(uid), day = d.dataset.day;
+  if (uid.startsWith("rest:")) {                   // SP-82: move the rest day — that day's sessions come here
+    const from = uid.slice(5);
+    if (from === day || day < D.today || boOf(day)) return;
+    try {
+      const r = await sj("POST", `${PAPI}/rest-days/move`, { from, to: day });
+      S.sel = day; await load();
+      msg(esc(tt("rest.mv_done", { to: `${md(day)}（週${wd(day)}）`, n: r.moved.length, from: `${md(from)}（週${wd(from)}）` }))
+        + (r.warnings || []).map((w) => `<br>⚠ ${esc(w)}`).join(""), r.warnings?.length ? "err" : "ok");
+    } catch (err) { errMsg(tt("rest.mv_what"), err); }
+    return;
+  }
   if (!s || s.day === day || day < D.today || boOf(day)) return;
   try { await sj("PATCH", `${PAPI}/sessions/${encodeURIComponent(uid)}`, { day }); S.sel = day; await load(); msg(`「${esc(s.title)}」移到 ${md(day)}（週${wd(day)}）`, "ok"); }
   catch (err) { errMsg("移動", err); }
