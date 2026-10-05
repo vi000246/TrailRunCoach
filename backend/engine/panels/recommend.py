@@ -44,7 +44,7 @@ def recommend(band: Optional[dict], focus: Optional[dict], phase: Optional[str],
     if phase in ("taper", "event"):
         return {"key": "taper", "headline": SESSIONS["taper"],
                 "reasons": reasons + [f"目前是{'減量期' if phase == 'taper' else '賽事週'}"]}
-    if phase == "recovery":
+    if phase in ("recovery", "rebuild"):
         return {"key": "recovery", "headline": SESSIONS["recovery"],
                 "reasons": reasons + ["目前是恢復期"]}
 

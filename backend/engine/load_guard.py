@@ -83,7 +83,7 @@ STEP_HOLD, STEP_BLOCK = 0.10, 0.20     # > 20 % block: Nielsen 2014, Damsted 201
 STEP_AVG_WEEKS = 4
 STEP_SPORTS = ("run",)                 # road + trail runs (sport group "run")
 SHORT_BREAK_MIN = 3                    # 推估: ≥ 3 days without a run is a break (routine rest = 1–2 days)
-STEP_SKIP_KINDS = ("taper", "event", "recovery", "transition")   # not a baseline week (SP-73)
+STEP_SKIP_KINDS = ("taper", "event", "recovery", "transition", "rebuild")   # not a baseline week (SP-73)
 STEP_LOOKBACK_WEEKS = 26               # 推估: covers taper + race + 恢復期 + a 4-week 轉換期 + 4 normal weeks
 
 # ---- planner's weekly CTL goal -------------------------------------------------

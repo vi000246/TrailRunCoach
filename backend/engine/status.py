@@ -319,7 +319,7 @@ class Status:
                        else _("起算期（有 TSS 的第 {n} 天）：前 {days} 天 CTL 還在建立，不看 ramp",
                               n=d + 1, days=LG.STARTUP_DAYS))
         elif ramp is not None:
-            if k in ("taper", "event", "recovery"):
+            if k in ("taper", "event", "recovery", "rebuild"):
                 level, verdict = GOOD, "減量／恢復期，體能小幅下降是正常的"
                 if ramp > 1:
                     level, verdict, action = WATCH, "減量期 CTL 還在上升，代表量沒有真的減", "把本週時數壓到減量帶內"
@@ -365,7 +365,7 @@ class Status:
                 lvl, v, act = WATCH, "太新鮮，可能減量太久", "賽前 2 天可以加一次短強度喚醒"
         elif k in ("taper",):
             lvl, v, act = (GOOD, "TSB 正在回升", "") if now > -10 else (WATCH, "減量期 TSB 還很負", "再減量：時數降到平常的 40–60%")
-        elif k in ("recovery", "transition"):
+        elif k in ("recovery", "transition", "rebuild"):
             lvl, v, act = (GOOD, "已經恢復", "") if now > 0 else (WATCH, "還沒恢復", "繼續休、不要急著練")
         else:  # base / specific / none
             if now < TSB_OVERREACH:
@@ -455,6 +455,9 @@ class Status:
                 lvl, v, act = WATCH, "減太多，體能會流失", f"本週回到 {lo:.1f}–{hi:.1f} h"
         elif k in ("recovery", "transition"):
             lvl, v, act = (GOOD, "量降下來了", "") if last <= base6 * 0.7 else (WATCH, "恢復期量還太多", "本週再降")
+        elif k == "rebuild":
+            # 回量期 (SP-98): the week plan steps it back up (50 → 75 % of the pre-race level)
+            lvl, v, act = GOOD, "回量期：量照計畫慢慢加回來", ""
         else:
             if exempt:
                 lvl, v, act = GOOD, exempt, ""
@@ -761,7 +764,7 @@ class Status:
         elif per_wk >= 1:
             lvl, v, act = WATCH, "每週不到 2 次", "補到每週 2 次（下肢單腳、核心；膝主導＋臀中肌）"
         else:
-            lvl, v, act = (BAD if self.kind in ("transition", "recovery", "base") else WATCH), \
+            lvl, v, act = (BAD if self.kind in ("transition", "recovery", "rebuild", "base") else WATCH), \
                 "幾乎沒有肌力訓練", "每週 2 次 30–40 分鐘；轉換期／基礎期是打底的時候"
         return Indicator("strength", "肌力", lvl, txt, v, why, act, SRC_UA, per_wk, spark)
 
@@ -1070,6 +1073,7 @@ class Status:
 PHASE_GOAL = {
     "transition": "恢復、重建習慣、肌力打底",
     "recovery": "恢復——不追體能，等 TSB 回正",
+    "rebuild": "回量：量慢慢加回賽前水準，不排強度課",
     "base": "練有氧引擎：大量低強度、EF 往上",
     "specific": "練比賽需要的能力：爬坡、長時間、爬升密度接近賽事",
     "taper": "量減 40–60%、強度保留、TSB 回正",
@@ -1080,6 +1084,7 @@ PHASE_GOAL = {
 PHASE_PRIORITY = {
     "transition": ["form", "volume", "strength", "data", "testing"],
     "recovery": ["form", "volume", "strength", "data", "testing"],
+    "rebuild": ["form", "volume", "strength", "data", "testing"],
     "base": ["intensity", "gate", "volume", "efficiency", "fitness", "strength", "testing", "data", "drift"],
     "specific": ["long", "density", "climb", "durability", "fitness", "intensity", "testing", "data"],
     "taper": ["volume", "intensity", "form", "long", "testing"],
@@ -1090,6 +1095,7 @@ PHASE_PRIORITY = {
 PHASE_FOCUS = {
     "transition": ("轉換期重點", "每週 2 次肌力、量低而穩定，等 TSB 回正再進基礎期", SRC_UA),
     "recovery": ("恢復期重點", "先休；TSB 回正、想練了再開始", SRC_UA),
+    "rebuild": ("回量期重點", "只排輕鬆跑和肌力，每週量照計畫慢慢加，不排強度課", "Higdon 反向減量；Koop；Uphill Athlete"),
     # the long run / AeT cap is UA's; 8–15 s hill sprints are Palladino's (UA: 8–10 s)
     "base": ("基礎期重點", "每週一次 60–90 分鐘輕鬆長跑（心率 < {aet}），其餘輕鬆跑也壓在 AeT 以下；每週一次 8–15 秒坡衝刺",
              SRC_UA + "（輕鬆長跑、AeT 以下）；Palladino 基礎中期坡衝刺 8–15 秒"),

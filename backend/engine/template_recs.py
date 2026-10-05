@@ -40,7 +40,7 @@ OVER_CAP = -60.0
 Z5_CLOSED = -80.0
 DROP_BELOW = -40.0             # a row that ends below this is never recommended
 
-PHASE_OF = {"base": "base", "transition": "base", "build": "build", "specific": "specific",
+PHASE_OF = {"base": "base", "transition": "base", "rebuild": "recovery", "build": "build", "specific": "specific",
             "taper": "taper", "event": "taper", "recovery": "recovery"}
 PHASE_LABEL = {"base": "基礎期", "build": "強化期", "specific": "專項期", "taper": "減量期", "recovery": "恢復期"}
 

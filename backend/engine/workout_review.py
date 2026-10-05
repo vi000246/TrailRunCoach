@@ -194,7 +194,7 @@ TYPE_LABEL = {"easy": "輕鬆跑", "long": "LSD", "quality": "間歇", "hard_lon
               "test_cp": "CP 測試", "test_aet": "AeT 飄移測試", "strength": "肌力",
               "bike": "騎車", "walk": "走路", "other": "其他"}
 TERRAIN_LABEL = {"road": "路跑", "trail": "越野", "hike": "登山健行"}
-PHASE_LABEL = {"transition": "轉換期", "recovery": "恢復期", "base": "基礎期",
+PHASE_LABEL = {"transition": "轉換期", "recovery": "恢復期", "rebuild": "回量期", "base": "基礎期",
                "specific": "專項期", "taper": "減量期", "event": "比賽週"}
 
 # dashboard order in views/workout.json

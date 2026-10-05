@@ -391,7 +391,7 @@ def _red_streak(stored: list[dict], today: str) -> bool:
 def _fatigue(wk: _Week, stored: list[dict], ctx: dict, th: dict, out: list) -> None:
     load = ctx.get("load") or {}
     tsb, ramp, base = load.get("tsb"), load.get("ramp"), load.get("ramp_base")
-    rest_week = ctx.get("mode") in ("recovery_week", "recovery", "taper", "event", "transition", "reentry")
+    rest_week = ctx.get("mode") in ("recovery_week", "recovery", "taper", "event", "transition", "rebuild", "reentry")
     why, remove = None, False
     tsb_hit = tsb is not None and tsb < TSB_FLOOR and not rest_week
     # a planned B2B (engine/b2b.py): its TSB drop is expected — only the ramp / red streak still act

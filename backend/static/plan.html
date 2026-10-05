@@ -8,7 +8,7 @@
 :root {
   --bg: #f4f5f7; --panel: #fff; --text: #1d232b; --muted: #6a7482; --line: #e1e5ea;
   --accent: #2563eb; --soft: #e8efff; --warn: #b45309; --bad: #dc2626;
-  --p-transition: #94a3b8; --p-recovery: #94a3b8; --p-base: #16a34a; --p-specific: #d97706;
+  --p-transition: #94a3b8; --p-recovery: #94a3b8; --p-rebuild: #7dd3fc; --p-base: #16a34a; --p-specific: #d97706;
   --p-taper: #2563eb; --p-event: #dc2626;
 }
 @media (prefers-color-scheme: dark) {
@@ -275,12 +275,12 @@ function renderTimeline() {
   h += `<div class="today" style="left:${pos(S.today)}%"><span>今天</span></div>`;
   $("#tl").innerHTML = h;
   stackTlLabels();
-  $("#legend").innerHTML = ["recovery", "base", "specific", "taper", "event"].map((k) =>
+  $("#legend").innerHTML = ["recovery", "rebuild", "base", "specific", "taper", "event"].map((k) =>
     `<span><i style="background:${PCOL(k)}"></i>${S.phase_labels[k]}</span>`).join("") +
     `<span><i style="background:var(--muted);height:4px"></i>B 賽事小減量 / 恢復</span>`;
   const r = S.rules;
   $("#tlnote").textContent = S.manual_phases ? "手動周期。" :
-    `自動排程：每場 A 賽事前 ${r.taper_days} 天減量（2–3 天的百岳 ${r.baiyue_taper_days} 天${r.taper_pref_days > r.taper_days ? `；路跑全馬、超馬照課表偏好 ${r.taper_pref_days} 天` : ""}）、再往前 ${r.specific_weeks} 週專項期，其餘是基礎期；賽後恢復 1 週（超馬級以上 2 週：預估 ≥ ${r.long_event_hours} 小時——先用賽事計算器、再用你填的預估時間；都沒有時看努力距離 EP ≥ ${r.long_event_ep}（公里＋爬升換算）；多日行程也算）。`;
+    `自動排程：每場 A 賽事前 ${r.taper_days} 天減量（2–3 天的百岳 ${r.baiyue_taper_days} 天${r.taper_pref_days > r.taper_days ? `；路跑全馬、超馬照課表偏好 ${r.taper_pref_days} 天` : ""}）、再往前 ${r.specific_weeks} 週專項期，其餘是基礎期；賽後恢復 1 週、馬拉松級再加 1 週回量期，超馬級恢復 2 週，100 英里級恢復 2 週＋回量 2 週（超馬級：預估 ≥ ${r.long_event_hours} 小時——先用賽事計算器、再用你填的預估時間；都沒有時看努力距離 EP ≥ ${r.long_event_ep}（公里＋爬升換算）；多日行程也算）；比賽的下坡遠超過你近 6 週練過的，恢復再多一級。回量期排在轉換期之後，只有輕鬆跑和肌力。`;
   // phases cut short around two A races close together, a skipped 轉換期 (SP-90, SP-73)
   const pn = S.manual_phases ? [] : phases.filter((p) => p.note && p.end >= S.today);
   $("#phnotes").innerHTML = pn.map((p) => `<li>${esc(S.phase_labels[p.kind])} ${p.start.slice(5)}～${p.end.slice(5)}：${esc(p.note)}</li>`).join("");
@@ -371,7 +371,7 @@ function renderThr() {
 }
 
 function renderGuide() {
-  const cur = S.current_phase && (S.current_phase.kind === "event" ? "taper" : S.current_phase.kind === "transition" ? "recovery" : S.current_phase.kind);
+  const cur = S.current_phase && (S.current_phase.kind === "event" ? "taper" : ["transition", "rebuild"].includes(S.current_phase.kind) ? "recovery" : S.current_phase.kind);
   $("#guide").innerHTML = Object.entries(GUIDE).map(([k, [t, items]]) =>
     `<div style="border-left-color:${PCOL(k)};${k === cur ? "background:var(--soft)" : ""}"><b>${t}${k === cur ? "（現在）" : ""}</b><ul>${items.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>`).join("");
 }

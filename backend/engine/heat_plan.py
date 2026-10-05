@@ -138,7 +138,7 @@ def apply(sessions: list[dict], *, events, today: dt.date, prefs=None, aet: Opti
             "s_now": cur["s"], "s_race_before": base["center"], "method": method}
     if base["center"] >= HT.LEVELS[0][1]:
         return {**info, "reason": f"預估比賽日 S {base['center']:.0%} ≥ 75 %：不用加課"}
-    if mode == "recovery_week" or kind in ("recovery", "transition"):
+    if mode == "recovery_week" or kind in ("recovery", "transition", "rebuild"):
         return {**info, "reason": "恢復週 / 恢復期不排熱適應"}
     lo_i, hi_i = race - dt.timedelta(days=INDUCT[0]), race - dt.timedelta(days=INDUCT[1])
     lo_m, hi_m = race - dt.timedelta(days=MAINTAIN[0]), race - dt.timedelta(days=MAINTAIN[1])

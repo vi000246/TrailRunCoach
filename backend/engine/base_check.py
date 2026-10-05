@@ -422,7 +422,7 @@ def _skip_week(ds, mon: dt.date, brk: Optional[dict]) -> bool:
         try:
             from backend.engine.planning import phase_on
             p = phase_on(plan, mon + dt.timedelta(days=3))
-            if p is not None and p.kind in ("recovery", "taper", "event", "transition"):
+            if p is not None and p.kind in ("recovery", "taper", "event", "transition", "rebuild"):
                 return True
         except Exception:                   # noqa: BLE001
             pass

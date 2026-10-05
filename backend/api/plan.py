@@ -35,7 +35,7 @@ WKO5_DEFAULT_DATE = dt.date(1980, 1, 1)
 
 # which periodization dashboard to open in each phase (views/periodization.json)
 PHASE_DASHBOARD = {
-    "recovery": "① 轉換期", "transition": "① 轉換期", "base": "② 基礎期",
+    "recovery": "① 轉換期", "transition": "① 轉換期", "rebuild": "① 轉換期", "base": "② 基礎期",
     "specific": "③ 專項期", "taper": "④ 減量期", "event": "④ 減量期",
 }
 

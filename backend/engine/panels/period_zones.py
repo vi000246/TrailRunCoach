@@ -88,6 +88,7 @@ PHASE_TARGETS = {
     "taper": (None, [SRC_TAPER, SRC_FLOOR], "taper"),
     "transition": (None, [SRC_FLOOR], None),
     "recovery": (None, [SRC_FLOOR], None),
+    "rebuild": (None, [SRC_FLOOR], None),
     "event": (None, [SRC_FLOOR], None),
 }
 

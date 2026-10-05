@@ -104,6 +104,9 @@ def _no_event_size_hooks(monkeypatch):
     from backend.engine import planning
     monkeypatch.setattr(planning, "HOURS_OF", None)
     monkeypatch.setattr(planning, "DIVISOR_OF", None)
+    # nor the downhill hooks (SP-111 下坡升級, engine/downhill_recovery.install)
+    monkeypatch.setattr(planning, "RACE_DOWNHILL_OF", None)
+    monkeypatch.setattr(planning, "ATHLETE_DOWNHILL_OF", None)
 
 
 @pytest.fixture(autouse=True)
