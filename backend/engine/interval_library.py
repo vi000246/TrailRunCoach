@@ -459,11 +459,13 @@ def family_word(v: Variant) -> str:
 # the titles stored before SP-79 → today's (plan_store.display_title, quality_gate's title matchers):
 # 「閾值／近閾值 <structure>」 → 有氧間歇 or 有氧間歇（巡航） by the rep length, 「VO2max <structure>」 →
 # VO2max 間歇, the fixed sessions' 「閾值節奏」「節奏」 → by the rep length, 「爬坡間歇 N×M 分」 →
-# 「VO2max 間歇 N×M 分上坡」. The rest of the title (上坡, （平路）, （只排閾值）…) is kept; anything else
+# 「VO2max 間歇 N×M 分上坡」, the taper's 「短強度 N×M 分」 (98–102 % CP short reps) → 有氧間歇（巡航）.
+# The rest of the title (上坡, （平路）, （只排閾值）…) is kept; anything else
 # (the old ladder's 「閾值下 3×8 分」「VO2max 間歇 4×4 分」, a title of your own) is left as written.
 _OLD_Z3 = re.compile(r"^(?:閾值|近閾值|閾值節奏|節奏) (?=\S)")
 _OLD_Z5 = re.compile(r"^VO2max (?!間歇)(?=\S)")
 _OLD_HILL = re.compile(r"^爬坡間歇 ?(\d+\s*[×xX]\s*\d+\s*分)")
+_OLD_TAPER = re.compile(r"^短強度 ?(?=\d+\s*[×xX]\s*\d+\s*分)")       # the taper's, renamed 2026-10-05
 _OLD_FLAT_HILL = re.compile(r"^間歇 ?(5\s*[×xX]\s*4\s*分)(?=（平路）)")     # the hill set on 平路 (plan_prefs)
 
 
@@ -494,6 +496,9 @@ def renamed(title: Optional[str]) -> Optional[str]:
     m = _OLD_Z5.match(t)
     if m:
         return _join(FAMILY_TITLE["vo2max"], t[m.end():])
+    m = _OLD_TAPER.match(t)
+    if m:
+        return _join(FAMILY_TITLE["cruise"], t[m.end():])
     m = _OLD_Z3.match(t)
     if m:
         rest = t[m.end():]

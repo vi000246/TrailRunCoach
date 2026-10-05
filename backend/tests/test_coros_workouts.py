@@ -213,10 +213,11 @@ def test_hill_repeats_and_taper_percent():
     work, rest = ex[2], ex[3]
     assert ex[1]["sets"] == 5 and work["targetValue"] == 240 and rest["targetValue"] == 240
     assert (work["intensityValue"], work["intensityValueExtend"]) == (round(1.01 * 300), round(1.06 * 300))
-    t = sess("quality", "quality", "短強度 4×3 分", 45, "2026-10-01", detail="保留強度、不累積疲勞（98–102% CP）")
-    ex = _flat(CW.session_workout(t, TH).payload)
-    assert ex[1]["sets"] == 4
-    assert (ex[2]["intensityValue"], ex[2]["intensityValueExtend"]) == (294, 306)
+    for title in ("短強度 4×3 分", "有氧間歇（巡航）4×3 分"):          # renamed 2026-10-05; intensity unchanged
+        t = sess("quality", "quality", title, 45, "2026-10-01", detail="保留強度、不累積疲勞（98–102% CP）")
+        ex = _flat(CW.session_workout(t, TH).payload)
+        assert ex[1]["sets"] == 4
+        assert (ex[2]["intensityValue"], ex[2]["intensityValueExtend"]) == (294, 306)
 
 
 def _cp_sess(protocol):

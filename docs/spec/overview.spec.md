@@ -278,8 +278,8 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
     `this_week_tracks`, `quality_n`, `aet_test`) for the projection
     (`backend/engine/overview.py:1465`).
 - Taper: one session by the two-track pick — Zone 3 有氧間歇（巡航）2×8′ (88–95 % CP), Zone 5 or no track
-  open the short intensity 4×3' (「短強度 4×3 分」: its 98–102 % CP band reads as 有氧間歇 to `family_of`,
-  so its title is left as it was, SP-79). Event week: the race.
+  open 有氧間歇（巡航）4×3′ (98–102 % CP, intensity unchanged; renamed from 「短強度 4×3 分」 2026-10-05 —
+  its short reps read as 有氧間歇・巡航 to `family_of`; a stored old title is mapped on read). Event week: the race.
 - Strength ×2 in base / transition / recovery or when the `strength` indicator is bad / watch,
   else ×1 (not counted in the hours).
 - Easy runs fill the remaining minutes in 40–60 min sessions; in base the first one carries
@@ -1564,3 +1564,4 @@ deleted / superseded) are returned as reconcile `changes` (`backend/engine/recon
 | 2026-10-04 | change | SP-73 follow-up | Zone 3 gate / re-entry block: 轉換期 days are not a running break (no block, no 7-day gap, no 21-day re-lock; plan-auto.spec.md) |
 | 2026-10-04 | change | SP-39 follow-up | Zone 5 UA path: no LTHR age limit; `threshold_confidence.lthr_evidence` (evidence since the LTHR date) feeds `quality_gate.lthr_invalid` (plan-auto.spec.md) |
 | 2026-10-04 | sp-79-quality-families | SP-79 | 強度課's three families in the main UI: `plan_sessions.family` (picked in the 課表 editor's 類型 — 有氧間歇／VO2max 間歇／速度 — else read from the steps), a mismatch hint, per-family chip colours and legend, 課表統計 by family; generated titles name the family and older stored titles are mapped on read (`display_title` → `interval_library.renamed`), so the watch names and the calendar feed SUMMARY follow (a pushed session with an old name is re-pushed once) |
+| 2026-10-05 | change | SP-79 follow-up | Taper short session renamed 「短強度 4×3 分」 → 「有氧間歇（巡航）4×3 分」 (98–102 % CP unchanged); `interval_library.renamed` maps the stored old title (no reconcile change; the 「N×M 分」 parsers read both) |

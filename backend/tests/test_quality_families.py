@@ -65,17 +65,21 @@ def test_library_titles_name_the_family_the_classifier_reads():
     ("閾值 3×6 分（只排閾值）", QG.SUB[1]),
     # not an old auto title: as written
     ("閾值下 3×8 分", "閾值下 3×8 分"), ("VO2max 間歇 4×4 分", "VO2max 間歇 4×4 分"),
-    ("短強度 4×3 分", "短強度 4×3 分"), ("輕鬆跑", "輕鬆跑"), ("我的節奏跑", "我的節奏跑"),
+    ("輕鬆跑", "輕鬆跑"), ("我的節奏跑", "我的節奏跑"), ("短強度喚醒", "短強度喚醒"),
+    # the taper's short session, renamed 2026-10-05 (intensity unchanged)
+    ("短強度 4×3 分", "有氧間歇（巡航）4×3 分"),
 ])
 def test_renamed(old, new):
     assert IL.renamed(old) == new
 
 
 def test_fixed_sessions_are_named_by_their_family():
-    for s, fam in ((O.ROAD_SPECIFIC_Q, "aerobic"), (O.TRAIL_SPECIFIC_Z5, "vo2max"), (O.TAPER_Z3, "aerobic")):
+    for s, fam in ((O.ROAD_SPECIFIC_Q, "aerobic"), (O.TRAIL_SPECIFIC_Z5, "vo2max"), (O.TAPER_Z3, "aerobic"),
+                   (O.TAPER_Q, "aerobic")):
         assert WT.session_family(s, TH)["id"] == fam
         assert s["title"].startswith(PREFIX[(fam, WT.session_family(s, TH)["sub"])])
     assert not any("閾值" in s["title"] for s in (O.ROAD_SPECIFIC_Q, O.TRAIL_SPECIFIC_Z5, O.TAPER_Z3))
+    assert O.TAPER_Q["title"] == "有氧間歇（巡航）4×3 分" and "98–102% CP" in O.TAPER_Q["detail"]
     assert PS.DEFAULT_TITLES["quality"] == "有氧間歇（巡航）3×10 分"
 
 
@@ -114,6 +118,22 @@ def test_a_renamed_generated_title_is_not_a_change():
     out, changes = R.reconcile([stored], [{"start": "2026-10-05", "sessions": [gen]}], [], "2026-10-01")[:2]
     assert not [c for c in changes if c["action"] == "changed"]
     assert next(s for s in out if s["uid"] == "u1")["title"] == "有氧間歇（巡航）3×10 分"
+
+
+def test_the_renamed_taper_session_is_not_a_change_and_parses_the_same():
+    # a stored taper row (read through to_dict → display_title, as plan_store feeds reconcile)
+    d = PS.to_dict(_row(title="短強度 4×3 分", gen_key="quality", minutes=45, detail=O.TAPER_Q["detail"],
+                        source=O.TAPER_Q["source"], tss=O.TAPER_Q["tss"]))
+    assert d["title"] == "有氧間歇（巡航）4×3 分"
+    gen = {**O.TAPER_Q, "target": "", "day": "2026-10-06"}
+    changes = R.reconcile([d], [{"start": "2026-10-05", "sessions": [gen]}], [], "2026-10-01")[1]
+    assert not [c for c in changes if c["action"] in ("changed", "added", "removed")], changes
+    # the 「N×M 分」 text parser reads both titles alike: 4 reps of 3 min at 98–102 % CP
+    for t in ("短強度 4×3 分", O.TAPER_Q["title"]):
+        st = CW.session_workout({"id": "u1", "key": "u1", "kind": "quality", "title": t, "minutes": 45,
+                                 "target": "", "detail": O.TAPER_Q["detail"], "source": "", "day": "2026-10-06",
+                                 "done": False, "basis": "power"}, TH)
+        assert st.payload["estimatedTime"] > 0
 
 
 # ---- the stored family --------------------------------------------------------------------

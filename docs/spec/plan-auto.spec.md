@@ -557,10 +557,11 @@ overview has `data-log="none"`. The settings are in 課表偏好 (above).
   「VO2max 間歇 5×4 分上坡」, 「有氧間歇（巡航）2×8 分」, the projection's 「有氧間歇（巡航）3×10 分」;
   `plan_prefs._quality_terrain` turns the new hill title flat too). Rung / ladder semantics are
   unchanged. A stored pre-SP-79 title is read in today's words (`interval_library.renamed`,
-  `backend/engine/interval_library.py:486`, through `plan_store.display_title`), and reconcile
+  `backend/engine/interval_library.py:488`, through `plan_store.display_title`), and reconcile
   renames a generated old title the same way (`_titled`, `backend/engine/reconcile.py:67`), so
   renaming alone is never a 「changed」 session or a change-log entry. Titles that were not the
-  generator's (「閾值下 3×8 分」, 「短強度 4×3 分」, your own) are left as written.
+  generator's (「閾值下 3×8 分」, your own) are left as written. The taper's 「短強度 4×3 分」 became
+  「有氧間歇（巡航）4×3 分」 (2026-10-05, 98–102 % CP unchanged) and is mapped the same way.
 - A swap from the 換一個 drawer or an editor template is a user edit (`swap = user`,
   `edited`): reconcile rule 3 keeps it, so the automatic run never overrides it. A
   non-equivalent swap is stored with `equiv = false` and doesn't move the ladder.
@@ -597,3 +598,4 @@ overview has `data-log="none"`. The settings are in 課表偏好 (above).
 | 2026-10-04 | change | SP-73 follow-up | 轉換期 days are not a running break: no re-entry block from a cross-training-only transition (`reentry.find_all` counts days outside it), and the Zone 3 gate's 7-day gap / 21-day re-lock skip them, its weeks see-through (`planning.transition_days`; owner 2026-10-05) |
 | 2026-10-04 | change | SP-39 follow-up | Zone 5's UA path: no LTHR age limit any more (`LTHR_FRESH_DAYS` removed) — a measured LTHR is invalidated only by an event (`lthr_invalid`: a ≥ 4-week running break after the test, evidence since the test from `threshold_confidence.lthr_evidence`, an AeT aggregate shift / moved); the flow names the event and offers the 30-min LTHR test (owner 2026-10-05) |
 | 2026-10-04 | sp-79-quality-families | SP-79 | Generated 強度課 titles name the family (有氧間歇／有氧間歇（巡航）／VO2max 間歇) instead of 閾值／近閾值／VO2max; stored older titles are mapped on read and in reconcile (no spurious change), and the ladder's title matchers accept both spellings |
+| 2026-10-05 | change | SP-79 follow-up | Taper 「短強度 4×3 分」 renamed 「有氧間歇（巡航）4×3 分」 (intensity unchanged); the stored old title maps through `interval_library.renamed` / `plan_store.display_title` |

@@ -663,8 +663,8 @@ def quality_sessions(gate: dict, dec: dict, kind: str, th: dict, tgt: dict, hour
     items (SP-31: one per track). Base: the track's ladder rung (_gate_session). 專項期: the
     track's specific session — road Zone 3 = ROAD_SPECIFIC_Q 2×15′, trail Zone 5 = the 5×4′ hill
     set; the other two are the ladder (trail Zone 3 uphill versions allowed). 減量期: Zone 3 =
-    TAPER_Z3, Zone 5 = the 4×3′ short intensity — which a taper week also keeps when neither
-    track is open (the session predates the gates). Shared by week_plan and projection."""
+    TAPER_Z3, Zone 5 = TAPER_Q 有氧間歇（巡航）4×3′ (98–102 % CP) — which a taper week also keeps
+    when neither track is open (the session predates the gates). Shared by week_plan and projection."""
     from backend.engine import quality_gate as QG
     items = dec.get("items") or []
     if kind == "taper" and not items:
@@ -898,9 +898,9 @@ ROAD_SPECIFIC_Q = dict(id="quality", kind="quality", title="有氧間歇 2×15 �
 TRAIL_SPECIFIC_Z5 = dict(id="quality", kind="quality", title="VO2max 間歇 5×4 分上坡", minutes=60,
                          detail="上坡 4 分鐘（6–10% 坡），慢跑或走下來恢復；暖身 15 分、緩和 10 分",
                          source=SRC_PALLADINO + "（Supra-threshold）", tss=60 / 60 * 75)
-# 減量期: the old short-intensity session (the Zone 5 side / no track open) and a Zone 3 one — the
-# volume about halved, the intensity kept (Bosquet 2007; Daniels Phase IV keeps T running)
-TAPER_Q = dict(id="quality", kind="quality", title="短強度 4×3 分", minutes=45,
+# 減量期: TAPER_Q (Zone 5 / no track open; 98–102 % CP short reps = 有氧間歇・巡航, ex-「短強度 4×3 分」) and a
+# Zone 3 one — the volume about halved, the intensity kept (Bosquet 2007; Daniels Phase IV keeps T running)
+TAPER_Q = dict(id="quality", kind="quality", title="有氧間歇（巡航）4×3 分", minutes=45,
                detail="保留強度、不累積疲勞（98–102% CP）", source=SRC_BOSQUET, tss=45 / 60 * 65)
 TAPER_Z3 = dict(id="quality", kind="quality", title="有氧間歇（巡航）2×8 分", minutes=45,
                 detail="保留強度、量減半（88–95% CP）；休 2 分慢跑；暖身 15 分、緩和 10 分",
