@@ -3083,6 +3083,10 @@
     "draft": true,
     "src": "backend/engine/interval_library.py:774"
   },
+  "超馬建議上傳 GPX：專項期的爬坡課和賽事評估要靠它知道爬升在哪幾段、有多陡。在賽季計畫的「路線 GPX」上傳": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:126"
+  },
   "超馬建議賽前 {w} 週開始，每週練 {h:g} 小時、連續 {n} 週；照推算最多能連續做到 {b} 週（一週最多約 {p:.1f} 小時）": {
     "draft": true,
     "src": "backend/engine/race_feasibility.py:277"

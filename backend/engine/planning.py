@@ -113,6 +113,7 @@ CUTOFF_MAX_H = 240.0                       # Event.cutoff_hours: 10 days, past t
 # (sleep points in the race calculator, not days). 百岳 is always split by day; 路跑 is never asked.
 RACE_FORMATS = ("stage", "continuous")
 FORMAT_KINDS = ("race", "other")
+ULTRA_GPX_KM = 50.0                        # SP-114: 超馬 (越野 ≥ 50 km) without a GPX → a reminder to upload one
 
 
 class EventError(ValueError):
@@ -174,6 +175,12 @@ class Event:
     def day_plan_missing(self) -> bool:
         """An old multi-day event saved without its per-day numbers (not blocked, hinted)."""
         return self.needs_day_plan and len(self.day_plan or []) != self.split_days
+
+    @property
+    def gpx_recommended(self) -> bool:
+        """SP-114: an ultra (越野賽／其他 ≥ ULTRA_GPX_KM) — the 專項期's climb sessions and the race check
+        need the GPX to know where the climbing is; a reminder, never a block."""
+        return self.kind in FORMAT_KINDS and float(self.distance_km or 0.0) >= ULTRA_GPX_KM
 
     @property
     def pack(self) -> float:
@@ -896,7 +903,7 @@ def goals(plan: Plan, today: dt.date, horizon_days: int = 182) -> dict:
 def event_json(e: Event, today: dt.date) -> dict:
     return {**asdict(e), "end": e.end.isoformat(), "climb_per_km": e.climb_per_km,
             "kind_label": KINDS.get(e.kind, e.kind), "days_to": (e.start - today).days,
-            "day_plan_missing": e.day_plan_missing}
+            "day_plan_missing": e.day_plan_missing, "gpx_recommended": e.gpx_recommended}
 
 
 def phase_json(p: Phase) -> dict:

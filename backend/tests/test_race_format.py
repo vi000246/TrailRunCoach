@@ -71,3 +71,22 @@ def test_races_say_which_stretch_or_ask_for_sleep_points(monkeypatch):
     monkeypatch.setattr(RR, "sleep_kms", lambda e: [40.0, 130.0])
     r = run()
     assert "split_note" not in r and "第 2 段" in r["stretch_note"] and r["race_day"]["km"] == 90.0
+
+
+# ---- slice 5: an ultra without its GPX gets a reminder, never a block --------------------------
+
+def test_an_ultra_without_a_gpx_is_reminded(monkeypatch):
+    assert up(days=1, race_format=None, distance_km=50).gpx_recommended
+    assert up(days=1, kind="other", distance_km=60).gpx_recommended
+    assert not up(days=1, distance_km=42).gpx_recommended                  # under 50 km
+    assert not up(days=1, kind="road", distance_km=100).gpx_recommended    # 路跑
+    e = up(days=1, distance_km=55, climbing_m=3000, est_hours=9.0)
+    assert P.event_json(e, TODAY)["gpx_recommended"]
+    monkeypatch.setattr(F, "weekly_history", lambda ds, today, weeks=4: [
+        {"monday": "2026-09-07", "km": 80.0, "climb_m": 4000.0, "hours": 10.0}] * weeks)
+    monkeypatch.setattr(F, "activity_rows", lambda ds, today, days=42: [])
+    run = lambda gpx: F.races(P.Plan(events=[e]), None, TODAY, predict=lambda e, c=None: None, gpx=gpx)[0]
+    assert "GPX" in run(lambda e: None)["gpx_note"]
+    with_gpx = lambda e: {"totals": {"km": 55.0, "gain_m": 3000.0, "loss_m": 3000.0}, "split_source": "single",
+                          "days": [{"day": 1, "km": 55.0, "gain_m": 3000.0, "loss_m": 3000.0}], "filename": "x.gpx"}
+    assert "gpx_note" not in run(with_gpx)

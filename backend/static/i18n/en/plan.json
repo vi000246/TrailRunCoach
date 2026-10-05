@@ -23,5 +23,6 @@
   "ev.format": "Format",
   "ev.format_tip": "Stages: one stage a day, set by the organiser — fill in each stage's distance and climb. Non-stop: one course, you decide where to sleep — no per-day numbers; add sleep points to the aid stations in the race calculator instead.",
   "ev.format_stage": "Stages (one a day)",
-  "ev.format_continuous": "Non-stop (one course)"
+  "ev.format_continuous": "Non-stop (one course)",
+  "ev.gpx_missing": "Upload a GPX for an ultra: the build-phase climb sessions and the race check need it to know where the climbing is"
 }

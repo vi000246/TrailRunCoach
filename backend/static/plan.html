@@ -340,6 +340,7 @@ function renderEvents() {
 function evHints(e) {
   const tP = (k) => (window.I18N ? I18N.t("plan.ev." + k) : k), out = [];
   if (e.day_plan_missing && e.days_to >= 0) out.push(tP("dayplan_missing"));
+  if (e.gpx_recommended && !e.gpx && e.days_to >= 0) out.push(tP("gpx_missing"));      // an ultra without its GPX
   return out.map((x) => `<div class="hint">⚠ ${esc(x)}</div>`).join("");
 }
 

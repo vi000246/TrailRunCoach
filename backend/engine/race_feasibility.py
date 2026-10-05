@@ -121,6 +121,11 @@ def split_note(line: dict) -> Optional[str]:
     return None
 
 
+def gpx_hint() -> str:
+    """SP-114: the reminder for an ultra (越野 ≥ 50 km) without a GPX."""
+    return _("超馬建議上傳 GPX：專項期的爬坡課和賽事評估要靠它知道爬升在哪幾段、有多陡。在賽季計畫的「路線 GPX」上傳")
+
+
 def day_plan_hint(days: int) -> str:
     """SP-114: the hint for an old multi-day event without its per-day numbers (not blocked)."""
     return _("請補每天的距離和爬升：現在 {n} 天是平均分配，最硬的那天（攻頂日、最難的一站）可能被低估。"
@@ -522,6 +527,8 @@ def races(plan, ds, today: dt.date, event_id: Optional[str] = None,
             r["split_note"] = sleep_note
         elif line is not None and RR.hardest_stretch_note(line):
             r["stretch_note"] = RR.hardest_stretch_note(line)
+        if getattr(e, "gpx_recommended", False) and line is not None and not line.get("gpx"):
+            r["gpx_note"] = gpx_hint()             # SP-114: an ultra without its GPX (a reminder, not a block)
         if not r.get("skipped"):
             r["readiness"] = readiness(e, line, today, hist, acts)
         # SP-114: a multi-day 百岳 is judged on the 攻頂日模擬, not the weekly volume (its own module)
