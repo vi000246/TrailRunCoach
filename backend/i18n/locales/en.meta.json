@@ -207,6 +207,10 @@
     "draft": true,
     "src": "backend/engine/quality_gate.py:1956"
   },
+  "Aubry 2015；Bellenger 2016；Buchheit 2014（門檻 25 %、連續 2 堂為推估）": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:753"
+  },
   "B2B 週：長跑照 B2B 排": {
     "draft": true,
     "src": "backend/engine/technical.py:67"
@@ -1662,6 +1666,10 @@
   "心率區間": {
     "draft": false,
     "src": "backend/engine/workout_steps.py:1296"
+  },
+  "心率恢復變快但功率沒到，可能累積疲勞：休 60 秒心率降 {d:.0f} bpm，比同規格課 8 週中位數 {b:.0f} 快 {x:.0%}（連續 {k} 堂 ≥ {t:.0%}）": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:858"
   },
   "心率最高的 {k} 次平均飄移 {m:.1f}%，算上誤差可能到 {u:.1f}%（≥ 5%）：還不夠確定": {
     "draft": true,
@@ -3310,6 +3318,10 @@
   "這筆活動沒有逐秒資料": {
     "draft": true,
     "src": "backend/engine/interval_eval.py:474"
+  },
+  "這週間歇不往上加；睡眠、輕鬆跑先顧好，下一堂功率回來再進階": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2596"
   },
   "速度": {
     "draft": true,

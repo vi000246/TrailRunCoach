@@ -76,7 +76,7 @@ from typing import Optional
 import numpy as np
 
 from backend.engine import load_guard as LG
-from backend.i18n import _
+from backend.i18n import N_, _
 
 # "xu_signals" (an old unlock path) was dropped 2026-10-01: stored prefs that still say it fall back to
 # auto (plan_prefs.from_settings; evaluate() maps any unknown mode to auto too)
@@ -472,20 +472,26 @@ def count_reps(t, power, cp: Optional[float]) -> list[dict]:
 
 def _with_hr_at60(reps: list[dict], s: Optional[dict]) -> list[dict]:
     """count_reps bouts + the HR 60 s after each one ends (徐國峰's 60-s check,
-    a brake only); None when the next rep starts before that or there is no HR."""
+    a brake only); None when the next rep starts before that or there is no HR.
+    `hr_drop60` (SP-110, the fatigue check): the peak HR from 10 s before to 15 s after the
+    rep's end minus that HR — workout_review.detect_efforts' HRR60."""
     from backend.engine.workout_review import _grid1
     h = None
     if s is not None and s.get("hr") is not None:
         h = _grid1(s["t"], s["hr"])[1]
     out = []
     for i, r in enumerate(reps):
-        at = int(r["start_s"] + r["duration_s"] + 60)
+        end = int(r["start_s"] + r["duration_s"])
+        at = end + 60
         nxt = reps[i + 1]["start_s"] if i + 1 < len(reps) else None
-        v = None
+        v = drop = None
         if h is not None and at < len(h) and (nxt is None or nxt >= at) and np.isfinite(h[at]):
             v = float(h[at])
+            win = h[max(0, end - 10):end + 15]
+            if np.isfinite(win).any():
+                drop = float(np.nanmax(win)) - v
         out.append({"power": r["power"], "duration_s": r["duration_s"], "start_s": r["start_s"], "hr_at60": v,
-                    **({"source": r["source"]} if r.get("source") else {})})
+                    "hr_drop60": drop, **({"source": r["source"]} if r.get("source") else {})})
     return out
 
 
@@ -584,7 +590,8 @@ def dose_history(ds, today: dt.date, days: int = LOOKBACK_DAYS) -> list[dict]:
         elif spec is None:
             bouts = [{"power": e.get("power"), "duration_s": e.get("duration_s"), "start_s": e.get("start_s"),
                       "hr_at60": (e["hr_max"] - e["hr_drop60"]) if e.get("hr_max") is not None
-                      and e.get("hr_drop60") is not None else None} for e in (m.get("efforts") or [])]
+                      and e.get("hr_drop60") is not None else None, "hr_drop60": e.get("hr_drop60")}
+                     for e in (m.get("efforts") or [])]
         else:
             bouts = []                         # planned, nothing found: 無法判定 (dose_step), not 「目標太高」
         tiz_ratio = None
@@ -731,6 +738,19 @@ TARGET_DOWN = 0.95      # ROLE:499「下修 5～10%」: first rep already short 
 AET60_MIN_SHARE = 0.5   # 推估 (doc §4.3): HR back under AeT 60 s into the rest on < half the reps = brake
 LAST_FADE = 0.05        # 推估 (doc §4.3): only the last rep missed and it fell > 5 % = 邊界
 TIZ_GOAL = 0.85         # 推估 (interval_eval.TIZ_GOAL): time in zone ≥ 85 % of the chosen variant's plan
+# 疲勞保險 (f-OR, SP-110; doc §4.3, 2026-10-05): a faster HR recovery is not always adaptation —
+# functional overreaching speeds it up too (Aubry 2015: HRR 38 → 45 bpm while performance fell and
+# HRmax 182 → 176; Bellenger 2016 meta-analysis: both adaptation and overreaching raise HRR). It
+# fires only when all three hold: this session's 60-s HR drop (median of its reps) is ≥ FOR_FAST
+# faster than the median of the same-spec sessions (same rep length, rest and rest mode) of the
+# FOR_DAYS before it, with ≥ FOR_MIN_N of them; the same-spec session before it was that fast too;
+# and this session's power missed (RPE is not recorded yet). Then it is 未適應 (no step forward)
+# and the note says so.
+FOR_FAST = 0.25         # Buchheit 2014: HRR60 day-to-day CV ≈ 25 % — used as the threshold (推估)
+FOR_STREAK = 2          # Buchheit 2014 citing Brink 2010 (「2–3 consecutive days/weeks」): 2 sessions in a row
+FOR_MIN_N = 5           # 推估 (doc §4.3): the baseline needs ≥ 5 same-spec sessions
+FOR_DAYS = 56           # doc §4.3: the 8 weeks before
+SRC_FOR = N_("Aubry 2015；Bellenger 2016；Buchheit 2014（門檻 25 %、連續 2 堂為推估）")
 OUTCOME_LABEL = {"met": "達標", "border": "邊界", "unadapted": "未適應", "too_high": "未適應（目標太高）",
                  "unknown": "無法判定"}
 
@@ -751,7 +771,9 @@ def interval_outcome(bouts: list[dict], spec: tuple, cp: Optional[float], aet: O
     if miss is None and done < 1:
         miss = len(ps) + 1                        # stopped early: the first rep not done
     fade = (ps[-1] / ps[0] - 1.0) if len(ps) >= 2 and ps[0] else None
-    base = {"first_miss": miss, "done": round(done, 2), "fade": fade}
+    # SP-110: the power part alone — every rep in band, or only the last one ≤ LAST_FADE off
+    power_ok = done >= 1 and (miss is None or (miss == planned and (fade is None or fade >= -LAST_FADE)))
+    base = {"first_miss": miss, "done": round(done, 2), "fade": fade, "power_ok": power_ok}
     if miss == 1:
         return {**base, "outcome": "too_high", "why": f"第 1 趟就沒到 {floor:.0f} W：目標功率下修 5%"}
     if done < 1 or (miss is not None and 2 <= miss <= planned - 1):
@@ -765,6 +787,77 @@ def interval_outcome(bouts: list[dict], spec: tuple, cp: Optional[float], aet: O
     if miss == planned and fade is not None and fade < -LAST_FADE:
         return {**base, "outcome": "border", "why": f"只有最後一趟沒到、掉 {-fade * 100:.0f}%：同一份課表再做一次"}
     return {**base, "outcome": "met", "why": "每一趟都在目標帶" if miss is None else "只有最後一趟略掉（≤ 5%）"}
+
+
+def spec_key(h: dict, spec: tuple) -> tuple:
+    """The 「same spec」 of a session for the fatigue check (SP-110): (rep seconds — the pattern
+    for a pyramid —, rest seconds, rest mode). A library variant / edited structure gives the rest
+    mode; a ladder row by title has none (None: only equal to another title-only row)."""
+    v = None
+    try:
+        if user_steps(h):
+            from backend.engine import workout_steps as WS
+            v = WS.variant_from_steps(h["steps"], h.get("rung_key") or getattr(_IL.get(h.get("variant_key")), "rung", None))
+        elif h.get("variant_key"):
+            v = _IL.resolve(h["variant_key"], h.get("variant_reps"), h.get("variant_adj"))
+    except Exception:                           # noqa: BLE001 — no variant: the spec's numbers
+        v = None
+    if v is not None and hasattr(v, "rest_s"):
+        return (tuple(v.works) if getattr(v, "pattern", None) else int(v.work_s), int(v.rest_s),
+                getattr(v, "rest_mode", None))
+    return (int(round(float(spec[3]) * 60)), int(round(float(spec[4]) * 60)), None)
+
+
+def session_drop60(h: dict, n: int) -> Optional[float]:
+    """The median 60-s HR drop of the first `n` reps of a session; None when no rep has one
+    (rest < 60 s, no HR)."""
+    xs = [float(b["hr_drop60"]) for b in (h.get("bouts") or [])[:max(1, n)] if b.get("hr_drop60") is not None]
+    return float(np.median(xs)) if xs else None
+
+
+def hrr_fast(rows: list[dict], i: int) -> Optional[dict]:
+    """rows[i]'s 60-s HR drop against the median of the same-spec rows of the FOR_DAYS before it
+    (rows oldest first, each with "spec_key", "drop60", "date"): {"drop", "base", "n", "gain",
+    "fast"}; None without a drop or with < FOR_MIN_N same-spec rows."""
+    h = rows[i]
+    if h.get("drop60") is None or h.get("spec_key") is None:
+        return None
+    d0 = dt.date.fromisoformat(str(h["date"])[:10])
+    prior = [r["drop60"] for r in rows[:i] if r.get("spec_key") == h["spec_key"] and r.get("drop60") is not None
+             and 0 < (d0 - dt.date.fromisoformat(str(r["date"])[:10])).days <= FOR_DAYS]
+    if len(prior) < FOR_MIN_N:
+        return None
+    base = float(np.median(prior))
+    if base <= 0:
+        return None
+    gain = h["drop60"] / base - 1.0
+    return {"drop": h["drop60"], "base": base, "n": len(prior), "gain": gain, "fast": gain >= FOR_FAST}
+
+
+def fatigue_check(rows: list[dict], i: int, o: dict) -> Optional[dict]:
+    """The 疲勞保險 (SP-110) on rows[i] judged `o` (interval_outcome): all three conditions —
+    ≥ FOR_FAST faster than its same-spec baseline, the same-spec session before it fast too
+    (FOR_STREAK in a row), and its power missed (o["power_ok"] False). None when it doesn't fire."""
+    if o.get("power_ok") is not False:
+        return None
+    f = rows[i].get("hrr")
+    if not f or not f["fast"]:
+        return None
+    key = rows[i]["spec_key"]
+    streak, j = 1, i - 1
+    while j >= 0 and streak < FOR_STREAK:
+        r = rows[j]
+        if r.get("spec_key") == key and r.get("drop60") is not None:
+            if not (r.get("hrr") or {}).get("fast"):
+                return None
+            streak += 1
+        j -= 1
+    if streak < FOR_STREAK:
+        return None
+    return {**f, "streak": streak,
+            "text": _("心率恢復變快但功率沒到，可能累積疲勞：休 60 秒心率降 {d:.0f} bpm，比同規格課 8 週中位數 {b:.0f} 快 {x:.0%}"
+                      "（連續 {k} 堂 ≥ {t:.0%}）", d=f["drop"], b=f["base"], x=f["gain"], k=streak, t=FOR_FAST),
+            "src": _(SRC_FOR)}
 
 
 def dose_step(history: list[dict], aet: Optional[float] = None, track: str = "z3") -> dict:
@@ -781,10 +874,13 @@ def dose_step(history: list[dict], aet: Optional[float] = None, track: str = "z3
     the history: the next week repeats the step (engine/adapt.py rule B).
     Zone 3 track: a Zone 3 session off the rung (巡航版 T1–T3 — the old rungs —, T+) is still
     judged and its 達標 counts in `met` (Zone 5's 「3 區達標」), but it doesn't move the rung.
-    `faded` stays for the week card."""
+    `faded` stays for the week card.
+    疲勞保險 (SP-110, fatigue_check): a session whose 60-s HR drop is ≥ 25 % faster than its
+    same-spec baseline two sessions in a row while its power missed is 未適應, whatever the
+    power rows said; out["fatigue"] carries the numbers when the last judged session fired."""
     step, streak, adjust, last, met = 0, 0, {}, None, 0
     rows = [h for h in history if (h.get("track") or row_track(h)) == track or h.get("unplanned")]
-    for h in rows:
+    for i, h in enumerate(rows):
         if h.get("unplanned"):
             h["outcome"] = "neutral"           # not one of the plan's quality sessions
             continue
@@ -800,6 +896,12 @@ def dose_step(history: list[dict], aet: Optional[float] = None, track: str = "z3
         else:
             spec, neutral = planned_spec(h.get("title"), step, track)
             counted = True
+        try:
+            h["spec_key"] = spec_key(h, spec)
+            h["drop60"] = session_drop60(h, int(spec[2]))
+            h["hrr"] = hrr_fast(rows, i)
+        except (TypeError, ValueError):         # an odd row: no fatigue check, nothing else changes
+            h["spec_key"] = h["drop60"] = h["hrr"] = None
         off_rung = neutral and track == "z3" and spec not in (RECOVERY, SUB, ZONE3) and \
             str(h.get("title") or "") not in LEGACY_ANY and _IL.track_of(_row_rung(h, spec)) == "z3"
         if neutral and not off_rung:
@@ -817,7 +919,13 @@ def dose_step(history: list[dict], aet: Optional[float] = None, track: str = "z3
             # interval_eval's verdict: every rep in band but too little time in the zone (stopped
             # early, reps short) = 部分達到 → the same step again (≥ 85 % of the plan: 推估, §C2)
             oc = "border"
-            o = {**o, "outcome": oc, "why": f"目標區時間只有計畫的 {r * 100:.0f}%（< 85%）"}
+            o = {**o, "outcome": oc, "why": f"目標區時間只有計畫的 {r * 100:.0f}%（< 85%）", "power_ok": False}
+        fat = fatigue_check(rows, i, o) if oc != "unknown" else None
+        if fat is not None:
+            # 疲勞保險 (SP-110): a faster HR recovery with the power missing is not adaptation
+            oc = "unadapted"
+            o = {**o, "outcome": oc, "why": fat["text"], "fatigue": fat}
+            h["fatigue"] = True
         h["outcome"] = oc
         if off_rung:
             # a Zone 3 session off the track's rung (巡航版 / T+ / the old Zone 3 rungs): judged, its
@@ -849,6 +957,8 @@ def dose_step(history: list[dict], aet: Optional[float] = None, track: str = "z3
         out.update(outcome=last["outcome"], adjust=adjust,
                    note="" if last["outcome"] == "met" else f"上次 {TRACK_LABEL[track].split('（')[0]}間歇"
                                                             f"{OUTCOME_LABEL[last['outcome']]}（{last.get('why') or ''}）：")
+        if last.get("fatigue"):
+            out["fatigue"] = {**last["fatigue"], "date": last.get("date")}
     return out
 
 
@@ -2475,7 +2585,20 @@ def is_z5_variant(key: Optional[str]) -> bool:
 # ---------------------------------------------------------------------------
 
 def indicator(gate: dict) -> dict:
-    """{"level", "text", "verdict", "why", "action", "source"} for status.i_gate."""
+    """{"level", "text", "verdict", "why", "action", "source"} for status.i_gate. A track whose last
+    session tripped the 疲勞保險 (SP-110, dose_step "fatigue") adds its reason to the verdict and
+    raises good / info to watch."""
+    out = _indicator(gate)
+    tips = [f for f in (d.get("fatigue") for d in _track_doses(gate)) if f]
+    if tips:
+        out = {**out, "verdict": "；".join([out["verdict"]] + [f["text"] for f in tips]),
+               "level": "watch" if out["level"] in ("good", "info") else out["level"],
+               "action": out["action"] or _("這週間歇不往上加；睡眠、輕鬆跑先顧好，下一堂功率回來再進階"),
+               "source": out["source"] + "；" + tips[0]["src"]}
+    return out
+
+
+def _indicator(gate: dict) -> dict:
     k = gate.get("kind") or "base"
     ae = gate.get("aet") or {}
     why_parts = [f"模式：{gate['mode_label']}" + ("（" + ("差距法＋飄移法" if gate["resolved"] != "none" else "不設門檻") + "）"
