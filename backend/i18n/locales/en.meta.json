@@ -491,6 +491,10 @@
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:420"
   },
+  "{day} 有課，不是休息日": {
+    "draft": true,
+    "src": "backend/api/plan_sessions.py:1984"
+  },
   "{day}→ {to} · 約 {t}{climb}": {
     "draft": true,
     "src": "backend/engine/racepower/watch_export.py:235"
@@ -723,6 +727,10 @@
     "draft": true,
     "src": "backend/engine/workout_templates.py:137"
   },
+  "「{a}」和「{b}」只隔 {n} 天：硬課之間建議隔 ≥ 2 天，可以再拖動調整": {
+    "draft": true,
+    "src": "backend/engine/rest_days.py:120"
+  },
   "「{label}」段用 RPE 填：用你填的分鐘數，TSS 由 RPE × 分鐘換算": {
     "draft": true,
     "src": "backend/engine/workout_steps.py:1152"
@@ -839,6 +847,10 @@
     "draft": true,
     "src": "backend/engine/overview.py:1071"
   },
+  "不排課日期不能移動休息日": {
+    "draft": true,
+    "src": "backend/api/plan_sessions.py:1981"
+  },
   "不排課日期／休息日": {
     "draft": true,
     "src": "backend/api/plan_sessions.py:521"
@@ -942,6 +954,10 @@
   "休息": {
     "draft": true,
     "src": "backend/engine/workout_steps.py:1472"
+  },
+  "休息日已經在這天": {
+    "draft": true,
+    "src": "backend/api/plan_sessions.py:1977"
   },
   "但週量上限 = 最近的正常訓練週 {ref:.1f} h（不含減量期／比賽週／賽後恢復期／轉換期）的 +10%（至少 +0.5 h）→ {cap:.1f} h": {
     "draft": true,
@@ -3378,6 +3394,10 @@
   "過去的日子": {
     "draft": true,
     "src": "backend/api/plan_sessions.py:515"
+  },
+  "過去的日子不能移動休息日": {
+    "draft": true,
+    "src": "backend/api/plan_sessions.py:1979"
   },
   "過去的日子不能設成休息日": {
     "draft": true,

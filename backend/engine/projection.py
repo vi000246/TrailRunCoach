@@ -33,6 +33,7 @@ from backend.engine import specific_phase as SP
 from backend.engine import steep_hill as SH
 from backend.engine import overview as O
 from backend.engine import quality_gate as QG
+from backend.engine import rest_days as RD
 from backend.engine.hr_profile import below, easy_cap_label, easy_cap_measured
 from backend.engine.zones import WORKOUT_TARGETS
 
@@ -234,6 +235,7 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
     n_easy = O.easy_count(left, kind)
     if kind == "taper" and taper:
         n_easy = O.taper_easy_count(left, taper.get("runs"), sum(1 for s in ss if s["kind"] in O.RUN_KINDS))
+    n_easy = O.auto_easy_cap(n_easy, sum(1 for s in ss if s["kind"] in O.RUN_KINDS))   # ≥ 1 rest day (SP-82)
     for i in range(n_easy):
         m = min(left / n_easy, O.TRANSITION_RUN_MAX) if kind == "transition" else left / n_easy
         st = O.strides_for(kind, mode, i, road, transition_week)   # base; 轉換期 from week 2 (SP-103)
@@ -306,6 +308,7 @@ def _place(ss: list[dict], monday: dt.date, long_wd: int, blocked=frozenset(),
     free = [d for d in days if d.isoformat() not in blocked]
     main = [s for s in ss if s["kind"] != "strength"]
     long_day = None
+    easy_q: list = []
     for s in sorted(main, key=lambda s: -1 if AT.is_xu(s) else {"long": 0, "quality": 1, "test": 1}.get(s["kind"], 2)):
         if not free:
             break
@@ -333,15 +336,26 @@ def _place(ss: list[dict], monday: dt.date, long_wd: int, blocked=frozenset(),
             order = [days[i] for i in (1, 2, 3, 0, 4, 5, 6)]
             pick = next((d for d in order if d in free and (long_day is None or abs((d - long_day).days) >= 2)),
                         free[0])
+        elif s["kind"] == "easy":
+            easy_q.append(s)                # placed together below (SP-82, engine/rest_days.py)
+            continue
         else:
             pick = free[0]
         s["day"] = pick.isoformat()
         free.remove(pick)
+    if easy_q and free:
+        # 休息日的位置 (SP-82): as week_plan — the rest days next to the long run, between hard days
+        runs = [_d(x["day"]) for x in main if x["day"]]
+        qd = [_d(x["day"]) for x in main if x["kind"] in ("quality", "test") and x["day"]]
+        for s, d in zip(easy_q, RD.pick_days(len(easy_q), free, days, runs, long_day, long_wd, qd)):
+            s["day"] = d.isoformat()
+            free.remove(d)
     easy_days = [_d(s["day"]) for s in main if s["kind"] == "easy" and s["day"]]
     taken: set[dt.date] = set()
     for s in [s for s in ss if s["kind"] == "strength"]:
-        cands = sorted(d for d in free + easy_days
-                       if (long_day is None or d != long_day - dt.timedelta(days=1)) and d not in taken)
+        # an easy-run day first, a free day only when none fits (SP-82)
+        cands = [d for d in RD.strength_days(easy_days, free, [long_day - dt.timedelta(days=1)] if long_day else [])
+                 if d not in taken]
         if cands:
             s["day"] = cands[0].isoformat()
             taken.add(cands[0])

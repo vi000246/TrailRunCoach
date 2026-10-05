@@ -428,13 +428,30 @@ keep the remaining interval 48 h away (`plan_prefs.place(hard_done=…)` and the
 **Placement**: remaining days from today (tomorrow when something is already logged today)
 to Sunday. The long session goes on the athlete's usual long-day weekday (mode over 12 weeks,
 `backend/engine/overview.py:415`) or the last free day; quality ≥ 2 days from the long one;
-easy on the next free days; strength on easy or free days, never the day before the long one.
+easy on the days that put the rest days where they belong (below); strength on easy days first.
 Sessions that don't fit are reported as a note, not squeezed in. Active preferences place
 with `plan_prefs.place()` instead (`backend/engine/overview.py:1288`). Blocked days are removed
 from the candidate days first (`backend/engine/overview.py:1268`); when they leave a quality /
 test session only a day next to the long one, it is dropped rather than stacked
 (`backend/engine/overview.py:1333`). An accepted B2B keeps its own two days and the rest moves
 around them (`B2B.place`, fixed).
+
+**Rest days** (SP-82, `engine/rest_days.py`; rest-day-placement.md, the owner's decisions §4.4):
+the run count still follows the week's minutes (easy runs ~50′, `easy_count`; 課表偏好 每週跑步次數
+when set), so a week can leave 可練日 free on purpose — before SP-82 those free days were simply
+what the easy runs (earliest free day first) left over, piled up late in the week. Now, in all three
+placement paths (no prefs, `plan_prefs.place`, `projection._place`), the easy runs take the
+combination of days with the smallest penalty (ties → earliest): a run the day after the long run
+(a Sunday long run → this Monday too) 8, the day before it while the week has a rest day 4, the day
+after an interval in a ≤ 4-run week 2, each training day past 3 in a row / rest day past 2 in a row
+1 (weights and streak limits 推估); the 休息日偏好 (pref_days `rest`, first / second choice) 32 / 16,
+above every rule. Auto mode runs ≤ 6 days (`AUTO_MAX_RUNS`, `auto_easy_cap`, `shape`'s room; 推估 —
+Bompa / UA / Koop keep ≥ 1 full rest day); 每週跑步次數 7 is honoured. Strength goes on an easy-run
+day first, a free day only when none fits (a 休息日偏好 day last), never the interval's day or the
+day before the long run. The 課表 calendar shows 「休息」 on an empty planned day (week view /
+agenda): dragged onto another day it calls `POST /rest-days/move {from, to}` — that day's active
+sessions move to `from` as user moves, with a warning when a moved hard session ends up < 2 days
+from another (`rest_days.swap_warnings`).
 
 **Output**: target / done / remaining (hours, TSS), the reasons (`why`), the rules cited,
 8-week history, load now and at Sunday (CTL, ATL, next-Monday TSB, weekly ramp), the daily

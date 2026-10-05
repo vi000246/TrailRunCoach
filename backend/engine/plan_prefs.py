@@ -49,7 +49,7 @@ import json
 import math
 import re
 from dataclasses import asdict, dataclass, field, fields, replace
-from typing import Optional
+from typing import Iterable, Optional
 
 from backend.engine.hr_profile import below
 from backend.i18n import _
@@ -102,8 +102,10 @@ NOT_SHAPING = ("cp_test_protocol", "heat", "heat_method", "aet_test_days", "aet_
 WD = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 WD_ZH = "一二三四五六日"
 LONG_WD = {d: i for i, d in enumerate(WD)}      # 長跑日: any weekday (was sat / sun only)
-PREF_KINDS = ("quality", "aet_test", "cp_test", "strides")
-PREF_LABEL = {"long": "LSD", "quality": "間歇", "aet_test": "AeT 測試", "cp_test": "CP 測試", "strides": "坡道衝刺／加速跑"}
+# rest = 休息日偏好 (SP-82): the weekdays the athlete would rather rest, first / second choice (engine/rest_days.py)
+PREF_KINDS = ("quality", "aet_test", "cp_test", "strides", "rest")
+PREF_LABEL = {"long": "LSD", "quality": "間歇", "aet_test": "AeT 測試", "cp_test": "CP 測試", "strides": "坡道衝刺／加速跑",
+              "rest": "休息日"}
 MIN_EASY = 20                        # never generate an easy session shorter than this
 TRIM_WARM, TRIM_COOL, MIN_REPS = 10, 5, 2
 
@@ -557,7 +559,9 @@ def shape(ss: list[dict], total_min: float, p: Prefs, c: Ctx) -> list[dict]:
     used = sum(s["minutes"] for s in hard + rest) + (long_s["minutes"] if long_s is not None else 0)
     left = max(0.0, total_min - used)
     cap = p.cap_weekday
-    room = max(0, min(c.slots, p.runs if p.runs is not None else 7) - n_fixed)
+    # auto: at most rest_days.AUTO_MAX_RUNS runs a week, at least one rest day (SP-82); 每週跑步次數 wins
+    from backend.engine.rest_days import AUTO_MAX_RUNS
+    room = max(0, min(c.slots, p.runs if p.runs is not None else AUTO_MAX_RUNS) - n_fixed)
     if p.runs is not None:
         n_e = min(room, int(left // MIN_EASY))
     else:
@@ -636,7 +640,7 @@ def day_conflicts(p: Prefs, auto_long_wd: int = 5) -> list[dict]:
                     "action": action, "keep": code in p.pref_keep})
     for kind in PREF_KINDS:
         for wd in p.pref_of(kind):
-            if not p.days[wd]:
+            if not p.days[wd] and kind != "rest":          # (a day that isn't 可練日 is a rest day anyway)
                 add(f"not_allowed:{kind}:{wd}", kind, wd, "可練日", "課表偏好", f"{PREF_LABEL[kind]}偏好週{WD_ZH[wd]}，但週{WD_ZH[wd]}不是可練日",
                     "改排在可練的日子")
     for wd in q[:1]:
@@ -693,19 +697,24 @@ def long_weekday(p: Prefs, auto_wd: int) -> int:
 
 def place(ss: list[dict], free: list[dt.date], long_wd: int, p: Prefs,
           notes: Optional[list] = None, long_done: Optional[dt.date] = None,
-          hard_done: Optional[list] = None) -> list[dict]:
+          hard_done: Optional[list] = None, run_done: Iterable[dt.date] = ()) -> list[dict]:
     """Put `ss` (not done, day None) on `free` days. Main sessions only on
     allowed days, one per day; strength on the chosen weekdays, else with an
     easy run / on an allowed day, never the day before the long session.
     The AeT test goes on the aet_test_days (aet_test.pick_day: a weekday by
     default, ≥ 2 days from the long run where possible). `long_done` = the
-    day of a long run already done this week. Returns the sessions that found
-    no day; notes go to `notes`."""
+    day of a long run already done this week. The easy runs take the days that put the rest days
+    where they belong — next to the long run, between hard days, on the 休息日偏好 (pref_days rest)
+    when possible (engine/rest_days.py, SP-82); `run_done` = the days already trained this week.
+    Returns the sessions that found no day; notes go to `notes`."""
     from backend.engine import aet_test as AT
+    from backend.engine import rest_days as RD
     avail = [d for d in free if p.allowed(d)]
     main = [s for s in ss if s["kind"] != "strength"]
     long_day = long_done
     aet_days = AT.test_days(p)
+    rest_pref = p.pref_of("rest")
+    easy_q: list = []
 
     def pick_near(wd: int) -> Optional[dt.date]:
         if not avail:
@@ -752,7 +761,7 @@ def place(ss: list[dict], free: list[dt.date], long_wd: int, p: Prefs,
             hard_days += list(hard_done or [])   # done hard days this week (workout_review.HARD_TYPES)
             ok = lambda d:(long_day is None or abs((d - long_day).days) >= 2) and \
                 all(abs((d - h).days) >= 2 for h in hard_days)
-            cands = sorted(avail, key=lambda d: QUALITY_ORDER.index(d.weekday()))
+            cands = sorted(avail, key=lambda d: (d.weekday() in rest_pref, QUALITY_ORDER.index(d.weekday())))
             if s.get("prefer_days"):
                 # interval_library.fit moved it to a day with a bigger cap (§C5.3-4)
                 cands = sorted(cands, key=lambda d: d.weekday() not in s["prefer_days"])
@@ -781,18 +790,30 @@ def place(ss: list[dict], free: list[dt.date], long_wd: int, p: Prefs,
             # 坡道衝刺／加速跑 on its preferred weekday (not the day before the long run)
             pick = next((d for wd in p.pref_of("strides") for d in avail if d.weekday() == wd
                          and (long_day is None or d != long_day - dt.timedelta(days=1))), avail[0])
+        elif s["kind"] == "easy":
+            easy_q.append(s)                # placed together below (rest days, SP-82)
+            continue
         else:
             pick = avail[0]
         s["day"] = pick.isoformat()
         avail.remove(pick)
+    if easy_q and avail:
+        mon = min(free) - dt.timedelta(days=min(free).weekday())
+        runs = [dt.date.fromisoformat(x["day"]) for x in main if x["day"]] + list(run_done or ())
+        qd = [dt.date.fromisoformat(x["day"]) for x in main if x["kind"] in ("quality", "test") and x["day"]]
+        for s, d in zip(easy_q, RD.pick_days(len(easy_q), avail, [mon + dt.timedelta(days=i) for i in range(7)],
+                                             runs, long_day, long_wd, qd + list(hard_done or ()), rest_pref)):
+            s["day"] = d.isoformat()
+            avail.remove(d)
     easy_days = [dt.date.fromisoformat(s["day"]) for s in main if s["kind"] == "easy" and s["day"]]
     taken: set = set()
     for s in [s for s in ss if s["kind"] == "strength"]:
         if p.strength_days:
             cands = [d for d in free if d.weekday() in p.strength_days and d not in taken]
         else:
-            cands = sorted(d for d in easy_days + avail
-                           if (long_day is None or d != long_day - dt.timedelta(days=1)) and d not in taken)
+            # an easy-run day first, a free day only when none fits, a 休息日偏好 day last (SP-82)
+            cands = [d for d in RD.strength_days(easy_days, avail, [long_day - dt.timedelta(days=1)] if long_day
+                                                 else [], rest_pref) if d not in taken]
         if cands:
             s["day"] = cands[0].isoformat()
             taken.add(cands[0])
