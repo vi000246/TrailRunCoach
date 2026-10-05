@@ -23,6 +23,8 @@
   "cat_del": "Delete",
   "cat_none": "No custom categories yet",
   "cat_all": "All",
+  "tt": "Main-set intensity",
+  "tt_all": "Any intensity",
   "empty": "Pick a template on the left, or press New template.",
   "name": "Template name",
   "cats_pick": "Categories",

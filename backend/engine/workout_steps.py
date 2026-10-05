@@ -1234,6 +1234,65 @@ def rpe_role(items: list) -> Optional[str]:
     return "quality" if max(his) >= RPE_HARD_MIN else "easy"
 
 
+# 主課強度類型 (SP-84): the 範本 page's and 插入範本's second filter, after the category. The
+# ids in display order; "auto" = a 「自動」 band whose type the session's 目標用 decides (no
+# basis on the template); "load" = a 「負荷」 end condition (not a target, listed with them).
+TARGET_TYPE_IDS = ("power_pct", "power_abs", "hr_pct", "hr_zone", "hr_abs", "pace", "rpe", "auto", "none", "load")
+TARGET_TYPE_LABEL = {"power_pct": N_("% CP 功率區間"), "power_abs": N_("絕對功率"), "hr_pct": N_("% LTHR 心率"),
+                     "hr_zone": N_("心率區間"), "hr_abs": N_("絕對心率"), "pace": N_("配速"), "rpe": "RPE",
+                     "auto": N_("自動（依課表類型）"), "none": N_("不設目標"), "load": N_("負荷")}
+
+
+def target_type_list() -> list[dict]:
+    """[{id, label}] of every 主課強度類型, in display order (the UIs show the ones in use)."""
+    return [{"id": k, "label": _(TARGET_TYPE_LABEL[k])} for k in TARGET_TYPE_IDS]
+
+
+def _target_type(tg: Optional[dict], basis: Optional[str]) -> str:
+    tg = tg or OPEN
+    ty = tg.get("type", "auto")
+    if ty in ("none", "rpe"):
+        return ty
+    if ty == "auto":
+        it = tg.get("intent", "open")
+        if it == "open":
+            return "none"
+        if it == "easy":
+            # easy_hr unless a power band with 目標用 power (resolve)
+            if tg.get("plo") is None or basis == "hr":
+                return "hr_zone"
+            return "power_pct" if basis == "power" else "auto"
+        return {"hr": "hr_pct", "power": "power_pct"}.get(basis, "auto")
+    if ty == "pace":
+        return "pace"
+    mode = tg.get("mode", "pct")
+    if ty == "power":
+        return "power_abs" if mode == "abs" else "power_pct"          # Palladino zones are % CP too
+    return {"abs": "hr_abs", "zone": "hr_zone"}.get(mode, "hr_pct")
+
+
+def target_types(items: list, basis: Optional[str] = None) -> list[str]:
+    """The 主課強度類型 of a structure (TARGET_TYPE_IDS order): the targets of its main set —
+    the work steps (inside repeats too), else the 「其他」 ones (strides), else every step — plus
+    "load" when a main-set step ends on 「負荷」. Mixed main sets list each type. `basis`: the
+    template's 目標用 (a library template's / a user template's target_basis), which turns a
+    「自動」 band into % CP or % LTHR; without one it stays "auto"."""
+    steps: list = []
+
+    def walk(xs):
+        for x in xs or []:
+            if x.get("kind") == "repeat":
+                walk(x.get("items"))
+            else:
+                steps.append(x)
+    walk(items)
+    main = [s for s in steps if s.get("kind") == "work"] or [s for s in steps if s.get("kind") == "other"] or steps
+    got = {_target_type(s.get("target"), basis) for s in main}
+    if any((s.get("dur") or {}).get("type") == "load" for s in main):
+        got.add("load")
+    return [k for k in TARGET_TYPE_IDS if k in got]
+
+
 def _has_rest_after(rows: list, st: dict) -> bool:
     for i, row in enumerate(rows):
         if row["st"] is st:
@@ -1679,8 +1738,10 @@ def templates(prefs=None, user: Optional[dict] = None) -> dict:
         for r in gr["rows"]:
             # the editor badges these when there is no threshold pace (their pace is × it)
             r["needs_tpace"] = needs_tpace(r.get("full") or r.get("items"))
+            # the 主課強度類型 filter (SP-84; user rows: user_templates.row, the same helper)
+            r["target_types"] = target_types(r.get("full") or r.get("items"), r.get("basis") or r.get("target_basis"))
     return {"cats": WT.cats() + list((user or {}).get("cats") or []), "groups": groups,
-            "no_tpace_text": no_tpace_text()}
+            "target_types": target_type_list(), "no_tpace_text": no_tpace_text()}
 
 
 def zones_table(c: Ctx) -> dict:

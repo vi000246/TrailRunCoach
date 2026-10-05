@@ -508,7 +508,7 @@ def row(t: dict) -> dict:
             "items": WT.main_of(full) or full, "full": full, "equiv": None, "family": fam,
             "fam_sub": fam["id"] if fam else None, "trail_sub": WT.trail_type_of(full),
             "purpose": "", "cats": t.get("cats") or [], "target_basis": t.get("target_basis"), "mine": True,
-            "gpx": t.get("gpx"), "role": WS.rpe_role(full)}
+            "gpx": t.get("gpx"), "role": WS.rpe_role(full), "target_types": WS.target_types(full, t.get("target_basis"))}
 
 
 def groups(templates: list[dict]) -> list[dict]:
