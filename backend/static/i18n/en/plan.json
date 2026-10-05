@@ -13,5 +13,11 @@
   "ev.cutoff_tip": "The organiser's cutoff (hours). When set, the feasibility check compares the race calculator's predicted finish with it.",
   "ev.turnaround_tip": "Turn back if the summit isn't reached this many hours after starting on summit day. The feasibility check compares the predicted time to the summit with it; too late = not a fit for this Taiwan's 100 Peaks (Baiyue) route.",
   "feas.title": "Race check",
-  "feas.sub": "Each race: is there time to get ready, and are you ready now"
+  "feas.sub": "Each race: is there time to get ready, and are you ready now",
+  "ev.dayplan_help": "Fill in each day's distance and climb (descent optional: blank = same as the climb); the totals add up by themselves. A GPX with each day's end marked wins over these numbers.",
+  "ev.day_km": "Distance km",
+  "ev.day_gain": "Climb m",
+  "ev.day_loss": "Descent m (optional)",
+  "ev.day_n": "Day {n}",
+  "ev.dayplan_missing": "Please add each day's distance and climb"
 }

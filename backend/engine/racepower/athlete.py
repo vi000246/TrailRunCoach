@@ -1274,7 +1274,9 @@ def derive(ds, today: Optional[dt.date] = None, fetch_weather: bool = True,
         pk_ = WX.find_peak(e.name)
         events.append({"id": e.id, "name": e.name, "date": e.date, "kind": e.kind, "days": e.days,
                        "distance_km": e.distance_km, "climbing_m": e.climbing_m, "est_hours": e.est_hours,
-                       "priority": e.priority, "peak": pk_})
+                       "priority": e.priority, "peak": pk_,
+                       # SP-114: the per-day numbers fill the calculator's 逐日行程; 連續 races get sleep points
+                       "day_plan": getattr(e, "day_plan", None), "race_format": getattr(e, "race_format", None)})
 
     return {
         "today": today.isoformat(),

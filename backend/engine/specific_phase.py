@@ -224,11 +224,14 @@ def race_day(plan, today: dt.date, predict: Optional[Callable] = None, gpx: Opti
     day = {"hours": ln["hours"] / n, "km": ln["km"] / n, "climb_m": ln["climb_m"] / n, "descent_m": ln["descent_m"] / n}
     ekm = day["km"] + day["climb_m"] / 100.0
     hpe = day["hours"] / ekm if ekm > 0 else None
+    from backend.engine.race_feasibility import split_note
     return {"id": e.id, "name": e.name, "start": e.start.isoformat(), "days": n, "kind": e.kind,
             "pack_kg": e.pack_kg, "goal": round(RR.goal_of(ln), 1), "cc": ln["cc"], "time_source": ln["time_source"],
             "hours": ln["hours"], "km": ln["km"], "climb_m": ln["climb_m"], "descent_m": ln["descent_m"],
             "descent_assumed": ln.get("descent_assumed"), "day": day, "h_per_ekm": hpe,
-            "features": gpx_features(e.id, hpe) if not ln.get("descent_assumed") else None}
+            # SP-114: the per-day numbers (a GPX's descent stays real even when the user's day plan sets the days)
+            "per_day": ln.get("per_day"), "split_hint": split_note(ln),
+            "features": gpx_features(e.id, hpe) if not ln.get("descent_assumed") or ln.get("gpx") else None}
 
 
 # ---------------------------------------------------------------------------

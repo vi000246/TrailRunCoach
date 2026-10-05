@@ -2110,7 +2110,12 @@ function applyEventDefaults(e) {
   if (e.est_hours && type === "baiyue") $("target").value = hms(e.est_hours * 3600);
   if (e.peak) { $("peak").value = e.peak.name; $("latlon").value = ""; }
   if ((e.days || 1) > 1) $("tripdays").value = e.days;
-  renderDayPlan(); saveForm();
+  renderDayPlan();
+  // SP-114: the event's own per-day numbers (賽季計畫) fill 逐日行程
+  if (Array.isArray(e.day_plan) && e.day_plan.length === (e.days || 1)) {
+    $("dayplan").querySelectorAll("input").forEach((x) => { const v = e.day_plan[+x.dataset.d]?.[x.dataset.k]; x.value = v ?? ""; });
+  }
+  saveForm();
 }
 // choosing an event (or reopening the page with it): its saved inputs and last result come back;
 // a first visit takes the event's distance / date / place and its stored GPX

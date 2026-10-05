@@ -104,6 +104,11 @@ PRIORITIES = ("A", "B", "C")
 EVENT_HEAT = ("auto", "hot", "cool")      # Event.heat (heat-acclimation.md §5.4)
 PACK_MAX_KG = 40.0                         # Event.pack_kg: as athlete.set_hike_meta's 0–40 kg check
 CUTOFF_MAX_H = 240.0                       # Event.cutoff_hours: 10 days, past the longest stage race's cutoff
+# 賽制 of a ≥ 2 day 越野賽／其他 (SP-114, owner 2026-10-05): 分站 = one stage a day set by the organiser
+# (each stage's km / climb in day_plan); 連續 = one non-stop course, the runner decides where to sleep
+# (sleep points in the race calculator, not days). 百岳 is always split by day; 路跑 is never asked.
+RACE_FORMATS = ("stage", "continuous")
+FORMAT_KINDS = ("race", "other")
 
 
 class EventError(ValueError):
@@ -139,6 +144,32 @@ class Event:
     cutoff_hours: Optional[float] = None
     # 百岳: km of the summit along the whole trip; None = the GPX's highest point
     summit_km: Optional[float] = None
+    # SP-114: a multi-day trip's own numbers per day [{"km", "gain_m", "loss_m" (None = gain_m)}],
+    # required on save (upsert_event) — an equal split misjudges the summit day / the hardest stage;
+    # distance_km / climbing_m are their sums. None on old events (a hint asks for them)
+    day_plan: Optional[list] = None
+    # SP-114 賽制 (RACE_FORMATS) of a ≥ 2 day 越野賽／其他; None = 分站 (old events) or not asked
+    race_format: Optional[str] = None
+
+    @property
+    def continuous(self) -> bool:
+        """A ≥ 2 day 越野賽／其他 run non-stop (賽制 連續): one course, never cut into days."""
+        return self.kind in FORMAT_KINDS and int(self.days or 1) > 1 and self.race_format == "continuous"
+
+    @property
+    def split_days(self) -> int:
+        """How many days the course is cut into: the trip's days, 1 for a 連續 race."""
+        return 1 if self.continuous else max(1, int(self.days or 1))
+
+    @property
+    def needs_day_plan(self) -> bool:
+        """Every multi-day trip but a road race: 百岳, a 分站 越野賽／其他 (SP-114)."""
+        return self.split_days > 1 and self.kind != "road"
+
+    @property
+    def day_plan_missing(self) -> bool:
+        """An old multi-day event saved without its per-day numbers (not blocked, hinted)."""
+        return self.needs_day_plan and len(self.day_plan or []) != self.split_days
 
     @property
     def pack(self) -> float:
@@ -170,6 +201,40 @@ class Event:
     @property
     def size(self) -> str:
         return SIZES[event_size(self)]
+
+
+def _num(v) -> Optional[float]:
+    if v in (None, ""):
+        return None
+    try:
+        x = float(v)
+    except (TypeError, ValueError):
+        return None
+    return x if math.isfinite(x) else None
+
+
+def clean_day_plan(data: dict, days: int) -> Optional[list]:
+    """The per-day numbers of an event being saved (SP-114): [{km, gain_m, loss_m}] of exactly
+    `days` days when the trip needs them (Event.needs_day_plan: 百岳, a 分站 越野賽／其他 of ≥ 2 days),
+    else None. km > 0 and the climb are required for every day; the descent is optional (None =
+    the climb, as plan_course assumes). A missing day / number is an EventError: 「少一天不能存」."""
+    probe = Event(id="", name="", date="2000-01-01", kind=data.get("kind") or "race", days=days,
+                  race_format=data.get("race_format"))
+    if not probe.needs_day_plan:
+        return None
+    rows = list(data.get("day_plan") or [])
+    if len(rows) != days:
+        raise EventError(_("多天行程要填每天的距離和爬升：{days} 天要填 {days} 列（現在 {n} 列）", days=days, n=len(rows)))
+    out = []
+    for i, r in enumerate(rows, 1):
+        r = r if isinstance(r, dict) else {}
+        km, gain, loss = _num(r.get("km")), _num(r.get("gain_m")), _num(r.get("loss_m"))
+        if km is None or km <= 0 or gain is None or gain < 0:
+            raise EventError(_("第 {n} 天的距離和爬升沒填完（距離要大於 0，爬升可以填 0）", n=i))
+        if loss is not None and loss < 0:
+            raise EventError(_("第 {n} 天的下降不能是負的", n=i))
+        out.append({"km": round(km, 2), "gain_m": round(gain), "loss_m": None if loss is None else round(loss)})
+    return out
 
 
 def _tier(x: float, cuts: tuple) -> int:
@@ -238,14 +303,14 @@ def install_size_inputs() -> None:
     import contextvars
     import threading
     import time
-    from dataclasses import astuple
     lock, memo, busy = threading.Lock(), {}, contextvars.ContextVar("event_size_busy", default=False)
 
     def hours_of(ev) -> Optional[float]:
         if busy.get() or not ev.distance_km:  # the calculator itself reads the plan: no recursion
             return None
         from backend import tenancy
-        key = (tenancy.current().id, astuple(ev), dt.date.today())
+        # SP-114: day_plan is a list (unhashable in astuple): the event as sorted JSON
+        key = (tenancy.current().id, json.dumps(asdict(ev), sort_keys=True, default=str), dt.date.today())
         with lock:
             hit = memo.get(key)
         if hit and time.time() - hit[0] < 600.0:
@@ -446,6 +511,14 @@ class Plan:
                 data[k] = float(data[k])
                 if data[k] <= 0 or (hi is not None and data[k] > hi):
                     raise EventError(_("關門／撤退時間要在 0–{max:g} 小時", max=hi) if hi else _("山頂公里數要大於 0"))
+        days = max(1, int(data.get("days") or 1))
+        data["days"] = days
+        data["race_format"] = ((data.get("race_format") if data.get("race_format") in RACE_FORMATS else "stage")
+                               if data["kind"] in FORMAT_KINDS and days > 1 else None)
+        data["day_plan"] = clean_day_plan(data, days)
+        if data["day_plan"]:
+            data["distance_km"] = round(sum(d["km"] for d in data["day_plan"]), 2)
+            data["climbing_m"] = round(sum(d["gain_m"] for d in data["day_plan"]))
         _d(data["date"])  # validate
         eid = data.get("id") or uuid.uuid4().hex[:8]
         ev = Event(**{**data, "id": eid})
@@ -815,7 +888,8 @@ def goals(plan: Plan, today: dt.date, horizon_days: int = 182) -> dict:
 
 def event_json(e: Event, today: dt.date) -> dict:
     return {**asdict(e), "end": e.end.isoformat(), "climb_per_km": e.climb_per_km,
-            "kind_label": KINDS.get(e.kind, e.kind), "days_to": (e.start - today).days}
+            "kind_label": KINDS.get(e.kind, e.kind), "days_to": (e.start - today).days,
+            "day_plan_missing": e.day_plan_missing}
 
 
 def phase_json(p: Phase) -> dict:

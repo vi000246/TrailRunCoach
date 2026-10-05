@@ -1276,6 +1276,9 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     from backend.engine import specific_phase as SP
     sp = SP.plan_context(status, today, monday, mode, _n(ctl_s.at(d_prev_sun) - atl_s.at(d_prev_sun)), longest28,
                          race_predict, sport=sport) if kind == "specific" else {"active": False}
+    if (sp.get("race") or {}).get("split_hint"):
+        # SP-114: an old multi-day event without its per-day numbers — the 專項期 targets an equal split
+        notes.append({"level": "watch", "src": "specific", "text": sp["race"]["split_hint"]})
 
     # the user's own RPE ≥ 7 技術地形 sessions this week (engine/technical.py, SP-74): in the 20 % first
     from backend.engine import technical as TECH
