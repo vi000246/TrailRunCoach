@@ -311,6 +311,11 @@ class InjuryEvent(Base):
     pause_quality: Mapped[bool] = mapped_column(Boolean, default=False)
     recurrence_of: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # SP-117: 生病 in the same log — category "injury" | "illness"; illness "cold" (輕微感冒) |
+    # "fever" (發燒或全身症狀); onset = the first day of symptoms, resolved_date = the first
+    # symptom-free day. Added to existing DBs by database._migrate_schema (default 'injury').
+    category: Mapped[str] = mapped_column(String(10), default="injury", server_default="injury")
+    illness: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 

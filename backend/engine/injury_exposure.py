@@ -467,6 +467,7 @@ def analysis(ds, events: list[dict], today: dt.date, *, severities=None, season:
              D: Optional[Daily] = None, include_recurrence: bool = False, **build_kw) -> dict:
     """§3.3–§3.4. The JSON the injury page draws (the tier decides what is in it)."""
     D = D or build_daily(ds, today, **build_kw)
+    events = [e for e in events if not INJ.is_illness(e)]      # 生病 (SP-117) is not an injury case
     inc, exc = classify_events(events, severities, include_recurrence)
     if area:
         inc = [e for e in inc if e.get("area") == area]
@@ -648,7 +649,8 @@ def timeline(ds, events: list[dict], marks: list[dict], today: dt.date, begin: O
         if stop < begin or o > end:
             continue
         bands.append({"id": e["id"], "start": o.isoformat(), "end": stop.isoformat(), "open": INJ.is_open(e),
-                      "area": e.get("area"), "label": INJ.full_label(e.get("area"), e.get("side")),
+                      "area": e.get("area"), "label": INJ.event_label(e),
+                      "category": "illness" if INJ.is_illness(e) else "injury",
                       "severity": e.get("severity"), "severity_label": INJ.SEVERITIES.get(e.get("severity"), ""),
                       "status": e.get("status"), "kind": e.get("kind")})
     ticks = [m for m in marks if m["pain"] >= 1 and begin.isoformat() <= m["date"] <= end.isoformat()]

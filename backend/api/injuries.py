@@ -35,6 +35,7 @@ from backend.db.current import current_athlete_id
 from backend.db.database import get_db
 from backend.db.models import ActivityTag, InjuryEvent
 from backend.engine import injuries as INJ
+from backend.i18n import _
 
 
 def _not_demo():
@@ -45,7 +46,7 @@ def _not_demo():
 router = APIRouter(prefix="/api/v1/wko5/injuries", tags=["injuries"], dependencies=[Depends(_not_demo)])
 
 EDITABLE = ("area", "side", "kind", "severity", "pain_max", "onset_date", "onset_key", "onset_file", "status",
-            "resolved_date", "days_missed", "pause_quality", "note")
+            "resolved_date", "days_missed", "pause_quality", "note", "category", "illness")
 
 
 def _row_dict(e: InjuryEvent) -> dict:
@@ -105,7 +106,7 @@ async def _list_json(db: AsyncSession, with_days: bool = True) -> list[dict]:
     runs = []
     if with_days and evs:
         try:
-            runs, _ = await run_in_threadpool(_runs)
+            runs, _today = await run_in_threadpool(_runs)
         except Exception:                   # noqa: BLE001 — the list still shows without the dataset
             runs = []
     today = today_local()
@@ -131,7 +132,12 @@ async def meta(db: AsyncSession = Depends(get_db)):
             "sides": INJ.SIDES, "no_side": list(INJ.NO_SIDE), "kinds": INJ.KINDS, "severities": INJ.SEVERITIES,
             "severity_help": INJ.SEVERITY_HELP, "statuses": INJ.STATUSES, "pain": INJ.PAIN,
             "settings": await _settings(db), "pattern_min_n": INJ.PATTERN_MIN_N,
-            "disclaimer": INJ.DISCLAIMER, "monitor": INJ.SILBERNAGEL["text"]}
+            "disclaimer": INJ.DISCLAIMER, "monitor": INJ.SILBERNAGEL["text"],
+            # 生病 (SP-117): two types, the examples help pick one
+            "categories": {k: _(v) for k, v in INJ.CATEGORIES.items()},
+            "illness": {k: _(v) for k, v in INJ.ILLNESS.items()},
+            "illness_help": {k: _(v) for k, v in INJ.ILLNESS_HELP.items()},
+            "illness_rules": {"cold": _(INJ.SRC_COLD), "fever": _(INJ.SRC_FEVER)}}
 
 
 @router.get("")
@@ -209,6 +215,13 @@ def _clean_body(body: dict, partial: bool) -> dict:
         raise HTTPException(400, "INVALID_DATE")
     if f.get("side") and f.get("area") in INJ.NO_SIDE:
         f["side"] = None
+    if f.get("category") == "illness":
+        # 生病 (SP-117): no body area, side, severity or pain; the type is required
+        if not partial and not f.get("illness"):
+            raise HTTPException(400, "INVALID_ILLNESS")
+        f.update(area=INJ.UNKNOWN, side=None, kind="overuse", severity="mild", pain_max=None, pause_quality=False)
+    elif f.get("category") == "injury":
+        f["illness"] = None
     return f
 
 

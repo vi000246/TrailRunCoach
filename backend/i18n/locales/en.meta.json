@@ -319,6 +319,10 @@
     "draft": true,
     "src": "backend/engine/terrain_calib.py:76"
   },
+  "Kaulback 2023（IOC 共識小組系統性回顧：輕微呼吸道感染對心肺耐力影響很小）；Wallenfels／TrainingPeaks（脖子以上的症狀可以跑心率 1 區的恢復課，教練級）": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:76"
+  },
   "LTHR {lthr:.0f} ＝ 最大心率 {mhr:.0f} 的 {r:.0%}（一般 85–95%，個人範圍 80–98%）": {
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:338"
@@ -443,6 +447,10 @@
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:290"
   },
+  "Wallenfels（脖子以下的症狀消失後至少等 1 天）；Watson／TrainingPeaks（無症狀 24–48 小時），教練級": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:78"
+  },
   "W′ {wp} J 不合理": {
     "draft": true,
     "src": "backend/api/plan.py:766"
@@ -562,6 +570,14 @@
   "{label}（自動：一年內心率判定為比賽強度的標準距離跑步）": {
     "draft": true,
     "src": "backend/engine/racepower/calc.py:317"
+  },
+  "{label}：{what}（{src}）": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:514"
+  },
+  "{label}：心率 1 區{cap}，不加速、不衝坡；{src}": {
+    "draft": true,
+    "src": "backend/engine/overview.py:1833"
   },
   "{model} 的輕鬆跑上限 {cap:.0f} bpm ≥ LTHR {lthr:.0f}：生理上不可能": {
     "draft": false,
@@ -1155,9 +1171,21 @@
     "draft": true,
     "src": "backend/engine/workout_review.py:2686"
   },
+  "傷": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:69"
+  },
   "傷停 {days} 天（{label}，傷病紀錄 #{id}）": {
     "draft": true,
     "src": "backend/engine/reentry.py:162"
+  },
+  "傷停＋生病停跑 {days} 天（{label}，傷病紀錄 #{id}；{ill}，#{ill_id}）": {
+    "draft": true,
+    "src": "backend/engine/reentry.py:178"
+  },
+  "傷病紀錄 #{id}（{label}）：{what}": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:464"
   },
   "儲備心率（COROS % HRR 6 區）": {
     "draft": true,
@@ -1314,6 +1342,10 @@
   "只有手錶推估功率（未採用，設定可改）：不判讀間歇、不算 W′": {
     "draft": true,
     "src": "backend/engine/interval_eval.py:458"
+  },
+  "只有流鼻水、鼻塞、喉嚨痛，沒有發燒": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:71"
   },
   "只有確定時才手動指定。": {
     "draft": true,
@@ -1807,6 +1839,14 @@
     "draft": true,
     "src": "backend/engine/overview.py:1026"
   },
+  "恢復跑（心率 1 區）": {
+    "draft": true,
+    "src": "backend/engine/overview.py:1832"
+  },
+  "恢復跑（發燒後第一次）": {
+    "draft": true,
+    "src": "backend/engine/overview.py:1854"
+  },
   "恢復週": {
     "draft": true,
     "src": "backend/engine/overview.py:1555"
@@ -2218,6 +2258,10 @@
   "有點飄": {
     "draft": true,
     "src": "backend/engine/workout_review.py:530"
+  },
+  "未指定": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:155"
   },
   "未解鎖": {
     "draft": true,
@@ -2643,6 +2687,18 @@
     "draft": true,
     "src": "backend/engine/quality_gate.py:2148"
   },
+  "生病": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:69"
+  },
+  "生病停跑 {days} 天（{ill}，傷病紀錄 #{id}）": {
+    "draft": true,
+    "src": "backend/engine/reentry.py:181"
+  },
+  "生病（{what}）": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:155"
+  },
   "用極短休息讓心肺維持在 VO2max 附近，同時限制乳酸累積（Uphill Athlete；Billat）": {
     "draft": true,
     "src": "backend/engine/workout_templates.py:134"
@@ -2654,6 +2710,26 @@
   "用短休息讓乳酸維持穩定，在閾值強度累積比連續跑更多的時間（Daniels）": {
     "draft": true,
     "src": "backend/engine/workout_templates.py:131"
+  },
+  "發燒、咳嗽到胸、全身痠痛、腸胃炎": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:72"
+  },
+  "發燒好了之後的第一次跑：恢復配速、≤ {m} 分；之後照停跑天數排": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:495"
+  },
+  "發燒好了之後的第一次跑：恢復配速、心率 1 區{cap}，之後照停跑天數排；{src}": {
+    "draft": true,
+    "src": "backend/engine/overview.py:1855"
+  },
+  "發燒或全身症狀": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:70"
+  },
+  "發燒或全身症狀：先不跑，症狀全部消失後至少 {n} 天（最多 48 小時）再跑": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:493"
   },
   "百岳多為跟團": {
     "draft": true,
@@ -3195,6 +3271,14 @@
     "draft": true,
     "src": "backend/engine/workout_steps.py:1201"
   },
+  "輕微感冒": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:70"
+  },
+  "輕微感冒有症狀：只排心率 1 區的恢復跑（≤ {m} 分），不排 3 區、5 區、加速跑": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:494"
+  },
   "輕鬆": {
     "draft": true,
     "src": "backend/engine/rpe_load.py:55"
@@ -3714,6 +3798,10 @@
   "（不含賽後恢復期／轉換期 {n} 天）": {
     "draft": true,
     "src": "backend/engine/reentry.py:167"
+  },
+  "（不超過{cap}）": {
+    "draft": true,
+    "src": "backend/engine/overview.py:1856"
   },
   "（推估的 AeT 要夠準、最近幾次沒有往同一邊偏才算；推估），改用不設門檻": {
     "draft": true,
