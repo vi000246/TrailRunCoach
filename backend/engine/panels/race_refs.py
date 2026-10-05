@@ -59,23 +59,112 @@ def stored_course(e) -> Optional[dict]:
     """The event's stored GPX as per-day km / climb / descent (event_gpx.day_stats), None = none."""
     from backend.engine import event_gpx as EG
     try:
-        return EG.day_stats(e.id, max(1, int(e.days or 1)))
+        return EG.day_stats(e.id, split_days(e))
     except Exception:                       # noqa: BLE001 — a broken file = the plan's numbers
         return None
 
 
+def split_days(e) -> int:
+    """The days the course is cut into (planning.Event.split_days: a 連續 race is one piece)."""
+    n = getattr(e, "split_days", None)
+    return int(n) if n else max(1, int(e.days or 1))
+
+
 def plan_course(e) -> dict:
     """The event's own km / climb split equally over its days; descent = climb (推估)."""
-    n = max(1, int(e.days or 1))
+    n = split_days(e)
     km, climb = float(e.distance_km), float(e.climbing_m or 0.0)
     return {"totals": {"km": km, "gain_m": climb, "loss_m": climb},
             "days": [{"day": i, "km": km / n, "gain_m": climb / n, "loss_m": climb / n} for i in range(1, n + 1)],
             "split_source": "equal" if n > 1 else "single", "filename": None, "descent_assumed": True}
 
 
+def day_plan_course(e) -> Optional[dict]:
+    """The trip's own per-day numbers (Event.day_plan, SP-114) as a course; a day without its
+    descent takes descent = climb (推估, as plan_course). None without a full day plan."""
+    rows = getattr(e, "day_plan", None) or []
+    n = split_days(e)
+    if n < 2 or len(rows) != n:
+        return None
+    days = [{"day": i, "km": float(r["km"]), "gain_m": float(r.get("gain_m") or 0.0),
+             "loss_m": float(r["loss_m"] if r.get("loss_m") is not None else r.get("gain_m") or 0.0)}
+            for i, r in enumerate(rows, 1)]
+    return {"totals": {k: sum(d[k] for d in days) for k in ("km", "gain_m", "loss_m")}, "days": days,
+            "split_source": "day_plan", "filename": None,
+            "descent_assumed": any(r.get("loss_m") is None for r in rows)}
+
+
 def course_of(e, gpx: Callable = stored_course) -> dict:
+    """SP-114: a GPX with its own day ends (the calculator's split points, camp waypoints) wins;
+    then the trip's own per-day numbers (Event.day_plan); then the GPX cut into equal days; the
+    event's km / climb split equally only when there is neither."""
     c = gpx(e)
+    if c and (split_days(e) < 2 or c.get("split_source") in ("stored", "camp")):
+        return {**c, "descent_assumed": False}
+    dp = day_plan_course(e)
+    if dp is not None:
+        return {**dp, "filename": (c or {}).get("filename")}
     return {**c, "descent_assumed": False} if c else plan_course(e)
+
+
+def sleep_kms(e) -> list[float]:
+    """The sleep points (km) of a 連續 race, from the race calculator's saved aid stations of the
+    event (race_calc_store inputs.stops, type "sleep" — SP-114); [] when none / unreadable."""
+    from backend.engine import race_calc_store as RC
+    try:
+        saved = RC.get(e.id)
+    except Exception:                       # noqa: BLE001 — a bad id / DB: no sleep points
+        return []
+    stops = ((saved or {}).get("inputs") or {}).get("stops") or []
+    out = set()
+    for s in stops if isinstance(stops, list) else []:
+        try:
+            if isinstance(s, dict) and s.get("type") == "sleep" and s.get("km") is not None:
+                out.add(round(float(s["km"]), 2))
+        except (TypeError, ValueError):
+            continue
+    return sorted(out)
+
+
+def sleep_course(e, course: dict, sleeps: Optional[list[float]] = None) -> tuple[dict, Optional[str]]:
+    """A 連續 race (Event.continuous, SP-114) cut at its sleep points: (the course with one "day" per
+    stretch between two sleep points, split_source "sleep"; None) — so the race check's hardest
+    day is the hardest stretch. Without sleep points: (the course as one piece, the hint). The
+    GPX's own 1 km pieces give each stretch its climb; without a GPX the climb follows the km
+    (推估). Other events: (course, None) unchanged."""
+    if not getattr(e, "continuous", False):
+        return course, None
+    km = float(course["totals"]["km"] or 0.0)
+    cuts = [k for k in (sleep_kms(e) if sleeps is None else sleeps) if 0.0 < k < km]
+    if not cuts:
+        return course, _("沒填睡眠點，整場當一段來比；會睡的話，在賽事計算器的補給站加睡眠點會更準")
+    days = None
+    if course.get("filename"):
+        from backend.engine import event_gpx as EG
+        from backend.engine.racepower import course as CO
+        try:
+            got = EG.track(e.id)
+            if got is not None:
+                pieces = CO.cut_at(EG._course(got[0], "km")["segments"], cuts)
+                days = [{"day": n, "km": sum(p["dist_m"] for p in pieces if p["day"] == n) / 1000.0,
+                         "gain_m": sum(p["gain_m"] for p in pieces if p["day"] == n),
+                         "loss_m": sum(p["loss_m"] for p in pieces if p["day"] == n)} for n in range(1, len(cuts) + 2)]
+        except Exception:                   # noqa: BLE001 — a broken file: by km
+            days = None
+    if days is None:
+        t, edges = course["totals"], [0.0] + cuts + [km]
+        days = [{"day": i, "km": b - a, "gain_m": float(t["gain_m"] or 0.0) * (b - a) / km,
+                 "loss_m": float(t["loss_m"] or 0.0) * (b - a) / km} for i, (a, b) in enumerate(zip(edges, edges[1:]), 1)]
+    return {**course, "days": days, "split_source": "sleep"}, None
+
+
+def hardest_stretch_note(line: dict) -> Optional[str]:
+    """The race check's line on a 連續 race cut at its sleep points: which stretch is compared."""
+    if line.get("split_source") != "sleep" or not line.get("per_day"):
+        return None
+    d = max(line["per_day"], key=lambda x: x["cc"])
+    return _("連續賽事以兩個睡眠點之間最硬的一段來比：第 {n} 段 {km:.1f} km、爬升 {cl:.0f} m（共 {k} 段）",
+             n=d["day"], km=d["km"], cl=d["climb_m"], k=len(line["per_day"]))
 
 
 def calculator_hours(e, course: Optional[dict] = None) -> Optional[list[float]]:
@@ -149,7 +238,8 @@ def tip(ln: dict) -> str:
             f"{ln['hours']:.1f} h（{ln['time_source']}）\n路線：{src}")
     if not ln.get("multi"):
         return head + f"\nコース定數 {ln['cc']:.0f}"
-    split = {"stored": "你在賽事計算器點的分日點", "camp": "GPX 的營地／山屋航點", "equal": "每天距離平均（沒有分日點）"}
+    split = {"stored": "你在賽事計算器點的分日點", "camp": "GPX 的營地／山屋航點", "equal": "每天距離平均（沒有分日點）",
+             "day_plan": "你填的每天距離和爬升"}
     rows = "\n".join(f"第 {d['day']} 天：{d['km']:.1f} km ↑{d['climb_m']} ↓{d['descent_m']} {d['hours']:.1f} h → 定數 {d['cc']:.0f}"
                      + ("（最難）" if d["day"] == ln["hardest_day"] else "") for d in ln["per_day"])
     return (head + f"\n整趟 {ln['days']} 天コース定數 {ln['cc']:.0f}（體力度 ≈ {ln['taiyokudo']}，推估）・"

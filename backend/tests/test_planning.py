@@ -73,7 +73,8 @@ def test_threshold_history(tmp_path):
     assert plan.threshold_on("aethr", dt.date(2026, 9, 2)) == 142
     assert plan.threshold_on("mhr", dt.date(2026, 9, 2)) is None
     path = tmp_path / "plan.json"
-    plan.upsert_event({"name": "玉山", "date": "2026-11-01", "kind": "baiyue", "priority": "Z", "days": 2})
+    plan.upsert_event({"name": "玉山", "date": "2026-11-01", "kind": "baiyue", "priority": "Z", "days": 2,
+                       "day_plan": [{"km": 8.5, "gain_m": 1000}, {"km": 15, "gain_m": 600}]})   # SP-114
     plan.save(path)
     back = P.Plan.load(path)
     assert back.events[0].name == "玉山" and back.events[0].priority == "A"   # bad priority -> A

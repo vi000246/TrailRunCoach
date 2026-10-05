@@ -188,7 +188,7 @@ def _plan_road(kind="road"):
     from backend.engine.planning import Weight
     plan = Plan()
     plan.thresholds.append(Threshold("2026-08-01", lthr=165, cp=250.0))
-    plan.events.append(Event(id="e1", name="台北馬", date="2026-12-05", kind=kind, days=4 if kind == "baiyue" else 1,   # 4 days: the 14-day taper (SP-96)
+    plan.events.append(Event(id="e1", name="台北馬", date="2026-12-05", kind=kind, days=4 if kind == "baiyue" else 1,   # 4 days: the longer taper (SP-96, 10 days since SP-114)
                              distance_km=42.195, est_hours=3.5 if kind == "road" else None))
     plan.weights.append(Weight("2026-08-01", 62.0))
     return plan

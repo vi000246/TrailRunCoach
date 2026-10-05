@@ -263,11 +263,22 @@ def week_ok_at(e, line: dict) -> float:
 
 
 def split_note(line: dict) -> Optional[str]:
-    """A multi-day trip split equally (no GPX day ends): its hardest day is likely underestimated."""
+    """A multi-day trip split equally (no per-day numbers, no GPX day ends — an event saved before
+    SP-114 made them required): its hardest day is likely underestimated."""
     if line.get("multi") and line.get("split_source") == "equal":
-        return _("沒有 GPX 的分日點，{n} 天是平均分配：攻頂那天通常最硬，可能被低估。上傳 GPX 並標好每天的終點會更準",
-                 n=line["days"])
+        return day_plan_hint(line["days"])
     return None
+
+
+def gpx_hint() -> str:
+    """SP-114: the reminder for an ultra (越野 ≥ 50 km) without a GPX."""
+    return _("超馬建議上傳 GPX：專項期的爬坡課和賽事評估要靠它知道爬升在哪幾段、有多陡。在賽季計畫的「路線 GPX」上傳")
+
+
+def day_plan_hint(days: int) -> str:
+    """SP-114: the hint for an old multi-day event without its per-day numbers (not blocked)."""
+    return _("請補每天的距離和爬升：現在 {n} 天是平均分配，最硬的那天（攻頂日、最難的一站）可能被低估。"
+             "在賽季計畫按「編輯」填每一天，或上傳 GPX 並標好每天的終點", n=days)
 
 
 def hardest_day(line: dict) -> dict:
@@ -738,10 +749,11 @@ def races(plan, ds, today: dt.date, event_id: Optional[str] = None,
         best = None
     out = []
     for e in sorted(evs, key=lambda x: x.start):
-        line = summit = None
+        line = summit = sleep_note = None
         if e.distance_km:
             course = RR.course_of(e, gpx)
             hs = predict(e, course)
+            course, sleep_note = RR.sleep_course(e, course)    # SP-114: a 連續 race's hardest stretch
             line = RR.race_line(e, hs, _("賽事計算器預測的完賽時間"), course)
             if line is not None:
                 summit = event_summit(e, course, [d["hours"] for d in line["per_day"]])
@@ -749,7 +761,16 @@ def races(plan, ds, today: dt.date, event_id: Optional[str] = None,
         if e.kind == "baiyue":
             climb, power = baiyue_inputs(plan, ds, today, e) if baiyue is None else baiyue(e)
         r = assess(e, line, today, hist[-BASE_WEEKS:], summit, best, climb, power)
+        if sleep_note:
+            r["split_note"] = sleep_note
+        elif line is not None and RR.hardest_stretch_note(line):
+            r["stretch_note"] = RR.hardest_stretch_note(line)
+        if getattr(e, "gpx_recommended", False) and line is not None and not line.get("gpx"):
+            r["gpx_note"] = gpx_hint()             # SP-114: an ultra without its GPX (a reminder, not a block)
         if not r.get("skipped"):
             r["readiness"] = readiness(e, line, today, hist, acts)
+        # SP-114: a multi-day 百岳 is judged on the 攻頂日模擬, not the weekly volume (its own module)
+        from backend.engine import baiyue_multiday as BM
+        BM.apply(r, e, line, today, ds)
         out.append(r)
     return out
