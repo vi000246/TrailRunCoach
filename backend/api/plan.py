@@ -140,7 +140,9 @@ def get_plan(begin: Optional[str] = None, end: Optional[str] = None):
                   "mini_taper_days": P.MINI_TAPER_DAYS, "long_event_hours": P.LONG_EVENT_HOURS,
                   "long_event_ep": P.SIZE_EP[P.ULTRA - 1],
                   # SP-96: a 2–3 day 百岳's taper; 課表偏好 taper_days for a road marathon / an ultra
-                  "baiyue_taper_days": P.BAIYUE_TAPER_DAYS, "taper_pref_days": P.taper_days_setting()},
+                  "baiyue_taper_days": P.BAIYUE_TAPER_DAYS, "taper_pref_days": P.taper_days_setting(),
+                  # SP-114: a ≥ 4 day 百岳
+                  "baiyue_long_taper_days": P.BAIYUE_LONG_TAPER_DAYS},
     }
 
 
@@ -159,13 +161,35 @@ class EventIn(BaseModel):
     pack_kg: Optional[float] = None         # trip pack kg; None = 9 kg (loaded-carry-training.md §5.1)
     cutoff_hours: Optional[float] = None    # 關門／撤退時間 h (SP-105, engine/race_feasibility.py)
     summit_km: Optional[float] = None       # 百岳: km of the summit; None = the GPX's highest point
+    # SP-114: [{km, gain_m, loss_m?}] per day, required for a multi-day trip (planning.clean_day_plan)
+    day_plan: Optional[list[dict]] = None
+    race_format: Optional[str] = None       # SP-114 賽制 stage | continuous (≥ 2 day 越野賽／其他)
+
+
+def _gpx_day_plan(data: dict) -> Optional[list[dict]]:
+    """The per-day numbers of the event's stored GPX when it has its own day ends (the calculator's
+    split points or camp waypoints; SP-114: a GPX with day ends wins), None otherwise."""
+    if not data.get("id") or int(data.get("days") or 1) < 2:
+        return None
+    from backend.engine import event_gpx as EG
+    try:
+        st = EG.day_stats(data["id"], int(data["days"]))
+    except Exception:                       # noqa: BLE001 — a broken file: the user's numbers
+        return None
+    if not st or st.get("split_source") not in ("stored", "camp") or len(st["days"]) != int(data["days"]):
+        return None
+    return [{"km": d["km"], "gain_m": d["gain_m"], "loss_m": d["loss_m"]} for d in st["days"]]
 
 
 @router.put("/events")
 def put_event(body: EventIn):
     plan = P.Plan.load()
+    data = body.model_dump()
+    gd = _gpx_day_plan(data)
+    if gd:
+        data["day_plan"] = gd
     try:
-        ev = plan.upsert_event(body.model_dump())
+        ev = plan.upsert_event(data)
     except P.EventError as e:                  # a bad field: the message is for the user
         raise HTTPException(400, str(e))
     except ValueError as e:

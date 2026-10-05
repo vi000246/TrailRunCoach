@@ -315,7 +315,7 @@ def _plan_with(event_start, days, today):
     return plan
 
 
-# a 4-day trip: its taper is the 14-day default (SP-96: a 2–3 day 百岳 tapers 7 days), so TODAY is in the 專項期
+# a 4-day trip: its taper is 10 days (SP-114; a 2–3 day 百岳 tapers 7 days), so TODAY is in the 專項期
 def _week(event_start="2026-12-05", days=4, today=TODAY, last_week="recovery", prefs=None, accepted=None,
           b2b_tph=1.3, tph=0.8):
     ds = _history(today, last_week, b2b_tph, tph)

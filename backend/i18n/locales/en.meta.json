@@ -459,6 +459,10 @@
     "draft": true,
     "src": "backend/engine/quality_gate.py:2127"
   },
+  "ME 負重爬坡（爬升 {cl:.0f} m、背 {kg:g} kg）": {
+    "draft": true,
+    "src": "backend/engine/specific_phase.py:478"
+  },
   "Nuuttila 2025：休閒跑者 LT2 = 90.6 ± 2.5% 最大心率、87.0 ± 3.4% 儲備心率；Davis 90% 範圍 80–98%／73–95%": {
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:132"
@@ -971,6 +975,10 @@
     "draft": true,
     "src": "backend/sync/workout_targets/garmin.py:23"
   },
+  "一天爬升約 {cl:.0f} m（攻頂日＝第 {d} 天 {need:.0f} m 的 {p:.0f}%），背 {kg:g} kg 的背包（行程背包），爬上去再下來": {
+    "draft": true,
+    "src": "backend/engine/specific_phase.py:421"
+  },
   "一定要實測 AeT": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:1999"
@@ -1207,6 +1215,10 @@
     "draft": true,
     "src": "backend/engine/technical.py:171"
   },
+  "你的 ADS（LTHR ÷ AeT − 1）是 {g:.0f}%": {
+    "draft": true,
+    "src": "backend/engine/specific_phase.py:558"
+  },
   "你的平路 RE 中位數（{n} 次）": {
     "draft": true,
     "src": "backend/engine/racepower/calc.py:308"
@@ -1238,6 +1250,10 @@
   "你自己走的登山日 EP/h 中位數（{n} 天，爬升 ≥ 600 m 的日子權重 3 倍）": {
     "draft": true,
     "src": "backend/engine/racepower/calc.py:384"
+  },
+  "來不及練到攻頂日的爬升：可以換短一點、低一級的路線，多排一天把攻頂日拆短，或延後出發": {
+    "draft": true,
+    "src": "backend/engine/baiyue_multiday.py:163"
   },
   "來得及": {
     "draft": true,
@@ -1338,6 +1354,10 @@
   "做一次 Friel 飄移測試（AeT 附近 ≥ 60 分鐘平路，飄移 < 5%）": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:1384"
+  },
+  "做完在活動頁記下這次背多少，賽事評估才會算這次（爬升到攻頂日的 100% 而且有背包，3 次算夠）": {
+    "draft": true,
+    "src": "backend/engine/specific_phase.py:425"
   },
   "停下 ≥ 5 分鐘的時間佔總時間超過這個比例，強度再高也算「有拼但有休息」。本人值 = 你的全力活動長休息比例的 p90 × 1.5。": {
     "draft": true,
@@ -1738,6 +1758,14 @@
   "外部 key 不對": {
     "draft": true,
     "src": "backend/engine/plan_store.py:533"
+  },
+  "多天行程要填每天的距離和爬升：{days} 天要填 {days} 列（現在 {n} 列）": {
+    "draft": true,
+    "src": "backend/engine/planning.py:227"
+  },
+  "多日百岳的專項期把爬坡間歇換成 ME（背重爬陡坡），前提是 ADS ≤ 10%（Uphill Athlete）；{why}，這週維持一般肌力（每週 2 次）": {
+    "draft": true,
+    "src": "backend/engine/specific_phase.py:562"
   },
   "多日行程": {
     "draft": true,
@@ -2287,6 +2315,18 @@
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:463"
   },
+  "攻頂日是第 {d} 天，爬升 {need:.0f} m。你最近 8 週一天最多爬 {best:.0f} m；照每週最多 +10% 慢慢加，行程前還能做 {n} 次攻頂日模擬（一天爬完攻頂日的爬升、背行程的背包），要 {k} 次": {
+    "draft": true,
+    "src": "backend/engine/baiyue_multiday.py:155"
+  },
+  "攻頂日模擬：Uphill Athlete〈Training for Mountaineering〉——行程前 8 週起每週一次，一天爬完攻頂日（爬升最多的那天）的爬升，背和行程差不多重的背包；做到 3 次算夠；背包 ≥ 行程背包 80%、最後一次在行程前 10 天以前、爬升每週最多 +10% 是推估。多日百岳不看每週的距離和爬升（那是越野跑的規則）": {
+    "draft": true,
+    "src": "backend/engine/baiyue_multiday.py:43"
+  },
+  "攻頂日模擬｜{name}": {
+    "draft": true,
+    "src": "backend/engine/specific_phase.py:426"
+  },
   "整趟時間是推估：{note}；沒有跑步資料可建能力模型，用 Tobler 步行函數": {
     "draft": true,
     "src": "backend/engine/racepower/calc.py:402"
@@ -2450,6 +2490,10 @@
   "最近 6 週跑最多的一週：{km:.0f} km，是比賽距離的 {p:.0f} %（最好到 {a:.0f} %）": {
     "draft": true,
     "src": "backend/engine/race_feasibility.py:413"
+  },
+  "最近 8 週沒有跑步或健行紀錄，沒辦法推算": {
+    "draft": true,
+    "src": "backend/engine/baiyue_multiday.py:149"
   },
   "最近 {days} 天有溫度的穩定路跑只有 {n} 次（要 {need} 次）": {
     "draft": true,
@@ -2683,6 +2727,10 @@
     "draft": true,
     "src": "backend/engine/race_feasibility.py:369"
   },
+  "每週排一次攻頂日模擬：背行程的背包，爬升一次比一次多（每週最多 +10%）": {
+    "draft": true,
+    "src": "backend/engine/baiyue_multiday.py:165"
+  },
   "每週跑步次數 {runs} 比可練日（{days} 天）多": {
     "draft": true,
     "src": "backend/engine/plan_prefs.py:288"
@@ -2735,6 +2783,10 @@
     "draft": true,
     "src": "backend/engine/racepower/watch_export.py:46"
   },
+  "沒填睡眠點，整場當一段來比；會睡的話，在賽事計算器的補給站加睡眠點會更準": {
+    "draft": true,
+    "src": "backend/engine/panels/race_refs.py:140"
+  },
   "沒有 AeT 或 LTHR": {
     "draft": true,
     "src": "backend/engine/panels/activity_charts.py:310"
@@ -2750,10 +2802,6 @@
   "沒有 CP：請手動輸入": {
     "draft": true,
     "src": "backend/engine/racepower/calc.py:271"
-  },
-  "沒有 GPX 的分日點，{n} 天是平均分配：攻頂那天通常最硬，可能被低估。上傳 GPX 並標好每天的終點會更準": {
-    "draft": true,
-    "src": "backend/engine/race_feasibility.py:118"
   },
   "沒有 LTHR，區間算不出來": {
     "draft": true,
@@ -2794,6 +2842,10 @@
   "沒有最大心率，到設定填": {
     "draft": true,
     "src": "backend/engine/hr_profile.py:84"
+  },
+  "沒有每天的距離和爬升，找不到攻頂日": {
+    "draft": true,
+    "src": "backend/engine/baiyue_multiday.py:144"
   },
   "沒有每日行程：距離與爬升平均分配到每一天；實際行程請逐日輸入": {
     "draft": true,
@@ -3023,6 +3075,10 @@
     "draft": true,
     "src": "backend/engine/race_feasibility.py:152"
   },
+  "爬最陡的坡、樓梯或跑步機最大坡度，共爬升約 {cl:.0f} m（攻頂日 {need:.0f} m 的 {f:.0f}%）；要腿先酸、呼吸不喘，心率不必拉高；背水上山、到頂把水倒掉輕裝下山，保護膝蓋；暖身 10 分。做完 3 天只排輕鬆": {
+    "draft": true,
+    "src": "backend/engine/specific_phase.py:473"
+  },
   "現在不是基礎期": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:2148"
@@ -3207,6 +3263,14 @@
     "draft": true,
     "src": "backend/engine/interval_library.py:739"
   },
+  "第 {n} 天的下降不能是負的": {
+    "draft": true,
+    "src": "backend/engine/planning.py:235"
+  },
+  "第 {n} 天的距離和爬升沒填完（距離要大於 0，爬升可以填 0）": {
+    "draft": true,
+    "src": "backend/engine/planning.py:233"
+  },
   "第一晚睡在約 {m:,.0f} m，超過 3,400 m 屬高風險（CDC；排雲山莊 3,402 m 就在線上）": {
     "draft": true,
     "src": "backend/engine/altitude.py:202"
@@ -3343,6 +3407,14 @@
     "draft": true,
     "src": "backend/engine/strength_plan.py:139"
   },
+  "背 {kg:g} kg（沒有體重紀錄，先用這個重量）": {
+    "draft": true,
+    "src": "backend/engine/specific_phase.py:472"
+  },
+  "背 {kg:g} kg（體重的 {p:.0f}%）": {
+    "draft": true,
+    "src": "backend/engine/specific_phase.py:471"
+  },
   "背包 {kg:g} kg（體重的 {p:.0%}）": {
     "draft": true,
     "src": "backend/engine/race_feasibility.py:210"
@@ -3394,6 +3466,10 @@
   "行動糧": {
     "draft": true,
     "src": "backend/engine/racepower/seg_targets.py:87"
+  },
+  "行程前 8 週內做了 {n} 次攻頂日模擬（一天爬升 ≥ {need:.0f} m、背包 ≥ {kg:.1f} kg），{k} 次算夠": {
+    "draft": true,
+    "src": "backend/engine/baiyue_multiday.py:185"
   },
   "行程會跨過午夜（多日）不匯出至課表：只有當天來回的單攻百岳可以匯出": {
     "draft": true,
@@ -3474,6 +3550,10 @@
   "請求太頻繁，請稍後再試": {
     "draft": true,
     "src": "backend/tenancy_mw.py:232"
+  },
+  "請補每天的距離和爬升：現在 {n} 天是平均分配，最硬的那天（攻頂日、最難的一站）可能被低估。在賽季計畫按「編輯」填每一天，或上傳 GPX 並標好每天的終點": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:126"
   },
   "請重新整理頁面後再試一次": {
     "draft": true,
@@ -3598,6 +3678,10 @@
   "超過今天上限 {cap:.0f} 分（最短也要 {need:.0f} 分）": {
     "draft": true,
     "src": "backend/engine/interval_library.py:774"
+  },
+  "超馬建議上傳 GPX：專項期的爬坡課和賽事評估要靠它知道爬升在哪幾段、有多陡。在賽季計畫的「路線 GPX」上傳": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:126"
   },
   "超馬建議賽前 {w} 週開始，每週練 {h:g} 小時、連續 {n} 週；照推算最多能連續做到 {b} 週（一週最多約 {p:.1f} 小時）": {
     "draft": true,
@@ -3955,6 +4039,10 @@
     "draft": true,
     "src": "backend/engine/drift_calib.py:137"
   },
+  "連續賽事以兩個睡眠點之間最硬的一段來比：第 {n} 段 {km:.1f} km、爬升 {cl:.0f} m（共 {k} 段）": {
+    "draft": true,
+    "src": "backend/engine/panels/race_refs.py:166"
+  },
   "週{day}已給{taken}，不能再排{kind}（一天只能指定一種課）": {
     "draft": true,
     "src": "backend/engine/plan_prefs.py:284"
@@ -4014,6 +4102,10 @@
   "還沒有 TSS：不看 ramp": {
     "draft": true,
     "src": "backend/engine/status.py:315"
+  },
+  "還沒有實測的 AeT 和 LTHR，算不出 ADS": {
+    "draft": true,
+    "src": "backend/engine/specific_phase.py:559"
   },
   "還缺：": {
     "draft": true,
@@ -4315,6 +4407,10 @@
     "draft": true,
     "src": "backend/engine/overview.py:1856"
   },
+  "（從 {d} 開始算）": {
+    "draft": true,
+    "src": "backend/engine/baiyue_multiday.py:190"
+  },
   "（推估的 AeT 要夠準、最近幾次沒有往同一邊偏才算；推估），改用不設門檻": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:2488"
@@ -4342,6 +4438,10 @@
   "（現在是 {m:.0f} 分）": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:2061"
+  },
+  "（這週的目標是 {w:.0f} m，一次最多排 {m} 分鐘，先爬到這裡）": {
+    "draft": true,
+    "src": "backend/engine/specific_phase.py:477"
   },
   "，CVI 調整 {adj:+.2f}": {
     "draft": true,
@@ -4487,9 +4587,21 @@
     "draft": true,
     "src": "backend/engine/status.py:570"
   },
+  "；受「每次最多 +15%」和週量限制，這次先爬到 {p:.0f}%，之後每週加一點": {
+    "draft": true,
+    "src": "backend/engine/specific_phase.py:424"
+  },
+  "；另外 {m} 次爬升夠，但沒有記背包或太輕：在活動頁記下那次背多少就會算進來": {
+    "draft": true,
+    "src": "backend/engine/baiyue_multiday.py:188"
+  },
   "；另外 {x}": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:2095"
+  },
+  "；已經做了 {n} 次": {
+    "draft": true,
+    "src": "backend/engine/baiyue_multiday.py:159"
   },
   "；心率、功率在下坡不準，看 RPE": {
     "draft": true,

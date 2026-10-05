@@ -78,6 +78,10 @@ button.link { border: 0; background: none; color: var(--accent); padding: 0 4px;
 .form { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: end; margin-top: 10px; }
 .form label { display: flex; flex-direction: column; font-size: 12px; color: var(--muted); gap: 2px; }
 .form label[hidden] { display: none; }
+.form .dayplan { flex-basis: 100%; }
+.form .dayplan[hidden] { display: none; }
+.form .dayplan td, .form .dayplan th { padding: 2px 6px; }
+.hint { color: var(--warn); font-size: 12px; }
 .pri { display: inline-block; min-width: 20px; text-align: center; border-radius: 4px; font-weight: 700; font-size: 12px; padding: 0 4px; }
 .pri.A { background: var(--bad); color: #fff; } .pri.B { background: var(--warn); color: #fff; } .pri.C { background: var(--line); }
 .dot { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
@@ -134,8 +138,19 @@ button.link { border: 0; background: none; color: var(--accent); padding: 0 4px;
       <label>類型<select name="kind" id="kindsel"></select></label>
       <label>優先<select name="priority"><option>A</option><option>B</option><option>C</option></select></label>
       <label>天數<input type="number" name="days" min="1" value="1"></label>
+      <!-- SP-114 賽制: only a ≥ 2 day 越野賽／其他 (百岳 is always split by day; 路跑 is never asked) -->
+      <label id="formatwrap" hidden data-i18n-attr="title:plan.ev.format_tip"
+        title="分站：每天一站，主辦單位定好，要填每一站的距離和爬升。連續：不分站、一次跑完全程，在哪睡自己決定，不用填每天的數字，改在賽事計算器的補給站加睡眠點。"><span data-i18n="plan.ev.format">賽制</span><select name="race_format">
+        <option value="stage" data-i18n="plan.ev.format_stage">分站（每天一站）</option>
+        <option value="continuous" data-i18n="plan.ev.format_continuous">連續（一次跑完全程）</option></select></label>
       <label>距離 km<input type="number" name="distance_km" step="0.1" min="0"></label>
       <label>爬升 m<input type="number" name="climbing_m" step="10" min="0"></label>
+      <!-- SP-114: every multi-day trip (百岳, a 分站 越野賽／其他) fills each day; the totals add up -->
+      <div id="dayplanwrap" class="dayplan" hidden>
+        <div class="meta" data-i18n="plan.ev.dayplan_help">每天的距離和爬升都要填（下降選填，空白＝跟爬升一樣）；總距離、總爬升會自動加總。有 GPX 而且標好每天的終點時，以 GPX 為準。</div>
+        <table><thead><tr><th></th><th class="num" data-i18n="plan.ev.day_km">距離 km</th><th class="num" data-i18n="plan.ev.day_gain">爬升 m</th>
+          <th class="num" data-i18n="plan.ev.day_loss">下降 m（選填）</th></tr></thead><tbody id="dayplanrows"></tbody></table>
+      </div>
       <label>預估移動時間 h<input type="number" name="est_hours" step="0.5" min="0"></label>
       <label title="百岳／多日行程第 1 天的背包重量；空白 = 體重 × 13 %（沒有體重時 9 kg，推估）。百岳預測用它，賽前的陡坡健走也用它算模擬負重的坡度">行程背包 kg<input type="number" name="pack_kg" step="0.5" min="0" max="40" placeholder="9"></label>
       <!-- SP-105 (engine/race_feasibility.py): 賽事 = 關門時間; 百岳 = 撤退時間 (hours from the summit day's start) + the summit km -->
@@ -280,7 +295,7 @@ function renderTimeline() {
     `<span><i style="background:var(--muted);height:4px"></i>B 賽事小減量 / 恢復</span>`;
   const r = S.rules;
   $("#tlnote").textContent = S.manual_phases ? "手動周期。" :
-    `自動排程：每場 A 賽事前 ${r.taper_days} 天減量（2–3 天的百岳 ${r.baiyue_taper_days} 天${r.taper_pref_days > r.taper_days ? `；路跑全馬、超馬照課表偏好 ${r.taper_pref_days} 天` : ""}）、再往前 ${r.specific_weeks} 週專項期，其餘是基礎期；賽後恢復 1 週、馬拉松級再加 1 週回量期，超馬級恢復 2 週，100 英里級恢復 2 週＋回量 2 週（超馬級：預估 ≥ ${r.long_event_hours} 小時——先用賽事計算器、再用你填的預估時間；都沒有時看努力距離 EP ≥ ${r.long_event_ep}（公里＋爬升換算）；多日行程也算）；比賽的下坡遠超過你近 6 週練過的，恢復再多一級。回量期排在轉換期之後，只有輕鬆跑和肌力。`;
+    `自動排程：每場 A 賽事前 ${r.taper_days} 天減量（多天的百岳 ${r.baiyue_taper_days} 天，4 天以上 ${r.baiyue_long_taper_days} 天${r.taper_pref_days > r.taper_days ? `；路跑全馬、超馬照課表偏好 ${r.taper_pref_days} 天` : ""}）、再往前 ${r.specific_weeks} 週專項期，其餘是基礎期；賽後恢復 1 週、馬拉松級再加 1 週回量期，超馬級恢復 2 週，100 英里級恢復 2 週＋回量 2 週（超馬級：預估 ≥ ${r.long_event_hours} 小時——先用賽事計算器、再用你填的預估時間；都沒有時看努力距離 EP ≥ ${r.long_event_ep}（公里＋爬升換算）；多日行程也算）；比賽的下坡遠超過你近 6 週練過的，恢復再多一級。回量期排在轉換期之後，只有輕鬆跑和肌力。`;
   // phases cut short around two A races close together, a skipped 轉換期 (SP-90, SP-73)
   const pn = S.manual_phases ? [] : phases.filter((p) => p.note && p.end >= S.today);
   $("#phnotes").innerHTML = pn.map((p) => `<li>${esc(S.phase_labels[p.kind])} ${p.start.slice(5)}～${p.end.slice(5)}：${esc(p.note)}</li>`).join("");
@@ -311,7 +326,7 @@ function renderEvents() {
     ? "隱藏已完賽" : `顯示已完賽（${past.length} 場）`}</button></td></tr>` : "";
   $("#events").innerHTML = (shown.map((e) => `<tr style="${done(e) ? "opacity:.55" : ""}">
     <td><span class="pri ${e.priority}">${e.priority}</span></td><td>${e.date}${e.days > 1 ? "～" + e.end.slice(5) : ""}</td>
-    <td>${esc(e.name)}</td><td>${esc(e.kind_label)}</td><td class="num">${e.days}</td>
+    <td>${esc(e.name)}${evHints(e)}</td><td>${esc(e.kind_label)}</td><td class="num">${e.days}</td>
     <td class="num">${fmt(e.distance_km, 1)}</td><td class="num">${fmt(e.climbing_m)}</td><td class="num">${fmt(e.climb_per_km)}</td>
     <td class="num">${fmt(e.est_hours, 1)}</td><td class="num">${e.days_to >= 0 ? e.days_to + " 天" : "已過"}</td>
     <td class="meta">${esc(e.note)}</td>
@@ -320,6 +335,13 @@ function renderEvents() {
     || `<tr><td colspan="13" class="meta">${past.length ? "沒有接下來的賽事。" : "還沒有賽事。"}在下面填一場。</td></tr>`) + toggle;
   const t = $("#togglepast");
   if (t) t.onclick = () => { S.showPast = !S.showPast; renderEvents(); };
+}
+// SP-114: an old multi-day event without its per-day numbers (not blocked, only hinted)
+function evHints(e) {
+  const tP = (k) => (window.I18N ? I18N.t("plan.ev." + k) : k), out = [];
+  if (e.day_plan_missing && e.days_to >= 0) out.push(tP("dayplan_missing"));
+  if (e.gpx_recommended && !e.gpx && e.days_to >= 0) out.push(tP("gpx_missing"));      // an ultra without its GPX
+  return out.map((x) => `<div class="hint">⚠ ${esc(x)}</div>`).join("");
 }
 
 // the event's GPX (engine/event_gpx.py): upload once here or in 賽事計算器; the calculator, the
@@ -383,10 +405,49 @@ $("#evform").addEventListener("submit", async (ev) => {
   for (const [k, v] of f.entries()) body[k] = v === "" ? null : v;
   for (const k of ["days", "distance_km", "climbing_m", "est_hours", "pack_kg", "cutoff_hours", "summit_km"]) if (body[k] != null) body[k] = Number(body[k]);
   body.days = body.days || 1; body.note = body.note || "";
+  body.day_plan = needsDayPlan() ? readDayRows().map((r) => ({ km: r.km, gain_m: r.gain_m, loss_m: r.loss_m })) : null;
   await call("PUT", "/events", body);
-  ev.target.reset(); ev.target.id.value = ""; $("#evsubmit").textContent = "新增"; $("#evcancel").hidden = true; cutoffLabels();
+  ev.target.reset(); ev.target.id.value = ""; $("#evsubmit").textContent = "新增"; $("#evcancel").hidden = true; cutoffLabels(); dayPlanForm([]);
   toast("已儲存"); load(); loadFeas();
 });
+// SP-114: a multi-day trip (百岳, a 分站 越野賽／其他 — not 路跑, not a 連續 race) fills each day's
+// distance and climb; the totals are their sums (read-only while the rows are shown)
+const FORMAT_KINDS = ["race", "other"];
+function needsDayPlan() {
+  const f = $("#evform"), n = Number(f.days.value) || 1, k = f.kind.value;
+  const cont = FORMAT_KINDS.includes(k) && f.race_format && f.race_format.value === "continuous";
+  return n > 1 && k !== "road" && !cont;
+}
+function readDayRows() {
+  const rows = [];
+  $("#dayplanrows").querySelectorAll("input").forEach((x) => {
+    const i = +x.dataset.d; rows[i] = rows[i] || {}; rows[i][x.dataset.k] = x.value === "" ? null : Number(x.value);
+  });
+  return rows;
+}
+function dayPlanForm(plan) {
+  const f = $("#evform"), n = Math.max(1, Number(f.days.value) || 1);
+  $("#formatwrap").hidden = !(FORMAT_KINDS.includes(f.kind.value) && n > 1);      // 賽制: ≥ 2 day 越野賽／其他 only
+  const on = needsDayPlan();
+  const tP = (k, p) => (window.I18N ? I18N.t("plan.ev." + k, p) : k);
+  $("#dayplanwrap").hidden = !on;
+  f.distance_km.readOnly = f.climbing_m.readOnly = on;
+  const old = plan || readDayRows();
+  $("#dayplanrows").innerHTML = on ? Array.from({ length: n }, (_, i) => `<tr><td>${esc(tP("day_n", { n: i + 1 }))}</td>`
+    + ["km", "gain_m", "loss_m"].map((k) => `<td><input type="number" data-d="${i}" data-k="${k}" step="${k === "km" ? 0.1 : 10}" min="0"`
+      + `${k !== "loss_m" ? " required" : ""} value="${old[i]?.[k] ?? ""}"></td>`).join("") + "</tr>").join("") : "";
+  sumDays();
+}
+function sumDays() {
+  if (!needsDayPlan()) return;
+  const f = $("#evform"), rows = readDayRows();
+  const s = (k) => rows.reduce((a, r) => a + (r && r[k] != null ? r[k] : 0), 0);
+  if (rows.some((r) => r && r.km != null)) f.distance_km.value = Math.round(s("km") * 10) / 10;
+  if (rows.some((r) => r && r.gain_m != null)) f.climbing_m.value = Math.round(s("gain_m"));
+}
+$("#dayplanrows").addEventListener("input", sumDays);
+$("#evform").days.addEventListener("input", () => dayPlanForm());
+$("#evform").race_format.addEventListener("change", () => dayPlanForm());
 // 賽事評估 of the upcoming A / B races (static/feasibility.js; GET /api/v1/overview/feasibility):
 // fetched apart from the plan — the first race-calculator read of the activities takes ~1 min, so the
 // section shows 「評估中」 from the start and only hides once it knows there is no A / B race
@@ -414,14 +475,15 @@ function cutoffLabels() {
   $("#cutwrap").title = tP(hike ? "turnaround_tip" : "cutoff_tip");
   $("#summitwrap").hidden = !hike;
 }
-$("#kindsel").addEventListener("change", cutoffLabels);
-$("#evcancel").onclick = () => { $("#evform").reset(); $("#evform").id.value = ""; $("#evsubmit").textContent = "新增"; $("#evcancel").hidden = true; cutoffLabels(); };
+$("#kindsel").addEventListener("change", () => { cutoffLabels(); dayPlanForm(); });
+$("#evcancel").onclick = () => { $("#evform").reset(); $("#evform").id.value = ""; $("#evsubmit").textContent = "新增"; $("#evcancel").hidden = true; cutoffLabels(); dayPlanForm([]); };
 $("#events").addEventListener("click", async (ev) => {
   const ed = ev.target.dataset.edit, del = ev.target.dataset.del;
   if (ed) {
     const e = S.events.find((x) => x.id === ed), f = $("#evform");
     for (const k of ["id", "name", "date", "kind", "priority", "days", "distance_km", "climbing_m", "est_hours", "pack_kg", "cutoff_hours", "summit_km", "note"]) f[k].value = e[k] ?? "";
-    cutoffLabels();
+    f.race_format.value = e.race_format || "stage";
+    cutoffLabels(); dayPlanForm(e.day_plan || []);
     $("#evsubmit").textContent = "更新"; $("#evcancel").hidden = false; f.scrollIntoView({ behavior: "smooth", block: "center" });
   }
   if (ev.target.dataset.gpxup) { gpxFor = ev.target.dataset.gpxup; $("#gpxpick").click(); }

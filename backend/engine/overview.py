@@ -1509,6 +1509,9 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     from backend.engine import specific_phase as SP
     sp = SP.plan_context(status, today, monday, mode, _n(ctl_s.at(d_prev_sun) - atl_s.at(d_prev_sun)), longest28,
                          race_predict, sport=sport) if kind == "specific" else {"active": False}
+    if (sp.get("race") or {}).get("split_hint"):
+        # SP-114: an old multi-day event without its per-day numbers — the 專項期 targets an equal split
+        notes.append({"level": "watch", "src": "specific", "text": sp["race"]["split_hint"]})
 
     # the user's own RPE ≥ 7 技術地形 sessions this week (engine/technical.py, SP-74): in the 20 % first
     from backend.engine import technical as TECH
@@ -1670,6 +1673,13 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         flags = {s.id: getattr(s, "_long_day", False) for s in sessions}
         dd = [asdict(s) for s in sessions]
         SP.decorate(dd, sp)
+        # SP-114: a multi-day 百岳 — ME instead of the uphill VO2max set (ADS ≤ 10 %), else general strength
+        try:
+            wkg = status.plan.weight_on(today)
+        except Exception:                   # noqa: BLE001
+            wkg = None
+        SP.apply_me(dd, sp, gate.get("gap"), wkg, allow=allow_quality and not b2b.get("post"),
+                    rate=tph["trail"], notes=notes)
         sessions = [Session(**d) for d in dd]
         for s in sessions:
             s._long_day = flags.get(s.id, False)
@@ -1695,6 +1705,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         elif s.id in B2B.FOLLOWERS:               # B2B day 2 / 3: the day after the one before
             w = take(lambda w: category(w) in ENDURANCE and moving_s(w) / 60 >= 0.8 * s.minutes
                      and B2B.done_follow(sessions, s, wdate(w)))
+        elif s.id == "me":                        # SP-114 ME: a walk / run that climbed ≥ 80 % of it (推估)
+            w = take(lambda w: category(w) in FOOT and (_n(w.metrics.get("climbing")) or 0.0) >= 0.8 * (s.climb_m or 0.0))
         elif s.id == "test_aet":
             # the 50-min test: a ≥ 48-min road run (2′ slack) titled AeT — the COROS
             # workout's name; untitled only from 55 min (workout_review.TEST_AET_MIN_S),

@@ -678,6 +678,10 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
         if sp_info and sp_info.get("active"):
             try:
                 SP.decorate(ss, sp_info)
+                # SP-114: a multi-day 百岳 — ME (ADS ≤ 10 %) instead of the uphill set, as week_plan
+                SP.apply_me(ss, sp_info, gate.get("gap"), cb.get("weight"),
+                            allow=q_ok and not ((b2b or {}).get("info") or {}).get("post"),
+                            rate=(cur.get("tss_per_category") or {}).get("trail") or 60.0, notes=notes)
                 SP.apply_climb(ss, sp_info, aet=th.get("aet"), prefs=prefs, b2b=(b2b or {}).get("info"), notes=notes,
                                rates=cur.get("tss_per_category"), aet_measured=th_meas)
             except Exception:              # noqa: BLE001 — never breaks the projection
