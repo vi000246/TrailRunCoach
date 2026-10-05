@@ -115,5 +115,14 @@
   "goal.near": "{pct}% off the model",
   "goal.fast": "{pct}% faster than the model: may not hold",
   "goal.too_fast": "{pct}% faster than the model: likely won't hold",
-  "goal.slow": "{pct}% slower than the model: conservative"
+  "goal.slow": "{pct}% slower than the model: conservative",
+  "zbar.title_power": "Absolute intensity · power zones",
+  "zbar.title_hr": "Absolute intensity · heart-rate zones",
+  "zbar.axis_power": "Palladino; axis = % CP, line = this race's average power",
+  "zbar.axis_hr": "axis = heart rate in bpm, line = this race's predicted average heart rate",
+  "zbar.system": "Zone model",
+  "zbar.tip": "This bar shows absolute intensity: which of your zones the race's average power or heart rate falls in. The effort bar above shows relative intensity: how long you can hold this power, which depends on the race length — 85% CP is easy for 1 hour and hard for 8 hours. Each colour is a zone (each zone's name and range are listed below); the line is this race's average. Power training shows power zones, heart-rate training shows heart-rate zones (the training basis in Settings); you can pick the heart-rate zone model, the default is the workout heart-rate zones in Settings.",
+  "zbar.line_power": "Absolute intensity: average {pct} CP ({w}), in Palladino zone {zone}",
+  "zbar.line_hr": "Absolute intensity: average {hr} bpm, in {sys} zone {zone}",
+  "zbar.no_hr_data": "This calculation has no average heart rate, so the power zones are shown"
 }

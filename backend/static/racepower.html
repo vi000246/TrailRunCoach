@@ -172,9 +172,15 @@ details summary { cursor: pointer; color: var(--muted); font-size: 12.5px; margi
   pointer-events: none; box-shadow: 0 0 0 2px var(--panel); }
 .escale { position: relative; height: 16px; font-size: 11px; color: var(--muted); }
 .escale span { position: absolute; transform: translateX(-50%); }
-.zbar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; margin-top: 8px; position: relative; }
-.zbar div { height: 100%; }
-.zbar .needle { position: absolute; top: -3px; bottom: -3px; width: 3px; background: var(--text); margin-left: -1px; }
+.zbar { display: flex; height: 18px; border-radius: 4px; overflow: hidden; margin-top: 4px; position: relative; }
+.zbar div.z { height: 100%; display: grid; place-items: center; font-size: 11px; color: #fff; font-weight: 600; overflow: hidden; white-space: nowrap; }
+.zbar .needle { position: absolute; top: 0; bottom: 0; width: 4px; margin-left: -2px; background: var(--text); border-radius: 2px; box-shadow: 0 0 0 2px var(--panel); }
+.zhead { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; margin-top: 12px; font-size: 13px; font-weight: 600; }
+.zhead .meta { font-weight: 400; }
+.zhead .zsys select { width: auto; max-width: 100%; padding: 2px 6px; font-size: 12.5px; }
+.zleg { display: flex; flex-wrap: wrap; gap: 2px 12px; font-size: 11.5px; color: var(--muted); margin: 2px 0 4px; }
+.zleg i { display: inline-block; width: 10px; height: 8px; border-radius: 2px; margin-right: 4px; }
+.zleg .cur { color: var(--text); font-weight: 600; }
 .eline { font-size: 13.5px; margin: 4px 0; }
 /* segments */
 .card { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin: 6px 0; }
@@ -1141,14 +1147,73 @@ function effortBar(e, hike) {
   h += ticks.map((t) => `<span style="left:${X(t)}%">${Math.round(t * 100)}</span>`).join("") + "</div>";
   return h;
 }
-function zoneBar(p, cp) {
-  const z = PLAN.zones || []; if (!z.length || !cp) return "";
-  const lo = 0.5, hi = 1.3, X = (f) => Math.max(0, Math.min(100, (f - lo) / (hi - lo) * 100));
-  const cols = ["--s3", "--s1", "--s7", "--s4", "--s2", "--s5", "--hi", "--bad", "--bad"];
-  let h = `<div class="zbar" title="Palladino 區間">`;
-  z.forEach((r, i) => { const a = Math.max(lo, r.lo), b = Math.min(hi, r.hi ?? hi); if (b > a) h += `<div style="width:${X(b) - X(a)}%;background:${css(cols[i % cols.length])}" title="${esc(r.id)} ${esc(r.name)}"></div>`; });
-  return h + `<div class="needle" style="left:${X(p / cp)}%"></div></div><div class="meta">絕對強度：平均 ${pct(p / cp)} CP，落在 Palladino ${esc(zoneOf(p, cp))} 區</div>`;
+// ---- zone bar (SP-118): absolute intensity — the race's average in the power or heart-rate zones ----
+// Follows the training basis (/goal-basis): power → Palladino % CP; heart rate → a heart-rate zone system
+// at the calculator's predicted race HR (PLAN.hr_bar, engine/racepower/zonebar.py), the system picked
+// here and remembered (default: the 課表心率區間 model). No predicted HR → the power bar and the reason.
+const ZB_SYS_KEY = "hrsys";
+const zbColor = (i, n) => `hsl(${Math.round(140 - 140 * i / Math.max(1, n - 1))} 60% 42%)`;   // green (easy) → red
+// {kind: "power"} | {kind: "hr", sys, hr}; `why` = the reason a heart-rate basis shows the power bar
+function zoneBarSpec(plan, basis, pick) {
+  if (basis?.basis !== "hr") return { kind: "power" };
+  const hb = plan.hr_bar;
+  if (!hb) return { kind: "power", why: T("zbar.no_hr_data") };
+  if (!ok(hb.hr)) return { kind: "power", why: hb.reason || T("zbar.no_hr_data") };
+  const avail = Object.keys(hb.systems || {}).filter((k) => hb.systems[k].rows?.length);
+  if (!avail.length) return { kind: "power", why: (hb.systems?.[hb.default] || {}).reason || T("zbar.no_hr_data") };
+  const sys = [pick, hb.default].find((k) => avail.includes(k)) || avail[0];
+  return { kind: "hr", sys, hr: hb.hr };
 }
+// the colour strip with zone ids on it, a tick scale and a legend of every zone shown (no hover needed)
+function zoneStrip(rows, val, lo, hi, ticks, tickText, rangeText) {
+  const X = (f) => Math.max(0, Math.min(100, (f - lo) / (hi - lo) * 100));
+  const at = rows.findIndex((r) => val >= r.lo && (r.hi == null || val < r.hi));
+  let h = `<div class="zbar">`, leg = "";
+  rows.forEach((r, i) => {
+    const a = Math.max(lo, r.lo), b = Math.min(hi, r.hi ?? hi);
+    if (!(b > a)) return;
+    const w = X(b) - X(a), col = zbColor(i, rows.length);
+    h += `<div class="z${i === at ? " cur" : ""}" style="width:${w}%;background:${col}">${w >= 6 ? esc(r.id) : ""}</div>`;
+    leg += `<span class="${i === at ? "cur" : ""}"><i style="background:${col}"></i><b>${esc(r.id)}</b> ${esc(r.name)} <span class="faint">${esc(rangeText(r))}</span></span>`;
+  });
+  h += `<div class="needle" style="left:${X(val)}%"></div></div><div class="escale">`;
+  // the end ticks align inwards, so 50 / 130 are not cut off at the card's edge
+  h += ticks.map((t) => { const x = X(t), tf = x <= 0 ? ";transform:none" : x >= 100 ? ";transform:translateX(-100%)" : "";
+    return `<span style="left:${x}%${tf}">${esc(tickText(t))}</span>`; }).join("") + "</div>";
+  return { html: h + `<div class="zleg">${leg}</div>`, zone: at >= 0 ? rows[at] : null };
+}
+function zoneBar(p, cp) {
+  const spec = zoneBarSpec(PLAN, BASIS, ls.get(ZB_SYS_KEY, null));
+  let head = "", body = "", line = "";
+  if (spec.kind === "hr") {
+    const hb = PLAN.hr_bar, S0 = hb.systems[spec.sys], rows = S0.rows, hr = spec.hr;
+    const top = rows[rows.length - 1].lo;
+    const lo = Math.max(0, Math.floor((Math.min(rows[1]?.lo ?? hr, hr) - 12) / 5) * 5);
+    const hi = Math.ceil((Math.max(top, hr) + 10) / 5) * 5, step = hi - lo > 80 ? 20 : 10;
+    const ticks = []; for (let t = Math.ceil(lo / step) * step; t <= hi; t += step) ticks.push(t);
+    const st = zoneStrip(rows, hr, lo, hi, ticks, (t) => String(t), (r) => r.hi == null ? `${Math.round(r.lo)}+` : r.lo ? `${Math.round(r.lo)}–${Math.round(r.hi)}` : `< ${Math.round(r.hi)}`);
+    const opts = Object.entries(hb.systems).map(([k, s]) => `<option value="${esc(k)}"${k === spec.sys ? " selected" : ""}${s.rows?.length ? "" : " disabled"}>${esc(s.title)}${s.rows?.length ? "" : "（" + esc(s.reason || "") + "）"}</option>`).join("");
+    head = `${esc(T("zbar.title_hr"))} <span class="meta">${esc(T("zbar.axis_hr"))}</span>${help(esc(T("zbar.tip")))}
+      <label class="meta zsys">${esc(T("zbar.system"))} <select id="zbar-sys">${opts}</select></label>`;
+    body = st.html;
+    line = T("zbar.line_hr", { hr: Math.round(hr), sys: S0.short, zone: st.zone ? st.zone.id : "–", name: st.zone ? st.zone.name : "" })
+      + (hb.hr_source ? ` · ${hb.hr_source}` : "") + (S0.basis_text ? ` · ${S0.basis_text}` : "");
+  } else {
+    const z = PLAN.zones || []; if (!z.length || !cp) return "";
+    const st = zoneStrip(z, p / cp, 0.5, 1.3, [0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3], (t) => String(Math.round(t * 100)),
+      (r) => `${Math.round(r.lo * 100)}${r.hi == null ? "+" : "–" + Math.round(r.hi * 100)}%`);
+    head = `${esc(T("zbar.title_power"))} <span class="meta">${esc(T("zbar.axis_power"))}</span>${help(esc(T("zbar.tip")))}`;
+    body = st.html;
+    line = T("zbar.line_power", { pct: pct(p / cp), w: W(p), zone: zoneOf(p, cp), name: st.zone ? st.zone.name : "" });
+  }
+  return `<div id="zbar-box"><div class="zhead">${head}</div>${body}<div class="meta">${esc(line)}</div>`
+    + (spec.why ? `<div class="note wn">${esc(spec.why)}</div>` : "") + `</div>`;
+}
+function wireZoneBar() {
+  const sel = $("zbar-sys"); if (!sel) return;
+  sel.onchange = () => { ls.set(ZB_SYS_KEY, sel.value); $("zbar-box").outerHTML = zoneBar(PLAN.summary.power, PLAN.used.cp.value); wireZoneBar(); };
+}
+// ---- end zone bar ----
 
 // the goal against the model's own prediction (100 %): one line, a warning when it is clearly faster
 function goalLine(g) {
@@ -1199,7 +1264,7 @@ function renderResults() {
   // other calcs (v1)
   h += `<details><summary>其他試算與交叉檢查</summary>${otherCalcs()}</details>`;
   $("results").innerHTML = h;
-  wireEffortBar();
+  wireEffortBar(); wireZoneBar();
 }
 function durText(m) {
   // the terrain-matched durability measurement (trailhr step 7), for the ? tip
