@@ -332,3 +332,33 @@ def test_summit_simulation_and_me_are_walking_sessions():
         assert s["target"].startswith("心率 ≤ 爬坡上限 146 bpm") and "RPE ≤ 13" in s["target"]
         assert "下坡看腿的感覺" in s["detail"] and "全程心率壓在輕鬆跑上限以下" not in s["detail"]
     assert not any(s.get("target", "").startswith("心率 ≤ 爬坡上限") for s in ss if s["id"] not in ("me",))
+
+
+def test_strength_drops_the_step_down_once_sp114s_me_is_in(monkeypatch):
+    """SP-119 × SP-114 (integration): SP-119 detects the ME by id 「me…」 / 「ME」 in the title — SP-114's
+    session is id "me", 「ME 負重爬坡（…）」, so it matches; but the ME is added after the strength
+    template (specific_phase.apply_me), so strength_plan.refresh re-renders the 維持 session: no
+    離心下階 in week_plan and in the projected ME weeks."""
+    from backend.engine import overview as O
+    from backend.engine import plan_prefs as PP
+    from backend.engine import projection as PJ
+    from backend.engine import strength_plan as STP
+    from backend.engine.status import Status
+    from backend.tests.test_b2b import _history, _phases, _plan_with
+    from backend.tests.test_quality_gate import TODAY as T0
+    assert STP.has_me([SP.me_session({"race": race_of(trip(), TODAY), "weeks_out": 6}, 60.0)])
+    ds = _history(T0)
+    plan = _plan_with("2026-12-05", 1, T0)
+    plan.events = [trip(start="2026-11-07", est_hours=21.0)]
+    ds.plan = plan
+    st = Status(ds, plan, T0, prefs=PP.Prefs()).compute()
+    next(i for i in st.indicators if i.id == "gate").extra["gap"] = 0.07
+    wp = O.week_plan(ds, st, T0)
+    assert any(s["id"] == "me" for s in wp["sessions"])
+    strength = [s for s in wp["sessions"] if s["kind"] == "strength"]
+    assert strength and all("離心下階" not in s["title"] and "ME 負重爬坡" in s["detail"] for s in strength)
+    weeks = PJ.project_weeks(wp, _phases(plan, T0), date(2026, 11, 8))
+    for w in weeks:
+        if any(x["id"] == "me" for x in w["sessions"]):
+            ss = [x for x in w["sessions"] if x["kind"] == "strength"]
+            assert ss and all("離心下階" not in x["title"] for x in ss)

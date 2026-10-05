@@ -13,7 +13,9 @@ scoring). The stage, by the week's phase (Bompa & Buzzichelli 2015, §2.4 of the
     6-station circuit, 12–15 reps, 1–2 left in the tank;
   * the rest of the 基礎期 — 最大肌力: split squat 3–6 reps × 3–4 sets, a loaded step-down, pull-ups;
   * 專項期 (and a 減量期 day before the stop) — 維持: 2–4 moves, 20–30 min. With a 百岳 A race and an
-    ME session in the week (SP-114: box step-up / step-down, lunges, jumps), no step-down here;
+    ME session in the week (SP-114's 「ME 負重爬坡」, id "me": a heavy pack up the steepest slope, the
+    pack emptied for the descent), no step-down here. The ME is added after the template
+    (specific_phase.apply_me), so refresh() re-renders the strength sessions once it is in;
   * 恢復期 (after a race) — the old session (not in SP-119's table).
 
 The moves are UA's (教練級); the sets and reps are 推估 (the app has no 1RM: 「留幾下」 instead).
@@ -122,6 +124,22 @@ def has_me(sessions) -> bool:
     return False
 
 
+def refresh(ss: list, ctx: Optional[dict]) -> None:
+    """Re-render the week's not-done strength sessions (dicts, in place) from `ctx` and the sessions
+    now in `ss` — after specific_phase.apply_me added SP-114's ME (has_me), which the template
+    didn't see yet. TSS scales with the minutes."""
+    if not ctx or not ctx.get("active"):
+        return
+    st = session(ctx, ss)
+    for x in ss:
+        if x.get("kind") != "strength" or x.get("done") or not str(x.get("id") or "").startswith("strength"):
+            continue
+        m0 = int(x.get("minutes") or 0)
+        x.update(title=st["title"], detail=st["detail"], minutes=st["minutes"],
+                 source=st["source"] or x.get("source"),
+                 tss=round(float(x.get("tss") or 0.0) * (st["minutes"] / m0 if m0 else 1.0), 1))
+
+
 def week_context(events, phases, monday: dt.date, kind: str) -> dict:
     """{active, stage, race_kind, race}: active when the next A race is a 越野賽 / 百岳 and the
     phase has a stage."""
@@ -157,7 +175,7 @@ def session(ctx: Optional[dict], others=()) -> dict:
     if ctx.get("race_kind") == "baiyue" and has_me(others):
         return {"title": _("肌力維持（高踏階＋引體向上）"), "minutes": MINUTES["maint"],
                 "detail": _("2–3 個動作各 2 組，不做到力竭：高踏階 8 下／腳（可背包）、引體向上（留 2 下）、"
-                            "農夫走路 2 × 30–40 m。這週的 ME 已經有下階和跳，這堂不做離心下階") + "；" + tail,
+                            "農夫走路 2 × 30–40 m。這週有 ME 負重爬坡，腿的負荷夠了，這堂不做離心下階") + "；" + tail,
                 "source": _("Bompa & Buzzichelli 2015（維持：每週至少 1 次、2–4 個動作）；動作：Uphill Athlete（教練級）")}
     return {"title": _("肌力維持（高踏階＋離心下階＋引體向上）"), "minutes": MINUTES["maint"],
             "detail": _("2–4 個動作各 2 組，不做到力竭、不加新動作：高踏階 8 下／腳（可背包）、"
