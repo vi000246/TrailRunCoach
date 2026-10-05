@@ -50,6 +50,10 @@ DEFAULTS: dict[str, Any] = {
     # outcome of the last run: {at, trigger, status, downloaded, checked, errors, error}
     "sync.coros.last_result": None,
     "sync.trainingpeaks.last_result": None,
+    # the last run that worked (status ok / partial): {at, trigger, downloaded}. A
+    # failed run never moves it (SP-88: 上次成功同步 on the overview banner)
+    "sync.coros.last_ok": None,
+    "sync.trainingpeaks.last_ok": None,
     # daily automatic sync: "HH:MM" local time, None = off
     "sync.schedule.daily_time": None,
     "sync.schedule.last_run": None,          # local ISO date of the last scheduled run

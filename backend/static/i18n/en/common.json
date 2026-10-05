@@ -83,5 +83,15 @@
   "sugg.kind.injury": "Injury",
   "sugg.wait_cool": "Testing is more accurate once the weather cools down (you can still schedule it now)",
   "sugg.decline": "No thanks",
-  "sugg.accept": "Schedule"
+  "sugg.accept": "Schedule",
+  "session.expired_sync": "{name} login expired: new activities can't sync",
+  "session.expired_push": "{name} login expired: new activities can't sync and the plan can't be pushed",
+  "session.expired_push_only": "{name} login expired: the plan can't be pushed",
+  "session.logged_out": "Logged out of {name}: new activities can't sync",
+  "session.sync_failed": "{name} automatic sync failed",
+  "session.see_settings": "Sync settings",
+  "session.last_ok": "Last successful sync: {when}",
+  "session.never_ok": "No successful sync yet",
+  "session.last_failed": "Last sync failed: {when} ({error})",
+  "autosync.failed": "Sync failed: {src}"
 }

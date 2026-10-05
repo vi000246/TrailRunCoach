@@ -83,5 +83,15 @@
   "sugg.kind.injury": "傷病",
   "sugg.wait_cool": "等天氣轉涼再測比較準（還是可以先排）",
   "sugg.decline": "不要",
-  "sugg.accept": "排入"
+  "sugg.accept": "排入",
+  "session.expired_sync": "{name} 登入已過期：無法同步新活動",
+  "session.expired_push": "{name} 登入已過期：無法同步新活動，也無法推送課表",
+  "session.expired_push_only": "{name} 登入已過期：無法推送課表",
+  "session.logged_out": "{name} 已登出：無法同步新活動",
+  "session.sync_failed": "{name} 自動同步失敗",
+  "session.see_settings": "查看同步設定",
+  "session.last_ok": "上次成功同步：{when}",
+  "session.never_ok": "還沒有成功同步過",
+  "session.last_failed": "最近一次同步失敗：{when}（{error}）",
+  "autosync.failed": "同步失敗：{src}"
 }
