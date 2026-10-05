@@ -593,15 +593,17 @@ def _fit_result(v, level, reps, equiv, progress, reason, action="ok", base=None,
 
 
 def fit(rung: str, cap: Optional[float] = None, history=(), prefs=None, mountain: bool = False,
-        alt_caps: Optional[list] = None, adj: Optional[dict] = None, cap_label: str = "平日上限") -> dict:
-    r = _fit(rung, cap, history, prefs, mountain, alt_caps, adj, cap_label)
+        alt_caps: Optional[list] = None, adj: Optional[dict] = None, cap_label: str = "平日上限",
+        hill: bool = False) -> dict:
+    r = _fit(rung, cap, history, prefs, mountain, alt_caps, adj, cap_label, hill)
     if adj and r.get("rung") == rung:
         r["adj"] = adj
     return r
 
 
 def _fit(rung: str, cap: Optional[float] = None, history=(), prefs=None, mountain: bool = False,
-         alt_caps: Optional[list] = None, adj: Optional[dict] = None, cap_label: str = "平日上限") -> dict:
+         alt_caps: Optional[list] = None, adj: Optional[dict] = None, cap_label: str = "平日上限",
+         hill: bool = False) -> dict:
     """The session for `rung` on a day with `cap` minutes (None = no cap), §C5.3:
       1. time enough → the canonical (first exposure) or a rotated equivalent of
          standard length, with the full warm-up / cool-down; then the same with
@@ -614,12 +616,19 @@ def _fit(rung: str, cap: Optional[float] = None, history=(), prefs=None, mountai
          filtered for the 48-h / Zone 5 spacing rules) → action "move";
       5. the rung before's equivalent as maintenance with a warning → action "back".
     `adj`: the state machine's tweak (rest + 1 min / power −5 %), applied first.
+    `hill` (SP-75, the 越野 專項期: 「階梯目前那一階的上坡版」 — Koop prescribes ~80 % of the intervals
+    uphill; specific-phase-progression.md §4.1, §4.4): only the rung's uphill variants, from the first
+    session on, and a tight cap cuts the uphill one's reps; 課表偏好 terrain_quality = flat still wins.
     {"variant", "base" (before reps / tweak), "level", "reps", "equiv", "progress",
      "reason", "action", "rung", "need_min"}."""
     allowed, prefer_hill = terrains(prefs, mountain)
     vs_all = [adjust(v, adj) for v in LIBRARY.get(rung, ())]
     vs = [v for v in vs_all if v.terrain in allowed] or [v for v in vs_all if v.canonical]
     canon = next(v for v in vs_all if v.canonical)
+    ref = canon                         # the variant a tight cap cuts reps from
+    if hill and "hill" in allowed and any(v.terrain == "hill" for v in vs):
+        vs = [v for v in vs if v.terrain == "hill"]
+        ref = vs[0]
     std_len = STD_LEN * main_s(canon)
     rh = _rung_hist(rung, history)
     first = not any(h.get("state", "done") == "done" for h in rh)
@@ -637,7 +646,7 @@ def _fit(rung: str, cap: Optional[float] = None, history=(), prefs=None, mountai
                 continue
             if lv == "full":
                 why = ("時間足夠 → 標準版" if v.canonical else "時間足夠 → 同等的標準長度版") + \
-                    ("（第一次做這一階：用有研究的那份課表）" if first else "")
+                    ("（第一次做這一階：用有研究的那份課表）" if first and v.canonical else "")
             else:
                 b = blocks(v, lv, prefs)
                 why = f"{cl} → {'標準版' if v.canonical else '同等的標準長度版'}，暖身縮到 {b['warm_min']} 分、緩和 {b['cool_min']} 分"
@@ -654,34 +663,34 @@ def _fit(rung: str, cap: Optional[float] = None, history=(), prefs=None, mountai
                                f"{cl} → 同等較短版 {structure(v)}（標準版 {structure(canon)} 要 {need:.0f} 分）",
                                rung=rung, need_min=need)
     floor = MIN_REPS.get(canon.cls, 2)
-    for n in range(canon.n - 1, floor - 1, -1):
-        r = with_reps(canon, n)
+    for n in range(ref.n - 1, floor - 1, -1):
+        r = with_reps(ref, n)
         if not ok(r, "min"):
             continue
-        share = tiz_s(r) / tiz_s(canon)
+        share = tiz_s(r) / tiz_s(ref)
         if share >= EQUIV_TIZ - 1e-9:
             return _fit_result(r, "min", n, True, True, f"{cl} → 減成 {n} 趟（目標區時間 {share * 100:.0f}%，仍算同等）",
-                               base=canon, rung=rung, need_min=need)
+                               base=ref, rung=rung, need_min=need)
         return _fit_result(r, "min", n, False, False,
                            f"{cl} → 縮量版 {n} 趟（目標區時間 {share * 100:.0f}% < 85%）：達標也只算維持，這一階不前進",
-                           base=canon, rung=rung, need_min=need, reduced=True)
+                           base=ref, rung=rung, need_min=need, reduced=True)
     for label, c, *wd in alt_caps or []:
         if cap is not None and (c is None or c > cap):
-            r = fit(rung, c, history, prefs, mountain, None, adj, cap_label=f"{label}上限")
+            r = fit(rung, c, history, prefs, mountain, None, adj, cap_label=f"{label}上限", hill=hill)
             if r["action"] == "ok" and r["equiv"]:
                 return {**r, "action": "move", "move_to": label, "move_wd": wd[0] if wd else None,
                         "reason": f"{cl} 放不下 {RUNG_NAME.get(rung, rung)} → 改到{label}（{r['reason']}）"}
     prev = PREV_RUNG.get(rung)
     if prev:
-        r = fit(prev, cap, history, prefs, mountain, None, None, cap_label)
+        r = fit(prev, cap, history, prefs, mountain, None, None, cap_label, hill)
         what = f"{RUNG_NAME.get(rung, rung)} 的 {structure(canon)}"
         return {**r, "action": "back", "equiv": False, "progress": False, "rung": prev, "need_min": need,
                 "reason": f"{cl} 放不下 {what}（需要 {need:.0f} 分以上）：本週改排 {RUNG_NAME.get(prev, prev)} 的 "
                           f"{structure(r['variant'])}，不算進階。要進階，把平日上限調到 {need:.0f} 分，或把品質課改到週末。",
                 "warn": True}
-    r = with_reps(canon, floor)
+    r = with_reps(ref, floor)
     return _fit_result(r, "min", floor, False, False,
-                       f"{cl} 連 {floor} 趟都放不下：先排 {floor} 趟，達標也只算維持", base=canon, rung=rung,
+                       f"{cl} 連 {floor} 趟都放不下：先排 {floor} 趟，達標也只算維持", base=ref, rung=rung,
                        need_min=need, reduced=True, warn=True)
 
 

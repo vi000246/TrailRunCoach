@@ -663,6 +663,10 @@
     "draft": true,
     "src": "backend/engine/panels/drift_bars.py:32"
   },
+  "{km:g} km 路跑": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1616"
+  },
   "{label} {tss:g} TSS（{rpe} {min} 分）": {
     "draft": true,
     "src": "backend/engine/workout_steps.py:788"
@@ -1855,6 +1859,18 @@
     "draft": true,
     "src": "backend/engine/overview.py:1554"
   },
+  "專項期前段（A 賽：{race}）": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1622"
+  },
+  "專項期後段（A 賽：{race}）": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1623"
+  },
+  "專項期後段（賽前第 {w} 週）：{rules}。越接近比賽，練的強度越像比賽；週數和比例為推估": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2549"
+  },
   "專項期每週 1 堂技術地形 {m}′（{rpe}，接近比賽路況）：RPE 7 算強度課，排在離長跑和其他強度課 ≥ 2 天的日子；{bits}（RPE 6–7 的時間算進每週強度預算，推估）": {
     "draft": true,
     "src": "backend/engine/technical.py:195"
@@ -2731,6 +2747,10 @@
     "draft": true,
     "src": "backend/engine/quality_gate.py:2005"
   },
+  "每週 1 堂強度課時以 {zone} 區為主（3 區：5 區 = {z3}:{z5}）": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2542"
+  },
   "每週 3 區量 ≤ 週量 10%（Daniels），放不下排巡航版 3×6／3×8／2×12": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:1941"
@@ -2766,6 +2786,10 @@
   "比賽": {
     "draft": true,
     "src": "backend/engine/hr_profile.py:176"
+  },
+  "比賽 10 公里以內：長跑全程輕鬆，不加馬拉松配速段": {
+    "draft": true,
+    "src": "backend/engine/overview.py:1145"
   },
   "比賽 {n} 次平均心率在 95–103% LTHR": {
     "draft": false,
@@ -3154,6 +3178,10 @@
   "百岳的專項期、減量期：單腳站和伸腳點地可以背 5–10% 體重的背包做": {
     "draft": true,
     "src": "backend/engine/balance_plan.py:40"
+  },
+  "百岳行程": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1618"
   },
   "目前不設門檻，只看護欄（{x}": {
     "draft": true,
@@ -3743,6 +3771,10 @@
     "draft": true,
     "src": "backend/engine/terrain_calib.py:78"
   },
+  "越野賽": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1618"
+  },
   "越野跑": {
     "draft": true,
     "src": "backend/engine/primary_sport.py:32"
@@ -3802,6 +3834,10 @@
   "路線有 {n} 段，超過手錶建議的 {limit} 步：相鄰的段合併成 {m} 步": {
     "draft": true,
     "src": "backend/engine/racepower/watch_export.py:226"
+  },
+  "路跑": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1616"
   },
   "路跑的預估只算功率，沒有平均心率，所以用功率區間": {
     "draft": false,
@@ -3979,6 +4015,10 @@
     "draft": true,
     "src": "backend/engine/racepower/calc.py:435"
   },
+  "這場賽事預估 4 小時以上、當天的強度不到 5 區，強度課只排 3 區（上坡版），5 區不排": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2540"
+  },
   "這天不是休息日": {
     "draft": true,
     "src": "backend/api/plan_sessions.py:1948"
@@ -4046,6 +4086,14 @@
   "這筆活動沒有逐秒資料": {
     "draft": true,
     "src": "backend/engine/interval_eval.py:474"
+  },
+  "這週的 3 區改排接近閾值的巡航 3×7 分（97–100% CP），比階梯那一階更接近比賽強度": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2546"
+  },
+  "這週長跑全程輕鬆：馬拉松配速段隔週排，逐週加長（推估）": {
+    "draft": true,
+    "src": "backend/engine/overview.py:1146"
   },
   "這週間歇不往上加；睡眠、輕鬆跑先顧好，下一堂功率回來再進階": {
     "draft": true,
@@ -4314,6 +4362,14 @@
   "非同等（不算進階）": {
     "draft": true,
     "src": "backend/engine/interval_library.py:822"
+  },
+  "預估 4 小時以上的{event}": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1619"
+  },
+  "預估不到 4 小時的{event}": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1620"
   },
   "預估時間 {h:.1f} h": {
     "draft": true,
