@@ -267,6 +267,18 @@ dialog#zoom::backdrop { background: rgba(0,0,0,.45); }
 .maptb .seg { padding: 1px; }
 .maptb .seg button { padding: 1px 8px; font-weight: 500; }
 .maptb .seg button:disabled { opacity: .4; cursor: default; }
+/* the map and its activity chart (SP-80): stacked, or side by side (.left) on a wide screen */
+.mapwrap { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+.mapwrap.left { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.mapwrap.left .plot.lmap { height: auto; min-height: 380px; }
+.mapside { min-width: 0; }
+.mapside .mcbar { margin: 0 0 2px; }
+.maplayout { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; }
+@media (max-width: 900px) {
+  .mapwrap.left { grid-template-columns: minmax(0, 1fr); }
+  .mapwrap.left .plot.lmap { height: 320px; min-height: 0; }
+  .maplayout { display: none; }
+}
 .maplegend { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); }
 .maplegend i { display: inline-block; width: 90px; height: 8px; border-radius: 4px; }
 .maphint { margin: 6px 0 0; padding: 6px 10px; border-radius: 6px; font-size: 11.5px; color: var(--warn);
@@ -1922,15 +1934,23 @@ function gridRect(chart) {
   try { return chart.getModel().getComponent("grid", 0).coordinateSystem.getRect(); }
   catch { return { x: 0, y: 0, width: chart.getWidth(), height: chart.getHeight() }; }
 }
-// a time-x (axis "t", seconds) or distance-x (axis "d", km × f) workout chart joins the hover group
-function hoverChart(chart, s, axis, f = 1) {
+// every grid of a chart (stacked panels share the x axis)
+function gridRects(chart) {
+  const rects = [];
+  try { for (let k = 0; ; k++) { const c = chart.getModel().getComponent("grid", k); if (!c) break; rects.push(c.coordinateSystem.getRect()); } }
+  catch { /* no grid model yet */ }
+  return rects.length ? rects : [gridRect(chart)];
+}
+// a time-x (axis "t", seconds) or distance-x (axis "d", km × f) workout chart joins the hover group;
+// `off`: the chart's x 0 in the samples' units (activity_charts' time axis starts at the first sample)
+function hoverChart(chart, s, axis, f = 1, off = 0) {
   const lk = axis === "t" ? s.byT : s.byD, arr = axis === "t" ? s.t : s.d;
   if (!lk) return;
   const m = {
     workout: s.workout, on: false, dead: () => chart.isDisposed(),
     show(i) {
       const x = arr[i], g = gridRect(chart);
-      const px = x == null ? NaN : chart.convertToPixel({ xAxisIndex: 0 }, x * f);
+      const px = x == null ? NaN : chart.convertToPixel({ xAxisIndex: 0 }, (x - off) * f);
       if (!isFinite(px) || px < g.x - 0.5 || px > g.x + g.width + 0.5) return this.hide();
       chart.dispatchAction({ type: "showTip", x: px, y: g.y + g.height / 2 });
       this.on = true;
@@ -1942,10 +1962,9 @@ function hoverChart(chart, s, axis, f = 1) {
     const px = e.offsetX, py = e.offsetY;
     hoverEmit(m, () => {
       if (chart.isDisposed()) return null;
-      const g = gridRect(chart);
-      if (px < g.x || px > g.x + g.width || py < g.y || py > g.y + g.height) return null;
+      if (!gridRects(chart).some((g) => px >= g.x && px <= g.x + g.width && py >= g.y && py <= g.y + g.height)) return null;
       const x = chart.convertFromPixel({ xAxisIndex: 0 }, px);
-      return isFinite(x) ? nearestIn(lk, x / f) : null;
+      return isFinite(x) ? nearestIn(lk, x / f + off) : null;
     });
   });
   zr.on("globalout", () => hoverEmit(m, null));
@@ -1981,12 +2000,17 @@ async function drawMap(card, res) {
   tb.className = "maptb";
   const el = document.createElement("div");
   el.className = "plot lmap";
-  card.append(tb, el);
+  // the map and the activity chart beside it (SP-80; mapChart)
+  const wrap = document.createElement("div");
+  wrap.className = "mapwrap";
+  wrap.appendChild(el);
+  card.append(tb, wrap);
   let s;
   try { s = await samplesFor(res.workout); }
-  catch (e) { el.remove(); tb.remove(); return nodata(`讀不到這筆活動的 GPS 樣本：${e.message}`); }
+  catch (e) { wrap.remove(); tb.remove(); return nodata(`讀不到這筆活動的 GPS 樣本：${e.message}`); }
   if (!el.isConnected) return;            // the card was redrawn meanwhile
-  if (!s.gps.length) { el.remove(); tb.remove(); return nodata("這筆活動沒有 GPS 資料（室內或裝置沒有記錄位置）。"); }
+  if (!s.gps.length) { wrap.remove(); tb.remove(); return nodata("這筆活動沒有 GPS 資料（室內或裝置沒有記錄位置）。"); }
+  if (!res._zoom) card.classList.add("ac-wide");
 
   const pref = mapPrefs();
   const map = L.map(el, { preferCanvas: true, zoomSnap: 0.5 });
@@ -2064,13 +2088,155 @@ async function drawMap(card, res) {
       return k < 0 ? null : s.gps[k];
     });
   });
+  // a tap on the route does the same on a phone (no mouse to hover with)
+  map.on("click", (e) => { const p = e.layerPoint; hoverEmit(m, () => { if (!el._lmap) return null; const k = near(p); return k < 0 ? null : s.gps[k]; }); });
   map.on("mouseout", () => hoverEmit(m, null));
   el.addEventListener("mouseleave", () => hoverEmit(m, null));
   HOVER.members.add(m);
   const n = s.gps.length;
-  addTip(card, `GPS 軌跡 ${n} 點 · 右上角切換底圖和疊圖 · 滑鼠移到路線上，其他圖表會同步標出同一時間`);
+  addTip(card, `GPS 軌跡 ${n} 點 · 右上角切換底圖和疊圖 · ${t("viewer.mapchart.tip")}`);
   new ResizeObserver(() => { if (el._lmap) map.invalidateSize(); }).observe(el);
+  mapChart(card, tb, wrap, s);
 }
+
+// ---- map chart (SP-80): the activity beside its route map — elevation, HR, power, pace and grade
+// on the samples' time axis, one stacked panel per metric (each has its own unit, never one shared
+// y scale). Buttons pick the panels; the layout puts the map on top or on the left (narrow screens:
+// always on top). Hovering the map, these panels or the activity's other time / distance charts
+// marks the same moment everywhere (HOVER; on a phone, tap). Choices remembered per browser.
+const MC_KEY = "wko5viewer.mapchart";
+// [id, label key, unit, colour var]
+const MC_METRICS = [["elev", "viewer.mapchart.elev", "m", "--ac-ink2"], ["hr", "viewer.mapchart.hr", "bpm", "--ac-hr"],
+  ["power", "viewer.mapchart.power", "W", "--ac-pw"], ["pace", "viewer.mapchart.pace", "/km", "--accent"],
+  ["grade", "viewer.mapchart.grade", "%", "--muted"]];
+const MC_DEFAULT = ["elev", "hr", "power", "pace"];
+function mcPrefs() { try { return JSON.parse(localStorage.getItem(MC_KEY) || "{}") || {}; } catch { return {}; } }
+function mcSave(patch) { try { localStorage.setItem(MC_KEY, JSON.stringify({ ...mcPrefs(), ...patch })); } catch {} }
+// pace (s/km) from the distance covered within ±`half` s of each sample (a moving window, so GPS
+// jitter doesn't spike it); null below `minKmh` (standing) or without distance
+function mcPace(t, d, half = 15, minKmh = 1.6) {
+  const out = new Array(t.length).fill(null);
+  if (!d) return out;
+  const v = [];
+  for (let i = 0; i < t.length; i++) if (t[i] != null && d[i] != null) v.push(i);
+  let a = 0, b = 0;
+  for (let k = 0; k < v.length; k++) {
+    const ti = t[v[k]];
+    while (t[v[a]] < ti - half) a++;
+    if (b < k) b = k;
+    while (b + 1 < v.length && t[v[b + 1]] <= ti + half) b++;
+    const dt = t[v[b]] - t[v[a]], kmh = dt > 0 ? (d[v[b]] - d[v[a]]) / dt * 3600 : 0;
+    if (kmh >= minKmh) out[v[k]] = 3600 / kmh;
+  }
+  return out;
+}
+// the panels to draw: the remembered pick (or the default) among the metrics this activity has
+function mcPick(saved, has) {
+  const want = Array.isArray(saved) ? saved : MC_DEFAULT;
+  return MC_METRICS.map((r) => r[0]).filter((id) => want.includes(id) && has(id));
+}
+const mcFmt = (id, v) => v == null || !isFinite(v) ? "—" : id === "pace" ? ACT.pace(v) : id === "grade" ? (+v).toFixed(1) : String(Math.round(v));
+function mcOption(s, ids, vals) {
+  const T = ACT.theme(), P = 76, G = 16, top = 6, n = ids.length;
+  const xs = s.byT.xs, t0 = xs[0], t1 = xs[xs.length - 1], span = Math.max(1, t1 - t0);
+  const lbl = { color: T.muted, fontSize: 10, hideOverlap: true };
+  const meta = Object.fromEntries(MC_METRICS.map((r) => [r[0], { name: t(r[1]), unit: r[2], color: css(r[3]) || T.ink2 }]));
+  const yRange = (id) => {
+    // pace and grade: the 2nd–98th percentile, so a few GPS spikes don't flatten the line
+    if (id !== "pace" && id !== "grade") return {};
+    const good = vals[id].filter((v) => v != null && isFinite(v));
+    if (good.length < 2) return {};
+    let lo = pctl(good, 0.02), hi = pctl(good, 0.98);
+    if (hi - lo < 1) { lo -= 1; hi += 1; }
+    const pad = (hi - lo) * 0.08;
+    return { min: Math.floor(lo - pad), max: Math.ceil(hi + pad) };
+  };
+  return {
+    animation: false,
+    grid: ids.map((id, k) => ({ left: 52, right: 12, top: top + k * (P + G), height: P })),
+    axisPointer: { link: [{ xAxisIndex: "all" }], lineStyle: { color: T.ink2 } },
+    tooltip: { trigger: "axis", confine: true, backgroundColor: T.panel, borderColor: T.line, textStyle: { color: T.text },
+      formatter: (pp) => {
+        pp = [].concat(pp); if (!pp.length) return "";
+        const i = pp[0].dataIndex, rows = [`<b>${fmtDur(s.t[i] - t0)}</b>${s.d?.[i] != null ? ` · ${s.d[i].toFixed(2)} km` : ""}`];
+        ids.forEach((id) => rows.push(`<span style="color:${meta[id].color}">●</span> ${esc(meta[id].name)} <b>${mcFmt(id, vals[id][i])}</b> ${meta[id].unit}`));
+        return ACT.tipBox(rows.join("<br>"));
+      } },
+    graphic: ids.map((id, k) => ({ type: "text", left: 56, top: top + k * (P + G) + 1, z: 10, silent: true,
+      style: { text: `${meta[id].name} ${meta[id].unit}`, fill: T.muted, fontSize: 10 } })),
+    xAxis: ids.map((id, k) => ({ type: "value", gridIndex: k, min: t0, max: t1, interval: ACT.interval(span),
+      axisLine: { lineStyle: { color: T.line } }, axisTick: { show: false },
+      splitLine: { lineStyle: { color: T.line, opacity: 0.5 } },
+      axisLabel: k === n - 1 ? { ...lbl, showMaxLabel: false, formatter: (v) => ACT.tick(v - t0, span) } : { show: false } })),
+    yAxis: ids.map((id, k) => ({ type: "value", gridIndex: k, scale: true, splitNumber: 2, inverse: id === "pace", ...yRange(id),
+      axisLabel: { ...lbl, formatter: (v) => mcFmt(id, v) }, splitLine: { lineStyle: { color: T.line, opacity: 0.5 } } })),
+    series: ids.map((id, k) => ({ id, name: meta[id].name, type: "line", xAxisIndex: k, yAxisIndex: k, showSymbol: false,
+      connectNulls: false, data: s.t.map((x, i) => [x, vals[id][i]]),
+      lineStyle: { color: meta[id].color, width: 1.3 }, itemStyle: { color: meta[id].color },
+      ...(id === "elev" ? { areaStyle: { color: meta[id].color, opacity: 0.18 } } : {}) })),
+  };
+}
+function mapChart(card, tb, wrap, s) {
+  if (!s.byT) return;                         // no time axis: the map alone
+  const pwOn = S.usePower !== false;
+  const vals = { elev: s.elev, hr: s.hr, power: pwOn ? s.power : null, pace: mcPace(s.t, s.d), grade: s.grade };
+  const has = (id) => Array.isArray(vals[id]) && vals[id].some((v) => v != null);
+  const pref = mcPrefs();
+  // `want` keeps a pick this activity can't show (no power here) for the next activity
+  let want = Array.isArray(pref.metrics) ? pref.metrics : MC_DEFAULT;
+  let ids = mcPick(want, has), layout = pref.layout === "left" ? "left" : "top";
+  // layout: map on top / on the left (hidden on narrow screens, where it is always on top)
+  const lay = document.createElement("span");
+  lay.className = "maplayout";
+  lay.innerHTML = `<span class="meta">${esc(t("viewer.mapchart.layout"))}</span><div class="seg" role="group" aria-label="${esc(t("viewer.mapchart.layout"))}">${
+    [["top", "viewer.mapchart.top"], ["left", "viewer.mapchart.left"]].map(([k, key]) =>
+      `<button data-l="${k}" class="${k === layout ? "on" : ""}" aria-pressed="${k === layout}">${esc(t(key))}</button>`).join("")}</div>`;
+  tb.appendChild(lay);
+  const side = document.createElement("div");
+  side.className = "mapside";
+  const bar = document.createElement("div");
+  bar.className = "maptb mcbar";
+  bar.innerHTML = `<span class="meta">${esc(t("viewer.mapchart.metrics"))}</span><div class="seg" role="group" aria-label="${esc(t("viewer.mapchart.metrics"))}">${
+    MC_METRICS.map(([id, key]) => `<button data-m="${id}" class="${ids.includes(id) ? "on" : ""}" aria-pressed="${ids.includes(id)}" ${has(id) ? "" : "disabled"}>${esc(t(key))}</button>`).join("")}</div>`;
+  const el = document.createElement("div");
+  el.className = "plot mapchart";
+  el.setAttribute("role", "img");
+  el.setAttribute("aria-label", t("viewer.mapchart.aria"));
+  const none = document.createElement("p");
+  none.className = "nodata";
+  none.textContent = t("viewer.mapchart.none");
+  side.append(bar, el, none);
+  wrap.appendChild(side);
+  wrap.classList.toggle("left", layout === "left");
+  const chart = echarts.init(el);
+  charts.push(chart);
+  new ResizeObserver(() => chart.isDisposed() || chart.resize()).observe(el);
+  const draw = () => {
+    none.hidden = ids.length > 0; el.hidden = !ids.length;
+    if (!ids.length) return;
+    el.style.height = `${6 + ids.length * 92 + 18}px`;
+    chart.resize();
+    chart.setOption(mcOption(s, ids, vals), true);
+  };
+  draw();
+  hoverChart(chart, s, "t");
+  bar.onclick = (e) => {
+    const b = e.target.closest("button[data-m]"); if (!b || b.disabled) return;
+    const id = b.dataset.m, on = !ids.includes(id);
+    want = MC_METRICS.map((r) => r[0]).filter((x) => x === id ? on : want.includes(x));
+    ids = mcPick(want, has);
+    b.classList.toggle("on", on); b.setAttribute("aria-pressed", String(on));
+    mcSave({ metrics: want });
+    draw();
+  };
+  lay.onclick = (e) => {
+    const b = e.target.closest("button[data-l]"); if (!b || b.dataset.l === layout) return;
+    layout = b.dataset.l; mcSave({ layout });
+    lay.querySelectorAll("button[data-l]").forEach((x) => { x.classList.toggle("on", x === b); x.setAttribute("aria-pressed", String(x === b)); });
+    wrap.classList.toggle("left", layout === "left");
+  };
+}
+// ---- end map chart ----
 
 // Day calendar for a daily count series ([iso date, n] points): a filled cell = done that day,
 // plus the counts that matter (this week, the last 4 weeks, the whole range).
@@ -2515,6 +2681,12 @@ function drawActivity(card, res) {
   else if (res.kind === "act_hrzones" || res.kind === "act_powerzones") drawActZones(card, res);
   else if (res.kind === "act_hrtrend") drawActHrTrend(card, res);
 }
+// an activity chart (x = seconds from the activity's first sample) joins the synced hover (SP-80)
+function hoverAct(chart) {
+  if (S.mode !== "workout" || S.workout == null) return;
+  samplesFor(S.workout).then((s) => { if (!chart.isDisposed()) hoverChart(chart, s, "t", 1, s.byT ? s.byT.xs[0] : 0); })
+    .catch((e) => console.warn("hover sync off:", e.message));
+}
 function actChart(card, cls, label) {
   const el = document.createElement("div");
   el.className = `plot ${cls}`;
@@ -2620,6 +2792,7 @@ function drawActHrPower(card, res) {
     ],
   });
   chart.dispatchAction({ type: "takeGlobalCursor", key: "brush", brushOption: { brushType: "lineX", brushMode: "single" } });
+  hoverAct(chart);
   const clearBtn = card.querySelector(".ac-clear");
   const toK = (x) => Math.max(0, Math.min(K, Math.round(x / res.step)));
   const panels = pwOn ? [0, 1] : [0];
@@ -2735,6 +2908,7 @@ function drawActHrTrend(card, res) {
         endLabel: { show: true, color: T.ink2, fontSize: 10, formatter: `趨勢 ${sign(res.change_bpm, 1)} bpm`, offset: [-90, -12] } },
     ],
   });
+  hoverAct(chart);
 }
 
 // ---- 爬坡與地形 (workout_review climbs / grades). Self-contained: its own styles (cpStyle), toggles and

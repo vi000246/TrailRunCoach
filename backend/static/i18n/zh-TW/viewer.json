@@ -47,5 +47,17 @@
   "pz.sources": "目標的來源",
   "map.failed": "地圖元件（Leaflet）載入失敗，無法顯示路線。",
   "zones.basis_tpace": "閾值配速",
-  "zones.basis_hrmax": "最大心率"
+  "zones.basis_hrmax": "最大心率",
+  "mapchart.tip": "滑鼠移到路線、旁邊的圖表或這筆活動的其他時間／距離圖上，所有圖表和地圖會同步標出同一時間（手機用點的）",
+  "mapchart.elev": "海拔",
+  "mapchart.hr": "心率",
+  "mapchart.power": "功率",
+  "mapchart.pace": "配速",
+  "mapchart.grade": "坡度",
+  "mapchart.layout": "版面",
+  "mapchart.top": "地圖在上",
+  "mapchart.left": "地圖在左",
+  "mapchart.metrics": "圖表",
+  "mapchart.aria": "這筆活動的海拔、心率、功率、配速和坡度隨時間，和地圖同步",
+  "mapchart.none": "按上面的按鈕選要看的指標"
 }
