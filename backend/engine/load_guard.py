@@ -60,12 +60,11 @@ from typing import Optional, Sequence
 import numpy as np
 
 from backend.engine.reentry import MIN_BREAK
+from backend.i18n import _
 
 # ---- CTL ramp ---------------------------------------------------------------
 WATCH_PCT, WATCH_MIN = 0.10, 3.0               # 推估 (Friel 5–8 over CTL 60–80, the lower end)
 BLOCK_PCT, BLOCK_MIN, BLOCK_MAX = 0.15, 5.0, 10.0   # 推估; BLOCK_MAX = Friel's ceiling 10 (coach)
-SRC_RAMP = ("CTL ramp 相對門檻：注意 ≥ max(3, CTL 的 10%)、擋 ≥ min(10, max(5, CTL 的 15%))"
-            "（Friel 每週 5–8 適合多數人、10 是上限，換算成比例；推估）")
 WATCH, BLOCK = "watch", "block"
 
 # ---- startup -----------------------------------------------------------------
@@ -122,12 +121,12 @@ def ramp_text(ramp: float, ctl_prev: Optional[float], level: str) -> str:
     c = _base(ctl_prev)
     if level == BLOCK:
         line, term = block_line(c), block_term(c)
-        how = {"floor": f"下限 {BLOCK_MIN:.0f}", "cap": f"上限 {BLOCK_MAX:.0f}",
-               "pct": f"CTL {c:.0f} 的 {BLOCK_PCT:.0%}"}[term]
+        how = {"floor": _("下限 {v:.0f}", v=BLOCK_MIN), "cap": _("上限 {v:.0f}", v=BLOCK_MAX),
+               "pct": _("CTL {c:.0f} 的 {pct:.0%}", c=c, pct=BLOCK_PCT)}[term]
     else:
         line = watch_line(c)
-        how = f"下限 {WATCH_MIN:.0f}" if WATCH_PCT * c <= WATCH_MIN else f"CTL {c:.0f} 的 {WATCH_PCT:.0%}"
-    return f"CTL 每週 +{ramp:.1f}（≥ {line:.1f}＝{how}）"
+        how = _("下限 {v:.0f}", v=WATCH_MIN) if WATCH_PCT * c <= WATCH_MIN else _("CTL {c:.0f} 的 {pct:.0%}", c=c, pct=WATCH_PCT)
+    return _("CTL 每週 +{ramp:.1f}（≥ {line:.1f}＝{how}）", ramp=ramp, line=line, how=how)
 
 
 # ---- PMC start values (SP-68) ---------------------------------------------------------

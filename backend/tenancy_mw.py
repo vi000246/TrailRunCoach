@@ -28,7 +28,8 @@ import secrets as _secrets
 from http.cookies import SimpleCookie
 from typing import Optional
 
-from backend import tenancy
+from backend import i18n, tenancy
+from backend.i18n import _
 from backend.security import ratelimit as RL
 
 MAX_BODY = 6 * 1024 * 1024
@@ -179,9 +180,9 @@ def _volume_error(method: str, path: str, body: bytes, t: Optional[tenancy.Tenan
         except ValueError:
             data = None
     if data is not None and _long_text(data):
-        return f"文字欄位最多 {MAX_TEXT} 字"
+        return _("文字欄位最多 {n} 字", n=MAX_TEXT)
     if path == "/api/v1/plan/phases" and isinstance(data, list) and len(data) > MAX_PHASES:
-        return f"示範模式最多 {MAX_PHASES} 個階段"
+        return _("示範模式最多 {n} 個階段", n=MAX_PHASES)
     if t is None:
         return None
     if path == "/api/v1/plan/events" and method == "PUT":
@@ -190,7 +191,7 @@ def _volume_error(method: str, path: str, body: bytes, t: Optional[tenancy.Tenan
             plan = Plan.load()
         eid = (data or {}).get("id") if isinstance(data, dict) else None
         if len(plan.events) >= MAX_EVENTS and not any(e.id == eid for e in plan.events):
-            return f"示範模式最多 {MAX_EVENTS} 個賽事"
+            return _("示範模式最多 {n} 個賽事", n=MAX_EVENTS)
     if path == "/api/v1/overview/plan/sessions" and method == "POST":
         import sqlite3
         try:
@@ -202,7 +203,7 @@ def _volume_error(method: str, path: str, body: bytes, t: Optional[tenancy.Tenan
         except sqlite3.Error:
             n = 0
         if n >= MAX_SESSIONS:
-            return f"示範模式最多 {MAX_SESSIONS} 堂課"
+            return _("示範模式最多 {n} 堂課", n=MAX_SESSIONS)
     return None
 
 
@@ -214,7 +215,13 @@ class TenancyMiddleware:
         if scope.get("type") != "http" or not tenancy.demo_mode():
             await self.app(scope, receive, send)
             return
-        await self._demo(scope, receive, send)
+        # the error texts below are built before RequestContextMiddleware (inside) sets the language
+        from backend.request_context import locale_for_scope
+        ltok = i18n.set_locale(locale_for_scope(scope)[0])
+        try:
+            await self._demo(scope, receive, send)
+        finally:
+            i18n.reset_locale(ltok)
 
     async def _demo(self, scope, receive, send):
         from backend.demo import sandbox as SB
@@ -222,7 +229,7 @@ class TenancyMiddleware:
         path = scope.get("path", "")
         ip = RL.client_ip(scope)
         if not REQ_BUCKET.take(ip):
-            await _json_response(send, 429, _demo_error("RATE_LIMITED", "請求太頻繁，請稍後再試"),
+            await _json_response(send, 429, _demo_error("RATE_LIMITED", _("請求太頻繁，請稍後再試")),
                                  [(b"retry-after", b"30")])
             return
         try:
@@ -230,12 +237,12 @@ class TenancyMiddleware:
         except ValueError:
             cl = 0
         if cl > MAX_BODY:
-            await _json_response(send, 413, _demo_error("TOO_LARGE", "上傳的資料太大"))
+            await _json_response(send, 413, _demo_error("TOO_LARGE", _("上傳的資料太大")))
             return
         try:
             base_dir = SB.current_base_dir()
         except SB.DemoNotReady:
-            await _json_response(send, 503, _demo_error("DEMO_NOT_READY", "示範資料準備中，請稍候"))
+            await _json_response(send, 503, _demo_error("DEMO_NOT_READY", _("示範資料準備中，請稍候")))
             return
         found = SB.lookup(cookie(scope, SB.COOKIE))
         tenant = found[0] if found else tenancy.demo_base(base_dir)
@@ -250,25 +257,25 @@ class TenancyMiddleware:
             hdr = _headers(scope).get(CSRF_HEADER.decode())
             ck = cookie(scope, CSRF_COOKIE)
             if not hdr or not ck or not _secrets.compare_digest(hdr, ck):
-                await _json_response(send, 403, _demo_error("CSRF", "請重新整理頁面後再試一次"))
+                await _json_response(send, 403, _demo_error("CSRF", _("請重新整理頁面後再試一次")))
                 return
             if not allowed_write(method, path):
-                await _json_response(send, 403, _demo_error("DEMO_DISABLED", "示範模式不提供這個功能"))
+                await _json_response(send, 403, _demo_error("DEMO_DISABLED", _("示範模式不提供這個功能")))
                 return
             body, msgs = await _read_body(receive)
             if body is None:
-                await _json_response(send, 413, _demo_error("TOO_LARGE", "上傳的資料太大"))
+                await _json_response(send, 413, _demo_error("TOO_LARGE", _("上傳的資料太大")))
                 return
             heavy = bool(HEAVY.match(path))
             if heavy and not HEAVY_IP.take(ip):
-                await _json_response(send, 429, _demo_error("RATE_LIMITED", "計算太頻繁，請稍後再試"),
+                await _json_response(send, 429, _demo_error("RATE_LIMITED", _("計算太頻繁，請稍後再試")),
                                      [(b"retry-after", b"30")])
                 return
             if not NO_SANDBOX.match(path):
                 if found is None:
                     if not (CREATE_HOUR.take(ip) and CREATE_DAY.take(ip)):
                         await _json_response(send, 429, _demo_error(
-                            "RATE_LIMITED", "建立示範沙盒的次數太多，請稍後再試；現在仍可瀏覽示範資料"))
+                            "RATE_LIMITED", _("建立示範沙盒的次數太多，請稍後再試；現在仍可瀏覽示範資料")))
                         return
                     value = _secrets.token_urlsafe(32)
                     tenant, meta = SB.create(value)
@@ -276,7 +283,7 @@ class TenancyMiddleware:
                     set_cookies.append(f"{SB.COOKIE}={value}; {cookie_attrs(SB.TTL_S)}".encode())
                 meta = found[1]
                 if int(meta.get("writes", 0)) >= WRITES_PER_DAY or not WRITE_MIN.take(tenant.id):
-                    await _json_response(send, 429, _demo_error("RATE_LIMITED", "修改太頻繁，請稍後再試"))
+                    await _json_response(send, 429, _demo_error("RATE_LIMITED", _("修改太頻繁，請稍後再試")))
                     return
                 err = _volume_error(method, path, body, tenant)
                 if err:
@@ -308,7 +315,7 @@ class TenancyMiddleware:
             await send(message)
 
         if heavy and not await HEAVY_GATE.acquire():
-            await _json_response(send, 503, _demo_error("BUSY", "示範伺服器忙碌中，請稍後再試"),
+            await _json_response(send, 503, _demo_error("BUSY", _("示範伺服器忙碌中，請稍後再試")),
                                  [(b"retry-after", b"10")])
             return
         tok = tenancy.set_current(tenant)

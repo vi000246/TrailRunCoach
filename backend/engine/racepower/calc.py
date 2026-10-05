@@ -22,6 +22,7 @@ from backend.engine.racepower import predict as PR
 from backend.engine.racepower import re as RE
 from backend.engine.racepower import riegel as R
 from backend.engine.zones import zones_json
+from backend.i18n import _
 
 DEFAULT_K = -0.07
 
@@ -246,7 +247,7 @@ def predict(ctx: Context, body: PredictIn) -> dict:
     d = ctx.inputs()
     used, warnings = {}, []
     weight = body.weight or d["weight"]["value"]
-    used["weight"] = _src(weight, "手動" if body.weight else d["weight"]["source"])
+    used["weight"] = _src(weight, _("手動") if body.weight else d["weight"]["source"])
 
     # environment
     tc = d["training_conditions"]
@@ -263,21 +264,21 @@ def predict(ctx: Context, body: PredictIn) -> dict:
     srcs = {s["id"]: s for s in d["cp"]["sources"]}
     sid = body.cp_source if body.cp_source in srcs else d["cp"]["default"]
     if body.cp:
-        cp, cp_src = body.cp, "手動"
+        cp, cp_src = body.cp, _("手動")
     elif sid:
         cp, cp_src = srcs[sid]["cp"], srcs[sid]["label"]
     else:
-        raise CalcError(400, "沒有 CP：請手動輸入")
+        raise CalcError(400, _("沒有 CP：請手動輸入"))
     used["cp"] = _src(cp, cp_src, id="manual" if body.cp else sid)
     acts = d["cp"]["activities"] or {}
     s_ = {} if body.cp else (srcs.get(sid) or {})
-    w_src = "手動" if body.w_prime else (s_.get("short_label") if s_.get("w_prime") and s_.get("short_label") else
-                                        "來源自帶" if s_.get("w_prime") else "活動擬合")
+    w_src = _("手動") if body.w_prime else (s_.get("short_label") if s_.get("w_prime") and s_.get("short_label") else
+                                        _("來源自帶") if s_.get("w_prime") else _("活動擬合"))
     w_prime = body.w_prime or s_.get("w_prime") or acts.get("w_prime")
     used["w_prime"] = _src(w_prime, w_src)
     tte = body.tte or s_.get("tte") or d["tte"]["value"]
-    used["tte"] = _src(tte, "手動" if body.tte else ("PD 模型重算的 TTE" if s_.get("fit") or s_.get("base") == "pdmodel"
-                                                    else "來源自帶" if s_.get("tte") else d["tte"]["source"]))
+    used["tte"] = _src(tte, _("手動") if body.tte else (_("PD 模型重算的 TTE") if s_.get("fit") or s_.get("base") == "pdmodel"
+                                                    else _("來源自帶") if s_.get("tte") else d["tte"]["source"]))
     # the short-range (F2) CP of a two-anchor source (PD model mFTP + test CP)
     used["cp2"] = _src(s_.get("cp2"), s_.get("short_label"))
     if d["cp"].get("lower_bound_message") and not body.cp:
@@ -291,20 +292,20 @@ def predict(ctx: Context, body: PredictIn) -> dict:
     d_eff_km = RE.effort_km(body.distance_km, body.gain_m, divisor) if trail else body.distance_km
     race_cvi = RE.cvi(body.gain_m, body.distance_km)
     if body.re:
-        re_v, re_src = body.re, "手動"
+        re_v, re_src = body.re, _("手動")
     elif trail:
         s = d["re"]["trail"].get(fx)
         if not s:
-            raise CalcError(400, "沒有越野 RE：請手動輸入")
-        re_v, re_src = s["median"], f"你的越野跑 RE 中位數（{s['n']} 次，effort km = km + 爬升/{divisor:g}）"
+            raise CalcError(400, _("沒有越野 RE：請手動輸入"))
+        re_v, re_src = s["median"], _("你的越野跑 RE 中位數（{n} 次，effort km = km + 爬升/{div:g}）", n=s['n'], div=divisor)
     else:
         s = d["re"]["road"]
         if not s:
-            raise CalcError(400, "沒有路跑 RE：請手動輸入")
+            raise CalcError(400, _("沒有路跑 RE：請手動輸入"))
         base_cvi = (d["re"]["road_cvi"] or {}).get("median") or 0.0
         adj = RE.cvi_adjust(base_cvi, race_cvi or 0.0)
         re_v = s["median"] + adj
-        re_src = f"你的平路 RE 中位數（{s['n']} 次）" + (f"，CVI 調整 {adj:+.2f}" if adj else "")
+        re_src = _("你的平路 RE 中位數（{n} 次）", n=s['n']) + (_("，CVI 調整 {adj:+.2f}", adj=adj) if adj else "")
     used["re"] = _src(re_v, re_src)
 
     # Riegel k
@@ -313,38 +314,38 @@ def predict(ctx: Context, body: PredictIn) -> dict:
     if prior is None and d.get("auto_prior"):
         a = d["auto_prior"]
         prior = {"distance_km": a["km"], "time_s": a["time_s"], "power": a["avg_power"],
-                 "label": f"{a['label']}（自動：一年內心率判定為比賽強度的標準距離跑步）"}
+                 "label": _("{label}（自動：一年內心率判定為比賽強度的標準距離跑步）", label=a['label'])}
     elif prior is None:
-        warnings.append("沒有比賽強度的標準距離紀錄可當查表依據：k 用預設 −0.07（≈ Stryd 比賽功率表）")
+        warnings.append(_("沒有比賽強度的標準距離紀錄可當查表依據：k 用預設 −0.07（≈ Stryd 比賽功率表）"))
     tk = R.table_k(target_m, prior["distance_km"] * 1000.0, prior["time_s"]) if prior else None
     pr = d.get("riegel") or {}
     ksrc = body.k_source or ("manual" if body.k is not None else None)
     if ksrc == "manual" and body.k is not None:
-        k, k_label = body.k, "手動"
+        k, k_label = body.k, _("手動")
     elif ksrc == "personal" and pr.get("k") is not None:
-        k, k_label = pr["k"], "個人擬合"
+        k, k_label = pr["k"], _("個人擬合")
     elif ksrc == "table" and tk and tk.get("k") is not None:
-        k, k_label = tk["k"], "查表"
+        k, k_label = tk["k"], _("查表")
     elif ksrc is None and pr.get("valid"):
-        k, k_label, ksrc = pr["k"], "個人擬合", "personal"
+        k, k_label, ksrc = pr["k"], _("個人擬合"), "personal"
     elif tk and tk.get("k") is not None:
-        k, k_label, ksrc = tk["k"], "查表", "table"
+        k, k_label, ksrc = tk["k"], _("查表"), "table"
         if body.k_source is None and pr.get("k") is not None and not pr.get("valid"):
-            warnings.append("個人 Riegel k 不可靠（" + "；".join(pr.get("invalid_reasons") or []) + "），改用查表 k")
+            warnings.append(_("個人 Riegel k 不可靠（{why}），改用查表 k", why="；".join(pr.get("invalid_reasons") or [])))
     else:
-        k, k_label, ksrc = DEFAULT_K, "預設 −0.07", "manual"
+        k, k_label, ksrc = DEFAULT_K, _("預設 −0.07"), "manual"
     used["k"] = _src(k, k_label, kind=ksrc)
     if not body.cp:
         # never predict below a power the athlete already held: the bound for THIS k
         from backend.engine.racepower.athlete import enforce_lower_bound
         cp_eff, lb_k = enforce_lower_bound(d, cp, w_prime, tte, k, (used.get("cp2") or {}).get("value"))
         if cp_eff > cp:
-            warnings.append(f"k {k:+.2f} 下，CP {cp:.0f} W 撐不住你 {lb_k['t_s'] / 60:.0f} 分鐘 {lb_k['p']:.0f} W 的紀錄："
-                            f"提高到 {cp_eff:.0f} W")
+            warnings.append(_("k {k:+.2f} 下，CP {cp:.0f} W 撐不住你 {min:.0f} 分鐘 {p:.0f} W 的紀錄："
+                              "提高到 {cp_eff:.0f} W", k=k, cp=cp, min=lb_k['t_s'] / 60, p=lb_k['p'], cp_eff=cp_eff))
             cp = cp_eff
-            used["cp"] = _src(cp, f"{used['cp']['source']}；依 k {k:+.2f} 提高到下限", id=used["cp"].get("id"))
+            used["cp"] = _src(cp, _("{src}；依 k {k:+.2f} 提高到下限", src=used['cp']['source'], k=k), id=used["cp"].get("id"))
     if tk and tk.get("warning"):
-        warnings.append("查表 k：" + tk["warning"])
+        warnings.append(_("查表 k：") + tk["warning"])
 
     res = PR.predict_run(distance_km=body.distance_km, cp=cp, tte=tte, k=k, re=re_v, weight=weight, m=m,
                          gain_m=body.gain_m, effort_divisor=divisor, target_time_s=body.target_time_s,
@@ -356,9 +357,9 @@ def predict(ctx: Context, body: PredictIn) -> dict:
     if trail:
         res["ep_itra_per_h"] = RE.effort_km(body.distance_km, body.gain_m, 100.0) / (res["time_s"] / 3600.0)
         res["effort_km_itra"] = RE.effort_km(body.distance_km, body.gain_m, 100.0)
-        warnings.append("爬坡功率上限 110 % 是經驗法則（非研究結論）；下坡讓功率自然掉下來")
+        warnings.append(_("爬坡功率上限 110 % 是經驗法則（非研究結論）；下坡讓功率自然掉下來"))
     if race_cvi is not None and not trail and race_cvi >= 25:
-        warnings.append(f"路線 CVI {race_cvi:.0f}（丘陵），已用 CVI 調整 RE；起伏很大的路線請改用「越野」")
+        warnings.append(_("路線 CVI {cvi:.0f}（丘陵），已用 CVI 調整 RE；起伏很大的路線請改用「越野」", cvi=race_cvi))
 
     tasks = {}
     if prior:
@@ -377,10 +378,10 @@ def predict_baiyue(ctx: Context, body: PredictIn, d: dict, weight: float, env: d
     from backend.engine.racepower import hike as HK
     h = d["hiking"]
     if body.eph:
-        eph, src = body.eph, "手動"
+        eph, src = body.eph, _("手動")
     elif h.get("eph"):
         eph = h["eph"]["median"]
-        src = f"你自己走的登山日 EP/h 中位數（{h['eph']['n']} 天，爬升 ≥ 600 m 的日子權重 3 倍）"
+        src = _("你自己走的登山日 EP/h 中位數（{n} 天，爬升 ≥ 600 m 的日子權重 3 倍）", n=h['eph']['n'])
     else:
         cap = None
         try:
@@ -392,20 +393,20 @@ def predict_baiyue(ctx: Context, body: PredictIn, d: dict, weight: float, env: d
             # at the v1 reference pack: predict_baiyue then applies its own
             # pack factor (W + hist)/(W + pack) and the altitude M
             eph = CAP.course_eph(cap, body.distance_km, body.gain_m, body.loss_m, body.hist_pack_kg)
-            src = ("推估：你的步行能力模型在這條路線的 EP/h（越野走路窗 + 百岳心率窗，AeT；" +
-                   (h.get("note") or "百岳多為跟團") + "）")
-            warnings.append("整趟時間是推估：" + (h.get("note") or "") + "；用你的步行能力模型（待回測）")
+            src = _("推估：你的步行能力模型在這條路線的 EP/h（越野走路窗 + 百岳心率窗，AeT；{note}）",
+                    note=h.get("note") or _("百岳多為跟團"))
+            warnings.append(_("整趟時間是推估：{note}；用你的步行能力模型（待回測）", note=h.get("note") or ""))
         else:
             eph = HK.tobler_eph(body.distance_km, body.gain_m, body.loss_m)
-            src = "推估：Tobler 步行函數在這條路線的 EP/h（" + (h.get("note") or "百岳多為跟團") + "）"
-            warnings.append("整趟時間是推估：" + (h.get("note") or "") + "；沒有跑步資料可建能力模型，用 Tobler 步行函數")
+            src = _("推估：Tobler 步行函數在這條路線的 EP/h（{note}）", note=h.get("note") or _("百岳多為跟團"))
+            warnings.append(_("整趟時間是推估：{note}；沒有跑步資料可建能力模型，用 Tobler 步行函數", note=h.get("note") or ""))
     used["eph"] = _src(eph, src)
     days = max(1, body.days or 1)
     from backend.engine.racepower import capacity as _cap
     default_pack = _cap.pack_default(weight, days)
     pack = body.pack_kg if body.pack_kg is not None else default_pack
-    used["pack_kg"] = _src(pack, "手動" if body.pack_kg is not None else f"預設背負 {_cap.pack_default_text(weight)}")
-    used["hist_pack_kg"] = _src(body.hist_pack_kg, "假設：過去登山日多為輕裝（約 5 kg）")
+    used["pack_kg"] = _src(pack, _("手動") if body.pack_kg is not None else _("預設背負 {pack}", pack=_cap.pack_default_text(weight)))
+    used["hist_pack_kg"] = _src(body.hist_pack_kg, _("假設：過去登山日多為輕裝（約 5 kg）"))
     plan = PR.split_days(days, body.distance_km, body.gain_m, body.loss_m,
                          [x.model_dump() for x in body.day_plan] if body.day_plan else None)
     aet = d["aet"].get("aet")
@@ -416,7 +417,7 @@ def predict_baiyue(ctx: Context, body: PredictIn, d: dict, weight: float, env: d
                             target_moving_h=(body.target_time_s / 3600.0) if body.target_time_s else None,
                             biggest_day=big)
     if not body.day_plan and days > 1:
-        warnings.append("沒有每日行程：距離與爬升平均分配到每一天；實際行程請逐日輸入")
+        warnings.append(_("沒有每日行程：距離與爬升平均分配到每一天；實際行程請逐日輸入"))
     return {"type": "baiyue", "used": used, "env": env, "result": res, "tasks": {},
             "biggest_day": big, "zones": [], "warnings": res.pop("warnings") + warnings}
 
@@ -431,7 +432,7 @@ def event_course(ctx: Context, eid: str, body: Optional[EventCourseIn] = None) -
     e = ctx.event(eid)
     got = ctx.event_track(eid)
     if got is None:
-        raise CalcError(404, "這場賽事沒有 GPX")
+        raise CalcError(404, _("這場賽事沒有 GPX"))
     cid, track, row = got
     c = build(track, course_opts((body or EventCourseIn()).model_dump()))
     sug = FU.stops_from_wpts(c.get("wpts") or [], c["totals"]["km"])
@@ -449,12 +450,12 @@ def resolve_course(ctx: Context, body: PlanIn) -> dict:
             got = ctx.event_track(c.event_id)
             track = got[1] if got else None
         if track is None:
-            raise CalcError(410, "路線已過期（伺服器重啟過），請重新上傳 GPX")
+            raise CalcError(410, _("路線已過期（伺服器重啟過），請重新上傳 GPX"))
         return {**build(track, course_opts(c.model_dump())), "name": track.name}
     man = (c.manual if c and c.manual else None) or {}
     km = float(man.get("km") or body.distance_km or 0)
     if km <= 0:
-        raise CalcError(400, "需要距離或 GPX 路線")
+        raise CalcError(400, _("需要距離或 GPX 路線"))
     gain = float(man.get("gain") if man.get("gain") is not None else body.gain_m or 0)
     loss = man.get("loss") if man.get("loss") is not None else body.loss_m
     split = man.get("split") or (c.split if c and c.split else "none")

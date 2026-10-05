@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 from backend.db.current import current_athlete_id
 from backend.db.database import get_db
+from backend.i18n import _
 from backend.sync.tp_client import get_auth_url, exchange_code, login_password, fetch_tp_settings
 from backend.sync import coros_client, session_check
 from backend.settings.secrets import SecretKeyMissing
@@ -171,12 +172,12 @@ async def session_alerts(athlete_id: int = 1, db: AsyncSession = Depends(get_db)
     names = {"coros": "COROS", "tp": "TrainingPeaks"}
     out = []
     for src in session_check.SOURCES:
-        needs = (["同步"] if src == use else []) + (["推送"] if src == "coros" and push == "coros" else [])
+        needs = ([_("同步")] if src == use else []) + ([_("推送")] if src == "coros" and push == "coros" else [])
         if not needs:
             continue
         if await session_check.check(db, src, athlete_id) == session_check.EXPIRED:
             out.append({"source": src, "name": names[src],
-                        "message": f"{names[src]} 登入已過期，重新登入後才能{'／'.join(needs)}"})
+                        "message": _("{name} 登入已過期，重新登入後才能{what}", name=names[src], what='／'.join(needs))})
     return {"expired": out, "settings_url": "/api/v1/wko5/settings#sync"}
 
 

@@ -34,6 +34,7 @@ import re
 from typing import Optional
 
 from backend.engine import workout_steps as WS
+from backend.i18n import N_, _
 
 LAP_MAX = 25                     # 推估: a lap-button workout the athlete can follow (owner: ~20–30)
 COROS_MAX = WS.COROS_MAX_STEPS
@@ -42,7 +43,7 @@ MIN_DIST_STEP_M = 50             # workout_steps' distance minimum
 HR_LO_FRAC = 0.85                # 推估: a cap's watch band = 85–100 % of the cap
 PACE_BAND = 0.02                 # 推估: ± 2 % around the planned pace (road, no CP)
 POWER_BAND = 0.03                # the COROS power band (planner.coros_steps, seg_targets.POWER_BAND)
-STOP_LABEL = {"water": "水站", "aid": "補給站", "big": "大補給站", "medical": "醫護站", "self": "補給點"}
+STOP_LABEL = {"water": N_("水站"), "aid": N_("補給站"), "big": N_("大補給站"), "medical": N_("醫護站"), "self": N_("補給點")}
 MODES = ("lap", "distance")
 
 
@@ -141,7 +142,7 @@ def _reduce(pieces: list[dict], limit: int, min_m: float, same_group_first: bool
 
 def _hm(sec: float) -> str:
     m = int(round(sec / 60.0))
-    return f"{m // 60}:{m % 60:02d}" if m >= 60 else f"{m} 分"
+    return f"{m // 60}:{m % 60:02d}" if m >= 60 else _("{m} 分", m=m)
 
 
 def _target(pc: dict, plan_type: str) -> tuple[dict, str]:
@@ -182,15 +183,15 @@ def _target(pc: dict, plan_type: str) -> tuple[dict, str]:
 def _landmark(pc: dict, nxt: Optional[dict], last: bool) -> str:
     e = pc["end"]
     if last:
-        return "終點"
+        return _("終點")
     if e and e.get("kind") == "stop":
         return e["name"]
     if e and e.get("kind") == "day":
-        return f"第 {e['day']} 天終點"
+        return _("第 {day} 天終點", day=e['day'])
     if pc["group"] == "climb" and nxt is not None and nxt["group"] != "climb":
-        return "坡頂"
+        return _("坡頂")
     if pc["group"] == "descent" and nxt is not None and nxt["group"] != "descent":
-        return "坡底"
+        return _("坡底")
     return f"{pc['end_km']:.1f} km"
 
 
@@ -209,7 +210,7 @@ def steps_for(plan: dict, rows: list[dict], *, mode: Optional[str] = None, stops
             km = s.get("km")
             if km is None or not pieces or not (pieces[0]["start_km"] < km < pieces[-1]["end_km"]):
                 continue
-            lab = STOP_LABEL.get(s.get("type") or "aid", "補給站")
+            lab = _(STOP_LABEL.get(s.get("type") or "aid", STOP_LABEL["aid"]))
             names[lab] = names.get(lab, 0) + 1
             nm = (s.get("name") or "").strip() or f"{lab} {names[lab]}"
             _cut_at(pieces, float(km), {"kind": "stop", "name": nm[:16]})
@@ -222,27 +223,27 @@ def steps_for(plan: dict, rows: list[dict], *, mode: Optional[str] = None, stops
         legs = _reduce(pieces, limit, MIN_DIST_STEP_M, False)
     merged = max(0, len(rows) - len(legs))
     if merged and len(rows) > limit:
-        notes.append(f"路線有 {len(rows)} 段，超過手錶建議的 {limit} 步：相鄰的段合併成 {len(legs)} 步")
+        notes.append(_("路線有 {n} 段，超過手錶建議的 {limit} 步：相鄰的段合併成 {m} 步", n=len(rows), limit=limit, m=len(legs)))
     items, out_legs = [], []
     for j, pc in enumerate(legs):
         tg, basis = _target(pc, ptype)
         nxt = legs[j + 1] if j + 1 < len(legs) else None
         if mode == "lap":
-            climb = f" · 爬 {pc['gain_m']:.0f} m" if pc["gain_m"] >= 30 else \
-                (f" · 降 {pc['loss_m']:.0f} m" if pc["loss_m"] >= 30 else "")
+            climb = _(" · 爬 {m:.0f} m", m=pc['gain_m']) if pc["gain_m"] >= 30 else \
+                (_(" · 降 {m:.0f} m", m=pc['loss_m']) if pc["loss_m"] >= 30 else "")
             day = f"D{pc['day']} " if ptype == "baiyue" and (day_splits_km or []) else ""
-            name = f"{day}→ {_landmark(pc, nxt, nxt is None)} · 約 {_hm(pc['t'])}{climb}"
+            name = _("{day}→ {to} · 約 {t}{climb}", day=day, to=_landmark(pc, nxt, nxt is None), t=_hm(pc['t']), climb=climb)
             dur = {"type": "open", "est": int(max(5, min(6 * 3600, round(pc["t"]))))}
         else:
             name = f"{pc['start_km']:.1f}–{pc['end_km']:.1f} km"
             dur = {"type": "distance", "value": int(max(MIN_DIST_STEP_M, round(pc["dist_m"])))}
         if basis == "safe":
-            name += " 控制、安全"
+            name += _(" 控制、安全")
         items.append({"id": f"r{j + 1}", "kind": "work", "dur": dur, "target": tg, "note": name[:WS.MAX_NOTE]})
         out_legs.append({"name": name[:WS.MAX_NOTE], "start_km": pc["start_km"], "end_km": pc["end_km"], "t": pc["t"],
                          "gain_m": pc["gain_m"], "loss_m": pc["loss_m"], "basis": basis, "target": tg})
     if mode == "lap":
-        notes.append("每段「直到按下計圈」：到步驟名稱寫的地點時按一下計圈（lap）")
+        notes.append(_("每段「直到按下計圈」：到步驟名稱寫的地點時按一下計圈（lap）"))
     return {"mode": mode, "doc": {"v": WS.V, "origin": "user", "items": items}, "legs": out_legs,
             "merged": merged, "limit": limit, "notes": notes}
 
@@ -263,9 +264,9 @@ def race_hr(plan: dict, th: dict) -> tuple[Optional[float], str]:
         m = s.get("trail_hr") or {}
         x = m.get("x_star") or m.get("x")
         if x and lthr:
-            return float(x) * float(lthr), f"越野心率模型 {float(x):.0%} LTHR"
+            return float(x) * float(lthr), _("越野心率模型 {x:.0%} LTHR", x=float(x))
     elif plan.get("type") == "baiyue" and s.get("hr_cap"):
-        return float(s["hr_cap"]), "百岳心率帶 AeT"
+        return float(s["hr_cap"]), _("百岳心率帶 AeT")
     return None, ""
 
 
@@ -315,9 +316,9 @@ def multi_day(plan: dict, start_time: Optional[str] = None, days: Optional[int] 
     s = plan.get("summary") or {}
     n = max(int(days or 1), int(s.get("days") or 1), len(plan.get("days") or []) or 1)
     if n > 1:
-        return f"多日行程（{n} 天）不匯出至課表：課表一天一堂，只有單日（單攻）百岳可以匯出"
+        return _("多日行程（{n} 天）不匯出至課表：課表一天一堂，只有單日（單攻）百岳可以匯出", n=n)
     clock = float(s.get("clock_s") or s.get("time_s") or 0.0)
     st = _start_s(start_time)
     if (st if st is not None else 0.0) + clock > 24 * 3600.0:
-        return "行程會跨過午夜（多日）不匯出至課表：只有當天來回的單攻百岳可以匯出"
+        return _("行程會跨過午夜（多日）不匯出至課表：只有當天來回的單攻百岳可以匯出")
     return None

@@ -27,6 +27,7 @@ from backend.engine import load_guard as LG
 from backend.engine.hr_profile import EASY_CAP_TIP, below, easy_cap_label
 from backend.engine.wko5expr.dataset import Dataset, Workout, date_to_day, day_to_date
 from backend.engine.wko5expr.evaluator import WS, Evaluator
+from backend.i18n import N_, _
 
 # ---------------------------------------------------------------------------
 # categories (colour only — totals always include everything)
@@ -347,8 +348,8 @@ SRC_TRANSITION = "Friel（Transition 3–4 週，for fun rather than fitness）�
 TRANSITION_SHARE = 0.5
 TRANSITION_RUN_MAX = 60
 TRANSITION_OLD_SHARE = 0.65           # no pre-race weeks known (a manual 轉換期 with no race): 65 % of the 4-week mean
-TRANSITION_NOTE = ("轉換期：只排輕鬆跑（每次 ≤ 60 分）和肌力，沒有長跑、強度課；"
-                   "想做交叉訓練（騎車、游泳、健行）可以拿來取代輕鬆跑")
+TRANSITION_NOTE = N_("轉換期：只排輕鬆跑（每次 ≤ 60 分）和肌力，沒有長跑、強度課；"
+                     "想做交叉訓練（騎車、游泳、健行）可以拿來取代輕鬆跑")
 
 
 def transition_hours(ref_h: Optional[float], base4: float) -> tuple[float, str]:
@@ -356,8 +357,9 @@ def transition_hours(ref_h: Optional[float], base4: float) -> tuple[float, str]:
     (no pre-race weeks) the old TRANSITION_OLD_SHARE × the 4-week mean."""
     if ref_h and ref_h > 0:
         return (TRANSITION_SHARE * ref_h,
-                f"轉換期：賽前 4 週平均 {ref_h:.1f} h × {TRANSITION_SHARE:.0%}（推估），每次輕鬆跑 ≤ {TRANSITION_RUN_MAX} 分")
-    return TRANSITION_OLD_SHARE * base4, f"轉換期：近 4 週的 {TRANSITION_OLD_SHARE:.0%}"
+                _("轉換期：賽前 4 週平均 {h:.1f} h × {share:.0%}（推估），每次輕鬆跑 ≤ {max} 分",
+                  h=ref_h, share=TRANSITION_SHARE, max=TRANSITION_RUN_MAX))
+    return TRANSITION_OLD_SHARE * base4, _("轉換期：近 4 週的 {share:.0%}", share=TRANSITION_OLD_SHARE)
 
 
 def easy_count(left: float, kind: str) -> int:
@@ -388,7 +390,8 @@ def cap_transition_runs(ss: list, notes: Optional[list] = None) -> int:
         cut += m - TRANSITION_RUN_MAX
     if cut and notes is not None:
         notes.append({"level": "info", "src": "transition",
-                      "text": f"轉換期每次跑步 ≤ {TRANSITION_RUN_MAX} 分（Canova）：本週少排 {cut} 分，不用補"})
+                      "text": _("轉換期每次跑步 ≤ {max} 分（Canova）：本週少排 {cut} 分，不用補",
+                                max=TRANSITION_RUN_MAX, cut=cut)})
     return cut
 
 
@@ -987,9 +990,11 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         need_h = need_tss / r_all
         cap = max(1.10 * ref, ref + 0.5)
         hours = min(max(need_h, base4), cap)
-        why.append(f"CTL {ctl0:.0f} 要每週 +{ramp_goal:.1f}，需要約 {need_tss:.0f} TSS（≈ {need_h:.1f} h）")
+        why.append(_("CTL {ctl:.0f} 要每週 +{ramp:.1f}，需要約 {tss:.0f} TSS（≈ {h:.1f} h）",
+                      ctl=ctl0, ramp=ramp_goal, tss=need_tss, h=need_h))
         if need_h > cap:
-            why.append(f"但週量上限 = 近 4 週 {base4:.1f} h / 上週 {last_h:.1f} h 的 +10%（至少 +0.5 h）→ {cap:.1f} h")
+            why.append(_("但週量上限 = 近 4 週 {base4:.1f} h / 上週 {last:.1f} h 的 +10%（至少 +0.5 h）→ {cap:.1f} h",
+                          base4=base4, last=last_h, cap=cap))
         # B2B (engine/b2b.py): a planned B2B's TSB drop doesn't make this / next week a recovery week
         # (主要訓練項目 = 路跑: no B2B weekend — an ultra / mountain tool, Koop; Uphill Athlete)
         b2b = {} if road else B2B.plan_context(ds, status, today, monday, [h for _, h, _ in hist], ctl_s, atl_s,
@@ -1000,25 +1005,25 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
             why.append(b2b_exempt)
         if tsb_today < -30 and not b2b_exempt:
             mode, hours = "recovery_week", 0.6 * base4
-            why.append(f"TSB {tsb_today:+.0f} < −30：改成恢復週（近 4 週的 60%）")
+            why.append(_("TSB {tsb:+.0f} < −30：改成恢復週（近 4 週的 60%）", tsb=tsb_today))
         elif tsb_today < -20 and not b2b_exempt:
             hours = min(hours, base4)
-            why.append(f"TSB {tsb_today:+.0f} < −20：先維持量，不加")
+            why.append(_("TSB {tsb:+.0f} < −20：先維持量，不加", tsb=tsb_today))
         elif build3:
             mode, hours = "recovery_week", 0.65 * statistics.mean(h for _, h, _ in hist[-3:])
-            why.append("已連續 3 週加量：這週是恢復週（前 3 週平均的 65%）")
+            why.append(_("已連續 3 週加量：這週是恢復週（前 3 週平均的 65%）"))
     elif kind == "taper":
         base6 = statistics.mean(h for _, h, _ in hist[-6:]) if hist else 0.0
         days_to = goals.get("days_to_next_a")
         share = 0.4 if days_to is not None and days_to <= 7 else 0.5
         hours = base6 * share
-        why.append(f"減量期：平常 {base6:.1f} h × {share:.0%}")
+        why.append(_("減量期：平常 {h:.1f} h × {share:.0%}", h=base6, share=share))
     elif kind == "event":
         hours = 0.3 * base4
-        why.append("比賽週：短、輕鬆")
+        why.append(_("比賽週：短、輕鬆"))
     elif kind == "recovery":
         hours = 0.5 * base4
-        why.append(f"恢復期：近 4 週的 {0.5:.0%}")
+        why.append(_("恢復期：近 4 週的 {share:.0%}", share=0.5))
     elif kind == "transition":
         # 轉換期 (SP-73): a share of the level before the race, not of the taper / race / recovery weeks
         hours, w = transition_hours(tr_ref.get("hours"), base4)
@@ -1026,7 +1031,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     hours = max(hours, 0.0)
     if PR is not None and PR.weekly_hours is not None and hours > PR.weekly_hours:
         hours = PR.weekly_hours
-        why.append(f"你的每週時數上限 {PR.weekly_hours:g} h")
+        why.append(_("你的每週時數上限 {h:g} h", h=PR.weekly_hours))
     lost: list[dt.date] = []
     # 停訓後的恢復期 (engine/reentry.py; detraining.md §6): a break ≥ 6 days without running —
     # planned (不排課日期) or not — gets Daniels' block (table 9.2). It replaces the old
@@ -1046,12 +1051,13 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     if re_f is not None and rp.get("prev_hours"):
         hours = rp["prev_hours"] * re_f
         mode = "reentry"
-        why.append(f"{rp['text']}：本週 = 停訓前 4 週平均 {rp['prev_hours']:.1f} h × {re_f:.0%} → {hours:.1f} h")
+        why.append(_("{text}：本週 = 停訓前 4 週平均 {prev:.1f} h × {f:.0%} → {h:.1f} h",
+                      text=rp["text"], prev=rp["prev_hours"], f=re_f, h=hours))
         notes.append({"level": "info", "src": "reentry", "text": rp["text"]})
     elif rp and kind in ("base", "specific") and rp.get("prev_hours") and \
             rp["end"] <= monday.isoformat() < (dt.date.fromisoformat(rp["end"]) + dt.timedelta(days=7)).isoformat():
         hours = max(hours, rp["prev_hours"])            # Daniels: back to 100 % after the block
-        why.append(f"恢復期結束：回到停訓前的量 {rp['prev_hours']:.1f} h（Daniels 表 9.2）")
+        why.append(_("恢復期結束：回到停訓前的量 {h:.1f} h（Daniels 表 9.2）", h=rp["prev_hours"]))
     if bmap:
         def trained(m: dt.date) -> set:
             return {wdate(w) for w in workouts_between(ds, m, m + dt.timedelta(days=7))}
@@ -1062,7 +1068,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
             f = BL.factor(monday, lost, allowed_fn)
             lost_h = hours * (1.0 - f)
             hours *= f
-            why.append(f"不排課 {BL.range_text(lost)}：少 {len(lost)} 個可練日，週量 × {f:.0%}")
+            why.append(_("不排課 {range}：少 {n} 個可練日，週量 × {f:.0%}", range=BL.range_text(lost), n=len(lost), f=f))
             notes.append(BL.week_note(bmap, lost, lost_h))
     tss_target = hours * r_all
 
@@ -1094,8 +1100,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
               "rows": [{**r, "power": [None if x is None else x * f for x in (r.get("power") or [])]}
                        for r in tt.get("rows") or []]}
         notes.append({"level": "info", "src": "reentry",
-                      "text": f"恢復期：心率區間為主；功率、配速目標 × {f:.3f}（停跑 {rp['days']} 天的 FVDOT"
-                              f"{'，有交叉訓練' if rp.get('cross') else ''}）"})
+                      "text": _("恢復期：心率區間為主；功率、配速目標 × {f:.3f}（停跑 {days} 天的 FVDOT{cross}）",
+                                f=f, days=rp["days"], cross=_("，有交叉訓練") if rp.get("cross") else "")})
     tgt = _targets(tt)
     # the easy-run cap of every session: 課表心率區間 (設定; engine/hr_profile.py) — a measured AeT,
     # else the chosen COROS model's Z2 top; an estimated AeT no longer caps (owner 2026-10-03).
@@ -1109,7 +1115,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     if hrz and (hrz.get("fallback") or (hrz["model"] != "lthr" and not hrz.get("aet_measured"))):
         notes.append({"level": "info", "src": "hr_zones",
                       "text": (hrz["fallback"] + "。" if hrz.get("fallback") else "")
-                      + f"課表心率用{hrz['label']}：輕鬆跑上限 {aet:.0f} bpm（{aet_src}）"})
+                      + _("課表心率用{label}：輕鬆跑上限 {aet:.0f} bpm（{src}）", label=hrz["label"], aet=aet, src=aet_src)})
     try:
         from backend.engine import base_check as BC
         et = BC.easy_targets(ds, today, aet) if not ds.config.parity else None
@@ -1271,7 +1277,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     if kind == "transition":
         # 轉換期 (SP-73): each run ≤ 60 min (Canova) — also after the 課表偏好 shaping
         cap_transition_runs(sessions, notes)
-        notes.append({"level": "info", "src": "transition", "text": TRANSITION_NOTE})
+        notes.append({"level": "info", "src": "transition", "text": _(TRANSITION_NOTE)})
     ph_note = getattr(getattr(status, "phase", None), "note", "") or ""
     if ph_note and kind in ("recovery", "transition"):
         # a 轉換期 shortened / skipped for the next A race's 專項期 (planning.auto_phases)
@@ -1377,7 +1383,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         if left_out:
             drop_min = sum(s["minutes"] for s in left_out)
             n_ok = len([d for d in free if PR.allowed(d)])
-            notes.append({"level": "info", "src": "prefs", "text": f"本週可練的日子只剩 {n_ok} 天，{len(left_out)} 堂課（約 {drop_min} 分鐘）排不進去——不用補，下週照常"})
+            notes.append({"level": "info", "src": "prefs", "text": _("本週可練的日子只剩 {days} 天，{n} 堂課（約 {m} 分鐘）排不進去——不用補，下週照常",
+                                                               days=n_ok, n=len(left_out), m=drop_min)})
         avail, keep_rest, main_todo = [], True, []
     else:
         avail = list(free)
@@ -1393,7 +1400,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         elif s.kind == "test" and AT.is_xu(asdict(s)):
             d = AT.pick_day_xu(avail, long_wd, getattr(prefs, "cap_weekday", None))
             if d is None:
-                notes.append({"level": "info", "text": "徐國峰 90 分鐘測試排在週末長跑日，本週週末沒有可練的日子：這週先不測"})
+                notes.append({"level": "info", "text": _("徐國峰 90 分鐘測試排在週末長跑日，本週週末沒有可練的日子：這週先不測")})
                 continue
             put(s, d)
             avail.remove(d)
@@ -1425,9 +1432,11 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     unplaced = [s for s in main_todo if s.day is None]
     if unplaced:
         drop_min = sum(s.minutes for s in unplaced)
-        what = "次輕鬆跑" if all(s.kind == "easy" for s in unplaced) else "堂課"
+        what = (_("本週只剩 {days} 天，{n} 次輕鬆跑（約 {m} 分鐘）排不進去——不用補，下週照常")
+                if all(s.kind == "easy" for s in unplaced) else
+                _("本週只剩 {days} 天，{n} 堂課（約 {m} 分鐘）排不進去——不用補，下週照常"))
         notes.append({"level": "info", **({"src": "blackout"} if lost else {}),
-                      "text": f"本週只剩 {len(free)} 天，{len(unplaced)} {what}（約 {drop_min} 分鐘）排不進去——不用補，下週照常"})
+                      "text": what.format(days=len(free), n=len(unplaced), m=drop_min)})
     # strength on easy days (or free days), never the day before the long session
     easy_days = [dt.date.fromisoformat(s.day) for s in main_todo if s.kind == "easy" and s.day]
     long_day = next((dt.date.fromisoformat(s.day) for s in main_todo if s.kind == "long" and s.day), None)
@@ -1440,7 +1449,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
             if d in avail:
                 avail.remove(d)
     if not keep_rest and free:
-        notes.append({"level": "info", "text": "剩下的每一天都排了東西；覺得累就把一次輕鬆跑換成休息"})
+        notes.append({"level": "info", "text": _("剩下的每一天都排了東西；覺得累就把一次輕鬆跑換成休息")})
     if b2b.get("due"):
         # the accepted B2B on the user's two days (engine/b2b.py place, fixed): the rest moves around them
         dd = [asdict(s) for s in sessions]
@@ -1464,7 +1473,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
                                  aet, tph["trail"], aet_meas)
     from backend.engine import steep_hill as SH
     # (主要訓練項目 = 路跑: no steep walk — it simulates a mountain pack)
-    lc = {"active": False, "why": "主要訓練項目：路跑"} if road else \
+    lc = {"active": False, "why": _("主要訓練項目：路跑")} if road else \
         SH.plan_context(ds, status, today, monday, mode, _n(ctl_s.at(d_prev_sun) - atl_s.at(d_prev_sun)), gate)
     if lc.get("active"):
         try:
@@ -1484,7 +1493,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         if heat_info.get("active"):
             sessions = [Session(**{k: v for k, v in d.items() if k in Session.__dataclass_fields__}) for d in sd]
     except Exception as e:                  # noqa: BLE001 — heat sessions never break the plan
-        heat_info = {"active": False, "reason": f"熱適應資料讀取失敗（{type(e).__name__}）"}
+        heat_info = {"active": False, "reason": _("熱適應資料讀取失敗（{err}）", err=type(e).__name__)}
 
     # ---- 技術地形課 (engine/technical.py, SP-74): 越野跑 only; 基礎期 every other week's LSD,
     # 專項期 one a week out of an easy run (RPE 6–7 = a quality session: spacing + budget)
@@ -1528,7 +1537,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         ti = by.get("testing")
         test_suggestions.append({
             "kind": "cp", "protocol": test_s.get("protocol"), "title": test_s["title"], "minutes": test_s["minutes"],
-            "reason": (getattr(ti, "verdict", "") or "門檻過期或沒測過") + "：區間、TSS、賽事計算機都靠 CP",
+            "reason": _("{why}：區間、TSS、賽事計算機都靠 CP", why=getattr(ti, "verdict", "") or _("門檻過期或沒測過")),
             "session": {k: test_s.get(k) for k in ("kind", "title", "minutes", "target", "detail", "source", "tss",
                                                    "protocol")}})
     if aet_due:
@@ -1537,14 +1546,14 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
                          getattr(prefs, "long_cap", None) if prefs is not None else None)
         test_suggestions.append({
             "kind": "aet", "protocol": aet_proto, "title": a_s["title"], "minutes": a_s["minutes"],
-            "reason": (gate.get("aet_test_reason") or {}).get("text") or "AeT 需要重新確認",
+            "reason": (gate.get("aet_test_reason") or {}).get("text") or _("AeT 需要重新確認"),
             "replaces_long": aet_proto == "xu90",
             "session": {k: a_s.get(k) for k in ("kind", "title", "minutes", "target", "detail", "source", "tss",
                                                 "protocol")}})
 
-    mode_label = {"base": "基礎期", "specific": "專項期", "taper": "減量期", "event": "比賽週",
-                  "recovery": "恢復期", "transition": "轉換期", "recovery_week": "恢復週",
-                  "reentry": "停訓後恢復期"}[mode]
+    mode_label = {"base": _("基礎期"), "specific": _("專項期"), "taper": _("減量期"), "event": _("比賽週"),
+                  "recovery": _("恢復期"), "transition": _("轉換期"), "recovery_week": _("恢復週"),
+                  "reentry": _("停訓後恢復期")}[mode]
     return {
         "week": {"start": monday.isoformat(), "end": sunday.isoformat(), "today": today.isoformat(),
                  "days_left": len(free)},
@@ -1570,7 +1579,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
                        # its ± badge only when the cap IS the AeT estimate (no 課表心率區間)
                        "lthr_source": tt.get("lthr_source"), "aet": aet, "aet_source": aet_src,
                        "aet_pm": tt.get("aet_pm") if hrz is None else None,
-                       "aet_measured": aet_meas, "easy_cap_label": cap_txt, "easy_cap_tip": EASY_CAP_TIP,
+                       "aet_measured": aet_meas, "easy_cap_label": cap_txt, "easy_cap_tip": _(EASY_CAP_TIP),
                        # 課表心率區間 (engine/hr_profile.plan_hr_zones): the push / step builders read it
                        "hr_model": hrz},
         "notes": notes,

@@ -35,6 +35,8 @@ import sys
 from types import SimpleNamespace
 from typing import Optional
 
+from backend.i18n import N_, _
+
 CTX_FILE = "racepower_ctx.json"                 # under data/
 # under data/: the names of the race calculator's saved answers (GET /racepower/... and the
 # precomputed POSTs), so static_shim.js asks the engine without fetching a missing file first
@@ -48,7 +50,7 @@ CTX_VERSION = 1
 
 # the requests the worker answers (static_shim.js RACEPOWER_POSTS is the same)
 ROUTE_PREFIX = "/api/v1/racepower/"
-ENGINE_FAIL_MSG = "示範版算不出這組輸入，請換一組數字再試"
+ENGINE_FAIL_MSG = N_("示範版算不出這組輸入，請換一組數字再試")
 
 # what the browser has: numpy / pydantic come from Pyodide; these must never be needed
 FORBIDDEN_IMPORTS = ("fastapi", "starlette", "sqlalchemy", "aiosqlite", "httpx", "sqlite3", "uvicorn", "anyio")
@@ -333,7 +335,7 @@ def compute(ctx, method: str, path: str, body) -> dict:
     except CALC.CalcError as e:
         return {"status": e.status, "body": {"detail": e.detail}}
     except ValidationError as e:
-        return {"status": 422, "body": {"detail": "輸入的數字格式不對", "errors": e.errors(include_url=False,
+        return {"status": 422, "body": {"detail": _("輸入的數字格式不對"), "errors": e.errors(include_url=False,
                                                                                 include_context=False)}}
     return {"status": 404, "body": {"detail": "Not Found"}}
 
@@ -348,7 +350,7 @@ def handle(method: str, path: str, body_text: Optional[str]) -> str:
         body = json.loads(body_text) if body_text else None
         out = compute(_CTX, method.upper(), path, body)
     except Exception as e:                  # noqa: BLE001 — the page shows a short message
-        out = {"status": 500, "body": {"detail": ENGINE_FAIL_MSG},
+        out = {"status": 500, "body": {"detail": _(ENGINE_FAIL_MSG)},
                "error": f"{type(e).__name__}: {e}", "trace": traceback.format_exc()[-4000:]}
     return json.dumps(out, ensure_ascii=False, allow_nan=False, default=_json_default)
 

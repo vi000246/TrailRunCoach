@@ -30,6 +30,7 @@ from typing import Optional
 import numpy as np
 
 from backend.engine import calibrate as CAL
+from backend.i18n import N_
 
 EARLY_LOOK_S, TAIL_LOOK_S, TAIL_GAP_S = 1500.0, 900.0, 360.0
 MIN_RUNS = 20
@@ -114,26 +115,26 @@ def _none(ds=None, today=None):
 
 
 CAL.register(CAL.Item(
-    name="drift_early_s", label="飄移：暖身段（前段停等）", unit="秒", default=1200.0,
-    default_src="推估（市區路跑的典型值 20 分）", k=20, min_n=MIN_RUNS, fit=fit_early, bounds=(600.0, 1500.0), digits=0,
-    help="跑步開頭這段時間裡的停等（紅綠燈、等人）都當暖身，飄移從最後一次停等後才開始算。本人值 = 你路跑前段最後一次停等時間的 p95。"))
+    name="drift_early_s", label=N_("飄移：暖身段（前段停等）"), unit=N_("秒"), default=1200.0,
+    default_src=N_("推估（市區路跑的典型值 20 分）"), k=20, min_n=MIN_RUNS, fit=fit_early, bounds=(600.0, 1500.0), digits=0,
+    help=N_("跑步開頭這段時間裡的停等（紅綠燈、等人）都當暖身，飄移從最後一次停等後才開始算。本人值 = 你路跑前段最後一次停等時間的 p95。")))
 CAL.register(CAL.Item(
-    name="drift_tail_s", label="飄移：回程段（結尾停等）", unit="秒", default=720.0,
-    default_src="推估（8 週路跑資料校正）", k=20, min_n=MIN_RUNS, fit=fit_tail, bounds=(300.0, 900.0), digits=0,
-    help="結尾這段時間裡的一群停等當回程緩和，不算進飄移。本人值 = 你路跑結尾那群停等起點距結束的 p95。"))
+    name="drift_tail_s", label=N_("飄移：回程段（結尾停等）"), unit=N_("秒"), default=720.0,
+    default_src=N_("推估（8 週路跑資料校正）"), k=20, min_n=MIN_RUNS, fit=fit_tail, bounds=(300.0, 900.0), digits=0,
+    help=N_("結尾這段時間裡的一群停等當回程緩和，不算進飄移。本人值 = 你路跑結尾那群停等起點距結束的 p95。")))
 CAL.register(CAL.Item(
-    name="drift_max_vi", label="飄移：功率起伏上限（VI）", unit="", default=1.04,
-    default_src="推估（單一跑者資料校正）", k=1, min_n=10 ** 9, fit=_none, bounds=(1.01, 1.15), digits=2,
-    manual_only=True, help="穩定段的 VI（NP ÷ 平均功率）超過這個值就不算穩定跑，不判讀飄移。"))
+    name="drift_max_vi", label=N_("飄移：功率起伏上限（VI）"), unit="", default=1.04,
+    default_src=N_("推估（單一跑者資料校正）"), k=1, min_n=10 ** 9, fit=_none, bounds=(1.01, 1.15), digits=2,
+    manual_only=True, help=N_("穩定段的 VI（NP ÷ 平均功率）超過這個值就不算穩定跑，不判讀飄移。")))
 CAL.register(CAL.Item(
-    name="drift_tau_s", label="飄移：心率延遲 τ", unit="秒", default=60.0,
-    default_src="Hunt 2015／2019、Wang & Hunt 2021：55–70 秒", k=1, min_n=10 ** 9, fit=_none,
+    name="drift_tau_s", label=N_("飄移：心率延遲 τ"), unit=N_("秒"), default=60.0,
+    default_src=N_("Hunt 2015／2019、Wang & Hunt 2021：55–70 秒"), k=1, min_n=10 ** 9, fit=_none,
     bounds=(30.0, 120.0), digits=0, manual_only=True, default_is_literature=True,
-    help="心率跟上強度變化的時間常數；算 Pw:HR 時先把功率延遲這麼多。"))
+    help=N_("心率跟上強度變化的時間常數；算 Pw:HR 時先把功率延遲這麼多。")))
 CAL.register(CAL.Item(
-    name="walk_max_s", label="飄移：多長的慢段算跑走", unit="秒", default=180.0,
-    default_src="推估", k=1, min_n=10 ** 9, fit=_none, bounds=(60.0, 600.0), digits=0, manual_only=True,
-    help="速度低於中位 75% 的慢段，最長的一段超過這麼久就當跑走課，不判讀飄移。"))
+    name="walk_max_s", label=N_("飄移：多長的慢段算跑走"), unit=N_("秒"), default=180.0,
+    default_src=N_("推估"), k=1, min_n=10 ** 9, fit=_none, bounds=(60.0, 600.0), digits=0, manual_only=True,
+    help=N_("速度低於中位 75% 的慢段，最長的一段超過這麼久就當跑走課，不判讀飄移。")))
 
 NAMES = {"DRIFT_EARLY_S": "drift_early_s", "DRIFT_TAIL_S": "drift_tail_s", "DRIFT_MAX_VI": "drift_max_vi",
          "DRIFT_TAU_S": "drift_tau_s", "WALK_MAX_S": "walk_max_s"}

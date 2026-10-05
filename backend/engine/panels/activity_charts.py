@@ -40,6 +40,7 @@ import numpy as np
 
 from backend.engine import hr_profile as HP
 from backend.engine import zones as Z
+from backend.i18n import _
 
 MAX_DT = 30.0            # a source interval > 30 s is a gap (workout_review.MAX_DT)
 STOP_KMH = 1.6           # moving = above WKO5's 1 mph (workout_review.STOP_KMH)
@@ -158,7 +159,7 @@ def _cum(v: np.ndarray, bounds: np.ndarray) -> list:
 def hrpower(ds, w, points: int = POINTS) -> dict:
     G = grid(ds, w)
     if G is None or (G["hr"] is None and G["power"] is None):
-        return {"empty": "這筆活動沒有心率也沒有功率"}
+        return {"empty": _("這筆活動沒有心率也沒有功率")}
     n = len(G["g"])
     step = max(1, int(math.ceil(n / points)))
     starts = np.arange(0, n, step)
@@ -306,7 +307,7 @@ def _bounds(ds, w, kind: str, model: dict, ctx: dict) -> dict:
     aet, lthr, cp = ctx["thr"]
     if b == "aet_lthr":
         if not aet or not lthr:
-            return {"reason": "沒有 AeT 或 LTHR"}
+            return {"reason": _("沒有 AeT 或 LTHR")}
         return {"rows": [("1", "低強度（< AeT）", 0.0, aet), ("2", "中強度（AeT–LTHR）", aet, lthr),
                          ("3", "高強度（≥ LTHR）", lthr, None)],
                 "basis_text": f"AeT {aet:.0f}、LTHR {lthr:.0f} bpm", "estimate": est}
@@ -314,7 +315,7 @@ def _bounds(ds, w, kind: str, model: dict, ctx: dict) -> dict:
         return _coros_bounds(ds, w, model["coros"], lthr, ctx)
     T = {"lthr": lthr, "cp": cp}[b]
     if not T:
-        return {"reason": f"沒有 {'LTHR' if b == 'lthr' else 'CP'}，區間算不出來"}
+        return {"reason": _("沒有 {name}，區間算不出來", name="LTHR" if b == "lthr" else "CP")}
     unit = "bpm" if b == "lthr" else "W"
     src = _threshold_text(ds, w, b)
     text = f"{'LTHR' if b == 'lthr' else 'CP'} {T:.0f} {unit}" + (f"（{src}）" if src else "")
@@ -338,8 +339,8 @@ def _coros_bounds(ds, w, kind: str, lthr: Optional[float], ctx: dict) -> dict:
     z = HP.zone_rows(kind, lthr, mx.get("value"), rs.get("value"), acc)
     if "reason" in z:
         return {"reason": z["reason"]}
-    srcs = [s for s in ((f"最大心率：{mx['source']}" if mx.get("source") else ""),
-                        (f"靜息心率：{rs['source']}" if rs.get("source") else "")) if s]
+    srcs = [s for s in ((_("最大心率：{src}", src=mx["source"]) if mx.get("source") else ""),
+                        (_("靜息心率：{src}", src=rs["source"]) if rs.get("source") else "")) if s]
     if kind == "lthr":
         src = _threshold_text(ds, w, "lthr")
         srcs = [src] if src else []
@@ -383,7 +384,7 @@ def zone_times(ds, w, kind: str) -> dict:
                              for (zid, nm, lo, hi), s in zip(b["rows"], secs)]})
     has = vals is not None and bool(np.isfinite(vals).any() and (np.nan_to_num(vals) > 0).any())
     return {"zone_kind": kind, "models": out, "default": DEFAULT_MODEL[kind],
-            "empty": None if has else ("這筆活動沒有心率" if kind == "hr" else "這筆活動沒有可用的功率（手錶推估功率不採用）")}
+            "empty": None if has else (_("這筆活動沒有心率") if kind == "hr" else _("這筆活動沒有可用的功率（手錶推估功率不採用）"))}
 
 
 # ---------------------------------------------------------------------------
@@ -452,11 +453,11 @@ def hrtrend(ds, w, points: int = POINTS) -> dict:
     from backend.engine.workout_review import _samples
     s = _samples(ds, w)
     if s is None or s.get("hr") is None:
-        return {"empty": "這筆活動沒有心率"}
+        return {"empty": _("這筆活動沒有心率")}
     t = np.asarray(s["t"], dtype=float)
     v = hr_variation(t, s["hr"], s.get("power"), s.get("speed"))
     if v is None:
-        return {"empty": "這筆活動沒有心率"}
+        return {"empty": _("這筆活動沒有心率")}
     G = grid(ds, w)
     hr = G["hr"]
     smooth = rolling(hr, 60)
@@ -484,7 +485,7 @@ def render(ds, w, ch: dict) -> dict:
     name = ch.get("chart")
     base = {"title": ch.get("title"), "description": ch.get("description"), "kind": f"act_{name}"}
     if w is None:
-        return {**base, "empty": "要選一筆活動"}
+        return {**base, "empty": _("要選一筆活動")}
     if name == "hrpower":
         return {**base, **hrpower(ds, w)}
     if name in ("hrzones", "powerzones"):
