@@ -1,6 +1,6 @@
 # Module Spec: workout-review
 
-> **Last Updated**: 2026-10-04
+> **Last Updated**: 2026-10-05
 > **Status**: Active
 > **Domain Layer**: Core Domain
 
@@ -246,7 +246,7 @@ runs 「品質課（間歇）」 (backtest in the research doc §5).
 
 | Section | Card | Line |
 |---|---|---|
-| `summary` | Text rows: type · terrain · phase, time, HR vs AeT/LTHR, three zones; the type's verdict lines (trail / hike lines first). Small tiles (`cards`, `_summary_cards`): tags (type icon with the classifier's why + sources as ?, terrain, phase), stats (moving time, distance, gain, TSS, avg HR, avg power), 「課表」 (the matched 課表 session: planned vs actual time / TSS %, `compliance.session_compliance`, ±20 % = 符合, 2026-10-03), the three-zone bar, 心率飄移 (judged on easy / long / AeT test, shown 「不判讀」 otherwise), 耐久 (last 20 %), 強度 (over AeT+3), 「VO2max 刺激」／「閾值刺激」, 間歇 or CP 測試, 爬坡段 (trail / hike), 「像 CP 測試？」. The 建議分頁 row is gone (user request); `suggested_dashboard` stays in the JSON | `backend/engine/workout_review.py:2887`, `backend/engine/workout_review.py:2739`, `backend/engine/workout_review.py:2692` |
+| `summary` | Text rows: type · terrain · phase, time, HR vs AeT/LTHR, three zones; the type's verdict lines (trail / hike lines first). Small tiles (`cards`, `_summary_cards`): tags (type icon with the classifier's why + sources as ?, terrain, phase), stats (moving time, distance, gain, TSS, avg HR, avg power), 「課表」 (the matched 課表 session: planned vs actual time / TSS %, `compliance.session_compliance`, ±20 % = 符合, 2026-10-03), the three-zone bar, 「刺激 TIS」 (`_tis_card`, `backend/engine/workout_review.py:2699`, SP-81: this activity's 有氧／無氧 TIS as 「a／b」, 1–10, from the evaluator's built-ins `tisaerobic` / `tisanaerobic` through `tis_scores` — the same numbers as 我的訓練's TIS charts, see wko5-engine.spec.md; no level names, WKO5 has none; the ? says how to read it; no tile without a power channel, like 平均功率; 「–／算不出」 when the 90-day PD model gives na; shown for every type, before the strength / bike early return), 心率飄移 (judged on easy / long / AeT test, shown 「不判讀」 otherwise), 耐久 (last 20 %), 強度 (over AeT+3), 「VO2max 刺激」／「閾值刺激」, 間歇 or CP 測試, 爬坡段 (trail / hike), 「像 CP 測試？」. The 建議分頁 row is gone (user request); `suggested_dashboard` stays in the JSON | `backend/engine/workout_review.py:2887`, `backend/engine/workout_review.py:2739`, `backend/engine/workout_review.py:2692` |
 | `aerobic` | Text rows: 「心率飄移（配速／功率）」 in plain words — 「穩定 · 3.2%（start）」 (`drift_plain`: < 5 % 穩定, 5–10 % 有點飄, > 10 % 飄很多), HR and speed / power per half, one 「可信度」 row (「暖身後不到 40 分鐘，只當參考」 for the 參考 tier, 「這次資料比較雜，只當參考」 when SE > 5 pp, else 「暖身後跑滿 40 分鐘，可以判讀」; the method and ± SE only behind the ?, `drift_method`), 「已排除」, 「穩定度」, 「坡道」, 「溫度」 (source, °C, band), time over AeT+3, the same-type baseline within the same temperature band (both tiers); 這次沒有功率 without power. Header chip `res.chip` 「🌡 < 25 °C／25–28 °C／> 28 °C／溫度不明」 (hover `HEAT_TIP`). Small tiles (`_aerobic_cards`): the main drift card (value, verdict word, 「· 只當參考」; or 「不採用」 + a ≤ 8-word reason, `short_reason`), then chips: the other basis, 已排除 (前段 / 回程 / 結尾), 去坡道, temperature, VI (road), 資料比較雜, AeT+3 以上, 同類中位. On `test_aet` the sub-word is 「AeT 可以再高／前半心率＝AeT／AeT 設太高」 (owner 2026-10-02: no ± SE / Pa:HR / tier names on the surface) | `backend/engine/workout_review.py:2930`, `backend/engine/workout_review.py:2810`, `backend/engine/workout_review.py:2607` |
 | `intervals` | Per-rep table: start, duration, power, %CP, HR, max HR, 60-s drop (「每組」 on the 間歇 tab) | `backend/engine/workout_review.py:3022` |
 | `climbs` | Per-climb table (①②… numbering): start, km, gain, distance, grade, time, VAM vs 平常 (similar-grade climbs), HR, HR per 100 m, power, %CP, pace, GAP; `climb_profile` {profile, climbs with baselines, descents} drawn by the viewer's `drawClimbProfile`; verdict = HR per 100 m vs the 8-week median and which climbs' VAM sat above / below the usual IQR | `backend/engine/workout_review.py:3231` |
@@ -276,7 +276,7 @@ Verdict rules:
   `engine/quality_gate.py`. Same bands on Pw:HR in power mode. A reference-tier drift
   reads the same bands plus the line 「暖身後不到 40 分鐘，只當參考（不算 AeT 測試）」; on
   `test_aet` the bands are strict only (they suggest a threshold).
-- AeT test (`_aet_test_lines`, `backend/engine/workout_review.py:2997`, on the summary and
+- AeT test (`_aet_test_lines`, `backend/engine/workout_review.py:3042`, on the summary and
   aerobic cards): `aet_test.analyze_workout` (`backend/engine/aet_test.py:399`) picks the
   protocol from the title, else the scheduled session's (`PROTOCOLS`: `xu90` 徐國峰 90 分,
   `ua60`, `ua40`, `evoke60`, `friel`; untitled = `ua60`; the protocol choice itself is in
@@ -458,7 +458,10 @@ The viewer draws a card's `action` as a button (`drawAction`,
 `backend/static/wko5_viewer.html:1436`): confirm, POST (PATCH for 「當作間歇判讀」, then reload),
 then 已套用. Small tiles are drawn by `drawReviewCards` and the 間歇判讀 rows by `drawChipRows`
 (`backend/static/wko5_viewer.html:1374`, `backend/static/wko5_viewer.html:1374`); with `cards`
-or `chip_rows` the text rows are hidden. The stored test sessions and the done interval
+or `chip_rows` the text rows are hidden. A tile with `power: true` (the 刺激 TIS tile) is dropped
+by `drawReviewCards` when 使用功率 is off. The TIS tile is not in `measure()`'s per-file cache:
+it reads the 90-day PD model (other workouts), so it is covered by the render cache's data
+fingerprint (workout list, athlete file) and code signature. The stored test sessions and the done interval
 sessions are part of the render-cache fingerprint
 (`backend/engine/wko5expr/render_cache.py:117-125`).
 
@@ -507,6 +510,7 @@ What the implementation does differently from `docs/plans/done-workout-review.pl
 | CP-test pattern alone → `cp_hint`, not test_cp; a titled test still takes the pattern's protocol | `backend/tests/test_cp_protocols.py:172`, `backend/tests/test_cp_protocols.py:196` |
 | AeT test: analysis bands, refusals (short / fast finish / hills), heat counts and says so, `latest_aet_test` + the card's apply action, apply on a temp plan | `backend/tests/test_quality_gate.py:740`, `backend/tests/test_quality_gate.py:753`, `backend/tests/test_quality_gate.py:764`, `backend/tests/test_quality_gate.py:790`, `backend/tests/test_quality_gate.py:1016` |
 | Small cards: summary stats / zones / verdicts, intensity warning, refused drift as one card, drifting run and chips, `short_reason`, strength only time + HR, viewer hides the text rows | `backend/tests/test_review_cards.py` |
+| 刺激 TIS tile: values equal the evaluator's built-ins (steady and interval run), no tile without power, 「算不出」 without a PD model, no level names, en text, the viewer drops `power` tiles when 使用功率 is off | `backend/tests/test_review_tis_card.py` |
 | Session classifier: Z5 bouts / lower band / Z3 climb, trail power trust, HR path, hikes never Z5, power beats easy HR, cadence lock, HRpeak | `backend/tests/test_session_stimulus.py` |
 | Climb profile and grade bins: VAM, profile series, descents, per-climb baseline by grade, no altitude, grade baselines | `backend/tests/test_climb_profile.py` |
 | Form bins / cadence: grade and work deciles, impact per km, cadence hint, cadence windows and fit, cards with / without Stryd | `backend/tests/test_form_bins.py`, `backend/tests/test_form_split.py` |
@@ -579,3 +583,4 @@ None. The module computes on request; there are no emitters or subscribers.
 | 2026-10-02 | feat/aet-heat-covariate | owner-approved (temporary) | AeT lower bound when the regression finds no crossing (`AetAggregate.code` flat / slope / range_hi): `threshold_estimate.aet_lower_bound` — reference grade or better, SE ≤ 5 pp, each SE × 2 (GC validation), X = highest first-half HR ≤ LTHR − 3, ≥ 6 runs ≤ X and ≥ 3 within 5 bpm, the top 6's weighted mean + 2·SE < 5 %; any run ≤ X with drift − 2·SE ≥ 5 % drops it (all 推估). Valid, value X, se None: shift / moved never fire on it; zones still from the plan. Shown 「AeT ≥ X bpm（下限，推估）」 in the gate's why with the temporary-rule text; `zone_events` aet_bound: one AeT test every 8 weeks, priority low (box only, the testing indicator unchanged), id per cycle. Real data: the bound never held in 53 weeks (≤ 5 runs with SE ≤ 5 pp below LTHR − 3) — 53/53 still 「需要測試」 |
 | 2026-10-02 | chore/drop-ilevels-encryption | owner decision | WKO5 iLevels removed from the time-in-zone charts / zone APIs (`activity_charts.ilevels_for` / `ILEVEL_*` gone, `period_zones.POWER_IDS` = Palladino 10 / 3); a remembered 「ilevels」 falls back to Palladino. The evaluator's `levelto` / `ilevels` (WKO5 expression language) stays |
 | 2026-10-04 | code-sync | N/A | Pointers refreshed (file grew to ~4000 lines); documented: small-tile cards (`cards`) and the 課表 tile, plain drift words (穩定／有點飄／飄很多, 可信度 row, method behind ?), per-athlete drift windows (`apply_calibration`, cache-key suffix), W′ prior by sex on read, planned interval never easy-HR, LSD label, AeT-test protocols / judges (xu90, Evoke, Friel), form drift by work halves, form_bins / cadence card, climb profile and grade baselines, 間歇 tab sections, view dashboards with `sports` filter, season drift charts as verdict bars, COROS HR zone models, two-way brush; removed: 建議分頁 row, old hard-time quality rule rows, golden tests moved to the opt-in realdata suite |
+| 2026-10-05 | SP-81 | N/A | 本次重點 gains the 「刺激 TIS」 tile (`_tis_card` / `tis_scores`): this activity's aerobic / anaerobic TIS (1–10, the evaluator's `tisaerobic` / `tisanaerobic`), hidden without power and, in the viewer, when 使用功率 is off (`power` tile flag); not in the measure cache (reads the 90-day PD model), covered by the render cache's fingerprint; zh-TW + en |

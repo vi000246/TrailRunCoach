@@ -111,5 +111,11 @@
   "最大心率": "Max HR",
   "{name} 可信度{c}": "{name} confidence {c}",
   "；": "; ",
-  "：": ": "
+  "：": ": ",
+  "刺激 TIS": "TIS stimulus",
+  "算不出": "Can't compute",
+  "有氧／無氧（1–10）": "aerobic / anaerobic (1–10)",
+  "有功率，但活動前 90 天的功率資料不夠擬合 PD 模型（mFTP、FRC），TIS 算不出。": "There is power, but the 90 days before this activity don't have enough power data to fit the PD model (mFTP, FRC), so TIS can't be computed.",
+  "有氧 TIS {a}、無氧 TIS {an}（WKO5 的 Training Impact Score，1–10）。": "Aerobic TIS {a}, anaerobic TIS {an} (WKO5's Training Impact Score, 1–10).",
+  "怎麼看：越高 = 這次對那個能量系統的刺激越大；WKO5 沒有官方的分級名稱，只看數字、和自己平常的課比。\n看什麼：長時間、接近門檻的課有氧分數高；無氧分數要功率超過門檻（mFTP 的 85%）才會加，輕鬆跑通常是 1。\n方法：WKO5 的 TIS：以活動當天往前 90 天 PD 模型的 mFTP（有氧）與 FRC（無氧）為基準，把平滑後的功率逐秒加權累加（和「我的訓練」的 TIS 圖同一個數字）。需要功率。": "How to read: higher = a bigger stimulus to that energy system this time; WKO5 has no official names for the levels, so read the numbers and compare with your own usual sessions.\nWhat to look for: long sessions near threshold score high aerobically; the anaerobic score only grows with power above threshold (85% of mFTP), so an easy run is usually 1.\nMethod: WKO5's TIS: smoothed power weighted and summed second by second against the mFTP (aerobic) and FRC (anaerobic) of the PD model over the 90 days up to the activity (the same number as the TIS charts in My training). Needs power."
 }
