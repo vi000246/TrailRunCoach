@@ -423,7 +423,9 @@ def test_projection_suggests_and_plans_only_accepted_weeks():
     i = weeks.index(w)
     if i + 1 < len(weeks):
         nxt = weeks[i + 1]
-        assert nxt["mode"] != "recovery_week" and (nxt.get("b2b") or {}).get("post")
+        # the B2B's own drop never makes a recovery week; the 專項期's countdown one (SP-97) can follow it
+        assert (nxt["mode"] != "recovery_week" or nxt["why"][0].startswith("專項期賽前第")) \
+            and (nxt.get("b2b") or {}).get("post")
         assert not any(x["kind"] in ("quality", "test") for x in nxt["sessions"])
 
 

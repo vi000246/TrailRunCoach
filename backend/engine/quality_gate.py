@@ -2235,6 +2235,12 @@ def week_decision(gate: dict, kind: str, mode: str, monday: Optional[dt.date] = 
             return {**none(""), "allow": ok, "z3_note": ""}
         if levels.get("drift") == "bad":
             return none("", "本週沒排 3 區：心率飄移是 bad，先不排強度課")
+        if kind == "specific" and mode == "recovery_week":
+            # SP-97: a 專項期 recovery week keeps one short intensity — the base phase's fartlek 4×1′
+            # (the Norwegian coaches keep the intensity, shorten the sessions)
+            return {"allow": True, "spec": RECOVERY, "advance": False, "adjust": None, "track": None, "note": "",
+                    "items": [{"track": None, "spec": RECOVERY, "advance": False, "adjust": None, "first": False}],
+                    "z3_note": "恢復週：只排 4×1 分 fartlek，3 區下週再排"}
         if kind == "specific" and first and mode != "reentry":
             # this week's load-progression guardrails apply in 專項期 too, to both tracks, as in the base
             # phase (owner 2026-10-04: no school exempts it — Friel ramp 5–8, Nielsen 2014 / Damsted 2019

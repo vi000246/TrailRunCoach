@@ -8,8 +8,9 @@
    80–100 % band twice in weeks 6–3; 江晏慶「抓比賽距離爬升的七成」 about 1.5 months
    out, Koop: longest run 20–80 % of the race distance, CTS's biggest block 4–6 weeks
    out — back-to-back-and-long-day.md §2.2). The existing guardrails still cap it:
-   ≤ +15 % over the longest of the last 4 weeks, the week's volume, recovery weeks
-   (no long day), re-entry. A trail long day stops at TRAIL_LONG_MAX_MIN (SP-106): past ~6 h
+   ≤ +15 % over the longest of the last 4 weeks, the week's volume, re-entry. The
+   recovery weeks are 賽前第 5、3 週 (EASY_WEEKS, FRAC's low points; SP-97): a shorter
+   long day (overview.recovery_long_minutes), never the week 6 / 4 peaks. A trail long day stops at TRAIL_LONG_MAX_MIN (SP-106): past ~6 h
    coaches stop the long run and cover the rest with B2B and weekly volume (iRunFar 5–6 h for
    100 mi; Koop: no magic long run — race-feasibility.md §1). The course constant is linear (1.8 h + 0.3 km + 10 climb
    km + 0.6 descent km), so N % of the race day = N % of its time, km, climb and
@@ -43,7 +44,14 @@ from typing import Callable, Optional
 from backend.i18n import _
 
 WEEKS = (3, 10)                     # 專項期 weeks before the race (planning: 8-week specific + 14-day taper)
-FRAC = {10: 0.50, 9: 0.55, 8: 0.60, 7: 0.70, 6: 0.85, 5: 0.70, 4: 0.90, 3: 0.70}   # 推估
+# 推估. The low points (賽前第 5、3 週) are the 專項期's recovery weeks (EASY_WEEKS, SP-97): there the
+# long day is overview.recovery_long_minutes (65 % of the usual, ≤ this share); the share stays for
+# a week 5 / 3 that isn't one (the week right after another recovery-like week)
+FRAC = {10: 0.50, 9: 0.55, 8: 0.60, 7: 0.70, 6: 0.85, 5: 0.70, 4: 0.90, 3: 0.70}
+# SP-97: the 專項期's recovery weeks are counted back from the race, on FRAC's low points, so a
+# recovery week never takes the biggest long days (weeks 6 and 4); the history-triggered 3:1 is the
+# base phase's only (periodization-cross-sport.md §4.3, §6.1 SP-97)
+EASY_WEEKS = (5, 3)
 SIM_WEEKS = (4, 3)                  # the race simulation (推估 inside Koop's 「not the last 2–3 weeks」)
 STEP = 1.15                         # ≤ +15 % over the longest of the last 4 weeks (the app's rule)
 FLOOR_MIN = 90.0                    # the 專項期 long day's old floor
@@ -88,6 +96,15 @@ def _r5(x: float) -> int:
 def weeks_out(start: dt.date, monday: dt.date) -> int:
     """賽前第 n 週 of the week starting `monday` (steep_hill.weeks_out)."""
     return -(-(start - monday).days // 7)
+
+
+def easy_week(start: Optional[dt.date], monday: dt.date) -> Optional[int]:
+    """賽前第 n 週 when the week of `monday` is one of the 專項期's recovery weeks (EASY_WEEKS), else
+    None (SP-97). `start` = the next A race's first day."""
+    if start is None:
+        return None
+    w = weeks_out(start, monday)
+    return w if w in EASY_WEEKS else None
 
 
 def frac(w: int, sport: str = "trail") -> float:
@@ -249,6 +266,8 @@ def week_context(*, kind: str, mode: str, monday: dt.date, race: Optional[dict],
         info["why"].append("只在專項期（賽前第 10–3 週）")
         return info
     info.update(active=True, frac=frac(w, info["sport"]), sim_week=w in SIM_WEEKS)
+    if mode == "recovery_week":
+        info["recovery"] = True             # SP-97: the long day is the recovery week's shorter one
     if road:
         info["climb_why"] = "主要訓練項目是路跑：不排長爬坡、下坡"
         return info
@@ -282,7 +301,7 @@ def projected_context(kind: str, mode: str, monday: dt.date, cur: Optional[dict]
 
 
 PUBLIC = ("active", "race", "weeks_out", "frac", "sim_week", "climb", "climb_why", "why", "src", "longest28",
-          "long", "planned", "error", "sport")
+          "long", "planned", "error", "sport", "recovery")
 
 
 def public(info: Optional[dict]) -> Optional[dict]:
@@ -356,7 +375,7 @@ def decorate(ss: list[dict], info: Optional[dict]) -> None:
         want = long_minutes(info, 1e9) or m
         pct = km / race["day"]["km"] * 100 if race["day"].get("km") else 0
         s["detail"] = "；".join([f"這次約 {km:.0f} km（賽事距離的 {pct:.0f}%）"
-                                + ("；受「每次最多 +15%」限制" if want > m + 5 else "")]
+                                + ("；受「每次最多 +15%」限制" if want > m + 5 and not info.get("recovery") else "")]
                                + [p for p in (s.get("detail") or "").split("；") if p])
         s["distance_km"] = round(km, 1)
         s["source"] = ((s.get("source") or "") + "；" + SRC_ROAD).lstrip("；")
@@ -365,7 +384,8 @@ def decorate(ss: list[dict], info: Optional[dict]) -> None:
     want, cut = trail_aim(info)
     r = route(race, m)
     parts = [p for p in (s.get("detail") or "").split("；") if p and not p.startswith(_OLD_TERRAIN)]
-    s["detail"] = "；".join([route_text(race, m, want > m + 5, cut and m >= want - 5)] + parts)
+    rec = bool(info.get("recovery"))        # SP-97: shorter on purpose, not the +15 % cap
+    s["detail"] = "；".join([route_text(race, m, want > m + 5 and not rec, cut and m >= want - 5 and not rec)] + parts)
     s["distance_km"] = round(r["km"], 1)
     s["climb_m"] = round(r["climb_m"])
     s["source"] = ((s.get("source") or "") + "；" + SRC).lstrip("；")

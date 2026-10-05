@@ -1487,6 +1487,10 @@
     "draft": true,
     "src": "backend/engine/planning.py:598"
   },
+  "專項期賽前第 {w} 週是恢復週（從比賽往回數，對齊長天逐週表的低點；前 3 週平均的 65%）": {
+    "draft": true,
+    "src": "backend/engine/overview.py:381"
+  },
   "專項期（賽前約 10–3 週）每 1–2 週排一次長天，點要一步步靠近最近那場的線（推估）": {
     "draft": true,
     "src": "backend/engine/panels/race_refs.py:183"
@@ -1522,6 +1526,10 @@
   "已經有這個分類": {
     "draft": false,
     "src": "backend/engine/user_templates.py:130"
+  },
+  "已經連續 {n} 週沒有恢復週（Koop：一段加量最多 6 週）：這週是恢復週（前 3 週平均的 65%）": {
+    "draft": true,
+    "src": "backend/engine/overview.py:384"
   },
   "已解鎖": {
     "draft": true,
@@ -1734,6 +1742,10 @@
   "恢復週": {
     "draft": true,
     "src": "backend/engine/overview.py:1555"
+  },
+  "恢復週：長跑縮短到平常的 {share:.0%}、全程輕鬆": {
+    "draft": true,
+    "src": "backend/engine/overview.py:403"
   },
   "慢跑": {
     "draft": true,
