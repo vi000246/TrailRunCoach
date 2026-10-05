@@ -59,6 +59,10 @@
     "draft": true,
     "src": "backend/engine/workout_templates.py:136"
   },
+  "220 − 年齡 {age}（推估）": {
+    "draft": true,
+    "src": "backend/engine/hr_profile.py:397"
+  },
   "3 區已解鎖": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:1924"
@@ -266,6 +270,10 @@
   "C 賽當練習，不評估": {
     "draft": true,
     "src": "backend/engine/race_feasibility.py:220"
+  },
+  "CDC 建議：出發前 14 天內在 2,750 m 以上睡至少 2 晚，越接近出發越好": {
+    "draft": true,
+    "src": "backend/engine/altitude.py:186"
   },
   "COROS 乳酸閾": {
     "draft": true,
@@ -579,6 +587,10 @@
     "draft": true,
     "src": "backend/engine/reentry.py:167"
   },
+  "{hr} 或 RPE ≤ {rpe}，先到的為準": {
+    "draft": true,
+    "src": "backend/engine/hr_profile.py:446"
+  },
   "{h} 小時 {m} 分": {
     "draft": true,
     "src": "backend/engine/panels/drift_bars.py:32"
@@ -707,6 +719,22 @@
     "draft": true,
     "src": "backend/engine/planning.py:581"
   },
+  "{pct}% × (220 − 年齡)，推估": {
+    "draft": true,
+    "src": "backend/engine/hr_profile.py:434"
+  },
+  "{pct}% 最大心率": {
+    "draft": true,
+    "src": "backend/engine/hr_profile.py:438"
+  },
+  "{pct}% 最大心率 {v:.0f} 低於輕鬆跑上限，取輕鬆跑上限": {
+    "draft": true,
+    "src": "backend/engine/hr_profile.py:432"
+  },
+  "{pct}% 最大心率，最大心率是推估": {
+    "draft": true,
+    "src": "backend/engine/hr_profile.py:436"
+  },
   "{plain}（{start}）": {
     "draft": true,
     "src": "backend/engine/workout_review.py:2944"
@@ -811,6 +839,10 @@
     "draft": true,
     "src": "backend/engine/workout_steps.py:1152"
   },
+  "「{name}」最高約 {m:,.0f} m：出發前的高度適應": {
+    "draft": true,
+    "src": "backend/engine/altitude.py:211"
+  },
   "「{x}」只能用在主課": {
     "draft": true,
     "src": "backend/engine/workout_steps.py:671"
@@ -867,6 +899,10 @@
     "draft": true,
     "src": "backend/tenancy_mw.py:240"
   },
+  "上坡心率 ≤ {cap}或 RPE ≤ {rpe}；下坡看感覺": {
+    "draft": true,
+    "src": "backend/engine/hr_profile.py:451"
+  },
   "上坡版用一樣的 %CP，但上坡時攝氧量比例較低（Gajer，Buchheit Part I），下坡回程有離心負荷": {
     "draft": true,
     "src": "backend/engine/interval_library.py:810"
@@ -894,6 +930,10 @@
   "下坡技術／離心": {
     "draft": true,
     "src": "backend/engine/workout_templates.py:483"
+  },
+  "下坡看腿的感覺，不看心率": {
+    "draft": true,
+    "src": "backend/engine/hr_profile.py:379"
   },
   "下週安排恢復週": {
     "draft": true,
@@ -1106,6 +1146,10 @@
   "來源：": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:1937"
+  },
+  "來源：{src}": {
+    "draft": true,
+    "src": "backend/engine/altitude.py:218"
   },
   "來源：{x}": {
     "draft": true,
@@ -1491,7 +1535,7 @@
     "draft": true,
     "src": "backend/engine/racepower/watch_export.py:194"
   },
-  "坡度由 Pandolf 公式換算：不背包、這個坡度的代謝量 ≈ 在 12% 坡、3.5 km/h 背這個重量（推估）；心率 ≤ 輕鬆跑上限": {
+  "坡度由 Pandolf 公式換算：不背包、這個坡度的代謝量 ≈ 在 12% 坡、3.5 km/h 背這個重量（推估）；心率：陡坡健走、登山的課表用爬坡上限（75% 最大心率或 RPE ≤ 13，萩原・山本 2011），其他課表用輕鬆跑上限": {
     "draft": true,
     "src": "backend/engine/workout_templates.py:195"
   },
@@ -2239,6 +2283,10 @@
     "draft": true,
     "src": "backend/engine/race_feasibility.py:216"
   },
+  "最高點與每晚的高度來自賽事的 GPX（每晚 = 分段點或營地）；你的高度來自活動的海拔紀錄，前後兩天都到 2,750 m 以上才算在高處過夜（推估）。研究多在 4,000 m 以上，套到 3,000–3,950 m 是推估。只是提醒，不會改課表。": {
+    "draft": true,
+    "src": "backend/engine/altitude.py:215"
+  },
   "有 GPX 時橫軸是路線距離（km）：距離段照它的距離放，時間、直到按下計圈、負荷、RPE 段依你每段的預估速度換算成距離（越野用努力距離：km＋爬升÷100），是推估": {
     "draft": false,
     "src": "backend/engine/user_templates.py:58"
@@ -2727,6 +2775,10 @@
     "draft": true,
     "src": "backend/engine/workout_review.py:2727"
   },
+  "爬坡上限": {
+    "draft": true,
+    "src": "backend/engine/hr_profile.py:378"
+  },
   "爬坡功率上限 110 % 是經驗法則（非研究結論）；下坡讓功率自然掉下來": {
     "draft": true,
     "src": "backend/engine/racepower/calc.py:360"
@@ -2875,6 +2927,10 @@
     "draft": true,
     "src": "backend/engine/drift_calib.py:128"
   },
+  "第 {a} 晚到第 {b} 晚的睡眠高度升高 {d:,.0f} m：CDC 建議 3,000 m 以上每晚升高不超過 500 m": {
+    "draft": true,
+    "src": "backend/engine/altitude.py:207"
+  },
   "第 {day} 天終點": {
     "draft": true,
     "src": "backend/engine/racepower/watch_export.py:190"
@@ -2882,6 +2938,10 @@
   "第 {i} 趟 {d}": {
     "draft": true,
     "src": "backend/engine/interval_library.py:739"
+  },
+  "第一晚睡在約 {m:,.0f} m，超過 3,400 m 屬高風險（CDC；排雲山莊 3,402 m 就在線上）": {
+    "draft": true,
+    "src": "backend/engine/altitude.py:202"
   },
   "算不出": {
     "draft": false,
@@ -2906,6 +2966,10 @@
   "範本最多 {n} 個": {
     "draft": false,
     "src": "backend/engine/user_templates.py:265"
+  },
+  "紀錄裡沒有到過 3,000 m 以上：第一次上 3,000 m 是高山症的相關因子（Shen 2024）": {
+    "draft": true,
+    "src": "backend/engine/altitude.py:198"
   },
   "累": {
     "draft": true,
@@ -3014,6 +3078,10 @@
   "至少要有一個步驟": {
     "draft": true,
     "src": "backend/engine/workout_steps.py:688"
+  },
+  "萩原・山本 2011（體力科學 60:327–341）：模擬登山的上坡乳酸閾值在 78% 最大心率、RPE 13–14，「75% 最大心率以下、或 RPE 13 以下」的配速是妥當的；長野縣 Safety Book（千島康稔）：(220 − 年齡) × 0.75 以下的心率走是安全的": {
+    "draft": true,
+    "src": "backend/engine/hr_profile.py:381"
   },
   "虛線＝接下來 {n} 場賽事一天的難度（紅 A、橘 B、藍其他；多天行程用每天平均）；滑過線看整趟和每一天": {
     "draft": true,
@@ -3387,6 +3455,26 @@
     "draft": true,
     "src": "backend/engine/primary_sport.py:79"
   },
+  "近 14 天有 1 晚在 2,750 m 以上；CDC 建議出發前 14 天內至少 2 晚，越接近出發越好": {
+    "draft": true,
+    "src": "backend/engine/altitude.py:183"
+  },
+  "近 14 天有 {n} 晚在 2,750 m 以上：已有部分適應（CDC）": {
+    "draft": true,
+    "src": "backend/engine/altitude.py:180"
+  },
+  "近 2 個月到 3,000 m 以上只有 {n} 天，還不算事前暴露（Schneider 2002：> 4 天）": {
+    "draft": true,
+    "src": "backend/engine/altitude.py:192"
+  },
+  "近 2 個月有 {n} 天到 3,000 m 以上：有事前暴露（Schneider 2002：有事前暴露又慢慢上升，容易高山症的人發生率從 58% 降到 7%）": {
+    "draft": true,
+    "src": "backend/engine/altitude.py:188"
+  },
+  "近 3 個月沒有到 3,000 m 以上：高山症風險較高（Shen 2024，玉山排雲山莊就診者的資料）": {
+    "draft": true,
+    "src": "backend/engine/altitude.py:196"
+  },
   "近 {days} 天只有 {n} 次路跑有 20 分鐘心率在 LTHR ±3%（需要 ≥ {need} 次）": {
     "draft": true,
     "src": "backend/engine/thresholds.py:264"
@@ -3482,6 +3570,10 @@
   "這次資料比較雜，只當參考": {
     "draft": true,
     "src": "backend/engine/workout_review.py:531"
+  },
+  "這比一般輕鬆跑的上限高，因為是爬坡步行": {
+    "draft": true,
+    "src": "backend/engine/hr_profile.py:380"
   },
   "這種課不用配對活動": {
     "draft": true,
@@ -3838,6 +3930,10 @@
   "馬拉松配速 ≈ 閾值配速 × 1.06（推估）": {
     "draft": true,
     "src": "backend/engine/workout_templates.py:216"
+  },
+  "體能好壞不影響高山症風險（CDC）：練得好不代表不會高山症": {
+    "draft": true,
+    "src": "backend/engine/altitude.py:210"
   },
   "體重 {kg} kg 不合理": {
     "draft": true,

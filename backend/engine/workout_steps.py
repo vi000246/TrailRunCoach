@@ -170,6 +170,9 @@ class Ctx:
     # 課表心率區間 (engine/hr_profile.plan_hr_zones; the plan thresholds' "hr_model"): the
     # automatic easy / interval HR targets and the editor's HR 區間 choice (hr_model_zones)
     hrz: Optional[dict] = None
+    # a walking session (target_policy.is_walk, SP-115): its uphill cap (hr_profile.walk_cap, the
+    # plan thresholds' "walk_cap") replaces the easy-run cap of its 「輕鬆」 steps
+    walk: Optional[dict] = None
     # the push target (sync/workout_targets, setting plan.push.provider): its end conditions
     # (empty = not checked) and name, for the 「負荷」 issue on providers without one
     end_conditions: tuple = ()
@@ -191,7 +194,7 @@ class Ctx:
 
     @classmethod
     def of(cls, th: Optional[dict], basis: Optional[str] = None, hr_cap: bool = False,
-           speeds: Optional[dict] = None) -> "Ctx":
+           speeds: Optional[dict] = None, walk: bool = False) -> "Ctx":
         th = th or {}
 
         def f(k, d=None):
@@ -206,7 +209,8 @@ class Ctx:
                    basis=basis if basis in ("hr", "power", "none") else "hr", hr_cap=hr_cap,
                    v_easy=f("v_easy", sp), v_easy_src=str(sp.get("v_easy_src") or ""), ep_kmh=f("ep_kmh", sp),
                    terrain=ter, climb_per_km=max(0.0, f("climb_per_km", sp) or 0.0) if ter == "trail" else 0.0,
-                   hrz=th.get("hr_model") if isinstance(th.get("hr_model"), dict) else None)
+                   hrz=th.get("hr_model") if isinstance(th.get("hr_model"), dict) else None,
+                   walk=th.get("walk_cap") if walk and isinstance(th.get("walk_cap"), dict) else None)
 
 
 def session_ctx(s: dict, th: Optional[dict], prefs=None) -> Ctx:
@@ -217,20 +221,22 @@ def session_ctx(s: dict, th: Optional[dict], prefs=None) -> Ctx:
     b = s.get("basis") if s.get("basis") in ("hr", "power", "none") else pol["basis"]
     if b == "power" and th and not (th or {}).get("cp"):
         b = pol["basis"]
-    return Ctx.of(th, b, bool(pol.get("hr_cap")))
+    return Ctx.of(th, b, bool(pol.get("hr_cap")), walk=pol["type"] == "walk")
 
 
 def easy_hr(c: Ctx) -> Optional[tuple]:
-    """HR ≤ the easy-run cap (coros_workouts.easy_hr; with a 課表心率區間 its Z2 band)."""
+    """HR ≤ the easy-run cap (coros_workouts.easy_hr; with a 課表心率區間 its Z2 band); a
+    walking session's cap is its uphill cap (hr_profile.walk_band)."""
+    from backend.engine.hr_profile import walk_band
     if c.hrz and c.hrz.get("easy"):
         lo, hi = c.hrz["easy"]
-        return ("hr", round(lo), round(hi))
+        return walk_band(c.walk, ("hr", round(lo), round(hi)))
     hi = c.aet or (0.89 * c.lthr if c.lthr else None)
     if not hi:
-        return None
+        return walk_band(c.walk, None)
     lo = 0.75 * c.lthr if c.lthr else hi - 25
     lo = min(lo, hi - 10)
-    return ("hr", round(lo), round(hi))
+    return walk_band(c.walk, ("hr", round(lo), round(hi)))
 
 
 def hr_model_zones(c: Optional[Ctx]) -> Optional[list]:
@@ -1499,6 +1505,9 @@ def _name(st: dict, r: Resolved, em: _Emit, grouped: bool) -> str:
     if st.get("note"):
         return st["note"]
     if st["kind"] == "work" and tg.get("type") == "auto" and tg.get("intent") == "easy" and tg.get("plo") is not None:
+        if r.type == "hr" and em.c.walk:
+            from backend.engine.hr_profile import walk_step_name
+            return walk_step_name()
         return CAP_NAME if r.type == "hr" else "功率區間" if r.type == "power" else "照感覺"
     if st["kind"] == "work" and not grouped:
         em.n_work += 1
@@ -1809,12 +1818,17 @@ def zones_table(c: Ctx) -> dict:
     HR with a 課表心率區間: its Z1–Z6 (lo / hi × LTHR for the editor's 填法 switch, None
     without LTHR), then the Friel rows marked `legacy` (shown only on a step that has one)."""
     hz = hr_model_zones(c)
+    # a walking session (SP-115): the easy row is its uphill cap (hr_profile.walk_band)
+    cap_label = "≤ " + EASY_CAP
+    if c.walk:
+        from backend.engine.hr_profile import WALK_CAP
+        cap_label = "≤ " + _(WALK_CAP)
 
     def rows(ty):
         out = []
         if ty == "hr" and hz:
             e = easy_hr(c)
-            out.append({"id": "aet", "label": "≤ " + EASY_CAP, "text": f"{e[1]}–{e[2]} bpm" if e else ""})
+            out.append({"id": "aet", "label": cap_label, "text": f"{e[1]}–{e[2]} bpm" if e else ""})
             for z, name, lo, hi in hz:
                 out.append({"id": z, "label": f"{z} {name}".strip(),
                             "lo": lo / c.lthr if c.lthr else None, "hi": hi / c.lthr if c.lthr else None,
@@ -1827,7 +1841,7 @@ def zones_table(c: Ctx) -> dict:
                 continue
             if ty == "hr" and z == "aet":
                 e = easy_hr(c)
-                out.append({"id": "aet", "label": "≤ " + EASY_CAP, "text": f"{e[1]}–{e[2]} bpm" if e else ""})
+                out.append({"id": "aet", "label": cap_label, "text": f"{e[1]}–{e[2]} bpm" if e else ""})
                 continue
             base = {"power": c.cp, "hr": c.lthr, "pace": c.tpace}[ty]
             if ty == "pace":

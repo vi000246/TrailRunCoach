@@ -359,6 +359,109 @@ def easy_cap_hr(bpm: Optional[float] = None, measured: bool = False) -> str:
     return "心率 ≤ " + easy_cap_label(None, bpm, measured)
 
 
+# ---------------------------------------------------------------------------
+# the uphill HR cap of a walking session (登山 / 健行 / 百岳 / 陡坡健走; SP-115, owner
+# 2026-10-05: AeT is too low for real climbing). 萩原正大・山本正嘉 2011〈歩行路の傾斜、
+# 歩行速度、および担荷重量との関連からみた登山時の生理的負担度の体系的な評価〉體力科學
+# 60:327–341 (full text; docs/research/mountaineering-physiology-scholars.md §1.1): 40
+# treadmill conditions of mountain walking, the uphill LT at 62 % VO2max, 78 % HRmax, RPE
+# 13–14; 山本's pace rule 「75 % HRmax 以下、または RPE 13 以下」 confirmed 「妥当」. Without a
+# max HR: 長野縣 Safety Book (千島康稔): 「(220 − 年齡) × 0.75 以下的心率走是安全的」 (推估).
+# Never below the easy-run cap (the cap does not get lower than before). Altitude: the same
+# % HRmax (the same strain; a 3,000–3,950 m HRmax correction was not found — 待查, 推估).
+# Downhill: no HR (萩原: downhill costs 35–50 % of the uphill O2 but the legs' RPE is higher).
+# ---------------------------------------------------------------------------
+
+WALK_PCT = 0.75                     # 萩原・山本 2011: ≤ 75 % HRmax
+WALK_RPE = 13                       # 萩原・山本 2011: or RPE ≤ 13 (Borg 6–20 「有點吃力」)
+AGE_MHR = 220                       # 長野縣 Safety Book: (220 − 年齡) × 0.75 (推估)
+WALK_CAP = N_("爬坡上限")
+WALK_DOWN = N_("下坡看腿的感覺，不看心率")
+WALK_WHY = N_("這比一般輕鬆跑的上限高，因為是爬坡步行")
+WALK_SRC = N_("萩原・山本 2011（體力科學 60:327–341）：模擬登山的上坡乳酸閾值在 78% 最大心率、RPE 13–14，"
+              "「75% 最大心率以下、或 RPE 13 以下」的配速是妥當的；長野縣 Safety Book（千島康稔）："
+              "(220 − 年齡) × 0.75 以下的心率走是安全的")
+
+
+def walk_cap(mhr: Optional[float], aet: Optional[float] = None, age: Optional[int] = None,
+             mhr_source: Optional[str] = None, mhr_estimate: bool = False) -> Optional[dict]:
+    """The uphill HR cap of a walking session: 75 % of the max HR; without one 0.75 ×
+    (220 − age) (推估); never below `aet` (the easy-run cap). None without a max HR or an age.
+
+    {"value", "pct", "mhr", "basis": hrmax | age, "estimate", "floor": capped up to `aet`,
+     "aet", "source", "rpe"} (JSON-able)."""
+    if mhr:
+        m, basis, src, est = float(mhr), "hrmax", mhr_source, bool(mhr_estimate)
+    elif age and 10 <= int(age) <= 100:
+        m, basis, est = float(AGE_MHR - int(age)), "age", True
+        src = _("220 − 年齡 {age}（推估）", age=int(age))
+    else:
+        return None
+    v = WALK_PCT * m
+    floor = bool(aet and v < float(aet))
+    return {"value": round(float(aet) if floor else v), "pct": WALK_PCT, "mhr": round(m), "basis": basis,
+            "estimate": est, "floor": floor, "aet": round(float(aet)) if aet else None, "source": src,
+            "rpe": WALK_RPE}
+
+
+def walk_cap_for(ds, day: dt.date, aet: Optional[float], profile: Optional[dict] = None) -> Optional[dict]:
+    """walk_cap with the max HR in effect on `day` (max_hr: 設定 → 手錶 → 推估) and the age from
+    the 一般設定 birth year. Never raises (None)."""
+    try:
+        m = max_hr(ds, day)
+    except Exception:                       # noqa: BLE001 — a dataset without a plan / samples
+        m = {}
+    age = None
+    try:
+        from backend.engine.athlete_profile import age as _age
+        if profile is None:
+            profile = getattr(getattr(ds, "plan", None), "profile", None)
+        age = _age(profile or {}, day)
+    except Exception:                       # noqa: BLE001
+        age = None
+    return walk_cap((m or {}).get("value"), aet, age, (m or {}).get("source"), (m or {}).get("kind") == "estimate")
+
+
+def walk_cap_label(w: Optional[dict]) -> str:
+    """「爬坡上限 146 bpm（75% 最大心率）」; 「（75% × (220 − 年齡)，推估）」 without a max HR;
+    「（75% 最大心率 141 低於輕鬆跑上限，取輕鬆跑上限）」 when the floor applies."""
+    if not w:
+        return _(WALK_CAP)
+    pct = round(w["pct"] * 100)
+    if w.get("floor"):
+        how = _("{pct}% 最大心率 {v:.0f} 低於輕鬆跑上限，取輕鬆跑上限", pct=pct, v=w["pct"] * w["mhr"])
+    elif w.get("basis") == "age":
+        how = _("{pct}% × (220 − 年齡)，推估", pct=pct)
+    elif w.get("estimate"):
+        how = _("{pct}% 最大心率，最大心率是推估", pct=pct)
+    else:
+        how = _("{pct}% 最大心率", pct=pct)
+    return f"{_(WALK_CAP)} {w['value']:.0f} bpm（{how}）"
+
+
+def walk_cap_hr(w: Optional[dict], aet: Optional[float] = None, measured: bool = False) -> str:
+    """The target text of a walking session: 「心率 ≤ 爬坡上限 146 bpm（75% 最大心率）或 RPE ≤ 13，
+    先到的為準」 — without a cap (no max HR, no age) the easy-run cap stands in."""
+    hr = ("心率 ≤ " + walk_cap_label(w)) if w else easy_cap_hr(aet, measured)
+    return _("{hr} 或 RPE ≤ {rpe}，先到的為準", hr=hr, rpe=WALK_RPE)
+
+
+def walk_step_name() -> str:
+    """The watch step name of a walking session's main step: 「上坡心率 ≤ 爬坡上限或 RPE ≤ 13；下坡看感覺」."""
+    return _("上坡心率 ≤ {cap}或 RPE ≤ {rpe}；下坡看感覺", cap=_(WALK_CAP), rpe=WALK_RPE)
+
+
+def walk_band(w: Optional[dict], easy: Optional[tuple]) -> Optional[tuple]:
+    """("hr", lo, hi) of a walking step: the easy band's floor up to the walk cap
+    (sync/coros_workouts, engine/workout_steps); `easy` when there is no cap."""
+    if not w or not w.get("value"):
+        return easy
+    hi = int(round(w["value"]))
+    lo = easy[1] if easy and easy[0] == "hr" else hi - 25
+    lo = min(int(lo), hi - 10)
+    return ("hr", lo, hi)
+
+
 def work_band(hrz: Optional[dict], cls: Optional[str]) -> Optional[tuple]:
     """(lo, hi) bpm of an interval class (CLASS_ZONES) under the 課表 zones, or None."""
     if not hrz or not cls or cls not in (hrz.get("work") or {}):

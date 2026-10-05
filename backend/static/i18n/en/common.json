@@ -81,6 +81,7 @@
   "sugg.kind.zone_test": "Retest",
   "sugg.kind.zone_update": "Zones",
   "sugg.kind.injury": "Injury",
+  "sugg.kind.altitude": "Altitude",
   "sugg.wait_cool": "Testing is more accurate once the weather cools down (you can still schedule it now)",
   "sugg.decline": "No thanks",
   "sugg.accept": "Schedule",
