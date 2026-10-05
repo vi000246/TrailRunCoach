@@ -100,11 +100,12 @@ Other entry points:
 leaving the 轉換期 — and changing its length while in it — is a phase change, so it is held for
 approval like any other (Big changes below). Adapt and reconcile treat the 轉換期 as a rest
 phase (`reconcile.REST_MODES`, adapt's rest week); the re-entry block applies only in base /
-specific. Days inside a 轉換期 (auto or manual, `planning.transition_days`) are **not a running
-break** (owner 2026-10-05): a transition of only cross-training / strength starts no re-entry
-block when base resumes — `reentry.find_all` counts a break's days outside the transition only
-(still ≥ 6 → a block of that length, its text 「停跑 N 天（不含轉換期 M 天）」) — and doesn't break
-the Zone 3 gate's streak or re-lock it (below).
+specific. Days inside a planned post-race phase — the A race's 恢復期 (7–14 days) or the 轉換期
+after it (auto or manual, `planning.post_race_days`) — are **not a running break** (owner
+2026-10-05): a 恢復期 without a run or a transition of only cross-training / strength starts no
+re-entry block when base resumes — `reentry.find_all` counts a break's days outside those phases
+only (still ≥ 6 → a block of that length, its text 「停跑 N 天（不含賽後恢復期／轉換期 M 天）」) — and
+doesn't break the Zone 3 gate's streak or re-lock it (below).
 
 The toggles are in 課表 › ⚙ 課表偏好 › 自動調整 (`backend/static/schedule.html`, saved through
 `PUT /settings`); `autoplan.js` no longer draws them.
@@ -248,8 +249,8 @@ intensity). Each rung is the canonical variant of `backend/engine/interval_libra
   for Zone 3, a Zone 3 session 達標 in the 8-week history. Once met it stays open; a break of
   ≥ 21 days without running (`Z3_RELOCK_DAYS`, 推估; Coyle 1984 VO2max −7 % at 21 days,
   detraining.md §1) re-locks it — only what comes after the break counts. Breaks of 6–20 days
-  get the re-entry block only. 轉換期 days (`z3_consistency(skip=)`, `planning.transition_days`;
-  SP-73, owner 2026-10-05) are no running gap: they count neither toward the 7-day stretch nor
+  get the re-entry block only. Post-race 恢復期 / 轉換期 days (`z3_consistency(skip=)`,
+  `planning.post_race_days`; SP-73, owner 2026-10-05) are no running gap: they count neither toward the 7-day stretch nor
   the 21-day re-lock (a 3–4-week transition alone never re-locks — chosen: the transition is a
   planned easy block, the fitness loss Coyle measured is for full inactivity), and a week touching
   the transition that fails on its own is see-through (neither counts nor breaks the 4 weeks; one
@@ -285,7 +286,7 @@ intensity). Each rung is the canonical variant of `backend/engine/interval_libra
      2026-10-05, replacing SP-39's 12-week `LTHR_FRESH_DAYS`: zones-and-thresholds.md §2.5 finds no
      direct evidence for a fixed retest period; unsourced-rules.md B3 moved the AeT to event
      triggers too) — the measured LTHR stays valid **unless an event invalidates it**
-     (`lthr_invalid`, `backend/engine/quality_gate.py:1386`, `gate["lthr"]["invalid"]`): (a) a
+     (`lthr_invalid`, `backend/engine/quality_gate.py:1387`, `gate["lthr"]["invalid"]`): (a) a
      running break ≥ 4 weeks after the test (`reentry.find_all`, a block with `reconfirm`;
      detraining.md); (b) evidence since the test (`threshold_confidence.lthr_evidence`, level weak
      or above: a cool long effort above LTHR, a 40–60-min race < 95 % LTHR, the CP-band
@@ -602,3 +603,4 @@ overview has `data-log="none"`. The settings are in 課表偏好 (above).
 | 2026-10-04 | sp-79-quality-families | SP-79 | Generated 強度課 titles name the family (有氧間歇／有氧間歇（巡航）／VO2max 間歇) instead of 閾值／近閾值／VO2max; stored older titles are mapped on read and in reconcile (no spurious change), and the ladder's title matchers accept both spellings |
 | 2026-10-05 | change | SP-79 follow-up | Taper 「短強度 4×3 分」 renamed 「有氧間歇（巡航）4×3 分」 (intensity unchanged); the stored old title maps through `interval_library.renamed` / `plan_store.display_title` |
 | 2026-10-05 | change | SP-63 follow-up | Weekdays not ticked as 可練日 in 課表偏好 count as planned rest for the short-break exemption (like 不排課日期 / 休息日), so a Fri–Sun-only runner's weekly Mon–Thu gap is not exempt from the running-volume step (owner 2026-10-05) |
+| 2026-10-05 | change | SP-73 follow-up | The A race's 恢復期 (7–14 days) is a planned post-race phase like the 轉換期: its days are no running break for the re-entry block or the Zone 3 gate's gap / re-lock (`planning.post_race_days`; the block text says 「不含賽後恢復期／轉換期 M 天」; owner 2026-10-05) |

@@ -408,19 +408,20 @@ def phase_on(plan: Plan, day: dt.date, begin: Optional[dt.date] = None,
     return None
 
 
-def transition_days(plan: Plan, begin: dt.date, end: dt.date,
-                    transition_weeks: Optional[int] = None) -> set[dt.date]:
-    """The days in [begin, end] inside a 轉換期 (auto or manual). SP-73 (owner 2026-10-05): a
-    transition is a planned easy / cross-training block, so its days without a run are not a
-    running break for the re-entry block (reentry.find_all) or the Zone 3 gate's gap / re-lock
-    (quality_gate.z3_consistency). Empty on any plan error."""
+POST_RACE_KINDS = ("recovery", "transition")   # the planned post-race phases (SP-73)
+
+
+def phase_days(plan: Plan, begin: dt.date, end: dt.date, kinds: tuple,
+               transition_weeks: Optional[int] = None) -> set[dt.date]:
+    """The days in [begin, end] inside a phase of one of `kinds` (auto or manual). Empty on any
+    plan error."""
     out: set[dt.date] = set()
     try:
         ps = phases(plan, begin - dt.timedelta(days=400), end, transition_weeks)
     except Exception:                       # noqa: BLE001 — the callers must still work
         return out
     for p in ps:
-        if p.kind != "transition":
+        if p.kind not in kinds:
             continue
         a, b = _d(p.start), _d(p.end)
         if a is None or b is None:
@@ -430,6 +431,23 @@ def transition_days(plan: Plan, begin: dt.date, end: dt.date,
             out.add(d)
             d += dt.timedelta(days=1)
     return out
+
+
+def transition_days(plan: Plan, begin: dt.date, end: dt.date,
+                    transition_weeks: Optional[int] = None) -> set[dt.date]:
+    """The days in [begin, end] inside a 轉換期 (auto or manual)."""
+    return phase_days(plan, begin, end, ("transition",), transition_weeks)
+
+
+def post_race_days(plan: Plan, begin: dt.date, end: dt.date,
+                   transition_weeks: Optional[int] = None) -> set[dt.date]:
+    """The days in [begin, end] inside a planned post-race phase — the A race's 恢復期 (7–14
+    days) or the 轉換期 after it (auto or manual). SP-73 (owner 2026-10-05): both are planned
+    rest / easy / cross-training blocks, so their days without a run are not a running break
+    for the re-entry block (reentry.find_all) or the Zone 3 gate's gap / re-lock
+    (quality_gate.z3_consistency), and their weeks are not a volume-step baseline
+    (status.i_volume). Empty on any plan error."""
+    return phase_days(plan, begin, end, POST_RACE_KINDS, transition_weeks)
 
 
 def pre_race_mondays(phases_: list, day: dt.date, n: int = 4) -> list[dt.date]:

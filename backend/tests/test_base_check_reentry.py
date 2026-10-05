@@ -363,12 +363,22 @@ def test_plan_auto_logs_z5_state_and_reentry_changes():
 # 轉換期 days are not break days (SP-73, owner 2026-10-05)
 # ---------------------------------------------------------------------------
 
-def _with_transition(ws, start_ago, end_ago):
+def _with_transition(ws, start_ago, end_ago, kind="transition"):
     from backend.engine.planning import Phase
     ds = _ds(ws)
-    ds.plan.phases = [Phase("transition", (TODAY - dt.timedelta(days=start_ago)).isoformat(),
+    ds.plan.phases = [Phase(kind, (TODAY - dt.timedelta(days=start_ago)).isoformat(),
                             (TODAY - dt.timedelta(days=end_ago)).isoformat(), auto=False)]
     return ds
+
+
+def test_post_race_recovery_without_a_run_starts_no_reentry_block():
+    """SP-73 (owner 2026-10-05): the A race's 恢復期 (7–14 days) is planned too — no run in it
+    is no break, like the 轉換期."""
+    off = set(range(2, 14))                                     # 12 days without a run
+    assert RE.find(_ds(_daily_except(off)), TODAY)["days"] == 12
+    assert RE.find(_with_transition(_daily_except(off), 13, 4, "recovery"), TODAY) is None   # 10 in 恢復期
+    p = RE.find(_with_transition(_daily_except(set(range(2, 22))), 21, 8, "recovery"), TODAY)
+    assert p["days"] == 6 and p["transition_days"] == 14 and "（不含賽後恢復期／轉換期 14 天）" in p["text"]
 
 
 def test_transition_with_only_cross_training_starts_no_reentry_block():
@@ -386,7 +396,7 @@ def test_days_off_beyond_the_transition_still_make_a_block():
     p = RE.find(ds, TODAY)
     assert p["days"] == 12 and p["category"] == "6-13" and p["transition_days"] == 21
     assert p["last_run"] == (TODAY - dt.timedelta(days=35)).isoformat()
-    assert "停跑 12 天（不含轉換期 21 天）" in p["text"]
+    assert "停跑 12 天（不含賽後恢復期／轉換期 21 天）" in p["text"]
     assert RE.find(_ds(_daily_except(set(range(2, 35)), n=70)), TODAY)["category"] == "29-56"
 
 
@@ -398,3 +408,13 @@ def test_transition_days_of_an_auto_plan():
     assert transition_days(pl, date(2026, 6, 1), date(2026, 8, 31), transition_weeks=0) == set()
     assert transition_days(pl, date(2026, 6, 20), date(2026, 6, 21), transition_weeks=3) == \
         {date(2026, 6, 20), date(2026, 6, 21)}
+
+
+def test_post_race_days_add_the_recovery_phase():
+    from backend.engine.planning import Event, Plan, post_race_days
+    pl = Plan(events=[Event("a", "A 賽", "2026-06-06", distance_km=21)])     # short: 7-day recovery
+    p = post_race_days(pl, date(2026, 6, 1), date(2026, 8, 31), transition_weeks=3)
+    assert min(p) == date(2026, 6, 7) and max(p) == date(2026, 7, 4) and len(p) == 28
+    p = post_race_days(pl, date(2026, 6, 1), date(2026, 8, 31), transition_weeks=0)   # no 轉換期: 恢復期 only
+    assert min(p) == date(2026, 6, 7) and max(p) == date(2026, 6, 13) and len(p) == 7
+    assert date(2026, 6, 6) not in p                                          # the race day itself is not

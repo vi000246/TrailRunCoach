@@ -1182,9 +1182,9 @@ def z3_consistency(days: list, today: dt.date, need: int = Z3_WEEKS_NEED, skip=(
     weeks, each with ≥ Z3_RUNS_PER_WEEK runs and no Z3_MAX_GAP_DAYS-day stretch without running,
     after the last break of ≥ Z3_RELOCK_DAYS days (which re-locks; a break still going on too).
     Once such a window exists the path stays open (sticky — a 6–20-day break only gets the
-    re-entry block). `skip`: 轉換期 days (planning.transition_days; SP-73, owner 2026-10-05) —
-    they are no running gap: not counted in the 7-day stretch nor the 21-day re-lock, and a week
-    touching the transition that fails on its own is left out of the run of weeks (neither counts
+    re-entry block). `skip`: post-race 恢復期 / 轉換期 days (planning.post_race_days; SP-73, owner
+    2026-10-05) — they are no running gap: not counted in the 7-day stretch nor the 21-day re-lock,
+    and a week touching them that fails on its own is left out of the run of weeks (neither counts
     nor breaks it; a transition week with ≥ 3 runs counts as usual). {"open", "since", "weeks"
     (the trailing complete weeks that pass, for the progress line), "rows" (the last `need` weeks:
     monday, runs, ok[, transition]), "break"}."""
@@ -1192,7 +1192,7 @@ def z3_consistency(days: list, today: dt.date, need: int = Z3_WEEKS_NEED, skip=(
     one = dt.timedelta(days=1)
 
     def gap(a: dt.date, b: dt.date) -> int:
-        """Days without a run between `a` and `b`, 轉換期 days left out."""
+        """Days without a run between `a` and `b`, post-race phase days left out."""
         n = (b - a).days - 1
         if not skip or n <= 0:
             return n
@@ -1253,12 +1253,13 @@ def z3_consistency(days: list, today: dt.date, need: int = Z3_WEEKS_NEED, skip=(
 
 
 def _transition_skip(ds, days: list, today: dt.date) -> set:
-    """The 轉換期 days over the run history (planning.transition_days; SP-73); empty without a plan."""
+    """The post-race 恢復期 / 轉換期 days over the run history (planning.post_race_days; SP-73);
+    empty without a plan."""
     plan_ = getattr(ds, "plan", None)
     if plan_ is None or not days:
         return set()
-    from backend.engine.planning import transition_days
-    return transition_days(plan_, days[0], today)
+    from backend.engine.planning import post_race_days
+    return post_race_days(plan_, days[0], today)
 
 
 def z3_gate(ds, today: dt.date, mode: str, state: Optional[str], ae: dict, lt: dict, z5: dict,
