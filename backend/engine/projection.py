@@ -643,7 +643,7 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
             try:
                 lc_info = SH.projected_context(kind, mode, week, lc_cur)
                 SH.apply(ss, lc_info, aet=th.get("aet"), prefs=prefs, b2b=b2b_info, notes=notes,
-                         rates=cur.get("tss_per_category"), aet_measured=th_meas)
+                         rates=cur.get("tss_per_category"), aet_measured=th_meas, walk=th.get("walk_cap"))
             except Exception:              # noqa: BLE001 — never breaks the projection
                 lc_info = None
         heat_w = None

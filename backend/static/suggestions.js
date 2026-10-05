@@ -2,7 +2,8 @@
  * by itself (engine/suggestions.py; GET /api/v1/overview/plan/suggestions):
  * a B2B weekend (pick the day pair), a due CP / AeT test (pick the day), a
  * zone retest (pick the test and the day; the LTHR 30-min / max-HR test as a
- * 「安排課表」 link, `links`), a zone update (information).
+ * 「安排課表」 link, `links`), a zone update, a high-altitude trip's acclimatisation
+ * reminder (information).
  *
  *   「排入」 POST …/suggestions/accept {id, day, test?}
  *   「不要」 POST …/suggestions/dismiss {id, action: "declined"}
@@ -29,7 +30,8 @@
   // i18n: common.sugg.* (static/i18n/i18n.js; the common catalog is inlined on every page)
   const T = (k, p) => (window.I18N ? window.I18N.t("common.sugg." + k, p) : k);
   const KIND = { b2b: "B2B", test: T("kind.test"), zone_test: T("kind.zone_test"), zone_update: T("kind.zone_update"),
-    injury_rest: T("kind.injury"), injury_hold: T("kind.injury"), injury_pattern: T("kind.injury") };
+    injury_rest: T("kind.injury"), injury_hold: T("kind.injury"), injury_pattern: T("kind.injury"),
+    altitude: T("kind.altitude") };
 
   const CSS = `
   .sugbox { --sg-acc: var(--accent, #2563eb); position: fixed; right: 16px; bottom: 16px; z-index: 60; width: 340px;

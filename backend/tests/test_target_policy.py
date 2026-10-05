@@ -17,7 +17,9 @@ TH = {"cp": 250.0, "lthr": 165.0, "aet": 145.0}
     ({"kind": "long", "title": "LSD"}, "power", "long"),
     ({"kind": "long", "title": "LSD（山路）"}, "hr", "trail_long"),
     ({"kind": "long", "title": "長跑", "terrain": "trail"}, "hr", "trail_long"),
-    ({"kind": "hike", "title": "登山健行"}, "hr", "hike"),
+    ({"kind": "hike", "title": "技術地形 40′（RPE 3–4）", "terrain": "trail"}, "hr", "hike"),
+    ({"kind": "hike", "title": "登山健行"}, "hr", "walk"),             # SP-115: a walking session
+    ({"kind": "easy", "title": "陡坡健走 14%（模擬負重 9 kg）", "terrain": "trail"}, "hr", "walk"),
     ({"kind": "mountain", "title": "山路長天"}, "hr", "trail_long"),
     ({"kind": "quality", "title": "閾值 3×8 分"}, "power", "interval"),
     ({"kind": "quality", "title": "VO2max 5×2 分上坡", "terrain": "trail"}, "power", "hill"),
