@@ -7,6 +7,9 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend/ ./backend/
+# The bundled views (training/workout/periodization, the WKO5 chart fixes, the
+# views/i18n sidecar) are read at runtime from the repo root (customviews.REPO_VIEWS).
+COPY views/ ./views/
 
 ENV PYTHONPATH=/app
 # glibc gives every thread that allocates its own malloc arena (up to 8 per
