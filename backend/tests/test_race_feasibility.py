@@ -272,3 +272,17 @@ def test_races_attach_readiness_but_not_to_c_races(monkeypatch):
     assert [r["event_id"] for r in out] == ["a"] and out[0]["readiness"]["checks"]
     c = F.races(plan, None, TODAY, event_id="c", predict=lambda e, c=None: None, gpx=lambda e: None)[0]
     assert "readiness" not in c
+
+
+def test_a_multi_day_trip_is_a_long_event_and_warns_about_the_equal_split():
+    """大小霸 on the NAS (2026-10-05): 3 days, 65 km ↑3500, no GPX — equal days of 21.7 km ↑1167 in
+    ~4.7 h. Under 6 h a day, but a 3-day trip is a long event: UA's 90 %, not 100 %."""
+    e = ev(kind="baiyue", days=3, distance_km=65, climbing_m=3500, est_hours=None, priority="B", start="2026-12-04")
+    ln = line(e, [4.74, 4.74, 4.74])
+    assert F.week_ok_at(e, ln) == F.WEEK_OK_LONG
+    r = F.assess(e, ln, TODAY, hist(km=21.7, climb=743.0, hours=3.8))
+    w = next(c for c in r["checks"] if c["id"] == "weekly")
+    assert w["ok_at"] == F.WEEK_OK_LONG and 0.9 <= w["ratio"] < 1.0 and w["level"] == "ok"
+    assert r["days"] == 3 and "平均分配" in r["split_note"]
+    one = ev(est_hours=3.0)
+    assert F.week_ok_at(one, line(one)) == F.WEEK_OK_SHORT and "split_note" not in F.assess(one, line(one), TODAY, hist())

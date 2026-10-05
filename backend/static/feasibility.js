@@ -51,12 +51,13 @@
   const pill = (lv, label) => `<span class="feas-pill ${TONE[lv] || "na"}">${esc(label)}</span>`;
 
   // the numbers worth a glance (the whole sentence is the hover)
-  function nums(checks) {
-    const out = [];
+  // a multi-day trip is compared with its hardest DAY, a one-day race with the race
+  function nums(checks, multi) {
+    const out = [], d = multi ? "_day" : "";
     for (const c of checks || []) {
       let t = null;
-      if (c.id === "weekly" && c.ratio != null) t = T("k_week", { p: pct(c.ratio) });
-      else if (c.id === "long" && c.ratio != null) t = T("k_long", { p: pct(c.ratio) });
+      if (c.id === "weekly" && c.ratio != null) t = T("k_week" + d, { p: pct(c.ratio) });
+      else if (c.id === "long" && c.ratio != null) t = T("k_long" + d, { p: pct(c.ratio) });
       else if (c.id === "cutoff" && c.eta_h != null) t = T("k_summit", { eta: f1(c.eta_h), c: f1(c.cutoff_h) });
       else if (c.id === "cutoff" && c.finish_h != null) t = T("k_finish", { f: f1(c.finish_h), c: f1(c.cutoff_h) });
       else if (c.id === "b2b" && c.count != null) t = T("k_b2b", { n: c.count });
@@ -74,13 +75,14 @@
       .filter(Boolean).join(" · ");
     const out = [`<div class="feas"><div class="feas-h"><b>${esc(r.name)}</b><span class="feas-m">${esc(meta)}</span></div>`];
     if (r.skipped) { out.push(`<div class="feas-m">${esc(r.skipped)}</div></div>`); return out.join(""); }
-    const sg = r.suggestions || [], rd = r.readiness;
-    out.push(`<div class="feas-r"><span class="q">${esc(T("feas"))}</span><span class="feas-k">${pill(r.level, r.label)}${nums(r.checks)}</span>`);
+    const sg = r.suggestions || [], rd = r.readiness, multi = (r.days || 1) > 1;
+    out.push(`<div class="feas-r"><span class="q">${esc(T("feas"))}</span><span class="feas-k">${pill(r.level, r.label)}${nums(r.checks, multi)}</span>`);
     if (sg.length) out.push(`<span class="feas-a">→ ${esc(sg[0])}</span>`);
     if (rd) {
-      out.push(`<span class="q">${esc(T("ready"))}</span><span class="feas-k">${pill(rd.level, rd.label)}${nums(rd.checks)}</span>`);
+      out.push(`<span class="q">${esc(T("ready"))}</span><span class="feas-k">${pill(rd.level, rd.label)}${nums(rd.checks, multi)}</span>`);
       if (rd.note) out.push(`<span class="feas-a feas-m">${esc(rd.note)}</span>`);
     }
+    if (r.split_note) out.push(`<span class="feas-a feas-m">⚠ ${esc(r.split_note)}</span>`);
     out.push(`</div><details><summary>${esc(T("detail"))}</summary><h4>${esc(T("feas"))}</h4>${list(r.checks)}`);
     if (sg.length > 1) out.push(`<ul class="feas-more">${sg.slice(1).map((s) => `<li>${esc(s)}</li>`).join("")}</ul>`);
     if (rd) out.push(`<h4>${esc(T("ready"))}</h4>${list(rd.checks)}`);
