@@ -429,7 +429,8 @@ dialog::backdrop { background: rgba(0,0,0,.35); }
 
   <section id="calib" hidden>
     <details><summary class="meta">進階設定：自動估算的參數</summary>
-      <p class="meta">這些數字會用你的資料自動估算（每次同步到新活動後重算），資料不夠時用文獻或推估的預設值。滑到標籤上看說明；只有確定時才手動指定。</p>
+      <p class="meta">這些數字會用你的資料自動估算（每次同步到新活動後重算），資料不夠時用文獻或推估的預設值。點標籤（或滑過去）看說明；只有確定時才手動指定。</p>
+      <p class="meta" id="calib-tip" hidden></p>
       <table class="wt"><tbody id="calib-rows"></tbody></table>
       <div class="row"><button id="calib-run">現在重新估算</button><span class="meta" id="calib-msg"></span></div>
     </details>
@@ -1281,6 +1282,10 @@ function calibRows(items) {
 }
 async function loadCalib() { try { calibRows((await j(CAL)).items); } catch (e) { $("calib").hidden = true; } }
 $("calib-rows").onclick = async (e) => {
+  // the chip's explanation on a tap too (title is hover only — phones have none; SP-69)
+  const c = e.target.closest(".cchip");
+  if (c) { const tip = $("calib-tip"), row = c.closest("tr");
+    tip.textContent = `${row.cells[0].textContent}：${c.title}`; tip.hidden = false; return; }
   const b = e.target.closest("button"); if (!b) return;
   const tr = b.closest("tr"), name = tr.dataset.n;
   try {

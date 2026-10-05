@@ -157,7 +157,9 @@ def _adapt_ctx(ds, st, cur: dict, monday: dt.date, today: dt.date, enabled: bool
     hard_days: set = set()
     if enabled:
         try:
+            from backend.engine import threshold_calib as TCAL
             from backend.engine import workout_review as WR
+            margin = TCAL.margin_fields()       # the easy-run HR margin in effect and whose it is (SP-69)
             for w in O.workouts_between(ds, monday, today + dt.timedelta(days=1)):
                 if O.category(w) not in ("road", "trail", "hike"):
                     continue
@@ -170,6 +172,7 @@ def _adapt_ctx(ds, st, cur: dict, monday: dt.date, today: dt.date, enabled: bool
                 m = WR.measure(ds, w) or {}
                 reviews[w.idx] = {k: m.get(k) for k in ("avg_hr", "aet", "over_aet_s", "hr_s", "avg_power", "cp")}
                 reviews[w.idx]["tss"] = O._n(w.metrics.get("tss"))
+                reviews[w.idx].update(margin)
             WR._flush(ds)
         except Exception:                   # noqa: BLE001 — a review failure never breaks the plan
             pass

@@ -62,13 +62,13 @@ from typing import Optional
 
 from backend.engine import load_guard as LG
 from backend.engine.hr_profile import easy_cap_label
-from backend.i18n import fmt
+from backend.i18n import _, fmt
 
 HARD = ("quality", "test")
 SIDE = ("strength", "heat_passive", "notice")
 
 # D. easy run done too hard (unsourced-rules.md §B5): HR = both conditions together; power / TSS either alone (推估)
-OVER_HR_BPM = 3.0          # workout_review.AET_MARGIN: "easy" = avg HR ≤ AeT + 3
+OVER_HR_BPM = 3.0          # workout_review.AET_MARGIN: "easy" = avg HR ≤ AeT + 3 (the default; per athlete: SP-69)
 OVER_SHARE = 0.10          # workout_review.OVER_AET_SHARE: > 10 % of the time above AeT + 3
 EASY_POWER_CAP = 0.80      # zones.py z2 upper bound (Palladino 1C: 75–80 % CP)
 OVER_TSS = 0.20            # compliance.COMPLIANCE["green"] (TrainingPeaks ±20 %)
@@ -112,10 +112,16 @@ def overhard(planned_tss: Optional[float], r: Optional[dict]) -> Optional[str]:
         return None
     aet, hr = r.get("aet"), r.get("avg_hr")
     over, tot = r.get("over_aet_s"), r.get("hr_s") or 0
-    hi_avg = bool(aet and hr and hr > aet + OVER_HR_BPM)
+    # the average-HR margin: OVER_HR_BPM or the athlete's own (threshold_calib.easy_margin, SP-69 —
+    # api/plan_sessions puts it in the review row); the time share stays the activity's AeT+3 seconds
+    margin = float(r.get("aet_margin") or OVER_HR_BPM)
+    hi_avg = bool(aet and hr and hr > aet + margin)
     hi_share = over is not None and tot > 0 and over / tot > OVER_SHARE
     if hi_avg and hi_share:                     # B5: both, not either
-        return (f"平均心率 {hr:.0f} > AeT+{OVER_HR_BPM:.0f}（{aet + OVER_HR_BPM:.0f}），"
+        m = f"{margin:.0f}" if abs(margin - round(margin)) < 0.05 else f"{margin:.1f}"
+        basis = r.get("aet_margin_basis")
+        return (f"平均心率 {hr:.0f} > AeT+{m}（{aet + margin:.0f}"
+                + (_("；餘裕 {m} bpm，{basis}", m=m, basis=basis) if basis else "") + "），"
                 f"且超過的時間 {over / tot * 100:.0f}% > {OVER_SHARE * 100:.0f}%")
     p, cp = r.get("avg_power"), r.get("cp")
     if p and cp and p > EASY_POWER_CAP * cp:
