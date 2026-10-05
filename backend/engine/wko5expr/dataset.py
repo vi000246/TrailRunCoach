@@ -14,7 +14,8 @@ from __future__ import annotations
 import datetime as dt
 import threading
 from dataclasses import dataclass, field
-from functools import lru_cache
+from collections import OrderedDict
+from functools import wraps
 from pathlib import Path
 from typing import Optional
 
@@ -109,6 +110,36 @@ def flush_held(ds) -> bool:
         return True
     ds._flush_last = now                     # this call writes; the next ones wait again
     return False
+
+
+def instance_lru(maxsize: int):
+    """lru_cache for a method, kept on the instance. functools.lru_cache on a
+    method is one class-wide cache whose keys hold `self`, so a Dataset that
+    _dataset_cfg already dropped stayed alive (with its open FIT channels)
+    while any of its entries were still in that cache — several GB on the NAS."""
+    def deco(fn):
+        attr = f"_lru_{fn.__name__}"
+
+        @wraps(fn)
+        def wrapper(self, *args):
+            d = self.__dict__
+            cache = d.get(attr)
+            if cache is None:
+                cache = d.setdefault(attr, (OrderedDict(), threading.Lock()))
+            entries, lock = cache
+            with lock:
+                if args in entries:
+                    entries.move_to_end(args)
+                    return entries[args]
+            v = fn(self, *args)
+            with lock:
+                entries[args] = v
+                entries.move_to_end(args)
+                while len(entries) > maxsize:
+                    entries.popitem(last=False)
+            return v
+        return wrapper
+    return deco
 
 
 class batched_flush:
@@ -840,7 +871,7 @@ class Dataset:
         """Mean-max curve for one workout+channel as (xs, ys), disk-cached."""
         return self._workout_curves(channel).get(self.workouts[idx].entry.file)
 
-    @lru_cache(maxsize=16)
+    @instance_lru(16)
     def _workout_curves(self, channel: str) -> dict[str, tuple[list, list]]:
         from backend.engine.algorithms.wko5_meanmax import meanmax_time
 
@@ -857,11 +888,11 @@ class Dataset:
         return {k: (v[0], v[1]) for k, v in raw.items()}
 
     # ---- samples ----------------------------------------------------------
-    @lru_cache(maxsize=8)
+    @instance_lru(8)
     def curve_cache(self, expr: str) -> dict[str, tuple[list, list]]:
         return load_wko5_curve_cache(self.dir, expr)
 
-    @lru_cache(maxsize=4096)
+    @instance_lru(4096)
     def wko4(self, idx: int) -> Optional[Wko4File]:
         w = self.workouts[idx]
         p = self.dir / w.entry.file

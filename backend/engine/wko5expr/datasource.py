@@ -117,8 +117,15 @@ def db_stamp() -> str:
         finally:
             con.close()
     except sqlite3.Error:
-        return ""
-    return ",".join("" if v is None else str(v) for v in (*a, *b))
+        # a locked DB is not a change: "" here flipped the cache key and
+        # rebuilt (and kept) another whole Dataset
+        return _LAST_DB_STAMP.get(str(db), "")
+    s = ",".join("" if v is None else str(v) for v in (*a, *b))
+    _LAST_DB_STAMP[str(db)] = s
+    return s
+
+
+_LAST_DB_STAMP: dict[str, str] = {}
 
 
 def source_stamp(source: str, wko5_dir: Path) -> str:

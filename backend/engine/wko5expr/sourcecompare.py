@@ -23,7 +23,7 @@ TOL = {"duration": TOLERANCE["duration_s"], "distance": TOLERANCE["distance_km"]
        "climbing": TOLERANCE["gain_m"], "np": TOLERANCE["np"], "tss": TOLERANCE["tss"]}
 
 
-@lru_cache(maxsize=6)
+@lru_cache(maxsize=2)
 def _ds(source: str, wko5_dir: str, cfg_json: str, stamp: str):
     import json
     return dataset_for_source(source, Path(wko5_dir), config=EngineConfig.from_dict(json.loads(cfg_json)))

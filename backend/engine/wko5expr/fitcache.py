@@ -592,7 +592,7 @@ class LazyFiles:
     def __init__(self, store: FitStore, max_open: Optional[int] = None):
         self.store = store
         self.meta: dict[int, tuple] = {}
-        self.max_open = max_open or int(os.getenv("WKO5COACH_FIT_OPEN", "256"))
+        self.max_open = max_open or int(os.getenv("WKO5COACH_FIT_OPEN", "48"))
         self._open: "OrderedDict[int, object]" = OrderedDict()
         self._lock = threading.Lock()
 
