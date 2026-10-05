@@ -745,7 +745,22 @@ async def _all_suggestions(db: AsyncSession, inp: dict) -> list[dict]:
                 t["label"] = f"{t['label']}：{src['title']}（{src['minutes']} 分）"
             t["replaces_long"] = t["key"] == "aet" and aet_p == "xu90"
     rows += await run_in_threadpool(_injury_suggestions, inp, today, set(bl), stored)
+    rows += await run_in_threadpool(_altitude_suggestions, today)
     return rows
+
+
+def _altitude_suggestions(today: str) -> list[dict]:
+    """高度適應提醒 (engine/altitude.py, SP-100): events ≥ 3,000 m (their GPX), 1–14 days away."""
+    from backend.engine import altitude as AL
+    from backend.engine import suggestions as SG
+    from backend.engine.planning import Plan
+    try:
+        def alts():
+            from backend.api.overview import _dataset
+            return AL.day_altitudes(_dataset(), dt.date.fromisoformat(today))
+        return SG.altitude_rows(Plan.load().events, today, lambda e: AL.event_altitude(e.id, e.days), alts)
+    except Exception:                       # noqa: BLE001 — the box must still load
+        return []
 
 
 def _injury_suggestions(inp: dict, today: str, blocked: set, stored: list[dict]) -> list[dict]:

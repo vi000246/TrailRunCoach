@@ -24,9 +24,13 @@ Kinds (the `type` of a row):
   injury_hold  a 痛 mark inside a re-entry block: hold the volume (information).
   injury_pattern 「跟受傷前很像」 (engine/injury_exposure.py; off by default,
                only with ≥ 5 analysed injuries) — information, ✕ only.
+  altitude     高度適應提醒 (engine/altitude.py, SP-100): an event whose GPX
+               reaches ≥ 3,000 m, 1–14 days before its start — information, ✕ only.
 
 Ids (the dismissal key): `b2b:<week>`, `test:<kind>:<week>` (both per week:
-「不要」 holds for that week), `zone:<detector id>`, `zone_update:<field>:<date>`.
+「不要」 holds for that week), `zone:<detector id>`, `zone_update:<field>:<date>`,
+`altitude:<event id>:<start>:<max m>:<flags>` (the flags say what the reminder found, so a
+dismissed one shows again only when that changes).
 A dismissal is dropped once its suggestion is no longer computed (prune), so
 a zone suggestion that fires again later is new and shows again.
 
@@ -174,6 +178,34 @@ def injury_rows(events: list[dict], today: str, blocked: set, rp: Optional[dict]
                         "reason": f"{hit[-1]['date']} 記了「{INJ.PAIN.get(hit[-1]['pain'], '痛')}」"
                                   f"{('・' + INJ.area_label(hit[-1]['area'])) if hit[-1].get('area') else ''}。",
                         "help": INJ.SILBERNAGEL["text"] + "\n" + INJ.DISCLAIMER})
+    return out
+
+
+def altitude_rows(events: list, today: str, alt_of, alts_of) -> list[dict]:
+    """高度適應提醒 (engine/altitude.py) for the events 1–14 days away. `events`: planning.Event
+    (or dicts with id / name / date / days); `alt_of(event)`: altitude.event_altitude (None = no
+    GPX); `alts_of()`: the athlete's altitude per day (altitude.day_altitudes, read once, only when
+    an event needs it)."""
+    from backend.engine import altitude as AL
+    d = dt.date.fromisoformat(today)
+    alts = None
+    out = []
+    for e in events:
+        get = (lambda k: e.get(k)) if isinstance(e, dict) else (lambda k: getattr(e, k, None))
+        start = dt.date.fromisoformat(str(get("date"))[:10])
+        if not 0 < (start - d).days <= AL.REMIND_DAYS:
+            continue
+        alt = alt_of(e)
+        if not alt or alt.get("max_m") is None or alt["max_m"] < AL.EVENT_MIN_M:
+            continue
+        if alts is None:
+            alts = alts_of()
+        r = AL.reminder({"id": get("id"), "name": get("name"), "start": start, "days": get("days")}, alt,
+                        AL.exposure(alts, d, start), d)
+        if r is None:
+            continue
+        out.append({**r, "id": f"altitude:{get('id')}:{r['start']}:{r['max_m']}:{'-'.join(r['flags']) or 'none'}",
+                    "type": "altitude", "pick": None, "src": AL.SRC})
     return out
 
 
