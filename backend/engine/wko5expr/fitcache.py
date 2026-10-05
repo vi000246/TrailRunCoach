@@ -61,6 +61,7 @@ log = logging.getLogger(__name__)
 ENV_ROOT = "WKO5COACH_FIT_CACHE"
 ENV_WORKERS = "WKO5COACH_FIT_WORKERS"
 POOL_MIN_FILES = 12           # fewer stale files than this: parse inline (no pool start-up)
+SAVE_EVERY = 10               # parsed files between index writes (a killed build keeps them)
 
 PARSE_V, POWER_V, BAD_V, FIELDS_V, HR_V, AVG_V = 1, 1, 1, 1, 1, 1
 
@@ -141,19 +142,34 @@ def group_of(sport, sub_sport) -> str:
 
 def parse_file(path: str, npz_path: str) -> dict:
     """Parse one FIT, write its channels to `npz_path`, return the entry's
-    derived fields (meta, power, bad, fields). Never raises: an unreadable file
-    gives {"meta": {"error": ...}}."""
+    derived fields (meta, power, bad, fields). Never raises: a file that
+    fails anywhere (the read, the decode, writing its channels, a derived
+    field) gives {"meta": {"error": <exception type>, "detail": ...}}, which
+    is cached like any entry, so the build skips it and the next build does
+    not parse it again (until the file or the parser changes). One bad file
+    used to raise out of ensure() before anything was saved: every build
+    re-parsed the whole batch and failed on the same file, forever."""
+    v = versions()
+    seen = {"sha": None}
+    try:
+        return _parse_file(path, npz_path, v, seen)
+    except Exception as e:                       # noqa: BLE001 — recorded, the build skips it
+        # a pool worker logs nothing (_worker_init): FitStore._store logs the file
+        try:
+            Path(npz_path).unlink(missing_ok=True)   # an error entry has no channels
+        except OSError:
+            pass
+        return {"meta": {"error": type(e).__name__, "detail": str(e)[:200]}, "parse": v["parse"],
+                "sha": seen["sha"]}
+
+
+def _parse_file(path: str, npz_path: str, v: dict, seen: dict) -> dict:
     from backend.engine import bad_activity as BA
     from backend.engine.wko5expr.fitdataset import workout_fields
     from backend.files.fit_to_channels import fit_to_channels
-    v = versions()
-    sha = None
-    try:
-        raw = Path(path).read_bytes()
-        sha = hashlib.sha1(raw).hexdigest()
-        fc = fit_to_channels(raw)
-    except Exception as e:                       # noqa: BLE001 — recorded, the build skips it
-        return {"meta": {"error": type(e).__name__}, "parse": v["parse"], "sha": sha}
+    raw = Path(path).read_bytes()
+    seen["sha"] = sha = hashlib.sha1(raw).hexdigest()
+    fc = fit_to_channels(raw)
     start = fc.start_time
     meta = {"start": start.isoformat() if start is not None else None, "sport": fc.sport,
             "sub_sport": fc.sub_sport, "stryd_device": bool(fc.stryd_device), "one_second": bool(fc.one_second),
@@ -166,8 +182,11 @@ def parse_file(path: str, npz_path: str) -> dict:
     ch = {k: _np(vals) for k, vals in fc.channels.items()}
     tmp = Path(npz_path).with_name(Path(npz_path).stem + f".{os.getpid()}.{threading.get_ident()}.tmp.npz")
     tmp.parent.mkdir(parents=True, exist_ok=True)
-    np.savez_compressed(tmp, t=t, **{f"c_{k}": a for k, a in ch.items()})
-    os.replace(tmp, npz_path)
+    try:
+        np.savez_compressed(tmp, t=t, **{f"c_{k}": a for k, a in ch.items()})
+        os.replace(tmp, npz_path)
+    finally:
+        tmp.unlink(missing_ok=True)               # a failed write leaves no half file behind
     out["power"] = [v["power"], fc.power_source]
     out["bad"] = [v["bad"], {"": BA.features(fc.elapsedtime, fc.channels.get("elapseddistance"),
                                              fc.channels.get("power"))}]
@@ -364,6 +383,7 @@ class FitStore:
         self.v = versions()
         self.files: dict[str, dict] = {}
         self.dirty = False
+        self._unsaved = 0                       # entries stored since the last save (SAVE_EVERY)
         try:
             raw = json.loads(self.index_path.read_text("utf-8"))
             d = raw.get("dir")
@@ -439,18 +459,25 @@ class FitStore:
             self.save()
             return 0
         n = _pool_size(len(todo)) if workers is None else workers
-        done = 0
-        if n > 1:
-            try:
-                done = self._parse_pool(todo, n, progress)
-            except Exception as e:               # noqa: BLE001 — a pool failure falls back to inline
-                log.warning("FIT cache: process pool failed (%s); parsing inline", type(e).__name__)
-        rest = self.stale(todo) if done else todo
-        for p in rest:
-            self._store(p, parse_file(str(p), str(self.npz(self.rel(p)))))
-            if progress is not None:
-                progress.tick()
-        self.save()
+        try:
+            rest = todo
+            if n > 1:
+                try:
+                    self._parse_pool(todo, n, progress)
+                except Exception as e:           # noqa: BLE001 — a pool failure falls back to inline
+                    log.warning("FIT cache: process pool failed (%s); parsing inline", type(e).__name__)
+                rest = self.stale(todo)          # what the pool did not finish
+            for p in rest:
+                try:
+                    res = parse_file(str(p), str(self.npz(self.rel(p))))
+                except Exception as e:           # noqa: BLE001 — parse_file never raises; a patched /
+                    res = {"meta": {"error": type(e).__name__, "detail": str(e)[:200]},   # broken one may
+                           "parse": self.v["parse"], "sha": None}
+                self._store(p, res)
+                if progress is not None:
+                    progress.tick()
+        finally:
+            self.save()                          # an interrupted build keeps what it parsed
         return len(todo)
 
     def _prune(self, paths: list[Path]) -> None:
@@ -469,25 +496,47 @@ class FitStore:
                 pass
 
     def _parse_pool(self, todo: list[Path], n: int, progress) -> int:
+        """Parse `todo` in a process pool; returns how many it stored. A
+        future that raises (a worker killed by the OOM killer: every pending
+        future then raises BrokenProcessPool) loses only its own file, which
+        stays stale and is parsed inline after the pool (ensure). It is not
+        recorded as unreadable here: the file itself may be fine."""
         import multiprocessing as mp
-        done = 0
+        done = failed = 0
         ctx = mp.get_context("spawn")
         with ProcessPoolExecutor(max_workers=n, mp_context=ctx, initializer=_worker_init) as ex:
             futs = {ex.submit(parse_file, str(p), str(self.npz(self.rel(p)))): p for p in todo}
-            for i, f in enumerate(as_completed(futs)):
-                self._store(futs[f], f.result())
+            for f in as_completed(futs):
+                try:
+                    res = f.result()
+                except Exception as e:           # noqa: BLE001 — this file only; ensure retries it inline
+                    failed += 1
+                    if failed <= 3:
+                        log.warning("FIT cache: pool worker failed on %s (%s)", futs[f].name, type(e).__name__)
+                    continue
+                self._store(futs[f], res)
                 done += 1
                 if progress is not None:
                     progress.tick()
-                if i % 100 == 99:
-                    self.save()                  # a killed build keeps what it parsed
+        if failed:
+            log.warning("FIT cache: %d file(s) failed in the pool; parsing them inline", failed)
         return done
 
     def _store(self, p: Path, res: dict) -> None:
         rel = self.rel(p)
+        err = (res.get("meta") or {}).get("error")
+        if err:
+            # the one place a parse failure is logged with its file: the
+            # owner finds the bad FIT in `docker logs` (skipped from now on)
+            log.warning("FIT cache: %s is unreadable, skipped (%s: %s)", rel, err,
+                        (res.get("meta") or {}).get("detail", ""))
         with self.lock:
             self.files[rel] = {"stamp": stamp_of(p), **res}
             self.dirty = True
+            self._unsaved += 1
+            due = self._unsaved >= SAVE_EVERY
+        if due:
+            self.save()                          # a killed build keeps what it parsed
 
     def entry(self, p: Path) -> Optional[dict]:
         with self.lock:
@@ -499,6 +548,7 @@ class FitStore:
                 return
             data = json.dumps({"dir": str(self.dir), "ident": ident_of(self.dir), "files": self.files})
             self.dirty = False
+            self._unsaved = 0
         try:
             self.home.mkdir(parents=True, exist_ok=True)
             write_mark(self.home, ident_of(self.dir))
