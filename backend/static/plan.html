@@ -144,7 +144,13 @@ button.link { border: 0; background: none; color: var(--accent); padding: 0 4px;
       <button class="primary" type="submit" id="evsubmit">新增</button>
       <button type="button" id="evcancel" hidden>取消編輯</button>
     </form>
-    <div id="evfeas" aria-live="polite"></div>
+  </section>
+
+  <!-- 賽事可行性 (engine/race_feasibility.py, SP-105): the upcoming A / B races — how the training
+       stands against each race (owner 2026-10-05: here, not on the overview) -->
+  <section id="feassec" aria-labelledby="feas-h" hidden>
+    <h2 id="feas-h"><span data-i18n="plan.feas.title">賽事可行性</span> <span class="meta" data-i18n="plan.feas.sub">照現在的訓練推到賽前，評估跑這場會有多吃力；難度過高或來不及時建議降組別、改 B／C 賽或放棄</span></h2>
+    <div id="feas" aria-live="polite"></div>
   </section>
 
   <section>
@@ -328,7 +334,7 @@ $("#gpxpick").addEventListener("change", async (ev) => {
   const fd = new FormData(); fd.append("file", f);
   const r = await fetch(`${API}/events/${encodeURIComponent(gpxFor)}/gpx`, { method: "POST", body: fd });
   if (!r.ok) { toast("GPX 失敗：" + (await r.text()).slice(0, 120)); return; }
-  toast("GPX 已存"); load();
+  toast("GPX 已存"); load(); loadFeas();
 });
 
 function renderPhases() {
@@ -372,21 +378,22 @@ $("#evform").addEventListener("submit", async (ev) => {
   for (const [k, v] of f.entries()) body[k] = v === "" ? null : v;
   for (const k of ["days", "distance_km", "climbing_m", "est_hours", "pack_kg", "cutoff_hours", "summit_km"]) if (body[k] != null) body[k] = Number(body[k]);
   body.days = body.days || 1; body.note = body.note || "";
-  const saved = await call("PUT", "/events", body);
+  await call("PUT", "/events", body);
   ev.target.reset(); ev.target.id.value = ""; $("#evsubmit").textContent = "新增"; $("#evcancel").hidden = true; cutoffLabels();
-  toast("已儲存"); load();
-  showFeas(saved.event);
+  toast("已儲存"); load(); loadFeas();
 });
-// 賽事可行性 of the event just saved (static/feasibility.js; GET /api/v1/overview/feasibility?event_id=…):
-// asked after the save, not inside it — the first race-calculator read of the activities takes ~1 min
-async function showFeas(e) {
-  const box = $("#evfeas"), tC = (k) => (window.I18N ? I18N.t("common.feas." + k) : k);
-  if (!e || !window.Feas || !e.distance_km) { box.innerHTML = ""; return; }
-  box.innerHTML = `<p class="meta">${esc(tC("loading"))}</p>`;
+// 賽事可行性 of the upcoming A / B races (static/feasibility.js; GET /api/v1/overview/feasibility):
+// fetched apart from the plan — the first race-calculator read of the activities takes ~1 min
+async function loadFeas() {
+  const sec = $("#feassec"), box = $("#feas"), tC = (k) => (window.I18N ? I18N.t("common.feas." + k) : k);
+  if (!window.Feas) return;
+  if (sec.hidden) box.innerHTML = "";
+  else box.innerHTML = `<p class="meta">${esc(tC("loading"))}</p>`;
   try {
-    const r = await Feas.load(e.id);
+    const r = await Feas.load();
+    sec.hidden = !(r.races || []).length;
     box.innerHTML = (r.races || []).map(Feas.html).join("");
-  } catch (x) { box.innerHTML = `<p class="meta warn">${esc(tC("failed"))}</p>`; }
+  } catch (x) { sec.hidden = false; box.innerHTML = `<p class="meta warn">${esc(tC("failed"))}</p>`; }
 }
 // 賽事: 關門時間; 百岳: 撤退時間 (from the summit day's start) + where the summit is
 function cutoffLabels() {
@@ -406,8 +413,8 @@ $("#events").addEventListener("click", async (ev) => {
     $("#evsubmit").textContent = "更新"; $("#evcancel").hidden = false; f.scrollIntoView({ behavior: "smooth", block: "center" });
   }
   if (ev.target.dataset.gpxup) { gpxFor = ev.target.dataset.gpxup; $("#gpxpick").click(); }
-  if (ev.target.dataset.gpxdel && confirm("刪除這場賽事的 GPX？")) { await call("DELETE", `/events/${encodeURIComponent(ev.target.dataset.gpxdel)}/gpx`); toast("GPX 已刪除"); load(); }
-  if (del && confirm("刪除這場賽事？")) { await call("DELETE", "/events/" + del); toast("已刪除"); load(); }
+  if (ev.target.dataset.gpxdel && confirm("刪除這場賽事的 GPX？")) { await call("DELETE", `/events/${encodeURIComponent(ev.target.dataset.gpxdel)}/gpx`); toast("GPX 已刪除"); load(); loadFeas(); }
+  if (del && confirm("刪除這場賽事？")) { await call("DELETE", "/events/" + del); toast("已刪除"); load(); loadFeas(); }
 });
 
 // ---- phases ----
@@ -429,6 +436,7 @@ $("#savephases").onclick = async () => { await call("PUT", "/phases", manual); t
 $("#toauto").onclick = async () => { if (!confirm("清掉手動周期，改回自動排程？")) return; await call("PUT", "/phases", []); toast("已恢復自動"); load(); };
 
 load();
+loadFeas();
 </script>
 </body>
 </html>
