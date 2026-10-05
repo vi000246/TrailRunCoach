@@ -53,6 +53,7 @@ from sqlalchemy import select
 
 from backend.db.current import current_athlete_id
 from backend.db.models import PlanChangeLog, PlanSession
+from backend.i18n import _
 
 log = logging.getLogger(__name__)
 
@@ -545,7 +546,7 @@ def state_changes(inp: dict, state: dict) -> list[str]:
     if z3 and z3key != state.get("z3"):
         if state.get("z3") is not None or z3.get("open"):
             # the first record of a closed gate says nothing new; opening (or closing again) is logged
-            out.append(z3.get("text") or ("Zone 3：已解鎖" if z3.get("open") else "Zone 3：未解鎖"))
+            out.append(z3.get("text") or (_("Zone 3：已解鎖") if z3.get("open") else _("Zone 3：未解鎖")))
         state["z3"] = z3key
     z5 = (cur.get("quality_gate") or {}).get("z5") or {}
     key = f"{z5.get('state')}|{z5.get('since')}|{z5.get('path')}" if z5 else None
@@ -561,8 +562,8 @@ def state_changes(inp: dict, state: dict) -> list[str]:
         tkey = "open" if zt.get("open") else "closed"
         if tkey != state.get("z5_track") and (state.get("z5_track") is not None or zt.get("open")):
             out.append(zt.get("text") if zt.get("open") else
-                       f"Zone 5：重新上鎖（{zt.get('reason') or ''}）" if state.get("z5_track") == "open"
-                       else zt.get("text") or "Zone 5：未解鎖")
+                       _("Zone 5：重新上鎖（{reason}）", reason=zt.get("reason") or "") if state.get("z5_track") == "open"
+                       else zt.get("text") or _("Zone 5：未解鎖"))
         state["z5_track"] = tkey
     rp = cur.get("reentry")
     rkey = f"{rp['return']}|{rp['days']}" if rp else None

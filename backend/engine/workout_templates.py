@@ -158,14 +158,15 @@ KOOP_URL = "https://trainright.com/decoding-ultramarathon-interval-workouts/"
 UA = "Uphill Athlete（House／Johnston）"
 FRIEL_URL = "https://www.trainingpeaks.com/learn/articles/joe-friel-s-quick-guide-to-setting-zones/"
 GARMIN_DSW = "https://www.garmin.com/zh-TW/blog/running/the-climbing-ability-of-trail-running/"
-HRMAX = "% LTHR 由來源的 % HRmax ÷ 0.9 換算（推估）"
+HRMAX = N_("% LTHR 由來源的 % HRmax ÷ 0.9 換算（推估）")
+HRMAX90 = N_("% LTHR 由來源的 % HRmax ÷ 0.9 換算（推估）（上緣壓在 90%）")
 MAXHR_SRC = "Polar「How to determine your maximum heart rate」上坡測試（2016，2024 更新）；Boudet 2002"
 MAXHR_URL = "https://www.polar.com/blog/calculate-maximum-heart-rate/"
-MAXHR_NOTE = ("條件：戴胸帶（手腕光學常有尖峰）、休息充足（前 48 小時沒有硬課）、沒生病、涼爽、找 2–3 分鐘的坡、"
+MAXHR_NOTE = N_("條件：戴胸帶（手腕光學常有尖峰）、休息充足（前 48 小時沒有硬課）、沒生病、涼爽、找 2–3 分鐘的坡、"
               "最好有人陪。有心血管疾病或風險、胸痛、頭暈的人不要做，先問醫師（ACSM 運動前篩檢，Riebe 2015）；"
               "不舒服立刻停。替代：最近一場 5 K 比賽的最後衝刺也可以（現場、比賽與實驗室的最高心率沒有差別，Boudet 2002）。"
               "app 的讀法：濾掉尖峰與步頻鎖定後，撐 ≥ 5 秒的最高心率（推估）；結果要在設定頁按「套用」才會寫入")
-TP = "配速是閾值配速的倍數（app 的 T 配速，推估）"
+TP = N_("配速是閾值配速的倍數（app 的 T 配速，推估）")
 
 
 def _steep(pct: float):
@@ -188,10 +189,10 @@ STEEP_SRC = "Pandolf 1977（同代謝率的坡度）；UA trekking（跑步機�
 STEEP_URL = "https://doi.org/10.1152/jappl.1977.43.4.577"
 # 技術地形 / 下坡 (SP-62): the structure is the app's (推估); D+ / D− sized for the time
 TECH_SRC = KOOP + "（賽道專項：練和比賽相同的地形）；" + UA
-TECH_CONV = "結構是這個 app 的建議（推估）：時間＋爬升＋RPE，不設心率、功率目標；爬升量依你的路線調"
+TECH_CONV = N_("結構是這個 app 的建議（推估）：時間＋爬升＋RPE，不設心率、功率目標；爬升量依你的路線調")
 DOWNHILL_M = 350
-DOWNHILL_CONV = "下降量 ≈ 25′ × 約 7 km/h × 12% 坡（推估）；不設心率、功率目標"
-STEEP_CONV = "坡度由 Pandolf 公式換算：不背包、這個坡度的代謝量 ≈ 在 12% 坡、3.5 km/h 背這個重量（推估）；心率 ≤ 輕鬆跑上限"
+DOWNHILL_CONV = N_("下降量 ≈ 25′ × 約 7 km/h × 12% 坡（推估）；不設心率、功率目標")
+STEEP_CONV = N_("坡度由 Pandolf 公式換算：不背包、這個坡度的代謝量 ≈ 在 12% 坡、3.5 km/h 背這個重量（推估）；心率 ≤ 輕鬆跑上限")
 
 TEMPLATES: list[Template] = [
     # ---------------- 輕鬆跑 ----------------
@@ -208,18 +209,18 @@ TEMPLATES: list[Template] = [
         b.cool(5, target=hr(0.70, 0.80))], conv=HRMAX, purpose=PURPOSE["easy"]),
     Template("pfitz_long", "easy", "Pfitzinger 長跑 2 小時", PFITZ, PFITZ_URL, lambda b: [
         b.warm(15, target=hr(0.75, 0.85)), b.t("work", 95 * 60, hr(0.82, 0.90), "74–84% HRmax"),
-        b.cool(10, target=hr(0.70, 0.80))], conv=HRMAX + "（上緣壓在 90%）", purpose=PURPOSE["long"]),
+        b.cool(10, target=hr(0.70, 0.80))], conv=HRMAX90, purpose=PURPOSE["long"]),
     # 主要訓練項目 = 路跑 (engine/overview.road_long_session): Pfitzinger's marathon-pace long run
     Template("pfitz_mp_long", "easy", "Pfitzinger 馬拉松配速長跑（16 km MP）", PFITZ, PFITZ_URL, lambda b: [
         b.warm(20, target=hr(0.75, 0.85)), b.d("work", 16000, pace(1.04, 1.08), "馬拉松配速"),
-        b.cool(10, target=hr(0.70, 0.80))], basis="pace", conv="馬拉松配速 ≈ 閾值配速 × 1.06（推估）", purpose=PURPOSE["mp"]),
+        b.cool(10, target=hr(0.70, 0.80))], basis="pace", conv=N_("馬拉松配速 ≈ 閾值配速 × 1.06（推估）"), purpose=PURPOSE["mp"]),
     Template("daniels_e", "easy", "Daniels E 輕鬆跑 50′", DANIELS, DANIELS_URL, lambda b: [
         b.warm(10), b.t("work", 35 * 60, hr(0.72, 0.88), "E：65–79% HRmax"), b.cool(5)], conv=HRMAX, purpose=PURPOSE["easy"]),
     Template("xu_e90", "easy", "徐國峰 E 強度 90′（看心率飄移）",
              "徐國峰 部落格 2015-10-14《E 配速心率飄移》；《全方位的馬拉松科學化訓練》2015",
              "http://rocky549.blogspot.com/2015/10/e.html", lambda b: [
         b.warm(10), b.t("work", 80 * 60, hr(0.72, 0.88), "平路 E；記第 10、90 分心率"), b.cool(10)],
-        conv=HRMAX, note="飄移 < 10% 有氧很好、< 5% 國手級（徐國峰）", purpose=PURPOSE["long"]),
+        conv=HRMAX, note=N_("飄移 < 10% 有氧很好、< 5% 國手級（徐國峰）"), purpose=PURPOSE["long"]),
     Template("ua_z2", "easy", "Uphill Athlete 有氧基礎 Z2 60′", UA + "「Zone 2 Heart Rate Training」2026",
              "https://uphillathlete.com/aerobic-training/uphill-athlete-training-zones-heart-rate-calculator/", lambda b: [
         b.warm(10, "Z1：AeT −20%～−10%"), b.t("work", 60 * 60, AET, "Z2：AeT −10%～AeT"), b.cool(10)], purpose=PURPOSE["easy"]),
@@ -266,47 +267,47 @@ TEMPLATES: list[Template] = [
         b.warm(15),
         b.rep(3, [b.t("work", 12 * 60, hr(0.95, 1.00), "RPE 8–9"),
                   b.t("rest", 6 * 60, AET, "輕鬆跑（工休 2:1）")], False, "3×12′"),
-        b.cool(10)], conv="來源只有 RPE：心率推估", purpose=PURPOSE["cruise"]),
+        b.cool(10)], conv=N_("來源只有 RPE：心率推估"), purpose=PURPOSE["cruise"]),
     Template("canova_specific", "quality", "Canova 專項間歇 5×3 km（1 km 浮動）",
              "Arcelli & Canova《Marathon Training – A Scientific Approach》1999",
              "https://runningwritings.com/2023/06/canova-marathon-book.html", lambda b: [
         b.warm(15),
         b.rep(5, [b.d("work", 3000, pace(1.04, 1.08), "100–102% 馬拉松配速"),
                   b.d("rest", 1000, pace(1.12, 1.25), "浮動：85–95% 馬拉松配速")], False, "5×3 km"),
-        b.cool(10)], basis="pace", conv="馬拉松配速 ≈ 閾值配速 × 1.06（推估）", purpose=PURPOSE["mp"]),
+        b.cool(10)], basis="pace", conv=N_("馬拉松配速 ≈ 閾值配速 × 1.06（推估）"), purpose=PURPOSE["mp"]),
     Template("canova_1k", "quality", "Canova 10×1000 m 強化", "Arcelli & Canova 1999（intensive block）",
              "https://runningwritings.com/2023/06/canova-marathon-book.html", lambda b: [
         b.warm(15),
         b.rep(10, [b.d("work", 1000, pace(0.96, 0.99), "111% 馬拉松配速（約 10K）"),
                    b.t("rest", 120, OPEN, "慢跑 2′")], False, "10×1 km"),
-        b.cool(10)], basis="pace", conv="馬拉松配速 ≈ 閾值配速 × 1.06（推估）", purpose=PURPOSE["vo2max"]),
+        b.cool(10)], basis="pace", conv=N_("馬拉松配速 ≈ 閾值配速 × 1.06（推估）"), purpose=PURPOSE["vo2max"]),
     Template("seiler_4x8", "quality", "Seiler 4×8′", "Seiler et al. 2013, Scand J Med Sci Sports 23:74–83",
              "https://pubmed.ncbi.nlm.nih.gov/21812820/", lambda b: [
         b.warm(15),
         b.rep(4, [b.t("work", 8 * 60, hr(1.00, 1.05), "能撐住的最高強度（≈ 90% HRpeak）"),
                   b.t("rest", 2 * 60, OPEN, "2′ 恢復")], False, "4×8′"),
-        b.cool(10)], src_kind="peer", conv="% LTHR 由 % HRpeak ÷ 0.9 換算（推估）", purpose=PURPOSE["cruise"]),
+        b.cool(10)], src_kind="peer", conv=N_("% LTHR 由 % HRpeak ÷ 0.9 換算（推估）"), purpose=PURPOSE["cruise"]),
     Template("pfitz_vo2", "quality", "Pfitzinger VO2max 5×1000 m", PFITZ, PFITZ_URL, lambda b: [
         b.warm(20),
         b.rep(5, [b.d("work", 1000, pace(0.93, 0.96), "5K 配速"),
                   b.t("rest", 150, OPEN, "慢跑 2–4′")], False, "5×1 km"),
-        b.cool(10)], basis="pace", conv="5K 配速 ≈ 閾值配速 × 0.93–0.96（推估）", purpose=PURPOSE["vo2max"]),
+        b.cool(10)], basis="pace", conv=N_("5K 配速 ≈ 閾值配速 × 0.93–0.96（推估）"), purpose=PURPOSE["vo2max"]),
     Template("daniels_i", "quality", "Daniels I 間歇 5×3′", DANIELS, DANIELS_URL, lambda b: [
         b.warm(15),
         b.rep(5, [b.t("work", 3 * 60, pace(0.92, 0.95), "I 配速"),
                   b.t("rest", 3 * 60, OPEN, "等長慢跑")], False, "5×3′"),
-        b.cool(10)], basis="pace", conv="I 配速 ≈ 閾值配速 × 0.92–0.95（推估）", purpose=PURPOSE["vo2max"]),
+        b.cool(10)], basis="pace", conv=N_("I 配速 ≈ 閾值配速 × 0.92–0.95（推估）"), purpose=PURPOSE["vo2max"]),
     Template("koop_vo2", "quality", "Koop RunningIntervals 6×3′", KOOP, KOOP_URL, lambda b: [
         b.warm(15),
         b.rep(6, [b.t("work", 3 * 60, hr(1.00, 1.06), "RPE 10"),
                   b.t("rest", 3 * 60, AET, "輕鬆跑 1:1")], False, "6×3′"),
-        b.cool(10)], conv="來源只有 RPE：心率推估（3′ 的趟心率會落後）", purpose=PURPOSE["vo2max"]),
+        b.cool(10)], conv=N_("來源只有 RPE：心率推估（3′ 的趟心率會落後）"), purpose=PURPOSE["vo2max"]),
     Template("billat_3030", "quality", "Billat 30-30 ×16", "Billat et al. 2000, Eur J Appl Physiol 81:188–196",
              "https://link.springer.com/article/10.1007/s004210050029", lambda b: [
         b.warm(15),
         b.rep(16, [b.t("work", 30, pace(0.86, 0.90), "30″ vVO2max"),
                    b.t("rest", 30, OPEN, "30″ 50% vVO2max 慢跑")], False, "30-30"),
-        b.cool(10)], basis="pace", src_kind="peer", conv="vVO2max ≈ 閾值配速 × 0.86–0.90（推估）", purpose=PURPOSE["short"]),
+        b.cool(10)], basis="pace", src_kind="peer", conv=N_("vVO2max ≈ 閾值配速 × 0.86–0.90（推估）"), purpose=PURPOSE["short"]),
     Template("ronnestad_3015", "quality", "Rønnestad 30/15 3×13", "Rønnestad et al. 2020, Scand J Med Sci Sports",
              "https://pubmed.ncbi.nlm.nih.gov/31977120/", lambda b: [
         b.warm(20, target=pw(0.65, 0.75)),
@@ -314,12 +315,12 @@ TEMPLATES: list[Template] = [
                              b.t("rest", 15, pw(0.50, 0.60), "15″")], False),
                   b.t("rest", 3 * 60, pw(0.55, 0.65), "組間 3′")], False, "3 組 30/15"),
         b.cool(10, target=pw(0.55, 0.70))], basis="power", src_kind="peer",
-        conv="原研究是自行車功率：跑步的 % CP 推估", purpose=PURPOSE["short"]),
+        conv=N_("原研究是自行車功率：跑步的 % CP 推估"), purpose=PURPOSE["short"]),
     Template("daniels_r", "quality", "Daniels R 8×300 m", DANIELS, DANIELS_URL, lambda b: [
         b.warm(15),
         b.rep(8, [b.d("work", 300, pace(0.85, 0.89), "R 配速：快而放鬆"),
                   b.t("rest", 180, OPEN, "完全恢復（2–3 倍）")], False, "8×300 m"),
-        b.cool(10)], basis="pace", conv="R 配速 ≈ 閾值配速 × 0.85–0.89（推估）", purpose=PURPOSE["rep"]),
+        b.cool(10)], basis="pace", conv=N_("R 配速 ≈ 閾值配速 × 0.85–0.89（推估）"), purpose=PURPOSE["rep"]),
 
     # ---------------- 測試 ----------------
     Template("stryd_cp_3_12", "test", "Stryd 內建 CP 測試 3′＋12′", "Stryd 內建課表庫（Palladino）：3′／12′ CP test", PAL_URL, lambda b: [
@@ -331,7 +332,7 @@ TEMPLATES: list[Template] = [
         b.lap("rest", 30 * 60, "走→輕鬆跑 5–10′→走，≥ 30′；直到按下計圈"),
         b.t("work", 12 * 60, OPEN, "12′ 全力、均勻"),
         b.lap("cool", 10 * 60, "走路恢復後輕鬆跑到總量；直到按下計圈", pw(0.65, 0.80))], basis="power",
-        note="全力段不設目標（Stryd 留給你填：模型功率 −1%～+5%）", purpose=PURPOSE["test"]),
+        note=N_("全力段不設目標（Stryd 留給你填：模型功率 −1%～+5%）"), purpose=PURPOSE["test"]),
     Template("pal_test3", "test", "Palladino 3′ 測試", PAL + "：3 minute max effort", PAL_URL, lambda b: [
         *b.pal_test_warm(), b.t("work", 3 * 60, OPEN, "3′ 全力：穩穩開始，最後才到極限"),
         b.t("rest", 5 * 60, OPEN, "走路恢復"), b.t("cool", 10 * 60, pw(0.70, 0.80), "EZ 跑到總量")], basis="power", purpose=PURPOSE["test"]),
@@ -352,7 +353,7 @@ TEMPLATES: list[Template] = [
     Template("friel_lthr30", "test", "Friel 30′ 閾值心率測試", "Joe Friel「Quick Guide to Setting Zones」TrainingPeaks", FRIEL_URL, lambda b: [
         b.warm(15), b.t("work", 10 * 60, OPEN, "獨自全力 30′ 的前 10′：第 10′ 按下計圈"),
         b.t("work", 20 * 60, OPEN, "後 20′：平均心率＝LTHR"), b.cool(10)],
-        note=("只看全力，不設目標；手腕光學心率的平均誤差比胸帶大。條件：< 25 °C、平路環線或田徑場、戴胸帶、"
+        note=N_("只看全力，不設目標；手腕光學心率的平均誤差比胸帶大。條件：< 25 °C、平路環線或田徑場、戴胸帶、"
               "前 48 小時沒有硬課、不在減量期／比賽週；自己一個人跑，不要跟人跑、不要在比賽中測"),
         purpose=PURPOSE["test"]),
     # SP-64: Polar's hill field test (docs/research/zones-and-thresholds.md 附錄 C); the app reads
@@ -371,11 +372,11 @@ TEMPLATES: list[Template] = [
         b.warm(15, "慢慢加到心率穩定"),
         b.t("work", 60 * 60, AET, "固定對話配速、平路；前後半心率比"),
         b.cool(10)],
-        note="飄移 3.5–5% 就是 AeT；< 3.5% 下次 +5 bpm、> 5% 降低（來源要胸帶，手腕心率只看趨勢）", purpose=PURPOSE["test"]),
+        note=N_("飄移 3.5–5% 就是 AeT；< 3.5% 下次 +5 bpm、> 5% 降低（來源要胸帶，手腕心率只看趨勢）"), purpose=PURPOSE["test"]),
     Template("xu_e_drift", "test", "徐國峰 90′ E 配速飄移", "徐國峰 部落格 2015-10-14",
              "http://rocky549.blogspot.com/2015/10/e.html", lambda b: [
         b.warm(10), b.t("work", 80 * 60, pace(1.18, 1.29), "固定 E 配速；比第 10、90 分心率"), b.cool(10)],
-        basis="pace", conv="E 配速 ≈ 閾值配速 × 1.18–1.29（Friel 2 區配速，推估）", purpose=PURPOSE["test"]),
+        basis="pace", conv=N_("E 配速 ≈ 閾值配速 × 1.18–1.29（Friel 2 區配速，推估）"), purpose=PURPOSE["test"]),
 
     # ---------------- 越野跑 ----------------
     Template("dsw_classic", "trail", "登山王經典 4×7′ 爬升", "江晏慶「如何提升越野跑的爬升能力－登山王課表」Garmin 台灣 2021-01-27",
@@ -383,38 +384,38 @@ TEMPLATES: list[Template] = [
         b.warm(12, "階梯步道輕鬆跑／走"),
         b.rep(4, [b.t("work", 7 * 60, hr(0.95, 1.02), "上坡 9 成力（快崩但不爆）"),
                   b.t("rest", 7 * 60, OPEN, "慢慢走下來")], False, "4×7′ 上坡"),
-        b.t("cool", 5 * 60, OPEN, "收操、補給")], conv="來源是 RPE：心率推估", purpose=PURPOSE["hill_rep"], trail="climb"),
+        b.t("cool", 5 * 60, OPEN, "收操、補給")], conv=N_("來源是 RPE：心率推估"), purpose=PURPOSE["hill_rep"], trail="climb"),
     Template("dsw_endurance", "trail", "登山王耐力型 6×快走上坡", "江晏慶 登山王課表（耐力變化）Garmin 台灣 2021", GARMIN_DSW, lambda b: [
         b.warm(12, "輕鬆跑／走"),
         b.rep(6, [b.t("work", 7 * 60, hr(0.88, 0.93), "快走上坡"),
                   b.t("rest", 5 * 60, AET, "慢跑下來")], False, "6×上坡"),
-        b.t("cool", 5 * 60, OPEN, "收操")], conv="來源是 RPE：心率推估", purpose=PURPOSE["long_tempo"], trail="climb"),
+        b.t("cool", 5 * 60, OPEN, "收操")], conv=N_("來源是 RPE：心率推估"), purpose=PURPOSE["long_tempo"], trail="climb"),
     Template("ua_hill_sprints", "trail", "陡坡衝刺 8×10″", UA + "《Training for the Uphill Athlete》2019",
              "https://uphillathlete.com/", lambda b: [
         b.warm(15),
         b.rep(8, [b.t("work", 10, OPEN, "≥ 20% 陡坡 10″ 全力"), b.t("rest", 3 * 60, OPEN, "走到完全恢復")], False, "8×10″"),
-        b.cool(10)], note="全力衝刺：心率、功率都不當目標", purpose=PURPOSE["hill_sprint"], trail="climb"),
+        b.cool(10)], note=N_("全力衝刺：心率、功率都不當目標"), purpose=PURPOSE["hill_sprint"], trail="climb"),
     Template("koop_uphill", "trail", "Koop 上坡 TempoRun 3×12′", KOOP, KOOP_URL, lambda b: [
         b.warm(15),
         b.rep(3, [b.t("work", 12 * 60, hr(0.95, 1.00), "上坡 RPE 8–9"),
                   b.t("rest", 6 * 60, AET, "下坡或平路輕鬆")], False, "3×12′ 上坡"),
-        b.cool(10)], conv="來源只有 RPE：心率推估", purpose=PURPOSE["cruise"], trail="climb"),
+        b.cool(10)], conv=N_("來源只有 RPE：心率推估"), purpose=PURPOSE["cruise"], trail="climb"),
     Template("long_climb", "trail", "長爬坡有氧 90′", UA + " Zone 2（AeT −10%～AeT）",
              "https://uphillathlete.com/aerobic-training/uphill-athlete-training-zones-heart-rate-calculator/", lambda b: [
         b.warm(15), b.t("work", 90 * 60, AET, "持續爬升，跑走混合，心率 ≤ 輕鬆跑上限"),
         b.t("cool", 15 * 60, OPEN, "輕鬆下山")], src_kind="推估", purpose=PURPOSE["long"], trail="climb"),
     Template("steep_5", "trail", f"陡坡健走 {_S5['grade']:g}%（模擬背 5% 體重）", STEEP_SRC, STEEP_URL, _S5B,
-             conv=STEEP_CONV, note="不背包；百岳前的專項期，第 1 階段", purpose=PURPOSE["me"], trail="climb"),
+             conv=STEEP_CONV, note=N_("不背包；百岳前的專項期，第 1 階段"), purpose=PURPOSE["me"], trail="climb"),
     Template("steep_10", "trail", f"陡坡健走 {_S10['grade']:g}%（模擬背 10% 體重）", STEEP_SRC, STEEP_URL, _S10B,
-             conv=STEEP_CONV, note="不背包；第 2 階段", purpose=PURPOSE["me"], trail="climb"),
+             conv=STEEP_CONV, note=N_("不背包；第 2 階段"), purpose=PURPOSE["me"], trail="climb"),
     Template("steep_15", "trail", f"陡坡健走 {_S15['grade']:g}%（模擬背 15% 體重）", STEEP_SRC, STEEP_URL, _S15B,
-             conv=STEEP_CONV, note="不背包；行程背包約體重 15% 時", purpose=PURPOSE["me"], trail="climb"),
+             conv=STEEP_CONV, note=N_("不背包；行程背包約體重 15% 時"), purpose=PURPOSE["me"], trail="climb"),
     Template("downhill_ecc", "trail", "下坡離心預適應 25′",
              "Assumpção et al. 2020 Sci Rep；Bontemps et al. 2020 Sports Med；Koop（TrainRight）",
              "https://pmc.ncbi.nlm.nih.gov/articles/PMC7606541/", lambda b: [
         b.warm(10, "平路暖身"), b.t("work", 25 * 60, rpe(3, 5, down=DOWNHILL_M), "−10～−15% 下坡，輕鬆到中等"),
         b.cool(10, "平路緩和")],
-        basis="rpe", src_kind="peer", conv=DOWNHILL_CONV, note="賽前 ≥ 2 週做；效果約 9 週，之後 2–3 天輕鬆；下坡功率、心率都不準，看 RPE",
+        basis="rpe", src_kind="peer", conv=DOWNHILL_CONV, note=N_("賽前 ≥ 2 週做；效果約 9 週，之後 2–3 天輕鬆；下坡功率、心率都不準，看 RPE"),
         purpose=PURPOSE["downhill"], trail="downhill"),
     # 技術地形 (SP-62): time + climb + RPE; no HR / power target (footing limits the pace, HR stays
     # low, so hrTSS under-reads — the load is still the watch's record). Low RPE = the long-run
@@ -422,11 +423,11 @@ TEMPLATES: list[Template] = [
     Template("tech_easy", "trail", "技術地形 60′（低 RPE）", TECH_SRC, KOOP_URL, lambda b: [
         b.warm(10, "好走的路段暖身"), b.t("work", 60 * 60, rpe(3, 4, up=300), "技術路段，跑走混合，練腳步"),
         b.t("cool", 5 * 60, OPEN, "收操")], basis="rpe", src_kind="推估", conv=TECH_CONV,
-        note="基礎期：輕鬆的有氧課，可以取代部分長跑", purpose=PURPOSE["technical"], trail="technical"),
+        note=N_("基礎期：輕鬆的有氧課，可以取代部分長跑"), purpose=PURPOSE["technical"], trail="technical"),
     Template("tech_hard", "trail", "技術地形 90′（中高 RPE、爬升 600 m）", TECH_SRC, KOOP_URL, lambda b: [
         b.warm(15, "好走的路段暖身"), b.t("work", 90 * 60, rpe(6, 7, up=600), "接近比賽路況的技術路段"),
         b.t("cool", 10 * 60, OPEN, "收操")], basis="rpe", src_kind="推估", conv=TECH_CONV,
-        note="專項期每週 1 堂，路況接近比賽；RPE 7 算強度課（隔 48 小時、算進強度預算）",
+        note=N_("專項期每週 1 堂，路況接近比賽；RPE 7 算強度課（隔 48 小時、算進強度預算）"),
         purpose=PURPOSE["technical"], trail="technical"),
 ]
 
@@ -698,7 +699,7 @@ def row(t: Template) -> dict:
     fam = family_of(full) if t.cat == "quality" else None
     sub = fam["id"] if fam else (t.trail or trail_type_of(full)) if t.cat == "trail" else None
     return {"key": f"lib:{t.key}", "label": t.title, "title": t.title, "src": t.src, "url": t.url,
-            "src_kind": t.src_kind, "conv": t.conv, "note": t.note, "items": main_of(full) or full, "full": full,
+            "src_kind": t.src_kind, "conv": _(t.conv) if t.conv else "", "note": _(t.note) if t.note else "", "items": main_of(full) or full, "full": full,
             "equiv": None, "sub": sub, "family": fam, "purpose": _(t.purpose) if t.purpose else "",
             "basis": t.basis, "basis_label": BASIS_LABEL[t.basis], "role": WS.rpe_role(full)}
 

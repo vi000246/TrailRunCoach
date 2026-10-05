@@ -18,6 +18,7 @@ from typing import Optional
 import numpy as np
 
 from backend.engine import calibrate as CAL
+from backend.i18n import N_
 
 DEFAULT = 100.0                  # ITRA km-effort
 MIN_CLIMB_RUNS = 8
@@ -71,10 +72,10 @@ def fit_divisor(ds, today: Optional[dt.date]):
 
 
 CAL.register(CAL.Item(
-    name="climb_divisor_run", label="爬升換算（每幾 m 爬升 = 1 km）", unit="m", default=DEFAULT,
-    default_src="ITRA km-effort（健行筆記也用）", k=10, min_n=MIN_CLIMB_RUNS, fit=fit_divisor,
+    name="climb_divisor_run", label=N_("爬升換算（每幾 m 爬升 = 1 km）"), unit="m", default=DEFAULT,
+    default_src=N_("ITRA km-effort（健行筆記也用）"), k=10, min_n=MIN_CLIMB_RUNS, fit=fit_divisor,
     bounds=(50.0, 300.0), digits=0, default_is_literature=True,
-    help="越野的「等效距離」= 公里 + 爬升 ÷ 這個數。本人值 = 你一年內的跑步（平路定速度、爬坡定爬升成本）最小平方擬合。"))
+    help=N_("越野的「等效距離」= 公里 + 爬升 ÷ 這個數。本人值 = 你一年內的跑步（平路定速度、爬坡定爬升成本）最小平方擬合。")))
 
 
 def divisor() -> float:

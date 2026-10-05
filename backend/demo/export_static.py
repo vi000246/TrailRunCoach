@@ -48,6 +48,8 @@ from pathlib import Path
 from typing import Callable, Iterable, Optional
 from urllib.parse import parse_qsl, unquote, urlsplit
 
+from backend.i18n import N_, _
+
 API = "/api/v1/"
 HOST = "http://trc.demo"
 REPO = Path(__file__).resolve().parents[2]
@@ -238,7 +240,7 @@ class DemoApp:
 
 
 # --------------------------------------------------------------------------- recording
-READONLY_MSG = "唯讀示範：這個操作在示範版不能用"
+READONLY_MSG = N_("唯讀示範：這個操作在示範版不能用")
 
 
 class Recorder:
@@ -322,7 +324,7 @@ class Crawler:
             print(f"  {method} refused {path}")
         route.fulfill(status=403, headers={"content-type": "application/json"},
                       body=json.dumps({"code": "STATIC_READONLY",
-                                       "detail": {"code": "STATIC_READONLY", "message": READONLY_MSG}},
+                                       "detail": {"code": "STATIC_READONLY", "message": _(READONLY_MSG)}},
                                       ensure_ascii=False))
 
     # -- waiting

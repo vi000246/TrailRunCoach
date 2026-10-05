@@ -108,7 +108,7 @@
   .appnav .an-lang:hover { color: var(--an-acc); border-color: var(--an-acc); }
   .appnav .an-lang:focus-visible { outline: 2px solid var(--an-acc); outline-offset: 1px; }
   @media (max-width: 699px) { .appnav .an-lang { margin: 0 4px; padding: 3px 6px; font-size: 11px; } }
-  /* 更多: a dropdown for the less-used pages */
+  /* More (nav.more): a dropdown for the less-used pages */
   .appnav .an-more { position: relative; display: flex; }
   .appnav .an-more > summary { list-style: none; cursor: pointer; }
   .appnav .an-more > summary::-webkit-details-marker { display: none; }

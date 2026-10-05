@@ -832,7 +832,7 @@ def easy_caps(lthr: Optional[float], mhr: Optional[float], rhr: Optional[float],
     for m in HP.PLAN_MODELS:
         z = HP.zone_rows(m, lthr, mhr, rhr, acc)
         if "rows" in z:
-            out[HP.MODEL_SHORT[m]] = float(HP.band(z["rows"], 2, 2)[1])
+            out[_(HP.MODEL_SHORT[m])] = float(HP.band(z["rows"], 2, 2)[1])
     if aet:
         out[_("實測 AeT")] = float(aet)
     return out

@@ -294,7 +294,7 @@ class Status:
         on the PMC CTL (SP-68: started from the manual CTL at a date, else the first 4
         weeks' mean daily TSS), not checked in the startup window, judged against the
         relative watch / block lines. The CTL shown and the guardrail's are the same series."""
-        ctl, _, start = self.ev.pmc()
+        ctl, _atl, start = self.ev.pmc()
         now = _n(ctl.at(self.tday))
         mo = _n(ctl.at(self.tday - 28))
         g = LG.guard_ramp(ctl.values, ctl.start, self.tday, start)
@@ -305,16 +305,19 @@ class Status:
         txt = f"{now:.0f}"
         why = f"CTL {now:.0f}，本週 {ramp:+.1f}/週，4 週 {now - mo:+.0f}" if mo is not None and ramp is not None else f"CTL {now:.0f}"
         if ramp is not None and not startup:
-            why += f"；注意線 +{LG.watch_line(base):.1f}、擋線 +{LG.block_line(base):.1f}（7 天前 CTL {base:.0f}）"
+            why += _("；注意線 +{watch:.1f}、擋線 +{block:.1f}（7 天前 CTL {base:.0f}）",
+                     watch=LG.watch_line(base), block=LG.block_line(base), base=base)
         level, verdict, action = INFO, "", ""
         k = self.kind
         lv = None if startup else LG.ramp_level(ramp, base)
         if startup:
             d = g.get("day_n")
-            verdict = ("還沒有 TSS：不看 ramp" if d is None
-                       else f"起始 CTL 從 {start['date']} 起算（手動設定）：前 {LG.MANUAL_STARTUP_DAYS} 天不看 ramp"
+            verdict = (_("還沒有 TSS：不看 ramp") if d is None
+                       else _("起始 CTL 從 {date} 起算（手動設定）：前 {days} 天不看 ramp",
+                              date=start["date"], days=LG.MANUAL_STARTUP_DAYS)
                        if start.get("source") == LG.MANUAL
-                       else f"起算期（有 TSS 的第 {d + 1} 天）：前 {LG.STARTUP_DAYS} 天 CTL 還在建立，不看 ramp")
+                       else _("起算期（有 TSS 的第 {n} 天）：前 {days} 天 CTL 還在建立，不看 ramp",
+                              n=d + 1, days=LG.STARTUP_DAYS))
         elif ramp is not None:
             if k in ("taper", "event", "recovery"):
                 level, verdict = GOOD, "減量／恢復期，體能小幅下降是正常的"
@@ -322,11 +325,12 @@ class Status:
                     level, verdict, action = WATCH, "減量期 CTL 還在上升，代表量沒有真的減", "把本週時數壓到減量帶內"
             else:
                 if lv == LG.BLOCK:
-                    level, verdict, action = (BAD, f"{LG.ramp_text(ramp, base, lv)}：超過擋線（Friel：10 以上最多撐一週）",
-                                              "本週維持或減量，不要再加")
+                    level, verdict, action = (BAD, _("{ramp}：超過擋線（Friel：10 以上最多撐一週）",
+                                                     ramp=LG.ramp_text(ramp, base, lv)),
+                                              _("本週維持或減量，不要再加"))
                 elif lv == LG.WATCH:
-                    level, verdict, action = (WATCH, f"{LG.ramp_text(ramp, base, lv)}：到注意線，只能撐一兩週",
-                                              "下週安排恢復週")
+                    level, verdict, action = (WATCH, _("{ramp}：到注意線，只能撐一兩週", ramp=LG.ramp_text(ramp, base, lv)),
+                                              _("下週安排恢復週"))
                 elif ramp >= 1:
                     level, verdict = GOOD, f"每週 +{ramp:.1f}，可長期維持的增幅（1–3；菁英 3–5）"
                 elif ramp > -1:

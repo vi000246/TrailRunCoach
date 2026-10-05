@@ -101,6 +101,7 @@ import statistics
 from typing import Optional
 
 from backend.engine import heat as HT
+from backend.i18n import _
 
 COOL_C = 25.0                 # 台灣教練：熱天心率偏高、飄移失真
 HOT_HADLEY = HT.HOT_HADLEY    # Hadley's 151–160 band (route_weather.HOT_HADLEY)
@@ -469,23 +470,25 @@ def hr_shift(points: list[dict], today: dt.date, beta: Optional[float] = None,
            "seasonal": None, "reason": None}
     fresh = [p for p in pts if 0 <= (today - _date(p["date"])).days <= RECENT_DAYS]
     if len(fresh) < N_RECENT:
-        out["reason"] = (f"最近 {RECENT_DAYS} 天有溫度的穩定路跑只有 {len(fresh)} 次（要 {N_RECENT} 次）"
-                         + (f"；{heat['n_no_temp']} 次沒有任何溫度，不能熱校正" if heat["n_no_temp"] else ""))
+        out["reason"] = (_("最近 {days} 天有溫度的穩定路跑只有 {n} 次（要 {need} 次）",
+                           days=RECENT_DAYS, n=len(fresh), need=N_RECENT)
+                         + (_("；{n} 次沒有任何溫度，不能熱校正", n=heat["n_no_temp"]) if heat["n_no_temp"] else ""))
         return out
     first = _date(fresh[-min(N_RECENT_MAX, len(fresh))]["date"])
     base = [p for p in pts if first - dt.timedelta(days=BASE_DAYS) <= _date(p["date"]) < first]
     if len(base) < BASE_MIN:
-        out["reason"] = f"之前 {BASE_DAYS} 天的穩定路跑只有 {len(base)} 次（要 {BASE_MIN} 次才畫得出基準線）"
+        out["reason"] = _("之前 {days} 天的穩定路跑只有 {n} 次（要 {need} 次才畫得出基準線）",
+                          days=BASE_DAYS, n=len(base), need=BASE_MIN)
         return out
     f = _fit([(p["p"], p["hr_adj"]) for p in base])
     if f is None or f["b"] <= 0:
-        out["reason"] = "熱校正後的心率–功率沒有正斜率，基準線不能用"
+        out["reason"] = _("熱校正後的心率–功率沒有正斜率，基準線不能用")
         return out
     a, b, s = f["a"], f["b"], f["s"]
     lo, hi = min(p["p"] for p in base) - POWER_RANGE_W, max(p["p"] for p in base) + POWER_RANGE_W
     recent = [p for p in fresh if lo <= p["p"] <= hi and _date(p["date"]) >= first][-N_RECENT_MAX:]
     if len(recent) < N_RECENT:
-        out["reason"] = f"最近的穩定跑只有 {len(recent)} 次落在基準線的功率範圍（{lo:.0f}–{hi:.0f} W）"
+        out["reason"] = _("最近的穩定跑只有 {n} 次落在基準線的功率範圍（{lo:.0f}–{hi:.0f} W）", n=len(recent), lo=lo, hi=hi)
         return out
     m = len(recent)
     res = [p["hr_adj"] - (a + b * p["p"]) for p in recent]

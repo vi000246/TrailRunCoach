@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>TrailRunCoach 示範</title>
-<meta name="description" content="越野跑、百岳、路跑的訓練教練：用一位虛構跑者試排課表、賽事計算機和週期規劃。">
+<title data-i18n="demo.title">TrailRunCoach 示範</title>
+<meta name="description" data-i18n-attr="content:demo.description" content="越野跑、百岳、路跑的訓練教練：用一位虛構跑者試排課表、賽事計算機和週期規劃。">
 <style>
 :root {
   color-scheme: light;
@@ -60,37 +60,37 @@ main { max-width: 1080px; margin: 0 auto; padding: 36px 16px 56px; }
 <script src="/api/v1/static/shell.js" data-page="demo"></script>
 <main>
   <section class="hero">
-    <span class="who">示範跑者 · <b>虛構資料</b>
-      <button type="button" class="q" aria-label="說明" title="這位跑者和他的一年訓練、心率、功率、GPS 軌跡都是程式產生的，跟任何真人無關。你的修改只存在你的瀏覽器，24 小時後自動清除。"
+    <span class="who"><span data-i18n="demo.who">示範跑者 ·</span> <b data-i18n="demo.fictional">虛構資料</b>
+      <button type="button" class="q" aria-label="說明" title="這位跑者和他的一年訓練、心率、功率、GPS 軌跡都是程式產生的，跟任何真人無關。你的修改只存在你的瀏覽器，24 小時後自動清除。" data-i18n-attr="aria-label:demo.help;title:demo.who_tip;data-static-title:demo.who_tip_static"
         data-static-title="這位跑者和他的一年訓練、心率、功率、GPS 軌跡都是程式產生的，跟任何真人無關。這是唯讀的靜態示範：課表可以試著改，修改只存在你的瀏覽器。">?</button></span>
-    <h1>越野跑、百岳、路跑的訓練教練</h1>
-    <p>從你的手錶資料看訓練狀況、自動排課表、預估比賽配速和功率。這裡用一位虛構的跑者給你試。</p>
+    <h1 data-i18n="demo.h1">越野跑、百岳、路跑的訓練教練</h1>
+    <p data-i18n="demo.lead">從你的手錶資料看訓練狀況、自動排課表、預估比賽配速和功率。這裡用一位虛構的跑者給你試。</p>
   </section>
   <div class="cards">
     <a class="card" href="/api/v1/overview/plan/schedule/page">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/><path d="M7.5 13h2M11 13h2M14.5 13h2M7.5 16.5h2M11 16.5h2"/></svg>
-      <h2>排課表</h2>
-      <ul><li>拖曳課程、改強度</li><li data-static-text="新增、刪除課，設休息日">調課表偏好（哪天長跑、休息日）</li><li>看每趟的步驟和目標功率</li></ul>
-      <span class="go">打開課表 →</span>
+      <h2 data-i18n="demo.sched.h">排課表</h2>
+      <ul><li data-i18n="demo.sched.drag">拖曳課程、改強度</li><li data-static-text="新增、刪除課，設休息日" data-i18n="demo.sched.prefs" data-i18n-attr="data-static-text:demo.sched.prefs_static">調課表偏好（哪天長跑、休息日）</li><li data-i18n="demo.sched.steps">看每趟的步驟和目標功率</li></ul>
+      <span class="go" data-i18n="demo.sched.go">打開課表 →</span>
     </a>
     <a class="card" href="/api/v1/racepower/page">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8.5 7h7"/><path d="M8.5 11.5h.01M12 11.5h.01M15.5 11.5h.01M8.5 15h.01M12 15h.01M15.5 15h.01M8.5 18h.01M12 18h3.5"/></svg>
-      <h2>賽事計算機</h2>
-      <ul><li>內建路跑半馬、越野 50K、百岳 3 日</li><li data-static-text="快速選項的結果已經算好">也可以上傳自己的 GPX</li><li>分段配速、功率、補給</li></ul>
-      <span class="go">試算一場比賽 →</span>
+      <h2 data-i18n="demo.race.h">賽事計算機</h2>
+      <ul><li data-i18n="demo.race.builtin">內建路跑半馬、越野 50K、百岳 3 日</li><li data-static-text="快速選項的結果已經算好" data-i18n="demo.race.gpx" data-i18n-attr="data-static-text:demo.race.gpx_static">也可以上傳自己的 GPX</li><li data-i18n="demo.race.legs">分段配速、功率、補給</li></ul>
+      <span class="go" data-i18n="demo.race.go">試算一場比賽 →</span>
     </a>
     <a class="card" href="/api/v1/plan/page">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/><path d="M8 14h3"/></svg>
-      <h2>週期規劃</h2>
-      <ul><li data-static-text="賽事（A／B／C）怎麼排">新增賽事（A／B／C）</li><li>基礎期、強化期、專項期、減量期</li><li>課表跟著週期重排</li></ul>
-      <span class="go">規劃賽季 →</span>
+      <h2 data-i18n="demo.season.h">週期規劃</h2>
+      <ul><li data-static-text="賽事（A／B／C）怎麼排" data-i18n="demo.season.add" data-i18n-attr="data-static-text:demo.season.add_static">新增賽事（A／B／C）</li><li data-i18n="demo.season.phases">基礎期、強化期、專項期、減量期</li><li data-i18n="demo.season.replan">課表跟著週期重排</li></ul>
+      <span class="go" data-i18n="demo.season.go">規劃賽季 →</span>
     </a>
   </div>
   <div class="enter">
-    <a class="btn primary" href="/api/v1/overview/page">進入示範（訓練總覽）</a>
-    <a class="btn" href="/api/v1/wko5/activities/page">看單次活動分析</a>
+    <a class="btn primary" href="/api/v1/overview/page" data-i18n="demo.enter">進入示範（訓練總覽）</a>
+    <a class="btn" href="/api/v1/wko5/activities/page" data-i18n="demo.activities">看單次活動分析</a>
     <span class="note ex" id="examples" hidden></span>
-    <span class="note" data-static-text="唯讀示範：課表的修改只存在這個瀏覽器；同步、推送、上傳、分享和週期規劃的修改在這裡不能用。">同步手錶、推送課表、分享連結在示範裡是關閉的。</span>
+    <span class="note" data-static-text="唯讀示範：課表的修改只存在這個瀏覽器；同步、推送、上傳、分享和週期規劃的修改在這裡不能用。" data-i18n="demo.off" data-i18n-attr="data-static-text:demo.off_static">同步手錶、推送課表、分享連結在示範裡是關閉的。</span>
   </div>
   <script>
   // the static read-only demo (backend/demo/export_static.py): its own wording
@@ -116,10 +116,10 @@ main { max-width: 1080px; margin: 0 auto; padding: 36px 16px 56px; }
         const ids = ri.ok ? ((await ri.json()).events || []).map((e) => e.id) : [];
         const ev = ["demo-maokong", "demo-50k"].find((id) => ids.includes(id));
         if (ev) {
-          rc = `<a href="${window.TRC_STATIC ? "racepower.html" : "/api/v1/racepower/page"}?event=${ev}">看越野賽事（GPX）計算範例</a>`;
+          rc = `<a href="${window.TRC_STATIC ? "racepower.html" : "/api/v1/racepower/page"}?event=${ev}">${t("demo.ex.race")}</a>`;
         }
       } catch {}
-      const out = [iv && link(iv, 2, "看間歇分析範例"), tr && link(tr, 0, "看越野課表範例"), rc].filter(Boolean);
+      const out = [iv && link(iv, 2, t("demo.ex.intervals")), tr && link(tr, 0, t("demo.ex.trail")), rc].filter(Boolean);
       if (!out.length) return;
       const el = document.getElementById("examples");
       el.innerHTML = out.join(" · ");

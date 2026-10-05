@@ -22,6 +22,8 @@ import sqlite3
 from pathlib import Path
 from typing import Optional
 
+from backend.i18n import _
+
 TABLE = "race_calc"
 DDL = (f"CREATE TABLE IF NOT EXISTS {TABLE} (id INTEGER PRIMARY KEY, event_id VARCHAR(64) NOT NULL UNIQUE, "
        "inputs_json TEXT, result_json TEXT, saved_at DATETIME)")
@@ -48,7 +50,7 @@ def _db(db_path=None) -> Optional[Path]:
 
 def _check_id(eid: str) -> str:
     if not isinstance(eid, str) or not _ID.match(eid):
-        raise RaceCalcError("賽事 id 格式不對")
+        raise RaceCalcError(_("賽事 id 格式不對"))
     return eid
 
 
@@ -83,14 +85,14 @@ def save(eid: str, inputs: dict, result: Optional[dict] = None, db_path=None) ->
     """Upsert the event's inputs (and result: None keeps the stored one)."""
     _check_id(eid)
     if not isinstance(inputs, dict):
-        raise RaceCalcError("inputs 要是物件")
+        raise RaceCalcError(_("inputs 要是物件"))
     p = _db(db_path)
     if p is None:
-        raise RaceCalcError("沒有資料庫")
+        raise RaceCalcError(_("沒有資料庫"))
     ij = json.dumps(inputs, ensure_ascii=False, separators=(",", ":"))
     rj = json.dumps(result, ensure_ascii=False, separators=(",", ":")) if result is not None else None
     if len(ij) + len(rj or "") > MAX_BYTES:
-        raise RaceCalcError("要儲存的資料太大")
+        raise RaceCalcError(_("要儲存的資料太大"))
     now = dt.datetime.now().replace(microsecond=0).isoformat(sep=" ")
     p.parent.mkdir(parents=True, exist_ok=True)
     con = sqlite3.connect(str(p))

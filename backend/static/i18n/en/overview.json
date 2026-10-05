@@ -11,5 +11,21 @@
   "thr.conf_low": "low",
   "thr.hrmax": "Max HR",
   "thr.line": "{name} {v} bpm: confidence {c}",
-  "thr.wait_cool": "The LTHR test is more accurate once it cools down (you can still schedule it now)"
+  "thr.wait_cool": "The LTHR test is more accurate once it cools down (you can still schedule it now)",
+  "drift.ref_badge": "Reference only",
+  "drift.ref_runs": {
+    "one": "{n} run under 40 min after warm-up",
+    "other": "{n} runs under 40 min after warm-up"
+  },
+  "drift.value": "HR drift {v}%",
+  "drift.basis_power": "HR drift from power (power ÷ HR, Pw:HR)",
+  "drift.basis_pace": "HR drift from pace (speed ÷ HR, Pa:HR)",
+  "z5.title": "Zone 3 / Zone 5 unlock tracks",
+  "z5.history": "History →",
+  "z5.pill": "Zone 5: {s}",
+  "z5.unlocked": "Unlocked",
+  "z5.aet_ok": "AeT passed",
+  "split.title": "Intensity distribution",
+  "split.target": "Low intensity: floor 75% · target 80% (base ≥ 90%)",
+  "split.tip": "Moving time of this period's endurance activities, split into three heart-rate bands.\nHow to read: low < AeT, moderate AeT–LTHR, high ≥ LTHR; bar length = share.\nLook for: 75% low intensity is the floor, 80% the target (≥ 90% in base); this is a reminder, not a condition for unlocking Zone 3.\nMethod: Seiler 2006."
 }

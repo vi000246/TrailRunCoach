@@ -2629,19 +2629,19 @@ def _stat_cards(w, m: dict) -> list[dict]:
     mt = w.metrics or {}
     dist, climb, tss = _f(mt.get("distance")), _f(mt.get("climbing")), _f(mt.get("tss"))
     aet, lthr = m.get("aet"), m.get("lthr")
-    out = [_card("stat", id="time", icon="time", label="移動時間", value=_hms(m.get("moving_s")),
-                 sub=f"全程 {_hms(m.get('elapsed_s'))}")]
+    out = [_card("stat", id="time", icon="time", label=_("移動時間"), value=_hms(m.get("moving_s")),
+                 sub=_("全程 {t}", t=_hms(m.get('elapsed_s'))))]
     if dist:
-        out.append(_card("stat", id="distance", icon="distance", label="距離", value=_num(dist, 1 if dist < 100 else 0), unit="km"))
+        out.append(_card("stat", id="distance", icon="distance", label=_("距離"), value=_num(dist, 1 if dist < 100 else 0), unit="km"))
     if climb is not None and (climb >= 1 or dist):
-        out.append(_card("stat", id="gain", icon="gain", label="爬升", value=f"{climb:,.0f}", unit="m"))
+        out.append(_card("stat", id="gain", icon="gain", label=_("爬升"), value=f"{climb:,.0f}", unit="m"))
     if tss is not None:
         out.append(_card("stat", id="tss", icon="tss", label="TSS", value=_num(tss)))
     if m.get("avg_hr"):
-        out.append(_card("stat", id="hr", icon="hr", label="平均心率", value=_num(m["avg_hr"]), unit="bpm",
+        out.append(_card("stat", id="hr", icon="hr", label=_("平均心率"), value=_num(m["avg_hr"]), unit="bpm",
                          sub=f"AeT {_num(aet)} · LTHR {_num(lthr)}" if aet or lthr else None))
     if m.get("avg_power"):
-        out.append(_card("stat", id="power", icon="power", label="平均功率", value=_num(m["avg_power"]), unit="W",
+        out.append(_card("stat", id="power", icon="power", label=_("平均功率"), value=_num(m["avg_power"]), unit="W",
                          sub=f"CP {_num(m.get('cp'))}" if m.get("cp") else None))
     return out
 
@@ -2652,12 +2652,12 @@ def _zones_card(m: dict) -> Optional[dict]:
         return None
     tot = sum(z.values())
     aet, lthr = m.get("aet"), m.get("lthr")
-    return _card("zones", id="zones", icon="zones", label="三區時間", zones=[
-        {"key": "low", "label": "低", "name": f"< AeT {_num(aet)}", "seconds": z["low"], "share": z["low"] / tot},
-        {"key": "mid", "label": "中", "name": f"AeT–LTHR {_num(aet)}–{_num(lthr)}", "seconds": z["mid"], "share": z["mid"] / tot},
-        {"key": "high", "label": "高", "name": f"≥ LTHR {_num(lthr)}", "seconds": z["high"], "share": z["high"] / tot}],
-        tip=f"只算有心率的移動時間：< AeT（{_num(aet)} bpm）是低強度，AeT–LTHR 是中強度（灰色地帶），"
-            f"≥ LTHR（{_num(lthr)} bpm）是高強度。")
+    return _card("zones", id="zones", icon="zones", label=_("三區時間"), zones=[
+        {"key": "low", "label": _("低"), "name": f"< AeT {_num(aet)}", "seconds": z["low"], "share": z["low"] / tot},
+        {"key": "mid", "label": _("中"), "name": f"AeT–LTHR {_num(aet)}–{_num(lthr)}", "seconds": z["mid"], "share": z["mid"] / tot},
+        {"key": "high", "label": _("高"), "name": f"≥ LTHR {_num(lthr)}", "seconds": z["high"], "share": z["high"] / tot}],
+        tip=_("只算有心率的移動時間：< AeT（{aet} bpm）是低強度，AeT–LTHR 是中強度（灰色地帶），"
+              "≥ LTHR（{lthr} bpm）是高強度。", aet=_num(aet), lthr=_num(lthr)))
 
 
 def _durability_card(ds, w) -> Optional[dict]:
@@ -2665,10 +2665,10 @@ def _durability_card(ds, w) -> Optional[dict]:
     if last is None:
         return None
     lvl = "good" if last >= 0.95 else "warn" if last >= LAST20_MIN else "bad"
-    word = "後段撐得住" if lvl == "good" else "後段開始累" if lvl == "warn" else "後段明顯掉了"
-    return _card("status", id="durability", icon="durability", label="耐久", value=f"{last * 100:.0f}%", sub=word, level=lvl,
-                 tip=f"最後 20% 的時間裡，同樣心率的輸出（功率，沒有功率時用速度）和暖身後相比。"
-                     f"≥ 95% 撐得住；90–95% 開始累（95% 推估）；< 90% 補給或配速要調整。詳細在「配速與耐久」。")
+    word = _("後段撐得住") if lvl == "good" else _("後段開始累") if lvl == "warn" else _("後段明顯掉了")
+    return _card("status", id="durability", icon="durability", label=_("耐久"), value=f"{last * 100:.0f}%", sub=word, level=lvl,
+                 tip=_("最後 20% 的時間裡，同樣心率的輸出（功率，沒有功率時用速度）和暖身後相比。"
+                       "≥ 95% 撐得住；90–95% 開始累（95% 推估）；< 90% 補給或配速要調整。詳細在「配速與耐久」。"))
 
 
 def tis_scores(ds, w) -> Optional[tuple[Optional[float], Optional[float]]]:
@@ -2721,11 +2721,11 @@ def _stimulus_card(c: dict) -> dict:
     tip = stimulus_tip(c)
     if c.get("stimulus") == "z5":
         eq = st.get("t_vo2_eq_s") or 0.0
-        return _card("status", id="vo2", icon="z5", label="VO2max 刺激", value=f"{eq / 60:.1f}", unit="分",
-                     sub="達到目標（≥ 10 分）" if eq >= SS.Z5_GOAL_S else f"有刺激，目標 ≥ {SS.Z5_GOAL_S // 60} 分",
+        return _card("status", id="vo2", icon="z5", label=_("VO2max 刺激"), value=f"{eq / 60:.1f}", unit=_("分"),
+                     sub=_("達到目標（≥ 10 分）") if eq >= SS.Z5_GOAL_S else _("有刺激，目標 ≥ {m} 分", m=SS.Z5_GOAL_S // 60),
                      level="good" if eq >= SS.Z5_GOAL_S else "info", tip=tip)
-    return _card("status", id="z3", icon="z3", label="閾值刺激", value=f"{(st.get('z3_s') or 0) / 60:.0f}", unit="分",
-                 sub="沒有到 VO2max" if c.get("category") != "hike" else "健行不判 5 區", level="info", tip=tip)
+    return _card("status", id="z3", icon="z3", label=_("閾值刺激"), value=f"{(st.get('z3_s') or 0) / 60:.0f}", unit=_("分"),
+                 sub=_("沒有到 VO2max") if c.get("category") != "hike" else _("健行不判 5 區"), level="info", tip=tip)
 
 
 PLAN_LEVEL = {"green": "good", "yellow": "warn", "red": "bad"}
@@ -2758,21 +2758,22 @@ def _plan_card(ds, w) -> Optional[dict]:
     vs = PM.compare(s) or {}
     if vs.get("off_plan"):
         comp = CO.with_plan_check(comp, vs)
-    tip = [f"課表：{s.get('title')}（{s.get('day')}，{vs.get('match_label') or PM.MATCH_LABEL.get('day')}）"]
+    tip = [_("課表：{title}（{day}，{match}）", title=s.get('title'), day=s.get('day'),
+             match=vs.get('match_label') or PM.MATCH_LABEL.get('day'))]
     mov = _f(a.get("moving_s"))
     if s.get("minutes") and mov is not None:
-        tip.append(f"時間：{_hms(mov)} ／ 計畫 {int(s['minutes'])} 分（{comp.get('duration_pct')}%）")
+        tip.append(_("時間：{t} ／ 計畫 {m} 分（{pct}%）", t=_hms(mov), m=int(s['minutes']), pct=comp.get('duration_pct')))
     if s.get("tss") and a.get("tss") is not None:
-        tip.append(f"TSS：{_f(a['tss']):.0f} ／ 計畫 {_f(s['tss']):.0f}（{comp.get('tss_pct')}%）")
+        tip.append(_("TSS：{a:.0f} ／ 計畫 {p:.0f}（{pct}%）", a=_f(a['tss']), p=_f(s['tss']), pct=comp.get('tss_pct')))
     if s.get("climb_m"):
-        tip.append(f"爬升：{_num(w.metrics.get('climbing'))} m ／ 計畫 {_num(s['climb_m'])} m")
+        tip.append(_("爬升：{a} m ／ 計畫 {p} m", a=_num(w.metrics.get('climbing')), p=_num(s['climb_m'])))
     if s.get("target"):
-        tip.append(f"目標：{s['target']}")
+        tip.append(_("目標：{target}", target=s['target']))
     if vs.get("text"):
         tip.append(vs["text"])
-    tip.append("顏色：時間和 TSS 偏離計畫較多的那個（±20% 內算符合，TrainingPeaks 的做法）")
+    tip.append(_("顏色：時間和 TSS 偏離計畫較多的那個（±20% 內算符合，TrainingPeaks 的做法）"))
     pct = comp.get("pct")
-    return _card("status", id="plan", icon=PS.session_tag(s).get("icon"), label="課表",
+    return _card("status", id="plan", icon=PS.session_tag(s).get("icon"), label=_("課表"),
                  value=f"{pct}" if pct is not None else "–", unit="%" if pct is not None else None,
                  sub=comp.get("label") or s.get("title"), level=PLAN_LEVEL.get(comp.get("level"), "info"),
                  tip="\n".join(tip))
