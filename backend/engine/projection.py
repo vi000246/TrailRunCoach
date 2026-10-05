@@ -134,7 +134,7 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
     `base_quality`: the session(s) the gate picked for this week — a list of the
     two-track intervals (overview.quality_sessions: base / 專項期 / 減量期), or one dict
     (the recovery-week fartlek, the AeT test, kind "test"); None in base with
-    `allow_quality` = 有氧間歇（巡航）3×10, in 專項期 the old fixed session, in 減量期 4×3′.
+    `allow_quality` = 有氧間歇（巡航）3×10, in 專項期 the old fixed session, in 減量期 TAPER_Q 4×3′.
     `quality_cap`: 1 = at most one interval (the gate's guardrail mode).
     `prefs` (課表偏好, engine/plan_prefs.py): shaped and placed like week_plan();
     `rates` = TSS / h per category for it, `notes` collects its notes.
