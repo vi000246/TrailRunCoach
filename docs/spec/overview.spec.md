@@ -359,6 +359,16 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
   easy run of a 專項期 week becomes a 40–50 min steep walk at the Pandolf grade that costs what
   the pack would (no pack in training).
 - **熱適應課** (`engine/heat_plan.py`): below.
+- **下坡課** (SP-99, `engine/downhill.py`; after placement, just before the 技術地形課, in week_plan
+  and per projected week): 專項期 賽前第 9、6、3 週 (`DOWNHILL_WEEKS`: ≤ 3 weeks apart — one
+  downhill run protects 3–6 weeks, not 9, controlled trials — and the last 14–21 days out, 推估)
+  before an A race that is not road and descends ≥ 20 m/km (推估; GPX, else descent = climb);
+  主要訓練項目 路跑: none. One easy run becomes SP-62's 下坡離心 (−10～−15 %, RPE 3–5, warm-up /
+  cool-down 10′, the template's steps; 25′ downhill, the first one of the phase 15′) on a day ≥ 14
+  days before the race, not on / the day before a hard day, not in the easy days after a B2B; the
+  first keeps the 2 days after it easy. The weekday cap shrinks the downhill part (≥ 10′); the
+  other easy runs give the extra minutes. The 技術地形 session keeps ≥ 2 days from it
+  (`technical.HARD_IDS`). A week note (`src: downhill`) says when / why or that no day fit.
 - **技術地形課** (SP-74, `engine/technical.py`; applied last, after placement, the climb / steep
   walk and heat hooks, `backend/engine/overview.py:1509`, and the same per projected week,
   `backend/engine/projection.py:591`): 主要訓練項目 越野跑 only (路跑: none), base / 專項期, not

@@ -46,7 +46,8 @@ SPEC_WORK_MIN = 30           # 推估: a shorter RPE 6–7 block is not worth a 
 WARM = {"base": 10, "specific": 15}
 COOL = {"base": 5, "specific": 10}
 EASY_MIN = 20                # the other easy runs give the difference, never below this
-HARD_IDS = ("long", "long2", "long3", "climb")   # B2B days and the race-climb repeats (steep_hill: its hard list)
+HARD_IDS = ("long", "long2", "long3", "climb",   # B2B days and the race-climb repeats (steep_hill: its hard list)
+            "downhill")                         # SP-99: ≥ 2 days from the downhill session (eccentric load)
 SRC = ("Koop（賽道專項：練和比賽相同的地形）；Uphill Athlete；隔週一次、RPE 對強度預算的換算是這個 app 的"
        "建議（推估）")
 
@@ -184,7 +185,7 @@ def _rate(rates: Optional[dict]) -> float:
 def _rebalance(ss: list, me: dict, delta: int) -> None:
     """The week's total stays: the other easy runs give / take `delta` minutes (≥ EASY_MIN)."""
     for x in sorted((x for x in ss if x is not me and x.get("kind") == "easy" and not x.get("done")
-                     and x.get("id") not in ("climb", "steep") and not x.get("heat")),
+                     and x.get("id") not in ("climb", "steep", "downhill") and not x.get("heat")),
                     key=lambda x: -(x.get("minutes") or 0)):
         if delta <= 0:
             break
@@ -256,7 +257,7 @@ def apply(ss: list, info: Optional[dict], *, hours: Optional[float] = None, rate
                                                            or s.get("id") in HARD_IDS)]
     hard += [_d(d) for d in hard_done or ()]
     easy = sorted((s for s in ss if s.get("kind") == "easy" and not s.get("done") and s.get("day")
-                   and s.get("id") not in ("climb", "steep") and not s.get("heat")),
+                   and s.get("id") not in ("climb", "steep", "downhill") and not s.get("heat")),
                   key=lambda s: (-(int(s.get("minutes") or 0)), s["day"]))
     if not easy:
         if notes is not None:
