@@ -784,6 +784,7 @@
   "輕鬆跑（1 區）打底。參考：每週約 {lo}–{hi} 分鐘 1 區": "Build the base with easy runs (zone 1). Guide: about {lo}–{hi} min of zone 1 a week",
   "輸入的數字格式不對": "The numbers entered are not in a valid format",
   "轉換期": "Transition",
+  "轉換期 {weeks} 週：設定的 {pref} 週只用在超馬級以上的 A 賽事": "Transition {weeks} weeks: the {pref} weeks you set apply only after an ultra-size A race",
   "轉換期每次跑步 ≤ {max} 分（Canova）：本週少排 {cut} 分，不用補": "Transition runs ≤ {max} min each (Canova): {cut} min fewer this week, no need to make it up",
   "轉換期縮短為 {days} 天：下一場 A 賽事「{name}」的專項期 {start} 開始": "Transition shortened to {days} days: the Build phase for the next A race \"{name}\" starts {start}",
   "轉換期週數要在 {lo}–{hi} 週（0 = 關閉）": "Transition weeks must be {lo}–{hi} (0 = off)",
