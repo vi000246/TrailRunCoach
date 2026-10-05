@@ -2171,6 +2171,10 @@
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:512"
   },
+  "比賽單日超過 {h:g} 小時：模擬只到長天上限，更長的部分交給 B2B。": {
+    "draft": true,
+    "src": "backend/engine/specific_phase.py:603"
+  },
   "比賽課由賽季計畫排入，或從賽事計算機「匯出至課表」，不能自己新增": {
     "draft": true,
     "src": "backend/engine/plan_store.py:338"
@@ -3466,6 +3470,10 @@
   "；這次誤差約 ±{se:.1f} 個百分點（回歸標準誤）": {
     "draft": true,
     "src": "backend/engine/workout_review.py:558"
+  },
+  "；長天上限 {h:g} 小時：比賽更長的部分交給 B2B 和週量": {
+    "draft": true,
+    "src": "backend/engine/specific_phase.py:336"
   },
   "🌡 {t:.0f} °C（{band}）": {
     "draft": true,

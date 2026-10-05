@@ -236,3 +236,28 @@ def test_week_plan_and_projection_follow_the_target(store):
     mins = [170] + [x["minutes"] for x in longs]
     assert all(b > a and b <= a * 1.15 + 5 for a, b in zip(mins, mins[1:]))
     assert any(x["id"] == "climb" for w in weeks for x in w["sessions"])
+
+
+def test_trail_long_day_stops_at_the_cap_for_long_races(store):
+    """SP-106: past ~6 h coaches stop the long day (iRunFar 5–6 h for 100 mi; Koop) and the rest
+    is B2B — a 10 h race day never pushes the long day towards 85 % of 10 h."""
+    long_race = _race(est_hours=10.0)
+    a = SP.week_context(kind="specific", mode="specific", monday=MON, race=long_race)
+    assert a["frac"] * long_race["day"]["hours"] * 60 > SP.TRAIL_LONG_MAX_MIN
+    assert SP.long_minutes(a, 1000) == SP.TRAIL_LONG_MAX_MIN                 # plenty of base: the cap
+    assert SP.long_minutes(a, 200) == pytest.approx(200 * 1.15)              # the +15 % step still rules below it
+    ss = [{"id": "long", "kind": "long", "minutes": SP.TRAIL_LONG_MAX_MIN, "title": "LSD（山路）", "detail": ""}]
+    SP.decorate(ss, a)
+    assert "長天上限" in ss[0]["detail"] and "B2B" in ss[0]["detail"] and "+15%" not in ss[0]["detail"]
+    sg = SP.sim_suggestion(SP.week_context(kind="specific", mode="specific", monday=date(2026, 10, 12), race=long_race),
+                           date(2026, 10, 12), 1000)
+    assert sg["minutes"][0] == SP.TRAIL_LONG_MAX_MIN                          # the simulation stops there too
+    assert "B2B" in sg["help"]
+
+
+def test_trail_cap_leaves_short_races_alone(store):
+    a = SP.week_context(kind="specific", mode="specific", monday=MON, race=_race())   # 5 h race day
+    assert SP.long_minutes(a, 400) == pytest.approx(0.85 * 300)              # same as before SP-106
+    ss = [{"id": "long", "kind": "long", "minutes": 255, "title": "LSD（山路）", "detail": ""}]
+    SP.decorate(ss, a)
+    assert "長天上限" not in ss[0]["detail"]
