@@ -45,6 +45,7 @@ class Context(Protocol):
     def heat_status(self, date: Optional[str]) -> dict: ...
     def hrc_test(self) -> Optional[dict]: ...
     def trail_hr(self) -> Optional[dict]: ...
+    def hr_basis(self) -> Optional[dict]: ...           # max / rest HR, COROS account, 課表心率區間 (zonebar)
     def body(self) -> Optional[dict]: ...               # inputs()["body"], filled in
     def event(self, eid: str): ...                      # the plan event (.name, .days, .date); CalcError 404
     def event_track(self, eid: str): ...                # (course_id, Track, row) of its stored GPX, or None
@@ -552,6 +553,11 @@ def make_plan(ctx: Context, body: PlanIn) -> dict:
     out["seg_targets"] = ST.plan_targets(out, aet=aet_d.get("aet"), lthr=aet_d.get("lthr"))
     # the main chart / table: pace, power and HR target per segment, null where not valid
     out["chart_rows"] = ST.chart_rows(out, aet=aet_d.get("aet"), lthr=aet_d.get("lthr"))
+    if body.type != "baiyue":
+        # the absolute-intensity bar's heart-rate version (SP-118; zonebar.py)
+        from backend.engine.racepower import zonebar as ZB
+        hb = getattr(ctx, "hr_basis", None)
+        out["hr_bar"] = ZB.hr_bar(out, aet_d.get("lthr"), hb() if hb else None)
     # 「匯出至課表」 is one race-day session: a multi-day 百岳 trip is not exported (the reason, else None)
     from backend.engine.racepower import watch_export as WE
     out["export_block"] = WE.multi_day(out, body.start_time, body.days)
