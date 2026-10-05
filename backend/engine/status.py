@@ -579,7 +579,7 @@ class Status:
         # the method (mean ± SE, median, the rules) only in extra["tip"] (the card's ?), one line at the end
         ref_extra = {"ref": n_ref, "test": len(fair) - n_ref, "ref_label": _(WR.REF_LABEL), "ref_tip": _(WR.REF_TIP),
                      "band": band, "band_label": WR.TEMP_BAND_LABEL.get(band) if band else None, "chip": chip,
-                     "heat": heat, "bands": bands, "band_tip": WR.HEAT_TIP}
+                     "heat": heat, "bands": bands, "band_tip": _(WR.HEAT_TIP)}
         rules = _("只算暖身後還有 30 分鐘以上、平路、沒有停、配速穩、心率在 AeT 附近以下的輕鬆路跑，"
                   "而且只和同樣溫度的跑步比。")
         agg = DA.aggregate(fair)
