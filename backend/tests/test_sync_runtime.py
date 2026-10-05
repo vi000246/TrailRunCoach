@@ -378,7 +378,8 @@ def test_primary_endpoint_reports_the_source_in_use(tmp_path, _fit_root_in_tmp):
     async def go():
         s = await make_session(tmp_path)
         out = await sync_primary(1, s)
-        assert out == {"source": "coros", "label": "COROS", "logged_in": False, "enabled": True, "busy": False}
+        assert out == {"source": "coros", "label": "COROS", "logged_in": False, "login": "logged_out",
+                       "enabled": True, "busy": False}
         await _coros_synced(s, [_coros_act("A1", START)])
         with runner.hold("coros"):
             out = await sync_primary(1, s)
@@ -387,5 +388,6 @@ def test_primary_endpoint_reports_the_source_in_use(tmp_path, _fit_root_in_tmp):
         await repo.set("sync.primary_source", "trainingpeaks")
         await repo.set("sync.trainingpeaks.enabled", False)
         out = await sync_primary(1, s)
-        assert out == {"source": "tp", "label": "TrainingPeaks", "logged_in": False, "enabled": False, "busy": False}
+        assert out == {"source": "tp", "label": "TrainingPeaks", "logged_in": False, "login": "logged_out",
+                       "enabled": False, "busy": False}
     run(go())

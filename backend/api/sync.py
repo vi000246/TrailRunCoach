@@ -88,14 +88,19 @@ async def sync_sources(athlete_id: int = 1, db: AsyncSession = Depends(get_db)):
 @router.get("/primary")
 async def sync_primary(athlete_id: int = 1, db: AsyncSession = Depends(get_db)):
     """The 資料來源 in use (sync/primary.py) and whether it can sync now — the
-    課表 page's 抓活動 button. Cheap: no disk stats, no chart Dataset."""
-    from backend.sync import primary as P
+    課表 page's 抓活動 button. Cheap: no disk stats, no chart Dataset.
+    logged_in follows the login check (sync/session_check.py, cached like the
+    status endpoints): it used to read only the cache and said true for a token
+    COROS had refused once the cached answer was 5 min old (SP-88)."""
+    from backend.sync import primary as P, session_check
     use = await P.current(db, athlete_id)
     src = P.FOLDER[use]
+    login = await session_check.check(db, src, athlete_id)
     return {
         "source": src,                                   # coros | tp (the /sync/<src> start URL)
         "label": P.LABELS[use],
-        "logged_in": await runner.logged_in(db, src, athlete_id),
+        "logged_in": login not in (session_check.EXPIRED, session_check.LOGGED_OUT),
+        "login": login,                                  # ok | expired | unknown | logged_out
         "enabled": bool(await SettingsRepository(db, athlete_id).get(f"sync.{use}.enabled")),
         "busy": runner.is_busy(src),
     }
@@ -160,11 +165,15 @@ async def delete_source_files(source: str, athlete_id: int = 1,
 
 @router.get("/status")
 async def sync_status(athlete_id: int = 1, db: AsyncSession = Depends(get_db)):
+    """Legacy, TrainingPeaks only: authenticated = a TP token is stored. Not the
+    資料來源's login (GET /sync/primary, /auth/coros/status): with COROS in use
+    it says false (SP-88)."""
     result = await db.execute(select(SyncState).where(SyncState.athlete_id == athlete_id))
     state = result.scalar_one_or_none()
     if not state:
-        return {"authenticated": False}
+        return {"source": "tp", "authenticated": False}
     return {
+        "source": "tp",
         "authenticated": bool(state.tp_access_token),
         "last_sync": state.last_sync_at.isoformat() if state.last_sync_at else None,
         "cursor": state.last_sync_cursor,

@@ -37,5 +37,16 @@
   "workout.elev_aria": "; distance across ({km} km in all), background: route elevation {lo}–{hi} m",
   "autoplan.log_title": "Automatic adjustment log",
   "autoplan.log_count": "({n})",
-  "workout.thr_low_badge": "HR threshold uncertain"
+  "workout.thr_low_badge": "HR threshold uncertain",
+  "session.expired_sync": "{name} login expired: new activities can't sync",
+  "session.expired_push": "{name} login expired: new activities can't sync and the plan can't be pushed",
+  "session.expired_push_only": "{name} login expired: the plan can't be pushed",
+  "session.logged_out": "Logged out of {name}: new activities can't sync",
+  "session.sync_failed": "{name} automatic sync failed",
+  "session.relogin": "Log in again",
+  "session.see_settings": "Sync settings",
+  "session.last_ok": "Last successful sync: {when}",
+  "session.never_ok": "No successful sync yet",
+  "session.last_failed": "Last sync failed: {when} ({error})",
+  "autosync.failed": "Sync failed: {src}"
 }
