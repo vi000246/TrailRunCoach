@@ -733,8 +733,8 @@ VARIANT_COLS = ("variant_key", "rung_key", "equiv", "swap", "swap_reason", "vari
 TEXT_COLS = ("minutes", "target", "detail", "source", "tss", "terrain", "distance_km", "climb_m")
 
 
-def _plan_rows(db_path, kinds: tuple, cache: dict) -> list[dict]:
-    """Rows of plan_sessions (kinds) as dicts with the variant columns that exist.
+def _plan_rows(db_path, kinds: tuple, cache: dict, more: tuple = ()) -> list[dict]:
+    """Rows of plan_sessions (kinds) as dicts with the variant columns that exist (+ `more`).
     Read-only sqlite, cached on the file's mtime; [] when the DB is missing."""
     import sqlite3
     from pathlib import Path
@@ -749,7 +749,7 @@ def _plan_rows(db_path, kinds: tuple, cache: dict) -> list[dict]:
     except OSError:
         return []
     from backend.engine import activity_key as AK
-    hit = cache.get((str(p), kinds))
+    hit = cache.get((str(p), kinds, more))
     if hit and hit[0] == mt:
         return AK.rebase_stored(hit[1])        # the current source's indexes (activity_key.py)
     out: list[dict] = []
@@ -760,7 +760,7 @@ def _plan_rows(db_path, kinds: tuple, cache: dict) -> list[dict]:
             if cols:
                 # + the text a structure is derived from (workout_steps.derive: interval_eval
                 # judges a planned session with no library variant by its structure)
-                extra = [c for c in VARIANT_COLS + TEXT_COLS if c in cols]
+                extra = [c for c in VARIANT_COLS + TEXT_COLS + tuple(more) if c in cols]
                 sel = ", ".join(["uid", "day", "state", "kind", "title", "done_by"] + extra)
                 marks = ",".join("?" * len(kinds))
                 for row in con.execute(f"SELECT {sel} FROM plan_sessions WHERE kind IN ({marks})", kinds):
@@ -771,6 +771,8 @@ def _plan_rows(db_path, kinds: tuple, cache: dict) -> list[dict]:
                         d["done_by"] = None
                     if "equiv" in d and d["equiv"] is not None:
                         d["equiv"] = bool(d["equiv"])
+                    if d.get("edited") is not None:
+                        d["edited"] = bool(d["edited"])
                     if d.get("variant_adj"):
                         try:
                             d["variant_adj"] = json.loads(d["variant_adj"])
@@ -783,7 +785,7 @@ def _plan_rows(db_path, kinds: tuple, cache: dict) -> list[dict]:
             con.close()
     except sqlite3.Error:
         return []
-    cache[(str(p), kinds)] = (mt, out)
+    cache[(str(p), kinds, more)] = (mt, out)
     return AK.rebase_stored(out)
 
 
@@ -823,6 +825,18 @@ def variant_rows(db_path=None) -> list[dict]:
     rows = [r for r in _plan_rows(db_path, ("quality",), _VARIANT_CACHE)
             if r.get("variant_key") and r.get("state") in ("done", "active", "missed")]
     return sorted(rows, key=lambda r: r.get("day") or "")
+
+
+_RPE_CACHE: dict = {}
+
+
+def user_rpe_rows(db_path=None) -> list[dict]:
+    """The user's own stored 越野跑 / easy / long sessions (custom, or auto ones the user edited;
+    active / done) that carry a structure — engine/technical.py reads their RPE (SP-74: a 技術地形
+    session the user added counts in the week's quality budget like the generated one)."""
+    return [r for r in _plan_rows(db_path, ("easy", "long", "hike"), _RPE_CACHE, ("origin", "edited", "gen_key"))
+            if r.get("steps") and r.get("state") in ("active", "done")
+            and (r.get("origin") == "custom" or r.get("edited"))]
 
 
 _DONE_CACHE: dict = {}

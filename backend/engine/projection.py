@@ -362,6 +362,22 @@ def IL_track(q: dict) -> Optional[str]:
     return t
 
 
+def _paired(qs: list, items: list) -> list:
+    """(session, week_decision item) pairs. quality_sessions returns one per item unless one was
+    left out (the second Zone 3 that didn't fit, the user's RPE ≥ 7 sessions took the budget):
+    then each session takes the first remaining item of its own track."""
+    if len(qs) == len(items):
+        return list(zip(qs, items))
+    rest, out = list(items), []
+    for q in qs:
+        tr = IL_track(q)
+        it = next((x for x in rest if x.get("track") == tr), rest[0] if rest else {})
+        if it in rest:
+            rest.remove(it)
+        out.append((q, it))
+    return out
+
+
 def _advance(steps: dict, rung: Optional[str]) -> None:
     """One step of the track `rung` serves (a projected session assumed 達標)."""
     from backend.engine import interval_library as IL
@@ -452,6 +468,8 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
     recent_long = [longest, float(sp_cur.get("longest28") or 0.0)]   # the long days of the last 4 weeks
     prev_mode = cur.get("mode")
     s_stops = cur.get("strength_stop") or []                 # 賽前停肌力 (SP-86): the A events' windows
+    from backend.engine import technical as TECH
+    user_rows = TECH.load_user()                             # the user's own RPE sessions (SP-74)
     week = monday + dt.timedelta(weeks=1)
     while week <= until:
         kind = phase_kind(phases, week)
@@ -492,6 +510,12 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
                 notes.append(BL.week_note(bmap, lost, lost_h))
         q_n = O.quality_per_week(PR, kind, mode, gate)
         dec = allow_quality(kind, gate, week, dict(steps), mode, q_n)
+        # the user's own RPE ≥ 7 技術地形 sessions this week: in the 20 % first (technical.py, SP-74)
+        user_q = TECH.user_quality(user_rows, week) \
+            if kind in ("base", "specific") and mode != "recovery_week" else []
+        user_min = sum(u["work"] for u in user_q)
+        if user_q:
+            notes.append(TECH.user_note(user_q, hours, kind))
         no_q = mode == "reentry" and rp is not None and not RE.quality_ok(rp, week)
         if no_q:
             dec = {**dec, "allow": False, "spec": None, "advance": False}
@@ -508,8 +532,9 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
             # the two-track pick (SP-31): the same sessions as week_plan (overview.quality_sessions)
             q_cap, q_alt = O.quality_caps(PR, PP_long(PR, long_wd))
             base_q = O.quality_sessions(gate, dec, kind, th, tgt, hours, prefs, vhist,
-                                        mountain if kind == "base" else not road, road, q_cap, q_alt)
-            for q, it in zip(base_q, dec["items"]):
+                                        mountain if kind == "base" else not road, road, q_cap, q_alt,
+                                        reserved=user_min)
+            for q, it in _paired(base_q, dec["items"]):
                 if it.get("track") == "z3":
                     steps["z3_dates"].append(week.isoformat())
                 if q.get("variant_key"):
@@ -524,8 +549,10 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
                                  "weight": cb.get("weight"), "accepted": b2b_accepted}
         sp_info = SP.projected_context(kind, mode, week, sp_cur) if sp_cur.get("race") else None
         sp_long = SP.long_minutes(sp_info, max(recent_long[-4:])) if sp_info else None
+        # nothing left of the 20 % after the user's own sessions: no fallback interval either
+        q_ok = (dec["allow"] or base_q is not None) and not (user_q and base_q == [])
         ss = week_sessions(week, kind, mode, hours, tph, tgt, long_wd, longest, mountain,
-                           dec["allow"] or base_q is not None, strength_tss, th.get("aet"), base_q,
+                           q_ok, strength_tss, th.get("aet"), base_q,
                            prefs=PR, rates=rates, notes=notes, blocked=set(bmap),
                            quality_cap=1 if kind == "base" and QG.guardrail_mode(gate) else None,
                            aet_test_days=getattr(prefs, "aet_test_days", None), xu_test=xu_q, b2b=b2b,
@@ -572,11 +599,11 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
             except Exception:              # noqa: BLE001 — never breaks the projection
                 heat_w = None
         # 技術地形課 (engine/technical.py, SP-74): the same rule as week_plan, per projected week
-        from backend.engine import technical as TECH
         tech = TECH.week_context(kind=kind, mode=mode, monday=week, road=road, b2b=b2b_info)
         if tech.get("active"):
             try:
-                TECH.apply(ss, tech, hours=hours, rates=cur.get("tss_per_category"), prefs=prefs, notes=notes)
+                TECH.apply(ss, tech, hours=hours, rates=cur.get("tss_per_category"), prefs=prefs, notes=notes,
+                           user=user_q)
             except Exception:              # noqa: BLE001 — never breaks the projection
                 tech = {"active": False}
         # 賽前停肌力 (SP-86): week_plan's A-event windows, the same rule (overview.drop_strength_before_a)
@@ -603,7 +630,7 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
                     "provisional": week > monday + dt.timedelta(weeks=1), "why": why,
                     "sessions": [s for s in ss if s["day"]],
                     **({"notes": notes} if PR is not None or bmap or (heat_w or {}).get("active")
-                       or kind == "transition" or ph_note or tech.get("planned") is not None or s_note
+                       or kind == "transition" or ph_note or tech.get("planned") is not None or s_note or user_q
                        or b2b_info.get("post") or b2b_info.get("due") or (lc_info or {}).get("planned") else {}),
                     **({"b2b": B2B.public(b2b_info)} if b2b_info.get("due") or b2b_info.get("post") else {}),
                     **({"b2b_suggestion": b2b_sug} if b2b_sug else {}),

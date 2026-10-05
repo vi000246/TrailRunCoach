@@ -141,7 +141,7 @@ touching the week before, which pulled the base down (`short_break`,
 default `blackouts.load()`) are a chosen rest, so a planned gap is still checked and a partly
 planned one is exempt only when its unplanned days alone are ≥ 3 (counted, not contiguous). The
 status card says so (「前一週非計畫停跑 N 天，另 M 天是自己排的不排課／休息日…」) and the week gets
-an info note (`guard`'s `step_note` → `week_plan`, `backend/engine/overview.py:914`). TSB −30…−20 → hold
+an info note (`guard`'s `step_note` → `week_plan`, `backend/engine/overview.py:940`). TSB −30…−20 → hold
 (Friel / TrainingPeaks). B2B weekends and the B2B TSB exemption use the block line too.
 
 ## Interval progression (`backend/engine/quality_gate.py`)
@@ -212,7 +212,9 @@ intensity). Each rung is the canonical variant of `backend/engine/interval_libra
   gives Zone 3 what is left (a smaller 巡航版); a session still over is cut to fewer reps as a
   縮量版 (`_shorten`, floor `MIN_REPS`, no progress) or, when it can't be cut, kept with a note —
   never dropped silently. 課表偏好's repeat of a lone track (`plan_prefs.shape`) is skipped when
-  the two would pass it.
+  the two would pass it. The user's own RPE ≥ 7 技術地形 sessions of the week come off the 20 %
+  first (`reserved`, SP-74 follow-up, overview.spec.md): then an interval whose 縮量版 floor still
+  doesn't fit is left out (a note) rather than kept over.
 - **How many a week**: 課表偏好 `quality_per_week = 2` → one Zone 3 + one Zone 5 when both are
   open (`week_decision(n=2)`; the base phase's guardrail mode still caps it at 1); only one track
   open → for Zone 3 (Zone 5 closed or held by a guardrail; owner 2026-10-04) a **different second
@@ -599,3 +601,4 @@ overview has `data-log="none"`. The settings are in 課表偏好 (above).
 | 2026-10-04 | change | SP-39 follow-up | Zone 5's UA path: no LTHR age limit any more (`LTHR_FRESH_DAYS` removed) — a measured LTHR is invalidated only by an event (`lthr_invalid`: a ≥ 4-week running break after the test, evidence since the test from `threshold_confidence.lthr_evidence`, an AeT aggregate shift / moved); the flow names the event and offers the 30-min LTHR test (owner 2026-10-05) |
 | 2026-10-04 | sp-79-quality-families | SP-79 | Generated 強度課 titles name the family (有氧間歇／有氧間歇（巡航）／VO2max 間歇) instead of 閾值／近閾值／VO2max; stored older titles are mapped on read and in reconcile (no spurious change), and the ladder's title matchers accept both spellings |
 | 2026-10-05 | feature | SP-86 | Strength removed from an A event's last 14 days is a reduction: auto-adjust removes stored ones without asking |
+| 2026-10-05 | feature | SP-74 follow-up | The user's own RPE ≥ 7 技術地形 sessions come off the week's 20 % before the intervals (shortened, or left out when the floor doesn't fit) |
