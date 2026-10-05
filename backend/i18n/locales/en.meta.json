@@ -2543,6 +2543,10 @@
     "draft": true,
     "src": "backend/engine/zone_events.py:491"
   },
+  "最難那天比你走過最大的一天高了兩級以上：先走一條低一級的路線（攻頂日的距離和爬升少一點）累積經驗，再來這一座": {
+    "draft": true,
+    "src": "backend/engine/baiyue_multiday.py:152"
+  },
   "最難那天要每小時爬約 {need:.0f} m；你走得順約 {s:.0f} m/h、走得辛苦約 {h:.0f} m/h": {
     "draft": true,
     "src": "backend/engine/race_feasibility.py:216"
@@ -2806,6 +2810,10 @@
   "沒有 LTHR，區間算不出來": {
     "draft": true,
     "src": "backend/engine/hr_profile.py:228"
+  },
+  "沒有 LTHR，算不出這場的平均心率，所以用功率區間": {
+    "draft": false,
+    "src": "backend/engine/racepower/zonebar.py:29"
   },
   "沒有 {name}，區間算不出來": {
     "draft": true,
@@ -3715,6 +3723,10 @@
     "draft": true,
     "src": "backend/engine/racepower/seg_targets.py:67"
   },
+  "越野心率配速模型算不出這場的平均心率，所以用功率區間": {
+    "draft": false,
+    "src": "backend/engine/racepower/zonebar.py:30"
+  },
   "越野的「等效距離」= 公里 + 爬升 ÷ 這個數。本人值 = 你一年內的跑步（平路定速度、爬坡定爬升成本）最小平方擬合。": {
     "draft": true,
     "src": "backend/engine/terrain_calib.py:78"
@@ -3778,6 +3790,10 @@
   "路線有 {n} 段，超過手錶建議的 {limit} 步：相鄰的段合併成 {m} 步": {
     "draft": true,
     "src": "backend/engine/racepower/watch_export.py:226"
+  },
+  "路跑的預估只算功率，沒有平均心率，所以用功率區間": {
+    "draft": false,
+    "src": "backend/engine/racepower/zonebar.py:28"
   },
   "路跑賽事不排下坡課": {
     "draft": true,

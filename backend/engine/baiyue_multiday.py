@@ -14,7 +14,9 @@ trail race keeps the trail rules (B2B included).
               whole climb, a pack of about the trip's weight. SIM_NEED = 3 is the owner's number; the 80 %
               pack and the last one ≥ 10 days out are 推估 (research §3.2, §4.2).
 
-  可行性 (feasibility)  the weekly-volume check (UA Big Vert, a trail-race source) is dropped; instead:
+  可行性 (feasibility)  the weekly-volume checks (UA Big Vert's weekly EP and its climb sub-check, Koop's
+              hours — trail-race sources, DROP_FEAS) are dropped; 跨級 / climb rate / climb power
+              (SP-112) stay; instead:
               will there be time for SIM_NEED simulations? The longest single-day climb of the last 8
               weeks grows ≤ +10 % a week (SP-89's step; recovery weeks hold and carry no simulation) and
               every week inside [trip − 8 weeks, trip − SIM_LAST_DAYS] that reaches the summit climb is one
@@ -38,8 +40,18 @@ SIM_WEEKS = 8                # UA: from 8 weeks before the trip
 SIM_LAST_DAYS = 10           # 推估 (research §3.2): the last simulation ≥ 10 days before the trip (taper 7–10)
 SIM_PACK_SHARE = 0.8         # 推估 (research §4.2): a pack ≥ 80 % of the trip's counts
 SIM_STEP = 1.10              # SP-89: ≤ +10 % a week
-DROP_FEAS = ("weekly", "hours")          # the weekly volume (UA Big Vert) and Koop's ultra hours: trail sources
-DROP_READY = ("long", "weekly", "hours")  # the コース定数 long day, the biggest week, Koop
+# The feasibility checks the 攻頂日模擬 replaces (SP-112 × SP-114, 2026-10-05 integration): the weekly
+# EP volume (UA Big Vert), its climb sub-check (the peak week's climb ÷ the hardest day's — a weekly
+# volume too, and the simulation counts the one-day climb instead) and Koop's ultra hours: trail-race
+# sources. Kept, as they judge the summit day itself, not the training volume, and don't conflict with
+# the simulation: 「step」 (跨級: the biggest single day done vs the hardest day — the same single-day
+# logic, experience; its trail-race suggestion is swapped for a route one in feasibility()), 「vam」 (the climb
+# rate the route needs vs the athlete's own) and 「power」 (W/kg for a pack uphill); the cutoff / turnaround
+# and late checks stay too.
+DROP_FEAS = ("weekly", "climb", "hours")
+# 完備程度: the long day, the biggest week and Koop's hours go the same way (SP-112 adds no readiness
+# check of its own; B2B stays).
+DROP_READY = ("long", "weekly", "hours")
 SRC_SUMMIT = N_("攻頂日模擬：Uphill Athlete〈Training for Mountaineering〉——行程前 8 週起每週一次，一天爬完攻頂日（爬升最多的那天）"
                 "的爬升，背和行程差不多重的背包；做到 3 次算夠；背包 ≥ 行程背包 80%、最後一次在行程前 10 天以前、"
                 "爬升每週最多 +10% 是推估。多日百岳不看每週的距離和爬升（那是越野跑的規則）")
@@ -135,6 +147,10 @@ def feasibility(r: dict, e, line: Optional[dict], today: dt.date, rows: list[dic
     keep = late_sugg | {cut_sugg}
     r["checks"] = [c for c in r["checks"] if c["id"] not in DROP_FEAS]
     r["suggestions"] = [s for s in r["suggestions"] if s in keep]
+    if any(c["id"] == "step" and c["level"] == "over" for c in r["checks"]):
+        # 跨級 kept (SP-112): a 百岳 has no lower 組別 — a lower-grade route first
+        r["suggestions"].append(_("最難那天比你走過最大的一天高了兩級以上：先走一條低一級的路線（攻頂日的距離和爬升少一點）"
+                                  "累積經驗，再來這一座"))
     for k in ("downgrade", "koop"):
         r.pop(k, None)
     r["src"] = [_(SRC_SUMMIT)]

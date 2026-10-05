@@ -279,3 +279,25 @@ def test_week_plan_uses_me_when_the_gate_has_ads(monkeypatch):
     weeks = PJ.project_weeks(wp, _phases(plan, T0), date(2026, 11, 8))
     spec = [w for w in weeks if (w.get("specific") or {}).get("me_week")]
     assert spec and all(any(x["id"] == "me" and x["day"] for x in w["sessions"]) for w in spec)
+
+
+def test_sp112_checks_a_multi_day_baiyue_keeps_and_drops():
+    """SP-112 × SP-114 (integration): the weekly volume, its climb sub-check and Koop's hours go (the
+    攻頂日模擬 replaces them); 跨級, the climb rate and the climb power stay (they judge the summit day,
+    not the volume), with a route suggestion instead of the trail race's 「低一級的比賽」."""
+    assert set(BM.DROP_FEAS) == {"weekly", "climb", "hours"}
+    big = [{"km": 30.0, "gain_m": 2500, "loss_m": 600}] + DXB[1:]           # summit day EP 55: class S
+    e = trip(day_plan=big, distance_km=75, climbing_m=3800)
+    ln = line(e)
+    rates = F.climb_rates([{"vam": 300.0, "hr": 150.0, "lthr": 170.0, "z": 1000.0, "g": 0.2} for _ in range(30)])
+    r = F.assess(e, ln, TODAY, hist(km=40.0, climb=300.0)[-4:], best={"ep": 10.0, "date": date(2026, 5, 1)},
+                 climb={"rates": rates}, power={"cp": 70.0, "kg": 70.0})
+    assert {"climb", "step", "vam", "power"} <= set(ids(r["checks"]))       # before the hook
+    BM.apply(r, e, ln, TODAY, None, [row(10, 1200.0)])
+    got = ids(r["checks"])
+    assert not {"weekly", "climb", "hours"} & set(got)
+    assert {"step", "vam", "power", "summit_sim"} <= set(got)
+    assert next(c for c in r["checks"] if c["id"] == "step")["level"] == "over" and r["level"] == "over"
+    assert any("低一級的路線" in s for s in r["suggestions"]) and not any("比賽" in s for s in r["suggestions"])
+    # readiness: SP-112 adds no check there; the long day / week / hours go, B2B is kept
+    assert set(BM.DROP_READY) == {"long", "weekly", "hours"}
