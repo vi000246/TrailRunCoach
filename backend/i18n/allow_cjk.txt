@@ -5,4 +5,23 @@
 # Add entries only for text that must stay Chinese in every language: regexes
 # that match the user's own activity names, the 百岳 peak names. UI text goes through _() / t() instead.
 #
-# (none yet: the first phases will move the matching rules here as they find them)
+
+# the synthetic demo athlete: its activities, races, trips and GPX are data (like a
+# user's own activity names), and the demo builders' CLI log / --help lines
+file backend/demo/season.py
+file backend/demo/generate.py
+file backend/demo/athlete.py
+file backend/demo/course.py
+file backend/demo/linked.py
+file backend/demo/build.py
+re 推薦 blocks|區間時數 charts|season-plan event edit
+# static_racepower's sample request: the CSV's name
+re ^測試$
+# a view's name used as its id (wko5_viewer ?view=<name>)
+re ^單次活動判讀$
+# activity_auto's effort_reason cache value (activity_tags' other effort reasons aren't translated yet either)
+re ^無法計算$
+# threshold_confidence: regexes that match the user's own activity names
+re ^賽\|馬拉松\|race
+re 閾值心率測試\|LTHR
+re ^最大心率測試\|max
