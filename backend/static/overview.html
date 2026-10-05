@@ -257,9 +257,9 @@ td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
   <!-- KPI row: CTL, TSB, this week's volume, countdown to the next A race -->
   <div data-sec id="s-status" style="display:grid;gap:10px">
     <div class="kpis" id="kpis"><div class="kpi"><div class="loading">計算訓練狀況中…</div></div></div>
-    <!-- PMC, last 90 days (GET /overview/pmc): CTL / ATL lines, TSB bars in views/training.json's PMC colours -->
+    <!-- PMC, the last 7 / 42 / 90 days (GET /overview/pmc): CTL / ATL lines, TSB bars in views/training.json's PMC colours -->
     <section aria-labelledby="pmc-h">
-      <h2 id="pmc-h"><span data-i18n="overview.pmc.title">體能・疲勞・狀況</span> <span class="meta" data-i18n="overview.pmc.sub">近 90 天</span><span id="pmc-q"></span></h2>
+      <h2 id="pmc-h"><span data-i18n="overview.pmc.title">體能・疲勞・狀況</span> <span class="seg" id="pmc-days" role="group"></span><span id="pmc-q"></span></h2>
       <div class="legend" id="pmc-legend" style="margin:0 0 2px"></div>
       <div class="plot pmc" id="pmc" role="img"></div>
     </section>
@@ -894,19 +894,36 @@ addEventListener("scroll", () => { if (QT.pinned) qShow(QT.pinned); else qHide()
   mark();
 })();
 
-// ---------------- PMC, last 90 days ----------------
+// ---------------- PMC, the last 7 / 42 / 90 days (SP-122; default 42, remembered per browser) ----------------
 // CTL / ATL lines and TSB bars; a bar's colour = the same Form% band (TSB ÷ yesterday's CTL) as
 // views/training.json's PMC, so a day has one colour on both pages. No zoom, no extras.
 const tO = (k, p) => (window.I18N ? I18N.t("overview." + k, p) : k);
 const TSB_BANDS = [[-0.3, "#e34948"], [-0.1, "#1baf7a"], [0.05, "#a9a1e6"], [0.25, "#6a5cc9"], [Infinity, "#eda100"]];
-let PMC = null;
+const PMC_DAYS = [7, 42, 90], PMC_DAYS_DEFAULT = 42;
+const pmcDays = () => { const n = Number(ls.get("pmcDays", PMC_DAYS_DEFAULT)); return PMC_DAYS.includes(n) ? n : PMC_DAYS_DEFAULT; };
+let PMC = null, PMC_SEQ = 0;
 async function loadPmc() {
+  const days = pmcDays(), seq = ++PMC_SEQ;
+  pmcSeg(days);
   const end = STATUS?.today || new Date().toISOString().slice(0, 10);
-  const d = new Date(end + "T00:00:00"); d.setDate(d.getDate() - 90);    // one day before the 90: yesterday's CTL
+  const d = new Date(end + "T00:00:00"); d.setDate(d.getDate() - days);    // one day before the range: yesterday's CTL
   const begin = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  PMC = (await j(`${API}/pmc?begin=${begin}&end=${end}`)).series;
+  const series = (await j(`${API}/pmc?begin=${begin}&end=${end}`)).series;
+  if (seq !== PMC_SEQ) return;              // a newer pick meanwhile
+  PMC = series;
   renderPmc();
 }
+// 7 / 42 / 90 天: the range buttons in the title
+function pmcSeg(days) {
+  const seg = $("pmc-days");
+  seg.setAttribute("aria-label", tO("pmc.range"));
+  seg.innerHTML = PMC_DAYS.map((n) => `<button type="button" data-n="${n}" class="${n === days ? "on" : ""}" aria-pressed="${n === days}">${esc(tO("pmc.days", { n }))}</button>`).join("");
+}
+$("pmc-days").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-n]"); if (!b || Number(b.dataset.n) === pmcDays()) return;
+  ls.set("pmcDays", Number(b.dataset.n));
+  loadPmc().catch(fail("pmc"));
+});
 function renderPmc() {
   if (!PMC) return;
   const rows = PMC.slice(1).map((r, i) => ({ ...r, prev: PMC[i].ctl }));
@@ -915,8 +932,8 @@ function renderPmc() {
     const f = r.prev > 0 && r.tsb != null ? r.tsb / r.prev : 0;
     return TSB_BANDS.find(([hi]) => f < hi)[1];
   };
-  $("pmc-q").innerHTML = q(tO("pmc.tip"));
-  $("pmc").setAttribute("aria-label", tO("pmc.aria"));
+  $("pmc-q").innerHTML = q(tO("pmc.tip", { n: pmcDays() }));
+  $("pmc").setAttribute("aria-label", tO("pmc.aria", { n: pmcDays() }));
   $("pmc-legend").innerHTML = `<span><i style="background:${ctlC};height:3px"></i>${esc(tO("pmc.ctl"))}</span>`
     + `<span><i style="background:${atlC};height:3px"></i>${esc(tO("pmc.atl"))}</span>`
     + `<span><i style="background:linear-gradient(90deg,#1baf7a 50%,#e34948 50%)"></i>${esc(tO("pmc.tsb"))}</span>`;
