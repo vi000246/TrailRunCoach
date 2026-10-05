@@ -228,6 +228,9 @@ class StaticContext:
     def trail_hr(self) -> Optional[dict]:
         return self.doc.get("trail_hr")
 
+    def hr_basis(self) -> Optional[dict]:
+        return self.doc.get("hr_basis")
+
     def body(self) -> Optional[dict]:
         return self.doc.get("body")
 
@@ -274,7 +277,7 @@ def collect(live) -> dict:
     return {"v": CTX_VERSION, "today": today_local().isoformat(),
             "inputs": live.inputs(), "grade_models": live.grade_models(), "flags": live.flags(),
             "heat_base": live.heat_status(None), "hrc_test": live.hrc_test(), "trail_hr": live.trail_hr(),
-            "body": live.body(), "events": events, "calib": calib_snapshot()}
+            "hr_basis": live.hr_basis(), "body": live.body(), "events": events, "calib": calib_snapshot()}
 
 
 def export_json(live) -> bytes:

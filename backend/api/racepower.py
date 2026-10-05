@@ -190,6 +190,9 @@ class LiveContext:
     def trail_hr(self) -> Optional[dict]:
         return _trail_hr()
 
+    def hr_basis(self) -> Optional[dict]:
+        return _hr_basis()
+
     def body(self) -> Optional[dict]:
         return _body(inputs())
 
@@ -511,6 +514,28 @@ def _trail_hr() -> Optional[dict]:
         m = None
     _cache["trail_hr"] = (key, m)
     return m
+
+
+def _hr_basis() -> Optional[dict]:
+    """What the heart-rate zone bar (engine/racepower/zonebar.py) needs beyond LTHR: max /
+    rest HR in effect today, the COROS account's zone ratios and the 課表心率區間 model
+    (hr_profile), cached per dataset / day / plan / HR settings."""
+    from backend.engine import hr_profile as HP
+    try:
+        ds, day = _dataset(), today_local()
+        key = (id(ds), day, _plan_stamp(), HP.stamp())
+        hit = _cache.get("hr_basis")
+        if hit and hit[0] == key:
+            return hit[1]
+        acc = HP.account()
+        mx, rs = HP.max_hr(ds, day, acc), HP.rest_hr(ds, day, acc)
+        b = {"model": HP.plan_model(), "acc": acc, "mhr": mx.get("value"), "rhr": rs.get("value")}
+    except Exception:                       # noqa: BLE001 — the bar keeps its LTHR tables
+        import traceback
+        traceback.print_exc()
+        return None
+    _cache["hr_basis"] = (key, b)
+    return b
 
 
 def make_plan(body: PlanIn) -> dict:
