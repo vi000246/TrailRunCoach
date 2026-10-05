@@ -439,8 +439,6 @@ def session_steps(s: dict, th: Thresholds, sent_tl: Optional[dict] = None) -> li
         raise Unsupported("COROS 肌力課要從動作庫挑動作，先不推")
     if kind == "heat_passive":
         raise Unsupported("被動熱適應不推")
-    if kind == "balance":
-        raise Unsupported("平衡／腳踝小課不推")
     if s.get("steps") and kind != "notice":
         # the structure the user saved in the editor (engine/workout_steps.py) wins over the text
         from backend.engine import workout_steps as WS

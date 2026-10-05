@@ -507,9 +507,12 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
     if this_q is not None:
         vhist.append({"day": monday.isoformat(), "rung_key": this_q.get("rung_key"),
                       "variant_key": this_q["variant_key"], "state": "done", "outcome": None})
-    st = next((s for s in cur_s if s["kind"] == "strength"), None)
-    # the TSS of a 35-min strength session (SP-119: this week's may be a 25-min 維持 one)
-    strength_tss = float(st["tss"]) / (float(st.get("minutes") or 35) or 35.0) * 35 if st else 35 / 60 * 30
+    st = next((s for s in cur_s if s["kind"] == "strength" and s.get("id") != BP.ID), None)
+    # the TSS of a 35-min strength session (SP-119: this week's may be a 25-min 維持 one; SP-120's
+    # balance block adds minutes, not TSS)
+    st_min = (float(st.get("minutes") or 35) - (BP.MINUTES if BP.title_tag() in (st.get("title") or "") else 0)) \
+        if st else 35.0
+    strength_tss = float(st["tss"]) / (st_min or 35.0) * 35 if st else 35 / 60 * 30
     hist = [float(h["hours"]) for h in cur.get("history") or []] + [float(cur["target"]["hours"])]
     # 轉換期 (SP-73): weekly hours by Monday — the past weeks, this week, then each projected week
     hours_at = {str(h.get("start")): float(h["hours"]) for h in cur.get("history") or [] if h.get("start")}
@@ -758,11 +761,13 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
         drop = [s for s in ss if not s["day"] and s["kind"] != "strength"] if lost else []
         if drop:
             notes.append({"level": "info", "src": "blackout", "text": f"剩下的日子排不下 {len(drop)} 堂課（約 {sum(s['minutes'] for s in drop)} 分鐘）——不用補"})
-        # 平衡／腳踝小課 (engine/balance_plan.py, SP-120): the same rule as week_plan
+        # 平衡／腳踝 (engine/balance_plan.py, SP-120 — part of strength): the same rule as week_plan
         try:
-            BP.apply(ss, BP.week_context(a_evs, phases, week, kind, BP._d((cur.get("balance") or {}).get("start"))),
-                     [week + dt.timedelta(days=i) for i in range(7)
-                      if (week + dt.timedelta(days=i)).isoformat() not in bmap], allowed_fn)
+            bal = BP.week_context(a_evs, week, kind)
+            if bal.get("active"):
+                BP.attach(ss, bal)
+                BP.ensure(ss, bal, [week + dt.timedelta(days=i) for i in range(7)
+                                    if (week + dt.timedelta(days=i)).isoformat() not in bmap], allowed_fn)
         except Exception:                  # noqa: BLE001 — never breaks the projection
             pass
         # a session _place() found no day for has day None: keep it out of the date test
@@ -802,7 +807,7 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
         if PR is not None or lost:
             # what the preferences / 不排課日期 actually let through (a hard cap or
             # too few days can leave less)
-            hours = sum(s["minutes"] for s in ss if s["kind"] not in ("strength", BP.KIND) and s["day"]) / 60.0
+            hours = sum(s["minutes"] for s in ss if s["kind"] != "strength" and s["day"]) / 60.0
         # a short break (< 6 days, Daniels cat. 1: back to 100 %) doesn't lower the base the next
         # weeks ramp from — the re-entry block handles the longer ones
         h_hist = full_h if lost and mode != "reentry" else hours

@@ -2749,7 +2749,7 @@ def _plan_card(ds, w) -> Optional[dict]:
         s = PS.done_session(w.idx)
     except Exception:                       # noqa: BLE001 — no plan: no card
         return None
-    if not s or s.get("kind") in ("notice", "heat_passive", "balance"):
+    if not s or s.get("kind") in ("notice", "heat_passive"):
         return None
     try:
         # the stored row completed with today's fields (its session class may have changed

@@ -20,8 +20,6 @@ from backend.i18n import N_, _
 
 KINDS = {"easy": "輕鬆跑", "long": "LSD", "quality": "強度課", "test": "測試",
          "hike": "越野跑", "strength": "肌力", "heat_passive": "被動熱適應",
-         # 平衡／腳踝小課 (engine/balance_plan.py, SP-120): ticked by the user, TSS 0, not pushed
-         "balance": "平衡／腳踝",
          # 課表待確認 (engine/plan_auto.py): a reminder pushed to the watch, not a
          # training session — never done / missed, no TSS, no compliance
          "notice": "課表待確認",
@@ -624,7 +622,7 @@ async def link(db: AsyncSession, uid: str, activity: dict, today: str, athlete_i
     if r is None or r.state not in ("active", "missed", "done"):
         raise PlanError(_("找不到這堂課"))
     d = to_dict(r)
-    if d["kind"] in ("notice", "heat_passive", "balance"):
+    if d["kind"] in ("notice", "heat_passive"):
         raise PlanError(_("這種課不用配對活動"))
     day = activity.get("date")
     if not day or day > today:
@@ -677,7 +675,7 @@ def plan_summary(ss: list[dict], week_start: str, today: str, ctl0: float, atl0:
     week_end = (dt.date.fromisoformat(week_start) + dt.timedelta(days=6)).isoformat()
     live = [s for s in ss if s["state"] in ("active", "done") and s.get("day") and s["kind"] not in NOT_LOAD]
     wk = [s for s in live if week_start <= s["day"] <= week_end]
-    hours = sum(s["minutes"] or 0 for s in wk if s["kind"] not in ("strength", "balance")) / 60.0
+    hours = sum(s["minutes"] or 0 for s in wk if s["kind"] != "strength") / 60.0
     tss = sum(session_tss(s) for s in wk)
     end = max(week_end, horizon_end or week_end)
     days, d = [], dt.date.fromisoformat(today) + dt.timedelta(days=1)
@@ -851,7 +849,7 @@ def session_tag(s: dict) -> dict:
     (label = the schedule's type word; icon = a dashicons.js name, as on 總覽)."""
     k, t = s.get("kind") or "", s.get("title") or ""
     label, icon = KINDS.get(k, k), {"easy": "easy", "long": "long", "test": "test", "hike": "hike",
-                                     "strength": "strength", "heat_passive": "heat", "balance": "balance"}.get(k, "easy")
+                                     "strength": "strength", "heat_passive": "heat"}.get(k, "easy")
     if k == "quality":
         z5 = str(s.get("rung_key") or "").lower().startswith("z5") or any(x in t for x in ("VO2max", "5 區", "Z5"))
         icon = "z5" if z5 else "z3"

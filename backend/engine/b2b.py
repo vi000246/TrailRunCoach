@@ -691,7 +691,7 @@ def place(ss: list[dict], monday: dt.date, first: Optional[dt.date], blocked=fro
     taken = {d.isoformat() for d in block}
     vacated = sorted(x for x in old if x not in taken)
     # easy runs / strength on the B2B days go to the days the B2B left (else a free allowed day)
-    main_days = {x["day"] for x in others if x.get("day") and x.get("kind") not in ("strength", "heat_passive", "notice", "balance")}
+    main_days = {x["day"] for x in others if x.get("day") and x.get("kind") not in ("strength", "heat_passive", "notice")}
     free = [d.isoformat() for d in week if d.isoformat() not in taken and d.isoformat() not in main_days
             and d.isoformat() not in blocked and (allowed is None or allowed(d)) and (first is None or d >= first)]
     spare = vacated + [d for d in free if d not in vacated]
@@ -699,11 +699,11 @@ def place(ss: list[dict], monday: dt.date, first: Optional[dt.date], blocked=fro
     for x in others:
         if x.get("done") or x.get("day") not in taken:
             continue
-        if x.get("kind") in ("strength", "balance"):
+        if x.get("kind") == "strength":
             continue                    # strength after the run is fine (UA: on easy days or after a run)
         if x.get("kind") in ("easy", "heat_passive", "notice"):
             nxt = next((d for d in spare if d not in {y.get("day") for y in kept if y is not x
-                                                       and y.get("kind") not in ("strength", "heat_passive", "notice", "balance")}),
+                                                       and y.get("kind") not in ("strength", "heat_passive", "notice")}),
                        None)
             if nxt is None:
                 kept.remove(x)
@@ -715,7 +715,7 @@ def place(ss: list[dict], monday: dt.date, first: Optional[dt.date], blocked=fro
     for q in [x for x in kept if x.get("kind") in ("quality", "test") and not x.get("done") and x.get("day")]:
         if all(abs((_d(q["day"]) - d).days) >= 2 for d in block):
             continue
-        busy = {y.get("day") for y in kept if y is not q and y.get("kind") not in ("strength", "heat_passive", "notice", "balance")}
+        busy = {y.get("day") for y in kept if y is not q and y.get("kind") not in ("strength", "heat_passive", "notice")}
         hard = [_d(y["day"]) for y in kept if y is not q and y.get("kind") in ("quality", "test") and y.get("day")]
         ok = [d for d in week if d.isoformat() not in busy and d.isoformat() not in blocked
               and (allowed is None or allowed(d)) and (first is None or d >= first)
