@@ -10,6 +10,7 @@ has saved manual phases:
 
 Sources (docs/research/periodization-phase-metrics.md):
   * taper 14 days — Bosquet et al. 2007 meta-analysis (8–14 days most effective)
+    (SP-96: 7 days before a 2–3 day 百岳, up to 21 by 課表偏好 for a road marathon / an ultra — taper_days)
   * specific block before the taper, general → specific — Koop; Uphill Athlete
   * recovery / transition after the goal event — Uphill Athlete (2–4 weeks);
     shortened to 1 week below 超馬級 (event_size: ~6 h predicted, else EP 60 — SP-111; a
@@ -47,6 +48,14 @@ def plan_path() -> Path:
     return tenancy.private_path("plan.json")
 
 TAPER_DAYS = 14
+# 減量期長度 (SP-96; periodization-cross-sport.md §4.5.1, §6.1): 14 days by default (Wang 2023
+# meta-analysis: 8–14 days best); a 2–3 day 百岳 trip 7 days ([114], 教練級); 課表偏好 taper_days
+# lengthens a road marathon / an ultra up to 21 days (Strava: 3 weeks > 2, 4 no better; ≥ 22 days
+# no effect in the meta-analysis — opening it to ultras is 推估)
+BAIYUE_TAPER_DAYS = 7
+BAIYUE_SHORT_DAYS = (2, 3)
+TAPER_DAYS_RANGE = (TAPER_DAYS, 21)
+TAPER_SETTING = "plan.prefs.taper_days"
 SPECIFIC_WEEKS = 8
 MINI_TAPER_DAYS = 5          # B event
 LONG_EVENT_HOURS = 6.0       # recovery: 14 d at/above this (= the 超馬級 size), else 7 d
@@ -206,6 +215,20 @@ def event_size(ev, hours: Optional[float] = None, divisor: Optional[float] = Non
     if ep is None:
         ep = float(ev.distance_km or 0.0)
     return _tier(ep, SIZE_EP)
+
+
+def taper_days(ev, pref: Optional[int] = None) -> int:
+    """The 減量期 length of an A event (SP-96): BAIYUE_TAPER_DAYS for a 2–3 day 百岳 trip; the
+    課表偏好 `pref` (TAPER_DAYS_RANGE, ≤ 21) for a road marathon or bigger and for an ultra-size
+    race (event_size); else TAPER_DAYS."""
+    days = int(ev.days or 1)
+    if ev.kind == "baiyue" and BAIYUE_SHORT_DAYS[0] <= days <= BAIYUE_SHORT_DAYS[1]:
+        return BAIYUE_TAPER_DAYS
+    if pref and pref > TAPER_DAYS and ev.kind != "baiyue":
+        size = event_size(ev)
+        if (ev.kind == "road" and size >= MARATHON) or size >= ULTRA:
+            return int(min(pref, TAPER_DAYS_RANGE[1]))
+    return TAPER_DAYS
 
 
 def install_size_inputs() -> None:
@@ -456,8 +479,9 @@ class Plan:
 # ---------------------------------------------------------------------------
 
 def auto_phases(events: list[Event], begin: dt.date, end: dt.date,
-                transition_weeks: int = TRANSITION_WEEKS) -> list[Phase]:
-    """Phases covering [begin, end], built backwards from each A event.
+                transition_weeks: int = TRANSITION_WEEKS, taper_pref: Optional[int] = None) -> list[Phase]:
+    """Phases covering [begin, end], built backwards from each A event; each taper taper_days(ev,
+    `taper_pref`) long (SP-96: 7 for a 2–3 day 百岳, up to 21 by 課表偏好).
     After each A event's recovery: `transition_weeks` of 轉換期 (0 = none), ending before
     the next A event's 專項期 — shortened when that starts sooner (`note` says so), skipped
     when fewer than TRANSITION_MIN_DAYS are left (the recovery phase's `note` says so).
@@ -482,7 +506,7 @@ def auto_phases(events: list[Event], begin: dt.date, end: dt.date,
         return None
 
     def taper_len(ev: Event) -> int:
-        return taper_of.get(ev.id, TAPER_DAYS)
+        return taper_of.get(ev.id, taper_days(ev, taper_pref))
 
     def spec_start_of(ev: Event) -> dt.date:
         return ev.start - dt.timedelta(days=taper_len(ev)) - dt.timedelta(weeks=SPECIFIC_WEEKS)
@@ -493,7 +517,8 @@ def auto_phases(events: list[Event], begin: dt.date, end: dt.date,
         taper_start = ev.start - dt.timedelta(days=taper_len(ev))
         spec_start = spec_start_of(ev)
         add("base", cursor, spec_start - one)
-        notes = _after_prev_notes(ev, prev, cursor, spec_start, taper_start, taper_len(ev)) if prev else []
+        notes = _after_prev_notes(ev, prev, cursor, spec_start, taper_start, taper_len(ev),
+                                  taper_days(ev, taper_pref)) if prev else []
         firsts = [add("specific", spec_start, taper_start - one, ev.id), add("taper", taper_start, ev.start - one, ev.id),
                   add("event", ev.start, ev.end, ev.id)]
         first = next((p for p in firsts if p is not None), None)
@@ -585,17 +610,17 @@ def _span(days: int) -> str:
 
 
 def _after_prev_notes(ev: Event, prev: Event, cursor: dt.date, spec_start: dt.date, taper_start: dt.date,
-                      taper_days: int) -> list[str]:
+                      taper_len: int, full_taper: int) -> list[str]:
     """The notes of an A race planned right after another (SP-90): a 專項期 / 減量期 cut short by
     the previous race's recovery, and TrainerRoad's ≥ A_GAP_HINT_WEEKS hint."""
     out = []
     left = (taper_start - max(cursor, spec_start)).days
     when = _md(prev.end)
     t_left = (ev.start - max(cursor, taper_start)).days
-    if taper_days < TAPER_DAYS and t_left > 0:
+    if taper_len < full_taper and t_left > 0:
         out.append(_("減量期縮短為 {days} 天：上一場 A 賽事「{name}」{date} 才結束",
                      days=t_left, name=prev.name, date=when))
-    elif taper_days < TAPER_DAYS:
+    elif taper_len < full_taper:
         out.append(_("沒有減量期：上一場 A 賽事「{name}」{date} 才結束", name=prev.name, date=when))
     elif spec_start < cursor and left > 0:
         out.append(_("專項期縮短為 {days} 天（原本 {weeks} 週）：上一場 A 賽事「{name}」{date} 才結束",
@@ -622,13 +647,29 @@ def transition_weeks_setting(user_id: int = 1) -> int:
     return max(TRANSITION_WEEKS_RANGE[0], min(TRANSITION_WEEKS_RANGE[1], v))
 
 
-def phases(plan: Plan, begin: dt.date, end: dt.date, transition_weeks: Optional[int] = None) -> list[Phase]:
+def taper_days_setting(user_id: int = 1) -> int:
+    """課表偏好 減量期天數 (plan.prefs.taper_days, SP-96; road marathon / ultra only, taper_days),
+    read-only; TAPER_DAYS when unset or unreadable."""
+    try:
+        from backend.engine.wko5expr.datasource import read_setting
+        v = read_setting(TAPER_SETTING, TAPER_DAYS, user_id)
+    except Exception:                       # noqa: BLE001 — phases must still build
+        return TAPER_DAYS
+    if isinstance(v, bool) or not isinstance(v, int):
+        return TAPER_DAYS
+    return max(TAPER_DAYS_RANGE[0], min(TAPER_DAYS_RANGE[1], v))
+
+
+def phases(plan: Plan, begin: dt.date, end: dt.date, transition_weeks: Optional[int] = None,
+           taper_pref: Optional[int] = None) -> list[Phase]:
     """The manual phases when the user saved any (they win), else auto_phases.
-    `transition_weeks` None = the 課表偏好 setting (transition_weeks_setting)."""
+    `transition_weeks` / `taper_pref` None = the 課表偏好 settings (transition_weeks_setting,
+    taper_days_setting)."""
     if plan.phases:
         return plan.phases
     tw = transition_weeks_setting() if transition_weeks is None else transition_weeks
-    return auto_phases(plan.events, begin, end, tw)
+    tp = taper_days_setting() if taper_pref is None else taper_pref
+    return auto_phases(plan.events, begin, end, tw, tp)
 
 
 def phase_on(plan: Plan, day: dt.date, begin: Optional[dt.date] = None,
@@ -698,6 +739,19 @@ def pre_race_mondays(phases_: list, day: dt.date, n: int = 4) -> list[dt.date]:
     t0 = _d(get(tap[0], "start")) if tap else ev_start - dt.timedelta(days=TAPER_DAYS)
     first = t0 - dt.timedelta(days=t0.weekday())        # the taper's own week is not counted
     return [first - dt.timedelta(weeks=k) for k in range(n, 0, -1)]
+
+
+def taper_start(phases_: list, ev, pref: Optional[int] = None) -> dt.date:
+    """The first day of A event `ev`'s 減量期 as planned (SP-96): its taper phase (auto: by
+    event_id; manual: the taper phase ending the day before the race), else ev.start −
+    taper_days(ev, pref). `phases_`: Phase objects or dicts."""
+    def get(p, k):
+        return p.get(k) if isinstance(p, dict) else getattr(p, k, None)
+    day_before = ev.start - dt.timedelta(days=1)
+    for p in phases_ or ():
+        if get(p, "kind") == "taper" and (get(p, "event_id") == ev.id or _d(get(p, "end")) == day_before):
+            return _d(get(p, "start"))
+    return ev.start - dt.timedelta(days=taper_days(ev, pref))
 
 
 def b_event_windows(events: list[Event]) -> list[dict]:

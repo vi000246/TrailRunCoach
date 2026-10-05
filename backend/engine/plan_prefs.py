@@ -83,6 +83,7 @@ KEY_FIELDS = {                       # user_settings key -> Prefs field
     "plan.prefs.pref_keep": "pref_keep",
     "plan.prefs.b2b": "b2b",
     "plan.prefs.transition_weeks": "transition_weeks",
+    "plan.prefs.taper_days": "taper_days",
 }
 # 間歇門檻 (engine/quality_gate.py): decides whether base phase gets intervals,
 # not how sessions are shaped, so these alone don't switch shape() / place() on
@@ -95,8 +96,9 @@ GATE_FIELDS = ("quality_gate", "quality_gate_weeks")
 # (engine/interval_library.py blocks) — read for every interval session, not shaping
 # b2b: whether a due B2B weekend is suggested at all (engine/b2b.py) — a suggestion, not shaping
 # transition_weeks: the 轉換期 after an A race (engine/planning.auto_phases) — a phase, not shaping
+# taper_days: the 減量期 length of a road marathon / an ultra (planning.taper_days, SP-96) — a phase too
 NOT_SHAPING = ("cp_test_protocol", "heat", "heat_method", "aet_test_days", "aet_test_protocol",
-               "warmup_commute_min", "cooldown_min", "b2b", "transition_weeks") + GATE_FIELDS
+               "warmup_commute_min", "cooldown_min", "b2b", "transition_weeks", "taper_days") + GATE_FIELDS
 WD = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 WD_ZH = "一二三四五六日"
 LONG_WD = {d: i for i, d in enumerate(WD)}      # 長跑日: any weekday (was sat / sun only)
@@ -170,6 +172,9 @@ class Prefs:
     # 轉換期 (SP-73; engine/planning.auto_phases): weeks of 轉換期 after an A race's 恢復期, 0 = off.
     # Default 3 (Friel 一般 3–4 週, Canova 4 週; the low end, 推估). Not part of `active`.
     transition_weeks: int = 3
+    # 減量期天數 (SP-96; planning.taper_days): 14 (default, Wang 2023: 8–14 days best) up to 21 for a road
+    # marathon or an ultra (Strava: 3 weeks > 2; ≥ 22 days no effect). Not part of `active`.
+    taper_days: int = 14
 
     @property
     def active(self) -> bool:
@@ -304,6 +309,9 @@ def check(p: Prefs) -> None:
     if isinstance(p.transition_weeks, bool) or not isinstance(p.transition_weeks, int) or \
             not TR[0] <= p.transition_weeks <= TR[1]:
         raise ValueError(_("轉換期週數要在 {lo}–{hi} 週（0 = 關閉）", lo=TR[0], hi=TR[1]))
+    from backend.engine.planning import TAPER_DAYS_RANGE as TD
+    if isinstance(p.taper_days, bool) or not isinstance(p.taper_days, int) or not TD[0] <= p.taper_days <= TD[1]:
+        raise ValueError(_("減量期天數要在 {lo}–{hi} 天", lo=TD[0], hi=TD[1]))
     if isinstance(p.quality_gate_weeks, bool) or not isinstance(p.quality_gate_weeks, int) or \
             not WEEKS_RANGE[0] <= p.quality_gate_weeks <= WEEKS_RANGE[1]:
         raise ValueError(_("週數法的週數要在 {lo}–{hi} 週", lo=WEEKS_RANGE[0], hi=WEEKS_RANGE[1]))

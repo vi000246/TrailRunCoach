@@ -48,6 +48,9 @@ PHASE_LABEL = {"base": "基礎期", "build": "強化期", "specific": "專項期
 # low RPE (may replace part of the long run), the 專項期 one a week close to the race's terrain
 TRAIL_SPECIFIC = {"lib:dsw_classic", "lib:koop_uphill", "lib:long_climb", "lib:downhill_ecc", "lib:steep_10",
                   "lib:steep_15", "lib:tech_hard"}
+# 減量期: no short hard climbing (江晏慶「短距離高強度爬坡排在強化期」, 教練級; SP-96) — the 10″ hill
+# sprints and the 4×7′ 登山王 set
+TAPER_NO_CLIMB = {"lib:ua_hill_sprints", "hill_sprints", "lib:dsw_classic"}
 TRAIL_BASE = {"lib:long_climb", "lib:ua_hill_sprints", "lib:steep_5", "lib:dsw_endurance", "hill_sprints",
               "lib:tech_easy"}
 # 主要訓練項目 = 路跑 (engine/primary_sport.py): marathon-specific sessions for the 專項期 (Pfitzinger's
@@ -174,6 +177,8 @@ def _score(row: dict, cat: str, sub: Optional[str], s: dict) -> _Score:
             sc.add(15, "基礎期：低 RPE 技術地形，可取代部分長跑" if tk == "lib:tech_easy" else "基礎期：有氧爬坡、腿力")
         if phase == "taper" and tk == "lib:downhill_ecc":
             sc.add(-80, "賽前 2 週內不做下坡離心")
+        elif phase == "taper" and tk in TAPER_NO_CLIMB:
+            sc.add(-80, "減量期不排短距離高強度爬坡（江晏慶，SP-96）")
     elif cat in ("easy",) and phase in ("taper", "recovery") and mins <= SHORT_MIN + 15:
         sc.add(12, f"{PHASE_LABEL[phase]}：短一點")
     elif cat == "test" and key in ("cp_quick", "cp_standard"):

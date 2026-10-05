@@ -190,6 +190,8 @@
   "pf.transition": "Transition after an A race",
   "pf.transition_tip": "Weeks of transition after an A race's recovery: easy runs only (≤ 60 min each) and strength, no long run or intervals, half the 4 weeks before the race (estimate); cross-training can replace easy runs. Friel usually 3–4 weeks, Canova 4. Shortened or skipped automatically when the next A race's build phase is too close. Not added when you set the phases yourself.",
   "pf.tr_off": "Off",
+  "pf.taper": "Taper for marathons / ultras",
+  "pf.taper_tip": "How many days to taper before an A race. Default 14 (the meta-analysis found 8–14 days best); a road marathon or an ultra can go up to 21 days (recreational marathoners did better with 3 weeks than 2, 4 was no better; applying it to ultras is an estimate). Other races stay at 14 days, a 2–3 day mountain trip (Baiyue) 7. Not applied when you set the phases yourself.",
   "pf.heat": "Heat acclimation",
   "pf.est": "Est.",
   "pf.heat_tip": "On: scheduled only when a hot A / B race is within 30 days. Induction 21–8 days before the race (5–10 days), then a top-up every 4 days from 7–3 days out; heat runs need ≥ 60 min (Racinais 2015) and ignore the session cap; with \"Never exceed\" they become a 40 min run + hot bath (Zurawlew 2016). Hot baths / sauna aren't pushed to COROS; tick them off on the calendar.",
