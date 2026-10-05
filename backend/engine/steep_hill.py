@@ -21,8 +21,10 @@ plan_context() / projected_context() → apply() turns one weekday easy run of a
 專項期 week into the 40–50 min session (the week's easy minutes unchanged),
 never within a day of the long day / quality, never a recovery / re-entry week,
 not when the week starts at TSB < −20, nothing in the last 7 days before the
-trip. Intensity HR ≤ AeT (UA: an aerobic session) — target_policy gives trail
-sessions HR.
+trip. Intensity (SP-115, owner 2026-10-05: AeT is too low for climbing): uphill
+HR ≤ 75 % HRmax or RPE ≤ 13, whichever comes first (萩原・山本 2011; without a max
+HR 0.75 × (220 − age), 推估; never below the easy-run cap — hr_profile.walk_cap);
+downhill by the legs, not HR. target_policy calls it a walking session (HR).
 
 What the doc says a pack alone trains (hip extensors, trunk, feet, loaded
 descents) is not simulated here; the long days and strength sessions carry on
@@ -46,6 +48,7 @@ NO_DAYS = 7                       # nothing in the last 7 days (doc §2.5, 推�
 DEFAULT_PCT = 0.13                # ≈ 9 kg / 70 kg (the doc's example) when there is no body weight
 SRC = ("Pandolf 1977（同代謝率的坡度）；Ludlow & Weyand 2017（代謝量和總重成正比）；"
        "UA trekking：跑步機坡度可以替代、5 → 10% 體重 → 行程背包")
+SRC_WALK = "心率上限：萩原・山本 2011（75% 最大心率或 RPE ≤ 13）；長野縣 Safety Book（(220 − 年齡) × 0.75）"
 
 
 def _d(x) -> Optional[dt.date]:
@@ -181,18 +184,23 @@ def _rate(s: dict) -> float:
     return float(s.get("tss") or 0.0) / m if m else 0.0
 
 
-def session_text(info: dict, minutes: int, aet: Optional[float], aet_measured: bool = False) -> tuple[str, str]:
-    """(title, detail) of the session. `aet` = the easy-run cap (hr_profile.easy_cap_hr)."""
-    from backend.engine.hr_profile import easy_cap_hr
+def session_text(info: dict, minutes: int, aet: Optional[float], aet_measured: bool = False,
+                 walk: Optional[dict] = None) -> tuple[str, str]:
+    """(title, detail) of the session. `aet` = the easy-run cap (hr_profile.easy_cap_hr);
+    `walk` = the uphill cap (hr_profile.walk_cap; None → the easy-run cap stands in)."""
+    from backend.i18n import _
+    from backend.engine import hr_profile as HP
     sim, pct = info["sim"], info["pct"]
     kg = info.get("kg")
     what = f"{kg:g} kg（體重的 {pct * 100:.0f}%）" if kg else f"體重的 {pct * 100:.0f}%"
-    hr = easy_cap_hr(aet, aet_measured)
+    hr = HP.walk_cap_hr(walk, aet, aet_measured)
     main = max(10, minutes - 15)
     speed = f"{sim['kmh']:g} km/h" + ("（坡度到上限，改加速度）" if sim["grade"] >= TREADMILL_MAX and sim["kmh"] > BASE_KMH else "")
     title = f"陡坡健走 {sim['grade']:g}%（模擬負重 {kg:g} kg）" if kg else f"陡坡健走 {sim['grade']:g}%（模擬負重）"
+    why = (_(HP.WALK_WHY) + "（" + _(HP.WALK_SRC) + "）。") if walk and not walk.get("floor") else ""
     detail = (f"不背包：跑步機坡度 {sim['grade']:g}%、{speed}，或戶外 ≥ {sim['grade']:g}% 的坡用走的。"
-              f"暖身 10 分平路 → 陡坡 {main} 分 → 緩和 5 分；{hr}，心率到上限就放慢、不降坡度。"
+              f"暖身 10 分平路 → 陡坡 {main} 分 → 緩和 5 分；上坡{hr}，到上限就放慢、不降坡度；"
+              f"{_(HP.WALK_DOWN)}。{why}"
               f"這個坡度的代謝量 ≈ 在 {BASE_GRADE:g}% 坡、{BASE_KMH:g} km/h 背 {what}（Pandolf 1977，推估）；"
               f"背包另外練到的髖、軀幹、腳底和背著下坡這裡練不到。")
     return title, detail
@@ -200,8 +208,9 @@ def session_text(info: dict, minutes: int, aet: Optional[float], aet_measured: b
 
 def apply(ss: list[dict], info: Optional[dict], *, aet: Optional[float] = None, prefs=None, th=None,
           b2b: Optional[dict] = None, notes: Optional[list] = None, rates: Optional[dict] = None,
-          aet_measured: bool = False, **_) -> list[dict]:
-    """Turn one weekday easy run into the session (in place); sets info["planned"]."""
+          aet_measured: bool = False, walk: Optional[dict] = None, **_) -> list[dict]:
+    """Turn one weekday easy run into the session (in place); sets info["planned"]. `walk`: the
+    uphill cap (hr_profile.walk_cap; the plan thresholds' "walk_cap")."""
     if not info or not info.get("active"):
         return ss
     info["planned"] = []
@@ -248,9 +257,9 @@ def apply(ss: list[dict], info: Optional[dict], *, aet: Optional[float] = None, 
             if delta <= 0:
                 break
     rate = (rates or {}).get("trail") or (rates or {}).get("road") or 50.0
-    title, detail = session_text(info, m, aet, aet_measured)
-    from backend.engine.hr_profile import easy_cap_hr
-    s.update(id="steep", kind="easy", terrain="trail", minutes=int(m), title=title, detail=detail, source=SRC,
-             tss=round(rate * m / 60.0, 1), target=easy_cap_hr(aet, aet_measured))
+    title, detail = session_text(info, m, aet, aet_measured, walk)
+    from backend.engine.hr_profile import walk_cap_hr
+    s.update(id="steep", kind="easy", terrain="trail", minutes=int(m), title=title, detail=detail,
+             source=SRC + "；" + SRC_WALK, tss=round(rate * m / 60.0, 1), target=walk_cap_hr(walk, aet, aet_measured))
     info["planned"].append({"day": s["day"], "minutes": m, "grade": info["sim"]["grade"], "kmh": info["sim"]["kmh"]})
     return ss

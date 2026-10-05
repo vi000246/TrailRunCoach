@@ -60,7 +60,7 @@ def test_apply_turns_one_weekday_easy_run_into_the_steep_walk():
     assert len(st) == 1
     s = st[0]
     assert s["day"] == (MON + dt.timedelta(days=3)).isoformat()      # not the day after the quality
-    assert s["kind"] == "easy" and s["terrain"] == "trail" and s["target"] == "心率 ≤ 輕鬆跑上限 148 bpm"
+    assert s["kind"] == "easy" and s["terrain"] == "trail" and s["target"] == "心率 ≤ 輕鬆跑上限 148 bpm 或 RPE ≤ 13，先到的為準"
     assert f"{info['sim']['grade']:g}%" in s["title"] and "9 kg" in s["title"] and "不背包" in s["detail"]
     assert SH.MINUTES[0] <= s["minutes"] <= SH.MINUTES[1]
     assert sum(x["minutes"] for x in ss if x["kind"] == "easy") == before          # the week doesn't grow

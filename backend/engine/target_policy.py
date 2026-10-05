@@ -12,9 +12,12 @@ edit) → 課表偏好 plan.prefs.target_basis (hr / power) → `auto`, by sessi
 type (docs/research/vo2max-gate-and-trail-metric.md §2, zones-and-thresholds.md):
   road easy / long                                   功率 (% CP) with HR ≤ AeT as a cap (athlete's
                                                      call 2026-10-02; HR still guards heat / fatigue)
-  trail easy, recovery, trail long days, hikes       心率 ≤ AeT (Uphill Athlete: the base
+  trail easy, recovery, trail long days, 越野跑      心率 ≤ AeT (Uphill Athlete: the base
                                                      is built below AeT; long days: HR —
                                                      drift and the late-day cap protect)
+  walking: 陡坡健走, 登山 / 健行 / 百岳 (SP-115)       心率 ≤ 75 % HRmax or RPE ≤ 13 uphill, never
+                                                     below the easy cap (萩原・山本 2011;
+                                                     hr_profile.walk_cap); downhill by feel
   Zone 3 / Zone 5 intervals, hill repeats 3–8 %     功率 (Stryd ≈ fixed metabolic load on
                                                      0–8 % grades, van Rassel 2026; HR lags
                                                      55–70 s, Hunt 2015) — HR only as a cap note
@@ -44,9 +47,11 @@ SRC = {
     "down": "下坡：Stryd 功率低估離心負荷（Kipp 2023），看下降量與技術",
     "cp": "CP 測試：全力段不設上下限，事後用功率算 CP",
     "aet": "AeT 測試：依方式（徐國峰 90／Friel 看心率；UA／Evoke 固定功率）",
+    "walk": "登山爬坡：75% 最大心率以下或 RPE ≤ 13（萩原・山本 2011）；沒有最大心率時 (220 − 年齡) × 0.75"
+            "（長野縣 Safety Book，推估）；下坡看腿的感覺，不看心率",
 }
 TIP = ("課表的目標用心率還是功率。\n自動：路跑的輕鬆跑、長跑用功率，心率以輕鬆跑上限為上限（天熱、疲勞時心率先到就放慢）；"
-       "越野輕鬆跑、山路長天、恢復跑用心率（≤ 輕鬆跑上限）；3 區／5 區間歇和 3–8% 坡的爬坡重複用功率，"
+       "越野輕鬆跑、山路長天、恢復跑用心率（≤ 輕鬆跑上限）；陡坡健走、登山健行的上坡用心率 ≤ 75% 最大心率或 RPE ≤ 13；3 區／5 區間歇和 3–8% 坡的爬坡重複用功率，"
        "心率只當上限提醒；長爬坡只給建議、不設目標；下坡練習不設目標；CP 測試用功率，AeT 測試依測試方式。\n"
        "心率：全部用心率區間（設定的課表心率區間；輕鬆跑上限＝Z2 上緣，有實測 AeT 時用實測值）。\n功率：全部用功率區間（Palladino % CP）；"
        "測試和下坡照它們自己的規則。\n每次課表也可以在編輯時改「目標用：自動／心率／功率」，只影響這次課表。")
@@ -66,8 +71,22 @@ def _aet_basis(s: dict) -> str:
     return "hr" if p in ("xu90", "friel") else "power"
 
 
+# a walking session (SP-115): the 陡坡健走 the planner makes (engine/steep_hill.py), or a
+# session the user titled 登山 / 健行 / 百岳 — not the 越野跑 kind "hike" (a trail run)
+WALK_WORDS = ("陡坡健走", "登山", "健行", "百岳")
+WALK_KINDS = ("easy", "long", "hike", "mountain")
+
+
+def is_walk(s: dict) -> bool:
+    """A walking session: its uphill HR cap is 75 % HRmax (hr_profile.walk_cap)."""
+    if s.get("kind") not in WALK_KINDS:
+        return False
+    title = str(s.get("title") or "")
+    return s.get("id") == "steep" or any(w in title for w in WALK_WORDS)
+
+
 def session_type(s: dict) -> str:
-    """easy / long / trail_long / hike / interval / hill / climb / downhill / cp_test / aet_test / other."""
+    """easy / long / trail_long / hike / walk / interval / hill / climb / downhill / cp_test / aet_test / other."""
     kind, title = s.get("kind"), str(s.get("title") or "")
     if kind == "test":
         from backend.engine.aet_test import is_aet_session
@@ -76,6 +95,8 @@ def session_type(s: dict) -> str:
         return "downhill"
     if "長爬坡" in title:
         return "climb"
+    if is_walk(s):
+        return "walk"
     if kind == "mountain":
         return "trail_long"
     if kind == "quality":
@@ -93,7 +114,7 @@ def session_type(s: dict) -> str:
 # needs only CP; the HR cap still guards heat and fatigue). Trail stays HR (Stryd only validated 3–8 %).
 AUTO = {"easy": ("power", "power_easy"), "long": ("power", "power_easy"), "trail_easy": ("hr", "hr_base"),
         "trail_long": ("hr", "hr_base"),
-        "hike": ("hr", "hr_base"), "interval": ("power", "power_iv"), "hill": ("power", "power_iv"),
+        "hike": ("hr", "hr_base"), "walk": ("hr", "walk"), "interval": ("power", "power_iv"), "hill": ("power", "power_iv"),
         "climb": ("none", "climb"), "downhill": ("none", "down"), "cp_test": ("power", "cp"),
         "aet_test": (None, "aet"), "other": ("hr", "hr_base")}
 
@@ -124,7 +145,7 @@ def target_policy(s: dict, prefs=None, th: Optional[dict] = None) -> dict:
     if base is None:
         base = _aet_basis(s)
     basis = base
-    why = f"自動：{ {'easy': '輕鬆跑', 'trail_easy': '越野輕鬆跑', 'long': '長跑', 'trail_long': '山路長天', 'hike': '越野跑', 'interval': '間歇', 'hill': '爬坡重複', 'climb': '長爬坡', 'downhill': '下坡練習', 'cp_test': 'CP 測試', 'aet_test': 'AeT 測試', 'other': '其他'}[t] }看{LABEL[base]}"
+    why = f"自動：{ {'easy': '輕鬆跑', 'trail_easy': '越野輕鬆跑', 'long': '長跑', 'trail_long': '山路長天', 'hike': '越野跑', 'walk': '登山爬坡', 'interval': '間歇', 'hill': '爬坡重複', 'climb': '長爬坡', 'downhill': '下坡練習', 'cp_test': 'CP 測試', 'aet_test': 'AeT 測試', 'other': '其他'}[t] }看{LABEL[base]}"
     if chosen in ("hr", "power") and t not in ("cp_test", "aet_test", "downhill", "climb"):
         basis = chosen
         why = ("這次課表你選了" if own in ("hr", "power") else "課表偏好：") + LABEL[chosen]

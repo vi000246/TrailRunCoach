@@ -133,6 +133,7 @@ class Thresholds:
     # easy = its Z2 band (a measured AeT caps it), interval classes = its zones
     hrz: Optional[dict] = None
     aet_measured: bool = False         # the easy cap is a measured AeT (week_plan thresholds)
+    walk: Optional[dict] = None        # the walking sessions' uphill cap (hr_profile.walk_cap, SP-115)
 
     @classmethod
     def of(cls, t: Optional[dict]) -> "Thresholds":
@@ -141,7 +142,13 @@ class Thresholds:
         hrz = t.get("hr_model") if isinstance(t.get("hr_model"), dict) else None
         from backend.engine.hr_profile import easy_cap_measured
         return cls(cp=f("cp"), lthr=f("lthr"), aet=f("aet"), tpace=f("tpace"), hrz=hrz,
-                   aet_measured=easy_cap_measured(t))
+                   aet_measured=easy_cap_measured(t),
+                   walk=t.get("walk_cap") if isinstance(t.get("walk_cap"), dict) else None)
+
+    def walk_of(self, s: dict) -> Optional[dict]:
+        """The uphill cap when `s` is a walking session (target_policy.is_walk), else None."""
+        from backend.engine.target_policy import is_walk
+        return self.walk if self.walk and is_walk(s) else None
 
 
 def cap_name(th: Thresholds) -> str:
@@ -206,13 +213,25 @@ def _work_hr(s: dict, th: Thresholds, cls: Optional[str]) -> Optional[tuple]:
 
 def easy_target(s: dict, th: Thresholds, frac: tuple = (0.75, 0.80)) -> Optional[tuple]:
     """Easy / long / hike by the session's basis: HR ≤ AeT (auto), a power band (課表偏好 or the
-    session's own 功率: Palladino Z2), or nothing."""
+    session's own 功率: Palladino Z2), or nothing. A walking session's HR cap is its uphill
+    cap (hr_profile.walk_band, SP-115)."""
+    from backend.engine.hr_profile import walk_band
     b = _basis(s)
     if b == "power":
-        return power(th, *frac) or easy_hr(th)
+        return power(th, *frac) or walk_band(th.walk_of(s), easy_hr(th))
     if b == "none":
         return None
-    return easy_hr(th)
+    return walk_band(th.walk_of(s), easy_hr(th))
+
+
+def easy_name(s: dict, th: Thresholds, it: Optional[tuple]) -> str:
+    """The step name of an easy / long / walking main step by its target."""
+    if it and it[0] == "hr":
+        if th.walk_of(s):
+            from backend.engine.hr_profile import walk_step_name
+            return walk_step_name()
+        return cap_name(th)
+    return "功率區間" if it else "照感覺"
 
 
 WARM_NAME = {"city": "輕鬆跑暖身", "river": "輕鬆跑→漸進", "drills": "動態伸展／drill"}
@@ -428,7 +447,7 @@ def session_steps(s: dict, th: Thresholds, sent_tl: Optional[dict] = None) -> li
         except WS.StepsError as e:
             raise Unsupported(f"課表結構有誤：{e}")
         c = WS.Ctx(cp=th.cp, lthr=th.lthr, aet=th.aet, tpace=th.tpace, basis=_basis(s), hrz=th.hrz,
-                   sent_tl=sent_tl)
+                   sent_tl=sent_tl, walk=th.walk_of(s))
         return WS.steps_to_coros(st, c)
     if kind == "notice":
         # 課表待確認 (engine/plan_auto.py): one 1-minute open warm-up step, so it is
@@ -458,7 +477,7 @@ def session_steps(s: dict, th: Thresholds, sent_tl: Optional[dict] = None) -> li
                 Step(EX_COOLDOWN, WS.MP_TAIL_S, easy_target(s, th), "輕鬆收操")]
     if kind in ("long", "mountain", "hike"):
         it = easy_target(s, th, (0.80, 0.88) if kind == "long" else (0.75, 0.88))
-        return [Step(EX_TRAIN, secs, it, cap_name(th) if it and it[0] == "hr" else "功率區間" if it else "照感覺")]
+        return [Step(EX_TRAIN, secs, it, easy_name(s, th, it))]
     if kind == "easy" and (s.get("heat") or "熱適應" in (s.get("title") or "")) and secs >= 20 * 60:
         # heat-acclimation.md §5.4: warm-up 10 / main / cool-down 5 (walk), HR ≤ AeT
         return [Step(EX_WARMUP, 10 * 60, easy_hr(th), "熱適應：慢慢進入"),
@@ -476,7 +495,7 @@ def session_steps(s: dict, th: Thresholds, sent_tl: Optional[dict] = None) -> li
                         Repeat(n, [Step(EX_TRAIN, sprint, None, w_name),
                                    Step(EX_REST, recover, None, r_name)], rep_name)]
         it = easy_target(s, th)
-        return [Step(EX_TRAIN, secs, it, cap_name(th) if it and it[0] == "hr" else "功率區間" if it else "照感覺")]
+        return [Step(EX_TRAIN, secs, it, easy_name(s, th, it))]
     raise Unsupported(f"不支援的課表類型 {kind}")
 
 
@@ -638,7 +657,8 @@ def _load_records(s: dict, th: Thresholds, sent: Optional[dict] = None) -> list:
         st = WS.normalize(s["steps"])
     except WS.StepsError:
         return []
-    c = WS.Ctx(cp=th.cp, lthr=th.lthr, aet=th.aet, tpace=th.tpace, basis=_basis(s), hrz=th.hrz, sent_tl=sent)
+    c = WS.Ctx(cp=th.cp, lthr=th.lthr, aet=th.aet, tpace=th.tpace, basis=_basis(s), hrz=th.hrz, sent_tl=sent,
+               walk=th.walk_of(s))
     return WS.load_records(st, c)
 
 

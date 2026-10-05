@@ -1148,7 +1148,7 @@ async def _steps_env(s: dict, inp: dict) -> dict:
     # 越野跑 (kind hike) and trail sessions: effort distance with the session's climb
     sp["terrain"] = "trail" if s.get("kind") == "hike" or s.get("terrain") in ("trail", "hike") else "road"
     sp["climb_per_km"] = _climb_per_km(s)
-    c = WS.Ctx.of(th, pol["basis"], bool(pol.get("hr_cap")), sp)
+    c = WS.Ctx.of(th, pol["basis"], bool(pol.get("hr_cap")), sp, walk=pol["type"] == "walk")
     # the push target's end conditions (sync/workout_targets; 「負荷」 only where it has one)
     prov = _provider()
     c.end_conditions, c.provider_label = tuple(prov.capabilities.end_conditions), prov.label
