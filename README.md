@@ -146,5 +146,8 @@ license:
 Versions published before 2026-10-05 were released under the MIT license and remain
 available under MIT; the PolyForm license applies from this commit on.
 
+Contributions need the [Contributor License Agreement](CLA.md); see
+[CONTRIBUTING.md](CONTRIBUTING.md).
+
 Third-party data: GoldenCheetah OpenData and the Lovdal dataset used by the
 validation scripts are CC0; they are fetched or placed outside the repo, not bundled.
