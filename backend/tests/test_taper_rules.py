@@ -28,7 +28,8 @@ def ev(**kw):
 
 @pytest.mark.parametrize("kw, pref, days", [
     (dict(kind="baiyue", days=2), None, 7), (dict(kind="baiyue", days=3), 21, 7),
-    (dict(kind="baiyue", days=5), 21, 14),                                       # longer trips: the default
+    (dict(kind="baiyue", days=5), 21, 10),                                       # longer trips: 10 (SP-114)
+    (dict(kind="baiyue", days=1), 21, 14),                                       # 單攻: the default
     (dict(kind="road", distance_km=42.2, est_hours=4.0), 21, 21),                # road marathon
     (dict(kind="road", distance_km=21.1, est_hours=1.9), 21, 14),                # half: the default
     (dict(kind="race", distance_km=50, climbing_m=3000, est_hours=9.0), 18, 18),  # ultra

@@ -295,7 +295,7 @@ function renderTimeline() {
     `<span><i style="background:var(--muted);height:4px"></i>B 賽事小減量 / 恢復</span>`;
   const r = S.rules;
   $("#tlnote").textContent = S.manual_phases ? "手動周期。" :
-    `自動排程：每場 A 賽事前 ${r.taper_days} 天減量（2–3 天的百岳 ${r.baiyue_taper_days} 天${r.taper_pref_days > r.taper_days ? `；路跑全馬、超馬照課表偏好 ${r.taper_pref_days} 天` : ""}）、再往前 ${r.specific_weeks} 週專項期，其餘是基礎期；賽後恢復 1 週（超馬級以上 2 週：預估 ≥ ${r.long_event_hours} 小時——先用賽事計算器、再用你填的預估時間；都沒有時看努力距離 EP ≥ ${r.long_event_ep}（公里＋爬升換算）；多日行程也算）。`;
+    `自動排程：每場 A 賽事前 ${r.taper_days} 天減量（多天的百岳 ${r.baiyue_taper_days} 天，4 天以上 ${r.baiyue_long_taper_days} 天${r.taper_pref_days > r.taper_days ? `；路跑全馬、超馬照課表偏好 ${r.taper_pref_days} 天` : ""}）、再往前 ${r.specific_weeks} 週專項期，其餘是基礎期；賽後恢復 1 週（超馬級以上 2 週：預估 ≥ ${r.long_event_hours} 小時——先用賽事計算器、再用你填的預估時間；都沒有時看努力距離 EP ≥ ${r.long_event_ep}（公里＋爬升換算）；多日行程也算）。`;
   // phases cut short around two A races close together, a skipped 轉換期 (SP-90, SP-73)
   const pn = S.manual_phases ? [] : phases.filter((p) => p.note && p.end >= S.today);
   $("#phnotes").innerHTML = pn.map((p) => `<li>${esc(S.phase_labels[p.kind])} ${p.start.slice(5)}～${p.end.slice(5)}：${esc(p.note)}</li>`).join("");

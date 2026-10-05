@@ -54,6 +54,10 @@ TAPER_DAYS = 14
 # no effect in the meta-analysis — opening it to ultras is 推估)
 BAIYUE_TAPER_DAYS = 7
 BAIYUE_SHORT_DAYS = (2, 3)
+# SP-114 (baiyue-mountaineering-training.md §3.2, owner 2026-10-05: a multi-day 百岳 tapers 7–10 days, not
+# 14): UA — a 2–3 day trip needs one week; 4 days and more (B / C 級) 1–2 weeks (UA, Evoke) → 10 days,
+# the top of the owner's 7–10 (推估)
+BAIYUE_LONG_TAPER_DAYS = 10
 TAPER_DAYS_RANGE = (TAPER_DAYS, 21)
 TAPER_SETTING = "plan.prefs.taper_days"
 SPECIFIC_WEEKS = 8
@@ -283,12 +287,15 @@ def event_size(ev, hours: Optional[float] = None, divisor: Optional[float] = Non
 
 
 def taper_days(ev, pref: Optional[int] = None) -> int:
-    """The 減量期 length of an A event (SP-96): BAIYUE_TAPER_DAYS for a 2–3 day 百岳 trip; the
+    """The 減量期 length of an A event (SP-96): BAIYUE_TAPER_DAYS for a 2–3 day 百岳 trip,
+    BAIYUE_LONG_TAPER_DAYS for a longer one (SP-114: every multi-day 百岳 tapers 7–10 days); the
     課表偏好 `pref` (TAPER_DAYS_RANGE, ≤ 21) for a road marathon or bigger and for an ultra-size
     race (event_size); else TAPER_DAYS."""
     days = int(ev.days or 1)
     if ev.kind == "baiyue" and BAIYUE_SHORT_DAYS[0] <= days <= BAIYUE_SHORT_DAYS[1]:
         return BAIYUE_TAPER_DAYS
+    if ev.kind == "baiyue" and days > BAIYUE_SHORT_DAYS[1]:
+        return BAIYUE_LONG_TAPER_DAYS
     if pref and pref > TAPER_DAYS and ev.kind != "baiyue":
         size = event_size(ev)
         if (ev.kind == "road" and size >= MARATHON) or size >= ULTRA:
