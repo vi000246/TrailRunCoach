@@ -63,6 +63,14 @@
     "draft": true,
     "src": "backend/engine/hr_profile.py:397"
   },
+  "2–3 個動作各 2 組，不做到力竭：高踏階 8 下／腳（可背包）、引體向上（留 2 下）、農夫走路 2 × 30–40 m。這週的 ME 已經有下階和跳，這堂不做離心下階": {
+    "draft": true,
+    "src": "backend/engine/strength_plan.py:154"
+  },
+  "2–4 個動作各 2 組，不做到力竭、不加新動作：高踏階 8 下／腳（可背包）、離心下階 8–10 下／腳、引體向上（留 2 下）、棒式 30 秒": {
+    "draft": true,
+    "src": "backend/engine/strength_plan.py:158"
+  },
   "3 區已解鎖": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:1924"
@@ -142,6 +150,10 @@
   "5K 配速 ≈ 閾值配速 × 0.93–0.96（推估）": {
     "draft": true,
     "src": "backend/engine/workout_templates.py:294"
+  },
+  "6 站做 2–3 輪，每站 12–15 下、留 1–2 下不做到力竭，站間休 30–60 秒：離心下階（箱 15–30 cm，3 秒慢慢往下點地）、分腿蹲、高踏階（箱高約膝高，踩上去站穩再下）、引體向上（做不到用彈力帶輔助，或跳上去 3–5 秒慢放）、農夫走路 30–40 m、棒式 30 秒或懸吊抬腿": {
+    "draft": true,
+    "src": "backend/engine/strength_plan.py:140"
   },
   "60 分鐘平均心率": {
     "draft": false,
@@ -266,6 +278,18 @@
   "B2B 週：長跑照 B2B 排": {
     "draft": true,
     "src": "backend/engine/technical.py:67"
+  },
+  "Bompa & Buzzichelli 2015（最大肌力）；山本正嘉（深蹲和下山用的肌肉相近，教練級）；動作：Uphill Athlete（教練級）": {
+    "draft": true,
+    "src": "backend/engine/strength_plan.py:150"
+  },
+  "Bompa & Buzzichelli 2015（維持：每週至少 1 次、2–4 個動作）；動作：Uphill Athlete（教練級）": {
+    "draft": true,
+    "src": "backend/engine/strength_plan.py:160"
+  },
+  "Bompa & Buzzichelli 2015（解剖適應）；動作：Uphill Athlete（教練級）": {
+    "draft": true,
+    "src": "backend/engine/strength_plan.py:144"
   },
   "C 賽事「{race}」{date} 當訓練跑，其他照常": {
     "draft": true,
@@ -466,6 +490,10 @@
   "RPE 要是 {levels}": {
     "draft": true,
     "src": "backend/engine/workout_steps.py:730"
+  },
+  "Schiftan 2015（平衡訓練讓踝扭傷少 35 %）；Hupperets 2009；Lesinski 2015（劑量，指標是平衡表現）；徐國峰（熱身，教練級）；階段和進階條件是推估": {
+    "draft": true,
+    "src": "backend/engine/balance_plan.py:149"
   },
   "TSB {tsb:+.0f} < −20：先維持量，不加": {
     "draft": true,
@@ -1411,6 +1439,10 @@
     "draft": true,
     "src": "backend/engine/effort_calib.py:94"
   },
+  "分腿蹲或後腳抬高蹲 3–4 組 × 3–6 下（留 2 下以上，組間休 2–3 分）；離心下階 3 組 × 8–12 下／腳，背包 5 → 10 % 體重；引體向上 3 組（留 2 下）；最後棒式 2 × 30 秒。離心下階是平日補強，不取代真的下坡": {
+    "draft": true,
+    "src": "backend/engine/strength_plan.py:147"
+  },
   "分鐘要在 0–1440": {
     "draft": true,
     "src": "backend/engine/plan_store.py:285"
@@ -1599,6 +1631,14 @@
     "draft": true,
     "src": "backend/engine/status.py:702"
   },
+  "單腳站閉眼；單腳站在折疊瑜珈墊或枕頭上；單腳站、另一腳往前、側、後三個方向伸出去點地；前跨步落地停住 2 秒": {
+    "draft": true,
+    "src": "backend/engine/balance_plan.py:51"
+  },
+  "單腳站（張眼）；單腳站轉頭；單腳提踵慢放；單腳站、另一腳前後擺": {
+    "draft": true,
+    "src": "backend/engine/balance_plan.py:50"
+  },
   "回量期": {
     "draft": true,
     "src": "backend/engine/overview.py:1741"
@@ -1726,6 +1766,10 @@
   "太難了": {
     "draft": true,
     "src": "backend/engine/race_feasibility.py:50"
+  },
+  "安排在輕鬆日或跑完後；組數次數是推估": {
+    "draft": true,
+    "src": "backend/engine/strength_plan.py:137"
   },
   "安排課表：{test}": {
     "draft": false,
@@ -1863,6 +1907,10 @@
     "draft": true,
     "src": "backend/engine/workout_review.py:2641"
   },
+  "平衡／腳踝 {m} 分（階段 {n}）": {
+    "draft": true,
+    "src": "backend/engine/balance_plan.py:147"
+  },
   "延長在有氧強度下的持續時間，提升耐久性與脂肪利用（Daniels）": {
     "draft": true,
     "src": "backend/engine/workout_templates.py:126"
@@ -1950,6 +1998,10 @@
   "徐國峰：打底 → 練強度 → 比賽 → 跑力提升 → 用新的 E 配速重新打底（教練級，沒有對照試驗）": {
     "draft": true,
     "src": "backend/engine/base_check.py:104"
+  },
+  "從前面階段挑 4 個，背包 5–10 % 體重做；也可以接在下坡課或長天之後做 2–3 分（累的時候練）": {
+    "draft": true,
+    "src": "backend/engine/balance_plan.py:55"
   },
   "從最近的輕鬆跑推估 AeT 約 {v:.0f} bpm，和目前 {now:.0f} 差 {d:+.0f}：測一次確認（UA：基礎變好 AeT 會往 AnT 靠）": {
     "draft": true,
@@ -2595,6 +2647,10 @@
     "draft": true,
     "src": "backend/engine/workout_steps.py:662"
   },
+  "每個動作都能穩穩站 40 秒，再換下一階（推估）": {
+    "draft": true,
+    "src": "backend/engine/balance_plan.py:57"
+  },
   "每段「直到按下計圈」：到步驟名稱寫的地點時按一下計圈（lap）": {
     "draft": true,
     "src": "backend/engine/racepower/watch_export.py:246"
@@ -2918,6 +2974,10 @@
   "熱校正後的心率–功率沒有正斜率，基準線不能用": {
     "draft": true,
     "src": "backend/engine/zone_events.py:485"
+  },
+  "熱身 1–2 分：承重式腳踝活動度——彈性站姿、體重壓在腳上，慢慢做內翻、外翻（徐國峰）。接著 4 個動作，每個 2 組 × 20–40 秒／腳：{moves}": {
+    "draft": true,
+    "src": "backend/engine/balance_plan.py:141"
   },
   "熱適應指數：每分鐘的熱劑量在這個 Hadley 以下是 0，到 150 是滿劑量。": {
     "draft": true,
@@ -3263,6 +3323,26 @@
     "draft": true,
     "src": "backend/engine/workout_review.py:2669"
   },
+  "肌力維持（高踏階＋引體向上）": {
+    "draft": true,
+    "src": "backend/engine/strength_plan.py:153"
+  },
+  "肌力維持（高踏階＋離心下階＋引體向上）": {
+    "draft": true,
+    "src": "backend/engine/strength_plan.py:157"
+  },
+  "肌力（下肢單腳＋核心）": {
+    "draft": true,
+    "src": "backend/engine/strength_plan.py:34"
+  },
+  "肌力（分腿蹲＋離心下階＋引體向上）": {
+    "draft": true,
+    "src": "backend/engine/strength_plan.py:146"
+  },
+  "肌力（基礎循環 6 站）": {
+    "draft": true,
+    "src": "backend/engine/strength_plan.py:139"
+  },
   "背包 {kg:g} kg（體重的 {p:.0%}）": {
     "draft": true,
     "src": "backend/engine/race_feasibility.py:210"
@@ -3270,6 +3350,10 @@
   "背負要在 0–40 kg": {
     "draft": true,
     "src": "backend/engine/racepower/athlete.py:1527"
+  },
+  "膝主導＋臀中肌；安排在輕鬆日或跑完後": {
+    "draft": true,
+    "src": "backend/engine/strength_plan.py:34"
   },
   "自動估算": {
     "draft": false,
@@ -3298,6 +3382,10 @@
   "萩原・山本 2011（體力科學 60:327–341）：模擬登山的上坡乳酸閾值在 78% 最大心率、RPE 13–14，「75% 最大心率以下、或 RPE 13 以下」的配速是妥當的；長野縣 Safety Book（千島康稔）：(220 − 年齡) × 0.75 以下的心率走是安全的": {
     "draft": true,
     "src": "backend/engine/hr_profile.py:381"
+  },
+  "落地不晃、膝蓋不往內夾（推估）": {
+    "draft": true,
+    "src": "backend/engine/balance_plan.py:59"
   },
   "虛線＝接下來 {n} 場賽事一天的難度（紅 A、橘 B、藍其他；多天行程用每天平均）；滑過線看整趟和每一天": {
     "draft": true,
@@ -3446,6 +3534,10 @@
   "賽前 2 週不再做接近線的長天（減量期；UA、Koop）": {
     "draft": true,
     "src": "backend/engine/panels/race_refs.py:187"
+  },
+  "賽前 7 天：只做熟悉的階段 1–2 動作，不加新的（推估）": {
+    "draft": true,
+    "src": "backend/engine/balance_plan.py:146"
   },
   "賽前 {n} 天內不排強度課": {
     "draft": true,
@@ -3618,6 +3710,10 @@
   "軟上限，只提醒": {
     "draft": true,
     "src": "backend/engine/workout_steps.py:1201"
+  },
+  "軟面上單腳站閉眼；單腳往前、側、斜小跳，落地停住；從 20 cm 的階往下跳、單腳落地；單腳硬舉，手往下觸地": {
+    "draft": true,
+    "src": "backend/engine/balance_plan.py:53"
   },
   "輕微感冒": {
     "draft": true,
@@ -4046,6 +4142,10 @@
   "門檻過期或沒測過": {
     "draft": true,
     "src": "backend/engine/overview.py:1540"
+  },
+  "閉眼能站 20 秒以上，再換下一階（推估）": {
+    "draft": true,
+    "src": "backend/engine/balance_plan.py:58"
   },
   "間歇門檻要是 {choices} 其中之一": {
     "draft": true,

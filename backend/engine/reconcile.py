@@ -83,7 +83,7 @@ def session_from_gen(g: dict, week_start: str, provisional: bool, uid: Optional[
 
 # never hold a main day (heat_passive: engine/heat_plan.py; notice: the 課表待確認
 # reminder pushed to the watch, engine/plan_auto.py — never done / missed / load)
-SIDE_KINDS = ("strength", "heat_passive", "notice")
+SIDE_KINDS = ("strength", "heat_passive", "notice", "balance")
 NOTICE = "notice"
 
 

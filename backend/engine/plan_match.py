@@ -36,7 +36,7 @@ from typing import Optional
 from backend.engine.compliance import KIND_OK
 
 ENDURANCE = {"road", "trail", "hike", "bike"}
-NEVER = ("heat_passive", "notice")          # a bath / sauna / the 課表待確認 reminder: the user ticks it
+NEVER = ("heat_passive", "notice", "balance")   # a bath / sauna / the 課表待確認 reminder / 平衡小課: the user ticks it
 HARD = ("quality", "test")
 HARD_MIN_S = 600                            # overview.HARD_SESSION_S: ≥ 10 min at/above threshold
 EASY_KINDS = ("easy", "long", "hike")
