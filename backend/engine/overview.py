@@ -1875,24 +1875,6 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
                          fixed=b2b.get("pair"))
         sessions = [Session(**d) for d in kept]
         B2B.placed(b2b, kept)
-    # 賽前停肌力 (SP-86): no strength in an A event's last STRENGTH_STOP_DAYS days (projection: the same)
-    s_stops = strength_stops(getattr(getattr(status, "plan", None), "events", None) or (), monday, phs)
-    sessions = drop_strength_before_a(sessions, s_stops, monday, notes)
-    # 生病 (SP-117, engine/injuries.illness_rule): a cold = Z1 recovery runs only, a fever = no run
-    # until a day after the symptoms, then a recovery-pace first run
-    try:
-        from backend.engine import injuries as INJ
-        sessions = illness_apply(sessions, INJ.load_events(), cap_txt)
-    except Exception:                       # noqa: BLE001 — the plan must still build
-        pass
-    if t_ctx and kind == "taper":
-        n = taper_climb_note(t_ctx, t_ref.get("climb"), hours / t_ref["hours"] if t_ref.get("hours") else None)
-        if n:
-            notes.append(n)
-    b2b_suggestion = B2B.suggestion(b2b, monday, next((s.day for s in sessions if s.id == "long"), None),
-                                    enabled=getattr(prefs, "b2b", True) is not False)
-    # ---- 陡坡健走（模擬負重） (engine/steep_hill.py): before a 百岳 / multi-day trip, one weekday
-    # easy run of a 專項期 week becomes a steep walk at the grade that costs what the pack would
     if sp.get("climb"):
         # 長爬坡反覆 (engine/specific_phase.py): the race GPX's longest climb, one easy run
         try:
@@ -1901,26 +1883,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
             sessions = [Session(**{k: v for k, v in d.items() if k in Session.__dataclass_fields__}) for d in dd]
         except Exception as e:              # noqa: BLE001 — the plan must still build
             sp = {**sp, "error": type(e).__name__}
-    # 減量期規則 (SP-96): quality by days to the race, the last long run, no hard downhill / climbing
-    sessions = taper_rules(sessions, t_ctx, monday, notes, road, today)
-    # 賽後的日子 (SP-98): no run the first 2 days, ≤ 40 min the first week, flat after a big downhill
-    sessions = PR_.apply(sessions, PR_.a_windows(phs, plan_events, monday), monday, notes, today, bmap)
-    # B / C races (SP-95): the mini-taper days, the race as the week's key session, the B recovery,
-    # a C race in place of a quality session or the long run; the hints
-    sessions = PR_.bc_apply(sessions, plan_events, monday, notes, today, bmap, rate=tph.get("trail") or 60.0,
-                            done_days={wdate(w).isoformat() for w in week_ws if category(w) in ENDURANCE},
-                            factory=Session)
-    b_ctl = None
-    if any(getattr(e, "priority", None) == "B" and monday - dt.timedelta(weeks=PR_.B_CTL_WEEKS) <= e.start < monday
-           for e in plan_events):
-        try:
-            b_ctl = [(dt.date.fromisoformat(r["date"]), r["ctl"])
-                     for r in pmc(ds, monday - dt.timedelta(weeks=PR_.B_CTL_WEEKS), today)["series"]]
-        except Exception:                   # noqa: BLE001 — the hint only
-            b_ctl = None
-    notes.extend(PR_.b_hints(plan_events, monday, b_ctl))
-    race_sim = SP.sim_suggestion(sp, monday, max([longest28] + [s.minutes for s in sessions if s.id == "long"]),
-                                 aet, tph["trail"], aet_meas)
+    # ---- 陡坡健走（模擬負重） (engine/steep_hill.py): before a 百岳 / multi-day trip, one weekday
+    # easy run of a 專項期 week becomes a steep walk at the grade that costs what the pack would
     from backend.engine import steep_hill as SH
     # (主要訓練項目 = 路跑: no steep walk — it simulates a mountain pack)
     lc = {"active": False, "why": _("主要訓練項目：路跑")} if road else \
@@ -1968,6 +1932,46 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
             sessions = [Session(**{k: v for k, v in d.items() if k in Session.__dataclass_fields__}) for d in dd]
         except Exception as e:              # noqa: BLE001 — the plan must still build
             tech = {**tech, "error": type(e).__name__}
+
+    # ---- the day rules, after every pass that makes or moves a session (as projection.project_weeks):
+    # the SP-86 strength stop, the 減量期 rules (SP-96), the post-race days (SP-98) and the B / C races
+    # (SP-95) — rest days are placed above already (SP-82); illness last, it wins (SP-117)
+    # 賽前停肌力 (SP-86): no strength in an A event's last STRENGTH_STOP_DAYS days (projection: the same)
+    s_stops = strength_stops(getattr(getattr(status, "plan", None), "events", None) or (), monday, phs)
+    sessions = drop_strength_before_a(sessions, s_stops, monday, notes)
+    # 減量期規則 (SP-96): quality by days to the race, the last long run, no hard downhill / climbing
+    sessions = taper_rules(sessions, t_ctx, monday, notes, road, today)
+    # 賽後的日子 (SP-98): no run the first 2 days, ≤ 40 min the first week, flat after a big downhill
+    sessions = PR_.apply(sessions, PR_.a_windows(phs, plan_events, monday), monday, notes, today, bmap)
+    # B / C races (SP-95): the mini-taper days, the race as the week's key session, the B recovery,
+    # a C race in place of a quality session or the long run; the hints
+    sessions = PR_.bc_apply(sessions, plan_events, monday, notes, today, bmap, rate=tph.get("trail") or 60.0,
+                            done_days={wdate(w).isoformat() for w in week_ws if category(w) in ENDURANCE},
+                            factory=Session)
+    b_ctl = None
+    if any(getattr(e, "priority", None) == "B" and monday - dt.timedelta(weeks=PR_.B_CTL_WEEKS) <= e.start < monday
+           for e in plan_events):
+        try:
+            b_ctl = [(dt.date.fromisoformat(r["date"]), r["ctl"])
+                     for r in pmc(ds, monday - dt.timedelta(weeks=PR_.B_CTL_WEEKS), today)["series"]]
+        except Exception:                   # noqa: BLE001 — the hint only
+            b_ctl = None
+    notes.extend(PR_.b_hints(plan_events, monday, b_ctl))
+    # 生病 (SP-117, engine/injuries.illness_rule): a cold = Z1 recovery runs only, a fever = no run
+    # until a day after the symptoms, then a recovery-pace first run
+    try:
+        from backend.engine import injuries as INJ
+        sessions = illness_apply(sessions, INJ.load_events(), cap_txt)
+    except Exception:                       # noqa: BLE001 — the plan must still build
+        pass
+    if t_ctx and kind == "taper":
+        n = taper_climb_note(t_ctx, t_ref.get("climb"), hours / t_ref["hours"] if t_ref.get("hours") else None)
+        if n:
+            notes.append(n)
+    b2b_suggestion = B2B.suggestion(b2b, monday, next((s.day for s in sessions if s.id == "long"), None),
+                                    enabled=getattr(prefs, "b2b", True) is not False)
+    race_sim = SP.sim_suggestion(sp, monday, max([longest28] + [s.minutes for s in sessions if s.id == "long"]),
+                                 aet, tph["trail"], aet_meas)
 
     # ---- 平衡／腳踝小課 (engine/balance_plan.py, SP-120): a 越野賽 / 百岳 A race next, the
     # 減量期 and race week included (not strength: the SP-86 stop doesn't touch it)

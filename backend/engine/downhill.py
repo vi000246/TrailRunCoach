@@ -18,7 +18,8 @@ Applied after the week is placed, like engine/technical.py, in week_plan and in 
 week (the same rule, so reconcile never flips a week back and forth), just before the 技術地形
 session (which then keeps ≥ 2 days from it, technical.HARD_IDS): one easy run (not the
 長爬坡反覆 / 陡坡健走 / heat session, not the easy days after a B2B) on a day ≥ 14 days before the
-race and before its 減量期 (planning.taper_start), not on / the day before a hard day (the long
+race and before its 減量期 (planning.taper_start), never on a race's post-race days (post_race_days:
+the 72 h after a big downhill included), not on / the day before a hard day (the long
 run, an interval, the 長爬坡反覆); the first one also keeps the 2 days after it easy. RPE 3–5 is an easy session (workout_templates.session_role),
 so a recovery week keeps it. A weekday keeps the weekday cap
 (the downhill part shrinks, ≥ DOWNHILL_MIN_WORK). The week's minutes stay: the other easy runs
@@ -110,7 +111,28 @@ def week_context(*, kind: str, mode: str, monday: dt.date, events, phases=None, 
         t0 = PL.taper_start(phases or (), e)
     except Exception:                       # noqa: BLE001 — the plan must still build
         t0 = None
-    return {**info, "active": True, "first": first, "taper_start": t0.isoformat() if t0 else None}
+    return {**info, "active": True, "first": first, "taper_start": t0.isoformat() if t0 else None,
+            "post_race": post_race_days(events, phases, monday)}
+
+
+def post_race_days(events, phases, monday: dt.date) -> list[str]:
+    """The days of the week of `monday` under a race's post-race day rules (engine/post_race.py, SP-98 /
+    SP-95): an A race's first week (≤ REC_SHORT_DAYS) and its flat days after a big downhill
+    (DOWNHILL_FLAT_DAYS = 72 h), a B race's easy days and flat days — no downhill session there (the
+    day rules run after this pass and would only cap / flatten it, keeping its title)."""
+    from backend.engine import post_race as PR
+    out = set()
+    try:
+        wins = PR.a_windows(phases or (), events or (), monday) + PR.b_windows(events or (), monday)
+    except Exception:                       # noqa: BLE001 — the plan must still build
+        return []
+    for w in wins:
+        last = max(x for x in (w.get("short"), w.get("easy"), w.get("flat"), w["end"]) if x is not None)
+        d = max(w["end"] + dt.timedelta(days=1), monday)
+        while d <= min(last, monday + dt.timedelta(days=6)):
+            out.add(d.isoformat())
+            d += dt.timedelta(days=1)
+    return sorted(out)
 
 
 def _steps(work: int) -> dict:
@@ -150,6 +172,7 @@ def apply(ss: list, info: Optional[dict], *, prefs=None, rates: Optional[dict] =
         return ss
     race = _d(info["race"]["start"])
     taper = _d(info.get("taper_start"))
+    post_race = set(info.get("post_race") or ())
     hard = [_d(s["day"]) for s in ss if s.get("day") and (s.get("kind") in ("quality", "test", "race")
                                                            or s.get("id") in HARD_IDS)]
     hard += [_d(d) for d in hard_done or ()]
@@ -172,7 +195,7 @@ def apply(ss: list, info: Optional[dict], *, prefs=None, rates: Optional[dict] =
         if s.get("kind") != "easy" or s.get("done") or not s.get("day") or s.get("id") in SKIP_IDS or s.get("heat"):
             continue
         d = _d(s["day"])
-        if (race - d).days < DOWNHILL_LAST_DAYS or (taper is not None and d >= taper) \
+        if (race - d).days < DOWNHILL_LAST_DAYS or (taper is not None and d >= taper) or d.isoformat() in post_race \
                 or (until is not None and d <= until) or not free_of_hard(d):
             continue
         c = long_cap if d.weekday() >= 5 else cap

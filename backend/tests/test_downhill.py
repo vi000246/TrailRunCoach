@@ -159,3 +159,48 @@ def test_never_in_the_real_taper_a_21_day_one_starting_mid_week():
     DH.apply(ss, info)
     d = next(s for s in ss if s["id"] == "downhill")
     assert d["day"] == t0.isoformat() and (RACE - date.fromisoformat(d["day"])).days >= 14
+
+
+def test_no_downhill_on_a_race_s_post_race_days(monkeypatch):
+    """Integration SP-98 / SP-95 × SP-99: a B race with a big downhill for the athlete on the Thursday
+    before 賽前第 6 週 — its 7 easy days (the 72 h flat days inside them) take no downhill session; the
+    week's Sunday, after them, can."""
+    from backend.engine import planning as PL
+    monkeypatch.setattr(PL, "RACE_DOWNHILL_OF", lambda e: 30.0)
+    monkeypatch.setattr(PL, "ATHLETE_DOWNHILL_OF", lambda d: 10.0)
+    m6 = RACE - dt.timedelta(days=RACE.weekday()) - dt.timedelta(weeks=5)
+    b = Event(id="b1", name="B 越野", date=(m6 - dt.timedelta(days=4)).isoformat(), kind="race", priority="B",
+              distance_km=21, climbing_m=1500, est_hours=3.5)
+    info = ctx(m6, events=[ev(), b])
+    rp = PL.recovery_plan(b, b=True)
+    assert rp["downhill"]["big"]
+    last = max(rp["days"], PL.DOWNHILL_FLAT_DAYS)
+    assert info["post_race"] == [(b.end + dt.timedelta(days=k)).isoformat() for k in range(1, last + 1)
+                                 if b.end + dt.timedelta(days=k) >= m6]
+    ss = _ss(m6)
+    DH.apply(ss, {**info, "first": False})
+    d = [s for s in ss if s["id"] == "downhill"]
+    assert all(s["day"] not in info["post_race"] for s in d)
+    assert d and d[0]["day"] > info["post_race"][-1]
+
+
+def test_illness_wins_over_the_downhill_session(monkeypatch):
+    """Integration SP-117 × SP-99 (week_plan's pass order): the illness rules run last — a cold this
+    week turns the countdown week's downhill session into a Z1 recovery run like every other run."""
+    from backend.engine import injuries as INJ
+    race = date(2026, 11, 28)                                          # 賽前第 9 週 this week
+    ds, plan, wp = _week(race.isoformat(), {4: LIGHT})
+    assert wp["downhill"]["active"] and any(s["id"] == "downhill" for s in wp["sessions"])
+    cold = {"id": 1, "category": "illness", "illness": "cold", "status": "active", "onset_date": "2026-09-28",
+            "resolved_date": None, "area": "unknown", "side": None, "severity": "mild"}
+    monkeypatch.setattr(INJ, "load_events", lambda *a, **k: [cold])
+    from backend.engine import overview as O
+    from backend.engine import plan_prefs as PP
+    from backend.engine.status import Status
+    st = Status(ds, plan, TODAY, prefs=PP.Prefs()).compute()
+    wp = O.week_plan(ds, st, TODAY)
+    left = [s for s in wp["sessions"] if not s["done"] and s["day"] and s["day"] >= TODAY.isoformat()
+            and s["kind"] in O.RUN_KINDS]
+    assert left and all(s["title"] == "恢復跑（心率 1 區）" for s in left)
+    assert not any(s["id"] == "downhill" and s["title"].startswith("下坡離心") for s in wp["sessions"]
+                   if not s["done"] and s["day"] and s["day"] >= TODAY.isoformat())
