@@ -1,6 +1,6 @@
 # Module Spec: plan-auto (自動調整課表)
 
-> **Last Updated**: 2026-10-04
+> **Last Updated**: 2026-10-05
 > **Status**: Active
 > **Domain Layer**: Core Domain
 
@@ -147,7 +147,7 @@ default `blackouts.load()`) and the weekdays not ticked as 可練日 in 課表�
 rest, so a planned gap is still checked and a partly planned one is exempt only when its unplanned
 days alone are ≥ 3 (counted, not contiguous). The status card says so (「前一週非計畫停跑 N 天，另 M
 天是自己排的休息（不排課日期／休息日／沒勾的可練日）…」) and the week gets
-an info note (`guard`'s `step_note` → `week_plan`, `backend/engine/overview.py:925`). TSB −30…−20 → hold
+an info note (`guard`'s `step_note` → `week_plan`, `backend/engine/overview.py:954`). TSB −30…−20 → hold
 (Friel / TrainingPeaks). B2B weekends and the B2B TSB exemption use the block line too.
 
 ## Interval progression (`backend/engine/quality_gate.py`)
@@ -218,7 +218,9 @@ intensity). Each rung is the canonical variant of `backend/engine/interval_libra
   gives Zone 3 what is left (a smaller 巡航版); a session still over is cut to fewer reps as a
   縮量版 (`_shorten`, floor `MIN_REPS`, no progress) or, when it can't be cut, kept with a note —
   never dropped silently. 課表偏好's repeat of a lone track (`plan_prefs.shape`) is skipped when
-  the two would pass it.
+  the two would pass it. The user's own RPE ≥ 7 技術地形 sessions of the week come off the 20 %
+  first (`reserved`, SP-74 follow-up, overview.spec.md): then an interval whose 縮量版 floor still
+  doesn't fit is left out (a note) rather than kept over.
 - **How many a week**: 課表偏好 `quality_per_week = 2` → one Zone 3 + one Zone 5 when both are
   open (`week_decision(n=2)`; the base phase's guardrail mode still caps it at 1); only one track
   open → for Zone 3 (Zone 5 closed or held by a guardrail; owner 2026-10-04) a **different second
@@ -427,7 +429,8 @@ the tissue has to re-adapt too); FVDOT stays the real break's.
 ## Big changes (held for approval; thresholds 推估)
 
 - A week's planned TSS rises more than 20 % above the stored (last pushed) version.
-  Reductions are the safe direction and apply on their own.
+  Reductions are the safe direction and apply on their own — e.g. the strength sessions taken out
+  of an A event's last 14 days (SP-86, overview.spec.md).
 - A long, quality or test session is removed within 14 days before an A race.
 - The training phase changed since the last run.
 - More than 3 sessions change in the push window and they are not all reductions.
@@ -608,3 +611,5 @@ overview has `data-log="none"`. The settings are in 課表偏好 (above).
 | 2026-10-05 | change | SP-63 follow-up | Weekdays not ticked as 可練日 in 課表偏好 count as planned rest for the short-break exemption (like 不排課日期 / 休息日), so a Fri–Sun-only runner's weekly Mon–Thu gap is not exempt from the running-volume step (owner 2026-10-05) |
 | 2026-10-05 | change | SP-73 follow-up | The A race's 恢復期 (7–14 days) is a planned post-race phase like the 轉換期: its days are no running break for the re-entry block or the Zone 3 gate's gap / re-lock (`planning.post_race_days`; the block text says 「不含賽後恢復期／轉換期 M 天」; owner 2026-10-05) |
 | 2026-10-05 | change | SP-73 follow-up | The running-volume step's base (and the planner's +10 % volume cap) skips weeks touching a 減量期 / race week / post-race 恢復期 / 轉換期 and uses the most recent normal weeks, so the second week after a transition isn't blocked (`load_guard.skip_mondays` / `normal_weeks`; owner 2026-10-05) |
+| 2026-10-05 | feature | SP-86 | Strength removed from an A event's last 14 days is a reduction: auto-adjust removes stored ones without asking |
+| 2026-10-05 | feature | SP-74 follow-up | The user's own RPE ≥ 7 技術地形 sessions come off the week's 20 % before the intervals (shortened, or left out when the floor doesn't fit) |
