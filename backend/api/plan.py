@@ -137,7 +137,8 @@ def get_plan(begin: Optional[str] = None, end: Optional[str] = None):
         "wko5_settings": _wko5_settings(),
         "phase_labels": P.PHASES, "kinds": _kinds(),
         "rules": {"taper_days": P.TAPER_DAYS, "specific_weeks": P.SPECIFIC_WEEKS,
-                  "mini_taper_days": P.MINI_TAPER_DAYS, "long_event_hours": P.LONG_EVENT_HOURS},
+                  "mini_taper_days": P.MINI_TAPER_DAYS, "long_event_hours": P.LONG_EVENT_HOURS,
+                  "long_event_ep": P.SIZE_EP[P.ULTRA - 1]},
     }
 
 

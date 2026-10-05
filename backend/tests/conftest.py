@@ -98,6 +98,15 @@ def _no_real_event_gpx(monkeypatch, tmp_path_factory):
 
 
 @pytest.fixture(autouse=True)
+def _no_event_size_hooks(monkeypatch):
+    """planning.event_size's calculator / climb-divisor hooks (SP-111) are unset in every test,
+    also after a TestClient ran the app's lifespan (main.py installs them)."""
+    from backend.engine import planning
+    monkeypatch.setattr(planning, "HOURS_OF", None)
+    monkeypatch.setattr(planning, "DIVISOR_OF", None)
+
+
+@pytest.fixture(autouse=True)
 def _no_registered_dataset():
     """engine/activity_key.py's registry of the last built Dataset is per
     test: a dataset built by one test never re-indexes another's plan rows."""

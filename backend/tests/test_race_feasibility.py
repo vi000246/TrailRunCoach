@@ -91,8 +91,23 @@ def test_koop_minimum_for_ultras_only():
     assert lv(r, "hours") == "ok" and r["koop"]["need_h"] == 9.0
     r = F.assess(e, line(e), TODAY, hist(km=80.0, climb=4000.0, hours=4.0))
     assert lv(r, "hours") == "tight"                     # never worse than tight
-    e2 = ev(distance_km=30)
+    e2 = ev(distance_km=30, est_hours=4.5)               # 馬拉松級: no Koop
     assert not any(c["id"] == "hours" for c in F.assess(e2, line(e2), TODAY, hist())["checks"])
+
+
+def test_koop_reads_the_race_size_not_the_km():
+    """SP-111: 30 km ↑2000 m in 7 h is an ultra (Koop's 50 km row); a flat 55 km road in 4.5 h is
+    not; 70 km ↑3500 m (EP 105) takes the 100 km row; a 100 英里級 by time too."""
+    e = ev(distance_km=30, est_hours=7.0)
+    assert F.koop_need(line(e), e) == F.KOOP[1]
+    e = ev(kind="road", distance_km=55, climbing_m=0, est_hours=4.5)
+    assert F.koop_need(line(e), e) is None                 # road: not Koop's anyway
+    e = ev(kind="other", distance_km=55, climbing_m=0, est_hours=4.5)
+    assert F.koop_need(line(e), e) is None                 # 馬拉松級 by time
+    e = ev(distance_km=70, climbing_m=3500, est_hours=12.0)
+    assert F.koop_need(line(e), e) == F.KOOP[0]
+    e = ev(distance_km=80, climbing_m=1000, est_hours=21.0)
+    assert F.koop_need(line(e), e) == F.KOOP[0]
 
 
 def test_late_under_three_weeks_suggests_b_or_c():

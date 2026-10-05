@@ -45,7 +45,11 @@ def ctx(**kw):
 def test_event_must_be_multi_day_or_six_hours():
     assert B2B.qualifies(ev(days=2)) and B2B.qualifies(ev(days=1, est_hours=7.0))
     assert not B2B.qualifies(ev(days=1, est_hours=5.0)) and not B2B.qualifies(ev(days=1, kind="road"))
-    assert B2B.qualifies(ev(days=1, distance_km=50))          # is_long without est_hours: ≥ 42 km
+    # no time, no climb: the km as EP (SP-111) — 50 km is 馬拉松級, 60 km 超馬級
+    assert not B2B.qualifies(ev(days=1, distance_km=50)) and B2B.qualifies(ev(days=1, distance_km=60))
+    # no time: the EP — 30 km ↑2000 m = EP 50 (馬拉松級), ↑3500 m = EP 65 (超馬級)
+    trail = dict(id="t", name="t", date="2026-11-28", kind="race", distance_km=30)
+    assert not B2B.qualifies(Event(**trail, climbing_m=2000)) and B2B.qualifies(Event(**trail, climbing_m=3500))
     assert not ctx(event=evj(days=1, est_hours=4.0))["candidate"]
     assert ctx(event=evj(days=1, est_hours=8.0, kind="race"))["candidate"]
     assert not ctx(event=None)["candidate"]

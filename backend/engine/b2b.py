@@ -33,7 +33,8 @@ just before this week: the 4 easy days).
 
 When (doc §2.4):
   * only in the 專項期 (`specific`) before the next A event that is multi-day
-    (days > 1) or a single day ≥ 6 h (planning.Event.is_long) — UA「longer
+    (days > 1) or a single day of 超馬級 (planning.Event.is_long: ≥ 6 h predicted, else EP ≥ 60
+    — SP-111) — UA「longer
     races」, CTS, Koop;
   * the last B2B ends ≥ 3 weeks before the event (搜尋摘要「3 weeks」未驗證;
     Koop: nothing hard in the last 2–3 weeks);
@@ -146,7 +147,7 @@ def target_event(events: Iterable, today: dt.date):
 
 
 def qualifies(ev) -> bool:
-    """Multi-day, or a single day ≥ 6 h (planning.Event.is_long)."""
+    """Multi-day, or a single day of 超馬級 (planning.Event.is_long — event_size, SP-111)."""
     if ev is None:
         return False
     days = int(ev.get("days") if isinstance(ev, dict) else (ev.days or 1)) or 1

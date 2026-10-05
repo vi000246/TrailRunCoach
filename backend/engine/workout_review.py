@@ -1979,10 +1979,14 @@ def scheduled_test(ds, w, m: dict) -> Optional[dict]:
     return None
 
 
+RACE_TEST_MAX_CLIMB = 20.0      # m/km: below it a 越野賽 runs like a road race (classify.TRAIL_CLIMB_RATE_M_PER_KM)
+
+
 def _race_test(ds, w, m: dict, title: str) -> bool:
     """A 5–10 K race or time trial (protocol race, no session of its own): a
-    plan race event that day (4–11 km or no distance) or a race / TT title,
-    and 15–90 min of moving time."""
+    plan road race that day (4–11 km or no distance; a 越野賽 only when flatter than
+    RACE_TEST_MAX_CLIMB — SP-111: a trail race is not a road 10K) or a race / TT
+    title, and 15–90 min of moving time."""
     from backend.engine import cp_protocols as CPP
     mv = m.get("moving_s") or 0.0
     if not (CPP.RACE_MIN_S <= mv <= 90 * 60) or not (m.get("cp_bouts") or {}).get("race"):
@@ -1991,7 +1995,10 @@ def _race_test(ds, w, m: dict, title: str) -> bool:
         return True
     iso = _wdate(w).isoformat()
     for e in getattr(getattr(ds, "plan", None), "events", None) or []:
-        if e.kind == "race" and e.date == iso and (e.distance_km is None or 4.0 <= e.distance_km <= 11.0):
+        if e.date != iso or not (e.distance_km is None or 4.0 <= e.distance_km <= 11.0):
+            continue
+        cpk = e.climb_per_km
+        if e.kind == "road" or (e.kind == "race" and cpk is not None and cpk < RACE_TEST_MAX_CLIMB):
             return True
     return False
 
