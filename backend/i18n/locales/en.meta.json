@@ -59,6 +59,10 @@
     "draft": true,
     "src": "backend/engine/workout_templates.py:136"
   },
+  "220 − 年齡 {age}（推估）": {
+    "draft": true,
+    "src": "backend/engine/hr_profile.py:397"
+  },
   "3 區已解鎖": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:1924"
@@ -511,6 +515,10 @@
     "draft": true,
     "src": "backend/engine/reentry.py:167"
   },
+  "{hr} 或 RPE ≤ {rpe}，先到的為準": {
+    "draft": true,
+    "src": "backend/engine/hr_profile.py:446"
+  },
   "{h} 小時 {m} 分": {
     "draft": true,
     "src": "backend/engine/panels/drift_bars.py:32"
@@ -638,6 +646,22 @@
   "{n} 週": {
     "draft": true,
     "src": "backend/engine/planning.py:581"
+  },
+  "{pct}% × (220 − 年齡)，推估": {
+    "draft": true,
+    "src": "backend/engine/hr_profile.py:434"
+  },
+  "{pct}% 最大心率": {
+    "draft": true,
+    "src": "backend/engine/hr_profile.py:438"
+  },
+  "{pct}% 最大心率 {v:.0f} 低於輕鬆跑上限，取輕鬆跑上限": {
+    "draft": true,
+    "src": "backend/engine/hr_profile.py:432"
+  },
+  "{pct}% 最大心率，最大心率是推估": {
+    "draft": true,
+    "src": "backend/engine/hr_profile.py:436"
   },
   "{plain}（{start}）": {
     "draft": true,
@@ -779,6 +803,10 @@
     "draft": true,
     "src": "backend/tenancy_mw.py:240"
   },
+  "上坡心率 ≤ {cap}或 RPE ≤ {rpe}；下坡看感覺": {
+    "draft": true,
+    "src": "backend/engine/hr_profile.py:451"
+  },
   "上坡版用一樣的 %CP，但上坡時攝氧量比例較低（Gajer，Buchheit Part I），下坡回程有離心負荷": {
     "draft": true,
     "src": "backend/engine/interval_library.py:810"
@@ -806,6 +834,10 @@
   "下坡技術／離心": {
     "draft": true,
     "src": "backend/engine/workout_templates.py:483"
+  },
+  "下坡看腿的感覺，不看心率": {
+    "draft": true,
+    "src": "backend/engine/hr_profile.py:379"
   },
   "下週安排恢復週": {
     "draft": true,
@@ -1355,7 +1387,7 @@
     "draft": true,
     "src": "backend/engine/racepower/watch_export.py:194"
   },
-  "坡度由 Pandolf 公式換算：不背包、這個坡度的代謝量 ≈ 在 12% 坡、3.5 km/h 背這個重量（推估）；心率 ≤ 輕鬆跑上限": {
+  "坡度由 Pandolf 公式換算：不背包、這個坡度的代謝量 ≈ 在 12% 坡、3.5 km/h 背這個重量（推估）；心率：陡坡健走、登山的課表用爬坡上限（75% 最大心率或 RPE ≤ 13，萩原・山本 2011），其他課表用輕鬆跑上限": {
     "draft": true,
     "src": "backend/engine/workout_templates.py:195"
   },
@@ -2555,6 +2587,10 @@
     "draft": true,
     "src": "backend/engine/workout_review.py:2727"
   },
+  "爬坡上限": {
+    "draft": true,
+    "src": "backend/engine/hr_profile.py:378"
+  },
   "爬坡功率上限 110 % 是經驗法則（非研究結論）；下坡讓功率自然掉下來": {
     "draft": true,
     "src": "backend/engine/racepower/calc.py:360"
@@ -2826,6 +2862,10 @@
   "至少要有一個步驟": {
     "draft": true,
     "src": "backend/engine/workout_steps.py:688"
+  },
+  "萩原・山本 2011（體力科學 60:327–341）：模擬登山的上坡乳酸閾值在 78% 最大心率、RPE 13–14，「75% 最大心率以下、或 RPE 13 以下」的配速是妥當的；長野縣 Safety Book（千島康稔）：(220 − 年齡) × 0.75 以下的心率走是安全的": {
+    "draft": true,
+    "src": "backend/engine/hr_profile.py:381"
   },
   "虛線＝接下來 {n} 場賽事一天的難度（紅 A、橘 B、藍其他；多天行程用每天平均）；滑過線看整趟和每一天": {
     "draft": true,
@@ -3266,6 +3306,10 @@
   "這次資料比較雜，只當參考": {
     "draft": true,
     "src": "backend/engine/workout_review.py:531"
+  },
+  "這比一般輕鬆跑的上限高，因為是爬坡步行": {
+    "draft": true,
+    "src": "backend/engine/hr_profile.py:380"
   },
   "這種課不用配對活動": {
     "draft": true,

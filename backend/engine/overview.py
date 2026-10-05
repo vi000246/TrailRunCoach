@@ -1207,6 +1207,9 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     aet_src = (tt.get("easy_cap") or {}).get("source") or tt.get("aet_source")
     aet_meas = bool(hrz.get("aet_measured")) if hrz else bool(tt.get("aet_measured"))
     cap_txt = easy_cap_label(None, aet, aet_meas)
+    # the walking sessions' uphill cap (SP-115: 75 % HRmax, never below the easy-run cap)
+    from backend.engine.hr_profile import walk_cap_for
+    walk = walk_cap_for(ds, today, aet, getattr(status.plan, "profile", None))
     if hrz and (hrz.get("fallback") or (hrz["model"] != "lthr" and not hrz.get("aet_measured"))):
         notes.append({"level": "info", "src": "hr_zones",
                       "text": (hrz["fallback"] + "。" if hrz.get("fallback") else "")
@@ -1602,7 +1605,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     if lc.get("active"):
         try:
             dd = [asdict(s) for s in sessions]
-            SH.apply(dd, lc, aet=aet, prefs=prefs, b2b=b2b, notes=notes, rates=tph, aet_measured=aet_meas)
+            SH.apply(dd, lc, aet=aet, prefs=prefs, b2b=b2b, notes=notes, rates=tph, aet_measured=aet_meas,
+                     walk=walk)
             sessions = [Session(**{k: v for k, v in d.items() if k in Session.__dataclass_fields__}) for d in dd]
         except Exception as e:              # noqa: BLE001 — the plan must still build
             lc = {**lc, "error": type(e).__name__}
@@ -1704,7 +1708,9 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
                        "aet_pm": tt.get("aet_pm") if hrz is None else None,
                        "aet_measured": aet_meas, "easy_cap_label": cap_txt, "easy_cap_tip": _(EASY_CAP_TIP),
                        # 課表心率區間 (engine/hr_profile.plan_hr_zones): the push / step builders read it
-                       "hr_model": hrz},
+                       "hr_model": hrz,
+                       # 登山爬坡的心率上限 (hr_profile.walk_cap, SP-115): the walking sessions' texts and push
+                       "walk_cap": walk},
         "notes": notes,
         # the quality gate (engine/quality_gate.py), so projection.project_weeks can
         # re-evaluate it for each projected week instead of copying this week's answer
