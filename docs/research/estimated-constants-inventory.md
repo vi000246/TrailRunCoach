@@ -87,11 +87,13 @@
 | `WATCH_PCT/MIN` | max(3, CTL×10 %) | `load_guard.py:61` | CTL 增幅「注意」線 | Friel 5–8 換算成比例，推估 | 高 | A |
 | `BLOCK_PCT/MIN/MAX` | min(10, max(5, CTL×15 %)) | `load_guard.py:62` | 「擋」線 | 同上；上限 10 是 Friel | 高 | A |
 | `STEP_HOLD/BLOCK` | 10 %／20 % | `load_guard.py:72` | 週跑量增幅 | 20 %：Nielsen 2014、Damsted 2019；10 % 推估 | 高 | D |
-| 週量上限 | max(×1.10, +0.5 h) | `overview.py:988` | 一週最多加多少 | UA 10 %（spec） | 高 | D |
+| 週量上限 | max(×1.10, +0.5 h) | `overview.py:988` | 一週最多加多少 | 推估：系統性回顧找不到「10 % 法則」的證據 [169]。spec 原本寫「UA 10 %」，SP-104 已改 | 高 | D |
 | `SEED_DAYS`、`STARTUP_DAYS` | 28、28 天 | `load_guard.py:69-70` | 新使用者的 CTL 起算 | 推估（Coggan：給起始值） | 低（只影響前 4 週） | D |
 | `SHORT_BREAK_MIN` | 3 天 | `load_guard.py:76` | 短中斷豁免 | 推估 | 低 | D |
-| 恢復週 | TSB < −30 → 4 週平均的 60 %；連 3 週加量 → 3 週平均的 65 % | `overview.py:1001-1008` | 恢復週的量 | 3:1 是 Friel／UA；百分比沒寫來源 | **高** | A |
-| 比賽週、恢復期、轉換期 | 30 %、50 %、50 %（`TRANSITION_SHARE`） | `overview.py:347, 1017-1020` | 這幾種週的量 | 轉換期 50 % 推估 | 中 | D |
+| 恢復週 | TSB < −30 → 4 週平均的 60 %；連 3 週加量 → 3 週平均的 65 % | `overview.py:1001-1008` | 恢復週的量 | 3:1 是 Friel／UA 的慣例，其他教練也這樣排 [199][114]，但沒有試驗比較過 3:1 和 2:1 [198]。65 %（減 35 %）在挪威教練減 25–35 % [30]、跑步教練減 20–35 % [194] 的範圍內（教練級，SP-104）。60 % 沒有來源 | **高** | A |
+| 加量週的判斷 | 每週 ≥ 前一週的 0.95 倍，且 > 0.5 h | `overview.py` `build3`、`projection.py` `build` | 判斷「連 3 週加量」→ 恢復週 | 推估，沒有來源（掉 5 % 以內仍算加量）。SP-104 補列 | 中 | D |
+| 減量期 | 近 6 週平均的 50 %，最後 7 天 40 % | `overview.py` `week_plan`（taper）、`projection.py` `week_hours` | 減量期每週的量 | Bosquet 2007、Wang 2023 統合分析：減 41–60 %、減 ≤ 40 % 不夠、保留強度 [206][105]；Pfitzinger 中譯本比賽週減 60 % [459]；徐國峰 8–14 天 [453]（SP-104 補列，最後 7 天 40 % 之前沒列） | 中 | D |
+| 比賽週、恢復期、轉換期 | 30 %、50 %、50 %（`TRANSITION_SHARE`） | `overview.py:347, 1017-1020` | 這幾種週的量 | 轉換期「減量、不全停」有出處：輕艇選手全停 VO2max −10.1 %、減量 −4.8 % [412]；50 % 這個數字仍是推估 | 中 | D |
 | `TSS_PER_HOUR_DEFAULT` | 路跑 55、越野 60、登山 45… | `overview.py:51` | 沒有歷史時的每小時 TSS | 沒寫 | 低（有 6 週資料就用本人的） | D（已自動） |
 | `MP_TSS_PER_HOUR` | 70 | `overview.py:408` | 馬拉松配速段的 TSS | 推估 | 低 | D |
 | `easy_count` | 每 50 分一堂、1–5 堂 | `overview.py:363-370` | 輕鬆跑堂數 | 沒寫 | 中 | C（已有「每週跑步次數」偏好） |
@@ -132,9 +134,12 @@
 | 模組 | 常數（筆數） | 來源概況 | 敏感 | 類 |
 |---|---|---|---|---|
 | `reentry.py:43-85` | `MIN_BREAK` 6、`CROSS_MIN` 45、`CROSS_SHARE` 0.5、`LONG_CAP_MIN` 90、`TARGETS_AFTER_DAYS` 14、`CAT4_STEPS`、`CAT4_Z3_WEEKS` 12、`STEP_UP_MIN`（9） | 架構是 Daniels 表 9.2（教練）；其餘推估 | 中（只在停跑後） | D；`CROSS_*` 是 C |
-| `planning.py:45-49` | `TRANSITION_WEEKS` 3、`TRANSITION_MIN_DAYS` 7、`LONG_EVENT_HOURS` 6、`B_RECOVERY_DAYS` 3（5） | Friel、Canova（教練）；低端取值推估 | 中 | C（已有偏好設定） |
+| `planning.py:45-49` | `TRANSITION_WEEKS` 3、`TRANSITION_MIN_DAYS` 7、`LONG_EVENT_HOURS` 6、`B_RECOVERY_DAYS` 3（5） | Friel、Canova（教練）；低端取值推估。`B_RECOVERY_DAYS` 見下面 B 賽事那一列 | 中 | C（已有偏好設定） |
+| `planning.py` `SPECIFIC_WEEKS` | 專項期 8 週（1） | 教練級：Friel Build 8–9 週 [18]、Canova 6–8 週 [130]、vert.run 最後 8–10 週 [131]、江晏慶強化 2–3 週＋巔峰約 6 週 [454]（換算成 8 週是推估）。原本只寫 Koop、UA（文字）（SP-104） | 高 | D |
+| `planning.py` B 賽事 | `MINI_TAPER_DAYS` 5、`B_RECOVERY_DAYS` 3（2） | 教練級、部分二手：TrainerRoad 比賽當週減量 [362]、Friel 賽前休 2–3 天 [431]、Pfitzinger 賽前 5 天不做間歇、4 天不做節奏跑和長跑、賽後約 5 天恢復 [437]（二手轉述）。3 天恢復是推估；SP-95 要改成依距離。之前清單沒列（SP-104 補列） | 中 | D |
+| `overview.py` `strength_n` | 基礎期、轉換期、恢復期每週 2 次肌力，其他 1 次（1） | UA；賽季每週 1 次可維持 13 週（Rønnestad 2010，自行車 [407]）（SP-104） | 低 | D |
 | `specific_phase.py:41-59` | `FRAC`（每週佔賽事的比例表）、`ROAD_FRAC`、`STEP` 1.15、`SIM_WEEKS`、爬坡課的 7 個門檻（18） | コース定數（山本正嘉）、江晏慶、Koop、Pfitzinger；比例表本身推估 | **高**（決定專項期長跑多長） | C；見 SP-75 |
-| `b2b.py:84-107` | `DAY2_RATIO` 0.67、`PAIR_SHARE` 0.70、`SPACING_DAYS` 14、`LAST_BEFORE_DAYS` 21、`POST_EASY_DAYS` 4 等（21） | CTS、Koop、UA（教練）；多數數字推估 | 中（B2B 是建議，要你接受） | C |
+| `b2b.py:84-107` | `DAY2_RATIO` 0.67、`PAIR_SHARE` 0.70、`SPACING_DAYS` 14、`LAST_BEFORE_DAYS` 21、`POST_EASY_DAYS` 4 等（21） | CTS、Koop、UA（教練）；多數數字推估。`LAST_BEFORE_DAYS` 21 原本是「未驗證的搜尋摘要」，換成 vert.run 百英里指南：最大的 B2B 在賽前 4–5 週、最後 3 週不做 [190]（教練級，SP-104） | 中（B2B 是建議，要你接受） | C |
 | `technical.py:31-36` | RPE 帶、`SPEC_WORK_MIN/MAX`（6） | 範本；推估 | 低 | D |
 | `steep_hill.py:36-46` | `STAGE_PCT`、`STAGE_WEEKS`、`BASE_GRADE`、`MINUTES`、`DEFAULT_PCT`（11） | UA trekking、Pandolf；階段週數推估 | 低 | D（`BASE_KMH` 已列在 plan G7） |
 | `primary_sport.py:33-35` | 84 天、25 %、5 小時（3） | 推估 | 低（可手動選） | D |
@@ -195,9 +200,9 @@
 | 項目 | 處理 |
 |---|---|
 | 週跑量增幅 20 %、低強度 75 %、TSB −20／−30、硬課間隔 2 天 | 維持。`unsourced-rules.md` §0.5.3 已經判定「通用、不校正」 |
-| 減量 50 %／40 %／30 % | 維持。Bosquet 2007 的最佳範圍是減 41–60 %（已驗證，見 §5.4）；一個人一年只有幾場 A 賽事，量不出個人值 |
+| 減量 50 %／40 %／30 % | 維持。Bosquet 2007 的最佳範圍是減 41–60 %（已驗證，見 §5.4），Wang 2023 統合分析結果相同 [206][105]；一個人一年只有幾場 A 賽事，量不出個人值 |
 | 3 區解鎖（4 週／3 跑／7 天）、重新上鎖 21 天、5 區的「3 區先」 | 維持，收進進階設定（C）。沒有可以量的結果 |
-| 轉換期 50 % | 可以補來源：Bompa & Buzzichelli 2015 p.186（教練；見 `bompa-periodization-strength.md` §4.4） |
+| 轉換期 50 % | 可以補來源：Bompa & Buzzichelli 2015 p.186（教練；見 `bompa-periodization-strength.md` §4.4）。「減量、不全停」的方向另有輕艇的比較 [412]（SP-104 已寫進 `overview.py` 註解） |
 | 強度預算 20 % | 數字維持，**來源說明要改**（§5.1） |
 | 專項期每週比例表、B2B 的比例 | 維持（C）。專項期的設計另見 SP-75 |
 | 偵測類（趟的容差、尖峰過濾、路線合併、資料異常） | 維持。這些和裝置、資料品質有關，不是和人有關 |
@@ -237,6 +242,7 @@
 - 如果這個轉述正確，app 的恢復週比 UA 的範圍輕（減得少）。
 - Bompa & Buzzichelli 2015 沒有給恢復週的百分比（`bompa-periodization-strength.md` 對照表 #2，已驗證）。
 - 結論：這個數字目前沒有一手來源。列在 §4.1 第 4 項用本人資料校正；同時值得去讀 UA 原文確認。
+- 2026-10-05 補（SP-104，`periodization-cross-sport.md` §4.3）：挪威教練恢復週減 25–35 % [30]、跑步教練減 20–35 % [194]，65 %（減 35 %）落在這個範圍的上緣；登山減 50 % [114]、自行車減 40–60 % [199] 比較深。都是教練級，沒有試驗。程式註解和 `SRC_31` 已補上。
 
 ### 5.3 Daniels「T 跑 ≤ 週量 10 %」
 
@@ -249,7 +255,7 @@
 
 | 常數 | 來源 | 等級 | 驗證 |
 |---|---|---|---|
-| 減量 50 %／40 % | Bosquet et al. 2007, *Med Sci Sports Exerc*（PMID 17762369）：2 週、量指數式減 41–60 %、強度和頻率不變 | 同儕審查（統合分析） | **已驗證**（Europe PMC 摘要） |
+| 減量 50 %／40 % | Bosquet et al. 2007, *Med Sci Sports Exerc*（PMID 17762369）：2 週、量指數式減 41–60 %、強度和頻率不變；Wang et al. 2023, *PLOS ONE*：減 41–60 % 效果最大、減 ≤ 40 % 不夠、保留強度 [206][105] | 同儕審查（統合分析） | **已驗證**（Europe PMC 摘要；Wang 2023 見 `periodization-cross-sport.md` §4.5） |
 | `Z3_RELOCK_DAYS` 21 天 | Coyle et al. 1984, *J Appl Physiol*（PMID 6511559）：7 位耐力訓練者，停練 21 天 VO2max −7 %，56 天後穩定在 −16 % | 同儕審查 | **已驗證**（Europe PMC 摘要）。但研究對象是多年訓練者完全停練；拿 21 天當「重新上鎖」是程式自己的延伸（推估） |
 | CTL 增幅 5–8、上限 10 | Friel, The CTL Ramp Rate | 教練 | 已驗證（`ctl-ramp-calibration.md:95`，這次沒有重讀） |
 | 週跑量 > 20–30 % | Nielsen 2014、Damsted 2019, *JOSPT* | 同儕審查 | 已驗證（`unsourced-rules.md:363`，這次沒有重讀） |
@@ -282,4 +288,5 @@
 - Bosquet L, Montpetit J, Arvisais D, Mujika I. Effects of tapering on performance: a meta-analysis. *Med Sci Sports Exerc* 2007. PMID 17762369.
 - Coyle EF, Martin WH, Sinacore DR, Joyner MJ, Hagberg JM, Holloszy JO. Time course of loss of adaptations after stopping prolonged intense endurance training. *J Appl Physiol* 1984. PMID 6511559.
 - Seiler S. What is best practice for training intensity and duration distribution in endurance athletes? *Int J Sports Physiol Perform* 2010. PMID 20861519.
+- 方括號編號 [n]（§3、§4.2、§5 裡 SP-104 補上的出處）是 `periodization-cross-sport.md` 參考文獻的編號；對照表在那份文件 §6.1 的「SP-104 補來源」。
 - 既有文件：`docs/plans/generalize-athlete.plan.md`、`docs/research/unsourced-rules.md`、`ctl-ramp-calibration.md`、`validation-lovdal.md`、`interval-adaptation.md`、`detraining.md`、`bompa-periodization-strength.md`。

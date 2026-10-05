@@ -10,8 +10,8 @@ rolls the same rules forward week by week:
   * base / specific: CTL ramp goal (load_guard.ramp_goal) capped at +10 % (at least
     +0.5 h) of max(4-week mean, last week) over normal weeks (no taper / race / 恢復期 /
     轉換期 week, SP-73); after 3 build weeks a recovery
-    week at 65 % of those 3 (3:1)
-  * taper 40–50 % of the 6-week mean, event week 30 %, recovery 50 %,
+    week at 65 % of those 3 (3:1; sources at overview.week_plan's build3)
+  * taper 50 % → 40 % of the 6-week mean (sources at overview.week_plan), event week 30 %, recovery 50 %,
     transition 50 % of the 4 weeks before the race's taper (SP-73;
     overview.transition_hours), each easy run <= 60 min
   * the same session template: long, one quality session, strength, easy
