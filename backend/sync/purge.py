@@ -92,6 +92,7 @@ async def delete_source_files(db: AsyncSession, source: str, athlete_id: int = 1
                 st.last_sync_at = None
         repo = SettingsRepository(db, athlete_id)
         await repo.set(f"sync.{runner.SETTING_NAME[source]}.last_result", None)
+        await repo.set(f"sync.{runner.SETTING_NAME[source]}.last_ok", None)
         switched = False
         # the charts read the 資料來源: deleting its files sends them to the WKO5
         # folder when there is one (the other source is never used instead)

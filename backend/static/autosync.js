@@ -19,6 +19,7 @@
   const KEY = "wko5coach.autosync.last";
   const MIN_GAP_MS = 10 * 60 * 1000;
   const SRC = { coros: "COROS", tp: "TP" };
+  const T = (k, fb, p) => (window.I18N && window.I18N.t ? window.I18N.t("common." + k, fb, p) : fb);
 
   function el() {
     let e = document.getElementById("nav-sync-status");
@@ -31,10 +32,14 @@
     }
     return e;
   }
-  function show(text, ok) {
+  function show(text, ok, bad) {
     const e = el();
     e.textContent = text;
     e.style.display = text ? "" : "none";
+    if (bad) {
+      e.style.background = "rgba(220,38,38,.12)";
+      e.style.color = "#dc2626";
+    }
     if (ok) setTimeout(() => { e.style.display = "none"; }, 6000);
   }
   function recent() {
@@ -49,11 +54,20 @@
       try { st = await (await fetch("/api/v1/sync/sources")).json(); } catch (_) { return; }
       const busy = sources.filter((s) => st[s] && st[s].busy);
       if (!busy.length) {
-        const res = sources.map((s) => {
-          const r = st[s] && st[s].last_result;
-          return `${SRC[s]} ${r ? `+${r.downloaded}` : ""}`;
-        }).join("、");
-        show(`已同步 ${res}`, true);
+        // SP-88: a failed run used to show as 「已同步 COROS +0」 for 6 s
+        const failed = sources.filter((s) => st[s] && st[s].last_result && st[s].last_result.status === "failed");
+        const done = sources.filter((s) => !failed.includes(s));
+        if (failed.length) {
+          show(T("autosync.failed", "同步失敗：{src}", { src: failed.map((s) => SRC[s]).join("、") }), false, true);
+        } else {
+          const res = done.map((s) => {
+            const r = st[s] && st[s].last_result;
+            return `${SRC[s]} ${r ? `+${r.downloaded}` : ""}`;
+          }).join("、");
+          show(`已同步 ${res}`, true);
+        }
+        // the 登入已過期／同步失敗 banner (session_banner.js) reads the new state
+        if (window.WKO5SessionBanner) window.WKO5SessionBanner.refresh();
         return;
       }
       show(`同步中：${busy.map((s) => SRC[s]).join("、")}…`);

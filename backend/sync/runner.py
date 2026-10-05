@@ -5,7 +5,9 @@ scheduler and the auto-sync-on-open trigger.
 * a per-source busy flag: never two runs of the same source at once
   (a second caller gets SYNC_BUSY / HTTP 409)
 * the outcome of each run (downloaded / checked / errors, when) is stored in
-  the settings store as sync.<source>.last_result
+  the settings store as sync.<source>.last_result; a run that worked (ok /
+  partial) also as sync.<source>.last_ok. A failed run is not a sync: it
+  never makes the source "fresh" for the auto-sync (SP-88)
 * background runs use their own DB session
 """
 from __future__ import annotations
@@ -27,6 +29,7 @@ log = logging.getLogger(__name__)
 
 SOURCES = ("coros", "tp")
 SETTING_NAME = {"coros": "coros", "tp": "trainingpeaks"}      # sync.<name>.* keys
+OK_STATUSES = ("ok", "partial")                               # a run that synced
 _BUSY: set[str] = set()
 _TASKS: set[asyncio.Task] = set()
 
@@ -99,7 +102,11 @@ async def stream(db: AsyncSession, source: str, athlete_id: int = 1,
         result["at"] = datetime.now(timezone.utc).isoformat()
         try:
             await db.rollback()
-            await SettingsRepository(db, athlete_id).set(f"sync.{SETTING_NAME[source]}.last_result", result)
+            repo = SettingsRepository(db, athlete_id)
+            await repo.set(f"sync.{SETTING_NAME[source]}.last_result", result)
+            if result["status"] in OK_STATUSES:
+                await repo.set(f"sync.{SETTING_NAME[source]}.last_ok", {
+                    "at": result["at"], "trigger": trigger, "downloaded": result["downloaded"]})
             await db.commit()
         except Exception as e:
             log.warning("could not store %s sync result: %s", source, type(e).__name__)
@@ -172,17 +179,22 @@ async def logged_in(db: AsyncSession, source: str, athlete_id: int = 1) -> bool:
 
 
 async def last_sync_at(db: AsyncSession, source: str, athlete_id: int = 1) -> Optional[datetime]:
-    """Latest of the clean-sync cursor time and the last recorded run."""
+    """When the source last synced: the latest of the clean-sync cursor time and
+    the last run that worked (ok / partial). A failed or aborted run does not
+    count (SP-88: a run that hit 登入已過期 used to make the source "fresh" for
+    sync.auto_on_open.hours and showed as 上次同步)."""
     st = (await db.execute(select(SyncState).where(SyncState.athlete_id == athlete_id))).scalar_one_or_none()
     cands = []
     if st is not None:
         cands.append(as_utc(st.coros_last_sync_at if source == "coros" else st.last_sync_at))
-    res = await SettingsRepository(db, athlete_id).get(f"sync.{SETTING_NAME[source]}.last_result")
-    if isinstance(res, dict) and res.get("at"):
-        try:
-            cands.append(as_utc(datetime.fromisoformat(res["at"])))
-        except ValueError:
-            pass
+    repo = SettingsRepository(db, athlete_id)
+    for key in ("last_result", "last_ok"):
+        res = await repo.get(f"sync.{SETTING_NAME[source]}.{key}")
+        if isinstance(res, dict) and res.get("at") and res.get("status", "ok") in OK_STATUSES:
+            try:
+                cands.append(as_utc(datetime.fromisoformat(res["at"])))
+            except ValueError:
+                pass
     cands = [c for c in cands if c]
     return max(cands) if cands else None
 

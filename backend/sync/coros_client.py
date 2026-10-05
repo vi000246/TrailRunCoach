@@ -538,6 +538,11 @@ async def sync_workouts(
                 yield {"status": "relogin", "detail": "COROS token renewed (remembered password)"}
                 continue
             session_check.mark_expired("coros", athlete_id)
+            # stored too (SP-88): the refusal outlives the in-memory answer (its 5 min
+            # cache, a restart), like the login check's own refusal (session_check._check_coros)
+            if state is not None:
+                state.coros_token_expires = datetime.now(timezone.utc)
+                await db.commit()
             yield {"status": "error", "error": "COROS_AUTH_REQUIRED", "detail": str(e),
                    "hint": "請到設定頁重新登入 COROS"}
             return

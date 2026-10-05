@@ -15,7 +15,11 @@ as a token was stored. Now:
     clients' existing automatic re-login (one login, never a loop); only
     when that is not possible or fails is the login 登入已過期.
   * A network problem is "unknown": the page keeps 已登入 (a blip must not
-    log anyone out); it is re-checked sooner (UNKNOWN_TTL_S).
+    log anyone out); it is re-checked sooner (UNKNOWN_TTL_S). But a login
+    COROS / TP already refused stays expired through an "unknown" re-check
+    (SP-88: the 登入已過期 banner disappeared when the re-check after the
+    CHECK_TTL_S cache could not reach COROS); only a login, an "ok" check or
+    a logout clears it.
 
 Nothing here logs or returns a token or a password.
 """
@@ -106,12 +110,17 @@ async def check(db: AsyncSession, source: str, athlete_id: int = 1) -> str:
         hit = cached(source, athlete_id)
         if hit is not None:
             return hit
+        prev = _CACHE.get((source, athlete_id), (None,))[0]      # stale answer, if any
         try:
             result = await (_check_coros(db, athlete_id) if source == "coros" else _check_tp(db, athlete_id))
         except Exception as e:                   # noqa: BLE001 — a check never breaks the page
             log.warning("%s login check failed: %s", source.upper(), type(e).__name__)
             result = UNKNOWN
-        _CACHE[(source, athlete_id)] = (result, time.monotonic())
+        at = time.monotonic()
+        if result == UNKNOWN and prev == EXPIRED:
+            # refused before, unreachable now: still expired, re-checked as soon as an unknown
+            result, at = EXPIRED, at - (CHECK_TTL_S - UNKNOWN_TTL_S)
+        _CACHE[(source, athlete_id)] = (result, at)
         return result
 
 

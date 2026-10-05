@@ -162,22 +162,54 @@ async def coros_auth_status(athlete_id: int = 1, db: AsyncSession = Depends(get_
 
 @router.get("/session-alerts")
 async def session_alerts(athlete_id: int = 1, db: AsyncSession = Depends(get_db)):
-    """The overview / schedule banner: the logins in use (資料來源, 課表推送)
-    that have expired. Uses the same cached check as the status endpoints."""
+    """The overview / schedule banner (static/session_banner.js).
+
+    expired: the logins in use (資料來源, 課表推送) that have expired. Uses
+    the same cached check as the status endpoints.
+
+    sync: can the 資料來源 sync (SP-88)? problem = expired (登入已過期) |
+    logged_out (no login any more, after it synced before) | failed (the last
+    run failed and nothing has fixed it since) | None, with the last
+    successful sync time and the last run. A sync switched off is no problem."""
     from backend.settings.repository import SettingsRepository
-    from backend.sync import primary as P
-    use = P.FOLDER[await P.current(db, athlete_id)]
-    push = await SettingsRepository(db, athlete_id).get("plan.push.provider")
+    from backend.sync import primary as P, runner
+    db_name = await P.current(db, athlete_id)
+    use = P.FOLDER[db_name]
+    repo = SettingsRepository(db, athlete_id)
+    push = await repo.get("plan.push.provider")
     names = {"coros": "COROS", "tp": "TrainingPeaks"}
-    out = []
+    out, verdicts = [], {}
     for src in session_check.SOURCES:
         needs = (["同步"] if src == use else []) + (["推送"] if src == "coros" and push == "coros" else [])
         if not needs:
             continue
-        if await session_check.check(db, src, athlete_id) == session_check.EXPIRED:
+        verdicts[src] = await session_check.check(db, src, athlete_id)
+        if verdicts[src] == session_check.EXPIRED:
             out.append({"source": src, "name": names[src],
+                        "needs": ["sync" if n == "同步" else "push" for n in needs],
                         "message": f"{names[src]} 登入已過期，重新登入後才能{'／'.join(needs)}"})
-    return {"expired": out, "settings_url": "/api/v1/wko5/settings#sync"}
+
+    login = verdicts[use]
+    enabled = bool(await repo.get(f"sync.{db_name}.enabled"))
+    last_ok = await runner.last_sync_at(db, use, athlete_id)
+    run = await repo.get(f"sync.{db_name}.last_result")
+    run = run if isinstance(run, dict) else None
+    problem = None
+    if enabled:
+        if login == session_check.EXPIRED:
+            problem = "expired"
+        elif login == session_check.LOGGED_OUT:
+            # only when it synced before: an install that never logged in is not 「同步失敗」
+            problem = "logged_out" if (last_ok or run) else None
+        elif run and run.get("status") == "failed" and not (
+                str(run.get("error") or "").endswith("AUTH_REQUIRED") and login == session_check.OK):
+            # an auth failure is over once the login checks ok (logged in again since)
+            problem = "failed"
+    return {"expired": out, "settings_url": "/api/v1/wko5/settings#sync",
+            "sync": {"source": use, "name": names[use], "enabled": enabled, "login": login,
+                     "problem": problem,
+                     "last_ok_at": last_ok.isoformat() if last_ok else None,
+                     "last_run": {k: run.get(k) for k in ("at", "trigger", "status", "error")} if run else None}}
 
 
 @router.post("/coros/logout")

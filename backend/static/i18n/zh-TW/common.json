@@ -37,5 +37,16 @@
   "workout.elev_aria": "；橫軸是距離（共 {km} km），背景是路線海拔 {lo}–{hi} m",
   "autoplan.log_title": "自動調整紀錄",
   "autoplan.log_count": "{n} 筆",
-  "workout.thr_low_badge": "心率門檻可信度低"
+  "workout.thr_low_badge": "心率門檻可信度低",
+  "session.expired_sync": "{name} 登入已過期：無法同步新活動",
+  "session.expired_push": "{name} 登入已過期：無法同步新活動，也無法推送課表",
+  "session.expired_push_only": "{name} 登入已過期：無法推送課表",
+  "session.logged_out": "{name} 已登出：無法同步新活動",
+  "session.sync_failed": "{name} 自動同步失敗",
+  "session.relogin": "重新登入",
+  "session.see_settings": "查看同步設定",
+  "session.last_ok": "上次成功同步：{when}",
+  "session.never_ok": "還沒有成功同步過",
+  "session.last_failed": "最近一次同步失敗：{when}（{error}）",
+  "autosync.failed": "同步失敗：{src}"
 }
