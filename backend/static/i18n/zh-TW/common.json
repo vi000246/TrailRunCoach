@@ -81,6 +81,7 @@
   "sugg.kind.zone_test": "重測",
   "sugg.kind.zone_update": "區間",
   "sugg.kind.injury": "傷病",
+  "sugg.kind.altitude": "高度",
   "sugg.wait_cool": "等天氣轉涼再測比較準（還是可以先排）",
   "sugg.decline": "不要",
   "sugg.accept": "排入",
