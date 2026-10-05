@@ -1182,6 +1182,12 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     if kind == "specific":
         # 中間訓練 between two A races < 12 weeks apart (SP-95): ≤ a share of the first one's pre-taper level
         hours = inter_cap(phs, monday, hours, why, lambda m: _week_hours(ds, m)[0] if m < monday else None)
+    from backend.engine import post_race as PR_
+    plan_events = getattr(getattr(status, "plan", None), "events", None) or ()
+    b_f, b_why = PR_.b_week_factor(plan_events, monday, kind)       # a B race's week: 75 % (SP-95)
+    if b_why:
+        hours *= b_f
+        why.append(b_why)
     if PR is not None and PR.weekly_hours is not None and hours > PR.weekly_hours:
         hours = PR.weekly_hours
         why.append(_("你的每週時數上限 {h:g} h", h=PR.weekly_hours))
@@ -1653,9 +1659,21 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     # 減量期規則 (SP-96): quality by days to the race, the last long run, no hard downhill / climbing
     sessions = taper_rules(sessions, t_ctx, monday, notes, road, today)
     # 賽後的日子 (SP-98): no run the first 2 days, ≤ 40 min the first week, flat after a big downhill
-    from backend.engine import post_race as PR_
-    sessions = PR_.apply(sessions, PR_.a_windows(phs, getattr(getattr(status, "plan", None), "events", None) or (),
-                                                 monday), monday, notes, today, bmap)
+    sessions = PR_.apply(sessions, PR_.a_windows(phs, plan_events, monday), monday, notes, today, bmap)
+    # B / C races (SP-95): the mini-taper days, the race as the week's key session, the B recovery,
+    # a C race in place of a quality session or the long run; the hints
+    sessions = PR_.bc_apply(sessions, plan_events, monday, notes, today, bmap, rate=tph.get("trail") or 60.0,
+                            done_days={wdate(w).isoformat() for w in week_ws if category(w) in ENDURANCE},
+                            factory=Session)
+    b_ctl = None
+    if any(getattr(e, "priority", None) == "B" and monday - dt.timedelta(weeks=PR_.B_CTL_WEEKS) <= e.start < monday
+           for e in plan_events):
+        try:
+            b_ctl = [(dt.date.fromisoformat(r["date"]), r["ctl"])
+                     for r in pmc(ds, monday - dt.timedelta(weeks=PR_.B_CTL_WEEKS), today)["series"]]
+        except Exception:                   # noqa: BLE001 — the hint only
+            b_ctl = None
+    notes.extend(PR_.b_hints(plan_events, monday, b_ctl))
     race_sim = SP.sim_suggestion(sp, monday, max([longest28] + [s.minutes for s in sessions if s.id == "long"]),
                                  aet, tph["trail"], aet_meas)
     from backend.engine import steep_hill as SH

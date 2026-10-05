@@ -259,7 +259,7 @@ function renderTimeline() {
   }
   for (const w of S.b_windows) {
     const l = pos(w.start), wd = pos(w.end) + 100 / span - l;
-    h += `<div class="mini" style="left:${l}%;width:${wd}%" title="${w.kind === "mini_taper" ? "B 賽事小減量" : "B 賽事恢復"}"></div>`;
+    h += `<div class="mini" style="left:${l}%;width:${wd}%" title="${w.kind === "mini_taper" ? "B 賽事小減量：賽前 5 天不排間歇、4 天不排節奏跑和長跑" : "B 賽事恢復" + (w.text ? "：" + esc(w.text) : "")}"></div>`;
   }
   const d0 = day(b);
   for (let m = new Date(d0.getFullYear(), d0.getMonth() + 1, 1); m <= day(e); m = new Date(m.getFullYear(), m.getMonth() + 1, 1)) {
