@@ -147,6 +147,14 @@
     "draft": true,
     "src": "backend/engine/quality_gate.py:2002"
   },
+  "A 賽事": {
+    "draft": true,
+    "src": "backend/engine/post_race.py:57"
+  },
+  "A 賽事「{race}」{date} 後：前 {n} 天不排跑步和肌力，第 1 週每次 ≤ {max} 分輕鬆跑": {
+    "draft": true,
+    "src": "backend/engine/post_race.py:126"
+  },
   "A 賽事「{race}」前 {days} 天不排肌力（{start} 起，含比賽週；課表偏好的每週肌力／肌力日也一樣）：把體力留給比賽——長距離耐力項目主要比賽前 2 週停肌力，停 4 週以上才會退步（Bompa & Buzzichelli）": {
     "draft": true,
     "src": "backend/engine/overview.py:1716"
@@ -270,6 +278,10 @@
   "EF 趨勢算不出來（輕鬆路跑不夠多）": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:2145"
+  },
+  "EP {ep:.0f}": {
+    "draft": true,
+    "src": "backend/engine/planning.py:254"
   },
   "Friel 1 小時心率飄移": {
     "draft": true,
@@ -655,6 +667,10 @@
     "draft": true,
     "src": "backend/engine/status.py:328"
   },
+  "{size}（{basis}）：{what}": {
+    "draft": true,
+    "src": "backend/engine/planning.py:362"
+  },
   "{src} {tc:.0f} °C；> {hot:.0f} °C 熱會讓心率飄得比較多，只和同樣溫度的跑步比（台灣教練 < 25 °C；Lafrenz 2008）": {
     "draft": true,
     "src": "backend/engine/workout_review.py:2859"
@@ -891,6 +907,10 @@
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:124"
   },
+  "中間訓練：兩場 A 賽相隔 {span}，這週最多練到上一場賽前 4 週平均 {h:.1f} h 的 {share:.0%}（Higdon 等教練級，比例推估）": {
+    "draft": true,
+    "src": "backend/engine/overview.py:439"
+  },
   "主要訓練項目：路跑": {
     "draft": true,
     "src": "backend/engine/overview.py:1476"
@@ -1119,6 +1139,10 @@
     "draft": true,
     "src": "backend/engine/workout_review.py:2633"
   },
+  "公里數 {km:.0f}": {
+    "draft": true,
+    "src": "backend/engine/planning.py:255"
+  },
   "其中 {n} 次比較短，只當參考": {
     "draft": true,
     "src": "backend/engine/status.py:584"
@@ -1239,6 +1263,10 @@
     "draft": true,
     "src": "backend/engine/technical.py:64"
   },
+  "只排恢復、回量、減量：越野／超馬級的 A 賽和下一場「{name}」相隔不到 {w} 週，中間不排訓練（推估）": {
+    "draft": true,
+    "src": "backend/engine/planning.py:770"
+  },
   "只收絕對瓦數：跑步沒有 % CP，送的是換算後的 W；CP 更新後這堂會標成「已過期」，要重推": {
     "draft": true,
     "src": "backend/engine/workout_steps.py:1521"
@@ -1306,6 +1334,26 @@
   "唯讀示範：這個操作在示範版不能用": {
     "draft": true,
     "src": "backend/demo/export_static.py:243"
+  },
+  "回量期": {
+    "draft": true,
+    "src": "backend/engine/overview.py:1741"
+  },
+  "回量期第 {i}/{n} 週：賽前 4 週平均 {h:.1f} h × {share:.0%}（照減量期倒過來，比例推估），不排強度課": {
+    "draft": true,
+    "src": "backend/engine/overview.py:424"
+  },
+  "回量期第 {i}/{n} 週：近 4 週的 {share:.0%}，不排強度課": {
+    "draft": true,
+    "src": "backend/engine/overview.py:426"
+  },
+  "回量期縮短為 {days} 天：下一場 A 賽事「{name}」{date}": {
+    "draft": true,
+    "src": "backend/engine/planning.py:773"
+  },
+  "回量期：只排輕鬆跑（每次 ≤ 60 分）和肌力，不排長跑、強度課；量照減量期倒過來慢慢加回去（Higdon 反向減量；不排強度：Koop、Uphill Athlete，教練級）": {
+    "draft": true,
+    "src": "backend/engine/overview.py:405"
   },
   "在 AeT 附近跑 1 次 ≥ 60 分鐘，飄移 < 5%": {
     "draft": true,
@@ -1386,6 +1434,10 @@
   "外部 key 不對": {
     "draft": true,
     "src": "backend/engine/plan_store.py:533"
+  },
+  "多日行程": {
+    "draft": true,
+    "src": "backend/engine/planning.py:248"
   },
   "多日行程每天吃掉的糧食": {
     "draft": true,
@@ -1695,6 +1747,14 @@
     "draft": true,
     "src": "backend/engine/hr_profile.py:65"
   },
+  "恢復 {days} 天": {
+    "draft": true,
+    "src": "backend/engine/planning.py:361"
+  },
+  "恢復 {days} 天＋回量 {n} 週": {
+    "draft": true,
+    "src": "backend/engine/planning.py:359"
+  },
   "恢復期": {
     "draft": true,
     "src": "backend/engine/overview.py:1555"
@@ -1726,6 +1786,10 @@
   "恢復期：心率區間為主；功率、配速目標 × {f:.3f}（停跑 {days} 天的 FVDOT{cross}）": {
     "draft": true,
     "src": "backend/engine/overview.py:1103"
+  },
+  "恢復期：賽前 4 週平均 {h:.1f} h × {share:.0%}（反向減量的第一段，比例推估）": {
+    "draft": true,
+    "src": "backend/engine/overview.py:415"
   },
   "恢復期：近 4 週的 {share:.0%}": {
     "draft": true,
@@ -2338,6 +2402,10 @@
   "沒有功率：不判讀間歇、不算 W′（間歇用心率看）": {
     "draft": true,
     "src": "backend/engine/interval_eval.py:461"
+  },
+  "沒有回量期：下一場 A 賽事「{name}」{date} 太近": {
+    "draft": true,
+    "src": "backend/engine/planning.py:776"
   },
   "沒有實測 AeT": {
     "draft": true,
@@ -2983,6 +3051,10 @@
     "draft": true,
     "src": "backend/engine/workout_templates.py:418"
   },
+  "賽後第 1 週：輕鬆跑 ≤ {max} 分": {
+    "draft": true,
+    "src": "backend/engine/post_race.py:116"
+  },
   "走路或極慢跑": {
     "draft": true,
     "src": "backend/engine/interval_library.py:62"
@@ -3527,6 +3599,10 @@
     "draft": true,
     "src": "backend/engine/interval_library.py:822"
   },
+  "預估時間 {h:.1f} h": {
+    "draft": true,
+    "src": "backend/engine/planning.py:251"
+  },
   "預估會超過關門時間：建議報短一點的組別，或這場先不跑": {
     "draft": true,
     "src": "backend/engine/race_feasibility.py:303"
@@ -3619,6 +3695,10 @@
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:518"
   },
+  "（{n} 堂排不開，拿掉了，不用補）": {
+    "draft": true,
+    "src": "backend/engine/post_race.py:131"
+  },
   "（不含賽後恢復期／轉換期 {n} 天）": {
     "draft": true,
     "src": "backend/engine/reentry.py:167"
@@ -3667,9 +3747,21 @@
     "draft": true,
     "src": "backend/engine/status.py:438"
   },
+  "，回量期多 1 週": {
+    "draft": true,
+    "src": "backend/engine/planning.py:373"
+  },
+  "，平路、不跑下坡": {
+    "draft": true,
+    "src": "backend/engine/post_race.py:118"
+  },
   "，平路或緩坡、不跑長下坡": {
     "draft": true,
     "src": "backend/engine/overview.py:1968"
+  },
+  "，恢復多給 {d} 天": {
+    "draft": true,
+    "src": "backend/engine/planning.py:378"
   },
   "，或": {
     "draft": true,
@@ -3678,6 +3770,26 @@
   "，有交叉訓練": {
     "draft": true,
     "src": "backend/engine/overview.py:1104"
+  },
+  "，沒有賽事 GPX：恢復天數沒有看下坡（上傳 GPX 才能算）": {
+    "draft": true,
+    "src": "backend/engine/planning.py:367"
+  },
+  "，賽後 {h} 小時內不排硬課、不跑下坡": {
+    "draft": true,
+    "src": "backend/engine/planning.py:384"
+  },
+  "，近 {w} 週沒有下坡紀錄，這場的下坡當成超過你練過的": {
+    "draft": true,
+    "src": "backend/engine/planning.py:369"
+  },
+  "，這場的下坡是你近 {w} 週最大一次的 {r:.1f} 倍": {
+    "draft": true,
+    "src": "backend/engine/planning.py:371"
+  },
+  "，遠超過你練過的，賽後前幾天特別注意": {
+    "draft": true,
+    "src": "backend/engine/planning.py:382"
   },
   "：": {
     "draft": false,
@@ -3698,6 +3810,10 @@
   "；{n} 次沒有任何溫度，不能熱校正": {
     "draft": true,
     "src": "backend/engine/zone_events.py:475"
+  },
+  "；下坡比你近 6 週練過的多，賽後 {h} 小時內走平路、不排硬課": {
+    "draft": true,
+    "src": "backend/engine/post_race.py:129"
   },
   "；不含減量期／比賽週／賽後恢復期／轉換期的週": {
     "draft": true,

@@ -32,13 +32,15 @@ from backend.engine import load_guard as LG
 from backend.engine import specific_phase as SP
 from backend.engine import steep_hill as SH
 from backend.engine import overview as O
+from backend.engine import post_race as PR_
 from backend.engine import quality_gate as QG
 from backend.engine.hr_profile import below, easy_cap_label, easy_cap_measured
 from backend.engine.zones import WORKOUT_TARGETS
 
 MAX_WEEKS = 8                 # never schedule further ahead than this
 MODE_LABELS = {"base": "基礎期", "specific": "專項期", "taper": "減量期", "event": "比賽週",
-               "recovery": "恢復期", "transition": "轉換期", "recovery_week": "恢復週", "reentry": "停訓後恢復期"}
+               "recovery": "恢復期", "transition": "轉換期", "rebuild": "回量期", "recovery_week": "恢復週",
+               "reentry": "停訓後恢復期"}
 
 
 def _d(s) -> dt.date:
@@ -91,9 +93,10 @@ def _next_event_start(phases: list, day: dt.date) -> Optional[dt.date]:
 
 def week_hours(kind: str, hist: list[float], build: list[bool], ctl0: float, r: float,
                cc: float, days_to_a: Optional[int], tr_ref: Optional[float] = None,
-               cap_ref: Optional[float] = None) -> tuple[float, str, list[str]]:
+               cap_ref: Optional[float] = None, rebuild: Optional[tuple] = None) -> tuple[float, str, list[str]]:
     """(hours, mode, why) for one projected week; `hist` = weekly hours, oldest first.
-    `tr_ref`: a 轉換期 week's pre-race level (overview.transition_ref; None = the old 65 % rule).
+    `tr_ref`: a 轉換期 / 恢復期 / 回量期 week's pre-race level (overview.transition_ref; None = the old
+    rules). `rebuild`: a 回量期 week's (share, index, weeks) (planning.rebuild_share, SP-98).
     `cap_ref`: the +10 % cap's reference on normal weeks (load_guard.step_base of the normal
     weeks, SP-73); None = max(4-week mean, last week) of `hist`."""
     base4 = statistics.mean(hist[-4:]) if hist else 0.0
@@ -120,7 +123,15 @@ def week_hours(kind: str, hist: list[float], build: list[bool], ctl0: float, r: 
     if kind == "transition":
         h, w = O.transition_hours(tr_ref, base4)
         return h, kind, [w]
-    share = 0.5 if kind == "recovery" else 0.65
+    if kind == "recovery":
+        h, w = O.recovery_hours(tr_ref, base4)
+        return h, kind, [w]
+    if kind == "rebuild":
+        from backend.engine.planning import REBUILD_SHARES
+        share, i, n = rebuild or (REBUILD_SHARES[0], 0, 1)
+        h, w = O.rebuild_hours(tr_ref, base4, share, i, n)
+        return h, kind, [w]
+    share = 0.65
     return share * base4, kind, [f"{MODE_LABELS.get(kind, kind)}：近 4 週的 {share:.0%}"]
 
 
@@ -212,7 +223,7 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
         add(id="long", kind="long", title=f"長跑（減量期，≤ {O.TAPER_LONG_MAX_MIN} 分）", minutes=int(round(lm / 5) * 5),
             target=tgt.get("long", ""), detail=f"心率不超過{cap_txt}；"
             + ("平路或緩坡，不跑長下坡" if taper.get("sore") else "輕鬆跑"), source=O.SRC_TAPER_WEEK, tss=lm / 60.0 * tph)
-    n_strength = 2 if kind in ("base", "transition", "recovery") else 1
+    n_strength = 2 if kind in ("base", "transition", "recovery", "rebuild") else 1
     for i in range(n_strength):
         add(id=f"strength{i + 1}", kind="strength", title="肌力（下肢單腳＋核心）", minutes=35,
             detail="膝主導＋臀中肌；安排在輕鬆日或跑完後", source=O.SRC_UA, tss=strength_tss)
@@ -222,7 +233,7 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
     if kind == "taper" and taper:
         n_easy = O.taper_easy_count(left, taper.get("runs"), sum(1 for s in ss if s["kind"] in O.RUN_KINDS))
     for i in range(n_easy):
-        m = min(left / n_easy, O.TRANSITION_RUN_MAX) if kind == "transition" else left / n_easy
+        m = min(left / n_easy, O.TRANSITION_RUN_MAX) if kind in ("transition", "rebuild") else left / n_easy
         strides = kind == "base" and i == 0 and mode not in ("recovery_week", "reentry")
         st_t, st_d, _st_s = O.ROAD_STRIDES if road else O.HILL_STRIDES
         add(id=f"easy{i + 1}", kind="easy", title="輕鬆跑" + (st_t if strides else ""),
@@ -238,8 +249,8 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
                      slots=max(1, sum(bool(x) for x in prefs.days) - n_lost), notes=notes if notes is not None else [],
                      quality_cap=quality_cap)
         ss = PP.shape(ss, total, prefs, ctx)
-        if kind == "transition":
-            O.cap_transition_runs(ss, ctx.notes)     # 轉換期: each run ≤ 60 min (Canova), as week_plan
+        if kind in ("transition", "rebuild"):
+            O.cap_transition_runs(ss, ctx.notes)     # 轉換期 / 回量期: each run ≤ 60 min (Canova), as week_plan
         ctx.notes.extend(PP.blocked_pref_notes(prefs, monday, blocked))
         PP.place(ss, days, PP.long_weekday(prefs, long_wd), prefs, notes=ctx.notes)
         return _b2b_finish(ss, info, b2b, monday, aet, blocked, prefs, ctx.notes, aet_measured)
@@ -506,14 +517,22 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
             pre_h = statistics.mean(hist[-4:]) if hist else None
         ev = _next_event_start(phases, week)
         days_to = (ev - week).days if ev else None
-        tr_h = None
-        if kind == "transition":
+        tr_h, rb = None, None
+        if kind in ("transition", "recovery", "rebuild"):
+            # the pre-race level (SP-73, SP-98): week_plan's when the same race, else the projected weeks
             ref = O.transition_ref(phases, week, lambda m: hours_at.get(m.isoformat()))
             tr_h = cur_tr.get("hours") if cur_tr.get("hours") and cur_tr.get("mondays") == ref["mondays"] \
                 else ref["hours"]
+        if kind == "rebuild":
+            from backend.engine import planning as PL
+            rb_ph = next((p for p in phases if phase_kind([p], week) == "rebuild"), None)
+            rb = PL.rebuild_share(rb_ph, week) if rb_ph is not None else None
         hours, mode, why = week_hours(kind, hist, build, ctl, tph, ctlconstant, days_to, tr_h,
-                                      LG.step_base(norm) if norm else None)
+                                      LG.step_base(norm) if norm else None, rb)
         notes: list = []
+        if kind == "specific":
+            # 中間訓練 (SP-95): the same cap as week_plan (overview.inter_cap)
+            hours = O.inter_cap(phases, week, hours, why, lambda m: hours_at.get(m.isoformat()))
         if PR is not None and PR.weekly_hours is not None and hours > PR.weekly_hours:
             hours = PR.weekly_hours
             why = why + [f"你的每週時數上限 {PR.weekly_hours:g} h"]
@@ -593,13 +612,14 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
                            taper={"runs": cur_t.get("pre_runs") if same else last_runs, "sore": tc.get("sore"),
                                   "long": (_d(tc["start"]) - week).days > tc["long_days"]}
                            if tc and kind == "taper" else None)
-        if kind == "transition":
-            notes.append({"level": "info", "src": "transition", "text": O.TRANSITION_NOTE})
+        if kind in ("transition", "rebuild"):
+            notes.append({"level": "info", "src": "transition",
+                          "text": O.TRANSITION_NOTE if kind == "transition" else O.REBUILD_NOTE})
         ph_notes = _phase_notes(phases, week)
         ph_note = bool(ph_notes)
         for pk, t in ph_notes:
-            notes.append({"level": "info", "src": "transition" if pk in ("recovery", "transition") else "phase",
-                          "text": t})
+            notes.append({"level": "info", "src": "transition" if pk in ("recovery", "transition", "rebuild")
+                          else "phase", "text": t})
         if sp_info and sp_info.get("active"):
             try:
                 SP.decorate(ss, sp_info)
@@ -648,6 +668,8 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
         ss = O.drop_strength_before_a(ss, s_stops, week, notes)
         # 減量期規則 (SP-96): the same rule as week_plan (overview.taper_rules)
         ss = O.taper_rules(ss, tc, week, notes, road)
+        # 賽後的日子 (SP-98): the same rule as week_plan (post_race.apply)
+        ss = PR_.apply(ss, PR_.a_windows(phases, events, week), week, notes, blocked=set(bmap))
         if tc and kind == "taper":
             n = O.taper_climb_note(tc, cur_t.get("pre_climb") if same else cur.get("climb4"),
                                    hours / (cur_t.get("pre_hours") if same else pre_h)
@@ -678,7 +700,7 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
                     "provisional": week > monday + dt.timedelta(weeks=1), "why": why,
                     "sessions": [s for s in ss if s["day"]],
                     **({"notes": notes} if PR is not None or bmap or (heat_w or {}).get("active")
-                       or kind == "transition" or ph_note or tech.get("planned") is not None or s_note or user_q
+                       or kind in ("transition", "rebuild") or ph_note or tech.get("planned") is not None or s_note or user_q
                        or b2b_info.get("post") or b2b_info.get("due") or (lc_info or {}).get("planned") else {}),
                     **({"b2b": B2B.public(b2b_info)} if b2b_info.get("due") or b2b_info.get("post") else {}),
                     **({"b2b_suggestion": b2b_sug} if b2b_sug else {}),

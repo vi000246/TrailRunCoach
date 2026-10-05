@@ -46,6 +46,7 @@ TARGETS = {
     "taper":      {"low": (50, 70), "high": (20, 35), "anaerobic": (5, 15)},
     "transition": {"low": (70, 100), "high": (0, 25), "anaerobic": (0, 5)},
     "recovery":   {"low": (70, 100), "high": (0, 25), "anaerobic": (0, 5)},
+    "rebuild":    {"low": (70, 100), "high": (0, 25), "anaerobic": (0, 5)},
 }
 DEFAULT_PHASE = "base"
 

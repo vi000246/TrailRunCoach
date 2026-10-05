@@ -89,7 +89,9 @@ def test_twenty_weeks_apart_unchanged():
     both = P.auto_phases([r1, r2], B, E)
     alone = P.auto_phases([r1], B, E)
     assert [(p.kind, p.start, p.end) for p in both[:6]] == [(p.kind, p.start, p.end) for p in alone[:6]]
-    assert not any(p.note for p in both if p.event_id == "r2")
+    # SP-98: every recovery says the race's size and its recovery; nothing else is cut short
+    assert not any(p.note for p in both if p.event_id == "r2" and p.kind != "recovery")
+    assert of(both, "recovery", "r2")[0].note == "中（預估時間 2.5 h）：恢復 7 天"
     assert days(of(both, "specific", "r2")[0]) == P.SPECIFIC_WEEKS * 7
 
 

@@ -27,8 +27,9 @@ def test_phases_are_contiguous_and_non_overlapping():
     ph = P.auto_phases(evs, dt.date(2026, 6, 1), dt.date(2027, 3, 1))
     for p, q in zip(ph, ph[1:]):
         assert P._d(q.start) == P._d(p.end) + dt.timedelta(days=1)
-    # second A event too close for a full 8-week specific block: clipped, never overlaps
-    assert [p.kind for p in ph if p.event_id == "b"][0] == "specific"
+    # second A event 6 weeks after a trail race: SP-95 — only 恢復 + 回量 + 減量, no 專項期
+    assert [p.kind for p in ph if p.event_id == "b"][0] == "taper"
+    assert [p.kind for p in ph if p.event_id == "a"][-1] == "rebuild"
     # B events never create phases
     assert all(p.event_id != "x" for p in ph)
     # multi-day event

@@ -6,7 +6,7 @@ Stored as a user overlay at ~/.wko5coach/plan.json — nothing here touches the
 WKO5 files. Phases are generated backwards from each A event unless the user
 has saved manual phases:
 
-    base  →  specific (8 wk)  →  taper (2 wk)  →  event  →  recovery  →  transition (3 wk)
+    base  →  specific (8 wk)  →  taper (2 wk)  →  event  →  recovery  →  transition (3 wk)  →  rebuild
 
 Sources (docs/research/periodization-phase-metrics.md):
   * taper 14 days — Bosquet et al. 2007 meta-analysis (8–14 days most effective)
@@ -20,6 +20,8 @@ Sources (docs/research/periodization-phase-metrics.md):
     `transition_weeks` (課表偏好, default 3, 0 = off; ≤ 4 weeks, ≤ 6 after a 超馬級+ race — SP-109,
     Koop / Hart / Torrence §4.7.1). It never takes days from the next A
     race's backward-planned 專項期: too close → shortened, < 7 days → skipped, with a note
+  * recovery by 賽事大小 + a 回量期 (reverse taper) after the 轉換期 (SP-98, recovery_plan); one size up
+    for a race with much more downhill than the athlete trained (SP-111 下坡升級, downhill)
   * two A races close together (SP-90): the first one's recovery yields to the second one's
     taper (recovery_and_taper, 推估), the phases say what was cut short, and A races < 12
     weeks apart get TrainerRoad's hint (periodization-cross-sport.md §4.8)
@@ -107,6 +109,7 @@ PHASES = {
     "taper": "減量期",
     "event": "賽事",
     "recovery": "恢復期",
+    "rebuild": "回量期",              # SP-98: after the 恢復期 (and the 轉換期), the reverse taper
 }
 KINDS = {"race": "越野賽", "baiyue": "百岳", "road": "路跑賽", "other": "其他"}
 PRIORITIES = ("A", "B", "C")
@@ -240,6 +243,195 @@ def taper_days(ev, pref: Optional[int] = None) -> int:
     return TAPER_DAYS
 
 
+def size_basis(ev) -> str:
+    """How event_size judged `ev` (SP-111: the plan page says it): 「多日行程」, 「預估時間 N h」,
+    「EP N」 or 「公里數 N」."""
+    if (ev.days or 1) > 1:
+        return _("多日行程")
+    h = event_hours(ev)
+    if h:
+        return _("預估時間 {h:.1f} h", h=h)
+    ep = event_ep(ev)
+    if ep is not None:
+        return _("EP {ep:.0f}", ep=ep)
+    return _("公里數 {km:.0f}", km=float(ev.distance_km or 0.0))
+
+
+# ---- 賽後恢復與回量期 (SP-98; periodization-cross-sport.md §4.6, §4.6.1, §6.1「SP-98」) --------------
+# Two parts after an A race, both 教練級: a 恢復期 (the first days without running) and a 回量期
+# that mirrors the 減量期 (Higdon's reverse taper [446]; no structured intensity — Koop [434], Uphill
+# Athlete [441]). Length by 賽事大小 (event_size, SP-111 — never the horizontal km alone):
+#   馬拉松級  7 days + 1 回量 week   (Torrence [445], Johnston [442]: ~2 weeks back to serious training)
+#   超馬級   14 days                (Johnston [442]: ~2 weeks)
+#   100 英里級 14 days + 2 回量 weeks (Johnston [442] 「easily a month」, Koop [434] weeks 2–3 easy)
+#   短 / 中   7 days (unchanged)
+# The cuts are 推估. Volume: the 恢復期 REC_SHARE of the 4 complete weeks before the taper
+# (pre_race_mondays, as the 轉換期 — the last 4 weeks hold the taper and the race), the 回量期 from
+# REBUILD_SHARES[0] to [1] (the taper's 50 % → 40 % mirrored, Daniels' 50 → 75 % re-entry steps;
+# the shares are 推估). The first REC_NO_RUN_DAYS after the race no running, then runs ≤
+# REC_SHORT_MIN until day REC_SHORT_DAYS (48 h on, a 40-min easy run did no harm — a controlled
+# trial [256]; Higdon: 3 days off, ~20 min on day 4 [446]).
+# Order: 恢復期 → 轉換期 (課表偏好, SP-73) → 回量期 → 基礎期: the 回量期 is the ramp back into normal
+# training, after the off-season block when there is one (with 轉換期 off it follows the 恢復期).
+REC_BY_SIZE = {SHORT: (7, 0), MEDIUM: (7, 0), MARATHON: (7, 1), ULTRA: (14, 0), HUNDRED: (14, 2)}
+REC_SHARE = 0.40
+REBUILD_SHARES = (0.50, 0.75)
+REC_NO_RUN_DAYS = 2
+REC_SHORT_DAYS = 7
+REC_SHORT_MIN = 40
+REBUILD_MIN_DAYS = 7               # a shorter remainder before the next race's 專項期 → no 回量期 (推估)
+# B races (SP-95; Pfitzinger, via [437], 二手轉述): 短 3 days, 中 5 days of easy running only;
+# 馬拉松級 and up as an A race's 恢復期 days (no 回量期). Cuts by event_size, 推估.
+B_REC_DAYS = {SHORT: 3, MEDIUM: 5}
+# Two A races (SP-95, §4.8.1): closer than A_GAP_HINT_WEEKS → 恢復 → (回量) → 中間訓練 (the 專項期
+# left, its weekly hours ≤ INTER_PEAK of the first race's pre-taper level — Higdon [429] / [430]:
+# 4 weeks apart 50–65 %, 6 weeks 75–90 %; 推估) → 再減量, no 轉換期. A trail / 超馬級 first race
+# closer than CLOSE_TRAIL_WEEKS: 恢復 + 回量 + 減量 only, no training block (推估, [428][434]).
+CLOSE_TRAIL_WEEKS = 8
+INTER_PEAK = ((4, 0.65), (6, 0.90))
+
+# 下坡升級 (SP-111 phase 1, docs/research/downhill-recovery.md): the race's downhill impact
+# (chart_metrics.DOWNHILL_EXPR units — 「下坡衝擊等效 km」, Gottschall & Kram 2005, Keller 1996)
+# ÷ the athlete's biggest single activity of the last DOWNHILL_WEEKS[0] weeks (DOWNHILL_WEEKS[0]–[1]
+# weeks back linearly down-weighted to 0 — the repeated-bout effect lasts 3–6 weeks, not 9).
+# ≥ DOWNHILL_BUMP → the recovery size one tier up (7 → 14 days: Millet 2011, Chalchat 2022; a size
+# already ≥ 14 days → one more 回量 week, 推估); ≥ DOWNHILL_HINT → only a hint more; nothing
+# downhill in the window = over. ≥ DOWNHILL_BIG (a big downhill for you) → the first
+# DOWNHILL_FLAT_DAYS days no hard session and no downhill (Bontemps 2020: 3–5 days). Thresholds 推估.
+DOWNHILL_BUMP = 1.5
+DOWNHILL_HINT = 2.0
+DOWNHILL_BIG = 1.0
+DOWNHILL_WEEKS = (6, 9)
+DOWNHILL_FLAT_DAYS = 3
+# The race's downhill impact from its GPX (None = no GPX) and the athlete's weighted max before a
+# day — installed by the app (engine/downhill_recovery.install); None = not judged, so the engine
+# and its tests stay pure.
+RACE_DOWNHILL_OF = None      # Callable[[Event], Optional[float]]
+ATHLETE_DOWNHILL_OF = None   # Callable[[dt.date], Optional[float]]
+
+
+def downhill_ratio(race: float, mine: Optional[float]) -> dict:
+    """The 下坡升級 verdict of a race's downhill impact against the athlete's (SP-111): {"race",
+    "mine", "ratio" (inf with nothing downhill), "bump", "hint", "big"}."""
+    ratio = race / mine if mine and mine > 0 else math.inf
+    return {"race": race, "mine": mine or 0.0, "ratio": ratio, "bump": ratio >= DOWNHILL_BUMP,
+            "hint": ratio >= DOWNHILL_HINT, "big": ratio >= DOWNHILL_BIG and race > 0}
+
+
+def downhill(ev) -> Optional[dict]:
+    """downhill_ratio of `ev` from the installed hooks; {"gpx": False} without its GPX; None when the
+    hooks are not installed (tests, a pure engine) or fail."""
+    if RACE_DOWNHILL_OF is None or ATHLETE_DOWNHILL_OF is None:
+        return None
+    try:
+        race = RACE_DOWNHILL_OF(ev)
+        if race is None:
+            return {"gpx": False}
+        return {"gpx": True, **downhill_ratio(float(race), ATHLETE_DOWNHILL_OF(ev.start))}
+    except Exception:                       # noqa: BLE001 — the plan must still build
+        return None
+
+
+def recovery_plan(ev, b: bool = False) -> dict:
+    """The recovery after event `ev` (SP-98, SP-95, SP-111 下坡升級): {"size", "rec_size", "days",
+    "rebuild" (weeks), "downhill", "bumped" (None / "size" / "rebuild"), "text"}. `b`: a B race —
+    B_REC_DAYS for 短 / 中, else the A days; never a 回量期."""
+    size = event_size(ev)
+    rec = size
+    days, rb = REC_BY_SIZE[size]
+    dh = downhill(ev)
+    bumped = None
+    if dh and dh.get("bump"):
+        if days >= 14 and not b:
+            rb, bumped = rb + 1, "rebuild"
+        else:
+            rec, bumped = min(size + 1, HUNDRED), "size"
+            days, rb = REC_BY_SIZE[rec]
+    if b:
+        days, rb = B_REC_DAYS.get(rec, days), 0
+    out = {"size": size, "rec_size": rec, "days": days, "rebuild": rb, "downhill": dh, "bumped": bumped}
+    base = recovery_plan_text(ev, out, b)
+    return {**out, "text": base}
+
+
+def recovery_plan_text(ev, rp: dict, b: bool = False) -> str:
+    """「馬拉松級（預估時間 4.5 h）：恢復 7 天＋回量 1 週」 + the downhill verdict, no 「；」 inside."""
+    size = SIZES[rp["size"]]
+    if rp["rebuild"]:
+        what = _("恢復 {days} 天＋回量 {n} 週", days=rp["days"], n=rp["rebuild"])
+    else:
+        what = _("恢復 {days} 天", days=rp["days"])
+    txt = _("{size}（{basis}）：{what}", size=_(SIZE_LABEL[size]), basis=size_basis(ev), what=what)
+    dh = rp.get("downhill")
+    if dh is None:
+        return txt
+    if not dh.get("gpx"):
+        return txt + _("，沒有賽事 GPX：恢復天數沒有看下坡（上傳 GPX 才能算）")
+    if dh["mine"] <= 0:
+        txt += _("，近 {w} 週沒有下坡紀錄，這場的下坡當成超過你練過的", w=DOWNHILL_WEEKS[1])
+    else:
+        txt += _("，這場的下坡是你近 {w} 週最大一次的 {r:.1f} 倍", w=DOWNHILL_WEEKS[0], r=dh["ratio"])
+    if rp["bumped"] == "rebuild":
+        txt += _("，回量期多 1 週")
+    elif rp["bumped"] == "size":
+        base_days = (B_REC_DAYS.get(rp["size"], REC_BY_SIZE[rp["size"]][0]) if b
+                     else REC_BY_SIZE[rp["size"]][0])
+        if rp["days"] > base_days:
+            txt += _("，恢復多給 {d} 天", d=rp["days"] - base_days)
+        elif rp["rebuild"] > REC_BY_SIZE[rp["size"]][1]:
+            txt += _("，回量期多 1 週")
+    if dh.get("hint"):
+        txt += _("，遠超過你練過的，賽後前幾天特別注意")
+    if dh.get("big"):
+        txt += _("，賽後 {h} 小時內不排硬課、不跑下坡", h=DOWNHILL_FLAT_DAYS * 24)
+    return txt
+
+
+def rebuild_share(phase, monday: dt.date) -> tuple[float, int, int]:
+    """(share, week index from 0, weeks) of the 回量期 `phase` (Phase or dict) in the week of
+    `monday`: REBUILD_SHARES[0] → [1] linearly over its weeks."""
+    def get(k):
+        return phase.get(k) if isinstance(phase, dict) else getattr(phase, k)
+    s, e = _d(get("start")), _d(get("end"))
+    n = max(1, math.ceil(((e - s).days + 1) / 7))
+    i = min(n - 1, max(0, (monday - s).days // 7))
+    lo, hi = REBUILD_SHARES
+    return (lo if n == 1 else lo + (hi - lo) * i / (n - 1)), i, n
+
+
+def inter_peak(gap_days: int) -> float:
+    """The 中間訓練's weekly-hours cap, as a share of the first race's pre-taper level, for two A
+    races `gap_days` apart (INTER_PEAK, linear between its points)."""
+    (w0, s0), (w1, s1) = INTER_PEAK
+    w = gap_days / 7.0
+    if w <= w0:
+        return s0
+    if w >= w1:
+        return s1
+    return s0 + (s1 - s0) * (w - w0) / (w1 - w0)
+
+
+def intermediate(phases_: list, monday: dt.date) -> Optional[dict]:
+    """The 中間訓練 between two A races < A_GAP_HINT_WEEKS apart (SP-95): when the 專項期 holding
+    `monday` follows an A race that ended less than that before its own race — {"share" (inter_peak),
+    "gap" (days), "prev_end"}; else None. `phases_`: Phase objects or dicts."""
+    def get(p, k):
+        return p.get(k) if isinstance(p, dict) else getattr(p, k, None)
+    sp = next((p for p in phases_ or () if get(p, "kind") == "specific"
+               and _d(get(p, "start")) <= monday <= _d(get(p, "end"))), None)
+    if sp is None:
+        return None
+    ev_p = next((p for p in phases_ if get(p, "kind") == "event" and _d(get(p, "start")) > _d(get(sp, "end"))), None)
+    prev = [p for p in phases_ if get(p, "kind") == "event" and _d(get(p, "end")) < _d(get(sp, "start"))]
+    if ev_p is None or not prev:
+        return None
+    pe = max(_d(get(p, "end")) for p in prev)
+    gap = (_d(get(ev_p, "start")) - pe).days
+    if gap >= A_GAP_HINT_WEEKS * 7:
+        return None
+    return {"share": inter_peak(gap), "gap": gap, "prev_end": pe.isoformat()}
+
+
 def transition_weeks_for(ev, weeks: Optional[int]) -> int:
     """The 轉換期 weeks after A event `ev` (SP-109): the 課表偏好 `weeks`, capped at
     TRANSITION_WEEKS_ULTRA_MAX after a 超馬級+ race (event_size), else TRANSITION_WEEKS_MAX."""
@@ -286,6 +478,9 @@ def install_size_inputs() -> None:
         return terrain_calib.divisor()
 
     HOURS_OF, DIVISOR_OF = hours_of, divisor_of
+    # 下坡升級 (SP-111 phase 1, SP-98): the race's and the athlete's downhill impact
+    from backend.engine import downhill_recovery
+    downhill_recovery.install()
 
 
 @dataclass
@@ -545,43 +740,78 @@ def auto_phases(events: list[Event], begin: dt.date, end: dt.date,
         cursor = max(cursor, ev.end + one)
         prev = ev
         nxt = next((x for x in a_events[i + 1:] if x.start > ev.end), None)
-        rec_days = 14 if ev.is_long else 7      # 超馬級 and up (event_size, SP-111)
-        rec_note = ""
+        rp = recovery_plan(ev)                  # 7 / 14 days + 回量 weeks by event_size (SP-98, SP-111)
+        rec_days = rp["days"]
+        rec_notes: list[str] = []
+        gap = (nxt.start - ev.end).days if nxt is not None else None
+        close = gap is not None and gap < A_GAP_HINT_WEEKS * 7                  # SP-95: no 轉換期
+        only_rec = close and gap < CLOSE_TRAIL_WEEKS * 7 and (ev.kind != "road" or event_size(ev) >= ULTRA)
         if nxt is not None:
-            rec_days, t = recovery_and_taper((nxt.start - ev.end).days - 1, rec_days, taper_len(nxt))
+            rec_days, t = recovery_and_taper(gap - 1, rec_days, taper_len(nxt))
             if t < taper_len(nxt):
                 taper_of[nxt.id] = t
-            if rec_days < (14 if ev.is_long else 7):
-                rec_note = _("恢復期縮短為 {days} 天：下一場 A 賽事「{name}」{date}",
-                             days=rec_days, name=nxt.name, date=_md(nxt.start))
+            if rec_days < rp["days"]:
+                rec_notes.append(_("恢復期縮短為 {days} 天：下一場 A 賽事「{name}」{date}",
+                                   days=rec_days, name=nxt.name, date=_md(nxt.start)))
         rec_end = ev.end + dt.timedelta(days=rec_days)
-        rec = add("recovery", cursor, rec_end, ev.id, rec_note)
+        rec = add("recovery", cursor, rec_end, ev.id)
         cursor = max(cursor, rec_end + one)
-        tw = transition_weeks_for(ev, transition_weeks)       # ≤ 4 weeks, ≤ 6 after an ultra (SP-109)
+        at = rec_end + one                      # the next post-race phase's first day (before `begin` too)
+        # what is left before the next A race's 專項期 (its 減量期 when only 恢復＋減量): that phase is
+        # planned backwards from its race and wins; the 回量期 gets it first, the 轉換期 the rest
+        # (two A races < 12 weeks apart, SP-95: the 回量期 comes out of the 中間訓練, i.e. that 專項期)
+        limit = None if nxt is None else \
+            (nxt.start - dt.timedelta(days=taper_len(nxt)) - one if close else spec_start_of(nxt) - one)
+        room = None if limit is None else max(0, (limit - at).days + 1)
+        rb_want = rp["rebuild"] * 7
+        rb_days = room if only_rec else (rb_want if room is None else min(rb_want, room))
+        if not only_rec and rb_days < REBUILD_MIN_DAYS:
+            rb_days = 0
+        rb_note = ""
+        if only_rec and rb_days:
+            rb_note = _("只排恢復、回量、減量：越野／超馬級的 A 賽和下一場「{name}」相隔不到 {w} 週，中間不排訓練（推估）",
+                        name=nxt.name, w=CLOSE_TRAIL_WEEKS)
+        elif rb_want and rb_days < rb_want and rb_days:
+            rb_note = _("回量期縮短為 {days} 天：下一場 A 賽事「{name}」{date}",
+                        days=rb_days, name=nxt.name, date=_md(nxt.start))
+        elif rb_want and not rb_days:
+            rec_notes.append(_("沒有回量期：下一場 A 賽事「{name}」{date} 太近", name=nxt.name, date=_md(nxt.start)))
+        room_t = None if room is None else room - rb_days
+        tw = 0 if close else transition_weeks_for(ev, transition_weeks)   # ≤ 4 weeks, ≤ 6 after an ultra (SP-109)
+        if close and not only_rec and transition_weeks_for(ev, transition_weeks) and not rec_notes:
+            # SP-95: two A races < 12 weeks apart — 恢復 → 中間訓練 → 再減量, no 轉換期
+            rec_notes.append(_("沒有轉換期：離下一場 A 賽事「{name}」只剩 {span}，恢復期後直接進專項期",
+                               name=nxt.name, span=_span((nxt.start - at).days)))
         if tw > 0:
-            # 轉換期 (SP-73): never into the next A race's 專項期 — that phase is planned backwards
-            # from its race and wins
-            t_end = rec_end + dt.timedelta(weeks=tw)
-            limit = spec_start_of(nxt) - one if nxt is not None else None
-            if limit is not None and limit < t_end:
-                days = (limit - cursor).days + 1
+            # 轉換期 (SP-73): never into the next A race's 專項期
+            if room_t is not None and room_t < tw * 7:
+                days = room_t
+                t_last = at + dt.timedelta(days=days - 1)
                 if days >= TRANSITION_MIN_DAYS:
                     note = _("轉換期縮短為 {days} 天：下一場 A 賽事「{name}」的專項期 {start} 開始",
                              days=days, name=nxt.name, start=(limit + one).isoformat())
-                    add("transition", cursor, limit, ev.id, note)
-                    cursor = max(cursor, limit + one)
-                elif rec is not None and not rec_note and days > 0:
-                    rec.note = _("沒有轉換期：下一場 A 賽事「{name}」的專項期 {start} 開始，只剩 {days} 天",
-                                 name=nxt.name, start=(limit + one).isoformat(), days=days)
-                elif rec is not None and not rec_note:
+                    add("transition", cursor, t_last, ev.id, note)
+                    cursor, at = max(cursor, t_last + one), t_last + one
+                elif not rec_notes and days > 0:
+                    rec_notes.append(_("沒有轉換期：下一場 A 賽事「{name}」的專項期 {start} 開始，只剩 {days} 天",
+                                       name=nxt.name, start=(limit + one).isoformat(), days=days))
+                elif not rec_notes:
                     # its 專項期 already started (SP-90: never cite a date in the past)
-                    rec.note = _("沒有轉換期：離下一場 A 賽事「{name}」只剩 {span}，恢復期後直接進專項期",
-                                 name=nxt.name, span=_span((nxt.start - cursor).days))
+                    rec_notes.append(_("沒有轉換期：離下一場 A 賽事「{name}」只剩 {span}，恢復期後直接進專項期",
+                                       name=nxt.name, span=_span((nxt.start - at).days)))
             else:
+                t_end = at + dt.timedelta(weeks=tw) - one
                 capped = _("轉換期 {weeks} 週：設定的 {pref} 週只用在超馬級以上的 A 賽事",
                            weeks=tw, pref=int(transition_weeks)) if transition_weeks > tw else ""
                 add("transition", cursor, t_end, ev.id, capped)
-                cursor = max(cursor, t_end + one)
+                cursor, at = max(cursor, t_end + one), t_end + one
+        if rb_days:
+            # 回量期 (SP-98): the reverse taper back into training, no intensity
+            r_end = at + dt.timedelta(days=rb_days - 1)
+            add("rebuild", cursor, r_end, ev.id, rb_note)
+            cursor = max(cursor, r_end + one)
+        if rec is not None:
+            rec.note = "；".join(rec_notes + [rp["text"]])
     if cursor <= end:
         add("base", cursor, end)    # no A event ahead: open-ended base
     return [p for p in out if _d(p.start) <= end]
@@ -702,7 +932,7 @@ def phase_on(plan: Plan, day: dt.date, begin: Optional[dt.date] = None,
     return None
 
 
-POST_RACE_KINDS = ("recovery", "transition")   # the planned post-race phases (SP-73)
+POST_RACE_KINDS = ("recovery", "transition", "rebuild")   # the planned post-race phases (SP-73, SP-98)
 
 
 def phase_days(plan: Plan, begin: dt.date, end: dt.date, kinds: tuple,
