@@ -47,5 +47,17 @@
   "pz.sources": "Where the targets come from",
   "map.failed": "The map component (Leaflet) failed to load, so the route can't be shown.",
   "zones.basis_tpace": "threshold pace",
-  "zones.basis_hrmax": "max HR"
+  "zones.basis_hrmax": "max HR",
+  "mapchart.tip": "Hover the route, the chart beside it or this activity's other time / distance charts: every chart and the map mark the same moment (tap on a phone)",
+  "mapchart.elev": "Elevation",
+  "mapchart.hr": "Heart rate",
+  "mapchart.power": "Power",
+  "mapchart.pace": "Pace",
+  "mapchart.grade": "Grade",
+  "mapchart.layout": "Layout",
+  "mapchart.top": "Map on top",
+  "mapchart.left": "Map on the left",
+  "mapchart.metrics": "Chart",
+  "mapchart.aria": "This activity's elevation, heart rate, power, pace and grade over time, synced with the map",
+  "mapchart.none": "Pick the metrics to show with the buttons above"
 }
