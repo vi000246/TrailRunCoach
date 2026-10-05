@@ -33,6 +33,7 @@
   "kind.hike": "Trail run",
   "kind.strength": "Strength",
   "kind.heat_passive": "Passive heat",
+  "kind.balance": "Balance / ankle",
   "kind.notice": "Plan to confirm",
   "kpi.rate": "Completion",
   "kpi.rate_tip": "Of the sessions that were due, the share you did (done, partial and off plan all count as done).\nDue = dated before today, or today and already done.\n\"Not synced\" = a past day the synced data doesn't cover yet; left out for now.\nDeleted past sessions don't count.",

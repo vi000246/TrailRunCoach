@@ -1634,6 +1634,19 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         except Exception as e:              # noqa: BLE001 — the plan must still build
             tech = {**tech, "error": type(e).__name__}
 
+    # ---- 平衡／腳踝小課 (engine/balance_plan.py, SP-120): a 越野賽 / 百岳 A race next, the
+    # 減量期 and race week included (not strength: the SP-86 stop doesn't touch it)
+    from backend.engine import balance_plan as BP
+    bal: dict = {"active": False}
+    try:
+        bal = BP.week_context(a_evs, phs, monday, kind, BP.first_day(monday - dt.timedelta(days=400)))
+        if bal.get("active"):
+            dd = [asdict(s) for s in sessions]
+            BP.apply(dd, bal, [d for d in free if d.isoformat() not in bmap], allowed_fn)
+            sessions = [Session(**{k: v for k, v in d.items() if k in Session.__dataclass_fields__}) for d in dd]
+    except Exception:                       # noqa: BLE001 — the plan must still build
+        pass
+
     # ---- projection to Sunday -------------------------------------------
     planned_by_day = {}
     for s in sessions:
@@ -1745,6 +1758,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         "strength_stop": s_stops,
         # the A races ahead (engine/strength_plan.py): the projection's 肌力課依期別 / 平衡小課 (SP-119, SP-120)
         "a_races": STP.a_races(a_evs, monday),
+        # 平衡／腳踝小課 (SP-120): this week's stage, count and the week its count starts from (the projection)
+        "balance": bal,
         # 減量期 (SP-96): the next A race's taper touching this week and the pre-taper level, for the projection
         "taper": {**t_ctx, **{f"pre_{k}": v for k, v in t_ref.items()}} if t_ctx else None,
         # the last 4 weeks' mean run climb (m): a projected 減量期's pre-taper climb (SP-96)

@@ -27,6 +27,7 @@ import statistics
 from typing import Optional
 
 from backend.engine import aet_test as AT
+from backend.engine import balance_plan as BP
 from backend.engine import b2b as B2B
 from backend.engine import load_guard as LG
 from backend.engine import specific_phase as SP
@@ -671,6 +672,13 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
         drop = [s for s in ss if not s["day"] and s["kind"] != "strength"] if lost else []
         if drop:
             notes.append({"level": "info", "src": "blackout", "text": f"剩下的日子排不下 {len(drop)} 堂課（約 {sum(s['minutes'] for s in drop)} 分鐘）——不用補"})
+        # 平衡／腳踝小課 (engine/balance_plan.py, SP-120): the same rule as week_plan
+        try:
+            BP.apply(ss, BP.week_context(a_evs, phases, week, kind, BP._d((cur.get("balance") or {}).get("start"))),
+                     [week + dt.timedelta(days=i) for i in range(7)
+                      if (week + dt.timedelta(days=i)).isoformat() not in bmap], allowed_fn)
+        except Exception:                  # noqa: BLE001 — never breaks the projection
+            pass
         # a session _place() found no day for has day None: keep it out of the date test
         ss = [s for s in ss if not s["day"] or _d(s["day"]) <= until] if ss else ss
         by_day = {}
@@ -705,7 +713,7 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
         if PR is not None or lost:
             # what the preferences / 不排課日期 actually let through (a hard cap or
             # too few days can leave less)
-            hours = sum(s["minutes"] for s in ss if s["kind"] != "strength" and s["day"]) / 60.0
+            hours = sum(s["minutes"] for s in ss if s["kind"] not in ("strength", BP.KIND) and s["day"]) / 60.0
         # a short break (< 6 days, Daniels cat. 1: back to 100 %) doesn't lower the base the next
         # weeks ramp from — the re-entry block handles the longer ones
         h_hist = full_h if lost and mode != "reentry" else hours
