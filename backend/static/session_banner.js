@@ -31,7 +31,7 @@
       line.textContent = a.message + " ";
       const link = document.createElement("a");
       link.href = r.settings_url || "/api/v1/wko5/settings#sync";
-      link.textContent = "去重新登入";
+      link.textContent = window.I18N ? window.I18N.t("common.session.relogin") : "common.session.relogin";
       line.appendChild(link);
       box.appendChild(line);
     }

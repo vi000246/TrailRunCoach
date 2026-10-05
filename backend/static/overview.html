@@ -298,7 +298,7 @@ td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
   <div class="cards" data-sec id="s-todo">
     <!-- the Zone 3 / Zone 5 unlock tracks (quality_gate.z5_card, SP-39); the season history is the 基礎期 chart -->
     <section id="z5card" aria-labelledby="z5-h" style="grid-column:1 / -1">
-      <h2 id="z5-h">3 區／5 區解鎖流程 <span id="z5-st"></span><a class="to-sched" id="z5-hist" href="/api/v1/wko5/viewer">歷程 →</a></h2>
+      <h2 id="z5-h"><span data-i18n="overview.z5.title">3 區／5 區解鎖流程</span> <span id="z5-st"></span><a class="to-sched" id="z5-hist" href="/api/v1/wko5/viewer" data-i18n="overview.z5.history">歷程 →</a></h2>
       <div id="z5"><div class="loading">…</div></div>
     </section>
     <!-- 待辦與警示 at the bottom, left of B2B (full width while B2B is hidden) -->
@@ -482,11 +482,11 @@ function heatExtra(i) {
 
 // 心率飄移 card (status.i_drift): runs on the 參考 tier are counted for display — say so in plain
 // words (no tier names), why on hover
-const tD = (k, s, p) => (window.I18N ? I18N.t(k, s, p) : s.replace(/\{(\w+)\}/g, (m, a) => (p && p[a] != null ? p[a] : m)));
+const tD = (k, p) => I18N.t(k, p);   // i18n.js is always inlined by render_page
 function driftTier(i) {
   const x = i.id === "drift" && i.extra;
   if (!x || !x.ref) return "";
-  return `<div><span class="st watch">${esc(tD("overview.drift.ref_badge", "只當參考"))}</span> ${esc(tD("overview.drift.ref_runs", "{n} 次暖身後不到 40 分鐘", { n: x.ref }))} ${q(x.ref_tip)}</div>`;
+  return `<div><span class="st watch">${esc(tD("overview.drift.ref_badge"))}</span> ${esc(tD("overview.drift.ref_runs", { n: x.ref }))} ${q(x.ref_tip)}</div>`;
 }
 
 // 測試 card: 「套用這次的 AeT」 when the latest AeT drift test is in UA's 3.5–5 % band
@@ -495,8 +495,8 @@ function aetApply(i) {
   const at = i.id === "testing" && i.extra && i.extra.aet_test;
   if (!at || !at.apply) return "";
   return `<div class="act"><button type="button" class="btn" data-aet-apply>套用這次的 AeT（${esc(at.apply.aethr)} bpm）</button>
-    <span class="meta" data-apply-msg>${esc(at.date)} ${at.drift != null ? esc(tD("overview.drift.value", "心率飄移 {v}%", { v: (at.drift * 100).toFixed(1) })) : ""}</span>${q(at.basis === "Pw:HR"
-      ? tD("overview.drift.basis_power", "用功率算的心率飄移（功率÷心率，Pw:HR）") : tD("overview.drift.basis_pace", "用配速算的心率飄移（速度÷心率，Pa:HR）"))}</div>`;
+    <span class="meta" data-apply-msg>${esc(at.date)} ${at.drift != null ? esc(tD("overview.drift.value", { v: (at.drift * 100).toFixed(1) })) : ""}</span>${q(at.basis === "Pw:HR"
+      ? tD("overview.drift.basis_power") : tD("overview.drift.basis_pace"))}</div>`;
 }
 document.addEventListener("click", async (ev) => {
   const b = ev.target.closest("[data-aet-apply]");
@@ -520,17 +520,17 @@ document.addEventListener("click", async (ev) => {
 function thrCheck(i) {
   const x = i.id === "testing" && i.extra && i.extra.thr_check;
   if (!x) return "";
-  const conf = (c) => ({ high: tD("overview.thr.conf_high", "高"), medium: tD("overview.thr.conf_medium", "中"),
-    low: tD("overview.thr.conf_low", "低") })[c] || c;
-  const rows = [["LTHR", x.lthr], [tD("overview.thr.hrmax", "最大心率"), x.hrmax]]
+  const conf = (c) => ({ high: tD("overview.thr.conf_high"), medium: tD("overview.thr.conf_medium"),
+    low: tD("overview.thr.conf_low") })[c] || c;
+  const rows = [["LTHR", x.lthr], [tD("overview.thr.hrmax"), x.hrmax]]
     .filter(([, v]) => v && v.value != null && v.confidence && v.confidence !== "high")
-    .map(([n, v]) => `<div>${esc(tD("overview.thr.line", "{name} {v} bpm：可信度{c}", { name: n, v: Math.round(v.value), c: conf(v.confidence) }))}${
+    .map(([n, v]) => `<div>${esc(tD("overview.thr.line", { name: n, v: Math.round(v.value), c: conf(v.confidence) }))}${
       q((v.signals || []).filter((s) => s.level !== "hint").map((s) => s.text).join("\n"))}</div>`);
   const sugs = (i.extra.test_suggestions || []).filter((s) => String(s.id).startsWith("thr_check:"));
   const links = sugs.flatMap((s) => s.links || []).map((l) => `<a class="btn" href="${esc(l.href)}">${esc(l.label)}</a>`).join(" ");
   if (!rows.length && !links) return "";
   const dg = x.diagnosis && x.diagnosis.text ? `<div class="meta">${esc(x.diagnosis.text)}</div>` : "";
-  const cool = sugs.some((s) => s.wait_cool) ? `<div class="meta">${esc(tD("overview.thr.wait_cool", "等天氣轉涼再做 LTHR 測試比較準（還是可以先排）"))}</div>` : "";
+  const cool = sugs.some((s) => s.wait_cool) ? `<div class="meta">${esc(tD("overview.thr.wait_cool"))}</div>` : "";
   return `<div class="act">${rows.join("")}${dg}${cool}${links}</div>`;
 }
 
@@ -569,7 +569,7 @@ async function loadZ5() {
   const zg = c.z5_gate || {};
   const sub = zg.text || (c.state === "confirmed" ? `${c.since || ""} · ${c.path_label || ""}` : (c.reason || ""));
   const st = c.open ? "confirmed" : c.state;
-  $("z5-st").innerHTML = `<span class="z5st ${esc(st)}" title="${esc(sub)}">${I(Z5_ICON[st] || "na")}5 區：${esc(c.open ? "已解鎖" : c.aet_ok ? "AeT 已通過" : c.label)}</span>`;
+  $("z5-st").innerHTML = `<span class="z5st ${esc(st)}" title="${esc(sub)}">${I(Z5_ICON[st] || "na")}${esc(tD("overview.z5.pill", { s: c.open ? tD("overview.z5.unlocked") : c.aet_ok ? tD("overview.z5.aet_ok") : c.label }))}</span>`;
   // the quest-style stage flow (static/z5flow.js, shared with the 基礎期 panel)
   Z5Flow.bind();
   $("z5").innerHTML = Z5Flow.html(c.flow, { q: "q" });
@@ -795,8 +795,8 @@ function renderPeriod(R) {
       <div class="tile"><div class="k">${I("climb")}努力距離 EP ${q("km + 爬升/100（跑步、登山）")}</div><div class="v">${km(C.ep_km)}</div></div>
       <div class="tile"><div class="k">${I("check")}有練的天數</div><div class="v">${C.days}</div><div class="s">下降 ${m0(C.descending_m)}</div></div>
     </div>
-    ${I_.total > 0 ? `<div><b style="font-size:13px">強度分配</b> <span class="meta">低強度 底線 75%・目標 80%（基礎期 ≥ 90%）</span>
-      ${q("這期耐力活動的移動時間，依心率分三段。\n怎麼看：低 < AeT、中 AeT–LTHR、高 ≥ LTHR，條的長度 = 佔比。\n看什麼：低強度 75% 是底線、80% 是目標（基礎期目標 ≥ 90%）；這是提醒，不是 3 區的解鎖條件。\n方法：Seiler 2006。")}
+    ${I_.total > 0 ? `<div><b style="font-size:13px">${esc(tD("overview.split.title"))}</b> <span class="meta">${esc(tD("overview.split.target"))}</span>
+      ${q(tD("overview.split.tip"))}
       <div class="split" role="img" aria-label="低 ${pct(I_.low / I_.total)}，中 ${pct(I_.mid / I_.total)}，高 ${pct(I_.high / I_.total)}">
         <i style="width:${I_.low / I_.total * 100}%;background:var(--lo)"></i><i style="width:${I_.mid / I_.total * 100}%;background:var(--mid)"></i><i style="width:${I_.high / I_.total * 100}%;background:var(--hi)"></i></div>
       <div class="legend" style="margin:0"><span><i style="background:var(--lo)"></i>低 ${pct(I_.low / I_.total)} · ${hm(I_.low)}</span>

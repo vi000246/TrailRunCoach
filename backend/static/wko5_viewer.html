@@ -378,14 +378,14 @@ table.z5ev td { white-space: normal; }
 </svg>
 <div class="tb">
   <div class="tb1">
-    <button class="iconbtn only-narrow" id="treebtn" aria-controls="side" aria-expanded="false"><svg class="i"><use href="#i-tree"/></svg>目錄</button>
-    <div class="modesw" role="group" aria-label="選擇看法">
-      <button id="m-season" class="mcard on" title="一段期間內多次活動的趨勢">
+    <button class="iconbtn only-narrow" id="treebtn" aria-controls="side" aria-expanded="false"><svg class="i"><use href="#i-tree"/></svg><span data-i18n="viewer.toc">目錄</span></button>
+    <div class="modesw" role="group" aria-label="選擇看法" data-i18n-attr="aria-label:viewer.mode_aria">
+      <button id="m-season" class="mcard on" title="一段期間內多次活動的趨勢" data-i18n-attr="title:viewer.mode.season_tip">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/></svg>
-        <span><b>趨勢</b><small>一段期間的變化</small></span></button>
-      <button id="m-workout" class="mcard" title="一筆活動的逐秒圖表">
+        <span><b data-i18n="viewer.mode.season">趨勢</b><small data-i18n="viewer.mode.season_sub">一段期間的變化</small></span></button>
+      <button id="m-workout" class="mcard" title="一筆活動的逐秒圖表" data-i18n-attr="title:viewer.mode.workout_tip">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="4.5" r="2"/><path d="M8 21l3-6 3 2v4"/><path d="M6 12l3-3 4 1 3 3 3-1"/></svg>
-        <span><b>單次活動</b><small>某一次的逐秒細節</small></span></button>
+        <span><b data-i18n="viewer.mode.workout">單次活動</b><small data-i18n="viewer.mode.workout_sub">某一次的逐秒細節</small></span></button>
     </div>
     <div class="crumb" id="crumb"></div>
     <span class="spacer"></span>
@@ -396,41 +396,41 @@ table.z5ev td { white-space: normal; }
   <div class="tb2">
     <button class="chip s-only" id="chip-range" aria-controls="aside"><svg class="i"><use href="#i-cal"/></svg><span class="v" id="range-txt"></span><span class="caret">▾</span></button>
     <button class="chip s-only" id="chip-sports" aria-controls="aside"><svg class="i"><use href="#i-sport"/></svg><span class="v" id="sports-txt"></span><span class="caret">▾</span></button>
-    <button class="chip go s-only" id="chip-acts" aria-controls="aside" title="選一筆活動，看它的單次活動圖表"><svg class="i"><use href="#i-list"/></svg>看單次活動<span class="k" id="acts-n"></span></button>
-    <button class="chip go w-only" id="back"><svg class="i"><use href="#i-back"/></svg>回到趨勢</button>
-    <button class="chip w-only" id="chip-act" aria-controls="aside" title="換一筆活動"><svg class="i"><use href="#i-list"/></svg><span class="k">活動</span><span class="v" id="act-txt"></span><span id="act-tag" style="display:contents"></span><span class="caret">▾</span></button>
-    <a class="chip w-only" id="edit-act" href="/api/v1/wko5/activities/page" title="在「活動列表」改這筆的名稱、類型、努力度、標籤、地形或排除" style="text-decoration:none">編輯活動</a>
-    <span class="w-only pain-wrap" id="pain-wrap" hidden><button class="chip" id="pain-chip" aria-haspopup="dialog" aria-expanded="false" title="這次有沒有痛（傷病紀錄）">疼痛？</button>
-      <div class="pain-pop" id="pain-pop" role="dialog" aria-label="疼痛" hidden></div></span>
+    <button class="chip go s-only" id="chip-acts" aria-controls="aside" title="選一筆活動，看它的單次活動圖表" data-i18n-attr="title:viewer.acts_tip"><svg class="i"><use href="#i-list"/></svg><span data-i18n="viewer.acts_btn">看單次活動</span><span class="k" id="acts-n"></span></button>
+    <button class="chip go w-only" id="back"><svg class="i"><use href="#i-back"/></svg><span data-i18n="viewer.back">回到趨勢</span></button>
+    <button class="chip w-only" id="chip-act" aria-controls="aside" title="換一筆活動" data-i18n-attr="title:viewer.act_tip"><svg class="i"><use href="#i-list"/></svg><span class="k" data-i18n="viewer.act">活動</span><span class="v" id="act-txt"></span><span id="act-tag" style="display:contents"></span><span class="caret">▾</span></button>
+    <a class="chip w-only" id="edit-act" href="/api/v1/wko5/activities/page" title="在「活動列表」改這筆的名稱、類型、努力度、標籤、地形或排除" data-i18n-attr="title:viewer.edit_tip" style="text-decoration:none" data-i18n="viewer.edit">編輯活動</a>
+    <span class="w-only pain-wrap" id="pain-wrap" hidden><button class="chip" id="pain-chip" aria-haspopup="dialog" aria-expanded="false" title="這次有沒有痛（傷病紀錄）" data-i18n-attr="title:viewer.pain_tip" data-i18n="viewer.pain_q">疼痛？</button>
+      <div class="pain-pop" id="pain-pop" role="dialog" aria-label="疼痛" data-i18n-attr="aria-label:viewer.pain" hidden></div></span>
   </div>
 </div>
 <div class="wrap">
-  <nav class="side" id="side" aria-label="圖表目錄">
+  <nav class="side" id="side" aria-label="圖表目錄" data-i18n-attr="aria-label:viewer.side_aria">
     <div class="sh">
-      <label class="search"><svg class="i"><use href="#i-search"/></svg><input type="search" id="q" placeholder="搜尋圖表名稱…" aria-label="搜尋圖表"></label>
-      <button class="iconbtn only-narrow" id="sideclose" aria-label="關閉目錄"><svg class="i"><use href="#i-x"/></svg></button>
+      <label class="search"><svg class="i"><use href="#i-search"/></svg><input type="search" id="q" placeholder="搜尋圖表名稱…" aria-label="搜尋圖表" data-i18n-attr="placeholder:viewer.search_ph;aria-label:viewer.search"></label>
+      <button class="iconbtn only-narrow" id="sideclose" aria-label="關閉目錄" data-i18n-attr="aria-label:viewer.side_close"><svg class="i"><use href="#i-x"/></svg></button>
     </div>
     <div class="tree" id="tree"></div>
     <div class="foot" id="athinfo"></div>
   </nav>
-  <main id="grid"><div class="empty">載入中…</div></main>
-  <aside id="aside" aria-label="篩選與活動">
-    <div class="ah">篩選與活動<span class="spacer"></span><button class="iconbtn" id="asideclose" aria-label="關閉"><svg class="i"><use href="#i-x"/></svg></button></div>
+  <main id="grid"><div class="empty" data-i18n="viewer.loading">載入中…</div></main>
+  <aside id="aside" aria-label="篩選與活動" data-i18n-attr="aria-label:viewer.aside">
+    <div class="ah"><span data-i18n="viewer.aside">篩選與活動</span><span class="spacer"></span><button class="iconbtn" id="asideclose" aria-label="關閉" data-i18n-attr="aria-label:viewer.close"><svg class="i"><use href="#i-x"/></svg></button></div>
     <details open data-k="range">
-      <summary>日期範圍 <span class="meta" id="sum-range"></span></summary>
+      <summary><span data-i18n="viewer.range">日期範圍</span> <span class="meta" id="sum-range"></span></summary>
       <div class="row"><input type="date" id="begin"> → <input type="date" id="end"></div>
       <div class="row presets" style="margin-top:6px">
-        <button data-d="7">7天</button><button data-d="42">42天</button><button data-d="90">90天</button>
-        <button data-d="365">1年</button><button data-d="ytd">今年</button><button data-d="all">全部</button>
+        <button data-d="7" data-i18n="viewer.p7">7天</button><button data-d="42" data-i18n="viewer.p42">42天</button><button data-d="90" data-i18n="viewer.p90">90天</button>
+        <button data-d="365" data-i18n="viewer.p365">1年</button><button data-d="ytd" data-i18n="viewer.pytd">今年</button><button data-d="all" data-i18n="viewer.pall">全部</button>
       </div>
     </details>
     <details open data-k="sports">
-      <summary>運動類型 <span class="meta" id="sum-sports"></span></summary>
+      <summary><span data-i18n="viewer.sports">運動類型</span> <span class="meta" id="sum-sports"></span></summary>
       <div class="sports" id="sports"></div>
     </details>
     <details open data-k="acts" class="actsbox">
-      <summary id="acts-h">活動</summary>
-      <p class="hint">點一筆 → 看它的單次活動圖表</p>
+      <summary id="acts-h" data-i18n="viewer.acts">活動</summary>
+      <p class="hint" data-i18n="viewer.acts_hint">點一筆 → 看它的單次活動圖表</p>
       <div class="acts" id="acts"></div>
     </details>
   </aside>
@@ -438,7 +438,7 @@ table.z5ev td { white-space: normal; }
 <div class="scrim" id="scrim"></div>
 <dialog id="zoom" aria-labelledby="zoom-title">
   <div class="zh"><h2 id="zoom-title"></h2><span class="spacer"></span>
-    <button class="iconbtn" id="zoomclose" aria-label="關閉放大"><svg class="i"><use href="#i-x"/></svg></button></div>
+    <button class="iconbtn" id="zoomclose" aria-label="關閉放大" data-i18n-attr="aria-label:viewer.zoom_close"><svg class="i"><use href="#i-x"/></svg></button></div>
   <div class="zb card" id="zoombody"></div>
 </dialog>
 <script>
@@ -1464,7 +1464,7 @@ function drawZones(card, res) {
     : (r.to == null ? `${f(r.from)}+` : `${f(r.from) || 0}–${f(r.to)}`);
   const pct = (r) => `${r.lo == null ? "" : Math.round(r.lo * 100)}${r.hi == null ? "+" : (r.lo == null ? "<" : "–") + Math.round(r.hi * 100)}%`;
   const maxShare = Math.max(0.0001, ...Z.rows.map((r) => r.share || 0));
-  const basis = { lthr: "LTHR", cp: "CP", tpace: "閾值配速", hrr: "HRR", hrmax: "最大心率" }[Z.basis];
+  const basis = { lthr: "LTHR", cp: "CP", tpace: t("viewer.zones.basis_tpace"), hrr: "HRR", hrmax: t("viewer.zones.basis_hrmax") }[Z.basis];
   // the description and the source sit behind the title's ?; one short threshold line stays
   addTip(card, [res.description, Z.source ? "來源：" + Z.source : ""].filter(Boolean).join("\n\n"));
   if (Z.choices && card._ctx) {
@@ -1483,7 +1483,7 @@ function drawZones(card, res) {
   card.insertAdjacentHTML("beforeend", `<p class="meta" style="margin:0 0 6px">
     ${basis} ${Z.threshold == null ? "未設定" : pace ? f(Z.threshold) + " /km" : f(Z.threshold) + " " + Z.unit}${Z.threshold_source ? `（${esc(Z.threshold_source)}）` : ""}${Z.wprime ? ` · W′ ${(Z.wprime / 1000).toFixed(1)} kJ（${esc(Z.wprime_source || "")}）` : ""} · 最近 ${Z.days} 天 ${Z.runs} 次跑步</p>
     ${Z.no_data_reason ? `<p class="badge" style="margin:0 0 6px">沒有資料：${esc(Z.no_data_reason)}</p>` : ""}
-    ${Z.threshold_is_default ? `<p class="badge" style="margin:0 0 6px">⚠ ${basis} 是 WKO5 出廠預設值，這張表的區間不準${Z.basis === "lthr" ? "——到「設定」頁的閾值測試紀錄套用自動估算的 LTHR" : "——山路配速本來就不準，建議看功率區間"}</p>` : ""}
+    ${Z.threshold_is_default ? `<p class="badge" style="margin:0 0 6px">⚠ ${esc(t(Z.basis === "lthr" ? "viewer.zones.default_lthr" : "viewer.zones.default_pace", { basis }))}</p>` : ""}
     <table class="zt"><thead><tr><th>區間</th><th>名稱</th><th class="num">${esc(Z.unit)}</th><th class="num">% ${basis}</th>
       <th style="width:34%">時間</th></tr></thead><tbody>${Z.rows.map((r, i) => `<tr>
       <td>${esc(r.id)}</td><td>${esc(r.name)}</td><td class="num">${range(r)}</td><td class="num meta">${pct(r)}</td>
@@ -1738,11 +1738,11 @@ function pzWeekly(card, res) {
   card.insertAdjacentHTML("beforeend", `<p class="pzhead">${esc(res.range.begin)} – ${esc(res.range.end)} · 每${month ? "月" : "週"}一根 · ${res.n_activities} 次活動 · 合計 <b>${fmtDur(res.total_s, "hm")}</b>
     ${res.model.estimate ? ` <span class="badge">推估</span>` : ""}</p>`);
   if (res.empty) { card.insertAdjacentHTML("beforeend", `<p class="nodata">${esc(res.empty)}</p>`); return; }
-  const tip = ["下方小圖：低強度（3 區摘要第 1 區）佔比", `底線：所有階段 ≥ ${pzPct(res.low_floor)}；目標：基礎期 ≥ 90%（提醒，不是 3 區的解鎖條件）`, ...res.target_sources].join("\n");
+  const tip = [t("viewer.pz.tip_mini"), t("viewer.pz.tip_floor", { floor: pzPct(res.low_floor) }), ...res.target_sources].join("\n");
   card.insertAdjacentHTML("beforeend", `<div class="pzleg" aria-label="圖例">${Z.map((z, i) => `<span><i style="background:${col[i].hex}"></i>${esc(z.id)} ${esc(z.name)}</span>`).join("")}</div>
-    <div class="pzleg" aria-label="下方小圖圖例"><span><i class="dot"></i>低強度佔比達標</span><span><i class="tri"></i>沒達標</span>
-      <span><i class="band"></i>目標帶（75% 到該階段目標）</span><span><i class="ln"></i>75% 底線</span>
-      <button type="button" class="qtip" aria-label="目標的來源" data-tip="${esc(tip)}">?</button></div>`);
+    <div class="pzleg" aria-label="${esc(t("viewer.pz.mini_legend"))}"><span><i class="dot"></i>${esc(t("viewer.pz.met"))}</span><span><i class="tri"></i>${esc(t("viewer.pz.missed"))}</span>
+      <span><i class="band"></i>${esc(t("viewer.pz.band"))}</span><span><i class="ln"></i>${esc(t("viewer.pz.floor"))}</span>
+      <button type="button" class="qtip" aria-label="${esc(t("viewer.pz.sources"))}" data-tip="${esc(tip)}">?</button></div>`);
   const el = document.createElement("div");
   el.className = "plot pzw";
   el.setAttribute("role", "img");
@@ -1954,7 +1954,7 @@ async function drawMap(card, res) {
   card.querySelector(".loading")?.remove();
   const nodata = (t) => card.insertAdjacentHTML("beforeend", `<p class="nodata">${esc(t)}</p>`);
   if (res.empty) return nodata(res.empty);
-  if (typeof L === "undefined" || !window.MapLayers) return nodata("地圖元件（Leaflet）載入失敗，無法顯示路線。");
+  if (typeof L === "undefined" || !window.MapLayers) return nodata(t("viewer.map.failed"));
   const tb = document.createElement("div");
   tb.className = "maptb";
   const el = document.createElement("div");

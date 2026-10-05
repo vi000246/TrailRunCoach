@@ -159,17 +159,17 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
   const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const mmss = (s) => { s = Math.round(s || 0); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
   const parseSec = (v) => { const m = String(v).trim().match(/^(\d+)(?:[:：](\d{1,2}))?$/); return m ? +m[1] * 60 + +(m[2] || 0) : null; };
-  const KIND = { warm: "暖身", work: "主課", rest: "休息", cool: "緩和", other: "其他" };
-  const TYPE = { auto: "自動", power: "功率", hr: "心率", pace: "配速", rpe: "RPE", none: "無" };
-  // ≈ % CP of RPE 1–10 (workout_steps.RPE_FRAC; the mini chart's height only, 推估)
-  const RPE_F = [0, 0.55, 0.62, 0.70, 0.76, 0.82, 0.88, 0.94, 1.00, 1.05, 1.10];
-  const opt = (v, l, cur, extra = "") => `<option value="${esc(v)}"${String(v) === String(cur) ? " selected" : ""}${extra}>${esc(l)}</option>`;
-  const q = (tip) => `<button type="button" class="qtip" aria-label="說明" data-tip="${esc(tip)}">?</button>`;
   // i18n (static/i18n/i18n.js t(key, fallback)): the keys live in the common namespace (common.workout.*,
   // inlined on every page); the zh-TW text is the fallback
   const tr = (k, fb, p) => (window.I18N && window.I18N.t ? window.I18N.t("common." + k, fb, p) : typeof fb === "string" ? fb : k);
   // (new strings: tr(key) / tr(key, params) with no Chinese fallback — the common catalog is always inlined)
-  const noTpaceText = () => tr("workout.no_tpace", "沒有閾值配速：這段推到手錶不會有配速目標");
+  const KIND = { warm: tr("workout.kind.warm"), work: tr("workout.kind.work"), rest: tr("workout.kind.rest"), cool: tr("workout.kind.cool"), other: tr("workout.kind.other") };
+  const TYPE = { auto: tr("workout.type.auto"), power: tr("workout.type.power"), hr: tr("workout.type.hr"), pace: tr("workout.type.pace"), rpe: "RPE", none: tr("workout.type.none") };
+  // ≈ % CP of RPE 1–10 (workout_steps.RPE_FRAC; the mini chart's height only, 推估)
+  const RPE_F = [0, 0.55, 0.62, 0.70, 0.76, 0.82, 0.88, 0.94, 1.00, 1.05, 1.10];
+  const opt = (v, l, cur, extra = "") => `<option value="${esc(v)}"${String(v) === String(cur) ? " selected" : ""}${extra}>${esc(l)}</option>`;
+  const q = (tip) => `<button type="button" class="qtip" aria-label="${esc(tr("workout.help"))}" data-tip="${esc(tip)}">?</button>`;
+  const noTpaceText = () => tr("workout.no_tpace");
   // SP-64: the LTHR (or, under the %HRR / %HRmax 課表心率區間, the max HR) is not believable
   // (engine/threshold_confidence.warn_of → context.thresholds.thr_warn): HR targets get a badge
   const usesHr = (items) => (items || []).some((x) => x.kind === "repeat" ? usesHr(x.items) : ((x.target || {}).type === "hr"));
@@ -181,26 +181,26 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
   // where threshold pace is estimated (GET /steps/context tpace_link: the Friel pace-zone chart)
   const tpaceLink = (ctx) => {
     const u = (ctx || {}).tpace_link;
-    return u ? ` <a class="we-tpl" href="${esc(u)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${esc(tr("workout.no_tpace_link", "看閾值配速怎麼估"))}</a>` : "";
+    return u ? ` <a class="we-tpl" href="${esc(u)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${esc(tr("workout.no_tpace_link"))}</a>` : "";
   };
   const OPEN_W = 90;
   const kmTxt = (x) => (Math.round((x || 0) * 10) / 10).toString();
   // 時長類型 (SP-38): the options come from the push target's capabilities (context.provider:
   // sync/workout_targets describe() — end_conditions + end_labels); these only without one
   const END_DEFAULT = ["time", "distance", "open"];
-  const END_LABEL = { time: "時間", distance: "距離", open: "直到按下計圈", load: "負荷" };
+  const END_LABEL = { time: tr("workout.end.time"), distance: tr("workout.end.distance"), open: tr("workout.end.open"), load: tr("workout.end.load") };
   const provCaps = (ctx) => (((ctx || {}).provider || {}).capabilities) || null;
   const TIP = {
-    basis: "每一段自己決定用功率、心率還是配速：點那一段的目標就能改（標「指定」）。標「自動」的段依課表類型（路跑輕鬆／長跑看功率、心率以輕鬆跑上限為上限；越野看心率；間歇看功率）。數字依目前的 CP、LTHR、輕鬆跑上限、閾值配速帶入。",
-    chart: "橫軸是時間（「直到按下計圈」的段畫成固定寬度、斜線），高度和顏色都是強度（約當 % CP）。心率段換算成功率高度是推估，只影響這張圖。點一段可以選到下面那一步。",
-    tss: "TSS 估＝Σ 秒 × IF² × 100 ÷ 3600，IF＝目標中點 ÷ CP；心率段用 Friel 心率區對到 Palladino 功率區，沒有目標的段依類型給固定值。都是推估，跑步 rTSS 和這個公式的差距未驗證。",
-    rules: "即時檢查：5 區每趟至少 2 分鐘（台灣教練）；5 區休息不超過最短一趟、也不超過 3 分鐘（Buchheit）；3 區每趟至少 3 分鐘（Haugen 2022 下緣）；這天的時間上限（課表偏好，軟上限只提醒、硬上限擋下）；選了功率卻沒有 CP 之類的錯誤。強度課另外和這一階的標準課表比，看算不算進階。",
-    lastRest: "最後一趟做完不休息、直接接下一段。COROS 的間歇群組做不到，推送時會攤平成一段一段（每段一個 lap）。",
-    watch: "COROS 手錶的限制：跑步的功率只收絕對瓦數（沒有 % CP）；每段只能設一個目標；沒有漸進（ramp）步驟。下面是實際會送出的步驟。",
-    tpl: "有出處的課表（作者／書／網址寫在每一份下面），依這堂的類型篩選。強度課再分三類，先看主課強度、再看每趟長度：有氧間歇（≤ 101% CP；長 tempo 每趟 15–30 分、巡航間歇 6–15 分，更短的也算巡航）、VO2max 間歇（高於閾值、每趟 2–5 分、休息約 1:1；30/30 這種短趟短休也在這裡）、速度（每趟 ≤ 2 分、休息 ≥ 2 倍，例如 R、加速跑、短坡衝刺）。越野跑分三類：結構化爬升（階梯、坡度穩定的路線，心率／功率上下限照設）、技術地形（時間＋爬升＋RPE，不設心率、功率目標；RPE ≥ 7 算強度課）、下坡技術／離心（時間＋下降量）。每一份下面有一行訓練目的。每段用來源自己的目標：Palladino／Stryd 看功率，Friel、Uphill Athlete、Pfitzinger 看心率，Daniels、Canova、Billat 看配速（只在來源的數字 app 沒有時才換算，標推估）。插入後就是一般步驟，可以再改；改過的強度課用它自己的趟數和強度判斷算不算進階。每一類最上面是這堂課的「推薦」前三名（強度課第一名＝間歇階梯的下一步），其他收在下面。",
-    total: "總時間由下面的步驟加總：要改時間就改步驟（點這格會打開結構）。",
-    pacePct: "配速的 % 是閾值配速的倍數：數字大＝慢（例：114–129% 是 Friel 2 區）。",
-    rpe: "RPE 用 0–10 量表（Foster）：3 中等、5 吃力、7 很累、10 極限。技術地形、下坡的心率上不去、功率不準，所以只看 RPE 和爬升／下降；手錶上這段不設目標，RPE 和爬升寫在步驟名稱。最高到 7 以上這堂算強度課（和其他強度課隔 48 小時）。負荷照手錶記錄算。",
+    basis: tr("workout.tip.basis"),
+    chart: tr("workout.tip.chart"),
+    tss: tr("workout.tip.tss"),
+    rules: tr("workout.tip.rules"),
+    lastRest: tr("workout.tip.lastRest"),
+    watch: tr("workout.tip.watch"),
+    tpl: tr("workout.tip.tpl"),
+    total: tr("workout.tip.total"),
+    pacePct: tr("workout.tip.pacePct"),
+    rpe: tr("workout.tip.rpe"),
   };
 
   let styled = false;
@@ -834,8 +834,8 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       const noTp = !(((this.ctx || {}).thresholds || {}).tpace);
       const hw = hrWarn(this.ctx);
       const tpBadge = (r) => (r.needs_tpace && noTp
-        ? ` <span class="we-tpb" title="${esc(T.no_tpace_text || noTpaceText())}">⚠ ${esc(tr("workout.no_tpace_badge", "沒有閾值配速"))}</span>` : "") +
-        (hw && usesHr(r.full || r.items) ? ` <span class="we-tpb" title="${esc(hw)}">⚠ ${esc(tr("common.workout.thr_low_badge", "心率門檻可信度低"))}</span>` : "");
+        ? ` <span class="we-tpb" title="${esc(T.no_tpace_text || noTpaceText())}">⚠ ${esc(tr("workout.no_tpace_badge"))}</span>` : "") +
+        (hw && usesHr(r.full || r.items) ? ` <span class="we-tpb" title="${esc(hw)}">⚠ ${esc(tr("workout.thr_low_badge"))}</span>` : "");
       // 技術地形／下坡 rows: how the scheduler counts them (workout_steps.rpe_role)
       const fsub = (r) => (r.mine ? ` <span class="mine">${esc(tr("workout.mine"))}</span>` : "") + (r.gpx ? ` <span class="fam">▲ GPX</span>` : "") +
         (r.family && r.family.sub_label ? ` <span class="fam">${esc(r.family.sub_label)}</span>` : "") +
