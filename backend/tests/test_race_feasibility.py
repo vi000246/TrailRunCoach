@@ -361,3 +361,75 @@ def test_over_only_from_the_cutoff_or_the_step():
     e = ev(distance_km=100, climbing_m=6000, est_hours=20.0, start="2026-12-12")
     r = F.assess(e, line(e), TODAY, hist(km=5.0, climb=100.0, hours=1.0))
     assert r["level"] in ("tight", "unknown") and all(c["level"] != "over" for c in r["checks"])
+
+
+# ---- SP-112 items 6–7: 百岳 climb rate and climb power ------------------------------------------
+
+def wins(n, vam, hr, lthr=170.0, z=1000.0):
+    return [{"vam": vam, "hr": hr, "lthr": lthr, "z": z, "g": 0.2} for _ in range(n)]
+
+
+def trip(**kw):
+    a = dict(kind="baiyue", distance_km=16, climbing_m=1600, est_hours=8.0, start="2026-12-05")
+    a.update(kw)
+    return ev(**a)
+
+
+def test_climb_rates_by_hr_band_and_the_shrinkage():
+    r = F.climb_rates(wins(30, 500.0, 150.0) + wins(10, 650.0, 165.0))
+    assert r["steady"]["vam"] == 500.0 and r["steady"]["n"] == 30 and r["hard"]["vam"] == 650.0
+    assert F._shrink(500.0, 30, 430.0) == pytest.approx((30 * 500 + 10 * 430) / 40)
+    assert F._shrink(None, 0, 430.0) == 430.0
+    assert F.pack_factor(0.10) == 1.0 and F.pack_factor(0.0) == pytest.approx(475 / 430)
+    assert F.pack_factor(0.2) == pytest.approx(395 / 430)
+
+
+def test_vam_ok_tight_and_faster_than_hard():
+    e = trip()                                            # 16 km ↑1600 in 8 h: EP 32, climb share 0.5
+    hd = {"km": 16.0, "climb_m": 1600.0, "hours": 8.0}
+    rates = F.climb_rates(wins(40, 500.0, 150.0) + wins(40, 700.0, 165.0))
+    vc = F.vam_check(e, hd, rates, None, None, 100.0)
+    assert vc["need"] == 400 and vc["level"] == "ok" and "沒有背包資料" in vc["text"]
+    hd2 = {"km": 10.0, "climb_m": 2000.0, "hours": 5.0}    # 2000 / (5 × 0.667) = 600 m/h
+    vc = F.vam_check(trip(), hd2, rates, None, None, 100.0)
+    assert vc["level"] == "tight" and "接近閾值" in vc["text"]
+    vc = F.vam_check(trip(cutoff_hours=3.0), hd2, rates, None, None, 100.0)     # before the turnaround: 1000
+    assert vc["level"] == "tight" and "最用力的爬升還快" in vc["text"]
+
+
+def test_vam_few_windows_use_yamamoto_altitude_and_pack():
+    hd = {"km": 16.0, "climb_m": 1600.0, "hours": 8.0}
+    vc = F.vam_check(trip(), hd, F.climb_rates(wins(2, 700.0, 150.0)), None, None, 100.0)
+    assert "資料不足（2 段）" in vc["text"] and vc["steady"] < 480                 # pulled to 430
+    high = F.vam_check(trip(), hd, F.climb_rates(wins(40, 500.0, 150.0, z=1000.0)), 3000.0, None, 100.0)
+    low = F.vam_check(trip(), hd, F.climb_rates(wins(40, 500.0, 150.0, z=1000.0)), None, None, 100.0)
+    assert high["steady"] == pytest.approx(low["steady"] * (1 - 0.063 * 2), abs=1) and "Wehrlin" in high["text"]
+    packed = F.vam_check(trip(pack_kg=14.0), hd, F.climb_rates(wins(40, 500.0, 150.0)), None, 70.0, 100.0)
+    assert packed["steady"] < low["steady"] and "背包 14 kg" in packed["text"]
+
+
+def test_baiyue_checks_in_assess_never_over():
+    e = trip(distance_km=10, climbing_m=2000, est_hours=5.0)
+    rates = F.climb_rates(wins(40, 300.0, 150.0) + wins(40, 350.0, 165.0))
+    r = F.assess(e, line(e), TODAY, hist(km=40.0, climb=3000.0), climb={"rates": rates, "top_m": None, "weight": 70.0},
+                 power={"cp": 70.0, "kg": 70.0})
+    by = {c["id"]: c for c in r["checks"]}
+    assert by["vam"]["level"] == "tight" and by["power"]["level"] == "tight" and "低於 1.2" in by["power"]["text"]
+    assert r["level"] != "over"
+    r = F.assess(e, line(e), TODAY, hist(km=40.0, climb=3000.0), power={"cp": 120.0, "kg": 70.0})
+    assert next(c for c in r["checks"] if c["id"] == "power")["level"] == "ok"
+    r = F.assess(e, line(e), TODAY, hist(km=40.0, climb=3000.0))
+    assert not any(c["id"] in ("vam", "power") for c in r["checks"])               # no power meter: not shown
+    road = ev(kind="road", distance_km=21.1, climbing_m=0, est_hours=2.0)
+    r = F.assess(road, line(road), TODAY, hist(), climb={"rates": rates}, power={"cp": 300.0, "kg": 70.0})
+    assert not any(c["id"] in ("vam", "power") for c in r["checks"])               # 百岳 only
+
+
+def test_baiyue_inputs_need_a_power_meter():
+    from backend.engine.planning import Plan, Threshold, Weight
+    plan = Plan(events=[], thresholds=[Threshold(date="2026-01-01", cp=250.0)], weights=[Weight("2026-01-01", 65.0)])
+    e = trip()
+    climb, power = F.baiyue_inputs(plan, None, TODAY, e)
+    assert climb is None and power is None                                          # no ds; no power meter
+    plan.profile = {"power_meter": "stryd"}
+    assert F.baiyue_inputs(plan, None, TODAY, e)[1] == {"cp": 250.0, "kg": 65.0}
