@@ -38,7 +38,12 @@ Weekly volume step: RUNNING time only (road + trail, sport "run"; Nielsen 2014
 and Damsted 2019 measured running), last week against
 max(the week before, the mean of the 4 weeks before) — the planner's own
 reference (overview.week_plan / projection.week_hours: max(4-week mean, last
-week)), so a week back to normal after a recovery week is not a 「spike」.
+week)), so a week back to normal after a recovery week is not a 「spike」. Only normal
+weeks make the base (SP-73, owner 2026-10-05): a week touching a 減量期, race week, post-race
+恢復期 or 轉換期 (STEP_SKIP_KINDS, planning.phase_days) is left out and the most recent normal
+weeks before it are used instead (up to STEP_LOOKBACK_WEEKS back), so the second week after a
+transition is not measured against the transition. The planner's +10 % cap reads the same
+normal weeks (normal_ref).
 > 20 % block, 10–20 % hold (unchanged classes). Exempt: the week after a short
 unplanned break — SHORT_BREAK_MIN–5 days without a run (shorter than a re-entry
 block, reentry.MIN_BREAK) touching the week before it — since the break pulled
@@ -79,6 +84,8 @@ STEP_HOLD, STEP_BLOCK = 0.10, 0.20     # > 20 % block: Nielsen 2014, Damsted 201
 STEP_AVG_WEEKS = 4
 STEP_SPORTS = ("run",)                 # road + trail runs (sport group "run")
 SHORT_BREAK_MIN = 3                    # 推估: ≥ 3 days without a run is a break (routine rest = 1–2 days)
+STEP_SKIP_KINDS = ("taper", "event", "recovery", "transition")   # not a baseline week (SP-73)
+STEP_LOOKBACK_WEEKS = 26               # 推估: covers taper + race + 恢復期 + a 4-week 轉換期 + 4 normal weeks
 
 # ---- planner's weekly CTL goal -------------------------------------------------
 GOAL = {"base": (0.05, 2.0), "specific": (0.07, 2.5)}   # (share of CTL, floor in points) 推估
@@ -278,6 +285,32 @@ def step_base(prev_weeks: Sequence[float]) -> Optional[float]:
         return None
     b = max(xs[-1], statistics.mean(xs))
     return b if b > 0 else None
+
+
+def skip_mondays(plan, mondays: Sequence[dt.date]) -> set[dt.date]:
+    """The Mondays whose week (Mon–Sun) touches a STEP_SKIP_KINDS phase of `plan` (auto or
+    manual); empty without a plan or on any plan error."""
+    ms = sorted(mondays)
+    if plan is None or not ms:
+        return set()
+    try:
+        from backend.engine.planning import phase_days
+        days = phase_days(plan, ms[0], ms[-1] + dt.timedelta(days=6), STEP_SKIP_KINDS)
+    except Exception:                       # noqa: BLE001 — the guardrail must still work
+        return set()
+    return {m for m in ms if any(m + dt.timedelta(days=k) in days for k in range(7))}
+
+
+def normal_weeks(weeks: Sequence[tuple], skip=()) -> list[float]:
+    """The hours of the last STEP_AVG_WEEKS weeks not in `skip` (Mondays), oldest first;
+    `weeks` = [(monday, hours)] oldest first."""
+    sk = set(skip or ())
+    return [float(h or 0.0) for m, h in weeks if m not in sk][-STEP_AVG_WEEKS:]
+
+
+def normal_ref(weeks: Sequence[tuple], skip=()) -> Optional[float]:
+    """The planner's volume reference on normal weeks: step_base(normal_weeks); None when none."""
+    return step_base(normal_weeks(weeks, skip))
 
 
 def volume_step(last: float, prev_weeks: Sequence[float]) -> tuple[Optional[float], Optional[float]]:
