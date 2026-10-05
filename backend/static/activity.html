@@ -77,6 +77,10 @@ td.c-act { text-align: right; }
 td.c-act .acts { display: inline-flex; gap: 4px; align-items: center; }
 .edit { padding: 2px 10px; font-weight: 600; color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
 .edit:hover { background: var(--soft); }
+/* 這是比賽 (SP-71): the user's own race mark, one tap from the list */
+.race { padding: 2px 8px; font-size: 12px; color: var(--muted); white-space: nowrap; }
+.race[aria-pressed="true"] { color: #fff; background: var(--accent); border-color: var(--accent); font-weight: 600; }
+.race:disabled { opacity: .55; }
 .iconlink { display: inline-grid; place-items: center; width: 28px; height: 26px; border-radius: 6px; color: var(--muted);
   border: 1px solid transparent; }
 .iconlink:hover { color: var(--accent); border-color: var(--line); }
@@ -90,6 +94,7 @@ td.c-act .acts { display: inline-flex; gap: 4px; align-items: center; }
 .badge.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 50%, var(--line)); }
 .badge.ex { color: var(--err); border-color: var(--err); }
 .badge.man { background: var(--accent); border-color: var(--accent); color: #fff; }
+.badge.rc { color: var(--accent); border-color: var(--accent); font-weight: 600; }
 .empty { color: var(--muted); padding: 28px 6px; text-align: center; }
 .loading { color: var(--muted); padding: 14px 8px; }
 /* phone: date, name (with a one-line summary), distance, actions */
@@ -209,6 +214,7 @@ dialog#exp .row .sp { flex: 1; }
     <select id="f-type" data-acts-only data-i18n-attr="aria-label:activity.f.type" aria-label=""></select>
     <select id="f-src" data-acts-only data-i18n-attr="aria-label:activity.f.src" aria-label=""></select>
     <label class="ck" data-pain-only data-acts-only hidden><input type="checkbox" id="f-pain"><span data-i18n="activity.f.pain">只看有疼痛</span></label>
+    <label class="ck" data-acts-only><input type="checkbox" id="f-race"><span data-i18n="activity.f.race">只看比賽</span></label><button type="button" class="qtip" data-acts-only aria-label="?" data-i18n-attr="data-tip:activity.help.race" data-tip="" style="margin-left:-4px">?</button>
     <label class="ck" data-acts-only><input type="checkbox" id="f-ach"><span data-i18n="activity.f.ach">有成就</span></label><button type="button" class="qtip" aria-label="?"
       data-acts-only data-i18n-attr="data-tip:activity.help.f_ach" data-tip="" style="margin-left:-4px">?</button>
     <button type="button" class="reset" id="f-reset" data-i18n="activity.f.reset">清除篩選</button>
@@ -341,7 +347,7 @@ $("thead").addEventListener("click", (e) => {
 const FIDS = ["f-q", "f-from", "f-to", "f-type", "f-src"];
 function loadPrefs() { try { return JSON.parse(localStorage.getItem(PREF) || "{}"); } catch { return {}; } }
 function savePrefs() {
-  const p = { sort: S.sort, pain: $("f-pain").checked, ach: $("f-ach").checked,
+  const p = { sort: S.sort, pain: $("f-pain").checked, ach: $("f-ach").checked, race: $("f-race").checked,
     asort: S.asort, akind: $("a-kind").value, acls: [...S.acls], ahid: $("a-hidden").checked };
   for (const k of FIDS) p[k] = $(k).value;
   try { localStorage.setItem(PREF, JSON.stringify(p)); } catch {}
@@ -351,6 +357,7 @@ function restorePrefs() {
   for (const k of FIDS) if (p[k] && $(k)) { $(k).value = p[k]; if ($(k).value !== p[k]) $(k).value = ""; }
   $("f-pain").checked = !!p.pain;
   $("f-ach").checked = !!p.ach;
+  $("f-race").checked = !!p.race;
   if (p.sort && COLS.some((c) => c.k === p.sort.k)) S.sort = { k: p.sort.k, dir: p.sort.dir > 0 ? 1 : -1 };
   if (p.asort && ACOLS.some((c) => c.k === p.asort.k && c.get)) S.asort = { k: p.asort.k, dir: p.asort.dir > 0 ? 1 : -1 };
   if (p.akind) { $("a-kind").value = p.akind; if ($("a-kind").value !== p.akind) $("a-kind").value = ""; }
@@ -372,7 +379,8 @@ function fillFilterOptions() {
 }
 function filtered() {
   const from = $("f-from").value, to = $("f-to").value, ty = $("f-type").value, src = $("f-src").value,
-    pain = S.pain && $("f-pain").checked, q = $("f-q").value.trim().toLowerCase(), achOnly = $("f-ach").checked;
+    pain = S.pain && $("f-pain").checked, q = $("f-q").value.trim().toLowerCase(), achOnly = $("f-ach").checked,
+    raceOnly = $("f-race").checked;
   return S.acts.filter((a) => {
     const d = a.start.slice(0, 10);
     if (from && d < from) return false;
@@ -380,6 +388,7 @@ function filtered() {
     if (ty && (a.sport_type || a.sport) !== ty) return false;
     if (src && a.origin !== src) return false;
     if (pain && !(a.pain >= 1)) return false;
+    if (raceOnly && a.user_type !== "race") return false;
     const r = (achOnly || q) ? achOf(a) : null;
     if (achOnly && !(r && !r.hidden)) return false;
     if (q) {
@@ -399,12 +408,12 @@ function sorted(rows) {
   }).map(([a]) => a);
 }
 const refresh = () => { render(); renderAch(); };
-for (const id of ["f-from", "f-to", "f-type", "f-src", "f-pain", "f-ach"]) $(id).addEventListener("change", () => { S.page = 0; savePrefs(); refresh(); });
+for (const id of ["f-from", "f-to", "f-type", "f-src", "f-pain", "f-ach", "f-race"]) $(id).addEventListener("change", () => { S.page = 0; savePrefs(); refresh(); });
 let qTimer = null;
 $("f-q").addEventListener("input", () => { clearTimeout(qTimer); qTimer = setTimeout(() => { S.page = 0; savePrefs(); refresh(); }, 120); });
 $("f-reset").addEventListener("click", () => {
   for (const k of FIDS) $(k).value = "";
-  $("f-pain").checked = false; $("f-ach").checked = false; S.page = 0; savePrefs(); refresh();
+  $("f-pain").checked = false; $("f-ach").checked = false; $("f-race").checked = false; S.page = 0; savePrefs(); refresh();
 });
 
 // ---- table ------------------------------------------------------------------
@@ -427,7 +436,8 @@ function cell(c, a) {
     case "date": return `<span class="yr">${esc(a.start.slice(0, 5))}</span>${esc(a.start.slice(5, 10))}<small>${esc(a.start.slice(11, 16))}</small>`;
     case "name": {
       const sub = [sportName(a), hms(a.duration), a.climbing != null ? `↑${Math.round(a.climbing)} m` : ""].filter(Boolean).join(" · ");
-      return `<span class="nm">${esc(title(a))}</span>${a.excluded ? ` <span class="badge ex">${esc(T("excluded"))}</span>` : ""}${achBadge(a)}` +
+      return `<span class="nm">${esc(title(a))}</span>${a.excluded ? ` <span class="badge ex">${esc(T("excluded"))}</span>` : ""}` +
+        `${a.user_type === "race" ? ` <span class="badge rc">${esc(T("race.badge"))}</span>` : ""}${achBadge(a)}` +
         `<span class="sub">${esc(sub)} ${painBadge(a)}</span>`;
     }
     case "type": return esc(sportName(a));
@@ -455,7 +465,7 @@ function render() {
       const href = viewerHref(a);
       return `<tr data-k="${esc(a.key)}" class="${a.excluded ? "excl" : ""} ${a.key === S.sel ? "on" : ""}">` +
         cs.map((c) => `<td class="${c.cls}">${cell(c, a)}</td>`).join("") +
-        `<td class="c-act"><span class="acts"><button type="button" class="edit" data-edit="${esc(a.key)}" aria-label="${esc(T("edit_label", { name: title(a) }))}">${esc(T("edit"))}</button>` +
+        `<td class="c-act"><span class="acts">${raceBtn(a)}<button type="button" class="edit" data-edit="${esc(a.key)}" aria-label="${esc(T("edit_label", { name: title(a) }))}">${esc(T("edit"))}</button>` +
         `<a class="iconlink${href ? "" : " off"}" ${href ? `href="${esc(href)}"` : 'aria-hidden="true" tabindex="-1"'} title="${esc(T("open_chart"))}" aria-label="${esc(T("open_chart"))}">${CHART_ICON}</a></span></td></tr>`;
     }).join("");
   }
@@ -471,9 +481,42 @@ $("pager").addEventListener("click", (e) => {
   $("tbl").scrollIntoView({ block: "start" });
 });
 $("tbody").addEventListener("click", (e) => {
+  const r = e.target.closest("button[data-race]");
+  if (r) { toggleRace(r); return; }
   const b = e.target.closest("button[data-edit]");
   if (b) openEditor(b.dataset.edit);
 });
+
+// 這是比賽 (SP-71): the user marks a past race by hand — the race-time prediction is checked
+// against the races marked here (racepower backtest: activity type 比賽). Nothing is guessed:
+// the button sets / clears only the user's own mark (PATCH /activities, activity_type race | null).
+// Runs only: a hike / ride is never a race the prediction could be checked against.
+const RACE_SPORTS = ["running", "trail running", "indoor running", "treadmill running"];
+function raceBtn(a) {
+  if (a.sport !== "run" && !RACE_SPORTS.includes(a.sport_type)) return "";
+  const on = a.user_type === "race";
+  return `<button type="button" class="race" data-race="${esc(a.key)}" aria-pressed="${on}" title="${esc(T(on ? "race.off_tip" : "race.on_tip"))}"` +
+    ` aria-label="${esc(T(on ? "race.off_label" : "race.on_label", { name: title(a) }))}">${esc(T("race.btn"))}</button>`;
+}
+async function toggleRace(btn) {
+  const a = actOf(btn.dataset.race);
+  if (!a) return;
+  const on = a.user_type !== "race";
+  btn.disabled = true;
+  try {
+    await send(`${API}/activities`, "PATCH", { items: [{ key: a.key, file: a.file }], activity_type: on ? "race" : null });
+    a.user_type = on ? "race" : null;
+    render();
+  } catch (err) {
+    btn.disabled = false;
+    alertRow(btn, T("save_failed", { err: err.message }));
+  }
+}
+function alertRow(btn, msg) {
+  const td = btn.closest("td");
+  td.querySelector(".race-err")?.remove();
+  td.insertAdjacentHTML("beforeend", `<div class="race-err" role="alert" style="color:var(--err);font-size:12px">${esc(msg)}</div>`);
+}
 
 async function loadList() {
   const r = await j(`${API}/activities`);

@@ -722,6 +722,9 @@ async def _run(db, trigger: str, force: bool, approve_id: Optional[int]) -> dict
         # change must stay held on the next sync
         state["phase"] = phase
     await _set_state(db, state)
+    # 每週課表存檔 (engine/plan_history.py, SP-71): a sync alone, with no page opened, still records the week
+    from backend.engine import plan_history as PH
+    await PH.record_safe(db, inp)
     return out
 
 
