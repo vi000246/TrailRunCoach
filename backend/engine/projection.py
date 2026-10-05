@@ -31,6 +31,7 @@ from backend.engine import b2b as B2B
 from backend.engine import load_guard as LG
 from backend.engine import specific_phase as SP
 from backend.engine import steep_hill as SH
+from backend.engine import strength_plan as STP
 from backend.engine import overview as O
 from backend.engine import quality_gate as QG
 from backend.engine.hr_profile import below, easy_cap_label, easy_cap_measured
@@ -132,8 +133,11 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
                   aet_test_days: Optional[str] = None, xu_test: Optional[dict] = None,
                   b2b: Optional[dict] = None, long_min: Optional[float] = None,
                   sport: str = "trail", goal_pace: Optional[float] = None,
-                  aet_measured: bool = False, taper: Optional[dict] = None) -> list[dict]:
+                  aet_measured: bool = False, taper: Optional[dict] = None,
+                  strength: Optional[dict] = None) -> list[dict]:
     """The week_plan() session template for a projected week, placed on days.
+    `strength` (SP-119): the week's strength_plan.week_context — the strength session's stage
+    (AA / 最大肌力 / 維持) before a 越野賽 / 百岳 A race; None = the old session.
     `taper` (SP-96, a 減量期 week): {"runs": the pre-taper runs a week, "long": whether a last long
     run ≤ 90 min fits, "sore"} — the run count is kept (overview.taper_easy_count).
     `aet` = the easy-run cap (hr_profile; `aet_measured`: a measured AeT).
@@ -213,9 +217,10 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
             target=tgt.get("long", ""), detail=f"心率不超過{cap_txt}；"
             + ("平路或緩坡，不跑長下坡" if taper.get("sore") else "輕鬆跑"), source=O.SRC_TAPER_WEEK, tss=lm / 60.0 * tph)
     n_strength = 2 if kind in ("base", "transition", "recovery") else 1
+    st_s = STP.session(strength, ss)                 # 肌力課依期別 (SP-119), as week_plan
     for i in range(n_strength):
-        add(id=f"strength{i + 1}", kind="strength", title="肌力（下肢單腳＋核心）", minutes=35,
-            detail="膝主導＋臀中肌；安排在輕鬆日或跑完後", source=O.SRC_UA, tss=strength_tss)
+        add(id=f"strength{i + 1}", kind="strength", title=st_s["title"], minutes=st_s["minutes"],
+            detail=st_s["detail"], source=st_s["source"] or O.SRC_UA, tss=strength_tss / 35 * st_s["minutes"])
     used = sum(s["minutes"] for s in ss if s["kind"] != "strength")
     left = max(0.0, total - used)
     n_easy = O.easy_count(left, kind)
@@ -461,7 +466,8 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
         vhist.append({"day": monday.isoformat(), "rung_key": this_q.get("rung_key"),
                       "variant_key": this_q["variant_key"], "state": "done", "outcome": None})
     st = next((s for s in cur_s if s["kind"] == "strength"), None)
-    strength_tss = float(st["tss"]) if st else 35 / 60 * 30
+    # the TSS of a 35-min strength session (SP-119: this week's may be a 25-min 維持 one)
+    strength_tss = float(st["tss"]) / (float(st.get("minutes") or 35) or 35.0) * 35 if st else 35 / 60 * 30
     hist = [float(h["hours"]) for h in cur.get("history") or []] + [float(cur["target"]["hours"])]
     # 轉換期 (SP-73): weekly hours by Monday — the past weeks, this week, then each projected week
     hours_at = {str(h.get("start")): float(h["hours"]) for h in cur.get("history") or [] if h.get("start")}
@@ -490,6 +496,8 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
     recent_long = [longest, float(sp_cur.get("longest28") or 0.0)]   # the long days of the last 4 weeks
     prev_mode = cur.get("mode")
     s_stops = cur.get("strength_stop") or []                 # 賽前停肌力 (SP-86): the A events' windows
+    # the A races ahead: 肌力課依期別 (SP-119) — the season plan's events, else week_plan's list
+    a_evs = events if events is not None else cur.get("a_races") or []
     from backend.engine import technical as TECH
     user_rows = TECH.load_user()                             # the user's own RPE sessions (SP-74)
     # 減量期 (SP-96): this week's taper context and pre-taper level (week_plan), the run count of the
@@ -592,7 +600,8 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
                            aet_measured=th_meas,
                            taper={"runs": cur_t.get("pre_runs") if same else last_runs, "sore": tc.get("sore"),
                                   "long": (_d(tc["start"]) - week).days > tc["long_days"]}
-                           if tc and kind == "taper" else None)
+                           if tc and kind == "taper" else None,
+                           strength=STP.week_context(a_evs, phases, week, kind))
         if kind == "transition":
             notes.append({"level": "info", "src": "transition", "text": O.TRANSITION_NOTE})
         ph_notes = _phase_notes(phases, week)
