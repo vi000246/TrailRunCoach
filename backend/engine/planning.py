@@ -17,7 +17,8 @@ Sources (docs/research/periodization-phase-metrics.md):
     heuristic, not a finding)
   * transition after the recovery (SP-73) — Friel (Transition 1–8 weeks, usually 3–4)
     and Canova (4 weeks of easy running ≤ 1 h), coach-schools-zones-periodization.md R5:
-    `transition_weeks` (課表偏好, default 3, 0 = off). It never takes days from the next A
+    `transition_weeks` (課表偏好, default 3, 0 = off; ≤ 4 weeks, ≤ 6 after a 超馬級+ race — SP-109,
+    Koop / Hart / Torrence §4.7.1). It never takes days from the next A
     race's backward-planned 專項期: too close → shortened, < 7 days → skipped, with a note
   * two A races close together (SP-90): the first one's recovery yields to the second one's
     taper (recovery_and_taper, 推估), the phases say what was cut short, and A races < 12
@@ -80,7 +81,15 @@ HOURS_OF = None              # Callable[[Event], Optional[float]]
 DIVISOR_OF = None            # Callable[[], float]
 B_RECOVERY_DAYS = 3
 TRANSITION_WEEKS = 3          # 轉換期 after an A race's recovery (SP-73; Friel 3–4, Canova 4 — the low end, 推估)
-TRANSITION_WEEKS_RANGE = (0, 4)   # 0 = off; 4 = Friel's / Canova's upper end
+# The setting's range (課表偏好 transition_weeks; 0 = off). What an A race gets (transition_weeks_for,
+# SP-109): ≤ TRANSITION_WEEKS_MAX (Friel's / Canova's upper end), ≤ TRANSITION_WEEKS_ULTRA_MAX after
+# a 超馬級+ race (event_size, the same cut as the 14-day recovery): ultra coaches' rest + return is
+# 4–8+ weeks — Koop 2–4 weeks no running then 2–4 weeks of 2 runs a week, Hart 2 weeks–2 months
+# off then ≥ 4 weeks back, Torrence 1–2 months (教練級, periodization-cross-sport.md §4.7.1);
+# 14 days + 6 weeks ≈ 8 weeks (the 6 is 推估). The default stays TRANSITION_WEEKS.
+TRANSITION_WEEKS_MAX = 4
+TRANSITION_WEEKS_ULTRA_MAX = 6
+TRANSITION_WEEKS_RANGE = (0, TRANSITION_WEEKS_ULTRA_MAX)
 TRANSITION_MIN_DAYS = 7       # less room before the next race's 專項期 → no 轉換期 (推估)
 TRANSITION_SETTING = "plan.prefs.transition_weeks"
 # Two A races close together (SP-90): the first one's 恢復期 yields to the second one's 減量期 —
@@ -229,6 +238,15 @@ def taper_days(ev, pref: Optional[int] = None) -> int:
         if (ev.kind == "road" and size >= MARATHON) or size >= ULTRA:
             return int(min(pref, TAPER_DAYS_RANGE[1]))
     return TAPER_DAYS
+
+
+def transition_weeks_for(ev, weeks: Optional[int]) -> int:
+    """The 轉換期 weeks after A event `ev` (SP-109): the 課表偏好 `weeks`, capped at
+    TRANSITION_WEEKS_ULTRA_MAX after a 超馬級+ race (event_size), else TRANSITION_WEEKS_MAX."""
+    if not weeks or weeks <= 0:
+        return 0
+    cap = TRANSITION_WEEKS_ULTRA_MAX if event_size(ev) >= ULTRA else TRANSITION_WEEKS_MAX
+    return int(min(int(weeks), cap))
 
 
 def install_size_inputs() -> None:
@@ -539,10 +557,11 @@ def auto_phases(events: list[Event], begin: dt.date, end: dt.date,
         rec_end = ev.end + dt.timedelta(days=rec_days)
         rec = add("recovery", cursor, rec_end, ev.id, rec_note)
         cursor = max(cursor, rec_end + one)
-        if transition_weeks and transition_weeks > 0:
+        tw = transition_weeks_for(ev, transition_weeks)       # ≤ 4 weeks, ≤ 6 after an ultra (SP-109)
+        if tw > 0:
             # 轉換期 (SP-73): never into the next A race's 專項期 — that phase is planned backwards
             # from its race and wins
-            t_end = rec_end + dt.timedelta(weeks=int(transition_weeks))
+            t_end = rec_end + dt.timedelta(weeks=tw)
             limit = spec_start_of(nxt) - one if nxt is not None else None
             if limit is not None and limit < t_end:
                 days = (limit - cursor).days + 1
@@ -559,7 +578,9 @@ def auto_phases(events: list[Event], begin: dt.date, end: dt.date,
                     rec.note = _("沒有轉換期：離下一場 A 賽事「{name}」只剩 {span}，恢復期後直接進專項期",
                                  name=nxt.name, span=_span((nxt.start - cursor).days))
             else:
-                add("transition", cursor, t_end, ev.id)
+                capped = _("轉換期 {weeks} 週：設定的 {pref} 週只用在超馬級以上的 A 賽事",
+                           weeks=tw, pref=int(transition_weeks)) if transition_weeks > tw else ""
+                add("transition", cursor, t_end, ev.id, capped)
                 cursor = max(cursor, t_end + one)
     if cursor <= end:
         add("base", cursor, end)    # no A event ahead: open-ended base

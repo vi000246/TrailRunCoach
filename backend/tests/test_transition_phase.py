@@ -81,7 +81,7 @@ def test_setting_default_and_out_of_range(monkeypatch):
     monkeypatch.setattr(DS, "read_setting", lambda k, d=None, u=1: d)
     assert P.transition_weeks_setting() == 3
     monkeypatch.setattr(DS, "read_setting", lambda k, d=None, u=1: 9)
-    assert P.transition_weeks_setting() == 4
+    assert P.transition_weeks_setting() == 6                         # SP-109: up to 6 (ultras only)
     monkeypatch.setattr(DS, "read_setting", lambda k, d=None, u=1: "x")
     assert P.transition_weeks_setting() == 3
 
@@ -92,12 +92,13 @@ def test_prefs_field_is_not_shaping_and_validated():
     assert not PP.Prefs(transition_weeks=4).active and not PP.Prefs(transition_weeks=0).active
     assert PP.from_settings({"plan.prefs.transition_weeks": 0}).transition_weeks == 0
     assert PP.Prefs(transition_weeks=2).settings()["plan.prefs.transition_weeks"] == 2
-    PP.check(PP.Prefs(transition_weeks=4))
+    PP.check(PP.Prefs(transition_weeks=6))                           # SP-109: 5–6 for ultras
     with pytest.raises(ValueError):
-        PP.check(PP.Prefs(transition_weeks=5))
+        PP.check(PP.Prefs(transition_weeks=7))
     validate("plan.prefs.transition_weeks", 0)
+    validate("plan.prefs.transition_weeks", 6)
     with pytest.raises(ValueError):
-        validate("plan.prefs.transition_weeks", 6)
+        validate("plan.prefs.transition_weeks", 7)
 
 
 def test_pre_race_mondays_and_transition_hours():

@@ -3139,6 +3139,10 @@
     "draft": true,
     "src": "backend/engine/overview.py:1555"
   },
+  "轉換期 {weeks} 週：設定的 {pref} 週只用在超馬級以上的 A 賽事": {
+    "draft": true,
+    "src": "backend/engine/planning.py:581"
+  },
   "轉換期每次跑步 ≤ {max} 分（Canova）：本週少排 {cut} 分，不用補": {
     "draft": true,
     "src": "backend/engine/overview.py:393"
