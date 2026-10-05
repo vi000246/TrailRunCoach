@@ -4,5 +4,12 @@
   "thr.now": "目前使用：AeT {aet} / LTHR {lthr} / CP {cp} W",
   "thr.latest": "；最新一筆測試 {date}（共 {n} 筆）。",
   "thr.none": "；還沒有測試紀錄。",
-  "thr.lthr_default": "⚠ LTHR 是 WKO5 預設值，請到設定填測試結果"
+  "thr.lthr_default": "⚠ LTHR 是 WKO5 預設值，請到設定填測試結果",
+  "ev.cutoff": "關門時間 h",
+  "ev.turnaround": "撤退時間（出發後 h）",
+  "ev.optional": "選填",
+  "ev.summit_km": "山頂在第幾 km",
+  "ev.summit_ph": "空白＝GPX 最高點",
+  "ev.cutoff_tip": "主辦單位的關門時間（小時）。填了之後，可行性判定會拿賽事計算器預測的完賽時間來比。",
+  "ev.turnaround_tip": "攻頂那天出發後幾小時還沒到山頂就撤退。可行性判定會拿預估到山頂的時間來比，來不及就判定不適合這座百岳。"
 }
