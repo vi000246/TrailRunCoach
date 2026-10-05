@@ -164,12 +164,13 @@ def user_note(user: list, hours: Optional[float], kind: str = "specific") -> Opt
         return None
     work = sum(u["work"] for u in user)
     total = QG.QUALITY_SHARE_MAX * hours * 60.0 if hours else None
-    left = f"：強度課總量上限 {total:.0f} 分（週量 {QG.QUALITY_SHARE_MAX:.0%}）扣掉後剩 {max(0.0, total - work):.0f} 分給間歇" \
-        if total is not None else ""
+    left = _("：強度課總量上限 {total:.0f} 分（週量 {share:.0%}）扣掉後剩 {left:.0f} 分給間歇",
+             total=total, share=QG.QUALITY_SHARE_MAX, left=max(0.0, total - work)) if total is not None else ""
     names = "、".join(f"{u['day'][5:]} {u['title']}" for u in user)
     return {"level": "info", "src": "technical",
-            "text": f"你排的技術地形課（{names}，RPE ≥ 7 算強度課）主課 {work:.0f} 分算進每週強度預算{left}"
-                    + ("；本週不另外排技術地形課" if kind == "specific" else "") + "（推估）"}
+            "text": _("你排的技術地形課（{names}，RPE ≥ 7 算強度課）主課 {work:.0f} 分算進每週強度預算{left}",
+                      names=names, work=work, left=left)
+                    + (_("；本週不另外排技術地形課") if kind == "specific" else "") + _("（推估）")}
 
 
 def _rpe_txt(rpe: tuple) -> str:

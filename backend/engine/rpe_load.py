@@ -47,7 +47,7 @@ import time
 from dataclasses import dataclass
 from typing import Optional
 
-from backend.i18n import N_
+from backend.i18n import N_, _
 
 log = logging.getLogger(__name__)
 
@@ -237,7 +237,7 @@ def describe(stored: Optional[dict] = None) -> dict:
     e = stored if isinstance(stored, dict) else {}
     return {"factor": round(m.factor, 4), "default": DEFAULT_FACTOR, "fitted": m.fitted, "n": m.n,
             "w": round(m.w, 4), "ratio": e.get("ratio"), "loo": e.get("loo"), "fitted_at": e.get("fitted_at"),
-            "err_pct": round(m.err_frac() * 100), "shrink_k": SHRINK_K, "levels": levels(), "badge": "推估"}
+            "err_pct": round(m.err_frac() * 100), "shrink_k": SHRINK_K, "levels": levels(), "badge": _("推估")}
 
 
 # ---------------------------------------------------------------------------

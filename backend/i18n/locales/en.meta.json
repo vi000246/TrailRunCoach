@@ -1,4 +1,12 @@
 {
+  " 3 區": {
+    "draft": true,
+    "src": "backend/engine/overview.py:748"
+  },
+  " 5 區": {
+    "draft": true,
+    "src": "backend/engine/overview.py:748"
+  },
   " · 爬 {m:.0f} m": {
     "draft": true,
     "src": "backend/engine/racepower/watch_export.py:232"
@@ -10,6 +18,14 @@
   " 控制、安全": {
     "draft": true,
     "src": "backend/engine/racepower/watch_export.py:241"
+  },
+  "% CP 功率區間": {
+    "draft": false,
+    "src": "backend/engine/workout_steps.py:1295"
+  },
+  "% LTHR 心率": {
+    "draft": false,
+    "src": "backend/engine/workout_steps.py:1295"
   },
   "% LTHR 由 % HRpeak ÷ 0.9 換算（推估）": {
     "draft": true,
@@ -126,6 +142,10 @@
   "90 分鐘測試量不出 AeT 數字，只算 3 區的關卡": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:2002"
+  },
+  "A 賽事「{race}」前 {days} 天不排肌力（{start} 起，含比賽週；課表偏好的每週肌力／肌力日也一樣）：把體力留給比賽——長距離耐力項目主要比賽前 2 週停肌力，停 4 週以上才會退步（Bompa & Buzzichelli）": {
+    "draft": true,
+    "src": "backend/engine/overview.py:1716"
   },
   "A1–A4": {
     "draft": true,
@@ -347,6 +367,10 @@
     "draft": true,
     "src": "backend/engine/workout_steps.py:1212"
   },
+  "RPE 要是 {levels}": {
+    "draft": true,
+    "src": "backend/engine/workout_steps.py:730"
+  },
   "TSB {tsb:+.0f} < −20：先維持量，不加": {
     "draft": true,
     "src": "backend/engine/overview.py:1011"
@@ -482,6 +506,10 @@
   "{h} 小時 {m} 分": {
     "draft": true,
     "src": "backend/engine/panels/drift_bars.py:32"
+  },
+  "{label} {tss:g} TSS（{rpe} {min} 分）": {
+    "draft": true,
+    "src": "backend/engine/workout_steps.py:788"
   },
   "{label} {value} {unit}：你在進階設定手動指定，不會被自動估算覆蓋。": {
     "draft": true,
@@ -678,6 +706,10 @@
   "≥ 20% 坡 8–10 秒全力，訓練爆發力與肌肉徵召，不是有氧課（Uphill Athlete；Lydiard）": {
     "draft": true,
     "src": "backend/engine/workout_templates.py:137"
+  },
+  "「{label}」段用 RPE 填：用你填的分鐘數，TSS 由 RPE × 分鐘換算": {
+    "draft": true,
+    "src": "backend/engine/workout_steps.py:1152"
   },
   "「{x}」只能用在主課": {
     "draft": true,
@@ -879,6 +911,10 @@
     "draft": true,
     "src": "backend/engine/workout_steps.py:1472"
   },
+  "但週量上限 = 最近的正常訓練週 {ref:.1f} h（不含減量期／比賽週／賽後恢復期／轉換期）的 +10%（至少 +0.5 h）→ {cap:.1f} h": {
+    "draft": true,
+    "src": "backend/engine/overview.py:1037"
+  },
   "但週量上限 = 近 4 週 {base4:.1f} h / 上週 {last:.1f} h 的 +10%（至少 +0.5 h）→ {cap:.1f} h": {
     "draft": true,
     "src": "backend/engine/overview.py:996"
@@ -890,6 +926,14 @@
   "低於 AeT 的短跑，促進恢復、同時累積有氧量（Pfitzinger；CTS）": {
     "draft": true,
     "src": "backend/engine/workout_templates.py:124"
+  },
+  "你排的技術地形課（RPE ≥ 7）主課 {reserved:.0f} 分算進本週強度預算（週量 {share:.0%}，80/20；推估），只剩 {left:.0f} 分：這週不排{zone}間歇": {
+    "draft": true,
+    "src": "backend/engine/overview.py:745"
+  },
+  "你排的技術地形課（{names}，RPE ≥ 7 算強度課）主課 {work:.0f} 分算進每週強度預算{left}": {
+    "draft": true,
+    "src": "backend/engine/technical.py:171"
   },
   "你的平路 RE 中位數（{n} 次）": {
     "draft": true,
@@ -1086,6 +1130,10 @@
   "列為非同等（30/15：每趟 < 2 分，證據方向不一致）": {
     "draft": true,
     "src": "backend/engine/interval_library.py:362"
+  },
+  "刺激 TIS": {
+    "draft": false,
+    "src": "backend/engine/workout_review.py:2710"
   },
   "前 {h} 小時不要有長跑、強度課或比賽": {
     "draft": false,
@@ -1491,6 +1539,10 @@
     "draft": true,
     "src": "backend/engine/interval_library.py:364"
   },
+  "很累": {
+    "draft": true,
+    "src": "backend/engine/rpe_load.py:55"
+  },
   "後段心率有點往上跑": {
     "draft": true,
     "src": "backend/engine/status.py:597"
@@ -1535,6 +1587,10 @@
     "draft": true,
     "src": "backend/engine/workout_steps.py:1488"
   },
+  "心率區間": {
+    "draft": false,
+    "src": "backend/engine/workout_steps.py:1296"
+  },
   "心率最高的 {k} 次平均飄移 {m:.1f}%，算上誤差可能到 {u:.1f}%（≥ 5%）：還不夠確定": {
     "draft": true,
     "src": "backend/engine/algorithms/threshold_estimate.py:348"
@@ -1574,6 +1630,10 @@
   "快步跑": {
     "draft": true,
     "src": "backend/engine/interval_library.py:757"
+  },
+  "怎麼看：越高 = 這次對那個能量系統的刺激越大；WKO5 沒有官方的分級名稱，只看數字、和自己平常的課比。\n看什麼：長時間、接近門檻的課有氧分數高；無氧分數要功率超過門檻（mFTP 的 85%）才會加，輕鬆跑通常是 1。\n方法：WKO5 的 TIS：以活動當天往前 90 天 PD 模型的 mFTP（有氧）與 FRC（無氧）為基準，把平滑後的功率逐秒加權累加（和「我的訓練」的 TIS 圖同一個數字）。需要功率。": {
+    "draft": false,
+    "src": "backend/engine/workout_review.py:2693"
   },
   "恢復": {
     "draft": true,
@@ -1935,9 +1995,17 @@
     "draft": true,
     "src": "backend/engine/workout_review.py:2683"
   },
+  "有功率，但活動前 90 天的功率資料不夠擬合 PD 模型（mFTP、FRC），TIS 算不出。": {
+    "draft": false,
+    "src": "backend/engine/workout_review.py:2708"
+  },
   "有基礎了就能做": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:1943"
+  },
+  "有氧 TIS {a}、無氧 TIS {an}（WKO5 的 Training Impact Score，1–10）。": {
+    "draft": false,
+    "src": "backend/engine/workout_review.py:2712"
   },
   "有氧動力": {
     "draft": true,
@@ -1950,6 +2018,10 @@
   "有氧間歇": {
     "draft": true,
     "src": "backend/engine/workout_templates.py:431"
+  },
+  "有氧／無氧（1–10）": {
+    "draft": false,
+    "src": "backend/engine/workout_review.py:2711"
   },
   "有氧／閾值：主課 ≤ 101% CP（心率 ≤ 102% LTHR、配速不快於閾值配速）。長 tempo 每趟 15–30 分或連續一段，巡航間歇每趟 6–15 分（更短的也算巡航）": {
     "draft": true,
@@ -2014,6 +2086,10 @@
   "條件：戴胸帶（手腕光學常有尖峰）、休息充足（前 48 小時沒有硬課）、沒生病、涼爽、找 2–3 分鐘的坡、最好有人陪。有心血管疾病或風險、胸痛、頭暈的人不要做，先問醫師（ACSM 運動前篩檢，Riebe 2015）；不舒服立刻停。替代：最近一場 5 K 比賽的最後衝刺也可以（現場、比賽與實驗室的最高心率沒有差別，Boudet 2002）。app 的讀法：濾掉尖峰與步頻鎖定後，撐 ≥ 5 秒的最高心率（推估）；結果要在設定頁按「套用」才會寫入": {
     "draft": true,
     "src": "backend/engine/workout_templates.py:165"
+  },
+  "極限": {
+    "draft": true,
+    "src": "backend/engine/rpe_load.py:55"
   },
   "標了「當作間歇」，但找不到用力段（≥ 95% CP 的短趟或 3 區以上 ≥ 2.5 分）": {
     "draft": true,
@@ -2423,6 +2499,10 @@
     "draft": true,
     "src": "backend/engine/workout_review.py:2632"
   },
+  "稍累": {
+    "draft": true,
+    "src": "backend/engine/rpe_load.py:55"
+  },
   "穩定": {
     "draft": true,
     "src": "backend/engine/workout_review.py:530"
@@ -2439,6 +2519,10 @@
     "draft": true,
     "src": "backend/engine/interval_library.py:739"
   },
+  "算不出": {
+    "draft": false,
+    "src": "backend/engine/workout_review.py:2707"
+  },
   "算不出來（{x}）": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:2134"
@@ -2454,6 +2538,10 @@
   "範本最多 {n} 個": {
     "draft": false,
     "src": "backend/engine/user_templates.py:265"
+  },
+  "累": {
+    "draft": true,
+    "src": "backend/engine/rpe_load.py:55"
   },
   "累積在接近最大攝氧量的時間，提高最大有氧能力（Daniels；Buchheit & Laursen）": {
     "draft": true,
@@ -2490,6 +2578,14 @@
   "結構要有 items": {
     "draft": true,
     "src": "backend/engine/workout_steps.py:626"
+  },
+  "絕對功率": {
+    "draft": false,
+    "src": "backend/engine/workout_steps.py:1295"
+  },
+  "絕對心率": {
+    "draft": false,
+    "src": "backend/engine/workout_steps.py:1296"
   },
   "維持：每週 1 區 ≥ {m} 分": {
     "draft": true,
@@ -2530,6 +2626,10 @@
   "自動目標的類型不對：{x}": {
     "draft": true,
     "src": "backend/engine/workout_steps.py:578"
+  },
+  "自動（依課表類型）": {
+    "draft": false,
+    "src": "backend/engine/workout_steps.py:1297"
   },
   "自訂分類最多 {n} 個": {
     "draft": false,
@@ -2638,6 +2738,14 @@
   "負荷": {
     "draft": true,
     "src": "backend/engine/workout_steps.py:69"
+  },
+  "負荷（RPE）換算超過 {max} TSS：分鐘數太多": {
+    "draft": true,
+    "src": "backend/engine/workout_steps.py:737"
+  },
+  "負荷（RPE）的分鐘": {
+    "draft": true,
+    "src": "backend/engine/workout_steps.py:732"
   },
   "負荷（TSS）": {
     "draft": true,
@@ -2774,6 +2882,10 @@
   "軟上限，只提醒": {
     "draft": true,
     "src": "backend/engine/workout_steps.py:1201"
+  },
+  "輕鬆": {
+    "draft": true,
+    "src": "backend/engine/rpe_load.py:55"
   },
   "輕鬆課": {
     "draft": true,
@@ -3031,6 +3143,10 @@
     "draft": true,
     "src": "backend/engine/status.py:583"
   },
+  "配速": {
+    "draft": false,
+    "src": "backend/engine/workout_steps.py:1296"
+  },
   "配速 {lo}–{hi} /km": {
     "draft": true,
     "src": "backend/engine/workout_steps.py:1490"
@@ -3235,13 +3351,17 @@
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:518"
   },
-  "（不含轉換期 {n} 天）": {
+  "（不含賽後恢復期／轉換期 {n} 天）": {
     "draft": true,
-    "src": "backend/engine/reentry.py:166"
+    "src": "backend/engine/reentry.py:167"
   },
   "（推估的 AeT 要夠準、最近幾次沒有往同一邊偏才算；推估），改用不設門檻": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:2488"
+  },
+  "（推估）": {
+    "draft": true,
+    "src": "backend/engine/technical.py:173"
   },
   "（每次約 {g:.0f} g 碳水）": {
     "draft": true,
@@ -3267,6 +3387,10 @@
     "draft": true,
     "src": "backend/engine/quality_gate.py:2049"
   },
+  "，另 {k} 天是自己排的休息（不排課日期／休息日／沒勾的可練日）": {
+    "draft": true,
+    "src": "backend/engine/status.py:438"
+  },
   "，或": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:2028"
@@ -3279,6 +3403,10 @@
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:594"
   },
+  "：強度課總量上限 {total:.0f} 分（週量 {share:.0%}）扣掉後剩 {left:.0f} 分給間歇": {
+    "draft": true,
+    "src": "backend/engine/technical.py:167"
+  },
   "；": {
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:592"
@@ -3290,6 +3418,10 @@
   "；{n} 次沒有任何溫度，不能熱校正": {
     "draft": true,
     "src": "backend/engine/zone_events.py:475"
+  },
+  "；不含減量期／比賽週／賽後恢復期／轉換期的週": {
+    "draft": true,
+    "src": "backend/engine/status.py:427"
   },
   "；傷後往上一級排（推估）": {
     "draft": true,
@@ -3315,6 +3447,10 @@
     "draft": true,
     "src": "backend/engine/quality_gate.py:2078"
   },
+  "；本週不另外排技術地形課": {
+    "draft": true,
+    "src": "backend/engine/technical.py:173"
+  },
   "；注意線 +{watch:.1f}、擋線 +{block:.1f}（7 天前 CTL {base:.0f}）": {
     "draft": true,
     "src": "backend/engine/status.py:308"
@@ -3334,25 +3470,5 @@
   "🌡 {t:.0f} °C（{band}）": {
     "draft": true,
     "src": "backend/engine/panels/drift_bars.py:42"
-  },
-  "輕鬆": {
-    "draft": true,
-    "src": "backend/engine/rpe_load.py:55"
-  },
-  "稍累": {
-    "draft": true,
-    "src": "backend/engine/rpe_load.py:55"
-  },
-  "累": {
-    "draft": true,
-    "src": "backend/engine/rpe_load.py:55"
-  },
-  "很累": {
-    "draft": true,
-    "src": "backend/engine/rpe_load.py:55"
-  },
-  "極限": {
-    "draft": true,
-    "src": "backend/engine/rpe_load.py:55"
   }
 }

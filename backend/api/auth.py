@@ -187,7 +187,7 @@ async def session_alerts(athlete_id: int = 1, db: AsyncSession = Depends(get_db)
         verdicts[src] = await session_check.check(db, src, athlete_id)
         if verdicts[src] == session_check.EXPIRED:
             out.append({"source": src, "name": names[src],
-                        "needs": ["sync" if n == "同步" else "push" for n in needs],
+                        "needs": ["sync" if n == _("同步") else "push" for n in needs],
                         "message": _("{name} 登入已過期，重新登入後才能{what}", name=names[src], what='／'.join(needs))})
 
     login = verdicts[use]

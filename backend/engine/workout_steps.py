@@ -727,14 +727,14 @@ def _norm_rpe_load(dur: dict, errs: list, model=None) -> dict:
     from backend.engine import rpe_load as RL
     lvl = dur.get("rpe")
     if lvl not in RL.CR10:
-        errs.append(f"RPE 要是 {'／'.join(_(l) for _k, l, _v in RL.LEVELS)}")
+        errs.append(_("RPE 要是 {levels}", levels="／".join(_(l) for _k, l, _v in RL.LEVELS)))
         return {"type": "open"}
-    m = _f(dur.get("min"), "負荷（RPE）的分鐘", errs, *RL.MIN_RANGE)
+    m = _f(dur.get("min"), _("負荷（RPE）的分鐘"), errs, *RL.MIN_RANGE)
     if not m:
         return {"type": "open"}
     tss = (model or RL.current()).tss(lvl, m)
     if tss is None or tss > LOAD_RANGE[1]:
-        errs.append(f"負荷（RPE）換算超過 {LOAD_RANGE[1]} TSS：分鐘數太多")
+        errs.append(_("負荷（RPE）換算超過 {max} TSS：分鐘數太多", max=LOAD_RANGE[1]))
         return {"type": "open"}
     return {"type": "load", "value": max(float(LOAD_RANGE[0]), tss), "rpe": lvl, "min": int(round(m))}
 
@@ -785,7 +785,8 @@ def fmt_dur(d: dict) -> str:
     if d.get("type") == "load":
         if d.get("rpe"):
             from backend.engine.rpe_load import LABEL
-            return f"{_(LOAD_LABEL)} {d['value']:g} TSS（{_(LABEL.get(d['rpe'], d['rpe']))} {d.get('min')} 分）"
+            return _("{label} {tss:g} TSS（{rpe} {min} 分）", label=_(LOAD_LABEL), tss=d["value"],
+                     rpe=_(LABEL.get(d["rpe"], d["rpe"])), min=d.get("min"))
         return f"{_(LOAD_LABEL)} {d['value']:g} TSS"
     return _(OPEN_LABEL)
 
@@ -1148,7 +1149,7 @@ def estimate_note(steps: dict, c: Ctx) -> str:
     if any(s["dur"]["type"] == "load" and not s["dur"].get("rpe") for s in rows):
         parts.append(f"「{_(LOAD_LABEL)}」段：TSS ÷（該段強度 IF² × 100）換成時間")
     if any(s["dur"]["type"] == "load" and s["dur"].get("rpe") for s in rows):
-        parts.append(f"「{_(LOAD_LABEL)}」段用 RPE 填：用你填的分鐘數，TSS 由 RPE × 分鐘換算")
+        parts.append(_("「{label}」段用 RPE 填：用你填的分鐘數，TSS 由 RPE × 分鐘換算", label=_(LOAD_LABEL)))
     return "；".join(parts) + "（推估）" if parts else ""
 
 
