@@ -134,5 +134,17 @@ English catalog.
 
 ## License
 
-[MIT](LICENSE). Third-party data: GoldenCheetah OpenData and the Lovdal dataset used by the
+[PolyForm Noncommercial 1.0.0](LICENSE). The source is public, but it is not an open-source
+license:
+
+- Personal use, study, research, hobby projects and use by non-profit, educational and
+  public organisations are free.
+- Any commercial use (selling it, running it as a paid service, using it inside a business,
+  or building a commercial product on it) needs a separate license from the author. Ask by
+  opening an issue at https://github.com/vi000246/TrailRunCoach.
+
+Versions published before 2026-10-05 were released under the MIT license and remain
+available under MIT; the PolyForm license applies from this commit on.
+
+Third-party data: GoldenCheetah OpenData and the Lovdal dataset used by the
 validation scripts are CC0; they are fetched or placed outside the repo, not bundled.
