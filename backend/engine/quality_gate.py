@@ -102,7 +102,7 @@ AET_FRESH_DAYS = 16 * 7        # 自訂: a plan AeT older than this is stale for
 # §2.5: no direct evidence for a fixed retest period) — an event invalidates it (lthr_invalid). The
 # time since the test stays threshold_confidence's weak reminder (TEST_AGE_DAYS, a hint) only.
 LOOKBACK_DAYS = 56             # 自訂: 8-week window for friel / xu / the dose count
-FRIEL_HR_BAND = (-5.0, 3.0)    # 自訂: "at AeT" = AeT−5 … AeT+3
+FRIEL_HR_BAND = (-5.0, 3.0)    # 自訂: "at AeT" = AeT−5 … AeT+3 (the +3 per athlete: friel_band, SP-69)
 FRIEL_MIN_S = 70 * 60          # ≥ 60 min after drift_of's 10-min warm-up
 FRIEL_GOOD = 0.05
 XU_MIN_S = 90 * 60
@@ -368,6 +368,13 @@ def heat_suffix(run: dict, passed: bool) -> str:
             else f"（{run['chip']}，{WR.HEAT_NOTE}，可能是熱造成的）")
 
 
+def friel_band() -> tuple[float, float]:
+    """FRIEL_HR_BAND with the athlete's easy-run margin as its upper edge (SP-69:
+    threshold_calib.easy_margin — AeT+3 until the aggregated AeT estimate's SE says more)."""
+    from backend.engine import threshold_calib as TCAL
+    return FRIEL_HR_BAND[0], TCAL.easy_margin()
+
+
 def friel_check(ds, today: dt.date, aet: Optional[float]) -> dict:
     """Friel: one steady run near AeT, ≥ 60 min after the warm-up, fair drift < 5 %.
     missing = no such run in 8 weeks; locked = runs there, all ≥ 5 %. Every
@@ -375,7 +382,8 @@ def friel_check(ds, today: dt.date, aet: Optional[float]) -> dict:
     from backend.engine import workout_review as WR
     if not aet:
         return {"state": "missing", "reason": "沒有實測 AeT，飄移法沒有基準"}
-    lo, hi = aet + FRIEL_HR_BAND[0], aet + FRIEL_HR_BAND[1]
+    band = friel_band()
+    lo, hi = aet + band[0], aet + band[1]
     cands = []
     for w in _runs(ds, today):
         if "runningtrail" in w.tags or (_f(w.metrics.get("duration")) or 0) < FRIEL_MIN_S:
@@ -738,6 +746,9 @@ TARGET_DOWN = 0.95      # ROLE:499「下修 5～10%」: first rep already short 
 AET60_MIN_SHARE = 0.5   # 推估 (doc §4.3): HR back under AeT 60 s into the rest on < half the reps = brake
 LAST_FADE = 0.05        # 推估 (doc §4.3): only the last rep missed and it fell > 5 % = 邊界
 TIZ_GOAL = 0.85         # 推估 (interval_eval.TIZ_GOAL): time in zone ≥ 85 % of the chosen variant's plan
+# IN_BAND_TOL, LAST_FADE and TIZ_GOAL are the defaults: the values in effect are per athlete
+# (engine/interval_calib.py — fitted on the athlete's CP tests / planned sessions, shrunk toward
+# these; SP-69). The texts that quote them say whose value it is (calibrate.basis).
 # 疲勞保險 (f-OR, SP-110; doc §4.3, 2026-10-05): a faster HR recovery is not always adaptation —
 # functional overreaching speeds it up too (Aubry 2015: HRR 38 → 45 bpm while performance fell and
 # HRmax 182 → 176; Bellenger 2016 meta-analysis: both adaptation and overreaching raise HRR). It
@@ -763,7 +774,10 @@ def interval_outcome(bouts: list[dict], spec: tuple, cp: Optional[float], aet: O
     planned, lo = int(spec[2]), spec[5]
     if not cp or lo is None or not planned:
         return {"outcome": None, "why": "沒有 CP 或目標功率帶"}
-    floor = IN_BAND_TOL * lo * cp
+    from backend.engine import calibrate as CAL
+    from backend.engine import interval_calib as IC
+    last_fade = IC.last_fade()                    # LAST_FADE or the athlete's own (SP-69)
+    floor = IC.in_band_tol() * lo * cp            # IN_BAND_TOL or the athlete's own
     ps = [float(b.get("power") or 0.0) for b in bouts[:planned]]
     inb = [p >= floor for p in ps]
     done = len(ps) / planned
@@ -772,7 +786,7 @@ def interval_outcome(bouts: list[dict], spec: tuple, cp: Optional[float], aet: O
         miss = len(ps) + 1                        # stopped early: the first rep not done
     fade = (ps[-1] / ps[0] - 1.0) if len(ps) >= 2 and ps[0] else None
     # SP-110: the power part alone — every rep in band, or only the last one ≤ LAST_FADE off
-    power_ok = done >= 1 and (miss is None or (miss == planned and (fade is None or fade >= -LAST_FADE)))
+    power_ok = done >= 1 and (miss is None or (miss == planned and (fade is None or fade >= -last_fade)))
     base = {"first_miss": miss, "done": round(done, 2), "fade": fade, "power_ok": power_ok}
     if miss == 1:
         return {**base, "outcome": "too_high", "why": f"第 1 趟就沒到 {floor:.0f} W：目標功率下修 5%"}
@@ -784,9 +798,10 @@ def interval_outcome(bouts: list[dict], spec: tuple, cp: Optional[float], aet: O
         share = sum(1 for h in at60 if h <= aet) / len(at60)
         if share < AET60_MIN_SHARE:
             return {**base, "outcome": "border", "why": f"休息 60 秒心率回到 AeT 以下只有 {share * 100:.0f}% 的趟"}
-    if miss == planned and fade is not None and fade < -LAST_FADE:
+    if miss == planned and fade is not None and fade < -last_fade:
         return {**base, "outcome": "border", "why": f"只有最後一趟沒到、掉 {-fade * 100:.0f}%：同一份課表再做一次"}
-    return {**base, "outcome": "met", "why": "每一趟都在目標帶" if miss is None else "只有最後一趟略掉（≤ 5%）"}
+    return {**base, "outcome": "met", "why": "每一趟都在目標帶" if miss is None else
+            _("只有最後一趟略掉（≤ {p:.0%}，{basis}）", p=last_fade, basis=CAL.basis(IC.FADE))}
 
 
 def spec_key(h: dict, spec: tuple) -> tuple:
@@ -879,6 +894,9 @@ def dose_step(history: list[dict], aet: Optional[float] = None, track: str = "z3
     same-spec baseline two sessions in a row while its power missed is 未適應, whatever the
     power rows said; out["fatigue"] carries the numbers when the last judged session fired."""
     step, streak, adjust, last, met = 0, 0, {}, None, 0
+    from backend.engine import calibrate as CAL
+    from backend.engine import interval_calib as IC
+    tiz_goal = IC.tiz_goal()                    # TIZ_GOAL or the athlete's own (SP-69)
     rows = [h for h in history if (h.get("track") or row_track(h)) == track or h.get("unplanned")]
     for i, h in enumerate(rows):
         if h.get("unplanned"):
@@ -915,11 +933,12 @@ def dose_step(history: list[dict], aet: Optional[float] = None, track: str = "z3
             o = {"outcome": "unknown", "why": "沒有功率或 CP，無法判定達標：同一階再做一次"}
         oc = o.get("outcome") or "unknown"
         r = h.get("tiz_ratio")
-        if oc == "met" and r is not None and r < TIZ_GOAL:
+        if oc == "met" and r is not None and r < tiz_goal:
             # interval_eval's verdict: every rep in band but too little time in the zone (stopped
             # early, reps short) = 部分達到 → the same step again (≥ 85 % of the plan: 推估, §C2)
             oc = "border"
-            o = {**o, "outcome": oc, "why": f"目標區時間只有計畫的 {r * 100:.0f}%（< 85%）", "power_ok": False}
+            o = {**o, "outcome": oc, "power_ok": False,
+                 "why": _("目標區時間只有計畫的 {r:.0%}（< {goal:.0%}，{basis}）", r=r, goal=tiz_goal, basis=CAL.basis(IC.TIZ))}
         fat = fatigue_check(rows, i, o) if oc != "unknown" else None
         if fat is not None:
             # 疲勞保險 (SP-110): a faster HR recovery with the power missing is not adaptation
@@ -2062,7 +2081,8 @@ def _test_todo(t: dict, gate: dict, z: dict) -> tuple[str, Optional[dict]]:
     if k == "aet_friel_drift":
         ta = z.get("aet_tested") or {}
         if ta.get("value"):
-            lo, hi = float(ta["value"]) + FRIEL_HR_BAND[0], float(ta["value"]) + FRIEL_HR_BAND[1]
+            band = friel_band()
+            lo, hi = float(ta["value"]) + band[0], float(ta["value"]) + band[1]
             return (_("在 AeT 附近（{lo}–{hi} bpm）跑 1 次 ≥ 60 分鐘平路，飄移 < 5%", lo=f"{lo:.0f}", hi=f"{hi:.0f}"),
                     schedule_action("test", "aet", "friel"))
         return _("在 AeT 附近跑 1 次 ≥ 60 分鐘，飄移 < 5%"), schedule_action("test", "aet", "friel")
@@ -2279,7 +2299,8 @@ def _z5_next(card: dict, z: dict, gate: dict, tests: list) -> dict:
         if fr and fr.get("ok") is not True:
             ta = z.get("aet_tested") or {}
             if ta.get("value"):
-                lo, hi = float(ta["value"]) + FRIEL_HR_BAND[0], float(ta["value"]) + FRIEL_HR_BAND[1]
+                band = friel_band()
+                lo, hi = float(ta["value"]) + band[0], float(ta["value"]) + band[1]
                 parts.append(_("在 AeT 附近（{lo:.0f}–{hi:.0f} bpm）跑一次 ≥ 60 分鐘平路穩定跑，前後半飄移 < 5%", lo=lo, hi=hi))
     if not parts:
         return {"kind": "missing", "text": _("還缺：{x}", x=z.get('reason') or _("實測 AeT"))}
