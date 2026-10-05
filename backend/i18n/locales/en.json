@@ -798,6 +798,7 @@
   "輸入的數字格式不對": "The numbers entered are not in a valid format",
   "轉換期": "Transition",
   "轉換期每次跑步 ≤ {max} 分（Canova）：本週少排 {cut} 分，不用補": "Transition runs ≤ {max} min each (Canova): {cut} min fewer this week, no need to make it up",
+  "轉換期第 {w} 週起，每週第一次輕鬆跑後加 4 趟 15 秒加速（約 5K 配速）：量很小，保留一點速度（Jay Johnson，教練級；自行車選手的對照試驗，套到跑步為推估）": "Transition, from week {w}: 4 × 15 s strides (about 5K pace) after the week's first easy run — very little volume, it keeps some speed (Jay Johnson, coach-level; controlled trials in cyclists, carrying it over to running is an estimate)",
   "轉換期縮短為 {days} 天：下一場 A 賽事「{name}」的專項期 {start} 開始": "Transition shortened to {days} days: the Build phase for the next A race \"{name}\" starts {start}",
   "轉換期週數要在 {lo}–{hi} 週（0 = 關閉）": "Transition weeks must be {lo}–{hi} (0 = off)",
   "轉換期：只排輕鬆跑（每次 ≤ 60 分）和肌力，沒有長跑、強度課；想做交叉訓練（騎車、游泳、健行）可以拿來取代輕鬆跑": "Transition: easy runs only (≤ 60 min each) and strength, no long runs or quality sessions; cross-training (cycling, swimming, hiking) can replace easy runs",

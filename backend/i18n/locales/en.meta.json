@@ -3195,6 +3195,10 @@
     "draft": true,
     "src": "backend/engine/overview.py:393"
   },
+  "轉換期第 {w} 週起，每週第一次輕鬆跑後加 4 趟 15 秒加速（約 5K 配速）：量很小，保留一點速度（Jay Johnson，教練級；自行車選手的對照試驗，套到跑步為推估）": {
+    "draft": true,
+    "src": "backend/engine/overview.py:1114"
+  },
   "轉換期縮短為 {days} 天：下一場 A 賽事「{name}」的專項期 {start} 開始": {
     "draft": true,
     "src": "backend/engine/planning.py:367"

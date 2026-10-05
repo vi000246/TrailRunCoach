@@ -136,8 +136,10 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
                   aet_test_days: Optional[str] = None, xu_test: Optional[dict] = None,
                   b2b: Optional[dict] = None, long_min: Optional[float] = None,
                   sport: str = "trail", goal_pace: Optional[float] = None,
-                  aet_measured: bool = False, taper: Optional[dict] = None) -> list[dict]:
+                  aet_measured: bool = False, taper: Optional[dict] = None,
+                  transition_week: Optional[int] = None) -> list[dict]:
     """The week_plan() session template for a projected week, placed on days.
+    `transition_week`: which week of its 轉換期 this is (overview.transition_week; SP-103 strides from 2).
     `taper` (SP-96, a 減量期 week): {"runs": the pre-taper runs a week, "long": whether a last long
     run ≤ 90 min fits, "sore"} — the run count is kept (overview.taper_easy_count).
     `aet` = the easy-run cap (hr_profile; `aet_measured`: a measured AeT).
@@ -234,12 +236,13 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
         n_easy = O.taper_easy_count(left, taper.get("runs"), sum(1 for s in ss if s["kind"] in O.RUN_KINDS))
     for i in range(n_easy):
         m = min(left / n_easy, O.TRANSITION_RUN_MAX) if kind == "transition" else left / n_easy
-        strides = kind == "base" and i == 0 and mode not in ("recovery_week", "reentry")
-        st_t, st_d, _st_s = O.ROAD_STRIDES if road else O.HILL_STRIDES
+        st = O.strides_for(kind, mode, i, road, transition_week)   # base; 轉換期 from week 2 (SP-103)
+        strides = st is not None
+        st_t, st_d, st_s = st or ("", "", "")
         add(id=f"easy{i + 1}", kind="easy", title="輕鬆跑" + (st_t if strides else ""),
             minutes=int(round(m / 5) * 5), target=tgt.get("z2", ""),
             detail=f"心率不超過{cap_txt}" + (st_d if strides else ""),
-            source=O.SRC_UA, tss=m / 60.0 * tph)
+            source=O.SRC_UA + (st_s if kind == "transition" else ""), tss=m / 60.0 * tph)
     if prefs is not None and prefs.active:
         from backend.engine import plan_prefs as PP
         r = {"road": tph, "trail": tph, "hike": tph, "strength": strength_tss / 35 * 60, **(rates or {})}
@@ -612,9 +615,12 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
                            aet_measured=th_meas,
                            taper={"runs": cur_t.get("pre_runs") if same else last_runs, "sore": tc.get("sore"),
                                   "long": (_d(tc["start"]) - week).days > tc["long_days"]}
-                           if tc and kind == "taper" else None)
+                           if tc and kind == "taper" else None,
+                           transition_week=O.transition_week(phases, week) if kind == "transition" else None)
         if kind == "transition":
             notes.append({"level": "info", "src": "transition", "text": O.TRANSITION_NOTE})
+            if any(O.TRANSITION_STRIDES[0] in (s.get("title") or "") for s in ss):
+                notes.append(O.transition_strides_note())           # SP-103
         ph_notes = _phase_notes(phases, week)
         ph_note = bool(ph_notes)
         for pk, t in ph_notes:
