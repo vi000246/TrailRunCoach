@@ -123,5 +123,7 @@
   "feas.k_b2b": "Back-to-back long days: {n}",
   "feas.chart": "Build-phase charts →",
   "feas.k_week_day": "Weekly training: {p}% of the hardest day",
-  "feas.k_long_day": "Longest outing: {p}% of the hardest day"
+  "feas.k_long_day": "Longest outing: {p}% of the hardest day",
+  "feas.k_sims_plan": "Summit-day simulations: {n} possible before the trip (need {k})",
+  "feas.k_sims": "Summit-day simulations: {n} done (need {k})"
 }
