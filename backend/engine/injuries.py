@@ -16,6 +16,22 @@ A 痛 / 中斷 mark attaches to an open event of the same area that started
 plus the user's own (stored in user_settings `injury.custom_areas`, reused in
 the picker).
 
+Illness (SP-117, owner 2026-10-05): a 生病 event lives in the same log (category "illness", no
+body area), one of two types — no COVID branch (docs/research/detraining.md §6.2):
+  cold   輕微感冒: runny / blocked nose, sore throat, no fever. While symptoms last only Z1
+         recovery runs (≤ ILL_RUN_MAX_MIN), no Zone 3 / Zone 5, no strides — Kaulback 2023 (IOC
+         consensus group review: mild respiratory infection has minimal effect on cardiorespiratory
+         endurance), Wallenfels / TrainingPeaks (above the neck: a zone-1 recovery session, coach).
+  fever  發燒或全身症狀: fever, chest cough, aches all over, stomach bug. No running until
+         FEVER_WAIT_DAYS after the symptoms are gone (Wallenfels: ≥ 1 day after below-the-neck
+         symptoms; Watson / TrainingPeaks: 24–48 h symptom-free — coach-level); the first run back
+         is at recovery pace (≤ FIRST_RUN_MAX_MIN).
+onset_date = the first day of symptoms, resolved_date = the first symptom-free day (症狀消失日).
+After that the break (last run → first run back) gets reentry.py's block by its length; an
+illness never takes the injury step-up (injury.reentry_step_up: tissue healing — 推估). The
+neck check only helps pick the type (Ruuskanen 2024: not scientific, may be partly useful).
+Illness events are left out of the injury analysis and never take a pain mark.
+
 Privacy (§5): local DB only; never in a share link, the demo mode
 (WKO5COACH_MODE=demo: the API answers 404, the UI hides it).
 Not a diagnosis.
@@ -26,6 +42,8 @@ import datetime as dt
 import os
 import sqlite3
 from typing import Optional
+
+from backend.i18n import N_, _
 
 AREAS = {"knee": "膝", "shin_calf": "小腿／脛骨", "achilles": "阿基里斯腱", "ankle": "腳踝",
          "foot": "足底／腳跟", "hip": "髖／臀", "thigh": "大腿", "low_back": "下背", "other": "其他"}
@@ -46,6 +64,18 @@ CUSTOM_MAX = 30
 NOTE_MAX = 1000
 PAIN_MAX = 10
 RETURN_RUN_MIN = 20.0   # §1.5: the first run ≥ 20 min with pain ≤ 1 ends the layoff (推估)
+
+# ---- 生病 (SP-117) -------------------------------------------------------------------------
+CATEGORIES = {"injury": N_("傷"), "illness": N_("生病")}
+ILLNESS = {"cold": N_("輕微感冒"), "fever": N_("發燒或全身症狀")}
+ILLNESS_HELP = {"cold": N_("只有流鼻水、鼻塞、喉嚨痛，沒有發燒"),
+                "fever": N_("發燒、咳嗽到胸、全身痠痛、腸胃炎")}
+FEVER_WAIT_DAYS = 1     # Wallenfels: ≥ 1 day after the symptoms are gone; Watson: 24–48 h (coach-level)
+ILL_RUN_MAX_MIN = 45    # 推估: a Z1 recovery run while a cold lasts
+FIRST_RUN_MAX_MIN = 30  # 推估: the first run back after a fever, at recovery pace
+SRC_COLD = N_("Kaulback 2023（IOC 共識小組系統性回顧：輕微呼吸道感染對心肺耐力影響很小）；"
+              "Wallenfels／TrainingPeaks（脖子以上的症狀可以跑心率 1 區的恢復課，教練級）")
+SRC_FEVER = N_("Wallenfels（脖子以下的症狀消失後至少等 1 天）；Watson／TrainingPeaks（無症狀 24–48 小時），教練級")
 
 SETTING_PATTERN = "injury.pattern_alerts"   # 「跟受傷前很像」提醒, default off, n ≥ 5 to enable
 SETTING_STEP_UP = "injury.reentry_step_up"  # 傷停後恢復期往上一級, default on
@@ -116,6 +146,20 @@ def full_label(area: Optional[str], side: Optional[str]) -> str:
     return f"{s}{area_label(area)}"
 
 
+def is_illness(ev: Optional[dict]) -> bool:
+    return bool(ev) and ev.get("category") == "illness"
+
+
+def illness_label(kind: Optional[str]) -> str:
+    """「生病（輕微感冒）」."""
+    return _("生病（{what}）", what=_(ILLNESS.get(kind or "", N_("未指定"))))
+
+
+def event_label(ev: dict) -> str:
+    """The event's name: 「右膝」 for an injury, 「生病（發燒或全身症狀）」 for an illness."""
+    return illness_label(ev.get("illness")) if is_illness(ev) else full_label(ev.get("area"), ev.get("side"))
+
+
 def is_custom(a: Optional[str]) -> bool:
     return bool(a) and a != UNKNOWN and a not in AREAS
 
@@ -167,6 +211,10 @@ def validate_event(f: dict, today: Optional[dt.date] = None) -> Optional[str]:
         return "INVALID_NOTE"
     if "pause_quality" in f and not isinstance(f["pause_quality"], bool):
         return "INVALID_PAUSE"
+    if "category" in f and f["category"] not in CATEGORIES:
+        return "INVALID_CATEGORY"
+    if "illness" in f and f["illness"] is not None and f["illness"] not in ILLNESS:
+        return "INVALID_ILLNESS"
     return None
 
 
@@ -199,6 +247,7 @@ def attach(pain: Optional[int], area: Optional[str], side: Optional[str], act_da
     Returns {"injury_id", "create" (fields of a new draft) | None,
     "update" ({id, fields}) | None, "delete" (an orphan draft id) | None}."""
     linked = linked or {}
+    events = [e for e in events if not is_illness(e)]      # a pain mark never joins a 生病 event
     by = {e["id"]: e for e in events}
     cur = by.get(current_id) if current_id is not None else None
     out = {"injury_id": None, "create": None, "update": None, "delete": None}
@@ -257,9 +306,9 @@ def recurrence(ev: dict, events: list[dict]) -> Optional[dict]:
     """The last resolved event of the same area before `ev`'s onset: {note,
     recurrence_of (its id when ≤ RECUR_DAYS after it resolved, else None), days}."""
     area, onset = ev.get("area"), _d(ev.get("onset_date"))
-    if not area or area == UNKNOWN or onset is None:
+    if not area or area == UNKNOWN or onset is None or is_illness(ev):
         return None
-    prev = [e for e in events if e.get("id") != ev.get("id") and e.get("area") == area
+    prev = [e for e in events if e.get("id") != ev.get("id") and e.get("area") == area and not is_illness(e)
             and e.get("status") == "resolved" and _d(e.get("resolved_date")) and _d(e["resolved_date"]) <= onset]
     if not prev:
         return None
@@ -319,10 +368,13 @@ def days_off_auto(ev: dict, runs: list[tuple], today: dt.date) -> Optional[int]:
 def event_json(ev: dict, today: dt.date, linked: int = 0, auto_days: Optional[int] = None) -> dict:
     o = _d(ev.get("onset_date")) or today
     end = end_of(ev, today)
+    ill = is_illness(ev)
     return {**{k: ev.get(k) for k in ("id", "area", "side", "kind", "severity", "pain_max", "onset_date", "onset_key",
                                       "onset_file", "status", "resolved_date", "days_missed", "pause_quality",
-                                      "recurrence_of", "note")},
-            "area_label": area_label(ev.get("area")), "label": full_label(ev.get("area"), ev.get("side")),
+                                      "recurrence_of", "note", "illness")},
+            "category": "illness" if ill else "injury",
+            "illness_label": _(ILLNESS[ev["illness"]]) if ill and ev.get("illness") in ILLNESS else "",
+            "area_label": area_label(ev.get("area")), "label": event_label(ev),
             "severity_label": SEVERITIES.get(ev.get("severity"), ""), "kind_label": KINDS.get(ev.get("kind"), ""),
             "status_label": STATUSES.get(ev.get("status"), ""), "custom_area": is_custom(ev.get("area")),
             "day_n": (end - o).days + 1, "open": is_open(ev), "linked": linked, "days_off_auto": auto_days,
@@ -343,7 +395,8 @@ def summary(ev: Optional[dict], today: dt.date) -> Optional[dict]:
 # ---------------------------------------------------------------------------
 
 EVENT_COLS = ("id", "athlete_id", "area", "side", "kind", "severity", "pain_max", "onset_date", "onset_key",
-              "onset_file", "status", "resolved_date", "days_missed", "pause_quality", "recurrence_of", "note")
+              "onset_file", "status", "resolved_date", "days_missed", "pause_quality", "recurrence_of", "note",
+              "category", "illness")
 _memo: dict = {}
 
 
@@ -400,11 +453,49 @@ def pain_marks(tag_rows: list[dict]) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 def pause_reason(events: list[dict], today: dt.date) -> Optional[str]:
-    """`pause_quality` on an open event: 「傷病紀錄 #12 進行中：先不排間歇」 until it is resolved."""
+    """`pause_quality` on an open event: 「傷病紀錄 #12 進行中：先不排間歇」 until it is resolved.
+    An illness (SP-117) pauses the intervals on its own: while the symptoms last, and after a fever
+    through the first run back (illness_rule)."""
     for e in active_on(events, today):
-        if e.get("pause_quality"):
+        if e.get("pause_quality") and not is_illness(e):
             return f"傷病紀錄 #{e['id']}（{full_label(e.get('area'), e.get('side'))}）進行中：先不排間歇"
+    r = illness_rule(events, today)
+    if r is not None:
+        return _("傷病紀錄 #{id}（{label}）：{what}", id=r["id"], label=r["label"], what=r["text"])
     return None
+
+
+def illness_rule(events: list[dict], day: dt.date) -> Optional[dict]:
+    """What a 生病 event allows on `day` (SP-117), the strictest when several: {"rule": "off" (no
+    run: fever symptoms or the FEVER_WAIT_DAYS after them) | "z1" (cold symptoms: Z1 recovery runs
+    only) | "first" (the first day a run is allowed again after a fever: recovery pace), "id",
+    "label", "illness", "text", "src"}; None when no illness touches the day. The symptom days are
+    [onset, resolved_date) — resolved_date is the first symptom-free day; an open one lasts."""
+    best = None
+    rank = {"off": 3, "z1": 2, "first": 1}
+    for e in events:
+        if not is_illness(e):
+            continue
+        o = _d(e.get("onset_date"))
+        if o is None or o > day:
+            continue
+        r = _d(e.get("resolved_date")) if e.get("status") == "resolved" else None
+        fever = e.get("illness") == "fever"
+        if r is None or day < r:
+            rule = "off" if fever else "z1"
+        elif fever and day < r + dt.timedelta(days=FEVER_WAIT_DAYS):
+            rule = "off"
+        elif fever and day == r + dt.timedelta(days=FEVER_WAIT_DAYS):
+            rule = "first"
+        else:
+            continue
+        if best is None or rank[rule] > rank[best["rule"]]:
+            text = {"off": _("發燒或全身症狀：先不跑，症狀全部消失後至少 {n} 天（最多 48 小時）再跑", n=FEVER_WAIT_DAYS),
+                    "z1": _("輕微感冒有症狀：只排心率 1 區的恢復跑（≤ {m} 分），不排 3 區、5 區、加速跑", m=ILL_RUN_MAX_MIN),
+                    "first": _("發燒好了之後的第一次跑：恢復配速、≤ {m} 分；之後照停跑天數排", m=FIRST_RUN_MAX_MIN)}[rule]
+            best = {"rule": rule, "id": e.get("id"), "label": event_label(e), "illness": e.get("illness"),
+                    "text": text, "src": _(SRC_FEVER if fever else SRC_COLD)}
+    return best
 
 
 def week_notes(events: list[dict], monday: dt.date, today: dt.date) -> list[dict]:
@@ -413,6 +504,15 @@ def week_notes(events: list[dict], monday: dt.date, today: dt.date) -> list[dict
     out = []
     for e in events:
         o = _d(e.get("onset_date"))
+        if is_illness(e):
+            # SP-117: what the illness allows (the strictest day of the rest of the week)
+            days = [max(today, monday) + dt.timedelta(days=k) for k in range((sun - max(today, monday)).days + 1)]
+            rs = [r for r in (illness_rule([e], d) for d in days) if r is not None]
+            if o is not None and o <= sun and rs:
+                r = max(rs, key=lambda x: {"off": 3, "z1": 2, "first": 1}[x["rule"]])
+                out.append({"level": "watch", "src": "illness",
+                            "text": _("{label}：{what}（{src}）", label=r["label"], what=r["text"], src=r["src"])})
+            continue
         if o is None or o > sun or e.get("status") == "resolved":
             continue
         n = (min(today, sun) - o).days + 1
@@ -424,9 +524,12 @@ def week_notes(events: list[dict], monday: dt.date, today: dt.date) -> list[dict
     return out
 
 
-def overlapping(events: list[dict], a: dt.date, b: dt.date, today: dt.date) -> Optional[dict]:
-    """The event whose period overlaps [a, b] (a layoff caused by an injury), latest onset first."""
-    hit = [e for e in events if (o := _d(e.get("onset_date"))) and o <= b and end_of(e, today) >= a]
+def overlapping(events: list[dict], a: dt.date, b: dt.date, today: dt.date,
+                category: str = "injury") -> Optional[dict]:
+    """The event of `category` ("injury" / "illness", SP-117) whose period overlaps [a, b] (a layoff
+    caused by it), latest onset first."""
+    hit = [e for e in events if (o := _d(e.get("onset_date"))) and o <= b and end_of(e, today) >= a
+           and is_illness(e) == (category == "illness")]
     return max(hit, key=lambda e: e["onset_date"]) if hit else None
 
 
