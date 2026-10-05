@@ -393,8 +393,20 @@
         else if (dt === "load") {
           const L = W.load;
           if (!L.kinds.includes(k)) errs.push(`「${L.label}」只能用在主課`);
-          const v = f(dur.value, "負荷（TSS）", L.range[0], L.range[1]);
-          dur = v ? { type: "load", value: pyRound(v, 1) } : { type: "open" };
+          if (dur.rpe != null) {         // entered by feel (SP-57, workout_steps._norm_rpe_load; the default factor)
+            const R = L.rpe, lvl = dur.rpe, cr = R.cr10[lvl];
+            if (cr == null) { errs.push(`RPE 要是 ${R.levels.map((x) => R.label[x.id]).join("／")}`); dur = { type: "open" }; }
+            else {
+              const m = f(dur.min, "負荷（RPE）的分鐘", R.min_range[0], R.min_range[1]);
+              const tss = m ? pyRound(R.factor * cr * m, 1) : null;
+              if (!m) dur = { type: "open" };
+              else if (tss > L.range[1]) { errs.push(`負荷（RPE）換算超過 ${L.range[1]} TSS：分鐘數太多`); dur = { type: "open" }; }
+              else dur = { type: "load", value: Math.max(L.range[0], tss), rpe: lvl, min: pyRound(m) };
+            }
+          } else {
+            const v = f(dur.value, "負荷（TSS）", L.range[0], L.range[1]);
+            dur = v ? { type: "load", value: pyRound(v, 1) } : { type: "open" };
+          }
         }
         else if (dt === "time") { const v = f(dur.value, "時間", 5, 6 * 3600); dur = v ? { type: "time", value: pyRound(v) } : { type: "open" }; }
         else if (dt === "distance") { const v = f(dur.value, "距離", 50, 100000); dur = v ? { type: "distance", value: pyRound(v) } : { type: "open" }; }
@@ -498,6 +510,7 @@
       return { thresholds, tpace_link: D.tpace_link ?? null, zones: zonesTable(e.ctx, D), policy: pol,
         basis_label: `目標用：${D.tp.label[pol.basis]}（${pol.why}）`, cap: e.cap, cap_mode: e.cap_mode, rung: e.rung,
         kinds: W.kind_label, types: W.type_label, provider: W.load.provider, load_kinds: W.load.kinds, load_range: W.load.range,
+        rpe_load: { levels: W.load.rpe.levels, min_range: W.load.rpe.min_range, factor: W.load.rpe.factor, fitted: false, n: 0 },
         rules: W.rules };
     }
 
@@ -675,7 +688,12 @@
       return [Math.max(v, 0.55 * (vE || vT)), how];
     }
     // 「負荷」 steps (workout_steps.load_if / load_tl; engine/coros_tl.py defaults, 推估)
-    const loadIf = (st, r, D) => (r.frac ? r.frac : (D.ws.none_if[st.kind] ?? 0.7));
+    // entered by feel (SP-57): the IF its TSS and minutes imply
+    const loadIf = (st, r, D) => {
+      const d = st.dur, R = D.ws.load.rpe;
+      if (d.type === "load" && d.rpe && d.min) return pyRound(Math.max(R.if_range[0], Math.min(R.if_range[1], Math.sqrt(d.value / (100 * d.min / 60)))), 4);
+      return r.frac ? r.frac : (D.ws.none_if[st.kind] ?? 0.7);
+    };
     function tlConv(tss, basis, ifv, D) {
       const T = D.ws.load.tl, x = Math.max(0, tss);
       const fam = (g) => {
@@ -697,7 +715,10 @@
     function secs(st, r, c, D) {
       const d = st.dur, W = D.ws;
       if (d.type === "time") return [d.value, false];
-      if (d.type === "load") { const q = loadIf(st, r, D); return [d.value * 3600 / (q * q * 100), true]; }
+      if (d.type === "load") {
+        if (d.rpe && d.min) return [d.min * 60, true];
+        const q = loadIf(st, r, D); return [d.value * 3600 / (q * q * 100), true];
+      }
       if (d.type === "distance") {
         const km = d.value / 1000;
         if (r.type === "pace" && r.lo) return [km * (r.lo + r.hi) / 2, true];
@@ -728,7 +749,8 @@
           (c.ep_kmh ? `，用你的越野 EP 速度 ${fx(c.ep_kmh, 1)} km/h` : "，你的越野紀錄不夠，先用路跑速度"));
       }
       if (lap) parts.push("「直到按下計圈」段：用課表原本寫的最短時間");
-      if (rows.some((s) => s.dur.type === "load")) parts.push(`「${D.ws.load.label}」段：TSS ÷（該段強度 IF² × 100）換成時間`);
+      if (rows.some((s) => s.dur.type === "load" && !s.dur.rpe)) parts.push(`「${D.ws.load.label}」段：TSS ÷（該段強度 IF² × 100）換成時間`);
+      if (rows.some((s) => s.dur.type === "load" && s.dur.rpe)) parts.push(`「${D.ws.load.label}」段用 RPE 填：用你填的分鐘數，TSS 由 RPE × 分鐘換算`);
       return parts.length ? parts.join("；") + "（推估）" : "";
     }
     function totals(steps, c, D) {
@@ -738,7 +760,7 @@
         est = est || e;
         if (st.dur.type === "open" && !s) { nOpen++; continue; }
         sec += s;
-        const f = r.frac != null ? r.frac : (D.ws.none_if[st.kind] ?? 0.7);
+        const f = st.dur.type === "load" ? loadIf(st, r, D) : r.frac != null ? r.frac : (D.ws.none_if[st.kind] ?? 0.7);
         tss += s * f * f * 100 / 3600;
         if (f >= 0.88) hard += s;
         if (r.frac != null && r.frac >= D.ws.z5_frac && st.kind === "work") z5 += s;
@@ -911,8 +933,8 @@
     // ---- the watch (sync/coros_workouts.build_program as lines)
     const EX = { warm: 1, work: 2, other: 2, rest: 4, cool: 3 };
     const EX_LABEL = { 1: "暖身", 2: "訓練", 3: "緩和", 4: "休息" };
-    const fmtDur = (d) => (d.type === "time" ? fmtS(d.value) : d.type === "distance" ? (d.value >= 1000 ? `${fmtG(d.value / 1000)} km` : `${d.value} m`)
-      : d.type === "load" ? `負荷 ${fmtG(d.value)} TSS` : "直到按下計圈");
+    const fmtDur = (d, D) => (d.type === "time" ? fmtS(d.value) : d.type === "distance" ? (d.value >= 1000 ? `${fmtG(d.value / 1000)} km` : `${d.value} m`)
+      : d.type === "load" ? `負荷 ${fmtG(d.value)} TSS` + (d.rpe ? `（${D.ws.load.rpe.label[d.rpe] || d.rpe} ${d.min} 分）` : "") : "直到按下計圈");
     function stepsToCoros(steps, c, D) {
       const em = { n: 0 }, out = [];
       const name = (st, r, grouped) => {
@@ -923,7 +945,7 @@
         }
         if (st.note) return st.note;
         if (st.kind === "work" && tg.type === "auto" && tg.intent === "easy" && tg.plo != null) return r.type === "hr" ? "心率 ≤ 輕鬆跑上限" : r.type === "power" ? "功率區間" : "照感覺";
-        if (st.kind === "work" && !grouped) { em.n++; return `第 ${em.n} 趟 ${fmtDur(st.dur)}`; }
+        if (st.kind === "work" && !grouped) { em.n++; return `第 ${em.n} 趟 ${fmtDur(st.dur, D)}`; }
         return "";
       };
       const one = (st, grouped) => {
@@ -1002,7 +1024,7 @@
     }
     function structureText(steps, D) {
       const one = (x) => (x.kind === "repeat" ? `${x.times}×(` + x.items.map(one).join("＋") + ")"
-        : ["work", "rest", "other"].includes(x.kind) ? fmtDur(x.dur) : `${D.ws.kind_label[x.kind]} ${fmtDur(x.dur)}`);
+        : ["work", "rest", "other"].includes(x.kind) ? fmtDur(x.dur, D) : `${D.ws.kind_label[x.kind]} ${fmtDur(x.dur, D)}`);
       return cut(steps.items.map(one).join(" · "), 300);
     }
     function zonesTable(c, D) {
@@ -1024,6 +1046,7 @@
         if (st.dur.type === "load") {
           const lt = loadTl(st, r, D);
           o.load = byId[st.id].load = { tss: st.dur.value, tl: pyRound(lt.tl), err: pyRound(lt.err), fitted: lt.fitted, sec: pyRound(s), if: pyRound(loadIf(st, r, D), 3) };
+          if (st.dur.rpe) { const R = D.ws.load.rpe; o.load.rpe = { level: st.dur.rpe, min: st.dur.min ?? null, factor: R.factor, fitted: false, err_pct: pyRound(R.err * 100) }; }
         }
         order.push(o);
       }

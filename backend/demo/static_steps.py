@@ -33,12 +33,17 @@ DERIVE_SIG_FIELDS = ("kind", "title", "minutes", "target", "detail", "source", "
 
 def _load_table() -> dict:
     from backend.engine import coros_tl as TL
+    from backend.engine import rpe_load as RL
     from backend.engine import workout_steps as WS
     from backend.sync import workout_targets as WT
     return {"kinds": list(WS.LOAD_KINDS), "range": list(WS.LOAD_RANGE), "label": WS.LOAD_LABEL,
             "tl": {g: dict(TL.DEFAULTS[g][1]) for g in TL.GROUPS}, "err": TL.DEFAULT_ERR,
             # the editor's 時長類型 dropdown (the demo pushes nowhere: COROS, the default provider)
-            "provider": WT.get(WT.DEFAULT).describe()}
+            "provider": WT.get(WT.DEFAULT).describe(),
+            # 「負荷」 by RPE (SP-57, engine/rpe_load.py): the levels and the default factor (推估)
+            "rpe": {"levels": RL.levels(), "cr10": dict(RL.CR10), "label": dict(RL.LABEL),
+                    "min_range": list(RL.MIN_RANGE), "factor": RL.DEFAULT_FACTOR, "err": RL.DEFAULT_ERR,
+                    "if_range": list(WS.RPE_IF_RANGE)}}
 
 
 def _sig_val(k: str, v) -> str:

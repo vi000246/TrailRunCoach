@@ -493,7 +493,7 @@ chips, `heat_passive` in the legend, no push button for it.
 
 The projection passes the same preferences (`week_sessions`, `backend/engine/projection.py:120`),
 rolls its history on the minutes actually planned, and returns each week's preference notes. The
-課表 page shows the notes of the weeks in view (`_plan_notes`, `backend/api/plan_sessions.py:2173`).
+課表 page shows the notes of the weeks in view (`_plan_notes`, `backend/api/plan_sessions.py:2182`).
 User-edited and custom sessions are never overwritten: preferences only change the
 generator's output and reconcile rule 3 keeps edited sessions.
 
@@ -558,7 +558,7 @@ the week (decision `move`).
    (`_not_blocked`, `backend/engine/plan_store.py:341`).
 6. **COROS**: through the normal reconcile + push. Regenerated sessions are re-sent on their new
    day or removed as stale; an edited session still on a blocked day (no decision yet) is not
-   pushed and its pushed copy is removed (`_on_blocked`, `backend/api/plan_sessions.py:1701`,
+   pushed and its pushed copy is removed (`_on_blocked`, `backend/api/plan_sessions.py:1710`,
    used at `backend/api/plan_sessions.py:1692`). The push preview counts them
    (`blackout_to_remove`).
 
@@ -767,7 +767,7 @@ past day; `is_expired_open`, `backend/engine/plan_store.py:433`) can be deleted 
 once (「刪除所有過期未完成」, `delete_expired`, `backend/engine/plan_store.py:459`). It becomes a
 tombstone of any origin with note `user_deleted_expired` and no `gen_key`, so reconcile,
 plan_match and the auto-replan's 復原 never bring it back; a pushed copy comes off the watch
-through the workout-sync provider (`_unpush_expired`, `backend/api/plan_sessions.py:1530`), or
+through the workout-sync provider (`_unpush_expired`, `backend/api/plan_sessions.py:1539`), or
 on the next push when the login has expired.
 
 **Manual link** (`link` / `unlink`, `backend/engine/plan_store.py:640`,
@@ -904,7 +904,7 @@ which one. The response keeps the `coros` field names.
   (`plan_store.off_watch`). Only entries recorded in `coros_plan_push` are
   ever deleted (`_remove_row`, `backend/sync/coros_workouts.py:1071`). A pushed exported race also
   takes off the workout the calculator's retired 「匯出到 COROS」 pushed under the same key
-  (`racecalc:<event id>`, not in `all_rows`; `_old_calc_keys`, `backend/api/plan_sessions.py:1695`);
+  (`racecalc:<event id>`, not in `all_rows`; `_old_calc_keys`, `backend/api/plan_sessions.py:1704`);
   the preview counts it as `calc_to_replace`.
 - **Unpush** (`DELETE /push-coros`, `backend/api/plan_sessions.py:1705`) removes every recorded
   entry whose day falls in the range (`remove_keys`, `backend/sync/coros_workouts.py:1056`).
@@ -917,7 +917,7 @@ which one. The response keeps the `coros` field names.
 - Pushes and removals are serialized by a module-level lock
   (`backend/sync/coros_workouts.py:79`). An expired COROS login returns 401
   `COROS_AUTH_REQUIRED` (`SYNC_AUTH_REQUIRED` for another provider) with a hint to log in again
-  on the settings page (`_auth`, `backend/api/plan_sessions.py:1705`).
+  on the settings page (`_auth`, `backend/api/plan_sessions.py:1714`).
 
 ## Page (`backend/static/overview.html`)
 
@@ -1031,7 +1031,7 @@ which one. The response keeps the `coros` field names.
   Above threshold with reps > 5′ is 巡航（超閾值）. Distance reps use T pace (4:48/km without one,
   推估). Used by: the editor's 插入範本 強度課 tabs (有氧間歇 ／ VO2max 間歇 ／ 速度, labels and
   tips through `_()`, `cats`, `backend/engine/workout_templates.py:511`; groups in
-  `workout_steps.templates`, `backend/engine/workout_steps.py:1601`, for the published templates
+  `workout_steps.templates`, `backend/engine/workout_steps.py:1659`, for the published templates
   and the interval ladder's rows alike — Palladino 4×2:40 now files as VO2max, 4×4:30 @ 98–104 %
   as 巡航); the 推薦 block (`template_recs._score`, `backend/engine/template_recs.py:131`: Zone 5
   closed → no VO2max / 速度 template; 基礎期 favours 有氧間歇, 強化期／專項期 巡航間歇; the
@@ -1050,7 +1050,7 @@ which one. The response keeps the `coros` field names.
   (`backend/engine/workout_templates.py:654`, the steps / derived structure) — so an old session
   without one still shows its family. `_view` (`backend/api/plan_sessions.py:270`) adds
   `steps_family`; `POST /steps/check` returns `family` (what the edited steps read as) for a
-  強度課 (`steps_check`, `backend/api/plan_sessions.py:1207`); `/calendar` adds `family_titles`
+  強度課 (`steps_check`, `backend/api/plan_sessions.py:1216`); `/calendar` adds `family_titles`
   (`FAMILY_TITLES`, `backend/engine/plan_store.py:43`).
   - 課表 editor: the 類型 radios offer 有氧間歇 ／ VO2max 間歇 ／ 速度 in place of 強度課 (each radio
     kind quality + `data-fam`; `setKind`, `backend/static/schedule.html:1372`). A new 強度課 saves
@@ -1071,7 +1071,7 @@ which one. The response keeps the `coros` field names.
   (`PURPOSE`, `backend/engine/workout_templates.py:123`, from the report's Finding 7 with the
   coaches it cites, msgids through `_()`); the interval ladder's rows take the purpose of their
   family. The 插入範本 menu shows it under each row's title, and a 強度課 row also shows its sub
-  (長 tempo ／ 巡航間歇 ／ 短間歇) as a small tag (`menuHtml`, `backend/static/workout_editor.js:822`).
+  (長 tempo ／ 巡航間歇 ／ 短間歇) as a small tag (`menuHtml`, `backend/static/workout_editor.js:852`).
 - **速度 tab add-ons** (2026-10-04, SP-32 follow-up): strides (快步跑 4×20″) and short hill sprints
   (上坡衝刺 8×10″, UA 陡坡衝刺 8×10″) are 速度 by `family_of`, but the menu only gave family tabs to
   the `quality` category, so only Daniels R showed there. `workout_steps.templates`
@@ -1087,14 +1087,14 @@ which one. The response keeps the `coros` field names.
   other RPE work step → 技術地形, else 結構化爬升). Two technical templates: 技術地形 60′（低 RPE
   3–4, 爬升 300 m） and 90′（RPE 6–7, 爬升 600 m）, `backend/engine/workout_templates.py:422`
   (structure 推估, source / purpose as the others). The step model has a new target type **`rpe`**
-  `{lo, hi (Borg CR-10 1–10), up?, down? (m)}` (`_norm_target`, `backend/engine/workout_steps.py:554`):
+  `{lo, hi (Borg CR-10 1–10), up?, down? (m)}` (`_norm_target`, `backend/engine/workout_steps.py:565`):
   it resolves to RPE with the climb, the CR-10 word and a **reference HR as text only**
-  (`rpe_hint`, `backend/engine/workout_steps.py:838`: ≤ 4 under the easy cap, 5–6 up to 95 %
+  (`rpe_hint`, `backend/engine/workout_steps.py:874`: ≤ 4 under the easy cap, 5–6 up to 95 %
   LTHR, ≥ 7 from 95 % LTHR, 推估); its ≈ % CP sizes only the chart and the TSS estimate.
   **Push**: no intensity — the step keeps its time / distance / 直到按下計圈 end and its name
-  carries 「RPE 6–7 · 爬升 600 m」 (`rpe_name`, `backend/engine/workout_steps.py:1375`); the watch
+  carries 「RPE 6–7 · 爬升 600 m」 (`rpe_name`, `backend/engine/workout_steps.py:1427`); the watch
   preview lists that limit. **Load / PMC stay the watch's record** (no RPE correction).
-  **Easy or quality by RPE**: `rpe_role` (`backend/engine/workout_steps.py:1226`) — a work step
+  **Easy or quality by RPE**: `rpe_role` (`backend/engine/workout_steps.py:1278`) — a work step
   reaching RPE 7 (很累) = 強度課, else 輕鬆課; POST /steps/check returns it (`rpe_role`), the menu
   tags each row 算強度課 / 算輕鬆課, the editor adds an info line, and the session dialog switches
   the session's type to match when the structure changes (`rpeKind`,
@@ -1105,14 +1105,14 @@ which one. The response keeps the `coros` field names.
   `load_unit`, `backend/sync/workout_targets/base.py:55`): COROS 時間／距離／直到按下計圈／負荷 (TL),
   Garmin 時間／直到按下 Lap 鍵, intervals.icu 時間. `/steps/derive` returns the active one
   (`context.provider`, read from `plan.push.provider`, `backend/api/plan_sessions.py:1160`) and the
-  editor builds the 時長類型 dropdown from it (`endOpts`, `backend/static/workout_editor.js:443`); a
+  editor builds the 時長類型 dropdown from it (`endOpts`, `backend/static/workout_editor.js:468`); a
   stored type the provider lacks stays listed as 「（… 不支援）」. 「按圈」 is now 「直到按下計圈」
   everywhere (editor, chart legend, watch preview, issues, race-calculator export switch and hint,
   template step notes). **`load`** = `{"type": "load", "value": TSS}` (1–500), **main-set (work)
-  steps only** (`normalize`, `backend/engine/workout_steps.py:616`). Its time is estimated
-  TSS ÷ (IF² × 100) h at the step's ≈ % CP (`load_if`, `backend/engine/workout_steps.py:1042`; 推估),
+  steps only** (`normalize`, `backend/engine/workout_steps.py:627`). Its time is estimated
+  TSS ÷ (IF² × 100) h at the step's ≈ % CP (`load_if`, `backend/engine/workout_steps.py:1083`; 推估),
   so the chart, the total and TSS 估 include it; the ladder counts such a main set by the same
-  formula at the band's middle (`load_work_s`, `backend/engine/workout_steps.py:1289` — see
+  formula at the band's middle (`load_work_s`, `backend/engine/workout_steps.py:1341` — see
   plan-auto.spec.md). The editor shows the provider's conversion next to
   the TSS: COROS 「≈ N TL（推估 ±E）」 (`load_tl` → `engine/coros_tl.py`, refit per athlete after
   each sync — wko5-coros-sync.spec.md). **Push**: COROS gets its training-load end condition,
@@ -1124,19 +1124,42 @@ which one. The response keeps the `coros` field names.
   sessions whose load step's sent TL moved by ≥ 3 TL as 需更新 (`TL_RESEND_MIN`, 推估; a smaller
   move keeps the TL last pushed, read from the closed-loop record — `sent_tl`,
   `backend/engine/workout_steps.py:1056`). Pushed load steps are recorded
-  (`load_records`, `backend/engine/workout_steps.py:1066`) for the closed-loop correction.
+  (`load_records`, `backend/engine/workout_steps.py:1113`) for the closed-loop correction.
   `workout_templates.session_role` (`backend/engine/workout_templates.py:706`) gives the same
   answer for a stored session. The editor's target menu adds 「RPE＋爬升」 with RPE / 爬升 / 下降
-  fields (`tgHtml`, `backend/static/workout_editor.js:470`); the static demo's JS port follows.
+  fields (`tgHtml`, `backend/static/workout_editor.js:495`); the static demo's JS port follows.
   The 推薦 block: 基礎期 favours the low-RPE technical session, 專項期 the race-like one
   (`TRAIL_SPECIFIC`, `backend/engine/template_recs.py:49`). Not done: week_plan does not generate
   技術地形 sessions itself, and a user's own quality-kind session is not counted into the
   generator's 20 % interval budget.
+- **「負荷」 entered by RPE (SP-57, 2026-10-05, the user's answers)**. Next to a load step's TSS
+  the editor has a 「負荷怎麼填」 choice TSS／RPE（感覺）(`loadIn`, `backend/static/workout_editor.js:479`;
+  the pure field update `loadDur`, `backend/static/workout_editor.js:199`): by RPE the user picks one
+  of five levels 輕鬆／稍累／累／很累／極限 = Borg CR-10 2／4／5／7／10 (Foster's anchors: easy,
+  somewhat hard, hard, very hard, maximal; `LEVELS`, `backend/engine/rpe_load.py:57`) and the
+  minutes. Stored as `{"type": "load", "value": TSS, "rpe": easy|moderate|hard|very_hard|max,
+  "min": minutes}` (1–360 min); `normalize` sets `value` = factor × CR-10 × minutes — Foster session
+  RPE × the athlete's TSS-per-AU factor (default 0.30, 推估; refit per athlete after each sync on
+  the watch-recorded RPE vs the activity's TSS — wko5-coros-sync.spec.md) — and refuses a level it
+  doesn't know, minutes out of range or a result > 500 TSS (`_norm_rpe_load`,
+  `backend/engine/workout_steps.py:724`). **RPE + minutes, not a TSS/h rate × the step's time**: a
+  load step's time is itself estimated from its TSS, so a rate would be circular; the minutes are
+  what session RPE is. Such a step is timed by its minutes and converted (TL, closed loop) at the IF
+  they imply, √(TSS ÷ (100 × h)) clamped to 0.4–1.3 (`load_if`,
+  `backend/engine/workout_steps.py:1083`); the rest — `value` in TSS, the COROS TL end condition,
+  the fingerprint, the closed-loop record — is the typed load step's. Because `normalize` runs with
+  the factor in effect, a refit moves the TSS; the push keeps the TL last sent while it moves < 3 TL
+  (`TL_RESEND_MIN`). The editor shows 「≈ N TSS ≈ M TL（推估 ±E）」 and, in its tooltip, the factor and
+  whether it is the default or calibrated (`view` adds `load.rpe` {level, min, factor, fitted,
+  err_pct}, `backend/engine/workout_steps.py:1599`); `/steps/derive` context `rpe_load` lists the
+  levels and the factor (`_rpe_load_ctx`, `backend/api/plan_sessions.py:1167`). **Planning only**
+  (the user, 2026-10-04): the PMC, the overview and every guardrail keep the watch's recorded load —
+  RPE never corrects an activity's TSS. The static demo's JS port follows (default factor).
 - **範本 page and 我的範本** (2026-10-04, SP-36, the user's answers). 課表's third mode card
   **範本** (`backend/static/templates.html`, `GET /plan/templates/page`,
   `backend/api/plan_sessions.py:2320`; also on 課表統計) lists the user's own templates and the
   built-in library (filter 全部／我的／內建, by category, by name); the chosen one opens in the
-  same step editor (`WorkoutEditor.load`, `backend/static/workout_editor.js:309`) with its name,
+  same step editor (`WorkoutEditor.load`, `backend/static/workout_editor.js:325`) with its name,
   categories, 目標用 (自動／心率／功率) and note. Built-in rows are read-only with their source;
   「複製成我的範本」 copies one (`backend/api/plan_sessions.py:1276`). Storage: tables
   `workout_templates_user` / `workout_template_cats` (`backend/db/models.py:348`,
@@ -1156,7 +1179,7 @@ which one. The response keeps the `coros` field names.
   sub-tab —, 越野跑 under its `trail_type_of` kind) and adds the custom categories as tabs; rows are
   tagged 我的 / ▲ GPX. Applying one in the session dialog also sets the session's `target_basis`
   (`backend/static/schedule.html:1609`, saved with it, `backend/static/schedule.html:1899`).
-  **儲存成範本** in the editor (`saveForm`, `backend/static/workout_editor.js:967`): name +
+  **儲存成範本** in the editor (`saveForm`, `backend/static/workout_editor.js:997`): name +
   categories, the current structure; `POST /sessions/{uid}/save-as-template`
   (`backend/api/plan_sessions.py:1358`: the body's steps, else the stored, else derived; the
   session's 目標用) or `POST /steps/templates/user` for an unsaved session. **Route GPX**: a
@@ -1169,7 +1192,7 @@ which one. The response keeps the `coros` field names.
   profile** (`route` {km, z, route_km, gain_m, name}: `route_copy`,
   `backend/engine/user_templates.py:385`, the ≤ 400-point downsample; validated by `_norm_route`,
   `backend/engine/workout_steps.py:709`, malformed copies dropped; a template never stores one).
-  The copy is embedded on save (`_with_route`, `backend/api/plan_sessions.py:1490`, from
+  The copy is embedded on save (`_with_route`, `backend/api/plan_sessions.py:1499`, from
   POST / PATCH /sessions; a re-save with the same `tpl` keeps the stored copy, so the session's
   profile doesn't follow later changes to the template's GPX), and deleting the template or its
   GPX leaves it on the session (2026-10-04 follow-up, the user's decision). POST /steps/check
@@ -1186,7 +1209,7 @@ which one. The response keeps the `coros` field names.
   longer than the workout: the legend says so). The editor (`chart`,
   `backend/static/workout_editor.js:546`) places the bars by `x` with km ticks and the step's km
   range in the tooltip, the elevation behind them as a light area + thin line with its own m scale
-  (`elev`, `backend/static/workout_editor.js:601`), in the chart viewer's neutral elevation colour.
+  (`elev`, `backend/static/workout_editor.js:626`), in the chart viewer's neutral elevation colour.
   **我的範本 in 推薦** (2026-10-04 follow-up, the user's decision): GET /steps/templates/recs
   (`backend/api/plan_sessions.py:1405`) ranks the user's templates with the built-ins by the same
   `_score` rules (family, Zone 5, phase, the ladder rung's 同一類 bonus, time, terrain, type); the
@@ -1376,7 +1399,7 @@ which one. The response keeps the `coros` field names.
 | GET | `/api/v1/plan/calendar` | 課表訂閱: `{enabled, path, url, window}` of the feed address (`backend/api/calendar_feed.py:88`) |
 | POST / DELETE | `/api/v1/plan/calendar/token` | `{origin?}` → a new secret address (the old one is a 404 from now on) / turn the feed off (`backend/api/calendar_feed.py:93`, `backend/api/calendar_feed.py:104`) |
 | GET / HEAD | `/share/calendar/<token>.ics` | public, token-only: the stored plan as `text/calendar` (see 課表訂閱 above); 404 for any other token; not in the demo (`backend/api/calendar_feed.py:122`) |
-| GET | `/api/v1/overview/plan/compliance?start=&end=` | the 課表統計 dashboard (≤ 371 days): due sessions with status and %, totals, weeks and days planned vs actual, streak, per kind, the current phase's progress, `plan_phases` (`backend/api/plan_sessions.py:2055`) |
+| GET | `/api/v1/overview/plan/compliance?start=&end=` | the 課表統計 dashboard (≤ 371 days): due sessions with status and %, totals, weeks and days planned vs actual, streak, per kind, the current phase's progress, `plan_phases` (`backend/api/plan_sessions.py:2064`) |
 | GET | `/api/v1/overview/plan/compliance/page` | `backend/static/compliance.html` (`backend/api/plan_sessions.py:2291`) |
 | GET | `/api/v1/overview/plan/templates/page` | `backend/static/templates.html`, the 範本 tab (`backend/api/plan_sessions.py:2297`) |
 | GET / POST | `/api/v1/overview/plan/steps/templates/user` | `{templates (each with its menu row), cats (built-in + custom), limits}` / create `{name, cats, steps, target_basis?, note?}` → 400 `{errors}` (`backend/api/plan_sessions.py:1249`) |
@@ -1564,3 +1587,4 @@ deleted / superseded) are returned as reconcile `changes` (`backend/engine/recon
 | 2026-10-04 | change | SP-73 follow-up | Zone 3 gate / re-entry block: 轉換期 days are not a running break (no block, no 7-day gap, no 21-day re-lock; plan-auto.spec.md) |
 | 2026-10-04 | change | SP-39 follow-up | Zone 5 UA path: no LTHR age limit; `threshold_confidence.lthr_evidence` (evidence since the LTHR date) feeds `quality_gate.lthr_invalid` (plan-auto.spec.md) |
 | 2026-10-04 | sp-79-quality-families | SP-79 | 強度課's three families in the main UI: `plan_sessions.family` (picked in the 課表 editor's 類型 — 有氧間歇／VO2max 間歇／速度 — else read from the steps), a mismatch hint, per-family chip colours and legend, 課表統計 by family; generated titles name the family and older stored titles are mapped on read (`display_title` → `interval_library.renamed`), so the watch names and the calendar feed SUMMARY follow (a pushed session with an old name is re-pushed once) |
+| 2026-10-05 | sp-57-rpe-load | SP-57 | 「負荷」 by RPE: five levels (CR-10 2/4/5/7/10) + minutes → TSS by Foster session RPE × a per-athlete factor (`engine/rpe_load.py`, shrunk to 0.30), step timed by its minutes; planning targets only, the PMC stays on the watch's load |

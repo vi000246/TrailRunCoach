@@ -126,5 +126,25 @@
   "練下坡：時間＋下降量，不設心率、功率目標（下坡功率不準）": {
     "draft": true,
     "src": "backend/engine/workout_templates.py:484"
+  },
+  "輕鬆": {
+    "draft": true,
+    "src": "backend/engine/rpe_load.py:55"
+  },
+  "稍累": {
+    "draft": true,
+    "src": "backend/engine/rpe_load.py:55"
+  },
+  "累": {
+    "draft": true,
+    "src": "backend/engine/rpe_load.py:55"
+  },
+  "很累": {
+    "draft": true,
+    "src": "backend/engine/rpe_load.py:55"
+  },
+  "極限": {
+    "draft": true,
+    "src": "backend/engine/rpe_load.py:55"
   }
 }

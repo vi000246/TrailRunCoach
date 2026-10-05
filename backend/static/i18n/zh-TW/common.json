@@ -37,5 +37,16 @@
   "workout.elev_aria": "；橫軸是距離（共 {km} km），背景是路線海拔 {lo}–{hi} m",
   "autoplan.log_title": "自動調整紀錄",
   "autoplan.log_count": "{n} 筆",
-  "workout.thr_low_badge": "心率門檻可信度低"
+  "workout.thr_low_badge": "心率門檻可信度低",
+  "workout.load_mode": "負荷怎麼填",
+  "workout.load_by_rpe": "RPE（感覺）",
+  "workout.rpe_easy": "輕鬆",
+  "workout.rpe_moderate": "稍累",
+  "workout.rpe_hard": "累",
+  "workout.rpe_very_hard": "很累",
+  "workout.rpe_max": "極限",
+  "workout.load_min": "分鐘",
+  "workout.load_rpe_tip": "用感覺填：輕鬆／稍累／累／很累／極限對到 Borg CR-10 的 2／4／5／7／10，TSS ＝ {factor} × RPE × 分鐘（Foster session RPE，{src}，推估）。只用來排課填目標，實際負荷照手錶記錄算。",
+  "workout.load_rpe_mine": "係數用你手錶記錄的 RPE 和實際 TSS 校正",
+  "workout.load_rpe_default": "預設係數，還沒有手錶記錄 RPE 的活動"
 }
