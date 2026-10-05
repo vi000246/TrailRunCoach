@@ -504,7 +504,8 @@ def walk_targets(ss: list[dict], walk: Optional[dict], aet: Optional[float] = No
 
 
 def _hill_set(s: dict) -> bool:
-    """The 專項期's uphill VO2max set (overview.TRAIL_SPECIFIC_Z5, maybe shortened)."""
+    """The 專項期's uphill VO2max set: the Zone 5 rung's uphill version (SP-75), or the old fixed 5×4′
+    (overview.TRAIL_SPECIFIC_Z5) of a stored week."""
     t = str(s.get("title") or "")
     return s.get("kind") == "quality" and t.startswith("VO2max 間歇") and "上坡" in t
 

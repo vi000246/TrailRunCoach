@@ -234,9 +234,16 @@ intensity). Each rung is the canonical variant of `backend/engine/interval_libra
   A race (`track_ratio`, 推估): the next A race a road race ≤ 10 km → 3 區 : 5 區 = 1:1, else
   (half marathon or longer, trail / 百岳, no A race) 2:1 — Zone 3 the first weeks of each cycle,
   deterministic by the week's Monday.
-- **專項期 / 減量期** run the same pick (`overview.quality_sessions`): 專項期 road Zone 3 =
-  `ROAD_SPECIFIC_Q` 2×15′ flat, trail Zone 5 = the 5×4′ hill set (`TRAIL_SPECIFIC_Z5`), the other two
-  the ladder (trail Zone 3 uphill versions allowed); 減量期 Zone 3 = 有氧間歇（巡航）2×8′ (`TAPER_Z3`,
+- **專項期 / 減量期** run the same pick (`overview.quality_sessions`). 專項期 (SP-75): both tracks keep
+  climbing their ladders — 越野 the rung's uphill version (`interval_library.fit(hill=True)`), 路跑 on
+  the flat; the old fixed 2×15′ / 5×4′ (`ROAD_SPECIFIC_Q`, `TRAIL_SPECIFIC_Z5`) are no longer generated.
+  It has two halves (`quality_gate.track_ratio` / `week_ratio`, 推估): 前段 賽前第 10–7 週 and 後段 第 6–3
+  週, the 1-a-week ratio by the race (`race_class`, `SPEC_RATIO`): 越野／百岳 < 4 h (`planning.event_size`)
+  1:1 → 1:1; ≥ 4 h or multi-day 2:1 → Zone 3 only (no Zone 5 kept; not a lock); 路跑 ≤ 5 km 1:1 → 1:2,
+  ≤ 10 km 1:1 → 1:1 with T+ as the Zone 3 session, half 2:1 → 3:1 with T+ in weeks 4–3, marathon 2:1 → 3:1
+  (T+ only while Zone 5 is open; it doesn't move the rung). The 後段's turns run in two-week blocks from
+  week 6 (weeks 5 / 3 are SP-97 recovery weeks); `week_decision`'s `seg_note` says what changed
+  (a week note, src `specific`). 減量期 Zone 3 = 有氧間歇（巡航）2×8′ (`TAPER_Z3`,
   88–95 % CP; Bosquet 2007, Daniels Phase IV), Zone 5 or no track open = the 4×3′ short intensity.
 - At most 2 Zone 5 sessions a week, ≥ 2 days apart (台灣教練). A ramp-week session (`SUB`,
   「有氧間歇（巡航）3×6 分（只排閾值）」, only when Zone 3 is open) and the recovery fartlek are neutral.
@@ -607,6 +614,7 @@ overview has `data-log="none"`. The settings are in 課表偏好 (above).
 | 2026-10-04 | change | SP-73 follow-up | 轉換期 days are not a running break: no re-entry block from a cross-training-only transition (`reentry.find_all` counts days outside it), and the Zone 3 gate's 7-day gap / 21-day re-lock skip them, its weeks see-through (`planning.transition_days`; owner 2026-10-05) |
 | 2026-10-04 | change | SP-39 follow-up | Zone 5's UA path: no LTHR age limit any more (`LTHR_FRESH_DAYS` removed) — a measured LTHR is invalidated only by an event (`lthr_invalid`: a ≥ 4-week running break after the test, evidence since the test from `threshold_confidence.lthr_evidence`, an AeT aggregate shift / moved); the flow names the event and offers the 30-min LTHR test (owner 2026-10-05) |
 | 2026-10-04 | sp-79-quality-families | SP-79 | Generated 強度課 titles name the family (有氧間歇／有氧間歇（巡航）／VO2max 間歇) instead of 閾值／近閾值／VO2max; stored older titles are mapped on read and in reconcile (no spurious change), and the ladder's title matchers accept both spellings |
+| 2026-10-05 | feature | SP-75 | 專項期 in two halves: 前段 (weeks 10–7) climbs the ladders, 後段 (6–3) leans the 1-a-week ratio toward the race (long trail ≥ 4 h: Zone 3 only; road half / marathon 3:1, 5 km 1:2, 10 km / half T+); trail intervals = the rung's uphill version instead of the fixed 5×4′, road Zone 3 = the ladder instead of the fixed 2×15′ |
 | 2026-10-05 | change | SP-79 follow-up | Taper 「短強度 4×3 分」 renamed 「有氧間歇（巡航）4×3 分」 (intensity unchanged); the stored old title maps through `interval_library.renamed` / `plan_store.display_title` |
 | 2026-10-05 | change | SP-63 follow-up | Weekdays not ticked as 可練日 in 課表偏好 count as planned rest for the short-break exemption (like 不排課日期 / 休息日), so a Fri–Sun-only runner's weekly Mon–Thu gap is not exempt from the running-volume step (owner 2026-10-05) |
 | 2026-10-05 | change | SP-73 follow-up | The A race's 恢復期 (7–14 days) is a planned post-race phase like the 轉換期: its days are no running break for the re-entry block or the Zone 3 gate's gap / re-lock (`planning.post_race_days`; the block text says 「不含賽後恢復期／轉換期 M 天」; owner 2026-10-05) |

@@ -783,13 +783,14 @@ def test_projection_gate_per_week_cp_test_and_drift_gate_do_not_leak():
     rec = next(w for w in w5 if w["start"] == "2026-11-16")
     assert rec["mode"] == "recovery_week" and [s["title"] for s in rec["sessions"] if s["kind"] == "quality"] \
         == ["恢復週 fartlek 4×1 分"]
-    # … and with a longer 專項期, Zone 5's turn is the trail 5×4′ hill set
+    # … and with a longer 專項期, Zone 5's turn is its ladder rung's uphill version (SP-75: no fixed 5×4′)
     longer = [{"kind": "base", "start": "2026-08-01", "end": "2026-11-01"},
               {"kind": "specific", "start": "2026-11-02", "end": "2026-11-29"},
               {"kind": "taper", "start": "2026-11-30", "end": "2026-12-13"},
               {"kind": "event", "start": "2026-12-14", "end": "2026-12-14"}]
     q5, _b, spec5 = split(P.project_weeks(_test_week(open5), longer, date(2027, 3, 1)))
-    assert spec5 and any(q5[d] == ["VO2max 間歇 5×4 分上坡"] for d in spec5)
+    assert spec5 and any(q5[d] == ["VO2max 間歇 5×2 分上坡"] for d in spec5)
+    assert not any("5×4" in t for d in spec5 for t in q5[d])
     # a locked method (data there, criterion not met): Zone 3 still goes on, never Zone 5
     locked = {"state": "locked", "mode": "ua_gap", "resolved": "ua_gap", "verdict": "差距 16%", "levels": good,
               "guard": {}, "dose": {"step": 0, "done": 0, "faded": False}, "z5": {"open": False}}

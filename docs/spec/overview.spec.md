@@ -197,10 +197,9 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
   toward 70 % of the goal event's hours, ≥ 90 min, or the 專項期 race target below), terrain from
   the goal's climb density (「LSD（山路）」 with a mountain goal); 路跑 uses `road_long_session`
   (`backend/engine/overview.py:882`). Then one of (`backend/engine/overview.py:1137`):
-  1. specific, Zone 5 not confirmed → the **Zone 3 ladder** (uphill versions allowed) instead
-     of the 5×4′ hill set (台灣教練: Zone 3 first);
-  2. specific, 路跑 → 「有氧間歇 2×15 分（平路）」 (`ROAD_SPECIFIC_Q`,
-     `backend/engine/overview.py:905`); specific, trail → 「VO2max 間歇 5×4 分上坡」;
+  1. specific, Zone 5 not confirmed → the **Zone 3 ladder** (台灣教練: Zone 3 first);
+  2. specific (SP-75) → the two ladders as in the base phase, 越野 the rung's uphill version, 路跑
+     flat; the 後段's race ratio (plan-auto.spec.md);
   3. base → the **間歇門檻**'s dose step as an interval-library variant fitted to the weekday
      cap (`_gate_session`, `backend/engine/overview.py:573`, `backend/engine/overview.py:1152`;
      see below).
@@ -285,8 +284,8 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
     (`session`, `backend/engine/quality_gate.py:2383`); the detail prefix names the rule
     (`prefix`, `backend/engine/quality_gate.py:2419`). In guardrail mode `plan_prefs.shape`
     gets `quality_cap=1` (`backend/engine/overview.py:1167`).
-  - 專項期: the same two-track pick; road Zone 3 = 有氧間歇 2×15′ (`ROAD_SPECIFIC_Q`), trail Zone 5 =
-    VO2max 間歇 5×4′ 上坡, else the ladder; drift bad → none, intensity bad → no Zone 5; this week's CTL ramp
+  - 專項期: the same two-track pick on the ladders (SP-75: trail = the uphill version; 前段 / 後段 ratios,
+    plan-auto.spec.md); drift bad → none, intensity bad → no Zone 5; this week's CTL ramp
     at the block line / volume step > 20 % → none and at the watch line → threshold only, on both
     tracks (owner 2026-10-04).
   - **Why no Zone 3** (SP-31): `week_decision`'s `z3_note` (the gate with its progress, a
@@ -350,7 +349,9 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
 - **主要訓練項目** (`engine/primary_sport.py`, setting `athlete.primary_sport` auto / trail / road;
   auto = the next A event's type, else trail + hike ≥ 25 % of 12 weeks' foot time, 推估): 路跑 =
   no B2B, no steep-hill walk, no mountain long run / uphill interval versions; the 專項期 LSD
-  carries a marathon-pace segment (Pfitzinger / Daniels; 40 % of the run within 20–75 min, 推估;
+  carries a marathon-pace segment (Pfitzinger / Daniels; SP-75 `MP_PLAN`: 20 / 25 / 30 % of the run at
+  賽前第 10 / 9 / 8 週, 35 % at 6, 40 % at 4, all easy at 7 / 5 / 3 and before a road race ≤ 10 km; 40 %
+  without a known race; within 20–75 min, 推估;
   the A road race's goal pace when ≥ 30 km, else threshold pace × 1.04–1.08), and base strides
   are 「加速跑 6×20 秒」 (`ROAD_STRIDES`, `backend/engine/overview.py:949`).
 - **專項期** (`engine/specific_phase.py`): the LSD follows the next A race's コース定數 (the race
@@ -1691,3 +1692,4 @@ deleted / superseded) are returned as reconcile `changes` (`backend/engine/recon
 | 2026-10-05 | change | SP-73 follow-up | Volume step and the planner's +10 % cap (`week_plan`, projection `week_hours(cap_ref=)`) read normal weeks only: weeks touching a 減量期 / race / post-race 恢復期 / 轉換期 are skipped for the most recent normal ones (`load_guard.normal_weeks`, `target.ref_weeks`); owner 2026-10-05 |
 | 2026-10-05 | feature | SP-86 | No strength in the 14 days before an A event (減量期 + race week; Bompa & Buzzichelli p.184 / p.327): `strength_stops` / `drop_strength_before_a` in week_plan and the projection (`strength_stop`), preferences included, a week note; B / C events unchanged |
 | 2026-10-05 | feature | SP-74 follow-up | The user's own 技術地形 session (custom or edited, RPE ≥ 7 by `session_role`) counts in the week's 20 % like the generated one: `plan_store.user_rpe_rows` → `technical.user_quality`, `quality_sessions(reserved=)` shortens / leaves out the intervals (note), no generated 技術地形 that 專項期 week, a week note; week_plan and projection alike |
+| 2026-10-05 | feature | SP-75 | 專項期 sessions climb the ladders (trail uphill versions; no fixed 2×15′ / 5×4′), 前段 / 後段 ratios, the road MP segment grows every other week (`MP_PLAN`, `mp_race` / `mp_week`) |
