@@ -672,13 +672,17 @@ def _cruise_for_cap(rung: str, cap: Optional[float], history=None, prefs=None, m
 
 def quality_sessions(gate: dict, dec: dict, kind: str, th: dict, tgt: dict, hours: Optional[float], prefs=None,
                      history=None, mountain: bool = False, road: bool = False, cap: Optional[float] = None,
-                     alt_caps: Optional[list] = None, notes: Optional[list] = None) -> list[dict]:
+                     alt_caps: Optional[list] = None, notes: Optional[list] = None,
+                     reserved: float = 0.0) -> list[dict]:
     """The week's interval sessions (Session kwargs, ids quality / quality2) for week_decision's
     items (SP-31: one per track). Base: the track's ladder rung (_gate_session). 專項期: the
     track's specific session — road Zone 3 = ROAD_SPECIFIC_Q 2×15′, trail Zone 5 = the 5×4′ hill
     set; the other two are the ladder (trail Zone 3 uphill versions allowed). 減量期: Zone 3 =
     TAPER_Z3, Zone 5 = TAPER_Q 有氧間歇（巡航）4×3′ (98–102 % CP) — which a taper week also keeps
-    when neither track is open (the session predates the gates). Shared by week_plan and projection."""
+    when neither track is open (the session predates the gates). Shared by week_plan and projection.
+    `reserved`: minutes of the week's 20 % already taken by the user's own RPE ≥ 7 技術地形
+    sessions (technical.user_quality, SP-74): the intervals get the rest — shortened, or left out
+    when nothing is left (a note says so)."""
     from backend.engine import quality_gate as QG
     items = dec.get("items") or []
     if kind == "taper" and not items:
@@ -686,12 +690,17 @@ def quality_sessions(gate: dict, dec: dict, kind: str, th: dict, tgt: dict, hour
     # the week's interval total (SP-31, 推估: Seiler 80/20, Koop): Zone 3 + Zone 5 time in zone ≤
     # QUALITY_SHARE_MAX of the planned running time — Zone 5 first, Zone 3 gets what is left
     total = QG.QUALITY_SHARE_MAX * hours * 60.0 if hours and kind in ("base", "specific") else None
+    if total is not None and reserved:
+        total = max(0.0, total - reserved)          # the user's own RPE ≥ 7 sessions first (SP-74)
     built: dict = {}
     for i in sorted(range(len(items)), key=lambda k: 0 if items[k].get("track") == "z5" else 1):
         it = items[i]
         t = it.get("track")
         used = sum(session_tiz_min(x) for x in built.values())
         left = None if total is None else max(0.0, total - used)
+        if reserved and left is not None and left < 1.0:
+            _reserved_out(notes, reserved, left, t)
+            continue
         if it.get("cruise"):
             s = _second_z3(gate, built, it, th, hours, prefs, history, mountain, cap, left, notes)
             if s is None:
@@ -709,6 +718,12 @@ def quality_sessions(gate: dict, dec: dict, kind: str, th: dict, tgt: dict, hour
             s = _gate_session(gate, {**it, "budget": left} if t == "z3" else it, th, hours, prefs, history, mountain,
                               cap, alt_caps, notes)
         if left is not None and session_tiz_min(s) > left + 1e-6:
+            if reserved:
+                # the user's own sessions came first: even the 縮量版 floor must fit, else none
+                short = _shorten(s, left, total, hours, th, gate, prefs, None)
+                if session_tiz_min(short) > left + 1e-6:
+                    _reserved_out(notes, reserved, left, t)
+                    continue
             s = _shorten(s, left, total, hours, th, gate, prefs, notes)
         built[i] = s
     out = []
@@ -719,6 +734,17 @@ def quality_sessions(gate: dict, dec: dict, kind: str, th: dict, tgt: dict, hour
         s["id"] = "quality" if not out else f"quality{len(out) + 1}"
         out.append(s)
     return out
+
+
+def _reserved_out(notes: Optional[list], reserved: float, left: float, track: Optional[str]) -> None:
+    """The note for an interval left out because the user's own RPE ≥ 7 技術地形 sessions took
+    the week's 20 % (quality_sessions `reserved`)."""
+    from backend.engine import quality_gate as QG
+    if notes is not None:
+        notes.append({"level": "info", "src": "quality_share",
+                      "text": f"你排的技術地形課（RPE ≥ 7）主課 {reserved:.0f} 分算進本週強度預算"
+                              f"（週量 {QG.QUALITY_SHARE_MAX:.0%}，80/20；推估），只剩 {max(0.0, left):.0f} 分："
+                              f"這週不排{' 5 區' if track == 'z5' else ' 3 區' if track == 'z3' else ''}間歇"})
 
 
 CRUISE_REP_MIN_S = 6 * 60   # 巡航 = reps of 6–15 min (coach-schools-zones-periodization.md R1: Friel 6–12′, Daniels
@@ -1199,6 +1225,13 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     sp = SP.plan_context(status, today, monday, mode, _n(ctl_s.at(d_prev_sun) - atl_s.at(d_prev_sun)), longest28,
                          race_predict, sport=sport) if kind == "specific" else {"active": False}
 
+    # the user's own RPE ≥ 7 技術地形 sessions this week (engine/technical.py, SP-74): in the 20 % first
+    from backend.engine import technical as TECH
+    user_q = TECH.user_quality(TECH.load_user(), monday) \
+        if kind in ("base", "specific") and mode != "recovery_week" else []
+    if user_q:
+        notes.append(TECH.user_note(user_q, hours, kind))
+
     if kind in ("base", "specific") and mode != "recovery_week":
         if kind == "specific" and sp.get("active"):
             long_min = SP.long_minutes(sp, longest28)
@@ -1240,7 +1273,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
             # own session (road Zone 3 = 2×15′ flat, trail Zone 5 = 5×4′ uphill)
             q_cap, q_alt = quality_caps(PR, PP.long_weekday(PR, _long_weekday(ds, today)) if PR is not None else 5)
             for q in quality_sessions(gate, dec, kind, tt, tgt, hours, prefs, variant_history(monday, gate),
-                                      mountain_goal if kind == "base" else not road, road, q_cap, q_alt, notes):
+                                      mountain_goal if kind == "base" else not road, road, q_cap, q_alt, notes,
+                                      reserved=sum(u["work"] for u in user_q)):
                 add(**q)
     elif kind == "base" and mode == "recovery_week" and allow_quality and dec["spec"] is not None:
         # 3:1 recovery week: a short fartlek instead of intervals (Palladino)
@@ -1474,6 +1508,9 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
                          fixed=b2b.get("pair"))
         sessions = [Session(**d) for d in kept]
         B2B.placed(b2b, kept)
+    # 賽前停肌力 (SP-86): no strength in an A event's last STRENGTH_STOP_DAYS days (projection: the same)
+    s_stops = strength_stops(getattr(getattr(status, "plan", None), "events", None) or (), monday)
+    sessions = drop_strength_before_a(sessions, s_stops, monday, notes)
     b2b_suggestion = B2B.suggestion(b2b, monday, next((s.day for s in sessions if s.id == "long"), None),
                                     enabled=getattr(prefs, "b2b", True) is not False)
     # ---- 陡坡健走（模擬負重） (engine/steep_hill.py): before a 百岳 / multi-day trip, one weekday
@@ -1514,12 +1551,11 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
 
     # ---- 技術地形課 (engine/technical.py, SP-74): 越野跑 only; 基礎期 every other week's LSD,
     # 專項期 one a week out of an easy run (RPE 6–7 = a quality session: spacing + budget)
-    from backend.engine import technical as TECH
     tech = TECH.week_context(kind=kind, mode=mode, monday=monday, road=road, b2b=b2b)
     if tech.get("active"):
         try:
             dd = [asdict(s) for s in sessions]
-            TECH.apply(dd, tech, hours=hours, rates=tph, prefs=prefs, notes=notes, hard_done=hard_done)
+            TECH.apply(dd, tech, hours=hours, rates=tph, prefs=prefs, notes=notes, hard_done=hard_done, user=user_q)
             sessions = [Session(**{k: v for k, v in d.items() if k in Session.__dataclass_fields__}) for d in dd]
         except Exception as e:              # noqa: BLE001 — the plan must still build
             tech = {**tech, "error": type(e).__name__}
@@ -1631,4 +1667,52 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         "race_sim_suggestion": race_sim,
         # 技術地形課 (engine/technical.py, SP-74): this week's rule and the session it made
         "technical": TECH.public(tech),
+        # 賽前停肌力 (SP-86): the A events' no-strength windows, for the projection
+        "strength_stop": s_stops,
     }
+
+
+# ---- 賽前停肌力 (SP-86; Bompa & Buzzichelli p.184 / p.327) ------------------------------------
+# No strength session in the STRENGTH_STOP_DAYS days before an A event (the 減量期 + the race
+# itself): the book's 「主要比賽」, so B / C events keep theirs (applying it to them would be 推估).
+# Shared by week_plan and projection (week_plan's `strength_stop` → project_weeks), applied after
+# the placement: a strength session the week placed (課表偏好 每週肌力 / 肌力日 included) on a day
+# in the window is dropped — a reduction, so auto-adjust removes a stored one without asking.
+STRENGTH_STOP_DAYS = 14
+
+
+def strength_stops(events, since: dt.date) -> list[dict]:
+    """[{"from", "to", "race"}] (ISO, inclusive) of every A event ending on / after `since`:
+    from STRENGTH_STOP_DAYS before its first day to its last."""
+    out = []
+    for e in events or ():
+        if getattr(e, "priority", None) != "A" or e.end < since:
+            continue
+        out.append({"from": (e.start - dt.timedelta(days=STRENGTH_STOP_DAYS)).isoformat(),
+                    "to": e.end.isoformat(), "race": e.name})
+    return sorted(out, key=lambda x: x["from"])
+
+
+def drop_strength_before_a(ss: list, stops: list, monday: dt.date, notes: Optional[list] = None) -> list:
+    """`ss` without the not-done strength sessions on a day in an A event's no-strength window
+    (strength_stops; one with no day is dropped when the window touches the week), and a week
+    note when any went. Session objects or dicts."""
+    days = [(monday + dt.timedelta(days=i)).isoformat() for i in range(7)]
+    hit = {d: x for x in stops or () for d in days if x["from"] <= d <= x["to"]}
+    if not hit:
+        return ss
+    g = (lambda s, k: s.get(k)) if ss and isinstance(ss[0], dict) else getattr
+    out, gone = [], []
+    for s in ss:
+        day = g(s, "day")
+        if g(s, "kind") == "strength" and not g(s, "done") and (day in hit or not day):
+            gone.append(s)
+        else:
+            out.append(s)
+    if gone and notes is not None:
+        x = hit[min(hit)]
+        notes.append({"level": "info", "src": "strength",
+                      "text": f"A 賽事「{x['race']}」前 {STRENGTH_STOP_DAYS} 天不排肌力（{x['from'][5:]} 起，含比賽週；"
+                              f"課表偏好的每週肌力／肌力日也一樣）：把體力留給比賽——長距離耐力項目主要比賽前 2 週停肌力，"
+                              f"停 4 週以上才會退步（Bompa & Buzzichelli）"})
+    return out

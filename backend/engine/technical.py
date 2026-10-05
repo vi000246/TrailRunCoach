@@ -22,6 +22,13 @@ never flips a week back and forth):
     time. A week note says which and why.
 
 The load stays the watch's (no RPE correction, SP-62); the planned TSS uses the trail rate.
+
+A 技術地形 session the user added (or an auto one they edited) whose RPE makes it a quality session
+(workout_templates.session_role) counts like the generated one (SP-74 follow-up): its RPE ≥ 7 work
+(`user_work_min`) comes off the week's 20 % before the intervals are fitted
+(overview.quality_sessions `reserved`: they shrink, or go when nothing is left), and the 專項期
+gets no second one. Read from the stored plan (plan_store.user_rpe_rows), per week, in week_plan
+and in the projection alike.
 """
 from __future__ import annotations
 
@@ -82,6 +89,89 @@ def _steps(phase: str, work: int, rpe: tuple) -> dict:
     return WS.doc(items, origin="template:lib:" + ("tech_easy" if phase == "base" else "tech_hard"))
 
 
+def _steps_doc(s: dict) -> Optional[dict]:
+    steps = s.get("steps")
+    if isinstance(steps, str):
+        import json
+        try:
+            steps = json.loads(steps)
+        except ValueError:
+            return None
+    return steps if isinstance(steps, dict) else None
+
+
+def user_work_min(s: dict) -> float:
+    """Minutes of a stored session's RPE ≥ 7 work (workout_steps.RPE_HARD_MIN): its timed steps,
+    an open step by its estimate; a step with no time (distance) → the session's minutes (推估:
+    the whole session counts rather than nothing)."""
+    from backend.engine import workout_steps as WS
+    doc = _steps_doc(s) or {}
+    sec, unknown = 0.0, False
+    for row in WS.flat(doc.get("items") or []):
+        st = row["st"]
+        tg = st.get("target") or {}
+        if st.get("kind") not in ("work", "other") or tg.get("type") != "rpe" \
+                or float(tg.get("hi") or 0) < WS.RPE_HARD_MIN:
+            continue
+        d = st.get("dur") or {}
+        if d.get("type") == "time" and d.get("value"):
+            sec += float(d["value"])
+        elif d.get("type") == "open" and d.get("est"):
+            sec += float(d["est"])
+        else:
+            unknown = True
+    return float(s.get("minutes") or 0) if unknown or sec <= 0 else sec / 60.0
+
+
+def user_quality(rows: list, monday: dt.date) -> list[dict]:
+    """The user's own RPE ≥ 7 sessions in the week of `monday` (plan_store.user_rpe_rows rows
+    whose workout_templates.session_role is "quality"): [{"uid", "day", "title", "work"}]."""
+    from backend.engine import workout_templates as WT
+    a, b = monday.isoformat(), (monday + dt.timedelta(days=6)).isoformat()
+    out = []
+    for r in rows or ():
+        day = str(r.get("day") or "")[:10]
+        if not (a <= day <= b) or r.get("kind") in ("quality", "test") or r.get("state") not in ("active", "done"):
+            continue
+        doc = _steps_doc(r)
+        if doc is None or WT.session_role({"steps": doc}) != "quality":
+            continue
+        out.append({"uid": r.get("uid"), "day": day, "title": r.get("title") or "",
+                    "work": round(user_work_min({**r, "steps": doc}), 1)})
+    return sorted(out, key=lambda x: x["day"])
+
+
+def load_user() -> list[dict]:
+    """plan_store.user_rpe_rows(), [] on any error (the plan must still build)."""
+    try:
+        from backend.engine.plan_store import user_rpe_rows
+        return user_rpe_rows()
+    except Exception:                       # noqa: BLE001
+        return []
+
+
+def user_stamp(rows: Optional[list] = None) -> tuple:
+    """What of the user's RPE sessions changes the generated plan (a cache key part)."""
+    rows = load_user() if rows is None else rows
+    return tuple(sorted((str(r.get("uid")), str(r.get("day")), str(r.get("state")), round(user_work_min(r), 1))
+                        for r in rows))
+
+
+def user_note(user: list, hours: Optional[float], kind: str = "specific") -> Optional[dict]:
+    """The week note for the user's own RPE ≥ 7 sessions in the budget."""
+    from backend.engine import quality_gate as QG
+    if not user:
+        return None
+    work = sum(u["work"] for u in user)
+    total = QG.QUALITY_SHARE_MAX * hours * 60.0 if hours else None
+    left = f"：強度課總量上限 {total:.0f} 分（週量 {QG.QUALITY_SHARE_MAX:.0%}）扣掉後剩 {max(0.0, total - work):.0f} 分給間歇" \
+        if total is not None else ""
+    names = "、".join(f"{u['day'][5:]} {u['title']}" for u in user)
+    return {"level": "info", "src": "technical",
+            "text": f"你排的技術地形課（{names}，RPE ≥ 7 算強度課）主課 {work:.0f} 分算進每週強度預算{left}"
+                    + ("；本週不另外排技術地形課" if kind == "specific" else "") + "（推估）"}
+
+
 def _rpe_txt(rpe: tuple) -> str:
     return f"RPE {rpe[0]}–{rpe[1]}"
 
@@ -126,14 +216,18 @@ def budget_room(ss: list, hours: Optional[float]) -> tuple[Optional[float], str]
 
 
 def apply(ss: list, info: Optional[dict], *, hours: Optional[float] = None, rates: Optional[dict] = None,
-          prefs=None, notes: Optional[list] = None, hard_done=(), **_kw) -> list:
+          prefs=None, notes: Optional[list] = None, hard_done=(), user=(), **_kw) -> list:
     """Turn the week's LSD (基礎期) or one easy run (專項期) into the 技術地形 session, in place;
-    sets info["planned"]. `hard_done`: hard days already done this week (dates)."""
+    sets info["planned"]. `hard_done`: hard days already done this week (dates). `user`: the
+    user's own RPE ≥ 7 sessions this week (user_quality) — the 專項期 one already, none added."""
     if not info or not info.get("active"):
         return ss
     info["planned"] = []
     if any(s.get("id") == "tech" for s in ss):
         return ss                                       # one a week
+    if user and info["phase"] == "specific":
+        info["user"] = list(user)
+        return ss                                       # the user's own is this week's (user_note says so)
     rate = _rate(rates)
     if info["phase"] == "base":
         s = next((x for x in ss if x.get("id") == "long" and x.get("kind") == "long"), None)
@@ -227,7 +321,7 @@ def apply(ss: list, info: Optional[dict], *, hours: Optional[float] = None, rate
     return ss
 
 
-PUBLIC = ("active", "phase", "why", "planned")
+PUBLIC = ("active", "phase", "why", "planned", "user")
 
 
 def public(info: Optional[dict]) -> Optional[dict]:
