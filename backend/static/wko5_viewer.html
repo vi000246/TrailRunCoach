@@ -924,7 +924,9 @@ async function load() {
   if (ZOOM.card) closeZoom(false);
   const token = ++loadToken;
   charts.splice(0).forEach((c) => c.dispose());
-  $("grid").querySelectorAll(".lmap").forEach((el) => el._lmap?.remove());
+  // null the handle too: the map's ResizeObserver fires once more as the card leaves the page
+  // and must not invalidateSize() a removed map (Leaflet throws: _leaflet_pos of undefined)
+  $("grid").querySelectorAll(".lmap").forEach((el) => { el._lmap?.remove(); el._lmap = null; });
   const grid = $("grid"), v = curView();
   grid.innerHTML = "";
   if (!v) { grid.innerHTML = `<div class="empty">沒有${MODE_LABEL[S.mode]}的 view</div>`; return; }
