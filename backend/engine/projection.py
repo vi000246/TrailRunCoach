@@ -68,13 +68,11 @@ def phase_kind(phases: list, day: dt.date) -> str:
     return "base"
 
 
-def _phase_note(phases: list, day: dt.date) -> str:
-    """The `note` of the phase holding `day` (a shortened / skipped 轉換期, planning.auto_phases)."""
-    for p in phases:
-        s, e = _d(p["start"] if isinstance(p, dict) else p.start), _d(p["end"] if isinstance(p, dict) else p.end)
-        if s <= day <= e:
-            return (p.get("note") if isinstance(p, dict) else getattr(p, "note", "")) or ""
-    return ""
+def _phase_notes(phases: list, monday: dt.date) -> list[tuple[str, str]]:
+    """planning.week_phase_notes: a shortened / skipped 轉換期 (SP-73), two A races close
+    together (SP-90) — the phase holding Monday and the ones starting later that week."""
+    from backend.engine import planning as PL
+    return PL.week_phase_notes(phases, monday)
 
 
 def _skip_week(phases: list, monday: dt.date) -> bool:
@@ -576,9 +574,11 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
                            aet_measured=th_meas)
         if kind == "transition":
             notes.append({"level": "info", "src": "transition", "text": O.TRANSITION_NOTE})
-        ph_note = _phase_note(phases, week)
-        if ph_note and kind in ("recovery", "transition"):
-            notes.append({"level": "info", "src": "transition", "text": ph_note})
+        ph_notes = _phase_notes(phases, week)
+        ph_note = bool(ph_notes)
+        for pk, t in ph_notes:
+            notes.append({"level": "info", "src": "transition" if pk in ("recovery", "transition") else "phase",
+                          "text": t})
         if sp_info and sp_info.get("active"):
             try:
                 SP.decorate(ss, sp_info)

@@ -43,6 +43,10 @@
     "draft": true,
     "src": "backend/engine/quality_gate.py:1983"
   },
+  "100 英里級": {
+    "draft": true,
+    "src": "backend/engine/planning.py:60"
+  },
   "15 週重新打底（33→50→70→85→100%）": {
     "draft": true,
     "src": "backend/engine/reentry.py:161"
@@ -611,6 +615,10 @@
     "draft": true,
     "src": "backend/engine/workout_review.py:2872"
   },
+  "{n} 天": {
+    "draft": true,
+    "src": "backend/engine/planning.py:581"
+  },
   "{n} 次路跑的中位數（沒有心率可篩）": {
     "draft": true,
     "src": "backend/engine/equivalence.py:203"
@@ -626,6 +634,10 @@
   "{n} 段超過 {max} 段：COROS 的上限未驗證": {
     "draft": true,
     "src": "backend/engine/workout_steps.py:1540"
+  },
+  "{n} 週": {
+    "draft": true,
+    "src": "backend/engine/planning.py:581"
   },
   "{plain}（{start}）": {
     "draft": true,
@@ -1279,6 +1291,10 @@
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:589"
   },
+  "和上一場 A 賽事只隔 {span}：教練建議至少 {weeks} 週，考慮把其中一場改成 B 賽": {
+    "draft": true,
+    "src": "backend/engine/planning.py:604"
+  },
   "品質課次數要比每週跑步次數少（至少留一次輕鬆或長跑）": {
     "draft": true,
     "src": "backend/engine/plan_prefs.py:290"
@@ -1462,6 +1478,10 @@
   "專項期每週 1 堂，路況接近比賽；RPE 7 算強度課（隔 48 小時、算進強度預算）": {
     "draft": true,
     "src": "backend/engine/workout_templates.py:430"
+  },
+  "專項期縮短為 {days} 天（原本 {weeks} 週）：上一場 A 賽事「{name}」{date} 才結束": {
+    "draft": true,
+    "src": "backend/engine/planning.py:598"
   },
   "專項期（賽前約 10–3 週）每 1–2 週排一次長天，點要一步步靠近最近那場的線（推估）": {
     "draft": true,
@@ -1690,6 +1710,10 @@
   "恢復期結束：回到停訓前的量 {h:.1f} h（Daniels 表 9.2）": {
     "draft": true,
     "src": "backend/engine/overview.py:1060"
+  },
+  "恢復期縮短為 {days} 天：下一場 A 賽事「{name}」{date}": {
+    "draft": true,
+    "src": "backend/engine/planning.py:509"
   },
   "恢復期還剩 {n} 天（到 {date} 前只排輕鬆跑）；{after}": {
     "draft": true,
@@ -2311,6 +2335,10 @@
     "draft": true,
     "src": "backend/engine/quality_gate.py:2118"
   },
+  "沒有專項期：上一場 A 賽事「{name}」{date} 才結束": {
+    "draft": true,
+    "src": "backend/engine/planning.py:601"
+  },
   "沒有最大心率，到設定填": {
     "draft": true,
     "src": "backend/engine/hr_profile.py:84"
@@ -2322,6 +2350,10 @@
   "沒有比賽強度的標準距離紀錄可當查表依據：k 用預設 −0.07（≈ Stryd 比賽功率表）": {
     "draft": true,
     "src": "backend/engine/racepower/calc.py:319"
+  },
+  "沒有減量期：上一場 A 賽事「{name}」{date} 才結束": {
+    "draft": true,
+    "src": "backend/engine/planning.py:596"
   },
   "沒有漸進（ramp）步驟：漸進只寫在步驟名稱": {
     "draft": true,
@@ -2350,6 +2382,10 @@
   "沒有轉換期：下一場 A 賽事「{name}」的專項期 {start} 開始，只剩 {days} 天": {
     "draft": true,
     "src": "backend/engine/planning.py:372"
+  },
+  "沒有轉換期：離下一場 A 賽事「{name}」只剩 {span}，恢復期後直接進專項期": {
+    "draft": true,
+    "src": "backend/engine/planning.py:531"
   },
   "沒有這個分類：{c}": {
     "draft": false,
@@ -2390,6 +2426,10 @@
   "減量期": {
     "draft": true,
     "src": "backend/engine/overview.py:1554"
+  },
+  "減量期縮短為 {days} 天：上一場 A 賽事「{name}」{date} 才結束": {
+    "draft": true,
+    "src": "backend/engine/planning.py:593"
   },
   "減量期／比賽週不測，賽後再測": {
     "draft": false,
@@ -2566,6 +2606,10 @@
   "直到按下計圈的預估時間": {
     "draft": true,
     "src": "backend/engine/workout_steps.py:682"
+  },
+  "短": {
+    "draft": true,
+    "src": "backend/engine/planning.py:59"
   },
   "短間歇": {
     "draft": true,
@@ -2922,6 +2966,10 @@
   "超馬建議連續 {k} 週、每週練 {h:g} 小時；最近 {n} 週你連續做到 {b} 週": {
     "draft": true,
     "src": "backend/engine/race_feasibility.py:424"
+  },
+  "超馬級": {
+    "draft": true,
+    "src": "backend/engine/planning.py:59"
   },
   "超馬週時數：Jason Koop——50 km 賽前 6 週起每週 6 小時、連續 3 週；100 km 賽前 9 週起每週 9 小時、連續 6 週": {
     "draft": true,
@@ -3498,6 +3546,10 @@
   "飄移：暖身段（前段停等）": {
     "draft": true,
     "src": "backend/engine/drift_calib.py:118"
+  },
+  "馬拉松級": {
+    "draft": true,
+    "src": "backend/engine/planning.py:59"
   },
   "馬拉松配速 ≈ 閾值配速 × 1.06（推估）": {
     "draft": true,
