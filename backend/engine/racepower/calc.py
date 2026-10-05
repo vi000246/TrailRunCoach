@@ -131,8 +131,9 @@ class LockIn(BaseModel):
 class StopIn(BaseModel):
     km: float
     minutes: float = 0.0
-    # aid-station editor (fuel.STOP_TYPES); the old 「km:分」 text has neither
-    type: Optional[Literal["water", "aid", "big", "medical", "self"]] = None
+    # aid-station editor (fuel.STOP_TYPES); the old 「km:分」 text has neither; sleep = a 連續 race's
+    # sleep point (SP-114), its minutes in the ETA like any stop
+    type: Optional[Literal["water", "aid", "big", "medical", "self", "sleep"]] = None
     name: Optional[str] = Field(None, max_length=40)
 
 

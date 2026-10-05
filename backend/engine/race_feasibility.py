@@ -509,14 +509,19 @@ def races(plan, ds, today: dt.date, event_id: Optional[str] = None,
     acts = activity_rows(ds, today, B2B_WEEKS * 7)
     out = []
     for e in sorted(evs, key=lambda x: x.start):
-        line = summit = None
+        line = summit = sleep_note = None
         if e.distance_km:
             course = RR.course_of(e, gpx)
             hs = predict(e, course)
+            course, sleep_note = RR.sleep_course(e, course)    # SP-114: a 連續 race's hardest stretch
             line = RR.race_line(e, hs, _("賽事計算器預測的完賽時間"), course)
             if line is not None:
                 summit = event_summit(e, course, [d["hours"] for d in line["per_day"]])
         r = assess(e, line, today, hist[-BASE_WEEKS:], summit)
+        if sleep_note:
+            r["split_note"] = sleep_note
+        elif line is not None and RR.hardest_stretch_note(line):
+            r["stretch_note"] = RR.hardest_stretch_note(line)
         if not r.get("skipped"):
             r["readiness"] = readiness(e, line, today, hist, acts)
         out.append(r)

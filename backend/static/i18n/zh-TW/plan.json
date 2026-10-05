@@ -19,5 +19,9 @@
   "ev.day_gain": "爬升 m",
   "ev.day_loss": "下降 m（選填）",
   "ev.day_n": "第 {n} 天",
-  "ev.dayplan_missing": "請補每天的距離和爬升"
+  "ev.dayplan_missing": "請補每天的距離和爬升",
+  "ev.format": "賽制",
+  "ev.format_tip": "分站：每天一站，主辦單位定好，要填每一站的距離和爬升。連續：不分站、一次跑完全程，在哪睡自己決定，不用填每天的數字，改在賽事計算器的補給站加睡眠點。",
+  "ev.format_stage": "分站（每天一站）",
+  "ev.format_continuous": "連續（一次跑完全程）"
 }
