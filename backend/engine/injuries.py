@@ -348,20 +348,21 @@ _memo: dict = {}
 
 
 def load_events(db_path=None, athlete_id: int = 1) -> list[dict]:
-    """Every event (sync, read-only, memoised on the DB file). [] without the
-    DB / table, and in the demo mode. Tests: activity_tags._default_db is
-    patched to None, so this reads nothing unless given a path."""
+    """Every event (sync, read-only, memoised on the DB file, WAL included:
+    db/filestamp.py). [] without the DB / table, and in the demo mode.
+    Tests: activity_tags._default_db is patched to None, so this reads
+    nothing unless given a path."""
     if demo_mode():
         return []
+    from backend.db.filestamp import db_stamp
     from backend.engine import activity_tags as AT
     p = AT._db_path(db_path)
     if p is None or not p.exists():
         return []
-    try:
-        st = os.stat(p)
-        stamp = (str(p), st.st_mtime_ns, st.st_size, athlete_id)
-    except OSError:
+    fs = db_stamp(p)
+    if fs is None:
         return []
+    stamp = (str(p), *fs, athlete_id)
     if _memo.get("stamp") == stamp:
         return _memo["rows"]
     try:
