@@ -193,7 +193,7 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
     (Palladino, `backend/engine/overview.py:1128`).
 - **Tests are suggested, never planned** (2026-10-01/02): a due CP test (`testing` bad / watch,
   `extra.cp_due`, A event > 10 days away, not inside a re-entry block) and a due AeT test
-  (`aet_test.due`, for a reason only) become `test_suggestions` (`backend/engine/overview.py:1526`)
+  (`aet_test.due`, for a reason only) become `test_suggestions` (`backend/engine/overview.py:1562`)
   — the floating suggestion box and the 課表 context menu's 排入測試 let the athlete pick a day.
   The CP session comes from the 課表偏好 CP 測試方式 via `cp_protocols.session_for`
   (`backend/engine/cp_protocols.py:128`), read even when the other preferences are the defaults:
@@ -250,7 +250,7 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
     first time) the Zone 3 rung becomes its 巡航版 T1–T3 (the old z3a–z3c), which still counts;
     Zone 3 + Zone 5 ≤ 20 % of the week (`quality_sessions`, `backend/engine/overview.py:659`).
     Weekly: `week_decision(..., n)` (`backend/engine/quality_gate.py:2176`) — 課表偏好 2 a week =
-    one of each (`quality_per_week`, `backend/engine/overview.py:841`), 1 a week with both open
+    one of each (`quality_per_week`, `backend/engine/overview.py:867`), 1 a week with both open
     alternates 1:1 (A race road ≤ 10 km) or 2:1 (`track_ratio`, `backend/engine/quality_gate.py:1372`).
     Rung details in plan-auto.spec.md.
     The step moves by the progression state machine (`interval_outcome` / `dose_step`,
@@ -285,8 +285,8 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
   (`STRENGTH_STOP_DAYS`: the 減量期 and the race itself; SP-86, Bompa & Buzzichelli
   《Periodization Training for Sports》 p.184 — long endurance events can stop strength 2 weeks
   before the main race — and p.327 — none in the taper's second week). After the placement,
-  `drop_strength_before_a` (`backend/engine/overview.py:1637`) removes every not-done strength
-  session on a day from `strength_stops` (`backend/engine/overview.py:1625`: each A event's first
+  `drop_strength_before_a` (`backend/engine/overview.py:1670`) removes every not-done strength
+  session on a day from `strength_stops` (`backend/engine/overview.py:1658`: each A event's first
   day − 14 to its last), 課表偏好 每週肌力 / 肌力日 included, with a week note (`src: strength`);
   a week partly inside keeps the strength days before the window. B / C events are unchanged
   (the book's 「主要比賽」; applying it to them would be 推估). week_plan returns the windows as
@@ -334,7 +334,7 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
   no B2B, no steep-hill walk, no mountain long run / uphill interval versions; the 專項期 LSD
   carries a marathon-pace segment (Pfitzinger / Daniels; 40 % of the run within 20–75 min, 推估;
   the A road race's goal pace when ≥ 30 km, else threshold pace × 1.04–1.08), and base strides
-  are 「加速跑 6×20 秒」 (`ROAD_STRIDES`, `backend/engine/overview.py:909`).
+  are 「加速跑 6×20 秒」 (`ROAD_STRIDES`, `backend/engine/overview.py:935`).
 - **專項期** (`engine/specific_phase.py`): the LSD follows the next A race's コース定數 (the race
   calculator's single-day target; a 推估 share per week from week 10 to 3 before the race, still
   ≤ +15 % over the 4-week longest); the race GPX's longest climb becomes one 長爬坡反覆 easy run;
@@ -349,7 +349,7 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
 - **技術地形課** (SP-74, `engine/technical.py`; applied last, after placement, the climb / steep
   walk and heat hooks, `backend/engine/overview.py:1492`, and the same per projected week,
   `backend/engine/projection.py:575`): 主要訓練項目 越野跑 only (路跑: none), base / 專項期, not
-  in a recovery / re-entry week (`week_context`, `backend/engine/technical.py:56`).
+  in a recovery / re-entry week (`week_context`, `backend/engine/technical.py:63`).
   - **基礎期**: every other week (an even ISO week number, `base_week`; 推估) the week's LSD
     becomes 「技術地形 N′（低 RPE 3–4）」 of the same minutes on the same day — it stays the `long`
     session (an easy one, so the long-run rules hold) with the structure warm-up 10′ + RPE 3–4
@@ -360,11 +360,26 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
     run's day is ≥ 2 days from the long run, the B2B days, the race-climb repeats, every quality /
     test session and the hard runs done this week, and the week's budget has ≥ 30′ left
     (`SPEC_WORK_MIN`, 推估): work = min(90′ (the template), 20 % of the week − the intervals'
-    time in zone (`budget_room`, `backend/engine/technical.py:111`; the technical work is not
+    time in zone (`budget_room`, `backend/engine/technical.py:201`; the technical work is not
     put in the Zone 3 ≤ 10 % bucket — HR stays low on technical trail, SP-62; 推估), the day's
     cap − 25′); weekend days first; the other easy runs give the extra minutes (≥ 20′ each).
     Otherwise the same session at RPE 4–5 (an easy one) on that easy run's time. A week note
     (`src: technical`) says which and why (budget left, no spaced day, the day cap).
+  - **The user's own** (SP-74 follow-up): a stored 技術地形 session the user added (custom) or an
+    auto one they edited, kind easy / long / hike, active or done, whose structure makes it a
+    quality session (`workout_templates.session_role`: an RPE work step ≥ 7) counts like the
+    generated one. `plan_store.user_rpe_rows` (`backend/engine/plan_store.py:833`, read-only) →
+    `user_quality` (`backend/engine/technical.py:124`) per week; its RPE ≥ 7 work
+    (`user_work_min`, `backend/engine/technical.py:101`: timed / estimated steps, a step with no
+    time → the whole session, 推估) is `reserved` in `quality_sessions`
+    (`backend/engine/overview.py:659`): the intervals get the 20 % minus it — shortened to a 縮量版,
+    or left out with a note (`src: quality_share`) when even its floor doesn't fit — and the 專項期
+    gets no generated 技術地形 session that week. A week note (`src: technical`) names the
+    session(s) and what is left. Same in week_plan and per projected week (a projected week
+    whose intervals all went gets no fallback interval); the plan inputs' cache key includes the
+    rows (`technical.user_stamp`). Not covered: a user's own interval (kind quality) is still not
+    counted, and the generator's intervals don't keep 48 h from the user's session (reconcile
+    only moves them off its day).
   - The generated session carries its `steps` (`Session.steps`, `backend/engine/overview.py:464`)
     so reconcile stores the structure on the auto row and the push sends time + RPE + climb.
     Load stays the watch's (SP-62).
@@ -680,7 +695,7 @@ more than `MAX_WEEKS` = 8 ahead (`backend/engine/projection.py:36`):
   the old `{levels, streak_ok}` shape — becomes a no-method gate (intensity bad keeps Zone 5
   out) (`_gate_inputs`, `backend/engine/projection.py:322`).
 - CTL / ATL roll forward with the athlete's constants (`ds.athlete.ctlconstant` /
-  `atlconstant`, `backend/engine/projection.py:377`); a session `_place` left without a day is
+  `atlconstant`, `backend/engine/projection.py:393`); a session `_place` left without a day is
   kept out of the date filter.
 - Each projected week carries `mode`, hours, TSS, CTL start / end, `why`, `provisional`
   (true beyond next week) and, with preferences, `notes`.
@@ -1139,9 +1154,9 @@ which one. The response keeps the `coros` field names.
   answer for a stored session. The editor's target menu adds 「RPE＋爬升」 with RPE / 爬升 / 下降
   fields (`tgHtml`, `backend/static/workout_editor.js:470`); the static demo's JS port follows.
   The 推薦 block: 基礎期 favours the low-RPE technical session, 專項期 the race-like one
-  (`TRAIL_SPECIFIC`, `backend/engine/template_recs.py:49`). Not done: week_plan does not generate
-  技術地形 sessions itself, and a user's own quality-kind session is not counted into the
-  generator's 20 % interval budget.
+  (`TRAIL_SPECIFIC`, `backend/engine/template_recs.py:49`). week_plan generates 技術地形 sessions
+  itself (SP-74) and counts the user's own RPE ≥ 7 ones into the 20 % budget (above); a user's own
+  interval (kind quality) is still not counted.
 - **範本 page and 我的範本** (2026-10-04, SP-36, the user's answers). 課表's third mode card
   **範本** (`backend/static/templates.html`, `GET /plan/templates/page`,
   `backend/api/plan_sessions.py:2320`; also on 課表統計) lists the user's own templates and the
@@ -1575,3 +1590,4 @@ deleted / superseded) are returned as reconcile `changes` (`backend/engine/recon
 | 2026-10-04 | change | SP-39 follow-up | Zone 5 UA path: no LTHR age limit; `threshold_confidence.lthr_evidence` (evidence since the LTHR date) feeds `quality_gate.lthr_invalid` (plan-auto.spec.md) |
 | 2026-10-04 | sp-79-quality-families | SP-79 | 強度課's three families in the main UI: `plan_sessions.family` (picked in the 課表 editor's 類型 — 有氧間歇／VO2max 間歇／速度 — else read from the steps), a mismatch hint, per-family chip colours and legend, 課表統計 by family; generated titles name the family and older stored titles are mapped on read (`display_title` → `interval_library.renamed`), so the watch names and the calendar feed SUMMARY follow (a pushed session with an old name is re-pushed once) |
 | 2026-10-05 | feature | SP-86 | No strength in the 14 days before an A event (減量期 + race week; Bompa & Buzzichelli p.184 / p.327): `strength_stops` / `drop_strength_before_a` in week_plan and the projection (`strength_stop`), preferences included, a week note; B / C events unchanged |
+| 2026-10-05 | feature | SP-74 follow-up | The user's own 技術地形 session (custom or edited, RPE ≥ 7 by `session_role`) counts in the week's 20 % like the generated one: `plan_store.user_rpe_rows` → `technical.user_quality`, `quality_sessions(reserved=)` shortens / leaves out the intervals (note), no generated 技術地形 that 專項期 week, a week note; week_plan and projection alike |

@@ -64,8 +64,10 @@ def _compute_inputs(blackouts: Optional[list] = None) -> dict:
     from backend.engine import primary_sport as PSP
     # 課表心率區間 and the COROS account's max / rest HR (engine/hr_profile.py) change the HR targets
     from backend.engine import hr_profile as HRP
+    # the user's own RPE ≥ 7 技術地形 sessions take part of the week's quality budget (engine/technical.py)
+    from backend.engine import technical as TECH
     key = (id(ds), today, _plan_stamp(), prefs.stamp(), BL.stamp(bos), auto_on, B2B.accepted_stamp(acc),
-           PSP.stored(), HRP.stamp())
+           PSP.stored(), HRP.stamp(), TECH.user_stamp())
     with _lock:
         hit = _cache.get(key)
     if hit is not None:
