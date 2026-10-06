@@ -558,6 +558,14 @@ def transition_ref(phases: list, day: dt.date, hours_of) -> dict:
 # segment — Pfitzinger's MP long runs (8–18 mi at MP) and Daniels' M runs. Its share of the
 # long run and its bounds are 推估 (no published single rule).
 MP_SHARE, MP_MIN, MP_MAX = 0.40, 20, 75
+# SP-75 (specific-phase-progression.md §4.2, owner 2026-10-05): the MP segment grows week by week and
+# comes every other week — share of the long run by 賽前第 n 週, None = an all-easy long run. Pfitzinger's
+# MP long runs lengthen (8 → 10 → 14 mi, 二手); Cairess' longest MP block 3 → 6 → 10 km (已驗證, elite);
+# Haugen 2022: race-pace volume grows toward the race. The easy weeks sit on the long run's step-back
+# weeks (賽前第 5、3 週, the 專項期's recovery weeks) and week 7; the last MP long run is week 4, with the
+# race simulation. The shares are 推估. A road race ≤ MP_SHORT_KM keeps its long runs easy.
+MP_PLAN = {10: 0.20, 9: 0.25, 8: 0.30, 7: None, 6: 0.35, 5: None, 4: 0.40, 3: None}
+MP_SHORT_KM = 10.0
 MP_TSS_PER_HOUR = 70.0                 # 推估: MP sits around 80–85 % of threshold
 MP_GOAL_MIN_KM = 30.0                  # the A race's goal pace is the MP target only for a marathon-like race
 
@@ -782,6 +790,7 @@ def _gate_session(gate: dict, dec: dict, th: dict, hours: Optional[float], prefs
     Zone 3 budget (quality_gate.z3_budget_min: 10 % of `hours`, 5 % for the first session) becomes
     the 巡航版 T1–T3 (quality_gate.cruise_for) — it still counts as the rung's session, and a note
     says why (`notes`). `history`: the stored variants done before this week (rotation).
+    `dec["hill"]` (SP-75, the 越野 專項期): the rung's uphill version (interval_library.fit `hill`).
     Recovery fartlek / sub / Zone 3 keep the old builder."""
     from backend.engine import interval_library as IL
     from backend.engine import quality_gate as QG
@@ -814,7 +823,7 @@ def _gate_session(gate: dict, dec: dict, th: dict, hours: Optional[float], prefs
     if budget is not None and canon is not None and IL.tiz_s(canon) / 60.0 > budget + 1e-6:
         # the week's Zone 3 cap (Daniels ≤ 10 %; UA ~5 % to start): the 巡航版 of the same position
         cr = QG.cruise_for(rung, budget)
-        f = IL.fit(cr, cap, history or (), prefs, mountain, alt_caps)
+        f = IL.fit(cr, cap, history or (), prefs, mountain, alt_caps, hill=bool(dec.get("hill")))
         counts = f["action"] in ("ok", "move") and bool(f["equiv"])
         why = (f"本週 {hours:.1f} h：3 區上限 {budget:.0f} 分（{what}）"
                f"< {IL.RUNG_NAME[rung]} {IL.structure(canon)} 的 {IL.tiz_s(canon) / 60:.0f} 分 → 巡航版 "
@@ -828,7 +837,7 @@ def _gate_session(gate: dict, dec: dict, th: dict, hours: Optional[float], prefs
             notes.append({"level": "info", "src": "z3", "text": why + "（Daniels：T ≤ 週量 10%；UA：起步約 5%）"})
         return s
     if rung in IL.LIBRARY:
-        f = IL.fit(rung, cap, history or (), prefs, mountain, alt_caps, dec.get("adjust"))
+        f = IL.fit(rung, cap, history or (), prefs, mountain, alt_caps, dec.get("adjust"), hill=bool(dec.get("hill")))
         if rung in IL.Z3_TRACK and cap is not None and (f["action"] == "back" or not f["equiv"]):
             # the day's cap can't fit the Zone 3 rung (no equivalent, no other day): the 巡航版 of the
             # same position that fits — it counts as the rung when 達標, the same rule as the volume
@@ -873,9 +882,11 @@ def quality_sessions(gate: dict, dec: dict, kind: str, th: dict, tgt: dict, hour
                      alt_caps: Optional[list] = None, notes: Optional[list] = None,
                      reserved: float = 0.0) -> list[dict]:
     """The week's interval sessions (Session kwargs, ids quality / quality2) for week_decision's
-    items (SP-31: one per track). Base: the track's ladder rung (_gate_session). 專項期: the
-    track's specific session — road Zone 3 = ROAD_SPECIFIC_Q 2×15′, trail Zone 5 = the 5×4′ hill
-    set; the other two are the ladder (trail Zone 3 uphill versions allowed). 減量期: Zone 3 =
+    items (SP-31: one per track). Base: the track's ladder rung (_gate_session). 專項期 (SP-75): the
+    ladder too — the old fixed sessions (road 2×15′, trail 5×4′ uphill) stopped the ladder (a road
+    runner at 2×20′ went back to 2×15′, a trail runner at V1 jumped to 20′ of Zone 5, over the
+    10–16′ of a Zone 5 session) — 越野 the rung's uphill version (Koop: ~80 % of intervals uphill;
+    specific-phase-progression.md §4.4), 路跑 on the flat; the race's ratio by week_decision. 減量期: Zone 3 =
     TAPER_Z3, Zone 5 = TAPER_Q 有氧間歇（巡航）4×3′ (98–102 % CP) — which a taper week also keeps
     when neither track is open (the session predates the gates). Shared by week_plan and projection.
     `reserved`: minutes of the week's 20 % already taken by the user's own RPE ≥ 7 技術地形
@@ -906,13 +917,10 @@ def quality_sessions(gate: dict, dec: dict, kind: str, th: dict, tgt: dict, hour
         elif kind == "specific" and it.get("spec") is QG.SUB:
             # 專項期 under a CTL ramp at the watch line (week_decision): the threshold-only session, as in the base phase
             s = _gate_session(gate, it, th, hours, prefs, history, mountain, cap, alt_caps, notes)
-        elif kind == "specific" and t == "z3" and road:
-            s = dict(ROAD_SPECIFIC_Q, target=tgt.get("threshold", ""))
-        elif kind == "specific" and t == "z5" and not road:
-            s = dict(TRAIL_SPECIFIC_Z5, target=tgt.get("supra", ""))
         elif kind == "taper":
             s = dict(TAPER_Z3 if t == "z3" else TAPER_Q, target=tgt.get("threshold", ""))
         else:
+            it = {**it, "hill": kind == "specific" and not road}        # SP-75: 越野 專項期 = the uphill version
             s = _gate_session(gate, {**it, "budget": left} if t == "z3" else it, th, hours, prefs, history, mountain,
                               cap, alt_caps, notes)
         if left is not None and session_tiz_min(s) > left + 1e-6:
@@ -1102,21 +1110,53 @@ def quality_caps(prefs, long_wd: int) -> tuple[Optional[float], list]:
     return float(prefs.cap_weekday), alt
 
 
-def mp_minutes(long_min: float) -> int:
-    """The marathon-pace segment (minutes) of a road 專項期 long run (MP_SHARE, 推估)."""
-    return int(round(max(MP_MIN, min(MP_MAX, MP_SHARE * long_min)) / 5.0) * 5)
+def mp_minutes(long_min: float, share: float = MP_SHARE) -> int:
+    """The marathon-pace segment (minutes) of a road 專項期 long run (`share`, 推估)."""
+    return int(round(max(MP_MIN, min(MP_MAX, share * long_min)) / 5.0) * 5)
+
+
+def mp_race(events, today: dt.date) -> Optional[dict]:
+    """The next A race the MP plan counts back from: {"start", "short" (a road race ≤ MP_SHORT_KM)};
+    None without one (the MP segment then stays MP_SHARE every week, as before SP-75)."""
+    ahead = sorted((e for e in events or () if getattr(e, "priority", "A") == "A"
+                    and getattr(e, "kind", "") in ("race", "road", "baiyue") and e.start >= today), key=lambda e: e.start)
+    if not ahead:
+        return None
+    e = ahead[0]
+    return {"start": e.start.isoformat(),
+            "short": e.kind == "road" and bool(e.distance_km) and float(e.distance_km) <= MP_SHORT_KM}
+
+
+def mp_week(race: Optional[dict], monday: dt.date) -> Optional[dict]:
+    """{"weeks_out", "share" (None = all easy), "short"} of the week of `monday` (MP_PLAN, SP-75); None
+    without a race. Weeks before 賽前第 10 週 take its share, weeks after 3 none."""
+    if not race or not race.get("start"):
+        return None
+    w = -(-(dt.date.fromisoformat(str(race["start"])[:10]) - monday).days // 7)
+    share = None if race.get("short") or w < min(MP_PLAN) else MP_PLAN.get(w, MP_PLAN[max(MP_PLAN)])
+    return {"weeks_out": w, "share": share, "short": bool(race.get("short"))}
 
 
 def road_long_session(long_min: float, kind: str, aet: Optional[float], road_rate: float,
-                      goal_pace: Optional[float] = None, aet_measured: bool = False) -> dict:
+                      goal_pace: Optional[float] = None, aet_measured: bool = False,
+                      mp: Optional[dict] = None) -> dict:
     """The long run for 主要訓練項目 = 路跑: flat, easy; in the 專項期 with a marathon-pace segment
     near the end (Pfitzinger / Daniels). `goal_pace` (s/km, mp_goal_pace): the race's goal pace, written
     as 「目標配速 m:ss/km」 (the step builders read it); None = threshold pace × 1.04–1.08.
-    `aet` = the easy-run cap (hr_profile; `aet_measured`: a measured AeT). Session kwargs (id long)."""
+    `aet` = the easy-run cap (hr_profile; `aet_measured`: a measured AeT). `mp` (mp_week, SP-75): this
+    week's MP share — growing, every other week, none before a road race ≤ 10 km; None = MP_SHARE.
+    Session kwargs (id long)."""
     cap = easy_cap_label(None, aet, aet_measured)
     m = int(round(long_min / 5) * 5)
+    if kind == "specific" and mp is not None and mp.get("share") is None:
+        why = (_("比賽 10 公里以內：長跑全程輕鬆，不加馬拉松配速段") if mp.get("short") else
+               _("這週長跑全程輕鬆：馬拉松配速段隔週排，逐週加長（推估）"))
+        return dict(id="long", kind="long", title="LSD（路跑）", minutes=m, terrain="road",
+                    detail=f"{why}；平路或緩坡；全程心率壓在{below(cap)}",
+                    source=SRC_PFITZ, tss=long_min / 60.0 * road_rate)
     if kind == "specific" and m >= 60:
-        mp = min(mp_minutes(m), m - 25)
+        share = mp["share"] if mp is not None else MP_SHARE
+        mp = min(mp_minutes(m, share), m - 25)
         easy = m - mp
         return dict(id="long", kind="long", title=f"長跑＋馬拉松配速 {mp} 分", minutes=m, terrain="road",
                     detail=f"平路；前 {easy - 10} 分輕鬆（心率 ≤ {cap}），接著 {mp} 分馬拉松配速"
@@ -1129,7 +1169,8 @@ def road_long_session(long_min: float, kind: str, aet: Optional[float], road_rat
                 source=SRC_PFITZ if kind == "specific" else SRC_UA, tss=long_min / 60.0 * road_rate)
 
 
-# the 專項期 interval for 路跑 (instead of the 5×4′ hill set): a flat threshold run
+# the old fixed 專項期 sessions: not generated any more (SP-75 — the 專項期 climbs the ladders); kept for
+# the stored rows they name and their title tests
 ROAD_SPECIFIC_Q = dict(id="quality", kind="quality", title="有氧間歇 2×15 分（平路）", minutes=60, terrain="road",
                        detail="平路或跑步機；休 3 分慢跑；暖身 15 分、緩和 10 分",
                        source=f"{SRC_PFITZ}（乳酸閾值跑）；{SRC_DANIELS}（T 配速）", tss=70.0)
@@ -1238,6 +1279,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
             sport = "trail"
     road = sport == "road"
     mp_goal = mp_goal_pace(getattr(getattr(status, "plan", None), "events", None) or (), today) if road else None
+    mp_rc = mp_race(getattr(getattr(status, "plan", None), "events", None) or (), today) if road else None
 
     # ---- history ---------------------------------------------------------
     hist = [(monday - dt.timedelta(weeks=i), *_week_hours(ds, monday - dt.timedelta(weeks=i)))
@@ -1567,7 +1609,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         # athlete picks the day (test_suggestions below → 「排入」 on the overview / 課表 page)
         if road:
             # (a recovery week's long run is easy: no marathon-pace segment)
-            add(**road_long_session(long_min, "base" if rec_wk else kind, aet, tph["road"], mp_goal, aet_meas),
+            add(**road_long_session(long_min, "base" if rec_wk else kind, aet, tph["road"], mp_goal, aet_meas,
+                                    mp_week(mp_rc, monday)),
                 target=tgt.get("long", ""))
         else:
             add(id="long", kind="long", title="LSD" + ("（山路）" if mountain_goal else ""),
@@ -1593,8 +1636,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
                 add(**_gate_session(gate, dec, tt, hours))
         elif allow_quality and kind in ("base", "specific") and dec.get("items"):
             # two tracks (engine/quality_gate.py week_decision, SP-31): each item is a ladder rung as a
-            # library variant fitted into the weekday cap (engine/interval_library.py), or the 專項期's
-            # own session (road Zone 3 = 2×15′ flat, trail Zone 5 = 5×4′ uphill)
+            # library variant fitted into the weekday cap (engine/interval_library.py); 專項期 越野 the
+            # rung's uphill version (SP-75)
             q_cap, q_alt = quality_caps(PR, PP.long_weekday(PR, _long_weekday(ds, today)) if PR is not None else 5)
             for q in quality_sessions(gate, dec, kind, tt, tgt, hours, prefs, variant_history(monday, gate),
                                       mountain_goal if kind == "base" else not road, road, q_cap, q_alt, notes,
@@ -1615,6 +1658,9 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     if kind in ("base", "specific", "taper") and dec.get("z3_note") and not in_reentry:
         # why there is no Zone 3 session this week (SP-31: the gate / a guardrail / the 1-a-week turn)
         notes.append({"level": "info", "src": "z3", "text": dec["z3_note"]})
+    if dec.get("seg_note") and not in_reentry and kind == "specific" and not rec_wk:
+        # SP-75: what the 專項期's 後段 changed in this week's intervals
+        notes.append({"level": "info", "src": "specific", "text": dec["seg_note"]})
     if dec.get("warn") and not in_reentry:
         # the low-intensity share under its floor: a warning for Zone 3, Zone 5 waits (SP-31)
         notes.append({"level": "watch", "src": "intensity", "text": dec["warn"]})
@@ -2049,6 +2095,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         # 主要訓練項目 (engine/primary_sport.py): trail | road — projection.project_weeks follows it
         "primary_sport": sport,
         "mp_goal_pace_s": mp_goal,          # the A marathon's goal pace (s/km) for the MP segment; None = threshold
+        "mp_race": mp_rc,                   # SP-75: the A race the MP plan counts back from (projection)
         "target": {"hours": hours, "tss": tss_target, "tss_per_hour": r_all, "ref_weeks": norm_wk},
         "done": {"hours": done_h, "tss": done_tss, "sessions": len(week_ws),
                  "activities": [activity_row(w, ds) for w in sorted(week_ws, key=lambda w: w.day)]},

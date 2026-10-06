@@ -162,11 +162,15 @@ def test_specific_phase_runs_the_two_tracks_with_its_own_sessions():
     for wp in (road, trail):
         if wp["mode"] == "recovery_week":
             pytest.skip("synthetic history made this a 3:1 recovery week")
-    # road: Zone 3 = the flat 2×15′ threshold run, Zone 5 = the Zone 5 ladder (flat)
-    assert [s["title"] for s in _q(road)] == [O.ROAD_SPECIFIC_Q["title"], "VO2max 間歇 4×3 分"]
-    # trail: Zone 3 = the ladder (uphill versions allowed), Zone 5 = the 5×4′ hill set
+    # SP-75: both keep climbing the ladders — road on the flat (no fixed 2×15′), trail the rung's
+    # uphill version (no fixed 5×4′)
+    rq = _q(road)
+    assert [s["rung_key"] for s in rq] == ["a3", "z5b"] and rq[1]["title"] == "VO2max 間歇 4×3 分"
+    assert O.ROAD_SPECIFIC_Q["title"] not in [s["title"] for s in rq]
     tq = _q(trail)
-    assert tq[0]["rung_key"] == "a3" and tq[1]["title"] == "VO2max 間歇 5×4 分上坡"
+    assert [s["rung_key"] for s in tq] == ["a3", "z5b"]
+    assert all(s["title"].endswith("上坡") and s["terrain"] == "trail" for s in tq)
+    assert tq[1]["variant_key"] == "v2c" and "5×4" not in tq[1]["title"]
 
 
 def test_the_weeks_interval_total_stays_under_20_percent():
