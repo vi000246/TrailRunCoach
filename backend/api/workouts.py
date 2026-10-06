@@ -71,7 +71,8 @@ class ActivityUpdate(BaseModel):
     pain: Optional[int] = None
     pain_area: Optional[str] = None
     pain_side: Optional[str] = None
-    # 登山杖 (SP-242): "with" 有杖 / "without" 沒杖 / null 未標 — stored as one free-form tag
+    # 登山杖 (SP-242): "with" 有杖 / "without" 沒杖 / "none" the user's 未標 / null no choice (SP-300:
+    # a race's 「會用登山杖」 then applies) — stored as one free-form tag
     poles: Optional[str] = None
     # 路況 (SP-250): "dry" 乾 / "wet" 濕 / null 未標 — stored as one free-form tag
     surface: Optional[str] = None
@@ -180,7 +181,7 @@ def _tag_json(t: Optional[ActivityTag]) -> dict:
             "exclusion": AT.user_exclusion({"exclusion": t.exclusion}) if t else None,
             "name": AT.name_of({"name": t.name}) if t else None,
             "tags": AT.tags_of({"tags_json": t.tags_json}) if t else [],
-            "poles": AT.poles_of(AT.tags_of({"tags_json": t.tags_json})) if t else None,
+            **AT.pole_state(AT.tags_of({"tags_json": t.tags_json}) if t else [], None),
             "surface": AT.surface_of(AT.tags_of({"tags_json": t.tags_json})) if t else None,
             "pain": t.pain if t else None, "pain_area": t.pain_area if t else None,
             "injury_id": t.injury_id if t else None}

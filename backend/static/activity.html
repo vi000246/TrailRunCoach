@@ -522,6 +522,7 @@ async function loadList() {
   const r = await j(`${API}/activities`);
   S.acts = r.activities; S.types = r.types; S.efforts = r.efforts;
   S.poleTags = r.pole_tags || {};
+  S.poleNoneTag = r.pole_none_tag || null;
   S.poleCompare = r.pole_compare || null;
   S.surfaceTags = r.surface_tags || {};
   S.rainHintMm = r.rain_hint_mm ?? null;
@@ -585,14 +586,26 @@ addEventListener("scroll", () => { if (!QTIP.pinned) qtipHide(); else qtipShow(Q
 // 登山杖 (SP-242): 有杖 / 沒杖 / 未標, the user's own mark (no auto rule: a watch cannot tell),
 // stored as one of two free-form tags (server: activity_tags.POLES) and read by no model.
 // A 3-way choice, never typed: the pole tags are kept out of the tag chips and the tag list.
+// SP-300: with no choice of the user's, an activity of a race marked 「會用登山杖」 (a.poles_race,
+// server: activity_tags.race_poles) shows 有杖 「依賽事設定」; the user's own 未標 is stored as a
+// hidden tag (S.poleNoneTag) so the race default stays off it, and any choice of theirs wins.
 const POLE_OPTS = ["with", "without", ""];
-const isPoleTag = (t) => Object.values(S.poleTags).includes(t);
-function polesOf(a) {
+const isPoleTag = (t) => Object.values(S.poleTags).includes(t) || (S.poleNoneTag != null && t === S.poleNoneTag);
+function userPole(a) {      // "with" / "without" / "none" (their own 未標) / "" (never chosen)
   let p = "";
-  for (const t of a.tags || []) for (const [k, v] of Object.entries(S.poleTags)) if (t === v) p = k;
+  for (const t of a.tags || []) {
+    for (const [k, v] of Object.entries(S.poleTags)) if (t === v) p = k;
+    if (S.poleNoneTag != null && t === S.poleNoneTag) p = "none";
+  }
   return p;
 }
-const withPoles = (tags, p) => [...(tags || []).filter((t) => !isPoleTag(t)), ...(S.poleTags[p] ? [S.poleTags[p]] : [])];
+const poleFromRace = (a) => !userPole(a) && a.poles_race != null;
+function polesOf(a) {       // the mark shown: the user's choice, else the race's 有杖
+  const u = userPole(a);
+  return u === "none" ? "" : u || (a.poles_race != null ? "with" : "");
+}
+const withPoles = (tags, p) => [...(tags || []).filter((t) => !isPoleTag(t)),
+  ...(S.poleTags[p] ? [S.poleTags[p]] : p === "none" && S.poleNoneTag ? [S.poleNoneTag] : [])];
 // 「有杖 vs 沒杖」 (分析 → 能力, SP-243) appears once the last 365 days have ≥ 5 of each mark on the
 // trail runs and hikes the chart uses (server: pole_compare.counts → S.poleCompare; a.pole_chart says
 // whether this activity's mark counts); until then the choice says how many more
@@ -705,8 +718,9 @@ function renderEditor() {
       <div class="why">${a.user_effort ? esc(T("auto_was", { v: S.efforts[eAuto] || "—", why: eWhy || "" })) : esc(eWhy || (pending ? T("computing") : ""))}${recTxt ? `<br>${esc(recTxt)}` : ""}</div></div>
     <div class="fld"><span class="lab">${esc(T("f_poles"))}${qt(T("help.poles"))}</span>
       <div class="ctl" role="group" aria-label="${esc(T("f_poles"))}">${POLE_OPTS.map((v) =>
-        `<button type="button" class="cchip" data-poles="${v}" aria-pressed="${polesOf(a) === v}">${esc(T("poles." + (v || "none")))}</button>`).join("")}</div>
-      <div class="why" data-pole-hint>${esc(poleHint())}</div></div>
+        `<button type="button" class="cchip" data-poles="${v}" aria-pressed="${polesOf(a) === v}">${esc(T("poles." + (v || "none")))}</button>`).join("")}${poleFromRace(a)
+        ? `<span class="badge" data-pole-race title="${esc(T("poles.by_race_why", { name: a.poles_race || "" }))}">${esc(T("poles.by_race"))}</span>` : ""}</div>
+      <div class="why" data-pole-hint>${poleFromRace(a) ? esc(T("poles.by_race_why", { name: a.poles_race || "" })) + "<br>" : ""}${esc(poleHint())}</div></div>
     <div class="fld"><span class="lab">${esc(T("f_surface"))}${qt(T("help.surface"))}</span>
       <div class="ctl" role="group" aria-label="${esc(T("f_surface"))}">${SURFACE_OPTS.map((v) =>
         `<button type="button" class="cchip" data-surface="${v}" aria-pressed="${surfaceOf(a) === v}">${esc(T("surface." + (v || "none")))}</button>`).join("")}</div>
@@ -762,7 +776,7 @@ async function saveFields(a, patch) {
       if ("pain_area" in patch) a.pain_area = patch.pain_area;
     }
     if ("tags" in patch) fillFilterOptions();
-    if ("poles" in patch) bumpPoleCount(a, poleWas || null, patch.poles || null);
+    if ("poles" in patch) bumpPoleCount(a, poleWas || null, polesOf(a) || null);   // the marks shown, before / after
     render(); renderEditor(); setMsg(T("saved"), "ok");
   } catch (e) { setMsg(T("save_failed", { err: e.message }), "err"); }
 }
@@ -784,8 +798,11 @@ function wireEditor(a) {
     }
   });
   ed.querySelectorAll("select[data-f]").forEach((el) => el.addEventListener("change", () => saveFields(a, { [el.dataset.f]: el.value || null })));
+  // a click is the user's own choice (未標 too: "none"), so a race default never overrides it later;
+  // clicking the 有杖 a race set makes it the user's (it then stays when the race is unticked)
   ed.querySelectorAll("button[data-poles]").forEach((b) => b.addEventListener("click", () => {
-    if (polesOf(a) !== b.dataset.poles) saveFields(a, { poles: b.dataset.poles || null });
+    const want = b.dataset.poles || "none";
+    if (userPole(a) !== want) saveFields(a, { poles: want });
   }));
   ed.querySelectorAll("button[data-surface]").forEach((b) => b.addEventListener("click", () => {
     if (surfaceOf(a) !== b.dataset.surface) saveFields(a, { surface: b.dataset.surface || null });
@@ -808,7 +825,8 @@ function wireEditor(a) {
     if (!v) return;
     if (v.length > 30) { setMsg(T("tag_long"), "err"); return; }
     const pole = Object.keys(S.poleTags).find((k) => S.poleTags[k] === v);
-    if (pole) { tin.value = ""; if (polesOf(a) !== pole) saveFields(a, { poles: pole }); return; }   // typed 有杖 / 沒杖 → the 登山杖 choice
+    if (pole) { tin.value = ""; if (userPole(a) !== pole) saveFields(a, { poles: pole }); return; }   // typed 有杖 / 沒杖 → the 登山杖 choice
+    if (S.poleNoneTag && v === S.poleNoneTag) { tin.value = ""; if (userPole(a) !== "none") saveFields(a, { poles: "none" }); return; }
     const surf = Object.keys(S.surfaceTags).find((k) => S.surfaceTags[k] === v);
     if (surf) { tin.value = ""; if (surfaceOf(a) !== surf) saveFields(a, { surface: surf }); return; }   // typed 乾路 / 濕路 → the 路況 choice
     if ((a.tags || []).some((t) => t.toLowerCase() === v.toLowerCase())) { tin.value = ""; return; }

@@ -2,7 +2,9 @@
 有杖 vs 沒杖 (views kind "polecompare", 我的訓練 → 能力, after 下坡腳程; SP-243).
 
 Compares what was MEASURED on the activities the athlete marked 有杖 / 沒杖
-(activity_tags.POLES, SP-242), never a model output: the weekly downhill
+(activity_tags.POLES, SP-242; with no choice of theirs, a race marked 「會用登山杖」
+makes its activities 有杖, SP-300 — activity_tags.race_poles / pole_state),
+never a model output: the weekly downhill
 impact load is grade × speed and poles can't change it
 (docs/research/trekking-poles.md §5.1, downhill-knee-load-display.md §5).
 Read-only and for this chart only: the mark feeds no prediction model.
@@ -174,14 +176,17 @@ def used(w) -> bool:
 
 
 def chart_rows(ds, rows: list, today: dt.date, days: Optional[int] = None) -> list:
-    """The tag rows of the activities this chart uses (`used`: trail runs and hikes) that
+    """The pole marks of the activities this chart uses (`used`: trail runs and hikes) that
     started in about the last `days` days (AT.pole_counts makes the exact cut on the row's own
-    start). Only their marks count toward the 5 + 5 (user decision 2026-10-06), so 「再標有杖
-    N 次、沒杖 M 次」 is what the chart really needs: a mark on a road run, a ride or an
-    excluded file does not count."""
+    start), as tag rows {start_local, file, tags: [the effective mark]}. Only their marks count
+    toward the 5 + 5 (user decision 2026-10-06), so 「再標有杖 N 次、沒杖 M 次」 is what the chart
+    really needs: a mark on a road run, a ride or an excluded file does not count. The mark is
+    the user's choice, else 有杖 「依賽事設定」 when a race marked 「會用登山杖」 covers the activity
+    (SP-300: AT.race_poles / pole_state)."""
     from backend.engine import activity_tags as AT
     from backend.engine.wko5expr.dataset import date_to_day
-    if not rows or not AT.pole_marks_stamp(rows):          # no mark at all: nothing to look up
+    race = AT.race_poles(ds)
+    if not race and (not rows or not AT.pole_marks_stamp(rows)):   # no mark at all: nothing to look up
         return []
     days = AT.POLE_COMPARE_DAYS if days is None else days
     first = date_to_day(today) - days                       # a day of slack before the window
@@ -189,11 +194,23 @@ def chart_rows(ds, rows: list, today: dt.date, days: Optional[int] = None) -> li
     for w in ds.workouts:
         if w.day < first or not used(w):
             continue
-        r = AT.find(rows, w.entry.start, getattr(w.entry, "file", None))
-        if r is not None and id(r) not in seen:
+        r = AT.find(rows, w.entry.start, getattr(w.entry, "file", None)) if rows else None
+        if r is not None and id(r) in seen:
+            continue
+        p = _mark(r, race.get(w.idx))
+        if r is not None:
             seen.add(id(r))
-            out.append(r)
+        if p is not None:
+            out.append({"start_local": (r or {}).get("start_local") or AT.key_of(w.entry.start),
+                        "file": (r or {}).get("file") or getattr(w.entry, "file", None), "tags": [AT.POLES[p]]})
     return out
+
+
+def _mark(row: Optional[dict], race: Optional[str]) -> Optional[str]:
+    """"with" / "without" / None of one activity: its tag row's choice, else the race default."""
+    from backend.engine import activity_tags as AT
+    tags = (row or {}).get("tags") if (row or {}).get("tags") is not None else AT.tags_of(row)
+    return AT.pole_state(tags, race)["poles"]
 
 
 def counts(ds, rows: list, today: dt.date) -> dict:
@@ -218,12 +235,13 @@ def compute(ds, b: float, e: float, params: Optional[dict] = None, rows: Optiona
                          days=cnt["days"], w=cnt["with"], wo=cnt["without"], need=cnt["need"])
         return out
     per = {"with": [], "without": []}
+    race = AT.race_poles(ds)                 # 有杖 「依賽事設定」 (SP-300) where the user didn't choose
     for w in ds.workouts:
         if not (b <= w.day < e + 1):
             continue
         if not used(w):
             continue
-        p = AT.poles_of((AT.find(rows, w.entry.start, getattr(w.entry, "file", None)) or {}).get("tags"))
+        p = _mark(AT.find(rows, w.entry.start, getattr(w.entry, "file", None)), race.get(w.idx))
         if p not in per:
             continue
         v = values(_cached(ds, w))
