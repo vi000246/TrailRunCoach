@@ -651,6 +651,10 @@
     "draft": true,
     "src": "backend/api/plan_sessions.py:1984"
   },
+  "{day} 那次沒有算進來（不是全力，或流程不完整）。": {
+    "draft": true,
+    "src": "backend/engine/suggestions.py:137"
+  },
   "{day}→ {to} · 約 {t}{climb}": {
     "draft": true,
     "src": "backend/engine/racepower/watch_export.py:235"
@@ -907,6 +911,10 @@
     "draft": true,
     "src": "backend/engine/quality_gate.py:1220"
   },
+  "{title}（{minutes} 分）": {
+    "draft": true,
+    "src": "backend/engine/suggestions.py:125"
+  },
   "{title}（少 1 趟：{n} 趟）": {
     "draft": true,
     "src": "backend/engine/interval_library.py:802"
@@ -1083,6 +1091,10 @@
     "draft": true,
     "src": "backend/engine/threshold_calib.py:127"
   },
+  "上次是 {weeks} 週前（{day}）。每 {lo}–{hi} 週用同一種方式測一次，才比得出有沒有進步。": {
+    "draft": true,
+    "src": "backend/engine/suggestions.py:128"
+  },
   "上週 {m} 分": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:1982"
@@ -1242,6 +1254,10 @@
   "之後先 {n} 堂 3 區": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:2049"
+  },
+  "之後每 {lo}–{hi} 週會再提醒一次。": {
+    "draft": true,
+    "src": "backend/engine/suggestions.py:148"
   },
   "之後維持：A3／A4／T+ 輪替；每週 3 區量 ≤ 週量 10%": {
     "draft": true,
@@ -1526,6 +1542,14 @@
   "全程 {t}": {
     "draft": true,
     "src": "backend/engine/workout_review.py:2633"
+  },
+  "全程維持穩定的輕鬆強度，不是全力。": {
+    "draft": true,
+    "src": "backend/engine/suggestions.py:142"
+  },
+  "兩段都要全力，中間休息 30 分鐘不要縮短。": {
+    "draft": true,
+    "src": "backend/engine/suggestions.py:140"
   },
   "兩邊的差距都在 {bpm} bpm 以內，不用改": {
     "draft": true,
@@ -2039,6 +2063,10 @@
     "draft": false,
     "src": "backend/engine/user_templates.py:130"
   },
+  "已經超過 {hi} 週了。": {
+    "draft": true,
+    "src": "backend/engine/suggestions.py:131"
+  },
   "已經連續 {n} 週沒有恢復週（Koop：一段加量最多 6 週）：這週是恢復週（前 3 週平均的 65%）": {
     "draft": true,
     "src": "backend/engine/overview.py:384"
@@ -2078,6 +2106,10 @@
   "建議 B2B 要是 true／false": {
     "draft": true,
     "src": "backend/engine/plan_prefs.py:297"
+  },
+  "建議做一次基線測試：{name}": {
+    "draft": true,
+    "src": "backend/engine/suggestions.py:133"
   },
   "建議做一次測試": {
     "draft": true,
@@ -2162,6 +2194,10 @@
   "徐國峰 90 分測試排在週末或長跑那天": {
     "draft": true,
     "src": "backend/api/plan_sessions.py:528"
+  },
+  "徐國峰 90 分鐘測試就是那週的長跑，會取代那天的長跑。": {
+    "draft": true,
+    "src": "backend/engine/suggestions.py:144"
   },
   "徐國峰 90 分鐘測試排在週末長跑日，本週週末沒有可練的日子：這週先不測": {
     "draft": true,
@@ -2879,6 +2915,10 @@
     "draft": true,
     "src": "backend/engine/workout_steps.py:662"
   },
+  "每次用同一種測法、同一條平路、差不多的天氣，前一天不要練太重，結果才能互相比。": {
+    "draft": true,
+    "src": "backend/engine/suggestions.py:145"
+  },
   "每段「直到按下計圈」：到步驟名稱寫的地點時按一下計圈（lap）": {
     "draft": true,
     "src": "backend/engine/racepower/watch_export.py:246"
@@ -3182,6 +3222,14 @@
   "測試日期不能在未來": {
     "draft": true,
     "src": "backend/api/plan.py:760"
+  },
+  "測試是建議，不會自動排進課表：挑一天按「排入」。": {
+    "draft": true,
+    "src": "backend/engine/suggestions.py:138"
+  },
+  "測試本身有誤差（約 ±3%，推估），兩次要差 4% 以上才算有變；一次看不出來，至少要 3–4 次。": {
+    "draft": true,
+    "src": "backend/engine/suggestions.py:147"
   },
   "測試（兩點法）": {
     "draft": true,
@@ -3747,6 +3795,10 @@
     "draft": true,
     "src": "backend/engine/race_calc_store.py:95"
   },
+  "要知道照課表練有沒有進步，需要先有一個起點。": {
+    "draft": true,
+    "src": "backend/engine/suggestions.py:135"
+  },
   "要等到 {day} 以後（重測的條件）": {
     "draft": true,
     "src": "backend/api/plan_sessions.py:519"
@@ -3774,6 +3826,10 @@
   "訓練": {
     "draft": true,
     "src": "backend/engine/workout_steps.py:1472"
+  },
+  "該重測了：{name}": {
+    "draft": true,
+    "src": "backend/engine/suggestions.py:127"
   },
   "課表": {
     "draft": true,
@@ -4399,6 +4455,10 @@
     "draft": true,
     "src": "backend/engine/race_feasibility.py:370"
   },
+  "還沒有 AeT（有氧閾值）測試紀錄。": {
+    "draft": true,
+    "src": "backend/engine/suggestions.py:134"
+  },
   "還沒有 CP：不判讀間歇、不算 W′（先做一次 CP 測試）": {
     "draft": true,
     "src": "backend/engine/interval_eval.py:487"
@@ -4406,6 +4466,10 @@
   "還沒有 TSS：不看 ramp": {
     "draft": true,
     "src": "backend/engine/status.py:315"
+  },
+  "還沒有全力的 CP 測試紀錄。": {
+    "draft": true,
+    "src": "backend/engine/suggestions.py:134"
   },
   "還沒有實測的 AeT 和 LTHR，算不出 ADS": {
     "draft": true,
