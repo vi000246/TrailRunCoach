@@ -143,3 +143,17 @@ def test_the_four_max_hr_rules_use_the_shared_cleaning():
     assert MX.run_hrmax_peak(t, h, v) == pytest.approx(152.0, abs=1.0)
     st = SS.measure(t, h, None, v, None, None, None, None, "road")
     assert st["hr_peak60"] < 152.0
+
+
+def test_racepower_observed_hrmax_looks_back_two_years():
+    from backend.engine.racepower import maximal as MX
+    assert MX.MAXIMAL["hrmax_window_days"] == 730
+    day = 10_000.0
+    base = [(day - 10, 180.0), (day - 40, 181.0), (day - 70, 179.0), (day - 100, 182.0)]
+    # a 195 from 500 days ago now counts (the 365-day window missed it) …
+    assert MX.hrmax_as_of(base + [(day - 500, 195.0)], day) == 181.0
+    assert MX.hrmax_as_of(base + [(day - 500, 195.0)], day, 365) == 180.5
+    # … one from 800 days ago doesn't
+    assert MX.hrmax_as_of(base + [(day - 800, 195.0)], day) == 180.5
+    # nothing later than the day itself
+    assert MX.hrmax_as_of(base + [(day + 3, 199.0)], day) == 180.5

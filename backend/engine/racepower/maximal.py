@@ -26,7 +26,8 @@ A capacity sample is one of (in this order):
      age-adjusted estimate of maximal heart rate"); the 10-bpm tolerance and
      the observed (not age-predicted) HRmax — median of the top-5 per-run
      peaks held ≥ 120 s (cumulative, moving, after the shared HR cleaning
-     hr_quality.clean — SP-265) in the 365 days up to the run — are 推估;
+     hr_quality.clean — SP-265) in the 730 days up to the run
+     (hrmax_window_days; 365 before 2026-10-06) — are 推估;
    * an even or negative split: second-half speed ≥ 0.98 × first half
      (pacing taxonomy: Abbiss & Laursen 2008, Sports Med 38:239–252; the 2 %
      tolerance is 推估);
@@ -76,6 +77,11 @@ MAXIMAL = {
     "peak_hold_s": 30.0,                    # 推估: a run's peak HR = highest bpm held ≥ 30 s (cumulative)
     "hrmax_hold_s": 120.0,                  # 推估: for HRmax the per-run peak must be held ≥ 120 s (strap spikes)
     "hrmax_top_n": 5,                       # 推估: observed HRmax = median of the top-5 per-run peaks
+    # 推估 (user 2026-10-06): the observed HRmax looks back 2 years, not the Riegel / power
+    # windows' 365 days — maximal efforts are rare (a year may hold too few to reach the top),
+    # and HRmax falls only ~0.7 bpm a year (Tanaka 2001: 208 − 0.7 × age), so a 2-year-old
+    # peak is at most ~1–2 bpm high
+    "hrmax_window_days": 730,
     "trail_min_km": 10.0,
     "trail_min_s": 90 * 60.0,
     "trail_avg_frac": 0.90,                 # Friel Z3 lower bound
@@ -112,6 +118,12 @@ def hrmax_observed(peaks, top_n: int = MAXIMAL["hrmax_top_n"]) -> Optional[float
     above the rest; held 120 s the top five sat within ~10 bpm)."""
     v = sorted((float(p) for p in peaks if p), reverse=True)[:top_n]
     return float(median(v)) if v else None
+
+
+def hrmax_as_of(peaks, day: float, window_days: float = MAXIMAL["hrmax_window_days"]) -> Optional[float]:
+    """hrmax_observed of the per-run peaks [(day, bpm)] in the `window_days` up to
+    and including `day` (dataset day numbers)."""
+    return hrmax_observed([p for d, p in peaks if day - window_days < d < day + 1])
 
 
 def run_hrmax_peak(t, hr, kmh=None, cadence_spm=None, min_kmh: float = 1.0,

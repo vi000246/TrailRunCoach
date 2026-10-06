@@ -690,7 +690,7 @@ def capacity_samples(ds, runs, th_of: Optional[dict] = None, tags: Optional[list
             long_ok = all(c["ok"] for c in r["checks"] if c["id"] in ("km", "time"))
             auto_ok = eff["effort"] == "max" and long_ok
         else:
-            hrmax = MX.hrmax_observed([p for d_, p in peaks if w.day - RIEGEL_WINDOW_DAYS < d_ < w.day + 1])
+            hrmax = MX.hrmax_as_of(peaks, w.day)      # 730 days (MAXIMAL["hrmax_window_days"]), not Riegel's 365
             mv = st.get("moving_s") or 0.0
             longer = [p for d_, s_, p in held if w.day - RIEGEL_WINDOW_DAYS < d_ < math.floor(w.day)
                       and s_ >= MX.MAXIMAL["longer_ratio"] * mv]

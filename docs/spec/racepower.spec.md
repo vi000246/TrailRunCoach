@@ -610,7 +610,7 @@ The rules the auto effort uses:
      Friel Z4 / Z3 lower bounds. The mapping is 推估;
    - 5K / 10K only: the 30-s peak HR ≥ observed HRmax − 10 bpm. Near-maximal HR is a criterion
      of a maximal effort (Howley, Bassett & Welch 1995, MSSE 27:1292–1301). The tolerance and
-     the observed HRmax (median of the top-5 per-run peaks held ≥ 120 s in the 365 days) are
+     the observed HRmax (median of the top-5 per-run peaks held ≥ 120 s in the 730 days — `MAXIMAL["hrmax_window_days"]`, 2026-10-06) are
      推估;
    - an even or negative split: second-half speed ≥ 0.98 × first half (Abbiss & Laursen 2008;
      the tolerance is 推估);
@@ -1204,3 +1204,4 @@ when set, but nothing fills it from the routes module yet.
 | 2026-10-06 | feature | SP-210 | Race-day climatology: the month centred on the race date over the last 10 years, the mean of ERA5 / ERA5-Land / ECMWF IFS at the target elevation (checked against CWA 1991–2020 normals at 6 stations), a 24-hour profile so far-off dates get per-segment heat, a permanent disk cache; tests in `test_race_climatology.py` |
 | 2026-10-06 | feature | SP-210 follow-up | Road / trail GPX plans: each segment's race-day temperature (single value or hourly) moved to its own mean elevation from `heat_ref_alt_m` (the weather point's elevation, sent by the page; also used by 百岳 when 氣溫所在海拔 is blank); tests in `test_racepower_heat_altitude.py` |
 | 2026-10-06 | bugfix | SP-239, docs/research/long-race-durability-shape.md §4.1 | Trail HR model durability: linear decline then flat at `TRAILHR["v_floor"]` 0.80 (`speed_mult` / `dist_nodecay` / `dbar` closed form, `predict_time` via the closed-form inverse `time_for_nodecay`); no more 2× predictions or jumps past ~11 h (δ 0.05: 12 h no-decay 24 h → 14.25 h; δ 0.15: 6 h → 7.1 h instead of 12 h); ≤ 5 h at δ ≤ 0.05 within 0.5 %; `fit`, back-test, SP-220 cutoff and SP-222 segment ETAs take the new whole-race time; tests in `test_trailhr_floor.py` |
+| 2026-10-06 | user-decision | SP-265 follow-up | Observed HRmax (5K / 10K maximal check) looks back 730 days (`MAXIMAL["hrmax_window_days"]`, 推估: maximal efforts are rare, HRmax falls only ~0.7 bpm / yr — Tanaka 2001), via `maximal.hrmax_as_of`; the Riegel / longer-power / capacity windows stay 365 days. The per-run peak is on the shared HR cleaning (`run_hrmax_peak`, SP-265). Owner data at 2026-10-05: 188 bpm with 730 days (old and new cleaning alike) vs 182 with 365 days; over 25 monthly dates 730 d is 1–6 bpm above 365 d |
