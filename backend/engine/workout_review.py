@@ -87,7 +87,8 @@ from backend.i18n import N_, _
 # session classifier of docs/research/vo2max-session-detection.md
 # v19 (SP-235): form_bins on every moving step (no ≥ 130 spm filter) + per-grade `slow_share`; bumped
 # so a new run's bins are never compared with an old run's running-only usual
-CACHE_KEY = "workout_review_v19"
+# v20 (SP-265): the stimulus's hr_peak60 on the shared HR cleaning (hr_quality.clean)
+CACHE_KEY = "workout_review_v20"
 
 # categories that can be a quality session (session_type's `runs`)
 QUALITY_CATEGORIES = ("road", "trail", "hike")

@@ -38,8 +38,7 @@ in the order of docs/research/zones-and-thresholds.md §2.6:
   source          watch account / 推估 from runs → weak (the account's value is often a
                   formula or a spike; hr_profile.max_hr resolution order)
   plausibility    the highest HR HELD ≥ 120 s across the runs of 365 days, optical spikes
-                  (a rise ≥ 15 bpm within 3 s) and cadence lock (session_stimulus.cadence_lock)
-                  removed: stored HRmax > that + 8 bpm → strong, down (推估); the
+                  and cadence lock removed by the shared cleaning (engine/hr_quality.clean): stored HRmax > that + 8 bpm → strong, down (推估); the
                   candidate is that sustained value (never applied by itself). Stored
                   HRmax < the highest 60-s hold − 3 bpm → strong, up (推估).
   rest HR         outside 30–90 bpm → strong; from the watch → hint
@@ -100,11 +99,7 @@ TEST_AGE_DAYS = 56                      # Friel: every 4–8 weeks (the default;
 HRMAX_DAYS = 365
 HOLD_LONG_S, HOLD_SHORT_S = 120, 60
 PEAK_HOLD_S, PEAK_HOLD_LONG_S = 5, 10   # a test's peak: held ≥ 5–10 s
-SPIKE_JUMP_BPM = 15.0
-SPIKE_WINDOW_S = 3
-SPIKE_MAX_S = 30                        # 推估: a "spike" that doesn't come back within 30 s is a level change
-HR_ABS_MIN, HR_ABS_MAX = 30.0, 225.0
-GAP_S = 5.0
+# the spike / range / gap / cadence-lock numbers: engine/hr_quality.py (SP-265, the one place)
 HRMAX_GAP_BPM = 8.0
 HRMAX_LOW_BPM = 3.0
 HRMAX_OUTLIER_BPM = 5.0                 # thresholds.MHR_OUTLIER: a lone top run is dropped
@@ -156,73 +151,20 @@ def signal(sid: str, target: str, level: str, text: str, direction: Optional[str
 # per-run HR: the 1-s grid, spikes and cadence lock removed (pure)
 # ---------------------------------------------------------------------------
 
-def clean_hr(t, hr, cadence_spm=None) -> Optional[tuple]:
+def clean_hr(t, hr, cadence_spm=None, speed_kmh=None) -> Optional[tuple]:
     """(grid seconds, HR) on a 1-s grid with NaN where the HR is not to be trusted:
-    gaps > 5 s, < 30 or > 225 bpm, a rise ≥ 15 bpm within 3 s until HR is back
-    within 15 bpm of the level before it (≤ 30 s; longer = a real level change, kept)
-    and cadence lock. None without HR."""
-    if t is None or hr is None:
-        return None
-    t = np.asarray([np.nan if v is None else v for v in t], float)
-    h = np.asarray([np.nan if v is None else v for v in hr], float)
-    n = min(len(t), len(h))
-    t, h = t[:n], h[:n]
-    ok = np.isfinite(t) & np.isfinite(h) & (h > 0)
-    if ok.sum() < 2:
-        return None
-    tt, hh = t[ok], h[ok]
-    order = np.argsort(tt, kind="stable")
-    tt, hh = tt[order], hh[order]
-    g = np.arange(np.floor(tt[0]), np.floor(tt[-1]) + 1.0)
-    y = np.interp(g, tt, hh)
-    j = np.clip(np.searchsorted(tt, g), 1, len(tt) - 1)
-    gap = (tt[j] - tt[j - 1]) > GAP_S
-    y[gap & (g > tt[j - 1]) & (g < tt[j])] = np.nan
-    y[(y < HR_ABS_MIN) | (y > HR_ABS_MAX)] = np.nan
-    # spikes: candidates from a vectorised previous-3-s minimum, then walked in order
-    pad = np.concatenate([np.full(SPIKE_WINDOW_S, np.nan), y])
-    with np.errstate(all="ignore"):
-        win = np.lib.stride_tricks.sliding_window_view(pad[:-1], SPIKE_WINDOW_S)
-        fin = np.isfinite(win)
-        prevmin = np.where(fin.any(axis=1), np.min(np.where(fin, win, np.inf), axis=1), np.nan)
-        cand = np.where(np.isfinite(y) & np.isfinite(prevmin) & (y - prevmin >= SPIKE_JUMP_BPM))[0]
-    done = -1
-    for i in cand:
-        if i <= done or not np.isfinite(y[i]):
-            continue
-        prev = y[max(0, i - SPIKE_WINDOW_S):i]
-        prev = prev[np.isfinite(prev)]
-        if not prev.size or y[i] - prev.min() < SPIKE_JUMP_BPM:
-            continue
-        base = prev.min()
-        k = i
-        while k < len(y) and k - i < SPIKE_MAX_S and (not np.isfinite(y[k]) or y[k] > base + SPIKE_JUMP_BPM):
-            k += 1
-        if k - i < SPIKE_MAX_S:                 # back near the level: a spike (else a level change, kept)
-            y[i:k] = np.nan
-        done = k
-    if cadence_spm is not None:
-        try:
-            from backend.engine.session_stimulus import cadence_lock
-            c = np.asarray([np.nan if v is None else v for v in cadence_spm], float)[:n][ok][order]
-            c1 = np.interp(g, tt, c) if np.isfinite(c).sum() >= 2 else None
-            if c1 is not None:
-                y[cadence_lock(y, c1)] = np.nan
-        except Exception:                   # noqa: BLE001 — no cadence: no lock filter
-            pass
-    return g, y
+    the shared cleaning (engine/hr_quality.clean, SP-265) — gaps > 5 s, out of
+    range, spikes (a rise ≥ 15 bpm within 3 s that comes back within 30 s), the
+    plateau of a moving up-step (one that doesn't come back; after a stop it is
+    a real restart, kept — needs `speed_kmh`) and cadence lock. None without HR."""
+    from backend.engine import hr_quality as HQ
+    return HQ.clean(t, hr, cadence_spm, speed_kmh=speed_kmh)
 
 
 def held_peak(y: np.ndarray, hold_s: int) -> Optional[float]:
-    """The highest HR held for ≥ `hold_s` seconds (max of the rolling minimum over
-    fully valid windows)."""
-    if y is None or len(y) < hold_s:
-        return None
-    win = np.lib.stride_tricks.sliding_window_view(y, hold_s)
-    full = np.isfinite(win).all(axis=1)
-    if not full.any():
-        return None
-    return float(np.min(win[full], axis=1).max())
+    """The highest HR held for ≥ `hold_s` seconds (hr_quality.held_peak)."""
+    from backend.engine import hr_quality as HQ
+    return HQ.held_peak(y, hold_s)
 
 
 def best_mean(y: np.ndarray, win_s: int, cover: float = 0.9) -> Optional[float]:
@@ -264,10 +206,11 @@ def cp_band_stretches(g: np.ndarray, y: np.ndarray, t, power, cp: Optional[float
     return out
 
 
-def run_summary(t, hr, power=None, cadence_spm=None, cp: Optional[float] = None) -> Optional[dict]:
+def run_summary(t, hr, power=None, cadence_spm=None, cp: Optional[float] = None,
+                speed_kmh=None) -> Optional[dict]:
     """One run's HR evidence: held peaks (5 / 10 / 60 / 120 s), the best 20- / 60-min
     mean HR, the mean HR, the duration, the CP-band stretches."""
-    c = clean_hr(t, hr, cadence_spm)
+    c = clean_hr(t, hr, cadence_spm, speed_kmh)
     if c is None:
         return None
     g, y = c
@@ -637,7 +580,7 @@ def schedule_link(test: str, day: Optional[str] = None) -> dict:
 def tt30_result(t, hr, power=None, speed=None, cp: Optional[float] = None) -> Optional[dict]:
     """The 30-min all-out block (the best 30-min mean power, else speed, else HR):
     {"lthr" = mean HR of its minutes 10–30, "hr30", "power", "vs_cp", "start_s"}."""
-    c = clean_hr(t, hr)
+    c = clean_hr(t, hr, None, speed)
     if c is None:
         return None
     g, y = c
@@ -668,9 +611,9 @@ def tt30_result(t, hr, power=None, speed=None, cp: Optional[float] = None) -> Op
             "power": None if pw is None else round(pw), "vs_cp": None if pw is None or not cp else round(pw / cp - 1, 3)}
 
 
-def hrmax_result(t, hr, cadence_spm=None) -> Optional[dict]:
+def hrmax_result(t, hr, cadence_spm=None, speed_kmh=None) -> Optional[dict]:
     """The filtered peak: the highest HR held ≥ 5 s (and ≥ 10 s) after spikes / cadence lock."""
-    c = clean_hr(t, hr, cadence_spm)
+    c = clean_hr(t, hr, cadence_spm, speed_kmh)
     if c is None:
         return None
     s5, s10 = held_peak(c[1], PEAK_HOLD_S), held_peak(c[1], PEAK_HOLD_LONG_S)
@@ -705,7 +648,7 @@ def test_kind(titles: list[str]) -> Optional[str]:
 # the dataset side
 # ---------------------------------------------------------------------------
 
-RUN_KEY = "thr_conf_run_v1"
+RUN_KEY = "thr_conf_run_v2"      # v2 (SP-265): the shared HR cleaning (hr_quality.clean, with speed)
 
 
 def _ch(ds, w, name):
@@ -730,7 +673,7 @@ def _summary(ds, w) -> Optional[dict]:
         cp = None
     road = "runningtrail" not in (w.tags or [])
     return run_summary(_ch(ds, w, "elapsedtime"), _ch(ds, w, "heartrate"),
-                       _ch(ds, w, "power") if road else None, _cad_spm(ds, w), cp)
+                       _ch(ds, w, "power") if road else None, _cad_spm(ds, w), cp, _ch(ds, w, "speed"))
 
 
 def _temp_class(h: Optional[dict]) -> Optional[str]:
@@ -878,7 +821,7 @@ def test_results(ds, plan, today: dt.date, days: int = RESULT_DAYS) -> list[dict
                 pass
             r = tt30_result(t, hr, _ch(ds, w, "power"), _ch(ds, w, "speed"), cp)
         else:
-            r = hrmax_result(t, hr, _cad_spm(ds, w))
+            r = hrmax_result(t, hr, _cad_spm(ds, w), _ch(ds, w, "speed"))
         if not r:
             found[k] = {"kind": k, "date": iso, "idx": w.idx, "result": None, "apply": None, "applied": False,
                         "reason": _("資料不足，算不出結果（心率斷掉或不到 30 分鐘）")}
