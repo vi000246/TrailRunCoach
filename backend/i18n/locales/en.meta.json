@@ -3675,6 +3675,10 @@
     "draft": true,
     "src": "backend/engine/race_feasibility.py:344"
   },
+  "賽事計算機的越野心率配速模型（移動時間）": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:917"
+  },
   "賽前 2 週不再做接近線的長天（減量期；UA、Koop）": {
     "draft": true,
     "src": "backend/engine/panels/race_refs.py:187"

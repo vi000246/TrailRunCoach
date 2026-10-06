@@ -918,6 +918,7 @@
   "賽事 id 格式不對": "Invalid race id",
   "賽事下降不明顯（每公里 ↓{d:.0f} m < {min:.0f} m）：不排下坡課": "The race has little descent (↓{d:.0f} m per km < {min:.0f} m): no downhill session",
   "賽事計算器預測的完賽時間": "the race calculator's predicted finish",
+  "賽事計算機的越野心率配速模型（移動時間）": "the race calculator's trail heart-rate pace model (moving time)",
   "賽前 2 週不再做接近線的長天（減量期；UA、Koop）": "No long days near the line in the last 2 weeks (taper; UA, Koop)",
   "賽前 {n} 天內不排強度課": "no hard session in the last {n} days",
   "賽前 {n} 天內不排強度課：輕鬆跑": "No hard session in the last {n} days: easy run",
