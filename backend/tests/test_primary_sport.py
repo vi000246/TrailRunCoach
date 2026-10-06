@@ -42,13 +42,48 @@ def test_suggestion_follows_the_next_a_race_then_the_trail_share():
     assert PS.suggest(ds, [_ev("road")], TODAY)["sport"] == "road"
     assert PS.suggest(ds, [_ev("race")], TODAY)["basis"] == "event"
     assert PS.suggest(ds, [_ev("baiyue")], TODAY)["sport"] == "trail"
-    assert PS.suggest(ds, [_ev("race", priority="B")], TODAY)["basis"] == "share"     # only A races decide
+    assert PS.suggest(ds, [_ev("road", priority="B")], TODAY)["basis"] == "share"     # only an A 路跑賽 decides road
     sh = PS.suggest(ds, [], TODAY)
     assert sh["sport"] == "road" and sh["trail_share"] == 0.0 and "推估" in sh["reason"]
     for w in ds.workouts[::2]:                             # half the runs on trails
         w.tags = ["runningtrail"]
     assert PS.suggest(ds, [], TODAY)["sport"] == "trail"
     assert PS.suggest(None, [], TODAY) == {**PS.suggest(None, [], TODAY), "sport": "trail", "basis": "default"}
+
+
+def _named(kind, name, start, priority):
+    return Event(id=name, name=name, date=start, kind=kind, priority=priority, days=1, distance_km=42.195)
+
+
+def test_any_a_or_b_trail_race_or_baiyue_means_trail():
+    """SP-245: a future A or B 越野賽 / 百岳 → trail; else the next A 路跑賽 → road; else the
+    12-week share; C races never count; the reason names the race."""
+    ds = _history(TODAY)                                   # road runs only → the share says road
+    a_road = _named("road", "台北馬", "2026-12-20", "A")
+    b_trail = _named("race", "XX 越野", "2027-03-01", "B")
+    s = PS.suggest(ds, [a_road, b_trail], TODAY)           # A 路跑 + B 越野 → 越野
+    assert s["sport"] == "trail" and s["basis"] == "event"
+    assert s["reason"] == "B 賽「XX 越野」是越野賽"
+    s = PS.suggest(ds, [a_road, _named("road", "高雄馬", "2027-02-01", "B")], TODAY)   # A 路跑 + B 路跑 → 路跑
+    assert s["sport"] == "road" and s["basis"] == "event" and s["reason"] == "下一場 A 賽「台北馬」是路跑賽"
+    s = PS.suggest(ds, [_named("baiyue", "玉山", "2027-05-01", "B")], TODAY)            # 只有 B 百岳 → 越野
+    assert s["sport"] == "trail" and s["reason"] == "B 賽「玉山」是百岳"
+    s = PS.suggest(ds, [_named("race", "小越野", "2026-11-01", "C")], TODAY)            # 只有 C 越野 → 照佔比
+    assert s["basis"] == "share" and s["sport"] == "road"
+    # the nearest A / B trail race is named; a past one or an 其他 event does not count
+    s = PS.suggest(ds, [b_trail, _named("race", "近的 A", "2027-01-10", "A"),
+                        _named("race", "去年", "2025-10-01", "A"), _named("other", "其他", "2026-11-01", "A")], TODAY)
+    assert s["reason"] == "A 賽「近的 A」是越野賽"
+    # a B trail race far after the A road race still wins (no time window, the ticket's assumption)
+    assert PS.suggest(ds, [a_road, _named("race", "遠", "2028-06-01", "B")], TODAY)["sport"] == "trail"
+
+
+def test_b_trail_race_only_affects_auto():
+    ds = _history(TODAY)
+    evs = [_named("road", "台北馬", "2026-12-20", "A"), _named("race", "XX 越野", "2027-03-01", "B")]
+    assert PS.resolve(ds, evs, TODAY, setting="auto")["sport"] == "trail"
+    assert PS.resolve(ds, evs, TODAY, setting="road")["sport"] == "road"
+    assert PS.resolve(ds, [_named("road", "台北馬", "2026-12-20", "A")], TODAY, setting="trail")["sport"] == "trail"
 
 
 def test_setting_wins_over_the_suggestion():

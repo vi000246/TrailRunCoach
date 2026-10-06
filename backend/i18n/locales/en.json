@@ -227,6 +227,7 @@
   "{pct}% 最大心率 {v:.0f} 低於輕鬆跑上限，取輕鬆跑上限": "{pct}% of max heart rate is {v:.0f}, below the easy-run cap, so the easy-run cap is used",
   "{pct}% 最大心率，最大心率是推估": "{pct}% of max heart rate; the max heart rate is an estimate",
   "{plain}（{start}）": "{plain} ({start})",
+  "{priority} 賽「{name}」是{kind}": "{priority} race \"{name}\" is a {kind}",
   "{p} 賽事「{race}」{date} 後": "After the {p} race \"{race}\" on {date}",
   "{p} 賽事「{race}」{date} 後：前 {n} 天不排跑步和肌力，第 1 週每次 ≤ {max} 分輕鬆跑": "After the {p} race \"{race}\" on {date}: no running or strength the first {n} days, then easy runs of ≤ {max} min for the first week",
   "{p} 賽事：{name}": "{p} race: {name}",
