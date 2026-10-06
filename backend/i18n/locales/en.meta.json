@@ -5483,6 +5483,10 @@
     "draft": true,
     "src": "backend/engine/race_feasibility.py:294"
   },
+  "預報有雨：下坡和技術路段可能比預估慢，跌倒風險較高；建議用杖、注意鞋底抓地": {
+    "draft": true,
+    "src": "backend/engine/racepower/weather.py:533"
+  },
   "預報沒有涵蓋這些日期": {
     "draft": true,
     "src": "backend/engine/racepower/weather.py:791"
