@@ -62,7 +62,9 @@ def test_one_moving_step_downgrades():
 
 def test_the_text_is_plain_and_translated():
     hq = {"downgrade": True, "spike_n": 2, "step_n": 1, "lock_s": 150, "flat_s": 0}
-    assert R.hr_quality_text(hq) == "這次心率有 2 段突然跳動、1 次突然跳一階沒有回來、2 分鐘跟著步頻走，飄移只當參考"
+    # cadence lock is never a downgrade reason (the user, 2026-10-06): not in the text
+    assert R.hr_quality_text(hq) == "這次心率有 2 段突然跳動、1 次突然跳一階沒有回來，飄移只當參考"
+    assert R.hr_quality_parts(hq)[-1] == "2 分鐘跟著步頻走"                  # still listed as information
     assert R.hr_quality_text(hq, aet=True).endswith("測試結果只當參考，不建議套用")
     assert R.hr_quality_text({**hq, "downgrade": False}) is None
     with use_locale("en"):
@@ -110,3 +112,21 @@ def test_the_aet_test_is_shown_but_not_offered_to_apply():
     r = AT.analyze(t, hr, v, None, warm_s=900)
     assert r["ok"] and r["hr_ref"] and r["hr_quality"]["spike_n"] == 15
     assert AT.lines(r)[-1].startswith("這次心率有 15 段突然跳動") and AT.lines(r)[-1].endswith("不建議套用")
+
+
+def test_cadence_lock_alone_never_downgrades_but_is_shown():
+    t, hr, v = _steady()
+    cad = 143.0 + 3.0 * np.sin(t / 7.0)       # (a slow cadence near the HR, so no jump into the lock)
+    hr[1200:1500] = cad[1200:1500] + 0.5      # 5 min locked on the cadence: ~10 % of the window
+    r = R.drift_of(t, hr, v, cadence_spm=cad)
+    hq = r["hr_quality"]
+    assert hq["lock_s"] >= 240 and hq["share"] > R.HRQ_MAX_SHARE              # counted as information …
+    assert hq["downgrade_share"] <= R.HRQ_MAX_SHARE and not hq["downgrade"]    # … not toward the threshold
+    assert r["ok"] and r["tier"] == "test" and not r.get("hr_ref")
+    assert "跟著步頻走" in R.hr_quality_parts(hq)[0]
+    # with spikes over 3 %, the downgrade's row still mentions the lock as information
+    for k in range(12):
+        a = 2000 + k * 70
+        hr[a:a + 10] += 40.0
+    r = R.drift_of(t, hr, v, cadence_spm=cad)
+    assert r["hr_ref"] and "跟著步頻走" not in r["reason"]
