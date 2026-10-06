@@ -943,6 +943,14 @@
     "draft": false,
     "src": "backend/engine/specific_phase.py:669"
   },
+  "。沒有算停留：在賽事計算機的補給站填停留分鐘，或累積 2 場以上的越野比賽紀錄，就會算進來": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:431"
+  },
+  "。用賽事計算機的努力目標 {p:.0%}": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:434"
+  },
   "「{a}」和「{b}」只隔 {n} 天：硬課之間建議隔 ≥ 2 天，可以再拖動調整": {
     "draft": true,
     "src": "backend/engine/rest_days.py:120"
@@ -1387,6 +1395,18 @@
     "draft": true,
     "src": "backend/engine/effort_calib.py:101"
   },
+  "停留用你過去 {n} 場比賽的停留推算（賽事計算機沒有填補給站）": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:427"
+  },
+  "停留＝賽事計算機的補給站 {u:g} 分鐘": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:425"
+  },
+  "停留＝賽事計算機的補給站 {u:g} 分鐘＋零碎停頓約 {s:.0f} 分鐘（照你過去 {n} 場比賽的比例）": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:422"
+  },
   "停訓後恢復期": {
     "draft": true,
     "src": "backend/engine/overview.py:1556"
@@ -1482,6 +1502,14 @@
   "分": {
     "draft": true,
     "src": "backend/engine/effort_calib.py:94"
+  },
+  "分段時間照你自己的速度變化分配（推估）：用了 {n} 次 ≥ {h:g} 小時的越野跑，同坡度、同心率下，第 2 到第 {k} 小時的速度約是第 1 小時的 {seq}，之後維持最後一個值。整場時間不變，只改各段怎麼分：變慢的話，前段的 ETA 提早、後段每段變長": {
+    "draft": true,
+    "src": "backend/engine/racepower/planner.py:710"
+  },
+  "分段維持平均分配：後段變慢要用你自己至少 {m} 次 ≥ {h:g} 小時的越野跑來估（目前 {n} 次能用，共 {a} 次 ≥ {h:g} 小時）": {
+    "draft": true,
+    "src": "backend/engine/racepower/planner.py:715"
   },
   "分腿蹲或後腳抬高蹲 3–4 組 × 3–6 下（留 2 下以上，組間休 2–3 分）；離心下階 3 組 × 8–12 下／腳，背包 5 → 10 % 體重；引體向上 3 組（留 2 下）；最後棒式 2 × 30 秒。離心下階是平日補強，不取代真的下坡": {
     "draft": true,
@@ -2923,6 +2951,14 @@
     "draft": true,
     "src": "backend/engine/racepower/calc.py:299"
   },
+  "沒有越野心率配速模型，移動時間用賽季計畫填的預估時間": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:438"
+  },
+  "沒有越野心率配速模型，移動時間退回舊的功率模型（CP＋Riegel），越野上常算得太快": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:436"
+  },
   "沒有路跑 RE：請手動輸入": {
     "draft": true,
     "src": "backend/engine/racepower/calc.py:304"
@@ -3055,6 +3091,10 @@
     "draft": true,
     "src": "backend/engine/hr_profile.py:65"
   },
+  "照分段的心率上限跑，補給站少停": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:524"
+  },
   "照現在每週慢慢加量，賽前你一週最多大約練到 EP {ep:.0f}（{km:.0f} km、爬升 {cl:.0f} m），是比賽最難那天 EP {hd:.0f} 的 {p:.0f} %": {
     "draft": true,
     "src": "backend/engine/race_feasibility.py:342"
@@ -3066,6 +3106,14 @@
   "照現在的體能，預估 {f:.1f} 小時完賽；關門是 {c:g} 小時": {
     "draft": true,
     "src": "backend/engine/race_feasibility.py:299"
+  },
+  "照現在的體能，預估移動 {m:.1f} 小時＋停留 {s:.0f} 分鐘＝ {f:.1f} 小時；關門是 {c:g} 小時": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:418"
+  },
+  "照現在的體能，預估移動 {m:.1f} 小時；關門是 {c:g} 小時": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:430"
   },
   "照現在的體能，預估第 {d} 天出發後 {eta:.1f} 小時到山頂；撤退時間是 {c:g} 小時": {
     "draft": true,
@@ -3238,10 +3286,6 @@
   "目標用要是 自動／心率／功率：{v!r}": {
     "draft": true,
     "src": "backend/engine/plan_store.py:310"
-  },
-  "目標設保守一點，前半段放慢": {
-    "draft": true,
-    "src": "backend/engine/race_feasibility.py:271"
   },
   "目標類型不對：{x}": {
     "draft": true,
@@ -3682,6 +3726,10 @@
   "賽事計算器預測的完賽時間": {
     "draft": true,
     "src": "backend/engine/race_feasibility.py:344"
+  },
+  "賽事計算機的越野心率配速模型（移動時間）": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:917"
   },
   "賽前 2 週不再做接近線的長天（減量期；UA、Koop）": {
     "draft": true,
@@ -4514,6 +4562,10 @@
   "（{n} 堂排不開，拿掉了，不用補）": {
     "draft": true,
     "src": "backend/engine/post_race.py:131"
+  },
+  "（{why}）": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:428"
   },
   "（不含賽後恢復期／轉換期 {n} 天）": {
     "draft": true,

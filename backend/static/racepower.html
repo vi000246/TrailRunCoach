@@ -325,7 +325,7 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
     <div class="row rf"><span class="lbl">策略</span>
       <div class="seg" id="strategy"><button data-k="even">均速</button><button data-k="negative">前慢後快</button><button data-k="positive">前快後慢</button></div>
       <label class="meta" id="amt-box">幅度 <input id="amount" type="range" min="0" max="5" step="0.5" style="width:120px;vertical-align:middle"> <b id="amount-v"></b></label>
-      <span class="help" tabindex="0">?<span class="tip">均速：全程同樣的平均功率（越野是同樣的「努力」，坡上功率照下面的坡道彈性變化）。前慢後快 / 前快後慢：功率從起點到終點線性變化，整場平均不變。過去的研究多半發現前後差距小的配速最快。</span></span>
+      <span class="help" tabindex="0">?<span class="tip" data-i18n="racepower.strategy.tip">均速（路跑）：全程同樣的平均功率。均勻努力（越野）：全程同樣的「努力」，坡上功率照下面的坡道彈性變化，所以配速會跟著坡度變，不是全程同一個配速。前慢後快 / 前快後慢：功率從起點到終點線性變化，整場平均不變。過去的研究多半發現前後差距小的配速最快。</span></span>
     </div>
     <div class="row rf" id="hills-row"><span class="lbl">坡道彈性</span>
       <label class="meta">上坡 +<input id="hup" type="number" step="1" min="0" max="12" style="width:56px"> %</label>
@@ -609,6 +609,8 @@ function segOn(id, attr, val) { document.querySelectorAll(`#${id} button`).forEa
 function setType(t) {
   type = t; ls.set("type", t);
   segOn("type", "t", t); applySport();
+  // SP-224: on trail the 「even」 strategy is even effort (the pace follows the grade), not even pace
+  $("strategy").querySelector('[data-k="even"]').textContent = T(t === "trail" ? "strategy.even_trail" : "strategy.even_road");
   const hike = t === "baiyue";
   document.querySelectorAll(".bf").forEach((e) => e.classList.toggle("hidden", !hike));
   document.querySelectorAll(".rf").forEach((e) => e.classList.toggle("hidden", hike));
@@ -1541,7 +1543,8 @@ function renderProfile() {
   const hike = P.type === "baiyue", m = measure(), M = MEASURE[m];
   segOn("measure", "m", m);
   document.querySelector('#measure button[data-m="power"]').classList.toggle("hidden", hike);
-  $("profile-sub").textContent = `${R.length} ${T("segs")}${P.summary.badge ? " · " + T("est") : ""}`;
+  // SP-222: the segment times carry the athlete's own fade (推估) — said next to the title, not only in a hover
+  $("profile-sub").textContent = `${R.length} ${T("segs")}${P.summary.badge ? " · " + T("est") : ""}${P.summary.fade?.applied ? " · " + T("fade") : ""}`;
   $("splits-line").textContent = SPLITS.length ? "分日點：" + SPLITS.map((x) => x.toFixed(1) + " km").join("、") : "";
   // the target as steps; a measure that is not a target on a segment leaves a gap there
   const step = [];
@@ -1596,6 +1599,8 @@ function renderProfile() {
     (pr ? `<span><i style="background:${css("--bar")};opacity:.6"></i>${esc(T("elev"))}</span>` : "") +
     (R.some((r) => r.walk) ? `<span><i style="background:${css("--watch")};opacity:.35"></i>${esc(T("legend.walk"))}</span>` : "") +
     (m !== "pace" && R.some((r) => M.val(r) == null) ? `<span>${esc(T(m === "power" ? "legend.gap_power" : "legend.gap_hr"))}</span>` : "") +
+    // SP-224: one HR cap for the whole race; late in a trail race HR drops by itself (Kerhervé 2015)
+    (m === "hr" && P.type === "trail" ? `<span>${esc(T("legend.hr_fade"))}</span>` : "") +
     (P.summary.runwalk && !hike ? `<span class="faint">${esc(T(P.summary.runwalk.personal ? "rw.legend_you" : "rw.legend_default"))}</span>` : "");
   const c = chart("profile");
   c.getZr().off("click");

@@ -282,3 +282,16 @@ def test_csv_export_gpx_and_hike(client):
     assert kv["類型"] == ["百岳"] and "總移動時間" in kv and kv["海拔適應"] == ["未適應"]
     c = cols.index("天")
     assert {r[c] for r in rows[:-1]} == {"1", "2"}
+
+
+def test_csv_names_the_trail_even_strategy_even_effort():
+    """SP-224: on trail the 「even」 strategy is even effort (the pace follows the grade); road keeps 均速."""
+    from backend.engine.racepower import csvplan as CSV
+    at = dt.datetime(2026, 10, 6, 8, 0)
+    for kind, label in (("trail", "均勻努力"), ("road", "均速")):
+        plan = {"type": kind, "summary": {"strategy": "even", "km": 10.0}, "used": {}}
+        rows = {r[0]: r[1:] for r in CSV.header_rows(plan, name="x", date=None, computed_at=at) if r}
+        assert rows["策略"] == [label]
+    plan = {"type": "trail", "summary": {"strategy": "positive", "strategy_amount": 0.03, "km": 10.0}, "used": {}}
+    rows = {r[0]: r[1:] for r in CSV.header_rows(plan, name="x", date=None, computed_at=at) if r}
+    assert rows["策略"] == ["前快後慢 3.0%"]

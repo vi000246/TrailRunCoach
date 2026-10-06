@@ -570,3 +570,141 @@ def delta_by_fuel(rows) -> dict:
         fy, fn = sh(yes), sh(no)
         out.update(split=True, fuelled=fy, unfuelled=fn, use=fy["delta"])
     return out
+
+
+# ---- the fade shape for the segment ETAs (SP-222) ----------------------------
+# docs/research/trail-pacing-strategy.md §1.2 items 1 & 7, §2.2, §4.2. The whole-race time
+# already holds the durability decline (D̄(T) above); the segments used to share it evenly, so
+# the early aid stations' ETAs were late. The owner (2026-10-05): the shape and its size come
+# from the athlete's OWN records — no population shape; too little data → the segments stay
+# evenly paced. All 推估.
+#   per run ≥ FADE["min_run_s"] moving: step 7's 100 m windows (drift-v2-cleaned, HR 60 s later)
+#   and the within-run OLS
+#       ln v = f(g) + c·(HR_lag − mean) + Σ_b β_b·[moving hour b]        (b ≥ 1; hour 0 = reference)
+#   on the grades both halves of the run cover — β_b = the speed in hour b at the same grade and
+#   the same HR as in the first hour (fade_run);
+#   across runs: per hour the random-effects mean of the runs that reach it (pool_deltas), hours
+#   1, 2, … in a row while ≥ min_runs runs reach them; the whole shape shrunk toward even by
+#   N/(N + k) (N = the usable runs, k as δ's); held flat after the last hour the data reaches (no
+#   extrapolation — a race longer than the long runs gets no extra late fade), floored at
+#   dbar_min (fade_shape);
+#   the race: each segment's time ÷ the shape's multiplier at its midpoint (moving hours), then
+#   all scaled so the sum stays the whole-race time (fade_times).
+# Not the straight line of step 2: at δ = 0.05 /h its speed reaches 0 at 21 h.
+FADE = {
+    "min_run_s": 3 * 3600.0,    # 推估: a run must reach its third hour to show a late fade
+    "min_runs": 3,              # 推估: fewer usable runs → no fade, the segments evenly paced
+    "bin_h": 1.0,               # 推估: one shape point per moving hour
+    "min_bin_windows": 10,      # 推估: 100 m windows (≈ 1 km) a run needs in an hour to count it
+    "k": 3.0,                   # 推估: = delta_k — the shrinkage toward even
+}
+FADE_SOURCE = ("後段變慢的形狀：你自己 ≥ 3 小時的越野跑，同坡度、同心率下每一小時的速度和第 1 小時比（100 m 視窗，"
+               "清掉停等與收操），各次合併後往「不變慢」收縮；資料沒涵蓋的小時維持最後一個值；推估")
+
+
+def fade_run(wins, bin_h: float = FADE["bin_h"]) -> Optional[dict]:
+    """One run's speed by moving hour at the same grade and HR (the SP-222 block above):
+    {"bins": [[hour b, β_b, se], …] for b ≥ 1, "n", "hours"} or None (too few windows, no
+    shared terrain, fewer than three hours with FADE["min_bin_windows"] windows)."""
+    k = DUR
+    w = [x for x in wins or [] if x.get("keep", 1.0) >= k["keep_min"] and x.get("v", 0) > 0
+         and x.get("hr") and abs(x["g"]) <= k["g_max"]]
+    if len(w) < k["min_windows"]:
+        return None
+    th = np.array([x["t_h"] for x in w])
+    g = np.array([x["g"] for x in w])
+    mid = float(np.median(th))
+    e, l_ = g[th <= mid], g[th > mid]
+    if len(e) < 5 or len(l_) < 5:
+        return None
+    lo = max(np.percentile(e, k["overlap_q"]), np.percentile(l_, k["overlap_q"]))
+    hi = min(np.percentile(e, 100 - k["overlap_q"]), np.percentile(l_, 100 - k["overlap_q"]))
+    if hi <= lo:
+        return None
+    sel = (g >= lo) & (g <= hi)
+    b = np.floor(th / bin_h).astype(int)
+    keep = [int(x) for x in sorted(set(b[sel])) if int(((b == x) & sel).sum()) >= FADE["min_bin_windows"]]
+    if 0 not in keep or len(keep) < 3:
+        return None
+    sel &= np.isin(b, keep)
+    gg, bb = g[sel], b[sel]
+    y = np.log([x["v"] for x, s in zip(w, sel) if s])
+    hr = np.array([x["hr"] for x, s in zip(w, sel) if s])
+    knots = [q for q in k["knots"] if lo < q < hi]
+    hcol = [hr - hr.mean()] if np.ptp(hr) > 1.0 else []
+    later = [x for x in keep if x != 0]
+    X = np.column_stack([np.ones_like(gg), gg] + [np.clip(gg - q, 0.0, None) for q in knots] + hcol
+                        + [(bb == x).astype(float) for x in later])
+    coef, *_ = np.linalg.lstsq(X, y, rcond=None)
+    dof = len(y) - X.shape[1]
+    if dof < 5:
+        return None
+    res = y - X @ coef
+    try:
+        cov = float(res @ res) / dof * np.linalg.inv(X.T @ X)
+    except np.linalg.LinAlgError:
+        return None
+    n = len(later)
+    se = np.sqrt(np.clip(np.diag(cov)[-n:], 0.0, None))
+    return {"bins": [[int(x), float(c), float(s)] for x, c, s in zip(later, coef[-n:], se)],
+            "n": int(len(y)), "hours": float(th.max())}
+
+
+def fade_shape(rows, n_long: Optional[int] = None) -> dict:
+    """The athlete's fade shape from fade_run() rows (the SP-222 block above): {"applied", "points"
+    [[moving hour, speed multiplier], …] (the first hour = 1.0), "bins", "n_runs" (usable runs),
+    "n_long" (runs ≥ min_run_s looked at), "min_runs", "min_run_h", "shrink", "source"}.
+    "applied" False (and only the first point) with fewer than min_runs usable runs."""
+    f = FADE
+    rs = [r for r in rows or [] if r and r.get("bins")]
+    n = len(rs)
+    out = {"applied": False, "points": [[0.5 * f["bin_h"], 1.0]], "bins": [], "n_runs": n,
+           "n_long": n if n_long is None else int(n_long), "min_runs": f["min_runs"],
+           "min_run_h": f["min_run_s"] / 3600.0, "shrink": None, "source": FADE_SOURCE, "label": "推估"}
+    if n < f["min_runs"]:
+        return out
+    w = n / (n + f["k"])
+    out["shrink"] = w
+    lo = TRAILHR["dbar_min"]
+    b = 1
+    while True:
+        got = [{"delta": c, "se": s} for r in rs for x, c, s in r["bins"] if x == b and s and s > 0]
+        if len(got) < f["min_runs"]:
+            break
+        p = pool_deltas(got)
+        m = float(min(1.0 / lo, max(lo, math.exp(w * p["mean"]))))
+        out["points"].append([(b + 0.5) * f["bin_h"], m])
+        out["bins"].append({"hour": b, "mean": p["mean"], "se": p["se"], "n": p["n"], "mult": m})
+        b += 1
+    out["applied"] = len(out["points"]) > 1
+    return out
+
+
+def fade_mult(shape: dict, hours) -> np.ndarray:
+    """The shape's speed multiplier at `hours` (moving): linear between the hour midpoints, flat
+    before the first and after the last."""
+    xs = [p[0] for p in shape["points"]]
+    ys = [p[1] for p in shape["points"]]
+    return np.interp(np.asarray(hours, float), xs, ys)
+
+
+def fade_times(ts, shape: Optional[dict], tol_s: float = 0.01) -> Optional[list[float]]:
+    """Segment moving times `ts` (s) with the fade: tᵢ ÷ the multiplier at the segment's midpoint
+    hour, all scaled so the sum stays Σ ts (fixed point: the midpoints move with the times). None
+    when the shape is not applied."""
+    if not shape or not shape.get("applied") or not ts:
+        return None
+    base = [float(t) for t in ts]
+    total = sum(base)
+    if total <= 0:
+        return None
+    out = list(base)
+    for _ in range(20):
+        mids = np.cumsum(out) - 0.5 * np.asarray(out)
+        raw = np.asarray(base) / fade_mult(shape, mids / 3600.0)
+        new = list(raw * (total / raw.sum()))
+        done = max(abs(a - c) for a, c in zip(new, out)) < tol_s
+        out = new
+        if done:
+            break
+    return out
