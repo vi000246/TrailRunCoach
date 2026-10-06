@@ -468,7 +468,9 @@ always, and the change log / undo cover them like any generated change.
   only): green / yellow / red from the last marked run (limits 跟腱 5, 膝前痛 2, others relative; +2 =
   yellow; 中斷, ≥ 7, two yellows or severity 重 = red). Yellow (applied on its own — a reduction): no
   interval, long run × 0.75, the rest of the week ≤ last week's actual minutes. Red: no run, strength
-  kept; the box offers 不排課日期 (`injury_rest`).
+  kept; the box offers 不排課日期 (`injury_rest`). A red light also takes the runs out of every projected
+  week (`projection.project_weeks`, hours 0; owner's decision, SP-273, 2026-10-06) so nothing is pushed
+  to the watch ahead.
 - **Walk-run** (`injuries.return_state`, `overview.walkrun_apply`; projection carries the rest): after
   red, a ≥ 30-min walk marked 沒痛／痠 or 「可以開始走跑」 (`injury_events.walkrun_from`) starts walk 4/run 1 →
   1/4 (3 each) and 30 min × 3, every other day; 痛 repeats, 中斷 = red again. `reentry.find_all` starts the

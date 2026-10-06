@@ -6918,5 +6918,9 @@
   "🌡 {t:.0f} °C（{band}）": {
     "draft": true,
     "src": "backend/engine/panels/drift_bars.py:42"
+  },
+  "疼痛紅燈還沒解除：這週先不排跑步，等下一次跑步標記改變燈號；交叉訓練和肌力照做": {
+    "draft": true,
+    "src": "backend/engine/projection.py:819"
   }
 }

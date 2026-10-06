@@ -477,7 +477,9 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
     `blackouts`: the 不排課日期 ranges week_plan() used (engine/blackouts.py).
     `events` (season-plan events) + `heat_acts` (per-activity heat exposure):
     熱適應課 before a hot A/B race (engine/heat_plan.py); None = none. The S
-    carried into each week counts the heat sessions planned before it."""
+    carried into each week counts the heat sessions planned before it.
+    A red pain light in cur['injury_light'] (SP-271) takes the runs out of every projected week too
+    (hours 0; strength stays) until the next mark changes it."""
     from backend.engine import blackouts as BL
     planned_heat: dict = {d: 1.0 for d in ((cur.get("heat") or {}).get("days") or [])}
     PR = prefs if prefs is not None and prefs.active else None
@@ -565,6 +567,7 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
     wr_next = (wr or {}).get("walkrun_next")
     if (wr or {}).get("block"):
         blocks.append(wr["block"])
+    red = (cur.get("injury_light") or {}).get("color") == "red"           # SP-271: no run ahead either
     cb = cur.get("b2b") or {}
     b2b_state = B2B.next_state(cb, monday, cur_s)          # 連續兩天長天 (engine/b2b.py)
     lc_cur = cur.get("steep_hill") or {}                    # 陡坡健走（模擬負重） (engine/steep_hill.py)
@@ -805,6 +808,15 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
             wr_next = d.isoformat()
             notes.append({"level": "watch", "src": "injury_light",
                           "text": _("走跑階段：照進度排走跑交替；連續跑 30 分 3 次之後才接恢復期")})
+        if red:
+            # SP-271 (owner's decision, SP-273 2026-10-06): a red light holds the projected weeks too — no
+            # run until the next mark changes it, so nothing is pushed to the watch ahead; strength stays
+            ss = [s for s in ss if s["kind"] not in O.RUN_KINDS]
+            for s in ss:
+                if s["kind"] == "strength":
+                    s["detail"] = (s.get("detail") or "") + _("；會痛的動作先不做")
+            notes.append({"level": "bad", "src": "injury_light",
+                          "text": _("疼痛紅燈還沒解除：這週先不排跑步，等下一次跑步標記改變燈號；交叉訓練和肌力照做")})
         if tc and kind == "taper":
             n = O.taper_climb_note(tc, cur_t.get("pre_climb") if same else cur.get("climb4"),
                                    hours / (cur_t.get("pre_hours") if same else pre_h)
@@ -848,7 +860,7 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
         ctl0 = ctl
         ctl, atl = proj[-1]["ctl"], proj[-1]["atl"]
         out.append({"start": week.isoformat(), "phase": kind, "mode": mode,
-                    "mode_label": MODE_LABELS.get(mode, mode), "hours": hours,
+                    "mode_label": MODE_LABELS.get(mode, mode), "hours": 0.0 if red else hours,
                     "tss": sum(planned), "ctl_start": ctl0, "ctl_end": ctl,
                     "provisional": week > monday + dt.timedelta(weeks=1), "why": why,
                     "sessions": [s for s in ss if s["day"]],
