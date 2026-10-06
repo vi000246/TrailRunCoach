@@ -139,8 +139,10 @@ def _build_dataset(cfg_json: str, source: str = "wko5", stamp: str = "", shared:
     st.begin()                      # runs only on a cache miss: a real build
     if source == "wko5":
         st.phase("wko5")
+    from backend import applog
     try:
-        ds = dataset_for_source(source, ATHLETE_DIR, config=EngineConfig.from_dict(json.loads(cfg_json)))
+        with applog.timed("dataset build", source=source):        # SP-215: the wait behind every chart
+            ds = dataset_for_source(source, ATHLETE_DIR, config=EngineConfig.from_dict(json.loads(cfg_json)))
     except BaseException as e:
         st.fail(e)
         raise
@@ -228,6 +230,9 @@ def warm_up(reason: str = "startup") -> Optional[threading.Thread]:
 
     def run():
         import logging
+        import time
+        from backend import applog
+        t0 = time.perf_counter()
         try:
             ds = _dataset()
             from backend.api import overview as OV
@@ -253,8 +258,10 @@ def warm_up(reason: str = "startup") -> Optional[threading.Thread]:
             # read from disk when nothing changed
             from backend.api import activity_auto as AA
             AA.job_for(ds)
+            applog.took("dataset warm-up", t0, reason=reason)       # SP-215
         except Exception as e:           # noqa: BLE001 — a page request will show the error
-            logging.getLogger(__name__).warning("dataset warm-up (%s) failed: %s", reason, type(e).__name__)
+            logging.getLogger(__name__).warning("dataset warm-up (%s) failed: %s", reason, type(e).__name__,
+                                                exc_info=True)
     import contextvars              # a Thread does not carry the tenant (contextvars) by itself
     ctx = contextvars.copy_context()
     t = threading.Thread(target=ctx.run, args=(run,), name=f"dataset-warmup-{reason}", daemon=True)

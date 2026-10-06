@@ -415,9 +415,13 @@ def get_profile():
             "power_meter": plan.profile.get("power_meter"),
             "power_source": AP.profile_power_source(plan.profile),
         },
-        # 首次精靈 (shell.js): asks for weight / sex until both are known, once
-        "setup": {"needed": AP.setup_needed(eff_w, sex),
+        # 首次精靈 (shell.js, SP-211): asks for weight / sex / age until all are known, once
+        "setup": {"needed": AP.setup_needed(eff_w, sex, plan.profile.get("birth_year")),
+                  "missing": AP.setup_missing(eff_w, sex, plan.profile.get("birth_year")),
                   "done": read_setting(AP.SETUP_DONE_KEY, False) is True,
+                  "remind": AP.setup_remind(AP.setup_needed(eff_w, sex, plan.profile.get("birth_year")),
+                                            read_setting(AP.SETUP_LATER_KEY, None)),
+                  "remind_days": AP.REMIND_DAYS,
                   "prefill": {"weight": None if eff_w is not None else app_w,
                               "weight_source": "COROS" if eff_w is None and app_w else None}},
         "options": {**P.PROFILE_FIELDS, "power_source": AP.POWER_SOURCES},
@@ -461,16 +465,21 @@ def detect_profile():
 
 class SetupIn(BaseModel):
     done: bool = True
+    later: bool = False                    # 「稍後再說」: ask again in AP.REMIND_DAYS
 
 
 @router.post("/profile/setup")
 async def setup_done(body: SetupIn, db: AsyncSession = Depends(get_db)):
-    """The 精靈 was saved or dismissed (「稍後再說」): don't ask again."""
+    """The 精靈 was saved (done) or skipped (later: asked again AP.REMIND_DAYS later while
+    weight / sex / age are still missing; SP-211)."""
     from backend.engine import athlete_profile as AP
     from backend.settings.repository import SettingsRepository
-    await SettingsRepository(db, current_athlete_id()).set(AP.SETUP_DONE_KEY, bool(body.done))
+    repo = SettingsRepository(db, current_athlete_id())
+    await repo.set(AP.SETUP_DONE_KEY, bool(body.done))
+    if body.later:
+        await repo.set(AP.SETUP_LATER_KEY, dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"))
     await db.commit()
-    return {"done": bool(body.done)}
+    return {"done": bool(body.done), "later": bool(body.later)}
 
 
 class WeightIn(BaseModel):
@@ -483,6 +492,7 @@ class ProfileIn(BaseModel):
     sex: Optional[str] = None
     height_cm: Optional[float] = None
     birth_year: Optional[int] = None
+    age: Optional[int] = None              # the 精靈 / 設定頁 ask the age: stored as the birth year
     power_source: Optional[str] = None
     power_meter: Optional[str] = None      # legacy (stryd / coros / garmin / other)
 
@@ -501,6 +511,10 @@ def put_profile(body: ProfileIn):
         raise HTTPException(400, _("身高 {cm} cm 不合理", cm=body.height_cm))
     if not AP.birth_year_ok(body.birth_year):
         raise HTTPException(400, _("出生年 {year} 不合理", year=body.birth_year))
+    if not AP.age_ok(body.age):
+        raise HTTPException(400, _("年齡 {age} 不合理（{lo}–{hi} 歲）", age=body.age, lo=AP.AGE_MIN, hi=AP.AGE_MAX))
+    birth_year = body.birth_year if body.birth_year is not None else (
+        None if body.age is None else AP.birth_year_of_age(body.age, today_local()))
     if body.power_source is not None and body.power_source not in AP.POWER_SOURCES:
         raise HTTPException(400, f"power_source must be one of {AP.POWER_SOURCES}")
     for k in ("sex", "power_meter"):
@@ -510,7 +524,7 @@ def put_profile(body: ProfileIn):
     plan = P.Plan.load()
     plan.weights = [P.Weight(w.date, round(w.kg, 1)) for w in body.weights]
     plan.profile = {k: v for k, v in (("sex", body.sex), ("height_cm", body.height_cm),
-                                      ("birth_year", body.birth_year), ("power_source", body.power_source),
+                                      ("birth_year", birth_year), ("power_source", body.power_source),
                                       ("power_meter", None if body.power_source else body.power_meter))
                     if v is not None}
     plan.save()

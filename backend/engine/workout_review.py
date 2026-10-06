@@ -2811,7 +2811,7 @@ def _plan_card(ds, w) -> Optional[dict]:
     a = s.get("done_by") or {}
     comp = CO.session_compliance(s) or {}
     vs = PM.compare(s) or {}
-    if vs.get("off_plan"):
+    if vs.get("off_plan") or vs.get("short"):           # 沒照課表 / 強度不足 (SP-216)
         comp = CO.with_plan_check(comp, vs)
     tip = [_("課表：{title}（{day}，{match}）", title=s.get('title'), day=s.get('day'),
              match=vs.get('match_label') or PM.MATCH_LABEL.get('day'))]
@@ -2826,7 +2826,12 @@ def _plan_card(ds, w) -> Optional[dict]:
         tip.append(_("目標：{target}", target=s['target']))
     if vs.get("text"):
         tip.append(vs["text"])
+    elif vs.get("short_text"):
+        tip.append(vs["short_text"])
     tip.append(_("顏色：時間和 TSS 偏離計畫較多的那個（±20% 內算符合，TrainingPeaks 的做法）"))
+    if vs.get("intensity_pct") is not None:
+        tip.append(_("強度：做到這堂課的 {pct}%（≥ 80% 算做到、50–80% 算強度不足、不到 50% 算沒照課表）",
+                     pct=vs["intensity_pct"]))
     pct = comp.get("pct")
     return _card("status", id="plan", icon=PS.session_tag(s).get("icon"), label=_("課表"),
                  value=f"{pct}" if pct is not None else "–", unit="%" if pct is not None else None,

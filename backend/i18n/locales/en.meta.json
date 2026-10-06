@@ -567,6 +567,10 @@
     "draft": true,
     "src": "backend/api/plan.py:768"
   },
+  "Zone 3 {a:.0f}／{b:.0f} 分": {
+    "draft": false,
+    "src": "backend/engine/plan_match.py:163"
+  },
   "Zone 3：已解鎖": {
     "draft": true,
     "src": "backend/engine/plan_auto.py:549"
@@ -1991,6 +1995,10 @@
     "draft": true,
     "src": "backend/engine/balance_plan.py:67"
   },
+  "年齡 {age} 不合理（{lo}–{hi} 歲）": {
+    "draft": false,
+    "src": "backend/api/plan.py:507"
+  },
   "延長在有氧強度下的持續時間，提升耐久性與脂肪利用（Daniels）": {
     "draft": true,
     "src": "backend/engine/workout_templates.py:126"
@@ -2023,6 +2031,18 @@
     "draft": true,
     "src": "backend/engine/workout_steps.py:584"
   },
+  "強度不足": {
+    "draft": false,
+    "src": "backend/engine/compliance.py:95"
+  },
+  "強度不足：只做到這堂課的 {pct}%": {
+    "draft": false,
+    "src": "backend/engine/plan_match.py:331"
+  },
+  "強度偏高": {
+    "draft": false,
+    "src": "backend/engine/compliance.py:95"
+  },
   "強度課": {
     "draft": true,
     "src": "backend/engine/workout_templates.py:443"
@@ -2042,6 +2062,10 @@
   "強度類別不同（{a} vs {b}）": {
     "draft": true,
     "src": "backend/engine/interval_library.py:364"
+  },
+  "強度：做到這堂課的 {pct}%（≥ 80% 算做到、50–80% 算強度不足、不到 50% 算沒照課表）": {
+    "draft": false,
+    "src": "backend/engine/workout_review.py:2833"
   },
   "很累": {
     "draft": true,
@@ -3399,6 +3423,10 @@
     "draft": true,
     "src": "backend/engine/quality_gate.py:1387"
   },
+  "等效 T@VO2max {a:.1f}／{b:.0f} 分": {
+    "draft": false,
+    "src": "backend/engine/plan_match.py:165"
+  },
   "算不出": {
     "draft": false,
     "src": "backend/engine/workout_review.py:2707"
@@ -3975,6 +4003,10 @@
     "draft": true,
     "src": "backend/engine/hr_profile.py:324"
   },
+  "輕鬆跑偏強": {
+    "draft": false,
+    "src": "backend/engine/plan_match.py:331"
+  },
   "輕鬆跑後段心率很穩": {
     "draft": true,
     "src": "backend/engine/status.py:595"
@@ -4399,6 +4431,10 @@
     "draft": true,
     "src": "backend/engine/hr_profile.py:65"
   },
+  "閾值以上 {a:.0f}／{b:.0f} 分": {
+    "draft": false,
+    "src": "backend/engine/plan_match.py:166"
+  },
   "閾值刺激": {
     "draft": true,
     "src": "backend/engine/workout_review.py:2685"
@@ -4562,6 +4598,10 @@
   "（{n} 堂排不開，拿掉了，不用補）": {
     "draft": true,
     "src": "backend/engine/post_race.py:131"
+  },
+  "（{what}）": {
+    "draft": false,
+    "src": "backend/engine/plan_match.py:333"
   },
   "（{why}）": {
     "draft": true,
