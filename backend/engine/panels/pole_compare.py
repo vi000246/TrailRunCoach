@@ -8,8 +8,10 @@ impact load is grade × speed and poles can't change it
 Read-only and for this chart only: the mark feeds no prediction model.
 
 Shown only to someone who uses poles: ≥ 5 activities marked 有杖 AND ≥ 5
-marked 沒杖 in the last 365 days (activity_tags.pole_counts; the chart list
-says so per chart: `"needs": "poles"`, wko5views.list_views → needs_met).
+marked 沒杖 in the last 365 days, counting only the activities this chart
+uses (trail runs and hikes; `counts` / `chart_rows` → activity_tags.pole_counts;
+the chart list says so per chart: `"needs": "poles"`, wko5views.list_views →
+needs_met).
 
 Per activity (trail runs and hikes, panels/climb_vam.kind_of) and per grade
 bin (rgrade, %): ≤ −15, −15…−8, −8…−3 (downhill) and ≥ +15 (steep climb),
@@ -165,26 +167,61 @@ def _rows() -> list:
     return AT.load()
 
 
+def used(w) -> bool:
+    """Whether this chart uses the activity: a trail run or a hike (climb_vam.kind_of)."""
+    from backend.engine.panels.climb_vam import kind_of
+    return kind_of(w) is not None
+
+
+def chart_rows(ds, rows: list, today: dt.date, days: Optional[int] = None) -> list:
+    """The tag rows of the activities this chart uses (`used`: trail runs and hikes) that
+    started in about the last `days` days (AT.pole_counts makes the exact cut on the row's own
+    start). Only their marks count toward the 5 + 5 (user decision 2026-10-06), so 「再標有杖
+    N 次、沒杖 M 次」 is what the chart really needs: a mark on a road run, a ride or an
+    excluded file does not count."""
+    from backend.engine import activity_tags as AT
+    from backend.engine.wko5expr.dataset import date_to_day
+    if not rows or not AT.pole_marks_stamp(rows):          # no mark at all: nothing to look up
+        return []
+    days = AT.POLE_COMPARE_DAYS if days is None else days
+    first = date_to_day(today) - days                       # a day of slack before the window
+    out, seen = [], set()
+    for w in ds.workouts:
+        if w.day < first or not used(w):
+            continue
+        r = AT.find(rows, w.entry.start, getattr(w.entry, "file", None))
+        if r is not None and id(r) not in seen:
+            seen.add(id(r))
+            out.append(r)
+    return out
+
+
+def counts(ds, rows: list, today: dt.date) -> dict:
+    """AT.pole_counts over the marks of the activities this chart uses (chart_rows)."""
+    from backend.engine import activity_tags as AT
+    return AT.pole_counts(chart_rows(ds, rows, today), today)
+
+
 def compute(ds, b: float, e: float, params: Optional[dict] = None, rows: Optional[list] = None,
             today: Optional[dt.date] = None) -> dict:
     from backend.engine import activity_tags as AT
-    from backend.engine.panels.climb_vam import kind_of
     rows = _rows() if rows is None else rows
     today = today or dt.date.today()
-    counts = AT.pole_counts(rows, today)
-    out = {"kind": "polecompare", "counts": counts, "min_n": MIN_N, "min_bin_s": MIN_BIN_S,
+    cnt = counts(ds, rows, today)
+    out = {"kind": "polecompare", "counts": cnt, "min_n": MIN_N, "min_bin_s": MIN_BIN_S,
            "caveat": _(CAVEAT), "bins": [{k: x[k] for k in ("id", "dir", "label")} for x in BINS],
            "metrics": [], "activities": {"with": 0, "without": 0}, "list": []}
-    if not counts["eligible"]:
-        out["empty"] = _("近 {days} 天標了「有杖」{w} 次、「沒杖」{wo} 次；兩邊都要至少 {need} 次才比較。"
+    if not cnt["eligible"]:
+        out["empty"] = _("近 {days} 天的越野跑、登山健行標了「有杖」{w} 次、「沒杖」{wo} 次；"
+                         "兩邊都要至少 {need} 次才比較。"
                          "到活動列表編輯活動，在「登山杖」選有杖或沒杖。",
-                         days=counts["days"], w=counts["with"], wo=counts["without"], need=counts["need"])
+                         days=cnt["days"], w=cnt["with"], wo=cnt["without"], need=cnt["need"])
         return out
     per = {"with": [], "without": []}
     for w in ds.workouts:
         if not (b <= w.day < e + 1):
             continue
-        if kind_of(w) is None:
+        if not used(w):
             continue
         p = AT.poles_of((AT.find(rows, w.entry.start, getattr(w.entry, "file", None)) or {}).get("tags"))
         if p not in per:

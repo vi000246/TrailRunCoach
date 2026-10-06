@@ -592,8 +592,9 @@ function polesOf(a) {
   return p;
 }
 const withPoles = (tags, p) => [...(tags || []).filter((t) => !isPoleTag(t)), ...(S.poleTags[p] ? [S.poleTags[p]] : [])];
-// 「有杖 vs 沒杖」 (分析 → 能力, SP-243) appears once the last 365 days have ≥ 5 of each mark
-// (server: activity_tags.pole_counts → S.poleCompare); until then the choice says how many more
+// 「有杖 vs 沒杖」 (分析 → 能力, SP-243) appears once the last 365 days have ≥ 5 of each mark on the
+// trail runs and hikes the chart uses (server: pole_compare.counts → S.poleCompare; a.pole_chart says
+// whether this activity's mark counts); until then the choice says how many more
 function poleHint() {
   const pc = S.poleCompare;
   if (!pc) return "";
@@ -604,7 +605,7 @@ function poleHint() {
 }
 function bumpPoleCount(a, from, to) {      // keep the hint live after a save (the server recounts on reload)
   const pc = S.poleCompare;
-  if (!pc || from === to || !pc.since || (a.start || "").slice(0, 10) < pc.since) return;
+  if (!pc || !a.pole_chart || from === to || !pc.since || (a.start || "").slice(0, 10) < pc.since) return;
   if (from) pc[from] = Math.max(0, pc[from] - 1);
   if (to) pc[to] += 1;
   pc.more_with = Math.max(0, pc.need - pc.with); pc.more_without = Math.max(0, pc.need - pc.without);

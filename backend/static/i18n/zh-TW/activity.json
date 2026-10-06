@@ -85,7 +85,7 @@
   "poles.with": "有杖",
   "poles.without": "沒杖",
   "poles.none": "未標",
-  "poles.more": "再標{what}，就能在「分析 → 能力」看有杖 vs 沒杖的比較（近 {days} 天兩邊各要 {need} 次）。",
+  "poles.more": "再標{what}，就能在「分析 → 能力」看有杖 vs 沒杖的比較（近 {days} 天兩邊各要 {need} 次，只算越野跑和登山健行）。",
   "poles.more_with": "有杖 {n} 次",
   "poles.more_without": "沒杖 {n} 次",
   "poles.more_sep": "、",
