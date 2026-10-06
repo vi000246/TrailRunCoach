@@ -664,7 +664,7 @@ def capacity_samples(ds, runs, th_of: Optional[dict] = None, tags: Optional[list
             eff = AT.effort_hr(es, th.get("lthr"), th.get("aet"),
                                max_frac=TH.auto_max_frac(mvs / 3600.0 if mvs else None))
             rec = AT.recorded_of(recorded, w.entry.start, w.entry.file)
-            eff = AT.effort_from_rpe((rec or {}).get("rpe"), es.get("rest_share"), eff) or eff
+            eff = AT.effort_from_rpe((rec or {}).get("rpe"), es.get("rest_share"), eff, rec=rec) or eff
             long_ok = all(c["ok"] for c in r["checks"] if c["id"] in ("km", "time"))
             auto_ok = eff["effort"] == "max" and long_ok
         else:
@@ -681,7 +681,7 @@ def capacity_samples(ds, runs, th_of: Optional[dict] = None, tags: Optional[list
             r["hrmax"] = hrmax
             eff = AT.effort_road(r, es, th.get("aet"))
             rec = AT.recorded_of(recorded, w.entry.start, w.entry.file)
-            eff = AT.effort_from_rpe((rec or {}).get("rpe"), es.get("rest_share"), eff) or eff
+            eff = AT.effort_from_rpe((rec or {}).get("rpe"), es.get("rest_share"), eff, rec=rec) or eff
             auto_ok = eff["effort"] == "max"
         typ, typ_reason = AT.auto_type(plan_race=ev, test=tests.get(w.idx), sport=w.sport, sport_type=w.sport_type,
                                        title=title, trail=trail)
@@ -740,7 +740,7 @@ def auto_tags(ds, w) -> dict:
     es = effort_stats(ds, w, th)
     eff = AT.effort_hr(es, th.get("lthr"), th.get("aet"))
     rec = AT.recorded_of(AT.load_recorded(), w.entry.start, w.entry.file)
-    eff = AT.effort_from_rpe((rec or {}).get("rpe"), es.get("rest_share"), eff) or eff
+    eff = AT.effort_from_rpe((rec or {}).get("rpe"), es.get("rest_share"), eff, rec=rec) or eff
     typ, why = AT.auto_type(test=test, sport=w.sport, sport_type=w.sport_type,
                             title=getattr(w.entry, "title", "") or "", trail=is_trail(w),
                             baiyue_event=baiyue_on(ds, w.entry.start.date()))
@@ -792,7 +792,7 @@ def auto_tags_all(ds) -> dict[int, dict]:
         except Exception:                   # noqa: BLE001 — one bad file never breaks the list
             es, eff = {}, {"effort": None, "reason": "無法計算"}
         rec = AT.recorded_of(recorded, w.entry.start, w.entry.file)
-        eff = AT.effort_from_rpe((rec or {}).get("rpe"), es.get("rest_share"), eff) or eff
+        eff = AT.effort_from_rpe((rec or {}).get("rpe"), es.get("rest_share"), eff, rec=rec) or eff
         typ, why = AT.auto_type(test=_test_reason(ds, w), sport=w.sport, sport_type=w.sport_type,
                                 title=getattr(w.entry, "title", "") or "", trail=is_trail(w),
                                 baiyue_event=baiyue_on(ds, w.entry.start.date()))

@@ -39,6 +39,14 @@ Rules (thresholds: source or 推估):
           planned), each ≥ 20 min, else the last easy is dropped (推估); the
           long run and the quality session are never trimmed for this;
        4. a note on that day:「輕鬆跑偏強（…）：已調整之後的課表」.
+     Self-rating trigger (SP-231, rule "rpe_hard"; docs/research/readiness-signals.md §4.1):
+     an easy run or long run the athlete rated Hard or more after the run (COROS's
+     post-run rating ≥ 4, engine/coros_rpe.py; a FIT's own RPE ≥ 7 the same) -> step 2 for
+     the next hard session (quality / test) < 48 h after it: moved to a free day ≥ 48 h
+     after the run, else one step down. Nothing else (no trim, the long run stays, the hard
+     session's done-check unchanged). 推估: no controlled trial (research §2.4). Runs after E
+     and leaves alone any session another rule already changed (E's removal / step-down
+     wins); ctx `rpe_rule` False = off (課表偏好 › 自動調整).
   E. fatigue guard: two red-compliance sessions in a row (engine/compliance.py)
      -> the quality steps down to the recovery fartlek and easy minutes × 0.8;
      TSB < −30 (Friel / TrainingPeaks, coach; when week_plan has not already
@@ -86,6 +94,8 @@ SRC_OVER = ("平均心率 > AeT+3 且 > 10% 時間超過（兩條都要）、z2 
 SRC_FATIGUE = ("CTL ramp 到擋線（min(10, max(5, CTL 的 15%))，Friel 5–8／10 換算，推估）；"
                "TSB < −30（Friel／TrainingPeaks）；連兩堂紅色、減 20% 推估")
 SRC_B2B = "Johnston（UA）B2B 後「three or four light days」；B2B 造成的 TSB 下降不觸發減量為推估"
+SRC_RPE = "跑後自評：Nuuttila 2021（心率恢復了、自覺費力仍偏高）；門檻 Hard 是使用者決定；規則與 1–5 級換算推估"
+RPE_RULE = "rpe_hard"
 
 
 def _b2b_exempt(info: Optional[dict], today: str) -> Optional[str]:
@@ -383,6 +393,58 @@ def _overhard(wk: _Week, reviews: dict, th: dict, out: list, notes: dict) -> Non
             _trim_easy(wk, excess, out, "overhard", f"{wd(day)}輕鬆跑多了 {excess:.0f} TSS，維持本週的 TSS 目標", SRC_OVER)
 
 
+def _rated_label(r: dict) -> str:
+    """「Hard」 (COROS's word) or 「RPE 8」 (a FIT's own RPE)."""
+    from backend.engine import coros_rpe as CR
+    sr = CR.self_rating(r) or {}
+    return sr.get("label") or f"RPE {float(r.get('rpe') or 0):g}"
+
+
+def _rpe_hard(wk: _Week, rated: dict, th: dict, out: list) -> None:
+    """Rule D's self-rating trigger (module doc). `rated`: activity index -> {rpe, source,
+    coros_feel} of this week's runs (api/plan_sessions._adapt_ctx)."""
+    from backend.engine import coros_rpe as CR
+    if not rated:
+        return
+    touched = {a.get("gen_key") for a in out if a.get("action") != "note"}
+    done = [g for g in wk.gens() if g.get("done") and (g.get("kind") in ("easy", "long") or g.get("id") == "long")
+            and isinstance(g.get("done_by"), dict)]
+    seen = {(g.get("done_by") or {}).get("index") for g in done}
+    for s in wk.st:      # the user's own easy / long sessions that are done
+        if s["state"] == "done" and s["kind"] in ("easy", "long") and isinstance(s.get("done_by"), dict) \
+                and s["done_by"].get("index") not in seen:
+            done.append({"id": s.get("gen_key") or s["uid"], "kind": s["kind"], "day": s["day"], "done": True,
+                         "done_by": s["done_by"], "title": s.get("title")})
+    for g in sorted(done, key=lambda g: g.get("day") or ""):
+        a = g["done_by"]
+        r = rated.get(a.get("index")) or rated.get(str(a.get("index")))
+        if not r or r.get("rpe") is None or float(r["rpe"]) < CR.HARD_RPE:
+            continue
+        day = a.get("date") or g["day"]
+        what = _("長跑") if (g.get("kind") == "long" or g.get("id") == "long") else _("輕鬆跑")
+        label = _rated_label(r)
+        nxt = sorted([h for h in wk.gens() if h.get("kind") in HARD and wk.free(h) and h.get("day")
+                      and h.get("id") not in touched and 0 <= (_d(h["day"]) - _d(day)).days < SPACING_DAYS],
+                     key=lambda h: h["day"])
+        for h in nxt[:1]:
+            pick = next((d for d in wk.open_days(skip=h) if _hard_ok(wk, h, d, extra_after=day)), None)
+            was = h["day"]
+            touched.add(h.get("id"))
+            if pick:
+                h["day"] = pick
+                _adj(out, RPE_RULE, wk, h, "moved",
+                     _("{was} {title}延到{to}：{day}{what}自評 {label}，間隔不到 48 小時",
+                       was=wd(was), title=h.get("title") or "", to=wd(pick), day=wd(day), what=what, label=label),
+                     SRC_RPE + "；" + SRC_SPACING, before_day=was, activity=a.get("index"))
+            else:
+                old = h.get("title")
+                became = _downgrade(h, th)
+                _adj(out, RPE_RULE, wk, h, "downgraded",
+                     _("{was} {old}改成{became}：{day}{what}自評 {label}，本週沒有隔 48 小時的空日",
+                       was=wd(was), old=old or "", became=became, day=wd(day), what=what, label=label),
+                     SRC_RPE, before_title=old, activity=a.get("index"))
+
+
 def _red_streak(stored: list[dict], today: str) -> bool:
     from backend.engine import compliance as C
     past = sorted([s for s in stored if s["state"] in ("done", "missed") and s.get("day") and s["day"] <= today
@@ -436,7 +498,8 @@ def _fatigue(wk: _Week, stored: list[dict], ctx: dict, th: dict, out: list) -> N
 def adapt(gen_weeks: list[dict], stored: list[dict], ctx: dict) -> tuple[list[dict], list[dict], dict]:
     """(adjusted gen_weeks, adjustments, notes). `ctx`: today, first_free (first
     day sessions can go on), blocked, allowed_days, thresholds, mode (this
-    week), load {tsb, ramp, ramp_base (CTL 7 days ago)}, reviews {activity index: review metrics}.
+    week), load {tsb, ramp, ramp_base (CTL 7 days ago)}, reviews {activity index: review metrics},
+    rpe {activity index: {rpe, source, coros_feel}} and rpe_rule (bool, default on): SP-231.
     `notes`: activity index -> the note for the done session it matched."""
     weeks = copy.deepcopy(gen_weeks)
     out: list[dict] = []
@@ -449,6 +512,8 @@ def adapt(gen_weeks: list[dict], stored: list[dict], ctx: dict) -> tuple[list[di
     _missed(wk, missed, out)
     _overhard(wk, ctx.get("reviews") or {}, th, out, notes)
     _fatigue(wk, stored, ctx, th, out)
+    if ctx.get("rpe_rule", True):
+        _rpe_hard(wk, ctx.get("rpe") or {}, th, out)
     return weeks, out, notes
 
 

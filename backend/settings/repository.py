@@ -56,6 +56,9 @@ DEFAULTS: dict[str, Any] = {
     # the last run that worked (status ok / partial): {at, trigger, downloaded}. A
     # failed run never moves it (SP-88: 上次成功同步 on the overview banner)
     "sync.coros.last_ok": None,
+    # the one-time backfill of COROS's post-run self-rating over the last 8 weeks (SP-231,
+    # sync/coros_client.backfill_feel): {done, passes, checked, filled, at}; internal
+    "sync.coros.rpe_backfill": None,
     "sync.trainingpeaks.last_ok": None,
     # daily automatic sync: "HH:MM" local time, None = off
     "sync.schedule.daily_time": None,
@@ -175,6 +178,9 @@ DEFAULTS: dict[str, Any] = {
     "plan.push.provider": "coros",
     "plan.auto.confirm_big": True,            # hold big changes for the user's approval
     "plan.auto.notify": None,                 # watch (a 課表待確認 workout on COROS) | overview (banner only); None = auto (watch with COROS)
+    # 跑後自評 (SP-231, engine/adapt.py rule D): an easy / long run rated Hard or more pushes a
+    # hard session within 48 h back (推估); on by default
+    "plan.auto.rpe_rule": True,
     # internal: {stamp, phase, rejected: [fingerprint]} of the last automatic run
     "plan.auto.state": None,
     # 傷病紀錄 (engine/injuries.py; docs/plans/injury-tracking.plan.md §4): 「跟受傷前很像」
@@ -220,7 +226,7 @@ DEFAULTS: dict[str, Any] = {
 RETIRED_KEYS = ("backup.encryption",)
 AUTO_NOTIFY = ("watch", "overview")
 AUTO_KEYS = ("plan.auto.enabled", "plan.auto.push", "plan.auto.push_days", "plan.auto.confirm_big",
-             "plan.auto.notify")
+             "plan.auto.notify", "plan.auto.rpe_rule")
 MAP_BASEMAPS = ("rudy", "google-terrain", "nlsc-emap", "nlsc-photo", "osm")
 MAP_OVERLAYS = ("contour", "google-roads", "nlsc-roads")
 PREF_ENUMS = {
@@ -350,7 +356,7 @@ def validate(key: str, value: Any) -> None:
     if key == "plan.blackouts":
         from backend.engine.blackouts import validate as validate_blackouts
         validate_blackouts(value)
-    if key == "plan.auto.confirm_big" and not isinstance(value, bool):
+    if key in ("plan.auto.confirm_big", "plan.auto.rpe_rule") and not isinstance(value, bool):
         raise ValueError(f"{key} must be true/false")
     if key == "plan.auto.push" and value is not None and not isinstance(value, bool):
         raise ValueError(f"{key} must be true/false")
@@ -388,6 +394,8 @@ def validate(key: str, value: Any) -> None:
             raise ValueError("athlete.pmc_start must be {date: YYYY-MM-DD, ctl, atl} (0-300) or null")
     if key == "plan.hr_zone_model" and value not in ("lthr", "hrr", "hrmax"):
         raise ValueError("plan.hr_zone_model must be lthr, hrr or hrmax")
+    if key == "sync.coros.rpe_backfill" and value is not None and not isinstance(value, dict):
+        raise ValueError(f"{key} must be an object or null")
     if key == "plan.auto.state" and value is not None and not isinstance(value, dict):
         raise ValueError("plan.auto.state must be an object or null")
     if key == "backup.dir" and value is not None and not (

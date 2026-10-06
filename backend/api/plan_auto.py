@@ -3,7 +3,7 @@
 proposal and 復原.
 
   GET  /api/v1/overview/plan/auto                    settings + pending proposal + last N log entries
-  PUT  /api/v1/overview/plan/auto/settings           {enabled, push, push_days, confirm_big, notify}
+  PUT  /api/v1/overview/plan/auto/settings           {enabled, push, push_days, confirm_big, notify, rpe_rule}
   POST /api/v1/overview/plan/auto/run                run now (ignores the data stamp; big changes still held)
   POST /api/v1/overview/plan/auto/proposal/{id}/approve
   POST /api/v1/overview/plan/auto/proposal/{id}/reject
