@@ -247,6 +247,18 @@
     "draft": true,
     "src": "backend/engine/quality_gate.py:753"
   },
+  "B 賽「{race}」比 A 賽事「{a}」還長（{cmp}）：B 賽是 A 賽前的練習賽，建議比 A 賽短；或把它改成 C 賽輕鬆跑（Runna：B 賽要比 A 賽短；廠商規則，推估）": {
+    "draft": true,
+    "src": "backend/engine/post_race.py:407"
+  },
+  "B 賽「{race}」落在 A 賽事「{a}」的減量期內（A 賽前 {n} 天），而且比 A 賽還長（{cmp}）：減量期是 A 賽前讓身體恢復的時間，B 賽建議比 A 賽短、不排在 A 賽前 7–10 天內；可改成 C 賽輕鬆跑或拿掉（Runna 的做法，廠商規則，推估）": {
+    "draft": true,
+    "src": "backend/engine/post_race.py:399"
+  },
+  "B 賽「{race}」落在 A 賽事「{a}」的減量期內（A 賽前 {n} 天）：減量期是 A 賽前讓身體恢復的時間，再比一場會影響 A 賽；可改成 C 賽輕鬆跑或拿掉（Runna：B 賽不排在 A 賽前 7–10 天內；廠商規則，推估）": {
+    "draft": true,
+    "src": "backend/engine/post_race.py:403"
+  },
   "B 賽事「{race}」{date} 後 {n} 天只排輕鬆跑（依賽事大小：短 3 天、中 5 天、馬拉松級以上照 A 賽的恢復期；Pfitzinger，推估）": {
     "draft": true,
     "src": "backend/engine/post_race.py:313"
@@ -386,6 +398,10 @@
   "EF 趨勢算不出來（輕鬆路跑不夠多）": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:2145"
+  },
+  "EP {b:.0f} 對 {a:.0f}": {
+    "draft": true,
+    "src": "backend/engine/post_race.py:361"
   },
   "EP {ep:.0f}": {
     "draft": true,
@@ -646,6 +662,14 @@
   "{aet}、LTHR {lthr:.0f} → 差距 {gap:.0f}%": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:2124"
+  },
+  "{b:.0f} 公里對 {a:.0f} 公里": {
+    "draft": true,
+    "src": "backend/engine/post_race.py:364"
+  },
+  "{b} 天對 {a} 天": {
+    "draft": true,
+    "src": "backend/engine/post_race.py:355"
   },
   "{date} {what} {v:.0f} bpm > LTHR {lthr:.0f}：撐得住比閾值高的心率，LTHR 可能設低了": {
     "draft": false,
@@ -5690,6 +5714,10 @@
   "預估時間": {
     "draft": true,
     "src": "backend/engine/primary_sport.py:59"
+  },
+  "預估時間 {b:.1f} h 對 {a:.1f} h": {
+    "draft": true,
+    "src": "backend/engine/post_race.py:358"
   },
   "預估時間 {h:.1f} h": {
     "draft": true,

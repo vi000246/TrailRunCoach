@@ -26,7 +26,11 @@ B and C races (SP-95; periodization-cross-sport.md §4.8, §4.8.1, §6.1「SP-95
   * hints (b_hints): more than B_PER_MONTH B race within 30 days (CTS [433]) or the CTL down more
     than B_CTL_DROP since the peak of the weeks holding a B race (Friel's case: −13 % [431]) —
     「B 賽太多，等於一直在減量」; a B race of 中 or longer within B_NEAR_A_DAYS before an A race
-    ([438][433]: 2–4 weeks out only a shorter warm-up race on similar terrain).
+    ([438][433]: 2–4 weeks out only a shorter warm-up race on similar terrain); SP-280: a B race of
+    any size inside the next A race's 減量期 (planning.taper_start: the planned taper phase, else
+    planning.taper_days), or longer than that A race (b_longer: days → predicted time → EP → km,
+    SP-111's order) — Runna's rule (no B race in the 7–10 days before the A race, the B race shorter
+    than the A race [482]; 廠商規則, no research: 推估).
 """
 from __future__ import annotations
 
@@ -341,10 +345,33 @@ def bc_apply(ss: list, events, monday: dt.date, notes: Optional[list] = None, to
     return keep
 
 
-def b_hints(events, monday: dt.date, ctl: Optional[list] = None) -> list[dict]:
+def b_longer(b, a) -> Optional[str]:
+    """How B race `b` is longer than A race `a` (SP-280), as 「X 對 Y」 on the first basis both
+    have — days (a multi-day trip), predicted time (planning.event_hours), EP, km (SP-111's order);
+    None when it is not longer or nothing compares."""
+    from backend.engine import planning as P
+    db, da = int(getattr(b, "days", 1) or 1), int(getattr(a, "days", 1) or 1)
+    if (db > 1 or da > 1) and db != da:
+        return _("{b} 天對 {a} 天", b=db, a=da) if db > da else None
+    hb, ha = P.event_hours(b), P.event_hours(a)
+    if hb and ha:
+        return _("預估時間 {b:.1f} h 對 {a:.1f} h", b=hb, a=ha) if hb > ha else None
+    eb, ea = P.event_ep(b), P.event_ep(a)
+    if eb is not None and ea is not None:
+        return _("EP {b:.0f} 對 {a:.0f}", b=eb, a=ea) if eb > ea else None
+    kb, ka = float(getattr(b, "distance_km", 0) or 0), float(getattr(a, "distance_km", 0) or 0)
+    if kb and ka:
+        return _("{b:.0f} 公里對 {a:.0f} 公里", b=kb, a=ka) if kb > ka else None
+    return None
+
+
+def b_hints(events, monday: dt.date, ctl: Optional[list] = None, phases=None,
+            taper_pref: Optional[int] = None) -> list[dict]:
     """The week notes about the B races of the week of `monday` (b_week): too many (> B_PER_MONTH in 30
     days, or `ctl` [(date, CTL)] down > B_CTL_DROP from its peak in the last B_CTL_WEEKS weeks with a B
-    race in them), a long one (≥ 中) within B_NEAR_A_DAYS before an A race."""
+    race in them), a long one (≥ 中) within B_NEAR_A_DAYS before an A race; SP-280 (Runna [482],
+    廠商規則): any B race inside the next A race's 減量期 (`phases`: the plan's phases, for the planned
+    taper; else planning.taper_days(A, `taper_pref`)) or longer than it (b_longer)."""
     from backend.engine import planning as P
     out = []
     bs = sorted((e for e in events or () if getattr(e, "priority", None) == "B"), key=lambda e: e.start)
@@ -360,6 +387,28 @@ def b_hints(events, monday: dt.date, ctl: Optional[list] = None) -> list[dict]:
             out.append({"level": "watch", "src": "race",
                         "text": _("長距離 B 賽「{race}」在 A 賽事「{a}」前 {n} 天：A 賽前 2–4 週只建議較短、地形相似的熱身賽，"
                                   "或把它改成 C 賽輕鬆跑（CTS）", race=e.name, a=a.name, n=(a.start - e.end).days)})
+        # SP-280 (Runna [482], 廠商規則, 推估): the next A race's 減量期, or longer than that A race
+        nxt = next((x for x in sorted(events, key=lambda x: x.start) if getattr(x, "priority", None) == "A"
+                    and x.start > e.end), None)
+        if nxt is None:
+            continue
+        in_taper = e.end >= P.taper_start(phases or (), nxt, taper_pref)
+        longer = b_longer(e, nxt)
+        n = (nxt.start - e.end).days
+        if in_taper and longer:
+            txt = _("B 賽「{race}」落在 A 賽事「{a}」的減量期內（A 賽前 {n} 天），而且比 A 賽還長（{cmp}）：減量期是 A 賽前"
+                    "讓身體恢復的時間，B 賽建議比 A 賽短、不排在 A 賽前 7–10 天內；可改成 C 賽輕鬆跑或拿掉"
+                    "（Runna 的做法，廠商規則，推估）", race=e.name, a=nxt.name, n=n, cmp=longer)
+        elif in_taper:
+            txt = _("B 賽「{race}」落在 A 賽事「{a}」的減量期內（A 賽前 {n} 天）：減量期是 A 賽前讓身體恢復的時間，"
+                    "再比一場會影響 A 賽；可改成 C 賽輕鬆跑或拿掉（Runna：B 賽不排在 A 賽前 7–10 天內；廠商規則，推估）",
+                    race=e.name, a=nxt.name, n=n)
+        elif longer:
+            txt = _("B 賽「{race}」比 A 賽事「{a}」還長（{cmp}）：B 賽是 A 賽前的練習賽，建議比 A 賽短；"
+                    "或把它改成 C 賽輕鬆跑（Runna：B 賽要比 A 賽短；廠商規則，推估）", race=e.name, a=nxt.name, cmp=longer)
+        else:
+            continue
+        out.append({"level": "watch", "src": "race", "text": txt})
     if ctl:
         lo = monday - dt.timedelta(weeks=B_CTL_WEEKS)
         if any(lo <= e.start < monday for e in bs):

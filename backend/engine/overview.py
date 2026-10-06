@@ -2000,7 +2000,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
                      for r in pmc(ds, monday - dt.timedelta(weeks=PR_.B_CTL_WEEKS), today)["series"]]
         except Exception:                   # noqa: BLE001 — the hint only
             b_ctl = None
-    notes.extend(PR_.b_hints(plan_events, monday, b_ctl))
+    notes.extend(PR_.b_hints(plan_events, monday, b_ctl, phases=phs))     # SP-280: the planned 減量期
     # 生病 (SP-117, engine/injuries.illness_rule): a cold = Z1 recovery runs only, a fever = no run
     # until a day after the symptoms, then a recovery-pace first run
     try:
