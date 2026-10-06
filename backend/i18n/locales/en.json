@@ -1104,6 +1104,7 @@
   "行程前 8 週內做了 {n} 次攻頂日模擬（一天爬升 ≥ {need:.0f} m、背包 ≥ {kg:.1f} kg），{k} 次算夠": "{n} summit-day simulations in the 8 weeks before the trip (≥ {need:.0f} m climb in one day, pack ≥ {kg:.1f} kg); {k} are enough",
   "行程會跨過午夜（多日）不匯出至課表：只有當天來回的單攻百岳可以匯出": "The trip runs past midnight (multi-day) and is not exported to the schedule: only a same-day Baiyue round trip can be exported",
   "行程背包要在 0–{max:g} kg": "Trip pack weight must be 0–{max:g} kg",
+  "衝擊高於平常、步頻低於平常 → 下坡縮小步幅、加快步頻可以減少膝蓋負擔（Van Hooren 2024、Heiderscheit 2011）": "Impact above usual and cadence below usual → on downhills, shorter, quicker steps reduce the load on your knees (Van Hooren 2024, Heiderscheit 2011)",
   "補給站": "Aid station",
   "補給點": "Refuel point",
   "要儲存的資料太大": "The data to save is too large",

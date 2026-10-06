@@ -594,7 +594,7 @@ Not in WKO5; grounded in `docs/research/`.
 | `minetti.py` | Energy cost of running/walking by gradient; grade-adjusted speed with a downhill floor | Minetti et al. 2002, R² 0.999, ±45% |
 | `effort.py` | Equivalent flat distance by integrating Minetti over the elevation stream | Same |
 | `trail.py` `compute_hr_drift` | Aerobic decoupling Pa:HR | TrainingPeaks / Uphill Athlete convention |
-| `chart_metrics.py` | Reference implementations of the competitor-derived charts in `views/training.json` / `views/workout.json`: Form% zones, ATL/CTL ratio, Treff PI (its chart was dropped in 2026-10), コース定数, ITRA km-effort/category, up/downhill m/h, downhill impact load (own composite; `DOWNHILL_EXPR` is shared with the 總覽 `descent` card) | Friel; Gabbett 2016 via Runalyze; Treff 2019; 山本正嘉; ITRA; Gottschall & Kram 2005 + Keller 1996 — sources, formulas and check results in `docs/research/competitor-charts.md` §7, tested in `test_chart_metrics.py` |
+| `chart_metrics.py` | Reference implementations of the competitor-derived charts in `views/training.json` / `views/workout.json`: Form% zones, ATL/CTL ratio, Treff PI (its chart was dropped in 2026-10), コース定数, ITRA km-effort/category, up/downhill m/h, downhill impact load (own composite; `DOWNHILL_EXPR` is shared with the 總覽 `descent` card) and, beside it, the weekly steep-downhill cadence lines (`downhill_cadence_expr`: < −8 %, moving, time-weighted, strides/min × 2 = spm, no point under 10 min; SP-237) | Friel; Gabbett 2016 via Runalyze; Treff 2019; 山本正嘉; ITRA; Gottschall & Kram 2005 + Keller 1996; Van Hooren 2024 (cadence) — sources, formulas and check results in `docs/research/competitor-charts.md` §7, tested in `test_chart_metrics.py` |
 
 WKO5's ACSM grade factor `(0.19v + 0.9vg)/0.19` under-counts steep running
 against Minetti by 22% at +20% grade, 31% at +30%, and goes negative below
@@ -730,6 +730,7 @@ source (synthetic FITs).
 | 2026-09-30 | feat/drift-basis | N/A | 配速／功率 basis toggle (`basis.py`, chart `basis` spec, tagged series, `?basis=`, viewer control, 這次沒有功率) on the drift charts; rolling EF skips the first 10 min |
 | 2026-10-04 | code-sync | N/A | Run FTP for power TSS on COROS / TP + `tss_source` / watch-power block; per-tenant engine.json / corrections / views / render cache, parity default by WKO5 presence; WKO5 chart packs no longer bundled (WKO5_VIEWS_DIR); chart ids, view i18n sidecar, variants, new chart kinds / keys (z5gate, activity, periodzones, climbvam, race_refs, drift_bars, sports / order); drift bars from `drift()`; stats / bin / lookup / filter implemented; 使用功率 auto; viewer mode cards / variant toggle; new activity endpoints; dropped monotony / PI charts and iLevels; all anchors refreshed |
 | 2026-10-04 | SP-45 | N/A | 我的訓練 › 負荷 PMC gains the aerobic / anaerobic TIS charts (per activity + Chronic / Acute TIS load); TIS built-ins count as power for 使用功率; real-data TIS golden test |
+| 2026-10-06 | feature | SP-237 | 訓練量 →「每週下坡衝擊負荷」gains a right axis (`steps/min`, spm) with two dashed lines: trail-run and hike cadence on steep downhills (`chart_metrics.downhill_cadence_expr`: < −8 % grade, > 1.6 km/h, sample gap ≤ 30 s, Σ cadence·dt ÷ Σ dt per week × 2; < 10 min in the week = no point), in their bars' colours; bars unchanged, still `"sports": ["trail"]`; help + en legend updated |
 
 
 ## Banded charts and the 使用功率 setting (2026-10)
