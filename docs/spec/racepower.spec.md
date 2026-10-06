@@ -654,13 +654,19 @@ terrain; the power-based time is kept only as `crosscheck.power_envelope`, and
   when it lowers the leave-one-out given-HR error, else the prior (`choose_delta`). When the user's
   tags mark runs fuelled / unfuelled and both groups have ≥ 2 runs, the fuelled δ predicts races.
   The old effort-km/HR ratio slope stays only as `delta_uncleaned` (it read course order as fatigue).
-  Mean multiplier over T: D̄ = 1 − δ (T − 1)² / (2T).
+  Shape (SP-239, 2026-10-06): the same-HR speed falls δ per hour after 1 h, then holds at
+  `TRAILHR["v_floor"]` = 0.80 (推估; Martin 2010, Bossi 2017, Markovic 2025; not personalised):
+  v(t) = v₀·max(0.80, 1 − δ (t − 1)⁺). Mean multiplier over T, with t1 = 1 + (1 − 0.80)/δ:
+  D̄ = 1 − δ (T − 1)² / (2T) up to t1, then D̄ = [1 + (t1 − 1)(1 + 0.80)/2 + 0.80 (T − t1)] / T
+  (`trailhr.dbar`, docs/research/long-race-durability-shape.md §4.1). The old line ran on to 0 and
+  D̄ sat on its 0.5 guard, so courses over ~11.3 h of no-decay time (δ 0.05) were predicted at 2×.
 - v₀(x) = a + b·x by OLS on v / D̄ (≥ 6 runs, b > 0), else proportional.
 - Race HR level (2026-10-02): the full-effort curve x*(T) = x₀ − s·ln T (`trailhr.fit_xstar`), prior
   through 1.00 @ 0.5 h, 0.90 @ 3 h, 0.85 @ 12 h (Fornasiero 2018 / Kerhervé 2015 shape; conversion
   推估), fitted on the earlier races and 全力 runs (road ≥ 15 min, trail ≥ the trail minimum) with the
   prior level worth 1 race and the slope worth 3. The prediction solves T = E / (v₀(f·x*(T) − heat
-  shift)·D̄(T)) (`predict_race`); `x_race` (shown) is the curve at 3 h. The planner's effort target f
+  shift)·D̄(T)) (`predict_race`; the inner T = E / (v₀·D̄(T)) is the closed-form inverse of the distance
+  covered T·D̄(T), `trailhr.time_for_nodecay`: continuous and increasing in E); `x_race` (shown) is the curve at 3 h. The planner's effort target f
   scales it; with β the race-day heat moves x instead of the Hadley time penalty, altitude still
   divides by M (推估).
 - Non-moving time (`nonmoving.py`, 推估): a profile from the earlier race / 全力 trail runs ≥ 90 min
@@ -1197,3 +1203,4 @@ when set, but nothing fills it from the routes module yet.
 | 2026-10-04 | feature | SP-43 follow-up | Race TSS: legs without a target use the calculator's predicted race HR ÷ LTHR (trail HR model x*, 百岳 AeT; 0.75 only without one, noted in the session detail); post-race correction factor from done exports (`tss_calib.py`, setting `racepower.race_tss_calib`, w = n/(n+3) 推估, one sample per race) shown in the export dialog; 百岳: single-day only (`multi_day`, `export_block`, 400), HR-only targets |
 | 2026-10-06 | feature | SP-210 | Race-day climatology: the month centred on the race date over the last 10 years, the mean of ERA5 / ERA5-Land / ECMWF IFS at the target elevation (checked against CWA 1991–2020 normals at 6 stations), a 24-hour profile so far-off dates get per-segment heat, a permanent disk cache; tests in `test_race_climatology.py` |
 | 2026-10-06 | feature | SP-210 follow-up | Road / trail GPX plans: each segment's race-day temperature (single value or hourly) moved to its own mean elevation from `heat_ref_alt_m` (the weather point's elevation, sent by the page; also used by 百岳 when 氣溫所在海拔 is blank); tests in `test_racepower_heat_altitude.py` |
+| 2026-10-06 | bugfix | SP-239, docs/research/long-race-durability-shape.md §4.1 | Trail HR model durability: linear decline then flat at `TRAILHR["v_floor"]` 0.80 (`speed_mult` / `dist_nodecay` / `dbar` closed form, `predict_time` via the closed-form inverse `time_for_nodecay`); no more 2× predictions or jumps past ~11 h (δ 0.05: 12 h no-decay 24 h → 14.25 h; δ 0.15: 6 h → 7.1 h instead of 12 h); ≤ 5 h at δ ≤ 0.05 within 0.5 %; `fit`, back-test, SP-220 cutoff and SP-222 segment ETAs take the new whole-race time; tests in `test_trailhr_floor.py` |
