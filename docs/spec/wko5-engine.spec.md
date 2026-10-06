@@ -265,7 +265,7 @@ Other optional chart keys, each validated in `_chart`:
 | `race_refs` | `"course_constant"`: the next two target races' single-day コース定数 lines and the A race's 80–100 % band (`backend/engine/panels/race_refs.py`) |
 | `drift_bars` | Drift as one verdict-coloured bar per run, with a hover line per bar (`backend/engine/panels/drift_bars.py`) |
 | `sports` / `order` | 主要訓練項目: shown only in the trail or road mode, and the chart's place in its dashboard per mode; a dashboard may carry per-mode `descriptions` |
-| `needs` | A condition on the athlete's own data (`customviews.NEEDS`): `"poles"` = ≥ 5 activities marked 有杖 and ≥ 5 沒杖 in the last 365 days (`activity_tags.pole_counts`). `GET /views` adds `needs_met`; the viewer hides the chart until it is true |
+| `needs` | A condition on the athlete's own data (`customviews.NEEDS`): `"poles"` = ≥ 5 activities marked 有杖 and ≥ 5 沒杖 in the last 365 days, counting only the trail runs and hikes the chart uses (`pole_compare.counts` → `chart_rows` (`climb_vam.kind_of`) → `activity_tags.pole_counts`; no mark at all = no Dataset wait). `GET /views` adds `needs_met`; the viewer hides the chart until it is true |
 
 The bundled custom views (regrouped in commit 4f75cfe; the old 每月・每年
 dashboard was dropped in favour of the period toggle; the polarization-index,
@@ -735,6 +735,7 @@ source (synthetic FITs).
 | 2026-10-04 | code-sync | N/A | Run FTP for power TSS on COROS / TP + `tss_source` / watch-power block; per-tenant engine.json / corrections / views / render cache, parity default by WKO5 presence; WKO5 chart packs no longer bundled (WKO5_VIEWS_DIR); chart ids, view i18n sidecar, variants, new chart kinds / keys (z5gate, activity, periodzones, climbvam, race_refs, drift_bars, sports / order); drift bars from `drift()`; stats / bin / lookup / filter implemented; 使用功率 auto; viewer mode cards / variant toggle; new activity endpoints; dropped monotony / PI charts and iLevels; all anchors refreshed |
 | 2026-10-04 | SP-45 | N/A | 我的訓練 › 負荷 PMC gains the aerobic / anaerobic TIS charts (per activity + Chronic / Acute TIS load); TIS built-ins count as power for 使用功率; real-data TIS golden test |
 | 2026-10-06 | feature | SP-237 | 訓練量 →「每週下坡衝擊負荷」gains a right axis (`steps/min`, spm) with two dashed lines: trail-run and hike cadence on steep downhills (`chart_metrics.downhill_cadence_expr`: < −8 % grade, > 1.6 km/h, sample gap ≤ 30 s, Σ cadence·dt ÷ Σ dt per week × 2; < 10 min in the week = no point), in their bars' colours; bars unchanged, still `"sports": ["trail"]`; help + en legend updated |
+| 2026-10-06 | fix | SP-243 follow-up | The 5 + 5 有杖 / 沒杖 marks count only the trail runs and hikes the chart uses (user decision): `pole_compare.counts` / `chart_rows` / `used` (same `climb_vam.kind_of` as the panel) feed `needs_met`, the panel and `GET /activities` → `pole_compare`; each activity gets `pole_chart` (the editor's live recount skips the others); hint / empty / help text say so (zh-TW + en). 365-day window, 2 min per bin and VAM ÷ HR unchanged |
 
 
 ## Banded charts and the 使用功率 setting (2026-10)

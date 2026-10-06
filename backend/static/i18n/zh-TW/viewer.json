@@ -67,7 +67,7 @@
   "pole.with": "有杖",
   "pole.without": "沒杖",
   "pole.help": "說明",
-  "pole.summary": "這段期間：有杖 {w} 次、沒杖 {wo} 次活動（越野跑和登山健行）；每個點是中位數，n < {n} 不畫。近 365 天共標有杖 {year_w} 次、沒杖 {year_wo} 次。",
+  "pole.summary": "這段期間：有杖 {w} 次、沒杖 {wo} 次活動（越野跑和登山健行）；每個點是中位數，n < {n} 不畫。近 365 天的越野跑和登山健行共標有杖 {year_w} 次、沒杖 {year_wo} 次。",
   "pole.axis_n": "有 n={w}・沒 n={wo}",
   "pole.aria": "{metric}：每個坡度有杖和沒杖的中位數",
   "pole.median": "中位數",

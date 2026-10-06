@@ -67,7 +67,7 @@
   "pole.with": "With poles",
   "pole.without": "No poles",
   "pole.help": "Help",
-  "pole.summary": "In this period: {w} activities with poles, {wo} without (trail runs and hikes); each point is a median, n < {n} isn't drawn. Marked in the last 365 days: {year_w} with poles, {year_wo} without.",
+  "pole.summary": "In this period: {w} activities with poles, {wo} without (trail runs and hikes); each point is a median, n < {n} isn't drawn. Trail runs and hikes marked in the last 365 days: {year_w} with poles, {year_wo} without.",
   "pole.axis_n": "with n={w} · without n={wo}",
   "pole.aria": "{metric}: median with and without poles per grade",
   "pole.median": "Median",

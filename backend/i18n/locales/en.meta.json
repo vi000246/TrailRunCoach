@@ -5007,9 +5007,9 @@
     "draft": true,
     "src": "backend/engine/thresholds.py:264"
   },
-  "近 {days} 天標了「有杖」{w} 次、「沒杖」{wo} 次；兩邊都要至少 {need} 次才比較。到活動列表編輯活動，在「登山杖」選有杖或沒杖。": {
+  "近 {days} 天的越野跑、登山健行標了「有杖」{w} 次、「沒杖」{wo} 次；兩邊都要至少 {need} 次才比較。到活動列表編輯活動，在「登山杖」選有杖或沒杖。": {
     "draft": false,
-    "src": "backend/engine/panels/pole_compare.py:179"
+    "src": "backend/engine/panels/pole_compare.py:215"
   },
   "近 {weeks} 週 {n} 次輕鬆路跑的中位數": {
     "draft": true,
