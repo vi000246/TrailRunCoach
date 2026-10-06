@@ -151,7 +151,7 @@ def header_rows(plan: dict, *, name: str, date: Optional[str], computed_at: dt.d
         rows.append(["海拔適應", ACCL_LABEL.get(acclimatisation, acclimatisation)])
     h = s.get("heat") or {}
     if h.get("mode") == "hourly":
-        rows.append(["熱修正", f"逐段：依各段 ETA 取逐時預報（{h.get('passes')} 次迭代）", "推估"])
+        rows.append(["熱修正", f"逐段：依各段 ETA 取逐時氣溫（預報或近 10 年同月平均；{h.get('passes')} 次迭代）", "推估"])
     else:
         env_to = (plan.get("env") or {}).get("to") or {}
         t = env_to.get("temp_c")
