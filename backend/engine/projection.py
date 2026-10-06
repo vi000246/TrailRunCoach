@@ -451,8 +451,10 @@ def _advance(steps: dict, rung: Optional[str]) -> None:
 
 def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 42.0,
                   atlconstant: float = 7.0, prefs=None, blackouts=None, events=None,
-                  heat_acts: Optional[list] = None, b2b_accepted: Optional[list] = None) -> list[dict]:
+                  heat_acts: Optional[list] = None, b2b_accepted: Optional[list] = None,
+                  weight: Optional[float] = None) -> list[dict]:
     """Weeks after cur['week'] (a week_plan() result) up to `until` (≤ MAX_WEEKS).
+    `weight`: the settings' body weight (kg) — the 賽前碳水負荷 note in grams too (SP-285).
     `b2b_accepted`: the accepted B2B entries (engine/b2b.py); a due B2B in a
     week without one is only a suggestion (the week's `b2b_suggestion`).
     `ctlconstant` / `atlconstant`: the athlete's (ds.athlete), as for the PMC.
@@ -789,6 +791,15 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
         elif kind in ("base", "specific"):
             last_runs = sum(1 for s in ss if s["kind"] in O.RUN_KINDS and s["day"]) or last_runs
             pre_h = None
+        if tc:
+            # 賽前碳水負荷 (SP-285): the same week note as week_plan (overview.carb_load_note)
+            try:
+                n = O.carb_load_note(tc, next((e for e in events or () if getattr(e, "id", None) == tc["id"]), None),
+                                     weight, week)
+            except Exception:              # noqa: BLE001 — a hint only
+                n = None
+            if n:
+                notes.append(n)
         s_note = len(notes) > n_notes
         prev_lost = lost
         drop = [s for s in ss if not s["day"] and s["kind"] != "strength"] if lost else []

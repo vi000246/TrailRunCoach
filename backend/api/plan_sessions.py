@@ -93,7 +93,8 @@ def _compute_inputs(blackouts: Optional[list] = None) -> dict:
     except Exception:                       # noqa: BLE001
         heat_acts = []
     weeks = P.project_weeks(cur, phases, horizon, ds.athlete.ctlconstant, ds.athlete.atlconstant, prefs=prefs,
-                            blackouts=bos, events=st.plan.events, heat_acts=heat_acts, b2b_accepted=acc)
+                            blackouts=bos, events=st.plan.events, heat_acts=heat_acts, b2b_accepted=acc,
+                            weight=st.plan.weight_on(today))
     since = monday - dt.timedelta(weeks=4)
     acts = activity_rows(ds, since, today + dt.timedelta(days=1), recorded)
     last_act = max((O.wdate(w) for w in ds.workouts if O.wdate(w) <= today), default=None)
@@ -331,12 +332,15 @@ def _view(s: dict, inp: dict, rows: dict, today: str, prov=None) -> dict:
     """`coros` keeps its name in the API: the push status at the active provider.
     `quality_family`: a 強度課's 有氧間歇 / VO2max 間歇 / 速度 (workout_templates.session_family: the
     stored `family` the user picked, else read from the steps); `steps_family` = what the steps
-    read as (the editor's 「步驟看起來像…」 hint when it differs, SP-79)."""
+    read as (the editor's 「步驟看起來像…」 hint when it differs, SP-79). `pre_meal`: 「課前要吃」
+    on a 強度課 / ≥ 2 h long run (engine/session_fuel.py, SP-286) — display only, never pushed."""
+    from backend.engine import session_fuel as SF
     prov = prov or WT.get(WT.DEFAULT)
     v = dict(s)
     got = WTPL.steps_family(s, inp["thresholds"])
     v["quality_family"] = WTPL.session_family(s, inp["thresholds"], derived=got)
     v["steps_family"] = got
+    v["pre_meal"] = SF.pre_meal(s)
     if s["state"] == "active":
         v["coros"] = prov.status_of(PS.push_dict(s), inp["thresholds"], rows.get(s["uid"]), today)
         note = pace_note(s, inp["thresholds"])

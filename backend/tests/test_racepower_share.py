@@ -50,6 +50,8 @@ def test_share_round_trip_without_weight(client):
     assert snap["title"] == "台北馬 測試" and snap["type"] == "road" and snap["weight"] is None
     assert "w_per_kg" not in snap["summary"] and "body" not in snap["fuel"] and "crosscheck" not in snap["fuel"]
     assert "g_day" not in snap["fuel"]["loading"] and snap["fuel"]["loading"]["label"] == "前一天 10–12 g/kg"
+    ld = snap["fuel"]["loading"]                                                    # SP-287: share page parts
+    assert ld["when"] == "前一天" and ld["amount"] == "10–12 g/kg" and ld["note"] == "總熱量也要跟著多，不只換比例"
     assert snap["inputs"]["stops"] == [{"km": 21.0, "type": "water", "name": "半程", "minutes": 0.0}]
     assert len(snap["segments"]) == 43 and "kcal" in snap["segments"][0]
     # nothing beyond the whitelist (no sources, model inputs, warnings quoting the athlete's records)

@@ -315,6 +315,14 @@
     "draft": true,
     "src": "backend/engine/strength_plan.py:144"
   },
+  "Bussau 2002（10 g/kg 一天肌肝醣就到頂）；ISSN 2019 Tiller（超馬：賽前 48 小時，可分兩天）；Vitale & Getzin 2019（> 90 min：10–12 g/kg/天）": {
+    "draft": true,
+    "src": "backend/engine/racepower/fuel.py:345"
+  },
+  "Bussau 2002（10 g/kg 一天肌肝醣就到頂）；Vitale & Getzin 2019（> 90 min：10–12 g/kg/天）": {
+    "draft": true,
+    "src": "backend/engine/racepower/fuel.py:349"
+  },
   "C 賽事「{race}」{date} 當訓練跑，其他照常": {
     "draft": true,
     "src": "backend/engine/post_race.py:340"
@@ -587,6 +595,10 @@
     "draft": true,
     "src": "backend/engine/workout_review.py:2725"
   },
+  "Tarnopolsky 2001（只提高碳水比例時肝醣沒增加，總熱量也多吃才補得上）": {
+    "draft": true,
+    "src": "backend/engine/racepower/fuel.py:355"
+  },
   "TrainerRoad；Pfitzinger；CTS（教練級）": {
     "draft": true,
     "src": "backend/engine/post_race.py:241"
@@ -606,6 +618,18 @@
   "VO2max 間歇": {
     "draft": true,
     "src": "backend/engine/workout_templates.py:434"
+  },
+  "Vitale & Getzin 2019（< 90 min：6 g/kg/天）": {
+    "draft": true,
+    "src": "backend/engine/racepower/fuel.py:352"
+  },
+  "Vitale & Getzin 2019：3–6 mg/kg，賽前 30–90 min": {
+    "draft": true,
+    "src": "backend/engine/racepower/fuel.py:359"
+  },
+  "Vitale & Getzin 2019：賽前 1–4 h 吃 1–4 g/kg": {
+    "draft": true,
+    "src": "backend/engine/racepower/fuel.py:358"
   },
   "WKO5 athlete 檔（選用）": {
     "draft": true,
@@ -1026,6 +1050,18 @@
   "{p}沒有「{x}」結束條件：推送時換成預估時間 {d}（推估）": {
     "draft": true,
     "src": "backend/engine/workout_steps.py:1208"
+  },
+  "{race} 出發前飲食：前一晚正常吃就好；百岳強度低、天數多，重點是每天吃夠總熱量（推估）": {
+    "draft": true,
+    "src": "backend/engine/overview.py:2431"
+  },
+  "{race} 賽前碳水負荷：{how}；選熟悉、低纖、低脂的食物；總熱量也要跟著多，不只換比例。體重會多 1–2 kg，是肝醣帶的水（說明，推估）": {
+    "draft": true,
+    "src": "backend/engine/overview.py:2438"
+  },
+  "{race} 賽前飲食：{how}；比賽不到 90 分鐘，不必刻意多吃；選熟悉、低纖、低脂的食物": {
+    "draft": true,
+    "src": "backend/engine/overview.py:2444"
   },
   "{ramp}：到注意線，只能撐一兩週": {
     "draft": true,
@@ -2003,9 +2039,49 @@
     "draft": false,
     "src": "backend/engine/workout_review.py:2710"
   },
+  "前 1 天（可分 2 天）每天約 {lo:.0f}–{hi:.0f} g/kg 碳水": {
+    "draft": true,
+    "src": "backend/engine/overview.py:2437"
+  },
+  "前 1 天（可分 2 天）每天約 {lo:.0f}–{hi:.0f} g/kg 碳水（{kg:.0f} kg：約 {glo:.0f}–{ghi:.0f} g）": {
+    "draft": true,
+    "src": "backend/engine/overview.py:2435"
+  },
+  "前 1–2 天": {
+    "draft": true,
+    "src": "backend/engine/racepower/fuel.py:344"
+  },
+  "前 1–2 天 10–12 g/kg": {
+    "draft": true,
+    "src": "backend/engine/racepower/fuel.py:344"
+  },
   "前 {h} 小時不要有長跑、強度課或比賽": {
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:538"
+  },
+  "前一天": {
+    "draft": true,
+    "src": "backend/engine/racepower/fuel.py:348"
+  },
+  "前一天 10–12 g/kg": {
+    "draft": true,
+    "src": "backend/engine/racepower/fuel.py:348"
+  },
+  "前一天正常高碳水，約 {g:.0f} g/kg": {
+    "draft": true,
+    "src": "backend/engine/overview.py:2443"
+  },
+  "前一天正常高碳水，約 {g:.0f} g/kg（{kg:.0f} kg：約 {grams:.0f} g）": {
+    "draft": true,
+    "src": "backend/engine/overview.py:2442"
+  },
+  "前一天約 6 g/kg（正常高碳水）": {
+    "draft": true,
+    "src": "backend/engine/racepower/fuel.py:351"
+  },
+  "前一晚正常吃，不必超補": {
+    "draft": true,
+    "src": "backend/engine/racepower/fuel.py:337"
   },
   "前半 50%、後半 75%": {
     "draft": true,
@@ -3215,6 +3291,10 @@
     "draft": true,
     "src": "backend/engine/drift_calib.py:123"
   },
+  "推估（§3.2：低強度、多日，重點是每日總熱量）": {
+    "draft": true,
+    "src": "backend/engine/racepower/fuel.py:338"
+  },
   "推估（以台北夏天傍晚設定；150 以上算滿劑量）": {
     "draft": true,
     "src": "backend/engine/advanced_params.py:24"
@@ -3334,6 +3414,10 @@
   "攻頂日模擬｜{name}": {
     "draft": true,
     "src": "backend/engine/specific_phase.py:426"
+  },
+  "教練常見做法（推估）": {
+    "draft": true,
+    "src": "backend/engine/racepower/fuel.py:360"
   },
   "教練級": {
     "draft": true,
@@ -4655,6 +4739,10 @@
     "draft": true,
     "src": "backend/engine/altitude.py:198"
   },
+  "約 6 g/kg（正常高碳水）": {
+    "draft": true,
+    "src": "backend/engine/racepower/fuel.py:351"
+  },
   "紅燈": {
     "draft": true,
     "src": "backend/engine/injuries.py:679"
@@ -4742,6 +4830,10 @@
   "總時間 {m:.0f} 分超過這天上限 {cap:.0f} 分（課表偏好：{mode}）": {
     "draft": true,
     "src": "backend/engine/workout_steps.py:1200"
+  },
+  "總熱量也要跟著多，不只換比例": {
+    "draft": true,
+    "src": "backend/engine/racepower/fuel.py:354"
   },
   "耐久": {
     "draft": true,
@@ -4959,6 +5051,10 @@
     "draft": true,
     "src": "backend/engine/suggestions.py:127"
   },
+  "課前 1–4 小時吃含碳水的一餐或點心，不要空腹做（Aird 2018、Mata 2019、Impey 2018）": {
+    "draft": true,
+    "src": "backend/engine/session_fuel.py:32"
+  },
   "課表": {
     "draft": true,
     "src": "backend/engine/workout_review.py:2734"
@@ -5062,6 +5158,10 @@
   "賽前 2 週不再做接近線的長天（減量期；UA、Koop）": {
     "draft": true,
     "src": "backend/engine/panels/race_refs.py:187"
+  },
+  "賽前 2–3 h 喝 500 ml，10 分鐘前再 300 ml": {
+    "draft": true,
+    "src": "backend/engine/racepower/fuel.py:360"
   },
   "賽前 {n} 天內不排強度課": {
     "draft": true,
@@ -6258,6 +6358,10 @@
   "黃燈": {
     "draft": true,
     "src": "backend/engine/injuries.py:679"
+  },
+  "（Bussau 2002、ISSN 2019、Hawley 1997）": {
+    "draft": true,
+    "src": "backend/engine/overview.py:2429"
   },
   "（LTHR 有獨立證據：{s}）": {
     "draft": false,
