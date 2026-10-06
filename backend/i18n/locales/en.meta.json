@@ -4399,6 +4399,10 @@
     "draft": true,
     "src": "backend/engine/planning.py:290"
   },
+  "衝擊高於平常、步頻低於平常 → 下坡縮小步幅、加快步頻可以減少膝蓋負擔（Van Hooren 2024、Heiderscheit 2011）": {
+    "draft": false,
+    "src": "backend/engine/workout_review.py:3575"
+  },
   "補給站": {
     "draft": true,
     "src": "backend/engine/racepower/watch_export.py:46"
