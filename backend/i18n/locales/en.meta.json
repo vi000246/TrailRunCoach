@@ -4783,9 +4783,9 @@
     "draft": true,
     "src": "backend/engine/plan_store.py:316"
   },
-  "跨級：ITRA 依 EP 分級（XXS–XXL）；UTMB 報名等於一次只能往上跳一級；完賽過越多場越不容易 DNF（Corrion 2018、Maleka 2026）；「高兩級」和「24 個月」是推估": {
+  "跨級：ITRA 依 EP 分級（XXS–XXL）。看「過去 24 個月」＝ UTMB 指數的有效期、Hardrock 100 的資格期；「高兩級」才判太難＝比 UTMB 總決賽「最多往上跳一級」略寬（ITRA 兩級約等於 UTMB 一級，這個對應是推估）；完賽過越多場越不容易 DNF（Corrion 2018、Maleka 2026）": {
     "draft": true,
-    "src": "backend/engine/race_feasibility.py:88"
+    "src": "backend/engine/race_feasibility.py:116"
   },
   "路況差的技術路段：時間＋爬升＋RPE，不設心率、功率目標（只給參考）；RPE ≥ 7 算強度課": {
     "draft": true,
