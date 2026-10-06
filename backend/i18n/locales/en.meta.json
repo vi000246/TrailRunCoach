@@ -703,6 +703,10 @@
     "draft": true,
     "src": "backend/engine/panels/drift_bars.py:32"
   },
+  "{km:g} km 內沒有鄉鎮預報點": {
+    "draft": true,
+    "src": "backend/engine/racepower/weather.py:787"
+  },
   "{km:g} km 路跑": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:1616"
@@ -1366,6 +1370,14 @@
   "中": {
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:124"
+  },
+  "中央氣象署 鄉鎮一週預報": {
+    "draft": true,
+    "src": "backend/engine/racepower/weather.py:108"
+  },
+  "中央氣象署 鄉鎮三天預報": {
+    "draft": true,
+    "src": "backend/engine/racepower/weather.py:108"
   },
   "中間訓練：兩場 A 賽相隔 {span}，這週最多練到上一場賽前 4 週平均 {h:.1f} h 的 {share:.0%}（Higdon 等教練級，比例推估）": {
     "draft": true,
@@ -3063,6 +3075,10 @@
     "draft": true,
     "src": "backend/engine/status.py:573"
   },
+  "日期不在一週預報範圍（還有 {n} 天）": {
+    "draft": true,
+    "src": "backend/engine/racepower/weather.py:770"
+  },
   "日期格式不對：{v!r}": {
     "draft": true,
     "src": "backend/engine/plan_store.py:273"
@@ -3327,6 +3343,10 @@
     "draft": true,
     "src": "backend/engine/workout_review.py:530"
   },
+  "未使用": {
+    "draft": true,
+    "src": "backend/engine/racepower/weather.py:768"
+  },
   "未指定": {
     "draft": true,
     "src": "backend/engine/injuries.py:155"
@@ -3338,6 +3358,10 @@
   "未設定": {
     "draft": true,
     "src": "backend/engine/wko5expr/fitdataset.py:92"
+  },
+  "未設定 CWA 授權碼": {
+    "draft": true,
+    "src": "backend/engine/racepower/weather.py:776"
   },
   "本人 n={n}": {
     "draft": true,
@@ -3374,6 +3398,10 @@
   "本週維持或減量，不要再加": {
     "draft": true,
     "src": "backend/engine/status.py:330"
+  },
+  "查不到預報點或比賽地點的海拔": {
+    "draft": true,
+    "src": "backend/engine/racepower/weather.py:797"
   },
   "查表": {
     "draft": true,
@@ -3650,6 +3678,10 @@
   "沒有專項期：上一場 A 賽事「{name}」{date} 才結束": {
     "draft": true,
     "src": "backend/engine/planning.py:601"
+  },
+  "沒有座標": {
+    "draft": true,
+    "src": "backend/engine/racepower/weather.py:772"
   },
   "沒有最大心率，到設定填": {
     "draft": true,
@@ -4703,6 +4735,10 @@
     "draft": true,
     "src": "backend/engine/status.py:319"
   },
+  "超出三天預報範圍": {
+    "draft": true,
+    "src": "backend/engine/racepower/weather.py:780"
+  },
   "超出建議的 {n} 天內": {
     "draft": true,
     "src": "backend/api/plan_sessions.py:517"
@@ -5542,6 +5578,18 @@
   "預估還沒到山頂就得撤退：這座百岳可能還不適合現在的你。可以換短一點的路線、多排一天，或先不去": {
     "draft": true,
     "src": "backend/engine/race_feasibility.py:294"
+  },
+  "預報有雨：下坡和技術路段可能比預估慢，跌倒風險較高；建議用杖、注意鞋底抓地": {
+    "draft": true,
+    "src": "backend/engine/racepower/weather.py:533"
+  },
+  "預報有雨：路面濕滑，轉彎和下坡注意抓地，跌倒風險較高": {
+    "draft": true,
+    "src": "backend/engine/racepower/weather.py:547"
+  },
+  "預報沒有涵蓋這些日期": {
+    "draft": true,
+    "src": "backend/engine/racepower/weather.py:791"
   },
   "預設 −0.07": {
     "draft": true,
