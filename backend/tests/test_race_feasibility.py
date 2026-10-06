@@ -433,3 +433,142 @@ def test_baiyue_inputs_need_a_power_meter():
     assert climb is None and power is None                                          # no ds; no power meter
     plan.profile = {"power_meter": "stryd"}
     assert F.baiyue_inputs(plan, None, TODAY, e)[1] == {"cp": 250.0, "kg": 65.0}
+
+
+# ---- SP-220: the cutoff of a trail race = the calculator's moving time + the stops ----------------
+
+def fin(moving_h=7.0, stop_h=0.0, src=None, **kw):
+    return {"moving_h": moving_h, "stop_h": stop_h, "stop_src": src, "stop_user_min": kw.pop("user_min", 0.0),
+            "short_min": kw.pop("short_min", None), "n_runs": kw.pop("n_runs", None), "effort": kw.pop("effort", 1.0),
+            **kw}
+
+
+def test_trail_cutoff_adding_the_stops_turns_ok_into_tight():
+    """SP-220 acceptance: moving 7.0 h against an 8 h cutoff is 87.5 % (ok); with 30 minutes of aid
+    stations it is 7.5 h = 93.8 % (tight). The race line's own hours (the old CP + Riegel time) are
+    not used while the HR model gives a moving time."""
+    e = ev(cutoff_hours=8.0)
+    ln = line(e, [5.0])
+    r = F.assess(e, ln, TODAY, hist(km=40.0, climb=2000.0), finish=fin(7.0))
+    c = next(c for c in r["checks"] if c["id"] == "cutoff")
+    assert c["level"] == "ok" and c["finish_h"] == 7.0 and c["moving_h"] == 7.0 and c["stop_h"] == 0.0
+    assert "沒有算停留" in c["text"] and c["time_method"] == "trail_hr"
+    r = F.assess(e, ln, TODAY, hist(km=40.0, climb=2000.0), finish=fin(7.0, 0.5, "user", user_min=30.0))
+    c = next(c for c in r["checks"] if c["id"] == "cutoff")
+    assert c["level"] == "tight" and c["finish_h"] == 7.5 and c["stop_src"] == "user"
+    assert "移動 7.0 小時" in c["text"] and "停留 30 分鐘" in c["text"] and "7.5 小時" in c["text"]
+    assert "補給站 30 分鐘" in c["text"] and "沒有算停留" not in c["text"]
+
+
+def test_trail_cutoff_stops_from_past_races_and_over():
+    e = ev(cutoff_hours=7.0)
+    f = fin(6.5, 0.75, "history", n_runs=4, short_min=12.0)
+    r = F.assess(e, line(e, [5.0]), TODAY, hist(km=40.0, climb=2000.0), finish=f)
+    c = next(c for c in r["checks"] if c["id"] == "cutoff")
+    assert c["level"] == "over" and "過去 4 場比賽" in c["text"] and "關門" in r["suggestions"][0]
+    f = fin(5.0, 0.5, "user", user_min=20.0, n_runs=3, short_min=10.0)
+    c = next(c for c in F.assess(e, line(e, [5.0]), TODAY, hist(km=40.0, climb=2000.0), finish=f)["checks"]
+             if c["id"] == "cutoff")
+    assert "補給站 20 分鐘" in c["text"] and "零碎停頓約 10 分鐘" in c["text"] and "3 場" in c["text"]
+
+
+def test_trail_cutoff_without_an_hr_model_falls_back_and_says_so():
+    e = ev(cutoff_hours=8.0)
+    r = F.assess(e, line(e, [6.0]), TODAY, hist(km=40.0, climb=2000.0),
+                 finish=fin(None, 0.5, "user", user_min=30.0, fallback="power"))
+    c = next(c for c in r["checks"] if c["id"] == "cutoff")
+    assert c["moving_h"] == 6.0 and c["finish_h"] == 6.5 and c["time_method"] == "power"
+    assert "功率模型" in c["text"] and "停留 30 分鐘" in c["text"]
+    c = next(c for c in F.assess(e, line(e, [6.0]), TODAY, hist(km=40.0, climb=2000.0),
+                                 finish=fin(None, fallback="plan"))["checks"] if c["id"] == "cutoff")
+    assert "賽季計畫" in c["text"] and c["time_method"] == "plan"
+
+
+def test_trail_cutoff_says_a_lower_effort_target():
+    e = ev(cutoff_hours=10.0)
+    c = next(c for c in F.assess(e, line(e, [6.0]), TODAY, hist(km=40.0, climb=2000.0),
+                                 finish=fin(7.0, effort=0.9))["checks"] if c["id"] == "cutoff")
+    assert "努力目標 90%" in c["text"]
+
+
+def test_calc_stops_as_the_page_sends_them():
+    inp = {"stops": [{"km": 5.0, "type": "aid", "minutes": None}, {"km": 10.0, "type": "big", "minutes": 8},
+                     {"km": 12.0, "type": "water", "minutes": ""}, {"km": 0.0, "type": "aid", "minutes": 3},
+                     {"km": 40.0, "type": "aid", "minutes": 3}, {"km": 20.0, "type": "bogus", "minutes": 1},
+                     {"km": 25.0, "minutes": 1}, {"km": 25.02, "minutes": 1}, {"km": "x"}, "junk"]}
+    got = F.calc_stops(inp, 30.0)
+    assert [(s["km"], s["type"], s["minutes"]) for s in got] == [
+        (5.0, "aid", 2.0), (10.0, "big", 8.0), (12.0, "water", 0.5), (20.0, "aid", 1.0)]
+    assert F.calc_stops({}, 30.0) == [] and F.calc_stops({"stops": "x"}, 30.0) == []
+    assert F.calc_effort({"S": {"mode": "auto", "effort": 0.95}}) == 0.95
+    assert F.calc_effort({"S": {"mode": "time", "effort": 0.95}}) == 1.0 and F.calc_effort({}) == 1.0
+
+
+def _course(filename=None):
+    return {"totals": {"km": 30.0, "gain_m": 2000.0, "loss_m": 1900.0}, "days": [], "filename": filename,
+            "descent_assumed": filename is None}
+
+
+def test_trail_finish_takes_the_calculators_moving_time_and_stops(monkeypatch):
+    seen = {}
+    monkeypatch.setattr(F, "calc_inputs", lambda e: {"S": {"mode": "auto", "effort": 1}, "stops": [
+        {"km": 10.0, "type": "aid", "minutes": 4}, {"km": 20.0, "type": "big", "minutes": None}]})
+
+    def plan(body):
+        seen["body"] = body
+        return {"summary": {"total_method": "trail_hr", "time_s": 6.0 * 3600, "stops_s": 540.0,
+                            "nonmoving": {"total_s": 900.0, "short_s": 360.0, "method": "user", "n_runs": 3}}}
+    out = F.trail_finish(ev(cutoff_hours=8.0), _course("race.gpx"), plan_fn=plan)
+    b = seen["body"]
+    assert b.type == "trail" and b.mode == "auto" and b.course.event_id == "e1" and b.course.manual is None
+    assert [(s.km, s.minutes) for s in b.stops] == [(10.0, 4.0), (20.0, 5.0)]
+    assert out["moving_h"] == 6.0 and out["stop_h"] == 0.25 and out["stop_src"] == "user"
+    assert out["stop_user_min"] == 9.0 and out["n_runs"] == 3 and out["short_min"] == 6.0
+
+
+def test_trail_finish_without_a_gpx_profile_or_hr_model(monkeypatch):
+    monkeypatch.setattr(F, "calc_inputs", lambda e: {"stops": [{"km": 10.0, "type": "aid", "minutes": 6}]})
+    seen = {}
+
+    def plan(body):
+        seen["body"] = body
+        return {"summary": {"total_method": "v1", "time_s": 5.0 * 3600, "stops_s": 360.0, "nonmoving": None}}
+    out = F.trail_finish(ev(cutoff_hours=8.0), _course(), plan_fn=plan)
+    assert seen["body"].course.manual == {"km": 30.0, "gain": 2000.0, "loss": None}
+    assert out["moving_h"] is None and out["stop_h"] == 0.1 and out["stop_src"] == "user"
+
+    def boom(body):
+        raise ValueError("沒有 CP")
+    out = F.trail_finish(ev(cutoff_hours=8.0), _course(), plan_fn=boom)
+    assert out["moving_h"] is None and out["stop_h"] == 0.1
+    monkeypatch.setattr(F, "calc_inputs", lambda e: {})
+    out = F.trail_finish(ev(cutoff_hours=8.0), _course(), plan_fn=lambda b: {
+        "summary": {"total_method": "trail_hr", "time_s": 3600.0, "nonmoving": {
+            "total_s": 600.0, "short_s": 120.0, "method": "rate", "n_runs": 5}}})
+    assert out["stop_src"] == "history" and out["stop_h"] == pytest.approx(600 / 3600)
+
+
+def test_races_use_the_trail_finish_for_one_piece_trail_races_only(monkeypatch):
+    monkeypatch.setattr(F, "weekly_history", lambda ds, today, weeks=4: hist(km=40.0, climb=2000.0, n=weeks))
+    monkeypatch.setattr(F, "activity_rows", lambda ds, today, days=42: [])
+    plan = Plan(events=[ev(eid="t", cutoff_hours=8.0), ev(eid="r", kind="road", distance_km=42.2, climbing_m=100,
+                                                         est_hours=4.0, cutoff_hours=6.0),
+                        ev(eid="s", days=3, race_format="stage", cutoff_hours=30.0, est_hours=20.0),
+                        ev(eid="n", cutoff_hours=None)])
+    asked = []
+
+    def finish(e, course):
+        asked.append(e.id)
+        return fin(7.0, 0.5, "user", user_min=30.0)
+    out = {r["event_id"]: r for r in F.races(plan, None, TODAY, predict=lambda e, c=None: [5.0],
+                                             gpx=lambda e: None, finish=finish)}
+    assert asked == ["t"]
+    ct = next(c for c in out["t"]["checks"] if c["id"] == "cutoff")
+    assert ct["finish_h"] == 7.5 and ct["level"] == "tight"
+    cr = next(c for c in out["r"]["checks"] if c["id"] == "cutoff")
+    assert "moving_h" not in cr and "預估" in cr["text"]
+    # the calculator gives no moving time: the old (CP + Riegel) hours, said so
+    out = F.races(plan, None, TODAY, event_id="t", predict=lambda e, c=None: [5.0], gpx=lambda e: None,
+                  finish=lambda e, c: None)
+    ct = next(c for c in out[0]["checks"] if c["id"] == "cutoff")
+    assert ct["finish_h"] == 5.0 and ct["time_method"] == "power" and "功率模型" in ct["text"]

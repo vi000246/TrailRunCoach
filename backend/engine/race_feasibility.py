@@ -27,6 +27,13 @@ Only advice — nothing here changes the plan or the event. Each check gives a l
            ≥ 3 weeks in a row from 6 weeks out; 100 km / 100 mi: 9 h for ≥ 6 weeks from 9 weeks
            out (coach experience). Never worse than tight.
   cutoff   races: the predicted finish ÷ the cutoff (ok ≤ 90 %, tight ≤ 100 %, over above).
+           A trail race in one piece (SP-220, docs/research/trail-pacing-strategy.md §1.2 item 3,
+           §4.3): the cutoff is clock time, so the finish = the race calculator's own moving time
+           (its HR pace model — the main screen's number, not the old CP + Riegel /predict, which
+           ran fast on trail) + the stops: the calculator's aid stations for the event, else the
+           athlete's own past races (nonmoving.py); neither → no stops, and the text says so (owner
+           2026-10-05: no population default — SP-221 cancelled). No HR model → the old moving
+           time, said in the text. Road races and stage races keep the old finish.
            百岳: the predicted time to the summit vs the turnaround (撤退時間, hours from that
            day's start): later = over (「不適合這座百岳」, the owner's rule 2026-10-05), < 30 min
            to spare = tight (推估).
@@ -93,6 +100,7 @@ ITRA_CLASSES = (("XXS", 0.0), ("XS", 25.0), ("S", 45.0), ("M", 75.0), ("L", 115.
 LONG_DAY_H = 6.0             # planning.LONG_EVENT_HOURS: a longer / shorter event for UA's rule
 CLIMB_MIN_M = 200.0          # 推估: a race day climbing less is judged on km only
 CUTOFF_TIGHT = 0.90          # 推估: a finish within 10 % of the cutoff
+TRAIL_KINDS = ("race", "other")   # the events the race calculator runs as 越野 (race_refs.CALC_TYPE)
 SUMMIT_SPARE_H = 0.5         # 推估: < 30 min to spare at the summit
 # Koop〈How Much Do You Need To Train〉: (race km ≥, hours a week, weeks in a row, from weeks out)
 KOOP = ((100.0, 9.0, 6, 9), (50.0, 6.0, 3, 6))
@@ -393,16 +401,60 @@ def summit_eta(course: dict, hours: list[float], summit_km: float, pieces: Optio
 
 
 # ---------------------------------------------------------------------------
+# the cutoff of a trail race (SP-220)
+# ---------------------------------------------------------------------------
+
+def cutoff_finish(finish: dict, line_h: float, cut: float) -> tuple[float, str, dict]:
+    """(finish hours, the check's text, its extra fields) from trail_finish()'s {"moving_h" (None = no
+    HR pace model), "stop_h", "stop_src" (user / history / None), "stop_user_min", "short_min",
+    "n_runs", "effort", "fallback" (power / plan)}: moving + stops, each said in the text; no stop
+    data → 「沒有算停留」; no HR model → the race line's hours (`line_h`, the old moving time)."""
+    mv = finish.get("moving_h")
+    moving = float(mv) if mv else float(line_h)
+    stop = max(0.0, float(finish.get("stop_h") or 0.0))
+    fin = moving + stop
+    src = finish.get("stop_src") if stop > 0 else None
+    if src:
+        txt = _("照現在的體能，預估移動 {m:.1f} 小時＋停留 {s:.0f} 分鐘＝ {f:.1f} 小時；關門是 {c:g} 小時",
+                m=moving, s=stop * 60.0, f=fin, c=cut)
+        um, n = float(finish.get("stop_user_min") or 0.0), finish.get("n_runs")
+        if src == "user" and n:
+            why = _("停留＝賽事計算機的補給站 {u:g} 分鐘＋零碎停頓約 {s:.0f} 分鐘（照你過去 {n} 場比賽的比例）",
+                    u=um, s=float(finish.get("short_min") or 0.0), n=n)
+        elif src == "user":
+            why = _("停留＝賽事計算機的補給站 {u:g} 分鐘", u=um)
+        else:
+            why = _("停留用你過去 {n} 場比賽的停留推算（賽事計算機沒有填補給站）", n=n or 0)
+        txt += _("（{why}）", why=why)
+    else:
+        txt = _("照現在的體能，預估移動 {m:.1f} 小時；關門是 {c:g} 小時", m=moving, c=cut)
+        txt += _("。沒有算停留：在賽事計算機的補給站填停留分鐘，或累積 2 場以上的越野比賽紀錄，就會算進來")
+    eff = finish.get("effort")
+    if mv and eff and abs(float(eff) - 1.0) > 1e-9:
+        txt += _("。用賽事計算機的努力目標 {p:.0%}", p=float(eff))
+    if not mv:
+        txt += ("。" + (_("沒有越野心率配速模型，移動時間退回舊的功率模型（CP＋Riegel），越野上常算得太快")
+                       if finish.get("fallback") == "power" else
+                       _("沒有越野心率配速模型，移動時間用賽季計畫填的預估時間")))
+    kw = {"moving_h": round(moving, 2), "stop_h": round(stop, 2), "stop_src": src,
+          "time_method": "trail_hr" if mv else (finish.get("fallback") or "plan")}
+    return fin, txt, kw
+
+
+# ---------------------------------------------------------------------------
 # the verdict
 # ---------------------------------------------------------------------------
 
 def assess(e, line: Optional[dict], today: dt.date, hist: list[dict], summit: Optional[dict] = None,
-           best: Optional[dict] = None, climb: Optional[dict] = None, power: Optional[dict] = None) -> dict:
+           best: Optional[dict] = None, climb: Optional[dict] = None, power: Optional[dict] = None,
+           finish: Optional[dict] = None) -> dict:
     """The verdict for event `e` (planning.Event) with its race line (race_refs.race_line) and
     the last weeks (weekly_history). `summit`: summit_eta()'s result for a 百岳 with a summit.
     `best`: best_day_ep of the last STEP_MONTHS months (the 跨級 check; None = not checked).
     百岳 only: `climb` {"rates" (climb_rates), "top_m", "weight"} — the climb-rate reference; `power`
-    {"cp", "kg"} with a running power meter — the climb-power check (None = not shown)."""
+    {"cp", "kg"} with a running power meter — the climb-power check (None = not shown).
+    `finish`: trail_finish()'s moving + stop time for the cutoff of a trail race (SP-220); None =
+    the race line's hours, as before."""
     out = {"event_id": e.id, "name": e.name, "date": e.date, "priority": e.priority, "kind": e.kind,
            "days": int(e.days or 1),
            "days_to": (e.start - today).days, "checks": [], "suggestions": [], "src": [_(SRC_UA), _(SRC_WEEK)]}
@@ -533,6 +585,14 @@ def assess(e, line: Optional[dict], today: dt.date, hist: list[dict], summit: Op
                 check("cutoff", lv, txt, eta_h=round(eta, 2), cutoff_h=cut)
                 if lv == "over":
                     out["suggestions"].insert(0, _("預估還沒到山頂就得撤退：這座百岳可能還不適合現在的你。可以換短一點的路線、多排一天，或先不去"))
+        elif cut and finish is not None:
+            # SP-220: a trail race — the calculator's moving time + the stops against the clock-time cutoff
+            fin, txt, kw = cutoff_finish(finish, float(line["hours"]), cut)
+            r = fin / cut
+            lv = "ok" if r <= CUTOFF_TIGHT else "tight" if r <= 1.0 else "over"
+            check("cutoff", lv, txt, finish_h=round(fin, 2), cutoff_h=cut, **kw)
+            if lv == "over":
+                out["suggestions"].insert(0, _("預估會超過關門時間：建議報短一點的組別，或這場先不跑"))
         elif cut:
             fin = float(line["hours"])
             r = fin / cut
@@ -731,14 +791,102 @@ def baiyue_inputs(plan, ds, today: dt.date, e) -> tuple[Optional[dict], Optional
     return climb, power
 
 
+def calc_inputs(e) -> dict:
+    """The race calculator's saved form state of the event (race_calc_store inputs), {} without one."""
+    from backend.engine import race_calc_store as RC
+    try:
+        saved = RC.get(e.id)
+    except Exception:                       # noqa: BLE001 — a bad id / DB: nothing saved
+        return {}
+    inp = (saved or {}).get("inputs")
+    return inp if isinstance(inp, dict) else {}
+
+
+def calc_stops(inp: dict, km: float) -> list[dict]:
+    """The aid stations of the saved calculator inputs as the page sends them (racepower.html stopsOf /
+    stopIssue): a row needs 0 < km < the course km and no other row within 50 m; a blank minutes =
+    the type's default (fuel.STOP_TYPES, 推估) — the stops its ETA and 含停留總時間 count."""
+    from backend.engine.racepower import fuel as FU
+    rows = []
+    raw = inp.get("stops")
+    for s in raw if isinstance(raw, list) else []:
+        if not isinstance(s, dict):
+            continue
+        try:
+            k = float(s["km"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        t = s.get("type") if s.get("type") in FU.STOP_TYPES else FU.STOP_DEFAULT
+        try:
+            m = float(s["minutes"]) if s.get("minutes") not in (None, "") else FU.STOP_TYPES[t]["minutes"]
+        except (TypeError, ValueError):
+            m = FU.STOP_TYPES[t]["minutes"]
+        if math.isfinite(k) and math.isfinite(m) and 0.0 < k < km and m >= 0.0:
+            rows.append({"km": k, "type": t, "minutes": m})
+    return [r for r in rows if not any(o is not r and abs(o["km"] - r["km"]) < 0.05 for o in rows)]
+
+
+def calc_effort(inp: dict) -> float:
+    """The calculator's 努力目標 of the saved inputs (auto mode, 0–100 %), else 1.0 (全力, the page's default)."""
+    st = inp.get("S") if isinstance(inp.get("S"), dict) else {}
+    try:
+        f = float(st.get("effort", 1.0))
+    except (TypeError, ValueError):
+        return 1.0
+    return f if (st.get("mode") or "auto") == "auto" and 0.0 < f <= 1.0 else 1.0
+
+
+def trail_finish(e, course: dict, plan_fn: Optional[Callable] = None) -> dict:
+    """SP-220: the moving and stop time the race calculator shows for a trail race (one piece) —
+    POST /plan's own computation (calc.make_plan on the live athlete) in auto mode with the course
+    the page opens (the event's GPX, else its km / climb), the saved 努力目標 and aid stations. The
+    race-day forecast is not fetched here (no network in the card): the calculator adds its heat when
+    it has one. Moving = summary.time_s when the total came from the HR pace model (total_method
+    "trail_hr"), else None (→ the old moving time). Stops, as the calculator's 含停留總時間: the
+    non-moving prediction (nonmoving.py — the stations' minutes, else your past races' rate, plus the
+    short stops) when there is a personal profile; else the stations' minutes; else none.
+    `plan_fn(body)` = calc.make_plan on the live context (tests)."""
+    from backend.engine.racepower import calc as CALC
+    t = course["totals"]
+    km = float(t["km"] or 0.0)
+    inp = calc_inputs(e)
+    stops = calc_stops(inp, km)
+    user_min = sum(s["minutes"] for s in stops)
+    eff = calc_effort(inp)
+    out = {"moving_h": None, "stop_h": user_min / 60.0, "stop_src": "user" if user_min > 0 else None,
+           "stop_user_min": user_min, "effort": eff, "short_min": None, "n_runs": None}
+    if plan_fn is None:
+        def plan_fn(body):
+            from backend.api import racepower as RP
+            return CALC.make_plan(RP.LIVE, body)
+    try:
+        ref = (CALC.CourseRef(event_id=e.id) if course.get("filename") else
+               CALC.CourseRef(manual={"km": km, "gain": float(t["gain_m"] or 0.0),
+                                      "loss": None if course.get("descent_assumed") else float(t["loss_m"] or 0.0)}))
+        body = CALC.PlanIn(type="trail", mode="auto", effort_target=eff, date=e.date, distance_km=km,
+                           gain_m=float(t["gain_m"] or 0.0), course=ref, stops=[CALC.StopIn(**s) for s in stops])
+        s = plan_fn(body).get("summary") or {}
+    except Exception:                       # noqa: BLE001 — no CP / RE / course: the old moving time
+        return out
+    if s.get("total_method") == "trail_hr" and s.get("time_s"):
+        out["moving_h"] = float(s["time_s"]) / 3600.0
+    nm = s.get("nonmoving")
+    if nm and nm.get("total_s") is not None:
+        out.update(stop_h=float(nm["total_s"]) / 3600.0, stop_src="user" if nm.get("method") == "user" else "history",
+                   n_runs=nm.get("n_runs"), short_min=float(nm.get("short_s") or 0.0) / 60.0)
+    return out
+
+
 def races(plan, ds, today: dt.date, event_id: Optional[str] = None,
           predict: Optional[Callable] = None, gpx: Optional[Callable] = None,
-          baiyue: Optional[Callable] = None) -> list[dict]:
+          baiyue: Optional[Callable] = None, finish: Optional[Callable] = None) -> list[dict]:
     """The verdicts of the upcoming A / B races (or the one `event_id`, any grade). `baiyue(e)` →
-    (climb, power) for a 百岳 (tests); None = baiyue_inputs."""
+    (climb, power) for a 百岳 (tests); None = baiyue_inputs. `finish(e, course)` → the cutoff's
+    moving + stop time of a trail race in one piece with a cutoff (SP-220); None = trail_finish."""
     from backend.engine.panels import race_refs as RR
     predict = predict or RR.calculator_hours
     gpx = gpx or RR.stored_course
+    finish = finish or trail_finish
     evs = [e for e in plan.events if e.end >= today]
     evs = [e for e in evs if e.id == event_id] if event_id else [e for e in evs if e.priority in ("A", "B")]
     hist = weekly_history(ds, today, KOOP_WEEKS)
@@ -749,10 +897,15 @@ def races(plan, ds, today: dt.date, event_id: Optional[str] = None,
         best = None
     out = []
     for e in sorted(evs, key=lambda x: x.start):
-        line = summit = sleep_note = None
+        line = summit = sleep_note = fin = None
         if e.distance_km:
             course = RR.course_of(e, gpx)
             hs = predict(e, course)
+            if e.kind in TRAIL_KINDS and getattr(e, "cutoff_hours", None) and RR.split_days(e) == 1:
+                # SP-220: the calculator's moving time + the stops (a stage race keeps the old finish)
+                fin = finish(e, course) or {"moving_h": None}
+                if not fin.get("moving_h"):
+                    fin["fallback"] = "power" if hs else "plan"
             course, sleep_note = RR.sleep_course(e, course)    # SP-114: a 連續 race's hardest stretch
             line = RR.race_line(e, hs, _("賽事計算器預測的完賽時間"), course)
             if line is not None:
@@ -760,7 +913,7 @@ def races(plan, ds, today: dt.date, event_id: Optional[str] = None,
         climb = power = None
         if e.kind == "baiyue":
             climb, power = baiyue_inputs(plan, ds, today, e) if baiyue is None else baiyue(e)
-        r = assess(e, line, today, hist[-BASE_WEEKS:], summit, best, climb, power)
+        r = assess(e, line, today, hist[-BASE_WEEKS:], summit, best, climb, power, finish=fin)
         if sleep_note:
             r["split_note"] = sleep_note
         elif line is not None and RR.hardest_stretch_note(line):
