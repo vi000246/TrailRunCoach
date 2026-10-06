@@ -1435,7 +1435,7 @@
     "draft": true,
     "src": "backend/engine/workout_templates.py:124"
   },
-  "你排的技術地形課（RPE ≥ 7）主課 {reserved:.0f} 分算進本週強度預算（週量 {share:.0%}，80/20；推估），只剩 {left:.0f} 分：這週不排{zone}間歇": {
+  "你排的技術地形課（RPE ≥ 7）主課 {reserved:.0f} 分算進本週強度預算（週量 {share:.0%}；推估，Seiler 的 80/20 是堂數，不是時間），只剩 {left:.0f} 分：這週不排{zone}間歇": {
     "draft": true,
     "src": "backend/engine/overview.py:745"
   },
@@ -3491,7 +3491,7 @@
     "draft": true,
     "src": "backend/engine/quality_gate.py:2542"
   },
-  "每週 3 區量 ≤ 週量 10%（Daniels），放不下排巡航版 3×6／3×8／2×12": {
+  "每週 3 區量 ≤ 週量 10%（教練，未驗證原書：Daniels 是單次課、以里程算，這裡是每週、以時間算），放不下排巡航版 3×6／3×8／2×12": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:1941"
   },

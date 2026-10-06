@@ -204,7 +204,8 @@ intensity). Each rung is the canonical variant of `backend/engine/interval_libra
   and for stored sessions. A stored row of an old rung still resolves: it is judged against its
   own variant and its 達標 counts in `met`, but it doesn't move the A rung.
 - **Zone 3 volume** (`z3_budget_min`): the session's time in zone ≤ 10 % of the week's planned
-  hours (Daniels: T ≤ 10 % of the weekly volume), 5 % for the track's first session (UA: Zone 3
+  hours (`Z3_SHARE_MAX`; coach, the book not verified: Daniels' T ≤ 10 % is per **session** and by
+  **mileage** — second-hand summaries — the app applies it per **week** and by **time**), 5 % for the track's first session (UA: Zone 3
   starts at ~5 %). Over it, `cruise_for` picks the 巡航版 of the same position (A1 → T1, A2 → T2,
   A3 / A4 → T3, stepping down to fit; T1 the floor); it is stored under the A rung (equiv) and
   counts, with a 「本週 x h：3 區上限 …→ 巡航版」 note.
@@ -214,7 +215,7 @@ intensity). Each rung is the canonical variant of `backend/engine/interval_libra
   stepping down), stored under the A rung (equiv) — 達標 moves the ladder; note 「平日上限 N 分放不下
   … → 巡航版 …（算這一階）」. Only when no 巡航版 fits does fit's own fallback (縮量版 / the step
   before, not counted) apply.
-- **Week total** (`QUALITY_SHARE_MAX = 0.20`, 推估: Seiler 80/20, Koop): Zone 3 + Zone 5 time in
+- **Week total** (`QUALITY_SHARE_MAX = 0.20`, 推估 — Seiler 2010's 80/20 counts **sessions**, not time; Koop): Zone 3 + Zone 5 time in
   zone ≤ 20 % of the planned running time. `overview.quality_sessions` builds Zone 5 first and
   gives Zone 3 what is left (a smaller 巡航版); a session still over is cut to fewer reps as a
   縮量版 (`_shorten`, floor `MIN_REPS`, no progress) or, when it can't be cut, kept with a note —

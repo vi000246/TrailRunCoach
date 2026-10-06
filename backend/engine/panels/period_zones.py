@@ -72,7 +72,7 @@ from backend.engine.status import LOW_SHARE_GOOD, LOW_SHARE_WATCH   # noqa: E402
 
 SRC_FLOOR = ("低強度 ≥ 75%：app 的強度護欄（status.LOW_SHARE_GOOD）。Seiler & Kjerland 2006（Scand J Med Sci Sports "
              "16:49–56）：約 75–80% 的『課』是低強度；Seiler & Tønnessen 2009（Sportscience 13）：同一批選手依時間算 "
-             "91% 在第一閾值以下、約 6% 在兩閾值之間、2.6% 在第二閾值以上。依時間算 75% 已經偏寬。< 65% = 太多中強度"
+             "91% 在第一閾值以下、約 6% 在兩閾值之間、2.6% 在第二閾值以上。依時間算 75% 已經偏寬（推估；Seiler 的 80/20 是堂數，不是時間）。< 65% = 太多中強度"
              "（LOW_SHARE_WATCH）")
 SRC_UA_BASE = ("基礎期 ≥ 90%：Uphill Athlete「90 percent or more in Zones 1 and 2」（UA 的 1–2 區在 AeT 以下；"
                "教練經驗，非同儕審查）")

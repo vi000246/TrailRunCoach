@@ -522,7 +522,7 @@ def shape(ss: list[dict], total_min: float, p: Prefs, c: Ctx) -> list[dict]:
     if p.quality == 2 and c.allow_quality and len(q) == 1 and c.mode != "recovery_week" and (c.quality_cap or 2) >= 2:
         # only one track open (SP-31: with both, the caller already planned one Zone 3 + one Zone 5):
         # the second session repeats the first — unless the two together go over the week's interval
-        # total (quality_gate.QUALITY_SHARE_MAX of the running time, 推估 80/20)
+        # total (quality_gate.QUALITY_SHARE_MAX of the running time, 推估 — Seiler's 80/20 counts sessions)
         from backend.engine.overview import session_tiz_min
         from backend.engine.quality_gate import QUALITY_SHARE_MAX
         if 2 * session_tiz_min(q[0]) <= QUALITY_SHARE_MAX * total_min + 1e-6:
@@ -530,7 +530,7 @@ def shape(ss: list[dict], total_min: float, p: Prefs, c: Ctx) -> list[dict]:
         else:
             c.notes.append({"level": "info", "src": "quality_share",
                             "text": f"偏好每週 2 堂品質課，但兩堂「{q[0]['title']}」會超過一週間歇總量上限"
-                                    f"（跑步時間 {QUALITY_SHARE_MAX:.0%}，80/20；推估）：本週排 1 堂"})
+                                    f"（跑步時間 {QUALITY_SHARE_MAX:.0%}；推估，Seiler 的 80/20 是堂數，不是時間）：本週排 1 堂"})
     elif len(q) > 1 and (p.quality == 1 or (c.quality_cap or 2) < 2):
         hard = [s for s in hard if s["kind"] != "quality" or s is q[0]]
     for s in hard:
