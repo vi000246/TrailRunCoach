@@ -395,6 +395,10 @@
     "draft": true,
     "src": "backend/engine/quality_gate.py:1809"
   },
+  "Friel：每 4–8 週測一次（教練級），取 8 週": {
+    "draft": true,
+    "src": "backend/engine/threshold_calib.py:125"
+  },
   "Friel：每 4–8 週測一次；30 分鐘獨跑測試的第 10–30 分平均心率＝LTHR（McGehee 2005 驗證：SEE 8 bpm）": {
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:136"
@@ -454,6 +458,10 @@
   "LTHR 是儲備心率的 {q:.0%}（一般 80–94%，個人範圍 73–95%）": {
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:350"
+  },
+  "LTHR 測試多久提醒重測": {
+    "draft": true,
+    "src": "backend/engine/threshold_calib.py:124"
   },
   "LTHR 測試（30 分鐘獨跑）": {
     "draft": false,
@@ -666,6 +674,10 @@
   "{head}：{start} 起恢復期到 {end}（{how}；Daniels 表 9.2，恢復期＝停訓天數{up}）": {
     "draft": true,
     "src": "backend/engine/reentry.py:167"
+  },
+  "{hit}/{n} 趟在目標帶（≥ {floor:.0f} W＝目標下限 {lo:.0f}% CP × {tol}，{basis}）": {
+    "draft": true,
+    "src": "backend/engine/interval_eval.py:312"
   },
   "{hr} 或 RPE ≤ {rpe}，先到的為準": {
     "draft": true,
@@ -959,6 +971,10 @@
     "draft": true,
     "src": "backend/engine/workout_templates.py:137"
   },
+  "≥ {goal:.0%} 算達到，{basis}（預設 85% 是 §C2 的 ±15%，推估）。": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:4065"
+  },
   "、": {
     "draft": true,
     "src": "backend/engine/coros_compare.py:110"
@@ -1059,9 +1075,13 @@
     "draft": true,
     "src": "backend/engine/interval_library.py:810"
   },
-  "上次 LTHR 測試是 {n} 天前（Friel：每 4–8 週一次）": {
-    "draft": false,
-    "src": "backend/engine/threshold_confidence.py:429"
+  "上次 LTHR 測試是 {n} 天前（超過 {d:.0f} 天，{basis}；Friel：每 4–8 週一次）": {
+    "draft": true,
+    "src": "backend/engine/threshold_confidence.py:433"
+  },
+  "上次 LTHR 測試超過這麼多天，測試建議裡會多一行提醒（只是提示，不會改課表）。本人值 = 照你歷次測試之間 LTHR 變動的速度，算出變動 5 bpm 要幾天：變得慢就拉長、變得快就縮短，範圍 8–24 週；1 筆 = 一組相鄰的同一種測試（間隔 4–52 週）。": {
+    "draft": true,
+    "src": "backend/engine/threshold_calib.py:127"
   },
   "上週 {m} 分": {
     "draft": true,
@@ -1675,6 +1695,14 @@
     "draft": true,
     "src": "backend/engine/interval_eval.py:458"
   },
+  "只有最後一趟沒到目標時，它比第一趟掉的幅度在這個比例以內仍算達標，超過就同一份課表再做一次。本人值 = 你照課表做完、前面每趟都達標的間歇課裡，最後一趟掉幅的第 90 百分位；1 筆 = 一堂這樣的間歇課（一年內）。": {
+    "draft": true,
+    "src": "backend/engine/interval_calib.py:179"
+  },
+  "只有最後一趟略掉（≤ {p:.0%}，{basis}）": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:804"
+  },
   "只有流鼻水、鼻塞、喉嚨痛，沒有發燒": {
     "draft": true,
     "src": "backend/engine/injuries.py:71"
@@ -1799,6 +1827,10 @@
     "draft": true,
     "src": "backend/engine/workout_templates.py:135"
   },
+  "在目標帶 = 平均 ≥ {floor:.0f} W（目標下限 {lo:.0f}% CP × {tol}，{basis}）。每趟的長條在「每趟功率」。": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3850"
+  },
   "在課表打開這堂課：{url}": {
     "draft": true,
     "src": "backend/engine/calendar_feed.py:176"
@@ -1874,6 +1906,10 @@
   "大補給站": {
     "draft": true,
     "src": "backend/engine/racepower/watch_export.py:46"
+  },
+  "天": {
+    "draft": true,
+    "src": "backend/engine/threshold_calib.py:124"
   },
   "天熱，飄移本來就會偏高": {
     "draft": true,
@@ -2383,6 +2419,22 @@
     "draft": true,
     "src": "backend/engine/drift_calib.py:119"
   },
+  "推估（每天的心率本來就差約 3 bpm，Lamberts & Lambert 2009）": {
+    "draft": true,
+    "src": "backend/engine/threshold_calib.py:132"
+  },
+  "推估（比目標下限低 2% 以內都算做到）": {
+    "draft": true,
+    "src": "backend/engine/interval_calib.py:170"
+  },
+  "推估（比第一趟掉 5% 以內）": {
+    "draft": true,
+    "src": "backend/engine/interval_calib.py:177"
+  },
+  "推估（計畫的 85%）": {
+    "draft": true,
+    "src": "backend/engine/interval_calib.py:184"
+  },
   "推估（越野賽通常超過 10 km）": {
     "draft": true,
     "src": "backend/engine/effort_calib.py:90"
@@ -2850,6 +2902,10 @@
   "每趟 ≥ 2 分、一週最多 2 次、隔 ≥ 2 天": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:2005"
+  },
+  "每趟都達標，但待在目標功率區的時間不到計畫的這個比例，就算「部分達到」，同一階再做一次。本人值 = 你照課表做完、每趟都達標的間歇課裡，這個比例的第 10 百分位；1 筆 = 一堂這樣的間歇課（一年內）。": {
+    "draft": true,
+    "src": "backend/engine/interval_calib.py:186"
   },
   "每週 3 區量 ≤ 週量 10%（Daniels），放不下排巡航版 3×6／3×8／2×12": {
     "draft": true,
@@ -3339,6 +3395,18 @@
     "draft": true,
     "src": "backend/engine/interval_library.py:367"
   },
+  "目標區時間 {tiz:.1f} 分，是這份課表計畫 {plan:.0f} 分的 {r:.0%}（≥ {goal:.0%} 算達到，{basis}）": {
+    "draft": true,
+    "src": "backend/engine/interval_eval.py:315"
+  },
+  "目標區時間 ÷ 這份課表計畫的時間；≥ {goal:.0%} 算達到，{basis}。": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3857"
+  },
+  "目標區時間只有計畫的 {r:.0%}（< {goal:.0%}，{basis}）": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:941"
+  },
   "目標填法不對：{x}": {
     "draft": true,
     "src": "backend/engine/workout_steps.py:597"
@@ -3542,6 +3610,10 @@
   "絕對心率": {
     "draft": false,
     "src": "backend/engine/workout_steps.py:1296"
+  },
+  "綠 ✓ 在目標內、黃 ▼ 偏低（< {floor:.0f} W = 下限 × {tol}，{basis}）": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3913"
   },
   "維持：每週 1 區 ≥ {m} 分": {
     "draft": true,
@@ -4051,6 +4123,14 @@
     "draft": true,
     "src": "backend/engine/status.py:595"
   },
+  "輕鬆跑的平均心率超過 AeT 加這個數（而且超過 AeT+3 的時間多於 10%）才算「偏強」，之後幾天的課表會跟著調整；有氧基礎的飄移檢查「在 AeT 附近」的上緣也用它。本人值 = 你的 AeT 估得有多不準（多次輕鬆跑心率飄移回歸的標準誤），最少 3；1 筆 = 一次可用的輕鬆跑飄移（半年內）。AeT 估得越準，這個數越接近 3。": {
+    "draft": true,
+    "src": "backend/engine/threshold_calib.py:134"
+  },
+  "輕鬆跑的心率餘裕（AeT 以上幾 bpm 還算輕鬆）": {
+    "draft": true,
+    "src": "backend/engine/threshold_calib.py:131"
+  },
   "輕鬆跑（1 區）打底。參考：每週約 {lo}–{hi} 分鐘 1 區": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:1936"
@@ -4467,9 +4547,25 @@
     "draft": true,
     "src": "backend/engine/coros_compare.py:122"
   },
+  "間歇每一趟的平均功率到「目標下限 × 這個數」就算做到；留一點空間，是因為 CP 本身是估出來的。本人值 = 1 − 你相鄰兩次 CP 測試差距（取中位數）的一半；1 筆 = 一組相鄰的 CP 測試（間隔半年內）。CP 測試越穩，這個數越接近 1。": {
+    "draft": true,
+    "src": "backend/engine/interval_calib.py:172"
+  },
   "間歇門檻要是 {choices} 其中之一": {
     "draft": true,
     "src": "backend/engine/plan_prefs.py:295"
+  },
+  "間歇：最後一趟可以掉多少": {
+    "draft": true,
+    "src": "backend/engine/interval_calib.py:176"
+  },
+  "間歇：每趟的達標線（× 目標下限）": {
+    "draft": true,
+    "src": "backend/engine/interval_calib.py:169"
+  },
+  "間歇：目標區時間要做到計畫的多少": {
+    "draft": true,
+    "src": "backend/engine/interval_calib.py:183"
   },
   "閾值": {
     "draft": true,
@@ -4914,6 +5010,10 @@
   "；長天上限 {h:g} 小時：比賽更長的部分交給 B2B 和週量": {
     "draft": true,
     "src": "backend/engine/specific_phase.py:336"
+  },
+  "；餘裕 {m} bpm，{basis}": {
+    "draft": true,
+    "src": "backend/engine/adapt.py:124"
   },
   "🌡 {t:.0f} °C（{band}）": {
     "draft": true,
