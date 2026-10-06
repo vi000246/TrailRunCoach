@@ -74,7 +74,11 @@ def test_use_power_follows_the_owner_decision():
     assert AP.use_power("watch", False) is False        # no Stryd -> heart rate by default
     assert AP.use_power("watch", True) is True          # 進階: watch power accepted
     assert AP.use_power("none", True) is False
-    assert AP.setup_needed(None, "male") and AP.setup_needed(60.0, None) and not AP.setup_needed(60.0, "female")
+    # SP-211: weight, sex and age (the birth year) — the wizard asks until all three are known
+    assert AP.setup_needed(None, "male", 1990) and AP.setup_needed(60.0, None, 1990)
+    assert AP.setup_needed(60.0, "female", None) and not AP.setup_needed(60.0, "female", 1990)
+    assert AP.setup_missing(None, None, None) == ["weight", "sex", "age"]
+    assert AP.setup_missing(60.0, "other", 1990) == ["sex"]
 
 
 # ---- profile API ------------------------------------------------------------------
@@ -176,3 +180,48 @@ def test_body_profile_age_from_birth_year():
     ds = SimpleNamespace(plan=SimpleNamespace(profile={"birth_year": 1980, "sex": "female"}), athlete=None)
     b = A.body_profile(ds, TODAY)
     assert b["age"] == 46 and b["age_src"].startswith("設定頁") and b["sex"] == "female"
+
+
+# ---- 首次精靈: 性別、年齡、體重 (SP-211) --------------------------------------------------
+
+def test_age_is_asked_and_stored_as_the_birth_year(plan_file):
+    from fastapi import HTTPException
+    from backend.api import plan as PA
+    from backend.engine.localtime import today_local
+    g = PA.get_profile()
+    assert g["setup"]["missing"] == ["weight", "sex", "age"]
+    r = PA.put_profile(PA.ProfileIn(weights=[PA.WeightIn(date="2026-09-01", kg=61.0)], sex="male"))
+    assert r["setup"]["needed"] is True and r["setup"]["missing"] == ["age"]      # age still missing
+    r = PA.put_profile(PA.ProfileIn(weights=[PA.WeightIn(date="2026-09-01", kg=61.0)], sex="male", age=37))
+    year = today_local().year
+    assert r["profile"]["birth_year"] == year - 37 and r["effective"]["age"] == 37
+    assert r["setup"]["needed"] is False and r["setup"]["missing"] == []
+    # a birth year given wins over an age
+    r = PA.put_profile(PA.ProfileIn(sex="male", birth_year=1980, age=20))
+    assert r["profile"]["birth_year"] == 1980
+    for bad in (9, 101):
+        with pytest.raises(HTTPException) as ei:
+            PA.put_profile(PA.ProfileIn(age=bad))
+        assert ei.value.status_code == 400
+    assert AP.birth_year_of_age(40, TODAY) == 1986 and AP.age({"birth_year": 1986}, TODAY) == 40
+    assert AP.age_ok(None) and AP.age_ok(10) and not AP.age_ok(True) and not AP.age_ok(101)
+
+
+def test_wizard_requires_sex_age_weight_and_explains_them():
+    import json
+    from pathlib import Path
+    static = Path(__file__).resolve().parents[1] / "static"
+    js = (static / "setup_wizard.js").read_text("utf-8")
+    for name in ("sex", "age", "kg"):
+        assert f'name="{name}"' in js
+    assert 'name="by"' not in js and "birth_year" not in js.split("const body")[1]   # the age is sent
+    for k in ("need_sex", "need_age", "need_weight"):
+        assert f'err("{k}"' in js
+    keys = set(__import__("re").findall(r'T\("(\w+)"', js))
+    for loc in ("zh-TW", "en"):
+        cat = json.loads((static / "i18n" / loc / "common.json").read_text("utf-8"))
+        missing = [k for k in keys if not cat.get(f"setup.{k}")]
+        assert not missing, (loc, missing)
+    assert {"sex_why", "age_why", "weight_why"} <= keys                 # what each is used for, not a hover
+    s = (static / "settings.html").read_text("utf-8")
+    assert 'id="p-age"' in s and 'id="p-birth"' not in s and "age: $(\"p-age\").value" in s

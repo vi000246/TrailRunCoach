@@ -167,5 +167,12 @@
   "tabs.body_note": "Max / resting HR, plan HR zones, the LTHR / AeT / CP test log, the starting CTL / ATL, and whether to use power.",
   "tabs.data_note": "COROS / TrainingPeaks login and sync, backups, the plan calendar feed.",
   "tabs.advanced_note": "Calculation mode, auto-estimated parameters, power spike fixes, excluding broken activity files. Rarely needed.",
-  "general.title": "Basic info"
+  "general.title": "Basic info",
+  "general.age": "Age",
+  "general.age_unit": "years",
+  "general.missing": "Still missing: {list} (used to calibrate the calculations)",
+  "general.f_weight": "weight",
+  "general.f_sex": "sex",
+  "general.f_age": "age",
+  "general.sep": ", "
 }
