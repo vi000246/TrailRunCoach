@@ -1351,6 +1351,9 @@ async def steps_check(body: dict = Body(...), db: AsyncSession = Depends(get_db)
     env = await _steps_env(s, inp)
     out = {**WS.view(st, env["ctx"], env["cap"], env["cap_mode"], env["rung"]),
            "basis_label": _context(env)["basis_label"], "policy": env["policy"]}
+    # SP-274 / SP-277: the LTHR / HRmax badge for this session (never on a test session)
+    from backend.engine import threshold_confidence as TC
+    out["thr_warn"] = TC.session_warn(env["th"].get("thr_warn"), s, st.get("items"))
     if s.get("kind") == "quality":
         # the family these steps read as (SP-79: the 類型's 「步驟看起來像…」 hint)
         out["family"] = WTPL.family_of(st.get("items") or [], env["th"])

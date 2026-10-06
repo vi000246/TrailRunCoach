@@ -968,3 +968,33 @@ def warn_of(chk: Optional[dict]) -> Optional[dict]:
     if not ((w.get("lthr") or {}).get("low") or (w.get("hrmax") or {}).get("low")):
         return None
     return w
+
+
+# the test sessions (SP-274 / SP-277; lthr-low-confidence-testing.md §6.1 第 5 點): 90-minute, UA,
+# Evoke, Friel 30-min, max-HR — they don't depend on LTHR or they are the LTHR test, so no warning
+TEST_SESSION_TITLE = re.compile(r"飄移測試|LTHR\s*測試|閾值心率測試|CP\s*測試|最大心率測試|"
+                                r"max(imum)?\s*h(eart\s*)?r(ate)?\s*test|hrmax\s*test", re.I)
+
+
+def is_test_session(s: Optional[dict]) -> bool:
+    """A test session: kind test (the 測試 kind: CP / AeT tests and the test templates — Friel 30′,
+    max HR), or a test's title on another kind."""
+    s = s or {}
+    return s.get("kind") == "test" or bool(TEST_SESSION_TITLE.search(str(s.get("title") or "")))
+
+
+def _items(items: Optional[list]) -> list:
+    out = []
+    for it in items or ():
+        out += _items(it.get("items")) if it.get("kind") == "repeat" else [it]
+    return out
+
+
+def session_warn(warn: Optional[dict], s: Optional[dict], items: Optional[list] = None) -> Optional[dict]:
+    """warn_of's badge for one session in the editor (POST /steps/check), or None: never on a
+    test session; otherwise when a step has an HR target."""
+    if not warn or is_test_session(s):
+        return None
+    if not any((it.get("target") or {}).get("type") == "hr" for it in _items(items)):
+        return None
+    return warn

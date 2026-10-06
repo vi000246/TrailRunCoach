@@ -449,9 +449,16 @@ def _aet_test(s: dict, c: Ctx, ids) -> list:
     main = _num(r"測試\s*(\d+)\s*分", text, 40)
     cool = _num(r"緩和\s*(?:\d+\s*[–-]\s*)?(\d+)\s*分", text, 0)
     proto = protocol_of_title(s.get("title"))
-    if proto in ("xu90", "friel"):
-        name = "固定 E 配速，不要調（心率 1 區）" if proto == "xu90" else "AeT 心率附近穩定跑"
-        out = [step(ids, "warm", warm * 60, EASY), step(ids, "work", main * 60, EASY, name)]
+    if proto == "xu90":
+        # SP-274: pace (E pace ± 3 %) or power (75–80 % of a tested CP) from the stored target,
+        # else no target (the talk test) — no HR cap on the main block; the warm-up stays easy
+        from backend.engine.aet_test import xu_main_name, xu_main_target
+        tg = xu_main_target(s.get("target") or "")
+        main_t = {"type": tg[0], "mode": "abs", "lo": tg[1], "hi": tg[2]} if tg else OPEN
+        out = [step(ids, "warm", warm * 60, EASY),
+               step(ids, "work", main * 60, main_t, xu_main_name(s.get("target") or ""))]
+    elif proto == "friel":
+        out = [step(ids, "warm", warm * 60, EASY), step(ids, "work", main * 60, EASY, "AeT 心率附近穩定跑")]
     else:
         p = _num(r"固定功率\s*(\d+)\s*W", text) or (round(0.75 * c.cp) if c.cp else None)
         hr0 = _num(r"心率從\s*(\d+)", text)

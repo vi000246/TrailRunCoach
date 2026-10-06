@@ -556,14 +556,15 @@ def session(th: dict, hr0: Optional[float], p0: Optional[float], cap_weekday: Op
     p = PROTOCOLS[key]
     warm, main, cool = p["warm"], p["main"], p["cool"]
     tgt = []
+    xu = None
     if key == "xu90":
-        aet = th.get("aet") if isinstance(th, dict) else None
-        tgt.append("配速固定在 E 配速，不要調")
-        tgt.append(f"心率 1 區（≤ AeT {aet:.0f}）" if aet else "心率 1 區（≤ AeT）")
+        xu = xu_target(th if isinstance(th, dict) else {})
+        tgt += [xu["text"], _("不設心率上限：心率升高也不要放慢（放慢會讓飄移偏小）")]
         why = ("自動：標準版徐國峰 90 分鐘（取代週末那次長跑）：" if protocol == "auto" else "徐國峰 90 分鐘：")
-        body = (f"暖身 {warm} 分，接著測試 {main} 分：平坦路段、配速盡量不變，記下第 10 分鐘和第 90 分鐘的心率；"
+        body = (f"暖身 {warm} 分（心率不超過輕鬆跑上限），接著測試 {main} 分：平坦路段、配速固定不要調、心率讓它自己變，"
+                "記下第 10 分鐘和第 90 分鐘的心率；"
                 "補給每次停不超過 30 秒；(第 90 分 − 第 10 分) ÷ 第 10 分 < 10% 有氧基礎夠。")
-        place = "平坦路段（河濱）、不要山路；"
+        place = "平坦路段（河濱）、不要山路；" + xu["why"]
     else:
         if p0:
             tgt.append(f"固定功率 {p0:.0f} W（±3%）")
@@ -591,7 +592,70 @@ def session(th: dict, hr0: Optional[float], p0: Optional[float], cap_weekday: Op
     return {"id": "test_aet", "kind": "test", "protocol": PROTOCOL, "title": p["title"], "minutes": warm + main + cool,
             "target": "；".join(tgt) or "固定功率（±3%），不要調",
             "detail": why + place + body + HEAT_TEXT + "；記下溫度。" + early,
-            "source": p["source"] if key != "ua60" and key != "ua40" else SRC, "tss": (warm + main + cool) / 60 * 50}
+            "source": p["source"] if key != "ua60" and key != "ua40" else SRC, "tss": (warm + main + cool) / 60 * 50,
+            **({"xu_basis": xu["basis"]} if xu else {})}
+
+
+# ---- the 90-minute test's intensity (SP-274; lthr-low-confidence-testing.md §2.1, §4.2, §6.1 第 1 點) ----
+# 徐國峰 holds the E pace and lets the HR drift; an HR cap would hold the drift down (a false pass),
+# and without a measured AeT the cap was 0.89 × LTHR. Order (owner 2026-10-06): the E pace of a
+# race the athlete entered / confirmed (engine/e_pace.py) → 75–80 % of a tested CP (Palladino 1C
+# 「EZ aerobic」, zones.py) → no target, the talk test. Never an HR cap on the main block.
+XU_PACE_BAND = 0.03             # 推估: ± 3 % around the middle of the E range (a fixed pace, like ± 3 % power)
+XU_CP = (0.75, 0.80)            # Palladino 1C 75–80 % CP
+PACE_RE = re.compile(r"(\d+):(\d\d)\s*[–-]\s*(\d+):(\d\d)\s*/km")     # the stored target's pace range
+WATTS_RE = re.compile(r"(\d+)\s*[–-]\s*(\d+)\s*W\b")                     # …or power range
+
+
+def xu_target(th: dict) -> dict:
+    """{"basis": pace | power | talk, "lo", "hi" (s/km or W; None for talk), "text" (the
+    target, its numbers parsed back by the step builders: PACE_RE / WATTS_RE), "name" (the
+    main step), "why" (the detail's line)}. th: the week plan's thresholds with "e_pace"
+    (e_pace.current) and "cp_measured" (a plan CP row in effect)."""
+    from backend.engine import e_pace as EP
+    e = th.get("e_pace") if isinstance(th.get("e_pace"), dict) else None
+    if e and e.get("e_fast") and e.get("e_slow"):
+        mid = (float(e["e_fast"]) + float(e["e_slow"])) / 2.0
+        lo, hi = round(mid * (1 - XU_PACE_BAND)), round(mid * (1 + XU_PACE_BAND))
+        return {"basis": "pace", "lo": lo, "hi": hi,
+                "text": _("配速固定 {lo}–{hi} /km（E 配速 {mid} ±3%，推估），不要調",
+                          lo=EP.fmt_pace(lo), hi=EP.fmt_pace(hi), mid=EP.fmt_pace(mid)),
+                "name": _("固定 E 配速，不要調"),
+                "why": _("強度：{e}。", e=EP.label(e))}
+    cp = th.get("cp")
+    if cp and th.get("cp_measured"):
+        lo, hi = round(XU_CP[0] * float(cp)), round(XU_CP[1] * float(cp))
+        return {"basis": "power", "lo": lo, "hi": hi,
+                "text": _("功率固定 {lo}–{hi} W（75–80% CP，Palladino 1C），不要調", lo=lo, hi=hi),
+                "name": _("固定功率 75–80% CP，不要調"),
+                "why": _("強度：還沒有比賽成績算的 E 配速，用實測 CP {cp:.0f} W 的 75–80%（Palladino 1C）。"
+                         "設定頁填一場比賽成績就會改用 E 配速。", cp=float(cp))}
+    return {"basis": "talk", "lo": None, "hi": None,
+            "text": _("能講完整句子的配速，固定不要調"),
+            "name": _("能講完整句子的配速，固定不要調"),
+            "why": _("強度：沒有比賽成績算的 E 配速，也沒有實測 CP：前 10 分鐘找能講完整句子的最快配速，"
+                     "之後就固定這個配速（講話測試，Foster 2008）。設定頁填一場比賽成績就會改用 E 配速。")}
+
+
+def xu_main_target(text: str) -> Optional[tuple]:
+    """The main block's target parsed from a stored 90-minute test's target text:
+    ("pace", fast, slow) s/km, ("power", lo, hi) W, or None (the talk test, or an old row)."""
+    m = PACE_RE.search(text or "")
+    if m:
+        a, b = int(m.group(1)) * 60 + int(m.group(2)), int(m.group(3)) * 60 + int(m.group(4))
+        return ("pace", min(a, b), max(a, b))
+    m = WATTS_RE.search(text or "")
+    if m:
+        return ("power", int(m.group(1)), int(m.group(2)))
+    return None
+
+
+def xu_main_name(text: str) -> str:
+    """The main step's name for xu_main_target's result."""
+    t = xu_main_target(text)
+    if t is None:
+        return _("能講完整句子的配速，固定不要調")
+    return _("固定 E 配速，不要調") if t[0] == "pace" else _("固定功率 75–80% CP，不要調")
 
 
 def pick_day_xu(avail: list, long_wd: int, cap_weekday: Optional[int] = None) -> Optional[dt.date]:

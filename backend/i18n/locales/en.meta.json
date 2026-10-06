@@ -1343,6 +1343,10 @@
     "draft": true,
     "src": "backend/engine/plan_store.py:275"
   },
+  "不設心率上限：心率升高也不要放慢（放慢會讓飄移偏小）": {
+    "draft": true,
+    "src": "backend/engine/aet_test.py:562"
+  },
   "不設目標": {
     "draft": false,
     "src": "backend/engine/workout_steps.py:1492"
@@ -1867,6 +1871,10 @@
     "draft": true,
     "src": "backend/sync/workout_targets/coros.py:22"
   },
+  "功率固定 {lo}–{hi} W（75–80% CP，Palladino 1C），不要調": {
+    "draft": true,
+    "src": "backend/engine/aet_test.py:629"
+  },
   "功率：app 的 CP 不是 Garmin 的功率，只寫在說明": {
     "draft": true,
     "src": "backend/sync/workout_targets/garmin.py:22"
@@ -2126,6 +2134,14 @@
   "回量期：只排輕鬆跑（每次 ≤ 60 分）和肌力，不排長跑、強度課；量照減量期倒過來慢慢加回去（Higdon 反向減量；不排強度：Koop、Uphill Athlete，教練級）": {
     "draft": true,
     "src": "backend/engine/overview.py:405"
+  },
+  "固定 E 配速，不要調": {
+    "draft": true,
+    "src": "backend/engine/aet_test.py:658"
+  },
+  "固定功率 75–80% CP，不要調": {
+    "draft": true,
+    "src": "backend/engine/aet_test.py:658"
   },
   "在 AeT 附近跑 1 次 ≥ 60 分鐘，飄移 < 5%": {
     "draft": true,
@@ -2539,9 +2555,21 @@
     "draft": true,
     "src": "backend/engine/interval_library.py:364"
   },
+  "強度：{e}。": {
+    "draft": true,
+    "src": "backend/engine/aet_test.py:624"
+  },
   "強度：做到這堂課的 {pct}%（≥ 80% 算做到、50–80% 算強度不足、不到 50% 算沒照課表）": {
     "draft": false,
     "src": "backend/engine/workout_review.py:2833"
+  },
+  "強度：沒有比賽成績算的 E 配速，也沒有實測 CP：前 10 分鐘找能講完整句子的最快配速，之後就固定這個配速（講話測試，Foster 2008）。設定頁填一場比賽成績就會改用 E 配速。": {
+    "draft": true,
+    "src": "backend/engine/aet_test.py:636"
+  },
+  "強度：還沒有比賽成績算的 E 配速，用實測 CP {cp:.0f} W 的 75–80%（Palladino 1C）。設定頁填一場比賽成績就會改用 E 配速。": {
+    "draft": true,
+    "src": "backend/engine/aet_test.py:631"
   },
   "彈力帶": {
     "draft": true,
@@ -4383,6 +4411,10 @@
     "draft": true,
     "src": "backend/engine/strength_moves.py:190"
   },
+  "能講完整句子的配速，固定不要調": {
+    "draft": true,
+    "src": "backend/engine/aet_test.py:634"
+  },
   "膝主導單腳": {
     "draft": true,
     "src": "backend/engine/strength_moves.py:71"
@@ -5298,6 +5330,10 @@
   "配速、距離段：轉換器還沒做": {
     "draft": true,
     "src": "backend/sync/workout_targets/garmin.py:22"
+  },
+  "配速固定 {lo}–{hi} /km（E 配速 {mid} ±3%，推估），不要調": {
+    "draft": true,
+    "src": "backend/engine/aet_test.py:621"
   },
   "配速是閾值配速的倍數（app 的 T 配速，推估）": {
     "draft": true,
