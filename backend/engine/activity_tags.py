@@ -37,9 +37,11 @@ activity_type, first match:
   2. a test the plan / title says (workout_review.classify test_cp / test_aet,
      not the power pattern alone) → test;
   3. a race word in the title (賽 / 馬拉松 / race / marathon) → race;
-  4. hiking / mountaineering sport with a plan 百岳 event covering that day →
+  4. a hike (sport_map.app_type "hike": the platform's hike / mountaineering
+     sport — COROS 104 / 105, FIT hiking / mountaineering, WKO5 hiking /
+     mountaineering) with a plan 百岳 event covering that day →
      baiyue_group (百岳 trips are group-paced: athlete.GROUP_HIKE_NOTE);
-  5. hiking / mountaineering sport, or a hike word in the title of a trail
+  5. a hike (as 4), or a hike word in the title of a trail
      run (爬山 / 登山 / 健行 / 郊山 / 百岳 / 縱走 / hike / trek) → hike;
   6. any run → training; anything else → other.
 
@@ -709,8 +711,11 @@ def recorded_json(r: Optional[dict]) -> Optional[dict]:
 
 def auto_type(*, plan_race: Optional[dict] = None, test: Optional[str] = None, sport: str = "",
               sport_type: str = "", title: str = "", trail: bool = False,
-              baiyue_event: Optional[str] = None) -> tuple[str, str]:
-    """(activity_type, reason) — the module docstring's order."""
+              baiyue_event: Optional[str] = None, app_type: Optional[str] = None) -> tuple[str, str]:
+    """(activity_type, reason) — the module docstring's order. `app_type` =
+    the activity's platform-neutral type (sport_map.app_type, SP-263: the
+    COROS / FIT / WKO5 sport mapped to one table); when given, "hike" is what
+    makes a hike, else the hiking / mountaineering sport type."""
     title = title or ""
     if plan_race:
         return "race", f"賽季計畫的比賽「{plan_race.get('name') or ''}」"
@@ -718,7 +723,7 @@ def auto_type(*, plan_race: Optional[dict] = None, test: Optional[str] = None, s
         return "test", test
     if RACE_WORDS.search(title):
         return "race", f"標題有比賽字樣（{title}）"
-    hike_sport = (sport_type or "").lower() in HIKE_SPORTS
+    hike_sport = app_type == "hike" if app_type is not None else (sport_type or "").lower() in HIKE_SPORTS
     if hike_sport and baiyue_event:
         return "baiyue_group", f"賽季計畫的百岳行程「{baiyue_event}」（跟團）"
     if hike_sport:
