@@ -263,6 +263,46 @@ def _split_days(start: dt.datetime, t, d, e, mask) -> list[DaySummary]:
             for k, v in sorted(out.items())]
 
 
+def _cached_summary(ds, w, peaks: list[dict], cache: dict) -> tuple[Optional[dict], bool]:
+    """(the GPS summary of one activity, whether `cache` changed): the cached one while its
+    file is unchanged, else summarised again. None without a file / a time channel."""
+    p = ds.dir / w.entry.file
+    if not p.exists():
+        return None, False
+    st = p.stat()
+    stamp = [st.st_size, int(st.st_mtime), ALGO_VERSION, len(peaks)]
+    hit = cache.get(w.entry.file)
+    if hit and hit.get("stamp") == stamp:
+        return hit.get("summary"), False
+    f = ds.wko4(w.idx)
+    summary = _summarise(w, f, peaks) if f else None
+    cache[w.entry.file] = {"stamp": stamp, "summary": summary}
+    return summary, True
+
+
+def baiyue_summits(ds, peaks: Optional[list[dict]] = None) -> dict[str, list[str]]:
+    """{activity file: the 百岳 names its GPS track passed within SUMMIT_RADIUS_M} for the mountain
+    days (activity_kind 登山健行) — this page's own detection and cache, read by the 活動類型
+    filter's 百岳登山 (sport_map.kind_of, SP-263 owner 2026-10-06). {} on any error."""
+    try:
+        peaks = load_peaks() if peaks is None else peaks
+        cache = _load_cache()
+        dirty = False
+        out: dict[str, list[str]] = {}
+        for w in ds.workouts:
+            if activity_kind(w) != KIND_HIKE:
+                continue
+            s, d = _cached_summary(ds, w, peaks, cache)
+            dirty = dirty or d
+            if s and s.get("peaks"):
+                out[w.entry.file] = [p["name"] for p in s["peaks"]]
+        if dirty:
+            _save_cache(cache)
+        return out
+    except Exception:                       # noqa: BLE001 — a dataset without files (tests, demo)
+        return {}
+
+
 def build_achievements(ds, peaks: Optional[list[dict]] = None) -> list[Achievement]:
     """One Achievement per trail run / mountain day, oldest first, with route
     clusters assigned. Uses (and refreshes) the on-disk cache."""
@@ -274,19 +314,8 @@ def build_achievements(ds, peaks: Optional[list[dict]] = None) -> list[Achieveme
         kind = activity_kind(w)
         if kind is None:
             continue
-        p = ds.dir / w.entry.file
-        if not p.exists():
-            continue
-        st = p.stat()
-        stamp = [st.st_size, int(st.st_mtime), ALGO_VERSION, len(peaks)]
-        hit = cache.get(w.entry.file)
-        if not hit or hit.get("stamp") != stamp:
-            f = ds.wko4(w.idx)
-            summary = _summarise(w, f, peaks) if f else None
-            hit = {"stamp": stamp, "summary": summary}
-            cache[w.entry.file] = hit
-            dirty = True
-        s = hit.get("summary")
+        s, d = _cached_summary(ds, w, peaks, cache)
+        dirty = dirty or d
         if not s:
             continue
         m = w.metrics
