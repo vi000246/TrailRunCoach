@@ -3463,11 +3463,7 @@
     "draft": true,
     "src": "backend/engine/racepower/calc.py:396"
   },
-  "推估：近 180 天確實輕鬆的跑步不到 3 筆，也沒有輕鬆跑上限或 LTHR，用路跑的預設值": {
-    "draft": false,
-    "src": "backend/engine/overview.py"
-  },
-  "推估：近 180 天確實輕鬆的跑步不到 3 筆，用輕鬆跑上限換算：IF = 上限心率 ÷ LTHR（hrTSS 的 IF 定義），每小時 TSS = IF² × 100（TrainingPeaks TSS 公式）": {
+  "推估：近 180 天確實輕鬆的跑步不到 3 筆，用 IF 0.80 換算（輕鬆強度的上緣），每小時 TSS = IF² × 100 ≈ 64（TrainingPeaks TSS 公式）": {
     "draft": false,
     "src": "backend/engine/overview.py"
   },
