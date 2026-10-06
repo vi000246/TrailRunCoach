@@ -265,3 +265,96 @@ def test_trail_cap_leaves_short_races_alone(store):
     ss = [{"id": "long", "kind": "long", "minutes": 255, "title": "LSD（山路）", "detail": ""}]
     SP.decorate(ss, a)
     assert "長天上限" not in ss[0]["detail"]
+
+
+@pytest.mark.parametrize("hours,gait,act", [(5.0, "walk", "用快走"), (2.2, "either", "走跑皆可"), (1.6, "run", "用跑的")])
+def test_climb_says_how_the_race_climbs_it(store, hours, gait, act):
+    """SP-227: the 長爬坡反覆 says the race's gait on that climb (runwalk.gait on its grade × the
+    predicted climbing speed) and the climbing rate, e.g. 「比賽時這段每小時約 430 m、16%：用快走」."""
+    from backend.engine.racepower import runwalk as RW
+    r = _race(store, est_hours=hours)
+    cl = r["features"]["climb"]
+    rg = SP.race_gait(r["features"])
+    v = cl["km"] * 1000 / (cl["minutes"] * 60)
+    assert rg["gait"] == gait == RW.gait(cl["grade"] / 100, v)
+    assert rg["vam"] == pytest.approx(cl["dz"] / cl["minutes"] * 60)
+    info = SP.week_context(kind="specific", mode="specific", monday=MON, race=r)
+    ss = _week()
+    SP.apply_climb(ss, info, aet=150.0)
+    c = next(s for s in ss if s["id"] == "climb")
+    want = f"比賽時這段每小時約 {round(rg['vam'], -1):.0f} m、{cl['grade']:.0f}%：{act}"
+    assert want in c["detail"] and "用比賽的走／跑方式" not in c["detail"]
+    assert info["planned"][0]["gait"] == gait and info["planned"][0]["vam"] == round(rg["vam"])
+
+
+def test_climb_text_without_a_speed_stays_as_before():
+    """No race time (no minutes on the climb) or a climb under 3 %: the old wording."""
+    race = {"name": "某賽", "features": {"climb": {"km": 5.0, "dz": 800.0, "grade": 16.0}, "loss_m": 1500}}
+    sh = SP.climb_shape(race["features"])
+    _t, detail, _hr = SP.climb_text(race, sh, sh["n"], 150.0)
+    assert "用比賽的走／跑方式" in detail and "比賽時這段" not in detail
+    assert SP.race_gait({"climb": {"km": 10.0, "dz": 200.0, "grade": 2.0, "minutes": 60}}) is None
+    assert SP.race_gait(None) is None and SP.race_gait({"climb": {"km": 5.0, "dz": 800.0, "grade": 16.0}}) is None
+
+
+def test_week_plan_and_projection_say_the_same_gait(store):
+    """SP-227: this week's and the projected weeks' 長爬坡反覆 give the same race gait."""
+    from backend.engine import overview as O
+    from backend.engine import plan_prefs as PP
+    from backend.engine import projection as P
+    from backend.engine.status import Status
+    from backend.tests.test_b2b import _history, _phases, _plan_with
+    from backend.tests.test_quality_gate import TODAY
+    EG.save("e1", GPX, "hehuan.gpx")
+    ds = _history(TODAY)
+    plan = _plan_with("2026-12-05", 1, TODAY)
+    plan.events = [_ev(start="2026-11-28")]                 # 賽前第 9 週: several build weeks ahead
+    ds.plan = plan
+    st = Status(ds, plan, TODAY, prefs=PP.Prefs()).compute()
+    wp = O.week_plan(ds, st, TODAY)
+    weeks = P.project_weeks(wp, _phases(plan, TODAY), date(2026, 11, 22))
+    climbs = [s for s in wp["sessions"] if s["id"] == "climb"] + \
+             [s for w in weeks for s in w["sessions"] if s["id"] == "climb"]
+    assert len(climbs) >= 2
+    how = {d[d.index("比賽時這段"):].split("；")[0] for d in (s["detail"] for s in climbs)}
+    assert len(how) == 1 and next(iter(how)).endswith(("用快走", "哪個輕鬆用哪個", "用跑的"))
+
+
+def test_split_specific_phase_climb_gait_and_picked_moves_coexist(store):
+    """Integration 2026-10-06: in the 專項期 of a long trail A race, this week and every projected
+    week carry SP-75's uphill rung for the 強度課 (and no Zone 5 in the 後段 of a ≥ 4 h race),
+    SP-227's race gait on the 長爬坡反覆, and SP-191's picked strength moves — none replaces another."""
+    from backend.engine import overview as O
+    from backend.engine import plan_prefs as PP
+    from backend.engine import projection as P
+    from backend.engine import quality_gate as QG
+    from backend.engine.status import Status
+    from backend.tests.test_b2b import _history, _phases, _plan_with
+    from backend.tests.test_quality_gate import TODAY
+    EG.save("e1", GPX, "hehuan.gpx")
+    ds = _history(TODAY)
+    plan = _plan_with("2026-12-05", 1, TODAY)
+    plan.events = [_ev(start="2026-11-28")]                 # est 5 h: SPEC_RATIO trail_long
+    ds.plan = plan
+    assert QG.race_class(plan.events[0]) == "trail_long"
+    pr = PP.Prefs(strength_moves=(("pull", "band_row"),), strength_no_gear=("bar",))
+    st = Status(ds, plan, TODAY, prefs=pr).compute()
+    wp = O.week_plan(ds, st, TODAY, prefs=pr)
+    weeks = [{"start": wp["week"]["start"], "phase": wp["phase"], "sessions": wp["sessions"]}] + \
+        P.project_weeks(wp, _phases(plan, TODAY), date(2026, 11, 22), prefs=pr)
+    build = [w for w in weeks if w["phase"] == "specific"
+             and not any("恢復週" in (s.get("title") or "") for s in w["sessions"])]
+    assert len(build) >= 4
+    climbs = 0
+    for w in build:
+        ss = w["sessions"]
+        q = [s for s in ss if s["kind"] == "quality"]
+        assert q and all((s.get("title") or "").endswith("上坡") for s in q), (w["start"], [s.get("title") for s in q])
+        assert not any("VO2max" in (s.get("title") or "") for s in q)          # 後段 of a ≥ 4 h race: no Zone 5
+        st_ = [s for s in ss if s["kind"] == "strength" and "肌力" in (s.get("title") or "")
+               and "（" in (s.get("title") or "")]
+        assert st_ and all("彈力帶划船" in s["title"] for s in st_), w["start"]  # the pick (no bar)
+        for c in (s for s in ss if s.get("id") == "climb"):
+            assert "比賽時這段每小時約" in c["detail"] and c["kind"] == "easy"
+            climbs += 1
+    assert climbs >= 3

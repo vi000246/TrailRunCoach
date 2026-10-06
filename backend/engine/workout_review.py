@@ -2811,7 +2811,7 @@ def _plan_card(ds, w) -> Optional[dict]:
     a = s.get("done_by") or {}
     comp = CO.session_compliance(s) or {}
     vs = PM.compare(s) or {}
-    if vs.get("off_plan"):
+    if vs.get("off_plan") or vs.get("short"):           # 沒照課表 / 強度不足 (SP-216)
         comp = CO.with_plan_check(comp, vs)
     tip = [_("課表：{title}（{day}，{match}）", title=s.get('title'), day=s.get('day'),
              match=vs.get('match_label') or PM.MATCH_LABEL.get('day'))]
@@ -2826,7 +2826,12 @@ def _plan_card(ds, w) -> Optional[dict]:
         tip.append(_("目標：{target}", target=s['target']))
     if vs.get("text"):
         tip.append(vs["text"])
+    elif vs.get("short_text"):
+        tip.append(vs["short_text"])
     tip.append(_("顏色：時間和 TSS 偏離計畫較多的那個（±20% 內算符合，TrainingPeaks 的做法）"))
+    if vs.get("intensity_pct") is not None:
+        tip.append(_("強度：做到這堂課的 {pct}%（≥ 80% 算做到、50–80% 算強度不足、不到 50% 算沒照課表）",
+                     pct=vs["intensity_pct"]))
     pct = comp.get("pct")
     return _card("status", id="plan", icon=PS.session_tag(s).get("icon"), label=_("課表"),
                  value=f"{pct}" if pct is not None else "–", unit="%" if pct is not None else None,
@@ -3846,12 +3851,16 @@ def _iv_verdict(ds, w, m, c, base):
     n, hit = e["n_plan"], e["hit"]
     chips = [_chip_row("每趟", [f"{hit}/{n} 趟在目標帶"], "全部達標" if hit >= n else f"差 {n - hit} 趟",
                        "good" if hit >= n else "warn",
-                       f"在目標帶 = 平均 ≥ {e['floor']:.0f} W（目標下限 {e['lo'] * 100:.0f}% CP × 0.98）。每趟的長條在「每趟功率」。")]
+                       # the tolerance / TIZ goal in effect and whose they are (interval_calib, SP-69)
+                       _("在目標帶 = 平均 ≥ {floor:.0f} W（目標下限 {lo:.0f}% CP × {tol}，{basis}）。每趟的長條在「每趟功率」。",
+                         floor=e["floor"], lo=e["lo"] * 100, tol=e.get("in_band_tol_text", "0.98"),
+                         basis=e.get("in_band_basis", "")))]
     if e.get("tiz_ratio") is not None:
-        ok = e["tiz_ratio"] >= 0.85
+        ok = e["tiz_ratio"] >= e.get("tiz_goal", 0.85)
         chips.append(_chip_row("目標區時間", [f"{e['tiz_s'] / 60:.1f} / {e['tiz_plan_s'] / 60:.0f} 分", f"{e['tiz_ratio'] * 100:.0f}%"],
                                "夠" if ok else "不足", "good" if ok else "warn",
-                               "目標區時間 ÷ 這份課表計畫的時間；≥ 85% 算達到（推估）。"))
+                               _("目標區時間 ÷ 這份課表計畫的時間；≥ {goal:.0%} 算達到，{basis}。",
+                                 goal=e.get("tiz_goal", 0.85), basis=e.get("tiz_basis", ""))))
     if e.get("outcome_why"):
         lv = {"met": "good", "border": "warn"}.get(e.get("outcome"), "bad")
         from backend.engine import quality_gate as QG
@@ -3906,7 +3915,8 @@ def _iv_reps(ds, w, m, c, base):
     band = (f"{e['lo'] * 100:.0f}–{e['hi'] * 100:.0f}% CP（{lo_w:.0f}–{hi_w:.0f} W）" if hi_w is not None
             else f"≥ {e['lo'] * 100:.0f}% CP（≥ {lo_w:.0f} W）")
     desc = (f"每趟一根長條（照順序），頂端 = 那趟的平均功率；綠色帶 = 目標 {band}。長條頂端落在綠色帶裡 = 達標："
-            f"綠 ✓ 在目標內、黃 ▼ 偏低（< {e['floor']:.0f} W = 下限 × 0.98）"
+            + _("綠 ✓ 在目標內、黃 ▼ 偏低（< {floor:.0f} W = 下限 × {tol}，{basis}）",
+                floor=e["floor"], tol=e.get("in_band_tol_text", "0.98"), basis=e.get("in_band_basis", ""))
             + (f"、紅 ▲ 偏高（> {ceil:.0f} W = 上限 × 1.02，推估）" if ceil is not None else "")
             + "。偏高在判讀裡仍算達標，只是提醒做太重。"
             + (f"掉速 {e['fade'] * 100:+.0f}%（最後一趟比第一趟）。" if e.get("fade") is not None else "")
@@ -4051,12 +4061,14 @@ def _iv_tiz(ds, w, m, c, base):
           "color": MUTED, "bar_width": 36, "labels": [f"計畫 {plan / 60:.0f} 分"],
           "data": {"kind": "points", "x": "value", "points": [[1, plan]]}},
          {"name": "實際", "type": "bar", "expression": "", "y_axis": "HHMMSS", "unit": du, "x_unit": xu,
-          "color": GOOD if (r or 0) >= 0.85 else BAD, "bar_width": 36,
+          "color": GOOD if (r or 0) >= e.get("tiz_goal", 0.85) else BAD, "bar_width": 36,
           "labels": [f"實際 {act / 60:.1f} 分（{(r or 0) * 100:.0f}%）"],
           "data": {"kind": "points", "x": "value", "points": [[2, act]]}}]
     zone = f"≥ {e['lo'] * 100:.0f}% CP" if e["z5"] else f"{e['lo'] * 100:.0f}–{e['hi'] * 105:.0f}% CP"
     return {**base, "axes": [{"id": "HHMMSS", "unit": du, "min": 0}], "series": s,
-            "description": f"目標區 = 10 秒功率 {zone}、連續 ≥ 30 秒才算（推估）。≥ 85% 算達到（推估，§C2 的 ±15%）。"}
+            "description": f"目標區 = 10 秒功率 {zone}、連續 ≥ 30 秒才算（推估）。"
+                           + _("≥ {goal:.0%} 算達到，{basis}（預設 85% 是 §C2 的 ±15%，推估）。",
+                               goal=e.get("tiz_goal", 0.85), basis=e.get("tiz_basis", ""))}
 
 
 def _iv_hr(ds, w, m, c, base):

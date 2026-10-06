@@ -171,5 +171,13 @@
   "ach.sh_label": "Shang-He standard time (minutes)",
   "ach.hide": "Hide (leave out of the hiking-group list)",
   "ach.unhide": "Unhide",
-  "ach.route_prompt": "Name this route (applies every time you do it; empty = remove):"
+  "ach.route_prompt": "Name this route (applies every time you do it; empty = remove):",
+  "f.race": "Races only",
+  "help.race": "Lists only the runs you marked as a race. Tap “Race” in the list to mark a past race (tap again to undo); the race prediction is checked against the actual results of these races. The app never guesses which run was a race.",
+  "race.btn": "Race",
+  "race.badge": "Race",
+  "race.on_tip": "Mark as a race: the race prediction is checked against this result",
+  "race.off_tip": "You marked this as a race; tap again to undo",
+  "race.on_label": "Mark “{name}” as a race",
+  "race.off_label": "Remove the race mark from “{name}”"
 }

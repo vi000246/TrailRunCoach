@@ -29,8 +29,10 @@ from backend.engine.racepower import hike as HK
 from backend.engine.racepower import pacing as PC
 from backend.engine.racepower import predict as PR
 from backend.engine.racepower import riegel as R
+from backend.engine.racepower import runwalk as RW
 from backend.engine.racepower import weather as WX
 from backend.engine.zones import zones_json
+from backend.i18n import _
 
 MODES = ("time", "power", "auto")
 AUTO_TARGETS = {"max": 1.00, "hard": 0.95, "steady": 0.85}
@@ -118,6 +120,20 @@ def _scale(res: dict, t_total: float) -> dict:
     return {**res, "rows": rows, "T": t_total, "scale": c}
 
 
+def _fade(res: dict, shape: Optional[dict]) -> dict:
+    """SP-222: the segment times with the athlete's own fade (trailhr.fade_times — the sum stays
+    the whole-race time); speeds follow the times, powers stay the allocation's (on trail power is a
+    reference: the same power late in the race buys less speed). `p_alloc` keeps the allocation's
+    time-weighted power for the 「平均功率只能到」 check. Unchanged without an applied shape."""
+    from backend.engine.racepower import trailhr as TH
+    ts = TH.fade_times([r["t"] for r in res["rows"]], shape)
+    if ts is None:
+        return res
+    p_alloc = sum(r["P"] * r["t"] for r in res["rows"]) / res["T"]
+    rows = [{**r, "t": t, "v": r["v"] * r["t"] / t} for r, t in zip(res["rows"], ts)]
+    return {**res, "rows": rows, "faded": True, "p_alloc": p_alloc}
+
+
 def _merge_for_export(segs: list[dict], limit: int = MAX_COROS_STEPS) -> list[dict]:
     s = [dict(x) for x in segs]
     while len(s) > limit:
@@ -154,8 +170,12 @@ def coros_steps(segments: list[dict], band: float = 0.03) -> list:
 # own composition (推估; racepower-v2.md §8 proposes it for long events) —
 # segment outputs carry 推估. The clock depends on the segment times and the
 # times on Mᵢ, so the planner iterates to a fixed point (max |Δ cumulative
-# time| < HEAT_TOL_S). Forecast temperatures are used as given at the
-# forecast point (no lapse to each segment's elevation).
+# time| < HEAT_TOL_S). On a GPX course with `heat_ref_alt_m` (the elevation
+# the race-day temperature refers to: the weather point, sent by the page)
+# each segment's temperature is moved to its own mean elevation by the
+# standard lapse rate (env.segment_temp, −0.0065 K/m, RH kept — as 百岳 and
+# the climatology do; owner decision 2026-10-06, SP-210 follow-up). Without
+# it the temperatures are used as given (one height for the whole course).
 # ---------------------------------------------------------------------------
 
 HEAT_MAX_PASSES = 8
@@ -186,7 +206,7 @@ def _heat_context(opts: dict) -> tuple[Optional[list], Optional[dt.datetime], Op
             rows.append(x)
     rows.sort(key=lambda r: r["t"])
     if not rows:
-        return None, None, "沒有逐時預報：比賽日超出預報範圍、離線，或還沒取得比賽日天氣"
+        return None, None, "沒有逐時預報：中央氣象署一週預報沒有逐時資料、離線，或還沒取得比賽日天氣"
     start = _start_datetime(opts.get("date"), opts.get("start_time"))
     if start is None:
         return None, None, "逐時熱修正需要比賽日期與起跑時間"
@@ -219,8 +239,22 @@ def _segment_heat(hourly: list, start: dt.datetime, segs: list, rows: list, stop
     return out
 
 
-def _heat_fields(h: Optional[dict], to_side: dict) -> dict:
+def _at_height(h: Optional[dict], z_ref: Optional[float], z: Optional[float]) -> Optional[dict]:
+    """Conditions moved from the weather point's elevation z_ref to the
+    segment's z: temperature by env.segment_temp (−0.0065 K/m), RH kept, dew
+    point rebuilt. No z_ref / z → unchanged."""
+    if h is None or z_ref is None or z is None:
+        return h
+    t = ENV.segment_temp(h["temp_c"], z_ref, z)
+    return {**h, "temp_c": t, "dew_c": ENV.dew_point(t, h["rh_pct"])["dew_c"]}
+
+
+def _heat_fields(h: Optional[dict], to_side: dict, z_ref: Optional[float] = None, z: Optional[float] = None) -> dict:
     if h is None:
+        if z_ref is not None and z is not None:
+            one = _at_height({"temp_c": to_side["temp_c"], "rh_pct": to_side["rh_pct"]}, z_ref, z)
+            return {**one, "heat_pct": ENV.heat_penalty_pct(one["temp_c"], one["rh_pct"]),
+                    "heat_clock": None, "heat_src": "single"}
         return {"temp_c": to_side["temp_c"], "dew_c": to_side.get("dew_c"), "rh_pct": to_side["rh_pct"],
                 "heat_pct": to_side.get("heat_penalty_pct", ENV.heat_penalty_pct(to_side["temp_c"], to_side["rh_pct"])),
                 "heat_clock": None, "heat_src": "single"}
@@ -370,6 +404,8 @@ def trail_hr_estimate(model: Optional[dict], km: float, gain_m: float, f_target:
             "heat_beta": bool(TH.TRAILHR["heat_beta"] and hadley is not None and lthr),
             "heat_shift": sh, "hadley": hadley,
             "nonmoving": nm, "time_total_s": t + nm["total_s"] if nm else None,
+            # SP-222: the athlete's own fade by moving hour (trailhr.fade_shape) for the segment times
+            "fade": model.get("fade"),
             "n_runs": model.get("n"), "kind": model.get("kind"), "source": TH.SOURCE, "badge": "推估"}
 
 
@@ -518,28 +554,42 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
                     break
         if not v2_primary:
             res = _scale(res, t_whole)
+            if hr_est is not None:
+                # SP-222: the HR model's total spread by the athlete's own fade, not evenly
+                res = _fade(res, hr_est.get("fade"))
         return {"res": res, "alpha_used": alpha_used, "runs": runs, "t_whole": t_whole, "p_whole": p_whole,
                 "t_c": t_c, "p_c": p_c, "mbar": mbar}
 
     # ---- per-segment, time-of-day heat (推估) ----------------------------
     stops = opts.get("stops") or []
     heat_rows, start_dt, heat_reason = _heat_context(opts)
-    st = solve_all(factors())
+    # each segment's temperature at its own height (GPX + the weather point's elevation)
+    z_ref = opts.get("heat_ref_alt_m") if gpx else None
+    one_to = {"temp_c": to["temp_c"], "rh_pct": to["rh_pct"]}
+
+    def heat_of(hs):
+        """(temp, rh) per segment: the hour's conditions, else the To value, at the segment's height."""
+        out = []
+        for h, sg in zip(hs, segs):
+            x = h if h is not None else _at_height(one_to, z_ref, sg.get("z_mean"))
+            out.append((x["temp_c"], x["rh_pct"]))
+        return out
+    st = solve_all(factors(heat_of([None] * len(segs)) if z_ref is not None else None))
     seg_heat = None
     heat_info = {"mode": "single", "passes": 0, "converged": None, "delta_s": None, "outside": 0,
                  "reason": heat_reason, "badge": None}
     if heat_rows:
         prev = _cum_times(st["res"]["rows"])
         for n in range(1, HEAT_MAX_PASSES + 1):
-            seg_heat = _segment_heat(heat_rows, start_dt, segs, st["res"]["rows"], stops)
+            seg_heat = [_at_height(h, z_ref, sg.get("z_mean"))
+                        for h, sg in zip(_segment_heat(heat_rows, start_dt, segs, st["res"]["rows"], stops), segs)]
             if hr_est is not None:
                 # the time-weighted race-day Hadley of the hours each segment is run
                 from backend.engine import heat as HT
                 tw = [(r["t"], HT.hadley_sum(h["temp_c"], h["rh_pct"])) for r, h in zip(st["res"]["rows"], seg_heat) if h]
                 if tw:
                     hr_est = hr_for(sum(t * x for t, x in tw) / (sum(t for t, _ in tw) or 1.0)) or hr_est
-            st = solve_all(factors([(h["temp_c"], h["rh_pct"]) if h else (to["temp_c"], to["rh_pct"])
-                                    for h in seg_heat]))
+            st = solve_all(factors(heat_of(seg_heat)))
             cur = _cum_times(st["res"]["rows"])
             delta = max(abs(a - b) for a, b in zip(cur, prev))
             prev = cur
@@ -554,6 +604,9 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
             warnings.append(f"{out_n} 段的 ETA 超出逐時預報範圍：這些段用單一溫度 {to['temp_c']:.1f} °C")
     elif heat_reason and opts.get("hourly_heat", True):
         warnings.append(f"熱修正用單一溫度 {to['temp_c']:.1f} °C / 濕度 {to['rh_pct']:.0f} %（{heat_reason}）")
+    if z_ref is not None:
+        heat_info["ref_alt_m"] = z_ref
+        warnings.append(_("熱：每段溫度由天氣點（{z:.0f} m）以每 100 m 0.65 °C 換算到該段海拔，濕度不變（推估）", z=z_ref))
     res, alpha_used, runs = st["res"], st["alpha_used"], st["runs"]
     t_whole, p_whole, t_c, p_c, mbar = st["t_whole"], st["p_whole"], st["t_c"], st["p_c"], st["mbar"]
     if alpha_used < alpha - 1e-9:
@@ -565,7 +618,7 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
     # absurd targets): say so instead of showing a confident wrong number
     if mode == "time" and abs(T - t_whole) > 1.0:
         warnings.append(f"達不到目標時間：最接近的是 {T / 3600:.2f} h（鎖定的分段或目標超出範圍）")
-    if (mode == "power" or not v2_primary) and abs(p_bar - p_whole) > 0.5:
+    if (mode == "power" or not v2_primary) and abs(res.get("p_alloc", p_bar) - p_whole) > 0.5:
         warnings.append(f"平均功率只能到 {p_bar:.0f} W（目標 {p_whole:.0f} W）：鎖定的分段或下坡上限限制了配置")
     p_train = sum(r["P"] / s["M"] * r["t"] for r, s in zip(rows, segs)) / T
     eff = DF.effort(p_train, T, cp, w_prime, tte, k, cp_spread=capacity.get("spread"),
@@ -588,14 +641,20 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
         wb = {"model": wmodel, "values": vals, "label": lab, "badge": None if wmodel == "wko5" else "推估",
               "w_prime": w_prime}
     zs = zones_json(cp)
+    # SP-228: the athlete's shift of the walk–run curves (0 = the default curve)
+    rw_shift = float(getattr(grade_re, "rw_shift", 0.0) or 0.0)
     out_segs = []
     cum = 0.0
     stops = opts.get("stops") or []
     for i, (s, r) in enumerate(zip(segs, rows)):
         cum += r["t"]
         notes = []
-        if s.get("walk"):
-            notes.append(s["walk"])
+        # walk / either / run from grade × the predicted speed (SP-226): a label only, the time is
+        # already solved; a manual course has only its net grade, so no label there
+        gait = RW.gait(s["grade"], r["v"], rw_shift) if gpx else None
+        walk = RW.walk_label(gait)
+        if walk:
+            notes.append(walk)
         if r["capped"]:
             notes.append("下坡上限")
         if i in over_idx or r["P"] > cp_w * s["M"] * 1.0001:
@@ -610,14 +669,15 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
         z = next((zz for zz in zs if r["P"] / cp >= zz["lo"] and (zz["hi"] is None or r["P"] / cp < zz["hi"])), None)
         out_segs.append({
             **{x: s.get(x) for x in ("i", "start_km", "end_km", "dist_m", "gain_m", "loss_m", "grade", "max_grade",
-                                     "z_start", "z_end", "z_mean", "z_max", "cls", "cls_label", "walk", "climb_no")},
+                                     "z_start", "z_end", "z_mean", "z_max", "cls", "cls_label", "climb_no")},
+            "walk": walk, "gait": gait,
             "M": s["M"], "power": r["P"], "pct_cp": r["P"] / cp, "zone": z["id"] if z else "1A 以下",
             "speed_ms": v, "pace_s_per_km": _pace(v), "gap_pace_s_per_km": _pace(v * gf) if trail else None,
             "vert_m_per_h": v * s["grade"] * 3600.0 if abs(s["grade"]) >= 0.15 else None,
             "t": r["t"], "cum_s": cum, "eta": _clock(opts.get("start_time"), cum + _stops_before(stops, s["end_km"])),
             "capped": r["capped"], "locked": r.get("locked", False), "notes": notes,
             "badge": None if (v2_primary and trusted) else "推估", "trusted": trusted, "hint": HINT_30S,
-            **_heat_fields(seg_heat[i] if seg_heat else None, env["to"]),
+            **_heat_fields(seg_heat[i] if seg_heat else None, env["to"], z_ref, s.get("z_mean")),
         })
     if wb:
         for sg, val in zip(out_segs, wb["values"]):
@@ -683,11 +743,26 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
                             f"{(hr_est['delta'] or 0):.1%}（1 小時後）；功率只當參考")
             if hr_est.get("delta_warning"):
                 warnings.append(hr_est["delta_warning"])
+            fd = hr_est.get("fade")
+            if fd and res.get("faded"):
+                # the shape as measured (it can rise: the athlete's data decides, not a population shape)
+                seq = " / ".join(f"{m:.0%}" for _h, m in fd["points"][1:])
+                warnings.append(_("分段時間照你自己的速度變化分配（推估）：用了 {n} 次 ≥ {h:g} 小時的越野跑，同坡度、同心率下，"
+                                  "第 2 到第 {k} 小時的速度約是第 1 小時的 {seq}，之後維持最後一個值。整場時間不變，"
+                                  "只改各段怎麼分：變慢的話，前段的 ETA 提早、後段每段變長",
+                                  n=fd["n_runs"], h=fd["min_run_h"], k=len(fd["points"]), seq=seq))
+            elif fd:
+                warnings.append(_("分段維持平均分配：後段變慢要用你自己至少 {m} 次 ≥ {h:g} 小時的越野跑來估"
+                                  "（目前 {n} 次能用，共 {a} 次 ≥ {h:g} 小時）",
+                                  m=fd["min_runs"], h=fd["min_run_h"], n=fd["n_runs"], a=fd["n_long"]))
     summary = {"time_s": T, "power": p_bar, "power_train": p_train, "pct_cp": p_bar / cp, "w_per_kg": p_bar / weight,
                "pace_s_per_km": T / km, "km": km, "gain_m": course["totals"].get("gain_m"),
                "loss_m": course["totals"].get("loss_m"), "M": mbar,
                "total_method": "trail_hr" if hr_est is not None else "v2" if v2_primary else "v1",
                "trail_hr": hr_est,
+               # SP-222: whether the segment times carry the athlete's own fade
+               "fade": {"applied": bool(res.get("faded")), "n_runs": (hr_est.get("fade") or {}).get("n_runs"),
+                        "badge": "推估"} if hr_est is not None and hr_est.get("fade") else None,
                # moving time (T, the validated target) + the predicted non-moving time, shown apart
                "nonmoving": (hr_est or {}).get("nonmoving"),
                "time_total_s": T + hr_est["nonmoving"]["total_s"] if hr_est and hr_est.get("nonmoving") else None,
@@ -699,6 +774,7 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
                "alpha_used": alpha_used, "sigma": sigma, "beta": beta, "damage": dmg, "hr_first": hr_first,
                "cp2": cp2, "tech": grade_re.tech_factor() if trail and hasattr(grade_re, "tech_factor") else None,
                "strategy": skind, "strategy_amount": amount, "alpha": alpha, "heat": heat_info,
+               "runwalk": {"shift": rw_shift, "personal": bool((getattr(grade_re, "runwalk", None) or {}).get("personal"))},
                "heat_accl": heat_accl}
     heat_profile = _heat_profile(heat_rows, start_dt, out_segs, stops) if heat_info["mode"] == "hourly" else None
     return {"type": kind, "summary": summary, "effort": eff, "segments": out_segs, "target": target,

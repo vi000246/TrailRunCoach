@@ -33,6 +33,8 @@ Verdict (thresholds 推估 unless noted):
   達到訓練目標  outcome 達標 and TIZ ≥ 85 % of the variant's plan (the ±15 % of §C2)
   部分達到      outcome 邊界, or 達標 with TIZ 60–85 %
   未達到        outcome 未適應 / 目標太高, or TIZ < 60 %
+The 0.98 and the 85 % are the defaults: the values in effect are per athlete
+(engine/interval_calib.py, SP-69) and the reasons say whose they are.
 
 The 間歇 dashboard is shown for every run (`card`, the user 2026-10-02):
   * a CP / AeT test (workout_review.classify) is judged against its protocol
@@ -59,7 +61,7 @@ import numpy as np
 
 from backend.i18n import _
 
-TIZ_GOAL = 0.85                  # 推估 (§C2 ±15 %)
+TIZ_GOAL = 0.85                  # 推估 (§C2 ±15 %); the default — per athlete via interval_calib.tiz_goal()
 TIZ_PART = 0.60                  # 推估
 TIZ_RUN_S = 30                   # 推估: a stretch in the zone counts from 30 s
 TIZ_HI_TOL = 1.05                # doc §B3 #4: up to hi × 1.05
@@ -127,7 +129,8 @@ def verdict_of(outcome: Optional[str], tiz_ratio: Optional[float]) -> str:
         return "unknown"
     if outcome in ("unadapted", "too_high") or (tiz_ratio is not None and tiz_ratio < TIZ_PART):
         return "missed"
-    if outcome == "border" or (tiz_ratio is not None and tiz_ratio < TIZ_GOAL):
+    from backend.engine import interval_calib as IC
+    if outcome == "border" or (tiz_ratio is not None and tiz_ratio < IC.tiz_goal()):
         return "partial"
     return "met"
 
@@ -274,7 +277,10 @@ def evaluate(ds, w, with_peers: bool = True, as_interval: bool = False) -> Optio
                 float(np.median([b["duration_s"] for b in bouts])) / 60.0, 2, band[1], band[2], False, "")
         label = spec[1]
     lo, hi, n_plan = spec[5], spec[6], int(spec[2])
-    floor = QG.IN_BAND_TOL * lo * cp
+    from backend.engine import calibrate as CAL
+    from backend.engine import interval_calib as IC
+    tol, goal = IC.in_band_tol(), IC.tiz_goal()     # QG.IN_BAND_TOL / TIZ_GOAL or the athlete's own (SP-69)
+    floor = tol * lo * cp
     t, p, hr = s["t"], s["power"], s["hr"]
     reps = []
     for k, b in enumerate(bouts[:max(n_plan, len(bouts))]):
@@ -301,10 +307,13 @@ def evaluate(ds, w, with_peers: bool = True, as_interval: bool = False) -> Optio
     fade = (ps[-1] / ps[0] - 1.0) if len(ps) >= 2 and ps[0] else None
     reasons = []
     hit = sum(1 for r in reps if r["in_band"])
-    reasons.append(f"{hit}/{n_plan} 趟在目標帶（≥ {floor:.0f} W＝目標下限 {lo * 100:.0f}% CP × 0.98）")
+    tol_txt = f"{tol:.3f}".rstrip("0")
+    tol_basis, goal_basis = CAL.basis(IC.TOL), CAL.basis(IC.TIZ)
+    reasons.append(_("{hit}/{n} 趟在目標帶（≥ {floor:.0f} W＝目標下限 {lo:.0f}% CP × {tol}，{basis}）",
+                     hit=hit, n=n_plan, floor=floor, lo=lo * 100, tol=tol_txt, basis=tol_basis))
     if ratio is not None:
-        reasons.append(f"目標區時間 {tiz / 60:.1f} 分，是這份課表計畫 {plan_tiz / 60:.0f} 分的 {ratio * 100:.0f}%"
-                       f"（≥ 85% 算達到，推估）")
+        reasons.append(_("目標區時間 {tiz:.1f} 分，是這份課表計畫 {plan:.0f} 分的 {r:.0%}（≥ {goal:.0%} 算達到，{basis}）",
+                         tiz=tiz / 60, plan=plan_tiz / 60, r=ratio, goal=goal, basis=goal_basis))
     if o.get("why"):
         reasons.append(f"逐趟判定：{QG.OUTCOME_LABEL.get(o.get('outcome'), o.get('outcome'))}（{o['why']}）")
     if fade is not None:
@@ -312,6 +321,9 @@ def evaluate(ds, w, with_peers: bool = True, as_interval: bool = False) -> Optio
     out = {"ok": True, "label": label, "variant_key": v.key if v is not None else None,
            "rung_key": row.get("rung_key"), "equiv": row.get("equiv"), "planned": bool(row),
            "cp": cp, "lo": lo, "hi": hi, "floor": floor, "n_plan": n_plan, "works": list(v.works) if v else None,
+           # the per-athlete numbers this verdict used and whose they are (the cards quote them)
+           "in_band_tol": tol, "in_band_tol_text": tol_txt, "in_band_basis": tol_basis,
+           "tiz_goal": goal, "tiz_basis": goal_basis,
            "reps": reps, "rep_source": found["source"], "outcome": o.get("outcome"), "outcome_why": o.get("why"),
            "hit": hit, "hit_rate": hit / n_plan if n_plan else None, "fade": fade, "sdec": sdec(ps),
            "tiz_s": tiz, "tiz_plan_s": plan_tiz, "tiz_ratio": ratio, "z5": is5,
@@ -514,8 +526,11 @@ def card_cached(ds, w) -> dict:
     # the planned session it was matched to is an input: a sync's match comes after the
     # dataset was built (plan_match on the next 課表 view)
     row = _planned(ds, w)
+    from backend.engine import interval_calib as IC
     key = ("interval_card", w.idx, flagged(w), row.get("uid"), row.get("title"), row.get("variant_key"),
-           json.dumps(row.get("steps"), sort_keys=True, default=str) if row.get("steps") else None)
+           json.dumps(row.get("steps"), sort_keys=True, default=str) if row.get("steps") else None,
+           # the per-athlete verdict numbers in effect (SP-69): a new fit / manual value re-judges
+           IC.in_band_tol(), IC.last_fade(), IC.tiz_goal())
     if isinstance(memo, dict) and key in memo:
         return memo[key]
     r = card(ds, w)

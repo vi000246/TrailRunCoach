@@ -87,7 +87,7 @@ def test_hourly_at_interpolates_and_stops_at_the_edges():
     assert mid["rh_pct"] == approx(ENV.rh_from_dew_point(mid["temp_c"], mid["dew_c"]))
 
 
-def test_weather_returns_hourly_rows_from_open_meteo_only(tmp_path):
+def test_weather_returns_hourly_rows_from_open_meteo_and_climatology(tmp_path):
     def fake_get(url, params, timeout):
         lo = dt.date.fromisoformat(params["start_date"])
         n = (dt.date.fromisoformat(params["end_date"]) - lo).days + 1
@@ -104,7 +104,10 @@ def test_weather_returns_hourly_rows_from_open_meteo_only(tmp_path):
     assert len(r["hourly"]) == 48 and r["values"]["temp_c"] == approx(20.0 + 0.5 * 11.5)
     far = WX.race_conditions(date=dt.date(2026, 11, 30), lat=23.5, lon=121.0, elevation_m=500.0, today=today,
                              key=None, get=fake_get, cache_dir=tmp_path, use_cwa=False)
-    assert far["provider"] == "climatology" and far["hourly"] is None
+    # SP-210: past the forecast, the climatology's 24-hour profile (each clock hour's mean)
+    assert far["provider"] == "climatology" and len(far["hourly"]) == 48
+    assert far["hourly"][0]["t"] == "2026-11-30T00:00" and far["hourly"][-1]["t"] == "2026-12-01T23:00"
+    assert far["hourly"][14]["temp_c"] == approx(20.0 + 0.5 * 14) and far["values"]["temp_c"] == approx(20.0 + 0.5 * 11.5)
 
 
 # ---- per-segment heat in the planner ------------------------------------------------------
@@ -282,3 +285,16 @@ def test_csv_export_gpx_and_hike(client):
     assert kv["類型"] == ["百岳"] and "總移動時間" in kv and kv["海拔適應"] == ["未適應"]
     c = cols.index("天")
     assert {r[c] for r in rows[:-1]} == {"1", "2"}
+
+
+def test_csv_names_the_trail_even_strategy_even_effort():
+    """SP-224: on trail the 「even」 strategy is even effort (the pace follows the grade); road keeps 均速."""
+    from backend.engine.racepower import csvplan as CSV
+    at = dt.datetime(2026, 10, 6, 8, 0)
+    for kind, label in (("trail", "均勻努力"), ("road", "均速")):
+        plan = {"type": kind, "summary": {"strategy": "even", "km": 10.0}, "used": {}}
+        rows = {r[0]: r[1:] for r in CSV.header_rows(plan, name="x", date=None, computed_at=at) if r}
+        assert rows["策略"] == [label]
+    plan = {"type": "trail", "summary": {"strategy": "positive", "strategy_amount": 0.03, "km": 10.0}, "used": {}}
+    rows = {r[0]: r[1:] for r in CSV.header_rows(plan, name="x", date=None, computed_at=at) if r}
+    assert rows["策略"] == ["前快後慢 3.0%"]

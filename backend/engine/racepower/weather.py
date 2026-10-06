@@ -9,10 +9,27 @@ Provider chain for race day (first success wins; every value stays editable):
      Whole-file downloads (~12 / ~7.5 MB) → compacted and cached on disk,
      refreshed when ≥ 3 h old.
   2. Open-Meteo forecast (no key, ≤ 16 days).
-  3. Open-Meteo archive climatology: the same ±7-day window in each of the
-     last 5 years, daytime hours, temperature lapse-corrected (−6.5 °C/km)
-     from the grid elevation to the target elevation.
+  3. Open-Meteo archive climatology (SP-210): the month centred on the race
+     date (±15 days) in each of the last 10 years, at the target elevation
+     (Open-Meteo downscales; −6.5 °C/km from the answer's elevation when it
+     differs), each hour the mean of three reanalyses (ERA5, ERA5-Land,
+     ECMWF IFS 9 km). Gives the daytime mean and a 24-hour profile (the mean
+     of each clock hour), so far-off races still get per-segment heat.
+     Cached on disk for good (past years do not change).
   4. Manual values.
+
+Why three models (SP-210, checked 2026-10-06 against CWA 1991–2020 station
+normals — 玉山 3845 m, 阿里山 2413 m, 日月潭 1018 m, 鞍部 838 m, 臺北, 臺中;
+2017–2020 daily means at the station elevation, monthly bias; the period
+itself runs ≈ +0.3 °C warm vs 1991–2020):
+    ECMWF IFS alone (Open-Meteo's best_match since 2017)  bias −0.68  MAE 0.80 °C
+    ERA5 alone                                             bias +0.42  MAE 0.93 °C
+    ERA5-Land alone                                        bias +0.03  MAE 0.87 °C
+    mean of the three                                      bias −0.08  MAE 0.57 °C
+Each model misses a different station (ERA5 −1.5 °C at 玉山, ERA5-Land
+−1.1 °C on the plains, IFS cold almost everywhere), so their mean is the
+best of the four. 6 stations, one 4-year period: 教練級, not a published
+validation.
 
 Parsing is separated from fetching so tests never touch the network.
 """
@@ -22,11 +39,13 @@ import datetime as dt
 import json
 import math
 import os
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from statistics import mean
 from typing import Callable, Optional
 
 from backend.engine.racepower.env import dew_point, rh_from_dew_point
+from backend.i18n import N_, _
 
 HOME = None      # fixed folder (tests); None = the tenant's shared root
 KEY_PATH = None  # fixed file (tests); None = home()/weather.json (owner only: the demo has no weather.key cap)
@@ -54,9 +73,18 @@ LAPSE_C_PER_M = -0.0065
 DAY_HOURS = range(6, 18)          # daytime 06:00–17:59 local
 TZ = dt.timezone(dt.timedelta(hours=8))    # CWA (Taiwan) timestamps; Open-Meteo answers in the location's zone ("auto")
 ATTRIBUTION = "Weather data by Open-Meteo.com (CC BY 4.0)"
+# climatology (SP-210; the numbers in the module docstring)
+CLIM_YEARS = 10                   # 推估: 10 years halve the year-to-year noise of 5, warming bias ≈ −0.15 °C
+CLIM_HALF_DAYS = 15               # ±15 days = the month centred on the race date, not the calendar month:
+                                  # 臺北 cools 2.7 °C from Oct to Nov, so 31 Oct would be ~1.3 °C off
+CLIM_MODELS = ("era5", "era5_land", "ecmwf_ifs")    # IFS starts 2017: older years average the other two
+CLIM_HOURLY = "temperature_2m,relative_humidity_2m,dew_point_2m"
+CLIM_WORKERS = 4                  # parallel archive calls (well under Open-Meteo's 600 / min)
+CLIM_VERSION = 2                  # bump to ignore older cache files
+ARCHIVE_LAG_DAYS = 6              # the archive's newest days are still missing
 
 PROVIDER_LABEL = {"cwa_hourly": "中央氣象署 登山三天預報", "cwa_weekly": "中央氣象署 登山一週預報",
-                  "open_meteo": "Open-Meteo 預報", "climatology": "Open-Meteo 近 5 年同期氣候",
+                  "open_meteo": "Open-Meteo 預報", "climatology": N_("近 10 年同月平均（Open-Meteo 歷史資料）"),
                   "manual": "手動 / 預設"}
 
 
@@ -295,17 +323,34 @@ def cwa_day_conditions(loc: dict, date: dt.date, days: int = 1) -> Optional[dict
 # Open-Meteo parsing
 # ---------------------------------------------------------------------------
 
+def merged(h: dict, key: str) -> Optional[list]:
+    """One hourly column of an Open-Meteo answer: `key` itself, else (a
+    multi-model request answers `key_<model>`) each hour's mean over the
+    CLIM_MODELS columns that have a value there."""
+    if h.get(key) is not None:
+        return h[key]
+    cols = [h[f"{key}_{m}"] for m in CLIM_MODELS if isinstance(h.get(f"{key}_{m}"), list)]
+    if not cols:
+        return None
+    out = []
+    for i in range(max(len(c) for c in cols)):
+        v = [float(c[i]) for c in cols if i < len(c) and c[i] is not None]
+        out.append(mean(v) if v else None)
+    return out
+
+
 def parse_open_meteo(js: dict, dates: set[dt.date], hours=DAY_HOURS) -> Optional[dict]:
     h = js.get("hourly") or {}
     times = h.get("time") or []
     temps, rhs, dews, press = [], [], [], []
+    cols = {key: merged(h, key) for key in ("temperature_2m", "relative_humidity_2m", "dew_point_2m", "surface_pressure")}
     for i, t in enumerate(times):
         ts = dt.datetime.fromisoformat(t)
         if ts.date() not in dates or ts.hour not in hours:
             continue
         for arr, key in ((temps, "temperature_2m"), (rhs, "relative_humidity_2m"),
                          (dews, "dew_point_2m"), (press, "surface_pressure")):
-            vals = h.get(key)
+            vals = cols[key]
             if vals and i < len(vals) and vals[i] is not None:
                 arr.append(float(vals[i]))
     c = _conditions(temps, rhs, dews)
@@ -456,6 +501,136 @@ def fetch_cwa(dataset: str, key: Optional[str], *, cache_dir: Optional[Path] = N
     return {**doc, "cache": "miss"}
 
 
+# ---------------------------------------------------------------------------
+# climatology (SP-210): the month around the race date, 10 years, 3 models
+# ---------------------------------------------------------------------------
+
+def _same_day(date: dt.date, year: int) -> dt.date:
+    try:
+        return date.replace(year=year)
+    except ValueError:                    # 29 Feb
+        return date.replace(year=year, day=28)
+
+
+def clim_windows(date: dt.date, days: int = 1, today: Optional[dt.date] = None,
+                 years: int = CLIM_YEARS, half: int = CLIM_HALF_DAYS) -> list[tuple[dt.date, dt.date, bool]]:
+    """(first day, last day, whole?) of each past year's window: the race date
+    ±`half` days (plus the other event days) in each of the `years` years
+    before the race year. A window past the archive's newest day is cut there
+    (whole = False); one with nothing left is dropped."""
+    if today is None:
+        from backend.engine.localtime import today_local
+        today = today_local()
+    newest = today - dt.timedelta(days=ARCHIVE_LAG_DAYS)
+    out = []
+    for back in range(1, years + 1):
+        mid = _same_day(date, date.year - back)
+        lo = mid - dt.timedelta(days=half)
+        hi = mid + dt.timedelta(days=half + max(1, days) - 1)
+        if min(hi, newest) >= lo:
+            out.append((lo, min(hi, newest), hi <= newest))
+    return out
+
+
+def diurnal_profile(answers: list[tuple[dict, set[dt.date]]]) -> Optional[list[dict]]:
+    """Mean temperature and RH of each local clock hour 0–23 over every archive
+    hour on the windows' days (answers = [(archive answer, its days)]); None
+    unless all 24 hours have data."""
+    acc = {hr: ([], []) for hr in range(24)}
+    for js, days in answers:
+        h = js.get("hourly") or {}
+        T, RH, D = (merged(h, k) or [] for k in ("temperature_2m", "relative_humidity_2m", "dew_point_2m"))
+        for i, t in enumerate(h.get("time") or []):
+            ts = dt.datetime.fromisoformat(t)
+            temp = T[i] if i < len(T) else None
+            if ts.date() not in days or temp is None:
+                continue
+            rh = RH[i] if i < len(RH) else None
+            if rh is None and i < len(D) and D[i] is not None:
+                rh = rh_from_dew_point(temp, D[i])
+            if rh is not None:
+                acc[ts.hour][0].append(float(temp))
+                acc[ts.hour][1].append(float(rh))
+    if any(not v[0] for v in acc.values()):
+        return None
+    return [{"hour": hr, "temp_c": mean(v[0]), "rh_pct": mean(v[1]), "n": len(v[0])} for hr, v in sorted(acc.items())]
+
+
+def climatology_hourly_rows(profile: list[dict], dates: set[dt.date], offset_c: float = 0.0) -> list[dict]:
+    """The 24-hour profile laid on the event days plus the day after (the same
+    hours each day), temperature moved by the lapse offset and RH kept — as
+    climatology_from treats the daytime mean."""
+    keep = sorted(dates | {max(dates) + dt.timedelta(days=1)})
+    return [_hour_row(f"{d.isoformat()}T{p['hour']:02d}:00", p["temp_c"] + offset_c, p["rh_pct"], None)
+            for d in keep for p in profile]
+
+
+def clim_point(lat: float, lon: float, elevation_m: Optional[float]) -> tuple:
+    """The queried point (and cache key): 0.01° (~1 km) and 10 m, like route_weather."""
+    return round(lat, 2), round(lon, 2), None if elevation_m is None else round(elevation_m / 10.0) * 10.0
+
+
+def clim_cache_path(cache_dir: Path, point: tuple, date: dt.date, days: int) -> Path:
+    z = "dem" if point[2] is None else f"{point[2]:.0f}"
+    return cache_dir / "climatology" / f"{point[0]:.2f}_{point[1]:.2f}_{z}_{date.isoformat()}_{max(1, days)}d.json"
+
+
+def fetch_climatology(lat: float, lon: float, elevation_m: Optional[float], date: dt.date, days: int = 1, *,
+                      today: Optional[dt.date] = None, get: Callable = _http_get,
+                      cache_dir: Optional[Path] = None) -> dict:
+    """Climatology of the race days at a place: climatology_from's fields plus
+    `profile` (diurnal_profile), `offset_c` (its lapse shift), `failed` (years
+    that did not answer) and `cache`. From the disk cache, else one archive
+    call per year (CLIM_WORKERS in parallel, the three models in each call).
+    Saved only when every year answered over its whole window; past years do
+    not change, so the file never expires. Raises RuntimeError when no year
+    answered."""
+    cache_dir = cache_dir or home()
+    pt = clim_point(lat, lon, elevation_m)
+    path = clim_cache_path(cache_dir, pt, date, days)
+    try:
+        doc = json.loads(path.read_text("utf-8"))
+        if doc.get("version") == CLIM_VERSION:
+            return {**doc["result"], "cache": "hit"}
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        pass
+    wins = clim_windows(date, days, today)
+    if not wins:
+        raise RuntimeError(_("沒有可用的歷史年份"))
+
+    def one(w):
+        params = {"latitude": pt[0], "longitude": pt[1], "start_date": w[0].isoformat(), "end_date": w[1].isoformat(),
+                  "timezone": "auto", "hourly": CLIM_HOURLY, "models": ",".join(CLIM_MODELS)}
+        if pt[2] is not None:
+            params["elevation"] = pt[2]
+        try:
+            return get(OM_ARCHIVE, params, 15.0), None
+        except Exception as e:           # noqa: BLE001 — a year that fails is left out
+            return None, str(e)[:80]
+    with ThreadPoolExecutor(max_workers=min(CLIM_WORKERS, len(wins))) as ex:
+        got = list(ex.map(one, wins))
+    years, answers, errs = [], [], []
+    for (lo, hi, _whole), (js, err) in zip(wins, got):
+        if js is None:
+            errs.append(err)
+            continue
+        window = {lo + dt.timedelta(days=i) for i in range((hi - lo).days + 1)}
+        y = parse_open_meteo(js, window)
+        if y is None:
+            errs.append("")
+        years.append(y)
+        answers.append((js, window))
+    c = climatology_from(years, elevation_m)
+    if c is None:
+        raise RuntimeError("; ".join(e for e in errs if e) or "沒有資料")
+    result = {**c, "profile": diurnal_profile(answers), "offset_c": lapse(0.0, c["grid_elevation_m"], elevation_m),
+              "failed": len(errs)}
+    if not errs and all(w[2] for w in wins):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"version": CLIM_VERSION, "models": list(CLIM_MODELS), "result": result}), "utf-8")
+    return {**result, "cache": "miss"}
+
+
 def race_conditions(*, date: dt.date, days: int = 1, lat: Optional[float] = None,
                     lon: Optional[float] = None, elevation_m: Optional[float] = None,
                     name: Optional[str] = None, today: Optional[dt.date] = None,
@@ -476,9 +651,9 @@ def race_conditions(*, date: dt.date, days: int = 1, lat: Optional[float] = None
     def done(provider, values, extra=None, hourly=None):
         v = {"altitude_m": elevation_m, "temp_c": values["temp_c"], "rh_pct": values["rh_pct"],
              "dew_c": values.get("dew_c", dew_point(values["temp_c"], values["rh_pct"])["dew_c"])}
-        # hourly rows only from a real hourly forecast (CWA 3-day, Open-Meteo);
-        # weekly blocks and climatology have none → the plan uses one heat value
-        return {"provider": provider, "label": PROVIDER_LABEL[provider], "values": v, "tried": tried,
+        # hourly rows from an hourly forecast (CWA 3-day, Open-Meteo) or the
+        # climatology's 24-hour profile; weekly blocks have none → one heat value
+        return {"provider": provider, "label": _(PROVIDER_LABEL[provider]), "values": v, "tried": tried,
                 "location": loc, "fetched_at": now, "detail": extra or {}, "lead_days": lead,
                 "hourly": hourly or None}
 
@@ -516,7 +691,7 @@ def race_conditions(*, date: dt.date, days: int = 1, lat: Optional[float] = None
                     tried.append({"provider": prov, "ok": False, "reason": str(e)[:120]})
     if lat is None or lon is None:
         tried.append({"provider": "open_meteo", "ok": False, "reason": "沒有座標"})
-        return {"provider": "manual", "label": PROVIDER_LABEL["manual"], "values": None, "tried": tried,
+        return {"provider": "manual", "label": _(PROVIDER_LABEL["manual"]), "values": None, "tried": tried,
                 "location": loc, "fetched_at": None, "lead_days": lead, "hourly": None}
     end = date + dt.timedelta(days=max(1, days) - 1)
     # 2. Open-Meteo forecast
@@ -541,31 +716,19 @@ def race_conditions(*, date: dt.date, days: int = 1, lat: Optional[float] = None
             tried.append({"provider": "open_meteo", "ok": False, "reason": str(e)[:120]})
     else:
         tried.append({"provider": "open_meteo", "ok": False, "reason": f"超出 {OM_HORIZON_DAYS} 天預報範圍"})
-    # 3. climatology
-    years = []
-    errs = []
-    for back in range(1, 6):
-        try:
-            y_date = date.replace(year=date.year - back)
-        except ValueError:                    # 29 Feb
-            y_date = date.replace(year=date.year - back, day=28)
-        lo, hi = y_date - dt.timedelta(days=7), y_date + dt.timedelta(days=7 + max(1, days) - 1)
-        window = {lo + dt.timedelta(days=i) for i in range((hi - lo).days + 1)}
-        try:
-            js = get(OM_ARCHIVE, {"latitude": lat, "longitude": lon, "start_date": lo.isoformat(),
-                                  "end_date": hi.isoformat(), "timezone": "auto",
-                                  "hourly": "temperature_2m,relative_humidity_2m"}, 10.0)
-            years.append(parse_open_meteo(js, window))
-        except Exception as e:               # noqa: BLE001
-            errs.append(str(e)[:80])
-    c = climatology_from(years, elevation_m)
-    if c:
-        tried.append({"provider": "climatology", "ok": True})
-        return done("climatology", c, {"years": c["years"], "grid_elevation_m": c["grid_elevation_m"],
-                                       "lapse_corrected": c["lapse_corrected"], "attribution": ATTRIBUTION})
-    tried.append({"provider": "climatology", "ok": False, "reason": "; ".join(errs) or "沒有資料"})
-    return {"provider": "manual", "label": PROVIDER_LABEL["manual"], "values": None, "tried": tried,
-            "location": loc, "fetched_at": None, "lead_days": lead, "hourly": None}
+    # 3. climatology: the month around the race date, 10 years, 3 models (fetch_climatology)
+    try:
+        c = fetch_climatology(lat, lon, elevation_m, date, days, today=today, get=get, cache_dir=cache_dir)
+    except Exception as e:                   # noqa: BLE001
+        tried.append({"provider": "climatology", "ok": False, "reason": str(e)[:120] or "沒有資料"})
+        return {"provider": "manual", "label": _(PROVIDER_LABEL["manual"]), "values": None, "tried": tried,
+                "location": loc, "fetched_at": None, "lead_days": lead, "hourly": None}
+    tried.append({"provider": "climatology", "ok": True})
+    rows = climatology_hourly_rows(c["profile"], want, c["offset_c"]) if c.get("profile") else None
+    return done("climatology", c, {"years": c["years"], "models": list(CLIM_MODELS),
+                                   "window_days": 2 * CLIM_HALF_DAYS + 1, "partial": c["failed"] > 0,
+                                   "grid_elevation_m": c["grid_elevation_m"], "lapse_corrected": c["lapse_corrected"],
+                                   "cache": c["cache"], "attribution": ATTRIBUTION}, rows)
 
 
 def activities_conditions(js: dict, windows: list[tuple[dt.datetime, dt.datetime]]) -> Optional[dict]:

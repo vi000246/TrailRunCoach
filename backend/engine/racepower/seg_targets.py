@@ -7,6 +7,9 @@ vo2max-gate-and-trail-metric.md §2.3, engine/target_policy.py):
                               (Stryd ≈ fixed metabolic load on 0–8 %, van Rassel 2026)
     steep / walked climb      HR cap + target VAM (m/h) + segment time
                               (> 8 % power under-reads; VAM is the climbing result, UA)
+                              labelled by the segment's gait (runwalk.gait on grade ×
+                              predicted speed, SP-226): 陡坡（走／走跑皆可／跑）; a 3–8 %
+                              climb counts here only when it is walked: 爬坡（走）
     descent                   no power / HR target: time and pace as a reference,
                               「控制、安全」 (Stryd under-reads the eccentric load, Kipp 2023)
     flat / runnable           power (HR when there is no CP)
@@ -19,7 +22,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from backend.i18n import _
+from backend.i18n import N_, _
 
 RUN_CLIMB = (0.03, 0.08)
 FLAT = 0.03
@@ -28,6 +31,9 @@ POWER_BAND = 0.03               # ± 3 % around the segment power (the COROS ste
 LONG_RACE_H = 3.0               # longer: HR cap at AeT (「長距離壓在 AeT 附近」, §2.3 推估); else LTHR
 CIRCLED = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳"
 KIND_LABEL = {"run_climb": "可跑的爬坡", "steep_climb": "陡坡（走）", "descent": "下坡", "flat": "平路／可跑"}
+# a steep_climb by its gait (SP-226): > 8 % keeps the HR cap + VAM target whatever the gait
+STEEP_LABEL = {"walk": N_("陡坡（走）"), "either": N_("陡坡（走跑皆可）"), "run": N_("陡坡（跑）")}
+WALKED_CLIMB_LABEL = N_("爬坡（走）")       # 3–8 % but slower than the walk–run transition speed
 SRC = {"run_climb": "3–8 % 坡：Stryd 功率 ≈ 固定代謝負荷（van Rassel 2026）；心率只當上限",
        "steep_climb": "> 8 %：功率低估，改看心率上限與 VAM（Uphill Athlete）",
        "descent": "下坡：功率和心率都低估離心負荷（Kipp 2023；Gravina-Cognetti），看技術與安全",
@@ -40,14 +46,31 @@ def mark(n: int) -> str:
 
 
 def kind_of(seg: dict) -> str:
+    """descent / flat / run_climb / steep_climb. A climb > 8 % is steep_climb
+    (power is not a target there, van Rassel 2026) whatever the gait; a 3–8 %
+    one too when its gait (runwalk.gait, SP-226) is walk."""
     g = float(seg.get("grade") or 0.0)
     if g <= DESCENT:
         return "descent"
-    if g > RUN_CLIMB[1] or (g >= RUN_CLIMB[0] and seg.get("walk")):
+    if g > RUN_CLIMB[1] or (g >= RUN_CLIMB[0] and seg.get("gait") == "walk"):
         return "steep_climb"
     if g >= RUN_CLIMB[0]:
         return "run_climb"
     return "flat"
+
+
+def label_of(seg: dict, k: str, hike: bool = False) -> str:
+    """The segment's target label: the kind's, a steep climb by its gait
+    (陡坡（跑） when the predicted speed is above the transition speed), 百岳
+    as before (no gait: the pack trip is walked)."""
+    if hike:
+        return "平緩" if k == "flat" else KIND_LABEL[k]
+    gait = seg.get("gait")
+    if k == "steep_climb" and gait in STEEP_LABEL:
+        if gait == "walk" and float(seg.get("grade") or 0.0) <= RUN_CLIMB[1]:
+            return _(WALKED_CLIMB_LABEL)
+        return _(STEEP_LABEL[gait])
+    return KIND_LABEL[k]
 
 
 def vam(seg: dict) -> Optional[float]:
@@ -91,7 +114,12 @@ def fuel_summary(plan: dict, seg: dict) -> str:
 
 
 def _walked(seg: dict, k: str) -> bool:
-    return k == "steep_climb" or bool(seg.get("walk")) or any("走" in str(n) for n in seg.get("notes") or [])
+    """Walked by the segment's gait (SP-226); without one (百岳, a manual course,
+    flats and descents) a steep climb counts as walked, as before."""
+    gait = seg.get("gait")
+    if gait is not None:
+        return gait == "walk"
+    return k == "steep_climb"
 
 
 def chart_rows(plan: dict, *, aet: Optional[float] = None, lthr: Optional[float] = None) -> list[dict]:
@@ -135,7 +163,7 @@ def chart_rows(plan: dict, *, aet: Optional[float] = None, lthr: Optional[float]
             "n": n, "mark": mark(n), "i": s.get("i"), "day": s.get("day"),
             "start_km": s.get("start_km"), "end_km": s.get("end_km"), "dist_m": s.get("dist_m"),
             "gain_m": s.get("gain_m"), "loss_m": s.get("loss_m"), "grade": s.get("grade"),
-            "kind": k, "label": tg.get("label") or KIND_LABEL[k], "basis": basis or "pace",
+            "kind": k, "label": tg.get("label") or label_of(s, k, hike), "basis": basis or "pace", "gait": s.get("gait"),
             "pace_s_per_km": pace, "power": p, "power_band": [p * (1 - POWER_BAND), p * (1 + POWER_BAND)] if p else None,
             "power_ref": p_ref, "hr_ref": hr_ref,
             "hr_cap": hr, "hr_cap_src": cap_src if hr else None, "walk": walk,
@@ -200,7 +228,7 @@ def plan_targets(plan: dict, *, aet: Optional[float] = None, lthr: Optional[floa
         if s.get("pace_s_per_km") and not hike:
             pc = int(round(s["pace_s_per_km"]))
             ref.append(f"配速參考 {pc // 60}:{pc % 60:02d} /km")
-        t = {"n": n, "mark": mark(n), "kind": k, "label": KIND_LABEL[k] if not hike or k != "flat" else "平緩",
+        t = {"n": n, "mark": mark(n), "kind": k, "label": label_of(s, k, hike),
              "basis": basis, "chips": chips, "ref": ref, "badge": badge, "src": src, "vam": v,
              "hr_cap": cap, "hr_cap_src": cap_src,
              "text": " · ".join(c["text"] for c in chips) or "—"}

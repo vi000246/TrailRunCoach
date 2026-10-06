@@ -242,6 +242,25 @@ class PlanChangeLog(Base):
     ref_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # the entry an undo / approve acts on
 
 
+class PlanWeekSnapshot(Base):
+    """每週課表存檔 (engine/plan_history.py, SP-71): one row per training week — what the stored
+    plan held when the week began (a compact summary, frozen: plan_sessions is rewritten by every
+    reconcile, so it is no record of what was planned at the time) and, once the week is over,
+    how it went (planned vs done). Kept so that later it can be judged whether training by the
+    app's plan works (docs/research/plan-backtest-feasibility.md §5.1). A summary on purpose:
+    about 1 kB a week. New table: created by init_db's create_all."""
+    __tablename__ = "plan_week_snapshots"
+    __table_args__ = (UniqueConstraint("athlete_id", "week_start"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    athlete_id: Mapped[int] = mapped_column(Integer, default=1, index=True)
+    week_start: Mapped[str] = mapped_column(String(10), index=True)      # the Monday, ISO
+    plan_json: Mapped[str] = mapped_column(Text)                         # plan_history.plan_summary
+    result_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)   # plan_history.result_summary
+    final: Mapped[bool] = mapped_column(Boolean, default=False)          # the result no longer changes
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class ActivityTag(Base):
     """The user's activity metadata (engine/activity_tags.py): activity type
     (比賽 / 練跑 / 爬山 / 百岳跟團 / 測試 / 其他), effort (全力 / 有拼但有休息 /

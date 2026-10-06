@@ -34,6 +34,9 @@ DEFAULTS: dict[str, Any] = {
     "athlete.region": None,
     # the first-run 精靈 (一般設定) was saved or dismissed (engine/athlete_profile.py)
     "athlete.setup.done": False,
+    # 「稍後再說」 on the 精靈 (SP-211): ISO time; it asks again REMIND_DAYS later while
+    # weight / sex / age are still missing (engine/athlete_profile.setup_remind)
+    "athlete.setup.later_at": None,
     # 主要訓練項目 (engine/primary_sport.py): auto (follow the suggestion from the data / the
     # next A race) | trail (越野跑, the original behaviour) | road (路跑／馬拉松)
     "athlete.primary_sport": "auto",
@@ -91,6 +94,10 @@ DEFAULTS: dict[str, Any] = {
     # login / sync — {max_hr, rest_hr, lthr, ratios: {lthr, hrr, hrmax}, hr_zone_type, at};
     # None = never read. Max / rest HR the user enters are dated plan thresholds (mhr / rhr).
     "athlete.coros_profile": None,
+    # the COROS account's HR settings over time (engine/coros_compare.py, SP-67): one entry per
+    # change [{at, lthr, max_hr, rest_hr, ratios, hr_zone_type}], oldest first; written by the
+    # COROS login / sync only. None = nothing recorded yet
+    "athlete.coros_profile_history": None,
     # 起始 CTL／ATL (engine/load_guard.py PMC_START_KEY, SP-68): {date: ISO, ctl, atl} — the
     # PMC's values at the start of that date (charts, status, guardrails); None = automatic
     # (the first 4 weeks' mean daily TSS). Replaces athlete_settings.initial_ctl_run /
@@ -147,6 +154,10 @@ DEFAULTS: dict[str, Any] = {
     "plan.prefs.transition_weeks": 3,
     # 減量期天數 of a road marathon / an ultra (engine/planning.taper_days, SP-96): 14–21
     "plan.prefs.taper_days": 14,
+    # 肌力動作 (engine/strength_moves.py, SP-191): {type: move} the athlete picked ({} = the defaults)
+    # and the equipment they don't have (bar | band)
+    "plan.prefs.strength_moves": {},
+    "plan.prefs.strength_no_gear": [],
     # accepted B2B weekends (engine/b2b.py ACCEPTED_KEY): [{week, days, minutes, uids, at}]
     "plan.b2b.accepted": [],
     # the floating suggestion box (engine/suggestions.py): {suggestion id: {action, at, week}}
@@ -368,6 +379,9 @@ def validate(key: str, value: Any) -> None:
             raise ValueError(f"injury.custom_areas must be distinct labels of 1-{INJ.CUSTOM_MAX_LEN} characters")
     if key == "athlete.coros_profile" and value is not None and not isinstance(value, dict):
         raise ValueError("athlete.coros_profile must be an object or null")
+    if key == "athlete.coros_profile_history":
+        from backend.engine.coros_compare import validate as validate_history
+        validate_history(value)
     if key == "athlete.pmc_start" and value is not None:
         from backend.engine.load_guard import parse_manual
         if parse_manual(value) is None:
@@ -432,6 +446,9 @@ def _validate_pref(key: str, value: Any) -> None:
     if key == "plan.prefs.pref_keep" and value is not None and not (
             isinstance(value, list) and all(isinstance(x, str) and len(x) <= 40 for x in value)):
         raise ValueError("plan.prefs.pref_keep must be a list of conflict codes")
+    if key in ("plan.prefs.strength_moves", "plan.prefs.strength_no_gear"):
+        from backend.engine import strength_moves as SM
+        (SM.clean_moves if key.endswith("moves") else SM.clean_gear)(value, strict=True)
     if key == "plan.prefs.weekly_hours" and value is not None and (
             isinstance(value, bool) or not isinstance(value, (int, float)) or not 1 <= value <= 40):
         raise ValueError("plan.prefs.weekly_hours must be 1-40 hours or null")

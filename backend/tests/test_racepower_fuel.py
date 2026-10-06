@@ -43,7 +43,7 @@ def test_eta_changes_above_four_percent_and_power_is_not_used_past_eight():
     assert FU.power_kcal(300, 3600, 0.03) == approx(300 * 3600 / (0.221 * 4184))
     segs = [{"grade": 0.0, "power": 250.0, "t": 600.0, "dist_m": 2000.0},
             {"grade": 0.12, "power": 260.0, "t": 900.0, "dist_m": 1000.0},
-            {"grade": 0.05, "power": 255.0, "t": 600.0, "dist_m": 1500.0, "walk": "走跑皆可"},
+            {"grade": 0.05, "power": 255.0, "t": 600.0, "dist_m": 1500.0, "gait": "walk", "walk": "走"},
             {"grade": -0.10, "power": 180.0, "t": 300.0, "dist_m": 1200.0}]
     e = FU.run_energy(segs, 65.0, 2.0)
     assert [x["method"] for x in e] == ["power", "minetti", "minetti_walk", "minetti"]

@@ -152,7 +152,8 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
                   b2b: Optional[dict] = None, long_min: Optional[float] = None,
                   sport: str = "trail", goal_pace: Optional[float] = None,
                   aet_measured: bool = False, taper: Optional[dict] = None,
-                  transition_week: Optional[int] = None, strength: Optional[dict] = None) -> list[dict]:
+                  transition_week: Optional[int] = None, strength: Optional[dict] = None,
+                  mp: Optional[dict] = None) -> list[dict]:
     """The week_plan() session template for a projected week, placed on days.
     `transition_week`: which week of its 轉換期 this is (overview.transition_week; SP-103 strides from 2).
     `strength` (SP-119): the week's strength_plan.week_context — the strength session's stage
@@ -166,13 +167,14 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
     `base_quality`: the session(s) the gate picked for this week — a list of the
     two-track intervals (overview.quality_sessions: base / 專項期 / 減量期), or one dict
     (the recovery-week fartlek, the AeT test, kind "test"); None in base with
-    `allow_quality` = 有氧間歇（巡航）3×10, in 專項期 the old fixed session, in 減量期 TAPER_Q 4×3′.
+    `allow_quality` = 有氧間歇（巡航）3×10 (專項期 too since SP-75), in 減量期 TAPER_Q 4×3′.
     `quality_cap`: 1 = at most one interval (the gate's guardrail mode).
     `prefs` (課表偏好, engine/plan_prefs.py): shaped and placed like week_plan();
     `rates` = TSS / h per category for it, `notes` collects its notes.
     `blocked`: ISO days of 不排課日期 (engine/blackouts.py) — never a candidate day.
     `sport` (主要訓練項目, engine/primary_sport.py): road = the week_plan() road template (flat long
-    run with a marathon-pace segment in the 專項期, flat threshold interval, flat strides)."""
+    run with a marathon-pace segment in the 專項期, flat strides). `mp` (overview.mp_week, SP-75): the
+    week's MP share."""
     road = sport == "road"
     total = hours * 60.0
     ss: list[dict] = []
@@ -205,7 +207,7 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
         if xu_test and kind == "base" and not rec_wk:
             add(**_bq(xu_test))                     # 徐國峰's 90-min test = this week's LSD
         elif road:
-            add(**O.road_long_session(long_min, "base" if rec_wk else kind, aet, tph, goal_pace, aet_measured),
+            add(**O.road_long_session(long_min, "base" if rec_wk else kind, aet, tph, goal_pace, aet_measured, mp),
                 target=tgt.get("long", ""))
         else:
             add(id="long", kind="long", title="LSD" + ("（山路）" if mountain else ""),
@@ -222,12 +224,6 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
         elif allow_quality and kind == "specific" and bqs:
             for b in bqs:                           # the two-track pick (SP-31; overview.quality_sessions)
                 add(**_bq(b))
-        elif allow_quality and kind == "specific" and road:
-            add(**O.ROAD_SPECIFIC_Q, target=tgt.get("threshold", ""))
-        elif allow_quality and kind == "specific":
-            add(id="quality", kind="quality", title="VO2max 間歇 5×4 分上坡", minutes=60, target=tgt.get("supra", ""),
-                detail="上坡 4 分鐘（6–10% 坡），慢跑或走下來恢復；暖身 15 分、緩和 10 分",
-                source=O.SRC_PALLADINO + "（Supra-threshold）", tss=75.0)
         elif allow_quality and kind == "base" and bqs:
             for b in bqs:
                 add(**_bq(b))
@@ -651,6 +647,8 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
                     _advance(steps, q.get("rung_key"))
         elif base_q is None and kind == "taper":
             base_q = O.quality_sessions(gate, dec, kind, th, tgt, hours)
+        if dec.get("seg_note") and kind == "specific" and mode not in ("recovery_week", "reentry"):
+            notes.append({"level": "info", "src": "specific", "text": dec["seg_note"]})     # SP-75, as week_plan
         b2b = None if road else {"event": cb.get("event"), "state": b2b_state, "prev_mode": prev_mode,
                                  "weight": cb.get("weight"), "accepted": b2b_accepted}
         sp_info = SP.projected_context(kind, mode, week, sp_cur) if sp_cur.get("race") else None
@@ -668,7 +666,8 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
                                   "long": (_d(tc["start"]) - week).days > tc["long_days"]}
                            if tc and kind == "taper" else None,
                            transition_week=O.transition_week(phases, week) if kind == "transition" else None,
-                           strength=STP.week_context(a_evs, phases, week, kind))
+                           strength=STP.week_context(a_evs, phases, week, kind, prefs),
+                           mp=O.mp_week(cur.get("mp_race"), week))
         if kind in ("transition", "rebuild"):
             notes.append({"level": "info", "src": "transition",
                           "text": O.TRANSITION_NOTE if kind == "transition" else O.REBUILD_NOTE})
@@ -687,7 +686,7 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
                             allow=q_ok and not ((b2b or {}).get("info") or {}).get("post"),
                             rate=(cur.get("tss_per_category") or {}).get("trail") or 60.0, notes=notes)
                 SP.walk_targets(ss, th.get("walk_cap"), th.get("aet"), th_meas)   # SP-115, as week_plan
-                STP.refresh(ss, STP.week_context(a_evs, phases, week, kind))      # SP-119 × ME, as week_plan
+                STP.refresh(ss, STP.week_context(a_evs, phases, week, kind, prefs))   # SP-119 × ME, as week_plan
                 SP.apply_climb(ss, sp_info, aet=th.get("aet"), prefs=prefs, b2b=(b2b or {}).get("info"), notes=notes,
                                rates=cur.get("tss_per_category"), aet_measured=th_meas)
             except Exception:              # noqa: BLE001 — never breaks the projection
@@ -763,7 +762,7 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
             notes.append({"level": "info", "src": "blackout", "text": f"剩下的日子排不下 {len(drop)} 堂課（約 {sum(s['minutes'] for s in drop)} 分鐘）——不用補"})
         # 平衡／腳踝 (engine/balance_plan.py, SP-120 — part of strength): the same rule as week_plan
         try:
-            bal = BP.week_context(a_evs, week, kind)
+            bal = BP.week_context(a_evs, week, kind, prefs)
             if bal.get("active"):
                 BP.attach(ss, bal)
                 BP.ensure(ss, bal, [week + dt.timedelta(days=i) for i in range(7)
@@ -787,7 +786,7 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
                     "sessions": [s for s in ss if s["day"]],
                     **({"notes": notes} if PR is not None or bmap or (heat_w or {}).get("active")
                        or kind in ("transition", "rebuild") or ph_note or tech.get("planned") is not None or s_note or user_q
-                       or dh.get("planned") is not None
+                       or dh.get("planned") is not None or any(n.get("src") == "specific" for n in notes)
                        or b2b_info.get("post") or b2b_info.get("due") or (lc_info or {}).get("planned") else {}),
                     **({"b2b": B2B.public(b2b_info)} if b2b_info.get("due") or b2b_info.get("post") else {}),
                     **({"b2b_suggestion": b2b_sug} if b2b_sug else {}),

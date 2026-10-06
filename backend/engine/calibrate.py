@@ -99,6 +99,8 @@ def _load_items() -> None:
     from backend.engine import terrain_calib  # noqa: F401  (climb_divisor_run)
     from backend.engine import advanced_params  # noqa: F401  (進階 C 類: heat_partial_hadley, pack_daily_drop_kg)
     from backend.engine import drift_calib  # noqa: F401  (drift windows)
+    from backend.engine import interval_calib  # noqa: F401  (SP-69: interval_in_band_tol, interval_last_fade, interval_tiz_goal)
+    from backend.engine import threshold_calib  # noqa: F401  (SP-69: lthr_test_age_days, easy_hr_margin_bpm)
 
 
 def validate_entry(v) -> None:
@@ -206,6 +208,13 @@ def value(name: str, user_id: int = 1) -> float:
     return float(entry(name, user_id)["value"])
 
 
+def basis(name: str, user_id: int = 1) -> str:
+    """Which value is in effect for `name`, in the chip's words — 「本人 n=24」 / 「手動」 /
+    「預設（文獻）」 / 「預設（推估）」 — for a text that quotes the number (SP-69: the text
+    says whether it is the athlete's own value or the default)."""
+    return chip(_registry()[name], entry(name, user_id))["text"]
+
+
 def run(ds, stored: dict, today: Optional[dt.date] = None) -> tuple[dict, dict]:
     """(updates {name: entry}, skipped {name: why}) for every registered item.
     A manual entry is kept; a fit below min_n writes nothing (the default /
@@ -273,11 +282,13 @@ async def run_safe(athlete_id: int = 1) -> dict:
     factory = SESSION_FACTORY
     if factory is None:
         from backend.db.database import AsyncSessionLocal as factory
+    from backend import applog
     try:
         async with factory() as db:
-            return await calibrate(db, athlete_id)
+            with applog.timed("calibration run"):                       # SP-215
+                return await calibrate(db, athlete_id)
     except Exception as e:                  # noqa: BLE001 — the sync must not break
-        log.warning("calibration run failed: %s", type(e).__name__)
+        log.warning("calibration run failed: %s", type(e).__name__, exc_info=True)
         return {"status": "failed", "error": type(e).__name__}
 
 
