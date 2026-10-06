@@ -341,15 +341,17 @@ def find_all(ds, today: dt.date, blackouts=(), horizon_days: int = 182, injuries
         ep = _walkrun_episode(ds, inj, last, ret, today, logs) if inj is not None and not planned else None
         if ep is not None:
             if ep.get("done"):
-                # SP-272: the walk-run stages are not block days — the block starts after the last continuous 30
-                start = dt.date.fromisoformat(ep["done"]) + dt.timedelta(days=1)
+                # SP-272: the walk-run stages are not block days — the block starts after the last continuous 30;
+                # a run marked 沒痛 that skipped them (owner's decision, SP-273) starts it on that run
+                start = dt.date.fromisoformat(ep["done"]) + dt.timedelta(days=0 if ep.get("skipped") else 1)
             elif INJ.is_open(inj):
                 continue                    # still red, or in the walk-run: no block yet
         p = plan(last, start, _cross(ds, last + dt.timedelta(days=1), ret - dt.timedelta(days=1)), planned, ph, pl,
                  ongoing, injury=inj, step_up=step_up, days=n if t or start != ret else None, transition_days=t,
                  illness=ill)
         if p is not None and start != ret:
-            p["walkrun"] = {"red": ep["red"], "start": ep["start"], "first_run": ep.get("first_run"), "done": ep["done"]}
+            p["walkrun"] = {"red": ep["red"], "start": ep["start"], "first_run": ep.get("first_run"), "done": ep["done"],
+                            "skipped": bool(ep.get("skipped"))}
         if p is not None:
             out.append(p)
     return out

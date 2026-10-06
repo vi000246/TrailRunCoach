@@ -167,7 +167,7 @@ async def meta(db: AsyncSession = Depends(get_db)):
                        "walkrun_button": _("可以開始走跑"),
                        "walkrun_help": _("紅燈之後：先能走 30 分鐘不痛、走路的樣子正常，再開始走跑交替（Ohio State Wexner "
                                          "回跑指引，臨床機構）。app 不判斷能不能開始跑。按了之後課表從「走 4 分／跑 1 分」開始；"
-                                         "走完 30 分在活動上標「沒痛」或「痠」也一樣。"),
+                                         "走完 30 分在活動上標「沒痛」或「痠」也一樣。直接跑一次標「沒痛」，就跳過走跑、直接回綠燈。"),
                        "walkrun_stage": _("走跑第 {s} 階：這階已完成 {n}/{need} 次"),
                        "walkrun_cont": _("連續跑 30 分：已完成 {n}/{need} 次"),
                        "pain_score_help": _("0 = 不痛、10 = 想像得到最痛。傷病還沒好的時候，app 用最近一次跑步的分數和"

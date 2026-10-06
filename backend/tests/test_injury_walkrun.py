@@ -4,7 +4,8 @@ overview.walkrun_apply / walkrun_session, reentry.find_all, projection, api/inju
 sync/coros_workouts): after a red light a ≥ 30-min walk marked 沒痛／痠 (or the button) starts the
 walk / run stages 4/1 → 3/2 → 2/3 → 1/4, then 30 min continuous × 3, a rest day between run days; a 痛
 repeats the stage, 中斷 goes back to red, an unmarked run moves on; the Daniels block starts after the
-last continuous 30 (the stages are not block days). Illness: never. Synthetic data and tmp SQLite only
+last continuous 30 (the stages are not block days). A run marked 沒痛 while red skips it all (owner's
+decision, SP-273, 2026-10-06). Illness: never. Synthetic data and tmp SQLite only
 (docs/research/injury-graded-return.md §2.4, §4.3, §6.1 point 5).
 """
 from __future__ import annotations
@@ -84,6 +85,33 @@ def test_all_stages_then_back_to_the_light():
     assert lt["color"] == "green"
 
 
+def test_a_run_marked_no_pain_goes_straight_back_to_green():
+    """Owner's decision (SP-273, 2026-10-06): after red, a run marked 沒痛 skips the walk check and the
+    walk-run — green at once; 痠 / 痛 / unmarked runs keep it red."""
+    e = ev(1, "2026-09-10")
+    red = [mk("2026-09-10", 3)]
+    for pain in (1, 2, None):
+        assert INJ.return_state(e, red + [mk("2026-09-14", pain)], date(2026, 9, 15))["phase"] == "red"
+    m = red + [mk("2026-09-14", 0)]
+    st = INJ.return_state(e, m, date(2026, 9, 15))
+    assert st["phase"] == "light" and st["since"] == "2026-09-14"
+    assert st["episodes"][0] == {"red": "2026-09-10", "start": "2026-09-14", "first_run": "2026-09-14",
+                                 "done": "2026-09-14", "skipped": True}
+    lt = INJ.light([e], m, date(2026, 9, 15))
+    assert lt["color"] == "green" and "沒痛" in lt["reason"]
+    # 沒痛 with a 0–10 over the red line is not a pain-free run
+    assert INJ.return_state(e, red + [mk("2026-09-14", 0, score=8)], date(2026, 9, 15))["phase"] == "red"
+    # the light keeps following the marks afterwards (中斷 → red again)
+    st = INJ.return_state(e, m + [mk("2026-09-16", 3)], date(2026, 9, 17))
+    assert st["phase"] == "red" and len(st["episodes"]) == 2
+    # a severe event too
+    sev = ev(1, "2026-09-10", severity="severe")
+    assert INJ.light([sev], [mk("2026-09-14", 0)], date(2026, 9, 15))["color"] == "green"
+    # once the walk-run started (walk check), runs are its sessions — no skip
+    st = INJ.return_state(e, red + [mk("2026-09-12", 0, "walk", 30), mk("2026-09-14", 0)], date(2026, 9, 15))
+    assert st["phase"] == "walkrun" and st["n"] == 1
+
+
 def test_severe_starts_red_and_the_button_starts_the_walk_run():
     e = {**ev(1, "2026-09-10", severity="severe")}
     assert INJ.return_state(e, [], date(2026, 9, 20))["phase"] == "red"
@@ -156,7 +184,7 @@ def test_red_week_says_how_to_start():
     lt = INJ.light([e], [mk("2026-09-28", 3)], date(2026, 9, 30))
     notes: list = []
     O.light_apply([_s("easy2", "easy", "2026-10-02", 50)], lt, date(2026, 9, 30), 200.0, 0.0, notes)
-    assert any("可以開始走跑" in n["text"] for n in notes)
+    assert any("可以開始走跑" in n["text"] and "跳過走跑" in n["text"] for n in notes)
 
 
 # ---------------------------------------------------------------------------
@@ -194,6 +222,19 @@ def test_ten_days_off_knee_walk_check_stages_then_the_block(monkeypatch):
     assert p["days"] == 10 and p["category"] == "6-13"
     assert [f for _a, _b, f in p["segments"]] == [0.5, 0.75]
     assert "傷停 10 天" in p["text"]
+
+
+def test_ten_days_off_knee_a_pain_free_run_skips_to_the_block(monkeypatch):
+    """A run marked 沒痛 right after the break (no walk check): the Daniels block starts on that run."""
+    e = ev(1, "2026-09-10", side="right")
+    today = date(2026, 9, 30)
+    ds, tags = _ds_and_tags(today, 5)
+    tags = [t for t in tags if t["start_local"] != "2026-09-20T09:00"]          # no walk check
+    tags.append({"start_local": "2026-09-21T07:00", "file": None, "pain": 0, "pain_area": None, "injury_id": None})
+    monkeypatch.setattr(AT, "load", lambda *a, **k: tags)
+    p = RE.find(ds, today, injuries=[e], step_up=False)
+    assert p and p["return"] == "2026-09-21" and "walkrun" not in p
+    assert p["days"] == 10 and [f for _a, _b, f in p["segments"]] == [0.5, 0.75]
 
 
 def test_no_block_while_in_the_walk_run_and_none_for_old_resolved(monkeypatch):

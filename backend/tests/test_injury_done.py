@@ -69,7 +69,11 @@ def test_not_proposed_for_illness_resolved_red_or_no_pre_injury_running():
     onset, m = marks(T)
     assert INJ.done_check({**ev(1, onset.isoformat()), "category": "illness", "illness": "cold"}, m, T) is None
     assert INJ.done_check(ev(1, onset.isoformat(), status="resolved", resolved="2026-09-29"), m, T) is None
-    assert INJ.done_check(ev(1, onset.isoformat(), severity="severe"), m, T) is None    # red: waiting
+    # red (severity 重) and only 痠 runs since: still red, waiting for the walk check / a 沒痛 run
+    onset_s, sore = marks(T, last3=((15, 1), (6, 1), (0, 1)))
+    assert INJ.done_check(ev(1, onset_s.isoformat(), severity="severe"), sore, T) is None
+    # owner's decision (SP-273, 2026-10-06): a run marked 沒痛 brings it straight back to green — proposed
+    assert INJ.done_check(ev(1, onset.isoformat(), severity="severe"), m, T) is not None
     post_only = [x for x in m if x["date"] >= onset.isoformat()]
     assert INJ.done_check(ev(1, onset.isoformat()), post_only, T) is None
 
