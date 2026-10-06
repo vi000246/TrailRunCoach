@@ -23,8 +23,9 @@ type (docs/research/vo2max-gate-and-trail-metric.md §2, zones-and-thresholds.md
                                                      55–70 s, Hunt 2015) — HR only as a cap note
   long climbs                                        none: suggestions only (power above 8 %
                                                      and HR on 20′+ climbs both partial)
-  downhill practice                                  none (Stryd underestimates the eccentric
-                                                     load, Kipp 2023; descend by skill)
+  downhill practice                                  none (Stryd power under-reads the descent's
+                                                     metabolic load: −7 → +7 % power +90 %, VO2
+                                                     +74 %, Gravina-Cognetti 2025; descend by skill)
   CP test                                            power (the all-out bouts are open)
   AeT test                                           by protocol: 徐國峰 90 / Friel → HR (or pace),
                                                      UA 60 / 40 / Evoke → a fixed power
@@ -35,7 +36,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from backend.i18n import _
+from backend.i18n import N_, _
 
 BASES = ("auto", "hr", "power")
 LABEL = {"auto": "自動（依課表類型）", "hr": "心率", "power": "功率", "pace": "配速", "none": "不設目標"}
@@ -44,7 +45,8 @@ SRC = {
     "power_easy": "路跑輕鬆／長跑看功率（Palladino Z1–Z2 % CP），心率以輕鬆跑上限為上限：天熱、疲勞時心率先到就放慢",
     "power_iv":"Stryd 功率在 0–8% 坡≈固定代謝負荷（van Rassel 2026）；心率延遲 55–70 秒（Hunt 2015）",
     "climb": "長爬坡：> 8% 功率低估、心率在 20 分以上才準（推估）",
-    "down": "下坡：Stryd 功率低估離心負荷（Kipp 2023），看下降量與技術",
+    # SP-247: Gravina-Cognetti et al. 2025 (Sports 13:294; power-gap-trail-validity.md §3 #2)
+    "down": N_("下坡：Stryd 功率低估下坡的負荷（Gravina-Cognetti 2025：−7～+7 % 時功率 +90 %、耗氧只 +74 %），看下降量與技術"),
     "cp": "CP 測試：全力段不設上下限，事後用功率算 CP",
     "aet": "AeT 測試：依方式（徐國峰 90／Friel 看心率；UA／Evoke 固定功率）",
     "walk": "登山爬坡：75% 最大心率以下或 RPE ≤ 13（萩原・山本 2011）；沒有最大心率時 (220 − 年齡) × 0.75"
@@ -170,7 +172,7 @@ def target_policy(s: dict, prefs=None, th: Optional[dict] = None) -> dict:
     if basis == "hr" and th and not (th.get("aet") or th.get("lthr")):
         basis, fb = "none", _("沒有 AeT／LTHR：不設目標")
     return {"basis": basis, "chosen": own if own in ("hr", "power") else chosen, "type": t, "why": why + (f"（{fb}）" if fb else ""),
-            "source": SRC[key], "hr_cap": basis == "power" and t in ("interval", "hill", "easy", "long"), "fallback": fb}
+            "source": _(SRC[key]), "hr_cap": basis == "power" and t in ("interval", "hill", "easy", "long"), "fallback": fb}
 
 
 def target_text(target: str, basis: str) -> str:
