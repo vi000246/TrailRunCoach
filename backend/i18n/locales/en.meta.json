@@ -1179,6 +1179,10 @@
     "draft": true,
     "src": "backend/engine/quality_gate.py:1978"
   },
+  "下坡垂直速度": {
+    "draft": false,
+    "src": "backend/engine/panels/pole_compare.py:50"
+  },
   "下坡技術／離心": {
     "draft": true,
     "src": "backend/engine/workout_templates.py:483"
@@ -1186,6 +1190,10 @@
   "下坡時大腿煞車的力量。基礎循環、最大肌力期和維持課會練；它是平日補強，不取代真的下坡。": {
     "draft": true,
     "src": "backend/engine/strength_moves.py:88"
+  },
+  "下坡步頻": {
+    "draft": false,
+    "src": "backend/engine/panels/pole_compare.py:51"
   },
   "下坡用跑的，練下坡": {
     "draft": false,
@@ -1198,6 +1206,14 @@
   "下坡看腿的感覺，不看心率": {
     "draft": true,
     "src": "backend/engine/hr_profile.py:379"
+  },
+  "下坡衝擊 G": {
+    "draft": false,
+    "src": "backend/engine/panels/pole_compare.py:52"
+  },
+  "下坡衝擊負荷率 ILR": {
+    "draft": false,
+    "src": "backend/engine/panels/pole_compare.py:53"
   },
   "下坡課排在賽前第 {weeks} 週": {
     "draft": true,
@@ -3247,6 +3263,10 @@
     "draft": true,
     "src": "backend/engine/race_feasibility.py:284"
   },
+  "有杖的日子常常也是背包較重、坡較陡、走得較久的日子，差異不一定是杖造成的。": {
+    "draft": false,
+    "src": "backend/engine/panels/pole_compare.py:59"
+  },
   "有氧 TIS {a}、無氧 TIS {an}（WKO5 的 Training Impact Score，1–10）。": {
     "draft": false,
     "src": "backend/engine/workout_review.py:2712"
@@ -3414,6 +3434,10 @@
   "死蟲式": {
     "draft": true,
     "src": "backend/engine/strength_moves.py:132"
+  },
+  "每個坡度箱的活動都不到 {n} 次，先不畫點；只列出次數。": {
+    "draft": false,
+    "src": "backend/engine/panels/pole_compare.py:212"
   },
   "每次用同一種測法、同一條平路、差不多的天氣，前一天不要練太重，結果才能互相比。": {
     "draft": true,
@@ -4931,6 +4955,10 @@
     "draft": true,
     "src": "backend/engine/thresholds.py:264"
   },
+  "近 {days} 天標了「有杖」{w} 次、「沒杖」{wo} 次；兩邊都要至少 {need} 次才比較。到活動列表編輯活動，在「登山杖」選有杖或沒杖。": {
+    "draft": false,
+    "src": "backend/engine/panels/pole_compare.py:179"
+  },
   "近 {weeks} 週 {n} 次輕鬆路跑的中位數": {
     "draft": true,
     "src": "backend/engine/equivalence.py:192"
@@ -5034,6 +5062,10 @@
   "這次資料比較雜，只當參考": {
     "draft": true,
     "src": "backend/engine/workout_review.py:531"
+  },
+  "這段期間沒有標了有杖或沒杖的越野跑、登山健行。": {
+    "draft": false,
+    "src": "backend/engine/panels/pole_compare.py:210"
   },
   "這段沒有衝擊資料（慢速或走路時裝置可能不輸出）": {
     "draft": false,
@@ -5346,6 +5378,10 @@
   "關門／撤退時間要在 0–{max:g} 小時": {
     "draft": true,
     "src": "backend/engine/planning.py:303"
+  },
+  "陡上坡同心率 VAM（VAM ÷ 心率）": {
+    "draft": false,
+    "src": "backend/engine/panels/pole_compare.py:54"
   },
   "陡坡（走跑皆可）": {
     "draft": false,

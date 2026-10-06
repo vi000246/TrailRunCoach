@@ -7,7 +7,8 @@ like WKO5's workout metadata (user request 2026-10-01).
     effort         max 全力 / hard_with_rests 有拼但有休息 / moderate 一般 / easy 輕鬆
     note           free text
     poles          登山杖 有杖 / 沒杖 / 未標 — user only, stored as a free-form tag,
-                   read by no model (POLES, SP-242)
+                   read by no model (POLES, SP-242); only the 有杖 vs 沒杖 chart
+                   shows it (panels/pole_compare.py, pole_counts; SP-243)
 
 Why effort, not "race": what a race-time prediction can learn from an
 activity is whether it was MAXIMAL. The athlete often races by feel (not
@@ -177,6 +178,43 @@ def exclusive_poles(tags) -> list[str]:
     ct = clean_tags(tags)
     p = poles_of(ct)
     return ct if sum(t in _POLE_OF_TAG for t in ct) <= 1 else with_poles(ct, p)
+
+
+# 「有杖 vs 沒杖」比較 (SP-243) only for someone who uses poles: in the last 365 days ≥ 5 activities
+# marked 有杖 AND ≥ 5 marked 沒杖 (docs/research/trekking-poles.md §5 #2 ②; user decision 2026-10-06).
+POLE_COMPARE_MIN = 5
+POLE_COMPARE_DAYS = 365
+
+
+def _row_poles(r: dict) -> Optional[str]:
+    return poles_of(r.get("tags") if r.get("tags") is not None else tags_of(r))
+
+
+def pole_counts(rows: list[dict], today: dt.date, days: int = POLE_COMPARE_DAYS,
+                need: int = POLE_COMPARE_MIN) -> dict:
+    """How many stored tag rows that started in the last `days` days (today
+    included) carry each pole mark, and whether both reach `need`:
+    {with, without, need, days, since (the first day counted), more_with,
+    more_without, eligible}."""
+    cut = (today - dt.timedelta(days=days - 1)).isoformat()
+    end = (today + dt.timedelta(days=1)).isoformat()
+    n = {"with": 0, "without": 0}
+    for r in rows or []:
+        s = str(r.get("start_local") or "")
+        p = _row_poles(r) if cut <= s < end else None
+        if p in n:
+            n[p] += 1
+    more = {k: max(0, need - v) for k, v in n.items()}
+    return {**n, "need": need, "days": days, "since": cut, "more_with": more["with"],
+            "more_without": more["without"], "eligible": not more["with"] and not more["without"]}
+
+
+def pole_marks_stamp(rows: list[dict]) -> list:
+    """Every pole mark as [start_local, file, "with" / "without"], sorted: a
+    render-cache input of the comparison chart (the tags DB is not part of
+    the data fingerprint)."""
+    return sorted([str(r.get("start_local") or ""), str(r.get("file") or ""), p]
+                  for r in rows or [] if (p := _row_poles(r)))
 
 
 def tags_of(row: Optional[dict]) -> list[str]:

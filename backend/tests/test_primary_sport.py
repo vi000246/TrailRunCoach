@@ -83,7 +83,7 @@ def test_chart_tags_parse_and_are_checked():
 
 
 TRAIL_ONLY = {
-    "training": {"weekly-downhill-load", "uphill-vam", "steady-climb-vam-hr", "downhill-rate",
+    "training": {"weekly-downhill-load", "uphill-vam", "steady-climb-vam-hr", "downhill-rate", "pole-compare",
                  "route-difficulty", "climb-density"},
     "periodization": {"route-difficulty-specific", "longest-session", "climb-density-vs-race", "uphill-vam"},
     "workout": {"route-difficulty", "climbs", "grades", "form-grades"},

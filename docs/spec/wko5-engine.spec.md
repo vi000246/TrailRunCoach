@@ -248,8 +248,9 @@ later file with the same `name` overrides an earlier one
 card — see [workout-review.spec.md](./workout-review.spec.md)), `activity`
 (a single-activity panel named by `chart`, e.g. 心率與功率, zone times),
 `periodzones` (time in zone over a period, `view` total / weekly), `z5gate`
-(the 5 區開放流程 replay over the season) or `climbvam` (steady-climb VAM:HR
-per route). Two optional chart keys drive the period toggle: `period` (day /
+(the 5 區開放流程 replay over the season), `climbvam` (steady-climb VAM:HR
+per route) or `polecompare` (有杖 vs 沒杖 per grade bin, SP-243:
+`backend/engine/panels/pole_compare.py` + `backend/static/pole_compare.js`). Two optional chart keys drive the period toggle: `period` (day /
 week / month / quarter / year, the default bucket) and `min_days` (look-back
 floor for that default bucket) (`backend/engine/wko5expr/customviews.py:117`).
 
@@ -264,6 +265,7 @@ Other optional chart keys, each validated in `_chart`:
 | `race_refs` | `"course_constant"`: the next two target races' single-day コース定数 lines and the A race's 80–100 % band (`backend/engine/panels/race_refs.py`) |
 | `drift_bars` | Drift as one verdict-coloured bar per run, with a hover line per bar (`backend/engine/panels/drift_bars.py`) |
 | `sports` / `order` | 主要訓練項目: shown only in the trail or road mode, and the chart's place in its dashboard per mode; a dashboard may carry per-mode `descriptions` |
+| `needs` | A condition on the athlete's own data (`customviews.NEEDS`): `"poles"` = ≥ 5 activities marked 有杖 and ≥ 5 沒杖 in the last 365 days (`activity_tags.pole_counts`). `GET /views` adds `needs_met`; the viewer hides the chart until it is true |
 
 The bundled custom views (regrouped in commit 4f75cfe; the old 每月・每年
 dashboard was dropped in favour of the period toggle; the polarization-index,
@@ -271,7 +273,7 @@ monotony / strain and other redundant charts were dropped in 2026-10):
 
 | File | View | Dashboards |
 |---|---|---|
-| `views/training.json` | 我的訓練 | 負荷 PMC (PMC with TSB bars coloured by Form% zone, 每日 TSS with a TSS / % CTL variant, TSS 合計, Ramp rate, Form% and 負荷比 as `zoned` charts, then 有氧／無氧刺激 TIS per activity and the Chronic / Acute TIS load — see below); 訓練量 (每週移動時間 stacked by category, one weekly volume chart with 跑量 / 爬升下降 / EP variants, 每次長跑距離, 每週下坡衝擊負荷, 肌力訓練日曆 as a day calendar, コース定数 with race reference lines); 強度 (periodzones total + weekly, 每週馬拉松配速時間); 能力 (power curve with the PD-model line, EF, 輕鬆路跑的心率飄移 as drift bars, 長跑配速, 上坡腳程, steady-climb VAM:HR (`climbvam`), 下坡腳程, 每公里爬升, per-session moving time, durability) |
+| `views/training.json` | 我的訓練 | 負荷 PMC (PMC with TSB bars coloured by Form% zone, 每日 TSS with a TSS / % CTL variant, TSS 合計, Ramp rate, Form% and 負荷比 as `zoned` charts, then 有氧／無氧刺激 TIS per activity and the Chronic / Acute TIS load — see below); 訓練量 (每週移動時間 stacked by category, one weekly volume chart with 跑量 / 爬升下降 / EP variants, 每次長跑距離, 每週下坡衝擊負荷, 肌力訓練日曆 as a day calendar, コース定数 with race reference lines); 強度 (periodzones total + weekly, 每週馬拉松配速時間); 能力 (power curve with the PD-model line, EF, 輕鬆路跑的心率飄移 as drift bars, 長跑配速, 上坡腳程, steady-climb VAM:HR (`climbvam`), 下坡腳程, 有杖 vs 沒杖 (`polecompare`, `needs: "poles"`), 每公里爬升, per-session moving time, durability) |
 | `views/periodization.json` | 周期化訓練 | ① 轉換期, ② 基礎期 (incl. drift bars and the `z5gate` 5 區開放流程), ③ 專項期, ④ 減量期, 區間與課表強度 (zone / target tables last) |
 | `views/workout.json` | 單次活動判讀 | 本次重點, 有氧／心率飄移, 間歇, 爬坡與地形, 配速與耐久, 跑姿與膝蓋負荷（參考） — see [workout-review.spec.md](./workout-review.spec.md) |
 
@@ -393,7 +395,8 @@ toggle.
   Some chart kinds add hidden inputs to the parameters: `z5gate` the 課表偏好
   stamp and the stored test sessions; `zones` / `targets` / `activity` /
   `periodzones` the HR-profile stamp; `race_refs` the events' stored GPX;
-  `climbvam` the route index / names / weather files
+  `climbvam` the route index / names / weather files; `polecompare` the pole
+  marks (`activity_tags.pole_marks_stamp`) and today's date
   (`backend/api/wko5views.py:385-414`). Nothing is invalidated explicitly;
   changed inputs miss.
 - **Data fingerprint** (`backend/engine/wko5expr/render_cache.py:89`): the
@@ -717,6 +720,7 @@ source (synthetic FITs).
 
 | Date | Source | SRS | Change |
 |------|--------|-----|--------|
+| 2026-10-06 | feature | SP-243 | 能力 › 有杖 vs 沒杖 (`kind: "polecompare"`, after 下坡腳程, trail mode): per grade bin (≤ −15, −15…−8, −8…−3, ≥ +15 %) the median of the activities' measured downhill vertical speed / cadence / impact G / ILR and steep-climb VAM ÷ HR, 有杖 vs 沒杖, every moving step (hike rest floor), ≥ 2 min per bin (推估), n shown, n < 3 not drawn, caveat on the card; chart key `needs` (`"poles"`) + `needs_met` on `GET /views`; `GET /activities` → `pole_compare` counts (activity editor: 「再標 N 次」); the mark still feeds no model |
 | 2026-10-04 | feature | SP-68 | Builtins `ctl` / `atl` / `tsb` start from `load_guard.pmc_start` (manual at a date → first-28-day mean → 0); `tl()` unchanged; render cache keys on the manual start |
 | 2026-10-04 | feature | SP-63 | Strength scores 0 TSS in own-formula mode even with a dated plan LTHR (`NO_TSS_SPORTS`); parity unchanged |
 | 2026-10-04 | bugfix | SP-52 | `hr_tss_zone1_floor` removed from `EngineConfig` and `MOUNTAIN_PRESET` (nothing read it; moving-time hrTSS already drops the camp / sleep hours); an old `engine.json` with the key still loads |
