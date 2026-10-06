@@ -192,6 +192,14 @@ class GaitRE:
     # per grade bin (TECH_BIN_LABELS) -> {"f" (shrunk to 1), "raw", "n"}; used on trail
     # instead of the single factor when its bin has windows (route_tech still wins)
     tech_bins: dict = field(default_factory=dict)
+    # SP-228: the athlete's walk–run transition shift (runwalk.fit_shift on the same windows):
+    # {"shift" (m/s, shrunk + clamped), "raw", "n", "weight", "bins", "personal"}; {} = the default curve
+    runwalk: dict = field(default_factory=dict)
+
+    @property
+    def rw_shift(self) -> float:
+        """The shift of the walk–run transition curves (runwalk.gait's `shift`), 0 = default."""
+        return float((self.runwalk or {}).get("shift") or 0.0)
 
     @property
     def re_flat(self) -> float:
@@ -240,6 +248,25 @@ class GaitRE:
             v *= self.tech_at(g)[0]
         return v
 
+    def gait_at(self, g: float, p: float, weight: float) -> Optional[str]:
+        """SP-229: the gait by the predicted speed — the running curve's speed at power `p`,
+        then runwalk.gait with the athlete's shift (rw_shift); None below 3 % or without power."""
+        from backend.engine.racepower import runwalk as RW
+        if not p or p <= 0 or not weight or g < RW.MIN_GRADE:
+            return None
+        return RW.gait(g, self.run.re(g) * p / weight, self.rw_shift)
+
+    def re_at(self, g: float, p: float, weight: float) -> float:
+        """SP-229 RE with the gait chosen by the predicted speed instead of the majority gait
+        (re): the walking curve where gait_at says walk, the running curve elsewhere (also on
+        flats and descents), the trail technicality as in re (推估: faster efforts run more,
+        a slower late race walks more). Used by the back-test's comparison; the planner
+        keeps re until that shows it is no worse."""
+        v = self.walk.re(g) if self.gait_at(g, p, weight) == "walk" else self.run.re(g)
+        if self.trail and g <= 0.02:
+            v *= self.tech_at(g)[0]
+        return v
+
     def v_max(self, g: float) -> Optional[float]:
         return self.run.v_max(g, TRAIL_VMAX_Q if self.trail else 90)
 
@@ -266,8 +293,11 @@ class GaitRE:
             r.update(walk_n=w["n"], walk_re=w["re"], walk_median_re=w["median_re"], walk_prior_re=w["prior_re"],
                      walk_share=(wb[0] / wb[1]) if wb[1] else None, gait="walk" if self.walked(r["grade"]) else "run")
         f, which = self.tech_factor()
+        from backend.engine.racepower import runwalk as RW
         j.update(walk_samples=self.walk.n_samples, tech=self.tech, tech_used={"f": f, "class": which},
-                 tech_bins=self.tech_bins, trail_vmax_q=TRAIL_VMAX_Q)
+                 tech_bins=self.tech_bins, trail_vmax_q=TRAIL_VMAX_Q,
+                 runwalk={**(self.runwalk or {"shift": 0.0, "personal": False, "n": 0, "bins": []}),
+                          "curve": RW.curve_json(self.rw_shift)})
         return j
 
 
@@ -308,7 +338,8 @@ def fit_gait_re(samples: Sequence[dict], re_flat: float, classes: Optional[dict]
         raw, n = float(np.median(rs)), len(rs)
         f = (n * raw + SHRINK_N * 1.0) / (n + SHRINK_N)
         tbins[lab] = {"f": min(TECH_BOUNDS[1], max(TECH_BOUNDS[0], f)), "raw": raw, "n": n}
-    return GaitRE(run, walk, wb, tech, tech_bins=tbins)
+    from backend.engine.racepower import runwalk as RW
+    return GaitRE(run, walk, wb, tech, tech_bins=tbins, runwalk=RW.fit_shift(samples))
 
 
 def tobler_kmh(g: float) -> float:

@@ -214,3 +214,97 @@ def test_api_calendar_has_planned_vs_actual_and_link_options(monkeypatch):
         q = next(s for s in b["sessions"] if s["kind"] == "quality" and s["day"] == "2026-10-01")
         assert q["state"] == "done" and q["vs"]["off_plan"] and q["compliance"]["label"] == "沒照課表"
         assert q["link_options"] == [32]                                     # the 10/2 run, ± 1 day
+
+
+# ---------------------------------------------------------------------------
+# 完成度等級 (SP-216): intensity graded like time / TSS, not pass / fail
+# ---------------------------------------------------------------------------
+
+def _q(done_by, kind="quality", minutes=60, title="閾值 3×10 分"):
+    return sess("q", "2026-10-01", kind, minutes, title, state="done", done_by=done_by)
+
+
+def _ses(typ, z3=None, eq=None):
+    return {"type": typ, "type_label": "", "z3_s": z3, "t_vo2_eq_s": eq}
+
+
+def test_99_percent_of_the_intensity_is_done_not_off_plan():
+    # the threshold-time rule (no classifier row): 9.9 of 10 min
+    q = _q(act(20, "2026-10-01", 60, hard_s=594, tss=48))
+    vs = PM.compare(q)
+    assert not vs["off_plan"] and not vs["short"] and vs["actual"] == "hard" and vs["intensity_pct"] == 99
+    comp = C.with_plan_check(C.session_compliance(q, 48.0), vs)
+    assert comp["level"] == "green" and comp["intensity_pct"] == 99 and C.status_of(q, comp, "2026-10-02") == "done"
+    # the classifier read it 「輕鬆跑」 (Zone 3 9.9 min < its 10-min bar): still done
+    q = _q({**act(21, "2026-10-01", 60, tss=48), "session": _ses("easy", z3=594, eq=60)})
+    vs = PM.compare(q)
+    assert not vs["off_plan"] and vs["intensity_pct"] == 99 and vs["actual"] == "hard"
+
+
+def test_intensity_short_is_partial_with_its_own_label_and_headline():
+    q = _q({**act(22, "2026-10-01", 60, tss=48), "session": _ses("easy", z3=420)})       # 7 of 10 min
+    vs = PM.compare(q)
+    assert vs["short"] and not vs["off_plan"] and vs["grade"] == "short" and vs["intensity_pct"] == 70
+    assert vs["short_text"] == "強度不足：只做到這堂課的 70%（Zone 3 7／10 分）"
+    comp = C.with_plan_check(C.session_compliance(q, 48.0), vs)
+    assert comp["level"] == "yellow" and comp["label"] == "強度不足" and comp["short"] and not comp.get("off_plan")
+    assert comp["pct"] == 70 and comp["tss_pct"] == 100                   # the number that explains the colour
+    assert C.status_of(q, comp, "2026-10-02") == "partial"
+    row = C.session_row({**q, "compliance": comp, "tss_est": 48.0}, "2026-10-02")
+    assert row["status"] == "partial" and row["off_text"] == vs["short_text"]
+    # an equivalent T@VO2max dose counts too: 3 of 4 min = 75 %
+    q = _q({**act(23, "2026-10-01", 60, tss=48), "session": _ses("easy", z3=60, eq=180)}, title="VO2max 5×3 分")
+    vs = PM.compare(q)
+    assert vs["short"] and vs["intensity_pct"] == 75 and "等效 T@VO2max 3.0／4 分" in vs["short_text"]
+
+
+def test_under_half_the_intensity_is_still_off_plan():
+    q = _q({**act(24, "2026-10-01", 60, tss=48), "session": _ses("easy", z3=240)})       # 40 %
+    vs = PM.compare(q)
+    assert vs["off_plan"] and not vs["short"] and vs["actual"] == "easy" and vs["intensity_pct"] == 40
+    assert vs["text"] == "沒照課表：排強度課，實際跑輕鬆"
+    comp = C.with_plan_check(C.session_compliance(q, 48.0), vs)
+    assert comp["label"] == "沒照課表" and C.status_of(q, comp, "2026-10-02") == "off_plan"
+
+
+def test_a_classified_hard_run_is_done_even_without_its_numbers():
+    q = _q({**act(25, "2026-10-01", 60, tss=48), "session": _ses("quality")})
+    vs = PM.compare(q)
+    assert not vs["off_plan"] and not vs["short"] and vs["intensity_pct"] == 100
+
+
+def test_easy_run_slightly_hard_is_partial_far_too_hard_is_off_plan():
+    e = sess("e", "2026-10-01", state="done",
+             done_by={**act(26, "2026-10-01", 45, tss=36), "session": _ses("quality", z3=720)})   # 1.2× the bar
+    vs = PM.compare(e)
+    assert vs["short"] and not vs["off_plan"] and vs["grade"] == "over" and vs["intensity_pct"] is None
+    assert vs["short_text"] == "輕鬆跑偏強（Zone 3 12／10 分）"
+    comp = C.with_plan_check(C.session_compliance(e, 36.0), vs)
+    assert comp["label"] == "強度偏高" and comp["level"] == "yellow" and comp["pct"] == 100
+    e = sess("e", "2026-10-01", state="done",
+             done_by={**act(27, "2026-10-01", 45, tss=36), "session": _ses("hard_long", z3=1000)})  # 1.67×
+    assert PM.compare(e)["off_plan"] and PM.compare(e)["text"] == "沒照課表：排輕鬆跑，實際跑強度"
+    # a CP test on an easy day: ran hard, never 「偏強」
+    e = sess("e", "2026-10-01", state="done",
+             done_by={**act(28, "2026-10-01", 45, tss=36), "session": _ses("test_cp")})
+    assert PM.compare(e)["off_plan"]
+
+
+def test_intensity_short_still_matches_its_session():
+    s = sess("q", "2026-10-01", "quality", 60, "閾值 3×10 分")
+    short = {**act(29, "2026-10-01", 60), "session": _ses("easy", z3=420)}
+    easy = {**act(30, "2026-10-01", 60), "session": _ses("easy", z3=60)}
+    assert PM.cost(s, short) < PM.cost(s, easy)
+    assert PM.cost(s, short) == PM.cost(s, {**act(31, "2026-10-01", 60), "session": _ses("quality", z3=900)})
+
+
+def test_session_row_carries_the_doses(monkeypatch):
+    from backend.engine import overview as O
+    from backend.engine import workout_review as WR
+    monkeypatch.setattr(WR, "classify", lambda ds, w: {"type": "easy", "type_label": "輕鬆跑", "stimulus": None,
+                                                        "icon": "x", "moderate": False,
+                                                        "stim": {"z3_s": 594.04, "t_vo2_eq_s": 61.26}})
+    assert O.session_of(None, None) == {"type": "easy", "type_label": "輕鬆跑", "stimulus": None, "icon": "x",
+                                        "moderate": False, "z3_s": 594.0, "t_vo2_eq_s": 61.3}
+    monkeypatch.setattr(WR, "classify", lambda ds, w: {"type": "strength", "stim": None})
+    assert O.session_of(None, None)["z3_s"] is None

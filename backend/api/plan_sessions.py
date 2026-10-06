@@ -93,6 +93,8 @@ def _compute_inputs(blackouts: Optional[list] = None) -> dict:
     acts = activity_rows(ds, since, today + dt.timedelta(days=1))
     last_act = max((O.wdate(w) for w in ds.workouts if O.wdate(w) <= today), default=None)
     out = {"cur": cur, "weeks": weeks, "activities": acts, "today": cur["week"]["today"],
+           # the first day `activities` covers (engine/plan_history.py: a week inside it has its totals)
+           "activities_since": since.isoformat(),
            "horizon_end": horizon.isoformat(),
            # + threshold pace (s/km, 推估): % / zone pace targets reach the watch (COROS intensityType 3)
            "thresholds": {**(cur.get("thresholds") or {}), "tpace": _tpace(),
@@ -109,12 +111,25 @@ def _compute_inputs(blackouts: Optional[list] = None) -> dict:
            "zone": {"suggestions": list(getattr(st, "test_suggestions", None) or []),
                     "events": next(((i.extra or {}).get("zone_events") or [] for i in st.indicators
                                     if i.id == "testing"), [])},
+           # 基線測試 (engine/baseline_test.py, SP-71): the latest CP / AeT test the review found
+           "tests": _latest_tests(st),
            "adapt": _adapt_ctx(ds, st, cur, monday, today, auto_on)}
     with _lock:
         while len(_cache) >= 3:                 # the stored plan + a preview or two
             _cache.pop(next(iter(_cache)))
         _cache[key] = out
     return out
+
+
+def _latest_tests(st) -> dict:
+    """The testing indicator's latest CP / AeT test (status.i_testing: workout_review.latest_cp_test,
+    aet_test.latest_aet_test), trimmed to what engine/baseline_test.latest reads. A CP test counts
+    (`ok`) when its result was applied or may be (cp_protocols.apply_payload: not 不採用)."""
+    tx = next(((i.extra or {}) for i in st.indicators if i.id == "testing"), {})
+    cp, ae = tx.get("cp_test") or {}, tx.get("aet_test") or {}
+    return {"cp": {"date": cp.get("date"), "method": cp.get("method"), "protocol": cp.get("protocol"),
+                   "ok": bool(cp.get("applied") or cp.get("apply"))} if cp else None,
+            "aet": {"date": ae.get("date"), "ok": bool(ae.get("ok"))} if ae else None}
 
 
 def _thr_warn(st) -> Optional[dict]:
@@ -157,7 +172,9 @@ def _adapt_ctx(ds, st, cur: dict, monday: dt.date, today: dt.date, enabled: bool
     hard_days: set = set()
     if enabled:
         try:
+            from backend.engine import threshold_calib as TCAL
             from backend.engine import workout_review as WR
+            margin = TCAL.margin_fields()       # the easy-run HR margin in effect and whose it is (SP-69)
             for w in O.workouts_between(ds, monday, today + dt.timedelta(days=1)):
                 if O.category(w) not in ("road", "trail", "hike"):
                     continue
@@ -170,6 +187,7 @@ def _adapt_ctx(ds, st, cur: dict, monday: dt.date, today: dt.date, enabled: bool
                 m = WR.measure(ds, w) or {}
                 reviews[w.idx] = {k: m.get(k) for k in ("avg_hr", "aet", "over_aet_s", "hr_s", "avg_power", "cp")}
                 reviews[w.idx]["tss"] = O._n(w.metrics.get("tss"))
+                reviews[w.idx].update(margin)
             WR._flush(ds)
         except Exception:                   # noqa: BLE001 — a review failure never breaks the plan
             pass
@@ -308,6 +326,9 @@ async def sessions(start: Optional[str] = None, end: Optional[str] = None, db: A
         if ch:
             await PS.save(db, new)
             every = await PS.load(db)
+        # 每週課表存檔 (engine/plan_history.py, SP-71): this week's snapshot / last week's result, when due
+        from backend.engine import plan_history as PH
+        await PH.record_safe(db, inp, every)
     ss = [s for s in every if not (start or end) or (s.get("day") and (not start or s["day"] >= start)
                                                      and (not end or s["day"] <= end))]
     today = _today(inp)
@@ -730,7 +751,12 @@ async def _all_suggestions(db: AsyncSession, inp: dict) -> list[dict]:
         sg = {"kind": kind, "replaces_long": kind == "aet" and aet_p == "xu90"}
         return [d for d in suggestion_days(sg, stored, today, prefs, bl) if not earliest or d["day"] >= earliest]
 
-    rows += SG.zone_rows(inp.get("zone") or {}, {t["kind"] for t in tests}, scheduled, days_for)
+    # 基線測試 (engine/baseline_test.py, SP-71): the fixed 12′ + 3′ CP test and the AeT test, now and
+    # every 6–8 weeks — in place of this week's `test` row of the same kind, never both
+    base = await _baseline_rows(inp, stored, today, tpl, aet_p, days_for)
+    covered = {b["kind"] for b in base}
+    rows = [r for r in rows if not (r["type"] == "test" and r["kind"] in covered)] + base
+    rows += SG.zone_rows(inp.get("zone") or {}, {t["kind"] for t in tests} | covered, scheduled, days_for)
     # the session a zone retest would put in (課表偏好 CP / AeT 測試方式)
     for r in rows:
         for t in r.get("tests") or []:
@@ -747,6 +773,45 @@ async def _all_suggestions(db: AsyncSession, inp: dict) -> list[dict]:
     rows += await run_in_threadpool(_injury_suggestions, inp, today, set(bl), stored)
     rows += await run_in_threadpool(_altitude_suggestions, today)
     return rows
+
+
+def _open_injuries(today: str) -> list[dict]:
+    """The 傷病紀錄 events open today (engine/injuries.py); [] in the demo or when unreadable."""
+    from backend.engine import injuries as INJ
+    try:
+        return [] if INJ.demo_mode() else INJ.active_on(INJ.load_events(), dt.date.fromisoformat(today))
+    except Exception:                       # noqa: BLE001 — the box must still load
+        return []
+
+
+async def _baseline_rows(inp: dict, stored: list[dict], today: str, tpl: dict, aet_p: str, days_for) -> list[dict]:
+    """基線測試 rows of the box (engine/baseline_test.py; engine/suggestions.baseline_rows). None
+    without the review's tests in the inputs, and none for a kind that already has a test ahead
+    in the plan (any CP test for cp: two all-out tests are not put in the same weeks)."""
+    from backend.engine import aet_test as AT
+    from backend.engine import baseline_test as BT
+    from backend.engine import suggestions as SG
+    if "tests" not in inp:
+        return []
+    cur = inp.get("cur") or {}
+    ctx = {"days_to_a": inp.get("days_to_next_a"), "phase": cur.get("phase"), "mode": cur.get("mode"),
+           "injuries": await run_in_threadpool(_open_injuries, today)}
+    due = BT.due(today, BT.latest(inp.get("tests"), stored, today), ctx)
+    ahead = {AT.is_aet_session(s) for s in stored if s["kind"] == "test" and s["state"] == "active"
+             and (s.get("day") or "") >= today}
+    due = [d for d in due if (d["kind"] == "aet") not in ahead]
+
+    def session_of(kind: str) -> Optional[dict]:
+        src = next((x for x in tpl["aet"] if x["protocol"] == aet_p), None) if kind == "aet" else \
+            next((x for x in tpl["cp"] if x["protocol"] == BT.CP_PROTOCOL and not x.get("none")), None)
+        if not src:
+            return None
+        return {"kind": "test", "title": src["title"], "minutes": src["minutes"], "target": src.get("target"),
+                "detail": src.get("detail"), "source": src.get("source"), "tss": src.get("tss"),
+                "protocol": src.get("protocol_stored") if kind == "aet" else src["protocol"],
+                "replaces_long": kind == "aet" and aet_p == "xu90"}
+
+    return SG.baseline_rows(due, R.monday_of(today), session_of, lambda kind, rl: days_for(kind, None))
 
 
 def _altitude_suggestions(today: str) -> list[dict]:
@@ -813,7 +878,7 @@ async def dismiss_suggestion(body: dict = Body(...), db: AsyncSession = Depends(
     if not sid:
         raise HTTPException(400, "id required")
     inp = await _inputs(db)
-    week = sid.split(":")[-1] if sid.startswith(("b2b:", "test:")) else None
+    week = sid.split(":")[-1] if sid.startswith(SG.WEEKLY) else None
     await _save_setting(db, SG.KEY, SG.record(await _dismissed(db), sid, action, dt.datetime.now(), week))
     return {"id": sid, "action": action, "today": _today(inp)}
 
@@ -844,11 +909,16 @@ async def accept_suggestion(body: dict = Body(...), db: AsyncSession = Depends(g
                                                            "session": t["session"],
                                                            "replaces_long": t.get("replaces_long")}, day,
                                                  tpl, t["key"])]}
+    elif sg["type"] == "baseline":
+        out = {"sessions": [await _schedule_test(db, inp, {"days": [{"day": o["day"]} for o in sg["options"]],
+                                                           "session": sg["session"],
+                                                           "replaces_long": sg.get("replaces_long")}, day,
+                                                 tpl, sg["kind"])]}
     elif sg["type"] == "injury_rest":
         out = await _accept_injury_rest(db, sg)
     else:
         raise HTTPException(400, "這個建議沒有可以排的東西")
-    week = sid.split(":")[-1] if sid.startswith(("b2b:", "test:")) else None
+    week = sid.split(":")[-1] if sid.startswith(SG.WEEKLY) else None
     await _save_setting(db, SG.KEY, SG.record(await _dismissed(db), sid, "accepted", dt.datetime.now(), week))
     return {"id": sid, **out}
 
@@ -873,6 +943,8 @@ async def test_options(day: str, db: AsyncSession = Depends(get_db)):
         if r["type"] == "test":
             ents = [(r["kind"], None, r["title"], r.get("options") or [], bool((due.get(r["kind"]) or {}).get("replaces_long")),
                      None)]
+        elif r["type"] == "baseline":
+            ents = [(r["kind"], None, r["title"], r.get("options") or [], bool(r.get("replaces_long")), None)]
         elif r["type"] == "zone_test":
             ents = [(t["key"], t["key"], t.get("label") or t["key"], t.get("options") or [], bool(t.get("replaces_long")),
                      r.get("earliest")) for t in r.get("tests") or [] if t.get("session")]
@@ -1794,6 +1866,7 @@ def _prefs_body(p, dropped=()) -> dict:
     # gate_options: the 間歇門檻 hover texts (the page adds "usable with your data"
     # from GET /prefs/gate, which needs the dataset)
     from backend.engine import aet_test as AT
+    from backend.engine import strength_moves as SM
     # aet_options: the AeT 測試方式 hover texts (duration, terrain, what is held, judging, source)
     return {"prefs": p.to_dict(), "defaults": PP.Prefs().to_dict(), "active": p.active,
             # 偏好的星期 vs the default rules (shown when the prefs are saved; 照我的偏好 = pref_keep)
@@ -1802,6 +1875,8 @@ def _prefs_body(p, dropped=()) -> dict:
             # removed on load, shown next to their row until the athlete saves
             "pref_dropped": list(dropped),
             "gate_options": QG.option_texts(),
+            # 肌力動作 (engine/strength_moves.py, SP-191): the types, their moves, the equipment
+            "strength_options": SM.options(),
             "aet_options": {k: {"label": "自動（標準：徐國峰 90 分；備案 UA 40 分）" if k == "auto"
                                 else AT.PROTOCOLS[k]["label"], "tip": AT.protocol_tip(k)}
                             for k in AT.PROTOCOL_CHOICES}}
@@ -2388,6 +2463,23 @@ async def compliance(start: str, end: str, db: AsyncSession = Depends(get_db)):
 @router.get("/compliance/page", include_in_schema=False)
 def compliance_page():
     return render_page("compliance")
+
+
+# ---------------------------------------------------------------------------
+# 每週課表存檔 (engine/plan_history.py, SP-71)
+#
+#   GET /api/v1/overview/plan/history?limit=   the stored weeks, newest first: what each week
+#       planned when it began (frozen) and, once it is over, how it went; plus how many
+#       activities the user marked 比賽 (the races a prediction can be checked against)
+# ---------------------------------------------------------------------------
+
+@router.get("/history")
+async def plan_history(limit: int = 26, db: AsyncSession = Depends(get_db)):
+    from backend.engine import activity_tags as AT
+    from backend.engine import plan_history as PH
+    races = await run_in_threadpool(lambda: sum(1 for t in AT.load() if AT.user_type(t) == "race"))
+    return {"weeks": await PH.history(db, limit), "final_days": PH.FINAL_DAYS, "kinds": PS.KINDS,
+            "marked_races": races}
 
 
 @router.get("/templates/page", include_in_schema=False)

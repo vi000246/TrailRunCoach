@@ -96,6 +96,16 @@
   "pf.g.content": "Sessions / targets",
   "pf.g.auto": "Auto-adjust",
   "pf.g.adv": "Advanced",
+  "pf.g.moves": "Strength moves",
+  "pf.mv.intro": "The phase decides which kinds of moves a session trains and the sets and reps; you pick the move for each kind (none picked = the default). Tick the equipment you don't have and moves that need it are swapped for ones that don't.",
+  "pf.mv.no_gear": "Equipment I don't have",
+  "pf.mv.group.strength": "Strength session moves",
+  "pf.mv.group.balance": "Balance / ankle block at the end",
+  "pf.mv.default": " (default)",
+  "pf.mv.easier": " (easier)",
+  "pf.mv.harder": " (harder)",
+  "pf.mv.who": "{who} Equipment: {gear}.",
+  "pf.mv.swap": "No {gear}: \"{name}\" is used instead.",
   "pf.days": "Training days",
   "pf.runs": "Runs per week",
   "pf.auto": "Auto",
@@ -265,5 +275,9 @@
   "rest.mv": "Rest",
   "rest.mv_tip": "No session this day (rest). Drag it to another day: the rest day moves there and that day's sessions move here",
   "rest.mv_done": "Rest day moved to {to}: {n} session(s) moved to {from}",
-  "rest.mv_what": "Move the rest day"
+  "rest.mv_what": "Move the rest day",
+  "vs.intensity_pct": "intensity {pct}%",
+  "vs.short_legend": "Intensity short / too high (counts as partial)",
+  "vs.levels_aria": "About the completion levels",
+  "vs.levels_tip": "Four completion levels; time, TSS and intensity all use TrainingPeaks' compliance bands (±20 %, 50 %):\n✓ Done: time and TSS within ±20 % of the plan, and a quality session's intensity at least 80 % done.\n◐ Partial: time or TSS more than 20 % off; or only 50–80 % of the intensity (intensity short); or an easy run that reached 1–1.5× a quality session's bar (too hard).\n≠ Off plan: a quality session with under 50 % of its intensity (run easy); an easy run at 1.5× a quality session's bar or more; or another sport. At least yellow.\n✗ Missed.\nHow intensity is measured: with the session classifier, the higher of Zone 3 time (bar 10 min) and equivalent T@VO2max (bar 4 min); without it, the time at or above threshold (power ≥ 95 % CP or HR ≥ LTHR; bar 10 min, short intervals 60 % of the plan). The 80 %, 50 % and 1.5× bands applied to intensity are estimates."
 }

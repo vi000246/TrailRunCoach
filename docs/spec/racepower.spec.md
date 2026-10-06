@@ -219,15 +219,20 @@ event's stored GPX:
    daytime 06–18 values only.
 2. Open-Meteo forecast (≤ 16 days, lat/lon/elevation). It requests one extra day when the horizon
    allows, for races that run past midnight.
-3. Open-Meteo archive climatology: the same ±7-day window in the last 5 years, temperature
-   lapse-corrected to the target elevation (−6.5 °C/km).
+3. Open-Meteo archive climatology (SP-210, `fetch_climatology`): the month centred on the race
+   date (±15 days) in each of the last 10 years, queried at the target elevation (0.01°, 10 m),
+   each hour the mean of ERA5, ERA5-Land and ECMWF IFS 9 km (the three-model mean had the smallest
+   error against CWA 1991–2020 station normals at 6 stations; numbers in the module docstring).
+   Daytime mean as before, plus a 24-hour profile (each clock hour's mean). One archive call per
+   year, 4 in parallel; cached for good in `climatology/` under the shared data folder once every
+   year answered over its whole window.
 4. Manual (`values: None`, the page's editable fields).
 
 The response also carries `hourly`: `[{t, temp_c, rh_pct, dew_c}]`, with `t` as naive local time
 (`YYYY-MM-DDTHH:MM`; CWA timestamps are UTC+8, Open-Meteo is asked with `timezone=auto`, i.e. the
 location's own zone). It covers the event days plus the day after. Only the CWA 3-day
-product and the Open-Meteo forecast provide it; the weekly blocks, climatology and manual give
-`null`. `hourly_at` (`backend/engine/racepower/weather.py:369`) interpolates temperature and dew
+product, the Open-Meteo forecast and the climatology (its 24-hour profile laid on each event day)
+provide it; the weekly blocks and manual give `null`. `hourly_at` (`backend/engine/racepower/weather.py:369`) interpolates temperature and dew
 point linearly between the bracketing rows and rebuilds RH from them. It takes the edge row up to
 1.5 h past either end, and returns nothing beyond that.
 
@@ -251,6 +256,7 @@ hides the CWA key, the 百岳 peak lists and presets (百岳 reads 多日登山)
 | POST | `/api/v1/racepower/plan` | `PlanIn` (`backend/engine/racepower/calc.py:145`) = `PredictIn` + mode, targets (time / pace, power W / %CP), course ref (`course_id` or `event_id` + options, or manual), strategy, hills, acclimatisation, locks, start time, aid stations (typed), day splits, terrain, `hourly` (the /weather rows), `hourly_heat` (default true), `heat_acclimatisation`, 百岳 trip kind / pack per day → summary (incl. `heat`, `strategy`, `trail_hr`, `time_total_s`, `nonmoving`), effort, segments (incl. temp_c / dew_c / rh_pct / heat_pct / heat_clock / heat_src, kcal / cho / water / sodium / fuel action), heat_profile, days (百岳), compare, crosscheck, v1, course_name, `fuel`, `seg_targets`, `chart_rows`, `goal` (time / power modes), `stop_suggestions`, warnings; an unknown `course_id` reloads from `event_id`, else 410 (`backend/api/racepower.py:566`, `calc.make_plan` `backend/engine/racepower/calc.py:492`) |
 | GET | `/api/v1/racepower/goal-basis` | the training basis for goals: hr (目標配速) or power (目標功率), from 課表偏好 目標基準 else 使用功率 (`backend/api/racepower.py:553`) |
 | GET | `/api/v1/racepower/grade-model` | gait-aware RE(g) (run / walk bins, walk share, technicality per class and per downhill bin) / v_max(g) / v_h(g), the HR hike-window summary and its basis (`backend/api/racepower.py:353`) |
+| GET | `/api/v1/racepower/cadence-check` | SP-230: the climbing (≥ 3 % windows) cadence histogram of the year's outdoor runs (5-spm bins, disk-cached per activity `racepower_climb_cadence_v1`) against the 130 spm walk line: two groups or one, the valley, whether 130 sits in it, a hint; report only, the line never moves (`backend/engine/racepower/runwalk.py`, page section 爬坡步頻分布) |
 | GET | `/api/v1/racepower/heat-status?date=` | heat-acclimation S today, its history and the race-day projection (`backend/api/racepower.py:394`) |
 | GET / POST | `/api/v1/racepower/hike-meta` | pack per trip (`racepower_hike_meta.json`, matched by file else start time) (`backend/api/racepower.py:441`) |
 | GET / POST | `/api/v1/racepower/solo-hikes` | the opted-in solo hikes (`{"files": [.wko4 names]}`); only these calibrate EP/h, the walking model, the hike back-test and the 登山 conversion (`backend/api/racepower.py:464`) |
@@ -279,8 +285,9 @@ Design: `docs/research/racepower-v2.md` (formulas F1–F18, verification §3A / 
   3 m hysteresis gain / loss, optional scaling to an official gain, Douglas–Peucker ε 10 m
   (`backend/engine/racepower/course.py:171`), classes 陡下 ≤ −15 % / 下坡 / 平 ±2 % / 上坡 / 陡上
   ≥ 15 %, merge of segments shorter than max(200 m, 1 %) (`backend/engine/racepower/course.py:233`),
-  flats > 3 km split per km; walk labels 走跑皆可 ≥ 15 %, 建議快走 ≥ 28 %. Also per-km or one
-  segment. Manual courses are one segment or per-km with no grade information.
+  flats > 3 km split per km; no walk label here (it needs the predicted speed, see Segment
+  targets). Also per-km or one segment. Manual courses are one segment or per-km with no grade
+  information.
 - **Multi-day** (百岳): split points clicked on the profile (camp / hut waypoints pre-fill them).
 - **Coordinates** (`backend/engine/racepower/course.py:418`): a GPX / FIT course's profile carries
   `lat` / `lon` beside `km` / `z` (the same ≤ 1500 points, interpolated along the track by
@@ -898,6 +905,18 @@ up to 3 h and AeT beyond (推估). Road plans keep pace / power. `chart_rows` gi
 one row per segment with pace, power and HR (null where not valid, `power_ref` / `hr_ref` for
 display), split, cumulative time, ETA, walk flag and fuel summary; the CSV gets 目標類型 / 執行目標.
 
+Walk or run (SP-226, `backend/engine/racepower/runwalk.py`, docs/research/run-walk-threshold.md
+§5.1): on a GPX course every climb ≥ 3 % gets `gait` walk / either / run from grade × the predicted
+speed against two transition-speed curves (Brill & Kram 2021 PTS / EOTS to 15°, straight to Ortiz
+2017's 0.8 m/s at 30°, 0.4 m/s vertical beyond; 推估 for everyone, the default curve). `walk` = 走 /
+走跑皆可 (a note too); > 8 % stays an HR cap + VAM target labelled 陡坡（走／走跑皆可／跑）, a walked
+3–8 % climb becomes 爬坡（走）; fuel uses Minetti walking only where the gait is walk. Labels only:
+the time model is unchanged (`GaitRE`'s majority gait). 百岳 and manual courses carry no gait.
+
+Personal transition speed (SP-228, `runwalk.fit_shift`, set on `GaitRE.runwalk` by `fit_gait_re`): per 2 % climbing bin with ≥ 10 walked and ≥ 10 run windows, the speed that best splits them; the median of (that − default PTS) is one shift of both curves, × n/(n + 30), held within ±0.4 m/s (推估). The planner's labels use it (`summary.runwalk`); the race-class model keeps the shift fitted on every run. 坡度 RE 曲線 shows the default and personal curves and each bin's windows, or 「預設值，還沒有你的資料」.
+
+SP-229 gate (back-test only): `GaitRE.re_at` / `gait_at` pick the walking curve where the running curve's speed at the segment power is below the (shifted) PTS; `RunModel.re_at` lets `course_time` use it. The terrain back-test reports it beside the majority gait (`models.speed_gait`, `speed_gait`: trail segment and climb |error|, segments whose gait changed, `no_worse`) and the 準確度 tab shows the line. The planner keeps the majority gait until a back-test on the athlete's data shows `no_worse`.
+
 ### Share links (`backend/engine/racepower/share.py:75`)
 
 「分享」 freezes one /plan result into a whitelisted snapshot (profile, splits, segment targets, 補給
@@ -1008,7 +1027,7 @@ the version-2 store.
 
 `backend/tests/test_racepower_export.py` covers:
 - the per-segment heat list in `segment_factors`; `hourly_at` interpolation and edges; hourly rows
-  from Open-Meteo, and none from climatology;
+  from Open-Meteo and from the climatology's 24-hour profile;
 - a synthetic forecast (cool, then 32 °C / 70 %) giving the expected Mᵢ per segment from an
   independent interpolation, convergence in ≤ 8 passes, self-consistency of the fixed point, and
   a later start picking warmer hours;
@@ -1119,9 +1138,12 @@ Per-athlete items: `test_heat_calib.py`, `test_effort_calib.py`, `test_terrain_c
 
 - Only the altitude term is normalised per activity (per-activity T / RH now exist in
   `activity_weather.json` but are not used for the envelope).
-- Heat per segment and hour is only for road / trail plans with an hourly forecast (CWA 3-day or
-  Open-Meteo ≤ 16 days); 百岳 and farther dates use one value. The forecast temperature is not
-  lapse-corrected to each segment's elevation.
+- Heat per segment and hour is only for road / trail plans with hourly rows (CWA 3-day,
+  Open-Meteo ≤ 16 days, or the climatology's 24-hour profile); 百岳 and the CWA 1-week product use
+  one value. The climatology is a 6-station check, not a validation (玉山 still ≈ 0.8 °C cold).
+  On GPX road / trail courses each segment's temperature follows its own height (−0.0065 K/m, RH kept) from
+  `heat_ref_alt_m`, which the page sends as the fetched weather point's elevation (or a typed To altitude);
+  without it one height is used for the whole course.
 - Sex defaults to male (labelled 預設（男，推估）) when neither the settings profile nor WKO5 has it.
 - Back-test:
   - one past A race, no solo hikes; 5 capacity samples in the year (≥ 5 per category are needed),
@@ -1173,3 +1195,5 @@ when set, but nothing fills it from the routes module yet.
 | 2026-10-04 | feature | SP-41 | Course map on the calculator for GPX courses: profile `lat` / `lon` and waypoint `lat` / `lon` from `build_course`, Leaflet map (segment-kind colours, highlighted segments, aid stations / waypoints, synced hover with the profile chart) built on the shared `basemaps.js`; share snapshots stay coordinate-free. Fuel tiles (SP-44): the source moved from the tile's native title into its ? tip, so hover and click show one explanation |
 | 2026-10-04 | feature | SP-43 | 「匯出到 COROS」 → 「匯出至課表」: `POST /export/plan` writes the race-day session of the stored plan (kind race, `ext_key` racecalc:<event id>, one per event; upsert, claims the generator's 比賽 row, warns / 409 before overwriting an edit made on the 課表), pushed with the plan's own push; `/export/coros` retired and its old watch workout replaced on that push; steep / walked trail legs: HR cap only (no power / pace; open without a cap); planned race TSS 推估 |
 | 2026-10-04 | feature | SP-43 follow-up | Race TSS: legs without a target use the calculator's predicted race HR ÷ LTHR (trail HR model x*, 百岳 AeT; 0.75 only without one, noted in the session detail); post-race correction factor from done exports (`tss_calib.py`, setting `racepower.race_tss_calib`, w = n/(n+3) 推估, one sample per race) shown in the export dialog; 百岳: single-day only (`multi_day`, `export_block`, 400), HR-only targets |
+| 2026-10-06 | feature | SP-210 | Race-day climatology: the month centred on the race date over the last 10 years, the mean of ERA5 / ERA5-Land / ECMWF IFS at the target elevation (checked against CWA 1991–2020 normals at 6 stations), a 24-hour profile so far-off dates get per-segment heat, a permanent disk cache; tests in `test_race_climatology.py` |
+| 2026-10-06 | feature | SP-210 follow-up | Road / trail GPX plans: each segment's race-day temperature (single value or hourly) moved to its own mean elevation from `heat_ref_alt_m` (the weather point's elevation, sent by the page; also used by 百岳 when 氣溫所在海拔 is blank); tests in `test_racepower_heat_altitude.py` |

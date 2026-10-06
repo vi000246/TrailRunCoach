@@ -421,10 +421,12 @@ def test_V_CL_classes(g, cls):
 
 
 def test_V_CL_walk_labels():
-    """Giovanelli 2016: 9.4° = 16.6 %; Ortiz 2017 30° walking cheaper → 15.8° = 28.3 %."""
-    assert math.tan(math.radians(9.4)) == approx(0.166, abs=5e-4)
-    assert math.tan(math.radians(15.8)) == approx(0.283, abs=5e-4)
-    assert CO.walk_label(0.14) is None and CO.walk_label(0.15) == "走跑皆可" and CO.walk_label(0.28) == "建議快走"
+    """SP-226: the walk label is grade × speed (runwalk.gait), not a fixed 15 / 28 % — no
+    speed, no label; the same 18 % climb is walked slowly and run fast."""
+    assert not hasattr(CO, "RUN_WALK_PCT") and not hasattr(CO, "WALK_PCT")
+    assert CO.walk_label(0.30) is None and CO.walk_label(0.18, None) is None
+    assert CO.walk_label(0.18, 0.8) == "走" and CO.walk_label(0.18, 1.62) == "走跑皆可"
+    assert CO.walk_label(0.18, 2.5) is None and CO.walk_label(0.02, 0.5) is None
 
 
 def test_T9_haversine():

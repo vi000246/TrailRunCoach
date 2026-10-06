@@ -12,6 +12,9 @@ Kinds (the `type` of a row):
                user's session(s) in place of that week's long day.
   test         a due CP / AeT test of this week (overview.week_plan
                test_suggestions; the interval-library merge) — a day.
+  baseline     基線測試 (engine/baseline_test.py, SP-71): the fixed 12′ + 3′ CP test and the
+               AeT test the plan is judged by, now and again every 6–8 weeks — a day;
+               it stands in for the `test` row of the same kind.
   zone_test    a zone-update retest (engine/zone_events.py suggestions:
                HR shift at the same power, a ≥ 4-week break, the first cool
                spell; engine/threshold_confidence.py: LTHR / max HR not
@@ -27,8 +30,8 @@ Kinds (the `type` of a row):
   altitude     高度適應提醒 (engine/altitude.py, SP-100): an event whose GPX
                reaches ≥ 3,000 m, 1–14 days before its start — information, ✕ only.
 
-Ids (the dismissal key): `b2b:<week>`, `test:<kind>:<week>` (both per week:
-「不要」 holds for that week), `zone:<detector id>`, `zone_update:<field>:<date>`,
+Ids (the dismissal key): `b2b:<week>`, `test:<kind>:<week>`, `baseline:<kind>:<week>` (all per
+week: 「不要」 holds for that week), `zone:<detector id>`, `zone_update:<field>:<date>`,
 `altitude:<event id>:<start>:<max m>:<flags>` (the flags say what the reminder found, so a
 dismissed one shows again only when that changes).
 A dismissal is dropped once its suggestion is no longer computed (prune), so
@@ -42,11 +45,12 @@ from __future__ import annotations
 import datetime as dt
 from typing import Optional
 
-from backend.i18n import fmt
+from backend.i18n import _, fmt
 
 KEY = "plan.suggestions.dismissed"
 ACTIONS = ("accepted", "declined", "dismissed")
 ZONE_TESTS = ("aet", "cp")            # schedulable from the box (tt30: described only)
+WEEKLY = ("b2b:", "test:", "baseline:")     # ids that end in their week: a dismissal holds for that week
 
 
 def _monday(day: str) -> str:
@@ -103,6 +107,51 @@ def test_rows(tests: list[dict], monday: str) -> list[dict]:
                              + ("徐國峰 90 分鐘測試就是那週的長跑，會取代那天的長跑。" if sg.get("replaces_long") else
                                 "建議的日子避開長跑、強度課的前後一天。")),
                     "pick": "day", "options": day_options(sg.get("days") or [])})
+    return out
+
+
+def baseline_rows(due: list[dict], monday: str, session_of, days_for) -> list[dict]:
+    """基線測試 (engine/baseline_test.due rows: kind cp | aet, reason first | repeat) → box rows.
+    `session_of(kind)`: the test session 「排入」 stores ({title, minutes, …, replaces_long}; None =
+    nothing to schedule, no row); `days_for(kind, replaces_long)`: the day options. The numbers in
+    the help (± 3 %, 4 %, 3–4 tests) are 推估: plan-backtest-feasibility.md §5.2."""
+    from backend.engine.baseline_test import REPEAT_DAYS
+    lo, hi = REPEAT_DAYS[0] // 7, REPEAT_DAYS[1] // 7
+    out = []
+    for d in due:
+        kind, s = d["kind"], session_of(d["kind"])
+        if not s:
+            continue
+        name = _("{title}（{minutes} 分）", title=s.get("title") or "", minutes=s.get("minutes") or 0)
+        if d["reason"] == "repeat":
+            title = _("該重測了：{name}", name=name)
+            reason = _("上次是 {weeks} 週前（{day}）。每 {lo}–{hi} 週用同一種方式測一次，才比得出有沒有進步。",
+                       weeks=d.get("weeks") or 0, day=fmt.date(d["last"], "md"), lo=lo, hi=hi)
+            if d.get("late"):
+                reason += _("已經超過 {hi} 週了。", hi=hi)
+        else:
+            title = _("建議做一次基線測試：{name}", name=name)
+            reason = (_("還沒有全力的 CP 測試紀錄。") if kind == "cp" else _("還沒有 AeT（有氧閾值）測試紀錄。")) + \
+                _("要知道照課表練有沒有進步，需要先有一個起點。")
+        if d.get("rejected"):
+            reason += _("{day} 那次沒有算進來（不是全力，或流程不完整）。", day=fmt.date(d["rejected"], "md"))
+        help_ = _("測試是建議，不會自動排進課表：挑一天按「排入」。")
+        if kind == "cp":
+            help_ += _("兩段都要全力，中間休息 30 分鐘不要縮短。")
+        else:
+            help_ += _("全程維持穩定的輕鬆強度，不是全力。")
+        if s.get("replaces_long"):
+            help_ += _("徐國峰 90 分鐘測試就是那週的長跑，會取代那天的長跑。")
+        help_ += "\n" + _("每次用同一種測法、同一條平路、差不多的天氣，前一天不要練太重，結果才能互相比。")
+        if kind == "cp":
+            help_ += _("測試本身有誤差（約 ±3%，推估），兩次要差 4% 以上才算有變；一次看不出來，至少要 3–4 次。")
+        help_ += "\n" + _("之後每 {lo}–{hi} 週會再提醒一次。", lo=lo, hi=hi)
+        out.append({"id": f"baseline:{kind}:{monday}", "type": "baseline", "week": monday, "kind": kind,
+                    "title": title, "reason": reason, "help": help_, "minutes": s.get("minutes"),
+                    "last": d.get("last"), "repeat": d["reason"] == "repeat",
+                    "replaces_long": bool(s.get("replaces_long")),
+                    "session": {k: v for k, v in s.items() if k != "replaces_long"},
+                    "pick": "day", "options": day_options(days_for(kind, bool(s.get("replaces_long"))))})
     return out
 
 

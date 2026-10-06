@@ -231,7 +231,7 @@ def test_quality_terrain_and_hr_target():
     flat = next(s for s in week(PP.Prefs(terrain_quality="flat"), kind="specific", mode="specific")
                 if s["kind"] == "quality")
     assert "爬坡" not in flat["title"] and flat["title"].endswith("（平路）")
-    assert "Supra" in flat["source"]                         # still the supra-threshold power band
+    # (SP-75: a 專項期 week without the gate's pick gets the generic fallback, no fixed 5×4′ hill set)
     # carried into the next projected week: not shaped twice
     again = next(s for s in week(PP.Prefs(terrain_quality="hill"), base_quality=q) if s["kind"] == "quality")
     assert again["title"].count("（坡道）") == 1

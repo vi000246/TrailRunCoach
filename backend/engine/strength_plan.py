@@ -21,6 +21,13 @@ scoring). The stage, by the week's phase (Bompa & Buzzichelli 2015, §2.4 of the
 The moves are UA's (教練級); the sets and reps are 推估 (the app has no 1RM: 「留幾下」 instead).
 The eccentric step-down is a weekday supplement — it never replaces real downhills (SP-99,
 downhill-recovery.md). Shared by overview.week_plan and projection.week_sessions (`session()`).
+
+肌力動作自己挑 (SP-191, engine/strength_moves.py; strength-session-design.md §3, §3.8): the stage
+decides which movement types a session trains (TYPES) and the sets × reps (DOSE); the move of each
+type is the athlete's 課表偏好 pick, else the default — the one named here before, so with nothing
+picked the texts are unchanged. 高踏階 stays a fixed station (STEP). A picked move, or one changed
+because its equipment is marked missing, is said at the end of the text and in the source. The old
+session names no moves: it only gets that line (its types: OLD_TYPES).
 """
 from __future__ import annotations
 
@@ -28,6 +35,7 @@ import datetime as dt
 import re
 from typing import Optional
 
+from backend.engine import strength_moves as SM
 from backend.i18n import N_, _
 
 TRAIL_KINDS = ("race", "baiyue")          # planning.KINDS 越野賽 / 百岳
@@ -37,6 +45,18 @@ MINUTES = {"aa": 35, "max": 35, "maint": 25}
 DEFAULT = {"title": N_("肌力（下肢單腳＋核心）"), "minutes": 35, "detail": N_("膝主導＋臀中肌；安排在輕鬆日或跑完後")}
 # an ME session (SP-114 / loaded-carry-training.md §5.3: id "me", 「肌耐力（ME）」), as overview.html reads it
 _ME = re.compile(r"(?<![A-Za-z])ME(?![A-Za-z])")
+# the movement types (strength_moves.TYPES) each session trains, in the order of its text — SP-119's
+# table, not a preference; maint_me = a 百岳 維持 week with an ME session (no step-down)
+TYPES = {"aa": ("ecc", "knee", "pull", "grip", "core"), "max": ("knee", "ecc", "pull", "core"),
+         "maint": ("ecc", "pull", "core"), "maint_me": ("pull", "grip")}
+OLD_TYPES = ("knee", "glute", "core")     # the old session: 「膝主導＋臀中肌」, 下肢單腳＋核心
+# 高踏階 (the uphill single-leg push, UA): a fixed station of the circuit and the 維持 session
+STEP = {"aa": N_("高踏階（箱高約膝高，踩上去站穩再下）"), "maint": N_("高踏階 8 下／腳（可背包）")}
+# 推估: the sets × reps of a plain reps move, by stage and type ({name}); a hold, a carry or a loaded
+# move has its own wording (strength_moves.Move.text). AA: the circuit says its 12–15 reps once.
+DOSE = {"max": {"knee": N_("{name} 3–4 組 × 3–6 下（留 2 下以上，組間休 2–3 分）"), "ecc": N_("{name} 3 組 × 8–12 下／腳"),
+                "pull": N_("{name} 3 組（留 2 下）"), "core": N_("{name} 2 組 × 8–12 下")},
+        "maint": {"ecc": N_("{name} 8–10 下／腳"), "pull": N_("{name}（留 2 下）"), "core": N_("{name} 8–12 下")}}
 
 
 def _g(x, k):
@@ -140,44 +160,67 @@ def refresh(ss: list, ctx: Optional[dict]) -> None:
                  tss=round(float(x.get("tss") or 0.0) * (st["minutes"] / m0 if m0 else 1.0), 1))
 
 
-def week_context(events, phases, monday: dt.date, kind: str) -> dict:
+def week_context(events, phases, monday: dt.date, kind: str, prefs=None) -> dict:
     """{active, stage, race_kind, race}: active when the next A race is a 越野賽 / 百岳 and the
-    phase has a stage."""
+    phase has a stage. `prefs` (課表偏好): its picked moves / missing equipment ride along as
+    `choice` (strength_moves.choice, SP-191) — also when not active, for the old session."""
     r = next_trail_a(events, monday)
     st = stage(kind, phases, monday) if r else None
+    ch = SM.choice(prefs)
+    own = {"choice": ch} if ch else {}
     if not r or st is None:
-        return {"active": False}
-    return {"active": True, "stage": st, "race_kind": r["kind"], "race": r["name"]}
+        return {"active": False, **own}
+    return {"active": True, "stage": st, "race_kind": r["kind"], "race": r["name"], **own}
+
+
+def _said(picks: dict, st: str, typ: str) -> str:
+    """One move as the stage's text says it: its own wording, else the stage's sets × reps."""
+    m = picks[typ].move
+    if m.text.get(st):
+        return _(m.text[st])
+    tpl = DOSE.get(st, {}).get(typ)
+    return _(tpl, name=_(m.name)) if tpl else _(m.name)
 
 
 def session(ctx: Optional[dict], others=()) -> dict:
     """{title, minutes, detail, source} of the week's strength session; `others` = the week's
     sessions so far (an ME one drops the step-down from a 百岳 維持 session). The old session when
-    `ctx` isn't active (`source` None = the caller's own, SRC_UA)."""
+    `ctx` isn't active (`source` None = the caller's own, SRC_UA). The moves: `ctx["choice"]`
+    (SP-191), the defaults without it."""
+    picks = SM.resolve((ctx or {}).get("choice"))
     if not ctx or not ctx.get("active"):
-        return {**DEFAULT, "source": None}
+        own = SM.notes(picks, OLD_TYPES)
+        if not own:
+            return {**DEFAULT, "source": None}
+        return {**DEFAULT, "detail": "；".join([_(DEFAULT["detail"])] + own), "source": None}
     st = ctx["stage"]
-    tail = _("安排在輕鬆日或跑完後；組數次數是推估")
+    name = {t: _(p.move.name) for t, p in picks.items()}
+    if st == "maint" and ctx.get("race_kind") == "baiyue" and has_me(others):
+        st = "maint_me"
+    tail = SM.notes(picks, TYPES[st]) + [_("安排在輕鬆日或跑完後；組數次數是推估")]
+
+    def out(title, body, source):
+        return {"title": title, "minutes": MINUTES[st[:5]], "detail": "；".join([body] + tail),
+                "source": "；".join(x for x in (source, SM.sources(picks, TYPES[st])) if x)}
     if st == "aa":
-        return {"title": _("肌力（基礎循環 6 站）"), "minutes": MINUTES["aa"],
-                "detail": _("6 站做 2–3 輪，每站 12–15 下、留 1–2 下不做到力竭，站間休 30–60 秒："
-                            "離心下階（箱 15–30 cm，3 秒慢慢往下點地）、分腿蹲、高踏階（箱高約膝高，踩上去站穩再下）、"
-                            "引體向上（做不到用彈力帶輔助，或跳上去 3–5 秒慢放）、農夫走路 30–40 m、"
-                            "棒式 30 秒或懸吊抬腿") + "；" + tail,
-                "source": _("Bompa & Buzzichelli 2015（解剖適應）；動作：Uphill Athlete（教練級）")}
+        stations = [_said(picks, st, "ecc"), _said(picks, st, "knee"), _(STEP["aa"]), _said(picks, st, "pull"),
+                    _said(picks, st, "grip"), _said(picks, st, "core")]
+        return out(_("肌力（基礎循環 6 站）"),
+                   _("6 站做 2–3 輪，每站 12–15 下、留 1–2 下不做到力竭，站間休 30–60 秒：{moves}", moves=_("、").join(stations)),
+                   _("Bompa & Buzzichelli 2015（解剖適應）；動作：Uphill Athlete（教練級）"))
     if st == "max":
-        return {"title": _("肌力（分腿蹲＋離心下階＋引體向上）"), "minutes": MINUTES["max"],
-                "detail": _("分腿蹲或後腳抬高蹲 3–4 組 × 3–6 下（留 2 下以上，組間休 2–3 分）；"
-                            "離心下階 3 組 × 8–12 下／腳，背包 5 → 10 % 體重；引體向上 3 組（留 2 下）；"
-                            "最後棒式 2 × 30 秒。離心下階是平日補強，不取代真的下坡") + "；" + tail,
-                "source": _("Bompa & Buzzichelli 2015（最大肌力）；山本正嘉（深蹲和下山用的肌肉相近，教練級）；"
-                            "動作：Uphill Athlete（教練級）")}
-    if ctx.get("race_kind") == "baiyue" and has_me(others):
-        return {"title": _("肌力維持（高踏階＋引體向上）"), "minutes": MINUTES["maint"],
-                "detail": _("2–3 個動作各 2 組，不做到力竭：高踏階 8 下／腳（可背包）、引體向上（留 2 下）、"
-                            "農夫走路 2 × 30–40 m。這週有 ME 負重爬坡，腿的負荷夠了，這堂不做離心下階") + "；" + tail,
-                "source": _("Bompa & Buzzichelli 2015（維持：每週至少 1 次、2–4 個動作）；動作：Uphill Athlete（教練級）")}
-    return {"title": _("肌力維持（高踏階＋離心下階＋引體向上）"), "minutes": MINUTES["maint"],
-            "detail": _("2–4 個動作各 2 組，不做到力竭、不加新動作：高踏階 8 下／腳（可背包）、"
-                        "離心下階 8–10 下／腳、引體向上（留 2 下）、棒式 30 秒") + "；" + tail,
-            "source": _("Bompa & Buzzichelli 2015（維持：每週至少 1 次、2–4 個動作）；動作：Uphill Athlete（教練級）")}
+        return out(_("肌力（{knee}＋{ecc}＋{pull}）", knee=name["knee"], ecc=name["ecc"], pull=name["pull"]),
+                   _("{knee}；{ecc}；{pull}；最後{core}。{name}是平日補強，不取代真的下坡", knee=_said(picks, st, "knee"),
+                     ecc=_said(picks, st, "ecc"), pull=_said(picks, st, "pull"), core=_said(picks, st, "core"),
+                     name=name["ecc"]),
+                   _("Bompa & Buzzichelli 2015（最大肌力）；山本正嘉（深蹲和下山用的肌肉相近，教練級）；"
+                     "動作：Uphill Athlete（教練級）"))
+    src = _("Bompa & Buzzichelli 2015（維持：每週至少 1 次、2–4 個動作）；動作：Uphill Athlete（教練級）")
+    if st == "maint_me":
+        stations = [_(STEP["maint"]), _said(picks, "maint", "pull"), _said(picks, "maint", "grip")]
+        return out(_("肌力維持（高踏階＋{pull}）", pull=name["pull"]),
+                   _("2–3 個動作各 2 組，不做到力竭：{moves}。這週有 ME 負重爬坡，腿的負荷夠了，這堂不做{name}",
+                     moves=_("、").join(stations), name=name["ecc"]), src)
+    stations = [_(STEP["maint"]), _said(picks, st, "ecc"), _said(picks, st, "pull"), _said(picks, st, "core")]
+    return out(_("肌力維持（高踏階＋{ecc}＋{pull}）", ecc=name["ecc"], pull=name["pull"]),
+               _("2–4 個動作各 2 組，不做到力竭、不加新動作：{moves}", moves=_("、").join(stations)), src)

@@ -1,6 +1,6 @@
 /* The floating suggestion box: what the planner suggests but never schedules
  * by itself (engine/suggestions.py; GET /api/v1/overview/plan/suggestions):
- * a B2B weekend (pick the day pair), a due CP / AeT test (pick the day), a
+ * a B2B weekend (pick the day pair), a due CP / AeT test or 基線測試 (pick the day), a
  * zone retest (pick the test and the day; the LTHR 30-min / max-HR test as a
  * 「安排課表」 link, `links`), a zone update, a high-altitude trip's acclimatisation
  * reminder (information).
@@ -29,7 +29,7 @@
   const ICON = `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.6 10.8c.7.6 1.1 1.3 1.1 2.2h5c0-.9.4-1.6 1.1-2.2A6 6 0 0 0 12 3z"/></svg>`;
   // i18n: common.sugg.* (static/i18n/i18n.js; the common catalog is inlined on every page)
   const T = (k, p) => (window.I18N ? window.I18N.t("common.sugg." + k, p) : k);
-  const KIND = { b2b: "B2B", test: T("kind.test"), zone_test: T("kind.zone_test"), zone_update: T("kind.zone_update"),
+  const KIND = { b2b: "B2B", test: T("kind.test"), baseline: T("kind.baseline"), zone_test: T("kind.zone_test"), zone_update: T("kind.zone_update"),
     injury_rest: T("kind.injury"), injury_hold: T("kind.injury"), injury_pattern: T("kind.injury"),
     altitude: T("kind.altitude") };
 

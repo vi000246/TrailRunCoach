@@ -65,6 +65,9 @@ async def lifespan(app: FastAPI):
     import asyncio
     from backend.sync import scheduler
     demo = bool(getattr(app.state, "demo", False))
+    # exceptions and performance to stderr + <data folder>/logs/app.log (SP-215, backend/applog.py)
+    from backend import applog
+    applog.setup()
     if demo:
         from backend.demo import instance as DI
         DI.startup_checks()          # refuses to start next to the owner's data (§3.1)
@@ -168,6 +171,10 @@ def build_app(demo: bool | None = None) -> FastAPI:
         app.include_router(r)
     # the tenant of each request (and the demo's rules): outermost, so every route sees it
     app.add_middleware(TenancyMiddleware)
+    # slow requests, 5xx and unhandled exceptions (with traceback) to the app log (SP-215);
+    # outside the tenant middleware so its time counts too
+    from backend.applog import RequestLogMiddleware
+    app.add_middleware(RequestLogMiddleware)
     app.state.demo = demo
 
     @app.get("/api/v1/static/{name}.html", include_in_schema=False)
