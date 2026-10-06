@@ -151,7 +151,7 @@ def feasibility(r: dict, e, line: Optional[dict], today: dt.date, rows: list[dic
         # 跨級 kept (SP-112): a 百岳 has no lower 組別 — a lower-grade route first
         r["suggestions"].append(_("最難那天比你走過最大的一天高了兩級以上：先走一條低一級的路線（攻頂日的距離和爬升少一點）"
                                   "累積經驗，再來這一座"))
-    for k in ("downgrade", "koop"):
+    for k in ("downgrade", "koop", "milestone"):     # milestone (SP-284): the weekly volume isn't judged here
         r.pop(k, None)
     r["src"] = [_(SRC_SUMMIT)]
     sd = summit_day(line) if line else None
