@@ -357,6 +357,32 @@ def test_step_source_names_the_industry_rules():
     assert s in r["src"]
 
 
+def _step(km, climb, best_ep):
+    e = ev(distance_km=km, climbing_m=climb, est_hours=16.0)
+    r = F.assess(e, line(e), TODAY, hist(km=90.0, climb=5000.0, hours=11.0), best={"ep": best_ep, "date": date(2026, 3, 1)})
+    return r, next(c for c in r["checks"] if c["id"] == "step")
+
+
+def test_step_shows_the_ep_multiple_but_judges_by_class_only():
+    """SP-283: 「比賽最難那天是你 24 個月內最大單日的 N 倍」 shown; the level is still the classes'."""
+    r, st = _step(80, 3000, 45.0)                         # EP 110 (M) vs 45 (S): one up, ×2.44
+    assert st["ep_ratio"] == pytest.approx(110 / 45, abs=0.01) and st["level"] == "ok" and st["up"] == 1
+    assert "最大單日的 2.4 倍" in st["text"] and "24 個月內" in st["text"]
+    assert "級數只高一級，但距離和爬升是兩倍以上" in st["text"] and "70 % 是推估" in st["text"]
+    assert r["level"] != "over" and not any("低一級" in s for s in r["suggestions"])
+    r, st = _step(80, 3000, 60.0)                         # ×1.83, one up: no reminder
+    assert st["level"] == "ok" and "1.8 倍" in st["text"] and "兩倍以上" not in st["text"]
+    r, st = _step(45, 3000, 44.0)                         # EP 75 (M) vs 44 (XS): two up at only ×1.7 → over
+    assert st["level"] == "over" and st["up"] == 2 and st["ep_ratio"] == pytest.approx(75 / 44, abs=0.01)
+    assert "兩倍以上" not in st["text"]
+    r, st = _step(80, 4500, 30.0)                         # three up at ×4.2: over, the reminder is for one up only
+    assert st["level"] == "over" and "兩倍以上" not in st["text"]
+    r, st = _step(20, 500, 40.0)                          # EP 25 vs 40: below, ×0.6
+    assert st["level"] == "ok" and st["ep_ratio"] == pytest.approx(25 / 40, abs=0.01)
+    r, st = _step(20, 500, 0.0)                           # a zero best day: no multiple, the class still judged
+    assert st["ep_ratio"] is None and "倍" not in st["text"] and st["level"] == "ok"
+
+
 def test_itra_classes_and_best_day():
     assert [F.ITRA_CLASSES[F.itra_class(x)][0] for x in (10, 25, 50, 80, 120, 160, 250)] == \
         ["XXS", "XS", "S", "M", "L", "XL", "XXL"]
