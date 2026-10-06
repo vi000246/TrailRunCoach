@@ -159,12 +159,16 @@ def energy_band(kcal: float, rel: float = 0.12) -> list[float]:
 def run_energy(segments: Sequence[dict], weight: float, pack_kg: float = 0.0,
                hr_bpm: Optional[float] = None, age: Optional[float] = None, sex: Optional[str] = None) -> list[dict]:
     """Per run segment {kcal, method}: Stryd power where it is validated,
-    Minetti × Fletcher elsewhere; Keytel only when a segment has no power."""
+    Minetti × Fletcher elsewhere; Keytel only when a segment has no power.
+    Walking cost where the segment's gait (runwalk.gait on grade × predicted
+    speed, SP-226) is walk; 走跑皆可 takes the running cost — above the
+    preferred transition speed people run (Brill & Kram 2021), and it is the
+    higher of the two, so the food is not under-counted (推估)."""
     out = []
     for s in segments:
         g = float(s.get("grade") or 0.0)
         p, t, d = s.get("power"), float(s.get("t") or 0.0), float(s.get("dist_m") or 0.0)
-        walked = bool(s.get("walk"))
+        walked = s.get("gait") == "walk"
         if p and t > 0 and not walked and POWER_MIN_GRADE <= g <= POWER_MAX_GRADE:
             out.append({"kcal": power_kcal(float(p), t, g), "method": "power"})
         elif p or not hr_bpm or age is None:

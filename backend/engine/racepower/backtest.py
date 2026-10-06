@@ -230,6 +230,25 @@ def _seg_errs(rows, key="err", sel=lambda s: True):
     return [s[key] for r in rows for s in r.get("segments") or [] if s.get(key) is not None and sel(s)]
 
 
+def speed_gait_summary(rows: list[dict]) -> dict:
+    """SP-229's gate: the trail segment speed errors with the majority gait (err) against
+    the gait chosen by the predicted speed (err_speed), on the same segments — all, and the
+    climbs ≥ 3 % (the only ones where the two can differ). `no_worse` = the speed gait's
+    median |error| is not above the majority gait's on both (the ticket: otherwise the time
+    model stays as it is)."""
+    tr = [r for r in rows if r.get("category") == "trail" and r.get("err_v2") is not None]
+    both = lambda s: s.get("err") is not None and s.get("err_speed") is not None      # noqa: E731
+    climb = lambda s: both(s) and (s.get("grade") or 0.0) >= 0.03                       # noqa: E731
+    out = {"segments": {"gait": stats(_seg_errs(tr, "err", both)), "speed_gait": stats(_seg_errs(tr, "err_speed", both))},
+           "climbs": {"gait": stats(_seg_errs(tr, "err", climb)), "speed_gait": stats(_seg_errs(tr, "err_speed", climb))},
+           "changed": sum(1 for r in tr for s in r.get("segments") or []
+                          if climb(s) and (s.get("gait_speed") == "walk") != (s.get("gait") == "walk"))}
+    ok = [out[k]["speed_gait"]["median_abs"] is not None and out[k]["gait"]["median_abs"] is not None
+          and out[k]["speed_gait"]["median_abs"] <= out[k]["gait"]["median_abs"] for k in ("segments", "climbs")]
+    out["no_worse"] = bool(out["segments"]["gait"]["n"]) and all(ok)
+    return out
+
+
 def summarise_terrain(rows: list[dict]) -> dict:
     """Mode-B errors per category (trail also running vs walking-heavy), per
     intensity class and per class × grade bin; pooled vs per-class RE and
@@ -256,7 +275,9 @@ def summarise_terrain(rows: list[dict]) -> dict:
                              "segments_class_model": stats(_seg_errs(rs, "err_cls"))}
         out["grid"][k] = {b: stats(_seg_errs(rs, sel=lambda s, b=b: s.get("bin") == b)) for b in BIN_LABELS}
     out["grid"]["all"] = {b: stats(_seg_errs(runs, sel=lambda s, b=b: s.get("bin") == b)) for b in BIN_LABELS}
-    out["models"] = {"gait": stats(r["err_v2"] for r in runs), "no_gait": stats(r.get("err_nogait") for r in runs)}
+    out["models"] = {"gait": stats(r["err_v2"] for r in runs), "no_gait": stats(r.get("err_nogait") for r in runs),
+                     "speed_gait": stats(r.get("err_speedgait") for r in runs)}
+    out["speed_gait"] = speed_gait_summary(rows)
     # does the error differ clearly by class? (classes with ≥ MIN_N activities)
     meds = {k: v["segments"]["median_abs"] for k, v in out["classes"].items()
             if v["activities"] >= MIN_N and v["segments"]["median_abs"] is not None}
@@ -470,6 +491,10 @@ def evaluate_run(case: dict, ctx: dict) -> Optional[dict]:
     res = PC.solve_power_mode(p_act, segs, model)
     res_cls = PC.solve_power_mode(p_act, segs, PC.RunModel(weight, gre_cls.re, gre_cls.v_max))
     res_ng = PC.solve_power_mode(p_act, segs, PC.RunModel(weight, gre_ng.re, gre_ng.v_max)) if gre_ng else None
+    # SP-229: the same model with the gait chosen by the predicted speed (GaitRE.re_at)
+    speed_gait = hasattr(gre, "re_at")
+    res_sp = PC.solve_power_mode(p_act, segs, PC.RunModel(weight, gre.re, gre.v_max,
+                                                          lambda g_, p_: gre.re_at(g_, p_, weight))) if speed_gait else None
     km = course["totals"]["km"]
     gain = course["totals"]["gain_m"]
     t_v1 = None
@@ -496,6 +521,11 @@ def evaluate_run(case: dict, ctx: dict) -> Optional[dict]:
                 return vm if vm and v > vm else v
             row.update(p_act=p_seg, v_act=v_act, v_pred=v_of(gre), err=v_of(gre) / v_act - 1.0,
                        err_cls=v_of(gre_cls) / v_act - 1.0, gait="walk" if walked(s["grade"]) else "run")
+            if speed_gait:
+                vs = gre.re_at(s["grade"], p_seg, weight) * p_seg / weight
+                vm = gre.v_max(s["grade"])
+                vs = vm if vm and vs > vm else vs
+                row.update(err_speed=vs / v_act - 1.0, gait_speed=gre.gait_at(s["grade"], p_seg, weight))
         seg_rows.append(row)
     walk_t = sum(a["walk_t"] for a in act)
     out = {"km": km, "gain_m": gain, "segments_n": len(segs), "t_act": t_act, "p_act": p_act,
@@ -503,6 +533,7 @@ def evaluate_run(case: dict, ctx: dict) -> Optional[dict]:
            "walk_heavy": bool(t_act and walk_t / t_act >= WALK_HEAVY),
            "t_v2": res["T"], "err_v2": res["T"] / t_act - 1.0,
            "err_v2_cls": res_cls["T"] / t_act - 1.0, "err_nogait": (res_ng["T"] / t_act - 1.0) if res_ng else None,
+           "err_speedgait": (res_sp["T"] / t_act - 1.0) if res_sp else None,
            "t_v1": t_v1, "err_v1": (t_v1 / t_act - 1.0) if t_v1 else None,
            "strategy": empirical_strategy(segs, act), "segments": seg_rows, "grade_n": gre.n_samples,
            "tech": gre.tech_factor() if trail and hasattr(gre, "tech_factor") else None}

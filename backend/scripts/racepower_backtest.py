@@ -77,6 +77,12 @@ def main(argv=None) -> int:
         print(f"  {k:6s} " + " | ".join(f"{_pct(row[b]['bias']):>7s} {_abs(row[b]['median_abs']):>6s} ({row[b]['n']:4d})"
                                         for b in res["grade_bins"]))
     print("models:", {k: _abs(v["median_abs"]) for k, v in te["models"].items()}, "class differs:", te["class_differs"])
+    sg = te.get("speed_gait") or {}
+    if sg:
+        print(f"SP-229 gait by predicted speed (trail segments): all {_abs(sg['segments']['gait']['median_abs'])} -> "
+              f"{_abs(sg['segments']['speed_gait']['median_abs'])}, climbs {_abs(sg['climbs']['gait']['median_abs'])} -> "
+              f"{_abs(sg['climbs']['speed_gait']['median_abs'])} (n {sg['climbs']['gait']['n']}, gait changed on "
+              f"{sg['changed']}); no worse: {sg['no_worse']}")
     ca = res["capacity"]
     print("\n== 能力模型回測 (race-like + tests) ==")
     if ca["message"]:

@@ -355,8 +355,11 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
   are 「加速跑 6×20 秒」 (`ROAD_STRIDES`, `backend/engine/overview.py:949`).
 - **專項期** (`engine/specific_phase.py`): the LSD follows the next A race's コース定數 (the race
   calculator's single-day target; a 推估 share per week from week 10 to 3 before the race, still
-  ≤ +15 % over the 4-week longest); the race GPX's longest climb becomes one 長爬坡反覆 easy run;
-  a race simulation 4–3 weeks out is a suggestion (`race_sim_suggestion`).
+  ≤ +15 % over the 4-week longest); the race GPX's longest climb becomes one 長爬坡反覆 easy run,
+  which says how the race climbs it (SP-227, `race_gait`: runwalk.gait on the climb's grade × the
+  race day's climbing speed, 「比賽時這段每小時約 N m、G%：用快走／走跑皆可／用跑的」; the old
+  「用比賽的走／跑方式」 without a race time); a race simulation 4–3 weeks out is a suggestion
+  (`race_sim_suggestion`).
 - **B2B 連續長天** (`engine/b2b.py`): a due B2B weekend is only a suggestion (課表偏好 `b2b`
   off = never); an accepted one is stored as the user's two sessions (`plan.b2b.accepted`) and
   the rest of the week is planned around it (day 2 out of the easy minutes, 4 easy days after).
