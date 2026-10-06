@@ -379,6 +379,10 @@
     "draft": true,
     "src": "backend/engine/load_guard.py:129"
   },
+  "E 配速 {fast}–{slow} /km（{km:g} K {time}，VDOT {vdot:.1f}）": {
+    "draft": true,
+    "src": "backend/engine/e_pace.py:145"
+  },
   "E 配速 ≈ 閾值配速 × 1.18–1.29（Friel 2 區配速，推估）": {
     "draft": true,
     "src": "backend/engine/workout_templates.py:379"
@@ -3551,6 +3555,10 @@
     "draft": true,
     "src": "backend/engine/specific_phase.py:603"
   },
+  "比賽日期不能在今天之後": {
+    "draft": true,
+    "src": "backend/api/plan.py:735"
+  },
   "比賽時這段每小時約 {vam:.0f} m、{g:.0f}%：{act}": {
     "draft": false,
     "src": "backend/engine/specific_phase.py:683"
@@ -4470,6 +4478,10 @@
   "要儲存的資料太大": {
     "draft": true,
     "src": "backend/engine/race_calc_store.py:95"
+  },
+  "要填距離（1.5–42.5 km）、時間、日期，配速要在 2:30–15:00 /km 之間": {
+    "draft": true,
+    "src": "backend/api/plan.py:733"
   },
   "要知道照課表練有沒有進步，需要先有一個起點。": {
     "draft": true,
@@ -5870,6 +5882,10 @@
   "；本週不另外排技術地形課": {
     "draft": true,
     "src": "backend/engine/technical.py:173"
+  },
+  "；比賽是 {d} 天前的，舊了（超過 {n} 天，推估）：有新的比賽成績再更新": {
+    "draft": true,
+    "src": "backend/engine/e_pace.py:148"
   },
   "；比賽超過 6 小時，長天練到 6 小時的量就夠，等於 {p:.0f} %": {
     "draft": true,

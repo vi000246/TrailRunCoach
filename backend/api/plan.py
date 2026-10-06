@@ -690,6 +690,55 @@ async def put_pmc_start(body: PmcStartIn, db: AsyncSession = Depends(get_db)):
     return await run_in_threadpool(lambda: pmc_start_view(_overview_dataset()))
 
 
+# ---- 比賽成績 → E 配速 (SP-276; engine/e_pace.py) ----------------------------------------
+
+def race_pace_view(ds, today: dt.date) -> dict:
+    """The confirmed race and its E pace (None when not set), and the runs recognised as road
+    races in the last year — offered only; used after the athlete confirms one."""
+    from backend.engine import e_pace as EP
+    cur = EP.current(today)
+    try:
+        cands = EP.candidates(ds, today) if ds is not None else []
+    except Exception:              # noqa: BLE001 — the candidates are a convenience
+        cands = []
+    return {"current": cur, "label": EP.label(cur), "candidates": cands[:8],
+            "stale_days": EP.STALE_DAYS}
+
+
+class RacePaceIn(BaseModel):
+    distance_km: Optional[float] = None
+    time_s: Optional[float] = None
+    date: Optional[str] = None
+    source: str = "manual"            # manual | activity (a candidate the athlete confirmed)
+    title: Optional[str] = None
+    clear: bool = False
+
+
+@router.get("/race-pace")
+def get_race_pace():
+    return race_pace_view(_estimate_dataset(), today_local())
+
+
+@router.put("/race-pace")
+async def put_race_pace(body: RacePaceIn, db: AsyncSession = Depends(get_db)):
+    """Save (or with clear: remove) the race the E pace comes from (date ≤ today)."""
+    from fastapi.concurrency import run_in_threadpool
+    from backend.engine import e_pace as EP
+    from backend.settings.repository import SettingsRepository
+    value = None
+    if not body.clear:
+        value = EP.parse({"distance_m": (body.distance_km or 0) * 1000.0, "time_s": body.time_s,
+                          "date": body.date, "source": body.source, "title": body.title})
+        if value is None:
+            raise HTTPException(400, _("要填距離（1.5–42.5 km）、時間、日期，配速要在 2:30–15:00 /km 之間"))
+        if value["date"] > today_local().isoformat():
+            raise HTTPException(400, _("比賽日期不能在今天之後"))
+    await SettingsRepository(db, current_athlete_id()).set(EP.RACE_KEY, value)
+    await db.commit()
+    _notify(True)                  # the 90-minute test's target follows (re-pushed like a threshold)
+    return await run_in_threadpool(lambda: race_pace_view(_estimate_dataset(), today_local()))
+
+
 def _estimate_dataset():
     # the estimate reads samples; use the athlete's own-formula dataset so
     # approved data corrections apply
