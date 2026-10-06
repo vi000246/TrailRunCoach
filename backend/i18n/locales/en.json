@@ -1131,6 +1131,7 @@
   "訓練": "Work",
   "設定頁": "Settings page",
   "該重測了：{name}": "Time to retest: {name}",
+  "課前 1–4 小時吃含碳水的一餐或點心，不要空腹做（Aird 2018、Mata 2019、Impey 2018）": "Eat a meal or snack with carbs 1–4 hours before; don't do this session fasted (Aird 2018, Mata 2019, Impey 2018)",
   "課表": "Schedule",
   "課表待確認是自動調整的提醒，不能自己新增": "A \"Plan to confirm\" is an auto-adjust reminder and cannot be added by hand",
   "課表心率用{label}：輕鬆跑上限 {aet:.0f} bpm（{src}）": "Plan HR uses {label}: easy-run cap {aet:.0f} bpm ({src})",
