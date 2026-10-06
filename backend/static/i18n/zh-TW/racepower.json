@@ -186,5 +186,21 @@
   "rw.legend_you": "走／跑標籤：你的切換速度",
   "sg.line": "依預估速度選走或跑（SP-229，還沒用在預測）：越野分段 |誤差| {a} → {b}，其中爬坡段 {c} → {d}（{n} 段，步態改變 {k} 段）。",
   "sg.ok": "沒有變差",
-  "sg.no": "變差：預測維持「多數步態」"
+  "sg.no": "變差：預測維持「多數步態」",
+  "bt.th.title": "越野心率配速模型回測（比賽心率水準，推估）",
+  "bt.th.decay_abs": "含衰減 |誤差| 中位",
+  "bt.th.decay_bias": "含衰減 偏差",
+  "bt.th.nodecay_abs": "不含衰減 |誤差| 中位",
+  "bt.th.nodecay_bias": "不含衰減 偏差",
+  "bt.th.races": "越野比賽",
+  "bt.th.long": "≥ {h} 小時的比賽",
+  "bt.th.note": "正值 = 預估比實際慢。耐久衰減的形狀在長賽才看得出來：比較 ≥ {h} 小時的比賽含衰減和不含衰減哪一個誤差小。",
+  "bt.th.none": "沒有 {h} 小時以上的比賽，長賽的衰減形狀無法驗證",
+  "bt.th.rows": "每一場越野比賽（{n}）",
+  "bt.th.date": "日期",
+  "bt.th.activity": "活動",
+  "bt.th.moving_h": "移動時數",
+  "bt.th.decay": "含衰減誤差",
+  "bt.th.nodecay": "不含衰減誤差",
+  "bt.th.long_badge": "≥ {h} h"
 }

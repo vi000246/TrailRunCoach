@@ -186,5 +186,21 @@
   "rw.legend_you": "walk / run labels: your transition speed",
   "sg.line": "Walk or run by the predicted speed (SP-229, not used in predictions yet): trail segment |error| {a} → {b}, climbs {c} → {d} ({n} segments, gait changed on {k}).",
   "sg.ok": "no worse",
-  "sg.no": "worse: predictions keep the majority gait"
+  "sg.no": "worse: predictions keep the majority gait",
+  "bt.th.title": "Trail HR pace model back-test (race HR level, estimate)",
+  "bt.th.decay_abs": "With decay: median |error|",
+  "bt.th.decay_bias": "With decay: bias",
+  "bt.th.nodecay_abs": "Without decay: median |error|",
+  "bt.th.nodecay_bias": "Without decay: bias",
+  "bt.th.races": "Trail races",
+  "bt.th.long": "Races ≥ {h} h",
+  "bt.th.note": "Positive = predicted slower than actual. The shape of the durability decay only shows in long races: compare whether the races ≥ {h} h have the smaller error with or without decay.",
+  "bt.th.none": "No races of {h} h or longer: the decay shape for long races cannot be validated",
+  "bt.th.rows": "Each trail race ({n})",
+  "bt.th.date": "Date",
+  "bt.th.activity": "Activity",
+  "bt.th.moving_h": "Moving hours",
+  "bt.th.decay": "Error with decay",
+  "bt.th.nodecay": "Error without decay",
+  "bt.th.long_badge": "≥ {h} h"
 }
