@@ -178,6 +178,9 @@ class Event:
     day_plan: Optional[list] = None
     # SP-114 賽制 (RACE_FORMATS) of a ≥ 2 day 越野賽／其他; None = 分站 (old events) or not asked
     race_format: Optional[str] = None
+    # SP-244 「會用登山杖」: the race calculator adds a hint on steep climbs / descents
+    # (seg_targets.pole_hint); no prediction reads it (trekking-poles.md §4)
+    poles: bool = False
 
     @property
     def continuous(self) -> bool:
@@ -736,6 +739,7 @@ class Plan:
             data["kind"] = "other"
         if data.get("heat") not in EVENT_HEAT:
             data["heat"] = "auto"
+        data["poles"] = bool(data.get("poles"))
         if data.get("pack_kg") in ("",):
             data["pack_kg"] = None
         if data.get("pack_kg") is not None:

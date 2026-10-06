@@ -79,3 +79,67 @@ def test_api_trail_plan_and_csv_carry_the_targets(client):  # noqa: F811
     assert any("控制、安全" in r[ti] for r in rows[:-1])
     road = client.post("/api/v1/racepower/plan", json={"type": "road", "distance_km": 10}).json()
     assert road["seg_targets"] is None
+
+
+# ---- SP-244 「會用登山杖」: a hint on steep climbs and steep descents, never a number -------
+
+def test_pole_hint_only_on_steep_climbs_and_steep_descents():
+    def hint(g, gait=None, kind="trail"):
+        s = seg(g, gait=gait)
+        return ST.pole_hint(s, ST.kind_of(s), kind)
+    assert hint(0.15)["key"] == "up" and hint(0.15, "walk")["text"] == "用杖：自覺比較輕鬆，速度差不多"
+    assert hint(0.05, "walk")["key"] == "up"                          # a walked 3–8 % climb is steep_climb
+    assert hint(0.15, "run") is None                                  # poles are for walking
+    assert hint(-0.15)["text"] == "用杖：膝蓋負擔少 12–25 %" and "Schwameder" in hint(-0.20)["src"]
+    assert "Giovanelli" in hint(0.15)["src"]
+    assert hint(-0.10) is None and hint(0.0) is None and hint(0.05) is None       # gentle / flat / runnable
+    assert hint(0.15, kind="road") is None and hint(0.15, kind="baiyue")["key"] == "up"
+
+
+def test_chart_rows_carry_the_hint_only_when_the_race_is_marked():
+    plan = {"type": "trail", "segments": [seg(0.15, i=1), seg(0.0, i=2), seg(-0.20, i=3), seg(-0.05, i=4)],
+            "used": {"cp": {"value": 300.0}}, "summary": {"time_s": 2 * 3600.0}}
+    ST.plan_targets(plan, aet=145.0, lthr=165.0)
+    off = ST.chart_rows(plan, aet=145.0, lthr=165.0)
+    on = ST.chart_rows(plan, aet=145.0, lthr=165.0, poles=True)
+    assert all(r["pole_hint"] is None for r in off)
+    assert [(r["pole_hint"] or {}).get("key") for r in on] == ["up", None, "down", None]
+    strip = lambda rows: [{k: v for k, v in r.items() if k != "pole_hint"} for r in rows]   # noqa: E731
+    assert strip(on) == strip(off)                                    # pace, power, HR cap unchanged
+
+
+def test_api_poles_change_no_time_pace_or_hr(client):  # noqa: F811
+    tr = synthetic_track({"len": 12000, "z": lambda x: 300 + (x * 0.2 if x < 6000 else (12000 - x) * 0.2)})
+    cid = client.post("/api/v1/racepower/course",
+                      files={"file": ("t.gpx", GPX.write_gpx(tr).encode(), "application/gpx+xml")}).json()["course_id"]
+    body = {"type": "trail", "course": {"course_id": cid}, "start_time": "06:00"}
+    off = client.post("/api/v1/racepower/plan", json=body).json()
+    on = client.post("/api/v1/racepower/plan", json={**body, "poles": True}).json()
+    assert on["summary"]["time_s"] == off["summary"]["time_s"]
+    assert [s["pace_s_per_km"] for s in on["segments"]] == [s["pace_s_per_km"] for s in off["segments"]]
+    assert [r["hr_cap"] for r in on["chart_rows"]] == [r["hr_cap"] for r in off["chart_rows"]]
+    assert all(r["pole_hint"] is None for r in off["chart_rows"])
+    keys = {r["pole_hint"]["key"] for r in on["chart_rows"] if r["pole_hint"]}
+    assert keys == {"up", "down"}
+    assert all(r["pole_hint"] is None for r in on["chart_rows"] if r["kind"] in ("flat", "run_climb"))
+
+
+def test_event_keeps_the_poles_choice():
+    from backend.engine import planning as P
+    plan = P.Plan()
+    assert plan.upsert_event({"name": "x", "date": "2026-11-01"}).poles is False
+    e = plan.upsert_event({"name": "y", "date": "2026-11-01", "poles": True})
+    assert e.poles is True and P.event_json(e, e.start)["poles"] is True
+
+
+def test_descent_source_is_gravina_cognetti_in_both_languages():
+    """SP-247: the downhill-power claim cites Gravina-Cognetti 2025 (the old 「Kipp 2023」 was untraceable)."""
+    from backend.engine import target_policy as TP
+    from backend.i18n import use_locale
+    plan = {"type": "trail", "segments": [seg(-0.12, i=1)], "summary": {"time_s": 3600.0}}
+    zh = ST.plan_targets(plan)[0]["src"]
+    assert "Gravina-Cognetti 2025" in zh and "+90 %" in zh and "+74 %" in zh and "Kipp" not in zh
+    assert "Kipp" not in TP.SRC["down"] and "Gravina-Cognetti 2025" in TP.SRC["down"]
+    with use_locale("en"):
+        en = ST.plan_targets(plan)[0]["src"]
+    assert en.startswith("Descent: power under-reads") and "Gravina-Cognetti 2025" in en

@@ -720,7 +720,8 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
     if gpx and not v2_primary and hr_est is None:
         warnings.append("分段目標是推估：回測通過前，整場時間照 v1 方法算，分段只負責分配")
     if any(not s["trusted"] for s in out_segs):
-        warnings.append("有坡度超過 8 % 的段，你在這個坡度的資料不足：該段目標是外插")
+        # SP-246: Stryd is validated on −2 … +8 % only (grade_model.stryd_valid): descents count too
+        warnings.append("有上坡超過 8 % 或下坡超過 2 % 的段，你在這個坡度的資料不足：該段目標是外插")
     an = altitude_note(segs, accl) if gpx else None
     if an:
         warnings.append(an)
