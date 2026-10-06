@@ -397,7 +397,7 @@ def get_profile():
     wk = _wko5_profile()
     eff_w = plan.weight_on(today)
     app_w = _app_weight()
-    w_src = "設定頁" if eff_w is not None else None
+    w_src = _("設定頁") if eff_w is not None else None
     if eff_w is None and wk["weights"]:
         eff_w, w_src = wk["weights"][-1]["kg"], "WKO5"
     sex = plan.profile.get("sex") or wk["sex"]

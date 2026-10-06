@@ -4451,6 +4451,10 @@
     "draft": true,
     "src": "backend/engine/workout_steps.py:1472"
   },
+  "設定頁": {
+    "draft": false,
+    "src": "backend/api/plan.py:400"
+  },
   "該重測了：{name}": {
     "draft": true,
     "src": "backend/engine/suggestions.py:127"
