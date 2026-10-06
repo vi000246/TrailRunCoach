@@ -180,6 +180,27 @@ def test_b_longer_by_the_size_order():
     assert PR.b_longer(e(), e(distance_km=30)) is None       # nothing to compare
 
 
+def test_only_an_a_race_within_16_weeks_and_10_percent_longer():
+    """Owner 2026-10-06 (both 推估): the in-taper / longer hints only look at an A race ≤ 16 weeks after
+    the B race, and 「longer」 needs ≥ 10 % more."""
+    assert PR.B_A_WINDOW_WEEKS == 16 and PR.B_LONGER_MIN == 0.10
+    b = ev("b", "2026-10-17", **MEDIUM)                                    # 3 h
+    a16 = ev("a", (date(2026, 10, 17) + dt.timedelta(weeks=16)).isoformat(), "A", **SHORT)
+    a17 = ev("a", (date(2026, 10, 17) + dt.timedelta(weeks=16, days=1)).isoformat(), "A", **SHORT)
+    assert _runna(PR.b_hints([a16, b], MON))                                # 16 weeks: still looked at
+    assert PR.b_hints([a17, b], MON) == []                                  # further: not compared
+    # a further A race doesn't hide a nearer one either way; the nearest A race within the window counts
+    assert _runna(PR.b_hints([a16, a17, b], MON))
+
+    def e(**kw):
+        return P.Event(id="x", name="x", date="2026-10-17", **kw)
+    assert PR.b_longer(e(est_hours=3.3, distance_km=10), e(est_hours=3.0, distance_km=10)) == "預估時間 3.3 h 對 3.0 h"
+    assert PR.b_longer(e(est_hours=3.1, distance_km=10), e(est_hours=3.0, distance_km=10)) is None   # +3 %
+    assert PR.b_longer(e(distance_km=33), e(distance_km=30)) == "33 公里對 30 公里"                   # +10 %
+    assert PR.b_longer(e(distance_km=32), e(distance_km=30)) is None                                 # +6.7 %
+    assert PR.b_longer(e(days=2, kind="baiyue"), e(distance_km=50, climbing_m=3000)) == "2 天對 1 天"  # days first
+
+
 def test_runna_hints_in_english():
     from backend.i18n import use_locale
     with use_locale("en"):

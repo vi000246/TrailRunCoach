@@ -30,7 +30,8 @@ B and C races (SP-95; periodization-cross-sport.md §4.8, §4.8.1, §6.1「SP-95
     any size inside the next A race's 減量期 (planning.taper_start: the planned taper phase, else
     planning.taper_days), or longer than that A race (b_longer: days → predicted time → EP → km,
     SP-111's order) — Runna's rule (no B race in the 7–10 days before the A race, the B race shorter
-    than the A race [482]; 廠商規則, no research: 推估).
+    than the A race [482]; 廠商規則, no research: 推估). Owner 2026-10-06 (推估): only an A race within
+    B_A_WINDOW_WEEKS (16) after the B race, and 「longer」 = ≥ B_LONGER_MIN (10 %) more.
 """
 from __future__ import annotations
 
@@ -170,6 +171,11 @@ B_PER_MONTH = 1
 B_CTL_DROP = 0.10
 B_CTL_WEEKS = 8              # 推估: the weeks a CTL drop is measured over
 B_NEAR_A_DAYS = 28
+# SP-280 (owner 2026-10-06, both 推估): the in-taper / 「longer than the A race」 hints only look at an A
+# race within B_A_WINDOW_WEEKS after the B race (a March 50K B race says nothing about an October 21K A
+# race), and 「longer」 needs ≥ B_LONGER_MIN more (days, predicted time, EP or km — SP-111's order)
+B_A_WINDOW_WEEKS = 16
+B_LONGER_MIN = 0.10
 B_EASY_MAX = 60              # a long run / quality turned easy around a B race: ≤ 60 min (推估)
 RACE_TSS_PER_H = 70.0        # 推估: a race hour is harder than an easy one
 
@@ -348,20 +354,23 @@ def bc_apply(ss: list, events, monday: dt.date, notes: Optional[list] = None, to
 def b_longer(b, a) -> Optional[str]:
     """How B race `b` is longer than A race `a` (SP-280), as 「X 對 Y」 on the first basis both
     have — days (a multi-day trip), predicted time (planning.event_hours), EP, km (SP-111's order);
-    None when it is not longer or nothing compares."""
+    None when it is not longer by ≥ B_LONGER_MIN (推估) or nothing compares."""
     from backend.engine import planning as P
+
+    def more(x, y) -> bool:
+        return x >= y * (1 + B_LONGER_MIN) - 1e-9 and x > y
     db, da = int(getattr(b, "days", 1) or 1), int(getattr(a, "days", 1) or 1)
     if (db > 1 or da > 1) and db != da:
-        return _("{b} 天對 {a} 天", b=db, a=da) if db > da else None
+        return _("{b} 天對 {a} 天", b=db, a=da) if more(db, da) else None
     hb, ha = P.event_hours(b), P.event_hours(a)
     if hb and ha:
-        return _("預估時間 {b:.1f} h 對 {a:.1f} h", b=hb, a=ha) if hb > ha else None
+        return _("預估時間 {b:.1f} h 對 {a:.1f} h", b=hb, a=ha) if more(hb, ha) else None
     eb, ea = P.event_ep(b), P.event_ep(a)
     if eb is not None and ea is not None:
-        return _("EP {b:.0f} 對 {a:.0f}", b=eb, a=ea) if eb > ea else None
+        return _("EP {b:.0f} 對 {a:.0f}", b=eb, a=ea) if more(eb, ea) else None
     kb, ka = float(getattr(b, "distance_km", 0) or 0), float(getattr(a, "distance_km", 0) or 0)
     if kb and ka:
-        return _("{b:.0f} 公里對 {a:.0f} 公里", b=kb, a=ka) if kb > ka else None
+        return _("{b:.0f} 公里對 {a:.0f} 公里", b=kb, a=ka) if more(kb, ka) else None
     return None
 
 
@@ -371,7 +380,8 @@ def b_hints(events, monday: dt.date, ctl: Optional[list] = None, phases=None,
     days, or `ctl` [(date, CTL)] down > B_CTL_DROP from its peak in the last B_CTL_WEEKS weeks with a B
     race in them), a long one (≥ 中) within B_NEAR_A_DAYS before an A race; SP-280 (Runna [482],
     廠商規則): any B race inside the next A race's 減量期 (`phases`: the plan's phases, for the planned
-    taper; else planning.taper_days(A, `taper_pref`)) or longer than it (b_longer)."""
+    taper; else planning.taper_days(A, `taper_pref`)) or longer than it (b_longer) — the next A race
+    within B_A_WINDOW_WEEKS after the B race only."""
     from backend.engine import planning as P
     out = []
     bs = sorted((e for e in events or () if getattr(e, "priority", None) == "B"), key=lambda e: e.start)
@@ -387,9 +397,10 @@ def b_hints(events, monday: dt.date, ctl: Optional[list] = None, phases=None,
             out.append({"level": "watch", "src": "race",
                         "text": _("長距離 B 賽「{race}」在 A 賽事「{a}」前 {n} 天：A 賽前 2–4 週只建議較短、地形相似的熱身賽，"
                                   "或把它改成 C 賽輕鬆跑（CTS）", race=e.name, a=a.name, n=(a.start - e.end).days)})
-        # SP-280 (Runna [482], 廠商規則, 推估): the next A race's 減量期, or longer than that A race
+        # SP-280 (Runna [482], 廠商規則, 推估): the next A race's 減量期, or longer than that A race —
+        # only an A race within B_A_WINDOW_WEEKS after the B race (推估)
         nxt = next((x for x in sorted(events, key=lambda x: x.start) if getattr(x, "priority", None) == "A"
-                    and x.start > e.end), None)
+                    and x.start > e.end and (x.start - e.end).days <= 7 * B_A_WINDOW_WEEKS), None)
         if nxt is None:
             continue
         in_taper = e.end >= P.taper_start(phases or (), nxt, taper_pref)
