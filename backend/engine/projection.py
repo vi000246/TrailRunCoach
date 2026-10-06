@@ -745,7 +745,7 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
         # B / C races (SP-95): the same rules as week_plan (post_race.bc_apply / b_hints)
         ss = PR_.bc_apply(ss, events or (), week, notes, blocked=set(bmap),
                           rate=float((cur.get("tss_per_category") or {}).get("trail") or tph))
-        notes.extend(PR_.b_hints(events or (), week))
+        notes.extend(PR_.b_hints(events or (), week, phases=phases))     # SP-280: the planned 減量期
         if tc and kind == "taper":
             n = O.taper_climb_note(tc, cur_t.get("pre_climb") if same else cur.get("climb4"),
                                    hours / (cur_t.get("pre_hours") if same else pre_h)

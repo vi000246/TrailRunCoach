@@ -106,6 +106,119 @@ def test_hints():
     assert not PR.b_hints([ev("x", "2026-09-26", **SHORT)], MON, [(MON, 50.0), (MON, 48.0)])
 
 
+# ---- SP-280: a B race inside the A race's 減量期, or longer than the A race (Runna [482], 廠商規則) ----
+
+def _runna(notes):
+    return [n["text"] for n in notes if "Runna" in n["text"]]
+
+
+def test_short_b_inside_the_a_taper_warns():
+    a = ev("a", "2026-11-07", "A", **MARA)                   # road marathon: taper 14 days, from 10/24
+    b = ev("b", "2026-10-31", **SHORT)
+    notes = PR.b_hints([a, b], date(2026, 10, 26))
+    txt = _runna(notes)
+    assert len(txt) == 1 and "B 賽「b」落在 A 賽事「a」的減量期內（A 賽前 7 天）" in txt[0]
+    assert "廠商規則" in txt[0] and "推估" in txt[0] and "比 A 賽還長" not in txt[0]
+    assert all(n["level"] == "watch" and n["src"] == "race" for n in notes)
+    assert not any("長距離" in t for t in (n["text"] for n in notes))     # short: the 28-day hint stays off
+
+
+def test_short_b_outside_the_a_taper_says_nothing():
+    a = ev("a", "2026-11-07", "A", **MARA)
+    assert PR.b_hints([a, ev("b", "2026-10-17", **SHORT)], MON) == []      # 21 days out, taper is 14
+    assert PR.b_hints([a, ev("b", "2026-10-23", **SHORT)], date(2026, 10, 19)) == []   # the day before it
+
+
+def test_the_taper_window_is_the_app_taper_length():
+    a = ev("a", "2026-11-07", "A", **MARA)
+    b = ev("b", "2026-10-17", **SHORT)                        # 21 days before the A race
+    assert _runna(PR.b_hints([a, b], MON, taper_pref=21))           # 課表偏好 21 days (road marathon)
+    # the planned taper phase wins (a manual one: ends the day before the race)
+    ph = [{"kind": "taper", "start": "2026-10-15", "end": "2026-11-06"}]
+    assert _runna(PR.b_hints([a, b], MON, phases=ph))
+    # a 2-day 百岳 tapers 7 days: a B race 9 days before is outside
+    trip = ev("t", "2026-11-07", "A", kind="baiyue", days=2)
+    assert PR.b_hints([trip, ev("b", "2026-10-29", **SHORT)], date(2026, 10, 26)) == []
+    assert _runna(PR.b_hints([trip, ev("b", "2026-10-31", **SHORT)], date(2026, 10, 26)))
+
+
+def test_b_longer_than_the_a_race_warns():
+    a = ev("a", "2026-11-07", "A", **SHORT)                   # 10 km road, 0.8 h
+    b = ev("b", "2026-10-17", **MEDIUM)                       # 3 h, 21 days before: outside the taper
+    txt = [n["text"] for n in PR.b_hints([a, b], MON)]
+    runna = [t for t in txt if "Runna" in t]
+    assert len(runna) == 1 and "B 賽「b」比 A 賽事「a」還長（預估時間 3.0 h 對 0.8 h）" in runna[0]
+    assert "廠商規則" in runna[0] and "推估" in runna[0]
+    # the 28-day hint for a long B race stays as it was
+    assert ("長距離 B 賽「b」在 A 賽事「a」前 21 天：A 賽前 2–4 週只建議較短、地形相似的熱身賽，"
+            "或把它改成 C 賽輕鬆跑（CTS）") in txt
+    far = ev("a", "2026-12-19", "A", **SHORT)                 # > 28 days: only the Runna hint
+    txt = [n["text"] for n in PR.b_hints([far, b], MON)]
+    assert len(txt) == 1 and "還長" in txt[0]
+    # shorter than the A race: nothing
+    assert PR.b_hints([ev("a", "2026-12-19", "A", **MARA), b], MON) == []
+
+
+def test_b_inside_the_taper_and_longer_one_hint():
+    a = ev("a", "2026-10-24", "A", **SHORT)
+    b = ev("b", "2026-10-17", **MEDIUM)
+    runna = _runna(PR.b_hints([a, b], MON))
+    assert len(runna) == 1 and "減量期內（A 賽前 7 天），而且比 A 賽還長（預估時間 3.0 h 對 0.8 h）" in runna[0]
+
+
+def test_b_longer_by_the_size_order():
+    def e(**kw):
+        return P.Event(id="x", name="x", date="2026-10-17", **kw)
+    assert PR.b_longer(e(days=3, kind="baiyue"), e(days=2, kind="baiyue")) == "3 天對 2 天"
+    assert PR.b_longer(e(days=2, kind="baiyue"), e(distance_km=50, climbing_m=3000)) == "2 天對 1 天"  # 多日 first
+    assert PR.b_longer(e(distance_km=50, climbing_m=3000), e(days=2, kind="baiyue")) is None
+    assert PR.b_longer(e(est_hours=5.0, distance_km=10), e(est_hours=4.0, distance_km=50)) == "預估時間 5.0 h 對 4.0 h"
+    ep = PR.b_longer(e(distance_km=30, climbing_m=3000), e(distance_km=35, climbing_m=0))
+    assert ep and ep.startswith("EP ")                       # no predicted time: EP
+    assert PR.b_longer(e(distance_km=30), e(distance_km=21)) == "30 公里對 21 公里"   # no climb: km
+    assert PR.b_longer(e(distance_km=21), e(distance_km=30)) is None
+    assert PR.b_longer(e(), e(distance_km=30)) is None       # nothing to compare
+
+
+def test_runna_hints_in_english():
+    from backend.i18n import use_locale
+    with use_locale("en"):
+        taper = _runna(PR.b_hints([ev("a", "2026-11-07", "A", **MARA), ev("b", "2026-10-31", **SHORT)],
+                                  date(2026, 10, 26)))
+        longer = _runna(PR.b_hints([ev("a", "2026-12-19", "A", **SHORT), ev("b", "2026-10-17", **MEDIUM)], MON))
+        both = _runna(PR.b_hints([ev("a", "2026-10-24", "A", **SHORT), ev("b", "2026-10-17", **MEDIUM)], MON))
+    assert taper == ['B race "b" falls in the taper of the A race "a" (7 days before it): the taper is when your '
+                     'body recovers before the A race, and another race then affects it; make it a C race run easy, '
+                     'or drop it (Runna: no B race in the 7–10 days before the A race; an app vendor rule, estimate)']
+    assert "is longer than the A race \"a\" (predicted 3.0 h vs 0.8 h)" in longer[0]
+    assert "(7 days before it) and is longer than the A race (predicted 3.0 h vs 0.8 h)" in both[0]
+
+
+def test_week_plan_and_projection_show_the_taper_hint():
+    """A short B race inside a 4-day 百岳's 10-day taper: the week plan and the projected week both say so."""
+    from backend.engine import plan_prefs as PP
+    from backend.engine import projection as PJ
+    from backend.engine.status import Status
+    from backend.tests.test_b2b import _history, _phases, _plan_with
+    from backend.tests.test_quality_gate import TODAY        # Wed 9/30
+    ds = _history(TODAY)
+    plan = _plan_with("2026-10-10", 4, TODAY)                 # A 嘉明湖 10/10, taper from 9/30
+    plan.events = list(plan.events) + [ev("b", "2026-10-03", **SHORT)]
+    ds.plan = plan
+    st = Status(ds, plan, TODAY, prefs=PP.Prefs()).compute()
+    wp = O.week_plan(ds, st, TODAY)
+    assert any("B 賽「b」落在 A 賽事「嘉明湖」的減量期內" in n["text"] for n in wp["notes"])
+
+    plan2 = _plan_with("2026-10-24", 4, TODAY)                # taper from 10/14
+    plan2.events = list(plan2.events) + [ev("b", "2026-10-17", **SHORT)]
+    ds.plan = plan2
+    wp2 = O.week_plan(ds, Status(ds, plan2, TODAY, prefs=PP.Prefs()).compute(), TODAY)
+    assert not any("Runna" in n["text"] for n in wp2["notes"])
+    weeks = PJ.project_weeks(wp2, _phases(plan2, TODAY), date(2026, 10, 18), events=plan2.events)
+    bw = next(w for w in weeks if w["start"] == "2026-10-12")
+    assert any("B 賽「b」落在 A 賽事「嘉明湖」的減量期內（A 賽前 7 天）" in n["text"] for n in bw.get("notes") or [])
+
+
 def test_b_windows_markers_by_size():
     w = P.b_event_windows([ev("b", "2026-10-17", **MEDIUM)])
     rec = next(x for x in w if x["kind"] == "mini_recovery")
