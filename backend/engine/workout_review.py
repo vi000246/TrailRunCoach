@@ -184,9 +184,8 @@ FADE = 0.05
 # 20 bpm is the size of the clinical post-exercise HRR cut-offs (Cole 1999 ≤ 12, Watanabe 2001 /
 # Cleveland Clinic 18), a one-off risk screen, not a rest rule — and is gone. No fixed-bpm fallback.
 REST_AET_AT_S = 60            # 徐國峰's 60-s check (his 70 % HRR; the app's measured AeT stands in) — the
-                              # same point quality_gate._with_hr_at60 reads for its brake
-LAST_REST_MAX_S = 300         # 推估: after the last rep the 「rest」 is the cool-down; t_to_aet is looked for in
-                              # its first 5 min only (longer than the library's longest rest, x3015's 3-min set rest)
+                              # same point quality_gate._with_hr_at60 reads for its brake. Only the rests
+                              # between reps count (owner 2026-10-06): the last rep's cool-down is not a rest
 REST_AET_TIP = N_("只供參考，不據此調整休息。\n"
                   "・心率回得快，可能是練起來了，也可能是累積疲勞（Bellenger 2016 統合分析、Aubry 2015）。\n"
                   "・同一個人做同一份測試，60 秒的心率恢復每天就差約 25%（Buchheit 2014），單一堂分不出變化。\n"
@@ -1087,10 +1086,11 @@ def detect_efforts(t, power, hr=None, cp: Optional[float] = None,
 
     The rest after each bout (SP-264, display only): `rest_s` = seconds to the
     next bout (None after the last one); `hr_at60` = HR 60 s after the end
-    (None when the next bout starts first); with an AeT, `aet60` = hr_at60 ≤
-    AeT, `t_to_aet` = seconds from the end to the first HR ≤ AeT inside the
-    rest (the last bout: the first LAST_REST_MAX_S of the cool-down) and
-    `aet_back` = whether that happened (None: no AeT / no HR to look at)."""
+    (None when the next bout starts first); with an AeT and only for a rest
+    between two bouts (owner 2026-10-06: the cool-down after the last bout
+    is not a rest), `aet60` = hr_at60 ≤ AeT, `t_to_aet` = seconds from the
+    end to the first HR ≤ AeT before the next bout and `aet_back` = whether
+    that happened (None: last bout / no AeT / no HR to look at)."""
     if power is None or not _has(power):
         return []
     grid, p = _grid1(t, power)
@@ -1140,10 +1140,10 @@ def detect_efforts(t, power, hr=None, cp: Optional[float] = None,
                 peak = np.nanmax(win) if np.isfinite(win).any() else np.nan
                 if np.isfinite(peak):
                     e["hr_drop60"] = float(peak - h[at])
-            if aet:
+            if aet and nxt is not None:
                 if e["hr_at60"] is not None:
                     e["aet60"] = bool(e["hr_at60"] <= aet)
-                rest = h[b:nxt if nxt is not None else min(len(h), b + LAST_REST_MAX_S)]
+                rest = h[b:nxt]
                 ok = np.isfinite(rest)
                 if ok.any():
                     below = np.where(ok & (rest <= aet))[0]
@@ -1154,7 +1154,8 @@ def detect_efforts(t, power, hr=None, cp: Optional[float] = None,
 
 
 def rest_aet_summary(efforts: list[dict]) -> Optional[dict]:
-    """The rests' HR back to AeT over the set (SP-264, information only):
+    """The between-rep rests' HR back to AeT over the set (SP-264, information
+    only; the cool-down after the last rep is never one of them):
     `at60` of the `judged` bouts under AeT 60 s into the rest, `short` = bouts
     whose rest ended before 60 s (not judged), `t_med` = the median t_to_aet of
     the `back` bouts that got there, `never` = bouts whose rest never got there.

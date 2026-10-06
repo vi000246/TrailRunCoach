@@ -522,7 +522,8 @@ def test_review_intervals_on_fake_quality_session():
     cols = {s["name"]: s["data"]["values"] for s in r["series"] if s["data"]["kind"] == "values"}
     assert len(cols["組"]) == 3
     # SP-264: AeT 133.5, the rests reach 125 → seconds to AeT per rep, the line with its 只供參考 tip
-    assert len(cols["回到 AeT"]) == 3 and all(v.endswith(" 秒") for v in cols["回到 AeT"])
+    assert len(cols["回到 AeT"]) == 3 and all(v.endswith(" 秒") for v in cols["回到 AeT"][:2])
+    assert cols["回到 AeT"][2] == "–"                     # the last rep's cool-down is not a rest
     rows = [s["data"] for s in r["series"] if s["data"]["kind"] == "value"]
     rest = next(d for d in rows if "回到 AeT" in d["value"])
     assert "拉長" not in rest["value"] and "只供參考，不據此調整休息" in rest["tip"] and "Buchheit 2014" in rest["tip"]
@@ -670,37 +671,45 @@ def test_rest_back_to_aet_and_time_to_aet():
     t, p, h = _rest_reps()
     eff = R.detect_efforts(t, p, h, cp=220.0, aet=140.0)
     assert len(eff) == 3
-    for e in eff:
-        assert e["aet60"] is True and e["aet_back"] is True
     for e in eff[:2]:
         assert e["hr_at60"] == pytest.approx(125.0, abs=1)
+        assert e["aet60"] is True and e["aet_back"] is True
         assert e["t_to_aet"] == pytest.approx(37, abs=2)        # 165 − 40·i/59 ≤ 140 at i = 37
-    assert eff[-1]["t_to_aet"] == pytest.approx(0, abs=2)       # the cool-down is at 130 from its start
     assert eff[0]["rest_s"] == pytest.approx(120, abs=2) and eff[-1]["rest_s"] is None
+    # the last rep's cool-down is not a rest (owner 2026-10-06): nothing judged there
+    assert eff[-1]["aet60"] is None and eff[-1]["aet_back"] is None and eff[-1]["t_to_aet"] is None
     # the AeT does not change the SP-110 HRR60 (quality_gate's fatigue check reads it)
     assert [e["hr_drop60"] for e in eff] == [e["hr_drop60"] for e in R.detect_efforts(t, p, h, cp=220.0)]
     s = R.interval_summary(eff)
     ra = s["rest_aet"]
-    assert ra["judged"] == 3 and ra["at60"] == 3 and ra["short"] == 0 and ra["never"] == 0
+    assert ra["n"] == 2 and ra["judged"] == 2 and ra["at60"] == 2 and ra["short"] == 0 and ra["never"] == 0
     assert ra["t_med"] == pytest.approx(37, abs=2)
     line = R.rest_aet_line({"aet": 140.0, "intervals": s})
-    assert "AeT（140 bpm）以下：3/3 組" in line and "中位 3" in line and "只供參考，不據此調整休息" in line
+    assert "AeT（140 bpm）以下：2/2 組" in line and "中位 3" in line and "只供參考，不據此調整休息" in line
     assert line in R.interval_lines({"aet": 140.0, "intervals": s})
+    # a cool-down that stays above AeT changes nothing
+    t, p, h = _rest_reps(cool_hr=150.0)
+    assert R.interval_summary(R.detect_efforts(t, p, h, cp=220.0, aet=140.0))["rest_aet"] == ra
+    # one rep: no rest between reps → no line
+    t, p, h = _rest_reps(reps=1)
+    eff = R.detect_efforts(t, p, h, cp=220.0, aet=140.0)
+    assert len(eff) == 1 and R.interval_summary(eff)["rest_aet"] is None
 
 
 def test_rest_hr_never_back_to_aet():
-    t, p, h = _rest_reps(rest_hr=lambda i: max(150.0, 165.0 - i), cool_hr=None)
+    # HR stays ≥ 150 in every rest; the cool-down at 130 (under AeT) must not count
+    t, p, h = _rest_reps(rest_hr=lambda i: max(150.0, 165.0 - i))
     eff = R.detect_efforts(t, p, h, cp=220.0, aet=140.0)
-    assert all(e["aet60"] is False and e["aet_back"] is False and e["t_to_aet"] is None for e in eff)
+    assert all(e["aet60"] is False and e["aet_back"] is False and e["t_to_aet"] is None for e in eff[:2])
     ra = R.interval_summary(eff)["rest_aet"]
-    assert ra["at60"] == 0 and ra["judged"] == 3 and ra["never"] == 3 and ra["t_med"] is None
+    assert ra["at60"] == 0 and ra["judged"] == 2 and ra["never"] == 2 and ra["back"] == 0 and ra["t_med"] is None
     line = R.rest_aet_line({"aet": 140.0, "intervals": {"rest_aet": ra}})
-    assert "0/3 組" in line and "3 組整段休息都沒回到 AeT" in line and "中位" not in line
+    assert "0/2 組" in line and "2 組整段休息都沒回到 AeT" in line and "中位" not in line
 
 
 def test_rest_shorter_than_60_s():
     # 45-s rests: no HR at 60 s (not judged); the time to AeT still counts when HR got there
-    t, p, h = _rest_reps(rest_s=45, rest_hr=lambda i: max(125.0, 165.0 - i), cool_hr=None)
+    t, p, h = _rest_reps(rest_s=45, rest_hr=lambda i: max(125.0, 165.0 - i))
     eff = R.detect_efforts(t, p, h, cp=220.0, aet=140.0)
     assert len(eff) == 3
     for e in eff[:2]:
@@ -708,20 +717,21 @@ def test_rest_shorter_than_60_s():
         assert e["hr_at60"] is None and e["aet60"] is None and e["hr_drop60"] is None
         assert e["aet_back"] is True and e["t_to_aet"] == pytest.approx(25, abs=2)
     ra = R.interval_summary(eff)["rest_aet"]
-    assert ra["short"] == 2 and ra["judged"] == 1 and ra["back"] == 3
+    assert ra["short"] == 2 and ra["judged"] == 0 and ra["back"] == 2 and ra["never"] == 0
     line = R.rest_aet_line({"aet": 140.0, "intervals": {"rest_aet": ra}})
-    assert "1/1 組" in line and "2 組休息不到 60 秒，不算" in line and "中位 25 秒" in line
+    assert "沒有休息滿 60 秒的組" in line and "2 組休息不到 60 秒，不算" in line and "中位 25 秒" in line
     # short rests where HR stays up: honestly 「沒回到」, still not judged at 60 s
-    t, p, h = _rest_reps(rest_s=45, rest_hr=lambda i: 150.0, cool_hr=150.0)
+    t, p, h = _rest_reps(rest_s=45, rest_hr=lambda i: 150.0)
     eff = R.detect_efforts(t, p, h, cp=220.0, aet=140.0)
     ra = R.interval_summary(eff)["rest_aet"]
-    assert ra["short"] == 2 and ra["never"] == 3 and ra["t_med"] is None
+    assert ra["short"] == 2 and ra["never"] == 2 and ra["t_med"] is None
     line = R.rest_aet_line({"aet": 140.0, "intervals": {"rest_aet": ra}})
-    assert "0/1 組" in line and "2 組休息不到 60 秒，不算" in line and "3 組整段休息都沒回到 AeT" in line
-    # every rest short and nothing judged at 60 s: 「沒有休息滿 60 秒的組」
-    ra = R.rest_aet_summary([{"rest_s": 45.0, "aet60": None, "aet_back": True, "t_to_aet": 30.0}] * 2)
+    assert "沒有休息滿 60 秒的組" in line and "2 組整段休息都沒回到 AeT" in line
+    # mixed: one 2-min rest judged, one 45-s rest not
+    ra = R.rest_aet_summary([{"rest_s": 120.0, "aet60": True, "aet_back": True, "t_to_aet": 40.0},
+                             {"rest_s": 45.0, "aet60": None, "aet_back": True, "t_to_aet": 30.0}])
     line = R.rest_aet_line({"aet": 140.0, "intervals": {"rest_aet": ra}})
-    assert "沒有休息滿 60 秒的組" in line and "中位 30 秒" in line
+    assert "1/1 組（1 組休息不到 60 秒，不算）" in line and "中位 35 秒" in line
 
 
 def test_rest_aet_line_in_english():
