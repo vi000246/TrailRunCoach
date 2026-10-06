@@ -156,6 +156,8 @@ button.link { border: 0; background: none; color: var(--accent); padding: 0 4px;
       <!-- SP-105 (engine/race_feasibility.py): 賽事 = 關門時間; 百岳 = 撤退時間 (hours from the summit day's start) + the summit km -->
       <label id="cutwrap"><span id="cutlab" data-i18n="plan.ev.cutoff">關門時間 h</span><input type="number" name="cutoff_hours" step="0.25" min="0" max="240" data-i18n-attr="placeholder:plan.ev.optional" placeholder="選填"></label>
       <label id="summitwrap" hidden><span data-i18n="plan.ev.summit_km">山頂在第幾 km</span><input type="number" name="summit_km" step="0.1" min="0" data-i18n-attr="placeholder:plan.ev.summit_ph" placeholder="空白＝GPX 最高點"></label>
+      <!-- SP-244: the race calculator adds a hint on steep climbs / descents; no prediction reads it -->
+      <label data-i18n-attr="title:plan.ev.poles_tip" title="勾了之後，賽事計算器在陡上坡和陡下坡（≤ −15 %）的段多一句用杖提示。預估時間、配速、心率都不變：研究顯示用杖主要是覺得比較輕鬆、膝蓋負擔比較小，速度差不多。比賽當天（多日行程每一天）的活動也會先標成「有杖」，你自己改過的不會被蓋掉。"><span data-i18n="plan.ev.poles">會用登山杖</span><input type="checkbox" name="poles" style="align-self:flex-start"></label>
       <label>備註<input name="note"></label>
       <button class="primary" type="submit" id="evsubmit">新增</button>
       <button type="button" id="evcancel" hidden>取消編輯</button>
@@ -405,6 +407,7 @@ $("#evform").addEventListener("submit", async (ev) => {
   for (const [k, v] of f.entries()) body[k] = v === "" ? null : v;
   for (const k of ["days", "distance_km", "climbing_m", "est_hours", "pack_kg", "cutoff_hours", "summit_km"]) if (body[k] != null) body[k] = Number(body[k]);
   body.days = body.days || 1; body.note = body.note || "";
+  body.poles = ev.target.poles.checked;
   body.day_plan = needsDayPlan() ? readDayRows().map((r) => ({ km: r.km, gain_m: r.gain_m, loss_m: r.loss_m })) : null;
   await call("PUT", "/events", body);
   ev.target.reset(); ev.target.id.value = ""; $("#evsubmit").textContent = "新增"; $("#evcancel").hidden = true; cutoffLabels(); dayPlanForm([]);
@@ -483,6 +486,7 @@ $("#events").addEventListener("click", async (ev) => {
     const e = S.events.find((x) => x.id === ed), f = $("#evform");
     for (const k of ["id", "name", "date", "kind", "priority", "days", "distance_km", "climbing_m", "est_hours", "pack_kg", "cutoff_hours", "summit_km", "note"]) f[k].value = e[k] ?? "";
     f.race_format.value = e.race_format || "stage";
+    f.poles.checked = !!e.poles;
     cutoffLabels(); dayPlanForm(e.day_plan || []);
     $("#evsubmit").textContent = "更新"; $("#evcancel").hidden = false; f.scrollIntoView({ behavior: "smooth", block: "center" });
   }

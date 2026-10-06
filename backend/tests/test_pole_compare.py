@@ -59,10 +59,47 @@ def _hike(day: dt.date, down_kmh=4.0, up_kmh=3.0, up_hr=150, kind="hike", down_s
     return FakeWorkout(start=dt.datetime.combine(day, dt.time(7)), sport=sport, tags=tags, sport_type=st, channels=ch)
 
 
+_FAR = [200 + k for k in range(5)] + [250 + k for k in range(5)]     # days ago: 5 有杖, then 5 沒杖
+
+
 def _eligible_rows():
-    """5 + 5 marks on far-away days (no activity there): the athlete qualifies."""
-    return [_row(TODAY - dt.timedelta(days=200 + k), "with", hour=5) for k in range(5)] \
-        + [_row(TODAY - dt.timedelta(days=250 + k), "without", hour=5) for k in range(5)]
+    """5 + 5 marks on far-away days (the activities of _eligible_acts, outside the tests' ranges)."""
+    return [_row(TODAY - dt.timedelta(days=k), "with" if i < 5 else "without", hour=5) for i, k in enumerate(_FAR)]
+
+
+def _eligible_acts(kind="hike"):
+    """The activities under _eligible_rows (no data streams): only marks on the activities the
+    chart uses (trail runs and hikes) count toward the 5 + 5."""
+    sport, tags, st = {"hike": ("walk", ["hiking"], "hiking"), "trail": ("run", ["runningtrail"], "trail running"),
+                       "road": ("run", ["running"], "running")}[kind]
+    return [FakeWorkout(start=dt.datetime.combine(TODAY - dt.timedelta(days=k), dt.time(5)), sport=sport,
+                        tags=tags, sport_type=st) for k in _FAR]
+
+
+def test_only_marks_on_trail_runs_and_hikes_count_toward_five_and_five():
+    # user decision 2026-10-06: the 5 + 5 counts only the activities the chart uses
+    for kind, ok in (("hike", True), ("trail", True), ("road", False)):
+        ds = FakeDataset(_eligible_acts(kind), TODAY)
+        c = PC.counts(ds, _eligible_rows(), TODAY)
+        assert (c["with"], c["without"], c["eligible"]) == ((5, 5, True) if ok else (0, 0, False)), kind
+        assert [PC.used(w) for w in ds.workouts] == [ok] * 10
+    # marks with no activity behind them (or on an activity not in the data) don't count
+    c = PC.counts(FakeDataset([], TODAY), _eligible_rows(), TODAY)
+    assert (c["with"], c["without"], c["more_with"], c["more_without"]) == (0, 0, 5, 5)
+    # 4 hikes + 1 road run marked 有杖: one more 有杖 still needed — the hint's 「再標有杖 1 次」
+    acts = _eligible_acts("hike")
+    acts[0] = _eligible_acts("road")[0]
+    c = PC.counts(FakeDataset(acts, TODAY), _eligible_rows(), TODAY)
+    assert (c["with"], c["without"], c["more_with"], c["more_without"], c["eligible"]) == (4, 5, 1, 0, False)
+    # the 365-day window holds on the activity's own start (a hike 365 days ago is one day too old)
+    old = FakeWorkout(start=dt.datetime.combine(TODAY - dt.timedelta(days=365), dt.time(5)), sport="walk",
+                      tags=["hiking"], sport_type="hiking")
+    c = PC.counts(FakeDataset(acts + [old], TODAY),
+                  _eligible_rows() + [_row(TODAY - dt.timedelta(days=365), "with", hour=5)], TODAY)
+    assert c["with"] == 4
+    # the panel's own count and its 「再標」 text use the same rule
+    res = PC.compute(FakeDataset(acts, TODAY), 0, date_to_day(TODAY), {}, rows=_eligible_rows(), today=TODAY)
+    assert res["counts"]["with"] == 4 and "越野跑、登山健行標了「有杖」4 次" in res["empty"]
 
 
 def test_panel_medians_per_grade_bin_with_n_and_no_point_under_three():
@@ -77,9 +114,10 @@ def test_panel_medians_per_grade_bin_with_n_and_no_point_under_three():
     acts.append(_hike(days[6]))                      # 未標: not in it
     acts.append(_hike(days[7], kind="road"))         # a road run marked 沒杖: not a trail run / hike
     rows.append(_row(days[7], "without"))
-    ds = FakeDataset(acts, TODAY)
+    ds = FakeDataset(acts + _eligible_acts(), TODAY)
     res = PC.compute(ds, date_to_day(TODAY - dt.timedelta(days=60)), date_to_day(TODAY), {}, rows=rows, today=TODAY)
     assert res["kind"] == "polecompare" and res["counts"]["eligible"] and not res.get("empty")
+    assert (res["counts"]["with"], res["counts"]["without"]) == (9, 7)    # the road run's 沒杖 not counted
     assert res["activities"] == {"with": 4, "without": 2}
     assert "背包較重" in res["caveat"]
     m = {x["id"]: x for x in res["metrics"]}
@@ -98,18 +136,19 @@ def test_panel_medians_per_grade_bin_with_n_and_no_point_under_three():
 
 def test_panel_not_eligible_says_how_many_marks_and_draws_nothing():
     rows = [_row(TODAY - dt.timedelta(days=k + 1), "with") for k in range(2)]
-    ds = FakeDataset([_hike(TODAY - dt.timedelta(days=1))], TODAY)
+    ds = FakeDataset([_hike(TODAY - dt.timedelta(days=k + 1)) for k in range(2)], TODAY)
     res = PC.compute(ds, 0, date_to_day(TODAY), {}, rows=rows, today=TODAY)
     assert res["metrics"] == [] and res["counts"]["eligible"] is False
     assert "「有杖」2 次" in res["empty"] and "「沒杖」0 次" in res["empty"] and "5 次" in res["empty"]
 
 
 def test_panel_eligible_but_nothing_in_range_or_every_bin_too_small():
-    ds = FakeDataset([_hike(TODAY - dt.timedelta(days=1))], TODAY)
-    res = PC.compute(ds, 0, date_to_day(TODAY), {}, rows=_eligible_rows(), today=TODAY)
+    ds = FakeDataset([_hike(TODAY - dt.timedelta(days=1))] + _eligible_acts(), TODAY)
+    b = date_to_day(TODAY - dt.timedelta(days=60))
+    res = PC.compute(ds, b, date_to_day(TODAY), {}, rows=_eligible_rows(), today=TODAY)
     assert res["list"] == [] and "沒有標了" in res["empty"]
     rows = _eligible_rows() + [_row(TODAY - dt.timedelta(days=1), "with")]
-    res = PC.compute(ds, 0, date_to_day(TODAY), {}, rows=rows, today=TODAY)
+    res = PC.compute(ds, b, date_to_day(TODAY), {}, rows=rows, today=TODAY)
     assert not res.get("empty") and "不到 3 次" in res["note"]
 
 
@@ -146,13 +185,17 @@ def test_needs_must_be_known():
         parse_view(raw, Path("x.json"))
 
 
-@pytest.mark.parametrize("eligible", [False, True])
-def test_list_views_reports_needs_met(monkeypatch, eligible):
+@pytest.mark.parametrize("marks, kind, eligible", [(False, "hike", False), (True, "hike", True),
+                                                   (True, "road", False)])
+def test_list_views_reports_needs_met(monkeypatch, marks, kind, eligible):
     from backend.api import wko5views as WV
-    rows = _eligible_rows() if eligible else []
+    rows = _eligible_rows() if marks else []
+    built = []
     monkeypatch.setattr(AT, "load", lambda *a, **k: rows)
     monkeypatch.setattr(WV, "today_local", lambda *a, **k: TODAY)
+    monkeypatch.setattr(WV, "_dataset", lambda *a, **k: built.append(1) or FakeDataset(_eligible_acts(kind), TODAY))
     views = {v["name"]: v for v in WV.list_views()}
+    assert bool(built) is marks                    # no mark at all: the Dataset isn't waited for
     dash = next(d for d in views["我的訓練"]["dashboards"] if d["title"] == "能力")
     c = next(c for c in dash["charts"] if c["id"] == "pole-compare")
     assert c["needs"] == "poles" and c["needs_met"] is eligible

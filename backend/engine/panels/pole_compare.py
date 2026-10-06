@@ -2,14 +2,18 @@
 有杖 vs 沒杖 (views kind "polecompare", 我的訓練 → 能力, after 下坡腳程; SP-243).
 
 Compares what was MEASURED on the activities the athlete marked 有杖 / 沒杖
-(activity_tags.POLES, SP-242), never a model output: the weekly downhill
+(activity_tags.POLES, SP-242; with no choice of theirs, a race marked 「會用登山杖」
+makes its activities 有杖, SP-300 — activity_tags.race_poles / pole_state),
+never a model output: the weekly downhill
 impact load is grade × speed and poles can't change it
 (docs/research/trekking-poles.md §5.1, downhill-knee-load-display.md §5).
 Read-only and for this chart only: the mark feeds no prediction model.
 
 Shown only to someone who uses poles: ≥ 5 activities marked 有杖 AND ≥ 5
-marked 沒杖 in the last 365 days (activity_tags.pole_counts; the chart list
-says so per chart: `"needs": "poles"`, wko5views.list_views → needs_met).
+marked 沒杖 in the last 365 days, counting only the activities this chart
+uses (trail runs and hikes; `counts` / `chart_rows` → activity_tags.pole_counts;
+the chart list says so per chart: `"needs": "poles"`, wko5views.list_views →
+needs_met).
 
 Per activity (trail runs and hikes, panels/climb_vam.kind_of) and per grade
 bin (rgrade, %): ≤ −15, −15…−8, −8…−3 (downhill) and ≥ +15 (steep climb),
@@ -165,28 +169,79 @@ def _rows() -> list:
     return AT.load()
 
 
+def used(w) -> bool:
+    """Whether this chart uses the activity: a trail run or a hike (climb_vam.kind_of)."""
+    from backend.engine.panels.climb_vam import kind_of
+    return kind_of(w) is not None
+
+
+def chart_rows(ds, rows: list, today: dt.date, days: Optional[int] = None) -> list:
+    """The pole marks of the activities this chart uses (`used`: trail runs and hikes) that
+    started in about the last `days` days (AT.pole_counts makes the exact cut on the row's own
+    start), as tag rows {start_local, file, tags: [the effective mark]}. Only their marks count
+    toward the 5 + 5 (user decision 2026-10-06), so 「再標有杖 N 次、沒杖 M 次」 is what the chart
+    really needs: a mark on a road run, a ride or an excluded file does not count. The mark is
+    the user's choice, else 有杖 「依賽事設定」 when a race marked 「會用登山杖」 covers the activity
+    (SP-300: AT.race_poles / pole_state)."""
+    from backend.engine import activity_tags as AT
+    from backend.engine.wko5expr.dataset import date_to_day
+    race = AT.race_poles(ds)
+    if not race and (not rows or not AT.pole_marks_stamp(rows)):   # no mark at all: nothing to look up
+        return []
+    days = AT.POLE_COMPARE_DAYS if days is None else days
+    first = date_to_day(today) - days                       # a day of slack before the window
+    out, seen = [], set()
+    for w in ds.workouts:
+        if w.day < first or not used(w):
+            continue
+        r = AT.find(rows, w.entry.start, getattr(w.entry, "file", None)) if rows else None
+        if r is not None and id(r) in seen:
+            continue
+        p = _mark(r, race.get(w.idx))
+        if r is not None:
+            seen.add(id(r))
+        if p is not None:
+            out.append({"start_local": (r or {}).get("start_local") or AT.key_of(w.entry.start),
+                        "file": (r or {}).get("file") or getattr(w.entry, "file", None), "tags": [AT.POLES[p]]})
+    return out
+
+
+def _mark(row: Optional[dict], race: Optional[str]) -> Optional[str]:
+    """"with" / "without" / None of one activity: its tag row's choice, else the race default."""
+    from backend.engine import activity_tags as AT
+    tags = (row or {}).get("tags") if (row or {}).get("tags") is not None else AT.tags_of(row)
+    return AT.pole_state(tags, race)["poles"]
+
+
+def counts(ds, rows: list, today: dt.date) -> dict:
+    """AT.pole_counts over the marks of the activities this chart uses (chart_rows)."""
+    from backend.engine import activity_tags as AT
+    return AT.pole_counts(chart_rows(ds, rows, today), today)
+
+
 def compute(ds, b: float, e: float, params: Optional[dict] = None, rows: Optional[list] = None,
             today: Optional[dt.date] = None) -> dict:
     from backend.engine import activity_tags as AT
-    from backend.engine.panels.climb_vam import kind_of
     rows = _rows() if rows is None else rows
     today = today or dt.date.today()
-    counts = AT.pole_counts(rows, today)
-    out = {"kind": "polecompare", "counts": counts, "min_n": MIN_N, "min_bin_s": MIN_BIN_S,
+    cnt = counts(ds, rows, today)
+    out = {"kind": "polecompare", "counts": cnt, "min_n": MIN_N, "min_bin_s": MIN_BIN_S,
            "caveat": _(CAVEAT), "bins": [{k: x[k] for k in ("id", "dir", "label")} for x in BINS],
            "metrics": [], "activities": {"with": 0, "without": 0}, "list": []}
-    if not counts["eligible"]:
-        out["empty"] = _("近 {days} 天標了「有杖」{w} 次、「沒杖」{wo} 次；兩邊都要至少 {need} 次才比較。"
+    if not cnt["eligible"]:
+        out["empty"] = _("近 {days} 天的越野跑、登山健行標了「有杖」{w} 次、「沒杖」{wo} 次；"
+                         "兩邊都要至少 {need} 次才比較。"
                          "到活動列表編輯活動，在「登山杖」選有杖或沒杖。",
-                         days=counts["days"], w=counts["with"], wo=counts["without"], need=counts["need"])
+                         days=cnt["days"], w=cnt["with"], wo=cnt["without"], need=cnt["need"])
         return out
     per = {"with": [], "without": []}
+    race = AT.race_poles(ds)                 # 有杖 「依賽事設定」 (SP-300) where the user didn't choose
     for w in ds.workouts:
         if not (b <= w.day < e + 1):
             continue
-        if kind_of(w) is None:
+        if not used(w):
             continue
-        p = AT.poles_of((AT.find(rows, w.entry.start, getattr(w.entry, "file", None)) or {}).get("tags"))
+        p = _mark(AT.find(rows, w.entry.start, getattr(w.entry, "file", None)), race.get(w.idx))
         if p not in per:
             continue
         v = values(_cached(ds, w))

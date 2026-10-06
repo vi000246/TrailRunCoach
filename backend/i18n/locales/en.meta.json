@@ -1207,6 +1207,10 @@
     "draft": false,
     "src": "backend/engine/panels/pole_compare.py:51"
   },
+  "下坡用杖，膝關節受力少 12–25 %（Schwameder 1999；Bohne 2007）": {
+    "draft": false,
+    "src": "backend/engine/racepower/seg_targets.py:55"
+  },
   "下坡用跑的，練下坡": {
     "draft": false,
     "src": "backend/engine/specific_phase.py:673"
@@ -1238,6 +1242,14 @@
   "下坡離心（第一次，下坡 {work}′）": {
     "draft": true,
     "src": "backend/engine/downhill.py:188"
+  },
+  "下坡：Stryd 功率低估下坡的負荷（Gravina-Cognetti 2025：−7～+7 % 時功率 +90 %、耗氧只 +74 %），看下降量與技術": {
+    "draft": false,
+    "src": "backend/engine/target_policy.py:49"
+  },
+  "下坡：功率低估下坡的負荷（Gravina-Cognetti 2025：−7～+7 % 時功率 +90 %、耗氧只 +74 %），心率也不當目標，看技術與安全": {
+    "draft": false,
+    "src": "backend/engine/racepower/seg_targets.py:45"
   },
   "下週安排恢復週": {
     "draft": true,
@@ -3947,6 +3959,14 @@
     "draft": false,
     "src": "backend/engine/specific_phase.py:636"
   },
+  "用杖：膝蓋負擔少 12–25 %": {
+    "draft": false,
+    "src": "backend/engine/racepower/seg_targets.py:52"
+  },
+  "用杖：自覺比較輕鬆，速度差不多": {
+    "draft": false,
+    "src": "backend/engine/racepower/seg_targets.py:51"
+  },
   "用極短休息讓心肺維持在 VO2max 附近，同時限制乳酸累積（Uphill Athlete；Billat）": {
     "draft": true,
     "src": "backend/engine/workout_templates.py:134"
@@ -4987,9 +5007,9 @@
     "draft": true,
     "src": "backend/engine/thresholds.py:264"
   },
-  "近 {days} 天標了「有杖」{w} 次、「沒杖」{wo} 次；兩邊都要至少 {need} 次才比較。到活動列表編輯活動，在「登山杖」選有杖或沒杖。": {
+  "近 {days} 天的越野跑、登山健行標了「有杖」{w} 次、「沒杖」{wo} 次；兩邊都要至少 {need} 次才比較。到活動列表編輯活動，在「登山杖」選有杖或沒杖。": {
     "draft": false,
-    "src": "backend/engine/panels/pole_compare.py:179"
+    "src": "backend/engine/panels/pole_compare.py:215"
   },
   "近 {weeks} 週 {n} 次輕鬆路跑的中位數": {
     "draft": true,
@@ -5414,6 +5434,10 @@
   "陡上坡同心率 VAM（VAM ÷ 心率）": {
     "draft": false,
     "src": "backend/engine/panels/pole_compare.py:54"
+  },
+  "陡坡用杖自覺強度低 14–19 %（Giovanelli 2019）；全力爬坡只快約 2.5 %，八成力時沒有差別（Giovanelli 2022）": {
+    "draft": false,
+    "src": "backend/engine/racepower/seg_targets.py:53"
   },
   "陡坡（走跑皆可）": {
     "draft": false,

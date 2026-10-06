@@ -361,6 +361,22 @@ def test_V_F9_vmax_is_the_personal_p90():
     assert gre.v_max(0.05) is None
 
 
+def test_sp246_stryd_trusted_only_on_flats_and_0_to_8_percent_uphill():
+    """SP-246: van Rassel validated 0–8 % uphill only; a descent below −2 % needs ≥ 30 own windows."""
+    none = GM.fit_grade_re([], 1.0)
+    assert not none.trusted(-0.05) and none.trusted(0.05)
+    assert none.trusted(-0.02) and none.trusted(0.0) and none.trusted(0.08)
+    assert not none.trusted(-0.03) and not none.trusted(0.10)
+    own = GM.fit_grade_re([{"g": -0.05, "re": 1.1, "v": 3.0, "a": 1}] * 40, 1.0)
+    assert own.data_n(-0.05) == 40 and own.trusted(-0.05)
+    for walk in (GM.fit_grade_re([], 1.0, walking=True),):
+        gait = GM.GaitRE(run=none, walk=walk)
+        assert not gait.trusted(-0.05) and gait.trusted(0.05)
+        assert GM.GaitRE(run=own, walk=walk).trusted(-0.05)
+    # only the label: the RE (so the predicted time) is the same as before
+    assert none.re(-0.05) == approx(1.0 / minetti.grade_factor(-0.05, downhill_floor=0.9))
+
+
 def test_hike_speed_shrinks_to_tobler():
     hs = GM.fit_hike_speed([])
     assert hs.v(0.0) == approx(GM.tobler_kmh(0.0) / 3.6)

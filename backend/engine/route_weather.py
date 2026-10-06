@@ -41,7 +41,9 @@ from backend.engine.racepower.env import dew_point, heat_penalty_pct
 CELL_DEG = 0.25                  # batching cell
 POINT_DEG = 0.01                 # an effort's point, ~1 km
 ELEV_STEP_M = 10.0
-HOURLY = "temperature_2m,relative_humidity_2m,dew_point_2m"
+# precipitation (SP-299): asked in the same call, so the activities' rain costs no extra call;
+# a day cached before it was added has none (no rain hint there, never a refetch)
+HOURLY = "temperature_2m,relative_humidity_2m,dew_point_2m,precipitation"
 TIMEZONE = "auto"                # local wall-clock time at the point = the activity's start clock
 # Hadley sum (°F + °F) above which pace suffers >= ~4.5 % (Hadley's 151–160
 # band). 130 (~2 %) flagged 75 % of the real efforts — Taiwan's usual summer
@@ -337,7 +339,38 @@ def activity_exposure(tr, days_js: list[dict]) -> Optional[dict]:
         return None
     return {"date": (s + dt.timedelta(seconds=t0)).date().isoformat(), "moving_min": round(mv, 1),
             "hot_min": round(hot, 1), "temp_c": round(acc_t / mv, 1), "rh_pct": round(acc_rh / mv, 0),
-            "hadley": round(acc_h / mv, 1), "hadley_max": round(hmax, 1), "src": "open_meteo"}
+            "hadley": round(acc_h / mv, 1), "hadley_max": round(hmax, 1), "src": "open_meteo",
+            "start": s.isoformat(timespec="seconds"),
+            "rain_mm": activity_rain(days_js, s + dt.timedelta(seconds=t0), s + dt.timedelta(seconds=t1))}
+
+
+# ---------------------------------------------------------------------------
+# rain during the activity (SP-299): activity_tags.rain_hint turns it into a hint, never a mark
+# ---------------------------------------------------------------------------
+
+def activity_rain(days_js: list[dict], a: dt.datetime, b: dt.datetime) -> Optional[float]:
+    """The archive's rain (mm) while the activity ran, a → b (its first to last sample, local
+    wall clock). Open-Meteo's hourly `precipitation` at hour T is the sum of the PRECEDING hour
+    (T − 1 h … T; open-meteo.com/en/docs/historical-weather-api), so every hour row whose hour
+    overlaps [a, b] counts in full (a short run in a rainy hour still met that rain). None when
+    an overlapping hour has no precipitation value — a day cached before precipitation was asked
+    (SP-299) or a gap — or no hour overlaps: unknown (activity_tags.rain_hint: no hint)."""
+    if b < a:
+        return None
+    total, n = 0.0, 0
+    for js in days_js:
+        h = js.get("hourly") or {}
+        times, pr = h.get("time") or [], h.get("precipitation")
+        for i, ts in enumerate(times):
+            end = dt.datetime.fromisoformat(ts)
+            if not (end > a and end - dt.timedelta(hours=1) < b):
+                continue
+            v = pr[i] if pr is not None and i < len(pr) else None
+            if v is None:
+                return None
+            total += float(v)
+            n += 1
+    return round(total, 1) if n else None
 
 
 def fill_activities(tracks: dict, root: Path, get: Callable = WX._http_get,
@@ -390,6 +423,20 @@ def load_activity_weather(root: Path) -> dict:
         return d if d.get("version") == ACTIVITY_WX_VERSION else {}
     except (OSError, ValueError):
         return {}
+
+
+def rain_by_activity(root: Optional[Path] = None):
+    """{activity file: {"rain_mm", "start"}} of the activities whose rain is known
+    (activity_weather.json, SP-299), as an activity_key.ByStartDict: `.find(file, start)` also
+    finds the activity under another source's file name by its start (±3 min). Empty when the
+    file is missing."""
+    from backend.engine.activity_key import ByStartDict
+    if root is None:
+        from backend.engine.routes import home
+        root = home()
+    acts = load_activity_weather(root).get("activities") or {}
+    return ByStartDict({f: {"rain_mm": v["rain_mm"], "start": v.get("start")} for f, v in acts.items()
+                        if isinstance(v, dict) and v.get("rain_mm") is not None})
 
 
 def retry_wanted(idx: dict) -> bool:

@@ -50,6 +50,8 @@
   "hrcap": "HR cap",
   "safe": "Descent: no power or HR target — control and safety",
   "safe_short": "control, safety",
+  "gap.tip": "GAP (grade-adjusted pace): Minetti's formula turns the pace on a slope into the equivalent flat pace. For reference only: it is off on steep climbs, descents and technical ground. A study pooling 674 data sets found Minetti's error largest uphill, and no grade formula has any data on technical terrain (Looney 2025); Koop also treats GAP as a direction only.",
+  "gap.note": "The GAP column is Minetti's grade adjustment, for reference only: it is off on steep climbs, descents and technical ground (Looney 2025; Koop).",
   "legend.target": "Target {m}",
   "legend.walk": "walked",
   "legend.gap_power": "gap on the chart = power is only a reference here (steep, descent; grey in the table)",
