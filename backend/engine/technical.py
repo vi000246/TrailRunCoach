@@ -67,13 +67,18 @@ def base_week(monday: dt.date) -> bool:
     return monday.isocalendar()[1] % 2 == 0
 
 
-def week_context(*, kind: str, mode: str, monday: dt.date, road: bool, b2b: Optional[dict] = None) -> dict:
-    """Whether this week gets a 技術地形 session and which rule: {"active", "phase", "why"}."""
+def week_context(*, kind: str, mode: str, monday: dt.date, road: bool, b2b: Optional[dict] = None,
+                 injury: Optional[dict] = None) -> dict:
+    """Whether this week gets a 技術地形 session and which rule: {"active", "phase", "why"}.
+    `injury`: injuries.condition_week's rule (SP-270) — 膝前痛／髂脛束進行中 = no 技術地形."""
     info = {"active": False, "phase": kind, "monday": monday.isoformat()}
     if road:
         return {**info, "why": _("主要訓練項目：路跑")}
     if kind not in ("base", "specific") or mode in ("recovery_week", "reentry"):
         return {**info, "why": _("只在基礎期、專項期（恢復週、停訓後恢復期不排）")}
+    from backend.engine import injuries as INJ
+    if INJ.avoids(injury, "technical"):
+        return {**info, "why": "；".join(injury["notes"])}
     b = b2b or {}
     if kind == "base" and (b.get("due") or b.get("candidate") or b.get("post")):
         return {**info, "why": _("B2B 週：長跑照 B2B 排")}

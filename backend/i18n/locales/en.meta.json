@@ -39,6 +39,10 @@
     "draft": true,
     "src": "backend/engine/workout_templates.py:162"
   },
+  "0 = 不痛、10 = 想像得到最痛。傷病還沒好的時候，app 用最近一次跑步的分數和上一次比，決定這週課表要照排（綠燈）、先不加量（黃燈）還是先不跑（紅燈）。沒填就只看「沒痛／痠／痛／中斷」。": {
+    "draft": true,
+    "src": "backend/api/injuries.py:159"
+  },
   "1 區時間連 3 週低於這條線，5 區會暫停": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:1983"
@@ -455,6 +459,10 @@
     "draft": true,
     "src": "backend/engine/injuries.py:76"
   },
+  "LSD": {
+    "draft": true,
+    "src": "backend/engine/overview.py:2318"
+  },
   "LTHR {lthr:.0f} ＝ 最大心率 {mhr:.0f} 的 {r:.0%}（一般 85–95%，個人範圍 80–98%）": {
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:338"
@@ -522,6 +530,10 @@
   "Nuuttila 2025：休閒跑者 LT2 = 90.6 ± 2.5% 最大心率、87.0 ± 3.4% 儲備心率；Davis 90% 範圍 80–98%／73–95%": {
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:132"
+  },
+  "Ohio State Wexner 回跑指引（臨床機構）；每階 {n} 次、每次 {reps} 趟是推估": {
+    "draft": true,
+    "src": "backend/engine/overview.py:2454"
   },
   "PD 模型重算的 TTE": {
     "draft": true,
@@ -771,6 +783,14 @@
     "draft": true,
     "src": "backend/sync/workout_targets/base.py:92"
   },
+  "{label}・{what}": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:612"
+  },
+  "{label}看起來好了？最近 {n} 次沒痛、跑量回到傷前 {pct}%": {
+    "draft": true,
+    "src": "backend/engine/suggestions.py:308"
+  },
   "{label}（自動：一年內心率判定為比賽強度的標準距離跑步）": {
     "draft": true,
     "src": "backend/engine/racepower/calc.py:317"
@@ -782,6 +802,14 @@
   "{label}：心率 1 區{cap}，不加速、不衝坡；{src}": {
     "draft": true,
     "src": "backend/engine/overview.py:1833"
+  },
+  "{label}：疼痛紅燈（{reason}），傷病紀錄 #{id} 進行中。": {
+    "draft": true,
+    "src": "backend/engine/suggestions.py:221"
+  },
+  "{label}：走跑階段（第 {s} 階，這階已完成 {n}/{need} 次）。走跑階段不算進恢復期：連續跑 30 分 {c} 次之後才接恢復期（50%→75%）": {
+    "draft": true,
+    "src": "backend/engine/overview.py:2523"
   },
   "{model} 的輕鬆跑上限 {cap:.0f} bpm ≥ LTHR {lthr:.0f}：生理上不可能": {
     "draft": false,
@@ -1027,6 +1055,10 @@
     "draft": true,
     "src": "backend/engine/workout_review.py:3252"
   },
+  "{s}/10，{n}/10 以上": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:689"
+  },
   "{text}：{d} 起做一次 AeT 測試（UA 差距或 Friel 飄移），用賽後的 E 配速、CP、LTHR": {
     "draft": true,
     "src": "backend/engine/base_check.py:516"
@@ -1082,6 +1114,14 @@
   "{why}：區間、TSS、賽事計算機都靠 CP": {
     "draft": true,
     "src": "backend/engine/overview.py:1540"
+  },
+  "{why}：改成平路或緩坡的長跑，輕鬆跑強度": {
+    "draft": true,
+    "src": "backend/engine/overview.py:2319"
+  },
+  "{why}：改成平路輕鬆跑，時間不變": {
+    "draft": true,
+    "src": "backend/engine/overview.py:2323"
   },
   "{word} · {pct}": {
     "draft": true,
@@ -1139,6 +1179,10 @@
     "draft": true,
     "src": "backend/engine/race_feasibility.py:417"
   },
+  "。本週剩下的課不加量（≤ 上週實際 {m:.0f} 分）、不排間歇和這種傷要避開的課、長跑縮短一階（× {f:.2f}，推估）": {
+    "draft": true,
+    "src": "backend/engine/overview.py:2422"
+  },
   "。比賽最難那天是你 {m} 個月內最大單日的 {x:.1f} 倍": {
     "draft": true,
     "src": "backend/engine/race_feasibility.py:572"
@@ -1158,6 +1202,10 @@
   "。級數相同，但距離和爬升是兩倍以上，建議先有一次 ≥ 比賽 {p:.0f} % 的長天（{p:.0f} % 是推估）": {
     "draft": false,
     "src": "backend/engine/race_feasibility.py:640"
+  },
+  "。這週先不排跑步；交叉訓練和肌力照做，會痛的動作先不做": {
+    "draft": true,
+    "src": "backend/engine/overview.py:2394"
   },
   "「{a}」和「{b}」只隔 {n} 天：硬課之間建議隔 ≥ 2 天，可以再拖動調整": {
     "draft": true,
@@ -1226,6 +1274,22 @@
   "三段 33／50／75%，5 區要重新確認有氧基礎": {
     "draft": true,
     "src": "backend/engine/reentry.py:161"
+  },
+  "上一次 {s}/10": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:698"
+  },
+  "上一次 {s}/10，比再前一次（{p}/10）高": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:697"
+  },
+  "上一次 {s}/10，比再前一次（{p}/10）高 {d} 分": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:695"
+  },
+  "上一次 {s}/10，超過{name}的 {lim}/10": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:693"
   },
   "上一階（{name}）：維持，不算進階": {
     "draft": true,
@@ -1459,6 +1523,10 @@
     "draft": true,
     "src": "backend/engine/strength_moves.py:176"
   },
+  "不選": {
+    "draft": true,
+    "src": "backend/api/injuries.py:142"
+  },
   "中": {
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:124"
@@ -1470,6 +1538,10 @@
   "中央氣象署 鄉鎮三天預報": {
     "draft": true,
     "src": "backend/engine/racepower/weather.py:108"
+  },
+  "中斷": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:58"
   },
   "中間訓練：兩場 A 賽相隔 {span}，這週最多練到上一場賽前 4 週平均 {h:.1f} h 的 {share:.0%}（Higdon 等教練級，比例推估）": {
     "draft": true,
@@ -1787,6 +1859,18 @@
     "draft": true,
     "src": "backend/engine/reentry.py:178"
   },
+  "傷別不對": {
+    "draft": true,
+    "src": "backend/api/injuries.py:145"
+  },
+  "傷別和部位對不上（例如膝前痛的部位要是膝）": {
+    "draft": true,
+    "src": "backend/api/injuries.py:144"
+  },
+  "傷別（選填）": {
+    "draft": true,
+    "src": "backend/api/injuries.py:142"
+  },
   "傷病紀錄 #{id}（{label}）：{what}": {
     "draft": true,
     "src": "backend/engine/injuries.py:464"
@@ -1798,6 +1882,10 @@
   "先張眼，站穩了再閉眼。": {
     "draft": true,
     "src": "backend/engine/strength_moves.py:150"
+  },
+  "先能走 30 分鐘不痛再開始走跑交替：走完在活動上標「沒痛」或「痠」，或在傷病紀錄按「可以開始走跑」（Ohio State Wexner 回跑指引，臨床機構）": {
+    "draft": true,
+    "src": "backend/engine/overview.py:2405"
   },
   "先解鎖 3 區": {
     "draft": true,
@@ -2079,6 +2167,10 @@
     "draft": true,
     "src": "backend/engine/quality_gate.py:1944"
   },
+  "可以開始走跑": {
+    "draft": true,
+    "src": "backend/api/injuries.py:167"
+  },
   "可信度": {
     "draft": true,
     "src": "backend/engine/workout_review.py:2954"
@@ -2226,6 +2318,10 @@
   "單腳蹲下去坐到箱子再站起來。墊軟墊調深度；深度、次數一次只改一樣。雙腳蹲穩了再練。": {
     "draft": true,
     "src": "backend/engine/strength_moves.py:79"
+  },
+  "嚴重度選了「重」（停跑）": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:717"
   },
   "回到 AeT": {
     "draft": true,
@@ -2415,6 +2511,22 @@
     "draft": true,
     "src": "backend/engine/race_feasibility.py:50"
   },
+  "好了": {
+    "draft": true,
+    "src": "backend/engine/suggestions.py:307"
+  },
+  "如果醫師或物理治療師說是哪一種傷就選；app 不診斷。": {
+    "draft": true,
+    "src": "backend/api/injuries.py:143"
+  },
+  "如果醫師或物理治療師說是足底筋膜炎：沒有找到這種傷專用的疼痛數字，用一般回跑指引——不能越跑越痛、不能改變跑姿、隔天不能更痛（Ohio State Wexner 回跑指引，臨床機構）。": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:115"
+  },
+  "如果醫師或物理治療師說是髂脛束症候群：沒有找到這種傷專用的疼痛數字，用一般回跑指引——不能越跑越痛、不能改變跑姿、隔天不能更痛（Ohio State Wexner 回跑指引，臨床機構）。": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:117"
+  },
   "安排在輕鬆日或跑完後；組數次數是推估": {
     "draft": true,
     "src": "backend/engine/strength_plan.py:137"
@@ -2519,6 +2631,10 @@
     "draft": true,
     "src": "backend/engine/strength_moves.py:182"
   },
+  "小腿／脛骨的痛可能是骨應力傷害（疲勞性骨折）：先給醫師看。app 不給這個部位傷別規則。": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:125"
+  },
   "少一趟（仍同等）": {
     "draft": true,
     "src": "backend/engine/interval_library.py:801"
@@ -2571,6 +2687,10 @@
     "draft": true,
     "src": "backend/engine/quality_gate.py:1842"
   },
+  "已記成好了（{day}）；日期可以在傷病紀錄改": {
+    "draft": true,
+    "src": "backend/api/plan_sessions.py:2161"
+  },
   "已連續 3 週加量：這週是恢復週（前 3 週平均的 65%）": {
     "draft": true,
     "src": "backend/engine/overview.py:1014"
@@ -2590,6 +2710,10 @@
   "平衡／腳踝 {m} 分：熱身 1–2 分承重式腳踝活動度——彈性站姿、體重壓在腳上，慢慢做內翻、外翻（徐國峰）；接著 4 個動作，每個 2 組 × 20–40 秒／腳：{moves}": {
     "draft": true,
     "src": "backend/engine/balance_plan.py:67"
+  },
+  "平路或緩坡（{why}）": {
+    "draft": true,
+    "src": "backend/engine/overview.py:2336"
   },
   "年齡 {age} 不合理（{lo}–{hi} 歲）": {
     "draft": false,
@@ -3071,6 +3195,10 @@
     "draft": true,
     "src": "backend/engine/strength_moves.py:103"
   },
+  "按「好了」才會結案（好了的日期之後可以在傷病紀錄改）；結案後傷別要避開的課和疼痛燈號都解除，同部位 {recur} 天內再痛會標成復發。按「還沒」{snooze} 天內不再問。回到傷前 75–80% 的量才恢復正常訓練（Ohio State Wexner 回跑指引，臨床機構）；「{n} 次、跨 {span} 天」是推估。": {
+    "draft": true,
+    "src": "backend/engine/suggestions.py:313"
+  },
   "接下來 1–2 週的長跑不要比這次長；之後每次長跑 ≤ 前 {d} 天最長一次的 {pct:.0%}，有疼痛就先減量": {
     "draft": true,
     "src": "backend/engine/status.py:705"
@@ -3431,6 +3559,10 @@
     "draft": true,
     "src": "backend/engine/quality_gate.py:2131"
   },
+  "最近一週跑 {h:.1f} h，傷前 4 週平均每週 {pre:.1f} h；最近 {n} 次跑步（{a}–{b}，跨 {d} 天）都標「沒痛」或「痠」。": {
+    "draft": true,
+    "src": "backend/engine/suggestions.py:310"
+  },
   "最近氣溫 ≥ 25 °C：等天氣轉涼再做比較準（還是可以先排）": {
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:537"
@@ -3619,9 +3751,21 @@
     "draft": true,
     "src": "backend/engine/strength_moves.py:183"
   },
+  "標了「{what}」": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:701"
+  },
+  "標了「中斷」": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:687"
+  },
   "標了「當作間歇」，但找不到用力段（≥ 95% CP 的短趟或 3 區以上 ≥ 2.5 分）": {
     "draft": true,
     "src": "backend/engine/interval_eval.py:501"
+  },
+  "標了「痛」": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:700"
   },
   "標題不能空白": {
     "draft": true,
@@ -3947,6 +4091,10 @@
     "draft": true,
     "src": "backend/engine/hr_profile.py:83"
   },
+  "沒痛": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:58"
+  },
   "沒辦法確認配速有沒有維持（沒有速度也沒有功率）：只看心率": {
     "draft": true,
     "src": "backend/engine/base_check.py:252"
@@ -4195,9 +4343,41 @@
     "draft": true,
     "src": "backend/engine/workout_templates.py:131"
   },
+  "用舒服的強度跑，走路不設目標；跑步日之間至少休 1 天。這次標「痛」就重複這一階，標「中斷」先停跑；沒標記視同沒痛、照進度走。": {
+    "draft": true,
+    "src": "backend/engine/overview.py:2452"
+  },
   "用跑的": {
     "draft": false,
     "src": "backend/engine/specific_phase.py:636"
+  },
+  "疼痛{light}（{label}）：{reason}": {
+    "draft": true,
+    "src": "backend/engine/overview.py:2387"
+  },
+  "疼痛監測（Silbernagel 2007）：跑的時候疼痛 ≤ 5/10；跑完 ≤ 5/10 且隔天早上要退回原本的程度；疼痛和僵硬不能一週比一週多。原研究只看阿基里斯腱，用在其他部位是推估。": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:92"
+  },
+  "疼痛監測（一般回跑指引）：不能越跑越痛、不能改變跑姿、隔天不能更痛（Ohio State Wexner 回跑指引，臨床機構）。": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:119"
+  },
+  "疼痛監測（如果醫師或物理治療師說是膝前痛）：跑時 ≤ 2/10、跑完 60 分鐘內回到原本的程度（Esculier 2016 試驗計畫書）。": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:113"
+  },
+  "疼痛黃燈：先不排間歇，改成輕鬆跑": {
+    "draft": true,
+    "src": "backend/engine/overview.py:2402"
+  },
+  "痛": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:58"
+  },
+  "痠": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:58"
   },
   "登山健行": {
     "draft": true,
@@ -4475,6 +4655,14 @@
     "draft": true,
     "src": "backend/engine/altitude.py:198"
   },
+  "紅燈": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:679"
+  },
+  "紅燈之後：先能走 30 分鐘不痛、走路的樣子正常，再開始走跑交替（Ohio State Wexner 回跑指引，臨床機構）。app 不判斷能不能開始跑。按了之後課表從「走 4 分／跑 1 分」開始；走完 30 分在活動上標「沒痛」或「痠」也一樣。": {
+    "draft": true,
+    "src": "backend/api/injuries.py:168"
+  },
   "累": {
     "draft": true,
     "src": "backend/engine/rpe_load.py:55"
@@ -4526,6 +4714,10 @@
   "綠 ✓ 在目標內、黃 ▼ 偏低（< {floor:.0f} W = 下限 × {tol}，{basis}）": {
     "draft": true,
     "src": "backend/engine/workout_review.py:3913"
+  },
+  "綠燈": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:679"
   },
   "維持：每週 1 區 ≥ {m} 分": {
     "draft": true,
@@ -4626,6 +4818,14 @@
   "膝主導＋臀中肌；安排在輕鬆日或跑完後": {
     "draft": true,
     "src": "backend/engine/strength_plan.py:34"
+  },
+  "膝前痛": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:100"
+  },
+  "膝前痛進行中：先不排下坡課（Esculier 2016）；技術地形、長爬坡反覆也先不排，越野長跑改平路": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:586"
   },
   "膝蓋微彎做提踵，練小腿深層的比目魚肌：長下坡、長時間跑的小腿耐力。": {
     "draft": true,
@@ -4911,6 +5111,14 @@
     "draft": false,
     "src": "backend/engine/racepower/runwalk.py:57"
   },
+  "走 {w}／跑 {r}": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:856"
+  },
+  "走跑交替：走 {w} 分／跑 {r} 分 × {n}（第 {s} 階 {k}/{need}）": {
+    "draft": true,
+    "src": "backend/engine/overview.py:2445"
+  },
   "走跑皆可": {
     "draft": false,
     "src": "backend/engine/racepower/runwalk.py:57"
@@ -4919,9 +5127,33 @@
     "draft": false,
     "src": "backend/engine/specific_phase.py:636"
   },
+  "走跑第 {s} 階：這階已完成 {n}/{need} 次": {
+    "draft": true,
+    "src": "backend/api/injuries.py:171"
+  },
+  "走跑階段": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:680"
+  },
+  "走跑階段標了「中斷」": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:809"
+  },
+  "走跑階段第 {s} 階": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:874"
+  },
+  "走跑階段：照進度排走跑交替；連續跑 30 分 3 次之後才接恢復期": {
+    "draft": true,
+    "src": "backend/engine/projection.py:782"
+  },
   "走路": {
     "draft": true,
     "src": "backend/engine/sport_map.py:59"
+  },
+  "走路 {m} 分": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:854"
   },
   "走路一群約 {w:.0f} spm、跑步一群約 {r:.0f} spm，130 spm 落在兩群之間的谷底附近（谷底約 {v:.0f} spm）：門檻合用": {
     "draft": false,
@@ -5027,6 +5259,14 @@
     "draft": true,
     "src": "backend/engine/effort_calib.py:92"
   },
+  "足底筋膜": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:100"
+  },
+  "足底筋膜炎（腳跟、足弓痛，早上第一步最痛）": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:103"
+  },
   "跑": {
     "draft": false,
     "src": "backend/engine/racepower/runwalk.py:57"
@@ -5038,6 +5278,10 @@
   "跑步開頭這段時間裡的停等（紅綠燈、等人）都當暖身，飄移從最後一次停等後才開始算。本人值 = 你路跑前段最後一次停等時間的 p95。": {
     "draft": true,
     "src": "backend/engine/drift_calib.py:120"
+  },
+  "跑的時候最痛幾分（選填）": {
+    "draft": true,
+    "src": "backend/api/injuries.py:158"
   },
   "距離": {
     "draft": true,
@@ -5058,6 +5302,14 @@
   "距離／爬升要是數字": {
     "draft": true,
     "src": "backend/engine/plan_store.py:316"
+  },
+  "跟腱": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:100"
+  },
+  "跟腱進行中：先不排爬坡反覆、陡坡健走、加速跑（推估：教練的說法，沒有找到量測研究）；長跑地形不變": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:588"
   },
   "跟著步頻走": {
     "draft": true,
@@ -5158,6 +5410,10 @@
   "輕鬆跑": {
     "draft": true,
     "src": "backend/engine/workout_templates.py:443"
+  },
+  "輕鬆跑 {m} 分": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:855"
   },
   "輕鬆跑上限＝課表心率區間的 Z2 上緣；有實測 AeT 時用實測值": {
     "draft": true,
@@ -5298,6 +5554,10 @@
   "透過重複回合效應減少賽後肌肉損傷，放在賽前最後幾週（Roche）": {
     "draft": true,
     "src": "backend/engine/workout_templates.py:140"
+  },
+  "這不是醫療診斷。持續或加重的疼痛請看醫師或物理治療師。": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:94"
   },
   "這個平台": {
     "draft": true,
@@ -5447,9 +5707,25 @@
     "draft": true,
     "src": "backend/engine/drift_calib.py:137"
   },
+  "連兩次黃燈（{why}）": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:722"
+  },
   "連續賽事以兩個睡眠點之間最硬的一段來比：第 {n} 段 {km:.1f} km、爬升 {cl:.0f} m（共 {k} 段）": {
     "draft": true,
     "src": "backend/engine/panels/race_refs.py:166"
+  },
+  "連續跑 30 分：已完成 {n}/{need} 次": {
+    "draft": true,
+    "src": "backend/api/injuries.py:172"
+  },
+  "連續輕鬆跑 {m} 分": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:852"
+  },
+  "連續輕鬆跑 {m} 分（走跑之後 {k}/{need}）": {
+    "draft": true,
+    "src": "backend/engine/overview.py:2448"
   },
   "週{day}已給{taken}，不能再排{kind}（一天只能指定一種課）": {
     "draft": true,
@@ -5499,6 +5775,10 @@
     "draft": true,
     "src": "backend/engine/quality_gate.py:1920"
   },
+  "還沒": {
+    "draft": true,
+    "src": "backend/engine/suggestions.py:307"
+  },
   "還沒到賽前 10 週的專項期：下面的數字會隨著長天和週量慢慢長上來": {
     "draft": true,
     "src": "backend/engine/race_feasibility.py:370"
@@ -5522,6 +5802,10 @@
   "還沒有實測的 AeT 和 LTHR，算不出 ADS": {
     "draft": true,
     "src": "backend/engine/specific_phase.py:559"
+  },
+  "還沒有標記疼痛的跑步": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:718"
   },
   "還缺：": {
     "draft": true,
@@ -5578,6 +5862,10 @@
   "配速：秒／公里（2026-10-02 手錶驗證）": {
     "draft": true,
     "src": "backend/sync/workout_targets/coros.py:22"
+  },
+  "醫師沒說，或不是上面這幾種": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:106"
   },
   "醫護站": {
     "draft": true,
@@ -5718,6 +6006,10 @@
   "關門／撤退時間要在 0–{max:g} 小時": {
     "draft": true,
     "src": "backend/engine/planning.py:303"
+  },
+  "阿基里斯腱的肌腱病變（腳跟上方的跟腱痛）": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:102"
   },
   "陡上坡同心率 VAM（VAM ÷ 心率）": {
     "draft": false,
@@ -5923,6 +6215,18 @@
     "draft": true,
     "src": "backend/engine/sport_map.py:58"
   },
+  "髂脛束": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:100"
+  },
+  "髂脛束症候群（膝蓋外側痛）": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:104"
+  },
+  "髂脛束進行中：先不排下坡課（Fredericson 2005）；技術地形、長爬坡反覆也先不排，越野長跑改平路": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:587"
+  },
   "體能好壞不影響高山症風險（CDC）：練得好不代表不會高山症": {
     "draft": true,
     "src": "backend/engine/altitude.py:210"
@@ -5930,6 +6234,10 @@
   "體重 {kg} kg 不合理": {
     "draft": true,
     "src": "backend/api/plan.py:468"
+  },
+  "髕股疼痛（膝蓋前面、膝蓋骨周圍痛）": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:105"
   },
   "高": {
     "draft": false,
@@ -5946,6 +6254,10 @@
   "高踏階（箱高約膝高，踩上去站穩再下）": {
     "draft": true,
     "src": "backend/engine/strength_plan.py:54"
+  },
+  "黃燈": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:679"
   },
   "（LTHR 有獨立證據：{s}）": {
     "draft": false,
@@ -6227,6 +6539,10 @@
     "draft": true,
     "src": "backend/engine/quality_gate.py:2078"
   },
+  "；會痛的動作先不做": {
+    "draft": true,
+    "src": "backend/engine/overview.py:2391"
+  },
   "；本週不另外排技術地形課": {
     "draft": true,
     "src": "backend/engine/technical.py:173"
@@ -6242,6 +6558,10 @@
   "；注意線 +{watch:.1f}、擋線 +{block:.1f}（7 天前 CTL {base:.0f}）": {
     "draft": true,
     "src": "backend/engine/status.py:308"
+  },
+  "；疼痛黃燈：長跑縮短一階（× {f:.2f}，推估）": {
+    "draft": true,
+    "src": "backend/engine/overview.py:2407"
   },
   "；第一次量小，之後 2 天只排輕鬆課": {
     "draft": true,

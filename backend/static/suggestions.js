@@ -30,7 +30,7 @@
   // i18n: common.sugg.* (static/i18n/i18n.js; the common catalog is inlined on every page)
   const T = (k, p) => (window.I18N ? window.I18N.t("common.sugg." + k, p) : k);
   const KIND = { b2b: "B2B", test: T("kind.test"), baseline: T("kind.baseline"), zone_test: T("kind.zone_test"), zone_update: T("kind.zone_update"),
-    injury_rest: T("kind.injury"), injury_hold: T("kind.injury"), injury_pattern: T("kind.injury"),
+    injury_rest: T("kind.injury"), injury_hold: T("kind.injury"), injury_pattern: T("kind.injury"), injury_done: T("kind.injury"),
     altitude: T("kind.altitude") };
 
   const CSS = `
@@ -128,7 +128,7 @@
         ${r.links.map((l) => `<a class="sg-btn" href="${esc(l.href)}">${esc(l.label)}</a>`).join("")}</div>` : ""}
       ${r.pick ? `<div class="sg-act">${picker(r)}
         ${canPick ? `<button type="button" class="sg-btn pri" data-act="accept">${esc(r.accept_label || T("accept"))}</button>` : ""}
-        <button type="button" class="sg-btn" data-act="decline">${esc(T("decline"))}</button></div>` : ""}
+        <button type="button" class="sg-btn" data-act="decline">${esc(r.decline_label || T("decline"))}</button></div>` : ""}
     </div>`;
   }
 
@@ -181,7 +181,8 @@
         const out = await post(`${API}/accept`, { id, day, test });
         const ss = out.sessions || [];
         const bl = out.blackouts || [];
-        el.querySelector(".sg-act").outerHTML = bl.length
+        // a server message (SP-273 「已記成好了」) wins over the 已排入 / 已設成不排課 texts
+        el.querySelector(".sg-act").outerHTML = out.message ? `<div class="sg-ok">${esc(out.message)}</div>` : bl.length
           ? `<div class="sg-ok">已設成不排課 ${bl.map((b) => `${md(b.start)}–${md(b.end)}`).join("、")}（<a href="${SCHEDULE}">到課表看</a>）</div>`
           : `<div class="sg-ok">已排入 ${ss.map((s) => `${md(s.day)}「${esc(s.title)}」`).join("、")}（<a href="${SCHEDULE}">到課表看</a>）</div>`;
         window.dispatchEvent(new CustomEvent("suggestions:changed", { detail: { id, sessions: ss } }));

@@ -55,7 +55,7 @@ SEVERITIES = {"mild": "輕", "moderate": "中", "severe": "重"}
 SEVERITY_HELP = {"mild": "照練", "moderate": "減量或改練", "severe": "停跑"}
 SEV_RANK = {"mild": 1, "moderate": 2, "severe": 3}
 STATUSES = {"draft": "待補細節", "active": "進行中", "resolved": "好了"}
-PAIN = {0: "沒痛", 1: "痠", 2: "痛", 3: "中斷"}
+PAIN = {0: N_("沒痛"), 1: N_("痠"), 2: N_("痛"), 3: N_("中斷")}
 
 ATTACH_DAYS = 28        # 推估: a 痛 mark joins an open event of the same area that began ≤ 28 days before
 RECUR_DAYS = 42         # 推估: same area within 42 days after the last one resolved = 復發 (§3.3)
@@ -87,11 +87,42 @@ PATTERN_MIN_N = 5
 # scale (VAS) … during the exercise training. The pain after the exercise program was
 # allowed to reach 5 on the VAS but should have subsided by the following morning. Pain and
 # stiffness in the Achilles tendon were not allowed to increase from week to week."
-# Studied in Achilles tendinopathy only: for other areas it is 推估.
+# Studied in Achilles tendinopathy only: SP-269 shows it for the 跟腱 condition only.
 SILBERNAGEL = {"during_max": 5, "after_max": 5, "src": "Silbernagel 2007（阿基里斯腱疼痛監測模型）",
-               "text": "疼痛監測（Silbernagel 2007）：跑的時候疼痛 ≤ 5/10；跑完 ≤ 5/10 且隔天早上要退回原本的程度；"
-                       "疼痛和僵硬不能一週比一週多。原研究只看阿基里斯腱，用在其他部位是推估。"}
-DISCLAIMER = "這不是醫療診斷。持續或加重的疼痛請看醫師或物理治療師。"
+               "text": N_("疼痛監測（Silbernagel 2007）：跑的時候疼痛 ≤ 5/10；跑完 ≤ 5/10 且隔天早上要退回原本的程度；"
+                          "疼痛和僵硬不能一週比一週多。原研究只看阿基里斯腱，用在其他部位是推估。")}
+DISCLAIMER = N_("這不是醫療診斷。持續或加重的疼痛請看醫師或物理治療師。")
+
+# ---- 傷別 (SP-269; docs/research/injury-graded-return.md §2.3, §4.2, owner §6.1 points 1–2) ----------
+# Optional, picked by the user (the app never diagnoses: the texts say 「如果醫師或物理治療師說是…」).
+# Each condition belongs to one body area; "other" fits any area. No condition = the general
+# return-to-run rules (no longer Silbernagel's 5/10: it was only studied in the Achilles tendon).
+CONDITIONS = {"achilles": N_("跟腱"), "plantar_fascia": N_("足底筋膜"), "itb": N_("髂脛束"), "pfp": N_("膝前痛"),
+              "other": N_("其他")}
+CONDITION_HELP = {"achilles": N_("阿基里斯腱的肌腱病變（腳跟上方的跟腱痛）"),
+                  "plantar_fascia": N_("足底筋膜炎（腳跟、足弓痛，早上第一步最痛）"),
+                  "itb": N_("髂脛束症候群（膝蓋外側痛）"),
+                  "pfp": N_("髕股疼痛（膝蓋前面、膝蓋骨周圍痛）"),
+                  "other": N_("醫師沒說，或不是上面這幾種")}
+CONDITION_AREA = {"achilles": "achilles", "plantar_fascia": "foot", "itb": "knee", "pfp": "knee", "other": None}
+# Esculier JF et al. BMC Musculoskelet Disord 2016 (trial protocol, PMC4702381, read 2026-10-06):
+# pain ≤ 2/10 while running, "pain should return to before-training levels within 60 min post training"
+ESCULIER = {"during_max": 2, "after_min": 60}
+MONITOR = {
+    "achilles": SILBERNAGEL["text"],
+    "pfp": N_("疼痛監測（如果醫師或物理治療師說是膝前痛）：跑時 ≤ 2/10、跑完 60 分鐘內回到原本的程度"
+              "（Esculier 2016 試驗計畫書）。"),
+    "plantar_fascia": N_("如果醫師或物理治療師說是足底筋膜炎：沒有找到這種傷專用的疼痛數字，用一般回跑指引——"
+                         "不能越跑越痛、不能改變跑姿、隔天不能更痛（Ohio State Wexner 回跑指引，臨床機構）。"),
+    "itb": N_("如果醫師或物理治療師說是髂脛束症候群：沒有找到這種傷專用的疼痛數字，用一般回跑指引——"
+              "不能越跑越痛、不能改變跑姿、隔天不能更痛（Ohio State Wexner 回跑指引，臨床機構）。"),
+    "general": N_("疼痛監測（一般回跑指引）：不能越跑越痛、不能改變跑姿、隔天不能更痛"
+                  "（Ohio State Wexner 回跑指引，臨床機構）。"),
+}
+MONITOR_SRC = {"achilles": "Silbernagel 2007", "pfp": "Esculier 2016", "plantar_fascia": "Ohio State Wexner",
+               "itb": "Ohio State Wexner", "general": "Ohio State Wexner"}
+# 小腿／脛骨: maybe a bone stress injury — no condition rules there, only 「先給醫師看」 (§4.2)
+SHIN_NOTE = N_("小腿／脛骨的痛可能是骨應力傷害（疲勞性骨折）：先給醫師看。app 不給這個部位傷別規則。")
 
 
 def demo_mode() -> bool:
@@ -172,6 +203,13 @@ def validate_pain(pain, area=None) -> Optional[str]:
     return None
 
 
+def validate_score(score) -> Optional[str]:
+    """SP-271: the optional 0–10 「跑的時候最痛幾分」."""
+    if score is not None and (isinstance(score, bool) or not isinstance(score, int) or not 0 <= score <= PAIN_MAX):
+        return "INVALID_PAIN_SCORE"
+    return None
+
+
 def _iso(d) -> Optional[str]:
     if d is None:
         return None
@@ -200,7 +238,7 @@ def validate_event(f: dict, today: Optional[dt.date] = None) -> Optional[str]:
     if "days_missed" in f and f["days_missed"] is not None and (
             isinstance(f["days_missed"], bool) or not isinstance(f["days_missed"], int) or not 0 <= f["days_missed"] <= 730):
         return "INVALID_DAYS_MISSED"
-    for k in ("onset_date", "resolved_date"):
+    for k in ("onset_date", "resolved_date", "walkrun_from"):
         if k in f and f[k] is not None:
             v = _iso(f[k])
             if v is None or v != str(f[k])[:10] or v > (today + dt.timedelta(days=1)).isoformat():
@@ -215,7 +253,39 @@ def validate_event(f: dict, today: Optional[dt.date] = None) -> Optional[str]:
         return "INVALID_CATEGORY"
     if "illness" in f and f["illness"] is not None and f["illness"] not in ILLNESS:
         return "INVALID_ILLNESS"
+    if "condition" in f and f["condition"] is not None and f["condition"] not in CONDITIONS:
+        return "INVALID_CONDITION"
     return None
+
+
+def check_condition(area: Optional[str], condition: Optional[str]) -> Optional[str]:
+    """SP-269: a condition other than 「其他」 belongs to one body area (CONDITION_AREA) —
+    「CONDITION_AREA_MISMATCH」 when the event's area is another one (e.g. 腳踝 + 膝前痛).
+    An unknown area is filled by the caller (condition_area)."""
+    if condition in (None, "other"):
+        return None
+    want = CONDITION_AREA.get(condition)
+    if want is None or area in (want, None, UNKNOWN):
+        return None
+    return "CONDITION_AREA_MISMATCH"
+
+
+def condition_label(condition: Optional[str]) -> str:
+    return _(CONDITIONS[condition]) if condition in CONDITIONS else ""
+
+
+def monitor(ev: Optional[dict] = None) -> dict:
+    """The pain-monitoring text of an event by its condition (SP-269): 跟腱 = Silbernagel 2007 (as
+    before), 膝前痛 = Esculier 2016's ≤ 2/10, the rest and no condition = the general return-to-run
+    rules (Ohio State Wexner). A 小腿／脛骨 event without a condition says 「先給醫師看」 first.
+    {"key", "text", "src", "disclaimer"} — every text keeps the 「這不是醫療診斷」 line."""
+    ev = ev or {}
+    c = ev.get("condition") if not is_illness(ev) else None
+    key = c if c in MONITOR else "general"
+    text = _(MONITOR[key])
+    if c in (None, "other") and ev.get("area") == "shin_calf":
+        text = _(SHIN_NOTE) + text
+    return {"key": key, "text": text, "src": MONITOR_SRC[key], "disclaimer": _(DISCLAIMER)}
 
 
 def check_dates(onset: Optional[str], resolved: Optional[str]) -> Optional[str]:
@@ -374,6 +444,11 @@ def event_json(ev: dict, today: dt.date, linked: int = 0, auto_days: Optional[in
                                       "recurrence_of", "note", "illness")},
             "category": "illness" if ill else "injury",
             "illness_label": _(ILLNESS[ev["illness"]]) if ill and ev.get("illness") in ILLNESS else "",
+            # 傷別 (SP-269): the condition and its pain-monitoring text (illness: none)
+            "condition": None if ill else ev.get("condition"),
+            "walkrun_from": None if ill else ev.get("walkrun_from"),
+            "condition_label": "" if ill else condition_label(ev.get("condition")),
+            "monitor": None if ill else monitor(ev)["text"],
             "area_label": area_label(ev.get("area")), "label": event_label(ev),
             "severity_label": SEVERITIES.get(ev.get("severity"), ""), "kind_label": KINDS.get(ev.get("kind"), ""),
             "status_label": STATUSES.get(ev.get("status"), ""), "custom_area": is_custom(ev.get("area")),
@@ -387,7 +462,7 @@ def summary(ev: Optional[dict], today: dt.date) -> Optional[dict]:
         return None
     j = event_json(ev, today)
     return {k: j[k] for k in ("id", "label", "status", "status_label", "severity", "severity_label", "day_n", "open",
-                              "area", "side")}
+                              "area", "side", "condition", "condition_label", "monitor")}
 
 
 # ---------------------------------------------------------------------------
@@ -396,7 +471,7 @@ def summary(ev: Optional[dict], today: dt.date) -> Optional[dict]:
 
 EVENT_COLS = ("id", "athlete_id", "area", "side", "kind", "severity", "pain_max", "onset_date", "onset_key",
               "onset_file", "status", "resolved_date", "days_missed", "pause_quality", "recurrence_of", "note",
-              "category", "illness")
+              "category", "illness", "condition", "walkrun_from")
 _memo: dict = {}
 
 
@@ -444,8 +519,34 @@ def pain_marks(tag_rows: list[dict]) -> list[dict]:
         if p is None or (r.get("start_local") or "") == "":
             continue
         out.append({"date": r["start_local"][:10], "key": r["start_local"], "pain": int(p),
-                    "area": r.get("pain_area"), "injury_id": r.get("injury_id"), "file": r.get("file")})
+                    "area": r.get("pain_area"), "injury_id": r.get("injury_id"), "file": r.get("file"),
+                    "score": r.get("pain_score")})
     return out
+
+
+def foot_log(ds, tag_rows: Optional[list] = None, since: Optional[dt.date] = None) -> list[dict]:
+    """Every run / walk of the dataset with its pain mark (SP-271–273): {date, key, cat ("run" | "walk"),
+    minutes, pain, score, area, injury_id}, oldest first; pain None = not marked. Runs: sport run (road /
+    trail); walks: walking / hiking. `tag_rows`: activity_tags.load() (default: read it)."""
+    from backend.engine import activity_tags as AT
+    from backend.engine.overview import category, moving_s
+    from backend.engine import workout_review as WR
+    tags = AT.load() if tag_rows is None else tag_rows
+    out = []
+    for w in ds.workouts:
+        c = category(w)
+        cat = "run" if w.sport == "run" else "walk" if c in ("hike", "walk") or w.sport in ("walk", "hike") else None
+        if cat is None:
+            continue
+        d = WR._wdate(w)
+        if since is not None and d < since:
+            continue
+        u = AT.find(tags, w.entry.start, w.entry.file) if tags else None
+        u = u or {}
+        out.append({"date": d.isoformat(), "key": AT.key_of(w.entry.start) or d.isoformat(), "cat": cat,
+                    "minutes": moving_s(w) / 60.0, "pain": u.get("pain"), "score": u.get("pain_score"),
+                    "area": u.get("pain_area"), "injury_id": u.get("injury_id")})
+    return sorted(out, key=lambda m: m["key"])
 
 
 # ---------------------------------------------------------------------------
@@ -496,6 +597,335 @@ def illness_rule(events: list[dict], day: dt.date) -> Optional[dict]:
             best = {"rule": rule, "id": e.get("id"), "label": event_label(e), "illness": e.get("illness"),
                     "text": text, "src": _(SRC_FEVER if fever else SRC_COLD)}
     return best
+
+
+# ---- 依傷別迴避課型 (SP-270; injury-graded-return.md §1.2, §2.2, §4.2, §4.5, owner §6.1 points 3–4) -----
+# While an event with a condition is open (any severity; the day it resolves the rule is gone — §6.1
+# point 3), these session types are not planned. Tags (overview.condition_apply maps them to sessions):
+#   downhill   下坡離心課 (engine/downhill.py)        technical  技術地形課 (engine/technical.py)
+#   climb      長爬坡反覆 (specific_phase.apply_climb: climbs, then runs down at race grade)
+#   steep      陡坡健走 (engine/steep_hill.py)        me         ME 負重爬坡 (specific_phase.apply_me)
+#   strides    加速跑／坡道衝刺 on an easy run
+# 膝前痛 / 髂脛束: downhill is their main load factor — Esculier 2016 (「avoid downhill running」),
+# Fredericson & Wolf 2005 (downhill among the training factors), Van Hooren 2024 (downhill loads the
+# patellofemoral joint more); the trail long run becomes flat (§6.1 point 4). The 長爬坡反覆 runs down
+# at race grade, so it goes too (推估: the same reason as the downhill session).
+# 跟腱: no hill repeats, steep walk or strides — a coach's rule, plausible (uphill: forefoot strike,
+# more calf work, Vernillo 2017) but no measuring study found: 推估. The long run keeps its terrain.
+# 足底筋膜 / 其他: no session type is avoided. load_guard is untouched: these rules only cut.
+CONDITION_AVOID = {"pfp": ("downhill", "technical", "climb"), "itb": ("downhill", "technical", "climb"),
+                   "achilles": ("climb", "steep", "me", "strides")}
+FLAT_LONG = ("pfp", "itb")
+CONDITION_NOTE = {
+    "pfp": N_("膝前痛進行中：先不排下坡課（Esculier 2016）；技術地形、長爬坡反覆也先不排，越野長跑改平路"),
+    "itb": N_("髂脛束進行中：先不排下坡課（Fredericson 2005）；技術地形、長爬坡反覆也先不排，越野長跑改平路"),
+    "achilles": N_("跟腱進行中：先不排爬坡反覆、陡坡健走、加速跑（推估：教練的說法，沒有找到量測研究）；長跑地形不變"),
+}
+
+
+def condition_rule(events: list[dict], day: dt.date) -> Optional[dict]:
+    """What the open 傷別 events avoid on `day` (SP-270, the injury twin of illness_rule): {"avoid": set of
+    tags (CONDITION_AVOID), "flat_long": bool, "events": [{id, label, condition}], "notes": [week-note
+    texts]}; None when no event with an avoiding condition touches the day. An event counts on
+    [onset, resolved_date) — from the day it resolves the plan goes back to normal; drafts count."""
+    avoid, flat, evs, notes = set(), False, [], []
+    for e in events or ():
+        c = e.get("condition")
+        if is_illness(e) or c not in CONDITION_AVOID:
+            continue
+        o = _d(e.get("onset_date"))
+        if o is None or o > day:
+            continue
+        r = _d(e.get("resolved_date")) if e.get("status") == "resolved" else None
+        if e.get("status") == "resolved" and (r is None or day >= r):
+            continue
+        avoid |= set(CONDITION_AVOID[c])
+        flat = flat or c in FLAT_LONG
+        lab = full_label(e.get("area"), e.get("side"))
+        evs.append({"id": e.get("id"), "label": lab, "condition": c})
+        t = _("{label}・{what}", label=lab, what=_(CONDITION_NOTE[c]))
+        if t not in notes:
+            notes.append(t)
+    if not avoid:
+        return None
+    return {"avoid": avoid, "flat_long": flat, "events": evs, "notes": notes}
+
+
+def condition_week(events: list[dict], monday: dt.date, today: Optional[dt.date] = None) -> Optional[dict]:
+    """The condition rule a week's session modules ask (downhill / technical / steep_hill week_context):
+    the one on the week's first planning day (today inside the current week, else its Monday)."""
+    first = max(monday, today) if today is not None and today <= monday + dt.timedelta(days=6) else monday
+    return condition_rule(events, first)
+
+
+def avoids(rule: Optional[dict], tag: str) -> bool:
+    return bool(rule) and tag in rule["avoid"]
+
+
+# ---- 疼痛燈號 (SP-271; injury-graded-return.md §1.1, §2.3, §4.6, owner §6.1 points 6–8) ----------------
+# The last marked run of an open injury decides (no daily log: the next run's mark stands in for
+# 「隔天」, §6.1 point 7; an unmarked run changes nothing):
+#   green   the 0–10 within the condition's limit (跟腱 ≤ 5 Silbernagel 2007, 膝前痛 ≤ 2 Esculier 2016;
+#           others: not above the last score) and not ≥ RISE_YELLOW above the last one; tap only: 沒痛 / 痠
+#   yellow  over the limit, or ≥ RISE_YELLOW above the last score; tap only: 痛
+#   red     中斷, 0–10 ≥ RED_SCORE, two yellows in a row, or the event's severity 重 (停跑)
+# Green: plan as usual minus the condition's avoided sessions (SP-270). Yellow (applied on its own, like
+# every cut — §6.1 point 6): the rest of the week ≤ last week's actual minutes, no interval, the long
+# run × YELLOW_LONG. Red: no run; strength / cross-training stay (「會痛的動作先不做」); the box offers
+# 不排課日期 (injury_rest). Illness events take no light (SP-117).
+RISE_YELLOW = 2         # 推估: 2 points above the last score
+RED_SCORE = 7           # 推估
+YELLOW_LONG = 0.75      # 推估: the long run one step shorter
+LIMIT = {"achilles": SILBERNAGEL["during_max"], "pfp": ESCULIER["during_max"]}
+LIGHTS = {"green": N_("綠燈"), "yellow": N_("黃燈"), "red": N_("紅燈"), "walkrun": N_("走跑階段")}
+_LRANK = {"green": 0, "yellow": 1, "walkrun": 2, "red": 3}
+
+
+def _mark_light(m: dict, prev_score: Optional[int], cond: Optional[str]) -> tuple[str, str]:
+    """(color, reason) of one marked run (the two-yellows rule is light()'s)."""
+    p, sc = m.get("pain"), m.get("score")
+    if p == 3:
+        return "red", _("標了「中斷」")
+    if sc is not None and sc >= RED_SCORE:
+        return "red", _("{s}/10，{n}/10 以上", s=sc, n=RED_SCORE)
+    lim = LIMIT.get(cond)
+    if sc is not None and (lim is not None or prev_score is not None):
+        if lim is not None and sc > lim:
+            return "yellow", _("上一次 {s}/10，超過{name}的 {lim}/10", s=sc, name=condition_label(cond), lim=lim)
+        if prev_score is not None and sc - prev_score >= RISE_YELLOW:
+            return "yellow", _("上一次 {s}/10，比再前一次（{p}/10）高 {d} 分", s=sc, p=prev_score, d=sc - prev_score)
+        if lim is None and prev_score is not None and sc > prev_score:
+            return "yellow", _("上一次 {s}/10，比再前一次（{p}/10）高", s=sc, p=prev_score)
+        return "green", _("上一次 {s}/10", s=sc)
+    if p == 2:
+        return "yellow", _("標了「痛」")
+    return "green", _("標了「{what}」", what=_(PAIN.get(p, "沒痛")))
+
+
+def event_light(e: dict, marks: list[dict], day: dt.date, since: Optional[dt.date] = None) -> dict:
+    """The light of one open injury on `day` (see above). `marks`: foot_log rows (runs count; walks are
+    SP-272's); the event's own marks, and unlinked ones of its area or with no area. `since`: only the
+    runs from that day (SP-272: after the walk-run start), and then a 重 severity no longer holds it red.
+    {"color", "reason", "id", "label", "condition", "date" (the deciding run, None = no run yet)}."""
+    o = _d(e.get("onset_date")) or day
+    lo = max(o, since) if since else o
+    runs = [m for m in marks if m.get("cat", "run") == "run" and m.get("pain") is not None
+            and lo.isoformat() <= m["date"] <= day.isoformat()
+            and (m.get("injury_id") == e.get("id") or (m.get("injury_id") is None
+                                                         and m.get("area") in (None, e.get("area"))))]
+    base = {"id": e.get("id"), "label": full_label(e.get("area"), e.get("side")), "condition": e.get("condition")}
+    if e.get("severity") == "severe" and since is None:
+        return {**base, "color": "red", "reason": _("嚴重度選了「重」（停跑）"), "date": None}
+    color, reason, when, prev_score, prev_color = "green", _("還沒有標記疼痛的跑步"), None, None, None
+    for m in sorted(runs, key=lambda x: x.get("key") or x["date"]):
+        c, why = _mark_light(m, prev_score, e.get("condition"))
+        if c == "yellow" and prev_color == "yellow":
+            c, why = "red", _("連兩次黃燈（{why}）", why=why)
+        color, reason, when, prev_color = c, why, m["date"], c
+        if m.get("score") is not None:
+            prev_score = m["score"]
+    return {**base, "color": color, "reason": reason, "date": when}
+
+
+# ---- 紅燈之後先走跑交替 (SP-272; injury-graded-return.md §2.4, §4.3, §4.6, owner §6.1 point 5) -----------
+# Ohio State Wexner's return-to-running guideline (clinical, coach-level): first walk 30 min without
+# pain, then walk / run 4/1 → 3/2 → 2/3 → 1/4 min, 2–3 times each with a rest day between run days,
+# then 30 min continuous × 3; 「Do not progress phases if …」 = a 痛 repeats the stage. After red (SP-271):
+# a walk / hike ≥ WALK_CHECK_MIN marked 沒痛 / 痠, or the 「可以開始走跑」 button (walkrun_from), starts
+# it; an unmarked run counts as no pain and moves on (§6.1 point 5); 中斷 (or ≥ RED_SCORE) goes back to
+# red. The stages are not re-entry days: reentry.py starts the Daniels block the day after the last
+# continuous 30 (§6.1 point 5). Illness: never. The app doesn't judge whether running may start.
+WALK_CHECK_MIN = 30
+WALKRUN = ((4, 1), (3, 2), (2, 3), (1, 4))       # (walk, run) minutes per interval — Wexner
+WALKRUN_REPS = 6        # 推估: Wexner 3–6 times per session; 6 × 5 min = 30 min, as long as the walk check
+WALKRUN_PER_STAGE = 3   # Wexner: each stage 2–3 times; 3 = the conservative end (推估)
+CONT_MIN, CONT_N = 30, 3                         # Wexner: 30 min continuous × 3
+
+
+def _need(stage: int) -> int:
+    return CONT_N if stage >= len(WALKRUN) else WALKRUN_PER_STAGE
+
+
+def _relevant(m: dict, e: dict) -> bool:
+    return m.get("injury_id") == e.get("id") or (m.get("injury_id") is None and m.get("area") in (None, e.get("area")))
+
+
+def return_state(e: dict, marks: list[dict], day: dt.date) -> Optional[dict]:
+    """The return-to-run state of an injury on `day` (SP-272) from its marked runs / walks (foot_log):
+    {"phase": "light" (never red, or back after the walk-run) | "red" (waiting for the walk check /
+    button) | "walkrun", "since" (light: the first day its marks count from), "stage" (0–3 walk / run,
+    4 = continuous 30), "n" (sessions done in the stage), "last_run" (the last walk-run / check day),
+    "reason", "episodes": [{red, start, first_run, done}]}; None for an illness."""
+    if is_illness(e):
+        return None
+    o = _d(e.get("onset_date")) or day
+    items = sorted((m for m in marks if o.isoformat() <= m["date"] <= day.isoformat() and _relevant(m, e)),
+                   key=lambda m: m.get("key") or m["date"])
+    button = e.get("walkrun_from")
+    st = {"phase": "light", "since": None, "stage": 0, "n": 0, "last_run": None, "reason": "", "episodes": []}
+    ep: Optional[dict] = None
+    prev_score = prev_color = None
+    red_key = ""
+
+    def to_red(date: str, key: str, why: str):
+        nonlocal ep, red_key
+        ep = {"red": date, "start": None, "first_run": None, "done": None}
+        st["episodes"].append(ep)
+        st.update(phase="red", stage=0, n=0, reason=why)
+        red_key = key
+
+    def start(date: str, why_last: Optional[str]):
+        ep["start"] = date
+        st.update(phase="walkrun", stage=0, n=0, last_run=why_last)
+
+    if e.get("severity") == "severe":
+        to_red(o.isoformat(), "", _("嚴重度選了「重」（停跑）"))
+    for m in items:
+        if st["phase"] == "red" and button and button >= ep["red"] and button <= m["date"]:
+            start(button, None)
+        if st["phase"] == "light":
+            if m.get("cat", "run") != "run" or m.get("pain") is None:
+                continue
+            c, why = _mark_light(m, prev_score, e.get("condition"))
+            if c == "yellow" and prev_color == "yellow":
+                c, why = "red", _("連兩次黃燈（{why}）", why=why)
+            prev_color = c
+            if m.get("score") is not None:
+                prev_score = m["score"]
+            if c == "red":
+                to_red(m["date"], m.get("key") or m["date"], why)
+            continue
+        if st["phase"] == "red":
+            if m.get("cat") == "walk" and (m.get("minutes") or 0) >= WALK_CHECK_MIN and m.get("pain") in (0, 1) \
+                    and (m.get("key") or m["date"]) > red_key:
+                start(m["date"], m["date"])
+            elif m.get("cat", "run") == "run" and m.get("pain") == 3:
+                red_key = m.get("key") or m["date"]
+            continue
+        # walk-run
+        if m.get("cat", "run") != "run":
+            continue
+        if m.get("pain") == 3 or (m.get("score") is not None and m["score"] >= RED_SCORE):
+            to_red(m["date"], m.get("key") or m["date"], _("走跑階段標了「中斷」") if m.get("pain") == 3
+                   else _("{s}/10，{n}/10 以上", s=m["score"], n=RED_SCORE))
+            continue
+        ep["first_run"] = ep["first_run"] or m["date"]
+        st["last_run"] = m["date"]
+        if m.get("pain") == 2:
+            continue                                    # 痛: the next session repeats the stage
+        st["n"] += 1
+        if st["n"] >= _need(st["stage"]):
+            st["stage"] += 1
+            st["n"] = 0
+            if st["stage"] > len(WALKRUN):
+                ep["done"] = m["date"]
+                st.update(phase="light", since=(_d(m["date"]) + dt.timedelta(days=1)).isoformat(), stage=0)
+                prev_score = prev_color = None
+    if st["phase"] == "red" and button and button >= ep["red"] and button <= day.isoformat():
+        start(button, None)
+    return st
+
+
+def walkrun_sessions(st: dict) -> list[dict]:
+    """The sessions still to do in the walk-run (SP-272), in order: {"stage", "k" (its number in the
+    stage, 1-based), "walk", "run", "reps", "minutes"} — walk / run stages, then the continuous 30s."""
+    out = []
+    for stage in range(st.get("stage", 0), len(WALKRUN) + 1):
+        first = st.get("n", 0) if stage == st.get("stage", 0) else 0
+        for k in range(first, _need(stage)):
+            if stage < len(WALKRUN):
+                w, r = WALKRUN[stage]
+                out.append({"stage": stage, "k": k + 1, "walk": w, "run": r, "reps": WALKRUN_REPS,
+                            "minutes": (w + r) * WALKRUN_REPS})
+            else:
+                out.append({"stage": stage, "k": k + 1, "walk": 0, "run": CONT_MIN, "reps": 1, "minutes": CONT_MIN})
+    return out
+
+
+def walkrun_steps(x: dict) -> dict:
+    """The COROS / editor steps of a walk-run session (engine/workout_steps.py doc): ×reps of walk
+    (no target) then easy run; the continuous 30 is one easy step."""
+    from backend.engine import workout_steps as WS
+    ids = WS._Ids("w")
+    easy = {"type": "auto", "intent": "easy"}
+    if x["walk"] <= 0:
+        items = [WS.step(ids, "work", x["run"] * 60, easy, _("連續輕鬆跑 {m} 分", m=x["run"]))]
+    else:
+        items = [WS.rep(ids, x["reps"], [WS.step(ids, "rest", x["walk"] * 60, None, _("走路 {m} 分", m=x["walk"])),
+                                         WS.step(ids, "work", x["run"] * 60, easy, _("輕鬆跑 {m} 分", m=x["run"]))],
+                        True, _("走 {w}／跑 {r}", w=x["walk"], r=x["run"]))]
+    return WS.doc(items, origin="template:lib:walkrun")
+
+
+def light(events: list[dict], marks: list[dict], day: dt.date) -> Optional[dict]:
+    """The worst light of the injuries open on `day` (SP-271); None without one (illness: never).
+    SP-272: after red the event stays red until the walk check / button, then "walkrun" (the
+    walk-run state in "walkrun"); back in "light" after it, only its marks from then count."""
+    best = None
+    for e in active_on(events or [], day):
+        if is_illness(e) or (e.get("status") == "resolved" and _d(e.get("resolved_date")) == day):
+            continue
+        rs = return_state(e, marks, day)
+        base = {"id": e.get("id"), "label": full_label(e.get("area"), e.get("side")), "condition": e.get("condition"),
+                "date": None, "walkrun": rs}
+        if rs["phase"] == "red":
+            r = {**base, "color": "red", "reason": rs["reason"]}
+        elif rs["phase"] == "walkrun":
+            r = {**base, "color": "walkrun", "reason": _("走跑階段第 {s} 階", s=min(rs["stage"], len(WALKRUN)) + 1)}
+        else:
+            r = {**event_light(e, marks, day, since=_d(rs["since"]) if rs["since"] else None), "walkrun": rs}
+        if best is None or _LRANK[r["color"]] > _LRANK[best["color"]]:
+            best = r
+    if best is not None:
+        best["light_label"] = _(LIGHTS[best["color"]])
+    return best
+
+
+# ---- app 提議「好了」 (SP-273; injury-graded-return.md §2.4, §4.6, owner §6.1 point 8) ----------------------
+# Proposed, never automatic: the user confirms (status resolved, resolved_date today — editable later).
+# Both conditions:
+#   1. the last 7 days' run time ≥ DONE_SHARE × the 4 weeks before the onset (reentry.prev_volume's
+#      window, from the day before the onset; runs only) — Ohio State Wexner: back to normal training
+#      at 75–80 % of the pre-injury volume (clinical, coach-level);
+#   2. the last DONE_RUNS runs all marked 沒痛 / 痠, spanning ≥ DONE_SPAN_DAYS (推估).
+# 「還沒」: not asked again for DONE_SNOOZE_DAYS (推估; suggestions.visible).
+DONE_SHARE = 0.75
+DONE_RUNS = 3
+DONE_SPAN_DAYS = 14
+DONE_SNOOZE_DAYS = 7
+
+
+def done_check(e: dict, marks: list[dict], day: dt.date) -> Optional[dict]:
+    """Whether an open injury looks healed on `day` (see above): {"id", "label", "pct", "recent_h",
+    "pre_h", "runs" (the last DONE_RUNS dates), "span"}; None otherwise (an illness, still red or in the
+    walk-run, no pre-injury running)."""
+    if is_illness(e) or not is_open(e):
+        return None
+    o = _d(e.get("onset_date"))
+    if o is None or o > day:
+        return None
+    rs = return_state(e, marks, day)
+    if rs is None or rs["phase"] != "light":
+        return None
+    runs = [m for m in marks if m.get("cat", "run") == "run"]
+    pre_a, pre_b = o - dt.timedelta(days=28), o - dt.timedelta(days=1)
+    pre_h = sum(m.get("minutes") or 0.0 for m in runs if pre_a.isoformat() <= m["date"] <= pre_b.isoformat()) / 60.0 / 4.0
+    if pre_h <= 0:
+        return None
+    lo = (day - dt.timedelta(days=6)).isoformat()
+    recent_h = sum(m.get("minutes") or 0.0 for m in runs if lo <= m["date"] <= day.isoformat()) / 60.0
+    if recent_h < DONE_SHARE * pre_h:
+        return None
+    after = sorted((m for m in runs if o.isoformat() < m["date"] <= day.isoformat()),
+                   key=lambda m: m.get("key") or m["date"])[-DONE_RUNS:]
+    if len(after) < DONE_RUNS or any(m.get("pain") not in (0, 1) for m in after):
+        return None
+    span = (_d(after[-1]["date"]) - _d(after[0]["date"])).days
+    if span < DONE_SPAN_DAYS:
+        return None
+    return {"id": e.get("id"), "label": full_label(e.get("area"), e.get("side")),
+            "pct": int(round(100 * recent_h / pre_h)), "recent_h": round(recent_h, 1), "pre_h": round(pre_h, 1),
+            "runs": [m["date"] for m in after], "span": span}
 
 
 def week_notes(events: list[dict], monday: dt.date, today: dt.date) -> list[dict]:

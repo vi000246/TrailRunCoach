@@ -308,6 +308,9 @@ class ActivityTag(Base):
     # user-added area) and the injury_events row the mark is attached to
     pain: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     pain_area: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
+    # SP-271: optional 0–10 「跑的時候最痛幾分」 next to the one-tap mark (NULL = not given; cleared
+    # with the mark). Added by database._migrate_schema.
+    pain_score: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     injury_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
@@ -341,6 +344,12 @@ class InjuryEvent(Base):
     # symptom-free day. Added to existing DBs by database._migrate_schema (default 'injury').
     category: Mapped[str] = mapped_column(String(10), default="injury", server_default="injury")
     illness: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
+    # SP-269 傷別 (optional): achilles | plantar_fascia | itb | pfp | other (injuries.CONDITIONS);
+    # NULL = not chosen (the general return-to-run rules). Added by database._migrate_schema.
+    condition: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    # SP-272: the day the user pressed 「可以開始走跑」 (ISO date; NULL = not pressed) — after a red
+    # pain light the walk-run stages start from it (or from a ≥ 30-min walk marked 沒痛／痠)
+    walkrun_from: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 

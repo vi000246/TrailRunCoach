@@ -71,6 +71,8 @@ class ActivityUpdate(BaseModel):
     pain: Optional[int] = None
     pain_area: Optional[str] = None
     pain_side: Optional[str] = None
+    # SP-271: the optional 0–10 「跑的時候最痛幾分」 (null = not given; cleared with the mark)
+    pain_score: Optional[int] = None
     # 登山杖 (SP-242): "with" 有杖 / "without" 沒杖 / "none" the user's 未標 / null no choice (SP-300:
     # a race's 「會用登山杖」 then applies) — stored as one free-form tag
     poles: Optional[str] = None
@@ -79,9 +81,9 @@ class ActivityUpdate(BaseModel):
 
 
 TAG_FIELDS = ("activity_type", "effort", "note", "exclusion", "name", "tags", "pain", "pain_area", "pain_side",
-              "poles", "surface")
+              "poles", "surface", "pain_score")
 STORED_FIELDS = ("activity_type", "effort", "note", "exclusion", "name", "tags", "pain", "pain_area", "poles",
-                 "surface")
+                 "surface", "pain_score")
 
 
 async def save_activity_tag(db: AsyncSession, body: ActivityUpdate, *, start_local: str, athlete_id: int = 1,
@@ -97,8 +99,9 @@ async def save_activity_tag(db: AsyncSession, body: ActivityUpdate, *, start_loc
                       body.pain if "pain" in sent else None,
                       body.pain_area if "pain_area" in sent else None,
                       body.poles if "poles" in sent else None,
-                      body.surface if "surface" in sent else None)
-    painish = bool({"pain", "pain_area", "pain_side"} & sent)
+                      body.surface if "surface" in sent else None,
+                      body.pain_score if "pain_score" in sent else None)
+    painish = bool({"pain", "pain_area", "pain_side", "pain_score"} & sent)
     if painish:
         from backend.engine import injuries as INJ
         if INJ.demo_mode():
@@ -184,6 +187,7 @@ def _tag_json(t: Optional[ActivityTag]) -> dict:
             **AT.pole_state(AT.tags_of({"tags_json": t.tags_json}) if t else [], None),
             "surface": AT.surface_of(AT.tags_of({"tags_json": t.tags_json})) if t else None,
             "pain": t.pain if t else None, "pain_area": t.pain_area if t else None,
+            "pain_score": t.pain_score if t else None,
             "injury_id": t.injury_id if t else None}
 
 

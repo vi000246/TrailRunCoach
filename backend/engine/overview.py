@@ -1402,9 +1402,14 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         rp = RE.find(ds, today, blackouts or ())
     except Exception:                       # noqa: BLE001 — the plan must still build
         rp = None
+    inj_events: list = []
+    inj_rule = None
     try:                                    # 傷病紀錄 (engine/injuries.py): 「右膝進行中（第 5 天）」
         from backend.engine import injuries as INJ
-        notes.extend(INJ.week_notes(INJ.load_events(), monday, today))
+        inj_events = INJ.load_events()
+        notes.extend(INJ.week_notes(inj_events, monday, today))
+        # 依傷別迴避課型 (SP-270): what the session modules below ask (condition_week)
+        inj_rule = INJ.condition_week(inj_events, monday, today)
     except Exception:                       # noqa: BLE001
         pass
     re_f = RE.week_factor(rp, monday) if rp and kind in ("base", "specific") else None
@@ -1928,8 +1933,9 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
                          fixed=b2b.get("pair"))
         sessions = [Session(**d) for d in kept]
         B2B.placed(b2b, kept)
-    if sp.get("climb"):
+    if sp.get("climb") and not (inj_rule and "climb" in inj_rule["avoid"]):
         # 長爬坡反覆 (engine/specific_phase.py): the race GPX's longest climb, one easy run
+        # (SP-270: not while a 膝前痛／髂脛束／跟腱 event is open)
         try:
             dd = [asdict(s) for s in sessions]
             SP.apply_climb(dd, sp, aet=aet, prefs=prefs, b2b=b2b, notes=notes, rates=tph, aet_measured=aet_meas)
@@ -1941,7 +1947,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     from backend.engine import steep_hill as SH
     # (主要訓練項目 = 路跑: no steep walk — it simulates a mountain pack)
     lc = {"active": False, "why": _("主要訓練項目：路跑")} if road else \
-        SH.plan_context(ds, status, today, monday, mode, _n(ctl_s.at(d_prev_sun) - atl_s.at(d_prev_sun)), gate)
+        SH.plan_context(ds, status, today, monday, mode, _n(ctl_s.at(d_prev_sun) - atl_s.at(d_prev_sun)), gate,
+                        injury=inj_rule)
     if lc.get("active"):
         try:
             dd = [asdict(s) for s in sessions]
@@ -1966,7 +1973,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     # ---- 下坡課 (engine/downhill.py, SP-99): 專項期 賽前第 9、6、3 週 before an A race with a clear descent
     from backend.engine import downhill as DH
     dh = DH.week_context(kind=kind, mode=mode, monday=monday, events=getattr(getattr(status, "plan", None),
-                                                                              "events", None), phases=phs, road=road)
+                                                                              "events", None), phases=phs, road=road,
+                        injury=inj_rule)
     if dh.get("active"):
         try:
             dd = [asdict(s) for s in sessions]
@@ -1977,7 +1985,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
 
     # ---- 技術地形課 (engine/technical.py, SP-74): 越野跑 only; 基礎期 every other week's LSD,
     # 專項期 one a week out of an easy run (RPE 6–7 = a quality session: spacing + budget)
-    tech = TECH.week_context(kind=kind, mode=mode, monday=monday, road=road, b2b=b2b)
+    tech = TECH.week_context(kind=kind, mode=mode, monday=monday, road=road, b2b=b2b, injury=inj_rule)
     if tech.get("active"):
         try:
             dd = [asdict(s) for s in sessions]
@@ -2011,6 +2019,32 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         except Exception:                   # noqa: BLE001 — the hint only
             b_ctl = None
     notes.extend(PR_.b_hints(plan_events, monday, b_ctl, phases=phs))     # SP-280: the planned 減量期
+    # 依傷別迴避課型 (SP-270, engine/injuries.condition_rule): what is left of the avoided session types
+    # on the days an open 膝前痛／髂脛束／跟腱 event touches → flat easy runs; strides off; flat long run
+    try:
+        sessions = condition_apply(sessions, inj_events, notes)
+        for t in (inj_rule or {}).get("notes") or ():          # the week's rule, said even when nothing changed
+            if not any(n.get("text") == t for n in notes):
+                notes.append({"level": "watch", "src": "injury_condition", "text": t})
+    except Exception:                       # noqa: BLE001 — the plan must still build
+        pass
+    # 疼痛燈號 (SP-271, engine/injuries.light): the last marked run of an open injury — yellow cuts the
+    # rest of the week, red takes the runs out
+    inj_light = None
+    try:
+        opened = [e for e in INJ.active_on(inj_events, today) if not INJ.is_illness(e)]
+        if opened:
+            since = min(dt.date.fromisoformat(e["onset_date"][:10]) for e in opened)
+            inj_log = INJ.foot_log(ds, None, since)
+            inj_light = INJ.light(inj_events, inj_log, today)
+            if inj_light and inj_light["color"] == "walkrun":
+                # SP-272: after red — the walk-run stages take the runs
+                sessions = walkrun_apply(sessions, inj_light, today, set(bmap), notes, float(tph.get("road") or 60.0))
+                inj_light["block"] = _walkrun_block(ds, inj_events, inj_light, inj_log)
+            else:
+                sessions = light_apply(sessions, inj_light, today, last_h * 60.0, done_h * 60.0, notes)
+    except Exception:                       # noqa: BLE001 — the plan must still build
+        inj_light = None
     # 生病 (SP-117, engine/injuries.illness_rule): a cold = Z1 recovery runs only, a fever = no run
     # until a day after the symptoms, then a recovery-pace first run
     try:
@@ -2139,6 +2173,9 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         "test_suggestions": test_suggestions,
         # 停訓後的恢復期 (engine/reentry.py): the block in effect / ahead, for projection and the log
         "reentry": rp,
+        # 疼痛燈號 (SP-271, engine/injuries.light): the open injuries' light today (None = no open injury);
+        # SP-272: color "walkrun" carries the walk-run state, the sessions still to come and the expected block
+        "injury_light": inj_light,
         # 轉換期 (SP-73): the pre-race level of the current / next 轉換期, for projection
         "transition_ref": tr_ref,
         # 連續兩天長天 (engine/b2b.py): this week's B2B / post-B2B state, for projection, adapt and the card
@@ -2252,6 +2289,242 @@ def illness_apply(ss: list, events: list, cap_txt: str = "") -> list:
             recover(nxt, INJ.FIRST_RUN_MAX_MIN, _("恢復跑（發燒後第一次）"),
                     _("發燒好了之後的第一次跑：恢復配速、心率 1 區{cap}，之後照停跑天數排；{src}",
                       cap=_("（不超過{cap}）", cap=cap_txt) if cap_txt else "", src=_(INJ.SRC_FEVER)))
+    return out
+
+
+# ---- 依傷別迴避課型 (SP-270; injuries.condition_rule) --------------------------------------------------
+# Applied after the day rules by week_plan and projection: on a day under the rule, an avoided session
+# becomes a flat easy run of the same minutes (its time stays with the easy running: the week's volume
+# doesn't change), a 技術地形 LSD goes back to a flat long run, strides leave the easy runs, and with
+# 膝前痛／髂脛束 the trail long run becomes flat. The modules also ask the rule first (no downhill /
+# technical / steep session is made); this pass covers the days a mid-week onset touches and the
+# sessions made elsewhere (長爬坡反覆, ME, strides). Never adds anything; no condition = `ss` unchanged.
+_COND_IDS = {"downhill": "downhill", "tech": "technical", "climb": "climb", "steep": "steep", "me": "me"}
+_STRIDES = (ROAD_STRIDES, HILL_STRIDES, TRANSITION_STRIDES)
+
+
+def condition_apply(ss: list, events: list, notes: Optional[list] = None) -> list:
+    """`ss` (Session objects or dicts) under the open 傷別 events (SP-270), in place; see above."""
+    from backend.engine import injuries as INJ
+    if not ss or not any(e.get("condition") in INJ.CONDITION_AVOID for e in events or ()):
+        return ss
+    is_d = isinstance(ss[0], dict)
+
+    def g(s, k):
+        return s.get(k) if is_d else getattr(s, k, None)
+
+    def put(s, **kw):
+        for k, v in kw.items():
+            if is_d:
+                s[k] = v
+            else:
+                setattr(s, k, v)
+
+    said: list[str] = []
+    n_easy = sum(1 for x in ss if g(x, "kind") == "easy")
+    for s in ss:
+        if g(s, "done") or not g(s, "day") or g(s, "kind") in ("strength", "race", "rest"):
+            continue
+        r = INJ.condition_rule(events, dt.date.fromisoformat(str(g(s, "day"))[:10]))
+        if r is None:
+            continue
+        hit = False
+        sid = g(s, "id") or ""
+        tag = _COND_IDS.get(sid)
+        if tag is not None and INJ.avoids(r, tag):
+            hit = True
+            why = "；".join(r["notes"])
+            had_long = any(g(x, "kind") == "long" for x in ss if x is not s)
+            if sid == "tech" and not had_long:
+                # 基礎期: the 技術地形 session took the week's LSD — back to a flat long run
+                put(s, id="long", kind="long", title=_("LSD"), terrain="road", target="", source="",
+                    detail=_("{why}：改成平路或緩坡的長跑，輕鬆跑強度", why=why))
+            else:
+                n_easy += 1
+                put(s, id=f"easy{n_easy}", kind="easy", title=_("輕鬆跑"), terrain="road", target="", source="",
+                    detail=_("{why}：改成平路輕鬆跑，時間不變", why=why))
+            put(s, protocol=None, **{k: None for k in _VARIANT_KEYS})       # steps / climb / distance too
+        if g(s, "kind") == "easy" and INJ.avoids(r, "strides"):
+            t, d, src = g(s, "title") or "", g(s, "detail") or "", g(s, "source") or ""
+            for st in _STRIDES:
+                if st[0] in t:
+                    hit = True
+                    put(s, title=t.replace(st[0], ""), detail=d.replace(st[1], ""), source=src.replace(st[2], ""))
+                    break
+        if r["flat_long"] and g(s, "kind") == "long" and g(s, "terrain") != "road" \
+                and not (g(s, "detail") or "").startswith("平路或緩坡"):
+            hit = True
+            put(s, terrain="road", title=(g(s, "title") or "").replace("（山路）", ""), climb_m=None, distance_km=None,
+                detail=_("平路或緩坡（{why}）", why="；".join(r["notes"])) + "；" + (g(s, "detail") or "").split("；", 1)[-1])
+        if hit:
+            said.extend(x for x in r["notes"] if x not in said)
+    if notes is not None:
+        for t in said:
+            if not any(n.get("text") == t for n in notes):
+                notes.append({"level": "watch", "src": "injury_condition", "text": t})
+    return ss
+
+
+# ---- 疼痛燈號的課表反應 (SP-271; injuries.light) -------------------------------------------------------
+def light_apply(ss: list, lt: Optional[dict], today: dt.date, last_min: float, done_min: float,
+                notes: Optional[list] = None) -> list:
+    """The rest of the week (not-done sessions from `today`) under the injury light (SP-271), applied on
+    its own like every cut (plan-auto: reductions need no confirmation):
+      yellow  no interval / test (→ an easy run), the long run × YELLOW_LONG, and the remaining run
+              minutes ≤ last week's actual minus what is done this week (`last_min` − `done_min`; no cap
+              without a last week) — each run scaled down, one under 15 min dropped;
+      red     no run at all; strength / cross-training stay (「會痛的動作先不做」).
+    Green / None: `ss` unchanged (the condition's avoided sessions are condition_apply's)."""
+    from backend.engine import injuries as INJ
+    if not lt or lt.get("color") not in ("yellow", "red") or not ss:
+        return ss
+    is_d = isinstance(ss[0], dict)
+
+    def g(s, k):
+        return s.get(k) if is_d else getattr(s, k, None)
+
+    def put(s, **kw):
+        for k, v in kw.items():
+            if is_d:
+                s[k] = v
+            else:
+                setattr(s, k, v)
+
+    iso = today.isoformat()
+    todo = [s for s in ss if not g(s, "done") and g(s, "day") and str(g(s, "day"))[:10] >= iso
+            and g(s, "kind") in RUN_KINDS]
+    head = _("疼痛{light}（{label}）：{reason}", light=_(INJ.LIGHTS[lt["color"]]), label=lt["label"], reason=lt["reason"])
+    if lt["color"] == "red":
+        for s in ss:
+            if g(s, "kind") == "strength" and not g(s, "done"):
+                put(s, detail=(g(s, "detail") or "") + _("；會痛的動作先不做"))
+        if notes is not None:
+            notes.append({"level": "bad", "src": "injury_light",
+                          "text": head + _("。這週先不排跑步；交叉訓練和肌力照做，會痛的動作先不做")})
+            if (lt.get("walkrun") or {}).get("phase") == "red":
+                # SP-272: what starts the walk-run
+                notes.append({"level": "info", "src": "injury_light",
+                              "text": _("先能走 30 分鐘不痛再開始走跑交替：走完在活動上標「沒痛」或「痠」，"
+                                        "或在傷病紀錄按「可以開始走跑」（Ohio State Wexner 回跑指引，臨床機構）")})
+        return [s for s in ss if not any(s is t for t in todo)]
+    n_easy = sum(1 for x in ss if g(x, "kind") == "easy")
+    for s in todo:
+        m = int(g(s, "minutes") or 0)
+        if g(s, "kind") in ("quality", "test"):
+            n_easy += 1
+            put(s, id=f"easy{n_easy}", kind="easy", title=_("輕鬆跑"), target="", source="", terrain="road",
+                detail=_("疼痛黃燈：先不排間歇，改成輕鬆跑"), protocol=None, tss=round(float(g(s, "tss") or 0.0) * 0.8, 1),
+                **{k: None for k in _VARIANT_KEYS})
+        elif g(s, "kind") == "long" and m:
+            nm = int(m * INJ.YELLOW_LONG // 5 * 5)
+            put(s, minutes=nm, tss=round(float(g(s, "tss") or 0.0) * nm / m, 1),
+                detail=(g(s, "detail") or "") + _("；疼痛黃燈：長跑縮短一階（× {f:.2f}，推估）", f=INJ.YELLOW_LONG))
+    allowed = max(0.0, last_min - done_min) if last_min > 0 else None
+    tot = sum(int(g(s, "minutes") or 0) for s in todo)
+    gone: list = []
+    if allowed is not None and tot > allowed:
+        f = allowed / tot if tot else 0.0
+        for s in todo:
+            m = int(g(s, "minutes") or 0)
+            nm = int(m * f // 5 * 5)
+            if nm < 15:
+                gone.append(s)
+            else:
+                put(s, minutes=nm, tss=round(float(g(s, "tss") or 0.0) * nm / m, 1) if m else g(s, "tss"))
+    if notes is not None:
+        notes.append({"level": "watch", "src": "injury_light",
+                      "text": head + _("。本週剩下的課不加量（≤ 上週實際 {m:.0f} 分）、不排間歇和這種傷要避開的課、"
+                                       "長跑縮短一階（× {f:.2f}，推估）", m=last_min, f=INJ.YELLOW_LONG)})
+    return [s for s in ss if not any(s is t for t in gone)]
+
+
+# ---- 紅燈之後先走跑交替 (SP-272; injuries.return_state) --------------------------------------------------
+def walkrun_session(x: dict, day: str, rate: float = 60.0) -> dict:
+    """One walk-run session (injuries.walkrun_sessions row) as a plan session dict, with its steps."""
+    from backend.engine import injuries as INJ
+    need = INJ._need(x["stage"])
+    if x["walk"] > 0:
+        title = _("走跑交替：走 {w} 分／跑 {r} 分 × {n}（第 {s} 階 {k}/{need}）", w=x["walk"], r=x["run"], n=x["reps"],
+                  s=x["stage"] + 1, k=x["k"], need=need)
+    else:
+        title = _("連續輕鬆跑 {m} 分（走跑之後 {k}/{need}）", m=x["run"], k=x["k"], need=need)
+    run_share = x["run"] / float(x["walk"] + x["run"])
+    return {"id": f"walkrun{x['stage']}_{x['k']}", "kind": "easy", "title": title, "minutes": int(x["minutes"]),
+            "target": "", "terrain": "road", "day": day, "done": False, "done_by": None,
+            "detail": _("用舒服的強度跑，走路不設目標；跑步日之間至少休 1 天。這次標「痛」就重複這一階，標「中斷」先停跑；"
+                        "沒標記視同沒痛、照進度走。"),
+            "source": _("Ohio State Wexner 回跑指引（臨床機構）；每階 {n} 次、每次 {reps} 趟是推估",
+                        n=INJ.WALKRUN_PER_STAGE, reps=INJ.WALKRUN_REPS),
+            "tss": round(rate * x["minutes"] / 60.0 * (0.5 + 0.5 * run_share), 1),
+            "steps": INJ.walkrun_steps(x)}
+
+
+def _walkrun_block(ds, events: list, lt: dict, log: list) -> Optional[dict]:
+    """The Daniels block expected after the walk-run (SP-272), for the projection: the break = the last
+    run on / before the red day → the first walk-run run (done or planned); the block starts the day
+    after the last session still to come (≥ 6 days off only — reentry.plan)."""
+    from backend.engine import reentry as RE
+    rs = lt.get("walkrun") or {}
+    ep = (rs.get("episodes") or [None])[-1]
+    if not ep or not ep.get("red"):
+        return None
+    runs = sorted(m["date"] for m in log if m.get("cat") == "run" and m["date"] <= ep["red"])
+    left = lt.get("walkrun_left") or []
+    nxt = dt.date.fromisoformat(lt.get("walkrun_next") or rs.get("last_run") or ep["red"])
+    first = dt.date.fromisoformat(ep["first_run"]) if ep.get("first_run") else None
+    if not runs:
+        return None
+    last = dt.date.fromisoformat(runs[-1])
+    first = first or nxt
+    done = nxt + dt.timedelta(days=2 * (len(left) - 1)) if left else nxt - dt.timedelta(days=2)
+    days = (first - last).days - 1
+    if days < RE.MIN_BREAK:
+        return None
+    e = next((x for x in events if x.get("id") == lt.get("id")), None)
+    ph, pl = RE.prev_volume(ds, last)
+    _inj, step = RE._injuries(events, None)
+    return RE.plan(last, max(done, first) + dt.timedelta(days=1), prev_hours=ph, prev_long_min=pl, injury=e,
+                   step_up=step, days=days)
+
+
+def walkrun_apply(ss: list, lt: Optional[dict], today: dt.date, blocked=(), notes: Optional[list] = None,
+                  rate: float = 60.0, until: Optional[dt.date] = None) -> list:
+    """The rest of the week in the walk-run (SP-272): the not-done runs from `today` go, the stages' next
+    sessions take every other free day (a rest day between run days; never a 不排課日期), through
+    `until` (default the week's Sunday). Sets lt["walkrun_left"] (the sessions still to come) and
+    lt["walkrun_next"] (the first day they may take) for the projection. Strength stays."""
+    from backend.engine import injuries as INJ
+    if not lt or lt.get("color") != "walkrun" or not lt.get("walkrun"):
+        return ss
+    is_d = bool(ss) and isinstance(ss[0], dict)
+
+    def g(s, k):
+        return s.get(k) if is_d else getattr(s, k, None)
+
+    rs = lt["walkrun"]
+    iso = today.isoformat()
+    out = [s for s in ss if not (not g(s, "done") and g(s, "day") and str(g(s, "day"))[:10] >= iso
+                                 and g(s, "kind") in RUN_KINDS)]
+    ep = (rs.get("episodes") or [{}])[-1]
+    last = dt.date.fromisoformat(rs["last_run"]) if rs.get("last_run") else None
+    d = today if last is None else max(today, last + dt.timedelta(days=2 if ep.get("first_run") else 1))
+    end = until or (today - dt.timedelta(days=today.weekday()) + dt.timedelta(days=6))
+    left = INJ.walkrun_sessions(rs)
+    blocked = set(blocked or ())
+    while left and d <= end:
+        if d.isoformat() in blocked:
+            d += dt.timedelta(days=1)
+            continue
+        x = walkrun_session(left.pop(0), d.isoformat(), rate)
+        out.append(x if is_d else Session(**{k: v for k, v in x.items() if k in Session.__dataclass_fields__}))
+        d += dt.timedelta(days=2)
+    lt["walkrun_left"], lt["walkrun_next"] = left, d.isoformat()
+    if notes is not None:
+        st, need = min(rs["stage"], len(INJ.WALKRUN)), INJ._need(rs["stage"])
+        notes.append({"level": "watch", "src": "injury_light",
+                      "text": _("{label}：走跑階段（第 {s} 階，這階已完成 {n}/{need} 次）。走跑階段不算進恢復期："
+                                "連續跑 30 分 {c} 次之後才接恢復期（50%→75%）", label=lt["label"], s=st + 1, n=rs["n"],
+                                need=need, c=INJ.CONT_N)})
     return out
 
 

@@ -745,14 +745,14 @@ function renderEditor() {
 
 function painState(a) {
   const ps = S.detail && S.detail.workout === a.index ? S.detail.pain_state : null;
-  return { pain: a.pain ?? null, pain_area: a.pain_area ?? null, injury: ps?.injury || null, reentry: ps?.reentry || null };
+  return { pain: a.pain ?? null, pain_area: a.pain_area ?? null, pain_score: a.pain_score ?? null, injury: ps?.injury || null, reentry: ps?.reentry || null };
 }
 function patchLocal(a, r) {
   // r: the single-activity JSON (PATCH /workouts/{i}/activity)
   if ("activity_type_overridden" in r) a.user_type = r.activity_type_overridden ? r.activity_type : null;
   if ("effort_overridden" in r) a.user_effort = r.effort_overridden ? r.effort : null;
   for (const k of ["note", "name", "tags"]) if (k in r) a[k] = r[k];
-  if (r.pain_state) { a.pain = r.pain_state.pain; a.pain_area = r.pain_state.pain_area; a.injury_id = r.pain_state.injury?.id ?? null; }
+  if (r.pain_state) { a.pain = r.pain_state.pain; a.pain_area = r.pain_state.pain_area; a.pain_score = r.pain_state.pain_score ?? null; a.injury_id = r.pain_state.injury?.id ?? null; }
 }
 // every edit is a mark in the app's own data (activity_tags, keyed by start time; the pack in
 // racepower_hike_meta.json) — the FIT / TP / WKO5 files are never written
@@ -772,8 +772,9 @@ async function saveFields(a, patch) {
       for (const k of ["note", "name", "tags"]) if (k in patch) a[k] = k === "name" ? (patch.name || "").trim() || null : patch[k];
       if ("poles" in patch) a.tags = withPoles(a.tags, patch.poles);
       if ("surface" in patch) a.tags = withSurface(a.tags, patch.surface);
-      if ("pain" in patch) { a.pain = patch.pain; if (!(patch.pain >= 1)) a.pain_area = null; }
+      if ("pain" in patch) { a.pain = patch.pain; if (!(patch.pain >= 1)) a.pain_area = null; if (patch.pain == null) a.pain_score = null; }
       if ("pain_area" in patch) a.pain_area = patch.pain_area;
+      if ("pain_score" in patch) a.pain_score = patch.pain_score;
     }
     if ("tags" in patch) fillFilterOptions();
     if ("poles" in patch) bumpPoleCount(a, poleWas || null, polesOf(a) || null);   // the marks shown, before / after

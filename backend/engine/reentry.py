@@ -329,6 +329,7 @@ def find_all(ds, today: dt.date, blackouts=(), horizon_days: int = 182, injuries
         if (ret - today).days <= 7 * 26 and (today - ret).days <= horizon_days and off(last, ret)[0] >= MIN_BREAK:
             cands.append((last, ret, True, False))
     out = []
+    logs: dict = {}
     for last, ret, planned, ongoing in sorted(set(cands), key=lambda c: c[1]):
         ph, pl = prev_volume(ds, last)
         inj = INJ.overlapping(injuries, last + dt.timedelta(days=1), ret - dt.timedelta(days=1), today) \
@@ -336,11 +337,39 @@ def find_all(ds, today: dt.date, blackouts=(), horizon_days: int = 182, injuries
         ill = INJ.overlapping(injuries, last + dt.timedelta(days=1), ret - dt.timedelta(days=1), today, "illness") \
             if injuries else None
         n, t = off(last, ret)
-        p = plan(last, ret, _cross(ds, last + dt.timedelta(days=1), ret - dt.timedelta(days=1)), planned, ph, pl,
-                 ongoing, injury=inj, step_up=step_up, days=n if t else None, transition_days=t, illness=ill)
+        start = ret
+        ep = _walkrun_episode(ds, inj, last, ret, today, logs) if inj is not None and not planned else None
+        if ep is not None:
+            if ep.get("done"):
+                # SP-272: the walk-run stages are not block days — the block starts after the last continuous 30
+                start = dt.date.fromisoformat(ep["done"]) + dt.timedelta(days=1)
+            elif INJ.is_open(inj):
+                continue                    # still red, or in the walk-run: no block yet
+        p = plan(last, start, _cross(ds, last + dt.timedelta(days=1), ret - dt.timedelta(days=1)), planned, ph, pl,
+                 ongoing, injury=inj, step_up=step_up, days=n if t or start != ret else None, transition_days=t,
+                 illness=ill)
+        if p is not None and start != ret:
+            p["walkrun"] = {"red": ep["red"], "start": ep["start"], "first_run": ep.get("first_run"), "done": ep["done"]}
         if p is not None:
             out.append(p)
     return out
+
+
+def _walkrun_episode(ds, inj: dict, last: dt.date, ret: dt.date, today: dt.date, logs: dict) -> Optional[dict]:
+    """The walk-run episode (injuries.return_state, SP-272) of `inj` that turned red between the break's
+    last run and its first run back; None without one (never red, an illness, no data)."""
+    from backend.engine import injuries as INJ
+    try:
+        if inj.get("id") not in logs:
+            o = dt.date.fromisoformat(str(inj.get("onset_date"))[:10])
+            logs[inj.get("id")] = INJ.return_state(inj, INJ.foot_log(ds, None, o), today)
+        st = logs[inj.get("id")]
+    except Exception:                       # noqa: BLE001 — re-entry must still work
+        return None
+    for ep in (st or {}).get("episodes") or ():
+        if last.isoformat() <= ep["red"] <= ret.isoformat():
+            return ep
+    return None
 
 
 def planned_ahead(blackouts, after: dt.date, prev_hours: Optional[float], prev_long_min: Optional[float]) -> list[dict]:
