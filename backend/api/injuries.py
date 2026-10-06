@@ -46,7 +46,7 @@ def _not_demo():
 router = APIRouter(prefix="/api/v1/wko5/injuries", tags=["injuries"], dependencies=[Depends(_not_demo)])
 
 EDITABLE = ("area", "side", "kind", "severity", "pain_max", "onset_date", "onset_key", "onset_file", "status",
-            "resolved_date", "days_missed", "pause_quality", "note", "category", "illness")
+            "resolved_date", "days_missed", "pause_quality", "note", "category", "illness", "condition")
 
 
 def _row_dict(e: InjuryEvent) -> dict:
@@ -132,7 +132,17 @@ async def meta(db: AsyncSession = Depends(get_db)):
             "sides": INJ.SIDES, "no_side": list(INJ.NO_SIDE), "kinds": INJ.KINDS, "severities": INJ.SEVERITIES,
             "severity_help": INJ.SEVERITY_HELP, "statuses": INJ.STATUSES, "pain": INJ.PAIN,
             "settings": await _settings(db), "pattern_min_n": INJ.PATTERN_MIN_N,
-            "disclaimer": INJ.DISCLAIMER, "monitor": INJ.SILBERNAGEL["text"],
+            "disclaimer": _(INJ.DISCLAIMER), "monitor": INJ.monitor(None)["text"],
+            # 傷別 (SP-269): optional, each tied to one area ("other": any); the pain-monitoring text of each
+            "conditions": {k: _(v) for k, v in INJ.CONDITIONS.items()},
+            "condition_help": {k: _(v) for k, v in INJ.CONDITION_HELP.items()},
+            "condition_area": INJ.CONDITION_AREA,
+            "condition_monitor": {k: INJ.monitor({"condition": k})["text"] for k in INJ.CONDITIONS},
+            "shin_note": _(INJ.SHIN_NOTE),
+            "labels": {"condition": _("傷別（選填）"), "condition_none": _("不選"),
+                       "condition_hint": _("如果醫師或物理治療師說是哪一種傷就選；app 不診斷。")},
+            "errors": {"CONDITION_AREA_MISMATCH": _("傷別和部位對不上（例如膝前痛的部位要是膝）"),
+                       "INVALID_CONDITION": _("傷別不對")},
             # 生病 (SP-117): two types, the examples help pick one
             "categories": {k: _(v) for k, v in INJ.CATEGORIES.items()},
             "illness": {k: _(v) for k, v in INJ.ILLNESS.items()},
@@ -219,10 +229,28 @@ def _clean_body(body: dict, partial: bool) -> dict:
         # 生病 (SP-117): no body area, side, severity or pain; the type is required
         if not partial and not f.get("illness"):
             raise HTTPException(400, "INVALID_ILLNESS")
-        f.update(area=INJ.UNKNOWN, side=None, kind="overuse", severity="mild", pain_max=None, pause_quality=False)
+        f.update(area=INJ.UNKNOWN, side=None, kind="overuse", severity="mild", pain_max=None, pause_quality=False,
+                 condition=None)
     elif f.get("category") == "injury":
         f["illness"] = None
     return f
+
+
+def _fit_condition(f: dict, e: Optional[InjuryEvent]) -> None:
+    """傷別 (SP-269) against the area (the stored one when the body leaves it out): an unknown area takes
+    the condition's own; another fixed / custom area → 400 CONDITION_AREA_MISMATCH. An illness has none."""
+    cat = f.get("category", getattr(e, "category", None) or "injury")
+    if cat == "illness":
+        f["condition"] = None
+        return
+    cond = f.get("condition", getattr(e, "condition", None))
+    area = f.get("area", getattr(e, "area", None))
+    if cond not in (None, "other") and area in (None, INJ.UNKNOWN):
+        f["area"] = INJ.CONDITION_AREA[cond]
+        return
+    err = INJ.check_condition(area, cond)
+    if err:
+        raise HTTPException(400, err)
 
 
 async def _onset_activity(f: dict, e: Optional[InjuryEvent]) -> None:
@@ -254,6 +282,7 @@ async def _onset_activity(f: dict, e: Optional[InjuryEvent]) -> None:
 @router.post("")
 async def create_injury(body: dict = Body(...), db: AsyncSession = Depends(get_db)):
     f = _clean_body(body or {}, partial=False)
+    _fit_condition(f, None)
     err = INJ.check_dates(f.get("onset_date"), f.get("resolved_date"))
     if err:
         raise HTTPException(400, err)
@@ -282,6 +311,7 @@ async def create_injury(body: dict = Body(...), db: AsyncSession = Depends(get_d
 async def patch_injury(eid: int, body: dict = Body(...), db: AsyncSession = Depends(get_db)):
     e = await _get(db, eid)
     f = _clean_body(body or {}, partial=True)
+    _fit_condition(f, e)
     onset = f.get("onset_date", e.onset_date)
     if f.get("status") == "resolved" and not f.get("resolved_date", e.resolved_date):
         f["resolved_date"] = today_local().isoformat()

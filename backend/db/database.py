@@ -166,6 +166,7 @@ async def _migrate_schema():
         ("activity_tags", "pain_area", "TEXT"),
         ("activity_tags", "injury_id", "INTEGER"),
         ("injury_events", "category", "TEXT DEFAULT 'injury'"),   # 生病 in the 傷病紀錄 (SP-117)
+        ("injury_events", "condition", "TEXT"),                   # 傷別 (SP-269); NULL = not chosen
         ("injury_events", "illness", "TEXT"),
         ("coros_plan_push", "provider", "TEXT DEFAULT 'coros'"),   # sync/workout_targets
     ]

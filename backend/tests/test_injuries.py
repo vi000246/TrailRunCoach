@@ -545,7 +545,8 @@ def test_suggestion_rows():
     rp = {"return": "2026-09-20", "end": "2026-10-04"}
     marks = [{"date": "2026-09-26", "pain": 2, "area": "knee"}]
     hold = SG.injury_rows([], "2026-09-28", set(), rp, marks)
-    assert hold[0]["type"] == "injury_hold" and hold[0]["pick"] is None and "Silbernagel 2007" in hold[0]["help"]
+    # SP-269: no condition → the general return-to-run rules, not Silbernagel's 5/10 (test_injury_condition.py)
+    assert hold[0]["type"] == "injury_hold" and hold[0]["pick"] is None and "不能越跑越痛" in hold[0]["help"]
 
 
 def test_silbernagel_numbers_are_the_papers():
