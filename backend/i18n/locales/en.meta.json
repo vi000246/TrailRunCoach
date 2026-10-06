@@ -1063,6 +1063,10 @@
     "draft": false,
     "src": "backend/engine/specific_phase.py:669"
   },
+  "。比賽最難那天是你 {m} 個月內最大單日的 {x:.1f} 倍": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:572"
+  },
   "。沒有算停留：在賽事計算機的補給站填停留分鐘，或累積 2 場以上的越野比賽紀錄，就會算進來": {
     "draft": true,
     "src": "backend/engine/race_feasibility.py:431"
@@ -1070,6 +1074,10 @@
   "。用賽事計算機的努力目標 {p:.0%}": {
     "draft": true,
     "src": "backend/engine/race_feasibility.py:434"
+  },
+  "。級數只高一級，但距離和爬升是兩倍以上，建議先有一次 ≥ 比賽 {p:.0f} % 的長天（{p:.0f} % 是推估）": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:574"
   },
   "「{a}」和「{b}」只隔 {n} 天：硬課之間建議隔 ≥ 2 天，可以再拖動調整": {
     "draft": true,

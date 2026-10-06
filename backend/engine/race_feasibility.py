@@ -101,6 +101,11 @@ STEP_MONTHS = 24             # UTMB Index FAQ: valid with a race of the category
                              # Hardrock 100: qualifiers within 2 years (runner-progression.md [P5][P7], SP-282)
 STEP_OVER = 2                # classes up → over: UTMB Finals take an index one category below at most [P6];
                              # 2 ITRA classes ≈ 1 UTMB category (推估, runner-progression.md §2.1)
+# SP-283: the EP multiple (race's hardest day ÷ your biggest day) is SHOWN, never judged (owner 2026-10-06).
+# The classes' widths are uneven (runner-progression.md §4: two up can be ×1.36, one up ×3.0), so one
+# class up at ≥ STEP_RATIO_WARN times adds a reminder. No study gives a safe multiple (§4) — 推估.
+STEP_RATIO_WARN = 2.0
+STEP_LONG_SHARE = 0.70       # 推估 (SP-283): a long day of ≥ 70 % of the race first — the same 七成 as LONG_TIGHT
 # ITRA's race classes by EP (km-effort; race-feasibility.md §2.4, run-motion's copy of ITRA)
 ITRA_CLASSES = (("XXS", 0.0), ("XS", 25.0), ("S", 45.0), ("M", 75.0), ("L", 115.0), ("XL", 155.0), ("XXL", 210.0))
 LONG_DAY_H = 6.0             # planning.LONG_EVENT_HOURS: a longer / shorter event for UA's rule
@@ -561,8 +566,15 @@ def assess(e, line: Optional[dict], today: dt.date, hist: list[dict], summit: Op
                     date=d.isoformat() if hasattr(d, "isoformat") else str(d), r=hd_ep, race=ITRA_CLASSES[rc][0])
             txt += (_("：高 {n} 級，跳太多了", n=up) if lv == "over" else
                     _("：高一級，可以") if up == 1 else _("：同級或更低"))
+            # SP-283: the multiple, shown only — the level stays the classes' (owner 2026-10-06)
+            mult = hd_ep / best["ep"] if best["ep"] > 0 else None
+            if mult is not None:
+                txt += _("。比賽最難那天是你 {m} 個月內最大單日的 {x:.1f} 倍", m=STEP_MONTHS, x=mult)
+                if up == 1 and mult >= STEP_RATIO_WARN:
+                    txt += _("。級數只高一級，但距離和爬升是兩倍以上，建議先有一次 ≥ 比賽 {p:.0f} % 的長天（{p:.0f} % 是推估）",
+                             p=STEP_LONG_SHARE * 100)
             check("step", lv, txt, race_class=ITRA_CLASSES[rc][0], best_class=ITRA_CLASSES[mc][0], up=up,
-                  best_ep=round(best["ep"], 1))
+                  best_ep=round(best["ep"], 1), ep_ratio=None if mult is None else round(mult, 2))
             if lv == "over":
                 out["suggestions"].insert(0, _("先跑一場低一級（{cls}）的比賽，或把這場改成 B／C 賽",
                                                cls=ITRA_CLASSES[max(0, rc - 1)][0]))
