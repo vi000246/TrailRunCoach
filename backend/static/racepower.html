@@ -1521,7 +1521,7 @@ function fmtRow(r, m, plain = false) {
 }
 function rowTip(r) {
   const hike = PLAN.type === "baiyue";
-  const lines = [`<b>${r.mark} ${esc(r.label)}</b>${r.walk ? ` <span class="badge watch">${esc(T("walk"))}</span>` : ""}`,
+  const lines = [`<b>${r.mark} ${esc(r.label)}</b>${r.walk ? ` <span class="badge watch">${esc(T("walk"))}</span>` : r.gait === "either" ? ` <span class="badge">${esc(T("gait.either"))}</span>` : ""}`,
     `${f1(r.start_km)}–${f1(r.end_km)} km · ${f1((r.grade || 0) * 100)}% · ↑${n0(r.gain_m)} ↓${n0(r.loss_m)} m`,
     `${T("m.pace")} ${fmtRow(r, "pace")}${hike ? "" : ` · ${T("m.power")} ${fmtRow(r, "power", true)}`} · ${T("m.hr")} ${fmtRow(r, "hr", true)}`,
     `${T("split")} ${dur(r.t)} · ${T("cum")} ${dur(r.cum_s)}${r.eta ? " · ETA " + esc(r.eta) : ""}${ok(r.temp_c) ? ` · ${f1(r.temp_c)} °C` : ""}`];
@@ -1718,7 +1718,7 @@ function renderSegCompact() {
   for (const r of R) {
     h += `<tr data-row="${r.i}" class="${SEL.has(r.i) ? "hl" : ""}" title="${esc(r.label)}${r.hr_cap_src ? " · " + esc(T("hrcap")) + "：" + esc(r.hr_cap_src) : ""}">
       <td>${r.mark}${hike && r.day ? ` <span class="faint">D${r.day}</span>` : ""}</td><td class="n">${f1(r.start_km)}–${f1(r.end_km)}</td>
-      <td class="n ${r.walk ? "walk" : ""}">${f1((r.grade || 0) * 100)}%${r.walk ? " " + esc(T("walk")) : ""}</td>${td("pace", r)}${hike ? "" : td("power", r)}${td("hr", r)}
+      <td class="n ${r.walk ? "walk" : ""}">${f1((r.grade || 0) * 100)}%${r.walk ? " " + esc(T("walk")) : r.gait === "either" ? " " + esc(T("gait.either")) : ""}</td>${td("pace", r)}${hike ? "" : td("power", r)}${td("hr", r)}
       <td class="n">${dur(r.t)}</td><td class="n">${dur(r.cum_s)}${r.eta ? ` <span class="faint">${esc(r.eta)}</span>` : ""}</td>
       <td class="fuel">${r.basis === "safe" ? `🛡️ ${esc(T("safe_short"))}${r.fuel ? "；" : ""}` : ""}${esc(r.fuel || "")}</td></tr>`;
   }
