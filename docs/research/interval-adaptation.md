@@ -1,6 +1,6 @@
 # 間歇適應：怎麼判斷練起來了、下一堂怎麼排
 
-> 狀態：研究＋設計提案（2026-10-01），尚未實作。2026-10-05 補查中文來源、Gerschler 規則、HRR 雜訊（§1.1、§1.2、§3 開頭、§3.1、§4.3）。2026-10-05 補查（功率）：用功率判斷適應、W′bal、同堂掉幅、功率 vs 心率（§0 第 6 點、§3.6、§4.3）。
+> 狀態：研究＋設計提案（2026-10-01），尚未實作。2026-10-05 補查中文來源、Gerschler 規則、HRR 雜訊（§1.1、§1.2、§3 開頭、§3.1、§4.3）。2026-10-05 補查（功率）：用功率判斷適應、W′bal、同堂掉幅、功率 vs 心率（§0 第 6 點、§3.6、§4.3）。2026-10-06 再查：Gerschler「90 秒」的出處、`HR_DROP_MIN = 20` 的來源（§3.1、§4.3），兩者都還是沒有一手出處。
 > 範圍：間歇適應的指標、什麼時候該進階／什麼時候是「還沒準備好」、組休與每趟時間怎麼定，以及 app 怎麼自動排間歇、自動檢討每一堂。
 > 標記：每個門檻都標來源；**推估** = 我們自己定的；**未找到來源** = 找過但沒找到；**未驗證** = 有引用但沒讀到原文。
 
@@ -258,6 +258,7 @@
 - 小結：
   - 「工作到約 180、休到約 120 再跑」有多個二手來源一致。
   - 「90 秒內回到 120–125，回不來＝跑太快或太長」只有 Magness 部落格一個來源，沒附出處：**未驗證**。
+    - 2026-10-06 再查：多找到一個二手來源 Boot Camp & Military Fitness Institute〈What is Interval Training: Part 03〉（「From this point they allowed 90 seconds to return to 120-125 bpm and then the next interval could commence」，全文），一樣**沒有附出處**、沒有日期。兩個二手來源都沒有一手出處，仍是**未驗證**。
   - 德文辭典給的是 120–140 的範圍，不是單一的 120。
   - 這是**決定組休長度**和**課中停止**的規則，不是「適應了就加趟」的規則。
   - 120 bpm 是絕對值，沒有依個人最大心率或閾值調整；Rushall 和王順正都指出越後面的趟，回到同一心率要越久。
@@ -608,6 +609,12 @@
 - `fade < −5%` 改成上面的 `first_miss` 判斷。
 - `interval_lines` 的「休息 60 秒心率降幅 < 20 → 休息拉長」（`HR_DROP_MIN = 20`；`done-workout-review.plan.md:87` 沒標來源，本次也**未找到來源**），改成顯示 `aet60` 與 `t_to_aet`。
   - 2026-10-05 補查：還是**未找到來源**。最接近的是 Don1Don（王志袁）「恢復時間比工作時間長就停」和 Gerschler「90 秒回不到 120 就是跑太快或太長」（**未驗證**），兩者都是看「多久回到某個心率」，不是看「60 秒降了幾下」。
+  - 2026-10-06 再查（SP-107 #4 續）：「60 秒降幾下」的數字門檻只出現在**臨床的運動後心率恢復**，不是間歇的組休：
+    - Cole 1999（NEJM）：運動負荷測試後第 1 分鐘降 ≤ 12 bpm＝異常，死亡風險較高（**摘要**，經搜尋結果與 JoiiUp 陳立洋 2017 轉述）。
+    - Watanabe 2001（Circulation）：≤ 18 bpm 一組的死亡率較高；Jouven 2005（NEJM）：< 25 bpm 對 > 40 bpm 的猝死相對風險 2.2（**二手**，JoiiUp 陳立洋 2017 轉述，原文未讀）。
+    - Cleveland Clinic（2022-07-18 更新）：「Good HRR after one minute of rest: 18 beats or higher」，同時說「there isn't one magic number for everyone」（全文）。
+    - 這些都是**最大或接近最大的運動結束後、整堂課只量一次**，對象是一般人或心臟病人；用來篩風險，不是用來決定組休。JoiiUp 那篇也寫明是「運動剛結束的 1-2 分鐘內」。
+  - 結論：20 bpm 和臨床的 12／18 bpm 是同一個量級，**推測**是從這類「運動後一分鐘心率恢復」的大眾說法搬過來的，但沒有任何來源把它用在組休。在間歇裡它還有兩個問題（**推估**）：一趟的峰值心率越低，能降的幅度本來就越小（短趟、Zone 3 課很難降 20 下）；越後面的趟回得越慢（Rushall 2015、王順正）。所以仍判**未找到來源**，維持本節的建議：不再用「降幅 < 20」下結論，改成顯示 `aet60`／`t_to_aet`。這是對現行程式的建議，開單建議見 SP-107。
 
 ### 4.4 (d) 有的資料 vs 缺的資料
 
@@ -674,6 +681,13 @@
 - schwimmlexikon.de「Intervallmethode」（全文）
 - Billat LV. 2001. Interval training for performance: Part I. Sports Med 31(1).（作者網站 publications.billatraining.com PDF，全文）
 - Reindell & Roskamm 1959；Reindell, Roskamm & Gerschler 1962（原書未核對）
+- Boot Camp & Military Fitness Institute. What is Interval Training: Part 03（未註明日期；沒有附出處）. https://bootcampmilitaryfitnessinstitute.com/run/what-is-interval-training/what-is-interval-training-part-03/ （2026-10-06 補查，全文）
+
+**運動後一分鐘心率恢復的臨床門檻（2026-10-06 補查，只用來說明 `HR_DROP_MIN = 20` 找不到訓練端來源）：**
+- Cole CR, Blackstone EH, Pashkow FJ, Snader CE, Lauer MS. Heart-rate recovery immediately after exercise as a predictor of mortality. N Engl J Med 1999;341:1351–1357.（摘要，原文未讀）
+- Watanabe 2001（Circulation）、Jouven 2005（NEJM）：只經下一筆轉述，原文未讀
+- 陳立洋〈評量你心肺功能的利器－心跳恢復率〉JoiiUp，2017-08-02. https://www.joiiup.com/knowledge/content/1126 （全文）
+- Cleveland Clinic. Heart Rate Recovery: What It Is and How to Calculate It（2022-07-18 更新）. https://my.clevelandclinic.org/health/articles/23490-heart-rate-recovery （全文）
 
 **WKO 研討會（中文逐字整理，冒號後是行號）：**
 - 研討會 Building intervals th WKO5 way（BI）
