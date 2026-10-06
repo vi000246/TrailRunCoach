@@ -39,6 +39,7 @@ from backend.engine import quality_gate as QG
 from backend.engine import rest_days as RD
 from backend.engine.hr_profile import below, easy_cap_label, easy_cap_measured
 from backend.engine.zones import WORKOUT_TARGETS
+from backend.i18n import _
 
 MAX_WEEKS = 8                 # never schedule further ahead than this
 MODE_LABELS = {"base": "基礎期", "specific": "專項期", "taper": "減量期", "event": "比賽週",
@@ -538,6 +539,13 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
     blocks = ([cur["reentry"]] if cur.get("reentry") else []) + RE.planned_ahead(
         blackouts or (), monday + dt.timedelta(days=6),
         (sum(hist[-5:-1]) / 4.0) if len(hist) >= 5 else (hist[-1] if hist else None), longest)
+    # 紅燈之後先走跑交替 (SP-272, week_plan's injury_light "walkrun"): the stages still to come take the next
+    # weeks' runs, then the Daniels block expected after them
+    wr = cur.get("injury_light") if (cur.get("injury_light") or {}).get("color") == "walkrun" else None
+    wr_left = list((wr or {}).get("walkrun_left") or [])
+    wr_next = (wr or {}).get("walkrun_next")
+    if (wr or {}).get("block"):
+        blocks.append(wr["block"])
     cb = cur.get("b2b") or {}
     b2b_state = B2B.next_state(cb, monday, cur_s)          # 連續兩天長天 (engine/b2b.py)
     lc_cur = cur.get("steep_hill") or {}                    # 陡坡健走（模擬負重） (engine/steep_hill.py)
@@ -549,6 +557,11 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
     a_evs = events if events is not None else cur.get("a_races") or []
     from backend.engine import technical as TECH
     user_rows = TECH.load_user()                             # the user's own RPE sessions (SP-74)
+    from backend.engine import injuries as INJ
+    try:                                                     # 依傷別迴避課型 (SP-270): the open 傷別 events
+        inj_events = INJ.load_events()
+    except Exception:                                        # noqa: BLE001 — never breaks the projection
+        inj_events = []
     # 減量期 (SP-96): this week's taper context and pre-taper level (week_plan), the run count of the
     # last projected week before a taper, its hours (the share the climb follows)
     cur_t = cur.get("taper") or {}
@@ -557,6 +570,7 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
     week = monday + dt.timedelta(weeks=1)
     while week <= until:
         kind = phase_kind(phases, week)
+        inj_rule = INJ.condition_week(inj_events, week) if inj_events else None     # SP-270
         tc = O.taper_context(phases, events, week) if events is not None else None
         same = bool(tc and cur_t.get("id") == tc["id"])
         if kind == "taper" and not same and pre_h is None:
@@ -687,8 +701,9 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
                             rate=(cur.get("tss_per_category") or {}).get("trail") or 60.0, notes=notes)
                 SP.walk_targets(ss, th.get("walk_cap"), th.get("aet"), th_meas)   # SP-115, as week_plan
                 STP.refresh(ss, STP.week_context(a_evs, phases, week, kind, prefs))   # SP-119 × ME, as week_plan
-                SP.apply_climb(ss, sp_info, aet=th.get("aet"), prefs=prefs, b2b=(b2b or {}).get("info"), notes=notes,
-                               rates=cur.get("tss_per_category"), aet_measured=th_meas)
+                if not INJ.avoids(inj_rule, "climb"):            # SP-270, as week_plan
+                    SP.apply_climb(ss, sp_info, aet=th.get("aet"), prefs=prefs, b2b=(b2b or {}).get("info"),
+                                   notes=notes, rates=cur.get("tss_per_category"), aet_measured=th_meas)
             except Exception:              # noqa: BLE001 — never breaks the projection
                 pass
         b2b_info = (b2b or {}).get("info") or {}
@@ -701,7 +716,7 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
         if lc_cur.get("active"):
             # 陡坡健走（模擬負重） (engine/steep_hill.py): one weekday steep walk in the 專項期
             try:
-                lc_info = SH.projected_context(kind, mode, week, lc_cur)
+                lc_info = SH.projected_context(kind, mode, week, lc_cur, injury=inj_rule)
                 SH.apply(ss, lc_info, aet=th.get("aet"), prefs=prefs, b2b=b2b_info, notes=notes,
                          rates=cur.get("tss_per_category"), aet_measured=th_meas, walk=th.get("walk_cap"))
             except Exception:              # noqa: BLE001 — never breaks the projection
@@ -721,14 +736,15 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
                 heat_w = None
         # 下坡課 (engine/downhill.py, SP-99): the same countdown rule as week_plan
         from backend.engine import downhill as DH
-        dh = DH.week_context(kind=kind, mode=mode, monday=week, events=events, phases=phases, road=road)
+        dh = DH.week_context(kind=kind, mode=mode, monday=week, events=events, phases=phases, road=road,
+                             injury=inj_rule)
         if dh.get("active"):
             try:
                 DH.apply(ss, dh, prefs=prefs, rates=cur.get("tss_per_category"), notes=notes, b2b=b2b_info)
             except Exception:              # noqa: BLE001 — never breaks the projection
                 dh = {"active": False}
         # 技術地形課 (engine/technical.py, SP-74): the same rule as week_plan, per projected week
-        tech = TECH.week_context(kind=kind, mode=mode, monday=week, road=road, b2b=b2b_info)
+        tech = TECH.week_context(kind=kind, mode=mode, monday=week, road=road, b2b=b2b_info, injury=inj_rule)
         if tech.get("active"):
             try:
                 TECH.apply(ss, tech, hours=hours, rates=cur.get("tss_per_category"), prefs=prefs, notes=notes,
@@ -746,6 +762,24 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
         ss = PR_.bc_apply(ss, events or (), week, notes, blocked=set(bmap),
                           rate=float((cur.get("tss_per_category") or {}).get("trail") or tph))
         notes.extend(PR_.b_hints(events or (), week, phases=phases))     # SP-280: the planned 減量期
+        # 依傷別迴避課型 (SP-270): the same pass as week_plan (overview.condition_apply)
+        if inj_rule is not None:
+            ss = O.condition_apply(ss, inj_events, notes)
+        if wr_left:
+            # SP-272: this week's walk-run sessions instead of its runs (strength stays)
+            first = max(week, _d(wr_next)) if wr_next else week
+            ss = [s for s in ss if s["kind"] not in O.RUN_KINDS]
+            d = first
+            while wr_left and d <= week + dt.timedelta(days=6):
+                if d.isoformat() in bmap:
+                    d += dt.timedelta(days=1)
+                    continue
+                ss.append(O.walkrun_session(wr_left.pop(0), d.isoformat(),
+                                            float((cur.get("tss_per_category") or {}).get("road") or tph)))
+                d += dt.timedelta(days=2)
+            wr_next = d.isoformat()
+            notes.append({"level": "watch", "src": "injury_light",
+                          "text": _("走跑階段：照進度排走跑交替；連續跑 30 分 3 次之後才接恢復期")})
         if tc and kind == "taper":
             n = O.taper_climb_note(tc, cur_t.get("pre_climb") if same else cur.get("climb4"),
                                    hours / (cur_t.get("pre_hours") if same else pre_h)

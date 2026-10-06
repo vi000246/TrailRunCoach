@@ -445,6 +445,31 @@ ramp guard skips it.
 is the next category's (6–13 → 14, 14–28 → 29, 29–56 → 57 days; `reentry.STEP_UP_MIN`, 推估:
 the tissue has to re-adapt too); FVDOT stays the real break's.
 
+**傷別、疼痛燈號、走跑、提議好了** (SP-269–273, 2026-10-06; `docs/research/injury-graded-return.md` §4.6,
+§6.1). All only cut — `load_guard` is untouched; edited / custom sessions are left alone by reconcile as
+always, and the change log / undo cover them like any generated change.
+
+- **傷別** (`injury_events.condition`, optional: 跟腱 / 足底筋膜 / 髂脛束 / 膝前痛 / 其他, each tied to one
+  area; `injuries.monitor`): the pain-monitoring text — 跟腱 Silbernagel 2007, 膝前痛 Esculier 2016
+  (≤ 2/10, back within 60 min), the rest and none = the general rules (Ohio State Wexner).
+- **Avoided session types** (`injuries.condition_rule` / `condition_week`, `overview.condition_apply`;
+  week_plan and the projection): while 膝前痛 / 髂脛束 is open no downhill session, 技術地形 or 長爬坡反覆
+  and the trail long run goes flat; while 跟腱 is open no 長爬坡反覆 / ME, 陡坡健走 or strides (推估). The
+  downhill / technical / steep_hill `week_context` ask the rule; what is left becomes a flat easy run of
+  the same minutes. The rule ends the day the event resolves.
+- **Pain light** (`activity_tags.pain_score` 0–10; `injuries.light`, `overview.light_apply`; this week
+  only): green / yellow / red from the last marked run (limits 跟腱 5, 膝前痛 2, others relative; +2 =
+  yellow; 中斷, ≥ 7, two yellows or severity 重 = red). Yellow (applied on its own — a reduction): no
+  interval, long run × 0.75, the rest of the week ≤ last week's actual minutes. Red: no run, strength
+  kept; the box offers 不排課日期 (`injury_rest`).
+- **Walk-run** (`injuries.return_state`, `overview.walkrun_apply`; projection carries the rest): after
+  red, a ≥ 30-min walk marked 沒痛／痠 or 「可以開始走跑」 (`injury_events.walkrun_from`) starts walk 4/run 1 →
+  1/4 (3 each) and 30 min × 3, every other day; 痛 repeats, 中斷 = red again. `reentry.find_all` starts the
+  Daniels block the day after the last continuous 30; no block while still red / in the stages.
+- **「好了」 proposed** (`injuries.done_check`, suggestion `injury_done`): last 7 days ≥ 75 % of the 4
+  weeks before the onset and the last 3 runs 沒痛／痠 over ≥ 14 days; 「好了」 resolves it today, 「還沒」
+  hides it 7 days. Never automatic.
+
 ## Big changes (held for approval; thresholds 推估)
 
 - A week's planned TSS rises more than 20 % above the stored (last pushed) version.
@@ -608,6 +633,7 @@ overview has `data-log="none"`. The settings are in 課表偏好 (above).
 
 | Date | Type | Feature SRS | Summary |
 |------|------|-------------|---------|
+| 2026-10-06 | feature | SP-269–273 | 傷別 + per-condition pain text; avoided session types by condition; pain light (yellow / red reactions); walk-run after red before the re-entry block; 「好了」 proposed in the box |
 | 2026-10-04 | code-sync | N/A | Domain Model; CP-change re-zone / re-push; push provider + auto push / notify defaults; settings moved to 課表偏好, collapsible log; plan_match / match_only; corrected ladder (T1–T3, V1–V4, T+); TIZ / user-structure judging; heat bands in the gates; injury pause and 傷停 step-up; B2B TSB exception; unplanned hard runs space adapt |
 | 2026-10-04 | feature | SP-74 | Known limits for the generated 技術地形 session (adapt's hard-day checks by kind; the hook after it is done) |
 | 2026-10-04 | feature | SP-73 | The automatic run sees the 轉換期 after an A race (`plan.prefs.transition_weeks`, `planning.phases`); entering / leaving it is a held phase change |

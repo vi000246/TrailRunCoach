@@ -118,7 +118,8 @@ def simulated(pct: float, grade: float = BASE_GRADE, kmh: float = BASE_KMH) -> d
 
 
 def week_context(*, kind: str, mode: str, monday: dt.date, event: Optional[dict], weight: Optional[float],
-                 tsb: Optional[float] = None) -> dict:
+                 tsb: Optional[float] = None, injury: Optional[dict] = None) -> dict:
+    """`injury`: injuries.condition_week's rule (SP-270) — 跟腱進行中 = no steep walk this week."""
     info = {"active": False, "event": event, "weight": weight, "monday": monday.isoformat(), "why": [], "src": SRC}
     if not qualifies(event):
         info["why"].append("下一場 A 賽事不是百岳或多日行程" if event else "沒有下一場 A 賽事")
@@ -132,6 +133,10 @@ def week_context(*, kind: str, mode: str, monday: dt.date, event: Optional[dict]
     if mode in ("recovery_week", "reentry"):
         info["why"].append("恢復週／停訓後恢復期：不排")
         return info
+    from backend.engine import injuries as INJ
+    if INJ.avoids(injury, "steep"):
+        info["why"].extend(injury["notes"])
+        return info
     if tsb is not None and tsb < TSB_MIN:
         info["why"].append(f"週初 TSB {tsb:+.0f} < {TSB_MIN:.0f}：這週不排")
         return info
@@ -143,7 +148,8 @@ def week_context(*, kind: str, mode: str, monday: dt.date, event: Optional[dict]
     return info
 
 
-def plan_context(ds, status, today: dt.date, monday: dt.date, mode: str, tsb: Optional[float], gate=None) -> dict:
+def plan_context(ds, status, today: dt.date, monday: dt.date, mode: str, tsb: Optional[float], gate=None,
+                 injury: Optional[dict] = None) -> dict:
     """week_context() from week_plan()'s data. Never raises."""
     try:
         from backend.engine import b2b as B2B
@@ -155,14 +161,17 @@ def plan_context(ds, status, today: dt.date, monday: dt.date, mode: str, tsb: Op
                 weight = ds.setting("weight", date_to_day(today))
             except Exception:              # noqa: BLE001
                 weight = None
-        return week_context(kind=status.kind or "base", mode=mode, monday=monday, event=ev, weight=weight, tsb=tsb)
+        return week_context(kind=status.kind or "base", mode=mode, monday=monday, event=ev, weight=weight, tsb=tsb,
+                            injury=injury)
     except Exception as e:                  # noqa: BLE001 — the plan must still build
         return {"active": False, "error": type(e).__name__}
 
 
-def projected_context(kind: str, mode: str, monday: dt.date, cur: Optional[dict], state=None, phases=None) -> dict:
+def projected_context(kind: str, mode: str, monday: dt.date, cur: Optional[dict], state=None, phases=None,
+                      injury: Optional[dict] = None) -> dict:
     cur = cur or {}
-    return week_context(kind=kind, mode=mode, monday=monday, event=cur.get("event"), weight=cur.get("weight"))
+    return week_context(kind=kind, mode=mode, monday=monday, event=cur.get("event"), weight=cur.get("weight"),
+                        injury=injury)
 
 
 def next_state(info: Optional[dict] = None, state=None) -> dict:

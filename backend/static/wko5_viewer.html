@@ -905,7 +905,7 @@ function paintPainChip() {
 function renderPainPop() {
   const pop = $("pain-pop");
   pop.innerHTML = `<div class="pain-h">這次有沒有痛？<button class="iconbtn" id="pain-x" aria-label="關閉">✕</button></div>` +
-    PainPicker.html({ pain: PAIN.st.pain, pain_area: PAIN.st.pain_area, injury: PAIN.st.injury, reentry: PAIN.st.reentry }, PAIN.meta) +
+    PainPicker.html({ pain: PAIN.st.pain, pain_area: PAIN.st.pain_area, pain_score: PAIN.st.pain_score, injury: PAIN.st.injury, reentry: PAIN.st.reentry }, PAIN.meta) +
     `<div class="pain-f">選「痛」或「中斷」會開一筆傷病紀錄，細節之後補。這不是診斷。</div>`;
   $("pain-x").onclick = () => togglePainPop(false);
   PainPicker.wire(pop, { ...PAIN.st, side: PAIN.st.injury?.side }, PAIN.meta, async (patch) => {
