@@ -1483,6 +1483,14 @@
     "draft": true,
     "src": "backend/engine/effort_calib.py:94"
   },
+  "分段時間照你自己的速度變化分配（推估）：用了 {n} 次 ≥ {h:g} 小時的越野跑，同坡度、同心率下，第 2 到第 {k} 小時的速度約是第 1 小時的 {seq}，之後維持最後一個值。整場時間不變，只改各段怎麼分：變慢的話，前段的 ETA 提早、後段每段變長": {
+    "draft": true,
+    "src": "backend/engine/racepower/planner.py:710"
+  },
+  "分段維持平均分配：後段變慢要用你自己至少 {m} 次 ≥ {h:g} 小時的越野跑來估（目前 {n} 次能用，共 {a} 次 ≥ {h:g} 小時）": {
+    "draft": true,
+    "src": "backend/engine/racepower/planner.py:715"
+  },
   "分腿蹲或後腳抬高蹲 3–4 組 × 3–6 下（留 2 下以上，組間休 2–3 分）；離心下階 3 組 × 8–12 下／腳，背包 5 → 10 % 體重；引體向上 3 組（留 2 下）；最後棒式 2 × 30 秒。離心下階是平日補強，不取代真的下坡": {
     "draft": true,
     "src": "backend/engine/strength_plan.py:147"

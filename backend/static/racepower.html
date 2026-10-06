@@ -1538,7 +1538,8 @@ function renderProfile() {
   const hike = P.type === "baiyue", m = measure(), M = MEASURE[m];
   segOn("measure", "m", m);
   document.querySelector('#measure button[data-m="power"]').classList.toggle("hidden", hike);
-  $("profile-sub").textContent = `${R.length} ${T("segs")}${P.summary.badge ? " · " + T("est") : ""}`;
+  // SP-222: the segment times carry the athlete's own fade (推估) — said next to the title, not only in a hover
+  $("profile-sub").textContent = `${R.length} ${T("segs")}${P.summary.badge ? " · " + T("est") : ""}${P.summary.fade?.applied ? " · " + T("fade") : ""}`;
   $("splits-line").textContent = SPLITS.length ? "分日點：" + SPLITS.map((x) => x.toFixed(1) + " km").join("、") : "";
   // the target as steps; a measure that is not a target on a segment leaves a gap there
   const step = [];

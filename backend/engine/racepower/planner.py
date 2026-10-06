@@ -31,6 +31,7 @@ from backend.engine.racepower import predict as PR
 from backend.engine.racepower import riegel as R
 from backend.engine.racepower import weather as WX
 from backend.engine.zones import zones_json
+from backend.i18n import _
 
 MODES = ("time", "power", "auto")
 AUTO_TARGETS = {"max": 1.00, "hard": 0.95, "steady": 0.85}
@@ -116,6 +117,20 @@ def _scale(res: dict, t_total: float) -> dict:
     c = t_total / res["T"]
     rows = [{**r, "t": r["t"] * c, "v": r["v"] / c} for r in res["rows"]]
     return {**res, "rows": rows, "T": t_total, "scale": c}
+
+
+def _fade(res: dict, shape: Optional[dict]) -> dict:
+    """SP-222: the segment times with the athlete's own fade (trailhr.fade_times — the sum stays
+    the whole-race time); speeds follow the times, powers stay the allocation's (on trail power is a
+    reference: the same power late in the race buys less speed). `p_alloc` keeps the allocation's
+    time-weighted power for the 「平均功率只能到」 check. Unchanged without an applied shape."""
+    from backend.engine.racepower import trailhr as TH
+    ts = TH.fade_times([r["t"] for r in res["rows"]], shape)
+    if ts is None:
+        return res
+    p_alloc = sum(r["P"] * r["t"] for r in res["rows"]) / res["T"]
+    rows = [{**r, "t": t, "v": r["v"] * r["t"] / t} for r, t in zip(res["rows"], ts)]
+    return {**res, "rows": rows, "faded": True, "p_alloc": p_alloc}
 
 
 def _merge_for_export(segs: list[dict], limit: int = MAX_COROS_STEPS) -> list[dict]:
@@ -370,6 +385,8 @@ def trail_hr_estimate(model: Optional[dict], km: float, gain_m: float, f_target:
             "heat_beta": bool(TH.TRAILHR["heat_beta"] and hadley is not None and lthr),
             "heat_shift": sh, "hadley": hadley,
             "nonmoving": nm, "time_total_s": t + nm["total_s"] if nm else None,
+            # SP-222: the athlete's own fade by moving hour (trailhr.fade_shape) for the segment times
+            "fade": model.get("fade"),
             "n_runs": model.get("n"), "kind": model.get("kind"), "source": TH.SOURCE, "badge": "推估"}
 
 
@@ -518,6 +535,9 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
                     break
         if not v2_primary:
             res = _scale(res, t_whole)
+            if hr_est is not None:
+                # SP-222: the HR model's total spread by the athlete's own fade, not evenly
+                res = _fade(res, hr_est.get("fade"))
         return {"res": res, "alpha_used": alpha_used, "runs": runs, "t_whole": t_whole, "p_whole": p_whole,
                 "t_c": t_c, "p_c": p_c, "mbar": mbar}
 
@@ -565,7 +585,7 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
     # absurd targets): say so instead of showing a confident wrong number
     if mode == "time" and abs(T - t_whole) > 1.0:
         warnings.append(f"達不到目標時間：最接近的是 {T / 3600:.2f} h（鎖定的分段或目標超出範圍）")
-    if (mode == "power" or not v2_primary) and abs(p_bar - p_whole) > 0.5:
+    if (mode == "power" or not v2_primary) and abs(res.get("p_alloc", p_bar) - p_whole) > 0.5:
         warnings.append(f"平均功率只能到 {p_bar:.0f} W（目標 {p_whole:.0f} W）：鎖定的分段或下坡上限限制了配置")
     p_train = sum(r["P"] / s["M"] * r["t"] for r, s in zip(rows, segs)) / T
     eff = DF.effort(p_train, T, cp, w_prime, tte, k, cp_spread=capacity.get("spread"),
@@ -683,11 +703,26 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
                             f"{(hr_est['delta'] or 0):.1%}（1 小時後）；功率只當參考")
             if hr_est.get("delta_warning"):
                 warnings.append(hr_est["delta_warning"])
+            fd = hr_est.get("fade")
+            if fd and res.get("faded"):
+                # the shape as measured (it can rise: the athlete's data decides, not a population shape)
+                seq = " / ".join(f"{m:.0%}" for _h, m in fd["points"][1:])
+                warnings.append(_("分段時間照你自己的速度變化分配（推估）：用了 {n} 次 ≥ {h:g} 小時的越野跑，同坡度、同心率下，"
+                                  "第 2 到第 {k} 小時的速度約是第 1 小時的 {seq}，之後維持最後一個值。整場時間不變，"
+                                  "只改各段怎麼分：變慢的話，前段的 ETA 提早、後段每段變長",
+                                  n=fd["n_runs"], h=fd["min_run_h"], k=len(fd["points"]), seq=seq))
+            elif fd:
+                warnings.append(_("分段維持平均分配：後段變慢要用你自己至少 {m} 次 ≥ {h:g} 小時的越野跑來估"
+                                  "（目前 {n} 次能用，共 {a} 次 ≥ {h:g} 小時）",
+                                  m=fd["min_runs"], h=fd["min_run_h"], n=fd["n_runs"], a=fd["n_long"]))
     summary = {"time_s": T, "power": p_bar, "power_train": p_train, "pct_cp": p_bar / cp, "w_per_kg": p_bar / weight,
                "pace_s_per_km": T / km, "km": km, "gain_m": course["totals"].get("gain_m"),
                "loss_m": course["totals"].get("loss_m"), "M": mbar,
                "total_method": "trail_hr" if hr_est is not None else "v2" if v2_primary else "v1",
                "trail_hr": hr_est,
+               # SP-222: whether the segment times carry the athlete's own fade
+               "fade": {"applied": bool(res.get("faded")), "n_runs": (hr_est.get("fade") or {}).get("n_runs"),
+                        "badge": "推估"} if hr_est is not None and hr_est.get("fade") else None,
                # moving time (T, the validated target) + the predicted non-moving time, shown apart
                "nonmoving": (hr_est or {}).get("nonmoving"),
                "time_total_s": T + hr_est["nonmoving"]["total_s"] if hr_est and hr_est.get("nonmoving") else None,
