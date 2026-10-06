@@ -78,3 +78,19 @@ def test_panel_starts_closed_and_its_strings_have_both_languages():
     zh = json.loads((STATIC / "i18n" / "zh-TW" / "racepower.json").read_text("utf-8"))
     en = json.loads((STATIC / "i18n" / "en" / "racepower.json").read_text("utf-8"))
     assert "{list}" in zh["adv.changed"] and "{list}" in en["adv.changed"]
+
+
+def test_main_strategy_copy_lives_in_the_panel_once_and_does_not_count_as_a_change():
+    """Merge of SP-214 with SP-224: the strategy row moved into 進階計算選項 keeps SP-224's i18n'd
+    ? (均速 for road, 均勻努力 for trail) exactly once, the 「even」 button setType relabels is the
+    one inside the panel, and the 「已改」 summary reads the strategy state, not the button label —
+    so a trail race showing 均勻努力 still reads as the default."""
+    src = PAGE.read_text("utf-8")
+    p = _page()
+    assert src.count('data-i18n="racepower.strategy.tip"') == 1
+    assert src.count('id="strategy"') == 1 and "calc-adv" in p.ids["strategy"]
+    # the tip sits in the strategy row, i.e. inside the panel
+    panel = src[src.index('<details class="calc-adv"'):src.index("</details>\n    <div class=\"calcbar\">")]
+    assert 'data-i18n="racepower.strategy.tip"' in panel and 'data-i18n="racepower.heat.tip"' in panel
+    assert '$("strategy").querySelector(\'[data-k="even"]\').textContent' in src
+    assert 'if (!hike && S.strategy !== "even") out.push(T("adv.n.strategy"));' in src
