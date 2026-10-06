@@ -3375,6 +3375,10 @@
     "draft": true,
     "src": "backend/engine/strength_moves.py:126"
   },
+  "步頻 < 130 的比例": {
+    "draft": false,
+    "src": "backend/engine/workout_review.py:3656"
+  },
   "步頻雙峰：Sanchez 2024（戶外上坡，摘要）；陡坡跑的步頻比走快約 40 %：Whiting 2020（摘要）；峰、谷的判斷門檻為推估": {
     "draft": false,
     "src": "backend/engine/racepower/runwalk.py:140"
@@ -5006,6 +5010,10 @@
   "這次資料比較雜，只當參考": {
     "draft": true,
     "src": "backend/engine/workout_review.py:531"
+  },
+  "這段沒有衝擊資料（慢速或走路時裝置可能不輸出）": {
+    "draft": false,
+    "src": "backend/engine/workout_review.py:3657"
   },
   "這比一般輕鬆跑的上限高，因為是爬坡步行": {
     "draft": true,

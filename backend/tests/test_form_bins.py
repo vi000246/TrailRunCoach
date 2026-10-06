@@ -10,22 +10,81 @@ from backend.tests.wko5_fakes import FakeDataset, FakeWorkout
 SETTINGS = {"runthr": 165.0, "runftp": 260.0}
 
 
-def test_form_bins_by_grade_counts_running_steps_only():
+def test_form_bins_by_grade_counts_every_moving_step():
+    # SP-235: walked / small steps (< 130 spm) count too; their share is shown per bin
     n = 1200
     t = np.arange(n, dtype=float)
     speed = np.full(n, 9.0)
     grade = np.where(t < 600, 0.0, 0.12)                       # 10' flat, 10' at 12 %
     cad = np.where((t >= 600) & (t < 900), 55.0, 85.0)         # 5' of the climb walked (110 spm)
-    gct = np.where(t < 600, 250.0, 300.0)
+    gct = np.where(t < 600, 250.0, np.where(t < 900, 400.0, 300.0))
     out = R.form_bins(t, speed, {"gct": gct, "ilr": None}, cad, None, grade)
     rows = {r["label"]: r for r in out["grade"]}
     flat = next(r for r in out["grade"] if r["lo"] == -2)
     up = next(r for r in out["grade"] if r["lo"] == 10)
     assert flat["time_s"] == pytest.approx(600, abs=2) and flat["m"]["gct"] == pytest.approx(250)
-    assert up["time_s"] == pytest.approx(300, abs=2)          # the walked 5' left out
-    assert up["m"]["gct"] == pytest.approx(300) and up["m"]["ilr"] is None
+    assert flat["slow_share"] == pytest.approx(0.0)
+    assert up["time_s"] == pytest.approx(600, abs=2)          # the walked 5' counted
+    assert up["m"]["gct"] == pytest.approx(350, abs=1) and up["m"]["ilr"] is None
+    assert up["slow_share"] == pytest.approx(0.5, abs=0.01)
     assert len(rows) == 2
     assert out["split"] == "time"
+    assert sum(r["time_s"] for r in out["work"]["all"]) == pytest.approx(n - 1, abs=2)
+
+
+def test_form_bins_without_cadence_has_no_slow_share():
+    n = 600
+    t = np.arange(n, dtype=float)
+    out = R.form_bins(t, np.full(n, 9.0), {"gct": np.full(n, 250.0)}, None, None, np.zeros(n))
+    assert out["grade"] and all(r["slow_share"] is None for r in out["grade"])
+
+
+def _downhill_110spm(n=900):
+    """15' of a −12 % downhill at 110 spm (55 strides/min), 5 km/h, after 5' flat at 170 spm."""
+    t = np.arange(n + 300, dtype=float)
+    grade = np.where(t < 300, 0.0, -0.12)
+    cad = np.where(t < 300, 85.0, 55.0)
+    return t, np.full(len(t), 5.0), grade, cad
+
+
+def test_slow_steep_downhill_lands_in_its_grade_bin():
+    """The SP-235 acceptance case: a −12 % downhill at 110 spm is in the −15～−8 % bin (and in the
+    card's default −20 ~ −10 % bin); before SP-235 the 130-spm filter dropped every one of those steps."""
+    t, v, grade, cad = _downhill_110spm()
+    gct = np.where(t < 300, 240.0, 330.0)
+    out = R.form_bins(t, v, {"gct": gct, "cadence": cad * 2.0}, cad, None, grade, edges=(-15, -8, -3, 3))
+    row = next(r for r in out["grade"] if r["lo"] == -15 and r["hi"] == -8)
+    assert row["label"] == "-15 ~ -8%"
+    assert row["time_s"] == pytest.approx(900, abs=2)
+    assert row["m"]["cadence"] == pytest.approx(110) and row["m"]["gct"] == pytest.approx(330)
+    assert row["slow_share"] == pytest.approx(1.0)
+    dflt = R.form_bins(t, v, {"gct": gct}, cad, None, grade)
+    assert next(r for r in dflt["grade"] if r["lo"] == -20)["time_s"] == pytest.approx(900, abs=2)
+    # the old mask (form_drift's, still used there): none of those steps
+    mov, _cum, _split = R._run_work(t, v, cad, None)
+    assert not mov[(t >= 301)].any()
+
+
+def test_form_drift_keeps_the_130_spm_rule():
+    """Same data as the form_bins tests: form_drift still compares running steps only — the walked
+    steps change form_bins but not form_drift."""
+    n = 2400
+    t = np.arange(n, dtype=float)
+    v = np.full(n, 9.0)
+    run = (t // 120) % 4 != 3                                   # every 4th 2' block walked (110 spm)
+    cad = np.where(run, 85.0, 55.0)
+    gct = np.where(run, 250.0 + t / 100.0, 500.0)               # walking GCT would swamp the drift
+    out = R.form_drift(t, v, {"gct": gct}, cad, None)
+    m = run & np.r_[False, np.ones(n - 1, bool)]                # moving mask drops the first sample (dt 0)
+    half = np.cumsum(np.where(m, 1.0, 0.0))
+    a, b = m & (half <= half[-1] / 2), m & (half > half[-1] / 2)
+    assert out["_split"] == "time"
+    assert out["gct"]["first"] == pytest.approx(gct[a].mean(), rel=1e-6)
+    assert out["gct"]["last"] == pytest.approx(gct[b].mean(), rel=1e-6)
+    assert max(out["gct"]["first"], out["gct"]["last"]) < 300          # no walking step inside
+    # form_bins on the same data does count the walked steps
+    fb = R.form_bins(t, v, {"gct": gct}, cad, None, np.zeros(n))
+    assert fb["grade"][0]["m"]["gct"] > 300
 
 
 def test_form_bins_work_deciles_and_bands():
@@ -137,6 +196,84 @@ def test_cadence_hint_on_the_cards_only_when_the_data_supports_it():
     ds = FakeDataset(past + [_run(today, ilr_v=90.0, cad=90.0)], today, settings=SETTINGS)
     for sec in ("form_grades", "form_work"):
         assert "步頻提高" not in _texts(R.review(ds, ds.workouts[-1], sec))
+
+
+def _trail(day, title="", gct=250.0, hour=7):
+    """30 min trail run: 20' flat at 10 km/h, 170 spm; then 10' down −12 % at 5 km/h, 110 spm,
+    where Stryd writes ILR 0 (as it does below ~115 spm) but the watch's stance time is there."""
+    t = np.arange(0, 1801, 1.0)
+    dn = t >= 1200
+    kmh = np.where(dn, 5.0, 10.0)
+    dist = np.concatenate([[0.0], np.cumsum(kmh[1:] / 3600.0)])
+    e = np.where(dn, -(dist - dist[1200]) * 1000 * 0.12, 0.0) + 500.0
+    ch = {"elapsedtime": list(t), "heartrate": [140.0] * len(t), "speed": list(kmh),
+          "elapseddistance": list(dist), "elevation": list(e), "power": [220.0] * len(t),
+          "cadence": list(np.where(dn, 55.0, 85.0)), "stancetime": list(np.where(dn, 0.33, gct / 1000.0)),
+          "verticaloscillation": [0.08] * len(t), "@impact_loading_rate": list(np.where(dn, 0.0, 70.0))}
+    return FakeWorkout(start=dt.datetime.combine(day, dt.time(hour)), sport="run", tags=["runningtrail"],
+                       sport_type="Trail Running", title=title, channels=ch,
+                       metrics={"duration": 1800.0, "movingduration": 1800.0, "distance": float(dist[-1]),
+                                "climbing": 0.0})
+
+
+def _cols(r):
+    return {s["name"]: s["data"]["values"] for s in r["series"] if s["data"]["kind"] == "values"}
+
+
+def test_grade_card_shows_slow_share_and_explains_missing_impact():
+    today = dt.date(2026, 9, 30)
+    ds = FakeDataset([_trail(today)], today, settings=SETTINGS)
+    g = R.review(ds, ds.workouts[-1], "form_grades")
+    fp = g["form_profile"]
+    steep = next(b for b in fp["bins"] if b["lo"] == -20)        # −12 %: the −20 ~ −10 % bin
+    flat = next(b for b in fp["bins"] if b["lo"] == -2)
+    assert steep["time_s"] == pytest.approx(600, abs=15)          # the 110-spm steps are in
+    assert steep["slow_share"] == pytest.approx(1.0, abs=0.03) and flat["slow_share"] == pytest.approx(0.0, abs=0.03)
+    assert steep["m"]["ilr"] is None and steep["m"]["cadence"] == pytest.approx(110, abs=1)
+    assert steep["m"]["gct"] == pytest.approx(330, abs=1)
+    cols = _cols(g)
+    i = [b["label"] for b in fp["bins"]].index(steep["label"])
+    assert cols["步頻 < 130 的比例"][i] == "100%"
+    assert cols["ILR（平常）"][i] == "–" and cols["觸地時間（平常）"][i] == "330"
+    assert "移動時間" in cols and "跑步時間" not in cols
+    texts = _texts(g)
+    assert "這段沒有衝擊資料（慢速或走路時裝置可能不輸出）" in texts and steep["label"] in texts
+    # every bin has ILR → no such note
+    ds = FakeDataset([_run(today)], today, settings=SETTINGS)
+    assert "沒有衝擊資料" not in _texts(R.review(ds, ds.workouts[-1], "form_grades"))
+
+
+def test_usual_keeps_trail_runs_and_hikes_apart():
+    """The 「平常」 of a trail run comes from trail runs only, a hike's (activity type 爬山) from hikes."""
+    today = dt.date(2026, 9, 30)
+    runs = [_trail(today - dt.timedelta(days=3 * k), gct=240.0) for k in range(1, 6)]
+    hikes = [_trail(today - dt.timedelta(days=3 * k), title="郊山爬山", gct=300.0, hour=15) for k in range(1, 6)]
+    ds = FakeDataset(runs + hikes + [_trail(today, hour=7), _trail(today, title="郊山爬山", hour=15)],
+                     today, settings=SETTINGS)
+    run_w = next(w for w in ds.workouts if w.day >= R.math.floor(ds.today) and not w.entry.title)
+    hike_w = next(w for w in ds.workouts if w.day >= R.math.floor(ds.today) and w.entry.title)
+    assert not R.hike_like(run_w, []) and R.hike_like(hike_w, [])
+    for w, want in ((run_w, 240.0), (hike_w, 300.0)):
+        for sec in ("form_grades", "form_work"):
+            fp = R.review(ds, w, sec)["form_profile"]
+            rows = fp["bins"] if sec == "form_grades" else fp["bands"]["all"]
+            r = next(r for r in rows if r["base"]["gct"]["ok"])
+            assert r["base"]["gct"]["n"] == 5
+            if sec == "form_grades":
+                flat = next(b for b in rows if b["lo"] == -2)
+                assert flat["base"]["gct"]["median"] == pytest.approx(want)
+
+
+def test_hike_like_follows_the_users_activity_type():
+    today = dt.date(2026, 9, 30)
+    ds = FakeDataset([_trail(today), _trail(today, title="郊山爬山", hour=15),
+                      _trail(today, title="五寮尖越野賽 爬山", hour=18)], today, settings=SETTINGS)
+    w_run, w_hike, w_race = ds.workouts
+    assert [R.hike_like(w, []) for w in ds.workouts] == [False, True, False]      # a race word wins
+    key = lambda w: {"start_local": w.entry.start.strftime("%Y-%m-%dT%H:%M"), "file": None,
+                     "activity_type_overridden": True}
+    rows = [{**key(w_run), "activity_type": "hike"}, {**key(w_hike), "activity_type": "training"}]
+    assert R.hike_like(w_run, rows) and not R.hike_like(w_hike, rows)
 
 
 def _steady_run(seed, n_win=40, slope=-0.3):
