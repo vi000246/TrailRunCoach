@@ -223,11 +223,12 @@
 | 徐國峰 RQ 文章 6 篇：article 32、61、141、192；〈面臨重要比賽前該如何減少訓練量？〉〈全馬週期化訓練數據總分析〉 | runningquotient.com | 403（L461、L522） | 減量比例（搜尋摘要「賽前三週減 20–25 %、兩週 40 %、比賽週 60 %」查無出處）、各期週數 | E（RQ 會員） |
 | 《運動訓練法》p.262（作者未記） | 書 | 原書未核對，只有使用者筆記（L443） | 肌力分期：三鐵準備期 100／比賽期 50／過渡期 20；過渡期不超過 4 週 | 使用者手邊應有（筆記引了頁碼）。可能和 SP-85 的 PDF 是同一本，待確認 |
 | Chen, Hsieh, Ho, Lin, Lin. Two weeks of detraining reduces cardiopulmonary function and muscular fitness in endurance athletes. *Eur J Sport Sci* 2022 | [448] doi:10.1080/17461391.2021.1880647；PMID 33517866 | 只讀摘要，摘要沒給百分比（L305） | 2 週停訓各項掉多少 | A → B（台灣作者，寫信容易） |
-| Wells, Hoffmann, Bruce, Kremer, Dwyer. Training load and intensity in triathlon … 95 age-group triathletes. *Front Sports Act Living* 2026 | [450] doi:10.3389/fspor.2026.1798702 | 只讀摘要（L307） | 休賽季約為專項期的 61 %（時間） | **Frontiers 是開放期刊**，直接讀全文 |
+| Wells, Hoffmann, Bruce, Kremer, Dwyer. Training load and intensity in triathlon … 95 age-group triathletes. *Front Sports Act Living* 2026 | [450] doi:10.3389/fspor.2026.1798702 | ~~只讀摘要（L307）~~ 2026-10-06 已讀全文（PMC13171522），數字不變 | 休賽季約為專項期的 61 %（時間） | 已取得 |
 | Roche D.〈Should You Change How You Think About Tapers For Long Races?〉（Trail Runner） | 文件未附網址 | 要登入 Outside 帳號（L229） | 超馬減量 | E（Outside+ 會員） |
 | Roche D.〈How Long Should My Long Runs Be?〉（Outside Run） | 文件未附網址 | 同上（L229） | 超馬最長一次長跑 | E |
 | Roche D.〈Is Multiple 100-Mile Races In A Single Season Too Much?〉（Trail Runner） | 文件未附網址 | 同上（L405） | 一季多場百英里 | E |
 | 〈Messed Up Your Marathon? What to Know Before Running Another Right Away〉（Outside Run） | 文件未附網址 | 同上（L405） | 失利後多久再比 | E |
+| 〈Karl Meltzer Unplugged〉（Trail Runner Magazine） | https://www.trailrunnermag.com/people/qas-people/karl-meltzer-unplugged/ | 要登入 Outside 帳號（2026-10-06 再查，§4.8.1） | 「50 英里主賽前 6–8 週不比賽」「百英里至少相隔 2 個月」的出處（目前查無出處） | E |
 | 〈The Rules of Recovery〉. *Washington Post* 1998 | 文件未附網址 | 403（L320） | 賽後恢復 | E 或 C（報紙資料庫） |
 
 單上 #16 列的周期化模型論文（Gonzalez-Ravé 2022 反向周期化系統性回顧 PMC9023617、Stone 2021 PubMed 34132223、Issurin 2008、Talsnes 越野滑雪 PMC10694351、IJSPP 2025 划船系統性回顧），在基準 commit 的 `docs/research/` 裡**找不到**這些編號，沒有列入計數。Issurin 只有 [248]〈New horizons for the methodology and physiology of training periodization〉（*Sports Med*，PubMed 20199119）被引用，文件沒有標它讀不到。可能是 SP-94 調查時的中間紀錄。結論（不做區塊／反向周期化）已由 [4][6][7][76] 支持（§2）。
