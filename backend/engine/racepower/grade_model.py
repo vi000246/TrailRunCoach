@@ -248,6 +248,25 @@ class GaitRE:
             v *= self.tech_at(g)[0]
         return v
 
+    def gait_at(self, g: float, p: float, weight: float) -> Optional[str]:
+        """SP-229: the gait by the predicted speed — the running curve's speed at power `p`,
+        then runwalk.gait with the athlete's shift (rw_shift); None below 3 % or without power."""
+        from backend.engine.racepower import runwalk as RW
+        if not p or p <= 0 or not weight or g < RW.MIN_GRADE:
+            return None
+        return RW.gait(g, self.run.re(g) * p / weight, self.rw_shift)
+
+    def re_at(self, g: float, p: float, weight: float) -> float:
+        """SP-229 RE with the gait chosen by the predicted speed instead of the majority gait
+        (re): the walking curve where gait_at says walk, the running curve elsewhere (also on
+        flats and descents), the trail technicality as in re (推估: faster efforts run more,
+        a slower late race walks more). Used by the back-test's comparison; the planner
+        keeps re until that shows it is no worse."""
+        v = self.walk.re(g) if self.gait_at(g, p, weight) == "walk" else self.run.re(g)
+        if self.trail and g <= 0.02:
+            v *= self.tech_at(g)[0]
+        return v
+
     def v_max(self, g: float) -> Optional[float]:
         return self.run.v_max(g, TRAIL_VMAX_Q if self.trail else 90)
 

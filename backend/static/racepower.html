@@ -578,6 +578,7 @@ const S = Object.assign({ mode: "auto", tunit: "time", punit: "w", effort: 1, cs
   amount: null, measure: "pace", accl: null, hup: 5, hdown: 10, heatAccl: { mode: "auto", s: null }, trip: null, hrband: "aet" },   // trip: 跟團／自己走 has no default (must pick)
   ls.get("ui", {}));
 const T = (k, p) => (window.I18N ? I18N.t("racepower." + k, p) : k);
+const TR = T;                     // for functions where T is a local (renderBacktest's terrain block)
 let HEAT = null;                          // /heat-status for the race date
 let HIKEMETA = null;                      // /hike-meta rows
 let COURSE = ls.get("course", null);      // {course_id, name, km, gain_m} — the file itself is not stored
@@ -2162,6 +2163,10 @@ async function renderBacktest() {
   h += `</tbody></table></div><div class="note">正值 = 預估比實際快。這一段只檢驗「功率 → 速度」（坡度 RE、走跑分開、下坡上限、越野技術係數），不是預測準確度。
     強度之間的分段誤差差 ${pct1(cd.spread)}${cd.clear ? "（明顯）" : ""}；分強度擬合比合併擬合好的強度：${Object.entries(cd.class_model_better).filter(([, v]) => v).map(([k]) => CZ[k]).join("、") || "無"}。
     走跑分開前後的時間 |誤差|：${pct1(T.models.no_gait.median_abs)} → ${pct1(T.models.gait.median_abs)}。</div>`;
+  const SG = T.speed_gait;
+  if (SG) h += `<div class="note">${esc(TR("sg.line", { a: pct1(SG.segments.gait.median_abs), b: pct1(SG.segments.speed_gait.median_abs),
+    c: pct1(SG.climbs.gait.median_abs), d: pct1(SG.climbs.speed_gait.median_abs), n: SG.climbs.gait.n, k: SG.changed }))}
+    <b class="${SG.no_worse ? "ok" : "no"}">${esc(TR(SG.no_worse ? "sg.ok" : "sg.no"))}</b></div>`;
   // hike HR windows
   const HH = R.hike_hr;
   if (HH && HH.uses) {

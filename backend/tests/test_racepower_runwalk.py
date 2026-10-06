@@ -327,3 +327,68 @@ def test_plan_labels_use_the_personal_shift(client, monkeypatch):   # noqa: F811
     assert p["summary"]["runwalk"] == {"shift": 0.4, "personal": True}
     climbs = [s for s in p["segments"] if s["grade"] >= 0.03]
     assert climbs and all(s["gait"] == RW.gait(s["grade"], s["speed_ms"], 0.4) for s in climbs)
+
+
+# ---- SP-229 part 1: the back-test compares the gait chosen by the predicted speed ----------
+
+def _gait_model(shift=0.0):
+    from backend.engine.racepower import grade_model as GM
+    run = [{"g": g / 100, "re": 1.0 * (1 - g / 100 * 3), "v": 2.5, "a": 0, "run": 1.0} for g in range(0, 30, 2) for _ in range(40)]
+    walk = [{"g": g / 100, "re": 1.0 * (1 - g / 100 * 2), "v": 1.0, "a": 0, "run": 0.0} for g in range(4, 30, 2) for _ in range(40)]
+    m = GM.fit_gait_re(run + walk, 1.0)
+    m.runwalk = {"shift": shift, "personal": bool(shift)}
+    return m
+
+
+def test_re_at_walks_when_slow_and_runs_when_fast():
+    m = _gait_model()
+    g, w = 0.16, 60.0
+    slow_p = RW.horizontal(g, RW.pts(g) * 0.7) * w / m.run.re(g)      # the running curve's speed well under PTS
+    fast_p = RW.horizontal(g, RW.eots(g) * 1.3) * w / m.run.re(g)
+    assert m.gait_at(g, slow_p, w) == "walk" and m.re_at(g, slow_p, w) == approx(m.walk.re(g))
+    assert m.gait_at(g, fast_p, w) == "run" and m.re_at(g, fast_p, w) == approx(m.run.re(g))
+    assert m.gait_at(0.0, slow_p, w) is None and m.re_at(0.0, slow_p, w) == approx(m.run.re(0.0))
+    # the personal shift moves the switch: the same power walks with a +0.4 m/s curve
+    mid_p = RW.horizontal(g, RW.pts(g) + 0.2) * w / m.run.re(g)
+    assert m.gait_at(g, mid_p, w) != "walk" and _gait_model(0.4).gait_at(g, mid_p, w) == "walk"
+
+
+def test_run_model_without_re_at_is_unchanged():
+    from backend.engine.racepower import pacing as PC
+    m = _gait_model()
+    segs = [{"dist_m": 2000.0, "grade": 0.16, "M": 1.0}, {"dist_m": 3000.0, "grade": 0.0, "M": 1.0}]
+    a = PC.course_time(150.0, segs, PC.RunModel(60.0, m.re, m.v_max))
+    b = PC.course_time(150.0, segs, PC.RunModel(60.0, m.re, m.v_max, None))
+    assert a["T"] == b["T"]
+    c = PC.course_time(150.0, segs, PC.RunModel(60.0, m.re, m.v_max, lambda g, p: m.re_at(g, p, 60.0)))
+    assert c["rows"][0]["re"] == approx(m.re_at(0.16, c["rows"][0]["P"], 60.0))
+
+
+def test_speed_gait_summary_is_the_gate():
+    from backend.engine.racepower import backtest as BT
+
+    def row(errs):
+        return {"category": "trail", "err_v2": 0.0, "segments": [
+            {"grade": g, "err": e, "err_speed": es, "gait": "walk", "gait_speed": gs} for g, e, es, gs in errs]}
+    better = [row([(0.10, 0.10, 0.02, "run"), (0.20, -0.08, -0.05, "walk"), (0.0, 0.03, 0.03, None)])] * 3
+    s = BT.speed_gait_summary(better)
+    assert s["no_worse"] and s["climbs"]["gait"]["n"] == 6 and s["changed"] == 3
+    worse = [row([(0.10, 0.02, 0.10, "run"), (0.20, -0.05, -0.08, "walk")])] * 3
+    assert not BT.speed_gait_summary(worse)["no_worse"]
+    assert not BT.speed_gait_summary([])["no_worse"]
+
+
+def test_evaluate_run_reports_the_speed_gait_errors():
+    """A slow synthetic climb: the back-test row carries the speed-gait time error and each
+    segment's err_speed / gait_speed next to the majority-gait ones."""
+    from backend.engine.racepower import backtest as BT
+    from backend.tests.test_racepower_v2 import _synthetic_run_arrays
+    arr = _synthetic_run_arrays(n=3000, v=1.0, p=150.0, grade=0.12)
+    inp = {"weight": {"value": 60.0}, "training_conditions": {"altitude_m": 100.0, "temp_c": 15.0, "rh_pct": 60.0},
+           "re": {"road": {"median": 1.0}, "trail": {}},
+           "cp": {"sources": [{"id": "x", "cp": 280.0}], "default": "x", "activities": {"w_prime": 15000.0}},
+           "tte": {"value": 3000.0}, "riegel": {"k": -0.07, "valid": True}, "auto_prior": None}
+    r = BT.evaluate_run({"category": "trail", "intensity": "easy"}, {"arrays": arr, "inputs": inp, "grade_re": _gait_model()})
+    assert r["err_speedgait"] is not None and math.isfinite(r["err_speedgait"])
+    segs = [s for s in r["segments"] if s.get("err") is not None]
+    assert segs and all("err_speed" in s and s["gait_speed"] == "walk" for s in segs)
