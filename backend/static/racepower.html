@@ -490,6 +490,9 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
     <details><summary>展開</summary><div class="two"><div><div class="plot" id="gm-chart"></div></div><div id="gm-detail"></div></div></details>
   </section>
 
+  <section id="cad-sec" class="tab-calc"><details><summary><b data-i18n="racepower.cad.title">爬坡步頻分布</b> <span class="meta" data-i18n="racepower.cad.sub">檢查「步頻 &lt; 130 spm 算走」</span></summary>
+    <div class="plot" id="cad-chart"></div><div id="cad-detail"></div></details></section>
+
   <section id="cp-sec" class="tab-calc"><details><summary><b>CP 分析</b> <span class="meta" id="cp-sub"></span></summary>
     <div class="two"><div><div class="plot" id="cp-chart"></div></div><div id="cp-detail"></div></div></details>
   </section>
@@ -559,7 +562,7 @@ function chart(id) { if (!charts[id]) { charts[id] = echarts.init($(id)); new Re
 const axisStyle = () => ({ axisLabel: { color: css("--muted"), fontSize: 11 }, axisLine: { lineStyle: { color: css("--line") } },
   splitLine: { lineStyle: { color: css("--line") } }, axisTick: { show: false }, nameTextStyle: { color: css("--muted") } });
 
-let INP = null, PEAKS = [], LAST = null, PLAN = null, WX = null, GM = null;
+let INP = null, PEAKS = [], LAST = null, PLAN = null, WX = null, GM = null, CAD = null;
 const ovr = {};          // user overrides of "your numbers": {cp, w_prime, tte, k, re, weight, eph, cp_source, k_source}
 let type = ls.get("type", "road");
 // 主要訓練項目 (設定; engine/primary_sport.py): road = 越野／百岳 buttons and presets hidden (a
@@ -608,7 +611,7 @@ function setType(t) {
   document.querySelectorAll(".bf").forEach((e) => e.classList.toggle("hidden", !hike));
   document.querySelectorAll(".rf").forEach((e) => e.classList.toggle("hidden", hike));
   document.querySelectorAll(".tf").forEach((e) => e.classList.toggle("hidden", t !== "trail"));
-  ["re-sec", "cp-sec", "rg-sec", "zone-sec", "gm-sec"].forEach((id) => $(id).classList.toggle("hidden", hike));
+  ["re-sec", "cp-sec", "rg-sec", "zone-sec", "gm-sec", "cad-sec"].forEach((id) => $(id).classList.toggle("hidden", hike));
   $("hike-sec").classList.toggle("hidden", !hike);
   if (!S.accl) segOn("accl", "a", hike ? "unacclimatised" : "acclimatised");
   // user decision 2026-09-30: a 百岳 trip defaults to 3 days
@@ -2054,6 +2057,28 @@ async function renderGM() {
   $("gm-detail").innerHTML = `<div class="kv"><span>平路 RE <b>${r3(g.re_flat)}</b></span><span>100 m 窗 <b>${n0(g.n_samples)}</b></span><span>活動 <b>${g.n_activities}</b></span></div>
     <div class="note">每一點是你在那個坡度（每 2% 一格）的 100 m 窗「速度 ÷ (功率/體重)」中位數，點越大樣本越多。樣本少的坡度會往「由平路 RE 與坡度能耗推出來」的虛線靠。這條曲線已經包含 Stryd 在陡坡的讀數特性與你上坡快走的習慣。</div>`;
 }
+// SP-230: climbing cadence against the 130 spm walk line (a check only: the line never moves here)
+async function renderCad() {
+  try { CAD = CAD || await j(`${API}/cadence-check`); } catch (e) { $("cad-detail").innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
+  const c = CAD, mins = c.seconds.map((x) => x / 60), on = c.bins.filter((b, i) => mins[i] > 0.05);
+  const lo = on.length ? Math.max(0, Math.floor((on[0] - 15) / 10) * 10) : 60, hi = on.length ? Math.ceil((on[on.length - 1] + 15) / 10) * 10 : 220;
+  const lines = [{ xAxis: c.threshold_spm, lineStyle: { color: css("--accent"), width: 2 }, label: { formatter: T("cad.line"), color: css("--accent") } }];
+  if (c.valley_spm != null) lines.push({ xAxis: c.valley_spm, lineStyle: { color: css("--muted"), type: "dashed" }, label: { formatter: T("cad.valley"), color: css("--muted"), position: "insideEndTop" } });
+  chart("cad-chart").setOption({
+    animation: false, grid: { left: 44, right: 14, top: 30, bottom: 38 },
+    tooltip: { trigger: "axis", valueFormatter: (v) => ok(v) ? T("cad.min_val", { m: v.toFixed(1) }) : "" },
+    xAxis: { type: "value", name: "spm", nameLocation: "middle", nameGap: 24, min: lo, max: hi, ...axisStyle() },
+    yAxis: { type: "value", name: T("cad.minutes"), ...axisStyle() },
+    series: [{ name: T("cad.series"), type: "line", step: "middle", symbol: "none", data: c.bins.map((b, i) => [b, mins[i]]),
+      lineStyle: { color: css("--s1"), width: 1.5 }, areaStyle: { color: css("--s1"), opacity: 0.3 },
+      markLine: { symbol: "none", silent: true, data: lines } }],
+  }, true);
+  const tag = { ok: ["good", "cad.ok"], off: ["watch", "cad.off"], unimodal: ["watch", "cad.unimodal"], few: ["", "cad.few"] }[c.verdict] || ["", "cad.few"];
+  $("cad-detail").innerHTML = `<div class="kv"><span>${esc(T("cad.time"))} <b>${hm(c.total_s)}</b></span><span>${esc(T("cad.runs"))} <b>${c.n_runs}</b></span>` +
+    (ok(c.below_share) ? `<span>${esc(T("cad.below"))} <b>${pct(c.below_share)}</b></span>` : "") + `</div>` +
+    `<div class="note"><span class="badge ${tag[0]}">${esc(T(tag[1]))}</span> ${esc(c.hint || "")}</div>` +
+    `<div class="note">${esc(T("cad.how"))}</div><div class="meta">${esc(c.source || "")}</div>`;
+}
 
 // ---------------- 準確度 ----------------
 async function renderBacktest() {
@@ -2337,6 +2362,7 @@ $("clearsplits").onclick = () => { SPLITS = []; saveEventSplits(); schedule(); }
 $("unlock").onclick = () => { LOCKS = {}; schedule(); };
 $("csv").onclick = csvExport;
 $("gm-sec").querySelector("details").addEventListener("toggle", (e) => { if (e.target.open) renderGM(); });
+$("cad-sec").querySelector("details").addEventListener("toggle", (e) => { if (e.target.open) renderCad(); });
 // charts inside a closed <details> have no size: draw them when opened
 $("cp-sec").querySelector("details").addEventListener("toggle", (e) => { if (e.target.open && INP) renderCP(); });
 $("rg-sec").querySelector("details").addEventListener("toggle", (e) => { if (e.target.open && INP) renderRiegel(); });

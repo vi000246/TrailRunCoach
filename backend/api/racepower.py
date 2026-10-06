@@ -12,6 +12,7 @@ v2 (docs/research/racepower-v2.md §10.2):
     POST /course        upload .gpx / .fit → course_id + segments + profile
     POST /plan          three modes on a course; segments, effort bar, cross-checks
     GET  /grade-model   personal RE(g), v_max(g), v_h(g)
+    GET  /cadence-check climbing cadence vs the 130 spm walk line (SP-230)
     GET  /backtest      stored leave-one-out back-test;  POST /backtest/run  recompute
     POST /export/plan   plan → the race-day session in the 課表 (preview, or push=true writes it)
     POST /export/csv    plan → CSV (UTF-8 BOM), header block + one row per segment
@@ -360,6 +361,21 @@ def grade_model():
     return _py({"grade_re": gm["grade_re"].to_json(), "hike_speed": gm["hike_speed"].to_json(),
                 "walk_capacity": cap.to_json() if cap is not None else None,
                 "hike_hr": gm.get("hike_hr"), "hike_basis": gm.get("hike_basis"), "race_model": gm.get("race_model")})
+
+
+@router.get("/cadence-check")
+def cadence_check():
+    """SP-230: the climbing cadence distribution against the 130 spm walk line (report only)."""
+    from backend.engine.racepower import athlete as A
+    from backend.engine.racepower import runwalk as RW
+    ds = _dataset()
+    key = (id(ds), today_local())
+    hit = _cache.get("climb_cadence")
+    if not (hit and hit[0] == key):
+        hit = (key, A.climb_cadence_seconds(ds, key[1]))       # the histogram; the texts follow the request's locale
+        _cache["climb_cadence"] = hit
+    secs, n = hit[1]
+    return _py({**RW.cadence_check(secs), "n_runs": n})
 
 
 def heat_status_for(date: Optional[str]) -> dict:

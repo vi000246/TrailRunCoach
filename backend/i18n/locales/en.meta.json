@@ -2719,6 +2719,10 @@
     "draft": true,
     "src": "backend/api/backup.py:225"
   },
+  "步頻雙峰：Sanchez 2024（戶外上坡，摘要）；陡坡跑的步頻比走快約 40 %：Whiting 2020（摘要）；峰、谷的判斷門檻為推估": {
+    "draft": false,
+    "src": "backend/engine/racepower/runwalk.py:140"
+  },
   "步驟太多（> {n}）": {
     "draft": true,
     "src": "backend/engine/workout_steps.py:690"
@@ -3118,6 +3122,14 @@
   "爬坡功率：Burtscher 2004——背包每小時爬 300 m（到 3,500 m）約需 1.2–1.5 W/kg，而且要在無氧閾值以下": {
     "draft": true,
     "src": "backend/engine/race_feasibility.py:152"
+  },
+  "爬坡的步頻只有一群（約 {p:.0f} spm），分不出走和跑兩群：130 spm 這條線沒辦法用你的資料確認": {
+    "draft": false,
+    "src": "backend/engine/racepower/runwalk.py:216"
+  },
+  "爬坡（≥ 3 %）有步頻的時間不到 {m:.0f} 分鐘，還不能檢查": {
+    "draft": false,
+    "src": "backend/engine/racepower/runwalk.py:198"
   },
   "爬坡（走）": {
     "draft": false,
@@ -3730,6 +3742,18 @@
   "走跑皆可：跑或快走，哪個輕鬆用哪個": {
     "draft": false,
     "src": "backend/engine/specific_phase.py:636"
+  },
+  "走路一群約 {w:.0f} spm、跑步一群約 {r:.0f} spm，130 spm 落在兩群之間的谷底附近（谷底約 {v:.0f} spm）：門檻合用": {
+    "draft": false,
+    "src": "backend/engine/racepower/runwalk.py:228"
+  },
+  "走路一群約 {w:.0f} spm、跑步一群約 {r:.0f} spm，谷底在約 {v:.0f} spm，不在 130：130–{v:.0f} spm 的快走會被算成跑步。門檻先不改": {
+    "draft": false,
+    "src": "backend/engine/racepower/runwalk.py:231"
+  },
+  "走路一群約 {w:.0f} spm、跑步一群約 {r:.0f} spm，谷底在約 {v:.0f} spm，不在 130：{v:.0f}–130 spm 的慢跑會被算成走路。門檻先不改": {
+    "draft": false,
+    "src": "backend/engine/racepower/runwalk.py:234"
   },
   "走路或極慢跑": {
     "draft": true,
