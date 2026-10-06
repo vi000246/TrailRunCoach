@@ -103,9 +103,25 @@
     "draft": true,
     "src": "backend/engine/quality_gate.py:1934"
   },
+  "3 區解鎖：最長幾天不跑就不算連續": {
+    "draft": true,
+    "src": "backend/engine/advanced_params.py:67"
+  },
+  "3 區解鎖：每週至少跑幾次": {
+    "draft": true,
+    "src": "backend/engine/advanced_params.py:62"
+  },
+  "3 區解鎖：連續幾週規律訓練": {
+    "draft": true,
+    "src": "backend/engine/advanced_params.py:56"
+  },
   "3 區還沒解鎖：{text}，{action}": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:1518"
+  },
+  "3 區重新上鎖：停跑幾天": {
+    "draft": true,
+    "src": "backend/engine/advanced_params.py:72"
   },
   "3 區階梯": {
     "draft": true,
@@ -114,6 +130,10 @@
   "3 區（有氧間歇／節奏跑）": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:2030"
+  },
+  "3 區（有氧間歇／節奏跑）的解鎖條件之一：連續這麼多個完整週，每週都跑到下面的次數、中間沒有太久沒跑。改了以後課表會照新的數字重算。": {
+    "draft": true,
+    "src": "backend/engine/advanced_params.py:59"
   },
   "30/15：算一堂 5 區（頻率照算），不算進階": {
     "draft": true,
@@ -806,6 +826,14 @@
   "{label} 尚未開放，沒有送出任何東西": {
     "draft": true,
     "src": "backend/sync/workout_targets/base.py:92"
+  },
+  "{label} 要在 {lo}–{hi} {unit} 之間": {
+    "draft": true,
+    "src": "backend/api/calib.py:55"
+  },
+  "{label} 要是整數": {
+    "draft": true,
+    "src": "backend/api/calib.py:58"
   },
   "{label}・{what}": {
     "draft": true,
@@ -1671,7 +1699,7 @@
     "draft": true,
     "src": "backend/engine/workout_templates.py:124"
   },
-  "你排的技術地形課（RPE ≥ 7）主課 {reserved:.0f} 分算進本週強度預算（週量 {share:.0%}，80/20；推估），只剩 {left:.0f} 分：這週不排{zone}間歇": {
+  "你排的技術地形課（RPE ≥ 7）主課 {reserved:.0f} 分算進本週強度預算（週量 {share:.0%}；推估，Seiler 的 80/20 是堂數，不是時間），只剩 {left:.0f} 分：這週不排{zone}間歇": {
     "draft": true,
     "src": "backend/engine/overview.py:745"
   },
@@ -1758,6 +1786,10 @@
   "來自手錶（COROS 帳號）": {
     "draft": true,
     "src": "backend/engine/hr_profile.py:213"
+  },
+  "依你的跑走紀錄校正": {
+    "draft": true,
+    "src": "backend/engine/walk_hint.py:117"
   },
   "修改太頻繁，請稍後再試": {
     "draft": true,
@@ -1870,6 +1902,10 @@
   "停跑後的恢復期結束": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:1909"
+  },
+  "停跑這麼多天，3 區重新上鎖，只算停跑之後的紀錄（賽後恢復期、轉換期的日子不算）。": {
+    "draft": true,
+    "src": "backend/engine/advanced_params.py:75"
   },
   "健行不判 5 區": {
     "draft": true,
@@ -3291,6 +3327,14 @@
     "draft": true,
     "src": "backend/engine/drift_calib.py:123"
   },
+  "推估（Coyle 1984：停練 21 天最大攝氧量掉約 7%）": {
+    "draft": true,
+    "src": "backend/engine/advanced_params.py:73"
+  },
+  "推估（app 的預設規則，沒有外部來源）": {
+    "draft": true,
+    "src": "backend/engine/advanced_params.py:57"
+  },
   "推估（§3.2：低強度、多日，重點是每日總熱量）": {
     "draft": true,
     "src": "backend/engine/racepower/fuel.py:338"
@@ -3362,6 +3406,10 @@
   "推送": {
     "draft": true,
     "src": "backend/api/auth.py:175"
+  },
+  "提示：照你輕鬆心率的爬升速度（約 {vam:.0f} m/h），坡度超過約 {grade:.0f}% 用走的比較省（{basis}）；規則仍是心率上限": {
+    "draft": true,
+    "src": "backend/engine/walk_hint.py:118"
   },
   "提腳尖": {
     "draft": true,
@@ -3859,6 +3907,10 @@
     "draft": true,
     "src": "backend/api/backup.py:225"
   },
+  "次／週": {
+    "draft": true,
+    "src": "backend/engine/advanced_params.py:62"
+  },
   "正面撐或側撐。撐不到 30 秒，代表軀幹還不夠。": {
     "draft": true,
     "src": "backend/engine/strength_moves.py:126"
@@ -3927,7 +3979,7 @@
     "draft": true,
     "src": "backend/engine/quality_gate.py:2542"
   },
-  "每週 3 區量 ≤ 週量 10%（Daniels），放不下排巡航版 3×6／3×8／2×12": {
+  "每週 3 區量 ≤ 週量 10%（教練，未驗證原書：Daniels 是單次課、以里程算，這裡是每週、以時間算），放不下排巡航版 3×6／3×8／2×12": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:1941"
   },
@@ -5827,6 +5879,10 @@
     "draft": true,
     "src": "backend/engine/overview.py:2448"
   },
+  "週": {
+    "draft": true,
+    "src": "backend/engine/advanced_params.py:56"
+  },
   "週{day}已給{taken}，不能再排{kind}（一天只能指定一種課）": {
     "draft": true,
     "src": "backend/engine/plan_prefs.py:284"
@@ -5930,6 +5986,14 @@
   "還缺：重新做 AeT 測試（UA 差距或 Friel 飄移）；之後每週 1 區時間別連 3 週低於確認時的 2/3{line}": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:2062"
+  },
+  "那幾週裡，每一週都要跑到這個次數才算規律訓練。": {
+    "draft": true,
+    "src": "backend/engine/advanced_params.py:65"
+  },
+  "那幾週裡，連續這麼多天沒跑，就要重新累積（賽後恢復期、轉換期的日子不算）。": {
+    "draft": true,
+    "src": "backend/engine/advanced_params.py:70"
   },
   "都做到了：5 區可以排（每趟 2–5 分、一週最多 2 次、隔 ≥ 2 天）": {
     "draft": true,
@@ -6243,6 +6307,10 @@
     "draft": true,
     "src": "backend/engine/racepower/calc.py:336"
   },
+  "預設值": {
+    "draft": true,
+    "src": "backend/engine/walk_hint.py:117"
+  },
   "預設背負 {pack}": {
     "draft": true,
     "src": "backend/engine/racepower/calc.py:408"
@@ -6254,6 +6322,10 @@
   "預設（文獻）": {
     "draft": true,
     "src": "backend/engine/calibrate.py:158"
+  },
+  "預設，推估": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1343"
   },
   "顏色：時間和 TSS 偏離計畫較多的那個（±20% 內算符合，TrainingPeaks 的做法）": {
     "draft": true,

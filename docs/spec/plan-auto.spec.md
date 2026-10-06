@@ -204,7 +204,8 @@ intensity). Each rung is the canonical variant of `backend/engine/interval_libra
   and for stored sessions. A stored row of an old rung still resolves: it is judged against its
   own variant and its 達標 counts in `met`, but it doesn't move the A rung.
 - **Zone 3 volume** (`z3_budget_min`): the session's time in zone ≤ 10 % of the week's planned
-  hours (Daniels: T ≤ 10 % of the weekly volume), 5 % for the track's first session (UA: Zone 3
+  hours (`Z3_SHARE_MAX`; coach, the book not verified: Daniels' T ≤ 10 % is per **session** and by
+  **mileage** — second-hand summaries — the app applies it per **week** and by **time**), 5 % for the track's first session (UA: Zone 3
   starts at ~5 %). Over it, `cruise_for` picks the 巡航版 of the same position (A1 → T1, A2 → T2,
   A3 / A4 → T3, stepping down to fit; T1 the floor); it is stored under the A rung (equiv) and
   counts, with a 「本週 x h：3 區上限 …→ 巡航版」 note.
@@ -214,7 +215,7 @@ intensity). Each rung is the canonical variant of `backend/engine/interval_libra
   stepping down), stored under the A rung (equiv) — 達標 moves the ladder; note 「平日上限 N 分放不下
   … → 巡航版 …（算這一階）」. Only when no 巡航版 fits does fit's own fallback (縮量版 / the step
   before, not counted) apply.
-- **Week total** (`QUALITY_SHARE_MAX = 0.20`, 推估: Seiler 80/20, Koop): Zone 3 + Zone 5 time in
+- **Week total** (`QUALITY_SHARE_MAX = 0.20`, 推估 — Seiler 2010's 80/20 counts **sessions**, not time; Koop): Zone 3 + Zone 5 time in
   zone ≤ 20 % of the planned running time. `overview.quality_sessions` builds Zone 5 first and
   gives Zone 3 what is left (a smaller 巡航版); a session still over is cut to fewer reps as a
   縮量版 (`_shorten`, floor `MIN_REPS`, no progress) or, when it can't be cut, kept with a note —
@@ -256,7 +257,13 @@ intensity). Each rung is the canonical variant of `backend/engine/interval_libra
 - **Zone 3** (`z3_gate`, SP-31; the owner's rule 2026-10-04) opens on any one of: (a)
   consistency — 4 complete weeks of actual training (imported history counts, whatever the
   phase label) with ≥ 3 runs every week and no ≥ 7-day stretch without running
-  (`Z3_WEEKS_NEED`, `Z3_RUNS_PER_WEEK`, `Z3_MAX_GAP_DAYS`, all 推估; `z3_consistency`); (b) the
+  (`Z3_WEEKS_NEED`, `Z3_RUNS_PER_WEEK`, `Z3_MAX_GAP_DAYS`, all 推估; `z3_consistency`) — with the
+  re-lock days below these are the defaults of 設定 → 進階設定 (SP-295: `advanced_params` items
+  `z3_unlock_weeks` 1–16, `z3_unlock_runs_per_week` 1–7, `z3_unlock_max_gap_days` 1–21,
+  `z3_relock_days` 7–120, whole numbers, manual only; `quality_gate.z3_rule()` reads the ones in
+  effect, the gate's texts and the 間歇門檻 hover quote them tagged 「預設，推估」 or 「手動」; a change
+  is in the status / plan cache keys (`z3_rule_stamp`) and starts a background `plan_auto` run,
+  trigger `settings`); (b) the
   90-min drift test < 10 %; (c) a measured UA gap ≤ 10 %. Also open: mode `none`, the chosen
   method unlocked, an aerobic-base confirmation of the Zone 5 process, the re-entry rule asking
   for Zone 3, a Zone 3 session 達標 in the 8-week history. Once met it stays open; a break of

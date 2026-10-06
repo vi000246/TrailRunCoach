@@ -214,7 +214,7 @@ def _tiz(s: dict) -> float:
 def budget_room(ss: list, hours: Optional[float]) -> tuple[Optional[float], str]:
     """Minutes of RPE 6–7 work the week's budget still takes (SP-31): 20 % of the week
     (QUALITY_SHARE_MAX) − the intervals' time in zone, and its text. The 技術地形 work is not put
-    in the Zone 3 bucket (≤ 10 %, Daniels' T volume): on technical trail the footing, not the
+    in the Zone 3 bucket (≤ 10 %, Z3_SHARE_MAX — Daniels' per-session T cap used per week, coach): on technical trail the footing, not the
     heart, sets the effort and HR stays low (SP-62), so it is hard time but not threshold time
     (推估); the Zone 3 intervals keep their own 10 %."""
     from backend.engine import quality_gate as QG

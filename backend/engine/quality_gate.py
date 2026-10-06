@@ -45,9 +45,10 @@ ladder, dose step and 達標 count (dose_tracks):
      then A3 / A4 / T+ maintenance. Opens on the Zone 3 gate (z3_gate, any one): 4 complete weeks
      of actual training with ≥ 3 runs a week and no 7-day gap (推估; sticky, a ≥ 21-day break
      re-locks), the 90-min drift test < 10 %, or a measured UA gap ≤ 10 %. Its time in zone ≤ 10 %
-     of the week (Daniels; 5 % for the first session, UA): over that the 巡航版 T1–T3 (3×6′ / 3×8′
+     of the week (coach, the book not verified: Daniels' T ≤ 10 % is per session and by mileage, here per
+     week and by time; 5 % for the first session, UA): over that the 巡航版 T1–T3 (3×6′ / 3×8′
      / 2×12′, the old Zone 3 rungs) stands in and still counts. Zone 3 + Zone 5 ≤ 20 % of the
-     week's running time (QUALITY_SHARE_MAX, 推估; overview.quality_sessions shortens and notes).
+     week's running time (QUALITY_SHARE_MAX, 推估 — Seiler's 80/20 counts sessions, not time; overview.quality_sessions shortens and notes).
   Zone 5: 5×2′ → 4×3′ → 5×3′ → 4×4′, then V3 / V4 maintenance — its own gate (SP-39, z5_track):
      a MEASURED AeT (base_check.z5_status: a tested AeT + a measured LTHR within 10 %, or Friel
      drift < 5 % at the tested AeT; the 90-min test is not an AeT test) and the soft 「3 區先」:
@@ -114,10 +115,10 @@ XU_GOOD = 0.10
 XU_HEAT_C = 25.0               # 台灣教練's condition: advice in the session text, not a refusal (heat bands)
 PLATEAU_WEEKS = 8              # 自訂
 EF_PLATEAU = 0.02              # status.EF_TREND
-LOW_SHARE_MIN = 0.75           # status.LOW_SHARE_GOOD (Seiler, by time)
+LOW_SHARE_MIN = 0.75           # status.LOW_SHARE_GOOD — by time, 推估: Seiler 2010's 80/20 counts sessions, not time
+                               # (estimated-constants-inventory.md §5.1)
 STEP_HOLD, STEP_BLOCK = LG.STEP_HOLD, LG.STEP_BLOCK   # > 20 % block: Nielsen 2014, Damsted 2019; 10–20 % hold 推估
 TSB_HOLD = -20.0                           # Friel / TrainingPeaks TSB bands (coach)
-ZONE3_SESSIONS = 3             # 自訂: ua_gap unlock → this many Zone 3 sessions, then the dose table
 REP_PCT, REP_MIN_S, DOSE_MIN_REPS = 0.95, 40, 4   # 自訂: a short-rep session = ≥ 4 bouts ≥ 40 s at ≥ 95 % CP
 FADE = 0.05                    # workout_review.FADE
 
@@ -158,11 +159,16 @@ Z3_RUNS_PER_WEEK = 3           # 推估: … with ≥ 3 runs every week
 Z3_MAX_GAP_DAYS = 7            # 推估: … and no stretch of ≥ 7 days without running inside them
 Z3_RELOCK_DAYS = 21            # 推估: ≥ 21 days without running re-locks Zone 3 (Coyle 1984: VO2max −7 % at
                                # 21 days; detraining.md §1 「3–8 週開始傷到有氧基礎」). 6–20 days: the re-entry block only
+# SP-295: the four numbers above are the defaults of 設定 → 進階設定 (engine/advanced_params.py items
+# z3_unlock_weeks / z3_unlock_runs_per_week / z3_unlock_max_gap_days / z3_relock_days); the gate reads the
+# ones in effect through z3_rule(), and its texts say 預設 or 手動.
 Z3_HISTORY_DAYS = 365          # 自訂: how far back the run dates are read
-QUALITY_SHARE_MAX = 0.20       # 推估 (Seiler 80/20, Koop): the week's interval work (Zone 3 + Zone 5 time in zone)
+QUALITY_SHARE_MAX = 0.20       # 推估 — Seiler 2010's 80/20 counts sessions, not time (inventory §5.1); Koop: the week's interval work (Zone 3 + Zone 5 time in zone)
                                # ≤ 20 % of the planned running time — a planning rule, not a gate
 Z3_SHARE_START = 0.05          # UA: Zone 3 starts at about 5 % of the weekly aerobic volume (the track's first session)
-Z3_SHARE_MAX = 0.10            # Daniels: T running ≤ 10 % of the weekly volume — the per-week Zone 3 cap
+Z3_SHARE_MAX = 0.10            # coach, the book not verified (second-hand summaries): Daniels' T ≤ 10 % of the weekly
+                               # mileage is per SESSION and by MILEAGE; the app uses it per WEEK and by TIME — the
+                               # per-week Zone 3 cap (estimated-constants-inventory.md §5.3)
 # legacy titles of the old ladders: not counted as steps any more (neutral in planned_spec).
 # The old z3a 「閾值 3×8 分」 is T2's title: a title-only row reads as z3b now.
 LEGACY_TITLES = ("短間歇 5×1 分", "短間歇 6×1 分", "爬坡間歇 4×3 分", "間歇 5×3 分", "VO2max 間歇 4×4 分",
@@ -211,7 +217,8 @@ def dose_spec(step: int, z5_open: bool = True) -> tuple:
 
 
 def z3_budget_min(hours: Optional[float], first: bool = False) -> Optional[float]:
-    """The week's Zone 3 time in zone budget (minutes): 10 % of the planned week (Daniels), 5 % for
+    """The week's Zone 3 time in zone budget (minutes): 10 % of the planned week (Z3_SHARE_MAX: Daniels' per-session,
+    by-mileage T cap used per week and by time — coach, the book not verified), 5 % for
     the track's first session (UA). None without a week volume."""
     if not hours or hours <= 0:
         return None
@@ -1298,15 +1305,16 @@ def _injury_pause(today: dt.date) -> Optional[str]:
 # ---------------------------------------------------------------------------
 
 SRC_Z3 = {
-    "weeks": "推估：連續 4 週規律訓練（每週 ≥ 3 次、沒有 ≥ 7 天沒跑）——UA 登山計畫 4 週基礎後才出現第一堂 Z3；"
+    "weeks": "推估（預設值，可在設定 → 進階設定改）：連續 4 週規律訓練（每週 ≥ 3 次、沒有 ≥ 7 天沒跑）——UA 登山計畫 4 週基礎後才出現第一堂 Z3；"
              "Pfitzinger 第一個週期 5 週耐力；停跑 ≥ 21 天重新累積（Coyle 1984：21 天 VO2max −7%）",
     "xu90": "徐國峰部落格（2016-12）：90 分鐘平路 1 區，飄移 < 10%",
     "ua_gap": SRC_UA,
     "ratio": "推估（研究 Finding 6 的週內配置：UA 專項期 1 堂 Z3＋1 堂 Z4、Daniels 主課＋T 次課）："
              "每週 1 堂時，目標 ≤ 10 km 路跑 3 區：5 區 = 1:1，半馬以上／越野／沒有 A 賽 2:1；"
              "專項期後段（賽前第 6–3 週）往比賽強度偏（Koop、Uphill Athlete、Haugen 2022；比例為推估）",
-    "volume": "Daniels：T 每週不超過週量 10%；Uphill Athlete：Zone 3 起步約週有氧量 5%",
-    "share": "推估：一週間歇（3 區＋5 區的目標區時間）≤ 跑步時間 20%（Seiler 80/20；Koop）",
+    "volume": "教練（未驗證原書）：Daniels 是單次 T 課不超過週里程 10%，這裡改成每週 3 區時間不超過週量 10%；"
+              "Uphill Athlete：Zone 3 起步約週有氧量 5%",
+    "share": "推估：一週間歇（3 區＋5 區的目標區時間）≤ 跑步時間 20%（Seiler 的 80/20 是堂數，不是時間；Koop）",
 }
 
 
@@ -1318,10 +1326,30 @@ def run_days(ds, today: dt.date, days: int = Z3_HISTORY_DAYS) -> list[dt.date]:
                    if w.sport == "run" and tday - days < math.floor(w.day) <= tday})
 
 
-def z3_consistency(days: list, today: dt.date, need: int = Z3_WEEKS_NEED, skip=()) -> dict:
+def z3_rule() -> dict:
+    """The Zone 3 unlock rule in effect (SP-295): {"weeks", "runs", "gap", "relock", "manual"} —
+    the 進階設定 values (engine/advanced_params.z3_rule), the defaults Z3_WEEKS_NEED / Z3_RUNS_PER_WEEK /
+    Z3_MAX_GAP_DAYS / Z3_RELOCK_DAYS when nothing is set or the settings can't be read."""
+    try:
+        from backend.engine import advanced_params as AP
+        return AP.z3_rule()
+    except Exception:                       # noqa: BLE001 — the gate must still evaluate
+        return {"weeks": Z3_WEEKS_NEED, "runs": Z3_RUNS_PER_WEEK, "gap": Z3_MAX_GAP_DAYS,
+                "relock": Z3_RELOCK_DAYS, "manual": False}
+
+
+def z3_rule_tag(rule: dict) -> str:
+    """「預設，推估」 / 「手動」: which numbers the Zone 3 texts quote (SP-295)."""
+    return _("手動") if rule.get("manual") else _("預設，推估")
+
+
+def z3_consistency(days: list, today: dt.date, need: Optional[int] = None, skip=(),
+                   rule: Optional[dict] = None) -> dict:
     """The Zone 3 gate's consistency path on the run dates (SP-31): a window of `need` complete
-    weeks, each with ≥ Z3_RUNS_PER_WEEK runs and no Z3_MAX_GAP_DAYS-day stretch without running,
-    after the last break of ≥ Z3_RELOCK_DAYS days (which re-locks; a break still going on too).
+    weeks, each with ≥ `runs` runs and no `gap`-day stretch without running, after the last
+    break of ≥ `relock` days (which re-locks; a break still going on too). `rule` = z3_rule()
+    (the 進階設定 values, SP-295; default Z3_WEEKS_NEED / Z3_RUNS_PER_WEEK / Z3_MAX_GAP_DAYS /
+    Z3_RELOCK_DAYS); `need` overrides its weeks.
     Once such a window exists the path stays open (sticky — a 6–20-day break only gets the
     re-entry block). `skip`: post-race 恢復期 / 轉換期 days (planning.post_race_days; SP-73, owner
     2026-10-05) — they are no running gap: not counted in the 7-day stretch nor the 21-day re-lock,
@@ -1329,6 +1357,9 @@ def z3_consistency(days: list, today: dt.date, need: int = Z3_WEEKS_NEED, skip=(
     nor breaks it; a transition week with ≥ 3 runs counts as usual). {"open", "since", "weeks"
     (the trailing complete weeks that pass, for the progress line), "rows" (the last `need` weeks:
     monday, runs, ok[, transition]), "break"}."""
+    rule = rule or z3_rule()
+    need = int(need if need is not None else rule["weeks"])
+    min_runs, max_gap, relock = int(rule["runs"]), int(rule["gap"]), int(rule["relock"])
     skip = set(skip or ())
     one = dt.timedelta(days=1)
 
@@ -1342,7 +1373,7 @@ def z3_consistency(days: list, today: dt.date, need: int = Z3_WEEKS_NEED, skip=(
     brk = None
     prev = None
     for d in list(days) + [today + one]:
-        if prev is not None and gap(prev, d) >= Z3_RELOCK_DAYS:
+        if prev is not None and gap(prev, d) >= relock:
             brk = {"last_run": prev.isoformat(), "days": gap(prev, d),
                    "return": d.isoformat() if d <= today else None}
         prev = d
@@ -1361,24 +1392,24 @@ def z3_consistency(days: list, today: dt.date, need: int = Z3_WEEKS_NEED, skip=(
 
     def gap_ok(w0: dt.date, w1: dt.date) -> bool:
         ds_ = [d for d in days if w0 <= d < w1]
-        return all(gap(a, b) < Z3_MAX_GAP_DAYS for a, b in zip(ds_, ds_[1:]))
+        return all(gap(a, b) < max_gap for a, b in zip(ds_, ds_[1:]))
 
     def in_transition(w: dt.date) -> bool:
         return any(w + k * one in skip for k in range(7))
     # a transition week that fails on its own is transparent (SP-73)
-    clear = {w for w in weeks if in_transition(w) and not (runs[w] >= Z3_RUNS_PER_WEEK
+    clear = {w for w in weeks if in_transition(w) and not (runs[w] >= min_runs
                                                           and gap_ok(w, w + dt.timedelta(weeks=1)))}
     seq = [w for w in weeks if w not in clear]
     since = None
     if not (brk and brk["return"] is None):
         for i in range(len(seq) - need + 1):
             win = seq[i:i + need]
-            if all(runs[w] >= Z3_RUNS_PER_WEEK for w in win) and gap_ok(win[0], win[-1] + dt.timedelta(weeks=1)):
+            if all(runs[w] >= min_runs for w in win) and gap_ok(win[0], win[-1] + dt.timedelta(weeks=1)):
                 since = (win[-1] + dt.timedelta(weeks=1)).isoformat()
                 break
     trail = 0
     for k in range(len(seq), 0, -1):
-        if runs[seq[k - 1]] >= Z3_RUNS_PER_WEEK and gap_ok(seq[k - 1], mon):
+        if runs[seq[k - 1]] >= min_runs and gap_ok(seq[k - 1], mon):
             trail += 1
         else:
             break
@@ -1386,7 +1417,7 @@ def z3_consistency(days: list, today: dt.date, need: int = Z3_WEEKS_NEED, skip=(
     for k in range(need, 0, -1):
         w = mon - dt.timedelta(weeks=k)
         n = sum(1 for d in days if w <= d < w + dt.timedelta(weeks=1))
-        row = {"monday": w.isoformat(), "runs": n, "ok": (n >= Z3_RUNS_PER_WEEK or w in clear) and w >= first_mon}
+        row = {"monday": w.isoformat(), "runs": n, "ok": (n >= min_runs or w in clear) and w >= first_mon}
         if w in clear:
             row["transition"] = True
         rows.append(row)
@@ -1458,26 +1489,28 @@ def rebase_reason(today: dt.date, rebase: Optional[dict], z3: Optional[dict], z5
 def z3_gate(ds, today: dt.date, mode: str, state: Optional[str], ae: dict, lt: dict, z5: dict,
             dose: dict, rebase: Optional[dict] = None) -> dict:
     """Is the Zone 3 track open (SP-31, the owner's rule 2026-10-04)? Any one of:
-      weeks   consistency: Z3_WEEKS_NEED complete weeks of actual training (imported history counts,
-              whatever the phase label) with ≥ Z3_RUNS_PER_WEEK runs every week and no
-              Z3_MAX_GAP_DAYS-day stretch without running (z3_consistency; 推估) — sticky once met
+      weeks   consistency: N complete weeks of actual training (imported history counts,
+              whatever the phase label) with ≥ M runs every week and no G-day stretch without
+              running (z3_consistency; z3_rule: the 進階設定 values, default Z3_WEEKS_NEED 4 /
+              Z3_RUNS_PER_WEEK 3 / Z3_MAX_GAP_DAYS 7, 推估) — sticky once met
       xu90    a 徐國峰 90-min test with drift < 10 % (base_check.xu_runs)
       ua_gap  a measured AeT with LTHR / AeT − 1 ≤ 10 % (Uphill Athlete)
     plus what already shows the base is there: mode none (no gate, Seiler), the chosen 間歇門檻
     method unlocked, an aerobic-base confirmation of the Zone 5 process, the re-entry rule asking
     for Zone 3, or a Zone 3 session 達標 in the last 8 weeks. No low-intensity-share condition
-    (the AeT is often estimated and climbs inflate HR). A break of ≥ Z3_RELOCK_DAYS days without
-    running re-locks it: only what comes after the break counts (and a break still going on
+    (the AeT is often estimated and climbs inflate HR). A break of ≥ R days (z3_rule, default
+    Z3_RELOCK_DAYS) without running re-locks it: only what comes after the break counts (and a break still going on
     locks). This week's guardrails apply on top (week_decision).
     `rebase` (base_check.a_race_rebase, SP-116): after an A race only evidence from rebase["from"]
     counts — the 90-min test, the UA gap's AeT, the chosen method or a Zone 5 confirmed again;
     the consistency weeks and earlier Zone 3 達標 don't (the rebuild is a re-test).
     {"open", "path", "path_label", "weeks", "weeks_need", "weekly", "tests", "reason", "text", "src", "break",
     "rebase"}."""
-    need = Z3_WEEKS_NEED
+    rule = z3_rule()
+    need, tag = rule["weeks"], z3_rule_tag(rule)
     try:
         rd = run_days(ds, today)
-        cons = z3_consistency(rd, today, need, _transition_skip(ds, rd, today))
+        cons = z3_consistency(rd, today, need, _transition_skip(ds, rd, today), rule)
     except Exception:                       # noqa: BLE001 — the gate must still evaluate
         cons = {"open": False, "since": None, "weeks": 0, "rows": [], "break": None}
     brk = cons.get("break")
@@ -1503,7 +1536,7 @@ def z3_gate(ds, today: dt.date, mode: str, state: Optional[str], ae: dict, lt: d
     pause = z5.get("pause") or {}
     short = [r for r in cons.get("rows") or [] if not r["ok"]]
     tests = [
-        {"key": "weeks", "label": f"連續 {need} 週，每週跑 ≥ {Z3_RUNS_PER_WEEK} 次、沒有 ≥ {Z3_MAX_GAP_DAYS} 天沒跑（推估）",
+        {"key": "weeks", "label": f"連續 {need} 週，每週跑 ≥ {rule['runs']} 次、沒有 ≥ {rule['gap']} 天沒跑（{tag}）",
          "ok": bool(cons["open"]),
          "value": (f"{cons['since']} 起達成" if cons["open"] else f"{min(cons['weeks'], need)}/{need} 週"
                    + (f"（{short[-1]['monday'][5:]} 那週跑 {short[-1]['runs']} 次）" if short else "")),
@@ -1535,18 +1568,18 @@ def z3_gate(ds, today: dt.date, mode: str, state: Optional[str], ae: dict, lt: d
     elif not brk and not rb_from and int(d3.get("met") or 0) + int(d3.get("step") or 0) > 0:
         path, label = "track", "8 週內有 3 區達標，繼續階梯"
     if resting:
-        reason = f"3 區還沒解鎖：已經 {brk['days']} 天沒跑（≥ {Z3_RELOCK_DAYS} 天要重新累積；推估）"
+        reason = f"3 區還沒解鎖：已經 {brk['days']} 天沒跑（≥ {rule['relock']} 天要重新累積；{tag}）"
     elif path:
         reason = ""
     elif rb_from:
         reason = _("3 區還沒解鎖：{text}，{action}", text=rebase["text"], action=rebase_action(mode, rebase))
     else:
-        reason = (f"3 區還沒解鎖：連續 {min(cons['weeks'], need)}/{need} 週每週跑 ≥ {Z3_RUNS_PER_WEEK} 次（推估）"
+        reason = (f"3 區還沒解鎖：連續 {min(cons['weeks'], need)}/{need} 週每週跑 ≥ {rule['runs']} 次（{tag}）"
                   + (f"——{short[-1]['monday'][5:]} 那週跑 {short[-1]['runs']} 次" if short else "")
-                  + (f"；停跑 {brk['days']} 天（≥ {Z3_RELOCK_DAYS} 天）後重新累積" if brk else "")
+                  + (f"；停跑 {brk['days']} 天（≥ {rule['relock']} 天）後重新累積" if brk else "")
                   + "；或做一次 90 分鐘平路 1 區測試（飄移 < 10%）；或實測 AeT 且 UA 差距 ≤ 10%")
     return {"open": path is not None, "path": path, "path_label": label, "weeks": cons["weeks"],
-            "weeks_need": need, "weekly": cons.get("rows") or [], "tests": tests, "reason": reason,
+            "weeks_need": need, "rule": rule, "weekly": cons.get("rows") or [], "tests": tests, "reason": reason,
             "since": cons.get("since"), "break": brk, "rebase": bool(rb_from),
             "text": f"Zone 3：已解鎖（{label}）" if path else f"Zone 3：未解鎖（{reason.split('：', 1)[-1]}）",
             "src": rebase["src"] if rb_from and not path else SRC_Z3["weeks"]}
@@ -1564,7 +1597,7 @@ def _xu_value(x: Optional[dict]) -> str:
 
 def z3_open_on(z3: Optional[dict], monday: Optional[dt.date], gate_monday: Optional[str]) -> bool:
     """The Zone 3 gate on the week of `monday`: open as evaluated; locked only by the time path
-    opens in a projected week once the streak would reach Z3_WEEKS_NEED (each projected week is
+    opens in a projected week once the streak would reach weeks_need (z3_rule; each projected week is
     assumed to pass its guardrails — they are re-checked when it comes; 推估). A gate without a
     Zone 3 part (older stored gates, legacy callers) is open."""
     if not isinstance(z3, dict):
@@ -2206,7 +2239,8 @@ def z5_flow(card: dict, z: dict, gate: dict, tests: list, step: int) -> dict:
         if G.get("path_label"):
             s1.append(item(_("3 區已解鎖"), True, G["path_label"]))
     else:
-        todo1 = {"weeks": (_("規律跑：每週 ≥ {n} 次、別連續 {g} 天沒跑", n=Z3_RUNS_PER_WEEK, g=Z3_MAX_GAP_DAYS), None),
+        todo1 = {"weeks": (_("規律跑：每週 ≥ {n} 次、別連續 {g} 天沒跑", n=(G.get("rule") or z3_rule())["runs"],
+                                g=(G.get("rule") or z3_rule())["gap"]), None),
                  "xu90": (_("做 1 次 90 分鐘平路 1 區測試"), schedule_action("test", "aet", "xu90")),
                  "ua_gap": (_("做 1 次 AeT 測試（LTHR ÷ AeT − 1 ≤ 10% 就算）"),
                             schedule_action("test", "aet", AET_TEST_PROTOCOL))}
@@ -2221,7 +2255,7 @@ def z5_flow(card: dict, z: dict, gate: dict, tests: list, step: int) -> dict:
     done1 = state != "reentry" and bool(G.get("open"))
     s2 = ladder(Z3, step, done1)
     tip2 = (_("3 區解鎖後、護欄通過就照排，5 區開放後也照排") + "\n"
-            + _("每週 3 區量 ≤ 週量 10%（Daniels），放不下排巡航版 3×6／3×8／2×12"))
+            + _("每週 3 區量 ≤ 週量 10%（教練，未驗證原書：Daniels 是單次課、以里程算，這裡是每週、以時間算），放不下排巡航版 3×6／3×8／2×12"))
     z3_stages = [
         {"key": "z3_gate", "title": _("3 區解鎖"), "sub": _("有基礎了就能做") if not done1 else "", "items": s1,
          "done": done1, "any": any1, "any_label": note1, "unlocks": _("可以開始排 3 區（有氧間歇／節奏跑）"),
@@ -2873,7 +2907,7 @@ def _indicator(gate: dict) -> dict:
     if not dec["allow"] and z3g and not z3g.get("open"):
         # the Zone 3 gate (SP-31): easy running until the base is there
         return {"level": "info", "text": "3 區未開", "verdict": dec.get("z3_note") or z3g.get("reason") or "",
-                "why": why, "action": f"規律跑（每週 ≥ {Z3_RUNS_PER_WEEK} 次、別連續 {Z3_MAX_GAP_DAYS} 天沒跑）；或做一次 90 分鐘平路 1 區測試（飄移 < 10% 就解鎖）",
+                "why": why, "action": f"規律跑（每週 ≥ {(z3g.get('rule') or z3_rule())['runs']} 次、別連續 {(z3g.get('rule') or z3_rule())['gap']} 天沒跑）；或做一次 90 分鐘平路 1 區測試（飄移 < 10% 就解鎖）",
                 "source": z3g.get("src") or SRC_Z3["weeks"]}
     if state == "unlocked":
         spec = dec["spec"]
@@ -2894,7 +2928,7 @@ def _indicator(gate: dict) -> dict:
 
 OPTION_INFO = {
     "auto": {"source": "台灣教練、徐國峰部落格、Uphill Athlete、Friel、Seiler",
-             "rule": "3 區（有氧間歇／節奏，每趟 15–30 分：2×15 → 3×12 → 2×20 → 1×30，88–95% CP）解鎖後、護欄通過就排——解鎖三選一：連續 4 週規律訓練（每週 ≥ 3 次、沒有 ≥ 7 天沒跑；推估，停跑 ≥ 21 天要重新累積）、徐國峰 90 分鐘測試飄移 < 10%、或實測 AeT 的 UA 差距 ≤ 10%；低強度占比不擋 3 區（只提醒；5 區照舊要 ≥ 75%）；每週 3 區量 ≤ 週量 10%（Daniels），放不下就排巡航版 3×6／3×8／2×12。5 區開放後 3 區照排：每週 2 堂＝3 區＋5 區各 1，每週 1 堂時輪替（目標 ≤ 10 km 路跑 1:1，其他 2:1；推估）；專項期照樣走階梯（越野排上坡版），後段（賽前第 6–3 週）的比例往比賽強度偏：預估 4 小時以上的越野／百岳只排 3 區，半馬以上的路跑 3:1，5 km 路跑 1:2（推估）；一週間歇總量 ≤ 跑步時間 20%（推估）。5 區（每趟 ≥ 2 分、一週最多 2 次、隔 ≥ 2 天：台灣教練）是另一道關卡，一定要實測 AeT："
+             "rule": "3 區（有氧間歇／節奏，每趟 15–30 分：2×15 → 3×12 → 2×20 → 1×30，88–95% CP）解鎖後、護欄通過就排——解鎖三選一：{z3_rule}、徐國峰 90 分鐘測試飄移 < 10%、或實測 AeT 的 UA 差距 ≤ 10%；低強度占比不擋 3 區（只提醒；5 區照舊要 ≥ 75%）；每週 3 區量 ≤ 週量 10%（教練，未驗證原書：Daniels 是單次課、以里程算，這裡是每週、以時間算），放不下就排巡航版 3×6／3×8／2×12。5 區開放後 3 區照排：每週 2 堂＝3 區＋5 區各 1，每週 1 堂時輪替（目標 ≤ 10 km 路跑 1:1，其他 2:1；推估）；專項期照樣走階梯（越野排上坡版），後段（賽前第 6–3 週）的比例往比賽強度偏：預估 4 小時以上的越野／百岳只排 3 區，半馬以上的路跑 3:1，5 km 路跑 1:2（推估）；一週間歇總量 ≤ 跑步時間 20%（推估；Seiler 的 80/20 是堂數，不是時間）。5 區（每趟 ≥ 2 分、一週最多 2 次、隔 ≥ 2 天：台灣教練）是另一道關卡，一定要實測 AeT："
                      "① 實測 AeT＋實測 LTHR，LTHR ÷ AeT − 1 ≤ 10%（UA 差距法）、或 ② 在實測 AeT 附近跑 ≥ 60 分鐘，前後半飄移 < 5%（Friel）；"
                      "90 分鐘測試量不出 AeT，只算 3 區的關卡。另外近 6 週要做過 ≥ 2 堂 3 區（軟條件，推估）。"
                      "低強度占比 < 75% 在實測 AeT 時擋 5 區；AeT 是估計值時只提醒。"
@@ -2933,5 +2967,9 @@ OPTION_INFO = {
 
 def option_texts() -> dict:
     """{mode: {"label", "tip"}} — the static part of the hover (availability is added by the page)."""
-    return {m: {"label": LABEL[m], "tip": f"{LABEL[m]}\n來源：{v['source']}\n\n怎麼算：{v['rule']}\n\n要做的事：{v['todo']}"}
+    r = z3_rule()
+    z3 = (f"連續 {r['weeks']} 週規律訓練（每週 ≥ {r['runs']} 次、沒有 ≥ {r['gap']} 天沒跑；{z3_rule_tag(r)}，"
+          f"停跑 ≥ {r['relock']} 天要重新累積）")
+    return {m: {"label": LABEL[m], "tip": f"{LABEL[m]}\n來源：{v['source']}\n\n怎麼算：{v['rule'].replace('{z3_rule}', z3)}"
+                                          f"\n\n要做的事：{v['todo']}"}
             for m, v in OPTION_INFO.items()}
