@@ -182,9 +182,11 @@ def test_races_lists_a_and_b_only(monkeypatch):
     plan = Plan(events=[ev(eid="a"), ev(eid="b", priority="B"), ev(eid="c", priority="C"),
                         ev(eid="old", start="2026-09-01")])
     no_gpx = lambda e: None
-    out = F.races(plan, None, TODAY, predict=lambda e, c=None: None, gpx=no_gpx)
+    out = F.races(plan, None, TODAY, predict=lambda e, c=None: None, gpx=no_gpx,
+                   finish=lambda e, c: None)
     assert [r["event_id"] for r in out] == ["a", "b"]
-    one = F.races(plan, None, TODAY, event_id="c", predict=lambda e, c=None: None, gpx=no_gpx)
+    one = F.races(plan, None, TODAY, event_id="c", predict=lambda e, c=None: None, gpx=no_gpx,
+                   finish=lambda e, c: None)
     assert one[0]["skipped"]
 
 
@@ -200,6 +202,7 @@ def test_api_lists_the_races_and_404s_an_unknown_event(tmp_path, monkeypatch):
     monkeypatch.setattr(F, "activity_rows", lambda ds, today, days=42: [])
     monkeypatch.setattr(RR, "calculator_hours", lambda e, c=None: None)
     monkeypatch.setattr(RR, "stored_course", lambda e: None)
+    monkeypatch.setattr(F, "trail_finish", lambda e, c: None)
     r = OA.feasibility()
     assert r["today"] == TODAY.isoformat() and [x["event_id"] for x in r["races"]] == ["a"]
     assert r["races"][0]["level"] == "ok" and r["levels"]["over"]
@@ -286,9 +289,11 @@ def test_races_attach_readiness_but_not_to_c_races(monkeypatch):
     monkeypatch.setattr(F, "weekly_history", lambda ds, today, weeks=4: hist(km=40.0, climb=2000.0, n=weeks))
     monkeypatch.setattr(F, "activity_rows", lambda ds, today, days=42: acts((TODAY - dt.timedelta(days=3), 20, 1200, 4.0)))
     plan = Plan(events=[ev(eid="a"), ev(eid="c", priority="C")])
-    out = F.races(plan, None, TODAY, predict=lambda e, c=None: None, gpx=lambda e: None)
+    out = F.races(plan, None, TODAY, predict=lambda e, c=None: None, gpx=lambda e: None,
+                   finish=lambda e, c: None)
     assert [r["event_id"] for r in out] == ["a"] and out[0]["readiness"]["checks"]
-    c = F.races(plan, None, TODAY, event_id="c", predict=lambda e, c=None: None, gpx=lambda e: None)[0]
+    c = F.races(plan, None, TODAY, event_id="c", predict=lambda e, c=None: None, gpx=lambda e: None,
+                   finish=lambda e, c: None)[0]
     assert "readiness" not in c
 
 
@@ -562,9 +567,14 @@ def test_races_use_the_trail_finish_for_one_piece_trail_races_only(monkeypatch):
         return fin(7.0, 0.5, "user", user_min=30.0)
     out = {r["event_id"]: r for r in F.races(plan, None, TODAY, predict=lambda e, c=None: [5.0],
                                              gpx=lambda e: None, finish=finish)}
-    assert asked == ["t"]
+    assert asked == ["t", "n"]                          # every trail race in one piece, cutoff or not
     ct = next(c for c in out["t"]["checks"] if c["id"] == "cutoff")
     assert ct["finish_h"] == 7.5 and ct["level"] == "tight"
+    # owner 2026-10-06: the other checks read the same HR-model moving time, not the CP + Riegel 5 h
+    assert out["n"]["race_day"]["hours"] == 7.0 and out["t"]["race_day"]["hours"] == 7.0
+    assert out["s"]["race_day"]["hours"] != 7.0
+    wk = next(c for c in out["n"]["checks"] if c["id"] == "weekly")
+    assert wk["ok_at"] == F.WEEK_OK_LONG                # 7 h ≥ 6 h: a long event (the old 5 h was short)
     cr = next(c for c in out["r"]["checks"] if c["id"] == "cutoff")
     assert "moving_h" not in cr and "預估" in cr["text"]
     # the calculator gives no moving time: the old (CP + Riegel) hours, said so

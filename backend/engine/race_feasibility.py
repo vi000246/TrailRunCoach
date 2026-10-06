@@ -33,7 +33,9 @@ Only advice — nothing here changes the plan or the event. Each check gives a l
            ran fast on trail) + the stops: the calculator's aid stations for the event, else the
            athlete's own past races (nonmoving.py); neither → no stops, and the text says so (owner
            2026-10-05: no population default — SP-221 cancelled). No HR model → the old moving
-           time, said in the text. Road races and stage races keep the old finish.
+           time, said in the text. Road races and stage races keep the old finish. The same moving
+           time feeds every other check of such a race (owner 2026-10-06): the 6 h long-event line,
+           Koop's ultra size, the hardest day's コース定数 (readiness' long day).
            百岳: the predicted time to the summit vs the turnaround (撤退時間, hours from that
            day's start): later = over (「不適合這座百岳」, the owner's rule 2026-10-05), < 30 min
            to spare = tight (推估).
@@ -884,8 +886,9 @@ def races(plan, ds, today: dt.date, event_id: Optional[str] = None,
           predict: Optional[Callable] = None, gpx: Optional[Callable] = None,
           baiyue: Optional[Callable] = None, finish: Optional[Callable] = None) -> list[dict]:
     """The verdicts of the upcoming A / B races (or the one `event_id`, any grade). `baiyue(e)` →
-    (climb, power) for a 百岳 (tests); None = baiyue_inputs. `finish(e, course)` → the cutoff's
-    moving + stop time of a trail race in one piece with a cutoff (SP-220); None = trail_finish."""
+    (climb, power) for a 百岳 (tests); None = baiyue_inputs. `finish(e, course)` → the moving + stop
+    time of a trail race in one piece (SP-220: the hours of every check, the stops for the cutoff);
+    None = trail_finish."""
     from backend.engine.panels import race_refs as RR
     predict = predict or RR.calculator_hours
     gpx = gpx or RR.stored_course
@@ -904,13 +907,18 @@ def races(plan, ds, today: dt.date, event_id: Optional[str] = None,
         if e.distance_km:
             course = RR.course_of(e, gpx)
             hs = predict(e, course)
-            if e.kind in TRAIL_KINDS and getattr(e, "cutoff_hours", None) and RR.split_days(e) == 1:
-                # SP-220: the calculator's moving time + the stops (a stage race keeps the old finish)
+            src = _("賽事計算器預測的完賽時間")
+            if e.kind in TRAIL_KINDS and RR.split_days(e) == 1:
+                # SP-220: the calculator's HR pace moving time for every check of a trail race in one
+                # piece (owner 2026-10-06: not only the cutoff) + the stops for the cutoff; a stage
+                # race keeps the old hours
                 fin = finish(e, course) or {"moving_h": None}
-                if not fin.get("moving_h"):
+                if fin.get("moving_h"):
+                    hs, src = [float(fin["moving_h"])], _("賽事計算機的越野心率配速模型（移動時間）")
+                else:
                     fin["fallback"] = "power" if hs else "plan"
             course, sleep_note = RR.sleep_course(e, course)    # SP-114: a 連續 race's hardest stretch
-            line = RR.race_line(e, hs, _("賽事計算器預測的完賽時間"), course)
+            line = RR.race_line(e, hs, src, course)
             if line is not None:
                 summit = event_summit(e, course, [d["hours"] for d in line["per_day"]])
         climb = power = None
