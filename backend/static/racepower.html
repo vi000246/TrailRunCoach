@@ -1110,7 +1110,7 @@ function planBody(extra = {}) {
     locks: Object.entries(LOCKS).map(([seg, power]) => ({ seg: +seg, power })), day_splits_km: SPLITS,
     terrain: TERRAIN, hourly_heat: $("hourlyheat").checked && !tempOverridden(),
     hourly: $("hourlyheat").checked && !tempOverridden() ? (WX?.hourly || null) : null,
-    heat_acclimatisation: heatAcclBody(), ...extra };
+    heat_acclimatisation: heatAcclBody(), rain: WX?.rain || null, ...extra };
   if (type === "baiyue") {
     body.trip_kind = S.trip; body.hr_band = S.hrband;
     body.pack_kg_by_day = $("packdays").value.split(/[,，\s]+/).map(Number).filter((x) => x > 0);
@@ -1149,7 +1149,7 @@ function planBody(extra = {}) {
 }
 function renderAll() {
   renderResults(); renderFuel(); renderProfile(); renderSegCompact(); renderSegments(); renderInputs(); renderEnv(); renderZones(); renderHeatLine();
-  renderStops(); renderExportBtn();
+  renderStops(); renderExportBtn(); renderRain();
   if (LAST.type !== "baiyue" && $("rg-sec").querySelector("details").open) renderRiegel();
 }
 let RUN_SEQ = 0;
@@ -1183,6 +1183,13 @@ function renderHeatLine() {
   else if ($("hourlyheat").checked && tempOverridden()) t = "比賽日溫度 / 濕度是你輸入的值：全程用這個溫度";
   else if (h.reason) t = `全程單一溫度（${h.reason}）`;
   $("heat-line").textContent = t;
+}
+// SP-249: forecast rain in the race window → a reminder under the result heading (trail / 百岳; time unchanged)
+function renderRain() {
+  const r = PLAN?.rain, h2 = $("results").querySelector("h2");
+  if (!r?.alert || PLAN.type === "road" || !h2) return;
+  const bits = [r.max_pop_pct != null ? T("rain.pop", { p: Math.round(r.max_pop_pct) }) : "", r.total_mm != null ? T("rain.mm", { mm: r.total_mm.toFixed(1) }) : ""].filter(Boolean);
+  h2.insertAdjacentHTML("afterend", `<div class="note" id="rain-note" style="color:var(--watch)">☂ ${esc(r.message)}${bits.length ? esc(T("rain.detail", { bits: bits.join(T("rain.sep")) })) : ""}</div>`);
 }
 function tile(k, v, s, main) { return `<div class="tile ${main ? "main" : ""}"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s || ""}</div></div>`; }
 function warnList(ws) { return ws && ws.length ? `<ul class="warn">${ws.map((w) => `<li>${esc(w)}</li>`).join("")}</ul>` : ""; }

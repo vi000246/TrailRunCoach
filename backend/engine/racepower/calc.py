@@ -145,6 +145,14 @@ class HourIn(BaseModel):
     dew_c: Optional[float] = None
 
 
+class RainIn(BaseModel):
+    """One /weather `rain` row (SP-249): a span in local clock time."""
+    start: str
+    end: str
+    pop_pct: Optional[float] = None
+    mm: Optional[float] = None
+
+
 class PlanIn(PredictIn):
     distance_km: Optional[float] = None
     mode: Literal["time", "power", "auto"] = "auto"
@@ -169,6 +177,8 @@ class PlanIn(PredictIn):
     # Open-Meteo); none, or no date / start time → the single To value
     hourly: Optional[list[HourIn]] = None
     hourly_heat: bool = True
+    # SP-249: the /weather `rain` rows → a reminder on trail / 百岳 plans; never changes the time
+    rain: Optional[list[RainIn]] = None
     # heat acclimation (heat-acclimation.md §5.5): {"mode": auto|none|partial|acclimatised|custom, "s"}
     heat_acclimatisation: Optional[dict] = None
     # 百岳 capacity (baiyue-from-running.md §6.1)
@@ -562,10 +572,25 @@ def make_plan(ctx: Context, body: PlanIn) -> dict:
     # 「匯出至課表」 is one race-day session: a multi-day 百岳 trip is not exported (the reason, else None)
     from backend.engine.racepower import watch_export as WE
     out["export_block"] = WE.multi_day(out, body.start_time, body.days)
+    out["rain"] = rain_reminder(body, out)
     if course.get("source") == "gpx":
         from backend.engine.racepower import fuel as FU
         out["stop_suggestions"] = FU.stops_from_wpts(course.get("wpts") or [], course["totals"]["km"])
     return out
+
+
+def rain_reminder(body: PlanIn, out: dict) -> Optional[dict]:
+    """SP-249: the forecast's rain over the race window (start → finish incl.
+    stops, else the whole event days) on trail and 百岳 plans; None for road
+    or without rain data. Display only — the plan is already computed."""
+    if body.type not in ("trail", "baiyue") or not body.rain:
+        return None
+    from backend.engine.racepower import weather as WX
+    s = out.get("summary") or {}
+    dur = s.get("time_total_s") or s.get("clock_s") or ((s.get("time_s") or 0) + (s.get("stops_s") or 0)) or None
+    days = len(out.get("days") or []) or body.days or 1
+    win = WX.race_window(body.date, body.start_time, days, dur)
+    return WX.rain_alert([r.model_dump() for r in body.rain], win)
 
 
 def fuel(ctx: Context, body: PlanIn, out: dict) -> dict:

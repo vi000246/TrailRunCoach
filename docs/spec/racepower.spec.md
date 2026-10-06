@@ -250,6 +250,17 @@ provide it; the weekly blocks and manual give `null`. `hourly_at` (`backend/engi
 point linearly between the bracketing rows and rebuilds RH from them. It takes the edge row up to
 1.5 h past either end, and returns nothing beyond that.
 
+Rain (SP-249, docs/research/wet-muddy-terrain.md §5 #1): the response also carries `rain`:
+`[{start, end, pop_pct, mm}]` in the same local time — CWA's 3- / 12-hour probability of
+precipitation (登山 and 鄉鎮 products, no amount), or Open-Meteo's hourly `precipitation` /
+`precipitation_probability` (each of the preceding hour, so a row spans t − 1 h … t); `null` for
+the climatology and manual. The page sends them with /plan (`rain`); `calc.rain_reminder` takes
+the race window (start → start + `time_total_s` / `clock_s` / `time_s` + stops for a one-day event
+with a start time, else the whole event days) and `weather.rain_alert` alerts when any row in it has
+PoP ≥ 50 % or the rows sum to ≥ 5 mm (thresholds 推估, kept as proposed). `plan.rain` =
+`{alert, max_pop_pct, total_mm, rows, message}` for trail and 百岳, `null` for road or without rain
+data; the page shows the message under the result heading. The predicted time never changes.
+
 CWA key: `CWA_API_KEY` env var, else `weather.json` in the tenant's shared folder (`weather.key_path()`); the API only returns it
 masked (`backend/engine/racepower/weather.py:93`). With region `intl` (`engine/region.py`) the page
 hides the CWA key, the 百岳 peak lists and presets (百岳 reads 多日登山). Peaks: `backend/data/baiyue.json`
@@ -262,12 +273,12 @@ hides the CWA key, the 百岳 peak lists and presets (百岳 reads 多日登山)
 |---|---|---|
 | GET | `/api/v1/racepower/inputs?refresh=` | the derived inputs (`backend/api/racepower.py:80`) |
 | GET | `/api/v1/racepower/peaks?q=&baiyue_only=` | peaks list (`backend/api/racepower.py:85`) |
-| GET | `/api/v1/racepower/weather?date=&days=&event_id=&peak=&lat=&lon=&elevation=&cwa=` | provider, values, hourly, tried, location, fetched_at (`backend/api/racepower.py:107`) |
+| GET | `/api/v1/racepower/weather?date=&days=&event_id=&peak=&lat=&lon=&elevation=&cwa=` | provider, values, hourly, rain, tried, location, fetched_at (`backend/api/racepower.py:107`) |
 | GET / POST | `/api/v1/racepower/weather/key` | masked key status / save (10–80 chars, no spaces) (`backend/api/racepower.py:151`) |
 | POST | `/api/v1/racepower/predict` | v1, unchanged: type, used, env, result, tasks, zones, warnings (百岳 adds biggest_day) (`backend/api/racepower.py:226`, `calc.predict`) |
 | POST | `/api/v1/racepower/course` | multipart `file` (.gpx/.fit) + segmentation options → `course_id` (content sha1; the Track is kept in a 20-entry LRU), totals, segments, profile ≤ 1500 points, climbs, waypoints, warnings; parsed in the thread pool (`backend/api/racepower.py:258`) |
 | POST | `/api/v1/racepower/course/event/{eid}` | the course of the GPX stored with a plan event (`event_gpx`), no re-upload; adds `stop_suggestions` from its waypoints, `day_splits_km`, `gpx`; 404 when the event has none (`backend/api/racepower.py:305`, `calc.event_course`) |
-| POST | `/api/v1/racepower/plan` | `PlanIn` (`backend/engine/racepower/calc.py:145`) = `PredictIn` + mode, targets (time / pace, power W / %CP), course ref (`course_id` or `event_id` + options, or manual), strategy, hills, acclimatisation, locks, start time, aid stations (typed), day splits, terrain, `hourly` (the /weather rows), `hourly_heat` (default true), `heat_acclimatisation`, 百岳 trip kind / pack per day → summary (incl. `heat`, `strategy`, `trail_hr`, `time_total_s`, `nonmoving`), effort, segments (incl. temp_c / dew_c / rh_pct / heat_pct / heat_clock / heat_src, kcal / cho / water / sodium / fuel action), heat_profile, days (百岳), compare, crosscheck, v1, course_name, `fuel`, `seg_targets`, `chart_rows`, `goal` (time / power modes), `stop_suggestions`, warnings; an unknown `course_id` reloads from `event_id`, else 410 (`backend/api/racepower.py:566`, `calc.make_plan` `backend/engine/racepower/calc.py:492`) |
+| POST | `/api/v1/racepower/plan` | `PlanIn` (`backend/engine/racepower/calc.py:145`) = `PredictIn` + mode, targets (time / pace, power W / %CP), course ref (`course_id` or `event_id` + options, or manual), strategy, hills, acclimatisation, locks, start time, aid stations (typed), day splits, terrain, `hourly` (the /weather rows), `hourly_heat` (default true), `rain` (the /weather rain rows, SP-249), `heat_acclimatisation`, 百岳 trip kind / pack per day → summary (incl. `heat`, `strategy`, `trail_hr`, `time_total_s`, `nonmoving`), effort, segments (incl. temp_c / dew_c / rh_pct / heat_pct / heat_clock / heat_src, kcal / cho / water / sodium / fuel action), heat_profile, days (百岳), compare, crosscheck, v1, course_name, `fuel`, `seg_targets`, `chart_rows`, `goal` (time / power modes), `stop_suggestions`, warnings; an unknown `course_id` reloads from `event_id`, else 410 (`backend/api/racepower.py:566`, `calc.make_plan` `backend/engine/racepower/calc.py:492`) |
 | GET | `/api/v1/racepower/goal-basis` | the training basis for goals: hr (目標配速) or power (目標功率), from 課表偏好 目標基準 else 使用功率 (`backend/api/racepower.py:553`) |
 | GET | `/api/v1/racepower/grade-model` | gait-aware RE(g) (run / walk bins, walk share, technicality per class and per downhill bin) / v_max(g) / v_h(g), the HR hike-window summary and its basis (`backend/api/racepower.py:353`) |
 | GET | `/api/v1/racepower/cadence-check` | SP-230: the climbing (≥ 3 % windows) cadence histogram of the year's outdoor runs (5-spm bins, disk-cached per activity `racepower_climb_cadence_v1`) against the 130 spm walk line: two groups or one, the valley, whether 130 sits in it, a hint; report only, the line never moves (`backend/engine/racepower/runwalk.py`, page section 爬坡步頻分布) |
@@ -1219,3 +1230,4 @@ when set, but nothing fills it from the routes module yet.
 | 2026-10-06 | feature | SP-210 follow-up | Road / trail GPX plans: each segment's race-day temperature (single value or hourly) moved to its own mean elevation from `heat_ref_alt_m` (the weather point's elevation, sent by the page; also used by 百岳 when 氣溫所在海拔 is blank); tests in `test_racepower_heat_altitude.py` |
 | 2026-10-06 | bugfix | SP-239, docs/research/long-race-durability-shape.md §4.1 | Trail HR model durability: linear decline then flat at `TRAILHR["v_floor"]` 0.80 (`speed_mult` / `dist_nodecay` / `dbar` closed form, `predict_time` via the closed-form inverse `time_for_nodecay`); no more 2× predictions or jumps past ~11 h (δ 0.05: 12 h no-decay 24 h → 14.25 h; δ 0.15: 6 h → 7.1 h instead of 12 h); ≤ 5 h at δ ≤ 0.05 within 0.5 %; `fit`, back-test, SP-220 cutoff and SP-222 segment ETAs take the new whole-race time; tests in `test_trailhr_floor.py` |
 | 2026-10-06 | feature | SP-234 | Race-day weather: CWA 鄉鎮天氣預報 (F-D0047-089 3 days / -091 1 week) between the mountain forecast and Open-Meteo — nearest 鄉鎮公所 ≤ 20 km, its height from Open-Meteo's elevation API (cached), temperature lapsed −0.65 °C / 100 m to the race elevation, RH kept; page shows the 鄉鎮 and the correction; tests in `test_race_township.py` |
+| 2026-10-06 | feature | SP-249, docs/research/wet-muddy-terrain.md §5 #1 | Rain reminder: /weather returns `rain` rows (CWA PoP, Open-Meteo `precipitation` / `precipitation_probability`), /plan takes them and returns `rain` (trail / 百岳 only; any hour PoP ≥ 50 % or ≥ 5 mm over the race window); the page shows 「預報有雨…」; the time is unchanged; tests in `test_race_rain.py` |

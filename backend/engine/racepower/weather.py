@@ -34,6 +34,12 @@ Provider chain for race day (first success wins; every value stays editable):
      Cached on disk for good (past years do not change).
   5. Manual values.
 
+Rain (SP-249): the forecasts' probability of precipitation (CWA 3- / 12-hour
+PoP, Open-Meteo's hourly PoP and amount) go out as `rain` rows; rain_alert()
+turns the rows in the race window into a reminder. It never changes the
+predicted time (docs/research/wet-muddy-terrain.md §4: no study gives a
+wet-trail slowdown to apply).
+
 Why three models (SP-210, checked 2026-10-06 against CWA 1991–2020 station
 normals — 玉山 3845 m, 阿里山 2413 m, 日月潭 1018 m, 鞍部 838 m, 臺北, 臺中;
 2017–2020 daily means at the station elevation, monthly bias; the period
@@ -88,6 +94,9 @@ CWA_TOWN_MATCH_KM = 20.0          # 推估: beyond this the nearest 鄉鎮公所
 ELEV_CACHE = "cwa_town_elevation.json"
 OM_FORECAST = "https://api.open-meteo.com/v1/forecast"
 OM_ELEVATION = "https://api.open-meteo.com/v1/elevation"   # Copernicus GLO-90 DEM, ≤ 100 points per call
+# SP-249 rain reminder: docs/research/wet-muddy-terrain.md §5 #1 (thresholds 推估; kept as proposed, owner 2026-10-06)
+RAIN_POP_PCT = 50.0               # any hour of the race window with this probability of precipitation
+RAIN_MM = 5.0                     # or this much forecast precipitation summed over the window
 OM_ARCHIVE = "https://archive-api.open-meteo.com/v1/archive"
 OM_HORIZON_DAYS = 16
 LAPSE_C_PER_M = -0.0065
@@ -276,7 +285,12 @@ def parse_cwa(doc: dict) -> dict:
                     continue
                 b = by.setdefault(r["start"], {"start": r["start"], "end": r["end"]})
                 b[key] = _first_num(r["v"], prefer)
-        locs.append({**h, "hourly": hourly, "blocks": sorted(by.values(), key=lambda b: b["start"])})
+        # probability of precipitation (SP-249): 「3小時降雨機率」 / 「12小時降雨機率」, start–end spans
+        pop = [{"start": r["start"], "end": r["end"], "pop": _first_num(r["v"], ("ProbabilityOfPrecipitation",))}
+               for name, rows in s.items() if name and name.endswith("降雨機率")
+               for r in rows if r["start"] and r["end"]]
+        locs.append({**h, "hourly": hourly, "blocks": sorted(by.values(), key=lambda b: b["start"]),
+                     "pop": sorted((p for p in pop if p["pop"] is not None), key=lambda p: p["start"])})
     return {"issued": issued, "locations": locs}
 
 
@@ -432,6 +446,91 @@ def open_meteo_hourly_rows(js: dict, dates: set[dt.date]) -> list[dict]:
         return float(v[i]) if i < len(v) and v[i] is not None else None
     return _in_window([_hour_row(t, at("temperature_2m", i), at("relative_humidity_2m", i), at("dew_point_2m", i))
                        for i, t in enumerate(h.get("time") or [])], dates)
+
+
+# ---------------------------------------------------------------------------
+# rain (SP-249): rows {start, end, pop_pct, mm} in naive local time
+# ---------------------------------------------------------------------------
+
+def _rain_window(rows: list[dict], dates: set[dt.date]) -> list[dict]:
+    keep = dates | {max(dates) + dt.timedelta(days=1)}
+    out = [r for r in rows if r and (r["pop_pct"] is not None or r["mm"] is not None)
+           and dt.date.fromisoformat(r["start"][:10]) in keep]
+    return sorted(out, key=lambda r: r["start"])
+
+
+def cwa_rain_rows(loc: dict, dates: set[dt.date]) -> list[dict]:
+    """The CWA PoP spans (3-hour or 12-hour) on the event days; CWA gives no amount."""
+    rows = []
+    for p in loc.get("pop") or []:
+        a, b = _local_key(p.get("start")), _local_key(p.get("end"))
+        if a and b:
+            rows.append({"start": a, "end": b, "pop_pct": p.get("pop"), "mm": None})
+    return _rain_window(rows, dates)
+
+
+def open_meteo_rain_rows(js: dict, dates: set[dt.date]) -> list[dict]:
+    """Open-Meteo's hourly `precipitation` / `precipitation_probability` are
+    of the preceding hour, so the row at t covers t − 1 h … t."""
+    h = js.get("hourly") or {}
+    P, PP = h.get("precipitation") or [], h.get("precipitation_probability") or []
+    rows = []
+    for i, t in enumerate(h.get("time") or []):
+        key = _local_key(t)
+        if key is None:
+            continue
+        end = dt.datetime.fromisoformat(key)
+        mm = _num(P[i]) if i < len(P) else None
+        pop = _num(PP[i]) if i < len(PP) else None
+        rows.append({"start": (end - dt.timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M"),
+                     "end": key, "pop_pct": pop, "mm": mm})
+    return _rain_window(rows, dates)
+
+
+def race_window(date: Optional[str], start_time: Optional[str], days: int,
+                duration_s: Optional[float]) -> Optional[tuple[dt.datetime, dt.datetime]]:
+    """The race's clock window: start → start + duration for a one-day race
+    with a start time; else the whole event days."""
+    try:
+        d = dt.date.fromisoformat(str(date)[:10])
+    except (TypeError, ValueError):
+        return None
+    day0 = dt.datetime(d.year, d.month, d.day)
+    whole = (day0, day0 + dt.timedelta(days=max(1, days or 1)))
+    if (days or 1) > 1 or not start_time or not duration_s:
+        return whole
+    try:
+        h, m = (int(x) for x in str(start_time).split(":")[:2])
+        s = day0.replace(hour=h, minute=m)
+    except ValueError:
+        return whole
+    return s, s + dt.timedelta(seconds=float(duration_s))
+
+
+def rain_alert(rows: Optional[list[dict]], window: Optional[tuple[dt.datetime, dt.datetime]]) -> Optional[dict]:
+    """The SP-249 reminder for the rows overlapping the window: alert when any
+    row's PoP ≥ RAIN_POP_PCT or their summed amount ≥ RAIN_MM. None when there
+    is no rain data in the window (nothing is shown). Never touches the time."""
+    if not rows or window is None:
+        return None
+    a, b = window
+    hit = []
+    for r in rows:
+        try:
+            s, e = dt.datetime.fromisoformat(r["start"]), dt.datetime.fromisoformat(r["end"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if s < b and e > a:
+            hit.append(r)
+    pops = [float(r["pop_pct"]) for r in hit if r.get("pop_pct") is not None]
+    mms = [float(r["mm"]) for r in hit if r.get("mm") is not None]
+    if not pops and not mms:
+        return None
+    max_pop = max(pops) if pops else None
+    total = sum(mms) if mms else None
+    alert = (max_pop is not None and max_pop >= RAIN_POP_PCT) or (total is not None and total >= RAIN_MM)
+    return {"alert": alert, "max_pop_pct": max_pop, "total_mm": total, "rows": len(hit),
+            "message": _("預報有雨：下坡和技術路段可能比預估慢，跌倒風險較高；建議用杖、注意鞋底抓地") if alert else None}
 
 
 def hourly_at(rows: list[dict], when: dt.datetime) -> Optional[dict]:
@@ -715,14 +814,14 @@ def race_conditions(*, date: dt.date, days: int = 1, lat: Optional[float] = None
 
     want = _dates(date, days)
 
-    def done(provider, values, extra=None, hourly=None):
+    def done(provider, values, extra=None, hourly=None, rain=None):
         v = {"altitude_m": values.get("altitude_m", elevation_m), "temp_c": values["temp_c"], "rh_pct": values["rh_pct"],
              "dew_c": values.get("dew_c", dew_point(values["temp_c"], values["rh_pct"])["dew_c"])}
         # hourly rows from an hourly forecast (CWA 3-day, Open-Meteo) or the
         # climatology's 24-hour profile; weekly blocks have none → one heat value
         return {"provider": provider, "label": _(PROVIDER_LABEL[provider]), "values": v, "tried": tried,
                 "location": loc, "fetched_at": now, "detail": extra or {}, "lead_days": lead,
-                "hourly": hourly or None}
+                "hourly": hourly or None, "rain": rain or None}   # rain: SP-249 rows (forecasts only)
 
     cwa_key = []                       # the key, read once (only when a CWA step runs)
 
@@ -760,7 +859,8 @@ def race_conditions(*, date: dt.date, days: int = 1, lat: Optional[float] = None
                     return done(prov, c, {"cwa_location": m["name"], "cwa_id": m.get("id"),
                                           "match": m["match"], "distance_km": m["distance_km"],
                                           "issued": doc.get("issued"), "cache": doc.get("cache")},
-                                cwa_hourly_rows(m, want) if c.get("product") == "hourly" else None)
+                                cwa_hourly_rows(m, want) if c.get("product") == "hourly" else None,
+                                cwa_rain_rows(m, want))
                 except Exception as e:          # noqa: BLE001 — fall through to the next provider
                     tried.append({"provider": prov, "ok": False, "reason": str(e)[:120]})
     # 2. CWA 鄉鎮預報 (SP-234): the nearest 鄉鎮公所, temperature lapsed to the race elevation
@@ -806,13 +906,13 @@ def race_conditions(*, date: dt.date, days: int = 1, lat: Optional[float] = None
                                              "town_elevation_m": zs[0], "target_elevation_m": to_m,
                                              "lapse_m": to_m - zs[0], "offset_c": lapse(0.0, zs[0], to_m),
                                              "issued": doc.get("issued"), "cache": doc.get("cache"),
-                                             "attribution": ATTRIBUTION}, rows or None)
+                                             "attribution": ATTRIBUTION}, rows or None, cwa_rain_rows(m, want))
                 except Exception as e:          # noqa: BLE001 — the weekly file, then the next provider
                     tried.append({"provider": prov, "ok": False, "reason": str(e)[:120]})
     if lat is None or lon is None:
         tried.append({"provider": "open_meteo", "ok": False, "reason": "沒有座標"})
         return {"provider": "manual", "label": _(PROVIDER_LABEL["manual"]), "values": None, "tried": tried,
-                "location": loc, "fetched_at": None, "lead_days": lead, "hourly": None}
+                "location": loc, "fetched_at": None, "lead_days": lead, "hourly": None, "rain": None}
     end = date + dt.timedelta(days=max(1, days) - 1)
     # 3. Open-Meteo forecast
     if 0 <= lead and (end - today).days < OM_HORIZON_DAYS:
@@ -821,7 +921,8 @@ def race_conditions(*, date: dt.date, days: int = 1, lat: Optional[float] = None
             # that runs past midnight (the daytime mean still uses `want` only)
             q_end = end + dt.timedelta(days=1) if (end - today).days + 1 < OM_HORIZON_DAYS else end
             params = {"latitude": lat, "longitude": lon,
-                      "hourly": "temperature_2m,relative_humidity_2m,dew_point_2m,surface_pressure",
+                      "hourly": "temperature_2m,relative_humidity_2m,dew_point_2m,surface_pressure,"
+                                "precipitation,precipitation_probability",          # SP-249
                       "timezone": "auto", "start_date": date.isoformat(), "end_date": q_end.isoformat()}
             if elevation_m is not None:
                 params["elevation"] = elevation_m
@@ -830,7 +931,8 @@ def race_conditions(*, date: dt.date, days: int = 1, lat: Optional[float] = None
             if c:
                 tried.append({"provider": "open_meteo", "ok": True})
                 return done("open_meteo", c, {"grid_elevation_m": c.get("grid_elevation_m"),
-                                              "attribution": ATTRIBUTION}, open_meteo_hourly_rows(js, want))
+                                              "attribution": ATTRIBUTION}, open_meteo_hourly_rows(js, want),
+                            open_meteo_rain_rows(js, want))
             tried.append({"provider": "open_meteo", "ok": False, "reason": "回應沒有這些日期"})
         except Exception as e:               # noqa: BLE001
             tried.append({"provider": "open_meteo", "ok": False, "reason": str(e)[:120]})
@@ -842,7 +944,7 @@ def race_conditions(*, date: dt.date, days: int = 1, lat: Optional[float] = None
     except Exception as e:                   # noqa: BLE001
         tried.append({"provider": "climatology", "ok": False, "reason": str(e)[:120] or "沒有資料"})
         return {"provider": "manual", "label": _(PROVIDER_LABEL["manual"]), "values": None, "tried": tried,
-                "location": loc, "fetched_at": None, "lead_days": lead, "hourly": None}
+                "location": loc, "fetched_at": None, "lead_days": lead, "hourly": None, "rain": None}
     tried.append({"provider": "climatology", "ok": True})
     rows = climatology_hourly_rows(c["profile"], want, c["offset_c"]) if c.get("profile") else None
     return done("climatology", c, {"years": c["years"], "models": list(CLIM_MODELS),
