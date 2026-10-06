@@ -22,13 +22,22 @@ Model (all 推估 until the back-test validates it):
    practice: Uphill Athlete / Maunder et al. 2021 "durability"]. Its decline
    per hour after T0 = 1 h (the user's "beyond ~1–2 h"; 1 h 推估) is the run's
    δ; the personal δ is the median over runs, clamped to 0…0.15 /h. Speed
-   at a given HR then is v(t) = v₀·(1 − δ·(t − T0)⁺), whose mean over a run
-   of length T is D̄(T) = 1 − δ·(T − T0)²/(2T) for T > T0.
+   at a given HR then is v(t) = v₀·max(f_min, 1 − δ·(t − T0)⁺) (SP-239,
+   2026-10-06: straight down, then flat at the floor f_min = v_floor 0.80),
+   whose mean over a run of length T is, with t1 = T0 + (1 − f_min)/δ,
+   D̄(T) = 1 − δ·(T − T0)²/(2T) for T0 < T ≤ t1 and
+   D̄(T) = [T0 + (t1 − T0)·(1 + f_min)/2 + f_min·(T − t1)] / T for T > t1
+   (docs/research/long-race-durability-shape.md §4.1). Before SP-239 the
+   line ran on to 0 at 1 + 1/δ h and below, so D̄ hit its 0.5 guard and any
+   course over ~11.3 h of no-decay time (δ 0.05) came out at exactly 2×.
 3. v₀(x) = a + b·x, OLS across runs on the durability-corrected
    v₀ = v / D̄(T). Needs ≥ 6 runs and b > 0; else v₀ = c·x with
    c = median(v₀/x) (proportional fallback).
 4. Prediction for a course of effort distance E at HR level x: T solves
-   T = E / (v₀(x)·D̄(T)) (fixed point).
+   T = E / (v₀(x)·D̄(T)), i.e. the distance covered T·D̄(T) (in no-decay
+   hours) equals E / v₀(x). That distance rises strictly with T (its slope
+   is the speed, ≥ f_min > 0), so T is its closed-form inverse
+   (time_for_nodecay): continuous and monotone in E.
 5. The race HR level x*(T) (2026-10-02, docs/research/unsourced-rules.md
    §0.7 / §A2): what "全力" means depends on how long the race is. A full-
    effort race HR falls with duration — Fornasiero 2018 (J Sports Sci 36:
@@ -98,7 +107,14 @@ TRAILHR = {
     "window_days": 365,        # as RE_WINDOW_DAYS
     "race_min_s": 90 * 60.0,   # maximal.MAXIMAL["trail_min_s"]
     "x_default": 0.90,         # Friel Z3 lower bound (activity_tags.AUTO_EFFORT max_hr_frac)
-    "dbar_min": 0.5,
+    "dbar_min": 0.5,           # guard only (fade_shape's clamp); D̄ itself never goes below v_floor
+    # SP-239 (2026-10-06, owner decision): the same-HR speed falls δ per hour after T0, then holds
+    # at v_floor × v₀ instead of running on to 0. 推估. Long-race speed flattens rather than falling
+    # to 0: Martin 2010 (24 h treadmill: speed fell until 16 h, then constant), Bossi 2017 (24 h
+    # track: reverse-J, bottoming mid-race), Markovic 2025 (Western States: last split ≈ 0.78 × the
+    # first, HR drop + stops + terrain included, so the same-HR loss is smaller → 0.80 is on the
+    # conservative side). docs/research/long-race-durability-shape.md §3, §4.1. Not personalised.
+    "v_floor": 0.80,
     "delta_prior": 0.05,       # Clark 2019 (CP −9…−11 % after 2 h heavy) per hour: 推估
     "delta_k": 3.0,            # 推估: the prior counts as 3 long runs
     "delta_warn_ratio": 3.0,   # 推估: warn when the measured δ exceeds 3 × the prior
@@ -116,7 +132,7 @@ XSTAR = {
     "road_min_s": 15 * 60.0,   # 推估: a road sample needs ≥ 15 min moving
 }
 SOURCE = ("越野心率配速模型：effort km（km + 爬升/153）÷ 移動時間 對 移動心率/LTHR 的個人回歸，"
-          "加耐久衰減（1 h 後每小時下降，先驗 0.05/h 收縮）；比賽心率 x*(T) 隨時長下降（Fornasiero 2018、"
+          "加耐久衰減（1 h 後每小時下降，先驗 0.05/h 收縮，降到 80 % 後持平）；比賽心率 x*(T) 隨時長下降（Fornasiero 2018、"
           "Kerhervé 2015 當形狀先驗）；推估")
 XSTAR_SOURCE = ("全力心率曲線 x*(T) = x₀ − s·ln(T)：先驗錨點 0.5 h 1.00（5K 最後 1/4 ≥ LTHR）、3 h 0.90"
                 "（Friel Z3 下緣）、12 h 0.85（Fornasiero 2018 77 % HRmax 換算）；你的比賽／全力跑以當天 LTHR 擬合，"
@@ -136,11 +152,52 @@ FUEL_YES = ("有補給", "補給", "吃膠", "能量膠", "fuelled", "fueled", "
 FUEL_NO = ("沒補給", "無補給", "不補給", "沒吃", "空腹", "unfuelled", "unfueled", "no fuel", "fasted")
 
 
+def _floor() -> float:
+    """f_min: TRAILHR["v_floor"] kept inside (0, 1] (a 0 floor would let the speed reach 0)."""
+    return min(1.0, max(1e-3, float(TRAILHR["v_floor"])))
+
+
+def speed_mult(t_h: float, delta: float, t0: float = TRAILHR["t0_h"]) -> float:
+    """v(t)/v₀ at moving hour t_h: max(f_min, 1 − δ·(t − T0)⁺) (SP-239)."""
+    if delta <= 0 or t_h <= t0:
+        return 1.0
+    return max(_floor(), 1.0 - delta * (t_h - t0))
+
+
+def dist_nodecay(T_h: float, delta: float, t0: float = TRAILHR["t0_h"]) -> float:
+    """The distance covered in T_h moving hours, in no-decay hours (∫₀ᵀ v(t)/v₀ dt = T·D̄(T)):
+    T up to T0; T − δ(T − T0)²/2 on the slope up to t1 = T0 + (1 − f_min)/δ; f_min per hour after
+    (docs/research/long-race-durability-shape.md §4.1). Continuous, strictly increasing."""
+    if T_h <= t0 or delta <= 0:
+        return float(T_h)
+    fm = _floor()
+    t1 = t0 + (1.0 - fm) / delta
+    if T_h <= t1:
+        return T_h - delta * (T_h - t0) ** 2 / 2.0
+    return t0 + (t1 - t0) * (1.0 + fm) / 2.0 + fm * (T_h - t1)
+
+
 def dbar(T_h: float, delta: float, t0: float = TRAILHR["t0_h"]) -> float:
-    """Mean speed multiplier over a run of T_h hours."""
+    """Mean speed multiplier over a run of T_h hours: linear-then-floor closed form (SP-239)."""
     if T_h <= t0 or delta <= 0:
         return 1.0
-    return max(TRAILHR["dbar_min"], 1.0 - delta * (T_h - t0) ** 2 / (2.0 * T_h))
+    return dist_nodecay(T_h, delta, t0) / T_h
+
+
+def time_for_nodecay(tn_h: float, delta: float, t0: float = TRAILHR["t0_h"]) -> float:
+    """The moving hours T with T·D̄(T) = tn_h (the inverse of dist_nodecay; tn_h = E / v₀, the
+    no-decay time). Closed form, continuous and strictly increasing in tn_h:
+    tn ≤ T0 → tn; on the slope T0 + 2u/(1 + √(1 − 2δu)) with u = tn − T0; past the floor
+    t1 + (tn − dist(t1)) / f_min."""
+    if tn_h <= t0 or delta <= 0:
+        return float(tn_h)
+    fm = _floor()
+    t1 = t0 + (1.0 - fm) / delta
+    s1 = dist_nodecay(t1, delta, t0)
+    if tn_h <= s1:
+        u = tn_h - t0
+        return t0 + 2.0 * u / (1.0 + math.sqrt(max(0.0, 1.0 - 2.0 * delta * u)))
+    return t1 + (tn_h - s1) / fm
 
 
 def run_point(km, gain_m, moving_s, hr_avg, lthr) -> Optional[dict]:
@@ -363,18 +420,13 @@ def v0_at(m: dict, x: float) -> Optional[float]:
 
 
 def predict_time(m: dict, eff_km: float, x: float, delta: Optional[float] = None) -> Optional[float]:
-    """Moving seconds for eff_km at HR level x (fixed point on D̄(T))."""
+    """Moving seconds for eff_km at HR level x: T solves T = E / (v₀(x)·D̄(T)), taken as the
+    closed-form inverse of the distance covered (time_for_nodecay, SP-239)."""
     v = v0_at(m, x)
     if not v or v <= 0 or not eff_km:
         return None
     d = m["delta"] if delta is None else delta
-    T = eff_km / v
-    for _ in range(100):
-        T2 = eff_km / (v * dbar(T, d))
-        if abs(T2 - T) < 1e-6:
-            break
-        T = T2
-    return T * 3600.0
+    return time_for_nodecay(eff_km / v, d) * 3600.0
 
 
 def race_level(xs) -> tuple[float, str]:
@@ -590,7 +642,8 @@ def delta_by_fuel(rows) -> dict:
 #   dbar_min (fade_shape);
 #   the race: each segment's time ÷ the shape's multiplier at its midpoint (moving hours), then
 #   all scaled so the sum stays the whole-race time (fade_times).
-# Not the straight line of step 2: at δ = 0.05 /h its speed reaches 0 at 21 h.
+# Not the line of step 2 (the whole-race D̄, a population shape since SP-239 floors it at v_floor):
+# the segments take the athlete's own shape, rescaled so their sum is the whole-race time.
 FADE = {
     "min_run_s": 3 * 3600.0,    # 推估: a run must reach its third hour to show a late fade
     "min_runs": 3,              # 推估: fewer usable runs → no fade, the segments evenly paced

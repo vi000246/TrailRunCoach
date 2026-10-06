@@ -390,7 +390,7 @@ def trail_hr_estimate(model: Optional[dict], km: float, gain_m: float, f_target:
     di = model.get("delta_info") or {}
     return {"time_s": t, "time_no_durability_s": tn, "x": x, "x_star": x + sh, "eff_km": e,
             "x_race": model.get("x_race"), "x_race_source": model.get("x_race_source"), "delta": model.get("delta"),
-            "delta_raw": model.get("delta_raw"), "delta_warning": (di.get("all") or {}).get("warning"),
+            "delta_raw": model.get("delta_raw"), "v_floor": TH.TRAILHR["v_floor"], "delta_warning": (di.get("all") or {}).get("warning"),
             "delta_fuel_split": bool(di.get("split")),
             # the terrain-matched measurement behind δ (trailhr step 7): raw pooled value, 95 % CI,
             # runs, and whether the LOO gate kept it or fell back to the 0.05 /h prior
