@@ -196,7 +196,7 @@ def analyze(t, hr, speed=None, power=None, temp=None, climb_m_per_km: Optional[f
     mean of the `temp` channel over the block; that mean is air minus
     `watch_bias` (zone_events.dataset_watch_bias's dict; None = the 3.7 °C default)."""
     if judge == "xu":
-        return analyze_xu(t, hr, speed, temp, climb_m_per_km, trail, temp_c, temp_src, watch_bias)
+        return analyze_xu(t, hr, speed, temp, climb_m_per_km, trail, temp_c, temp_src, watch_bias, power=power)
     from backend.engine.workout_review import DRIFT_MAX_VI, MAX_DT, STOP_KMH, _arr, _grid1, _hms, power_vi
     out = {"ok": False, "reason": "", "drift": None, "pw_drift": None, "pa_drift": None, "hr1": None, "hr2": None,
            "main_s": None, "band": None, "basis": None, "judge": judge, "vi": None, "cv30": None}
@@ -295,11 +295,13 @@ def analyze(t, hr, speed=None, power=None, temp=None, climb_m_per_km: Optional[f
 
 def analyze_xu(t, hr, speed=None, temp=None, climb_m_per_km: Optional[float] = None, trail: bool = False,
                temp_c: Optional[float] = None, temp_src: Optional[str] = None,
-               watch_bias: Optional[dict] = None) -> dict:
+               watch_bias: Optional[dict] = None, power=None) -> dict:
     """徐國峰's 90-minute test (blog 2016-12): flat, every stop ≤ 30 s (the
     ≤ 25 °C line, 台灣教練: a temperature band on the result, _tag_heat); HR at minute 10
     (A) vs minute 90 (B), each the ±1-min mean;
-    drift = (B − A) ÷ A; < 10 % = the base is sufficient. Not halves."""
+    drift = (B − A) ÷ A; < 10 % = the base is sufficient. Not halves.
+    SP-275: the output must hold — minutes 80–90 not > 5 % slower than 10–20 (power when
+    there is power; base_check.output_hold); without speed or power `hold_note` says so."""
     from backend.engine import base_check as BC
     from backend.engine.quality_gate import xu_drift_of
     out = {"ok": False, "reason": "", "drift": None, "pw_drift": None, "pa_drift": None, "hr1": None, "hr2": None,
@@ -316,6 +318,12 @@ def analyze_xu(t, hr, speed=None, temp=None, climb_m_per_km: Optional[float] = N
     stop = BC.longest_stop(t, speed)
     if stop > BC.XU_STOP_S:
         out["reason"] = f"第 10–90 分鐘停了 {stop:.0f} 秒：補給每次不能停超過 30 秒（徐國峰）"
+        return out
+    h = out["hold"] = BC.output_hold(t, speed, power)
+    if h["basis"] is None:
+        out["hold_note"] = BC.hold_text(h)
+    elif not h["ok"]:
+        out["reason"] = BC.hold_text(h)
         return out
     if temp_c is None and temp is not None:
         tp = np.asarray(temp, dtype=float)
@@ -373,10 +381,11 @@ def _lines(r: dict, aet_now: Optional[float] = None) -> list[str]:
     judge = r.get("judge") or "ua"
     if judge == "xu":
         head = f"徐國峰 90 分鐘：第 10 分 {h1:.0f} → 第 90 分 {r['hr2']:.0f} bpm，飄移 {d * 100:.1f}%"
+        note = [r["hold_note"]] if r.get("hold_note") else []
         if r["band"] == "base_ok":
             return [f"{head} < 10%：有氧基礎夠（5% 內國家級），可以加 5 區",
-                    _("這次不給 AeT 數字：這個測試看的是有氧基礎，AeT 由平常多次輕鬆跑的飄移推估")]
-        return [f"{head} ≥ 10%：有氧基礎還不夠，繼續 1 區長跑", "5 區先不排；3 區照排"]
+                    _("這次不給 AeT 數字：這個測試看的是有氧基礎，AeT 由平常多次輕鬆跑的飄移推估")] + note
+        return [f"{head} ≥ 10%：有氧基礎還不夠，繼續 1 區長跑", "5 區先不排；3 區照排"] + note
     if judge == "friel":
         head = _("心率飄移 {d:.1f}%（Friel 1 小時）", d=d * 100)
         return [{"base_ok": f"{head} < 5%：有氧耐力夠", "base_mid": f"{head}（5–10%）：有氧耐力還在進步",

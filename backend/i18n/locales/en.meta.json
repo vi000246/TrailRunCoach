@@ -2611,6 +2611,10 @@
     "draft": true,
     "src": "backend/engine/workout_review.py:2668"
   },
+  "後段放慢了 {n:.1f}%：飄移會偏小，下次配速固定": {
+    "draft": true,
+    "src": "backend/engine/base_check.py:254"
+  },
   "後段明顯掉了": {
     "draft": true,
     "src": "backend/engine/workout_review.py:2668"
@@ -3774,6 +3778,10 @@
   "沒有靜息心率，到設定填": {
     "draft": true,
     "src": "backend/engine/hr_profile.py:83"
+  },
+  "沒辦法確認配速有沒有維持（沒有速度也沒有功率）：只看心率": {
+    "draft": true,
+    "src": "backend/engine/base_check.py:252"
   },
   "活動擬合": {
     "draft": true,
