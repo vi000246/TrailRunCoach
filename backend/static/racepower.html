@@ -2212,6 +2212,29 @@ async function renderBacktest() {
   if (SG) h += `<div class="note">${esc(TR("sg.line", { a: pct1(SG.segments.gait.median_abs), b: pct1(SG.segments.speed_gait.median_abs),
     c: pct1(SG.climbs.gait.median_abs), d: pct1(SG.climbs.speed_gait.median_abs), n: SG.climbs.gait.n, k: SG.changed }))}
     <b class="${SG.no_worse ? "ok" : "no"}">${esc(TR(SG.no_worse ? "sg.ok" : "sg.no"))}</b></div>`;
+  // trail HR pace model: race level with / without durability decay; ≥ 8 h races apart (SP-240)
+  const TH = R.trail_hr;
+  if (TH && TH.races) {
+    const LR = TH.long_races || { n: 0, min_h: 8, race_level: {}, race_level_no_durability: {} };
+    const thRow = (label, b, cls = "") => `<tr${cls ? ` class="${cls}"` : ""}><td>${label}</td><td class="n">${b.n}</td>
+      <td class="n">${pct1(b.race_level?.median_abs)}</td><td class="n">${spct(b.race_level?.bias)}</td>
+      <td class="n">${pct1(b.race_level_no_durability?.median_abs)}</td><td class="n">${spct(b.race_level_no_durability?.bias)}</td></tr>`;
+    h += `<h3>${esc(TR("bt.th.title"))}</h3><div class="tablewrap"><table><thead><tr><th></th><th class="n">n</th>
+      <th class="n">${esc(TR("bt.th.decay_abs"))}</th><th class="n">${esc(TR("bt.th.decay_bias"))}</th>
+      <th class="n">${esc(TR("bt.th.nodecay_abs"))}</th><th class="n">${esc(TR("bt.th.nodecay_bias"))}</th></tr></thead><tbody>`
+      + thRow(esc(TR("bt.th.races")), TH.races)
+      + thRow(esc(TR("bt.th.long", { h: LR.min_h })), LR, "hl")
+      + `</tbody></table></div>`;
+    h += `<div class="note">${LR.n ? esc(TR("bt.th.note", { h: LR.min_h })) : `<b class="wn">${esc(TR("bt.th.none", { h: LR.min_h }))}</b>`}</div>`;
+    const RR = TH.race_rows || [];
+    if (RR.length) h += `<details><summary>${esc(TR("bt.th.rows", { n: RR.length }))}</summary><div class="tablewrap"><table><thead><tr>
+      <th>${esc(TR("bt.th.date"))}</th><th>${esc(TR("bt.th.activity"))}</th><th class="n">${esc(TR("bt.th.moving_h"))}</th>
+      <th class="n">${esc(TR("bt.th.decay"))}</th><th class="n">${esc(TR("bt.th.nodecay"))}</th></tr></thead><tbody>`
+      + RR.map((x) => `<tr${x.long ? ' class="hl"' : ""}><td>${esc(x.date)}</td><td>${esc(x.label || x.file || "")}</td>
+        <td class="n">${f1((x.th?.moving_s ?? NaN) / 3600)}${x.long ? ` <span class="badge watch">${esc(TR("bt.th.long_badge", { h: LR.min_h }))}</span>` : ""}</td>
+        <td class="n">${spct(x.err_th_race)}</td><td class="n">${spct(x.err_th_race_nodur)}</td></tr>`).join("")
+      + `</tbody></table></div></details>`;
+  }
   // hike HR windows
   const HH = R.hike_hr;
   if (HH && HH.uses) {
