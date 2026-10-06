@@ -2570,10 +2570,11 @@ def light_apply(ss: list, lt: Optional[dict], today: dt.date, last_min: float, d
             notes.append({"level": "bad", "src": "injury_light",
                           "text": head + _("。這週先不排跑步；交叉訓練和肌力照做，會痛的動作先不做")})
             if (lt.get("walkrun") or {}).get("phase") == "red":
-                # SP-272: what starts the walk-run
+                # SP-272: what starts the walk-run; a run marked 沒痛 skips it (owner's decision, SP-273)
                 notes.append({"level": "info", "src": "injury_light",
                               "text": _("先能走 30 分鐘不痛再開始走跑交替：走完在活動上標「沒痛」或「痠」，"
-                                        "或在傷病紀錄按「可以開始走跑」（Ohio State Wexner 回跑指引，臨床機構）")})
+                                        "或在傷病紀錄按「可以開始走跑」（Ohio State Wexner 回跑指引，臨床機構）。"
+                                        "直接跑一次標「沒痛」，就跳過走跑、直接回綠燈")})
         return [s for s in ss if not any(s is t for t in todo)]
     n_easy = sum(1 for x in ss if g(x, "kind") == "easy")
     for s in todo:

@@ -735,6 +735,9 @@ def event_light(e: dict, marks: list[dict], day: dt.date, since: Optional[dt.dat
 # it; an unmarked run counts as no pain and moves on (§6.1 point 5); 中斷 (or ≥ RED_SCORE) goes back to
 # red. The stages are not re-entry days: reentry.py starts the Daniels block the day after the last
 # continuous 30 (§6.1 point 5). Illness: never. The app doesn't judge whether running may start.
+# Owner's decision (SP-273, 2026-10-06): while red, a run marked 沒痛 (its own light green) skips the walk
+# check and the stages — straight back to green, the Daniels block starting on that run (episode "skipped").
+# 痠 / 痛 / unmarked runs keep it red; once the walk-run started (walk check / button) runs are its sessions.
 WALK_CHECK_MIN = 30
 WALKRUN = ((4, 1), (3, 2), (2, 3), (1, 4))       # (walk, run) minutes per interval — Wexner
 WALKRUN_REPS = 6        # 推估: Wexner 3–6 times per session; 6 × 5 min = 30 min, as long as the walk check
@@ -752,10 +755,11 @@ def _relevant(m: dict, e: dict) -> bool:
 
 def return_state(e: dict, marks: list[dict], day: dt.date) -> Optional[dict]:
     """The return-to-run state of an injury on `day` (SP-272) from its marked runs / walks (foot_log):
-    {"phase": "light" (never red, or back after the walk-run) | "red" (waiting for the walk check /
-    button) | "walkrun", "since" (light: the first day its marks count from), "stage" (0–3 walk / run,
-    4 = continuous 30), "n" (sessions done in the stage), "last_run" (the last walk-run / check day),
-    "reason", "episodes": [{red, start, first_run, done}]}; None for an illness."""
+    {"phase": "light" (never red, or back after the walk-run / a run marked 沒痛) | "red" (waiting for the
+    walk check / button / a run marked 沒痛) | "walkrun", "since" (light: the first day its marks count
+    from), "stage" (0–3 walk / run, 4 = continuous 30), "n" (sessions done in the stage), "last_run" (the last walk-run / check day),
+    "reason", "episodes": [{red, start, first_run, done, skipped (a 沒痛 run skipped the walk-run)}]};
+    None for an illness."""
     if is_illness(e):
         return None
     o = _d(e.get("onset_date")) or day
@@ -799,6 +803,14 @@ def return_state(e: dict, marks: list[dict], day: dt.date) -> Optional[dict]:
             if m.get("cat") == "walk" and (m.get("minutes") or 0) >= WALK_CHECK_MIN and m.get("pain") in (0, 1) \
                     and (m.get("key") or m["date"]) > red_key:
                 start(m["date"], m["date"])
+            elif m.get("cat", "run") == "run" and m.get("pain") == 0 and (m.get("key") or m["date"]) > red_key \
+                    and _mark_light(m, None, e.get("condition"))[0] == "green":
+                # owner's decision (SP-273, 2026-10-06, against the conservative default): a run marked
+                # 沒痛 goes straight back to green — no walk check, no walk-run; the Daniels block (reentry)
+                # starts on this run, like any first run back
+                ep.update(start=m["date"], first_run=m["date"], done=m["date"], skipped=True)
+                st.update(phase="light", since=m["date"], stage=0, n=0, last_run=m["date"], reason="")
+                prev_color, prev_score = "green", m.get("score")
             elif m.get("cat", "run") == "run" and m.get("pain") == 3:
                 red_key = m.get("key") or m["date"]
             continue
@@ -860,7 +872,8 @@ def walkrun_steps(x: dict) -> dict:
 def light(events: list[dict], marks: list[dict], day: dt.date) -> Optional[dict]:
     """The worst light of the injuries open on `day` (SP-271); None without one (illness: never).
     SP-272: after red the event stays red until the walk check / button, then "walkrun" (the
-    walk-run state in "walkrun"); back in "light" after it, only its marks from then count."""
+    walk-run state in "walkrun"); back in "light" after it, only its marks from then count. A run
+    marked 沒痛 while red goes straight back to "light" (owner's decision, SP-273)."""
     best = None
     for e in active_on(events or [], day):
         if is_illness(e) or (e.get("status") == "resolved" and _d(e.get("resolved_date")) == day):

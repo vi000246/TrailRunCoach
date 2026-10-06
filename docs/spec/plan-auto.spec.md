@@ -472,7 +472,9 @@ always, and the change log / undo cover them like any generated change.
 - **Walk-run** (`injuries.return_state`, `overview.walkrun_apply`; projection carries the rest): after
   red, a ≥ 30-min walk marked 沒痛／痠 or 「可以開始走跑」 (`injury_events.walkrun_from`) starts walk 4/run 1 →
   1/4 (3 each) and 30 min × 3, every other day; 痛 repeats, 中斷 = red again. `reentry.find_all` starts the
-  Daniels block the day after the last continuous 30; no block while still red / in the stages.
+  Daniels block the day after the last continuous 30; no block while still red / in the stages. A run
+  marked 沒痛 while red (owner's decision, SP-273, 2026-10-06) skips the walk check and the stages: green
+  at once, the Daniels block starting on that run (episode `skipped`).
 - **「好了」 proposed** (`injuries.done_check`, suggestion `injury_done`): last 7 days ≥ 75 % of the 4
   weeks before the onset and the last 3 runs 沒痛／痠 over ≥ 14 days; 「好了」 resolves it today, 「還沒」
   hides it 7 days. Never automatic.

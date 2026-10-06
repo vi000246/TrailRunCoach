@@ -1999,7 +1999,7 @@
     "draft": true,
     "src": "backend/engine/strength_moves.py:150"
   },
-  "先能走 30 分鐘不痛再開始走跑交替：走完在活動上標「沒痛」或「痠」，或在傷病紀錄按「可以開始走跑」（Ohio State Wexner 回跑指引，臨床機構）": {
+  "先能走 30 分鐘不痛再開始走跑交替：走完在活動上標「沒痛」或「痠」，或在傷病紀錄按「可以開始走跑」（Ohio State Wexner 回跑指引，臨床機構）。直接跑一次標「沒痛」，就跳過走跑、直接回綠燈": {
     "draft": true,
     "src": "backend/engine/overview.py:2405"
   },
@@ -4899,7 +4899,7 @@
     "draft": true,
     "src": "backend/engine/injuries.py:679"
   },
-  "紅燈之後：先能走 30 分鐘不痛、走路的樣子正常，再開始走跑交替（Ohio State Wexner 回跑指引，臨床機構）。app 不判斷能不能開始跑。按了之後課表從「走 4 分／跑 1 分」開始；走完 30 分在活動上標「沒痛」或「痠」也一樣。": {
+  "紅燈之後：先能走 30 分鐘不痛、走路的樣子正常，再開始走跑交替（Ohio State Wexner 回跑指引，臨床機構）。app 不判斷能不能開始跑。按了之後課表從「走 4 分／跑 1 分」開始；走完 30 分在活動上標「沒痛」或「痠」也一樣。直接跑一次標「沒痛」，就跳過走跑、直接回綠燈。": {
     "draft": true,
     "src": "backend/api/injuries.py:168"
   },
