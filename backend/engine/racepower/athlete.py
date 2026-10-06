@@ -1712,7 +1712,7 @@ def grade_models(ds, today: Optional[dt.date] = None, re_flat: Optional[float] =
             "classes": cmap}
 
 
-TRAILHR_DUR_KEY = "racepower_trailhr_dur_v3"   # v3 (2026-10-02): terrain-matched within-run δ ± SE
+TRAILHR_DUR_KEY = "racepower_trailhr_dur_v4"   # v3 (2026-10-02): terrain-matched within-run δ ± SE; v4: + fade (SP-222)
 
 
 def durability_clean_mask(t, kmh, hr, es_rel=None) -> tuple[np.ndarray, dict]:
@@ -1767,7 +1767,8 @@ def _trail_durability(ds, w) -> Optional[dict]:
     effort-km speed as output, only on the drift-v2-cleaned samples
     (durability_clean_mask; the moving-time axis itself keeps every moving
     second, so "hours after T0" still counts from the start); δ per hour
-    after T0."""
+    after T0. SP-222: on the same windows, the speed by moving hour (trailhr.fade_run) for the
+    segment ETAs' fade shape."""
     from backend.engine.panels.workout import durability
     from backend.engine.racepower import trailhr as TH
     a = activity_arrays(ds, w)
@@ -1783,8 +1784,10 @@ def _trail_durability(ds, w) -> Optional[dict]:
     es_clean = np.where(keep[m], es, np.nan)
     r = durability(tm, es_clean, a["hr"][m])
     # trailhr step 7: terrain-matched δ on the cleaned windows (the ratio above only for comparison)
-    wd = TH.within_run_delta(TH.terrain_windows(a["t"], a["d"], a["z"], a["hr"], mv, keep))
+    wins = TH.terrain_windows(a["t"], a["d"], a["z"], a["hr"], mv, keep)
+    wd = TH.within_run_delta(wins)
     return {"delta": (wd or {}).get("delta"), "se": (wd or {}).get("se"), "windows": (wd or {}).get("n"),
+            "fade": TH.fade_run(wins) if tm[-1] >= TH.FADE["min_run_s"] else None,
             "bins": (wd or {}).get("bins"), "moving_s": float(tm[-1]), "end_pct": (r or {}).get("end_pct"),
             "delta_uncleaned": TH.durability_delta((r or {}).get("points")),
             "clean": cuts, "kept_share": float(keep[m].mean()) if len(m) else None}
@@ -1933,11 +1936,16 @@ def trail_hr_model(ds, today: Optional[dt.date] = None, exclude: Optional[set] =
     runs = [w for w in ds.workouts if outdoor(w) and is_trail(w) and w.idx not in exclude
             and tday - TH.TRAILHR["window_days"] < w.day < tday + 1]
     pts = trail_hr_points(ds, runs)
-    drows = []
+    drows, frows, n_long = [], [], 0
     for p in pts:
         if p["T_h"] * 3600.0 >= TH.TRAILHR["dur_min_s"]:
             w = ds.workouts[p["idx"]]
             r = ds.cached_series(TRAILHR_DUR_KEY, w, lambda w=w: _trail_durability(ds, w))
+            if p["T_h"] * 3600.0 >= TH.FADE["min_run_s"]:
+                # SP-222: the athlete's own fade by moving hour, for the segment ETAs
+                n_long += 1
+                if r and r.get("fade"):
+                    frows.append(r["fade"])
             if r and r.get("delta") is not None and r.get("se"):
                 p["delta"], p["delta_se"] = r["delta"], r["se"]
                 p["delta_uncleaned"] = r.get("delta_uncleaned")
@@ -1952,6 +1960,7 @@ def trail_hr_model(ds, today: Optional[dt.date] = None, exclude: Optional[set] =
     m["delta_raw"] = dinfo["all"]["raw_median"]
     m["delta_info"] = dinfo
     m["n_durability"] = len(drows)
+    m["fade"] = TH.fade_shape(frows, n_long)
     if race_idx is None:
         caps = capacity_samples(ds, [w for w in ds.workouts if outdoor(w) and w.day < tday], tags=tags)
         race_idx = {i for i, c in caps.items() if c["tags"]["activity_type"] == "race" or c.get("ok")}
