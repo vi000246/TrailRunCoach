@@ -502,9 +502,11 @@ run** (SP-302) has its own rate `easy`: the median over the last 180 days' **gen
 runs only — the session classifier says 輕鬆跑 and not 中強度跑, or the average HR is within the
 easy line (AeT + 3, `workout_review.classify` `stim.easy_hr`); a Zone 3 / Zone 5 / 高強度長跑 /
 test never counts (`overview._genuinely_easy`). Road runs first; with < 3 of them, road + trail.
-With < 3 in all: 推估 from the easy cap's IF — IF = cap HR ÷ LTHR (hrTSS's IF, ≤ 1), rate =
-IF² × 100 (TrainingPeaks' TSS formula) — and without a cap or LTHR the road default 55; the
-week gets an info note (`src: easy_tss`) naming the rate and its basis. `easy_trail` (課表偏好
+With < 3 in all: 推估 IF 0.80 (`EASY_EST_IF`), rate = IF² × 100 = 64 (TrainingPeaks' TSS
+formula; owner 2026-10-06 — the easy cap's IF, cap HR ÷ LTHR, gave the owner 81.6, more than the
+all-runs median); the week gets an info note (`src: easy_tss`) naming the rate and its basis. The
+projection (`projection.week_sessions`) prices easy runs with the same `easy` rate with or without
+課表偏好 (before, its default path used the all-runs `tss_per_hour`). `easy_trail` (課表偏好
 輕鬆跑地形 = 越野) is the same over trail runs, else `easy`. The output's `easy_tss` = {n,
 estimated, rate, source}; `plan_prefs._easy` and the editor's estimate
 (`plan_sessions.tss_rates`, kind easy → `easy`, a plan from before → `road`) read the same
@@ -1763,3 +1765,4 @@ deleted / superseded) are returned as reconcile `changes` (`backend/engine/recon
 | 2026-10-06 | feat/cold-start-sp288-290 | docs/research/cold-start.md | SP-288 冷啟動排課: the first week without history = the questionnaire as entered or 1.5 h / 3 easy runs / no long run (no more 0.5 h next to a 60-min long run); 4-week ramp with the start level as the base floor, +10 % / +0.5 h steps, ≥ 3 runs a day apart, no intervals; long run ≤ 40 % of a week < 120 min; projection consistent; runners with history unchanged |
 | 2026-10-06 | feat/cold-start-sp288-290 | docs/research/cold-start.md | SP-289 心率先驗: max HR falls back to 208 − 0.7 × age, LTHR to 0.90 × max HR (only without a test / estimate / watch LTHR; before the first real value), both 推估 and low confidence; easy runs get HR numbers + the talk test; PMC `marks` on the day a real LTHR replaces it; LTHR test suggested from week 5 for new runners (week 2 with ≥ 3 h + a race); unsourced-rules §0.5.5 rewritten |
 | 2026-10-06 | change | SP-302 | The easy run's planned TSS / h (`easy`, `easy_trail`) from genuinely easy runs only (classifier 輕鬆跑 not 中強度跑, or average HR ≤ AeT + 3; no Zone 3 / Zone 5 / test); < 3 → 推估 from the easy cap's IF (cap ÷ LTHR)² × 100 with a note; long run / quality rates unchanged; `easy_tss` in the output; `plan_prefs._easy` and `plan_sessions.tss_rates` read it |
+| 2026-10-06 | change | SP-302 decision | < 3 genuinely easy runs → 推估 IF 0.80 (64 TSS / h) instead of the easy cap's IF; the projection's default path (no 課表偏好) prices easy runs with the same `easy` rate as week_plan |

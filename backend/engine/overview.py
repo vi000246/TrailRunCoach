@@ -739,11 +739,14 @@ def _tss_per_hour(ds: Dataset, today: dt.date, cap: Optional[float] = None,
 # in the interval sessions and the 中強度跑 (one runner: 79 TSS/h ≈ IF 0.89, near tempo), so a
 # run kept under the cap looked far short of its plan and rule D's TSS + 20 % never fired.
 EASY_MIN_RUNS = 3                 # = the per-category rule above (≥ 3 runs, else a fallback)
+# < EASY_MIN_RUNS easy runs: IF 0.80 (推估; owner 2026-10-06, SP-302 — the cap's IF, cap ÷ LTHR, gave one
+# runner 81.6, above the all-runs median it replaced; 0.80 = a lower, power-cap-like estimate), × IF² × 100
+# = 64 TSS / h. Labelled 推估 with its source.
+EASY_EST_IF = 0.80
 SRC_EASY_TSS = N_("輕鬆跑的計畫 TSS：近 180 天確實輕鬆的跑步（課別分類為輕鬆跑、或平均心率在輕鬆跑上限內；"
                   "強度課、中強度跑不算）每小時 TSS 的中位數")
-SRC_EASY_TSS_EST = N_("推估：近 180 天確實輕鬆的跑步不到 3 筆，用輕鬆跑上限換算：IF = 上限心率 ÷ LTHR"
-                      "（hrTSS 的 IF 定義），每小時 TSS = IF² × 100（TrainingPeaks TSS 公式）")
-SRC_EASY_TSS_DEFAULT = N_("推估：近 180 天確實輕鬆的跑步不到 3 筆，也沒有輕鬆跑上限或 LTHR，用路跑的預設值")
+SRC_EASY_TSS_EST = N_("推估：近 180 天確實輕鬆的跑步不到 3 筆，用 IF 0.80 換算（輕鬆強度的上緣），"
+                      "每小時 TSS = IF² × 100 ≈ 64（TrainingPeaks TSS 公式）")
 
 
 def _genuinely_easy(ds: Dataset, w: Workout) -> bool:
@@ -761,19 +764,16 @@ def _genuinely_easy(ds: Dataset, w: Workout) -> bool:
     return (typ == "easy" and not c.get("moderate")) or bool((c.get("stim") or {}).get("easy_hr"))
 
 
-def easy_cap_rate(cap: Optional[float], lthr: Optional[float]) -> Optional[float]:
-    """TSS per hour of a run held at the easy cap: IF = cap ÷ LTHR (≤ 1), × IF² × 100."""
-    if not cap or not lthr or lthr <= 0:
-        return None
-    f = min(1.0, float(cap) / float(lthr))
-    return round(f * f * 100.0, 1)
+def easy_est_rate() -> float:
+    """The estimated easy-run TSS per hour (< EASY_MIN_RUNS easy runs): EASY_EST_IF² × 100 (= 64)."""
+    return round(EASY_EST_IF * EASY_EST_IF * 100.0, 1)
 
 
 def easy_tss_rates(ds: Dataset, today: dt.date, cap: Optional[float], lthr: Optional[float]) -> dict:
     """{"easy", "easy_trail", "easy_info"} (SP-302). "easy": the median TSS / h of the last
     180 days' genuinely easy road runs (`_genuinely_easy`; road + trail when < EASY_MIN_RUNS
-    road ones), ≥ EASY_MIN_RUNS; else the easy cap's IF (`easy_cap_rate`, 推估); else the road
-    default (推估). "easy_trail" (課表偏好 輕鬆跑地形 = 越野): the trail ones, else "easy".
+    road ones), ≥ EASY_MIN_RUNS; else IF EASY_EST_IF (`easy_est_rate`, 64, 推估 — owner 2026-10-06;
+    `cap` / `lthr` no longer used). "easy_trail" (課表偏好 輕鬆跑地形 = 越野): the trail ones, else "easy".
     The long run's and the quality sessions' rates are not touched.
     `easy_info`: {n, estimated, rate, source} (the week plan's note when estimated)."""
     lo = today - dt.timedelta(days=180)
@@ -791,11 +791,7 @@ def easy_tss_rates(ds: Dataset, today: dt.date, cap: Optional[float], lthr: Opti
     if len(pool) >= EASY_MIN_RUNS:
         easy, est, src = statistics.median(pool), False, SRC_EASY_TSS
     else:
-        easy = easy_cap_rate(cap, lthr)
-        est, src = True, SRC_EASY_TSS_EST
-        if easy is None:
-            easy = TSS_PER_HOUR_DEFAULT["road"]
-            src = SRC_EASY_TSS_DEFAULT
+        easy, est, src = easy_est_rate(), True, SRC_EASY_TSS_EST
     trail = statistics.median(per["trail"]) if len(per["trail"]) >= EASY_MIN_RUNS else easy
     return {"easy": float(easy), "easy_trail": float(trail),
             "easy_info": {"n": len(pool), "estimated": est, "rate": round(float(easy), 1), "source": src}}

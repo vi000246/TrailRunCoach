@@ -178,7 +178,8 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
     `allow_quality` = 有氧間歇（巡航）3×10 (專項期 too since SP-75), in 減量期 TAPER_Q 4×3′.
     `quality_cap`: 1 = at most one interval (the gate's guardrail mode).
     `prefs` (課表偏好, engine/plan_prefs.py): shaped and placed like week_plan();
-    `rates` = TSS / h per category for it, `notes` collects its notes.
+    `rates` = TSS / h per category (week_plan's tss_per_category) — its "easy" prices the easy runs
+    with or without 課表偏好 (SP-302, as week_plan), the rest is for 課表偏好; `notes` collects its notes.
     `blocked`: ISO days of 不排課日期 (engine/blackouts.py) — never a candidate day.
     `sport` (主要訓練項目, engine/primary_sport.py): road = the week_plan() road template (flat long
     run with a marathon-pace segment in the 專項期, flat strides). `mp` (overview.mp_week, SP-75): the
@@ -188,6 +189,8 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
     road = sport == "road"
     total = hours * 60.0
     ss: list[dict] = []
+    # the easy run's rate (SP-302, overview.easy_tss_rates) — week_plan's, also without 課表偏好
+    easy_tph = float((rates or {}).get("easy") or tph)
     # one session (older callers, the AeT test) or the week's interval list (two tracks, SP-31)
     bqs = [b for b in (base_quality if isinstance(base_quality, list) else [base_quality]) if b]
     cap_txt = easy_cap_label(None, aet, aet_measured)
@@ -273,7 +276,7 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
         add(id=f"easy{i + 1}", kind="easy", title="輕鬆跑" + (st_t if strides else ""),
             minutes=int(round(m / 5) * 5), target=tgt.get("z2", ""),
             detail=f"心率不超過{cap_txt}" + (st_d if strides else ""),
-            source=O.SRC_UA + (st_s if kind in ("transition", "rebuild") else ""), tss=m / 60.0 * tph)
+            source=O.SRC_UA + (st_s if kind in ("transition", "rebuild") else ""), tss=m / 60.0 * easy_tph)
     if prefs is not None and prefs.active:
         from backend.engine import plan_prefs as PP
         r = {"road": tph, "trail": tph, "hike": tph, "strength": strength_tss / 35 * 60, **(rates or {})}
@@ -503,7 +506,7 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
     # 主要訓練項目 (engine/primary_sport.py): the sport week_plan() used; road = no B2B, no steep walk
     sport = cur.get("primary_sport") or "trail"
     road = sport == "road"
-    rates = cur.get("tss_per_category") if PR is not None else None
+    rates = cur.get("tss_per_category")      # SP-302: the easy rate with or without 課表偏好
     gate = _gate_inputs(cur)
     # each track's step (SP-31): the gate's, plus this week's intervals — a 縮量版 / the step before
     # under a tight cap is maintenance and moves nothing (§C5.3)

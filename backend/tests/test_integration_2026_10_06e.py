@@ -295,22 +295,23 @@ def test_cold_start_without_any_threshold_prices_easy_runs_at_the_estimated_defa
     wp = cold_week()
     assert wp["cold_start"] and wp["cold_start"]["week"] == 1
     info, tph = wp["easy_tss"], wp["tss_per_category"]
-    assert info["n"] == 0 and info["estimated"] and info["source"] == O.SRC_EASY_TSS_DEFAULT
-    assert tph["easy"] == O.TSS_PER_HOUR_DEFAULT["road"]
+    # SP-302 decision (2026-10-06): < 3 easy runs → IF 0.80 (64 TSS / h, 推估), thresholds or not
+    assert info["n"] == 0 and info["estimated"] and info["source"] == O.SRC_EASY_TSS_EST
+    assert tph["easy"] == pytest.approx(64.0)
     runs = _easy_runs(wp)
     assert len(runs) == 3 and all(s["tss"] == pytest.approx(s["minutes"] / 60 * tph["easy"]) for s in runs)
     srcs = [n.get("src") for n in wp["notes"]]
     assert "easy_tss" in srcs and "cold_start" in srcs
 
 
-def test_cold_start_with_the_lthr_prior_prices_easy_runs_from_the_prior_cap(cold_week):
+def test_cold_start_with_the_lthr_prior_prices_easy_runs_at_the_estimate_too(cold_week):
     from backend.engine import overview as O
     wp = cold_week({"birth_year": TODAY.year - 40})
     th = wp["thresholds"]
     assert th["lthr_prior"] and th["lthr"] == 162.0 and wp["cold_start"]
     info, tph = wp["easy_tss"], wp["tss_per_category"]
     assert info["estimated"] and info["source"] == O.SRC_EASY_TSS_EST
-    assert tph["easy"] == pytest.approx(O.easy_cap_rate(th["aet"], th["lthr"]))
+    assert tph["easy"] == pytest.approx(64.0)                  # IF 0.80, not the prior cap ÷ LTHR
     assert all(s["tss"] == pytest.approx(s["minutes"] / 60 * tph["easy"]) for s in _easy_runs(wp))
     # the long-run / category rates stay the defaults (no history)
     assert tph["road"] == O.TSS_PER_HOUR_DEFAULT["road"]

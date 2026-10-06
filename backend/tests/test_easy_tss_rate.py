@@ -1,6 +1,7 @@
 """SP-302: an easy run's planned TSS per hour from genuinely easy runs only
-(overview._tss_per_hour / easy_tss_rates); < 3 → the easy cap's IF (推估); the long run's and
-the quality sessions' rates unchanged."""
+(overview._tss_per_hour / easy_tss_rates); < 3 → IF 0.80 = 64 TSS / h (推估; owner 2026-10-06, was
+the easy cap's IF); the long run's and the quality sessions' rates unchanged; the projection's
+default path (no 課表偏好) prices easy runs with the same rate as week_plan."""
 import datetime as dt
 from types import SimpleNamespace
 
@@ -50,17 +51,19 @@ def test_easy_rate_reads_only_the_easy_runs(history):
     assert tph["road"] == pytest.approx(81.0)
 
 
-def test_fewer_than_three_easy_runs_estimates_from_the_cap(history):
+def test_fewer_than_three_easy_runs_estimate_if_0_80(history):
+    """Owner 2026-10-06: < 3 easy runs → IF 0.80 (≈ 64 TSS / h, 推估), not the easy cap ÷ LTHR (which gave
+    150 / 170 → 77.9 here, more than the easy runs it stands for)."""
     history([_w(1, 50, EASY), _w(2, 52, EASY), _w(3, 90, Z3), _w(4, 80, MODERATE), _w(5, 85, MODERATE)])
     tph = O._tss_per_hour(None, TODAY, 150.0, 170.0)
     info = tph.pop("easy_info")
-    assert tph["easy"] == pytest.approx(round((150 / 170) ** 2 * 100, 1))      # IF 0.88 → 77.9
-    assert info["estimated"] and info["n"] == 2 and "推估" in info["source"] and "LTHR" in info["source"]
+    assert O.EASY_EST_IF == 0.80 and tph["easy"] == pytest.approx(64.0)
+    assert info == {"n": 2, "estimated": True, "rate": 64.0, "source": O.SRC_EASY_TSS_EST}
+    assert "推估" in info["source"] and "0.80" in info["source"]
     assert tph["road"] == pytest.approx(80.0)                                    # long run: unchanged
-    # no cap / LTHR: the road default, still labelled 推估
-    tph = O._tss_per_hour(None, TODAY, None, 170.0)
-    assert tph["easy"] == O.TSS_PER_HOUR_DEFAULT["road"] and tph["easy_info"]["source"] == O.SRC_EASY_TSS_DEFAULT
-    assert O.easy_cap_rate(180.0, 170.0) == 100.0                                # IF capped at 1
+    # no cap / LTHR: the same estimate
+    tph = O._tss_per_hour(None, TODAY, None, None)
+    assert tph["easy"] == pytest.approx(64.0) and tph["easy_info"]["source"] == O.SRC_EASY_TSS_EST
 
 
 def test_trail_runs_fill_in_and_have_their_own_rate(history):
@@ -102,3 +105,26 @@ def test_week_plan_prices_easy_runs_with_the_easy_rate():
     assert easy and all(s["tss"] / s["minutes"] * 60 == pytest.approx(tph["easy"], rel=2.5 / s["minutes"])
                         for s in easy)
     assert any(n.get("src") == "easy_tss" for n in wp["notes"]) == info["estimated"]
+
+
+def test_projection_default_path_prices_easy_runs_like_week_plan():
+    """The reported inconsistency: without 課表偏好 the projection priced easy runs at the all-runs
+    rate (target tss_per_hour) while week_plan used the SP-302 easy rate — now both use "easy"."""
+    from backend.engine import projection as P
+    from backend.tests.test_overview import BOTH, _two_track_week
+    wp = _two_track_week(BOTH)
+    wp["tss_per_category"] = {**wp["tss_per_category"], "easy": 41.0}             # far from the all-runs rate
+    assert abs(float(wp["target"]["tss_per_hour"]) - 41.0) > 5
+    weeks = P.project_weeks(wp, [], dt.date.fromisoformat(wp["week"]["start"]) + dt.timedelta(weeks=3))
+    easy = [s for w in weeks for s in w["sessions"] if s["kind"] == "easy" and s["minutes"] and s["id"].startswith("easy")]
+    assert easy and all(s["tss"] / s["minutes"] * 60 == pytest.approx(41.0, rel=2.5 / s["minutes"]) for s in easy)
+    # the week_sessions default path directly: rates' "easy", else the plain rate as before
+    from backend.tests.test_plan_prefs import MON, TGT
+    ss = P.week_sessions(MON, "base", "base", 5.0, 70.0, TGT, 5, 90.0, False, False, 17.5, 150.0,
+                         rates={"easy": 41.0})
+    old = P.week_sessions(MON, "base", "base", 5.0, 70.0, TGT, 5, 90.0, False, False, 17.5, 150.0)
+    for new_s, old_s in zip(ss, old):
+        if new_s["kind"] == "easy":
+            assert new_s["tss"] == pytest.approx(old_s["tss"] * 41.0 / 70.0)
+        else:
+            assert new_s == old_s
