@@ -176,6 +176,8 @@ class PlanIn(PredictIn):
     hr_band: Optional[Literal["aet", "cap"]] = None
     pack_kg_by_day: list[float] = []
     heat_ref_alt_m: Optional[float] = None  # the elevation the race-day temperature refers to
+    # 路況 (SP-250): the race-day trail surface; used only when the model has the dry / wet split
+    surface: Optional[Literal["dry", "wet"]] = None
 
 
 class ExportIn(PlanIn):

@@ -73,11 +73,14 @@ class ActivityUpdate(BaseModel):
     pain_side: Optional[str] = None
     # 登山杖 (SP-242): "with" 有杖 / "without" 沒杖 / null 未標 — stored as one free-form tag
     poles: Optional[str] = None
+    # 路況 (SP-250): "dry" 乾 / "wet" 濕 / null 未標 — stored as one free-form tag
+    surface: Optional[str] = None
 
 
 TAG_FIELDS = ("activity_type", "effort", "note", "exclusion", "name", "tags", "pain", "pain_area", "pain_side",
-              "poles")
-STORED_FIELDS = ("activity_type", "effort", "note", "exclusion", "name", "tags", "pain", "pain_area", "poles")
+              "poles", "surface")
+STORED_FIELDS = ("activity_type", "effort", "note", "exclusion", "name", "tags", "pain", "pain_area", "poles",
+                 "surface")
 
 
 async def save_activity_tag(db: AsyncSession, body: ActivityUpdate, *, start_local: str, athlete_id: int = 1,
@@ -92,7 +95,8 @@ async def save_activity_tag(db: AsyncSession, body: ActivityUpdate, *, start_loc
                       body.tags if "tags" in sent else None,
                       body.pain if "pain" in sent else None,
                       body.pain_area if "pain_area" in sent else None,
-                      body.poles if "poles" in sent else None)
+                      body.poles if "poles" in sent else None,
+                      body.surface if "surface" in sent else None)
     painish = bool({"pain", "pain_area", "pain_side"} & sent)
     if painish:
         from backend.engine import injuries as INJ
@@ -177,6 +181,7 @@ def _tag_json(t: Optional[ActivityTag]) -> dict:
             "name": AT.name_of({"name": t.name}) if t else None,
             "tags": AT.tags_of({"tags_json": t.tags_json}) if t else [],
             "poles": AT.poles_of(AT.tags_of({"tags_json": t.tags_json})) if t else None,
+            "surface": AT.surface_of(AT.tags_of({"tags_json": t.tags_json})) if t else None,
             "pain": t.pain if t else None, "pain_area": t.pain_area if t else None,
             "injury_id": t.injury_id if t else None}
 

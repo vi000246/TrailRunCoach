@@ -8,6 +8,9 @@ like WKO5's workout metadata (user request 2026-10-01).
     note           free text
     poles          登山杖 有杖 / 沒杖 / 未標 — user only, stored as a free-form tag,
                    read by no model (POLES, SP-242)
+    surface        路況 乾 / 濕 / 未標 — user only, stored as a free-form tag; the
+                   trail technicality factor splits on it when both groups
+                   have enough data (SURFACES, SP-250)
 
 Why effort, not "race": what a race-time prediction can learn from an
 activity is whether it was MAXIMAL. The athlete often races by feel (not
@@ -179,6 +182,39 @@ def exclusive_poles(tags) -> list[str]:
     return ct if sum(t in _POLE_OF_TAG for t in ct) <= 1 else with_poles(ct, p)
 
 
+# 路況 (SP-250, docs/research/wet-muddy-terrain.md §5 #2, §6): the user's own mark of a dry or a
+# wet / slippery trail, stored as one of two free-form tags like the pole mark (no schema change);
+# 乾 / 濕 / 未標 (neither tag), mutually exclusive. Nothing detects it — no rain data is read and
+# no synonym (雨天, 泥濘 …) typed as a free tag counts: only marked activities enter the dry / wet
+# groups (ticket). The trail technicality factor splits on it (grade_model.fit_gait_re) when both
+# groups have enough windows. The tag strings are storage values, the same in every UI language.
+SURFACES = {"dry": "乾路", "wet": "濕路"}
+_SURFACE_OF_TAG = {v: k for k, v in SURFACES.items()}
+
+
+def surface_of(tags) -> Optional[str]:
+    """"dry" / "wet" / None (未標) from a tag list; the last surface tag wins
+    should both ever be there."""
+    out = None
+    for t in tags or []:
+        out = _SURFACE_OF_TAG.get(str(t).strip(), out)
+    return out
+
+
+def with_surface(tags, surface: Optional[str]) -> list[str]:
+    """The tag list with the surface mark set to `surface` ("dry" / "wet",
+    None = 未標): both surface tags removed, the chosen one appended."""
+    out = [t for t in clean_tags(tags) if t not in _SURFACE_OF_TAG]
+    return out + [SURFACES[surface]] if surface in SURFACES else out
+
+
+def exclusive_surface(tags) -> list[str]:
+    """A cleaned tag list with at most one surface tag (the last one kept)."""
+    ct = clean_tags(tags)
+    s = surface_of(ct)
+    return ct if sum(t in _SURFACE_OF_TAG for t in ct) <= 1 else with_surface(ct, s)
+
+
 def tags_of(row: Optional[dict]) -> list[str]:
     """The stored free-form tags of a tag row ([] when none / unreadable)."""
     import json
@@ -287,7 +323,7 @@ def user_exclusion(u: Optional[dict]) -> Optional[str]:
 
 
 def validate(activity_type=None, effort=None, exclusion=None, name=None, tags=None,
-             pain=None, pain_area=None, poles=None) -> Optional[str]:
+             pain=None, pain_area=None, poles=None, surface=None) -> Optional[str]:
     if activity_type is not None and activity_type not in TYPES:
         return "INVALID_ACTIVITY_TYPE"
     if effort is not None and effort not in EFFORTS:
@@ -304,6 +340,8 @@ def validate(activity_type=None, effort=None, exclusion=None, name=None, tags=No
             return "INVALID_TAGS"
     if poles is not None and poles not in POLES:
         return "INVALID_POLES"
+    if surface is not None and surface not in SURFACES:
+        return "INVALID_SURFACE"
     if pain is not None or pain_area is not None:
         from backend.engine import injuries as INJ
         err = INJ.validate_pain(pain, pain_area)
@@ -317,20 +355,22 @@ _UNSET = object()
 
 def upsert(db_path, *, start_local: str, athlete_id: int = 1, source=None, file=None, workout_id=None,
            distance_km=None, label=None, activity_type=_UNSET, effort=_UNSET, note=_UNSET,
-           exclusion=_UNSET, name=_UNSET, tags=_UNSET, pain=_UNSET, pain_area=_UNSET, poles=_UNSET) -> dict:
+           exclusion=_UNSET, name=_UNSET, tags=_UNSET, pain=_UNSET, pain_area=_UNSET, poles=_UNSET,
+           surface=_UNSET) -> dict:
     """Write one user tag (sync; the seed script and tests). For each of
     activity_type / effort: a value sets it and its *_overridden flag; None
     clears it (back to auto); left out = unchanged. `exclusion`: "keep" /
     "exclude" / None (auto). `name`: the user's title, None / "" = back to
     the original. `tags`: the free-form tag list (replaces the stored one).
-    `poles`: "with" / "without" / None (未標), see POLES.
+    `poles`: "with" / "without" / None (未標), see POLES. `surface`: "dry" /
+    "wet" / None (未標), see SURFACES.
     Creates the table when missing. Returns the stored row."""
     from sqlalchemy import create_engine, select
     from sqlalchemy.orm import Session
     from backend.db.models import ActivityTag
     un = lambda v: None if v is _UNSET else v       # noqa: E731
     err = validate(un(activity_type), un(effort), un(exclusion), un(name), un(tags), un(pain), un(pain_area),
-                   un(poles))
+                   un(poles), un(surface))
     if err:
         raise ValueError(err)
     eng = create_engine(f"sqlite:///{Path(db_path)}")
@@ -349,7 +389,7 @@ def upsert(db_path, *, start_local: str, athlete_id: int = 1, source=None, file=
                               activity_type_overridden=False, effort_overridden=False)
             s.add(row)
         apply_update(row, activity_type=activity_type, effort=effort, note=note, exclusion=exclusion,
-                     name=name, tags=tags, pain=pain, pain_area=pain_area, poles=poles)
+                     name=name, tags=tags, pain=pain, pain_area=pain_area, poles=poles, surface=surface)
         for k, v in (("source", source), ("file", file), ("workout_id", workout_id),
                      ("distance_km", distance_km), ("label", label)):
             if v is not None:
@@ -363,23 +403,28 @@ def upsert(db_path, *, start_local: str, athlete_id: int = 1, source=None, file=
 
 
 def apply_update(row, *, activity_type=_UNSET, effort=_UNSET, note=_UNSET, exclusion=_UNSET,
-                 name=_UNSET, tags=_UNSET, pain=_UNSET, pain_area=_UNSET, poles=_UNSET) -> None:
+                 name=_UNSET, tags=_UNSET, pain=_UNSET, pain_area=_UNSET, poles=_UNSET,
+                 surface=_UNSET) -> None:
     """Set the user fields of an ActivityTag row (shared by upsert and the
     async API): value → set + overridden; None → cleared, back to auto.
     `exclusion` (bad_activity.py): "keep" / "exclude", None = the auto rule.
     `name`: None / blank = back to the original title. `tags`: the whole
-    list (cleaned; [] / None = no tags; at most one pole tag). `poles`
-    (登山杖, POLES): "with" / "without" / None = 未標 — rewrites the pole tag
-    of the (new) tag list, after `tags`."""
+    list (cleaned; [] / None = no tags; at most one pole tag and one surface
+    tag). `poles` (登山杖, POLES): "with" / "without" / None = 未標 — rewrites
+    the pole tag of the (new) tag list, after `tags`. `surface` (路況,
+    SURFACES): "dry" / "wet" / None = 未標, the same way."""
     import json
     if exclusion is not _UNSET:
         row.exclusion = exclusion
     if name is not _UNSET:
         row.name = (name or "").strip() or None
-    if tags is not _UNSET or poles is not _UNSET:
-        ct = exclusive_poles(tags) if tags is not _UNSET else tags_of({"tags_json": row.tags_json})
+    if tags is not _UNSET or poles is not _UNSET or surface is not _UNSET:
+        ct = exclusive_surface(exclusive_poles(tags)) if tags is not _UNSET \
+            else tags_of({"tags_json": row.tags_json})
         if poles is not _UNSET:
             ct = with_poles(ct, poles)
+        if surface is not _UNSET:
+            ct = with_surface(ct, surface)
         row.tags_json = json.dumps(ct, ensure_ascii=False) if ct else None
     if activity_type is not _UNSET:
         row.activity_type = activity_type
@@ -685,6 +730,7 @@ def merge(auto: dict, user: Optional[dict]) -> dict:
             "note": (user or {}).get("note"), "stored": user is not None,
             "exclusion": user_exclusion(user),
             "name": name_of(user), "tags": tags_of(user), "poles": poles_of(tags_of(user)),
+            "surface": surface_of(tags_of(user)),
             "pain": (user or {}).get("pain"), "pain_area": (user or {}).get("pain_area"),
             "injury_id": (user or {}).get("injury_id"),
             "key": (user or {}).get("start_local")}
