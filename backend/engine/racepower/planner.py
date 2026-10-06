@@ -427,6 +427,12 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
     if kind == "trail" and hasattr(grade_re, "for_trail"):
         # trail technicality on flats / descents, race-like class
         grade_re = grade_re.for_trail("race")
+    # SP-250: the race-day 路況 (乾 / 濕) picks the dry or wet technicality on g ≤ +2 % — only when the
+    # model has the split (both marked groups ≥ 30 windows, kept by the back-test); else ignored
+    surface = None
+    if kind == "trail" and getattr(grade_re, "surface_split", False):
+        grade_re = grade_re.for_surface(opts.get("surface"))
+        surface = grade_re.surface
     weight, re_v1 = used["weight"]["value"], used["re"]["value"]
     mode = opts.get("mode") or "auto"
     warnings: list[str] = []
@@ -773,6 +779,11 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
                "stops_s": _stops_before(stops, km + 1), "badge": None if v2_primary else "推估",
                "alpha_used": alpha_used, "sigma": sigma, "beta": beta, "damage": dmg, "hr_first": hr_first,
                "cp2": cp2, "tech": grade_re.tech_factor() if trail and hasattr(grade_re, "tech_factor") else None,
+               # SP-250: whether the 路況 choice is offered (available) and which one was used
+               "surface": {"available": True, "used": surface, "total_from_hr": hr_est is not None,
+                           "n": (grade_re.tech_surface or {}).get("n"), "min_n": (grade_re.tech_surface or {}).get("min_n"),
+                           "badge": "推估"}
+               if trail and getattr(grade_re, "surface_split", False) else None,
                "strategy": skind, "strategy_amount": amount, "alpha": alpha, "heat": heat_info,
                "runwalk": {"shift": rw_shift, "personal": bool((getattr(grade_re, "runwalk", None) or {}).get("personal"))},
                "heat_accl": heat_accl}

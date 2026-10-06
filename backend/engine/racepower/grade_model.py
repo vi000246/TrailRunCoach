@@ -155,6 +155,13 @@ TECH_BOUNDS = (0.6, 1.2)       # 推估 sanity range for the factor
 TECH_BIN_EDGES = (-0.15, -0.08, -0.02, 0.02)
 TECH_BIN_LABELS = ("≤ −15%", "−15…−8%", "−8…−2%", "±2%")
 TRAIL_VMAX_Q = 50              # 推估: the trail descent cap = the personal median speed of the bin
+# 路況 split (SP-250, docs/research/wet-muddy-terrain.md §4 #2, §5 #2): no study gives a wet-trail
+# running slowdown, so a wet factor only comes from the athlete's OWN runs marked 濕 (乾 / 濕 /
+# 未標, activity_tags.SURFACES). Split only when the marked-dry AND the marked-wet trail windows
+# on g ≤ +2 % each number ≥ SURFACE_MIN_N (ticket); then per technicality bin each group's median
+# ratio is shrunk n/(n + 30) toward the pooled bin factor (推估: a thin group stays near what all
+# the data say, not near 1). Unmarked runs stay in the pooled factor only.
+SURFACE_MIN_N = 30             # SP-250 acceptance: ≥ 30 windows in each group (= SHRINK_N)
 
 
 def tech_bin(g: float) -> Optional[str]:
@@ -195,6 +202,16 @@ class GaitRE:
     # SP-228: the athlete's walk–run transition shift (runwalk.fit_shift on the same windows):
     # {"shift" (m/s, shrunk + clamped), "raw", "n", "weight", "bins", "personal"}; {} = the default curve
     runwalk: dict = field(default_factory=dict)
+    # SP-250: the dry / wet technicality per bin ({"split", "n": {"dry", "wet"}, "min_n", "dry": {bin: {"f", "raw",
+    # "n"}}, "wet": {…}}; split False → no per-surface factor) and the race-day surface chosen
+    # ("dry" / "wet" / None = the pooled factor, as before)
+    tech_surface: dict = field(default_factory=dict)
+    surface: Optional[str] = None
+
+    @property
+    def surface_split(self) -> bool:
+        """True when both marked groups have ≥ SURFACE_MIN_N windows (the 路況 choice is offered)."""
+        return bool((self.tech_surface or {}).get("split"))
 
     @property
     def rw_shift(self) -> float:
@@ -237,6 +254,11 @@ class GaitRE:
         grade bin's (§A4), else the single per-class factor."""
         if self.route_tech and self.route_tech.get("f"):
             return float(self.route_tech["f"]), "route"
+        if self.surface and self.surface_split:
+            # SP-250: the chosen surface's factor for this bin (a bin the group never ran: pooled)
+            sb = (self.tech_surface.get(self.surface) or {}).get(tech_bin(g) or "")
+            if sb and sb.get("n"):
+                return float(sb["f"]), f"bin_{self.surface}"
         tb = self.tech_bins.get(tech_bin(g) or "")
         if tb and tb.get("n"):
             return float(tb["f"]), "bin"
@@ -285,6 +307,21 @@ class GaitRE:
         from dataclasses import replace
         return replace(self, trail=True, tech_class=cls)
 
+    def for_surface(self, surface: Optional[str]) -> "GaitRE":
+        """The same model with the race-day 路況 ("dry" / "wet"); ignored (None) unless the split
+        exists, so an unsplit model behaves exactly as before (SP-250)."""
+        from dataclasses import replace
+        return replace(self, surface=surface if surface in ("dry", "wet") and self.surface_split else None)
+
+    def without_surface_split(self, reason: str) -> "GaitRE":
+        """The model with the split switched off (the back-test gate did not keep it): {split:
+        False, gate: reason}, the counts kept for the page."""
+        from dataclasses import replace
+        ts = dict(self.tech_surface or {})
+        if ts.get("split"):
+            ts.update(split=False, gate=reason)
+        return replace(self, tech_surface=ts, surface=None)
+
     def to_json(self) -> dict:
         j = self.run.to_json()
         wj = self.walk.to_json()
@@ -295,16 +332,41 @@ class GaitRE:
         f, which = self.tech_factor()
         from backend.engine.racepower import runwalk as RW
         j.update(walk_samples=self.walk.n_samples, tech=self.tech, tech_used={"f": f, "class": which},
-                 tech_bins=self.tech_bins, trail_vmax_q=TRAIL_VMAX_Q,
+                 tech_bins=self.tech_bins, trail_vmax_q=TRAIL_VMAX_Q, tech_surface=self.tech_surface,
                  runwalk={**(self.runwalk or {"shift": 0.0, "personal": False, "n": 0, "bins": []}),
                           "curve": RW.curve_json(self.rw_shift)})
         return j
 
 
-def fit_gait_re(samples: Sequence[dict], re_flat: float, classes: Optional[dict] = None) -> GaitRE:
+def surface_tech(by_surface: dict, pooled: dict) -> dict:
+    """SP-250: {"dry": [(bin label, ratio), …], "wet": […]} (the marked trail running windows on
+    g ≤ +2 %) and the pooled per-bin factors → GaitRE.tech_surface. split only when both groups
+    have ≥ SURFACE_MIN_N windows; each group's bin = its median ratio shrunk n/(n + 30) toward the
+    pooled bin factor (1 when the pooled bin is missing), clamped to TECH_BOUNDS."""
+    n = {s: len(by_surface.get(s) or []) for s in ("dry", "wet")}
+    out = {"split": n["dry"] >= SURFACE_MIN_N and n["wet"] >= SURFACE_MIN_N, "n": n, "min_n": SURFACE_MIN_N}
+    if not out["split"]:
+        return out
+    for s in ("dry", "wet"):
+        bins: dict = {}
+        for lab, r in by_surface[s]:
+            bins.setdefault(lab, []).append(r)
+        grp = {}
+        for lab, rs in bins.items():
+            raw, k = float(np.median(rs)), len(rs)
+            base = float((pooled.get(lab) or {}).get("f") or 1.0)
+            f = (k * raw + SHRINK_N * base) / (k + SHRINK_N)
+            grp[lab] = {"f": min(TECH_BOUNDS[1], max(TECH_BOUNDS[0], f)), "raw": raw, "n": k}
+        out[s] = grp
+    return out
+
+
+def fit_gait_re(samples: Sequence[dict], re_flat: float, classes: Optional[dict] = None,
+                surfaces: Optional[dict] = None) -> GaitRE:
     """samples = [{"g", "re", "v", "a", "run" (running share of the window),
     "trail"}]; classes = {activity idx: intensity class} for the per-class
-    technicality factor."""
+    technicality factor; surfaces = {activity idx: "dry" / "wet"} (the user's 路況
+    marks, SP-250; unmarked activities absent) for the per-surface factor."""
     run_s = [s for s in samples if s.get("run") is None or s["run"] >= WALK_MAJORITY]
     walk_s = [s for s in samples if s.get("run") is not None and s["run"] < WALK_MAJORITY]
     run = fit_grade_re(run_s, re_flat)
@@ -321,6 +383,7 @@ def fit_gait_re(samples: Sequence[dict], re_flat: float, classes: Optional[dict]
     tech: dict = {}
     ratios: dict = {}
     by_bin: dict = {}
+    by_surface: dict = {"dry": [], "wet": []}
     for s in run_s:
         if not s.get("trail") or s["g"] > 0.02 or not s.get("re"):
             continue
@@ -330,6 +393,9 @@ def fit_gait_re(samples: Sequence[dict], re_flat: float, classes: Optional[dict]
         c = (classes or {}).get(s.get("a"))
         if c:
             ratios.setdefault(c, []).append(r)
+        sf = (surfaces or {}).get(s.get("a"))
+        if sf in by_surface:
+            by_surface[sf].append((tech_bin(s["g"]), r))
     for c, rs in ratios.items():
         f = float(np.median(rs))
         tech[c] = {"f": min(TECH_BOUNDS[1], max(TECH_BOUNDS[0], f)), "raw": f, "n": len(rs)}
@@ -339,7 +405,8 @@ def fit_gait_re(samples: Sequence[dict], re_flat: float, classes: Optional[dict]
         f = (n * raw + SHRINK_N * 1.0) / (n + SHRINK_N)
         tbins[lab] = {"f": min(TECH_BOUNDS[1], max(TECH_BOUNDS[0], f)), "raw": raw, "n": n}
     from backend.engine.racepower import runwalk as RW
-    return GaitRE(run, walk, wb, tech, tech_bins=tbins, runwalk=RW.fit_shift(samples))
+    return GaitRE(run, walk, wb, tech, tech_bins=tbins, runwalk=RW.fit_shift(samples),
+                  tech_surface=surface_tech(by_surface, tbins))
 
 
 def tobler_kmh(g: float) -> float:

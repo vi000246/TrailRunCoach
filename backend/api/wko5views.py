@@ -977,6 +977,7 @@ def activities_list():
 
     def user_part(u):
         return {"name": AT.name_of(u), "tags": AT.tags_of(u), "poles": AT.poles_of(AT.tags_of(u)),
+                "surface": AT.surface_of(AT.tags_of(u)),
                 "note": (u or {}).get("note"),
                 "user_type": AT.user_type(u), "user_effort": AT.user_effort(u),
                 "user_exclusion": AT.user_exclusion(u), **_pain_part(u)}
@@ -1015,7 +1016,7 @@ def activities_list():
                     "excluded": _exclusion_json(x), **rpe_part(start, x["file"]), **user_part(u)})
     out.sort(key=lambda a: a["start"], reverse=True)
     return {"source": getattr(ds, "source", None) or "wko5", "origin_labels": ORIGIN_LABELS,
-            "types": AT.TYPES, "efforts": AT.EFFORTS, "pole_tags": AT.POLES,
+            "types": AT.TYPES, "efforts": AT.EFFORTS, "pole_tags": AT.POLES, "surface_tags": AT.SURFACES,
             # 「再標 N 次就能比較」 beside the 登山杖 choice (SP-243)
             "pole_compare": AT.pole_counts(tags, today_local()),
             "exclude_enabled": bool(getattr(ds, "exclude_bad", False)), "activities": out}
@@ -1096,6 +1097,8 @@ class BulkBody(BaseModel):
     pain_side: Optional[str] = None
     # 登山杖 (SP-242): "with" / "without" / null 未標 (engine/activity_tags.POLES)
     poles: Optional[str] = None
+    # 路況 (SP-250): "dry" / "wet" / null 未標 (engine/activity_tags.SURFACES)
+    surface: Optional[str] = None
 
 
 BULK_MAX = 500
@@ -1115,7 +1118,7 @@ async def patch_activities(body: BulkBody):
         raise HTTPException(400, "TOO_MANY_ITEMS")
     sent = body.model_fields_set
     base = {k: getattr(body, k) for k in ("activity_type", "effort", "note", "exclusion", "name", "tags",
-                                          "pain", "pain_area", "pain_side", "poles") if k in sent}
+                                          "pain", "pain_area", "pain_side", "poles", "surface") if k in sent}
     for k in ("add_tags", "remove_tags"):
         v = getattr(body, k)
         if v is not None and AT.validate(tags=v):

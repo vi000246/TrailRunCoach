@@ -1662,15 +1662,37 @@ def walk_capacity(ds, today: Optional[dt.date] = None, exclude: Optional[set] = 
     return cap
 
 
+def surface_marks(ds, runs, tags: Optional[list] = None) -> dict:
+    """SP-250: {activity idx: "dry" / "wet"} — the user's 路況 mark (activity_tags.SURFACES) of
+    each run that has one; unmarked runs are left out. `tags` = activity_tags rows (default: the
+    app DB; no tag store → {})."""
+    from backend.engine import activity_tags as AT
+    if tags is None:
+        try:
+            tags = AT.load()
+        except Exception:                   # noqa: BLE001 — no tag store: no marks
+            tags = []
+    out = {}
+    if not tags:
+        return out
+    for w in runs:
+        u = AT.find(tags, w.entry.start, w.entry.file)
+        s = AT.surface_of(AT.tags_of(u)) if u else None
+        if s:
+            out[w.idx] = s
+    return out
+
+
 def grade_models(ds, today: Optional[dt.date] = None, re_flat: Optional[float] = None,
                  exclude: Optional[set] = None, runs: Optional[list] = None,
                  classes: Optional[dict] = None, only_classes: Optional[set] = None,
-                 hikes: bool = True) -> dict:
+                 hikes: bool = True, surfaces: Optional[dict] = None) -> dict:
     """Gait-aware RE(g) (GaitRE) from the 365-day runs, and the walking
     model HikeSpeed from solo hikes + the HR-filtered steep windows of every
     hike (group hikes contribute only those), all before `today` and without
     `exclude`. `only_classes` restricts the runs to those intensity classes
-    (per-class fit); `classes` = classify_runs()."""
+    (per-class fit); `classes` = classify_runs(). `surfaces` = surface_marks()
+    (default: read from the tag store) for the dry / wet technicality (SP-250)."""
     from backend.engine.racepower import grade_model as GM
     from backend.engine.racepower import hikehr as HH
     from backend.engine.wko5expr.dataset import date_to_day
@@ -1687,8 +1709,10 @@ def grade_models(ds, today: Optional[dt.date] = None, re_flat: Optional[float] =
     if re_flat is None:
         flat = [s["re"] for s in gs if s["re"] and abs(s["g"]) <= 0.01 and (s["run"] is None or s["run"] >= 0.5)]
         re_flat = float(median(flat)) if flat else 1.0
+    if surfaces is None:
+        surfaces = surface_marks(ds, runs)
     if not hikes:
-        return {"grade_re": GM.fit_gait_re(gs, re_flat, cmap), "classes": cmap}
+        return {"grade_re": GM.fit_gait_re(gs, re_flat, cmap, surfaces), "classes": cmap}
     hikes = hike_workouts(ds, today)
     solo = solo_hikes()
     solo_w = [w for w in hikes if w.entry.file in solo]
@@ -1704,7 +1728,7 @@ def grade_models(ds, today: Optional[dt.date] = None, re_flat: Optional[float] =
         import traceback
         traceback.print_exc()
         cap = None
-    return {"grade_re": GM.fit_gait_re(gs, re_flat, cmap), "hike_speed": GM.fit_hike_speed(hs_solo + steep),
+    return {"grade_re": GM.fit_gait_re(gs, re_flat, cmap, surfaces), "hike_speed": GM.fit_hike_speed(hs_solo + steep),
             "walk_capacity": cap,
             "hike_hr": HH.summary(hr_wins, th.get("aet"), th.get("lthr"), n_days),
             "hike_basis": {"solo_hikes": len(solo_w), "solo_windows": len(hs_solo), "steep_hr_windows": len(steep),
