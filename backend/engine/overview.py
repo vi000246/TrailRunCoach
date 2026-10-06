@@ -115,13 +115,20 @@ def ep_km(w: Workout) -> float:
 
 def session_of(ds: Dataset, w: Workout) -> dict:
     """The session classifier for one activity (workout_review.classify): {type,
-    type_label, stimulus, icon}; {} when it can't be measured."""
+    type_label, stimulus, icon, z3_s, t_vo2_eq_s}; {} when it can't be measured. The two
+    doses (Zone 3 seconds, equivalent T@VO2max) grade a planned session's intensity
+    (plan_match.dose, SP-216)."""
     from backend.engine import workout_review as WR
     try:
         c = WR.classify(ds, w)
     except Exception:                       # noqa: BLE001 — a row never breaks the overview
         return {}
-    return {k: c.get(k) for k in ("type", "type_label", "stimulus", "icon", "moderate")}
+    out = {k: c.get(k) for k in ("type", "type_label", "stimulus", "icon", "moderate")}
+    st = c.get("stim") or {}
+    for k in ("z3_s", "t_vo2_eq_s"):
+        v = st.get(k)
+        out[k] = None if v is None else round(float(v), 1)
+    return out
 
 
 def activity_row(w: Workout, ds: Optional[Dataset] = None) -> dict:
