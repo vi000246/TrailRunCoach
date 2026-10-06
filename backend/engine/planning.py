@@ -603,6 +603,9 @@ class Threshold:
     # when measured (two-point) — a prior is not the athlete's W′.
     wprime: Optional[float] = None
     cp_method: Optional[str] = None
+    # True = `cp` was typed by hand in 設定 (SP-274, owner 2026-10-06); None = a test result or a
+    # row saved before this field (a legacy row counts as tested: aet_test.cp_tested)
+    cp_manual: Optional[bool] = None
     # how `lthr` / `aethr` were obtained (LTHR_METHODS / AETHR_METHODS); None =
     # a legacy row, read from its note (threshold_method). docs/research/
     # zones-and-thresholds.md §3.4 change 1: an applied estimate is not a test.
@@ -616,7 +619,7 @@ class Threshold:
     THRESHOLD_FIELDS = ("lthr", "aethr", "mhr", "rhr", "cp")
 
 
-_THRESHOLD_KEYS = ("date", "lthr", "aethr", "mhr", "rhr", "cp", "note", "wprime", "cp_method",
+_THRESHOLD_KEYS = ("date", "lthr", "aethr", "mhr", "rhr", "cp", "note", "wprime", "cp_method", "cp_manual",
                    "lthr_method", "aethr_method", "mhr_method")
 
 # estimate = thresholds.estimate applied with 「套用估計」; friel30 = Friel's

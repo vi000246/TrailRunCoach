@@ -98,15 +98,49 @@ def test_a_race_older_than_180_days_is_not_used():
     assert s["xu_basis"] == "talk" and "180 天內" in s["detail"]
 
 
-def test_only_a_cp_from_a_test_counts():
+@pytest.mark.parametrize("row, want", [
+    ({"cp_method": "2pt"}, True),                       # a test result
+    ({}, True),                                         # legacy: CP, no cp_method, no marker
+    ({"cp_manual": True}, False)])                      # typed by hand in 設定
+def test_which_cp_counts_as_tested(row, want):
+    from backend.engine.planning import Plan, Threshold
+    p = Plan()
+    p.thresholds.append(Threshold("2026-09-01", cp=255.0, **row))
+    assert AT.cp_tested(p, TODAY) is want
+    assert not AT.cp_tested(Plan(), TODAY)
+
+
+def test_the_cp_in_effect_decides():
     from backend.engine.planning import Plan, Threshold
     p = Plan()
     p.thresholds.append(Threshold("2026-08-01", cp=250.0, cp_method="2pt"))
-    assert AT.cp_tested(p, TODAY)
-    p.thresholds.append(Threshold("2026-09-01", cp=255.0))                 # typed by hand: the latest
-    assert not AT.cp_tested(p, TODAY)
-    assert AT.cp_tested(p, dt.date(2026, 8, 15))                           # before the hand-typed row
-    assert not AT.cp_tested(Plan(), TODAY)
+    p.thresholds.append(Threshold("2026-09-01", cp=255.0, cp_manual=True))
+    assert not AT.cp_tested(p, TODAY) and AT.cp_tested(p, dt.date(2026, 8, 15))
+
+
+def test_the_manual_marker_round_trips_and_apply_cp_clears_it(tmp_path, monkeypatch):
+    """設定's PUT keeps cp_manual; 「套用這次的 CP」 on that day turns it back into a test result."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from backend.api import plan as API
+    from backend.engine import planning as PL
+    path = tmp_path / "plan.json"
+    PL.Plan().save(path)
+    load, save = PL.Plan.load.__func__, PL.Plan.save
+    monkeypatch.setattr(PL.Plan, "load", classmethod(lambda cls, p=path: load(cls, p)))
+    monkeypatch.setattr(PL.Plan, "save", lambda self, p=path: save(self, p))
+    monkeypatch.setattr(API, "_notify", lambda thresholds: None)
+    app = FastAPI()
+    app.include_router(API.router)
+    c = TestClient(app)
+    assert c.put("/api/v1/plan/thresholds", json=[{"date": "2026-09-01", "cp": 255, "cp_manual": True}]).status_code == 200
+    t = PL.Plan.load(path).thresholds[0]
+    assert t.cp_manual is True and not AT.cp_tested(PL.Plan.load(path), TODAY)
+    assert c.post("/api/v1/plan/thresholds/apply-cp",
+                  json={"date": "2026-09-01", "cp": 250, "cp_method": "2pt"}).status_code == 200
+    t = PL.Plan.load(path).thresholds[0]
+    assert t.cp_manual is None and t.cp_method == "2pt" and AT.cp_tested(PL.Plan.load(path), TODAY)
 
 
 def test_english():
@@ -141,17 +175,17 @@ def test_an_interval_session_keeps_the_badge():
 
 
 
-@pytest.mark.parametrize("method, want", [("2pt", True), (None, False)])
-def test_week_plan_thresholds_carry_the_tested_cp(method, want):
-    """overview.week_plan → thresholds.cp_measured (aet_test.cp_tested): a CP test row counts, a
-    hand-typed CP doesn't (owner 2026-10-06)."""
+@pytest.mark.parametrize("row, want", [({"cp_method": "2pt"}, True), ({}, True), ({"cp_manual": True}, False)])
+def test_week_plan_thresholds_carry_the_tested_cp(row, want):
+    """overview.week_plan → thresholds.cp_measured (aet_test.cp_tested): a CP test row or a legacy
+    row counts, a hand-typed CP doesn't (owner 2026-10-06)."""
     from backend.engine import overview as O
     from backend.engine import plan_prefs as PP
     from backend.engine.planning import Threshold
     from backend.engine.status import Status
     from backend.tests.test_aet_weekday import TODAY as T2, _build_week_ds
     ds, plan = _build_week_ds()
-    plan.thresholds.append(Threshold((T2 - dt.timedelta(days=1)).isoformat(), cp=250.0, cp_method=method))
+    plan.thresholds.append(Threshold((T2 - dt.timedelta(days=1)).isoformat(), cp=250.0, **row))
     st = Status(ds, plan, T2, prefs=PP.Prefs()).compute()
     wp = O.week_plan(ds, st, T2, prefs=PP.Prefs())
     assert wp["thresholds"]["cp_measured"] is want and "e_pace" in wp["thresholds"]
