@@ -98,6 +98,65 @@ def test_downhill_expression_constants_match_the_reference():
         assert CM.DOWNHILL_EXPR in _series("training", "每週下坡衝擊負荷", name)
 
 
+def _dh_trail(day, down_s, cad, tags=("runningtrail",), kmh=8.0, pause=False):
+    """10' flat, then `down_s` s at −12 %; cadence `cad` strides/min; `pause` = a 15' gap mid-descent."""
+    import datetime as dt
+    import numpy as np
+    from backend.tests.wko5_fakes import FakeWorkout
+    n = 600 + down_s
+    t = np.arange(1, n + 1, dtype=float)
+    if pause:
+        t[600 + down_s // 2:] += 900
+    dist = np.arange(1, n + 1, dtype=float) * kmh / 3600.0
+    e = np.where(np.arange(n) < 600, 500.0, 500.0 - (dist - dist[599]) * 1000 * 0.12)
+    ch = {"elapsedtime": list(t), "speed": [kmh] * n, "elapseddistance": list(dist), "elevation": list(e),
+          "cadence": [cad] * n, "heartrate": [140.0] * n}
+    return FakeWorkout(start=dt.datetime.combine(day, dt.time(7)), sport="run", tags=list(tags), channels=ch,
+                       metrics={"duration": float(t[-1]), "movingduration": float(n), "distance": float(dist[-1])})
+
+
+def test_weekly_downhill_chart_has_steep_downhill_cadence_lines():
+    # SP-237: two dashed right-axis lines, colours of their bars, trail mode only, bars unchanged
+    import datetime as dt
+    from backend.engine.wko5expr.render import render_chart
+    from backend.tests.wko5_fakes import FakeDataset
+    ch = _chart("training", "每週下坡衝擊負荷")
+    assert ch["sports"] == ["trail"]
+    assert [a["id"] for a in ch["axes"]] == ["CUSTOM等效 km", "steps/min"]
+    by = {s["name"]: s for s in ch["series"]}
+    for line, bar, cat in (("越野跑 陡下坡步頻", "越野跑", 'hastag("runningtrail")'),
+                           ("登山健行 陡下坡步頻", "登山健行", 'hastag("hiking") or hastag("mountaineering")')):
+        s = by[line]
+        assert s["type"] == "line" and s["line_style"] == "dash" and s["y_axis"] == "steps/min"
+        assert s["color"] == by[bar]["color"] and s["expression"] == CM.downhill_cadence_expr(cat)
+    assert "rgrade < -0.08" in CM.DH_CAD_TIME_EXPR and CM.DH_CAD_MIN_S == 600
+    d = ch["description"]
+    assert "Van Hooren 2024" in d and "−8%" in d and all(k in d for k in ("怎麼看：", "看什麼：", "方法："))
+
+    ws = [_dh_trail(dt.date(2026, 9, 1), 900, 55.0), _dh_trail(dt.date(2026, 9, 2), 900, 60.0),  # one week
+          _dh_trail(dt.date(2026, 9, 9), 300, 60.0),                         # 5' of steep downhill: no point
+          _dh_trail(dt.date(2026, 9, 16), 1200, 58.0, tags=("hiking",)),
+          _dh_trail(dt.date(2026, 9, 22), 1200, 60.0),
+          _dh_trail(dt.date(2026, 9, 28), 500, 50.0, pause=True)]   # 8'20" + a 15' pause: the pause doesn't count
+    ds = FakeDataset(ws, dt.date(2026, 9, 29), settings={"runftp": 250.0, "runthr": 160.0})
+    out = render_chart(ch, ds, ds.today - 40, ds.today)
+    pts = {s["name"]: {x[:10]: y for x, y in s["data"]["points"] if y is not None} for s in out["series"]}
+    unit = {s["name"]: s["unit"]["label"] for s in out["series"]}
+    assert unit["越野跑 陡下坡步頻"] == "spm"
+    assert pts["越野跑 陡下坡步頻"] == {"2026-08-31": pytest.approx(115.0), "2026-09-21": pytest.approx(120.0)}
+    assert pts["登山健行 陡下坡步頻"] == {"2026-09-14": pytest.approx(116.0)}
+    # the bars are the same expression as before (DOWNHILL_EXPR per category) and still drawn
+    assert pts["越野跑"]["2026-09-07"] > 0 and pts["登山健行"]["2026-09-14"] > 0
+    # English legend and help
+    from backend.engine.wko5expr.customviews import parse_view
+    from backend.engine.wko5expr.viewi18n import translate_view
+    v = parse_view(_view("training"), ROOT / "views" / "training.json")
+    en = translate_view(v, json.loads((ROOT / "views" / "i18n" / "en.json").read_text("utf-8"))["training"])
+    c = next(c for d in en["dashboards"] for c in d["charts"] if c["id"] == "weekly-downhill-load")
+    assert {"Trail run steep-downhill cadence", "Hike steep-downhill cadence"} <= {s["name"] for s in c["series"]}
+    assert "Van Hooren 2024" in c["description"] and "−8%" in c["description"]
+
+
 def test_acute_chronic():
     assert CM.acute_chronic([1.0] * 28) == pytest.approx(1.0)
     assert CM.acute_chronic([0.0] * 21 + [4.0] * 7) == pytest.approx(4.0)
