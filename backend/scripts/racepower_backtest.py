@@ -151,11 +151,17 @@ def main(argv=None) -> int:
             if b.get("total"):
                 print(f"  {'':10s} total (+stops) {_st(b['total'])}")
             print(f"  {'':10s}  power envelope (mode C) {_st(b['power_envelope'])}")
+        lr = th.get("long_races") or {}
+        if lr.get("n"):
+            print(f"  races >= {lr['min_h']:g} h n={lr['n']}: race-x {_st(lr['race_level'])}")
+            print(f"  {'':10s}  race-x no-dur {_st(lr['race_level_no_durability'])}")
+        elif lr:
+            print(f"  no races of {lr['min_h']:g} h or longer: the long-race decay shape cannot be validated")
         print("  pass rule:", th.get("pass_rule"))
         for r in th["race_rows"]:
             t = r.get("th") or {}
             mv = t.get("moving_s") or 0
-            print(f"   {r['date']} {r.get('file') or ''} effort {r.get('effort_tag')}{'(手動)' if r.get('effort_overridden') else ''} "
+            print(f"  {'*' if r.get('long') else ' '}{r['date']} {r.get('file') or ''} effort {r.get('effort_tag')}{'(手動)' if r.get('effort_overridden') else ''} "
                   f"rest {(r.get('rest_share') or 0):.0%}"
                   f"{(' 手錶推估功率（未採用）' if r.get('power_unused') else ' NO POWER') if r.get('no_power') else ''}"
                   f": actual {mv / 3600:.2f} h, "

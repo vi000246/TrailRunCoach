@@ -658,6 +658,24 @@ def evaluate_trail_hr(case: dict, ctx: dict) -> dict:
             "err_th_total": tot / el - 1.0 if (tot and el) else None}
 
 
+# SP-240 (docs/research/long-race-durability-shape.md §1.3, §5 #2): races with ≥ 8 h of
+# moving time are where the durability decay shape shows; listed apart, with and without decay.
+LONG_RACE_H = 8.0
+
+
+def _is_long_race(r: dict) -> bool:
+    return ((r.get("th") or {}).get("moving_s") or 0.0) >= LONG_RACE_H * 3600.0
+
+
+def summarise_long_races(races: list[dict]) -> dict:
+    """The ≥ LONG_RACE_H races: n and the race-level errors with / without
+    durability decay (existing err_th_race / err_th_race_nodur only)."""
+    ls = [r for r in races if _is_long_race(r)]
+    return {"n": len(ls), "min_h": LONG_RACE_H,
+            "race_level": stats(r.get("err_th_race") for r in ls),
+            "race_level_no_durability": stats(r.get("err_th_race_nodur") for r in ls)}
+
+
 def summarise_trail_hr(rows: list[dict]) -> dict:
     """Trail HR pace model errors: every trail case (given HR), the races
     (activity type 比賽) and the 全力 capacity samples (given and race level)."""
@@ -680,13 +698,15 @@ def summarise_trail_hr(rows: list[dict]) -> dict:
                 "total": st_ub(r.get("err_th_total") for r in rs),
                 "power_envelope": stats(r.get("err_c") for r in rs)}
     return {"all": blk(th), "races": blk(races), "max_effort": blk(maxes),
+            "long_races": summarise_long_races(races),
             "race_rows": [{k: r.get(k) for k in ("date", "label", "file", "effort_tag", "effort_overridden",
                                                  "effort_reason", "rest_share", "no_power", "power_source",
                                                  "power_unused", "err_th_given",
                                                  "err_th_nodur", "err_th_race", "err_th_race_nodur",
                                                  "err_th_race_median", "err_th_total", "err_c",
                                                  "err_p", "error")}
-                          | {"th": r.get("th")} for r in sorted(races, key=lambda r: r["date"])],
+                          | {"th": r.get("th"), "long": _is_long_race(r)}
+                          for r in sorted(races, key=lambda r: r["date"])],
             "source": "越野心率配速模型（推估）", "threshold": THRESHOLDS["trail"],
             "target": TARGETS["trail"]}
 
