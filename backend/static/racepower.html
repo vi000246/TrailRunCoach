@@ -226,6 +226,7 @@ input.need, .drop.need { border-color: var(--bad); box-shadow: 0 0 0 1px var(--b
 .cmp td.walk { color: var(--watch); }
 .cmp tr { cursor: pointer; }
 .cmp td.fuel { white-space: normal; min-width: 160px; font-size: 12px; color: var(--muted); }
+.pole { display: block; font-size: 12px; color: var(--muted); }      /* SP-244 會用登山杖 hint */
 .chead { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; margin: 0 0 4px; }
 .legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 11.5px; color: var(--muted); }
 .legend i { display: inline-block; width: 12px; height: 8px; border-radius: 2px; margin-right: 4px; vertical-align: 0; }
@@ -1139,6 +1140,8 @@ function planBody(extra = {}) {
   for (const k of ["cp", "w_prime", "tte", "k", "re", "weight", "eph"]) if (ovr[k] != null) body[k] = ovr[k];
   if (ovr.cp_source) body.cp_source = ovr.cp_source;
   if (ovr.k_source) body.k_source = ovr.k_source;
+  // SP-244: the plan event's 會用登山杖 (賽季計畫) → hints on steep segments only, no number changes
+  if ((INP?.events || []).find((e) => e.id === $("event").value)?.poles) body.poles = true;
   const pi = ls.get("prior", "");
   if (pi !== "" && INP.priors[+pi]) { const p = INP.priors[+pi]; body.prior = { distance_km: p.km, time_s: p.time_s, power: p.avg_power, label: p.label }; }
   return body;
@@ -1574,6 +1577,7 @@ function rowTip(r) {
     `${T("split")} ${dur(r.t)} · ${T("cum")} ${dur(r.cum_s)}${r.eta ? " · ETA " + esc(r.eta) : ""}${ok(r.temp_c) ? ` · ${f1(r.temp_c)} °C` : ""}`];
   if (r.basis === "safe") lines.push(esc(T("safe")));
   if (r.fuel) lines.push("🍬 " + esc(r.fuel));
+  if (r.pole_hint) lines.push(esc(r.pole_hint.text));
   return lines.join("<br>");
 }
 function renderProfile() {
@@ -1771,7 +1775,7 @@ function renderSegCompact() {
       <td>${r.mark}${hike && r.day ? ` <span class="faint">D${r.day}</span>` : ""}</td><td class="n">${f1(r.start_km)}–${f1(r.end_km)}</td>
       <td class="n ${r.walk ? "walk" : ""}">${f1((r.grade || 0) * 100)}%${r.walk ? " " + esc(T("walk")) : r.gait === "either" ? " " + esc(T("gait.either")) : ""}</td>${td("pace", r)}${hike ? "" : td("power", r)}${td("hr", r)}
       <td class="n">${dur(r.t)}</td><td class="n">${dur(r.cum_s)}${r.eta ? ` <span class="faint">${esc(r.eta)}</span>` : ""}</td>
-      <td class="fuel">${r.basis === "safe" ? `🛡️ ${esc(T("safe_short"))}${r.fuel ? "；" : ""}` : ""}${esc(r.fuel || "")}</td></tr>`;
+      <td class="fuel">${r.basis === "safe" ? `🛡️ ${esc(T("safe_short"))}${r.fuel ? "；" : ""}` : ""}${esc(r.fuel || "")}${poleHint(r.pole_hint)}</td></tr>`;
   }
   const s = PLAN.summary;
   h += `<tr class="center"><td colspan="2">${esc(T("total"))}</td><td></td><td class="n opt ${m === "pace" ? "cur" : ""}">${pace(s.pace_s_per_km || (s.time_s / s.km))}</td>` +
@@ -1783,6 +1787,8 @@ function renderSegCompact() {
   });
   $("segcmp").onmouseleave = () => hoverSeg(null);
 }
+// SP-244: the event is marked 會用登山杖 → one line on steep climbs / descents, the studies in its tooltip
+function poleHint(ph) { return ph ? `<span class="pole" title="${esc(ph.src)}">${esc(ph.text)}</span>` : ""; }
 function segAt(km) { return PLAN.segments.find((s) => km >= s.start_km && km <= s.end_km); }
 function segNote(s) { return (s.notes || []).concat(s.walk && !(s.notes || []).includes(s.walk) ? [s.walk] : []).join("、"); }
 function heatText(s) {
@@ -1813,7 +1819,7 @@ function renderSegments() {
     }
     h += `<td class="n">${dur(s.t)}</td><td class="n">${dur(s.cum_s)}</td><td class="n">${s.eta || ""}</td>${hike ? "" : `<td class="n">${s.M.toFixed(3)}</td>
       <td class="n" title="${esc(heatText(s).replace(/<[^>]+>/g, ""))}">${f1(s.temp_c)}°${s.heat_pct > 0 ? ` <span class="wn">−${s.heat_pct.toFixed(1)}%</span>` : ""}${ok(s.heat_eff_pct) && s.heat_pct > 0 ? ` <span class="faint" title="適應後 H_eff">→ −${s.heat_eff_pct.toFixed(1)}%</span>` : ""}</td>`}
-      <td class="wrap">${esc(segNote(s))}${s.badge ? ' <span class="badge watch">推估</span>' : ""}</td></tr>`;
+      <td class="wrap">${esc(segNote(s))}${s.badge ? ' <span class="badge watch">推估</span>' : ""}${poleHint((rowsOf(P)[P.segments.indexOf(s)] || {}).pole_hint)}</td></tr>`;
   }
   const tot = P.summary;
   h += `<tr class="center"><td colspan="${hike ? 7 : 6}">合計</td>${hike ? `<td></td><td class="n">${f1(tot.km / (tot.time_s / 3600))} km/h</td><td></td>${capx ? "<td></td><td></td><td></td><td></td><td></td>" : ""}` :

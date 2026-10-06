@@ -164,6 +164,7 @@ class EventIn(BaseModel):
     # SP-114: [{km, gain_m, loss_m?}] per day, required for a multi-day trip (planning.clean_day_plan)
     day_plan: Optional[list[dict]] = None
     race_format: Optional[str] = None       # SP-114 賽制 stage | continuous (≥ 2 day 越野賽／其他)
+    poles: bool = False                     # SP-244 會用登山杖: calculator hints only
 
 
 def _gpx_day_plan(data: dict) -> Optional[list[dict]]:
