@@ -45,9 +45,10 @@ ladder, dose step and 達標 count (dose_tracks):
      then A3 / A4 / T+ maintenance. Opens on the Zone 3 gate (z3_gate, any one): 4 complete weeks
      of actual training with ≥ 3 runs a week and no 7-day gap (推估; sticky, a ≥ 21-day break
      re-locks), the 90-min drift test < 10 %, or a measured UA gap ≤ 10 %. Its time in zone ≤ 10 %
-     of the week (Daniels; 5 % for the first session, UA): over that the 巡航版 T1–T3 (3×6′ / 3×8′
+     of the week (coach, the book not verified: Daniels' T ≤ 10 % is per session and by mileage, here per
+     week and by time; 5 % for the first session, UA): over that the 巡航版 T1–T3 (3×6′ / 3×8′
      / 2×12′, the old Zone 3 rungs) stands in and still counts. Zone 3 + Zone 5 ≤ 20 % of the
-     week's running time (QUALITY_SHARE_MAX, 推估; overview.quality_sessions shortens and notes).
+     week's running time (QUALITY_SHARE_MAX, 推估 — Seiler's 80/20 counts sessions, not time; overview.quality_sessions shortens and notes).
   Zone 5: 5×2′ → 4×3′ → 5×3′ → 4×4′, then V3 / V4 maintenance — its own gate (SP-39, z5_track):
      a MEASURED AeT (base_check.z5_status: a tested AeT + a measured LTHR within 10 %, or Friel
      drift < 5 % at the tested AeT; the 90-min test is not an AeT test) and the soft 「3 區先」:
@@ -114,7 +115,8 @@ XU_GOOD = 0.10
 XU_HEAT_C = 25.0               # 台灣教練's condition: advice in the session text, not a refusal (heat bands)
 PLATEAU_WEEKS = 8              # 自訂
 EF_PLATEAU = 0.02              # status.EF_TREND
-LOW_SHARE_MIN = 0.75           # status.LOW_SHARE_GOOD (Seiler, by time)
+LOW_SHARE_MIN = 0.75           # status.LOW_SHARE_GOOD — by time, 推估: Seiler 2010's 80/20 counts sessions, not time
+                               # (estimated-constants-inventory.md §5.1)
 STEP_HOLD, STEP_BLOCK = LG.STEP_HOLD, LG.STEP_BLOCK   # > 20 % block: Nielsen 2014, Damsted 2019; 10–20 % hold 推估
 TSB_HOLD = -20.0                           # Friel / TrainingPeaks TSB bands (coach)
 REP_PCT, REP_MIN_S, DOSE_MIN_REPS = 0.95, 40, 4   # 自訂: a short-rep session = ≥ 4 bouts ≥ 40 s at ≥ 95 % CP
@@ -158,10 +160,12 @@ Z3_MAX_GAP_DAYS = 7            # 推估: … and no stretch of ≥ 7 days withou
 Z3_RELOCK_DAYS = 21            # 推估: ≥ 21 days without running re-locks Zone 3 (Coyle 1984: VO2max −7 % at
                                # 21 days; detraining.md §1 「3–8 週開始傷到有氧基礎」). 6–20 days: the re-entry block only
 Z3_HISTORY_DAYS = 365          # 自訂: how far back the run dates are read
-QUALITY_SHARE_MAX = 0.20       # 推估 (Seiler 80/20, Koop): the week's interval work (Zone 3 + Zone 5 time in zone)
+QUALITY_SHARE_MAX = 0.20       # 推估 — Seiler 2010's 80/20 counts sessions, not time (inventory §5.1); Koop: the week's interval work (Zone 3 + Zone 5 time in zone)
                                # ≤ 20 % of the planned running time — a planning rule, not a gate
 Z3_SHARE_START = 0.05          # UA: Zone 3 starts at about 5 % of the weekly aerobic volume (the track's first session)
-Z3_SHARE_MAX = 0.10            # Daniels: T running ≤ 10 % of the weekly volume — the per-week Zone 3 cap
+Z3_SHARE_MAX = 0.10            # coach, the book not verified (second-hand summaries): Daniels' T ≤ 10 % of the weekly
+                               # mileage is per SESSION and by MILEAGE; the app uses it per WEEK and by TIME — the
+                               # per-week Zone 3 cap (estimated-constants-inventory.md §5.3)
 # legacy titles of the old ladders: not counted as steps any more (neutral in planned_spec).
 # The old z3a 「閾值 3×8 分」 is T2's title: a title-only row reads as z3b now.
 LEGACY_TITLES = ("短間歇 5×1 分", "短間歇 6×1 分", "爬坡間歇 4×3 分", "間歇 5×3 分", "VO2max 間歇 4×4 分",
@@ -210,7 +214,8 @@ def dose_spec(step: int, z5_open: bool = True) -> tuple:
 
 
 def z3_budget_min(hours: Optional[float], first: bool = False) -> Optional[float]:
-    """The week's Zone 3 time in zone budget (minutes): 10 % of the planned week (Daniels), 5 % for
+    """The week's Zone 3 time in zone budget (minutes): 10 % of the planned week (Z3_SHARE_MAX: Daniels' per-session,
+    by-mileage T cap used per week and by time — coach, the book not verified), 5 % for
     the track's first session (UA). None without a week volume."""
     if not hours or hours <= 0:
         return None
@@ -1304,8 +1309,9 @@ SRC_Z3 = {
     "ratio": "推估（研究 Finding 6 的週內配置：UA 專項期 1 堂 Z3＋1 堂 Z4、Daniels 主課＋T 次課）："
              "每週 1 堂時，目標 ≤ 10 km 路跑 3 區：5 區 = 1:1，半馬以上／越野／沒有 A 賽 2:1；"
              "專項期後段（賽前第 6–3 週）往比賽強度偏（Koop、Uphill Athlete、Haugen 2022；比例為推估）",
-    "volume": "Daniels：T 每週不超過週量 10%；Uphill Athlete：Zone 3 起步約週有氧量 5%",
-    "share": "推估：一週間歇（3 區＋5 區的目標區時間）≤ 跑步時間 20%（Seiler 80/20；Koop）",
+    "volume": "教練（未驗證原書）：Daniels 是單次 T 課不超過週里程 10%，這裡改成每週 3 區時間不超過週量 10%；"
+              "Uphill Athlete：Zone 3 起步約週有氧量 5%",
+    "share": "推估：一週間歇（3 區＋5 區的目標區時間）≤ 跑步時間 20%（Seiler 的 80/20 是堂數，不是時間；Koop）",
 }
 
 
@@ -2219,7 +2225,7 @@ def z5_flow(card: dict, z: dict, gate: dict, tests: list, step: int) -> dict:
     done1 = state != "reentry" and bool(G.get("open"))
     s2 = ladder(Z3, step, done1)
     tip2 = (_("3 區解鎖後、護欄通過就照排，5 區開放後也照排") + "\n"
-            + _("每週 3 區量 ≤ 週量 10%（Daniels），放不下排巡航版 3×6／3×8／2×12"))
+            + _("每週 3 區量 ≤ 週量 10%（教練，未驗證原書：Daniels 是單次課、以里程算，這裡是每週、以時間算），放不下排巡航版 3×6／3×8／2×12"))
     z3_stages = [
         {"key": "z3_gate", "title": _("3 區解鎖"), "sub": _("有基礎了就能做") if not done1 else "", "items": s1,
          "done": done1, "any": any1, "any_label": note1, "unlocks": _("可以開始排 3 區（有氧間歇／節奏跑）"),
@@ -2892,7 +2898,7 @@ def _indicator(gate: dict) -> dict:
 
 OPTION_INFO = {
     "auto": {"source": "台灣教練、徐國峰部落格、Uphill Athlete、Friel、Seiler",
-             "rule": "3 區（有氧間歇／節奏，每趟 15–30 分：2×15 → 3×12 → 2×20 → 1×30，88–95% CP）解鎖後、護欄通過就排——解鎖三選一：連續 4 週規律訓練（每週 ≥ 3 次、沒有 ≥ 7 天沒跑；推估，停跑 ≥ 21 天要重新累積）、徐國峰 90 分鐘測試飄移 < 10%、或實測 AeT 的 UA 差距 ≤ 10%；低強度占比不擋 3 區（只提醒；5 區照舊要 ≥ 75%）；每週 3 區量 ≤ 週量 10%（Daniels），放不下就排巡航版 3×6／3×8／2×12。5 區開放後 3 區照排：每週 2 堂＝3 區＋5 區各 1，每週 1 堂時輪替（目標 ≤ 10 km 路跑 1:1，其他 2:1；推估）；專項期照樣走階梯（越野排上坡版），後段（賽前第 6–3 週）的比例往比賽強度偏：預估 4 小時以上的越野／百岳只排 3 區，半馬以上的路跑 3:1，5 km 路跑 1:2（推估）；一週間歇總量 ≤ 跑步時間 20%（推估）。5 區（每趟 ≥ 2 分、一週最多 2 次、隔 ≥ 2 天：台灣教練）是另一道關卡，一定要實測 AeT："
+             "rule": "3 區（有氧間歇／節奏，每趟 15–30 分：2×15 → 3×12 → 2×20 → 1×30，88–95% CP）解鎖後、護欄通過就排——解鎖三選一：連續 4 週規律訓練（每週 ≥ 3 次、沒有 ≥ 7 天沒跑；推估，停跑 ≥ 21 天要重新累積）、徐國峰 90 分鐘測試飄移 < 10%、或實測 AeT 的 UA 差距 ≤ 10%；低強度占比不擋 3 區（只提醒；5 區照舊要 ≥ 75%）；每週 3 區量 ≤ 週量 10%（教練，未驗證原書：Daniels 是單次課、以里程算，這裡是每週、以時間算），放不下就排巡航版 3×6／3×8／2×12。5 區開放後 3 區照排：每週 2 堂＝3 區＋5 區各 1，每週 1 堂時輪替（目標 ≤ 10 km 路跑 1:1，其他 2:1；推估）；專項期照樣走階梯（越野排上坡版），後段（賽前第 6–3 週）的比例往比賽強度偏：預估 4 小時以上的越野／百岳只排 3 區，半馬以上的路跑 3:1，5 km 路跑 1:2（推估）；一週間歇總量 ≤ 跑步時間 20%（推估；Seiler 的 80/20 是堂數，不是時間）。5 區（每趟 ≥ 2 分、一週最多 2 次、隔 ≥ 2 天：台灣教練）是另一道關卡，一定要實測 AeT："
                      "① 實測 AeT＋實測 LTHR，LTHR ÷ AeT − 1 ≤ 10%（UA 差距法）、或 ② 在實測 AeT 附近跑 ≥ 60 分鐘，前後半飄移 < 5%（Friel）；"
                      "90 分鐘測試量不出 AeT，只算 3 區的關卡。另外近 6 週要做過 ≥ 2 堂 3 區（軟條件，推估）。"
                      "低強度占比 < 75% 在實測 AeT 時擋 5 區；AeT 是估計值時只提醒。"

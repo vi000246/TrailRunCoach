@@ -821,7 +821,7 @@ def _gate_session(gate: dict, dec: dict, th: dict, hours: Optional[float], prefs
         budget, what = float(dec["budget"]), f"間歇總量 ≤ 週量 {QG.QUALITY_SHARE_MAX:.0%} 扣掉 5 區"
     canon = IL.canonical(rung) if rung in IL.LIBRARY else None
     if budget is not None and canon is not None and IL.tiz_s(canon) / 60.0 > budget + 1e-6:
-        # the week's Zone 3 cap (Daniels ≤ 10 %; UA ~5 % to start): the 巡航版 of the same position
+        # the week's Zone 3 cap (≤ 10 %: Daniels' per-session, by-mileage T cap used per week, coach; UA ~5 % to start): the 巡航版 of the same position
         cr = QG.cruise_for(rung, budget)
         f = IL.fit(cr, cap, history or (), prefs, mountain, alt_caps, hill=bool(dec.get("hill")))
         counts = f["action"] in ("ok", "move") and bool(f["equiv"])
@@ -834,7 +834,7 @@ def _gate_session(gate: dict, dec: dict, th: dict, hours: Optional[float], prefs
             s["prefer_days"] = [f["move_wd"]]
         s["source"] = QG.source(gate, (f"{s['source']}；{QG.SRC_Z3['volume']}",))
         if notes is not None:
-            notes.append({"level": "info", "src": "z3", "text": why + "（Daniels：T ≤ 週量 10%；UA：起步約 5%）"})
+            notes.append({"level": "info", "src": "z3", "text": why + "（教練，未驗證原書：Daniels 是單次課、以里程算，這裡是每週、以時間算；UA：起步約 5%）"})
         return s
     if rung in IL.LIBRARY:
         f = IL.fit(rung, cap, history or (), prefs, mountain, alt_caps, dec.get("adjust"), hill=bool(dec.get("hill")))
@@ -896,7 +896,7 @@ def quality_sessions(gate: dict, dec: dict, kind: str, th: dict, tgt: dict, hour
     items = dec.get("items") or []
     if kind == "taper" and not items:
         items = [{"track": None}]
-    # the week's interval total (SP-31, 推估: Seiler 80/20, Koop): Zone 3 + Zone 5 time in zone ≤
+    # the week's interval total (SP-31, 推估 — Seiler's 80/20 counts sessions, not time; Koop): Zone 3 + Zone 5 time in zone ≤
     # QUALITY_SHARE_MAX of the planned running time — Zone 5 first, Zone 3 gets what is left
     total = QG.QUALITY_SHARE_MAX * hours * 60.0 if hours and kind in ("base", "specific") else None
     if total is not None and reserved:
@@ -949,7 +949,7 @@ def _reserved_out(notes: Optional[list], reserved: float, left: float, track: Op
     if notes is not None:
         notes.append({"level": "info", "src": "quality_share",
                       "text": _("你排的技術地形課（RPE ≥ 7）主課 {reserved:.0f} 分算進本週強度預算"
-                                "（週量 {share:.0%}，80/20；推估），只剩 {left:.0f} 分：這週不排{zone}間歇",
+                                "（週量 {share:.0%}；推估，Seiler 的 80/20 是堂數，不是時間），只剩 {left:.0f} 分：這週不排{zone}間歇",
                                 reserved=reserved, share=QG.QUALITY_SHARE_MAX, left=max(0.0, left),
                                 zone=_(" 5 區") if track == "z5" else _(" 3 區") if track == "z3" else "")})
 
@@ -964,7 +964,7 @@ def _second_z3(gate: dict, built: dict, it: dict, th: dict, hours: Optional[floa
     """The week's second Zone 3 session while Zone 5 is closed (課表偏好 2 a week; owner 2026-10-04):
     a 巡航版 interval (a T1–T3 library row or fewer of its reps, floor interval_library.MIN_REPS;
     quality_gate.week_decision's `cruise` item) as close to the first one's time in zone as the
-    Zone 3 cap (quality_gate.z3_budget_min: 10 % of the week for both, Daniels), the week's
+    Zone 3 cap (quality_gate.z3_budget_min: 10 % of the week for both — Daniels' per-session cap, coach), the week's
     interval total (`left`) and the day's cap allow, never the first one's structure. None — with
     a note — when nothing fits. It doesn't move the rung (its 達標 counts in `met`)."""
     from backend.engine import interval_library as IL
@@ -1005,7 +1005,7 @@ def _second_z3(gate: dict, built: dict, it: dict, th: dict, hours: Optional[floa
     if not fits:
         if notes is not None:
             notes.append({"level": "info", "src": "z3",
-                          "text": f"{head}——但 3 區每週上限（週量 10%，Daniels）／間歇總量（20%）或平日上限放不下"
+                          "text": f"{head}——但 3 區每週上限（週量 10%；教練，未驗證原書：Daniels 是單次課、以里程算，這裡是每週、以時間算）／間歇總量（20%）或平日上限放不下"
                                   f"（剩 {max(0.0, budget):.0f} 分）：本週排 1 堂"})
         return None
     why = (f"{head}：{IL.RUNG_NAME[rung]} {IL.structure(v)}，目標區 {IL.tiz_s(v) / 60:.0f} 分"
@@ -1045,7 +1045,7 @@ def _shorten(s: dict, left: float, total: float, hours: float, th: dict, gate: d
     from backend.engine import interval_library as IL
     from backend.engine import quality_gate as QG
     v = IL.resolve(s.get("variant_key"), s.get("variant_reps"), s.get("variant_adj")) if s.get("variant_key") else None
-    head = (f"本週 {hours:.1f} h：間歇總量上限 {total:.0f} 分（週量 {QG.QUALITY_SHARE_MAX:.0%}，80/20；推估）"
+    head = (f"本週 {hours:.1f} h：間歇總量上限 {total:.0f} 分（週量 {QG.QUALITY_SHARE_MAX:.0%}；推估，Seiler 的 80/20 是堂數，不是時間）"
             f"，{s['title']} 的 {session_tiz_min(s):.0f} 分放不下")
     if v is None or v.n <= 1 or v.sets > 1:
         if notes is not None:
