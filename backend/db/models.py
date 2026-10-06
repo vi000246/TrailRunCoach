@@ -341,6 +341,9 @@ class InjuryEvent(Base):
     # symptom-free day. Added to existing DBs by database._migrate_schema (default 'injury').
     category: Mapped[str] = mapped_column(String(10), default="injury", server_default="injury")
     illness: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
+    # SP-269 傷別 (optional): achilles | plantar_fascia | itb | pfp | other (injuries.CONDITIONS);
+    # NULL = not chosen (the general return-to-run rules). Added by database._migrate_schema.
+    condition: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 

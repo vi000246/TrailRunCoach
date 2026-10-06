@@ -829,17 +829,26 @@ def _pain_state(ds, w, t: dict) -> Optional[dict]:
         today = today_local()
         evs = INJ.load_events()
         ev = next((e for e in evs if e["id"] == t.get("injury_id")), None) if t.get("injury_id") else None
-        out = {"pain": t.get("pain"), "pain_area": t.get("pain_area"),
-               "area_label": INJ.area_label(t.get("pain_area")) if t.get("pain_area") else None,
-               "injury": INJ.summary(ev, today), "reentry": None}
-        # inside a re-entry block (engine/reentry.py): 「記一下有沒有痛」 (plan §4.3)
         from backend.engine import reentry as RE
         from backend.engine import workout_review as WR
         day = WR._wdate(w)
+        # the event the pain-monitoring text follows (傷別, SP-269): the mark's own, else an injury of the
+        # mark's area open that day; none = the general return-to-run rules
+        mev = ev or next((e for e in INJ.active_on(evs, day) if not INJ.is_illness(e) and t.get("pain_area")
+                          and e.get("area") == t.get("pain_area")), None)
+        mon = INJ.monitor(mev)
+        out = {"pain": t.get("pain"), "pain_area": t.get("pain_area"),
+               "area_label": INJ.area_label(t.get("pain_area")) if t.get("pain_area") else None,
+               "injury": INJ.summary(ev, today), "reentry": None,
+               "monitor": mon["text"] + "\n" + mon["disclaimer"] if mev is not None else None}
+        # inside a re-entry block (engine/reentry.py): 「記一下有沒有痛」 (plan §4.3)
         if w.sport == "run" and (today - day).days <= 120:
             rp = RE.find(ds, day)
             if rp and RE.in_block(rp, day):
-                out["reentry"] = {"text": rp.get("text"), "monitor": INJ.SILBERNAGEL["text"]}
+                inj = (rp.get("injury") or {}).get("id")
+                rev = mev or next((e for e in evs if inj is not None and e.get("id") == inj), None)
+                rm = INJ.monitor(rev)
+                out["reentry"] = {"text": rp.get("text"), "monitor": rm["text"] + "\n" + rm["disclaimer"]}
         return out
     except Exception:                       # noqa: BLE001 — never breaks the activity card
         return {"pain": t.get("pain"), "pain_area": t.get("pain_area"), "injury": None, "reentry": None}

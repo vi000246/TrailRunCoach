@@ -87,11 +87,42 @@ PATTERN_MIN_N = 5
 # scale (VAS) … during the exercise training. The pain after the exercise program was
 # allowed to reach 5 on the VAS but should have subsided by the following morning. Pain and
 # stiffness in the Achilles tendon were not allowed to increase from week to week."
-# Studied in Achilles tendinopathy only: for other areas it is 推估.
+# Studied in Achilles tendinopathy only: SP-269 shows it for the 跟腱 condition only.
 SILBERNAGEL = {"during_max": 5, "after_max": 5, "src": "Silbernagel 2007（阿基里斯腱疼痛監測模型）",
-               "text": "疼痛監測（Silbernagel 2007）：跑的時候疼痛 ≤ 5/10；跑完 ≤ 5/10 且隔天早上要退回原本的程度；"
-                       "疼痛和僵硬不能一週比一週多。原研究只看阿基里斯腱，用在其他部位是推估。"}
-DISCLAIMER = "這不是醫療診斷。持續或加重的疼痛請看醫師或物理治療師。"
+               "text": N_("疼痛監測（Silbernagel 2007）：跑的時候疼痛 ≤ 5/10；跑完 ≤ 5/10 且隔天早上要退回原本的程度；"
+                          "疼痛和僵硬不能一週比一週多。原研究只看阿基里斯腱，用在其他部位是推估。")}
+DISCLAIMER = N_("這不是醫療診斷。持續或加重的疼痛請看醫師或物理治療師。")
+
+# ---- 傷別 (SP-269; docs/research/injury-graded-return.md §2.3, §4.2, owner §6.1 points 1–2) ----------
+# Optional, picked by the user (the app never diagnoses: the texts say 「如果醫師或物理治療師說是…」).
+# Each condition belongs to one body area; "other" fits any area. No condition = the general
+# return-to-run rules (no longer Silbernagel's 5/10: it was only studied in the Achilles tendon).
+CONDITIONS = {"achilles": N_("跟腱"), "plantar_fascia": N_("足底筋膜"), "itb": N_("髂脛束"), "pfp": N_("膝前痛"),
+              "other": N_("其他")}
+CONDITION_HELP = {"achilles": N_("阿基里斯腱的肌腱病變（腳跟上方的跟腱痛）"),
+                  "plantar_fascia": N_("足底筋膜炎（腳跟、足弓痛，早上第一步最痛）"),
+                  "itb": N_("髂脛束症候群（膝蓋外側痛）"),
+                  "pfp": N_("髕股疼痛（膝蓋前面、膝蓋骨周圍痛）"),
+                  "other": N_("醫師沒說，或不是上面這幾種")}
+CONDITION_AREA = {"achilles": "achilles", "plantar_fascia": "foot", "itb": "knee", "pfp": "knee", "other": None}
+# Esculier JF et al. BMC Musculoskelet Disord 2016 (trial protocol, PMC4702381, read 2026-10-06):
+# pain ≤ 2/10 while running, "pain should return to before-training levels within 60 min post training"
+ESCULIER = {"during_max": 2, "after_min": 60}
+MONITOR = {
+    "achilles": SILBERNAGEL["text"],
+    "pfp": N_("疼痛監測（如果醫師或物理治療師說是膝前痛）：跑時 ≤ 2/10、跑完 60 分鐘內回到原本的程度"
+              "（Esculier 2016 試驗計畫書）。"),
+    "plantar_fascia": N_("如果醫師或物理治療師說是足底筋膜炎：沒有找到這種傷專用的疼痛數字，用一般回跑指引——"
+                         "不能越跑越痛、不能改變跑姿、隔天不能更痛（Ohio State Wexner 回跑指引，臨床機構）。"),
+    "itb": N_("如果醫師或物理治療師說是髂脛束症候群：沒有找到這種傷專用的疼痛數字，用一般回跑指引——"
+              "不能越跑越痛、不能改變跑姿、隔天不能更痛（Ohio State Wexner 回跑指引，臨床機構）。"),
+    "general": N_("疼痛監測（一般回跑指引）：不能越跑越痛、不能改變跑姿、隔天不能更痛"
+                  "（Ohio State Wexner 回跑指引，臨床機構）。"),
+}
+MONITOR_SRC = {"achilles": "Silbernagel 2007", "pfp": "Esculier 2016", "plantar_fascia": "Ohio State Wexner",
+               "itb": "Ohio State Wexner", "general": "Ohio State Wexner"}
+# 小腿／脛骨: maybe a bone stress injury — no condition rules there, only 「先給醫師看」 (§4.2)
+SHIN_NOTE = N_("小腿／脛骨的痛可能是骨應力傷害（疲勞性骨折）：先給醫師看。app 不給這個部位傷別規則。")
 
 
 def demo_mode() -> bool:
@@ -215,7 +246,39 @@ def validate_event(f: dict, today: Optional[dt.date] = None) -> Optional[str]:
         return "INVALID_CATEGORY"
     if "illness" in f and f["illness"] is not None and f["illness"] not in ILLNESS:
         return "INVALID_ILLNESS"
+    if "condition" in f and f["condition"] is not None and f["condition"] not in CONDITIONS:
+        return "INVALID_CONDITION"
     return None
+
+
+def check_condition(area: Optional[str], condition: Optional[str]) -> Optional[str]:
+    """SP-269: a condition other than 「其他」 belongs to one body area (CONDITION_AREA) —
+    「CONDITION_AREA_MISMATCH」 when the event's area is another one (e.g. 腳踝 + 膝前痛).
+    An unknown area is filled by the caller (condition_area)."""
+    if condition in (None, "other"):
+        return None
+    want = CONDITION_AREA.get(condition)
+    if want is None or area in (want, None, UNKNOWN):
+        return None
+    return "CONDITION_AREA_MISMATCH"
+
+
+def condition_label(condition: Optional[str]) -> str:
+    return _(CONDITIONS[condition]) if condition in CONDITIONS else ""
+
+
+def monitor(ev: Optional[dict] = None) -> dict:
+    """The pain-monitoring text of an event by its condition (SP-269): 跟腱 = Silbernagel 2007 (as
+    before), 膝前痛 = Esculier 2016's ≤ 2/10, the rest and no condition = the general return-to-run
+    rules (Ohio State Wexner). A 小腿／脛骨 event without a condition says 「先給醫師看」 first.
+    {"key", "text", "src", "disclaimer"} — every text keeps the 「這不是醫療診斷」 line."""
+    ev = ev or {}
+    c = ev.get("condition") if not is_illness(ev) else None
+    key = c if c in MONITOR else "general"
+    text = _(MONITOR[key])
+    if c in (None, "other") and ev.get("area") == "shin_calf":
+        text = _(SHIN_NOTE) + text
+    return {"key": key, "text": text, "src": MONITOR_SRC[key], "disclaimer": _(DISCLAIMER)}
 
 
 def check_dates(onset: Optional[str], resolved: Optional[str]) -> Optional[str]:
@@ -374,6 +437,10 @@ def event_json(ev: dict, today: dt.date, linked: int = 0, auto_days: Optional[in
                                       "recurrence_of", "note", "illness")},
             "category": "illness" if ill else "injury",
             "illness_label": _(ILLNESS[ev["illness"]]) if ill and ev.get("illness") in ILLNESS else "",
+            # 傷別 (SP-269): the condition and its pain-monitoring text (illness: none)
+            "condition": None if ill else ev.get("condition"),
+            "condition_label": "" if ill else condition_label(ev.get("condition")),
+            "monitor": None if ill else monitor(ev)["text"],
             "area_label": area_label(ev.get("area")), "label": event_label(ev),
             "severity_label": SEVERITIES.get(ev.get("severity"), ""), "kind_label": KINDS.get(ev.get("kind"), ""),
             "status_label": STATUSES.get(ev.get("status"), ""), "custom_area": is_custom(ev.get("area")),
@@ -387,7 +454,7 @@ def summary(ev: Optional[dict], today: dt.date) -> Optional[dict]:
         return None
     j = event_json(ev, today)
     return {k: j[k] for k in ("id", "label", "status", "status_label", "severity", "severity_label", "day_n", "open",
-                              "area", "side")}
+                              "area", "side", "condition", "condition_label", "monitor")}
 
 
 # ---------------------------------------------------------------------------
@@ -396,7 +463,7 @@ def summary(ev: Optional[dict], today: dt.date) -> Optional[dict]:
 
 EVENT_COLS = ("id", "athlete_id", "area", "side", "kind", "severity", "pain_max", "onset_date", "onset_key",
               "onset_file", "status", "resolved_date", "days_missed", "pause_quality", "recurrence_of", "note",
-              "category", "illness")
+              "category", "illness", "condition")
 _memo: dict = {}
 
 

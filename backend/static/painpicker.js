@@ -38,6 +38,7 @@
   .pp .pp-link.draft { color: var(--warn, #b45309); }
   .pp .pp-link.ok { color: var(--muted, #667); }
   .pp .pp-re { font-size: 12px; color: var(--warn, #b45309); }
+  .pp .pp-mon { font-size: 12px; color: var(--muted, #667); white-space: pre-line; max-width: 46em; }
   .pp.pp-hl { outline: 2px solid color-mix(in srgb, var(--warn, #b45309) 55%, transparent); outline-offset: 4px; border-radius: 6px; }
   .pp .pp-msg { font-size: 12px; color: var(--muted, #667); min-height: 1em; }
   .pp .pp-msg.err { color: var(--err, #b91c1c); }
@@ -81,8 +82,11 @@
           ${Object.entries((m && m.sides) || {}).map(([k, t]) => `<button type="button" data-side="${k}" aria-pressed="${(s.side ?? s.injury?.side) === k}">${esc(t)}</button>`).join("")}` : ""}
       </div>` : "";
     const re = s.reentry ? `<div class="pp-re">恢復期：跑完記一下有沒有痛${opts.qtip ? opts.qtip(s.reentry.monitor || "") : ""}</div>` : "";
+    // 傷別 (SP-269): the open event's pain-monitoring text (server-translated), with the disclaimer
+    const mon = s.injury && s.injury.open && s.injury.monitor
+      ? `<div class="pp-mon">${esc(s.injury.monitor + (m && m.disclaimer ? "\n" + m.disclaimer : ""))}</div>` : "";
     return `<div class="pp ${s.reentry && p == null ? "pp-hl" : ""}">
-      <div class="pp-seg" role="group" aria-label="疼痛">${seg}</div>${chips}${linkChip(s.injury)}${re}
+      <div class="pp-seg" role="group" aria-label="疼痛">${seg}</div>${chips}${linkChip(s.injury)}${mon}${re}
       <div class="pp-msg" aria-live="polite"></div></div>`;
   }
 

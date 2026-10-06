@@ -222,11 +222,18 @@ def injury_rows(events: list[dict], today: str, blocked: set, rp: Optional[dict]
     if rp and rp.get("return", "9999") <= today < rp.get("end", ""):
         hit = [m for m in marks if m["pain"] >= 2 and rp["return"] <= m["date"] <= today]
         if hit:
+            # the pain-monitoring text of the mark's event by its 傷別 (SP-269): its own event, else an
+            # event of the same area open that day; none = the general return-to-run rules
+            m = hit[-1]
+            ev = next((e for e in events if m.get("injury_id") is not None and e.get("id") == m["injury_id"]), None) \
+                or next((e for e in INJ.active_on(events, dt.date.fromisoformat(m["date"]))
+                         if not INJ.is_illness(e) and m.get("area") and e.get("area") == m["area"]), None)
+            mon = INJ.monitor(ev)
             out.append({"id": f"injury_hold:{rp['return']}", "type": "injury_hold", "pick": None,
                         "title": "恢復期內又痛了：先維持這週的量，不要往上加",
-                        "reason": f"{hit[-1]['date']} 記了「{INJ.PAIN.get(hit[-1]['pain'], '痛')}」"
-                                  f"{('・' + INJ.area_label(hit[-1]['area'])) if hit[-1].get('area') else ''}。",
-                        "help": INJ.SILBERNAGEL["text"] + "\n" + INJ.DISCLAIMER})
+                        "reason": f"{m['date']} 記了「{INJ.PAIN.get(m['pain'], '痛')}」"
+                                  f"{('・' + INJ.area_label(m['area'])) if m.get('area') else ''}。",
+                        "help": mon["text"] + "\n" + mon["disclaimer"]})
     return out
 
 

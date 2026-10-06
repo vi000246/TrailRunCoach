@@ -1351,6 +1351,10 @@
     "draft": true,
     "src": "backend/engine/strength_moves.py:176"
   },
+  "不選": {
+    "draft": true,
+    "src": "backend/api/injuries.py:142"
+  },
   "中": {
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:124"
@@ -1659,6 +1663,18 @@
     "draft": true,
     "src": "backend/engine/reentry.py:178"
   },
+  "傷別不對": {
+    "draft": true,
+    "src": "backend/api/injuries.py:145"
+  },
+  "傷別和部位對不上（例如膝前痛的部位要是膝）": {
+    "draft": true,
+    "src": "backend/api/injuries.py:144"
+  },
+  "傷別（選填）": {
+    "draft": true,
+    "src": "backend/api/injuries.py:142"
+  },
   "傷病紀錄 #{id}（{label}）：{what}": {
     "draft": true,
     "src": "backend/engine/injuries.py:464"
@@ -1718,6 +1734,10 @@
   "其中 {n} 次比較短，只當參考": {
     "draft": true,
     "src": "backend/engine/status.py:584"
+  },
+  "其他": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:101"
   },
   "再 {n} 堂 3 區": {
     "draft": true,
@@ -2263,6 +2283,18 @@
     "draft": true,
     "src": "backend/engine/race_feasibility.py:50"
   },
+  "如果醫師或物理治療師說是哪一種傷就選；app 不診斷。": {
+    "draft": true,
+    "src": "backend/api/injuries.py:143"
+  },
+  "如果醫師或物理治療師說是足底筋膜炎：沒有找到這種傷專用的疼痛數字，用一般回跑指引——不能越跑越痛、不能改變跑姿、隔天不能更痛（Ohio State Wexner 回跑指引，臨床機構）。": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:115"
+  },
+  "如果醫師或物理治療師說是髂脛束症候群：沒有找到這種傷專用的疼痛數字，用一般回跑指引——不能越跑越痛、不能改變跑姿、隔天不能更痛（Ohio State Wexner 回跑指引，臨床機構）。": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:117"
+  },
   "安排在輕鬆日或跑完後；組數次數是推估": {
     "draft": true,
     "src": "backend/engine/strength_plan.py:137"
@@ -2366,6 +2398,10 @@
   "小腿、腳踝": {
     "draft": true,
     "src": "backend/engine/strength_moves.py:182"
+  },
+  "小腿／脛骨的痛可能是骨應力傷害（疲勞性骨折）：先給醫師看。app 不給這個部位傷別規則。": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:125"
   },
   "少一趟（仍同等）": {
     "draft": true,
@@ -3963,6 +3999,18 @@
     "draft": false,
     "src": "backend/engine/specific_phase.py:636"
   },
+  "疼痛監測（Silbernagel 2007）：跑的時候疼痛 ≤ 5/10；跑完 ≤ 5/10 且隔天早上要退回原本的程度；疼痛和僵硬不能一週比一週多。原研究只看阿基里斯腱，用在其他部位是推估。": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:92"
+  },
+  "疼痛監測（一般回跑指引）：不能越跑越痛、不能改變跑姿、隔天不能更痛（Ohio State Wexner 回跑指引，臨床機構）。": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:119"
+  },
+  "疼痛監測（如果醫師或物理治療師說是膝前痛）：跑時 ≤ 2/10、跑完 60 分鐘內回到原本的程度（Esculier 2016 試驗計畫書）。": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:113"
+  },
   "發燒、咳嗽到胸、全身痠痛、腸胃炎": {
     "draft": true,
     "src": "backend/engine/injuries.py:72"
@@ -4371,6 +4419,10 @@
     "draft": true,
     "src": "backend/engine/strength_plan.py:34"
   },
+  "膝前痛": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:100"
+  },
   "膝蓋微彎做提踵，練小腿深層的比目魚肌：長下坡、長時間跑的小腿耐力。": {
     "draft": true,
     "src": "backend/engine/strength_moves.py:187"
@@ -4751,6 +4803,14 @@
     "draft": true,
     "src": "backend/engine/effort_calib.py:92"
   },
+  "足底筋膜": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:100"
+  },
+  "足底筋膜炎（腳跟、足弓痛，早上第一步最痛）": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:103"
+  },
   "跑": {
     "draft": false,
     "src": "backend/engine/racepower/runwalk.py:57"
@@ -4782,6 +4842,10 @@
   "距離／爬升要是數字": {
     "draft": true,
     "src": "backend/engine/plan_store.py:316"
+  },
+  "跟腱": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:100"
   },
   "跨級：ITRA 依 EP 分級（XXS–XXL）；UTMB 報名等於一次只能往上跳一級；完賽過越多場越不容易 DNF（Corrion 2018、Maleka 2026）；「高兩級」和「24 個月」是推估": {
     "draft": true,
@@ -5014,6 +5078,10 @@
   "透過重複回合效應減少賽後肌肉損傷，放在賽前最後幾週（Roche）": {
     "draft": true,
     "src": "backend/engine/workout_templates.py:140"
+  },
+  "這不是醫療診斷。持續或加重的疼痛請看醫師或物理治療師。": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:94"
   },
   "這個平台": {
     "draft": true,
@@ -5283,6 +5351,10 @@
     "draft": true,
     "src": "backend/sync/workout_targets/coros.py:22"
   },
+  "醫師沒說，或不是上面這幾種": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:106"
+  },
   "醫護站": {
     "draft": true,
     "src": "backend/engine/racepower/watch_export.py:46"
@@ -5410,6 +5482,10 @@
   "關門／撤退時間要在 0–{max:g} 小時": {
     "draft": true,
     "src": "backend/engine/planning.py:303"
+  },
+  "阿基里斯腱的肌腱病變（腳跟上方的跟腱痛）": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:102"
   },
   "陡上坡同心率 VAM（VAM ÷ 心率）": {
     "draft": false,
@@ -5591,6 +5667,14 @@
     "draft": true,
     "src": "backend/engine/workout_templates.py:216"
   },
+  "髂脛束": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:100"
+  },
+  "髂脛束症候群（膝蓋外側痛）": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:104"
+  },
   "體能好壞不影響高山症風險（CDC）：練得好不代表不會高山症": {
     "draft": true,
     "src": "backend/engine/altitude.py:210"
@@ -5598,6 +5682,10 @@
   "體重 {kg} kg 不合理": {
     "draft": true,
     "src": "backend/api/plan.py:468"
+  },
+  "髕股疼痛（膝蓋前面、膝蓋骨周圍痛）": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:105"
   },
   "高": {
     "draft": false,
