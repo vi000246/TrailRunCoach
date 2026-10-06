@@ -503,6 +503,10 @@
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:132"
   },
+  "Ohio State Wexner 回跑指引（臨床機構）；每階 {n} 次、每次 {reps} 趟是推估": {
+    "draft": true,
+    "src": "backend/engine/overview.py:2454"
+  },
   "PD 模型重算的 TTE": {
     "draft": true,
     "src": "backend/engine/racepower/calc.py:280"
@@ -758,6 +762,10 @@
   "{label}：疼痛紅燈（{reason}），傷病紀錄 #{id} 進行中。": {
     "draft": true,
     "src": "backend/engine/suggestions.py:221"
+  },
+  "{label}：走跑階段（第 {s} 階，這階已完成 {n}/{need} 次）。走跑階段不算進恢復期：連續跑 30 分 {c} 次之後才接恢復期（50%→75%）": {
+    "draft": true,
+    "src": "backend/engine/overview.py:2523"
   },
   "{model} 的輕鬆跑上限 {cap:.0f} bpm ≥ LTHR {lthr:.0f}：生理上不可能": {
     "draft": false,
@@ -1743,6 +1751,10 @@
     "draft": true,
     "src": "backend/engine/strength_moves.py:150"
   },
+  "先能走 30 分鐘不痛再開始走跑交替：走完在活動上標「沒痛」或「痠」，或在傷病紀錄按「可以開始走跑」（Ohio State Wexner 回跑指引，臨床機構）": {
+    "draft": true,
+    "src": "backend/engine/overview.py:2405"
+  },
   "先解鎖 3 區": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:1968"
@@ -2014,6 +2026,10 @@
   "可以開始排 3 區（有氧間歇／節奏跑）": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:1944"
+  },
+  "可以開始走跑": {
+    "draft": true,
+    "src": "backend/api/injuries.py:167"
   },
   "可信度": {
     "draft": true,
@@ -4075,6 +4091,10 @@
     "draft": true,
     "src": "backend/engine/workout_templates.py:131"
   },
+  "用舒服的強度跑，走路不設目標；跑步日之間至少休 1 天。這次標「痛」就重複這一階，標「中斷」先停跑；沒標記視同沒痛、照進度走。": {
+    "draft": true,
+    "src": "backend/engine/overview.py:2452"
+  },
   "用跑的": {
     "draft": false,
     "src": "backend/engine/specific_phase.py:636"
@@ -4374,6 +4394,10 @@
   "紅燈": {
     "draft": true,
     "src": "backend/engine/injuries.py:679"
+  },
+  "紅燈之後：先能走 30 分鐘不痛、走路的樣子正常，再開始走跑交替（Ohio State Wexner 回跑指引，臨床機構）。app 不判斷能不能開始跑。按了之後課表從「走 4 分／跑 1 分」開始；走完 30 分在活動上標「沒痛」或「痠」也一樣。": {
+    "draft": true,
+    "src": "backend/api/injuries.py:168"
   },
   "累": {
     "draft": true,
@@ -4811,6 +4835,14 @@
     "draft": false,
     "src": "backend/engine/racepower/runwalk.py:57"
   },
+  "走 {w}／跑 {r}": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:856"
+  },
+  "走跑交替：走 {w} 分／跑 {r} 分 × {n}（第 {s} 階 {k}/{need}）": {
+    "draft": true,
+    "src": "backend/engine/overview.py:2445"
+  },
   "走跑皆可": {
     "draft": false,
     "src": "backend/engine/racepower/runwalk.py:57"
@@ -4818,6 +4850,30 @@
   "走跑皆可：跑或快走，哪個輕鬆用哪個": {
     "draft": false,
     "src": "backend/engine/specific_phase.py:636"
+  },
+  "走跑第 {s} 階：這階已完成 {n}/{need} 次": {
+    "draft": true,
+    "src": "backend/api/injuries.py:171"
+  },
+  "走跑階段": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:680"
+  },
+  "走跑階段標了「中斷」": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:809"
+  },
+  "走跑階段第 {s} 階": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:874"
+  },
+  "走跑階段：照進度排走跑交替；連續跑 30 分 3 次之後才接恢復期": {
+    "draft": true,
+    "src": "backend/engine/projection.py:782"
+  },
+  "走路 {m} 分": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:854"
   },
   "走路一群約 {w:.0f} spm、跑步一群約 {r:.0f} spm，130 spm 落在兩群之間的谷底附近（谷底約 {v:.0f} spm）：門檻合用": {
     "draft": false,
@@ -5054,6 +5110,10 @@
   "輕鬆跑": {
     "draft": true,
     "src": "backend/engine/workout_templates.py:443"
+  },
+  "輕鬆跑 {m} 分": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:855"
   },
   "輕鬆跑上限＝課表心率區間的 Z2 上緣；有實測 AeT 時用實測值": {
     "draft": true,
@@ -5346,6 +5406,18 @@
   "連續賽事以兩個睡眠點之間最硬的一段來比：第 {n} 段 {km:.1f} km、爬升 {cl:.0f} m（共 {k} 段）": {
     "draft": true,
     "src": "backend/engine/panels/race_refs.py:166"
+  },
+  "連續跑 30 分：已完成 {n}/{need} 次": {
+    "draft": true,
+    "src": "backend/api/injuries.py:172"
+  },
+  "連續輕鬆跑 {m} 分": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:852"
+  },
+  "連續輕鬆跑 {m} 分（走跑之後 {k}/{need}）": {
+    "draft": true,
+    "src": "backend/engine/overview.py:2448"
   },
   "週{day}已給{taken}，不能再排{kind}（一天只能指定一種課）": {
     "draft": true,

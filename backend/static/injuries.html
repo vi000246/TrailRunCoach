@@ -106,6 +106,7 @@ dialog form { padding: 14px 16px; display: grid; gap: 10px; }
 .badge.light-green { color: var(--ok, #15803d); border-color: currentColor; }
 .badge.light-yellow { color: var(--warn, #b45309); border-color: currentColor; }
 .badge.light-red { color: var(--err, #b91c1c); border-color: currentColor; }
+.badge.light-walkrun { color: var(--accent, #2563eb); border-color: currentColor; }
 </style>
 </head>
 <body>
@@ -335,14 +336,24 @@ function renderList() {
   }
   $("cards").innerHTML = L.map((x) => `<div class="card ${x.status === "draft" ? "draft" : ""} ${S.sel === x.id ? "on" : ""}" data-id="${x.id}">
       <div class="t"><span class="dot" style="background:${areaCol(x.area)}"></span>${esc(x.label)}${x.category === "illness" ? "" : `<span class="sev ${x.severity}" title="${esc((S.meta?.severity_help || {})[x.severity] || "")}">${esc(x.severity_label)}</span>`}
-        ${x.light ? `<span class="badge light-${esc(x.light.color)}" title="${esc(x.light.reason)}">${esc(x.light.label)}</span>` : ""}${x.condition_label ? `<span class="badge" title="${esc((S.meta?.labels || {}).condition || "")}">${esc(x.condition_label)}</span>` : ""}${x.kind === "acute" ? `<span class="badge">急性</span>` : ""}${x.recurrence_of ? `<span class="badge" title="同部位、上次好了 42 天內">復發</span>` : ""}</div>
+        ${x.light ? `<span class="badge light-${esc(x.light.color)}" title="${esc(x.light.reason)}">${esc(x.light.label)}${x.light.phase === "walkrun" ? "・" + esc(walkrunText(x.light)) : ""}</span>` : ""}${x.condition_label ? `<span class="badge" title="${esc((S.meta?.labels || {}).condition || "")}">${esc(x.condition_label)}</span>` : ""}${x.kind === "acute" ? `<span class="badge">急性</span>` : ""}${x.recurrence_of ? `<span class="badge" title="同部位、上次好了 42 天內">復發</span>` : ""}</div>
       <div class="s"><span>${ymd(x.onset_date)} – ${x.status === "resolved" ? ymd(x.resolved_date) : x.category === "illness" ? "還有症狀" : "還沒好"}</span><span>${x.day_n} 天</span>
         ${x.days_off != null ? `<span>停跑 ${x.days_off} 天${x.days_missed == null ? "（自動）" : ""}</span>` : ""}
         ${x.linked ? `<span>${x.linked} 次活動</span>` : ""}${x.pain_max != null ? `<span>最痛 ${x.pain_max}/10</span>` : ""}${x.pause_quality ? `<span>暫停強度課</span>` : ""}</div>
       ${x.open && x.monitor ? `<div class="s" style="display:block;white-space:normal">${esc(x.monitor)}</div>` : ""}
       ${x.note ? `<div class="s" title="${esc(x.note)}" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block">${esc(x.note)}</div>` : ""}
       <div class="act">${x.status === "draft" ? `<button class="primary" data-a="edit">補細節</button>` : `<button data-a="edit">編輯</button>`}
-        ${x.open ? `<button data-a="resolve">好了</button>` : ""}<button data-a="days">前 21 天</button></div></div>`).join("");
+        ${x.open ? `<button data-a="resolve">好了</button>` : ""}${walkrunBtn(x)}<button data-a="days">前 21 天</button></div></div>`).join("");
+}
+// SP-272: after a red pain light — 「可以開始走跑」 and the walk-run's stage (texts from the server)
+function walkrunBtn(x) {
+  const lab = S.meta?.labels || {};
+  return x.open && x.light && x.light.phase === "red" ? `<button data-a="walkrun" title="${esc(lab.walkrun_help || "")}">${esc(lab.walkrun_button || "可以開始走跑")}</button>` : "";
+}
+function walkrunText(l) {
+  const lab = S.meta?.labels || {};
+  const t = (l.stage >= 4 ? lab.walkrun_cont : lab.walkrun_stage) || "";
+  return t.replace("{s}", (l.stage ?? 0) + 1).replace("{n}", l.n ?? 0).replace("{need}", l.need ?? "");
 }
 $("cards").addEventListener("click", async (e) => {
   const b = e.target.closest("button[data-a]"), c = e.target.closest(".card");
@@ -351,6 +362,10 @@ $("cards").addEventListener("click", async (e) => {
   if (!b) { pick(id); return; }
   if (b.dataset.a === "edit") openDlg(S.list.find((x) => x.id === id));
   if (b.dataset.a === "days") pick(id);
+  if (b.dataset.a === "walkrun") {
+    b.disabled = true;
+    try { await send(`${API}/${id}/walkrun`, "POST", { date: todayIso() }); await refreshAll(); } catch (er) { alert("儲存失敗：" + errText(er)); b.disabled = false; }
+  }
   if (b.dataset.a === "resolve") {
     b.disabled = true;
     try { await send(`${API}/${id}/resolve`, "POST", { date: todayIso() }); await refreshAll(); } catch (er) { alert("儲存失敗：" + errText(er)); b.disabled = false; }
