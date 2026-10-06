@@ -1246,7 +1246,7 @@
   "近 2 個月有 {n} 天到 3,000 m 以上：有事前暴露（Schneider 2002：有事前暴露又慢慢上升，容易高山症的人發生率從 58% 降到 7%）": "{n} days above 3,000 m in the last 2 months: pre-exposed (Schneider 2002: with pre-exposure and a slow ascent, altitude sickness in susceptible people fell from 58% to 7%)",
   "近 3 個月沒有到 3,000 m 以上：高山症風險較高（Shen 2024，玉山排雲山莊就診者的資料）": "Nothing above 3,000 m in the last 3 months: higher risk of altitude sickness (Shen 2024, patients seen at Paiyun Lodge on Jade Mountain)",
   "近 {days} 天只有 {n} 次路跑有 20 分鐘心率在 LTHR ±3%（需要 ≥ {need} 次）": "Only {n} road runs in the last {days} days have 20 minutes with HR within LTHR ±3% (needs ≥ {need})",
-  "近 {days} 天標了「有杖」{w} 次、「沒杖」{wo} 次；兩邊都要至少 {need} 次才比較。到活動列表編輯活動，在「登山杖」選有杖或沒杖。": "In the last {days} days, {w} activities are marked \"with poles\" and {wo} \"no poles\"; both need at least {need} before comparing. Edit an activity in the activity list and pick with or without poles under \"Poles\".",
+  "近 {days} 天的越野跑、登山健行標了「有杖」{w} 次、「沒杖」{wo} 次；兩邊都要至少 {need} 次才比較。到活動列表編輯活動，在「登山杖」選有杖或沒杖。": "In the last {days} days, {w} trail runs and hikes are marked \"with poles\" and {wo} \"no poles\"; both need at least {need} before comparing. Edit an activity in the activity list and pick with or without poles under \"Poles\".",
   "近 {weeks} 週 {n} 次輕鬆路跑的中位數": "median of {n} easy road runs over the last {weeks} weeks",
   "近 {w} 週 3 區 {done}/{need} 堂": "Zone 3 in the last {w} weeks: {done}/{need} sessions",
   "近 {w} 週做過 ≥ {n} 堂 3 區（推估）": "≥ {n} zone 3 sessions in the last {w} weeks (estimate)",
