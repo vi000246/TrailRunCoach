@@ -76,7 +76,7 @@ form drift, `form_bins` and `cad_windows`.
   for the same sessions (`backend/engine/workout_review.py:1702-1703`). Since the session
   classifier, hard time no longer decides the session type; `quality_gate.dose_history` and
   `plan_match` still read it.
-- Memoised on disk through `Dataset.cached_series` under key `workout_review_v20`
+- Memoised on disk through `Dataset.cached_series` under key `workout_review_v23`
   (v7: Pw:HR halves and `cp_bouts`; v8: drift_of's 40 min after the warm-up, fast finish,
   one Pa/Pw window, `watch_temp_c`; v9: the two drift tiers, `ref_ok` / `pw_ref_ok` / `tier`;
   v10: the adaptive start, `warmup_s` / `start_shift`; v11: drift v2 — `end_s`, `tail`,
@@ -85,7 +85,9 @@ form drift, `form_bins` and `cad_windows`.
   fields and `grade_bins`; v14/v15: interval-library reps, `form_bins` with `impact_km`;
   v16: `cad_windows`; v17: the heat bands; v18: `stim`; v19: `form_bins` on every moving step +
   `slow_share`, SP-235; v20: the rests' `rest_s` / `hr_at60` / `aet60` / `t_to_aet` / `aet_back`
-  and `intervals.rest_aet`, SP-264) (`backend/engine/workout_review.py:67-91`,
+  and `intervals.rest_aet`, SP-264; v20–v22 on the HR-quality branch: `hr_peak60` on the shared
+  cleaning, SP-265, `hr_quality` / `hr_ref`, SP-266; v23: the two branches merged — one key above
+  both, integration 2026-10-06e) (`backend/engine/workout_review.py:67-96`,
   `backend/engine/wko5expr/dataset.py:720`). The key holds the file and thresholds, not the
   code, so the version is bumped whenever `_measure` changes. Phase, classification,
   baselines and verdicts are recomputed on each call.
@@ -599,3 +601,4 @@ None. The module computes on request; there are no emitters or subscribers.
 | 2026-10-06 | SP-266 | docs/research/optical-hr-quality.md §1.3, §2 point 2, §3.2 單 2 | `drift_of(…, cadence_spm)` checks the HR in the measured window (`hr_quality_check` → `hr_quality`: seconds / events per kind): spike + step + flat + lock seconds > 3 % (`HRQ_MAX_SHARE`, 推估) or any moving step (`HRQ_MAX_STEPS`) → `hr_ref`, and a strict result becomes the reference tier with the plain reason (「這次心率有 2 段突然跳動，飄移只當參考」, zh / en). Marked only: the HR is never changed or interpolated. Gates (`ok`), the ≥ 55-min AeT classification and `drift_agg.aet_points` (the AeT estimate) skip it; the aerobic card gets a 「心率品質」 row, the 可信度 caveat and a 「心率可疑」 chip. The AeT test (`aet_test.analyze`, hook `aet_hr_check`) shows the result with 「測試結果只當參考，不建議套用」 and offers no 套用. hr_quality: a flat line needs the speed to move (SD > 0.2 km/h over its moving seconds) and a step needs no stop in the 30 s after it. Owner data (COROS 2025–26, 33 runs with a drift — all reference tier, none strict): 11 downgraded (33 %), all by > 3 % suspect seconds (8 cadence lock, 3 flat; no spike, no step); > 5 %: 5, > 10 %: 1. Over the 10 % line the ticket sets — reported, not to go live before the user decides (removing the suspect samples moved those drifts 0.0–2.4 pp, ≥ 1 pp in 3 runs). `workout_review_v21` |
 | 2026-10-06 | SP-267 | docs/research/optical-hr-quality.md §2 point 5, §3.2 單 3 | 心率與功率 (`hrpower`) gets `hr_quality` (`hr_quality_spans`: [[x0, x1, kind]], labels, note, counts) and the viewer shades those stretches on the HR panel (`--hrq`), with a legend item + ? note and a tooltip line (zh / en). The user decided 2026-10-06 (SP-200) not to have a manual 「忽略這段心率」: no heart-rate corrections, no settings change — the marks are display only |
 | 2026-10-06 | SP-266 user-decision | N/A | Cadence lock no longer counts toward the downgrade (user, option c): `HRQ_DOWNGRADE_KINDS` = spike + step + flat, share > 3 % (`downgrade_share`) or any moving step → reference only; lock seconds stay in `hr_quality` (`lock_s`, `share`) and in the 「心率品質」 row as information (「…；另外 N 分鐘跟著步頻走，這項不算進門檻」), never in the reason. Owner data (COROS 2025–26, 33 runs with a drift): 3 downgraded (9 %), all by a flat line (4.9–6.4 % of the window); 9 runs have lock, none downgraded by it. `workout_review_v22` |
+| 2026-10-06 | integration 2026-10-06e | N/A | SP-264 (v20) and SP-265 / SP-266 (v20 → v22) bumped the measure cache on separate branches; merged as `workout_review_v23` so no v20 / v22 entry holding only one branch's fields is read. Cross-branch test: `test_integration_2026_10_06e.py` |
