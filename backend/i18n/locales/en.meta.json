@@ -763,6 +763,14 @@
     "draft": true,
     "src": "backend/engine/workout_steps.py:549"
   },
+  "{name}最長的爬坡 ↑{dz:.0f} m、平均 {g:.0f}%{when}：找 {lo:.0f}–{hi:.0f}% 的坡，上坡 {rep} 分 × {n} 趟、{hr}；{how}；{down}。暖身 15 分、緩和 10 分": {
+    "draft": false,
+    "src": "backend/engine/specific_phase.py:685"
+  },
+  "{name}最長的爬坡 ↑{dz:.0f} m、平均 {g:.0f}%{when}：找 {lo:.0f}–{hi:.0f}% 的坡，上坡 {rep} 分 × {n} 趟，用比賽的走／跑方式、{hr}；{down}。暖身 15 分、緩和 10 分": {
+    "draft": false,
+    "src": "backend/engine/specific_phase.py:679"
+  },
   "{note}（不算 AeT 測試）": {
     "draft": true,
     "src": "backend/engine/workout_review.py:2377"
@@ -931,6 +939,10 @@
     "draft": true,
     "src": "backend/engine/workout_templates.py:137"
   },
+  "、你的速度約 {m:.0f} 分": {
+    "draft": false,
+    "src": "backend/engine/specific_phase.py:669"
+  },
   "「{a}」和「{b}」只隔 {n} 天：硬課之間建議隔 ≥ 2 天，可以再拖動調整": {
     "draft": true,
     "src": "backend/engine/rest_days.py:120"
@@ -1038,6 +1050,14 @@
   "下坡技術／離心": {
     "draft": true,
     "src": "backend/engine/workout_templates.py:483"
+  },
+  "下坡用跑的，練下坡": {
+    "draft": false,
+    "src": "backend/engine/specific_phase.py:673"
+  },
+  "下坡用跑的：找接近 {g:.0f}% 的坡（賽道最陡的長下坡 ↓{dz:.0f} m；整場下降 {loss:.0f} m）": {
+    "draft": false,
+    "src": "backend/engine/specific_phase.py:671"
   },
   "下坡看腿的感覺，不看心率": {
     "draft": true,
@@ -2063,6 +2083,10 @@
     "draft": true,
     "src": "backend/engine/algorithms/threshold_estimate.py:348"
   },
+  "心率約{cap}": {
+    "draft": false,
+    "src": "backend/engine/specific_phase.py:668"
+  },
   "心率跟上強度變化的時間常數；算 Pw:HR 時先把功率延遲這麼多。": {
     "draft": true,
     "src": "backend/engine/drift_calib.py:133"
@@ -2775,6 +2799,10 @@
     "draft": true,
     "src": "backend/engine/specific_phase.py:603"
   },
+  "比賽時這段每小時約 {vam:.0f} m、{g:.0f}%：{act}": {
+    "draft": false,
+    "src": "backend/engine/specific_phase.py:683"
+  },
   "比賽本身算這週的重點課": {
     "draft": true,
     "src": "backend/engine/post_race.py:239"
@@ -3115,6 +3143,10 @@
     "draft": true,
     "src": "backend/engine/injuries.py:155"
   },
+  "用快走": {
+    "draft": false,
+    "src": "backend/engine/specific_phase.py:636"
+  },
   "用極短休息讓心肺維持在 VO2max 附近，同時限制乳酸累積（Uphill Athlete；Billat）": {
     "draft": true,
     "src": "backend/engine/workout_templates.py:134"
@@ -3126,6 +3158,10 @@
   "用短休息讓乳酸維持穩定，在閾值強度累積比連續跑更多的時間（Daniels）": {
     "draft": true,
     "src": "backend/engine/workout_templates.py:131"
+  },
+  "用跑的": {
+    "draft": false,
+    "src": "backend/engine/specific_phase.py:636"
   },
   "發燒、咳嗽到胸、全身痠痛、腸胃炎": {
     "draft": true,
@@ -3691,6 +3727,10 @@
     "draft": false,
     "src": "backend/engine/racepower/runwalk.py:57"
   },
+  "走跑皆可：跑或快走，哪個輕鬆用哪個": {
+    "draft": false,
+    "src": "backend/engine/specific_phase.py:636"
+  },
   "走路或極慢跑": {
     "draft": true,
     "src": "backend/engine/interval_library.py:62"
@@ -4250,6 +4290,10 @@
   "長天：練到比賽最難那天的 80 % 以上算夠（圖表「每次路線難度」的目標帶）；江晏慶「抓比賽距離和爬升的七成」；比賽超過 6 小時，長天練到 6 小時的量就夠": {
     "draft": true,
     "src": "backend/engine/race_feasibility.py:332"
+  },
+  "長爬坡反覆 {n}×{rep} 分（{g:.0f}% 坡）": {
+    "draft": false,
+    "src": "backend/engine/specific_phase.py:670"
   },
   "長跑": {
     "draft": true,
