@@ -95,7 +95,7 @@ SUPPORT_BPM = 5.0                       # 推估: a 60-min mean within 5 bpm bel
 # 7 events / 8 age
 BREAK_DAYS = 28                         # ≥ 4 weeks (detraining.md)
 COOL_ACTIVE_DAYS = 60                   # zone_events.SEASON_ACTIVE_DAYS
-TEST_AGE_DAYS = 56                      # Friel: every 4–8 weeks
+TEST_AGE_DAYS = 56                      # Friel: every 4–8 weeks (the default; per athlete: threshold_calib, SP-69)
 # HRmax plausibility (all 推估)
 HRMAX_DAYS = 365
 HOLD_LONG_S, HOLD_SHORT_S = 120, 60
@@ -425,8 +425,13 @@ def event_signals(lthr: dict, today: dt.date, cp_now: Optional[float], brk: Opti
                             cp0=cp0, cp1=cp_now), "up" if cp_now > cp0 else "down"))
     if lthr.get("source_kind") == "test" and d0:
         age = (today - dt.date.fromisoformat(d0[:10])).days
-        if age > TEST_AGE_DAYS:
-            out.append(signal("age", "lthr", "hint", _("上次 LTHR 測試是 {n} 天前（Friel：每 4–8 週一次）", n=age),
+        from backend.engine import calibrate as CAL
+        from backend.engine import threshold_calib as TCAL
+        limit = TCAL.lthr_test_age()            # TEST_AGE_DAYS or the athlete's own (SP-69)
+        if age > limit:
+            out.append(signal("age", "lthr", "hint",
+                              _("上次 LTHR 測試是 {n} 天前（超過 {d:.0f} 天，{basis}；Friel：每 4–8 週一次）",
+                                n=age, d=limit, basis=CAL.basis(TCAL.AGE)),
                               estimate=False, source=_(SRC_FRIEL)))
     return out
 
