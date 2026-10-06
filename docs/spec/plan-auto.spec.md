@@ -328,6 +328,12 @@ intensity). Each rung is the canonical variant of `backend/engine/interval_libra
   stop ≤ 30 s, HR in Zone 1 (the app's easy rule: avg ≤ AeT + 3, ≤ 10 % above — mapping his
   E zone to "below AeT" is 推估), (HR@90′ − HR@10′) / HR@10′ < 10 % — his own comparison, not
   drift_of's halves (blog 2016-12). Any qualifying run counts (it can be the weekend long run).
+  SP-275: a **scheduled** test (`is_scheduled_xu`: the plan's test session done by the run, or
+  the test's title) is run at a pace / power (SP-274), so Zone 1 doesn't apply; instead
+  `output_hold`: minutes 80–90 not > 5 % slower than 10–20 (power when there is power; 推估, UA's
+  5 %) — 「後段放慢了 N%：飄移會偏小，下次配速固定」; without speed or power only the HR, with
+  「沒辦法確認配速有沒有維持」. The test's own review (`aet_test.analyze_xu`) applies the same check.
+  A passive long run keeps the Zone 1 rule and has no pace check.
   **Heat bands** (2026-10-02): ≤ 25 °C (台灣教練) is advice in the session text, no longer a
   refusal. The run carries its temperature band; a pass in heat counts (heat only inflates the
   drift — conservative), a fail in heat is marked 「熱環境，結果可能偏高」 (`quality_gate.heat_suffix`;

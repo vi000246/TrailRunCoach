@@ -70,6 +70,14 @@ XU_STOP_S = 30.0                     # 補給每次停不超過 30 秒
 XU_HEAT_C = 25.0                     # 當天氣溫 25 °C 以下（課表文字的建議；不再拒絕，heat bands）
 XU_FLAT_M_PER_KM = 20.0              # 「全程平坦」 = drift_of's flat rule (推估 mapping)
 SRC_XU = "徐國峰部落格（2016-12，有氧基礎檢測）；徐國峰《跑者都該懂的跑步數據》"
+# SP-275 (lthr-low-confidence-testing.md §2.2, §6.1 第 3 點): every drift test holds the output and
+# lets the HR drift; slowing down hides the drift (a false pass). A scheduled 90-minute test whose
+# minutes 80–90 are > 5 % slower (pace; power when there is power) than minutes 10–20 is refused
+# (推估, UA's 5 %). Only the scheduled test — a passive long run keeps the Zone 1 rule (_z1).
+XU_HOLD_A = (600.0, 1200.0)          # minutes 10–20
+XU_HOLD_B = (4800.0, 5400.0)         # minutes 80–90
+XU_HOLD_DROP = 0.05                  # 推估 (UA's 5 %)
+XU_HOLD_COVER = 0.5                  # 推估: a window needs half its samples valid (moving / power > 0)
 SRC_Z3_FIRST = "台灣教練：入門轉進階先練 3 區，3 區穩定、恢復正常後再加 5 區"
 SRC_Z5_LIMIT = "台灣教練：5 區每趟至少 2 分鐘；一週最多 2 次、間隔至少 2 天"
 
@@ -206,10 +214,65 @@ def longest_stop(t, speed, a_s: float = XU_A_S, b_s: float = XU_B_S) -> float:
     return best
 
 
+def output_hold(t, speed=None, power=None) -> dict:
+    """Was the output held (SP-275)? Minutes 80–90 vs 10–20: the mean power (> 0) when there is
+    power, else the mean moving speed (> 1.6 km/h; a ≤ 30-s feeding stop doesn't count).
+    {"basis": power | pace | None (neither: can't tell), "drop": the slowdown (pace: v1/v2 − 1;
+    power: 1 − p2/p1), "ok": drop ≤ XU_HOLD_DROP (None without a basis)}."""
+    from backend.engine import workout_review as WR
+    t = np.asarray(t, dtype=float)
+    out = {"basis": None, "drop": None, "ok": None}
+    if not np.isfinite(t).any():
+        return out
+    rel = t - float(np.nanmin(t))
+
+    def mean_in(x, win, floor):
+        sel = (rel >= win[0]) & (rel < win[1])
+        if not sel.any():
+            return None
+        v = x[sel]
+        good = np.isfinite(v) & (v > floor)
+        if good.sum() < XU_HOLD_COVER * sel.sum():
+            return None
+        return float(v[good].mean())
+    for basis, ch, floor in (("power", power, 0.0), ("pace", speed, WR.STOP_KMH)):
+        if ch is None:
+            continue
+        x = WR._arr(ch, len(t))
+        a, b = mean_in(x, XU_HOLD_A, floor), mean_in(x, XU_HOLD_B, floor)
+        if a and b:
+            drop = (a / b - 1.0) if basis == "pace" else (1.0 - b / a)
+            return {"basis": basis, "drop": drop, "ok": drop <= XU_HOLD_DROP}
+    return out
+
+
+def hold_text(h: dict) -> str:
+    """The refusal (drop > 5 %) or the 「can't tell」 note; "" when held."""
+    if h.get("basis") is None:
+        return _("沒辦法確認配速有沒有維持（沒有速度也沒有功率）：只看心率")
+    if not h.get("ok"):
+        return _("後段放慢了 {n:.1f}%：飄移會偏小，下次配速固定", n=h["drop"] * 100)
+    return ""
+
+
+def is_scheduled_xu(ds, w) -> bool:
+    """The run is a scheduled 徐國峰 90-minute test: the plan's test session done by it, or its own
+    title is the test's (aet_test.TITLE_RE)."""
+    from backend.engine import aet_test as AT
+    from backend.engine import workout_review as WR
+    try:
+        sched = WR.scheduled_aet_test(ds, w)
+    except Exception:                       # noqa: BLE001 — no plan sessions (tests, WKO5-only)
+        sched = None
+    return bool(sched and AT.is_xu(sched)) or AT.protocol_of_title(WR._title(w)) == "xu90"
+
+
 def xu_run(ds, w, m: Optional[dict] = None) -> Optional[dict]:
     """徐國峰's 90-minute test on one run (None: not a ≥ 90-min run).
-    {"idx", "date", "ok", "drift", "hr10", "hr90", "why"} — `why` lists
-    every condition that failed (empty when ok)."""
+    {"idx", "date", "ok", "drift", "hr10", "hr90", "why", "scheduled", "hold"} — `why` lists
+    every condition that failed (empty when ok). SP-275: a scheduled test (is_scheduled_xu) is
+    run at a pace, so the Zone 1 rule doesn't apply; instead the output must hold (output_hold).
+    A passive long run keeps the Zone 1 rule."""
     from backend.engine import quality_gate as QG
     from backend.engine import workout_review as WR
     if w.sport != "run":
@@ -229,7 +292,12 @@ def xu_run(ds, w, m: Optional[dict] = None) -> Optional[dict]:
     cpm = m.get("climb_m_per_km")
     if "runningtrail" in w.tags or (cpm is not None and cpm >= XU_FLAT_M_PER_KM):
         why.append("不是平路（越野或每公里爬升 ≥ 20 m）")
-    if not _z1(m):
+    out["scheduled"] = sched = is_scheduled_xu(ds, w)
+    if sched:
+        h = out["hold"] = output_hold(s["t"], s.get("speed"), s.get("power"))
+        if h["basis"] is not None and not h["ok"]:
+            why.append(hold_text(h))
+    elif not _z1(m):
         why.append("心率不是全程 1 區（平均 ≤ AeT+3、超過的時間 ≤ 10%）")
     # heat bands: the temperature is a band, not a refusal (> 25 °C was one before). Heat inflates
     # the drift, so a pass in heat is conservative and counts; a fail in heat says it may be the heat
@@ -267,7 +335,9 @@ def xu_text(r: dict) -> str:
     head = (f"{r['date']} 90 分鐘：第 10 分 {r['hr10']:.0f} → 第 90 分 {r['hr90']:.0f} bpm，"
             f"飄移 {r['drift'] * 100:.1f}%")
     heat = f"（{r['chip']}，熱環境，結果可能偏高；熱天通過仍算數）" if r["ok"] and r.get("heat") else ""
-    return head + ("（< 10%：有氧基礎夠）" + heat if r["ok"] else "：" + "；".join(r["why"]))
+    h = r.get("hold") or {}
+    note = ("；" + hold_text(h)) if r.get("scheduled") and h and h.get("basis") is None else ""
+    return head + ("（< 10%：有氧基礎夠）" + heat if r["ok"] else "：" + "；".join(r["why"])) + note
 
 
 # ---------------------------------------------------------------------------
