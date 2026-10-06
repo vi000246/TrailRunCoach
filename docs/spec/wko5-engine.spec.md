@@ -516,6 +516,14 @@ unchanged files and unchanged code reads no FIT file at all.
   view with a 匯入 tag and collapsible headers. Charts marked `power` are hidden
   when 使用功率 is off, and charts whose `sports` excludes the 主要訓練項目 are
   hidden (`backend/static/wko5_viewer.html:547`).
+- **活動類型 filter** (SP-263): the filter panel lists the activity kinds of
+  `engine/sport_map.py` — one platform-neutral type per activity
+  (`app_type`: trail / road from the trail classification, then the COROS
+  `sportType`, the FIT sport / sub_sport, the WKO5 names) plus 百岳登山 (a
+  hike whose activity type is 百岳跟團: the user's mark wins, else a plan
+  百岳 event that day). Season charts filter their activities with it
+  (`Evaluator(keep=...)`); the render-cache key carries the user's
+  activity-type marks.
 - **Deep link** (`backend/static/wko5_viewer.html:590`): `?view=<name>&dash=<index
   or title>`, plus `&chart=<index>` to load that chart first and open it
   enlarged; `?workout=<index>&label=<name>` (from the 課表 page) opens that
@@ -626,7 +634,7 @@ All under `/api/v1/wko5` (`backend/api/wko5views.py`).
 | GET | `/activities/stats` | 952 | Average HR / power per activity for the list columns |
 | PATCH | `/activities` | 1000 | Key-based bulk edit (also reaches excluded files) |
 | GET | `/activities/page` | 1043 | The 活動列表 page |
-| GET | `/sports` | 1048 | Sport groups and counts |
+| GET | `/sports` | 1133 | Activity kinds (越野跑 / 路跑 / 登山健行 / 百岳登山 / 騎車 / 肌力 / 走路 / 其他, `engine/sport_map.py`) with counts; the `sports` query of `/workouts` and the charts takes these keys (a WKO5 sport group such as `run` still works) |
 | GET | `/athlete` | 1057 | Settings history, WKO5's PMC snapshot |
 | GET | `/primary-sport` | 1072 | 主要訓練項目: setting, sport in effect and suggestion |
 | GET / PUT | `/config` | 1089, 1096 | Engine config |
@@ -729,6 +737,7 @@ source (synthetic FITs).
 | 2026-10-01 | perf/dataset-load | user request (site frozen during a COROS build) | Persistent per-file FIT cache with per-field versions, lazy channels, disk `cached_series` / as-of estimates / PD refits for `FitFolderDataset`; process-pool parsing; single-flight `_dataset`; `GET /dataset/status` + shell.js progress; warm-up at startup and after a sync |
 | 2026-09-30 | feat/drift-basis | N/A | 配速／功率 basis toggle (`basis.py`, chart `basis` spec, tagged series, `?basis=`, viewer control, 這次沒有功率) on the drift charts; rolling EF skips the first 10 min |
 | 2026-10-04 | code-sync | N/A | Run FTP for power TSS on COROS / TP + `tss_source` / watch-power block; per-tenant engine.json / corrections / views / render cache, parity default by WKO5 presence; WKO5 chart packs no longer bundled (WKO5_VIEWS_DIR); chart ids, view i18n sidecar, variants, new chart kinds / keys (z5gate, activity, periodzones, climbvam, race_refs, drift_bars, sports / order); drift bars from `drift()`; stats / bin / lookup / filter implemented; 使用功率 auto; viewer mode cards / variant toggle; new activity endpoints; dropped monotony / PI charts and iLevels; all anchors refreshed |
+| 2026-10-06 | feature | SP-263 | `engine/sport_map.py`: one activity-type table (COROS sportType, Garmin / FIT sport + sub_sport, WKO5 names → road / trail / hike / bike / strength / walk / other); `overview.category` and `activity_tags.auto_type` use it; `Workout.platform` from the FIT dataset; the viewer's 運動類型 filter becomes 活動類型 with 百岳登山 |
 | 2026-10-04 | SP-45 | N/A | 我的訓練 › 負荷 PMC gains the aerobic / anaerobic TIS charts (per activity + Chronic / Acute TIS load); TIS built-ins count as power for 使用功率; real-data TIS golden test |
 
 

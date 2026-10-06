@@ -319,6 +319,9 @@ class Workout:
     sport_type: str            # e.g. "trail running"
     tags: list[str]
     metrics: dict[str, Optional[float]] = field(default_factory=dict)
+    # the platform's own sport data (engine/sport_map.py, SP-263): {"coros": sportType code,
+    # "fit": (sport, sub_sport)} — filled by the FIT dataset; empty for a WKO5 file
+    platform: dict = field(default_factory=dict)
 
 
 _PLAN_MEMO: dict = {}             # (tenant id, plan path) -> (stamp, Plan)

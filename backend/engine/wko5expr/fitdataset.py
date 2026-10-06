@@ -160,17 +160,20 @@ def load_classifications(db: Optional[Path] = None) -> dict:
     try:
         con = _ro(db)
         try:
+            # + the COROS sportType (sport_map.py, SP-263) when the DB has the column
+            have = {r[1] for r in con.execute("PRAGMA table_info(workout_files)").fetchall()}
+            code = "coros_sport_type" if "coros_sport_type" in have else "NULL"
             cur = con.execute("SELECT id, file_path, trail_classification, classification_overridden, "
-                              "duplicate_of FROM workout_files")
+                              f"duplicate_of, {code} FROM workout_files")
             raw = cur.fetchall()
         finally:
             con.close()
     except sqlite3.Error:
         return {}
     out: dict = {"_by_id": {}, "_by_name": {}, "_dups": {}}
-    for i, fp, tc, ov, dup in raw:
+    for i, fp, tc, ov, dup, cst in raw:
         r = {"id": i, "file_path": fp, "trail_classification": tc, "classification_overridden": bool(ov),
-             "duplicate_of": dup}
+             "duplicate_of": dup, "coros_sport_type": cst}
         out["_by_id"][i] = r
         if fp:
             out[_norm(fp)] = r
@@ -199,6 +202,36 @@ def read_athlete_settings(db: Optional[Path] = None, athlete_id: int = 1) -> lis
     return [dict(zip(cols, r)) for r in rows]
 
 
+def _row_for(path, rows: dict) -> Optional[dict]:
+    """The workout_files row of one FIT file (by path, else a unique file name)."""
+    if not rows:
+        return None
+    r = rows.get(_norm(path))
+    if r is None:
+        cand = rows["_by_name"].get(Path(str(path)).name) or []
+        r = cand[0] if len(cand) == 1 else None
+    return r
+
+
+def platform_for(path, rows: dict, sport=None, sub_sport=None) -> dict:
+    """The platform's own sport data of one FIT file (Workout.platform,
+    engine/sport_map.py): the FIT session sport / sub_sport, and the COROS
+    sportType of its workout_files row (or of the canonical row of its
+    cross-source duplicate group) when there is one."""
+    out: dict = {}
+    if sport or sub_sport:
+        out["fit"] = (sport, sub_sport)
+    r = _row_for(path, rows)
+    if r is not None:
+        canon = rows["_by_id"].get(r["duplicate_of"]) if r.get("duplicate_of") else None
+        code = r.get("coros_sport_type")
+        if code is None and canon is not None:
+            code = canon.get("coros_sport_type")
+        if code is not None:
+            out["coros"] = code
+    return out
+
+
 def classification_for(path, rows: dict) -> Optional[str]:
     """The trail / road classification of one FIT file from the app DB.
     Cross-source duplicates (dedup.py: the same activity from COROS and TP,
@@ -207,12 +240,7 @@ def classification_for(path, rows: dict) -> Optional[str]:
     file's row first, then the canonical row, then the other duplicates);
     otherwise this row's own auto value, else the canonical row's. None when
     the file has no row or every value is "unknown"."""
-    if not rows:
-        return None
-    r = rows.get(_norm(path))
-    if r is None:
-        cand = rows["_by_name"].get(Path(str(path)).name) or []
-        r = cand[0] if len(cand) == 1 else None
+    r = _row_for(path, rows)
     if r is None:
         return None
     canon_id = r["duplicate_of"] or r["id"]
@@ -571,7 +599,8 @@ class FitFolderDataset(Dataset):
             # hikes carry "hiking" / "mountaineering" (the 專項期 charts
             # select hikes with hastag(), as on the user's WKO5 data)
             tags = list(TYPE_TAGS.get(stype, []))
-            w = Workout(idx=idx, entry=entry, day=date_to_day(start), sport=group, sport_type=stype, tags=tags)
+            w = Workout(idx=idx, entry=entry, day=date_to_day(start), sport=group, sport_type=stype, tags=tags,
+                        platform=platform_for(p, self._classes, sport_raw or None, sub))
             # a bad file (car / bike segment, impossible power: bad_activity.py)
             # never enters ds.workouts; it is listed in ds.excluded
             if self._exclusion(w, lambda rel=rel: self._fit_bad_features(rel), duration=meta.get("duration")):

@@ -507,15 +507,18 @@ BINOPS = {
 
 class Evaluator:
     def __init__(self, ds: Dataset, begin: float, end: float,
-                 sports: Optional[set[str]] = None):
-        """`sports`: RHE sport filter (sport groups, lower-case); None = all."""
+                 sports: Optional[set[str]] = None, keep=None):
+        """`sports`: RHE sport filter (sport groups, lower-case); None = all.
+        `keep`: a workout predicate on top (the 圖表分析 activity-type filter,
+        sport_map.KindFilter); None = all."""
         self.ds = ds
         self.begin, self.end = int(math.floor(begin)), int(math.floor(end))
         self.unsupported: set[str] = set()
         self.full_span = (min(ds.first_day, self.begin),
                           max(ds.last_day, int(ds.today), self.end) + 1)
-        self.wlist = [w for w in ds.workouts if sports is None or w.sport in sports]
+        self.wlist = [w for w in ds.workouts if (sports is None or w.sport in sports) and (keep is None or keep(w))]
         self.sports = sports
+        self.keep = keep
         self._manual_start: Any = _UNSET       # load_guard.manual_start(), read once (pmc())
         # settings a chart read from an estimate (推估) instead of a dated
         # setting: name -> {"value", "date", "reason"} of the latest use
@@ -2453,7 +2456,7 @@ class Evaluator:
         s, _ = self.full_span
         daily = self._tl_daily(self._ws_metric("tss", ctx))
         manual = None
-        if self.sports is None and ctx.sportf is None:
+        if self.sports is None and self.keep is None and ctx.sportf is None:
             if self._manual_start is _UNSET:
                 try:
                     self._manual_start = LG.manual_start()
