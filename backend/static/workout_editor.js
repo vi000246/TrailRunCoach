@@ -176,11 +176,8 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
   // SP-64: the LTHR (or, under the %HRR / %HRmax 課表心率區間, the max HR) is not believable
   // (engine/threshold_confidence.warn_of → context.thresholds.thr_warn): HR targets get a badge
   const usesHr = (items) => (items || []).some((x) => x.kind === "repeat" ? usesHr(x.items) : ((x.target || {}).type === "hr"));
-  const hrWarn = (ctx) => {
-    const w = ((ctx || {}).thresholds || {}).thr_warn;
-    if (!w) return "";
-    return [w.lthr && w.lthr.low ? w.lthr.text : "", w.hrmax && w.hrmax.low ? w.hrmax.text : ""].filter(Boolean).join("；");
-  };
+  const warnText = (w) => w ? [w.lthr && w.lthr.low ? w.lthr.text : "", w.hrmax && w.hrmax.low ? w.hrmax.text : ""].filter(Boolean).join("；") : "";
+  const hrWarn = (ctx) => warnText(((ctx || {}).thresholds || {}).thr_warn);
   // where threshold pace is estimated (GET /steps/context tpace_link: the Friel pace-zone chart)
   const tpaceLink = (ctx) => {
     const u = (ctx || {}).tpace_link;
@@ -564,7 +561,10 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       const ic = { err: "✕", warn: "!", info: "i" };
       const nt = noTpaceText(), T = this.tpls || {};
       const isNt = (x) => x === nt || x === T.no_tpace_text;
-      const hw = this.doc && usesHr(this.doc.items) ? hrWarn(this.ctx) : "";
+      // POST /steps/check decides (threshold_confidence.session_warn: never on a test session);
+      // the static demo's port has no thr_warn — the old rule there
+      const hw = "thr_warn" in v ? warnText(v.thr_warn)
+        : this.doc && usesHr(this.doc.items) && (this.sess().kind || "") !== "test" ? hrWarn(this.ctx) : "";
       this.$("we-issues").innerHTML = (hw ? `<li class="warn"><span class="ic">!</span><span>${esc(hw)}</span></li>` : "") + list.map((i) => `<li class="${i.level}"${i.id ? ` data-id="${esc(i.id)}"` : ""}><span class="ic">${ic[i.level] || "i"}</span><span>${esc(i.text)}${isNt(i.text) ? tpaceLink(this.ctx) : ""}</span></li>`).join("") +
         (list.length ? `<li class="info"><span class="ic"></span><span class="faint">檢查規則 ${q(TIP.rules)}</span></li>` : "");
     }
@@ -875,7 +875,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       const tab = (k, id, l, on, tip) => `<button type="button" data-${k}="${esc(id)}" class="${on ? "on" : ""}" aria-pressed="${on}"${tip ? ` title="${esc(tip)}"` : ""}>${esc(l)}</button>`;
       // pace × threshold pace (Daniels / Canova / Billat …) with no threshold pace: badge it
       const noTp = !(((this.ctx || {}).thresholds || {}).tpace);
-      const hw = hrWarn(this.ctx);
+      const hw = cat === "test" ? "" : hrWarn(this.ctx);      // the test templates: no LTHR badge (SP-274)
       const tpBadge = (r) => (r.needs_tpace && noTp
         ? ` <span class="we-tpb" title="${esc(T.no_tpace_text || noTpaceText())}">⚠ ${esc(tr("workout.no_tpace_badge"))}</span>` : "") +
         (hw && usesHr(r.full || r.items) ? ` <span class="we-tpb" title="${esc(hw)}">⚠ ${esc(tr("workout.thr_low_badge"))}</span>` : "");
