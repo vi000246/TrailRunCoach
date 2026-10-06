@@ -198,6 +198,32 @@ def test_week_plan_no_open_injury_is_unchanged_and_red_has_no_run(monkeypatch):
     assert any(s["kind"] == "strength" for s in left)
 
 
+def test_red_light_projected_weeks_have_no_run_either(monkeypatch):
+    """Owner's decision (SP-273, 2026-10-06): while red, the projected weeks schedule no run (nothing pushed to
+    the watch ahead); strength stays. Without an injury the projection keeps its runs."""
+    from backend.engine import plan_prefs as PP
+    from backend.engine import projection as P
+    from backend.engine.status import Status
+    from backend.tests.test_b2b import _phases
+    from backend.tests.test_recovery_week import LIGHT, _week as _rw
+
+    def weeks(events):
+        ds, plan, _ = _rw("2026-11-28", {4: LIGHT})
+        monkeypatch.setattr(INJ, "load_events", lambda *a, **k: list(events))
+        monkeypatch.setattr(AT, "load", lambda *a, **k: [])
+        st = Status(ds, plan, TODAY, prefs=PP.Prefs()).compute()
+        wp = O.week_plan(ds, st, TODAY)
+        return wp, P.project_weeks(wp, _phases(plan, TODAY), date(2026, 11, 28), events=plan.events)
+    _wp, base = weeks([])
+    assert base and all(any(s["kind"] in O.RUN_KINDS for s in w["sessions"]) for w in base)
+    wp, red = weeks([ev(1, "2026-09-20", severity="severe")])
+    assert wp["injury_light"]["color"] == "red" and len(red) == len(base)
+    for w in red:
+        assert not any(s["kind"] in O.RUN_KINDS for s in w["sessions"]) and w["hours"] == 0.0
+        assert any(n.get("src") == "injury_light" and "疼痛紅燈" in n["text"] for n in w.get("notes") or [])
+    assert any(s["kind"] == "strength" for w in red for s in w["sessions"])
+
+
 def test_red_light_offers_days_off():
     from backend.engine import suggestions as SG
     evs = [ev(4, "2026-09-25", severity="moderate")]
