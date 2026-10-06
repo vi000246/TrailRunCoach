@@ -25,7 +25,8 @@ A capacity sample is one of (in this order):
      Bassett & Welch 1995, MSSE 27:1292–1301: "some percentage of an
      age-adjusted estimate of maximal heart rate"); the 10-bpm tolerance and
      the observed (not age-predicted) HRmax — median of the top-5 per-run
-     peaks held ≥ 120 s in the 365 days up to the run — are 推估;
+     peaks held ≥ 120 s (cumulative, moving, after the shared HR cleaning
+     hr_quality.clean — SP-265) in the 365 days up to the run — are 推估;
    * an even or negative split: second-half speed ≥ 0.98 × first half
      (pacing taxonomy: Abbiss & Laursen 2008, Sports Med 38:239–252; the 2 %
      tolerance is 推估);
@@ -111,6 +112,29 @@ def hrmax_observed(peaks, top_n: int = MAXIMAL["hrmax_top_n"]) -> Optional[float
     above the rest; held 120 s the top five sat within ~10 bpm)."""
     v = sorted((float(p) for p in peaks if p), reverse=True)[:top_n]
     return float(median(v)) if v else None
+
+
+def run_hrmax_peak(t, hr, kmh=None, cadence_spm=None, min_kmh: float = 1.0,
+                   hold_s: float = MAXIMAL["hrmax_hold_s"]) -> Optional[float]:
+    """One run's peak for hrmax_observed: the highest bpm with ≥ hold_s seconds
+    (cumulative) at or above it, on the moving seconds (kmh > min_kmh) of the
+    HR after the shared cleaning (hr_quality.clean: gaps, range, spikes,
+    cadence lock — SP-265)."""
+    from backend.engine import hr_quality as HQ
+    c = HQ.clean(t, hr, cadence_spm, speed_kmh=kmh)
+    if c is None:
+        return None
+    g, y = c
+    ok = np.isfinite(y)
+    if kmh is not None:
+        v = HQ.to_grid(t, kmh, g, max_gap=30.0, positive=False)
+        if v is not None:
+            ok &= np.nan_to_num(v[1]) > min_kmh
+    if ok.sum() < hold_s:
+        return None
+    lo, hi = 40, 221
+    h = np.clip(np.round(y[ok]), lo, hi - 1).astype(int) - lo
+    return peak_hr(np.bincount(h, minlength=hi - lo).astype(float).tolist(), lo, hold_s)
 
 
 def _check(cid: str, ok: bool, text: str) -> dict:

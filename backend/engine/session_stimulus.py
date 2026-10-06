@@ -26,13 +26,15 @@ Sports Med 43:313, §1 / §3) — estimated without gas analysis:
   (interval_reps.Z3_FLOOR / Z3_MIN_S), plus HR-only samples ≥ 0.95 LTHR minus the first 3 min
   of each run (HR lag) when ≥ 150 s remain. Zone 3 session at ≥ 10 min (overview.HARD_SESSION_S).
 
-  Cadence lock: HR within 3 bpm of the cadence (spm) in a 60-s window AND following its
-  changes (correlation ≥ 0.8 with ≥ 1.5 spm of cadence variation) — HR merely close to the
+  Cadence lock: engine/hr_quality.cadence_lock (SP-265, the one definition): HR within 3 bpm
+  of the cadence (spm) in a 60-s window AND following its changes — HR merely close to the
   cadence is common on easy runs (backtest: 144 / 188 runs) and is not a lock (推估).
 
 The per-run part (`measure`) does not depend on HRpeak: the HR path is stored as seconds per
 threshold bpm, so `verdict` can read it at the HRpeak in effect (`hr_peak`: the plan's HRmax,
 else the 3rd-highest per-run 60-s HR peak in 365 days — the top ones are optical errors).
+The run's 60-s peak (`hr_peak60`) is taken on the shared cleaning (hr_quality.clean: range,
+spikes, cadence lock — SP-265).
 """
 from __future__ import annotations
 
@@ -42,6 +44,7 @@ from typing import Optional, Sequence
 import numpy as np
 
 from backend.engine import zones as _Z
+from backend.engine.hr_quality import cadence_lock     # noqa: F401 — the shared definition (SP-265)
 
 # Palladino's running power zones (owner 2026-10-02: Palladino everywhere): a VO2 bout is
 # zone 5 (≥ 106 % CP) for ≥ 2 min, or the upper part of zone 4 (supra-threshold, 103–106 %)
@@ -63,7 +66,6 @@ Z3_HR_SKIP_S = 180
 Z3_NEED_S = 600
 GRADE_MAX, GRADE_DOWN = 0.08, -0.03
 MOVING_MS = 0.5
-LOCK_TOL, LOCK_WIN, LOCK_CORR, LOCK_CAD_SD = 3.0, 60, 0.8, 1.5
 HR_BPM_LO, HR_BPM_HI = 130, 215          # the HR path's stored threshold range
 HRPEAK_RANK, HRPEAK_DAYS = 3, 365
 
@@ -121,26 +123,6 @@ def runs_of(mask: np.ndarray, bridge: int = 0) -> list[tuple[int, int]]:
         else:
             out.append([int(a), int(b)])
     return [(a, b) for a, b in out]
-
-
-def cadence_lock(hr: Optional[np.ndarray], cad_spm: Optional[np.ndarray]) -> np.ndarray:
-    """Samples where the optical HR follows the cadence (module doc)."""
-    if hr is None or cad_spm is None:
-        return np.zeros(0 if hr is None else len(hr), dtype=bool)
-    n = len(hr)
-    out = np.zeros(n, dtype=bool)
-    step = LOCK_WIN // 2
-    for a in range(0, max(1, n - LOCK_WIN + 1), step):
-        h, c = hr[a:a + LOCK_WIN], cad_spm[a:a + LOCK_WIN]
-        ok = np.isfinite(h) & np.isfinite(c)
-        if ok.sum() < LOCK_WIN * 0.8:
-            continue
-        h, c = h[ok], c[ok]
-        if abs(float(np.mean(h - c))) > LOCK_TOL or float(np.std(c)) < LOCK_CAD_SD or float(np.std(h)) < 1e-6:
-            continue
-        if float(np.corrcoef(h, c)[0, 1]) >= LOCK_CORR:
-            out[a:a + LOCK_WIN] = True
-    return out
 
 
 def measure(t, hr=None, power=None, speed=None, cadence_spm=None, grade=None,
@@ -204,8 +186,11 @@ def measure(t, hr=None, power=None, speed=None, cadence_spm=None, grade=None,
     hr_secs, hr_peak60 = [], None
     if h30 is not None:
         ok = np.isfinite(h30) & ~lock
-        h60 = _roll(np.where(ok, h1, np.nan), 60)
-        if np.isfinite(h60).any():
+        # the run's own 60-s peak on the shared cleaning (hr_quality.clean, SP-265)
+        from backend.engine import hr_quality as HQ
+        hc = HQ.clean(t, hr, cadence_spm, grid=g, speed_kmh=speed)
+        h60 = _roll(hc[1], 60) if hc is not None else None
+        if h60 is not None and np.isfinite(h60).any():
             hr_peak60 = float(np.nanmax(h60))
         elig = ok & ~pvalid & moving & ~down
         if elig.any():
