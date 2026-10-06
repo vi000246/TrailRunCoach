@@ -44,7 +44,7 @@ import datetime as dt
 from typing import Callable, Optional
 
 from backend.engine.load_guard import LONG_CAP
-from backend.i18n import _
+from backend.i18n import N_, _
 
 WEEKS = (3, 10)                     # 專項期 weeks before the race (planning: 8-week specific + 14-day taper)
 # 推估. The low points (賽前第 5、3 週) are the 專項期's recovery weeks (EASY_WEEKS, SP-97): there the
@@ -632,6 +632,27 @@ def climb_shape(feat: dict) -> Optional[dict]:
     return {"rep": rep, "n": n, "grade": cl["grade"], "climb_dz": cl["dz"], "climb_min": cl.get("minutes")}
 
 
+# SP-227: how to climb it in the race, by runwalk.gait (grade × the predicted climbing speed, SP-226)
+CLIMB_GAIT_DO = {"walk": N_("用快走"), "either": N_("走跑皆可：跑或快走，哪個輕鬆用哪個"), "run": N_("用跑的")}
+
+
+def race_gait(feat: Optional[dict]) -> Optional[dict]:
+    """The race's longest climb as the race will go (SP-227): its climbing rate (m/h) at the
+    race day's hours per effort-km — the same estimate as 「你的速度約 N 分」 — and
+    runwalk.gait on its grade × that speed (docs/research/run-walk-threshold.md §5.4). None
+    without the climb's minutes (no race time) or below 3 %. The default curve (推估)."""
+    from backend.engine.racepower import runwalk as RW
+    cl = (feat or {}).get("climb") or {}
+    mins, km, dz, g = cl.get("minutes"), cl.get("km"), cl.get("dz"), cl.get("grade")
+    if not mins or mins <= 0 or not km or not dz or g is None:
+        return None
+    v = float(km) * 1000.0 / (float(mins) * 60.0)
+    gait = RW.gait(float(g) / 100.0, v)
+    if gait is None:
+        return None
+    return {"gait": gait, "vam": float(dz) / float(mins) * 60.0, "grade": float(g), "speed_ms": v}
+
+
 def climb_minutes(sh: dict, n: Optional[int] = None) -> int:
     n = sh["n"] if n is None else n
     return _r5(15 + n * sh["rep"] * (1 + DOWN_SHARE) + 10)
@@ -644,13 +665,25 @@ def climb_text(race: dict, sh: dict, n: int, aet: Optional[float],
     f = race.get("features") or {}
     g = sh["grade"]
     dn = f.get("steep_descent") or f.get("descent") or {}
-    hr = "心率約" + easy_cap_label(None, aet, aet_measured)
-    when = f"、你的速度約 {sh['climb_min']:.0f} 分" if sh.get("climb_min") else ""
-    title = f"長爬坡反覆 {n}×{sh['rep']} 分（{g:.0f}% 坡）"
-    down = (f"下坡用跑的：找接近 {dn['grade']:.0f}% 的坡（賽道最陡的長下坡 ↓{dn['dz']:.0f} m；整場下降 {f.get('loss_m', 0):.0f} m）"
-            if dn else "下坡用跑的，練下坡")
-    detail = (f"{race['name']}最長的爬坡 ↑{sh['climb_dz']:.0f} m、平均 {g:.0f}%{when}：找 {max(0, g - 2):.0f}–{g + 2:.0f}% 的坡，"
-              f"上坡 {sh['rep']} 分 × {n} 趟，用比賽的走／跑方式、{hr}；{down}。暖身 15 分、緩和 10 分")
+    hr = _("心率約{cap}", cap=easy_cap_label(None, aet, aet_measured))
+    when = _("、你的速度約 {m:.0f} 分", m=sh["climb_min"]) if sh.get("climb_min") else ""
+    title = _("長爬坡反覆 {n}×{rep} 分（{g:.0f}% 坡）", n=n, rep=sh["rep"], g=g)
+    down = (_("下坡用跑的：找接近 {g:.0f}% 的坡（賽道最陡的長下坡 ↓{dz:.0f} m；整場下降 {loss:.0f} m）",
+              g=dn["grade"], dz=dn["dz"], loss=f.get("loss_m", 0))
+            if dn else _("下坡用跑的，練下坡"))
+    kw = dict(name=race["name"], dz=sh["climb_dz"], g=g, when=when, lo=max(0, g - 2), hi=g + 2, rep=sh["rep"], n=n,
+              hr=hr, down=down)
+    rg = race_gait(f)
+    if rg is None:
+        # no race time or a climb under 3 %: the text as before SP-227
+        detail = _("{name}最長的爬坡 ↑{dz:.0f} m、平均 {g:.0f}%{when}：找 {lo:.0f}–{hi:.0f}% 的坡，"
+                   "上坡 {rep} 分 × {n} 趟，用比賽的走／跑方式、{hr}；{down}。暖身 15 分、緩和 10 分", **kw)
+    else:
+        # SP-227: the race's gait on this climb (runwalk.gait), e.g. 「比賽時這段每小時約 620 m、18%：用快走」
+        how = _("比賽時這段每小時約 {vam:.0f} m、{g:.0f}%：{act}", vam=round(rg["vam"], -1), g=g,
+                act=_(CLIMB_GAIT_DO[rg["gait"]]))
+        detail = _("{name}最長的爬坡 ↑{dz:.0f} m、平均 {g:.0f}%{when}：找 {lo:.0f}–{hi:.0f}% 的坡，"
+                   "上坡 {rep} 分 × {n} 趟、{hr}；{how}；{down}。暖身 15 分、緩和 10 分", how=how, **kw)
     return title, detail, hr
 
 
@@ -707,7 +740,9 @@ def apply_climb(ss: list[dict], info: Optional[dict], *, aet: Optional[float] = 
     s.update(id="climb", kind="easy", terrain="trail", minutes=int(m), title=title, detail=detail, source=SRC_CLIMB,
              tss=round(rate * 1.1 * m / 60.0, 1), target=hr,
              climb_m=round(n * sh["rep"] / sh["climb_min"] * sh["climb_dz"]) if sh.get("climb_min") else None)
-    info["planned"] = [{"day": s["day"], "minutes": m, "n": n, "rep": sh["rep"], "grade": round(sh["grade"], 1)}]
+    rg = race_gait(race.get("features"))
+    info["planned"] = [{"day": s["day"], "minutes": m, "n": n, "rep": sh["rep"], "grade": round(sh["grade"], 1),
+                        "gait": rg["gait"] if rg else None, "vam": round(rg["vam"]) if rg else None}]
     return ss
 
 

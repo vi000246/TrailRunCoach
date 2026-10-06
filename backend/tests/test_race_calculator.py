@@ -116,7 +116,9 @@ def test_chart_rows_trail_power_only_where_valid(client):   # noqa: F811
         else:
             assert r["hr_cap"]                              # LTHR / AeT cap
     steep = [r for r in rows if r["grade"] > 0.08]
-    assert steep and all(r["walk"] and r["basis"] == "hr" for r in steep)
+    # > 8 %: HR cap whatever the gait; walked only when grade × speed says so (SP-226)
+    assert steep and all(r["basis"] == "hr" and r["gait"] in ("walk", "either", "run") for r in steep)
+    assert all(r["walk"] == (r["gait"] == "walk") for r in steep)
 
 
 def test_chart_rows_road_and_hike():

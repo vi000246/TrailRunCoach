@@ -40,6 +40,8 @@ class RunModel:
     weight: float
     re: Callable[[float], float]
     v_max: Callable[[float], Optional[float]] = lambda g: None
+    # SP-229: RE(g, P) when the gait depends on the predicted speed (GaitRE.re_at); None = re(g)
+    re_at: Optional[Callable[[float, float], float]] = None
 
 
 def hill_factor(g: float, alpha: float = ALPHA_DEFAULT, beta: float = BETA_DEFAULT) -> float:
@@ -94,7 +96,7 @@ def course_time(lam: float, segs: Sequence[dict], model: RunModel, alpha: float 
             g = s["grade"]
             u = hill_factor(g, alpha, beta) * a[i] * ramp(taus[i], sigma)
             p = float(locks[i]) if i in locks else lam * u
-            re = model.re(g)
+            re = model.re_at(g, p) if model.re_at else model.re(g)
             v = re * p / model.weight
             vmax = model.v_max(g)
             capped = False

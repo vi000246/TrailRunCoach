@@ -19,10 +19,11 @@ def seg(g, **kw):
             "power": 250.0, "pace_s_per_km": 360.0, "dist_m": 2000.0, **kw}
 
 
-@pytest.mark.parametrize("g,walk,kind", [(-0.10, None, "descent"), (0.0, None, "flat"), (0.05, None, "run_climb"),
-                                         (0.05, "走跑皆可", "steep_climb"), (0.12, None, "steep_climb")])
-def test_kind_by_grade(g, walk, kind):
-    assert ST.kind_of(seg(g, walk=walk)) == kind
+@pytest.mark.parametrize("g,gait,kind", [(-0.10, None, "descent"), (0.0, None, "flat"), (0.05, None, "run_climb"),
+                                         (0.05, "walk", "steep_climb"), (0.05, "either", "run_climb"),
+                                         (0.12, None, "steep_climb"), (0.12, "run", "steep_climb")])
+def test_kind_by_grade(g, gait, kind):
+    assert ST.kind_of(seg(g, gait=gait)) == kind
 
 
 def test_trail_targets_follow_the_policy():

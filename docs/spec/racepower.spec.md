@@ -251,6 +251,7 @@ hides the CWA key, the 百岳 peak lists and presets (百岳 reads 多日登山)
 | POST | `/api/v1/racepower/plan` | `PlanIn` (`backend/engine/racepower/calc.py:145`) = `PredictIn` + mode, targets (time / pace, power W / %CP), course ref (`course_id` or `event_id` + options, or manual), strategy, hills, acclimatisation, locks, start time, aid stations (typed), day splits, terrain, `hourly` (the /weather rows), `hourly_heat` (default true), `heat_acclimatisation`, 百岳 trip kind / pack per day → summary (incl. `heat`, `strategy`, `trail_hr`, `time_total_s`, `nonmoving`), effort, segments (incl. temp_c / dew_c / rh_pct / heat_pct / heat_clock / heat_src, kcal / cho / water / sodium / fuel action), heat_profile, days (百岳), compare, crosscheck, v1, course_name, `fuel`, `seg_targets`, `chart_rows`, `goal` (time / power modes), `stop_suggestions`, warnings; an unknown `course_id` reloads from `event_id`, else 410 (`backend/api/racepower.py:566`, `calc.make_plan` `backend/engine/racepower/calc.py:492`) |
 | GET | `/api/v1/racepower/goal-basis` | the training basis for goals: hr (目標配速) or power (目標功率), from 課表偏好 目標基準 else 使用功率 (`backend/api/racepower.py:553`) |
 | GET | `/api/v1/racepower/grade-model` | gait-aware RE(g) (run / walk bins, walk share, technicality per class and per downhill bin) / v_max(g) / v_h(g), the HR hike-window summary and its basis (`backend/api/racepower.py:353`) |
+| GET | `/api/v1/racepower/cadence-check` | SP-230: the climbing (≥ 3 % windows) cadence histogram of the year's outdoor runs (5-spm bins, disk-cached per activity `racepower_climb_cadence_v1`) against the 130 spm walk line: two groups or one, the valley, whether 130 sits in it, a hint; report only, the line never moves (`backend/engine/racepower/runwalk.py`, page section 爬坡步頻分布) |
 | GET | `/api/v1/racepower/heat-status?date=` | heat-acclimation S today, its history and the race-day projection (`backend/api/racepower.py:394`) |
 | GET / POST | `/api/v1/racepower/hike-meta` | pack per trip (`racepower_hike_meta.json`, matched by file else start time) (`backend/api/racepower.py:441`) |
 | GET / POST | `/api/v1/racepower/solo-hikes` | the opted-in solo hikes (`{"files": [.wko4 names]}`); only these calibrate EP/h, the walking model, the hike back-test and the 登山 conversion (`backend/api/racepower.py:464`) |
@@ -279,8 +280,9 @@ Design: `docs/research/racepower-v2.md` (formulas F1–F18, verification §3A / 
   3 m hysteresis gain / loss, optional scaling to an official gain, Douglas–Peucker ε 10 m
   (`backend/engine/racepower/course.py:171`), classes 陡下 ≤ −15 % / 下坡 / 平 ±2 % / 上坡 / 陡上
   ≥ 15 %, merge of segments shorter than max(200 m, 1 %) (`backend/engine/racepower/course.py:233`),
-  flats > 3 km split per km; walk labels 走跑皆可 ≥ 15 %, 建議快走 ≥ 28 %. Also per-km or one
-  segment. Manual courses are one segment or per-km with no grade information.
+  flats > 3 km split per km; no walk label here (it needs the predicted speed, see Segment
+  targets). Also per-km or one segment. Manual courses are one segment or per-km with no grade
+  information.
 - **Multi-day** (百岳): split points clicked on the profile (camp / hut waypoints pre-fill them).
 - **Coordinates** (`backend/engine/racepower/course.py:418`): a GPX / FIT course's profile carries
   `lat` / `lon` beside `km` / `z` (the same ≤ 1500 points, interpolated along the track by
@@ -897,6 +899,18 @@ segment time; descents no power / HR target (「控制、安全」, time and pac
 up to 3 h and AeT beyond (推估). Road plans keep pace / power. `chart_rows` gives every plan type
 one row per segment with pace, power and HR (null where not valid, `power_ref` / `hr_ref` for
 display), split, cumulative time, ETA, walk flag and fuel summary; the CSV gets 目標類型 / 執行目標.
+
+Walk or run (SP-226, `backend/engine/racepower/runwalk.py`, docs/research/run-walk-threshold.md
+§5.1): on a GPX course every climb ≥ 3 % gets `gait` walk / either / run from grade × the predicted
+speed against two transition-speed curves (Brill & Kram 2021 PTS / EOTS to 15°, straight to Ortiz
+2017's 0.8 m/s at 30°, 0.4 m/s vertical beyond; 推估 for everyone, the default curve). `walk` = 走 /
+走跑皆可 (a note too); > 8 % stays an HR cap + VAM target labelled 陡坡（走／走跑皆可／跑）, a walked
+3–8 % climb becomes 爬坡（走）; fuel uses Minetti walking only where the gait is walk. Labels only:
+the time model is unchanged (`GaitRE`'s majority gait). 百岳 and manual courses carry no gait.
+
+Personal transition speed (SP-228, `runwalk.fit_shift`, set on `GaitRE.runwalk` by `fit_gait_re`): per 2 % climbing bin with ≥ 10 walked and ≥ 10 run windows, the speed that best splits them; the median of (that − default PTS) is one shift of both curves, × n/(n + 30), held within ±0.4 m/s (推估). The planner's labels use it (`summary.runwalk`); the race-class model keeps the shift fitted on every run. 坡度 RE 曲線 shows the default and personal curves and each bin's windows, or 「預設值，還沒有你的資料」.
+
+SP-229 gate (back-test only): `GaitRE.re_at` / `gait_at` pick the walking curve where the running curve's speed at the segment power is below the (shifted) PTS; `RunModel.re_at` lets `course_time` use it. The terrain back-test reports it beside the majority gait (`models.speed_gait`, `speed_gait`: trail segment and climb |error|, segments whose gait changed, `no_worse`) and the 準確度 tab shows the line. The planner keeps the majority gait until a back-test on the athlete's data shows `no_worse`.
 
 ### Share links (`backend/engine/racepower/share.py:75`)
 

@@ -1450,6 +1450,47 @@ def grade_samples(ds, runs, exclude: Optional[set] = None, power_only: bool = Tr
     return out
 
 
+CLIMB_CAD_KEY = "racepower_climb_cadence_v1"   # SP-230: seconds per 5-spm bin on climbs ≥ 3 %
+
+
+def _climb_cadence(ds, w) -> Optional[list]:
+    from backend.engine.racepower import runwalk as RW
+    a = activity_arrays(ds, w)
+    if a is None or a["cad"] is None:
+        return None
+    mv = np.nan_to_num(a["kmh"]) > RUN_MOVING_KMH
+    return RW.climb_cadence_hist(a["t"], a["d"], a["z"], a["cad"], mv)
+
+
+def climb_cadence_seconds(ds, today: Optional[dt.date] = None) -> tuple[Optional[list], int]:
+    """SP-230: the climbing (≥ 3 %) cadence histogram (seconds per runwalk 5-spm bin) of every
+    outdoor run of the last 365 days, with or without power (the 130 spm line splits every
+    run), disk-cached per activity; and how many runs had climbing with cadence."""
+    from backend.engine.wko5expr.dataset import date_to_day
+    today = today or dt.date.today()
+    tday = date_to_day(today)
+    tot = None
+    n = 0
+    for w in ds.workouts:
+        if w.sport != "run" or not (tday - RE_WINDOW_DAYS < w.day <= tday + 1) or w.sport_type == "indoor running" \
+                or "runningtreadmill" in w.tags or "runningindoor" in w.tags:
+            continue
+        h = ds.cached_series(CLIMB_CAD_KEY, w, lambda w=w: _climb_cadence(ds, w))
+        if not h or not any(h):
+            continue
+        tot = np.asarray(h, float) if tot is None else tot + np.asarray(h, float)
+        n += 1
+    ds.flush_series()
+    return (None if tot is None else [float(x) for x in tot]), n
+
+
+def climb_cadence(ds, today: Optional[dt.date] = None) -> dict:
+    """runwalk.cadence_check on climb_cadence_seconds, with `n_runs`."""
+    from backend.engine.racepower import runwalk as RW
+    secs, n = climb_cadence_seconds(ds, today)
+    return {**RW.cadence_check(secs), "n_runs": n}
+
+
 def hike_workouts(ds, today: dt.date) -> list:
     from backend.engine.wko5expr.dataset import date_to_day
     tday = date_to_day(today)
