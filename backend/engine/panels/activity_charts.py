@@ -12,6 +12,10 @@ hrpower
     average HR), EF (NP ÷ average HR) and the range's Pw:HR halves
     (WKO5's definition: the range cut at half its length). `range_stats`
     is the reference implementation; the viewer mirrors it.
+    `hr_quality` (SP-267): the stretches engine/hr_quality.py flags as
+    suspect (spike, step, cadence lock, flat, high start, out of range) as
+    [[x0, x1, kind]] for shading on the HR panel, with plain labels and a
+    note — marked only, nothing is changed.
 hrzones / powerzones
     Time in zones of this activity under a zone model the viewer picks (and
     remembers; defaults Friel % LTHR and Palladino % CP — the chart default is
@@ -40,7 +44,7 @@ import numpy as np
 
 from backend.engine import hr_profile as HP
 from backend.engine import zones as Z
-from backend.i18n import _
+from backend.i18n import N_, _
 
 MAX_DT = 30.0            # a source interval > 30 s is a gap (workout_review.MAX_DT)
 STOP_KMH = 1.6           # moving = above WKO5's 1 mph (workout_review.STOP_KMH)
@@ -51,6 +55,15 @@ TREND_MOVE = 0.0005      # WKO5 Heart Rate Format: |slrm| < 0.0005 bpm/s = consi
 CV_STEADY, CV_MIXED = 0.33, 0.66   # WKO5 Heart Rate Format: stddev / avg
 
 CHARTS = ("hrpower", "hrzones", "powerzones", "hrtrend")
+# SP-267: the HR-quality flags shaded on the HR panel (engine/hr_quality.py; marked only)
+HRQ_KINDS = ("spike", "step", "lock", "flat", "high_start", "range")
+HRQ_KIND_LABEL = {"spike": N_("突然跳動"), "step": N_("跳一階沒回來"), "lock": N_("跟著步頻走"),
+                  "flat": N_("數字卡住不動"), "high_start": N_("起跑讀得太高"), "range": N_("超出合理範圍")}
+HRQ_MERGE_S = 5          # 推估: flags ≤ 5 s apart are one shaded stretch
+HRQ_MAX_SPANS = 200      # a chart never needs more
+HRQ_LEGEND = N_("心率可能不準")
+HRQ_CHART_NOTE = N_("灰底是手腕光學心率可能不準的時段：{parts}。只是標出來，資料沒有被修改；"
+                    "飄移判讀會把這些算進「可疑秒數」，太多就只當參考。")
 
 
 def _f(v) -> Optional[float]:
@@ -203,8 +216,54 @@ def hrpower(ds, w, points: int = POINTS) -> dict:
         "cum": {k: (None if v is None else [_r(x, 4 if k in ("n4", "d") else 1) for x in v]) for k, v in cum.items()},
         "ref": {"aet": _r(aet, 0), "lthr": _r(lthr, 0), "cp": _r(cp, 0)},
         "has_hr": has_hr, "has_power": has_p, "has_dist": dist is not None,
+        "hr_quality": _hr_quality_safe(ds, w, G) if has_hr else None,
         "empty": None,
     }
+
+
+def _hr_quality_safe(ds, w, G) -> Optional[dict]:
+    try:
+        return hr_quality_spans(ds, w, G)
+    except Exception:                       # noqa: BLE001 — the marks never break the chart
+        return None
+
+
+def hr_quality_spans(ds, w, G: Optional[dict] = None) -> Optional[dict]:
+    """{"spans": [[x0, x1, kind]], "labels", "legend", "note", "counts"} of the
+    activity's suspect HR (x = seconds from the first sample, as hrpower's x);
+    None without HR or when nothing is flagged."""
+    from backend.engine import hr_quality as HQ
+    from backend.engine.workout_review import _samples
+    s = _samples(ds, w)
+    if s is None or s.get("hr") is None:
+        return None
+    G = G if G is not None else grid(ds, w)
+    if G is None:
+        return None
+    cad = s.get("cadence")
+    q = HQ.assess(s["t"], s["hr"], None if cad is None else np.asarray(cad, float) * 2.0, s.get("speed"),
+                  grid=G["g"] + G["t0"])
+    if q is None:
+        return None
+    spans, counts = [], {}
+    for k in HRQ_KINDS:
+        m = q.masks.get(k)
+        if m is None or not m.any():
+            continue
+        runs = []
+        for a, b in HQ.runs_of(m):
+            if runs and a - runs[-1][1] <= HRQ_MERGE_S:
+                runs[-1][1] = b
+            else:
+                runs.append([a, b])
+        counts[k] = {"n": len(q.events.get(k) or runs), "s": int(m.sum())}
+        spans += [[float(G["g"][a]), float(G["g"][min(b, len(G["g"])) - 1] + 1.0), k] for a, b in runs]
+    if not spans:
+        return None
+    spans.sort(key=lambda r: r[0])
+    labels = {k: _(HRQ_KIND_LABEL[k]) for k in counts}
+    return {"spans": spans[:HRQ_MAX_SPANS], "labels": labels, "legend": _(HRQ_LEGEND), "counts": counts, "sep": _("、"),
+            "note": _(HRQ_CHART_NOTE, parts=_("、").join(labels[k] for k in HRQ_KINDS if k in counts))}
 
 
 def range_stats(res: dict, ka: int, kb: int) -> dict:

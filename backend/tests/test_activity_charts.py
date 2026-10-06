@@ -257,3 +257,39 @@ def test_bundled_view_has_the_charts_and_the_api_renders_them():
     for title in ("心率與功率（拖曳選一段看統計）", "心率變化與趨勢", "心率區間時間"):
         res = _render(charts[title][1], ds, ds.today, ds.today, None, ds.workouts[0])
         assert res["kind"].startswith("act_") and res["title"] == title and not res.get("empty")
+
+
+# ---------------------------------------------------------------------------
+# SP-267: suspect HR stretches shaded on the HR panel (marked only)
+# ---------------------------------------------------------------------------
+
+def test_hrpower_marks_suspect_hr_stretches_without_changing_the_data():
+    t, hr, p, v = _steady()
+    ds = _ds(_run(t, hr, p, v))
+    base = A.hrpower(ds, ds.workouts[0])
+    assert base["hr_quality"] is None                                            # nothing suspect: no marks
+    hr2 = hr.copy()
+    hr2[1500:1510] += 45.0                                                       # a 10-s spike …
+    hr2[2400:2410] += 45.0                                                       # … and another
+    ds = _ds(_run(t, hr2, p, v))
+    res = A.hrpower(ds, ds.workouts[0])
+    q = res["hr_quality"]
+    assert [r[2] for r in q["spans"]] == ["spike", "spike"]
+    assert q["spans"][0][0] == pytest.approx(1500.0) and q["spans"][0][1] == pytest.approx(1510.0)
+    assert q["counts"]["spike"] == {"n": 2, "s": 20}
+    assert q["labels"]["spike"] == "突然跳動" and "只是標出來，資料沒有被修改" in q["note"]
+    # the plotted HR is the raw HR (the spike is still drawn, only shaded)
+    k = int(1500 // res["step"])
+    assert res["hr"][k] is not None and res["hr"][k] > max(x for x in base["hr"][k - 3:k] if x is not None)
+
+
+def test_hrpower_marks_are_translated():
+    from backend.i18n import use_locale
+    t, hr, p, v = _steady()
+    hr = hr.copy()
+    hr[1500:1510] += 45.0
+    ds = _ds(_run(t, hr, p, v))
+    with use_locale("en"):
+        q = A.hrpower(ds, ds.workouts[0])["hr_quality"]
+    assert q["legend"] == "HR may be off" and q["labels"]["spike"] == "sudden spike" and q["sep"] == ", "
+    assert q["note"].startswith("Shaded: stretches where the wrist optical HR may be off: sudden spike.")
