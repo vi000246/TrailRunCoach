@@ -1133,7 +1133,7 @@
   "爬升": "Climb",
   "爬升 {m} m": "climb {m} m",
   "爬升換算（每幾 m 爬升 = 1 km）": "Climb conversion (m of climb = 1 km)",
-  "爬升速度：山本正嘉 2015（健行 350、無雪期登山 430、雪山岩場 510 m/h，背包約體重 10 %）只當資料不夠時的預設；你的速度用心率分區的 100 m 爬坡段（AeT 到 0.95 LTHR = 走得順，≥ 0.95 LTHR = 走得辛苦）；海拔：你的海拔因子，沒有時用 Wehrlin & Hallén 2006（每 1000 m −6.3 %）": "Climb rate: Yamamoto 2015 (hiking 350, summer mountaineering 430, snow / rock 510 m/h, a pack of ~10 % of body weight) is only the default when your data is short; your rates come from 100 m climb sections by heart-rate band (AeT to 0.95 LTHR = steady, ≥ 0.95 LTHR = hard); altitude: your own factor, else Wehrlin & Hallén 2006 (−6.3 % per 1000 m)",
+  "爬升速度：山本正嘉 2015（健行 350、無雪期登山 430、雪山岩場 510 m/h，背包約體重 10 %）只當資料不夠時的預設；你的速度用心率分區的 100 m 爬坡段（≤ 75 % 最大心率 = 走得順，和登山課的爬坡上限一樣；≥ 0.95 LTHR = 走得辛苦）；海拔：你的海拔因子，沒有時用 Wehrlin & Hallén 2006（每 1000 m −6.3 %）": "Climb rate: Yamamoto 2015 (hiking 350, summer mountaineering 430, snow / rock 510 m/h, a pack of ~10 % of body weight) is only the default when your data is short; your rates come from 100 m climb sections by heart-rate band (≤ 75 % of max HR = steady, the same as the hiking sessions' uphill cap; ≥ 0.95 LTHR = hard); altitude: your own factor, else Wehrlin & Hallén 2006 (−6.3 % per 1000 m)",
   "爬升：{a} m ／ 計畫 {p} m": "Climb: {a} m / planned {p} m",
   "爬坡上限": "climbing cap",
   "爬坡功率上限 110 % 是經驗法則（非研究結論）；下坡讓功率自然掉下來": "The 110 % climbing power cap is a rule of thumb (not a research finding); on descents let the power drop naturally",

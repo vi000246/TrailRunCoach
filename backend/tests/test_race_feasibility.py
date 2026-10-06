@@ -465,6 +465,13 @@ def wins(n, vam, hr, lthr=170.0, z=1000.0):
     return [{"vam": vam, "hr": hr, "lthr": lthr, "z": z, "g": 0.2} for _ in range(n)]
 
 
+WALK75 = 150.0      # 75 % of a 200 max HR: 「走得順」 (SP-115 / owner 2026-10-06)
+
+
+def rates_of(ws):
+    return F.climb_rates(ws, WALK75)
+
+
 def trip(**kw):
     a = dict(kind="baiyue", distance_km=16, climbing_m=1600, est_hours=8.0, start="2026-12-05")
     a.update(kw)
@@ -472,8 +479,33 @@ def trip(**kw):
 
 
 def test_climb_rates_by_hr_band_and_the_shrinkage():
-    r = F.climb_rates(wins(30, 500.0, 150.0) + wins(10, 650.0, 165.0))
+    r = rates_of(wins(30, 500.0, 150.0) + wins(10, 650.0, 165.0))
     assert r["steady"]["vam"] == 500.0 and r["steady"]["n"] == 30 and r["hard"]["vam"] == 650.0
+    assert r["steady_max"] == 150
+
+
+def test_steady_is_hr_at_most_75_percent_of_max_hr():
+    """SP-112's 走得順 = HR ≤ 75 % HRmax (SP-115's walking cap; owner 2026-10-06), no longer AeT … 0.95
+    LTHR: a window at 155 bpm (< 0.95 × 170) was steady before and is not now; 走得辛苦 unchanged."""
+    ws = wins(20, 480.0, 145.0) + wins(20, 560.0, 155.0) + wins(10, 650.0, 165.0)
+    r = F.climb_rates(ws, 150.0)
+    assert r["steady"]["n"] == 20 and r["steady"]["vam"] == 480.0
+    assert r["hard"]["n"] == 10 and r["hard"]["vam"] == 650.0
+    assert F.climb_rates(ws, 160.0)["steady"]["n"] == 40                       # a higher max HR, more windows
+    none = F.climb_rates(ws)                                                    # no max HR / age: 山本's default
+    assert none["steady"]["n"] == 0 and none["steady"]["vam"] is None and none["hard"]["n"] == 10
+    assert "75 %" in F.SRC_VAM and "AeT 到 0.95 LTHR" not in F.SRC_VAM
+
+
+def test_baiyue_inputs_use_the_walk_cap(monkeypatch):
+    from backend.engine import hr_profile as HP
+    from backend.engine.planning import Plan
+    from backend.engine.racepower import athlete as A
+    monkeypatch.setattr(A, "hike_workouts", lambda ds, today: [])
+    monkeypatch.setattr(A, "hike_hr_windows", lambda ds, hikes: (wins(5, 480.0, 148.0) + wins(5, 560.0, 156.0), {}))
+    monkeypatch.setattr(HP, "walk_cap_for", lambda ds, day, aet, profile=None: {"value": 150, "mhr": 200})
+    climb, _p = F.baiyue_inputs(Plan(), object(), TODAY, trip())
+    assert climb["rates"]["steady"]["n"] == 5 and climb["rates"]["steady_max"] == 150
     assert F._shrink(500.0, 30, 430.0) == pytest.approx((30 * 500 + 10 * 430) / 40)
     assert F._shrink(None, 0, 430.0) == 430.0
     assert F.pack_factor(0.10) == 1.0 and F.pack_factor(0.0) == pytest.approx(475 / 430)
@@ -483,7 +515,7 @@ def test_climb_rates_by_hr_band_and_the_shrinkage():
 def test_vam_ok_tight_and_faster_than_hard():
     e = trip()                                            # 16 km ↑1600 in 8 h: EP 32, climb share 0.5
     hd = {"km": 16.0, "climb_m": 1600.0, "hours": 8.0}
-    rates = F.climb_rates(wins(40, 500.0, 150.0) + wins(40, 700.0, 165.0))
+    rates = rates_of(wins(40, 500.0, 150.0) + wins(40, 700.0, 165.0))
     vc = F.vam_check(e, hd, rates, None, None, 100.0)
     assert vc["need"] == 400 and vc["level"] == "ok" and "沒有背包資料" in vc["text"]
     hd2 = {"km": 10.0, "climb_m": 2000.0, "hours": 5.0}    # 2000 / (5 × 0.667) = 600 m/h
@@ -495,18 +527,18 @@ def test_vam_ok_tight_and_faster_than_hard():
 
 def test_vam_few_windows_use_yamamoto_altitude_and_pack():
     hd = {"km": 16.0, "climb_m": 1600.0, "hours": 8.0}
-    vc = F.vam_check(trip(), hd, F.climb_rates(wins(2, 700.0, 150.0)), None, None, 100.0)
+    vc = F.vam_check(trip(), hd, rates_of(wins(2, 700.0, 150.0)), None, None, 100.0)
     assert "資料不足（2 段）" in vc["text"] and vc["steady"] < 480                 # pulled to 430
-    high = F.vam_check(trip(), hd, F.climb_rates(wins(40, 500.0, 150.0, z=1000.0)), 3000.0, None, 100.0)
-    low = F.vam_check(trip(), hd, F.climb_rates(wins(40, 500.0, 150.0, z=1000.0)), None, None, 100.0)
+    high = F.vam_check(trip(), hd, rates_of(wins(40, 500.0, 150.0, z=1000.0)), 3000.0, None, 100.0)
+    low = F.vam_check(trip(), hd, rates_of(wins(40, 500.0, 150.0, z=1000.0)), None, None, 100.0)
     assert high["steady"] == pytest.approx(low["steady"] * (1 - 0.063 * 2), abs=1) and "Wehrlin" in high["text"]
-    packed = F.vam_check(trip(pack_kg=14.0), hd, F.climb_rates(wins(40, 500.0, 150.0)), None, 70.0, 100.0)
+    packed = F.vam_check(trip(pack_kg=14.0), hd, rates_of(wins(40, 500.0, 150.0)), None, 70.0, 100.0)
     assert packed["steady"] < low["steady"] and "背包 14 kg" in packed["text"]
 
 
 def test_baiyue_checks_in_assess_never_over():
     e = trip(distance_km=10, climbing_m=2000, est_hours=5.0)
-    rates = F.climb_rates(wins(40, 300.0, 150.0) + wins(40, 350.0, 165.0))
+    rates = rates_of(wins(40, 300.0, 150.0) + wins(40, 350.0, 165.0))
     r = F.assess(e, line(e), TODAY, hist(km=40.0, climb=3000.0), climb={"rates": rates, "top_m": None, "weight": 70.0},
                  power={"cp": 70.0, "kg": 70.0})
     by = {c["id"]: c for c in r["checks"]}

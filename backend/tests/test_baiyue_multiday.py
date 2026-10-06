@@ -294,7 +294,7 @@ def test_sp112_checks_a_multi_day_baiyue_keeps_and_drops():
     big = [{"km": 30.0, "gain_m": 2500, "loss_m": 600}] + DXB[1:]           # summit day EP 55: class S
     e = trip(day_plan=big, distance_km=75, climbing_m=3800)
     ln = line(e)
-    rates = F.climb_rates([{"vam": 300.0, "hr": 150.0, "lthr": 170.0, "z": 1000.0, "g": 0.2} for _ in range(30)])
+    rates = F.climb_rates([{"vam": 300.0, "hr": 150.0, "lthr": 170.0, "z": 1000.0, "g": 0.2} for _ in range(30)], 150.0)
     r = F.assess(e, ln, TODAY, hist(km=40.0, climb=300.0)[-4:], best={"ep": 10.0, "date": date(2026, 5, 1)},
                  climb={"rates": rates}, power={"cp": 70.0, "kg": 70.0})
     assert {"climb", "step", "vam", "power"} <= set(ids(r["checks"]))       # before the hook
