@@ -88,7 +88,8 @@ from backend.i18n import N_, _
 # v19 (SP-235): form_bins on every moving step (no ≥ 130 spm filter) + per-grade `slow_share`; bumped
 # so a new run's bins are never compared with an old run's running-only usual
 # v20 (SP-265): the stimulus's hr_peak60 on the shared HR cleaning (hr_quality.clean)
-CACHE_KEY = "workout_review_v20"
+# v21 (SP-266): drift_of's HR-quality check (`hr_quality`, `hr_ref`)
+CACHE_KEY = "workout_review_v21"
 
 # categories that can be a quality session (session_type's `runs`)
 QUALITY_CATEGORIES = ("road", "trail", "hike")
@@ -562,6 +563,91 @@ def se_text(se: Optional[float]) -> str:
 DRIFT_WORDS = {"good": N_("穩定"), "warn": N_("有點飄"), "bad": N_("飄很多")}
 NOISY_NOTE = N_("這次資料比較雜，只當參考")
 
+# ---- HR quality in the drift window (SP-266; docs/research/optical-hr-quality.md §1.3, §2 point 2,
+# §3.2 單 2; the user's decision 2026-10-06: bad HR makes the drift reference-only, never excluded).
+# Marked only: the data is never changed or interpolated. The flags are engine/hr_quality.py's.
+HRQ_MAX_SHARE = 0.03          # 推估: spike + step + flat + lock seconds > 3 % of the measured window
+HRQ_MAX_STEPS = 0             # 推估: any moving level jump (a step that doesn't come back) downgrades
+HRQ_PARTS = {"spike": N_("{n} 段突然跳動"), "step": N_("{n} 次突然跳一階沒有回來"),
+             "lock": N_("{m} 分鐘跟著步頻走"), "flat": N_("{m} 分鐘數字都沒變")}
+HRQ_NOTE = N_("這次心率有 {parts}，飄移只當參考")
+HRQ_AET_NOTE = N_("這次心率有 {parts}，測試結果只當參考，不建議套用")
+HRQ_LABEL = N_("心率可疑")
+HRQ_TIP = N_("手腕光學心率偶爾會突然跳動、跳一階不回來、跟著步頻走或卡在同一個數字。"
+             "量測的這段裡可疑的秒數超過 3%，或有一次跑步中突然跳一階，飄移就只當參考："
+             "不拿來開放間歇、不算 AeT 測試、不寫進閾值。原始資料不會被修改（門檻是推估）。")
+
+
+def hr_quality_check(t, hr, grid, window, cadence_spm=None, speed=None) -> Optional[dict]:
+    """hr_quality.summary of the measured window (a mask on the 1-s `grid`), plus
+    `downgrade` (suspect share > HRQ_MAX_SHARE or a step) — SP-266. None without HR."""
+    from backend.engine import hr_quality as HQ
+    q = HQ.assess(t, hr, cadence_spm, speed, grid=grid)
+    if q is None:
+        return None
+    sm = HQ.summary(q, window)
+    sm["downgrade"] = bool(sm["share"] > HRQ_MAX_SHARE or sm["step_n"] > HRQ_MAX_STEPS)
+    return sm
+
+
+def hr_quality_parts(hq: Optional[dict]) -> list[str]:
+    """The plain parts of the HR-quality note (in the request's language)."""
+    if not hq:
+        return []
+    out = []
+    for k in ("spike", "step"):
+        if hq.get(f"{k}_n"):
+            out.append(_(HRQ_PARTS[k], n=int(hq[f"{k}_n"])))
+    for k in ("lock", "flat"):
+        if hq.get(f"{k}_s"):
+            out.append(_(HRQ_PARTS[k], m=max(1, round(hq[f"{k}_s"] / 60.0)), n=max(1, round(hq[f"{k}_s"] / 60.0))))
+    return out
+
+
+def hr_quality_text(hq: Optional[dict], aet: bool = False) -> Optional[str]:
+    """「這次心率有 2 段突然跳動，飄移只當參考」 when the check downgraded the run, else None."""
+    if not hq or not hq.get("downgrade"):
+        return None
+    parts = hr_quality_parts(hq)
+    if not parts:
+        return None
+    return _(HRQ_AET_NOTE if aet else HRQ_NOTE, parts=_("、").join(parts))
+
+
+def aet_hr_check(out: dict, t, hr, grid, window, cadence_spm=None, speed=None) -> dict:
+    """The AeT test's hook (engine/aet_test.analyze): the same check on the test
+    block; bad HR → `hr_ref` (the result is shown, never offered to apply)."""
+    try:
+        hq = hr_quality_check(t, hr, grid, window, cadence_spm, speed)
+    except Exception:                       # noqa: BLE001 — the check never breaks the test
+        hq = None
+    out["hr_quality"] = hq
+    out["hr_ref"] = bool(hq and hq.get("downgrade"))
+    return out
+
+
+def aet_hr_line(r: dict) -> Optional[str]:
+    """The AeT test card's line for bad HR, else None."""
+    return hr_quality_text(r.get("hr_quality"), aet=True) if r.get("ok") and r.get("hr_ref") else None
+
+
+def hr_downgrade(out: dict, hq: Optional[dict]) -> dict:
+    """In place: a strict (test) drift with bad HR becomes the reference tier
+    (`hr_ref`; gates, the AeT test and threshold writes read only the strict
+    tier, drift_agg.aet_points skips `hr_ref`). The values stay."""
+    out["hr_quality"] = hq
+    if not hq or not hq.get("downgrade") or out.get("drift") is None:
+        return out
+    out["hr_ref"] = True
+    from backend.i18n import use_locale
+    with use_locale("zh-TW"):                 # cached with the measurements: the source language;
+        why = hr_quality_text(hq) or HRQ_LABEL   # display re-renders it (hr_reason)
+    if out.get("ok"):
+        out.update(ok=False, ref_ok=True, tier="ref", reason=why)
+        if out.get("pw_ok"):
+            out.update(pw_ok=False, pw_ref_ok=True, pw_reason=why)
+    return out
+
 
 def drift_word(d: Optional[float]) -> str:
     """「穩定」 (< 5 %) / 「有點飄」 (5–10 %) / 「飄很多」 (> 10 %): DRIFT_GOOD / DRIFT_WATCH, the drift_bars chart."""
@@ -840,7 +926,7 @@ def ramp_contrast(gh: np.ndarray, gv: np.ndarray, gp: Optional[np.ndarray], gd: 
 def drift_of(t, hr, speed, power=None, cp: Optional[float] = None,
              climb_m_per_km: Optional[float] = None, trail: bool = False,
              temp_c: Optional[float] = None, temp_src: Optional[str] = None,
-             dist=None, elev=None) -> dict:
+             dist=None, elev=None, cadence_spm=None) -> dict:
     """Pa:HR decoupling (r = speed / HR, (r1 − r2) / r1 over the halves of the
     moving time after a 10-minute warm-up). Positive = HR drifted up for the
     same pace. `ok` False (with `reason`) when the run is not a fair test —
@@ -884,7 +970,13 @@ def drift_of(t, hr, speed, power=None, cp: Optional[float] = None,
         `noisy` (SE > 5 pp); single runs are ±4–6 pp (DRIFT §1.3);
       * ramps stay in (the user's decision); `ramps` (ramp_contrast, with dist /
         elev) carries the per-half counts and the ramp-free comparison value.
-    Two tiers and the AeT test are unchanged; the heat rule is the band tag."""
+    Two tiers and the AeT test are unchanged; the heat rule is the band tag.
+
+    HR quality (SP-266): `hr_quality` = hr_quality.summary of the measured
+    window (seconds / events per kind; `cadence_spm` in steps / min for the
+    lock); suspect seconds > 3 % or a moving step → `hr_ref` and a strict
+    result becomes the reference tier with the plain reason (hr_downgrade).
+    Marked only — the HR is never changed or interpolated."""
     out = {"drift": None, "ok": False, "ref_ok": False, "tier": None, "reason": "", "hr1": None, "hr2": None,
            "v1": None, "v2": None, "pw_drift": None, "pw_ok": False, "pw_ref_ok": False, "pw_reason": "",
            "p1": None, "p2": None, "pw_hr1": None, "pw_hr2": None, "measured_s": None,
@@ -1020,6 +1112,11 @@ def drift_of(t, hr, speed, power=None, cp: Optional[float] = None,
                        p1=rp[3], p2=rp[4])
             if not strict:
                 out["pw_reason"] = out["reason"]
+    # ---- HR quality in the measured window (SP-266): marked only ----
+    try:
+        hr_downgrade(out, hr_quality_check(t, hr, grid, wg, cadence_spm, speed))
+    except Exception:                       # noqa: BLE001 — the check never breaks the drift
+        out["hr_quality"] = None
     # ---- precision (DRIFT §3.1) and ramps (display only) ----
     stopped_g = np.isfinite(gs) & (gs <= STOP_KMH)
     ra = drift_regression(gh, gs, wg, stopped_g, r[2])
@@ -1035,13 +1132,20 @@ def drift_of(t, hr, speed, power=None, cp: Optional[float] = None,
     return heat_band(out, temp_c, temp_src) if temp_c is not None else out
 
 
+def hr_reason(dr: dict) -> Optional[str]:
+    """The HR-quality note of a downgraded drift (SP-266) in the request's language, else None."""
+    if not dr.get("hr_ref"):
+        return None
+    return hr_quality_text(dr.get("hr_quality")) or _(HRQ_LABEL)
+
+
 def basis_drift(dr: dict, basis: str = "pace", ref: bool = False) -> tuple[Optional[float], str]:
     """(drift, reason) of a drift_of result for the chosen basis; drift None
     when refused (the run was unfair, or there is no power in power mode).
     Strict (the test tier) by default — gates and thresholds; `ref=True`
     (display only) also returns a reference-tier value (drift_tier says which)."""
     if not (dr.get("ok") or (ref and dr.get("ref_ok"))):
-        return None, dr.get("reason") or "飄移數字不採用"
+        return None, hr_reason(dr) or dr.get("reason") or "飄移數字不採用"
     if basis == "power":
         good = dr.get("pw_ok") or (ref and dr.get("pw_ref_ok"))
         return (dr["pw_drift"], "") if good else (None, dr.get("pw_reason") or "這次沒有功率")
@@ -1750,7 +1854,8 @@ def _measure(ds, w) -> Optional[dict]:
     if w.sport == "run" or cat in ("road", "trail"):
         # the temperature band is left to heat_band in measure(): the archive can fill after this is cached
         out["drift"] = drift_of(t, s["hr"], s["speed"], s["power"], cp, cpm, trail=cat == "trail",
-                                dist=s["dist"], elev=s["elev"])
+                                dist=s["dist"], elev=s["elev"],
+                                cadence_spm=None if s["cadence"] is None else np.asarray(s["cadence"], float) * 2.0)
     else:
         out["drift"] = {"drift": None, "ok": False, "reason": "不是跑步"}
     # hikes too: session_type needs a detected effort next to hard_power_s
@@ -2453,7 +2558,9 @@ def aerobic_lines(typ: str, m: dict, streak: Optional[int] = None, basis: str = 
         lines.append(_("{name} {plain}：有氧基礎不足或跑太快", name=name, plain=drift_plain(d)))
     if heat:
         lines.append(heat)
-    if drift_tier(dr) == "ref":
+    if dr.get("hr_ref"):
+        lines.append(hr_reason(dr))
+    elif drift_tier(dr) == "ref":
         lines.append(_("{note}（不算 AeT 測試）", note=_(REF_LABEL)))
     return lines[:3]
 
@@ -2656,7 +2763,9 @@ def short_reason(dr: dict, basis: str = "pace") -> str:
 
 def drift_caveat(dr: dict, basis: str = "pace") -> Optional[str]:
     """The one plain caveat a drift needs, or None: 「暖身後不到 40 分鐘，只當參考」 (the 參考 tier)
-    or 「這次資料比較雜，只當參考」 (SE > DRIFT_NOISY_SE)."""
+    or 「這次資料比較雜，只當參考」 (SE > DRIFT_NOISY_SE); bad HR (SP-266) first."""
+    if dr.get("hr_ref"):
+        return hr_reason(dr)
     if drift_tier(dr) == "ref":
         return _(REF_LABEL)
     se = dr.get("pw_drift_se" if basis == "power" else "drift_se")
@@ -2997,6 +3106,10 @@ def _aerobic_cards(ds, w, m: dict, c: dict, basis: str, lines: list[str]) -> lis
     st = stability_text(dr, power)
     if st and m.get("category") == "road" and dr.get("vi") is not None:
         chip(id="stability", icon="gauge", text=f"VI {dr['vi']:.2f}", level="info", tip=f"{st}\n{STABILITY_TIP}")
+    # HR quality (SP-266): the downgrade's reason
+    if dr.get("hr_ref"):
+        chip(id="hr_quality", icon="noise", text=_(HRQ_LABEL), level="warn",
+             tip="\n".join(x for x in (hr_reason(dr), _(HRQ_TIP)) if x))
     # precision
     se = dr.get("pw_drift_se" if power else "drift_se")
     if se is not None and se > DRIFT_NOISY_SE:
@@ -3084,7 +3197,13 @@ def _aerobic(ds, w, m, c, base):
         # one plain 「可信度」 row: the 參考 tier, a noisy run, or fine (the method only in the ?)
         cav = drift_caveat(dr, basis)
         rows.append(_row(_("可信度"), cav or _("暖身後跑滿 40 分鐘，可以判讀"),
-                         _(REF_TIP) if ref else _(SE_TIP) if cav else None))
+                         _(HRQ_TIP) if dr.get("hr_ref") else _(REF_TIP) if ref else _(SE_TIP) if cav else None))
+    hq = dr.get("hr_quality")
+    if hq and d is not None:
+        parts = hr_quality_parts(hq)
+        rows.append(_row(_("心率品質"), hr_reason(dr) if dr.get("hr_ref") else
+                         _("{parts}（沒有超過門檻，飄移照常判讀）", parts=_("、").join(parts)) if parts else
+                         _("量測的這段沒有發現可疑的心率"), _(HRQ_TIP)))
     ex = excluded_text(dr)
     if ex and m.get("category") == "road":
         rows.append(_row("已排除", ex, START_TIP + " " + TAIL_TIP))
@@ -3143,7 +3262,7 @@ def _aet_test_lines(ds, w, m, base: dict) -> Optional[list[str]]:
     if not r.get("ok"):
         return AT.lines(r)
     t = {"date": _wdate(w).isoformat(), "drift": r["drift"], "basis": r["basis"],
-         "aethr_suggest": round(r["hr1"]) if r["band"] == "at" else None}
+         "aethr_suggest": round(r["hr1"]) if r["band"] == "at" and not r.get("hr_ref") else None}
     body = AT.apply_body(t)
     plan = getattr(ds, "plan", None)
     if body and not AT.applied(plan, t):

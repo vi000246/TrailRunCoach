@@ -28,11 +28,13 @@ Flags (`assess`) — marked only, never removed from the data, never
 interpolated (SP-266 / SP-267 read them):
 
   dropout     HR missing ≥ 10 s while the watch kept recording
-  flat        the same HR value ≥ 60 s while moving
+  flat        the same HR value ≥ 60 s while moving and the pace changes
+              (speed SD > 0.2 km/h over its moving seconds: HR that doesn't move at all
+              while the speed does is a frozen reading)
   step        a moving level jump: a rise or fall ≥ 15 bpm within 3 s that is
               not back within 30 s, after minute 10, with no stop (speed
-              < 0.5 m/s for ≥ 5 s) in the 60 s before and no dropout in the
-              10 s before. A jump after a stop is left alone: HR really rises
+              < 0.5 m/s for ≥ 5 s) in the 60 s before or the 30 s after and no
+              dropout in the 10 s before. A jump after a stop is left alone: HR really rises
               ~10+ bpm within seconds at the start of exercise (phase I,
               PMC8505324 — abstract only)
   high_start  ≥ 30 s of the first 10 min above (the 95th percentile after
@@ -68,7 +70,8 @@ LOCK_COVER = 0.8            # share of the window with both HR and cadence
 # ---- flags (all 推估: optical-hr-quality.md §1.3) ----------------------------
 DROPOUT_S = 10              # HR missing ≥ 10 s while recording
 FLAT_S = 60                 # the same value ≥ 60 s …
-FLAT_MOVING = 0.8           # … with ≥ 80 % of it moving
+FLAT_MOVING = 0.8           # … with ≥ 80 % of it moving …
+FLAT_SPEED_SD = 0.2         # … and the speed moving (km/h SD; GPS / footpod speed always wobbles more)
 STOP_KMH = 1.8              # 0.5 m/s: stopped
 STEP_JUMP_BPM = 15.0        # the spike rule's size …
 STEP_WINDOW_S = 3           # … and window
@@ -266,7 +269,7 @@ def dropouts(h: np.ndarray, recording: np.ndarray) -> np.ndarray:
     return out
 
 
-def flatline(h: np.ndarray, moving: np.ndarray) -> np.ndarray:
+def flatline(h: np.ndarray, moving: np.ndarray, speed: Optional[np.ndarray] = None) -> np.ndarray:
     n = len(h)
     same = np.zeros(n, dtype=bool)
     if n > 1:
@@ -275,6 +278,9 @@ def flatline(h: np.ndarray, moving: np.ndarray) -> np.ndarray:
     for a, b in runs_of(same):
         a0 = max(0, a - 1)                      # the first sample of the run of equal values
         if b - a0 >= FLAT_S and moving[a0:b].mean() >= FLAT_MOVING:
+            sp = None if speed is None else speed[a0:b][np.isfinite(speed[a0:b]) & moving[a0:b]]
+            if sp is not None and (sp.size < 2 or float(np.std(sp)) <= FLAT_SPEED_SD):
+                continue                    # the speed is as constant as the HR: nothing says it froze
             out[a0:b] = True
     return out
 
@@ -320,6 +326,8 @@ def steps(h: np.ndarray, rel: np.ndarray, stopped: Optional[np.ndarray], drop: n
         a0 = max(0, i - STEP_STOP_LOOK_S)
         if stopped is not None and stopped[a0:i].sum() >= STEP_STOP_S:
             continue
+        if stopped is not None and stopped[i:i + STEP_HOLD_S].sum() >= STEP_STOP_S:
+            continue                        # stopping right then: HR falls for a reason
         if drop[max(0, i - STEP_DROP_LOOK_S):i].any():
             continue
         a, b = max(0, i - w), min(n, i + STEP_HOLD_S)
@@ -384,7 +392,8 @@ def assess(t, hr, cadence_spm=None, speed_kmh=None, grid: Optional[np.ndarray] =
     if c1 is not None:
         lock = cadence_lock(y, c1) & np.isfinite(y)
     q = Quality(g=g, hr=h, masks={"range": rng, "spike": sp, "lock": lock, "dropout": drop,
-                                  "flat": flatline(h, moving), "step": st, "step_up": up,
+                                  "flat": flatline(h, moving, None if v is None else v[1]),
+                                  "step": st, "step_up": up,
                                   "high_start": high_start(h, rel, moving)})
     for k in KINDS:
         q.events[k] = ev if k == "step" else runs_of(q.masks[k])
