@@ -967,6 +967,10 @@
     "draft": true,
     "src": "backend/engine/status.py:328"
   },
+  "{reason}；另外 {lock}，這項不算進門檻": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:582"
+  },
   "{size}（{basis}）：{what}": {
     "draft": true,
     "src": "backend/engine/planning.py:362"
@@ -2851,9 +2855,9 @@
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:289"
   },
-  "手腕光學心率偶爾會突然跳動、跳一階不回來、跟著步頻走或卡在同一個數字。量測的這段裡可疑的秒數超過 3%，或有一次跑步中突然跳一階，飄移就只當參考：不拿來開放間歇、不算 AeT 測試、不寫進閾值。原始資料不會被修改（門檻是推估）。": {
+  "手腕光學心率偶爾會突然跳動、跳一階不回來、跟著步頻走或卡在同一個數字。量測的這段裡突然跳動、跳一階和卡住不動的秒數超過 3%，或有一次跑步中突然跳一階，飄移就只當參考：不拿來開放間歇、不算 AeT 測試、不寫進閾值。跟著步頻走只列出來，不算進門檻。原始資料不會被修改（門檻是推估）。": {
     "draft": true,
-    "src": "backend/engine/workout_review.py:576"
+    "src": "backend/engine/workout_review.py:578"
   },
   "手錶 LTHR 平均誤差 9–11 bpm（COROS 8.9；Lu 2025）": {
     "draft": false,

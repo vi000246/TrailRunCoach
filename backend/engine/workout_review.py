@@ -89,7 +89,8 @@ from backend.i18n import N_, _
 # so a new run's bins are never compared with an old run's running-only usual
 # v20 (SP-265): the stimulus's hr_peak60 on the shared HR cleaning (hr_quality.clean)
 # v21 (SP-266): drift_of's HR-quality check (`hr_quality`, `hr_ref`)
-CACHE_KEY = "workout_review_v21"
+# v22 (SP-266, user 2026-10-06): cadence lock no longer counts toward the downgrade
+CACHE_KEY = "workout_review_v22"
 
 # categories that can be a quality session (session_type's `runs`)
 QUALITY_CATEGORIES = ("road", "trail", "hike")
@@ -566,7 +567,9 @@ NOISY_NOTE = N_("這次資料比較雜，只當參考")
 # ---- HR quality in the drift window (SP-266; docs/research/optical-hr-quality.md §1.3, §2 point 2,
 # §3.2 單 2; the user's decision 2026-10-06: bad HR makes the drift reference-only, never excluded).
 # Marked only: the data is never changed or interpolated. The flags are engine/hr_quality.py's.
-HRQ_MAX_SHARE = 0.03          # 推估: spike + step + flat + lock seconds > 3 % of the measured window
+HRQ_MAX_SHARE = 0.03          # 推估: spike + step + flat seconds > 3 % of the measured window
+HRQ_DOWNGRADE_KINDS = ("spike", "step", "flat")   # the user 2026-10-06: cadence lock is shown, never a downgrade
+                                                  # (on the owner's COROS it alone downgraded 8 of 33 runs)
 HRQ_MAX_STEPS = 0             # 推估: any moving level jump (a step that doesn't come back) downgrades
 HRQ_PARTS = {"spike": N_("{n} 段突然跳動"), "step": N_("{n} 次突然跳一階沒有回來"),
              "lock": N_("{m} 分鐘跟著步頻走"), "flat": N_("{m} 分鐘數字都沒變")}
@@ -574,31 +577,38 @@ HRQ_NOTE = N_("這次心率有 {parts}，飄移只當參考")
 HRQ_AET_NOTE = N_("這次心率有 {parts}，測試結果只當參考，不建議套用")
 HRQ_LABEL = N_("心率可疑")
 HRQ_TIP = N_("手腕光學心率偶爾會突然跳動、跳一階不回來、跟著步頻走或卡在同一個數字。"
-             "量測的這段裡可疑的秒數超過 3%，或有一次跑步中突然跳一階，飄移就只當參考："
-             "不拿來開放間歇、不算 AeT 測試、不寫進閾值。原始資料不會被修改（門檻是推估）。")
+             "量測的這段裡突然跳動、跳一階和卡住不動的秒數超過 3%，或有一次跑步中突然跳一階，飄移就只當參考："
+             "不拿來開放間歇、不算 AeT 測試、不寫進閾值。跟著步頻走只列出來，不算進門檻。"
+             "原始資料不會被修改（門檻是推估）。")
+HRQ_LOCK_INFO = N_("{reason}；另外 {lock}，這項不算進門檻")
 
 
 def hr_quality_check(t, hr, grid, window, cadence_spm=None, speed=None) -> Optional[dict]:
     """hr_quality.summary of the measured window (a mask on the 1-s `grid`), plus
-    `downgrade` (suspect share > HRQ_MAX_SHARE or a step) — SP-266. None without HR."""
+    `downgrade` (spike + step + flat share — `downgrade_share`, cadence lock
+    left out — > HRQ_MAX_SHARE or a step) — SP-266. `share` / `suspect_s` still
+    include the lock (information). None without HR."""
     from backend.engine import hr_quality as HQ
     q = HQ.assess(t, hr, cadence_spm, speed, grid=grid)
     if q is None:
         return None
     sm = HQ.summary(q, window)
-    sm["downgrade"] = bool(sm["share"] > HRQ_MAX_SHARE or sm["step_n"] > HRQ_MAX_STEPS)
+    dg = HQ.summary(q, window, kinds=HRQ_DOWNGRADE_KINDS)
+    sm.update(downgrade_s=dg["suspect_s"], downgrade_share=dg["share"])
+    sm["downgrade"] = bool(dg["share"] > HRQ_MAX_SHARE or sm["step_n"] > HRQ_MAX_STEPS)
     return sm
 
 
-def hr_quality_parts(hq: Optional[dict]) -> list[str]:
-    """The plain parts of the HR-quality note (in the request's language)."""
+def hr_quality_parts(hq: Optional[dict], lock: bool = True) -> list[str]:
+    """The plain parts of the HR-quality note (in the request's language);
+    `lock` False leaves cadence lock out (it never downgrades)."""
     if not hq:
         return []
     out = []
     for k in ("spike", "step"):
         if hq.get(f"{k}_n"):
             out.append(_(HRQ_PARTS[k], n=int(hq[f"{k}_n"])))
-    for k in ("lock", "flat"):
+    for k in (("lock", "flat") if lock else ("flat",)):
         if hq.get(f"{k}_s"):
             out.append(_(HRQ_PARTS[k], m=max(1, round(hq[f"{k}_s"] / 60.0)), n=max(1, round(hq[f"{k}_s"] / 60.0))))
     return out
@@ -608,7 +618,7 @@ def hr_quality_text(hq: Optional[dict], aet: bool = False) -> Optional[str]:
     """「這次心率有 2 段突然跳動，飄移只當參考」 when the check downgraded the run, else None."""
     if not hq or not hq.get("downgrade"):
         return None
-    parts = hr_quality_parts(hq)
+    parts = hr_quality_parts(hq, lock=False)
     if not parts:
         return None
     return _(HRQ_AET_NOTE if aet else HRQ_NOTE, parts=_("、").join(parts))
@@ -3201,7 +3211,9 @@ def _aerobic(ds, w, m, c, base):
     hq = dr.get("hr_quality")
     if hq and d is not None:
         parts = hr_quality_parts(hq)
-        rows.append(_row(_("心率品質"), hr_reason(dr) if dr.get("hr_ref") else
+        lock = hr_quality_parts({"lock_s": hq.get("lock_s")})
+        rows.append(_row(_("心率品質"), (_(HRQ_LOCK_INFO, reason=hr_reason(dr), lock=lock[0]) if lock else hr_reason(dr))
+                         if dr.get("hr_ref") else
                          _("{parts}（沒有超過門檻，飄移照常判讀）", parts=_("、").join(parts)) if parts else
                          _("量測的這段沒有發現可疑的心率"), _(HRQ_TIP)))
     ex = excluded_text(dr)

@@ -400,10 +400,10 @@ def assess(t, hr, cadence_spm=None, speed_kmh=None, grid: Optional[np.ndarray] =
     return q
 
 
-def summary(q: Optional[Quality], window: Optional[np.ndarray] = None) -> dict:
+def summary(q: Optional[Quality], window: Optional[np.ndarray] = None, kinds: tuple = SUSPECT) -> dict:
     """Seconds and events of each kind inside `window` (a grid mask; None = the
-    whole run): {"<kind>_s", "<kind>_n", "suspect_s" (the union of SUSPECT),
-    "window_s", "share"}. An event counts when it starts in the window."""
+    whole run): {"<kind>_s", "<kind>_n", "suspect_s" (the union of `kinds`,
+    default SUSPECT), "window_s", "share"}. An event counts when it starts in the window."""
     out = {f"{k}_{x}": 0 for k in KINDS for x in ("s", "n")}
     out.update(suspect_s=0, window_s=0, share=0.0)
     if q is None:
@@ -417,7 +417,7 @@ def summary(q: Optional[Quality], window: Optional[np.ndarray] = None) -> dict:
             continue
         out[f"{k}_s"] = int((m & win).sum())
         out[f"{k}_n"] = sum(1 for a, _b in q.events.get(k, []) if a < n and win[a])
-        if k in SUSPECT:
+        if k in kinds:
             sus |= m
     out["suspect_s"] = int((sus & win).sum())
     out["window_s"] = int(win.sum())
