@@ -74,13 +74,18 @@ def _phase_start(phases: list, monday: dt.date) -> Optional[dt.date]:
     return None
 
 
-def week_context(*, kind: str, mode: str, monday: dt.date, events, phases=None, road: bool = False) -> dict:
-    """Whether this week gets a downhill session: {"active", "race", "weeks_out", "first", "why"}."""
+def week_context(*, kind: str, mode: str, monday: dt.date, events, phases=None, road: bool = False,
+                 injury: Optional[dict] = None) -> dict:
+    """Whether this week gets a downhill session: {"active", "race", "weeks_out", "first", "why"}.
+    `injury`: injuries.condition_week's rule (SP-270) — 膝前痛／髂脛束進行中 = no downhill session."""
     info = {"active": False, "monday": monday.isoformat()}
     if road:
         return {**info, "why": _("主要訓練項目：路跑")}
     if kind != "specific" or mode == "reentry":
         return {**info, "why": _("只在專項期排（停訓後恢復期不排）")}
+    from backend.engine import injuries as INJ
+    if INJ.avoids(injury, "downhill"):
+        return {**info, "why": "；".join(injury["notes"])}
     ahead = sorted((e for e in events or () if getattr(e, "priority", None) == "A" and e.start > monday),
                    key=lambda e: e.start)
     if not ahead:

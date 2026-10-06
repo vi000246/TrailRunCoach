@@ -435,6 +435,10 @@
     "draft": true,
     "src": "backend/engine/injuries.py:76"
   },
+  "LSD": {
+    "draft": true,
+    "src": "backend/engine/overview.py:2318"
+  },
   "LTHR {lthr:.0f} ＝ 最大心率 {mhr:.0f} 的 {r:.0%}（一般 85–95%，個人範圍 80–98%）": {
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:338"
@@ -731,6 +735,10 @@
     "draft": true,
     "src": "backend/sync/workout_targets/base.py:92"
   },
+  "{label}・{what}": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:612"
+  },
   "{label}（自動：一年內心率判定為比賽強度的標準距離跑步）": {
     "draft": true,
     "src": "backend/engine/racepower/calc.py:317"
@@ -1014,6 +1022,14 @@
   "{why}：區間、TSS、賽事計算機都靠 CP": {
     "draft": true,
     "src": "backend/engine/overview.py:1540"
+  },
+  "{why}：改成平路或緩坡的長跑，輕鬆跑強度": {
+    "draft": true,
+    "src": "backend/engine/overview.py:2319"
+  },
+  "{why}：改成平路輕鬆跑，時間不變": {
+    "draft": true,
+    "src": "backend/engine/overview.py:2323"
   },
   "{word} · {pct}": {
     "draft": true,
@@ -2474,6 +2490,10 @@
   "平衡／腳踝 {m} 分：熱身 1–2 分承重式腳踝活動度——彈性站姿、體重壓在腳上，慢慢做內翻、外翻（徐國峰）；接著 4 個動作，每個 2 組 × 20–40 秒／腳：{moves}": {
     "draft": true,
     "src": "backend/engine/balance_plan.py:67"
+  },
+  "平路或緩坡（{why}）": {
+    "draft": true,
+    "src": "backend/engine/overview.py:2336"
   },
   "年齡 {age} 不合理（{lo}–{hi} 歲）": {
     "draft": false,
@@ -4423,6 +4443,10 @@
     "draft": true,
     "src": "backend/engine/injuries.py:100"
   },
+  "膝前痛進行中：先不排下坡課（Esculier 2016）；技術地形、長爬坡反覆也先不排，越野長跑改平路": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:586"
+  },
   "膝蓋微彎做提踵，練小腿深層的比目魚肌：長下坡、長時間跑的小腿耐力。": {
     "draft": true,
     "src": "backend/engine/strength_moves.py:187"
@@ -4846,6 +4870,10 @@
   "跟腱": {
     "draft": true,
     "src": "backend/engine/injuries.py:100"
+  },
+  "跟腱進行中：先不排爬坡反覆、陡坡健走、加速跑（推估：教練的說法，沒有找到量測研究）；長跑地形不變": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:588"
   },
   "跨級：ITRA 依 EP 分級（XXS–XXL）；UTMB 報名等於一次只能往上跳一級；完賽過越多場越不容易 DNF（Corrion 2018、Maleka 2026）；「高兩級」和「24 個月」是推估": {
     "draft": true,
@@ -5674,6 +5702,10 @@
   "髂脛束症候群（膝蓋外側痛）": {
     "draft": true,
     "src": "backend/engine/injuries.py:104"
+  },
+  "髂脛束進行中：先不排下坡課（Fredericson 2005）；技術地形、長爬坡反覆也先不排，越野長跑改平路": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:587"
   },
   "體能好壞不影響高山症風險（CDC）：練得好不代表不會高山症": {
     "draft": true,
