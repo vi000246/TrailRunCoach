@@ -24,11 +24,21 @@ G_MIN, G_MAX = -0.40, 0.40
 SHRINK_N = 30.0
 DOWNHILL_FLOOR = 0.9
 VMAX_MIN_N = 10
+# SP-246: the grades where Stryd power ≈ metabolic load without personal data: flats (±2 %, the
+# course's flat, course.FLAT_PCT) up to +8 % — van Rassel et al. 2026 (IJSPP 21:597–603) validated
+# 0–8 % uphill only; at −7 % power and VO2 decouple (−7→+7 %: power +90 %, VO2 +74 %,
+# Gravina-Cognetti et al. 2025, Sports 13:294), so a descent below −2 % needs its own windows
 STRYD_VALID_GRADE = 0.08
+STRYD_VALID_DOWN = -0.02
 
 
 def _bin_of(g: float) -> int:
     return int(round(max(G_MIN, min(G_MAX, g)) / BIN))
+
+
+def stryd_valid(g: float) -> bool:
+    """SP-246: is grade g inside the range Stryd power was validated on (−2 % … +8 %)?"""
+    return STRYD_VALID_DOWN <= g <= STRYD_VALID_GRADE
 
 
 def re_prior(g: float, re_flat: float, walking: bool = False) -> float:
@@ -37,8 +47,11 @@ def re_prior(g: float, re_flat: float, walking: bool = False) -> float:
     Source: Minetti et al. 2002 (J Appl Physiol 93:1039–1046) running cost
     Cr(i) = 155.4i⁵ − 30.4i⁴ − 43.3i³ + 46.3i² + 19.5i + 3.6 J/kg/m, 已驗證
     (test_minetti). Using it for Stryd power assumes Stryd ∝ metabolic power:
-    已驗證 for 0–8 % (van Rassel et al. 2026, IJSPP 21:597–603), 待驗證 above
-    8 % — those segments rely on the personal bins (F7) or are labelled 推估.
+    已驗證 for 0–8 % uphill (van Rassel et al. 2026, IJSPP 21:597–603; flats
+    within ±2 % count with it), 待驗證 above 8 % and on descents below −2 %
+    (at −7 % power and VO2 decouple, Gravina-Cognetti et al. 2025) — those
+    segments rely on the personal bins (F7) or are labelled 推估 (stryd_valid,
+    trusted).
     The 0.9 downhill floor (≈ +11 % speed at most) is our choice (推估).
 
     walking=True: the walking prior RE_flat · Cr(0)/Cw(g) with Minetti's
@@ -110,9 +123,10 @@ class GradeRE:
         return float(vs[0])
 
     def trusted(self, g: float) -> bool:
-        """False when the segment's target rests on an extrapolation: steeper
-        than 8 % with fewer than 30 personal windows in that bin."""
-        return abs(g) <= STRYD_VALID_GRADE or self.data_n(g) >= SHRINK_N
+        """False when the segment's target rests on an extrapolation: outside
+        −2 % … +8 % (stryd_valid; SP-246: a descent too) with fewer than 30
+        personal windows in that bin."""
+        return stryd_valid(g) or self.data_n(g) >= SHRINK_N
 
     def to_json(self) -> dict:
         rows = []
@@ -294,7 +308,7 @@ class GaitRE:
 
     def trusted(self, g: float) -> bool:
         m = self.walk if self.walked(g) else self.run
-        return abs(g) <= STRYD_VALID_GRADE or m.data_n(g) >= SHRINK_N
+        return stryd_valid(g) or m.data_n(g) >= SHRINK_N
 
     def data_n(self, g: float) -> int:
         return (self.walk if self.walked(g) else self.run).data_n(g)
