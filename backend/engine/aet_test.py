@@ -185,7 +185,7 @@ def is_xu(s: dict) -> bool:
 def analyze(t, hr, speed=None, power=None, temp=None, climb_m_per_km: Optional[float] = None,
             trail: bool = False, warm_s: float = WARM_S, main_s: float = MAIN_MAX_S,
             temp_c: Optional[float] = None, temp_src: Optional[str] = None, judge: str = "ua",
-            watch_bias: Optional[dict] = None) -> dict:
+            watch_bias: Optional[dict] = None, cadence_spm=None) -> dict:
     """Halves drift test on one recording (UA / Evoke / Friel by `judge`;
     徐國峰's 10-vs-90 is analyze_xu). `ok` False with `reason` when it isn't a
     fair test. `temp_c` (with `temp_src`, route_weather / watch) overrides the
@@ -286,6 +286,8 @@ def analyze(t, hr, speed=None, power=None, temp=None, climb_m_per_km: Optional[f
         out["reason"] = "有效資料不夠"
         return out
     out.update(ok=True, drift=d, hr1=h1, hr2=h2, band=band_of(d, judge), basis=basis)
+    from backend.engine.workout_review import aet_hr_check      # SP-266: bad HR → reference only
+    aet_hr_check(out, t, hr, grid, m, cadence_spm, speed)
     return out
 
 
@@ -347,7 +349,9 @@ def lines(r: dict, aet_now: Optional[float] = None) -> list[str]:
     out = _lines(r, aet_now)
     if r.get("ok") and r.get("heat"):
         out = out + [heat_line(r)]
-    return out
+    from backend.engine.workout_review import aet_hr_line          # SP-266
+    hl = aet_hr_line(r)
+    return out + [hl] if hl else out
 
 
 def heat_line(r: dict) -> str:
@@ -424,7 +428,9 @@ def analyze_workout(ds, w, m: Optional[dict] = None) -> Optional[dict]:
     main = PROTOCOLS[proto]["main"] * 60.0 if proto in ("evoke60", "friel") else MAIN_MAX_S
     return {**analyze(s["t"], s["hr"], s["speed"], s["power"], temp, m.get("climb_m_per_km"),
                       trail="runningtrail" in w.tags, warm_s=warm, main_s=main, temp_c=tc, temp_src=src,
-                      judge=judge, watch_bias=wb), "warm_s": warm, "protocol": proto}
+                      judge=judge, watch_bias=wb,
+                      cadence_spm=None if s["cadence"] is None else np.asarray(s["cadence"], float) * 2.0),
+            "warm_s": warm, "protocol": proto}
 
 
 def latest_aet_test(ds, today: dt.date, days: int = 120) -> Optional[dict]:
@@ -450,10 +456,10 @@ def latest_aet_test(ds, today: dt.date, days: int = 120) -> Optional[dict]:
         if r is None:
             continue
         now = m.get("aet")
-        sug = round(r["hr1"]) if r.get("ok") and r["band"] == "at" else None
+        sug = round(r["hr1"]) if r.get("ok") and r["band"] == "at" and not r.get("hr_ref") else None
         found = {"idx": w.idx, "date": WR._wdate(w).isoformat(), **{k: r.get(k) for k in (
             "ok", "reason", "hr1", "drift", "pw_drift", "pa_drift", "band", "basis", "main_s", "judge",
-            "protocol", "temp_c", "temp_band", "heat")},
+            "protocol", "temp_c", "temp_band", "heat", "hr_ref")},
             "aethr_suggest": sug, "aethr_now": now, "delta": (sug - now) if sug is not None and now else None}
     WR._flush(ds)
     return found

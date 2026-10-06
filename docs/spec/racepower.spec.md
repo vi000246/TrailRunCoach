@@ -641,7 +641,7 @@ The rules the auto effort uses:
      Friel Z4 / Z3 lower bounds. The mapping is 推估;
    - 5K / 10K only: the 30-s peak HR ≥ observed HRmax − 10 bpm. Near-maximal HR is a criterion
      of a maximal effort (Howley, Bassett & Welch 1995, MSSE 27:1292–1301). The tolerance and
-     the observed HRmax (median of the top-5 per-run peaks held ≥ 120 s in the 365 days) are
+     the observed HRmax (median of the top-5 per-run peaks held ≥ 120 s in the 730 days — `MAXIMAL["hrmax_window_days"]`, 2026-10-06) are
      推估;
    - an even or negative split: second-half speed ≥ 0.98 × first half (Abbiss & Laursen 2008;
      the tolerance is 推估);
@@ -1248,3 +1248,4 @@ when set, but nothing fills it from the routes module yet.
 | 2026-10-06 | feature | SP-234 | Race-day weather: CWA 鄉鎮天氣預報 (F-D0047-089 3 days / -091 1 week) between the mountain forecast and Open-Meteo — nearest 鄉鎮公所 ≤ 20 km, its height from Open-Meteo's elevation API (cached), temperature lapsed −0.65 °C / 100 m to the race elevation, RH kept; page shows the 鄉鎮 and the correction; tests in `test_race_township.py` |
 | 2026-10-06 | feature | SP-249, docs/research/wet-muddy-terrain.md §5 #1 | Rain reminder: /weather returns `rain` rows (CWA PoP, Open-Meteo `precipitation` / `precipitation_probability`), /plan takes them and returns `rain` (trail / 百岳 only; any hour PoP ≥ 50 % or ≥ 5 mm over the race window); the page shows 「預報有雨…」; the time is unchanged; tests in `test_race_rain.py` |
 | 2026-10-06 | feature | owner decisions on SP-234 / SP-249 | Chain reordered: 登山 → Open-Meteo → 鄉鎮 (fallback) → climatology → manual until a station comparison exists; the rain reminder also on road plans (own wording), and without a start time it looks at 06–18 only |
+| 2026-10-06 | user-decision | SP-265 follow-up | Observed HRmax (5K / 10K maximal check) looks back 730 days (`MAXIMAL["hrmax_window_days"]`, 推估: maximal efforts are rare, HRmax falls only ~0.7 bpm / yr — Tanaka 2001), via `maximal.hrmax_as_of`; the Riegel / longer-power / capacity windows stay 365 days. The per-run peak is on the shared HR cleaning (`run_hrmax_peak`, SP-265). Owner data at 2026-10-05: 188 bpm with 730 days (old and new cleaning alike) vs 182 with 365 days; over 25 monthly dates 730 d is 1–6 bpm above 365 d |
