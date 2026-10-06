@@ -34,6 +34,7 @@
 | 2026-10-04 | feature | SP-38 follow-up | 推送「負荷」步驟時，重新擬合讓 TL 變動 < 3（推估）就沿用上次送出的 TL，不標「需更新」、不重推；≥ 3 才換 |
 | 2026-10-05 | bugfix | SP-88 | 登入過期（例如在 COROS 網頁版 Training Hub 登入後 1019）時總覽看不到：橫幅只在頁面載入時查一次、早於開網站自動同步；同步撞到 1019 只記在記憶體 5 分鐘，之後連不上 COROS 的重查（`unknown`）就當已登入；失敗的同步被算成「上次同步」（自動同步認為已新鮮、`autosync.js` 顯示「已同步 COROS +0」）。改為：被拒過的登入遇到 `unknown` 仍算過期、同步撞到 1019 也存進 `coros_token_expires`；`last_sync_at` 只算成功的同步，新增 `sync.<src>.last_ok`；`/auth/session-alerts` 多回 `sync`（`problem` expired／logged_out／failed、上次成功同步、最近一次結果）；總覽／課表橫幅改成醒目卡片（重新登入連結、上次成功同步），自動同步結束與分頁回到前景時重讀；`autosync.js` 顯示同步失敗；`/sync/primary` 的 `logged_in` 改走登入檢查並回 `login` |
 | 2026-10-05 | sp-57-rpe-load | SP-57 | 同步後的每人校正加一項：手錶記錄的 RPE 對活動實際 TSS 擬合「負荷」RPE 換算係數（`engine/rpe_load.py`，Foster session RPE，log 空間收縮到 0.30、w = n ÷ (n + 10)，留一誤差），存 `rpe.load_model`，設定頁顯示；只用於排課目標，PMC 仍用手錶負荷 |
+| 2026-10-06 | feat/coros-rpe-sp231 | SP-231 | 跑後自評：每個新活動多一個唯讀 `POST /activity/detail/query?labelId=&sportType=`（GET 回 result=1001），只讀 `data.sportFeelInfo.feelType`（1 最輕～5 最累，0 沒填；不讀 `sportNote`、語音筆記），存 `workout_files.coros_feel`，換成 `rpe`（1→2、2→4、3→5、4→7、5→10，推估；FIT 自己有 RPE 時 FIT 為準，`rpe_source`）。讀取失敗或 0 不算同步錯誤、不卡 cursor；失敗的在之後同步（最近 4 天、每次 ≤ 10 筆）重試。最近 8 週已匯入的活動在之後的同步各讀一次（每次 ≤ 80 筆、每筆間隔 0.4 秒，不登入、不寫 COROS，完成記在 `sync.coros.rpe_backfill`；token 被拒不算一輪，3 輪後停）。有補到自評時 `complete` 事件帶 `rpe_filled`，觸發自動調整與每人校正 |
 
 ---
 

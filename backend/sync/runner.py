@@ -157,6 +157,10 @@ async def stream(db: AsyncSession, source: str, athlete_id: int = 1,
                 if ev.get("tl_filled"):
                     # COROS TL stored on already-imported activities (engine/coros_tl.py refit)
                     result["tl_filled"] = int(ev["tl_filled"])
+                if ev.get("rpe_filled"):
+                    # COROS self-rating stored on already-imported activities (SP-231): the plan's
+                    # rule D and the RPE factor need a run even without a new activity
+                    result["rpe_filled"] = int(ev["rpe_filled"])
             elif ev.get("error") and "workout_id" not in ev and "activity_id" not in ev:
                 # run-level failure (auth, listing); per-workout errors carry an id
                 result.update(status="failed", error=str(ev.get("error")))

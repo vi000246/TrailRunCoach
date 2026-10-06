@@ -63,7 +63,7 @@ def _other(ds, w, recorded) -> dict:
     except Exception:                       # noqa: BLE001 — one bad file never breaks the list
         es, eff = {}, {"effort": None, "reason": "無法計算"}
     rec = AT.recorded_of(recorded, w.entry.start, w.entry.file)
-    eff = AT.effort_from_rpe((rec or {}).get("rpe"), es.get("rest_share"), eff) or eff
+    eff = AT.effort_from_rpe((rec or {}).get("rpe"), es.get("rest_share"), eff, rec=rec) or eff
     typ, why = AT.auto_type(test=A._test_reason(ds, w), sport=w.sport, sport_type=w.sport_type,
                             title=getattr(w.entry, "title", "") or "", trail=A.is_trail(w),
                             baiyue_event=A.baiyue_on(ds, w.entry.start.date()))

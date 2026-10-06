@@ -173,7 +173,9 @@ def test_load_recorded_and_match_by_file_or_start(tmp_path, monkeypatch):
     db = _wf_db(tmp_path, [(1, r"C:\fit\coros\2024\a_2024-03-12_run.fit", "fit", "2024-03-12 10:00:00", 4.0, 75),
                            (2, "/fit/b.fit", "fit", "2024-03-13 10:00:00", None, None)])
     rows = AT.load_recorded(db)
-    assert rows == [{"start_local": "2024-03-12T18:00", "file": "a_2024-03-12_run.fit", "rpe": 4.0, "feel": 75}]
+    # a DB without SP-231's columns: no COROS rating; the RPE is the FIT's ("watch")
+    assert rows == [{"start_local": "2024-03-12T18:00", "file": "a_2024-03-12_run.fit", "rpe": 4.0, "feel": 75,
+                     "coros_feel": None, "source": "watch"}]
     assert AT.recorded_of(rows, dt.datetime(2024, 1, 1), "2024/a_2024-03-12_run.fit")["rpe"] == 4.0   # by file
     assert AT.recorded_of(rows, dt.datetime(2024, 3, 12, 18, 2), "2024/x.wko4")["feel"] == 75        # WKO5 copy, ±3 min
     assert AT.recorded_of(rows, dt.datetime(2024, 3, 12, 19, 0), "x.wko4") is None

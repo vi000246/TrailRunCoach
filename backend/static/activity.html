@@ -617,7 +617,10 @@ function renderEditor() {
     `<option value="" ${cur ? "" : "selected"}>${esc(T("auto_opt", { v: autoV ? opts[autoV] : pending ? T("computing") : "—" }))}</option>` +
     Object.entries(opts).map(([k, v]) => `<option value="${k}" ${cur === k ? "selected" : ""}>${esc(v)}</option>`).join("") + `</select>`;
   const rc = d?.recorded || (a.rpe != null || a.feel != null ? { rpe: a.rpe, feel: a.feel } : null);
-  const recTxt = rc && (rc.rpe != null || rc.feel != null)
+  // COROS's post-run rating (SP-231): 「自評：Hard（COROS）」 as the server words it
+  const sr = (d?.recorded && d.recorded.self_rating) || a.self_rating;
+  const recTxt = sr && sr.source === "coros" ? sr.text
+    : rc && (rc.rpe != null || rc.feel != null)
     ? T("recorded", { v: [rc.rpe != null ? `RPE ${rc.rpe}` : "", rc.feel_label ? T("feel", { v: rc.feel_label }) : ""].filter(Boolean).join("、") }) : "";
   const tr = a.terrain || {};
   const terrainCtl = tr.editable
