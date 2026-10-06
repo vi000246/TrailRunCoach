@@ -170,6 +170,16 @@ h2 .meta { font-weight: 400; }
 .row .p { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
 .row .x { text-align: right; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .more { margin-top: 8px; }
+/* 每週存檔 (engine/plan_history.py, SP-71): one row per stored week, the plan as it began and how it went */
+.hrow { display: grid; grid-template-columns: 112px minmax(0, 1fr) minmax(0, 1.3fr); gap: 4px 12px; align-items: baseline;
+  padding: 7px 4px; border-top: 1px solid var(--line); font-size: 13px; }
+.hrow:first-child { border-top: 0; }
+.hrow .d { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.hrow .d small { display: block; color: var(--muted); font-size: 11.5px; }
+.hrow .pl, .hrow .rs { min-width: 0; }
+.hrow .rs b { font-variant-numeric: tabular-nums; }
+.hrow .meta { display: block; }
+.hbadge { display: inline-block; font-size: 11px; padding: 0 6px; border-radius: 9px; border: 1px solid var(--line); color: var(--muted); margin-left: 4px; }
 @media (max-width: 699px) {
   main { padding: 10px 10px 84px; gap: 10px; }
   section, .panel { padding: 12px; }
@@ -179,6 +189,7 @@ h2 .meta { font-weight: 400; }
   .row .x { grid-column: 3 / -1; text-align: left; }
   .row .st .lb { display: none; }
   .kr { grid-template-columns: 78px minmax(0, 1fr) 70px; gap: 8px; }
+  .hrow { grid-template-columns: minmax(0, 1fr); }
   .plot { height: 220px; }
 }
 </style>
@@ -261,6 +272,12 @@ h2 .meta { font-weight: 400; }
       <div class="list" id="list"></div>
       <div class="more" id="more"></div>
     </section>
+
+  <section aria-labelledby="hs-h">
+    <h2 id="hs-h"><span data-i18n="compliance.history.title">每週存檔</span> <span class="meta" id="hs-sub"></span><span id="hs-q"></span></h2>
+    <div class="list" id="hist"><div class="loading" data-i18n="compliance.loading">載入中…</div></div>
+    <div class="more" id="hs-more"></div>
+  </section>
 </main>
 <script>
 const T = (k, p) => (window.I18N ? I18N.t("compliance." + k, p) : k);
@@ -629,7 +646,55 @@ document.addEventListener("click", (e) => {
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") { QT.pinned = null; qHide(); } });
 addEventListener("scroll", () => { if (QT.pinned) qShow(QT.pinned); else qHide(); }, { passive: true, capture: true });
 
+// ---- 每週存檔 (GET /api/v1/overview/plan/history, engine/plan_history.py, SP-71) ----
+// Not tied to the period filter: the latest stored weeks, newest first. The plan side is what the
+// week held when it began (frozen); the result side appears once the week is over.
+const HIST = { weeks: [], limit: 8, races: 0, finalDays: 14 };
+function histRow(w) {
+  const p = w.plan || {}, r = w.result;
+  const plan = `<span>${esc(T("history.plan", { n: p.n || 0, h: h1(p.hours), tss: n0(p.tss) }))}</span>` +
+    (p.late ? `<span class="hbadge" title="${esc(T("history.late_tip"))}">${esc(T("history.late"))}</span>` : "") +
+    `<span class="meta">${esc(T("history.taken", { day: md(p.taken || w.week_start) }))}</span>`;
+  let res;
+  if (!r) {
+    res = `<span class="meta">${esc(T(w.week_end >= (S.today || isoOf(new Date())) ? "history.running" : "history.pending"))}</span>`;
+  } else {
+    const dr = r.drift || {}, q = r.quality || {};
+    const moved = (dr.changed || 0) + (dr.removed || 0) + (dr.added || 0);
+    res = `<span><b>${r.due ? pc(r.rate) + "%" : "–"}</b> ${esc(T("history.done", { done: r.completed || 0, due: r.due || 0, ok: r.ok || 0 }))}</span>` +
+      `<span class="meta">${esc(T("history.tss", { p: n0(r.planned_tss), a: n0(r.actual_tss) }))}` +
+      `${r.done_tss != null ? " · " + esc(T("history.all_tss", { t: n0(r.done_tss) })) : ""}</span>` +
+      (q.due ? `<span class="meta">${esc(T("history.quality", { done: q.completed || 0, due: q.due, ok: q.ok || 0 }))}</span>` : "") +
+      `<span class="meta">${esc(moved ? T("history.drift", { c: dr.changed || 0, r: dr.removed || 0, a: dr.added || 0 }) : T("history.no_drift"))}` +
+      `${w.final ? "" : " · " + esc(T("history.open", { n: HIST.finalDays }))}</span>`;
+  }
+  return `<div class="hrow"><span class="d">${esc(md(w.week_start))}–${esc(md(w.week_end))}` +
+    `${p.phase ? `<small>${esc(T("phase_kind." + p.phase, p.phase))}</small>` : ""}</span>` +
+    `<span class="pl">${plan}</span><span class="rs">${res}</span></div>`;
+}
+function renderHist() {
+  $("hs-q").innerHTML = q(T("history.tip", { n: HIST.finalDays }));
+  $("hs-sub").textContent = T("history.sub", { n: HIST.weeks.length, races: HIST.races });
+  $("hist").innerHTML = HIST.weeks.length ? HIST.weeks.slice(0, HIST.limit).map(histRow).join("")
+    : `<p class="meta">${esc(T("history.empty"))}</p>`;
+  $("hs-more").innerHTML = HIST.weeks.length > HIST.limit
+    ? `<button class="btn" type="button" id="hs-more-btn">${esc(T("history.more", { n: HIST.weeks.length - HIST.limit }))}</button>` : "";
+}
+async function loadHist() {
+  try {
+    const r = await fetch("/api/v1/overview/plan/history?limit=52");
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const j = await r.json();
+    HIST.weeks = j.weeks || []; HIST.races = j.marked_races || 0; HIST.finalDays = j.final_days || 14;
+    renderHist();
+  } catch (e) {
+    $("hist").innerHTML = `<p class="err">${esc(T("history.failed", { err: e.message }))}</p>`;
+  }
+}
+$("hs-more").addEventListener("click", (e) => { if (e.target.id === "hs-more-btn") { HIST.limit = HIST.weeks.length; renderHist(); } });
+
 load();
+loadHist();
 </script>
 </body>
 </html>
