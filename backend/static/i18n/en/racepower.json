@@ -125,5 +125,20 @@
   "zbar.tip": "This bar shows absolute intensity: which of your zones the race's average power or heart rate falls in. The effort bar above shows relative intensity: how long you can hold this power, which depends on the race length — 85% CP is easy for 1 hour and hard for 8 hours. Each colour is a zone (each zone's name and range are listed below); the line is this race's average. Power training shows power zones, heart-rate training shows heart-rate zones (the training basis in Settings); you can pick the heart-rate zone model, the default is the workout heart-rate zones in Settings.",
   "zbar.line_power": "Absolute intensity: average {pct} CP ({w}), in Palladino zone {zone}",
   "zbar.line_hr": "Absolute intensity: average {hr} bpm, in {sys} zone {zone}",
-  "zbar.no_hr_data": "This calculation has no average heart rate, so the power zones are shown"
+  "zbar.no_hr_data": "This calculation has no average heart rate, so the power zones are shown",
+  "cad.title": "Climbing cadence",
+  "cad.sub": "checks “cadence < 130 spm = walking”",
+  "cad.line": "130 spm line",
+  "cad.valley": "valley",
+  "cad.minutes": "min",
+  "cad.min_val": "{m} min",
+  "cad.series": "time climbing",
+  "cad.time": "Time climbing",
+  "cad.runs": "Runs",
+  "cad.below": "Below 130 spm",
+  "cad.ok": "line fits",
+  "cad.off": "line is off",
+  "cad.unimodal": "can't tell",
+  "cad.few": "not enough data",
+  "cad.how": "Counts only moving time with cadence on the 100 m stretches of 3 % or steeper, in your outdoor runs of the last year. Every walk / run split in the app is “cadence below 130 spm = walking”; on climbs cadence usually falls into a walking and a running group, and the line should sit in the valley between them. This only checks; it never moves the line."
 }

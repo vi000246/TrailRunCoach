@@ -149,3 +149,108 @@ def test_the_labels_never_change_the_time(client, monkeypatch):   # noqa: F811
     # the food does follow the gait: walking the climbs costs less
     assert walk["fuel"]["kcal"] < run["fuel"]["kcal"]
     assert walk["fuel"]["methods"].get("minetti_walk") and not run["fuel"]["methods"].get("minetti_walk")
+
+
+# ---- SP-230: is 「步頻 < 130 spm 算走」 right? -------------------------------------------
+
+import datetime as dt                                    # noqa: E402
+from types import SimpleNamespace                        # noqa: E402
+
+import numpy as np                                       # noqa: E402
+
+from backend.engine.racepower import athlete as A        # noqa: E402
+
+MIDS = (RW.cad_edges()[:-1] + RW.cad_edges()[1:]) / 2
+
+
+def mix(walk, run, sd=6.0, walk_share=0.4, total_s=3 * 3600.0):
+    """Seconds per bin of a walking and a running group of climbing cadence."""
+    d = walk_share * np.exp(-0.5 * ((MIDS - walk) / sd) ** 2) + (1 - walk_share) * np.exp(-0.5 * ((MIDS - run) / sd) ** 2)
+    return list(d / d.sum() * total_s)
+
+
+def track(sections, dt_s=1.0):
+    """Sample arrays from [(metres, grade, strides/min, m/s)] sections."""
+    t, d, z, cad = [0.0], [0.0], [100.0], [sections[0][2]]
+    for metres, g, c, v in sections:
+        for _ in range(int(metres / (v * dt_s))):
+            t.append(t[-1] + dt_s)
+            d.append(d[-1] + v * dt_s)
+            z.append(z[-1] + v * dt_s * g)
+            cad.append(c)
+    return {k: np.array(x, float) for k, x in (("t", t), ("d", d), ("z", z), ("cad", cad))}
+
+
+def test_climb_cadence_histogram_counts_only_climbs():
+    """Seconds per 5-spm bin of moving time on ≥ 3 % windows; the cadence channel is
+    strides/min (spm = × 2); flats and descents stay out."""
+    a = track([(1000, 0.0, 85, 3.0), (1000, 0.10, 55, 1.0), (1000, 0.10, 82, 2.0), (1000, -0.10, 88, 3.5)])
+    h = RW.climb_cadence_hist(a["t"], a["d"], a["z"], a["cad"], np.ones(len(a["t"]), bool))
+    s = dict(zip(MIDS, h))
+    assert s[112.5] == pytest.approx(1000, rel=0.12)          # 55 × 2 = 110 spm, walked at 1 m/s
+    assert s[162.5] == pytest.approx(500, rel=0.12)           # 82 × 2 = 164 spm, run at 2 m/s
+    assert sum(h) == pytest.approx(1500, rel=0.12)            # the flat 170 spm and the descent 176 spm: none
+    assert RW.climb_cadence_hist(a["t"], a["d"], a["z"], None, np.ones(len(a["t"]), bool)) is None
+
+
+@pytest.mark.parametrize("walk,run,verdict,word", [(110, 165, "ok", "門檻合用"), (100, 140, "ok", "門檻合用"),
+                                                   (140, 172, "off", "快走會被算成跑步"),
+                                                   (95, 128, "off", "慢跑會被算成走路")])
+def test_two_groups_and_where_the_valley_is(walk, run, verdict, word):
+    """130 in the valley (or on its floor): fits; the valley above 130: fast hiking counts as
+    running; below: slow running counts as walking."""
+    c = RW.cadence_check(mix(walk, run, sd=5.0))
+    assert c["bimodal"] and c["verdict"] == verdict and word in c["hint"]
+    assert c["walk_peak_spm"] == pytest.approx(walk, abs=5) and c["run_peak_spm"] == pytest.approx(run, abs=5)
+    assert c["walk_peak_spm"] < c["valley_spm"] < c["run_peak_spm"]
+    assert c["below_share"] == pytest.approx(sum(x for m, x in zip(MIDS, mix(walk, run, sd=5.0)) if m < 130) / (3 * 3600))
+
+
+def test_one_group_or_too_little():
+    one = RW.cadence_check(mix(150, 150))
+    assert one["bimodal"] is False and one["verdict"] == "unimodal" and "只有一群" in one["hint"]
+    few = RW.cadence_check(mix(110, 165, total_s=600.0))
+    assert few["enough"] is False and few["verdict"] == "few" and few["bimodal"] is None
+    assert RW.cadence_check(None)["verdict"] == "few"
+
+
+def test_the_check_never_moves_the_line():
+    """先不自動改門檻: the 130 spm everywhere stays."""
+    from backend.engine import workout_review as WR
+    from backend.engine.racepower import intensity as I
+    RW.cadence_check(mix(140, 172, sd=5.0))
+    assert WR.RUN_CADENCE == 65.0 and I.INTENSITY["run_cadence"] == 65.0 and RW.THRESHOLD_SPM == 130.0
+
+
+def _ds(arrays):
+    """A Dataset stand-in: two outdoor runs with the given arrays, one treadmill run, one hike."""
+    def w(idx, sport="run", sport_type="trail running", tags=()):
+        return SimpleNamespace(idx=idx, sport=sport, sport_type=sport_type, tags=list(tags), day=0,
+                               entry=SimpleNamespace(file=f"{idx}.fit", start=dt.datetime(2026, 9, 1)))
+    ws = [w(1), w(2), w(3, tags=("runningtreadmill",)), w(4, sport="walk", sport_type="hiking")]
+    ch = {"elapsedtime": arrays["t"], "elapseddistance": arrays["d"] / 1000.0, "elevation": arrays["z"],
+          "cadence": arrays["cad"], "speed": np.full(len(arrays["t"]), 7.2)}
+    return SimpleNamespace(workouts=ws, channel=lambda i, name: ch.get(name), flush_series=lambda: None,
+                           cached_series=lambda key, wk, fn: fn())
+
+
+def test_athlete_sums_the_outdoor_runs(monkeypatch):
+    from backend.engine.wko5expr import dataset as D
+    monkeypatch.setattr(D, "date_to_day", lambda d: 10)
+    a = track([(1000, 0.10, 55, 1.0), (1000, 0.10, 82, 2.0)])
+    secs, n = A.climb_cadence_seconds(_ds(a), dt.date(2026, 10, 6))
+    assert n == 2 and sum(secs) == pytest.approx(2 * 1500, rel=0.15)
+    out = A.climb_cadence(_ds(a), dt.date(2026, 10, 6))
+    assert out["n_runs"] == 2 and out["verdict"] == "ok"               # 110 and 164 spm, 50 min of climbing
+    assert out["walk_peak_spm"] == pytest.approx(110, abs=5) and out["run_peak_spm"] == pytest.approx(164, abs=5)
+
+
+def test_cadence_check_endpoint(client, monkeypatch):   # noqa: F811
+    from backend.api import racepower as RP
+    monkeypatch.setattr(A, "climb_cadence_seconds", lambda ds, today: (mix(140, 172, sd=5.0), 12))
+    monkeypatch.setattr(RP, "_dataset", lambda: object())
+    RP._cache.pop("climb_cadence", None)
+    r = client.get("/api/v1/racepower/cadence-check").json()
+    assert r["verdict"] == "off" and r["n_runs"] == 12 and r["threshold_spm"] == 130 and len(r["bins"]) == len(r["seconds"])
+    r_en = client.get("/api/v1/racepower/cadence-check", headers={"Accept-Language": "en"}).json()
+    assert r_en["verdict"] == "off"
