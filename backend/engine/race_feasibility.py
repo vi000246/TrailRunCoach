@@ -50,8 +50,9 @@ Only advice — nothing here changes the plan or the event. Each check gives a l
   vam      the climb rate the hardest day needs (its climb ÷ the uphill share of its time — the
            turnaround hours when set, else the predicted hours; the uphill share = the climb's part of
            the day's EP, 推估) against the athlete's own rates from hikehr's windows (100 m, > 1.5
-           km/h, ≥ 10 %, HR ≥ AeT): 「走得順」 = the median VAM at AeT … 0.95 LTHR, 「走得辛苦」 = at ≥ 0.95
-           LTHR; each shrunk towards 山本 2015's 430 m/h (無雪期登山, pack ~10 % of body weight; 510 m/h
+           km/h, ≥ 10 %, HR ≥ AeT): 「走得順」 = the median VAM at HR ≤ 75 % HRmax (hr_profile.walk_cap
+           — the walking sessions' uphill cap, SP-115; owner 2026-10-06, was AeT … 0.95 LTHR; no max HR
+           and no age: no 走得順 windows, 山本's default), 「走得辛苦」 = at ≥ 0.95 LTHR; each shrunk towards 山本 2015's 430 m/h (無雪期登山, pack ~10 % of body weight; 510 m/h
            for the hard rate, 推估) with k = CLIMB_K windows (terrain_calib's rule). Moved to the
            route's top altitude by the athlete's own altitude factor (hikehr.altitude_factor) when it
            is known, else Wehrlin & Hallén 2006 (−6.3 % per 1000 m); by the pack (山本: 0 → 10 → 20 %
@@ -174,7 +175,8 @@ YAMAMOTO_PACK = ((0.0, 475.0), (0.10, 430.0), (0.20, 395.0))   # pack share of b
 CLIMB_POWER_OK = 1.5         # W/kg (Burtscher 2004)
 CLIMB_POWER_LOW = 1.2
 SRC_VAM = N_("爬升速度：山本正嘉 2015（健行 350、無雪期登山 430、雪山岩場 510 m/h，背包約體重 10 %）只當資料不夠時的預設；"
-             "你的速度用心率分區的 100 m 爬坡段（AeT 到 0.95 LTHR = 走得順，≥ 0.95 LTHR = 走得辛苦）；"
+             "你的速度用心率分區的 100 m 爬坡段（≤ 75 % 最大心率 = 走得順，和登山課的爬坡上限一樣；"
+             "≥ 0.95 LTHR = 走得辛苦）；"
              "海拔：你的海拔因子，沒有時用 Wehrlin & Hallén 2006（每 1000 m −6.3 %）")
 SRC_POWER = N_("爬坡功率：Burtscher 2004——背包每小時爬 300 m（到 3,500 m）約需 1.2–1.5 W/kg，而且要在無氧閾值以下")
 
@@ -193,19 +195,23 @@ def pack_factor(share: float) -> float:
     return 1.0
 
 
-def climb_rates(wins: list[dict]) -> dict:
+def climb_rates(wins: list[dict], steady_max: Optional[float] = None) -> dict:
     """The athlete's climb rates from hikehr windows ({"vam", "hr", "z", "lthr"}): {"steady" / "hard":
-    {"vam" (median), "n", "z" (median altitude)}, "alt_pct" (% per 1000 m, None = not enough)}."""
+    {"vam" (median), "n", "z" (median altitude)}, "alt_pct" (% per 1000 m, None = not enough),
+    "steady_max"}. 「走得順」 (steady): HR ≤ `steady_max` = 75 % HRmax (hr_profile.walk_cap's value,
+    SP-115 — owner 2026-10-06; None = no max HR: no steady windows); 「走得辛苦」 (hard): ≥ 0.95 LTHR."""
     from statistics import median
     from backend.engine.racepower import hikehr as HH
     out = {}
-    for band, keep in (("steady", lambda w: w["hr"] < 0.95 * w["lthr"]), ("hard", lambda w: w["hr"] >= 0.95 * w["lthr"])):
-        ws = [w for w in wins or () if w.get("lthr") and keep(w)]
+    for band, keep in (("steady", lambda w: steady_max is not None and w["hr"] <= steady_max),
+                       ("hard", lambda w: bool(w.get("lthr")) and w["hr"] >= 0.95 * w["lthr"])):
+        ws = [w for w in wins or () if keep(w)]
         zs = [w["z"] for w in ws if w.get("z") is not None]
         out[band] = {"vam": float(median(w["vam"] for w in ws)) if ws else None, "n": len(ws),
                      "z": float(median(zs)) if zs else None}
     alt = HH.altitude_factor(wins or [], 0.0, 0.0) if wins else {"enough": False}
     out["alt_pct"] = alt.get("pct_per_km") if alt.get("enough") else None
+    out["steady_max"] = round(steady_max) if steady_max is not None else None
     return out
 
 
@@ -875,7 +881,10 @@ def baiyue_inputs(plan, ds, today: dt.date, e) -> tuple[Optional[dict], Optional
             top = float(row["z_max"]) if row and row.get("z_max") is not None else None
         except Exception:                   # noqa: BLE001
             top = None
-        climb = {"rates": climb_rates(wins), "top_m": top, "weight": kg}
+        # 走得順 = HR ≤ 75 % HRmax, the walking sessions' uphill cap (SP-115; no AeT floor here)
+        from backend.engine import hr_profile as HP
+        wc = HP.walk_cap_for(ds, today, None)
+        climb = {"rates": climb_rates(wins, (wc or {}).get("value")), "top_m": top, "weight": kg}
     except Exception:                       # noqa: BLE001 — the other checks still run
         climb = None
     cp = plan.threshold_on("cp", today) if plan is not None else None
