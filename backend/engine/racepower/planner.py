@@ -186,7 +186,7 @@ def _heat_context(opts: dict) -> tuple[Optional[list], Optional[dt.datetime], Op
             rows.append(x)
     rows.sort(key=lambda r: r["t"])
     if not rows:
-        return None, None, "沒有逐時預報：比賽日超出預報範圍、離線，或還沒取得比賽日天氣"
+        return None, None, "沒有逐時預報：中央氣象署一週預報沒有逐時資料、離線，或還沒取得比賽日天氣"
     start = _start_datetime(opts.get("date"), opts.get("start_time"))
     if start is None:
         return None, None, "逐時熱修正需要比賽日期與起跑時間"

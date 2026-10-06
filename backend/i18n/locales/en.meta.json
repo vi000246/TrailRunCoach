@@ -2843,6 +2843,10 @@
     "draft": true,
     "src": "backend/engine/interval_eval.py:461"
   },
+  "沒有可用的歷史年份": {
+    "draft": false,
+    "src": "backend/engine/racepower/weather.py:599"
+  },
   "沒有回量期：下一場 A 賽事「{name}」{date} 太近": {
     "draft": true,
     "src": "backend/engine/planning.py:776"
@@ -3894,6 +3898,10 @@
   "轉換期：近 4 週的 {share:.0%}": {
     "draft": true,
     "src": "backend/engine/overview.py:362"
+  },
+  "近 10 年同月平均（Open-Meteo 歷史資料）": {
+    "draft": false,
+    "src": "backend/engine/racepower/weather.py:87"
   },
   "近 12 週的跑步資料不夠，先用越野跑（原本的設定）": {
     "draft": true,
