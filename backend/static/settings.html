@@ -178,7 +178,7 @@ main > section.tab-off { display: none; }
     <h2>主要訓練項目</h2>
     <div class="row" style="margin-top:4px">
       <label>主要訓練項目 <select id="u-sport"><option value="auto">自動</option><option value="trail">越野跑</option><option value="road">路跑／馬拉松</option></select></label>
-      <button type="button" class="q" aria-label="說明" title="決定圖表分析顯示哪些圖、自動課表怎麼排、比賽計算機預設什麼。越野跑：爬升、下坡、コース定数、陡坡健走、B2B 都會出現。路跑／馬拉松：藏起爬坡和下坡的圖，改看平路的有氧效率、心率飄移、長跑距離和馬拉松配速的量；課表不排陡坡健走和 B2B，專項期的長跑加一段馬拉松配速。自動 = 之後的 A 或 B 賽只要有一場是越野賽或百岳就算越野；沒有的話，下一場 A 賽是路跑賽就算路跑；都沒有就看近 12 週越野＋登山的時間比例（≥ 25% 算越野，推估）。C 賽不算。">?</button>
+      <button type="button" class="q" aria-label="說明" title="決定圖表分析顯示哪些圖、自動課表怎麼排、比賽計算機預設什麼。越野跑：爬升、下坡、コース定数、陡坡健走、B2B 都會出現。路跑／馬拉松：藏起爬坡和下坡的圖，改看平路的有氧效率、心率飄移、長跑距離和馬拉松配速的量；課表不排陡坡健走和 B2B，專項期的長跑加一段馬拉松配速。自動 = 先看之後的 A 賽：只有越野賽或百岳就算越野，只有路跑賽就算路跑；兩種都有就看哪一場比較吃力（先比賽事大小，再比預估時間，再比 EP），一樣或比不出來就算越野；沒有 A 賽才照同樣方式看 B 賽；都沒有就看近 12 週越野＋登山的時間比例（≥ 25% 算越野，推估）。C 賽不算。">?</button>
       <span class="meta" id="u-sport-note"></span>
     </div>
   </section>
