@@ -3573,9 +3573,9 @@ CADENCE_HINT = "衝擊高於平常、步頻低於平常 → 可試著把步頻�
 # downhill (Van Hooren 2024, downhill-recovery.md [D21]); +5 / +10 % step rate cut the energy absorbed
 # at the knee (Heiderscheit 2011)
 DOWN_CADENCE_HINT = N_("衝擊高於平常、步頻低於平常 → 下坡縮小步幅、加快步頻可以減少膝蓋負擔（Van Hooren 2024、Heiderscheit 2011）")
-# a grade bin is a downhill one when it lies wholly below the flat −2 ~ 2 % bin (panels.workout
-# GRADE_EDGES): the research doc's < −3 % band on the card's own bins (−5 ~ −2 % counts)
-HINT_DOWN_MAX = -2.0
+# a grade bin is a downhill one when its upper edge is ≤ −5 % (panels.workout GRADE_EDGES): the
+# −5 ~ −2 % bin runs at near-flat cadence and takes the plain hint (user decision 2026-10-06)
+HINT_DOWN_MAX = -5.0
 # ≥ 15 % climbs: a low cadence there is mostly walking, so no hint (research doc §3.2; 推估)
 HINT_UP_MIN = 15.0
 
@@ -3583,7 +3583,7 @@ HINT_UP_MIN = 15.0
 def cadence_hint(rows: list[dict], names: list[str]) -> list[str]:
     """「−10 ~ −5%、0–10%：衝擊高於平常、步頻低於平常 → …」 for the rows (≥ BIN_MIN_S) where ILR or
     impact G is above the usual's middle 50 % and the cadence below it; [] when there is none.
-    A grade row (`lo` / `hi`, %) on a downhill (hi ≤ HINT_DOWN_MAX) gets its own line with the
+    A grade row (`lo` / `hi`, %) on a downhill (hi ≤ HINT_DOWN_MAX = −5 %) gets its own line with the
     downhill wording (DOWN_CADENCE_HINT); a ≥ HINT_UP_MIN climb gets none. A row without an impact
     value never hints (a low cadence alone says nothing about the load). Rows without a grade
     (form_work's segments) take the plain hint.
