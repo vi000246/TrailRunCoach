@@ -6,10 +6,12 @@
 
 | 代號 | 來源 | 本文用到的重點 |
 |---|---|---|
-| UA | House & Johnston, *Training for the Uphill Athlete* (2019)；uphillathlete.com 周期化文章 | 轉換期 → 基礎期（全年最大比例）→ 專項期 → 減量期；有氧閾值心率飄移測試 < 5%；每週量增幅約 10% |
+| UA | House & Johnston, *Training for the Uphill Athlete* (2019)；uphillathlete.com 周期化文章 | 轉換期 → 基礎期（全年最大比例）→ 專項期 → 減量期；有氧閾值心率飄移測試 < 5%；每週量增幅約 10%（2026-10-06 已驗證：UA 教練 Hammond「平均超過 10 % 約八週後出問題」，教練經驗；UA 書另有**每年**增幅：新手 ≤ 25 %、進階 ≤ 10 %） |
 | Koop | Jason Koop, *Training Essentials for Ultrarunning* | 採區塊式周期；從一般能力練到專項能力；越接近比賽訓練越像比賽；最後階段要跑得比之前更長、更慢；用背對背長天練抗疲勞 |
-| Bosquet | Bosquet et al., "Effects of tapering on performance: a meta-analysis", *Med Sci Sports Exerc* 2007;39(8):1358–65 | 減量期約 2 週最有效；訓練量逐步（指數式）減少 41–60%；強度與頻率維持；平均進步約 2.2% |
-| Seiler | Seiler & Kjerland, "Quantifying training intensity distribution in elite endurance athletes", *Scand J Med Sci Sports* 2006 | 頂尖耐力選手的強度分配約 75–80% 低強度、0–5% 中強度、15–20% 高強度 |
+| Bosquet | Bosquet et al., "Effects of tapering on performance: a meta-analysis", *Med Sci Sports Exerc* 2007;39(8):1358–65 | 減量期約 2 週最有效；訓練量逐步（指數式）減少 41–60%；強度與頻率維持；平均進步約 2.2%（摘要沒有這個數字，未找到來源） |
+| Seiler | Seiler & Kjerland, "Quantifying training intensity distribution in elite endurance athletes", *Scand J Med Sci Sports* 2006 | 國家級青年越野滑雪選手的強度分配約 75% 低強度、6–8% 中強度、15–20% 高強度（2026-10-06 更正，原寫 75–80／0–5％） |
+
+> 2026-10-06 核對（SP-107 #13）：上表四個來源逐句對過原文，結果見文末「來源核對」。兩處要改：Seiler 的中強度不是 0–5 %，是 6–8 %；Bosquet 的「平均進步約 2.2 %」摘要裡沒有。UA「每週增幅約 10 %」找到原句（教練個人經驗）。
 
 既有研究文件裡已經寫過的（有氧/無氧閾值區間、CTL 參考值、ACWR 不能預測受傷、耐久度）請看
 `docs/research/uphill-athlete-mountain-metrics.md` 和 `docs/research/coaching-dashboards-mountain.md`。
@@ -40,7 +42,7 @@
   如果路跑一週只有一次左右，趨勢要看好幾個月，不要看單次。
 - **心率飄移（Pa:HR）**：UA 的有氧閾值測試是 40–60 分鐘穩定跑、飄移 < 5%。
   這張圖只取 > 40 分鐘、IF < 0.85 的路跑。
-- **量的週增幅**：UA 的經驗值是週增幅平均不要超過 ~10%。只當趨勢看，不當受傷預測
+- **量的週增幅**：UA 的經驗值是週增幅平均不要超過 ~10%（2026-10-06 已驗證：UA 教練 Drew Hammond 的個人經驗，見文末「來源核對」）。只當趨勢看，不當受傷預測
   （ACWR 預測受傷的說法已被推翻，見既有研究文件）。
 
 ### ③ 專項期
@@ -83,3 +85,18 @@
 - 越野/百岳的次數少，專項期的圖單點雜訊大，要看 2–3 個月的趨勢。
 - 「目標賽事」的每公里爬升目前寫死在檢視裡（50 m/km），要手動改 `views/periodization.json`。
 - 效能：第一次開基礎期的「低強度佔比」要讀全部活動的逐秒心率，1 年範圍冷啟動約 80 秒，之後約 3 秒。
+
+## 來源核對（SP-107 #13，2026-10-06）
+
+方法：PubMed 摘要用 E-utilities 抓原文，網頁抓原始 HTML（UA 擋直接下載時改用 Wayback 快照），逐字比對；搜尋 2 次。這份文件是圖表說明，只核對既有的四個來源，沒有擴充新主題。要不要擴充，等使用者決定（見 SP-107）。
+
+| 原本的說法 | 原文 | 結果 |
+|---|---|---|
+| Bosquet：減量約 2 週、量逐步（指數式）減 41–60 %、強度與頻率維持 | "A 2-wk taper during which training volume is exponentially reduced by 41-60% seems to be the most efficient strategy"；"without any modification of either training intensity ... or frequency"（PMID 17762369 摘要） | **已驗證** |
+| Bosquet：平均進步約 2.2 % | 摘要只有效果量（overall effect = 0.59 ± 0.33），沒有百分比 | **未找到來源**（可能在全文，沒讀到）。圖表沒用到這個數字，不影響 |
+| Seiler：頂尖耐力選手約 75–80 % 低強度、0–5 % 中強度、15–20 % 高強度 | 受試者是 11 名國家級**青年越野滑雪**選手。依心率：zone 1 "75+/-3%"、zone 2 "8+/-3%"、zone 3 "17+/-4%"；依 session RPE：76／6／18 %；結論 "about 75%" 低於、"15-20%" 高於（PMID 16430681 摘要） | **更正**：中強度是 6–8 %，不是 0–5 %；低強度約 75 %。受試者是青年選手，摘要說和其他頂尖選手的觀察研究 "similar" |
+| UA：有氧閾值心率飄移測試 < 5 % | "If your heart rate stays nearly flat, drifting less than about 5 percent across the effort, you were working below your aerobic threshold."（UA〈Zone 2 Heart Rate Training〉2026-06-07，原始 HTML） | **已驗證**。詳細判讀（3.5–5 %）見 `aerobic-base-readiness.md` §8 |
+| UA：每週量增幅約 10 % | ① Drew Hammond〈How to Build a Transition Period for Tactical Athletes〉（uphillathlete.com，2020-01-13，2026-05-04 更新，教練；Wayback 2026-05-15 快照的原始 HTML）："I and the other coaches at Uphill Athlete have all found that greater than an average of 10 percent progression in volume leads to trouble in roughly eight weeks." 前一句："All of these numbers are based entirely off my own experiences and observations." 他的排法是加量一週、持平一週，加幅 15 % → 10 % → 5 %。② UA 書的摘錄（Scott Johnston〈Training Principles for the Uphill Athlete〉，TrainingPeaks，2019）講的是**每年**："beginners (under 350-400 hours/year) can increase training load, as measured by time, by as much as 25 percent per year"；"For them [advanced athletes, > 500 h/yr], a 10 percent jump in yearly volume should be considered a maximum." | **已驗證**，但屬於教練經驗（作者自己說是個人觀察），對象是戰術（軍警）運動員的轉換期。`views/periodization.json` 週增幅圖的說明「平均每週 > 10%、持續約 8 週會出問題」和原文一致 |
+| Koop：區塊式周期、越接近比賽越像比賽、最後要跑得更長更慢、背對背 | 書（付費），這次沒讀 | 未核對（`paywalled-sources.md` 已列 Koop 的書） |
+
+同一篇 UA 摘錄另有一句，和停訓／復跑有關，給 `detraining.md` 參考（這次沒有改那份文件）："Occasional breaks of a day or two are not much of a problem as long as they do not diminish the training load by more than roughly 5 percent in a month."

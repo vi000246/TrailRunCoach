@@ -19,6 +19,9 @@ How to read it:
     rendered client-side. `web.archive.org` is blocked for our fetcher. Where ITRA's own
     wording matters we fall back to the UTMB page, which did load, or we mark the claim
     `[search extract only]`.
+    **2026-10-06 (SP-107 #12):** a plain HTTP GET of the same FAQ pages does return the text
+    in the HTML; only the earlier page-reading tool saw them empty. §1.1 quotes them
+    word for word from the raw HTML.
   - Scarf's paper (Taylor & Francis, ResearchGate PDF) returned **HTTP 403**, and the Salford
     repository link now redirects to the repository home page. Scarf's figures below come from
     Wikipedia and the search-engine abstract, and are marked that way.
@@ -44,7 +47,8 @@ How to read it:
   physiological derivation for the 1:100 ratio. [derived here] It does happen to match the
   running energy data (see §4e): per Minetti, 100 m of climb costs about the same as 1.4 km of
   flat running.
-- **Descent:** not included. Only positive gain counts (UTMB formula above).
+- **Descent:** not included. Only positive gain counts (UTMB formula above). (ITRA's race
+  score is different: it does use "Elevation change (up & down)"; see §1.1.)
 - **Technicality, terrain, weather:** not in the formula. A search-engine extract of ITRA's
   FAQ says technicality and conditions "are not objectively measurable". According to that
   extract, ITRA handles them statistically instead: it compares the same runners' results
@@ -70,7 +74,62 @@ How to read it:
 - **UTMB Index:** a performance score computed per category from results within the last 24
   to 36 months. The UTMB page mentions no terrain or technicality adjustment.
   https://utmb.world/sports-system
-- **What it ignores:** descent, altitude, terrain, pack weight, speed or gait.
+- **What it ignores:** descent, altitude, terrain, pack weight, speed or gait. (This is true of
+  the km-effort *formula* and of ITRA points. ITRA's *race score* does use descent and altitude;
+  see §1.1.)
+
+### 1.1 ITRA's own FAQ, read from the raw HTML (2026-10-06, SP-107 #12)
+
+All quotes below were checked word for word against the HTML of the itra.run pages (fetched
+2026-10-06), not against a tool summary. **[verified]**
+
+- **km-effort and ITRA points** (https://itra.run/FAQ/Organizers):
+  - "1km = 1 Km-effort", "+100m vertical meters = 1 Km-effort". Runner FAQ example:
+    "Ex: 45km / 1500m+ = 60 Km Effort (KmE)" (https://itra.run/FAQ/Runner).
+  - The points scale is an image on the page (`itra point km-effort.png`). We downloaded and read
+    it: **0 = 0–24, 1 = 25–44, 2 = 45–74, 3 = 75–114, 4 = 115–154, 5 = 155–209,
+    6 = 210+ km-effort.** This confirms the third-party class boundaries above, and the ones in
+    `backend/engine/race_feasibility.py:101` (`ITRA_CLASSES`). The FAQ itself calls these
+    "ITRA Endurance Points" 0–6. It does not use the XXS–XXL labels. Race organisers do use
+    them together: 福爾摩沙古道 lists "ITRA-1 XS" … "ITRA-5 XL" (§5c).
+  - Points can be **lowered** for frequent aid stations. "The average interval = Number of
+    effort points / Number of aid stations". At ≥ 13 there is no penalty. Below that the penalty
+    is −10 / −15 / −20 / −25 / −30 effort points (11.0–12.99 … < 5). The worked example:
+    "40km / 1500m+ course with 6 aids stations … Effort points final = 55 - 15 = 40 effort
+    points. This race course would obtain 1 ITRA points."
+    So a race's published ITRA points can sit one class below its raw km-effort.
+  - Stage races: "one point is always deducted from the standard Endurance Points category"
+    (180 km-effort → 4 points instead of 5).
+  - "The minimum race distance is 5 km-effort".
+- **The race score is not plain km-effort** (https://itra.run/FAQ/ItraScore):
+  - "The distance & elevation data are turned into a flat equivalent distance (km-effort)",
+    using "Distance", "Elevation change (up & down)" and "Minimum, average, and maximum
+    altitude". So **descent and altitude do enter ITRA's scoring**. The weights are not
+    published.
+  - Terrain and conditions: "Terrain technicality and racing conditions are not objectively
+    measurable". The FAQ handles them as a per-race "coefficient of adjustment". That
+    coefficient comes from comparing "performances from that race to previous performances of
+    the same runners on similar km-effort courses". This confirms the earlier
+    `[search extract only]` wording.
+  - "Races where the km-effort (distance + (elevation profile/100)) is less than 5" get no
+    score.
+- **Mountain Level** (https://itra.run/FAQ/Runner): "on scale from 0 to 12". "To be
+  calculated, the Mountain Level takes into account the ratio between vertical gain and overall
+  distance. It also looks at the average race altitude, the longest vertical ascent". **0–12 is
+  ITRA's own figure**, so the 1–14 on mmctrail.no is out of date or wrong. No formula is given.
+- **Finisher Level** (same page): "an estimation of the minimum Performance Index required to be
+  able to finish a race within the race's maximum allowed time". Example: 30 km / 1700 m+ with
+  a 7 h limit → 290; with 5 h → 410.
+- **Performance Index categories are by distance, not by km-effort**
+  (https://itra.run/FAQ/PerformanceIndex): Vertical 2–12, 10K 5–15, Half Marathon 15–35,
+  Marathon 35–45, 50K 45–65, 50M 65–90, 100K 90–130, 100M 130–190, Endurance 190+ (lower
+  bound "equal to or greater than", upper bound "Less than"). "The distance categories are
+  defined by the number of kilometres in the race". These are a different scale from the
+  points table above; don't mix the two.
+- **What this means for the app:** the app's EP (`km + gain/100`) and its XXS–XXL classes match
+  ITRA's points table exactly. The app ignores the aid-station and stage-race deductions. That
+  is the conservative direction for a feasibility check: the app's class for a race is never
+  lower than ITRA's. No code change needed.
 
 ## 2. Swiss Leistungskilometer and Swiss hiking-time rules
 
@@ -353,7 +412,39 @@ https://hiking.biji.co/index.php?act=info&id=24918&q=news
   `[search extract only]` https://hiking.biji.co/index.php?act=info&id=24792&q=news
 - 福爾摩沙古道: 10/18/40/75/104 K, with 2,400–5,700 m gain from 40 K up (104 K has 5,700 m).
   `[search extract only]` https://nspp.mofa.gov.tw/nspp/news.php?unit=406&post=244666
+  - **2026-10-06 (SP-107 #12), organiser's course page [verified, raw HTML]:**
+    https://formosatrail.com/course/ (modified 2026-09-07). Six courses, each with gain, ITRA
+    class and time limit. Our km-effort is `km + gain/100`, checked against ITRA's points table
+    (§1.1):
+
+    | Course | Gain | Organiser's ITRA label | Time limit | km-effort [derived here] | ITRA class from table |
+    |---|---|---|---|---|---|
+    | 10 km | 400 m D+ | hiking, no award | 4 h | 14 | 0 |
+    | 18 km (18.5 km) | 770 m D+ | ITRA-1 XS | 6 h | 26.2 | 1 |
+    | 40 km | 2400 m D+ | ITRA-2 S | 13 h | 64 | 2 |
+    | 54 km | 2650 m D+ / 2850 m D− | ITRA-3 M | 15 h | 80.5 | 3 |
+    | 75 km (finish row 76.5 km) | 4100 m D+ | ITRA-4 L, UTMB Index 100k | 20 h | 116–117.5 | 4 |
+    | 104 km | 5700 m D+ | ITRA-5 XL | 28 h | 161 | 5 |
+
+    - Every course lands in the class that `km + gain/100` predicts. None of them has an
+      aid-station deduction.
+    - Entry rules: 40 km needs "at least one trail race of 21km or longer with an ITRA point of
+      1 or higher"; 75 km needs "at least one trail race of 40km or longer (ITRA-2)"; 104 km
+      needs "at least one trail race of 50km or longer with an ITRA point of 3 or higher (ITRA 4
+      preferred)". 54 km instead needs a fast FT40/FT75 finish or "an ITRA score of 450+".
+      - So the 40 km course allows a one-class jump (1 → 2), but **75 km (2 → 4) and 104 km
+        (3 → 5) allow a two-class jump**, with extra GPS-navigation requirements.
+      - The app's step check (`backend/engine/race_feasibility.py:99`, `STEP_OVER = 2`, marked
+        推估) calls a two-class jump "over" ("跳太多了"). That is stricter than this organiser
+        and matches the UTMB reading in `race-feasibility.md` §2.4. One organiser is not enough
+        to change the rule. Logged as a question in SP-107, not a code change.
+    - 2026 104 km is a Western States 100 qualifier ("Runners who complete the race within 28
+      hours will qualify to enter a lottery").
 - 環花東: we found no primary source for its grading.
+  - **2026-10-06 (SP-107 #12):** 3 more searches. We found **no trail race** by this name. 「環花東」
+    is the 環花東國際自行車賽 (Tour of East Taiwan, a road cycling race) and the 環花東 100／365
+    cycling challenges. This line was probably a mix-up with another race. **[no source found]**
+    Ask the user which race was meant.
 - **All of them use km-effort, i.e. ITRA.**
 
 ### 5d. 百岳 terrain
@@ -400,6 +491,9 @@ https://hiking.biji.co/index.php?act=info&id=24918&q=news
   - None of the effort-distance formulas above has an altitude term: km-effort, Leistungskm,
     Wanderwege/DIN, Yamamoto, Naismith family, Tobler.
   - Only ITRA's Mountain Level uses altitude, and it is a label with no public formula (§1).
+    (2026-10-06 correction: ITRA's *race score* also feeds "Minimum, average, and maximum
+    altitude" and descent into its flat-equivalent distance, with unpublished weights (§1.1).
+    The km-effort formula and ITRA points still have no altitude term.)
   - 健行筆記 mentions the 3,000 m performance drop only as prose (§5a).
 
 ## 7. Terrain and technicality factors
@@ -522,8 +616,11 @@ These are our recommendations, not sourced claims.
 
 **Open items we could not verify:**
 
-- ITRA's own FAQ wording (the page renders client-side).
+- ~~ITRA's own FAQ wording (the page renders client-side).~~ Read from the raw HTML on
+  2026-10-06 (§1.1).
 - The full text of Scarf 2007 (403).
 - The full text of 中原ら 2006 (subjects, fit error).
 - YAMAP's time source (403).
-- Race-by-race ITRA data for 環花東 and 福爾摩沙古道.
+- ~~Race-by-race ITRA data for 環花東 and 福爾摩沙古道.~~ 福爾摩沙古道: done from the
+  organiser's course page (§5c). 環花東: no trail race found under that name (§5c).
+- The weights ITRA gives descent and altitude in its race score (§1.1). Not published.
