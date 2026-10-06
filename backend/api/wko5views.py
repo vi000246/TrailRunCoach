@@ -1141,7 +1141,7 @@ def athlete_summary(parity: Optional[bool] = None):
 @router.get("/primary-sport")
 def primary_sport():
     """主要訓練項目 (engine/primary_sport.py): the setting (auto | trail | road), the sport in
-    effect and the suggestion from the data / the next A race (shown next to the control)."""
+    effect and the suggestion from the data / the A and B races (SP-245; shown next to the control)."""
     from backend.engine import primary_sport as PS
     import math
     from backend.engine.planning import Plan

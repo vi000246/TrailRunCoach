@@ -911,6 +911,10 @@
     "draft": true,
     "src": "backend/engine/workout_review.py:2944"
   },
+  "{priority} 賽「{name}」是{kind}": {
+    "draft": true,
+    "src": "backend/engine/primary_sport.py:78"
+  },
   "{p} 賽事「{race}」{date} 後": {
     "draft": true,
     "src": "backend/engine/post_race.py:149"
@@ -1173,7 +1177,7 @@
   },
   "下一場 A 賽「{name}」是{kind}": {
     "draft": true,
-    "src": "backend/engine/primary_sport.py:65"
+    "src": "backend/engine/primary_sport.py:77"
   },
   "下一次 ≥ 75 分鐘路跑，後段心率、配速各在 ±5% 內": {
     "draft": true,

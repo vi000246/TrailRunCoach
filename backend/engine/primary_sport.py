@@ -13,11 +13,13 @@ What changes per mode: docs/plans/generalize-athlete.plan.md §5.
     marathon-pace segment (Pfitzinger / Daniels).
   * 插入範本 推薦 (engine/template_recs.py) and the race calculator (static/racepower.html).
 
-Suggestion (推估 rule, no published threshold):
-  1. the next A event: 路跑賽 → road; 越野賽 / 百岳 → trail;
-  2. else the share of trail + hike time among the foot activities of the last 12 weeks:
+Suggestion (推估 rule, no published threshold; SP-245 — the user's decision, 2026-10-06):
+  1. any future A or B event that is a 越野賽 / 百岳 → trail (the nearest one is named);
+  2. else the next A event is a 路跑賽 → road;
+  3. else the share of trail + hike time among the foot activities of the last 12 weeks:
      ≥ 25 % → trail, else road;
-  3. no data → trail (keeps the original behaviour).
+  4. no data → trail (keeps the original behaviour).
+C events never count; A / B events have no time window (any future one counts).
 """
 from __future__ import annotations
 
@@ -46,10 +48,20 @@ def stored(user_id: int = 1) -> str:
     return norm(read_setting(SETTING_KEY, "auto", user_id))
 
 
-def _a_event(events: Iterable, today: dt.date):
-    ahead = sorted((e for e in events or () if getattr(e, "priority", "A") == "A"
-                    and e.start >= today and getattr(e, "kind", None) in EVENT_SPORT), key=lambda e: e.start)
-    return ahead[0] if ahead else None
+def _ahead(events: Iterable, today: dt.date, priorities: tuple) -> list:
+    """The future events of these priorities whose kind decides a sport, nearest first."""
+    return sorted((e for e in events or () if getattr(e, "priority", "A") in priorities
+                   and e.start >= today and getattr(e, "kind", None) in EVENT_SPORT), key=lambda e: e.start)
+
+
+def _event_pick(events: Iterable, today: dt.date):
+    """The event that decides the sport (SP-245), or None: the nearest future A / B 越野賽 or
+    百岳, else the next A event when it is a 路跑賽. C events never count."""
+    trail = [e for e in _ahead(events, today, ("A", "B")) if EVENT_SPORT[e.kind] == "trail"]
+    if trail:
+        return trail[0]
+    a = _ahead(events, today, ("A",))
+    return a[0] if a and EVENT_SPORT[a[0].kind] == "road" else None
 
 
 def suggest(ds=None, events: Iterable = (), today: Optional[dt.date] = None) -> dict:
@@ -57,12 +69,15 @@ def suggest(ds=None, events: Iterable = (), today: Optional[dt.date] = None) -> 
     from backend.engine import overview as O
     if today is None:
         today = O.day_to_date(ds.today) if ds is not None else dt.date.today()
-    ev = _a_event(events, today)
+    ev = _event_pick(events, today)
     if ev is not None:
         sp = EVENT_SPORT[ev.kind]
         from backend.engine.planning import KINDS
-        return {"sport": sp, "basis": "event", "trail_share": None, "hours": None,
-                "reason": _("下一場 A 賽「{name}」是{kind}", name=ev.name, kind=_(KINDS.get(ev.kind, ev.kind)))}
+        kind = _(KINDS.get(ev.kind, ev.kind))
+        reason = (_("下一場 A 賽「{name}」是{kind}", name=ev.name, kind=kind) if sp == "road"
+                  else _("{priority} 賽「{name}」是{kind}", priority=getattr(ev, "priority", "A"),
+                         name=ev.name, kind=kind))
+        return {"sport": sp, "basis": "event", "trail_share": None, "hours": None, "reason": reason}
     secs = {"road": 0.0, "trail": 0.0, "hike": 0.0}
     if ds is not None:
         for w in O.workouts_between(ds, today - dt.timedelta(days=WINDOW_DAYS), today + dt.timedelta(days=1)):
