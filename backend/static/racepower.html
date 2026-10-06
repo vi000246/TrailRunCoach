@@ -1071,7 +1071,7 @@ async function getWeather() {
     const w = WX = await j(`${API}/weather?${q}`);
     WX_KEY = key;
     const v = w.values;
-    const cls = { cwa_hourly: "good", cwa_weekly: "good", open_meteo: "good", climatology: "watch", manual: "bad" }[w.provider];
+    const cls = { cwa_hourly: "good", cwa_weekly: "good", cwa_town_hourly: "good", cwa_town_weekly: "good", open_meteo: "good", climatology: "watch", manual: "bad" }[w.provider];
     $("to-badge").className = "badge " + (cls || ""); $("to-badge").textContent = w.label;
     if (v) {
       // fetched values fill the To inputs unless the athlete typed their own
@@ -1082,7 +1082,11 @@ async function getWeather() {
     } else if (loc?.elevation != null && !loc.gpx && !$("t-alt").classList.contains("ovr")) { $("t-alt").value = Math.round(loc.elevation); }
     const d = w.detail || {};
     $("wx-meta").textContent = v ? `白天 06–18 平均${w.fetched_at ? "，取得於 " + w.fetched_at.slice(5, 16).replace("T", " ") : ""}` +
-      (d.cwa_location ? `，CWA 地點 ${d.cwa_location}${d.match === "nearest" ? `（最近 ${d.distance_km.toFixed(1)} km）` : ""}` : "") +
+      // SP-234: which 鄉鎮 and how far its temperature was moved (公所 height → race height)
+      (d.town ? T("env.town_meta", { name: d.cwa_location, km: d.distance_km.toFixed(1), from: Math.round(d.town_elevation_m),
+        to: Math.round(d.target_elevation_m), dz: (d.lapse_m >= 0 ? "+" : "−") + Math.abs(Math.round(d.lapse_m)),
+        dc: (d.offset_c > 0 ? "+" : d.offset_c < 0 ? "−" : "±") + Math.abs(d.offset_c).toFixed(1) }) :
+      d.cwa_location ? `，CWA 地點 ${d.cwa_location}${d.match === "nearest" ? `（最近 ${d.distance_km.toFixed(1)} km）` : ""}` : "") +
       (d.years ? T("env.clim_meta", { years: d.years, models: (d.models || []).length || 1 }) + (d.partial ? T("env.clim_partial") : "") : "") +
       (w.provider === "climatology" && w.hourly?.length ? T("env.clim_hourly")
         : w.hourly?.length ? `；逐時 ${w.hourly.length} 筆，可逐段修正熱` : "；沒有逐時資料，熱用這個平均值") : T("env.none");
