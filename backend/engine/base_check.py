@@ -97,7 +97,8 @@ Z1_LOW_WEEKS = 3                     # … 3 complete weeks in a row → pause Z
 # (14–28 d), or a re-confirmation dated after the break (≥ 29 d — Mujika & Padilla 2000)
 LOOKBACK_DAYS = 182                  # how far back a confirmation is looked for
 NO_DATA_DAYS = 42                    # no interpretable data for ~6 weeks → schedule the AeT test
-                                     # (UA's 4–6-week retest, coach; the original wording 未驗證)
+                                     # (推估 / owner's choice; UA's drift-test page says "every 4-6
+                                     # months" — months, not weeks: aerobic-base-readiness.md §8)
 
 # ---- A 賽後重新打底 (SP-116) -----------------------------------------------------------
 REBASE_SCAN_DAYS = 400               # how far back the latest A race is looked for

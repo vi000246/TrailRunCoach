@@ -366,7 +366,7 @@ intensity). Each rung is the canonical variant of `backend/engine/interval_libra
   The 總覽 card and the 基礎期 panel draw it with `static/z5flow.js` (`wko5views.z5_progress`).
 - **Re-confirmation**: a new measured AeT (UA gap or Friel) re-confirms. The AeT test is
   scheduled only for a reason (`quality_gate.aet_test_reason`): no interpretable run for ~6
-  weeks (UA's 4–6-week retest, coach; wording 未驗證), the aggregated AeT estimate missing or
+  weeks (推估; UA's own retest is every 4–6 months, not weeks), the aggregated AeT estimate missing or
   SE > 3 bpm, a shift > 5 bpm in the last 6 points (B3), the estimate more than max(SE, 3 bpm)
   from the plan's AeT ("moved": UA — AeT rises toward AnT as the base improves), or after a
   break ≥ 4 weeks. (The passive 90-min re-confirmation that stood in for no_data / se is gone

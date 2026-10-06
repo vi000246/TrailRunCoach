@@ -1023,6 +1023,10 @@
     "draft": true,
     "src": "backend/engine/workout_review.py:2618"
   },
+  "{w} 週內沒有可判讀的跑步（推估 {w} 週）": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1849"
+  },
   "—（AeT 是估計值，不算：要做一次 AeT 測試）": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:1797"
