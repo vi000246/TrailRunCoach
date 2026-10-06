@@ -924,6 +924,8 @@ const KINDS = { easy: "輕鬆跑", long: "LSD", quality: "強度課", test: "測
 // down (and the dialog's radios are built before it), so the catalog is read directly
 const FAMILIES = ["aerobic", "vo2max", "speed"];
 const FAM_ZH = { aerobic: "有氧間歇", vo2max: "VO2max 間歇", speed: "速度" };
+// rule D's two tiers (SP-301): the done session's note hover
+const ADAPT_NOTE_TIP = "自動調整：輕鬆跑偏強＝平均功率超過 80% CP（Palladino）或 TSS 超過計畫 20%（TrainingPeaks），沒有功率時看平均心率超過 LTHR 的 94%（Friel Zone 3 以上），只標示、不改課表；課別分類為閾值或更強＝跑成強度課，48 小時內的強度課延後或降一階。兩級的分法是推估。";
 const famLabel = (f) => (window.I18N ? I18N.t("schedule.family." + f, FAM_ZH[f] || f) : FAM_ZH[f] || f);
 // race: the season plan's race day, or the 賽事計算機's 「匯出至課表」 (its steps are editable here); never added by hand
 // 熱適應課 (engine/heat_plan.py): a heat run keeps kind easy / long, tagged by its title
@@ -1915,7 +1917,7 @@ function openDlg(s, day) {
   const pastOpen = s && s.state === "active" && s.day <= D.today && (s.link_options || []).length;
   db.hidden = !(s && (s.state === "done" || s.state === "missed" || pastOpen));
   if (s && s.state === "done") db.innerHTML = vsHtml(s) +
-    (s.note ? `<br><span class="adapt-note" title="自動調整：平均心率 > AeT+3、超過 AeT+3 的時間 > 10%、平均功率 > 80% CP 或 TSS 超過計畫 20% 任一項（四擇一屬推估）">⚠ ${esc(s.note)}</span>` : "");
+    (s.note ? `<br><span class="adapt-note" title="${esc(window.I18N ? I18N.t("schedule.pf.adapt_note_tip", ADAPT_NOTE_TIP) : ADAPT_NOTE_TIP)}">⚠ ${esc(s.note)}</span>` : "");
   else if (s && s.state === "missed") db.innerHTML = `<b class="err">未完成</b>：這天沒有對應的活動${s.note ? `（${esc(s.note)}）` : ""}${linkSel(s, "配對活動…")}`;
   else if (pastOpen) db.innerHTML = `<span class="meta">還沒配到活動</span>${linkSel(s, "配對活動…")}`;
   F.day.min = D.today; F.day.max = addDays(D.horizon_end > D.today ? D.horizon_end : D.today, 60);

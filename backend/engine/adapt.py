@@ -22,31 +22,40 @@ Rules (thresholds: source or 推估):
   C. missed long run -> kept / moved to a free day of the same week that is not
      next to a quality / test day; else cancelled. Never carried into next week
      (reconcile never moves a session across weeks).
-  D. easy run done too hard: the session stays done. Detected by
-     overhard() (unsourced-rules.md §B5): the heart-rate condition needs BOTH
-     avg HR > AeT + 3 bpm (workout_review.AET_MARGIN) AND time above AeT+3
-     > 10 % (workout_review.OVER_AET_SHARE) — summer easy runs
-     sit high on HR alone (heat), so one HR rule fired too often; or avg power
-     > 80 % CP (zones z2 upper bound, Palladino 1C); or TSS > planned + 20 %
-     (TrainingPeaks compliance green band, engine/compliance.py). Power / TSS
-     either one alone; the combination is 推估. Then:
-       1. the actual TSS counts (plan_store.plan_summary uses done_by.tss;
-          CTL/ATL already come from the real data);
-       2. a hard session < 2 days after it moves later in the week if the 48-h
-          spacing allows, else steps down one dose step, else becomes an easy
-          run (推估);
-       3. the remaining easy runs this week lose the excess TSS (actual −
-          planned), each ≥ 20 min, else the last easy is dropped (推估); the
-          long run and the quality session are never trimmed for this;
-       4. a note on that day:「輕鬆跑偏強（…）：已調整之後的課表」.
+  D. easy run done too hard (SP-301, the user 2026-10-06): two tiers; the session stays done
+     and its actual TSS counts (plan_store.plan_summary uses done_by.tss; CTL/ATL already
+     come from the real data).
+       偏強 — label only, overhard(): avg power > 80 % CP (zones z2 upper bound, Palladino 1C)
+         or TSS > planned + 20 % (TrainingPeaks compliance green band, engine/compliance.py;
+         the plan's easy rate is the easy-only one since SP-302). The old AeT+3 heart-rate
+         condition is gone (summer heat put easy runs over it on HR alone); a run without power
+         reads avg HR > 94 % LTHR instead of the power line (above Friel run Zone 3; lenient,
+         推估; the user 2026-10-06) — with power, HR is not used at all. The done session gets
+         「輕鬆跑偏強（…）：只標示，課表不變」; no session changes (no move, no step-down, no
+         trimmed easy runs).
+       太強 — schedule change, too_hard(): the session classifier (workout_review.classify,
+         session_stimulus.verdict) puts the run in a hard class — Zone 3 (threshold) or Zone 5,
+         高強度長跑, CP test (= workout_review.HARD_TYPES). It counts as a hard session: the
+         next free hard session < 2 days later moves later in the week if the 48-h spacing
+         allows, else steps down one dose step, else becomes an easy run (rule B's spacing,
+         SRC_SPACING); the reason names the run (「週四 有氧間歇…延到週六：週三輕鬆跑跑成閾值課，
+         間隔不到 48 小時」). week_plan already keeps the remaining hard sessions 48 h from a done
+         hard run (hard_done): when the generator moved one off its stored day for this run,
+         that move gets the same reason. A session another rule changed, a locked (edited /
+         custom / done) one, is never touched; within 14 days of an A race the change waits
+         for approval (plan_auto.classify, rule "too_hard"); 復原 as every run.
+       The two tiers and 「太強 = the classifier's hard class」 are 推估 (Seiler「easy days
+       easy」is the principle). The old step 3 (the excess TSS off the remaining easy runs) is
+       gone: 偏強 changes nothing, 太強 is handled as a hard session.
      Self-rating trigger (SP-231, rule "rpe_hard"; docs/research/readiness-signals.md §4.1):
      an easy run or long run the athlete rated Hard or more after the run (COROS's
-     post-run rating ≥ 4, engine/coros_rpe.py; a FIT's own RPE ≥ 7 the same) -> step 2 for
-     the next hard session (quality / test) < 48 h after it: moved to a free day ≥ 48 h
+     post-run rating ≥ 4, engine/coros_rpe.py; a FIT's own RPE ≥ 7 the same) -> the 太強
+     step for the next hard session (quality / test) < 48 h after it: moved to a free day ≥ 48 h
      after the run, else one step down. Nothing else (no trim, the long run stays, the hard
      session's done-check unchanged). 推估: no controlled trial (research §2.4). Runs after E
-     and leaves alone any session another rule already changed (E's removal / step-down
-     wins); ctx `rpe_rule` False = off (課表偏好 › 自動調整).
+     and D and leaves alone any session another rule already changed (E's removal / step-down
+     wins) and a run 太強 already acted on (one adjustment per session when both fire); ctx
+     `rpe_rule` False = off (課表偏好 › 自動調整).
   E. fatigue guard: two red-compliance sessions in a row (engine/compliance.py)
      -> the quality steps down to the recovery fartlek and easy minutes × 0.8;
      TSB < −30 (Friel / TrainingPeaks, coach; when week_plan has not already
@@ -70,17 +79,20 @@ from typing import Optional
 
 from backend.engine import load_guard as LG
 from backend.engine.hr_profile import easy_cap_label
-from backend.i18n import _, fmt
+from backend.i18n import N_, _, fmt
 
 HARD = ("quality", "test")
 SIDE = ("strength", "heat_passive", "notice")
 
-# D. easy run done too hard (unsourced-rules.md §B5): HR = both conditions together; power / TSS either alone (推估)
-OVER_HR_BPM = 3.0          # workout_review.AET_MARGIN: "easy" = avg HR ≤ AeT + 3 (the default; per athlete: SP-69)
-OVER_SHARE = 0.10          # workout_review.OVER_AET_SHARE: > 10 % of the time above AeT + 3
+# D. easy run done too hard (SP-301): 偏強 = power or TSS, either alone (label only); 太強 = the
+# session classifier's hard class (moves / steps down the next hard session). Two tiers: 推估
 EASY_POWER_CAP = 0.80      # zones.py z2 upper bound (Palladino 1C: 75–80 % CP)
+EASY_HR_LTHR = 0.94        # no power only (the user 2026-10-06): above Friel run Zone 3 (90–94 % LTHR,
+                           # zones.FRIEL_HR) = into Zone 4; lenient on purpose (heat); 推估
 OVER_TSS = 0.20            # compliance.COMPLIANCE["green"] (TrainingPeaks ±20 %)
-MIN_EASY_MIN = 20          # 推估: a trimmed easy run is never shorter than this
+TOO_HARD_TYPES = ("quality", "hard_long", "test_cp")    # = workout_review.HARD_TYPES (Zone 3 / Zone 5 …)
+TOO_HARD_LABEL = {"z3": N_("閾值課"), "z5": N_("VO2max 課"), "hard_long": N_("高強度長跑"), "test_cp": N_("CP 測試")}
+MIN_EASY_MIN = 20          # 推估: a trimmed easy run is never shorter than this (rule E)
 SPACING_DAYS = 2           # plan_prefs.place(): 48 h between hard days / the long run
 # E. fatigue guard
 TSB_FLOOR = -30.0          # week_plan(): TSB < −30 -> recovery week
@@ -89,8 +101,12 @@ RED_STREAK = 2             # 推估: two red sessions in a row
 
 SRC_SEILER = "Seiler：easy days easy；不補課屬推估"
 SRC_SPACING = "硬課之間隔 ≥ 2 天：台灣教練（5 區一週最多 2 次、間隔至少 2 天）"
-SRC_OVER = ("平均心率 > AeT+3 且 > 10% 時間超過（兩條都要）、z2 上限 80% CP（Palladino）、"
-            "TrainingPeaks ±20%；組合方式推估")
+SRC_OVER = N_("平均功率 > 80% CP（z2 上限，Palladino）或 TSS > 計畫 +20%（TrainingPeaks 達成度綠燈帶），"
+              "任一項；沒有功率時改看平均心率 > LTHR 的 94%（超過 Friel 跑步 Zone 3，推估）；"
+              "只標示、不動課表屬推估（使用者決定 2026-10-06）")
+SRC_TOO_HARD = N_("課別分類（Zone 3 閾值或更強）跑成強度課，就當成一堂強度課：Seiler「easy days easy」；"
+                  "用課別分類當「太強」的界線屬推估")
+OVERHARD_RULE = "overhard"
 SRC_FATIGUE = ("CTL ramp 到擋線（min(10, max(5, CTL 的 15%))，Friel 5–8／10 換算，推估）；"
                "TSB < −30（Friel／TrainingPeaks）；連兩堂紅色、減 20% 推估")
 SRC_B2B = "Johnston（UA）B2B 後「three or four light days」；B2B 造成的 TSB 下降不觸發減量為推估"
@@ -116,30 +132,37 @@ def _gap(a: str, b: str) -> int:
 
 
 def overhard(planned_tss: Optional[float], r: Optional[dict]) -> Optional[str]:
-    """Why a done easy run was too hard (Traditional Chinese), or None.
-    `r`: {avg_hr, aet, over_aet_s, hr_s, avg_power, cp, tss}."""
+    """Why a done easy run was 偏強 (rule D's label-only tier), or None. `r`: {avg_power, cp,
+    avg_hr, lthr, tss}. SP-301: avg power > 80 % CP or TSS > planned + 20 %, either one; a run
+    without power (no avg power or no CP) reads avg HR > 94 % LTHR instead of the power line
+    (the user 2026-10-06; no time-share condition). With power, HR is not used at all."""
     if not r:
         return None
-    aet, hr = r.get("aet"), r.get("avg_hr")
-    over, tot = r.get("over_aet_s"), r.get("hr_s") or 0
-    # the average-HR margin: OVER_HR_BPM or the athlete's own (threshold_calib.easy_margin, SP-69 —
-    # api/plan_sessions puts it in the review row); the time share stays the activity's AeT+3 seconds
-    margin = float(r.get("aet_margin") or OVER_HR_BPM)
-    hi_avg = bool(aet and hr and hr > aet + margin)
-    hi_share = over is not None and tot > 0 and over / tot > OVER_SHARE
-    if hi_avg and hi_share:                     # B5: both, not either
-        m = f"{margin:.0f}" if abs(margin - round(margin)) < 0.05 else f"{margin:.1f}"
-        basis = r.get("aet_margin_basis")
-        return (f"平均心率 {hr:.0f} > AeT+{m}（{aet + margin:.0f}"
-                + (_("；餘裕 {m} bpm，{basis}", m=m, basis=basis) if basis else "") + "），"
-                f"且超過的時間 {over / tot * 100:.0f}% > {OVER_SHARE * 100:.0f}%")
     p, cp = r.get("avg_power"), r.get("cp")
-    if p and cp and p > EASY_POWER_CAP * cp:
-        return f"平均功率 {p:.0f} W > {EASY_POWER_CAP * 100:.0f}% CP（{EASY_POWER_CAP * cp:.0f} W）"
+    if p and cp:
+        if p > EASY_POWER_CAP * cp:
+            return _("平均功率 {p:.0f} W > {pct:.0f}% CP（{w:.0f} W）", p=p, pct=EASY_POWER_CAP * 100,
+                     w=EASY_POWER_CAP * cp)
+    else:
+        hr, lthr = r.get("avg_hr"), r.get("lthr")
+        if hr and lthr and hr > EASY_HR_LTHR * lthr:
+            return _("平均心率 {hr:.0f} > LTHR 的 {pct:.0f}%（{bpm:.0f} bpm；沒有功率才看心率）", hr=hr,
+                     pct=EASY_HR_LTHR * 100, bpm=EASY_HR_LTHR * lthr)
     t = r.get("tss")
     if t and planned_tss and t > planned_tss * (1 + OVER_TSS):
-        return f"TSS {t:.0f} > 計畫 {planned_tss:.0f} 的 +{OVER_TSS * 100:.0f}%"
+        return _("TSS {t:.0f} > 計畫 {plan:.0f} 的 +{pct:.0f}%", t=t, plan=planned_tss, pct=OVER_TSS * 100)
     return None
+
+
+def too_hard(r: Optional[dict]) -> Optional[str]:
+    """What a done easy run turned into when the session classifier calls it a hard session
+    (Zone 3 threshold or harder: rule D's 太強 tier), else None. `r`: the review row's
+    session_type / stimulus (api/plan_sessions._adapt_ctx, workout_review.classify)."""
+    typ = (r or {}).get("session_type")
+    if typ not in TOO_HARD_TYPES:
+        return None
+    key = typ if typ in ("hard_long", "test_cp") else ("z5" if r.get("stimulus") == "z5" else "z3")
+    return _(TOO_HARD_LABEL[key])
 
 
 class _Week:
@@ -325,32 +348,8 @@ def _missed(wk: _Week, stored_missed: list[dict], out: list) -> None:
                  SRC_SPACING, before_day=was)
 
 
-def _trim_easy(wk: _Week, excess: float, out: list, rule: str, why: str, src: str) -> None:
-    """Take `excess` TSS off the remaining easy runs (≥ MIN_EASY_MIN each, else drop the last)."""
-    while excess > 0.5:
-        easy = sorted([g for g in wk.gens() if g.get("kind") == "easy" and wk.free(g) and g.get("day")
-                       and g["day"] >= wk.today and g.get("id") != "long" and not g.get("heat")],
-                      key=lambda g: g["day"])
-        tot = sum(float(g.get("tss") or 0.0) for g in easy)
-        if not easy or tot <= 0:
-            return
-        f = max(0.0, (tot - excess) / tot)
-        new_min = [_r5((g.get("minutes") or 0) * f) for g in easy]
-        if all(m >= MIN_EASY_MIN for m in new_min):
-            for g, m in zip(easy, new_min):
-                if m < (g.get("minutes") or 0):
-                    before = g["minutes"]
-                    _set_minutes(g, m)
-                    _adj(out, rule, wk, g, "trimmed", f"{wd(g['day'])}輕鬆跑 {before}→{m} 分：{why}", src,
-                         before_minutes=before)
-            return
-        last = easy[-1]
-        wk.remove(last)
-        excess -= float(last.get("tss") or 0.0)
-        _adj(out, rule, wk, last, "removed", f"{wd(last['day'])}輕鬆跑取消：{why}（縮短後會少於 {MIN_EASY_MIN} 分）", src)
-
-
-def _overhard(wk: _Week, reviews: dict, th: dict, out: list, notes: dict) -> None:
+def _done_easy(wk: _Week) -> list[dict]:
+    """This week's done easy sessions with their activity (generated and the user's own)."""
     done = [g for g in wk.gens() if g.get("done") and g.get("kind") == "easy" and isinstance(g.get("done_by"), dict)]
     seen = {(g.get("done_by") or {}).get("index") for g in done}
     for s in wk.st:      # the user's own easy sessions that are done
@@ -358,39 +357,80 @@ def _overhard(wk: _Week, reviews: dict, th: dict, out: list, notes: dict) -> Non
                 and s["done_by"].get("index") not in seen:
             done.append({"id": s.get("gen_key") or s["uid"], "kind": "easy", "day": s["day"], "tss": s.get("tss"),
                          "done": True, "done_by": s["done_by"], "title": s.get("title")})
-    for g in sorted(done, key=lambda g: g.get("day") or ""):
+    return sorted(done, key=lambda g: g.get("day") or "")
+
+
+def _as_hard(wk: _Week, day: str, label: str, th: dict, out: list, touched: set, act) -> bool:
+    """Rule D 太強: the run on `day` counts as a hard session — the next free hard session < 48 h
+    after it moves to a free day ≥ 48 h away, else steps down (rule D′ / B's spacing). When the
+    generator already moved it off its stored day (week_plan's hard_done), that move gets the
+    reason. True when a session was adjusted."""
+    src = _(SRC_TOO_HARD) + "；" + SRC_SPACING
+    nxt = sorted([h for h in wk.gens() if h.get("kind") in HARD and wk.free(h) and h.get("day")
+                  and h.get("id") not in touched and 0 <= (_d(h["day"]) - _d(day)).days < SPACING_DAYS],
+                 key=lambda h: h["day"])
+    for h in nxt[:1]:
+        pick = next((d for d in wk.open_days(skip=h) if _hard_ok(wk, h, d, extra_after=day)), None)
+        was = h["day"]
+        touched.add(h.get("id"))
+        if pick:
+            h["day"] = pick
+            _adj(out, OVERHARD_RULE, wk, h, "moved",
+                 _("{was} {title}延到{to}：{day}輕鬆跑跑成{label}，間隔不到 48 小時",
+                   was=wd(was), title=h.get("title") or "", to=wd(pick), day=wd(day), label=label),
+                 src, before_day=was, activity=act)
+        else:
+            old = h.get("title")
+            became = _downgrade(h, th)
+            _adj(out, OVERHARD_RULE, wk, h, "downgraded",
+                 _("{was} {old}改成{became}：{day}輕鬆跑跑成{label}，本週沒有隔 48 小時的空日",
+                   was=wd(was), old=old or "", became=became, day=wd(day), label=label),
+                 src, before_title=old, activity=act)
+        return True
+    # week_plan keeps the remaining hard sessions 48 h from a done hard run (hard_done): the
+    # generator may have moved it already — give that move this reason (reconcile's change)
+    stored = {s["gen_key"]: s for s in wk.st if s.get("gen_key") and s["state"] == "active"
+              and s.get("origin") == "auto" and not s.get("edited") and s["kind"] in HARD and s.get("day")}
+    for h in sorted(wk.gens(), key=lambda h: h.get("day") or ""):
+        s = stored.get(h.get("id"))
+        if s is None or h.get("kind") not in HARD or not wk.free(h) or h.get("id") in touched \
+                or not h.get("day") or h["day"] == s["day"]:
+            continue
+        if 0 <= (_d(s["day"]) - _d(day)).days < SPACING_DAYS <= (_d(h["day"]) - _d(day)).days:
+            touched.add(h["id"])
+            _adj(out, OVERHARD_RULE, wk, h, "moved",
+                 _("{was} {title}延到{to}：{day}輕鬆跑跑成{label}，間隔不到 48 小時",
+                   was=wd(s["day"]), title=h.get("title") or "", to=wd(h["day"]), day=wd(day), label=label),
+                 src, before_day=s["day"], activity=act)
+            return True
+    return False
+
+
+def _overhard(wk: _Week, reviews: dict, th: dict, out: list, notes: dict) -> None:
+    """Rule D (module doc, SP-301): 太強 → handled as a hard session; else 偏強 → a label only."""
+    touched = {a.get("gen_key") for a in out if a.get("action") != "note"}
+    for g in _done_easy(wk):
         a = g["done_by"]
-        r = reviews.get(a.get("index")) or reviews.get(str(a.get("index")))
+        idx = a.get("index")
+        r = reviews.get(idx) or reviews.get(str(idx))
         rr = dict(r or {})
         if rr.get("tss") is None:
             rr["tss"] = a.get("tss")              # the activity row's real TSS
-        why = overhard(g.get("tss"), rr)
-        if not why:
-            continue
         day = a.get("date") or g["day"]
-        notes[a.get("index")] = f"輕鬆跑偏強（{why}）：已調整之後的課表"
-        _adj(out, "overhard", wk, {**g, "day": day}, "note", f"{wd(day)}輕鬆跑偏強（{why}）：課表不作廢、算完成", SRC_OVER)
-        # 2. the next hard session within 48 h
-        nxt = sorted([h for h in wk.gens() if h.get("kind") in HARD and wk.free(h) and h.get("day")
-                      and 0 <= (_d(h["day"]) - _d(day)).days < SPACING_DAYS], key=lambda h: h["day"])
-        for h in nxt[:1]:
-            pick = next((d for d in wk.open_days(skip=h) if _hard_ok(wk, h, d, extra_after=day)), None)
-            was = h["day"]
-            if pick:
-                h["day"] = pick
-                _adj(out, "overhard", wk, h, "moved",
-                     f"{h['title']}從{wd(was)}延到{wd(pick)}：{wd(day)}輕鬆跑偏強，間隔不到 48 小時", SRC_OVER + "；" + SRC_SPACING,
-                     before_day=was)
-            else:
-                old = h.get("title")
-                became = _downgrade(h, th)
-                _adj(out, "overhard", wk, h, "downgraded",
-                     f"{wd(was)}{old}改成{became}：{wd(day)}輕鬆跑偏強，本週沒有隔 48 小時的空日", SRC_OVER, before_title=old)
-        # 3. keep the week's TSS: the excess comes off the remaining easy runs
-        actual = rr.get("tss")
-        excess = (float(actual) - float(g.get("tss") or 0.0)) if actual is not None else 0.0
-        if excess > 0:
-            _trim_easy(wk, excess, out, "overhard", f"{wd(day)}輕鬆跑多了 {excess:.0f} TSS，維持本週的 TSS 目標", SRC_OVER)
+        label = too_hard(rr)
+        if label:
+            acted = _as_hard(wk, day, label, th, out, touched, idx)
+            what = _("已調整之後的強度課") if acted else _("48 小時內沒有強度課，課表不用動")
+            notes[idx] = _("輕鬆跑跑成強度課（{label}）：{what}", label=label, what=what)
+            _adj(out, OVERHARD_RULE, wk, {**g, "day": day}, "note",
+                 _("{day}輕鬆跑跑成強度課（{label}）：{what}", day=wd(day), label=label, what=what),
+                 _(SRC_TOO_HARD), activity=idx)
+            continue
+        why = overhard(g.get("tss"), rr)
+        if why:
+            notes[idx] = _("輕鬆跑偏強（{why}）：只標示，課表不變", why=why)
+            _adj(out, OVERHARD_RULE, wk, {**g, "day": day}, "note",
+                 _("{day}輕鬆跑偏強（{why}）：只標示，課表不變", day=wd(day), why=why), _(SRC_OVER), activity=idx)
 
 
 def _rated_label(r: dict) -> str:
@@ -407,6 +447,8 @@ def _rpe_hard(wk: _Week, rated: dict, th: dict, out: list) -> None:
     if not rated:
         return
     touched = {a.get("gen_key") for a in out if a.get("action") != "note"}
+    # a run rule D's 太強 already acted on: one adjustment, not two (SP-301)
+    acted = {str(a.get("activity")) for a in out if a.get("rule") == OVERHARD_RULE and a.get("action") != "note"}
     done = [g for g in wk.gens() if g.get("done") and (g.get("kind") in ("easy", "long") or g.get("id") == "long")
             and isinstance(g.get("done_by"), dict)]
     seen = {(g.get("done_by") or {}).get("index") for g in done}
@@ -418,7 +460,7 @@ def _rpe_hard(wk: _Week, rated: dict, th: dict, out: list) -> None:
     for g in sorted(done, key=lambda g: g.get("day") or ""):
         a = g["done_by"]
         r = rated.get(a.get("index")) or rated.get(str(a.get("index")))
-        if not r or r.get("rpe") is None or float(r["rpe"]) < CR.HARD_RPE:
+        if not r or r.get("rpe") is None or float(r["rpe"]) < CR.HARD_RPE or str(a.get("index")) in acted:
             continue
         day = a.get("date") or g["day"]
         what = _("長跑") if (g.get("kind") == "long" or g.get("id") == "long") else _("輕鬆跑")
@@ -510,14 +552,25 @@ def adapt(gen_weeks: list[dict], stored: list[dict], ctx: dict) -> tuple[list[di
     th = ctx.get("thresholds") or {}
     missed = [s for s in wk.st if s["state"] == "missed" and s.get("origin") == "auto" and s.get("gen_key")]
     _missed(wk, missed, out)
-    _overhard(wk, ctx.get("reviews") or {}, th, out, notes)
     _fatigue(wk, stored, ctx, th, out)
+    # D after E: a session E removed / stepped down is left alone (one adjustment per session)
+    _overhard(wk, ctx.get("reviews") or {}, th, out, notes)
     if ctx.get("rpe_rule", True):
         _rpe_hard(wk, ctx.get("rpe") or {}, th, out)
     return weeks, out, notes
 
 
+# the notes rule D writes on the done session (a stale one is cleared): 偏強 / 太強, in either language
 NOTE_PREFIX = "輕鬆跑偏強"
+NOTE_TOO_HARD = "輕鬆跑跑成強度課"
+
+
+def _note_prefixes() -> tuple:
+    from backend.i18n import translate
+    out = []
+    for p in (NOTE_PREFIX, NOTE_TOO_HARD):
+        out += [p, translate(p, "en")]
+    return tuple(x for x in out if x)
 
 
 def apply_notes(sessions: list[dict], notes: dict) -> None:
@@ -531,7 +584,7 @@ def apply_notes(sessions: list[dict], notes: dict) -> None:
         n = keyed.get(str(idx)) if idx is not None else None
         if n:
             s["note"] = n
-        elif (s.get("note") or "").startswith(NOTE_PREFIX):
+        elif (s.get("note") or "").startswith(_note_prefixes()):
             s["note"] = None
 
 

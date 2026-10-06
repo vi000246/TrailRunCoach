@@ -19,7 +19,8 @@ Safety
       - a week's planned TSS + > 20 % vs the stored (= last pushed) version
         (reductions are the safe direction and apply on their own)
       - a long / quality / test removed within 14 days before an A race; within those
-        14 days also any move / step-down by the self-rating rule (SP-231)
+        14 days also any move / step-down by the self-rating rule (SP-231) or by rule D's
+        太強 tier (an easy run that turned into a hard session, SP-301)
       - a phase change since the last run
       - > 3 sessions changed in the push window that are not pure reductions
   * every run that changes something writes a plan_change_log row (Traditional
@@ -54,7 +55,7 @@ from sqlalchemy import select
 
 from backend.db.current import current_athlete_id
 from backend.db.models import PlanChangeLog, PlanSession
-from backend.i18n import _
+from backend.i18n import N_, _
 
 log = logging.getLogger(__name__)
 
@@ -65,10 +66,12 @@ MAX_CHANGED = 3             # > 3 non-reducing changes in the push window
 BIG_TEXT = {"tss": "單週計畫 TSS 比上次推送 +20% 以上（推估）",
             "race": "A 賽前 14 天內拿掉長跑／強度課／測試（推估）",
             "rpe": "A 賽前 14 天內因為跑後自評延後或降階強度課（推估）",
+            "too_hard": N_("A 賽前 14 天內因為輕鬆跑跑成強度課，延後或降階強度課（推估）"),
             "phase": "訓練周期改變（推估）",
             "many": "推送範圍內超過 3 堂課改變、而且不是單純減量（推估）"}
 HARD_LONG = ("long", "quality", "test")
 RPE_RULE = "rpe_hard"       # engine/adapt.py: the self-rating trigger of rule D (SP-231)
+OVERHARD_RULE = "overhard"  # engine/adapt.py rule D: only its 太強 tier changes sessions (SP-301)
 CMP = ("day", "kind", "title", "minutes", "target", "detail", "tss", "terrain", "protocol")
 NOTICE_KIND = "notice"
 REJECTED_KEEP = 20
@@ -194,12 +197,13 @@ def classify(stored: list[dict], new: list[dict], items: list[dict], today: str,
             k = (i.get("before") or {}).get("kind") or i.get("kind")
             if gone and k in HARD_LONG and start <= (i.get("day") or "") <= race:
                 out.append({"rule": "race", "text": f"A 賽前 {RACE_GUARD_DAYS} 天內拿掉 {_md(i['day'])} {i['title']}"})
-            # the self-rating rule (SP-231) only moves / steps down: still the user's call this
-            # close to the A race (research §4.3: tired in a taper is common)
-            elif i.get("rule") == RPE_RULE and any(start <= (d or "") <= race for d in
-                                                    (i.get("day"), (i.get("before") or {}).get("day"))):
-                out.append({"rule": "rpe", "text": _("A 賽前 {n} 天內：{reason}", n=RACE_GUARD_DAYS,
-                                                     reason=i.get("reason") or i.get("title") or "")})
+            # the self-rating rule (SP-231) and rule D's 太強 (SP-301) only move / step down:
+            # still the user's call this close to the A race (research §4.3: tired in a taper is common)
+            elif i.get("rule") in (RPE_RULE, OVERHARD_RULE) and any(start <= (d or "") <= race for d in
+                                                                     (i.get("day"), (i.get("before") or {}).get("day"))):
+                out.append({"rule": "rpe" if i["rule"] == RPE_RULE else "too_hard",
+                            "text": _("A 賽前 {n} 天內：{reason}", n=RACE_GUARD_DAYS,
+                                      reason=i.get("reason") or i.get("title") or "")})
     for i in [x for x in items if x["action"] == "dropped" and x.get("kind") in HARD_LONG]:
         if days_to_race is not None and 0 <= days_to_race <= RACE_GUARD_DAYS + 7:
             out.append({"rule": "race", "text": f"A 賽前取消 {_md(i['day'])} {i['title']}"})

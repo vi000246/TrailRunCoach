@@ -198,15 +198,14 @@ def _adapt_ctx(ds, st, cur: dict, monday: dt.date, today: dt.date, enabled: bool
     hard_days: set = set()
     if enabled:
         try:
-            from backend.engine import threshold_calib as TCAL
             from backend.engine import workout_review as WR
-            margin = TCAL.margin_fields()       # the easy-run HR margin in effect and whose it is (SP-69)
             for w in O.workouts_between(ds, monday, today + dt.timedelta(days=1)):
                 if O.category(w) not in ("road", "trail", "hike"):
                     continue
                 # a hard day done this week, planned or not (Z5 / Z3 / 高強度長跑 / CP test):
                 # adapt keeps the remaining hard sessions 48 h away from it
-                if O.session_of(ds, w).get("type") in WR.HARD_TYPES:
+                sess = O.session_of(ds, w)
+                if sess.get("type") in WR.HARD_TYPES:
                     hard_days.add(O.wdate(w).isoformat())
                 if O.category(w) == "hike":
                     continue
@@ -214,9 +213,11 @@ def _adapt_ctx(ds, st, cur: dict, monday: dt.date, today: dt.date, enabled: bool
                 if rec:
                     rated[w.idx] = rec
                 m = WR.measure(ds, w) or {}
-                reviews[w.idx] = {k: m.get(k) for k in ("avg_hr", "aet", "over_aet_s", "hr_s", "avg_power", "cp")}
+                # rule D (SP-301): 偏強 reads power (else HR ÷ LTHR) and TSS; 太強 the session class
+                reviews[w.idx] = {k: m.get(k) for k in ("avg_hr", "aet", "lthr", "avg_power", "cp")}
                 reviews[w.idx]["tss"] = O._n(w.metrics.get("tss"))
-                reviews[w.idx].update(margin)
+                reviews[w.idx]["session_type"] = sess.get("type")
+                reviews[w.idx]["stimulus"] = sess.get("stimulus")
             WR._flush(ds)
         except Exception:                   # noqa: BLE001 — a review failure never breaks the plan
             pass

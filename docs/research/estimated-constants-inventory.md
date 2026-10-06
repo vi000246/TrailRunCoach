@@ -122,8 +122,10 @@
 
 | 常數 | 值 | 位置 | 用途 | 來源 | 敏感 | 類 |
 |---|---|---|---|---|---|---|
-| `OVER_HR_BPM`、`OVER_SHARE` | AeT +3、10 % | `adapt.py:71-72` | 輕鬆跑偏強 | 推估（`unsourced-rules.md` §B5） | 高（會改後面幾天的課） | A |
-| `EASY_POWER_CAP` | 80 % CP | `adapt.py:73` | 同上 | Palladino（教練） | 中 | D |
+| ~~`OVER_HR_BPM`、`OVER_SHARE`~~ | AeT +3、10 % | 已移除（SP-301，2026-10-06） | 輕鬆跑偏強不再看 AeT+3 | — | — | — |
+| `EASY_HR_LTHR` | 94 % LTHR | `adapt.py` | 沒有功率時的輕鬆跑偏強（只標示） | Friel 跑步 Zone 3 上緣（教練）；拿來當門檻屬推估（使用者決定 2026-10-06） | 低 | C |
+| `TOO_HARD_TYPES` | 課別分類 Zone 3 以上 | `adapt.py` | 輕鬆跑「太強」→ 當強度課調整 | 推估（SP-301 使用者決定） | 中（會改後面 48 小時的強度課） | C |
+| `EASY_POWER_CAP` | 80 % CP | `adapt.py` | 輕鬆跑偏強（只標示，SP-301） | Palladino（教練） | 低 | D |
 | `OVER_TSS`、`BIG_TSS_UP` | +20 %、+20 % | `adapt.py:74`、`plan_auto.py:60` | 偏強、大變更 | TrainingPeaks 達成度綠燈帶；大變更是推估 | 中 | D |
 | `MIN_EASY_MIN`、`FATIGUE_CUT`、`RED_STREAK` | 20 分、×0.8、2 堂 | `adapt.py:75-80` | 疲勞時減量 | 推估 | 中 | C |
 | `RACE_GUARD_DAYS`、`MAX_CHANGED` | 14 天、3 堂 | `plan_auto.py:61-62` | 大變更的定義 | 推估，**未找到來源**（`unsourced-rules.md:409`） | 低（只決定要不要你確認） | C |
