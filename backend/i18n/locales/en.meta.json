@@ -2947,6 +2947,14 @@
     "draft": true,
     "src": "backend/engine/racepower/calc.py:396"
   },
+  "推估：近 180 天確實輕鬆的跑步不到 3 筆，也沒有輕鬆跑上限或 LTHR，用路跑的預設值": {
+    "draft": false,
+    "src": "backend/engine/overview.py"
+  },
+  "推估：近 180 天確實輕鬆的跑步不到 3 筆，用輕鬆跑上限換算：IF = 上限心率 ÷ LTHR（hrTSS 的 IF 定義），每小時 TSS = IF² × 100（TrainingPeaks TSS 公式）": {
+    "draft": false,
+    "src": "backend/engine/overview.py"
+  },
   "推估：近 {days} 天 {n} 次路跑中，心率在 LTHR ±3% 的最快 20 分鐘配速中位數（Friel 30 分鐘測試的後 20 分鐘）": {
     "draft": true,
     "src": "backend/engine/thresholds.py:261"
@@ -4894,6 +4902,14 @@
   "輕鬆跑的心率餘裕（AeT 以上幾 bpm 還算輕鬆）": {
     "draft": true,
     "src": "backend/engine/threshold_calib.py:131"
+  },
+  "輕鬆跑的計畫 TSS 每小時 {rate:.0f}（{src}）": {
+    "draft": false,
+    "src": "backend/engine/overview.py"
+  },
+  "輕鬆跑的計畫 TSS：近 180 天確實輕鬆的跑步（課別分類為輕鬆跑、或平均心率在輕鬆跑上限內；強度課、中強度跑不算）每小時 TSS 的中位數": {
+    "draft": false,
+    "src": "backend/engine/overview.py"
   },
   "輕鬆跑（1 區）打底。參考：每週約 {lo}–{hi} 分鐘 1 區": {
     "draft": true,

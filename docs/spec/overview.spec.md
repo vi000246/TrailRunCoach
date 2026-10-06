@@ -1,6 +1,6 @@
 # Module Spec: overview
 
-> **Last Updated**: 2026-10-05
+> **Last Updated**: 2026-10-06
 > **Status**: Active
 > **Domain Layer**: Core Domain
 
@@ -460,6 +460,24 @@ day before the long run. The 課表 calendar shows 「休息」 on an empty plan
 agenda): dragged onto another day it calls `POST /rest-days/move {from, to}` — that day's active
 sessions move to `from` as user moves, with a warning when a moved hard session ends up < 2 days
 from another (`rest_days.swap_warnings`).
+
+**Session TSS** (`_tss_per_hour`): a session's planned TSS = its minutes × a TSS / h rate. The
+long run and the other sessions take the median TSS per moving hour of the athlete's last 180
+days in that category (road / trail / hike / strength, ≥ 3 activities, else
+`TSS_PER_HOUR_DEFAULT`); the quality sessions and tests carry their own fixed rates. The **easy
+run** (SP-302) has its own rate `easy`: the median over the last 180 days' **genuinely easy**
+runs only — the session classifier says 輕鬆跑 and not 中強度跑, or the average HR is within the
+easy line (AeT + 3, `workout_review.classify` `stim.easy_hr`); a Zone 3 / Zone 5 / 高強度長跑 /
+test never counts (`overview._genuinely_easy`). Road runs first; with < 3 of them, road + trail.
+With < 3 in all: 推估 from the easy cap's IF — IF = cap HR ÷ LTHR (hrTSS's IF, ≤ 1), rate =
+IF² × 100 (TrainingPeaks' TSS formula) — and without a cap or LTHR the road default 55; the
+week gets an info note (`src: easy_tss`) naming the rate and its basis. `easy_trail` (課表偏好
+輕鬆跑地形 = 越野) is the same over trail runs, else `easy`. The output's `easy_tss` = {n,
+estimated, rate, source}; `plan_prefs._easy` and the editor's estimate
+(`plan_sessions.tss_rates`, kind easy → `easy`, a plan from before → `road`) read the same
+rates. Before, the easy run took the road median of every run — intervals and 中強度跑 too
+(one runner: 79 TSS / h ≈ IF 0.89, near tempo; easy runs only: 70) — so a run kept under the
+cap looked short of its plan and rule D's TSS + 20 % never fired (plan-auto.spec.md).
 
 **Output**: target / done / remaining (hours, TSS), the reasons (`why`), the rules cited,
 8-week history, load now and at Sunday (CTL, ATL, next-Monday TSB, weekly ramp), the daily
@@ -1700,3 +1718,4 @@ deleted / superseded) are returned as reconcile `changes` (`backend/engine/recon
 | 2026-10-05 | feature | SP-74 follow-up | The user's own 技術地形 session (custom or edited, RPE ≥ 7 by `session_role`) counts in the week's 20 % like the generated one: `plan_store.user_rpe_rows` → `technical.user_quality`, `quality_sessions(reserved=)` shortens / leaves out the intervals (note), no generated 技術地形 that 專項期 week, a week note; week_plan and projection alike |
 | 2026-10-05 | feature | SP-75 | 專項期 sessions climb the ladders (trail uphill versions; no fixed 2×15′ / 5×4′), 前段 / 後段 ratios, the road MP segment grows every other week (`MP_PLAN`, `mp_race` / `mp_week`) |
 | 2026-10-06 | change | SP-245 | 主要訓練項目 自動: A races first — only trail (越野賽 / 百岳) → trail, only road → road, both → the harder race (`event_size` tier → predicted hours → EP; tie / unknown size → trail; `primary_sport._harder`); with no future A race the B races the same way; else the 12-week share; C / past / 其他 races never count; the reason names the race (and the race it was compared with); only the 自動 setting is affected |
+| 2026-10-06 | change | SP-302 | The easy run's planned TSS / h (`easy`, `easy_trail`) from genuinely easy runs only (classifier 輕鬆跑 not 中強度跑, or average HR ≤ AeT + 3; no Zone 3 / Zone 5 / test); < 3 → 推估 from the easy cap's IF (cap ÷ LTHR)² × 100 with a note; long run / quality rates unchanged; `easy_tss` in the output; `plan_prefs._easy` and `plan_sessions.tss_rates` read it |
