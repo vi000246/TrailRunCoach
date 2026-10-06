@@ -130,3 +130,16 @@ def test_event_keeps_the_poles_choice():
     assert plan.upsert_event({"name": "x", "date": "2026-11-01"}).poles is False
     e = plan.upsert_event({"name": "y", "date": "2026-11-01", "poles": True})
     assert e.poles is True and P.event_json(e, e.start)["poles"] is True
+
+
+def test_descent_source_is_gravina_cognetti_in_both_languages():
+    """SP-247: the downhill-power claim cites Gravina-Cognetti 2025 (the old 「Kipp 2023」 was untraceable)."""
+    from backend.engine import target_policy as TP
+    from backend.i18n import use_locale
+    plan = {"type": "trail", "segments": [seg(-0.12, i=1)], "summary": {"time_s": 3600.0}}
+    zh = ST.plan_targets(plan)[0]["src"]
+    assert "Gravina-Cognetti 2025" in zh and "+90 %" in zh and "+74 %" in zh and "Kipp" not in zh
+    assert "Kipp" not in TP.SRC["down"] and "Gravina-Cognetti 2025" in TP.SRC["down"]
+    with use_locale("en"):
+        en = ST.plan_targets(plan)[0]["src"]
+    assert en.startswith("Descent: power under-reads") and "Gravina-Cognetti 2025" in en

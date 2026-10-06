@@ -303,6 +303,8 @@
   "下坡課排在賽前第 {weeks} 週": "Downhill sessions go in weeks {weeks} before the race",
   "下坡離心（下坡 {work}′）": "Downhill eccentric ({work}′ downhill)",
   "下坡離心（第一次，下坡 {work}′）": "Downhill eccentric (first one, {work}′ downhill)",
+  "下坡：Stryd 功率低估下坡的負荷（Gravina-Cognetti 2025：−7～+7 % 時功率 +90 %、耗氧只 +74 %），看下降量與技術": "Downhill: Stryd power under-reads the load of a descent (Gravina-Cognetti 2025: from −7 to +7 % power rises 90 %, oxygen uptake only 74 %); go by the descent and technique",
+  "下坡：功率低估下坡的負荷（Gravina-Cognetti 2025：−7～+7 % 時功率 +90 %、耗氧只 +74 %），心率也不當目標，看技術與安全": "Descent: power under-reads the load of a descent (Gravina-Cognetti 2025: from −7 to +7 % power rises 90 %, oxygen uptake only 74 %), and heart rate is no target either; go by technique and safety",
   "下週安排恢復週": "Plan a recovery week next week",
   "下降": "Descent",
   "下降量 ≈ 25′ × 約 7 km/h × 12% 坡（推估）；不設心率、功率目標": "Descent ≈ 25′ × about 7 km/h × 12% grade (estimate); no heart-rate or power target",

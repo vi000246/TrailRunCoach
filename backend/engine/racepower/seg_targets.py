@@ -11,7 +11,8 @@ vo2max-gate-and-trail-metric.md §2.3, engine/target_policy.py):
                               predicted speed, SP-226): 陡坡（走／走跑皆可／跑）; a 3–8 %
                               climb counts here only when it is walked: 爬坡（走）
     descent                   no power / HR target: time and pace as a reference,
-                              「控制、安全」 (Stryd under-reads the eccentric load, Kipp 2023)
+                              「控制、安全」 (Stryd power under-reads the descent's load:
+                              −7 → +7 % power +90 %, VO2 +74 %, Gravina-Cognetti 2025)
     flat / runnable           power (HR when there is no CP)
     百岳 (pack)                HR ≤ AeT + VAM + segment / day time; never pace
 
@@ -40,7 +41,8 @@ STEEP_LABEL = {"walk": N_("陡坡（走）"), "either": N_("陡坡（走跑皆�
 WALKED_CLIMB_LABEL = N_("爬坡（走）")       # 3–8 % but slower than the walk–run transition speed
 SRC = {"run_climb": "3–8 % 坡：Stryd 功率 ≈ 固定代謝負荷（van Rassel 2026）；心率只當上限",
        "steep_climb": "> 8 %：功率低估，改看心率上限與 VAM（Uphill Athlete）",
-       "descent": "下坡：功率和心率都低估離心負荷（Kipp 2023；Gravina-Cognetti），看技術與安全",
+       # SP-247: Gravina-Cognetti et al. 2025 (Sports 13:294; power-gap-trail-validity.md §3 #2)
+       "descent": N_("下坡：功率低估下坡的負荷（Gravina-Cognetti 2025：−7～+7 % 時功率 +90 %、耗氧只 +74 %），心率也不當目標，看技術與安全"),
        "flat": "平路與可跑段：功率（沒有 CP 時看心率）",
        "hike": "百岳揹重：心率 ≤ AeT（Uphill Athlete）＋ VAM；配速受地形與背負影響，不當目標"}
 
@@ -155,7 +157,7 @@ def chart_rows(plan: dict, *, aet: Optional[float] = None, lthr: Optional[float]
     plan type: the pace, power and heart-rate target that segment is run by, null where
     that measure is not a valid target there —
       power  road: every segment; trail: flat / runnable climbs only (Stryd ≈ metabolic
-             load on 0–8 %, van Rassel 2026; > 8 % under-reads, descents too, Kipp 2023);
+             load on 0–8 %, van Rassel 2026; > 8 % under-reads, descents too, Gravina-Cognetti 2025);
              百岳: none
       hr     the race cap (hr_cap: LTHR ≤ 3 h, AeT beyond, the trail HR model's race HR;
              百岳 AeT); none on trail / 百岳 descents (控制、安全)
@@ -227,10 +229,10 @@ def plan_targets(plan: dict, *, aet: Optional[float] = None, lthr: Optional[floa
                     chips.append({"icon": "❤️", "text": f"心率 ≤ {cap:.0f}", "role": "main"})
                 if v and k in ("steep_climb", "run_climb"):
                     chips.append({"icon": "⛰️", "text": f"VAM {v:.0f} m/h"})
-            src = SRC["hike"] if k != "descent" else SRC["descent"]
+            src = SRC["hike"] if k != "descent" else _(SRC["descent"])
         elif k == "descent":
             chips.append({"icon": "🛡️", "text": "控制、安全"})
-            src = SRC["descent"]
+            src = _(SRC["descent"])
         elif k == "steep_climb":
             basis = "hr"
             if cap:
