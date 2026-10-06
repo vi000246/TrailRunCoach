@@ -373,6 +373,7 @@
 | `heat-acclimation.md` | Roberts WO, et al. 2023. ACSM expert consensus statement on exertional heat illness. *Curr Sports Med Rep* 22:134–149 | doi:10.1249/JSR.0000000000001058 | 只讀摘要（L296、L670）。**新增**。2026-10-06 再試（SP-107 #9）：journals.lww.com 全文頁回 402（付費），仍沒讀到 | app 的熱傷害安全症狀清單標 [待驗證]，要對全文逐條 | P2 | A（Curr Sports Med Rep 的 ACSM 共識通常免費；這次 402，改試 PMC 或 ACSM 官網 PDF） |
 | `heat-acclimation.md` | Tyler CJ, et al. 2016 熱適應統合分析的**勘誤**（*Sports Med*，Springer） | doi:10.1007/s40279-016-0572-3 | 導向登入，未讀（2026-10-06，SP-107 #9）。**新增** | 確認勘誤有沒有改到 −0.31 °C／−12 bpm（正文已用作者接受稿核對過） | P3 | A → B |
 | `heat-acclimation.md` | Greenfield 2025（*J Appl Physiol*） | https://journals.physiology.org/doi/full/10.1152/japplphysiol.00624.2025 | 全文 403，只有搜尋摘要（2026-10-06，SP-107 #9）。**新增** | 多穿衣服熱適應的衣服組合與 clo 值（`heat_plan.py` 的「多穿長袖或防風外套」夠不夠） | P2 | A（APS 期刊用瀏覽器開）→ B |
+| `zones-and-thresholds.md` | Veritas Endurance Coaching（Robert Duncan）〈Bike and Run Heart Rate Based Field Tests〉TrainingPeaks 商城課表 TP-18131（US$9.99） | https://www.trainingpeaks.com/training-plans/triathlon/tp-18131/bike-and-run-heart-rate-based-field-tests | 課表內容要購買，只讀到公開說明（2026-10-06，SP-107 #11）。**新增** | 「10 分鐘測試測最大心率」的步驟。第三方教練的課表、不是 TrainingPeaks 的方法，**不需要補**；app 已有 Polar、McMillan 兩個公開來源 | P3 | E（不建議買） |
 | `back-to-back-and-long-day.md` | Roche D, Roche M. Back-to-Back Long Runs and Workouts（Trail Runner） | https://run.outsideonline.com/training/workouts/back-back-long-runs-workouts-next-level-training-done-right/ | 付費牆，只有搜尋摘要（L146、L364） | 一次 40–50 英里改成兩天；第 1 天速度、第 2 天爬坡 | P3 | E（Outside+ 會員） |
 | `trail-terrain-and-climb-sessions.md` | Johnston S. 爬坡文章（Trail Runner Magazine） | 文件未附網址與題名 | 付費牆（L184） | 爬坡課、肌耐力課；已有 iRunFar 2025 訪談代替 | P3 | E |
 | `specific-phase-progression.md` | Arcelli E, Canova R.《Marathon Training – A Scientific Approach》1999 | 書；書評 https://runningwritings.com/2023/06/canova-marathon-book.html | 原書未讀，只讀 John Davis 書評（L60） | 專項期賽前 6–8 週、30–35 km @ 97–100 % MP；SP-75 專項期內部進階 | P3 | D（可能已絕版，二手書） |
@@ -424,9 +425,10 @@
 | Uphill Athlete〈What Norwegian endurance science teaches us about building aerobic base〉 | `aerobic-base-readiness.md` §2.1、§8 | 坡衝刺歸在神經肌肉訓練，只有摘要（擋下載、Wayback 沒有快照） |
 | TrainingPeaks help 全站（EF／Pa:HR、Dashboard Charts、Performance Insights、達成度顏色、Low rTSS and Trail Running） | `competitor-charts.md` L23、L370；`coaching-dashboards-mountain.md` L44；`estimated-constants-inventory.md` L256；`uphill-athlete-mountain-metrics.md` L395 | 達成度綠燈 80–120 %（`OVER_TSS` ±20 % 的依據）目前只有第三方整理 |
 | Strava 工程部落格〈An improved GAP model〉（medium.com） | `racepower-v2.md` L45、L1380；`competitor-charts.md` L371；`uphill-athlete-mountain-metrics.md` L259 | GAP 下坡加成上限約 10 % |
-| ITRA FAQ、Performance Index、資料使用條款 | `competitor-charts.md` L373；`effort-distance-formulas.md` L525；`public-datasets.md` L291 | ITRA 原文措辭；研究者例外條款**未驗證** |
+| ITRA FAQ、Performance Index、資料使用條款 | `competitor-charts.md` L373；`effort-distance-formulas.md` L525；`public-datasets.md` L291 | ITRA 原文措辭；研究者例外條款**未驗證**。2026-10-06（SP-107 #12）：FAQ 的 Runner、ItraScore、Organizers、PerformanceIndex 四頁用一般 HTTP 下載就有全文，已讀完並核對（`effort-distance-formulas.md` §1.1）。點數表是圖片，要帶 Referer 才下載得到。**資料使用條款（`public-datasets.md`）這次沒查，仍未驗證** |
 | YAMAP 說明頁 | `effort-distance-formulas.md` L25、L528 | YAMAP 的時間來源 |
-| Garmin Connect Terms of Use（一般使用者版） | `garmin.md` L120、L365 | 自動化存取條款 |
+| ~~Garmin Connect Terms of Use（一般使用者版）~~ | `garmin.md` L120、L365 | 自動化存取條款。**2026-10-06 已讀到（SP-107 #15）**：條文以 JSON 嵌在原始 HTML，Effective Date: April 1, 2026，見 `garmin.md` §2.4 |
+| Uphill Athlete 全站（直接下載回 403） | `zones-and-thresholds.md` C.1、`periodization-phase-metrics.md` 來源核對 | 2026-10-06（SP-107 #11、#13）改用轉文字代理抓原始 HTML、或 Wayback 快照，都讀得到；不是付費牆 |
 | Uphill Athlete 論壇〈How to schedule the recovery week〉 | `estimated-constants-inventory.md` L236 | 恢復週減 40–60 %，只看到搜尋摘要 |
 | Runalyze、SportTracks、Nolio 的 API 條款 | `data-hubs.md` L159–162 | 商業條件**未驗證** |
 | Freetrail 訓練計畫（付費內容） | `coaching-dashboards-mountain.md` L148 | 計畫內容 |

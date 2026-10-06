@@ -255,6 +255,7 @@ FIT 資料集（COROS／TP）的規則寫在 `backend/engine/wko5expr/fitdataset
 - Friel：在 Base、Build 期初各測一次 LTHR（原文 "early in the Base and Build periods"）。
 - 筆記：CP 每 4–6 週（`backend/engine/status.py:60`）。
 - UA：AeT 4–6 週重測（措辭**未驗證**，見 `backend/engine/quality_gate.py:754`）。
+  - 2026-10-06 補（SP-107 #8、#11）：UA 兩個頁面講法不同。〈Heart Rate Drift〉："Athletes are encouraged to perform this test every 4-6 months"（`aerobic-base-readiness.md` §8）；〈Zone 2 Heart Rate Training〉（2026-06-07 改版）："Every test on this page gives you a snapshot: a number that holds for six to ten weeks while your fitness keeps moving in between."（已驗證，原始 HTML）。後者是在推銷它的每週自動 AeT，不是重測建議，但「6–10 週」比「4–6 週」或「4–6 個月」更接近 app 的 `NO_DATA_DAYS = 42`。
 - 徐國峰：每次目標賽後、跑力提升後，用新的 E 配速重新打底，再做 90 分鐘檢測（`跑者都該懂的跑步數據，讀書心得.md:77`）。
 
 **證據**
@@ -441,4 +442,36 @@ FIT 資料集（COROS／TP）的規則寫在 `backend/engine/wko5expr/fitdataset
 - **安全**：最大強度運動前的篩檢依 ACSM（Riebe D et al. 2015, Updating ACSM's recommendations for exercise preparticipation health screening, *Med Sci Sports Exerc* 47(11):2473–2479；本次沒有重讀原文）：有心血管疾病或症狀的人先經醫師同意。範本寫「有心血管疾病或風險、胸痛、頭暈的人不要做，不舒服立刻停」。
 - **感測器**：腕式對心電圖一致性 rc 0.67–0.92、胸帶 0.996（Gillinov 2017，附錄 B）→ 範本要求戴胸帶。
 - **app 讀法（推估）**：1 秒格點、濾掉尖峰（3 秒內升 ≥ 15 bpm）與步頻鎖定後，撐 ≥ 5 秒的最高心率（也報 10 秒值）；`thresholds.estimate_mhr` 用的也是 5 秒。沒有來源，標推估。
-- 限制：這次的網路搜尋額度用完，只讀到上面幾個頁面；Uphill Athlete／TrainingPeaks 的最大心率測試頁沒讀到（404），沒有引用。
+- 限制：這次的網路搜尋額度用完，只讀到上面幾個頁面；Uphill Athlete／TrainingPeaks 的最大心率測試頁沒讀到（404），沒有引用。（2026-10-06 補查見 C.1）
+
+### C.1 補查：UA、TrainingPeaks、Friel、McMillan 的最大心率測試（SP-107 #11，2026-10-06）
+
+方法：搜尋 6 次；每句引文都用原始 HTML 逐字核對（UA 擋直接下載，改用轉文字代理抓原始 HTML；Wayback 最新快照是 2026-04 改版前的版本），沒有經過摘錄模型。
+
+**結論：UA 和 TrainingPeaks 都沒有自己的最大心率測試頁。** 當初 404 的頁面應該本來就不存在，不是換了網址。兩家的區間都不建在最大心率上：
+
+- **Uphill Athlete**〈Zone 2 Heart Rate Training: How to Find (and Train) Your Real Zone 2〉（https://uphillathlete.com/aerobic-training/uphill-athlete-training-zones-heart-rate-calculator/ ，2026-06-07 發布、06-28 更新，教練）（已驗證）：
+  - 反對用公式："Maximum heart rate varies widely between people of the same age, commonly by 10 to 20 beats per minute and sometimes more, so two healthy 40-year-olds can have true maximums 30-plus beats apart."
+  - 區間從 AeT 往上下推："your zones are built up and down from your aerobic threshold"。Zone 4 寫 "Lactate Threshold to LT to maxHR"，最大心率只當最上緣。
+  - 推薦的自測是心率飄移，不是最大心率測試："The heart rate drift test is the most reliable self-test for athletes."
+  - UA〈Should You Test?〉（2026-05-15，已驗證）只提到 "3-minute uphill repeats" 測高端有氧能力，沒有最大心率測試的步驟。
+- **TrainingPeaks**：站上找到的只有兩種，都不是 TrainingPeaks 自己的測試。
+  - Hal Higdon〈Alternatives to Heart Rate Formulas〉（TrainingPeaks blog，2014-08-26 發布、2026-09-12 更新，教練）（已驗證）：220 − 年齡 "probably is not accurate"；建議改用自覺強度，或去做跑步機壓力測試（"schedule a stress test where the medical people allow you to run on a treadmill until you achieve a true maximum"）。沒有給場地測試步驟。
+  - 商城課表 TP-18131〈Bike and Run Heart Rate Based Field Tests〉（Veritas Endurance Coaching／Robert Duncan，US$9.99，**課表內容要付費**，只讀公開說明）：「The 10 min tests are to determine maximum heart rate」；跑步那堂公開的是 40 分鐘最大持續配速。第三方教練、不是 TrainingPeaks 的方法，不採用。
+- **Friel**〈Max Heart Rate and Performance〉（joefrieltraining.com，2017-01-15，教練）（已驗證）："I believe it's far better to base zones on anaerobic/lactate threshold HR as it is much more easily determined and less dangerous to discover." 又說叫沒受過訓練的人跑到最大心率 "it's also dangerous ... I would never suggest that"。TrainingPeaks〈Quick Guide to Setting Zones〉（2012）："Do not use 220 minus your age to find max heart rate as this is as likely to be wrong as right."（已驗證）
+- **McMillan Field Test**（Greg McMillan〈Max Heart Rate Calculator: 4 Formulas + Field Test〉，mcmillanrunning.com，2026-05-01，教練）（已驗證）：這次找到最完整的跑步版步驟，可以當 Polar 之外的第二個來源。
+  - 暖身 10–15 分 → 平路 4 × 1 分漸快（10 K 配速 → 接近 1 英里配速），間隔慢跑 1 分。
+  - 接著上坡（4–7 %，跑 40–60 秒）全力 3–4 趟，下坡恢復最多 2 分，"Repeat 3–4 times until your heart rate stops climbing with each effort"；連續兩趟峰值一樣就是最大心率。
+  - 讀法："Note your heart rate 5–6 seconds after finishing each repeat"；或直接看整堂的峰值心率。
+  - 安全："if you're over 50, returning to running after a long layoff, or have any history of heart issues, high blood pressure ... talk to your doctor before attempting a max HR test."
+- **Polar 原文再核對**（已驗證；網址已轉到 https://www.polar.com/blog/calculate-maximum-heart-rate-running/ ，2016-07-06，2024-04-12 更新）：步驟和上面 Polar 那條一致。三處範本沒寫到：
+  1. 第一趟後只寫 "Return to the base of the hill"，「心率降 30–40 bpm」只在第二趟後。範本兩次休息都寫「心率降 30–40 bpm」。
+  2. 第二趟後："Your max HR is approximately 10 beats higher than the now-noted value."
+  3. 條件："make sure you have some hard training under your belt from recent weeks"，以及 "it's best to call a friend and have them join you"。範本寫的是「休息充足（前 48 小時沒有硬課）」，Polar 原文沒有 48 小時這一句（推估）。
+
+**對照 app（`engine/workout_templates.py:163–168` 的 `MAXHR_SRC`／`MAXHR_NOTE`，`:361–369` 的 `maxhr_hill`）**
+
+- 上坡三趟、最後一趟全力、戴胸帶、有人陪、先問醫師：和 Polar、McMillan 一致，沒有衝突。
+- app 讀「撐 ≥ 5 秒的最高心率」（推估）。McMillan 讀「結束後 5–6 秒」的值或整堂峰值，Polar 讀最高心率：都是讀峰值，方向一致；「≥ 5 秒」仍沒有來源。
+- 「區間要建在閾值上，不要建在最大心率上」（Friel、UA）和 app 的主區間（LTHR／AeT，本文 §1.3、§3.1）方向一致。app 仍有用到最大心率的地方（例如 `threshold_confidence.py` 的交叉檢查），所以最大心率測試範本還是需要；這次沒有逐一盤點。
+- 小落差（只改文字，建議單見 SP-107 筆記）：範本第一段休息的「心率降 30–40 bpm」、「前 48 小時沒有硬課」都不是 Polar 原文；Polar 要求的「最近幾週有練過硬課」範本沒寫。`MAXHR_URL` 舊網址會轉址，仍可用。

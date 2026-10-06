@@ -155,13 +155,47 @@
 
 | 平台 | 輸入 | 個人 API／商業 API | 原始 FIT | 推課表到 Garmin／COROS | 費用 | 條款重點 | 可靠度 |
 |---|---|---|---|---|---|---|---|
-| **Strava** | 幾乎所有品牌 | 個人可建 app，新 app 只能連 1 人，自助升到 10 人，再多要審核（rate-limits 頁）。據 tryterra（2026-09-06）2026-06 起 Standard 開發者要付月費。官方 rate-limits 頁沒有提到費用，所以「要付費」這件事和金額都**未驗證** | **無**，只有 streams（API reference 沒有活動原始檔端點） | 否（Strava 沒有結構化課表推送） | 一般使用者免費／訂閱 | API Agreement（Effective June 1, 2026）：「Strava Data provided by a specific user can only be displayed or disclosed in your Developer Application to that user」；「You may not create applications that compete with or replicate Strava functionality」。AI 禁令：2024-11-15 公告加入「explicitly prohibit … artificial intelligence models」，目前在 API Policy；原文我沒讀到（API Policy 頁 404），**未驗證** | 高，但條款越來越緊；本 app 有 AI 功能，**不適合** |
+| **Strava** | 幾乎所有品牌 | 個人可建 app，新 app 只能連 1 人，自助升到 10 人，再多要審核（rate-limits 頁）。據 tryterra（2026-09-06）2026-06 起 Standard 開發者要付月費。官方 rate-limits 頁沒有提到費用，所以「要付費」這件事和金額都**未驗證**。**2026-10-06 已驗證（SP-107 #14，見 §3.1）**：不是另收開發者費，而是 Standard 層的開發者要有 **Strava 訂閱**（新開發者 2026-06-01 起，既有開發者 2026-06-30 起） | **無**，只有 streams（API reference 沒有活動原始檔端點） | 否（Strava 沒有結構化課表推送） | 一般使用者免費／訂閱 | API Agreement（Effective June 1, 2026）：「Strava Data provided by a specific user can only be displayed or disclosed in your Developer Application to that user」；「You may not create applications that compete with or replicate Strava functionality」。AI 禁令：2024-11-15 公告加入「explicitly prohibit … artificial intelligence models」，目前在 API Policy；原文我沒讀到（API Policy 頁 404），**未驗證**。**2026-10-06 已讀到 API Policy 原文**（https://www.strava.com/legal/api_policy ，Effective Date: June 1, 2026）：§5.3 禁止把 Strava 資料用在任何 AI Application，連「ingestion into a context window」都算，見 §3.1 | 高，但條款越來越緊；本 app 有 AI 功能，**不適合** |
 | **Runalyze** | Garmin、COROS（官方 API）等 | **Personal API**：帳號設定產生 token，要設到期日，header `token:`；免費版是基本端點，Supporter／Premium 可讀更多；「Currently, there is no rate limit」（help「personal-api」）。商業 API 叫 Third Party API，條件**未驗證** | 有：「original fit file」匯出端點（changelog 搜尋摘要，**未驗證**） | 未驗證 | 免費／Supporter／Premium | 未讀條款，**未驗證** | 中（德國小團隊） |
 | **SportTracks** | Garmin、COROS 等 | 寄信 api@sporttracks.mobi 取得 OAuth 憑證（api/doc 頁的搜尋摘要） | 未驗證 | Garmin：有（blog「Garmin Training Integration」）；COROS：有活動同步，課表推送**未驗證** | 訂閱 | 未讀，**未驗證** | 中 |
 | **Final Surge** | Garmin、COROS 等 | 找不到公開的開發者 API，**未驗證** | 未驗證 | 有：Garmin（每晚推接下來 4 天）、COROS（官方 blog 與 the5krunner 2024-09） | 免費（教練付費） | — | 中；沒有 API，不能當 hub |
 | **Nolio** | Garmin、Suunto、Polar、COROS、Strava、Zwift、Wahoo 等 | 有 OAuth 2.0 API，「A quick form and you're good to go」（developers 頁），能讀寫課表與指標。商業條件**未驗證** | 未驗證 | 有：「Structured workouts created in Nolio are automatically sent to compatible devices like Garmin, Coros or Suunto」（connectors 頁摘要） | 免費／付費 | 未讀，**未驗證** | 中（法國）；可當 intervals.icu 的備案，值得之後細查 |
 | **TrainingPeaks** | 幾乎所有品牌 | 官方 Partner API：「at this time access to the API is not available for personal use」（官方 blog，2026-09-12 更新）。只給商業 fitness app 與裝置廠；有報導說目前不收新夥伴（搜尋摘要，**未驗證**） | Partner API 有，個人拿不到 | 有（TP 本身會推 Garmin／COROS） | 訂閱 | 見 plan §2.1：WKO5 client secret 不得用於他人 | 高，但個人與小團隊拿不到 API |
 | **Apple Health／Google Health Connect** | 手機上的各家 App 寫入 | 只能在**手機上的 app** 讀，沒有雲端 API | 否，只有運動紀錄與樣本，沒有 FIT | 否 | 免費 | 平台審核規範（未細查） | 本 app 是桌面版，**不適用**；除非日後做手機 App |
+
+### 3.1 Strava 2026 開發者計畫改版（SP-107 #14，2026-10-06 補查）
+
+方法：搜尋 2 次；下面的引句都用 Strava 官方頁面的原始 HTML 逐字核對（已驗證）。
+
+- **官方公告**：Strava 社群〈An Update To Our Developer Program〉（Community Manager Elliott，2026-06-01）。https://communityhub.strava.com/insider-journal-9/an-update-to-our-developer-program-13428
+  - 原因："AI companies are aggressively attempting to scrape platforms for training data, abuse APIs through intermediary layers, and provide zero-code AI tools that produce apps that hammer APIs"；"developer applications to our program are up 448% year-to-date"。
+  - 2026-06-01："Subscription required for all new Standard Tier developers. A Strava subscription will be required to access the API as a Standard Tier developer."
+  - 2026-06-30："Subscription required for existing Standard Tier developers"；2026 年有呼叫過 API 的開發者 "are entitled to 3-months free"。
+  - 中介平台："Apps routing Strava data through third-party intermediary platforms are no longer supported."
+  - 2026-09-01：Club 的 3 個端點停用；Segments Explore 只留給 Extended Access。
+  - 2027-06-01：token 要放 header；API 網址從 `https://www.strava.com/api/v3` 改成 `https://www.api-v3.strava.com`；`oauth/deauthorize` 停用，改用 `oauth/revoke`。
+  - 不變的："every Strava athlete can still access and download their data for free"；"wearable and device integrations are not affected"。
+- **分層**：Strava〈Strava API FAQ〉（2026-03-16 發文，後來有更新）。https://communityhub.strava.com/developers-knowledge-base-14/strava-api-faq-12906
+
+  | | 單人（MCP） | Standard | Standard（審核後） | Extended Access |
+  |---|---|---|---|---|
+  | 使用者數 | 1 | < 10 | 11–9,999 | > 10,000 |
+  | 審核 | 不用 | 不用（自己升級） | 要 | 要 |
+  | 訂閱 | 要 | 要 | 要 | N/A |
+
+  FAQ 原句："Note: A Strava subscription is a prerequisite."
+- **金額**：官方頁面只說「要訂閱」，沒寫金額。「US$11.99／月」來自 GIGAZINE、heise 等報導，是美國的一般訂閱價，各國不同（**二手**；台灣價格沒查）。
+- **AI 條款**（API Policy，Effective Date: June 1, 2026，已驗證）：
+  - §5.3："You may not use the Strava API Materials or Strava Data, directly or indirectly, in connection with the development, training, evaluation, or operation of any AI Application."
+  - 涵蓋範圍包含 "retrieval-augmented generation, ingestion into a context window or working memory"。
+  - 只有官方 Strava MCP 可以："The Strava MCP is the sole authorized first-party agent-mediated interface"，而且限訂閱者 "personal use of their own Strava data"。
+  - API Agreement 原本引的兩句（"can only be displayed or disclosed in your Developer Application to that user"、"compete with or replicate Strava functionality"）仍在現行版本（Effective Date: June 1, 2026），已驗證。
+- **對本 app 的意思**：結論不變，而且更確定：
+  - 用 Strava API 要付訂閱；
+  - 把 Strava 資料送進 AI 功能（教練建議、對話），API Policy §5.3 明文禁止；
+  - 透過 intervals.icu 等中介轉 Strava 資料也不再被支援。
+
+  程式沒有接 Strava（只有演算法參考文字），**不用改程式**。
 
 ---
 
@@ -269,7 +303,7 @@
 6. Garmin 對 intervals.icu 轉出 Garmin 資料的限制（Garmin API Brand Guidelines、Developer Agreement）。
 7. Workout Builder 文字格式有沒有新增絕對 bpm 的寫法。
 8. GoldenCheetah master 的 `src/Cloud/` 有沒有新增 intervals.icu；`Secrets.h` 的做法。
-9. Strava API Policy 的 AI 條款原文、Standard 開發者月費金額。
+9. ~~Strava API Policy 的 AI 條款原文、Standard 開發者月費金額。~~ 2026-10-06 已讀（§3.1）：AI 條款原文已核對；費用＝Strava 訂閱，官方沒寫金額。之後要重查的是 2027-06-01 的技術變更有沒有延期。
 10. Runalyze Personal API 的原始 FIT 端點；Nolio API 的商業條件與 FIT 下載。
 
 ---
@@ -297,6 +331,9 @@
   - 限流：https://developers.strava.com/docs/rate-limits/
   - API reference：https://developers.strava.com/docs/reference/
   - 2026 變更：https://tryterra.co/blog/strava-api-changes-2026
+  - 官方公告（2026-06-01）：https://communityhub.strava.com/insider-journal-9/an-update-to-our-developer-program-13428
+  - API FAQ：https://communityhub.strava.com/developers-knowledge-base-14/strava-api-faq-12906
+  - API Policy（Effective June 1, 2026）：https://www.strava.com/legal/api_policy
 - Runalyze：https://runalyze.com/help/article/personal-api
 - Nolio：
   - https://www.nolio.io/en/developers/
