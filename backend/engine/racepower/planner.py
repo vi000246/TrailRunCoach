@@ -589,6 +589,8 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
         wb = {"model": wmodel, "values": vals, "label": lab, "badge": None if wmodel == "wko5" else "推估",
               "w_prime": w_prime}
     zs = zones_json(cp)
+    # SP-228: the athlete's shift of the walk–run curves (0 = the default curve)
+    rw_shift = float(getattr(grade_re, "rw_shift", 0.0) or 0.0)
     out_segs = []
     cum = 0.0
     stops = opts.get("stops") or []
@@ -597,7 +599,7 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
         notes = []
         # walk / either / run from grade × the predicted speed (SP-226): a label only, the time is
         # already solved; a manual course has only its net grade, so no label there
-        gait = RW.gait(s["grade"], r["v"]) if gpx else None
+        gait = RW.gait(s["grade"], r["v"], rw_shift) if gpx else None
         walk = RW.walk_label(gait)
         if walk:
             notes.append(walk)
@@ -705,6 +707,7 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
                "alpha_used": alpha_used, "sigma": sigma, "beta": beta, "damage": dmg, "hr_first": hr_first,
                "cp2": cp2, "tech": grade_re.tech_factor() if trail and hasattr(grade_re, "tech_factor") else None,
                "strategy": skind, "strategy_amount": amount, "alpha": alpha, "heat": heat_info,
+               "runwalk": {"shift": rw_shift, "personal": bool((getattr(grade_re, "runwalk", None) or {}).get("personal"))},
                "heat_accl": heat_accl}
     heat_profile = _heat_profile(heat_rows, start_dt, out_segs, stops) if heat_info["mode"] == "hourly" else None
     return {"type": kind, "summary": summary, "effort": eff, "segments": out_segs, "target": target,

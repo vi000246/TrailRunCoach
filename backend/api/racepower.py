@@ -330,8 +330,11 @@ def _grade_models() -> dict:
     # the race-like class's own RE(g) only when the back-test showed it clearly better
     gm["race_model"] = BT.class_model_flag()
     if gm["race_model"]:
+        rw = getattr(gm["grade_re"], "runwalk", None)
         gm["grade_re"] = A.grade_models(ds, today, re_flat=road, classes=gm.get("classes"),
                                         only_classes={"race"}, hikes=False)["grade_re"]
+        if rw is not None:
+            gm["grade_re"].runwalk = rw           # SP-228: the transition shift from every run, not the race class only
     solo = A.solo_hikes()
     try:
         # the clock ETA's moving ratio, per trip kind: group hikes rest on the

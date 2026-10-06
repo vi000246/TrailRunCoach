@@ -487,7 +487,8 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
   </div>
 
   <section id="gm-sec" class="tab-calc"><h2>坡度 RE 曲線 <span class="meta">你的 Stryd 功率在不同坡度換成多少速度</span></h2>
-    <details><summary>展開</summary><div class="two"><div><div class="plot" id="gm-chart"></div></div><div id="gm-detail"></div></div></details>
+    <details><summary>展開</summary><div class="two"><div><div class="plot" id="gm-chart"></div></div><div id="gm-detail"></div></div>
+      <h3 data-i18n="racepower.rw.title">跑走切換速度</h3><div class="two"><div><div class="plot" id="rw-chart"></div></div><div id="rw-detail"></div></div></details>
   </section>
 
   <section id="cad-sec" class="tab-calc"><details><summary><b data-i18n="racepower.cad.title">爬坡步頻分布</b> <span class="meta" data-i18n="racepower.cad.sub">檢查「步頻 &lt; 130 spm 算走」</span></summary>
@@ -1593,7 +1594,8 @@ function renderProfile() {
   $("chart-legend").innerHTML = `<span><i style="background:${css("--accent")}"></i>${esc(T("legend.target", { m: T("m." + m) }))}</span>` +
     (pr ? `<span><i style="background:${css("--bar")};opacity:.6"></i>${esc(T("elev"))}</span>` : "") +
     (R.some((r) => r.walk) ? `<span><i style="background:${css("--watch")};opacity:.35"></i>${esc(T("legend.walk"))}</span>` : "") +
-    (m !== "pace" && R.some((r) => M.val(r) == null) ? `<span>${esc(T(m === "power" ? "legend.gap_power" : "legend.gap_hr"))}</span>` : "");
+    (m !== "pace" && R.some((r) => M.val(r) == null) ? `<span>${esc(T(m === "power" ? "legend.gap_power" : "legend.gap_hr"))}</span>` : "") +
+    (P.summary.runwalk && !hike ? `<span class="faint">${esc(T(P.summary.runwalk.personal ? "rw.legend_you" : "rw.legend_default"))}</span>` : "");
   const c = chart("profile");
   c.getZr().off("click");
   c.getZr().on("click", (ev) => {
@@ -2056,6 +2058,32 @@ async function renderGM() {
   }, true);
   $("gm-detail").innerHTML = `<div class="kv"><span>平路 RE <b>${r3(g.re_flat)}</b></span><span>100 m 窗 <b>${n0(g.n_samples)}</b></span><span>活動 <b>${g.n_activities}</b></span></div>
     <div class="note">每一點是你在那個坡度（每 2% 一格）的 100 m 窗「速度 ÷ (功率/體重)」中位數，點越大樣本越多。樣本少的坡度會往「由平路 RE 與坡度能耗推出來」的虛線靠。這條曲線已經包含 Stryd 在陡坡的讀數特性與你上坡快走的習慣。</div>`;
+  renderRW(g.runwalk);
+}
+// SP-228: the walk–run transition speed by grade, the default curve and the athlete's (shifted) one
+function renderRW(rw) {
+  if (!rw || !rw.curve) { $("rw-detail").innerHTML = ""; return; }
+  const kmh = (v) => v * 3.6, you = rw.personal;
+  const series = [
+    { name: T("rw.pts"), type: "line", symbol: "none", data: rw.curve.map((r) => [r.grade * 100, kmh(r.pts)]), lineStyle: { color: css("--muted"), type: "dashed" } },
+    { name: T("rw.eots"), type: "line", symbol: "none", data: rw.curve.map((r) => [r.grade * 100, kmh(r.eots)]), lineStyle: { color: css("--muted"), type: "dotted" } },
+  ];
+  if (you) series.push({ name: T("rw.you"), type: "line", symbol: "none", data: rw.curve.map((r) => [r.grade * 100, kmh(r.pts_you)]), lineStyle: { color: css("--s2"), width: 2 } });
+  const pts = (rw.bins || []).filter((b) => b.used);
+  if (pts.length) series.push({ name: T("rw.bins"), type: "scatter", data: pts.map((b) => [b.grade * 100, kmh(b.split_ms), b.n_walk + b.n_run]),
+    symbolSize: (d) => Math.max(5, Math.min(16, Math.sqrt(d[2]))), itemStyle: { color: css("--s1") } });
+  chart("rw-chart").setOption({
+    animation: false, grid: { left: 48, right: 14, top: 44, bottom: 38 }, legend: { top: 0, textStyle: { color: css("--muted"), fontSize: 11 } },
+    tooltip: { trigger: "axis", valueFormatter: (v) => ok(v) ? v.toFixed(1) + " km/h" : "" },
+    xAxis: { type: "value", name: T("rw.grade"), nameLocation: "middle", nameGap: 24, min: 3, max: 40, ...axisStyle() },
+    yAxis: { type: "value", name: "km/h", scale: true, ...axisStyle() }, series,
+  }, true);
+  const head = you ? T("rw.personal", { d: (rw.shift >= 0 ? "+" : "") + rw.shift.toFixed(2), n: rw.n }) : T("rw.default");
+  const rows = (rw.bins || []).filter((b) => b.n_walk + b.n_run > 0).map((b) => `<tr><td class="n">${Math.round(b.grade * 100)}%</td><td class="n">${b.n_walk}</td><td class="n">${b.n_run}</td>` +
+    `<td class="n">${b.used ? f1(kmh(b.split_ms)) : "–"}</td><td class="n">${b.used ? (b.diff >= 0 ? "+" : "") + b.diff.toFixed(2) : `<span class="faint">${esc(T("rw.thin"))}</span>`}</td></tr>`).join("");
+  $("rw-detail").innerHTML = `<div class="note"><span class="badge ${you ? "good" : ""}">${esc(T(you ? "rw.badge_you" : "rw.badge_default"))}</span> ${esc(head)}</div>` +
+    (rows ? `<div class="tablewrap"><table><thead><tr><th class="n">${esc(T("rw.grade"))}</th><th class="n">${esc(T("rw.n_walk"))}</th><th class="n">${esc(T("rw.n_run"))}</th><th class="n">${esc(T("rw.split"))}</th><th class="n">${esc(T("rw.diff"))}</th></tr></thead><tbody>${rows}</tbody></table></div>` : "") +
+    `<div class="note">${esc(T("rw.how"))}</div>`;
 }
 // SP-230: climbing cadence against the 130 spm walk line (a check only: the line never moves here)
 async function renderCad() {

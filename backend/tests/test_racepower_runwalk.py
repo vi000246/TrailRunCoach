@@ -254,3 +254,76 @@ def test_cadence_check_endpoint(client, monkeypatch):   # noqa: F811
     assert r["verdict"] == "off" and r["n_runs"] == 12 and r["threshold_spm"] == 130 and len(r["bins"]) == len(r["seconds"])
     r_en = client.get("/api/v1/racepower/cadence-check", headers={"Accept-Language": "en"}).json()
     assert r_en["verdict"] == "off"
+
+
+# ---- SP-228: the athlete's own transition speed ---------------------------------------
+
+def windows_at(shift, grades=(0.06, 0.10, 0.14, 0.18, 0.22), n_per=60, seed=1, spread=0.05):
+    """Synthetic 100 m windows of an athlete whose preferred transition is the default + `shift`."""
+    rng = np.random.default_rng(seed)
+    out = []
+    for g in grades:
+        c = RW.horizontal(g, RW.pts(g) + shift)
+        for _ in range(n_per):
+            v = c * math.exp(rng.normal(0, 0.15))
+            p_run = 1 / (1 + math.exp(-(v - c) / spread))
+            out.append({"g": g, "v": v, "run": 1.0 if rng.random() < p_run else 0.0})
+    return out
+
+
+def test_split_speed_is_where_walking_turns_to_running():
+    assert RW.split_speed([1.0, 1.1, 1.2], [1.6, 1.7]) == approx(1.4)
+    assert RW.split_speed([1.0, 1.5, 1.2], [1.4, 1.7, 1.8]) == approx(1.45, abs=0.06)
+    assert RW.split_speed([], [1.0]) is None
+
+
+def test_no_windows_means_the_default_curve():
+    f = RW.fit_shift([])
+    assert f["shift"] == 0.0 and not f["personal"] and f["n"] == 0
+    thin = RW.fit_shift(windows_at(0.3, n_per=12))          # < 10 walked or run in every bin
+    assert not thin["personal"] and thin["shift"] == 0.0 and all(not b["used"] for b in thin["bins"])
+    only_walk = [dict(w, run=0.0) for w in windows_at(0.0)]
+    assert not RW.fit_shift(only_walk)["personal"]
+    assert RW.fit_shift([{"g": 0.0, "v": 2.0, "run": 1.0}] * 50)["bins"] == []    # flats are not climbs
+
+
+@pytest.mark.parametrize("true", [0.25, -0.2, 0.0])
+def test_many_windows_approach_the_athletes_own_value(true):
+    f = RW.fit_shift(windows_at(true, n_per=200))
+    assert f["personal"] and f["weight"] == approx(f["n"] / (f["n"] + 30))
+    assert f["weight"] > 0.95 and f["shift"] == approx(true, abs=0.06)
+    few = RW.fit_shift(windows_at(true, grades=(0.10,), n_per=24))
+    if few["personal"]:                                     # fewer windows: shrunk harder towards 0
+        assert abs(few["shift"]) <= abs(few["raw"]) * few["weight"] + 1e-9 and few["weight"] < 0.5
+
+
+def test_shift_is_held_within_04():
+    f = RW.fit_shift(windows_at(0.8, n_per=200))
+    assert f["shift"] == approx(0.4) and f["clamped"] and f["raw"] > 0.6
+
+
+def test_gait_model_carries_the_shift_and_the_page_curve():
+    from backend.engine.racepower import grade_model as GM
+    samples = [{**w, "re": 1.0, "a": 0, "trail": True} for w in windows_at(0.25, n_per=200)]
+    g = GM.fit_gait_re(samples, 1.0)
+    assert g.rw_shift == approx(0.25, abs=0.06) and g.runwalk["personal"]
+    j = g.to_json()["runwalk"]
+    assert j["personal"] and len(j["curve"]) == 38 and j["curve"][0]["grade"] == approx(0.03)
+    c = j["curve"][7]                                        # 10 %
+    assert c["pts_you"] == approx(RW.horizontal(0.10, RW.pts(0.10, g.rw_shift)))
+    assert GM.fit_gait_re([], 1.0).rw_shift == 0.0 and not GM.fit_gait_re([], 1.0).to_json()["runwalk"]["personal"]
+    # for_trail / with_flat keep it (the planner calls them)
+    assert g.for_trail("race").rw_shift == g.rw_shift and g.with_flat(1.1).rw_shift == g.rw_shift
+
+
+def test_plan_labels_use_the_personal_shift(client, monkeypatch):   # noqa: F811
+    from backend.api import racepower as RP
+    from backend.engine.racepower import grade_model as GM
+    from backend.tests.test_racepower_export import RE0
+    gre = GM.fit_gait_re([], RE0)
+    gre.runwalk = {"shift": 0.4, "personal": True, "n": 500}
+    monkeypatch.setattr(RP, "_grade_models", lambda: {"grade_re": gre, "hike_speed": GM.fit_hike_speed([]), "moving_rows": []})
+    p = _plan(client)
+    assert p["summary"]["runwalk"] == {"shift": 0.4, "personal": True}
+    climbs = [s for s in p["segments"] if s["grade"] >= 0.03]
+    assert climbs and all(s["gait"] == RW.gait(s["grade"], s["speed_ms"], 0.4) for s in climbs)
