@@ -274,7 +274,7 @@ const PREF = "activitylist.filters", PER = 50;
 // pain: the 傷病紀錄 meta (null in the demo mode: no 疼痛 column / filter / row)
 // ach: the 成就 records (GET /api/v1/achievements, loaded once; null until then) — the 成就 tab and
 // the per-activity badges / 「有成就」 filter all read this one copy
-const S = { acts: [], stats: {}, auto: null, types: {}, efforts: {}, poleTags: {}, usePower: true, pain: null,
+const S = { acts: [], stats: {}, auto: null, types: {}, efforts: {}, poleTags: {}, surfaceTags: {}, usePower: true, pain: null,
   sort: { k: "date", dir: -1 }, page: 0, sel: null, detail: null, merge: null, originLabels: {},
   tab: "acts", ach: null, achErr: null, achMin: new Map(), actMin: new Map(),
   asort: { k: "date", dir: -1 }, aopen: new Set(), acls: new Set(["baiyue", "mid", "low"]) };
@@ -374,7 +374,7 @@ function fillFilterOptions() {
   keep("f-src", `<option value="">${esc(T("f.src_all"))}</option>` +
     srcs.map((s) => `<option value="${esc(s)}">${esc(SRC_SHORT[s] || s)}</option>`).join(""));
   $("f-src").hidden = srcs.length < 2;
-  const tags = [...new Set(S.acts.flatMap((a) => a.tags || []))].filter((t) => !isPoleTag(t)).sort();
+  const tags = [...new Set(S.acts.flatMap((a) => a.tags || []))].filter((t) => !isMarkTag(t)).sort();
   $("tag-list").innerHTML = tags.map((t) => `<option value="${esc(t)}">`).join("");
 }
 function filtered() {
@@ -522,6 +522,7 @@ async function loadList() {
   const r = await j(`${API}/activities`);
   S.acts = r.activities; S.types = r.types; S.efforts = r.efforts;
   S.poleTags = r.pole_tags || {};
+  S.surfaceTags = r.surface_tags || {};
   S.merge = r.merge || null; S.originLabels = r.origin_labels || {};
   S.actMin = new Map();
   for (const a of S.acts) { const m = minOf(a.key); if (m != null && (!S.actMin.has(m) || a.index != null)) S.actMin.set(m, a); }
@@ -590,6 +591,18 @@ function polesOf(a) {
   return p;
 }
 const withPoles = (tags, p) => [...(tags || []).filter((t) => !isPoleTag(t)), ...(S.poleTags[p] ? [S.poleTags[p]] : [])];
+// 路況 (SP-250): 乾 / 濕 / 未標, the user's own mark (no rain data, no auto rule), stored as one of two
+// free-form tags (server: activity_tags.SURFACES) like the pole mark. The trail technicality factor
+// splits on it once both groups have enough data. A 3-way choice, never typed.
+const SURFACE_OPTS = ["dry", "wet", ""];
+const isSurfaceTag = (t) => Object.values(S.surfaceTags).includes(t);
+const isMarkTag = (t) => isPoleTag(t) || isSurfaceTag(t);
+function surfaceOf(a) {
+  let p = "";
+  for (const t of a.tags || []) for (const [k, v] of Object.entries(S.surfaceTags)) if (t === v) p = k;
+  return p;
+}
+const withSurface = (tags, p) => [...(tags || []).filter((t) => !isSurfaceTag(t)), ...(S.surfaceTags[p] ? [S.surfaceTags[p]] : [])];
 const badge = (manual, why) => manual ? `<span class="badge man" title="${esc(T("manual_tip"))}">${esc(T("manual"))}</span>`
   : `<span class="badge" title="${esc(why || T("auto_tip"))}">${esc(T("auto"))}</span>`;
 function setMsg(t, cls) { const m = $("msg"); if (m) { m.textContent = t; m.className = "msg " + (cls || ""); } }
@@ -668,11 +681,14 @@ function renderEditor() {
     <div class="fld"><span class="lab">${esc(T("f_poles"))}${qt(T("help.poles"))}</span>
       <div class="ctl" role="group" aria-label="${esc(T("f_poles"))}">${POLE_OPTS.map((v) =>
         `<button type="button" class="cchip" data-poles="${v}" aria-pressed="${polesOf(a) === v}">${esc(T("poles." + (v || "none")))}</button>`).join("")}</div></div>
+    <div class="fld"><span class="lab">${esc(T("f_surface"))}${qt(T("help.surface"))}</span>
+      <div class="ctl" role="group" aria-label="${esc(T("f_surface"))}">${SURFACE_OPTS.map((v) =>
+        `<button type="button" class="cchip" data-surface="${v}" aria-pressed="${surfaceOf(a) === v}">${esc(T("surface." + (v || "none")))}</button>`).join("")}</div></div>
     ${S.pain ? `<div class="fld"><span class="lab">${esc(T("col.pain"))}${qt(T("help.pain"))}</span><div class="ctl" id="pain-ctl">${PainPicker.html(painState(a), S.pain, { qtip: qt })}</div></div>` : ""}
     ${a.index != null ? `<div class="fld"><span class="lab">${esc(T("f_pack"))}${qt(T("help.pack"))}</span>
       <div class="ctl">${!d ? esc(T("loading")) : `<input type="number" data-pack min="0" max="40" step="0.5" inputmode="decimal" style="width:6em" value="${pk?.pack_kg ?? ""}" placeholder="—" aria-label="${esc(T("f_pack"))}"> kg`}</div></div>` : ""}
     <div class="fld"><span class="lab">${esc(T("f_tags"))}${qt(T("help.tags"))}</span>
-      <div class="ctl">${(a.tags || []).filter((t) => !isPoleTag(t)).map((t) => `<span class="chip">${esc(t)}<button type="button" data-tag-rm="${esc(t)}" aria-label="${esc(T("tag_rm", { v: t }))}">×</button></span>`).join("")}
+      <div class="ctl">${(a.tags || []).filter((t) => !isMarkTag(t)).map((t) => `<span class="chip">${esc(t)}<button type="button" data-tag-rm="${esc(t)}" aria-label="${esc(T("tag_rm", { v: t }))}">×</button></span>`).join("")}
         <input type="text" data-tag-in list="tag-list" placeholder="${esc(T("tag_add_ph"))}" style="width:10em;flex:0 1 10em" aria-label="${esc(T("tag_add"))}"></div></div>
     <div class="fld"><span class="lab">${esc(T("f_note"))}</span>
       <div class="ctl" style="display:block"><textarea data-note rows="3" aria-label="${esc(T("f_note"))}">${esc(a.note || "")}</textarea></div></div>
@@ -713,6 +729,7 @@ async function saveFields(a, patch) {
       if ("effort" in patch) a.user_effort = patch.effort;
       for (const k of ["note", "name", "tags"]) if (k in patch) a[k] = k === "name" ? (patch.name || "").trim() || null : patch[k];
       if ("poles" in patch) a.tags = withPoles(a.tags, patch.poles);
+      if ("surface" in patch) a.tags = withSurface(a.tags, patch.surface);
       if ("pain" in patch) { a.pain = patch.pain; if (!(patch.pain >= 1)) a.pain_area = null; }
       if ("pain_area" in patch) a.pain_area = patch.pain_area;
     }
@@ -741,6 +758,9 @@ function wireEditor(a) {
   ed.querySelectorAll("button[data-poles]").forEach((b) => b.addEventListener("click", () => {
     if (polesOf(a) !== b.dataset.poles) saveFields(a, { poles: b.dataset.poles || null });
   }));
+  ed.querySelectorAll("button[data-surface]").forEach((b) => b.addEventListener("click", () => {
+    if (surfaceOf(a) !== b.dataset.surface) saveFields(a, { surface: b.dataset.surface || null });
+  }));
   const nm = ed.querySelector("input[data-name]");
   nm.addEventListener("change", () => saveFields(a, { name: nm.value.trim() || null }));
   ed.querySelector("button[data-name-clear]")?.addEventListener("click", () => saveFields(a, { name: null }));
@@ -759,6 +779,8 @@ function wireEditor(a) {
     if (v.length > 30) { setMsg(T("tag_long"), "err"); return; }
     const pole = Object.keys(S.poleTags).find((k) => S.poleTags[k] === v);
     if (pole) { tin.value = ""; if (polesOf(a) !== pole) saveFields(a, { poles: pole }); return; }   // typed 有杖 / 沒杖 → the 登山杖 choice
+    const surf = Object.keys(S.surfaceTags).find((k) => S.surfaceTags[k] === v);
+    if (surf) { tin.value = ""; if (surfaceOf(a) !== surf) saveFields(a, { surface: surf }); return; }   // typed 乾路 / 濕路 → the 路況 choice
     if ((a.tags || []).some((t) => t.toLowerCase() === v.toLowerCase())) { tin.value = ""; return; }
     saveFields(a, { tags: [...(a.tags || []), v] });
   };

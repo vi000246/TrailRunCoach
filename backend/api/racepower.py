@@ -335,6 +335,10 @@ def _grade_models() -> dict:
                                         only_classes={"race"}, hikes=False)["grade_re"]
         if rw is not None:
             gm["grade_re"].runwalk = rw           # SP-228: the transition shift from every run, not the race class only
+    # SP-250: the dry / wet technicality only when the back-test kept it (downhill error not worse)
+    gm["surface_ok"] = BT.surface_split_flag()
+    if getattr(gm["grade_re"], "surface_split", False) and not gm["surface_ok"]:
+        gm["grade_re"] = gm["grade_re"].without_surface_split("backtest")
     solo = A.solo_hikes()
     try:
         # the clock ETA's moving ratio, per trip kind: group hikes rest on the
