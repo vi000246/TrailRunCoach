@@ -1779,6 +1779,10 @@
     "draft": true,
     "src": "backend/engine/status.py:584"
   },
+  "其他": {
+    "draft": true,
+    "src": "backend/engine/sport_map.py:59"
+  },
   "再 {n} 堂 3 區": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:1975"
@@ -4087,6 +4091,10 @@
     "draft": false,
     "src": "backend/engine/specific_phase.py:636"
   },
+  "登山健行": {
+    "draft": true,
+    "src": "backend/engine/sport_map.py:58"
+  },
   "發燒、咳嗽到胸、全身痠痛、腸胃炎": {
     "draft": true,
     "src": "backend/engine/injuries.py:72"
@@ -4114,6 +4122,10 @@
   "百岳心率帶 AeT": {
     "draft": true,
     "src": "backend/engine/racepower/watch_export.py:269"
+  },
+  "百岳登山": {
+    "draft": true,
+    "src": "backend/engine/sport_map.py:65"
   },
   "百岳的專項期、減量期：單腳站和伸腳點地可以背 5–10% 體重的背包做": {
     "draft": true,
@@ -4434,6 +4446,10 @@
   "耐久": {
     "draft": true,
     "src": "backend/engine/workout_review.py:2669"
+  },
+  "肌力": {
+    "draft": true,
+    "src": "backend/engine/sport_map.py:59"
   },
   "肌力動作沒有「{type}：{move}」這個選項": {
     "draft": true,
@@ -4786,6 +4802,10 @@
   "走跑皆可：跑或快走，哪個輕鬆用哪個": {
     "draft": false,
     "src": "backend/engine/specific_phase.py:636"
+  },
+  "走路": {
+    "draft": true,
+    "src": "backend/engine/sport_map.py:59"
   },
   "走路一群約 {w:.0f} spm、跑步一群約 {r:.0f} spm，130 spm 落在兩群之間的谷底附近（谷底約 {v:.0f} spm）：門檻合用": {
     "draft": false,
@@ -5766,6 +5786,10 @@
   "馬拉松配速 ≈ 閾值配速 × 1.06（推估）": {
     "draft": true,
     "src": "backend/engine/workout_templates.py:216"
+  },
+  "騎車": {
+    "draft": true,
+    "src": "backend/engine/sport_map.py:58"
   },
   "體能好壞不影響高山症風險（CDC）：練得好不代表不會高山症": {
     "draft": true,

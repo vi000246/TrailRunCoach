@@ -443,7 +443,7 @@ table.z5ev td { white-space: normal; }
       </div>
     </details>
     <details open data-k="sports">
-      <summary><span data-i18n="viewer.sports">運動類型</span> <span class="meta" id="sum-sports"></span></summary>
+      <summary><span data-i18n="viewer.sports">活動類型</span> <span class="meta" id="sum-sports"></span></summary>
       <div class="sports" id="sports"></div>
     </details>
     <details open data-k="acts" class="actsbox">
@@ -588,6 +588,8 @@ function visCharts(d) {
   return cs.map((c, i) => [c, i]).sort((a, b) => rank(...a) - rank(...b) || a[1] - b[1]).map((x) => x[0]);
 }
 function selectedSports() { return [...document.querySelectorAll("#sports input:checked")].map((i) => i.value); }
+// 活動類型 (engine/sport_map.py, SP-263): 越野跑 / 路跑 / 登山健行 / 百岳登山 / 騎車 / 肌力 / 走路 / 其他
+const kindLabel = (k) => { const s = (S.sports || []).find((x) => x.sport === k); return t("viewer.kind." + k, s?.label || k || ""); };
 function sportsParam() { const s = selectedSports(); return s.length === S.sports.length ? "" : s.join(","); }
 function tpParam() { return `parity=${S.parity}`; }
 const narrowMq = matchMedia("(max-width: 900px)");
@@ -624,7 +626,9 @@ async function init() {
   const today = new Date();
   $("end").value = r.end || iso(today);
   $("begin").value = r.begin || iso(new Date(today - 365 * 864e5));
-  $("sports").innerHTML = sports.map((s) => `<label><input type="checkbox" value="${esc(s.sport)}" ${!r.sports || r.sports.includes(s.sport) ? "checked" : ""}>${esc(s.sport)} <span class="meta">${s.count}</span></label>`).join("");
+  // a selection saved before SP-263 holds WKO5 sport groups ("run"): none of them is a kind -> all ticked
+  const savedSports = r.sports && r.sports.some((x) => sports.some((s) => s.sport === x)) ? r.sports : null;
+  $("sports").innerHTML = sports.map((s) => `<label><input type="checkbox" value="${esc(s.sport)}" ${!savedSports || savedSports.includes(s.sport) ? "checked" : ""}>${esc(kindLabel(s.sport))} <span class="meta">${s.count}</span></label>`).join("");
   S.dash = { ...S.dash, ...(r.dash || {}) }; S.view = r.view || {}; S.workout = r.workout ?? null; S.workoutLabel = r.workoutLabel || null; S.workoutPlan = r.workoutPlan || null;
   // deep link from other pages: ?view=<name>&dash=<index or title>
   const qp = new URLSearchParams(location.search), qv = S.views.find((x) => x.name === qp.get("view") && !x.error);
@@ -830,7 +834,8 @@ function filterSummary() {
   const b = $("begin").value, e = $("end").value;
   const days = b && e ? Math.round((new Date(e) - new Date(b)) / 864e5) + 1 : null;
   const sel = selectedSports();
-  const sp = sel.length === S.sports.length ? "全部運動" : sel.length === 1 ? sel[0] : `${sel.length}/${S.sports.length} 類運動`;
+  const sp = sel.length === S.sports.length ? t("viewer.kind_all", "全部類型") : sel.length === 1 ? kindLabel(sel[0])
+    : t("viewer.kind_n", "{n}/{total} 類", { n: sel.length, total: S.sports.length });
   $("sum-range").textContent = days ? `${days} 天` : "";
   $("sum-sports").textContent = sp;
   // the active filter lives in the toolbar chips, so it's visible when the panel is closed
@@ -932,13 +937,13 @@ async function loadActs() {
   renderActChip();
   // an excluded bad file (engine/bad_activity.py) has no index: shown, not openable
   $("acts").innerHTML = acts.map((a) => a.excluded ? `<div class="act excl" style="opacity:.6;cursor:default">
-    <div class="t"><b>${esc(actWhen(a.start))}</b><span>${esc(a.sport_type || a.sport)}</span></div>
+    <div class="t"><b>${esc(actWhen(a.start))}</b><span title="${esc(a.sport_type || a.sport)}">${esc(a.kind ? kindLabel(a.kind) : a.sport_type || a.sport)}</span></div>
     <div class="s">${hms(a.duration)} · ${a.distance != null ? (+a.distance).toFixed(2) + " km" : "—"}</div>
     <div class="s" style="color:var(--err, #b91c1c)">${esc(a.excluded.label)}
       <button class="iconbtn" data-exkey="${esc(a.excluded.key)}" data-exfile="${esc(a.file)}" data-exact="${a.excluded.auto ? "keep" : "auto"}"
         style="font-size:11.5px;padding:1px 6px;margin-left:4px">${a.excluded.auto ? "這筆是正常的，不要排除" : "取消手動排除"}</button></div></div>`
     : `<div class="act ${a.index === S.workout ? "on" : ""}" data-i="${a.index}">
-    <div class="t"><span class="tl"><b>${esc(actWhen(a.start))}</b>${planTag(a.plan)}</span><span>${esc(a.sport_type || a.sport)}</span></div>
+    <div class="t"><span class="tl"><b>${esc(actWhen(a.start))}</b>${planTag(a.plan)}</span><span title="${esc(a.sport_type || a.sport)}">${esc(a.kind ? kindLabel(a.kind) : a.sport_type || a.sport)}</span></div>
     <div class="s">${hms(a.duration)} · ${a.distance != null ? (+a.distance).toFixed(2) + " km" : "—"} · ↑${a.climbing != null ? Math.round(a.climbing) + " m" : "—"} · TSS ${a.tss != null ? (+a.tss).toFixed(0) : "—"}<span class="src" title="${esc(tssSrcTitle(a))}">${a.tss_source ? " " + ({power: "⚡", rtss: "🏃", hrtss: "❤", trainingpeaks: "TP"}[a.tss_source] || "") : ""}</span></div></div>`).join("");
   $("acts").querySelectorAll("button[data-exkey]").forEach((b) => b.onclick = async (ev) => {
     ev.stopPropagation(); b.disabled = true;

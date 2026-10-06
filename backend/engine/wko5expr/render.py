@@ -325,8 +325,9 @@ def empty_reason(chart: dict, series: list[dict], ds: Dataset, begin: float, end
 
 
 def render_chart(chart: dict, ds: Dataset, begin: float, end: float,
-                 sports: Optional[set[str]] = None, workout=None) -> dict:
-    """Athlete chart over [begin, end] (RHE sport filter), or a workout chart
+                 sports: Optional[set[str]] = None, workout=None, keep=None) -> dict:
+    """Athlete chart over [begin, end] (RHE sport filter; `keep` = the
+    activity-type filter, a workout predicate), or a workout chart
     for `workout` (a dataset Workout).
 
     Every series and axis carries unit metadata (label / kind / decimals, see
@@ -335,8 +336,10 @@ def render_chart(chart: dict, ds: Dataset, begin: float, end: float,
     from backend.engine.wko5expr import render_units as RU
     parity = bool(getattr(getattr(ds, "config", None), "parity", True))
     sport = RU.sport_hint(workout, sports)
+    if sport is None and workout is None and keep is not None and hasattr(keep, "sport_hint"):
+        sport = keep.sport_hint()          # the activity-type filter (sport_map.KindFilter)
     notes = list(chart.get("fixes") or [])
-    ev = Evaluator(ds, begin, end, sports=sports)
+    ev = Evaluator(ds, begin, end, sports=sports, keep=keep)
     out_series = []
     for s in chart.get("series", []):
         expr, y_id, s_notes = RU.prepare(s, parity)
