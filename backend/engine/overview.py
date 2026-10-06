@@ -23,6 +23,7 @@ from typing import Optional
 
 import numpy as np
 
+from backend.engine import cold_start as CS
 from backend.engine import load_guard as LG
 from backend.engine.hr_profile import EASY_CAP_TIP, below, easy_cap_label
 from backend.engine.wko5expr.dataset import Dataset, Workout, date_to_day, day_to_date
@@ -304,7 +305,26 @@ def pmc(ds: Dataset, begin: dt.date, end: dt.date) -> dict:
             "ctlconstant": ds.athlete.ctlconstant, "atlconstant": ds.athlete.atlconstant,
             "start": {"source": st["source"], "ctl": st["ctl"], "atl": st["atl"],
                       "date": None if st["day"] is None else day_to_date(st["day"]).isoformat()},
-            "series": rows}
+            "series": rows, "marks": pmc_marks(ds, begin, end)}
+
+
+LTHR_SWITCH_NOTE = {
+    "estimate": N_("LTHR 從這天起用你自己資料的估算；之前是推估（最大心率的 90 %），hrTSS 和體能數字在這天會跳一下"),
+    "test": N_("LTHR 從這天起用你填的值（測試）；之前是推估（最大心率的 90 %），hrTSS 和體能數字在這天會跳一下"),
+}
+
+
+def pmc_marks(ds: Dataset, begin: dt.date, end: dt.date) -> list[dict]:
+    """Notes on PMC days (SP-289): the day the LTHR prior (0.90 × max HR, fitdataset.lthr_prior) was
+    replaced by a real LTHR — the TSS scale changes there. [{date, kind, text}] within [begin, end]."""
+    pri = getattr(ds, "lthr_prior", None)
+    if not isinstance(pri, dict) or not pri.get("until"):
+        return []
+    d = str(pri["until"])[:10]
+    if not begin.isoformat() <= d <= end.isoformat():
+        return []
+    return [{"date": d, "kind": "lthr_switch", "text": _(LTHR_SWITCH_NOTE.get(pri.get("until_kind"),
+                                                                             LTHR_SWITCH_NOTE["test"]))}]
 
 
 def project(ctl0: float, atl0: float, planned: list[float], cc: float, ac: float) -> list[dict]:
@@ -1231,6 +1251,13 @@ def strides_for(kind: str, mode: str, i: int, road: bool, tr_week: Optional[int]
     return None
 
 
+def talk_test(detail: str) -> str:
+    """`detail` + the talk test (SP-289: the HR numbers are a prior), once."""
+    from backend.engine.hr_profile import TALK_TEST
+    t = _(TALK_TEST)
+    return detail if t in (detail or "") else ((detail + "；") if detail else "") + t
+
+
 def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, blackouts=None,
               b2b_accepted: Optional[list] = None, race_predict=None, sport: Optional[str] = None) -> dict:
     """Target volume and sessions for the current Monday–Sunday week.
@@ -1292,6 +1319,22 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     r_all = (sum(t for _, _, t in hist[-6:]) / tot_h) if tot_h > 1 else 50.0
     if not r_all > 0:
         r_all = 50.0        # hours but no TSS yet (HR-only runs before any LTHR / CP is known)
+    # 停訓後的恢復期 (engine/reentry.py; read here — the cold start below defers to it)
+    from backend.engine import reentry as RE
+    try:
+        rp = RE.find(ds, today, blackouts or ())
+    except Exception:                       # noqa: BLE001 — the plan must still build
+        rp = None
+    # 冷啟動 (engine/cold_start.py, SP-288): the week the data starts and the RAMP_WEEKS after it — the
+    # start level (問卷 or the default) stands for the weeks before the data; None with history
+    cs = None
+    if kind in ("base", "specific"):
+        try:
+            cs = CS.week_context(ds, today, reentry=rp)
+        except Exception:                   # noqa: BLE001 — the plan must still build
+            cs = None
+    if cs is not None:
+        base4, ref, cap_ref = max(base4, cs["hours"]), max(ref, cs["hours"]), max(cap_ref, cs["hours"])
 
     cc, ac = ds.athlete.ctlconstant, ds.athlete.atlconstant
     ev = Evaluator(ds, int(date_to_day(monday)) - 1, int(date_to_day(sunday)))
@@ -1324,6 +1367,11 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         hours = min(max(need_h, base4), cap)
         why.append(_("CTL {ctl:.0f} 要每週 +{ramp:.1f}，需要約 {tss:.0f} TSS（≈ {h:.1f} h）",
                       ctl=ctl0, ramp=ramp_goal, tss=need_tss, h=need_h))
+        if cs is not None and cs["level"] == 1:
+            # SP-288: a new runner's ramp steps by the volume rule itself (+10 %, at least +0.5 h) — the
+            # CTL of a few weeks of data (seeded from them, load_guard.SEED_DAYS) says nothing yet
+            hours = cap
+            why[-1] = _("資料還在累積：週量 = 基準 {ref:.1f} h 的 +10%（至少 +0.5 h）→ {h:.1f} h", ref=cap_ref, h=cap)
         if need_h > cap and cap_ref != ref:
             why.append(_("但週量上限 = 最近的正常訓練週 {ref:.1f} h（不含減量期／比賽週／賽後恢復期／轉換期）"
                          "的 +10%（至少 +0.5 h）→ {cap:.1f} h", ref=cap_ref, cap=cap))
@@ -1352,6 +1400,9 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         elif build3:
             mode, hours = "recovery_week", 0.65 * statistics.mean(h for _, h, _ in hist[-3:])
             why.append(_("已連續 3 週加量：這週是恢復週（前 3 週平均的 65%）"))
+        if cs is not None and cs["level"] == 0:
+            # SP-288: the week the data starts = the start level (問卷 as entered, else the default)
+            mode, hours, why = kind, cs["hours"], [CS.why(cs)]
     elif kind == "taper":
         base6 = statistics.mean(h for _, h, _ in hist[-6:]) if hist else 0.0
         days_to = goals.get("days_to_next_a")
@@ -1397,11 +1448,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     # planned (不排課日期) or not — gets Daniels' block (table 9.2). It replaces the old
     # 「不排課後週量 +10%（至少 +0.5 h）」 step (blackouts.step_cap), which after a fully blocked
     # week capped the next one at 0.5 h — far slower than Daniels' 50 % → 75 % → 100 %.
-    from backend.engine import reentry as RE
-    try:
-        rp = RE.find(ds, today, blackouts or ())
-    except Exception:                       # noqa: BLE001 — the plan must still build
-        rp = None
+    # (`rp` is read above, before the volume target: the cold start defers to it, SP-288)
     inj_events: list = []
     inj_rule = None
     try:                                    # 傷病紀錄 (engine/injuries.py): 「右膝進行中（第 5 天）」
@@ -1512,6 +1559,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     longest28 = max((moving_s(w) for w in workouts_between(ds, today - dt.timedelta(days=LG.LONG_DAYS),
                                                           today + dt.timedelta(days=1))
                      if category(w) in FOOT), default=0.0) / 60.0
+    if cs is not None and cs["level"] == 0 and not longest28 and cs.get("longest"):
+        longest28 = cs["longest"]           # SP-288: the questionnaire's longest run stands for the data's
     minutes_total = hours * 60.0
     sessions: list[Session] = []
     # 間歇門檻 (engine/quality_gate.py): status.i_gate's result; the method, this
@@ -1528,6 +1577,9 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     # guardrail mode keeps the base phase at one
     q_n = quality_per_week(PR, kind, mode, gate)
     dec = QG.week_decision(gate, kind, mode, monday, n=q_n)
+    if cs is not None:
+        # SP-288 (cold-start.md §4.1): a new runner's first weeks are easy runs only — also no 3:1 fartlek
+        dec = {**dec, "allow": False, "spec": None, "advance": False, "items": []}
     allow_quality = dec["allow"]
     in_reentry = mode == "reentry"
     # a week touching the block gets no quality (推估: the whole week after it, so nothing lands inside)
@@ -1590,7 +1642,11 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
             long_min = max(90.0, min(goal_h * 0.7 * 60.0, max(longest28, 60.0) * LG.LONG_CAP))
         else:
             long_min = max(60.0, min(0.30 * minutes_total, max(longest28, 60.0) * LG.LONG_CAP))
-        long_min = min(long_min, 0.5 * minutes_total) if minutes_total >= 120 else long_min
+        # ≤ 50 % of the week; under 120 min ≤ 40 % and no 60-min floor (SP-288)
+        long_min = CS.long_share_cap(long_min, minutes_total)
+        # the week the data starts (SP-288): no long run without the questionnaire (owner 2026-10-06) or
+        # when it wouldn't be longer than the other runs
+        no_long = CS.no_long(cs, LG.cap_long(long_min, longest28)[0], minutes_total, rec_wk)
         if rec_wk:
             # SP-97: a recovery week keeps a shorter long run (the usual one × 65 %; the 專項期's ≤ FRAC's low point)
             usual = longest28 if kind == "specific" else min(longest28, 0.30 * norm_hours * 60.0)
@@ -1612,7 +1668,9 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
                    "有山路就走山路，陡坡用走的" if mountain_goal else "平路或緩坡")
         # a due CP / AeT test is SUGGESTED, never put into the plan (the user, 2026-10-01): the
         # athlete picks the day (test_suggestions below → 「排入」 on the overview / 課表 page)
-        if road:
+        if no_long:
+            pass
+        elif road:
             # (a recovery week's long run is easy: no marathon-pace segment)
             add(**road_long_session(long_min, "base" if rec_wk else kind, aet, tph["road"], mp_goal, aet_meas,
                                     mp_week(mp_rc, monday)),
@@ -1625,10 +1683,10 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
                 tss=long_min / 60.0 * tph["trail" if mountain_goal else "road"])
         if rec_wk:
             recovery_long(sessions[-1])
-        if b2b.get("candidate") and not in_reentry:
+        if b2b.get("candidate") and not in_reentry and not no_long:
             # a due B2B is a SUGGESTION (b2b_suggestion below); only an accepted one is planned
             B2B.finalize(b2b, sessions[-1].minutes, b2b.get("longest_before") or 0.0, minutes_total)
-        if b2b.get("due"):            # accepted: day 2 out of the easy minutes below (Koop: total unchanged)
+        if b2b.get("due") and not no_long:   # accepted: day 2 out of the easy minutes below (Koop: total unchanged)
             ls = asdict(sessions[-1])
             fol = B2B.followers(ls, b2b)
             sessions[-1] = Session(**ls)
@@ -1696,6 +1754,9 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         # keep the run count, each run shorter (SP-96)
         n_easy = taper_easy_count(left, t_ref.get("runs"), sum(1 for s in sessions if s.kind in RUN_KINDS))
     n_easy = auto_easy_cap(n_easy, sum(1 for s in sessions if s.kind in RUN_KINDS))   # ≥ 1 rest day (SP-82)
+    if cs is not None and mode in ("base", "specific"):
+        # SP-288: the cold week / the ramp — DEFAULT_RUNS runs (the cold week exactly), none under MIN_EASY
+        n_easy = CS.easy_runs(n_easy, left, cs, sum(1 for s in sessions if s.kind in RUN_KINDS))
     for i in range(n_easy):
         m = min(left / n_easy, TRANSITION_RUN_MAX) if kind in ("transition", "rebuild") else left / n_easy
         st = strides_for(kind, mode, i, road, tr_wk)       # base; 轉換期 from week 2 (SP-103)
@@ -1710,7 +1771,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         ctx = PP.Ctx(kind=kind, mode=mode, allow_quality=allow_quality, rates=tph, aet=aet, aet_measured=aet_meas,
                      slots=max(1, sum(bool(x) for x in PR.days) - len(lost)), notes=notes,
                      quality_cap=1 if kind == "base" and QG.guardrail_mode(gate) else None)
-        shaped = PP.shape([asdict(s) for s in sessions], minutes_total, PR, ctx)
+        shaped = PP.shape([asdict(s) for s in sessions], minutes_total,
+                          CS.prefs_for(PR, cs, ctx.slots) if mode in ("base", "specific") else PR, ctx)
         sessions = []
         for d in shaped:
             flag = d.pop("long_day", False)
@@ -1900,7 +1962,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
             [wdate(w) for w in week_ws if category(w) in ENDURANCE]
         qd = [dt.date.fromisoformat(x.day) for x in main_todo if x.kind in ("quality", "test") and x.day] + hard_done
         for s, d in zip(easy_q, RD.pick_days(len(easy_q), avail, [monday + dt.timedelta(days=i) for i in range(7)],
-                                             runs, ld, long_wd, qd)):
+                                             runs, ld, long_wd, qd, apart=CS.apart(cs))):   # SP-288: a day apart
             put(s, d)
             avail.remove(d)
     unplaced = [s for s in main_todo if s.day is None]
@@ -2103,6 +2165,17 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     ctl_end = proj_rows[-1]["ctl"] if proj_rows else ctl_start
     atl_end = proj_rows[-1]["atl"] if proj_rows else atl_start
 
+    # ---- 沒有 LTHR 時的心率先驗 (SP-289): the easy / long runs' HR numbers come from 0.90 × max HR —
+    # the talk test as the backup (cold-start.md §4.3)
+    if tt.get("lthr_prior"):
+        for x in sessions:
+            if x.kind in ("easy", "long") and not x.done:
+                x.detail = talk_test(x.detail)
+
+    # ---- 冷啟動 (SP-288): what the cold week / the ramp used, and where the questionnaire is
+    if cs is not None:
+        notes.append(CS.note(cs, sum(1 for s in sessions if s.kind in RUN_KINDS)))
+
     # ---- non-session to-dos from the indicators --------------------------
     for iid in ("data", "testing"):
         i = by.get(iid)
@@ -2157,6 +2230,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
                        # aet = the easy-run cap (not always an AeT: the 課表心率區間 Z2 top unless measured);
                        # its ± badge only when the cap IS the AeT estimate (no 課表心率區間)
                        "lthr_source": tt.get("lthr_source"), "aet": aet, "aet_source": aet_src,
+                       "lthr_prior": bool(tt.get("lthr_prior")),       # SP-289: 0.90 × max HR (推估)
                        "aet_pm": tt.get("aet_pm") if hrz is None else None,
                        "aet_measured": aet_meas, "easy_cap_label": cap_txt, "easy_cap_tip": _(EASY_CAP_TIP),
                        # 課表心率區間 (engine/hr_profile.plan_hr_zones): the push / step builders read it
@@ -2186,6 +2260,11 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         # 疼痛燈號 (SP-271, engine/injuries.light): the open injuries' light today (None = no open injury);
         # SP-272: color "walkrun" carries the walk-run state, the sessions still to come and the expected block
         "injury_light": inj_light,
+        # 冷啟動 (engine/cold_start.py, SP-288): the cold week / ramp — projection keeps the start level
+        # as the base floor until `until` and the run count; `longest` = the long day the next week caps
+        # from (this week's long run, else its longest easy run). None for a runner with history
+        "cold_start": None if cs is None else {
+            **cs, "longest_planned": max([float(s.minutes) for s in sessions if s.kind in ("long", "easy")] or [0.0])},
         # 轉換期 (SP-73): the pre-race level of the current / next 轉換期, for projection
         "transition_ref": tr_ref,
         # 連續兩天長天 (engine/b2b.py): this week's B2B / post-B2B state, for projection, adapt and the card

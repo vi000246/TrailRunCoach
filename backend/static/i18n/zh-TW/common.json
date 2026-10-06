@@ -155,5 +155,22 @@
   "setup.need_sex": "請選性別",
   "setup.need_age": "請填年齡（10–100 歲）",
   "setup.need_weight": "請填體重（25–250 kg）",
-  "setup.save_failed": "儲存失敗：{msg}"
+  "setup.save_failed": "儲存失敗：{msg}",
+  "setup.exp_title": "跑步經驗（每一題都可以不填）",
+  "setup.exp_intro": "用來排你的第一個月課表；你填的週量照原數字用，不打折。沒填的話先排每週 1.5 小時、3 次輕鬆跑。",
+  "setup.exp_import": "換手錶或換平台的話：舊紀錄如果在 COROS 或 TrainingPeaks，先到「設定 → 資料同步」把紀錄同步進來，會比這份問卷準。",
+  "setup.exp_q1": "最近 4 週，平均一週跑步或健行幾次、每次大約多久？",
+  "setup.exp_times": "次",
+  "setup.exp_min": "分鐘",
+  "setup.exp_q2": "最近 4 週最長的一次是多久？",
+  "setup.exp_q3": "現在能不能連續跑 30 分鐘不停？",
+  "setup.exp_skip": "（不填）",
+  "setup.exp_yes": "可以",
+  "setup.exp_no": "還不行",
+  "setup.exp_q4": "最近一年有沒有比賽成績？（距離、時間、日期；可不填）",
+  "setup.exp_race_km": "比賽距離（公里）",
+  "setup.exp_race_time": "完賽時間（時:分:秒）",
+  "setup.exp_race_date": "比賽日期",
+  "setup.exp_race_trail": "越野賽",
+  "setup.need_race": "比賽成績要填完整：距離（公里）、時間（像 1:05:30）、日期（不能是未來）；不想填就三格都留空"
 }

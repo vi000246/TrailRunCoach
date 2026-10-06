@@ -155,5 +155,22 @@
   "setup.need_sex": "Please choose a sex",
   "setup.need_age": "Please enter your age (10–100)",
   "setup.need_weight": "Please enter your weight (25–250 kg)",
-  "setup.save_failed": "Could not save: {msg}"
+  "setup.save_failed": "Could not save: {msg}",
+  "setup.exp_title": "Your running (every question can be left blank)",
+  "setup.exp_intro": "Used to plan your first month; the weekly volume you enter is used as it is, not reduced. Left blank, the plan starts at 1.5 hours a week: 3 easy runs.",
+  "setup.exp_import": "Changed watch or platform? If your old activities are on COROS or TrainingPeaks, sync them in first under Settings → Data sync: that is more accurate than these answers.",
+  "setup.exp_q1": "Over the last 4 weeks, how many runs or hikes a week on average, and about how long each?",
+  "setup.exp_times": "times",
+  "setup.exp_min": "min",
+  "setup.exp_q2": "The longest one in the last 4 weeks?",
+  "setup.exp_q3": "Can you run 30 minutes without stopping right now?",
+  "setup.exp_skip": "(skip)",
+  "setup.exp_yes": "Yes",
+  "setup.exp_no": "Not yet",
+  "setup.exp_q4": "A race result from the last year? (distance, time, date; optional)",
+  "setup.exp_race_km": "Race distance (km)",
+  "setup.exp_race_time": "Finish time (h:mm:ss)",
+  "setup.exp_race_date": "Race date",
+  "setup.exp_race_trail": "Trail race",
+  "setup.need_race": "Fill in the whole race result: distance (km), time (like 1:05:30) and date (not in the future), or leave all three blank"
 }

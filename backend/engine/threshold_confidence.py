@@ -117,9 +117,9 @@ RESULT_DAYS = 60
 
 LEVELS = ("error", "strong", "weak", "hint")
 CONF_LABEL = {"high": N_("高"), "medium": N_("中"), "low": N_("低")}
-LOW_LTHR_SOURCES = ("estimate", "watch", "default")
+LOW_LTHR_SOURCES = ("estimate", "watch", "default", "prior")      # prior: 0.90 × max HR (SP-289)
 MID_SOURCES = ("manual", "wko5")
-LOW_HRMAX_SOURCES = ("watch", "estimate")
+LOW_HRMAX_SOURCES = ("watch", "estimate", "age")                   # age: Tanaka 208 − 0.7 × age (SP-289)
 
 TT30_TITLE = re.compile(r"(30\s*[′'分].*(閾值心率|LTHR))|(LTHR.*30\s*[′'分])|閾值心率測試|LTHR\s*(測試|test)", re.I)
 HRMAX_TITLE = re.compile(r"最大心率測試|max(imum)?\s*h(eart\s*)?r(ate)?\s*test|hrmax\s*test", re.I)
@@ -230,7 +230,8 @@ def run_summary(t, hr, power=None, cadence_spm=None, cp: Optional[float] = None,
 
 def _src_label(kind: Optional[str]) -> str:
     return {"test": _("測試"), "manual": _("手動輸入"), "estimate": _("自動估算"), "watch": _("手錶帳號"),
-            "default": _("WKO5 預設值"), "wko5": _("WKO5 設定")}.get(kind or "", kind or "–")
+            "default": _("WKO5 預設值"), "wko5": _("WKO5 設定"), "prior": _("最大心率的 90 %（推估）"),
+            "age": _("年齡公式（推估）")}.get(kind or "", kind or "–")
 
 
 def source_signals(lthr: dict) -> list[dict]:
@@ -526,6 +527,10 @@ def assess(lthr: dict, mhr: dict, rhr: dict, today: dt.date, runs: list[dict], e
         if hconf == "low" and mhr.get("value"):
             tests.insert(0, "hrmax")
     tests = [t for t in tests if t not in (tested or set())]
+    if lthr.get("test_from") and today.isoformat() < lthr["test_from"]:
+        # SP-289 (owner 2026-10-06): a new runner is suggested the LTHR test only from week 5 (week 2
+        # with ≥ 3 h a week and a race result reported) — cold_start.lthr_test_from
+        tests = [t for t in tests if t != "tt30"]
     firm = any(s["level"] in ("error", "strong") for s in lsig + hsig if s["id"] != "source") or \
         bool(dg["outlier"] and dg["outlier"] != "undetermined")
     sugs = []
@@ -736,7 +741,23 @@ def recent_hot(runs: list[dict], today: dt.date) -> Optional[bool]:
     return sum(1 for x in xs if x == "hot") > len(xs) / 2.0
 
 
+def _test_from(ds, today: dt.date) -> dict:
+    """{"test_from": ISO} — the first day a new runner is suggested the LTHR test (SP-289,
+    cold_start.lthr_test_from); {} for a runner with history (no limit) or on any error."""
+    try:
+        from backend.engine import cold_start as CS
+        d = CS.lthr_test_from(ds, today)
+    except Exception:                       # noqa: BLE001 — the check never fails on it
+        d = None
+    return {"test_from": d} if d else {}
+
+
 def lthr_info(ds, plan, today: dt.date) -> dict:
+    return {**_lthr_info(ds, plan, today), **_test_from(ds, today)}
+
+
+def _lthr_info(ds, plan, today: dt.date) -> dict:
+    from backend.engine import hr_profile as HP
     from backend.engine.planning import threshold_row
     r = threshold_row(plan, "lthr", today) if plan is not None else None
     if r is not None:
@@ -745,8 +766,22 @@ def lthr_info(ds, plan, today: dt.date) -> dict:
         cp0 = plan.threshold_on("cp", dt.date.fromisoformat(r["date"]))
         return {"value": r["value"], "source_kind": kind, "date": r["date"], "label": r["label"],
                 "method": m, "cp_at_date": cp0}
+    # SP-289: the 0.90 × max-HR prior — the dataset's (fitdataset.lthr_prior, in effect until a real
+    # LTHR) or, before any run, hr_profile.lthr_prior; a low source from the start
+    pri = getattr(ds, "lthr_prior", None)
+    iso = today.isoformat()
+    if isinstance(pri, dict) and pri.get("from", "") <= iso < (pri.get("until") or "9999-12-31"):
+        return {"value": _f(pri.get("value")), "source_kind": "prior", "date": None,
+                "label": _(HP.LTHR_PRIOR_SOURCE), "cp_at_date": None}
     hist = (getattr(getattr(ds, "athlete", None), "settings", None) or {}).get("runthr") or []
     if not hist:
+        try:
+            p0 = HP.lthr_prior(ds, today)
+        except Exception:                   # noqa: BLE001
+            p0 = None
+        if p0:
+            return {"value": p0["value"], "source_kind": "prior", "date": None,
+                    "label": _(HP.LTHR_PRIOR_SOURCE), "cp_at_date": None}
         return {"value": None, "source_kind": None, "date": None, "label": None}
     d, v = max(((d, v) for d, v in hist if d <= today), default=hist[0])
     default = all(x == dt.date(1980, 1, 1) for x, _v in hist)
@@ -757,7 +792,7 @@ def lthr_info(ds, plan, today: dt.date) -> dict:
 def mhr_info(ds, today: dt.date, acc=None) -> dict:
     from backend.engine import hr_profile as HP
     m = HP.max_hr(ds, today, acc)
-    kind = {"coros": "watch", "estimate": "estimate"}.get(m.get("kind"))
+    kind = {"coros": "watch", "estimate": "estimate", "age": "age"}.get(m.get("kind"))
     if m.get("kind") == "manual":
         meth = m.get("method")
         kind = "test" if meth in ("test", "race", "lab") else "estimate" if meth == "estimate" else "manual"
