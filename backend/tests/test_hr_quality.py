@@ -93,13 +93,16 @@ def test_out_of_range_and_gaps():
 def test_dropout_flat_and_high_start_are_flagged_only():
     t, h, v = _run()
     h[1000:1015] = np.nan                     # the watch kept recording, no HR for 15 s
-    h[2000:2070] = 151.0                      # the same value for 70 s while running
+    h[2000:2070] = 151.0                      # the same value for 70 s while running …
+    v = v + 0.5 * np.sin(t / 5.0)             # … while the pace wobbles (a frozen reading)
     h[60:200] = 175.0 + np.sin(t[60:200])     # the first minutes read far above the rest
     q = HQ.assess(t, h, speed_kmh=v)
     s = HQ.summary(q)
     assert s["dropout_n"] == 1 and s["dropout_s"] == 15
     assert s["flat_n"] >= 1 and s["flat_s"] >= 70
     assert s["high_start_s"] >= 30
+    # the same flat HR at a perfectly constant speed: nothing says it froze
+    assert HQ.summary(HQ.assess(t, h, speed_kmh=np.full(len(t), 10.0)))["flat_s"] == 0
     # never removed by the cleaning
     y = HQ.clean(t, h, speed_kmh=v)[1]
     assert np.isfinite(y[2000:2070]).all() and np.isfinite(y[60:200]).all()

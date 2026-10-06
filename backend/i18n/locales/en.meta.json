@@ -755,6 +755,14 @@
     "draft": true,
     "src": "backend/engine/calendar_feed.py:150"
   },
+  "{m} 分鐘數字都沒變": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:572"
+  },
+  "{m} 分鐘跟著步頻走": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:572"
+  },
   "{m}/{d} 是不排課日期{label}，不能排課": {
     "draft": true,
     "src": "backend/engine/plan_store.py:344"
@@ -871,6 +879,10 @@
     "draft": true,
     "src": "backend/engine/planning.py:581"
   },
+  "{n} 次突然跳一階沒有回來": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:571"
+  },
   "{n} 次路跑的中位數（沒有心率可篩）": {
     "draft": true,
     "src": "backend/engine/equivalence.py:203"
@@ -883,6 +895,10 @@
     "draft": true,
     "src": "backend/engine/workout_steps.py:1203"
   },
+  "{n} 段突然跳動": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:571"
+  },
   "{n} 段超過 {max} 段：COROS 的上限未驗證": {
     "draft": true,
     "src": "backend/engine/workout_steps.py:1540"
@@ -890,6 +906,10 @@
   "{n} 週": {
     "draft": true,
     "src": "backend/engine/planning.py:581"
+  },
+  "{parts}（沒有超過門檻，飄移照常判讀）": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3205"
   },
   "{pct}% × (220 − 年齡)，推估": {
     "draft": true,
@@ -2647,6 +2667,14 @@
     "draft": true,
     "src": "backend/engine/hr_profile.py:457"
   },
+  "心率可疑": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:575"
+  },
+  "心率品質": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3204"
+  },
   "心率恢復變快但功率沒到，可能累積疲勞：休 60 秒心率降 {d:.0f} bpm，比同規格課 8 週中位數 {b:.0f} 快 {x:.0%}（連續 {k} 堂 ≥ {t:.0%}）": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:858"
@@ -2818,6 +2846,10 @@
   "手動輸入": {
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:289"
+  },
+  "手腕光學心率偶爾會突然跳動、跳一階不回來、跟著步頻走或卡在同一個數字。量測的這段裡可疑的秒數超過 3%，或有一次跑步中突然跳一階，飄移就只當參考：不拿來開放間歇、不算 AeT 測試、不寫進閾值。原始資料不會被修改（門檻是推估）。": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:576"
   },
   "手錶 LTHR 平均誤差 9–11 bpm（COROS 8.9；Lu 2025）": {
     "draft": false,
@@ -5083,6 +5115,14 @@
     "draft": true,
     "src": "backend/engine/aet_test.py:366"
   },
+  "這次心率有 {parts}，測試結果只當參考，不建議套用": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:574"
+  },
+  "這次心率有 {parts}，飄移只當參考": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:573"
+  },
   "這次沒有功率": {
     "draft": true,
     "src": "backend/engine/workout_review.py:2967"
@@ -5326,6 +5366,10 @@
   "量到的 AeT {aet:.0f} bpm（測試值優先於 {model} Z2 上緣）": {
     "draft": true,
     "src": "backend/engine/hr_profile.py:289"
+  },
+  "量測的這段沒有發現可疑的心率": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3206"
   },
   "長 tempo": {
     "draft": true,
