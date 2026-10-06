@@ -867,8 +867,18 @@ def _after_thresholds() -> None:
     upcoming power targets and re-pushes them (plan.auto.push permitting).
     From a sync endpoint (a worker thread) the task is started on the app's
     event loop; without one (scripts) nothing happens — the next sync does it."""
+    _start_run("cp_change")
+
+
+def _after_settings() -> None:
+    """api/calib.py calls this after a 進階設定 value the plan reads changed (the Zone 3
+    unlock rule, SP-295): a background run re-plans with it, like a sync would."""
+    _start_run("settings")
+
+
+def _start_run(trigger: str) -> None:
     def start():
-        t = asyncio.get_running_loop().create_task(run_safe("cp_change"))
+        t = asyncio.get_running_loop().create_task(run_safe(trigger))
         _TASKS.add(t)
         t.add_done_callback(_TASKS.discard)
     try:
@@ -884,3 +894,4 @@ def _after_thresholds() -> None:
 
 
 after_thresholds = _after_thresholds     # the hook api/plan.py calls (tests replace it)
+after_settings = _after_settings         # the hook api/calib.py calls (tests replace it)
