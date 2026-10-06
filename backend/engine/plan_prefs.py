@@ -84,6 +84,8 @@ KEY_FIELDS = {                       # user_settings key -> Prefs field
     "plan.prefs.b2b": "b2b",
     "plan.prefs.transition_weeks": "transition_weeks",
     "plan.prefs.taper_days": "taper_days",
+    "plan.prefs.strength_moves": "strength_moves",
+    "plan.prefs.strength_no_gear": "strength_no_gear",
 }
 # 間歇門檻 (engine/quality_gate.py): decides whether base phase gets intervals,
 # not how sessions are shaped, so these alone don't switch shape() / place() on
@@ -97,8 +99,11 @@ GATE_FIELDS = ("quality_gate", "quality_gate_weeks")
 # b2b: whether a due B2B weekend is suggested at all (engine/b2b.py) — a suggestion, not shaping
 # transition_weeks: the 轉換期 after an A race (engine/planning.auto_phases) — a phase, not shaping
 # taper_days: the 減量期 length of a road marathon / an ultra (planning.taper_days, SP-96) — a phase too
+# strength_moves / strength_no_gear: which move each strength type uses (engine/strength_moves.py,
+# SP-191) — the strength texts only, read by strength_plan / balance_plan whether or not `active`
 NOT_SHAPING = ("cp_test_protocol", "heat", "heat_method", "aet_test_days", "aet_test_protocol",
-               "warmup_commute_min", "cooldown_min", "b2b", "transition_weeks", "taper_days") + GATE_FIELDS
+               "warmup_commute_min", "cooldown_min", "b2b", "transition_weeks", "taper_days",
+               "strength_moves", "strength_no_gear") + GATE_FIELDS
 WD = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 WD_ZH = "一二三四五六日"
 LONG_WD = {d: i for i, d in enumerate(WD)}      # 長跑日: any weekday (was sat / sun only)
@@ -177,6 +182,11 @@ class Prefs:
     # 減量期天數 (SP-96; planning.taper_days): 14 (default, Wang 2023: 8–14 days best) up to 21 for a road
     # marathon or an ultra (Strava: 3 weeks > 2; ≥ 22 days no effect). Not part of `active`.
     taper_days: int = 14
+    # 肌力動作 (SP-191, engine/strength_moves.py): ((type, move), …) the athlete picked — a type's
+    # default is never stored, () = every default; strength_no_gear: the equipment they don't have
+    # (bar / band), a move that needs it gives way to one that doesn't. Not part of `active`.
+    strength_moves: tuple = ()
+    strength_no_gear: tuple = ()
 
     @property
     def active(self) -> bool:
@@ -197,6 +207,8 @@ class Prefs:
         d["days"], d["strength_days"] = list(self.days), list(self.strength_days)
         d["pref_days"] = {k: list(v) for k, v in self.pref_days}
         d["pref_keep"] = list(self.pref_keep)
+        d["strength_moves"] = dict(self.strength_moves)
+        d["strength_no_gear"] = list(self.strength_no_gear)
         return d
 
     def pref_of(self, kind: str) -> tuple:
@@ -231,6 +243,10 @@ def from_settings(values: dict, lenient: bool = True) -> Prefs:
                              if k in PREF_KINDS and d))
         if f == "weekly_hours":
             v = float(v)
+        if f in ("strength_moves", "strength_no_gear"):
+            # a move / an equipment no longer offered: dropped when stored, refused when new (SP-191)
+            from backend.engine import strength_moves as SM
+            v = (SM.clean_moves if f == "strength_moves" else SM.clean_gear)(v, strict=not lenient)
         if f == "quality_gate" and lenient:
             from backend.engine.quality_gate import MODES
             v = v if v in MODES else "auto"

@@ -154,6 +154,10 @@ DEFAULTS: dict[str, Any] = {
     "plan.prefs.transition_weeks": 3,
     # 減量期天數 of a road marathon / an ultra (engine/planning.taper_days, SP-96): 14–21
     "plan.prefs.taper_days": 14,
+    # 肌力動作 (engine/strength_moves.py, SP-191): {type: move} the athlete picked ({} = the defaults)
+    # and the equipment they don't have (bar | band)
+    "plan.prefs.strength_moves": {},
+    "plan.prefs.strength_no_gear": [],
     # accepted B2B weekends (engine/b2b.py ACCEPTED_KEY): [{week, days, minutes, uids, at}]
     "plan.b2b.accepted": [],
     # the floating suggestion box (engine/suggestions.py): {suggestion id: {action, at, week}}
@@ -442,6 +446,9 @@ def _validate_pref(key: str, value: Any) -> None:
     if key == "plan.prefs.pref_keep" and value is not None and not (
             isinstance(value, list) and all(isinstance(x, str) and len(x) <= 40 for x in value)):
         raise ValueError("plan.prefs.pref_keep must be a list of conflict codes")
+    if key in ("plan.prefs.strength_moves", "plan.prefs.strength_no_gear"):
+        from backend.engine import strength_moves as SM
+        (SM.clean_moves if key.endswith("moves") else SM.clean_gear)(value, strict=True)
     if key == "plan.prefs.weekly_hours" and value is not None and (
             isinstance(value, bool) or not isinstance(value, (int, float)) or not 1 <= value <= 40):
         raise ValueError("plan.prefs.weekly_hours must be 1-40 hours or null")
