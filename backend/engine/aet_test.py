@@ -616,14 +616,25 @@ PACE_RE = re.compile(r"(\d+):(\d\d)\s*[–-]\s*(\d+):(\d\d)\s*/km")     # the st
 WATTS_RE = re.compile(r"(\d+)\s*[–-]\s*(\d+)\s*W\b")                     # …or power range
 
 
+def cp_tested(plan, day: dt.date) -> bool:
+    """The CP in effect on `day` came from a CP test: the latest plan row with a CP has a
+    cp_method (cp_protocols.METHOD_LABEL — 「套用這次的 CP」 writes it). A CP typed by hand (or a
+    legacy row without a method) doesn't count for the 90-minute test (owner 2026-10-06)."""
+    from backend.engine.cp_protocols import METHOD_LABEL
+    rows = sorted((t for t in getattr(plan, "thresholds", None) or []
+                   if t.cp is not None and str(t.date)[:10] <= day.isoformat()), key=lambda t: t.date)
+    return bool(rows) and getattr(rows[-1], "cp_method", None) in METHOD_LABEL
+
+
 def xu_target(th: dict) -> dict:
     """{"basis": pace | power | talk, "lo", "hi" (s/km or W; None for talk), "text" (the
     target, its numbers parsed back by the step builders: PACE_RE / WATTS_RE), "name" (the
     main step), "why" (the detail's line)}. th: the week plan's thresholds with "e_pace"
-    (e_pace.current) and "cp_measured" (a plan CP row in effect)."""
+    (e_pace.current) and "cp_measured" (cp_tested). A race older than e_pace.STALE_DAYS is not
+    used (owner 2026-10-06): the test falls back to the CP / the talk test."""
     from backend.engine import e_pace as EP
     e = th.get("e_pace") if isinstance(th.get("e_pace"), dict) else None
-    if e and e.get("e_fast") and e.get("e_slow"):
+    if e and e.get("e_fast") and e.get("e_slow") and not e.get("stale"):
         mid = (float(e["e_fast"]) + float(e["e_slow"])) / 2.0
         lo, hi = round(mid * (1 - XU_PACE_BAND)), round(mid * (1 + XU_PACE_BAND))
         return {"basis": "pace", "lo": lo, "hi": hi,
@@ -637,12 +648,12 @@ def xu_target(th: dict) -> dict:
         return {"basis": "power", "lo": lo, "hi": hi,
                 "text": _("功率固定 {lo}–{hi} W（75–80% CP，Palladino 1C），不要調", lo=lo, hi=hi),
                 "name": _("固定功率 75–80% CP，不要調"),
-                "why": _("強度：還沒有比賽成績算的 E 配速，用實測 CP {cp:.0f} W 的 75–80%（Palladino 1C）。"
+                "why": _("強度：沒有 180 天內的比賽成績可以算 E 配速，用實測 CP {cp:.0f} W 的 75–80%（Palladino 1C）。"
                          "設定頁填一場比賽成績就會改用 E 配速。", cp=float(cp))}
     return {"basis": "talk", "lo": None, "hi": None,
             "text": _("能講完整句子的配速，固定不要調"),
             "name": _("能講完整句子的配速，固定不要調"),
-            "why": _("強度：沒有比賽成績算的 E 配速，也沒有實測 CP：前 10 分鐘找能講完整句子的最快配速，"
+            "why": _("強度：沒有 180 天內的比賽成績可以算 E 配速，也沒有 CP 測試的結果：前 10 分鐘找能講完整句子的最快配速，"
                      "之後就固定這個配速（講話測試，Foster 2008）。設定頁填一場比賽成績就會改用 E 配速。")}
 
 

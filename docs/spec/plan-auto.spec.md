@@ -405,9 +405,11 @@ intensity). Each rung is the canonical variant of `backend/engine/interval_libra
 
 The protocol drives the session text (「氣溫 25 °C 以下時開始（熱會讓心率偏高、飄移失真）」,
 台灣教練 + Lafrenz 2008), the COROS steps (friel: an HR-capped main block; UA / Evoke: a power
-range; xu90, SP-274: `aet_test.xu_target` — the E pace ± 3 % of a confirmed race result
-(`engine/e_pace.py`, SP-276), else 75–80 % of a tested CP (a plan CP row; Palladino 1C), else no
-target and the talk test; never an HR cap on the main block, the warm-up keeps the easy-run cap;
+range; xu90, SP-274: `aet_test.xu_target` — the E pace ± 3 % (around the middle of the E
+range) of a confirmed race result from the last 180 days (`engine/e_pace.py`, SP-276; Daniels'
+table is the reference; an older race is not used), else 75–80 % of a CP from a CP test
+(`aet_test.cp_tested`: the CP row in effect has a `cp_method` — a hand-typed CP doesn't count;
+Palladino 1C), else no target and the talk test (owner 2026-10-06); never an HR cap on the main block, the warm-up keeps the easy-run cap;
 the builders read the numbers back from the stored target, `xu_main_target`), the placement (xu90 on the weekend; the others by `aet_test_days`) and the
 analysis (`analyze_workout`: warm-up cut, window and judging rule by the title's protocol).
 The analysis uses VI ≤ 1.04 (drift v2) instead of the old 30-s CV. Heat is a band on the

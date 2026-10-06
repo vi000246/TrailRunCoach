@@ -1483,14 +1483,14 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     aet_meas = bool(hrz.get("aet_measured")) if hrz else bool(tt.get("aet_measured"))
     cap_txt = easy_cap_label(None, aet, aet_meas)
     # SP-274: the 90-minute test's intensity — the E pace of a confirmed race (engine/e_pace.py),
-    # else 75–80 % of a tested CP (a plan CP row, not WKO5's mFTP / a PD fit), else the talk test
+    # else 75–80 % of a tested CP (a plan CP row from a CP test — not typed by hand, not WKO5's
+    # mFTP / a PD fit: owner 2026-10-06), else the talk test
     from backend.engine import e_pace as EP
-    from backend.engine.planning import threshold_row
+    from backend.engine.aet_test import cp_tested
     try:
-        cp_row = threshold_row(ds.plan, "cp", today)
+        cp_meas = bool(tt.get("cp")) and cp_tested(ds.plan, today)
     except Exception:                       # noqa: BLE001 — a dataset without a plan (tests)
-        cp_row = None
-    cp_meas = bool(cp_row and cp_row["measured"] and tt.get("cp"))
+        cp_meas = False
     e_pc = EP.current(today)
     # the walking sessions' uphill cap (SP-115: 75 % HRmax, never below the easy-run cap)
     from backend.engine.hr_profile import walk_cap_for

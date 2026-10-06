@@ -54,11 +54,11 @@ def test_older_than_180_days_is_stale():
     fresh = EP.of_race({"distance_m": 10000, "time_s": 2700, "date": (TODAY - dt.timedelta(days=180)).isoformat()}, TODAY)
     old = EP.of_race({"distance_m": 10000, "time_s": 2700, "date": (TODAY - dt.timedelta(days=181)).isoformat()}, TODAY)
     assert not fresh["stale"] and old["stale"] and old["age_days"] == 181
-    assert "舊了" in EP.label(old) and "舊了" not in EP.label(fresh)
+    assert "太舊了" in EP.label(old) and "90 分鐘測試不用它" in EP.label(old) and "太舊" not in EP.label(fresh)
     assert EP.label(fresh) == "E 配速 5:32–6:06 /km（10 K 45:00，VDOT 45.3）"
     with use_locale("en"):
         assert EP.label(fresh) == "E pace 5:32–6:06 /km (10 K in 45:00, VDOT 45.3)"
-        assert "old (over 180 days, estimate)" in EP.label(old)
+        assert "too old (over 180 days, estimate): the 90-minute test doesn't use it" in EP.label(old)
 
 
 # ---- candidates: confirm first, no trail races ---------------------------------------------
@@ -88,6 +88,16 @@ def test_road_races_are_offered_trail_races_are_not():
     c = EP.candidates(_ds(ws, plan), TODAY)
     assert [x["title"] for x in c] == ["台北 10K 路跑賽", "晨跑"]
     assert c[0]["vdot"] == pytest.approx(45.3, abs=0.1) and c[0]["source"] == "activity"
+
+
+def test_api_offers_only_races_from_the_last_180_days(monkeypatch):
+    from backend.api import plan as API
+    from backend.engine.wko5expr import datasource
+    monkeypatch.setattr(datasource, "read_setting", lambda k, d=None, *a: d)
+    ds = _ds([_w(TODAY - dt.timedelta(days=170), "10K race", 10.0, 2700),
+              _w(TODAY - dt.timedelta(days=200), "Half marathon race", 21.0975, 5700)])
+    assert len(EP.candidates(ds, TODAY)) == 2
+    assert [c["title"] for c in API.race_pace_view(ds, TODAY)["candidates"]] == ["10K race"]
 
 
 def test_an_unconfirmed_candidate_is_not_used(monkeypatch):

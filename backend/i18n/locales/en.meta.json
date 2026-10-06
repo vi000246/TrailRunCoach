@@ -2571,13 +2571,13 @@
     "draft": false,
     "src": "backend/engine/workout_review.py:2833"
   },
-  "強度：沒有比賽成績算的 E 配速，也沒有實測 CP：前 10 分鐘找能講完整句子的最快配速，之後就固定這個配速（講話測試，Foster 2008）。設定頁填一場比賽成績就會改用 E 配速。": {
+  "強度：沒有 180 天內的比賽成績可以算 E 配速，也沒有 CP 測試的結果：前 10 分鐘找能講完整句子的最快配速，之後就固定這個配速（講話測試，Foster 2008）。設定頁填一場比賽成績就會改用 E 配速。": {
     "draft": true,
-    "src": "backend/engine/aet_test.py:636"
+    "src": "backend/engine/aet_test.py:656"
   },
-  "強度：還沒有比賽成績算的 E 配速，用實測 CP {cp:.0f} W 的 75–80%（Palladino 1C）。設定頁填一場比賽成績就會改用 E 配速。": {
+  "強度：沒有 180 天內的比賽成績可以算 E 配速，用實測 CP {cp:.0f} W 的 75–80%（Palladino 1C）。設定頁填一場比賽成績就會改用 E 配速。": {
     "draft": true,
-    "src": "backend/engine/aet_test.py:631"
+    "src": "backend/engine/aet_test.py:651"
   },
   "彈力帶": {
     "draft": true,
@@ -5939,9 +5939,9 @@
     "draft": true,
     "src": "backend/engine/technical.py:173"
   },
-  "；比賽是 {d} 天前的，舊了（超過 {n} 天，推估）：有新的比賽成績再更新": {
+  "；比賽是 {d} 天前的，太舊了（超過 {n} 天，推估）：90 分鐘測試不用它，有新的比賽成績再更新": {
     "draft": true,
-    "src": "backend/engine/e_pace.py:148"
+    "src": "backend/engine/e_pace.py:150"
   },
   "；比賽超過 6 小時，長天練到 6 小時的量就夠，等於 {p:.0f} %": {
     "draft": true,
