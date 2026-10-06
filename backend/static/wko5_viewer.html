@@ -377,6 +377,7 @@ table.z5ev td { white-space: normal; }
 <script src="/api/v1/static/shell.js" data-page="charts"></script>
 <script src="/api/v1/static/segments_card.js" defer></script>
 <script src="/api/v1/static/climb_vam.js" defer></script>
+<script src="/api/v1/static/pole_compare.js" defer></script>
 <script src="/api/v1/static/z5flow.js" defer></script>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
   <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></symbol>
@@ -573,9 +574,11 @@ const curView = () => viewsOf(S.mode).find((v) => v.name === S.view[S.mode]) || 
 // charts shown under the 使用功率 setting (the list's `power` flag, wko5expr/power_use.py)
 // …and under 主要訓練項目 (engine/primary_sport.py): a chart tagged `sports` shows only in those modes,
 // `order` ({road: n}) moves it up in that mode (untagged charts keep the file order)
+// …and a chart with `needs` (e.g. "poles": enough 有杖／沒杖 marks, SP-243) only when the server says needs_met
 function visCharts(d) {
   const sp = S.sport || "trail";
-  const cs = d.charts.filter((c) => (S.usePower !== false || !c.power) && (!c.sports || c.sports.includes(sp)));
+  const cs = d.charts.filter((c) => (S.usePower !== false || !c.power) && (!c.sports || c.sports.includes(sp))
+    && (!c.needs || c.needs_met));
   const rank = (c, i) => (c.order && c.order[sp] != null ? c.order[sp] : i);
   return cs.map((c, i) => [c, i]).sort((a, b) => rank(...a) - rank(...b) || a[1] - b[1]).map((x) => x[0]);
 }
@@ -1005,7 +1008,7 @@ async function load() {
       const { c, card } = queue.shift();
       if (token !== loadToken) return;
       if (c.kind === "z5gate" || (c.kind === "periodzones" && c.view === "weekly")) card.classList.add("wide");
-      if (!["athlete", "workout", "zones", "targets", "map", "z5gate", "periodzones", "climbvam"].includes(c.kind)) { card.querySelector(".loading").textContent = "這種 WKO5 面板尚未支援"; continue; }
+      if (!["athlete", "workout", "zones", "targets", "map", "z5gate", "periodzones", "climbvam", "polecompare"].includes(c.kind)) { card.querySelector(".loading").textContent = "這種 WKO5 面板尚未支援"; continue; }
       if (c.kind === "map" && S.mode !== "workout") { card.querySelector(".loading").textContent = "地圖要選一筆活動才看得到"; continue; }
       await renderCard(card, v, di, c, q, token);
     }
@@ -1212,6 +1215,7 @@ function drawInto(box, res) {
   else if (res.kind === "z5gate") drawZ5Gate(box, res);
   else if (res.kind === "periodzones") drawPeriodZones(box, res);   // panels/period_zones.py
   else if (res.kind === "climbvam" && window.drawClimbVam) drawClimbVam(box, res);   // climb_vam.js
+  else if (res.kind === "polecompare" && window.drawPoleCompare) drawPoleCompare(box, res);   // pole_compare.js
   else if (res.kind === "map") drawMap(box, res);
   else if (String(res.kind || "").startsWith("act_")) drawActivity(box, res);   // panels/activity_charts.py
   else if (res.climb_profile) drawClimbProfile(box, res);     // 爬坡段: elevation profile (cp* below)

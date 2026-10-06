@@ -63,5 +63,20 @@
   "mapchart.left": "Map on the left",
   "mapchart.metrics": "Chart",
   "mapchart.aria": "This activity's elevation, heart rate, power, pace and grade over time, synced with the map",
-  "mapchart.none": "Pick the metrics to show with the buttons above"
+  "mapchart.none": "Pick the metrics to show with the buttons above",
+  "pole.with": "With poles",
+  "pole.without": "No poles",
+  "pole.help": "Help",
+  "pole.summary": "In this period: {w} activities with poles, {wo} without (trail runs and hikes); each point is a median, n < {n} isn't drawn. Marked in the last 365 days: {year_w} with poles, {year_wo} without.",
+  "pole.axis_n": "with n={w} · without n={wo}",
+  "pole.aria": "{metric}: median with and without poles per grade",
+  "pole.median": "Median",
+  "pole.iqr": "Middle half",
+  "pole.metric_aria": "Measure to compare",
+  "pole.too_few": "Too few, not drawn",
+  "pole.table": "Table",
+  "pole.col_metric": "Measure",
+  "pole.col_bin": "Grade",
+  "pole.col_group": "Poles",
+  "pole.no_impact": "These activities have no impact data (a watch or Stryd may not record it when walking), so downhill compares only vertical speed and cadence."
 }

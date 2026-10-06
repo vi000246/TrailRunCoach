@@ -67,6 +67,9 @@ SERIES_DEFAULTS = {
 }
 
 
+NEEDS = ("poles",)          # chart `needs` values (see _chart)
+
+
 class CustomViewError(ValueError):
     pass
 
@@ -88,11 +91,12 @@ def _chart(raw: dict, where: str) -> dict:
     # activity: a single-activity chart computed in panels/activity_charts.py ({"chart": "hrpower"})
     # periodzones: time in zone over a period (panels/period_zones.py, {"view": "total" | "weekly"})
     # climbvam: steady-climb VAM:HR per route, trail runs + hikes (panels/climb_vam.py)
+    # polecompare: with vs without trekking poles per grade bin, trail runs + hikes (SP-243)
     # map: the workout's GPS route (render_map + the viewer's Leaflet map), same as WKO5's map panel
     if kind not in ("athlete", "workout", "zones", "targets", "review", "z5gate", "activity", "periodzones",
-                    "climbvam", "map"):
+                    "climbvam", "polecompare", "map"):
         raise CustomViewError(f"{where}: kind must be 'athlete', 'workout', 'zones', 'targets', 'review', "
-                              "'z5gate', 'activity', 'periodzones', 'climbvam' or 'map'")
+                              "'z5gate', 'activity', 'periodzones', 'climbvam', 'polecompare' or 'map'")
     out = {
         "id": raw.get("id"),            # stable id (viewids.py); filled in by parse_view when missing
         "title": raw["title"],
@@ -180,6 +184,12 @@ def _chart(raw: dict, where: str) -> dict:
             out["sports"] = chart_sports(raw["sports"])
         except ValueError as e:
             raise CustomViewError(f"{where}/{raw['title']}: {e}")
+    if raw.get("needs") is not None:
+        # a condition on the athlete's own data, checked by GET /views (needs_met): "poles" = enough
+        # activities marked with and without trekking poles in the last 365 days (SP-243)
+        if raw["needs"] not in NEEDS:
+            raise CustomViewError(f"{where}/{raw['title']}: needs must be one of {list(NEEDS)}")
+        out["needs"] = raw["needs"]
     if raw.get("order") is not None:
         # {"road": 0}: the chart's place in its dashboard in that mode (lower first; others keep file order)
         from backend.engine.primary_sport import SPORTS
