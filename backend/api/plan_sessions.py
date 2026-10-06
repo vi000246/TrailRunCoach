@@ -71,8 +71,10 @@ def _compute_inputs(blackouts: Optional[list] = None) -> dict:
     from backend.engine import hr_profile as HRP
     # the user's own RPE ≥ 7 技術地形 sessions take part of the week's quality budget (engine/technical.py)
     from backend.engine import technical as TECH
+    # the Zone 3 unlock rule of 進階設定 (SP-295): a change re-plans (the gate opens / closes)
+    from backend.engine import advanced_params as AP
     key = (id(ds), today, _plan_stamp(), prefs.stamp(), BL.stamp(bos), auto_on, B2B.accepted_stamp(acc),
-           PSP.stored(), HRP.stamp(), TECH.user_stamp(), rpe_on, _recorded_stamp(recorded))
+           PSP.stored(), HRP.stamp(), TECH.user_stamp(), rpe_on, _recorded_stamp(recorded), AP.z3_rule_stamp())
     with _lock:
         hit = _cache.get(key)
     if hit is not None:

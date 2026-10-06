@@ -257,7 +257,13 @@ intensity). Each rung is the canonical variant of `backend/engine/interval_libra
 - **Zone 3** (`z3_gate`, SP-31; the owner's rule 2026-10-04) opens on any one of: (a)
   consistency — 4 complete weeks of actual training (imported history counts, whatever the
   phase label) with ≥ 3 runs every week and no ≥ 7-day stretch without running
-  (`Z3_WEEKS_NEED`, `Z3_RUNS_PER_WEEK`, `Z3_MAX_GAP_DAYS`, all 推估; `z3_consistency`); (b) the
+  (`Z3_WEEKS_NEED`, `Z3_RUNS_PER_WEEK`, `Z3_MAX_GAP_DAYS`, all 推估; `z3_consistency`) — with the
+  re-lock days below these are the defaults of 設定 → 進階設定 (SP-295: `advanced_params` items
+  `z3_unlock_weeks` 1–16, `z3_unlock_runs_per_week` 1–7, `z3_unlock_max_gap_days` 1–21,
+  `z3_relock_days` 7–120, whole numbers, manual only; `quality_gate.z3_rule()` reads the ones in
+  effect, the gate's texts and the 間歇門檻 hover quote them tagged 「預設，推估」 or 「手動」; a change
+  is in the status / plan cache keys (`z3_rule_stamp`) and starts a background `plan_auto` run,
+  trigger `settings`); (b) the
   90-min drift test < 10 %; (c) a measured UA gap ≤ 10 %. Also open: mode `none`, the chosen
   method unlocked, an aerobic-base confirmation of the Zone 5 process, the re-entry rule asking
   for Zone 3, a Zone 3 session 達標 in the 8-week history. Once met it stays open; a break of
