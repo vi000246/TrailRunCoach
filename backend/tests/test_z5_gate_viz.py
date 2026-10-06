@@ -353,7 +353,7 @@ def test_flow_zone3_gate_locked_is_the_first_stage(monkeypatch):
     assert _st(t3) == {"z3_gate": "current", "z3": "locked"} and t3["here"]["stage"] == "z3_gate" and not t3["open"]
     gate3 = t3["stages"][0]
     assert [i["text"].split("：")[0] for i in gate3["any"]] == [
-        "連續 4 週，每週跑 ≥ 3 次、沒有 ≥ 7 天沒跑（推估）", "徐國峰 90 分鐘測試", "UA 差距法"]
+        "連續 4 週，每週跑 ≥ 3 次、沒有 ≥ 7 天沒跑（預設，推估）", "徐國峰 90 分鐘測試", "UA 差距法"]
     assert gate3["any_label"] and all(i["todo"] for i in gate3["any"]) and "推估" in gate3["any"][0]["tip"]
     # 安排課表: the tests carry an action (the consistency path doesn't — it isn't a session)
     acts = [i["action"] for i in gate3["any"]]

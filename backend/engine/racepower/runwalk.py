@@ -318,3 +318,22 @@ def curve_json(shift: float = 0.0, step: float = 0.01) -> list[dict]:
         out.append({"grade": g, "pts": horizontal(g, pts(g)), "eots": horizontal(g, eots(g)),
                     "pts_you": horizontal(g, pts(g, shift)), "eots_you": horizontal(g, eots(g, shift))})
     return out
+
+
+# ---- 「你爬多快，就在幾 % 改走」 (§3.2; SP-298) ------------------------------------------------
+WALK_GRADE_STEP = 0.001                # search step of walk_grade (0.1 %)
+
+
+def walk_grade(vam_mh: Optional[float], shift: float = 0.0, max_grade: float = 1.0) -> Optional[float]:
+    """The grade above which a climb at `vam_mh` (vertical m/h) is walked: the smallest grade
+    ≥ MIN_GRADE where gait() at that climbing rate's horizontal speed (vam / 3600 / grade) is
+    "walk" — below the PTS line, as on the segment labels. §3.2's table: 500 m/h ≈ 8 %, 700 ≈ 11 %,
+    900 ≈ 15 %, 1,400 ≈ 28 % (推估, the default curve). None without a rate, or when the rate is
+    still run at `max_grade`."""
+    if vam_mh is None or not math.isfinite(vam_mh) or vam_mh <= 0:
+        return None
+    for i in range(int(round(MIN_GRADE / WALK_GRADE_STEP)), int(round(max_grade / WALK_GRADE_STEP)) + 1):
+        g = i * WALK_GRADE_STEP
+        if gait(g, vam_mh / 3600.0 / g, shift) == "walk":
+            return g
+    return None

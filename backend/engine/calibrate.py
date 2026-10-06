@@ -68,6 +68,7 @@ class Item:
     help: str = ""                              # what the number does (hover)
     default_is_literature: bool = False         # chip: 預設（文獻） vs 預設（推估）
     manual_only: bool = False                   # 進階 C 類: no fit, a default you may override by hand
+    integer: bool = False                       # a count (weeks, runs, days): a manual value must be whole
 
 
 REGISTRY: dict[str, Item] = {}
@@ -171,7 +172,7 @@ def describe(name: str, stored: Optional[dict]) -> dict:
     e = resolve(item, stored)
     return {"name": name, "label": _(item.label), "unit": _(item.unit), "digits": item.digits,
             "default": item.default, "default_src": _(item.default_src), "min_n": item.min_n, "k": item.k,
-            "bounds": list(item.bounds) if item.bounds else None, **e, "chip": chip(item, e)}
+            "bounds": list(item.bounds) if item.bounds else None, "integer": item.integer, **e, "chip": chip(item, e)}
 
 
 # ---------------------------------------------------------------------------

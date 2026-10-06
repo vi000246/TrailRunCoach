@@ -51,7 +51,8 @@ TSB_A = (10.0, 20.0)                                        # A race, taper end 
 TSB_PRODUCTIVE = (-30.0, -10.0)                             # Friel: productive training
 TSB_OVERREACH = -30.0
 TSB_STALE = 25.0
-LOW_SHARE_GOOD, LOW_SHARE_WATCH = 0.75, 0.65                 # Seiler / Palladino
+LOW_SHARE_GOOD, LOW_SHARE_WATCH = 0.75, 0.65                 # by time, 推估: Seiler's 80/20 counts sessions,
+                                                             # not time (inventory §5.1); Palladino
 TAPER_BAND = (0.40, 0.59)                                   # Bosquet: -41…-60%
 DRIFT_GOOD, DRIFT_WATCH = 0.05, 0.10                         # Friel (<5%), 徐國峰 (90' E <10%)
 SRC_FRIEL = "Friel（TrainingPeaks：Aerobic decoupling < 5%）；徐國峰（90 分鐘 E 跑 < 10%）"

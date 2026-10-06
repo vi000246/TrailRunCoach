@@ -1438,7 +1438,7 @@ function calibRows(items) {
   $("calib-rows").innerHTML = items.map((it) => `<tr data-n="${esc(it.name)}">
     <td>${esc(it.label)}</td>
     <td>${Number(it.value).toFixed(it.digits)} ${esc(it.unit)} ${calibChip(it.chip, it.source)}</td>
-    <td><input type="number" step="any" style="width:80px" placeholder="手動" ${it.source === "user" ? `value="${it.value}"` : ""}
+    <td><input type="number" step="${it.integer ? 1 : "any"}" style="width:80px" placeholder="手動" ${it.source === "user" ? `value="${it.value}"` : ""}
       ${it.bounds ? `min="${it.bounds[0]}" max="${it.bounds[1]}"` : ""}>
       <button data-a="set">指定</button>${it.source === "user" ? ' <button data-a="auto">改回自動</button>' : ""}</td></tr>`).join("");
 }

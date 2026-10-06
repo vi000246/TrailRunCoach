@@ -364,6 +364,16 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
   race day's climbing speed, 「比賽時這段每小時約 N m、G%：用快走／走跑皆可／用跑的」; the old
   「用比賽的走／跑方式」 without a race time); a race simulation 4–3 weeks out is a suggestion
   (`race_sim_suggestion`).
+- **爬坡走路提示** (SP-298, `engine/walk_hint.py`; run-walk-threshold.md §5.4 #2): a planned hill easy
+  run / long run (kind easy / long, terrain trail / hike or a 山路 / 越野 title; never road / flat)
+  gets `walk_hint` in the 課表 API view (`api/plan_sessions._view`, shown after the detail on the 課表
+  calendar and the overview tooltip) — 「提示：照你輕鬆心率的爬升速度（約 N m/h），坡度超過約 X% 用走的
+  比較省（預設值｜依你的跑走紀錄校正）；規則仍是心率上限」. N = the median VAM of the last 90 days' trail-run
+  sustained climbs (`climb_vam`, ≥ 8 %, ≥ 8 min) with average HR ≤ the plan's easy cap, ≥ 3 climbs
+  (both 推估), else no hint; X = `runwalk.walk_grade(N, shift)` — the smallest grade ≥ 3 % whose gait at
+  that rate is walk (the SP-226 PTS line; SP-228's shift only when personal). Display only: the stored
+  detail, the HR-cap rule and the pushed workout are unchanged; cached per dataset day and cap
+  (`_walk_hint`).
 - **B2B 連續長天** (`engine/b2b.py`): a due B2B weekend is only a suggestion (課表偏好 `b2b`
   off = never); an accepted one is stored as the user's two sessions (`plan.b2b.accepted`) and
   the rest of the week is planned around it (day 2 out of the easy minutes, 4 easy days after).

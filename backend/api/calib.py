@@ -14,6 +14,7 @@ from backend.engine.localtime import today_local
 from backend.db.current import current_athlete_id
 from backend.db.database import get_db
 from backend.engine import calibrate as CAL
+from backend.i18n import _
 from backend.settings.repository import SettingsRepository
 
 router = APIRouter(prefix="/api/v1/calib", tags=["calibration"])
@@ -24,6 +25,15 @@ def _item(name: str) -> CAL.Item:
     if item is None:
         raise HTTPException(404, "UNKNOWN_CALIBRATION")
     return item
+
+
+def _replan(name: str) -> None:
+    """A value the plan reads (the Zone 3 unlock rule, SP-295): the plan / status caches key on
+    it (advanced_params.z3_rule_stamp); a background plan_auto run re-plans the stored sessions."""
+    from backend.engine import advanced_params as AP
+    if name in AP.Z3_RULE.values():
+        from backend.engine import plan_auto as PA
+        PA.after_settings()
 
 
 @router.get("")
@@ -40,14 +50,19 @@ class Manual(BaseModel):
 async def set_manual(name: str, body: Manual, db: AsyncSession = Depends(get_db)):
     """手動指定: stored with source = user, never overwritten by a fit."""
     item = _item(name)
+    fmt = "{:.0f}" if item.integer else "{:g}"
     if item.bounds and not item.bounds[0] <= body.value <= item.bounds[1]:
-        raise HTTPException(400, f"{item.label} 要在 {item.bounds[0]}–{item.bounds[1]} {item.unit} 之間")
+        raise HTTPException(400, _("{label} 要在 {lo}–{hi} {unit} 之間", label=_(item.label), unit=_(item.unit),
+                                   lo=fmt.format(item.bounds[0]), hi=fmt.format(item.bounds[1])))
+    if item.integer and body.value != int(body.value):
+        raise HTTPException(400, _("{label} 要是整數", label=_(item.label)))
     repo = SettingsRepository(db, current_athlete_id())
     prev = await repo.get(CAL.key(name)) or {}
     await repo.set(CAL.key(name), {"value": body.value, "se": None, "n": int(prev.get("n") or 0),
                                    "fitted_at": today_local().isoformat(), "source": "user"})
     await db.commit()
     CAL.forget_reads()
+    _replan(name)
     return CAL.describe(name, await repo.get(CAL.key(name)))
 
 
@@ -59,6 +74,7 @@ async def clear_manual(name: str, db: AsyncSession = Depends(get_db)):
     await repo.set(CAL.key(name), None)
     await db.commit()
     CAL.forget_reads()
+    _replan(name)
     return CAL.describe(name, None)
 
 
