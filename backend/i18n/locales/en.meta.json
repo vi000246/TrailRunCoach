@@ -1083,6 +1083,10 @@
     "draft": true,
     "src": "backend/engine/race_feasibility.py:574"
   },
+  "。級數相同，但距離和爬升是兩倍以上，建議先有一次 ≥ 比賽 {p:.0f} % 的長天（{p:.0f} % 是推估）": {
+    "draft": false,
+    "src": "backend/engine/race_feasibility.py:640"
+  },
   "「{a}」和「{b}」只隔 {n} 天：硬課之間建議隔 ≥ 2 天，可以再拖動調整": {
     "draft": true,
     "src": "backend/engine/rest_days.py:120"
@@ -5799,7 +5803,7 @@
     "draft": true,
     "src": "backend/engine/race_feasibility.py:423"
   },
-  "：照現在的週量每週加 10 %，最快 {y} 年 {m} 月練到（推估）": {
+  "：照現在的週量每週加 10 %，最快 {y} 年 {m} 月練到（推估；這是週量練到的時間，不代表到時候跨級就一定判可以）": {
     "draft": true,
     "src": "backend/engine/race_feasibility.py:421"
   },

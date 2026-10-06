@@ -105,7 +105,7 @@ STEP_OVER = 2                # classes up → over: UTMB Finals take an index on
                              # 2 ITRA classes ≈ 1 UTMB category (推估, runner-progression.md §2.1)
 # SP-283: the EP multiple (race's hardest day ÷ your biggest day) is SHOWN, never judged (owner 2026-10-06).
 # The classes' widths are uneven (runner-progression.md §4: two up can be ×1.36, one up ×3.0), so one
-# class up at ≥ STEP_RATIO_WARN times adds a reminder. No study gives a safe multiple (§4) — 推估.
+# class up (or the same class — owner 2026-10-06) at ≥ STEP_RATIO_WARN times adds a reminder. No study gives a safe multiple (§4) — 推估.
 STEP_RATIO_WARN = 2.0
 STEP_LONG_SHARE = 0.70       # 推估 (SP-283): a long day of ≥ 70 % of the race first — the same 七成 as LONG_TIGHT
 # ITRA's race classes by EP (km-effort; race-feasibility.md §2.4, run-motion's copy of ITRA)
@@ -418,7 +418,9 @@ def step_milestone(e, line: dict, hd: dict, rc: int, base: dict, today: dt.date,
     if weeks == 0:
         txt += _("：你現在的週量已經夠了")
     elif when is not None:
-        txt += _("：照現在的週量每週加 10 %，最快 {y} 年 {m} 月練到（推估）", y=when.year, m=when.month)
+        # owner 2026-10-06: the date is the weekly volume's, not a promise the 跨級 check passes then
+        txt += _("：照現在的週量每週加 10 %，最快 {y} 年 {m} 月練到（推估；這是週量練到的時間，不代表到時候跨級就一定判可以）",
+                 y=when.year, m=when.month)
     elif base["km"] <= 0:
         txt += _("：最近 {n} 週沒有跑步或健行紀錄，推算不出日期", n=BASE_WEEKS)
     else:
@@ -632,6 +634,10 @@ def assess(e, line: Optional[dict], today: dt.date, hist: list[dict], summit: Op
                 txt += _("。比賽最難那天是你 {m} 個月內最大單日的 {x:.1f} 倍", m=STEP_MONTHS, x=mult)
                 if up == 1 and mult >= STEP_RATIO_WARN:
                     txt += _("。級數只高一級，但距離和爬升是兩倍以上，建議先有一次 ≥ 比賽 {p:.0f} % 的長天（{p:.0f} % 是推估）",
+                             p=STEP_LONG_SHARE * 100)
+                elif up == 0 and mult >= STEP_RATIO_WARN:
+                    # owner 2026-10-06 (「照建議」): the same class can hide ×2 too (the wide XXL, XXS)
+                    txt += _("。級數相同，但距離和爬升是兩倍以上，建議先有一次 ≥ 比賽 {p:.0f} % 的長天（{p:.0f} % 是推估）",
                              p=STEP_LONG_SHARE * 100)
             check("step", lv, txt, race_class=ITRA_CLASSES[rc][0], best_class=ITRA_CLASSES[mc][0], up=up,
                   best_ep=round(best["ep"], 1), ep_ratio=None if mult is None else round(mult, 2))
