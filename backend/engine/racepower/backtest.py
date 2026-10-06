@@ -249,6 +249,20 @@ def speed_gait_summary(rows: list[dict]) -> dict:
     return out
 
 
+def surface_split_summary(rows: list[dict]) -> dict:
+    """SP-250's gate (unsourced-rules.md §0.4): on the trail cases marked 乾 / 濕 whose as-of model
+    had the split, the downhill segments' speed error with the pooled technicality (err) against
+    the marked surface's (err_surf), on the same segments. `no_worse` = there are such segments and
+    the split's median |error| is not above the pooled one — only then the calculator offers 路況."""
+    tr = [r for r in rows if r.get("category") == "trail" and r.get("err_v2") is not None and r.get("surface_split")]
+    both = lambda s: s.get("err") is not None and s.get("err_surf") is not None and s.get("cls") in DOWN   # noqa: E731
+    out = {"cases": len(tr), "by_surface": {k: sum(1 for r in tr if r.get("surface") == k) for k in ("dry", "wet")},
+           "downhill": {"pooled": stats(_seg_errs(tr, "err", both)), "split": stats(_seg_errs(tr, "err_surf", both))}}
+    p, q = out["downhill"]["pooled"]["median_abs"], out["downhill"]["split"]["median_abs"]
+    out["no_worse"] = bool(out["downhill"]["pooled"]["n"]) and p is not None and q is not None and q <= p
+    return out
+
+
 def summarise_terrain(rows: list[dict]) -> dict:
     """Mode-B errors per category (trail also running vs walking-heavy), per
     intensity class and per class × grade bin; pooled vs per-class RE and
@@ -278,6 +292,7 @@ def summarise_terrain(rows: list[dict]) -> dict:
     out["models"] = {"gait": stats(r["err_v2"] for r in runs), "no_gait": stats(r.get("err_nogait") for r in runs),
                      "speed_gait": stats(r.get("err_speedgait") for r in runs)}
     out["speed_gait"] = speed_gait_summary(rows)
+    out["surface_split"] = surface_split_summary(rows)
     # does the error differ clearly by class? (classes with ≥ MIN_N activities)
     meds = {k: v["segments"]["median_abs"] for k, v in out["classes"].items()
             if v["activities"] >= MIN_N and v["segments"]["median_abs"] is not None}
@@ -482,6 +497,10 @@ def evaluate_run(case: dict, ctx: dict) -> Optional[dict]:
     gre_ng = ctx.get("grade_re_nogait")
     if trail and hasattr(gre, "for_trail"):
         gre, gre_cls = gre.for_trail(cls), gre_cls.for_trail(cls)
+    # SP-250: a trail case the user marked 乾 / 濕, predicted with that surface's technicality when the
+    # as-of model has the split (the gate: the downhill bins must not get worse, surface_split_summary)
+    gre_sf = gre.for_surface(case.get("surface")) if trail and getattr(gre, "surface_split", False) \
+        and case.get("surface") else None
     ref = inp["training_conditions"]
     side = {"altitude_m": ref["altitude_m"], "temp_c": ref["temp_c"], "rh_pct": ref["rh_pct"]}
     ms = ENV.segment_factors([s["z_mean"] for s in segs], side, {**side, "altitude_m": None})
@@ -521,6 +540,8 @@ def evaluate_run(case: dict, ctx: dict) -> Optional[dict]:
                 return vm if vm and v > vm else v
             row.update(p_act=p_seg, v_act=v_act, v_pred=v_of(gre), err=v_of(gre) / v_act - 1.0,
                        err_cls=v_of(gre_cls) / v_act - 1.0, gait="walk" if walked(s["grade"]) else "run")
+            if gre_sf is not None:
+                row["err_surf"] = v_of(gre_sf) / v_act - 1.0
             if speed_gait:
                 vs = gre.re_at(s["grade"], p_seg, weight) * p_seg / weight
                 vm = gre.v_max(s["grade"])
@@ -536,7 +557,8 @@ def evaluate_run(case: dict, ctx: dict) -> Optional[dict]:
            "err_speedgait": (res_sp["T"] / t_act - 1.0) if res_sp else None,
            "t_v1": t_v1, "err_v1": (t_v1 / t_act - 1.0) if t_v1 else None,
            "strategy": empirical_strategy(segs, act), "segments": seg_rows, "grade_n": gre.n_samples,
-           "tech": gre.tech_factor() if trail and hasattr(gre, "tech_factor") else None}
+           "tech": gre.tech_factor() if trail and hasattr(gre, "tech_factor") else None,
+           "surface": case.get("surface") if trail else None, "surface_split": gre_sf is not None}
     if case.get("aet_test"):
         # a submaximal anchor: the HR model's power at this run's HR vs the actual power
         hc = ctx.get("hrcap") or {}
@@ -676,6 +698,26 @@ def summarise_long_races(races: list[dict]) -> dict:
             "race_level_no_durability": stats(r.get("err_th_race_nodur") for r in ls)}
 
 
+# SP-241 (docs/research/long-race-durability-shape.md §2.4): do x*(T) and δ count the same fatigue
+# twice? Only races with ≥ 6 h moving can tell (below that D̄ ≈ 1); the ticket needs ≥ 3 of them.
+# The three set-ups are the back-test's existing errors (each case predicted without itself):
+# x* + δ = err_th_race, x* only (δ = 0) = err_th_race_nodur, δ only (x fixed at the earlier
+# races' median) = err_th_race_median. Report only — the model is not changed by this block.
+DOUBLE_COUNT_H = 6.0      # SP-241 acceptance: races ≥ 6 h moving
+DOUBLE_COUNT_MIN_N = 3    # SP-241 acceptance: ≥ 3 such races
+
+
+def summarise_double_count(races: list[dict]) -> dict:
+    """The ≥ DOUBLE_COUNT_H races: n, `ready` (n ≥ DOUBLE_COUNT_MIN_N) and the three set-ups'
+    errors — x* + δ, x* only, δ only (fixed x)."""
+    ls = [r for r in races if ((r.get("th") or {}).get("moving_s") or 0.0) >= DOUBLE_COUNT_H * 3600.0]
+    return {"n": len(ls), "min_h": DOUBLE_COUNT_H, "min_n": DOUBLE_COUNT_MIN_N,
+            "ready": len(ls) >= DOUBLE_COUNT_MIN_N,
+            "xstar_and_delta": stats(r.get("err_th_race") for r in ls),
+            "xstar_only": stats(r.get("err_th_race_nodur") for r in ls),
+            "delta_only": stats(r.get("err_th_race_median") for r in ls)}
+
+
 def summarise_trail_hr(rows: list[dict]) -> dict:
     """Trail HR pace model errors: every trail case (given HR), the races
     (activity type 比賽) and the 全力 capacity samples (given and race level)."""
@@ -699,6 +741,7 @@ def summarise_trail_hr(rows: list[dict]) -> dict:
                 "power_envelope": stats(r.get("err_c") for r in rs)}
     return {"all": blk(th), "races": blk(races), "max_effort": blk(maxes),
             "long_races": summarise_long_races(races),
+            "double_count_check": summarise_double_count(races),
             "race_rows": [{k: r.get(k) for k in ("date", "label", "file", "effort_tag", "effort_overridden",
                                                  "effort_reason", "rest_share", "no_power", "power_source",
                                                  "power_unused", "err_th_given",
@@ -907,6 +950,8 @@ def backtest(ds, today: Optional[dt.date] = None, progress=None, tags: Optional[
                 and (tday - 2 * RUN_WINDOW_DAYS < w.day or w.idx in marked)]
     classes = A.classify_runs(ds, all_runs, tags=tags)
     cmap = {i: c.get("cls") for i, c in classes.items()}
+    # SP-250: the user's 路況 marks (乾 / 濕), for the dry / wet technicality and the cases' own surface
+    smarks = A.surface_marks(ds, all_runs, tags)
     # trail race HR level: runs whose effective type is 比賽, or 全力 samples (trail_hr_model
     # only reads the ones before each case's as-of date)
     race_idx = {i for i, c in classes.items()
@@ -918,7 +963,7 @@ def backtest(ds, today: Optional[dt.date] = None, progress=None, tags: Optional[
         arr = A.activity_arrays(ds, w)
         if arr is None:
             continue
-        c = {**c, "power_source": A.power_source(ds, w)}
+        c = {**c, "power_source": A.power_source(ds, w), "surface": smarks.get(c["idx"])}
         if c["category"] == "hike":
             for n, part in _hike_days(arr, w.entry.start):
                 cc = {**c, "day": n, "date": (w.entry.start + dt.timedelta(seconds=float(np.nanmin(part["t"])))).date().isoformat()}
@@ -998,15 +1043,16 @@ def backtest(ds, today: Optional[dt.date] = None, progress=None, tags: Optional[
         if c["category"] == "test":
             return ctx
         if c["category"] == "hike":
-            gm = A.grade_models(ds, as_of, re_flat=1.0, exclude=c["exclude"], classes=classes)
+            gm = A.grade_models(ds, as_of, re_flat=1.0, exclude=c["exclude"], classes=classes, surfaces=smarks)
             ctx["hike_speed"] = gm["hike_speed"]
             return ctx
         road = (inp["re"]["road"] or {}).get("median")
         ctx["grade_re"] = A.grade_models(ds, as_of, re_flat=road, exclude=c["exclude"], classes=classes,
-                                         hikes=False)["grade_re"]
+                                         hikes=False, surfaces=smarks)["grade_re"]
         if c.get("intensity"):
             ctx["grade_re_cls"] = A.grade_models(ds, as_of, re_flat=road, exclude=c["exclude"], classes=classes,
-                                                 only_classes={c["intensity"]}, hikes=False)["grade_re"]
+                                                 only_classes={c["intensity"]}, hikes=False,
+                                                 surfaces=smarks)["grade_re"]
         runs = [w for w in ds.workouts if w.sport == "run"
                 and date_to_day(as_of) - A.RE_WINDOW_DAYS < w.day <= date_to_day(as_of) + 1]
         ctx["grade_re_nogait"] = GM.fit_grade_re(A.grade_samples(ds, runs, c["exclude"]), road or 1.0)
@@ -1046,7 +1092,7 @@ def backtest(ds, today: Optional[dt.date] = None, progress=None, tags: Optional[
     except Exception as e:                  # noqa: BLE001
         hike_cap = {"error": f"{type(e).__name__}: {str(e)[:160]}", "passed": False}
     validated["hike_capacity"] = bool(hike_cap.get("passed"))
-    gm_now = A.grade_models(ds, today, classes=classes)
+    gm_now = A.grade_models(ds, today, classes=classes, surfaces=smarks)
     counts = {k: sum(1 for r in run_rows if r.get("intensity") == k) for k in CLASSES}
     leaks = sum(1 for r in ok if (r.get("capacity") or {}).get("cp_source") == "wko5")
     win_lo = date_to_day(today) - RUN_WINDOW_DAYS
@@ -1348,6 +1394,14 @@ def class_model_flag(path=None) -> bool:
     r = load(path)
     cd = ((r or {}).get("terrain") or {}).get("class_differs") or {}
     return bool(cd.get("clear") and (cd.get("class_model_better") or {}).get("race"))
+
+
+def surface_split_flag(path=None) -> bool:
+    """True when the stored back-test kept the dry / wet technicality split (SP-250: the marked
+    trail cases' downhill error not worse with it); nothing stored → False (the calculator then
+    offers no 路況 choice and behaves as before)."""
+    r = load(path)
+    return bool((((r or {}).get("terrain") or {}).get("surface_split") or {}).get("no_worse"))
 
 
 def state() -> dict:

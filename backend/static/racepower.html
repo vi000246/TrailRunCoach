@@ -299,6 +299,11 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
       <span class="meta bf">以你平常的登山速度（100%）推估</span>
       <span class="meta rf" id="effort-custom"></span>
     </div>
+    <!-- SP-250: 路況, only when the plan says the dry / wet split exists (renderSurface) -->
+    <div class="row hidden" id="surface-row"><span class="lbl" data-i18n="racepower.surface.label">路況</span>
+      <div class="seg" id="surface"><button data-s="dry" data-i18n="racepower.surface.dry">乾</button><button data-s="wet" data-i18n="racepower.surface.wet">濕</button></div>
+      <span class="meta" id="surface-meta"></span>
+    </div>
 
     <div class="row"><span class="lbl">路線</span>
       <div class="seg" id="csrc"><button data-c="manual">手動</button><button data-c="gpx">GPX</button></div>
@@ -1106,7 +1111,7 @@ function planBody(extra = {}) {
     locks: Object.entries(LOCKS).map(([seg, power]) => ({ seg: +seg, power })), day_splits_km: SPLITS,
     terrain: TERRAIN, hourly_heat: $("hourlyheat").checked && !tempOverridden(),
     hourly: $("hourlyheat").checked && !tempOverridden() ? (WX?.hourly || null) : null,
-    heat_acclimatisation: heatAcclBody(), ...extra };
+    heat_acclimatisation: heatAcclBody(), surface: type === "trail" ? (S.surface || null) : null, ...extra };
   if (type === "baiyue") {
     body.trip_kind = S.trip; body.hr_band = S.hrband;
     body.pack_kg_by_day = $("packdays").value.split(/[,，\s]+/).map(Number).filter((x) => x > 0);
@@ -1145,7 +1150,7 @@ function planBody(extra = {}) {
 }
 function renderAll() {
   renderResults(); renderFuel(); renderProfile(); renderSegCompact(); renderSegments(); renderInputs(); renderEnv(); renderZones(); renderHeatLine();
-  renderStops(); renderExportBtn();
+  renderStops(); renderExportBtn(); renderSurface();
   if (LAST.type !== "baiyue" && $("rg-sec").querySelector("details").open) renderRiegel();
 }
 let RUN_SEQ = 0;
@@ -2371,6 +2376,16 @@ bindSeg("csrc", "c", "csrc", (x) => x, () => { LOCKS = {}; }); bindSeg("split", 
 bindSeg("strategy", "k", "strategy", (x) => x, () => { S.amount = null; });
 document.querySelectorAll("#measure button").forEach((b) => b.onclick = () => { S.measure = b.dataset.m; saveUI(); if (PLAN) { renderProfile(); renderSegCompact(); } });
 bindSeg("accl", "a", "accl");
+// SP-250 路況: clicking the chosen one again clears it (no choice = the pooled factor, as before)
+document.querySelectorAll("#surface button").forEach((b) => b.onclick = () => {
+  S.surface = S.surface === b.dataset.s ? null : b.dataset.s; renderSurface(); schedule(); });
+function renderSurface() {
+  const sf = PLAN?.summary?.surface;
+  $("surface-row").classList.toggle("hidden", !(type === "trail" && sf?.available));
+  segOn("surface", "s", S.surface || "");
+  $("surface-meta").textContent = sf?.available
+    ? T(sf.total_from_hr ? "surface.meta_hr" : "surface.meta", { dry: sf.n?.dry ?? 0, wet: sf.n?.wet ?? 0 }) : "";
+}
 bindSeg("tripkind", "k", "trip"); bindSeg("hrband", "b", "hrband");
 document.querySelectorAll("#heat-accl button").forEach((b) => b.onclick = () => {
   S.heatAccl = { mode: b.dataset.h, s: b.dataset.h === "custom" ? (num("heat-s") ?? 50) / 100 : null };
