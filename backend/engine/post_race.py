@@ -31,7 +31,9 @@ B and C races (SP-95; periodization-cross-sport.md §4.8, §4.8.1, §6.1「SP-95
     planning.taper_days), or longer than that A race (b_longer: days → predicted time → EP → km,
     SP-111's order) — Runna's rule (no B race in the 7–10 days before the A race, the B race shorter
     than the A race [482]; 廠商規則, no research: 推估). Owner 2026-10-06 (推估): only an A race within
-    B_A_WINDOW_WEEKS (16) after the B race, and 「longer」 = ≥ B_LONGER_MIN (10 %) more.
+    B_A_WINDOW_WEEKS (16) after the B race, and 「longer」 = ≥ B_LONGER_MIN (10 %) more. A 百岳 B race
+    (hiking-level, low TSS) takes no hint at all — not too many, not near / in the taper / longer
+    (owner 2026-10-06).
 """
 from __future__ import annotations
 
@@ -374,6 +376,10 @@ def b_longer(b, a) -> Optional[str]:
     return None
 
 
+def _is_baiyue(e) -> bool:
+    return getattr(e, "kind", None) == "baiyue"
+
+
 def b_hints(events, monday: dt.date, ctl: Optional[list] = None, phases=None,
             taper_pref: Optional[int] = None) -> list[dict]:
     """The week notes about the B races of the week of `monday` (b_week): too many (> B_PER_MONTH in 30
@@ -381,11 +387,14 @@ def b_hints(events, monday: dt.date, ctl: Optional[list] = None, phases=None,
     race in them), a long one (≥ 中) within B_NEAR_A_DAYS before an A race; SP-280 (Runna [482],
     廠商規則): any B race inside the next A race's 減量期 (`phases`: the plan's phases, for the planned
     taper; else planning.taper_days(A, `taper_pref`)) or longer than it (b_longer) — the next A race
-    within B_A_WINDOW_WEEKS after the B race only."""
+    within B_A_WINDOW_WEEKS after the B race only. A 百岳 B race (kind baiyue: hiking-level, low TSS)
+    is left out of every one of these hints (owner 2026-10-06)."""
     from backend.engine import planning as P
     out = []
-    bs = sorted((e for e in events or () if getattr(e, "priority", None) == "B"), key=lambda e: e.start)
-    for e in b_week(events, monday):
+    # owner 2026-10-06: a 百岳 B race is hiking-level, low TSS — no B-race hint considers it at all
+    bs = sorted((e for e in events or () if getattr(e, "priority", None) == "B" and not _is_baiyue(e)),
+                key=lambda e: e.start)
+    for e in (x for x in b_week(events, monday) if not _is_baiyue(x)):
         near = [x for x in bs if x is not e and abs((x.start - e.start).days) < 30]
         if len(near) + 1 > B_PER_MONTH:
             out.append({"level": "watch", "src": "race",

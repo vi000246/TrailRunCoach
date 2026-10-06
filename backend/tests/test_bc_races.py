@@ -201,6 +201,20 @@ def test_only_an_a_race_within_16_weeks_and_10_percent_longer():
     assert PR.b_longer(e(days=2, kind="baiyue"), e(distance_km=50, climbing_m=3000)) == "2 天對 1 天"  # days first
 
 
+def test_baiyue_b_races_take_no_hint():
+    """Owner 2026-10-06: a 百岳 B race is hiking-level with a low TSS — no B-race hint looks at it (in the
+    A race's taper, longer by days, the 28-day long-B hint, too many B races); a trail B race still warns."""
+    a = ev("a", "2026-10-24", "A", kind="race", distance_km=30, climbing_m=1500, est_hours=5.0)
+    trip = ev("t", "2026-10-17", kind="baiyue", days=2, distance_km=25, climbing_m=2000)   # 7 days before, 2 days
+    assert PR.b_longer(trip, a) == "2 天對 1 天"                     # it would be longer by days …
+    assert PR.b_hints([a, trip], MON) == []                            # … but no hint at all
+    assert PR.b_hints([a, trip, ev("t2", "2026-10-10", kind="baiyue", days=2)], MON) == []   # not "too many"
+    trail = ev("b", "2026-10-17", kind="race", distance_km=40, climbing_m=2500, est_hours=7.0)
+    txt = [n["text"] for n in PR.b_hints([a, trail], MON)]
+    assert any("減量期內" in t and "比 A 賽還長" in t for t in txt)
+    assert any("長距離 B 賽「b」在 A 賽事「a」前 7 天" in t for t in txt)
+
+
 def test_runna_hints_in_english():
     from backend.i18n import use_locale
     with use_locale("en"):
