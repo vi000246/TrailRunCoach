@@ -950,7 +950,9 @@ def activities_list():
     def rpe_part(start, file):
         # the watch's post-workout RPE / feel (FIT session workout_rpe / workout_feel), read only
         r = AT.recorded_of(rec, start, file) or {}
-        return {"rpe": r.get("rpe"), "feel": r.get("feel")}
+        from backend.engine import coros_rpe as CR
+        # + 「自評：Hard（COROS）」 when the RPE is COROS's post-run rating (SP-231)
+        return {"rpe": r.get("rpe"), "feel": r.get("feel"), "self_rating": CR.self_rating(r) if r else None}
 
     for w in ds.workouts:
         u = AT.find(tags, w.entry.start, w.entry.file)

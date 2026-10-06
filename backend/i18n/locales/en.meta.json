@@ -183,6 +183,10 @@
     "draft": true,
     "src": "backend/engine/overview.py:1716"
   },
+  "A 賽前 {n} 天內：{reason}": {
+    "draft": false,
+    "src": "backend/engine/plan_auto.py:201"
+  },
   "A1–A4": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:1946"
@@ -342,6 +346,10 @@
   "COROS 最大心率區間：50／60／70／80／90% 最大心率（從 COROS 帳號讀到，沒有公開文件）。限制：同樣 % 最大心率，每個人的乳酸閾值可以落在 60–90% HRmax（Iannetta 2020），所以這組區間對個人的強度不準，Friel／乳酸閾區間比較可靠": {
     "draft": true,
     "src": "backend/engine/hr_profile.py:79"
+  },
+  "COROS 跑後自評 {label}（換算成 RPE {rpe}，推估）→ {effort}": {
+    "draft": false,
+    "src": "backend/engine/activity_tags.py:418"
   },
   "CP {cp:.0f} W ÷ 體重 {kg:.1f} kg = {w:.2f} W/kg": {
     "draft": true,
@@ -970,6 +978,14 @@
   "{warm} · 主課 {main} · 緩和 {cool} ＝ {total:.0f} 分": {
     "draft": true,
     "src": "backend/engine/interval_library.py:759"
+  },
+  "{was} {old}改成{became}：{day}{what}自評 {label}，本週沒有隔 48 小時的空日": {
+    "draft": false,
+    "src": "backend/engine/adapt.py:443"
+  },
+  "{was} {title}延到{to}：{day}{what}自評 {label}，間隔不到 48 小時": {
+    "draft": false,
+    "src": "backend/engine/adapt.py:436"
   },
   "{what} {n} 次": {
     "draft": true,
@@ -4334,6 +4350,14 @@
   "自訂分類最多 {n} 個": {
     "draft": false,
     "src": "backend/engine/user_templates.py:128"
+  },
+  "自評：RPE {rpe}（手錶）": {
+    "draft": false,
+    "src": "backend/engine/coros_rpe.py:97"
+  },
+  "自評：{label}（COROS）": {
+    "draft": false,
+    "src": "backend/engine/coros_rpe.py:94"
   },
   "至少要有一個步驟": {
     "draft": true,

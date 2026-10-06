@@ -59,6 +59,11 @@ def _compute_inputs(blackouts: Optional[list] = None) -> dict:
     acc = B2B.load_accepted()                    # accepted B2B weekends (the user's own days)
     from backend.engine.wko5expr.datasource import read_setting
     auto_on = read_setting("plan.auto.enabled", True) is not False
+    # 跑後自評 (SP-231): the rule's switch and the stored ratings (a rating read after the
+    # activity's import changes no FIT file, so the dataset alone would not notice)
+    rpe_on = read_setting("plan.auto.rpe_rule", True) is not False
+    from backend.engine import activity_tags as AT
+    recorded = AT.load_recorded()
     # saving 課表偏好 or 不排課日期, or accepting / cancelling a B2B, regenerates
     # 主要訓練項目 (engine/primary_sport.py): switching it regenerates too
     from backend.engine import primary_sport as PSP
@@ -67,7 +72,7 @@ def _compute_inputs(blackouts: Optional[list] = None) -> dict:
     # the user's own RPE ≥ 7 技術地形 sessions take part of the week's quality budget (engine/technical.py)
     from backend.engine import technical as TECH
     key = (id(ds), today, _plan_stamp(), prefs.stamp(), BL.stamp(bos), auto_on, B2B.accepted_stamp(acc),
-           PSP.stored(), HRP.stamp(), TECH.user_stamp())
+           PSP.stored(), HRP.stamp(), TECH.user_stamp(), rpe_on, _recorded_stamp(recorded))
     with _lock:
         hit = _cache.get(key)
     if hit is not None:
@@ -90,7 +95,7 @@ def _compute_inputs(blackouts: Optional[list] = None) -> dict:
     weeks = P.project_weeks(cur, phases, horizon, ds.athlete.ctlconstant, ds.athlete.atlconstant, prefs=prefs,
                             blackouts=bos, events=st.plan.events, heat_acts=heat_acts, b2b_accepted=acc)
     since = monday - dt.timedelta(weeks=4)
-    acts = activity_rows(ds, since, today + dt.timedelta(days=1))
+    acts = activity_rows(ds, since, today + dt.timedelta(days=1), recorded)
     last_act = max((O.wdate(w) for w in ds.workouts if O.wdate(w) <= today), default=None)
     out = {"cur": cur, "weeks": weeks, "activities": acts, "today": cur["week"]["today"],
            # the first day `activities` covers (engine/plan_history.py: a week inside it has its totals)
@@ -113,7 +118,9 @@ def _compute_inputs(blackouts: Optional[list] = None) -> dict:
                                     if i.id == "testing"), [])},
            # 基線測試 (engine/baseline_test.py, SP-71): the latest CP / AeT test the review found
            "tests": _latest_tests(st),
-           "adapt": _adapt_ctx(ds, st, cur, monday, today, auto_on)}
+           "adapt": _adapt_ctx(ds, st, cur, monday, today, auto_on, recorded, rpe_on)}
+    from backend.engine import coros_rpe as CR
+    out["rpe_stamp"] = CR.stamp(out["adapt"].get("rpe")) if rpe_on else ""
     with _lock:
         while len(_cache) >= 3:                 # the stored plan + a preview or two
             _cache.pop(next(iter(_cache)))
@@ -141,11 +148,23 @@ def _thr_warn(st) -> Optional[dict]:
         return None
 
 
-def activity_rows(ds, a: dt.date, b: dt.date) -> list[dict]:
+def _recorded_stamp(recorded: list) -> tuple:
+    return tuple(sorted((str(r.get("start_local")), r.get("rpe"), r.get("source"), r.get("coros_feel"))
+                        for r in recorded or ()))
+
+
+def activity_rows(ds, a: dt.date, b: dt.date, recorded: Optional[list] = None) -> list[dict]:
     """overview.activity_row for the workouts in [a, b) plus `hard_s`: seconds at /
     above threshold (power ≥ 95 % CP or HR ≥ LTHR, the generator's done rule for
-    a quality session) — engine/plan_match.py tells an interval run from an easy one."""
+    a quality session) — engine/plan_match.py tells an interval run from an easy one —
+    and `self_rating` (SP-231): the post-run rating, 「自評：Hard（COROS）」 (coros_rpe.self_rating)."""
+    from backend.engine import activity_tags as AT
+    from backend.engine import coros_rpe as CR
     from backend.engine import overview as O
+    try:
+        recorded = AT.load_recorded() if recorded is None else recorded
+    except Exception:                       # noqa: BLE001 — no rating shown
+        recorded = []
     ws = O.workouts_between(ds, a, b)
     hard: dict = {}
     runs = [w for w in ws if O.category(w) in ("road", "trail", "hike")]
@@ -159,16 +178,23 @@ def activity_rows(ds, a: dt.date, b: dt.date) -> list[dict]:
         r = O.activity_row(w, ds)          # + `session` (workout_review.classify: type, label, icon)
         if w in runs:
             r["hard_s"] = hard.get(w.idx, 0.0) if hard else None
+        if recorded:
+            sr = CR.self_rating(AT.recorded_of(recorded, w.entry.start, getattr(w.entry, "file", None)))
+            if sr:
+                r["self_rating"] = sr
         out.append(r)
     return out
 
 
-def _adapt_ctx(ds, st, cur: dict, monday: dt.date, today: dt.date, enabled: bool) -> dict:
+def _adapt_ctx(ds, st, cur: dict, monday: dt.date, today: dt.date, enabled: bool,
+               recorded: Optional[list] = None, rpe_on: bool = True) -> dict:
     """engine/adapt.py's context: per-run review numbers of this week's runs
     (workout_review.measure, disk-memoised), the actual CTL ramp (status
-    fitness indicator), TSB today and the first day sessions can still go on."""
+    fitness indicator), TSB today and the first day sessions can still go on;
+    `rpe`: this week's runs with a post-run self-rating (SP-231)."""
     from backend.engine import overview as O
     reviews: dict = {}
+    rated: dict = {}
     hard_days: set = set()
     if enabled:
         try:
@@ -184,6 +210,9 @@ def _adapt_ctx(ds, st, cur: dict, monday: dt.date, today: dt.date, enabled: bool
                     hard_days.add(O.wdate(w).isoformat())
                 if O.category(w) == "hike":
                     continue
+                rec = _rated(recorded, w) if rpe_on else None
+                if rec:
+                    rated[w.idx] = rec
                 m = WR.measure(ds, w) or {}
                 reviews[w.idx] = {k: m.get(k) for k in ("avg_hr", "aet", "over_aet_s", "hr_s", "avg_power", "cp")}
                 reviews[w.idx]["tss"] = O._n(w.metrics.get("tss"))
@@ -196,8 +225,19 @@ def _adapt_ctx(ds, st, cur: dict, monday: dt.date, today: dt.date, enabled: bool
     load = cur.get("load") or {}
     done_today = any(a.get("date") == today.isoformat() for a in (cur.get("done") or {}).get("activities") or [])
     return {"enabled": enabled, "reviews": reviews, "ramp": ramp, "ramp_base": ramp_base, "tsb": load.get("tsb_today"),
-            "hard_days": sorted(hard_days),
+            "hard_days": sorted(hard_days), "rpe": rated, "rpe_rule": rpe_on,
             "first_free": (today + dt.timedelta(days=1 if done_today else 0)).isoformat()}
+
+
+def _rated(recorded: Optional[list], w) -> Optional[dict]:
+    """{rpe, source, coros_feel} of a run with a recorded RPE, else None."""
+    if not recorded:
+        return None
+    from backend.engine import activity_tags as AT
+    r = AT.recorded_of(recorded, w.entry.start, getattr(w.entry, "file", None))
+    if not r or r.get("rpe") is None:
+        return None
+    return {"rpe": r.get("rpe"), "source": r.get("source"), "coros_feel": r.get("coros_feel")}
 
 
 async def _covered(db: AsyncSession, last_activity: Optional[str]) -> Optional[str]:
