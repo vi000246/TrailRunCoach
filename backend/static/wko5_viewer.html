@@ -3774,6 +3774,9 @@ function fpCad(r) {
   if (v == null) return "–";
   return `${Math.round(v)}${b?.ok ? (v > b.q3 ? "↑" : v < b.q1 ? "↓" : "") : ""}`;
 }
+// SP-235: the bin's share of moving time under 130 spm, and why an impact cell is 「–」
+const fpSlowTip = (b) => b.slow_share != null ? `<br>${esc(t("viewer.fp.slow_share", { pct: cpPct(b.slow_share) }))}` : "";
+const fpNoImpactTip = (k, v) => v == null && FP_IMPACT.has(k) ? `<br>${esc(t("viewer.fp.no_impact"))}` : "";
 function drawFormProfile(card, res) {
   cpStyle();
   const D = res.form_profile, work = D.mode === "work";
@@ -3799,7 +3802,7 @@ function drawFormProfile(card, res) {
       + `<span><i class="hol"></i>這次（不到 ${min} 秒）</span>`
       + `<span><i style="background:var(--cp-base)"></i>平常的中間 50%</span>`
       + `<span><i class="ln" style="border-top-style:dashed;border-color:var(--cp-ink2)"></i>平常中位數（推估）</span>`
-    : `<span><i style="background:var(--cp-bar)"></i>跑步時間佔比</span>`
+    : `<span><i style="background:var(--cp-bar)"></i>${esc(t("viewer.fp.time_share"))}</span>`
       + `<span><i class="dot" style="background:var(--cp-line)"></i>這次</span>`
       + `<span><i class="hol"></i>這次（不到 ${min} 秒）</span>`
       + `<span><i class="iqr"></i>平常的中間 50% 與中位數（推估）</span>`;
@@ -3845,9 +3848,10 @@ function drawFormProfile(card, res) {
         const b = bins[p.dataIndex];
         if (!b) return "";
         const v = val(b);
-        return cpTipBox(`<b>坡度 ${esc(b.label)}</b><br>跑步時間 <b>${cpDur(b.time_s)}</b>（${cpN(b.time_pct)}%）`
+        return cpTipBox(`<b>坡度 ${esc(b.label)}</b><br>${esc(t("viewer.fp.moving"))} <b>${cpDur(b.time_s)}</b>（${cpN(b.time_pct)}%）`
+          + fpSlowTip(b)
           + `<br>${esc(g.label)} <b>${cpN(v, g.d)}</b> ${esc(g.unit)}${b.time_s < D.min_s ? `（不到 ${min} 秒，只供參考）` : ""}`
-          + usualTip(v, b.base?.[metric], g) + cadTip(b));
+          + fpNoImpactTip(metric, v) + usualTip(v, b.base?.[metric], g) + cadTip(b));
       } },
       grid: [{ left, width: w0, top: 4, bottom: 26 },
         { left: left + w0 + gap, right: (narrow ? 14 : 118) + (showCad ? 48 : 0), top: 4, bottom: 26 }],
@@ -3879,6 +3883,9 @@ function drawFormProfile(card, res) {
                 { type: "line", silent: true, shape: { x1: md, y1: yc - 8, x2: md, y2: yc + 8 }, style: { stroke: css("--cp-ink2"), lineWidth: 2 } });
             }
             const xr = Math.max(gx0, gx1);
+            // no impact value in this bin (slow / walked steps: the device may not record it): 「–」, the ? says why
+            if (val(b) == null && FP_IMPACT.has(metric)) kids.push({ type: "text", silent: true, style: { text: "–",
+              x: Math.min(gx0, gx1) + 8, y: yc, fill: muted(), font: "12px system-ui, sans-serif", verticalAlign: "middle" } });
             // the same bin's cadence, a quiet column right of the plot (impact metrics only)
             if (showCad) kids.push({ type: "text", silent: true, style: { text: fpCad(b), x: xr + 10, y: yc, fill: muted(),
               font: "10.5px system-ui, sans-serif", verticalAlign: "middle" } });
@@ -3918,9 +3925,9 @@ function drawFormProfile(card, res) {
         if (!r) return "";
         const v = val(r);
         return cpTipBox(`<b>${esc(xname)} ${esc(r.label)}</b>${band !== "all" ? `（${esc(D.band_labels?.[band] || band)}）` : ""}`
-          + `<br>跑步時間 <b>${cpDur(r.time_s)}</b>`
+          + `<br>${esc(t("viewer.fp.moving"))} <b>${cpDur(r.time_s)}</b>`
           + `<br>${esc(g.label)} <b>${cpN(v, g.d)}</b> ${esc(g.unit)}${r.time_s < D.min_s ? `（不到 ${min} 秒，只供參考）` : ""}`
-          + usualTip(v, B(r), g) + cadTip(r));
+          + fpNoImpactTip(metric, v) + usualTip(v, B(r), g) + cadTip(r));
       } },
       grid: [{ left: 52, right: narrow ? 22 : 30, top: 12, bottom: showCad ? 48 : 34 }],
       xAxis: [{ type: "category", data: cats, boundaryGap: false, axisTick: { show: false },
