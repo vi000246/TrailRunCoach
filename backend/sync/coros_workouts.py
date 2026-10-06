@@ -28,7 +28,10 @@ targetValue 100, the step's HR target kept as usual). intensityType 0 none, 2 he
 intensityDisplayUnit 1 — verified on a COROS watch 2026-10-02: 270 / 285 showed
 4'30"–4'45"/km; 270000 showed 4500'00"), 6 power (W). HR: isIntensityPercent false = absolute bpm in
 intensityValue/intensityValueExtend; hrType 3 = the LTHR zone scheme
-(intensityPercent = % of LTHR × 1000).
+(intensityPercent = % of LTHR × 1000). intensityPercent / intensityPercentExtend are left 0
+(SP-67): COROS keeps the bpm and fills the percent itself from the account's own LTHR — a
+workout pushed with 82–94 % (÷ the app's 160) read back as 86–99 % (÷ COROS's 152), bpm
+unchanged (docs/research/coros-threshold-unification.md §2.3). Nothing here reads the field.
 
 Every pushed session is recorded in `coros_plan_push` (session key = the
 stored session's uid, plan_store.push_dict -> COROS
@@ -512,7 +515,10 @@ def native_load(st: Step) -> bool:
     return bool(st.load_tl) and COROS_TARGET_TYPE_LOAD is not None
 
 
-def _exercise(st: Step, ex_id: int, sort_no: int, group_id: str, th: Thresholds) -> dict:
+def _exercise(st: Step, ex_id: int, sort_no: int, group_id: str, th: Thresholds,
+              legacy_percent: bool = False) -> dict:
+    """One step. `legacy_percent`: also fill an HR step's intensityPercent with bpm ÷ the app's
+    LTHR, as every payload did before SP-67 — never sent, only for legacy_fingerprint."""
     name = st.name or STEP_NAME[st.kind]
     if st.load_tl and not native_load(st):
         # COROS_TARGET_TYPE_LOAD unset: the estimated time stands in, the name says the load
@@ -539,7 +545,7 @@ def _exercise(st: Step, ex_id: int, sort_no: int, group_id: str, th: Thresholds)
         ex["intensityValue"], ex["intensityValueExtend"] = int(lo), int(hi)
         if typ == "hr":
             ex["intensityType"], ex["hrType"] = INT_HR, HR_TYPE_LTHR
-            if th.lthr:
+            if th.lthr and legacy_percent:
                 ex["intensityPercent"] = round(lo / th.lthr * 100000)
                 ex["intensityPercentExtend"] = round(hi / th.lthr * 100000)
         elif typ == "power":
@@ -552,7 +558,8 @@ def _exercise(st: Step, ex_id: int, sort_no: int, group_id: str, th: Thresholds)
     return ex
 
 
-def build_program(name: str, steps: list[StepLike], th: Thresholds, overview: str = "") -> dict:
+def build_program(name: str, steps: list[StepLike], th: Thresholds, overview: str = "",
+                  legacy_percent: bool = False) -> dict:
     exercises: list[dict] = []
     ex_id = 0
     total = 0
@@ -564,7 +571,7 @@ def build_program(name: str, steps: list[StepLike], th: Thresholds, overview: st
             children = []
             for j, c in enumerate(st.steps, start=1):
                 ex_id += 1
-                children.append(_exercise(c, ex_id, base + SORT_CHILD * j, str(gid), th))
+                children.append(_exercise(c, ex_id, base + SORT_CHILD * j, str(gid), th, legacy_percent))
             one = sum(c.seconds for c in st.steps)
             exercises.append({
                 "id": gid, "name": st.name, "overview": OVERVIEW[EX_TRAIN],
@@ -577,7 +584,7 @@ def build_program(name: str, steps: list[StepLike], th: Thresholds, overview: st
             exercises.extend(children)
             total += one * st.sets
         else:
-            exercises.append(_exercise(st, ex_id, base, "0", th))
+            exercises.append(_exercise(st, ex_id, base, "0", th, legacy_percent))
             total += st.seconds
     return {
         "id": "0", "idInPlan": "0", "authorId": "0", "userId": "0", "createTimestamp": 0,
@@ -601,6 +608,14 @@ class WorkoutSpec:
     fingerprint: str
     # 「負荷」 steps sent with COROS's load target [{i, n, tss, tl}] (engine/coros_tl.record_push)
     load_steps: list = field(default_factory=list)
+    # the fingerprint this workout had before SP-67 (HR steps then carried intensityPercent):
+    # a row holding it is the same workout on COROS — owner 2026-10-05 「已推送的課不用重推」.
+    # Not needed once no workout pushed before 2026-10-05 is still ahead
+    legacy_fingerprint: Optional[str] = None
+
+    def pushed_as(self, fp: Optional[str]) -> bool:
+        """`fp` (coros_plan_push.fingerprint) is this workout, in today's or the earlier form."""
+        return bool(fp) and fp in (self.fingerprint, self.legacy_fingerprint)
 
 
 def workout_name(s: dict) -> str:
@@ -624,9 +639,15 @@ def session_workout(s: dict, thresholds: Optional[dict], today: Optional[str] = 
     # the payload is the fingerprint: a TSS → TL refit changes it only for sessions with a
     # 「負荷」 step whose sent TL moved by ≥ WS.TL_RESEND_MIN (a smaller move keeps the TL last
     # pushed, _sent_tl; no other field depends on the conversion)
-    fp = hashlib.sha256(json.dumps({"day": s["day"], "program": payload}, sort_keys=True,
-                                   ensure_ascii=False).encode()).hexdigest()
-    return WorkoutSpec(s["id"], s["day"], name, payload, fp, _load_records(s, th, sent))
+    fp = _fingerprint(s["day"], payload)
+    old = _fingerprint(s["day"], build_program(name, steps, th, s.get("detail") or "", legacy_percent=True))
+    return WorkoutSpec(s["id"], s["day"], name, payload, fp, _load_records(s, th, sent),
+                       legacy_fingerprint=old if old != fp else None)
+
+
+def _fingerprint(day: Optional[str], payload: dict) -> str:
+    return hashlib.sha256(json.dumps({"day": day, "program": payload}, sort_keys=True,
+                                     ensure_ascii=False).encode()).hexdigest()
 
 
 def _sent_tl(s: dict) -> Optional[dict]:
@@ -876,7 +897,7 @@ def status_of(s: dict, thresholds: Optional[dict], row: Optional[CorosPlanPush],
         return {**out, "status": "not_pushed", "name": spec.name}
     if row.status == "failed":
         return {**out, "status": "failed", "name": spec.name, **_row_view(row)}
-    st = "pushed" if row.fingerprint == spec.fingerprint else "outdated"
+    st = "pushed" if spec.pushed_as(row.fingerprint) else "outdated"
     return {**out, "status": st, "name": spec.name, **_row_view(row)}
 
 
@@ -952,13 +973,14 @@ async def push_workout(db: AsyncSession, s: dict, thresholds: Optional[dict], to
     steps = session_steps(s, th)
     name = library_name(s)
     payload = build_program(name, steps, th, s.get("detail") or "")
-    fp = hashlib.sha256(json.dumps({"day": None, "program": payload}, sort_keys=True,
-                                   ensure_ascii=False).encode()).hexdigest()
+    fp = _fingerprint(None, payload)
+    # the same workout as exported before SP-67 (WorkoutSpec.legacy_fingerprint)
+    old = _fingerprint(None, build_program(name, steps, th, s.get("detail") or "", legacy_percent=True))
     out = {"id": s["id"], "title": s.get("title"), "day": None, "name": name, "scheduled": False}
     async with _push_lock:
         hub = hub or await TrainingHub.from_db(db, athlete_id)
         row = (await rows_by_key(db, athlete_id, [s["key"]])).get(s["key"])
-        if row is not None and row.status == "pushed" and row.fingerprint == fp and row.program_id:
+        if row is not None and row.status == "pushed" and row.fingerprint in (fp, old) and row.program_id:
             return {**out, "status": "pushed", "changed": False, **_row_view(row)}
         replacing = row is not None and (row.program_id or row.id_in_plan)
         if replacing:
@@ -1003,7 +1025,7 @@ async def _push_one(db, hub: TrainingHub, athlete_id: int, s: dict,
             # pushed earlier, now dropped from this week's days: take it off COROS
             return {**(await _remove_row(db, hub, row, today)), "reason": str(e)}
         return {**out, "status": "skipped", "reason": str(e), **_row_view(row)}
-    if row is not None and row.status == "pushed" and row.fingerprint == spec.fingerprint:
+    if row is not None and row.status == "pushed" and spec.pushed_as(row.fingerprint):
         return {**out, "status": "pushed", "name": spec.name, "changed": False, **_row_view(row)}
     replacing = row is not None and (row.program_id or row.id_in_plan)
     if replacing:

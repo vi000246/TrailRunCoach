@@ -170,7 +170,14 @@ def test_trail_easy_run_is_hr_capped_at_aet():
     assert e["isIntensityPercent"] is False
     assert e["intensityValueExtend"] == 150                 # AeT cap
     assert e["intensityValue"] == round(0.75 * 170)
-    assert e["intensityPercentExtend"] == round(150 / 170 * 100000)
+    # SP-67: the percent fields are left 0 — COROS recomputes them from its own LTHR
+    assert e["intensityPercent"] == 0 and e["intensityPercentExtend"] == 0
+    # ...and a row pushed before that (HR steps carried bpm ÷ LTHR) is still this workout
+    old = copy.deepcopy(spec.payload)
+    old["exercises"][0].update(intensityPercent=round(round(0.75 * 170) / 170 * 100000),
+                               intensityPercentExtend=round(150 / 170 * 100000))
+    assert spec.legacy_fingerprint == CW._fingerprint(spec.day, old) != spec.fingerprint
+    assert spec.pushed_as(spec.legacy_fingerprint) and spec.pushed_as(spec.fingerprint) and not spec.pushed_as(None)
     p = spec.payload
     assert p["sportType"] == CW.SPORT_RUN and p["estimatedTime"] == 45 * 60
     assert p["name"] == "TRC 越野輕鬆跑 10/2"
@@ -387,6 +394,29 @@ def test_push_twice_is_idempotent():
     assert {r["id"]: r.get("changed") for r in res["sessions"] if r["status"] == "pushed"} == \
         {"long": False, "quality": False, "easy1": False}
     assert len(fake.entities) == 3 and len(fake.live()) == 3
+
+
+def test_workouts_pushed_before_sp67_are_not_pushed_again():
+    # owner 2026-10-05: 「已推送的課不用重推」 — a row holding the fingerprint of the old payload
+    # (HR steps with intensityPercent) is still 已推送 and nothing is sent to COROS
+    db = run(make_db())
+    fake = FakeHub()
+    p = week1()
+    _push(db, p, fake)
+    rows = run(CW.all_rows(db))
+    for s in _keyed(p):
+        row = rows.get(s["key"])
+        if row is not None:
+            spec = CW.session_workout(s, p["thresholds"], _today_of(p))
+            row.fingerprint = spec.legacy_fingerprint or spec.fingerprint
+    run(db.commit())
+    assert any(CW.session_workout(s, p["thresholds"]).legacy_fingerprint for s in _keyed(p)
+               if s["id"] in ("long", "easy1"))
+    n_calls = len(fake.calls)
+    res = _push(db, p, fake)
+    assert len(fake.calls) == n_calls
+    assert {r["id"]: r["status"] for r in res["sessions"]}["long"] == "pushed"
+    assert set(_status(db, p).values()) <= {"pushed", "skipped", "done"}
 
 
 def test_changed_session_is_replaced_not_duplicated():

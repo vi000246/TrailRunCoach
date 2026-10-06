@@ -76,6 +76,10 @@ table.wt th { color: var(--muted); font-weight: 600; font-size: 12px; }
 .pill.ok { color: var(--ok); border-color: var(--ok); }
 .pill.warn { color: var(--warn); border-color: var(--warn); }
 .pill.err { color: var(--err); border-color: var(--err); }
+/* app 和手錶數值對照 (SP-67): the advice is plain text under the table, readable on a phone */
+.cmp p, .cmp ul { margin: 6px 0 0; font-size: 13px; }
+.cmp ul { padding-left: 18px; }
+.cmp td .meta { display: block; white-space: normal; min-width: 96px; }
 .kv { display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; font-size: 13px; margin-top: 8px; }
 .kv dt { color: var(--muted); }
 .kv dd { margin: 0; }
@@ -202,6 +206,7 @@ main > section.tab-off { display: none; }
       <button type="button" class="q" aria-label="說明" id="hr-model-q" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.hr.model_help" title="只決定課表（自動排課、課表步驟、推到手錶）的心率目標：恢復跑 Z1、輕鬆跑／長跑／越野 Z2、節奏 Z3、閾值 Z4、Supra／VO2max Z5。量過的 AeT（AeT 測試）一定當輕鬆跑上限。缺最大心率或靜息心率時改用乳酸閾值區間。圖表的心率區間各自在圖上選，不受這裡影響。">?</button>
       <span class="meta" id="hr-model-note" role="status"></span>
     </div>
+    <div class="src cmp" id="hr-cmp" hidden></div>
     <details style="margin-top:6px"><summary class="meta" data-i18n="settings.hr.advanced">進階設定</summary>
       <div class="row"><label><span data-i18n="settings.hr.max">最大心率</span> <input type="number" id="hr-max" min="120" max="240" step="1" style="width:72px"> bpm</label>
         <button id="hr-max-save" data-i18n="settings.pmc.save">儲存</button><button id="hr-max-auto" data-i18n="settings.pmc.clear" hidden>改回自動</button></div>
@@ -648,6 +653,46 @@ function renderHr(r) {
     e.peaks && e.peaks.length ? t("settings.hr.peaks", { list: e.peaks.map((p) => `${p[0]} ${p[1]}`).join("、") }) : "",
     r.account ? t("settings.hr.watch", { max: r.account.max_hr ?? "–", rest: r.account.rest_hr ?? "–" }) : t("settings.hr.watch_none"),
   ].filter(Boolean).join("　");
+  renderHrCompare(r.compare);
+}
+// ---- app 和手錶數值對照 (SP-67; engine/coros_compare.py, the "compare" of GET hr-profile) ----
+// The app's LTHR / max / resting HR and 課表 zones beside the COROS account's own. A gap over
+// alert_bpm is marked in the table and what to change in the COROS app is written out below
+// it; the account's past values (one row per change) sit in the <details>. Hidden without a
+// COROS account read.
+function renderHrCompare(c) {
+  const box = $("hr-cmp");
+  box.hidden = !c;
+  if (!c) { box.innerHTML = ""; return; }
+  const bpm = (v) => v == null ? "–" : String(v);
+  const gap = (r) => r.diff == null ? "–" : r.alert ? `<span class="pill warn">${r.diff > 0 ? "+" : ""}${r.diff}</span>` : (r.diff > 0 ? "+" : "") + r.diff;
+  const band = (b) => b[1] == null ? `${bpm(b[0])}+` : b[0] ? `${b[0]}–${b[1]}` : `< ${b[1]}`;
+  const src = (r) => r.from_watch ? t("settings.hr.cmp_from_watch") : r.app_source || "";
+  const rows = c.rows.map((r) => `<tr><td>${esc(r.name)}</td>
+    <td>${bpm(r.app)}${src(r) ? `<span class="meta">${esc(src(r))}</span>` : ""}</td>
+    <td>${bpm(r.watch)}</td><td>${gap(r)}</td></tr>`).join("");
+  const z = c.zones;
+  const zrows = !z ? "" : `<tr><th colspan="4">${esc(t("settings.hr.cmp_zones", { model: z.label }))}</th></tr>`
+    + (z.reason ? `<tr><td colspan="4"><span class="meta">${esc(z.reason)}</span></td></tr>`
+      : z.rows.map((r) => `<tr><td>${esc(r.id)} ${esc(r.name)}</td><td>${band(r.app)}</td><td>${band(r.watch)}</td><td>${gap(r)}</td></tr>`).join(""));
+  const h = c.history;
+  const hist = h.rows.map((r) => `<tr><td>${esc(r.day || "–")}</td><td>${bpm(r.lthr)}</td><td>${bpm(r.max_hr)}</td><td>${bpm(r.rest_hr)}</td>
+    <td>${esc(r.text)}</td></tr>`).join("");
+  box.innerHTML = `<h3>${esc(t("settings.hr.cmp_title"))}
+      <span class="pill ${c.alert ? "warn" : "ok"}">${esc(t(c.alert ? "settings.hr.cmp_warn" : "settings.hr.cmp_ok", { bpm: c.alert_bpm }))}</span></h3>
+    <p>${esc(c.summary)}</p>
+    <div class="tw"><table class="wt"><thead><tr><th>${esc(t("settings.hr.cmp_item"))}</th><th>${esc(t("settings.hr.cmp_app"))}</th>
+      <th>${esc(t("settings.hr.cmp_watch"))}</th><th>${esc(t("settings.hr.cmp_gap"))}</th></tr></thead>
+      <tbody>${rows}${zrows}</tbody></table></div>
+    ${c.fixes.length ? `<ul>${c.fixes.map((f) => `<li>${esc(f)}</li>`).join("")}</ul><p>${esc(c.where)}</p>` : ""}
+    <p class="meta">${esc(c.note)}</p>
+    <p class="meta">${esc([c.read_day ? t("settings.hr.cmp_read", { day: c.read_day }) : "",
+      h.last_change ? t("settings.hr.cmp_last", { day: h.last_change.day || "–", text: h.last_change.text }) : ""].filter(Boolean).join("　"))}</p>
+    <details style="margin-top:6px"><summary class="meta">${esc(t("settings.hr.cmp_hist", { n: h.n }))}</summary>
+      ${hist ? `<div class="tw"><table class="wt"><thead><tr><th>${esc(t("settings.hr.cmp_hist_day"))}</th><th>LTHR</th>
+        <th>${esc(t("settings.hr.max"))}</th><th>${esc(t("settings.hr.rest"))}</th><th>${esc(t("settings.hr.cmp_hist_what"))}</th></tr></thead>
+        <tbody>${hist}</tbody></table></div>` : ""}
+      <p class="meta">${esc(t(hist ? "settings.hr.cmp_hist_note" : "settings.hr.cmp_hist_none"))}</p></details>`;
 }
 async function loadHr() {
   try { renderHr(await j(HRP)); }
