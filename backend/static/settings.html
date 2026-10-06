@@ -148,6 +148,26 @@ main > section.tab-off { display: none; }
       <span class="meta" id="profnow"></span>
     </div>
     <p class="meta" id="profwko5"></p>
+    <h3 data-i18n="settings.general.exp_title">跑步經驗</h3>
+    <p class="meta" data-i18n="settings.general.exp_intro">用來排第一個月的課表；每一題都可以不填，填的週量照原數字用。有 4 週以上的紀錄之後，課表改看你的紀錄。</p>
+    <div class="row">
+      <label><span data-i18n="settings.general.exp_q1">最近 4 週平均一週</span> <input type="number" id="x-n" min="0" max="14" step="1" style="width:56px"> <span data-i18n="settings.general.exp_times">次</span>
+        × <input type="number" id="x-m" min="5" max="600" step="5" style="width:64px"> <span data-i18n="settings.general.exp_min">分鐘</span></label>
+      <label><span data-i18n="settings.general.exp_q2">最近 4 週最長一次</span> <input type="number" id="x-l" min="5" max="1440" step="5" style="width:64px"> <span data-i18n="settings.general.exp_min">分鐘</span></label>
+      <label><span data-i18n="settings.general.exp_q3">能連續跑 30 分鐘</span> <select id="x-30"><option value="" data-i18n="settings.general.sex_unset">（未填）</option>
+        <option value="yes" data-i18n="settings.general.exp_yes">可以</option><option value="no" data-i18n="settings.general.exp_no">還不行</option></select></label>
+    </div>
+    <div class="row">
+      <span data-i18n="settings.general.exp_q4">最近一年的比賽成績</span>
+      <label><input type="number" id="x-rk" min="0.4" max="1000" step="0.1" style="width:64px"> km</label>
+      <label><span data-i18n="settings.general.exp_race_time">時間</span> <input type="text" id="x-rt" inputmode="numeric" placeholder="h:mm:ss" style="width:80px"></label>
+      <label><span data-i18n="settings.general.exp_race_date">日期</span> <input type="date" id="x-rd"></label>
+      <label><input type="checkbox" id="x-rtr"> <span data-i18n="settings.general.exp_race_trail">越野賽</span></label>
+    </div>
+    <div class="row">
+      <button class="primary" id="saveexp" data-i18n="settings.general.save">儲存</button>
+      <span class="meta" id="expnow"></span>
+    </div>
   </section>
 
   <section id="mode">
@@ -611,7 +631,33 @@ async function loadProfile() {
       : t("settings.general.power_auto");
     PROF.appWeight = d.weight;
   }).catch(() => {});
+  renderExperience();
 }
+// 跑步經驗問卷 (SP-290, engine/experience.py; PUT /profile/experience): editable here any time
+function renderExperience() {
+  const x = PROF.experience || {}, r = PROF.survey_race || {};
+  $("x-n").value = x.runs_per_week ?? ""; $("x-m").value = x.minutes_per_run ?? ""; $("x-l").value = x.longest_min ?? "";
+  $("x-30").value = x.can_run_30 === true ? "yes" : x.can_run_30 === false ? "no" : "";
+  $("x-rk").value = r.distance_km ?? ""; $("x-rd").value = r.date ?? ""; $("x-rtr").checked = !!r.trail;
+  $("x-rt").value = r.time_s ? `${Math.floor(r.time_s / 3600)}:${String(Math.floor(r.time_s / 60) % 60).padStart(2, "0")}:${String(r.time_s % 60).padStart(2, "0")}` : "";
+  $("expnow").textContent = !PROF.experience ? t("settings.general.exp_none")
+    : PROF.experience_hours != null ? t("settings.general.exp_hours", { h: Math.round(PROF.experience_hours * 10) / 10 }) : "";
+}
+$("saveexp").onclick = async () => {
+  const n = (id) => ($(id).value === "" ? null : Number($(id).value));
+  const rk = n("x-rk"), rt = $("x-rt").value.trim(), rd = $("x-rd").value;
+  const race = rk != null || rt || rd ? { distance_km: rk, time: rt, date: rd, trail: $("x-rtr").checked } : null;
+  if (race && !(rk >= 0.4 && rk <= 1000 && /^\d{1,3}:\d{2}(:\d{2})?$/.test(rt) && rd)) {
+    toast(t("settings.general.exp_need_race")); return;
+  }
+  const v30 = $("x-30").value;
+  const body = { runs_per_week: n("x-n"), minutes_per_run: n("x-m"), longest_min: n("x-l"),
+    can_run_30: v30 === "yes" ? true : v30 === "no" ? false : null, race };
+  try {
+    await j("/api/v1/plan/profile/experience", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    toast(t("settings.general.exp_saved")); loadProfile();
+  } catch (e) { toast(t("settings.failed", { msg: e.message.slice(0, 80) })); }
+};
 // one weight only (date + kg): saving overwrites the stored list with this single entry
 function renderWeights() {
   const last = PROF.weights.at(-1);
