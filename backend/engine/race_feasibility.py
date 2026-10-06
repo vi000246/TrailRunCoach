@@ -20,8 +20,10 @@ Only advice — nothing here changes the plan or the event. Each check gives a l
            < CLIMB_TIGHT → tight 「爬升練得比距離少」, never over (推估).
   step     跨級: the biggest single-day EP of the last STEP_MONTHS months (activity records) as an
            ITRA class (XXS–XXL) against the hardest day's class: same or one up ok, STEP_OVER classes
-           up or more → over (UTMB entry ≈ one class up at a time; Corrion 2018, Maleka 2026:
-           experience predicts finishing; 「two classes」 and 24 months are 推估).
+           up or more → over (SP-282, docs/research/runner-progression.md §2.1: 24 months = the UTMB
+           Index's validity and Hardrock's qualifying window; two ITRA classes ≈ one UTMB category, so
+           a little looser than the UTMB World Series Finals' 「at most one category up」 — only that
+           mapping is 推估; Corrion 2018, Maleka 2026: experience predicts finishing).
   hours    ultras only (a trail race of 超馬級 or bigger, planning.event_size — SP-111; the 100 km
            row from EP 100): Koop's minimum — 50 km / 50 mi: 6 h a week for
            ≥ 3 weeks in a row from 6 weeks out; 100 km / 100 mi: 9 h for ≥ 6 weeks from 9 weeks
@@ -95,8 +97,10 @@ WEEK_OK_LONG = 0.90          # UA: 90–100 % for longer events
 WEEK_OK_SHORT = 1.00         # UA: > 100 % for shorter events
 WEEK_OVER = 0.50             # UA's starting point: below it a shorter course is suggested (never over, SP-112)
 CLIMB_TIGHT = 0.50           # SP-112 推估: the peak week's climb < half the hardest day's → tight
-STEP_MONTHS = 24             # SP-112 推估 (UTMB Running Stones: two years)
-STEP_OVER = 2                # classes up → over (推估)
+STEP_MONTHS = 24             # UTMB Index FAQ: valid with a race of the category in the last 24 months;
+                             # Hardrock 100: qualifiers within 2 years (runner-progression.md [P5][P7], SP-282)
+STEP_OVER = 2                # classes up → over: UTMB Finals take an index one category below at most [P6];
+                             # 2 ITRA classes ≈ 1 UTMB category (推估, runner-progression.md §2.1)
 # ITRA's race classes by EP (km-effort; race-feasibility.md §2.4, run-motion's copy of ITRA)
 ITRA_CLASSES = (("XXS", 0.0), ("XS", 25.0), ("S", 45.0), ("M", 75.0), ("L", 115.0), ("XL", 155.0), ("XXL", 210.0))
 LONG_DAY_H = 6.0             # planning.LONG_EVENT_HOURS: a longer / shorter event for UA's rule
@@ -109,8 +113,9 @@ KOOP = ((100.0, 9.0, 6, 9), (50.0, 6.0, 3, 6))
 SRC_UA = N_("週量：Uphill Athlete〈Big Vert Ultra Marathon〉——每週的距離和爬升，從比賽最難那天的一半開始，長的比賽練到 90–100 %")
 SRC_WEEK = N_("週量最多判到「有點趕」：完賽和沒完賽的人最高週量沒有差別（Hoffman & Fogard 2011：134 對 127 km；"
                "沒完賽主要是腸胃 23 %、趕不上關門 18.7 %，練不夠只有 0.7 %），和完賽有關的是經驗（Corrion 2018、Maleka 2026）")
-SRC_STEP = N_("跨級：ITRA 依 EP 分級（XXS–XXL）；UTMB 報名等於一次只能往上跳一級；完賽過越多場越不容易 DNF"
-              "（Corrion 2018、Maleka 2026）；「高兩級」和「24 個月」是推估")
+SRC_STEP = N_("跨級：ITRA 依 EP 分級（XXS–XXL）。看「過去 24 個月」＝ UTMB 指數的有效期、Hardrock 100 的資格期；"
+              "「高兩級」才判太難＝比 UTMB 總決賽「最多往上跳一級」略寬（ITRA 兩級約等於 UTMB 一級，這個對應是推估）；"
+              "完賽過越多場越不容易 DNF（Corrion 2018、Maleka 2026）")
 SRC_KOOP = N_("超馬週時數：Jason Koop——50 km 賽前 6 週起每週 6 小時、連續 3 週；100 km 賽前 9 週起每週 9 小時、連續 6 週")
 
 

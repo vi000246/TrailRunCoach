@@ -345,6 +345,18 @@ def test_step_xs_best_against_an_l_race_is_over():
     assert not any(c["id"] == "step" for c in r["checks"])                    # no records: not judged
 
 
+def test_step_source_names_the_industry_rules():
+    """SP-282: 24 months = the UTMB Index's validity / Hardrock's window, two classes = a little looser
+    than the UTMB Finals' one category; only the ITRA ↔ UTMB mapping is 推估. The rule is unchanged."""
+    s = F.SRC_STEP
+    assert "24 個月" in s and "UTMB 指數的有效期" in s and "Hardrock" in s and "最多往上跳一級" in s
+    assert s.count("推估") == 1 and "ITRA 兩級約等於 UTMB 一級，這個對應是推估" in s
+    assert (F.STEP_MONTHS, F.STEP_OVER) == (24, 2)
+    e = ev(distance_km=80, climbing_m=4500, est_hours=16.0)
+    r = F.assess(e, line(e), TODAY, hist(km=90.0, climb=5000.0, hours=11.0), best={"ep": 30.0, "date": date(2026, 3, 1)})
+    assert s in r["src"]
+
+
 def test_itra_classes_and_best_day():
     assert [F.ITRA_CLASSES[F.itra_class(x)][0] for x in (10, 25, 50, 80, 120, 160, 250)] == \
         ["XXS", "XS", "S", "M", "L", "XL", "XXL"]

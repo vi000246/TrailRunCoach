@@ -1195,7 +1195,7 @@
   "距離段：COROS 欄位（公分）依第三方整理，這個 app 還沒實際送過（未驗證）": "Distance steps: the COROS field (centimetres) follows third-party notes; this app hasn't actually sent one yet (unverified)",
   "距離要在 0–500 km、爬升 0–20000 m": "Distance must be 0–500 km and climb 0–20000 m",
   "距離／爬升要是數字": "Distance / climb must be numbers",
-  "跨級：ITRA 依 EP 分級（XXS–XXL）；UTMB 報名等於一次只能往上跳一級；完賽過越多場越不容易 DNF（Corrion 2018、Maleka 2026）；「高兩級」和「24 個月」是推估": "Class jump: ITRA grades races by EP (XXS–XXL); UTMB entry means moving up one class at a time; the more races finished, the lower the DNF risk (Corrion 2018, Maleka 2026); \"two classes\" and \"24 months\" are estimates",
+  "跨級：ITRA 依 EP 分級（XXS–XXL）。看「過去 24 個月」＝ UTMB 指數的有效期、Hardrock 100 的資格期；「高兩級」才判太難＝比 UTMB 總決賽「最多往上跳一級」略寬（ITRA 兩級約等於 UTMB 一級，這個對應是推估）；完賽過越多場越不容易 DNF（Corrion 2018、Maleka 2026）": "Class jump: ITRA grades races by EP (XXS–XXL). \"The last 24 months\" = how long a UTMB Index stays valid and the Hardrock 100 qualifying window; \"two classes up\" before it says too hard = a little looser than the UTMB World Series Finals' \"at most one category up\" (two ITRA classes are about one UTMB category; that mapping is an estimate); the more races finished, the lower the DNF risk (Corrion 2018, Maleka 2026)",
   "路況差的技術路段：時間＋爬升＋RPE，不設心率、功率目標（只給參考）；RPE ≥ 7 算強度課": "Rough technical trail: time + climb + RPE, no heart-rate or power target (reference only); RPE ≥ 7 counts as a quality session",
   "路線 CVI {cvi:.0f}（丘陵），已用 CVI 調整 RE；起伏很大的路線請改用「越野」": "Course CVI {cvi:.0f} (hilly): RE adjusted by CVI; for a very hilly course use “Trail” instead",
   "路線已過期（伺服器重啟過），請重新上傳 GPX": "The course has expired (the server restarted); upload the GPX again",
