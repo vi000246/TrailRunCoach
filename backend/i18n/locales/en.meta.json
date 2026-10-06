@@ -947,6 +947,10 @@
     "draft": true,
     "src": "backend/engine/racepower/calc.py:346"
   },
+  "{s} 秒": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3252"
+  },
   "{text}：{d} 起做一次 AeT 測試（UA 差距或 Friel 飄移），用賽後的 E 配速、CP、LTHR": {
     "draft": true,
     "src": "backend/engine/base_check.py:516"
@@ -1378,6 +1382,14 @@
   "休息": {
     "draft": true,
     "src": "backend/engine/workout_steps.py:1472"
+  },
+  "休息 60 秒時心率回到 AeT（{aet} bpm）以下：{k}/{n} 組": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2525"
+  },
+  "休息 60 秒時心率回到 AeT（{aet} bpm）以下：沒有休息滿 60 秒的組": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2527"
   },
   "休息日已經在這天": {
     "draft": true,
@@ -1847,6 +1859,10 @@
     "draft": true,
     "src": "backend/engine/strength_moves.py:162"
   },
+  "只供參考，不據此調整休息。\n・心率回得快，可能是練起來了，也可能是累積疲勞（Bellenger 2016 統合分析、Aubry 2015）。\n・同一個人做同一份測試，60 秒的心率恢復每天就差約 25%（Buchheit 2014），單一堂分不出變化。\n・越後面的趟本來就回得越慢（Rushall 2015、王順正）。\n・AeT 用你實測的有氧閾值，代替徐國峰用的 70% 儲備心率（徐國峰：看心率掉回這條線要幾秒，同一份課表前後比）。\n・舊的「60 秒降不到 20 下就拉長休息」找不到訓練上的來源，已拿掉；20 下接近臨床篩心臟風險用的運動後心率恢復門檻（Cole 1999、Cleveland Clinic），不是給組間休息用的。": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:190"
+  },
   "只剩 {n} 天：最後 3 週練不出新的體能了，只能減量休息": {
     "draft": true,
     "src": "backend/engine/race_feasibility.py:232"
@@ -2058,6 +2074,10 @@
   "單腳蹲下去坐到箱子再站起來。墊軟墊調深度；深度、次數一次只改一樣。雙腳蹲穩了再練。": {
     "draft": true,
     "src": "backend/engine/strength_moves.py:79"
+  },
+  "回到 AeT": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3251"
   },
   "回量期": {
     "draft": true,
@@ -3522,6 +3542,10 @@
   "水站": {
     "draft": true,
     "src": "backend/engine/racepower/watch_export.py:46"
+  },
+  "沒回到": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3253"
   },
   "沒填睡眠點，整場當一段來比；會睡的話，在賽事計算器的補給站加睡眠點會更準": {
     "draft": true,
@@ -5551,6 +5575,10 @@
     "draft": true,
     "src": "backend/engine/post_race.py:131"
   },
+  "（{n} 組休息不到 60 秒，不算）": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2529"
+  },
   "（{what}）": {
     "draft": false,
     "src": "backend/engine/plan_match.py:333"
@@ -5566,6 +5594,10 @@
   "（不超過{cap}）": {
     "draft": true,
     "src": "backend/engine/overview.py:1856"
+  },
+  "（只供參考，不據此調整休息）": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2534"
   },
   "（從 {d} 開始算）": {
     "draft": true,
@@ -5731,6 +5763,10 @@
     "draft": true,
     "src": "backend/engine/zone_events.py:475"
   },
+  "；{n} 組整段休息都沒回到 AeT": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2533"
+  },
   "；下坡比你近 6 週練過的多，賽後 {h} 小時內走平路、不排硬課": {
     "draft": true,
     "src": "backend/engine/post_race.py:129"
@@ -5766,6 +5802,10 @@
   "；另外 {x}": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:2095"
+  },
+  "；回到 AeT 的時間中位 {s} 秒": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2531"
   },
   "；已經做了 {n} 次": {
     "draft": true,

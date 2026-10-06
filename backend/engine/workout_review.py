@@ -87,7 +87,8 @@ from backend.i18n import N_, _
 # session classifier of docs/research/vo2max-session-detection.md
 # v19 (SP-235): form_bins on every moving step (no ≥ 130 spm filter) + per-grade `slow_share`; bumped
 # so a new run's bins are never compared with an old run's running-only usual
-CACHE_KEY = "workout_review_v19"
+# v20 (SP-264): efforts carry `rest_s`, `hr_at60`, `aet60`, `t_to_aet`, `aet_back`; intervals `rest_aet`
+CACHE_KEY = "workout_review_v20"
 
 # categories that can be a quality session (session_type's `runs`)
 QUALITY_CATEGORIES = ("road", "trail", "hike")
@@ -178,7 +179,22 @@ TEST_AET_MIN_S = 55 * 60
 EFFORT_MIN_S = 60
 EFFORT_GAP_S = 30
 FADE = 0.05
-HR_DROP_MIN = 20.0
+# SP-264: the rests' HR back to AeT, shown for information only (docs/research/interval-adaptation.md
+# §3.1, §4.3). The old 「60 秒降幅中位 < 20 bpm → 休息拉長」 (HR_DROP_MIN = 20) had no training source —
+# 20 bpm is the size of the clinical post-exercise HRR cut-offs (Cole 1999 ≤ 12, Watanabe 2001 /
+# Cleveland Clinic 18), a one-off risk screen, not a rest rule — and is gone. No fixed-bpm fallback.
+REST_AET_AT_S = 60            # 徐國峰's 60-s check (his 70 % HRR; the app's measured AeT stands in) — the
+                              # same point quality_gate._with_hr_at60 reads for its brake
+LAST_REST_MAX_S = 300         # 推估: after the last rep the 「rest」 is the cool-down; t_to_aet is looked for in
+                              # its first 5 min only (longer than the library's longest rest, x3015's 3-min set rest)
+REST_AET_TIP = N_("只供參考，不據此調整休息。\n"
+                  "・心率回得快，可能是練起來了，也可能是累積疲勞（Bellenger 2016 統合分析、Aubry 2015）。\n"
+                  "・同一個人做同一份測試，60 秒的心率恢復每天就差約 25%（Buchheit 2014），單一堂分不出變化。\n"
+                  "・越後面的趟本來就回得越慢（Rushall 2015、王順正）。\n"
+                  "・AeT 用你實測的有氧閾值，代替徐國峰用的 70% 儲備心率（徐國峰：看心率掉回這條線要幾秒，"
+                  "同一份課表前後比）。\n"
+                  "・舊的「60 秒降不到 20 下就拉長休息」找不到訓練上的來源，已拿掉；20 下接近臨床篩心臟風險用的"
+                  "運動後心率恢復門檻（Cole 1999、Cleveland Clinic），不是給組間休息用的。")
 CP_DELTA = 0.03
 CLIMB_BETTER = 0.05
 LAST20_MIN = 0.90
@@ -1065,9 +1081,16 @@ def band_of(pct_cp: Optional[float]) -> Optional[tuple[str, float, float]]:
 
 
 def detect_efforts(t, power, hr=None, cp: Optional[float] = None,
-                   min_s: int = EFFORT_MIN_S, gap_s: int = EFFORT_GAP_S) -> list[dict]:
+                   min_s: int = EFFORT_MIN_S, gap_s: int = EFFORT_GAP_S, aet: Optional[float] = None) -> list[dict]:
     """Work bouts: 30-s power ≥ max(0.85 CP, 1.12 × session median) for at
-    least `min_s`, gaps < `gap_s` bridged. Seconds are from the workout start."""
+    least `min_s`, gaps < `gap_s` bridged. Seconds are from the workout start.
+
+    The rest after each bout (SP-264, display only): `rest_s` = seconds to the
+    next bout (None after the last one); `hr_at60` = HR 60 s after the end
+    (None when the next bout starts first); with an AeT, `aet60` = hr_at60 ≤
+    AeT, `t_to_aet` = seconds from the end to the first HR ≤ AeT inside the
+    rest (the last bout: the first LAST_REST_MAX_S of the cool-down) and
+    `aet_back` = whether that happened (None: no AeT / no HR to look at)."""
     if power is None or not _has(power):
         return []
     grid, p = _grid1(t, power)
@@ -1098,29 +1121,60 @@ def detect_efforts(t, power, hr=None, cp: Optional[float] = None,
         pa = pz[a:b]
         avg = float(pa.mean())
         e = {"start_s": float(grid[a] - grid[0]), "duration_s": float(b - a), "power": avg,
-             "pct_cp": (avg / cp) if cp else None, "hr": None, "hr_max": None, "hr_drop60": None}
+             "pct_cp": (avg / cp) if cp else None, "hr": None, "hr_max": None, "hr_drop60": None,
+             "rest_s": None, "hr_at60": None, "aet60": None, "t_to_aet": None, "aet_back": None}
+        # the next bout that is itself an effort (≥ min_s; shorter ones are skipped above)
+        nxt = next((s for s, e_ in segs[k + 1:] if e_ - s >= min_s), None)
+        if nxt is not None:
+            e["rest_s"] = float(nxt - b)
         if h is not None:
             hh = h[a:b]
             if np.isfinite(hh).any():
                 e["hr"] = float(np.nanmean(hh))
                 e["hr_max"] = float(np.nanmax(hh))
             # HR lags the effort: the peak is at the end or a few seconds after
-            # the next bout that is itself an effort (≥ min_s; shorter ones are skipped above)
-            nxt = next((s for s, e_ in segs[k + 1:] if e_ - s >= min_s), None)
-            if b + 60 < len(h) and (nxt is None or nxt >= b + 60):
+            at = b + REST_AET_AT_S
+            if at < len(h) and (nxt is None or nxt >= at) and np.isfinite(h[at]):
+                e["hr_at60"] = float(h[at])
                 win = h[max(a, b - 10):b + 15]
                 peak = np.nanmax(win) if np.isfinite(win).any() else np.nan
-                if np.isfinite(peak) and np.isfinite(h[b + 60]):
-                    e["hr_drop60"] = float(peak - h[b + 60])
+                if np.isfinite(peak):
+                    e["hr_drop60"] = float(peak - h[at])
+            if aet:
+                if e["hr_at60"] is not None:
+                    e["aet60"] = bool(e["hr_at60"] <= aet)
+                rest = h[b:nxt if nxt is not None else min(len(h), b + LAST_REST_MAX_S)]
+                ok = np.isfinite(rest)
+                if ok.any():
+                    below = np.where(ok & (rest <= aet))[0]
+                    e["aet_back"] = bool(len(below))
+                    e["t_to_aet"] = float(below[0]) if len(below) else None
         out.append(e)
     return out
+
+
+def rest_aet_summary(efforts: list[dict]) -> Optional[dict]:
+    """The rests' HR back to AeT over the set (SP-264, information only):
+    `at60` of the `judged` bouts under AeT 60 s into the rest, `short` = bouts
+    whose rest ended before 60 s (not judged), `t_med` = the median t_to_aet of
+    the `back` bouts that got there, `never` = bouts whose rest never got there.
+    None without an AeT (detect_efforts left every `aet_back` None)."""
+    looked = [e for e in efforts if e.get("aet_back") is not None]
+    if not looked:
+        return None
+    judged = [e for e in looked if e.get("aet60") is not None]
+    back = [e["t_to_aet"] for e in looked if e.get("aet_back") and e.get("t_to_aet") is not None]
+    return {"n": len(looked), "judged": len(judged), "at60": sum(1 for e in judged if e["aet60"]),
+            "short": sum(1 for e in looked if e.get("rest_s") is not None and e["rest_s"] < REST_AET_AT_S),
+            "back": len(back), "never": sum(1 for e in looked if not e["aet_back"]),
+            "t_med": statistics.median(back) if back else None}
 
 
 def interval_summary(efforts: list[dict]) -> dict:
     """Band of the set (median %CP), reps inside it, fade (last vs first)."""
     reps = [e for e in efforts if e.get("pct_cp") is not None]
     if not reps:
-        return {"n": len(efforts), "band": None, "in_band": 0, "fade": None}
+        return {"n": len(efforts), "band": None, "in_band": 0, "fade": None, "rest_aet": rest_aet_summary(efforts)}
     med = statistics.median(e["pct_cp"] for e in reps)
     b = band_of(med)
     inb = sum(1 for e in reps if b and b[1] - 0.01 <= e["pct_cp"] < b[2] + 0.01)
@@ -1128,6 +1182,7 @@ def interval_summary(efforts: list[dict]) -> dict:
     drops = [e["hr_drop60"] for e in efforts if e.get("hr_drop60") is not None]
     return {"n": len(efforts), "band": None if b is None else list(b), "in_band": inb, "fade": fade,
             "median_pct": med, "hr_drop60": statistics.median(drops) if drops else None,
+            "rest_aet": rest_aet_summary(efforts),
             "rep_s": statistics.median(e["duration_s"] for e in efforts),
             "hr": statistics.median(e["hr"] for e in efforts if e.get("hr") is not None)
             if any(e.get("hr") is not None for e in efforts) else None}
@@ -1753,7 +1808,7 @@ def _measure(ds, w) -> Optional[dict]:
     else:
         out["drift"] = {"drift": None, "ok": False, "reason": "不是跑步"}
     # hikes too: session_type needs a detected effort next to hard_power_s
-    efforts = detect_efforts(t, s["power"], s["hr"], cp) if (w.sport == "run" or power_q) else []
+    efforts = detect_efforts(t, s["power"], s["hr"], cp, aet=aet) if (w.sport == "run" or power_q) else []
     out["efforts"] = efforts[:40]
     out["intervals"] = interval_summary(efforts)
     out["cp_test"] = cp_test(t, s["power"]) if w.sport == "run" else None
@@ -2457,6 +2512,28 @@ def aerobic_lines(typ: str, m: dict, streak: Optional[int] = None, basis: str = 
     return lines[:3]
 
 
+def rest_aet_line(m: dict) -> Optional[str]:
+    """How the rests brought HR back to AeT (SP-264): information only, never a
+    「休息拉長」 — REST_AET_TIP says why. None without an AeT (no fixed-bpm
+    fallback) or without HR in the rests."""
+    ra = (m.get("intervals") or {}).get("rest_aet")
+    aet = m.get("aet")
+    if not ra or not aet:
+        return None
+    a = int(round(float(aet)))
+    if ra["judged"]:
+        out = _("休息 60 秒時心率回到 AeT（{aet} bpm）以下：{k}/{n} 組", aet=a, k=ra["at60"], n=ra["judged"])
+    else:
+        out = _("休息 60 秒時心率回到 AeT（{aet} bpm）以下：沒有休息滿 60 秒的組", aet=a)
+    if ra["short"]:
+        out += _("（{n} 組休息不到 60 秒，不算）", n=ra["short"])
+    if ra["t_med"] is not None:
+        out += _("；回到 AeT 的時間中位 {s} 秒", s=int(round(ra["t_med"])))
+    if ra["never"]:
+        out += _("；{n} 組整段休息都沒回到 AeT", n=ra["never"])
+    return out + _("（只供參考，不據此調整休息）")
+
+
 def interval_lines(m: dict) -> list[str]:
     iv = m.get("intervals") or {}
     n = iv.get("n") or 0
@@ -2471,9 +2548,9 @@ def interval_lines(m: dict) -> list[str]:
     fade = iv.get("fade")
     if fade is not None and fade < -FADE:
         lines.append(f"最後一組比第一組低 {-fade * 100:.0f}%：下次組數減 1 或多休")
-    drop = iv.get("hr_drop60")
-    if drop is not None and drop < HR_DROP_MIN:
-        lines.append(f"休息 60 秒心率降幅中位 {drop:.0f} bpm（< 20）：休息拉長")
+    rest = rest_aet_line(m)
+    if rest:
+        lines.append(rest)
     aet, lthr, hr = m.get("aet"), m.get("lthr"), iv.get("hr")
     if len(lines) < 3 and b and b[0] in ("閾值下", "閾值") and aet and lthr and hr and aet <= hr < lthr:
         lines.append(f"功率有到、心率 {hr:.0f} 在 AeT–LTHR 之間：屬於閾值下")
@@ -2913,10 +2990,13 @@ def _summary_cards(ds, w, m: dict, c: dict, lines: list[str], ev: Optional[dict]
         iv = m.get("intervals") or {}
         n, inb = iv.get("n") or 0, iv.get("in_band")
         lvl = "na" if not n else "info" if inb is None or not iv.get("band") else "good" if inb == n else "warn"
+        il = interval_lines(m)
+        rest = rest_aet_line(m)
         cards.append(_card("status", id="intervals", icon="z3", label="間歇",
                            value=f"{inb}/{n}" if n and iv.get("band") else str(n) if n else "–",
                            sub=(f"組在 {iv['band'][0]} 帶" if n and iv.get("band") else "組" if n else "沒有偵測到"),
-                           level=lvl, tip="\n".join(interval_lines(m)) + "\n詳細在「間歇」。"))
+                           level=lvl, tip="\n".join(il) + "\n詳細在「間歇」。"
+                           + ("\n\n" + _(REST_AET_TIP) if rest and rest in il else "")))
     elif typ == "test_cp":
         cp = (ev or {}).get("cp")
         dlt = (ev or {}).get("delta")
@@ -3166,11 +3246,21 @@ def _intervals(ds, w, m, c, base):
             _col("心率", [_num(e.get("hr")) for e in eff]),
             _col("最高心率", [_num(e.get("hr_max")) for e in eff]),
             _col("休 60 秒降", [_num(e.get("hr_drop60")) for e in eff])]
+    if m.get("aet") and any(e.get("aet_back") is not None for e in eff):
+        # SP-264: seconds from the rep's end to HR ≤ AeT (information only, REST_AET_TIP)
+        cols.append(_col(_("回到 AeT"), [
+            "–" if e.get("aet_back") is None else _("{s} 秒", s=int(round(e["t_to_aet"])))
+            if e["aet_back"] and e.get("t_to_aet") is not None else _("沒回到") for e in eff]))
     lines = cp_lines(cp_eval(ds, w, m, c), m.get("avg_power") is not None) if c["type"] == "test_cp" \
         else interval_lines(m)
     if c["type"] not in ("quality", "test_cp"):
         lines = [f"這次是{c['type_label']}，下表只是偵測到的用力段"] + lines[:2]
-    return {**base, "series": cols + _verdict_rows(lines)}
+    rows = _verdict_rows(lines)
+    rest = rest_aet_line(m) if c["type"] != "test_cp" else None
+    for r in rows:
+        if rest and r["data"]["value"] == rest:
+            r["data"]["tip"] = _(REST_AET_TIP)          # 只供參考 + the sources, behind the row
+    return {**base, "series": cols + rows}
 
 
 def _trail_lines(ds, w, m) -> list[str]:
