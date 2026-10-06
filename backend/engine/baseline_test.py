@@ -119,12 +119,15 @@ def blocked(ctx: Optional[dict]) -> Optional[str]:
 def due(today: str, tests: dict, ctx: Optional[dict] = None) -> list[dict]:
     """The baseline tests to suggest today: [{kind, reason first | repeat, last, days, weeks,
     late, rejected}] — `first`: no valid test on record; `repeat`: the last one is REPEAT_DAYS[0]
-    days old or more (`late` from REPEAT_DAYS[1]). `tests`: latest(). [] while blocked(ctx)."""
+    days old or more (`late` from REPEAT_DAYS[1]). `tests`: latest(). [] while blocked(ctx).
+    ctx["cold_start"] (week_plan's, SP-288): a new runner's first weeks — no CP test (owner 2026-10-06)."""
     if blocked(ctx):
         return []
     t0 = dt.date.fromisoformat(today)
     out = []
     for kind in KINDS:
+        if kind == "cp" and (ctx or {}).get("cold_start"):
+            continue
         t = tests.get(kind) or {}
         last = t.get("last")
         if last is None:
