@@ -879,7 +879,7 @@ def _injury_suggestions(inp: dict, today: str, blocked: set, stored: list[dict])
     try:
         events = INJ.load_events()
         rows = SG.injury_rows(events, today, blocked, (inp.get("cur") or {}).get("reentry"),
-                              INJ.pain_marks(AT.load()))
+                              INJ.pain_marks(AT.load()), (inp.get("cur") or {}).get("injury_light"))
     except Exception:                       # noqa: BLE001 — the box must still load
         return []
     try:

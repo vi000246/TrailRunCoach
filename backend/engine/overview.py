@@ -2028,6 +2028,17 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
                 notes.append({"level": "watch", "src": "injury_condition", "text": t})
     except Exception:                       # noqa: BLE001 — the plan must still build
         pass
+    # 疼痛燈號 (SP-271, engine/injuries.light): the last marked run of an open injury — yellow cuts the
+    # rest of the week, red takes the runs out
+    inj_light = None
+    try:
+        opened = [e for e in INJ.active_on(inj_events, today) if not INJ.is_illness(e)]
+        if opened:
+            since = min(dt.date.fromisoformat(e["onset_date"][:10]) for e in opened)
+            inj_light = INJ.light(inj_events, INJ.foot_log(ds, None, since), today)
+            sessions = light_apply(sessions, inj_light, today, last_h * 60.0, done_h * 60.0, notes)
+    except Exception:                       # noqa: BLE001 — the plan must still build
+        inj_light = None
     # 生病 (SP-117, engine/injuries.illness_rule): a cold = Z1 recovery runs only, a fever = no run
     # until a day after the symptoms, then a recovery-pace first run
     try:
@@ -2154,6 +2165,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         "test_suggestions": test_suggestions,
         # 停訓後的恢復期 (engine/reentry.py): the block in effect / ahead, for projection and the log
         "reentry": rp,
+        # 疼痛燈號 (SP-271, engine/injuries.light): the open injuries' light today (None = no open injury)
+        "injury_light": inj_light,
         # 轉換期 (SP-73): the pre-race level of the current / next 轉換期, for projection
         "transition_ref": tr_ref,
         # 連續兩天長天 (engine/b2b.py): this week's B2B / post-B2B state, for projection, adapt and the card
@@ -2341,6 +2354,74 @@ def condition_apply(ss: list, events: list, notes: Optional[list] = None) -> lis
             if not any(n.get("text") == t for n in notes):
                 notes.append({"level": "watch", "src": "injury_condition", "text": t})
     return ss
+
+
+# ---- 疼痛燈號的課表反應 (SP-271; injuries.light) -------------------------------------------------------
+def light_apply(ss: list, lt: Optional[dict], today: dt.date, last_min: float, done_min: float,
+                notes: Optional[list] = None) -> list:
+    """The rest of the week (not-done sessions from `today`) under the injury light (SP-271), applied on
+    its own like every cut (plan-auto: reductions need no confirmation):
+      yellow  no interval / test (→ an easy run), the long run × YELLOW_LONG, and the remaining run
+              minutes ≤ last week's actual minus what is done this week (`last_min` − `done_min`; no cap
+              without a last week) — each run scaled down, one under 15 min dropped;
+      red     no run at all; strength / cross-training stay (「會痛的動作先不做」).
+    Green / None: `ss` unchanged (the condition's avoided sessions are condition_apply's)."""
+    from backend.engine import injuries as INJ
+    if not lt or lt.get("color") not in ("yellow", "red") or not ss:
+        return ss
+    is_d = isinstance(ss[0], dict)
+
+    def g(s, k):
+        return s.get(k) if is_d else getattr(s, k, None)
+
+    def put(s, **kw):
+        for k, v in kw.items():
+            if is_d:
+                s[k] = v
+            else:
+                setattr(s, k, v)
+
+    iso = today.isoformat()
+    todo = [s for s in ss if not g(s, "done") and g(s, "day") and str(g(s, "day"))[:10] >= iso
+            and g(s, "kind") in RUN_KINDS]
+    head = _("疼痛{light}（{label}）：{reason}", light=_(INJ.LIGHTS[lt["color"]]), label=lt["label"], reason=lt["reason"])
+    if lt["color"] == "red":
+        for s in ss:
+            if g(s, "kind") == "strength" and not g(s, "done"):
+                put(s, detail=(g(s, "detail") or "") + _("；會痛的動作先不做"))
+        if notes is not None:
+            notes.append({"level": "bad", "src": "injury_light",
+                          "text": head + _("。這週先不排跑步；交叉訓練和肌力照做，會痛的動作先不做")})
+        return [s for s in ss if not any(s is t for t in todo)]
+    n_easy = sum(1 for x in ss if g(x, "kind") == "easy")
+    for s in todo:
+        m = int(g(s, "minutes") or 0)
+        if g(s, "kind") in ("quality", "test"):
+            n_easy += 1
+            put(s, id=f"easy{n_easy}", kind="easy", title=_("輕鬆跑"), target="", source="", terrain="road",
+                detail=_("疼痛黃燈：先不排間歇，改成輕鬆跑"), protocol=None, tss=round(float(g(s, "tss") or 0.0) * 0.8, 1),
+                **{k: None for k in _VARIANT_KEYS})
+        elif g(s, "kind") == "long" and m:
+            nm = int(m * INJ.YELLOW_LONG // 5 * 5)
+            put(s, minutes=nm, tss=round(float(g(s, "tss") or 0.0) * nm / m, 1),
+                detail=(g(s, "detail") or "") + _("；疼痛黃燈：長跑縮短一階（× {f:.2f}，推估）", f=INJ.YELLOW_LONG))
+    allowed = max(0.0, last_min - done_min) if last_min > 0 else None
+    tot = sum(int(g(s, "minutes") or 0) for s in todo)
+    gone: list = []
+    if allowed is not None and tot > allowed:
+        f = allowed / tot if tot else 0.0
+        for s in todo:
+            m = int(g(s, "minutes") or 0)
+            nm = int(m * f // 5 * 5)
+            if nm < 15:
+                gone.append(s)
+            else:
+                put(s, minutes=nm, tss=round(float(g(s, "tss") or 0.0) * nm / m, 1) if m else g(s, "tss"))
+    if notes is not None:
+        notes.append({"level": "watch", "src": "injury_light",
+                      "text": head + _("。本週剩下的課不加量（≤ 上週實際 {m:.0f} 分）、不排間歇和這種傷要避開的課、"
+                                       "長跑縮短一階（× {f:.2f}，推估）", m=last_min, f=INJ.YELLOW_LONG)})
+    return [s for s in ss if not any(s is t for t in gone)]
 
 
 def drop_strength_before_a(ss: list, stops: list, monday: dt.date, notes: Optional[list] = None) -> list:

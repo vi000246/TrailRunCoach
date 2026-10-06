@@ -38,6 +38,10 @@
   .pp .pp-link.draft { color: var(--warn, #b45309); }
   .pp .pp-link.ok { color: var(--muted, #667); }
   .pp .pp-re { font-size: 12px; color: var(--warn, #b45309); }
+  .pp .pp-score { display: flex; flex-wrap: wrap; gap: 3px; align-items: center; font-size: 12px; color: var(--muted, #667); }
+  .pp .pp-score button { font: inherit; font-size: 12px; min-width: 26px; min-height: 26px; padding: 0 4px; border-radius: 6px;
+    border: 1px solid var(--line, #e1e5ea); background: var(--panel, #fff); color: var(--text, #111); cursor: pointer; }
+  .pp .pp-score button[aria-pressed="true"] { background: var(--accent, #2563eb); color: #fff; border-color: transparent; font-weight: 600; }
   .pp .pp-mon { font-size: 12px; color: var(--muted, #667); white-space: pre-line; max-width: 46em; }
   .pp.pp-hl { outline: 2px solid color-mix(in srgb, var(--warn, #b45309) 55%, transparent); outline-offset: 4px; border-radius: 6px; }
   .pp .pp-msg { font-size: 12px; color: var(--muted, #667); min-height: 1em; }
@@ -82,11 +86,18 @@
           ${Object.entries((m && m.sides) || {}).map(([k, t]) => `<button type="button" data-side="${k}" aria-pressed="${(s.side ?? s.injury?.side) === k}">${esc(t)}</button>`).join("")}` : ""}
       </div>` : "";
     const re = s.reentry ? `<div class="pp-re">恢復期：跑完記一下有沒有痛${opts.qtip ? opts.qtip(s.reentry.monitor || "") : ""}</div>` : "";
+    // SP-271: the optional 0–10 「跑的時候最痛幾分」 next to a mark (labels server-translated)
+    const lab = (m && m.labels) || {};
+    const sc = s.pain_score;
+    const score = p != null ? `<div class="pp-score" role="group" aria-label="${esc(lab.pain_score || "0–10")}">
+        <span>${esc(lab.pain_score || "0–10")}${opts.qtip && lab.pain_score_help ? opts.qtip(lab.pain_score_help) : ""}</span>
+        ${Array.from({ length: 11 }, (_, v) => `<button type="button" data-score="${v}" aria-pressed="${sc === v}">${v}</button>`).join("")}
+      </div>` : "";
     // 傷別 (SP-269): the open event's pain-monitoring text (server-translated), with the disclaimer
     const mon = s.injury && s.injury.open && s.injury.monitor
       ? `<div class="pp-mon">${esc(s.injury.monitor + (m && m.disclaimer ? "\n" + m.disclaimer : ""))}</div>` : "";
     return `<div class="pp ${s.reentry && p == null ? "pp-hl" : ""}">
-      <div class="pp-seg" role="group" aria-label="疼痛">${seg}</div>${chips}${linkChip(s.injury)}${mon}${re}
+      <div class="pp-seg" role="group" aria-label="疼痛">${seg}</div>${score}${chips}${linkChip(s.injury)}${mon}${re}
       <div class="pp-msg" aria-live="polite"></div></div>`;
   }
 
@@ -106,6 +117,10 @@
     root.querySelectorAll(".pp-seg button[data-p]").forEach((b) => b.addEventListener("click", () => {
       const v = +b.dataset.p;
       go({ pain: s.pain === v ? null : v });
+    }));
+    root.querySelectorAll(".pp-score button[data-score]").forEach((b) => b.addEventListener("click", () => {
+      const v = +b.dataset.score;
+      go({ pain_score: s.pain_score === v ? null : v });
     }));
     root.querySelectorAll(".pp-chips button[data-area]").forEach((b) => b.addEventListener("click", () => {
       const a = b.dataset.area;

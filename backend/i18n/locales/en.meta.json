@@ -39,6 +39,10 @@
     "draft": true,
     "src": "backend/engine/workout_templates.py:162"
   },
+  "0 = 不痛、10 = 想像得到最痛。傷病還沒好的時候，app 用最近一次跑步的分數和上一次比，決定這週課表要照排（綠燈）、先不加量（黃燈）還是先不跑（紅燈）。沒填就只看「沒痛／痠／痛／中斷」。": {
+    "draft": true,
+    "src": "backend/api/injuries.py:159"
+  },
   "1 區時間連 3 週低於這條線，5 區會暫停": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:1983"
@@ -751,6 +755,10 @@
     "draft": true,
     "src": "backend/engine/overview.py:1833"
   },
+  "{label}：疼痛紅燈（{reason}），傷病紀錄 #{id} 進行中。": {
+    "draft": true,
+    "src": "backend/engine/suggestions.py:221"
+  },
   "{model} 的輕鬆跑上限 {cap:.0f} bpm ≥ LTHR {lthr:.0f}：生理上不可能": {
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:326"
@@ -967,6 +975,10 @@
     "draft": true,
     "src": "backend/engine/racepower/calc.py:346"
   },
+  "{s}/10，{n}/10 以上": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:689"
+  },
   "{text}：{d} 起做一次 AeT 測試（UA 差距或 Friel 飄移），用賽後的 E 配速、CP、LTHR": {
     "draft": true,
     "src": "backend/engine/base_check.py:516"
@@ -1079,6 +1091,10 @@
     "draft": false,
     "src": "backend/engine/specific_phase.py:669"
   },
+  "。本週剩下的課不加量（≤ 上週實際 {m:.0f} 分）、不排間歇和這種傷要避開的課、長跑縮短一階（× {f:.2f}，推估）": {
+    "draft": true,
+    "src": "backend/engine/overview.py:2422"
+  },
   "。沒有算停留：在賽事計算機的補給站填停留分鐘，或累積 2 場以上的越野比賽紀錄，就會算進來": {
     "draft": true,
     "src": "backend/engine/race_feasibility.py:431"
@@ -1086,6 +1102,10 @@
   "。用賽事計算機的努力目標 {p:.0%}": {
     "draft": true,
     "src": "backend/engine/race_feasibility.py:434"
+  },
+  "。這週先不排跑步；交叉訓練和肌力照做，會痛的動作先不做": {
+    "draft": true,
+    "src": "backend/engine/overview.py:2394"
   },
   "「{a}」和「{b}」只隔 {n} 天：硬課之間建議隔 ≥ 2 天，可以再拖動調整": {
     "draft": true,
@@ -1154,6 +1174,22 @@
   "三段 33／50／75%，5 區要重新確認有氧基礎": {
     "draft": true,
     "src": "backend/engine/reentry.py:161"
+  },
+  "上一次 {s}/10": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:698"
+  },
+  "上一次 {s}/10，比再前一次（{p}/10）高": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:697"
+  },
+  "上一次 {s}/10，比再前一次（{p}/10）高 {d} 分": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:695"
+  },
+  "上一次 {s}/10，超過{name}的 {lim}/10": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:693"
   },
   "上一階（{name}）：維持，不算進階": {
     "draft": true,
@@ -1374,6 +1410,10 @@
   "中": {
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:124"
+  },
+  "中斷": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:58"
   },
   "中間訓練：兩場 A 賽相隔 {span}，這週最多練到上一場賽前 4 週平均 {h:.1f} h 的 {share:.0%}（Higdon 等教練級，比例推估）": {
     "draft": true,
@@ -2122,6 +2162,10 @@
   "單腳蹲下去坐到箱子再站起來。墊軟墊調深度；深度、次數一次只改一樣。雙腳蹲穩了再練。": {
     "draft": true,
     "src": "backend/engine/strength_moves.py:79"
+  },
+  "嚴重度選了「重」（停跑）": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:717"
   },
   "回量期": {
     "draft": true,
@@ -3467,9 +3511,21 @@
     "draft": true,
     "src": "backend/engine/strength_moves.py:183"
   },
+  "標了「{what}」": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:701"
+  },
+  "標了「中斷」": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:687"
+  },
   "標了「當作間歇」，但找不到用力段（≥ 95% CP 的短趟或 3 區以上 ≥ 2.5 分）": {
     "draft": true,
     "src": "backend/engine/interval_eval.py:501"
+  },
+  "標了「痛」": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:700"
   },
   "標題不能空白": {
     "draft": true,
@@ -3783,6 +3839,10 @@
     "draft": true,
     "src": "backend/engine/hr_profile.py:83"
   },
+  "沒痛": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:58"
+  },
   "活動擬合": {
     "draft": true,
     "src": "backend/engine/racepower/calc.py:276"
@@ -4019,6 +4079,10 @@
     "draft": false,
     "src": "backend/engine/specific_phase.py:636"
   },
+  "疼痛{light}（{label}）：{reason}": {
+    "draft": true,
+    "src": "backend/engine/overview.py:2387"
+  },
   "疼痛監測（Silbernagel 2007）：跑的時候疼痛 ≤ 5/10；跑完 ≤ 5/10 且隔天早上要退回原本的程度；疼痛和僵硬不能一週比一週多。原研究只看阿基里斯腱，用在其他部位是推估。": {
     "draft": true,
     "src": "backend/engine/injuries.py:92"
@@ -4030,6 +4094,18 @@
   "疼痛監測（如果醫師或物理治療師說是膝前痛）：跑時 ≤ 2/10、跑完 60 分鐘內回到原本的程度（Esculier 2016 試驗計畫書）。": {
     "draft": true,
     "src": "backend/engine/injuries.py:113"
+  },
+  "疼痛黃燈：先不排間歇，改成輕鬆跑": {
+    "draft": true,
+    "src": "backend/engine/overview.py:2402"
+  },
+  "痛": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:58"
+  },
+  "痠": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:58"
   },
   "發燒、咳嗽到胸、全身痠痛、腸胃炎": {
     "draft": true,
@@ -4295,6 +4371,10 @@
     "draft": true,
     "src": "backend/engine/altitude.py:198"
   },
+  "紅燈": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:679"
+  },
   "累": {
     "draft": true,
     "src": "backend/engine/rpe_load.py:55"
@@ -4346,6 +4426,10 @@
   "綠 ✓ 在目標內、黃 ▼ 偏低（< {floor:.0f} W = 下限 × {tol}，{basis}）": {
     "draft": true,
     "src": "backend/engine/workout_review.py:3913"
+  },
+  "綠燈": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:679"
   },
   "維持：每週 1 區 ≥ {m} 分": {
     "draft": true,
@@ -4847,6 +4931,10 @@
     "draft": true,
     "src": "backend/engine/drift_calib.py:120"
   },
+  "跑的時候最痛幾分（選填）": {
+    "draft": true,
+    "src": "backend/api/injuries.py:158"
+  },
   "距離": {
     "draft": true,
     "src": "backend/engine/workout_review.py:2635"
@@ -5251,6 +5339,10 @@
     "draft": true,
     "src": "backend/engine/drift_calib.py:137"
   },
+  "連兩次黃燈（{why}）": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:722"
+  },
   "連續賽事以兩個睡眠點之間最硬的一段來比：第 {n} 段 {km:.1f} km、爬升 {cl:.0f} m（共 {k} 段）": {
     "draft": true,
     "src": "backend/engine/panels/race_refs.py:166"
@@ -5326,6 +5418,10 @@
   "還沒有實測的 AeT 和 LTHR，算不出 ADS": {
     "draft": true,
     "src": "backend/engine/specific_phase.py:559"
+  },
+  "還沒有標記疼痛的跑步": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:718"
   },
   "還缺：": {
     "draft": true,
@@ -5735,6 +5831,10 @@
     "draft": true,
     "src": "backend/engine/strength_plan.py:54"
   },
+  "黃燈": {
+    "draft": true,
+    "src": "backend/engine/injuries.py:679"
+  },
   "（LTHR 有獨立證據：{s}）": {
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:518"
@@ -5975,6 +6075,10 @@
     "draft": true,
     "src": "backend/engine/quality_gate.py:2078"
   },
+  "；會痛的動作先不做": {
+    "draft": true,
+    "src": "backend/engine/overview.py:2391"
+  },
   "；本週不另外排技術地形課": {
     "draft": true,
     "src": "backend/engine/technical.py:173"
@@ -5986,6 +6090,10 @@
   "；注意線 +{watch:.1f}、擋線 +{block:.1f}（7 天前 CTL {base:.0f}）": {
     "draft": true,
     "src": "backend/engine/status.py:308"
+  },
+  "；疼痛黃燈：長跑縮短一階（× {f:.2f}，推估）": {
+    "draft": true,
+    "src": "backend/engine/overview.py:2407"
   },
   "；第一次量小，之後 2 天只排輕鬆課": {
     "draft": true,
