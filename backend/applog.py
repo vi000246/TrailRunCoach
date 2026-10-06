@@ -15,6 +15,11 @@ What is logged
     query string, so an ID or token in the URL never reaches the log.
   * timed(): how long a step took (dataset build, auto plan, calibration).
   * sync/runner.py: one line per sync run with where the time went.
+  * uvicorn's access log (docker logs only; it never reaches app.log) keeps
+    its one line per request, with the keys in the address masked (SP-232):
+    a share link or 課表訂閱 feed token after /share/ (GET /share/calendar/***.ics),
+    secret-named query parameters (token, key, code, state, …: ?code=***) and
+    anything else that looks like a key. See mask_url().
 
 Never a token, password or personal data. The call sites log counts,
 durations and exception types only (no weights, heart rates, e-mail, user
@@ -35,6 +40,7 @@ import threading
 import time
 from pathlib import Path
 from typing import Iterator, Optional
+from urllib.parse import unquote, unquote_plus
 
 log = logging.getLogger("backend.applog")
 
@@ -77,18 +83,95 @@ def _opaque(m: re.Match) -> str:
     return "***" if any(c.isdigit() for c in s) and any(c.isalpha() for c in s) else s
 
 
+# ---- URLs (SP-232) ------------------------------------------------------------
+# uvicorn's access log prints every request's path and query string. A share
+# link (/share/<id>, /share/<id>/data, engine/racepower/share.py) and the 課表訂閱
+# feed (/share/calendar/<token>.ics, engine/calendar_feed.py) are keys in the
+# path: whoever has the address reads the data. Every segment after a share /
+# shares segment (any case, %-encoded or not) is masked, except these route
+# words and a route template ({sid}); a .ics ending stays so a feed fetch is
+# still recognisable in the log.
+_SHARE_SEGMENTS = frozenset({"share", "shares"})
+_SHARE_WORDS = frozenset({"calendar", "data"})
+_TEMPLATE_SEG = re.compile(r"\{[A-Za-z_][\w:]*\}(?:\.\w+)?")
+# A query parameter whose name (any case, %-encoded or not, with a prefix or a
+# suffix: access_token, X-Api-Key, oauth_state) holds one of these has its value
+# masked. code / state: the TrainingPeaks OAuth callback (/api/v1/auth/tp/callback).
+# Erring on the masking side: the app's own parameters (day, uid, view, period, …)
+# match none of them; ?key= (an activity's start minute) is masked with the rest.
+_SECRET_PARAM = re.compile(r"token|secret|passw|pwd|key|code|state|sig|auth|session|cookie|credential|"
+                           r"jwt|ticket|nonce|otp|mail|user|account")
+# Any other path segment or query value that looks like a key: 20+ token
+# characters holding both letters and digits (a share id is 22, a feed token 32;
+# the app's own ids — plan uid 12 hex, workout index, dates — are shorter or
+# carry other characters)
+_OPAQUE_PART = re.compile(r"[A-Za-z0-9_\-]{20,}={0,2}")
+_PATH_IN_TEXT = re.compile(r"/[^\s\"'<>]*")
+
+
+def _looks_opaque(s: str) -> bool:
+    return bool(_OPAQUE_PART.fullmatch(s)) and any(c.isdigit() for c in s) and any(c.isalpha() for c in s)
+
+
+def _mask_segment(seg: str) -> str:
+    if not seg or _TEMPLATE_SEG.fullmatch(seg):
+        return seg
+    low = unquote(seg).lower()
+    if low in _SHARE_WORDS:
+        return seg
+    return "***.ics" if low.endswith(".ics") else "***"
+
+
+def _mask_param(p: str, guess: bool) -> str:
+    k, eq, v = p.partition("=")
+    if eq and _SECRET_PARAM.search(unquote_plus(k).lower()):
+        return f"{k}=***"
+    if guess and _looks_opaque(unquote_plus(v if eq else k)):
+        return f"{k}=***" if eq else "***"
+    return p
+
+
+def mask_url(url: str, guess: bool = True) -> str:
+    """A request target (path?query, as uvicorn's access log prints it) with
+    its keys masked (***): the segments after /share/ or /shares/, the values
+    of secret-named query parameters and, with `guess`, any other segment or
+    value that looks like a key. The rest (route, ordinary parameters) stays
+    readable."""
+    if not url:
+        return url
+    path, q, query = url.partition("?")
+    segs = path.split("/")
+    after_share = False
+    for i, seg in enumerate(segs):
+        if after_share:
+            segs[i] = _mask_segment(seg)
+        elif guess and _looks_opaque(unquote(seg)):
+            segs[i] = "***"
+        if unquote(seg).strip().lower() in _SHARE_SEGMENTS:
+            after_share = True
+    out = "/".join(segs)
+    if q:
+        out += "?" + "".join(part if part in ("&", ";") else _mask_param(part, guess)
+                             for part in re.split(r"([&;])", query))
+    return out
+
+
 def redact(text: str) -> str:
     """`text` with secrets and personal identifiers blanked (***)."""
     if not text:
         return text
-    s = _URL_QUERY.sub(r"\1?***", text)
+    s = text
+    home = str(Path.home())
+    if len(home) > 1:
+        s = s.replace(home, "~")
+    s = _URL_QUERY.sub(r"\1?***", s)
+    # share paths and secret-named parameters in any path (SP-232); no guessing
+    # here: a file path in a traceback keeps its folders
+    s = _PATH_IN_TEXT.sub(lambda m: mask_url(m.group(0), guess=False), s)
     s = _BEARER.sub(r"\1 ***", s)
     s = _KV.sub(r"\1***", s)
     s = _EMAIL.sub("***@***", s)
     s = _OPAQUE.sub(_opaque, s)
-    home = str(Path.home())
-    if len(home) > 1:
-        s = s.replace(home, "~")
     return s
 
 
@@ -97,6 +180,42 @@ class RedactingFormatter(logging.Formatter):
 
     def format(self, record: logging.LogRecord) -> str:
         return redact(super().format(record))
+
+
+class UvicornRedactFilter(logging.Filter):
+    """On uvicorn's own loggers (SP-232), which keep their handlers and
+    formats (docker logs). uvicorn.access: each string argument of the request
+    line — (client, method, path?query, HTTP version, status), unpacked as a
+    tuple by uvicorn's AccessFormatter, so the tuple keeps its shape — through
+    redact(), the path?query through mask_url() first. uvicorn.error: the
+    message and the traceback through redact()."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if record.name == "uvicorn.access" and isinstance(record.args, tuple):
+            record.args = tuple(redact(mask_url(a) if a.startswith("/") else a) if isinstance(a, str) else a
+                                for a in record.args)
+            return True
+        try:
+            msg = record.getMessage()
+        except Exception:                 # noqa: BLE001 — a bad format string: logging reports it
+            return True
+        if redact(msg) != msg:
+            record.msg, record.args = redact(msg), None
+            record.__dict__.pop("color_message", None)     # its own %s copy of the message (TTY colours)
+        if record.exc_info and not record.exc_text:
+            record.exc_text = redact(logging.Formatter().formatException(record.exc_info))
+        return True
+
+
+UVICORN_LOGGERS = ("uvicorn.access", "uvicorn.error")
+
+
+def install_uvicorn_filter() -> None:
+    """UvicornRedactFilter on uvicorn's loggers, once each."""
+    for name in UVICORN_LOGGERS:
+        lg = logging.getLogger(name)
+        if not any(isinstance(f, UvicornRedactFilter) for f in lg.filters):
+            lg.addFilter(UvicornRedactFilter())
 
 
 # ---------------------------------------------------------------------------
@@ -129,11 +248,13 @@ def log_file() -> Optional[Path]:
 def setup() -> logging.Logger:
     """The `backend` logger's handlers: stderr and app.log, both redacting.
     Idempotent (the app's start-up calls it; a second call only follows a
-    changed data folder). uvicorn's own loggers are left alone."""
+    changed data folder). uvicorn's own loggers keep their handlers and
+    formats; they only get UvicornRedactFilter (SP-232)."""
     root = logging.getLogger("backend")
     level = getattr(logging, os.getenv("WKO5COACH_LOG_LEVEL", "INFO").strip().upper(), logging.INFO)
     fmt = RedactingFormatter(FORMAT)
     with _SETUP_LOCK:
+        install_uvicorn_filter()
         root.setLevel(level)
         if not any(getattr(h, "_trc", None) == "stderr" for h in root.handlers):
             h = _StderrHandler()
