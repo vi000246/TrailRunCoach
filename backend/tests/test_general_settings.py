@@ -258,3 +258,23 @@ def test_wizard_later_button_snoozes():
     from pathlib import Path
     js = (Path(__file__).resolve().parents[1] / "static" / "setup_wizard.js").read_text("utf-8")
     assert "prof.setup.remind" in js and "done(true)" in js and "later: !!later" in js
+
+
+def test_power_source_names_follow_the_ui_language(plan_file, monkeypatch):
+    """SP-233: the 精靈's 「偵測到：…」 shows the /profile/detect labels; in English they are English."""
+    from backend.api import plan as PA
+    from backend.i18n import use_locale
+    monkeypatch.setattr(PA, "_app_weight", lambda: None)
+    assert AP.power_labels() == {"stryd": "Stryd", "watch": "手錶推估功率", "none": "沒有功率計"}
+    with use_locale("en"):
+        want = {"stryd": "Stryd", "watch": "Watch-estimated power", "none": "No power meter"}
+        assert AP.power_labels() == want
+        assert PA.detect_profile()["labels"] == want
+        assert PA.get_profile()["power_labels"] == want
+        from backend.engine.racepower import athlete as RA
+        assert RA._power_label({"power_source": "watch"}) == "Watch-estimated power"
+        assert RA._power_label({}) == "Not set"
+    # the wizard shows the label the API sends (no Chinese of its own for the detected source)
+    from pathlib import Path
+    js = (Path(__file__).resolve().parents[1] / "static" / "setup_wizard.js").read_text("utf-8")
+    assert 'T("power_detected", { src: x.labels[s] })' in js
