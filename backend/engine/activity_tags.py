@@ -442,25 +442,32 @@ def feel_label(feel: Optional[int]) -> Optional[str]:
 
 
 def effort_from_rpe(rpe: Optional[float], rest_share: Optional[float] = None,
-                    base: Optional[dict] = None) -> Optional[dict]:
+                    base: Optional[dict] = None, rec: Optional[dict] = None) -> Optional[dict]:
     """The auto effort from the watch's RPE (it outranks the HR rule; a user
     mark outranks both). 9–10 with long rests > AUTO_EFFORT["rest_max"] =
     有拼但有休息, as the HR rule. `base` = the HR rule's result (its numbers
-    are kept for display). None without an RPE."""
+    are kept for display). `rec` = the recorded row (load_recorded): an RPE mapped
+    from COROS's post-run rating (SP-231) says so. None without an RPE."""
     if rpe is None:
         return None
     eff = next((e for top, e in RPE_EFFORT if rpe <= top), "max")
     rest = rest_share if rest_share is not None else (base or {}).get("rest_share")
     if eff == "max" and rest is not None and rest > _rest_max():
         eff = "hard_with_rests"
-    why = f"手錶記錄的 RPE {rpe:g}（運動後自評）→ {EFFORTS[eff]}"
+    from backend.engine import coros_rpe as CR
+    from backend.i18n import _
+    if (rec or {}).get("source") == CR.SOURCE and (rec or {}).get("coros_feel") in CR.FEEL_LABEL:
+        why = _("COROS 跑後自評 {label}（換算成 RPE {rpe}，推估）→ {effort}",
+                label=CR.FEEL_LABEL[rec["coros_feel"]], rpe=f"{rpe:g}", effort=EFFORTS[eff])
+    else:
+        why = f"手錶記錄的 RPE {rpe:g}（運動後自評）→ {EFFORTS[eff]}"
     if base and base.get("effort") and base["effort"] != eff:
         why += f"；心率規則會判為「{EFFORTS.get(base['effort'], '?')}」"
     return {**(base or {}), "effort": eff, "reason": why, "basis": "rpe", "rpe": rpe,
             "hr_effort": (base or {}).get("effort")}
 
 
-RECORDED_COLS = ("file_path", "start_time_utc", "rpe", "feel")
+RECORDED_COLS = ("file_path", "start_time_utc", "rpe", "feel", "coros_feel", "rpe_source")
 _rec_memo: dict = {}
 
 
@@ -483,7 +490,9 @@ def load_recorded(db_path=None) -> list[dict]:
         con = sqlite3.connect(f"file:{p}?mode=ro", uri=True)
         try:
             have = {r[1] for r in con.execute("PRAGMA table_info(workout_files)").fetchall()}
-            raw = con.execute("SELECT file_path, start_time_utc, rpe, feel FROM workout_files "
+            # + COROS's post-run rating (SP-231) when the DB has its columns
+            extra = "coros_feel, rpe_source" if {"coros_feel", "rpe_source"} <= have else "NULL, NULL"
+            raw = con.execute(f"SELECT file_path, start_time_utc, rpe, feel, {extra} FROM workout_files "
                               "WHERE rpe IS NOT NULL OR feel IS NOT NULL").fetchall() \
                 if {"rpe", "feel", "start_time_utc"} <= have else []
         finally:
@@ -494,13 +503,15 @@ def load_recorded(db_path=None) -> list[dict]:
     if raw:
         from backend.engine.wko5expr.datasource import athlete_tz
         tz = athlete_tz()
-        for fp, st, rpe, feel in raw:
+        for fp, st, rpe, feel, cfeel, src in raw:
             try:
                 t = dt.datetime.fromisoformat(str(st)).replace(tzinfo=dt.timezone.utc).astimezone(tz)
             except (TypeError, ValueError):
                 continue
             rows.append({"start_local": key_of(t.replace(tzinfo=None)), "file": Path(str(fp).replace("\\", "/")).name,
-                         "rpe": rpe, "feel": feel})
+                         "rpe": rpe, "feel": feel, "coros_feel": cfeel,
+                         # where the RPE came from: COROS's rating (SP-231) or the FIT
+                         "source": src if src else ("watch" if rpe is not None else None)})
     _rec_memo.update(stamp=stamp, rows=rows)
     return rows
 
@@ -517,7 +528,9 @@ def recorded_of(rows: list[dict], start: Optional[dt.datetime], file: Optional[s
 def recorded_json(r: Optional[dict]) -> Optional[dict]:
     if not r:
         return None
-    return {"rpe": r.get("rpe"), "feel": r.get("feel"), "feel_label": feel_label(r.get("feel"))}
+    from backend.engine import coros_rpe as CR
+    return {"rpe": r.get("rpe"), "feel": r.get("feel"), "feel_label": feel_label(r.get("feel")),
+            "source": r.get("source"), "self_rating": CR.self_rating(r)}
 
 
 # ---------------------------------------------------------------------------

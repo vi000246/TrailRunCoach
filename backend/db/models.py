@@ -63,6 +63,12 @@ class WorkoutFile(Base):
     # workout_feel 0–100 (0 very weak … 100 very strong). NULL = not recorded
     rpe: Mapped[Optional[float]] = mapped_column(nullable=True)
     feel: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # COROS's post-run self-rating (SP-231, engine/coros_rpe.py): sportFeelInfo.feelType of the
+    # activity detail, 1 (lightest) … 5 (hardest), 0 = not filled; NULL = not read (yet / failed).
+    # Mapped onto `rpe` (1→2, 2→4, 3→5, 4→7, 5→10, 推估) unless the FIT has its own RPE;
+    # `rpe_source` = "coros" when `rpe` came from it (NULL: the FIT's, or none)
+    coros_feel: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    rpe_source: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
     # COROS's own Training Load of the activity: `trainingLoad` of the activity list item the
     # sync already reads (sync/coros_client.sync_workouts; NULL = not listed / not COROS).
     # engine/coros_tl.py refits the TSS → TL conversion on it (SP-37 / SP-38)

@@ -775,6 +775,10 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
         <button type="button" class="qtip" id="ap-big-q" data-i18n-attr="aria-label:schedule.pf.about;data-tip:schedule.pf.ap_big_tip" aria-label="說明"
           data-tip="加量超過 20%、A 賽前 14 天拿掉長跑／強度課、周期改變、推送範圍內超過 3 堂非減量的改變，會先等你同意（門檻推估）。">?</button>
         <input type="checkbox" class="sw pf-c" id="ap-cb" name="ap_confirm_big" role="switch"></div>
+      <div class="pf-r"><label class="pf-l" for="ap-rpe" data-i18n="schedule.pf.ap_rpe">跑後自評很累時延後強度課</label>
+        <button type="button" class="qtip" data-i18n-attr="aria-label:schedule.pf.about;data-tip:schedule.pf.ap_rpe_tip" aria-label="說明"
+          data-tip="輕鬆跑或長跑跑完在 COROS 自評 Hard 以上（換成 RPE ≥ 7），而且 48 小時內有強度課或測試：那堂課延到隔 48 小時的空日，沒有空日就降一階。不會解開疲勞、增幅、跑量、傷病擋下的課；你改過或自己加的課不動；A 賽前 14 天內先等你確認。規則和 1–5 級換算（1→2、2→4、3→5、4→7、5→10）都是推估。">?</button>
+        <input type="checkbox" class="sw pf-c" id="ap-rpe" name="ap_rpe_rule" role="switch"></div>
       <div class="pf-r ap-co"><label class="pf-l" for="ap-nt" data-i18n="schedule.pf.ap_notify">待確認通知</label>
         <span class="pf-c"><select id="ap-nt" name="ap_notify"><option value="watch" data-i18n="schedule.pf.ap_watch">手錶</option><option value="overview" data-i18n="schedule.pf.ap_overview">只在總覽頁</option></select></span></div>
       <div class="pf-r ap-nc meta" data-i18n="schedule.pf.ap_login">登入 COROS 後可以自動推到手錶</div>
@@ -986,7 +990,9 @@ function chipHtml(s, big) {
   // done: what was actually run that day (the planned title stays the chip's title), with its
   // session class (workout_review.classify: Z5 間歇 / Z3 閾值 / 高強度長跑 / 中強度跑 …)
   const sl = done && s.done_by.session && s.done_by.session.type_label ? ` · ${s.done_by.session.type_label}` : "";
-  const line = done ? `實際 ${esc((s.done_by.category_label || "完成") + sl)} ${hm(s.done_by.moving_s)}${s.done_by.distance_km ? ` · ${(+s.done_by.distance_km).toFixed(1)} km` : ""}` : esc(s.target || "");
+  // + the post-run self-rating, 「自評：Hard（COROS）」 (SP-231, worded by the server)
+  const rated = done && s.done_by.self_rating ? ` · ${esc(s.done_by.self_rating.text)}` : "";
+  const line = done ? `實際 ${esc((s.done_by.category_label || "完成") + sl)} ${hm(s.done_by.moving_s)}${s.done_by.distance_km ? ` · ${(+s.done_by.distance_km).toFixed(1)} km` : ""}${rated}` : esc(s.target || "");
   const off = done && s.vs && s.vs.off_plan;
   const part = done && s.vs && s.vs.short;          // 強度不足 / 偏強 (SP-216): 部分, not 沒照課表
   const cp = s.compliance;
@@ -1840,7 +1846,7 @@ function vsHtml(s) {
   const a = s.done_by || {}, vs = s.vs || {}, cp = s.compliance;
   const plan = [(s.kind === "quality" && s.quality_family ? s.quality_family.label : KINDS[s.kind]) || "", s.minutes ? `${s.minutes}′` : "", `TSS ${n0(s.tss_est ?? s.tss)}`, vs.planned ? INT_LB[vs.planned] : ""].filter(Boolean).join(" · ");
   const real = [a.category_label || "", hm(a.moving_s), a.distance_km ? `${(+a.distance_km).toFixed(1)} km` : "", a.climbing_m ? `↑${Math.round(a.climbing_m)} m` : "",
-    a.tss != null ? `TSS ${n0(a.tss)}` : "", vs.actual ? INT_LB[vs.actual] : ""].filter(Boolean).join(" · ");
+    a.tss != null ? `TSS ${n0(a.tss)}` : "", vs.actual ? INT_LB[vs.actual] : "", a.self_rating ? a.self_rating.text : ""].filter(Boolean).join(" · ");
   const hard = vs.hard_min != null ? `閾值以上 ${vs.hard_min} 分${vs.need_min ? `（強度課門檻 ${vs.need_min} 分）` : ""}` : "";
   return `<div class="vs-h"><b class="ok">✓ 已完成</b><span class="meta">${esc(vs.match_label || "")}</span>` +
     `<button type="button" class="qtip" aria-label="配對規則" data-tip="${esc(MATCH_TIP)}">?</button>` +
@@ -2256,6 +2262,7 @@ function apFill(s, th) {
   E.ap_push.checked = !!AP.push;
   E.ap_push_days.value = AP.push_days ?? 7;
   E.ap_confirm_big.checked = !!AP.confirm_big;
+  E.ap_rpe_rule.checked = AP.rpe_rule !== false;          // 跑後自評 (SP-231): on unless turned off
   E.ap_notify.value = AP.notify || "overview";
   const tx = th && th.texts ? Object.values(th.texts) : [];
   if (tx.length) $("ap-big-q").dataset.tip = `${tt("pf.ap_big_tip")}\n\n${tx.map((x) => "• " + x).join("\n")}`;
@@ -2271,7 +2278,8 @@ function apSync() {
 }
 function apRead() {
   if (!AP) return {};
-  const E = PFF.elements, out = { enabled: E.ap_enabled.checked, confirm_big: E.ap_confirm_big.checked };
+  const E = PFF.elements, out = { enabled: E.ap_enabled.checked, confirm_big: E.ap_confirm_big.checked,
+    rpe_rule: E.ap_rpe_rule.checked };
   if (AP.coros_logged_in) Object.assign(out, { push: E.ap_push.checked, push_days: numOrNull(E.ap_push_days.value), notify: E.ap_notify.value });
   return out;
 }

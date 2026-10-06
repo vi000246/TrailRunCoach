@@ -153,6 +153,8 @@
   "pf.ap_days": "Push range",
   "pf.ap_big": "Ask me before big changes",
   "pf.ap_big_tip": "Big changes wait for your approval and the watch keeps the old sessions (thresholds are an estimate):",
+  "pf.ap_rpe": "Push back hard sessions after a hard-rated easy run",
+  "pf.ap_rpe_tip": "When you rate an easy or long run Hard or more on COROS (RPE ≥ 7 after mapping) and an intensity session or test is less than 48 hours later, that session moves to a free day 48 hours after the run; with no free day it steps down one level. Sessions held back by fatigue, ramp, volume or injury rules are never brought back; sessions you edited or added are left alone; within 14 days of an A race it waits for your approval. The rule and the 1–5 mapping (1→2, 2→4, 3→5, 4→7, 5→10) are estimates.",
   "pf.ap_notify": "Approval notice",
   "pf.ap_watch": "Watch",
   "pf.ap_overview": "Overview page only",

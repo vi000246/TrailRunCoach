@@ -220,7 +220,9 @@ def reconcile_with_adapt(stored: list[dict], inputs: dict, decisions: Optional[d
             "load": {"tsb": ctx.get("tsb", load.get("tsb_today")), "ramp": ctx.get("ramp"),
                      "ramp_base": ctx.get("ramp_base")},
             "reviews": ctx.get("reviews") or {}, "b2b": cur.get("b2b"),
-            "hard_days": ctx.get("hard_days") or []})     # done hard days, planned or not (48 h)
+            "hard_days": ctx.get("hard_days") or [],      # done hard days, planned or not (48 h)
+            # the runs' post-run self-rating and its rule's switch (SP-231)
+            "rpe": ctx.get("rpe") or {}, "rpe_rule": ctx.get("rpe_rule", True)})
     new, changes = R.reconcile(stored, gw, inputs.get("activities") or [],
                                inputs["today"], inputs.get("horizon_end"), covered=inputs.get("covered"),
                                blocked=blocked, allowed_days=days, decisions=decisions,
