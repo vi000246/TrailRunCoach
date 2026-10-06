@@ -2799,6 +2799,10 @@
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:289"
   },
+  "手錶推估功率": {
+    "draft": false,
+    "src": "backend/engine/athlete_profile.py:41"
+  },
   "扣本人的手腕偏差 {b:.1f} °C（{n} 次跑步配對）": {
     "draft": true,
     "src": "backend/engine/workout_review.py:434"
@@ -3570,6 +3574,10 @@
   "沒有到 VO2max": {
     "draft": true,
     "src": "backend/engine/workout_review.py:2686"
+  },
+  "沒有功率計": {
+    "draft": false,
+    "src": "backend/engine/athlete_profile.py:41"
   },
   "沒有功率：不判讀間歇、不算 W′（間歇用心率看）": {
     "draft": true,
@@ -4442,6 +4450,10 @@
   "訓練": {
     "draft": true,
     "src": "backend/engine/workout_steps.py:1472"
+  },
+  "設定頁": {
+    "draft": false,
+    "src": "backend/api/plan.py:400"
   },
   "該重測了：{name}": {
     "draft": true,

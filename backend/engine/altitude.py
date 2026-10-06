@@ -17,7 +17,8 @@ docs/research/mountaineering-physiology-scholars.md §3, SP-107 #4d):
     sleeping altitude should not rise more than 500 m a night; a first night
     above 3,400 m is high risk (排雲山莊 3,402 m is just over the line);
     「Training and physical fitness do not affect risk」. Acclimatisation is
-    partly kept 12 days back at low altitude (Pichon 2017 [400]).
+    partly kept 12 days back at low altitude (Beidleman 2017, J Appl Physiol
+    123:1214 [400]).
   * Schneider…Bärtsch 2002 (MSSE, abstract): pre-exposure = > 4 days above
     3,000 m in the 2 months before; with it and a slow ascent, susceptible
     climbers' AMS 58 % → 7 %.

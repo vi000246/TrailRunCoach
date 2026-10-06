@@ -258,3 +258,51 @@ def test_wizard_later_button_snoozes():
     from pathlib import Path
     js = (Path(__file__).resolve().parents[1] / "static" / "setup_wizard.js").read_text("utf-8")
     assert "prof.setup.remind" in js and "done(true)" in js and "later: !!later" in js
+
+
+def test_power_source_names_follow_the_ui_language(plan_file, monkeypatch):
+    """SP-233: the 精靈's 「偵測到：…」 shows the /profile/detect labels; in English they are English."""
+    from backend.api import plan as PA
+    from backend.i18n import use_locale
+    monkeypatch.setattr(PA, "_app_weight", lambda: None)
+    assert AP.power_labels() == {"stryd": "Stryd", "watch": "手錶推估功率", "none": "沒有功率計"}
+    with use_locale("en"):
+        want = {"stryd": "Stryd", "watch": "Watch-estimated power", "none": "No power meter"}
+        assert AP.power_labels() == want
+        assert PA.detect_profile()["labels"] == want
+        assert PA.get_profile()["power_labels"] == want
+        from backend.engine.racepower import athlete as RA
+        assert RA._power_label({"power_source": "watch"}) == "Watch-estimated power"
+        assert RA._power_label({}) == "Not set"
+    # the wizard shows the label the API sends (no Chinese of its own for the detected source)
+    from pathlib import Path
+    js = (Path(__file__).resolve().parents[1] / "static" / "setup_wizard.js").read_text("utf-8")
+    assert 'T("power_detected", { src: x.labels[s] })' in js
+
+
+def test_settings_basic_info_section_is_translated():
+    """SP-233 follow-up: 設定 → 基本資料 (the power-source dropdown and the rest of the section)
+    goes through the page catalog; in English no Chinese is left in its markup or its script."""
+    import json
+    import re
+    from pathlib import Path
+    from backend.i18n import pages
+    static = Path(__file__).resolve().parents[1] / "static"
+    cjk = re.compile("[\u3001-\u303f\u4e00-\u9fff\uff00-\uffef]")   # U+3000 (a spacer) is allowed
+    html = pages.render("settings", "en")
+    sec = html[html.index('<section id="general">'):]
+    sec = sec[:sec.index("</section>")]
+    assert not cjk.findall(sec), cjk.findall(sec)
+    assert '<option value="" data-i18n="settings.general.power_auto">Auto (from the data)</option>' in sec
+    assert ">Watch-estimated power</option>" in sec and ">No power meter</option>" in sec
+    src = (static / "settings.html").read_text("utf-8")
+    js = src[src.index("async function loadProfile()"):src.index("// ---- 心率")]
+    code = "\n".join(l.split("//")[0] for l in js.splitlines())           # comments may stay Chinese
+    assert not cjk.findall(code), cjk.findall(code)
+    assert 't("settings.general.power_detected", { src: d.labels[s] })' in js
+    keys = {k for k in re.findall(r'settings\.general\.(\w+)', src) if not k.endswith("_")} | {"male", "female"}
+    for loc in ("zh-TW", "en"):
+        cat = json.loads((static / "i18n" / loc / "settings.json").read_text("utf-8"))
+        assert not [k for k in keys if not cat.get(f"general.{k}")], loc
+    en = json.loads((static / "i18n" / "en" / "settings.json").read_text("utf-8"))
+    assert en["general.power_detected"].format(src="Watch-estimated power") == "Auto (detected: Watch-estimated power)"
