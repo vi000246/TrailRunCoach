@@ -9,7 +9,9 @@ the table that maps every watch platform's own sport codes onto it.
     filter     the app types + baiyue 百岳登山 (the 圖表分析 activity filter):
                a hike counts as 百岳 when its activity type
                (activity_tags: user mark wins, else the auto rule) is
-               百岳跟團; every activity is in exactly one filter kind.
+               百岳跟團, or (no user mark) when the 成就 page's GPS detection
+               (achievements.baiyue_summits) found it passed a 百岳 summit
+               (owner 2026-10-06); every activity is in exactly one filter kind.
 
 PLATFORMS is the one mapping table: platform -> platform code -> app type.
 
@@ -287,14 +289,18 @@ def app_type(w) -> str:
 # the 圖表分析 filter
 # ---------------------------------------------------------------------------
 
-def kind_of(w, user: Optional[dict] = None, baiyue_event: Optional[str] = None) -> str:
+def kind_of(w, user: Optional[dict] = None, baiyue_event: Optional[str] = None,
+            summit: bool = False) -> str:
     """The filter kind of one activity. `user` = its stored activity tag
-    (activity_tags.find), `baiyue_event` = the plan's 百岳 event that day.
+    (activity_tags.find), `baiyue_event` = the plan's 百岳 event that day,
+    `summit` = the 成就 page's GPS detection found a 百岳 summit on its track
+    (achievements.baiyue_summits).
       * the user's activity type wins: 百岳跟團 -> baiyue, 爬山 -> hike
         (a run they marked as a mountain day); any other mark keeps the sport
         and is not 百岳;
       * else a hike with a 百岳 event that day is baiyue (the auto rule of
-        activity_tags.auto_type);
+        activity_tags.auto_type), and so is a hike that summited a 百岳 (GPS,
+        owner 2026-10-06 — SP-263);
       * else the app type."""
     from backend.engine import activity_tags as AT
     ut = AT.user_type(user)
@@ -303,7 +309,7 @@ def kind_of(w, user: Optional[dict] = None, baiyue_event: Optional[str] = None) 
     if ut == "hike":
         return "hike"
     t = app_type(w)
-    if ut is None and t == "hike" and baiyue_event:
+    if ut is None and t == "hike" and (baiyue_event or summit):
         return BAIYUE
     return t
 
@@ -330,6 +336,7 @@ class KindFilter:
             tag_rows = AT.load()
         self.rows = tag_rows
         self._baiyue: dict = {}
+        self._summits: Optional[dict] = None
 
     def _baiyue_on(self, day) -> Optional[str]:
         if self.ds is None or BAIYUE not in self.kinds and "hike" not in self.kinds:
@@ -342,12 +349,23 @@ class KindFilter:
                 self._baiyue[day] = None
         return self._baiyue[day]
 
+    def _summit(self, file) -> bool:
+        """The 成就 page's GPS 百岳 detection (achievements.baiyue_summits), read once per filter."""
+        if self.ds is None or BAIYUE not in self.kinds and "hike" not in self.kinds or not file:
+            return False
+        if self._summits is None:
+            from backend.engine.achievements import baiyue_summits
+            self._summits = baiyue_summits(self.ds)
+        return file in self._summits
+
     def kind(self, w) -> str:
         from backend.engine import activity_tags as AT
         e = getattr(w, "entry", None)
         start = getattr(e, "start", None)
-        user = AT.find(self.rows, start, getattr(e, "file", None)) if self.rows else None
-        return kind_of(w, user, self._baiyue_on(start.date()) if start is not None else None)
+        file = getattr(e, "file", None)
+        user = AT.find(self.rows, start, file) if self.rows else None
+        return kind_of(w, user, self._baiyue_on(start.date()) if start is not None else None,
+                       self._summit(file))
 
     def __call__(self, w) -> bool:
         if self.groups and (getattr(w, "sport", "") or "").lower() in self.groups:

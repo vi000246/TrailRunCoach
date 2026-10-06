@@ -524,7 +524,9 @@ unchanged files and unchanged code reads no FIT file at all.
   (`app_type`: trail / road from the trail classification, then the COROS
   `sportType`, the FIT sport / sub_sport, the WKO5 names) plus 百岳登山 (a
   hike whose activity type is 百岳跟團: the user's mark wins, else a plan
-  百岳 event that day). Season charts filter their activities with it
+  百岳 event that day, or — without a user mark — the 成就 page's GPS detection
+  found a 百岳 summit on its track: `achievements.baiyue_summits`, the page's own
+  cached summaries; owner 2026-10-06). Season charts filter their activities with it
   (`Evaluator(keep=...)`); the render-cache key carries the user's
   activity-type marks.
 - **Deep link** (`backend/static/wko5_viewer.html:590`): `?view=<name>&dash=<index
@@ -742,6 +744,7 @@ source (synthetic FITs).
 | 2026-09-30 | feat/drift-basis | N/A | 配速／功率 basis toggle (`basis.py`, chart `basis` spec, tagged series, `?basis=`, viewer control, 這次沒有功率) on the drift charts; rolling EF skips the first 10 min |
 | 2026-10-04 | code-sync | N/A | Run FTP for power TSS on COROS / TP + `tss_source` / watch-power block; per-tenant engine.json / corrections / views / render cache, parity default by WKO5 presence; WKO5 chart packs no longer bundled (WKO5_VIEWS_DIR); chart ids, view i18n sidecar, variants, new chart kinds / keys (z5gate, activity, periodzones, climbvam, race_refs, drift_bars, sports / order); drift bars from `drift()`; stats / bin / lookup / filter implemented; 使用功率 auto; viewer mode cards / variant toggle; new activity endpoints; dropped monotony / PI charts and iLevels; all anchors refreshed |
 | 2026-10-06 | feature | SP-263 | `engine/sport_map.py`: one activity-type table (COROS sportType, Garmin / FIT sport + sub_sport, WKO5 names → road / trail / hike / bike / strength / walk / other); `overview.category` and `activity_tags.auto_type` use it; `Workout.platform` from the FIT dataset; the viewer's 運動類型 filter becomes 活動類型 with 百岳登山 |
+| 2026-10-06 | change | SP-263 decision | 百岳登山 also takes an unmarked hike the 成就 page's GPS detection saw summit a 百岳 (`sport_map.kind_of(summit=)`, `achievements.baiyue_summits` reusing the achievements cache); the user's mark still wins |
 | 2026-10-04 | SP-45 | N/A | 我的訓練 › 負荷 PMC gains the aerobic / anaerobic TIS charts (per activity + Chronic / Acute TIS load); TIS built-ins count as power for 使用功率; real-data TIS golden test |
 | 2026-10-06 | feature | SP-237 | 訓練量 →「每週下坡衝擊負荷」gains a right axis (`steps/min`, spm) with two dashed lines: trail-run and hike cadence on steep downhills (`chart_metrics.downhill_cadence_expr`: < −8 % grade, > 1.6 km/h, sample gap ≤ 30 s, Σ cadence·dt ÷ Σ dt per week × 2; < 10 min in the week = no point), in their bars' colours; bars unchanged, still `"sports": ["trail"]`; help + en legend updated |
 | 2026-10-06 | fix | SP-243 follow-up | The 5 + 5 有杖 / 沒杖 marks count only the trail runs and hikes the chart uses (user decision): `pole_compare.counts` / `chart_rows` / `used` (same `climb_vam.kind_of` as the panel) feed `needs_met`, the panel and `GET /activities` → `pole_compare`; each activity gets `pole_chart` (the editor's live recount skips the others); hint / empty / help text say so (zh-TW + en). 365-day window, 2 min per bin and VAM ÷ HR unchanged |

@@ -333,3 +333,56 @@ def test_load_classifications_reads_the_coros_code(tmp_path):
     con.commit()
     con.close()
     assert load_classifications(db2)["_by_id"][1]["coros_sport_type"] is None
+
+
+# ---------------------------------------------------------------------------
+# 百岳登山 from the 成就 page's GPS detection (owner 2026-10-06)
+# ---------------------------------------------------------------------------
+
+def test_kind_baiyue_from_a_gps_summit_user_mark_wins():
+    def mark(t):
+        return {"activity_type": t, "activity_type_overridden": True}
+    assert SM.kind_of(_hike(), summit=True) == SM.BAIYUE
+    assert SM.kind_of(_hike(), summit=False) == "hike"
+    assert SM.kind_of(_fw(102, "running", "trail", "trail"), summit=True) == "trail"     # a run stays a run
+    assert SM.kind_of(_hike(), mark("hike"), summit=True) == "hike"                     # the user's mark wins
+    assert SM.kind_of(_hike(), mark("race"), summit=True) == "hike"
+
+
+def test_baiyue_summits_reads_the_achievements_detection(tmp_path, monkeypatch):
+    """The filter reuses achievements' own cached GPS summaries (no second detection)."""
+    import json
+    from backend.engine import achievements as ACH
+    (tmp_path / "2026").mkdir()
+    ws = []
+    for i, (sport, peaks) in enumerate([("hiking", [{"name": "雪山主峰"}]), ("hiking", []),
+                                        ("mountaineering", [{"name": "玉山主峰"}, {"name": "玉山北峰"}])]):
+        f = tmp_path / f"2026/{i}.fit"
+        f.write_bytes(b"x" * (i + 1))
+        w = _fw(104, sport, None, None, file=f"2026/{i}.fit")
+        w.idx = i
+        ws.append(w)
+    peaks = ACH.load_peaks()
+    cache = {}
+    for i, (_s, pk) in enumerate([(0, [{"name": "雪山主峰"}]), (1, []), (2, [{"name": "玉山主峰"}, {"name": "玉山北峰"}])]):
+        st = (tmp_path / f"2026/{i}.fit").stat()
+        cache[f"2026/{i}.fit"] = {"stamp": [st.st_size, int(st.st_mtime), ACH.ALGO_VERSION, len(peaks)],
+                                  "summary": {"peaks": pk}}
+    cp = tmp_path / "ach.json"
+    cp.write_text(json.dumps(cache), "utf-8")
+    monkeypatch.setattr(ACH, "CACHE_PATH", cp)
+    ds = SimpleNamespace(dir=tmp_path, workouts=ws, wko4=lambda idx: pytest.fail("re-parsed a cached file"))
+    assert ACH.baiyue_summits(ds) == {"2026/0.fit": ["雪山主峰"], "2026/2.fit": ["玉山主峰", "玉山北峰"]}
+    assert ACH.baiyue_summits(SimpleNamespace(workouts=ws)) == {}                    # no files: nothing, no error
+
+
+def test_workouts_and_counts_count_a_gps_summit_as_baiyue(api, monkeypatch):
+    from backend.engine import achievements as ACH
+    V, ds = api
+    monkeypatch.setattr(ACH, "baiyue_summits", lambda ds, peaks=None: {"2026/3.fit": ["雪山主峰"], "2026/0.fit": ["x"]})
+    q = dict(begin="2026-09-01", end="2026-09-30", parity=None)
+    kinds = {a["file"]: a["kind"] for a in V.workouts(sports=None, **q)}
+    assert kinds["2026/3.fit"] == "baiyue" and kinds["2026/0.fit"] == "road"           # a road run stays a road run
+    assert _files(V.workouts(sports="baiyue", **q)) == ["2026/2.fit", "2026/3.fit", "2026/5.fit"]
+    assert _files(V.workouts(sports="hike", **q)) == []
+    assert dict((x["sport"], x["count"]) for x in V.sports_list())["baiyue"] == 3
