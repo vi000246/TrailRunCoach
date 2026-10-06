@@ -255,6 +255,7 @@
   "{why}：區間、TSS、賽事計算機都靠 CP": "{why}: zones, TSS and the race calculator all rely on CP",
   "{word} · {pct}": "{word} · {pct}",
   "{word} · 只當參考": "{word} · reference only",
+  "{w} 週內沒有可判讀的跑步（推估 {w} 週）": "No interpretable run in {w} weeks ({w} weeks is an estimate)",
   "—（AeT 是估計值，不算：要做一次 AeT 測試）": "— (AeT is an estimate and doesn't count: do an AeT test)",
   "—（LTHR 不是實測：要做一次 30 分鐘 LTHR 測試）": "— (LTHR isn't measured: do a 30-min LTHR test)",
   "—（{why}：要重測 30 分鐘 LTHR）": "— ({why}: retest the 30-min LTHR)",
