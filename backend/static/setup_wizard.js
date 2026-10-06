@@ -2,7 +2,8 @@
  * while the app does not know the weight, the sex or the age — what the calculations are
  * calibrated with and the data cannot tell (docs/research/cold-start.md §1.3, §4.3). The three
  * are required to save, each with what it is used for; height and power source are optional.
- * Pre-filled from COROS (weight) and the data (power source). 「稍後再說」 also counts as done;
+ * Pre-filled from COROS (weight) and the data (power source). 「稍後再說」 skips it for
+ * REMIND_DAYS (a week), then it asks again while something is still missing (owner 2026-10-06);
  * everything stays editable on 設定 → 個人資料. Text: catalog common.setup.* (every page has it).
  * Loaded by shell.js; styled from the page's own tokens.
  *
@@ -18,10 +19,11 @@
   const T = (k, p) => (window.I18N ? window.I18N.t("common.setup." + k, p) : k);
   const j = (u, o) => fetch(u, o).then((r) => (r.ok ? r.json() : Promise.reject(new Error(r.status))));
   const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-  const done = () => j(`${P}/setup`, { method: "POST", headers: { "Content-Type": "application/json" }, body: '{"done":true}' });
+  const done = (later) => j(`${P}/setup`, { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ done: !later, later: !!later }) });
 
   j(P).then((prof) => {
-    if (!prof.setup || !prof.setup.needed || prof.setup.done) return;
+    if (!prof.setup || !prof.setup.remind) return;
     const e = prof.effective, pre = prof.setup.prefill || {};
     const CSS = `
     .sw-dlg { border: 1px solid var(--line, #e1e5ea); border-radius: 10px; background: var(--panel, #fff);
@@ -51,6 +53,7 @@
     d.innerHTML = `<form method="dialog" novalidate>
       <h3>${esc(T("title"))}</h3>
       <p>${esc(T("intro"))}</p>
+      <p>${esc(T("remind", { days: prof.setup.remind_days || 7 }))}</p>
       <label><span>${esc(T("sex"))}${req}</span> <select name="sex" required><option value="">${esc(T("pick"))}</option>
         <option value="male">${esc(T("male"))}</option><option value="female">${esc(T("female"))}</option></select></label>
       <div class="sw-why">${esc(T("sex_why"))}</div>
@@ -76,7 +79,7 @@
       if (s) f.ps.options[0].textContent = T("power_detected", { src: x.labels[s] });
       if (!f.kg.value && x.weight) f.kg.value = x.weight;
     }).catch(() => {});
-    d.querySelector(".sw-later").onclick = () => { done().catch(() => {}); d.close(); };
+    d.querySelector(".sw-later").onclick = () => { done(true).catch(() => {}); d.close(); };
     const err = (k, el) => { d.querySelector(".sw-err").textContent = T(k); if (el) el.focus(); };
     f.onsubmit = async (ev) => {
       ev.preventDefault();

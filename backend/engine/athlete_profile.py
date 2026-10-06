@@ -43,6 +43,10 @@ BIRTH_YEAR_MIN = 1920
 AGE_MIN, AGE_MAX = 10, 100            # the age the 精靈 / 設定頁 accept (birth year: this year − age)
 SETUP_FIELDS = ("weight", "sex", "age")
 SETUP_DONE_KEY = "athlete.setup.done"
+SETUP_LATER_KEY = "athlete.setup.later_at"
+# 「稍後再說」 skips the 精靈 for a week, then it asks again while something is still missing
+# (owner 2026-10-06: skippable, reminded periodically — also who dismissed it before; 推估)
+REMIND_DAYS = 7
 
 
 def birth_year_ok(y: Optional[int], today: Optional[dt.date] = None) -> bool:
@@ -126,3 +130,21 @@ def setup_missing(weight: Optional[float], sex: Optional[str], birth_year: Optio
 def setup_needed(weight: Optional[float], sex: Optional[str], birth_year: Optional[int]) -> bool:
     """The first-run 精靈 asks until the weight, the sex and the age are known (SP-211)."""
     return bool(setup_missing(weight, sex, birth_year))
+
+
+def setup_remind(needed: bool, later_at: Optional[str], now: Optional[dt.datetime] = None) -> bool:
+    """Show the 精靈 now: something is missing and 「稍後再說」 was not pressed in the last
+    REMIND_DAYS. The old `athlete.setup.done` no longer silences it for good: a runner who
+    dismissed it before is asked again (owner 2026-10-06)."""
+    if not needed:
+        return False
+    if not later_at:
+        return True
+    try:
+        t = dt.datetime.fromisoformat(later_at)
+    except (TypeError, ValueError):
+        return True
+    now = now or dt.datetime.now(dt.timezone.utc)
+    if t.tzinfo is None:
+        t = t.replace(tzinfo=dt.timezone.utc)
+    return now - t >= dt.timedelta(days=REMIND_DAYS)

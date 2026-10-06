@@ -419,6 +419,9 @@ def get_profile():
         "setup": {"needed": AP.setup_needed(eff_w, sex, plan.profile.get("birth_year")),
                   "missing": AP.setup_missing(eff_w, sex, plan.profile.get("birth_year")),
                   "done": read_setting(AP.SETUP_DONE_KEY, False) is True,
+                  "remind": AP.setup_remind(AP.setup_needed(eff_w, sex, plan.profile.get("birth_year")),
+                                            read_setting(AP.SETUP_LATER_KEY, None)),
+                  "remind_days": AP.REMIND_DAYS,
                   "prefill": {"weight": None if eff_w is not None else app_w,
                               "weight_source": "COROS" if eff_w is None and app_w else None}},
         "options": {**P.PROFILE_FIELDS, "power_source": AP.POWER_SOURCES},
@@ -462,16 +465,21 @@ def detect_profile():
 
 class SetupIn(BaseModel):
     done: bool = True
+    later: bool = False                    # 「稍後再說」: ask again in AP.REMIND_DAYS
 
 
 @router.post("/profile/setup")
 async def setup_done(body: SetupIn, db: AsyncSession = Depends(get_db)):
-    """The 精靈 was saved or dismissed (「稍後再說」): don't ask again."""
+    """The 精靈 was saved (done) or skipped (later: asked again AP.REMIND_DAYS later while
+    weight / sex / age are still missing; SP-211)."""
     from backend.engine import athlete_profile as AP
     from backend.settings.repository import SettingsRepository
-    await SettingsRepository(db, current_athlete_id()).set(AP.SETUP_DONE_KEY, bool(body.done))
+    repo = SettingsRepository(db, current_athlete_id())
+    await repo.set(AP.SETUP_DONE_KEY, bool(body.done))
+    if body.later:
+        await repo.set(AP.SETUP_LATER_KEY, dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"))
     await db.commit()
-    return {"done": bool(body.done)}
+    return {"done": bool(body.done), "later": bool(body.later)}
 
 
 class WeightIn(BaseModel):
