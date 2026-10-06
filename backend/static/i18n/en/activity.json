@@ -85,7 +85,7 @@
   "poles.with": "With poles",
   "poles.without": "No poles",
   "poles.none": "Not marked",
-  "poles.more": "Mark {what} more to see the with vs without poles comparison under Analysis → Ability (each needs {need} in the last {days} days).",
+  "poles.more": "Mark {what} more to see the with vs without poles comparison under Analysis → Ability (each needs {need} in the last {days} days; only trail runs and hikes count).",
   "poles.more_with": "{n} with poles",
   "poles.more_without": "{n} without",
   "poles.more_sep": " and ",

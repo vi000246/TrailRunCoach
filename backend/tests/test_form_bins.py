@@ -143,12 +143,16 @@ def test_cadence_hint_on_downhill_bins_not_on_steep_climbs():
     def row(lo, hi, ilr=60.0, g=None):
         return {"lo": lo, "hi": hi, "time_s": 300, "m": {"ilr": ilr, "impact_g": g, "cadence": 110.0},
                 "base": {"ilr": _b(50.0), "impact_g": _b(2.0), "cadence": _b(150.0)}}
-    h = R.cadence_hint([row(-20, -10), row(-5, -2), row(-2, 2), row(15, 20), row(30, None)],
-                       ["D1", "D2", "F", "U1", "U2"])
+    h = R.cadence_hint([row(-20, -10), row(-10, -5), row(-5, -2), row(-2, 2), row(15, 20), row(30, None)],
+                       ["D1", "D2", "D3", "F", "U1", "U2"])
     assert len(h) == 2
     assert h[0].startswith("D1、D2：") and "下坡縮小步幅、加快步頻可以減少膝蓋負擔" in h[0]
     assert "Van Hooren 2024" in h[0] and "Heiderscheit 2011" in h[0]
-    assert h[1].startswith("F：") and "步頻提高 5–10%" in h[1]
+    # only bins with an upper edge ≤ −5 % are downhill for the hint (user decision 2026-10-06):
+    # the −5 ~ −2 % bin takes the plain wording
+    assert "D3" not in h[0]
+    assert h[1].startswith("D3、F：") and "步頻提高 5–10%" in h[1] and "下坡" not in h[1]
+    assert "下坡" not in R.cadence_hint([row(-5, -2)], ["D3"])[0]
     assert not any("U1" in x or "U2" in x for x in h)
     assert R.cadence_hint([row(15, 20)], ["U"]) == []
     assert R.cadence_hint([row(-10, -5)], ["D"])[0].startswith("D：")

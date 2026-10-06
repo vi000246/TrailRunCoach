@@ -155,7 +155,12 @@ def test_activities_list_returns_both_marks_and_the_pole_counts(tmp_path, no_pla
     from backend.tests.test_activity_edit import _fit_ds
     db = tmp_path / "tags.db"
     monkeypatch.setattr(AT, "_default_db", lambda: db)
-    ds = _fit_ds(tmp_path)
+    from backend.engine.wko5expr.fitdataset import _norm
+    # a trail run: only the trail runs and hikes the chart uses count toward the 5 + 5 (SP-243 follow-up)
+    f0 = tmp_path / "fit" / "coros" / "2025" / "0.fit"
+    r0 = {"id": 7, "file_path": str(f0), "trail_classification": "trail", "classification_overridden": True,
+          "duplicate_of": None}
+    ds = _fit_ds(tmp_path, classes={_norm(f0): r0, "_by_id": {7: r0}, "_by_name": {"0.fit": [r0]}, "_dups": {}})
     monkeypatch.setattr(V, "_dataset", lambda parity=None, source=None: ds)
     i = next(w.idx for w in ds.workouts if w.entry.file == "2025/0.fit")
     start = next(w.entry.start for w in ds.workouts if w.entry.file == "2025/0.fit")
@@ -172,6 +177,7 @@ def test_activities_list_returns_both_marks_and_the_pole_counts(tmp_path, no_pla
         lst = V.activities_list()
         a = {x["file"]: x for x in lst["activities"]}["2025/0.fit"]
         assert a["poles"] == "with" and a["surface"] == "wet" and a["tags"] == [WITH, WET]
+        assert a["pole_chart"] is True
         assert lst["pole_tags"] == AT.POLES and lst["surface_tags"] == AT.SURFACES
         assert lst["pole_compare"]["with"] == 1 and lst["pole_compare"]["without"] == 0
         r = await V.patch_activity(i, {"surface": None})                 # clearing 路況 keeps 有杖

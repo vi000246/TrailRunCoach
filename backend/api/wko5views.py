@@ -362,12 +362,16 @@ def _panel_kind(c: dict) -> Optional[str]:
 
 def _needs_met() -> dict:
     """Chart `needs` conditions on the athlete's own data (customviews.NEEDS):
-    "poles" = ≥ 5 有杖 and ≥ 5 沒杖 marks in the last 365 days (SP-243). False
-    when the tag store can't be read."""
+    "poles" = ≥ 5 有杖 and ≥ 5 沒杖 marks in the last 365 days on the trail runs
+    and hikes the chart uses (SP-243, pole_compare.counts). False when the tag
+    store or the data can't be read."""
     from backend.engine import activity_tags as AT
+    from backend.engine.panels import pole_compare as PC
     try:
-        poles = AT.pole_counts(AT.load(), today_local())["eligible"]
-    except Exception:                          # noqa: BLE001 — no tag store: the chart stays hidden
+        rows = AT.load()
+        # no mark at all: no need to wait for the Dataset
+        poles = bool(AT.pole_marks_stamp(rows)) and PC.counts(_dataset(), rows, today_local())["eligible"]
+    except Exception:                          # noqa: BLE001 — no tag store / data: the chart stays hidden
         poles = False
     return {"poles": poles}
 
@@ -969,6 +973,7 @@ def activities_list():
     note, exclusion), the terrain and the power source. Excluded bad files
     are included (index null). The auto values: GET /activities/auto."""
     from backend.engine import activity_tags as AT
+    from backend.engine.panels import pole_compare as PC
     from backend.engine.racepower import athlete as A
     ds = _dataset()
     tags = AT.load()
@@ -1001,7 +1006,8 @@ def activities_list():
                     "terrain": _terrain(ds, w.entry.file, A.is_trail(w)),
                     "power_label": ds.power_label(w) if hasattr(ds, "power_label") else None,
                     "origin": _origin(ds, w), "excluded": None, **rpe_part(w.entry.start, w.entry.file),
-                    **user_part(u)})
+                    # its 有杖 / 沒杖 mark counts toward the comparison (trail runs and hikes, SP-243)
+                    "pole_chart": PC.used(w), **user_part(u)})
     for x in getattr(ds, "excluded", []):
         start = dt.datetime.fromisoformat(x["start"])
         u = AT.find(tags, start, x["file"])
@@ -1013,12 +1019,14 @@ def activities_list():
                     "trail": x["sport_type"] == "trail running",
                     "terrain": _terrain(ds, x["file"], x["sport_type"] == "trail running"),
                     "power_label": None, "origin": _origin(ds, file=x["file"]),
-                    "excluded": _exclusion_json(x), **rpe_part(start, x["file"]), **user_part(u)})
+                    "excluded": _exclusion_json(x), **rpe_part(start, x["file"]), "pole_chart": False,
+                    **user_part(u)})
     out.sort(key=lambda a: a["start"], reverse=True)
     return {"source": getattr(ds, "source", None) or "wko5", "origin_labels": ORIGIN_LABELS,
             "types": AT.TYPES, "efforts": AT.EFFORTS, "pole_tags": AT.POLES, "surface_tags": AT.SURFACES,
-            # 「再標 N 次就能比較」 beside the 登山杖 choice (SP-243)
-            "pole_compare": AT.pole_counts(tags, today_local()),
+            # 「再標 N 次就能比較」 beside the 登山杖 choice (SP-243): only the trail runs and
+            # hikes the chart uses count
+            "pole_compare": PC.counts(ds, tags, today_local()),
             "exclude_enabled": bool(getattr(ds, "exclude_bad", False)), "activities": out}
 
 
