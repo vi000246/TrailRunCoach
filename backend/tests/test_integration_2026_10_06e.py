@@ -112,6 +112,11 @@ def test_an_existing_db_upgrades_with_every_new_column_and_setting_twice(tmp_pat
                 "'2026-09-20 00:00:00')"), {"k": k, "t": json.dumps(["冬訓", WITH, WET], ensure_ascii=False)})
             await conn.execute(text("INSERT INTO user_settings (user_id, key, value_json, updated_at) "
                                     "VALUES (1, 'athlete.setup.done', 'true', '2026-09-01')"))
+            # SP-276's single E-pace race, before the shared list (moved into it once, owner 2026-10-06)
+            await conn.execute(text("INSERT INTO user_settings (user_id, key, value_json, updated_at) "
+                                    "VALUES (1, 'athlete.race_result', :v, '2026-09-01')"),
+                               {"v": json.dumps({"distance_m": 10000, "time_s": 2700, "date": "2026-05-01",
+                                                 "source": "manual"})})
         await eng.dispose()
 
     _run(make_old())
@@ -123,21 +128,23 @@ def test_an_existing_db_upgrades_with_every_new_column_and_setting_twice(tmp_pat
         await db_mod.init_db()                                           # idempotent, as every start-up
         async with db_mod.AsyncSessionLocal() as db:
             repo = SettingsRepository(db, 1)
-            before = (await repo.get(EX.KEY), await repo.get(RR.KEY), await repo.get(EP.RACE_KEY),
-                      await repo.get("athlete.setup.done"))
+            before = (await repo.get(EX.KEY), await repo.get(RR.KEY), await repo.get("athlete.setup.done"))
             await repo.set(EX.KEY, EX.answer({"runs_per_week": 3}))
-            await repo.set(RR.KEY, [RR.make(10, 2700, "2026-05-01", source="survey")])
-            await repo.set(EP.RACE_KEY, {"distance_m": 10000, "time_s": 2700, "date": "2026-05-01",
-                                         "source": "manual"})
+            await repo.set(RR.KEY, RR.with_survey(await repo.get(RR.KEY),
+                                                  RR.make(21.0975, 6000, "2026-04-01", source="survey")))
             await db.commit()
-            after = await repo.get(EX.KEY), await repo.get(RR.KEY), await repo.get(EP.RACE_KEY)
+            after = await repo.get(EX.KEY), await repo.get(RR.KEY)
         await db_mod.dispose(path)
         return before, after
 
     before, after = _run(go())
-    assert before == (None, [], None, True)
-    assert after[0]["runs_per_week"] == 3 and after[1][0]["source"] == "survey" and after[2]["time_s"] == 2700
+    # the old single race moved into the shared list exactly once (two start-ups), the old key gone
+    assert before == (None, [RR.make(10, 2700, "2026-05-01", source="manual")], True)
+    assert EP.LEGACY_KEY != RR.KEY
+    assert after[0]["runs_per_week"] == 3 and [r["source"] for r in after[1]] == ["manual", "survey"]
+    assert EP.pick(after[1])["time_s"] == 2700
     con = sqlite3.connect(path)
+    assert not con.execute("SELECT 1 FROM user_settings WHERE key = 'athlete.race_result'").fetchall()
     tg = {r[1] for r in con.execute("PRAGMA table_info(activity_tags)")}
     ie = {r[1] for r in con.execute("PRAGMA table_info(injury_events)")}
     con.close()

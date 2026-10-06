@@ -41,7 +41,8 @@ DEFAULTS: dict[str, Any] = {
     # can_run_30, at}; None = never answered (asked by the 精靈 unless the data has 4 good weeks)
     "athlete.experience": None,
     # 比賽成績 (engine/race_results.py, SP-290): [{date, distance_km, time_s, trail, source,
-    # confirmed, name?}] — one list shared by the questionnaire, SP-293 and SP-276
+    # confirmed, name?}] — one list shared by the questionnaire, SP-293 and SP-276 (the E pace,
+    # engine/e_pace.py: the newest confirmed road row; its 設定 block writes here too)
     "athlete.race_results": [],
     # 主要訓練項目 (engine/primary_sport.py): auto (follow the suggestion from the data / the
     # next A race) | trail (越野跑, the original behaviour) | road (路跑／馬拉松)
@@ -112,10 +113,6 @@ DEFAULTS: dict[str, Any] = {
     # (the first 4 weeks' mean daily TSS). Replaces athlete_settings.initial_ctl_run /
     # initial_atl_run (React app, no longer read)
     "athlete.pmc_start": None,
-    # 比賽成績 → E 配速 (engine/e_pace.py RACE_KEY, SP-276): {distance_m, time_s, date, source:
-    # manual | activity, title?} — one race the athlete entered or confirmed; only the 90-minute
-    # test reads its E pace. None = not set
-    "athlete.race_result": None,
     # 課表心率區間 (engine/hr_profile.py): lthr (COROS % LTHR, default) | hrr | hrmax — the
     # 課表's HR targets only; the HR-zone charts keep their own selector
     "plan.hr_zone_model": "lthr",
@@ -233,7 +230,9 @@ DEFAULTS: dict[str, Any] = {
 }
 # keys that were removed: db/database.py init_db deletes any stored row
 # (backup.encryption held the sealed scrypt-derived backup key)
-RETIRED_KEYS = ("backup.encryption",)
+# athlete.race_result: SP-276's single E-pace race, moved into athlete.race_results (SP-290) by
+# db/database._migrate_schema before it is deleted (owner 2026-10-06: one shared list)
+RETIRED_KEYS = ("backup.encryption", "athlete.race_result")
 AUTO_NOTIFY = ("watch", "overview")
 AUTO_KEYS = ("plan.auto.enabled", "plan.auto.push", "plan.auto.push_days", "plan.auto.confirm_big",
              "plan.auto.notify", "plan.auto.rpe_rule")
@@ -408,11 +407,6 @@ def validate(key: str, value: Any) -> None:
         from backend.engine.load_guard import parse_manual
         if parse_manual(value) is None:
             raise ValueError("athlete.pmc_start must be {date: YYYY-MM-DD, ctl, atl} (0-300) or null")
-    if key == "athlete.race_result" and value is not None:
-        from backend.engine.e_pace import parse as parse_race
-        if parse_race(value) is None:
-            raise ValueError("athlete.race_result must be {distance_m (1500-42500), time_s, date: YYYY-MM-DD} "
-                             "with a pace of 2:30-15:00 /km, or null")
     if key == "plan.hr_zone_model" and value not in ("lthr", "hrr", "hrmax"):
         raise ValueError("plan.hr_zone_model must be lthr, hrr or hrmax")
     if key == "sync.coros.rpe_backfill" and value is not None and not isinstance(value, dict):
