@@ -162,7 +162,7 @@ def test_schedule_pull_button_logged_out(app):
     expect(page.locator("#pull-btn")).to_be_hidden()
     links = page.locator("#pull-login:visible, #login-link:visible")
     expect(links.first).to_be_visible()
-    expect(links.first).to_have_attribute("href", "/api/v1/wko5/settings")
+    expect(links.first).to_have_attribute("href", "/api/v1/wko5/settings#sync")
 
 
 def test_schedule_pull_button_runs(app):
@@ -289,7 +289,7 @@ def test_racepower_course_map(app):
 
 def test_settings_threshold_confidence(app):
     page, _ = app
-    open_page(page, _server.PAGES["settings"])
+    open_page(page, _server.PAGES["settings"] + "#thresholds")          # 生理數據 tab (SP-213)
     card = page.locator("#thr-check")
     expect(card).to_be_visible(timeout=30_000)
     expect(card).to_contain_text("LTHR")
@@ -303,7 +303,7 @@ def test_settings_threshold_confidence(app):
 def test_settings_calendar_subscription(app):
     """課表訂閱: create the address, the ICS answers, disable it again."""
     page, watch = app
-    open_page(page, _server.PAGES["settings"])
+    open_page(page, _server.PAGES["settings"] + "#calendar")            # 資料同步 tab (SP-213)
     page.locator("#calendar").scroll_into_view_if_needed()
     expect(page.locator("#cal-off")).to_be_visible(timeout=30_000)
     page.click("#cal-create")

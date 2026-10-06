@@ -157,5 +157,15 @@
   "sync.step_finish": "finishing {t}",
   "rpe_load.fitted": "“Load” by RPE (estimate) — TSS = {factor} × RPE × minutes (yours: n={n}, weight {w}%, leave-one-out error {err})",
   "rpe_load.default": "“Load” by RPE (estimate) — TSS = {factor} × RPE × minutes (default, ±{err}%; no activity with a watch-recorded RPE yet)",
-  "rpe_load.help": "A workout's “Load” can also be entered by feel: pick Easy / Somewhat hard / Hard / Very hard / Max (Borg CR-10 2 / 4 / 5 / 7 / 10) and the minutes; TSS = factor × RPE × minutes (Foster's session RPE). The default factor 0.30 is an estimate; after each sync it is calibrated on the RPE your watch recorded and that activity's actual TSS, pulled toward the default while there is little data (weight = n ÷ (n + 10)). Planning targets only: the overview and the PMC always use the watch's recorded load, never corrected by RPE."
+  "rpe_load.help": "A workout's “Load” can also be entered by feel: pick Easy / Somewhat hard / Hard / Very hard / Max (Borg CR-10 2 / 4 / 5 / 7 / 10) and the minutes; TSS = factor × RPE × minutes (Foster's session RPE). The default factor 0.30 is an estimate; after each sync it is calibrated on the RPE your watch recorded and that activity's actual TSS, pulled toward the default while there is little data (weight = n ÷ (n + 10)). Planning targets only: the overview and the PMC always use the watch's recorded load, never corrected by RPE.",
+  "tabs.aria": "Settings sections",
+  "tabs.personal": "Personal",
+  "tabs.body": "Physiology",
+  "tabs.data": "Data & sync",
+  "tabs.advanced": "Advanced",
+  "tabs.personal_note": "Sex, age, height, weight, power source, main sport and maps.",
+  "tabs.body_note": "Max / resting HR, plan HR zones, the LTHR / AeT / CP test log, the starting CTL / ATL, and whether to use power.",
+  "tabs.data_note": "COROS / TrainingPeaks login and sync, backups, the plan calendar feed.",
+  "tabs.advanced_note": "Calculation mode, auto-estimated parameters, power spike fixes, excluding broken activity files. Rarely needed.",
+  "general.title": "Basic info"
 }

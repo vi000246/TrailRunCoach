@@ -157,5 +157,15 @@
   "sync.step_finish": "收尾 {t}",
   "rpe_load.fitted": "「負荷」用 RPE 填（推估）— TSS ＝ {factor} × RPE × 分鐘（本人 n={n}，權重 {w}%，留一誤差 {err}）",
   "rpe_load.default": "「負荷」用 RPE 填（推估）— TSS ＝ {factor} × RPE × 分鐘（預設，±{err}%；還沒有手錶記錄 RPE 的活動）",
-  "rpe_load.help": "課表的「負荷」也可以用感覺填：選 輕鬆／稍累／累／很累／極限（對到 Borg CR-10 的 2／4／5／7／10），再填分鐘數，TSS ＝ 係數 × RPE × 分鐘（Foster 的 session RPE）。預設係數 0.30 是推估；每次同步後用你手錶記錄的 RPE 和那次活動的實際 TSS 校正，資料少時向預設靠攏（權重＝n ÷（n＋10））。只用來排課填目標：總覽、PMC 的負荷一律用手錶記錄，不會用 RPE 修正。"
+  "rpe_load.help": "課表的「負荷」也可以用感覺填：選 輕鬆／稍累／累／很累／極限（對到 Borg CR-10 的 2／4／5／7／10），再填分鐘數，TSS ＝ 係數 × RPE × 分鐘（Foster 的 session RPE）。預設係數 0.30 是推估；每次同步後用你手錶記錄的 RPE 和那次活動的實際 TSS 校正，資料少時向預設靠攏（權重＝n ÷（n＋10））。只用來排課填目標：總覽、PMC 的負荷一律用手錶記錄，不會用 RPE 修正。",
+  "tabs.aria": "設定分類",
+  "tabs.personal": "個人資料",
+  "tabs.body": "生理數據",
+  "tabs.data": "資料同步",
+  "tabs.advanced": "進階設定",
+  "tabs.personal_note": "性別、年齡、身高、體重、功率來源，主要訓練項目和地圖。",
+  "tabs.body_note": "最大／靜息心率、課表心率區間、LTHR／AeT／CP 測試紀錄、起始 CTL／ATL，以及要不要用功率。",
+  "tabs.data_note": "COROS／TrainingPeaks 登入和同步、備份、課表訂閱。",
+  "tabs.advanced_note": "計算模式、自動估算的參數、功率壞點修正、排除壞掉的活動檔。平常不用動。",
+  "general.title": "基本資料"
 }
