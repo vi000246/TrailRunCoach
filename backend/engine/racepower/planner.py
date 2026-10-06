@@ -29,6 +29,7 @@ from backend.engine.racepower import hike as HK
 from backend.engine.racepower import pacing as PC
 from backend.engine.racepower import predict as PR
 from backend.engine.racepower import riegel as R
+from backend.engine.racepower import runwalk as RW
 from backend.engine.racepower import weather as WX
 from backend.engine.zones import zones_json
 
@@ -594,8 +595,12 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
     for i, (s, r) in enumerate(zip(segs, rows)):
         cum += r["t"]
         notes = []
-        if s.get("walk"):
-            notes.append(s["walk"])
+        # walk / either / run from grade × the predicted speed (SP-226): a label only, the time is
+        # already solved; a manual course has only its net grade, so no label there
+        gait = RW.gait(s["grade"], r["v"]) if gpx else None
+        walk = RW.walk_label(gait)
+        if walk:
+            notes.append(walk)
         if r["capped"]:
             notes.append("下坡上限")
         if i in over_idx or r["P"] > cp_w * s["M"] * 1.0001:
@@ -610,7 +615,8 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
         z = next((zz for zz in zs if r["P"] / cp >= zz["lo"] and (zz["hi"] is None or r["P"] / cp < zz["hi"])), None)
         out_segs.append({
             **{x: s.get(x) for x in ("i", "start_km", "end_km", "dist_m", "gain_m", "loss_m", "grade", "max_grade",
-                                     "z_start", "z_end", "z_mean", "z_max", "cls", "cls_label", "walk", "climb_no")},
+                                     "z_start", "z_end", "z_mean", "z_max", "cls", "cls_label", "climb_no")},
+            "walk": walk, "gait": gait,
             "M": s["M"], "power": r["P"], "pct_cp": r["P"] / cp, "zone": z["id"] if z else "1A 以下",
             "speed_ms": v, "pace_s_per_km": _pace(v), "gap_pace_s_per_km": _pace(v * gf) if trail else None,
             "vert_m_per_h": v * s["grade"] * 3600.0 if abs(s["grade"]) >= 0.15 else None,

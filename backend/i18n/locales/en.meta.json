@@ -3091,6 +3091,10 @@
     "draft": true,
     "src": "backend/engine/race_feasibility.py:152"
   },
+  "爬坡（走）": {
+    "draft": false,
+    "src": "backend/engine/racepower/seg_targets.py:36"
+  },
   "爬最陡的坡、樓梯或跑步機最大坡度，共爬升約 {cl:.0f} m（攻頂日 {need:.0f} m 的 {f:.0f}%）；要腿先酸、呼吸不喘，心率不必拉高；背水上山、到頂把水倒掉輕裝下山，保護膝蓋；暖身 10 分。做完 3 天只排輕鬆": {
     "draft": true,
     "src": "backend/engine/specific_phase.py:473"
@@ -3679,6 +3683,14 @@
     "draft": true,
     "src": "backend/engine/post_race.py:116"
   },
+  "走": {
+    "draft": false,
+    "src": "backend/engine/racepower/runwalk.py:57"
+  },
+  "走跑皆可": {
+    "draft": false,
+    "src": "backend/engine/racepower/runwalk.py:57"
+  },
   "走路或極慢跑": {
     "draft": true,
     "src": "backend/engine/interval_library.py:62"
@@ -3754,6 +3766,10 @@
   "越野跑要多長才可能算全力（給比賽功率／心率模型當全力樣本）。本人值 = 你標記全力的越野比賽距離的第 10 百分位。": {
     "draft": true,
     "src": "backend/engine/effort_calib.py:92"
+  },
+  "跑": {
+    "draft": false,
+    "src": "backend/engine/racepower/runwalk.py:57"
   },
   "跑 {d}": {
     "draft": true,
@@ -4278,6 +4294,18 @@
   "關門／撤退時間要在 0–{max:g} 小時": {
     "draft": true,
     "src": "backend/engine/planning.py:303"
+  },
+  "陡坡（走跑皆可）": {
+    "draft": false,
+    "src": "backend/engine/racepower/seg_targets.py:35"
+  },
+  "陡坡（走）": {
+    "draft": false,
+    "src": "backend/engine/racepower/seg_targets.py:35"
+  },
+  "陡坡（跑）": {
+    "draft": false,
+    "src": "backend/engine/racepower/seg_targets.py:35"
   },
   "階梯步道、坡度穩定的路線（登山王、Koop 上坡 tempo、陡坡健走）：每組時間＋強度，心率／功率上下限照設": {
     "draft": true,

@@ -279,8 +279,9 @@ Design: `docs/research/racepower-v2.md` (formulas F1–F18, verification §3A / 
   3 m hysteresis gain / loss, optional scaling to an official gain, Douglas–Peucker ε 10 m
   (`backend/engine/racepower/course.py:171`), classes 陡下 ≤ −15 % / 下坡 / 平 ±2 % / 上坡 / 陡上
   ≥ 15 %, merge of segments shorter than max(200 m, 1 %) (`backend/engine/racepower/course.py:233`),
-  flats > 3 km split per km; walk labels 走跑皆可 ≥ 15 %, 建議快走 ≥ 28 %. Also per-km or one
-  segment. Manual courses are one segment or per-km with no grade information.
+  flats > 3 km split per km; no walk label here (it needs the predicted speed, see Segment
+  targets). Also per-km or one segment. Manual courses are one segment or per-km with no grade
+  information.
 - **Multi-day** (百岳): split points clicked on the profile (camp / hut waypoints pre-fill them).
 - **Coordinates** (`backend/engine/racepower/course.py:418`): a GPX / FIT course's profile carries
   `lat` / `lon` beside `km` / `z` (the same ≤ 1500 points, interpolated along the track by
@@ -897,6 +898,14 @@ segment time; descents no power / HR target (「控制、安全」, time and pac
 up to 3 h and AeT beyond (推估). Road plans keep pace / power. `chart_rows` gives every plan type
 one row per segment with pace, power and HR (null where not valid, `power_ref` / `hr_ref` for
 display), split, cumulative time, ETA, walk flag and fuel summary; the CSV gets 目標類型 / 執行目標.
+
+Walk or run (SP-226, `backend/engine/racepower/runwalk.py`, docs/research/run-walk-threshold.md
+§5.1): on a GPX course every climb ≥ 3 % gets `gait` walk / either / run from grade × the predicted
+speed against two transition-speed curves (Brill & Kram 2021 PTS / EOTS to 15°, straight to Ortiz
+2017's 0.8 m/s at 30°, 0.4 m/s vertical beyond; 推估 for everyone, the default curve). `walk` = 走 /
+走跑皆可 (a note too); > 8 % stays an HR cap + VAM target labelled 陡坡（走／走跑皆可／跑）, a walked
+3–8 % climb becomes 爬坡（走）; fuel uses Minetti walking only where the gait is walk. Labels only:
+the time model is unchanged (`GaitRE`'s majority gait). 百岳 and manual courses carry no gait.
 
 ### Share links (`backend/engine/racepower/share.py:75`)
 

@@ -10,11 +10,9 @@ Status per step (§3A): Douglas–Peucker is an established algorithm (Douglas
 & Peucker 1973, Cartographica 10(2):112–122; the reference is cited from
 memory) and is 已驗證 by its property test (V-DP). The smoothing / hysteresis
 recipe is our own (推估) and 待驗證 against barometric gain (V-SM checks the
-synthetic case). The class thresholds (±2 %, ±15 %) are our own; the 15 % /
-28 % walk labels follow Giovanelli et al. 2016 (J Appl Physiol 120:370–375,
-walking cheaper at all angles other than 9.4°) and Ortiz, Giovanelli & Kram
-2017 (Eur J Appl Physiol 117:1869–1876, 30° incline) — 已驗證 conversion
-(9.4° = 16.6 %, 15.8° = 28.3 %), labels only (V-CL).
+synthetic case). The class thresholds (±2 %, ±15 %) are our own. Whether a
+climb is walked depends on grade × speed (runwalk.py, SP-226), so the segments
+here carry no walk label: the planner adds it from the predicted speed.
 """
 from __future__ import annotations
 
@@ -32,8 +30,6 @@ HYST_M = 3.0
 DEFAULT_EPS_M = 10.0
 FLAT_PCT = 2.0
 STEEP_PCT = 15.0
-RUN_WALK_PCT = 15.0
-WALK_PCT = 28.0
 FLAT_SPLIT_M = 3000.0
 PROFILE_MAX = 1500
 CAMP_WORDS = ("營地", "山屋", "營", "camp", "hut", "山莊", "避難")
@@ -213,14 +209,12 @@ def classify(grade: float, flat_pct: float = FLAT_PCT) -> str:
     return "steep_up"
 
 
-def walk_label(grade: float) -> Optional[str]:
-    """≥ 28 % 建議快走, ≥ 15 % 走跑皆可 (labels only, not used for time)."""
-    g = grade * 100.0
-    if g >= WALK_PCT:
-        return "建議快走"
-    if g >= RUN_WALK_PCT:
-        return "走跑皆可"
-    return None
+def walk_label(grade: float, speed_ms: Optional[float] = None, shift: float = 0.0) -> Optional[str]:
+    """走 / 走跑皆可 for a climb walked at `speed_ms` (horizontal m/s), None
+    when it is run, not a climb or there is no speed (runwalk.gait, SP-226).
+    A label only: it never changes the time."""
+    from backend.engine.racepower import runwalk as RW
+    return RW.walk_label(RW.gait(grade, speed_ms, shift))
 
 
 # ---- segmentation --------------------------------------------------------------
@@ -326,7 +320,7 @@ def segment_rows(bounds: list[int], xs: np.ndarray, zs: np.ndarray, flat_pct: fl
             "dist_m": float(xs[b] - xs[a]), "gain_m": gn, "loss_m": ls,
             "grade": g, "max_grade": _max_grade(xs, zs, a, b),
             "z_start": float(zs[a]), "z_end": float(zs[b]), "z_mean": zmean, "z_max": float(seg_z.max()),
-            "cls": cls, "cls_label": CLASSES[cls], "walk": walk_label(g), "climb_no": cno,
+            "cls": cls, "cls_label": CLASSES[cls], "walk": None, "climb_no": cno,   # walk: the planner, from the speed
         })
     return rows
 
