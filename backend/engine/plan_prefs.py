@@ -464,13 +464,14 @@ def _easy(template: Optional[dict], i: int, minutes: float, p: Prefs, c: Ctx) ->
         s["target"] = easy_hr_text(c.aet, c.aet_measured)
         s["detail"] = f"山路或步道；只看心率 ≤ {c.cap()}，配速和功率在山路不準" + \
             ((TRANSITION_STRIDES[1] if tr else "；最後 8 趟 10 秒上坡衝刺，走下來恢復") if strides else "")
-        cat = "trail"
+        rate = c.rates.get("easy_trail") or c.rate("trail")
     else:
         if t == "road":
             s["terrain"] = "road"
             s["title"] = s["title"].replace("輕鬆跑", "輕鬆跑（路跑）", 1)
-        cat = "road"
-    s["tss"] = s["minutes"] / 60.0 * c.rate(cat)
+        rate = c.rates.get("easy") or c.rate("road")
+    # the easy-run rates come from genuinely easy runs only (overview.easy_tss_rates, SP-302)
+    s["tss"] = s["minutes"] / 60.0 * float(rate)
     return s
 
 

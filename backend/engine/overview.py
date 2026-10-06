@@ -718,16 +718,87 @@ def _week_phase_notes(status, monday: dt.date) -> list[tuple[str, str]]:
     return [(ph.kind, t) for t in note.split("；") if t] if ph is not None else []
 
 
-def _tss_per_hour(ds: Dataset, today: dt.date) -> dict[str, float]:
-    """Median TSS per moving hour by category over the last 180 days."""
+def _tss_per_hour(ds: Dataset, today: dt.date, cap: Optional[float] = None,
+                  lthr: Optional[float] = None) -> dict:
+    """Median TSS per moving hour by category over the last 180 days, plus the easy-run
+    rates (SP-302): "easy" (an easy run on the road / any terrain) and "easy_trail" (one
+    set on trails) from genuinely easy runs only (`easy_tss_rates`); "easy_info" says how."""
     lo = today - dt.timedelta(days=180)
     per: dict[str, list[float]] = {}
     for w in workouts_between(ds, lo, today + dt.timedelta(days=1)):
         h, t = moving_s(w) / 3600.0, _n(w.metrics.get("tss"))
         if h >= 0.25 and t:
             per.setdefault(category(w), []).append(t / h)
-    return {k: (statistics.median(per[k]) if len(per.get(k, [])) >= 3 else v)
-            for k, v in TSS_PER_HOUR_DEFAULT.items()}
+    out: dict = {k: (statistics.median(per[k]) if len(per.get(k, [])) >= 3 else v)
+                 for k, v in TSS_PER_HOUR_DEFAULT.items()}
+    out.update(easy_tss_rates(ds, today, cap, lthr))
+    return out
+
+
+# SP-302: an easy run's planned TSS from genuinely easy runs only. The all-runs median mixed
+# in the interval sessions and the 中強度跑 (one runner: 79 TSS/h ≈ IF 0.89, near tempo), so a
+# run kept under the cap looked far short of its plan and rule D's TSS + 20 % never fired.
+EASY_MIN_RUNS = 3                 # = the per-category rule above (≥ 3 runs, else a fallback)
+SRC_EASY_TSS = N_("輕鬆跑的計畫 TSS：近 180 天確實輕鬆的跑步（課別分類為輕鬆跑、或平均心率在輕鬆跑上限內；"
+                  "強度課、中強度跑不算）每小時 TSS 的中位數")
+SRC_EASY_TSS_EST = N_("推估：近 180 天確實輕鬆的跑步不到 3 筆，用輕鬆跑上限換算：IF = 上限心率 ÷ LTHR"
+                      "（hrTSS 的 IF 定義），每小時 TSS = IF² × 100（TrainingPeaks TSS 公式）")
+SRC_EASY_TSS_DEFAULT = N_("推估：近 180 天確實輕鬆的跑步不到 3 筆，也沒有輕鬆跑上限或 LTHR，用路跑的預設值")
+
+
+def _genuinely_easy(ds: Dataset, w: Workout) -> bool:
+    """An easy run by the session classifier (workout_review.classify: type 輕鬆跑, not a
+    中強度跑) or by its average HR (≤ AeT + 3, the classifier's own easy line), never a hard
+    session (Zone 3 / Zone 5 / 高強度長跑 / a test)."""
+    from backend.engine import workout_review as WR
+    try:
+        c = WR.classify(ds, w)
+    except Exception:                       # noqa: BLE001 — an unreadable run is not counted
+        return False
+    typ = c.get("type")
+    if typ in WR.HARD_TYPES or typ in ("test_cp", "test_aet"):
+        return False
+    return (typ == "easy" and not c.get("moderate")) or bool((c.get("stim") or {}).get("easy_hr"))
+
+
+def easy_cap_rate(cap: Optional[float], lthr: Optional[float]) -> Optional[float]:
+    """TSS per hour of a run held at the easy cap: IF = cap ÷ LTHR (≤ 1), × IF² × 100."""
+    if not cap or not lthr or lthr <= 0:
+        return None
+    f = min(1.0, float(cap) / float(lthr))
+    return round(f * f * 100.0, 1)
+
+
+def easy_tss_rates(ds: Dataset, today: dt.date, cap: Optional[float], lthr: Optional[float]) -> dict:
+    """{"easy", "easy_trail", "easy_info"} (SP-302). "easy": the median TSS / h of the last
+    180 days' genuinely easy road runs (`_genuinely_easy`; road + trail when < EASY_MIN_RUNS
+    road ones), ≥ EASY_MIN_RUNS; else the easy cap's IF (`easy_cap_rate`, 推估); else the road
+    default (推估). "easy_trail" (課表偏好 輕鬆跑地形 = 越野): the trail ones, else "easy".
+    The long run's and the quality sessions' rates are not touched.
+    `easy_info`: {n, estimated, rate, source} (the week plan's note when estimated)."""
+    lo = today - dt.timedelta(days=180)
+    per: dict[str, list[float]] = {"road": [], "trail": []}
+    for w in workouts_between(ds, lo, today + dt.timedelta(days=1)):
+        cat = category(w)
+        if cat not in per:
+            continue
+        h, t = moving_s(w) / 3600.0, _n(w.metrics.get("tss"))
+        if h >= 0.25 and t and _genuinely_easy(ds, w):
+            per[cat].append(t / h)
+    # the road ones first (the easy run's default terrain, like the "road" rate before); a
+    # runner with < 3 of them but ≥ 3 easy trail runs takes all of them
+    pool = per["road"] if len(per["road"]) >= EASY_MIN_RUNS else per["road"] + per["trail"]
+    if len(pool) >= EASY_MIN_RUNS:
+        easy, est, src = statistics.median(pool), False, SRC_EASY_TSS
+    else:
+        easy = easy_cap_rate(cap, lthr)
+        est, src = True, SRC_EASY_TSS_EST
+        if easy is None:
+            easy = TSS_PER_HOUR_DEFAULT["road"]
+            src = SRC_EASY_TSS_DEFAULT
+    trail = statistics.median(per["trail"]) if len(per["trail"]) >= EASY_MIN_RUNS else easy
+    return {"easy": float(easy), "easy_trail": float(trail),
+            "easy_info": {"n": len(pool), "estimated": est, "rate": round(float(easy), 1), "source": src}}
 
 
 def _long_weekday(ds: Dataset, today: dt.date, weeks: int = 12) -> int:
@@ -1308,7 +1379,6 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     # the +10 % cap reads normal weeks only, like the volume-step guardrail (SP-73, load_guard.normal_ref)
     norm_wk = _normal_weeks(ds, status, monday, hours4)
     cap_ref = LG.step_base(norm_wk) or ref
-    tph = _tss_per_hour(ds, today)
     # 轉換期 (SP-73): the pre-race level of the current / next 轉換期 (projection reads it too)
     tr_ref = _transition_ref(ds, status, today, monday)
     # 減量期 (SP-96): the next A race's taper touching this week, the pre-taper level (runs, climb)
@@ -1534,6 +1604,13 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     except Exception:                       # noqa: BLE001 — a dataset without a plan (tests)
         cp_meas = False
     e_pc = EP.current(today)
+    # TSS / h per category; the easy run's from genuinely easy runs, else the cap's IF (SP-302)
+    tph = _tss_per_hour(ds, today, aet, tt.get("lthr"))
+    easy_tss = tph.pop("easy_info")
+    if easy_tss["estimated"]:
+        notes.append({"level": "info", "src": "easy_tss",
+                      "text": _("輕鬆跑的計畫 TSS 每小時 {rate:.0f}（{src}）", rate=easy_tss["rate"],
+                                src=_(easy_tss["source"]))})
     # the walking sessions' uphill cap (SP-115: 75 % HRmax, never below the easy-run cap)
     from backend.engine.hr_profile import walk_cap_for
     walk = walk_cap_for(ds, today, aet, getattr(status.plan, "profile", None))
@@ -1765,7 +1842,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         add(id=f"easy{i + 1}", kind="easy", title="輕鬆跑" + (st_t if strides else ""),
             minutes=int(round(m / 5) * 5), target=tgt.get("z2", ""),
             detail=f"心率不超過{cap_txt}" + (st_d if strides else ""),
-            source=SRC_UA + (st_s if strides else ""), tss=m / 60.0 * tph["road"])
+            source=SRC_UA + (st_s if strides else ""), tss=m / 60.0 * tph["easy"])
     if PR is not None:
         # 課表偏好: counts, caps, terrain, interval target (engine/plan_prefs.py)
         ctx = PP.Ctx(kind=kind, mode=mode, allow_quality=allow_quality, rates=tph, aet=aet, aet_measured=aet_meas,
@@ -2250,6 +2327,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
                          "aet_test": {"due": aet_due, "last": today.isoformat() if aet_due else tx.get("aet_last_test")}},
         # per-category TSS / h (projection shapes projected weeks with the same rates)
         "tss_per_category": tph,
+        # how the easy run's rate was found (SP-302): {n, estimated, rate, source}
+        "easy_tss": easy_tss,
         "prefs": PR.to_dict() if PR is not None else None,
         "blackout_days": [d.isoformat() for d in lost],
         "heat": heat_info,
