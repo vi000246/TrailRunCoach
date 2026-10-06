@@ -103,3 +103,45 @@ def test_week_plan_this_week_uses_the_settings_weight():
     n = next(n for n in wp["notes"] if n.get("src") == "carb_load")
     w = plan.weight_on(TODAY)
     assert w and f"{w:.0f} kg" in n["text"] and "10–12 g/kg" in n["text"]
+
+
+# ---- SP-286: 「課前要吃」 on 強度課 and ≥ 2 h long runs (app text only) ----------------------------
+
+PRE = "課前 1–4 小時吃含碳水的一餐或點心，不要空腹做"
+
+
+def _row(kind, minutes, state="active", **kw):
+    return {"uid": f"u-{kind}-{minutes}", "week_start": "2026-10-05", "kind": kind, "title": "x", "minutes": minutes,
+            "target": "", "detail": "暖身 15 分", "source": "", "day": "2026-10-07", "state": state, **kw}
+
+
+def test_pre_meal_on_quality_and_long_runs_only():
+    from backend.engine import session_fuel as SF
+    for r in (_row("quality", 50), _row("long", 120), _row("mountain", 150)):
+        t = SF.pre_meal(r)["text"]
+        assert PRE in t and "Aird 2018" in t and "Mata 2019" in t and "Impey 2018" in t and "g/kg" not in t
+    for r in (_row("easy", 60), _row("easy", 150), _row("long", 110), _row("strength", 40), _row("rest", 0),
+              _row("quality", 50, state="done"), _row("long", 150, state="missed")):
+        assert SF.pre_meal(r) is None, r["kind"]
+
+
+def test_pre_meal_is_on_the_view_but_never_pushed():
+    from backend.api import plan_sessions as API
+    from backend.engine import plan_store as PS
+
+    class Prov:
+        def status_of(self, *a):
+            return {"status": "new"}
+
+        def row_view(self, r):
+            return {}
+
+    th = {"cp": 300.0, "lthr": 170.0, "aet": 150.0}
+    q, e = _row("quality", 50), _row("easy", 45)
+    vq = API._view(q, {"thresholds": th}, {}, "2026-10-06", Prov())
+    assert PRE in vq["pre_meal"]["text"] and vq["detail"] == "暖身 15 分"
+    assert API._view(e, {"thresholds": th}, {}, "2026-10-06", Prov())["pre_meal"] is None
+    # the watch gets the same session as before: no pre_meal, the detail unchanged
+    p = PS.push_dict(vq)
+    assert "pre_meal" not in p and p["detail"] == "暖身 15 分" and p == PS.push_dict(q)
+    assert PRE not in str(p)
