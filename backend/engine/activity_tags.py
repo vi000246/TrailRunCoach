@@ -222,7 +222,8 @@ def pole_marks_stamp(rows: list[dict]) -> list:
 
 # 路況 (SP-250, docs/research/wet-muddy-terrain.md §5 #2, §6): the user's own mark of a dry or a
 # wet / slippery trail, stored as one of two free-form tags like the pole mark (no schema change);
-# 乾 / 濕 / 未標 (neither tag), mutually exclusive. Nothing detects it — no rain data is read and
+# 乾 / 濕 / 未標 (neither tag), mutually exclusive. Nothing sets it but the user — the archive rain
+# during an activity only HINTS 「要標成濕路嗎？」 (SP-299, rain_hint below) — and
 # no synonym (雨天, 泥濘 …) typed as a free tag counts: only marked activities enter the dry / wet
 # groups (ticket). The trail technicality factor splits on it (grade_model.fit_gait_re) when both
 # groups have enough windows. The tag strings are storage values, the same in every UI language.
@@ -251,6 +252,22 @@ def exclusive_surface(tags) -> list[str]:
     ct = clean_tags(tags)
     s = surface_of(ct)
     return ct if sum(t in _SURFACE_OF_TAG for t in ct) <= 1 else with_surface(ct, s)
+
+
+# 「這次活動期間下過雨（N mm），要標成濕路嗎？」 (SP-299): the archive rain while the activity ran
+# (route_weather.activity_rain, activity_weather.json) only HINTS at the 濕 mark; the user presses
+# 「標成濕」 to set it. 推估: ≥ 1 mm (the ticket's suggested start: a trace under 1 mm rarely wets a
+# trail through the canopy).
+RAIN_HINT_MM = 1.0
+
+
+def rain_hint(rain_mm: Optional[float], surface: Optional[str]) -> Optional[float]:
+    """The rain (mm) for the hint, else None: only when the rain reached RAIN_HINT_MM and the
+    路況 is still 未標 (`surface` None — a 乾 / 濕 mark is the user's and is never questioned).
+    Unknown rain (no coordinates, no weather, a day cached before SP-299) → None."""
+    if surface is not None or rain_mm is None or rain_mm < RAIN_HINT_MM:
+        return None
+    return float(rain_mm)
 
 
 def tags_of(row: Optional[dict]) -> list[str]:

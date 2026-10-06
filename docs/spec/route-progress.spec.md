@@ -314,6 +314,15 @@ without changing them.
   Hadley and the max. Read by the heat-acclimation index (`racepower.spec.md`)
   and the workout review's activity temperature. A no-change build fills it
   when the file is missing.
+- **Rain during an activity** (SP-299): `precipitation` rides in the same
+  archive call (`HOURLY`), so it costs no extra call; each activity row also
+  has `start` and `rain_mm` = the sum of the hourly rows (Open-Meteo: the
+  preceding hour's total) whose hour overlaps the activity's first → last
+  sample, `None` when an overlapping hour has no value — a day cached before
+  precipitation was asked is never refetched, it just has no rain. The 活動編輯
+  page (`GET /activities` → `rain_mm`, `rain_hint_mm`) shows 「這次活動期間下過雨
+  （N mm），要標成濕路嗎？」 with a 「標成濕」 button while the 路況 is 未標 and
+  `rain_mm` ≥ `activity_tags.RAIN_HINT_MM` (1 mm, 推估); it never marks anything itself.
 
 ## Comparison (`GET /{id}/compare?a=&b=`)
 
@@ -501,3 +510,4 @@ None. Builds are triggered by requests (or `POST /rebuild`); there are no emitte
 | 2026-10-01 | bugfix | — | One route per path: clustering by length share (start / direction free), canonical common part, partials / sub-routes, reversed runs ranked apart; stretches folded into routes, longer variants dropped, chains merged; real path thumbnails (the row graphic was a time sparkline); INDEX_VERSION 4 |
 | 2026-10-04 | code-sync | N/A | Store root per tenant (`routes.home()`); tracks from synced FITs without a WKO5 folder; effort → workout index matched by start across sources; per-activity heat exposure (`activity_weather.json`) documented; page via `render_page` |
 | 2026-10-04 | feature | SP-41 | The route on the detail map is drawn by the shared `MapLayers.track` (`basemaps.js`), the same as the activity map and the race calculator's course map |
+| 2026-10-06 | feature | SP-299 | Activity weather also stores the rain during the activity (`precipitation` in the same call and cache); 活動編輯 hints 「要標成濕路嗎？」 at ≥ 1 mm (推估) while 路況 is 未標 |

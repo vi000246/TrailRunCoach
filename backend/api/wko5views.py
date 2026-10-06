@@ -979,6 +979,18 @@ def activities_list():
     tags = AT.load()
     rec = AT.load_recorded()
     out = []
+    # 「這次活動期間下過雨（N mm），要標成濕路嗎？」 (SP-299): the archive rain while it ran
+    # (route_weather.activity_rain, activity_weather.json); the page shows the hint only while
+    # the 路況 is 未標 and the rain reached rain_hint_mm — a hint, never a mark
+    try:
+        from backend.engine import route_weather as RW
+        rain = RW.rain_by_activity()
+    except Exception:                       # noqa: BLE001 — no weather file: no hint
+        rain = {}
+
+    def rain_mm(start, file):
+        r = rain.find(file, start) if rain else None
+        return r["rain_mm"] if r else None
 
     def user_part(u):
         return {"name": AT.name_of(u), "tags": AT.tags_of(u), "poles": AT.poles_of(AT.tags_of(u)),
@@ -1007,7 +1019,7 @@ def activities_list():
                     "power_label": ds.power_label(w) if hasattr(ds, "power_label") else None,
                     "origin": _origin(ds, w), "excluded": None, **rpe_part(w.entry.start, w.entry.file),
                     # its 有杖 / 沒杖 mark counts toward the comparison (trail runs and hikes, SP-243)
-                    "pole_chart": PC.used(w), **user_part(u)})
+                    "pole_chart": PC.used(w), "rain_mm": rain_mm(w.entry.start, w.entry.file), **user_part(u)})
     for x in getattr(ds, "excluded", []):
         start = dt.datetime.fromisoformat(x["start"])
         u = AT.find(tags, start, x["file"])
@@ -1020,13 +1032,14 @@ def activities_list():
                     "terrain": _terrain(ds, x["file"], x["sport_type"] == "trail running"),
                     "power_label": None, "origin": _origin(ds, file=x["file"]),
                     "excluded": _exclusion_json(x), **rpe_part(start, x["file"]), "pole_chart": False,
-                    **user_part(u)})
+                    "rain_mm": rain_mm(start, x["file"]), **user_part(u)})
     out.sort(key=lambda a: a["start"], reverse=True)
     return {"source": getattr(ds, "source", None) or "wko5", "origin_labels": ORIGIN_LABELS,
             "types": AT.TYPES, "efforts": AT.EFFORTS, "pole_tags": AT.POLES, "surface_tags": AT.SURFACES,
             # 「再標 N 次就能比較」 beside the 登山杖 choice (SP-243): only the trail runs and
             # hikes the chart uses count
             "pole_compare": PC.counts(ds, tags, today_local()),
+            "rain_hint_mm": AT.RAIN_HINT_MM if rain else None,
             "exclude_enabled": bool(getattr(ds, "exclude_bad", False)), "activities": out}
 
 
