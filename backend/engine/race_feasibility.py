@@ -23,7 +23,9 @@ Only advice — nothing here changes the plan or the event. Each check gives a l
            up or more → over (SP-282, docs/research/runner-progression.md §2.1: 24 months = the UTMB
            Index's validity and Hardrock's qualifying window; two ITRA classes ≈ one UTMB category, so
            a little looser than the UTMB World Series Finals' 「at most one category up」 — only that
-           mapping is 推估; Corrion 2018, Maleka 2026: experience predicts finishing).
+           mapping is 推估; Corrion 2018, Maleka 2026: experience predicts finishing). The text also
+           shows the EP multiple (SP-283, never judged); over → milestones, not years (SP-284,
+           step_milestone: a race one class lower, the weekly volume and the date it's reached).
   hours    ultras only (a trail race of 超馬級 or bigger, planning.event_size — SP-111; the 100 km
            row from EP 100): Koop's minimum — 50 km / 50 mi: 6 h a week for
            ≥ 3 weeks in a row from 6 weeks out; 100 km / 100 mi: 9 h for ≥ 6 weeks from 9 weeks
@@ -122,6 +124,11 @@ SRC_STEP = N_("跨級：ITRA 依 EP 分級（XXS–XXL）。看「過去 24 個�
               "「高兩級」才判太難＝比 UTMB 總決賽「最多往上跳一級」略寬（ITRA 兩級約等於 UTMB 一級，這個對應是推估）；"
               "完賽過越多場越不容易 DNF（Corrion 2018、Maleka 2026）")
 SRC_KOOP = N_("超馬週時數：Jason Koop——50 km 賽前 6 週起每週 6 小時、連續 3 週；100 km 賽前 9 週起每週 9 小時、連續 6 週")
+# SP-284: when 跨級 is over, milestones instead of years — no reliable yearly progression rate exists and
+# years of running don't track ultra results (runner-progression.md §2.2, §3 row 6, §5 P-3)
+MILESTONE_MAX_WEEKS = 104    # 推估: past 2 years (STEP_MONTHS) a +10 %-a-week projection means nothing
+SRC_MILESTONE = N_("里程碑：不給「幾年後」——經驗的研究看的是跑過哪些距離，不是年數（Hoffman 2013：第一場超馬前跑了 3–15 年都有）；"
+                   "週量的日期照現在的週量每週 +10 %、每 4 週一週恢復推算，是推估")
 
 
 def _worse(a: str, b: str) -> str:
@@ -368,6 +375,59 @@ def koop_run(base_h: float, weeks: list[dict], race: dt.date, need: tuple) -> di
     return {"need_h": hours, "need_weeks": in_row, "from_weeks": from_wk, "best_run": best, "peak_h": peak_h}
 
 
+def weeks_to(base: float, target: float, limit: int = MILESTONE_MAX_WEEKS) -> Optional[int]:
+    """Weeks from this Monday until a weekly `base` growing as weeks_ahead() does (+10 % a week, every
+    4th week a recovery week with no growth) reaches `target`: 0 = already there; None = no base, or
+    not within `limit` weeks."""
+    if base >= target:
+        return 0
+    if base <= 0:
+        return None
+    builds = 0
+    for i in range(1, limit + 1):
+        if i % RECOVERY_EVERY:
+            builds += 1
+            if base * STEP ** builds >= target:
+                return i
+    return None
+
+
+def step_milestone(e, line: dict, hd: dict, rc: int, base: dict, today: dt.date, div: float) -> dict:
+    """SP-284: what to reach before a race `rc` (ITRA_CLASSES index) the 跨級 check calls too big a jump —
+    never 「in N years」: (1) a race one class lower (its EP range); (2) the weekly volume this race needs
+    (UA: ok_at × the hardest day's EP, a road race km; an ultra also Koop's hours), with the date the
+    current base reaches it at +10 % a week (推估). {"cls", "ep_lo", "ep_hi", "unit" (ep / km),
+    "weekly", "koop_h", "weeks" (0 = already there, None = no base), "date", "text"}."""
+    lc = max(0, rc - 1)
+    lo, hi = ITRA_CLASSES[lc][1], ITRA_CLASSES[rc][1]
+    ok_at = week_ok_at(e, line)
+    trail = hd["climb_m"] >= CLIMB_MIN_M
+    unit = "ep" if trail else "km"
+    want = ok_at * (ep(hd["km"], hd["climb_m"], div) if trail else hd["km"])
+    have = ep(base["km"], base["climb_m"], div) if trail else base["km"]
+    need = koop_need(line, e)
+    got = [weeks_to(have, want)] + ([weeks_to(base["hours"], need[1])] if need else [])
+    weeks = None if any(w is None for w in got) else max(got)
+    when = monday_of(today) + dt.timedelta(weeks=weeks) if weeks else None
+    txt = _("里程碑（看跑過哪些距離，不看年數）：① 先完成一場 EP {lo:.0f}–{hi:.0f}（{cls} 級）的比賽",
+            lo=lo, hi=hi, cls=ITRA_CLASSES[lc][0])
+    txt += (_("；② 每週練到 EP {w:.0f}（比賽最難那天的 {p:.0f} %，UA）", w=want, p=ok_at * 100) if trail else
+            _("；② 每週跑到 {w:.0f} km（比賽距離的 {p:.0f} %，UA）", w=want, p=ok_at * 100))
+    if need:
+        txt += _("、每週 {h:g} 小時（Koop）", h=need[1])
+    if weeks == 0:
+        txt += _("：你現在的週量已經夠了")
+    elif when is not None:
+        txt += _("：照現在的週量每週加 10 %，最快 {y} 年 {m} 月練到（推估）", y=when.year, m=when.month)
+    elif base["km"] <= 0:
+        txt += _("：最近 {n} 週沒有跑步或健行紀錄，推算不出日期", n=BASE_WEEKS)
+    else:
+        txt += _("：離現在的週量還很遠，推算不出日期")
+    return {"cls": ITRA_CLASSES[lc][0], "ep_lo": lo, "ep_hi": hi, "unit": unit, "weekly": round(want, 1),
+            "koop_h": need[1] if need else None, "weeks": weeks, "date": when.isoformat() if when else None,
+            "text": txt}
+
+
 # ---------------------------------------------------------------------------
 # the summit (百岳)
 # ---------------------------------------------------------------------------
@@ -578,6 +638,11 @@ def assess(e, line: Optional[dict], today: dt.date, hist: list[dict], summit: Op
             if lv == "over":
                 out["suggestions"].insert(0, _("先跑一場低一級（{cls}）的比賽，或把這場改成 B／C 賽",
                                                cls=ITRA_CLASSES[max(0, rc - 1)][0]))
+                # SP-284: milestones and a date, never 「N 年後」
+                ms = step_milestone(e, line, hd, rc, base, today, div)
+                out["milestone"] = ms
+                out["suggestions"].insert(1, ms["text"])
+                out["src"].append(_(SRC_MILESTONE))
         # 百岳: the climb rate and the climb power (SP-112 items 6–7) — never over
         if e.kind == "baiyue" and climb is not None:
             vc = vam_check(e, hd, climb.get("rates") or {}, climb.get("top_m"), climb.get("weight"), divisor())

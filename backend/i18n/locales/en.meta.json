@@ -1063,6 +1063,10 @@
     "draft": false,
     "src": "backend/engine/specific_phase.py:669"
   },
+  "、每週 {h:g} 小時（Koop）": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:417"
+  },
   "。比賽最難那天是你 {m} 個月內最大單日的 {x:.1f} 倍": {
     "draft": true,
     "src": "backend/engine/race_feasibility.py:572"
@@ -5295,6 +5299,14 @@
     "draft": true,
     "src": "backend/engine/racepower/watch_export.py:46"
   },
+  "里程碑（看跑過哪些距離，不看年數）：① 先完成一場 EP {lo:.0f}–{hi:.0f}（{cls} 級）的比賽": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:412"
+  },
+  "里程碑：不給「幾年後」——經驗的研究看的是跑過哪些距離，不是年數（Hoffman 2013：第一場超馬前跑了 3–15 年都有）；週量的日期照現在的週量每週 +10 %、每 4 週一週恢復推算，是推估": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:130"
+  },
   "重新校正錨點，讓所有區間跟著真實體能移動（Friel；Uphill Athlete）": {
     "draft": true,
     "src": "backend/engine/workout_templates.py:142"
@@ -5763,6 +5775,10 @@
     "draft": true,
     "src": "backend/engine/race_feasibility.py:507"
   },
+  "：你現在的週量已經夠了": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:419"
+  },
   "：同級或更低": {
     "draft": true,
     "src": "backend/engine/race_feasibility.py:391"
@@ -5779,6 +5795,14 @@
     "draft": true,
     "src": "backend/engine/technical.py:167"
   },
+  "：最近 {n} 週沒有跑步或健行紀錄，推算不出日期": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:423"
+  },
+  "：照現在的週量每週加 10 %，最快 {y} 年 {m} 月練到（推估）": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:421"
+  },
   "：爬升練得比距離少，不到一半（推估）": {
     "draft": true,
     "src": "backend/engine/race_feasibility.py:366"
@@ -5790,6 +5814,10 @@
   "：要靠接近閾值的強度撐": {
     "draft": true,
     "src": "backend/engine/race_feasibility.py:221"
+  },
+  "：離現在的週量還很遠，推算不出日期": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:425"
   },
   "：高 {n} 級，跳太多了": {
     "draft": true,
@@ -5810,6 +5838,14 @@
   "；{n} 次沒有任何溫度，不能熱校正": {
     "draft": true,
     "src": "backend/engine/zone_events.py:475"
+  },
+  "；② 每週練到 EP {w:.0f}（比賽最難那天的 {p:.0f} %，UA）": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:414"
+  },
+  "；② 每週跑到 {w:.0f} km（比賽距離的 {p:.0f} %，UA）": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:415"
   },
   "；下坡比你近 6 週練過的多，賽後 {h} 小時內走平路、不排硬課": {
     "draft": true,

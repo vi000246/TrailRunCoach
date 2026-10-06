@@ -383,6 +383,51 @@ def test_step_shows_the_ep_multiple_but_judges_by_class_only():
     assert st["ep_ratio"] is None and "倍" not in st["text"] and st["level"] == "ok"
 
 
+def test_weeks_to_grows_10_percent_with_a_recovery_week_every_4th():
+    assert F.weeks_to(100.0, 90.0) == 0 and F.weeks_to(100.0, 100.0) == 0
+    assert F.weeks_to(100.0, 121.0) == 2 and F.weeks_to(100.0, 133.1) == 3
+    assert F.weeks_to(100.0, 140.0) == 5                  # week 4 is a recovery week: no growth
+    assert F.weeks_to(0.0, 10.0) is None and F.weeks_to(1.0, 1e9) is None
+
+
+def test_step_over_gives_milestones_and_a_date_not_years():
+    """SP-284: over → a race one class lower (its EP range) and the weekly volume (UA's EP, Koop's
+    hours for an ultra) with the date it's reached at +10 % a week; never 「N 年後」."""
+    e = ev(distance_km=80, climbing_m=4500, est_hours=16.0)                  # EP 125: L; Koop's 9 h row
+    best = {"ep": 30.0, "date": date(2026, 3, 1)}                             # XS
+    r = F.assess(e, line(e), TODAY, hist(km=40.0, climb=1500.0, hours=6.0), best=best)
+    ms = r["milestone"]
+    assert lv(r, "step") == "over" and (ms["cls"], ms["ep_lo"], ms["ep_hi"]) == ("M", 75.0, 115.0)
+    # EP 55 → 112.5 (90 %): 8 builds = week 10; 6 h → 9 h: 5 builds = week 6 → week 10 = 2026-12-14
+    assert ms["unit"] == "ep" and ms["weekly"] == pytest.approx(112.5) and ms["koop_h"] == 9.0
+    assert ms["weeks"] == 10 and ms["date"] == "2026-12-14"
+    t = r["suggestions"][1]
+    assert t == ms["text"] and "EP 75–115（M 級）" in t and "每週 9 小時（Koop）" in t and "最快 2026 年 12 月" in t
+    assert "推估" in t and "年後" not in t and "幾年" not in t
+    assert "低一級（M）" in r["suggestions"][0]                                # the old advice stays first
+    assert any("Hoffman 2013：第一場超馬前跑了 3–15 年都有" in s for s in r["src"])
+    # the weekly volume already there: no weeks, no date
+    r = F.assess(e, line(e), TODAY, hist(km=90.0, climb=5000.0, hours=11.0), best=best)
+    ms = r["milestone"]
+    assert ms["weeks"] == 0 and ms["date"] is None and "已經夠了" in ms["text"] and "最快" not in ms["text"]
+    # no records lately: no date
+    r = F.assess(e, line(e), TODAY, hist(km=0.0, climb=0.0, hours=0.0), best=best)
+    assert r["milestone"]["date"] is None and "推算不出日期" in r["milestone"]["text"]
+    # ok (one class up): no milestone
+    r = F.assess(e, line(e), TODAY, hist(km=40.0, climb=1500.0, hours=6.0), best={"ep": 80.0, "date": date(2026, 3, 1)})
+    assert lv(r, "step") == "ok" and "milestone" not in r and not any("里程碑" in s for s in r["suggestions"])
+    assert not any("Hoffman 2013" in s for s in r["src"])
+
+
+def test_step_milestone_of_a_road_race_is_in_km():
+    e = ev(kind="road", distance_km=50, climbing_m=0, est_hours=5.0)          # EP 50: S; < 6 h → 100 %
+    r = F.assess(e, line(e), TODAY, hist(km=20.0, climb=0.0, hours=2.0), best={"ep": 5.0, "date": date(2026, 3, 1)})
+    ms = r["milestone"]
+    assert lv(r, "step") == "over" and (ms["cls"], ms["unit"], ms["koop_h"]) == ("XS", "km", None)
+    assert ms["weekly"] == pytest.approx(50 * F.WEEK_OK_SHORT) and "每週跑到 50 km（比賽距離的 100 %" in ms["text"]
+    assert ms["date"] and "最快" in ms["text"]
+
+
 def test_itra_classes_and_best_day():
     assert [F.ITRA_CLASSES[F.itra_class(x)][0] for x in (10, 25, 50, 80, 120, 160, 250)] == \
         ["XXS", "XS", "S", "M", "L", "XL", "XXL"]
