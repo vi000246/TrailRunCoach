@@ -3555,6 +3555,10 @@
     "draft": true,
     "src": "backend/engine/interval_eval.py:461"
   },
+  "沒有可用的歷史年份": {
+    "draft": false,
+    "src": "backend/engine/racepower/weather.py:599"
+  },
   "沒有單槓時用：把彈力帶拉向肚子，兩邊肩胛往後夾。": {
     "draft": true,
     "src": "backend/engine/strength_moves.py:108"
@@ -3806,6 +3810,10 @@
   "熱適應開始累積的熱指數": {
     "draft": true,
     "src": "backend/engine/advanced_params.py:23"
+  },
+  "熱：每段溫度由天氣點（{z:.0f} m）以每 100 m 0.65 °C 換算到該段海拔，濕度不變（推估）": {
+    "draft": false,
+    "src": "backend/engine/racepower/planner.py:589"
   },
   "爬升": {
     "draft": true,
@@ -4858,6 +4866,10 @@
   "農夫走路 30–40 m": {
     "draft": true,
     "src": "backend/engine/strength_moves.py:118"
+  },
+  "近 10 年同月平均（Open-Meteo 歷史資料）": {
+    "draft": false,
+    "src": "backend/engine/racepower/weather.py:87"
   },
   "近 12 週的跑步資料不夠，先用越野跑（原本的設定）": {
     "draft": true,

@@ -87,7 +87,7 @@ def test_hourly_at_interpolates_and_stops_at_the_edges():
     assert mid["rh_pct"] == approx(ENV.rh_from_dew_point(mid["temp_c"], mid["dew_c"]))
 
 
-def test_weather_returns_hourly_rows_from_open_meteo_only(tmp_path):
+def test_weather_returns_hourly_rows_from_open_meteo_and_climatology(tmp_path):
     def fake_get(url, params, timeout):
         lo = dt.date.fromisoformat(params["start_date"])
         n = (dt.date.fromisoformat(params["end_date"]) - lo).days + 1
@@ -104,7 +104,10 @@ def test_weather_returns_hourly_rows_from_open_meteo_only(tmp_path):
     assert len(r["hourly"]) == 48 and r["values"]["temp_c"] == approx(20.0 + 0.5 * 11.5)
     far = WX.race_conditions(date=dt.date(2026, 11, 30), lat=23.5, lon=121.0, elevation_m=500.0, today=today,
                              key=None, get=fake_get, cache_dir=tmp_path, use_cwa=False)
-    assert far["provider"] == "climatology" and far["hourly"] is None
+    # SP-210: past the forecast, the climatology's 24-hour profile (each clock hour's mean)
+    assert far["provider"] == "climatology" and len(far["hourly"]) == 48
+    assert far["hourly"][0]["t"] == "2026-11-30T00:00" and far["hourly"][-1]["t"] == "2026-12-01T23:00"
+    assert far["hourly"][14]["temp_c"] == approx(20.0 + 0.5 * 14) and far["values"]["temp_c"] == approx(20.0 + 0.5 * 11.5)
 
 
 # ---- per-segment heat in the planner ------------------------------------------------------
