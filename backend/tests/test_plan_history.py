@@ -266,3 +266,35 @@ def test_history_counts_the_marked_races(monkeypatch, tmp_path):
     with Env(monkeypatch) as e:
         assert e.c.get(f"{API}/history").json()["marked_races"] == 1
     assert PSAPI.router is not None
+
+
+# ---------------------------------------------------------------------------
+# integration (SP-71 × SP-216): the stored week grades intensity like the page
+# ---------------------------------------------------------------------------
+
+def test_the_week_result_grades_intensity_like_the_compliance_page():
+    """A 強度課 with 70 % of its dose is 強度不足 = 部分 (SP-216), not 沒照課表 and not done as
+    planned; one under half is 沒照課表; an easy run slightly hard is 部分 (偏強). The stored
+    result counts them exactly as compliance.dashboard on the page does."""
+    def a(index, day, z3, typ="easy"):
+        return {"index": index, "start": f"{day}T07:00:00", "date": day, "category": "road",
+                "category_label": "路跑", "moving_s": 3600.0, "tss": 50.0, "hard_s": 0.0,
+                "session": {"type": typ, "type_label": "", "z3_s": z3, "t_vo2_eq_s": None}}
+    acts = [a(1, "2026-09-29", 420), a(2, "2026-10-01", 240), a(3, "2026-10-02", 720, "quality"),
+            a(4, "2026-10-03", 900, "quality")]
+    every = [_s("q1", "2026-09-29", "quality", "done", title="閾值 3×10 分", done_by=dict(acts[0], match="day")),
+             _s("q2", "2026-10-01", "quality", "done", title="閾值 3×10 分", done_by=dict(acts[1], match="day")),
+             _s("e1", "2026-10-02", "easy", "done", minutes=60, done_by=dict(acts[2], match="day")),
+             _s("q3", "2026-10-03", "quality", "done", title="閾值 3×10 分", done_by=dict(acts[3], match="day"))]
+    inp = {"activities": acts, "activities_since": "2026-09-01"}
+    plan = PH.plan_summary(every, "2026-09-28", "2026-09-28")
+    r = PH._week_result("2026-09-28", plan, every, inp, "2026-10-06", {})
+    assert (r["due"], r["completed"], r["ok"], r["partial"], r["off_plan"]) == (4, 4, 1, 2, 1)
+    assert r["quality"] == {"due": 3, "completed": 3, "ok": 1}                # only the full dose is 做到
+    # the same numbers as the 課表統計 page's own dashboard of that week
+    ss = PSAPI._decorate([dict(s) for s in every], acts, {}, "2026-09-28", "2026-10-04")
+    by = {s["uid"]: s["compliance"] for s in ss}
+    assert by["q1"]["label"] == "強度不足" and by["q1"]["pct"] == 70 and not by["q1"].get("off_plan")
+    assert by["q2"]["label"] == "沒照課表" and by["e1"]["label"] == "強度偏高"
+    t = C.dashboard(ss, [], "2026-10-06", "2026-09-28", "2026-10-04")["totals"]
+    assert (t["done"], t["partial"], t["off_plan"]) == (r["ok"], r["partial"], r["off_plan"])
