@@ -949,9 +949,10 @@ class Status:
                           f"（{AT.BAND_LABEL[at['band']]}）")
                     why += f"；{v2}"
                 else:
-                    step = "+5" if at["band"] == "below" else "−5"
+                    # +5 is UA's; −5 is 推估 (UA: "lower", Evoke: a slower pace — aet_test.LOWER_BPM)
+                    step = "+5 bpm" if at["band"] == "below" else "−5 bpm（推估）"
                     act = (f"{at['date']} 的 AeT 測試飄移 {at['drift'] * 100:.1f}%（{AT.BAND_LABEL[at['band']]}）："
-                           f"下次起始心率 {step} bpm 再測一次") + (f"；{act}" if act else "")
+                           f"下次起始心率 {step} 再測一次") + (f"；{act}" if act else "")
             why += f"；最近一次 AeT 測試 {at['date']}：" + (f"飄移 {at['drift'] * 100:.1f}%" if at.get("ok")
                                                           else at.get("reason") or "不採用")
         gate = next((i.extra for i in getattr(self, "indicators", []) if i.id == "gate"), None) or {}

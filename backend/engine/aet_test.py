@@ -17,15 +17,17 @@ Two lengths, chosen by the 課表偏好 weekday cap (`variant_for`):
   isn't the long run's. An air-conditioned treadmill 2–3 % with a fan first,
   else an early flat loop (not trails). Note the temperature: heat inflates
   the drift. Evoke's early abort: HR already 10 above the start at minute 10
-  of the block and rising → started too high, stop, retest 5 bpm lower.
+  of the block and rising → started too high, stop, retest another day at a
+  slower pace (Evoke); "about 5 bpm lower" is ours (推估 — neither UA nor Evoke
+  gives a number: aerobic-base-readiness.md §8).
 
 Analysis (`analyze`): the main block is the time after the warm-up (15′ for
 the standard test, 10′ for the short one — `warm_for`, from the title, else
 the length), up to 60′ of it, cool-down trimmed; Pw:HR over its halves (Pa:HR
 without power) — on the short test the first 20′ vs the last 20′. Both are
 the strict tier (≥ 40′ after the warm-up). UA's bands: < 3.5 % → below AeT
-(next time start 5 bpm higher), 3.5–5 % → the first-half HR is the AeT, > 5 %
-→ started above AeT (5 bpm lower).
+(next time start 5 bpm higher — UA's own number), 3.5–5 % → the first-half HR is
+the AeT, > 5 % → started above AeT (UA: start lower; the 5 bpm is 推估, LOWER_BPM).
 
 The same three checks as workout_review.drift_of (the daily runs):
   * the 40-min floor counts *after* the warm-up;
@@ -75,6 +77,8 @@ MAX_CV = 0.15                   # the old unsourced 30-s CV rule: information on
 START_BELOW = 5.0               # 自訂: 0.89 × LTHR − 5 as the starting HR without an estimate
 POWER_OF_CP = 0.75              # 自訂: starting power when nothing better is known (Palladino easy ≤ 80 % CP)
 RECENT_DAYS = 28                # 推估: a test in the last 4 weeks → don't suggest another (minimum spacing)
+LOWER_BPM = 5                   # 推估: > 5 % → start lower — UA says "lower", Evoke "a slower pace"; neither
+                                # gives a number (aerobic-base-readiness.md §8, 2026-10-06 verbatim check)
 # B3 (unsourced-rules.md): no fixed expiry / cadence any more (16 weeks, 4–6 weeks, every 5 base
 # weeks: no source). The test is due only for a reason (quality_gate.aet_test_reason).
 HEAT_TEXT = "氣溫 25 °C 以下時開始（熱會讓心率偏高、飄移失真；台灣教練、Lafrenz 2008）"
@@ -381,14 +385,20 @@ def _lines(r: dict, aet_now: Optional[float] = None) -> list[str]:
         head = _("心率飄移 {d:.1f}%（Evoke 60 分）", d=d * 100)
         if r["band"] == "at":
             return [f"{head} ≤ 5%：起始心率 {h1:.0f} bpm 在 AeT 或以下", "可以按「套用這次的 AeT」（保守：取起始心率）"]
-        return [f"{head} > 5%：起始心率 {h1:.0f} bpm 高於 AeT", f"下次起始心率 −5 bpm（約 {h1 - 5:.0f}）再測一次"]
+        return [f"{head} > 5%：起始心率 {h1:.0f} bpm 高於 AeT", _lower_line(h1)]
     head = _("心率飄移 {d:.1f}%（暖身後 {m:.0f} 分）", d=d * 100, m=r["main_s"] / 60)
     now = f"（目前 {aet_now:.0f}）" if aet_now else ""
     if r["band"] == "below":
         return [f"{head} < 3.5%：前半心率 {h1:.0f} bpm 還在 AeT 以下", f"下次起始心率 +5 bpm（約 {h1 + 5:.0f}）再測一次{now}"]
     if r["band"] == "at":
         return [f"{head}，在 3.5–5%：AeT = 前半平均心率 {h1:.0f} bpm{now}", "可以按「套用這次的 AeT」寫進門檻"]
-    return [f"{head} > 5%：起始心率 {h1:.0f} bpm 高於 AeT", f"下次起始心率 −5 bpm（約 {h1 - 5:.0f}）再測一次{now}"]
+    return [f"{head} > 5%：起始心率 {h1:.0f} bpm 高於 AeT", _lower_line(h1) + now]
+
+
+def _lower_line(h1: float) -> str:
+    """> 5 %: start lower next time. The 5 bpm is 推估 (LOWER_BPM): UA only says
+    a lower start, Evoke a slower pace another day."""
+    return _("下次起始心率降 {n} bpm（約 {hr:.0f}；{n} bpm 是推估）再測一次", n=LOWER_BPM, hr=h1 - LOWER_BPM)
 
 
 def warm_for(title: str, duration_s: float) -> float:
@@ -574,7 +584,9 @@ def session(th: dict, hr0: Optional[float], p0: Optional[float], cap_weekday: Op
                 + ("（至少 40 分）" if key == "ua60" else "") + "；中途不停；"
                 + (f"緩和 {cool} 分。" if cool else "緩和可省略（0–5 分慢跑）。"))
         place = "冷氣房跑步機 2–3%＋電扇（首選），或平路環線，不要山路；"
-    early = ("主課第 10 分鐘心率已經比起始高 10 下還在升 → 起始太高，停掉改天降 5 bpm 再測（Evoke）"
+    # the abort rule is Evoke's; Evoke says "a slower pace another day" — the 5 bpm is ours (推估)
+    early = (_("主課第 10 分鐘心率已經比起始高 10 下還在升 → 起始太高，停掉改天用較慢的配速再測（Evoke）；"
+               "起始心率約降 {n} bpm（推估）", n=LOWER_BPM)
              if p["judge"] in ("ua", "evoke") else "")
     return {"id": "test_aet", "kind": "test", "protocol": PROTOCOL, "title": p["title"], "minutes": warm + main + cool,
             "target": "；".join(tgt) or "固定功率（±3%），不要調",
