@@ -572,3 +572,30 @@ def test_races_use_the_trail_finish_for_one_piece_trail_races_only(monkeypatch):
                   finish=lambda e, c: None)
     ct = next(c for c in out[0]["checks"] if c["id"] == "cutoff")
     assert ct["finish_h"] == 5.0 and ct["time_method"] == "power" and "功率模型" in ct["text"]
+
+
+def test_tight_weekly_advice_no_longer_says_slow_the_first_half():
+    """SP-224 (SP-198 §2.3, §4.6): nothing supports slowing the first half for runners near the cutoff."""
+    e = ev(est_hours=3.0)
+    r = F.assess(e, line(e), date(2027, 1, 4), hist(km=30.0, climb=1900.0))
+    assert lv(r, "weekly") == "tight"
+    assert "照分段的心率上限跑，補給站少停" in r["suggestions"]
+    assert not any("前半段" in s for s in r["suggestions"])
+
+
+def test_calculator_page_names_the_trail_strategy_and_the_hr_fade():
+    """SP-224: the 「even」 button reads 均勻努力 on trail, 均速 on road; the HR cap note is in the chart's
+    ? and, for a trail race on the HR chart, in the legend under it (visible on a phone)."""
+    import json
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1] / "static"
+    page = (root / "racepower.html").read_text("utf-8")
+    assert 'T(t === "trail" ? "strategy.even_trail" : "strategy.even_road")' in page
+    assert 'm === "hr" && P.type === "trail"' in page and 'T("legend.hr_fade")' in page
+    assert 'data-i18n="racepower.strategy.tip"' in page
+    for loc in ("zh-TW", "en"):
+        cat = json.loads((root / "i18n" / loc / "racepower.json").read_text("utf-8"))
+        assert all(cat.get(k) for k in ("strategy.even_road", "strategy.even_trail", "strategy.tip", "legend.hr_fade"))
+    zh = json.loads((root / "i18n" / "zh-TW" / "racepower.json").read_text("utf-8"))
+    assert zh["strategy.even_trail"] == "均勻努力" and zh["strategy.even_road"] == "均速"
+    assert "後段心率會自己下降" in zh["legend.hr_fade"] and "後段心率會自己下降" in zh["chart.tip"]
