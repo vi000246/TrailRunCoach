@@ -1866,6 +1866,7 @@ def _prefs_body(p, dropped=()) -> dict:
     # gate_options: the 間歇門檻 hover texts (the page adds "usable with your data"
     # from GET /prefs/gate, which needs the dataset)
     from backend.engine import aet_test as AT
+    from backend.engine import strength_moves as SM
     # aet_options: the AeT 測試方式 hover texts (duration, terrain, what is held, judging, source)
     return {"prefs": p.to_dict(), "defaults": PP.Prefs().to_dict(), "active": p.active,
             # 偏好的星期 vs the default rules (shown when the prefs are saved; 照我的偏好 = pref_keep)
@@ -1874,6 +1875,8 @@ def _prefs_body(p, dropped=()) -> dict:
             # removed on load, shown next to their row until the athlete saves
             "pref_dropped": list(dropped),
             "gate_options": QG.option_texts(),
+            # 肌力動作 (engine/strength_moves.py, SP-191): the types, their moves, the equipment
+            "strength_options": SM.options(),
             "aet_options": {k: {"label": "自動（標準：徐國峰 90 分；備案 UA 40 分）" if k == "auto"
                                 else AT.PROTOCOLS[k]["label"], "tip": AT.protocol_tip(k)}
                             for k in AT.PROTOCOL_CHOICES}}

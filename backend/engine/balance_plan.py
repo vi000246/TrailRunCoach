@@ -23,12 +23,17 @@ the strength session is gone — the SP-86 stop in the 減量期, the race week 
 apply: a side session, not pushed to the watch) on an easy-run day, else a free day, before the race.
 Applied after the day rules (overview.week_plan, projection.project_weeks), so the SP-86 stop and
 the post-race rules don't remove it again.
+
+The four moves are the athlete's picks (SP-191, engine/strength_moves.py: one per TYPES, the
+easier / harder versions from the stages of baiyue-technical-terrain.md §3.2), else MOVES; the
+dose stays.
 """
 from __future__ import annotations
 
 import datetime as dt
 from typing import Callable, Optional
 
+from backend.engine import strength_moves as SM
 from backend.engine import strength_plan as STP
 from backend.i18n import N_, _
 
@@ -38,6 +43,7 @@ ID = "balance"                   # the balance-only strength session (ensure)
 MOVES = N_("單腳站（張眼 → 閉眼）；單腳站、另一腳往前、側、後伸出去點地；單腳往前、側小跳，落地停住 2 秒；"
            "單腳提踵慢放")
 PACK = N_("百岳的專項期、減量期：單腳站和伸腳點地可以背 5–10% 體重的背包做")
+TYPES = ("stance", "reach", "landing", "calf")      # strength_moves: MOVES' four, in its order
 SRC = N_("Schiftan 2015（平衡訓練讓踝扭傷少 35 %）；Hupperets 2009；Lesinski 2015（劑量，指標是平衡表現）；"
          "徐國峰（熱身，教練級）；動作組合是推估")
 
@@ -52,23 +58,35 @@ def _d(x) -> Optional[dt.date]:
     return x if isinstance(x, dt.date) else dt.date.fromisoformat(str(x)[:10])
 
 
-def week_context(events, monday: dt.date, kind: str) -> dict:
+def week_context(events, monday: dt.date, kind: str, prefs=None) -> dict:
     """{active, race, race_kind, race_start, pack} of the week: `kind` = the week's phase (week_plan's
-    status.kind / the projection's phase_kind)."""
+    status.kind / the projection's phase_kind); `prefs` (課表偏好): the picked moves as `choice`."""
     r = STP.next_trail_a(events, monday)
     if not r or kind not in PHASES:
         return {"active": False}
+    ch = SM.choice(prefs)
     return {"active": True, "race": r["name"], "race_kind": r["kind"], "race_start": r["start"],
-            "pack": r["kind"] == "baiyue" and kind in ("specific", "taper")}
+            "pack": r["kind"] == "baiyue" and kind in ("specific", "taper"), **({"choice": ch} if ch else {})}
 
 
 def block(ctx: dict) -> str:
-    """The balance block's text (the warm-up, the moves, the dose; the pack line for a 百岳)."""
+    """The balance block's text (the warm-up, the moves, the dose; the pack line for a 百岳; the
+    picked moves said at the end)."""
+    picks = SM.resolve(ctx.get("choice"))
+    if all(picks[t].why == "default" for t in TYPES):
+        moves = _(MOVES)
+    else:
+        moves = _("；").join(_(picks[t].move.text.get("block") or picks[t].move.name) for t in TYPES)
     t = _("平衡／腳踝 {m} 分：熱身 1–2 分承重式腳踝活動度——彈性站姿、體重壓在腳上，慢慢做內翻、外翻（徐國峰）；"
-          "接著 4 個動作，每個 2 組 × 20–40 秒／腳：{moves}", m=MINUTES, moves=_(MOVES))
+          "接著 4 個動作，每個 2 組 × 20–40 秒／腳：{moves}", m=MINUTES, moves=moves)
     if ctx.get("pack"):
         t += "；" + _(PACK)
-    return t
+    return "；".join([t] + SM.notes(picks, TYPES))
+
+
+def source(ctx: dict) -> str:
+    """SRC, + the marks of the moves that aren't the defaults (SP-191)."""
+    return "；".join(x for x in (_(SRC), SM.sources(SM.resolve(ctx.get("choice")), TYPES)) if x)
 
 
 def title_tag() -> str:
@@ -103,7 +121,7 @@ def attach(ss: list, ctx: Optional[dict]) -> int:
             continue                                    # already (a projected week passed twice)
         _set(s, title=str(_g(s, "title") or "") + title_tag(), minutes=int(_g(s, "minutes") or 0) + MINUTES,
              detail="；".join(x for x in (_g(s, "detail"), block(ctx)) if x),
-             source="；".join(x for x in (_g(s, "source"), _(SRC)) if x))
+             source="；".join(x for x in (_g(s, "source"), source(ctx)) if x))
     return n
 
 
@@ -111,7 +129,7 @@ def session(ctx: dict, day: Optional[str]) -> dict:
     """The balance-only strength session (a plain dict, as week_plan's sessions)."""
     return {"id": ID, "kind": "strength", "title": _("肌力：平衡／腳踝 {m} 分", m=MINUTES), "minutes": MINUTES,
             "target": "", "detail": block(ctx) + "；" + _("賽前停了一般肌力，平衡照做（負荷低，不累腿）"),
-            "source": _(SRC), "tss": 0.0, "day": day, "done": False, "done_by": None}
+            "source": source(ctx), "tss": 0.0, "day": day, "done": False, "done_by": None}
 
 
 def ensure(ss: list, ctx: Optional[dict], days: list, allowed: Optional[Callable] = None) -> Optional[dict]:
