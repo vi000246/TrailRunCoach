@@ -315,7 +315,26 @@ def pmc(ds: Dataset, begin: dt.date, end: dt.date) -> dict:
             "ctlconstant": ds.athlete.ctlconstant, "atlconstant": ds.athlete.atlconstant,
             "start": {"source": st["source"], "ctl": st["ctl"], "atl": st["atl"],
                       "date": None if st["day"] is None else day_to_date(st["day"]).isoformat()},
-            "series": rows}
+            "series": rows, "marks": pmc_marks(ds, begin, end)}
+
+
+LTHR_SWITCH_NOTE = {
+    "estimate": N_("LTHR 從這天起用你自己資料的估算；之前是推估（最大心率的 90 %），hrTSS 和體能數字在這天會跳一下"),
+    "test": N_("LTHR 從這天起用你填的值（測試）；之前是推估（最大心率的 90 %），hrTSS 和體能數字在這天會跳一下"),
+}
+
+
+def pmc_marks(ds: Dataset, begin: dt.date, end: dt.date) -> list[dict]:
+    """Notes on PMC days (SP-289): the day the LTHR prior (0.90 × max HR, fitdataset.lthr_prior) was
+    replaced by a real LTHR — the TSS scale changes there. [{date, kind, text}] within [begin, end]."""
+    pri = getattr(ds, "lthr_prior", None)
+    if not isinstance(pri, dict) or not pri.get("until"):
+        return []
+    d = str(pri["until"])[:10]
+    if not begin.isoformat() <= d <= end.isoformat():
+        return []
+    return [{"date": d, "kind": "lthr_switch", "text": _(LTHR_SWITCH_NOTE.get(pri.get("until_kind"),
+                                                                             LTHR_SWITCH_NOTE["test"]))}]
 
 
 def project(ctl0: float, atl0: float, planned: list[float], cc: float, ac: float) -> list[dict]:
@@ -1242,6 +1261,13 @@ def strides_for(kind: str, mode: str, i: int, road: bool, tr_week: Optional[int]
     return None
 
 
+def talk_test(detail: str) -> str:
+    """`detail` + the talk test (SP-289: the HR numbers are a prior), once."""
+    from backend.engine.hr_profile import TALK_TEST
+    t = _(TALK_TEST)
+    return detail if t in (detail or "") else ((detail + "；") if detail else "") + t
+
+
 def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, blackouts=None,
               b2b_accepted: Optional[list] = None, race_predict=None, sport: Optional[str] = None) -> dict:
     """Target volume and sessions for the current Monday–Sunday week.
@@ -2095,6 +2121,13 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     ctl_end = proj_rows[-1]["ctl"] if proj_rows else ctl_start
     atl_end = proj_rows[-1]["atl"] if proj_rows else atl_start
 
+    # ---- 沒有 LTHR 時的心率先驗 (SP-289): the easy / long runs' HR numbers come from 0.90 × max HR —
+    # the talk test as the backup (cold-start.md §4.3)
+    if tt.get("lthr_prior"):
+        for x in sessions:
+            if x.kind in ("easy", "long") and not x.done:
+                x.detail = talk_test(x.detail)
+
     # ---- 冷啟動 (SP-288): what the cold week / the ramp used, and where the questionnaire is
     if cs is not None:
         notes.append(CS.note(cs, sum(1 for s in sessions if s.kind in RUN_KINDS)))
@@ -2153,6 +2186,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
                        # aet = the easy-run cap (not always an AeT: the 課表心率區間 Z2 top unless measured);
                        # its ± badge only when the cap IS the AeT estimate (no 課表心率區間)
                        "lthr_source": tt.get("lthr_source"), "aet": aet, "aet_source": aet_src,
+                       "lthr_prior": bool(tt.get("lthr_prior")),       # SP-289: 0.90 × max HR (推估)
                        "aet_pm": tt.get("aet_pm") if hrz is None else None,
                        "aet_measured": aet_meas, "easy_cap_label": cap_txt, "easy_cap_tip": _(EASY_CAP_TIP),
                        # 課表心率區間 (engine/hr_profile.plan_hr_zones): the push / step builders read it

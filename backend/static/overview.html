@@ -903,16 +903,17 @@ const tO = (k, p) => (window.I18N ? I18N.t("overview." + k, p) : k);
 const TSB_BANDS = [[-0.3, "#e34948"], [-0.1, "#1baf7a"], [0.05, "#a9a1e6"], [0.25, "#6a5cc9"], [Infinity, "#eda100"]];
 const PMC_DAYS = [7, 42, 90], PMC_DAYS_DEFAULT = 42;
 const pmcDays = () => { const n = Number(ls.get("pmcDays", PMC_DAYS_DEFAULT)); return PMC_DAYS.includes(n) ? n : PMC_DAYS_DEFAULT; };
-let PMC = null, PMC_SEQ = 0;
+let PMC = null, PMC_SEQ = 0, PMC_MARKS = [];
 async function loadPmc() {
   const days = pmcDays(), seq = ++PMC_SEQ;
   pmcSeg(days);
   const end = STATUS?.today || new Date().toISOString().slice(0, 10);
   const d = new Date(end + "T00:00:00"); d.setDate(d.getDate() - days);    // one day before the range: yesterday's CTL
   const begin = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  const series = (await j(`${API}/pmc?begin=${begin}&end=${end}`)).series;
+  const res = await j(`${API}/pmc?begin=${begin}&end=${end}`);
   if (seq !== PMC_SEQ) return;              // a newer pick meanwhile
-  PMC = series;
+  PMC = res.series;
+  PMC_MARKS = res.marks || [];              // SP-289: the day the LTHR prior was replaced
   renderPmc();
 }
 // 7 / 42 / 90 天: the range buttons in the title
@@ -938,7 +939,9 @@ function renderPmc() {
   $("pmc").setAttribute("aria-label", tO("pmc.aria", { n: pmcDays() }));
   $("pmc-legend").innerHTML = `<span><i style="background:${ctlC};height:3px"></i>${esc(tO("pmc.ctl"))}</span>`
     + `<span><i style="background:${atlC};height:3px"></i>${esc(tO("pmc.atl"))}</span>`
-    + `<span><i style="background:linear-gradient(90deg,#1baf7a 50%,#e34948 50%)"></i>${esc(tO("pmc.tsb"))}</span>`;
+    + `<span><i style="background:linear-gradient(90deg,#1baf7a 50%,#e34948 50%)"></i>${esc(tO("pmc.tsb"))}</span>`
+    + PMC_MARKS.filter((m) => rows.some((r) => r.date === m.date))
+      .map((m) => `<span>┆ ${esc(md(m.date))} ${esc(m.text)}</span>`).join("");
   const one = (v) => v == null ? "–" : (Math.round(v * 10) / 10).toFixed(1);
   chart("pmc").setOption({ animation: false, textStyle: { fontFamily: "system-ui, sans-serif" },
     grid: { left: 36, right: 10, top: 10, bottom: 24 },
@@ -950,7 +953,11 @@ function renderPmc() {
     yAxis: { type: "value", ...axisStyle(), splitLine: { lineStyle: { color: css("--line"), type: [3, 3] } } },
     series: [
       { name: "TSB", type: "bar", barCategoryGap: "20%", data: rows.map((r) => ({ value: r.tsb == null ? null : Math.round(r.tsb * 10) / 10, itemStyle: { color: color(r) } })) },
-      { name: "CTL", type: "line", data: rows.map((r) => r.ctl), showSymbol: false, z: 3, lineStyle: { width: 2.5, color: ctlC }, itemStyle: { color: ctlC } },
+      { name: "CTL", type: "line", data: rows.map((r) => r.ctl), showSymbol: false, z: 3, lineStyle: { width: 2.5, color: ctlC }, itemStyle: { color: ctlC },
+        // SP-289: a dashed line on the day the LTHR prior (0.90 × max HR) was replaced; the text on hover
+        markLine: { symbol: "none", silent: false, label: { show: false }, lineStyle: { type: "dashed", color: css("--muted") },
+          tooltip: { formatter: (p) => esc(p.data.text) },
+          data: PMC_MARKS.filter((m) => rows.some((r) => r.date === m.date)).map((m) => ({ xAxis: md(m.date), text: m.text })) } },
       { name: "ATL", type: "line", data: rows.map((r) => r.atl), showSymbol: false, z: 3, lineStyle: { width: 1.6, color: atlC }, itemStyle: { color: atlC } },
     ] }, true);
 }

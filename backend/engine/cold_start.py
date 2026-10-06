@@ -188,3 +188,39 @@ def prefs_for(prefs, ctx: Optional[dict], slots: int):
 def apart(ctx: Optional[dict]) -> bool:
     """Runs a day apart (NHS [C10]) — possible up to 4 runs a week."""
     return ctx is not None and ctx["runs"] <= 4
+
+
+# ---- LTHR 測試的建議 (SP-289; cold-start.md §4.3) ------------------------------------------------
+# A new runner (資料等級 0 / 1: the data has never had 4 good weeks, experience.has_history) is
+# suggested the LTHR test (30-min solo, Friel) from week 5 of the current stretch of data (owner
+# 2026-10-06 — unsourced-rules.md §0.5.5 used to say weeks 1–4; a 30-min all-out time trial in week 1
+# is unreasonable, 推估); from week 2 with ≥ LTHR_TEST_EXP_HOURS a week and a race result in the
+# questionnaire (推估, §4.3). A runner with history: no limit (today's rule).
+LTHR_TEST_WEEK = 5
+LTHR_TEST_WEEK_EXPERIENCED = 2
+LTHR_TEST_EXP_HOURS = 3.0
+
+
+def lthr_test_week(exp: Optional[dict], races: Optional[list], today: dt.date) -> int:
+    """The week of the data the LTHR test is first suggested in (see above)."""
+    from backend.engine import experience as EX
+    from backend.engine import race_results as RR
+    h = EX.weekly_hours(exp)
+    if h is not None and h >= LTHR_TEST_EXP_HOURS and RR.usable(races, today):
+        return LTHR_TEST_WEEK_EXPERIENCED
+    return LTHR_TEST_WEEK
+
+
+def lthr_test_from(ds, today: dt.date, exp: Optional[dict] = None, races: Optional[list] = None,
+                   load: bool = True) -> Optional[str]:
+    """The first day (ISO, a Monday) the LTHR test may be suggested; None = no limit (history)."""
+    from backend.engine import experience as EX
+    if EX.has_history(ds, today):
+        return None
+    monday = _monday(today)
+    since = data_start(EX.foot_days(ds, monday + dt.timedelta(days=6)), monday) or monday
+    if load:
+        from backend.engine import race_results as RR
+        exp = EX.load() if exp is None else exp
+        races = RR.load() if races is None else races
+    return (since + dt.timedelta(weeks=lthr_test_week(exp, races, today) - 1)).isoformat()

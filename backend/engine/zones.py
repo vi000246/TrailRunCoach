@@ -467,6 +467,22 @@ def training_targets(ds, end_day: int, lthr_est=None, aet_est=None, aet_below=No
     lthr_measured = bool(lr and lr["measured"])
     if not planned and hist and all(d == dt.date(1980, 1, 1) for d, _ in hist) and lthr_est:
         lthr, lthr_src = float(lthr_est), "自動估算（尚未套用）"
+    # SP-289: the LTHR prior (0.90 × max HR, hr_profile.lthr_prior) — the dataset's own (fitdataset
+    # lthr_prior: in effect from the first run until a real LTHR), or, before any run, read here
+    from backend.engine import hr_profile as HP
+    day0 = day_to_date(ref.day) if ref is not None else day_to_date(end_day)
+    pri = getattr(ds, "lthr_prior", None)
+    lthr_prior = bool(not planned and isinstance(pri, dict) and lthr is not None
+                      and pri.get("from", "") <= day0.isoformat() < (pri.get("until") or "9999-12-31"))
+    if lthr_prior:
+        lthr_src = _(HP.LTHR_PRIOR_SOURCE)
+    if lthr is None and not planned and not getattr(getattr(ds, "config", None), "parity", False):
+        try:
+            p0 = HP.lthr_prior(ds, day0)
+        except Exception:                   # noqa: BLE001 — a dataset without a plan (tests)
+            p0 = None
+        if p0:
+            lthr, lthr_src, lthr_prior = p0["value"], _(HP.LTHR_PRIOR_SOURCE), True
     ar = threshold_row(ds.plan, "aethr", day_to_date(ref.day)) if ref is not None else None
     aet_measured = bool(ar and ar["measured"])
     if ar is not None:
@@ -486,7 +502,7 @@ def training_targets(ds, end_day: int, lthr_est=None, aet_est=None, aet_below=No
     if lthr is not None and not getattr(getattr(ds, "config", None), "parity", False):
         from backend.engine import hr_profile as HP
         try:
-            hrz = HP.plan_hr_zones_for(ds, day_to_date(ref.day), lthr, aet, aet_measured)
+            hrz = HP.plan_hr_zones_for(ds, day0, lthr, aet, aet_measured)
         except Exception:                   # noqa: BLE001 — a dataset without a plan (tests)
             hrz = None
     rows = []
@@ -508,6 +524,8 @@ def training_targets(ds, end_day: int, lthr_est=None, aet_est=None, aet_below=No
                                                         else ds.setting_label("runftp")),
             "cp_date": ci.get("date"), "terrain_note": TERRAIN_NOTE,
             "lthr": lthr, "lthr_source": lthr_src, "lthr_measured": lthr_measured,
+            # SP-289: the LTHR is the 0.90 × max-HR prior (low confidence; the easy runs add the talk test)
+            "lthr_prior": lthr_prior,
             "aet": aet, "aet_source": aet_src, "aet_measured": aet_measured, "aet_below": aet_below,
             "aet_pm": None if aet is None else aet_uncertainty(
                 "measured" if aet_measured else "estimate" if (ar is not None or aet_est) else "friel"),
