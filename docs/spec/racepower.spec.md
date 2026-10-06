@@ -915,6 +915,14 @@ up to 3 h and AeT beyond (推估). Road plans keep pace / power. `chart_rows` gi
 one row per segment with pace, power and HR (null where not valid, `power_ref` / `hr_ref` for
 display), split, cumulative time, ETA, walk flag and fuel summary; the CSV gets 目標類型 / 執行目標.
 
+會用登山杖 (SP-244, docs/research/trekking-poles.md §5 #3): a plan event's `poles` checkbox (賽季計畫
+event form, default off) is sent by the page as `PlanIn.poles`; `chart_rows[].pole_hint`
+{key up / down, text, src} is then set on steep climbs (kind steep_climb, unless the predicted gait
+runs it) — 「用杖：自覺比較輕鬆，速度差不多」 (Giovanelli 2019 / 2022) — and on descents ≤ −15 % —
+「用杖：膝蓋負擔少 12–25 %」 (Schwameder 1999, Bohne 2007); never on road plans, flats or runnable
+climbs. The compact table's last cell, the full table's notes and the chart tooltip show it (source
+as the tooltip). Text only: time, pace, power and HR targets are identical with or without it.
+
 Walk or run (SP-226, `backend/engine/racepower/runwalk.py`, docs/research/run-walk-threshold.md
 §5.1): on a GPX course every climb ≥ 3 % gets `gait` walk / either / run from grade × the predicted
 speed against two transition-speed curves (Brill & Kram 2021 PTS / EOTS to 15°, straight to Ortiz
