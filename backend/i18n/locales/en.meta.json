@@ -1119,6 +1119,14 @@
     "draft": false,
     "src": "backend/engine/specific_phase.py:669"
   },
+  "、每週 {h:g} 小時（Koop）": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:417"
+  },
+  "。比賽最難那天是你 {m} 個月內最大單日的 {x:.1f} 倍": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:572"
+  },
   "。沒有算停留：在賽事計算機的補給站填停留分鐘，或累積 2 場以上的越野比賽紀錄，就會算進來": {
     "draft": true,
     "src": "backend/engine/race_feasibility.py:431"
@@ -1126,6 +1134,14 @@
   "。用賽事計算機的努力目標 {p:.0%}": {
     "draft": true,
     "src": "backend/engine/race_feasibility.py:434"
+  },
+  "。級數只高一級，但距離和爬升是兩倍以上，建議先有一次 ≥ 比賽 {p:.0f} % 的長天（{p:.0f} % 是推估）": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:574"
+  },
+  "。級數相同，但距離和爬升是兩倍以上，建議先有一次 ≥ 比賽 {p:.0f} % 的長天（{p:.0f} % 是推估）": {
+    "draft": false,
+    "src": "backend/engine/race_feasibility.py:640"
   },
   "「{a}」和「{b}」只隔 {n} 天：硬課之間建議隔 ≥ 2 天，可以再拖動調整": {
     "draft": true,
@@ -4971,9 +4987,9 @@
     "draft": true,
     "src": "backend/engine/panels/activity_charts.py:60"
   },
-  "跨級：ITRA 依 EP 分級（XXS–XXL）；UTMB 報名等於一次只能往上跳一級；完賽過越多場越不容易 DNF（Corrion 2018、Maleka 2026）；「高兩級」和「24 個月」是推估": {
+  "跨級：ITRA 依 EP 分級（XXS–XXL）。看「過去 24 個月」＝ UTMB 指數的有效期、Hardrock 100 的資格期；「高兩級」才判太難＝比 UTMB 總決賽「最多往上跳一級」略寬（ITRA 兩級約等於 UTMB 一級，這個對應是推估）；完賽過越多場越不容易 DNF（Corrion 2018、Maleka 2026）": {
     "draft": true,
-    "src": "backend/engine/race_feasibility.py:88"
+    "src": "backend/engine/race_feasibility.py:116"
   },
   "路況差的技術路段：時間＋爬升＋RPE，不設心率、功率目標（只給參考）；RPE ≥ 7 算強度課": {
     "draft": true,
@@ -5487,6 +5503,14 @@
     "draft": true,
     "src": "backend/engine/racepower/watch_export.py:46"
   },
+  "里程碑（看跑過哪些距離，不看年數）：① 先完成一場 EP {lo:.0f}–{hi:.0f}（{cls} 級）的比賽": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:412"
+  },
+  "里程碑：不給「幾年後」——經驗的研究看的是跑過哪些距離，不是年數（Hoffman 2013：第一場超馬前跑了 3–15 年都有）；週量的日期照現在的週量每週 +10 %、每 4 週一週恢復推算，是推估": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:130"
+  },
   "重新校正錨點，讓所有區間跟著真實體能移動（Friel；Uphill Athlete）": {
     "draft": true,
     "src": "backend/engine/workout_templates.py:142"
@@ -5991,6 +6015,10 @@
     "draft": true,
     "src": "backend/engine/race_feasibility.py:507"
   },
+  "：你現在的週量已經夠了": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:419"
+  },
   "：同級或更低": {
     "draft": true,
     "src": "backend/engine/race_feasibility.py:391"
@@ -6007,6 +6035,14 @@
     "draft": true,
     "src": "backend/engine/technical.py:167"
   },
+  "：最近 {n} 週沒有跑步或健行紀錄，推算不出日期": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:423"
+  },
+  "：照現在的週量每週加 10 %，最快 {y} 年 {m} 月練到（推估；這是週量練到的時間，不代表到時候跨級就一定判可以）": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:421"
+  },
   "：爬升練得比距離少，不到一半（推估）": {
     "draft": true,
     "src": "backend/engine/race_feasibility.py:366"
@@ -6018,6 +6054,10 @@
   "：要靠接近閾值的強度撐": {
     "draft": true,
     "src": "backend/engine/race_feasibility.py:221"
+  },
+  "：離現在的週量還很遠，推算不出日期": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:425"
   },
   "：高 {n} 級，跳太多了": {
     "draft": true,
@@ -6042,6 +6082,14 @@
   "；{n} 組整段休息都沒回到 AeT": {
     "draft": true,
     "src": "backend/engine/workout_review.py:2533"
+  },
+  "；② 每週練到 EP {w:.0f}（比賽最難那天的 {p:.0f} %，UA）": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:414"
+  },
+  "；② 每週跑到 {w:.0f} km（比賽距離的 {p:.0f} %，UA）": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:415"
   },
   "；下坡比你近 6 週練過的多，賽後 {h} 小時內走平路、不排硬課": {
     "draft": true,
