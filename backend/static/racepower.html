@@ -202,6 +202,11 @@ input.need, .drop.need { border-color: var(--bad); box-shadow: 0 0 0 1px var(--b
   display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
 .trip.need { border-color: var(--bad); border-left-color: var(--bad); background: var(--needbg); }
 .trip .lbl { font-weight: 650; font-size: 14px; color: var(--text); }
+/* SP-214: the advanced calculation options */
+.calc-adv { border: 1px solid var(--line); border-radius: 8px; padding: 0 10px; margin-top: 10px; }
+.calc-adv > summary { font-size: 13.5px; color: var(--text); margin: 0; padding: 8px 0; min-height: 36px; }
+.calc-adv > summary .meta { font-weight: 400; }
+.calc-adv[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 4px; }
 .calcbar { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
 .btn.big { font-size: 15px; padding: 6px 22px; min-height: 36px; font-weight: 600; }
 #calc-msg.miss { color: var(--bad); }
@@ -309,62 +314,14 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
       <div class="drop" id="drop"><b class="req">*</b> 把 .gpx / .fit 拖到這裡，或 <label class="btn" style="display:inline-block">選擇檔案<input id="gpxfile" type="file" accept=".gpx,.fit,application/gpx+xml" hidden></label></div>
       <div class="form" style="margin-top:8px">
         <label>官方爬升 (m，選填)<input id="ogain" type="number" step="10" min="0" placeholder="用來校正 GPS 海拔"></label>
+        <label class="bf">天數<input id="tripdays" type="number" min="1" max="10" step="1" value="3"></label>
       </div>
       <ul class="warn" id="course-warn"></ul>
-    </div>
-    <div class="row"><span class="lbl">分段</span>
-      <div class="seg" id="split"><button data-s="grade">依坡段</button><button data-s="km">每公里</button><button data-s="none">不分段</button></div>
-      <details id="adv"><summary>進階</summary>
-        <div class="form" style="margin:4px 0 6px">
-          <label>平滑 σ (m)<input id="sigma" type="number" step="5" min="25" max="150" placeholder="50"></label>
-          <label>容差 ε (m)<input id="eps" type="number" step="1" min="2" placeholder="10"></label>
-          <label>最短段 (m)<input id="minlen" type="number" step="50" min="50" placeholder="自動"></label>
-          <label>平路門檻 (%)<input id="flatpct" type="number" step="0.5" min="0.5" placeholder="2"></label>
-        </div></details>
-    </div>
-    <div class="row rf"><span class="lbl">策略</span>
-      <div class="seg" id="strategy"><button data-k="even">均速</button><button data-k="negative">前慢後快</button><button data-k="positive">前快後慢</button></div>
-      <label class="meta" id="amt-box">幅度 <input id="amount" type="range" min="0" max="5" step="0.5" style="width:120px;vertical-align:middle"> <b id="amount-v"></b></label>
-      <span class="help" tabindex="0">?<span class="tip">均速：全程同樣的平均功率（越野是同樣的「努力」，坡上功率照下面的坡道彈性變化）。前慢後快 / 前快後慢：功率從起點到終點線性變化，整場平均不變。過去的研究多半發現前後差距小的配速最快。</span></span>
-    </div>
-    <div class="row rf" id="hills-row"><span class="lbl">坡道彈性</span>
-      <label class="meta">上坡 +<input id="hup" type="number" step="1" min="0" max="12" style="width:56px"> %</label>
-      <label class="meta">下坡 −<input id="hdown" type="number" step="1" min="0" max="30" style="width:56px"> %</label>
-      <span class="help" tabindex="0">?<span class="tip">上坡時功率可以比平均高一點、下坡讓它自然掉下來，平均功率不變。上坡 +5% 以內沒有額外的生理成本；上限 12%。持續超過 CP 太久的坡段會自動縮小。</span></span>
-    </div>
-    <div class="row"><span class="lbl">海拔</span>
-      <div class="seg" id="accl"><button data-a="acclimatised">已適應</button><button data-a="partial">部分適應</button><button data-a="unacclimatised">未適應</button></div>
-      <span class="badge watch hidden" id="accl-badge">推估</span>
-      <span class="help" tabindex="0">?<span class="tip">未適應：剛上山，每升高 1000 m 有氧能力約少 6.3%（300 m 起算）。已適應：較樂觀的海拔曲線。部分適應（例如前一晚住山屋）取兩者中間，沒有研究可依，所以標推估。</span></span>
-    </div>
-    <div class="row rf"><span class="lbl">熱</span>
-      <label class="meta"><input type="checkbox" id="hourlyheat" checked> 逐段熱修正（依起跑時間與各段 ETA 取逐時氣溫、露點）</label>
-      <span class="badge watch">推估</span>
-      <span class="help" tabindex="0">?<span class="tip" data-i18n="racepower.heat.tip">取得比賽日天氣後，如果有逐時資料，每一段用「跑到那一段時」的氣溫和露點算熱負荷，所以早上涼、中午熱會反映在各段的目標上。逐時資料來自中央氣象署三天預報或 Open-Meteo 預報；超過 16 天的日期用近 10 年同一個月每個小時的平均。時間改了、到達時刻跟著改，會重算到穩定為止。沒有逐時資料（中央氣象署一週預報、離線、還沒取得天氣）或沒填起跑時間時，全程用同一個溫度。</span></span>
-      <span class="meta" id="heat-line"></span>
-    </div>
-    <div class="row"><span class="lbl">熱適應</span>
-      <div class="seg" id="heat-accl"><button data-h="auto">自動</button><button data-h="none">未適應</button><button data-h="partial">部分</button><button data-h="acclimatised">已適應</button><button data-h="custom">自訂 %</button></div>
-      <input id="heat-s" type="number" min="0" max="100" step="5" style="width:64px" class="hidden" placeholder="S %">
-      <span class="badge watch">推估</span>
-      <span class="help" tabindex="0">?<span class="tip">熱適應指數 S（0–100 %）：近期每天在 Hadley ≥ 150（例如 28 °C / 75 %）的移動分鐘，每天 ≥ 60 分算滿劑量，連續 5 天約 70 %（Pandolf 1998），停止後每天掉約 2.5 %（Daanen 2018）。比賽的熱懲罰乘上 (1 − 0.75 × S)（Racinais 2015 兩週拿回約 77 %；0.75 是推估）。自動 = 從你的紀錄推算到比賽日。部分 = 50 %、已適應 = 90 % 是推估的固定值。你自己的心率資料目前不支持「夏末熱懲罰比較小」，所以一律標推估。</span></span>
-      <span class="meta" id="heat-accl-line"></span>
-    </div>
-    <div class="row bf"><span class="lbl">心率帶</span>
-      <div class="seg" id="hrband"><button data-b="aet">AeT（多日建議）</button><button data-b="cap">能力上限（≤ 3 h）</button></div>
-      <label class="meta">天數 <input id="tripdays" type="number" min="1" max="10" step="1" value="3" style="width:52px"></label>
-      <label class="meta">每天背負 kg <input id="packdays" placeholder="例 9, 8.3, 7.6" style="width:120px"></label>
-      <label class="meta">氣溫所在海拔 m <input id="heatz" type="number" step="10" style="width:76px" placeholder="天氣點"></label>
-      <span class="help" tabindex="0">?<span class="tip">跟團：主數字是「過去跟團日的 EP/h 換算的時間」，旁邊是你的能力時間；自己走：主數字是能力時間。能力時間 = 你在 AeT 的步行能力（越野跑裡走路的陡坡窗 + 百岳心率 ≥ AeT 的爬升窗，以 Pandolf 生理先驗為形狀）。心率帶：處理心率落後後，陡坡速度仍不隨心率改變，所以只有 AeT 和「能力上限」兩檔。背負預設第 1 天 9 kg、之後每天 −0.7 kg（糧食，推估）；GPX 沒有分日點時依天數平均切。每段氣溫由比賽日溫度（在「氣溫所在海拔」）以 0.0065 K/m 遞減率推算。</span></span>
     </div>
     <div class="form" style="margin-top:6px">
       <label>日期<input id="date" type="date"></label>
       <label>起跑 / 起登時間<input id="start" type="time"></label>
       <label class="bf">背負 (kg)<input id="pack" type="number" step="0.5" min="0" placeholder="預設"></label>
-      <label class="tf">effort km 公式<select id="formula">
-        <option value="fitted_run">km + 爬升/153（你的跑步擬合）</option>
-        <option value="itra">km + 爬升/100（ITRA / 健行筆記）</option>
-        <option value="scarf">km + 爬升/126（Scarf）</option></select></label>
       <label data-tw-only>地點（山名，天氣用）<input id="peak" list="peaklist" placeholder="例：玉山"></label>
       <label>或 緯度, 經度<span class="ll-row"><input id="latlon" placeholder="23.47, 120.957" data-intl-placeholder="46.55, 7.98"><button class="btn" id="ll-pick" type="button" data-i18n="racepower.pick.btn">🗺 地圖選點</button></span></label>
     </div>
@@ -391,6 +348,60 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
     </div>
     <details class="bf" id="dayplan-box"><summary>逐日行程（手動路線；空白 = 平均分配）</summary>
       <div class="tablewrap"><table class="daytbl"><thead><tr><th>天</th><th>km</th><th>爬升 m</th><th>下降 m</th></tr></thead><tbody id="dayplan"></tbody></table></div>
+    </details>
+    <!-- SP-214: tuning options with working defaults, collapsed; the summary names what was changed -->
+    <details class="calc-adv" id="calc-adv">
+      <summary><b data-i18n="racepower.adv.title">進階計算選項</b> <span class="meta" id="adv-sum" data-i18n="racepower.adv.hint">分段、配速策略、海拔、熱：預設就好，要調再展開</span></summary>
+      <div class="row"><span class="lbl">分段</span>
+        <div class="seg" id="split"><button data-s="grade">依坡段</button><button data-s="km">每公里</button><button data-s="none">不分段</button></div>
+        <details id="split-adv"><summary data-i18n="racepower.adv.split_params">切段參數</summary>
+          <div class="form" style="margin:4px 0 6px">
+            <label>平滑 σ (m)<input id="sigma" type="number" step="5" min="25" max="150" placeholder="50"></label>
+            <label>容差 ε (m)<input id="eps" type="number" step="1" min="2" placeholder="10"></label>
+            <label>最短段 (m)<input id="minlen" type="number" step="50" min="50" placeholder="自動"></label>
+            <label>平路門檻 (%)<input id="flatpct" type="number" step="0.5" min="0.5" placeholder="2"></label>
+          </div></details>
+      </div>
+      <div class="row rf"><span class="lbl">策略</span>
+        <div class="seg" id="strategy"><button data-k="even">均速</button><button data-k="negative">前慢後快</button><button data-k="positive">前快後慢</button></div>
+        <label class="meta" id="amt-box">幅度 <input id="amount" type="range" min="0" max="5" step="0.5" style="width:120px;vertical-align:middle"> <b id="amount-v"></b></label>
+        <span class="help" tabindex="0">?<span class="tip">均速：全程同樣的平均功率（越野是同樣的「努力」，坡上功率照下面的坡道彈性變化）。前慢後快 / 前快後慢：功率從起點到終點線性變化，整場平均不變。過去的研究多半發現前後差距小的配速最快。</span></span>
+      </div>
+      <div class="row rf" id="hills-row"><span class="lbl">坡道彈性</span>
+        <label class="meta">上坡 +<input id="hup" type="number" step="1" min="0" max="12" style="width:56px"> %</label>
+        <label class="meta">下坡 −<input id="hdown" type="number" step="1" min="0" max="30" style="width:56px"> %</label>
+        <span class="help" tabindex="0">?<span class="tip">上坡時功率可以比平均高一點、下坡讓它自然掉下來，平均功率不變。上坡 +5% 以內沒有額外的生理成本；上限 12%。持續超過 CP 太久的坡段會自動縮小。</span></span>
+      </div>
+      <div class="row"><span class="lbl">海拔</span>
+        <div class="seg" id="accl"><button data-a="acclimatised">已適應</button><button data-a="partial">部分適應</button><button data-a="unacclimatised">未適應</button></div>
+        <span class="badge watch hidden" id="accl-badge">推估</span>
+        <span class="help" tabindex="0">?<span class="tip">未適應：剛上山，每升高 1000 m 有氧能力約少 6.3%（300 m 起算）。已適應：較樂觀的海拔曲線。部分適應（例如前一晚住山屋）取兩者中間，沒有研究可依，所以標推估。</span></span>
+      </div>
+      <div class="row rf"><span class="lbl">熱</span>
+        <label class="meta"><input type="checkbox" id="hourlyheat" checked> 逐段熱修正（依起跑時間與各段 ETA 取逐時氣溫、露點）</label>
+        <span class="badge watch">推估</span>
+        <span class="help" tabindex="0">?<span class="tip" data-i18n="racepower.heat.tip">取得比賽日天氣後，如果有逐時資料，每一段用「跑到那一段時」的氣溫和露點算熱負荷，所以早上涼、中午熱會反映在各段的目標上。逐時資料來自中央氣象署三天預報或 Open-Meteo 預報；超過 16 天的日期用近 10 年同一個月每個小時的平均。時間改了、到達時刻跟著改，會重算到穩定為止。沒有逐時資料（中央氣象署一週預報、離線、還沒取得天氣）或沒填起跑時間時，全程用同一個溫度。</span></span>
+        <span class="meta" id="heat-line"></span>
+      </div>
+      <div class="row"><span class="lbl">熱適應</span>
+        <div class="seg" id="heat-accl"><button data-h="auto">自動</button><button data-h="none">未適應</button><button data-h="partial">部分</button><button data-h="acclimatised">已適應</button><button data-h="custom">自訂 %</button></div>
+        <input id="heat-s" type="number" min="0" max="100" step="5" style="width:64px" class="hidden" placeholder="S %">
+        <span class="badge watch">推估</span>
+        <span class="help" tabindex="0">?<span class="tip">熱適應指數 S（0–100 %）：近期每天在 Hadley ≥ 150（例如 28 °C / 75 %）的移動分鐘，每天 ≥ 60 分算滿劑量，連續 5 天約 70 %（Pandolf 1998），停止後每天掉約 2.5 %（Daanen 2018）。比賽的熱懲罰乘上 (1 − 0.75 × S)（Racinais 2015 兩週拿回約 77 %；0.75 是推估）。自動 = 從你的紀錄推算到比賽日。部分 = 50 %、已適應 = 90 % 是推估的固定值。你自己的心率資料目前不支持「夏末熱懲罰比較小」，所以一律標推估。</span></span>
+        <span class="meta" id="heat-accl-line"></span>
+      </div>
+      <div class="row bf"><span class="lbl">心率帶</span>
+        <div class="seg" id="hrband"><button data-b="aet">AeT（多日建議）</button><button data-b="cap">能力上限（≤ 3 h）</button></div>
+        <label class="meta">每天背負 kg <input id="packdays" placeholder="例 9, 8.3, 7.6" style="width:120px"></label>
+        <label class="meta">氣溫所在海拔 m <input id="heatz" type="number" step="10" style="width:76px" placeholder="天氣點"></label>
+        <span class="help" tabindex="0">?<span class="tip">跟團：主數字是「過去跟團日的 EP/h 換算的時間」，旁邊是你的能力時間；自己走：主數字是能力時間。能力時間 = 你在 AeT 的步行能力（越野跑裡走路的陡坡窗 + 百岳心率 ≥ AeT 的爬升窗，以 Pandolf 生理先驗為形狀）。心率帶：處理心率落後後，陡坡速度仍不隨心率改變，所以只有 AeT 和「能力上限」兩檔。背負預設第 1 天 9 kg、之後每天 −0.7 kg（糧食，推估）；GPX 沒有分日點時依天數平均切。每段氣溫由比賽日溫度（在「氣溫所在海拔」）以 0.0065 K/m 遞減率推算。</span></span>
+      </div>
+      <div class="row tf"><span class="lbl">effort km</span>
+        <label class="meta">effort km 公式 <select id="formula" style="width:auto">
+          <option value="fitted_run">km + 爬升/153（你的跑步擬合）</option>
+          <option value="itra">km + 爬升/100（ITRA / 健行筆記）</option>
+          <option value="scarf">km + 爬升/126（Scarf）</option></select></label>
+      </div>
     </details>
     <div class="calcbar"><button class="btn primary big" id="calc" type="button" data-i18n="racepower.calc">計算</button>
       <span class="meta" id="calc-msg"></span>
@@ -650,7 +661,26 @@ function syncForm() {
   $("hup").value = S.hup; $("hdown").value = S.hdown;
   const fixed = [1, 0.95, 0.85].includes(Number(S.effort));
   $("effort-custom").textContent = fixed ? "" : `自訂 ${Math.round(S.effort * 100)}%（拖動努力度條設定）`;
-  courseLine(); markRequired();
+  courseLine(); markRequired(); renderAdvSum();
+}
+// SP-214: the 進階計算選項 summary names what differs from the defaults, so a closed panel still says it
+// (visible text, not a hover tip). Only options that apply to the current race type count.
+function advChanged() {
+  const hike = type === "baiyue", blank = (id) => $(id).value === "", out = [];
+  if (S.split !== "grade" || !["sigma", "eps", "minlen", "flatpct"].every(blank)) out.push(T("adv.n.split"));
+  if (!hike && S.strategy !== "even") out.push(T("adv.n.strategy"));
+  if (!hike && S.csrc === "gpx" && (Number(S.hup) !== 5 || Number(S.hdown) !== 10)) out.push(T("adv.n.hills"));
+  if (S.accl && S.accl !== (hike ? "unacclimatised" : "acclimatised")) out.push(T("adv.n.accl"));
+  if (!hike && !$("hourlyheat").checked) out.push(T("adv.n.hourly"));
+  if ((S.heatAccl?.mode || "auto") !== "auto") out.push(T("adv.n.heat_accl"));
+  if (hike && (S.hrband !== "aet" || !blank("packdays") || !blank("heatz"))) out.push(T("adv.n.hike"));
+  if (type === "trail" && $("formula").value !== "fitted_run") out.push(T("adv.n.formula"));
+  return out;
+}
+function renderAdvSum() {
+  const ch = advChanged(), el = $("adv-sum");
+  el.textContent = ch.length ? T("adv.changed", { list: ch.join(T("adv.sep")) }) : T("adv.hint");
+  el.classList.toggle("wn", ch.length > 0);
 }
 // the chart's one measure: 百岳 has no power target
 function measure() { return S.measure === "power" && type === "baiyue" ? "pace" : (S.measure || "pace"); }
@@ -2326,6 +2356,10 @@ $("amount").addEventListener("input", () => { S.amount = Number($("amount").valu
 ["hup", "hdown"].forEach((id) => $(id).addEventListener("input", () => { S[id] = num(id) ?? S[id]; schedule(); }));
 ["dist", "gain", "loss", "date", "target", "tpace", "tpower", "tspeed", "pack", "start", "stops", "ogain", "sigma", "eps", "minlen", "flatpct"].forEach((id) => $(id).addEventListener("input", schedule));
 $("ptrain").addEventListener("change", schedule); $("hourlyheat").addEventListener("change", schedule);
+// 進階計算選項: closed by default, the viewer's last choice kept; typing inside refreshes its summary
+{ const ca = $("calc-adv"); ca.open = !!ls.get("calcAdvOpen", false);
+  ca.addEventListener("toggle", () => ls.set("calcAdvOpen", ca.open));
+  ["input", "change"].forEach((ev) => ca.addEventListener(ev, renderAdvSum)); }
 $("days").addEventListener("input", () => { renderDayPlan(); schedule(); });
 $("formula").addEventListener("change", () => { schedule(); if (INP) renderRE(); });
 $("peak").addEventListener("change", () => { const l = getLoc(); if (l?.elevation != null && !l.gpx && !$("t-alt").classList.contains("ovr")) { $("t-alt").value = Math.round(l.elevation); } schedule(); autoWeather(); });
