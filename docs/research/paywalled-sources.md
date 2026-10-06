@@ -370,7 +370,9 @@
 
 | 研究文件 | 文獻 | 連結 | 缺什麼 | 依賴的說法 | 級 | 取得 |
 |---|---|---|---|---|---|---|
-| `heat-acclimation.md` | Roberts WO, et al. 2023. ACSM expert consensus statement on exertional heat illness. *Curr Sports Med Rep* 22:134–149 | doi:10.1249/JSR.0000000000001058 | 只讀摘要（L296、L670）。**新增** | app 的熱傷害安全症狀清單標 [待驗證]，要對全文逐條 | P2 | A（Curr Sports Med Rep 的 ACSM 共識通常免費） |
+| `heat-acclimation.md` | Roberts WO, et al. 2023. ACSM expert consensus statement on exertional heat illness. *Curr Sports Med Rep* 22:134–149 | doi:10.1249/JSR.0000000000001058 | 只讀摘要（L296、L670）。**新增**。2026-10-06 再試（SP-107 #9）：journals.lww.com 全文頁回 402（付費），仍沒讀到 | app 的熱傷害安全症狀清單標 [待驗證]，要對全文逐條 | P2 | A（Curr Sports Med Rep 的 ACSM 共識通常免費；這次 402，改試 PMC 或 ACSM 官網 PDF） |
+| `heat-acclimation.md` | Tyler CJ, et al. 2016 熱適應統合分析的**勘誤**（*Sports Med*，Springer） | doi:10.1007/s40279-016-0572-3 | 導向登入，未讀（2026-10-06，SP-107 #9）。**新增** | 確認勘誤有沒有改到 −0.31 °C／−12 bpm（正文已用作者接受稿核對過） | P3 | A → B |
+| `heat-acclimation.md` | Greenfield 2025（*J Appl Physiol*） | https://journals.physiology.org/doi/full/10.1152/japplphysiol.00624.2025 | 全文 403，只有搜尋摘要（2026-10-06，SP-107 #9）。**新增** | 多穿衣服熱適應的衣服組合與 clo 值（`heat_plan.py` 的「多穿長袖或防風外套」夠不夠） | P2 | A（APS 期刊用瀏覽器開）→ B |
 | `back-to-back-and-long-day.md` | Roche D, Roche M. Back-to-Back Long Runs and Workouts（Trail Runner） | https://run.outsideonline.com/training/workouts/back-back-long-runs-workouts-next-level-training-done-right/ | 付費牆，只有搜尋摘要（L146、L364） | 一次 40–50 英里改成兩天；第 1 天速度、第 2 天爬坡 | P3 | E（Outside+ 會員） |
 | `trail-terrain-and-climb-sessions.md` | Johnston S. 爬坡文章（Trail Runner Magazine） | 文件未附網址與題名 | 付費牆（L184） | 爬坡課、肌耐力課；已有 iRunFar 2025 訪談代替 | P3 | E |
 | `specific-phase-progression.md` | Arcelli E, Canova R.《Marathon Training – A Scientific Approach》1999 | 書；書評 https://runningwritings.com/2023/06/canova-marathon-book.html | 原書未讀，只讀 John Davis 書評（L60） | 專項期賽前 6–8 週、30–35 km @ 97–100 % MP；SP-75 專項期內部進階 | P3 | D（可能已絕版，二手書） |
@@ -415,6 +417,11 @@
 |---|---|---|
 | COROS 支援：〈April 2023 Update Common Questions〉〈Setting Resting and Max Heart Rate Data〉 | `coros-threshold-unification.md` L104、L180 | 「LTHR 只能自動調整」「可以編輯預設區間」只看到搜尋摘要 |
 | COROS 支援：Hill Alerts、Fitness Metrics | `competitor-charts.md` L130、L374 | 爬坡段分色規則 |
+| COROS 支援：〈Heart Rate Variability (HRV)〉 | `aerobic-base-readiness.md` §2.7、§8 | 「COROS does not support HRV data from external accessories」只有摘要（2026-10-06 回 403） |
+| COROS 支援：〈Personalized Marathon Plans〉（https://support.coros.com/hc/en-us/articles/20959039543828） | `periodization-cross-sport.md` §4.11 | 個人化馬拉松計畫的分期與減量（2026-10-06 回 403） |
+| COROS〈Training Through Races〉（https://coros.com/stories/d/training-through-races-optimizing-your-fall-race-season） | `periodization-cross-sport.md` §4.11 | A／B 賽相隔 4 週的排法，只有搜尋摘要（2026-10-06 兩次逾時） |
+| TrainingPeaks help：〈Annual Training Plan (ATP) Methodologies〉（…/articles/224662768）、〈How do I set up my ATP?〉（…/204073724） | `periodization-cross-sport.md` §4.11 | ATP 查表、各期每週 TSS、恢復週降多少（2026-10-06 回 403） |
+| Uphill Athlete〈What Norwegian endurance science teaches us about building aerobic base〉 | `aerobic-base-readiness.md` §2.1、§8 | 坡衝刺歸在神經肌肉訓練，只有摘要（擋下載、Wayback 沒有快照） |
 | TrainingPeaks help 全站（EF／Pa:HR、Dashboard Charts、Performance Insights、達成度顏色、Low rTSS and Trail Running） | `competitor-charts.md` L23、L370；`coaching-dashboards-mountain.md` L44；`estimated-constants-inventory.md` L256；`uphill-athlete-mountain-metrics.md` L395 | 達成度綠燈 80–120 %（`OVER_TSS` ±20 % 的依據）目前只有第三方整理 |
 | Strava 工程部落格〈An improved GAP model〉（medium.com） | `racepower-v2.md` L45、L1380；`competitor-charts.md` L371；`uphill-athlete-mountain-metrics.md` L259 | GAP 下坡加成上限約 10 % |
 | ITRA FAQ、Performance Index、資料使用條款 | `competitor-charts.md` L373；`effort-distance-formulas.md` L525；`public-datasets.md` L291 | ITRA 原文措辭；研究者例外條款**未驗證** |

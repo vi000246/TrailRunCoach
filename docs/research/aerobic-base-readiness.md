@@ -9,6 +9,7 @@
 > - **自訂**：我們自己定的數字或規則，沒有外部依據。
 >
 > 查證限制：這次 WebSearch 額度用完，後半段改用 WebFetch 直接讀頁面，論文用 Europe PMC / PubMed 讀摘要。WebFetch 會先經過一個小模型摘錄，所以引號裡的句子是它回報的「原文」。關鍵的四項（UA 10% 差距、UA 從 Zone 3 開始、Friel 飄移 < 5% 與時間、Seiler 80/20 以課表次數計）已經再抓一次原文核對過。
+> 2026-10-06 再核對（SP-107 #8）：其餘引號和數字改用原始網頁 HTML（UA 頁面擋直接下載，改讀 Wayback 2026-05／06 的快照）和 PubMed／Europe PMC 的摘要或全文逐字比對，**不再經過摘錄模型**。結果見 §8：大部分相符；UA〈When to add intensity〉的幾句（含上面四項裡的「差距 > 10%」原句和「每週 1 次」）在現在的頁面找不到，已改成原文；UA 飄移測試的建議重測頻率是 **4–6 個月**，不是 4–6 週。仍未逐字核對：COROS 支援頁（403）、UA〈Norwegian endurance science〉（擋下載、沒有快照）、筆記（本來就是筆記）。
 
 ---
 
@@ -155,27 +156,30 @@
 ### 2.1 Uphill Athlete（House / Johnston）
 
 - **差距法（ADS）**，https://uphillathlete.com/aerobic-training/when-to-add-intensity-training/
-  - "If the spread between your AeT and AnT heart rates is greater than 10 percent, you have Aerobic Deficiency."
-  - 算法是 **AnT/AeT − 1**。原文例子："150 ÷ 128 = 1.17. Your AnT is 17 percent greater than your AeT."
-  - 差距 ≤ 10% 之後怎麼加：
-    - "Start with Zone 3"
-    - "Start with total high-intensity work time equal to roughly 5 percent of your weekly aerobic volume"
-    - 每週 1 次，能輕鬆應付再加第二次
-  - 頁面沒有給差距要多久才會縮小。
+  - ~~"If the spread between your AeT and AnT heart rates is greater than 10 percent, you have Aerobic Deficiency."~~ 2026-10-06 核對：現在的頁面（Wayback 2026-05-20 快照，署名 Uphill Athlete、2018-07-01）沒有這句。原文是 "With more than a 10 percent spread between thresholds, an athlete has what we refer to as Aerobic Deficiency"，以及 "We want to see a spread of less than 10 percent before adding any intensity into the training program."，意思相同，已改。
+  - 算法是 **AnT/AeT − 1**（原文："dividing the higher heart rate by the lower heart rate"）。原文例子（2026-10-06 逐字核對，已改成原句）："150/128 = 1.17. Your AnT/LT heart rate is 17 percent greater than your AeT heart rate."
+  - 差距 < 10% 之後怎麼加（2026-10-06 逐字核對，已改成原句）：
+    - "Start with Z3."（原本記成 "Start with Zone 3"，意思相同）；同一頁也寫 "beginning to add Z3 and Z4 workouts"。
+    - "start with a total work time of about 5 percent of your weekly aerobic volume"（小標題是 "Begin with 5 percent of your weekly aerobic volume."）
+    - 第一週的例子："It might be 1×10 minutes of Z3 the first week."
+    - Z3 到約週量的 10% 才換一部分成 Z4："Once up to about 10 percent of the total weekly volume in Z3, you should consider replacing some of the Z3 with Z4. Replace 2 minutes of Z3 with 1 minute of Z4."
+    - 間隔："Space high-intensity workouts 48 to 72 hours apart. At least 48 hours—and preferably 72."
+    - ~~每週 1 次，能輕鬆應付再加第二次~~ **2026-10-06 核對：頁面沒有這句**，是當初摘錄模型補出來的（這次用 WebFetch 再問一次，它又回報同一句，但原始 HTML 裡沒有）。原文只有 "Only add more intensity when you can comfortably handle the current load."，沒有講每週幾次。
+  - 頁面沒有給差距要多久才會縮小（2026-10-06 核對：相符，只有 "After a few weeks…" 之類的說法，沒有時程）。
   - 頁面有兩種寫法：zones 頁寫「AeT 比 AnT 低 10% 以上」，也就是 1 − AeT/AnT。兩者只在 AnT/AeT 1.10–1.111 之間判定不同（見 `docs/research/uphill-athlete-mountain-metrics.md` §2(b)）。我們用上面有數字例子的那一種。
   - 10% 門檻本身沒有同儕審查驗證，是教練經驗法則。
 - **越野跑的強度順序**，https://uphillathlete.com/trail-running/training-for-trail-running/
-  - "Athletes new to high-intensity work should start with Zone 3 workouts and slowly incorporate Zone 4 work, due to their higher strain on soft tissues."
-  - 坡衝刺是 power training："repetitions of very short duration (8 to 10 seconds) at the maximum intensity… Utilize a hill that is at least 20 percent in grade… start with 6 to 8 repetitions with a 2-to-3-minute rest"
-  - 專項期寫的是 "retain the hill sprints"，表示基礎期就有坡衝刺。但**「ADS 期間也可以做坡衝刺」這句明文沒找到**。
-  - https://uphillathlete.com/aerobic-training/what-norwegian-endurance-science-teaches-us-about-building-aerobic-base/ 把坡衝刺歸在 "neuromuscular development"。
+  - "Athletes new to high-intensity work should start with Zone 3 workouts and slowly incorporate Zone 4 work, due to their higher strain on soft tissues."（2026-10-06 逐字核對：相符）
+  - 坡衝刺是 power training："repetitions of very short duration (8 to 10 seconds) at the maximum intensity… Utilize a hill that is at least 20 percent in grade… start with 6 to 8 repetitions with a 2-to-3-minute rest"（2026-10-06 逐字核對：相符；省略號處原文是 "an athlete can produce, broken up by periods of recovery (as long as 3 minutes)" 和 "with good footing"）
+  - 專項期寫的是 "retain the hill sprints"，表示基礎期就有坡衝刺（2026-10-06 核對：相符）。但**「ADS 期間也可以做坡衝刺」這句明文沒找到**（2026-10-06 再看全頁，仍沒有）。
+  - https://uphillathlete.com/aerobic-training/what-norwegian-endurance-science-teaches-us-about-building-aerobic-base/ 把坡衝刺歸在 "neuromuscular development"。（**摘要**：2026-10-06 原頁擋下載、Wayback 沒有快照，未能逐字核對；WebFetch 回報有 "hill sprints for neuromuscular development and fast twitch muscle fiber recruitment"，署名 Steve House、2026-06-15。）
 - **鼻呼吸／講話測試**，https://uphillathlete.com/aerobic-training/aerobic-anaerobic-threshold-self-assessment/
   - 對受過訓練的人，鼻呼吸上限和 AeT 對得很好。
-  - 但 "once we began to work with untrained and less well-trained climbers, we discovered that this nice, simple test no longer worked"
+  - 但 "once we began to work with untrained and less well-trained climbers, we discovered that this nice, simple test no longer worked"（2026-10-06 逐字核對：相符）
   - 現在只當作「輕鬆跑是不是真的輕鬆」的每日檢查，要找 AeT 請做心率飄移測試。
 - **沒有實測的人**，https://uphillathlete.com/aerobic-training/should-you-test/
-  - "if you can speak in full sentences, you're below LT1"
-  - "the training itself is the test"
+  - "if you can speak in full sentences, you're below LT1"（2026-10-06 逐字核對：相符）
+  - "the training itself is the test"（2026-10-06 逐字核對：相符）
   - 這頁沒有說沒測過的人什麼時候可以加強度。
 - **心率飄移測試**：見 §6.2。
 
@@ -198,13 +202,15 @@ https://www.trainingpeaks.com/blog/aerobic-endurance-and-decoupling/（Friel，2
 
 ### 2.3 Maffetone：停滯是警訊，不是解鎖訊號
 
+（本節 2026-10-06 逐字核對原頁：全部相符。）
+
 - https://philmaffetone.com/180-formula/：180 − 年齡，再依狀況 −10／−5／0／+5。
 - https://philmaffetone.com/maf-test/："I recommend doing the test every month."
 - https://philmaffetone.com/method/step-5/
-  - "If your speed plateaus (stops increasing) for two or three tests, or decreases, this is a warning that aerobic function may be compromised"
+  - "If your speed plateaus (stops increasing) for two or three tests, or decreases, this is a warning that aerobic function may be compromised"（原句後面還有 "or diminishing"）
   - 有氧功能不好的人 "often takes three to six months of strict aerobic exercise"
-  - MAF 測試持續進步時才加肌力／無氧（這句摘錄的可信度較低）
-  - 無氧和有氧比約 80/20
+  - MAF 測試持續進步時才加肌力／無氧。2026-10-06 核對後從「可信度較低」升為已驗證，原文："Strength and power training can be included in your routine when MAF Tests have consistently improved, indicating that the aerobic system can tolerate high intensity training without impairing health."（他列的 strength and power 包含 HIT 和 fartlek）
+  - 無氧和有氧比約 80/20。原文是**全年**比例，而且「無氧」指肌力和爆發力："a yearly ratio of aerobic to strength training is about 80 percent aerobic and 20 percent anaerobic (strength and power)"
 - https://philmaffetone.com/hit-helps-hurts/：HIIT "one to three sessions (more often one to two) per week"
 
 → **「MAF 停滯就往下走」和 Maffetone 本人說的相反**，不能用他的名字做成選項。徐國峰的「錶上 VO2max 不再上升」才是「停滯＝基礎差不多」的來源，見 §4 的 `plateau`。
@@ -217,8 +223,10 @@ https://www.trainingpeaks.com/blog/aerobic-endurance-and-decoupling/（Friel，2
 - Seiler & Tønnessen 2009, *Sportscience* 13, https://www.sportsci.org/2009/ss.htm
   - "About 80 % of training sessions are performed completely or predominantly at intensities under the first ventilatory turn point"
   - 同一批選手依時間算："91 % of all training time was spent at a heart rate below VT1… ~6 % between VT1 and VT2, and only 2.6 %… above VT2"
-  - 間歇頻率："likely to dedicate 1-3 sessions weekly"
-  - "3-4 sessions per week" 會造成 overreaching
+  - 間歇頻率："likely to dedicate 1-3 sessions weekly"。前提是 "An elite athlete training 10-12 times per week"，不是休閒跑者。
+  - "3-4 sessions per week" 會造成 overreaching（原文是 2–8 週的強化期內）
+  - 以上 2026-10-06 逐字核對 sportsci.org 原文：相符（「2.6 %」原文是 "2.6 % of all 15-s heart rate registrations"）。
+- Seiler & Kjerland 2006、Seiler 2010、Seiler 2013、Helgerud 2007：2026-10-06 對 PubMed／Europe PMC 摘要逐字核對，數字和引句都相符（Seiler 2013 的 90% 是 HRpeak；Helgerud 的 +7.2% 在 PubMed 摘要裡，15/15 組 +5.5%）。
 - Seiler 2010, *IJSPP* 5:276–91, DOI 10.1123/ijspp.5.3.276，摘要："careful application of high-intensity training incorporated throughout the training cycle"。**摘要裡沒有高強度之前要先達標的門檻。**
 - Seiler et al. 2013, *Scand J Med Sci Sports* 23:74–83, DOI 10.1111/j.1600-0838.2011.01351.x
   - 對象：35 名受過訓練的休閒自行車手，7 週，每週 2 次間歇
@@ -239,6 +247,7 @@ https://www.trainingpeaks.com/blog/aerobic-endurance-and-decoupling/（Friel，2
 - 地形：Koop 建議 "uphill if possible… to reach 90% of your VO2max… more consistently"（https://trainright.com/key-workouts-every-ultrarunner-should-do/）
 - 門檻：沒有數字門檻。強度課約佔 "20% of training sessions and only about 10% of total training hours"，先拿到基礎耐力的大進步（https://trainright.com/hierarchy-ultramarathon-training-needs-jason-koop/）。
 - Koop 對 strides／坡衝刺的看法：未找到來源（書沒有取得）。
+- 本節四頁 2026-10-06 逐字核對 trainright.com 原文：相符。Addison Smith 那頁更新於 2025-04-30；"3-5 week blocks" 原文是 "I typically only prescribe them in 3-5 week blocks"（他自己的做法）；6×3 分出自 Koop 的〈Decoding…〉；"12-24 minutes" 和 "2-4 minutes" 每趟、"uphill if possible" 出自〈Key workouts…〉。
 
 ### 2.6 Daniels、Lydiard
 
@@ -249,15 +258,15 @@ https://www.trainingpeaks.com/blog/aerobic-endurance-and-decoupling/（Friel，2
 
 | 指標 | 數字 | 來源 | 能不能當門檻 |
 |---|---|---|---|
-| LT1/LT2 差距 | 沒有論文直接給 VT1 佔 VT2 的比例、受訓前後比較 | 未找到來源 | 間接數據：訓練過的自行車手 VT1 71–78% HRmax、VT2 87–92% HRmax（Pallarés 2016, *PLoS One*, DOI 10.1371/journal.pone.0163389），中點相除約 83%。這是我們算的，不是論文的 |
+| LT1/LT2 差距 | 沒有論文直接給 VT1 佔 VT2 的比例、受訓前後比較 | 未找到來源 | 間接數據：訓練過的自行車手 VT1 71–78% HRmax、VT2 87–92% HRmax（Pallarés 2016, *PLoS One*, DOI 10.1371/journal.pone.0163389），中點相除約 83%。這是我們算的，不是論文的。2026-10-06 對 PMC 全文核對：數字在 Table 3，是 14 名男性自行車手的 95% 信賴區間（VT1 71%—78%、VT2 87%—92% HRmax），相符 |
 | LT1 心率佔 HRmax | VT1 71–78% HRmax | Pallarés 2016（同上） | 「Seiler：VT1 ≈ 77–79% HRmax」未找到來源 |
-| LT1 心率佔 LTHR | Friel 跑步 Zone 2 = 85–89% LTHR | https://www.trainingpeaks.com/learn/articles/joe-friel-s-quick-guide-to-setting-zones | 這是分區慣例。App 的 0.89×LTHR 就是 Friel Zone 2 的上限，**不是測出來的 LT1** |
-| VT1 佔 VO2max | 61–86%，平均 70 ± 6% | Rogers et al. 2021, *Front Physiol* 11:596567, DOI 10.3389/fphys.2020.596567 | 受訓者乳酸閾值 79%（男）/ 73%（女）VO2max，未受訓 66.5% / 58.9%（*MSSE* 1987, DOI 10.1249/00005768-198708000-00006）。需要氣體分析 |
-| DFA-α1 | α1 = 0.75 ≈ VT1。HRVT 和 VT1 的 r = 0.99（VO2）/ 0.97（HR），心率 154 vs 152 bpm | Rogers 2021（同上），n = 15、ECG。摘要原文："DFA a1 reaching a value of 0.75 (HRVT)" | α1 = 0.5 ≈ VT2（Rogers 2021, *J Funct Morphol Kinesiol* 6:38, DOI 10.3390/jfmk6020038）。3–6% 漏拍會有偏差，但 HRVT 仍在 1 bpm 內（Rogers 2021, *Sensors* 21:821, DOI 10.3390/s21030821）。反例：*Physiol Rep* 2026, DOI 10.14814/phy2.70777，自行車 HRVT1 和 LT1/VT1 一致性差 |
-| DFA-α1 在 COROS 上 | "COROS does not support HRV data from external accessories" | https://support.coros.com/hc/en-us/articles/360058469472 | **不能做**：活動 FIT 沒有 RR 間期（官方沒說有，視為不支援）。替代方式：Polar H10＋FatMaxxer（https://github.com/IanPeake/FatMaxxer）另外錄 |
-| EF 停滯 | Friel：有氧進步時 EF "will rise over the course of a few weeks" | https://www.trainingpeaks.com/blog/efficiency-factor-and-decoupling/ | 「EF 停滯＝可以加間歇」未找到來源 |
-| FATmax | 64 ± 4% VO2max、74 ± 3% HRmax（Achten 2002, *MSSE*, DOI 10.1097/00005768-200201000-00015） | FATmax 和乳酸剛上升點（LIAB）沒有差異：63% vs 61% VO2max（Achten & Jeukendrup 2004, *IJSM*, DOI 10.1055/s-2003-45231） | 需要氣體分析。當準備好的指標：未找到來源 |
-| 飄移 5% 的生理驗證 | 馬拉松 82,303 人：decoupling 平均 1.16，出現在 25.2 km；加進去後預測誤差 6.45% → 5.16%（Smyth 2022, *Sports Med*, DOI 10.1007/s40279-022-01680-5） | 他們的分級是 onset > 1.025、低 < 1.1 | **5% 當 AeT 或體能標記：沒有同儕審查驗證**，是 Friel / UA 的教練規則 |
+| LT1 心率佔 LTHR | Friel 跑步 Zone 2 = 85–89% LTHR | https://www.trainingpeaks.com/learn/articles/joe-friel-s-quick-guide-to-setting-zones（2026-10-06 逐字核對：Run Zones "Zone 2 85% to 89% of LTHR"，相符） | 這是分區慣例。App 的 0.89×LTHR 就是 Friel Zone 2 的上限，**不是測出來的 LT1** |
+| VT1 佔 VO2max | 61–86%，平均 70 ± 6% | Rogers et al. 2021, *Front Physiol* 11:596567, DOI 10.3389/fphys.2020.596567 | 受訓者乳酸閾值 79%（男）/ 73%（女）VO2max，未受訓 66.5% / 58.9%（DeMello et al., *MSSE* 1987, DOI 10.1249/00005768-198708000-00006；2026-10-06 核對摘要：79.2／73.3／66.5／58.9 %，相符）。需要氣體分析 |
+| DFA-α1 | α1 = 0.75 ≈ VT1。HRVT 和 VT1 的 r = 0.99（VO2）/ 0.97（HR），心率 154 vs 152 bpm | Rogers 2021（同上），n = 15、ECG。摘要原文："DFA a1 reaching a value of 0.75 (HRVT)" | α1 = 0.5 ≈ VT2（Rogers 2021, *J Funct Morphol Kinesiol* 6:38, DOI 10.3390/jfmk6020038）。3–6% 漏拍會有偏差，但 HRVT 仍在 1 bpm 內（Rogers 2021, *Sensors* 21:821, DOI 10.3390/s21030821）。反例：*Physiol Rep* 2026, DOI 10.14814/phy2.70777，自行車 HRVT1 和 LT1/VT1 一致性差。2026-10-06 核對摘要與全文：四篇的數字都相符（Rogers 2021 *Front Physiol* r 0.99／0.97、ICC 0.99／0.96；*Sensors* 那篇 n = 17，另外 Polar H7 比 ECG 平均低 4 bpm；*Physiol Rep* 2026 是 21 人、4 分鐘階梯） |
+| DFA-α1 在 COROS 上 | "COROS does not support HRV data from external accessories" | https://support.coros.com/hc/en-us/articles/360058469472（2026-10-06：原頁 403，未能逐字核對；搜尋結果顯示該頁標題是〈Heart Rate Variability (HRV)〉，搜尋摘要的說法和這句一致，標**摘要**） | **不能做**：活動 FIT 沒有 RR 間期（官方沒說有，視為不支援）。替代方式：Polar H10＋FatMaxxer（https://github.com/IanPeake/FatMaxxer）另外錄 |
+| EF 停滯 | Friel：有氧進步時 EF "will rise over the course of a few weeks" | https://www.trainingpeaks.com/blog/efficiency-factor-and-decoupling/（2026-10-06 逐字核對：原句 "If you are making good aerobic progress, then your EF will rise over the course of a few weeks."，相符） | 「EF 停滯＝可以加間歇」未找到來源（2026-10-06 再看全頁，仍沒有） |
+| FATmax | 64 ± 4% VO2max、74 ± 3% HRmax（Achten 2002, *MSSE*, DOI 10.1097/00005768-200201000-00015） | FATmax 和乳酸剛上升點（LIAB）沒有差異：63% vs 61% VO2max（Achten & Jeukendrup 2004, *IJSM*, DOI 10.1055/s-2003-45231） | 需要氣體分析。當準備好的指標：未找到來源。（2026-10-06 核對兩篇摘要：相符；Achten 2004 原文是 63 ± 9 % 對 61 ± 5 %） |
+| 飄移 5% 的生理驗證 | 馬拉松 82,303 人：decoupling 平均 1.16，出現在 25.2 km；加進去後預測誤差 6.45% → 5.16%（Smyth 2022, *Sports Med*, DOI 10.1007/s40279-022-01680-5） | 他們的分級是 onset > 1.025、低 < 1.1（中 1.1–1.2、高 ≥ 1.2）。2026-10-06 對 PMC 全文核對：相符 | **5% 當 AeT 或體能標記：沒有同儕審查驗證**，是 Friel / UA 的教練規則 |
 
 ### 2.8 先打基礎再練間歇，研究怎麼說
 
@@ -282,6 +291,7 @@ https://www.trainingpeaks.com/blog/aerobic-endurance-and-decoupling/（Friel，2
   - Muñoz 2014, *IJSPP* 9:265–72, DOI 10.1123/ijspp.2012-0350：30 名休閒跑者，10 週，極化（依時間 77/3/20）10K 進步 5.0%，閾值間 3.6%，差異不顯著。**摘要沒有傷害資料。**
   - Esteve-Lanao 2007, *JSCR* 21:943–9, DOI 10.1519/R-19725.1：次菁英跑者，約 5 個月，Z3 都約 8%，Z1 多的那組進步較多，"provided that the contribution of high-intensity training remains sufficient"。
 - **低劑量 VO2max 間歇對休閒越野跑者、登山者的安全性：未找到來源。**
+- 本節的數字 2026-10-06 對 PubMed／Europe PMC 摘要（Filipas 2022 對 PMC 全文 Table 5）逐字核對：全部相符。補充：Rosenblat 2019 的 3 篇 RCT PEDro 只有 4–5／10；Silva Oliveira 2024 的 < 12 週子群 SMD 0.40、高水準選手 SMD 0.46；Rosenblat 2025 是 13 篇、348 人的個人資料網絡統合分析；Rønnestad 2014 每組 9–10 人；Muñoz 2014 的 5.0% 對 3.6% 差約 41 秒，不顯著。
 
 → 研究**不支持**「一定要先過門檻才能練高強度」。支持的是「大部分時間低強度，高強度少量但一直都有」，以及「中後段才提高高強度比例」。
 
@@ -290,9 +300,9 @@ https://www.trainingpeaks.com/blog/aerobic-endurance-and-decoupling/（Friel，2
 | 來源 | 準則 | 數字 | 時間／條件 | 驗證 |
 |---|---|---|---|---|
 | **UA 差距法** | AnT/AeT − 1 ≤ 10% → 可以加 Zone 3、Zone 4 | 10% | AeT、AnT 都要實測 | 已驗證；教練規則，無同儕審查 |
-| UA 加法 | 先 Zone 3，約週有氧量的 5%，每週 1 次 | 5%、1 次/週 | 差距 ≤ 10% 之後 | 已驗證 |
+| UA 加法 | 先 Zone 3，約週有氧量的 5%（例：第一週 1×10 分）；Z3 到週量約 10% 才把一部分換成 Z4；硬課間隔 48–72 小時 | 5%、10% | 差距 < 10% 之後 | 已驗證（2026-10-06 改：原本的「每週 1 次」頁面上沒有，刪掉） |
 | **Friel 飄移法** | 在 AeT 跑目標時間 decoupling < 5% → 進 build | < 5% | 跑步 1–2 小時、在 AeT、不含暖身 | 已驗證 |
-| UA 飄移測試 | 用來**找 AeT**，不是判斷準備好了沒 | < 3.5 / 3.5–5 / > 5% | 40–60 分鐘、平路或跑步機 | 已驗證 |
+| UA 飄移測試 | 用來**找 AeT**，不是判斷準備好了沒 | < 3.5 / 3.5–5 / > 5% | 40–60 分鐘、平路或跑步機；建議每 4–6 **個月**重測 | 已驗證（2026-10-06 逐字核對） |
 | 徐國峰 | E 配速 90 分鐘 (HR90 − HR10)/HR10 < 10% → 可以練間歇 | < 10%（< 5% 國家級） | 平地、< 25 °C、補給停 ≤ 30 秒 | 筆記（書） |
 | Maffetone | MAF 測試每月一次；停滯 2–3 次＝**警訊**；基礎 3–6 個月 | — | — | 已驗證 |
 | Seiler | 不設門檻；約 80% 課表低強度（時間約 91%），每週 1–3 次高強度 | 80/20（課表數） | 整個週期都有 | 已驗證 |
@@ -324,7 +334,7 @@ https://www.trainingpeaks.com/blog/aerobic-endurance-and-decoupling/（Friel，2
 | DFA-α1 | **不能** | COROS 不存 RR 間期 | Polar H10＋外部 app |
 | FATmax、VT1 %VO2max、乳酸 LT1 | **不能** | — | 實驗室 |
 | 鼻呼吸／講話測試 | 不能自動 | 只能當提示文字 | 自己感覺 |
-| 階梯／Conconi 心率拐點找 LT1 | 不建議 | 很多人根本沒有拐點：Vachon 1999 *J Appl Physiol* DOI 10.1152/jappl.1999.87.1.452「只有一半的受試者」有；Carey 2002 60% 沒有拐點（PMC3979002）。拐點比較接近 LT2 / MLSS（Pereira 2016, PMID 26014090） | — |
+| 階梯／Conconi 心率拐點找 LT1 | 不建議 | 很多人根本沒有拐點：Vachon 1999 *J Appl Physiol* DOI 10.1152/jappl.1999.87.1.452「只有一半的受試者」有（2026-10-06 核對摘要後補充：8 名跑者在田徑場的 Conconi 測試**全部**有拐點，只有跑步機連續測試時一半有；作者認為田徑場上是因為每段越來越短才出現拐點，而且拐點高估了 LT）；Carey 2002 60% 沒有拐點（PMC3979002；73 名自行車手中 44 人，60.3%，相符）。拐點比較接近 LT2 / MLSS（Pereira 2016, PMID 26014090；15 名未受訓男性，拐點速度和 MLSS 速度沒有差別，相符） | — |
 
 ---
 
@@ -391,8 +401,8 @@ https://www.trainingpeaks.com/blog/aerobic-endurance-and-decoupling/（Friel，2
 | 護欄 | 規則 | 現有程式 | 依據 |
 |---|---|---|---|
 | 強度分配 | 4 週心率 < AeT（估計值）的**時間**佔比 ≥ 75%（`LOW_SHARE_GOOD`）才排 VO2 類；65–75% 只排閾值下 3×8 或不排；< 65% 不排 | `i_intensity` | Seiler：課表數約 80%、時間約 91% 低強度。用時間算，75% 已經偏寬，所以不再放寬。有功率時也要看 < 80% CP 的佔比 ≥ 75%（Palladino 早期 ≤ 80% CP） |
-| CTL ramp | 每週 ≥ max(3, CTL 的 10%) → 這週只排閾值；≥ min(10, max(5, CTL 的 15%)) → 不排（SP-63 起，`load_guard.py`；之前是 5／**8**） | `i_fitness` | **Friel**（教練，https://joefrieltraining.com/the-ctl-ramp-rate/ ：5–8 適合多數人、10 是上限；`unsourced-rules.md` §B2，2026-10-01 從 7 改 8）；Palladino 的每週 +1–3 當「可長期維持」顯示 |
-| 週增量 | 上週增幅 > 20%（`i_volume` 的 BAD）→ 不排；10–20% → 維持上週的劑量，不往上加（SP-63 起只算跑步時間、對 max(上上週, 前 4 週平均)） | `i_volume`、`load_guard.STEP_HOLD／STEP_BLOCK` | > 20%：**Nielsen et al. 2014**（JOSPT 44:739，DOI 10.2519/jospt.2014.5164）、**Damsted et al. 2019**（JOSPT 49:230，DOI 10.2519/jospt.2019.8541），同儕審查；10–20% 維持：推估（保守）。「10% 法則」本身沒有證據 |
+| CTL ramp | 每週 ≥ max(3, CTL 的 10%) → 這週只排閾值；≥ min(10, max(5, CTL 的 15%)) → 不排（SP-63 起，`load_guard.py`；之前是 5／**8**） | `i_fitness` | **Friel**（教練，https://joefrieltraining.com/the-ctl-ramp-rate/ ：5–8 適合多數人、10 是上限；`unsourced-rules.md` §B2，2026-10-01 從 7 改 8；2026-10-06 逐字核對：原文 "an increase in CTL of about 5 to 8 points per week is about right for most"，10 不是硬上限，而是 "Go much beyond a week at 10 or more weekly CTL ramp rate and the outcomes aren't likely to be as beneficial"）；Palladino 的每週 +1–3 當「可長期維持」顯示 |
+| 週增量 | 上週增幅 > 20%（`i_volume` 的 BAD）→ 不排；10–20% → 維持上週的劑量，不往上加（SP-63 起只算跑步時間、對 max(上上週, 前 4 週平均)） | `i_volume`、`load_guard.STEP_HOLD／STEP_BLOCK` | > 20%：**Nielsen et al. 2014**（JOSPT 44:739，DOI 10.2519/jospt.2014.5164）、**Damsted et al. 2019**（JOSPT 49:230，DOI 10.2519/jospt.2019.8541），同儕審查；10–20% 維持：推估（保守）。「10% 法則」本身沒有證據。2026-10-06 核對摘要後補充：**20% 的切點只來自 Damsted 2019**（261 人準備半馬，第 21 天時週距離增 20–60% 的人受傷比 < 20% 的人多，風險差 22.6%；第 56、98 天就沒有差別）；Nielsen 2014 是新手、**兩週增 > 30%** 對 < 10%，距離相關傷害 HR 1.59、P = .07（不顯著，探索性） |
 | 3:1 恢復週 | `mode == "recovery_week"` → 不排正式間歇，改成 4×1 分 @ 98–101% CP fartlek | `week_plan` 的 `build3` | Palladino 恢復週保留 1–2 次 98–101% fartlek（palladino基礎期 L86）；3:1 是 Friel / UA 的常見做法（`SRC_31`） |
 | TSB | TSB < −30 → 恢復週（現有）；−30 到 −20 → 劑量不往上加 | `week_plan` | Friel／TrainingPeaks（Simmons 2020，教練）TSB 區間 |
 | 2 天 | 間歇離長跑和其他硬課 ≥ 2 天；5 區一週最多 2 次 | `plan_prefs.place()`（已經有） | **台灣教練**：5 區一週最多 2 次、間隔至少 2 天 |
@@ -476,7 +486,7 @@ https://www.trainingpeaks.com/blog/aerobic-endurance-and-decoupling/（Friel，2
   - Muñoz 2014 的休閒跑者從第一週就有高強度，結果不差。
   - Filipas 2022 的四組從頭到尾都有高強度。
   - 沒有研究顯示「先過門檻」比較好（§2.8）。
-- **基礎期的量**：每週 1 次（UA 的起步量、Palladino 後期每週 1 次、Maffetone 1–2 次）。`plan.prefs.quality_per_week` 可以設 0–2，預設 auto = 最多 1。
+- **基礎期的量**：每週 1 次（Palladino 後期每週 1 次、Maffetone 1–2 次）。2026-10-06 改：原本還寫「UA 的起步量」，但 UA 原文只有「約週量 5%、例如第一週 1×10 分 Z3」，沒有講每週幾次，所以拿掉；UA 的 5% 仍可當第一堂的量。`plan.prefs.quality_per_week` 可以設 0–2，預設 auto = 最多 1。
 - **類型**：前 6 週依 §4.5，從短（1 分）到中（3–4 分）。之後和閾值下 3×8、4×8 交替。
 - **坡衝刺**：每週一次 8×10 秒（現有），不算間歇。依據是 UA（8–10 秒，≥ 20% 坡，6–8 趟，休 2–3 分）和 Palladino（8–15 秒，4–8 趟）。
 - **護欄**：§4.4。
@@ -500,11 +510,11 @@ https://www.trainingpeaks.com/blog/aerobic-endurance-and-decoupling/（Friel，2
 
 | 流程 | 暖身 | 測試長度 | 場地 | 固定什麼 | 比較 | 判讀 | 來源 |
 |---|---|---|---|---|---|---|---|
-| **UA 心率飄移** | 10–15 分（「快要開始流汗」） | **40–60 分**："If you only have 40 minutes, do that." "We don't recommend relying on tests less than 40 minutes long." | 跑步機 3%（慢跑）／≥ 10%（健行），或平路（田徑場）。"Trails have too many pitch changes" | **固定配速**（"Don't slow down or speed up"），讓心率變 | 前半對後半（例：第一個 30 分鐘 vs 第二個 30 分鐘，(151/144 − 1) = 4.9%）；排除暖身和緩和 | < 3.5%：低於 AeT，下次起始心率 +5 bpm 再測；3.5–5%：起始心率就是 AeT；> 5%：起始太高，降低再測 | https://uphillathlete.com/aerobic-training/heart-rate-drift/ |
-| **Evoke（Johnston）** | ≥ 10 分，不超過鼻呼吸配速；找到心率 ±2–3 bpm 穩定 ≥ 3 分的配速 | **60 分** | 跑步機 2%（跑者）／15%（健行）；戶外要平的環線，每 1.6 km 爬升 < 30 m，**不要折返路線**；戶外自然坡不能做健行版 | 固定速度（"DO NOT TOUCH THE SPEED CONTROL"）；或固定心率、看配速掉多少 | 前半從約第 5 分鐘到約 30 分鐘，對後半 | 1 小時內心率升 > 5%（或固定心率時配速掉 > 5%）→ 起始在 AeT 以上；10 分鐘時心率已經高 10 下還在升 → 提早放棄重來 | https://evokeendurance.com/resources/our-latest-thinking-on-aerobic-assessment-for-the-mountain-athlete/ |
+| **UA 心率飄移** | 10–15 分（「快要開始流汗」） | **40–60 分**："If you only have 40 minutes, do that." "We don't recommend relying on tests less than 40 minutes long." | 跑步機 3%（慢跑）／≥ 10%（健行），或平路（田徑場）。"Trails have too many pitch changes" | **固定配速**（"Don't slow down or speed up"），讓心率變 | 前半對後半（例：第一個 30 分鐘 vs 第二個 30 分鐘，(151/144 − 1) = 4.9%）；排除暖身和緩和 | < 3.5%：低於 AeT，下次起始心率 +5 bpm 再測；3.5–5%：起始心率就是 AeT；> 5%：起始太高，降低再測（原文 "Redo the test using a lower starting heart rate"，**沒有給降幾下**） | https://uphillathlete.com/aerobic-training/heart-rate-drift/（2026-10-06 逐字核對：本列引句全部相符；頁面署名 Steve House、2026-06-08；「快要開始流汗」原文 "you should feel like you're about to start sweating"，在簡版步驟，暖身寫 "about 15 minutes"，詳版寫 10–15 分；另寫 "Athletes are encouraged to perform this test every 4-6 months"） |
+| **Evoke（Johnston）** | ≥ 10 分，不超過鼻呼吸配速；找到心率 ±2–3 bpm 穩定 ≥ 3 分的配速 | **60 分** | 跑步機 2%（跑者）／15%（健行）；戶外要平的環線，每 1.6 km 爬升 < 30 m，**不要折返路線**；戶外自然坡不能做健行版 | 固定速度（"DO NOT TOUCH THE SPEED CONTROL"）；或固定心率、看配速掉多少 | 前半從約第 5 分鐘到約 30 分鐘，對後半 | 1 小時內心率升 > 5%（或固定心率時配速掉 > 5%）→ 起始在 AeT 以上；10 分鐘時心率已經高 10 下還在升 → 提早放棄重來 | https://evokeendurance.com/resources/our-latest-thinking-on-aerobic-assessment-for-the-mountain-athlete/（2026-10-06 逐字核對：本列全部相符；Scott Johnston，2022-10-26。提早中止原文 "If, say, 10 minutes into the test, your HR is ten beats higher than the start and continuing to climb, the starting pace/HR was too high"，之後是 "come back another day to do the test again at a slower pace"，**沒有給降幾下**） |
 | **Friel decoupling** | 不含暖身和緩和 | 跑步 **1–2 小時** | 穩定 | 在 AeT | 前半對後半 | < 5% / 5–10% / > 10% | https://www.trainingpeaks.com/blog/aerobic-endurance-and-decoupling/ |
 | **徐國峰** | 前 10 分鐘 | **90 分** | 平地 | E 配速 | 第 10 分鐘對第 90 分鐘 | < 10% 基礎夠 | 筆記 |
-| 講話測試 | — | 階段式 | — | — | 最後一個能舒服講話的階段 | 「+」階段 64 ± 5% VO2max、82 ± 7% HRmax；「±」階段 71 ± 6% VO2max，和乳酸閾值的關係比 VT 強 | Persinger 2004 *MSSE* PMID 15354048（和 VT 相關良好，n = 16）；Reed & Pipe 2014 *Curr Opin Cardiol* DOI 10.1097/hco.0000000000000097；Quinn & Coons 2011 *J Sports Sci* DOI 10.1080/02640414.2011.585165 |
+| 講話測試 | — | 階段式 | — | — | 最後一個能舒服講話的階段 | 「+」階段 64 ± 5% VO2max、82 ± 7% HRmax；「±」階段 71 ± 6% VO2max（90 ± 6% HRmax），和乳酸閾值的關係比 VT 強。2026-10-06 核對：這組數字**出自 Quinn & Coons 2011**（n = 15，各階段心率都高於 VT、和 LT 相近），不是 Persinger | Persinger 2004 *MSSE* PMID 15354048（和 VT 相關良好，n = 16；「說話開始困難」的點幾乎等於 VT）；Reed & Pipe 2014 *Curr Opin Cardiol* DOI 10.1097/hco.0000000000000097；Quinn & Coons 2011 *J Sports Sci* DOI 10.1080/02640414.2011.585165（以上 2026-10-06 核對摘要：相符） |
 | 鼻呼吸 | — | — | — | — | — | UA：對訓練不足的人不準；鼻呼吸上限＝VT1 **沒有研究驗證**（Mapelli 2025 *PLoS One* DOI 10.1371/journal.pone.0326661 沒有找出 VT1 上限） | 未找到驗證 |
 | DFA-α1 | — | 階梯或斜坡 | — | — | α1 = 0.75 | 見 §2.7 | COROS **不能做** |
 | 心率拐點（Conconi） | — | 階梯 | — | — | — | 很多人沒有拐點；比較接近 LT2 | 不建議（§3） |
@@ -514,7 +524,7 @@ https://www.trainingpeaks.com/blog/aerobic-endurance-and-decoupling/（Friel，2
 **一定要 60 分鐘嗎？** 不一定。
 - UA 接受 40–60 分鐘，不建議少於 40 分鐘。Evoke 用 60 分鐘，Friel 用 1–2 小時，徐國峰用 90 分鐘。
 - **沒有任何長度（30、45、60 分鐘）有同儕審查的驗證**，文獻查詢零筆。
-- 生理上，心血管飄移大約在運動 10–20 分鐘後開始（Coyle & González-Alonso 2001, *Exerc Sport Sci Rev*, DOI 10.1097/00003677-200104000-00009），所以扣掉暖身後至少要有 30 分鐘以上才看得到前後半的差別。
+- 生理上，心血管飄移大約在運動 10–20 分鐘後開始（Coyle & González-Alonso 2001, *Exerc Sport Sci Rev*, DOI 10.1097/00003677-200104000-00009；2026-10-06 核對摘要：原文 "a progressive decline in stroke volume after 10-20 min of exercise"，相符），所以扣掉暖身後至少要有 30 分鐘以上才看得到前後半的差別。
 - 40 分鐘是教練經驗的下限，45–60 分鐘比較保險，屬自訂判斷。
 
 **讓測試無效的因素**：
@@ -526,8 +536,8 @@ https://www.trainingpeaks.com/blog/aerobic-endurance-and-decoupling/（Friel，2
 | 坡道、快步（平路上的短坡、過路口後加速） | UA "Trails have too many pitch changes"；Evoke 不折返；坡道後心率的遲滯時間未找到來源 | **不排除**（2026-10-01 使用者決定）：上坡後的平路心率可能還沒回來，排除會把真的影響藏起來。坡道、快步留在功率變異檢查和前後半裡；變異太大就不採用。一般的平路路線也常有幾組數公尺的短坡，而且可能集中在後半（資料檔 §3–4） |
 | 配速／功率不穩、快速結尾 | UA / Evoke 固定速度；Palladino 研討會 | 有：30 秒功率變異 > 15% 就不採用（**15% 和 30 秒都未找到來源**，推估；現在通過的跑步 p90 是 14.7%，門檻是循環的，重新校準的選項見資料檔 §6）。**但快速結尾不一定會被擋**，因為變異可能還不到 15%。建議加一條：後 10% 時間平均功率比前段高 > 5% 就不採用（自訂） |
 | 強度太高 | — | 有：> 90% CP 不採用 |
-| 熱 | 35 °C 下 15–45 分鐘心率升 11%，22 °C 只升 2%（Lafrenz 2008 *MSSE* DOI 10.1249/MSS.0b013e3181666ed7）；Wingo 2020 *MSSE* DOI 10.1249/MSS.0000000000002324 升 17–19%；28.7 對 19.2 °C 最高心率 +16 bpm（Beiter 2025 *Physiol Rep* DOI 10.14814/phy2.70305）；台灣教練 < 25 °C | 有，**分區、不拒絕**（2026-10-02 使用者決定，`workout_review.temp_band`）：< 25 °C、25–28 °C、> 28 °C、溫度不明四區，飄移只和同一區比（總覽心率飄移、季圖每區一條 6 次平均、判讀卡同類基準；AeT 聚合用 < 25 °C、溫度不明和熱校正後的 25–28 °C——心率扣 β·(T − 25)，β 文獻 1 bpm／°C（Jenkins 2023）往個人擬合收縮，unsourced-rules.md §B6）。25 °C 是台灣教練＋Lafrenz；**28 °C 是推估**（Beiter 2025 的熱組 28.7 °C，沒有來源給分界）。用氣溫不用 Hadley：飄移的來源都用 °C，手錶那條路也沒有自己的濕度。溫度：Open-Meteo 路線天氣（依檔名，否則當天唯一一筆），沒有才用手錶溫度扣手腕偏差 3.7 °C（一位跑者 72 組配對，推估，較不準）。門檻（Friel／徐國峰 90 分／AeT 測試）照常：熱會讓飄移偏高，**熱天通過仍算數（保守）**，沒通過標「熱環境，結果可能偏高」、可能是熱造成的。**不做熱校正值**：個人擬合的 β（bpm／Hadley）是跑步之間的心率位移，不是一次跑步裡心率往上飄的速度，套在前後半上等於 0。實際資料（一位跑者）：原本的 > 25 °C 規則只用 WKO5 檔名找天氣，COROS 資料 161 次路跑只找到 5 次溫度，32 個飄移值一個都沒擋到；加上依日期對照後 147 次有溫度，32 個值是 < 25 °C 5、25–28 °C 19、> 28 °C 7、溫度不明 1（舊規則會擋掉 26 個） |
-| 脫水、沒補給 | 2 小時不補水：體重 −2.9%、心率 +10%；補水加葡萄糖可以防止飄移（Hamilton 1991 *J Appl Physiol* DOI 10.1152/jappl.1991.71.3.871） | 沒有（無資料）。只能在測試說明裡提醒 |
+| 熱 | 35 °C 下 15–45 分鐘心率升 11%，22 °C 只升 2%（Lafrenz 2008 *MSSE* DOI 10.1249/MSS.0b013e3181666ed7）；Wingo 2020 *MSSE* DOI 10.1249/MSS.0000000000002324 升 17–19%；28.7 對 19.2 °C 最高心率 +16 bpm（Beiter 2025 *Physiol Rep* DOI 10.14814/phy2.70305）；台灣教練 < 25 °C。（2026-10-06 核對三篇摘要／全文：相符。注意 Lafrenz 是 10 名受訓男性**騎車** 59% VO2max、有補水；Wingo 是 7 人在 35 °C 跑步 +19%、騎車 +17%；Beiter 是 11 名鐵人跑步機 1 小時、跑到 90% 個人無氧閾值） | 有，**分區、不拒絕**（2026-10-02 使用者決定，`workout_review.temp_band`）：< 25 °C、25–28 °C、> 28 °C、溫度不明四區，飄移只和同一區比（總覽心率飄移、季圖每區一條 6 次平均、判讀卡同類基準；AeT 聚合用 < 25 °C、溫度不明和熱校正後的 25–28 °C——心率扣 β·(T − 25)，β 文獻 1 bpm／°C（Jenkins 2023）往個人擬合收縮，unsourced-rules.md §B6）。25 °C 是台灣教練＋Lafrenz；**28 °C 是推估**（Beiter 2025 的熱組 28.7 °C，沒有來源給分界）。用氣溫不用 Hadley：飄移的來源都用 °C，手錶那條路也沒有自己的濕度。溫度：Open-Meteo 路線天氣（依檔名，否則當天唯一一筆），沒有才用手錶溫度扣手腕偏差 3.7 °C（一位跑者 72 組配對，推估，較不準）。門檻（Friel／徐國峰 90 分／AeT 測試）照常：熱會讓飄移偏高，**熱天通過仍算數（保守）**，沒通過標「熱環境，結果可能偏高」、可能是熱造成的。**不做熱校正值**：個人擬合的 β（bpm／Hadley）是跑步之間的心率位移，不是一次跑步裡心率往上飄的速度，套在前後半上等於 0。實際資料（一位跑者）：原本的 > 25 °C 規則只用 WKO5 檔名找天氣，COROS 資料 161 次路跑只找到 5 次溫度，32 個飄移值一個都沒擋到；加上依日期對照後 147 次有溫度，32 個值是 < 25 °C 5、25–28 °C 19、> 28 °C 7、溫度不明 1（舊規則會擋掉 26 個） |
+| 脫水、沒補給 | 2 小時不補水：體重 −2.9%、心率 +10%；補水加葡萄糖可以防止飄移（Hamilton 1991 *J Appl Physiol* DOI 10.1152/jappl.1991.71.3.871；2026-10-06 核對摘要：相符，對象是 10 名受訓者在 22 °C 騎車 2 小時、70% VO2max；完全補水時心率仍升 5%） | 沒有（無資料）。只能在測試說明裡提醒 |
 | 咖啡因 | 對運動心率有交互作用（Glaister 2025 *RQES* DOI 10.1080/02701367.2024.2377303，效果大小沒取得） | 沒有；只能提醒 |
 | 前一天的疲勞 | Evoke "vary daily, depending on your recovery state"；Friel "cardiovascular fatigue"（沒有同儕審查來源） | 沒有；排課時避開（§6.4） |
 | 時間不夠 | UA ≥ 40 分鐘（暖身之後）；心血管飄移約在運動 10–20 分鐘後開始（Coyle & González-Alonso 2001 *Exerc Sport Sci Rev* DOI 10.1097/00003677-200104000-00009） | 有，分兩級（2026-10-01 使用者決定）。**嚴格／測試級**：暖身 10 分鐘後的移動時間 ≥ 40 分鐘（`DRIFT_MIN_S`），只有這一級拿來判斷間歇門檻（Friel／徐國峰）、AeT 測試分類和寫門檻。**參考級**：暖身後 30–40 分鐘（`DRIFT_REF_MIN_S`，**推估**，30 分鐘沒有來源；UA 的 40 分鐘是正式 AeT 測試的標準），其他排除條件（熱、坡、停頓、快速結尾、功率變異、強度、功率涵蓋率）照樣套用；只在總覽心率飄移、季圖、判讀卡顯示，標「參考（暖身後 30–40 分，未達 UA 測試標準）」。< 30 分鐘兩級都不採用。在一位跑者的實際資料上（164 次 ≥ 40 分鐘的路跑，多數只略長於 40 分鐘）：嚴格 1 次、參考 32 次。`test_aet` 的穩定跑備援仍用 ≥ 55 分鐘（`TEST_AET_MIN_S`），排進課表的 50 分鐘測試靠課表 done_by／標題辨認 |
@@ -566,8 +576,8 @@ https://www.trainingpeaks.com/blog/aerobic-endurance-and-decoupling/（Friel，2
   - 暖身時用鼻呼吸確認不超過（Evoke）。
 - **判讀**：UA 三段。
   - < 3.5%：下次 +5 bpm 再測
-  - 3.5–5%：前半平均心率＝AeT
-  - > 5%：下次 −5 bpm 再測
+  - 3.5–5%：前半平均心率＝AeT（2026-10-06 核對：UA 原文是 "You have determined your AeT heart rate, which was your starting heart rate for the test"，是**起始心率**；固定配速下前半平均會比起始心率略高，用前半平均是我們的簡化，**推估**）
+  - > 5%：下次 −5 bpm 再測（UA 只寫 "Redo the test using a lower starting heart rate"，5 bpm 是比照 < 3.5% 那段的 +5，**推估**）
 
 ### 6.4 在 app 裡怎麼排、怎麼分析、怎麼套用
 
@@ -615,7 +625,7 @@ https://www.trainingpeaks.com/blog/aerobic-endurance-and-decoupling/（Friel，2
 | 數字 | 用在哪 |
 |---|---|
 | ~~AeT 16 週過期~~ | **已移除**（B3）：AeT 有效＝聚合估計 SE ≤ 3 bpm 且最近 6 次沒有 > 5 bpm 的單向偏移（推估，`unsourced-rules.md` §B3）；停跑 ≥ 4 週視同過期（UA） |
-| ~~AeT 每 4–6 週重測、每 5 個基礎週建議一次~~ | **已移除**：只在有理由時排（SE 太大、偏移、約 6 週沒有可判讀的跑步〔推估 6 週；UA 4–6 週，原文未驗證〕、估計值移動超過 SE、停跑 ≥ 4 週）；兩次測試間隔 ≥ 28 天（推估） |
+| ~~AeT 每 4–6 週重測、每 5 個基礎週建議一次~~ | **已移除**：只在有理由時排（SE 太大、偏移、約 6 週沒有可判讀的跑步〔推估 6 週；~~UA 4–6 週，原文未驗證~~ 2026-10-06 核對：UA 飄移測試頁原文是 "Athletes are encouraged to perform this test every 4-6 months"，**4–6 個月**，所以 6 週沒有 UA 的依據，完全是推估〕、估計值移動超過 SE、停跑 ≥ 4 週）；兩次測試間隔 ≥ 28 天（推估） |
 | 3 堂 3 區達標才進 5 區 | §4.5（推估；順序：台灣教練） |
 | 5 區 5×2 分 @ 106–112% CP | §4.5（推估：Palladino Z5 的下段） |
 | ~~舊替代訊號：隔週跑量 ≥ 70%~~ | **已移除**（2026-10-01，改成三選一測試） |
@@ -642,3 +652,51 @@ https://www.trainingpeaks.com/blog/aerobic-endurance-and-decoupling/（Friel，2
 | 標題有 AeT 且 ≥ 48 分，或沒標題 ≥ 55 分，才算做了 AeT 測試 | `overview.week_plan` 標完成 |
 | 沒標題時暖身切 15 分（≥ 55 分的跑步）或 10 分 | `aet_test.warm_for` |
 | 5% 掉速、48 小時的 2 天 | 現有規則 |
+
+---
+
+## 8. 2026-10-06 原文核對（SP-107 #8）
+
+**方法**：不再用 WebFetch 的摘錄（它會補句子：這次再問 UA〈When to add intensity〉，它又回報「每週 1 次、能輕鬆應付再加第二次」，但原始 HTML 沒有這句）。網頁直接下載 HTML 用關鍵字比對；UA 擋直接下載，改讀 Wayback 快照（2026-05-20 起，飄移測試頁是 2026-06-08 的版本）；論文讀 PubMed／Europe PMC 摘要，有 PMC 全文的讀全文。網路搜尋只用 1 次（COROS）。
+
+**相符**（引句或數字逐字對得上）：
+
+- UA：心率飄移測試頁（40–60 分、"If you only have 40 minutes, do that."、"We don't recommend relying on tests less than 40 minutes long."、"Trails have too many pitch changes"、"Don't slow down or speed up."、151/144 → 4.9%、3.5／5% 三段、跑步機 3%／10%）；越野跑頁（Zone 3 → Zone 4、坡衝刺 8–10 秒、≥ 20% 坡、6–8 趟、休 2–3 分、"retain the hill sprints"）；鼻呼吸自評頁；〈Should you test〉。
+- Evoke 60 分鐘流程（跑步機 2%／15%、每 1.6 km < 30 m、不要折返、"DO NOT TOUCH THE SPEED CONTROL"、第 10 分鐘高 10 下就重做、1 小時 > 5%、暖身鼻呼吸＋穩定 3 分、"vary daily"）。
+- Friel：EF "will rise over the course of a few weeks"；跑步 Zone 2 = 85–89% LTHR；CTL ramp 5–8（10 不是硬上限，見 §4.4）。
+- Maffetone 四頁（180 公式、每月測、停滯 2–3 次是警訊、3–6 個月、HIT 每週 1–3 次）；「MAF 持續進步才加肌力／爆發力」從「可信度較低」升為已驗證。
+- Seiler & Tønnessen 2009、Seiler & Kjerland 2006、Seiler 2010、Seiler 2013、Helgerud 2007。
+- CTS／Koop 四頁。
+- Pallarés 2016（Table 3）、Rogers 2021 三篇、*Physiol Rep* 2026、DeMello 1987、Achten 2002／2004、Smyth 2022。
+- Lafrenz 2008、Wingo 2020、Beiter 2025、Hamilton 1991、Coyle & González-Alonso 2001。
+- Stöggl 2014、Rosenblat 2019／2025、Silva Oliveira 2024、Filipas 2022、Rønnestad 2014、Almquist 2022、Muñoz 2014、Esteve-Lanao 2007、Carey 2002、Pereira 2016、Persinger 2004、Reed & Pipe 2014、Mapelli 2025。
+- Nielsen 2014、Damsted 2019（數字相符，但 20% 的切點只來自 Damsted，見 §4.4）。
+
+**更正**：
+
+| 位置 | 原本 | 原文／改成 |
+|---|---|---|
+| §2.1 UA 差距法 | "If the spread … greater than 10 percent, you have Aerobic Deficiency." | 現在的頁面沒有這句；原文 "With more than a 10 percent spread between thresholds, an athlete has what we refer to as Aerobic Deficiency"（意思相同） |
+| §2.1、§2.9、§5 | UA「每週 1 次，能輕鬆應付再加第二次」 | **頁面沒有**。原文是約週量 5%（例：第一週 1×10 分 Z3）、Z3 到約週量 10% 再換一部分成 Z4（2 分 Z3 換 1 分 Z4）、硬課間隔 48–72 小時 |
+| §2.1 | "Start with Zone 3"、"…equal to roughly 5 percent…" | "Start with Z3."、"start with a total work time of about 5 percent of your weekly aerobic volume"（意思相同，改成原句） |
+| §7 | 「UA 4–6 週重測，原文未驗證」 | UA 原文 "every 4-6 months"：**4–6 個月** |
+| §6.3 | 3.5–5%：前半平均心率＝AeT | UA 寫的是**起始心率**；前半平均是我們的簡化（推估） |
+| §6.3 | > 5%：−5 bpm | UA 只說用較低的起始心率；Evoke 只說改天用較慢的配速。5 bpm 是推估 |
+| §6.2 講話測試 | 64／71% VO2max 掛在 Persinger 名下 | 出自 Quinn & Coons 2011 |
+| §3 心率拐點 | Vachon「只有一半的受試者」有拐點 | 田徑場 Conconi 測試 8 人全部有，跑步機連續測試才一半有 |
+| §2.3 Maffetone | 無氧和有氧比約 80/20 | 原文是全年比例，「無氧」指肌力和爆發力 |
+
+**未能逐字核對**：
+
+- COROS 支援頁〈Heart Rate Variability (HRV)〉：403（Cloudflare），Wayback 沒有內容。只有搜尋摘要和這句一致，標**摘要**。
+- UA〈What Norwegian endurance science teaches us…〉：擋下載、Wayback 沒有快照；WebFetch 回報有 "hill sprints for neuromuscular development…"，標**摘要**。
+- 筆記（§1）：本來就是筆記，不在這次範圍。
+- 書（Daniels、Lydiard、Koop、Friel 的書）：未讀，維持「未找到來源」。
+
+**付費牆**：這次沒有碰到需要付費才能讀的來源（MSSE、JSCR、Scand J Med Sci Sports 那幾篇用 PubMed 摘要就夠核對）。
+
+**和程式不一致的地方**（只記錄，不改程式；開單建議見 SP-107）：
+
+- `backend/engine/base_check.py:100`、`backend/engine/quality_gate.py:1848`、`backend/engine/baseline_test.py:23–24` 把「4–6 週重測」寫成 UA 的說法；UA 原文是 4–6 個月。常數本身（`NO_DATA_DAYS = 42`、`REPEAT_DAYS`）是推估／使用者決定，只是出處文字要改。
+- `backend/engine/aet_test.py:384`、`:391`（> 5% → −5 bpm）和 `:577`（Evoke 提早中止「降 5 bpm」）：原文沒有 5 bpm，來源標示要加「推估」。
+- `backend/engine/aet_test.py:390`：3.5–5% 時 AeT 用前半平均心率；UA 原文是起始心率。差幾 bpm，是否要改待決定。
