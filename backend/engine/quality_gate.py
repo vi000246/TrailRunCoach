@@ -53,7 +53,8 @@ ladder, dose step and 達標 count (dose_tracks):
      drift < 5 % at the tested AeT; the 90-min test is not an AeT test) and the soft 「3 區先」:
      ≥ Z5_Z3_NEED Zone 3 sessions in the last 6 weeks (推估), or the Zone 5 track already under way.
 Zone 3 keeps going after Zone 5 opens. 課表偏好 2 a week → one of each; 1 a week with both open →
-alternate by the A race (track_ratio: ≤ 10 km road 1:1, else 2:1; 推估). A step moves one rung per
+alternate by the A race (track_ratio: ≤ 10 km road 1:1, else 2:1; 推估 — the 專項期's 後段 has its own
+ratio, below). A step moves one rung per
 planned session 達標 in the last 8 weeks. Each step is a library variant fitted to the day
 (engine/interval_library.py). The recovery-week fartlek is not a step. A held week repeats
 the last step. The step moves by the progression state machine of
@@ -62,8 +63,11 @@ docs/research/interval-adaptation.md §4.3 (interval_outcome / dose_step):
 short = target −5 %. The old "last rep 5 % below the first -> back one" rule is
 gone (the WKO5 speakers oppose it).
 
-專項期 / 減量期 run the same two-track choice with their own sessions (overview.quality_sessions);
-their guard: intensity and drift not bad, and in 專項期 (owner 2026-10-04) this week's CTL ramp
+專項期 / 減量期 run the same two-track choice (overview.quality_sessions). The 專項期 keeps climbing
+the ladders — 越野 the rung's uphill version, 路跑 on the flat — and has two halves (SP-75, track_ratio /
+week_ratio): 前段 (賽前第 10–7 週) and 後段 (賽前第 6–3 週), whose 1-a-week ratio leans toward the
+race's intensity (a trail race of ≥ 4 h: Zone 3 only). 減量期 has its own sessions.
+Their guard: intensity and drift not bad, and in 專項期 (owner 2026-10-04) this week's CTL ramp
 (load_guard watch line: threshold only / block line: none) and > STEP_BLOCK volume step on both tracks, as in the
 base phase — 減量期, race / recovery weeks and the re-entry block stay exempt.
 """
@@ -1299,7 +1303,8 @@ SRC_Z3 = {
     "xu90": "徐國峰部落格（2016-12）：90 分鐘平路 1 區，飄移 < 10%",
     "ua_gap": SRC_UA,
     "ratio": "推估（研究 Finding 6 的週內配置：UA 專項期 1 堂 Z3＋1 堂 Z4、Daniels 主課＋T 次課）："
-             "每週 1 堂時，目標 ≤ 10 km 路跑 3 區：5 區 = 1:1，半馬以上／越野／沒有 A 賽 2:1",
+             "每週 1 堂時，目標 ≤ 10 km 路跑 3 區：5 區 = 1:1，半馬以上／越野／沒有 A 賽 2:1；"
+             "專項期後段（賽前第 6–3 週）往比賽強度偏（Koop、Uphill Athlete、Haugen 2022；比例為推估）",
     "volume": "Daniels：T 每週不超過週量 10%；Uphill Athlete：Zone 3 起步約週有氧量 5%",
     "share": "推估：一週間歇（3 區＋5 區的目標區時間）≤ 跑步時間 20%（Seiler 80/20；Koop）",
 }
@@ -1572,18 +1577,84 @@ def z3_open_on(z3: Optional[dict], monday: Optional[dt.date], gate_monday: Optio
     return ahead > 0 and int(z3.get("weeks") or 0) + ahead >= int(z3.get("weeks_need") or Z3_WEEKS_NEED)
 
 
+# ---- 專項期的前段／後段 (SP-75; specific-phase-progression.md §4, owner 2026-10-05) -----------------
+# 前段 = 賽前第 10–7 週: the same sessions as the late base phase, the ladders keep climbing.
+# 後段 = 賽前第 6–3 週: the 1-a-week ratio leans toward the race's intensity — the one thing the schools
+# agree on is 「the closer to the race, the more race-like」, and what is race-like differs by the race:
+# low intensity and steady state for an ultra (Koop: the last 6–8 weeks; UA long races: one Zone 3 or
+# Zone 4 session), around race pace for a marathon (Canova; Haugen 2022: the moderate share grows),
+# high intensity for a short race (Casado 2022). The week cut, the ratios and the 4-h line are 推估.
+# (Zone 3, Zone 5) of 前段, of 後段, and the 後段 weeks whose Zone 3 session is T+ (97–100 % CP, near a
+# 10 km / half marathon's race intensity):
+#   越野／百岳 < 4 h (UA short races: one Zone 3 + one Zone 4; Ehrström 2018: VO2max still counts)  1:1 → 1:1
+#   越野／百岳 ≥ 4 h, multi-day (planning.event_size ≥ 馬拉松級)  2:1 → Zone 3 only, no Zone 5 kept
+#   路跑 ≤ 5 km  1:1 → 1:2          路跑 ≤ 10 km  1:1 → 1:1, Zone 3 = T+
+#   半馬 (< 30 km)  2:1 → 3:1, T+ in the second half of the 後段      馬拉松+  2:1 → 3:1
+SPEC_LATE_WEEKS = 6
+ROAD_5K_KM, ROAD_10K_KM, ROAD_HALF_MAX_KM = 5.0, 10.0, 30.0        # 30 = overview.MP_GOAL_MIN_KM (marathon-like)
+SPEC_RATIO = {
+    "trail_short": ((1, 1), (1, 1), ()),
+    "trail_long": ((2, 1), (1, 0), ()),
+    "road_5k": ((1, 1), (1, 2), ()),
+    "road_10k": ((1, 1), (1, 1), (6, 5, 4, 3)),
+    "road_half": ((2, 1), (3, 1), (4, 3)),
+    "road_long": ((2, 1), (3, 1), ()),
+}
+
+
+def race_class(e) -> str:
+    """The SPEC_RATIO row of an A race: 路跑 by its distance (no distance = marathon-like, as before),
+    越野／百岳 short / long at 4 h (planning.event_size: the predicted time → EP → km; a multi-day trip is long)."""
+    if e.kind == "road":
+        km = float(e.distance_km or 0.0)
+        return "road_long" if not km or km >= ROAD_HALF_MAX_KM else "road_5k" if km <= ROAD_5K_KM else \
+            "road_10k" if km <= ROAD_10K_KM else "road_half"
+    from backend.engine import planning as PL
+    return "trail_long" if PL.event_size(e) >= PL.MARATHON else "trail_short"
+
+
 def track_ratio(events, today: dt.date) -> dict:
     """The 1-a-week alternation (推估): the next A race a road race ≤ 10 km → Zone 3 : Zone 5 = 1:1;
-    a half marathon or longer, a trail race / 百岳, or no A race → 2:1. {"z3", "z5", "why"}."""
+    a half marathon or longer, a trail race / 百岳, or no A race → 2:1. {"z3", "z5", "why"} — the base
+    phase's. With an A race ahead also its 專項期 halves (SP-75, SPEC_RATIO; week_ratio picks one by the
+    week): "start" (the race's first day), "class", "early" / "late" {"z3", "z5", "why"}, the late one
+    with "tp" (its T+ weeks)."""
     ahead = sorted((e for e in events or () if getattr(e, "priority", "A") == "A" and getattr(e, "kind", "") in
                     ("race", "road", "baiyue") and e.start >= today), key=lambda e: e.start)
     e = ahead[0] if ahead else None
-    if e is not None and e.kind == "road" and e.distance_km and e.distance_km <= 10.0:
-        return {"z3": 1, "z5": 1, "why": f"A 賽 {e.distance_km:g} km 路跑（≤ 10 km）"}
     if e is None:
         return {"z3": 2, "z5": 1, "why": "沒有 A 賽"}
     what = "越野" if e.kind != "road" else f"{e.distance_km:g} km 路跑" if e.distance_km else "路跑"
-    return {"z3": 2, "z5": 1, "why": f"A 賽{what}"}
+    if e.kind == "road" and e.distance_km and e.distance_km <= 10.0:
+        out = {"z3": 1, "z5": 1, "why": f"A 賽 {e.distance_km:g} km 路跑（≤ 10 km）"}
+    else:
+        out = {"z3": 2, "z5": 1, "why": f"A 賽{what}"}
+    cls = race_class(e)
+    early, late, tp = SPEC_RATIO[cls]
+    if e.kind == "road":
+        race = _("{km:g} km 路跑", km=e.distance_km) if e.distance_km else _("路跑")
+    else:
+        ev = _("百岳行程") if e.kind == "baiyue" else _("越野賽")
+        race = (_("預估 4 小時以上的{event}", event=ev) if cls == "trail_long"
+                else _("預估不到 4 小時的{event}", event=ev))
+    return {**out, "start": e.start.isoformat(), "class": cls,
+            "early": {"z3": early[0], "z5": early[1], "why": _("專項期前段（A 賽：{race}）", race=race)},
+            "late": {"z3": late[0], "z5": late[1], "why": _("專項期後段（A 賽：{race}）", race=race), "tp": list(tp)}}
+
+
+def week_ratio(gate: dict, kind: str, monday: Optional[dt.date]) -> dict:
+    """The 1-a-week ratio of the week of `monday`: gate["ratio"], in the 專項期 its 前段 / 後段 part by
+    賽前第 n 週 (SP-75) with "segment" (early | late) and "weeks_out". A gate without the halves (an
+    older stored one, no A race) or a week after the race keeps gate["ratio"]."""
+    r = gate.get("ratio") or {"z3": 2, "z5": 1}
+    mon = monday or (dt.date.fromisoformat(gate["monday"]) if gate.get("monday") else None)
+    if kind != "specific" or mon is None or not r.get("start") or not r.get("late"):
+        return r
+    w = -(-(dt.date.fromisoformat(str(r["start"])[:10]) - mon).days // 7)       # specific_phase.weeks_out
+    if w < 1:
+        return r
+    seg = "late" if w <= SPEC_LATE_WEEKS else "early"
+    return {**(r.get(seg) or r), "segment": seg, "weeks_out": w}
 
 
 def lthr_invalid(ds, plan, today: dt.date, lt: dict, ae: dict) -> Optional[dict]:
@@ -2479,9 +2550,25 @@ def week_decision(gate: dict, kind: str, mode: str, monday: Optional[dt.date] = 
                 warn = "輕鬆跑心率偏高（強度分配是 bad）——只是提醒，3 區照排；5 區先不排"
             else:
                 warn = "輕鬆跑心率偏高（強度分配是 bad）——AeT 是估計值、占比不準，只是提醒：3 區、5 區照排"
-        items = _pick_tracks(avail, n, monday, gate, s3, s5, d3, first and step is None, met)
-        out = _decision(items, avail, gate, n, monday, lock, zt)
-        return {**out, "allow": True if kind == "taper" else bool(items), "warn": warn if items else ""}
+        # SP-75: the 專項期's 前段 / 後段 ratio; `seg_note` says what the 後段 changed in this week's pick
+        ratio = week_ratio(gate, kind, monday)
+        late = ratio.get("segment") == "late" and "z5" in avail
+        rules = []
+        if late and not ratio.get("z5"):
+            # a long trail race: Zone 5 isn't scheduled (owner 2026-10-05: no maintenance session) —
+            # not a lock, the track's gate and step stay as they are
+            avail = [t for t in avail if t != "z5"]
+            rules.append(_("這場賽事預估 4 小時以上、當天的強度不到 5 區，強度課只排 3 區（上坡版），5 區不排"))
+        elif late and n < 2 and ratio.get("z3") != ratio.get("z5"):
+            rules.append(_("每週 1 堂強度課時以 {zone} 區為主（3 區：5 區 = {z3}:{z5}）", z3=ratio["z3"], z5=ratio["z5"],
+                           zone=3 if ratio["z3"] > ratio["z5"] else 5))
+        items = _pick_tracks(avail, n, monday, gate, s3, s5, d3, first and step is None, met, ratio=ratio)
+        if any(it["spec"] is TP for it in items):
+            rules.append(_("這週的 3 區改排接近閾值的巡航 3×7 分（97–100% CP），比階梯那一階更接近比賽強度"))
+        out = _decision(items, avail, gate, n, monday, lock, zt, ratio)
+        return {**out, "allow": True if kind == "taper" else bool(items), "warn": warn if items else "",
+                "seg_note": _("專項期後段（賽前第 {w} 週）：{rules}。越接近比賽，練的強度越像比賽；週數和比例為推估",
+                              w=ratio["weeks_out"], rules="；".join(rules)) if items and rules else ""}
     if first and z5.get("state") == "reentry":
         # inside a re-entry block: E days only (Daniels table 9.2; engine/reentry.py)
         return none(z5.get("text", ""))
@@ -2525,23 +2612,35 @@ def week_decision(gate: dict, kind: str, mode: str, monday: Optional[dt.date] = 
 
 
 def _pick_tracks(avail: list, n: int, monday: Optional[dt.date], gate: dict, s3: int, s5: int, d3: dict,
-                 tweak: bool, met: int, d5: Optional[dict] = None) -> list[dict]:
+                 tweak: bool, met: int, d5: Optional[dict] = None, ratio: Optional[dict] = None) -> list[dict]:
     """The week's items: n ≥ 2 → every open track (Zone 3 first); one a week with both open →
     the track gate["ratio"] gives this week (Zone 3 the first `z3` weeks of each cycle); else the
-    open one. `tweak`: this week's state-machine tweak (d3 / d5 "adjust") applies."""
+    open one. `tweak`: this week's state-machine tweak (d3 / d5 "adjust") applies.
+    `ratio` (week_ratio, SP-75): the week's ratio when it isn't gate["ratio"]. In the 專項期's 後段 the
+    turns run in two-week blocks counted from 賽前第 6 週 (weeks 6–5, then 4–3), the bigger share first:
+    賽前第 5、3 週 are the recovery weeks (specific_phase.EASY_WEEKS, SP-97), so week-by-week turns would
+    give weeks 6 and 4 the same track on a 1:1. On its T+ weeks (ratio["tp"]) the Zone 3 session is T+
+    while Zone 5 is open (T+ is a maintenance session of an open Zone 5; it doesn't move the rung)."""
     if not avail:
         return []
+    r = ratio or gate.get("ratio") or {"z3": 2, "z5": 1}
     if n >= 2 or len(avail) == 1:
         tracks = list(avail)
     else:
-        r = gate.get("ratio") or {"z3": 2, "z5": 1}
         a, b = max(1, int(r.get("z3") or 1)), max(0, int(r.get("z5") or 0))
         mon = monday or (dt.date.fromisoformat(gate["monday"]) if gate.get("monday") else None)
-        tracks = ["z5"] if b and _week_index(mon) % (a + b) >= a else ["z3"]
+        if r.get("segment") == "late":
+            i = max(0, SPEC_LATE_WEEKS - int(r["weeks_out"])) // 2 % (a + b)
+            tracks = ["z5"] if (i < b if b > a else i >= a) else ["z3"]
+        else:
+            tracks = ["z5"] if b and _week_index(mon) % (a + b) >= a else ["z3"]
     out = []
     for t in tracks:
         d = d3 if t == "z3" else (d5 or {})
         s = s3 if t == "z3" else s5
+        if t == "z3" and "z5" in avail and r.get("weeks_out") in (r.get("tp") or ()):
+            out.append({"track": t, "spec": TP, "advance": False, "adjust": None, "first": False})
+            continue
         spec = track_spec(t, s)
         adj = None
         if tweak and s == int(d.get("step") or 0):
@@ -2562,7 +2661,7 @@ def _pick_tracks(avail: list, n: int, monday: Optional[dt.date], gate: dict, s3:
 
 
 def _decision(items: list, avail: list, gate: dict, n: int, monday: Optional[dt.date], lock: str,
-              zt: Optional[dict] = None) -> dict:
+              zt: Optional[dict] = None, ratio: Optional[dict] = None) -> dict:
     tracks = [it["track"] for it in items]
     z5 = gate.get("z5") or {}
     if "z3" in tracks:
@@ -2570,7 +2669,7 @@ def _decision(items: list, avail: list, gate: dict, n: int, monday: Optional[dt.
     elif lock:
         z3_note = lock
     elif "z3" in avail:
-        r = gate.get("ratio") or {"z3": 2, "z5": 1, "why": ""}
+        r = ratio or gate.get("ratio") or {"z3": 2, "z5": 1, "why": ""}
         z3_note = (f"本週輪到 5 區（每週 1 堂時 3 區：5 區 = {r.get('z3')}:{r.get('z5')}，{r.get('why') or ''}；推估），"
                    "3 區下週排")
     else:
@@ -2794,7 +2893,7 @@ def _indicator(gate: dict) -> dict:
 
 OPTION_INFO = {
     "auto": {"source": "台灣教練、徐國峰部落格、Uphill Athlete、Friel、Seiler",
-             "rule": "3 區（有氧間歇／節奏，每趟 15–30 分：2×15 → 3×12 → 2×20 → 1×30，88–95% CP）解鎖後、護欄通過就排——解鎖三選一：連續 4 週規律訓練（每週 ≥ 3 次、沒有 ≥ 7 天沒跑；推估，停跑 ≥ 21 天要重新累積）、徐國峰 90 分鐘測試飄移 < 10%、或實測 AeT 的 UA 差距 ≤ 10%；低強度占比不擋 3 區（只提醒；5 區照舊要 ≥ 75%）；每週 3 區量 ≤ 週量 10%（Daniels），放不下就排巡航版 3×6／3×8／2×12。5 區開放後 3 區照排：每週 2 堂＝3 區＋5 區各 1，每週 1 堂時輪替（目標 ≤ 10 km 路跑 1:1，其他 2:1；推估）；一週間歇總量 ≤ 跑步時間 20%（推估）。5 區（每趟 ≥ 2 分、一週最多 2 次、隔 ≥ 2 天：台灣教練）是另一道關卡，一定要實測 AeT："
+             "rule": "3 區（有氧間歇／節奏，每趟 15–30 分：2×15 → 3×12 → 2×20 → 1×30，88–95% CP）解鎖後、護欄通過就排——解鎖三選一：連續 4 週規律訓練（每週 ≥ 3 次、沒有 ≥ 7 天沒跑；推估，停跑 ≥ 21 天要重新累積）、徐國峰 90 分鐘測試飄移 < 10%、或實測 AeT 的 UA 差距 ≤ 10%；低強度占比不擋 3 區（只提醒；5 區照舊要 ≥ 75%）；每週 3 區量 ≤ 週量 10%（Daniels），放不下就排巡航版 3×6／3×8／2×12。5 區開放後 3 區照排：每週 2 堂＝3 區＋5 區各 1，每週 1 堂時輪替（目標 ≤ 10 km 路跑 1:1，其他 2:1；推估）；專項期照樣走階梯（越野排上坡版），後段（賽前第 6–3 週）的比例往比賽強度偏：預估 4 小時以上的越野／百岳只排 3 區，半馬以上的路跑 3:1，5 km 路跑 1:2（推估）；一週間歇總量 ≤ 跑步時間 20%（推估）。5 區（每趟 ≥ 2 分、一週最多 2 次、隔 ≥ 2 天：台灣教練）是另一道關卡，一定要實測 AeT："
                      "① 實測 AeT＋實測 LTHR，LTHR ÷ AeT − 1 ≤ 10%（UA 差距法）、或 ② 在實測 AeT 附近跑 ≥ 60 分鐘，前後半飄移 < 5%（Friel）；"
                      "90 分鐘測試量不出 AeT，只算 3 區的關卡。另外近 6 週要做過 ≥ 2 堂 3 區（軟條件，推估）。"
                      "低強度占比 < 75% 在實測 AeT 時擋 5 區；AeT 是估計值時只提醒。"
