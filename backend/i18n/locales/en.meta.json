@@ -747,6 +747,10 @@
     "draft": true,
     "src": "backend/engine/injuries.py:612"
   },
+  "{label}看起來好了？最近 {n} 次沒痛、跑量回到傷前 {pct}%": {
+    "draft": true,
+    "src": "backend/engine/suggestions.py:308"
+  },
   "{label}（自動：一年內心率判定為比賽強度的標準距離跑步）": {
     "draft": true,
     "src": "backend/engine/racepower/calc.py:317"
@@ -2359,6 +2363,10 @@
     "draft": true,
     "src": "backend/engine/race_feasibility.py:50"
   },
+  "好了": {
+    "draft": true,
+    "src": "backend/engine/suggestions.py:307"
+  },
   "如果醫師或物理治療師說是哪一種傷就選；app 不診斷。": {
     "draft": true,
     "src": "backend/api/injuries.py:143"
@@ -2530,6 +2538,10 @@
   "已解鎖": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:1842"
+  },
+  "已記成好了（{day}）；日期可以在傷病紀錄改": {
+    "draft": true,
+    "src": "backend/api/plan_sessions.py:2161"
   },
   "已連續 3 週加量：這週是恢復週（前 3 週平均的 65%）": {
     "draft": true,
@@ -2999,6 +3011,10 @@
     "draft": true,
     "src": "backend/engine/strength_moves.py:103"
   },
+  "按「好了」才會結案（好了的日期之後可以在傷病紀錄改）；結案後傷別要避開的課和疼痛燈號都解除，同部位 {recur} 天內再痛會標成復發。按「還沒」{snooze} 天內不再問。回到傷前 75–80% 的量才恢復正常訓練（Ohio State Wexner 回跑指引，臨床機構）；「{n} 次、跨 {span} 天」是推估。": {
+    "draft": true,
+    "src": "backend/engine/suggestions.py:313"
+  },
   "接下來 1–2 週的長跑不要比這次長；之後每次長跑 ≤ 前 {d} 天最長一次的 {pct:.0%}，有疼痛就先減量": {
     "draft": true,
     "src": "backend/engine/status.py:705"
@@ -3350,6 +3366,10 @@
   "最近一次 {date} 飄移 {d:.1f}%": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:2131"
+  },
+  "最近一週跑 {h:.1f} h，傷前 4 週平均每週 {pre:.1f} h；最近 {n} 次跑步（{a}–{b}，跨 {d} 天）都標「沒痛」或「痠」。": {
+    "draft": true,
+    "src": "backend/engine/suggestions.py:310"
   },
   "最近氣溫 ≥ 25 °C：等天氣轉涼再做比較準（還是可以先排）": {
     "draft": false,
@@ -5466,6 +5486,10 @@
   "還剩 {n} 天：{date} 前只排輕鬆跑": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:1920"
+  },
+  "還沒": {
+    "draft": true,
+    "src": "backend/engine/suggestions.py:307"
   },
   "還沒到賽前 10 週的專項期：下面的數字會隨著長天和週量慢慢長上來": {
     "draft": true,
