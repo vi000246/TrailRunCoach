@@ -257,6 +257,23 @@ main > section.tab-off { display: none; }
         <button id="pmc-clear" data-i18n="settings.pmc.clear" hidden>改回自動</button>
       </div>
     </div>
+    <div class="sub" id="race">
+      <b data-i18n="settings.race.title">比賽成績（E 配速）</b>
+      <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.race.help" title="徐國峰 90 分鐘測試要用 E 配速跑，E 配速從一場比賽成績算（Daniels VDOT 公式；E 配速＝62–70 % VDOT 的速度，對齊 Daniels 的配速表，推估）。填最近一場路跑或田徑場的全力比賽（5 K 到全馬）；越野賽不算，爬升會讓成績失真。只用在 90 分鐘測試和它的說明，其他課表和區間不受影響。比賽超過 180 天會標「舊了」（推估）。">?</button>
+      <div class="est" id="race-card"><span class="meta" data-i18n="settings.pmc.loading">載入中…</span></div>
+      <div class="row">
+        <label><span data-i18n="settings.race.dist">距離</span> <select id="race-dist">
+          <option value="5" data-i18n="settings.race.d5">5 K</option><option value="10" selected data-i18n="settings.race.d10">10 K</option>
+          <option value="21.0975" data-i18n="settings.race.dhalf">半馬</option><option value="42.195" data-i18n="settings.race.dfull">全馬</option>
+          <option value="other" data-i18n="settings.race.dother">其他</option></select></label>
+        <label id="race-km-l" hidden><input type="number" id="race-km" min="1.5" max="42.5" step="0.01" style="width:72px"> km</label>
+        <label><span data-i18n="settings.race.time">時間</span> <input type="text" id="race-time" placeholder="45:00" inputmode="numeric" style="width:84px"></label>
+        <label><span data-i18n="settings.race.date">比賽日期</span> <input type="date" id="race-date"></label>
+        <button id="race-save" data-i18n="settings.pmc.save">儲存</button>
+        <button id="race-clear" data-i18n="settings.race.clear" hidden>清除</button>
+      </div>
+      <div id="race-cands"></div>
+    </div>
   </section>
 
   <section id="sync">
@@ -890,6 +907,62 @@ $("pmc-save").onclick = () => {
 };
 $("pmc-clear").onclick = () => putPmc({ clear: true }, t("settings.pmc.cleared"));
 loadPmc();
+
+// ---- 比賽成績 → E 配速 (SP-276; engine/e_pace.py): only the 90-minute test uses it -----
+const RACE = "/api/v1/plan/race-pace";
+const pace = (s) => s == null ? "–" : `${Math.floor(Math.round(s) / 60)}:${String(Math.round(s) % 60).padStart(2, "0")}`;
+const hms = (s) => { s = Math.round(s); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60;
+  return h ? `${h}:${String(m).padStart(2, "0")}:${String(x).padStart(2, "0")}` : `${m}:${String(x).padStart(2, "0")}`; };
+function parseHms(v) {
+  const p = String(v || "").trim().split(":").map(Number);
+  if (!p.length || p.some((x) => !Number.isFinite(x) || x < 0)) return null;
+  return p.length === 3 ? p[0] * 3600 + p[1] * 60 + p[2] : p.length === 2 ? p[0] * 60 + p[1] : null;
+}
+function renderRace(r) {
+  const c = r.current;
+  $("race-card").innerHTML = c
+    ? `<div class="card"><div class="k">${esc(t(c.source === "activity" ? "settings.race.k_act" : "settings.race.k_manual", { date: c.date, title: c.title || "" }))}</div>
+      <div class="v">${esc(pace(c.e_fast))}–${esc(pace(c.e_slow))} <small>/km · VDOT ${esc(c.vdot)}</small></div>
+      <div class="s">${esc(r.label)}</div>
+      ${c.stale ? `<div class="s err-text">${esc(t("settings.race.stale", { d: c.age_days, n: r.stale_days }))}</div>` : ""}</div>`
+    : `<span class="meta">${esc(t("settings.race.none"))}</span>`;
+  const today = new Date().toISOString().slice(0, 10);
+  $("race-date").max = today;
+  if (c) {
+    const km = c.distance_m / 1000, opt = ["5", "10", "21.0975", "42.195"].find((v) => Math.abs(Number(v) - km) < 0.01);
+    $("race-dist").value = opt || "other"; $("race-km").value = opt ? "" : Math.round(km * 100) / 100;
+    $("race-km-l").hidden = !!opt; $("race-time").value = hms(c.time_s); $("race-date").value = c.date;
+  }
+  $("race-clear").hidden = !c;
+  const cs = r.candidates || [];
+  $("race-cands").innerHTML = cs.length ? `<p class="meta">${esc(t("settings.race.cands"))}</p><ul class="meta" style="margin:4px 0;padding-left:18px">`
+    + cs.map((x, i) => `<li>${esc(x.date)} ${esc(x.title || "")} · ${esc((x.distance_m / 1000).toFixed(2))} km ${esc(hms(x.time_s))}
+      → E ${esc(pace(x.e_fast))}–${esc(pace(x.e_slow))} /km${x.stale ? " · " + esc(t("settings.race.old")) : ""}
+      <button type="button" data-race="${i}">${esc(t("settings.race.use"))}</button></li>`).join("") + "</ul>" : "";
+  $("race-cands").querySelectorAll("button[data-race]").forEach((b) => b.onclick = () => {
+    const x = cs[Number(b.dataset.race)];
+    putRace({ distance_km: x.distance_m / 1000, time_s: x.time_s, date: x.date, source: "activity", title: x.title }, t("settings.race.saved"));
+  });
+}
+async function loadRace() {
+  try { renderRace(await j(RACE)); }
+  catch (e) { $("race-card").innerHTML = `<span class="meta">${esc(t("settings.pmc.load_failed", { msg: e.message.slice(0, 100) }))}</span>`; }
+}
+async function putRace(body, msg) {
+  try {
+    renderRace(await j(RACE, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }));
+    toast(msg);
+  } catch (e) { toast(t("settings.pmc.failed", { msg: e.message.slice(0, 80) })); }
+}
+$("race-dist").onchange = () => { $("race-km-l").hidden = $("race-dist").value !== "other"; };
+$("race-save").onclick = () => {
+  const dv = $("race-dist").value, km = dv === "other" ? Number($("race-km").value) : Number(dv);
+  const ts = parseHms($("race-time").value), date = $("race-date").value;
+  if (!km || !ts || !date) { toast(t("settings.race.need")); return; }
+  putRace({ distance_km: km, time_s: ts, date, source: "manual" }, t("settings.race.saved"));
+};
+$("race-clear").onclick = () => putRace({ clear: true }, t("settings.race.cleared"));
+loadRace();
 
 // ---- 資料同步 -------------------------------------------------------------
 const SYNC = "/api/v1/sync";
