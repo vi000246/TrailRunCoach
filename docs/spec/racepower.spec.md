@@ -910,6 +910,8 @@ the time model is unchanged (`GaitRE`'s majority gait). 百岳 and manual course
 
 Personal transition speed (SP-228, `runwalk.fit_shift`, set on `GaitRE.runwalk` by `fit_gait_re`): per 2 % climbing bin with ≥ 10 walked and ≥ 10 run windows, the speed that best splits them; the median of (that − default PTS) is one shift of both curves, × n/(n + 30), held within ±0.4 m/s (推估). The planner's labels use it (`summary.runwalk`); the race-class model keeps the shift fitted on every run. 坡度 RE 曲線 shows the default and personal curves and each bin's windows, or 「預設值，還沒有你的資料」.
 
+SP-229 gate (back-test only): `GaitRE.re_at` / `gait_at` pick the walking curve where the running curve's speed at the segment power is below the (shifted) PTS; `RunModel.re_at` lets `course_time` use it. The terrain back-test reports it beside the majority gait (`models.speed_gait`, `speed_gait`: trail segment and climb |error|, segments whose gait changed, `no_worse`) and the 準確度 tab shows the line. The planner keeps the majority gait until a back-test on the athlete's data shows `no_worse`.
+
 ### Share links (`backend/engine/racepower/share.py:75`)
 
 「分享」 freezes one /plan result into a whitelisted snapshot (profile, splits, segment targets, 補給
