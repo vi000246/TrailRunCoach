@@ -132,6 +132,7 @@
   "feas.k_sims": "Summit-day simulations: {n} done (need {k})",
   "setup.title": "A few basics first",
   "setup.intro": "Sex, age and weight calibrate the calculations and only you know them; everything else (thresholds, heat, climbing…) is estimated from your activities. You can change them later in Settings → Personal.",
+  "setup.remind": "Not now? Press \"Later\": if anything is still missing, you'll be asked again in {days} days.",
   "setup.sex": "Sex",
   "setup.pick": "(choose)",
   "setup.male": "Male",

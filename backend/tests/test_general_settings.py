@@ -109,7 +109,7 @@ def test_setup_done_is_stored():
 
     async def go():
         s = await _session()
-        assert (await PA.setup_done(PA.SetupIn(done=True), db=s)) == {"done": True}
+        assert (await PA.setup_done(PA.SetupIn(done=True), db=s)) == {"done": True, "later": False}
         assert await SettingsRepository(s, 1).get(AP.SETUP_DONE_KEY) is True
     _run(go())
 
@@ -225,3 +225,36 @@ def test_wizard_requires_sex_age_weight_and_explains_them():
     assert {"sex_why", "age_why", "weight_why"} <= keys                 # what each is used for, not a hover
     s = (static / "settings.html").read_text("utf-8")
     assert 'id="p-age"' in s and 'id="p-birth"' not in s and "age: $(\"p-age\").value" in s
+
+
+def test_later_skips_the_wizard_for_a_week_then_reminds():
+    now = dt.datetime(2026, 10, 6, 12, 0, tzinfo=dt.timezone.utc)
+    assert AP.setup_remind(True, None, now) and not AP.setup_remind(False, None, now)
+    assert not AP.setup_remind(True, (now - dt.timedelta(days=6)).isoformat(), now)
+    assert AP.setup_remind(True, (now - dt.timedelta(days=AP.REMIND_DAYS)).isoformat(), now)
+    assert AP.setup_remind(True, "garbage", now)
+
+
+def test_setup_later_is_stored_and_the_old_done_no_longer_silences(plan_file, monkeypatch):
+    from backend.api import plan as PA
+    from backend.engine.wko5expr import datasource as DS
+    from backend.settings.repository import SettingsRepository
+    store = {AP.SETUP_DONE_KEY: True}                    # dismissed before SP-211
+    monkeypatch.setattr(PA, "read_setting", lambda k, d=None, *a: store.get(k, d), raising=False)
+    monkeypatch.setattr(DS, "read_setting", lambda k, d=None, *a: store.get(k, d))
+    g = PA.get_profile()["setup"]
+    assert g["needed"] and g["remind"] and g["remind_days"] == AP.REMIND_DAYS      # asked again
+
+    async def go():
+        s = await _session()
+        r = await PA.setup_done(PA.SetupIn(done=False, later=True), db=s)
+        assert r == {"done": False, "later": True}
+        return await SettingsRepository(s, 1).get(AP.SETUP_LATER_KEY)
+    store[AP.SETUP_LATER_KEY] = _run(go())
+    assert not PA.get_profile()["setup"]["remind"]       # a week of quiet
+
+
+def test_wizard_later_button_snoozes():
+    from pathlib import Path
+    js = (Path(__file__).resolve().parents[1] / "static" / "setup_wizard.js").read_text("utf-8")
+    assert "prof.setup.remind" in js and "done(true)" in js and "later: !!later" in js
