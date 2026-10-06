@@ -11,8 +11,9 @@ estimated-constants-inventory.md §4.1 #3 and #5; engine/calibrate.py items).
                        PAIR_MAX_DAYS apart give |Δ bpm| per 30 days; the age = the days it
                        takes to move MOVED_BPM at the median rate. Slow → longer, fast →
                        shorter, 8–24 weeks (the report's range). ≥ 2 pairs (3 tests); k = 4.
-  easy_hr_margin_bpm   「輕鬆」 = average HR ≤ AeT + this: adapt.OVER_HR_BPM (= workout_review.
-                       AET_MARGIN, 3 bpm) and the upper edge of quality_gate.FRIEL_HR_BAND.
+  easy_hr_margin_bpm   「輕鬆」 = average HR ≤ AeT + this: the upper edge of
+                       quality_gate.FRIEL_HR_BAND (default = workout_review.AET_MARGIN, 3 bpm).
+                       adapt's rule D read it until SP-301 (2026-10-06: 偏強 = power / TSS, without power HR > 94 % LTHR).
                        Fit: the standard error of the athlete's aggregated AeT estimate
                        (threshold_estimate.aet_aggregate on drift_agg.aet_points — the one
                        the AeT's validity already reads), never below 3 bpm (Lamberts &
@@ -21,7 +22,6 @@ estimated-constants-inventory.md §4.1 #3 and #5; engine/calibrate.py items).
                        (threshold_estimate.AET_MIN_RUNS); 3–6 bpm; k = 6.
 
 MOVED_BPM, the pair window, the bounds and the k are 推估. The margin is read by
-adapt.overhard's average-HR condition (through api/plan_sessions._adapt_ctx) and by
 quality_gate.friel_band; workout_review's own AET_MARGIN (the session classifier, the
 time-above-AeT share, the charts) stays 3 — those numbers are cached per activity.
 
@@ -50,7 +50,7 @@ MOVED_BPM = 5.0                  # 推估: the app's 「閾值變了」 line (th
 PAIR_MIN_DAYS, PAIR_MAX_DAYS = 28, 365       # 推估: closer = test noise, not change; further = another season
 MIN_PAIRS = 2                    # 3 tests of one kind
 
-DEFAULT_MARGIN = 3.0             # = workout_review.AET_MARGIN = adapt.OVER_HR_BPM; Lamberts & Lambert 2009
+DEFAULT_MARGIN = 3.0             # = workout_review.AET_MARGIN; Lamberts & Lambert 2009
 MARGIN_BOUNDS = (3.0, 6.0)       # 推估: never tighter than the day-to-day variation, at most twice it
 MIN_POINTS = 6                   # = threshold_estimate.AET_MIN_RUNS
 
@@ -131,8 +131,8 @@ CAL.register(CAL.Item(
     name=MARGIN, label=N_("輕鬆跑的心率餘裕（AeT 以上幾 bpm 還算輕鬆）"), unit="bpm", default=DEFAULT_MARGIN,
     default_src=N_("推估（每天的心率本來就差約 3 bpm，Lamberts & Lambert 2009）"), k=6, min_n=MIN_POINTS,
     fit=fit_easy_margin, bounds=MARGIN_BOUNDS, digits=1,
-    help=N_("輕鬆跑的平均心率超過 AeT 加這個數（而且超過 AeT+3 的時間多於 10%）才算「偏強」，之後幾天的課表會跟著調整；"
-            "有氧基礎的飄移檢查「在 AeT 附近」的上緣也用它。"
+    help=N_("有氧基礎的飄移檢查判斷「在 AeT 附近」時，上緣是 AeT 加這個數。"
+            "輕鬆跑偏強不用這個數（看功率和 TSS；沒有功率時看 LTHR 的 94%）。"
             "本人值 = 你的 AeT 估得有多不準（多次輕鬆跑心率飄移回歸的標準誤），最少 3；"
             "1 筆 = 一次可用的輕鬆跑飄移（半年內）。AeT 估得越準，這個數越接近 3。")))
 
@@ -146,6 +146,6 @@ def easy_margin() -> float:
 
 
 def margin_fields() -> dict:
-    """{"aet_margin", "aet_margin_basis"} for adapt.overhard's review rows: the margin in
-    effect and whose it is (calibrate.basis)."""
+    """{"aet_margin", "aet_margin_basis"}: the margin in effect and whose it is
+    (calibrate.basis). adapt's rule D no longer reads it (SP-301)."""
     return {"aet_margin": easy_margin(), "aet_margin_basis": CAL.basis(MARGIN)}

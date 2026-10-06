@@ -14,6 +14,7 @@ from backend.engine import interval_calib as IC
 from backend.engine import quality_gate as QG
 from backend.engine import threshold_calib as TCAL
 from backend.engine import threshold_confidence as TC
+from backend.engine import workout_review as WR
 from backend.tests.calib_fixtures import assert_self_consistent
 
 TODAY = dt.date(2026, 10, 1)
@@ -37,7 +38,7 @@ def test_items_are_registered_with_todays_constants_as_defaults():
     assert set(NAMES) <= set(reg)
     assert reg[IC.TOL].default == QG.IN_BAND_TOL and reg[IC.FADE].default == QG.LAST_FADE
     assert reg[IC.TIZ].default == QG.TIZ_GOAL
-    assert reg[TCAL.AGE].default == TC.TEST_AGE_DAYS and reg[TCAL.MARGIN].default == A.OVER_HR_BPM
+    assert reg[TCAL.AGE].default == TC.TEST_AGE_DAYS and reg[TCAL.MARGIN].default == WR.AET_MARGIN
     for n in NAMES:                          # nothing stored: the default is in effect
         assert CAL.value(n) == reg[n].default and CAL.basis(n).startswith("預設")
         lo, hi = reg[n].bounds
@@ -189,12 +190,11 @@ def test_margin_fit_on_drift_points(monkeypatch):
     assert f.n == 30 and TCAL.MARGIN_BOUNDS[0] <= f.value <= TCAL.MARGIN_BOUNDS[1]
 
 
-def test_overhard_reads_the_margin_and_says_whose():
-    r = {"avg_hr": 154, "aet": 150, "over_aet_s": 600, "hr_s": 3000}
-    assert A.overhard(36, {**r, "aet_margin": 5.0}) is None                   # 154 ≤ AeT + 5
-    why = A.overhard(36, {**r, "avg_hr": 156, "aet_margin": 5.0, "aet_margin_basis": "本人 n=12"})
-    assert why.startswith("平均心率 156 > AeT+5（155；餘裕 5 bpm，本人 n=12）")
-    assert A.overhard(36, r).startswith("平均心率 154 > AeT+3（153），")      # no margin in the row: as before
+def test_overhard_no_longer_reads_the_margin():
+    # SP-301: rule D's 偏強 is power / TSS only — the HR margin changes nothing there
+    r = {"avg_hr": 160, "aet": 150, "over_aet_s": 900, "hr_s": 3000}
+    assert A.overhard(36, {**r, "aet_margin": 3.0}) is None
+    assert A.overhard(36, {**r, "aet_margin": 5.0, "aet_margin_basis": "本人 n=12"}) is None
 
 
 def test_friel_band_upper_edge_follows_the_margin(monkeypatch):

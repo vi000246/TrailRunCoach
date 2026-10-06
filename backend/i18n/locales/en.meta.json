@@ -115,6 +115,10 @@
     "draft": true,
     "src": "backend/engine/interval_library.py:804"
   },
+  "48 小時內沒有強度課，課表不用動": {
+    "draft": false,
+    "src": "backend/engine/adapt.py"
+  },
   "5 區休息 {d} 比一趟長或超過 3 分鐘（Buchheit 工休比）": {
     "draft": true,
     "src": "backend/engine/workout_steps.py:1194"
@@ -182,6 +186,10 @@
   "A 賽事「{race}」前 {days} 天不排肌力（{start} 起，含比賽週；課表偏好的每週肌力／肌力日也一樣）：把體力留給比賽——長距離耐力項目主要比賽前 2 週停肌力，停 4 週以上才會退步（Bompa & Buzzichelli）": {
     "draft": true,
     "src": "backend/engine/overview.py:1716"
+  },
+  "A 賽前 14 天內因為輕鬆跑跑成強度課，延後或降階強度課（推估）": {
+    "draft": false,
+    "src": "backend/engine/plan_auto.py"
   },
   "A 賽前 {n} 天內：{reason}": {
     "draft": false,
@@ -363,6 +371,10 @@
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:135"
   },
+  "CP 測試": {
+    "draft": false,
+    "src": "backend/engine/adapt.py"
+  },
   "CP 附近 {n} 段心率中位數 {m:.0f}": {
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:514"
@@ -535,6 +547,10 @@
     "draft": true,
     "src": "backend/engine/overview.py:1008"
   },
+  "TSS {t:.0f} > 計畫 {plan:.0f} 的 +{pct:.0f}%": {
+    "draft": false,
+    "src": "backend/engine/adapt.py"
+  },
   "TSS 要在 0–2000": {
     "draft": true,
     "src": "backend/engine/plan_store.py:333"
@@ -562,6 +578,10 @@
   "VO2max 刺激": {
     "draft": true,
     "src": "backend/engine/workout_review.py:2682"
+  },
+  "VO2max 課": {
+    "draft": false,
+    "src": "backend/engine/adapt.py"
   },
   "VO2max 間歇": {
     "draft": true,
@@ -670,6 +690,14 @@
   "{day}→ {to} · 約 {t}{climb}": {
     "draft": true,
     "src": "backend/engine/racepower/watch_export.py:235"
+  },
+  "{day}輕鬆跑偏強（{why}）：只標示，課表不變": {
+    "draft": false,
+    "src": "backend/engine/adapt.py"
+  },
+  "{day}輕鬆跑跑成強度課（{label}）：{what}": {
+    "draft": false,
+    "src": "backend/engine/adapt.py"
   },
   "{d} 起{test}；通過前只排輕鬆跑、長跑和加速跑": {
     "draft": true,
@@ -995,9 +1023,17 @@
     "draft": false,
     "src": "backend/engine/adapt.py:443"
   },
+  "{was} {old}改成{became}：{day}輕鬆跑跑成{label}，本週沒有隔 48 小時的空日": {
+    "draft": false,
+    "src": "backend/engine/adapt.py"
+  },
   "{was} {title}延到{to}：{day}{what}自評 {label}，間隔不到 48 小時": {
     "draft": false,
     "src": "backend/engine/adapt.py:436"
+  },
+  "{was} {title}延到{to}：{day}輕鬆跑跑成{label}，間隔不到 48 小時": {
+    "draft": false,
+    "src": "backend/engine/adapt.py"
   },
   "{what} {n} 次": {
     "draft": true,
@@ -2419,6 +2455,10 @@
     "draft": true,
     "src": "backend/engine/quality_gate.py:1842"
   },
+  "已調整之後的強度課": {
+    "draft": false,
+    "src": "backend/engine/adapt.py"
+  },
   "已連續 3 週加量：這週是恢復週（前 3 週平均的 65%）": {
     "draft": true,
     "src": "backend/engine/overview.py:1014"
@@ -2427,9 +2467,21 @@
     "draft": true,
     "src": "backend/engine/workout_review.py:2644"
   },
+  "平均功率 > 80% CP（z2 上限，Palladino）或 TSS > 計畫 +20%（TrainingPeaks 達成度綠燈帶），任一項；沒有功率時改看平均心率 > LTHR 的 94%（超過 Friel 跑步 Zone 3，推估）；只標示、不動課表屬推估（使用者決定 2026-10-06）": {
+    "draft": false,
+    "src": "backend/engine/adapt.py"
+  },
+  "平均功率 {p:.0f} W > {pct:.0f}% CP（{w:.0f} W）": {
+    "draft": false,
+    "src": "backend/engine/adapt.py"
+  },
   "平均心率": {
     "draft": true,
     "src": "backend/engine/workout_review.py:2641"
+  },
+  "平均心率 {hr:.0f} > LTHR 的 {pct:.0f}%（{bpm:.0f} bpm；沒有功率才看心率）": {
+    "draft": false,
+    "src": "backend/engine/adapt.py"
   },
   "平棒式划船": {
     "draft": true,
@@ -3298,6 +3350,10 @@
   "有氧動力": {
     "draft": true,
     "src": "backend/engine/hr_profile.py:65"
+  },
+  "有氧基礎的飄移檢查判斷「在 AeT 附近」時，上緣是 AeT 加這個數。輕鬆跑偏強不用這個數（看功率和 TSS；沒有功率時看 LTHR 的 94%）。本人值 = 你的 AeT 估得有多不準（多次輕鬆跑心率飄移回歸的標準誤），最少 3；1 筆 = 一次可用的輕鬆跑飄移（半年內）。AeT 估得越準，這個數越接近 3。": {
+    "draft": false,
+    "src": "backend/engine/threshold_calib.py"
   },
   "有氧耐力": {
     "draft": true,
@@ -4507,6 +4563,10 @@
     "draft": true,
     "src": "backend/engine/suggestions.py:127"
   },
+  "課別分類（Zone 3 閾值或更強）跑成強度課，就當成一堂強度課：Seiler「easy days easy」；用課別分類當「太強」的界線屬推估": {
+    "draft": false,
+    "src": "backend/engine/adapt.py"
+  },
   "課表": {
     "draft": true,
     "src": "backend/engine/workout_review.py:2734"
@@ -4891,13 +4951,13 @@
     "draft": false,
     "src": "backend/engine/plan_match.py:331"
   },
+  "輕鬆跑偏強（{why}）：只標示，課表不變": {
+    "draft": false,
+    "src": "backend/engine/adapt.py"
+  },
   "輕鬆跑後段心率很穩": {
     "draft": true,
     "src": "backend/engine/status.py:595"
-  },
-  "輕鬆跑的平均心率超過 AeT 加這個數（而且超過 AeT+3 的時間多於 10%）才算「偏強」，之後幾天的課表會跟著調整；有氧基礎的飄移檢查「在 AeT 附近」的上緣也用它。本人值 = 你的 AeT 估得有多不準（多次輕鬆跑心率飄移回歸的標準誤），最少 3；1 筆 = 一次可用的輕鬆跑飄移（半年內）。AeT 估得越準，這個數越接近 3。": {
-    "draft": true,
-    "src": "backend/engine/threshold_calib.py:134"
   },
   "輕鬆跑的心率餘裕（AeT 以上幾 bpm 還算輕鬆）": {
     "draft": true,
@@ -4910,6 +4970,14 @@
   "輕鬆跑的計畫 TSS：近 180 天確實輕鬆的跑步（課別分類為輕鬆跑、或平均心率在輕鬆跑上限內；強度課、中強度跑不算）每小時 TSS 的中位數": {
     "draft": false,
     "src": "backend/engine/overview.py"
+  },
+  "輕鬆跑跑成強度課": {
+    "draft": false,
+    "src": "backend/engine/adapt.py"
+  },
+  "輕鬆跑跑成強度課（{label}）：{what}": {
+    "draft": false,
+    "src": "backend/engine/adapt.py"
   },
   "輕鬆跑（1 區）打底。參考：每週約 {lo}–{hi} 分鐘 1 區": {
     "draft": true,
@@ -5419,6 +5487,10 @@
     "draft": true,
     "src": "backend/engine/workout_review.py:2685"
   },
+  "閾值課": {
+    "draft": false,
+    "src": "backend/engine/adapt.py"
+  },
   "閾值配速": {
     "draft": true,
     "src": "backend/engine/zones.py:246"
@@ -5618,6 +5690,10 @@
   "高": {
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:124"
+  },
+  "高強度長跑": {
+    "draft": false,
+    "src": "backend/engine/adapt.py"
   },
   "高腳杯深蹲": {
     "draft": true,
