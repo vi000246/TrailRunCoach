@@ -32,12 +32,12 @@
   | Q19 轉換期與休賽季 | `Q19#2`（0 個）；補查改用 Europe PMC 取得 15 個；**2026-10-05 已補查**（新增 14 個來源 [439]–[452]，見 §4.6.1、§4.7.1）；2026-10-06 再查（補讀 [450] 全文） | 已補查，教練端以超馬教練為主 | Daniels、Pfitzinger 本人的休季與賽後規則（只有二手或查無出處，原書未核對；2026-10-06 再查仍沒有）；越野／超馬跑者的休賽季研究（0 篇）；跑者「休季後幾週回到賽季水準」的研究（0 篇）；50 km、100 km 賽後回到正常訓練的教練天數 |
   | Q20 一季多場比賽 | `Q20#1`、`Q20#2`（只靠直接抓頁面，共 7 個）；**2026-10-05 已補查**（新增 15 個來源 [424]–[438]，另補讀 [416] 全文）；2026-10-06 再查 Meltzer（付費牆） | 已補查，仍以教練級為主 | 多峰減量沒有任何試驗（[424] 明說）；「巔峰維持幾週」只有教練說法；B 賽對 A 賽成績的影響、B 賽後幾天可再上強度沒有研究；越野／超馬兩場相隔 3–8 週只有恢復資料（含 1 篇 n = 1 的個案 [428]），沒有排法的研究；Pfitzinger 的 B 賽規則是二手轉述，原書未核對 |
   | Q17 減量 | `Q17#2`（學術角度，只抓到 2 個）；**2026-10-05 已補查**（新增 7 個來源 [417]–[423]，另補讀 [205][207][416][162] 全文）；2026-10-06 再查（新增 [469]） | 已補查 | 越野／超馬仍沒有減量的對照試驗，只有 2 篇觀察研究 [417][469] 和教練文章；2024–2026 沒有找到新的耐力減量統合分析（Wang 2023 [207] 仍是最新）；馬拉松最後一次長跑的時機只有訓練計畫的統計 [418] 和教練建議 |
-  | Q29 其他 app | 兩個角度都跑完，但廠商文件少 | 偏少 | TrainingPeaks ATP、Garmin、COROS、Runna、Xert 的規則 |
+  | Q29 其他 app | 兩個角度都跑完，但廠商文件少；**2026-10-06 已補查**（新增 19 個來源 [470]–[488]，見 §4.11） | 已補查，廠商規則為主 | TrainingPeaks ATP 的查表與各期 TSS（help center 403）；Garmin 各階段長度與 supporting 賽事的處理（沒有公開文件）；COROS help center（403） |
 
   續查的方法：開新的 session（額度重新計算），或先把 `CLAUDE_CODE_MAX_WEB_SEARCHES_PER_SESSION` 調高，然後說「繼續上次的研究」並指向證據資料夾。資料夾裡的 `RESUME.md` 有同一張表和可直接用的子題文字。
 - **來源偏少的子題**：
   - 一季多場比賽：補查後（2026-10-05）多了菁英選手的訓練統整 [416]、游泳的多季觀察研究 [425]、長跑選手的整季追蹤 [426]、賽後恢復研究 [427][428]，和 Friel、Higdon、CTS 等教練文章（§4.8.1）。但「多峰減量」仍然沒有任何試驗，領域回顧也明說沒人研究過 [424]；兩場重點賽的排法、B 賽的代價都只有教練級。
-  - 其他 app 的自動分期：只有 TrainerRoad 寫出具體規則；TrainingPeaks ATP、Garmin、COROS、Runna、Xert 沒有資料。
+  - 其他 app 的自動分期：原本只有 TrainerRoad 寫出具體規則。補查後（2026-10-06）TrainingPeaks ATP、COROS、Runna、Xert 都有廠商文件的階段長度、減量與 B 賽規則；Garmin 只有階段名稱（§4.11）。都沒有附研究出處。
   - 越野、超馬、登山的減量與賽後恢復：只有教練建議，沒有對照試驗。減量部分補查後多了 1 篇越野跑者的觀察研究 [417]（§4.5.1）。賽後恢復補查後（2026-10-05）多了依距離的教練說法 [442][445][446]（§4.6.1），仍沒有試驗。
   - 中文來源：補查後（2026-10-05）有徐國峰 2012 年的分期與減量文章 [453]、江晏慶的越野周期 [454][455]、RACE ON 的百岳 8 週計畫 [456][457]、Pfitzinger 中譯本的減量書摘 [459]，和幾篇中國大陸的周期化整理 [462]–[464]（§4.10）。但都是教練級；徐國峰各期幾週、田麥久各期比例都沒讀到原文（RQ、知乎、百度百科 403）。
   - 轉換期與休賽季：補查後（2026-10-05）有了教練端（Koop、Hart、Torrence、Uphill Athlete、Jay Johnson）[439]–[447] 和 3 篇休賽季研究 [448]–[450]（§4.7.1）。但 Daniels、Pfitzinger 本人的說法都沒讀到原文；休賽季研究的對象是一般耐力選手、自行車和鐵人，沒有越野或超馬跑者。
@@ -540,6 +540,46 @@
   - 「Pfitzinger：賽後 2 週不做高強度、第 3 週加 strides、第 4 週加 tempo」（第三方部落格，沒讀）。
 - 這次補查用了 13 次網路搜尋，沒有撞到額度。
 
+### 4.11 其他 app 的周期規則（Q29 補查，2026-10-06）
+
+只當參考，不直接改規則（SP-107 第 10 列）。廠商文件只寫「做什麼」，幾乎都不寫「為什麼」，也沒有一家附研究出處，所以下面的數字最多算**廠商規則**，證據等級不高於教練級。
+
+結論先講：
+
+- **骨架大家都一樣**：基礎 → 強化 → 巔峰 → 減量 → 比賽（→ 恢復／轉換），從比賽日往回排。app 的骨架和它們一致。
+- **減量長度**：TrainingPeaks 巔峰 1–2 週＋比賽 1–3 週 [470]、COROS 1–2 週 [478]、Runna 半馬以上或 ≥ 10 週的計畫 3 週、10 公里以下 2 週 [481]、Xert 依「賽事準備度」自動決定 [487]。app 的 14 天（百岳 7–10 天）落在範圍內；Runna 的 3 週比統合分析的最佳範圍（8–14 天 [207]）長，不跟。
+- **恢復週**：TrainingPeaks 讓使用者選 3 週或 4 週一循環（新手或 40 歲以上選 3 週）[470]；Runna 依計畫長度插入減量週，強度課縮得比輕鬆跑多 [481]；Xert「積極」加量 3–4 週後要休一週 [488]。app 是固定 3:1、由實際時數觸發（§4.3）。都沒有研究出處。
+- **B、C 賽**：只有 TrainingPeaks、Runna、Garmin 有分級。TrainingPeaks 的 B、C 預設不觸發巔峰、C 不減量 [470][471]；Runna 的 B 賽前一週開始小減量、賽後一週加休息日，而且 B 賽**要比 A 賽短、不能落在 A 賽前 7–10 天內**、一個循環最多 1–2 場 [482]；Garmin 只能設一場主賽，另有「supporting」與「no priority」[474][475]。app 的 B、C 規則（SP-95）比這些都細，只有「B 賽不能太靠近 A 賽、不能比 A 賽長」這一條 app 只部分做到（見下方建議）。
+- **兩場 A 賽**：TrainingPeaks ATP 要求 A 賽彼此相隔不超過 32 週（是工具的上限，不是建議的最短間隔）[470]；COROS 教練文章：A、B 賽相隔 4 週時，第 1 週恢復、最後 1 週減量、中間只有 2 週可練 [479]（只讀到搜尋摘要），和 §4.8.1 的 Higdon 表一致。沒有一家給「最短間隔」；最短間隔仍只有 TrainerRoad ≥ 12 週 [362]。
+- **沒有比賽時**：Xert 選「持續進步」就**不分期** [485]；Runna 建議用 3–26 週的維持計畫，前 1–2 週當反向減量 [483][484]，計畫上限 26 週 [483]；TrainingPeaks ATP 一定要有 A 賽。和 app 的「無限期基礎期」相近，沒有一家做 SP-102 那種「維持＋輪替重點」。
+
+| | 階段與長度 | 減量 | 恢復週 | B／C 賽 | 多場 A 賽 | 沒有比賽 | 標記 |
+|---|---|---|---|---|---|---|---|
+| TrainingPeaks ATP | 依查表決定（看 A 賽前幾週、強／弱、3 或 4 週循環）；Transition 1–6、Prep 3–4、Base 8–12、Build 6–8、Peak 1–2、Race 1–3 週 [470] | 巔峰 1–2 週；賽日 TSB 約 +10，前面通常有幾週輕鬆 [472] | 3 或 4 週一循環，使用者選 [470] | B、C 不觸發巔峰；C 不減量 [470][471] | A 賽相隔 ≤ 32 週、距 ATP 起點 ≤ 48 週 [470] | 不支援 | 已驗證（TP 網站文章；help center 403） |
+| Garmin（比賽日曆＋每日建議課表） | Base、Build、Peak、Taper、Recovery，長度沒公開 [473] | 使用者回報：最後 1 週或 2 週 [476] | 未公開 | 一場主賽＋supporting／no priority [474][475]；supporting 怎麼影響課表沒公開 | 只能一場主賽 [474] | 沒有分期 | 階段名稱已驗證；長度只有論壇（二手） |
+| Garmin Coach（教練計畫） | 5K 6–20、10K 10–21、半馬 12–26 週 [477] | 未公開 | 未公開 | — | — | — | 已驗證（只有計畫長度） |
+| COROS | Base 3–6 週（新手 8–12）、Build 6–8、Peak 2–4、Race／Taper 1–2、Transition [478]；個人化馬拉松計畫 8–16 週 [480] | 1–2 週，量大減、強度保留 [478] | 未寫 | 教練文章有 A／B／C 的說法 [479] | A、B 相隔 4 週：1 週恢復＋2 週練＋1 週減量 [479] | — | [478][480] 已驗證；[479] 摘要；help center 403 |
+| Runna | 從賽日往回排；計畫上限 26 週 [483] | 半馬以上或 ≥ 10 週計畫 3 週；10 公里以下 2 週 [481] | 依計畫長度插入減量週 [481] | 只有 B：前一週小減量、賽後一週多休；要比 A 短、不在 A 前 7–10 天內、每循環 1–2 場 [482] | 不支援背靠背、多日賽 [482] | 維持計畫 3–26 週，前 1–2 週反向減量 [483][484] | 已驗證（support 文章） |
+| Xert（XATA／Forecast AI，自行車為主） | 賽前 120 天起算，前 45 天是 Base [488]；之後 Build、Peak、Taper（45／30 天只有搜尋摘要）；更早是 Pre-Base [485] | 依賽事準備度：越準備好減越多 [487]；加量速率「Taper」＝ −1 [488] | 「積極」3–4 週後休一週 [488]；加量速率由使用者選，−2 到 +7 TL／週 [486] | 無 | 無 | 「持續進步」模式不分期 [485] | 已驗證（廠商網站） |
+| TrainerRoad | 見 §4.8 | A 完整減量 | — | B 當週減量、C 不改 [362] | A 相隔 ≥ 12 週 [362] | — | 既有 |
+
+和 app 的對照：
+
+- **一致**：骨架、從比賽往回排；減量 1–3 週（app 14 天）；B、C 不觸發完整減量；沒有比賽時不硬分期。
+- **app 比較細**：B 賽依距離決定賽後恢復、B 賽太多的提示、兩場 A 賽 < 12 週的中間訓練（SP-95）；這些廠商都沒有公開規則。
+- **app 沒有、廠商有**：
+  1. Runna 不讓 B 賽落在 A 賽前 7–10 天內、也不讓 B 賽比 A 賽長 [482]。app 的 `post_race.b_hints` 只對「中以上的 B 賽在 A 賽前 28 天內」提示（`backend/engine/post_race.py:168`、`:357`–`:359`），短的 B 賽落在 A 賽的減量期裡、或 B 賽比 A 賽還長時都不提示。廠商規則、沒有研究，只列建議（見 SP-107 回報）。
+  2. TrainingPeaks 讓使用者選 3 週循環（2 週加量＋1 週恢復）[470]。app 固定 3:1；§4.3 已說唯一的試驗沒發現年齡差異 [312]，`bompa-periodization-strength.md` §4.5 已提過做成偏好選項。不另外開單。
+- **不跟**：Runna 半馬以上 3 週減量（比統合分析的最佳 8–14 天長 [207]，SP-96 已決定 21 天只做偏好選項）；Xert「越準備好減越多」（沒有公開算法）。
+
+查不到、讀不到的：
+
+- TrainingPeaks help center（ATP Methodologies、How do I set up my ATP）、COROS support（Personalized Marathon Plans）都回 **403，未讀**。TrainingPeaks 的查表本身、各期每週 TSS 怎麼算、恢復週減多少，都只在 help center，這次沒讀到。
+- COROS〈Training Through Races〉兩次抓取逾時，只有搜尋摘要 [479]。
+- Garmin 每日建議課表各階段的長度、supporting 賽事的小減量：Garmin 沒有公開文件，只有使用者論壇和評測網站的推測 [475][476]，**未找到來源**。
+- COROS「AI 教練」自動分期：沒找到。COROS 目前只有固定計畫＋教練平台手動設每週階段。
+- 這次用了 12 次網路搜尋，沒有撞到額度。沒有付費牆來源。
+
 ## 5. 對照表：app 的周期規劃缺什麼
 
 判定：**一致**＝不用改；**補來源**＝規則不變，可以把「推估」換成出處；**缺口**＝要改；**不做**＝證據不支持。
@@ -719,7 +759,7 @@
 
 - 越野、超馬、登山的周期研究幾乎都是教練經驗和個案。§3.3、SP-98、SP-99 裡的時間點多是**推估**；SP-96 的賽週規則在 2026-10-05 補查後換成教練級出處，但仍沒有對照試驗。
 - 菁英選手的資料只能當結構參考。他們每年練 750–1000 小時，恢復能力和休閒選手不同。
-- 其他 app 的規則只有 TrainerRoad 一家的文件。一季多場比賽補查後多了教練文章和幾篇觀察研究，但多峰減量沒有任何試驗 [424]，SP-95 的 B 賽規則仍是教練級。
+- 其他 app 的規則：2026-10-06 補查後有 TrainingPeaks、COROS、Runna、Xert 的廠商文件（§4.11），但都只是廠商規則、沒有研究出處；TrainingPeaks 與 COROS 的 help center 403，Garmin 沒有公開各階段長度。一季多場比賽補查後多了教練文章和幾篇觀察研究，但多峰減量沒有任何試驗 [424]，SP-95 的 B 賽規則仍是教練級。
 - 中文來源：2026-10-05 補查後有 16 個（§4.10），但都是教練文章、部落格或二手整理。田麥久《運動訓練學》和徐國峰 KFCS 的書沒讀到原文，RQ 全站 403。
 - 部分引文是工具摘要後的文字，沒有逐字核對；統計數字請以原文為準。
 - app 現況以 2026-10-05 的 HEAD `c320074` 為準。這天 repo 有多次合併，行號之後可能位移。
@@ -1080,3 +1120,41 @@
 [468] 2022 徐國峰全馬線上訓練營（破4/初馬）（RQ 支援文件，GitBook）. https://runningquotient-support.gitbook.io/rqsupport/online-training-camp/yi-jie-shu/fmotc
 
 [469] Differences in training characteristics of recreational endurance runners by race distance – results from the NURMI Study (Step 2) (Knechtle, Tanous, Thuany, Motevalli, Wirnitzer G, Leitzmann, Weiss, Rosemann, Wirnitzer K; Front Psychol 2023;14；2026-10-06 補查，全文). https://pmc.ncbi.nlm.nih.gov/articles/PMC10805148 ；doi:10.3389/fpsyg.2023.1269374
+
+[470] The Comprehensive Guide to Creating an Annual Training Plan (Matti Rowe, TrainingPeaks；2021-04-21，更新 2026-09-29；2026-10-06 補查，全文經工具摘錄。原文寫「32 weeks (4.5 months)」，兩個數字對不上，以 32 週記). https://www.trainingpeaks.com/learn/articles/the-comprehensive-guide-to-creating-an-annual-training-plan/
+
+[471] Basic ATP Planning with Ramp Rate (Andrew Simmons, TrainingPeaks Coach Blog；2021-02-04，更新 2025-12-19；全文經工具摘錄). https://www.trainingpeaks.com/coach-blog/basic-atp-planning-with-ramp-rate/
+
+[472] A Look at Planning by TSS with the New ATP (Phil Crick, TrainingPeaks；2016-12-12；全文經工具摘錄). https://www.trainingpeaks.com/learn/articles/a-look-at-planning-by-tss-with-the-new-atp/
+
+[473] How to Train for Your Next Race with the Garmin Race Widget (Garmin Blog；2022-07-22；全文). https://www.garmin.com/en-US/blog/fitness/running/how-to-train-for-your-next-race-with-the-garmin-race-widget/
+
+[474] Forerunner 265 Series Owner's Manual – Training for a Race Event (Garmin；日期未標；全文). https://www8.garmin.com/manuals/webhelp/GUID-F41EAFB3-6CC9-42DE-9C6C-9E358DBB0671/EN-US/GUID-DF6FE8CB-4039-4BC9-B040-E310A4BDA966.html
+
+[475] New Garmin Event Designation (the5krunner；2023-03-05，更新 2026-01-26；評測網站，引用 Garmin 的分級說明，二手). https://the5krunner.com/2023/03/05/new-garmin-event-designation-probabyl-for-edge-540-840/
+
+[476] Is there Tapering for suggested workouts using race widget? (Garmin Forums，Forerunner 955；使用者討論，沒有 Garmin 員工回覆，二手). https://forums.garmin.com/sports-fitness/running-multisport/f/forerunner-955-series/308542/is-there-tapering-for-suggested-workouts-using-race-widget
+
+[477] Which Adaptive Training Plan Is Right for You? (Garmin Blog UK；日期未標；全文). https://www.garmin.com/en-GB/blog/which-adaptive-training-plan-is-right-for-you/
+
+[478] Periodization: How COROS Uses Phases to Build Training Plans (COROS Coaches；2025-06-11；全文). https://coros.com/stories/coros-coaches/c/periodization-how-coros-uses-phases-to-build-training-plans
+
+[479] Training Through Races: Optimizing Your Fall Race Season (COROS；日期未讀到；抓取兩次逾時，**只有搜尋摘要**). https://coros.com/stories/d/training-through-races-optimizing-your-fall-race-season
+
+[480] The Best Marathon Training Plan for You (COROS Coaches；2025-02-13；全文). https://coros.com/stories/coros-coaches/c/the-best-marathon-training-plan-for-you
+
+[481] How Does Runna Build Recovery Into Your Training Plan? (Runna Support；2026-08-31；全文). https://support.runna.com/en/articles/15272605-how-does-runna-build-recovery-into-your-training-plan
+
+[482] How to Add and Manage Your B-Race (Runna Support；更新日期未標；全文). https://support.runna.com/en/articles/10856802-how-to-add-and-manage-your-b-race
+
+[483] Which Plan Should I Choose Between Race Blocks? (Runna Support；2026-08-31；全文). https://support.runna.com/en/articles/14666749-which-plan-should-i-choose-between-race-blocks
+
+[484] How to Keep Fit When Not Training for a Specific Event (Runna Support；2026-08-31；全文，沒有寫維持計畫的結構). https://support.runna.com/en/articles/7995620-how-to-keep-fit-when-not-training-for-a-specific-event
+
+[485] Training Right For Your Event (Scott, Xert／Baron Biosystems；2022-09-22；全文). https://www.baronbiosys.com/training-right-for-your-event/
+
+[486] Beginner's Guide: Improvement Rate (Xert；2025-01-07；全文；加量速率從 Off-Season −2 到 Extreme-2 +7 TL／週). https://www.baronbiosys.com/beginners-guide-improvement-rate/
+
+[487] Xert Forecast AI (Xert 詞彙表；日期未標；全文). https://www.baronbiosys.com/glossary/xert-forecast-ai/
+
+[488] Full Glossary (Xert；日期未標；全文：Improvement Rate 各級、「Aggressive … 3-4 week block … followed by a rest week」、「Training Programs are currently set at 120 days … The first 45-days … is your Base Phase」). https://www.baronbiosys.com/full-glossary/
