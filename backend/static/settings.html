@@ -890,6 +890,19 @@ async function loadSyncSettings() {
     ? ` <span class="pill err">找不到加密金鑰</span> ${esc(SS.secret_key_hint || "")}` : "";
 }
 
+// how long the last run took and where the time went (SP-215; sync/runner.SyncClock)
+const SYNC_STEPS = ["list", "check", "download", "import", "finish"];
+const syncDur = (x) => x < 60 ? t("settings.sync.secs", { n: Math.round(x) })
+  : t("settings.sync.mins", { m: Math.floor(x / 60), s: Math.round(x % 60) });
+function syncTook(secs) {
+  if (!secs || secs.total == null) return "";
+  // steps of at least a second, longest first: what made it slow
+  const steps = SYNC_STEPS.filter((k) => (secs[k] || 0) >= 1).sort((a, b) => secs[b] - secs[a])
+    .map((k) => t(`settings.sync.step_${k}`, { t: syncDur(secs[k]) }));
+  return steps.length ? t("settings.sync.took_steps", { total: syncDur(secs.total), steps: steps.join(t("settings.sync.sep")) })
+    : t("settings.sync.took", { total: syncDur(secs.total) });
+}
+
 async function loadSources() {
   SOURCES = await j(`${SYNC}/sources`);
   const tp = await j("/api/v1/auth/tp/status").catch(() => ({}));
@@ -920,7 +933,8 @@ async function loadSources() {
     }
     f(src, "busy").hidden = !s.busy;
     const res = r ? `${({ ok: "成功", partial: "部分失敗", failed: "失敗", aborted: "中斷" })[r.status] || r.status}：`
-      + `下載 ${r.downloaded}、檢查 ${r.checked}、錯誤 ${r.errors}${r.error ? "（" + esc(r.error) + "）" : ""}` : "–";
+      + `下載 ${r.downloaded}、檢查 ${r.checked}、錯誤 ${r.errors}${r.error ? "（" + esc(r.error) + "）" : ""}`
+      + esc(syncTook(r.secs)) : "–";
     f(src, "kv").innerHTML = `<dt>上次同步</dt><dd>${fmtTime(s.last_sync_at)}</dd>
       <dt>上次結果</dt><dd>${res}</dd>
       <dt>同步檔案</dt><dd>${st.files} 個、${esc(st.size)}（${esc(st.folder)}）</dd>
