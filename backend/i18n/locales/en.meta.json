@@ -447,9 +447,13 @@
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:297"
   },
-  "LTHR 可信度低：心率目標可能不準（{why}）": {
-    "draft": false,
-    "src": "backend/engine/threshold_confidence.py:600"
+  "LTHR 來自{src}，沒有測過；輕鬆跑可以改用講話測試的配速，做一次 30 分鐘測試後這個提醒會消失": {
+    "draft": true,
+    "src": "backend/engine/threshold_confidence.py:976"
+  },
+  "LTHR 可信度低：心率目標可能不準（{why}）；做一次 30 分鐘 LTHR 測試並套用後，這個提醒會消失": {
+    "draft": true,
+    "src": "backend/engine/threshold_confidence.py:979"
   },
   "LTHR 和最大心率互相矛盾，資料分不出是哪一個錯": {
     "draft": false,
@@ -470,6 +474,10 @@
   "LTHR 是 {date} 的自動估算，當時 CP {cp0:.0f} W、現在 {cp1:.0f} W（{d:+.0%}）：估算的前提已失效（推估 > 5%）": {
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:311"
+  },
+  "LTHR 是估算的；輕鬆跑可以改用講話測試的配速，做一次 30 分鐘測試後這個提醒會消失": {
+    "draft": true,
+    "src": "backend/engine/threshold_confidence.py:974"
   },
   "LTHR 是儲備心率的 {q:.0%}（一般 80–94%，個人範圍 73–95%）": {
     "draft": false,
@@ -2866,6 +2874,10 @@
   "手動輸入": {
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:289"
+  },
+  "手動輸入，沒有驗證": {
+    "draft": true,
+    "src": "backend/engine/threshold_confidence.py:969"
   },
   "手錶 LTHR 平均誤差 9–11 bpm（COROS 8.9；Lu 2025）": {
     "draft": false,

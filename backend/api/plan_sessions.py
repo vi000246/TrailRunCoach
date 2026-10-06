@@ -1305,7 +1305,7 @@ def _context(env: dict) -> dict:
     from backend.engine import workout_steps as WS
     th, pol = env["th"], env["policy"]
     return {"thresholds": {k: th.get(k) for k in ("cp", "lthr", "aet", "tpace", "cp_source", "lthr_source", "aet_source",
-                                                  "thr_warn")},
+                                                  "thr_warn", "aet_measured")},
             "tpace_link": tpace_link(),
             "zones": WS.zones_table(env["ctx"]), "policy": pol,
             "basis_label": f"目標用：{TP.LABEL[pol['basis']]}（{pol['why']}）",
@@ -1353,7 +1353,8 @@ async def steps_check(body: dict = Body(...), db: AsyncSession = Depends(get_db)
            "basis_label": _context(env)["basis_label"], "policy": env["policy"]}
     # SP-274 / SP-277: the LTHR / HRmax badge for this session (never on a test session)
     from backend.engine import threshold_confidence as TC
-    out["thr_warn"] = TC.session_warn(env["th"].get("thr_warn"), s, st.get("items"))
+    out["thr_warn"] = TC.session_warn(env["th"].get("thr_warn"), s, st.get("items"), out.get("resolved"),
+                                      bool(env["th"].get("aet_measured")))
     if s.get("kind") == "quality":
         # the family these steps read as (SP-79: the 類型's 「步驟看起來像…」 hint)
         out["family"] = WTPL.family_of(st.get("items") or [], env["th"])

@@ -506,7 +506,7 @@
     function context(e, D) {
       const th = e.th, pol = e.policy, W = D.ws;
       const thresholds = {};
-      for (const k of ["cp", "lthr", "aet", "tpace", "cp_source", "lthr_source", "aet_source", "thr_warn"]) thresholds[k] = th[k] ?? null;
+      for (const k of ["cp", "lthr", "aet", "tpace", "cp_source", "lthr_source", "aet_source", "thr_warn", "aet_measured"]) thresholds[k] = th[k] ?? null;
       return { thresholds, tpace_link: D.tpace_link ?? null, zones: zonesTable(e.ctx, D), policy: pol,
         basis_label: `目標用：${D.tp.label[pol.basis]}（${pol.why}）`, cap: e.cap, cap_mode: e.cap_mode, rung: e.rung,
         kinds: W.kind_label, types: W.type_label, provider: W.load.provider, load_kinds: W.load.kinds, load_range: W.load.range,
