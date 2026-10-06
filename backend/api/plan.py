@@ -561,10 +561,12 @@ def hr_profile_view(ds, today: dt.date) -> dict:
         tt = training_targets(ds, int(ds.today))
     except Exception:                       # noqa: BLE001 — no runs yet
         tt = None
+    # 「app 和手錶數值對照」 (engine/coros_compare.py, SP-67); None without a COROS account read
+    from backend.engine import coros_compare as CC
     return {"max_hr": {k: v for k, v in mx.items() if k != "estimate"}, "rest_hr": rs,
             "estimate": est, "account": acc, "model": model,
             "models": [{"id": k, "label": _(HP.MODEL_LABEL[k]), "source": _(HP.SOURCE[k])} for k in HP.PLAN_MODELS],
-            "plan_zones": (tt or {}).get("hr_model")}
+            "plan_zones": (tt or {}).get("hr_model"), "compare": CC.view(tt, mx, rs, acc)}
 
 
 class HrProfileIn(BaseModel):
