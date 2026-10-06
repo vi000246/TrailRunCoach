@@ -309,6 +309,7 @@ class ThresholdIn(BaseModel):
     note: str = ""
     wprime: Optional[float] = None       # carried through so an edit keeps what apply-cp wrote
     cp_method: Optional[str] = None
+    cp_manual: Optional[bool] = None     # True = CP typed by hand in 設定 (planning.Threshold.cp_manual)
     lthr_method: Optional[str] = None    # carried through likewise (planning.LTHR_METHODS)
     aethr_method: Optional[str] = None
     mhr_method: Optional[str] = None     # planning.MHR_METHODS (SP-64)
@@ -691,6 +692,56 @@ async def put_pmc_start(body: PmcStartIn, db: AsyncSession = Depends(get_db)):
     return await run_in_threadpool(lambda: pmc_start_view(_overview_dataset()))
 
 
+# ---- 比賽成績 → E 配速 (SP-276; engine/e_pace.py) ----------------------------------------
+
+def race_pace_view(ds, today: dt.date) -> dict:
+    """The confirmed race and its E pace (None when not set; `stale` past e_pace.STALE_DAYS = not
+    used), and the runs recognised as road races in the last STALE_DAYS — offered only; used after
+    the athlete confirms one."""
+    from backend.engine import e_pace as EP
+    cur = EP.current(today)
+    try:
+        cands = EP.candidates(ds, today, EP.STALE_DAYS) if ds is not None else []   # an older one couldn't be used
+    except Exception:              # noqa: BLE001 — the candidates are a convenience
+        cands = []
+    return {"current": cur, "label": EP.label(cur), "candidates": cands[:8],
+            "stale_days": EP.STALE_DAYS}
+
+
+class RacePaceIn(BaseModel):
+    distance_km: Optional[float] = None
+    time_s: Optional[float] = None
+    date: Optional[str] = None
+    source: str = "manual"            # manual | activity (a candidate the athlete confirmed)
+    title: Optional[str] = None
+    clear: bool = False
+
+
+@router.get("/race-pace")
+def get_race_pace():
+    return race_pace_view(_estimate_dataset(), today_local())
+
+
+@router.put("/race-pace")
+async def put_race_pace(body: RacePaceIn, db: AsyncSession = Depends(get_db)):
+    """Save (or with clear: remove) the race the E pace comes from (date ≤ today)."""
+    from fastapi.concurrency import run_in_threadpool
+    from backend.engine import e_pace as EP
+    from backend.settings.repository import SettingsRepository
+    value = None
+    if not body.clear:
+        value = EP.parse({"distance_m": (body.distance_km or 0) * 1000.0, "time_s": body.time_s,
+                          "date": body.date, "source": body.source, "title": body.title})
+        if value is None:
+            raise HTTPException(400, _("要填距離（1.5–42.5 km）、時間、日期，配速要在 2:30–15:00 /km 之間"))
+        if value["date"] > today_local().isoformat():
+            raise HTTPException(400, _("比賽日期不能在今天之後"))
+    await SettingsRepository(db, current_athlete_id()).set(EP.RACE_KEY, value)
+    await db.commit()
+    _notify(True)                  # the 90-minute test's target follows (re-pushed like a threshold)
+    return await run_in_threadpool(lambda: race_pace_view(_estimate_dataset(), today_local()))
+
+
 def _estimate_dataset():
     # the estimate reads samples; use the athlete's own-formula dataset so
     # approved data corrections apply
@@ -823,6 +874,7 @@ def apply_cp(body: ApplyCP):
     row.cp = round(body.cp)
     row.wprime = None if body.wprime is None else round(body.wprime)
     row.cp_method = body.cp_method
+    row.cp_manual = None                 # a test result now, not a hand-typed CP
     note = body.note or f"CP 測試（{CPP.METHOD_LABEL[body.cp_method]}）"
     if body.activity_index is not None:
         note += f"；活動 #{body.activity_index}"

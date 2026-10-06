@@ -20,8 +20,9 @@ Why (docs/research/plan-backtest-feasibility.md §1.2, §5.1–§5.2):
 Suggested, never scheduled (owner 2026-10-05): due() feeds rows of the floating box
 (engine/suggestions.baseline_rows); the athlete picks the day there.
 
-Cadence (REPEAT_DAYS, the owner's 6–8 weeks; the notes' 4–6 weeks for a CP test and Uphill
-Athlete's 4–6 weeks for the AeT are the same order — coaches, no trial): due again 6 weeks after
+Cadence (REPEAT_DAYS, the owner's 6–8 weeks, 推估; the notes' 4–6 weeks for a CP test is the
+same order — coaches, no trial. Uphill Athlete retests the AeT every 4–6 *months*, not weeks —
+aerobic-base-readiness.md §8 — so the AeT cadence here is ours, not UA's): due again 6 weeks after
 the last valid test; from 8 weeks on the row says it is late.
 
 What counts as the last valid test (latest()):

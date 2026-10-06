@@ -17,15 +17,17 @@ Two lengths, chosen by the 課表偏好 weekday cap (`variant_for`):
   isn't the long run's. An air-conditioned treadmill 2–3 % with a fan first,
   else an early flat loop (not trails). Note the temperature: heat inflates
   the drift. Evoke's early abort: HR already 10 above the start at minute 10
-  of the block and rising → started too high, stop, retest 5 bpm lower.
+  of the block and rising → started too high, stop, retest another day at a
+  slower pace (Evoke); "about 5 bpm lower" is ours (推估 — neither UA nor Evoke
+  gives a number: aerobic-base-readiness.md §8).
 
 Analysis (`analyze`): the main block is the time after the warm-up (15′ for
 the standard test, 10′ for the short one — `warm_for`, from the title, else
 the length), up to 60′ of it, cool-down trimmed; Pw:HR over its halves (Pa:HR
 without power) — on the short test the first 20′ vs the last 20′. Both are
 the strict tier (≥ 40′ after the warm-up). UA's bands: < 3.5 % → below AeT
-(next time start 5 bpm higher), 3.5–5 % → the first-half HR is the AeT, > 5 %
-→ started above AeT (5 bpm lower).
+(next time start 5 bpm higher — UA's own number), 3.5–5 % → the first-half HR is
+the AeT, > 5 % → started above AeT (UA: start lower; the 5 bpm is 推估, LOWER_BPM).
 
 The same three checks as workout_review.drift_of (the daily runs):
   * the 40-min floor counts *after* the warm-up;
@@ -75,6 +77,8 @@ MAX_CV = 0.15                   # the old unsourced 30-s CV rule: information on
 START_BELOW = 5.0               # 自訂: 0.89 × LTHR − 5 as the starting HR without an estimate
 POWER_OF_CP = 0.75              # 自訂: starting power when nothing better is known (Palladino easy ≤ 80 % CP)
 RECENT_DAYS = 28                # 推估: a test in the last 4 weeks → don't suggest another (minimum spacing)
+LOWER_BPM = 5                   # 推估: > 5 % → start lower — UA says "lower", Evoke "a slower pace"; neither
+                                # gives a number (aerobic-base-readiness.md §8, 2026-10-06 verbatim check)
 # B3 (unsourced-rules.md): no fixed expiry / cadence any more (16 weeks, 4–6 weeks, every 5 base
 # weeks: no source). The test is due only for a reason (quality_gate.aet_test_reason).
 HEAT_TEXT = "氣溫 25 °C 以下時開始（熱會讓心率偏高、飄移失真；台灣教練、Lafrenz 2008）"
@@ -192,7 +196,7 @@ def analyze(t, hr, speed=None, power=None, temp=None, climb_m_per_km: Optional[f
     mean of the `temp` channel over the block; that mean is air minus
     `watch_bias` (zone_events.dataset_watch_bias's dict; None = the 3.7 °C default)."""
     if judge == "xu":
-        return analyze_xu(t, hr, speed, temp, climb_m_per_km, trail, temp_c, temp_src, watch_bias)
+        return analyze_xu(t, hr, speed, temp, climb_m_per_km, trail, temp_c, temp_src, watch_bias, power=power)
     from backend.engine.workout_review import DRIFT_MAX_VI, MAX_DT, STOP_KMH, _arr, _grid1, _hms, power_vi
     out = {"ok": False, "reason": "", "drift": None, "pw_drift": None, "pa_drift": None, "hr1": None, "hr2": None,
            "main_s": None, "band": None, "basis": None, "judge": judge, "vi": None, "cv30": None}
@@ -293,11 +297,13 @@ def analyze(t, hr, speed=None, power=None, temp=None, climb_m_per_km: Optional[f
 
 def analyze_xu(t, hr, speed=None, temp=None, climb_m_per_km: Optional[float] = None, trail: bool = False,
                temp_c: Optional[float] = None, temp_src: Optional[str] = None,
-               watch_bias: Optional[dict] = None) -> dict:
+               watch_bias: Optional[dict] = None, power=None) -> dict:
     """徐國峰's 90-minute test (blog 2016-12): flat, every stop ≤ 30 s (the
     ≤ 25 °C line, 台灣教練: a temperature band on the result, _tag_heat); HR at minute 10
     (A) vs minute 90 (B), each the ±1-min mean;
-    drift = (B − A) ÷ A; < 10 % = the base is sufficient. Not halves."""
+    drift = (B − A) ÷ A; < 10 % = the base is sufficient. Not halves.
+    SP-275: the output must hold — minutes 80–90 not > 5 % slower than 10–20 (power when
+    there is power; base_check.output_hold); without speed or power `hold_note` says so."""
     from backend.engine import base_check as BC
     from backend.engine.quality_gate import xu_drift_of
     out = {"ok": False, "reason": "", "drift": None, "pw_drift": None, "pa_drift": None, "hr1": None, "hr2": None,
@@ -314,6 +320,12 @@ def analyze_xu(t, hr, speed=None, temp=None, climb_m_per_km: Optional[float] = N
     stop = BC.longest_stop(t, speed)
     if stop > BC.XU_STOP_S:
         out["reason"] = f"第 10–90 分鐘停了 {stop:.0f} 秒：補給每次不能停超過 30 秒（徐國峰）"
+        return out
+    h = out["hold"] = BC.output_hold(t, speed, power)
+    if h["basis"] is None:
+        out["hold_note"] = BC.hold_text(h)
+    elif not h["ok"]:
+        out["reason"] = BC.hold_text(h)
         return out
     if temp_c is None and temp is not None:
         tp = np.asarray(temp, dtype=float)
@@ -373,10 +385,11 @@ def _lines(r: dict, aet_now: Optional[float] = None) -> list[str]:
     judge = r.get("judge") or "ua"
     if judge == "xu":
         head = f"徐國峰 90 分鐘：第 10 分 {h1:.0f} → 第 90 分 {r['hr2']:.0f} bpm，飄移 {d * 100:.1f}%"
+        note = [r["hold_note"]] if r.get("hold_note") else []
         if r["band"] == "base_ok":
             return [f"{head} < 10%：有氧基礎夠（5% 內國家級），可以加 5 區",
-                    _("這次不給 AeT 數字：這個測試看的是有氧基礎，AeT 由平常多次輕鬆跑的飄移推估")]
-        return [f"{head} ≥ 10%：有氧基礎還不夠，繼續 1 區長跑", "5 區先不排；3 區照排"]
+                    _("這次不給 AeT 數字：這個測試看的是有氧基礎，AeT 由平常多次輕鬆跑的飄移推估")] + note
+        return [f"{head} ≥ 10%：有氧基礎還不夠，繼續 1 區長跑", "5 區先不排；3 區照排"] + note
     if judge == "friel":
         head = _("心率飄移 {d:.1f}%（Friel 1 小時）", d=d * 100)
         return [{"base_ok": f"{head} < 5%：有氧耐力夠", "base_mid": f"{head}（5–10%）：有氧耐力還在進步",
@@ -385,14 +398,20 @@ def _lines(r: dict, aet_now: Optional[float] = None) -> list[str]:
         head = _("心率飄移 {d:.1f}%（Evoke 60 分）", d=d * 100)
         if r["band"] == "at":
             return [f"{head} ≤ 5%：起始心率 {h1:.0f} bpm 在 AeT 或以下", "可以按「套用這次的 AeT」（保守：取起始心率）"]
-        return [f"{head} > 5%：起始心率 {h1:.0f} bpm 高於 AeT", f"下次起始心率 −5 bpm（約 {h1 - 5:.0f}）再測一次"]
+        return [f"{head} > 5%：起始心率 {h1:.0f} bpm 高於 AeT", _lower_line(h1)]
     head = _("心率飄移 {d:.1f}%（暖身後 {m:.0f} 分）", d=d * 100, m=r["main_s"] / 60)
     now = f"（目前 {aet_now:.0f}）" if aet_now else ""
     if r["band"] == "below":
         return [f"{head} < 3.5%：前半心率 {h1:.0f} bpm 還在 AeT 以下", f"下次起始心率 +5 bpm（約 {h1 + 5:.0f}）再測一次{now}"]
     if r["band"] == "at":
         return [f"{head}，在 3.5–5%：AeT = 前半平均心率 {h1:.0f} bpm{now}", "可以按「套用這次的 AeT」寫進門檻"]
-    return [f"{head} > 5%：起始心率 {h1:.0f} bpm 高於 AeT", f"下次起始心率 −5 bpm（約 {h1 - 5:.0f}）再測一次{now}"]
+    return [f"{head} > 5%：起始心率 {h1:.0f} bpm 高於 AeT", _lower_line(h1) + now]
+
+
+def _lower_line(h1: float) -> str:
+    """> 5 %: start lower next time. The 5 bpm is 推估 (LOWER_BPM): UA only says
+    a lower start, Evoke a slower pace another day."""
+    return _("下次起始心率降 {n} bpm（約 {hr:.0f}；{n} bpm 是推估）再測一次", n=LOWER_BPM, hr=h1 - LOWER_BPM)
 
 
 def warm_for(title: str, duration_s: float) -> float:
@@ -552,14 +571,15 @@ def session(th: dict, hr0: Optional[float], p0: Optional[float], cap_weekday: Op
     p = PROTOCOLS[key]
     warm, main, cool = p["warm"], p["main"], p["cool"]
     tgt = []
+    xu = None
     if key == "xu90":
-        aet = th.get("aet") if isinstance(th, dict) else None
-        tgt.append("配速固定在 E 配速，不要調")
-        tgt.append(f"心率 1 區（≤ AeT {aet:.0f}）" if aet else "心率 1 區（≤ AeT）")
+        xu = xu_target(th if isinstance(th, dict) else {})
+        tgt += [xu["text"], _("不設心率上限：心率升高也不要放慢（放慢會讓飄移偏小）")]
         why = ("自動：標準版徐國峰 90 分鐘（取代週末那次長跑）：" if protocol == "auto" else "徐國峰 90 分鐘：")
-        body = (f"暖身 {warm} 分，接著測試 {main} 分：平坦路段、配速盡量不變，記下第 10 分鐘和第 90 分鐘的心率；"
+        body = (f"暖身 {warm} 分（心率不超過輕鬆跑上限），接著測試 {main} 分：平坦路段、配速固定不要調、心率讓它自己變，"
+                "記下第 10 分鐘和第 90 分鐘的心率；"
                 "補給每次停不超過 30 秒；(第 90 分 − 第 10 分) ÷ 第 10 分 < 10% 有氧基礎夠。")
-        place = "平坦路段（河濱）、不要山路；"
+        place = "平坦路段（河濱）、不要山路；" + xu["why"]
     else:
         if p0:
             tgt.append(f"固定功率 {p0:.0f} W（±3%）")
@@ -580,12 +600,88 @@ def session(th: dict, hr0: Optional[float], p0: Optional[float], cap_weekday: Op
                 + ("（至少 40 分）" if key == "ua60" else "") + "；中途不停；"
                 + (f"緩和 {cool} 分。" if cool else "緩和可省略（0–5 分慢跑）。"))
         place = "冷氣房跑步機 2–3%＋電扇（首選），或平路環線，不要山路；"
-    early = ("主課第 10 分鐘心率已經比起始高 10 下還在升 → 起始太高，停掉改天降 5 bpm 再測（Evoke）"
+    # the abort rule is Evoke's; Evoke says "a slower pace another day" — the 5 bpm is ours (推估)
+    early = (_("主課第 10 分鐘心率已經比起始高 10 下還在升 → 起始太高，停掉改天用較慢的配速再測（Evoke）；"
+               "起始心率約降 {n} bpm（推估）", n=LOWER_BPM)
              if p["judge"] in ("ua", "evoke") else "")
     return {"id": "test_aet", "kind": "test", "protocol": PROTOCOL, "title": p["title"], "minutes": warm + main + cool,
             "target": "；".join(tgt) or "固定功率（±3%），不要調",
             "detail": why + place + body + HEAT_TEXT + "；記下溫度。" + early,
-            "source": p["source"] if key != "ua60" and key != "ua40" else SRC, "tss": (warm + main + cool) / 60 * 50}
+            "source": p["source"] if key != "ua60" and key != "ua40" else SRC, "tss": (warm + main + cool) / 60 * 50,
+            **({"xu_basis": xu["basis"]} if xu else {})}
+
+
+# ---- the 90-minute test's intensity (SP-274; lthr-low-confidence-testing.md §2.1, §4.2, §6.1 第 1 點) ----
+# 徐國峰 holds the E pace and lets the HR drift; an HR cap would hold the drift down (a false pass),
+# and without a measured AeT the cap was 0.89 × LTHR. Order (owner 2026-10-06): the E pace of a
+# race the athlete entered / confirmed (engine/e_pace.py) → 75–80 % of a tested CP (Palladino 1C
+# 「EZ aerobic」, zones.py) → no target, the talk test. Never an HR cap on the main block.
+XU_PACE_BAND = 0.03             # 推估: ± 3 % around the middle of the E range (a fixed pace, like ± 3 % power)
+XU_CP = (0.75, 0.80)            # Palladino 1C 75–80 % CP
+PACE_RE = re.compile(r"(\d+):(\d\d)\s*[–-]\s*(\d+):(\d\d)\s*/km")     # the stored target's pace range
+WATTS_RE = re.compile(r"(\d+)\s*[–-]\s*(\d+)\s*W\b")                     # …or power range
+
+
+def cp_tested(plan, day: dt.date) -> bool:
+    """The CP in effect on `day` counts as tested for the 90-minute test (owner 2026-10-06): the
+    latest plan row with a CP is not marked as typed by hand (planning.Threshold.cp_manual, set
+    by 設定 when the CP is typed). A test result (cp_method) and a legacy row saved before the
+    marker existed (CP, no cp_method) both count."""
+    rows = sorted((t for t in getattr(plan, "thresholds", None) or []
+                   if t.cp is not None and str(t.date)[:10] <= day.isoformat()), key=lambda t: t.date)
+    return bool(rows) and not getattr(rows[-1], "cp_manual", None)
+
+
+def xu_target(th: dict) -> dict:
+    """{"basis": pace | power | talk, "lo", "hi" (s/km or W; None for talk), "text" (the
+    target, its numbers parsed back by the step builders: PACE_RE / WATTS_RE), "name" (the
+    main step), "why" (the detail's line)}. th: the week plan's thresholds with "e_pace"
+    (e_pace.current) and "cp_measured" (cp_tested). A race older than e_pace.STALE_DAYS is not
+    used (owner 2026-10-06): the test falls back to the CP / the talk test."""
+    from backend.engine import e_pace as EP
+    e = th.get("e_pace") if isinstance(th.get("e_pace"), dict) else None
+    if e and e.get("e_fast") and e.get("e_slow") and not e.get("stale"):
+        mid = (float(e["e_fast"]) + float(e["e_slow"])) / 2.0
+        lo, hi = round(mid * (1 - XU_PACE_BAND)), round(mid * (1 + XU_PACE_BAND))
+        return {"basis": "pace", "lo": lo, "hi": hi,
+                "text": _("配速固定 {lo}–{hi} /km（E 配速 {mid} ±3%，推估），不要調",
+                          lo=EP.fmt_pace(lo), hi=EP.fmt_pace(hi), mid=EP.fmt_pace(mid)),
+                "name": _("固定 E 配速，不要調"),
+                "why": _("強度：{e}。", e=EP.label(e))}
+    cp = th.get("cp")
+    if cp and th.get("cp_measured"):
+        lo, hi = round(XU_CP[0] * float(cp)), round(XU_CP[1] * float(cp))
+        return {"basis": "power", "lo": lo, "hi": hi,
+                "text": _("功率固定 {lo}–{hi} W（75–80% CP，Palladino 1C），不要調", lo=lo, hi=hi),
+                "name": _("固定功率 75–80% CP，不要調"),
+                "why": _("強度：沒有 180 天內的比賽成績可以算 E 配速，用實測 CP {cp:.0f} W 的 75–80%（Palladino 1C）。"
+                         "設定頁填一場比賽成績就會改用 E 配速。", cp=float(cp))}
+    return {"basis": "talk", "lo": None, "hi": None,
+            "text": _("能講完整句子的配速，固定不要調"),
+            "name": _("能講完整句子的配速，固定不要調"),
+            "why": _("強度：沒有 180 天內的比賽成績可以算 E 配速，也沒有 CP 測試的結果：前 10 分鐘找能講完整句子的最快配速，"
+                     "之後就固定這個配速（講話測試，Foster 2008）。設定頁填一場比賽成績就會改用 E 配速。")}
+
+
+def xu_main_target(text: str) -> Optional[tuple]:
+    """The main block's target parsed from a stored 90-minute test's target text:
+    ("pace", fast, slow) s/km, ("power", lo, hi) W, or None (the talk test, or an old row)."""
+    m = PACE_RE.search(text or "")
+    if m:
+        a, b = int(m.group(1)) * 60 + int(m.group(2)), int(m.group(3)) * 60 + int(m.group(4))
+        return ("pace", min(a, b), max(a, b))
+    m = WATTS_RE.search(text or "")
+    if m:
+        return ("power", int(m.group(1)), int(m.group(2)))
+    return None
+
+
+def xu_main_name(text: str) -> str:
+    """The main step's name for xu_main_target's result."""
+    t = xu_main_target(text)
+    if t is None:
+        return _("能講完整句子的配速，固定不要調")
+    return _("固定 E 配速，不要調") if t[0] == "pace" else _("固定功率 75–80% CP，不要調")
 
 
 def pick_day_xu(avail: list, long_wd: int, cap_weekday: Optional[int] = None) -> Optional[dt.date]:

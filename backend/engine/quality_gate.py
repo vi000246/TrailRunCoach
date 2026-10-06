@@ -1792,7 +1792,8 @@ def aet_test_reason(ds, today: dt.date, ae: dict, z5: dict, brk: Optional[dict] 
     """Why an AeT test should be scheduled now, or None (unsourced-rules.md §B3
     and the Z5 lifecycle; numbers 推估 unless noted): {"code", "text"}.
       no_data  no interpretable run (a drift_of value or a 90-min 徐國峰 run) for
-               ~6 weeks (UA's 4–6-week retest, coach; wording 未驗證)
+               ~6 weeks (推估; not UA's — UA retests every 4–6 *months*,
+               aerobic-base-readiness.md §8)
       se       the aggregated AeT estimate is missing or its SE > 3 bpm
       shift    the last 6 points shift one way > 5 bpm
       moved    the estimate is more than max(SE, 3 bpm) away from the plan's AeT
@@ -1845,7 +1846,7 @@ def _aet_test_reason(today: dt.date, ae: dict, z5: dict, brk: Optional[dict], va
     if passive:
         return None
     if not recent and not xu_recent:
-        return {"code": "no_data", "text": f"{BC.NO_DATA_DAYS // 7} 週內沒有可判讀的跑步（UA 4–6 週重測；推估 6 週）"}
+        return {"code": "no_data", "text": _("{w} 週內沒有可判讀的跑步（推估 {w} 週）", w=BC.NO_DATA_DAYS // 7)}
     if not val.get("valid"):
         return {"code": "se", "text": val.get("reason") or "AeT 聚合估計還不夠準"}
     return None

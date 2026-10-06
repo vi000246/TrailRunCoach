@@ -343,13 +343,19 @@ def _aet_test_steps(s: dict, th: Thresholds) -> list[StepLike]:
     text = f"{s.get('target', '')} {s.get('detail', '')}"
     warm = _num(r"暖身\s*(\d+)\s*分", text, 10)
     main = _num(r"測試\s*(\d+)\s*分", text, 40)
-    from backend.engine.aet_test import protocol_of_title
+    from backend.engine.aet_test import protocol_of_title, xu_main_name, xu_main_target
     proto = protocol_of_title(s.get("title"))
     if proto in ("xu90", "friel"):
-        # 徐國峰 90 分 (constant E pace, HR in Zone 1) / Friel (steady at AeT): an HR-capped
-        # main block, no power range — the pace / HR is what is held
-        name = "固定 E 配速，不要調（心率 1 區）" if proto == "xu90" else "AeT 心率附近穩定跑"
-        steps = [Step(EX_WARMUP, warm * 60, easy_hr(th)), Step(EX_TRAIN, main * 60, easy_hr(th), name)]
+        # 徐國峰 90 分 (SP-274): the main block holds a pace (the E pace ± 3 %) or a power (75–80 %
+        # of a tested CP) read back from the stored target (aet_test.xu_target), else no target
+        # (the talk test) — never an HR cap: it would hold the drift down. The warm-up keeps the
+        # easy-run cap. Friel (steady at AeT): an HR-capped main block.
+        if proto == "xu90":
+            tg = xu_main_target(s.get("target", ""))
+            main_step = Step(EX_TRAIN, main * 60, tg, xu_main_name(s.get("target", "")))
+        else:
+            main_step = Step(EX_TRAIN, main * 60, easy_hr(th), "AeT 心率附近穩定跑")
+        steps = [Step(EX_WARMUP, warm * 60, easy_hr(th)), main_step]
         cool = _num(r"緩和\s*(?:\d+\s*[–-]\s*)?(\d+)\s*分", text, 0)
         if cool:
             steps.append(Step(EX_COOLDOWN, cool * 60, easy_hr(th)))

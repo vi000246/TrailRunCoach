@@ -1439,6 +1439,15 @@ which one. The response keeps the `coros` field names.
   automatically: 設定 shows the results / candidate with 「套用」 (`renderThrCheck`,
   `backend/static/settings.html:718`). HR-target templates and sessions get a warning badge in
   the editor from `thresholds.thr_warn` (`_thr_warn`, `backend/api/plan_sessions.py:118`).
+  SP-274 / SP-277: per session `POST /steps/check` returns `thr_warn` from
+  `threshold_confidence.session_warn` — never on a test session (`is_test_session`: kind test or a
+  test title: 90-minute / UA / Evoke / Friel 30′ / max HR), and only when a step's HR target is
+  worked out from LTHR (`lthr_step`: zones, % LTHR, an interval band on HR, the easy-run cap
+  unless it is a measured AeT; not a typed bpm range). The template rows use the same rule
+  client-side (`usesLthr`; no badge in the 測試 category). `lthr_warn`: the source alone →
+  「LTHR 是估算的；輕鬆跑可以改用講話測試的配速，做一次 30 分鐘測試後這個提醒會消失」; other reasons
+  keep the why and add the way out. A manual LTHR stays 中 (no warning) with the small
+  「手動輸入，沒有驗證」 (editor and 設定's LTHR card).
 - **AeT drift test** (`backend/engine/aet_test.py`): `due` (`backend/engine/aet_test.py:481`) —
   base phase, a reason (`quality_gate.aet_test_reason`: no data for ~6 weeks, the aggregate's SE
   too large, a shift, the estimate moved) and no test in the last 28 days (推估); no fixed

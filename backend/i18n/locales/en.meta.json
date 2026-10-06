@@ -391,6 +391,10 @@
     "draft": true,
     "src": "backend/engine/load_guard.py:129"
   },
+  "E 配速 {fast}–{slow} /km（{km:g} K {time}，VDOT {vdot:.1f}）": {
+    "draft": true,
+    "src": "backend/engine/e_pace.py:145"
+  },
   "E 配速 ≈ 閾值配速 × 1.18–1.29（Friel 2 區配速，推估）": {
     "draft": true,
     "src": "backend/engine/workout_templates.py:379"
@@ -459,9 +463,13 @@
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:297"
   },
-  "LTHR 可信度低：心率目標可能不準（{why}）": {
-    "draft": false,
-    "src": "backend/engine/threshold_confidence.py:600"
+  "LTHR 來自{src}，沒有測過；輕鬆跑可以改用講話測試的配速，做一次 30 分鐘測試後這個提醒會消失": {
+    "draft": true,
+    "src": "backend/engine/threshold_confidence.py:976"
+  },
+  "LTHR 可信度低：心率目標可能不準（{why}）；做一次 30 分鐘 LTHR 測試並套用後，這個提醒會消失": {
+    "draft": true,
+    "src": "backend/engine/threshold_confidence.py:979"
   },
   "LTHR 和最大心率互相矛盾，資料分不出是哪一個錯": {
     "draft": false,
@@ -482,6 +490,10 @@
   "LTHR 是 {date} 的自動估算，當時 CP {cp0:.0f} W、現在 {cp1:.0f} W（{d:+.0%}）：估算的前提已失效（推估 > 5%）": {
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:311"
+  },
+  "LTHR 是估算的；輕鬆跑可以改用講話測試的配速，做一次 30 分鐘測試後這個提醒會消失": {
+    "draft": true,
+    "src": "backend/engine/threshold_confidence.py:974"
   },
   "LTHR 是儲備心率的 {q:.0%}（一般 80–94%，個人範圍 73–95%）": {
     "draft": false,
@@ -1079,6 +1091,10 @@
     "draft": true,
     "src": "backend/engine/workout_review.py:2618"
   },
+  "{w} 週內沒有可判讀的跑步（推估 {w} 週）": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:1849"
+  },
   "—（AeT 是估計值，不算：要做一次 AeT 測試）": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:1797"
@@ -1323,6 +1339,10 @@
     "draft": false,
     "src": "backend/engine/racepower/seg_targets.py:45"
   },
+  "下次起始心率降 {n} bpm（約 {hr:.0f}；{n} bpm 是推估）再測一次": {
+    "draft": true,
+    "src": "backend/engine/aet_test.py:401"
+  },
   "下週安排恢復週": {
     "draft": true,
     "src": "backend/engine/status.py:333"
@@ -1415,6 +1435,10 @@
     "draft": true,
     "src": "backend/engine/plan_store.py:275"
   },
+  "不設心率上限：心率升高也不要放慢（放慢會讓飄移偏小）": {
+    "draft": true,
+    "src": "backend/engine/aet_test.py:562"
+  },
   "不設目標": {
     "draft": false,
     "src": "backend/engine/workout_steps.py:1492"
@@ -1458,6 +1482,10 @@
   "主課 {work}′": {
     "draft": true,
     "src": "backend/engine/technical.py:192"
+  },
+  "主課第 10 分鐘心率已經比起始高 10 下還在升 → 起始太高，停掉改天用較慢的配速再測（Evoke）；起始心率約降 {n} bpm（推估）": {
+    "draft": true,
+    "src": "backend/engine/aet_test.py:588"
   },
   "主課高於閾值、每趟 2–5 分、休息約 1:1；30/30、30/15 這種短趟短休也算這類": {
     "draft": true,
@@ -1955,6 +1983,10 @@
     "draft": true,
     "src": "backend/sync/workout_targets/coros.py:22"
   },
+  "功率固定 {lo}–{hi} W（75–80% CP，Palladino 1C），不要調": {
+    "draft": true,
+    "src": "backend/engine/aet_test.py:629"
+  },
   "功率：app 的 CP 不是 Garmin 的功率，只寫在說明": {
     "draft": true,
     "src": "backend/sync/workout_targets/garmin.py:22"
@@ -2222,6 +2254,14 @@
   "回量期：只排輕鬆跑（每次 ≤ 60 分）和肌力，不排長跑、強度課；量照減量期倒過來慢慢加回去（Higdon 反向減量；不排強度：Koop、Uphill Athlete，教練級）": {
     "draft": true,
     "src": "backend/engine/overview.py:405"
+  },
+  "固定 E 配速，不要調": {
+    "draft": true,
+    "src": "backend/engine/aet_test.py:658"
+  },
+  "固定功率 75–80% CP，不要調": {
+    "draft": true,
+    "src": "backend/engine/aet_test.py:658"
   },
   "在 AeT 附近跑 1 次 ≥ 60 分鐘，飄移 < 5%": {
     "draft": true,
@@ -2635,9 +2675,21 @@
     "draft": true,
     "src": "backend/engine/interval_library.py:364"
   },
+  "強度：{e}。": {
+    "draft": true,
+    "src": "backend/engine/aet_test.py:624"
+  },
   "強度：做到這堂課的 {pct}%（≥ 80% 算做到、50–80% 算強度不足、不到 50% 算沒照課表）": {
     "draft": false,
     "src": "backend/engine/workout_review.py:2833"
+  },
+  "強度：沒有 180 天內的比賽成績可以算 E 配速，也沒有 CP 測試的結果：前 10 分鐘找能講完整句子的最快配速，之後就固定這個配速（講話測試，Foster 2008）。設定頁填一場比賽成績就會改用 E 配速。": {
+    "draft": true,
+    "src": "backend/engine/aet_test.py:656"
+  },
+  "強度：沒有 180 天內的比賽成績可以算 E 配速，用實測 CP {cp:.0f} W 的 75–80%（Palladino 1C）。設定頁填一場比賽成績就會改用 E 配速。": {
+    "draft": true,
+    "src": "backend/engine/aet_test.py:651"
   },
   "彈力帶": {
     "draft": true,
@@ -2678,6 +2730,10 @@
   "後段撐得住": {
     "draft": true,
     "src": "backend/engine/workout_review.py:2668"
+  },
+  "後段放慢了 {n:.1f}%：飄移會偏小，下次配速固定": {
+    "draft": true,
+    "src": "backend/engine/base_check.py:254"
   },
   "後段明顯掉了": {
     "draft": true,
@@ -2942,6 +2998,10 @@
   "手動輸入": {
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:289"
+  },
+  "手動輸入，沒有驗證": {
+    "draft": true,
+    "src": "backend/engine/threshold_confidence.py:969"
   },
   "手腕光學心率偶爾會突然跳動、跳一階不回來、跟著步頻走或卡在同一個數字。量測的這段裡突然跳動、跳一階和卡住不動的秒數超過 3%，或有一次跑步中突然跳一階，飄移就只當參考：不拿來開放間歇、不算 AeT 測試、不寫進閾值。跟著步頻走只列出來，不算進門檻。原始資料不會被修改（門檻是推估）。": {
     "draft": true,
@@ -3687,6 +3747,10 @@
     "draft": true,
     "src": "backend/engine/specific_phase.py:603"
   },
+  "比賽日期不能在今天之後": {
+    "draft": true,
+    "src": "backend/api/plan.py:735"
+  },
   "比賽時這段每小時約 {vam:.0f} m、{g:.0f}%：{act}": {
     "draft": false,
     "src": "backend/engine/specific_phase.py:683"
@@ -3882,6 +3946,10 @@
   "沒有靜息心率，到設定填": {
     "draft": true,
     "src": "backend/engine/hr_profile.py:83"
+  },
+  "沒辦法確認配速有沒有維持（沒有速度也沒有功率）：只看心率": {
+    "draft": true,
+    "src": "backend/engine/base_check.py:252"
   },
   "活動擬合": {
     "draft": true,
@@ -4547,6 +4615,10 @@
     "draft": true,
     "src": "backend/engine/strength_moves.py:190"
   },
+  "能講完整句子的配速，固定不要調": {
+    "draft": true,
+    "src": "backend/engine/aet_test.py:634"
+  },
   "膝主導單腳": {
     "draft": true,
     "src": "backend/engine/strength_moves.py:71"
@@ -4642,6 +4714,10 @@
   "要儲存的資料太大": {
     "draft": true,
     "src": "backend/engine/race_calc_store.py:95"
+  },
+  "要填距離（1.5–42.5 km）、時間、日期，配速要在 2:30–15:00 /km 之間": {
+    "draft": true,
+    "src": "backend/api/plan.py:733"
   },
   "要知道照課表練有沒有進步，需要先有一個起點。": {
     "draft": true,
@@ -5491,6 +5567,10 @@
     "draft": true,
     "src": "backend/sync/workout_targets/garmin.py:22"
   },
+  "配速固定 {lo}–{hi} /km（E 配速 {mid} ±3%，推估），不要調": {
+    "draft": true,
+    "src": "backend/engine/aet_test.py:621"
+  },
   "配速是閾值配速的倍數（app 的 T 配速，推估）": {
     "draft": true,
     "src": "backend/engine/workout_templates.py:169"
@@ -6150,6 +6230,10 @@
   "；本週不另外排技術地形課": {
     "draft": true,
     "src": "backend/engine/technical.py:173"
+  },
+  "；比賽是 {d} 天前的，太舊了（超過 {n} 天，推估）：90 分鐘測試不用它，有新的比賽成績再更新": {
+    "draft": true,
+    "src": "backend/engine/e_pace.py:150"
   },
   "；比賽超過 6 小時，長天練到 6 小時的量就夠，等於 {p:.0f} %": {
     "draft": true,
