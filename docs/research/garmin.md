@@ -122,6 +122,15 @@
   - 我試過的幾個 Connect 專屬 URL 都回 404。
   - web.archive.org 這次的工具連不上。
   - 所以**我無法引用使用者條款原文**。「使用者條款禁止自動化存取」這個說法常見於二手文章，本文件標為 **未驗證**。
+  - **2026-10-06 補查（SP-107 #15）：讀到全文，改為已驗證。** 頁面雖然是 JS 渲染，條文其實以 JSON 嵌在原始 HTML 裡，下面的引句都對過原始 HTML。
+    - 版本：Garmin〈Terms of Use〉，"Effective Date: April 1, 2026"。https://www.garmin.com/en-US/legal/terms-of-use/
+    - 適用範圍："These Terms of Use apply to any Garmin website or online service on which these Terms of Use are posted"。connect.garmin.com 首頁的頁尾連到這份條款（2026-10-06 原始 HTML 有 `https://www.garmin.com/legal/terms-of-use/`），所以 **Garmin Connect 適用**。另外沒有找到 Connect 專屬的使用者條款。
+    - 自動化存取（Rules of Conduct「No Spam, Malicious Software, or Other Damaging or Disruptive Activity」）：總則是 "You may not use the Site in any manner that could overburden, damage, impair, disable, or breach the security of any Garmin server or network"。違規例子包括：
+      - "Using any process, whether automated or manual, that accesses, copies, or scrapes content from the Site through any means not purposely made available through the Site"；
+      - 另有「探測、掃描」和 "imposes an unreasonable or disproportionately large load"。
+    - 罰則（Enforcement）："Suspending or terminating a user account, which may result in loss of access, without a refund, to subscription services associated with the account"，也可以 "Asserting our rights in court"。
+    - **對 `garminconnect` 的意思**：它走的是 Garmin 沒有公開給第三方的登入與內部 API，而且會輪換 TLS 指紋繞過 Cloudflare，符合上面「not purposely made available through the Site」的描述。**使用者條款明文禁止，帳號可能被停權**；不再只是推論。Export Your Data、手動下載 FIT 是 Garmin 提供的管道，不在禁止範圍內。
+    - 程式現況：`backend/sync/workout_targets/garmin.py` 是 stub（`enabled = False`、不連網），`backend/scripts/garmin_probe.py` 是手動 probe。程式沒有違反條款的地方，**不用改程式**。要不要真的接 `garminconnect`，是產品決定（見 SP-107 待決定）。
 - 可以引用的是 §1.3 的 Developer Program Agreement：
   - §5.2.j 禁止 robot／spider／scrape。
   - §5.2.h 禁止繞過「mechanisms used to restrict or control the Garmin Connect services」。
@@ -362,7 +371,7 @@ probe 腳本：`backend/scripts/garmin_probe.py`。它是獨立腳本，沒有�
 1. Garmin Connect Developer Program 是否重新開放申請；FAQ 的資格（enterprise／business only）與審核時間有沒有變。
 2. Developer Program Agreement 的版本（目前 FRM-0952 Rev. B）與 §4.1、§5.2.e、§5.2.h、§5.2.j、§10.1 是否改寫。
 3. Health API 頁面的商業授權費註記；Health API 是否加入 HRV Status／Training Status。
-4. 一般使用者版 Garmin Connect Terms of Use 的自動化存取條款（本次取不到全文）。
+4. 一般使用者版 Garmin Connect Terms of Use 的自動化存取條款（本次取不到全文）。2026-10-06 已讀到（Effective Date: April 1, 2026，§2.4）；之後重查有沒有新版本（頁首有「Previous Version」連結可以比對）。
 5. `garminconnect` 最新版與 Python 需求（本次 0.3.17／≥ 3.12）；登入策略鏈有沒有大改。
 6. GitHub issue #444（API 403）是否修正，例如改成 opt-in 的 curl_cffi API session；有沒有新的大規模登入失效 issue。
 7. `upload_workout`、`schedule_workout`、`unschedule_workout`、`download_activity(ORIGINAL)` 的簽名與回傳格式。
@@ -387,6 +396,7 @@ probe 腳本：`backend/scripts/garmin_probe.py`。它是獨立腳本，沒有�
   - https://sahha.ai/blog/garmin-developer-program-paused/
   - https://forums.garmin.com/apps-software/mobile-apps-web/f/garmin-connect-mobile-andriod/441607/garmin-connect-api-access-paused-for-months-what-are-startups-supposed-to-do
 - 個人無法申請：https://ghurt.org/garmin-api-for-personal-use
+- Garmin Terms of Use（一般使用者，Effective Date: April 1, 2026；2026-10-06 讀取）：https://www.garmin.com/en-US/legal/terms-of-use/
 - garth：
   - 停止維護 README：https://github.com/matin/garth
   - 公告：https://github.com/matin/garth/discussions/222
