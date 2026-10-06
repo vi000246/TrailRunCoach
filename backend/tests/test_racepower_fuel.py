@@ -257,6 +257,7 @@ def test_csv_road_fuel_header_and_typed_stops(client):  # noqa: F811
     kv = {x[0]: x[1:] for x in head if x}
     assert kv["補給站"] == ["21 km 1 分 水站 半程"]
     assert kv["碳水 g/h"][0] == "60–90 g/h" and kv["賽前超補"][0] == "前一天 10–12 g/kg"
+    assert kv["賽前超補"][-1] == "總熱量也要跟著多，不只換比例"                   # SP-287
     assert "ml/h" in kv["水 ml/h"][0]
 
 
