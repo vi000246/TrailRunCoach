@@ -765,6 +765,7 @@
   "熱適應指數：每分鐘的熱劑量在這個 Hadley 以下是 0，到 150 是滿劑量。": "Heat acclimatisation index: each minute's heat dose is 0 below this Hadley and a full dose at 150.",
   "熱適應資料讀取失敗（{err}）": "Failed to read heat-acclimation data ({err})",
   "熱適應開始累積的熱指數": "Heat index where heat acclimatisation starts to build",
+  "熱：每段溫度由天氣點（{z:.0f} m）以每 100 m 0.65 °C 換算到該段海拔，濕度不變（推估）": "Heat: each segment's temperature is taken from the weather point ({z:.0f} m) to the segment's height at 0.65 °C per 100 m, humidity unchanged (estimate)",
   "爬升": "Climb",
   "爬升 {m} m": "climb {m} m",
   "爬升換算（每幾 m 爬升 = 1 km）": "Climb conversion (m of climb = 1 km)",

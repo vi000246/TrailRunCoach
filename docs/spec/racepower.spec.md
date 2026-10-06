@@ -1126,8 +1126,10 @@ Per-athlete items: `test_heat_calib.py`, `test_effort_calib.py`, `test_terrain_c
   `activity_weather.json` but are not used for the envelope).
 - Heat per segment and hour is only for road / trail plans with hourly rows (CWA 3-day,
   Open-Meteo ≤ 16 days, or the climatology's 24-hour profile); 百岳 and the CWA 1-week product use
-  one value. The climatology is a 6-station check, not a validation (玉山 still ≈ 0.8 °C cold). The forecast temperature is not
-  lapse-corrected to each segment's elevation.
+  one value. The climatology is a 6-station check, not a validation (玉山 still ≈ 0.8 °C cold).
+  On GPX road / trail courses each segment's temperature follows its own height (−0.0065 K/m, RH kept) from
+  `heat_ref_alt_m`, which the page sends as the fetched weather point's elevation (or a typed To altitude);
+  without it one height is used for the whole course.
 - Sex defaults to male (labelled 預設（男，推估）) when neither the settings profile nor WKO5 has it.
 - Back-test:
   - one past A race, no solo hikes; 5 capacity samples in the year (≥ 5 per category are needed),
@@ -1180,3 +1182,4 @@ when set, but nothing fills it from the routes module yet.
 | 2026-10-04 | feature | SP-43 | 「匯出到 COROS」 → 「匯出至課表」: `POST /export/plan` writes the race-day session of the stored plan (kind race, `ext_key` racecalc:<event id>, one per event; upsert, claims the generator's 比賽 row, warns / 409 before overwriting an edit made on the 課表), pushed with the plan's own push; `/export/coros` retired and its old watch workout replaced on that push; steep / walked trail legs: HR cap only (no power / pace; open without a cap); planned race TSS 推估 |
 | 2026-10-04 | feature | SP-43 follow-up | Race TSS: legs without a target use the calculator's predicted race HR ÷ LTHR (trail HR model x*, 百岳 AeT; 0.75 only without one, noted in the session detail); post-race correction factor from done exports (`tss_calib.py`, setting `racepower.race_tss_calib`, w = n/(n+3) 推估, one sample per race) shown in the export dialog; 百岳: single-day only (`multi_day`, `export_block`, 400), HR-only targets |
 | 2026-10-06 | feature | SP-210 | Race-day climatology: the month centred on the race date over the last 10 years, the mean of ERA5 / ERA5-Land / ECMWF IFS at the target elevation (checked against CWA 1991–2020 normals at 6 stations), a 24-hour profile so far-off dates get per-segment heat, a permanent disk cache; tests in `test_race_climatology.py` |
+| 2026-10-06 | feature | SP-210 follow-up | Road / trail GPX plans: each segment's race-day temperature (single value or hourly) moved to its own mean elevation from `heat_ref_alt_m` (the weather point's elevation, sent by the page; also used by 百岳 when 氣溫所在海拔 is blank); tests in `test_racepower_heat_altitude.py` |
