@@ -1,6 +1,6 @@
 # Module Spec: plan-auto (自動調整課表)
 
-> **Last Updated**: 2026-10-05
+> **Last Updated**: 2026-10-06
 > **Status**: Active
 > **Domain Layer**: Core Domain
 
@@ -624,3 +624,4 @@ overview has `data-log="none"`. The settings are in 課表偏好 (above).
 | 2026-10-05 | feature | SP-74 follow-up | The user's own RPE ≥ 7 技術地形 sessions come off the week's 20 % before the intervals (shortened, or left out when the floor doesn't fit) |
 | 2026-10-06 | feature | SP-69 | Per-athlete calibration (`engine/calibrate.py` items) of the interval verdict (`interval_in_band_tol` 0.98 from the CP tests, `interval_last_fade` 5 % and `interval_tiz_goal` 85 % from the planned sessions, ≥ 20; `engine/interval_calib.py`), the LTHR retest hint (`lthr_test_age_days` 56 from how fast the LTHR moved between tests) and the easy-run HR margin (`easy_hr_margin_bpm` AeT+3 from the aggregated AeT estimate's SE, ≥ 3; adapt rule D's average-HR condition and the Friel band's upper edge; `engine/threshold_calib.py`). Thin data keeps today's constants; the texts that quote a number say 本人／手動／預設 |
 | 2026-10-06 | feature | SP-231 | COROS post-run self-rating (`sportFeelInfo.feelType`, read per new activity with `POST /activity/detail/query`, 8-week backfill) as rule D′ (`rpe_hard`): an easy / long run rated Hard or more moves the next hard session < 48 h later to a free day ≥ 48 h after, else one step down; switch `plan.auto.rpe_rule`; held for approval within 14 days of an A race; the data stamp includes this week's ratings (`rpe_stamp`) and a sync that stored a rating on an already-imported activity (`rpe_filled`) starts a run |
+| 2026-10-06 | change | SP-302 | Rule D's 「TSS > planned + 20 %」 now compares against an easy run planned at the easy-only TSS / h (overview.spec.md › Session TSS; before, the all-runs median put the plan near tempo and the check almost never fired) |

@@ -2237,9 +2237,10 @@ def _range_extras(start: str, end: str) -> dict:
 
 
 # TSS per hour of a planned session by kind: week_plan() / projection use the
-# athlete's median TSS/h per category (road for easy / long, hike, strength) and
-# fixed rates for the hard sessions (quality ≈ 70, test 75).
-KIND_CATEGORY = {"easy": "road", "long": "road", "hike": "hike", "strength": "strength"}
+# athlete's median TSS/h per category (road for long, hike, strength; the easy run's own
+# rate from genuinely easy runs, overview.easy_tss_rates — SP-302) and fixed rates for the
+# hard sessions (quality ≈ 70, test 75).
+KIND_CATEGORY = {"easy": "easy", "long": "road", "hike": "hike", "strength": "strength"}
 HARD_RATE = {"quality": 70.0, "test": 75.0}
 
 
@@ -2250,6 +2251,7 @@ def tss_rates(tph: Optional[dict], sessions: list[dict], fallback: float = 50.0)
     import statistics
     from backend.engine.overview import TSS_PER_HOUR_DEFAULT
     tph = {**TSS_PER_HOUR_DEFAULT, **(tph or {})}
+    tph.setdefault("easy", tph["road"])          # a plan stored before SP-302
     out = {k: float(tph.get(KIND_CATEGORY.get(k, ""), 0.0) or HARD_RATE.get(k, fallback)) for k in PS.KINDS}
     seen: dict[str, list[float]] = {}
     for s in sessions:
