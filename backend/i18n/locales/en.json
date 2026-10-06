@@ -486,6 +486,7 @@
   "平均功率": "Avg power",
   "平均心率": "Avg HR",
   "平衡／腳踝 {m} 分：熱身 1–2 分承重式腳踝活動度——彈性站姿、體重壓在腳上，慢慢做內翻、外翻（徐國峰）；接著 4 個動作，每個 2 組 × 20–40 秒／腳：{moves}": "Balance / ankle {m} min: warm up 1–2 min with loaded ankle mobility — a soft stance, weight on the feet, slowly roll in and out (Kuo-Feng Hsu); then 4 moves, 2 sets × 20–40 s per leg each: {moves}",
+  "年齡 {age} 不合理（{lo}–{hi} 歲）": "Age {age} is not plausible ({lo}–{hi} years)",
   "延長在有氧強度下的持續時間，提升耐久性與脂肪利用（Daniels）": "Extends time at aerobic intensity to improve durability and fat use (Daniels)",
   "建立示範沙盒的次數太多，請稍後再試；現在仍可瀏覽示範資料": "Too many demo sandboxes created; please try again later. You can still browse the demo data",
   "建議 B2B 要是 true／false": "Suggest B2B must be true / false",

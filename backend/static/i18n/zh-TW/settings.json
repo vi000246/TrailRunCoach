@@ -167,5 +167,12 @@
   "tabs.body_note": "最大／靜息心率、課表心率區間、LTHR／AeT／CP 測試紀錄、起始 CTL／ATL，以及要不要用功率。",
   "tabs.data_note": "COROS／TrainingPeaks 登入和同步、備份、課表訂閱。",
   "tabs.advanced_note": "計算模式、自動估算的參數、功率壞點修正、排除壞掉的活動檔。平常不用動。",
-  "general.title": "基本資料"
+  "general.title": "基本資料",
+  "general.age": "年齡",
+  "general.age_unit": "歲",
+  "general.missing": "還缺：{list}（用來校準計算）",
+  "general.f_weight": "體重",
+  "general.f_sex": "性別",
+  "general.f_age": "年齡",
+  "general.sep": "、"
 }

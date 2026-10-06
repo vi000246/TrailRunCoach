@@ -3,6 +3,13 @@
 and the data cannot tell — body (sex, height, birth year, dated weights) and
 the power source — plus what can be pre-filled from the data.
 
+First-run 精靈 (static/setup_wizard.js, SP-211): asks until the weight, the sex and the age
+are known — what the calculations are calibrated with and the data cannot tell: weight → W/kg,
+RE, the race calculator, the pack default; sex → the W′ prior and energy; age → energy and the
+220 − age walk cap without a max HR (docs/research/cold-start.md §1.3: the wizard asked weight /
+sex only; §4.3: age is the max-HR fallback). The age is asked, the birth year stored (an age
+goes stale; `age()` = this year − birth year, the birthday itself is not asked).
+
 Stored in the season plan's `profile` (engine/planning.py, ~/.wko5coach/plan.json):
 
     sex          male | female
@@ -33,6 +40,8 @@ LEGACY_METER = {"stryd": "stryd", "coros": "watch", "garmin": "watch", "other": 
 DETECT_DAYS = 90
 DETECT_MIN_RUNS = 5               # 推估 (plan S1: ≥ 5 Stryd runs in 90 days)
 BIRTH_YEAR_MIN = 1920
+AGE_MIN, AGE_MAX = 10, 100            # the age the 精靈 / 設定頁 accept (birth year: this year − age)
+SETUP_FIELDS = ("weight", "sex", "age")
 SETUP_DONE_KEY = "athlete.setup.done"
 
 
@@ -47,6 +56,15 @@ def age(profile: dict, today: Optional[dt.date] = None) -> Optional[int]:
     if not isinstance(y, int):
         return None
     return (today or dt.date.today()).year - y
+
+
+def birth_year_of_age(age: int, today: Optional[dt.date] = None) -> int:
+    """The birth year stored for an age typed in (the age reached this year)."""
+    return (today or dt.date.today()).year - int(age)
+
+
+def age_ok(a: Optional[int]) -> bool:
+    return a is None or (isinstance(a, int) and not isinstance(a, bool) and AGE_MIN <= a <= AGE_MAX)
 
 
 def profile_power_source(profile: dict) -> Optional[str]:
@@ -99,6 +117,12 @@ def use_power(source: str, accept_watch_power: bool) -> bool:
     return source == "stryd" or (source == "watch" and bool(accept_watch_power))
 
 
-def setup_needed(weight: Optional[float], sex: Optional[str]) -> bool:
-    """The first-run 精靈 asks until a weight and a sex are known (any source)."""
-    return weight is None or sex not in ("male", "female")
+def setup_missing(weight: Optional[float], sex: Optional[str], birth_year: Optional[int]) -> list[str]:
+    """Which of weight / sex / age (SETUP_FIELDS) the app does not know yet (any source)."""
+    have = {"weight": weight is not None, "sex": sex in ("male", "female"), "age": isinstance(birth_year, int)}
+    return [k for k in SETUP_FIELDS if not have[k]]
+
+
+def setup_needed(weight: Optional[float], sex: Optional[str], birth_year: Optional[int]) -> bool:
+    """The first-run 精靈 asks until the weight, the sex and the age are known (SP-211)."""
+    return bool(setup_missing(weight, sex, birth_year))

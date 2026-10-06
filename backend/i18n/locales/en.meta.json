@@ -1947,6 +1947,10 @@
     "draft": true,
     "src": "backend/engine/balance_plan.py:67"
   },
+  "年齡 {age} 不合理（{lo}–{hi} 歲）": {
+    "draft": false,
+    "src": "backend/api/plan.py:507"
+  },
   "延長在有氧強度下的持續時間，提升耐久性與脂肪利用（Daniels）": {
     "draft": true,
     "src": "backend/engine/workout_templates.py:126"
