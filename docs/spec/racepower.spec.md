@@ -519,6 +519,10 @@ have a median f in 0.97–1.03.
 Trail plans: when > 30 % of the distance is steeper than ±8 % (Stryd's validated range, van
 Rassel 2026), the plan says HR first (cap LTHR, long races near AeT) and power second (推估),
 and returns `summary.hr_first`. Walked grades are noted per segment.
+A GPX segment is `trusted` (no 推估 badge once the category passes) when its grade is inside
+−2 … +8 % (`grade_model.stryd_valid`: van Rassel 2026 validated 0–8 % uphill only, flats ±2 % count
+with it; SP-246) or its grade bin has ≥ 30 personal windows; a descent below −2 % without them is
+推估 (power and VO2 decouple there, Gravina-Cognetti 2025). Only the label changes, not the time.
 
 ### Intensity classes (`backend/engine/racepower/intensity.py:169`)
 
