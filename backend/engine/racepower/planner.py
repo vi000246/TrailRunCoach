@@ -31,6 +31,7 @@ from backend.engine.racepower import predict as PR
 from backend.engine.racepower import riegel as R
 from backend.engine.racepower import weather as WX
 from backend.engine.zones import zones_json
+from backend.i18n import _
 
 MODES = ("time", "power", "auto")
 AUTO_TARGETS = {"max": 1.00, "hard": 0.95, "steady": 0.85}
@@ -154,8 +155,12 @@ def coros_steps(segments: list[dict], band: float = 0.03) -> list:
 # own composition (推估; racepower-v2.md §8 proposes it for long events) —
 # segment outputs carry 推估. The clock depends on the segment times and the
 # times on Mᵢ, so the planner iterates to a fixed point (max |Δ cumulative
-# time| < HEAT_TOL_S). Forecast temperatures are used as given at the
-# forecast point (no lapse to each segment's elevation).
+# time| < HEAT_TOL_S). On a GPX course with `heat_ref_alt_m` (the elevation
+# the race-day temperature refers to: the weather point, sent by the page)
+# each segment's temperature is moved to its own mean elevation by the
+# standard lapse rate (env.segment_temp, −0.0065 K/m, RH kept — as 百岳 and
+# the climatology do; owner decision 2026-10-06, SP-210 follow-up). Without
+# it the temperatures are used as given (one height for the whole course).
 # ---------------------------------------------------------------------------
 
 HEAT_MAX_PASSES = 8
@@ -219,8 +224,22 @@ def _segment_heat(hourly: list, start: dt.datetime, segs: list, rows: list, stop
     return out
 
 
-def _heat_fields(h: Optional[dict], to_side: dict) -> dict:
+def _at_height(h: Optional[dict], z_ref: Optional[float], z: Optional[float]) -> Optional[dict]:
+    """Conditions moved from the weather point's elevation z_ref to the
+    segment's z: temperature by env.segment_temp (−0.0065 K/m), RH kept, dew
+    point rebuilt. No z_ref / z → unchanged."""
+    if h is None or z_ref is None or z is None:
+        return h
+    t = ENV.segment_temp(h["temp_c"], z_ref, z)
+    return {**h, "temp_c": t, "dew_c": ENV.dew_point(t, h["rh_pct"])["dew_c"]}
+
+
+def _heat_fields(h: Optional[dict], to_side: dict, z_ref: Optional[float] = None, z: Optional[float] = None) -> dict:
     if h is None:
+        if z_ref is not None and z is not None:
+            one = _at_height({"temp_c": to_side["temp_c"], "rh_pct": to_side["rh_pct"]}, z_ref, z)
+            return {**one, "heat_pct": ENV.heat_penalty_pct(one["temp_c"], one["rh_pct"]),
+                    "heat_clock": None, "heat_src": "single"}
         return {"temp_c": to_side["temp_c"], "dew_c": to_side.get("dew_c"), "rh_pct": to_side["rh_pct"],
                 "heat_pct": to_side.get("heat_penalty_pct", ENV.heat_penalty_pct(to_side["temp_c"], to_side["rh_pct"])),
                 "heat_clock": None, "heat_src": "single"}
@@ -524,22 +543,33 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
     # ---- per-segment, time-of-day heat (推估) ----------------------------
     stops = opts.get("stops") or []
     heat_rows, start_dt, heat_reason = _heat_context(opts)
-    st = solve_all(factors())
+    # each segment's temperature at its own height (GPX + the weather point's elevation)
+    z_ref = opts.get("heat_ref_alt_m") if gpx else None
+    one_to = {"temp_c": to["temp_c"], "rh_pct": to["rh_pct"]}
+
+    def heat_of(hs):
+        """(temp, rh) per segment: the hour's conditions, else the To value, at the segment's height."""
+        out = []
+        for h, sg in zip(hs, segs):
+            x = h if h is not None else _at_height(one_to, z_ref, sg.get("z_mean"))
+            out.append((x["temp_c"], x["rh_pct"]))
+        return out
+    st = solve_all(factors(heat_of([None] * len(segs)) if z_ref is not None else None))
     seg_heat = None
     heat_info = {"mode": "single", "passes": 0, "converged": None, "delta_s": None, "outside": 0,
                  "reason": heat_reason, "badge": None}
     if heat_rows:
         prev = _cum_times(st["res"]["rows"])
         for n in range(1, HEAT_MAX_PASSES + 1):
-            seg_heat = _segment_heat(heat_rows, start_dt, segs, st["res"]["rows"], stops)
+            seg_heat = [_at_height(h, z_ref, sg.get("z_mean"))
+                        for h, sg in zip(_segment_heat(heat_rows, start_dt, segs, st["res"]["rows"], stops), segs)]
             if hr_est is not None:
                 # the time-weighted race-day Hadley of the hours each segment is run
                 from backend.engine import heat as HT
                 tw = [(r["t"], HT.hadley_sum(h["temp_c"], h["rh_pct"])) for r, h in zip(st["res"]["rows"], seg_heat) if h]
                 if tw:
                     hr_est = hr_for(sum(t * x for t, x in tw) / (sum(t for t, _ in tw) or 1.0)) or hr_est
-            st = solve_all(factors([(h["temp_c"], h["rh_pct"]) if h else (to["temp_c"], to["rh_pct"])
-                                    for h in seg_heat]))
+            st = solve_all(factors(heat_of(seg_heat)))
             cur = _cum_times(st["res"]["rows"])
             delta = max(abs(a - b) for a, b in zip(cur, prev))
             prev = cur
@@ -554,6 +584,9 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
             warnings.append(f"{out_n} 段的 ETA 超出逐時預報範圍：這些段用單一溫度 {to['temp_c']:.1f} °C")
     elif heat_reason and opts.get("hourly_heat", True):
         warnings.append(f"熱修正用單一溫度 {to['temp_c']:.1f} °C / 濕度 {to['rh_pct']:.0f} %（{heat_reason}）")
+    if z_ref is not None:
+        heat_info["ref_alt_m"] = z_ref
+        warnings.append(_("熱：每段溫度由天氣點（{z:.0f} m）以每 100 m 0.65 °C 換算到該段海拔，濕度不變（推估）", z=z_ref))
     res, alpha_used, runs = st["res"], st["alpha_used"], st["runs"]
     t_whole, p_whole, t_c, p_c, mbar = st["t_whole"], st["p_whole"], st["t_c"], st["p_c"], st["mbar"]
     if alpha_used < alpha - 1e-9:
@@ -617,7 +650,7 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
             "t": r["t"], "cum_s": cum, "eta": _clock(opts.get("start_time"), cum + _stops_before(stops, s["end_km"])),
             "capped": r["capped"], "locked": r.get("locked", False), "notes": notes,
             "badge": None if (v2_primary and trusted) else "推估", "trusted": trusted, "hint": HINT_30S,
-            **_heat_fields(seg_heat[i] if seg_heat else None, env["to"]),
+            **_heat_fields(seg_heat[i] if seg_heat else None, env["to"], z_ref, s.get("z_mean")),
         })
     if wb:
         for sg, val in zip(out_segs, wb["values"]):

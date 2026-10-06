@@ -380,7 +380,7 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
       <div class="row rf"><span class="lbl">熱</span>
         <label class="meta"><input type="checkbox" id="hourlyheat" checked> 逐段熱修正（依起跑時間與各段 ETA 取逐時氣溫、露點）</label>
         <span class="badge watch">推估</span>
-        <span class="help" tabindex="0">?<span class="tip" data-i18n="racepower.heat.tip">取得比賽日天氣後，如果有逐時資料，每一段用「跑到那一段時」的氣溫和露點算熱負荷，所以早上涼、中午熱會反映在各段的目標上。逐時資料來自中央氣象署三天預報或 Open-Meteo 預報；超過 16 天的日期用近 10 年同一個月每個小時的平均。時間改了、到達時刻跟著改，會重算到穩定為止。沒有逐時資料（中央氣象署一週預報、離線、還沒取得天氣）或沒填起跑時間時，全程用同一個溫度。</span></span>
+        <span class="help" tabindex="0">?<span class="tip" data-i18n="racepower.heat.tip">取得比賽日天氣後，如果有逐時資料，每一段用「跑到那一段時」的氣溫和露點算熱負荷，所以早上涼、中午熱會反映在各段的目標上。逐時資料來自中央氣象署三天預報或 Open-Meteo 預報；超過 16 天的日期用近 10 年同一個月每個小時的平均。GPX 路線時，每段溫度再依該段海拔換算（每升高 100 m 約低 0.65 °C，濕度不變）。時間改了、到達時刻跟著改，會重算到穩定為止。沒有逐時資料（中央氣象署一週預報、離線、還沒取得天氣）或沒填起跑時間時，全程用同一個溫度。</span></span>
         <span class="meta" id="heat-line"></span>
       </div>
       <div class="row"><span class="lbl">熱適應</span>
@@ -1104,6 +1104,12 @@ function planBody(extra = {}) {
     body.trip_kind = S.trip; body.hr_band = S.hrband;
     body.pack_kg_by_day = $("packdays").value.split(/[,，\s]+/).map(Number).filter((x) => x > 0);
     if (num("heatz") != null) body.heat_ref_alt_m = num("heatz");
+  }
+  // the elevation the race-day temperature refers to (owner decision 2026-10-06: each GPX segment's
+  // temperature follows its own height): a typed To altitude, else the fetched weather's point
+  if (body.heat_ref_alt_m == null) {
+    if ($("t-alt").classList.contains("ovr") && num("t-alt") != null) body.heat_ref_alt_m = num("t-alt");
+    else if (!tempOverridden() && WX?.values?.altitude_m != null) body.heat_ref_alt_m = WX.values.altitude_m;
   }
   if (body.mode === "time") {
     if (type !== "baiyue" && S.tunit === "pace") body.target_pace_s_per_km = parseMs($("tpace").value);
