@@ -463,6 +463,14 @@
     "draft": true,
     "src": "backend/engine/quality_gate.py:1800"
   },
+  "LTHR 從這天起用你填的值（測試）；之前是推估（最大心率的 90 %），hrTSS 和體能數字在這天會跳一下": {
+    "draft": false,
+    "src": "backend/engine/overview.py:323"
+  },
+  "LTHR 從這天起用你自己資料的估算；之前是推估（最大心率的 90 %），hrTSS 和體能數字在這天會跳一下": {
+    "draft": false,
+    "src": "backend/engine/overview.py:322"
+  },
   "LTHR 是 {date} 的自動估算，當時 CP {cp0:.0f} W、現在 {cp1:.0f} W（{d:+.0%}）：估算的前提已失效（推估 > 5%）": {
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:311"
@@ -2443,6 +2451,10 @@
     "draft": false,
     "src": "backend/api/plan.py:507"
   },
+  "年齡公式（推估）": {
+    "draft": false,
+    "src": "backend/engine/threshold_confidence.py:291"
+  },
   "延長在有氧強度下的持續時間，提升耐久性與脂肪利用（Daniels）": {
     "draft": true,
     "src": "backend/engine/workout_templates.py:126"
@@ -2650,6 +2662,10 @@
   "心率恢復變快但功率沒到，可能累積疲勞：休 60 秒心率降 {d:.0f} bpm，比同規格課 8 週中位數 {b:.0f} 快 {x:.0%}（連續 {k} 堂 ≥ {t:.0%}）": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:858"
+  },
+  "心率數字是推估的，以能完整講一句話的強度為準（說話測試）": {
+    "draft": false,
+    "src": "backend/engine/hr_profile.py:94"
   },
   "心率最高的 {k} 次平均飄移 {m:.1f}%，算上誤差可能到 {u:.1f}%（≥ 5%）：還不夠確定": {
     "draft": true,
@@ -2911,6 +2927,14 @@
     "draft": true,
     "src": "backend/engine/drift_calib.py:119"
   },
+  "推估（年齡公式，個人可以差 10 bpm 以上）": {
+    "draft": false,
+    "src": "backend/engine/hr_profile.py:91"
+  },
+  "推估（最大心率的 90 %）": {
+    "draft": false,
+    "src": "backend/engine/hr_profile.py:92"
+  },
   "推估（每天的心率本來就差約 3 bpm，Lamberts & Lambert 2009）": {
     "draft": true,
     "src": "backend/engine/threshold_calib.py:132"
@@ -3158,6 +3182,10 @@
   "最大心率測試 {date}：撐 ≥ 5 秒的最高心率（濾掉尖峰）": {
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:684"
+  },
+  "最大心率的 90 %（推估）": {
+    "draft": false,
+    "src": "backend/engine/threshold_confidence.py:290"
   },
   "最大心率（COROS % HRmax 6 區）": {
     "draft": true,

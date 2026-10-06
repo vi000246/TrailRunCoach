@@ -187,12 +187,16 @@ def test_estimated_thresholds_fill_unset_dates(tmp_path, monkeypatch):
     ds = FitFolderDataset(d, config=EngineConfig(parity=True), today=TODAY, estimate_thresholds=True)
     first = ds.workouts[0].entry.start.date()
     hist = ds.athlete.settings["runthr"]
-    assert hist[0] == FD.NOT_BEFORE and hist[1][0] == first + dt.timedelta(days=FD.ESTIMATE_STEP_DAYS)
-    assert ds.sport_setting("thr", ds.workouts[0]) is None            # before the first estimate
+    est_day = first + dt.timedelta(days=FD.ESTIMATE_STEP_DAYS)
+    assert hist[0] == FD.NOT_BEFORE and hist[2][0] == est_day
+    # SP-289: no watch LTHR → before the first estimate the 0.90 × max-HR prior (max HR from these
+    # runs), never the estimate itself; the switch day is noted on the PMC
+    assert hist[1][0] == first and ds.lthr_prior["until"] == est_day.isoformat()
+    assert ds.sport_setting("thr", ds.workouts[0]) == ds.lthr_prior["value"] != 160.0
     late = ds.workouts[-1]
     assert ds.sport_setting("thr", late) == 160.0
     assert ds.sport_setting("ftp", late) is None and ds.cp(late) is None   # CP is never filled from the PD refit
-    assert late.metrics["hrtss"] is not None and ds.workouts[0].metrics["hrtss"] is None
+    assert late.metrics["hrtss"] is not None and ds.workouts[0].metrics["hrtss"] is not None
     assert ds.setting_label("runthr").startswith("自動估算")
 
 

@@ -687,6 +687,10 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
                            transition_week=O.transition_week(phases, week) if kind == "transition" else None,
                            strength=STP.week_context(a_evs, phases, week, kind, prefs),
                            mp=O.mp_week(cur.get("mp_race"), week), cold=ramp)
+        if th.get("lthr_prior"):
+            for s_ in ss:                      # SP-289: the talk test with prior HR numbers, as week_plan
+                if s_["kind"] in ("easy", "long"):
+                    s_["detail"] = O.talk_test(s_["detail"])
         if kind in ("transition", "rebuild"):
             notes.append({"level": "info", "src": "transition",
                           "text": O.TRANSITION_NOTE if kind == "transition" else O.REBUILD_NOTE})

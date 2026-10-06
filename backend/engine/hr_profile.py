@@ -81,6 +81,17 @@ SOURCE = {
                 "所以這組區間對個人的強度不準，Friel／乳酸閾區間比較可靠"),
 }
 NO_REST = N_("沒有靜息心率，到設定填")
+# 沒有 LTHR 時的先驗 (SP-289; docs/research/cold-start.md §1.2, §4.3, T2): the LAST layer of each, 推估.
+# Max HR: 設定 → 手錶 → 跑步資料 → Tanaka 2001 [C3] 208 − 0.7 × age (r = −0.90; Friel [C7] warns
+# against age formulas, so only when nothing else exists; the individual SD ~10 bpm is 未驗證).
+# LTHR: 測試 → 本人資料估算 → 手錶 → 0.90 × max HR (Nuuttila 2025: LT2 at 90.6 ± 2.5 % HRmax,
+# zones-and-thresholds.md; unsourced-rules.md §0.5.5). Owner 2026-10-06: the age formula last, labelled.
+TANAKA_A, TANAKA_B = 208.0, 0.7
+LTHR_OF_MHR = 0.90
+AGE_MHR_SOURCE = N_("推估（年齡公式，個人可以差 10 bpm 以上）")
+LTHR_PRIOR_SOURCE = N_("推估（最大心率的 90 %）")
+# the easy runs' backup when the HR numbers are a prior (§4.3: the talk test, 教練常見做法, 未驗證)
+TALK_TEST = N_("心率數字是推估的，以能完整講一句話的強度為準（說話測試）")
 NO_MAX = N_("沒有最大心率，到設定填")
 
 # 課表 session class → COROS zones (owner 2026-10-03): recovery Z1, easy / long / hike Z2,
@@ -199,8 +210,40 @@ def max_hr(ds, day: dt.date, acc: Optional[dict] = None, use_account: bool = Tru
         return {"value": watch, "kind": "coros", "source": _("來自手錶（COROS 帳號）") + note, "estimate": est}
     if ev is not None:
         return {"value": ev, "kind": "estimate", "source": _("推估（近 365 天跑步）"), "estimate": est}
+    a = _age_on(ds, day)
+    if a is not None:
+        # SP-289: the last layer — Tanaka's age formula, labelled 推估
+        return {"value": age_max_hr(a), "kind": "age", "source": _(AGE_MHR_SOURCE), "estimate": est, "age": a}
     return {"value": None, "kind": None, "source": None, "estimate": est,
             "reason": _(NO_MAX) if not est else f"{_(NO_MAX)}（{est.get('reason')}）"}
+
+
+def age_max_hr(age: Optional[int]) -> Optional[float]:
+    """Tanaka 2001 [C3]: 208 − 0.7 × age (whole bpm); None without a sane age."""
+    if not isinstance(age, int) or isinstance(age, bool) or not 10 <= age <= 100:
+        return None
+    return float(round(TANAKA_A - TANAKA_B * age))
+
+
+def _age_on(ds, day: dt.date) -> Optional[int]:
+    """The age from the 一般設定 birth year (SP-211's 精靈) on `day`; None without one."""
+    try:
+        from backend.engine.athlete_profile import age
+        a = age(getattr(getattr(ds, "plan", None), "profile", None) or {}, day)
+    except Exception:                       # noqa: BLE001
+        return None
+    return a if age_max_hr(a) is not None else None
+
+
+def lthr_prior(ds, day: dt.date, acc: Optional[dict] = None, use_account: bool = True) -> Optional[dict]:
+    """The LTHR prior (SP-289): LTHR_OF_MHR × the max HR in effect (max_hr's whole order, the age
+    formula last). {"value", "mhr", "mhr_kind", "mhr_source", "source"}; None without a max HR.
+    Used only when there is no test, no estimate from the runner's data and no watch LTHR."""
+    m = max_hr(ds, day, acc, use_account)
+    if not m.get("value"):
+        return None
+    return {"value": float(round(LTHR_OF_MHR * float(m["value"]))), "mhr": float(m["value"]),
+            "mhr_kind": m.get("kind"), "mhr_source": m.get("source"), "source": _(LTHR_PRIOR_SOURCE)}
 
 
 def rest_hr(ds, day: dt.date, acc: Optional[dict] = None, use_account: bool = True) -> dict:
@@ -419,6 +462,8 @@ def walk_cap_for(ds, day: dt.date, aet: Optional[float], profile: Optional[dict]
         age = _age(profile or {}, day)
     except Exception:                       # noqa: BLE001
         age = None
+    if (m or {}).get("kind") == "age":
+        m = {}                              # the walk cap keeps its own (220 − age) × 0.75 (長野縣, SP-115)
     return walk_cap((m or {}).get("value"), aet, age, (m or {}).get("source"), (m or {}).get("kind") == "estimate")
 
 
