@@ -28,6 +28,7 @@ from typing import Optional, Sequence
 
 from backend.engine.algorithms import minetti
 from backend.engine.racepower import hike as HK
+from backend.i18n import _
 
 J_PER_KCAL = 4184.0
 ETA_FLAT = 0.221                 # van Rassel 2026: Stryd ÷ metabolic power on the flat
@@ -317,23 +318,46 @@ def sodium_band(cls: str, temp_c: Optional[float], hot: bool, water_mid: Optiona
     return [lo, min(max(hi, lo), max(hi0, lo))]
 
 
+LOAD_MIN = 90.0                  # carb loading only helps races > 90 min (Hawley 1997; Vitale & Getzin 2019)
+LOAD_G_KG = (10.0, 12.0)         # g/kg/day the day before (Bussau 2002; Vitale & Getzin 2019 > 90 min)
+NORMAL_G_KG = (6.0, 6.0)         # ≤ 90 min: a normal high-carb day (Vitale & Getzin 2019 < 90 min)
+
+
 def loading(weight: float, hours: float, cls: str) -> dict:
     """Pre-race (§6.1): > 90 min 10–12 g/kg the day before (Bussau 2002:
     one day is enough), else 6 g/kg; breakfast 1–4 g/kg 1–4 h before;
-    caffeine 3–6 mg/kg (Vitale 2019); 百岳: eat normally (推估)."""
+    caffeine 3–6 mg/kg (Vitale 2019); 百岳: eat normally (推估).
+    `g_kg` = the per-kg band and `carb_load` = a real carb load (> 90 min): the 減量期 week note
+    reads them (overview.carb_load_note, SP-285).
+    SP-287 (carb-periodization.md §2.4, §5 C-3), numbers unchanged: an ultra (> 6 h) loads over the
+    last 1–2 days (ISSN 2019 Tiller: 48 h; Bussau: one is enough); a carb load also needs more total
+    energy, not only a higher carb share (`note`; Tarnopolsky 2001, worded for everyone). `when` /
+    `amount` = the label's two parts (the share page shows them apart)."""
     if cls == "hike":
-        return {"kind": "normal", "label": "前一晚正常吃，不必超補", "badge": "推估",
-                "src": "推估（§3.2：低強度、多日，重點是每日總熱量）"}
-    if hours * 60.0 > 90.0:
-        g = [10.0 * weight, 12.0 * weight]
-        lab, src = "前一天 10–12 g/kg", "Bussau 2002（10 g/kg 一天肌肝醣就到頂）；Vitale & Getzin 2019（> 90 min：10–12 g/kg/天）"
+        return {"kind": "normal", "label": _("前一晚正常吃，不必超補"), "badge": "推估", "carb_load": False,
+                "src": _("推估（§3.2：低強度、多日，重點是每日總熱量）")}
+    full = hours * 60.0 > LOAD_MIN
+    gk = list(LOAD_G_KG if full else NORMAL_G_KG)
+    g = [gk[0] * weight, gk[1] * weight]
+    note = note_src = None
+    if full and cls == "ultra":
+        when, amount, lab = _("前 1–2 天"), "10–12 g/kg", _("前 1–2 天 10–12 g/kg")
+        src = _("Bussau 2002（10 g/kg 一天肌肝醣就到頂）；ISSN 2019 Tiller（超馬：賽前 48 小時，可分兩天）；"
+                "Vitale & Getzin 2019（> 90 min：10–12 g/kg/天）")
+    elif full:
+        when, amount, lab = _("前一天"), "10–12 g/kg", _("前一天 10–12 g/kg")
+        src = _("Bussau 2002（10 g/kg 一天肌肝醣就到頂）；Vitale & Getzin 2019（> 90 min：10–12 g/kg/天）")
     else:
-        g = [6.0 * weight, 6.0 * weight]
-        lab, src = "前一天約 6 g/kg（正常高碳水）", "Vitale & Getzin 2019（< 90 min：6 g/kg/天）"
-    return {"kind": "load", "g_day": g, "label": lab, "src": src, "badge": None,
-            "breakfast_g": [1.0 * weight, 4.0 * weight], "breakfast_src": "Vitale & Getzin 2019：賽前 1–4 h 吃 1–4 g/kg",
-            "caffeine_mg": [3.0 * weight, 6.0 * weight], "caffeine_src": "Vitale & Getzin 2019：3–6 mg/kg，賽前 30–90 min",
-            "drink": "賽前 2–3 h 喝 500 ml，10 分鐘前再 300 ml", "drink_src": "教練常見做法（推估）"}
+        when, amount, lab = _("前一天"), _("約 6 g/kg（正常高碳水）"), _("前一天約 6 g/kg（正常高碳水）")
+        src = _("Vitale & Getzin 2019（< 90 min：6 g/kg/天）")
+    if full:
+        note = _("總熱量也要跟著多，不只換比例")
+        note_src = _("Tarnopolsky 2001（只提高碳水比例時肝醣沒增加，總熱量也多吃才補得上）")
+    return {"kind": "load", "g_day": g, "g_kg": gk, "carb_load": full, "label": lab, "when": when, "amount": amount,
+            "note": note, "note_src": note_src, "src": src, "badge": None,
+            "breakfast_g": [1.0 * weight, 4.0 * weight], "breakfast_src": _("Vitale & Getzin 2019：賽前 1–4 h 吃 1–4 g/kg"),
+            "caffeine_mg": [3.0 * weight, 6.0 * weight], "caffeine_src": _("Vitale & Getzin 2019：3–6 mg/kg，賽前 30–90 min"),
+            "drink": _("賽前 2–3 h 喝 500 ml，10 分鐘前再 300 ml"), "drink_src": _("教練常見做法（推估）")}
 
 
 # ---------------------------------------------------------------------------

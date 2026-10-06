@@ -55,7 +55,7 @@ def fuel_rows(plan: dict) -> list[list]:
     rows.append(["鈉 mg/h", _span(n.get("per_h"), "mg/h"), _span(n.get("total_mg"), "mg")])
     ld = f.get("loading") or {}
     rows.append(["賽前超補", ld.get("label") or "", _span(ld.get("g_day"), "g/天") if ld.get("g_day") else "",
-                 ld.get("badge") or ""])
+                 ld.get("badge") or ""] + ([ld["note"]] if ld.get("note") else []))     # SP-287: 總熱量也要多
     return rows
 
 
