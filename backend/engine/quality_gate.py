@@ -117,7 +117,6 @@ EF_PLATEAU = 0.02              # status.EF_TREND
 LOW_SHARE_MIN = 0.75           # status.LOW_SHARE_GOOD (Seiler, by time)
 STEP_HOLD, STEP_BLOCK = LG.STEP_HOLD, LG.STEP_BLOCK   # > 20 % block: Nielsen 2014, Damsted 2019; 10–20 % hold 推估
 TSB_HOLD = -20.0                           # Friel / TrainingPeaks TSB bands (coach)
-ZONE3_SESSIONS = 3             # 自訂: ua_gap unlock → this many Zone 3 sessions, then the dose table
 REP_PCT, REP_MIN_S, DOSE_MIN_REPS = 0.95, 40, 4   # 自訂: a short-rep session = ≥ 4 bouts ≥ 40 s at ≥ 95 % CP
 FADE = 0.05                    # workout_review.FADE
 
