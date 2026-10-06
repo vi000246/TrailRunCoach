@@ -6,9 +6,11 @@ like WKO5's workout metadata (user request 2026-10-01).
                    test 測試 / other 其他
     effort         max 全力 / hard_with_rests 有拼但有休息 / moderate 一般 / easy 輕鬆
     note           free text
-    poles          登山杖 有杖 / 沒杖 / 未標 — user only, stored as a free-form tag,
+    poles          登山杖 有杖 / 沒杖 / 未標 — the user's, stored as a free-form tag,
                    read by no model (POLES, SP-242); only the 有杖 vs 沒杖 chart
-                   shows it (panels/pole_compare.py, pole_counts; SP-243)
+                   shows it (panels/pole_compare.py, pole_counts; SP-243). With
+                   no user choice, an activity of a race marked 「會用登山杖」
+                   shows 有杖 「依賽事設定」 (race_poles / pole_state, SP-300)
     surface        路況 乾 / 濕 / 未標 — user only, stored as a free-form tag; the
                    trail technicality factor splits on it when both groups
                    have enough data (SURFACES, SP-250)
@@ -157,30 +159,97 @@ def clean_tags(tags) -> list[str]:
 # the HR model and the downhill bump stay as they are (§4); it is kept only for the 有杖 vs 沒杖
 # comparison (SP-243). The tag strings are storage values, the same in every UI language.
 POLES = {"with": "有杖", "without": "沒杖"}
+# SP-300: the user's own 「未標」 is a choice too — it keeps a race's 「會用登山杖」 default off this
+# activity — so it is stored as a third, hidden tag. No tag at all = never chosen (the race default,
+# else 未標). poles_of() still answers only 有杖 / 沒杖 (the explicit 未標 is None there).
+POLE_NONE = "none"
+POLE_NONE_TAG = "杖未標"
 _POLE_OF_TAG = {v: k for k, v in POLES.items()}
+_CHOICE_OF_TAG = {**_POLE_OF_TAG, POLE_NONE_TAG: POLE_NONE}
 
 
 def poles_of(tags) -> Optional[str]:
     """"with" / "without" / None (未標) from a tag list; the last pole tag
     wins should both ever be there."""
+    c = pole_choice(tags)
+    return c if c in POLES else None
+
+
+def pole_choice(tags) -> Optional[str]:
+    """The USER's pole choice in a tag list: "with" / "without" / "none" (their own 未標) /
+    None (never chosen); the last pole tag wins."""
     out = None
     for t in tags or []:
-        out = _POLE_OF_TAG.get(str(t).strip(), out)
+        out = _CHOICE_OF_TAG.get(str(t).strip(), out)
     return out
 
 
 def with_poles(tags, poles: Optional[str]) -> list[str]:
     """The tag list with the pole mark set to `poles` ("with" / "without",
-    None = 未標): both pole tags removed, the chosen one appended."""
-    out = [t for t in clean_tags(tags) if t not in _POLE_OF_TAG]
+    "none" = the user's own 未標, None = no choice): every pole tag removed,
+    the chosen one appended."""
+    out = [t for t in clean_tags(tags) if t not in _CHOICE_OF_TAG]
+    if poles == POLE_NONE:
+        return out + [POLE_NONE_TAG]
     return out + [POLES[poles]] if poles in POLES else out
 
 
 def exclusive_poles(tags) -> list[str]:
     """A cleaned tag list with at most one pole tag (the last one kept)."""
     ct = clean_tags(tags)
-    p = poles_of(ct)
-    return ct if sum(t in _POLE_OF_TAG for t in ct) <= 1 else with_poles(ct, p)
+    p = pole_choice(ct)
+    return ct if sum(t in _CHOICE_OF_TAG for t in ct) <= 1 else with_poles(ct, p)
+
+
+# 「依賽事設定」 (SP-300, user decision 2026-10-06): an activity matched to a season-plan event marked
+# 「會用登山杖」 (planning.Event.poles, SP-244) shows 有杖 unless the user chose for it. Not a guess: it
+# is what the user entered on the race. The match is the existing one — a 1-day road / 越野賽 event:
+# its run by date + kind + distance (maximal.match_events, the auto 比賽 type); a 百岳, an 其他 or a
+# multi-day event: every trail run / hike (the activities the comparison chart uses) on each of its
+# days (the auto 百岳跟團 rule, athlete.baiyue_on). Computed at read time, never stored, so unticking
+# the race puts its un-chosen activities back to 未標. Like the mark itself it feeds no model.
+
+def race_poles(ds) -> dict[int, str]:
+    """{workout idx: event name} of the activities a 「會用登山杖」 event covers ({} without one)."""
+    events = [e for e in (getattr(getattr(ds, "plan", None), "events", None) or []) if getattr(e, "poles", False)]
+    if not events:
+        return {}
+    memo = getattr(ds, "memo", None)
+    key = ("race_poles", tuple((e.id, str(e.date)[:10], e.kind, int(e.days or 1), e.distance_km) for e in events))
+    if memo is not None and key in memo:
+        return memo[key]
+    from backend.engine.panels.climb_vam import kind_of
+    from backend.engine.racepower import athlete as A
+    from backend.engine.racepower import maximal as MX
+    out: dict[int, str] = {}
+    one_day = [e for e in events if e.kind in MX.EVENT_KINDS and int(e.days or 1) <= 1]
+    if one_day:
+        runs = [{"idx": w.idx, "date": w.entry.start.date().isoformat(), "km": w.metrics.get("distance"),
+                 "trail": A.is_trail(w)} for w in ds.workouts if A.outdoor(w)]
+        for i, m in MX.match_events(one_day, runs).items():
+            out[i] = m.get("name") or ""
+    span = [e for e in events if e not in one_day]
+    for w in ds.workouts if span else []:
+        if w.idx in out or kind_of(w) is None:
+            continue
+        d = w.entry.start.date()
+        e = next((e for e in span if e.start <= d < e.start + dt.timedelta(days=max(1, int(e.days or 1)))), None)
+        if e is not None:
+            out[w.idx] = e.name or ""
+    if memo is not None:
+        memo[key] = out
+    return out
+
+
+def pole_state(tags, race: Optional[str]) -> dict:
+    """The pole mark the pages show: {"poles": "with" / "without" / None (the effective mark),
+    "poles_user": pole_choice, "poles_race": the event name when the mark comes from it}. The
+    user's choice (有杖 / 沒杖 / their own 未標) always wins; with none, a race (`race`, from
+    race_poles) makes it 有杖."""
+    c = pole_choice(tags)
+    if c is None and race is not None:
+        return {"poles": "with", "poles_user": None, "poles_race": race}
+    return {"poles": c if c in POLES else None, "poles_user": c, "poles_race": None}
 
 
 # 「有杖 vs 沒杖」比較 (SP-243) only for someone who uses poles: in the last 365 days ≥ 5 activities
@@ -393,7 +462,7 @@ def validate(activity_type=None, effort=None, exclusion=None, name=None, tags=No
         ct = clean_tags(tags)
         if len(ct) > TAGS_MAX or any(len(t) > TAG_MAX_LEN for t in ct):
             return "INVALID_TAGS"
-    if poles is not None and poles not in POLES:
+    if poles is not None and poles not in POLES and poles != POLE_NONE:
         return "INVALID_POLES"
     if surface is not None and surface not in SURFACES:
         return "INVALID_SURFACE"
@@ -417,7 +486,7 @@ def upsert(db_path, *, start_local: str, athlete_id: int = 1, source=None, file=
     clears it (back to auto); left out = unchanged. `exclusion`: "keep" /
     "exclude" / None (auto). `name`: the user's title, None / "" = back to
     the original. `tags`: the free-form tag list (replaces the stored one).
-    `poles`: "with" / "without" / None (未標), see POLES. `surface`: "dry" /
+    `poles`: "with" / "without" / "none" (the user's 未標) / None (no choice), see POLES. `surface`: "dry" /
     "wet" / None (未標), see SURFACES.
     Creates the table when missing. Returns the stored row."""
     from sqlalchemy import create_engine, select
@@ -465,7 +534,8 @@ def apply_update(row, *, activity_type=_UNSET, effort=_UNSET, note=_UNSET, exclu
     `exclusion` (bad_activity.py): "keep" / "exclude", None = the auto rule.
     `name`: None / blank = back to the original title. `tags`: the whole
     list (cleaned; [] / None = no tags; at most one pole tag and one surface
-    tag). `poles` (登山杖, POLES): "with" / "without" / None = 未標 — rewrites
+    tag). `poles` (登山杖, POLES): "with" / "without" / "none" = the user's 未標
+    (POLE_NONE_TAG, keeps a race default off) / None = no choice — rewrites
     the pole tag of the (new) tag list, after `tags`. `surface` (路況,
     SURFACES): "dry" / "wet" / None = 未標, the same way."""
     import json
@@ -784,6 +854,8 @@ def merge(auto: dict, user: Optional[dict]) -> dict:
             "effort_auto": ae, "effort_auto_label": EFFORTS.get(ae, ""), "effort_reason": auto.get("effort_reason"),
             "note": (user or {}).get("note"), "stored": user is not None,
             "exclusion": user_exclusion(user),
+            # the user's 有杖 / 沒杖 only (no dataset here): the pages' callers apply
+            # pole_state(tags, race_poles(ds).get(idx)) over it — the race default (SP-300)
             "name": name_of(user), "tags": tags_of(user), "poles": poles_of(tags_of(user)),
             "surface": surface_of(tags_of(user)),
             "pain": (user or {}).get("pain"), "pain_area": (user or {}).get("pain_area"),

@@ -369,8 +369,11 @@ def _needs_met() -> dict:
     from backend.engine.panels import pole_compare as PC
     try:
         rows = AT.load()
-        # no mark at all: no need to wait for the Dataset
-        poles = bool(AT.pole_marks_stamp(rows)) and PC.counts(_dataset(), rows, today_local())["eligible"]
+        # no mark at all and no race marked 「會用登山杖」 (its activities count, SP-300): no need
+        # to wait for the Dataset
+        from backend.engine.wko5expr.dataset import tenant_plan
+        race = any(getattr(e, "poles", False) for e in (tenant_plan().events or []))
+        poles = bool(AT.pole_marks_stamp(rows) or race) and PC.counts(_dataset(), rows, today_local())["eligible"]
     except Exception:                          # noqa: BLE001 — no tag store / data: the chart stays hidden
         poles = False
     return {"poles": poles}
@@ -801,6 +804,8 @@ def _activity_json(ds, w) -> dict:
             "terrain": _terrain(ds, w.entry.file, A.is_trail(w)),
             "origin": _origin(ds, w),
             "types": AT.TYPES, "efforts": AT.EFFORTS, **t,
+            # 登山杖: the user's choice, else 有杖 「依賽事設定」 (SP-300)
+            **AT.pole_state(t.get("tags"), AT.race_poles(ds).get(w.idx)),
             # bad activity files (engine/bad_activity.py): an excluded file is not
             # in ds.workouts; `flagged` = the rule's reason when the user kept it
             "exclusion_state": {"override": t.get("exclusion"), "flagged": kept["reason"] if kept else None,
@@ -992,8 +997,11 @@ def activities_list():
         r = rain.find(file, start) if rain else None
         return r["rain_mm"] if r else None
 
-    def user_part(u):
-        return {"name": AT.name_of(u), "tags": AT.tags_of(u), "poles": AT.poles_of(AT.tags_of(u)),
+    # 「依賽事設定」 (SP-300): an activity of a race marked 「會用登山杖」 shows 有杖 until the user chooses
+    race_pole = AT.race_poles(ds)
+
+    def user_part(u, race=None):
+        return {"name": AT.name_of(u), "tags": AT.tags_of(u), **AT.pole_state(AT.tags_of(u), race),
                 "surface": AT.surface_of(AT.tags_of(u)),
                 "note": (u or {}).get("note"),
                 "user_type": AT.user_type(u), "user_effort": AT.user_effort(u),
@@ -1019,7 +1027,8 @@ def activities_list():
                     "power_label": ds.power_label(w) if hasattr(ds, "power_label") else None,
                     "origin": _origin(ds, w), "excluded": None, **rpe_part(w.entry.start, w.entry.file),
                     # its 有杖 / 沒杖 mark counts toward the comparison (trail runs and hikes, SP-243)
-                    "pole_chart": PC.used(w), "rain_mm": rain_mm(w.entry.start, w.entry.file), **user_part(u)})
+                    "pole_chart": PC.used(w), "rain_mm": rain_mm(w.entry.start, w.entry.file),
+                    **user_part(u, race_pole.get(w.idx))})
     for x in getattr(ds, "excluded", []):
         start = dt.datetime.fromisoformat(x["start"])
         u = AT.find(tags, start, x["file"])
@@ -1035,7 +1044,8 @@ def activities_list():
                     "rain_mm": rain_mm(start, x["file"]), **user_part(u)})
     out.sort(key=lambda a: a["start"], reverse=True)
     return {"source": getattr(ds, "source", None) or "wko5", "origin_labels": ORIGIN_LABELS,
-            "types": AT.TYPES, "efforts": AT.EFFORTS, "pole_tags": AT.POLES, "surface_tags": AT.SURFACES,
+            "types": AT.TYPES, "efforts": AT.EFFORTS, "pole_tags": AT.POLES, "pole_none_tag": AT.POLE_NONE_TAG,
+            "surface_tags": AT.SURFACES,
             # 「再標 N 次就能比較」 beside the 登山杖 choice (SP-243): only the trail runs and
             # hikes the chart uses count
             "pole_compare": PC.counts(ds, tags, today_local()),
@@ -1116,7 +1126,8 @@ class BulkBody(BaseModel):
     pain: Optional[int] = None
     pain_area: Optional[str] = None
     pain_side: Optional[str] = None
-    # 登山杖 (SP-242): "with" / "without" / null 未標 (engine/activity_tags.POLES)
+    # 登山杖 (SP-242): "with" / "without" / "none" the user's 未標 (SP-300: keeps a race's
+    # 「會用登山杖」 off) / null no choice (engine/activity_tags.POLES, POLE_NONE)
     poles: Optional[str] = None
     # 路況 (SP-250): "dry" / "wet" / null 未標 (engine/activity_tags.SURFACES)
     surface: Optional[str] = None
