@@ -27,6 +27,14 @@ Matching, one activity <-> one session:
      linked, shown as 類型不符.
   An activity the user unlinked (`unlinked`) is never auto-matched again; the
   user can link it by hand (plan_store.link).
+
+Planned vs actual intensity is graded, not pass / fail (SP-216: a session run
+at 99 % of its intensity was 「沒照課表」). dose() = the run's quality work over
+what the session needs; the bands are TrainingPeaks' compliance colours that
+compliance.py already uses for time / TSS (±20 % / 50 %), applied to time at
+intensity as interval-prescription.md #4 / #10 propose (TIZ ÷ planned TIZ):
+  planned hard: ≥ 80 % done · 50–80 % 強度不足 (partial) · < 50 % ran easy (沒照課表)
+  planned easy: a quality dose up to 150 % 偏強 (partial) · beyond: ran hard (沒照課表)
 """
 from __future__ import annotations
 
@@ -34,6 +42,7 @@ import datetime as dt
 from typing import Optional
 
 from backend.engine.compliance import KIND_OK
+from backend.i18n import _
 
 ENDURANCE = {"road", "trail", "hike", "bike"}
 NEVER = ("heat_passive", "notice")          # a bath / sauna / the 課表待確認 reminder: the user ticks it
@@ -41,6 +50,12 @@ HARD = ("quality", "test")
 HARD_MIN_S = 600                            # overview.HARD_SESSION_S: ≥ 10 min at/above threshold
 EASY_KINDS = ("easy", "long", "hike")
 MATCH_LABEL = {"manual": "手動配對", "day": "同一天", "plan": "同一週（課表自動對到）"}
+# intensity bands (SP-216): TrainingPeaks' compliance colours (green 80–120 %, yellow 50–79 % /
+# 121–150 %; competitor-charts.md §1.2), here on the quality dose — 推估 for intensity
+INTENSITY_DONE = 0.80            # planned hard: ≥ 80 % of the dose it needs = done
+INTENSITY_OFF = 0.50             # < 50 % = ran easy (沒照課表); 50–80 % = 強度不足
+EASY_OVER_OFF = 1.50             # planned easy: a quality dose ≥ 150 % = ran hard (沒照課表); below = 偏強
+HARD_TYPES = ("quality", "hard_long", "test_cp")   # the session classifier's hard classes
 
 
 def _f(v) -> Optional[float]:
@@ -87,11 +102,68 @@ def actual_intensity(a: dict, need: float = HARD_MIN_S) -> Optional[str]:
     Z5 / Z3 / 高強度長跑 / CP test = hard, the rest easy (vo2max-session-detection.md)."""
     t = (a.get("session") or {}).get("type")
     if t:
-        return "hard" if t in ("quality", "hard_long", "test_cp") else "easy"
+        return "hard" if t in HARD_TYPES else "easy"
     h = _f(a.get("hard_s"))
     if h is None:
         return None
     return "hard" if h >= need else "easy"
+
+
+def dose(a: dict, need: float = HARD_MIN_S) -> Optional[dict]:
+    """How much quality work the run holds against what a quality session needs:
+    {ratio, by, done_s, need_s}. With the session classifier's row (as actual_intensity:
+    it decides first) the better of Zone 3 time ÷ 10 min and equivalent T@VO2max ÷ 4 min —
+    its own bars (session_stimulus.Z3_NEED_S / Z5_MIN_S, vo2max-session-detection.md §3.5) —
+    and at least 1 when it classed the run hard; without one (or without its numbers) the
+    seconds at threshold ÷ `need` (the generator's done rule). None: nothing measured."""
+    ses = a.get("session") or {}
+    t = ses.get("type")
+    if t:
+        from backend.engine import session_stimulus as SS
+        cands = [(v / q, by, v, q) for by, v, q in (("z3", _f(ses.get("z3_s")), SS.Z3_NEED_S),
+                                                    ("z5", _f(ses.get("t_vo2_eq_s")), SS.Z5_MIN_S)) if v is not None]
+        if cands or t in HARD_TYPES:
+            r, by, v, q = max(cands) if cands else (0.0, "class", None, None)
+            if t in HARD_TYPES and r < 1.0:
+                r, by = 1.0, "class"
+            return {"ratio": r, "by": by, "done_s": v, "need_s": q}
+    h = _f(a.get("hard_s"))
+    if h is None or not need or need <= 0:
+        return None
+    return {"ratio": h / need, "by": "hard", "done_s": h, "need_s": need}
+
+
+def graded(s: dict, a: dict) -> tuple[Optional[str], Optional[str], Optional[dict]]:
+    """(planned, actual, dose): actual = hard / short (強度不足) / easy for a planned
+    hard session, easy / over (偏強) / hard for a planned easy one, None when not measured."""
+    p = planned_intensity(s)
+    if p is None:
+        return None, None, None
+    if p == "hard":
+        d = dose(a, hard_need(s))
+        if d is None:
+            return p, None, None
+        r = d["ratio"]
+        return p, ("hard" if r >= INTENSITY_DONE else "short" if r >= INTENSITY_OFF else "easy"), d
+    got = actual_intensity(a, HARD_MIN_S)
+    if got != "hard":
+        return p, got, None
+    if (a.get("session") or {}).get("type") == "test_cp":
+        return p, "hard", None              # a CP test on an easy day: ran hard, never 「偏強」
+    d = dose(a, HARD_MIN_S)
+    return p, ("over" if d is not None and d["ratio"] < EASY_OVER_OFF else "hard"), d
+
+
+def _dose_text(d: Optional[dict]) -> str:
+    """「閾值以上 7／10 分」: the measure the grade came from."""
+    if not d or d.get("done_s") is None or not d.get("need_s"):
+        return ""
+    a, b = d["done_s"] / 60.0, d["need_s"] / 60.0
+    if d["by"] == "z3":
+        return _("Zone 3 {a:.0f}／{b:.0f} 分", a=a, b=b)
+    if d["by"] == "z5":
+        return _("等效 T@VO2max {a:.1f}／{b:.0f} 分", a=a, b=b)
+    return _("閾值以上 {a:.0f}／{b:.0f} 分", a=a, b=b)
 
 
 def planned_intensity(s: dict) -> Optional[str]:
@@ -115,11 +187,9 @@ def cost(s: dict, a: dict) -> float:
     ter, cat = s.get("terrain"), a.get("category")
     if ter in ("road", "trail") and cat in ("road", "trail") and ter != cat:
         c += 0.3
-    p = planned_intensity(s)
-    if p is not None:
-        got = actual_intensity(a, hard_need(s) if p == "hard" else HARD_MIN_S)
-        if got is not None and got != p:
-            c += 0.6
+    p, got, _d = graded(s, a)
+    if got in ("hard", "easy") and got != p:          # 強度不足 / 偏強 still fit the session
+        c += 0.6
     return c
 
 
@@ -238,25 +308,36 @@ INTENSITY_LABEL = {"hard": "強度", "easy": "輕鬆"}
 
 
 def compare(s: dict) -> Optional[dict]:
-    """A done session vs its activity: {off_plan, planned, actual, text, match}.
-    off_plan: the planned intensity was not run (排間歇、跑成輕鬆, or the other way)
-    or another sport; the time / TSS deviation is compliance.py's part."""
+    """A done session vs its activity: {off_plan, short, planned, actual, intensity_pct,
+    text, short_text, match}. off_plan (沒照課表): the planned intensity was not run
+    (排間歇、跑成輕鬆 — under 50 % of the dose — or the other way) or another sport;
+    short (部分): 強度不足 (50–80 %) or 偏強. `actual` stays hard / easy (short reads hard,
+    it was intensity; 偏強 reads hard). The time / TSS deviation is compliance.py's part."""
     a = s.get("done_by") if s.get("state") == "done" else None
     if not isinstance(a, dict):
         return None
-    p = planned_intensity(s)
-    got = actual_intensity(a, hard_need(s) if p == "hard" else HARD_MIN_S) if p else None
+    p, grade, d = graded(s, a)
+    got = {"short": "hard", "over": "hard"}.get(grade, grade)
     wrong_sport = bool(a.get("category")) and not sport_ok(s, a) and s.get("kind") not in NEVER
     why = []
     if wrong_sport:
         why.append(f"排{_kind_label(s)}，實際{a.get('category_label') or a.get('category')}")
-    elif p and got and got != p:
-        why.append(f"排{_kind_label(s)}，實際跑{'強度' if got == 'hard' else '輕鬆'}")
+    elif p and grade in ("hard", "easy") and grade != p:
+        why.append(f"排{_kind_label(s)}，實際跑{'強度' if grade == 'hard' else '輕鬆'}")
+    short = not why and grade in ("short", "over")
+    pct = None if d is None or p != "hard" else round(min(d["ratio"], 9.99) * 100)
+    what = _dose_text(d)
+    short_text = "" if not short else (
+        _("強度不足：只做到這堂課的 {pct}%", pct=pct) if grade == "short" else _("輕鬆跑偏強"))
+    if short_text and what:
+        short_text += _("（{what}）", what=what)
     ter, cat = s.get("terrain"), a.get("category")
     terrain_off = ter in ("road", "trail") and cat in ("road", "trail") and ter != cat
     hs = _f(a.get("hard_s"))
-    return {"off_plan": bool(why), "planned": p, "actual": got, "wrong_sport": wrong_sport,
+    return {"off_plan": bool(why), "short": short, "planned": p, "actual": got, "grade": grade,
+            "intensity_pct": pct, "wrong_sport": wrong_sport,
             "terrain_off": terrain_off, "text": "沒照課表：" + why[0] if why else "",
+            "short_text": short_text,
             "hard_min": None if hs is None else round(hs / 60.0, 1),
             "need_min": round(hard_need(s) / 60.0, 1) if p == "hard" else None,
             "match": a.get("match") or "day", "match_label": MATCH_LABEL.get(a.get("match") or "day", "")}
