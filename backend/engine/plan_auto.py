@@ -806,12 +806,14 @@ async def run_safe(trigger: str) -> dict:
     factory = SESSION_FACTORY
     if factory is None:
         from backend.db.database import AsyncSessionLocal as factory
+    from backend import applog
     try:
         async with factory() as db:
             try:
-                return await run(db, trigger=trigger)
+                with applog.timed("auto plan run", trigger=trigger):     # SP-215
+                    return await run(db, trigger=trigger)
             except Exception as e:          # noqa: BLE001
-                log.warning("auto plan run failed: %s", type(e).__name__)
+                log.warning("auto plan run failed: %s", type(e).__name__, exc_info=True)
                 try:
                     await db.rollback()
                     await _add_entry(db, trigger=trigger, status="failed",
