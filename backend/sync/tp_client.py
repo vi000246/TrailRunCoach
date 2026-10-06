@@ -31,6 +31,7 @@ import os
 import zlib
 import re
 import logging
+import time
 import httpx
 from datetime import datetime, timezone, timedelta, date
 from pathlib import Path
@@ -772,6 +773,7 @@ async def sync_workouts(
                     }
                     continue
 
+                t_dl = time.monotonic()        # download vs import seconds (sync/runner.SyncClock)
                 try:
                     fit_path = await _download_workout_fit(
                         client, athlete, wo_id, wo_day
@@ -787,6 +789,7 @@ async def sync_workouts(
                     }
                     continue
 
+                dl_s = time.monotonic() - t_dl
                 if not fit_path:
                     yield {
                         "status": "no_file",
@@ -829,6 +832,7 @@ async def sync_workouts(
                     "workout_date": wo_day,
                     "file": str(fit_path),
                     "total_downloaded": total_downloaded,
+                    "secs": {"download": round(dl_s, 3)},
                 }
 
 

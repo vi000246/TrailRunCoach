@@ -17,6 +17,8 @@ from __future__ import annotations
 
 from typing import Optional
 
+from backend.i18n import _
+
 # |actual / planned − 1| upper bounds per level (TrainingPeaks ±20 % / 50 %)
 COMPLIANCE = {"green": 0.20, "yellow": 0.50}
 LEVEL_LABEL = {"green": "符合計畫", "yellow": "有點偏離", "red": "偏離計畫", "missed": "未完成"}
@@ -70,14 +72,27 @@ ORDER = ("green", "yellow", "red")
 
 
 def with_plan_check(comp: Optional[dict], vs: Optional[dict]) -> Optional[dict]:
-    """A done session whose run was not the planned kind (engine/plan_match.compare:
-    planned intervals, ran easy — or the other way): 「沒照課表」, at least yellow
-    (推估: TrainingPeaks colours time / TSS only; the kind is our addition)."""
-    if not comp or not vs or not vs.get("off_plan") or comp.get("level") == "missed":
+    """The intensity part of a done session (engine/plan_match.compare), on top of time / TSS:
+      沒照課表 (off_plan: planned intervals, ran easy — or the other way — or another sport):
+        at least yellow (推估: TrainingPeaks colours time / TSS only; the kind is our addition)
+      強度不足 / 偏強 (short, SP-216: 50–80 % of the planned intensity, or an easy run up to
+        150 % of a quality dose): at least yellow, counted as 部分 — no longer 沒照課表.
+    `intensity_pct` (planned hard) joins the time / TSS %; when the intensity fell short it is
+    the headline 完成度 (the number that explains the colour)."""
+    if not comp or not vs or comp.get("level") == "missed":
         return comp
+    if not vs.get("off_plan") and not vs.get("short"):
+        return {**comp, "intensity_pct": vs["intensity_pct"]} if vs.get("intensity_pct") is not None else comp
     lv = comp["level"] if comp.get("level") in ORDER else "green"
     level = ORDER[max(ORDER.index(lv), 1)]
-    return {**comp, "level": level, "off_plan": True, "label": "沒照課表", "off_text": vs.get("text") or ""}
+    out = {**comp, "level": level, "intensity_pct": vs.get("intensity_pct")}
+    if vs.get("off_plan"):
+        return {**out, "off_plan": True, "label": "沒照課表", "off_text": vs.get("text") or ""}
+    ipct = vs.get("intensity_pct")
+    if ipct is not None and (comp.get("pct") is None or ipct < comp["pct"]):
+        out["pct"] = ipct
+    return {**out, "short": True, "off_text": vs.get("short_text") or "",
+            "label": _("強度不足") if vs.get("grade") == "short" else _("強度偏高")}
 
 
 def week_compliance(planned_tss: float, done_tss: float, planned_hours: float,

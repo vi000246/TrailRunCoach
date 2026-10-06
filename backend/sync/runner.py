@@ -9,12 +9,16 @@ scheduler and the auto-sync-on-open trigger.
   partial) also as sync.<source>.last_ok. A failed run is not a sync: it
   never makes the source "fresh" for the auto-sync (SP-88)
 * background runs use their own DB session
+* each run's time per step (SP-215): listing, checking known activities,
+  downloading, importing, finishing; stored as last_result.secs and logged
+  in one line (backend/applog.py), WARNING over applog.SLOW_SYNC_S
 """
 from __future__ import annotations
 
 import asyncio
 import contextlib
 import logging
+import time
 from datetime import datetime, timezone
 from typing import AsyncIterator, Callable, Optional
 
@@ -38,6 +42,70 @@ class SyncBusy(RuntimeError):
     def __init__(self, source: str):
         super().__init__(f"SYNC_BUSY: a {source} sync (or file deletion) is already running")
         self.source = source
+
+
+class SyncClock:
+    """Where a run's time went (SP-215), from the gaps between the client's
+    events: the time up to an event is charged to what that event ends.
+
+      started / checking / relogin -> list      (login, listing a page of activities)
+      skipped                      -> check     (looking up an already-imported one)
+      downloaded / no_file / error -> download + import (split by the event's
+                                      `secs` {download, import} when the client sends it)
+      complete                     -> finish    (cursor, the account's HR settings)
+    `after` (the steps run when the stream ends) is added by the runner."""
+
+    STEPS = ("list", "check", "download", "import", "finish", "after")
+
+    def __init__(self):
+        self.t0 = self.last = time.monotonic()
+        self.secs = dict.fromkeys(self.STEPS, 0.0)
+        self.slowest: Optional[tuple[float, str]] = None     # (seconds, activity id)
+
+    def event(self, ev: dict) -> None:
+        now = time.monotonic()
+        gap, self.last = now - self.last, now
+        st = ev.get("status")
+        item = ev.get("workout_id") or ev.get("activity_id")
+        if st == "skipped":
+            self.secs["check"] += gap
+        elif st == "complete":
+            self.secs["finish"] += gap
+        elif item is not None and st in ("downloaded", "no_file", "error"):
+            split = ev.get("secs") if isinstance(ev.get("secs"), dict) else {}
+            try:
+                dl = min(gap, max(0.0, float(split.get("download", gap))))
+            except (TypeError, ValueError):
+                dl = gap
+            self.secs["download"] += dl
+            self.secs["import"] += gap - dl
+            if self.slowest is None or gap > self.slowest[0]:
+                self.slowest = (gap, str(item))
+        else:
+            self.secs["list"] += gap
+
+    def total(self) -> float:
+        return time.monotonic() - self.t0
+
+    def summary(self) -> dict:
+        """{total, list, check, download, import, finish, after} in seconds (0.1 s)."""
+        out = {k: round(v, 1) for k, v in self.secs.items()}
+        out["total"] = round(self.total(), 1)
+        return out
+
+
+def _log_run(source: str, trigger: str, result: dict, clock: SyncClock) -> None:
+    """One line per run: outcome, counts, seconds per step, the slowest activity
+    (its id only). Counts and durations only: nothing personal (backend/applog.py)."""
+    from backend import applog
+    s = clock.summary()
+    steps = ", ".join(f"{k} {s[k]:.1f} s" for k in SyncClock.STEPS if s[k] >= 0.05)
+    slow = f"; slowest activity {clock.slowest[0]:.1f} s ({clock.slowest[1]})" if clock.slowest else ""
+    level = logging.WARNING if s["total"] >= applog.SLOW_SYNC_S or result["status"] == "failed" else logging.INFO
+    log.log(level, "sync %s (%s) %s in %.1f s: checked %s, downloaded %s, errors %s%s%s",
+            source, trigger, result["status"], s["total"], result.get("checked", 0),
+            result.get("downloaded", 0), result.get("errors", 0),
+            f" | {steps}" if steps else "", slow)
 
 
 def is_busy(source: str) -> bool:
@@ -79,8 +147,10 @@ async def stream(db: AsyncSession, source: str, athlete_id: int = 1,
         return
     result = {"at": None, "trigger": trigger, "status": "running", "downloaded": 0,
               "checked": 0, "errors": 0, "error": None}
+    clock = SyncClock()
     try:
         async for ev in _client_stream(db, source, athlete_id, since):
+            clock.event(ev)
             if ev.get("status") == "complete":
                 result.update(downloaded=ev.get("total_downloaded", 0), checked=ev.get("total_checked", 0),
                               errors=len(ev.get("errors") or []), status="ok" if not ev.get("errors") else "partial")
@@ -92,14 +162,16 @@ async def stream(db: AsyncSession, source: str, athlete_id: int = 1,
                 result.update(status="failed", error=str(ev.get("error")))
             yield ev
     except Exception as e:  # keep the stream well-formed; record the failure
-        log.warning("%s sync failed: %s", source, type(e).__name__)
+        log.warning("%s sync failed: %s", source, type(e).__name__, exc_info=True)
         result.update(status="failed", error=type(e).__name__)
         yield {"status": "error", "error": "SYNC_FAILED", "detail": type(e).__name__}
     finally:
         ctx.__exit__(None, None, None)
+        t_after = time.monotonic()                 # storing the result and the post-sync steps
         if result["status"] == "running":
             result["status"] = "aborted"
         result["at"] = datetime.now(timezone.utc).isoformat()
+        result["secs"] = clock.summary()           # the settings page shows where the time went
         try:
             await db.rollback()
             repo = SettingsRepository(db, athlete_id)
@@ -139,6 +211,11 @@ async def stream(db: AsyncSession, source: str, athlete_id: int = 1,
                 wko5views.warm_up(f"sync-{source}")
             except Exception as e:       # noqa: BLE001
                 log.warning("dataset warm-up after sync failed: %s", type(e).__name__)
+        clock.secs["after"] += time.monotonic() - t_after
+        try:
+            _log_run(source, trigger, result, clock)
+        except Exception:                # noqa: BLE001 — logging never breaks a sync
+            pass
 
 
 async def run_once(source: str, athlete_id: int = 1, since: Optional[str] = None,

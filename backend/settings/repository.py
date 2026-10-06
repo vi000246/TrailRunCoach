@@ -34,6 +34,9 @@ DEFAULTS: dict[str, Any] = {
     "athlete.region": None,
     # the first-run 精靈 (一般設定) was saved or dismissed (engine/athlete_profile.py)
     "athlete.setup.done": False,
+    # 「稍後再說」 on the 精靈 (SP-211): ISO time; it asks again REMIND_DAYS later while
+    # weight / sex / age are still missing (engine/athlete_profile.setup_remind)
+    "athlete.setup.later_at": None,
     # 主要訓練項目 (engine/primary_sport.py): auto (follow the suggestion from the data / the
     # next A race) | trail (越野跑, the original behaviour) | road (路跑／馬拉松)
     "athlete.primary_sport": "auto",

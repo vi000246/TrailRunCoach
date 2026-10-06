@@ -252,16 +252,17 @@ async def _store_login(result: dict, email: str, region: str, base: str, db: Asy
             settings.lthr = int(lthr)
         if weight:
             settings.weight_kg = float(weight)
-        log.info("Coros profile: FTP=%s LTHR=%s weight=%s", ftp, lthr, weight)
+        log.info("Coros profile stored: FTP %s, LTHR %s, weight %s",      # no values: personal data
+                 *("yes" if v else "no" for v in (ftp, lthr, weight)))
     try:
         await store_hr_profile(db, athlete_id, result)      # max / resting HR, zone tables (hr_profile.py)
     except Exception as e:                  # noqa: BLE001 — never fails the login
-        log.info("Coros HR profile not stored: %s", e)
+        log.info("Coros HR profile not stored: %s", type(e).__name__)
 
     await db.commit()
     session_check.mark_ok("coros", athlete_id)
 
-    log.info("Coros login OK region=%s data_base=%s user_id=%s", region, data_base, user_id)
+    log.info("Coros login OK region=%s data_base=%s", region, data_base)
     return {
         "authenticated": True,
         "coros_user_id": user_id,
@@ -295,7 +296,7 @@ async def store_hr_profile(db: AsyncSession, athlete_id: int, data: Optional[dic
     old = await repo.get(HP.ACCOUNT_KEY) or {}
     if {k: v for k, v in old.items() if k != "at"} != {k: v for k, v in prof.items() if k != "at"}:
         await repo.set(HP.ACCOUNT_KEY, prof)
-        log.info("Coros HR profile: max=%s rest=%s", prof.get("max_hr"), prof.get("rest_hr"))
+        log.info("Coros HR profile updated")          # no values: personal data
     return prof
 
 
@@ -308,7 +309,7 @@ async def refresh_hr_profile(db: AsyncSession, athlete_id: int, token: str, base
         if body.get("result") == "0000" and await store_hr_profile(db, athlete_id, body.get("data")):
             await db.commit()
     except Exception as e:                  # noqa: BLE001
-        log.info("Coros HR profile not refreshed: %s", e)
+        log.info("Coros HR profile not refreshed: %s", type(e).__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -579,6 +580,7 @@ async def sync_workouts(
                 yield {"status": "skipped", "activity_id": label_id, "reason": "already_imported"}
                 continue
 
+            t_dl = _time.monotonic()           # download vs import seconds (sync/runner.SyncClock)
             try:
                 fit_bytes = await _download_fit(token, base, user_id, act)
             except Exception as e:
@@ -587,6 +589,7 @@ async def sync_workouts(
                 yield {"status": "error", "activity_id": label_id, "error": str(e)}
                 continue
 
+            dl_s = _time.monotonic() - t_dl
             year = act_date.year if act_date else "unknown"
             dest_dir = storage.year_dir("coros", year)      # ~/.wko5coach/fit/coros/<year>/
             date_str = act_date.isoformat() if act_date else "unknown"
@@ -630,6 +633,7 @@ async def sync_workouts(
                     "activity_id": label_id,
                     "file": filename,
                     "sport": sport_name,
+                    "secs": {"download": round(dl_s, 3)},
                 }
             except Exception as e:
                 # nothing half-written survives; the cursor stays so it's retried

@@ -273,11 +273,13 @@ async def run_safe(athlete_id: int = 1) -> dict:
     factory = SESSION_FACTORY
     if factory is None:
         from backend.db.database import AsyncSessionLocal as factory
+    from backend import applog
     try:
         async with factory() as db:
-            return await calibrate(db, athlete_id)
+            with applog.timed("calibration run"):                       # SP-215
+                return await calibrate(db, athlete_id)
     except Exception as e:                  # noqa: BLE001 — the sync must not break
-        log.warning("calibration run failed: %s", type(e).__name__)
+        log.warning("calibration run failed: %s", type(e).__name__, exc_info=True)
         return {"status": "failed", "error": type(e).__name__}
 
 
