@@ -375,3 +375,126 @@ def test_load_recorded_carries_the_source(tmp_path, monkeypatch):
     j = AT.recorded_json(rows["C1.fit"])
     assert j["self_rating"]["text"] == "自評：Hard（COROS）"
     AT._rec_memo.clear()
+
+
+# ---------------------------------------------------------------------------
+# live-probe follow-ups (2026-10-06): BACKFILL_MAX 25, any COROS row is read, a stored 0
+# (not rated) of the last RETRY_DAYS is read again
+# ---------------------------------------------------------------------------
+
+async def _seed_rows(s, rows):
+    """rows: (label, days ago, coros_sport_type, sport, coros_feel, rpe, rpe_source)."""
+    today = datetime.now(timezone.utc).date()
+    for label, ago, st, sport, feel, rpe, src in rows:
+        s.add(WorkoutFile(athlete_id=1, file_path=f"/x/{label}.fit", file_format="fit", source="coros",
+                          coros_activity_id=label, coros_sport_type=st, sport=sport,
+                          workout_date=today - timedelta(days=ago), coros_feel=feel, rpe=rpe, rpe_source=src))
+    await s.commit()
+
+
+def test_backfill_reads_at_most_25_per_sync():
+    assert coros_client.BACKFILL_MAX == 25 and coros_client.BACKFILL_PASSES == 3
+
+
+def test_backfill_with_more_work_than_passes_finishes_and_only_failures_count(tmp_path, monkeypatch):
+    """7 unread rows, 2 per sync: 4 passes — more than BACKFILL_PASSES — and every row is read,
+    because a pass that only ran out of reads is not a failing pass."""
+    monkeypatch.setattr(coros_client, "BACKFILL_MAX", 2)
+
+    async def go():
+        s = await make_session(tmp_path)
+        await _seed(s, n_recent=7, n_old=0)
+        fake = FakeDetail([], feels={"B1": None}, default=3)               # B1 fails once (500)
+        with http.use_transport(httpx.MockTransport(fake)):
+            await coros_client.login("me@example.com", "pw", s, 1)
+            marks = []
+            for i in range(6):
+                if i == 1:
+                    fake.feels = {}                                       # B1 answers from now on
+                await collect(coros_client.sync_workouts(s, 1))
+                marks.append(await SettingsRepository(s, 1).get(coros_client.BACKFILL_KEY))
+        last = marks[-1]
+        assert last["done"] is True and last["failed_passes"] == 1 and last["passes"] > coros_client.BACKFILL_PASSES
+        assert [m["done"] for m in marks].index(True) == last["passes"] - 1
+        rows = {r.coros_activity_id: r for r in await _rows(s)}
+        assert all(r.coros_feel == 3 and r.rpe == 5.0 for r in rows.values())
+        reads = [q["labelId"] for _m, _p, q in fake.details()]
+        assert sorted(set(reads)) == [f"B{i}" for i in range(7)] and reads.count("B1") == 2
+    run(go())
+
+
+def test_backfill_still_gives_up_after_three_failing_passes_with_work_left(tmp_path, monkeypatch):
+    monkeypatch.setattr(coros_client, "BACKFILL_MAX", 2)
+
+    async def go():
+        s = await make_session(tmp_path)
+        await _seed(s, n_recent=6, n_old=0)
+        fake = FakeDetail([], default=None)                                # 500 every time
+        with http.use_transport(httpx.MockTransport(fake)):
+            await coros_client.login("me@example.com", "pw", s, 1)
+            for _ in range(coros_client.BACKFILL_PASSES + 2):
+                await collect(coros_client.sync_workouts(s, 1))
+        mark = await SettingsRepository(s, 1).get(coros_client.BACKFILL_KEY)
+        assert mark["done"] is True and mark["failed_passes"] == coros_client.BACKFILL_PASSES
+        assert len(fake.details()) == 2 * coros_client.BACKFILL_PASSES
+    run(go())
+
+
+def test_every_coros_row_is_read_whatever_its_sport(tmp_path):
+    """COROS ignores a wrong sportType here (live probe): a row without a stored code is read
+    with 100, whatever its sport; a stored code is sent as it is."""
+    async def go():
+        s = await make_session(tmp_path)
+        await _seed_rows(s, [("H1", 10, None, "hiking", None, None, None),
+                             ("N1", 11, None, None, None, None, None),
+                             ("T1", 12, 102, "trail running", None, None, None)])
+        fake = FakeDetail([], default=2)
+        with http.use_transport(httpx.MockTransport(fake)):
+            await coros_client.login("me@example.com", "pw", s, 1)
+            ev = await collect(coros_client.sync_workouts(s, 1))
+        sent = {q["labelId"]: q["sportType"] for _m, _p, q in fake.details()}
+        assert sent == {"H1": "100", "N1": "100", "T1": "102"}
+        assert ev[-1]["rpe_filled"] == 3
+        assert coros_client._detail_sport(WorkoutFile(sport="hiking", coros_sport_type=None)) == 100
+    run(go())
+
+
+def test_a_later_rating_of_a_recent_unrated_activity_arrives(tmp_path):
+    """A stored 0 (not rated) of the last RETRY_DAYS is read again: a rating added later in the
+    COROS app becomes the RPE and sets rpe_filled; a FIT's own RPE still wins; an older 0 is
+    left alone."""
+    async def go():
+        s = await make_session(tmp_path)
+        await _seed_rows(s, [("Z1", 1, 100, "running", 0, None, None),
+                             ("Z2", 2, 100, "running", 0, 8.0, None),          # a FIT RPE 8
+                             ("Z3", coros_client.RETRY_DAYS + 3, 100, "running", 0, None, None)])
+        await SettingsRepository(s, 1).set(coros_client.BACKFILL_KEY, {"done": True})
+        await s.commit()
+        fake = FakeDetail([], feels={"Z1": 4, "Z2": 5, "Z3": 5})
+        with http.use_transport(httpx.MockTransport(fake)):
+            await coros_client.login("me@example.com", "pw", s, 1)
+            ev = await collect(coros_client.sync_workouts(s, 1))
+        assert sorted(q["labelId"] for _m, _p, q in fake.details()) == ["Z1", "Z2"]   # not the older Z3
+        assert ev[-1]["rpe_filled"] == 1
+        rows = {r.coros_activity_id: r for r in await _rows(s)}
+        assert (rows["Z1"].coros_feel, rows["Z1"].rpe, rows["Z1"].rpe_source) == (4, 7.0, "coros")
+        assert (rows["Z2"].coros_feel, rows["Z2"].rpe, rows["Z2"].rpe_source) == (5, 8.0, None)
+        assert (rows["Z3"].coros_feel, rows["Z3"].rpe) == (0, None)
+        assert fake.writes() == []
+    run(go())
+
+
+def test_unrated_rereads_are_capped_by_the_retry_limit(tmp_path, monkeypatch):
+    monkeypatch.setattr(coros_client, "RETRY_MAX", 3)
+
+    async def go():
+        s = await make_session(tmp_path)
+        await _seed_rows(s, [(f"U{i}", i % 3, 100, "running", 0, None, None) for i in range(6)])
+        await SettingsRepository(s, 1).set(coros_client.BACKFILL_KEY, {"done": True})
+        await s.commit()
+        fake = FakeDetail([], default=0)                                   # still not rated
+        with http.use_transport(httpx.MockTransport(fake)):
+            await coros_client.login("me@example.com", "pw", s, 1)
+            ev = await collect(coros_client.sync_workouts(s, 1))
+        assert len(fake.details()) == 3 and ev[-1]["rpe_filled"] == 0
+    run(go())
