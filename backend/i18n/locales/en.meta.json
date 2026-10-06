@@ -931,6 +931,14 @@
     "draft": true,
     "src": "backend/engine/workout_templates.py:137"
   },
+  "。沒有算停留：在賽事計算機的補給站填停留分鐘，或累積 2 場以上的越野比賽紀錄，就會算進來": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:431"
+  },
+  "。用賽事計算機的努力目標 {p:.0%}": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:434"
+  },
   "「{a}」和「{b}」只隔 {n} 天：硬課之間建議隔 ≥ 2 天，可以再拖動調整": {
     "draft": true,
     "src": "backend/engine/rest_days.py:120"
@@ -1366,6 +1374,18 @@
   "停下 ≥ 5 分鐘的時間佔總時間超過這個比例，強度再高也算「有拼但有休息」。本人值 = 你的全力活動長休息比例的 p90 × 1.5。": {
     "draft": true,
     "src": "backend/engine/effort_calib.py:101"
+  },
+  "停留用你過去 {n} 場比賽的停留推算（賽事計算機沒有填補給站）": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:427"
+  },
+  "停留＝賽事計算機的補給站 {u:g} 分鐘": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:425"
+  },
+  "停留＝賽事計算機的補給站 {u:g} 分鐘＋零碎停頓約 {s:.0f} 分鐘（照你過去 {n} 場比賽的比例）": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:422"
   },
   "停訓後恢復期": {
     "draft": true,
@@ -2891,6 +2911,14 @@
     "draft": true,
     "src": "backend/engine/racepower/calc.py:299"
   },
+  "沒有越野心率配速模型，移動時間用賽季計畫填的預估時間": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:438"
+  },
+  "沒有越野心率配速模型，移動時間退回舊的功率模型（CP＋Riegel），越野上常算得太快": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:436"
+  },
   "沒有路跑 RE：請手動輸入": {
     "draft": true,
     "src": "backend/engine/racepower/calc.py:304"
@@ -3034,6 +3062,14 @@
   "照現在的體能，預估 {f:.1f} 小時完賽；關門是 {c:g} 小時": {
     "draft": true,
     "src": "backend/engine/race_feasibility.py:299"
+  },
+  "照現在的體能，預估移動 {m:.1f} 小時＋停留 {s:.0f} 分鐘＝ {f:.1f} 小時；關門是 {c:g} 小時": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:418"
+  },
+  "照現在的體能，預估移動 {m:.1f} 小時；關門是 {c:g} 小時": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:430"
   },
   "照現在的體能，預估第 {d} 天出發後 {eta:.1f} 小時到山頂；撤退時間是 {c:g} 小時": {
     "draft": true,
@@ -4418,6 +4454,10 @@
   "（{n} 堂排不開，拿掉了，不用補）": {
     "draft": true,
     "src": "backend/engine/post_race.py:131"
+  },
+  "（{why}）": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:428"
   },
   "（不含賽後恢復期／轉換期 {n} 天）": {
     "draft": true,
