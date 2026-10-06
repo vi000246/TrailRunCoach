@@ -824,7 +824,9 @@ function renderThrCheck() {
   const candHtml = cand ? `<div class="s">${esc(t("settings.thr.chk_cand", { v: cand.value, hold: cand.hold_s, date: cand.date }))}</div>`
     + btn({ mhr: cand.value, mhr_method: "estimate", note: t("settings.thr.chk_cand_note", { hold: cand.hold_s, date: cand.date }) },
       t("settings.thr.chk_apply", { v: cand.value })) : "";
-  box("thr-check", card("LTHR", TC.lthr, dg + tests("tt30")));
+  // SP-277: a manual LTHR stays 中 (no warning) with a small 「手動輸入，沒有驗證」
+  const lnote = TC.warn && TC.warn.lthr && TC.warn.lthr.note ? `<div class="s">${esc(TC.warn.lthr.note)}</div>` : "";
+  box("thr-check", card("LTHR", TC.lthr, lnote + dg + tests("tt30")));
   box("hr-check", card(t("settings.thr.chk_hrmax"), TC.hrmax, (TC.diagnosis && TC.diagnosis.outlier === "hrmax" ? dg : "") + candHtml + tests("hrmax")));
 }
 document.addEventListener("click", async (ev) => {

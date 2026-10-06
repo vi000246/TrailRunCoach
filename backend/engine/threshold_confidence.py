@@ -602,8 +602,7 @@ def assess(lthr: dict, mhr: dict, rhr: dict, today: dt.date, runs: list[dict], e
                      "source": _(SRC_FRIEL), "evidence": {"diagnosis": dg["outlier"]},
                      "links": [schedule_link(t, earliest) for t in tests],
                      **({} if firm else {"priority": "low"})})
-    warn = {"lthr": {"low": lconf == "low", "text": _("LTHR 可信度低：心率目標可能不準（{why}）",
-                                                         why=(lsig[0]["text"] if lsig else ""))},
+    warn = {"lthr": lthr_warn(lthr.get("source_kind"), lconf, lsig),
             "hrmax": {"low": hconf == "low" and hr_model in ("hrr", "hrmax"),
                       "text": _("最大心率可信度低：儲備心率／最大心率區間的目標可能不準，測準之前建議改用乳酸閾區間")},
             "model": hr_model}
@@ -960,12 +959,36 @@ def check(ds, plan, today: dt.date, brk: Optional[dict] = None, cool: Optional[d
     return out
 
 
+def lthr_warn(source_kind: Optional[str], conf: str, sigs: list[dict]) -> dict:
+    """The editor's LTHR badge (SP-277; lthr-low-confidence-testing.md §1.1, §6.1 第 4 點):
+    {"low", "text" (why + how it goes away), "note"}. Only the source as the reason (an
+    estimate / the watch / WKO5's default, nothing else against it) → the actionable text: easy
+    runs can go by the talk test, a 30-minute test makes it go away. Other reasons: the first
+    one, then the same way out. A manual LTHR stays medium (no badge) but carries the small
+    「手動輸入，沒有驗證」 note (owner 2026-10-06)."""
+    out = {"low": conf == "low", "text": "", "note": _("手動輸入，沒有驗證") if source_kind == "manual" else ""}
+    if conf != "low":
+        return out
+    reasons = [s for s in sigs if s.get("level") != "hint"]
+    if source_kind in LOW_LTHR_SOURCES and all(s.get("id") == "source" for s in reasons):
+        out["text"] = (_("LTHR 是估算的；輕鬆跑可以改用講話測試的配速，做一次 30 分鐘測試後這個提醒會消失")
+                       if source_kind == "estimate" else
+                       _("LTHR 來自{src}，沒有測過；輕鬆跑可以改用講話測試的配速，做一次 30 分鐘測試後這個提醒會消失",
+                         src=_src_label(source_kind)))
+    else:
+        out["text"] = _("LTHR 可信度低：心率目標可能不準（{why}）；做一次 30 分鐘 LTHR 測試並套用後，這個提醒會消失",
+                        why=(reasons[0]["text"] if reasons else sigs[0]["text"] if sigs else ""))
+    return out
+
+
 def warn_of(chk: Optional[dict]) -> Optional[dict]:
-    """The badge data for HR-target templates / sessions (workout_editor.js), or None."""
+    """The badge data for HR-target templates / sessions (workout_editor.js), or None: a low
+    LTHR / max HR, or a manual LTHR's 「手動輸入，沒有驗證」 note."""
     if not chk:
         return None
     w = chk.get("warn") or {}
-    if not ((w.get("lthr") or {}).get("low") or (w.get("hrmax") or {}).get("low")):
+    lt = w.get("lthr") or {}
+    if not (lt.get("low") or lt.get("note") or (w.get("hrmax") or {}).get("low")):
         return None
     return w
 
@@ -990,11 +1013,32 @@ def _items(items: Optional[list]) -> list:
     return out
 
 
-def session_warn(warn: Optional[dict], s: Optional[dict], items: Optional[list] = None) -> Optional[dict]:
+def lthr_step(item: dict, resolved_type: Optional[str] = None, aet_measured: bool = False) -> bool:
+    """Is this step's HR target worked out from LTHR (SP-277)? Not when it doesn't resolve to HR
+    (`resolved_type`: workout_steps.view's type; None = the step's own target type), not a bpm
+    range typed in (hr / abs), not the easy-run cap when that cap is a measured AeT (an
+    「輕鬆」 step or the AeT zone). Zones / % LTHR / an interval band on HR / the easy-run cap
+    without a measured AeT (0.89 × LTHR or the Z2 top): yes."""
+    tg = item.get("target") or {}
+    ty = resolved_type or tg.get("type")
+    if ty != "hr":
+        return False
+    if tg.get("type") == "hr" and tg.get("mode") == "abs":
+        return False
+    easy = (tg.get("type") == "auto" and tg.get("intent") == "easy") or \
+        (tg.get("type") == "hr" and tg.get("mode") == "zone" and tg.get("zone") == "aet")
+    return not (easy and aet_measured)
+
+
+def session_warn(warn: Optional[dict], s: Optional[dict], items: Optional[list] = None,
+                 resolved: Optional[dict] = None, aet_measured: bool = False) -> Optional[dict]:
     """warn_of's badge for one session in the editor (POST /steps/check), or None: never on a
-    test session; otherwise when a step has an HR target."""
+    test session (90-minute / UA / Evoke / Friel 30′ / max HR); otherwise only when a step's HR
+    target is worked out from LTHR (lthr_step; `resolved` = workout_steps.view's by-id dict)."""
     if not warn or is_test_session(s):
         return None
-    if not any((it.get("target") or {}).get("type") == "hr" for it in _items(items)):
+    res = resolved or {}
+    if not any(lthr_step(it, (res.get(it.get("id")) or {}).get("type") if resolved is not None else None,
+                         aet_measured) for it in _items(items)):
         return None
     return warn
