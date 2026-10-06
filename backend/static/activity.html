@@ -524,6 +524,7 @@ async function loadList() {
   S.poleTags = r.pole_tags || {};
   S.poleCompare = r.pole_compare || null;
   S.surfaceTags = r.surface_tags || {};
+  S.rainHintMm = r.rain_hint_mm ?? null;
   S.merge = r.merge || null; S.originLabels = r.origin_labels || {};
   S.actMin = new Map();
   for (const a of S.acts) { const m = minOf(a.key); if (m != null && (!S.actMin.has(m) || a.index != null)) S.actMin.set(m, a); }
@@ -623,6 +624,10 @@ function surfaceOf(a) {
   return p;
 }
 const withSurface = (tags, p) => [...(tags || []).filter((t) => !isSurfaceTag(t)), ...(S.surfaceTags[p] ? [S.surfaceTags[p]] : [])];
+// SP-299: the archive rain while the activity ran (server: route_weather.activity_rain) ≥ the
+// 推估 threshold and the 路況 still 未標 → 「要標成濕路嗎？」 with a one-click 「標成濕」. Only a
+// hint: nothing is marked until the button is pressed; no hint without coordinates / weather.
+const rainHint = (a) => a.rain_mm != null && S.rainHintMm != null && a.rain_mm >= S.rainHintMm && !surfaceOf(a) ? a.rain_mm : null;
 const badge = (manual, why) => manual ? `<span class="badge man" title="${esc(T("manual_tip"))}">${esc(T("manual"))}</span>`
   : `<span class="badge" title="${esc(why || T("auto_tip"))}">${esc(T("auto"))}</span>`;
 function setMsg(t, cls) { const m = $("msg"); if (m) { m.textContent = t; m.className = "msg " + (cls || ""); } }
@@ -704,7 +709,8 @@ function renderEditor() {
       <div class="why" data-pole-hint>${esc(poleHint())}</div></div>
     <div class="fld"><span class="lab">${esc(T("f_surface"))}${qt(T("help.surface"))}</span>
       <div class="ctl" role="group" aria-label="${esc(T("f_surface"))}">${SURFACE_OPTS.map((v) =>
-        `<button type="button" class="cchip" data-surface="${v}" aria-pressed="${surfaceOf(a) === v}">${esc(T("surface." + (v || "none")))}</button>`).join("")}</div></div>
+        `<button type="button" class="cchip" data-surface="${v}" aria-pressed="${surfaceOf(a) === v}">${esc(T("surface." + (v || "none")))}</button>`).join("")}</div>
+      ${rainHint(a) != null ? `<div class="why" data-rain-hint>${esc(T("surface.rain_hint", { mm: num(rainHint(a), 1) }))} <button type="button" data-rain-wet>${esc(T("surface.mark_wet"))}</button></div>` : ""}</div>
     ${S.pain ? `<div class="fld"><span class="lab">${esc(T("col.pain"))}${qt(T("help.pain"))}</span><div class="ctl" id="pain-ctl">${PainPicker.html(painState(a), S.pain, { qtip: qt })}</div></div>` : ""}
     ${a.index != null ? `<div class="fld"><span class="lab">${esc(T("f_pack"))}${qt(T("help.pack"))}</span>
       <div class="ctl">${!d ? esc(T("loading")) : `<input type="number" data-pack min="0" max="40" step="0.5" inputmode="decimal" style="width:6em" value="${pk?.pack_kg ?? ""}" placeholder="—" aria-label="${esc(T("f_pack"))}"> kg`}</div></div>` : ""}
@@ -784,6 +790,7 @@ function wireEditor(a) {
   ed.querySelectorAll("button[data-surface]").forEach((b) => b.addEventListener("click", () => {
     if (surfaceOf(a) !== b.dataset.surface) saveFields(a, { surface: b.dataset.surface || null });
   }));
+  ed.querySelector("button[data-rain-wet]")?.addEventListener("click", () => saveFields(a, { surface: "wet" }));
   const nm = ed.querySelector("input[data-name]");
   nm.addEventListener("change", () => saveFields(a, { name: nm.value.trim() || null }));
   ed.querySelector("button[data-name-clear]")?.addEventListener("click", () => saveFields(a, { name: null }));
