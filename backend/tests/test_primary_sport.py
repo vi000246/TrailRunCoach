@@ -42,13 +42,84 @@ def test_suggestion_follows_the_next_a_race_then_the_trail_share():
     assert PS.suggest(ds, [_ev("road")], TODAY)["sport"] == "road"
     assert PS.suggest(ds, [_ev("race")], TODAY)["basis"] == "event"
     assert PS.suggest(ds, [_ev("baiyue")], TODAY)["sport"] == "trail"
-    assert PS.suggest(ds, [_ev("race", priority="B")], TODAY)["basis"] == "share"     # only A races decide
+    assert PS.suggest(ds, [_ev("road", priority="B")], TODAY)["sport"] == "road"      # no A race: the B race decides
+    assert PS.suggest(ds, [_ev("race", priority="C")], TODAY)["basis"] == "share"     # C races never count
     sh = PS.suggest(ds, [], TODAY)
     assert sh["sport"] == "road" and sh["trail_share"] == 0.0 and "推估" in sh["reason"]
     for w in ds.workouts[::2]:                             # half the runs on trails
         w.tags = ["runningtrail"]
     assert PS.suggest(ds, [], TODAY)["sport"] == "trail"
     assert PS.suggest(None, [], TODAY) == {**PS.suggest(None, [], TODAY), "sport": "trail", "basis": "default"}
+
+
+def _named(kind, name, start, priority, km=42.195, climb=None, hours=None, days=1):
+    return Event(id=name, name=name, date=start, kind=kind, priority=priority, days=days,
+                 distance_km=km, climbing_m=climb, est_hours=hours)
+
+
+def test_a_races_first_then_b_and_the_harder_race_decides_a_level():
+    """SP-245 (user's rule, 2026-10-06): the future A races decide first; with a trail and a road
+    race at the same level the HARDER one decides (event_size tier, then predicted hours, then
+    EP; a tie or an unknown size → trail); no future A race → the B races the same way; else
+    the 12-week share. C races, past races and 其他 never count; the reason names the race."""
+    ds = _history(TODAY)                                   # road runs only → the share says road
+    a_road = _named("road", "台北馬", "2026-12-20", "A")
+    b_trail = _named("race", "XX 越野", "2027-03-01", "B")
+    s = PS.suggest(ds, [a_road, b_trail], TODAY)           # A 路跑 + B 越野 → 路跑 (A first)
+    assert s["sport"] == "road" and s["basis"] == "event" and s["reason"] == "下一場 A 賽「台北馬」是路跑賽"
+    # A 路跑 + A 越野, same size, nothing else known → tie → 越野
+    s = PS.suggest(ds, [a_road, _named("race", "A 越野", "2027-04-01", "A")], TODAY)
+    assert s["sport"] == "trail"
+    assert s["reason"] == "A 賽「A 越野」（越野賽）和「台北馬」（路跑賽）一樣吃力或比不出來，越野優先"
+    # A 越野 bigger (size tier: 50 km + 3000 m → EP 80, 超馬級) → 越野, named with what decided it
+    s = PS.suggest(ds, [a_road, _named("race", "大越野", "2027-04-01", "A", km=50, climb=3000)], TODAY)
+    assert s["sport"] == "trail" and s["reason"] == "A 賽「大越野」（越野賽）比「台北馬」（路跑賽）更吃力（依賽事大小）"
+    # A 路跑 bigger (a marathon vs a 10 km trail race) → 路跑
+    s = PS.suggest(ds, [a_road, _named("race", "小越野", "2027-04-01", "A", km=10, climb=300)], TODAY)
+    assert s["sport"] == "road" and s["reason"] == "A 賽「台北馬」（路跑賽）比「小越野」（越野賽）更吃力（依賽事大小）"
+    # same tier → the predicted hours decide (both 馬拉松級: 4–6 h)
+    s = PS.suggest(ds, [_named("road", "慢馬", "2026-12-20", "A", hours=5.5),
+                        _named("race", "越野", "2027-04-01", "A", km=30, hours=4.5)], TODAY)
+    assert s["sport"] == "road" and "依預估時間" in s["reason"]
+    # same tier, no hours → EP decides (42.195 + 0 vs 42.195 + 500 / 100)
+    s = PS.suggest(ds, [_named("road", "平馬", "2026-12-20", "A", climb=0),
+                        _named("race", "爬升越野", "2027-04-01", "A", climb=500)], TODAY)
+    assert s["sport"] == "trail" and "依EP" in s["reason"]
+    # an unknown size (no distance, no time) → 越野
+    s = PS.suggest(ds, [a_road, _named("race", "沒距離", "2027-04-01", "A", km=None)], TODAY)
+    assert s["sport"] == "trail" and "比不出來" in s["reason"]
+    s = PS.suggest(ds, [_named("baiyue", "玉山", "2027-05-01", "B")], TODAY)            # 只有 B 百岳 → 越野
+    assert s["sport"] == "trail" and s["reason"] == "B 賽「玉山」是百岳"
+    s = PS.suggest(ds, [_named("road", "高雄馬", "2027-02-01", "B")], TODAY)            # 只有 B 路跑 → 路跑
+    assert s["sport"] == "road" and s["reason"] == "下一場 B 賽「高雄馬」是路跑賽"
+    s = PS.suggest(ds, [_named("race", "小越野", "2026-11-01", "C")], TODAY)            # 只有 C 越野 → 照佔比
+    assert s["basis"] == "share" and s["sport"] == "road"
+    s = PS.suggest(ds, [_named("race", "A 越野", "2027-04-01", "A", km=10),
+                        _named("road", "高雄馬", "2027-02-01", "B")], TODAY)            # A 越野 + B 路跑 → 越野
+    assert s["sport"] == "trail" and s["reason"] == "A 賽「A 越野」是越野賽"
+    # no A race: B 路跑 + B 越野 compared the same way (here a tie → 越野)
+    assert PS.suggest(ds, [_named("road", "高雄馬", "2027-02-01", "B"), b_trail], TODAY)["sport"] == "trail"
+    # the trail side of a comparison is its hardest race (a 3-day 百岳 = 超馬級 beats the marathon)
+    s = PS.suggest(ds, [_named("race", "小越野", "2026-11-01", "A", km=10), a_road,
+                        _named("baiyue", "南湖", "2027-07-01", "A", km=30, days=3)], TODAY)
+    assert s["sport"] == "trail" and s["reason"].startswith("A 賽「南湖」（百岳）比「台北馬」")
+    # a past A race or an A 其他 event is not "a future A race": the B race decides
+    s = PS.suggest(ds, [_named("road", "去年馬", "2025-10-01", "A"), _named("other", "其他", "2026-11-01", "A"),
+                        b_trail], TODAY)
+    assert s["sport"] == "trail" and s["reason"] == "B 賽「XX 越野」是越野賽"
+    # only trail races at a level: the nearest is named; only road races: the next one
+    s = PS.suggest(ds, [_named("race", "遠的 A", "2027-06-10", "A"), _named("race", "近的 A", "2027-01-10", "A")], TODAY)
+    assert s["reason"] == "A 賽「近的 A」是越野賽"
+    s = PS.suggest(ds, [_named("road", "遠馬", "2027-10-01", "A"), a_road], TODAY)
+    assert s["reason"] == "下一場 A 賽「台北馬」是路跑賽"
+
+
+def test_event_rule_only_affects_auto():
+    ds = _history(TODAY)
+    evs = [_named("road", "台北馬", "2026-12-20", "A"), _named("race", "A 越野", "2027-04-01", "A")]
+    assert PS.resolve(ds, evs, TODAY, setting="auto")["sport"] == "trail"
+    assert PS.resolve(ds, evs, TODAY, setting="road")["sport"] == "road"
+    assert PS.resolve(ds, [_named("road", "台北馬", "2026-12-20", "A")], TODAY, setting="trail")["sport"] == "trail"
 
 
 def test_setting_wins_over_the_suggestion():
