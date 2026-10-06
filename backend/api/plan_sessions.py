@@ -93,7 +93,8 @@ def _compute_inputs(blackouts: Optional[list] = None) -> dict:
     except Exception:                       # noqa: BLE001
         heat_acts = []
     weeks = P.project_weeks(cur, phases, horizon, ds.athlete.ctlconstant, ds.athlete.atlconstant, prefs=prefs,
-                            blackouts=bos, events=st.plan.events, heat_acts=heat_acts, b2b_accepted=acc)
+                            blackouts=bos, events=st.plan.events, heat_acts=heat_acts, b2b_accepted=acc,
+                            weight=st.plan.weight_on(today))
     since = monday - dt.timedelta(weeks=4)
     acts = activity_rows(ds, since, today + dt.timedelta(days=1), recorded)
     last_act = max((O.wdate(w) for w in ds.workouts if O.wdate(w) <= today), default=None)

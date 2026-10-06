@@ -939,6 +939,18 @@
     "draft": true,
     "src": "backend/engine/workout_steps.py:1208"
   },
+  "{race} 出發前飲食：前一晚正常吃就好；百岳強度低、天數多，重點是每天吃夠總熱量（推估）": {
+    "draft": true,
+    "src": "backend/engine/overview.py:2431"
+  },
+  "{race} 賽前碳水負荷：{how}；選熟悉、低纖、低脂的食物；總熱量也要跟著多，不只換比例。體重會多 1–2 kg，是肝醣帶的水（說明，推估）": {
+    "draft": true,
+    "src": "backend/engine/overview.py:2438"
+  },
+  "{race} 賽前飲食：{how}；比賽不到 90 分鐘，不必刻意多吃；選熟悉、低纖、低脂的食物": {
+    "draft": true,
+    "src": "backend/engine/overview.py:2444"
+  },
   "{ramp}：到注意線，只能撐一兩週": {
     "draft": true,
     "src": "backend/engine/status.py:332"
@@ -1783,9 +1795,25 @@
     "draft": false,
     "src": "backend/engine/workout_review.py:2710"
   },
+  "前 1 天（可分 2 天）每天約 {lo:.0f}–{hi:.0f} g/kg 碳水": {
+    "draft": true,
+    "src": "backend/engine/overview.py:2437"
+  },
+  "前 1 天（可分 2 天）每天約 {lo:.0f}–{hi:.0f} g/kg 碳水（{kg:.0f} kg：約 {glo:.0f}–{ghi:.0f} g）": {
+    "draft": true,
+    "src": "backend/engine/overview.py:2435"
+  },
   "前 {h} 小時不要有長跑、強度課或比賽": {
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:538"
+  },
+  "前一天正常高碳水，約 {g:.0f} g/kg": {
+    "draft": true,
+    "src": "backend/engine/overview.py:2443"
+  },
+  "前一天正常高碳水，約 {g:.0f} g/kg（{kg:.0f} kg：約 {grams:.0f} g）": {
+    "draft": true,
+    "src": "backend/engine/overview.py:2442"
   },
   "前半 50%、後半 75%": {
     "draft": true,
@@ -5614,6 +5642,10 @@
   "高踏階（箱高約膝高，踩上去站穩再下）": {
     "draft": true,
     "src": "backend/engine/strength_plan.py:54"
+  },
+  "（Bussau 2002、ISSN 2019、Hawley 1997）": {
+    "draft": true,
+    "src": "backend/engine/overview.py:2429"
   },
   "（LTHR 有獨立證據：{s}）": {
     "draft": false,
