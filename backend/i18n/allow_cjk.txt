@@ -28,3 +28,5 @@ re ^最大心率測試\|max
 # interval_library's _OLD_* regexes: they match the session titles stored in plans written before a
 # rename (the titles are re-parsed, never shown), so they stay Chinese like the titles they read
 re ^\^(?:\(\?:閾值\||VO2max \(\?!間歇\)|爬坡間歇 \?\(|短強度 \?\(\?=|間歇 \?\(5)
+# walk_hint.HILL_WORDS: matched against the stored session titles (LSD（山路越野）, 輕鬆越野跑 …), never shown
+re ^(?:山路|越野)$

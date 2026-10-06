@@ -918,6 +918,9 @@ speed against two transition-speed curves (Brill & Kram 2021 PTS / EOTS to 15°,
 走跑皆可 (a note too); > 8 % stays an HR cap + VAM target labelled 陡坡（走／走跑皆可／跑）, a walked
 3–8 % climb becomes 爬坡（走）; fuel uses Minetti walking only where the gait is walk. Labels only:
 the time model is unchanged (`GaitRE`'s majority gait). 百岳 and manual courses carry no gait.
+`runwalk.walk_grade(vam, shift)` turns a climbing rate into the grade above which it is walked (§3.2's
+table, 500 m/h ≈ 8 %, 700 ≈ 11 %, 900 ≈ 15 %); the plan's hill easy / long runs quote it (SP-298,
+`engine/walk_hint.py`).
 
 Personal transition speed (SP-228, `runwalk.fit_shift`, set on `GaitRE.runwalk` by `fit_gait_re`): per 2 % climbing bin with ≥ 10 walked and ≥ 10 run windows, the speed that best splits them; the median of (that − default PTS) is one shift of both curves, × n/(n + 30), held within ±0.4 m/s (推估). The planner's labels use it (`summary.runwalk`); the race-class model keeps the shift fitted on every run. 坡度 RE 曲線 shows the default and personal curves and each bin's windows, or 「預設值，還沒有你的資料」.
 

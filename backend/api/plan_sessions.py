@@ -329,13 +329,19 @@ def _range(scope: str, day: Optional[str], inp: dict) -> tuple[str, str]:
     return today, inp["phase_push_end"]
 
 
-def _view(s: dict, inp: dict, rows: dict, today: str, prov=None) -> dict:
+def _view(s: dict, inp: dict, rows: dict, today: str, prov=None, walk: Optional[dict] = None) -> dict:
     """`coros` keeps its name in the API: the push status at the active provider.
     `quality_family`: a 強度課's 有氧間歇 / VO2max 間歇 / 速度 (workout_templates.session_family: the
     stored `family` the user picked, else read from the steps); `steps_family` = what the steps
-    read as (the editor's 「步驟看起來像…」 hint when it differs, SP-79)."""
+    read as (the editor's 「步驟看起來像…」 hint when it differs, SP-79). `walk_hint` (SP-298):
+    on a planned hill easy run / long run, 「坡度超過約 X% 用走的比較省」 (engine/walk_hint.py,
+    `walk` = _walk_hint) — shown next to the detail, never stored or pushed."""
     prov = prov or WT.get(WT.DEFAULT)
     v = dict(s)
+    from backend.engine import walk_hint as WH
+    wh = WH.for_session(s, walk)
+    if wh:
+        v["walk_hint"] = wh
     got = WTPL.steps_family(s, inp["thresholds"])
     v["quality_family"] = WTPL.session_family(s, inp["thresholds"], derived=got)
     v["steps_family"] = got
@@ -376,8 +382,9 @@ async def sessions(start: Optional[str] = None, end: Optional[str] = None, db: A
     today = _today(inp)
     prov = await WT.active(db)
     rows = await prov.all_rows(db)
+    walk = await run_in_threadpool(_walk_hint, inp)
     return {**_meta(inp), "summary": _summary(every, inp),
-            "sessions": [_view(s, inp, rows, today, prov) for s in ss if s["state"] != "deleted"
+            "sessions": [_view(s, inp, rows, today, prov, walk) for s in ss if s["state"] != "deleted"
                          and s["state"] != "superseded"]}
 
 
@@ -1216,6 +1223,30 @@ def _tpace() -> Optional[float]:
             _tp_cache[key] = float(v) * 60.0 if v else None
         return _tp_cache[key]
     except Exception:                       # noqa: BLE001 — pace is optional
+        return None
+
+
+_wh_cache: dict = {}
+
+
+def _walk_hint(inp: dict) -> Optional[dict]:
+    """SP-298: the numbers of 「照你輕鬆心率的爬升速度（約 N m/h），坡度超過約 X% 用走的比較省」
+    (engine/walk_hint.compute at the plan's easy-run cap), cached per dataset day and cap; None
+    without enough climbs or when it can't be computed (the hint is optional)."""
+    try:
+        from backend.api.overview import _dataset
+        from backend.engine import overview as O
+        from backend.engine import walk_hint as WH
+        ds = _dataset()
+        today = O.day_to_date(ds.today)
+        cap = (inp.get("thresholds") or {}).get("aet")
+        key = (id(ds), today, cap)
+        if key not in _wh_cache:
+            v = WH.compute(ds, today, cap)
+            _wh_cache.clear()
+            _wh_cache[key] = v
+        return _wh_cache[key]
+    except Exception:                       # noqa: BLE001 — a hint, never an error
         return None
 
 

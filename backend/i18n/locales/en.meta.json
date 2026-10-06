@@ -1551,6 +1551,10 @@
     "draft": true,
     "src": "backend/engine/hr_profile.py:213"
   },
+  "依你的跑走紀錄校正": {
+    "draft": true,
+    "src": "backend/engine/walk_hint.py:117"
+  },
   "修改太頻繁，請稍後再試": {
     "draft": true,
     "src": "backend/tenancy_mw.py:286"
@@ -3006,6 +3010,10 @@
   "推送": {
     "draft": true,
     "src": "backend/api/auth.py:175"
+  },
+  "提示：照你輕鬆心率的爬升速度（約 {vam:.0f} m/h），坡度超過約 {grade:.0f}% 用走的比較省（{basis}）；規則仍是心率上限": {
+    "draft": true,
+    "src": "backend/engine/walk_hint.py:118"
   },
   "提腳尖": {
     "draft": true,
@@ -5578,6 +5586,10 @@
   "預設 −0.07": {
     "draft": true,
     "src": "backend/engine/racepower/calc.py:336"
+  },
+  "預設值": {
+    "draft": true,
+    "src": "backend/engine/walk_hint.py:117"
   },
   "預設背負 {pack}": {
     "draft": true,
