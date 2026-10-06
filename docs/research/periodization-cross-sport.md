@@ -29,9 +29,9 @@
   | 子題 | 受影響的任務 | 結果 | 還缺什麼 |
   |---|---|---|---|
   | Q30 中文來源 | `Q30#1`（0 個）；**2026-10-05 已補查**（新增 16 個來源 [453]–[468]，另整理使用者筆記，見 §4.10） | 已補查，以教練級為主；田麥久只讀到二手 | 田麥久《運動訓練學》原書（整理頁 403，各期比例未核對）；徐國峰 KFCS 書與 RQ 文章（RQ 全站 403）裡的各期週數；台灣教練的賽後恢復與轉換期說法（0 篇）；百岳多日行程的減量（只有 1 份 8 週計畫） |
-  | Q19 轉換期與休賽季 | `Q19#2`（0 個）；補查改用 Europe PMC 取得 15 個；**2026-10-05 已補查**（新增 14 個來源 [439]–[452]，見 §4.6.1、§4.7.1） | 已補查，教練端以超馬教練為主 | Daniels、Pfitzinger 本人的休季與賽後規則（只有二手或查無出處，原書未核對）；越野／超馬跑者的休賽季研究（0 篇）；跑者「休季後幾週回到賽季水準」的研究（0 篇）；50 km、100 km 賽後回到正常訓練的教練天數 |
-  | Q20 一季多場比賽 | `Q20#1`、`Q20#2`（只靠直接抓頁面，共 7 個）；**2026-10-05 已補查**（新增 15 個來源 [424]–[438]，另補讀 [416] 全文） | 已補查，仍以教練級為主 | 多峰減量沒有任何試驗（[424] 明說）；「巔峰維持幾週」只有教練說法；B 賽對 A 賽成績的影響、B 賽後幾天可再上強度沒有研究；越野／超馬兩場相隔 3–8 週只有恢復資料（含 1 篇 n = 1 的個案 [428]），沒有排法的研究；Pfitzinger 的 B 賽規則是二手轉述，原書未核對 |
-  | Q17 減量 | `Q17#2`（學術角度，只抓到 2 個）；**2026-10-05 已補查**（新增 7 個來源 [417]–[423]，另補讀 [205][207][416][162] 全文） | 已補查 | 越野／超馬仍沒有減量的對照試驗，只有 1 篇觀察研究 [417] 和教練文章；2024–2026 沒有找到新的耐力減量統合分析（Wang 2023 [207] 仍是最新）；馬拉松最後一次長跑的時機只有訓練計畫的統計 [418] 和教練建議 |
+  | Q19 轉換期與休賽季 | `Q19#2`（0 個）；補查改用 Europe PMC 取得 15 個；**2026-10-05 已補查**（新增 14 個來源 [439]–[452]，見 §4.6.1、§4.7.1）；2026-10-06 再查（補讀 [450] 全文） | 已補查，教練端以超馬教練為主 | Daniels、Pfitzinger 本人的休季與賽後規則（只有二手或查無出處，原書未核對；2026-10-06 再查仍沒有）；越野／超馬跑者的休賽季研究（0 篇）；跑者「休季後幾週回到賽季水準」的研究（0 篇）；50 km、100 km 賽後回到正常訓練的教練天數 |
+  | Q20 一季多場比賽 | `Q20#1`、`Q20#2`（只靠直接抓頁面，共 7 個）；**2026-10-05 已補查**（新增 15 個來源 [424]–[438]，另補讀 [416] 全文）；2026-10-06 再查 Meltzer（付費牆） | 已補查，仍以教練級為主 | 多峰減量沒有任何試驗（[424] 明說）；「巔峰維持幾週」只有教練說法；B 賽對 A 賽成績的影響、B 賽後幾天可再上強度沒有研究；越野／超馬兩場相隔 3–8 週只有恢復資料（含 1 篇 n = 1 的個案 [428]），沒有排法的研究；Pfitzinger 的 B 賽規則是二手轉述，原書未核對 |
+  | Q17 減量 | `Q17#2`（學術角度，只抓到 2 個）；**2026-10-05 已補查**（新增 7 個來源 [417]–[423]，另補讀 [205][207][416][162] 全文）；2026-10-06 再查（新增 [469]） | 已補查 | 越野／超馬仍沒有減量的對照試驗，只有 2 篇觀察研究 [417][469] 和教練文章；2024–2026 沒有找到新的耐力減量統合分析（Wang 2023 [207] 仍是最新）；馬拉松最後一次長跑的時機只有訓練計畫的統計 [418] 和教練建議 |
   | Q29 其他 app | 兩個角度都跑完，但廠商文件少 | 偏少 | TrainingPeaks ATP、Garmin、COROS、Runna、Xert 的規則 |
 
   續查的方法：開新的 session（額度重新計算），或先把 `CLAUDE_CODE_MAX_WEB_SEARCHES_PER_SESSION` 調高，然後說「繼續上次的研究」並指向證據資料夾。資料夾裡的 `RESUME.md` 有同一張表和可直接用的子題文字。
@@ -202,6 +202,10 @@
   - 22–42 km 和 43–69 km：減 2 週；70 km 以上：減 1 週。
   - 從賽前第 3 週到比賽週，距離減少：22–42 km −36.6 %、43–69 km −53.8 %、70 km 以上 −66.4 %（時間 −68 %、sRPE −77.5 %）。
   - 這是描述跑者「實際怎麼做」，沒有比較哪種減量比較好。
+- 休閒耐力跑者的問卷（NURMI Step 2，Knechtle 等，Front Psychol 2023，2015 年線上問卷，**已驗證**，全文）[469]（2026-10-06 補查）：
+  - 馬拉松／超馬組 65 人（超馬 50–160 km 和馬拉松合在一組）。準備期最後一段（Condition 4，作者定義「competition trial, race-dependent focus」）每週 56.2 ± 43.6 km、8.45 ± 6.57 h、4 次；比賽期（Period C，作者定義為「interim race stage/s & tapering」）47.3 ± 34.8 km、6.48 ± 4.77 h、4 次。
+  - 換算：距離 −16 %、時間 −23 %、次數不變（換算是我算的，**推估**）。標準差很大，而且比賽期混了中途賽和減量，不是單看減量那幾週。
+  - 意思：休閒跑者實際上減得比統合分析建議的 41–60 % [207] 淺，但**次數都保留**。和 Matos [417]、江晏慶的淺減量 [454][455] 方向一致。不改 app 的 50 % → 40 %（依據仍是 [207]）。
 
 不採用的說法：
 
@@ -229,6 +233,7 @@
 - 付費牆，未讀：Trail Runner Magazine〈Should You Change How You Think About Tapers For Long Races?〉、Outside Run〈How Long Should My Long Runs Be?〉（David Roche 對超馬最長一次長跑的建議）。兩篇都要求登入 Outside 帳號。
 - 抓不到內容：Campus Coach〈Last week before marathon〉（只回傳標題）。
 - 補查用了 15 次網路搜尋，沒有撞到額度；學術部分另用 Europe PMC API 檢索 2023–2026 的減量文獻，只找到游泳、自行車和舉重的研究，沒有跑步或超馬的新回顧。
+- 2026-10-06 再查：Europe PMC 檢索「taper × ultramarathon／trail running／ultraendurance，2023–2026」共 36 筆，沒有任何減量的對照試驗或回顧；唯一有減量期資料的是上面的 NURMI 問卷 [469]。網路搜尋也只回到既有的 CTS、Fellrnr、Ultra-X 教練文章。**越野／超馬的減量對照試驗仍是 0 篇。**
 
 ### 4.6 賽後恢復
 
@@ -304,7 +309,9 @@
 
 - 2 週停訓（Chen 2022，15 名耐力訓練的男性，**已驗證，摘要**）[448]：最大攝氧量、力竭時間、最大心搏量、膝伸肌等速肌力都顯著下降；最大心率和體重上升；體脂沒變；膝屈肌力和肌耐力沒掉。摘要沒給百分比。
 - 8 週休賽季（減量、不是全停；Martínez Noguera 2022，訓練有素的自行車選手，**已驗證**，全文）[449]：最大攝氧量 3.98 → 3.86 L/min（−2.7 %，p = 0.057）；VT2 的攝氧量 −3.9 %（p = 0.055）；FatMax 的脂肪氧化 −21.5 %（p = 0.026，唯一顯著）；體重不變。也就是**有練的休賽季，最先掉的是脂肪氧化（長耐力），最大攝氧量掉得不多**，和 `detraining.md` §2 的「量砍太多傷長耐力」一致。
-- 95 名業餘鐵人、6 個月、34,731 堂課（Wells 2026，**已驗證，摘要**）[450]：休賽季每週 340 分、84 km、364 TSS；專項期 556 分、166 km、620 TSS。換算休賽季約為專項期的 61 %（時間）、51 %（距離）、59 %（TSS）（換算是我算的）。
+- 95 名業餘鐵人、6 個月、34,731 堂課（Wells 2026，**已驗證**，2026-10-06 補讀全文）[450]：休賽季每週 340 分、84 km、364 TSS；專項期 556 分、166 km、620 TSS。換算休賽季約為專項期的 61 %（時間）、51 %（距離）、59 %（TSS）（換算是我算的）。
+  - 全文的比較基準是一般期（基礎期）：專項期高 21 %，「減量／比賽／賽後」合併一期低 14 %，休賽季低 38 %。各期是選手自己在問卷裡填的（問卷有附各期定義）；比賽那堂課也算進當週的量。
+  - 對 app 的意思：休賽季的量大約是基礎期的 6 成，和 app 轉換期「賽前水準的 50 %」（`overview.TRANSITION_SHARE`）同一個量級，不衝突。
 - 既有證據（不重做）：輕艇全停 −10.1 % 對減量 −4.8 % [412]；跑者停 14 天最大攝氧量 −4 %、血量先掉、跑步經濟性不變；剛練起來的進步停 > 4 週會歸零（`detraining.md` §0、§1）。
 - 哪些掉得快（整理既有＋新證據）：血量與次最大心率（2 週內）> 最大攝氧量與心搏量（2 週起）> 肌力（2 週就有下降 [448]）> 脂肪氧化與長耐力（減量時就掉 [449]）。無氧短段功率掉得最慢（`detraining.md` §4.7）。
 
@@ -321,6 +328,9 @@
 - 原書未核對：Daniels《Running Formula》、Pfitzinger《Advanced Marathoning》的休季與賽後章節。
 - Europe PMC 檢索「off-season／detraining × 跑者／鐵人 × VO2max」多半回傳無關的綜論，只找到上面 3 篇可用；沒有找到越野跑者或超馬跑者的休賽季研究。
 - 這次補查用了 17 次網路搜尋，沒有撞到額度。
+- 2026-10-06 再查 Daniels、Pfitzinger（4 次搜尋）：
+  - Daniels「計畫性休息最少 2 週、最多約 6 週」：仍只在搜尋摘要；唯一找到的頁面（Run Eat Repeat 部落格 2014）只轉貼另一位教練（Joe English）部落格、標為出自 Daniels 書的「停 7 天掉 0.6 %、14 天 2.7 %……」數字，沒有書的版次和頁碼，也沒有提到 2–6 週。仍是**查無出處**，不採用。停訓掉多少以 `detraining.md` 為準。
+  - Pfitzinger：Fraioli 2025-10-17 的長訪談（The Morning Shakeout）完全沒談賽後恢復或休季。「每跑 1 英里輕鬆 1 天」仍只出現在第三方工具頁，**查無出處**。原書仍未核對（已列在 `paywalled-sources.md`，SP-113）。
 
 ### 4.8 多場比賽與沒有比賽
 
@@ -405,6 +415,7 @@
 - 付費牆，未讀：Trail Runner Magazine〈Is Multiple 100-Mile Races In A Single Season Too Much?〉、Outside Run〈Messed Up Your Marathon? What to Know Before Running Another Right Away〉。兩篇都導向 Outside 帳號登入。
 - 抓不到內容：PubMed 的 Aubry 2014 [279] 頁面（只回傳 cookie 提示）；Europe PMC 只拿到摘要的結論句，沒有「巔峰出現在第幾天」的數字。
 - 搜尋摘要裡「Meltzer 建議 50 英里主賽前 6–8 週不比賽」「百英里賽至少相隔 2 個月」，沒有找到原始頁面，**查無出處**，不採用。
+  - 2026-10-06 再查：只找到 Trail Runner Magazine〈Karl Meltzer Unplugged〉（**付費牆**，導向 Outside 帳號登入，未讀）。搜尋摘要說的是 Meltzer 自己「相隔 3 週跑快的百英里並不少見」，這是他個人的參賽紀錄，不是給一般跑者的建議，也沒讀到原文，不採用。
 - 這次補查用了 22 次網路搜尋，沒有撞到額度；另用 Europe PMC API 檢索多峰減量與連續比賽的文獻，沒有找到跑步或超馬的多峰研究。
 
 ### 4.9 依狀態調整（HRV、安靜心率、主觀感受）
@@ -1030,7 +1041,7 @@
 
 [449] Biomarker Changes in Oxygen Metabolism, Acid-Base Status, and Performance after the Off-Season in Well-Trained Cyclists (Martínez Noguera, Marín-Pagán, Chung, Alcaraz; Nutrients 2022). https://pmc.ncbi.nlm.nih.gov/articles/PMC9506402
 
-[450] Training load and intensity in triathlon: objective differences between sex, age, race distance preference and training phase across a cohort of 95 age-group triathletes over six months (Wells, Hoffmann, Bruce, Kremer, Dwyer; Front Sports Act Living 2026；只讀摘要). doi:10.3389/fspor.2026.1798702
+[450] Training load and intensity in triathlon: objective differences between sex, age, race distance preference and training phase across a cohort of 95 age-group triathletes over six months (Wells, Hoffmann, Bruce, Kremer, Dwyer; Front Sports Act Living 2026；2026-10-06 補讀全文). https://pmc.ncbi.nlm.nih.gov/articles/PMC13171522 ；doi:10.3389/fspor.2026.1798702
 
 [451] Pfitzinger Marathon Plan: Pros and Cons of Pete's Approach (Brian Rock, Running with Rock；2024-02-15；二手書評，只提到書末有 5 週回跑計畫). https://runningwithrock.com/pfitzinger-marathon-plan/
 
@@ -1067,3 +1078,5 @@
 [467] 体育考研 运动训练学第二版 田麦久（2017年）思维导图（亿图脑图模板；簡體中文；只有節點名稱）. https://mm.edrawsoft.cn/template/292500
 
 [468] 2022 徐國峰全馬線上訓練營（破4/初馬）（RQ 支援文件，GitBook）. https://runningquotient-support.gitbook.io/rqsupport/online-training-camp/yi-jie-shu/fmotc
+
+[469] Differences in training characteristics of recreational endurance runners by race distance – results from the NURMI Study (Step 2) (Knechtle, Tanous, Thuany, Motevalli, Wirnitzer G, Leitzmann, Weiss, Rosemann, Wirnitzer K; Front Psychol 2023;14；2026-10-06 補查，全文). https://pmc.ncbi.nlm.nih.gov/articles/PMC10805148 ；doi:10.3389/fpsyg.2023.1269374
