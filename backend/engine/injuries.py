@@ -565,6 +565,69 @@ def illness_rule(events: list[dict], day: dt.date) -> Optional[dict]:
     return best
 
 
+# ---- 依傷別迴避課型 (SP-270; injury-graded-return.md §1.2, §2.2, §4.2, §4.5, owner §6.1 points 3–4) -----
+# While an event with a condition is open (any severity; the day it resolves the rule is gone — §6.1
+# point 3), these session types are not planned. Tags (overview.condition_apply maps them to sessions):
+#   downhill   下坡離心課 (engine/downhill.py)        technical  技術地形課 (engine/technical.py)
+#   climb      長爬坡反覆 (specific_phase.apply_climb: climbs, then runs down at race grade)
+#   steep      陡坡健走 (engine/steep_hill.py)        me         ME 負重爬坡 (specific_phase.apply_me)
+#   strides    加速跑／坡道衝刺 on an easy run
+# 膝前痛 / 髂脛束: downhill is their main load factor — Esculier 2016 (「avoid downhill running」),
+# Fredericson & Wolf 2005 (downhill among the training factors), Van Hooren 2024 (downhill loads the
+# patellofemoral joint more); the trail long run becomes flat (§6.1 point 4). The 長爬坡反覆 runs down
+# at race grade, so it goes too (推估: the same reason as the downhill session).
+# 跟腱: no hill repeats, steep walk or strides — a coach's rule, plausible (uphill: forefoot strike,
+# more calf work, Vernillo 2017) but no measuring study found: 推估. The long run keeps its terrain.
+# 足底筋膜 / 其他: no session type is avoided. load_guard is untouched: these rules only cut.
+CONDITION_AVOID = {"pfp": ("downhill", "technical", "climb"), "itb": ("downhill", "technical", "climb"),
+                   "achilles": ("climb", "steep", "me", "strides")}
+FLAT_LONG = ("pfp", "itb")
+CONDITION_NOTE = {
+    "pfp": N_("膝前痛進行中：先不排下坡課（Esculier 2016）；技術地形、長爬坡反覆也先不排，越野長跑改平路"),
+    "itb": N_("髂脛束進行中：先不排下坡課（Fredericson 2005）；技術地形、長爬坡反覆也先不排，越野長跑改平路"),
+    "achilles": N_("跟腱進行中：先不排爬坡反覆、陡坡健走、加速跑（推估：教練的說法，沒有找到量測研究）；長跑地形不變"),
+}
+
+
+def condition_rule(events: list[dict], day: dt.date) -> Optional[dict]:
+    """What the open 傷別 events avoid on `day` (SP-270, the injury twin of illness_rule): {"avoid": set of
+    tags (CONDITION_AVOID), "flat_long": bool, "events": [{id, label, condition}], "notes": [week-note
+    texts]}; None when no event with an avoiding condition touches the day. An event counts on
+    [onset, resolved_date) — from the day it resolves the plan goes back to normal; drafts count."""
+    avoid, flat, evs, notes = set(), False, [], []
+    for e in events or ():
+        c = e.get("condition")
+        if is_illness(e) or c not in CONDITION_AVOID:
+            continue
+        o = _d(e.get("onset_date"))
+        if o is None or o > day:
+            continue
+        r = _d(e.get("resolved_date")) if e.get("status") == "resolved" else None
+        if e.get("status") == "resolved" and (r is None or day >= r):
+            continue
+        avoid |= set(CONDITION_AVOID[c])
+        flat = flat or c in FLAT_LONG
+        lab = full_label(e.get("area"), e.get("side"))
+        evs.append({"id": e.get("id"), "label": lab, "condition": c})
+        t = _("{label}・{what}", label=lab, what=_(CONDITION_NOTE[c]))
+        if t not in notes:
+            notes.append(t)
+    if not avoid:
+        return None
+    return {"avoid": avoid, "flat_long": flat, "events": evs, "notes": notes}
+
+
+def condition_week(events: list[dict], monday: dt.date, today: Optional[dt.date] = None) -> Optional[dict]:
+    """The condition rule a week's session modules ask (downhill / technical / steep_hill week_context):
+    the one on the week's first planning day (today inside the current week, else its Monday)."""
+    first = max(monday, today) if today is not None and today <= monday + dt.timedelta(days=6) else monday
+    return condition_rule(events, first)
+
+
+def avoids(rule: Optional[dict], tag: str) -> bool:
+    return bool(rule) and tag in rule["avoid"]
+
+
 def week_notes(events: list[dict], monday: dt.date, today: dt.date) -> list[dict]:
     """「右膝進行中（第 5 天）」 for the week plan (src "injury")."""
     sun = monday + dt.timedelta(days=6)
