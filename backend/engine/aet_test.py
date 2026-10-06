@@ -617,13 +617,13 @@ WATTS_RE = re.compile(r"(\d+)\s*[–-]\s*(\d+)\s*W\b")                     # …
 
 
 def cp_tested(plan, day: dt.date) -> bool:
-    """The CP in effect on `day` came from a CP test: the latest plan row with a CP has a
-    cp_method (cp_protocols.METHOD_LABEL — 「套用這次的 CP」 writes it). A CP typed by hand (or a
-    legacy row without a method) doesn't count for the 90-minute test (owner 2026-10-06)."""
-    from backend.engine.cp_protocols import METHOD_LABEL
+    """The CP in effect on `day` counts as tested for the 90-minute test (owner 2026-10-06): the
+    latest plan row with a CP is not marked as typed by hand (planning.Threshold.cp_manual, set
+    by 設定 when the CP is typed). A test result (cp_method) and a legacy row saved before the
+    marker existed (CP, no cp_method) both count."""
     rows = sorted((t for t in getattr(plan, "thresholds", None) or []
                    if t.cp is not None and str(t.date)[:10] <= day.isoformat()), key=lambda t: t.date)
-    return bool(rows) and getattr(rows[-1], "cp_method", None) in METHOD_LABEL
+    return bool(rows) and not getattr(rows[-1], "cp_manual", None)
 
 
 def xu_target(th: dict) -> dict:

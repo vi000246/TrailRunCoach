@@ -848,7 +848,8 @@ $("thr").addEventListener("change", (ev) => {
   const f = ev.target.dataset.f, v = ev.target.value, r = TS.thresholds[i];
   r[f] = THR_SHOWN.includes(f) ? (v === "" ? null : Number(v)) : v;
   // a CP typed by hand is no longer the test's result (套用這次的 CP stores how it was measured)
-  if (f === "cp") { r.cp_method = null; r.wprime = null; }
+  // and is marked as typed by hand (SP-274: the 90-minute test doesn't take it as a tested CP)
+  if (f === "cp") { r.cp_method = null; r.wprime = null; r.cp_manual = v === "" ? null : true; }
   // likewise an LTHR / AeT typed by hand is no longer the applied estimate / test
   if (f === "lthr" || f === "aethr") r[`${f}_method`] = v === "" ? null : "manual";
 });
@@ -857,7 +858,7 @@ $("thr").addEventListener("click", (ev) => {
   const r = TS.thresholds[+i];
   // a row that also holds 最大／靜息心率 (心率 above) keeps them: only its LTHR / AeT / CP go
   if (r.mhr != null || r.rhr != null) {
-    for (const k of [...THR_SHOWN, "wprime", "cp_method", "lthr_method", "aethr_method"]) r[k] = null;
+    for (const k of [...THR_SHOWN, "wprime", "cp_method", "cp_manual", "lthr_method", "aethr_method"]) r[k] = null;
     r._new = false;
   } else TS.thresholds.splice(+i, 1);
   renderThr();

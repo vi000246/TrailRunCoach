@@ -308,6 +308,7 @@ class ThresholdIn(BaseModel):
     note: str = ""
     wprime: Optional[float] = None       # carried through so an edit keeps what apply-cp wrote
     cp_method: Optional[str] = None
+    cp_manual: Optional[bool] = None     # True = CP typed by hand in 設定 (planning.Threshold.cp_manual)
     lthr_method: Optional[str] = None    # carried through likewise (planning.LTHR_METHODS)
     aethr_method: Optional[str] = None
     mhr_method: Optional[str] = None     # planning.MHR_METHODS (SP-64)
@@ -872,6 +873,7 @@ def apply_cp(body: ApplyCP):
     row.cp = round(body.cp)
     row.wprime = None if body.wprime is None else round(body.wprime)
     row.cp_method = body.cp_method
+    row.cp_manual = None                 # a test result now, not a hand-typed CP
     note = body.note or f"CP 測試（{CPP.METHOD_LABEL[body.cp_method]}）"
     if body.activity_index is not None:
         note += f"；活動 #{body.activity_index}"
