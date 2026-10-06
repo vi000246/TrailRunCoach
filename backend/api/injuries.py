@@ -8,6 +8,7 @@ mode (WKO5COACH_MODE=demo). Local only: nothing here is synced or shared.
   POST   /api/v1/wko5/injuries                    a manual event
   PATCH  /api/v1/wko5/injuries/{id}               change fields
   POST   /api/v1/wko5/injuries/{id}/resolve       「好了」 {date?}
+  POST   /api/v1/wko5/injuries/{id}/walkrun       「可以開始走跑」 {date?} (SP-272)
   DELETE /api/v1/wko5/injuries/{id}               delete (activities keep their pain mark)
   POST   /api/v1/wko5/injuries/areas              {label}: add a body area
   DELETE /api/v1/wko5/injuries/areas/{label}      remove one from the picker
@@ -46,7 +47,8 @@ def _not_demo():
 router = APIRouter(prefix="/api/v1/wko5/injuries", tags=["injuries"], dependencies=[Depends(_not_demo)])
 
 EDITABLE = ("area", "side", "kind", "severity", "pain_max", "onset_date", "onset_key", "onset_file", "status",
-            "resolved_date", "days_missed", "pause_quality", "note", "category", "illness", "condition")
+            "resolved_date", "days_missed", "pause_quality", "note", "category", "illness", "condition",
+            "walkrun_from")
 
 
 def _row_dict(e: InjuryEvent) -> dict:
@@ -125,8 +127,13 @@ async def _list_json(db: AsyncSession, with_days: bool = True) -> list[dict]:
         auto = INJ.days_off_auto(d, runs, today) if runs else None
         j = INJ.event_json(d, today, linked.get(e.id, 0), auto)
         if marks is not None and j["open"] and not INJ.is_illness(d):
-            lt = INJ.event_light(d, marks, today)
-            j["light"] = {"color": lt["color"], "label": _(INJ.LIGHTS[lt["color"]]), "reason": lt["reason"]}
+            lt = INJ.light([d], marks, today)
+            if lt is not None:
+                rs = lt.get("walkrun") or {}
+                j["light"] = {"color": lt["color"], "label": _(INJ.LIGHTS[lt["color"]]), "reason": lt["reason"],
+                              # SP-272: red waits for the walk check / 「可以開始走跑」; the walk-run's stage
+                              "phase": rs.get("phase"), "stage": rs.get("stage"), "n": rs.get("n"),
+                              "need": INJ._need(rs.get("stage") or 0) if rs.get("phase") == "walkrun" else None}
         out.append(j)
     return out
 
@@ -156,6 +163,13 @@ async def meta(db: AsyncSession = Depends(get_db)):
                        "condition_hint": _("如果醫師或物理治療師說是哪一種傷就選；app 不診斷。"),
                        # SP-271: the optional 0–10 next to the one-tap mark
                        "pain_score": _("跑的時候最痛幾分（選填）"),
+                       # SP-272: after a red light
+                       "walkrun_button": _("可以開始走跑"),
+                       "walkrun_help": _("紅燈之後：先能走 30 分鐘不痛、走路的樣子正常，再開始走跑交替（Ohio State Wexner "
+                                         "回跑指引，臨床機構）。app 不判斷能不能開始跑。按了之後課表從「走 4 分／跑 1 分」開始；"
+                                         "走完 30 分在活動上標「沒痛」或「痠」也一樣。"),
+                       "walkrun_stage": _("走跑第 {s} 階：這階已完成 {n}/{need} 次"),
+                       "walkrun_cont": _("連續跑 30 分：已完成 {n}/{need} 次"),
                        "pain_score_help": _("0 = 不痛、10 = 想像得到最痛。傷病還沒好的時候，app 用最近一次跑步的分數和"
                                             "上一次比，決定這週課表要照排（綠燈）、先不加量（黃燈）還是先不跑（紅燈）。"
                                             "沒填就只看「沒痛／痠／痛／中斷」。")},
@@ -362,6 +376,23 @@ async def resolve_injury(eid: int, body: Optional[dict] = Body(None), db: AsyncS
     if err:
         raise HTTPException(400, err)
     e.status, e.resolved_date, e.updated_at = "resolved", day, dt.datetime.utcnow()
+    await db.commit()
+    _plan_changed()
+    return INJ.event_json(_row_dict(e), today_local(), (await _linked(db)).get(e.id, 0))
+
+
+@router.post("/{eid}/walkrun")
+async def start_walkrun(eid: int, body: Optional[dict] = Body(None), db: AsyncSession = Depends(get_db)):
+    """「可以開始走跑」 (SP-272): after a red pain light the walk-run stages start from `date` (default
+    today) — the same as a ≥ 30-min walk marked 沒痛／痠. {date: null} takes it back. An open injury only."""
+    e = await _get(db, eid)
+    if e.category == "illness" or e.status not in ("draft", "active"):
+        raise HTTPException(400, "NOT_AN_OPEN_INJURY")
+    day = (body or {}).get("date", today_local().isoformat()) if body is not None else today_local().isoformat()
+    err = INJ.validate_event({"walkrun_from": day}) or (INJ.check_dates(e.onset_date, day) if day else None)
+    if err:
+        raise HTTPException(400, err)
+    e.walkrun_from, e.updated_at = day, dt.datetime.utcnow()
     await db.commit()
     _plan_changed()
     return INJ.event_json(_row_dict(e), today_local(), (await _linked(db)).get(e.id, 0))

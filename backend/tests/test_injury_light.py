@@ -87,7 +87,9 @@ def test_two_yellows_make_red_and_the_next_mark_changes_it():
     e = [ev(1, "2026-09-20")]
     lt = INJ.light(e, [mk("2026-09-25", 2), mk("2026-09-27", 2)], D)
     assert lt["color"] == "red" and "連兩次黃燈" in lt["reason"]
-    assert INJ.light(e, [mk("2026-09-25", 2), mk("2026-09-27", 2), mk("2026-09-29", 1)], D)["color"] == "green"
+    assert INJ.light(e, [mk("2026-09-25", 2), mk("2026-09-29", 1)], D)["color"] == "green"     # yellow → green
+    # SP-272: after red, only the walk check / 「可以開始走跑」 moves on (a run marked 痠 doesn't)
+    assert INJ.light(e, [mk("2026-09-25", 2), mk("2026-09-27", 2), mk("2026-09-29", 1)], D)["color"] == "red"
     # an unmarked run changes nothing; a walk is not a run
     assert INJ.light(e, [mk("2026-09-25", 2), mk("2026-09-27", None), mk("2026-09-28", 1, cat="walk"),
                          mk("2026-09-29", 2)], D)["color"] == "red"

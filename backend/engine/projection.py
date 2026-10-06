@@ -39,6 +39,7 @@ from backend.engine import quality_gate as QG
 from backend.engine import rest_days as RD
 from backend.engine.hr_profile import below, easy_cap_label, easy_cap_measured
 from backend.engine.zones import WORKOUT_TARGETS
+from backend.i18n import _
 
 MAX_WEEKS = 8                 # never schedule further ahead than this
 MODE_LABELS = {"base": "基礎期", "specific": "專項期", "taper": "減量期", "event": "比賽週",
@@ -538,6 +539,13 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
     blocks = ([cur["reentry"]] if cur.get("reentry") else []) + RE.planned_ahead(
         blackouts or (), monday + dt.timedelta(days=6),
         (sum(hist[-5:-1]) / 4.0) if len(hist) >= 5 else (hist[-1] if hist else None), longest)
+    # 紅燈之後先走跑交替 (SP-272, week_plan's injury_light "walkrun"): the stages still to come take the next
+    # weeks' runs, then the Daniels block expected after them
+    wr = cur.get("injury_light") if (cur.get("injury_light") or {}).get("color") == "walkrun" else None
+    wr_left = list((wr or {}).get("walkrun_left") or [])
+    wr_next = (wr or {}).get("walkrun_next")
+    if (wr or {}).get("block"):
+        blocks.append(wr["block"])
     cb = cur.get("b2b") or {}
     b2b_state = B2B.next_state(cb, monday, cur_s)          # 連續兩天長天 (engine/b2b.py)
     lc_cur = cur.get("steep_hill") or {}                    # 陡坡健走（模擬負重） (engine/steep_hill.py)
@@ -757,6 +765,21 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
         # 依傷別迴避課型 (SP-270): the same pass as week_plan (overview.condition_apply)
         if inj_rule is not None:
             ss = O.condition_apply(ss, inj_events, notes)
+        if wr_left:
+            # SP-272: this week's walk-run sessions instead of its runs (strength stays)
+            first = max(week, _d(wr_next)) if wr_next else week
+            ss = [s for s in ss if s["kind"] not in O.RUN_KINDS]
+            d = first
+            while wr_left and d <= week + dt.timedelta(days=6):
+                if d.isoformat() in bmap:
+                    d += dt.timedelta(days=1)
+                    continue
+                ss.append(O.walkrun_session(wr_left.pop(0), d.isoformat(),
+                                            float((cur.get("tss_per_category") or {}).get("road") or tph)))
+                d += dt.timedelta(days=2)
+            wr_next = d.isoformat()
+            notes.append({"level": "watch", "src": "injury_light",
+                          "text": _("走跑階段：照進度排走跑交替；連續跑 30 分 3 次之後才接恢復期")})
         if tc and kind == "taper":
             n = O.taper_climb_note(tc, cur_t.get("pre_climb") if same else cur.get("climb4"),
                                    hours / (cur_t.get("pre_hours") if same else pre_h)

@@ -238,7 +238,7 @@ def validate_event(f: dict, today: Optional[dt.date] = None) -> Optional[str]:
     if "days_missed" in f and f["days_missed"] is not None and (
             isinstance(f["days_missed"], bool) or not isinstance(f["days_missed"], int) or not 0 <= f["days_missed"] <= 730):
         return "INVALID_DAYS_MISSED"
-    for k in ("onset_date", "resolved_date"):
+    for k in ("onset_date", "resolved_date", "walkrun_from"):
         if k in f and f[k] is not None:
             v = _iso(f[k])
             if v is None or v != str(f[k])[:10] or v > (today + dt.timedelta(days=1)).isoformat():
@@ -446,6 +446,7 @@ def event_json(ev: dict, today: dt.date, linked: int = 0, auto_days: Optional[in
             "illness_label": _(ILLNESS[ev["illness"]]) if ill and ev.get("illness") in ILLNESS else "",
             # 傷別 (SP-269): the condition and its pain-monitoring text (illness: none)
             "condition": None if ill else ev.get("condition"),
+            "walkrun_from": None if ill else ev.get("walkrun_from"),
             "condition_label": "" if ill else condition_label(ev.get("condition")),
             "monitor": None if ill else monitor(ev)["text"],
             "area_label": area_label(ev.get("area")), "label": event_label(ev),
@@ -470,7 +471,7 @@ def summary(ev: Optional[dict], today: dt.date) -> Optional[dict]:
 
 EVENT_COLS = ("id", "athlete_id", "area", "side", "kind", "severity", "pain_max", "onset_date", "onset_key",
               "onset_file", "status", "resolved_date", "days_missed", "pause_quality", "recurrence_of", "note",
-              "category", "illness", "condition")
+              "category", "illness", "condition", "walkrun_from")
 _memo: dict = {}
 
 
@@ -676,8 +677,8 @@ RISE_YELLOW = 2         # 推估: 2 points above the last score
 RED_SCORE = 7           # 推估
 YELLOW_LONG = 0.75      # 推估: the long run one step shorter
 LIMIT = {"achilles": SILBERNAGEL["during_max"], "pfp": ESCULIER["during_max"]}
-LIGHTS = {"green": N_("綠燈"), "yellow": N_("黃燈"), "red": N_("紅燈")}
-_LRANK = {"green": 0, "yellow": 1, "red": 2}
+LIGHTS = {"green": N_("綠燈"), "yellow": N_("黃燈"), "red": N_("紅燈"), "walkrun": N_("走跑階段")}
+_LRANK = {"green": 0, "yellow": 1, "walkrun": 2, "red": 3}
 
 
 def _mark_light(m: dict, prev_score: Optional[int], cond: Optional[str]) -> tuple[str, str]:
@@ -726,13 +727,153 @@ def event_light(e: dict, marks: list[dict], day: dt.date, since: Optional[dt.dat
     return {**base, "color": color, "reason": reason, "date": when}
 
 
+# ---- 紅燈之後先走跑交替 (SP-272; injury-graded-return.md §2.4, §4.3, §4.6, owner §6.1 point 5) -----------
+# Ohio State Wexner's return-to-running guideline (clinical, coach-level): first walk 30 min without
+# pain, then walk / run 4/1 → 3/2 → 2/3 → 1/4 min, 2–3 times each with a rest day between run days,
+# then 30 min continuous × 3; 「Do not progress phases if …」 = a 痛 repeats the stage. After red (SP-271):
+# a walk / hike ≥ WALK_CHECK_MIN marked 沒痛 / 痠, or the 「可以開始走跑」 button (walkrun_from), starts
+# it; an unmarked run counts as no pain and moves on (§6.1 point 5); 中斷 (or ≥ RED_SCORE) goes back to
+# red. The stages are not re-entry days: reentry.py starts the Daniels block the day after the last
+# continuous 30 (§6.1 point 5). Illness: never. The app doesn't judge whether running may start.
+WALK_CHECK_MIN = 30
+WALKRUN = ((4, 1), (3, 2), (2, 3), (1, 4))       # (walk, run) minutes per interval — Wexner
+WALKRUN_REPS = 6        # 推估: Wexner 3–6 times per session; 6 × 5 min = 30 min, as long as the walk check
+WALKRUN_PER_STAGE = 3   # Wexner: each stage 2–3 times; 3 = the conservative end (推估)
+CONT_MIN, CONT_N = 30, 3                         # Wexner: 30 min continuous × 3
+
+
+def _need(stage: int) -> int:
+    return CONT_N if stage >= len(WALKRUN) else WALKRUN_PER_STAGE
+
+
+def _relevant(m: dict, e: dict) -> bool:
+    return m.get("injury_id") == e.get("id") or (m.get("injury_id") is None and m.get("area") in (None, e.get("area")))
+
+
+def return_state(e: dict, marks: list[dict], day: dt.date) -> Optional[dict]:
+    """The return-to-run state of an injury on `day` (SP-272) from its marked runs / walks (foot_log):
+    {"phase": "light" (never red, or back after the walk-run) | "red" (waiting for the walk check /
+    button) | "walkrun", "since" (light: the first day its marks count from), "stage" (0–3 walk / run,
+    4 = continuous 30), "n" (sessions done in the stage), "last_run" (the last walk-run / check day),
+    "reason", "episodes": [{red, start, first_run, done}]}; None for an illness."""
+    if is_illness(e):
+        return None
+    o = _d(e.get("onset_date")) or day
+    items = sorted((m for m in marks if o.isoformat() <= m["date"] <= day.isoformat() and _relevant(m, e)),
+                   key=lambda m: m.get("key") or m["date"])
+    button = e.get("walkrun_from")
+    st = {"phase": "light", "since": None, "stage": 0, "n": 0, "last_run": None, "reason": "", "episodes": []}
+    ep: Optional[dict] = None
+    prev_score = prev_color = None
+    red_key = ""
+
+    def to_red(date: str, key: str, why: str):
+        nonlocal ep, red_key
+        ep = {"red": date, "start": None, "first_run": None, "done": None}
+        st["episodes"].append(ep)
+        st.update(phase="red", stage=0, n=0, reason=why)
+        red_key = key
+
+    def start(date: str, why_last: Optional[str]):
+        ep["start"] = date
+        st.update(phase="walkrun", stage=0, n=0, last_run=why_last)
+
+    if e.get("severity") == "severe":
+        to_red(o.isoformat(), "", _("嚴重度選了「重」（停跑）"))
+    for m in items:
+        if st["phase"] == "red" and button and button >= ep["red"] and button <= m["date"]:
+            start(button, None)
+        if st["phase"] == "light":
+            if m.get("cat", "run") != "run" or m.get("pain") is None:
+                continue
+            c, why = _mark_light(m, prev_score, e.get("condition"))
+            if c == "yellow" and prev_color == "yellow":
+                c, why = "red", _("連兩次黃燈（{why}）", why=why)
+            prev_color = c
+            if m.get("score") is not None:
+                prev_score = m["score"]
+            if c == "red":
+                to_red(m["date"], m.get("key") or m["date"], why)
+            continue
+        if st["phase"] == "red":
+            if m.get("cat") == "walk" and (m.get("minutes") or 0) >= WALK_CHECK_MIN and m.get("pain") in (0, 1) \
+                    and (m.get("key") or m["date"]) > red_key:
+                start(m["date"], m["date"])
+            elif m.get("cat", "run") == "run" and m.get("pain") == 3:
+                red_key = m.get("key") or m["date"]
+            continue
+        # walk-run
+        if m.get("cat", "run") != "run":
+            continue
+        if m.get("pain") == 3 or (m.get("score") is not None and m["score"] >= RED_SCORE):
+            to_red(m["date"], m.get("key") or m["date"], _("走跑階段標了「中斷」") if m.get("pain") == 3
+                   else _("{s}/10，{n}/10 以上", s=m["score"], n=RED_SCORE))
+            continue
+        ep["first_run"] = ep["first_run"] or m["date"]
+        st["last_run"] = m["date"]
+        if m.get("pain") == 2:
+            continue                                    # 痛: the next session repeats the stage
+        st["n"] += 1
+        if st["n"] >= _need(st["stage"]):
+            st["stage"] += 1
+            st["n"] = 0
+            if st["stage"] > len(WALKRUN):
+                ep["done"] = m["date"]
+                st.update(phase="light", since=(_d(m["date"]) + dt.timedelta(days=1)).isoformat(), stage=0)
+                prev_score = prev_color = None
+    if st["phase"] == "red" and button and button >= ep["red"] and button <= day.isoformat():
+        start(button, None)
+    return st
+
+
+def walkrun_sessions(st: dict) -> list[dict]:
+    """The sessions still to do in the walk-run (SP-272), in order: {"stage", "k" (its number in the
+    stage, 1-based), "walk", "run", "reps", "minutes"} — walk / run stages, then the continuous 30s."""
+    out = []
+    for stage in range(st.get("stage", 0), len(WALKRUN) + 1):
+        first = st.get("n", 0) if stage == st.get("stage", 0) else 0
+        for k in range(first, _need(stage)):
+            if stage < len(WALKRUN):
+                w, r = WALKRUN[stage]
+                out.append({"stage": stage, "k": k + 1, "walk": w, "run": r, "reps": WALKRUN_REPS,
+                            "minutes": (w + r) * WALKRUN_REPS})
+            else:
+                out.append({"stage": stage, "k": k + 1, "walk": 0, "run": CONT_MIN, "reps": 1, "minutes": CONT_MIN})
+    return out
+
+
+def walkrun_steps(x: dict) -> dict:
+    """The COROS / editor steps of a walk-run session (engine/workout_steps.py doc): ×reps of walk
+    (no target) then easy run; the continuous 30 is one easy step."""
+    from backend.engine import workout_steps as WS
+    ids = WS._Ids("w")
+    easy = {"type": "auto", "intent": "easy"}
+    if x["walk"] <= 0:
+        items = [WS.step(ids, "work", x["run"] * 60, easy, _("連續輕鬆跑 {m} 分", m=x["run"]))]
+    else:
+        items = [WS.rep(ids, x["reps"], [WS.step(ids, "rest", x["walk"] * 60, None, _("走路 {m} 分", m=x["walk"])),
+                                         WS.step(ids, "work", x["run"] * 60, easy, _("輕鬆跑 {m} 分", m=x["run"]))],
+                        True, _("走 {w}／跑 {r}", w=x["walk"], r=x["run"]))]
+    return WS.doc(items, origin="template:lib:walkrun")
+
+
 def light(events: list[dict], marks: list[dict], day: dt.date) -> Optional[dict]:
-    """The worst light of the injuries open on `day` (SP-271); None without one (illness: never)."""
+    """The worst light of the injuries open on `day` (SP-271); None without one (illness: never).
+    SP-272: after red the event stays red until the walk check / button, then "walkrun" (the
+    walk-run state in "walkrun"); back in "light" after it, only its marks from then count."""
     best = None
     for e in active_on(events or [], day):
         if is_illness(e) or (e.get("status") == "resolved" and _d(e.get("resolved_date")) == day):
             continue
-        r = event_light(e, marks, day)
+        rs = return_state(e, marks, day)
+        base = {"id": e.get("id"), "label": full_label(e.get("area"), e.get("side")), "condition": e.get("condition"),
+                "date": None, "walkrun": rs}
+        if rs["phase"] == "red":
+            r = {**base, "color": "red", "reason": rs["reason"]}
+        elif rs["phase"] == "walkrun":
+            r = {**base, "color": "walkrun", "reason": _("走跑階段第 {s} 階", s=min(rs["stage"], len(WALKRUN)) + 1)}
+        else:
+            r = {**event_light(e, marks, day, since=_d(rs["since"]) if rs["since"] else None), "walkrun": rs}
         if best is None or _LRANK[r["color"]] > _LRANK[best["color"]]:
             best = r
     if best is not None:
