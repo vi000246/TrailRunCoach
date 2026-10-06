@@ -360,8 +360,29 @@ def _panel_kind(c: dict) -> Optional[str]:
     return "map" if c.get("kind") == "other" and c.get("class") == MAP_PANEL else c.get("kind")
 
 
+def _needs_met() -> dict:
+    """Chart `needs` conditions on the athlete's own data (customviews.NEEDS):
+    "poles" = ≥ 5 有杖 and ≥ 5 沒杖 marks in the last 365 days (SP-243). False
+    when the tag store can't be read."""
+    from backend.engine import activity_tags as AT
+    try:
+        poles = AT.pole_counts(AT.load(), today_local())["eligible"]
+    except Exception:                          # noqa: BLE001 — no tag store: the chart stays hidden
+        poles = False
+    return {"poles": poles}
+
+
 @router.get("/views")
 def list_views():
+    met = None
+
+    def needs(c):
+        nonlocal met
+        if not c.get("needs"):
+            return {}
+        met = _needs_met() if met is None else met
+        return {"needs": c["needs"], "needs_met": bool(met.get(c["needs"]))}
+
     return [
         {"name": name, "source": v.get("source", "wko5"), "path": v.get("path"),
          "error": v.get("error"),
@@ -378,6 +399,8 @@ def list_views():
                          # `sports` doesn't list the athlete's sport and sorts by `order`
                          **({"sports": c["sports"]} if c.get("sports") else {}),
                          **({"order": c["order"]} if c.get("order") else {}),
+                         # `needs` (customviews.NEEDS): the viewer hides the chart unless needs_met
+                         **needs(c),
                          **({"view": c.get("view")} if c.get("kind") == "periodzones" else {})}
                         for j, c in enumerate(d["charts"])]}
             for i, d in enumerate(v["dashboards"])]}
@@ -426,7 +449,7 @@ def chart(request: Request, view: str, d: int, c: int, begin: Optional[str] = No
     if needs_workout and (workout is None or not 0 <= workout < len(ds.workouts)):
         raise HTTPException(400, "workout charts need ?workout=<index>")
     if not needs_workout and ch.get("kind") not in ("athlete", "zones", "targets", "z5gate", "periodzones",
-                                                    "climbvam"):
+                                                    "climbvam", "polecompare"):
         raise HTTPException(400, f"unsupported panel {ch.get('class')}")
     pinfo = winfo = binfo = vinfo = None
     if v.get("source") == "custom" and VR.variant_spec(ch):
@@ -471,6 +494,12 @@ def chart(request: Request, view: str, d: int, c: int, begin: Optional[str] = No
             except OSError:
                 stamp.append(None)
         params = {**params, "_routes": json.dumps(stamp)}
+    if ch.get("kind") == "polecompare":
+        # the 有杖／沒杖 marks live in the tags DB (not in the data fingerprint) and the
+        # eligibility counts the last 365 days from today
+        from backend.engine import activity_tags as AT
+        params = {**params, "_poles": json.dumps(AT.pole_marks_stamp(AT.load())),
+                  "_today": today_local().isoformat()}
     # the data source is in data_fingerprint too (ds.source + its source_stamp); named here as well
     req = {"view": view, "d": d, "c": c, "begin": b, "end": e, "parity": ds.config.parity,
            "source": getattr(ds, "source", None) or "wko5",
@@ -584,6 +613,10 @@ def _render(ch: dict, ds: Dataset, b: float, e: float, sports: Optional[str], w,
         # steady-climb VAM:HR on trail runs and hikes; ?route=<route id> (part of the render-cache key)
         from backend.engine.panels.climb_vam import render as render_climb_vam
         return render_climb_vam(ds, ch, b, e, params or {})
+    if ch.get("kind") == "polecompare":
+        # 有杖 vs 沒杖 per grade bin (SP-243); the marks are in the key (chart())
+        from backend.engine.panels.pole_compare import render as render_pole_compare
+        return render_pole_compare(ds, ch, b, e, params or {}, today=today_local())
     if ch.get("kind") == "review":
         from backend.engine.workout_review import review
         return {**review(ds, w, ch.get("section") or "summary", basis=ch.get("basis_chosen") or "pace"),
@@ -983,6 +1016,8 @@ def activities_list():
     out.sort(key=lambda a: a["start"], reverse=True)
     return {"source": getattr(ds, "source", None) or "wko5", "origin_labels": ORIGIN_LABELS,
             "types": AT.TYPES, "efforts": AT.EFFORTS, "pole_tags": AT.POLES,
+            # 「再標 N 次就能比較」 beside the 登山杖 choice (SP-243)
+            "pole_compare": AT.pole_counts(tags, today_local()),
             "exclude_enabled": bool(getattr(ds, "exclude_bad", False)), "activities": out}
 
 

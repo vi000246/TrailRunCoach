@@ -63,5 +63,20 @@
   "mapchart.left": "地圖在左",
   "mapchart.metrics": "圖表",
   "mapchart.aria": "這筆活動的海拔、心率、功率、配速和坡度隨時間，和地圖同步",
-  "mapchart.none": "按上面的按鈕選要看的指標"
+  "mapchart.none": "按上面的按鈕選要看的指標",
+  "pole.with": "有杖",
+  "pole.without": "沒杖",
+  "pole.help": "說明",
+  "pole.summary": "這段期間：有杖 {w} 次、沒杖 {wo} 次活動（越野跑和登山健行）；每個點是中位數，n < {n} 不畫。近 365 天共標有杖 {year_w} 次、沒杖 {year_wo} 次。",
+  "pole.axis_n": "有 n={w}・沒 n={wo}",
+  "pole.aria": "{metric}：每個坡度有杖和沒杖的中位數",
+  "pole.median": "中位數",
+  "pole.iqr": "中間一半",
+  "pole.metric_aria": "要比的量",
+  "pole.too_few": "次數太少，不畫",
+  "pole.table": "表格",
+  "pole.col_metric": "量",
+  "pole.col_bin": "坡度",
+  "pole.col_group": "有沒有杖",
+  "pole.no_impact": "這些活動沒有衝擊資料（手錶或 Stryd 走路時可能不輸出），下坡只比垂直速度和步頻。"
 }

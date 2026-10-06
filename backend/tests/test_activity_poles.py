@@ -169,13 +169,18 @@ def test_the_mark_changes_no_capacity_sample(monkeypatch):
                 assert sample({**row, "tags_json": f'["{tag}"]'}, rest) == plain, (rest, user, tag)
 
 
+# the only engine modules that may read the mark: the tag store itself and the 有杖 vs 沒杖
+# comparison chart (SP-243, a display — nothing in engine/ imports it: test_pole_compare.py)
+POLE_READERS = {"engine/activity_tags.py", "engine/panels/pole_compare.py"}
+
+
 def test_no_model_module_reads_the_pole_mark():
-    """Only activity_tags.py knows the pole tags: no prediction model (the
-    calculator, the HR model, the downhill bump, …) reads them."""
-    pat = re.compile(r"poles_of|with_poles|exclusive_poles|\bPOLES\b|有杖|沒杖")
+    """Only activity_tags.py (and the comparison chart) know the pole tags: no
+    prediction model (the calculator, the HR model, the downhill bump, …) reads them."""
+    pat = re.compile(r"poles_of|with_poles|exclusive_poles|pole_counts|pole_marks_stamp|\bPOLES\b|有杖|沒杖")
     hits = []
     for p in sorted((ROOT / "engine").rglob("*.py")):
-        if p.name == "activity_tags.py":
+        if p.relative_to(ROOT).as_posix() in POLE_READERS:
             continue
         if pat.search(p.read_text(encoding="utf-8")):
             hits.append(str(p.relative_to(ROOT)))

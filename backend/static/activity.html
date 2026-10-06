@@ -274,7 +274,7 @@ const PREF = "activitylist.filters", PER = 50;
 // pain: the 傷病紀錄 meta (null in the demo mode: no 疼痛 column / filter / row)
 // ach: the 成就 records (GET /api/v1/achievements, loaded once; null until then) — the 成就 tab and
 // the per-activity badges / 「有成就」 filter all read this one copy
-const S = { acts: [], stats: {}, auto: null, types: {}, efforts: {}, poleTags: {}, usePower: true, pain: null,
+const S = { acts: [], stats: {}, auto: null, types: {}, efforts: {}, poleTags: {}, poleCompare: null, usePower: true, pain: null,
   sort: { k: "date", dir: -1 }, page: 0, sel: null, detail: null, merge: null, originLabels: {},
   tab: "acts", ach: null, achErr: null, achMin: new Map(), actMin: new Map(),
   asort: { k: "date", dir: -1 }, aopen: new Set(), acls: new Set(["baiyue", "mid", "low"]) };
@@ -522,6 +522,7 @@ async function loadList() {
   const r = await j(`${API}/activities`);
   S.acts = r.activities; S.types = r.types; S.efforts = r.efforts;
   S.poleTags = r.pole_tags || {};
+  S.poleCompare = r.pole_compare || null;
   S.merge = r.merge || null; S.originLabels = r.origin_labels || {};
   S.actMin = new Map();
   for (const a of S.acts) { const m = minOf(a.key); if (m != null && (!S.actMin.has(m) || a.index != null)) S.actMin.set(m, a); }
@@ -590,6 +591,24 @@ function polesOf(a) {
   return p;
 }
 const withPoles = (tags, p) => [...(tags || []).filter((t) => !isPoleTag(t)), ...(S.poleTags[p] ? [S.poleTags[p]] : [])];
+// 「有杖 vs 沒杖」 (分析 → 能力, SP-243) appears once the last 365 days have ≥ 5 of each mark
+// (server: activity_tags.pole_counts → S.poleCompare); until then the choice says how many more
+function poleHint() {
+  const pc = S.poleCompare;
+  if (!pc) return "";
+  if (pc.eligible) return T("poles.ready");
+  const what = [pc.more_with ? T("poles.more_with", { n: pc.more_with }) : "",
+    pc.more_without ? T("poles.more_without", { n: pc.more_without }) : ""].filter(Boolean).join(T("poles.more_sep"));
+  return T("poles.more", { what, need: pc.need, days: pc.days });
+}
+function bumpPoleCount(a, from, to) {      // keep the hint live after a save (the server recounts on reload)
+  const pc = S.poleCompare;
+  if (!pc || from === to || !pc.since || (a.start || "").slice(0, 10) < pc.since) return;
+  if (from) pc[from] = Math.max(0, pc[from] - 1);
+  if (to) pc[to] += 1;
+  pc.more_with = Math.max(0, pc.need - pc.with); pc.more_without = Math.max(0, pc.need - pc.without);
+  pc.eligible = !pc.more_with && !pc.more_without;
+}
 const badge = (manual, why) => manual ? `<span class="badge man" title="${esc(T("manual_tip"))}">${esc(T("manual"))}</span>`
   : `<span class="badge" title="${esc(why || T("auto_tip"))}">${esc(T("auto"))}</span>`;
 function setMsg(t, cls) { const m = $("msg"); if (m) { m.textContent = t; m.className = "msg " + (cls || ""); } }
@@ -667,7 +686,8 @@ function renderEditor() {
       <div class="why">${a.user_effort ? esc(T("auto_was", { v: S.efforts[eAuto] || "—", why: eWhy || "" })) : esc(eWhy || (pending ? T("computing") : ""))}${recTxt ? `<br>${esc(recTxt)}` : ""}</div></div>
     <div class="fld"><span class="lab">${esc(T("f_poles"))}${qt(T("help.poles"))}</span>
       <div class="ctl" role="group" aria-label="${esc(T("f_poles"))}">${POLE_OPTS.map((v) =>
-        `<button type="button" class="cchip" data-poles="${v}" aria-pressed="${polesOf(a) === v}">${esc(T("poles." + (v || "none")))}</button>`).join("")}</div></div>
+        `<button type="button" class="cchip" data-poles="${v}" aria-pressed="${polesOf(a) === v}">${esc(T("poles." + (v || "none")))}</button>`).join("")}</div>
+      <div class="why" data-pole-hint>${esc(poleHint())}</div></div>
     ${S.pain ? `<div class="fld"><span class="lab">${esc(T("col.pain"))}${qt(T("help.pain"))}</span><div class="ctl" id="pain-ctl">${PainPicker.html(painState(a), S.pain, { qtip: qt })}</div></div>` : ""}
     ${a.index != null ? `<div class="fld"><span class="lab">${esc(T("f_pack"))}${qt(T("help.pack"))}</span>
       <div class="ctl">${!d ? esc(T("loading")) : `<input type="number" data-pack min="0" max="40" step="0.5" inputmode="decimal" style="width:6em" value="${pk?.pack_kg ?? ""}" placeholder="—" aria-label="${esc(T("f_pack"))}"> kg`}</div></div>` : ""}
@@ -701,6 +721,7 @@ function patchLocal(a, r) {
 // racepower_hike_meta.json) — the FIT / TP / WKO5 files are never written
 async function saveFields(a, patch) {
   setMsg(T("saving"));
+  const poleWas = "poles" in patch ? polesOf(a) : null;
   try {
     if (a.index != null) {
       const r = await send(`${API}/workouts/${a.index}/activity`, "PATCH", patch);
@@ -717,6 +738,7 @@ async function saveFields(a, patch) {
       if ("pain_area" in patch) a.pain_area = patch.pain_area;
     }
     if ("tags" in patch) fillFilterOptions();
+    if ("poles" in patch) bumpPoleCount(a, poleWas || null, patch.poles || null);
     render(); renderEditor(); setMsg(T("saved"), "ok");
   } catch (e) { setMsg(T("save_failed", { err: e.message }), "err"); }
 }
