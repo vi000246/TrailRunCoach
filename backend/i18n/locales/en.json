@@ -1371,6 +1371,7 @@
   "預估會超過關門時間：建議報短一點的組別，或這場先不跑": "Predicted past the cutoff: consider a shorter distance, or skip this one",
   "預估還沒到山頂就得撤退：這座百岳可能還不適合現在的你。可以換短一點的路線、多排一天，或先不去": "Predicted to turn back before the summit: this Taiwan's 100 Peaks (Baiyue) route may not suit you yet. Pick a shorter route, add a day, or wait",
   "預報有雨：下坡和技術路段可能比預估慢，跌倒風險較高；建議用杖、注意鞋底抓地": "Rain in the forecast: downhills and technical sections may be slower than predicted and falls more likely; consider poles and shoes with good grip",
+  "預報有雨：路面濕滑，轉彎和下坡注意抓地，跌倒風險較高": "Rain in the forecast: wet roads, so watch your grip on corners and downhills; falls are more likely",
   "預報沒有涵蓋這些日期": "The forecast does not cover these dates",
   "預設 −0.07": "Default −0.07",
   "預設背負 {pack}": "Default pack {pack}",

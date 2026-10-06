@@ -8,7 +8,9 @@ Provider chain for race day (first success wins; every value stays editable):
        F-B0053-033 登山一週日夜 (06–18 / 18–06 blocks, 7 days)
      Whole-file downloads (~12 / ~7.5 MB) → compacted and cached on disk,
      refreshed when ≥ 3 h old.
-  2. CWA 鄉鎮天氣預報 (SP-234; same 授權碼, same whole-file download + cache):
+  2. Open-Meteo forecast (no key, ≤ 16 days).
+  3. CWA 鄉鎮天氣預報 (SP-234; the fallback when Open-Meteo has no data or
+     fails; same 授權碼, same whole-file download + cache):
        F-D0047-089 臺灣未來3天 (temperature / dew point / RH hourly on day 1,
                    3-hourly to day 3; 3-hour PoP)
        F-D0047-091 臺灣未來1週 (12-hour blocks; 12-hour PoP)
@@ -19,12 +21,9 @@ Provider chain for race day (first success wins; every value stays editable):
      and (when not given) the race's height come from Open-Meteo's elevation
      API (Copernicus GLO-90, cached for good) and the temperature is moved
      by −0.65 °C / 100 m to the race elevation, RH kept (as SP-210).
-     Before Open-Meteo: CWA's forecasters edit this product for Taiwan, the
-     acceptance criteria of SP-234 want it whenever a key is set, and the
-     elevation gap is corrected the same way Open-Meteo corrects its grid.
-     Not compared against stations yet (SP-234 asks for it; needs CWA
+     After Open-Meteo (owner decision 2026-10-06) until a station comparison
+     shows which is closer in Taiwan (SP-234 asks for one; it needs CWA
      observations, i.e. the key) — see docs/spec/racepower.spec.md.
-  3. Open-Meteo forecast (no key, ≤ 16 days).
   4. Open-Meteo archive climatology (SP-210): the month centred on the race
      date (±15 days) in each of the last 10 years, at the target elevation
      (Open-Meteo downscales; −6.5 °C/km from the answer's elevation when it
@@ -487,40 +486,53 @@ def open_meteo_rain_rows(js: dict, dates: set[dt.date]) -> list[dict]:
     return _rain_window(rows, dates)
 
 
+Window = tuple[dt.datetime, dt.datetime]
+
+
 def race_window(date: Optional[str], start_time: Optional[str], days: int,
-                duration_s: Optional[float]) -> Optional[tuple[dt.datetime, dt.datetime]]:
-    """The race's clock window: start → start + duration for a one-day race
-    with a start time; else the whole event days."""
+                duration_s: Optional[float]) -> Optional[list[Window]]:
+    """The race's clock windows (owner decision 2026-10-06): start → start +
+    duration for a one-day race with a start time; otherwise daytime
+    (DAY_HOURS, 06:00–18:00 local) of each event day — day 1 from the start
+    time when that is earlier (a pre-dawn 百岳 start)."""
     try:
         d = dt.date.fromisoformat(str(date)[:10])
     except (TypeError, ValueError):
         return None
+    n = max(1, days or 1)
     day0 = dt.datetime(d.year, d.month, d.day)
-    whole = (day0, day0 + dt.timedelta(days=max(1, days or 1)))
-    if (days or 1) > 1 or not start_time or not duration_s:
-        return whole
-    try:
-        h, m = (int(x) for x in str(start_time).split(":")[:2])
-        s = day0.replace(hour=h, minute=m)
-    except ValueError:
-        return whole
-    return s, s + dt.timedelta(seconds=float(duration_s))
+    start = None
+    if start_time:
+        try:
+            h, m = (int(x) for x in str(start_time).split(":")[:2])
+            start = day0.replace(hour=h, minute=m)
+        except ValueError:
+            start = None
+    if n == 1 and start is not None and duration_s:
+        return [(start, start + dt.timedelta(seconds=float(duration_s)))]
+    lo, hi = dt.timedelta(hours=DAY_HOURS.start), dt.timedelta(hours=DAY_HOURS.stop)
+    wins = [(day0 + dt.timedelta(days=i) + lo, day0 + dt.timedelta(days=i) + hi) for i in range(n)]
+    if start is not None and start < wins[0][0]:
+        wins[0] = (start, wins[0][1])
+    return wins
 
 
-def rain_alert(rows: Optional[list[dict]], window: Optional[tuple[dt.datetime, dt.datetime]]) -> Optional[dict]:
-    """The SP-249 reminder for the rows overlapping the window: alert when any
-    row's PoP ≥ RAIN_POP_PCT or their summed amount ≥ RAIN_MM. None when there
-    is no rain data in the window (nothing is shown). Never touches the time."""
-    if not rows or window is None:
+def rain_alert(rows: Optional[list[dict]], window, kind: str = "trail") -> Optional[dict]:
+    """The SP-249 reminder for the rows overlapping the window(s) (one
+    (start, end) or a list of them): alert when any row's PoP ≥ RAIN_POP_PCT
+    or their summed amount ≥ RAIN_MM. None when there is no rain data in the
+    window (nothing is shown). Never touches the time. `kind` "road" gets a
+    road wording (no poles, no technical sections)."""
+    if not rows or not window:
         return None
-    a, b = window
+    wins = [window] if isinstance(window, tuple) else list(window)
     hit = []
     for r in rows:
         try:
             s, e = dt.datetime.fromisoformat(r["start"]), dt.datetime.fromisoformat(r["end"])
         except (KeyError, TypeError, ValueError):
             continue
-        if s < b and e > a:
+        if any(s < b and e > a for a, b in wins):
             hit.append(r)
     pops = [float(r["pop_pct"]) for r in hit if r.get("pop_pct") is not None]
     mms = [float(r["mm"]) for r in hit if r.get("mm") is not None]
@@ -529,8 +541,13 @@ def rain_alert(rows: Optional[list[dict]], window: Optional[tuple[dt.datetime, d
     max_pop = max(pops) if pops else None
     total = sum(mms) if mms else None
     alert = (max_pop is not None and max_pop >= RAIN_POP_PCT) or (total is not None and total >= RAIN_MM)
-    return {"alert": alert, "max_pop_pct": max_pop, "total_mm": total, "rows": len(hit),
-            "message": _("預報有雨：下坡和技術路段可能比預估慢，跌倒風險較高；建議用杖、注意鞋底抓地") if alert else None}
+    if not alert:
+        msg = None
+    elif kind == "road":
+        msg = _("預報有雨：路面濕滑，轉彎和下坡注意抓地，跌倒風險較高")
+    else:
+        msg = _("預報有雨：下坡和技術路段可能比預估慢，跌倒風險較高；建議用杖、注意鞋底抓地")
+    return {"alert": alert, "max_pop_pct": max_pop, "total_mm": total, "rows": len(hit), "message": msg}
 
 
 def hourly_at(rows: list[dict], when: dt.datetime) -> Optional[dict]:
@@ -863,13 +880,43 @@ def race_conditions(*, date: dt.date, days: int = 1, lat: Optional[float] = None
                                 cwa_rain_rows(m, want))
                 except Exception as e:          # noqa: BLE001 — fall through to the next provider
                     tried.append({"provider": prov, "ok": False, "reason": str(e)[:120]})
-    # 2. CWA 鄉鎮預報 (SP-234): the nearest 鄉鎮公所, temperature lapsed to the race elevation
+    if lat is None or lon is None:
+        tried.append({"provider": "open_meteo", "ok": False, "reason": "沒有座標"})
+        tried.append({"provider": "cwa_town", "ok": False, "reason": _("沒有座標")})
+        return {"provider": "manual", "label": _(PROVIDER_LABEL["manual"]), "values": None, "tried": tried,
+                "location": loc, "fetched_at": None, "lead_days": lead, "hourly": None, "rain": None}
+    end = date + dt.timedelta(days=max(1, days) - 1)
+    # 2. Open-Meteo forecast
+    if 0 <= lead and (end - today).days < OM_HORIZON_DAYS:
+        try:
+            # one extra day when the horizon allows: the hourly rows for a race
+            # that runs past midnight (the daytime mean still uses `want` only)
+            q_end = end + dt.timedelta(days=1) if (end - today).days + 1 < OM_HORIZON_DAYS else end
+            params = {"latitude": lat, "longitude": lon,
+                      "hourly": "temperature_2m,relative_humidity_2m,dew_point_2m,surface_pressure,"
+                                "precipitation,precipitation_probability",          # SP-249
+                      "timezone": "auto", "start_date": date.isoformat(), "end_date": q_end.isoformat()}
+            if elevation_m is not None:
+                params["elevation"] = elevation_m
+            js = get(OM_FORECAST, params, 10.0)
+            c = parse_open_meteo(js, want)
+            if c:
+                tried.append({"provider": "open_meteo", "ok": True})
+                return done("open_meteo", c, {"grid_elevation_m": c.get("grid_elevation_m"),
+                                              "attribution": ATTRIBUTION}, open_meteo_hourly_rows(js, want),
+                            open_meteo_rain_rows(js, want))
+            tried.append({"provider": "open_meteo", "ok": False, "reason": "回應沒有這些日期"})
+        except Exception as e:               # noqa: BLE001
+            tried.append({"provider": "open_meteo", "ok": False, "reason": str(e)[:120]})
+    else:
+        tried.append({"provider": "open_meteo", "ok": False, "reason": f"超出 {OM_HORIZON_DAYS} 天預報範圍"})
+    # 3. CWA 鄉鎮預報 (SP-234), the fallback when Open-Meteo has no data or fails (owner 2026-10-06:
+    #    Open-Meteo first until a station comparison exists): the nearest 鄉鎮公所, temperature lapsed
+    #    to the race elevation
     if not use_cwa:
         tried.append({"provider": "cwa_town", "ok": False, "reason": _("未使用")})
     elif lead < 0 or lead > 6:
         tried.append({"provider": "cwa_town", "ok": False, "reason": _("日期不在一週預報範圍（還有 {n} 天）", n=lead)})
-    elif lat is None or lon is None:
-        tried.append({"provider": "cwa_town", "ok": False, "reason": _("沒有座標")})
     else:
         tkey = get_key()
         if not tkey and not any((cache_dir / f"cwa_{d}.json").exists() for d in (CWA_TOWN_HOURLY, CWA_TOWN_WEEKLY)):
@@ -909,35 +956,6 @@ def race_conditions(*, date: dt.date, days: int = 1, lat: Optional[float] = None
                                              "attribution": ATTRIBUTION}, rows or None, cwa_rain_rows(m, want))
                 except Exception as e:          # noqa: BLE001 — the weekly file, then the next provider
                     tried.append({"provider": prov, "ok": False, "reason": str(e)[:120]})
-    if lat is None or lon is None:
-        tried.append({"provider": "open_meteo", "ok": False, "reason": "沒有座標"})
-        return {"provider": "manual", "label": _(PROVIDER_LABEL["manual"]), "values": None, "tried": tried,
-                "location": loc, "fetched_at": None, "lead_days": lead, "hourly": None, "rain": None}
-    end = date + dt.timedelta(days=max(1, days) - 1)
-    # 3. Open-Meteo forecast
-    if 0 <= lead and (end - today).days < OM_HORIZON_DAYS:
-        try:
-            # one extra day when the horizon allows: the hourly rows for a race
-            # that runs past midnight (the daytime mean still uses `want` only)
-            q_end = end + dt.timedelta(days=1) if (end - today).days + 1 < OM_HORIZON_DAYS else end
-            params = {"latitude": lat, "longitude": lon,
-                      "hourly": "temperature_2m,relative_humidity_2m,dew_point_2m,surface_pressure,"
-                                "precipitation,precipitation_probability",          # SP-249
-                      "timezone": "auto", "start_date": date.isoformat(), "end_date": q_end.isoformat()}
-            if elevation_m is not None:
-                params["elevation"] = elevation_m
-            js = get(OM_FORECAST, params, 10.0)
-            c = parse_open_meteo(js, want)
-            if c:
-                tried.append({"provider": "open_meteo", "ok": True})
-                return done("open_meteo", c, {"grid_elevation_m": c.get("grid_elevation_m"),
-                                              "attribution": ATTRIBUTION}, open_meteo_hourly_rows(js, want),
-                            open_meteo_rain_rows(js, want))
-            tried.append({"provider": "open_meteo", "ok": False, "reason": "回應沒有這些日期"})
-        except Exception as e:               # noqa: BLE001
-            tried.append({"provider": "open_meteo", "ok": False, "reason": str(e)[:120]})
-    else:
-        tried.append({"provider": "open_meteo", "ok": False, "reason": f"超出 {OM_HORIZON_DAYS} 天預報範圍"})
     # 4. climatology: the month around the race date, 10 years, 3 models (fetch_climatology)
     try:
         c = fetch_climatology(lat, lon, elevation_m, date, days, today=today, get=get, cache_dir=cache_dir)

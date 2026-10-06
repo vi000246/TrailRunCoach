@@ -217,8 +217,10 @@ event's stored GPX:
    folder (`weather.home()`), refreshed when ≥ 3 h old; a stale cache is used when there is no key
    or the fetch fails (`backend/engine/racepower/weather.py:424`). Locations match by name, else nearest ≤ 5 km;
    daytime 06–18 values only.
-2. CWA 鄉鎮天氣預報 (SP-234): 臺灣未來3天 F-D0047-089 (temperature / dew point / RH hourly on
-   day 1, 3-hourly to day 3) when the event fits in 3 days, else 臺灣未來1週 F-D0047-091 (12-hour
+2. Open-Meteo forecast (≤ 16 days, lat/lon/elevation). It requests one extra day when the horizon
+   allows, for races that run past midnight.
+3. CWA 鄉鎮天氣預報 (SP-234), the fallback when the Open-Meteo forecast has no data or fails:
+   臺灣未來3天 F-D0047-089 (temperature / dew point / RH hourly on day 1, 3-hourly to day 3) when the event fits in 3 days, else 臺灣未來1週 F-D0047-091 (12-hour
    blocks). Same key, same fileapi download and 3 h disk cache as the mountain files. The nearest
    point (the 鄉鎮市區公所, `CWA_TOWN_MATCH_KM` 20 km, 推估) by coordinates; the files have no
    elevation, so the point's height (and the race's, when not given) comes from Open-Meteo's
@@ -228,11 +230,10 @@ event's stored GPX:
    `town_elevation_m`, `target_elevation_m`, `lapse_m`, `offset_c`; the page names the 鄉鎮 and the
    metres / °C moved. No key, no coordinates, offline, no point within 20 km or no elevation →
    the next step, with the reason in `tried` (`cwa_town`, `cwa_town_hourly`, `cwa_town_weekly`).
-   Placed before Open-Meteo because CWA's forecasters edit it for Taiwan and SP-234's acceptance
-   wants it whenever a key is set; the station comparison SP-234 suggests (needs CWA
-   observations, i.e. the key) has not been run — **open**.
-3. Open-Meteo forecast (≤ 16 days, lat/lon/elevation). It requests one extra day when the horizon
-   allows, for races that run past midnight.
+   After Open-Meteo by the owner's decision (2026-10-06) until the station comparison SP-234
+   suggests (needs CWA observations, i.e. the key) shows which is closer — **open**. The
+   elevation lookup uses Open-Meteo's host too: when all of Open-Meteo is down, the fallback works
+   only for points whose height is already cached.
 4. Open-Meteo archive climatology (SP-210, `fetch_climatology`): the month centred on the race
    date (±15 days) in each of the last 10 years, queried at the target elevation (0.01°, 10 m),
    each hour the mean of ERA5, ERA5-Land and ECMWF IFS 9 km (the three-model mean had the smallest
@@ -256,10 +257,11 @@ precipitation (登山 and 鄉鎮 products, no amount), or Open-Meteo's hourly `p
 `precipitation_probability` (each of the preceding hour, so a row spans t − 1 h … t); `null` for
 the climatology and manual. The page sends them with /plan (`rain`); `calc.rain_reminder` takes
 the race window (start → start + `time_total_s` / `clock_s` / `time_s` + stops for a one-day event
-with a start time, else the whole event days) and `weather.rain_alert` alerts when any row in it has
+with a start time; otherwise 06–18 of each event day, day 1 from an earlier start — owner
+2026-10-06) and `weather.rain_alert` alerts when any row in it has
 PoP ≥ 50 % or the rows sum to ≥ 5 mm (thresholds 推估, kept as proposed). `plan.rain` =
-`{alert, max_pop_pct, total_mm, rows, message}` for trail and 百岳, `null` for road or without rain
-data; the page shows the message under the result heading. The predicted time never changes.
+`{alert, max_pop_pct, total_mm, rows, message}` for road, trail and 百岳 (road has its own wording,
+no poles), `null` without rain data; the page shows the message under the result heading. The predicted time never changes.
 
 CWA key: `CWA_API_KEY` env var, else `weather.json` in the tenant's shared folder (`weather.key_path()`); the API only returns it
 masked (`backend/engine/racepower/weather.py:93`). With region `intl` (`engine/region.py`) the page
@@ -1231,3 +1233,4 @@ when set, but nothing fills it from the routes module yet.
 | 2026-10-06 | bugfix | SP-239, docs/research/long-race-durability-shape.md §4.1 | Trail HR model durability: linear decline then flat at `TRAILHR["v_floor"]` 0.80 (`speed_mult` / `dist_nodecay` / `dbar` closed form, `predict_time` via the closed-form inverse `time_for_nodecay`); no more 2× predictions or jumps past ~11 h (δ 0.05: 12 h no-decay 24 h → 14.25 h; δ 0.15: 6 h → 7.1 h instead of 12 h); ≤ 5 h at δ ≤ 0.05 within 0.5 %; `fit`, back-test, SP-220 cutoff and SP-222 segment ETAs take the new whole-race time; tests in `test_trailhr_floor.py` |
 | 2026-10-06 | feature | SP-234 | Race-day weather: CWA 鄉鎮天氣預報 (F-D0047-089 3 days / -091 1 week) between the mountain forecast and Open-Meteo — nearest 鄉鎮公所 ≤ 20 km, its height from Open-Meteo's elevation API (cached), temperature lapsed −0.65 °C / 100 m to the race elevation, RH kept; page shows the 鄉鎮 and the correction; tests in `test_race_township.py` |
 | 2026-10-06 | feature | SP-249, docs/research/wet-muddy-terrain.md §5 #1 | Rain reminder: /weather returns `rain` rows (CWA PoP, Open-Meteo `precipitation` / `precipitation_probability`), /plan takes them and returns `rain` (trail / 百岳 only; any hour PoP ≥ 50 % or ≥ 5 mm over the race window); the page shows 「預報有雨…」; the time is unchanged; tests in `test_race_rain.py` |
+| 2026-10-06 | feature | owner decisions on SP-234 / SP-249 | Chain reordered: 登山 → Open-Meteo → 鄉鎮 (fallback) → climatology → manual until a station comparison exists; the rain reminder also on road plans (own wording), and without a start time it looks at 06–18 only |

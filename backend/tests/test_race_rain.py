@@ -1,5 +1,5 @@
-"""SP-249: forecast rain → a reminder on the trail and 百岳 calculators, never a
-time change (docs/research/wet-muddy-terrain.md §5 #1: any hour's PoP ≥ 50 %
+"""SP-249: forecast rain → a reminder on the road, trail and 百岳 calculators
+(owner 2026-10-06: road too; no start time → 06–18 only), never a time change (docs/research/wet-muddy-terrain.md §5 #1: any hour's PoP ≥ 50 %
 or ≥ 5 mm over the race window). Fakes only, no network."""
 import datetime as dt
 
@@ -59,11 +59,23 @@ def test_no_rain_data_shows_nothing():
 
 
 def test_race_window():
-    assert WX.race_window(DAY, "06:30", 1, 3600 * 5) == (dt.datetime(2026, 10, 7, 6, 30), dt.datetime(2026, 10, 7, 11, 30))
-    # no start time or a multi-day trip → the whole event days
-    assert WX.race_window(DAY, None, 1, 3600) == (dt.datetime(2026, 10, 7), dt.datetime(2026, 10, 8))
-    assert WX.race_window(DAY, "05:00", 2, 3600) == (dt.datetime(2026, 10, 7), dt.datetime(2026, 10, 9))
+    D = lambda d, h, m=0: dt.datetime(2026, 10, d, h, m)   # noqa: E731
+    assert WX.race_window(DAY, "06:30", 1, 3600 * 5) == [(D(7, 6, 30), D(7, 11, 30))]
+    # no start time → daytime 06–18 only
+    assert WX.race_window(DAY, None, 1, 3600) == [(D(7, 6), D(7, 18))]
+    assert WX.race_window(DAY, None, 2, None) == [(D(7, 6), D(7, 18)), (D(8, 6), D(8, 18))]
+    # a multi-day trip: 06–18 each day, day 1 from an earlier start
+    assert WX.race_window(DAY, "03:30", 2, 3600) == [(D(7, 3, 30), D(7, 18)), (D(8, 6), D(8, 18))]
     assert WX.race_window(None, "05:00", 1, 3600) is None
+
+
+def test_without_a_start_time_night_rain_is_ignored():
+    night = [_row("19:00", "20:00", pop=90, mm=8), _row("04:00", "05:00", pop=90, mm=8),
+             _row("10:00", "11:00", pop=10, mm=0)]
+    r = WX.rain_alert(night, WX.race_window(DAY, None, 1, None))
+    assert r["alert"] is False and r["rows"] == 1
+    day = night + [_row("17:00", "18:00", pop=60)]
+    assert WX.rain_alert(day, WX.race_window(DAY, None, 1, None))["alert"] is True
 
 
 # ---- rows from the providers -------------------------------------------------------
@@ -107,28 +119,33 @@ def test_cwa_pop_spans_are_parsed():
     assert WX.rain_alert(rows, WIN)["alert"] is True
 
 
-# ---- the plan: shown on trail / 百岳, not on road, time unchanged ----------------------
+# ---- the plan: shown on road / trail / 百岳, time unchanged -----------------------------
 
 def _rain_rows(pop):
     return [{"start": f"2099-05-01T{h:02d}:00", "end": f"2099-05-01T{h + 1:02d}:00", "pop_pct": pop, "mm": 0.5}
             for h in range(0, 23)]
 
 
-@pytest.mark.parametrize("kind", ["trail", "baiyue"])
+ROAD_MSG = "預報有雨：路面濕滑，轉彎和下坡注意抓地，跌倒風險較高"
+
+
+@pytest.mark.parametrize("kind", ["road", "trail", "baiyue"])
 def test_plan_reminder_without_changing_the_time(client, kind):   # noqa: F811
     cid = _upload(client)["course_id"]
     body = {"type": kind, "course": {"course_id": cid}, "date": "2099-05-01", "start_time": "06:00"}
     dry = client.post("/api/v1/racepower/plan", json={**body, "rain": _rain_rows(10)}).json()
     wet = client.post("/api/v1/racepower/plan", json={**body, "rain": _rain_rows(80)}).json()
     none = client.post("/api/v1/racepower/plan", json=body).json()
-    assert wet["rain"]["alert"] is True and wet["rain"]["message"] == MSG
+    assert wet["rain"]["alert"] is True and wet["rain"]["message"] == (ROAD_MSG if kind == "road" else MSG)
     assert dry["rain"]["alert"] is False
     assert none["rain"] is None
     assert wet["summary"]["time_s"] == dry["summary"]["time_s"] == none["summary"]["time_s"]
 
 
-def test_road_plan_shows_no_reminder(client):   # noqa: F811
+def test_plan_without_a_start_time_looks_at_daytime_only(client):   # noqa: F811
     cid = _upload(client)["course_id"]
-    p = client.post("/api/v1/racepower/plan", json={"type": "road", "course": {"course_id": cid}, "date": "2099-05-01",
-                                                    "start_time": "06:00", "rain": _rain_rows(90)}).json()
-    assert p["rain"] is None
+    night = [{"start": f"2099-05-01T{h:02d}:00", "end": f"2099-05-01T{h + 1:02d}:00", "pop_pct": 90 if h < 6 or h >= 18 else 10,
+              "mm": 0.0} for h in range(0, 23)]
+    p = client.post("/api/v1/racepower/plan", json={"type": "trail", "course": {"course_id": cid}, "date": "2099-05-01",
+                                                    "rain": night}).json()
+    assert p["rain"]["alert"] is False and p["rain"]["max_pop_pct"] == 10

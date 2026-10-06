@@ -581,16 +581,17 @@ def make_plan(ctx: Context, body: PlanIn) -> dict:
 
 def rain_reminder(body: PlanIn, out: dict) -> Optional[dict]:
     """SP-249: the forecast's rain over the race window (start → finish incl.
-    stops, else the whole event days) on trail and 百岳 plans; None for road
-    or without rain data. Display only — the plan is already computed."""
-    if body.type not in ("trail", "baiyue") or not body.rain:
+    stops; without a start time or on a multi-day trip, 06–18 of each day) on
+    road, trail and 百岳 plans (owner 2026-10-06); None without rain data.
+    Display only — the plan is already computed."""
+    if not body.rain:
         return None
     from backend.engine.racepower import weather as WX
     s = out.get("summary") or {}
     dur = s.get("time_total_s") or s.get("clock_s") or ((s.get("time_s") or 0) + (s.get("stops_s") or 0)) or None
     days = len(out.get("days") or []) or body.days or 1
     win = WX.race_window(body.date, body.start_time, days, dur)
-    return WX.rain_alert([r.model_dump() for r in body.rain], win)
+    return WX.rain_alert([r.model_dump() for r in body.rain], win, "road" if body.type == "road" else "trail")
 
 
 def fuel(ctx: Context, body: PlanIn, out: dict) -> dict:
