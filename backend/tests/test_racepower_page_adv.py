@@ -94,3 +94,17 @@ def test_main_strategy_copy_lives_in_the_panel_once_and_does_not_count_as_a_chan
     assert 'data-i18n="racepower.strategy.tip"' in panel and 'data-i18n="racepower.heat.tip"' in panel
     assert '$("strategy").querySelector(\'[data-k="even"]\').textContent' in src
     assert 'if (!hike && S.strategy !== "even") out.push(T("adv.n.strategy"));' in src
+
+
+def test_trail_gap_is_marked_reference_only_with_its_sources():
+    """SP-248: the trail segment table's GAP column says Minetti / reference only (Looney 2025, Koop);
+    road tables don't get it."""
+    src = PAGE.read_text("utf-8")
+    assert 'if (trail) h += `<div class="note" title="${esc(T("gap.tip"))}">${esc(T("gap.note"))}</div>`;' in src
+    assert '${trail ? ` title="${esc(T("gap.tip"))}"` : ""}' in src
+    for loc in ("zh-TW", "en"):
+        cat = json.loads((STATIC / "i18n" / loc / "racepower.json").read_text("utf-8"))
+        assert "Minetti" in cat["gap.note"] and "Looney 2025" in cat["gap.note"] and "Koop" in cat["gap.note"]
+        assert "Looney 2025" in cat["gap.tip"] and "Koop" in cat["gap.tip"]
+    zh = json.loads((STATIC / "i18n" / "zh-TW" / "racepower.json").read_text("utf-8"))
+    assert "只供參考" in zh["gap.note"] and "陡坡、下坡、技術路段不準" in zh["gap.note"]

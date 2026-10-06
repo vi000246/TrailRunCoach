@@ -24,5 +24,7 @@
   "ev.format_tip": "Stages: one stage a day, set by the organiser — fill in each stage's distance and climb. Non-stop: one course, you decide where to sleep — no per-day numbers; add sleep points to the aid stations in the race calculator instead.",
   "ev.format_stage": "Stages (one a day)",
   "ev.format_continuous": "Non-stop (one course)",
-  "ev.gpx_missing": "Upload a GPX for an ultra: the build-phase climb sessions and the race check need it to know where the climbing is"
+  "ev.gpx_missing": "Upload a GPX for an ultra: the build-phase climb sessions and the race check need it to know where the climbing is",
+  "ev.poles": "I'll use trekking poles",
+  "ev.poles_tip": "When ticked, the race calculator adds a short poles note on steep climbs and steep descents (≤ −15 %). The predicted time, pace and heart rate don't change: studies show poles mainly make it feel easier and take load off the knees, at about the same speed. The activities of the race day (each day of a multi-day trip) are also preset to \"With poles\"; any you set yourself stay as you set them."
 }

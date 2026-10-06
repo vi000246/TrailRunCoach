@@ -178,6 +178,9 @@ class PlanIn(PredictIn):
     heat_ref_alt_m: Optional[float] = None  # the elevation the race-day temperature refers to
     # 路況 (SP-250): the race-day trail surface; used only when the model has the dry / wet split
     surface: Optional[Literal["dry", "wet"]] = None
+    # SP-244: the plan event is marked 會用登山杖 → a hint on steep segments (seg_targets.pole_hint);
+    # text only, no number changes
+    poles: bool = False
 
 
 class ExportIn(PlanIn):
@@ -555,7 +558,7 @@ def make_plan(ctx: Context, body: PlanIn) -> dict:
     aet_d = ctx.inputs().get("aet") or {}
     out["seg_targets"] = ST.plan_targets(out, aet=aet_d.get("aet"), lthr=aet_d.get("lthr"))
     # the main chart / table: pace, power and HR target per segment, null where not valid
-    out["chart_rows"] = ST.chart_rows(out, aet=aet_d.get("aet"), lthr=aet_d.get("lthr"))
+    out["chart_rows"] = ST.chart_rows(out, aet=aet_d.get("aet"), lthr=aet_d.get("lthr"), poles=body.poles)
     if body.type != "baiyue":
         # the absolute-intensity bar's heart-rate version (SP-118; zonebar.py)
         from backend.engine.racepower import zonebar as ZB

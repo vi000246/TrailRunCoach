@@ -11,9 +11,14 @@ vo2max-gate-and-trail-metric.md §2.3, engine/target_policy.py):
                               predicted speed, SP-226): 陡坡（走／走跑皆可／跑）; a 3–8 %
                               climb counts here only when it is walked: 爬坡（走）
     descent                   no power / HR target: time and pace as a reference,
-                              「控制、安全」 (Stryd under-reads the eccentric load, Kipp 2023)
+                              「控制、安全」 (Stryd power under-reads the descent's load:
+                              −7 → +7 % power +90 %, VO2 +74 %, Gravina-Cognetti 2025)
     flat / runnable           power (HR when there is no CP)
     百岳 (pack)                HR ≤ AeT + VAM + segment / day time; never pace
+
+SP-244: a race marked 「會用登山杖」 (planning.Event.poles → PlanIn.poles) gets one
+line per steep climb and steep descent (≤ −15 %) in chart_rows' `pole_hint`
+(docs/research/trekking-poles.md §5 #3). Text only: no time, pace or HR changes.
 
 Road plans keep pace / power and get no targets here. Pure functions on
 the /plan payload.
@@ -36,9 +41,18 @@ STEEP_LABEL = {"walk": N_("陡坡（走）"), "either": N_("陡坡（走跑皆�
 WALKED_CLIMB_LABEL = N_("爬坡（走）")       # 3–8 % but slower than the walk–run transition speed
 SRC = {"run_climb": "3–8 % 坡：Stryd 功率 ≈ 固定代謝負荷（van Rassel 2026）；心率只當上限",
        "steep_climb": "> 8 %：功率低估，改看心率上限與 VAM（Uphill Athlete）",
-       "descent": "下坡：功率和心率都低估離心負荷（Kipp 2023；Gravina-Cognetti），看技術與安全",
+       # SP-247: Gravina-Cognetti et al. 2025 (Sports 13:294; power-gap-trail-validity.md §3 #2)
+       "descent": N_("下坡：功率低估下坡的負荷（Gravina-Cognetti 2025：−7～+7 % 時功率 +90 %、耗氧只 +74 %），心率也不當目標，看技術與安全"),
        "flat": "平路與可跑段：功率（沒有 CP 時看心率）",
        "hike": "百岳揹重：心率 ≤ AeT（Uphill Athlete）＋ VAM；配速受地形與背負影響，不當目標"}
+
+# SP-244 「會用登山杖」 hints (docs/research/trekking-poles.md §2.1–§2.3, §5 #3); no number changes
+POLE_DESCENT = -0.15            # steep descents only: the knee-load studies are 25° / −15 % and steeper
+POLE_HINT = {"up": N_("用杖：自覺比較輕鬆，速度差不多"),
+             "down": N_("用杖：膝蓋負擔少 12–25 %")}
+POLE_SRC = {"up": N_("陡坡用杖自覺強度低 14–19 %（Giovanelli 2019）；全力爬坡只快約 2.5 %，"
+                     "八成力時沒有差別（Giovanelli 2022）"),
+            "down": N_("下坡用杖，膝關節受力少 12–25 %（Schwameder 1999；Bohne 2007）")}
 
 
 def mark(n: int) -> str:
@@ -113,6 +127,21 @@ def fuel_summary(plan: dict, seg: dict) -> str:
     return "；".join(parts)
 
 
+def pole_hint(seg: dict, k: str, plan_type: Optional[str]) -> Optional[dict]:
+    """SP-244: {"key", "text", "src"} on a steep climb (kind steep_climb, not one the predicted
+    gait runs: poles are for walking, trekking-poles.md §2.5) or a descent ≤ −15 %; None on
+    road plans, flats, runnable climbs and gentler descents."""
+    if plan_type == "road":
+        return None
+    if k == "steep_climb" and seg.get("gait") != "run":
+        key = "up"
+    elif k == "descent" and float(seg.get("grade") or 0.0) <= POLE_DESCENT:
+        key = "down"
+    else:
+        return None
+    return {"key": key, "text": _(POLE_HINT[key]), "src": _(POLE_SRC[key])}
+
+
 def _walked(seg: dict, k: str) -> bool:
     """Walked by the segment's gait (SP-226); without one (百岳, a manual course,
     flats and descents) a steep climb counts as walked, as before."""
@@ -122,17 +151,19 @@ def _walked(seg: dict, k: str) -> bool:
     return k == "steep_climb"
 
 
-def chart_rows(plan: dict, *, aet: Optional[float] = None, lthr: Optional[float] = None) -> list[dict]:
+def chart_rows(plan: dict, *, aet: Optional[float] = None, lthr: Optional[float] = None,
+               poles: bool = False) -> list[dict]:
     """One row per segment for the race calculator's main chart and its table, every
     plan type: the pace, power and heart-rate target that segment is run by, null where
     that measure is not a valid target there —
       power  road: every segment; trail: flat / runnable climbs only (Stryd ≈ metabolic
-             load on 0–8 %, van Rassel 2026; > 8 % under-reads, descents too, Kipp 2023);
+             load on 0–8 %, van Rassel 2026; > 8 % under-reads, descents too, Gravina-Cognetti 2025);
              百岳: none
       hr     the race cap (hr_cap: LTHR ≤ 3 h, AeT beyond, the trail HR model's race HR;
              百岳 AeT); none on trail / 百岳 descents (控制、安全)
       pace   every segment (the model's pace, already grade / walk / technical adjusted)
-    plus the split, cumulative time, ETA, walk flag and the fuelling in the segment.
+    plus the split, cumulative time, ETA, walk flag and the fuelling in the segment;
+    `pole_hint` (SP-244, pole_hint) when the race is marked 會用登山杖 (`poles`).
     Run after plan_targets (reads each segment's `target` when there is one)."""
     kind = plan.get("type")
     hike = kind == "baiyue"
@@ -169,6 +200,7 @@ def chart_rows(plan: dict, *, aet: Optional[float] = None, lthr: Optional[float]
             "hr_cap": hr, "hr_cap_src": cap_src if hr else None, "walk": walk,
             "t": s.get("t"), "cum_s": s.get("cum_s"), "eta": s.get("eta"),
             "temp_c": s.get("temp_c"), "fuel": fuel_summary(plan, s), "badge": tg.get("badge") or s.get("badge"),
+            "pole_hint": pole_hint(s, k, kind) if poles else None,
         })
     return out
 
@@ -197,10 +229,10 @@ def plan_targets(plan: dict, *, aet: Optional[float] = None, lthr: Optional[floa
                     chips.append({"icon": "❤️", "text": f"心率 ≤ {cap:.0f}", "role": "main"})
                 if v and k in ("steep_climb", "run_climb"):
                     chips.append({"icon": "⛰️", "text": f"VAM {v:.0f} m/h"})
-            src = SRC["hike"] if k != "descent" else SRC["descent"]
+            src = SRC["hike"] if k != "descent" else _(SRC["descent"])
         elif k == "descent":
             chips.append({"icon": "🛡️", "text": "控制、安全"})
-            src = SRC["descent"]
+            src = _(SRC["descent"])
         elif k == "steep_climb":
             basis = "hr"
             if cap:

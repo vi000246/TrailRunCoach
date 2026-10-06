@@ -519,6 +519,10 @@ have a median f in 0.97–1.03.
 Trail plans: when > 30 % of the distance is steeper than ±8 % (Stryd's validated range, van
 Rassel 2026), the plan says HR first (cap LTHR, long races near AeT) and power second (推估),
 and returns `summary.hr_first`. Walked grades are noted per segment.
+A GPX segment is `trusted` (no 推估 badge once the category passes) when its grade is inside
+−2 … +8 % (`grade_model.stryd_valid`: van Rassel 2026 validated 0–8 % uphill only, flats ±2 % count
+with it; SP-246) or its grade bin has ≥ 30 personal windows; a descent below −2 % without them is
+推估 (power and VO2 decouple there, Gravina-Cognetti 2025). Only the label changes, not the time.
 
 ### Intensity classes (`backend/engine/racepower/intensity.py:169`)
 
@@ -867,7 +871,9 @@ start time, aid stations. Since 2026-10-02 (賽事計算機, renamed from 賽事
   walked segments shaded). Hovering a table row shows that segment on the chart; click selects,
   shift+click adds / removes. A compact table carries split, ETA and fuelling per segment; every
   segment shows power and HR, grey 「參考」 where that measure is not a valid target (`power_ref` /
-  `hr_ref`). The full table (locks, terrain, heat) is under 「全部欄位」. The W′ balance and heat
+  `hr_ref`). The full table (locks, terrain, heat) is under 「全部欄位」; on trail its GAP column
+  (Minetti + the 0.9 downhill floor, values unchanged) carries a tooltip and a note: reference only,
+  off on steep climbs, descents and technical ground (Looney 2025, Koop; SP-248, road never shows it). The W′ balance and heat
   overlays and the target cards were removed.
 - Results: tiles (moving time vs total with stops), draggable effort bar with band, Palladino zone
   strip, the goal-vs-model line, the 補給 card (below), COROS export (preview, then confirm), 「匯出
@@ -910,6 +916,14 @@ segment time; descents no power / HR target (「控制、安全」, time and pac
 up to 3 h and AeT beyond (推估). Road plans keep pace / power. `chart_rows` gives every plan type
 one row per segment with pace, power and HR (null where not valid, `power_ref` / `hr_ref` for
 display), split, cumulative time, ETA, walk flag and fuel summary; the CSV gets 目標類型 / 執行目標.
+
+會用登山杖 (SP-244, docs/research/trekking-poles.md §5 #3): a plan event's `poles` checkbox (賽季計畫
+event form, default off) is sent by the page as `PlanIn.poles`; `chart_rows[].pole_hint`
+{key up / down, text, src} is then set on steep climbs (kind steep_climb, unless the predicted gait
+runs it) — 「用杖：自覺比較輕鬆，速度差不多」 (Giovanelli 2019 / 2022) — and on descents ≤ −15 % —
+「用杖：膝蓋負擔少 12–25 %」 (Schwameder 1999, Bohne 2007); never on road plans, flats or runnable
+climbs. The compact table's last cell, the full table's notes and the chart tooltip show it (source
+as the tooltip). Text only: time, pace, power and HR targets are identical with or without it.
 
 Walk or run (SP-226, `backend/engine/racepower/runwalk.py`, docs/research/run-walk-threshold.md
 §5.1): on a GPX course every climb ≥ 3 % gets `gait` walk / either / run from grade × the predicted
