@@ -3051,6 +3051,10 @@
     "draft": true,
     "src": "backend/engine/hr_profile.py:65"
   },
+  "照分段的心率上限跑，補給站少停": {
+    "draft": true,
+    "src": "backend/engine/race_feasibility.py:524"
+  },
   "照現在每週慢慢加量，賽前你一週最多大約練到 EP {ep:.0f}（{km:.0f} km、爬升 {cl:.0f} m），是比賽最難那天 EP {hd:.0f} 的 {p:.0f} %": {
     "draft": true,
     "src": "backend/engine/race_feasibility.py:342"
@@ -3222,10 +3226,6 @@
   "目標用要是 自動／心率／功率：{v!r}": {
     "draft": true,
     "src": "backend/engine/plan_store.py:310"
-  },
-  "目標設保守一點，前半段放慢": {
-    "draft": true,
-    "src": "backend/engine/race_feasibility.py:271"
   },
   "目標類型不對：{x}": {
     "draft": true,

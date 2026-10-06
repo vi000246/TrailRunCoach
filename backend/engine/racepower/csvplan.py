@@ -18,6 +18,7 @@ from typing import Optional
 TYPE_LABEL = {"road": "路跑", "trail": "越野", "baiyue": "百岳"}
 MODE_LABEL = {"time": "目標時間", "power": "目標功率", "auto": "通通幫我算"}
 STRATEGY_LABEL = {"even": "均速", "negative": "前慢後快", "positive": "前快後慢"}
+STRATEGY_EVEN_TRAIL = "均勻努力"          # SP-224: trail 「even」 = even effort, the pace follows the grade
 STOP_LABEL = {"water": "水站", "aid": "補給站", "big": "大補給站", "medical": "醫護站", "self": "自備補給點"}
 ACCL_LABEL = {"acclimatised": "已適應", "partial": "部分適應（推估）", "unacclimatised": "未適應"}
 USED_ROWS = (("cp", "CP", "W"), ("cp2", "CP（20 分鐘內）", "W"), ("w_prime", "W′", "J"), ("tte", "TTE", "s"),
@@ -139,7 +140,7 @@ def header_rows(plan: dict, *, name: str, date: Optional[str], computed_at: dt.d
         rows.append([f"{label}{' ' + unit if unit else ''}", _r(u["value"], nd), u.get("source") or ""])
     if plan.get("type") != "baiyue":
         kind = s.get("strategy") or "even"
-        st = STRATEGY_LABEL.get(kind, kind)
+        st = STRATEGY_EVEN_TRAIL if kind == "even" and plan.get("type") == "trail" else STRATEGY_LABEL.get(kind, kind)
         if kind != "even" and s.get("strategy_amount") is not None:
             st += f" {s['strategy_amount'] * 100:.1f}%"
         rows.append(["策略", st])

@@ -518,7 +518,10 @@ def assess(e, line: Optional[dict], today: dt.date, hist: list[dict], summit: Op
                     out["suggestions"].append(_("練量離比賽還遠，可以考慮報短一點的組別：照推算，你大約應付得了一天 {km} km、爬升 {cl} m 的比賽",
                                                 km=out["downgrade"]["km"], cl=out["downgrade"]["climb_m"]))
                 elif lv == "tight" and days_to >= WINDOW_DAYS:     # late already says 「照現有體能跑」
-                    out["suggestions"].append(_("目標設保守一點，前半段放慢"))
+                    # SP-224: no data supports slowing the first half for runners near the cutoff (SP-198
+                    # §2.3: UTMB 2025's slow starters DNF'd more); stop time tracks the finish more
+                    # closely than the pacing spread (Martínez-Navarro 2021 r = 0.64; Kerhervé 2015). 推估 wording
+                    out["suggestions"].append(_("照分段的心率上限跑，補給站少停"))
             if r_cl is not None:
                 # SP-112: the climb as a sub-check — at most tight (推估)
                 lv = "ok" if r_cl >= CLIMB_TIGHT else "tight"
