@@ -256,3 +256,22 @@ def test_notes_are_translated():
                 t = CS.note({"level": lv, "source": src, "hours": 1.5, "runs": 3, "week": 2})["text"]
                 assert t and not re.search("[一-鿿]", t), t
         assert not re.search("[一-鿿]", CS.why({"source": "survey", "hours": 2.0, "runs": 3}))
+
+
+def test_no_cp_test_suggestion_in_the_first_weeks_hill_strides_stay(monkeypatch):
+    """Owner 2026-10-06 (SP-288): a new runner's first RAMP_WEEKS weeks have no CP-test suggestion — not in
+    the week plan, its notes, the 基線測試 box rows or the zone retests — the base phase's hill strides
+    stay; with the cold start off (the old rules) the same week still offered it."""
+    from backend.engine import baseline_test as BT
+    _survey(monkeypatch, None)
+    wp = _week(_ds())
+    assert wp["cold_start"] is not None
+    assert not [t for t in wp["test_suggestions"] if t["kind"] == "cp"]
+    assert not any("CP 測試" in n["text"] for n in wp["notes"])
+    assert any("坡道衝刺" in s["title"] for s in wp["sessions"])
+    assert BT.due(MON.isoformat(), {}, {"cold_start": True}) == [
+        x for x in BT.due(MON.isoformat(), {}, {}) if x["kind"] != "cp"]
+    assert any(x["kind"] == "cp" for x in BT.due(MON.isoformat(), {}, {}))
+    with monkeypatch.context() as m:
+        m.setattr(CS, "week_context", lambda *a, **k: None)
+        assert [t for t in _week(_ds())["test_suggestions"] if t["kind"] == "cp"]

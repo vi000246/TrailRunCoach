@@ -810,7 +810,9 @@ async def _all_suggestions(db: AsyncSession, inp: dict) -> list[dict]:
     base = await _baseline_rows(inp, stored, today, tpl, aet_p, days_for)
     covered = {b["kind"] for b in base}
     rows = [r for r in rows if not (r["type"] == "test" and r["kind"] in covered)] + base
-    rows += SG.zone_rows(inp.get("zone") or {}, {t["kind"] for t in tests} | covered, scheduled, days_for)
+    # SP-288: no CP test in a new runner's first weeks (week_plan's cold_start)
+    no_cp = {"cp"} if (inp.get("cur") or {}).get("cold_start") else set()
+    rows += SG.zone_rows(inp.get("zone") or {}, {t["kind"] for t in tests} | covered | no_cp, scheduled, days_for)
     # the session a zone retest would put in (課表偏好 CP / AeT 測試方式)
     for r in rows:
         for t in r.get("tests") or []:
@@ -849,7 +851,7 @@ async def _baseline_rows(inp: dict, stored: list[dict], today: str, tpl: dict, a
         return []
     cur = inp.get("cur") or {}
     ctx = {"days_to_a": inp.get("days_to_next_a"), "phase": cur.get("phase"), "mode": cur.get("mode"),
-           "injuries": await run_in_threadpool(_open_injuries, today)}
+           "injuries": await run_in_threadpool(_open_injuries, today), "cold_start": bool(cur.get("cold_start"))}
     due = BT.due(today, BT.latest(inp.get("tests"), stored, today), ctx)
     ahead = {AT.is_aet_session(s) for s in stored if s["kind"] == "test" and s["state"] == "active"
              and (s.get("day") or "") >= today}

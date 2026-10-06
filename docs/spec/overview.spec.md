@@ -207,7 +207,9 @@ B2B weekends, the race calculator (for the 專項期 target) and the 主要訓�
    (no run-walk sessions). The 4 weeks from the data's start (the ramp) take max(start level, actual)
    as the base and step by the volume cap itself (+10 %, at least +0.5 h, 3:1), ≥ 3 runs a day apart
    (more when the questionnaire reported more), no intervals; a long run only when longer than the
-   other runs. The projection reads `cold_start` and applies the same. A runner with history:
+   other runs. No CP-test suggestion in those 4 weeks (week plan, its testing note, the 基線測試 and
+   zone-retest box rows; owner 2026-10-06) — the base phase's hill strides stay, the AeT test keeps
+   its rule. The projection reads `cold_start` and applies the same. A runner with history:
    `cold_start` None, nothing changes. Any week < 120 min: long run ≤ 40 % of it, no 60-min floor.
 
 **Sessions** (dataclass `Session`, `backend/engine/overview.py:432`; `terrain`, `distance_km`,

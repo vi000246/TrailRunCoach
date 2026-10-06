@@ -1689,6 +1689,10 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         aet_pref = {"xu_drift": "xu90", "friel_drift": "friel"}.get(gate.get("mode"), aet_pref)
     aet_proto = AT.resolve_protocol(aet_pref, getattr(prefs, "cap_weekday", None),
                                     getattr(prefs, "long_cap", None) if prefs is not None else None)
+    if cs is not None:
+        # SP-288 (owner 2026-10-06): no CP-test suggestion in a new runner's first RAMP_WEEKS weeks (the
+        # base phase's hill strides stay); the AeT test keeps its rule (as in a CP-test week: not offered)
+        test_s = None
     # strength: 2 a week outside the season, 1 in it — once a week kept cyclists' strength for 13 weeks
     # (Rønnestad 2010, periodization-cross-sport.md §4.7 [407])
     strength_n = 2 if kind in ("base", "transition", "recovery", "rebuild") or lvl("strength") in ("bad", "watch") else 1
@@ -2256,7 +2260,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     # ---- non-session to-dos from the indicators --------------------------
     for iid in ("data", "testing"):
         i = by.get(iid)
-        if i is not None and i.level in ("bad", "watch") and i.action and not (iid == "testing" and test_s is not None):
+        if i is not None and i.level in ("bad", "watch") and i.action \
+                and not (iid == "testing" and (test_s is not None or cs is not None)):       # SP-288: no CP test yet
             notes.append({"level": i.level, "text": f"{i.title}：{i.action}"})
 
     # ---- tests: suggested, not scheduled -----------------------------------
