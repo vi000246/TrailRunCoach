@@ -37,6 +37,12 @@ DEFAULTS: dict[str, Any] = {
     # 「稍後再說」 on the 精靈 (SP-211): ISO time; it asks again REMIND_DAYS later while
     # weight / sex / age are still missing (engine/athlete_profile.setup_remind)
     "athlete.setup.later_at": None,
+    # 跑步經驗問卷 (engine/experience.py, SP-290): {runs_per_week, minutes_per_run, longest_min,
+    # can_run_30, at}; None = never answered (asked by the 精靈 unless the data has 4 good weeks)
+    "athlete.experience": None,
+    # 比賽成績 (engine/race_results.py, SP-290): [{date, distance_km, time_s, trail, source,
+    # confirmed, name?}] — one list shared by the questionnaire, SP-293 and SP-276
+    "athlete.race_results": [],
     # 主要訓練項目 (engine/primary_sport.py): auto (follow the suggestion from the data / the
     # next A race) | trail (越野跑, the original behaviour) | road (路跑／馬拉松)
     "athlete.primary_sport": "auto",
@@ -321,6 +327,12 @@ def validate(key: str, value: Any) -> None:
         from backend.engine import calibrate
         calibrate.validate_entry(value)
         return
+    if key == "athlete.experience":
+        from backend.engine import experience
+        experience.validate(value)
+    if key == "athlete.race_results":
+        from backend.engine import race_results
+        race_results.validate(value)
     if key == "athlete.timezone.auto" and value is not None and not isinstance(value, dict):
         raise ValueError("athlete.timezone.auto must be an object or null")
     if key == "athlete.region" and value not in (None, "tw", "intl"):

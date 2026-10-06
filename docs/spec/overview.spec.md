@@ -104,6 +104,17 @@ categorical palette in fixed slot order (`backend/engine/overview.py:36`).
 (full history, constants from the athlete: 42 / 7) and daily TSS with the `tl()` input rule
 0 ≤ x ≤ 5000 (`backend/engine/overview.py:280`). TSB is yesterday's CTL − ATL.
 
+**LTHR prior note (SP-289).** `marks` = [{date, kind: lthr_switch, text}] — the day the LTHR prior
+(0.90 × max HR, `fitdataset.lthr_prior`) gave way to a real LTHR (an estimate grid day or a plan
+row); hrTSS / CTL change scale there. The overview page draws it as a dashed line with the text in
+the legend. Where the prior comes from (SP-289, `hr_profile.lthr_prior`): LTHR = test → estimate
+from the runner's data → watch account → 0.90 × max HR, only without a watch LTHR, from the first
+run to the first real value; max HR = 設定 → watch → runs → 208 − 0.7 × age (Tanaka, 「推估（年齡公式，
+個人可以差 10 bpm 以上）」). `training_targets` reads it before any run too (`lthr_prior` flag); the
+easy / long runs then carry the talk test; `threshold_confidence` rates it low (`prior` / `age`), and
+a new runner (no 4 good weeks in the data) is suggested the LTHR test from week 5 of the data (week 2
+with ≥ 3 h a week and a race result in the questionnaire; `cold_start.lthr_test_from`).
+
 **Start values (SP-68).** CTL / ATL start from `load_guard.pmc_start()`
 (`backend/engine/load_guard.py:197`), one source order:
 1. **manual** — the user's CTL / ATL at the start of a date (設定 → 閾值 → 起始 CTL／ATL;
@@ -188,6 +199,16 @@ B2B weekends, the race calculator (for the 專項期 target) and the 主要訓�
    (`injuries.week_notes`, `backend/engine/overview.py:957`).
 7. 不排課日期 (`blackouts`, `backend/engine/overview.py:975`): this week's lost days scale the
    target (see 不排課日期 below).
+8. **冷啟動** (SP-288, `engine/cold_start.py`; docs/research/cold-start.md §4.2): the week the data
+   starts (no run / hike in the 28 days before this Monday, no re-entry block with a previous volume)
+   = the 跑步經驗問卷's runs × minutes as entered (not discounted; 「能連續跑 30 分鐘」 → ≥ 1.5 h),
+   else 1.5 h, 3 easy runs, no long run, with a week note (`src: cold_start`, also on the 課表 page);
+   「還不能連續跑 30 分鐘」 → the same default and 「app 的自動排課要等你能連續跑 30 分鐘之後才準」
+   (no run-walk sessions). The 4 weeks from the data's start (the ramp) take max(start level, actual)
+   as the base and step by the volume cap itself (+10 %, at least +0.5 h, 3:1), ≥ 3 runs a day apart
+   (more when the questionnaire reported more), no intervals; a long run only when longer than the
+   other runs. The projection reads `cold_start` and applies the same. A runner with history:
+   `cold_start` None, nothing changes. Any week < 120 min: long run ≤ 40 % of it, no 60-min floor.
 
 **Sessions** (dataclass `Session`, `backend/engine/overview.py:432`; `terrain`, `distance_km`,
 `climb_m` added for the preferences / conversion, `protocol` for tests, `heat`, and the
@@ -1719,3 +1740,5 @@ deleted / superseded) are returned as reconcile `changes` (`backend/engine/recon
 | 2026-10-05 | feature | SP-74 follow-up | The user's own 技術地形 session (custom or edited, RPE ≥ 7 by `session_role`) counts in the week's 20 % like the generated one: `plan_store.user_rpe_rows` → `technical.user_quality`, `quality_sessions(reserved=)` shortens / leaves out the intervals (note), no generated 技術地形 that 專項期 week, a week note; week_plan and projection alike |
 | 2026-10-05 | feature | SP-75 | 專項期 sessions climb the ladders (trail uphill versions; no fixed 2×15′ / 5×4′), 前段 / 後段 ratios, the road MP segment grows every other week (`MP_PLAN`, `mp_race` / `mp_week`) |
 | 2026-10-06 | change | SP-245 | 主要訓練項目 自動: A races first — only trail (越野賽 / 百岳) → trail, only road → road, both → the harder race (`event_size` tier → predicted hours → EP; tie / unknown size → trail; `primary_sport._harder`); with no future A race the B races the same way; else the 12-week share; C / past / 其他 races never count; the reason names the race (and the race it was compared with); only the 自動 setting is affected |
+| 2026-10-06 | feat/cold-start-sp288-290 | docs/research/cold-start.md | SP-288 冷啟動排課: the first week without history = the questionnaire as entered or 1.5 h / 3 easy runs / no long run (no more 0.5 h next to a 60-min long run); 4-week ramp with the start level as the base floor, +10 % / +0.5 h steps, ≥ 3 runs a day apart, no intervals; long run ≤ 40 % of a week < 120 min; projection consistent; runners with history unchanged |
+| 2026-10-06 | feat/cold-start-sp288-290 | docs/research/cold-start.md | SP-289 心率先驗: max HR falls back to 208 − 0.7 × age, LTHR to 0.90 × max HR (only without a test / estimate / watch LTHR; before the first real value), both 推估 and low confidence; easy runs get HR numbers + the talk test; PMC `marks` on the day a real LTHR replaces it; LTHR test suggested from week 5 for new runners (week 2 with ≥ 3 h + a race); unsourced-rules §0.5.5 rewritten |

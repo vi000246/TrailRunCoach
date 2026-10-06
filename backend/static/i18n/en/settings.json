@@ -229,5 +229,22 @@
   "general.no_weight": "No weight yet: enter your weight and save (used for W/kg, the power calculator and the pack default)",
   "general.wko5": "WKO5 data: height {h} cm, sex {sex}, weight log {list}",
   "general.wko5_none": "none",
-  "general.saved": "Saved; the charts will be recalculated with the new weight"
+  "general.saved": "Saved; the charts will be recalculated with the new weight",
+  "general.exp_title": "Your running",
+  "general.exp_intro": "Used to plan your first month; every question can be left blank and the weekly volume is used as entered. Once you have 4 weeks or more of activities, the plan goes by them instead.",
+  "general.exp_q1": "Last 4 weeks, on average a week",
+  "general.exp_times": "times",
+  "general.exp_min": "min",
+  "general.exp_q2": "Longest one in the last 4 weeks",
+  "general.exp_q3": "Can run 30 minutes non-stop",
+  "general.exp_yes": "Yes",
+  "general.exp_no": "Not yet",
+  "general.exp_q4": "Race result from the last year",
+  "general.exp_race_time": "Time",
+  "general.exp_race_date": "Date",
+  "general.exp_race_trail": "Trail race",
+  "general.exp_none": "Not answered yet: the plan starts at 1.5 hours a week, 3 easy runs",
+  "general.exp_hours": "Your weekly volume: about {h} hours a week",
+  "general.exp_need_race": "Fill in the whole race result (distance, a time like 1:05:30, date) or leave all three blank",
+  "general.exp_saved": "Saved; the plan follows your answers"
 }

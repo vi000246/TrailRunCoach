@@ -90,6 +90,8 @@ SETTING_LABELS = {
     "db": "athlete_settings（app DB）",
     "estimate": N_("自動估算（當天以前的跑步，Friel 30 分鐘段）"),
     "unset": N_("未設定"),
+    # SP-289: no test / estimate / watch LTHR → 0.90 × max HR (hr_profile.lthr_prior)
+    "prior": N_("推估（最大心率的 90 %）"),
 }
 IGNORED_WHY = ("COROS 帳號 zoneData 的值（登入時寫入），沒有記錄是哪個運動；"
                "不當跑步 LTHR／FTP 用")
@@ -626,7 +628,10 @@ class FitFolderDataset(Dataset):
         if self.settings_from == "app" and estimate_thresholds and self.workouts:
             prog.phase("estimate")
             # an estimated LTHR, or a Stryd PD fit (the run FTP of power TSS: tss_ftp)
-            if self._estimate_settings_memo() or self._cp_est:
+            est = self._estimate_settings_memo()
+            # SP-289: the LTHR prior (0.90 × max HR) where nothing else gives an LTHR
+            prior = self._apply_lthr_prior()
+            if est or self._cp_est or prior:
                 for w in self.workouts:          # hrTSS / rTSS / power TSS with the estimated thresholds
                     self._refresh_hr_fields(w)
                     w.metrics = self._metrics(w)
@@ -801,6 +806,49 @@ class FitFolderDataset(Dataset):
             for r in rows:
                 r["why"] = "沒有硬的跑步可以估 LTHR：先用手錶的值（推估）"
         return out
+
+    lthr_prior: Optional[dict] = None
+
+    def _apply_lthr_prior(self) -> bool:
+        """SP-289 (docs/research/cold-start.md §4.3): the LTHR order is test → estimate from the
+        runner's data → the watch account → 0.90 × max HR (hr_profile.lthr_prior, its max HR the
+        last layer of hr_profile.max_hr). Applied only without a watch LTHR (with one the P7 rule of
+        _coros_lthr_prior governs, unchanged): from the first run up to the first real LTHR (an
+        estimate grid day or a plan LTHR row; none = open-ended). A real LTHR from the first run on
+        leaves it out. Sets `lthr_prior` {value, mhr, mhr_kind, from, until, until_kind} for the
+        texts, threshold_confidence (low) and the PMC note on the day it is replaced. True when set."""
+        self.lthr_prior = None
+        if any(r.get("field") == "lthr" and r.get("value") for r in self.settings_ignored):
+            return False
+        runs = [w for w in self.workouts if w.sport == "run"]
+        if not runs:
+            return False
+        first_run = runs[0].entry.start.date()
+        real = [(d, v) for d, v in (self.athlete.settings.get("runthr") or []) if v is not None]
+        plan_rows = sorted(str(t.date)[:10] for t in getattr(self.plan, "thresholds", None) or []
+                           if getattr(t, "lthr", None) is not None)
+        ends = [(real[0][0].isoformat(), "estimate")] if real else []
+        if plan_rows:
+            ends.append((plan_rows[0], "test"))
+        until, until_kind = min(ends) if ends else (None, None)
+        if until is not None and until <= first_run.isoformat():
+            return False
+        from backend.engine import hr_profile as HP
+        try:
+            pr = HP.lthr_prior(self, day_to_date(self.today))
+        except Exception as e:                  # noqa: BLE001 — no prior then
+            log.warning("FIT dataset: LTHR prior failed (%s)", type(e).__name__)
+            return False
+        if not pr:
+            return False
+        self.athlete.settings["runthr"] = [NOT_BEFORE, (first_run, pr["value"])] + real
+        if not real:
+            self._setting_labels["runthr"] = SETTING_LABELS["prior"]
+        self.lthr_prior = {"value": pr["value"], "mhr": pr["mhr"], "mhr_kind": pr["mhr_kind"],
+                           "mhr_source": pr["mhr_source"], "from": first_run.isoformat(),
+                           "until": until, "until_kind": until_kind}
+        self.memo.clear()
+        return True
 
     def _estimate_settings(self) -> bool:
         """As-of running LTHR estimated from these FITs, on a grid of dates

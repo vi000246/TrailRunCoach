@@ -404,7 +404,14 @@ def get_profile():
         eff_w, w_src = wk["weights"][-1]["kg"], "WKO5"
     sex = plan.profile.get("sex") or wk["sex"]
     from backend.engine import athlete_profile as AP
+    from backend.engine import experience as EX
+    from backend.engine import race_results as RR
     from backend.engine.wko5expr.datasource import read_setting
+    exp = EX.load()
+    needed = AP.setup_needed(eff_w, sex, plan.profile.get("birth_year"))
+    # 跑步經驗問卷 (SP-290): pending until saved once; the 精靈 still skips it when the data has
+    # 4 good weeks (GET /profile/detect has_history — the Dataset is not read here)
+    survey_pending = not EX.answered(exp)
     return {
         "weights": [w.__dict__ for w in sorted(plan.weights, key=lambda w: w.date)],
         "profile": plan.profile,
@@ -418,16 +425,21 @@ def get_profile():
             "power_source": AP.profile_power_source(plan.profile),
         },
         # 首次精靈 (shell.js, SP-211): asks for weight / sex / age until all are known, once
-        "setup": {"needed": AP.setup_needed(eff_w, sex, plan.profile.get("birth_year")),
+        "setup": {"needed": needed,
                   "missing": AP.setup_missing(eff_w, sex, plan.profile.get("birth_year")),
                   "done": read_setting(AP.SETUP_DONE_KEY, False) is True,
-                  "remind": AP.setup_remind(AP.setup_needed(eff_w, sex, plan.profile.get("birth_year")),
-                                            read_setting(AP.SETUP_LATER_KEY, None)),
+                  # the same 「稍後再說」 / 7-day reminder covers the questionnaire (SP-290)
+                  "remind": AP.setup_remind(needed or survey_pending, read_setting(AP.SETUP_LATER_KEY, None)),
+                  "survey_pending": survey_pending,
                   "remind_days": AP.REMIND_DAYS,
                   "prefill": {"weight": None if eff_w is not None else app_w,
                               "weight_source": "COROS" if eff_w is None and app_w else None}},
         "options": {**P.PROFILE_FIELDS, "power_source": AP.POWER_SOURCES},
         "power_labels": AP.power_labels(),
+        # 跑步經驗問卷 (engine/experience.py) and its race (engine/race_results.py, the shared list)
+        "experience": exp,
+        "experience_hours": EX.weekly_hours(exp),
+        "survey_race": RR.survey_entry(read_setting(RR.KEY, [])),
     }
 
 
@@ -457,12 +469,58 @@ def detect_profile():
     last 90 days of runs (engine/athlete_profile.detect_power_source) and the
     app DB's weight (COROS)."""
     from backend.engine import athlete_profile as AP
+    from backend.engine import experience as EX
+    history = None
     try:
         from backend.api.wko5views import _dataset
-        power = AP.detect_power_source(_dataset())
+        ds = _dataset()
+        power = AP.detect_power_source(ds)
+        # SP-290: 4 complete weeks with ≥ 3 days of running / hiking → the questionnaire isn't asked
+        history = EX.has_history(ds, today_local())
     except Exception as e:                  # noqa: BLE001 — no data yet
         power = {"source": None, "error": type(e).__name__}
-    return {"power_source": power, "weight": _app_weight(), "labels": AP.power_labels()}
+    return {"power_source": power, "weight": _app_weight(), "labels": AP.power_labels(),
+            "has_history": history}
+
+
+class RaceIn(BaseModel):
+    distance_km: float
+    time: str                              # h:mm:ss or mm:ss
+    date: str
+    trail: bool = False
+
+
+class ExperienceIn(BaseModel):
+    runs_per_week: Optional[int] = None
+    minutes_per_run: Optional[int] = None
+    longest_min: Optional[int] = None
+    can_run_30: Optional[bool] = None
+    race: Optional[RaceIn] = None          # None = no race result (the questionnaire's row is removed)
+
+
+@router.put("/profile/experience")
+async def put_experience(body: ExperienceIn, db: AsyncSession = Depends(get_db)):
+    """跑步經驗問卷 (SP-290, engine/experience.py): the four answers, every one optional. Saved =
+    answered (not asked again); the race goes to the shared race-result list (engine/race_results.py)
+    as its one questionnaire row. The weekly volume is stored as entered (not discounted)."""
+    from backend.engine import experience as EX
+    from backend.engine import race_results as RR
+    from backend.settings.repository import SettingsRepository
+    try:
+        exp = EX.answer(body.model_dump(exclude={"race"}))
+        race = None if body.race is None else RR.make(body.race.distance_km, RR.parse_time(body.race.time),
+                                                       body.race.date, body.race.trail, source="survey")
+        if race is not None:
+            RR.validate_entry(race, today_local())
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    repo = SettingsRepository(db, current_athlete_id())
+    rows = RR.with_survey(await repo.get(RR.KEY), race)
+    await repo.set(EX.KEY, exp)
+    await repo.set(RR.KEY, rows)
+    await db.commit()
+    _notify(False)            # the cold-start week follows the answers (engine/cold_start.py, SP-288)
+    return {"experience": exp, "experience_hours": EX.weekly_hours(exp), "survey_race": race}
 
 
 class SetupIn(BaseModel):

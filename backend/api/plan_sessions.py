@@ -2425,8 +2425,8 @@ async def _coros_state(db: AsyncSession, views: list[dict]) -> dict:
 
 def _plan_notes(inp: dict, start: str, end: str) -> list[dict]:
     """The generator's notes for the weeks in view (課表偏好: capped weeks, CP test
-    exempt, soft-cap excess; 不排課日期: hours lost, the step after it), each with
-    its week start."""
+    exempt, soft-cap excess; 不排課日期: hours lost, the step after it; 冷啟動: the questionnaire
+    hint / 「能連續跑 30 分鐘之後才準」, SP-288), each with its week start."""
     cur = inp.get("cur") or {}
     weeks = [((cur.get("week") or {}).get("start"), cur.get("notes") or [])] + \
         [(w.get("start"), w.get("notes") or []) for w in inp.get("weeks") or []]
@@ -2437,7 +2437,8 @@ def _plan_notes(inp: dict, start: str, end: str) -> list[dict]:
         we = (dt.date.fromisoformat(ws) + dt.timedelta(days=6)).isoformat()
         if we < start or ws > end:
             continue
-        out += [{"week_start": ws, **n} for n in notes if n.get("src") in ("prefs", "blackout")]
+        # (cold_start: a new runner's first weeks — the questionnaire / the 30-minute note, SP-288)
+        out += [{"week_start": ws, **n} for n in notes if n.get("src") in ("prefs", "blackout", "cold_start")]
     return out
 
 

@@ -28,6 +28,7 @@ from typing import Optional
 
 from backend.engine import aet_test as AT
 from backend.engine import balance_plan as BP
+from backend.engine import cold_start as CS
 from backend.engine import b2b as B2B
 from backend.engine import load_guard as LG
 from backend.engine import specific_phase as SP
@@ -98,17 +99,21 @@ def _next_event_start(phases: list, day: dt.date) -> Optional[dt.date]:
 def week_hours(kind: str, hist: list[float], build: list[bool], ctl0: float, r: float,
                cc: float, days_to_a: Optional[int], tr_ref: Optional[float] = None,
                cap_ref: Optional[float] = None, rebuild: Optional[tuple] = None,
-               recovery: Optional[str] = None) -> tuple[float, str, list[str]]:
+               recovery: Optional[str] = None, floor: Optional[float] = None) -> tuple[float, str, list[str]]:
     """(hours, mode, why) for one projected week; `hist` = weekly hours, oldest first.
     `tr_ref`: a 轉換期 / 恢復期 / 回量期 week's pre-race level (overview.transition_ref; None = the old
     rules). `rebuild`: a 回量期 week's (share, index, weeks) (planning.rebuild_share, SP-98).
     `cap_ref`: the +10 % cap's reference on normal weeks (load_guard.step_base of the normal
     weeks, SP-73); None = max(4-week mean, last week) of `hist`.
     `recovery`: why the week is a recovery week by the calendar (overview.recovery_reason, SP-97: the
-    專項期 countdown, the 6-week cap); the 3:1 after three build weeks is the base phase's only."""
+    專項期 countdown, the 6-week cap); the 3:1 after three build weeks is the base phase's only.
+    `floor` (冷啟動, engine/cold_start.py SP-288): a new runner's ramp weeks — the start level stands for
+    the weeks before the data, as week_plan: the base and the cap's reference are at least it."""
     base4 = statistics.mean(hist[-4:]) if hist else 0.0
     last = hist[-1] if hist else 0.0
     ref = cap_ref if cap_ref else max(base4, last)
+    if floor and kind in ("base", "specific"):
+        base4, ref = max(base4, floor), max(ref, floor)
     why: list[str] = []
     if kind in ("base", "specific"):
         if kind == "base" and len(build) >= 3 and all(build[-3:]):
@@ -121,6 +126,8 @@ def week_hours(kind: str, hist: list[float], build: list[bool], ctl0: float, r: 
         need_h = 7.0 * (ctl0 + goal / f7) / max(r, 1.0)
         cap = max(1.10 * ref, ref + 0.5)
         h = min(max(need_h, base4), cap)
+        if floor:
+            h = cap                         # SP-288: the ramp steps by the volume rule (as week_plan)
         why.append(f"CTL {ctl0:.0f} 每週 +{goal:.1f}，上限 +10%（至少 +0.5 h）→ {h:.1f} h")
         return h, kind, why
     if kind == "taper":
@@ -154,7 +161,7 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
                   sport: str = "trail", goal_pace: Optional[float] = None,
                   aet_measured: bool = False, taper: Optional[dict] = None,
                   transition_week: Optional[int] = None, strength: Optional[dict] = None,
-                  mp: Optional[dict] = None) -> list[dict]:
+                  mp: Optional[dict] = None, cold: Optional[dict] = None) -> list[dict]:
     """The week_plan() session template for a projected week, placed on days.
     `transition_week`: which week of its 轉換期 this is (overview.transition_week; SP-103 strides from 2).
     `strength` (SP-119): the week's strength_plan.week_context — the strength session's stage
@@ -175,7 +182,9 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
     `blocked`: ISO days of 不排課日期 (engine/blackouts.py) — never a candidate day.
     `sport` (主要訓練項目, engine/primary_sport.py): road = the week_plan() road template (flat long
     run with a marathon-pace segment in the 專項期, flat strides). `mp` (overview.mp_week, SP-75): the
-    week's MP share."""
+    week's MP share. `cold` (engine/cold_start.py, SP-288): a new runner's ramp week (week_plan's
+    `cold_start`, as level 1) — at least its run count, a long run only when longer than the other
+    runs, runs a day apart; None = the plain rules."""
     road = sport == "road"
     total = hours * 60.0
     ss: list[dict] = []
@@ -191,7 +200,7 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
     if long_min is None:
         # ≤ +10 % over the last long day (SP-66, load_guard.LONG_CAP), also over the 60-min floor
         long_min = LG.cap_long(max(60.0, min(0.30 * total, max(longest, 60.0) * LG.LONG_CAP)), longest)[0]
-    long_min = min(long_min, 0.5 * total) if total >= 120 else long_min
+    long_min = CS.long_share_cap(long_min, total)          # under 120 min: ≤ 40 %, no 60-min floor (SP-288)
     rec_wk = kind in ("base", "specific") and mode == "recovery_week"
     if rec_wk:
         # SP-97: the recovery week keeps a shorter long run (overview.recovery_long_minutes, as week_plan)
@@ -207,6 +216,8 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
     if kind in ("base", "specific"):
         if xu_test and kind == "base" and not rec_wk:
             add(**_bq(xu_test))                     # 徐國峰's 90-min test = this week's LSD
+        elif CS.no_long(cold, long_min, total, rec_wk):
+            pass                                    # SP-288: all easy runs (the long one wouldn't be longer)
         elif road:
             add(**O.road_long_session(long_min, "base" if rec_wk else kind, aet, tph, goal_pace, aet_measured, mp),
                 target=tgt.get("long", ""))
@@ -252,6 +263,8 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
     if kind == "taper" and taper:
         n_easy = O.taper_easy_count(left, taper.get("runs"), sum(1 for s in ss if s["kind"] in O.RUN_KINDS))
     n_easy = O.auto_easy_cap(n_easy, sum(1 for s in ss if s["kind"] in O.RUN_KINDS))   # ≥ 1 rest day (SP-82)
+    if cold is not None and mode in ("base", "specific"):
+        n_easy = CS.easy_runs(n_easy, left, cold, sum(1 for s in ss if s["kind"] in O.RUN_KINDS))   # SP-288
     for i in range(n_easy):
         m = min(left / n_easy, O.TRANSITION_RUN_MAX) if kind in ("transition", "rebuild") else left / n_easy
         st = O.strides_for(kind, mode, i, road, transition_week)   # base; 轉換期 from week 2 (SP-103)
@@ -269,7 +282,8 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
         ctx = PP.Ctx(kind=kind, mode=mode, allow_quality=allow_quality, rates=r, aet=aet, aet_measured=aet_measured,
                      slots=max(1, sum(bool(x) for x in prefs.days) - n_lost), notes=notes if notes is not None else [],
                      quality_cap=quality_cap)
-        ss = PP.shape(ss, total, prefs, ctx)
+        ss = PP.shape(ss, total, CS.prefs_for(prefs, cold, ctx.slots) if mode in ("base", "specific") else prefs,
+                      ctx)                     # SP-288: a ramp week's run count unless 每週跑步次數 is set
         if kind in ("transition", "rebuild"):
             O.cap_transition_runs(ss, ctx.notes)     # 轉換期 / 回量期: each run ≤ 60 min (Canova), as week_plan
         ctx.notes.extend(PP.blocked_pref_notes(prefs, monday, blocked))
@@ -277,7 +291,7 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
         return _b2b_finish(ss, info, b2b, monday, aet, blocked, prefs, ctx.notes, aet_measured)
     # the raw 課表偏好 value: aet_test_days isn't part of `active`, so `prefs` may be None here
     aet_days = AT.TEST_DAYS.get(aet_test_days or getattr(prefs, "aet_test_days", None) or "weekday")
-    _place(ss, monday, long_wd, blocked, aet_days, notes)
+    _place(ss, monday, long_wd, blocked, aet_days, notes, apart=CS.apart(cold))
     return _b2b_finish(ss, info, b2b, monday, aet, blocked, None, notes, aet_measured)
 
 
@@ -317,9 +331,10 @@ def _bq(b: dict) -> dict:
 
 
 def _place(ss: list[dict], monday: dt.date, long_wd: int, blocked=frozenset(),
-           aet_days: Optional[tuple] = AT.TEST_DAYS["weekday"], notes: Optional[list] = None) -> None:
+           aet_days: Optional[tuple] = AT.TEST_DAYS["weekday"], notes: Optional[list] = None,
+           apart: bool = False) -> None:
     """`aet_days`: where the AeT test goes (aet_test.test_days / pick_day:
-    Mon–Fri by default; None = like an interval)."""
+    Mon–Fri by default; None = like an interval). `apart`: a new runner's runs a day apart (SP-288)."""
     days = [monday + dt.timedelta(days=i) for i in range(7)]
     free = [d for d in days if d.isoformat() not in blocked]
     main = [s for s in ss if s["kind"] != "strength"]
@@ -363,7 +378,7 @@ def _place(ss: list[dict], monday: dt.date, long_wd: int, blocked=frozenset(),
         # 休息日的位置 (SP-82): as week_plan — the rest days next to the long run, between hard days
         runs = [_d(x["day"]) for x in main if x["day"]]
         qd = [_d(x["day"]) for x in main if x["kind"] in ("quality", "test") and x["day"]]
-        for s, d in zip(easy_q, RD.pick_days(len(easy_q), free, days, runs, long_day, long_wd, qd)):
+        for s, d in zip(easy_q, RD.pick_days(len(easy_q), free, days, runs, long_day, long_wd, qd, apart=apart)):
             s["day"] = d.isoformat()
             free.remove(d)
     easy_days = [_d(s["day"]) for s in main if s["kind"] == "easy" and s["day"]]
@@ -479,7 +494,9 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
     long_wd = O.WEEKDAYS.index(cur.get("long_weekday") or "六")
     cur_s = cur.get("sessions") or []
     long_s = next((s for s in cur_s if s.get("id", s.get("gen_key")) == "long" or s["kind"] == "long"), None)
-    longest = float(long_s["minutes"]) if long_s else 60.0
+    cold = cur.get("cold_start")            # 冷啟動 (SP-288): a new runner's ramp; None with history
+    longest = float(long_s["minutes"]) if long_s else \
+        float(cold.get("longest_planned") or 60.0) if cold else 60.0
     mountain = bool(long_s and "山路" in long_s["title"])
     # 主要訓練項目 (engine/primary_sport.py): the sport week_plan() used; road = no B2B, no steep walk
     sport = cur.get("primary_sport") or "trail"
@@ -590,8 +607,10 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
             rb_ph = next((p for p in phases if phase_kind([p], week) == "rebuild"), None)
             rb = PL.rebuild_share(rb_ph, week) if rb_ph is not None else None
         rec = O.recovery_reason(kind, week, O.next_a_start(phases, week), O.weeks_since_recovery(hist, skips))
+        ramp = {**cold, "level": 1} if cold and week.isoformat() < cold["until"] else None
         hours, mode, why = week_hours(kind, hist, build, ctl, tph, ctlconstant, days_to, tr_h,
-                                      LG.step_base(norm) if norm else None, rebuild=rb, recovery=rec)
+                                      LG.step_base(norm) if norm else None, rebuild=rb, recovery=rec,
+                                      floor=ramp["hours"] if ramp else None)
         notes: list = []
         if kind == "specific":
             # 中間訓練 (SP-95): the same cap as week_plan (overview.inter_cap)
@@ -635,7 +654,7 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
         if user_q:
             notes.append(TECH.user_note(user_q, hours, kind))
         no_q = mode == "reentry" and rp is not None and not RE.quality_ok(rp, week)
-        if no_q:
+        if no_q or ramp:                    # (SP-288: a new runner's ramp weeks are easy runs only, as week_plan)
             dec = {**dec, "allow": False, "spec": None, "advance": False}
         base_q, xu_q = None, None
         proto = AT.resolve_protocol(getattr(prefs, "aet_test_protocol", None) or "auto",
@@ -683,7 +702,11 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
                            if tc and kind == "taper" else None,
                            transition_week=O.transition_week(phases, week) if kind == "transition" else None,
                            strength=STP.week_context(a_evs, phases, week, kind, prefs),
-                           mp=O.mp_week(cur.get("mp_race"), week))
+                           mp=O.mp_week(cur.get("mp_race"), week), cold=ramp)
+        if th.get("lthr_prior"):
+            for s_ in ss:                      # SP-289: the talk test with prior HR numbers, as week_plan
+                if s_["kind"] in ("easy", "long"):
+                    s_["detail"] = O.talk_test(s_["detail"])
         if kind in ("transition", "rebuild"):
             notes.append({"level": "info", "src": "transition",
                           "text": O.TRANSITION_NOTE if kind == "transition" else O.REBUILD_NOTE})
@@ -843,6 +866,10 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
                     **({"blackout_days": [d.isoformat() for d in lost]} if lost else {})})
         long_n = next((s for s in ss if s["id"] == "long"), None) if kind != "taper" else None
         recent_long.append(float(long_n["minutes"]) if long_n else 0.0)
+        if long_n is None and ramp:
+            # SP-288: a ramp week of easy runs only — its longest run is the next week's reference (as
+            # week_plan's longest28 once it is run)
+            longest = max([longest] + [float(s["minutes"]) for s in ss if s["kind"] == "easy" and s["day"]])
         if long_n and mode != "recovery_week":
             # (SP-97: a recovery week's shorter long run doesn't lower the next week's base)
             # a B2B day 1 shortened to fit the pair (engine/b2b.py) doesn't lower the long-run base
