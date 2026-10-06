@@ -305,7 +305,8 @@ def rolling(ds, basis: str = "pace", n: int = AGG_N, days: int = AGG_DAYS) -> di
 def aet_points(ds, today: dt.date, days: int = AET_DAYS, bands: tuple = AET_BANDS,
                beta: Optional[dict] = None) -> list[dict]:
     """(first-half HR, drift, SE) of the road runs in `days` up to `today`
-    whose drift_of passed (test or reference tier) in `bands` (AET_BANDS:
+    whose drift_of passed (test or reference tier, not downgraded for bad HR —
+    `hr_ref`, SP-266) in `bands` (AET_BANDS:
     cool, warm, no temperature), oldest first: Pw:HR when the run has it
     (the AeT test's basis), else Pa:HR. A warm run's "hr1" is heat-adjusted
     to HEAT_REF_C with `beta` (heat_beta() when None and there is a warm
@@ -325,6 +326,8 @@ def aet_points(ds, today: dt.date, days: int = AET_DAYS, bands: tuple = AET_BAND
         dr = (m or {}).get("drift") or {}
         band = band_of(dr)
         if WR.drift_tier(dr) is None or band not in bands:
+            continue
+        if dr.get("hr_ref"):                # SP-266: bad HR — reference only, never into the AeT estimate
             continue
         if dr.get("pw_drift") is not None and (dr.get("pw_ok") or dr.get("pw_ref_ok")):
             hr1, d, se, basis = dr.get("pw_hr1"), dr["pw_drift"], dr.get("pw_drift_se"), "power"

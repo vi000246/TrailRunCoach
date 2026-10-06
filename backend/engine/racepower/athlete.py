@@ -512,6 +512,28 @@ def intensity_stats(ds, w) -> Optional[dict]:
     return ds.cached_series(INTENSITY_KEY, w, lambda: _intensity_stats(ds, w))
 
 
+HRMAX_PEAK_KEY = "racepower_hrmax_peak_v1"   # SP-265: the per-run HRmax peak on the shared HR cleaning
+
+
+def _hrmax_peak(ds, w) -> Optional[float]:
+    from backend.engine.racepower import maximal as MX
+    t = ds.channel(w.idx, "elapsedtime")
+    if t is None:
+        return None
+    cad = ds.channel(w.idx, "cadence")
+    return MX.run_hrmax_peak(t, ds.channel(w.idx, "heartrate"), ds.channel(w.idx, "speed"),
+                             None if cad is None else np.asarray(cad, float) * 2.0,
+                             min_kmh=RUN_MOVING_KMH if w.sport == "run" else HIKE_REST_MS * 3.6)
+
+
+def hrmax_peak(ds, w) -> Optional[float]:
+    """The run's peak for maximal.hrmax_observed (maximal.run_hrmax_peak), disk-cached."""
+    cache = getattr(ds, "cached_series", None)
+    if cache is not None:
+        return cache(HRMAX_PEAK_KEY, w, lambda: _hrmax_peak(ds, w))
+    return _hrmax_peak(ds, w) if hasattr(ds, "channel") else None
+
+
 def race_dates(ds) -> set[str]:
     """Season-plan race days (every kind but 百岳 / other, all priorities)."""
     out = set()
@@ -638,7 +660,7 @@ def capacity_samples(ds, runs, th_of: Optional[dict] = None, tags: Optional[list
     for w in ds.workouts:
         if w.sport == "run":
             st = intensity_stats(ds, w)
-            pk = MX.peak_hr(st.get("hist"), st.get("hist_lo", 40), MX.MAXIMAL["hrmax_hold_s"]) if st else None
+            pk = hrmax_peak(ds, w) if st else None
             if pk:
                 peaks.append((w.day, pk))
             # the monotonicity check compares only power the models use (no watch power)
@@ -668,7 +690,7 @@ def capacity_samples(ds, runs, th_of: Optional[dict] = None, tags: Optional[list
             long_ok = all(c["ok"] for c in r["checks"] if c["id"] in ("km", "time"))
             auto_ok = eff["effort"] == "max" and long_ok
         else:
-            hrmax = MX.hrmax_observed([p for d_, p in peaks if w.day - RIEGEL_WINDOW_DAYS < d_ < w.day + 1])
+            hrmax = MX.hrmax_as_of(peaks, w.day)      # 730 days (MAXIMAL["hrmax_window_days"]), not Riegel's 365
             mv = st.get("moving_s") or 0.0
             longer = [p for d_, s_, p in held if w.day - RIEGEL_WINDOW_DAYS < d_ < math.floor(w.day)
                       and s_ >= MX.MAXIMAL["longer_ratio"] * mv]

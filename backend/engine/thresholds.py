@@ -270,14 +270,10 @@ def estimate_tpace(ds: Dataset, today: dt.date) -> dict:
 #
 # Wrist optical HR only (no chest strap): its errors are short spikes (a jump
 # of 20–40 bpm within a second, often to 215–225) and cadence lock-on. Per
-# run, on a 1-s grid (gaps > 5 s are not bridged):
-#   * samples < 30 or > 220 bpm are dropped (MHR_ABS_MAX; 220 is above any
-#     plausible maximum of this athlete's data, 202–209);
-#   * a rise of more than 15 bpm within one second (MHR_JUMP) starts a spike:
-#     every sample from it until HR is back within 15 bpm of the level before
-#     the jump is dropped (a real effort climbs a few bpm per second at most);
-#   * the run's peak = the highest HR held for ≥ 5 s (the max of the rolling
-#     5-s minimum over valid samples), so a 1–4 s spike can't count.
+# run, the shared cleaning (engine/hr_quality.clean, SP-265: gaps > 5 s, out
+# of range, spikes, moving up-steps, cadence lock — the numbers live there), then the run's
+# peak = the highest HR held for ≥ 5 s (the max of the rolling 5-s minimum
+# over valid samples), so a 1–4 s spike can't count.
 # Result: the highest per-run peak of the runs (road, trail, treadmill) in the
 # 365 days up to the date; when that one run stands > 5 bpm above the next
 # (MHR_OUTLIER), it is taken as an artefact and the second-highest is used.
@@ -285,57 +281,33 @@ def estimate_tpace(ds: Dataset, today: dt.date) -> dict:
 # value is a floor — a runner rarely reaches true HRmax outside a test.
 # ---------------------------------------------------------------------------
 
-MHR_KEY = "mhr_peak5_v1"
+MHR_KEY = "mhr_peak5_v2"      # v2 (SP-265): the shared cleaning (3-s spikes, cadence lock)
 MHR_DAYS = 365
-MHR_ABS_MIN, MHR_ABS_MAX = 30.0, 220.0
-MHR_JUMP = 15.0               # bpm within 1 s
 MHR_HOLD_S = 5
-MHR_GAP_S = 5.0
 MHR_OUTLIER = 5.0
 MHR_MIN_RUNS = 3
 
 
-def peak_sustained_hr(t, hr) -> Optional[float]:
-    """The highest HR held ≥ MHR_HOLD_S seconds after dropping optical spikes
-    (see above); None without enough valid samples."""
+def peak_sustained_hr(t, hr, cadence_spm=None, speed_kmh=None) -> Optional[float]:
+    """The highest HR held ≥ MHR_HOLD_S seconds after the shared cleaning
+    (hr_quality.clean); None without enough valid samples."""
+    from backend.engine import hr_quality as HQ
+    c = HQ.clean(t, hr, cadence_spm, speed_kmh=speed_kmh)
+    if c is None:
+        return None
+    return HQ.held_peak(c[1], MHR_HOLD_S)
+
+
+def _cadence_spm(ds, w):
+    """The run's cadence in steps / min (the channel is strides / min), or None."""
+    try:
+        c = ds.channel(w.idx, "cadence")
+    except Exception:                       # noqa: BLE001
+        return None
+    if c is None:
+        return None
     import numpy as np
-    if t is None or hr is None:
-        return None
-    t = np.asarray([np.nan if v is None else v for v in t], float)
-    h = np.asarray([np.nan if v is None else v for v in hr], float)
-    n = min(len(t), len(h))
-    t, h = t[:n], h[:n]
-    ok = np.isfinite(t) & np.isfinite(h) & (h > 0)
-    if ok.sum() < MHR_HOLD_S:
-        return None
-    tt, hh = t[ok], h[ok]
-    order = np.argsort(tt, kind="stable")
-    tt, hh = tt[order], hh[order]
-    g = np.arange(np.floor(tt[0]), np.floor(tt[-1]) + 1.0)
-    y = np.interp(g, tt, hh)
-    j = np.clip(np.searchsorted(tt, g), 1, len(tt) - 1)
-    gap = (tt[j] - tt[j - 1]) > MHR_GAP_S
-    y[gap & (g > tt[j - 1]) & (g < tt[j])] = np.nan
-    y[(y < MHR_ABS_MIN) | (y > MHR_ABS_MAX)] = np.nan
-    # spikes: a > 15 bpm rise within a second, dropped until back near the level before it
-    i = 1
-    while i < len(y):
-        if np.isfinite(y[i]) and np.isfinite(y[i - 1]) and y[i] - y[i - 1] > MHR_JUMP:
-            base = y[i - 1]
-            k = i
-            while k < len(y) and (not np.isfinite(y[k]) or y[k] > base + MHR_JUMP):
-                y[k] = np.nan
-                k += 1
-            i = k + 1
-            continue
-        i += 1
-    if len(y) < MHR_HOLD_S:
-        return None
-    win = np.lib.stride_tricks.sliding_window_view(y, MHR_HOLD_S)
-    full = np.isfinite(win).all(axis=1)
-    if not full.any():
-        return None
-    return float(np.min(win[full], axis=1).max())
+    return np.asarray(c, float) * 2.0
 
 
 def estimate_mhr(ds: Dataset, today: dt.date) -> dict:
@@ -352,7 +324,8 @@ def estimate_mhr(ds: Dataset, today: dt.date) -> dict:
     peaks = []
     for w in runs:
         def compute(w=w):
-            return peak_sustained_hr(ds.channel(w.idx, "elapsedtime"), ds.channel(w.idx, "heartrate"))
+            return peak_sustained_hr(ds.channel(w.idx, "elapsedtime"), ds.channel(w.idx, "heartrate"),
+                                     _cadence_spm(ds, w), ds.channel(w.idx, "speed"))
         v = cached(MHR_KEY, w, compute) if cached is not None else None
         if v is None and cached is None:
             v = compute()
@@ -373,7 +346,7 @@ def estimate_mhr(ds: Dataset, today: dt.date) -> dict:
             pick = top[1][1]
         out["value"] = round(pick)
         out["reason"] = (f"推估：近 {MHR_DAYS} 天 {len(peaks)} 次跑步中，持續 ≥ {MHR_HOLD_S} 秒的最高心率"
-                         "（濾掉光學心率尖刺：一秒跳 > 15 bpm、超過 220）"
+                         "（濾掉光學心率尖刺：3 秒內跳 ≥ 15 bpm 又回來、超過 220、跟著步頻）"
                          + (f"；{out['dropped'][0]} 那次 {out['dropped'][1]} 比其他高太多，當成誤差不採用"
                             if out["dropped"] else ""))
     if isinstance(memo, dict):
