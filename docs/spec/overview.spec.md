@@ -347,8 +347,10 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
 
 **Session decorators** (2026-10-02/03; each a small hook module, also run per projected week):
 - **主要訓練項目** (`engine/primary_sport.py`, setting `athlete.primary_sport` auto / trail / road;
-  auto = any future A / B 越野賽 or 百岳 → trail, else the next A 路跑賽 → road, else trail + hike
-  ≥ 25 % of 12 weeks' foot time, 推估; C races never count — SP-245): 路跑 =
+  auto = the future A races decide (only 越野賽 / 百岳 → trail, only 路跑賽 → road, both → the
+  harder race by `planning.event_size` tier, then predicted hours, then EP; tie / unknown size →
+  trail), with no future A race the B races the same way, else trail + hike ≥ 25 % of 12 weeks'
+  foot time, 推估; C races never count — SP-245): 路跑 =
   no B2B, no steep-hill walk, no mountain long run / uphill interval versions; the 專項期 LSD
   carries a marathon-pace segment (Pfitzinger / Daniels; SP-75 `MP_PLAN`: 20 / 25 / 30 % of the run at
   賽前第 10 / 9 / 8 週, 35 % at 6, 40 % at 4, all easy at 7 / 5 / 3 and before a road race ≤ 10 km; 40 %
@@ -1697,4 +1699,4 @@ deleted / superseded) are returned as reconcile `changes` (`backend/engine/recon
 | 2026-10-05 | feature | SP-86 | No strength in the 14 days before an A event (減量期 + race week; Bompa & Buzzichelli p.184 / p.327): `strength_stops` / `drop_strength_before_a` in week_plan and the projection (`strength_stop`), preferences included, a week note; B / C events unchanged |
 | 2026-10-05 | feature | SP-74 follow-up | The user's own 技術地形 session (custom or edited, RPE ≥ 7 by `session_role`) counts in the week's 20 % like the generated one: `plan_store.user_rpe_rows` → `technical.user_quality`, `quality_sessions(reserved=)` shortens / leaves out the intervals (note), no generated 技術地形 that 專項期 week, a week note; week_plan and projection alike |
 | 2026-10-05 | feature | SP-75 | 專項期 sessions climb the ladders (trail uphill versions; no fixed 2×15′ / 5×4′), 前段 / 後段 ratios, the road MP segment grows every other week (`MP_PLAN`, `mp_race` / `mp_week`) |
-| 2026-10-06 | change | SP-245 | 主要訓練項目 自動: any future A / B 越野賽 or 百岳 → trail (the nearest is named in the reason), else the next A 路跑賽 → road, else the 12-week share; C races never count (`primary_sport._event_pick`); only the 自動 setting is affected |
+| 2026-10-06 | change | SP-245 | 主要訓練項目 自動: A races first — only trail (越野賽 / 百岳) → trail, only road → road, both → the harder race (`event_size` tier → predicted hours → EP; tie / unknown size → trail; `primary_sport._harder`); with no future A race the B races the same way; else the 12-week share; C / past / 其他 races never count; the reason names the race (and the race it was compared with); only the 自動 setting is affected |

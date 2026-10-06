@@ -913,7 +913,15 @@
   },
   "{priority} 賽「{name}」是{kind}": {
     "draft": true,
-    "src": "backend/engine/primary_sport.py:78"
+    "src": "backend/engine/primary_sport.py:129"
+  },
+  "{priority} 賽「{name}」（{kind}）和「{other}」（{other_kind}）一樣吃力或比不出來，越野優先": {
+    "draft": true,
+    "src": "backend/engine/primary_sport.py:136"
+  },
+  "{priority} 賽「{name}」（{kind}）比「{other}」（{other_kind}）更吃力（依{by}）": {
+    "draft": true,
+    "src": "backend/engine/primary_sport.py:133"
   },
   "{p} 賽事「{race}」{date} 後": {
     "draft": true,
@@ -1175,9 +1183,9 @@
     "draft": true,
     "src": "backend/engine/load_guard.py:124"
   },
-  "下一場 A 賽「{name}」是{kind}": {
+  "下一場 {priority} 賽「{name}」是{kind}": {
     "draft": true,
-    "src": "backend/engine/primary_sport.py:77"
+    "src": "backend/engine/primary_sport.py:128"
   },
   "下一次 ≥ 75 分鐘路跑，後段心率、配速各在 ±5% 內": {
     "draft": true,
@@ -4539,6 +4547,10 @@
     "draft": true,
     "src": "backend/engine/downhill.py:96"
   },
+  "賽事大小": {
+    "draft": true,
+    "src": "backend/engine/primary_sport.py:59"
+  },
   "賽事計算器預測的完賽時間": {
     "draft": true,
     "src": "backend/engine/race_feasibility.py:344"
@@ -5438,6 +5450,10 @@
   "預估不到 4 小時的{event}": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:1620"
+  },
+  "預估時間": {
+    "draft": true,
+    "src": "backend/engine/primary_sport.py:59"
   },
   "預估時間 {h:.1f} h": {
     "draft": true,
