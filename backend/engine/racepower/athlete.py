@@ -976,7 +976,7 @@ def _power_label(prof: dict) -> str:
     the runner never picked one (the data decides then, engine/power_source.py)."""
     from backend.engine import athlete_profile as AP
     s = AP.profile_power_source(prof)
-    return AP.POWER_LABEL[s] if s else "未設定"
+    return AP.power_labels()[s] if s else _("未設定")
 
 
 def body_profile(ds, today: dt.date) -> dict:

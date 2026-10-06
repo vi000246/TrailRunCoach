@@ -131,20 +131,20 @@ main > section.tab-off { display: none; }
   </nav>
   <p class="meta tab-note" id="tab-note"></p>
   <section id="general">
-    <h2><span data-i18n="settings.general.title">基本資料</span> <button type="button" class="q" aria-label="說明" title="資料推不出來、只有你知道的幾項。體重用在 W/kg、跑步效能 RE、功率計算機和背包預設（體重 × 13 %）；只記一筆（日期＋體重），儲存會直接覆寫上一筆，所有圖表都用這個體重。性別決定 W′ 先驗（女性 6.4、男性 13.1 kJ）和熱量估算；年齡用在熱量估算，沒有最大心率時也用來估爬坡心率上限（220 − 年齡，推估），存的是出生年，每年自動加一歲。功率來源：只有 Stryd 的功率會進功率模型，沒有 Stryd 就用心率（手錶推估功率要到下面「功率」的進階設定打開）。其他數字都自動估算。">?</button></h2>
+    <h2><span data-i18n="settings.general.title">基本資料</span> <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.general.help" title="資料推不出來、只有你知道的幾項。體重用在 W/kg、跑步效能 RE、功率計算機和背包預設（體重 × 13 %）；只記一筆（日期＋體重），儲存會直接覆寫上一筆，所有圖表都用這個體重。性別決定 W′ 先驗（女性 6.4、男性 13.1 kJ）和熱量估算；年齡用在熱量估算，沒有最大心率時也用來估爬坡心率上限（220 − 年齡，推估），存的是出生年，每年自動加一歲。功率來源：只有 Stryd 的功率會進功率模型，沒有 Stryd 就用心率（手錶推估功率要到下面「功率」的進階設定打開）。其他數字都自動估算。">?</button></h2>
     <div class="row">
-      <label>性別 <select id="p-sex"><option value="">（未填）</option><option value="male">男</option><option value="female">女</option></select></label>
-      <label>身高 <input type="number" id="p-height" min="100" max="250" step="1" style="width:72px"> cm</label>
+      <label><span data-i18n="settings.general.sex">性別</span> <select id="p-sex"><option value="" data-i18n="settings.general.sex_unset">（未填）</option><option value="male" data-i18n="settings.general.male">男</option><option value="female" data-i18n="settings.general.female">女</option></select></label>
+      <label><span data-i18n="settings.general.height">身高</span> <input type="number" id="p-height" min="100" max="250" step="1" style="width:72px"> cm</label>
       <label><span data-i18n="settings.general.age">年齡</span> <input type="number" id="p-age" min="10" max="100" step="1" style="width:64px"> <span data-i18n="settings.general.age_unit">歲</span></label>
-      <label>功率來源 <select id="p-meter"><option value="">自動（依資料）</option><option value="stryd">Stryd</option>
-        <option value="watch">手錶推估功率</option><option value="none">沒有功率計</option></select></label>
+      <label><span data-i18n="settings.general.power">功率來源</span> <select id="p-meter"><option value="" data-i18n="settings.general.power_auto">自動（依資料）</option><option value="stryd">Stryd</option>
+        <option value="watch" data-i18n="settings.general.power_watch">手錶推估功率</option><option value="none" data-i18n="settings.general.power_none">沒有功率計</option></select></label>
     </div>
     <div class="row">
-      <label>體重 <input type="number" id="p-kg" step="0.1" min="25" max="250" style="width:90px"> kg</label>
-      <label>量測日期 <input type="date" id="p-kgdate"></label>
+      <label><span data-i18n="settings.general.weight">體重</span> <input type="number" id="p-kg" step="0.1" min="25" max="250" style="width:90px"> kg</label>
+      <label><span data-i18n="settings.general.weight_date">量測日期</span> <input type="date" id="p-kgdate"></label>
     </div>
     <div class="row">
-      <button class="primary" id="saveprof">儲存</button>
+      <button class="primary" id="saveprof" data-i18n="settings.general.save">儲存</button>
       <span class="meta" id="profnow"></span>
     </div>
     <p class="meta" id="profwko5"></p>
@@ -593,19 +593,22 @@ async function loadProfile() {
   $("p-age").value = e.age ?? "";                  // stored as the birth year (SP-211)
   $("p-height").placeholder = wk.height_cm || "";
   renderWeights();
-  $("profnow").textContent = e.weight != null ? `目前使用：${e.weight} kg（${e.weight_source || "–"}）`
-    : "還沒有體重：請填體重後儲存（W/kg、功率計算機、背包預設都會用到）";
+  $("profnow").textContent = e.weight != null ? t("settings.general.now", { kg: e.weight, src: e.weight_source || "–" })
+    : t("settings.general.no_weight");
   // 性別、年齡、體重 calibrate the calculations (SP-211): say which are still missing
   const miss = (PROF.setup && PROF.setup.missing) || [];
   if (miss.length) $("profnow").textContent += "　" + t("settings.general.missing",
     { list: miss.map((k) => t(`settings.general.f_${k}`)).join(t("settings.general.sep")) });
   const hasWko5 = wk.height_cm || wk.sex || wk.weights.length;
-  $("profwko5").textContent = !hasWko5 ? "" : `WKO5 裡的資料：身高 ${wk.height_cm ?? "–"} cm、性別 ${({ male: "男", female: "女" })[wk.sex] || "–"}、體重紀錄 `
-    + (wk.weights.length ? wk.weights.map((w) => `${w.date} ${w.kg} kg`).join("、") : "無");
+  $("profwko5").textContent = !hasWko5 ? "" : t("settings.general.wko5", { h: wk.height_cm ?? "–",
+    sex: wk.sex === "male" || wk.sex === "female" ? t(`settings.general.${wk.sex}`) : "–",
+    list: wk.weights.length ? wk.weights.map((w) => `${w.date} ${w.kg} kg`).join(t("settings.general.sep"))
+      : t("settings.general.wko5_none") });
   // 功率來源 pre-fill: what the last 90 days of runs show (shown on the 自動 option)
   j("/api/v1/plan/profile/detect").then((d) => {
     const s = d.power_source && d.power_source.source;
-    $("p-meter").options[0].textContent = s ? `自動（偵測到：${d.labels[s]}）` : "自動（依資料）";
+    $("p-meter").options[0].textContent = s ? t("settings.general.power_detected", { src: d.labels[s] })
+      : t("settings.general.power_auto");
     PROF.appWeight = d.weight;
   }).catch(() => {});
 }
@@ -625,8 +628,8 @@ $("saveprof").onclick = async () => {
     power_source: $("p-meter").value || null };
   try {
     await j("/api/v1/plan/profile", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    toast("已儲存，圖表會用新的體重重算"); loadProfile();
-  } catch (e) { toast("失敗：" + e.message.slice(0, 80)); }
+    toast(t("settings.general.saved")); loadProfile();
+  } catch (e) { toast(t("settings.failed", { msg: e.message.slice(0, 80) })); }
 };
 
 // ---- 心率 (api/plan.py hr-profile, engine/hr_profile.py) ---------------------

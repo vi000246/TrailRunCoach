@@ -946,7 +946,7 @@
 
 [394] Time requirements of pre-acclimatization at simulated altitude to prevent acute mountain sickness (J Travel Med). https://europepmc.org/article/MED/41609128
 
-[400] Is normobaric hypoxia an effective treatment for sustaining previously acquired altitude acclimatization?. https://europepmc.org/article/MED/28705998
+[400] Is normobaric hypoxia an effective treatment for sustaining previously acquired altitude acclimatization? (Beidleman et al., J Appl Physiol 2017;123:1214–1227). https://europepmc.org/article/MED/28705998
 
 [402] CDC Yellow Book: High-Altitude Travel and Altitude Illness. https://www.cdc.gov/yellow-book/hcp/environmental-hazards-risks/high-altitude-travel-and-altitude-illness.html
 
