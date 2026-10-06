@@ -340,7 +340,7 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
     <div class="row rf"><span class="lbl">熱</span>
       <label class="meta"><input type="checkbox" id="hourlyheat" checked> 逐段熱修正（依起跑時間與各段 ETA 取逐時氣溫、露點）</label>
       <span class="badge watch">推估</span>
-      <span class="help" tabindex="0">?<span class="tip">取得比賽日天氣後，如果有逐時預報（中央氣象署三天預報或 Open-Meteo），每一段用「跑到那一段時」的氣溫和露點算熱負荷，所以早上涼、中午熱會反映在各段的目標上。時間改了、到達時刻跟著改，會重算到穩定為止。沒有逐時預報（日期太遠、離線）或沒填起跑時間時，全程用同一個溫度。</span></span>
+      <span class="help" tabindex="0">?<span class="tip" data-i18n="racepower.heat.tip">取得比賽日天氣後，如果有逐時資料，每一段用「跑到那一段時」的氣溫和露點算熱負荷，所以早上涼、中午熱會反映在各段的目標上。逐時資料來自中央氣象署三天預報或 Open-Meteo 預報；超過 16 天的日期用近 10 年同一個月每個小時的平均。時間改了、到達時刻跟著改，會重算到穩定為止。沒有逐時資料（中央氣象署一週預報、離線、還沒取得天氣）或沒填起跑時間時，全程用同一個溫度。</span></span>
       <span class="meta" id="heat-line"></span>
     </div>
     <div class="row"><span class="lbl">熱適應</span>
@@ -451,7 +451,7 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
     </section>
     <section>
       <h2><span data-i18n="racepower.env.title">環境</span> <span class="meta" data-i18n="racepower.env.sub">自動帶入，不用填</span>
-        <span class="help" tabindex="0">?<span class="tip" data-i18n="racepower.env.tip">From = 你平常訓練的條件（你功率量到的地方）：近 90 天跑步的中位海拔，溫濕度取那些跑步當下的歷史天氣，沒有時用你所有活動的中位溫濕度。To = 比賽日：選了賽事、日期和地點（山名、座標或 GPX 起點）就自動查預報（中央氣象署 → Open-Meteo），太遠的日期用過去 5 年同期的氣候平均。兩邊的差換成環境係數 M。要自己改按 ✎。</span></span></h2>
+        <span class="help" tabindex="0">?<span class="tip" data-i18n="racepower.env.tip">From = 你平常訓練的條件（你功率量到的地方）：近 90 天跑步的中位海拔，溫濕度取那些跑步當下的歷史天氣，沒有時用你所有活動的中位溫濕度。To = 比賽日：選了賽事、日期和地點（山名、座標或 GPX 起點）就自動查預報（中央氣象署 → Open-Meteo），超過 16 天的日期用近 10 年同一個月（比賽日前後 15 天）的平均，含一天裡每個小時的冷熱。兩邊的差換成環境係數 M。要自己改按 ✎。</span></span></h2>
       <div class="envchips">
         <div class="echip"><span class="k"><span data-i18n="racepower.env.from">From 訓練</span> <span class="badge" id="from-badge"></span></span><b id="from-v">–</b><span class="s" id="from-s"></span></div>
         <div class="echip"><span class="k"><span data-i18n="racepower.env.to">To 比賽日</span> <span class="badge" id="to-badge">未取得</span></span><b id="to-v">–</b><span class="s" id="wx-meta"></span></div>
@@ -1046,8 +1046,9 @@ async function getWeather() {
     const d = w.detail || {};
     $("wx-meta").textContent = v ? `白天 06–18 平均${w.fetched_at ? "，取得於 " + w.fetched_at.slice(5, 16).replace("T", " ") : ""}` +
       (d.cwa_location ? `，CWA 地點 ${d.cwa_location}${d.match === "nearest" ? `（最近 ${d.distance_km.toFixed(1)} km）` : ""}` : "") +
-      (d.years ? `，${d.years} 年平均，已依海拔修正溫度` : "") +
-      (w.hourly?.length ? `；逐時 ${w.hourly.length} 筆，可逐段修正熱` : "；沒有逐時資料，熱用這個平均值") : T("env.none");
+      (d.years ? T("env.clim_meta", { years: d.years, models: (d.models || []).length || 1 }) + (d.partial ? T("env.clim_partial") : "") : "") +
+      (w.provider === "climatology" && w.hourly?.length ? T("env.clim_hourly")
+        : w.hourly?.length ? `；逐時 ${w.hourly.length} 筆，可逐段修正熱` : "；沒有逐時資料，熱用這個平均值") : T("env.none");
     $("wx-tried").innerHTML = "嘗試：" + w.tried.map((t) => `<span class="${t.ok ? "ok" : "faint"}">${esc(t.provider)} ${t.ok ? "✓" : "✕ " + esc(t.reason || "")}</span>`).join(" → ");
     $("attrib").textContent = (d.attribution || "");
     renderEnvChips();
@@ -1128,7 +1129,10 @@ function renderHeatLine() {
   const h = PLAN?.summary?.heat;
   if (!h || PLAN.type === "baiyue") { $("heat-line").textContent = ""; return; }
   let t = "";
-  if (h.mode === "hourly") t = `已套用：${PLAN.segments.filter((s) => s.heat_src === "hourly").length} 段用逐時預報，${h.passes} 次迭代${h.converged ? "收斂" : "未收斂"}`;
+  const nh = PLAN.segments.filter((s) => s.heat_src === "hourly").length;
+  if (h.mode === "hourly" && WX?.provider === "climatology")
+    t = T("heat.applied_clim", { n: nh, years: WX.detail?.years ?? 10, passes: h.passes }) + T(h.converged ? "heat.converged" : "heat.not_converged");
+  else if (h.mode === "hourly") t = `已套用：${nh} 段用逐時預報，${h.passes} 次迭代${h.converged ? "收斂" : "未收斂"}`;
   else if ($("hourlyheat").checked && tempOverridden()) t = "比賽日溫度 / 濕度是你輸入的值：全程用這個溫度";
   else if (h.reason) t = `全程單一溫度（${h.reason}）`;
   $("heat-line").textContent = t;
