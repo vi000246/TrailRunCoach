@@ -59,3 +59,29 @@ def test_settings_links_to_the_login_open_the_sync_tab():
     for page, frag in (("plan.html", "#thresholds"), ("wko5_viewer.html", "#mode"),
                        ("session_banner.js", "#sync")):
         assert f"/api/v1/wko5/settings{frag}" in (STATIC / page).read_text("utf-8")
+
+
+def _section_of(element_id: str) -> str:
+    """The <section id> of main that holds the element with this id."""
+    main = PAGE[PAGE.index("<main>"):PAGE.index("</main>")]
+    at = main.index(f'id="{element_id}"')
+    return re.findall(r"<section\b[^>]*\bid=\"([\w-]+)\"", main[:at])[-1]
+
+
+def test_the_controls_of_the_other_branches_land_on_their_tab():
+    """Integration 2026-10-06: what SP-67 / SP-69 / SP-211 / SP-215 added to the settings page sits
+    in the section of the tab it belongs to (SP-213), and SP-191's 肌力動作 is a 課表偏好 control
+    on the schedule page, inside 課表內容／目標 next to 每週肌力."""
+    tab = {i: k for k, ids in _tabs().items() for i in ids}
+    assert tab[_section_of("hr-cmp")] == "body"            # SP-67 app vs watch card, 心率
+    assert tab[_section_of("calib-tip")] == "advanced"     # SP-69 calibrated constants, 自動估算的參數
+    assert tab[_section_of("calib-rows")] == "advanced"
+    assert tab[_section_of("p-age")] == "personal"         # SP-211 age, 基本資料
+    assert tab[_section_of("profnow")] == "personal"       # SP-211 「還缺：…」
+    # SP-215 「花了 …」 under the source's 上次結果, in 資料同步
+    assert tab[_section_of("src-coros")] == "data"
+    assert "syncTook(r.secs)" in PAGE
+    sched = (STATIC / "schedule.html").read_text("utf-8")
+    g3 = sched[sched.index('aria-labelledby="pf-g3"'):]
+    g3 = g3[:g3.index("</section>")]
+    assert 'id="pf-st"' in g3 and 'id="pf-sm"' in g3 and 'id="pf-mv"' in g3 and 'id="pf-ng"' in g3

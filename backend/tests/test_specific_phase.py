@@ -318,3 +318,43 @@ def test_week_plan_and_projection_say_the_same_gait(store):
     assert len(climbs) >= 2
     how = {d[d.index("比賽時這段"):].split("；")[0] for d in (s["detail"] for s in climbs)}
     assert len(how) == 1 and next(iter(how)).endswith(("用快走", "哪個輕鬆用哪個", "用跑的"))
+
+
+def test_split_specific_phase_climb_gait_and_picked_moves_coexist(store):
+    """Integration 2026-10-06: in the 專項期 of a long trail A race, this week and every projected
+    week carry SP-75's uphill rung for the 強度課 (and no Zone 5 in the 後段 of a ≥ 4 h race),
+    SP-227's race gait on the 長爬坡反覆, and SP-191's picked strength moves — none replaces another."""
+    from backend.engine import overview as O
+    from backend.engine import plan_prefs as PP
+    from backend.engine import projection as P
+    from backend.engine import quality_gate as QG
+    from backend.engine.status import Status
+    from backend.tests.test_b2b import _history, _phases, _plan_with
+    from backend.tests.test_quality_gate import TODAY
+    EG.save("e1", GPX, "hehuan.gpx")
+    ds = _history(TODAY)
+    plan = _plan_with("2026-12-05", 1, TODAY)
+    plan.events = [_ev(start="2026-11-28")]                 # est 5 h: SPEC_RATIO trail_long
+    ds.plan = plan
+    assert QG.race_class(plan.events[0]) == "trail_long"
+    pr = PP.Prefs(strength_moves=(("pull", "band_row"),), strength_no_gear=("bar",))
+    st = Status(ds, plan, TODAY, prefs=pr).compute()
+    wp = O.week_plan(ds, st, TODAY, prefs=pr)
+    weeks = [{"start": wp["week"]["start"], "phase": wp["phase"], "sessions": wp["sessions"]}] + \
+        P.project_weeks(wp, _phases(plan, TODAY), date(2026, 11, 22), prefs=pr)
+    build = [w for w in weeks if w["phase"] == "specific"
+             and not any("恢復週" in (s.get("title") or "") for s in w["sessions"])]
+    assert len(build) >= 4
+    climbs = 0
+    for w in build:
+        ss = w["sessions"]
+        q = [s for s in ss if s["kind"] == "quality"]
+        assert q and all((s.get("title") or "").endswith("上坡") for s in q), (w["start"], [s.get("title") for s in q])
+        assert not any("VO2max" in (s.get("title") or "") for s in q)          # 後段 of a ≥ 4 h race: no Zone 5
+        st_ = [s for s in ss if s["kind"] == "strength" and "肌力" in (s.get("title") or "")
+               and "（" in (s.get("title") or "")]
+        assert st_ and all("彈力帶划船" in s["title"] for s in st_), w["start"]  # the pick (no bar)
+        for c in (s for s in ss if s.get("id") == "climb"):
+            assert "比賽時這段每小時約" in c["detail"] and c["kind"] == "easy"
+            climbs += 1
+    assert climbs >= 3
