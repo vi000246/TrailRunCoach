@@ -1,6 +1,6 @@
 # Module Spec: workout-review
 
-> **Last Updated**: 2026-10-05
+> **Last Updated**: 2026-10-06
 > **Status**: Active
 > **Domain Layer**: Core Domain
 
@@ -76,7 +76,7 @@ form drift, `form_bins` and `cad_windows`.
   for the same sessions (`backend/engine/workout_review.py:1702-1703`). Since the session
   classifier, hard time no longer decides the session type; `quality_gate.dose_history` and
   `plan_match` still read it.
-- Memoised on disk through `Dataset.cached_series` under key `workout_review_v18`
+- Memoised on disk through `Dataset.cached_series` under key `workout_review_v20`
   (v7: Pw:HR halves and `cp_bouts`; v8: drift_of's 40 min after the warm-up, fast finish,
   one Pa/Pw window, `watch_temp_c`; v9: the two drift tiers, `ref_ok` / `pw_ref_ok` / `tier`;
   v10: the adaptive start, `warmup_s` / `start_shift`; v11: drift v2 — `end_s`, `tail`,
@@ -84,7 +84,8 @@ form drift, `form_bins` and `cad_windows`.
   `pw_drift_se`, `noisy`, `ramps`; `drift_of` also gets `dist` / `elev`; v13: climb profile
   fields and `grade_bins`; v14/v15: interval-library reps, `form_bins` with `impact_km`;
   v16: `cad_windows`; v17: the heat bands; v18: `stim`; v19: `form_bins` on every moving step +
-  `slow_share`, SP-235) (`backend/engine/workout_review.py:67-88`,
+  `slow_share`, SP-235; v20: the rests' `rest_s` / `hr_at60` / `aet60` / `t_to_aet` / `aet_back`
+  and `intervals.rest_aet`, SP-264) (`backend/engine/workout_review.py:67-91`,
   `backend/engine/wko5expr/dataset.py:720`). The key holds the file and thresholds, not the
   code, so the version is bumped whenever `_measure` changes. Phase, classification,
   baselines and verdicts are recomputed on each call.
@@ -133,7 +134,7 @@ has no humidity of its own.
 | `heat_band` (alias `heat_gate`) | Tags a drift result with `temp_c` / `temp_src` / `temp_band` / `heat` (and `temp_bias` on the watch, from its optional `bias`); never refuses (2026-10-02). Idempotent | Bands: see Heat bands | `backend/engine/workout_review.py:408` |
 | `activity_temp` | (°C, source): the route_weather archive's air temperature for the file (`activity_weather.json`, moving-weighted, `backend/engine/route_weather.py:300`), else the only archive row of that date — the air is what the 25 °C rule (台灣教練) means, a wrist sensor is warmed by the body (`docs/research/aerobic-base-readiness.md:515`) — else the watch's `watch_temp_c` minus the dataset's wrist bias (`watch_air(t, watch_bias_of(ds)["bias_c"])`: the athlete's own median with ≥ 10 paired runs, else 3.7 °C; see Heat bands); a dataset may carry `activity_temps` (tests; `conftest` points `routes.HOME` at a temp folder so the date fallback never reads the real archive) | Archive read cached on the file's mtime; the wrist bias is read on every `measure()` (outside its disk cache), so a new bias re-bands cached runs and the same-band baseline's peers without a cache flush | `backend/engine/workout_review.py` |
 | `basis_drift` | (drift, reason) of a `drift_of` result for pace or power; strict by default, `ref=True` also returns a reference-tier value | Gates and thresholds (`quality_gate.friel_check` / `xu_check`, `classify`'s steady AeT test, the AeT-test bands) read strict; display (`_aerobic`, `aerobic_lines` except on `test_aet`, `drift_series(ref=True)` → `i_drift`, `drift(basis, "ref")`) opts in, labelled 「暖身後不到 40 分鐘，只當參考」 (`REF_LABEL`, hover `REF_TIP`) | `backend/engine/workout_review.py:1006` |
-| `detect_efforts` | Work bouts in the 1-s power stream | 30-s power ≥ max(0.85 CP, 1.12 × session median) (1.15 × median with no CP), ≥ 60 s, gaps < 30 s bridged; HR drop 60 s after the HR peak, skipped only when the next bout that is itself an effort (≥ 60 s) starts within those 60 s (`backend/engine/workout_review.py:1077`) | `backend/engine/workout_review.py:1036` |
+| `detect_efforts` | Work bouts in the 1-s power stream | 30-s power ≥ max(0.85 CP, 1.12 × session median) (1.15 × median with no CP), ≥ 60 s, gaps < 30 s bridged; HR drop 60 s after the HR peak (`hr_drop60`) and the HR at 60 s (`hr_at60`), skipped only when the next bout that is itself an effort (≥ 60 s) starts within those 60 s; `rest_s` to the next bout; with an AeT (SP-264): `aet60` = hr_at60 ≤ AeT, `t_to_aet` = seconds to the first HR ≤ AeT before the next bout, `aet_back` — only for rests between two bouts (owner 2026-10-06: the cool-down after the last bout is not a rest); `rest_aet_summary` aggregates them (`backend/engine/workout_review.py:1156`) | `backend/engine/workout_review.py:1082` |
 | `interval_summary` | Set band (median %CP), reps in band (±1 %), fade last vs first, median HR drop | Bands 閾值下 0.88–0.95, 閾值 0.95–1.01, 超閾值 1.01–1.06, VO2max 1.06–1.16, 無氧 ≥ 1.16 ×CP | `backend/engine/workout_review.py:1088`, `backend/engine/workout_review.py:190` |
 | `cp_test` | Best 12′ window, then the best 3′ window ≥ 10 min away (never overlapping); two-point CP, or the single-bout fallback when P3 ≤ P12 (W′ prior by sex, `cp_test_for_sex`) | — | `backend/engine/workout_review.py:1113`, `backend/engine/workout_review.py:1154` |
 | `looks_like_cp_test` | Two separate all-out efforts | 3′ ≥ 115 % and 12′ ≥ 98 % of the current CP (or a separate 3′ ≥ 98 % on the single-bout fallback) | `backend/engine/workout_review.py:1166` |
@@ -348,9 +349,14 @@ run, the older runs refused by the strict tier, both season charts and the drift
 the card, the stored values match the whole-run definition to 5e-5 / 1e-9) moved to the
 opt-in real-data suite `backend/tests/realdata/test_real_drift_basis.py`; the default run
 keeps the synthetic and chart-definition tests in `backend/tests/test_drift_basis.py`.
-- Intervals (`backend/engine/workout_review.py:2381`): reps in band; fade > 5 % → one
-  rep fewer or more rest; median 60-s HR drop < 20 bpm → longer rest; band 閾值下/閾值
-  with HR between AeT and LTHR → 屬於閾值下. A `quality` run's summary leads with the first
+- Intervals (`backend/engine/workout_review.py:2538`): reps in band; fade > 5 % → one
+  rep fewer or more rest; the rests' HR back to AeT (`rest_aet_line`, SP-264, information only:
+  「休息 60 秒時心率回到 AeT 以下 k/n 組」 over the rests between reps only (not the cool-down after
+  the last rep), rests under 60 s and rests that never got there said as such, the median time to AeT; no line without an AeT — no fixed-bpm fallback; the row's tip
+  `REST_AET_TIP` = 「只供參考，不據此調整休息」 + sources; the 間歇 table gets a 回到 AeT column);
+  band 閾值下/閾值 with HR between AeT and LTHR → 屬於閾值下. The old 「median 60-s HR drop
+  < 20 bpm → longer rest」 (`HR_DROP_MIN`) is gone: no training source
+  (docs/research/interval-adaptation.md §3.1, §4.3). A `quality` run's summary leads with the first
   `stimulus_lines` line (equivalent T@VO2max); `hard_long` shows the stimulus lines
   (`backend/engine/workout_review.py:2404`).
 - CP (`backend/engine/workout_review.py:2474`): the headline by method, the first
@@ -588,3 +594,4 @@ None. The module computes on request; there are no emitters or subscribers.
 | 2026-10-05 | SP-51 | N/A | The watch temperature path uses the athlete's own wrist bias (`zone_events.dataset_watch_bias`: median of ≥ 10 runs with both an archive and a watch temperature, else 3.7 °C) in `activity_temp` and the AeT test (`aet_test.analyze(…, watch_bias)`), as `HEAT_TIP` already said; `temp_bias` on watch drifts, the 溫度 row says which bias was used; `HEAT_TIP` wrapped in `N_` with en. Measure cache unchanged (bias applied on read) |
 | 2026-10-06 | SP-236 | docs/research/downhill-knee-load-display.md §3.2 | `cadence_hint` returns lines: a downhill grade bin (hi ≤ −2 %) with impact above the usual and cadence below it gets 「下坡縮小步幅、加快步頻可以減少膝蓋負擔（Van Hooren 2024、Heiderscheit 2011）」 (`DOWN_CADENCE_HINT`, `N_` + en); ≥ 15 % climbs get no hint; a bin without an impact value never hints. Card help (zh-TW + en) says so. No cache change (computed on read) |
 | 2026-10-06 | SP-236 follow-up | user decision | Downhill wording only on grade bins with an upper edge ≤ −5 % (`HINT_DOWN_MAX` −2 → −5); the −5 ~ −2 % bin gets the plain flat wording. 「跑姿隨疲勞的變化」 (`form_work`) unchanged. form-grades help (zh-TW + en) updated |
+| 2026-10-06 | SP-264 | docs/research/interval-adaptation.md §3.1, §4.3 | Interval review: the unsourced 「休息 60 秒心率降幅中位 < 20 bpm：休息拉長」 (`HR_DROP_MIN`) removed; instead, information only, how the rests brought HR back to AeT — `aet60` (HR at 60 s ≤ AeT, k of n judged reps), `t_to_aet` median, between-rep rests only — the last rep's cool-down never counts (owner 2026-10-06); rests < 60 s not judged, never-reached counted; no AeT → no line; tip 「只供參考，不據此調整休息」 with sources; 回到 AeT table column; zh-TW + en. `hr_drop60` (SP-110's fatigue check) and `quality_gate` unchanged; measure cache `workout_review_v20` |
