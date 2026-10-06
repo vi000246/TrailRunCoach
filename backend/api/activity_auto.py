@@ -55,6 +55,7 @@ def _recorded_stamp(recorded: list) -> tuple:
 def _other(ds, w, recorded) -> dict:
     """A workout that is not an outdoor run: auto_tags_all's second branch."""
     from backend.engine import activity_tags as AT
+    from backend.engine import sport_map as SM
     from backend.engine.racepower import athlete as A
     try:
         th = A.thresholds_as_of(ds, w.entry.start.date())
@@ -66,7 +67,7 @@ def _other(ds, w, recorded) -> dict:
     eff = AT.effort_from_rpe((rec or {}).get("rpe"), es.get("rest_share"), eff, rec=rec) or eff
     typ, why = AT.auto_type(test=A._test_reason(ds, w), sport=w.sport, sport_type=w.sport_type,
                             title=getattr(w.entry, "title", "") or "", trail=A.is_trail(w),
-                            baiyue_event=A.baiyue_on(ds, w.entry.start.date()))
+                            baiyue_event=A.baiyue_on(ds, w.entry.start.date()), app_type=SM.app_type(w))
     return {"activity_type": typ, "activity_type_reason": why, "effort": eff["effort"], "effort_reason": eff["reason"]}
 
 
@@ -115,11 +116,11 @@ _CODE: dict = {}
 def _code_sig() -> str:
     """The code the values come from (a rule change recomputes)."""
     if not _CODE:
-        from backend.engine import activity_tags, thresholds, workout_review
+        from backend.engine import activity_tags, sport_map, thresholds, workout_review
         from backend.engine.racepower import athlete, intensity, maximal, trailhr
         import sys
         h = hashlib.sha1()
-        for m in (activity_tags, thresholds, workout_review, athlete, intensity, maximal, trailhr,
+        for m in (activity_tags, sport_map, thresholds, workout_review, athlete, intensity, maximal, trailhr,
                   sys.modules[__name__]):
             try:
                 h.update(inspect.getsource(m).encode("utf-8"))
@@ -151,7 +152,7 @@ def signature(ds, recorded: list) -> str:
     add(getattr(ds, "source", None))
     for w in ds.workouts:
         add((w.entry.file, _file_stamp(ds, w), w.sport, w.sport_type, sorted(w.tags or []),
-             getattr(w.entry, "title", ""), w.entry.start.isoformat()))
+             getattr(w.entry, "title", ""), w.entry.start.isoformat(), sorted((getattr(w, "platform", None) or {}).items())))
     add(repr(getattr(ds, "plan", None)))
     try:
         add(sorted((k, [(str(d), v) for d, v in vals]) for k, vals in ds.athlete.settings.items()))

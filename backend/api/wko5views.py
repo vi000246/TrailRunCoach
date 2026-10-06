@@ -20,6 +20,7 @@ import weakref
 from collections import OrderedDict
 from functools import lru_cache
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Optional
 
 from backend.engine.localtime import today_local
@@ -394,10 +395,12 @@ def custom_view_dirs():
             "wko5": str(views_dir()) if views_dir() else None}
 
 
-def _sports(sports: Optional[str]) -> Optional[set[str]]:
-    if not sports:
-        return None
-    return {s.strip().lower() for s in sports.split(",") if s.strip()}
+def _kind_filter(ds: Dataset, sports: Optional[str]):
+    """The `sports` query as a workout predicate (engine/sport_map.py, SP-263):
+    activity kinds 越野跑 / 路跑 / 登山健行 / 百岳登山 / ...; a WKO5 sport group
+    ("run", from an older link) still selects its group. None = everything."""
+    from backend.engine import sport_map as SM
+    return SM.make_filter(sports, ds)
 
 
 def _range(ds: Dataset, begin: Optional[str], end: Optional[str]) -> tuple[float, float]:
@@ -442,6 +445,11 @@ def chart(request: Request, view: str, d: int, c: int, begin: Optional[str] = No
             # 近 7／14／28 天新高 (recentbests.py): ?window=14
             ch, winfo = RB.apply_window(ch, request.query_params.get("window"))
     params = {k: val for k, val in request.query_params.items() if k not in ("begin", "end", "parity")}
+    if params.get("sports") and not needs_workout:
+        # the activity-type filter reads the user's activity-type marks (百岳跟團 / 爬山) and the plan's
+        # 百岳 events (the plan is in data_fingerprint): the marks are in the key too
+        from backend.engine import sport_map as SM
+        params = {**params, "_kinds": SM.tags_stamp()}
     if ch.get("kind") == "z5gate":
         # the replay follows the 間歇門檻 preference (課表偏好) and the stored test / interval
         # sessions: both in the key so a changed preference isn't served from the cache
@@ -623,18 +631,21 @@ def _render(ch: dict, ds: Dataset, b: float, e: float, sports: Optional[str], w,
             (est.get("aethr") or {}).get("below"))}
     if ch.get("kind") != "athlete":
         raise HTTPException(400, f"unsupported panel {ch.get('class')}")
-    return render_chart(ch, ds, b, e, sports=_sports(sports))
+    return render_chart(ch, ds, b, e, keep=_kind_filter(ds, sports))
 
 
 @router.get("/workouts")
 def workouts(begin: Optional[str] = None, end: Optional[str] = None, sports: Optional[str] = None,
              parity: Optional[bool] = None):
-    """RHE activity list for the selected range / sports (newest first)."""
+    """RHE activity list for the selected range / activity kinds (newest
+    first; `sports` = kinds, engine/sport_map.py). Each row carries its kind."""
     from backend.engine import activity_tags as AT
+    from backend.engine import sport_map as SM
     ds = _dataset(parity)
     b, e = _range(ds, begin, end)
-    sp = _sports(sports)
     tag_rows = AT.load()
+    keep = SM.make_filter(sports, ds, tag_rows)
+    kinds = SM.KindFilter(SM.FILTER_KINDS, ds, tag_rows)
     # the planned session each activity was matched to (engine/plan_match.py): one cached query
     try:
         from backend.engine.plan_store import done_by_index
@@ -643,11 +654,11 @@ def workouts(begin: Optional[str] = None, end: Optional[str] = None, sports: Opt
         plan = {}
     out = []
     for w in reversed(ds.workouts):
-        if not (b <= w.day < e + 1) or (sp is not None and w.sport not in sp):
+        if not (b <= w.day < e + 1) or (keep is not None and not keep(w)):
             continue
         m = w.metrics
         out.append({
-            "index": w.idx, "start": w.entry.start.isoformat(), "sport": w.sport,
+            "index": w.idx, "start": w.entry.start.isoformat(), "sport": w.sport, "kind": kinds.kind(w),
             # the 活動編輯 page's title (activity_tags.name), else null
             "name": AT.name_of(AT.find(tag_rows, w.entry.start, w.entry.file)) if tag_rows else None,
             "key": AT.key_of(w.entry.start),
@@ -669,10 +680,14 @@ def workouts(begin: Optional[str] = None, end: Optional[str] = None, sports: Opt
     # bad activity files (engine/bad_activity.py) are in no model, but stay in
     # the list, marked 「已排除：…」, without an index (nothing reads them)
     for x in getattr(ds, "excluded", []):
-        day = date_to_day(dt.datetime.fromisoformat(x["start"]))
-        if not (b <= day < e + 1) or (sp is not None and x["sport"] not in sp):
+        start = dt.datetime.fromisoformat(x["start"])
+        day = date_to_day(start)
+        xw = SimpleNamespace(sport=x["sport"], sport_type=x["sport_type"], tags=[],
+                             entry=SimpleNamespace(start=start, file=x["file"]))
+        if not (b <= day < e + 1) or (keep is not None and not keep(xw)):
             continue
-        out.append({"index": None, "start": x["start"], "sport": x["sport"], "sport_type": x["sport_type"],
+        out.append({"index": None, "start": x["start"], "sport": x["sport"], "kind": kinds.kind(xw),
+                    "sport_type": x["sport_type"],
                     "file": x["file"], "tags": [], "duration": x.get("duration"), "distance": x.get("distance"),
                     "climbing": None, "tss": None, "if": None, "hrtss": None, "np": None,
                     "power_source": None, "power_label": None, "tss_source": None,
@@ -1116,11 +1131,15 @@ def activities_page():
 
 @router.get("/sports")
 def sports_list():
-    """Sport groups present in the athlete, with counts (RHE sport filter)."""
-    counts: dict[str, int] = {}
-    for w in _dataset().workouts:
-        counts[w.sport] = counts.get(w.sport, 0) + 1
-    return sorted(({"sport": k, "count": v} for k, v in counts.items()), key=lambda x: -x["count"])
+    """The activity kinds present, with counts, in the filter's order (the
+    圖表分析 activity-type filter, engine/sport_map.py, SP-263): 越野跑 / 路跑 /
+    登山健行 / 百岳登山 / 騎車 / 肌力 / 走路 / 其他. `sport` = the kind key
+    the `sports` query takes."""
+    from backend.engine import sport_map as SM
+    from backend.i18n import _
+    ds = _dataset()
+    n = SM.counts(ds.workouts, ds)
+    return [{"sport": k, "label": _(label), "count": n[k]} for k, label in SM.FILTER_KINDS.items() if n.get(k)]
 
 
 @router.get("/athlete")

@@ -529,6 +529,11 @@ def is_trail(w) -> bool:
     return _it(w)
 
 
+def _app_type(w) -> str:
+    from backend.engine.sport_map import app_type
+    return app_type(w)
+
+
 def outdoor(w) -> bool:
     return w.sport == "run" and w.sport_type not in ("indoor running", "treadmill running") \
         and "runningtreadmill" not in w.tags and "runningindoor" not in w.tags
@@ -743,7 +748,7 @@ def auto_tags(ds, w) -> dict:
     eff = AT.effort_from_rpe((rec or {}).get("rpe"), es.get("rest_share"), eff, rec=rec) or eff
     typ, why = AT.auto_type(test=test, sport=w.sport, sport_type=w.sport_type,
                             title=getattr(w.entry, "title", "") or "", trail=is_trail(w),
-                            baiyue_event=baiyue_on(ds, w.entry.start.date()))
+                            baiyue_event=baiyue_on(ds, w.entry.start.date()), app_type=_app_type(w))
     out = AT.merge({"activity_type": typ, "activity_type_reason": why, "effort": eff["effort"],
                     "effort_reason": eff["reason"]}, AT.user_of(w))
     out["effort_detail"] = eff

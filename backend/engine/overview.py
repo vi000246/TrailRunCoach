@@ -72,21 +72,11 @@ Z3_EXPR = "sum(if(runpower >= 0.85*cp, deltatime))"
 
 
 def category(w: Workout) -> str:
-    tags, st = set(w.tags), (w.sport_type or "")
-    from backend.engine.algorithms.classify import is_trail
-    if is_trail(w):
-        return "trail"
-    if w.sport == "run":
-        return "road"
-    if tags & {"hiking", "mountaineering"} or st in ("hiking", "mountaineering"):
-        return "hike"
-    if w.sport in ("bike", "road bike") or "cycling" in tags or "cycling" in st:
-        return "bike"
-    if w.sport == "strength" or st == "strength":
-        return "strength"
-    if w.sport == "walk":
-        return "walk"
-    return "other"
+    """The activity's app type (engine/sport_map.py, SP-263: trail / road from
+    the trail classification, then the platform's own sport code, the FIT
+    sport, the WKO5 names)."""
+    from backend.engine.sport_map import app_type
+    return app_type(w)
 
 
 def _n(v) -> Optional[float]:
