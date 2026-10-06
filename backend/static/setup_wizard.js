@@ -43,7 +43,7 @@
     const w0 = e.weight ?? pre.weight ?? "";
     d.innerHTML = `<form method="dialog">
       <h3>先填幾項基本資料</h3>
-      <p>只問資料推不出來的。其他數字（門檻、熱、爬坡…）都會用你的紀錄自動估算。之後都能在「設定 → 一般設定」改。</p>
+      <p>只問資料推不出來的。其他數字（門檻、熱、爬坡…）都會用你的紀錄自動估算。之後都能在「設定 → 個人資料」改。</p>
       <label>體重 <span><input name="kg" type="number" step="0.1" min="25" max="250" required value="${esc(w0)}" style="width:80px"> kg
         ${pre.weight_source ? `<small style="color:var(--muted,#667)">（${esc(pre.weight_source)}）</small>` : ""}</span></label>
       <label>性別 <select name="sex"><option value="">（未填）</option><option value="male">男</option><option value="female">女</option></select></label>

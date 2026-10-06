@@ -96,6 +96,18 @@ dialog::backdrop { background: rgba(0,0,0,.35); }
 .toast { position: fixed; right: 16px; bottom: 16px; background: var(--text); color: var(--bg);
   padding: 8px 14px; border-radius: 6px; opacity: 0; transition: opacity .2s; }
 .toast.on { opacity: .92; }
+/* 分頁 (SP-213): 個人資料 / 生理數據 / 資料同步 / 進階設定. The sections stay where they are
+   (deep links #sync, #thresholds … keep working); the selected tab shows its own (TABS below). */
+.tabs { order: -2; display: flex; gap: 4px; overflow-x: auto; background: var(--panel); border: 1px solid var(--line);
+  border-radius: 8px; padding: 4px; scrollbar-width: none; }
+.tabs button { flex: 1 0 auto; border: 0; background: none; padding: 7px 12px; border-radius: 6px;
+  font-weight: 600; color: var(--muted); white-space: nowrap; }
+.tabs button[aria-selected="true"] { background: var(--soft); color: var(--accent); }
+.tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.tab-note { order: -1; margin: -6px 2px 0; }
+main > section.tab-off { display: none; }
+/* 生理數據: 心率 → 閾值測試紀錄 → 功率 (grid order; the HTML order stays) */
+#hr { order: 1; } #thresholds { order: 2; } #power { order: 3; }
 </style>
 </head>
 <body>
@@ -106,8 +118,15 @@ dialog::backdrop { background: rgba(0,0,0,.35); }
   <h1>設定</h1>
 </header>
 <main>
+  <nav class="tabs" role="tablist" aria-label="設定分類" data-i18n-attr="aria-label:settings.tabs.aria">
+    <button type="button" role="tab" id="tab-personal" data-tab="personal" data-i18n="settings.tabs.personal">個人資料</button>
+    <button type="button" role="tab" id="tab-body" data-tab="body" data-i18n="settings.tabs.body">生理數據</button>
+    <button type="button" role="tab" id="tab-data" data-tab="data" data-i18n="settings.tabs.data">資料同步</button>
+    <button type="button" role="tab" id="tab-advanced" data-tab="advanced" data-i18n="settings.tabs.advanced">進階設定</button>
+  </nav>
+  <p class="meta tab-note" id="tab-note"></p>
   <section id="general">
-    <h2>一般設定 <button type="button" class="q" aria-label="說明" title="資料推不出來、只有你知道的幾項。體重用在 W/kg、跑步效能 RE、功率計算機和背包預設（體重 × 13 %）；只記一筆（日期＋體重），儲存會直接覆寫上一筆，所有圖表都用這個體重。性別決定 W′ 先驗（女性 6.4、男性 13.1 kJ）和熱量估算；出生年用在熱量估算。功率來源：只有 Stryd 的功率會進功率模型，沒有 Stryd 就用心率（手錶推估功率要到下面「功率」的進階設定打開）。其他數字都自動估算。">?</button></h2>
+    <h2><span data-i18n="settings.general.title">基本資料</span> <button type="button" class="q" aria-label="說明" title="資料推不出來、只有你知道的幾項。體重用在 W/kg、跑步效能 RE、功率計算機和背包預設（體重 × 13 %）；只記一筆（日期＋體重），儲存會直接覆寫上一筆，所有圖表都用這個體重。性別決定 W′ 先驗（女性 6.4、男性 13.1 kJ）和熱量估算；出生年用在熱量估算。功率來源：只有 Stryd 的功率會進功率模型，沒有 Stryd 就用心率（手錶推估功率要到下面「功率」的進階設定打開）。其他數字都自動估算。">?</button></h2>
     <div class="row">
       <label>性別 <select id="p-sex"><option value="">（未填）</option><option value="male">男</option><option value="female">女</option></select></label>
       <label>身高 <input type="number" id="p-height" min="100" max="250" step="1" style="width:72px"> cm</label>
@@ -163,7 +182,7 @@ dialog::backdrop { background: rgba(0,0,0,.35); }
     <h2>功率</h2>
     <div class="row" style="margin-top:4px">
       <label><input type="checkbox" id="u-power"> 使用功率</label>
-      <button type="button" class="q" aria-label="說明" title="預設跟著「一般設定」的功率來源：Stryd 才打開，沒有功率計或只有手錶推估功率就用心率。只用心率訓練就關掉：圖表、總覽和活動頁會藏起只跟功率／CP 有關的圖、欄位和卡片（例如功率區間、功率曲線、CP 測試、W′ 電池、間歇的功率判讀），有「配速／功率」切換的圖固定用配速。心率版的圖照常顯示，計算本身不受影響，隨時可以再打開。">?</button>
+      <button type="button" class="q" aria-label="說明" title="預設跟著「基本資料」的功率來源：Stryd 才打開，沒有功率計或只有手錶推估功率就用心率。只用心率訓練就關掉：圖表、總覽和活動頁會藏起只跟功率／CP 有關的圖、欄位和卡片（例如功率區間、功率曲線、CP 測試、W′ 電池、間歇的功率判讀），有「配速／功率」切換的圖固定用配速。心率版的圖照常顯示，計算本身不受影響，隨時可以再打開。">?</button>
       <span class="meta" id="u-power-note"></span>
       <button type="button" id="u-power-auto" hidden>改回自動</button>
     </div>
@@ -435,7 +454,7 @@ dialog::backdrop { background: rgba(0,0,0,.35); }
     </details>
   </section>
 
-  <section>
+  <section id="fixes">
     <h2>資料校正</h2>
     <p class="meta">找出功率異常尖峰（例如 1800 W）。只會列出建議，<b>按下套用才會生效</b>；不會改到 .wko4 原始檔，隨時可以撤銷。只在「我的算式」模式生效。</p>
     <div class="row">
@@ -1344,6 +1363,60 @@ document.querySelectorAll("[data-cal-copy]").forEach((b) => b.onclick = async ()
   try { await navigator.clipboard.writeText(inp.value); toast(t("settings.cal.copied")); }
   catch { inp.select(); toast(t("settings.cal.copy_fail")); }
 });
+// ---- 分頁 (SP-213) ------------------------------------------------------------------------
+// which tab each section is on; a section not listed goes to 進階設定. A URL hash picks the
+// tab: #body … or a section / element id (#sync, #thresholds, #badfiles: its tab, scrolled to)
+const TABS = {
+  personal: ["general", "sport", "map"],
+  body: ["hr", "thresholds", "power"],
+  data: ["sync", "backup", "calendar"],
+  advanced: ["mode", "calib", "fixes"],
+};
+const TAB_OF = Object.fromEntries(Object.entries(TABS).flatMap(([k, ids]) => ids.map((id) => [id, k])));
+const tabOf = (sec) => TAB_OF[sec.id] || "advanced";
+const tabBtns = () => [...document.querySelectorAll('.tabs [role="tab"]')];
+document.querySelectorAll("main > section").forEach((sec) => {
+  sec.setAttribute("role", "tabpanel"); sec.setAttribute("aria-labelledby", `tab-${tabOf(sec)}`);
+});
+tabBtns().forEach((b) => b.setAttribute("aria-controls",
+  [...document.querySelectorAll("main > section")].filter((sec) => tabOf(sec) === b.dataset.tab && sec.id).map((sec) => sec.id).join(" ")));
+function showTab(tab, focus) {
+  if (!TABS[tab]) tab = "personal";
+  document.querySelectorAll("main > section").forEach((sec) => sec.classList.toggle("tab-off", tabOf(sec) !== tab));
+  tabBtns().forEach((b) => {
+    const on = b.dataset.tab === tab;
+    b.setAttribute("aria-selected", on ? "true" : "false"); b.tabIndex = on ? 0 : -1;
+    if (on && focus) b.focus();
+  });
+  $("tab-note").textContent = t(`settings.tabs.${tab}_note`);
+}
+function tabFromHash() {
+  const h = decodeURIComponent(location.hash.slice(1));
+  if (TABS[h]) { showTab(h); return; }
+  const el = h ? document.getElementById(h) : null;
+  const sec = el && el.closest("main > section");
+  showTab(sec ? tabOf(sec) : "personal");
+  if (sec) el.scrollIntoView();
+}
+document.querySelector(".tabs").addEventListener("click", (e) => {
+  const b = e.target.closest('[role="tab"]'); if (!b) return;
+  showTab(b.dataset.tab);
+  history.replaceState(null, "", "#" + b.dataset.tab);
+});
+// ← → Home End between the tabs (WAI-ARIA tabs pattern)
+document.querySelector(".tabs").addEventListener("keydown", (e) => {
+  const bs = tabBtns(), i = bs.indexOf(document.activeElement);
+  if (i < 0) return;
+  const j = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: bs.length - 1 }[e.key];
+  if (j == null) return;
+  e.preventDefault();
+  const b = bs[(j + bs.length) % bs.length];
+  showTab(b.dataset.tab, true);
+  history.replaceState(null, "", "#" + b.dataset.tab);
+});
+window.addEventListener("hashchange", tabFromHash);
+tabFromHash();
+
 loadMode(); loadApplied(); loadProfile(); loadHr(); loadThr(); loadExclusions(); loadBackup(); loadCalib(); loadCal();
 loadSyncSettings().then(loadSources).catch((e) => toast("同步設定載入失敗：" + e.message.slice(0, 80)));
 </script>
