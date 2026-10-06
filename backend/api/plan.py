@@ -425,7 +425,7 @@ def get_profile():
                   "prefill": {"weight": None if eff_w is not None else app_w,
                               "weight_source": "COROS" if eff_w is None and app_w else None}},
         "options": {**P.PROFILE_FIELDS, "power_source": AP.POWER_SOURCES},
-        "power_labels": AP.POWER_LABEL,
+        "power_labels": AP.power_labels(),
     }
 
 
@@ -460,7 +460,7 @@ def detect_profile():
         power = AP.detect_power_source(_dataset())
     except Exception as e:                  # noqa: BLE001 — no data yet
         power = {"source": None, "error": type(e).__name__}
-    return {"power_source": power, "weight": _app_weight(), "labels": AP.POWER_LABEL}
+    return {"power_source": power, "weight": _app_weight(), "labels": AP.power_labels()}
 
 
 class SetupIn(BaseModel):

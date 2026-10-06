@@ -34,8 +34,11 @@ import datetime as dt
 import math
 from typing import Optional
 
+from backend.i18n import N_, _
+
 POWER_SOURCES = ("stryd", "watch", "none")
-POWER_LABEL = {"stryd": "Stryd", "watch": "手錶推估功率", "none": "沒有功率計"}
+# msgids (zh-TW): shown through power_labels() / _() so they follow the UI language (SP-233)
+POWER_LABEL = {"stryd": "Stryd", "watch": N_("手錶推估功率"), "none": N_("沒有功率計")}
 LEGACY_METER = {"stryd": "stryd", "coros": "watch", "garmin": "watch", "other": "watch"}
 DETECT_DAYS = 90
 DETECT_MIN_RUNS = 5               # 推估 (plan S1: ≥ 5 Stryd runs in 90 days)
@@ -69,6 +72,11 @@ def birth_year_of_age(age: int, today: Optional[dt.date] = None) -> int:
 
 def age_ok(a: Optional[int]) -> bool:
     return a is None or (isinstance(a, int) and not isinstance(a, bool) and AGE_MIN <= a <= AGE_MAX)
+
+
+def power_labels() -> dict:
+    """POWER_LABEL in the request's language (the 精靈 / 設定頁 「偵測到：…」, SP-233)."""
+    return {k: v if k == "stryd" else _(v) for k, v in POWER_LABEL.items()}   # Stryd: a brand name
 
 
 def profile_power_source(profile: dict) -> Optional[str]:
