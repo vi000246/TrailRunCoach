@@ -379,7 +379,14 @@ def test_step_shows_the_ep_multiple_but_judges_by_class_only():
     assert st["level"] == "over" and "兩倍以上" not in st["text"]
     r, st = _step(20, 500, 40.0)                          # EP 25 vs 40: below, ×0.6
     assert st["level"] == "ok" and st["ep_ratio"] == pytest.approx(25 / 40, abs=0.01)
-    r, st = _step(20, 500, 0.0)                           # a zero best day: no multiple, the class still judged
+    assert "兩倍以上" not in st["text"]
+    # the same class at ≥ 2× (owner 2026-10-06): the reminder too, the level unchanged
+    r, st = _step(400, 2000, 210.0)                       # EP 420 vs 210: both XXL, ×2.0
+    assert st["up"] == 0 and st["level"] == "ok" and r["level"] != "over"
+    assert "級數相同，但距離和爬升是兩倍以上" in st["text"] and "70 % 是推估" in st["text"]
+    r, st = _step(300, 2000, 210.0)                       # EP 320 vs 210: both XXL, ×1.5
+    assert st["up"] == 0 and "兩倍以上" not in st["text"]
+    r, st = _step(20, 500, 0.0)                          # a zero best day: no multiple, the class still judged
     assert st["ep_ratio"] is None and "倍" not in st["text"] and st["level"] == "ok"
 
 
@@ -404,6 +411,7 @@ def test_step_over_gives_milestones_and_a_date_not_years():
     t = r["suggestions"][1]
     assert t == ms["text"] and "EP 75–115（M 級）" in t and "每週 9 小時（Koop）" in t and "最快 2026 年 12 月" in t
     assert "推估" in t and "年後" not in t and "幾年" not in t
+    assert "這是週量練到的時間，不代表到時候跨級就一定判可以" in t
     assert "低一級（M）" in r["suggestions"][0]                                # the old advice stays first
     assert any("Hoffman 2013：第一場超馬前跑了 3–15 年都有" in s for s in r["src"])
     # the weekly volume already there: no weeks, no date
