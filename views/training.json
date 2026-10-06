@@ -203,13 +203,15 @@
         {
           "id": "weekly-downhill-load", "sports": ["trail"],
           "title": "每週下坡衝擊負荷（參考・自訂指標）",
-          "description": "每週下坡衝擊負荷（參考）。\n怎麼看：依類別堆疊；1 = 平路用 3 m/s（約 5:33/km）跑 1 公里的衝擊，最陡、最快時一公里約 2.4。\n看什麼：下山的膝蓋、股四頭肌負荷有沒有突然變多（心率看不出來）。\n方法：推估，沒有公開的標準公式：只算陡於 −3% 的路段，坡越陡、速度越快權重越高。",
-          "axes": [{"id": "CUSTOM等效 km", "min": 0}],
+          "description": "每週下坡衝擊負荷（參考）。\n怎麼看：長條依類別堆疊；1 = 平路用 3 m/s（約 5:33/km）跑 1 公里的衝擊，最陡、最快時一公里約 2.4。虛線（右軸）= 越野跑、登山健行在陡下坡（陡於 −8%）的平均步頻（每分鐘步數），顏色跟長條一樣；那一週那一類陡下坡不到 10 分鐘就不畫點。\n看什麼：下山的膝蓋、股四頭肌負荷有沒有突然變多（心率看不出來）；下坡量變多時，步頻有沒有跟著掉。步頻越高、步幅越小，膝蓋負擔越小（Van Hooren 2024），下坡量增加時步頻掉下來，要多注意。\n方法：推估，沒有公開的標準公式：只算陡於 −3% 的路段，坡越陡、速度越快權重越高。步頻只並排顯示，不算進負荷：陡於 −8%、在移動的時間加權平均（緩下坡的步頻接近平路，會把差異沖淡）。",
+          "axes": [{"id": "CUSTOM等效 km", "min": 0}, {"id": "steps/min"}],
           "period": "week",
           "series": [
             {"name": "路跑", "type": "stackedbar", "y_axis": "CUSTOM等效 km", "color": "#2a78d6", "expression": "sum(if(sport=\"run\" and !hastag(\"runningtrail\"), sum(if(rgrade < -0.03 and speed > 0, delta(elapseddistance) * (1 + 0.54 * clamp(-rgrade / 0.158384, 0, 1)) * (1.2 + 0.288889 * (clamp(speed / 3.6, 1.5, 6) - 1.5)) / 1.633333))), startofweek(date))"},
             {"name": "越野跑", "type": "stackedbar", "y_axis": "CUSTOM等效 km", "color": "#eb6834", "expression": "sum(if(hastag(\"runningtrail\"), sum(if(rgrade < -0.03 and speed > 0, delta(elapseddistance) * (1 + 0.54 * clamp(-rgrade / 0.158384, 0, 1)) * (1.2 + 0.288889 * (clamp(speed / 3.6, 1.5, 6) - 1.5)) / 1.633333))), startofweek(date))"},
-            {"name": "登山健行", "type": "stackedbar", "y_axis": "CUSTOM等效 km", "color": "#1baf7a", "expression": "sum(if(hastag(\"hiking\") or hastag(\"mountaineering\"), sum(if(rgrade < -0.03 and speed > 0, delta(elapseddistance) * (1 + 0.54 * clamp(-rgrade / 0.158384, 0, 1)) * (1.2 + 0.288889 * (clamp(speed / 3.6, 1.5, 6) - 1.5)) / 1.633333))), startofweek(date))"}
+            {"name": "登山健行", "type": "stackedbar", "y_axis": "CUSTOM等效 km", "color": "#1baf7a", "expression": "sum(if(hastag(\"hiking\") or hastag(\"mountaineering\"), sum(if(rgrade < -0.03 and speed > 0, delta(elapseddistance) * (1 + 0.54 * clamp(-rgrade / 0.158384, 0, 1)) * (1.2 + 0.288889 * (clamp(speed / 3.6, 1.5, 6) - 1.5)) / 1.633333))), startofweek(date))"},
+            {"name": "越野跑 陡下坡步頻", "type": "line", "y_axis": "steps/min", "color": "#eb6834", "line_style": "dash", "expression": "if(sum(if(hastag(\"runningtrail\"), sum(if(rgrade < -0.08 and speed > 1.6 and cadence > 0 and deltatime <= 30, deltatime))), startofweek(date)) >= 600, 2 * sum(if(hastag(\"runningtrail\"), sum(if(rgrade < -0.08 and speed > 1.6 and cadence > 0 and deltatime <= 30, cadence * deltatime))), startofweek(date)) / sum(if(hastag(\"runningtrail\"), sum(if(rgrade < -0.08 and speed > 1.6 and cadence > 0 and deltatime <= 30, deltatime))), startofweek(date)))"},
+            {"name": "登山健行 陡下坡步頻", "type": "line", "y_axis": "steps/min", "color": "#1baf7a", "line_style": "dash", "expression": "if(sum(if(hastag(\"hiking\") or hastag(\"mountaineering\"), sum(if(rgrade < -0.08 and speed > 1.6 and cadence > 0 and deltatime <= 30, deltatime))), startofweek(date)) >= 600, 2 * sum(if(hastag(\"hiking\") or hastag(\"mountaineering\"), sum(if(rgrade < -0.08 and speed > 1.6 and cadence > 0 and deltatime <= 30, cadence * deltatime))), startofweek(date)) / sum(if(hastag(\"hiking\") or hastag(\"mountaineering\"), sum(if(rgrade < -0.08 and speed > 1.6 and cadence > 0 and deltatime <= 30, deltatime))), startofweek(date)))"}
           ]
         },
         {

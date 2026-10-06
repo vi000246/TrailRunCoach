@@ -66,7 +66,8 @@
       },
       "weekly-downhill-load": {
         "title": "Weekly downhill impact load (reference · custom metric)",
-        "description": "Weekly downhill impact load (reference).\nHow to read: stacked by category; 1 = the impact of 1 km on the flat at 3 m/s (about 5:33/km); the steepest and fastest km is about 2.4.\nLook for: a sudden jump in knee and quad load from descending (heart rate doesn't show it).\nMethod: an estimate, no published standard formula: only stretches steeper than −3% count; steeper and faster weigh more."
+        "description": "Weekly downhill impact load (reference).\nHow to read: bars stacked by category; 1 = the impact of 1 km on the flat at 3 m/s (about 5:33/km); the steepest and fastest km is about 2.4. Dashed lines (right axis) = the average cadence (steps per minute) of trail runs and hikes on steep downhills (steeper than −8%), in the bars' colours; no point when that week's steep downhill for that category is under 10 minutes.\nLook for: a sudden jump in knee and quad load from descending (heart rate doesn't show it); whether cadence drops when the downhill volume goes up. Higher cadence with shorter steps means less load on the knees (Van Hooren 2024), so watch out when cadence falls as downhill volume rises.\nMethod: an estimate, no published standard formula: only stretches steeper than −3% count; steeper and faster weigh more. Cadence is only shown alongside, not counted in the load: a time-weighted average over moving time steeper than −8% (on gentle downhills cadence is close to the flat and would blur the difference).",
+        "series": {"越野跑 陡下坡步頻": "Trail run steep-downhill cadence", "登山健行 陡下坡步頻": "Hike steep-downhill cadence"}
       },
       "strength-calendar": {
         "title": "Strength training calendar",
