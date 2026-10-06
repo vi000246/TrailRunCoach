@@ -89,10 +89,24 @@ def test_an_old_row_with_the_hr_text_has_no_hr_cap_any_more():
     assert _work(CW.session_steps(old, CW.Thresholds.of(BASE))).intensity is None
 
 
-def test_stale_race_still_used_with_the_note():
+def test_a_race_older_than_180_days_is_not_used():
+    # owner 2026-10-06: no 「舊了」 fallback — the tested CP, else the talk test
     old = EP.of_race({"distance_m": 10000, "time_s": 2700, "date": "2026-01-01"}, TODAY)
+    assert old["stale"]
+    assert AT.session(_th(e_pace=old, cp_measured=True), 140.0, 190.0, None, "xu90")["xu_basis"] == "power"
     s = AT.session(_th(e_pace=old), 140.0, 190.0, None, "xu90")
-    assert s["xu_basis"] == "pace" and "舊了" in s["detail"]
+    assert s["xu_basis"] == "talk" and "180 天內" in s["detail"]
+
+
+def test_only_a_cp_from_a_test_counts():
+    from backend.engine.planning import Plan, Threshold
+    p = Plan()
+    p.thresholds.append(Threshold("2026-08-01", cp=250.0, cp_method="2pt"))
+    assert AT.cp_tested(p, TODAY)
+    p.thresholds.append(Threshold("2026-09-01", cp=255.0))                 # typed by hand: the latest
+    assert not AT.cp_tested(p, TODAY)
+    assert AT.cp_tested(p, dt.date(2026, 8, 15))                           # before the hand-typed row
+    assert not AT.cp_tested(Plan(), TODAY)
 
 
 def test_english():
@@ -124,3 +138,20 @@ def test_test_sessions_have_no_lthr_badge(s):
 
 def test_an_interval_session_keeps_the_badge():
     assert TC.session_warn(WARN, {"kind": "quality", "title": "閾值 3×8 分"}, HR_ITEMS) == WARN
+
+
+
+@pytest.mark.parametrize("method, want", [("2pt", True), (None, False)])
+def test_week_plan_thresholds_carry_the_tested_cp(method, want):
+    """overview.week_plan → thresholds.cp_measured (aet_test.cp_tested): a CP test row counts, a
+    hand-typed CP doesn't (owner 2026-10-06)."""
+    from backend.engine import overview as O
+    from backend.engine import plan_prefs as PP
+    from backend.engine.planning import Threshold
+    from backend.engine.status import Status
+    from backend.tests.test_aet_weekday import TODAY as T2, _build_week_ds
+    ds, plan = _build_week_ds()
+    plan.thresholds.append(Threshold((T2 - dt.timedelta(days=1)).isoformat(), cp=250.0, cp_method=method))
+    st = Status(ds, plan, T2, prefs=PP.Prefs()).compute()
+    wp = O.week_plan(ds, st, T2, prefs=PP.Prefs())
+    assert wp["thresholds"]["cp_measured"] is want and "e_pace" in wp["thresholds"]

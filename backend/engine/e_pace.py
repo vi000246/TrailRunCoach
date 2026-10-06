@@ -26,7 +26,8 @@ Where the race comes from (owner 2026-10-06, §6.1 第 2 點):
     candidates are never used.
   * trail races don't count (climb distorts the time): a plan trail race / 百岳 that day, the
     runningtrail tag, or ≥ TRAIL_M_PER_KM of climb per km.
-A race older than STALE_DAYS is shown as 「舊了」 (推估) — still used, with the note.
+A race older than STALE_DAYS (推估) is too old: shown as such, NOT used for the 90-minute test
+(owner 2026-10-06; aet_test.xu_target then falls back to a tested CP / the talk test).
 """
 from __future__ import annotations
 
@@ -38,7 +39,7 @@ from backend.i18n import _
 
 RACE_KEY = "athlete.race_result"   # user_settings: {distance_m, time_s, date, source, title?} | None
 E_LOW, E_HIGH = 0.62, 0.70         # 推估 fit to Daniels' E table (see the module doc)
-STALE_DAYS = 180                   # 推估: an older race no longer says much about today's E pace
+STALE_DAYS = 180                   # 推估: an older race no longer says much about today's E pace — not used
 TRAIL_M_PER_KM = 20.0              # 推估: base_check.XU_FLAT_M_PER_KM — more climb = not a road race
 DIST_RANGE_M = (1500.0, 42500.0)   # Daniels' equations: 1500 m to the marathon
 PACE_RANGE_S = (150.0, 900.0)      # 推估 sanity: 2:30–15:00 /km
@@ -138,14 +139,16 @@ def current(today: dt.date, user_id: int = 1) -> Optional[dict]:
 
 
 def label(e: Optional[dict]) -> str:
-    """「E 配速 5:32–6:06 /km（10 K 45:00，VDOT 45.3）」, with 「舊了」 past STALE_DAYS."""
+    """「E 配速 5:32–6:06 /km（10 K 45:00，VDOT 45.3）」; past STALE_DAYS it says the race is too old
+    and isn't used."""
     if not e:
         return ""
     km = e["distance_m"] / 1000.0
     out = _("E 配速 {fast}–{slow} /km（{km:g} K {time}，VDOT {vdot:.1f}）", fast=fmt_pace(e["e_fast"]),
             slow=fmt_pace(e["e_slow"]), km=round(km, 2), time=fmt_time(e["time_s"]), vdot=e["vdot"])
     if e.get("stale"):
-        out += _("；比賽是 {d} 天前的，舊了（超過 {n} 天，推估）：有新的比賽成績再更新", d=e["age_days"], n=STALE_DAYS)
+        out += _("；比賽是 {d} 天前的，太舊了（超過 {n} 天，推估）：90 分鐘測試不用它，有新的比賽成績再更新",
+                 d=e["age_days"], n=STALE_DAYS)
     return out
 
 

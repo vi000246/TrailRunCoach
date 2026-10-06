@@ -693,12 +693,13 @@ async def put_pmc_start(body: PmcStartIn, db: AsyncSession = Depends(get_db)):
 # ---- 比賽成績 → E 配速 (SP-276; engine/e_pace.py) ----------------------------------------
 
 def race_pace_view(ds, today: dt.date) -> dict:
-    """The confirmed race and its E pace (None when not set), and the runs recognised as road
-    races in the last year — offered only; used after the athlete confirms one."""
+    """The confirmed race and its E pace (None when not set; `stale` past e_pace.STALE_DAYS = not
+    used), and the runs recognised as road races in the last STALE_DAYS — offered only; used after
+    the athlete confirms one."""
     from backend.engine import e_pace as EP
     cur = EP.current(today)
     try:
-        cands = EP.candidates(ds, today) if ds is not None else []
+        cands = EP.candidates(ds, today, EP.STALE_DAYS) if ds is not None else []   # an older one couldn't be used
     except Exception:              # noqa: BLE001 — the candidates are a convenience
         cands = []
     return {"current": cur, "label": EP.label(cur), "candidates": cands[:8],
