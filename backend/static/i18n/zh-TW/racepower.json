@@ -50,6 +50,8 @@
   "hrcap": "心率上限",
   "safe": "下坡：不看功率也不看心率，控制、安全",
   "safe_short": "控制、安全",
+  "gap.tip": "GAP（坡度調整配速）：用 Minetti 公式把坡上的配速換成平路的等效配速，只供參考；陡坡、下坡、技術路段不準。合併 674 筆資料的研究顯示 Minetti 在上坡的誤差最大，而且所有坡度公式都沒有技術地形的資料（Looney 2025）；Koop 也說 GAP 只能當方向參考。",
+  "gap.note": "GAP 欄是 Minetti 坡度調整，只供參考：陡坡、下坡、技術路段不準（Looney 2025；Koop）。",
   "legend.target": "目標{m}",
   "legend.walk": "走路段",
   "legend.gap_power": "圖上空白 = 這段功率只當參考（陡坡、下坡；表格寫灰色）",

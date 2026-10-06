@@ -1800,7 +1800,7 @@ function renderSegments() {
   let h = `<table><thead><tr><th>#</th>${hike ? "<th>天</th>" : ""}<th>類別</th><th class="n">km</th><th class="n">距離</th><th class="n">↑ / ↓</th><th class="n">坡度</th>`;
   const capx = hike && !!P.capacity;
   h += hike ? `<th>地形</th><th class="n">速度</th><th class="n">垂直</th>${capx ? `<th class="n" title="遞減率推算的氣溫 / 熱懲罰（適應後）">溫度</th><th class="n" title="海拔係數 A">A</th><th class="n" title="日內衰減 f_time">f時</th><th class="n" title="該段 σ（對數）">σ</th><th>資料</th>` : ""}` :
-    `<th class="n">目標功率</th><th class="n">% CP</th><th>區</th><th class="n">配速</th><th class="n">${trail ? "GAP / 垂直" : ""}</th>`;
+    `<th class="n">目標功率</th><th class="n">% CP</th><th>區</th><th class="n">配速</th><th class="n"${trail ? ` title="${esc(T("gap.tip"))}"` : ""}>${trail ? "GAP / 垂直" : ""}</th>`;
   const hourly = P.summary.heat?.mode === "hourly";
   h += `<th class="n">分段時間</th><th class="n">累計</th><th class="n">ETA</th>${hike ? "" : `<th class="n">M</th><th class="n" title="該段使用的氣溫與 Hadley 熱負荷">熱${hourly ? ' <span class="badge watch">推估</span>' : ""}</th>`}<th>備註</th></tr></thead><tbody>`;
   for (const s of P.segments) {
@@ -1826,6 +1826,8 @@ function renderSegments() {
     `<td class="n">${W(tot.power)}</td><td class="n">${pct(tot.pct_cp)}</td><td></td><td class="n">${pace(tot.pace_s_per_km)}</td><td></td>`}
     <td class="n">${hms(tot.time_s)}</td><td></td><td></td>${hike ? "" : "<td></td><td></td>"}<td></td></tr></tbody></table>`;
   h += `<div class="note">${hike ? "速度已含背負、海拔、地形與多日修正。" : `目標功率請${esc(PLAN.hint || "看 30 秒平均功率")}，不要看瞬間值（上坡起點讀數常會衝高）。在功率欄改數字會鎖定該段，其他段重新分配、平均不變。`}</div>`;
+  // SP-248: trail GAP is Minetti's grade adjustment — a direction only (power-gap-trail-validity.md §3 #3)
+  if (trail) h += `<div class="note" title="${esc(T("gap.tip"))}">${esc(T("gap.note"))}</div>`;
   $("segtable").innerHTML = h;
   document.querySelectorAll("[data-lock]").forEach((e) => e.addEventListener("change", () => {
     const v = Number(e.value); if (v > 0) LOCKS[e.dataset.lock] = v; else delete LOCKS[e.dataset.lock]; schedule(); }));

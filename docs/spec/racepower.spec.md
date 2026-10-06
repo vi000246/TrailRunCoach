@@ -871,7 +871,9 @@ start time, aid stations. Since 2026-10-02 (賽事計算機, renamed from 賽事
   walked segments shaded). Hovering a table row shows that segment on the chart; click selects,
   shift+click adds / removes. A compact table carries split, ETA and fuelling per segment; every
   segment shows power and HR, grey 「參考」 where that measure is not a valid target (`power_ref` /
-  `hr_ref`). The full table (locks, terrain, heat) is under 「全部欄位」. The W′ balance and heat
+  `hr_ref`). The full table (locks, terrain, heat) is under 「全部欄位」; on trail its GAP column
+  (Minetti + the 0.9 downhill floor, values unchanged) carries a tooltip and a note: reference only,
+  off on steep climbs, descents and technical ground (Looney 2025, Koop; SP-248, road never shows it). The W′ balance and heat
   overlays and the target cards were removed.
 - Results: tiles (moving time vs total with stops), draggable effort bar with band, Palladino zone
   strip, the goal-vs-model line, the 補給 card (below), COROS export (preview, then confirm), 「匯出
