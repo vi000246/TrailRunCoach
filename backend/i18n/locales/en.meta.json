@@ -2671,6 +2671,10 @@
     "draft": true,
     "src": "backend/engine/workout_review.py:575"
   },
+  "心率可能不準": {
+    "draft": true,
+    "src": "backend/engine/panels/activity_charts.py:64"
+  },
   "心率品質": {
     "draft": true,
     "src": "backend/engine/workout_review.py:3204"
@@ -3062,6 +3066,10 @@
   "整趟時間是推估：{note}；用你的步行能力模型（待回測）": {
     "draft": true,
     "src": "backend/engine/racepower/calc.py:398"
+  },
+  "數字卡住不動": {
+    "draft": true,
+    "src": "backend/engine/panels/activity_charts.py:61"
   },
   "文字欄位最多 {n} 字": {
     "draft": true,
@@ -3851,6 +3859,10 @@
     "draft": true,
     "src": "backend/engine/interval_library.py:757"
   },
+  "灰底是手腕光學心率可能不準的時段：{parts}。只是標出來，資料沒有被修改；飄移判讀會把這些算進「可疑秒數」，太多就只當參考。": {
+    "draft": true,
+    "src": "backend/engine/panels/activity_charts.py:65"
+  },
   "無氧動力": {
     "draft": true,
     "src": "backend/engine/hr_profile.py:65"
@@ -4158,6 +4170,10 @@
   "穩的桌子或低槓": {
     "draft": true,
     "src": "backend/engine/strength_moves.py:109"
+  },
+  "突然跳動": {
+    "draft": true,
+    "src": "backend/engine/panels/activity_charts.py:60"
   },
   "站在箱上往前跨下去、落地停住，再回箱上。箱子越高衝擊越大，從低的開始；上一個做穩了再換這個。": {
     "draft": true,
@@ -4715,6 +4731,14 @@
     "draft": true,
     "src": "backend/engine/status.py:319"
   },
+  "起跑讀得太高": {
+    "draft": true,
+    "src": "backend/engine/panels/activity_charts.py:61"
+  },
+  "超出合理範圍": {
+    "draft": true,
+    "src": "backend/engine/panels/activity_charts.py:61"
+  },
   "超出建議的 {n} 天內": {
     "draft": true,
     "src": "backend/api/plan_sessions.py:517"
@@ -4815,6 +4839,10 @@
     "draft": true,
     "src": "backend/engine/plan_store.py:316"
   },
+  "跟著步頻走": {
+    "draft": true,
+    "src": "backend/engine/panels/activity_charts.py:60"
+  },
   "跨級：ITRA 依 EP 分級（XXS–XXL）；UTMB 報名等於一次只能往上跳一級；完賽過越多場越不容易 DNF（Corrion 2018、Maleka 2026）；「高兩級」和「24 個月」是推估": {
     "draft": true,
     "src": "backend/engine/race_feasibility.py:88"
@@ -4850,6 +4878,10 @@
   "路跑／馬拉松": {
     "draft": true,
     "src": "backend/engine/primary_sport.py:32"
+  },
+  "跳一階沒回來": {
+    "draft": true,
+    "src": "backend/engine/panels/activity_charts.py:60"
   },
   "踮起來，慢慢放下。練小腿、阿基里斯腱和足弓。": {
     "draft": true,

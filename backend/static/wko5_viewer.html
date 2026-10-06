@@ -294,12 +294,17 @@ table.z5ev td { white-space: normal; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --ac-hr: #e66767; --ac-pw: #f5b700;
   --ac-ink: #ffffff; --ac-ink2: #c3c2b7; --ac-brush: rgba(57,135,229,.16); } }
 :root[data-theme="dark"] { --ac-hr: #e66767; --ac-pw: #f5b700; --ac-ink: #ffffff; --ac-ink2: #c3c2b7; --ac-brush: rgba(57,135,229,.16); }
+/* SP-267: suspect wrist-HR stretches, shaded on the HR panel */
+:root { --hrq: rgba(82,81,78,.18); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --hrq: rgba(195,194,183,.20); } }
+:root[data-theme="dark"] { --hrq: rgba(195,194,183,.20); }
 .card.ac-wide { grid-column: 1 / -1; }
 .ac-leg { display: flex; flex-wrap: wrap; gap: 3px 14px; font-size: 11.5px; color: var(--muted); margin: 0 0 2px; align-items: center; }
 .ac-leg span { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
 .ac-leg i { display: inline-block; width: 16px; height: 0; border-top: 2px solid; }
 .ac-leg i.dash { border-top-style: dashed; }
 .ac-leg i.band { height: 10px; border: 0; border-radius: 3px; }
+.ac-leg i.hrq { height: 10px; border: 0; border-radius: 2px; background: var(--hrq); }
 .ac-leg .hint { margin-left: auto; }
 .ac-leg button { font: inherit; font-size: 11.5px; border: 1px solid var(--line); background: var(--panel); color: var(--text);
   border-radius: 4px; padding: 1px 8px; cursor: pointer; }
@@ -2724,6 +2729,9 @@ ACT.stats = (r, ka, kb) => {
 };
 function drawActHrPower(card, res) {
   const T = ACT.theme(), K = res.x.length, span = res.n, iv = ACT.interval(span);
+  // SP-267: stretches where the wrist HR may be wrong (engine/hr_quality.py) — shaded, never changed
+  const HQ = res.has_hr && res.hr_quality?.spans?.length ? res.hr_quality : null;
+  const hqAt = (x) => HQ ? HQ.spans.filter((r) => x >= r[0] && x < r[1]).map((r) => HQ.labels[r[2]] || r[2]) : [];
   // 使用功率 off (settings): the HR panel alone, no power stats
   const pwOn = S.usePower !== false, usePw = res.has_power && pwOn;
   if (!pwOn) { const h = card.querySelector("h2"); if (h?.firstChild?.nodeType === 3) h.firstChild.textContent = h.firstChild.textContent.replace("心率與功率", "心率"); }
@@ -2732,6 +2740,7 @@ function drawActHrPower(card, res) {
       ${res.has_hr ? `<span><i style="border-color:${T.hr}"></i>心率 bpm${pwOn ? "（上）" : ""}</span>` : ""}
       ${usePw ? `<span><i style="border-color:${T.pw}"></i>功率 W，30 秒平均（下）</span>` : pwOn ? `<span>這筆沒有可用的功率</span>` : ""}
       <span><i class="dash" style="border-color:${T.ink2}"></i>${usePw ? "AeT／LTHR／CP" : "AeT／LTHR"}</span>
+      ${HQ ? `<span><i class="hrq"></i>${esc(HQ.legend)} ${rvQ(HQ.note)}</span>` : ""}
       <span class="hint">左右拖曳選一段 <button type="button" class="ac-clear" hidden>清除選取</button></span></div>`);
   const chart = actChart(card, "ac-hp", "心率與功率隨時間；拖曳選一段看那段的統計，統計列在圖下方");
   const head = document.createElement("p"); head.className = "ac-head"; card.appendChild(head);
@@ -2770,6 +2779,8 @@ function drawActHrPower(card, res) {
         pp = [].concat(pp); if (!pp.length) return "";
         const i = pp[0].dataIndex, rows = [`<b>${fmtDur(res.x[i])}</b>`];
         if (res.hr) rows.push(`<span style="color:${T.hr}">●</span> 心率 <b>${ACT.num(res.hr[i])}</b> bpm`);
+        const hq = hqAt(res.x[i]);
+        if (hq.length) rows.push(`<span class="meta">⚠ ${esc(HQ.legend)} · ${esc([...new Set(hq)].join(HQ.sep || "、"))}</span>`);
         if (usePw && res.power) rows.push(`<span style="color:${T.pw}">●</span> 功率（30 秒） <b>${ACT.num(res.power[i])}</b> W`);
         return ACT.tipBox(rows.join("<br>"));
       } },
@@ -2789,7 +2800,9 @@ function drawActHrPower(card, res) {
     series: [
       { name: "心率", type: "line", xAxisIndex: 0, yAxisIndex: 0, data: pts(res.hr), showSymbol: false, connectNulls: false,
         lineStyle: { color: T.hr, width: 1.5 }, itemStyle: { color: T.hr },
-        markLine: mark([ref(res.ref.aet, "AeT"), ref(res.ref.lthr, "LTHR")]) },
+        markLine: mark([ref(res.ref.aet, "AeT"), ref(res.ref.lthr, "LTHR")]),
+        ...(HQ ? { markArea: { silent: true, itemStyle: { color: css("--hrq") || "rgba(128,128,128,.22)" },
+          data: HQ.spans.map((r) => [{ xAxis: r[0] }, { xAxis: r[1] }]) } } : {}) },
       ...(pwOn ? [{ name: "功率", type: "line", xAxisIndex: 1, yAxisIndex: 1, data: pts(usePw ? res.power : null), showSymbol: false, connectNulls: false,
         lineStyle: { color: T.pw, width: 1.5 }, itemStyle: { color: T.pw },
         markLine: mark([usePw ? ref(res.ref.cp, "CP") : null]) }] : []),
