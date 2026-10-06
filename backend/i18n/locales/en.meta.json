@@ -1243,6 +1243,10 @@
     "draft": true,
     "src": "backend/engine/downhill.py:188"
   },
+  "下次起始心率降 {n} bpm（約 {hr:.0f}；{n} bpm 是推估）再測一次": {
+    "draft": true,
+    "src": "backend/engine/aet_test.py:401"
+  },
   "下週安排恢復週": {
     "draft": true,
     "src": "backend/engine/status.py:333"
@@ -1370,6 +1374,10 @@
   "主課 {work}′": {
     "draft": true,
     "src": "backend/engine/technical.py:192"
+  },
+  "主課第 10 分鐘心率已經比起始高 10 下還在升 → 起始太高，停掉改天用較慢的配速再測（Evoke）；起始心率約降 {n} bpm（推估）": {
+    "draft": true,
+    "src": "backend/engine/aet_test.py:588"
   },
   "主課高於閾值、每趟 2–5 分、休息約 1:1；30/30、30/15 這種短趟短休也算這類": {
     "draft": true,

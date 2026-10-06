@@ -46,3 +46,50 @@ def test_no_ua_4_6_weeks_left_in_the_code():
             if bad in s:
                 hits.append(f"{p.relative_to(ROOT)}: {bad}")
     assert not hits, hits
+
+
+# ---- SP-279: 「−5 bpm」 is 推估 (UA: "lower"; Evoke: a slower pace) ---------------------
+
+from backend.engine import aet_test as AT  # noqa: E402
+
+
+def _r(judge, band, drift):
+    return {"ok": True, "judge": judge, "band": band, "drift": drift, "hr1": 140.0, "hr2": 150.0,
+            "main_s": 3600.0}
+
+
+def test_ua_above_lower_5_is_an_estimate():
+    ln = AT.lines(_r("ua", "above", 0.06), 142.0)
+    assert ln[-1] == "下次起始心率降 5 bpm（約 135；5 bpm 是推估）再測一次（目前 142）"
+    assert "UA" not in ln[-1] and "Evoke" not in ln[-1]
+
+
+def test_evoke_above_lower_5_is_an_estimate():
+    ln = AT.lines(_r("evoke", "above", 0.06))
+    assert ln[-1] == "下次起始心率降 5 bpm（約 135；5 bpm 是推估）再測一次"
+
+
+def test_ua_below_plus_5_stays_uas():
+    ln = AT.lines(_r("ua", "below", 0.02), 142.0)
+    assert ln[-1] == "下次起始心率 +5 bpm（約 145）再測一次（目前 142）"
+
+
+def test_the_numbers_did_not_move():
+    assert AT.LOWER_BPM == 5
+    assert AT.band_of(0.06) == "above" and AT.band_of(0.02) == "below" and AT.band_of(0.04) == "at"
+
+
+def test_evoke_early_abort_keeps_evoke_rule_but_5_bpm_is_an_estimate():
+    for proto in ("ua60", "ua40", "evoke60"):
+        d = AT.session({}, 140.0, 250.0, protocol=proto)["detail"]
+        assert "停掉改天用較慢的配速再測（Evoke）；起始心率約降 5 bpm（推估）" in d
+        assert "降 5 bpm 再測（Evoke）" not in d
+    assert "Evoke）；起始心率" not in AT.session({}, 140.0, 250.0, protocol="friel")["detail"]
+
+
+def test_lower_line_in_english():
+    with use_locale("en"):
+        ln = AT.lines(_r("ua", "above", 0.06))
+        d = AT.session({}, 140.0, 250.0, protocol="ua60")["detail"]
+    assert ln[-1] == "Next time start 5 bpm lower (about 135; the 5 bpm is an estimate) and test again"
+    assert "retest another day at a slower pace (Evoke); start about 5 bpm lower (estimate)" in d
