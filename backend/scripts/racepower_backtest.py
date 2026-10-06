@@ -157,6 +157,14 @@ def main(argv=None) -> int:
             print(f"  {'':10s}  race-x no-dur {_st(lr['race_level_no_durability'])}")
         elif lr:
             print(f"  no races of {lr['min_h']:g} h or longer: the long-race decay shape cannot be validated")
+        dc = th.get("double_count_check") or {}
+        if dc:
+            print(f"  x*/δ double-count check (SP-241), races >= {dc['min_h']:g} h: n={dc['n']}"
+                  f"{'' if dc['ready'] else ' (needs ' + str(dc['min_n']) + ', no verdict)'}")
+            if dc["n"]:
+                print(f"  {'':10s}  x*+δ {_st(dc['xstar_and_delta'])}")
+                print(f"  {'':10s}  x* only {_st(dc['xstar_only'])}")
+                print(f"  {'':10s}  δ only {_st(dc['delta_only'])}")
         print("  pass rule:", th.get("pass_rule"))
         for r in th["race_rows"]:
             t = r.get("th") or {}

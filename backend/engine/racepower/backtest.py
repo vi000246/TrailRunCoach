@@ -676,6 +676,26 @@ def summarise_long_races(races: list[dict]) -> dict:
             "race_level_no_durability": stats(r.get("err_th_race_nodur") for r in ls)}
 
 
+# SP-241 (docs/research/long-race-durability-shape.md §2.4): do x*(T) and δ count the same fatigue
+# twice? Only races with ≥ 6 h moving can tell (below that D̄ ≈ 1); the ticket needs ≥ 3 of them.
+# The three set-ups are the back-test's existing errors (each case predicted without itself):
+# x* + δ = err_th_race, x* only (δ = 0) = err_th_race_nodur, δ only (x fixed at the earlier
+# races' median) = err_th_race_median. Report only — the model is not changed by this block.
+DOUBLE_COUNT_H = 6.0      # SP-241 acceptance: races ≥ 6 h moving
+DOUBLE_COUNT_MIN_N = 3    # SP-241 acceptance: ≥ 3 such races
+
+
+def summarise_double_count(races: list[dict]) -> dict:
+    """The ≥ DOUBLE_COUNT_H races: n, `ready` (n ≥ DOUBLE_COUNT_MIN_N) and the three set-ups'
+    errors — x* + δ, x* only, δ only (fixed x)."""
+    ls = [r for r in races if ((r.get("th") or {}).get("moving_s") or 0.0) >= DOUBLE_COUNT_H * 3600.0]
+    return {"n": len(ls), "min_h": DOUBLE_COUNT_H, "min_n": DOUBLE_COUNT_MIN_N,
+            "ready": len(ls) >= DOUBLE_COUNT_MIN_N,
+            "xstar_and_delta": stats(r.get("err_th_race") for r in ls),
+            "xstar_only": stats(r.get("err_th_race_nodur") for r in ls),
+            "delta_only": stats(r.get("err_th_race_median") for r in ls)}
+
+
 def summarise_trail_hr(rows: list[dict]) -> dict:
     """Trail HR pace model errors: every trail case (given HR), the races
     (activity type 比賽) and the 全力 capacity samples (given and race level)."""
@@ -699,6 +719,7 @@ def summarise_trail_hr(rows: list[dict]) -> dict:
                 "power_envelope": stats(r.get("err_c") for r in rs)}
     return {"all": blk(th), "races": blk(races), "max_effort": blk(maxes),
             "long_races": summarise_long_races(races),
+            "double_count_check": summarise_double_count(races),
             "race_rows": [{k: r.get(k) for k in ("date", "label", "file", "effort_tag", "effort_overridden",
                                                  "effort_reason", "rest_share", "no_power", "power_source",
                                                  "power_unused", "err_th_given",
