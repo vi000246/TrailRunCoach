@@ -1184,10 +1184,10 @@ function renderHeatLine() {
   else if (h.reason) t = `全程單一溫度（${h.reason}）`;
   $("heat-line").textContent = t;
 }
-// SP-249: forecast rain in the race window → a reminder under the result heading (trail / 百岳; time unchanged)
+// SP-249: forecast rain in the race window → a reminder under the result heading (road / trail / 百岳; time unchanged)
 function renderRain() {
   const r = PLAN?.rain, h2 = $("results").querySelector("h2");
-  if (!r?.alert || PLAN.type === "road" || !h2) return;
+  if (!r?.alert || !h2) return;
   const bits = [r.max_pop_pct != null ? T("rain.pop", { p: Math.round(r.max_pop_pct) }) : "", r.total_mm != null ? T("rain.mm", { mm: r.total_mm.toFixed(1) }) : ""].filter(Boolean);
   h2.insertAdjacentHTML("afterend", `<div class="note" id="rain-note" style="color:var(--watch)">☂ ${esc(r.message)}${bits.length ? esc(T("rain.detail", { bits: bits.join(T("rain.sep")) })) : ""}</div>`);
 }

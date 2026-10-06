@@ -5487,6 +5487,10 @@
     "draft": true,
     "src": "backend/engine/racepower/weather.py:533"
   },
+  "預報有雨：路面濕滑，轉彎和下坡注意抓地，跌倒風險較高": {
+    "draft": true,
+    "src": "backend/engine/racepower/weather.py:547"
+  },
   "預報沒有涵蓋這些日期": {
     "draft": true,
     "src": "backend/engine/racepower/weather.py:791"

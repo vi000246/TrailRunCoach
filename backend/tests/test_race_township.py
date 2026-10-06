@@ -1,7 +1,8 @@
 """SP-234: CWA 鄉鎮天氣預報 in the race-day weather chain — the nearest 鄉鎮公所,
 temperature moved from its height to the race height (−0.65 °C / 100 m, RH
-kept), between the mountain forecast and Open-Meteo. CWA, the elevation API
-and Open-Meteo are all fakes: no network."""
+kept). Owner decision 2026-10-06: after Open-Meteo, as its fallback, until a
+station comparison exists — chain 登山 (5 km) → Open-Meteo → 鄉鎮 → climatology
+→ manual. CWA, the elevation API and Open-Meteo are all fakes: no network."""
 import datetime as dt
 
 import pytest
@@ -54,7 +55,8 @@ def _mountain_doc() -> dict:
 
 
 class Fake:
-    def __init__(self, *, town_hourly=True, elev=(120.0, 620.0), om_fails=False):
+    def __init__(self, *, town_hourly=True, elev=(120.0, 620.0), om_fails=True):
+        # om_fails (default): the Open-Meteo forecast and archive fail, so the 鄉鎮 fallback is reached
         self.calls = []
         self.town_hourly, self.elev, self.om_fails = town_hourly, elev, om_fails
 
@@ -99,7 +101,16 @@ def test_parse_reads_the_township_format_with_geocode():
     assert len(bt["hourly"]) == 24 and bt["hourly"][6]["temp"] == 20 and bt["hourly"][6]["rh"] == 80
 
 
-def test_far_from_a_mountain_point_the_township_forecast_is_used_with_lapse(tmp_path):
+def test_with_a_key_and_open_meteo_answering_open_meteo_is_used(tmp_path):
+    g = Fake(om_fails=False)
+    r = _run(tmp_path, g)
+    assert r["provider"] == "open_meteo"
+    assert [t["provider"] for t in r["tried"]][-1] == "open_meteo"
+    assert not any(t["provider"].startswith("cwa_town") for t in r["tried"])
+    assert not any(u.endswith(WX.CWA_TOWN_HOURLY) or u == WX.OM_ELEVATION for u in g.urls())
+
+
+def test_open_meteo_failing_falls_back_to_the_township_forecast_with_lapse(tmp_path):
     g = Fake()
     r = _run(tmp_path, g)
     assert r["provider"] == "cwa_town_hourly"
@@ -115,9 +126,10 @@ def test_far_from_a_mountain_point_the_township_forecast_is_used_with_lapse(tmp_
     # hourly rows for per-segment heat, moved the same way
     assert r["hourly"] and all(h["temp_c"] == approx(16.75) and h["rh_pct"] == approx(80) for h in r["hourly"])
     provs = [(t["provider"], t["ok"]) for t in r["tried"]]
-    assert provs[0][0] == "cwa_hourly" and not provs[0][1]          # 5 km from 玉山? no
-    assert ("cwa_town_hourly", True) in provs
-    assert not any("open-meteo.com/v1/forecast" in u for u in g.urls())
+    assert provs[0][0] == "cwa_hourly" and not provs[0][1]          # no 登山 point within 5 km
+    # the 「嘗試」 order: 登山 ✕ → Open-Meteo ✕ → 鄉鎮 ✓
+    assert provs.index(("open_meteo", False)) < provs.index(("cwa_town_hourly", True))
+    assert any(u == WX.OM_FORECAST for u in g.urls())
 
 
 def test_without_a_race_elevation_both_heights_come_from_one_elevation_call(tmp_path):
@@ -131,12 +143,15 @@ def test_without_a_race_elevation_both_heights_come_from_one_elevation_call(tmp_
 
 def test_downloads_and_heights_are_cached(tmp_path):
     g = Fake()
+
+    def cwa_or_height():
+        return [u for u in g.urls() if "opendataapi" in u or u == WX.OM_ELEVATION]
     _run(tmp_path, g)
-    n = len(g.calls)
+    n = len(cwa_or_height())
     r = _run(tmp_path, g)
     assert r["provider"] == "cwa_town_hourly" and r["detail"]["cache"] == "hit"
     # the second run: mountain + township files from the cache (< 3 h), height from the cache
-    assert len(g.calls) == n
+    assert len(cwa_or_height()) == n
     assert (tmp_path / f"cwa_{WX.CWA_TOWN_HOURLY}.json").exists() and (tmp_path / WX.ELEV_CACHE).exists()
 
 
@@ -154,7 +169,7 @@ def test_no_key_falls_through_with_the_reason(tmp_path, monkeypatch):
     monkeypatch.setattr(WX, "load_key", lambda *a, **k: None)
     g = Fake()
     r = _run(tmp_path, g, key=None)
-    assert r["provider"] == "open_meteo"
+    assert r["provider"] == "manual"
     town = next(t for t in r["tried"] if t["provider"] == "cwa_town")
     assert not town["ok"] and "授權碼" in town["reason"]
     assert not any("opendataapi" in u or u == WX.OM_ELEVATION for u in g.urls())
@@ -163,7 +178,7 @@ def test_no_key_falls_through_with_the_reason(tmp_path, monkeypatch):
 def test_no_township_point_near_falls_through(tmp_path):
     g = Fake()
     r = _run(tmp_path, g, lat=35.36, lon=138.73)         # 富士山: no 鄉鎮 within 20 km
-    assert r["provider"] == "open_meteo"
+    assert r["provider"] == "manual"
     t = next(t for t in r["tried"] if t["provider"] == "cwa_town_hourly")
     assert not t["ok"] and "鄉鎮預報點" in t["reason"]
 
@@ -180,7 +195,7 @@ def test_offline_falls_through_with_the_error(tmp_path):
 def test_no_height_for_the_point_falls_through(tmp_path):
     g = Fake(elev=(None, None))
     r = _run(tmp_path, g)
-    assert r["provider"] == "open_meteo"
+    assert r["provider"] == "manual"
     t = next(t for t in r["tried"] if t["provider"] == "cwa_town_hourly")
     assert not t["ok"] and "海拔" in t["reason"]
 
@@ -204,5 +219,5 @@ def test_a_mountain_point_within_5_km_still_wins(tmp_path):
 def test_without_cwa_the_township_step_is_skipped(tmp_path):
     g = Fake()
     r = _run(tmp_path, g, use_cwa=False)
-    assert r["provider"] == "open_meteo"
+    assert r["provider"] == "manual"
     assert {"provider": "cwa_town", "ok": False, "reason": "未使用"} in r["tried"]
