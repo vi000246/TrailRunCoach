@@ -3039,6 +3039,14 @@
     "draft": true,
     "src": "backend/engine/strength_moves.py:128"
   },
+  "新使用者第一週：起步量每週 {h:g} 小時（{n} 次 × 30 分，推估）": {
+    "draft": false,
+    "src": "backend/engine/cold_start.py:143"
+  },
+  "新使用者第一週：週量 = 你填的每週 {h:.1f} 小時（不打折）": {
+    "draft": false,
+    "src": "backend/engine/cold_start.py:142"
+  },
   "方法：8 週內 {k} 次、取最近 {n} 次加權平均 {agg}，中位數 {med}；速度÷心率（Pa:HR）前後半比較（Friel）。": {
     "draft": true,
     "src": "backend/engine/status.py:590"
@@ -4579,6 +4587,18 @@
     "draft": true,
     "src": "backend/engine/workout_review.py:2871"
   },
+  "資料還在累積（第 {i}/{n} 週）：週量的基準取起步量 {h:.1f} 小時和實際紀錄的較大值，每週至少 {runs} 次": {
+    "draft": false,
+    "src": "backend/engine/cold_start.py:57"
+  },
+  "資料還在累積：這週的量照你填的問卷（每週 {h:.1f} 小時，照原數字用），排 {n} 次": {
+    "draft": false,
+    "src": "backend/engine/cold_start.py:56"
+  },
+  "資料還在累積：週量 = 基準 {ref:.1f} h 的 +10%（至少 +0.5 h）→ {h:.1f} h": {
+    "draft": false,
+    "src": "backend/engine/overview.py:1358"
+  },
   "賽事 id 格式不對": {
     "draft": true,
     "src": "backend/engine/race_calc_store.py:53"
@@ -5203,6 +5223,10 @@
     "draft": true,
     "src": "backend/engine/race_feasibility.py:321"
   },
+  "還不能連續跑 30 分鐘：app 的自動排課要等你能連續跑 30 分鐘之後才準。這週先照預設排每週 {h:g} 小時、{n} 次輕鬆跑，不排長跑；每次以能完整講一句話的強度為準": {
+    "draft": false,
+    "src": "backend/engine/cold_start.py:54"
+  },
   "還剩 {n} 天：{date} 前只排輕鬆跑": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:1920"
@@ -5210,6 +5234,10 @@
   "還沒到賽前 10 週的專項期：下面的數字會隨著長天和週量慢慢長上來": {
     "draft": true,
     "src": "backend/engine/race_feasibility.py:370"
+  },
+  "還沒填跑步經驗：這週先排每週 {h:g} 小時、{n} 次輕鬆跑，不排長跑。到「設定 → 個人資料 → 跑步經驗」填最近 4 週的量，課表會照你平常的量排": {
+    "draft": false,
+    "src": "backend/engine/cold_start.py:52"
   },
   "還沒有 AeT（有氧閾值）測試紀錄。": {
     "draft": true,

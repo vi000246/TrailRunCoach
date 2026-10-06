@@ -38,6 +38,7 @@ RULE_BEFORE_LONG = 4
 RULE_AFTER_Q = 2
 RULE_STREAK = 1
 PREF_WEIGHT = (32, 16)               # 休息日偏好 first / second choice: above every rule
+RULE_APART = 64                      # SP-288 新使用者: 3 runs a week a day apart (NHS Couch to 5K) — above all
 MAX_TRAIN_STREAK = 3
 MAX_REST_STREAK = 2
 FEW_RUNS = 4
@@ -56,11 +57,15 @@ def _streaks(flags: list) -> list[tuple[bool, int]]:
 
 
 def penalty(chosen: Iterable[dt.date], week: list[dt.date], runs: set, long_day: Optional[dt.date],
-            long_wd: Optional[int], quality: Iterable[dt.date], rest_pref: tuple = ()) -> int:
-    """The penalty of putting the easy runs on `chosen`; `runs` = the week's other run days."""
+            long_wd: Optional[int], quality: Iterable[dt.date], rest_pref: tuple = (), apart: bool = False) -> int:
+    """The penalty of putting the easy runs on `chosen`; `runs` = the week's other run days.
+    `apart` (a new runner's first weeks, engine/cold_start.py SP-288): runs on two days in a row cost
+    RULE_APART each — above every other rule."""
     ch = set(chosen)
     all_runs = set(runs) | ch
     p = 0
+    if apart:
+        p += RULE_APART * sum(1 for d in all_runs if d + dt.timedelta(days=1) in all_runs and d in week)
     for rank, wd in enumerate(rest_pref[:len(PREF_WEIGHT)]):
         p += sum(PREF_WEIGHT[rank] for d in ch if d.weekday() == wd)
     after = set()
@@ -83,9 +88,10 @@ def penalty(chosen: Iterable[dt.date], week: list[dt.date], runs: set, long_day:
 
 def pick_days(n: int, avail: list[dt.date], week: list[dt.date], runs: Iterable[dt.date],
               long_day: Optional[dt.date] = None, long_wd: Optional[int] = None,
-              quality: Iterable[dt.date] = (), rest_pref: tuple = ()) -> list[dt.date]:
+              quality: Iterable[dt.date] = (), rest_pref: tuple = (), apart: bool = False) -> list[dt.date]:
     """The `n` days of `avail` for the week's easy runs with the smallest penalty (ties → the
-    earliest days), sorted. `runs`: days that already have a run (placed or done)."""
+    earliest days), sorted. `runs`: days that already have a run (placed or done). `apart`: no two
+    runs on consecutive days when it can be helped (penalty)."""
     avail = sorted(set(avail))
     n = max(0, min(n, len(avail)))
     if n == 0:
@@ -93,7 +99,7 @@ def pick_days(n: int, avail: list[dt.date], week: list[dt.date], runs: Iterable[
     runs, quality = set(runs), list(quality)
     best = None
     for combo in combinations(avail, n):
-        key = (penalty(combo, week, runs, long_day, long_wd, quality, rest_pref), combo)
+        key = (penalty(combo, week, runs, long_day, long_wd, quality, rest_pref, apart), combo)
         if best is None or key < best:
             best = key
     return list(best[1])
