@@ -129,7 +129,9 @@ function fuelHtml(S) {
   h += tile("💧 水", hike ? rng((w.total_ml || []).map((x) => x / 1000), (x) => x.toFixed(1), "L") : w.thirst ? "口渴再喝" : rng(w.per_h, n0, "ml/h"),
     "別喝到體重增加");
   h += tile("🧂 鈉", na.per_h && na.per_h[1] > 0 ? rng(na.per_h, n0, "mg/h") : "不必另外補", na.total_mg && na.total_mg[1] > 0 ? `共 ${rng(na.total_mg, n0, "mg")}` : "");
-  if (!hike && ld.label) h += tile("🍚 賽前", ld.g_day ? rng(ld.g_day, n0, "g") : esc(ld.label.replace(/^前一天\s*/, "")), ld.g_day ? esc(ld.label) : "前一天");
+  // when / amount / note: SP-287 (older shares have only the label)
+  if (!hike && ld.label) h += tile("🍚 賽前", ld.g_day ? rng(ld.g_day, n0, "g") : esc(ld.amount || ld.label.replace(/^前一天\s*/, "")),
+    (ld.g_day ? esc(ld.label) : ld.when ? esc(ld.when) : "前一天") + (ld.note ? `<br>${esc(ld.note)}` : ""));
   if (hike && ok(F.food_kg_mean)) h += tile("🎒 糧食", `${F.food_kg_mean.toFixed(2)} <span class="u">kg/天</span>`, "推估");
   h += `</div>`;
   const ev = F.schedule || [];

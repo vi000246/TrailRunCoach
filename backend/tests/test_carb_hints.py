@@ -145,3 +145,32 @@ def test_pre_meal_is_on_the_view_but_never_pushed():
     p = PS.push_dict(vq)
     assert "pre_meal" not in p and p["detail"] == "暖身 15 分" and p == PS.push_dict(q)
     assert PRE not in str(p)
+
+
+# ---- SP-287: the calculator's loading text (total energy, an ultra over 1–2 days) ---------------
+
+def test_loading_text_ultra_two_days_and_total_energy():
+    from backend.engine.racepower import fuel as FU
+    u = FU.loading(60.0, 9.0, "ultra")
+    assert u["label"] == "前 1–2 天 10–12 g/kg" and u["when"] == "前 1–2 天" and u["amount"] == "10–12 g/kg"
+    assert u["note"] == "總熱量也要跟著多，不只換比例" and "ISSN 2019" in u["src"] and "Tarnopolsky 2001" in u["note_src"]
+    # the numbers don't change
+    assert u["g_day"] == [600.0, 720.0] and u["breakfast_g"] == [60.0, 240.0] and u["caffeine_mg"] == [180.0, 360.0]
+    lg = FU.loading(60.0, 3.0, "long")
+    assert lg["label"] == "前一天 10–12 g/kg" and lg["g_day"] == [600.0, 720.0] and lg["note"]
+    h = FU.loading(60.0, 1.2, "half")
+    assert h["label"] == "前一天約 6 g/kg（正常高碳水）" and h["g_day"] == [360.0, 360.0] and h["note"] is None
+    assert FU.loading(60.0, 0.8, "short")["g_day"] == [360.0, 360.0]
+    hk = FU.loading(60.0, 20.0, "hike")
+    assert hk["kind"] == "normal" and hk["label"] == "前一晚正常吃，不必超補" and "note" not in hk
+
+
+def test_loading_text_in_english():
+    from backend import i18n
+    from backend.engine.racepower import fuel as FU
+    with i18n.use_locale("en"):
+        u = FU.loading(60.0, 9.0, "ultra")
+    for k in ("label", "when", "note", "src", "note_src", "drink", "drink_src", "breakfast_src", "caffeine_src"):
+        assert u[k] and not any("一" <= c <= "鿿" for c in u[k]), (k, u[k])
+    assert "1–2 days" in u["label"] and u["g_day"] == [600.0, 720.0]
+
