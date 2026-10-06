@@ -177,6 +177,31 @@ DOWNHILL_EXPR = ("sum(if(rgrade < -0.03 and speed > 0, delta(elapseddistance) * 
                  "(1.2 + 0.288889 * (clamp(speed / 3.6, 1.5, 6) - 1.5)) / 1.633333))")
 
 
+# ---- steep-downhill cadence next to the downhill load (SP-237) ------------------
+# docs/research/downhill-knee-load-display.md §4: shown beside the load, not folded into it (there
+# is no validated coefficient for cadence in the load). Shorter, quicker steps lower the cumulative
+# load on the knee and the other tissues downhill (Van Hooren 2024, downhill-recovery.md [D21]).
+STEEP_DOWN_GRADE = -0.08   # racepower/backtest.py GRADE_EDGES' −8 % boundary; gentler downhills run at
+#                            near-flat cadence and would dilute the difference (user decision 2026-10-06)
+DH_CAD_MIN_S = 600         # 推估: < 10 min of steep downhill in a week / category = no point (as 下坡腳程)
+# moving = above WKO5's 1 mph (1.6 km/h, workout_review.STOP_KMH) and a normal sample interval
+# (≤ 30 s, workout_review.MAX_DT, so a paused gap doesn't weigh in); with a cadence reading
+_DH_CAD_WHERE = f"rgrade < {STEEP_DOWN_GRADE:g} and speed > 1.6 and cadence > 0 and deltatime <= 30"
+DH_CAD_TIME_EXPR = f"sum(if({_DH_CAD_WHERE}, deltatime))"
+DH_CAD_SUM_EXPR = f"sum(if({_DH_CAD_WHERE}, cadence * deltatime))"
+
+
+def downhill_cadence_expr(category: str) -> str:
+    """The weekly time-weighted cadence (spm) on steep downhills (< −8 %, moving) of the
+    workouts matching `category` (an expression, e.g. hastag("runningtrail")): the week's
+    Σ cadence·dt over its Σ dt, no point under DH_CAD_MIN_S. The cadence channel is
+    strides/min (the evaluator's fmax: 60000 / cadence / 2 = one step's ms), so × 2 = spm.
+    views/training.json (weekly-downhill-load) uses it verbatim."""
+    t = f"sum(if({category}, {DH_CAD_TIME_EXPR}), startofweek(date))"
+    c = f"sum(if({category}, {DH_CAD_SUM_EXPR}), startofweek(date))"
+    return f"if({t} >= {DH_CAD_MIN_S}, 2 * {c} / {t})"
+
+
 def acute_chronic(daily: Sequence[float], acute: int = 7, chronic: int = 28) -> Optional[float]:
     """Mean of the last `acute` days over the mean of the last `chronic` days
     (the list ends today; missing days are 0)."""

@@ -130,11 +130,32 @@ def test_cadence_hint_needs_high_impact_and_low_cadence():
     row = lambda ilr, cad, secs=300: {"time_s": secs, "m": {"ilr": ilr, "cadence": cad},
                                       "base": {"ilr": _b(50.0), "cadence": _b(160.0)}}
     h = R.cadence_hint([row(60, 150), row(60, 165), row(45, 150), row(60, 150, secs=30)], ["A", "B", "C", "D"])
-    assert h is not None and h.startswith("A：") and "Heiderscheit 2011" in h
-    assert "B" not in h and "C" not in h and "D" not in h                # cadence high / impact low / < 60 s
-    assert R.cadence_hint([row(60, 165)], ["B"]) is None
+    assert len(h) == 1 and h[0].startswith("A：") and "Heiderscheit 2011" in h[0]
+    assert "B" not in h[0] and "C" not in h[0] and "D" not in h[0]       # cadence high / impact low / < 60 s
+    assert R.cadence_hint([row(60, 165)], ["B"]) == []
     no_base = {"time_s": 300, "m": {"ilr": 60, "cadence": 150}, "base": {"ilr": {"ok": False}, "cadence": _b(160.0)}}
-    assert R.cadence_hint([no_base], ["E"]) is None
+    assert R.cadence_hint([no_base], ["E"]) == []
+
+
+def test_cadence_hint_on_downhill_bins_not_on_steep_climbs():
+    # SP-236: a downhill bin (high impact + low cadence) gets the downhill wording; a ≥ 15 % climb
+    # with the same numbers gets none; a bin with no impact value gets none (cadence alone says nothing)
+    def row(lo, hi, ilr=60.0, g=None):
+        return {"lo": lo, "hi": hi, "time_s": 300, "m": {"ilr": ilr, "impact_g": g, "cadence": 110.0},
+                "base": {"ilr": _b(50.0), "impact_g": _b(2.0), "cadence": _b(150.0)}}
+    h = R.cadence_hint([row(-20, -10), row(-5, -2), row(-2, 2), row(15, 20), row(30, None)],
+                       ["D1", "D2", "F", "U1", "U2"])
+    assert len(h) == 2
+    assert h[0].startswith("D1、D2：") and "下坡縮小步幅、加快步頻可以減少膝蓋負擔" in h[0]
+    assert "Van Hooren 2024" in h[0] and "Heiderscheit 2011" in h[0]
+    assert h[1].startswith("F：") and "步頻提高 5–10%" in h[1]
+    assert not any("U1" in x or "U2" in x for x in h)
+    assert R.cadence_hint([row(15, 20)], ["U"]) == []
+    assert R.cadence_hint([row(-10, -5)], ["D"])[0].startswith("D：")
+    # no ILR and no impact G in the bin (the card's 「–」): no hint, even with a low cadence
+    assert R.cadence_hint([row(-20, -10, ilr=None)], ["D"]) == []
+    # the watch's impact G alone is enough
+    assert R.cadence_hint([row(-20, -10, ilr=None, g=2.5)], ["D"])[0].startswith("D：")
 
 
 def _run(day, gct=250.0, ilr=True, ilr_v=70.0, cad=85.0):
@@ -192,6 +213,9 @@ def test_cadence_hint_on_the_cards_only_when_the_data_supports_it():
     for sec in ("form_grades", "form_work"):
         t = _texts(R.review(ds, ds.workouts[-1], sec))
         assert "步頻提高 5–10%" in t and "Heiderscheit 2011" in t
+    # the −8 % downhill stretch (the −10 ~ −5 % bin) gets the downhill wording (SP-236)
+    t = _texts(R.review(ds, ds.workouts[-1], "form_grades"))
+    assert "坡度 -10 ~ -5%" in t and "下坡縮小步幅、加快步頻可以減少膝蓋負擔" in t and "Van Hooren 2024" in t
     # higher impact but a higher cadence: no hint
     ds = FakeDataset(past + [_run(today, ilr_v=90.0, cad=90.0)], today, settings=SETTINGS)
     for sec in ("form_grades", "form_work"):

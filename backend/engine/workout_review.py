@@ -3568,25 +3568,43 @@ FORM_DEC = {"ilr": 1, "impact_g": 2, "impact_km": 0, "lss": 1, "kleg": 1, "gct":
 FORM_LABEL = {"ilr": "ILR", "impact_g": "衝擊 G", "impact_km": "每公里衝擊量（推估）", "lss": "LSS", "kleg": "kleg",
               "gct": "觸地時間", "cadence": "步頻", "vo": "垂直振幅"}
 CADENCE_HINT = "衝擊高於平常、步頻低於平常 → 可試著把步頻提高 5–10%（Heiderscheit 2011）"
+# SP-236 (docs/research/downhill-knee-load-display.md §3.2): the same pattern on a downhill bin gets the
+# downhill wording — a higher step rate lowers the cumulative load on the knee and the other tissues
+# downhill (Van Hooren 2024, downhill-recovery.md [D21]); +5 / +10 % step rate cut the energy absorbed
+# at the knee (Heiderscheit 2011)
+DOWN_CADENCE_HINT = N_("衝擊高於平常、步頻低於平常 → 下坡縮小步幅、加快步頻可以減少膝蓋負擔（Van Hooren 2024、Heiderscheit 2011）")
+# a grade bin is a downhill one when it lies wholly below the flat −2 ~ 2 % bin (panels.workout
+# GRADE_EDGES): the research doc's < −3 % band on the card's own bins (−5 ~ −2 % counts)
+HINT_DOWN_MAX = -2.0
+# ≥ 15 % climbs: a low cadence there is mostly walking, so no hint (research doc §3.2; 推估)
+HINT_UP_MIN = 15.0
 
 
-def cadence_hint(rows: list[dict], names: list[str]) -> Optional[str]:
+def cadence_hint(rows: list[dict], names: list[str]) -> list[str]:
     """「−10 ~ −5%、0–10%：衝擊高於平常、步頻低於平常 → …」 for the rows (≥ BIN_MIN_S) where ILR or
-    impact G is above the usual's middle 50 % and the cadence below it; None when there is none.
+    impact G is above the usual's middle 50 % and the cadence below it; [] when there is none.
+    A grade row (`lo` / `hi`, %) on a downhill (hi ≤ HINT_DOWN_MAX) gets its own line with the
+    downhill wording (DOWN_CADENCE_HINT); a ≥ HINT_UP_MIN climb gets none. A row without an impact
+    value never hints (a low cadence alone says nothing about the load). Rows without a grade
+    (form_work's segments) take the plain hint.
     Heiderscheit 2011 (MSSE 43:296): +5 / +10 % step rate cut the energy absorbed at the knee."""
-    hit = []
+    down, other = [], []
     for r, name in zip(rows, names):
         if (r.get("time_s") or 0) < BIN_MIN_S:
+            continue
+        lo, hi = r.get("lo"), r.get("hi")
+        if lo is not None and lo >= HINT_UP_MIN:
             continue
         m, b = r.get("m") or {}, r.get("base") or {}
         high = any(compare(m.get(k), b.get(k) or {}) == "high" for k in IMPACT_KEYS)
         if high and compare(m.get("cadence"), b.get("cadence") or {}) == "low":
-            hit.append(name)
-    return f"{'、'.join(hit)}：{CADENCE_HINT}" if hit else None
+            (down if hi is not None and hi <= HINT_DOWN_MAX else other).append(name)
+    out = [f"{'、'.join(down)}：{_(DOWN_CADENCE_HINT)}"] if down else []
+    return out + ([f"{'、'.join(other)}：{CADENCE_HINT}"] if other else [])
 
 
-def _hint_rows(hint: Optional[str]) -> list[dict]:
-    return _verdict_rows([hint], "判讀（參考）") if hint else []
+def _hint_rows(hints: list[str]) -> list[dict]:
+    return _verdict_rows(hints, "判讀（參考）") if hints else []
 BAND_LABEL = {"all": "全部坡度", "flat": "平路 −3～+3%", "up": "上坡 ≥ 3%", "down": "下坡 < −3%"}
 NO_STRYD_NOTE = ("這次沒有 Stryd：ILR（衝擊負荷率）和 LSS（腿部剛性）是 Stryd 腳掌感測器算的，手錶沒有，"
                  "所以只看步頻、觸地時間、垂直振幅、kleg、衝擊 G")
@@ -3695,7 +3713,7 @@ def _form_grades(ds, w, m, c, base):
     if any(b["slow_share"] is not None for b in bins):
         cols.append(_col(_(SLOW_SHARE_LABEL), [_pct(b["slow_share"], 0) for b in bins]))
     cols += [_col(f"{FORM_LABEL[k]}（平常）", [_form_cell(b["m"][k], b["base"][k], k) for b in bins]) for k in keys]
-    hint = cadence_hint(bins, [f"坡度 {b['label']}" for b in bins])
+    hint = cadence_hint(bins, [f"坡度 {b['label']}" for b in bins])     # bins carry lo / hi (SP-236)
     return {**base, "series": cols + _form_note_rows(m) + _no_impact_rows(bins, keys) + _hint_rows(hint),
             "form_profile": {"mode": "grade", "bins": bins, "keys": keys, "min_s": BIN_MIN_S,
                              "pool_weeks": list(POOL_WEEKS), "stryd": bool(m.get("stryd")),
