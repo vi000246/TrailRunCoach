@@ -2022,6 +2022,16 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         n = taper_climb_note(t_ctx, t_ref.get("climb"), hours / t_ref["hours"] if t_ref.get("hours") else None)
         if n:
             notes.append(n)
+    if t_ctx:
+        # 賽前碳水負荷 (SP-285): the week holding the A race's last 1–2 days (text only)
+        try:
+            ev_a = next((e for e in getattr(getattr(status, "plan", None), "events", None) or ()
+                         if getattr(e, "id", None) == t_ctx["id"]), None)
+            n = carb_load_note(t_ctx, ev_a, status.plan.weight_on(today), monday)
+        except Exception:                   # noqa: BLE001 — a hint only
+            n = None
+        if n:
+            notes.append(n)
     b2b_suggestion = B2B.suggestion(b2b, monday, next((s.day for s in sessions if s.id == "long"), None),
                                     enabled=getattr(prefs, "b2b", True) is not False)
     race_sim = SP.sim_suggestion(sp, monday, max([longest28] + [s.minutes for s in sessions if s.id == "long"]),
@@ -2386,6 +2396,54 @@ def taper_climb_note(tc: Optional[dict], pre_climb: Optional[float], share: Opti
             "text": _("減量期爬升跟著時數一起減：減量前每週約 {pre:.0f} m × {share:.0%} → 這週約 {m:.0f} m（推估）；"
                       "不排短距離高強度爬坡、高強度下坡（江晏慶，教練級）",
                       pre=pre_climb, share=share, m=pre_climb * share)}
+
+
+# 賽前碳水負荷 on the week plan (SP-285; docs/research/carb-periodization.md §2.4, §5 C-1): the race
+# calculator's numbers (racepower/fuel.loading), shown in the week holding the A race's last 1–2 days
+# (Bussau 2002: one day is enough; ISSN 2019 Tiller: 48 h) — 1 day for a race ≤ 90 min / a 百岳.
+CARB_LOAD_DAYS = 2
+
+
+def carb_load_note(tc: Optional[dict], ev, weight: Optional[float], monday: dt.date) -> Optional[dict]:
+    """An A race's carb-loading week note (info) for the week of `monday` holding the day before the
+    race (or the 2 days before, for a > 90 min race): > 90 min 10–12 g/kg the day before (may be split
+    over 2), ≤ 90 min a normal high-carb day, a 百岳 a normal dinner — fuel.loading's numbers, in grams
+    too when the settings have a weight. None outside those days, without the race's predicted time
+    (planning.event_hours) or when `ev` isn't tc's race."""
+    from backend.engine import planning as P
+    from backend.engine.racepower import fuel as F
+    if not tc or ev is None or getattr(ev, "id", None) != tc.get("id"):
+        return None
+    hours = P.event_hours(ev)
+    if not hours and ev.kind != "baiyue":
+        return None
+    cls = F.event_class("baiyue" if ev.kind == "baiyue" else "road" if ev.kind == "road" else "trail",
+                        float(hours or 0.0), float(ev.distance_km or 0.0))
+    w = float(weight) if weight and weight > 0 else None
+    ld = F.loading(w or 0.0, float(hours or 0.0), cls)
+    race = dt.date.fromisoformat(tc["start"])
+    days = CARB_LOAD_DAYS if ld.get("carb_load") else 1
+    sunday = monday + dt.timedelta(days=6)
+    if not any(monday <= race - dt.timedelta(days=i) <= sunday for i in range(1, days + 1)):
+        return None
+    src = _("（Bussau 2002、ISSN 2019、Hawley 1997）")
+    if ld["kind"] == "normal":
+        text = _("{race} 出發前飲食：前一晚正常吃就好；百岳強度低、天數多，重點是每天吃夠總熱量（推估）",
+                 race=tc.get("race") or "")
+    elif ld.get("carb_load"):
+        lo, hi = ld["g_kg"]
+        how = (_("前 1 天（可分 2 天）每天約 {lo:.0f}–{hi:.0f} g/kg 碳水（{kg:.0f} kg：約 {glo:.0f}–{ghi:.0f} g）",
+                 lo=lo, hi=hi, kg=w, glo=round(lo * w, -1), ghi=round(hi * w, -1)) if w else
+               _("前 1 天（可分 2 天）每天約 {lo:.0f}–{hi:.0f} g/kg 碳水", lo=lo, hi=hi))
+        text = _("{race} 賽前碳水負荷：{how}；選熟悉、低纖、低脂的食物；總熱量也要跟著多，不只換比例。"
+                 "體重會多 1–2 kg，是肝醣帶的水（說明，推估）", race=tc.get("race") or "", how=how) + src
+    else:
+        g = ld["g_kg"][0]
+        how = (_("前一天正常高碳水，約 {g:.0f} g/kg（{kg:.0f} kg：約 {grams:.0f} g）", g=g, kg=w, grams=round(g * w, -1))
+               if w else _("前一天正常高碳水，約 {g:.0f} g/kg", g=g))
+        text = _("{race} 賽前飲食：{how}；比賽不到 90 分鐘，不必刻意多吃；選熟悉、低纖、低脂的食物",
+                 race=tc.get("race") or "", how=how) + src
+    return {"level": "info", "src": "carb_load", "text": text}
 
 
 def taper_rules(ss: list, tc: Optional[dict], monday: dt.date, notes: Optional[list] = None,
