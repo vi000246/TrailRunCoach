@@ -193,6 +193,199 @@ def test_unhandled_exception_logged_with_traceback_and_redacted(caplog):
     assert "RuntimeError" in line and "Traceback" in line and "me@example.com" not in line
 
 
+# ---- uvicorn's access log (SP-232) ----------------------------------------------
+
+FEED_TOK = "AbCdEfGhIjKlMnOpQrStUvWxYz0123456789_-"     # synthetic, like secrets.token_urlsafe(24)
+NO_DIGIT_TOK = "AbCdEfGhIjKlMnOpQrStUvWxYzabcdef"       # ~0.4 % of real feed tokens have no digit
+SHARE_ID = "abcdefghijklmnopqrstuv"                      # a share id (22 chars) with no digit
+
+
+@pytest.mark.parametrize("url, want", [
+    (f"/share/calendar/{FEED_TOK}.ics", "/share/calendar/***.ics"),
+    (f"/share/calendar/{NO_DIGIT_TOK}.ics", "/share/calendar/***.ics"),
+    (f"/SHARE/Calendar/{NO_DIGIT_TOK}.ICS", "/SHARE/Calendar/***.ics"),
+    (f"//share//calendar/{NO_DIGIT_TOK}.ics", "//share//calendar/***.ics"),
+    (f"/%73hare/calendar/{NO_DIGIT_TOK}.ics", "/%73hare/calendar/***.ics"),
+    (f"/share/calendar/{NO_DIGIT_TOK}%2Eics", "/share/calendar/***.ics"),
+    (f"/share/calendar/{NO_DIGIT_TOK}.ics?lang=en&x=1", "/share/calendar/***.ics?lang=en&x=1"),
+    (f"/share/{SHARE_ID}", "/share/***"),
+    (f"/share/{SHARE_ID}/data", "/share/***/data"),
+    (f"/api/v1/racepower/shares/{SHARE_ID}", "/api/v1/racepower/shares/***"),
+    # the TrainingPeaks OAuth callback, any case, repeated, among other parameters
+    ("/api/v1/auth/tp/callback?code=c0de&state=st4te", "/api/v1/auth/tp/callback?code=***&state=***"),
+    ("/api/v1/auth/tp/callback?lang=en&CODE=c0de&State=s&code=again",
+     "/api/v1/auth/tp/callback?lang=en&CODE=***&State=***&code=***"),
+    # secret-named parameters: prefixes, suffixes, %-encoded names, ; separators
+    ("/x?access_token=a&X-Api-Key=b&Password=c&client_secret=d", "/x?access_token=***&X-Api-Key=***&Password=***&client_secret=***"),
+    ("/x?%74oken=abc&day=2026-10-01", "/x?%74oken=***&day=2026-10-01"),
+    ("/x?a=1;TOKEN=abc", "/x?a=1;TOKEN=***"),
+    ("/x?token", "/x?token"),                                       # a bare name carries no value
+    # anything else that looks like a key, whatever its name
+    ("/x?zz=AbCdEf1234567890xyzWq", "/x?zz=***"),
+    ("/x?AbCdEf1234567890xyzWq", "/x?***"),
+    (f"/hook/{FEED_TOK}", "/hook/***"),
+])
+def test_mask_url_masks_every_key(url, want):
+    assert applog.mask_url(url) == want
+    assert applog.redact(applog.mask_url(url)) == want              # what UvicornRedactFilter does
+
+
+@pytest.mark.parametrize("text, secret", [
+    (f"GET /share/calendar/{NO_DIGIT_TOK}.ics failed", NO_DIGIT_TOK),
+    (f"GET /Share/{SHARE_ID}/data failed", SHARE_ID),
+    ("callback /api/v1/auth/tp/callback?CODE=c0de&state=st4te", "c0de"),
+    ("callback /api/v1/auth/tp/callback?CODE=c0de&state=st4te", "st4te"),
+])
+def test_redact_masks_share_paths_and_secret_parameters(text, secret):
+    out = applog.redact(text)
+    assert secret not in out and "***" in out
+
+
+def test_redact_keeps_file_paths_in_a_traceback():
+    line = '  File "/app/backend/engine/racepower/share.py", line 12, in load_20260101abcdefghij'
+    assert applog.redact(line) == line
+
+
+@pytest.mark.parametrize("url", [
+    "/api/v1/overview/page",
+    "/api/v1/plan/sessions/abc123def456?day=2026-10-01",
+    "/api/v1/overview/plan/schedule/page?day=2026-10-01&uid=abc123def456",
+    "/api/v1/wko5/views/training/dashboards/0/charts/3?begin=2026-01-01&end=2026-10-01&variant=x&period=8w",
+    "/api/v1/static/shell.js",
+    "/api/v1/static/i18n/zh-TW/plan_sessions.json",
+    "/api/v1/racepower/share",                                  # making a share: no id in the path
+    "/share/calendar/{token}.ics",                              # the route template (RequestLogMiddleware)
+])
+def test_mask_url_keeps_ordinary_requests_readable(url):
+    assert applog.mask_url(url) == url
+    assert applog.redact(url) == url
+
+
+def _uvicorn_access_logger(stream):
+    """uvicorn.access as uvicorn sets it up (its AccessFormatter, no propagation)."""
+    from uvicorn.logging import AccessFormatter
+    lg = logging.getLogger("uvicorn.access")
+    h = logging.StreamHandler(stream)
+    h.setFormatter(AccessFormatter('%(client_addr)s - "%(request_line)s" %(status_code)s', use_colors=False))
+    lg.addHandler(h)
+    return lg, h
+
+
+def test_access_log_line_is_masked_and_keeps_its_shape():
+    import io
+    applog.install_uvicorn_filter()
+    applog.install_uvicorn_filter()                     # once per logger
+    for name in applog.UVICORN_LOGGERS:
+        assert sum(isinstance(f, applog.UvicornRedactFilter) for f in logging.getLogger(name).filters) == 1
+    buf = io.StringIO()
+    lg, h = _uvicorn_access_logger(buf)
+    level = lg.level
+    lg.setLevel(logging.INFO)
+    try:
+        # the exact call of uvicorn/protocols/http/h11_impl.py
+        lg.info('%s - "%s %s HTTP/%s" %d', "172.18.0.1:51234", "GET", f"/share/calendar/{NO_DIGIT_TOK}.ics", "1.1", 200)
+        lg.info('%s - "%s %s HTTP/%s" %d', "172.18.0.1:51234", "GET", "/api/v1/plan/sessions?day=2026-10-01", "1.1", 200)
+    finally:
+        lg.removeHandler(h)
+        lg.setLevel(level)
+    lines = buf.getvalue().splitlines()
+    assert lines == ['172.18.0.1:51234 - "GET /share/calendar/***.ics HTTP/1.1" 200 OK',
+                     '172.18.0.1:51234 - "GET /api/v1/plan/sessions?day=2026-10-01 HTTP/1.1" 200 OK']
+
+
+def test_a_real_uvicorn_server_logs_the_feed_without_its_token():
+    """uvicorn serving a feed-shaped route: its own access line, through the filter."""
+    import io
+    import socket
+    import threading
+    import time as _time
+    import uvicorn
+
+    app = FastAPI()
+
+    @app.api_route("/share/calendar/{token}.ics", methods=["GET", "HEAD"])
+    def feed(token: str):
+        return {"ok": True}
+
+    @app.get("/api/v1/auth/tp/callback")
+    def cb(code: str = "", state: str = ""):
+        return {"ok": True}
+
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+    buf = io.StringIO()
+    lg, h = _uvicorn_access_logger(buf)
+    level = lg.level
+    lg.setLevel(logging.INFO)
+    applog.install_uvicorn_filter()
+    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_config=None, lifespan="off"))
+    t = threading.Thread(target=server.run, daemon=True)
+    t.start()
+    try:
+        deadline = _time.monotonic() + 10
+        while not server.started and _time.monotonic() < deadline:
+            _time.sleep(0.02)
+        assert server.started
+        base = f"http://127.0.0.1:{port}"
+        assert httpx.get(f"{base}/share/calendar/{FEED_TOK}.ics").status_code == 200
+        assert httpx.head(f"{base}/share/calendar/{NO_DIGIT_TOK}.ics?lang=en").status_code == 200
+        assert httpx.get(f"{base}/api/v1/auth/tp/callback?Code=c0de123&STATE=s7&lang=en").status_code == 200
+    finally:
+        server.should_exit = True
+        t.join(10)
+        lg.removeHandler(h)
+        lg.setLevel(level)
+    text = buf.getvalue()
+    for secret in (FEED_TOK, NO_DIGIT_TOK, "c0de123", "s7"):
+        assert secret not in text
+    assert '"GET /share/calendar/***.ics HTTP/1.1" 200' in text
+    assert '"HEAD /share/calendar/***.ics?lang=en HTTP/1.1" 200' in text
+    assert '"GET /api/v1/auth/tp/callback?Code=***&STATE=***&lang=en HTTP/1.1" 200' in text
+
+
+def test_uvicorn_error_log_message_and_traceback_are_redacted():
+    import io
+    applog.install_uvicorn_filter()
+    lg = logging.getLogger("uvicorn.error")
+    buf = io.StringIO()
+    h = logging.StreamHandler(buf)
+    h.setFormatter(logging.Formatter("%(message)s"))
+    lg.addHandler(h)
+    level = lg.level
+    lg.setLevel(logging.INFO)
+    try:
+        try:
+            raise RuntimeError(f"no feed at /share/calendar/{NO_DIGIT_TOK}.ics")
+        except RuntimeError:
+            lg.exception("Exception in ASGI application for %s", f"/share/{SHARE_ID}/data")
+        lg.info("Uvicorn running on %s://%s:%d", "http", "0.0.0.0", 8000, extra={"color_message": "x %s"})
+    finally:
+        lg.removeHandler(h)
+        lg.setLevel(level)
+    text = buf.getvalue()
+    assert NO_DIGIT_TOK not in text and SHARE_ID not in text
+    assert "Exception in ASGI application for /share/***/data" in text and "RuntimeError" in text
+    assert "Uvicorn running on http://0.0.0.0:8000" in text
+
+
+def test_setup_installs_the_uvicorn_filter(tmp_path, monkeypatch, clean_handlers):
+    for name in applog.UVICORN_LOGGERS:
+        lg = logging.getLogger(name)
+        for f in [f for f in lg.filters if isinstance(f, applog.UvicornRedactFilter)]:
+            lg.removeFilter(f)
+    monkeypatch.setenv("WKO5COACH_HOME", str(tmp_path))
+    monkeypatch.setenv("WKO5COACH_LOG_FILE", "0")
+    applog.setup()                                       # what the app's lifespan calls (backend/main.py)
+    for name in applog.UVICORN_LOGGERS:
+        assert any(isinstance(f, applog.UvicornRedactFilter) for f in logging.getLogger(name).filters)
+
+
+def test_app_log_masks_a_share_path_without_digits():
+    line = _fmt("feed fetch failed for %s", f"https://coach.example/share/calendar/{NO_DIGIT_TOK}.ics")
+    assert NO_DIGIT_TOK not in line and "/share/calendar/***.ics" in line
+
+
 def test_app_installs_the_request_log():
     from backend.main import build_app
     app = build_app(demo=False)
