@@ -1,10 +1,12 @@
-"""E pace from a race result (SP-276; engine/e_pace.py). Synthetic data only — never the
+"""E pace from a race result (SP-276; engine/e_pace.py), read from the shared race list
+athlete.race_results (SP-290; owner 2026-10-06: one list). Synthetic data only — never the
 WKO5 folder, the app DB or ~/.wko5coach."""
 import datetime as dt
 
 import pytest
 
 from backend.engine import e_pace as EP
+from backend.engine import race_results as RR
 from backend.engine.planning import Event, Plan
 from backend.i18n import use_locale
 from backend.tests.wko5_fakes import FakeDataset, FakeWorkout
@@ -107,17 +109,58 @@ def test_an_unconfirmed_candidate_is_not_used(monkeypatch):
     ds = _ds([_w(TODAY - dt.timedelta(days=5), "10K race", 10.0, 2700)])
     assert EP.candidates(ds, TODAY) and EP.current(TODAY) is None          # offered, not used
     c = EP.candidates(ds, TODAY)[0]
-    store[EP.RACE_KEY] = {k: c[k] for k in ("distance_m", "time_s", "date", "source", "title")}   # confirmed
+    store[RR.KEY] = EP.with_race([], c)                                    # 「用這場」: into the shared list
+    assert store[RR.KEY][0]["source"] == "activity" and store[RR.KEY][0]["confirmed"]
     assert EP.current(TODAY)["vdot"] == c["vdot"]
 
 
+# ---- the shared list (SP-290) ---------------------------------------------------------------
+
+def test_the_e_pace_reads_the_newest_confirmed_road_race_of_the_shared_list():
+    rows = [RR.make(21.0975, 7200, "2026-09-20", trail=True, source="survey"),        # trail: never
+            RR.make(10, 2700, "2026-09-01", source="manual"),
+            RR.make(5, 1500, "2026-09-10", source="activity", confirmed=False),        # unconfirmed
+            RR.make(0.8, 150, "2026-09-25", source="manual"),                          # too short for VDOT
+            RR.make(10, 2900, "2026-01-01", source="manual")]
+    e = EP.pick(rows)
+    assert (e["date"], e["time_s"], e["source"]) == ("2026-09-01", 2700.0, "manual")
+    assert EP.pick([RR.make(42.195, 4 * 3600, "2026-09-01", source="survey")])["source"] == "survey"   # the 問卷's
+    assert EP.pick([]) is None and EP.pick([rows[0]]) is None
+    # the 180-day rule stays: the newest road race too old → shown stale, not used
+    old = EP.of_race(EP.pick([RR.make(10, 2700, "2026-03-01")]), TODAY)
+    assert old["stale"]
+
+
+def test_with_race_replaces_the_same_race_and_keeps_the_survey_row():
+    survey = RR.make(10, 2800, "2026-09-01", source="survey")
+    other = RR.make(21.0975, 6000, "2026-08-01", trail=True, source="survey")
+    e = EP.parse({"distance_m": 10000, "time_s": 2700, "date": "2026-09-01", "source": "manual"})
+    rows = EP.with_race([survey], e)
+    assert len(rows) == 1 and rows[0]["time_s"] == 2700 and rows[0]["source"] == "survey"
+    rows = EP.with_race([other], e)
+    assert [r["source"] for r in rows] == ["manual", "survey"]
+    RR.validate(rows)
+    assert EP.without_race(rows, EP.pick(rows)) == [other]
+    assert EP.in_rows(rows, e) and not EP.in_rows([other], e)
+
+
+def test_the_legacy_single_race_migrates_once():
+    legacy = {"distance_m": 10000, "time_s": 2700.0, "date": "2026-09-01", "source": "activity", "title": "10K race"}
+    rows = EP.migrate_legacy(legacy, [RR.make(21.0975, 7200, "2026-05-01", trail=True, source="survey")])
+    assert len(rows) == 2 and rows[0] == {"date": "2026-09-01", "distance_km": 10.0, "time_s": 2700, "trail": False,
+                                          "source": "activity", "confirmed": True, "name": "10K race"}
+    assert EP.migrate_legacy(legacy, rows) == rows                         # idempotent
+    assert EP.migrate_legacy(None, rows) == rows and EP.migrate_legacy({"distance_m": 1}, rows) == rows
+    assert EP.pick(rows)["date"] == "2026-09-01"
+
+
 def test_setting_validation():
-    from backend.settings.repository import DEFAULTS, validate
-    assert DEFAULTS[EP.RACE_KEY] is None
-    validate(EP.RACE_KEY, None)
-    validate(EP.RACE_KEY, {"distance_m": 10000, "time_s": 2700, "date": "2026-09-01", "source": "manual"})
+    from backend.settings.repository import DEFAULTS, RETIRED_KEYS, validate
+    assert EP.RACE_KEY == RR.KEY and DEFAULTS[RR.KEY] == []
+    assert EP.LEGACY_KEY in RETIRED_KEYS and EP.LEGACY_KEY not in DEFAULTS
+    validate(RR.KEY, [RR.make(10, 2700, "2026-09-01")])
     with pytest.raises(ValueError):
-        validate(EP.RACE_KEY, {"distance_m": 10000, "time_s": 100, "date": "2026-09-01"})
+        validate(RR.KEY, [{"distance_km": 10, "time_s": 100, "date": "2026-09-01", "source": "x"}])
 
 
 def test_race_pace_api(monkeypatch):
@@ -132,8 +175,12 @@ def test_race_pace_api(monkeypatch):
 
     async def fake_db():
         yield db
-    stored = {}
-    monkeypatch.setattr(EP, "stored", lambda user_id=1: EP.parse(stored.get("v")))
+    survey = RR.make(21.0975, 7000, "2026-08-01", trail=True, source="survey")
+    run(SettingsRepository(db).set(RR.KEY, [survey]))
+    run(db.commit())
+    rows = lambda: run(SettingsRepository(db).get(RR.KEY))               # noqa: E731
+    monkeypatch.setattr(RR, "load", lambda user_id=1: RR.normalise(rows()))
+    monkeypatch.setattr(EP, "stored", lambda user_id=1: EP.pick(rows()))
     monkeypatch.setattr(API, "_estimate_dataset", lambda: _ds([_w(TODAY - dt.timedelta(days=5), "10K race", 10.0, 2700)]))
     monkeypatch.setattr(API, "today_local", lambda *a, **k: TODAY)
     monkeypatch.setattr(API, "_notify", lambda thresholds: None)
@@ -142,14 +189,23 @@ def test_race_pace_api(monkeypatch):
     app.dependency_overrides[get_db] = fake_db
     c = TestClient(app)
     r = c.get("/api/v1/plan/race-pace").json()
-    assert r["current"] is None and len(r["candidates"]) == 1 and r["stale_days"] == 180
+    assert r["current"] is None and len(r["candidates"]) == 1 and r["stale_days"] == 180    # the trail race: not used
     for bad in ({"distance_km": 10, "time_s": 60, "date": "2026-09-01"},
                 {"distance_km": 10, "time_s": 2700, "date": "2026-10-07"}):        # after today
         assert c.put("/api/v1/plan/race-pace", json=bad).status_code == 400
     assert c.put("/api/v1/plan/race-pace", json={"distance_km": 10, "time_s": 2700, "date": "2026-09-01"}).status_code == 200
-    stored["v"] = run(SettingsRepository(db).get(EP.RACE_KEY))
-    assert stored["v"] == {"distance_m": 10000.0, "time_s": 2700.0, "date": "2026-09-01", "source": "manual"}
+    assert rows() == [RR.make(10, 2700, "2026-09-01", source="manual"), survey]               # added to the list
     r = c.get("/api/v1/plan/race-pace").json()
     assert r["current"]["e_fast"] == 332 and r["label"].startswith("E 配速 5:32–6:06")
+    # 「用這場」: the candidate goes into the list as confirmed and is no longer offered
+    cand = r["candidates"][0]
+    assert c.put("/api/v1/plan/race-pace", json={"distance_km": cand["distance_m"] / 1000, "time_s": cand["time_s"],
+                                                 "date": cand["date"], "source": "activity",
+                                                 "title": cand["title"]}).status_code == 200
+    got = rows()
+    assert got[0]["source"] == "activity" and got[0]["confirmed"] and got[0]["name"] == "10K race"
+    r = c.get("/api/v1/plan/race-pace").json()
+    assert r["current"]["date"] == cand["date"] and r["candidates"] == []
+    # 清除 removes the race the E pace used — only that one
     assert c.put("/api/v1/plan/race-pace", json={"clear": True}).status_code == 200
-    assert run(SettingsRepository(db).get(EP.RACE_KEY)) is None
+    assert [x["source"] for x in rows()] == ["manual", "survey"]

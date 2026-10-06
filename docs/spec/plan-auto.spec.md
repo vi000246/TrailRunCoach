@@ -414,7 +414,10 @@ The protocol drives the session text (「氣溫 25 °C 以下時開始（熱會�
 台灣教練 + Lafrenz 2008), the COROS steps (friel: an HR-capped main block; UA / Evoke: a power
 range; xu90, SP-274: `aet_test.xu_target` — the E pace ± 3 % (around the middle of the E
 range) of a confirmed race result from the last 180 days (`engine/e_pace.py`, SP-276; Daniels'
-table is the reference; an older race is not used), else 75–80 % of a tested CP
+table is the reference; an older race is not used — the race is the newest confirmed road row of
+the shared list `athlete.race_results`, SP-290: the questionnaire's, the 設定 block's entries and
+the activities confirmed with 「用這場」; SP-276's own single `athlete.race_result` is migrated into
+the list once at start-up and retired, owner 2026-10-06), else 75–80 % of a tested CP
 (`aet_test.cp_tested`: the CP row in effect is not marked `cp_manual` — 設定 marks a CP typed by
 hand; a test result or a legacy row saved before the marker counts; Palladino 1C), else no target and the talk test (owner 2026-10-06); never an HR cap on the main block, the warm-up keeps the easy-run cap;
 the builders read the numbers back from the stored target, `xu_main_target`), the placement (xu90 on the weekend; the others by `aet_test_days`) and the

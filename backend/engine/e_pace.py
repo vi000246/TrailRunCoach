@@ -18,14 +18,19 @@ VDOT), not from LTHR. The app had no E pace at all; this module gives one:
 Used only by the 90-minute test (aet_test.session, coros_workouts, workout_steps) and its
 explanation — no other session or zone changes (owner 2026-10-06: 先不動區間).
 
-Where the race comes from (owner 2026-10-06, §6.1 第 2 點):
-  * the athlete enters it in 設定 (距離、時間、日期) → stored as RACE_KEY;
+Where the race comes from (owner 2026-10-06, §6.1 第 2 點) — the ONE shared list of race results
+(engine/race_results.py, `athlete.race_results`, SP-290; owner 2026-10-06: unified):
+  * the newest confirmed road row of that list (`pick`) — the 跑步經驗問卷's race, the 設定 block
+    「比賽成績（E 配速）」 (距離、時間、日期: written to the list, source manual), or a confirmed
+    activity (below);
   * runs the app recognises as races (threshold_confidence.RACE_WORDS on the title, or a road
     race on the plan that day) are offered as candidates; one is used only after the athlete
-    confirms it (it is then stored as RACE_KEY with source "activity"). Unconfirmed
-    candidates are never used.
-  * trail races don't count (climb distorts the time): a plan trail race / 百岳 that day, the
-    runningtrail tag, or ≥ TRAIL_M_PER_KM of climb per km.
+    confirms it (「用這場」: it then goes into the list, source "activity", confirmed).
+    Unconfirmed candidates are never used.
+  * trail races don't count (climb distorts the time): a list row marked trail; for candidates a
+    plan trail race / 百岳 that day, the runningtrail tag, or ≥ TRAIL_M_PER_KM of climb per km.
+  * the single race SP-276 stored before (LEGACY_KEY) is moved into the list once by the start-up
+    migration (db/database._migrate_schema → migrate_legacy; idempotent) and the key retired.
 A race older than STALE_DAYS (推估) is too old: shown as such, NOT used for the 90-minute test
 (owner 2026-10-06; aet_test.xu_target then falls back to a tested CP / the talk test).
 """
@@ -37,7 +42,8 @@ from typing import Optional
 
 from backend.i18n import _
 
-RACE_KEY = "athlete.race_result"   # user_settings: {distance_m, time_s, date, source, title?} | None
+RACE_KEY = "athlete.race_results"  # the shared list (race_results.KEY, SP-290) the E pace reads
+LEGACY_KEY = "athlete.race_result"  # SP-276's single race {distance_m, time_s, date, source, title?} — migrated
 E_LOW, E_HIGH = 0.62, 0.70         # 推估 fit to Daniels' E table (see the module doc)
 STALE_DAYS = 180                   # 推估: an older race no longer says much about today's E pace — not used
 TRAIL_M_PER_KM = 20.0              # 推估: base_check.XU_FLAT_M_PER_KM — more climb = not a road race
@@ -45,7 +51,8 @@ DIST_RANGE_M = (1500.0, 42500.0)   # Daniels' equations: 1500 m to the marathon
 PACE_RANGE_S = (150.0, 900.0)      # 推估 sanity: 2:30–15:00 /km
 CANDIDATE_DAYS = 365               # how far back races are looked for
 CANDIDATE_KM = (3.0, 42.5)         # 推估: 5 K to the marathon (shorter "races" are usually not races)
-SOURCES = ("manual", "activity")
+SOURCES = ("manual", "activity", "survey")
+SAME_KM = 0.01                     # two rows of one day within 10 m: the same race
 
 
 def vo2_of_speed(v_m_min: float) -> float:
@@ -110,10 +117,90 @@ def parse(v) -> Optional[dict]:
     return out
 
 
+# ---- the shared list (race_results, SP-290) ---------------------------------------------------
+
+def from_row(r: Optional[dict]) -> Optional[dict]:
+    """A race_results row → the race as parse() gives it; None for a trail race, an unconfirmed
+    row or one the VDOT can't use (distance / pace out of range)."""
+    if not isinstance(r, dict) or r.get("trail") or not r.get("confirmed", True):
+        return None
+    try:
+        km = float(r.get("distance_km"))
+    except (TypeError, ValueError):
+        return None
+    return parse({"distance_m": km * 1000.0, "time_s": r.get("time_s"), "date": r.get("date"),
+                  "source": r.get("source"), "title": r.get("name")})
+
+
+def to_row(e: dict, confirmed: bool = True) -> dict:
+    """A parsed race → a race_results row (road, validated; raises ValueError)."""
+    from backend.engine import race_results as RR
+    return RR.make(e["distance_m"] / 1000.0, int(round(float(e["time_s"]))), e["date"], trail=False,
+                   source=e.get("source") if e.get("source") in RR.SOURCES else "manual",
+                   name=(e.get("title") or None) and str(e["title"])[:RR.NAME_MAX], confirmed=confirmed)
+
+
+def _same(r: dict, e: dict) -> bool:
+    try:
+        return r.get("date") == e["date"] and abs(float(r.get("distance_km")) - e["distance_m"] / 1000.0) < SAME_KM
+    except (TypeError, ValueError, KeyError):
+        return False
+
+
+def pick(rows: Optional[list]) -> Optional[dict]:
+    """The race the E pace comes from: the newest confirmed road row (race_results.normalise order)."""
+    from backend.engine import race_results as RR
+    for r in RR.normalise(rows):
+        e = from_row(r)
+        if e is not None:
+            return e
+    return None
+
+
+def in_rows(rows: Optional[list], e: dict) -> bool:
+    """Whether race `e` (a candidate) is already in the list as a confirmed row."""
+    return any(_same(r, e) and r.get("confirmed", True) for r in rows or ())
+
+
+def with_race(rows: Optional[list], e: dict) -> list:
+    """`rows` with race `e` in it (confirmed): a row of the same race is replaced (the
+    questionnaire's keeps its source — race_results allows one survey row)."""
+    from backend.engine import race_results as RR
+    keep, src = [], None
+    for r in RR.normalise(rows):
+        if _same(r, e):
+            src = src or (r.get("source") if r.get("source") == "survey" else None)
+            continue
+        keep.append(r)
+    return RR.normalise(keep + [to_row({**e, "source": src or e.get("source")})])
+
+
+def without_race(rows: Optional[list], e: Optional[dict]) -> list:
+    """`rows` without race `e` (the 設定 block's 清除: the race the E pace used)."""
+    from backend.engine import race_results as RR
+    return RR.normalise([r for r in rows or () if not (e and _same(r, e))])
+
+
+def migrate_legacy(old, rows: Optional[list]) -> list:
+    """SP-276's single stored race (LEGACY_KEY) merged into the shared list once: added as a
+    confirmed road row unless the list already has that race (idempotent); a bad value changes
+    nothing."""
+    from backend.engine import race_results as RR
+    e = parse(old)
+    rows = RR.normalise(rows)
+    if e is None or any(_same(r, e) for r in rows):
+        return rows
+    try:
+        return RR.normalise(rows + [to_row(e)])
+    except ValueError:
+        return rows
+
+
 def stored(user_id: int = 1) -> Optional[dict]:
-    """The confirmed race (a synchronous read like load_guard.manual_start); None = not set."""
-    from backend.engine.wko5expr.datasource import read_setting
-    return parse(read_setting(RACE_KEY, None, user_id))
+    """The race the E pace comes from (pick over the shared list; a synchronous read like
+    load_guard.manual_start); None = no usable race."""
+    from backend.engine import race_results as RR
+    return pick(RR.load(user_id))
 
 
 def of_race(race: Optional[dict], today: dt.date) -> Optional[dict]:

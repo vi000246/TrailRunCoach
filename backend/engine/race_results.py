@@ -20,8 +20,11 @@ first after `normalise`:
                  races are not used); True otherwise
     name         optional, ≤ 80 characters
 
-Only the questionnaire writes rows for now (source survey, at most one; saving the
-questionnaire again replaces it).
+Writers: the questionnaire (source survey, at most one; saving it again replaces it) and the
+設定 block 「比賽成績（E 配速）」 (engine/e_pace.with_race: source manual, or activity for a run
+confirmed with 「用這場」; owner 2026-10-06 — SP-276's own single race, `athlete.race_result`,
+is migrated into this list once at start-up and retired). The E pace reads the newest
+confirmed road row (e_pace.pick).
 """
 from __future__ import annotations
 

@@ -753,15 +753,22 @@ async def put_pmc_start(body: PmcStartIn, db: AsyncSession = Depends(get_db)):
 # ---- 比賽成績 → E 配速 (SP-276; engine/e_pace.py) ----------------------------------------
 
 def race_pace_view(ds, today: dt.date) -> dict:
-    """The confirmed race and its E pace (None when not set; `stale` past e_pace.STALE_DAYS = not
-    used), and the runs recognised as road races in the last STALE_DAYS — offered only; used after
-    the athlete confirms one."""
+    """The race the E pace comes from (the newest confirmed road row of the shared list
+    athlete.race_results, e_pace.pick; None when there is none; `stale` past e_pace.STALE_DAYS =
+    not used), and the runs recognised as road races in the last STALE_DAYS that are not in the
+    list yet — offered only; used after the athlete confirms one."""
     from backend.engine import e_pace as EP
+    from backend.engine import race_results as RR
     cur = EP.current(today)
+    try:
+        rows = RR.load()
+    except Exception:              # noqa: BLE001 — no settings DB
+        rows = []
     try:
         cands = EP.candidates(ds, today, EP.STALE_DAYS) if ds is not None else []   # an older one couldn't be used
     except Exception:              # noqa: BLE001 — the candidates are a convenience
         cands = []
+    cands = [c for c in cands if not EP.in_rows(rows, c)]
     return {"current": cur, "label": EP.label(cur), "candidates": cands[:8],
             "stale_days": EP.STALE_DAYS}
 
@@ -770,7 +777,7 @@ class RacePaceIn(BaseModel):
     distance_km: Optional[float] = None
     time_s: Optional[float] = None
     date: Optional[str] = None
-    source: str = "manual"            # manual | activity (a candidate the athlete confirmed)
+    source: str = "manual"            # manual | activity (a candidate the athlete confirmed) → the shared list
     title: Optional[str] = None
     clear: bool = False
 
@@ -782,19 +789,32 @@ def get_race_pace():
 
 @router.put("/race-pace")
 async def put_race_pace(body: RacePaceIn, db: AsyncSession = Depends(get_db)):
-    """Save (or with clear: remove) the race the E pace comes from (date ≤ today)."""
+    """Add a race to the shared list athlete.race_results (engine/race_results.py, SP-290) — a
+    manual entry, or a candidate confirmed with 「用這場」 (source activity, confirmed); the same
+    race (date, distance) is replaced. With clear: remove the race the E pace uses. Date ≤ today."""
     from fastapi.concurrency import run_in_threadpool
     from backend.engine import e_pace as EP
+    from backend.engine import race_results as RR
     from backend.settings.repository import SettingsRepository
-    value = None
-    if not body.clear:
+    repo = SettingsRepository(db, current_athlete_id())
+    rows = await repo.get(RR.KEY)
+    if body.clear:
+        rows = EP.without_race(rows, EP.pick(rows))
+    else:
         value = EP.parse({"distance_m": (body.distance_km or 0) * 1000.0, "time_s": body.time_s,
                           "date": body.date, "source": body.source, "title": body.title})
         if value is None:
             raise HTTPException(400, _("要填距離（1.5–42.5 km）、時間、日期，配速要在 2:30–15:00 /km 之間"))
+        if value["source"] == "survey":
+            value["source"] = "manual"          # the questionnaire's row is the questionnaire's to write
         if value["date"] > today_local().isoformat():
             raise HTTPException(400, _("比賽日期不能在今天之後"))
-    await SettingsRepository(db, current_athlete_id()).set(EP.RACE_KEY, value)
+        try:
+            rows = EP.with_race(rows, value)
+            RR.validate(rows)
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from None
+    await repo.set(RR.KEY, rows)
     await db.commit()
     _notify(True)                  # the 90-minute test's target follows (re-pushed like a threshold)
     return await run_in_threadpool(lambda: race_pace_view(_estimate_dataset(), today_local()))

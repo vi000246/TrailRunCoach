@@ -186,8 +186,43 @@ async def _migrate_schema():
         from backend.settings.repository import RETIRED_KEYS
         has_settings = (await conn.execute(
             text("SELECT 1 FROM sqlite_master WHERE type='table' AND name='user_settings'"))).first()
+        if has_settings:
+            await _migrate_race_result(conn)
         for key in RETIRED_KEYS if has_settings else ():
             await conn.execute(text("DELETE FROM user_settings WHERE key = :k"), {"k": key})
+
+
+async def _migrate_race_result(conn) -> None:
+    """SP-276's single E-pace race (athlete.race_result) → the shared list athlete.race_results
+    (SP-290; engine/e_pace.migrate_legacy), per user, before RETIRED_KEYS deletes the old key.
+    Idempotent: a race already in the list is not added again; a bad value is dropped."""
+    import datetime as _dt
+    import json as _json
+    from backend.engine import e_pace as EP
+    from backend.engine import race_results as RR
+    olds = (await conn.execute(text("SELECT user_id, value_json FROM user_settings WHERE key = :k"),
+                               {"k": EP.LEGACY_KEY})).fetchall()
+    for uid, vj in olds:
+        try:
+            old = _json.loads(vj)
+        except ValueError:
+            continue
+        cur = (await conn.execute(text("SELECT value_json FROM user_settings WHERE user_id = :u AND key = :k"),
+                                  {"u": uid, "k": RR.KEY})).first()
+        try:
+            rows = _json.loads(cur[0]) if cur else []
+        except ValueError:
+            rows = []
+        new = EP.migrate_legacy(old, rows)
+        if new == RR.normalise(rows):
+            continue                                    # already there (or nothing usable)
+        params = {"u": uid, "k": RR.KEY, "v": _json.dumps(new), "t": _dt.datetime.utcnow()}
+        if cur is None:
+            await conn.execute(text("INSERT INTO user_settings (user_id, key, value_json, updated_at) "
+                                    "VALUES (:u, :k, :v, :t)"), params)
+        else:
+            await conn.execute(text("UPDATE user_settings SET value_json = :v, updated_at = :t "
+                                    "WHERE user_id = :u AND key = :k"), params)
 
 
 async def init_db():
