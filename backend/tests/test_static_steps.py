@@ -204,6 +204,9 @@ def test_js_port_matches_the_endpoints(scenario, monkeypatch, tmp_path):
         # a 強度課's 「步驟看起來像…」 family (SP-79, workout_templates.family_of) isn't ported: the
         # demo's editor just doesn't show that hint
         (w.get("body") or {}).pop("family", None)
+        # nor the per-session LTHR badge (SP-274 / SP-277, threshold_confidence.session_warn):
+        # the demo's editor keeps its own rule from the context
+        (w.get("body") or {}).pop("thr_warn", None)
 
     (tmp_path / "d.json").write_text(json.dumps(data, ensure_ascii=False), "utf-8")
     (tmp_path / "c.json").write_text(json.dumps({"check": cases, "derive": DERIVE}, ensure_ascii=False), "utf-8")

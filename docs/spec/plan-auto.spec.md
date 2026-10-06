@@ -328,6 +328,12 @@ intensity). Each rung is the canonical variant of `backend/engine/interval_libra
   stop ≤ 30 s, HR in Zone 1 (the app's easy rule: avg ≤ AeT + 3, ≤ 10 % above — mapping his
   E zone to "below AeT" is 推估), (HR@90′ − HR@10′) / HR@10′ < 10 % — his own comparison, not
   drift_of's halves (blog 2016-12). Any qualifying run counts (it can be the weekend long run).
+  SP-275: a **scheduled** test (`is_scheduled_xu`: the plan's test session done by the run, or
+  the test's title) is run at a pace / power (SP-274), so Zone 1 doesn't apply; instead
+  `output_hold`: minutes 80–90 not > 5 % slower than 10–20 (power when there is power; 推估, UA's
+  5 %) — 「後段放慢了 N%：飄移會偏小，下次配速固定」; without speed or power only the HR, with
+  「沒辦法確認配速有沒有維持」. The test's own review (`aet_test.analyze_xu`) applies the same check.
+  A passive long run keeps the Zone 1 rule and has no pace check.
   **Heat bands** (2026-10-02): ≤ 25 °C (台灣教練) is advice in the session text, no longer a
   refusal. The run carries its temperature band; a pass in heat counts (heat only inflates the
   drift — conservative), a fail in heat is marked 「熱環境，結果可能偏高」 (`quality_gate.heat_suffix`;
@@ -366,7 +372,7 @@ intensity). Each rung is the canonical variant of `backend/engine/interval_libra
   The 總覽 card and the 基礎期 panel draw it with `static/z5flow.js` (`wko5views.z5_progress`).
 - **Re-confirmation**: a new measured AeT (UA gap or Friel) re-confirms. The AeT test is
   scheduled only for a reason (`quality_gate.aet_test_reason`): no interpretable run for ~6
-  weeks (UA's 4–6-week retest, coach; wording 未驗證), the aggregated AeT estimate missing or
+  weeks (推估; UA's own retest is every 4–6 months, not weeks), the aggregated AeT estimate missing or
   SE > 3 bpm, a shift > 5 bpm in the last 6 points (B3), the estimate more than max(SE, 3 bpm)
   from the plan's AeT ("moved": UA — AeT rises toward AnT as the base improves), or after a
   break ≥ 4 weeks. (The passive 90-min re-confirmation that stood in for no_data / se is gone
@@ -398,8 +404,13 @@ intensity). Each rung is the canonical variant of `backend/engine/interval_libra
 | `friel` | 10 + 60 + 5 | steady flat | at AeT HR | halves < 5 / 5–10 / > 10 % | Friel (TrainingPeaks) |
 
 The protocol drives the session text (「氣溫 25 °C 以下時開始（熱會讓心率偏高、飄移失真）」,
-台灣教練 + Lafrenz 2008), the COROS steps (xu90 / friel: an HR-capped main block; UA / Evoke:
-a power range), the placement (xu90 on the weekend; the others by `aet_test_days`) and the
+台灣教練 + Lafrenz 2008), the COROS steps (friel: an HR-capped main block; UA / Evoke: a power
+range; xu90, SP-274: `aet_test.xu_target` — the E pace ± 3 % (around the middle of the E
+range) of a confirmed race result from the last 180 days (`engine/e_pace.py`, SP-276; Daniels'
+table is the reference; an older race is not used), else 75–80 % of a tested CP
+(`aet_test.cp_tested`: the CP row in effect is not marked `cp_manual` — 設定 marks a CP typed by
+hand; a test result or a legacy row saved before the marker counts; Palladino 1C), else no target and the talk test (owner 2026-10-06); never an HR cap on the main block, the warm-up keeps the easy-run cap;
+the builders read the numbers back from the stored target, `xu_main_target`), the placement (xu90 on the weekend; the others by `aet_test_days`) and the
 analysis (`analyze_workout`: warm-up cut, window and judging rule by the title's protocol).
 The analysis uses VI ≤ 1.04 (drift v2) instead of the old 30-s CV. Heat is a band on the
 result, not a refusal (`aet_test._tag_heat`, `heat_line`): a pass in heat still counts. Every protocol is ≥ 40

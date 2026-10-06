@@ -106,6 +106,10 @@ DEFAULTS: dict[str, Any] = {
     # (the first 4 weeks' mean daily TSS). Replaces athlete_settings.initial_ctl_run /
     # initial_atl_run (React app, no longer read)
     "athlete.pmc_start": None,
+    # 比賽成績 → E 配速 (engine/e_pace.py RACE_KEY, SP-276): {distance_m, time_s, date, source:
+    # manual | activity, title?} — one race the athlete entered or confirmed; only the 90-minute
+    # test reads its E pace. None = not set
+    "athlete.race_result": None,
     # 課表心率區間 (engine/hr_profile.py): lthr (COROS % LTHR, default) | hrr | hrmax — the
     # 課表's HR targets only; the HR-zone charts keep their own selector
     "plan.hr_zone_model": "lthr",
@@ -392,6 +396,11 @@ def validate(key: str, value: Any) -> None:
         from backend.engine.load_guard import parse_manual
         if parse_manual(value) is None:
             raise ValueError("athlete.pmc_start must be {date: YYYY-MM-DD, ctl, atl} (0-300) or null")
+    if key == "athlete.race_result" and value is not None:
+        from backend.engine.e_pace import parse as parse_race
+        if parse_race(value) is None:
+            raise ValueError("athlete.race_result must be {distance_m (1500-42500), time_s, date: YYYY-MM-DD} "
+                             "with a pace of 2:30-15:00 /km, or null")
     if key == "plan.hr_zone_model" and value not in ("lthr", "hrr", "hrmax"):
         raise ValueError("plan.hr_zone_model must be lthr, hrr or hrmax")
     if key == "sync.coros.rpe_backfill" and value is not None and not isinstance(value, dict):

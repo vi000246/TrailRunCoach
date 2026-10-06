@@ -1472,6 +1472,16 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     aet_src = (tt.get("easy_cap") or {}).get("source") or tt.get("aet_source")
     aet_meas = bool(hrz.get("aet_measured")) if hrz else bool(tt.get("aet_measured"))
     cap_txt = easy_cap_label(None, aet, aet_meas)
+    # SP-274: the 90-minute test's intensity — the E pace of a confirmed race (engine/e_pace.py),
+    # else 75–80 % of a tested CP (a plan CP row not typed by hand — aet_test.cp_tested; not WKO5's
+    # mFTP / a PD fit: owner 2026-10-06), else the talk test
+    from backend.engine import e_pace as EP
+    from backend.engine.aet_test import cp_tested
+    try:
+        cp_meas = bool(tt.get("cp")) and cp_tested(ds.plan, today)
+    except Exception:                       # noqa: BLE001 — a dataset without a plan (tests)
+        cp_meas = False
+    e_pc = EP.current(today)
     # the walking sessions' uphill cap (SP-115: 75 % HRmax, never below the easy-run cap)
     from backend.engine.hr_profile import walk_cap_for
     walk = walk_cap_for(ds, today, aet, getattr(status.plan, "profile", None))
@@ -2065,7 +2075,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
             "session": {k: test_s.get(k) for k in ("kind", "title", "minutes", "target", "detail", "source", "tss",
                                                    "protocol")}})
     if aet_due:
-        a_s = AT.session(tt, AT.start_hr((est.get("aethr") or {}).get("value"), tt.get("lthr")),
+        a_s = AT.session({**tt, "cp_measured": cp_meas, "e_pace": e_pc}, AT.start_hr((est.get("aethr") or {}).get("value"), tt.get("lthr")),
                          AT.start_power(tt.get("cp")), getattr(prefs, "cap_weekday", None), aet_proto,
                          getattr(prefs, "long_cap", None) if prefs is not None else None)
         test_suggestions.append({
@@ -2108,7 +2118,9 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
                        # 課表心率區間 (engine/hr_profile.plan_hr_zones): the push / step builders read it
                        "hr_model": hrz,
                        # 登山爬坡的心率上限 (hr_profile.walk_cap, SP-115): the walking sessions' texts and push
-                       "walk_cap": walk},
+                       "walk_cap": walk,
+                       # SP-274: the 90-minute test's pace / power (aet_test.xu_target)
+                       "cp_measured": cp_meas, "e_pace": e_pc},
         "notes": notes,
         # the quality gate (engine/quality_gate.py), so projection.project_weeks can
         # re-evaluate it for each projected week instead of copying this week's answer

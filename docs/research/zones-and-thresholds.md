@@ -254,7 +254,7 @@ FIT 資料集（COROS／TP）的規則寫在 `backend/engine/wko5expr/fitdataset
 
 - Friel：在 Base、Build 期初各測一次 LTHR（原文 "early in the Base and Build periods"）。
 - 筆記：CP 每 4–6 週（`backend/engine/status.py:60`）。
-- UA：AeT 4–6 週重測（措辭**未驗證**，見 `backend/engine/quality_gate.py:754`）。
+- UA：AeT 飄移測試每 4–6 **個月**重測（原文 "every 4-6 months"，2026-10-06 核對，見 `aerobic-base-readiness.md` §8）。app 的「約 6 週沒有可判讀的跑步就排測試」是推估，不是 UA 的說法（`backend/engine/base_check.py` `NO_DATA_DAYS`）。
 - 徐國峰：每次目標賽後、跑力提升後，用新的 E 配速重新打底，再做 90 分鐘檢測（`跑者都該懂的跑步數據，讀書心得.md:77`）。
 
 **證據**

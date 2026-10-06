@@ -991,8 +991,11 @@ def test_each_protocol_session_title_steps_and_hover(key):
     assert "氣溫 25 °C 以下時開始" in s["detail"]
     steps = CW.session_steps(s, CW.Thresholds.of(th))
     assert steps[0].seconds == p["warm"] * 60 and steps[1].seconds == p["main"] * 60
-    if key in ("xu90", "friel"):
-        assert steps[1].intensity[0] == "hr"                       # the pace / HR is held, no power range
+    if key == "xu90":
+        # SP-274: no E pace, no tested CP (cp_measured unset) → the talk test, no HR cap
+        assert steps[1].intensity is None and steps[0].intensity[0] == "hr"
+    elif key == "friel":
+        assert steps[1].intensity[0] == "hr"                       # steady at AeT
     else:
         assert steps[1].intensity[0] == "power"
     tip = AT.protocol_tip(key)
