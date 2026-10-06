@@ -883,6 +883,15 @@ def _injury_suggestions(inp: dict, today: str, blocked: set, stored: list[dict])
     except Exception:                       # noqa: BLE001 — the box must still load
         return []
     try:
+        # SP-273: 「看起來好了？」 for an open injury (injuries.done_check; the runs and their marks)
+        opened = [e for e in INJ.active_on(events, dt.date.fromisoformat(today)) if not INJ.is_illness(e)]
+        if opened:
+            from backend.api.overview import _dataset
+            since = min(dt.date.fromisoformat(e["onset_date"][:10]) for e in opened) - dt.timedelta(days=28)
+            rows += SG.injury_done_rows(events, INJ.foot_log(_dataset(), None, since), today)
+    except Exception:                       # noqa: BLE001
+        pass
+    try:
         from backend.engine.wko5expr.datasource import read_setting
         if events and read_setting(INJ.SETTING_PATTERN, False) is True:
             from backend.api.overview import _dataset
@@ -956,6 +965,8 @@ async def accept_suggestion(body: dict = Body(...), db: AsyncSession = Depends(g
                                                  tpl, sg["kind"])]}
     elif sg["type"] == "injury_rest":
         out = await _accept_injury_rest(db, sg)
+    elif sg["type"] == "injury_done":
+        out = await _accept_injury_done(db, sg)
     else:
         raise HTTPException(400, "這個建議沒有可以排的東西")
     week = sid.split(":")[-1] if sid.startswith(SG.WEEKLY) else None
@@ -2124,6 +2135,30 @@ async def move_rest_day(body: dict = Body(...), db: AsyncSession = Depends(get_d
         await _b2b_moved(db, s["uid"], frm)
     after = await PS.load(db)
     return {"from": frm, "to": to, "moved": moved, "warnings": RD.swap_warnings(after, [s["uid"] for s in moved])}
+
+
+async def _accept_injury_done(db: AsyncSession, sg: dict) -> dict:
+    """「好了」 of an injury_done suggestion (SP-273): the event resolves today (editable later on the
+    傷病紀錄 page) — the user's own confirmation, never automatic; then the plan reconciles (the
+    condition's avoided sessions and the pain light are gone from today)."""
+    from sqlalchemy import select
+    from backend.api import injuries as IA
+    from backend.db.models import InjuryEvent
+    from backend.engine.localtime import today_local
+    from backend.i18n import _
+    e = (await db.execute(select(InjuryEvent).where(InjuryEvent.id == sg["injury_id"]))).scalar_one_or_none()
+    if e is None or e.status == "resolved":
+        raise HTTPException(400, "INJURY_NOT_OPEN")
+    day = sg.get("date") or today_local().isoformat()
+    e.status, e.resolved_date, e.updated_at = "resolved", day, dt.datetime.utcnow()
+    await db.commit()
+    IA._plan_changed()
+    inp = await _inputs(db)
+    async with _wlock():
+        await _ensure(db, inp)
+        _res, changes = await PS.plan_reconcile(db, inp, apply=True, decisions={})
+    return {"sessions": [], "resolved": {"id": e.id, "date": day}, "changes": changes,
+            "message": _("已記成好了（{day}）；日期可以在傷病紀錄改", day=day)}
 
 
 async def _accept_injury_rest(db: AsyncSession, sg: dict) -> dict:

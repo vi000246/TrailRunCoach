@@ -47,6 +47,7 @@ datasets via `source_stamp`).
 | `name` | the user's title (≤ 200 chars; null / blank = the original) |
 | `tags` | free-form list (stored `tags_json`; ≤ 20 tags, ≤ 30 chars each, case-insensitive dedupe). The tag 「當作間歇」 makes the workout review judge the run as intervals (`interval_eval.FLAG_TAG`) |
 | `pain`, `pain_area`, `injury_id` | 疼痛 mark (null 沒填 / 0 沒痛 / 1 痠 / 2 痛 / 3 中斷), area, the linked 傷病紀錄 event (`engine/injuries.py`; hidden and 404 in demo mode) |
+| `pain_score` | optional 0–10 「跑的時候最痛幾分」 next to the mark (SP-271; cleared with it; drives the pain light) |
 
 The pack carried (`pack_kg`, PATCH on the dataset workout) is not a tag column: it goes to
 `racepower_hike_meta.json` (the 百岳 prediction).

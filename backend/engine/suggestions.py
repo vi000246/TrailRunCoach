@@ -25,6 +25,8 @@ Kinds (the `type` of a row):
                (zone_events.applied_events) — information, ✕ only.
   injury_rest  an open 重（停跑） injury: the next 7 days as 不排課日期 (confirm).
   injury_hold  a 痛 mark inside a re-entry block: hold the volume (information).
+  injury_done  SP-273: an open injury that looks healed (injuries.done_check) — 「好了」 resolves it
+               (confirm; never automatic), 「還沒」 hides it for 7 days (ids `injury_done:<id>`).
   injury_pattern 「跟受傷前很像」 (engine/injury_exposure.py; off by default,
                only with ≥ 5 analysed injuries) — information, ✕ only.
   altitude     高度適應提醒 (engine/altitude.py, SP-100): an event whose GPX
@@ -272,8 +274,48 @@ def altitude_rows(events: list, today: str, alt_of, alts_of) -> list[dict]:
     return out
 
 
-def visible(rows: list[dict], dismissed: dict) -> list[dict]:
-    return [r for r in rows if r["id"] not in (dismissed or {})]
+SNOOZE = {"injury_done:": 7}            # SP-273 (injuries.DONE_SNOOZE_DAYS): 「還沒」 / ✕ hold this many days
+
+
+def _snoozed(sid: str, d: dict, now: dt.datetime) -> bool:
+    days = next((v for k, v in SNOOZE.items() if sid.startswith(k)), None)
+    if days is None or d.get("action") == "accepted":
+        return True
+    try:
+        return (now - dt.datetime.fromisoformat(d["at"])).days < days
+    except (KeyError, TypeError, ValueError):
+        return True
+
+
+def visible(rows: list[dict], dismissed: dict, now: Optional[dt.datetime] = None) -> list[dict]:
+    """The rows not dismissed; a SNOOZE kind comes back once its days are over."""
+    now = now or dt.datetime.now()
+    dis = dismissed or {}
+    return [r for r in rows if r["id"] not in dis or not _snoozed(r["id"], dis[r["id"]], now)]
+
+
+def injury_done_rows(events: list[dict], marks: list[dict], today: str) -> list[dict]:
+    """SP-273: 「右膝看起來好了？」 for each open injury injuries.done_check passes. `marks`: foot_log rows."""
+    from backend.engine import injuries as INJ
+    d = dt.date.fromisoformat(today)
+    out = []
+    for e in INJ.active_on(events, d):
+        c = INJ.done_check(e, marks, d)
+        if c is None:
+            continue
+        out.append({"id": f"injury_done:{e['id']}", "type": "injury_done", "pick": "confirm", "injury_id": e["id"],
+                    "accept_label": _("好了"), "decline_label": _("還沒"), "date": today,
+                    "title": _("{label}看起來好了？最近 {n} 次沒痛、跑量回到傷前 {pct}%", label=c["label"],
+                               n=len(c["runs"]), pct=c["pct"]),
+                    "reason": _("最近一週跑 {h:.1f} h，傷前 4 週平均每週 {pre:.1f} h；最近 {n} 次跑步（{a}–{b}，跨 {d} 天）"
+                                "都標「沒痛」或「痠」。", h=c["recent_h"], pre=c["pre_h"], n=len(c["runs"]),
+                                a=_md(c["runs"][0]), b=_md(c["runs"][-1]), d=c["span"]),
+                    "help": _("按「好了」才會結案（好了的日期之後可以在傷病紀錄改）；結案後傷別要避開的課和疼痛燈號都解除，"
+                              "同部位 {recur} 天內再痛會標成復發。按「還沒」{snooze} 天內不再問。回到傷前 75–80% 的量才恢復正常"
+                              "訓練（Ohio State Wexner 回跑指引，臨床機構）；「{n} 次、跨 {span} 天」是推估。",
+                              recur=INJ.RECUR_DAYS, snooze=INJ.DONE_SNOOZE_DAYS, n=INJ.DONE_RUNS,
+                              span=INJ.DONE_SPAN_DAYS) + "\n" + _(INJ.DISCLAIMER)})
+    return out
 
 
 def prune(dismissed: dict, rows: list[dict], today: str) -> dict:

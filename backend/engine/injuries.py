@@ -881,6 +881,53 @@ def light(events: list[dict], marks: list[dict], day: dt.date) -> Optional[dict]
     return best
 
 
+# ---- app 提議「好了」 (SP-273; injury-graded-return.md §2.4, §4.6, owner §6.1 point 8) ----------------------
+# Proposed, never automatic: the user confirms (status resolved, resolved_date today — editable later).
+# Both conditions:
+#   1. the last 7 days' run time ≥ DONE_SHARE × the 4 weeks before the onset (reentry.prev_volume's
+#      window, from the day before the onset; runs only) — Ohio State Wexner: back to normal training
+#      at 75–80 % of the pre-injury volume (clinical, coach-level);
+#   2. the last DONE_RUNS runs all marked 沒痛 / 痠, spanning ≥ DONE_SPAN_DAYS (推估).
+# 「還沒」: not asked again for DONE_SNOOZE_DAYS (推估; suggestions.visible).
+DONE_SHARE = 0.75
+DONE_RUNS = 3
+DONE_SPAN_DAYS = 14
+DONE_SNOOZE_DAYS = 7
+
+
+def done_check(e: dict, marks: list[dict], day: dt.date) -> Optional[dict]:
+    """Whether an open injury looks healed on `day` (see above): {"id", "label", "pct", "recent_h",
+    "pre_h", "runs" (the last DONE_RUNS dates), "span"}; None otherwise (an illness, still red or in the
+    walk-run, no pre-injury running)."""
+    if is_illness(e) or not is_open(e):
+        return None
+    o = _d(e.get("onset_date"))
+    if o is None or o > day:
+        return None
+    rs = return_state(e, marks, day)
+    if rs is None or rs["phase"] != "light":
+        return None
+    runs = [m for m in marks if m.get("cat", "run") == "run"]
+    pre_a, pre_b = o - dt.timedelta(days=28), o - dt.timedelta(days=1)
+    pre_h = sum(m.get("minutes") or 0.0 for m in runs if pre_a.isoformat() <= m["date"] <= pre_b.isoformat()) / 60.0 / 4.0
+    if pre_h <= 0:
+        return None
+    lo = (day - dt.timedelta(days=6)).isoformat()
+    recent_h = sum(m.get("minutes") or 0.0 for m in runs if lo <= m["date"] <= day.isoformat()) / 60.0
+    if recent_h < DONE_SHARE * pre_h:
+        return None
+    after = sorted((m for m in runs if o.isoformat() < m["date"] <= day.isoformat()),
+                   key=lambda m: m.get("key") or m["date"])[-DONE_RUNS:]
+    if len(after) < DONE_RUNS or any(m.get("pain") not in (0, 1) for m in after):
+        return None
+    span = (_d(after[-1]["date"]) - _d(after[0]["date"])).days
+    if span < DONE_SPAN_DAYS:
+        return None
+    return {"id": e.get("id"), "label": full_label(e.get("area"), e.get("side")),
+            "pct": int(round(100 * recent_h / pre_h)), "recent_h": round(recent_h, 1), "pre_h": round(pre_h, 1),
+            "runs": [m["date"] for m in after], "span": span}
+
+
 def week_notes(events: list[dict], monday: dt.date, today: dt.date) -> list[dict]:
     """「右膝進行中（第 5 天）」 for the week plan (src "injury")."""
     sun = monday + dt.timedelta(days=6)
