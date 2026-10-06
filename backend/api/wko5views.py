@@ -816,7 +816,7 @@ def _pain_part(u: Optional[dict]) -> dict:
     if INJ.demo_mode():
         return {}
     return {"pain": (u or {}).get("pain"), "pain_area": (u or {}).get("pain_area"),
-            "injury_id": (u or {}).get("injury_id")}
+            "injury_id": (u or {}).get("injury_id"), "pain_score": (u or {}).get("pain_score")}
 
 
 def _pain_state(ds, w, t: dict) -> Optional[dict]:
@@ -837,7 +837,7 @@ def _pain_state(ds, w, t: dict) -> Optional[dict]:
         mev = ev or next((e for e in INJ.active_on(evs, day) if not INJ.is_illness(e) and t.get("pain_area")
                           and e.get("area") == t.get("pain_area")), None)
         mon = INJ.monitor(mev)
-        out = {"pain": t.get("pain"), "pain_area": t.get("pain_area"),
+        out = {"pain": t.get("pain"), "pain_area": t.get("pain_area"), "pain_score": t.get("pain_score"),
                "area_label": INJ.area_label(t.get("pain_area")) if t.get("pain_area") else None,
                "injury": INJ.summary(ev, today), "reentry": None,
                "monitor": mon["text"] + "\n" + mon["disclaimer"] if mev is not None else None}
@@ -1104,6 +1104,7 @@ class BulkBody(BaseModel):
     pain: Optional[int] = None
     pain_area: Optional[str] = None
     pain_side: Optional[str] = None
+    pain_score: Optional[int] = None        # SP-271: 0–10 跑的時候最痛幾分 (single edits)
     # 登山杖 (SP-242): "with" / "without" / null 未標 (engine/activity_tags.POLES)
     poles: Optional[str] = None
     # 路況 (SP-250): "dry" / "wet" / null 未標 (engine/activity_tags.SURFACES)
@@ -1127,7 +1128,8 @@ async def patch_activities(body: BulkBody):
         raise HTTPException(400, "TOO_MANY_ITEMS")
     sent = body.model_fields_set
     base = {k: getattr(body, k) for k in ("activity_type", "effort", "note", "exclusion", "name", "tags",
-                                          "pain", "pain_area", "pain_side", "poles", "surface") if k in sent}
+                                          "pain", "pain_area", "pain_side", "pain_score", "poles", "surface")
+            if k in sent}
     for k in ("add_tags", "remove_tags"):
         v = getattr(body, k)
         if v is not None and AT.validate(tags=v):

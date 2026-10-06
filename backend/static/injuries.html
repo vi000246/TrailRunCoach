@@ -103,6 +103,9 @@ dialog form { padding: 14px 16px; display: grid; gap: 10px; }
 .dact { display: flex; gap: 8px; justify-content: space-between; flex-wrap: wrap; border-top: 1px solid var(--line); padding-top: 10px; }
 .msg { font-size: 12px; color: var(--muted); min-height: 1.2em; }
 .msg.err { color: var(--err); }
+.badge.light-green { color: var(--ok, #15803d); border-color: currentColor; }
+.badge.light-yellow { color: var(--warn, #b45309); border-color: currentColor; }
+.badge.light-red { color: var(--err, #b91c1c); border-color: currentColor; }
 </style>
 </head>
 <body>
@@ -332,7 +335,7 @@ function renderList() {
   }
   $("cards").innerHTML = L.map((x) => `<div class="card ${x.status === "draft" ? "draft" : ""} ${S.sel === x.id ? "on" : ""}" data-id="${x.id}">
       <div class="t"><span class="dot" style="background:${areaCol(x.area)}"></span>${esc(x.label)}${x.category === "illness" ? "" : `<span class="sev ${x.severity}" title="${esc((S.meta?.severity_help || {})[x.severity] || "")}">${esc(x.severity_label)}</span>`}
-        ${x.condition_label ? `<span class="badge" title="${esc((S.meta?.labels || {}).condition || "")}">${esc(x.condition_label)}</span>` : ""}${x.kind === "acute" ? `<span class="badge">急性</span>` : ""}${x.recurrence_of ? `<span class="badge" title="同部位、上次好了 42 天內">復發</span>` : ""}</div>
+        ${x.light ? `<span class="badge light-${esc(x.light.color)}" title="${esc(x.light.reason)}">${esc(x.light.label)}</span>` : ""}${x.condition_label ? `<span class="badge" title="${esc((S.meta?.labels || {}).condition || "")}">${esc(x.condition_label)}</span>` : ""}${x.kind === "acute" ? `<span class="badge">急性</span>` : ""}${x.recurrence_of ? `<span class="badge" title="同部位、上次好了 42 天內">復發</span>` : ""}</div>
       <div class="s"><span>${ymd(x.onset_date)} – ${x.status === "resolved" ? ymd(x.resolved_date) : x.category === "illness" ? "還有症狀" : "還沒好"}</span><span>${x.day_n} 天</span>
         ${x.days_off != null ? `<span>停跑 ${x.days_off} 天${x.days_missed == null ? "（自動）" : ""}</span>` : ""}
         ${x.linked ? `<span>${x.linked} 次活動</span>` : ""}${x.pain_max != null ? `<span>最痛 ${x.pain_max}/10</span>` : ""}${x.pause_quality ? `<span>暫停強度課</span>` : ""}</div>

@@ -199,9 +199,11 @@ def _manual_link(test: str, earliest: Optional[str]) -> Optional[dict]:
 REST_DAYS = 7                         # plan §4.2: 「要不要把今天起 7 天設成不排課日期？」
 
 
-def injury_rows(events: list[dict], today: str, blocked: set, rp: Optional[dict], marks: list[dict]) -> list[dict]:
+def injury_rows(events: list[dict], today: str, blocked: set, rp: Optional[dict], marks: list[dict],
+                light: Optional[dict] = None) -> list[dict]:
     """傷病紀錄 (engine/injuries.py, plan §4.2–§4.3):
-      injury_rest  an open 重（停跑） event and the next 7 days not all blocked:
+      injury_rest  an open 重（停跑） event — or one whose pain light is red (SP-271, `light`:
+                   week_plan's injury_light) — and the next 7 days not all blocked:
                    offer them as 不排課日期 (accepting writes them; never automatic);
       injury_hold  a 痛 / 中斷 mark inside a re-entry block: keep this week's
                    volume (information, ✕ only)."""
@@ -209,14 +211,19 @@ def injury_rows(events: list[dict], today: str, blocked: set, rp: Optional[dict]
     d = dt.date.fromisoformat(today)
     out = []
     days = [(d + dt.timedelta(days=i)).isoformat() for i in range(REST_DAYS)]
+    red = light.get("id") if light and light.get("color") == "red" else None
     for e in INJ.active_on(events, d):
-        if e.get("severity") != "severe" or all(x in blocked for x in days):
+        if (e.get("severity") != "severe" and e.get("id") != red) or all(x in blocked for x in days) \
+                or INJ.is_illness(e):
             continue
         lab = INJ.full_label(e.get("area"), e.get("side"))
+        why = f"{lab}：重（停跑），傷病紀錄 #{e['id']} 進行中。" if e.get("severity") == "severe" else \
+            _("{label}：疼痛紅燈（{reason}），傷病紀錄 #{id} 進行中。", label=lab, reason=light.get("reason") or "",
+              id=e["id"])
         out.append({"id": f"injury_rest:{e['id']}", "type": "injury_rest", "pick": "confirm",
                     "accept_label": "設成不排課", "injury_id": e["id"], "start": days[0], "end": days[-1],
                     "title": f"要不要把 {_md(days[0])} 起 {REST_DAYS} 天設成不排課日期？",
-                    "reason": f"{lab}：重（停跑），傷病紀錄 #{e['id']} 進行中。",
+                    "reason": why,
                     "help": "按「設成不排課」才會寫入不排課日期（課表頁可以再改）；不會自動改。"
                             "好了以後回來跑，恢復期會照停跑天數排。"})
     if rp and rp.get("return", "9999") <= today < rp.get("end", ""):

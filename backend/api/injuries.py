@@ -110,11 +110,24 @@ async def _list_json(db: AsyncSession, with_days: bool = True) -> list[dict]:
         except Exception:                   # noqa: BLE001 — the list still shows without the dataset
             runs = []
     today = today_local()
+    marks = None
+    if with_days and any(e.status in ("draft", "active") and e.category != "illness" for e in evs):
+        try:                                # 疼痛燈號 (SP-271): the runs and their marks
+            def _marks():
+                from backend.api.wko5views import _dataset
+                return INJ.foot_log(_dataset())
+            marks = await run_in_threadpool(_marks)
+        except Exception:                   # noqa: BLE001 — the list still shows without the dataset
+            marks = None
     out = []
     for e in evs:
         d = _row_dict(e)
         auto = INJ.days_off_auto(d, runs, today) if runs else None
-        out.append(INJ.event_json(d, today, linked.get(e.id, 0), auto))
+        j = INJ.event_json(d, today, linked.get(e.id, 0), auto)
+        if marks is not None and j["open"] and not INJ.is_illness(d):
+            lt = INJ.event_light(d, marks, today)
+            j["light"] = {"color": lt["color"], "label": _(INJ.LIGHTS[lt["color"]]), "reason": lt["reason"]}
+        out.append(j)
     return out
 
 
@@ -140,7 +153,12 @@ async def meta(db: AsyncSession = Depends(get_db)):
             "condition_monitor": {k: INJ.monitor({"condition": k})["text"] for k in INJ.CONDITIONS},
             "shin_note": _(INJ.SHIN_NOTE),
             "labels": {"condition": _("傷別（選填）"), "condition_none": _("不選"),
-                       "condition_hint": _("如果醫師或物理治療師說是哪一種傷就選；app 不診斷。")},
+                       "condition_hint": _("如果醫師或物理治療師說是哪一種傷就選；app 不診斷。"),
+                       # SP-271: the optional 0–10 next to the one-tap mark
+                       "pain_score": _("跑的時候最痛幾分（選填）"),
+                       "pain_score_help": _("0 = 不痛、10 = 想像得到最痛。傷病還沒好的時候，app 用最近一次跑步的分數和"
+                                            "上一次比，決定這週課表要照排（綠燈）、先不加量（黃燈）還是先不跑（紅燈）。"
+                                            "沒填就只看「沒痛／痠／痛／中斷」。")},
             "errors": {"CONDITION_AREA_MISMATCH": _("傷別和部位對不上（例如膝前痛的部位要是膝）"),
                        "INVALID_CONDITION": _("傷別不對")},
             # 生病 (SP-117): two types, the examples help pick one

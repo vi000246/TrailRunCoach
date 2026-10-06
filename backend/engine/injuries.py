@@ -55,7 +55,7 @@ SEVERITIES = {"mild": "輕", "moderate": "中", "severe": "重"}
 SEVERITY_HELP = {"mild": "照練", "moderate": "減量或改練", "severe": "停跑"}
 SEV_RANK = {"mild": 1, "moderate": 2, "severe": 3}
 STATUSES = {"draft": "待補細節", "active": "進行中", "resolved": "好了"}
-PAIN = {0: "沒痛", 1: "痠", 2: "痛", 3: "中斷"}
+PAIN = {0: N_("沒痛"), 1: N_("痠"), 2: N_("痛"), 3: N_("中斷")}
 
 ATTACH_DAYS = 28        # 推估: a 痛 mark joins an open event of the same area that began ≤ 28 days before
 RECUR_DAYS = 42         # 推估: same area within 42 days after the last one resolved = 復發 (§3.3)
@@ -200,6 +200,13 @@ def validate_pain(pain, area=None) -> Optional[str]:
         return "INVALID_PAIN"
     if area is not None and (not isinstance(area, str) or norm_area(area) is None):
         return "INVALID_AREA"
+    return None
+
+
+def validate_score(score) -> Optional[str]:
+    """SP-271: the optional 0–10 「跑的時候最痛幾分」."""
+    if score is not None and (isinstance(score, bool) or not isinstance(score, int) or not 0 <= score <= PAIN_MAX):
+        return "INVALID_PAIN_SCORE"
     return None
 
 
@@ -511,8 +518,34 @@ def pain_marks(tag_rows: list[dict]) -> list[dict]:
         if p is None or (r.get("start_local") or "") == "":
             continue
         out.append({"date": r["start_local"][:10], "key": r["start_local"], "pain": int(p),
-                    "area": r.get("pain_area"), "injury_id": r.get("injury_id"), "file": r.get("file")})
+                    "area": r.get("pain_area"), "injury_id": r.get("injury_id"), "file": r.get("file"),
+                    "score": r.get("pain_score")})
     return out
+
+
+def foot_log(ds, tag_rows: Optional[list] = None, since: Optional[dt.date] = None) -> list[dict]:
+    """Every run / walk of the dataset with its pain mark (SP-271–273): {date, key, cat ("run" | "walk"),
+    minutes, pain, score, area, injury_id}, oldest first; pain None = not marked. Runs: sport run (road /
+    trail); walks: walking / hiking. `tag_rows`: activity_tags.load() (default: read it)."""
+    from backend.engine import activity_tags as AT
+    from backend.engine.overview import category, moving_s
+    from backend.engine import workout_review as WR
+    tags = AT.load() if tag_rows is None else tag_rows
+    out = []
+    for w in ds.workouts:
+        c = category(w)
+        cat = "run" if w.sport == "run" else "walk" if c in ("hike", "walk") or w.sport in ("walk", "hike") else None
+        if cat is None:
+            continue
+        d = WR._wdate(w)
+        if since is not None and d < since:
+            continue
+        u = AT.find(tags, w.entry.start, w.entry.file) if tags else None
+        u = u or {}
+        out.append({"date": d.isoformat(), "key": AT.key_of(w.entry.start) or d.isoformat(), "cat": cat,
+                    "minutes": moving_s(w) / 60.0, "pain": u.get("pain"), "score": u.get("pain_score"),
+                    "area": u.get("pain_area"), "injury_id": u.get("injury_id")})
+    return sorted(out, key=lambda m: m["key"])
 
 
 # ---------------------------------------------------------------------------
@@ -626,6 +659,85 @@ def condition_week(events: list[dict], monday: dt.date, today: Optional[dt.date]
 
 def avoids(rule: Optional[dict], tag: str) -> bool:
     return bool(rule) and tag in rule["avoid"]
+
+
+# ---- 疼痛燈號 (SP-271; injury-graded-return.md §1.1, §2.3, §4.6, owner §6.1 points 6–8) ----------------
+# The last marked run of an open injury decides (no daily log: the next run's mark stands in for
+# 「隔天」, §6.1 point 7; an unmarked run changes nothing):
+#   green   the 0–10 within the condition's limit (跟腱 ≤ 5 Silbernagel 2007, 膝前痛 ≤ 2 Esculier 2016;
+#           others: not above the last score) and not ≥ RISE_YELLOW above the last one; tap only: 沒痛 / 痠
+#   yellow  over the limit, or ≥ RISE_YELLOW above the last score; tap only: 痛
+#   red     中斷, 0–10 ≥ RED_SCORE, two yellows in a row, or the event's severity 重 (停跑)
+# Green: plan as usual minus the condition's avoided sessions (SP-270). Yellow (applied on its own, like
+# every cut — §6.1 point 6): the rest of the week ≤ last week's actual minutes, no interval, the long
+# run × YELLOW_LONG. Red: no run; strength / cross-training stay (「會痛的動作先不做」); the box offers
+# 不排課日期 (injury_rest). Illness events take no light (SP-117).
+RISE_YELLOW = 2         # 推估: 2 points above the last score
+RED_SCORE = 7           # 推估
+YELLOW_LONG = 0.75      # 推估: the long run one step shorter
+LIMIT = {"achilles": SILBERNAGEL["during_max"], "pfp": ESCULIER["during_max"]}
+LIGHTS = {"green": N_("綠燈"), "yellow": N_("黃燈"), "red": N_("紅燈")}
+_LRANK = {"green": 0, "yellow": 1, "red": 2}
+
+
+def _mark_light(m: dict, prev_score: Optional[int], cond: Optional[str]) -> tuple[str, str]:
+    """(color, reason) of one marked run (the two-yellows rule is light()'s)."""
+    p, sc = m.get("pain"), m.get("score")
+    if p == 3:
+        return "red", _("標了「中斷」")
+    if sc is not None and sc >= RED_SCORE:
+        return "red", _("{s}/10，{n}/10 以上", s=sc, n=RED_SCORE)
+    lim = LIMIT.get(cond)
+    if sc is not None and (lim is not None or prev_score is not None):
+        if lim is not None and sc > lim:
+            return "yellow", _("上一次 {s}/10，超過{name}的 {lim}/10", s=sc, name=condition_label(cond), lim=lim)
+        if prev_score is not None and sc - prev_score >= RISE_YELLOW:
+            return "yellow", _("上一次 {s}/10，比再前一次（{p}/10）高 {d} 分", s=sc, p=prev_score, d=sc - prev_score)
+        if lim is None and prev_score is not None and sc > prev_score:
+            return "yellow", _("上一次 {s}/10，比再前一次（{p}/10）高", s=sc, p=prev_score)
+        return "green", _("上一次 {s}/10", s=sc)
+    if p == 2:
+        return "yellow", _("標了「痛」")
+    return "green", _("標了「{what}」", what=_(PAIN.get(p, "沒痛")))
+
+
+def event_light(e: dict, marks: list[dict], day: dt.date, since: Optional[dt.date] = None) -> dict:
+    """The light of one open injury on `day` (see above). `marks`: foot_log rows (runs count; walks are
+    SP-272's); the event's own marks, and unlinked ones of its area or with no area. `since`: only the
+    runs from that day (SP-272: after the walk-run start), and then a 重 severity no longer holds it red.
+    {"color", "reason", "id", "label", "condition", "date" (the deciding run, None = no run yet)}."""
+    o = _d(e.get("onset_date")) or day
+    lo = max(o, since) if since else o
+    runs = [m for m in marks if m.get("cat", "run") == "run" and m.get("pain") is not None
+            and lo.isoformat() <= m["date"] <= day.isoformat()
+            and (m.get("injury_id") == e.get("id") or (m.get("injury_id") is None
+                                                         and m.get("area") in (None, e.get("area"))))]
+    base = {"id": e.get("id"), "label": full_label(e.get("area"), e.get("side")), "condition": e.get("condition")}
+    if e.get("severity") == "severe" and since is None:
+        return {**base, "color": "red", "reason": _("嚴重度選了「重」（停跑）"), "date": None}
+    color, reason, when, prev_score, prev_color = "green", _("還沒有標記疼痛的跑步"), None, None, None
+    for m in sorted(runs, key=lambda x: x.get("key") or x["date"]):
+        c, why = _mark_light(m, prev_score, e.get("condition"))
+        if c == "yellow" and prev_color == "yellow":
+            c, why = "red", _("連兩次黃燈（{why}）", why=why)
+        color, reason, when, prev_color = c, why, m["date"], c
+        if m.get("score") is not None:
+            prev_score = m["score"]
+    return {**base, "color": color, "reason": reason, "date": when}
+
+
+def light(events: list[dict], marks: list[dict], day: dt.date) -> Optional[dict]:
+    """The worst light of the injuries open on `day` (SP-271); None without one (illness: never)."""
+    best = None
+    for e in active_on(events or [], day):
+        if is_illness(e) or (e.get("status") == "resolved" and _d(e.get("resolved_date")) == day):
+            continue
+        r = event_light(e, marks, day)
+        if best is None or _LRANK[r["color"]] > _LRANK[best["color"]]:
+            best = r
+    if best is not None:
+        best["light_label"] = _(LIGHTS[best["color"]])
+    return best
 
 
 def week_notes(events: list[dict], monday: dt.date, today: dt.date) -> list[dict]:

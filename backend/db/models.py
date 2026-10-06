@@ -308,6 +308,9 @@ class ActivityTag(Base):
     # user-added area) and the injury_events row the mark is attached to
     pain: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     pain_area: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
+    # SP-271: optional 0–10 「跑的時候最痛幾分」 next to the one-tap mark (NULL = not given; cleared
+    # with the mark). Added by database._migrate_schema.
+    pain_score: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     injury_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
