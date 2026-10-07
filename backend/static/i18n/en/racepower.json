@@ -214,5 +214,15 @@
   "bt.th.moving_h": "Moving hours",
   "bt.th.decay": "Error with decay",
   "bt.th.nodecay": "Error without decay",
-  "bt.th.long_badge": "≥ {h} h"
+  "bt.th.long_badge": "≥ {h} h",
+  "snow.label": "Snow",
+  "snow.none": "None",
+  "snow.trodden": "Tracked (× 1.5)",
+  "snow.untrodden": "No track (× 2–3)",
+  "snow.tip": "Snow time for winter mountains (rule of thumb, Japanese guides): climbs × 1.5 on a tracked trail, × 2–3 with no track. Only the climbs are multiplied; descents and flats stay the same",
+  "snow.note_trodden": "Snow, tracked: climbing time × 1.5 (rule of thumb, Japanese guides), moving {t} ({base} without snow)",
+  "snow.note_untrodden": "Snow, no track: climbing time × 2 to × 3 (rule of thumb, Japanese guides), moving {lo} (× 2) to {hi} (× 3), clock {clo} to {chi}; the numbers above use × 2",
+  "snow.season_single": "This is a one-day push. ",
+  "snow.season": "Yushan main-peak trail snow-season rules (about mid-December to March, when Paiyun or Baimulin has ≥ 5 cm of snow): one-day ascents are suspended; crampons, an ice axe and a helmet are required, plus snow experience",
+  "snow.season_link": "park notice"
 }

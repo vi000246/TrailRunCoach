@@ -833,6 +833,7 @@ def _plan_hike_v1(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, 
     q = _quantiles([d["ep_per_h"] for d in hdays])
     cuts = DF.hike_cuts(q[0], q[1], q[2], q[3]) if q else [0.8, 1.0, 1.15, 1.3]
     v2_primary = bool(validated.get("hike")) and gpx
+    snow = HK.snow_range(opts.get("snow"))
 
     if gpx:
         segs = [dict(s) for s in course["segments"]]
@@ -845,14 +846,28 @@ def _plan_hike_v1(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, 
                "temp_c": to["temp_c"], "rh_pct": to["rh_pct"]}
         alt = ENV.segment_factors([s["z_mean"] for s in segs], ref, to, accl)
         rows1 = HK.hike_rows(segs, hike_speed.v, 1.0, pack, alt, fat)
+        t1_v2_base = sum(r["t"] for r in rows1)
+        climb = [HK.is_climb(s) for s in segs]
+        if snow:                                   # SP-252: 積雪 on the climbing legs only
+            for r, up in zip(rows1, climb):
+                if up:
+                    r["t"] *= snow[0]
         t1_v2 = sum(r["t"] for r in rows1)
+        t1_v2_hi = t1_v2 + (sum(r["t"] for r, up in zip(rows1, climb) if up) * (snow[1] / snow[0] - 1)
+                            if snow else 0.0)
         ep = course["totals"]["km"] + course["totals"]["gain_m"] / 100.0
         t1_v1 = ep / (eph * m_v1 * pack) * 3600.0
-        t1 = t1_v2 if v2_primary else t1_v1
+        # v1 primary: the whole-trip time gets the segments' snow ratio (the segments only distribute it)
+        t1_base = t1_v2_base if v2_primary else t1_v1
+        t1 = t1_v2 if v2_primary else t1_v1 * t1_v2 / t1_v2_base
+        t1_hi = t1 * t1_v2_hi / t1_v2
         c = t1 / t1_v2
     else:
         segs, rows1, alt = [], [], []
-        t1 = r1["time_s"] * (r1["M"] / m_v1 if m_v1 else 1.0)
+        t1_base = r1["time_s"] * (r1["M"] / m_v1 if m_v1 else 1.0)
+        sh = HK.climb_time_share(course["totals"]["km"], course["totals"]["gain_m"], course["totals"].get("loss_m"))
+        t1 = t1_base * (1 + sh * (snow[0] - 1)) if snow else t1_base
+        t1_hi = t1_base * (1 + sh * (snow[1] - 1)) if snow else t1_base
         c = 1.0
     if mode == "time":
         t_star = opts.get("target_time_s")
@@ -932,6 +947,7 @@ def _plan_hike_v1(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, 
                # racepower-v2.md §8: Hadley only on running segments → 百岳 keeps one heat value
                "heat": {"mode": "single", "passes": 0, "converged": None, "delta_s": None, "outside": 0,
                         "reason": "百岳用單一溫度（逐時熱修正只用在跑步）", "badge": None}}
+    summary["snow"] = _snow_summary(opts.get("snow"), snow, t1, t1_base, t1_hi, lam, ratio, stops, km)
     return {"type": "baiyue", "summary": summary, "effort": he, "segments": out, "days": days,
             "crosscheck": cross, "fatigue": fat, "profile": course.get("profile"), "wpts": course.get("wpts"),
             "course_totals": course["totals"], "course_warnings": course.get("warnings") or [],
@@ -946,6 +962,16 @@ AMS_TOP_M = 2500.0          # 高山症提示: WMS guideline (Luks 2019) — sym
 LIMITS_NOTE = ("沒有背 10–15 kg、每天 6–10 h、連走多天的跑步資料；背負與多日效應靠公式（誤差約 ±15 %，"
                "Looney 2022、Weyand 2021），所以帶比越野寬")
 AMS_NOTE = "高山症會讓速度與行程失準，出現症狀以下撤為先"
+
+
+def _snow_summary(key, snow, t1, t1_base, t1_hi, lam, ratio, stops, km) -> Optional[dict]:
+    """SP-252: the 積雪 line — the low-end (main) and high-end moving / clock times; None without snow."""
+    if not snow:
+        return None
+    st = _stops_before(stops, km + 1)
+    return {"key": key, "lo": snow[0], "hi": snow[1], "base_s": t1_base / lam, "time_s": t1 / lam,
+            "time_hi_s": t1_hi / lam, "clock_s": t1 / lam / ratio + st, "clock_hi_s": t1_hi / lam / ratio + st,
+            "season": None}
 
 
 def _cap_band_factor(cap) -> float:
@@ -1013,12 +1039,13 @@ def plan_hike(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, vali
         if len(pack_by_day) >= n:
             return pack_by_day[n - 1]
         return CAP.day_pack(pack1, n)
+    snow = HK.snow_range(opts.get("snow"))
     rows = []
-    day, h = 0, 0.0
+    day, h, h0 = 0, 0.0, 0.0
     for s in segs:
         n = int(s.get("day") or 1)
         if n != day:
-            day, h = n, 0.0
+            day, h, h0 = n, 0.0, 0.0
         s["terrain"] = terrain.get(s["i"], "normal")
         eta = HK.TERRAIN_ETA.get(s["terrain"], 1.0)
         L = load_of(n)
@@ -1027,7 +1054,17 @@ def plan_hike(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, vali
         ht = ENV.heat_term(t_c, to["rh_pct"], heat_status)
         v_base = cap.v(s["grade"], L, eta, z, h, n, accl)
         v = v_base * ht["H"] * band_f
+        # SP-252: 積雪 × on the climbing legs only; the day's hours (f_time) include the snow time.
+        # t0 = the snow-free plan's own segment time (its own hours into the day)
+        k_snow = snow[0] if snow and HK.is_climb(s) else 1.0
+        if snow:
+            v0 = cap.v(s["grade"], L, eta, z, h0, n, accl) * ht["H"] * band_f
+            t0 = s["dist_m"] / v0 if v0 > 0 else math.inf
+            h0 += t0 / 3600.0
+        v /= k_snow
         t = s["dist_m"] / v if v > 0 else math.inf
+        if not snow:
+            t0 = t
         sp = cap.sigma_parts(L, z, h, n)
         flags = []
         lo, hi = cap.pack_range
@@ -1037,15 +1074,22 @@ def plan_hike(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, vali
             flags.append("坡度箱 n < 30")
         if z is not None and z > cap.z_range[1] + 1:
             flags.append("海拔超出資料")
-        rows.append({"s": s, "v": v, "t": t, "L": L, "eta": eta, "A": cap.A(z, accl), "f_time": cap.f_time(h),
+        rows.append({"s": s, "v": v, "t": t, "t0": t0, "snow": k_snow, "L": L, "eta": eta, "A": cap.A(z, accl),
+                     "f_time": cap.f_time(h),
                      "f_day": cap.f_day(n), "H": ht["H"], "temp_c": t_c, "heat_pct": ht["penalty_pct"],
                      "heat_eff_pct": ht["penalty_eff_pct"], "sigma": sp, "flags": flags, "h": h})
         h += t / 3600.0
     ep = course["totals"]["km"] + course["totals"]["gain_m"] / 100.0
     if gpx:
         t1 = sum(r["t"] for r in rows)
+        t1_base = sum(r["t0"] for r in rows)
+        t1_hi = t1 + (sum(r["t"] for r in rows if r["snow"] != 1.0) * (snow[1] / snow[0] - 1) if snow else 0.0)
     else:
-        t1 = r1["time_s"]
+        t1_base = r1["time_s"]
+        sh = HK.climb_time_share(course["totals"]["km"], course["totals"]["gain_m"], course["totals"].get("loss_m"))
+        t1 = t1_base * (1 + sh * (snow[0] - 1)) if snow else t1_base
+        t1_hi = t1_base * (1 + sh * (snow[1] - 1)) if snow else t1_base
+    snow_f = t1 / t1_base if t1_base else 1.0     # the whole trip's snow factor (group time, no-GPX days)
     if mode == "time":
         t_star = opts.get("target_time_s")
         if not t_star:
@@ -1072,6 +1116,9 @@ def plan_hike(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, vali
     bnd["shares"] = {k: v * v / tot2 for k, v in comp.items()}
     bnd["components"] = comp
     grp = CAP.group_time(ep, group_days)
+    if grp and snow:
+        # past group days were walked without snow: their time gets the same climbing-leg factor (推估)
+        grp = {**grp, **{k: grp[k] * snow_f for k in ("p25_s", "p50_s", "p75_s")}}
     out = []
     cum = 0.0
     day, day_start = 1, 0.0
@@ -1103,13 +1150,17 @@ def plan_hike(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, vali
             L = load_of(n)
             kcal = PR.yamamoto_cc(hh, km, gain, loss) * (weight + L)
             g_day = CAP.group_time(km + gain / 100.0, group_days)
+            if g_day and snow:
+                rr = [r for r in rows if int(r["s"].get("day") or 1) == n]
+                f_d = sum(r["t"] for r in rr) / (sum(r["t0"] for r in rr) or 1.0)
+                g_day = {**g_day, **{k: g_day[k] * f_d for k in ("p25_s", "p50_s", "p75_s")}}
             days.append({"day": n, "km": km, "gain_m": gain, "loss_m": loss, "moving_h": hh,
                          "clock_h": hh / ratio, "kcal": kcal, "water_ml": [0.7 * kcal, 0.8 * kcal], "pack_kg": L,
                          "group_h": g_day["p50_s"] / 3600.0 if g_day else None,
                          "group_h_range": [g_day["p25_s"] / 3600.0, g_day["p75_s"] / 3600.0] if g_day else None})
     else:
         for d in r1["days"]:
-            mh = d["moving_h"] / lam
+            mh = d["moving_h"] * snow_f / lam
             days.append({"day": d["day"], "km": d["km"], "gain_m": d["gain_m"], "loss_m": d["loss_m"],
                          "moving_h": mh, "clock_h": mh / ratio, "kcal": d["kcal"], "water_ml": d["water_ml"],
                          "pack_kg": load_of(d["day"]), "group_h": None, "group_h_range": None})
@@ -1173,6 +1224,7 @@ def plan_hike(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, vali
                         "reason": "百岳：登山口／測站溫度依遞減率推算到每段", "badge": "推估", "ref_alt_m": z0},
                "heat_accl": ({k: hacc[k] for k in ("mode", "s", "s_from", "a", "source", "badge", "a_literature",
                                                    "a_reason", "a_supported")} if hacc else None)}
+    summary["snow"] = _snow_summary(opts.get("snow"), snow, t1, t1_base, t1_hi, lam, ratio, stops, km)
     capj = cap.to_json()
     cur = ((cap.alpha.get("diagnostics") or {}).get("versions") or {}).get("current") or {}
     capj["alt_current"] = cur.get("pct_per_km")

@@ -328,6 +328,9 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
       <label>日期<input id="date" type="date"></label>
       <label>起跑 / 起登時間<input id="start" type="time"></label>
       <label class="bf">背負 (kg)<input id="pack" type="number" step="0.5" min="0" placeholder="預設"></label>
+      <!-- SP-252: 積雪 → × on the climbing legs (hike.SNOW); the line under 預估結果 only when picked -->
+      <label class="bf"><span data-i18n="racepower.snow.label">積雪</span><select id="snow" title="有踏跡：爬升段 × 1.5；無踏跡：爬升段 × 2–3（經驗法則，日本嚮導）" data-i18n-attr="title:racepower.snow.tip">
+        <option value="none" data-i18n="racepower.snow.none">無</option><option value="trodden" data-i18n="racepower.snow.trodden">有踏跡（× 1.5）</option><option value="untrodden" data-i18n="racepower.snow.untrodden">無踏跡（× 2–3）</option></select></label>
       <label data-tw-only>地點（山名，天氣用）<input id="peak" list="peaklist" placeholder="例：玉山"></label>
       <label>或 緯度, 經度<span class="ll-row"><input id="latlon" placeholder="23.47, 120.957" data-intl-placeholder="46.55, 7.98"><button class="btn" id="ll-pick" type="button" data-i18n="racepower.pick.btn">🗺 地圖選點</button></span></label>
     </div>
@@ -825,8 +828,9 @@ function readDayPlan(raw) {
 }
 const FORM = ["dist", "gain", "loss", "days", "date", "target", "tpace", "tpower", "tspeed", "pack", "formula", "peak", "latlon", "start", "stops", "ogain", "sigma", "eps", "minlen", "flatpct",
   "tripdays", "packdays", "heatz", "heat-s"];
-function formValues() { const o = {}; FORM.forEach((k) => o[k] = $(k).value); o.ptrain = $("ptrain").checked; o.hourlyheat = $("hourlyheat").checked; return o; }
-function setForm(o) { FORM.forEach((k) => { if (o[k] != null) $(k).value = o[k]; }); $("ptrain").checked = !!o.ptrain; $("hourlyheat").checked = o.hourlyheat !== false; }
+function formValues() { const o = {}; FORM.forEach((k) => o[k] = $(k).value); o.ptrain = $("ptrain").checked; o.hourlyheat = $("hourlyheat").checked; o.snow = $("snow").value; return o; }
+// snow: a page saved before SP-252 has none → 無, never the previous event's choice
+function setForm(o) { FORM.forEach((k) => { if (o[k] != null) $(k).value = o[k]; }); $("ptrain").checked = !!o.ptrain; $("hourlyheat").checked = o.hourlyheat !== false; $("snow").value = o.snow || "none"; }
 function saveForm() { ls.set("form", formValues()); }
 function loadForm() { const o = ls.get("form", null); if (!o) return false; setForm(o); return true; }
 // hourly rows go with the plan only when the race-day temperature / humidity are the fetched ones
@@ -1122,6 +1126,10 @@ function planBody(extra = {}) {
     body.trip_kind = S.trip; body.hr_band = S.hrband;
     body.pack_kg_by_day = $("packdays").value.split(/[,，\s]+/).map(Number).filter((x) => x > 0);
     if (num("heatz") != null) body.heat_ref_alt_m = num("heatz");
+    // SP-252: 積雪, and the 山名 (else the plan event's name) for the 玉山 snow-season line
+    body.snow = $("snow").value || "none";
+    const pk = $("peak").value.trim() || (INP?.events || []).find((e) => e.id === $("event").value)?.name || "";
+    body.peak = pk ? pk.slice(0, 40) : null;
   }
   // the elevation the race-day temperature refers to (owner decision 2026-10-06: each GPX segment's
   // temperature follows its own height): a typed To altitude, else the fetched weather's point
@@ -1158,7 +1166,7 @@ function planBody(extra = {}) {
 }
 function renderAll() {
   renderResults(); renderFuel(); renderProfile(); renderSegCompact(); renderSegments(); renderInputs(); renderEnv(); renderZones(); renderHeatLine();
-  renderStops(); renderExportBtn(); renderSurface(); renderRain();
+  renderStops(); renderExportBtn(); renderSurface(); renderRain(); renderSnow();
   if (LAST.type !== "baiyue" && $("rg-sec").querySelector("details").open) renderRiegel();
 }
 let RUN_SEQ = 0;
@@ -1199,6 +1207,18 @@ function renderRain() {
   if (!r?.alert || !h2) return;
   const bits = [r.max_pop_pct != null ? T("rain.pop", { p: Math.round(r.max_pop_pct) }) : "", r.total_mm != null ? T("rain.mm", { mm: r.total_mm.toFixed(1) }) : ""].filter(Boolean);
   h2.insertAdjacentHTML("afterend", `<div class="note" id="rain-note" style="color:var(--watch)">☂ ${esc(r.message)}${bits.length ? esc(T("rain.detail", { bits: bits.join(T("rain.sep")) })) : ""}</div>`);
+}
+// SP-252: 積雪 picked → one line under 預估結果 (× 2 and × 3 both for 無踏跡), plus the 玉山 雪季措施
+// line with the park's notice when the route is 玉山. Nothing when 積雪 is 無.
+function renderSnow() {
+  const sn = PLAN?.type === "baiyue" ? PLAN.summary?.snow : null, h2 = $("results").querySelector("h2");
+  if (!sn || !h2) return;
+  let t = sn.key === "untrodden"
+    ? T("snow.note_untrodden", { lo: hm(sn.time_s), hi: hm(sn.time_hi_s), clo: hm(sn.clock_s), chi: hm(sn.clock_hi_s) })
+    : T("snow.note_trodden", { t: hm(sn.time_s), base: hm(sn.base_s) });
+  let h = `<div class="note" id="snow-note" style="color:var(--watch)">❄ ${esc(t)}`;
+  if (sn.season) h += `<br>${esc((sn.season.single_day ? T("snow.season_single") : "") + T("snow.season"))} <a href="${esc(sn.season.url)}" target="_blank" rel="noopener">${esc(T("snow.season_link"))}</a>`;
+  h2.insertAdjacentHTML("afterend", h + `</div>`);
 }
 function tile(k, v, s, main) { return `<div class="tile ${main ? "main" : ""}"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s || ""}</div></div>`; }
 function warnList(ws) { return ws && ws.length ? `<ul class="warn">${ws.map((w) => `<li>${esc(w)}</li>`).join("")}</ul>` : ""; }
@@ -2482,7 +2502,7 @@ $("pick-ok").addEventListener("click", () => {
 $("amount").addEventListener("input", () => { S.amount = Number($("amount").value); syncForm(); schedule(); });
 ["hup", "hdown"].forEach((id) => $(id).addEventListener("input", () => { S[id] = num(id) ?? S[id]; schedule(); }));
 ["dist", "gain", "loss", "date", "target", "tpace", "tpower", "tspeed", "pack", "start", "stops", "ogain", "sigma", "eps", "minlen", "flatpct"].forEach((id) => $(id).addEventListener("input", schedule));
-$("ptrain").addEventListener("change", schedule); $("hourlyheat").addEventListener("change", schedule);
+$("ptrain").addEventListener("change", schedule); $("hourlyheat").addEventListener("change", schedule); $("snow").addEventListener("change", schedule);
 // 進階計算選項: closed by default, the viewer's last choice kept; typing inside refreshes its summary
 { const ca = $("calc-adv"); ca.open = !!ls.get("calcAdvOpen", false);
   ca.addEventListener("toggle", () => ls.set("calcAdvOpen", ca.open));
