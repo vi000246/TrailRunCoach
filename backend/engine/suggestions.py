@@ -260,14 +260,15 @@ def _taper_days(e) -> int:
         return PL.TAPER_DAYS
 
 
-def altitude_rows(events: list, today: str, alt_of, alts_of) -> list[dict]:
+def altitude_rows(events: list, today: str, alt_of, alts_of, nights_of=None) -> list[dict]:
     """高度適應提醒 (engine/altitude.py) for the events 1–28 days away (15–28: 安排適應週末, SP-258).
     `events`: planning.Event (or dicts with id / name / date / days); `alt_of(event)`:
     altitude.event_altitude (None = no GPX); `alts_of()`: the athlete's altitude per day
-    (altitude.day_altitudes, read once, only when an event 1–14 days away needs it)."""
+    (altitude.day_altitudes, read once, only when an event 1–14 days away needs it); `nights_of()`:
+    the recorded nights {date: m} (altitude.load_nights, SP-259; None = none, read with alts_of)."""
     from backend.engine import altitude as AL
     d = dt.date.fromisoformat(today)
-    alts = None
+    alts = manual = None
     out = []
     for e in events:
         get = (lambda k: e.get(k)) if isinstance(e, dict) else (lambda k: getattr(e, k, None))
@@ -281,7 +282,8 @@ def altitude_rows(events: list, today: str, alt_of, alts_of) -> list[dict]:
         if (start - d).days <= AL.REMIND_DAYS:
             if alts is None:
                 alts = alts_of()
-            ex = AL.exposure(alts, d, start)
+                manual = nights_of() if nights_of is not None else {}
+            ex = AL.exposure(alts, d, start, manual)
         r = AL.reminder({"id": get("id"), "name": get("name"), "start": start, "days": get("days"),
                          "taper_days": _taper_days(e)}, alt, ex, d)
         if r is None:
