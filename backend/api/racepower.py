@@ -237,6 +237,22 @@ def _predict_baiyue(body: PredictIn, d: dict, weight: float, env: dict, used: di
     return _calc(CALC.predict_baiyue, LIVE, body, d, weight, env, used, warnings)
 
 
+@router.post("/estimate")
+def estimate(body: PlanIn):
+    """SP-293 用近期比賽成績推完賽時間: without a CP the calculator's model can't run; the shared race
+    results (engine/race_results.py — the questionnaire's and SP-276's one list) give a 推估 time:
+    road Riegel k −0.07, trail unsourced-rules §0.5.5 (engine/racepower/race_estimate.py). With a CP
+    (typed in, the chosen or the default source): {"available": False, "model": True} — /plan's model."""
+    from backend.engine import race_results as RR
+    from backend.engine.race_feasibility import survey_hours
+    from backend.engine.racepower import race_estimate as RX
+    if RX.has_cp(inputs(), body):
+        return {"available": False, "model": True}
+    t = _calc(CALC.resolve_course, LIVE, body)["totals"]
+    return RX.estimate(body.type, float(t.get("km") or 0.0), float(t.get("gain_m") or 0.0), RR.load(),
+                       today_local(), survey_hours())
+
+
 @router.get("/page", include_in_schema=False)
 def page():
     return render_page("racepower")
