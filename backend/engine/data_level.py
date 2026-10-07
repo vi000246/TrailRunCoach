@@ -88,12 +88,14 @@ def level(ds, today: dt.date, rule: Optional[dict] = None) -> dict:
     if not [d for d in before if monday - dt.timedelta(days=LEVEL0_DAYS) <= d]:
         lv, since, ok = 0, monday, 0
     else:
+        # the gate's own path on the days before this Monday, over the gate's own window (z3_gate reads
+        # quality_gate.run_days: the run days of the last Z3_HISTORY_DAYS)
+        days = [d for d in before if d > monday - dt.timedelta(days=QG.Z3_HISTORY_DAYS)]
         try:
-            skip = QG._transition_skip(ds, before, monday)
+            skip = QG._transition_skip(ds, days, monday)
         except Exception:                   # noqa: BLE001 — no plan: no post-race days
             skip = set()
-        # the gate's own path on the days before this Monday (z3_gate reads it on the run days)
-        cons = QG.z3_consistency(before, monday, need, skip, rule)
+        cons = QG.z3_consistency(days, monday, need, skip, rule)
         lv = 2 if cons["open"] else 1
         ok = min(int(cons.get("weeks") or 0), need)
         since = data_start(foot, monday) or monday
