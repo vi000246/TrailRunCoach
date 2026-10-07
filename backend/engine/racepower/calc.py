@@ -191,6 +191,9 @@ class PlanIn(PredictIn):
     # SP-244: the plan event is marked 會用登山杖 → a hint on steep segments (seg_targets.pole_hint);
     # text only, no number changes
     poles: bool = False
+    # SP-252: 百岳 積雪 (hike.SNOW) — × on the climbing legs; none / None = the snow-free time
+    snow: Optional[Literal["none", "trodden", "untrodden"]] = None
+    peak: Optional[str] = Field(None, max_length=40)   # the page's 地點 (山名): the 玉山 snow-season line
 
 
 class ExportIn(PlanIn):
@@ -578,6 +581,7 @@ def make_plan(ctx: Context, body: PlanIn) -> dict:
     from backend.engine.racepower import watch_export as WE
     out["export_block"] = WE.multi_day(out, body.start_time, body.days)
     out["rain"] = rain_reminder(body, out)
+    snow_season(body, course, out)
     if course.get("source") == "gpx":
         from backend.engine.racepower import fuel as FU
         out["stop_suggestions"] = FU.stops_from_wpts(course.get("wpts") or [], course["totals"]["km"])
@@ -597,6 +601,18 @@ def rain_reminder(body: PlanIn, out: dict) -> Optional[dict]:
     days = len(out.get("days") or []) or body.days or 1
     win = WX.race_window(body.date, body.start_time, days, dur)
     return WX.rain_alert([r.model_dump() for r in body.rain], win, "road" if body.type == "road" else "trail")
+
+
+def snow_season(body: PlanIn, course: dict, out: dict) -> None:
+    """SP-252: a 百岳 with 積雪 picked on a 玉山 route (the 地點 field, else the course's name) gets the
+    雪季措施 line (hike.YUSHAN_SNOW_URL) in summary.snow.season — only when snow was picked (owner
+    2026-10-06), never from the date alone. Display only."""
+    from backend.engine.racepower import hike as HK
+    sn = (out.get("summary") or {}).get("snow")
+    if body.type != "baiyue" or not sn:
+        return
+    if any(HK.is_yushan(n) for n in (body.peak, course.get("name"))):
+        sn["season"] = {"url": HK.YUSHAN_SNOW_URL, "single_day": len(out.get("days") or []) <= 1}
 
 
 def fuel(ctx: Context, body: PlanIn, out: dict) -> dict:
