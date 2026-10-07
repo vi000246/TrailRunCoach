@@ -12,12 +12,15 @@ key and the settings UI were removed). An encrypted backup made by an older
 version (`.zip.enc`, starts with LEGACY_MAGIC) is rejected with a clear
 message; it is neither listed nor pruned.
 
-The zip holds
+The zip holds what the data registry (backend/data_registry.py, SP-311) marks for a
+backup — `plan()`:
     manifest.json     app / app_version / format / schema_version / created_at /
                       row_counts / db_sha256 / fit {included, files, bytes}
-    wko5coach.db      a consistent snapshot taken with sqlite3's online backup
-                      API (safe while the app is writing)
-    fit/<source>/<year>/<file>.gz   only with "include FIT originals"
+    wko5coach.db      (registry DB, always) a consistent snapshot taken with sqlite3's
+                      online backup API (safe while the app is writing); every table,
+                      so sync_state (SECRET) too, as stored — its credentials are
+                      sealed with secret.key (settings/secrets.py), never in a backup
+    fit/<source>/<year>/<file>.gz   (registry FIT, opt-in) only with "include FIT originals"
 
 Retention (`prune`) only ever looks at files whose name matches NAME_RE exactly,
 so nothing else in the folder can be deleted.
@@ -45,13 +48,15 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path, PurePosixPath
 from typing import Iterable, Optional
 
+from backend import data_registry as R
+
 APP = "TrailRunCoach"
 FORMAT = 1
 NAME_RE = re.compile(r"^trailruncoach-backup-(\d{8})-(\d{6})\.zip$")
 PRE_RE = re.compile(r"^trailruncoach-prerestore-(\d{8})-(\d{6})\.zip$")
 MANIFEST = "manifest.json"
-DB_ENTRY = "wko5coach.db"
-FIT_DIR = "fit"
+DB_ENTRY = R.DB.pattern                       # "wko5coach.db"
+FIT_DIR = R.FIT.pattern.split("/")[0]         # "fit"
 FIT_ENTRY_RE = re.compile(r"^fit/(coros|tp)/[A-Za-z0-9_.\-]{1,32}/[^/\\:*?\"<>|]{1,200}\.gz$")
 KEEP_DAILY, KEEP_WEEKLY, KEEP_PRERESTORE = 7, 4, 5
 AUTO_EVERY = timedelta(hours=24)
@@ -154,10 +159,22 @@ def _fit_files(fit_root: Optional[Path]) -> Iterable[tuple[Path, str]]:
             yield p, entry
 
 
+def plan(include_fit: bool) -> list:
+    """The registry entries a backup holds (data_registry.backup_entries). This module
+    writes the DB snapshot and the FIT originals; an entry it cannot write is an error,
+    not silently left out."""
+    parts = R.backup_entries(include_fit)
+    unknown = [f.pattern for f in parts if f not in (R.DB, R.FIT)]
+    if unknown or R.DB not in parts:
+        raise BackupError(f"備份不支援這些資料：{unknown or [R.DB.pattern]}")
+    return parts
+
+
 def build_zip(db_path: Path, zip_path: Path, *, fit_root: Optional[Path] = None,
               include_fit: bool = False, now: Optional[datetime] = None) -> dict:
     """The plain zip (snapshot + manifest [+ FITs]). Returns the manifest."""
     now = now or datetime.now(timezone.utc)
+    parts = plan(include_fit)
     with tempfile.TemporaryDirectory(dir=zip_path.parent, prefix=".trc-snap-") as td:
         snap = Path(td) / DB_ENTRY
         snapshot_db(db_path, snap)
@@ -171,10 +188,10 @@ def build_zip(db_path: Path, zip_path: Path, *, fit_root: Optional[Path] = None,
         manifest = {"app": APP, "format": FORMAT, "app_version": app_version(),
                     "schema_version": schema, "created_at": now.astimezone(timezone.utc).isoformat(),
                     "row_counts": counts, "db_sha256": _sha256(snap),
-                    "fit": {"included": bool(include_fit), "files": 0, "bytes": 0}}
+                    "fit": {"included": R.FIT in parts, "files": 0, "bytes": 0}}
         with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as z:
             z.write(snap, DB_ENTRY)
-            if include_fit:
+            if R.FIT in parts:
                 for p, entry in _fit_files(fit_root):
                     z.writestr(zipfile.ZipInfo(entry, date_time=_zip_time(p)),
                                gzip.compress(p.read_bytes(), compresslevel=6, mtime=0),
