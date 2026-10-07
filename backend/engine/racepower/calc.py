@@ -582,8 +582,10 @@ def make_plan(ctx: Context, body: PlanIn) -> dict:
     out["export_block"] = WE.multi_day(out, body.start_time, body.days)
     out["rain"] = rain_reminder(body, out)
     snow_season(body, course, out)
+    from backend.engine.racepower import fuel as FU
+    # SP-255: the sleep points' default minutes by the race hours and the 「凌晨小睡」 line
+    out["sleep"] = FU.sleep_info(out, [x.model_dump() for x in body.stops], body.start_time)
     if course.get("source") == "gpx":
-        from backend.engine.racepower import fuel as FU
         out["stop_suggestions"] = FU.stops_from_wpts(course.get("wpts") or [], course["totals"]["km"])
     return out
 
