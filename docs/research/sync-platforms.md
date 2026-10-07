@@ -46,6 +46,12 @@
    - COROS 跑後自評與 TL 拿不到。
 
    細節見 §4.9。
+9. **使用者 2026-10-07 決定不推課表也沒關係**，盡可能增加同步機制。這樣一來：
+   - Polar 官方 API 可以直接接；
+   - COROS MCP 與 intervals.icu 的推課表限制都消失；
+   - Apple Watch 不需要原生 app。
+
+   細節與實作單（SP-346～349）見 §4.10。
 
 ---
 
@@ -432,6 +438,42 @@
   - COROS 上刪不掉的課；
   - COROS 自評與 TL。
 - 後兩項只有 COROS 直連拿得到。所以如果 SP-331 確認 COROS MCP 可用，COROS 使用者走 COROS MCP 會保留比較多功能。MCP 是否提供自評與 TL，那份文件會查。
+
+### 4.10 不推課表、只同步 FIT 時（2026-10-07 補）
+
+使用者 2026-10-07 決定：**盡可能增加同步機制，不推課表也沒關係；Polar、intervals.icu 一定要做。** 只同步 FIT 給週期訓練與賽事計算機用時，選路線只看三件事：拿不拿得到檔案、拿得到多久的歷史、條款准不准。
+
+**變簡單的：**
+
+| 路線 | 原本卡在推課表的地方 | 只同步 FIT 之後 |
+|---|---|---|
+| Polar 官方 API（AccessLink） | 沒有推課表的端點（推估），所以原本只能經 intervals.icu | **可以直接接官方**：任何 Polar Flow 使用者都能自助申請、免費、有 FIT、有 webhook（SP-331，已驗證）。限制："Only Exercises uploaded to Flow in the last 30 days are returned."，要定期同步；舊資料用匯出檔 |
+| COROS MCP | 推上去的課不能刪、不能改期 | 這個問題消失，只剩讀活動加 FIT（每人每 24 小時 50 個）；沒有 webhook，要輪詢；能不能用在收費服務仍要書面確認 |
+| Suunto 官方 API | 它的 push workouts 只是上傳活動檔，不是課表 | 讀 FIT 加 workout webhook 就夠，但只給公司或組織 |
+| intervals.icu | 心率只能送 % LTHR、計圈步驟與 TL 送不過去、COROS 上刪不掉課（§4.9） | 都不用處理；只要 ACTIVITY 讀取權限；使用者不用勾「Upload planned workouts」。剩下的代價不變（§4.3） |
+| Garmin（`garminconnect`，SP-91） | 要上傳、排程、更新、刪除課表 | 只剩列活動加下載 FIT；條款定位與登入被鎖的風險不變（推估：風險主要來自登入） |
+| Apple Watch | 推課表一定要原生 iOS app（WorkoutKit） | 不需要原生 app：HealthFit／Intervals Companion 經 intervals.icu，或 Health Auto Export 直接 POST JSON 給我們；兩者都不是原始 FIT |
+
+**不變的**：TrainingPeaks、Strava、Final Surge、Runalyze、SportTracks、商用聚合 API、Garmin 官方 API。它們被排除的理由都跟推課表無關（§3）。
+
+**建議（每個品牌各自走最短的路）：**
+
+| 手錶 | 第一選擇 | 備案 |
+|---|---|---|
+| COROS | COROS MCP（等書面確認） | intervals.icu → 手動匯入 |
+| Garmin | `garminconnect` 試運行（使用者決定，SP-91） | intervals.icu → Garmin「Export Your Data」 |
+| Polar | Polar 官方 API | intervals.icu |
+| Suunto | Suunto 官方 API（要公司） | intervals.icu |
+| Apple Watch | 橋接 app → intervals.icu，或 Health Auto Export → 我們 | Health app 匯出 XML |
+| 全部 | 手動匯入（SP-323）、桌面自動匯入（SP-324）、帳號匯出檔（SP-349） | — |
+
+**拿掉推課表會失去的：**
+
+- COROS 跑後自評（SP-231）幾乎消失：只有「從 COROS 行事曆課表跑的活動」才帶自評（`backend/engine/coros_rpe.py` 說明）。調課表的規則 D 要改靠 app 自己的自評（推估）。
+- 訂閱層少一個賣點；SP-321 的備案已經寫好（訂閱改賣回測、全歷史、計算機無限、AI、3 年保留）。
+- 使用者要自己把課表輸進手錶。替代做法：行事曆訂閱（`calendar_feed` 已有）；匯出 FIT 課表檔讓使用者自己匯入（要另外做）。
+
+**實作單**（2026-10-07，parent SP-343）：SP-346 intervals.icu、SP-347 Polar、SP-348 COROS MCP（只讀）、SP-349 帳號匯出檔。Apple Watch 的部分寫在 SP-344。
 
 ---
 
