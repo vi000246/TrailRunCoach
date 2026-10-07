@@ -732,3 +732,132 @@ def test_calculator_page_names_the_trail_strategy_and_the_hr_fade():
     zh = json.loads((root / "i18n" / "zh-TW" / "racepower.json").read_text("utf-8"))
     assert zh["strategy.even_trail"] == "均勻努力" and zh["strategy.even_road"] == "均速"
     assert "後段心率會自己下降" in zh["legend.hr_fade"] and "後段心率會自己下降" in zh["chart.tip"]
+
+
+# ---- 資料少的人 (SP-292): 資料等級 0 / 1 (engine/data_level.py, SP-291) ------------------------------
+
+def dl(level, survey_h=None, survey=True, week=1):
+    """A data_level.level result (+ races()' survey_hours)."""
+    return {"level": level, "week": week, "since": TODAY.isoformat(), "monday": TODAY.isoformat(), "need": 4,
+            "runs": 3, "weeks_ok": 0, "survey": survey, "survey_hours": survey_h}
+
+
+def chk(r, cid):
+    return next(c for c in r["checks"] if c["id"] == cid)
+
+
+ULTRA = dict(distance_km=60, climbing_m=3000, est_hours=10.0, start="2027-03-06")       # Koop's 50 km row
+
+
+def test_level0_with_the_questionnaire_judges_koop_hours_ua_unknown():
+    e = ev(**ULTRA)
+    r = F.assess(e, line(e), TODAY, hist(km=0.0, climb=0.0, hours=0.0), data=dl(0, 6.0))
+    assert r["base_week"]["hours"] == 6.0 and r["base_week"]["km"] == 0.0           # 6 h as entered, no km guessed
+    w, c, h = chk(r, "weekly"), chk(r, "climb"), chk(r, "hours")
+    assert w["level"] == c["level"] == "unknown" and w["label"] == c["label"] == "還不知道"
+    assert "ratio" not in w and "還不知道" in w["text"]
+    assert h["level"] in ("ok", "tight") and r["koop"]["need_h"] == 6.0
+    assert r["level"] == h["level"] and r["label"] != "資料不足"
+    ds = r["data_source"]
+    assert ds["label"] == "依你填的資料" and "6.0 小時" in ds["text"] and "有點趕" in ds["text"]
+    assert r["data_level"]["level"] == 0
+
+
+def test_level0_without_the_questionnaire_says_what_is_missing():
+    e = ev(**ULTRA)
+    r = F.assess(e, line(e), TODAY, hist(km=0.0, climb=0.0, hours=0.0), data=dl(0, None))
+    assert chk(r, "weekly")["label"] == "還不知道" and chk(r, "hours")["level"] == "unknown"
+    assert r["level"] == "unknown" and r["label"] == "還不知道"
+    assert r["data_source"]["label"] == "資料還少" and "設定 → 個人資料 → 跑步經驗" in r["data_source"]["text"]
+    # a shorter race (no Koop): the UA ratios unknown, nothing judged on guessed km
+    e2 = ev(distance_km=21, climbing_m=1200, est_hours=3.5)
+    r2 = F.assess(e2, line(e2), TODAY, hist(km=0.0, climb=0.0, hours=0.0), data=dl(0, 3.0))
+    assert not any(c["id"] == "hours" for c in r2["checks"]) and r2["label"] == "還不知道"
+    assert r2["data_source"]["label"] == "依你填的資料"
+
+
+def test_level0_is_at_most_tight_and_says_it_is_the_data():
+    e = ev(cutoff_hours=5.0)                                  # est 6 h > the 5 h cutoff: over with data
+    r2 = F.assess(e, line(e), TODAY, hist(km=0.0, climb=0.0, hours=0.0), data=dl(2))
+    assert lv(r2, "cutoff") == "over" or r2["level"] == "over"
+    r = F.assess(e, line(e), TODAY, hist(km=0.0, climb=0.0, hours=0.0), data=dl(0, 4.0))
+    ct = chk(r, "cutoff")
+    assert ct["level"] == "tight" and ct["capped"] and "資料還少，最多先判到「有點趕」" in ct["text"]
+    assert r["level"] == "tight" and not any("先不跑" in s for s in r["suggestions"])
+    # 跨級 over (an old XS best against an L race): tight, no 「低一級」 advice, no milestone
+    e = ev(distance_km=80, climbing_m=4500, est_hours=16.0)
+    r = F.assess(e, line(e), TODAY, hist(km=0.0, climb=0.0, hours=0.0), best={"ep": 30.0, "date": date(2025, 3, 1)},
+                 data=dl(0, 5.0))
+    assert lv(r, "step") == "tight" and r["level"] != "over" and "milestone" not in r
+    assert not any("低一級" in s for s in r["suggestions"])
+    # level 1 keeps the red (the cap is level 0's)
+    r = F.assess(ev(cutoff_hours=5.0), line(ev(cutoff_hours=5.0)), TODAY, hist(km=20.0, climb=800.0, hours=3.0),
+                 data=dl(1, 2.0, week=3))
+    assert lv(r, "cutoff") == "over"
+
+
+def test_level1_uses_the_larger_of_survey_and_actual_on_actual_km():
+    e = ev(**ULTRA)
+    h = hist(km=0.0, climb=0.0, hours=0.0)
+    h[-1].update(km=20.0, climb_m=900.0, hours=2.5)            # one week of records
+    r = F.assess(e, line(e), TODAY, h, data=dl(1, 5.0, week=2))
+    assert r["base_week"]["hours"] == 5.0 and r["base_week"]["km"] == 20.0            # max(5, 2.5); km actual
+    assert chk(r, "weekly")["level"] in ("ok", "tight") and chk(r, "weekly")["ratio"] > 0
+    assert r["data_source"]["label"] == "依你填的資料"
+    r = F.assess(e, line(e), TODAY, h, data=dl(1, 2.0, week=2))
+    assert r["base_week"]["hours"] == 2.5 and r["data_source"]["label"] == "資料還少"
+    # past the ramp (the questionnaire no longer stands in): the records only
+    r = F.assess(e, line(e), TODAY, h, data=dl(1, None, survey=False, week=7))
+    assert r["base_week"]["hours"] == 2.5 and r["data_source"]["label"] == "資料還少"
+
+
+@pytest.mark.parametrize("h", [hist(km=40.0, climb=2000.0), hist(km=0.0, climb=0.0, hours=0.0)])
+def test_level2_is_exactly_todays_card(h):
+    for e in (ev(**ULTRA), ev(cutoff_hours=5.0), ev(kind="road", distance_km=42.2, climbing_m=50, est_hours=4.0)):
+        a = F.assess(e, line(e), TODAY, h, best={"ep": 30.0, "date": date(2026, 3, 1)})
+        b = F.assess(e, line(e), TODAY, h, best={"ep": 30.0, "date": date(2026, 3, 1)}, data=dl(2, 9.0, survey=False))
+        assert b.pop("data_level")["level"] == 2 and a.pop("data_level") is None
+        assert a == b and "data_source" not in b and "optimistic_note" not in b
+
+
+def test_marathon_and_a_low_self_reported_week_is_optimistic():
+    road = ev(kind="road", distance_km=42.2, climbing_m=50, est_hours=4.0)
+    note = lambda e, data: F.assess(e, line(e), TODAY, hist(km=0.0, climb=0.0, hours=0.0), data=data).get("optimistic_note")
+    assert note(road, dl(0, 2.0)).startswith("這個估法對週跑量少的人偏樂觀")
+    assert note(ev(**ULTRA), dl(1, 2.5, week=2))                                     # trail ≥ 42 km too
+    assert note(road, dl(0, 4.0)) is None                                             # not a low week
+    assert note(ev(kind="road", distance_km=21.1, climbing_m=0, est_hours=2.0), dl(0, 2.0)) is None   # a half
+    assert note(road, dl(0, None)) is None and note(road, dl(2, 2.0, survey=False)) is None
+
+
+def test_races_read_the_level_and_the_questionnaire(monkeypatch):
+    from backend.engine import experience as EX
+    from backend.tests.wko5_fakes import FakeDataset
+    monkeypatch.setattr(F, "activity_rows", lambda ds, today, days=42: [])
+    monkeypatch.setattr(EX, "load", lambda user_id=1: {"runs_per_week": 4, "minutes_per_run": 60, "at": "2026-10-01T00:00:00+00:00"})
+    from backend.engine import quality_gate as QG
+    monkeypatch.setattr(QG, "z3_rule", lambda: {"weeks": 4, "runs": 3, "gap": 7, "relock": 21, "manual": False})
+    plan = Plan(events=[ev(eid="u", **ULTRA)])
+    r = F.races(plan, FakeDataset([], TODAY), TODAY, predict=lambda e, c=None: None, gpx=lambda e: None,
+                finish=lambda e, c: None)[0]
+    assert r["data_level"]["level"] == 0 and r["base_week"]["hours"] == 4.0
+    assert r["data_source"]["label"] == "依你填的資料" and lv(r, "hours") in ("ok", "tight")
+    # 「還不能連續跑 30 分鐘」: the plan doesn't use that volume, neither does the card
+    monkeypatch.setattr(EX, "load", lambda user_id=1: {"runs_per_week": 4, "minutes_per_run": 60, "can_run_30": False,
+                                                       "at": "2026-10-01T00:00:00+00:00"})
+    r = F.races(plan, FakeDataset([], TODAY), TODAY, predict=lambda e, c=None: None, gpx=lambda e: None,
+                finish=lambda e, c: None)[0]
+    assert r["base_week"]["hours"] == 0.0 and r["data_source"]["label"] == "資料還少"
+
+
+def test_low_data_texts_are_translated():
+    import re
+    from backend.i18n import use_locale
+    e = ev(cutoff_hours=5.0, **{k: v for k, v in ULTRA.items() if k != "est_hours"}, est_hours=10.0)
+    with use_locale("en"):
+        for data in (dl(0, 2.0), dl(0, None), dl(1, 1.0, week=2)):
+            r = F.assess(e, line(e), TODAY, hist(km=0.0, climb=0.0, hours=0.0), data=data)
+            texts = [r["label"], r["data_source"]["label"], r["data_source"]["text"], r.get("optimistic_note") or ""]
+            texts += [c["label"] + c["text"] for c in r["checks"] if c["id"] in ("weekly", "climb", "cutoff")]
+            for t in texts:
+                assert not re.search("[一-鿿]", t), t
