@@ -851,6 +851,10 @@
     "draft": true,
     "src": "backend/engine/panels/drift_bars.py:32"
   },
+  "{km:g} K {time}（{date}）": {
+    "draft": false,
+    "src": "backend/engine/racepower/race_estimate.py:59"
+  },
   "{km:g} km 內沒有鄉鎮預報點": {
     "draft": true,
     "src": "backend/engine/racepower/weather.py:787"
@@ -1727,6 +1731,10 @@
     "draft": true,
     "src": "backend/engine/quality_gate.py:2005"
   },
+  "也沒有最近一年的路跑成績可以推估：在「設定 → 個人資料 → 跑步經驗」或「設定 → 生理數據 → 比賽成績（E 配速）」填一場最近的路跑成績（距離、時間、日期）": {
+    "draft": false,
+    "src": "backend/engine/racepower/race_estimate.py:46"
+  },
   "乳酸閾值心率（COROS % LTHR 6 區）": {
     "draft": true,
     "src": "backend/engine/hr_profile.py:71"
@@ -1830,6 +1838,10 @@
   "你的越野跑 RE 中位數（{n} 次，effort km = km + 爬升/{div:g}）": {
     "draft": true,
     "src": "backend/engine/racepower/calc.py:300"
+  },
+  "你確認的活動": {
+    "draft": false,
+    "src": "backend/engine/racepower/race_estimate.py:40"
   },
   "你自己走的登山日 EP/h 中位數（{n} 天，爬升 ≥ 600 m 的日子權重 3 倍）": {
     "draft": true,
@@ -3923,6 +3935,10 @@
     "draft": true,
     "src": "backend/engine/zone_events.py:491"
   },
+  "最近的路跑成績算不出平路輕鬆配速（Daniels 的公式只適用 1.5 km 到全馬）：越野先沒辦法推估": {
+    "draft": false,
+    "src": "backend/engine/racepower/race_estimate.py:47"
+  },
   "最難的一種：軟墊加閉眼。旁邊要有東西可以扶。": {
     "draft": true,
     "src": "backend/engine/strength_moves.py:156"
@@ -4711,6 +4727,14 @@
     "draft": true,
     "src": "backend/engine/injuries.py:155"
   },
+  "用 {src} {race} 推算：Riegel（k {k:+.2f}，平路配速固定）→ 約 {t}。一場成績推另一個距離大約 ±5–8 %（推估）；有 CP 之後會自動改用賽事計算機的模型": {
+    "draft": false,
+    "src": "backend/engine/racepower/race_estimate.py:41"
+  },
+  "用 {src} {race} 推算：平路輕鬆配速約 {pace} /km（E 配速 {fast}–{slow} 的中間，Daniels VDOT {vdot:.1f}），等效公里 {ekm:.1f}（km + 爬升 ÷ 100）× 配速 × 0.85 → 約 {t}。越野的這個算法是推估；有 CP 之後會自動改用賽事計算機的模型": {
+    "draft": false,
+    "src": "backend/engine/racepower/race_estimate.py:43"
+  },
   "用快走": {
     "draft": false,
     "src": "backend/engine/specific_phase.py:636"
@@ -4806,6 +4830,10 @@
   "百岳心率帶 AeT": {
     "draft": true,
     "src": "backend/engine/racepower/watch_export.py:269"
+  },
+  "百岳用步行模型，不需要 CP": {
+    "draft": false,
+    "src": "backend/engine/racepower/race_estimate.py:48"
   },
   "百岳登山": {
     "draft": true,
@@ -5379,6 +5407,10 @@
     "draft": true,
     "src": "backend/engine/workout_steps.py:1472"
   },
+  "設定裡填的": {
+    "draft": false,
+    "src": "backend/engine/racepower/race_estimate.py:40"
+  },
   "設定頁": {
     "draft": false,
     "src": "backend/api/plan.py:400"
@@ -5738,6 +5770,10 @@
   "跑 {d}": {
     "draft": true,
     "src": "backend/engine/panels/drift_bars.py:49"
+  },
+  "跑步經驗問卷填的": {
+    "draft": false,
+    "src": "backend/engine/racepower/race_estimate.py:40"
   },
   "跑步開頭這段時間裡的停等（紅綠燈、等人）都當暖身，飄移從最後一次停等後才開始算。本人值 = 你路跑前段最後一次停等時間的 p95。": {
     "draft": true,
@@ -6315,6 +6351,10 @@
     "draft": true,
     "src": "backend/engine/interval_eval.py:487"
   },
+  "還沒有 CP：先用你的比賽成績推估": {
+    "draft": false,
+    "src": "backend/engine/racepower/race_estimate.py:37"
+  },
   "還沒有 TSS：不看 ramp": {
     "draft": true,
     "src": "backend/engine/status.py:315"
@@ -6658,6 +6698,10 @@
   "預估不到 4 小時的{event}": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:1620"
+  },
+  "預估完賽": {
+    "draft": false,
+    "src": "backend/engine/racepower/race_estimate.py:38"
   },
   "預估時間": {
     "draft": true,
