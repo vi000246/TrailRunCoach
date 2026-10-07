@@ -153,6 +153,23 @@ class RainIn(BaseModel):
     mm: Optional[float] = None
 
 
+class WindIn(BaseModel):
+    """One /weather `wind` row (SP-251): local clock time, km/h."""
+    t: str
+    temp_c: Optional[float] = None
+    wind_kmh: Optional[float] = None
+    gust_kmh: Optional[float] = None
+    apparent_c: Optional[float] = None
+
+
+class SunIn(BaseModel):
+    """One /weather `sun` row (SP-254): local 'YYYY-MM-DDTHH:MM'."""
+    date: str
+    sunrise: str
+    sunset: str
+    src: Optional[str] = None
+
+
 class PlanIn(PredictIn):
     distance_km: Optional[float] = None
     mode: Literal["time", "power", "auto"] = "auto"
@@ -179,6 +196,12 @@ class PlanIn(PredictIn):
     hourly_heat: bool = True
     # SP-249: the /weather `rain` rows → a reminder on trail / 百岳 plans; never changes the time
     rain: Optional[list[RainIn]] = None
+    # SP-251: the /weather `wind` rows → wind chill and the 冷風 reminder; never changes the time
+    wind: Optional[list[WindIn]] = None
+    # SP-254: the /weather `sun` rows (else NOAA at the GPX start) → segments marked 夜間; the night
+    # slowdown % (0 / 5 / 10 / 15, default 0, 推估) lengthens only their dark part
+    sun: Optional[list[SunIn]] = None
+    night_slow_pct: float = Field(0.0, ge=0.0, le=15.0)
     # heat acclimation (heat-acclimation.md §5.5): {"mode": auto|none|partial|acclimatised|custom, "s"}
     heat_acclimatisation: Optional[dict] = None
     # 百岳 capacity (baiyue-from-running.md §6.1)
@@ -516,6 +539,14 @@ def make_plan(ctx: Context, body: PlanIn) -> dict:
         body = body.model_copy(update={"day_splits_km": [km * i / body.days for i in range(1, body.days)]})
     v1 = v1_for(ctx, body, course)
     validated, effort_ok = ctx.flags()
+    from backend.engine.racepower import night as NI
+    stops_l = [x.model_dump() for x in body.stops]
+    sun = [x.model_dump() for x in body.sun] if body.sun else \
+        NI.course_sun(course, body.date, body.days or 1) if course.get("source") == "gpx" else None
+
+    def night(p: dict, mode: str) -> dict:
+        return NI.apply(p, date=body.date, start_time=body.start_time, stops=stops_l, sun=sun,
+                        slow_pct=body.night_slow_pct, mode=mode)
     gm = ctx.grade_models()
     opts = body.model_dump()
     opts["locks"] = [x.model_dump() for x in body.locks]
@@ -531,8 +562,8 @@ def make_plan(ctx: Context, body: PlanIn) -> dict:
         if body.type == "baiyue":
             opts["moving_rows"] = gm.get("moving_rows") or []
             opts["moving_rows_group"] = gm.get("moving_rows_group") or []
-            out = PL.plan_hike(v1=v1, course=course, hike_speed=gm["hike_speed"], inp=ctx.inputs(), opts=opts,
-                               validated=validated, capacity=gm.get("walk_capacity"))
+            out = night(PL.plan_hike(v1=v1, course=course, hike_speed=gm["hike_speed"], inp=ctx.inputs(), opts=opts,
+                                     validated=validated, capacity=gm.get("walk_capacity")), body.mode)
         else:
             gre = gm["grade_re"]
             if body.type == "road":
@@ -547,9 +578,9 @@ def make_plan(ctx: Context, body: PlanIn) -> dict:
             th = ctx.trail_hr() if body.type == "trail" else None
 
             def run(o: dict, v: dict) -> dict:
-                return PL.plan_run(v1=v, course=course, grade_re=gre, opts=o, validated=validated,
-                                   effort_validated=effort_ok, longest_s=(inp.get("riegel") or {}).get("longest_s"),
-                                   capacity=capacity, trail_hr=th)
+                return night(PL.plan_run(v1=v, course=course, grade_re=gre, opts=o, validated=validated,
+                                         effort_validated=effort_ok, longest_s=(inp.get("riegel") or {}).get("longest_s"),
+                                         capacity=capacity, trail_hr=th), o.get("mode") or "auto")
             out = run(opts, v1)
             if body.mode in ("time", "power"):
                 # the goal against the model's own prediction (auto, 100 %), same course and conditions
@@ -578,6 +609,10 @@ def make_plan(ctx: Context, body: PlanIn) -> dict:
     from backend.engine.racepower import watch_export as WE
     out["export_block"] = WE.multi_day(out, body.start_time, body.days)
     out["rain"] = rain_reminder(body, out)
+    out["cold_wind"], out["hypothermia"] = cold_reminders(body, out)
+    # SP-305: the outdoor reminders of this race merged into one line for the attention box
+    from backend.engine.racepower import cold as CD
+    out["attention"] = CD.attention(out["cold_wind"], out["hypothermia"], NI.hint(out.get("night"), body.type))
     if course.get("source") == "gpx":
         from backend.engine.racepower import fuel as FU
         out["stop_suggestions"] = FU.stops_from_wpts(course.get("wpts") or [], course["totals"]["km"])
@@ -597,6 +632,22 @@ def rain_reminder(body: PlanIn, out: dict) -> Optional[dict]:
     days = len(out.get("days") or []) or body.days or 1
     win = WX.race_window(body.date, body.start_time, days, dur)
     return WX.rain_alert([r.model_dump() for r in body.rain], win, "road" if body.type == "road" else "trail")
+
+
+def cold_reminders(body: PlanIn, out: dict) -> tuple[Optional[dict], Optional[dict]]:
+    """(cold_wind, hypothermia), cold.py. SP-251: wind chill / gusts at each segment's clock from
+    the /weather `wind` rows on road, trail and 百岳 plans; None without wind data. SP-253: the
+    失溫風險 checklist on trail / 百岳 (lowest temperature ≤ 5 °C and rain or wind chill ≤ −5 °C);
+    None without race-day rain or wind data. Display only — call after rain_reminder."""
+    if not body.wind and out.get("rain") is None:
+        return None, None
+    from backend.engine.racepower import cold as CD
+    days = len(out.get("days") or []) or body.days or 1
+    pts = CD.points(out, body.date, body.start_time, [x.model_dump() for x in body.stops], days)
+    wind = [r.model_dump() for r in body.wind or []]
+    cw = CD.cold_wind(pts, wind, body.heat_ref_alt_m, body.date) if wind else None
+    hours = [r.model_dump() for r in body.hourly or []]
+    return cw, CD.hypothermia(pts, cw, out.get("rain"), body.type, wind, hours, body.heat_ref_alt_m)
 
 
 def fuel(ctx: Context, body: PlanIn, out: dict) -> dict:

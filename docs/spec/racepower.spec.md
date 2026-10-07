@@ -263,6 +263,56 @@ PoP ≥ 50 % or the rows sum to ≥ 5 mm (thresholds 推估, kept as proposed). 
 `{alert, max_pop_pct, total_mm, rows, message}` for road, trail and 百岳 (road has its own wording,
 no poles), `null` without rain data; the page shows the message under the result heading. The predicted time never changes.
 
+Wind (SP-251, docs/research/cold-environment.md §2.3 / §4.2 單 1): the response also carries `wind`:
+`[{t, temp_c, wind_kmh, gust_kmh, apparent_c}]` — Open-Meteo's hourly `wind_speed_10m` /
+`wind_gusts_10m` / `apparent_temperature` (km/h) with the hour's temperature, or the CWA mountain
+3-day product's 「風速」 (`WindSpeed`, m/s × 3.6; 3-hourly; no gusts — CWA 產品說明文件
+「休閒旅遊預報」 F-B0053-001…073, 2024-12-10) with that file's temperature interpolated to the row.
+`null` for the 鄉鎮 product (its point is the valley 公所, not the ridge), the weekly products, the
+climatology and manual. The page sends them with /plan (`wind`); `calc.cold_reminder` →
+`cold.points` (each segment's clock span: start + time before it + stops; 百岳 each day from the start
+time, ÷ the moving ratio; no start time or no segments → the race window's hours, no km) →
+`cold.cold_wind`: wind and temperature at each midpoint (linear between rows, 1.5 h edge), the
+temperature moved from `heat_ref_alt_m` to the segment's height (−0.65 °C / 100 m), NWS wind chill
+(°F / mph form; only ≤ 10 °C and > 4.8 km/h). `plan.cold_wind` = `{alert, level (frostbite | cold |
+gust), min_wc_c, max_gust_kmh, min_temp_c, n, ranges, per_km}`: alert when any point has wind chill
+≤ −10 °C (ECCC's long-exposure band, owner 2026-10-06) or gusts ≥ 50 km/h; ≤ −28 °C → the
+frostbite wording; `null` without wind data. `plan.attention` (`cold.attention`) = `{kinds, line,
+gear, details}`: the outdoor reminders of the race merged into ONE line (SP-305: only when
+triggered, one gear list), details for the collapsed 「細節」; the page shows it in the same box as the
+rain line under the result heading. Road, trail and 百岳. The predicted time never changes.
+
+Hypothermia (SP-253, cold-environment.md §4.2 單 3): `calc.cold_reminders` also returns
+`plan.hypothermia` = `{alert, min_temp_c, wet, windy, min_wc_c}` (`cold.hypothermia`) on trail and
+百岳 (`null` on road, and without race-day rain or wind rows). The lowest temperature over the points:
+the wind rows' temperature at each midpoint, else the `hourly` rows', moved to the point's height, else
+the segment's plan temperature. Alert when it is ≤ 5 °C AND (`plan.rain.alert` OR the lowest wind chill
+≤ −5 °C) — both thresholds 推估, kept as proposed (owner 2026-10-06; no 強制裝備 checklist for now).
+`cold.attention` then adds 失溫風險 to the same line: 「防水防風外套、保暖層、手套帽子、熱食熱飲；先想好撤退點」
+(merged with 冷風: one head 冷風＋失溫風險, one gear list, the wind chill said once). No probability or
+percentage in the text.
+
+Night (SP-254, docs/research/night-and-sleep.md §2.1 / §4.2 單 1): /weather also returns `sun` =
+`[{date, sunrise, sunset, src}]` for the event days and the day after — Open-Meteo's
+`daily=sunrise,sunset` when the forecast answered, else NOAA's solar formula (`weather.sun_times`,
+zenith 90.833°, UTC+8 unless the answer gives its offset; within ~1 min at Taiwan's latitudes, tested
+against api.sunrise-sunset.org). /plan takes `sun` (else `night.course_sun`: NOAA at the GPX start) and
+`night_slow_pct` (0 / 5 / 10 / 15, default 0, 推估; owner 2026-10-06: default 0 %, no learning from the
+athlete's own night runs). `night.apply` (inside `make_plan`, on the plan and on the goal's model run):
+each segment's clock span (`cold.points`, needs a start time), its `dark_share` (part of the span
+between sunset and sunrise) and `night` (share ≥ ½); with a slowdown > 0 (not in target-time mode)
+each segment's moving time × (1 + p × dark_share), fixed point on the ETAs (< 1 s, ≤ 8 passes), then
+cum_s / ETA / pace / speed and the summary (time_s, finish_eta, time_total_s and its range; 百岳
+capacity_time_s, clock_s, EP/h, days' moving / clock hours) rebuilt; power, heat and effort stay as
+solved. 0 % leaves every number unchanged. `plan.night` = `{slow_pct, applied, added_s, n, ranges,
+sun, badge}`, `null` without a start time, segments or sun rows; `chart_rows[].night`. The page adds a
+「夜間」 column (🌙) to both segment tables and a grey background on the chart only when `plan.night`
+exists; the option sits in 進階計算選項 with 「沒有研究拆出天黑本身慢多少；Brager 2020 的 35.9 % 含疲勞」.
+On trail / 百岳 (road races are lit) night segments add 夜間 to the one attention line (頭燈（備用電池）、
+保暖層, merged with 冷風 / 失溫風險: 夜間＋冷風＋失溫風險, one gear list). The race card's trail cutoff
+(`race_feasibility.trail_finish`) passes the saved calculator's slowdown with its start time
+(`calc_night`), so the cutoff check moves with it; the 百岳 turnaround check (v1 /predict hours) does not.
+
 CWA key: `CWA_API_KEY` env var, else `weather.json` in the tenant's shared folder (`weather.key_path()`); the API only returns it
 masked (`backend/engine/racepower/weather.py:93`). With region `intl` (`engine/region.py`) the page
 hides the CWA key, the 百岳 peak lists and presets (百岳 reads 多日登山). Peaks: `backend/data/baiyue.json`
@@ -275,12 +325,12 @@ hides the CWA key, the 百岳 peak lists and presets (百岳 reads 多日登山)
 |---|---|---|
 | GET | `/api/v1/racepower/inputs?refresh=` | the derived inputs (`backend/api/racepower.py:80`) |
 | GET | `/api/v1/racepower/peaks?q=&baiyue_only=` | peaks list (`backend/api/racepower.py:85`) |
-| GET | `/api/v1/racepower/weather?date=&days=&event_id=&peak=&lat=&lon=&elevation=&cwa=` | provider, values, hourly, rain, tried, location, fetched_at (`backend/api/racepower.py:107`) |
+| GET | `/api/v1/racepower/weather?date=&days=&event_id=&peak=&lat=&lon=&elevation=&cwa=` | provider, values, hourly, rain, wind, sun, tried, location, fetched_at (`backend/api/racepower.py:107`) |
 | GET / POST | `/api/v1/racepower/weather/key` | masked key status / save (10–80 chars, no spaces) (`backend/api/racepower.py:151`) |
 | POST | `/api/v1/racepower/predict` | v1, unchanged: type, used, env, result, tasks, zones, warnings (百岳 adds biggest_day) (`backend/api/racepower.py:226`, `calc.predict`) |
 | POST | `/api/v1/racepower/course` | multipart `file` (.gpx/.fit) + segmentation options → `course_id` (content sha1; the Track is kept in a 20-entry LRU), totals, segments, profile ≤ 1500 points, climbs, waypoints, warnings; parsed in the thread pool (`backend/api/racepower.py:258`) |
 | POST | `/api/v1/racepower/course/event/{eid}` | the course of the GPX stored with a plan event (`event_gpx`), no re-upload; adds `stop_suggestions` from its waypoints, `day_splits_km`, `gpx`; 404 when the event has none (`backend/api/racepower.py:305`, `calc.event_course`) |
-| POST | `/api/v1/racepower/plan` | `PlanIn` (`backend/engine/racepower/calc.py:145`) = `PredictIn` + mode, targets (time / pace, power W / %CP), course ref (`course_id` or `event_id` + options, or manual), strategy, hills, acclimatisation, locks, start time, aid stations (typed), day splits, terrain, `hourly` (the /weather rows), `hourly_heat` (default true), `rain` (the /weather rain rows, SP-249), `heat_acclimatisation`, 百岳 trip kind / pack per day → summary (incl. `heat`, `strategy`, `trail_hr`, `time_total_s`, `nonmoving`), effort, segments (incl. temp_c / dew_c / rh_pct / heat_pct / heat_clock / heat_src, kcal / cho / water / sodium / fuel action), heat_profile, days (百岳), compare, crosscheck, v1, course_name, `fuel`, `seg_targets`, `chart_rows`, `goal` (time / power modes), `stop_suggestions`, warnings; an unknown `course_id` reloads from `event_id`, else 410 (`backend/api/racepower.py:566`, `calc.make_plan` `backend/engine/racepower/calc.py:492`) |
+| POST | `/api/v1/racepower/plan` | `PlanIn` (`backend/engine/racepower/calc.py:145`) = `PredictIn` + mode, targets (time / pace, power W / %CP), course ref (`course_id` or `event_id` + options, or manual), strategy, hills, acclimatisation, locks, start time, aid stations (typed), day splits, terrain, `hourly` (the /weather rows), `hourly_heat` (default true), `rain` (the /weather rain rows, SP-249), `wind` (the /weather wind rows, SP-251 → `cold_wind`, SP-253 `hypothermia`, `attention`), `sun` + `night_slow_pct` (SP-254 → `night`, segments' `night` / `dark_share`), `heat_acclimatisation`, 百岳 trip kind / pack per day → summary (incl. `heat`, `strategy`, `trail_hr`, `time_total_s`, `nonmoving`), effort, segments (incl. temp_c / dew_c / rh_pct / heat_pct / heat_clock / heat_src, kcal / cho / water / sodium / fuel action), heat_profile, days (百岳), compare, crosscheck, v1, course_name, `fuel`, `seg_targets`, `chart_rows`, `goal` (time / power modes), `stop_suggestions`, warnings; an unknown `course_id` reloads from `event_id`, else 410 (`backend/api/racepower.py:566`, `calc.make_plan` `backend/engine/racepower/calc.py:492`) |
 | GET | `/api/v1/racepower/goal-basis` | the training basis for goals: hr (目標配速) or power (目標功率), from 課表偏好 目標基準 else 使用功率 (`backend/api/racepower.py:553`) |
 | GET | `/api/v1/racepower/grade-model` | gait-aware RE(g) (run / walk bins, walk share, technicality per class and per downhill bin) / v_max(g) / v_h(g), the HR hike-window summary and its basis (`backend/api/racepower.py:353`) |
 | GET | `/api/v1/racepower/cadence-check` | SP-230: the climbing (≥ 3 % windows) cadence histogram of the year's outdoor runs (5-spm bins, disk-cached per activity `racepower_climb_cadence_v1`) against the 130 spm walk line: two groups or one, the valley, whether 130 sits in it, a hint; report only, the line never moves (`backend/engine/racepower/runwalk.py`, page section 爬坡步頻分布) |
@@ -1251,4 +1301,7 @@ when set, but nothing fills it from the routes module yet.
 | 2026-10-06 | feature | SP-234 | Race-day weather: CWA 鄉鎮天氣預報 (F-D0047-089 3 days / -091 1 week) between the mountain forecast and Open-Meteo — nearest 鄉鎮公所 ≤ 20 km, its height from Open-Meteo's elevation API (cached), temperature lapsed −0.65 °C / 100 m to the race elevation, RH kept; page shows the 鄉鎮 and the correction; tests in `test_race_township.py` |
 | 2026-10-06 | feature | SP-249, docs/research/wet-muddy-terrain.md §5 #1 | Rain reminder: /weather returns `rain` rows (CWA PoP, Open-Meteo `precipitation` / `precipitation_probability`), /plan takes them and returns `rain` (trail / 百岳 only; any hour PoP ≥ 50 % or ≥ 5 mm over the race window); the page shows 「預報有雨…」; the time is unchanged; tests in `test_race_rain.py` |
 | 2026-10-06 | feature | owner decisions on SP-234 / SP-249 | Chain reordered: 登山 → Open-Meteo → 鄉鎮 (fallback) → climatology → manual until a station comparison exists; the rain reminder also on road plans (own wording), and without a start time it looks at 06–18 only |
+| 2026-10-07 | feature | SP-251, docs/research/cold-environment.md §4.2 單 1 | Wind chill: /weather returns `wind` rows (Open-Meteo wind / gusts / apparent temperature; CWA mountain 3-day 風速 m/s), /plan returns `cold_wind` (NWS wind chill per segment at its clock and height; ≤ −10 °C or gusts ≥ 50 km/h; ≤ −28 °C frostbite wording) and the merged `attention` line in the rain box (SP-305); road / trail / 百岳; time unchanged; tests in `test_race_cold_wind.py` |
+| 2026-10-07 | feature | SP-253, docs/research/cold-environment.md §4.2 單 3 | 失溫風險: `hypothermia` on trail / 百岳 (lowest temperature ≤ 5 °C and rain reminder or wind chill ≤ −5 °C, 推估) adds the carry list to the same attention line; no probability; tests in `test_race_hypothermia.py` |
+| 2026-10-07 | feature | SP-254, docs/research/night-and-sleep.md §4.2 單 1 | Night: /weather `sun` (Open-Meteo daily, else NOAA), segments `night` / `dark_share`, 夜間 column and chart shading, optional night slowdown 0 / 5 / 10 / 15 % on the dark part only (default 0 %, exact regression at 0), the trail card's cutoff follows a saved slowdown; headlamp / warmth merged into the attention line on trail / 百岳; tests in `test_race_night.py` |
 | 2026-10-06 | user-decision | SP-265 follow-up | Observed HRmax (5K / 10K maximal check) looks back 730 days (`MAXIMAL["hrmax_window_days"]`, 推估: maximal efforts are rare, HRmax falls only ~0.7 bpm / yr — Tanaka 2001), via `maximal.hrmax_as_of`; the Riegel / longer-power / capacity windows stay 365 days. The per-run peak is on the shared HR cleaning (`run_hrmax_peak`, SP-265). Owner data at 2026-10-05: 188 bpm with 730 days (old and new cleaning alike) vs 182 with 365 days; over 25 monthly dates 730 d is 1–6 bpm above 365 d |

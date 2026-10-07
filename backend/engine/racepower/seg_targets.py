@@ -201,6 +201,7 @@ def chart_rows(plan: dict, *, aet: Optional[float] = None, lthr: Optional[float]
             "t": s.get("t"), "cum_s": s.get("cum_s"), "eta": s.get("eta"),
             "temp_c": s.get("temp_c"), "fuel": fuel_summary(plan, s), "badge": tg.get("badge") or s.get("badge"),
             "pole_hint": pole_hint(s, k, kind) if poles else None,
+            "night": s.get("night"),             # SP-254: run in the dark (None without a start time / sun)
         })
     return out
 

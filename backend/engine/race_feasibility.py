@@ -938,6 +938,26 @@ def calc_effort(inp: dict) -> float:
     return f if (st.get("mode") or "auto") == "auto" and 0.0 < f <= 1.0 else 1.0
 
 
+def calc_night(inp: dict) -> dict:
+    """SP-254: the saved calculator's night slowdown (0 / 5 / 10 / 15 %) with its start time and the
+    saved forecast's sunrise / sunset, as PlanIn fields; {} when the slowdown is 0 or there is no
+    start time (the card then stays exactly as before). Without saved sun rows the plan uses NOAA's
+    formula at the GPX start."""
+    form = inp.get("form") if isinstance(inp.get("form"), dict) else {}
+    try:
+        pct = float(form.get("nightslow") or 0.0)
+    except (TypeError, ValueError):
+        pct = 0.0
+    start = form.get("start") or None
+    if not (0.0 < pct <= 15.0) or not start:
+        return {}
+    out = {"start_time": str(start), "night_slow_pct": pct}
+    wx = inp.get("wx") if isinstance(inp.get("wx"), dict) else {}
+    if isinstance(wx.get("sun"), list) and wx["sun"]:
+        out["sun"] = wx["sun"]
+    return out
+
+
 def trail_finish(e, course: dict, plan_fn: Optional[Callable] = None) -> dict:
     """SP-220: the moving and stop time the race calculator shows for a trail race (one piece) —
     POST /plan's own computation (calc.make_plan on the live athlete) in auto mode with the course
@@ -947,6 +967,7 @@ def trail_finish(e, course: dict, plan_fn: Optional[Callable] = None) -> dict:
     "trail_hr"), else None (→ the old moving time). Stops, as the calculator's 含停留總時間: the
     non-moving prediction (nonmoving.py — the stations' minutes, else your past races' rate, plus the
     short stops) when there is a personal profile; else the stations' minutes; else none.
+    SP-254: a saved night slowdown (with its start time) is passed on, so the cutoff check follows it.
     `plan_fn(body)` = calc.make_plan on the live context (tests)."""
     from backend.engine.racepower import calc as CALC
     t = course["totals"]
@@ -966,7 +987,8 @@ def trail_finish(e, course: dict, plan_fn: Optional[Callable] = None) -> dict:
                CALC.CourseRef(manual={"km": km, "gain": float(t["gain_m"] or 0.0),
                                       "loss": None if course.get("descent_assumed") else float(t["loss_m"] or 0.0)}))
         body = CALC.PlanIn(type="trail", mode="auto", effort_target=eff, date=e.date, distance_km=km,
-                           gain_m=float(t["gain_m"] or 0.0), course=ref, stops=[CALC.StopIn(**s) for s in stops])
+                           gain_m=float(t["gain_m"] or 0.0), course=ref, stops=[CALC.StopIn(**s) for s in stops],
+                           **calc_night(inp))
         s = plan_fn(body).get("summary") or {}
     except Exception:                       # noqa: BLE001 — no CP / RE / course: the old moving time
         return out
