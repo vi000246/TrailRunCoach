@@ -282,6 +282,16 @@ gear, details}`: the outdoor reminders of the race merged into ONE line (SP-305:
 triggered, one gear list), details for the collapsed 「細節」; the page shows it in the same box as the
 rain line under the result heading. Road, trail and 百岳. The predicted time never changes.
 
+Hypothermia (SP-253, cold-environment.md §4.2 單 3): `calc.cold_reminders` also returns
+`plan.hypothermia` = `{alert, min_temp_c, wet, windy, min_wc_c}` (`cold.hypothermia`) on trail and
+百岳 (`null` on road, and without race-day rain or wind rows). The lowest temperature over the points:
+the wind rows' temperature at each midpoint, else the `hourly` rows', moved to the point's height, else
+the segment's plan temperature. Alert when it is ≤ 5 °C AND (`plan.rain.alert` OR the lowest wind chill
+≤ −5 °C) — both thresholds 推估, kept as proposed (owner 2026-10-06; no 強制裝備 checklist for now).
+`cold.attention` then adds 失溫風險 to the same line: 「防水防風外套、保暖層、手套帽子、熱食熱飲；先想好撤退點」
+(merged with 冷風: one head 冷風＋失溫風險, one gear list, the wind chill said once). No probability or
+percentage in the text.
+
 CWA key: `CWA_API_KEY` env var, else `weather.json` in the tenant's shared folder (`weather.key_path()`); the API only returns it
 masked (`backend/engine/racepower/weather.py:93`). With region `intl` (`engine/region.py`) the page
 hides the CWA key, the 百岳 peak lists and presets (百岳 reads 多日登山). Peaks: `backend/data/baiyue.json`
@@ -299,7 +309,7 @@ hides the CWA key, the 百岳 peak lists and presets (百岳 reads 多日登山)
 | POST | `/api/v1/racepower/predict` | v1, unchanged: type, used, env, result, tasks, zones, warnings (百岳 adds biggest_day) (`backend/api/racepower.py:226`, `calc.predict`) |
 | POST | `/api/v1/racepower/course` | multipart `file` (.gpx/.fit) + segmentation options → `course_id` (content sha1; the Track is kept in a 20-entry LRU), totals, segments, profile ≤ 1500 points, climbs, waypoints, warnings; parsed in the thread pool (`backend/api/racepower.py:258`) |
 | POST | `/api/v1/racepower/course/event/{eid}` | the course of the GPX stored with a plan event (`event_gpx`), no re-upload; adds `stop_suggestions` from its waypoints, `day_splits_km`, `gpx`; 404 when the event has none (`backend/api/racepower.py:305`, `calc.event_course`) |
-| POST | `/api/v1/racepower/plan` | `PlanIn` (`backend/engine/racepower/calc.py:145`) = `PredictIn` + mode, targets (time / pace, power W / %CP), course ref (`course_id` or `event_id` + options, or manual), strategy, hills, acclimatisation, locks, start time, aid stations (typed), day splits, terrain, `hourly` (the /weather rows), `hourly_heat` (default true), `rain` (the /weather rain rows, SP-249), `wind` (the /weather wind rows, SP-251 → `cold_wind`, `attention`), `heat_acclimatisation`, 百岳 trip kind / pack per day → summary (incl. `heat`, `strategy`, `trail_hr`, `time_total_s`, `nonmoving`), effort, segments (incl. temp_c / dew_c / rh_pct / heat_pct / heat_clock / heat_src, kcal / cho / water / sodium / fuel action), heat_profile, days (百岳), compare, crosscheck, v1, course_name, `fuel`, `seg_targets`, `chart_rows`, `goal` (time / power modes), `stop_suggestions`, warnings; an unknown `course_id` reloads from `event_id`, else 410 (`backend/api/racepower.py:566`, `calc.make_plan` `backend/engine/racepower/calc.py:492`) |
+| POST | `/api/v1/racepower/plan` | `PlanIn` (`backend/engine/racepower/calc.py:145`) = `PredictIn` + mode, targets (time / pace, power W / %CP), course ref (`course_id` or `event_id` + options, or manual), strategy, hills, acclimatisation, locks, start time, aid stations (typed), day splits, terrain, `hourly` (the /weather rows), `hourly_heat` (default true), `rain` (the /weather rain rows, SP-249), `wind` (the /weather wind rows, SP-251 → `cold_wind`, SP-253 `hypothermia`, `attention`), `heat_acclimatisation`, 百岳 trip kind / pack per day → summary (incl. `heat`, `strategy`, `trail_hr`, `time_total_s`, `nonmoving`), effort, segments (incl. temp_c / dew_c / rh_pct / heat_pct / heat_clock / heat_src, kcal / cho / water / sodium / fuel action), heat_profile, days (百岳), compare, crosscheck, v1, course_name, `fuel`, `seg_targets`, `chart_rows`, `goal` (time / power modes), `stop_suggestions`, warnings; an unknown `course_id` reloads from `event_id`, else 410 (`backend/api/racepower.py:566`, `calc.make_plan` `backend/engine/racepower/calc.py:492`) |
 | GET | `/api/v1/racepower/goal-basis` | the training basis for goals: hr (目標配速) or power (目標功率), from 課表偏好 目標基準 else 使用功率 (`backend/api/racepower.py:553`) |
 | GET | `/api/v1/racepower/grade-model` | gait-aware RE(g) (run / walk bins, walk share, technicality per class and per downhill bin) / v_max(g) / v_h(g), the HR hike-window summary and its basis (`backend/api/racepower.py:353`) |
 | GET | `/api/v1/racepower/cadence-check` | SP-230: the climbing (≥ 3 % windows) cadence histogram of the year's outdoor runs (5-spm bins, disk-cached per activity `racepower_climb_cadence_v1`) against the 130 spm walk line: two groups or one, the valley, whether 130 sits in it, a hint; report only, the line never moves (`backend/engine/racepower/runwalk.py`, page section 爬坡步頻分布) |
