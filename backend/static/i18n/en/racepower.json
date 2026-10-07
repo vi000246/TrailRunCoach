@@ -214,5 +214,8 @@
   "bt.th.moving_h": "Moving hours",
   "bt.th.decay": "Error with decay",
   "bt.th.nodecay": "Error without decay",
-  "bt.th.long_badge": "≥ {h} h"
+  "bt.th.long_badge": "≥ {h} h",
+  "accl.tip": "Unacclimatised: just arrived; aerobic capacity falls about 6.3% per 1000 m (from 300 m). Acclimatised: the more optimistic altitude curve. Partly acclimatised = the midpoint of the two, an estimate (no study has measured partial acclimatisation). For a Taiwan's 100 Peaks (Baiyue) trip with nothing picked: 2 or more nights slept above 2,750 m in the 14 days before the trip (activities, plus the nights up high recorded on the schedule calendar) default to partly acclimatised, otherwise unacclimatised; acclimatised only when you pick it. A route topping out under 3,000 m has no partly acclimatised option.",
+  "accl.default_partial": "Default partly acclimatised: {n} nights above 2,750 m in the 14 days before the trip (estimate)",
+  "accl.default_none": "Default unacclimatised: {n} nights above 2,750 m in the 14 days before the trip (2 or more for partly acclimatised)"
 }
