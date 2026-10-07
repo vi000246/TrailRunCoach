@@ -18,6 +18,7 @@ import statistics
 from dataclasses import asdict, dataclass, field
 from typing import Optional
 
+from backend.engine import data_level as DL
 from backend.engine import load_guard as LG
 from backend.engine.reentry import MIN_BREAK
 from backend.engine.planning import KINDS, PHASES, Plan, goals, phase_on
@@ -201,7 +202,8 @@ class Status:
     def compute(self) -> "Status":
         self.indicators = []
         self.actions = []
-        for fn in (self.i_phase, self.i_fitness, self.i_form, self.i_volume, self.i_intensity,
+        self.data_level = None
+        for fn in (self.i_phase, self.i_level, self.i_fitness, self.i_form, self.i_volume, self.i_intensity,
                    self.i_efficiency, self.i_drift, self.i_gate, self.i_climb, self.i_long, self.i_density,
                    self.i_descent, self.i_strength, self.i_durability, self.i_heat, self.i_testing, self.i_data):
             try:
@@ -289,6 +291,27 @@ class Status:
         return Indicator("phase", "周期", INFO, txt, PHASE_GOAL[p.kind], why,
                          extra={"kind": p.kind, "days_left": left, "next_a": None if not nxt else nxt.name,
                                 "days_to_next_a": g["days_to_next_a"]})
+
+    def i_level(self) -> Optional[Indicator]:
+        """資料等級 (engine/data_level.py, SP-291): the same level the plan and the race feasibility read —
+        shown while the data builds up (等級 0 / 1) with the plan page's line; nothing at 等級 2."""
+        from backend.engine import cold_start as CS
+        from backend.engine import experience as EX
+        from backend.engine import quality_gate as QG
+        rule = QG.z3_rule()
+        lv = self.data_level = DL.level(self.ds, self.today, rule)
+        if lv["level"] == 2:
+            return None
+        exp = EX.load()
+        st = CS.start_level(exp)
+        txt = _("等級 {n}：{label}", n=lv["level"], label=_(DL.LABEL[lv["level"]]))
+        why = _("等級 2（正常）＝連續 {n} 週、每週跑步或健行 ≥ {r} 次，和 3 區的解鎖條件一樣（{tag}）；現在 {k}/{n} 週。"
+                "等級 0 ＝前 {d} 天沒有跑步或健行。排課、賽事可行性和這裡都看同一個等級",
+                n=lv["need"], r=lv["runs"], tag=QG.z3_rule_tag(rule), k=lv["weeks_ok"], d=DL.LEVEL0_DAYS)
+        act = (_("到「設定 → 個人資料 → 跑步經驗」填最近 4 週的量，課表和賽事可行性會照你平常的量算")
+               if lv["survey"] and not EX.answered(exp) else "")
+        return Indicator("level", _("資料等級"), INFO, txt, DL.line(lv, st["source"], st["hours"]) or "", why, act,
+                         _("推估（等級的切法是 app 自訂，數字沿用 3 區的解鎖條件）"), extra=DL.public(lv))
 
     def i_fitness(self) -> Indicator:
         """CTL and its 7-day ramp. The ramp is the guardrail one (engine/load_guard.py):
@@ -1104,6 +1127,8 @@ class Status:
             "actions": [asdict(a) for a in self.actions],
             # engine/zone_events.py suggestion objects (schema in its module doc); never scheduled
             "test_suggestions": list(getattr(self, "test_suggestions", None) or []),
+            # 資料等級 (engine/data_level.py, SP-291): the level the plan and the race feasibility read too
+            "data_level": DL.public(getattr(self, "data_level", None)),
             "counts": {lvl: sum(1 for i in self.indicators if i.level == lvl) for lvl in (GOOD, WATCH, BAD, INFO, NA)},
         }
 

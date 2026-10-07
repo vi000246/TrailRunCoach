@@ -1391,12 +1391,16 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         rp = RE.find(ds, today, blackouts or ())
     except Exception:                       # noqa: BLE001 — the plan must still build
         rp = None
-    # 冷啟動 (engine/cold_start.py, SP-288): the week the data starts and the RAMP_WEEKS after it — the
-    # start level (問卷 or the default) stands for the weeks before the data; None with history
+    # 資料等級 (engine/data_level.py, SP-291): the one level the plan, the feasibility and the status page read
+    from backend.engine import data_level as DL
+    dlv = DL.safe_level(ds, today)
+    # 冷啟動 (engine/cold_start.py, SP-288): the week the data starts and the ramp after it (資料等級 0 / 1
+    # while the questionnaire stands in) — the start level (問卷 or the default) stands for the weeks
+    # before the data; None with history
     cs = None
-    if kind in ("base", "specific"):
+    if kind in ("base", "specific") and dlv is not None:
         try:
-            cs = CS.week_context(ds, today, reentry=rp)
+            cs = CS.week_context(ds, today, reentry=rp, lv=dlv)
         except Exception:                   # noqa: BLE001 — the plan must still build
             cs = None
     if cs is not None:
@@ -2249,9 +2253,10 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
             if x.kind in ("easy", "long") and not x.done:
                 x.detail = talk_test(x.detail)
 
-    # ---- 冷啟動 (SP-288): what the cold week / the ramp used, and where the questionnaire is
+    # ---- 冷啟動 (SP-288): what the cold week / the ramp used, and where the questionnaire is — the
+    # data level's one line (SP-291), 「心率區間是推估」 when the HR zones are the SP-289 prior
     if cs is not None:
-        notes.append(CS.note(cs, sum(1 for s in sessions if s.kind in RUN_KINDS)))
+        notes.append(CS.note(cs, sum(1 for s in sessions if s.kind in RUN_KINDS), hr_prior=bool(tt.get("lthr_prior"))))
 
     # ---- non-session to-dos from the indicators --------------------------
     for iid in ("data", "testing"):
@@ -2345,6 +2350,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         # from (this week's long run, else its longest easy run). None for a runner with history
         "cold_start": None if cs is None else {
             **cs, "longest_planned": max([float(s.minutes) for s in sessions if s.kind in ("long", "easy")] or [0.0])},
+        # 資料等級 (engine/data_level.py, SP-291): {level 0 / 1 / 2, week, need, weeks_ok, survey, label}
+        "data_level": DL.public(dlv),
         # 轉換期 (SP-73): the pre-race level of the current / next 轉換期, for projection
         "transition_ref": tr_ref,
         # 連續兩天長天 (engine/b2b.py): this week's B2B / post-B2B state, for projection, adapt and the card

@@ -46,6 +46,21 @@ Only advice — nothing here changes the plan or the event. Each check gives a l
   late     < 21 days to the race: late (the fitness window has closed — Koop).
 「over」 comes only from the cutoff / turnaround and 跨級 (SP-112); < 3 weeks is its own 「late」.
 
+資料少的人 (SP-292; docs/research/cold-start.md §3 G4, §4.4, §5 T5) — 資料等級 0 / 1 (engine/data_level.py,
+SP-291, the level the plan and the status page read too):
+  * base_week's hours = max(the 跑步經驗問卷's weekly hours — as the plan reads them, as entered, not
+    discounted, owner 2026-10-06 — while the questionnaire stands in, the actual hours); km / climb
+    stay the actual ones (no guessed pace turns hours into km, §4.4 推估)
+  * no actual distance: the UA weekly / climb ratios say 「還不知道」 and only Koop's weekly hours are
+    judged (ultras); the race's level when nothing can be judged reads 「還不知道」 too
+  * `data_source` labels the card: 「依你填的資料」 (the questionnaire's hours won) / 「資料還少」
+  * 等級 0: at most tight — a cutoff / 跨級 「over」 becomes tight, says why, and the 「先不跑」 /
+    「低一級」 advice is left out (§4.4 推估: a self-reported number shouldn't make anyone give up a race).
+    「late」 (< 3 weeks, the calendar, not the data) stays as it is
+  * a race of ≥ MARATHON_KM with a self-reported week under LOW_WEEK_H: 「這個估法對週跑量少的人偏樂觀」
+    (Vickers & Vertosick 2016 [C2])
+  Level 2 (or no level): exactly as before.
+
 百岳 only (SP-112 items 6–7), never over:
   vam      the climb rate the hardest day needs (its climb ÷ the uphill share of its time — the
            turnaround hours when set, else the predicted hours; the uphill share = the climb's part of
@@ -130,6 +145,21 @@ SRC_KOOP = N_("超馬週時數：Jason Koop——50 km 賽前 6 週起每週 6 �
 MILESTONE_MAX_WEEKS = 104    # 推估: past 2 years (STEP_MONTHS) a +10 %-a-week projection means nothing
 SRC_MILESTONE = N_("里程碑：不給「幾年後」——經驗的研究看的是跑過哪些距離，不是年數（Hoffman 2013：第一場超馬前跑了 3–15 年都有）；"
                    "週量的日期照現在的週量每週 +10 %、每 4 週一週恢復推算，是推估")
+# 資料少的人 (SP-292; cold-start.md §3 G4, §4.4, §5 T5) — 資料等級 0 / 1 (engine/data_level.py, SP-291)
+MARATHON_KM = 42.195         # 「目標是全馬以上」
+LOW_WEEK_H = 3.0             # = cold_start.LTHR_TEST_EXP_HOURS (推估): under it a self-reported week is 「週跑量少」
+UNKNOWN_LABEL = N_("還不知道")
+LABEL_SURVEY = N_("依你填的資料")
+LABEL_FEW = N_("資料還少")
+SRC_SURVEY = N_("依你填的資料：週時數用跑步經驗問卷的每週 {h:.1f} 小時（照原數字用）")
+SRC_FEW = N_("資料還少：週量照你最近 {n} 週的紀錄")
+SRC_NONE = N_("資料還少：最近 {n} 週沒有跑步或健行紀錄，跑步經驗問卷也沒有可用的每週量。"
+              "到「設定 → 個人資料 → 跑步經驗」填最近 4 週的量，就能先估")
+CAP_NOTE = N_("資料還少，最多先判到「有點趕」")
+UNKNOWN_KM = N_("還不知道：還沒有實際的距離和爬升紀錄，週量和比賽最難那天的比例要等有紀錄才算（不拿猜的配速把時數換成公里）")
+UNKNOWN_CLIMB = N_("還不知道：還沒有實際的爬升紀錄")
+OPTIMISTIC = N_("這個估法對週跑量少的人偏樂觀：你填的每週 {h:.1f} 小時不多，全馬以上的距離實際會比估的吃力"
+                "（Vickers & Vertosick 2016：一場成績推全馬，週跑量少的人慢得更多）")
 
 
 def _worse(a: str, b: str) -> str:
@@ -522,22 +552,61 @@ def cutoff_finish(finish: dict, line_h: float, cut: float) -> tuple[float, str, 
 
 
 # ---------------------------------------------------------------------------
+# 資料少的人 (SP-292)
+# ---------------------------------------------------------------------------
+
+def survey_hours(exp: Optional[dict] = None, load: bool = True) -> Optional[float]:
+    """The 跑步經驗問卷's weekly hours as the plan reads them (cold_start.start_level: runs × minutes as
+    entered, not discounted; 「能連續跑 30 分鐘」 → ≥ 1.5 h); None without its volume or for 「還不能連續跑
+    30 分鐘」 (the plan doesn't use that volume either). `exp` None + `load` = the stored answers."""
+    from backend.engine import cold_start as CS
+    from backend.engine import experience as EX
+    try:
+        st = CS.start_level(EX.load() if exp is None and load else exp)
+    except Exception:                       # noqa: BLE001 — no settings: no questionnaire
+        return None
+    return float(st["hours"]) if st["source"] == "survey" else None
+
+
+def data_source(data: dict, survey_h: Optional[float], actual_h: float, base: dict) -> dict:
+    """The card's data-source tag for 資料等級 0 / 1: {level, label, text, survey_hours} — 「依你填的資料」
+    when the questionnaire's hours are the base, else 「資料還少」 (the records, or nothing yet)."""
+    if survey_h and survey_h > actual_h:
+        label, text = _(LABEL_SURVEY), _(SRC_SURVEY, h=survey_h)
+    elif base["km"] <= 0 and base["hours"] <= 0:
+        label, text = _(LABEL_FEW), _(SRC_NONE, n=BASE_WEEKS)
+    else:
+        label, text = _(LABEL_FEW), _(SRC_FEW, n=BASE_WEEKS)
+    if data.get("level") == 0:
+        text += _("（{why}）", why=_(CAP_NOTE))
+    return {"level": data.get("level"), "label": label, "text": text, "survey_hours": survey_h}
+
+
+# ---------------------------------------------------------------------------
 # the verdict
 # ---------------------------------------------------------------------------
 
 def assess(e, line: Optional[dict], today: dt.date, hist: list[dict], summit: Optional[dict] = None,
            best: Optional[dict] = None, climb: Optional[dict] = None, power: Optional[dict] = None,
-           finish: Optional[dict] = None) -> dict:
+           finish: Optional[dict] = None, data: Optional[dict] = None) -> dict:
     """The verdict for event `e` (planning.Event) with its race line (race_refs.race_line) and
     the last weeks (weekly_history). `summit`: summit_eta()'s result for a 百岳 with a summit.
     `best`: best_day_ep of the last STEP_MONTHS months (the 跨級 check; None = not checked).
     百岳 only: `climb` {"rates" (climb_rates), "top_m", "weight"} — the climb-rate reference; `power`
     {"cp", "kg"} with a running power meter — the climb-power check (None = not shown).
     `finish`: trail_finish()'s moving + stop time for the cutoff of a trail race (SP-220); None =
-    the race line's hours, as before."""
+    the race line's hours, as before. `data`: 資料等級 (engine/data_level.level, SP-291) — the level
+    the plan and the status page read too — with `survey_hours` (survey_hours()) while the
+    questionnaire stands in; levels 0 / 1 are judged as the module doc's 資料少的人 (SP-292); None =
+    level 2's (today's) behaviour."""
     out = {"event_id": e.id, "name": e.name, "date": e.date, "priority": e.priority, "kind": e.kind,
            "days": int(e.days or 1),
            "days_to": (e.start - today).days, "checks": [], "suggestions": [], "src": [_(SRC_UA), _(SRC_WEEK)]}
+    from backend.engine import data_level as DL
+    out["data_level"] = DL.public(data)
+    no_data = bool(data) and data.get("level") == 0          # = no run / hike in the 4 weeks of `hist`
+    low = bool(data) and data.get("level") in (0, 1)         # SP-292: 資料等級 0 / 1
+    survey_h = data.get("survey_hours") if low and data.get("survey") else None
     if e.priority == "C":
         out.update(level="ok", label=_(LEVEL_LABEL["ok"]), skipped=_("C 賽當練習，不評估"))
         return out
@@ -546,6 +615,8 @@ def assess(e, line: Optional[dict], today: dt.date, hist: list[dict], summit: Op
 
     def check(cid: str, lv: str, text: str, **kw) -> None:
         nonlocal level
+        if no_data and lv == "over":                         # SP-292: 等級 0 at most tight, and why
+            lv, text, kw["capped"] = "tight", text + _("（{why}）", why=_(CAP_NOTE)), True
         out["checks"].append({"id": cid, "level": lv, "label": _(LEVEL_LABEL[lv]), "text": text, **kw})
         if lv != "unknown":
             level = lv if level == "unknown" else _worse(level, lv)
@@ -560,6 +631,9 @@ def assess(e, line: Optional[dict], today: dt.date, hist: list[dict], summit: Op
     else:
         hd = hardest_day(line)
         base = base_week(hist)
+        actual_h = base["hours"]
+        if survey_h and survey_h > actual_h:
+            base = {**base, "hours": float(survey_h)}        # SP-292: max(questionnaire as entered, actual)
         weeks = weeks_ahead(today, e.start)
         pk = peak_week(base, weeks)
         out["race_day"] = hd
@@ -567,8 +641,29 @@ def assess(e, line: Optional[dict], today: dt.date, hist: list[dict], summit: Op
             out["split_note"] = split_note(line)
         out["base_week"] = {k: round(v, 1) for k, v in base.items()}
         out["peak_week"] = {k: round(v, 1) for k, v in pk.items()}
-        if base["km"] <= 0:
+        if low:
+            out["data_source"] = data_source(data, survey_h, actual_h, base)
+        need = koop_need(line, e)
+
+        def koop() -> None:
+            kr = koop_run(base["hours"], weeks, e.start, need)
+            out["koop"] = {k: round(v, 1) if isinstance(v, float) else v for k, v in kr.items()}
+            out["src"].append(_(SRC_KOOP))
+            txt = _("超馬建議賽前 {w} 週開始，每週練 {h:g} 小時、連續 {n} 週；照推算最多能連續做到 {b} 週（一週最多約 {p:.1f} 小時）",
+                    w=need[3], h=need[1], n=need[2], b=kr["best_run"], p=kr["peak_h"])
+            check("hours", "ok" if kr["best_run"] >= need[2] else "tight", txt)
+        if not low and base["km"] <= 0:
             check("weekly", "unknown", _("最近 {n} 週沒有跑步或健行紀錄，沒辦法推算", n=BASE_WEEKS))
+        elif base["km"] <= 0:
+            # SP-292: no actual distance / climb — the UA ratios are 「還不知道」, only Koop's hours are judged
+            check("weekly", "unknown", _(UNKNOWN_KM), label=_(UNKNOWN_LABEL))
+            if hd["climb_m"] >= CLIMB_MIN_M:
+                check("climb", "unknown", _(UNKNOWN_CLIMB), label=_(UNKNOWN_LABEL))
+            if need and base["hours"] > 0:
+                koop()
+            elif need:
+                check("hours", "unknown", _("還不知道：還沒有每週時數（沒有紀錄，跑步經驗也沒有可用的每週量）"),
+                      label=_(UNKNOWN_LABEL))
         else:
             div = divisor()
             trail = hd["climb_m"] >= CLIMB_MIN_M
@@ -612,14 +707,8 @@ def assess(e, line: Optional[dict], today: dt.date, hist: list[dict], summit: Op
                 check("climb", lv, txt, ratio=round(r_cl, 3), tight_below=CLIMB_TIGHT)
                 if lv == "tight" and days_to >= WINDOW_DAYS:
                     out["suggestions"].append(_("每週多排一些爬坡：長跑挑爬升多的路線"))
-            need = koop_need(line, e)
             if need:
-                kr = koop_run(base["hours"], weeks, e.start, need)
-                out["koop"] = {k: round(v, 1) if isinstance(v, float) else v for k, v in kr.items()}
-                out["src"].append(_(SRC_KOOP))
-                txt = _("超馬建議賽前 {w} 週開始，每週練 {h:g} 小時、連續 {n} 週；照推算最多能連續做到 {b} 週（一週最多約 {p:.1f} 小時）",
-                        w=need[3], h=need[1], n=need[2], b=kr["best_run"], p=kr["peak_h"])
-                check("hours", "ok" if kr["best_run"] >= need[2] else "tight", txt)
+                koop()
         # 跨級 (SP-112): the biggest single day of the last 24 months against the race's hardest day
         if best is not None:
             out["src"].append(_(SRC_STEP))
@@ -647,7 +736,7 @@ def assess(e, line: Optional[dict], today: dt.date, hist: list[dict], summit: Op
                              p=STEP_LONG_SHARE * 100)
             check("step", lv, txt, race_class=ITRA_CLASSES[rc][0], best_class=ITRA_CLASSES[mc][0], up=up,
                   best_ep=round(best["ep"], 1), ep_ratio=None if mult is None else round(mult, 2))
-            if lv == "over":
+            if lv == "over" and not no_data:                 # 等級 0: tight, no 「低一級」 advice (SP-292)
                 out["suggestions"].insert(0, _("先跑一場低一級（{cls}）的比賽，或把這場改成 B／C 賽",
                                                cls=ITRA_CLASSES[max(0, rc - 1)][0]))
                 # SP-284: milestones and a date, never 「N 年後」
@@ -682,7 +771,7 @@ def assess(e, line: Optional[dict], today: dt.date, hist: list[dict], summit: Op
                 if summit.get("assumed_climb"):
                     txt += _("（沒有 GPX，所以假設當天的爬升都在登頂前）")
                 check("cutoff", lv, txt, eta_h=round(eta, 2), cutoff_h=cut)
-                if lv == "over":
+                if lv == "over" and not no_data:
                     out["suggestions"].insert(0, _("預估還沒到山頂就得撤退：這座百岳可能還不適合現在的你。可以換短一點的路線、多排一天，或先不去"))
         elif cut and finish is not None:
             # SP-220: a trail race — the calculator's moving time + the stops against the clock-time cutoff
@@ -690,7 +779,7 @@ def assess(e, line: Optional[dict], today: dt.date, hist: list[dict], summit: Op
             r = fin / cut
             lv = "ok" if r <= CUTOFF_TIGHT else "tight" if r <= 1.0 else "over"
             check("cutoff", lv, txt, finish_h=round(fin, 2), cutoff_h=cut, **kw)
-            if lv == "over":
+            if lv == "over" and not no_data:
                 out["suggestions"].insert(0, _("預估會超過關門時間：建議報短一點的組別，或這場先不跑"))
         elif cut:
             fin = float(line["hours"])
@@ -699,10 +788,13 @@ def assess(e, line: Optional[dict], today: dt.date, hist: list[dict], summit: Op
             check("cutoff", lv, _("照現在的體能，預估 {f:.1f} 小時完賽；關門是 {c:g} 小時",
                                   f=fin, c=cut),
                   finish_h=round(fin, 2), cutoff_h=cut)
-            if lv == "over":
+            if lv == "over" and not no_data:
                 out["suggestions"].insert(0, _("預估會超過關門時間：建議報短一點的組別，或這場先不跑"))
     out["level"] = level
-    out["label"] = _(LEVEL_LABEL[level])
+    # SP-292: little data and nothing judged — 「還不知道」 (the card says what is missing), not 「資料不足」
+    out["label"] = _(UNKNOWN_LABEL) if low and level == "unknown" else _(LEVEL_LABEL[level])
+    if low and survey_h is not None and survey_h < LOW_WEEK_H and float(e.distance_km or 0.0) >= MARATHON_KM:
+        out["optimistic_note"] = _(OPTIMISTIC, h=survey_h)          # Vickers & Vertosick 2016 [C2]
     # one suggestion per text, the hard ones first
     seen, sugg = set(), []
     for s in out["suggestions"]:
@@ -1016,6 +1108,10 @@ def races(plan, ds, today: dt.date, event_id: Optional[str] = None,
     evs = [e for e in evs if e.id == event_id] if event_id else [e for e in evs if e.priority in ("A", "B")]
     hist = weekly_history(ds, today, KOOP_WEEKS)
     acts = activity_rows(ds, today, B2B_WEEKS * 7)
+    from backend.engine import data_level as DL
+    lv = DL.safe_level(ds, today)               # 資料等級 (SP-291): the plan's and the status page's level
+    if lv is not None and lv["level"] < 2 and lv["survey"]:
+        lv = {**lv, "survey_hours": survey_hours()}     # SP-292: the questionnaire stands in, as in the plan
     try:
         best = best_day_ep(activity_rows(ds, today, STEP_MONTHS * 365 // 12))      # 跨級 (SP-112)
     except Exception:                       # noqa: BLE001 — the other checks still run
@@ -1043,7 +1139,7 @@ def races(plan, ds, today: dt.date, event_id: Optional[str] = None,
         climb = power = None
         if e.kind == "baiyue":
             climb, power = baiyue_inputs(plan, ds, today, e) if baiyue is None else baiyue(e)
-        r = assess(e, line, today, hist[-BASE_WEEKS:], summit, best, climb, power, finish=fin)
+        r = assess(e, line, today, hist[-BASE_WEEKS:], summit, best, climb, power, finish=fin, data=lv)
         if sleep_note:
             r["split_note"] = sleep_note
         elif line is not None and RR.hardest_stretch_note(line):
