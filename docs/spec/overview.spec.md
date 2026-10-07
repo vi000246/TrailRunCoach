@@ -211,6 +211,22 @@ B2B weekends, the race calculator (for the 專項期 target) and the 主要訓�
    zone-retest box rows; owner 2026-10-06) — the base phase's hill strides stay, the AeT test keeps
    its rule. The projection reads `cold_start` and applies the same. A runner with history:
    `cold_start` None, nothing changes. Any week < 120 min: long run ≤ 40 % of it, no 60-min floor.
+9. **資料等級** (SP-291, `engine/data_level.py`; docs/research/cold-start.md §4.1): ONE function
+   (`data_level.level(ds, today)`) gives `{level, week, since, need, runs, weeks_ok, survey}`, read
+   on this week's Monday; the week plan (via `cold_start.week_context`), the status page
+   (`Status.i_level`) and the race feasibility read it — no module decides 「not enough data」 on
+   its own. 0 沒有資料 = no run / hike in the 28 days before this Monday; 2 正常 = the Zone 3 gate's
+   consistency path (`quality_gate.z3_consistency` with `z3_rule`, the 進階設定 values — default
+   4 complete weeks with ≥ 3 sessions each, no 7-day gap, a ≥ 21-day break starts over) on the
+   run AND hike days; 1 累積中 = in between. `week` = the week of the current stretch of data
+   (`data_start`). `survey` (the questionnaire's start level stands in, i.e. `cold_start` is set):
+   level 0, and level 1 up to week `need` (the rule's weeks) — level 2 or later weeks never use
+   the questionnaire (a level-1 runner past week `need` is planned on their own records, 推估).
+   The cold / ramp week's note is the level's one line: 「你的資料還在累積（第 n 週／4）：週量依你填
+   的問卷，心率區間是推估」 (「週量從預設的每週 1.5 小時起算」 without the questionnaire's volume after
+   the cold week; 「，心率區間是推估」 only with the SP-289 LTHR prior); the cold week without the
+   questionnaire's volume keeps its 「還沒填跑步經驗」 / 「還不能連續跑 30 分鐘」 note. `data_level`
+   (with its `label`) is in the week plan's output and in `Status.to_dict()`.
 
 **Sessions** (dataclass `Session`, `backend/engine/overview.py:432`; `terrain`, `distance_km`,
 `climb_m` added for the preferences / conversion, `protocol` for tests, `heat`, and the
@@ -1378,6 +1394,12 @@ which one. The response keeps the `coros` field names.
 
 ## Status engine change
 
+- **`i_level`** (SP-291, `backend/engine/status.py`): the 資料等級 card — `data_level.level` (the
+  same level the week plan and the race feasibility read), shown only at level 0 / 1 (info): text
+  「等級 n：累積中」, verdict = the plan page's line (without the HR clause), why = the rule's numbers
+  and 「現在 k/4 週」, action = fill in the 跑步經驗問卷 while it would stand in and isn't answered.
+  Nothing at level 2. The `/status` cache key also carries `experience.stamp()` (the answers word
+  the line).
 - `Status.weekly_hours()` sums moving time (fallback recorded time) instead of recorded
   time (`backend/engine/status.py:181`), so the volume indicators aren't inflated by multi-day
   trips.
@@ -1528,7 +1550,7 @@ which one. The response keeps the `coros` field names.
 
 | Method | Path | Returns |
 |---|---|---|
-| GET | `/api/v1/overview/status` | `Status.to_dict()`: today, phase, goals, headline, indicators, actions, counts (`backend/api/overview.py:83`) |
+| GET | `/api/v1/overview/status` | `Status.to_dict()`: today, phase, goals, headline, indicators, actions, counts, `data_level` (SP-291) (`backend/api/overview.py:83`) |
 | GET | `/api/v1/overview/summary?unit=week\|month\|year&anchor=&n=` | buckets + current detail; n capped 104 / 60 / 12 (`backend/api/overview.py:90`) |
 | GET | `/api/v1/overview/pmc?begin=&end=` | daily tss / ctl / atl / tsb; default the last 180 days (the page asks for 90) (`backend/api/overview.py:100`) |
 | GET | `/api/v1/overview/weekplan` | the generated week plan, with the stored 課表偏好, 不排課日期, accepted B2B weekends and the race calculator (`backend/api/overview.py:111`) |
@@ -1654,6 +1676,7 @@ preference, blackout, auto-replan, accepted-B2B, 主要訓練項目 and HR-profi
 | LSD | the long easy run (kind `long`; label since 2026-10-03, was 長時間) |
 | 輕鬆跑上限 (easy cap) | the easy-run HR ceiling: the 課表心率區間's Z2 top, or a measured AeT |
 | 主要訓練項目 | trail (越野跑) or road (路跑／馬拉松); shapes the template |
+| 資料等級 (data level) | 0 沒有資料 / 1 累積中 / 2 正常 (= the Zone 3 consistency rule), `data_level.level`; the plan, the race feasibility and the status page read the same one (SP-291) |
 | category | Colour group of a workout (路跑 / 越野跑 / 登山健行 / 騎車 / 肌力 / 走路 / 其他) |
 | endurance session | road, trail, hike or bike workout |
 | EP / effort km | km + gain/100 |
@@ -1766,3 +1789,4 @@ deleted / superseded) are returned as reconcile `changes` (`backend/engine/recon
 | 2026-10-06 | feat/cold-start-sp288-290 | docs/research/cold-start.md | SP-289 心率先驗: max HR falls back to 208 − 0.7 × age, LTHR to 0.90 × max HR (only without a test / estimate / watch LTHR; before the first real value), both 推估 and low confidence; easy runs get HR numbers + the talk test; PMC `marks` on the day a real LTHR replaces it; LTHR test suggested from week 5 for new runners (week 2 with ≥ 3 h + a race); unsourced-rules §0.5.5 rewritten |
 | 2026-10-06 | change | SP-302 | The easy run's planned TSS / h (`easy`, `easy_trail`) from genuinely easy runs only (classifier 輕鬆跑 not 中強度跑, or average HR ≤ AeT + 3; no Zone 3 / Zone 5 / test); < 3 → 推估 from the easy cap's IF (cap ÷ LTHR)² × 100 with a note; long run / quality rates unchanged; `easy_tss` in the output; `plan_prefs._easy` and `plan_sessions.tss_rates` read it |
 | 2026-10-06 | change | SP-302 decision | < 3 genuinely easy runs → 推估 IF 0.80 (64 TSS / h) instead of the easy cap's IF; the projection's default path (no 課表偏好) prices easy runs with the same `easy` rate as week_plan |
+| 2026-10-07 | feat/sp291-293-data-level | docs/research/cold-start.md §4.1 | SP-291 資料等級: `data_level.level` (0 no run / hike in 28 days, 2 = the Zone 3 consistency rule on run + hike days, 1 between; week of the data; `survey`) read by the week plan (cold_start), the status page (`i_level` card, `data_level` in `/status`) and the race feasibility; the ramp lasts the rule's weeks; the cold / ramp note is the level's one line (「你的資料還在累積（第 n 週／4）：週量依你填的問卷，心率區間是推估」); plan / status cache keys carry `experience.stamp()` |

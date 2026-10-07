@@ -55,8 +55,10 @@ def _status(ds, today: dt.date) -> Status:
     pmc0 = LG.manual_start()
     # the Zone 3 unlock rule of 進階設定 (engine/advanced_params.py, SP-295): a change re-evaluates the gate
     from backend.engine import advanced_params as AP
+    # the 跑步經驗問卷 (SP-291): the 資料等級 card words its line by the answers
+    from backend.engine import experience as EX
     key = (*_tenancy.ds_key(ds), today, _plan_stamp(), prefs.stamp(), tests, HRP.stamp(),
-           None if pmc0 is None else tuple(sorted(pmc0.items())), AP.z3_rule_stamp())
+           None if pmc0 is None else tuple(sorted(pmc0.items())), AP.z3_rule_stamp(), EX.stamp())
     with _lock:
         hit = _status_cache.get(key)
         if hit is not None:

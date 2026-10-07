@@ -1815,6 +1815,18 @@
     "draft": true,
     "src": "backend/engine/race_feasibility.py:202"
   },
+  "你的資料還在累積（第 {i} 週／{n}）：週量依你填的問卷{hr}": {
+    "draft": false,
+    "src": "backend/engine/data_level.py:39"
+  },
+  "你的資料還在累積（第 {i} 週／{n}）：週量從預設的每週 {h:g} 小時起算{hr}": {
+    "draft": false,
+    "src": "backend/engine/data_level.py:40"
+  },
+  "你的資料還在累積：要連續 {n} 週、每週跑步或健行 ≥ {r} 次（現在 {k}/{n} 週）；週量照你的紀錄{hr}": {
+    "draft": false,
+    "src": "backend/engine/data_level.py:41"
+  },
   "你的越野跑 RE 中位數（{n} 次，effort km = km + 爬升/{div:g}）": {
     "draft": true,
     "src": "backend/engine/racepower/calc.py:300"
@@ -2174,6 +2186,10 @@
   "列為非同等（30/15：每趟 < 2 分，證據方向不一致）": {
     "draft": true,
     "src": "backend/engine/interval_library.py:362"
+  },
+  "到「設定 → 個人資料 → 跑步經驗」填最近 4 週的量，課表和賽事可行性會照你平常的量算": {
+    "draft": false,
+    "src": "backend/engine/status.py:311"
   },
   "刺激 TIS": {
     "draft": false,
@@ -3531,6 +3547,10 @@
     "draft": true,
     "src": "backend/engine/interval_calib.py:177"
   },
+  "推估（等級的切法是 app 自訂，數字沿用 3 區的解鎖條件）": {
+    "draft": false,
+    "src": "backend/engine/status.py:314"
+  },
   "推估（計畫的 85%）": {
     "draft": true,
     "src": "backend/engine/interval_calib.py:184"
@@ -4115,6 +4135,10 @@
     "draft": true,
     "src": "backend/engine/advanced_params.py:62"
   },
+  "正常": {
+    "draft": false,
+    "src": "backend/engine/data_level.py:36"
+  },
   "正面撐或側撐。撐不到 30 秒，代表軀幹還不夠。": {
     "draft": true,
     "src": "backend/engine/strength_moves.py:126"
@@ -4378,6 +4402,10 @@
   "沒有背包資料": {
     "draft": true,
     "src": "backend/engine/race_feasibility.py:212"
+  },
+  "沒有資料": {
+    "draft": false,
+    "src": "backend/engine/data_level.py:36"
   },
   "沒有資料庫": {
     "draft": true,
@@ -4987,6 +5015,14 @@
     "draft": false,
     "src": "backend/engine/plan_match.py:165"
   },
+  "等級 2（正常）＝連續 {n} 週、每週跑步或健行 ≥ {r} 次，和 3 區的解鎖條件一樣（{tag}）；現在 {k}/{n} 週。等級 0 ＝前 {d} 天沒有跑步或健行。排課、賽事可行性和這裡都看同一個等級": {
+    "draft": false,
+    "src": "backend/engine/status.py:308"
+  },
+  "等級 {n}：{label}": {
+    "draft": false,
+    "src": "backend/engine/status.py:307"
+  },
   "算不出": {
     "draft": false,
     "src": "backend/engine/workout_review.py:2707"
@@ -5042,6 +5078,10 @@
   "累": {
     "draft": true,
     "src": "backend/engine/rpe_load.py:55"
+  },
+  "累積中": {
+    "draft": false,
+    "src": "backend/engine/data_level.py:36"
   },
   "累積在接近最大攝氧量的時間，提高最大有氧能力（Daniels；Buchheit & Laursen）": {
     "draft": true,
@@ -5427,13 +5467,9 @@
     "draft": true,
     "src": "backend/engine/workout_review.py:2871"
   },
-  "資料還在累積（第 {i}/{n} 週）：週量的基準取起步量 {h:.1f} 小時和實際紀錄的較大值，每週至少 {runs} 次": {
+  "資料等級": {
     "draft": false,
-    "src": "backend/engine/cold_start.py:57"
-  },
-  "資料還在累積：這週的量照你填的問卷（每週 {h:.1f} 小時，照原數字用），排 {n} 次": {
-    "draft": false,
-    "src": "backend/engine/cold_start.py:56"
+    "src": "backend/engine/status.py:313"
   },
   "資料還在累積：週量 = 基準 {ref:.1f} h 的 +10%（至少 +0.5 h）→ {h:.1f} h": {
     "draft": false,
@@ -6882,6 +6918,10 @@
   "，平路或緩坡、不跑長下坡": {
     "draft": true,
     "src": "backend/engine/overview.py:1968"
+  },
+  "，心率區間是推估": {
+    "draft": false,
+    "src": "backend/engine/data_level.py:42"
   },
   "，恢復多給 {d} 天": {
     "draft": true,
