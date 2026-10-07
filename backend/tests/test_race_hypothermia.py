@@ -85,7 +85,7 @@ def test_merged_with_cold_wind_in_one_line():
 @pytest.mark.parametrize("kind", ["trail", "baiyue"])
 def test_plan_checklist_time_unchanged(client, kind):   # noqa: F811
     cid = _upload(client)["course_id"]
-    body = {"type": kind, "course": {"course_id": cid}, "date": DAY, "start_time": "06:00"}
+    body = {"type": kind, "course": {"course_id": cid}, "date": DAY, "start_time": "09:00"}   # daylight: no SP-254 night line
     rain = [{"start": f"{DAY}T{h:02d}:00", "end": f"{DAY}T{h + 1:02d}:00", "pop_pct": 80, "mm": 0.5} for h in range(23)]
     cold = client.post("/api/v1/racepower/plan", json={**body, "rain": rain, "wind": _rows(2.0, 3.0)}).json()
     warm = client.post("/api/v1/racepower/plan", json={**body, "rain": rain, "wind": _rows(12.0, 3.0)}).json()

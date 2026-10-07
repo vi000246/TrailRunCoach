@@ -185,7 +185,7 @@ def test_cwa_wind_speed_in_metres_per_second():
 @pytest.mark.parametrize("kind", ["road", "trail", "baiyue"])
 def test_plan_reminder_without_changing_the_time(client, kind):   # noqa: F811
     cid = _upload(client)["course_id"]
-    body = {"type": kind, "course": {"course_id": cid}, "date": DAY, "start_time": "06:00"}
+    body = {"type": kind, "course": {"course_id": cid}, "date": DAY, "start_time": "09:00"}   # daylight: no SP-254 night line
     cold = client.post("/api/v1/racepower/plan", json={**body, "wind": _rows(-8.0, 40.0)}).json()
     calm = client.post("/api/v1/racepower/plan", json={**body, "wind": _rows(5.0, 10.0)}).json()
     none = client.post("/api/v1/racepower/plan", json=body).json()

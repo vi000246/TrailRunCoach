@@ -319,16 +319,28 @@ def _range_text(r: dict) -> str:
     return _("{where}{what}", where=_where(r), what=_("、").join(bits))
 
 
-def attention(cold: Optional[dict] = None, hypo: Optional[dict] = None) -> Optional[dict]:
+def attention(cold: Optional[dict] = None, hypo: Optional[dict] = None, night: Optional[dict] = None) -> Optional[dict]:
     """The outdoor reminders of one plan merged into one line: {kinds, line, gear, details} —
-    one head per reminder (冷風＋失溫風險), one gear list without repeats. None when nothing is
-    triggered."""
+    one head per reminder (夜間＋冷風＋失溫風險), one gear list without repeats. `night` =
+    night.hint() (trail / 百岳 plans with night segments, SP-254). None when nothing is triggered."""
     kinds, heads, wheres, gear, details = [], [], [], [], []
 
     def add_gear(*items):
         for g in items:
             if g not in gear:
                 gear.append(g)
+    if night and night.get("n"):
+        from backend.engine.racepower import night as NI
+        kinds.append("night")
+        heads.append(_("夜間"))
+        rs = night["ranges"]
+        wheres.append(NI.where(rs[0]) + (_("（共 {n} 處）", n=len(rs)) if len(rs) > 1 else ""))
+        add_gear(_("頭燈（備用電池）"), _("保暖層"))
+        details += [_("夜間：") + NI.where(r) for r in rs]
+        if night.get("applied"):
+            details.append(_("夜間減速 {p:g} %（推估）：天黑的部分時間拉長，共多 {m:.0f} 分鐘", p=night["slow_pct"],
+                             m=night["added_s"] / 60.0))
+        details.append(_("沒有研究拆出天黑本身慢多少；Brager 2020 的 35.9 % 含疲勞"))
     if cold and cold.get("alert"):
         kinds.append("cold_wind")
         heads.append(_("冷風"))
