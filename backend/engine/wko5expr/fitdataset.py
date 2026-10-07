@@ -74,6 +74,11 @@ F_DESCENDING, F_WORK, F_VAM = 4225, 4218, 4224
 # a full-history load to ~one estimate per month; the thresholds.estimate
 # windows (90 / 180 days) are much longer, so a finer grid changes little.
 ESTIMATE_STEP_DAYS = 30
+# SP-320 ⑥: what one grid day's estimate can read — thresholds.WINDOWS[-1] (180 d of runs),
+# each run's cp_as_of looking back racepower.athlete.CP_ASOF_BACK_DAYS (30 d) to a PD refit
+# on a CP_WINDOW_DAYS (90 d) window; +5 d margin. A test pins it to those constants.
+ESTIMATE_LOOKBACK_DAYS = 180 + 30 + 90 + 5
+ESTIMATE_GRID_V = 1                  # bump to drop every grid-day entry
 # 推估: fewest Stryd runs in the 90-day window for a chart CP fit. On one
 # runner's data the first Stryd window (one run) fitted ~30 % below the
 # next window (11 runs) on; a single run's
@@ -877,17 +882,35 @@ class FitFolderDataset(Dataset):
         for memo in (A._cp_memo, A._est_memo):
             for k in [k for k in memo if k[0] == id(self)]:
                 del memo[k]
-        first = runs[0].entry.start.date() + dt.timedelta(days=ESTIMATE_STEP_DAYS)
-        end = min(day_to_date(self.today), runs[-1].entry.start.date())
+        first, end = self._estimate_grid()
+        # SP-320 ⑥: one disk entry per grid day, keyed on that day's own inputs
+        # (_grid_sig): a sync / a deletion re-estimates only the grid days whose
+        # windows hold the change; set by _estimate_settings_memo
+        grid = self._grid_memo
         thr = []
         day = first
         while day <= end:
-            try:
-                est = estimate(self, day, cp_of=lambda d: A.cp_as_of(self, d))
-            except Exception as e:           # noqa: BLE001
-                log.warning("FIT dataset: threshold estimate %s failed (%s)", day, type(e).__name__)
-                est = {}
-            v = (est.get("lthr") or {}).get("value")
+            sig = hit = None
+            if grid is not None:
+                try:
+                    sig = self._grid_sig(day)
+                    hit = grid["old"].get(day.isoformat())
+                except Exception as e:           # noqa: BLE001 — no memo for that day, just estimate
+                    log.warning("FIT dataset: estimate grid key failed (%s)", type(e).__name__)
+                    sig = None
+            if sig is not None and hit is not None and hit[0] == sig:
+                v = hit[1]
+            else:
+                try:
+                    est = estimate(self, day, cp_of=lambda d: A.cp_as_of(self, d))
+                except Exception as e:           # noqa: BLE001
+                    log.warning("FIT dataset: threshold estimate %s failed (%s)", day, type(e).__name__)
+                    est = {}
+                v = (est.get("lthr") or {}).get("value")
+                if grid is not None:
+                    grid["computed"] += 1
+            if grid is not None and sig is not None:
+                grid["new"][day.isoformat()] = [sig, v]
             if v:
                 thr.append((day, float(v)))
             day += dt.timedelta(days=ESTIMATE_STEP_DAYS)
@@ -902,13 +925,28 @@ class FitFolderDataset(Dataset):
 
     # ---- the as-of estimates, memoised on disk ------------------------------
     ESTIMATE_MEMO_KEEP = 4
+    _grid_memo: Optional[dict] = None
+    _est_inputs: Optional[tuple] = None
 
-    def _estimate_key(self) -> str:
-        """Everything _estimate_settings reads: the workouts (file stamps,
-        sport, tags, power source / blocking, exclusions), the thresholds and
-        weight before the estimate (plan, DB), the corrections, the engine
-        config, today, and the code of the estimate (thresholds.py, race-power
-        athlete / CP / PD model, mean-max)."""
+    def _estimate_grid(self) -> tuple:
+        """(first, end) grid days of _estimate_settings: from the first run +
+        ESTIMATE_STEP_DAYS to the last run (or today when that is earlier).
+        Moving `today` past the last run changes nothing here."""
+        runs = [w for w in self.workouts if w.sport == "run"]
+        if not runs:
+            return None, None
+        first = runs[0].entry.start.date() + dt.timedelta(days=ESTIMATE_STEP_DAYS)
+        return first, min(day_to_date(self.today), runs[-1].entry.start.date())
+
+    def _estimate_global(self) -> tuple:
+        """(global hash, [(start date, workout row)]) — the inputs of the
+        estimate other than the workouts' dates: the code of the estimate
+        (thresholds.py, race-power athlete / CP / PD model, mean-max), the
+        engine config, the thresholds and weight before the estimate (plan,
+        DB), exclusions, corrections; and one row per workout (file stamp,
+        sport, tags, power source / blocking). Computed once per Dataset."""
+        if self._est_inputs is not None:
+            return self._est_inputs
         import hashlib
         import inspect
         from backend.engine import thresholds
@@ -927,22 +965,75 @@ class FitFolderDataset(Dataset):
                 add(mod.__name__)
         add(inspect.getsource(type(self)._estimate_settings))
         add(inspect.getsource(type(self)._estimate_cp))
-        add((ESTIMATE_STEP_DAYS, CP_FIT_MIN_RUNS))
-        add(day_to_date(self.today).isoformat())
+        add((ESTIMATE_STEP_DAYS, CP_FIT_MIN_RUNS, ESTIMATE_GRID_V))
         add(self.config.to_dict())
         add(self.accept_watch_power)
+        add(sorted(x["file"] for x in self.excluded))
+        add(sorted((k, [(d.isoformat(), v) for d, v in vals]) for k, vals in self.athlete.settings.items()))
+        add(repr(self.plan))                     # a dataclass: events, phases, thresholds, weights, profile
+        add([(c.file, c.channel, c.t_start, c.t_end) for c in (self.corrections.items if self.corrections else [])])
+        rows = []
         for w in self.workouts:
             try:
                 st = stamp_of(self.dir / w.entry.file)
             except OSError:
                 st = None
-            add((w.entry.file, st, w.sport, w.sport_type, w.tags, w.entry.start.isoformat(),
-                 self._power_src.get(w.idx), w.entry.file in self._power_blocked))
-        add(sorted(x["file"] for x in self.excluded))
-        add(sorted((k, [(d.isoformat(), v) for d, v in vals]) for k, vals in self.athlete.settings.items()))
-        add(repr(self.plan))                     # a dataclass: events, phases, thresholds, weights, profile
-        add([(c.file, c.channel, c.t_start, c.t_end) for c in (self.corrections.items if self.corrections else [])])
-        return m.hexdigest()
+            rows.append((w.entry.start.date(),
+                         (w.entry.file, st, w.sport, w.sport_type, w.tags, w.entry.start.isoformat(),
+                          self._power_src.get(w.idx), w.entry.file in self._power_blocked)))
+        rows.sort(key=lambda r: r[0])
+        self._est_inputs = (m.hexdigest(), rows)
+        return self._est_inputs
+
+    def _estimate_key(self) -> str:
+        """Everything _estimate_settings reads (_estimate_global, every
+        workout) and the grid's last day — not today (SP-320 ⑥): a new day
+        without a new run hits."""
+        import hashlib
+        g, rows = self._estimate_global()
+        first, end = self._estimate_grid()
+        return hashlib.sha1(repr((g, None if first is None else (first.isoformat(), end.isoformat()),
+                                  [r for _, r in rows])).encode("utf-8")).hexdigest()
+
+    def _grid_sig(self, day: dt.date) -> str:
+        """The inputs of one grid day's estimate (thresholds.estimate(day)):
+        the global part, the workouts of the ESTIMATE_LOOKBACK_DAYS up to the
+        day, and the PD refits' extra inputs (PdMemo: the synced FIT files of
+        that span, its settings / code)."""
+        import bisect
+        import hashlib
+        g, rows = self._estimate_global()
+        lo_day = day - dt.timedelta(days=ESTIMATE_LOOKBACK_DAYS)
+        dates = [r[0] for r in rows]
+        # +1 day: entry.start is UTC, a run's local day (w.day) can be the next date
+        lo, hi = bisect.bisect_left(dates, lo_day), bisect.bisect_right(dates, day + dt.timedelta(days=1))
+        pd = self.pd_memo
+        if pd._prep is None:
+            pd._prepare()
+        _days, _rows, files, glob = pd._prep
+        fl = [f for f in files if lo_day <= f[0] <= day + dt.timedelta(days=1)]
+        return hashlib.sha1(repr((g, day.isoformat(), [r for _, r in rows[lo:hi]], fl, glob))
+                            .encode("utf-8")).hexdigest()
+
+    def _grid_load(self) -> dict:
+        import json
+        try:
+            old = json.loads((self._store.home / "estimate_grid.json").read_text("utf-8"))
+        except (OSError, ValueError):
+            old = {}
+        return {"old": old if isinstance(old, dict) else {}, "new": {}, "computed": 0}
+
+    def _grid_save(self, grid: dict) -> None:
+        import json
+        import os
+        path = self._store.home / "estimate_grid.json"
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = path.with_name(f"estimate_grid.{os.getpid()}.{threading.get_ident()}.tmp")
+            tmp.write_text(json.dumps(grid["new"]), "utf-8")
+            os.replace(tmp, path)
+        except (OSError, TypeError, ValueError) as e:
+            log.warning("FIT dataset: could not write the estimate grid memo (%s)", type(e).__name__)
 
     def _estimate_settings_memo(self) -> bool:
         """_estimate_settings, its result (the dated settings / labels it
@@ -971,8 +1062,16 @@ class FitFolderDataset(Dataset):
         before = {k: list(v) for k, v in self.athlete.settings.items()}
         labels = dict(self._setting_labels)
         from backend.engine.wko5expr.dataset import batched_flush
-        with batched_flush(self):            # one estimate() per grid day each flushed every series file
-            ret = self._estimate_settings()
+        self._grid_memo = self._grid_load()
+        try:
+            with batched_flush(self):            # one estimate() per grid day each flushed every series file
+                ret = self._estimate_settings()
+            if self._grid_memo["new"] or self._grid_memo["old"]:
+                self._grid_save(self._grid_memo)
+            log.info("FIT dataset: estimate grid: %d of %d grid days computed",
+                     self._grid_memo["computed"], len(self._grid_memo["new"]))
+        finally:
+            self._grid_memo = None
         self.pd_memo.flush()
         changed = {k: [(d.isoformat(), val) for d, val in v] for k, v in self.athlete.settings.items()
                    if before.get(k) != list(v)}
