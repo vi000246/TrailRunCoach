@@ -2695,6 +2695,14 @@
     "draft": true,
     "src": "backend/engine/race_feasibility.py:50"
   },
+  "失溫風險": {
+    "draft": true,
+    "src": "backend/engine/racepower/cold.py:350"
+  },
+  "失溫：最低約 {t} °C（依各段海拔）。失溫通常是濕、風、累、吃不夠一起來，模型算不出會不會發生，所以只列該帶的東西；門檻 5 °C、風寒 −5 °C 是推估。參考甘肅 2021 越野賽、台灣 2025 年 3 月高山事故與 ACSM 2006 冷傷害預防立場聲明": {
+    "draft": true,
+    "src": "backend/engine/racepower/cold.py:360"
+  },
   "好了": {
     "draft": true,
     "src": "backend/engine/suggestions.py:307"
@@ -3679,6 +3687,14 @@
     "draft": true,
     "src": "backend/engine/drift_agg.py:405"
   },
+  "最低約 {t} °C": {
+    "draft": true,
+    "src": "backend/engine/racepower/cold.py:355"
+  },
+  "最低約 {t} °C，加上{why}": {
+    "draft": true,
+    "src": "backend/engine/racepower/cold.py:354"
+  },
   "最可能錯的是 LTHR": {
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:519"
@@ -4514,6 +4530,10 @@
   "熱適應開始累積的熱指數": {
     "draft": true,
     "src": "backend/engine/advanced_params.py:23"
+  },
+  "熱食熱飲": {
+    "draft": true,
+    "src": "backend/engine/racepower/cold.py:358"
   },
   "熱：每段溫度由天氣點（{z:.0f} m）以每 100 m 0.65 °C 換算到該段海拔，濕度不變（推估）": {
     "draft": false,
@@ -6347,6 +6367,10 @@
     "draft": true,
     "src": "backend/engine/planning.py:303"
   },
+  "防水防風外套": {
+    "draft": true,
+    "src": "backend/engine/racepower/cold.py:356"
+  },
   "防風外套": {
     "draft": true,
     "src": "backend/engine/racepower/cold.py:281"
@@ -6474,6 +6498,10 @@
   "預估還沒到山頂就得撤退：這座百岳可能還不適合現在的你。可以換短一點的路線、多排一天，或先不去": {
     "draft": true,
     "src": "backend/engine/race_feasibility.py:294"
+  },
+  "預報有雨": {
+    "draft": true,
+    "src": "backend/engine/racepower/cold.py:351"
   },
   "預報有雨：下坡和技術路段可能比預估慢，跌倒風險較高；建議用杖、注意鞋底抓地": {
     "draft": true,
@@ -6878,6 +6906,10 @@
   "；傷後往上一級排（推估）": {
     "draft": true,
     "src": "backend/engine/reentry.py:164"
+  },
+  "；先想好撤退點": {
+    "draft": true,
+    "src": "backend/engine/racepower/cold.py:359"
   },
   "；其他溫度另外算（{o}）": {
     "draft": true,

@@ -589,10 +589,10 @@ def make_plan(ctx: Context, body: PlanIn) -> dict:
     from backend.engine.racepower import watch_export as WE
     out["export_block"] = WE.multi_day(out, body.start_time, body.days)
     out["rain"] = rain_reminder(body, out)
-    out["cold_wind"] = cold_reminder(body, out)
+    out["cold_wind"], out["hypothermia"] = cold_reminders(body, out)
     # SP-305: the outdoor reminders of this race merged into one line for the attention box
     from backend.engine.racepower import cold as CD
-    out["attention"] = CD.attention(out["cold_wind"])
+    out["attention"] = CD.attention(out["cold_wind"], out["hypothermia"])
     if course.get("source") == "gpx":
         from backend.engine.racepower import fuel as FU
         out["stop_suggestions"] = FU.stops_from_wpts(course.get("wpts") or [], course["totals"]["km"])
@@ -614,15 +614,20 @@ def rain_reminder(body: PlanIn, out: dict) -> Optional[dict]:
     return WX.rain_alert([r.model_dump() for r in body.rain], win, "road" if body.type == "road" else "trail")
 
 
-def cold_reminder(body: PlanIn, out: dict) -> Optional[dict]:
-    """SP-251: wind chill / gusts at each segment's clock from the /weather `wind` rows
-    (cold.py) on road, trail and 百岳 plans; None without wind data. Display only."""
-    if not body.wind:
-        return None
+def cold_reminders(body: PlanIn, out: dict) -> tuple[Optional[dict], Optional[dict]]:
+    """(cold_wind, hypothermia), cold.py. SP-251: wind chill / gusts at each segment's clock from
+    the /weather `wind` rows on road, trail and 百岳 plans; None without wind data. SP-253: the
+    失溫風險 checklist on trail / 百岳 (lowest temperature ≤ 5 °C and rain or wind chill ≤ −5 °C);
+    None without race-day rain or wind data. Display only — call after rain_reminder."""
+    if not body.wind and out.get("rain") is None:
+        return None, None
     from backend.engine.racepower import cold as CD
     days = len(out.get("days") or []) or body.days or 1
     pts = CD.points(out, body.date, body.start_time, [x.model_dump() for x in body.stops], days)
-    return CD.cold_wind(pts, [r.model_dump() for r in body.wind], body.heat_ref_alt_m, body.date)
+    wind = [r.model_dump() for r in body.wind or []]
+    cw = CD.cold_wind(pts, wind, body.heat_ref_alt_m, body.date) if wind else None
+    hours = [r.model_dump() for r in body.hourly or []]
+    return cw, CD.hypothermia(pts, cw, out.get("rain"), body.type, wind, hours, body.heat_ref_alt_m)
 
 
 def fuel(ctx: Context, body: PlanIn, out: dict) -> dict:

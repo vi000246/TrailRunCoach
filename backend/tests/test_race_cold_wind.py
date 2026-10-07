@@ -190,7 +190,9 @@ def test_plan_reminder_without_changing_the_time(client, kind):   # noqa: F811
     calm = client.post("/api/v1/racepower/plan", json={**body, "wind": _rows(5.0, 10.0)}).json()
     none = client.post("/api/v1/racepower/plan", json=body).json()
     assert cold["cold_wind"]["alert"] is True and cold["cold_wind"]["per_km"] is True
-    assert cold["attention"]["kinds"] == ["cold_wind"] and "風寒" in cold["attention"]["line"]
+    # SP-253: −8 °C with wind chill ≤ −5 °C also lists the 失溫 checklist on trail / 百岳, in the same line
+    assert cold["attention"]["kinds"] == (["cold_wind"] if kind == "road" else ["cold_wind", "hypothermia"])
+    assert "風寒" in cold["attention"]["line"]
     assert calm["cold_wind"]["alert"] is False and calm["attention"] is None
     assert none["cold_wind"] is None and none["attention"] is None
     assert cold["summary"]["time_s"] == calm["summary"]["time_s"] == none["summary"]["time_s"]

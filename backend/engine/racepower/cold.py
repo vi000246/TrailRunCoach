@@ -25,6 +25,17 @@ predicted time never changes (no study gives a cold slowdown to apply).
     chill ≤ −28 °C says 「exposed skin can freeze in 10–30 minutes」 (ECCC).
   * No wind data → None: nothing shown, no error.
 
+Hypothermia (SP-253, cold-environment.md §2.3 / §4.2 單 3): on trail and 百岳
+plans, when the lowest temperature of the race is ≤ 5 °C AND (the SP-249 rain
+reminder is on OR the wind chill somewhere is ≤ −5 °C) — both thresholds 推估,
+kept as proposed (owner 2026-10-06) — the line lists what to carry: a
+waterproof windproof jacket, a warm layer, gloves and a hat, hot food and
+drink, and to know the bail-out points. The trigger (wet + wind + tired +
+underfed, Gansu 2021, Taiwan 2025-03, ACSM 2006) cannot be turned into a
+probability, so the text has none. No race-day rain or wind data → None.
+The lowest temperature: each point's forecast temperature at its own height
+(the wind rows, else the hourly rows), else the segment's plan temperature.
+
 SP-305 (docs/research/ui-hint-audit.md): the page shows this as ONE line in
 the result's attention box, merged with the other outdoor reminders of the
 same race (attention()), the details in a collapsed section.
@@ -41,6 +52,8 @@ WC_MIN_WIND_KMH = 4.8             # … and wind > 3 mph
 WC_ALERT_C = -10.0                # ECCC −10 to −27: risk if outdoors for long periods (owner 2026-10-06)
 WC_FROSTBITE_C = -28.0            # ECCC −28 to −39: exposed skin can freeze in 10–30 minutes
 GUST_ALERT_KMH = 50.0             # ECCC: > 50 km/h speeds frostbite up; applied to gusts (推估, ticket SP-251)
+HYPO_TEMP_C = 5.0                 # 推估 (SP-253, owner 2026-10-06): the lowest temperature of the race …
+HYPO_WC_C = -5.0                  # … and wind chill ≤ this (推估), or the rain reminder on
 EDGE_H = 1.5                      # a clock this far past the first / last wind row still takes that row
 LAPSE_C_PER_M = -0.0065
 
@@ -238,6 +251,51 @@ def cold_wind(pts: list[dict], rows: Optional[list[dict]], z_ref: Optional[float
 
 
 # ---------------------------------------------------------------------------
+# 失溫風險 (SP-253)
+# ---------------------------------------------------------------------------
+
+def min_temp(pts: list[dict], wind_rows: Optional[list[dict]] = None, hourly_rows: Optional[list[dict]] = None,
+             z_ref: Optional[float] = None) -> Optional[float]:
+    """The lowest temperature over the points: the forecast's at each midpoint (the wind rows,
+    else the hourly rows) moved to the point's height, else the segment's plan temperature."""
+    from backend.engine.racepower import weather as WX
+    hrs = sorted((x for x in (WX._hour_row(r.get("t"), r.get("temp_c"), r.get("rh_pct"), r.get("dew_c"))
+                              for r in hourly_rows or []) if x), key=lambda r: r["t"])
+    out = []
+    for p in pts:
+        when = mid(p)
+        w = wind_at(wind_rows, when) if wind_rows else None
+        t = w.get("temp_c") if w else None
+        if t is None and hrs:
+            h = WX.hourly_at(hrs, when)
+            t = h["temp_c"] if h else None
+        if t is not None and z_ref is not None and p.get("z") is not None:
+            t = t + LAPSE_C_PER_M * (float(p["z"]) - float(z_ref))
+        if t is None:
+            t = p.get("temp_c")
+        if t is not None:
+            out.append(float(t))
+    return min(out) if out else None
+
+
+def hypothermia(pts: list[dict], cold: Optional[dict], rain: Optional[dict], kind: str,
+                wind_rows: Optional[list[dict]] = None, hourly_rows: Optional[list[dict]] = None,
+                z_ref: Optional[float] = None) -> Optional[dict]:
+    """The SP-253 check on a trail / 百岳 plan: {alert, min_temp_c, wet, windy, min_wc_c}. None on
+    road, without race-day rain or wind data, or without any temperature."""
+    if kind not in ("trail", "baiyue") or (rain is None and cold is None):
+        return None
+    t = min_temp(pts, wind_rows, hourly_rows, z_ref)
+    if t is None:
+        return None
+    wet = bool(rain and rain.get("alert"))
+    wc = (cold or {}).get("min_wc_c")
+    windy = wc is not None and wc <= HYPO_WC_C
+    return {"alert": t <= HYPO_TEMP_C and (wet or windy), "min_temp_c": t, "wet": wet, "windy": windy,
+            "min_wc_c": wc}
+
+
+# ---------------------------------------------------------------------------
 # one line for the page (SP-305: merged, details collapsed)
 # ---------------------------------------------------------------------------
 
@@ -261,9 +319,10 @@ def _range_text(r: dict) -> str:
     return _("{where}{what}", where=_where(r), what=_("、").join(bits))
 
 
-def attention(cold: Optional[dict] = None) -> Optional[dict]:
-    """The outdoor reminders of one plan merged into one line: {kinds, line, gear, details}.
-    None when nothing is triggered."""
+def attention(cold: Optional[dict] = None, hypo: Optional[dict] = None) -> Optional[dict]:
+    """The outdoor reminders of one plan merged into one line: {kinds, line, gear, details} —
+    one head per reminder (冷風＋失溫風險), one gear list without repeats. None when nothing is
+    triggered."""
     kinds, heads, wheres, gear, details = [], [], [], [], []
 
     def add_gear(*items):
@@ -285,8 +344,25 @@ def attention(cold: Optional[dict] = None) -> Optional[dict]:
         details.append(_("風寒用美國國家氣象局的公式，只在氣溫 ≤ 10 °C、風速 > 4.8 km/h 時算；"
                          "≤ −10 °C 是加拿大環境部「長時間在外有失溫和凍傷風險」那一級，≤ −28 °C 外露皮膚 10–30 分鐘可能凍傷；"
                          "陣風 ≥ 50 km/h 也提醒（推估）。氣溫依各段海拔換算。只是提醒，預估時間不變"))
+    tail = ""
+    if hypo and hypo.get("alert"):
+        kinds.append("hypothermia")
+        heads.append(_("失溫風險"))
+        why = [_("預報有雨")] if hypo["wet"] else []
+        if hypo["windy"] and "cold_wind" not in kinds:      # the 冷風 part already names the wind chill
+            why.append(_("風寒 {wc} °C", wc=signed(hypo["min_wc_c"])))
+        wheres.append(_("最低約 {t} °C，加上{why}", t=signed(hypo["min_temp_c"]), why=_("、").join(why)) if why
+                      else _("最低約 {t} °C", t=signed(hypo["min_temp_c"])))
+        jacket = _("防水防風外套")
+        gear[:] = [jacket if g == _("防風外套") else g for g in gear]
+        add_gear(jacket, _("保暖層"), _("手套帽子"), _("熱食熱飲"))
+        tail = _("；先想好撤退點")
+        details.append(_("失溫：最低約 {t} °C（依各段海拔）。失溫通常是濕、風、累、吃不夠一起來，"
+                         "模型算不出會不會發生，所以只列該帶的東西；門檻 5 °C、風寒 −5 °C 是推估。"
+                         "參考甘肅 2021 越野賽、台灣 2025 年 3 月高山事故與 ACSM 2006 冷傷害預防立場聲明",
+                         t=signed(hypo["min_temp_c"])))
     if not kinds:
         return None
     line = _("{heads}：{wheres} → 帶{gear}", heads=_("＋").join(heads), wheres=_("；").join(wheres),
-             gear=_("、").join(gear))
+             gear=_("、").join(gear)) + tail
     return {"kinds": kinds, "line": line, "gear": gear, "details": details}
