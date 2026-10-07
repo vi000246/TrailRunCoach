@@ -98,20 +98,13 @@ class MmpCache(Base):
     channel: Mapped[str] = mapped_column(String(30), default="power")
     duration_s: Mapped[int]
     value: Mapped[Optional[float]]
+    # the code version the row was computed with (files/file_service.mmp_version, SP-341); another
+    # one (or NULL: a row from before the column) is stale and recomputed by get_run_ftp
+    version: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     workout: Mapped["WorkoutFile"] = relationship(back_populates="mmp_cache")
 
 
-class PmcCache(Base):
-    __tablename__ = "pmc_cache"
-    __table_args__ = (UniqueConstraint("athlete_id", "date"),)
-    id: Mapped[int] = mapped_column(primary_key=True)
-    athlete_id: Mapped[int] = mapped_column(ForeignKey("athletes.id"))
-    date: Mapped[date] = mapped_column(Date, index=True)
-    ctl: Mapped[Optional[float]]
-    atl: Mapped[Optional[float]]
-    tsb: Mapped[Optional[float]]
-    ramp_rate: Mapped[Optional[float]]
-    tss: Mapped[Optional[float]]
+# pmc_cache: no code read or wrote it; dropped by database._migrate_schema (SP-341)
 
 
 class SyncState(Base):

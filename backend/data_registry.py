@@ -60,6 +60,7 @@ class Table:
     user_fields: tuple = ()       # columns the user edits inside a table of another class
     secret_fields: tuple = ()     # credentials: never in an API response, an export or a sync
     deidentify: tuple = ()        # columns (SP-319)
+    invalidated_by: str = ""      # DERIVED: what makes a row stale
 
 
 @dataclass(frozen=True)
@@ -114,15 +115,24 @@ TABLES: tuple = (
           "the external account's state, server-side bookkeeping",
           deidentify=("day", "title", "program_id", "plan_id", "id_in_plan", "plan_program_id")),
     Table("workout_metrics", DERIVED, "per-activity metrics computed once at import "
-          "(files/file_service._import_one_file); only scripts read them"),
+          "(files/file_service._import_one_file); only scripts read them",
+          invalidated_by="never (computed once per imported file)"),
     Table("mmp_cache", DERIVED, "per-activity power mean-max computed at import; read by "
-          "file_service.get_run_ftp"),
-    Table("pmc_cache", DERIVED, "no code reads or writes it"),
+          "file_service.get_run_ftp",
+          invalidated_by="the row's version vs file_service.mmp_version() (compute_mmp + the FIT read, "
+                         "code_hash + MMP_CACHE_V): get_run_ftp recomputes its window's stale rows (SP-341); "
+                         "deleted with the activity row"),
     Table("sync_state", SECRET, "COROS / TP tokens, the sealed 「記住密碼」 passwords (settings/secrets.py), "
           "the accounts' ids and the sync cursors",
           secret_fields=("tp_access_token", "tp_refresh_token", "tp_web_cookie", "coros_access_token",
                          "coros_password_sealed", "tp_password_sealed"),
           deidentify=("coros_email", "coros_user_id", "tp_username", "coros_base_url")),
+)
+
+# tables no code uses any more: db/database._migrate_schema drops them from every tenant DB
+# (DROP TABLE IF EXISTS); unclassified_tables leaves them out until then
+RETIRED_TABLES: tuple = (
+    "pmc_cache",        # SP-341: never read or written (cache-tiering.md §3 B)
 )
 
 # ---------------------------------------------------------------------------
@@ -175,16 +185,18 @@ FILES: tuple = (
     File("cache/render/**", DERIVED, SHARED, "chart render cache, LRU 300 MB (wko5expr/render_cache.py)",
          invalidated_by="data fingerprint + CACHE_VERSION + engine file contents"),
     File("achievements_cache.json", DERIVED, SHARED, "per-activity GPS summaries (engine/achievements.py)",
-         deidentify=("footprint cells (GPS)", "days (dates)"),
-         invalidated_by="file stamp + ALGO_VERSION + peak count"),
+         deidentify=("footprint cells (GPS)", "days (dates)", "paths of the activity files"),
+         invalidated_by="file stamp + ALGO_VERSION + peak count; an entry whose file is gone is dropped, "
+                        "written atomically (SP-341)"),
     File("channel_peaks.json", DERIVED, SHARED, "per-activity channel peaks (wko5expr/dataset.py)",
-         invalidated_by="file stamp + corrections"),
+         invalidated_by="file stamp + corrections; the file's code version dataset.per_workout_code "
+                        "(code_hash + PER_WORKOUT_V + the FIT parse version, SP-341)"),
     File("workout_curves.json", DERIVED, SHARED, "per-activity mean-max curves (wko5expr/dataset.py)",
-         invalidated_by="file stamp + corrections"),
+         invalidated_by="file stamp + corrections; the file's code version dataset.per_workout_code (SP-341)"),
     File("power_source_v1.json", DERIVED, SHARED, "WKO5 .wko4 power source (wko5expr/dataset.py)",
-         invalidated_by="file stamp; the _v1 in the name"),
+         invalidated_by="file stamp; the file's code version dataset.per_workout_code (SP-341)"),
     File("bad_activity_v1.json", DERIVED, SHARED, "WKO5 .wko4 bad-file features (wko5expr/dataset.py)",
-         invalidated_by="file stamp + corrections; the _v1 in the name"),
+         invalidated_by="file stamp + corrections; the file's code version dataset.per_workout_code (SP-341)"),
     File("series_*.json", DERIVED, SHARED, "WKO5 dataset per-activity values (wko5expr/dataset.py "
          "cached_series)", invalidated_by="file stamp + corrections + the day's thresholds; _vN in the key"),
     File("tp_tss.json", DERIVED, SHARED, "WKO5 TSS synced from TP, per .wko4 (wko5expr/dataset.py)",
@@ -196,9 +208,11 @@ FILES: tuple = (
     File("racepower_cptests.json", DERIVED, SHARED, "CP tests found in the FIT files (racepower/cptest.py)",
          invalidated_by="file stamp + _KEY_VERSION"),
     File("racepower_power_source.json", DERIVED, SHARED, "power source per FIT file (racepower/cptest.py)",
-         invalidated_by="file stamp"),
+         invalidated_by="file stamp; the file's code version cptest.power_cache_code (fitcache parse + power "
+                        "versions + FILE_CACHE_V, SP-341)"),
     File("racepower_bad_activity.json", DERIVED, SHARED, "bad-file features per FIT file "
-         "(racepower/cptest.py)", invalidated_by="file stamp"),
+         "(racepower/cptest.py)", invalidated_by="file stamp; the file's code version cptest.bad_cache_code "
+                                                 "(SP-341)"),
     File("racepower_training_env.json", DERIVED, SHARED, "Open-Meteo averages of the training runs' weather "
          "(racepower/athlete.py)", invalidated_by="its stamp; refetched"),
     File("racepower_backtest.json", DERIVED, SHARED, "the last race-power back-test (racepower/backtest.py)",
@@ -285,7 +299,7 @@ def unclassified_tables(con: sqlite3.Connection) -> list[str]:
     """The tables of a DB without an entry in TABLES."""
     names = [r[0] for r in con.execute(
         "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")]
-    return [n for n in names if n not in _BY_TABLE]
+    return [n for n in names if n not in _BY_TABLE and n not in RETIRED_TABLES]
 
 
 def unclassified_files(folder: Path, skip: Iterable[str] = ()) -> list[str]:
