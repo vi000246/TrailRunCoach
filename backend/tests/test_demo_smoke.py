@@ -121,3 +121,25 @@ def test_the_three_demo_flows(demo):
     assert r.status_code < 500, r.text
     # sync / push stay off
     assert c.post("/api/v1/overview/plan/push-coros", headers=h).status_code == 403
+
+
+def test_every_tenant_file_and_table_has_a_data_class(built):
+    """SP-311: after the pages above filled the caches, every file of the demo base and of
+    the visitor's sandbox, and every table of their DBs, has an entry in backend/data_registry.py
+    (a new file kind / table without one fails here). A sandbox holds private files only."""
+    import sqlite3
+    from backend import data_registry as R
+    assert R.unclassified_files(built) == []                  # the demo root: base/, sandboxes/, logs/
+    base = built / "base" / (built / "base" / "current").read_text("utf-8").strip()
+    tenants = [base] + sorted(p for p in (built / "sandboxes").glob("*") if p.is_dir())
+    for t in tenants:
+        assert R.unclassified_files(t) == [], t
+        con = sqlite3.connect(f"file:{(t / 'wko5coach.db').as_posix()}?mode=ro", uri=True)
+        try:
+            assert R.unclassified_tables(con) == [], t
+        finally:
+            con.close()
+    for t in tenants[1:]:
+        for p in t.rglob("*"):
+            if p.is_file():
+                assert R.classify(p.relative_to(t).as_posix()).where in (R.ROOT, R.ANYWHERE), p
