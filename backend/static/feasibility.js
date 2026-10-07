@@ -82,7 +82,11 @@
     const out = [`<div class="feas"><div class="feas-h"><b>${esc(r.name)}</b><span class="feas-m">${esc(meta)}</span></div>`];
     if (r.skipped) { out.push(`<div class="feas-m">${esc(r.skipped)}</div></div>`); return out.join(""); }
     const sg = r.suggestions || [], rd = r.readiness, multi = (r.days || 1) > 1;
-    out.push(`<div class="feas-r"><span class="q">${esc(T("feas"))}</span><span class="feas-k">${pill(r.level, r.label)}${nums(r.checks, multi)}</span>`);
+    // SP-292: 資料等級 0 / 1 — the data the verdict stands on (「依你填的資料」／「資料還少」, translated by the engine)
+    const src = r.data_source;
+    out.push(`<div class="feas-r"><span class="q">${esc(T("feas"))}</span><span class="feas-k">${pill(r.level, r.label)}${src ? pill("unknown", src.label) : ""}${nums(r.checks, multi)}</span>`);
+    if (src) out.push(`<span class="feas-a feas-m">${esc(src.text)}</span>`);
+    if (r.optimistic_note) out.push(`<span class="feas-a feas-m">⚠ ${esc(r.optimistic_note)}</span>`);
     if (sg.length) out.push(`<span class="feas-a">→ ${esc(sg[0])}</span>`);
     if (rd) {
       out.push(`<span class="q">${esc(T("ready"))}</span><span class="feas-k">${pill(rd.level, rd.label)}${nums(rd.checks, multi)}</span>`);

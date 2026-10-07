@@ -33,6 +33,7 @@ decisions on the workbook's ambiguities (D1–D10) are in
 | `weather.py` | Key storage, peaks, CWA + Open-Meteo providers, caches | `backend/engine/racepower/weather.py:459` |
 | `athlete.py` | Reads the Dataset and derives every input | `backend/engine/racepower/athlete.py:1013` |
 | `calc.py` | The /predict, /plan, /course/event, /export/csv computations on an athlete `Context` (no FastAPI / DB); `CalcError` → HTTP status | `backend/engine/racepower/calc.py:492` |
+| `race_estimate.py` | No CP yet (SP-293): a 推估 finish time from the shared race results — road Riegel k −0.07, trail effort km × flat easy pace × 0.85 (unsourced-rules §0.5.5) | `backend/engine/racepower/race_estimate.py` |
 | API + page | Endpoints; `LiveContext` (memoised Dataset / DB / file reads) passed to calc.py; the HTML page | `backend/api/racepower.py:169` |
 | `gpx.py` (v2) | GPX 1.0/1.1 / FIT course parsing (stdlib ElementTree), GPX writer | `backend/engine/racepower/gpx.py:57` |
 | `course.py` (v2) | Distance, resample, smoothing, hysteresis gain, Douglas–Peucker, classes, merge | `backend/engine/racepower/course.py:364` |
@@ -210,6 +211,26 @@ records each value and its source ("手動" when overridden).
   course constant → kcal, water 0.7–0.8 × kcal ml, HR cap = AeT, comparison with the biggest
   past day (`backend/engine/racepower/predict.py:175`).
 
+### No CP yet: 用近期比賽成績推估 (SP-293, `race_estimate.py`)
+
+Road and trail need a CP (`calc.predict`: 「沒有 CP：請手動輸入」, 400). `POST /estimate` (same body as
+/plan) answers `{"available": False, "model": True}` whenever a CP is there (typed in, the chosen
+source or the default — `has_cp`, calc.predict's own rule), so with a CP the existing model is always
+used. Without one it reads the ONE shared race list (`race_results.load`, `athlete.race_results`: the
+跑步經驗問卷's row and SP-276's 設定 / confirmed-activity rows; nothing stored twice) and takes the
+newest confirmed road race of the last 365 days:
+- **Road**: Riegel on time, `t = t_race × (d / d_race)^(1/(1+k))`, k = −0.07 (unsourced-rules §0.5.5;
+  `riegel.power_from_prior_distance`'s time ratio, constant RE).
+- **Trail**: §0.5.5 as written — effort km (km + climb/100, ITRA) × flat easy pace × 0.85 (推估); the
+  flat easy pace = the middle of the E pace (`e_pace.of_race`, Daniels VDOT of the same road race).
+  Trail rows in the list are not used. 百岳: not here (no CP needed).
+- `{available, time_s, km, method (riegel / effort_pace), race, title, tile, label 推估, text, note}`;
+  `note` = 「這個估法對週跑量少的人偏樂觀」 for ≥ 42.195 km with a self-reported week < 3 h (the same line as
+  the race feasibility card, SP-292). No usable race: `{available: False, reason}` (where to add one).
+- The page asks it only after /plan failed with 400 on road / trail and shows the estimate (tile +
+  推估 badge + the text); otherwise the error, plus the reason. The feasibility card and the plan's
+  `race_predict` (race_refs.calculator_hours → /predict) are unchanged.
+
 ## Weather
 
 `race_conditions` (`backend/engine/racepower/weather.py:459`) tries, in order, and logs every
@@ -338,6 +359,7 @@ hides the CWA key, the 百岳 peak lists and presets (百岳 reads 多日登山)
 | GET | `/api/v1/racepower/weather?date=&days=&event_id=&peak=&lat=&lon=&elevation=&cwa=` | provider, values, hourly, rain, wind, sun, tried, location, fetched_at (`backend/api/racepower.py:107`) |
 | GET / POST | `/api/v1/racepower/weather/key` | masked key status / save (10–80 chars, no spaces) (`backend/api/racepower.py:151`) |
 | POST | `/api/v1/racepower/predict` | v1, unchanged: type, used, env, result, tasks, zones, warnings (百岳 adds biggest_day) (`backend/api/racepower.py:226`, `calc.predict`) |
+| POST | `/api/v1/racepower/estimate` | SP-293, `PlanIn`: with a CP `{available: false, model: true}`; without, the 推估 finish from the shared race results (road Riegel −0.07, trail §0.5.5) or `{available: false, reason}` (`backend/api/racepower.py`, `race_estimate.estimate`) |
 | POST | `/api/v1/racepower/course` | multipart `file` (.gpx/.fit) + segmentation options → `course_id` (content sha1; the Track is kept in a 20-entry LRU), totals, segments, profile ≤ 1500 points, climbs, waypoints, warnings; parsed in the thread pool (`backend/api/racepower.py:258`) |
 | POST | `/api/v1/racepower/course/event/{eid}` | the course of the GPX stored with a plan event (`event_gpx`), no re-upload; adds `stop_suggestions` from its waypoints, `day_splits_km`, `gpx`; 404 when the event has none (`backend/api/racepower.py:305`, `calc.event_course`) |
 | POST | `/api/v1/racepower/plan` | `PlanIn` (`backend/engine/racepower/calc.py:145`) = `PredictIn` + mode, targets (time / pace, power W / %CP), course ref (`course_id` or `event_id` + options, or manual), strategy, hills, acclimatisation, locks, start time, aid stations (typed), day splits, terrain, `hourly` (the /weather rows), `hourly_heat` (default true), `rain` (the /weather rain rows, SP-249), `wind` (the /weather wind rows, SP-251 → `cold_wind`, SP-253 `hypothermia`, `attention`), `sun` + `night_slow_pct` (SP-254 → `night`, segments' `night` / `dark_share`), `heat_acclimatisation`, 百岳 trip kind / pack per day → summary (incl. `heat`, `strategy`, `trail_hr`, `time_total_s`, `nonmoving`), effort, segments (incl. temp_c / dew_c / rh_pct / heat_pct / heat_clock / heat_src, kcal / cho / water / sodium / fuel action), heat_profile, days (百岳), compare, crosscheck, v1, course_name, `fuel`, `seg_targets`, `chart_rows`, `goal` (time / power modes), `stop_suggestions`, warnings; an unknown `course_id` reloads from `event_id`, else 410 (`backend/api/racepower.py:566`, `calc.make_plan` `backend/engine/racepower/calc.py:492`) |
@@ -1321,3 +1343,4 @@ when set, but nothing fills it from the routes module yet.
 | 2026-10-07 | feature | SP-260, docs/research/altitude-training.md §4.1 | 百岳 capacity model: 「部分」 = midpoint of 已適應 / 未適應 (was read as 未適應); the page's default follows the nights above 2,750 m in the 14 days before the trip (≥ 2 → 部分, 推估; owner 2026-10-06), the user's pick is kept, 部分 hidden for routes under 3,000 m; GET /altitude-acclimatisation |
 | 2026-10-07 | feature | integration of SP-252 / SP-254 / SP-260 | 百岳: 部分適應 (capacity), 積雪 (climbing legs) and the night slowdown (dark share) compose, each once; `summary.snow` follows the night's added time (`night._shift_snow`); the 積雪 line moved into the one attention box; test `test_baiyue_snow_night_accl.py` |
 | 2026-10-07 | fix | SP-341, docs/research/cache-tiering.md §10 ⑩ | `racepower_power_source.json` / `racepower_bad_activity.json` carry a code version (`{"v", "files"}`; the older flat form is recomputed once) and are written atomically; `workout_curves.json` (the `_curve` source) is versioned by `dataset.per_workout_code`; all registered in `backend/data_registry.py` (SP-311) |
+| 2026-10-07 | feature | SP-293, docs/research/cold-start.md §2.1, §4.4, §5 T6 | No CP yet: `POST /estimate` + `race_estimate.py` — the shared race results (`athlete.race_results`, the questionnaire's and SP-276's one list) give a 推估 finish: road Riegel k −0.07, trail §0.5.5 effort km × flat easy pace (E pace middle) × 0.85; with a CP `model: true` (the existing model); the page falls back to it only after /plan's 400 on road / trail; low self-reported week + ≥ marathon → the optimistic line; test `test_race_estimate.py` |

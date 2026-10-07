@@ -851,6 +851,10 @@
     "draft": true,
     "src": "backend/engine/panels/drift_bars.py:32"
   },
+  "{km:g} K {time}（{date}）": {
+    "draft": false,
+    "src": "backend/engine/racepower/race_estimate.py:59"
+  },
   "{km:g} km 內沒有鄉鎮預報點": {
     "draft": true,
     "src": "backend/engine/racepower/weather.py:787"
@@ -1727,6 +1731,10 @@
     "draft": true,
     "src": "backend/engine/quality_gate.py:2005"
   },
+  "也沒有最近一年的路跑成績可以推估：在「設定 → 個人資料 → 跑步經驗」或「設定 → 生理數據 → 比賽成績（E 配速）」填一場最近的路跑成績（距離、時間、日期）": {
+    "draft": false,
+    "src": "backend/engine/racepower/race_estimate.py:46"
+  },
   "乳酸閾值心率（COROS % LTHR 6 區）": {
     "draft": true,
     "src": "backend/engine/hr_profile.py:71"
@@ -1815,9 +1823,25 @@
     "draft": true,
     "src": "backend/engine/race_feasibility.py:202"
   },
+  "你的資料還在累積（第 {i} 週／{n}）：週量依你填的問卷{hr}": {
+    "draft": false,
+    "src": "backend/engine/data_level.py:39"
+  },
+  "你的資料還在累積（第 {i} 週／{n}）：週量從預設的每週 {h:g} 小時起算{hr}": {
+    "draft": false,
+    "src": "backend/engine/data_level.py:40"
+  },
+  "你的資料還在累積：要連續 {n} 週、每週跑步或健行 ≥ {r} 次（現在 {k}/{n} 週）；週量照你的紀錄{hr}": {
+    "draft": false,
+    "src": "backend/engine/data_level.py:41"
+  },
   "你的越野跑 RE 中位數（{n} 次，effort km = km + 爬升/{div:g}）": {
     "draft": true,
     "src": "backend/engine/racepower/calc.py:300"
+  },
+  "你確認的活動": {
+    "draft": false,
+    "src": "backend/engine/racepower/race_estimate.py:40"
   },
   "你自己走的登山日 EP/h 中位數（{n} 天，爬升 ≥ 600 m 的日子權重 3 倍）": {
     "draft": true,
@@ -1866,6 +1890,14 @@
   "來自手錶（COROS 帳號）": {
     "draft": true,
     "src": "backend/engine/hr_profile.py:213"
+  },
+  "依你填的資料": {
+    "draft": false,
+    "src": "backend/engine/race_feasibility.py:152"
+  },
+  "依你填的資料：週時數用跑步經驗問卷的每週 {h:.1f} 小時（照原數字用）": {
+    "draft": false,
+    "src": "backend/engine/race_feasibility.py:154"
   },
   "依你的跑走紀錄校正": {
     "draft": true,
@@ -2174,6 +2206,10 @@
   "列為非同等（30/15：每趟 < 2 分，證據方向不一致）": {
     "draft": true,
     "src": "backend/engine/interval_library.py:362"
+  },
+  "到「設定 → 個人資料 → 跑步經驗」填最近 4 週的量，課表和賽事可行性會照你平常的量算": {
+    "draft": false,
+    "src": "backend/engine/status.py:311"
   },
   "刺激 TIS": {
     "draft": false,
@@ -3531,6 +3567,10 @@
     "draft": true,
     "src": "backend/engine/interval_calib.py:177"
   },
+  "推估（等級的切法是 app 自訂，數字沿用 3 區的解鎖條件）": {
+    "draft": false,
+    "src": "backend/engine/status.py:314"
+  },
   "推估（計畫的 85%）": {
     "draft": true,
     "src": "backend/engine/interval_calib.py:184"
@@ -3895,6 +3935,10 @@
     "draft": true,
     "src": "backend/engine/zone_events.py:491"
   },
+  "最近的路跑成績算不出平路輕鬆配速（Daniels 的公式只適用 1.5 km 到全馬）：越野先沒辦法推估": {
+    "draft": false,
+    "src": "backend/engine/racepower/race_estimate.py:47"
+  },
   "最難的一種：軟墊加閉眼。旁邊要有東西可以扶。": {
     "draft": true,
     "src": "backend/engine/strength_moves.py:156"
@@ -4114,6 +4158,10 @@
   "次／週": {
     "draft": true,
     "src": "backend/engine/advanced_params.py:62"
+  },
+  "正常": {
+    "draft": false,
+    "src": "backend/engine/data_level.py:36"
   },
   "正面撐或側撐。撐不到 30 秒，代表軀幹還不夠。": {
     "draft": true,
@@ -4378,6 +4426,10 @@
   "沒有背包資料": {
     "draft": true,
     "src": "backend/engine/race_feasibility.py:212"
+  },
+  "沒有資料": {
+    "draft": false,
+    "src": "backend/engine/data_level.py:36"
   },
   "沒有資料庫": {
     "draft": true,
@@ -4675,6 +4727,14 @@
     "draft": true,
     "src": "backend/engine/injuries.py:155"
   },
+  "用 {src} {race} 推算：Riegel（k {k:+.2f}，平路配速固定）→ 約 {t}。一場成績推另一個距離大約 ±5–8 %（推估）；有 CP 之後會自動改用賽事計算機的模型": {
+    "draft": false,
+    "src": "backend/engine/racepower/race_estimate.py:41"
+  },
+  "用 {src} {race} 推算：平路輕鬆配速約 {pace} /km（E 配速 {fast}–{slow} 的中間，Daniels VDOT {vdot:.1f}），等效公里 {ekm:.1f}（km + 爬升 ÷ 100）× 配速 × 0.85 → 約 {t}。越野的這個算法是推估；有 CP 之後會自動改用賽事計算機的模型": {
+    "draft": false,
+    "src": "backend/engine/racepower/race_estimate.py:43"
+  },
   "用快走": {
     "draft": false,
     "src": "backend/engine/specific_phase.py:636"
@@ -4770,6 +4830,10 @@
   "百岳心率帶 AeT": {
     "draft": true,
     "src": "backend/engine/racepower/watch_export.py:269"
+  },
+  "百岳用步行模型，不需要 CP": {
+    "draft": false,
+    "src": "backend/engine/racepower/race_estimate.py:48"
   },
   "百岳登山": {
     "draft": true,
@@ -4987,6 +5051,14 @@
     "draft": false,
     "src": "backend/engine/plan_match.py:165"
   },
+  "等級 2（正常）＝連續 {n} 週、每週跑步或健行 ≥ {r} 次，和 3 區的解鎖條件一樣（{tag}）；現在 {k}/{n} 週。等級 0 ＝前 {d} 天沒有跑步或健行。排課、賽事可行性和這裡都看同一個等級": {
+    "draft": false,
+    "src": "backend/engine/status.py:308"
+  },
+  "等級 {n}：{label}": {
+    "draft": false,
+    "src": "backend/engine/status.py:307"
+  },
   "算不出": {
     "draft": false,
     "src": "backend/engine/workout_review.py:2707"
@@ -5042,6 +5114,10 @@
   "累": {
     "draft": true,
     "src": "backend/engine/rpe_load.py:55"
+  },
+  "累積中": {
+    "draft": false,
+    "src": "backend/engine/data_level.py:36"
   },
   "累積在接近最大攝氧量的時間，提高最大有氧能力（Daniels；Buchheit & Laursen）": {
     "draft": true,
@@ -5331,6 +5407,10 @@
     "draft": true,
     "src": "backend/engine/workout_steps.py:1472"
   },
+  "設定裡填的": {
+    "draft": false,
+    "src": "backend/engine/racepower/race_estimate.py:40"
+  },
   "設定頁": {
     "draft": false,
     "src": "backend/api/plan.py:400"
@@ -5427,17 +5507,29 @@
     "draft": true,
     "src": "backend/engine/workout_review.py:2871"
   },
-  "資料還在累積（第 {i}/{n} 週）：週量的基準取起步量 {h:.1f} 小時和實際紀錄的較大值，每週至少 {runs} 次": {
+  "資料等級": {
     "draft": false,
-    "src": "backend/engine/cold_start.py:57"
-  },
-  "資料還在累積：這週的量照你填的問卷（每週 {h:.1f} 小時，照原數字用），排 {n} 次": {
-    "draft": false,
-    "src": "backend/engine/cold_start.py:56"
+    "src": "backend/engine/status.py:313"
   },
   "資料還在累積：週量 = 基準 {ref:.1f} h 的 +10%（至少 +0.5 h）→ {h:.1f} h": {
     "draft": false,
     "src": "backend/engine/overview.py:1358"
+  },
+  "資料還少": {
+    "draft": false,
+    "src": "backend/engine/race_feasibility.py:153"
+  },
+  "資料還少，最多先判到「有點趕」": {
+    "draft": false,
+    "src": "backend/engine/race_feasibility.py:158"
+  },
+  "資料還少：最近 {n} 週沒有跑步或健行紀錄，跑步經驗問卷也沒有可用的每週量。到「設定 → 個人資料 → 跑步經驗」填最近 4 週的量，就能先估": {
+    "draft": false,
+    "src": "backend/engine/race_feasibility.py:156"
+  },
+  "資料還少：週量照你最近 {n} 週的紀錄": {
+    "draft": false,
+    "src": "backend/engine/race_feasibility.py:155"
   },
   "賽事 id 格式不對": {
     "draft": true,
@@ -5678,6 +5770,10 @@
   "跑 {d}": {
     "draft": true,
     "src": "backend/engine/panels/drift_bars.py:49"
+  },
+  "跑步經驗問卷填的": {
+    "draft": false,
+    "src": "backend/engine/racepower/race_estimate.py:40"
   },
   "跑步開頭這段時間裡的停等（紅綠燈、等人）都當暖身，飄移從最後一次停等後才開始算。本人值 = 你路跑前段最後一次停等時間的 p95。": {
     "draft": true,
@@ -5979,6 +6075,10 @@
     "draft": true,
     "src": "backend/engine/injuries.py:94"
   },
+  "這個估法對週跑量少的人偏樂觀：你填的每週 {h:.1f} 小時不多，全馬以上的距離實際會比估的吃力（Vickers & Vertosick 2016：一場成績推全馬，週跑量少的人慢得更多）": {
+    "draft": false,
+    "src": "backend/engine/race_feasibility.py:161"
+  },
   "這個平台": {
     "draft": true,
     "src": "backend/engine/workout_steps.py:1209"
@@ -6203,6 +6303,22 @@
     "draft": true,
     "src": "backend/engine/race_feasibility.py:321"
   },
+  "還不知道": {
+    "draft": false,
+    "src": "backend/engine/race_feasibility.py:151"
+  },
+  "還不知道：還沒有實際的爬升紀錄": {
+    "draft": false,
+    "src": "backend/engine/race_feasibility.py:160"
+  },
+  "還不知道：還沒有實際的距離和爬升紀錄，週量和比賽最難那天的比例要等有紀錄才算（不拿猜的配速把時數換成公里）": {
+    "draft": false,
+    "src": "backend/engine/race_feasibility.py:159"
+  },
+  "還不知道：還沒有每週時數（沒有紀錄，跑步經驗也沒有可用的每週量）": {
+    "draft": false,
+    "src": "backend/engine/race_feasibility.py:665"
+  },
   "還不能連續跑 30 分鐘：app 的自動排課要等你能連續跑 30 分鐘之後才準。這週先照預設排每週 {h:g} 小時、{n} 次輕鬆跑，不排長跑；每次以能完整講一句話的強度為準": {
     "draft": false,
     "src": "backend/engine/cold_start.py:54"
@@ -6234,6 +6350,10 @@
   "還沒有 CP：不判讀間歇、不算 W′（先做一次 CP 測試）": {
     "draft": true,
     "src": "backend/engine/interval_eval.py:487"
+  },
+  "還沒有 CP：先用你的比賽成績推估": {
+    "draft": false,
+    "src": "backend/engine/racepower/race_estimate.py:37"
   },
   "還沒有 TSS：不看 ramp": {
     "draft": true,
@@ -6579,6 +6699,10 @@
     "draft": true,
     "src": "backend/engine/quality_gate.py:1620"
   },
+  "預估完賽": {
+    "draft": false,
+    "src": "backend/engine/racepower/race_estimate.py:38"
+  },
   "預估時間": {
     "draft": true,
     "src": "backend/engine/primary_sport.py:59"
@@ -6882,6 +7006,10 @@
   "，平路或緩坡、不跑長下坡": {
     "draft": true,
     "src": "backend/engine/overview.py:1968"
+  },
+  "，心率區間是推估": {
+    "draft": false,
+    "src": "backend/engine/data_level.py:42"
   },
   "，恢復多給 {d} 天": {
     "draft": true,

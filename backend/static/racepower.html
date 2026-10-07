@@ -1237,9 +1237,30 @@ async function run() {
     saveEvent();
   } catch (e) {
     if (e.status === 410) { COURSE = null; ls.set("course", null); syncForm(); $("results").innerHTML = `<h2>預估結果</h2><div class="err">GPX 路線已過期（伺服器重啟過），請重新上傳。</div>`; return; }
-    $("results").innerHTML = `<h2>預估結果</h2><div class="err">${esc(e.message)}</div>`;
+    let msg = e.message;
+    // SP-293: no CP yet → the finish time from your race results (POST /estimate: road Riegel, trail §0.5.5,
+    // 推估); the server answers model:true when a CP is there, so other errors stay as they are
+    const b = planBody();
+    if (e.status === 400 && b.type !== "baiyue") {
+      try {
+        const est = await post(`${API}/estimate`, b);
+        if (seq !== RUN_SEQ) return;
+        if (est.available) { renderEstimate(est); return; }
+        if (est.reason) msg += "；" + est.reason;
+      } catch (_) { /* the original error stands */ }
+    }
+    $("results").innerHTML = `<h2>預估結果</h2><div class="err">${esc(msg)}</div>`;
     $("fuel-sec").classList.add("hidden");
   }
+}
+// SP-293: the no-CP estimate (engine/racepower/race_estimate.py) — every text comes translated from the engine
+function renderEstimate(est) {
+  let h = `<h2>${esc(T("results"))} <span class="meta">${esc(est.title)}</span></h2><div class="tiles">`;
+  h += tile(`${esc(est.tile)}${badge(est.label)}`, hms(est.time_s), `${f1(est.km)} km`, true);
+  h += `</div><div class="note">${esc(est.text)}</div>`;
+  if (est.note) h += `<div class="note">⚠ ${esc(est.note)}</div>`;
+  $("results").innerHTML = h;
+  $("fuel-sec").classList.add("hidden");
 }
 
 function renderHeatLine() {
