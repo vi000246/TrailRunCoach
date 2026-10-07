@@ -20,6 +20,7 @@ v2 (docs/research/racepower-v2.md §10.2):
 """
 from __future__ import annotations
 
+from backend import tenancy as _tenancy
 import datetime as dt
 import hashlib
 import threading
@@ -67,7 +68,7 @@ def inputs(refresh: bool = False) -> dict:
     from backend.engine.racepower.athlete import derive
     ds = _dataset()
     today = today_local()
-    key = (id(ds), today, _plan_stamp())
+    key = (*_tenancy.ds_key(ds), today, _plan_stamp())
     with _lock:
         hit = _cache.get("inputs")
         if not refresh and hit and hit[0] == key and time.time() - hit[1] < INPUTS_TTL_S:
@@ -319,7 +320,7 @@ def _grade_models() -> dict:
     from backend.engine.racepower import athlete as A
     ds = _dataset()
     today = today_local()
-    key = (id(ds), today)
+    key = (*_tenancy.ds_key(ds), today)
     with _lock:
         hit = _cache.get("grade")
         if hit and hit[0] == key and time.time() - hit[1] < INPUTS_TTL_S:
@@ -376,10 +377,11 @@ def cadence_check():
     from backend.engine.racepower import athlete as A
     from backend.engine.racepower import runwalk as RW
     ds = _dataset()
-    key = (id(ds), today_local())
+    today = today_local()
+    key = (*_tenancy.ds_key(ds), today)
     hit = _cache.get("climb_cadence")
     if not (hit and hit[0] == key):
-        hit = (key, A.climb_cadence_seconds(ds, key[1]))       # the histogram; the texts follow the request's locale
+        hit = (key, A.climb_cadence_seconds(ds, today))       # the histogram; the texts follow the request's locale
         _cache["climb_cadence"] = hit
     secs, n = hit[1]
     return _py({**RW.cadence_check(secs), "n_runs": n})
@@ -403,13 +405,20 @@ def _hrc_test() -> Optional[dict]:
     from backend.engine import heat as HT
     from backend.engine import heat_data as HD
     from backend.engine.racepower import heatacc as HA
-    key = today_local()
+    today = today_local()
+    try:
+        ds = _dataset()
+    except Exception:                       # noqa: BLE001
+        ds = None
+    # SP-320 ④: the tenant and the dataset in the key, not the day alone (a second tenant
+    # read the first one's test; a sync's new activities did not count until tomorrow)
+    key = (*(_tenancy.ds_key(ds) if ds is not None else (_tenancy.current().id, None)), today)
     hit = _cache.get("hrc_test")
     if hit and hit[0] == key:
         return hit[1]
     try:
         acts, _meta = HD.exposures()
-        rows = HT.hr_cost(HD.steady_segments(_dataset(), key, acts))["rows"] if acts else []
+        rows = HT.hr_cost(HD.steady_segments(ds, today, acts))["rows"] if acts else []
         out = HA.hrc_slope_test(rows)
     except Exception:                       # noqa: BLE001
         out = None
@@ -532,7 +541,7 @@ def _trail_hr() -> Optional[dict]:
     from backend.engine import activity_tags as AT
     from backend.engine.racepower import athlete as A
     AT.load()
-    key = (id(_dataset()), today_local(), _plan_stamp(), AT._memo.get("stamp"))
+    key = (*_tenancy.ds_key(_dataset()), today_local(), _plan_stamp(), AT._memo.get("stamp"))
     hit = _cache.get("trail_hr")
     if hit and hit[0] == key:
         return hit[1]
@@ -559,7 +568,7 @@ def _hr_basis() -> Optional[dict]:
     from backend.engine import hr_profile as HP
     try:
         ds, day = _dataset(), today_local()
-        key = (id(ds), day, _plan_stamp(), HP.stamp())
+        key = (*_tenancy.ds_key(ds), day, _plan_stamp(), HP.stamp())
         hit = _cache.get("hr_basis")
         if hit and hit[0] == key:
             return hit[1]

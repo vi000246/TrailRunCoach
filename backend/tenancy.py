@@ -26,7 +26,9 @@ contextvars: start it with `contextvars.copy_context().run` or `with use(t)`.
 """
 from __future__ import annotations
 
+import itertools
 import os
+import threading
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
@@ -129,6 +131,33 @@ def base_of(t: Optional[Tenant] = None) -> Tenant:
     if t.kind == DEMO_SANDBOX:
         return Tenant(id="demo-base", kind=DEMO_BASE, root=t.shared, shared=t.shared, caps=DEMO_CAPS)
     return t
+
+
+_GEN = itertools.count(1)
+_GEN_LOCK = threading.Lock()
+
+
+def generation(ds) -> int:
+    """A number unique to this Dataset object for the life of the process (SP-320 ④).
+    Replaces id(ds) in in-memory cache keys: CPython reuses a freed object's id, so a
+    new Dataset (after a sync, or another tenant's) could match a stale entry."""
+    g = getattr(ds, "_trc_generation", None)
+    if g is None:
+        with _GEN_LOCK:
+            g = getattr(ds, "_trc_generation", None)
+            if g is None:
+                g = next(_GEN)
+                try:
+                    ds._trc_generation = g
+                except AttributeError:          # no instance dict (a test stub): fall back to the id
+                    return id(ds)
+    return g
+
+
+def ds_key(ds) -> tuple:
+    """(tenant id, dataset generation): the head of every in-memory cache key that holds
+    one person's results (SP-320 ④: two tenants never share an entry)."""
+    return (current().id, generation(ds))
 
 
 def private_path(*parts: str) -> Path:
