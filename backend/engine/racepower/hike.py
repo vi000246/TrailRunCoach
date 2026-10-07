@@ -24,6 +24,52 @@ TERRAIN_LABEL = {"normal": "一般", "gravel": "碎石", "bamboo": "箭竹", "of
 MIN_TRIPS = 3
 DEFAULT_MOVING_RATIO = 0.8
 
+# SP-252 積雪 (docs/research/cold-environment.md §2.4, §4.2 單 2): a time multiplier the user picks,
+# 經驗法則 (教練級, no study). 有踏跡 × 1.5: YAMAP STORE 「積雪期はコースタイムの1.5倍」 [C11];
+# 無踏跡 × 2–3: guide 沖本浩一 「トレースがない場合…登りなら無積雪期の2〜3倍」 [C12] — both ends shown.
+# Only the climbing legs (owner 2026-10-06, the guide's 「登り」); descents and flats keep their time.
+# The main time uses the low end; Pandolf's soft-snow η is single-source and not used.
+SNOW = {"trodden": (1.5, 1.5), "untrodden": (2.0, 3.0)}
+CLIMB_CLASSES = ("up", "steep_up")      # course.classify: 上坡 / 陡上 (grade > the flat threshold, 2 %)
+CLIMB_GRADE = 0.02                      # a segment without a class: climbing above +2 % (course.FLAT_PCT)
+# 玉山國家公園雪季措施 [C9]: about mid-December to March, on 主峰線 when 排雲／白木林 has ≥ 5 cm of
+# snow — 單攻 suspended; crampons, ice axe, helmet and snow experience required. Shown only when the
+# user picked 積雪 (owner 2026-10-06), on a 玉山 route; 雪霸 not covered (owner 2026-10-06).
+YUSHAN_SNOW_URL = ("https://www.ysnp.gov.tw/Announcement/C001000?ID=3cbca887-0ab0-4382-8d12-5eb7250c7936"
+                   "&PageIndex=1&PageType=1")
+
+
+def snow_range(key: Optional[str]) -> Optional[tuple[float, float]]:
+    """(low, high) climbing-time multiplier of a 積雪 choice; None for 無 / unknown."""
+    return SNOW.get(key or "")
+
+
+def is_climb(seg: dict) -> bool:
+    cls = seg.get("cls")
+    if cls:
+        return cls in CLIMB_CLASSES
+    return (seg.get("grade") or 0.0) > CLIMB_GRADE
+
+
+def climb_time_share(km: float, gain_m: float, loss_m: Optional[float] = None) -> float:
+    """The share of the walking time spent climbing on a course known only by its totals:
+    tobler_eph's two-segment split (up part ∝ gain, both at the mean grade) — 推估."""
+    from backend.engine.racepower.grade_model import tobler_kmh
+    loss_m = gain_m if loss_m is None else loss_m
+    if km <= 0 or gain_m <= 0:
+        return 0.0
+    g = (gain_m + loss_m) / (km * 1000.0)
+    d_up = km * gain_m / (gain_m + loss_m)
+    t_up = d_up / tobler_kmh(g)
+    t_down = (km - d_up) / tobler_kmh(-g)
+    return t_up / (t_up + t_down)
+
+
+def is_yushan(name: Optional[str]) -> bool:
+    """A 玉山 主峰線 route by its peak / course / event name (玉山、玉山主峰、北峰、東峰…; not 南玉山)."""
+    n = (name or "").strip()
+    return "玉山" in n and "南玉山" not in n
+
 
 def pandolf(weight: float, load: float, v: float, grade_pct: float, eta: float = 1.0) -> float:
     """F12 Pandolf, Givoni & Goldman 1977 (J Appl Physiol 43:577–581):
