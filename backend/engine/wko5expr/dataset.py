@@ -782,8 +782,11 @@ class Dataset:
                  if same_file(c.file, file) and (channel is None or c.channel == channel)]
         return ";".join(sorted(f"{r.channel}:{r.t_start}-{r.t_end}" for r in rules))
 
-    def cached_series(self, key: str, w: Workout, compute):
+    def cached_series(self, key: str, w: Workout, compute, extra=None):
         """One disk-memoised derived value per workout, computed on demand.
+        `extra` (JSON-able): more inputs of the value beyond the file, its
+        corrections and the day's settings (e.g. the other workouts of a
+        window, SP-320 ②); a different `extra` recomputes.
 
         Unlike `_cached_per_workout` this does not walk every workout, so an
         expensive series (a mean-max curve over a derived channel) only costs
@@ -804,14 +807,17 @@ class Dataset:
         # Thresholds are inputs too (zones, IF): a changed LTHR / AeT test must
         # not serve values computed with the old one.
         stamp = _file_stamp(p) + [self._corr_sig(w.entry.file), self._settings_sig(w)]
+        if extra is not None:
+            stamp.append(extra)
+        n = len(stamp)
         with self._series_lock:
             hit = store.get(w.entry.file)
-        if not hit or hit[:4] != stamp:
+        if not hit or len(hit) != n + 1 or hit[:n] != stamp:
             hit = stamp + [compute()]
             with self._series_lock:
                 store[w.entry.file] = hit
                 self._series_dirty.add(key)
-        return hit[4]
+        return hit[n]
 
     def _settings_sig(self, w: Workout) -> str:
         vals = [self.sport_setting(k, w) for k in ("thr", "mhr", "ftp", "tpace")] + \

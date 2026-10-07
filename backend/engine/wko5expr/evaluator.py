@@ -258,6 +258,13 @@ BUILTIN_EXPRS = {
 }
 # Built-ins that are evaluated once per workout (they need the workout's samples).
 PER_WORKOUT_BUILTINS = {"tisaerobic", "tisanaerobic"}
+# SP-320 ②: their per-workout values are kept on disk (Dataset.cached_series), keyed on the
+# workout, the workouts of the window their FTP / FRC fit reads (@lookback:=90 in
+# BUILTIN_EXPRS, +1 day margin) and the code that evaluates them; a new Dataset object (a
+# sync, a restart) no longer recomputes ~800 of them (2 s local / ~17 s NAS per chart)
+BUILTIN_DISK_LOOKBACK_DAYS = 91
+BUILTIN_DISK_V = 1                 # bump when a change is not seen by engine/codehash.py
+_BUILTIN_CODE: dict = {}
 # Identifiers the evaluator resolves itself (besides channels / metrics / settings).
 BUILTIN_IDENTS = (set(CONSTANTS) | set(TEXT_FIELDS) | set(BUILTIN_EXPRS) | set(CHANNEL_EXPRS)
                   | {"begintime", "endtime", "rngp"})
@@ -882,14 +889,72 @@ class Evaluator:
     def _builtin_workout(self, name, node, ctx, w: Workout):
         memo = self.ds.memo.setdefault(("builtin", name), {})
         if w.idx not in memo:
-            if not self._has_channel(w, "power"):
-                memo[w.idx] = math.nan            # count(ewma(power)) = 0 -> na
-            else:
+            def compute():
+                if not self._has_channel(w, "power"):
+                    return math.nan               # count(ewma(power)) = 0 -> na
                 try:
-                    memo[w.idx] = _num(self.ev(node, ctx.child(vars={})))
+                    return _num(self.ev(node, ctx.child(vars={})))
                 except EvalError:
-                    memo[w.idx] = math.nan
+                    return math.nan
+            cached_series = getattr(self.ds, "cached_series", None)
+            extra = None
+            if cached_series is not None and name in PER_WORKOUT_BUILTINS:
+                try:
+                    extra = self._builtin_window_sig(w)
+                except Exception:                 # noqa: BLE001 — no disk memo, just compute
+                    extra = None
+            if extra is not None:
+                hit = cached_series(f"builtin:{name}:{self._builtin_code(name, node)}", w,
+                                    lambda: _json_num(compute()), extra=extra)
+                memo[w.idx] = math.nan if hit is None else float(hit)
+            else:
+                memo[w.idx] = compute()
         return memo[w.idx]
+
+    def _builtin_code(self, name, node) -> str:
+        """The expression and the evaluator code it reaches (each fn_<call> it uses,
+        the ev_* dispatch) — engine/codehash.py."""
+        hit = _BUILTIN_CODE.get(name)
+        if hit is None:
+            from backend.engine.codehash import code_hash
+            calls = sorted({x.name for x in P.walk(node) if isinstance(x, P.Call)})
+            roots = [Evaluator._builtin_workout, Evaluator.ev]
+            roots += [getattr(Evaluator, f"fn_{c}") for c in calls if hasattr(Evaluator, f"fn_{c}")]
+            roots += [v for k, v in vars(Evaluator).items() if k.startswith("ev_")]
+            hit = _BUILTIN_CODE[name] = code_hash(*roots, context=[Evaluator, type(self.ds)],
+                                                  extra=(BUILTIN_EXPRS[name], BUILTIN_DISK_V))
+        return hit
+
+    def _builtin_window_sig(self, w: Workout) -> str:
+        """The workouts a TIS of `w` can read: this evaluator's workouts of the
+        BUILTIN_DISK_LOOKBACK_DAYS up to its day (any sport: a superset of the
+        sport(sport) pool), each with its file stamp, power corrections, power
+        source / blocking; plus the engine config and the watch-power setting."""
+        import bisect
+        import hashlib
+        rows = self.ds.memo.get(("builtin-rows", id(self.wlist)))
+        if rows is None or rows[0] is not self.wlist:
+            from backend.engine.wko5expr.dataset import _file_stamp
+            src = getattr(self.ds, "_power_src", None) or {}
+            blocked = getattr(self.ds, "_power_blocked", None) or ()
+            days, rr = [], []
+            for x in sorted(self.wlist, key=lambda x: x.day):
+                try:
+                    st = _file_stamp(self.ds.dir / x.entry.file)
+                except (OSError, TypeError):
+                    st = None
+                days.append(math.floor(x.day))
+                rr.append((x.entry.file, st, x.sport, self.ds._corr_sig(x.entry.file, "power"),
+                           src.get(x.idx), x.entry.file in blocked))
+            cfg = self.ds.config.to_dict() if hasattr(self.ds.config, "to_dict") else repr(self.ds.config)
+            glob = repr((cfg, getattr(self.ds, "accept_watch_power", None)))
+            rows = (self.wlist, days, rr, glob)
+            self.ds.memo[("builtin-rows", id(self.wlist))] = rows
+        _wl, days, rr, glob = rows
+        d = math.floor(w.day)
+        lo = bisect.bisect_left(days, d - BUILTIN_DISK_LOOKBACK_DAYS)
+        hi = bisect.bisect_right(days, d)
+        return hashlib.sha1(repr((glob, rr[lo:hi])).encode("utf-8")).hexdigest()
 
     def _has_channel(self, w: Workout, name: str) -> bool:
         """Channel present? Uses the athlete index channel list (3062) when

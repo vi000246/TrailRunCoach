@@ -1205,12 +1205,13 @@ class FitFolderDataset(Dataset):
 
     SERIES_VARIANTS = 4     # thresholds in effect kept per file and key (before / after the estimates, ...)
 
-    def cached_series(self, key: str, w: Workout, compute):
+    def cached_series(self, key: str, w: Workout, compute, extra=None):
         """Disk memo per FIT file (fitcache folder, series_<key>.json), keyed
         like the WKO5 Dataset's on the file stamp, the corrections and the
         thresholds in effect, so a threshold change never serves a stale
         value. A few threshold variants are kept per file: a build computes
-        with the plan / DB values, then again with the estimated LTHR."""
+        with the plan / DB values, then again with the estimated LTHR.
+        `extra` (JSON-able): more inputs beyond this file (SP-320 ②)."""
         import json
         from backend.engine.wko5expr.dataset import _cache_read, _safe
         from backend.engine.wko5expr.fitcache import stamp_of
@@ -1222,7 +1223,8 @@ class FitFolderDataset(Dataset):
             st = stamp_of(self.dir / w.entry.file)
         except OSError:
             return compute()
-        sk = json.dumps(st + [self._corr_sig(w.entry.file), self._settings_sig(w)])
+        sk = json.dumps(st + [self._corr_sig(w.entry.file), self._settings_sig(w)]
+                        + ([] if extra is None else [extra]))
         with self._series_lock:
             slot = store.get(w.entry.file)
             if isinstance(slot, dict) and sk in slot:
