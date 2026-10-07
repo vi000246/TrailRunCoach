@@ -26,7 +26,6 @@ the rest).
 from __future__ import annotations
 
 import hashlib
-import inspect
 import json
 import logging
 import os
@@ -116,17 +115,12 @@ _CODE: dict = {}
 def _code_sig() -> str:
     """The code the values come from (a rule change recomputes)."""
     if not _CODE:
-        from backend.engine import activity_tags, sport_map, thresholds, workout_review
-        from backend.engine.racepower import athlete, intensity, maximal, trailhr
-        import sys
-        h = hashlib.sha1()
-        for m in (activity_tags, sport_map, thresholds, workout_review, athlete, intensity, maximal, trailhr,
-                  sys.modules[__name__]):
-            try:
-                h.update(inspect.getsource(m).encode("utf-8"))
-            except (OSError, TypeError):
-                h.update(m.__name__.encode())
-        _CODE["v"] = f"{CACHE_V}:{h.hexdigest()[:12]}"
+        # SP-320 ①: the functions compute_blocking reaches (engine/codehash.py), not the
+        # whole of athlete.py / workout_review.py …: a deploy that edits other code keeps it
+        from backend.engine.codehash import code_hash
+        from backend.engine.wko5expr.dataset import Dataset
+        from backend.engine.wko5expr.fitdataset import FitFolderDataset
+        _CODE["v"] = f"{CACHE_V}:{code_hash(compute_blocking, context=[Dataset, FitFolderDataset])[:12]}"
     return _CODE["v"]
 
 
