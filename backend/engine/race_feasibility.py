@@ -527,17 +527,21 @@ def cutoff_finish(finish: dict, line_h: float, cut: float) -> tuple[float, str, 
 
 def assess(e, line: Optional[dict], today: dt.date, hist: list[dict], summit: Optional[dict] = None,
            best: Optional[dict] = None, climb: Optional[dict] = None, power: Optional[dict] = None,
-           finish: Optional[dict] = None) -> dict:
+           finish: Optional[dict] = None, data: Optional[dict] = None) -> dict:
     """The verdict for event `e` (planning.Event) with its race line (race_refs.race_line) and
     the last weeks (weekly_history). `summit`: summit_eta()'s result for a 百岳 with a summit.
     `best`: best_day_ep of the last STEP_MONTHS months (the 跨級 check; None = not checked).
     百岳 only: `climb` {"rates" (climb_rates), "top_m", "weight"} — the climb-rate reference; `power`
     {"cp", "kg"} with a running power meter — the climb-power check (None = not shown).
     `finish`: trail_finish()'s moving + stop time for the cutoff of a trail race (SP-220); None =
-    the race line's hours, as before."""
+    the race line's hours, as before. `data`: 資料等級 (engine/data_level.level, SP-291) — the level
+    the plan and the status page read too; None = level 2's (today's) behaviour."""
     out = {"event_id": e.id, "name": e.name, "date": e.date, "priority": e.priority, "kind": e.kind,
            "days": int(e.days or 1),
            "days_to": (e.start - today).days, "checks": [], "suggestions": [], "src": [_(SRC_UA), _(SRC_WEEK)]}
+    from backend.engine import data_level as DL
+    out["data_level"] = DL.public(data)
+    no_data = bool(data) and data.get("level") == 0          # = no run / hike in the 4 weeks of `hist`
     if e.priority == "C":
         out.update(level="ok", label=_(LEVEL_LABEL["ok"]), skipped=_("C 賽當練習，不評估"))
         return out
@@ -567,7 +571,7 @@ def assess(e, line: Optional[dict], today: dt.date, hist: list[dict], summit: Op
             out["split_note"] = split_note(line)
         out["base_week"] = {k: round(v, 1) for k, v in base.items()}
         out["peak_week"] = {k: round(v, 1) for k, v in pk.items()}
-        if base["km"] <= 0:
+        if no_data or base["km"] <= 0:
             check("weekly", "unknown", _("最近 {n} 週沒有跑步或健行紀錄，沒辦法推算", n=BASE_WEEKS))
         else:
             div = divisor()
@@ -1016,6 +1020,8 @@ def races(plan, ds, today: dt.date, event_id: Optional[str] = None,
     evs = [e for e in evs if e.id == event_id] if event_id else [e for e in evs if e.priority in ("A", "B")]
     hist = weekly_history(ds, today, KOOP_WEEKS)
     acts = activity_rows(ds, today, B2B_WEEKS * 7)
+    from backend.engine import data_level as DL
+    lv = DL.safe_level(ds, today)               # 資料等級 (SP-291): the plan's and the status page's level
     try:
         best = best_day_ep(activity_rows(ds, today, STEP_MONTHS * 365 // 12))      # 跨級 (SP-112)
     except Exception:                       # noqa: BLE001 — the other checks still run
@@ -1043,7 +1049,7 @@ def races(plan, ds, today: dt.date, event_id: Optional[str] = None,
         climb = power = None
         if e.kind == "baiyue":
             climb, power = baiyue_inputs(plan, ds, today, e) if baiyue is None else baiyue(e)
-        r = assess(e, line, today, hist[-BASE_WEEKS:], summit, best, climb, power, finish=fin)
+        r = assess(e, line, today, hist[-BASE_WEEKS:], summit, best, climb, power, finish=fin, data=lv)
         if sleep_note:
             r["split_note"] = sleep_note
         elif line is not None and RR.hardest_stretch_note(line):

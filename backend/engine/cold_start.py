@@ -6,10 +6,10 @@ Before: a runner without history got a self-contradicting first week — a weekl
 applied from 120 min), no easy run at all (reproduced on an empty dataset:
 test_cold_start.test_empty_dataset_reproduces_the_old_first_week).
 
-Now, for the week the data starts (COLD WEEK: no run or hike in the LEVEL0_DAYS before this week's
-Monday — 等級 0 of §4.1, read on the Monday so a first run mid-week doesn't flip the plan — and no
-停訓後的恢復期 with a previous volume, engine/reentry.py, which already covers a runner back after a
-break):
+Now, for the week the data starts (COLD WEEK: 資料等級 0 — engine/data_level.py, SP-291: no run or
+hike in the LEVEL0_DAYS before this week's Monday, read on the Monday so a first run mid-week doesn't
+flip the plan — and no 停訓後的恢復期 with a previous volume, engine/reentry.py, which already covers
+a runner back after a break):
 
   * the weekly volume = the questionnaire's (engine/experience.py) runs × minutes, AS ENTERED
     (owner 2026-10-06: not discounted; the doc's × 0.75 is not applied); with 「能連續跑 30 分鐘」
@@ -23,11 +23,13 @@ break):
     placement win when set)
   * the self-reported longest run stands for `longest28` (the Frandsen cap reads it)
 
-The RAMP (the first RAMP_WEEKS weeks from the week the data started, the cold week included):
-the start level stands for the weeks before the data — the weekly base is max(start level,
-actual) (§4.2 「實際紀錄」) — and the run count stays ≥ DEFAULT_RUNS. Everything else is the
+The RAMP (資料等級 1 up to week `need` of the data — the Zone 3 rule's weeks, default RAMP_WEEKS —
+the cold week included; data_level.level's `survey`): the start level stands for the weeks before
+the data — the weekly base is max(start level, actual) (§4.2 「實際紀錄」; SP-291 驗收: 等級 1 的週量
+基準 = max(問卷自報值（不打折）, 實際)) — and the run count stays ≥ DEFAULT_RUNS. Everything else is the
 existing rule (+10 %, at least +0.5 h, 3:1; §4.2: no stricter step for beginners — GRONORUN [C5]
-found none helped). projection.project_weeks reads week_plan's `cold_start` and applies the same.
+found none helped). 等級 2 (or past week `need`): the questionnaire is no longer used.
+projection.project_weeks reads week_plan's `cold_start` and applies the same.
 
 For every runner, not only new ones: a week under SHORT_WEEK_MIN gets a long run of at most
 LONG_SHARE of the week and no 60-min floor (SP-288 驗收). A runner with history (data in the 28 days
@@ -38,23 +40,25 @@ from __future__ import annotations
 import datetime as dt
 from typing import Optional
 
+from backend.engine import data_level as DL
 from backend.i18n import N_, _
 
-DEFAULT_HOURS = 1.5        # owner 2026-10-06; 推估 (NHS Couch to 5K's end point: 3 × 30 min a week [C10])
+DEFAULT_HOURS = 1.5       # owner 2026-10-06; 推估 (NHS Couch to 5K's end point: 3 × 30 min a week [C10])
 DEFAULT_RUNS = 3           # NHS Couch to 5K [C10], TrainingPeaks' novice trail plan [C12]: 3 runs, a day apart
 RUN30_FLOOR_H = 1.5        # 「能連續跑 30 分鐘」 → ≥ 3 × 30 min (NHS end point [C10]; as a floor 推估, §4.2)
 LONG_SHARE = 0.40          # 推估 (cold-start.md §4.2): a week < SHORT_WEEK_MIN — long run ≤ 40 % of it
 SHORT_WEEK_MIN = 120       # the existing line: the 50 % share of the long run applies from 120 min
 LONG_MIN_WEEK = 90         # 推估: a week under 3 × 30 min has no separate long run
-LEVEL0_DAYS = 28           # cold-start.md §4.1 等級 0: no run or hike in the last 28 days (= load_guard.SEED_DAYS)
-RAMP_WEEKS = 4             # 推估 (§4.2): the start level stands in until 4 weeks of data (= the Zone 3 gate's 4 weeks)
+LEVEL0_DAYS = DL.LEVEL0_DAYS   # cold-start.md §4.1 等級 0: no run or hike in the last 28 days (= load_guard.SEED_DAYS)
+RAMP_WEEKS = 4             # 推估 (§4.2): the start level stands in until 4 weeks of data — the Zone 3 rule's
+                           # weeks (quality_gate.Z3_WEEKS_NEED; data_level reads the 進階設定 value)
 
 NOTE_NO_SURVEY = N_("還沒填跑步經驗：這週先排每週 {h:g} 小時、{n} 次輕鬆跑，不排長跑。到「設定 → 個人資料 → 跑步經驗」"
                       "填最近 4 週的量，課表會照你平常的量排")
 NOTE_NO_30 = N_("還不能連續跑 30 分鐘：app 的自動排課要等你能連續跑 30 分鐘之後才準。這週先照預設排每週 {h:g} 小時、"
                   "{n} 次輕鬆跑，不排長跑；每次以能完整講一句話的強度為準")
-NOTE_SURVEY = N_("資料還在累積：這週的量照你填的問卷（每週 {h:.1f} 小時，照原數字用），排 {n} 次")
-NOTE_RAMP = N_("資料還在累積（第 {i}/{n} 週）：週量的基準取起步量 {h:.1f} 小時和實際紀錄的較大值，每週至少 {runs} 次")
+# the questionnaire's cold week and the ramp weeks: data_level.line (SP-291 — one line on the 課表 page)
+data_start = DL.data_start
 
 
 def start_level(exp: Optional[dict]) -> dict:
@@ -85,54 +89,39 @@ def _monday(d: dt.date) -> dt.date:
     return d - dt.timedelta(days=d.weekday())
 
 
-def data_start(foot: list, monday: dt.date) -> Optional[dt.date]:
-    """The Monday the current stretch of data started: the week of the first run / hike after the
-    last gap of ≥ LEVEL0_DAYS before `monday` (sessions of this week count), this Monday when the
-    LEVEL0_DAYS before it have none; None = no stretch (nothing at all up to this week)."""
-    past = [d for d in foot if d < monday + dt.timedelta(days=7)]
-    if not [d for d in past if monday - dt.timedelta(days=LEVEL0_DAYS) <= d < monday]:
-        return monday                                   # 等級 0 on this Monday: the data starts this week
-    start = past[0]
-    for a, b in zip(past, past[1:]):
-        if (b - a).days > LEVEL0_DAYS:
-            start = b
-    return _monday(start)
-
-
 def week_context(ds, today: dt.date, exp: Optional[dict] = None, reentry: Optional[dict] = None,
-                 load_exp: bool = True) -> Optional[dict]:
-    """This week's cold-start / ramp context, None for a runner with history (nothing changes).
-    {level: 0 (cold week) | 1 (ramp), week (1…RAMP_WEEKS), since, until (the Monday the ramp ends),
-    hours, runs, long, longest, source}. `exp`: the questionnaire (None + load_exp = the stored one);
-    `reentry`: week_plan's 停訓後的恢復期 block — with a previous volume it wins (no cold start)."""
+                 load_exp: bool = True, lv: Optional[dict] = None) -> Optional[dict]:
+    """This week's cold-start / ramp context, None when the questionnaire no longer stands in
+    (資料等級 2, or past the ramp — nothing changes). {level: 0 (cold week) | 1 (ramp), week
+    (1…need), need, since, until (the Monday the ramp ends), hours, runs, long, longest, source}.
+    `exp`: the questionnaire (None + load_exp = the stored one); `reentry`: week_plan's 停訓後的恢復期
+    block — with a previous volume it wins (no cold start); `lv`: data_level.level's (None = read)."""
     if reentry and reentry.get("prev_hours"):
         return None
     from backend.engine import experience as EX
-    monday = _monday(today)
-    foot = EX.foot_days(ds, monday + dt.timedelta(days=6))
-    since = data_start(foot, monday)
-    if since is None or since + dt.timedelta(weeks=RAMP_WEEKS) <= monday:
+    lv = lv if lv is not None else DL.level(ds, today)
+    if not lv.get("survey"):
         return None
     if exp is None and load_exp:
         exp = EX.load()
-    lv = start_level(exp)
-    week = (monday - since).days // 7 + 1
-    return {**lv, "level": 0 if since == monday else 1, "week": week, "since": since.isoformat(),
-            "until": (since + dt.timedelta(weeks=RAMP_WEEKS)).isoformat()}
+    since = dt.date.fromisoformat(lv["since"])
+    return {**start_level(exp), "level": lv["level"], "week": lv["week"], "need": lv["need"],
+            "since": lv["since"], "until": (since + dt.timedelta(weeks=lv["need"])).isoformat()}
 
 
-def note(ctx: dict, runs: Optional[int] = None) -> dict:
+def note(ctx: dict, runs: Optional[int] = None, hr_prior: bool = False) -> dict:
     """The week's note (課表 / 總覽): what the cold week / the ramp used. `runs`: the runs actually
-    planned (a small volume makes fewer than ctx["runs"]); None = ctx["runs"]."""
+    planned (a small volume makes fewer than ctx["runs"]); None = ctx["runs"]. Without the
+    questionnaire's volume the cold week says where to fill it in; else the data level's one line
+    (data_level.line, SP-291) — `hr_prior`: the HR zones are the 0.90 × max-HR prior (SP-289)."""
     n = ctx["runs"] if runs is None else runs
     if ctx["level"] == 0 and ctx["source"] == "default":
         t = _(NOTE_NO_SURVEY, h=ctx["hours"], n=n)
     elif ctx["level"] == 0 and ctx["source"] == "no_run30":
         t = _(NOTE_NO_30, h=ctx["hours"], n=n)
-    elif ctx["level"] == 0:
-        t = _(NOTE_SURVEY, h=ctx["hours"], n=n)
     else:
-        t = _(NOTE_RAMP, i=ctx["week"], n=RAMP_WEEKS, h=ctx["hours"], runs=ctx["runs"])
+        lv = {"level": ctx["level"], "week": ctx["week"], "need": ctx.get("need") or RAMP_WEEKS, "survey": True}
+        t = DL.line(lv, ctx["source"], ctx["hours"], hr_prior)
     return {"level": "info", "src": "cold_start", "text": t}
 
 
@@ -218,7 +207,7 @@ def lthr_test_from(ds, today: dt.date, exp: Optional[dict] = None, races: Option
     if EX.has_history(ds, today):
         return None
     monday = _monday(today)
-    since = data_start(EX.foot_days(ds, monday + dt.timedelta(days=6)), monday) or monday
+    since = DL.data_start(EX.foot_days(ds, monday + dt.timedelta(days=6)), monday) or monday
     if load:
         from backend.engine import race_results as RR
         exp = EX.load() if exp is None else exp

@@ -92,7 +92,10 @@ def test_questionnaire_volume_as_entered_and_the_longest_run(monkeypatch):
     assert long_s["minutes"] <= 45 * LG.LONG_CAP
     assert any(n.get("src") == "long_cap" for n in wp["notes"])
     assert len(_runs(wp)) == 3
-    assert "2.0 小時" in next(n for n in wp["notes"] if n.get("src") == "cold_start")["text"]
+    # SP-291: the week note is the data level's one line; the hours are in the 「為什麼」
+    assert next(n for n in wp["notes"] if n.get("src") == "cold_start")["text"].startswith(
+        "你的資料還在累積（第 1 週／4）：週量依你填的問卷")
+    assert any("2.0 小時" in w for w in wp["why"])
     # 「能連續跑 30 分鐘」: at least 1.5 h even when the runs reported are fewer
     _survey(monkeypatch, {"runs_per_week": 2, "minutes_per_run": 30, "can_run_30": True, "at": AT})
     assert _week(_ds())["target"]["hours"] == pytest.approx(1.5)
@@ -187,7 +190,7 @@ def test_ramp_keeps_the_start_level_as_the_base(monkeypatch):
     w2 = _week(_ds(_did(w1), nxt), nxt)
     assert w1["target"]["hours"] == pytest.approx(4.0)
     assert w2["target"]["hours"] >= 4.0 - 1e-6
-    assert any(n.get("src") == "cold_start" and "第 2/4 週" in n["text"] for n in w2["notes"])
+    assert any(n.get("src") == "cold_start" and "第 2 週／4" in n["text"] for n in w2["notes"])
     # after the ramp the start level no longer counts
     later = MON + dt.timedelta(weeks=CS.RAMP_WEEKS)
     assert CS.week_context(_ds(_did(w1), later), later) is None

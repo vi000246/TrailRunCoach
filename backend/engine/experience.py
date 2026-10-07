@@ -91,6 +91,14 @@ def load(user_id: int = 1) -> Optional[dict]:
     return v
 
 
+def stamp(user_id: int = 1) -> tuple:
+    """For the plan / status cache keys (SP-291): saving the questionnaire re-plans the cold week /
+    ramp (cold_start) and re-words the data level's line — PUT /profile/experience changes no plan
+    file and no dataset, so the keys would not notice otherwise."""
+    v = load(user_id)
+    return () if v is None else tuple((k, v.get(k)) for k in (*FIELDS, "at"))
+
+
 def foot_days(ds, today: dt.date) -> list[dt.date]:
     """The dates with a run or hike (overview.FOOT) up to `today`, oldest first."""
     from backend.engine import overview as O
