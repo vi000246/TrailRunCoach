@@ -206,8 +206,10 @@ def test_cptest_cold_folder_prefetch_matches_the_file_by_file_read(tmp_path, mon
         c = T.curves(home, lo, hi, accept_watch=False)
         s = T.scan(home, lo, hi)
         # the stamps differ (two folders written at different times): compare what follows them
-        out[name] = (c, s, {k: v[2:] for k, v in json.loads((home / T.BAD_CACHE_NAME).read_text("utf-8")).items()},
-                     {k: v[2:] for k, v in json.loads((home / T.POWER_CACHE_NAME).read_text("utf-8")).items()})
+        # (SP-341: the entries sit under "files", next to the code version "v")
+        out[name] = (c, s,
+                     {k: v[2:] for k, v in json.loads((home / T.BAD_CACHE_NAME).read_text("utf-8"))["files"].items()},
+                     {k: v[2:] for k, v in json.loads((home / T.POWER_CACHE_NAME).read_text("utf-8"))["files"].items()})
     a, b = out["inline"], out["prefetch"]
     assert a[0] == b[0] and a[1] == b[1]
     assert a[2] == {k: v for k, v in b[2].items() if k in a[2]}       # the prefetch also fills the others

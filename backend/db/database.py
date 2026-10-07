@@ -114,7 +114,8 @@ async def get_db():
 async def _migrate_schema():
     """Add columns introduced after the initial schema without dropping data.
     New TABLES (e.g. activity_tags, 2026-10-01) need no entry here: init_db's
-    create_all creates any missing table and leaves existing ones alone."""
+    create_all creates any missing table and leaves existing ones alone. Retired
+    tables (data_registry.RETIRED_TABLES) are dropped."""
     new_cols = [
         ("workout_files", "coros_activity_id", "TEXT"),
         ("workout_files", "coros_sport_type", "INTEGER"),
@@ -171,8 +172,14 @@ async def _migrate_schema():
         ("injury_events", "walkrun_from", "TEXT"),                # 「可以開始走跑」 (SP-272)
         ("injury_events", "illness", "TEXT"),
         ("coros_plan_push", "provider", "TEXT DEFAULT 'coros'"),   # sync/workout_targets
+        ("mmp_cache", "version", "TEXT"),              # the rows' code version (SP-341); NULL = stale
     ]
+    from backend import data_registry
     async with get_engine().begin() as conn:
+        # tables no code uses any more (data_registry.RETIRED_TABLES, e.g. pmc_cache, SP-341);
+        # IF EXISTS: a DB that never had one (a newer DB, a test schema) is fine
+        for table in data_registry.RETIRED_TABLES:
+            await conn.execute(text(f'DROP TABLE IF EXISTS "{table}"'))
         for table, col, col_type in new_cols:
             result = await conn.execute(text(f"PRAGMA table_info({table})"))
             existing = {row[1] for row in result.fetchall()}

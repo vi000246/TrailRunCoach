@@ -17,6 +17,47 @@ from backend.engine.algorithms.metrics import (
 from backend.engine.algorithms.classify import classify_trail
 
 WKO5_ROOT = Path.home() / "WKO5"
+# SP-341: bump when the mmp_cache rows change through code engine/codehash.py cannot follow
+MMP_CACHE_V = 1
+
+
+def mmp_version() -> str:
+    """The code version mmp_cache rows are written with (SP-341): the code of compute_mmp and
+    of the FIT read (engine/codehash.py) + MMP_CACHE_V. Rows of another version are stale."""
+    from backend.engine.codehash import code_hash
+    return f"{MMP_CACHE_V}:{code_hash(compute_mmp, parse_fit, extra=('mmp', MMP_CACHE_V))[:12]}"
+
+
+def _add_mmp(db: AsyncSession, workout_id: int, raw, version: str) -> None:
+    for dur, val in compute_mmp(raw.power_w, raw.time_s).items():
+        if val > 0:
+            db.add(MmpCache(workout_id=workout_id, channel="power", duration_s=dur, value=val, version=version))
+
+
+async def _refresh_stale_mmp(db: AsyncSession, athlete_id: int, since: date, until: date, version: str) -> int:
+    """Recompute the mmp_cache rows of another code version (SP-341) of the running workouts
+    dated since…until from their FIT file; a file that can't be read drops its rows. The
+    number of workouts refreshed."""
+    from sqlalchemy import delete, or_
+    stale = (await db.execute(
+        select(WorkoutFile.id, WorkoutFile.file_path).distinct()
+        .join(MmpCache, MmpCache.workout_id == WorkoutFile.id)
+        .where(WorkoutFile.athlete_id == athlete_id, WorkoutFile.sport == "running",
+               WorkoutFile.workout_date >= since, WorkoutFile.workout_date <= until,
+               or_(MmpCache.version.is_(None), MmpCache.version != version)))).fetchall()
+    for wid, path in stale:
+        raw = None
+        if str(path).lower().endswith(".fit"):
+            try:
+                raw = await asyncio.to_thread(parse_fit, str(path))    # FIT parsing: off the event loop
+            except Exception:                                          # noqa: BLE001 — gone / unreadable
+                raw = None
+        await db.execute(delete(MmpCache).where(MmpCache.workout_id == wid))
+        if raw is not None and raw.has_power:
+            _add_mmp(db, wid, raw, version)
+    if stale:
+        await db.flush()
+    return len(stale)
 
 
 def _apply_classification(wf: WorkoutFile) -> None:
@@ -156,8 +197,10 @@ async def get_run_ftp(db: AsyncSession, athlete_id: int, as_of_date: Optional[da
     if settings and settings.run_ftp_w and settings.run_ftp_w > 0:
         return settings.run_ftp_w
 
-    # Compute from 90-day running MMP window
+    # Compute from 90-day running MMP window (rows of the current code version only, SP-341)
     window_start = as_of_date - timedelta(days=89)
+    version = mmp_version()
+    await _refresh_stale_mmp(db, athlete_id, window_start, as_of_date, version)
     mmp_q = await db.execute(
         select(MmpCache.duration_s, MmpCache.value)
         .join(WorkoutFile, MmpCache.workout_id == WorkoutFile.id)
@@ -168,6 +211,7 @@ async def get_run_ftp(db: AsyncSession, athlete_id: int, as_of_date: Optional[da
             WorkoutFile.workout_date <= as_of_date,
             MmpCache.channel == "power",
             MmpCache.value > 0,
+            MmpCache.version == version,
         )
     )
     rows = mmp_q.fetchall()
@@ -357,10 +401,7 @@ async def _import_one_file(
         if isinstance(val, (float, int)) and val is not None:
             db.add(WorkoutMetric(workout_id=wf.id, metric_key=key, value=float(val)))
 
-    mmp = compute_mmp(raw.power_w, raw.time_s)
-    for dur, val in mmp.items():
-        if val > 0:
-            db.add(MmpCache(workout_id=wf.id, channel="power", duration_s=dur, value=val))
+    _add_mmp(db, wf.id, raw, mmp_version())
 
     # Intensity metrics for running: seconds at or above runFTP thresholds
     # WKO5: sum(if(runpower >= runFTP * 0.95, deltatime, 0))

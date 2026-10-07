@@ -68,23 +68,49 @@ def _cache_dir() -> Path:
 # signature of the approved corrections that apply to it.
 # ---------------------------------------------------------------------------
 
-def _cache_read(path: Path) -> dict:
+def _cache_read(path: Path, version: Optional[str] = None) -> dict:
+    """The entries of a disk cache. With `version` (SP-341) only a file written with that
+    version counts: another one (the code changed; none = written before) reads empty."""
     import json
     try:
-        return json.loads(path.read_text("utf-8")).get("files", {})
+        doc = json.loads(path.read_text("utf-8"))
     except (OSError, ValueError):
         return {}
+    if not isinstance(doc, dict) or (version is not None and doc.get("v") != version):
+        return {}
+    return doc.get("files", {})
 
 
-def _cache_write(path: Path, entries: dict) -> None:
+def _cache_write(path: Path, entries: dict, version: Optional[str] = None) -> None:
     import json
+    doc = {"files": entries} if version is None else {"v": version, "files": entries}
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_suffix(path.suffix + ".tmp")
-        tmp.write_text(json.dumps({"files": entries}), "utf-8")
+        tmp.write_text(json.dumps(doc), "utf-8")
         tmp.replace(path)
     except OSError:
         pass
+
+
+# SP-341: bump when a per-workout cache below changes through code engine/codehash.py cannot follow
+PER_WORKOUT_V = 1
+
+
+def per_workout_code(name: str) -> str:
+    """The code version of one per-workout disk cache (SP-341): the code its value comes from
+    (engine/codehash.py: the computation, the .wko4 read, the corrections' apply; the FIT
+    parse version for the caches FIT datasets share) + PER_WORKOUT_V. Its file holds the
+    version; a file of another version is dropped, so a changed algorithm recomputes."""
+    from backend.engine import bad_activity as BA
+    from backend.engine.codehash import code_hash
+    from backend.engine.wko5expr import fitcache
+    roots, parse = {"channel_peaks": ((Dataset.channel_peaks,), True),
+                    "workout_curves": ((Dataset._workout_curves,), True),
+                    "power_source": ((Dataset._compute_power_source,), False),      # WKO5 .wko4 only
+                    "bad_activity": ((BA.features,), False)}[name]
+    return code_hash(*roots, read_wko4, CorrectionStore.apply,
+                     extra=(name, PER_WORKOUT_V, fitcache.versions()["parse"] if parse else None))
 
 
 def _file_stamp(p: Path) -> list:
@@ -450,7 +476,7 @@ class Dataset:
         path = _cache_dir() / "power_source_v1.json"
         store = self.__dict__.setdefault("_ps_store", None)
         if store is None:
-            store = self._ps_store = _cache_read(path)
+            store = self._ps_store = _cache_read(path, per_workout_code("power_source"))
         stamp = _file_stamp(p)
         hit = store.get(w.entry.file)
         if not hit or hit[:2] != stamp:
@@ -461,7 +487,7 @@ class Dataset:
 
     def _flush_power_sources(self) -> None:
         if getattr(self, "_ps_dirty", False):
-            _cache_write(_cache_dir() / "power_source_v1.json", self._ps_store)
+            _cache_write(_cache_dir() / "power_source_v1.json", self._ps_store, per_workout_code("power_source"))
             self._ps_dirty = False
 
     def power_ok(self, w: Workout) -> bool:
@@ -543,15 +569,16 @@ class Dataset:
 
     def _bad_features(self, w: Workout) -> Optional[dict]:
         """bad_activity.features of a WKO5 .wko4 file, disk-cached by file
-        stamp + its corrections ("bad_activity_v1"). Reads the file directly
-        (not the per-index wko4 cache: the index is not final yet)."""
+        stamp + its corrections ("bad_activity_v1", + the code version, SP-341). Reads the
+        file directly (not the per-index wko4 cache: the index is not final yet)."""
         from backend.engine import bad_activity as BA
         p = self.dir / w.entry.file
         if not p.exists():
             return None
         store = self.__dict__.get("_ba_store")
         if store is None:
-            store = self._ba_store = _cache_read(_cache_dir() / "bad_activity_v1.json")
+            store = self._ba_store = _cache_read(_cache_dir() / "bad_activity_v1.json",
+                                                 per_workout_code("bad_activity"))
         stamp = _file_stamp(p) + [self._corr_sig(w.entry.file, "power")]
         hit = store.get(w.entry.file)
         if not hit or hit[:3] != stamp:
@@ -576,7 +603,7 @@ class Dataset:
                 keep.append(w)
         self.workouts = keep
         if getattr(self, "_ba_dirty", False):
-            _cache_write(_cache_dir() / "bad_activity_v1.json", self._ba_store)
+            _cache_write(_cache_dir() / "bad_activity_v1.json", self._ba_store, per_workout_code("bad_activity"))
             self._ba_dirty = False
 
     def _is_hr_sourced(self, w: Workout) -> bool:
@@ -838,10 +865,12 @@ class Dataset:
 
         `compute(workout, Wko4File) -> value | None`; the value must be
         JSON-round-trippable. Only workouts whose file changed (or whose
-        corrections changed) are recomputed.
+        corrections changed) are recomputed; every one when the code behind
+        `cache_name` changed (per_workout_code, SP-341).
         """
         path = _cache_dir() / f"{cache_name}.json"
-        entries = _cache_read(path)
+        version = per_workout_code(cache_name)
+        entries = _cache_read(path, version)
         out, dirty = {}, False
         for w in self.workouts:
             p = self.dir / w.entry.file
@@ -858,7 +887,7 @@ class Dataset:
             if hit[3] is not None:
                 out[w.entry.file] = hit[3]
         if dirty:
-            _cache_write(path, entries)
+            _cache_write(path, entries, version)
         return out
 
     def channel_peaks(self, channel: str = "power") -> dict[str, float]:
