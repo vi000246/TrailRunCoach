@@ -79,6 +79,9 @@ ESTIMATE_STEP_DAYS = 30
 # on a CP_WINDOW_DAYS (90 d) window; +5 d margin. A test pins it to those constants.
 ESTIMATE_LOOKBACK_DAYS = 180 + 30 + 90 + 5
 ESTIMATE_GRID_V = 1                  # bump to drop every grid-day entry
+# bump when an estimate / PD refit changes through code engine/codehash.py cannot follow
+# (a value read by name through getattr, a registry): drops estimate.json, the grid and pd_mftp
+ESTIMATE_CODE_V = 1
 # 推估: fewest Stryd runs in the 90-day window for a chart CP fit. On one
 # runner's data the first Stryd window (one run) fitted ~30 % below the
 # next window (11 runs) on; a single run's
@@ -366,6 +369,23 @@ def _smooth(x: np.ndarray, n: int = 10) -> np.ndarray:
     return np.convolve(np.nan_to_num(x), k, mode="same") * n
 
 
+def estimate_code() -> str:
+    """SP-320 ①: the code of the as-of estimates — what _estimate_settings /
+    _estimate_cp reach (thresholds.estimate, racepower.athlete.cp_as_of, the PD
+    model, mean-max …; engine/codehash.py), not every line of those modules."""
+    from backend.engine.codehash import code_hash
+    return code_hash(FitFolderDataset._estimate_settings, FitFolderDataset._estimate_cp,
+                     context=[FitFolderDataset], extra=("estimate", ESTIMATE_CODE_V))
+
+
+def pd_code() -> str:
+    """SP-320 ①: the code of one PD refit (racepower.athlete._pd_mftp and what it reaches)."""
+    from backend.engine.codehash import code_hash
+    from backend.engine.racepower import athlete as A
+    return code_hash(A._pd_mftp, A.power_ok, A.power_source, context=[FitFolderDataset],
+                     extra=("pd", ESTIMATE_CODE_V))
+
+
 class PdMemo:
     """Disk memo of racepower.athlete._pd_mftp (the as-of PD refit behind
     cp_as_of: ~670 refits for the LTHR estimates of a full COROS history,
@@ -392,21 +412,13 @@ class PdMemo:
     def _prepare(self):
         import bisect  # noqa: F401
         import hashlib
-        import inspect
         from backend.engine import bad_activity as BA
-        from backend.engine import power_source as PS
-        from backend.engine.algorithms import wko5_meanmax, wko5_pdmodel
         from backend.engine.racepower import athlete as A
         from backend.engine.racepower import cptest as T
         from backend.engine.racepower import weather as WX
         from backend.engine.wko5expr.fitcache import stamp_of, stamp_s
         ds = self.ds
-        code = hashlib.sha1()
-        for m in (A, T, wko5_pdmodel, wko5_meanmax, PS):
-            try:
-                code.update(inspect.getsource(m).encode("utf-8"))
-            except (OSError, TypeError):
-                code.update(m.__name__.encode())
+        code = hashlib.sha1(pd_code().encode("utf-8"))
         days, rows = [], []
         for w in ds.workouts:
             if w.sport != "run":
@@ -948,23 +960,13 @@ class FitFolderDataset(Dataset):
         if self._est_inputs is not None:
             return self._est_inputs
         import hashlib
-        import inspect
-        from backend.engine import thresholds
-        from backend.engine.algorithms import power_model, wko5_meanmax, wko5_pdmodel
-        from backend.engine.racepower import athlete, cp
         from backend.engine.wko5expr.fitcache import stamp_of
         m = hashlib.sha1()
 
         def add(x):
             m.update(repr(x).encode("utf-8"))
             m.update(b"\x00")
-        for mod in (thresholds, athlete, cp, power_model, wko5_pdmodel, wko5_meanmax):
-            try:
-                add(inspect.getsource(mod))
-            except (OSError, TypeError):
-                add(mod.__name__)
-        add(inspect.getsource(type(self)._estimate_settings))
-        add(inspect.getsource(type(self)._estimate_cp))
+        add(estimate_code())
         add((ESTIMATE_STEP_DAYS, CP_FIT_MIN_RUNS, ESTIMATE_GRID_V))
         add(self.config.to_dict())
         add(self.accept_watch_power)

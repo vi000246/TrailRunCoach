@@ -70,10 +70,19 @@ def _stamp(p: Path) -> list:
         return [p.name, None, None]
 
 
+def _content(p: Path) -> list:
+    """[name, sha1 of the bytes] — SP-320 ①: a deploy rewrites every file's mtime;
+    only a changed file's contents should drop the charts."""
+    try:
+        return [p.name, hashlib.sha1(p.read_bytes()).hexdigest()]
+    except OSError:
+        return [p.name, None]
+
+
 def _compute_code_signature() -> str:
     parts = [CACHE_VERSION]
     for d, pat in _ENGINE_GLOBS:
-        parts += [[d.name] + _stamp(p) for p in sorted(d.glob(pat))]
+        parts += [[d.name] + _content(p) for p in sorted(d.glob(pat))]
     return hashlib.sha1(json.dumps(parts).encode()).hexdigest()
 
 
@@ -85,7 +94,7 @@ _CODE_SIGNATURE = _compute_code_signature()
 
 
 def code_signature() -> str:
-    """CACHE_VERSION + mtimes of the engine modules, as loaded by this process."""
+    """CACHE_VERSION + contents of the engine modules, as loaded by this process."""
     return _CODE_SIGNATURE
 
 
