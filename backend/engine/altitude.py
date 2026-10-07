@@ -44,6 +44,15 @@ channel, the highest held about 30 s so a GPS spike doesn't count), on every dat
 activity covers. A night counts as spent above 2,750 m when the days on both sides
 of it reached 2,750 m (a multi-day activity, or activities on consecutive days) —
 where the tent or hut was is not in the data.
+
+睡在高處的紀錄 (SP-259, owner 2026-10-06: on the 課表 calendar's day, no symptoms): the
+athlete marks 「這一晚睡在 X m」 on a day (the night from that evening to the next morning), stored
+as user_settings NIGHTS_KEY = [{day, m}] — e.g. a drive up to 松雪樓 and a climb the next day,
+which the activities can't see. `exposure` counts a night when the activities say so OR it is
+recorded at ≥ 2,750 m; nights are counted per date, so one night is never counted twice. A
+recorded night at ≥ 3,000 m also makes its evening and the next morning 「到過 3,000 m 以上」
+days for the Schneider / Shen lines (推估). No record = exactly the old result. The record
+dialog can be filled from a plan event's GPX night (the camp of that night, `event_night`).
 """
 from __future__ import annotations
 
@@ -178,19 +187,108 @@ def day_altitudes(ds, today: dt.date, days: int = HISTORY_DAYS) -> dict:
     return out
 
 
-def exposure(alts: dict, today: dt.date, start: dt.date) -> dict:
+def exposure(alts: dict, today: dt.date, start: dt.date, manual: Optional[dict] = None) -> dict:
     """What the days say before a trip starting `start`:
     {"nights": nights above SLEEP_M from start − 14 days to today (CDC), "pre_days": days above
      HIGH_M in the last 60 days (Schneider), "recent": any day above HIGH_M in the last 90 days
-     (Shen), "ever": any day above HIGH_M in the data}."""
+     (Shen), "ever": any day above HIGH_M in the data, "manual": how many of `nights` only the
+     records give}. `manual`: {date: m} recorded nights (SP-259, load_nights); None / {} = the
+     activities alone (the result before SP-259)."""
+    manual = manual or {}
     since = start - dt.timedelta(days=REMIND_DAYS)
-    nights = sum(1 for d, m in alts.items() if since <= d < today and m >= SLEEP_M
-                 and alts.get(d + dt.timedelta(days=1), -1e9) >= SLEEP_M)
-    high = [d for d, m in alts.items() if m >= HIGH_M and d <= today]
-    return {"nights": nights,
+    act = {d for d, m in alts.items() if since <= d < today and m >= SLEEP_M
+           and alts.get(d + dt.timedelta(days=1), -1e9) >= SLEEP_M}
+    rec = {d for d, m in manual.items() if since <= d < today and m >= SLEEP_M}
+    high = {d for d, m in alts.items() if m >= HIGH_M and d <= today}
+    for d, m in manual.items():                 # a night up high: its evening and the next morning (推估)
+        if m >= HIGH_M:
+            high |= {x for x in (d, d + dt.timedelta(days=1)) if x <= today}
+    return {"nights": len(act | rec),
             "pre_days": sum(1 for d in high if d > today - dt.timedelta(days=PRE_DAYS)),
             "recent": any(d > today - dt.timedelta(days=RECENT_DAYS) for d in high),
-            "ever": bool(high)}
+            "ever": bool(high), "manual": len(rec - act)}
+
+
+# ---------------------------------------------------------------------------
+# 睡在高處的紀錄 (SP-259): user_settings NIGHTS_KEY = [{"day": ISO, "m": int}]
+# ---------------------------------------------------------------------------
+
+NIGHTS_KEY = "altitude.nights"
+NIGHT_MAX_M = 8849                  # Everest: no night is recorded higher
+MAX_NIGHTS = 1000                   # 推估: years of nights, keeps the setting small
+
+
+def validate_nights(value) -> None:
+    """The stored list (raises ValueError): [{day: YYYY-MM-DD, m: 1–8849}], one per day."""
+    if not isinstance(value, list) or len(value) > MAX_NIGHTS:
+        raise ValueError(f"altitude.nights must be a list of at most {MAX_NIGHTS} {{day, m}}")
+    seen = set()
+    for e in value:
+        if not isinstance(e, dict) or set(e) != {"day", "m"}:
+            raise ValueError("altitude.nights entries must be {day, m}")
+        try:
+            day = dt.date.fromisoformat(str(e["day"]))
+        except ValueError:
+            raise ValueError("altitude.nights day must be YYYY-MM-DD")
+        if day.isoformat() != e["day"] or e["day"] in seen:
+            raise ValueError("altitude.nights: one entry per day, YYYY-MM-DD")
+        m = e["m"]
+        if isinstance(m, bool) or not isinstance(m, int) or not 0 < m <= NIGHT_MAX_M:
+            raise ValueError(f"altitude.nights m must be a whole number of metres, 1–{NIGHT_MAX_M}")
+        seen.add(e["day"])
+
+
+def clean_m(m) -> int:
+    """A typed altitude → whole metres (raises ValueError)."""
+    try:
+        v = float(m)
+    except (TypeError, ValueError):
+        raise ValueError(_("高度要是數字（公尺）"))
+    if not math.isfinite(v) or not 0 < v <= NIGHT_MAX_M:
+        raise ValueError(_("高度要在 1–{mx:,} m 之間", mx=NIGHT_MAX_M))
+    return int(round(v))
+
+
+def set_night(nights: list, day: str, m: Optional[int]) -> list:
+    """The list with `day`'s night set to `m` (None = removed), sorted by day."""
+    out = [e for e in (nights or []) if e.get("day") != day]
+    if m is not None:
+        out.append({"day": day, "m": int(m)})
+    return sorted(out, key=lambda e: e["day"])
+
+
+def nights_map(value) -> dict:
+    """{date: m} of a stored list; {} when it is bad."""
+    try:
+        validate_nights(value or [])
+    except ValueError:
+        return {}
+    return {dt.date.fromisoformat(e["day"]): float(e["m"]) for e in value or []}
+
+
+def load_nights(user_id: int = 1) -> dict:
+    """The recorded nights {date: m} (synchronous read-only sqlite, like blackouts.load)."""
+    from backend.engine.wko5expr.datasource import read_setting
+    return nights_map(read_setting(NIGHTS_KEY, [], user_id))
+
+
+def event_night(events, day: dt.date, alt_of) -> Optional[dict]:
+    """The plan event night on `day` (a ≥ 2 day trip's nights are its first day … its second-last
+    day) whose altitude its GPX knows: {"m", "event_id", "name", "night"} — fills the record
+    dialog (SP-259 「從百岳賽事的營地自動帶入」); None otherwise. `alt_of(event)`: event_altitude."""
+    for e in events or []:
+        n = int(getattr(e, "days", 1) or 1)
+        try:
+            first = dt.date.fromisoformat(str(getattr(e, "date", ""))[:10])
+        except ValueError:
+            continue
+        i = (day - first).days
+        if n < 2 or not 0 <= i < n - 1:
+            continue
+        nights = (alt_of(e) or {}).get("nights") or []
+        if i < len(nights) and nights[i]:
+            return {"m": int(round(nights[i])), "event_id": e.id, "name": e.name, "night": i + 1}
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -321,8 +419,11 @@ def reminder(ev: dict, alt: dict, ex: Optional[dict], today: dt.date) -> Optiona
     n1 = first_night_high(alt)
     eve = [_("第一晚在 3,000 m 以上：行前一晚先住約 2,500 m（玉山國家公園建議；例如塔塔加 {a:,} m、大禹嶺 {b:,} m）。",
              a=TATAKA_M, b=DAYULING_M)] if n1 is not None else []
+    # SP-259: where the nights came from, and how to add one the activities can't see
+    rec = ([_("其中 {n} 晚來自你在課表日曆記的「睡在高處」。", n=ex["manual"])] if ex.get("manual") else []) + \
+        [_("開車上山過夜、隔天才爬，活動看不到這一晚：在課表日曆那一天按右鍵（手機長按）記「睡在高處」。")]
     help_ = "\n".join(
-        [status + "。"] + [x + "。" for x in lines] + eve + [fit + "。",
+        [status + "。"] + rec + [x + "。" for x in lines] + eve + [fit + "。",
          _("最高點與每晚的高度來自賽事的 GPX（每晚 = 分段點或營地）；你的高度來自活動的海拔紀錄，"
            "前後兩天都到 2,750 m 以上才算在高處過夜（推估）。研究多在 4,000 m 以上，套到 3,000–3,950 m 是推估。"
            "只是提醒，不會改課表。"),

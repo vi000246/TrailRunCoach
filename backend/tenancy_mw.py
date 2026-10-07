@@ -46,6 +46,7 @@ WRITE_ALLOW: list[tuple[frozenset, re.Pattern]] = [(frozenset(m.split()), re.com
     ("POST", _P + r"/(test-suggestions/schedule|suggestions/dismiss|suggestions/accept|steps-preview|steps/derive"
              r"|steps/check|reconcile|prefs/conflicts|blackouts/preview|equivalence/design|rest-days)"),
     ("DELETE", _P + r"/rest-days/[^/]+"),
+    ("PUT DELETE", _P + r"/high-nights/[^/]+"),          # 睡在高處的紀錄 (SP-259)
     # 範本 (SP-36): the visitor's own templates, categories and route GPX, in the sandbox
     ("POST", _P + r"/steps/templates/(user|user/copy|cats)"),
     ("PATCH DELETE", _P + r"/steps/templates/(user|cats)/[^/]+"),

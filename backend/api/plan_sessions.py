@@ -879,7 +879,8 @@ def _altitude_suggestions(today: str) -> list[dict]:
         def alts():
             from backend.api.overview import _dataset
             return AL.day_altitudes(_dataset(), dt.date.fromisoformat(today))
-        return SG.altitude_rows(Plan.load().events, today, lambda e: AL.event_altitude(e.id, e.days), alts)
+        return SG.altitude_rows(Plan.load().events, today, lambda e: AL.event_altitude(e.id, e.days), alts,
+                                AL.load_nights)
     except Exception:                       # noqa: BLE001 — the box must still load
         return []
 
@@ -2525,9 +2526,20 @@ async def calendar(start: str, end: str, db: AsyncSession = Depends(get_db)):
             "plan_notes": _plan_notes(inp, start, end),
             "test_suggestions": await _suggestions(db, inp),
             "test_templates": _test_templates(inp["thresholds"] or {}, None),
+            # 睡在高處的紀錄 (SP-259, api/altitude_nights.py) of the range: a small mark on the day
+            "high_nights": await _high_nights(db, start, end),
             # 刪除所有過期未完成: how many past sessions were never done (whole plan, not just the range)
             "expired_open": sum(1 for s in every if PS.is_expired_open(s, body["today"])),
             "coros": await _coros_state(db, every)}
+
+
+async def _high_nights(db: AsyncSession, start: str, end: str) -> list[dict]:
+    from backend.engine import altitude as AL
+    from backend.settings.repository import SettingsRepository
+    try:
+        return [e for e in (await SettingsRepository(db).get(AL.NIGHTS_KEY) or []) if start <= e["day"] <= end]
+    except Exception:                       # noqa: BLE001 — the calendar must still load
+        return []
 
 
 @router.get("/schedule/page", include_in_schema=False)

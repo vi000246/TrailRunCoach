@@ -1335,6 +1335,10 @@
     "draft": true,
     "src": "backend/engine/altitude.py:240"
   },
+  "「{name}」第 {n} 晚的營地（賽事 GPX）": {
+    "draft": true,
+    "src": "backend/api/altitude_nights.py:92"
+  },
   "「{x}」只能用在主課": {
     "draft": true,
     "src": "backend/engine/workout_steps.py:671"
@@ -2054,6 +2058,10 @@
   "公里數 {km:.0f}": {
     "draft": true,
     "src": "backend/engine/planning.py:255"
+  },
+  "其中 {n} 晚來自你在課表日曆記的「睡在高處」。": {
+    "draft": true,
+    "src": "backend/engine/altitude.py:423"
   },
   "其中 {n} 次比較短，只當參考": {
     "draft": true,
@@ -5939,6 +5947,10 @@
     "draft": true,
     "src": "backend/api/plan_sessions.py:1930"
   },
+  "這天沒有睡在高處的紀錄": {
+    "draft": true,
+    "src": "backend/api/altitude_nights.py:79"
+  },
   "這天的時間上限放不下": {
     "draft": true,
     "src": "backend/engine/technical.py:211"
@@ -6114,6 +6126,10 @@
   "還沒": {
     "draft": true,
     "src": "backend/engine/suggestions.py:307"
+  },
+  "還沒到的晚上不能記：到了那天或之後再記": {
+    "draft": true,
+    "src": "backend/api/altitude_nights.py:66"
   },
   "還沒到賽前 10 週的專項期：下面的數字會隨著長天和週量慢慢長上來": {
     "draft": true,
@@ -6314,6 +6330,10 @@
   "開始記錄": {
     "draft": true,
     "src": "backend/engine/coros_compare.py:122"
+  },
+  "開車上山過夜、隔天才爬，活動看不到這一晚：在課表日曆那一天按右鍵（手機長按）記「睡在高處」。": {
+    "draft": true,
+    "src": "backend/engine/altitude.py:424"
   },
   "間歇每一趟的平均功率到「目標下限 × 這個數」就算做到；留一點空間，是因為 CP 本身是估出來的。本人值 = 1 − 你相鄰兩次 CP 測試差距（取中位數）的一半；1 筆 = 一組相鄰的 CP 測試（間隔半年內）。CP 測試越穩，這個數越接近 1。": {
     "draft": true,
@@ -6602,6 +6622,14 @@
   "高": {
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:124"
+  },
+  "高度要在 1–{mx:,} m 之間": {
+    "draft": true,
+    "src": "backend/engine/altitude.py:248"
+  },
+  "高度要是數字（公尺）": {
+    "draft": true,
+    "src": "backend/engine/altitude.py:246"
   },
   "高強度長跑": {
     "draft": false,
