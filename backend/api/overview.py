@@ -4,6 +4,7 @@ month / year (all sports together), the combined PMC and this week's plan.
 """
 from __future__ import annotations
 
+from backend import tenancy as _tenancy
 import datetime as dt
 import threading
 from pathlib import Path
@@ -54,7 +55,7 @@ def _status(ds, today: dt.date) -> Status:
     pmc0 = LG.manual_start()
     # the Zone 3 unlock rule of 進階設定 (engine/advanced_params.py, SP-295): a change re-evaluates the gate
     from backend.engine import advanced_params as AP
-    key = (tenancy.current().id, id(ds), today, _plan_stamp(), prefs.stamp(), tests, HRP.stamp(),
+    key = (*_tenancy.ds_key(ds), today, _plan_stamp(), prefs.stamp(), tests, HRP.stamp(),
            None if pmc0 is None else tuple(sorted(pmc0.items())), AP.z3_rule_stamp())
     with _lock:
         hit = _status_cache.get(key)

@@ -20,6 +20,7 @@ mode (WKO5COACH_MODE=demo). Local only: nothing here is synced or shared.
 """
 from __future__ import annotations
 
+from backend import tenancy as _tenancy
 import datetime as dt
 import threading
 from pathlib import Path
@@ -430,7 +431,7 @@ def _analysis_cached(severities: Optional[tuple], season: bool, area: Optional[s
     from backend.engine import injury_exposure as IE
     from backend.engine.overview import day_to_date
     ds = _dataset()
-    key = (id(ds), _stamp(), severities, season, area)
+    key = (*_tenancy.ds_key(ds), _stamp(), severities, season, area)
     with _an_lock:
         hit = _an_memo.get(key)
     if hit is not None and not hit.get("pending"):

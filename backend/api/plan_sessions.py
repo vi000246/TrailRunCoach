@@ -14,6 +14,7 @@ engine/projection.py, sync/coros_workouts.py).
 """
 from __future__ import annotations
 
+from backend import tenancy as _tenancy
 import asyncio
 import datetime as dt
 import functools
@@ -73,7 +74,7 @@ def _compute_inputs(blackouts: Optional[list] = None) -> dict:
     from backend.engine import technical as TECH
     # the Zone 3 unlock rule of 進階設定 (SP-295): a change re-plans (the gate opens / closes)
     from backend.engine import advanced_params as AP
-    key = (id(ds), today, _plan_stamp(), prefs.stamp(), BL.stamp(bos), auto_on, B2B.accepted_stamp(acc),
+    key = (*_tenancy.ds_key(ds), today, _plan_stamp(), prefs.stamp(), BL.stamp(bos), auto_on, B2B.accepted_stamp(acc),
            PSP.stored(), HRP.stamp(), TECH.user_stamp(), rpe_on, _recorded_stamp(recorded), AP.z3_rule_stamp())
     with _lock:
         hit = _cache.get(key)
@@ -1235,7 +1236,7 @@ def _tpace() -> Optional[float]:
         from backend.engine import thresholds as T
         ds = _dataset()
         today = O.day_to_date(ds.today)
-        key = (id(ds), today)
+        key = (*_tenancy.ds_key(ds), today)
         if key not in _tp_cache:
             v = (T.estimate_tpace(ds, today) or {}).get("value")
             _tp_cache.clear()
@@ -1259,7 +1260,7 @@ def _walk_hint(inp: dict) -> Optional[dict]:
         ds = _dataset()
         today = O.day_to_date(ds.today)
         cap = (inp.get("thresholds") or {}).get("aet")
-        key = (id(ds), today, cap)
+        key = (*_tenancy.ds_key(ds), today, cap)
         if key not in _wh_cache:
             v = WH.compute(ds, today, cap)
             _wh_cache.clear()
@@ -2244,7 +2245,7 @@ def _equivalence() -> dict:
     ds = _dataset()
     today = O.day_to_date(ds.today)
     aet = (_compute_inputs().get("thresholds") or {}).get("aet")
-    key = (id(ds), today, aet)
+    key = (*_tenancy.ds_key(ds), today, aet)
     with _eq_lock:
         hit = _eq_cache.get(key)
     if hit is None:

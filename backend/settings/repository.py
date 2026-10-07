@@ -40,6 +40,9 @@ DEFAULTS: dict[str, Any] = {
     # 跑步經驗問卷 (engine/experience.py, SP-290): {runs_per_week, minutes_per_run, longest_min,
     # can_run_30, at}; None = never answered (asked by the 精靈 unless the data has 4 good weeks)
     "athlete.experience": None,
+    # 每人校正 last run (engine/calibrate.py, SP-320 ④): ISO time; a sync refits at most once
+    # per CALIB_EVERY_DAYS, 「重新校正」 (POST /api/v1/calib/run) always runs
+    "athlete.calib_last_run": None,
     # 比賽成績 (engine/race_results.py, SP-290): [{date, distance_km, time_s, trail, source,
     # confirmed, name?}] — one list shared by the questionnaire, SP-293 and SP-276 (the E pace,
     # engine/e_pace.py: the newest confirmed road row; its 設定 block writes here too)

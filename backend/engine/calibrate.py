@@ -16,8 +16,9 @@ repository.py), value
 `source = "user"` (進階設定 → 手動指定) is never overwritten by a fit.
 
 When: `after_sync` (sync/runner.py, next to plan_auto) starts `run_safe` in
-the background after a sync that imported an activity; `calibrate()` can be
-called directly (POST /api/v1/calib/run).
+the background after a sync that imported an activity, at most once per
+CALIB_EVERY_DAYS (SP-320 ④); `calibrate()` can be called directly
+(POST /api/v1/calib/run), which always runs.
 
 Reading: `value(name)` (sync, read-only) for engine code; `describe()` for
 the API / settings page, with the chip text 「本人 n=…」 or 「預設（文獻／推估）」
@@ -252,6 +253,7 @@ async def calibrate(db, athlete_id: int = 1, ds=None, today: Optional[dt.date] =
     forget_reads()
     for n, e in updates.items():
         await repo.set(key(n), e)
+    await repo.set(LAST_RUN_KEY, dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"))
     await db.commit()
     out = {"written": sorted(updates), "skipped": skipped}
     # the COROS TL conversion (engine/coros_tl.py, SP-38): a multi-parameter fit with its own
@@ -279,13 +281,41 @@ SESSION_FACTORY: Optional[Callable] = None      # tests replace; default AsyncSe
 _TASKS: set = set()
 
 
-async def run_safe(athlete_id: int = 1) -> dict:
+LAST_RUN_KEY = "athlete.calib_last_run"
+# SP-320 ④ (decided 2026-10-07): the refits move slowly (weeks of data, shrunk toward the
+# default), and one run costs ~12 s on the NAS — a sync refits at most once a week
+CALIB_EVERY_DAYS = 7
+
+
+def due(last_run: Optional[str], now: Optional[dt.datetime] = None) -> bool:
+    """Whether a sync-triggered run is due: never ran, an unreadable stamp, or the last run
+    CALIB_EVERY_DAYS or more ago."""
+    if not last_run:
+        return True
+    try:
+        t = dt.datetime.fromisoformat(str(last_run))
+    except ValueError:
+        return True
+    if t.tzinfo is None:
+        t = t.replace(tzinfo=dt.timezone.utc)
+    now = now or dt.datetime.now(dt.timezone.utc)
+    return now - t >= dt.timedelta(days=CALIB_EVERY_DAYS)
+
+
+async def run_safe(athlete_id: int = 1, force: bool = False) -> dict:
+    """The background run after a sync: skipped while the last run (any trigger) is less than
+    CALIB_EVERY_DAYS old, unless `force`."""
     factory = SESSION_FACTORY
     if factory is None:
         from backend.db.database import AsyncSessionLocal as factory
     from backend import applog
     try:
         async with factory() as db:
+            if not force:
+                from backend.settings.repository import SettingsRepository
+                last = await SettingsRepository(db, athlete_id).get(LAST_RUN_KEY)
+                if not due(last):
+                    return {"status": "skipped", "reason": "weekly", "last_run": last}
             with applog.timed("calibration run"):                       # SP-215
                 return await calibrate(db, athlete_id)
     except Exception as e:                  # noqa: BLE001 — the sync must not break
