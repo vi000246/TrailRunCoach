@@ -91,9 +91,18 @@ STOP_TYPES = {
     "medical": {"label": "醫護站", "water": False, "food": False, "sodium": False, "minutes": 0.0},
     "self": {"label": "自備補給點", "water": True, "food": True, "sodium": True, "minutes": 2.0},
     # SP-114: a 連續 race's sleep point (offered only for 賽制 連續); minutes = how long you sleep (推估
-    # default 90 = one sleep cycle); you eat and refill there before sleeping (推估)
+    # default 90 = one sleep cycle); you eat and refill there before sleeping (推估). 90 stays the
+    # blank row's value (pages saved before SP-255 keep it); a new sleep point gets sleep_default_min
     "sleep": {"label": "睡眠點", "water": True, "food": True, "sodium": False, "minutes": 90.0},
 }
+# SP-255 (docs/research/night-and-sleep.md §2.4, §4.2 單 2): a new sleep point's minutes by the race's
+# predicted hours — groups 推估 from the studies, owner OK 2026-10-06. Martin 2018 [N14] (636 ultra
+# runners): sleep in all < 36 h races 0.55 h, 36–60 h 1.36 h, > 60 h 8.24 h; Kishi 2024 [N5] (165 km:
+# 76 min in all, 82 % of naps < 30 min, 79.5 % between 00:00 and 05:00). < 36 h: a 20-min nap;
+# 36–60 h: 20–30 min each (about 1–1.5 h in all) — 30, the end that keeps the ETA on the safe side;
+# > 60 h: 90 min, one sleep cycle (a sleep every night).
+SLEEP_GROUPS = ((36.0, 20.0), (60.0, 30.0), (math.inf, 90.0))   # (hours below, minutes)
+SLEEP_NIGHT = (0, 5)             # Kishi 2024: 79.5 % of naps between 00:00 and 05:00
 STOP_DEFAULT = "aid"             # the old 「km:分」 text had no type
 # GPX waypoint names that look like aid stations (「從路線匯入」)
 STOP_NAME_HINTS = (("醫護", "medical"), ("medic", "medical"), ("大補", "big"), ("水站", "water"), ("water", "water"),
@@ -400,6 +409,51 @@ def _t_at_km(segments: Sequence[dict], km: float) -> Optional[float]:
             return prev + max(0.0, min(1.0, f)) * s["t"]
         prev = s["cum_s"]
     return None
+
+
+def sleep_default_min(hours: Optional[float]) -> Optional[float]:
+    """SP-255: a new sleep point's minutes for a race of `hours` (SLEEP_GROUPS); None when unknown."""
+    if hours is None or not math.isfinite(hours) or hours <= 0:
+        return None
+    return next(m for h, m in SLEEP_GROUPS if hours < h)
+
+
+def sleep_info(plan: dict, stops: Optional[list], start_time: Optional[str]) -> Optional[dict]:
+    """SP-255: the sleep points' line for the page — the race hours (moving + the non-sleep stops: the
+    sleep itself does not decide its own length), the new sleep point's default minutes, the 36–60 h
+    group's 「about 1–1.5 h in all」 hint, and the sleep points that arrive outside 00:00–05:00
+    (needs a start time). None for a plan without a moving time."""
+    s = plan.get("summary") or {}
+    if not s.get("time_s"):
+        return None
+    sts = [st for st in stops or [] if stop_type(st) != "sleep"]
+    hours = float(s["time_s"]) / 3600.0 + sum(float(st.get("minutes") or 0.0) for st in sts) / 60.0
+    out = {"hours": hours, "default_min": sleep_default_min(hours), "total_hint": None, "off_night": [],
+           "note": None}
+    sleeps = sorted((st for st in stops or [] if stop_type(st) == "sleep"), key=lambda x: float(x.get("km") or 0.0))
+    if not sleeps:
+        return out
+    if SLEEP_GROUPS[0][0] <= hours < SLEEP_GROUPS[1][0]:
+        out["total_hint"] = _("36–60 小時的比賽，研究中累計約睡 1–1.5 小時，分成幾次短睡（Martin 2018）")
+    segs = plan.get("segments") or []
+    km = float(s.get("km") or 0.0)
+    for st in sleeps:
+        k_ = float(st.get("km") or 0.0)
+        t = _t_at_km(segs, k_) if segs else (float(s["time_s"]) * k_ / km if km else None)
+        if t is None or not start_time:
+            continue
+        secs = t + _stops_before([x for x in stops or [] if float(x.get("km") or 0) < k_ - 1e-6], k_)
+        eta = _clock(start_time, secs)
+        if eta is None:
+            continue
+        hh = int(eta[:2])
+        if not SLEEP_NIGHT[0] <= hh < SLEEP_NIGHT[1]:
+            out["off_night"].append({"km": k_, "eta": eta})
+    if out["off_night"]:
+        out["note"] = _("多數人在凌晨小睡：{list} 不在 00:00–05:00（Kishi 2024：79.5 % 的小睡在這段時間）",
+                        list=_("、").join(_("第 {km} km 預估 {eta} 到", km=f"{x['km']:g}", eta=x["eta"])
+                                         for x in out["off_night"]))
+    return out
 
 
 def _seg_at(segments: Sequence[dict], t_s: float) -> int:

@@ -139,6 +139,10 @@
     "draft": true,
     "src": "backend/engine/interval_library.py:804"
   },
+  "36–60 小時的比賽，研究中累計約睡 1–1.5 小時，分成幾次短睡（Martin 2018）": {
+    "draft": true,
+    "src": "backend/engine/racepower/fuel.py:437"
+  },
   "48 小時內沒有強度課，課表不用動": {
     "draft": false,
     "src": "backend/engine/adapt.py"
@@ -2627,6 +2631,10 @@
     "draft": true,
     "src": "backend/engine/planning.py:227"
   },
+  "多數人在凌晨小睡：{list} 不在 00:00–05:00（Kishi 2024：79.5 % 的小睡在這段時間）": {
+    "draft": true,
+    "src": "backend/engine/racepower/fuel.py:453"
+  },
   "多日百岳的專項期把爬坡間歇換成 ME（背重爬陡坡），前提是 ADS ≤ 10%（Uphill Athlete）；{why}，這週維持一般肌力（每週 2 次）": {
     "draft": true,
     "src": "backend/engine/specific_phase.py:562"
@@ -4822,6 +4830,10 @@
   "第 {i} 趟 {d}": {
     "draft": true,
     "src": "backend/engine/interval_library.py:739"
+  },
+  "第 {km} km 預估 {eta} 到": {
+    "draft": true,
+    "src": "backend/engine/racepower/fuel.py:454"
   },
   "第 {n} 天的下降不能是負的": {
     "draft": true,

@@ -349,10 +349,12 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
         <button class="btn" id="stop-add" type="button">＋ 新增補給站</button>
         <button class="btn hidden" id="stop-import" type="button">從路線匯入</button>
         <span class="meta" id="stop-msg"></span>
-        <span class="help" tabindex="0">?<span class="tip">每一列一個補給站，依 km 自動排序。類型決定補給計畫：水站只補水；補給站有食物和水，附近的那一次碳水改在站上吃；大補給站再加電解質和熱食；醫護站不補給（水要從上一站帶夠）；自備補給點是自己的補給袋。停留分鐘留白時用預設（水站 0.5、補給站 2、大補給站 5、自備 2 分鐘，推估），會加進 ETA。GPX 的航點名稱像補給站（補給、水站、CP1、Aid…）時可以「從路線匯入」。賽制是「連續」的比賽（賽季計畫）多一種「睡眠點」：填第幾 km 和睡多久（分鐘，空白 90），睡眠時間算進 ETA；賽事評估會拿兩個睡眠點之間最硬的一段來比。</span></span>
+        <span class="help" tabindex="0">?<span class="tip">每一列一個補給站，依 km 自動排序。類型決定補給計畫：水站只補水；補給站有食物和水，附近的那一次碳水改在站上吃；大補給站再加電解質和熱食；醫護站不補給（水要從上一站帶夠）；自備補給點是自己的補給袋。停留分鐘留白時用預設（水站 0.5、補給站 2、大補給站 5、自備 2 分鐘，推估），會加進 ETA。GPX 的航點名稱像補給站（補給、水站、CP1、Aid…）時可以「從路線匯入」。賽制是「連續」的比賽（賽季計畫）多一種「睡眠點」：填第幾 km 和睡多久（分鐘），睡眠時間算進 ETA。新增睡眠點時依預估總時數帶入預設：< 36 小時每次 20 分、36–60 小時 30 分（研究中累計約 1–1.5 小時）、> 60 小時 90 分（每晚睡、累計約 8 小時；Martin 2018）；多數人在凌晨 00:00–05:00 小睡，而且 82 % 的小睡不到 30 分（Kishi 2024）。分組是推估；分鐘留白照舊算 90；賽事評估會拿兩個睡眠點之間最硬的一段來比。</span></span>
       </div>
       <div class="tablewrap"><table class="stoptbl"><thead><tr><th class="n">km</th><th>類型</th><th>名稱（選填）</th><th class="n">停留 分</th><th></th></tr></thead>
         <tbody id="stoprows"></tbody></table></div>
+      <!-- SP-255: the sleep points' lines (預設已改 / 累計 1–1.5 h / 凌晨小睡), only when one applies -->
+      <div class="meta hidden" id="sleep-note"></div>
       <input id="stops" type="hidden">
     </div>
     <details class="bf" id="dayplan-box"><summary>逐日行程（手動路線；空白 = 平均分配）</summary>
@@ -893,7 +895,7 @@ function parseStops(v) {
     const a = JSON.parse(v);
     if (Array.isArray(a)) return a.map((r) => ({ km: ok(Number(r.km)) && r.km !== "" && r.km != null ? Number(r.km) : null,
       type: STOP_MIN[r.type] != null ? r.type : "aid", name: String(r.name || "").slice(0, 40),
-      minutes: r.minutes === "" || r.minutes == null ? null : Number(r.minutes) }));
+      minutes: r.minutes === "" || r.minutes == null ? null : Number(r.minutes), ...(r.sd ? { sd: true } : {}) }));
   } catch {}
   // the old 「km:分, km:分」 text
   return v.split(/[,，]/).map((s) => s.trim()).filter(Boolean).map((s) => s.split(/[:：]/).map(Number))
@@ -922,6 +924,26 @@ function renderStops() {
   const fresh = STOP_SUGG.filter((s) => !STOPS.some((r) => r.km != null && Math.abs(r.km - s.km) < 0.1));
   $("stop-import").classList.toggle("hidden", !(S.csrc === "gpx" && fresh.length));
   $("stop-import").textContent = `從路線匯入（${fresh.length}）`;
+  renderSleepNote();
+}
+// SP-255: a sleep point added before the first result gets its default once the race hours are known
+function fillSleepDefaults() {
+  const m = PLAN?.sleep?.default_min;
+  if (m == null || !STOPS.some((r) => r.sd && r.type === "sleep" && r.minutes == null)) return;
+  STOPS.forEach((r) => { if (r.sd && r.type === "sleep" && r.minutes == null) { r.minutes = m; delete r.sd; } });
+  saveStops(); renderStops(); schedule();
+}
+// SP-255: lines only when they apply — a blank sleep row of a page saved before the change (still 90),
+// the 36–60 h group's total, the sleep points that arrive outside 00:00–05:00
+function renderSleepNote() {
+  const sl = PLAN?.sleep, lines = [];
+  if (STOPS.some((r) => r.type === "sleep" && r.minutes == null && !r.sd))
+    lines.push(T("sleep.changed") + (sl?.default_min != null ? T("sleep.changed_now", { m: sl.default_min }) : ""));
+  if (sl?.total_hint && STOPS.some((r) => r.type === "sleep")) lines.push(sl.total_hint);
+  if (sl?.note) lines.push("🛏️ " + sl.note);
+  const el = $("sleep-note");
+  el.innerHTML = lines.map(esc).join("<br>");
+  el.classList.toggle("hidden", !lines.length);
 }
 function stopsOf() {
   return STOPS.filter((r, i) => !stopIssue(r, i)).map((r) => ({ km: r.km, type: r.type, name: r.name || null,
@@ -929,8 +951,12 @@ function stopsOf() {
 }
 $("stoprows").addEventListener("change", (e) => {
   const i = e.target.dataset.si; if (i == null) return;
-  const f = e.target.dataset.f, v = e.target.value;
-  STOPS[i][f] = f === "km" || f === "minutes" ? (v === "" ? null : Number(v)) : v;
+  const f = e.target.dataset.f, v = e.target.value, r = STOPS[i];
+  r[f] = f === "km" || f === "minutes" ? (v === "" ? null : Number(v)) : v;
+  // SP-255: a new sleep point takes the default for this race's length (a typed minutes is kept);
+  // before the first result it waits (sd) and fillSleepDefaults sets it
+  if (f === "type" && v === "sleep" && r.minutes == null) { r.minutes = PLAN?.sleep?.default_min ?? null; if (r.minutes == null) r.sd = true; }
+  if (f === "minutes" || (f === "type" && v !== "sleep")) delete r.sd;
   sortStops(); saveStops(); renderStops(); schedule();
 });
 $("stoprows").addEventListener("click", (e) => { const i = e.target.dataset.rm; if (i == null) return; STOPS.splice(+i, 1); saveStops(); renderStops(); schedule(); });
@@ -1166,7 +1192,7 @@ function planBody(extra = {}) {
 }
 function renderAll() {
   renderResults(); renderFuel(); renderProfile(); renderSegCompact(); renderSegments(); renderInputs(); renderEnv(); renderZones(); renderHeatLine();
-  renderStops(); renderExportBtn(); renderSurface(); renderRain(); renderSnow();
+  renderStops(); renderExportBtn(); renderSurface(); renderRain(); renderSnow(); fillSleepDefaults();
   if (LAST.type !== "baiyue" && $("rg-sec").querySelector("details").open) renderRiegel();
 }
 let RUN_SEQ = 0;

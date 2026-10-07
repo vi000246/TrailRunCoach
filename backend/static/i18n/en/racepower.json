@@ -224,5 +224,7 @@
   "snow.note_untrodden": "Snow, no track: climbing time × 2 to × 3 (rule of thumb, Japanese guides), moving {lo} (× 2) to {hi} (× 3), clock {clo} to {chi}; the numbers above use × 2",
   "snow.season_single": "This is a one-day push. ",
   "snow.season": "Yushan main-peak trail snow-season rules (about mid-December to March, when Paiyun or Baimulin has ≥ 5 cm of snow): one-day ascents are suspended; crampons, an ice axe and a helmet are required, plus snow experience",
-  "snow.season_link": "park notice"
+  "snow.season_link": "park notice",
+  "sleep.changed": "Sleep-point default changed: a new sleep point now gets minutes by the predicted race length (< 36 h 20 min, 36–60 h 30 min, > 60 h 90 min; Kishi 2024, Martin 2018). A blank sleep point here still counts 90 minutes, as before",
+  "sleep.changed_now": "; the new default for this race is {m} minutes"
 }
