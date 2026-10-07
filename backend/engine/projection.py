@@ -1,5 +1,6 @@
 """
-Project the weekly plan past this week, up to a horizon (the phase end,
+Project the weekly plan past this week, up to a horizon (the phase end — the
+next phase's when it ends within 14 days, api/plan_sessions.horizon_of, SP-327 —
 capped at MAX_WEEKS), so a whole training phase can be scheduled.
 
 Structural companion to overview.week_plan(): it does not recompute anything

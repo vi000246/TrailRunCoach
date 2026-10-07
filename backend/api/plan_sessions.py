@@ -84,12 +84,11 @@ def _compute_inputs(blackouts: Optional[list] = None) -> dict:
     from backend.engine.panels.race_refs import calculator_hours
     cur = O.week_plan(ds, st, today, prefs=prefs, blackouts=bos, b2b_accepted=acc, race_predict=calculator_hours)
     monday = dt.date.fromisoformat(cur["week"]["start"])
-    cap = monday + dt.timedelta(weeks=P.MAX_WEEKS, days=6)
     ph = st.phase
-    phase_end = dt.date.fromisoformat(ph.end) if ph else cap
-    horizon = min(cap, max(phase_end, monday + dt.timedelta(days=13)))
+    phase_end = dt.date.fromisoformat(ph.end) if ph else None
     phases = [{"kind": p.kind, "start": p.start, "end": p.end, "note": p.note}
               for p in planning.phases(st.plan, today - dt.timedelta(days=400), today + dt.timedelta(days=400))]
+    horizon = horizon_of(monday, today, phase_end, phases)
     try:
         from backend.engine import heat_data as HD
         heat_acts = HD.exposures()[0]
@@ -111,7 +110,7 @@ def _compute_inputs(blackouts: Optional[list] = None) -> dict:
                           # the editor badges HR-target templates and sessions
                           "thr_warn": _thr_warn(st)},
            "phase": None if ph is None else {"kind": ph.kind, "label": ph.label, "start": ph.start, "end": ph.end},
-           "phase_push_end": min(phase_end, today + dt.timedelta(weeks=P.MAX_WEEKS)).isoformat(),
+           "phase_push_end": phase_push_end(today, phase_end).isoformat(),
            "max_weeks": P.MAX_WEEKS, "last_activity": last_act.isoformat() if last_act else None,
            "cc": ds.athlete.ctlconstant, "ac": ds.athlete.atlconstant, "prefs": prefs.to_dict(),
            "blackouts": [b.to_dict() for b in bos],
@@ -130,6 +129,42 @@ def _compute_inputs(blackouts: Optional[list] = None) -> dict:
             _cache.pop(next(iter(_cache)))
         _cache[key] = out
     return out
+
+
+NEXT_PHASE_DAYS = 14          # the current phase ends within this many days: plan through the next one (SP-327)
+
+
+def horizon_of(monday: dt.date, today: dt.date, phase_end: Optional[dt.date], phases: list) -> dt.date:
+    """The last day the stored plan is scheduled to (`horizon_end`): the current phase's end, at
+    least to the end of next week, at most MAX_WEEKS weeks after this one; no phase = that cap.
+    SP-327: when the current phase ends within NEXT_PHASE_DAYS of today (end − today ≤ 14), the
+    next phase's end instead (the first of `phases` — {start, end} — starting after it; none = as
+    before). On a phase's last days the horizon used to drop to the two-week floor: reconcile
+    removed the later weeks (rule 5) and, once they were back inside the horizon, could only add
+    them as new rows with new uids, so the calendar feed and COROS saw them deleted and created
+    again (the phase cut short by a new / moved race does the same). Now the horizon already
+    reaches into the next phase on those days, never moves back from one day to the next while
+    the phases stay the same, and reconcile keeps each later row and its uid."""
+    cap = monday + dt.timedelta(weeks=P.MAX_WEEKS, days=6)
+    if phase_end is None:
+        return cap
+    end = phase_end
+    if (phase_end - today).days <= NEXT_PHASE_DAYS:
+        later = sorted((dt.date.fromisoformat(p["start"]), dt.date.fromisoformat(p["end"])) for p in phases
+                       if dt.date.fromisoformat(p["start"]) > phase_end)
+        if later:
+            end = max(end, later[0][1])
+    return min(cap, max(end, monday + dt.timedelta(days=13)))
+
+
+def phase_push_end(today: dt.date, phase_end: Optional[dt.date]) -> dt.date:
+    """The last day of the 整個周期 push / unpush scope (_range): the current phase's end, at most
+    MAX_WEEKS weeks from today; no phase = those MAX_WEEKS weeks. The current phase only, also on
+    its last days when the horizon already reaches into the next one (SP-327): the menu shows this
+    range next to the phase the page names; the days after it go out with 這週 / 這天 or the
+    automatic push (plan.auto.push_days), and 整個周期 covers the next phase from its first day."""
+    far = today + dt.timedelta(weeks=P.MAX_WEEKS)
+    return far if phase_end is None else min(phase_end, far)
 
 
 def _latest_tests(st) -> dict:
