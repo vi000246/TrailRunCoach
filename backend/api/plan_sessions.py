@@ -871,7 +871,7 @@ async def _baseline_rows(inp: dict, stored: list[dict], today: str, tpl: dict, a
 
 
 def _altitude_suggestions(today: str) -> list[dict]:
-    """高度適應提醒 (engine/altitude.py, SP-100): events ≥ 3,000 m (their GPX), 1–14 days away."""
+    """高度適應提醒 (engine/altitude.py, SP-100 / SP-258): events ≥ 3,000 m (their GPX), 1–28 days away."""
     from backend.engine import altitude as AL
     from backend.engine import suggestions as SG
     from backend.engine.planning import Plan
