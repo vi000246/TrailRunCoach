@@ -10,13 +10,17 @@ standard time to get the "上河時間比" hikers compare with.
 
 Records are expensive (each needs a full .wko4 parse plus climb detection and
 the Minetti integral), so they are cached on disk keyed by file size, mtime and
-ALGO_VERSION — bump it whenever the computation changes.
+ALGO_VERSION — bump it whenever the computation changes. Each entry records its
+file's path: an entry whose file is gone is dropped, and the cache is written
+atomically (SP-341).
 """
 from __future__ import annotations
 
 import datetime as dt
 import json
 import math
+import os
+import tempfile
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -276,8 +280,31 @@ def _cached_summary(ds, w, peaks: list[dict], cache: dict) -> tuple[Optional[dic
         return hit.get("summary"), False
     f = ds.wko4(w.idx)
     summary = _summarise(w, f, peaks) if f else None
-    cache[w.entry.file] = {"stamp": stamp, "summary": summary}
+    cache[w.entry.file] = {"stamp": stamp, "summary": summary, "path": str(p)}
     return summary, True
+
+
+def _prune(ds, cache: dict) -> bool:
+    """Drop the entries of activity files that no longer exist (SP-341); whether `cache`
+    changed. An entry is this dataset's when its file is under ds.dir (an older entry without
+    a path, or a moved folder, gets the path); else it stays while its recorded file exists
+    (another data source's activity)."""
+    dirty = False
+    for key, hit in list(cache.items()):
+        if not isinstance(hit, dict):                 # not an entry this code wrote
+            del cache[key]
+            dirty = True
+            continue
+        mine = Path(ds.dir) / key
+        path = hit.get("path")
+        if mine.exists():
+            if path != str(mine):
+                hit["path"] = str(mine)
+                dirty = True
+        elif not (path and Path(path).exists()):
+            del cache[key]
+            dirty = True
+    return dirty
 
 
 def baiyue_summits(ds, peaks: Optional[list[dict]] = None) -> dict[str, list[str]]:
@@ -287,7 +314,7 @@ def baiyue_summits(ds, peaks: Optional[list[dict]] = None) -> dict[str, list[str
     try:
         peaks = load_peaks() if peaks is None else peaks
         cache = _load_cache()
-        dirty = False
+        dirty = _prune(ds, cache)
         out: dict[str, list[str]] = {}
         for w in ds.workouts:
             if activity_kind(w) != KIND_HIKE:
@@ -308,7 +335,7 @@ def build_achievements(ds, peaks: Optional[list[dict]] = None) -> list[Achieveme
     clusters assigned. Uses (and refreshes) the on-disk cache."""
     peaks = load_peaks() if peaks is None else peaks
     cache = _load_cache()
-    dirty = False
+    dirty = _prune(ds, cache)
     out: list[Achievement] = []
     for w in ds.workouts:
         kind = activity_kind(w)
@@ -356,17 +383,33 @@ def _assign_routes(records: list[Achievement]) -> None:
 
 def _load_cache() -> dict:
     try:
-        return json.loads(cache_path().read_text("utf-8"))
+        d = json.loads(cache_path().read_text("utf-8"))
     except (OSError, ValueError):
         return {}
+    return d if isinstance(d, dict) else {}
 
 
 def _save_cache(cache: dict) -> None:
+    """Atomic (SP-341): written to a temporary file next to the cache and renamed over it, so
+    an interrupted write leaves the previous cache whole (and at worst a stray *.tmp)."""
+    p = cache_path()
+    text = json.dumps(cache)
+    tmp = None
     try:
-        cache_path().parent.mkdir(parents=True, exist_ok=True)
-        cache_path().write_text(json.dumps(cache), "utf-8")
+        p.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(dir=p.parent, prefix=f".{p.name}.", suffix=".tmp")
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(text)
+        os.replace(tmp, p)
+        tmp = None
     except OSError:
         pass
+    finally:
+        if tmp is not None:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
 
 
 # ---------------------------------------------------------------------------

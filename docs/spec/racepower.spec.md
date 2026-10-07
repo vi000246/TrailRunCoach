@@ -87,7 +87,10 @@ decisions on the workbook's ambiguities (D1–D10) are in
   recorded in a car / on a bike, or with impossible power, is not in `ds.workouts`, so it is no run,
   envelope point, capacity sample or back-test case; the synced FIT files read beside the dataset
   (`cptest.curves` / `scan` → `_usable`) drop it too (`cptest.bad_files`, cached in
-  `racepower_bad_activity.json`). A TP file recorded in a car (≈ 43 km/h, ≈ 4 × CP) is excluded
+  `racepower_bad_activity.json`; it and `racepower_power_source.json` hold their code version —
+  `cptest.bad_cache_code` / `power_cache_code`: the FIT parse and feature / power-source versions of
+  `fitcache.versions()` + `FILE_CACHE_V`; a file of another version is recomputed, SP-341; written
+  atomically). A TP file recorded in a car (≈ 43 km/h, ≈ 4 × CP) is excluded
   by the average-speed rule whatever `power.accept_watch_power` says. The user's 「這筆是正常的」 brings it back.
 - **Altitude normalisation (D2)**: before building an envelope, each run's power is scaled by
   M(activity median elevation → training reference altitude), altitude term only
@@ -1317,3 +1320,4 @@ when set, but nothing fills it from the routes module yet.
 | 2026-10-07 | feature | SP-254, docs/research/night-and-sleep.md §4.2 單 1 | Night: /weather `sun` (Open-Meteo daily, else NOAA), segments `night` / `dark_share`, 夜間 column and chart shading, optional night slowdown 0 / 5 / 10 / 15 % on the dark part only (default 0 %, exact regression at 0), the trail card's cutoff follows a saved slowdown; headlamp / warmth merged into the attention line on trail / 百岳; tests in `test_race_night.py` |
 | 2026-10-07 | feature | SP-260, docs/research/altitude-training.md §4.1 | 百岳 capacity model: 「部分」 = midpoint of 已適應 / 未適應 (was read as 未適應); the page's default follows the nights above 2,750 m in the 14 days before the trip (≥ 2 → 部分, 推估; owner 2026-10-06), the user's pick is kept, 部分 hidden for routes under 3,000 m; GET /altitude-acclimatisation |
 | 2026-10-07 | feature | integration of SP-252 / SP-254 / SP-260 | 百岳: 部分適應 (capacity), 積雪 (climbing legs) and the night slowdown (dark share) compose, each once; `summary.snow` follows the night's added time (`night._shift_snow`); the 積雪 line moved into the one attention box; test `test_baiyue_snow_night_accl.py` |
+| 2026-10-07 | fix | SP-341, docs/research/cache-tiering.md §10 ⑩ | `racepower_power_source.json` / `racepower_bad_activity.json` carry a code version (`{"v", "files"}`; the older flat form is recomputed once) and are written atomically; `workout_curves.json` (the `_curve` source) is versioned by `dataset.per_workout_code`; all registered in `backend/data_registry.py` (SP-311) |

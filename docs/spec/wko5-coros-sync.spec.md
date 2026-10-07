@@ -36,6 +36,7 @@
 | 2026-10-05 | sp-57-rpe-load | SP-57 | 同步後的每人校正加一項：手錶記錄的 RPE 對活動實際 TSS 擬合「負荷」RPE 換算係數（`engine/rpe_load.py`，Foster session RPE，log 空間收縮到 0.30、w = n ÷ (n + 10)，留一誤差），存 `rpe.load_model`，設定頁顯示；只用於排課目標，PMC 仍用手錶負荷 |
 | 2026-10-06 | feat/coros-rpe-sp231 | SP-231 | 跑後自評：每個新活動多一個唯讀 `POST /activity/detail/query?labelId=&sportType=`（GET 回 result=1001），只讀 `data.sportFeelInfo.feelType`（1 最輕～5 最累，0 沒填；不讀 `sportNote`、語音筆記），存 `workout_files.coros_feel`，換成 `rpe`（1→2、2→4、3→5、4→7、5→10，推估；FIT 自己有 RPE 時 FIT 為準，`rpe_source`）。讀取失敗或 0 不算同步錯誤、不卡 cursor；失敗的在之後同步（最近 4 天、每次 ≤ 10 筆）重試。最近 8 週已匯入的活動在之後的同步各讀一次（每次 ≤ 80 筆、每筆間隔 0.4 秒，不登入、不寫 COROS，完成記在 `sync.coros.rpe_backfill`；token 被拒不算一輪，3 輪後停）。有補到自評時 `complete` 事件帶 `rpe_filled`，觸發自動調整與每人校正 |
 | 2026-10-06 | integrate/2026-10-06c | SP-231 follow-up | 依唯讀實測修正：每筆 detail 回整個活動（1.4–3.2 MB、約 1.5–3 秒），回填改每次同步 ≤ 25 筆（`BACKFILL_MAX`），剩下的留給之後的同步；「3 輪後停」只算有讀取失敗的輪（`failed_passes`），只是讀不完不算；沒存 `coros_sport_type` 的 COROS 活動不論運動一律用 sportType 100 讀（COROS 這個查詢不看 sportType）；最近 4 天存成 0（沒填）的活動在重試輪再讀一次（同樣每次 ≤ 10 筆，這次同步剛讀過的不重讀），之後在 COROS app 補填的自評照樣換成 RPE（FIT 有 RPE 時仍以 FIT 為準）並帶 `rpe_filled` |
+| 2026-10-07 | feat/sp311-341-data-registry | SP-311, SP-341 | 資料分類登錄表 `backend/data_registry.py`：每張表、每類租戶檔案屬「使用者改的／匯入的／衍生的／機密」哪一類（含去識別化欄位），備份改讀它（行為不變）；`sync_state` 屬機密。`mmp_cache` 加 `version` 欄（程式改了，`get_run_ftp` 重算窗內舊列）；`pmc_cache` 表刪除；`power_source_v1.json` 帶程式版本 |
 
 ---
 
@@ -385,6 +386,18 @@ ALTER TABLE sync_state ADD COLUMN tp_username           TEXT;
 ALTER TABLE sync_state ADD COLUMN tp_password_sealed    TEXT;
 ```
 
+`sync_state` 在資料分類登錄表（`backend/data_registry.py`，SP-311）屬「機密」：只留在伺服器，
+token／封存密碼欄位不出現在任何 API 回應、匯出或同步路徑（`test_data_registry.py` 檢查）。
+
+### `mmp_cache` 版本欄位、`pmc_cache` 刪除（SP-341）
+
+```sql
+ALTER TABLE mmp_cache ADD COLUMN version TEXT;  -- file_service.mmp_version()：compute_mmp＋FIT 讀取的程式雜湊；NULL＝舊列
+DROP TABLE IF EXISTS pmc_cache;                 -- 沒有程式讀寫（data_registry.RETIRED_TABLES）
+```
+
+`get_run_ftp` 只讀目前版本的列；它 90 天窗內版本不同（或 NULL）的列，先從 FIT 重算（讀不到的檔就刪掉那幾列）。
+
 ### `athlete_settings` 表（已有，從 Coros 登入自動填入）
 
 登入成功後自動 upsert：
@@ -622,7 +635,8 @@ COROS 上傳的 FIT；抽查的兩筆，兩邊的檔案功率完全相同）：
 
 - `FitChannels.power_source`（`backend/files/fit_to_channels.py`，同時讀 `device_info`）；
   `FitFolderDataset` 載入時記在每筆 workout；WKO5 `.wko4` 由 `Dataset.power_source` 從 channel
-  判定（依檔案 stamp 快取在 `power_source_v1.json`）。`.wko4` 存的是同一個 `power` channel
+  判定（依檔案 stamp 快取在 `power_source_v1.json`，檔內帶程式版本 `dataset.per_workout_code`，
+  判定程式改了就重算，SP-341）。`.wko4` 存的是同一個 `power` channel
   加上裝置名稱，沒有來源旗標。
 - 設定 `power.accept_watch_power`（預設 false；parity 模式一律讀全部功率，同 WKO5）：
   false 時手錶推估功率不算功率 TSS（改用 rTSS／hrTSS，`metrics.power_tss_blocked`），也不進

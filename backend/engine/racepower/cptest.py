@@ -23,6 +23,7 @@ from __future__ import annotations
 import datetime as dt
 import json
 import os
+import threading
 from pathlib import Path
 from typing import Optional
 
@@ -324,7 +325,8 @@ def _prefetch(home: Path, rows: list, files: dict) -> None:
     from backend.engine import power_source as PS
     from backend.engine.wko5expr import fitcache
     bad_p, pw_p = home / BAD_CACHE_NAME, home / POWER_CACHE_NAME
-    bad_c, pw_c = _load_json(bad_p), _load_json(pw_p)
+    bad_v, pw_v = bad_cache_code(), power_cache_code()
+    bad_c, pw_c = _load_json(bad_p, bad_v), _load_json(pw_p, pw_v)
     jobs = []
     for r in rows:
         e = _fit_entry(home, r[1])
@@ -345,9 +347,9 @@ def _prefetch(home: Path, rows: list, files: dict) -> None:
                 pw_c[r[1]] = r[3] + [pw]
             bad_dirty = pw_dirty = True
     if bad_dirty:
-        _save_json(bad_p, bad_c)
+        _save_json(bad_p, bad_c, bad_v)
     if pw_dirty:
-        _save_json(pw_p, pw_c)
+        _save_json(pw_p, pw_c, pw_v)
 
 
 def _files(home: Path, since: dt.date, until: dt.date, skip_folder: Optional[str] = None) -> list[dict]:
@@ -388,35 +390,64 @@ def _files(home: Path, since: dt.date, until: dt.date, skip_folder: Optional[str
     return sorted(out, key=lambda x: x["date"])
 
 
-POWER_CACHE_NAME = "racepower_power_source.json"   # {path: [size, mtime, stryd|watch|none]}
+POWER_CACHE_NAME = "racepower_power_source.json"   # {"v", "files": {path: [size, mtime, stryd|watch|none]}}
+# SP-341: bump when the power-source / bad-file caches change through code the versions below miss
+FILE_CACHE_V = 1
 
 _JSON_MEMO: dict = {}
 
 
-def _load_json(p: Path) -> dict:
-    """A per-file JSON cache, parsed once per file version."""
+def power_cache_code() -> str:
+    """The version racepower_power_source.json is written with (SP-341): the FIT parse and
+    power-source versions of the dataset cache field it mirrors (fitcache.versions) +
+    FILE_CACHE_V. A file of another version (or the older unversioned form) is recomputed."""
+    from backend.engine.wko5expr import fitcache
+    v = fitcache.versions()
+    return f"{FILE_CACHE_V}:{v['parse']}:{v['power']}"
+
+
+def bad_cache_code() -> str:
+    """The version of racepower_bad_activity.json (SP-341): the FIT parse and bad-file feature
+    versions (fitcache.versions), the sport-group code (engine/codehash.py) + FILE_CACHE_V."""
+    from backend.engine.codehash import code_hash
+    from backend.engine.wko5expr import fitcache
+    v = fitcache.versions()
+    return f"{FILE_CACHE_V}:{v['parse']}:{v['bad']}:{code_hash(fitcache.group_of)[:10]}"
+
+
+def _load_json(p: Path, version: str) -> dict:
+    """The entries of a versioned per-file JSON cache, parsed once per file version; {} when
+    the file was written with another version (SP-341)."""
     try:
         mt = p.stat().st_mtime_ns
     except OSError:
         return {}
     m = _JSON_MEMO.get(str(p))
     if m is not None and m[0] == mt:
-        return m[1]
-    try:
-        v = json.loads(p.read_text("utf-8"))
-    except (OSError, ValueError):
-        v = {}
-    _JSON_MEMO[str(p)] = (mt, v)
-    return v
+        doc = m[1]
+    else:
+        try:
+            doc = json.loads(p.read_text("utf-8"))
+        except (OSError, ValueError):
+            doc = {}
+        _JSON_MEMO[str(p)] = (mt, doc)
+    files = doc.get("files") if isinstance(doc, dict) and doc.get("v") == version else None
+    return files if isinstance(files, dict) else {}
 
 
-def _save_json(p: Path, v: dict) -> None:
+def _save_json(p: Path, files: dict, version: str) -> None:
+    """Atomic: a temporary file renamed over the cache (an interrupted write keeps the old one)."""
+    doc = {"v": version, "files": files}
+    tmp = p.with_name(f".{p.name}.{os.getpid()}.{threading.get_ident()}.tmp")
     try:
         p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(json.dumps(v), "utf-8")
-        _JSON_MEMO[str(p)] = (p.stat().st_mtime_ns, json.loads(json.dumps(v)))
+        tmp.write_text(json.dumps(doc), "utf-8")
+        os.replace(tmp, p)
+        _JSON_MEMO[str(p)] = (p.stat().st_mtime_ns, json.loads(json.dumps(doc)))
     except OSError:
         pass
+    finally:
+        tmp.unlink(missing_ok=True)
 
 
 _STORES: dict = {}
@@ -461,10 +492,10 @@ def _classify_file(p: Path, home: Optional[Path] = None, key: Optional[str] = No
 def power_sources(home: Path, paths: list[str]) -> dict[str, str]:
     """{path (relative to home/fit): stryd / watch / none} of the given FIT
     files (backend/engine/power_source.py), cached per file stamp in its own
-    file (the curve cache's version is left alone)."""
+    file (the curve cache's version is left alone), with its code version (SP-341)."""
     from backend.engine.wko5expr import fitcache
-    cache_p = home / POWER_CACHE_NAME
-    cache = _load_json(cache_p)
+    cache_p, version = home / POWER_CACHE_NAME, power_cache_code()
+    cache = _load_json(cache_p, version)
     root, out, dirty = home / "fit", {}, False
     for key in paths:
         p = root / key
@@ -480,11 +511,11 @@ def power_sources(home: Path, paths: list[str]) -> dict[str, str]:
             dirty = True
         out[key] = hit[2]
     if dirty:
-        _save_json(cache_p, cache)
+        _save_json(cache_p, cache, version)
     return out
 
 
-BAD_CACHE_NAME = "racepower_bad_activity.json"   # {path: [size, mtime, local start, group, features]}
+BAD_CACHE_NAME = "racepower_bad_activity.json"   # {"v", "files": {path: [size, mtime, local start, group, features]}}
 
 
 def _local_start(start):
@@ -537,7 +568,7 @@ def bad_files(home: Path, paths: list[str], enabled: Optional[bool] = None,
     (backend/engine/bad_activity.py: a car / bike segment, impossible power),
     with the user's keep / exclude overrides (activity_tags, matched by the
     file's local start) and the setting activities.exclude_bad. The features
-    are cached per file stamp in their own file."""
+    are cached per file stamp in their own file, with its code version (SP-341)."""
     from backend.engine import activity_tags as AT
     from backend.engine import bad_activity as BA
     from backend.engine.wko5expr import fitcache
@@ -545,8 +576,8 @@ def bad_files(home: Path, paths: list[str], enabled: Optional[bool] = None,
     rows = AT.load() if tags is None else tags
     if not enabled and not any(AT.user_exclusion(r) for r in rows):
         return {}
-    cache_p = home / BAD_CACHE_NAME
-    cache = _load_json(cache_p)
+    cache_p, version = home / BAD_CACHE_NAME, bad_cache_code()
+    cache = _load_json(cache_p, version)
     root, out, dirty = home / "fit", {}, False
     for key in paths:
         p = root / key
@@ -567,7 +598,7 @@ def bad_files(home: Path, paths: list[str], enabled: Optional[bool] = None,
         if ex:
             out[key] = ex["reason"]
     if dirty:
-        _save_json(cache_p, cache)
+        _save_json(cache_p, cache, version)
     return out
 
 
