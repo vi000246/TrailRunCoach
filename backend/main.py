@@ -25,6 +25,7 @@ from backend.api import backup as backup_api
 from backend.api import calib as calib_api
 from backend.api import region as region_api
 from backend.api import calendar_feed as calendar_api
+from backend.api import altitude_nights as altitude_nights_api
 
 
 # pages the demo never serves: the WKO5 comparison, the settings and the injury log
@@ -152,6 +153,7 @@ def build_app(demo: bool | None = None) -> FastAPI:
         sync.router, auth.router,        # owner only (sync, connect)
         wko5views.router, achievements_api.router,
         plan_api.router, plan_auto_api.router, plan_sessions_api.router, overview_api.router,
+        altitude_nights_api.router,      # 睡在高處的紀錄 (SP-259, the 課表 calendar)
         racepower_api.router,
         racepower_api.share_router,      # /share/<id>: the only path meant to skip the tunnel's password
         routes_api.router, routes_api.workout_router,

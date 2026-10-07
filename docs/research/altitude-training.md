@@ -88,7 +88,9 @@
 | 來源 | 說法 | 等級 |
 |---|---|---|
 | 玉山國家公園管理處〈高山生理、高山症預防及處理〉[H13] | 「攀登3,000公尺以上高山，應先於海拔2,500公尺左右地區適應高度（約1晚）」；24 小時內從平地上到 3,000 m 以上、無法避免時，考慮預防藥物；緩慢上升是最重要的準則 | 已驗證（官方頁，經擷取工具） |
-| 合歡山松雪樓 [H16] | 海拔 3,150 m | 摘要（旅遊網站） |
+| 合歡山松雪樓 [H16][H18] | 海拔 3,150 m；林業及自然保育署：合歡山國家森林遊樂區「海拔介於2,900-3,421公尺間」 | 3,150 m 為旅遊網站；遊樂區範圍為官方頁（2026-10-07 讀取，SP-258） |
+| 塔塔加 [H19] | 「海拔2,610公尺的塔塔加，是新中橫公路的最高點，也是塔塔加遊客中心的所在地」 | 已驗證（官方頁，2026-10-07，SP-258） |
+| 大禹嶺 [H20] | 「海拔2,565公尺」，中橫公路主線最高點 | 官方頁的搜尋摘要（頁面本身要 JavaScript，擷取工具讀不到；2026-10-07，SP-258） |
 | 醫師科普與住宿文章 [H17] | 前一晚住清境（約 2,000 m）或松雪樓、隔天再爬；引 CDC 的睡眠高度原則 | 教練級（搜尋摘要） |
 
 讀完的判斷：
@@ -162,7 +164,7 @@
 - 3,000–3,950 m、1–5 天行程的預適應研究（研究幾乎都是 4,300 m 以上）。
 - 台灣研究：合歡山或玉山的「行前適應週末」能不能降低高山症。
 - 一般休閒跑者的高地訓練對越野賽成績的研究。
-- 塔塔加、大禹嶺等地點的精確海拔：這次沒有核對官方數字。
+- ~~塔塔加、大禹嶺等地點的精確海拔：這次沒有核對官方數字。~~ SP-258 已核對（§2.3 [H19][H20]）：兩地都約 2,600 m，**低於 CDC 的 2,750 m**，所以只列為「行前一晚住約 2,500 m」的地點，不列為適應週末的地點。
 
 **付費牆或讀不到**
 
@@ -194,4 +196,7 @@
 - [H15] Luks AM, Beidleman BA, Freer L, et al. Wilderness Medical Society clinical practice guidelines for the prevention, diagnosis, and treatment of acute altitude illness: 2024 update. *Wilderness Environ Med* 2024;35:2S–19S. https://doi.org/10.1016/j.wem.2023.05.013
 - [H16] 清境合歡山旅遊網〈住宿合歡山松雪樓注意事項〉. https://www.qingjing.tw/index.php/hehuan-mountain/ssl/47-ssl01 （搜尋摘要）
 - [H17] 藍天花園〈合歡山住宿推薦：松雪樓 vs 清境〉. https://blueskybnb.net/travel-guide/hehuanshan-accommodation-guide/ （搜尋摘要）
+- [H18] 林業及自然保育署 台灣山林悠遊網〈合歡山國家森林遊樂區〉. https://recreation.forest.gov.tw/Forest/RA?typ_id=0300004 （2026-10-07 讀取）
+- [H19] 玉山國家公園管理處〈塔塔加遊客中心〉. https://www.ysnp.gov.tw/Child/StaticPage/VK002 （2026-10-07 讀取）
+- [H20] 太魯閣國家公園管理處〈大禹嶺〉. https://www.taroko.gov.tw/AttractionTrailContent.aspx?s=10&n=5701&sms=11275 （2026-10-07，搜尋摘要）
 - 既有文件：`mountaineering-physiology-scholars.md` §1.4、§3、§6；`periodization-cross-sport.md` §3.3、[394]、[400]、[402]；`coaching-dashboards-mountain.md` §4.5；`baiyue-from-running.md` §2.4；`racepower-v2.md` §3C.3。

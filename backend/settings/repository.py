@@ -175,6 +175,9 @@ DEFAULTS: dict[str, Any] = {
     # 不排課日期 (engine/blackouts.py): one-off ranges [{id, start, end, label}]
     # on which nothing is planned; separate from the weekly plan.prefs.days
     "plan.blackouts": [],
+    # 睡在高處的紀錄 (engine/altitude.py NIGHTS_KEY, SP-259): [{day, m}] — the night from `day`'s
+    # evening slept at m metres, marked on the 課表 calendar; counted by the 高度適應提醒
+    "altitude.nights": [],
     # 自動調整課表 (engine/plan_auto.py): after a sync that imported an activity,
     # reconcile + adapt (engine/adapt.py) + push the next N days to COROS
     "plan.auto.enabled": True,
@@ -371,6 +374,9 @@ def validate(key: str, value: Any) -> None:
     if key == "plan.blackouts":
         from backend.engine.blackouts import validate as validate_blackouts
         validate_blackouts(value)
+    if key == "altitude.nights":
+        from backend.engine.altitude import validate_nights
+        validate_nights(value)
     if key in ("plan.auto.confirm_big", "plan.auto.rpe_rule") and not isinstance(value, bool):
         raise ValueError(f"{key} must be true/false")
     if key == "plan.auto.push" and value is not None and not isinstance(value, bool):

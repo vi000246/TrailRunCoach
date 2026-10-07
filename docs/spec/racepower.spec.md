@@ -485,8 +485,11 @@ suggestion.
   to Wehrlin −6.3 %/1000 m by precision weighting. τ = √(1.02² + 1.25²) = 1.61 points: Wehrlin's 8
   athletes span 4.6–7.5 (range ÷ 2.847 = 1.02; the n = 8 range-to-SD step is ours) plus half the
   Wehrlin–Coffman gap (VO2max vs fixed-HR speed, 1.25; 推估). A(z) = exp(b/100·max(0, z−300)/1000);
-  acclimatised × Bassett acclimatised ÷ unacclimatised (推估). Partial acclimatisation is treated as
-  unacclimatised, warned.
+  acclimatised × Bassett acclimatised ÷ unacclimatised (推估); partial = the midpoint of the two
+  (SP-260, as `env._alt_factor`; 推估, warned with `planner.PARTIAL_NOTE`). The page's 百岳 default
+  (nothing picked): ≥ 2 nights above 2,750 m in the 14 days before the trip (activities + the 課表
+  calendar's records, `altitude.acclimatisation_default`, GET `/api/v1/racepower/altitude-acclimatisation?date=`)
+  → partial, else unacclimatised; acclimatised only when picked; no partial on a route under 3,000 m.
 - **Flat / descent** (§3.4): v_flat = min(median walked flat speed of trail runs × p(L), Pandolf⁻¹
   at g); uphill never faster than flat; v_down = personal walked descent windows shrunk to
   c_cap·Tobler, × (W+2)/(W+L) ÷ η, capped at c_cap·Tobler(g), c_cap = p75 of speed ÷ Tobler over
@@ -1305,3 +1308,4 @@ when set, but nothing fills it from the routes module yet.
 | 2026-10-07 | feature | SP-253, docs/research/cold-environment.md §4.2 單 3 | 失溫風險: `hypothermia` on trail / 百岳 (lowest temperature ≤ 5 °C and rain reminder or wind chill ≤ −5 °C, 推估) adds the carry list to the same attention line; no probability; tests in `test_race_hypothermia.py` |
 | 2026-10-07 | feature | SP-254, docs/research/night-and-sleep.md §4.2 單 1 | Night: /weather `sun` (Open-Meteo daily, else NOAA), segments `night` / `dark_share`, 夜間 column and chart shading, optional night slowdown 0 / 5 / 10 / 15 % on the dark part only (default 0 %, exact regression at 0), the trail card's cutoff follows a saved slowdown; headlamp / warmth merged into the attention line on trail / 百岳; tests in `test_race_night.py` |
 | 2026-10-06 | user-decision | SP-265 follow-up | Observed HRmax (5K / 10K maximal check) looks back 730 days (`MAXIMAL["hrmax_window_days"]`, 推估: maximal efforts are rare, HRmax falls only ~0.7 bpm / yr — Tanaka 2001), via `maximal.hrmax_as_of`; the Riegel / longer-power / capacity windows stay 365 days. The per-run peak is on the shared HR cleaning (`run_hrmax_peak`, SP-265). Owner data at 2026-10-05: 188 bpm with 730 days (old and new cleaning alike) vs 182 with 365 days; over 25 monthly dates 730 d is 1–6 bpm above 365 d |
+| 2026-10-07 | feature | SP-260, docs/research/altitude-training.md §4.1 | 百岳 capacity model: 「部分」 = midpoint of 已適應 / 未適應 (was read as 未適應); the page's default follows the nights above 2,750 m in the 14 days before the trip (≥ 2 → 部分, 推估; owner 2026-10-06), the user's pick is kept, 部分 hidden for routes under 3,000 m; GET /altitude-acclimatisation |
