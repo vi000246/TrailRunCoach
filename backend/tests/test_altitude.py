@@ -1,7 +1,7 @@
 """
 高度適應提醒 (SP-100, engine/altitude.py + suggestions.altitude_rows): an event whose
 GPX reaches ≥ 3,000 m gets an information row in the floating box 1–14 days before
-its start; the athlete's own altitude (activities) says acclimatised / pre-exposure /
+its start (15–28 days: 安排適應週末, SP-258); the athlete's own altitude (activities) says acclimatised / pre-exposure /
 first time; the GPX nights say a high first night or a big jump. Synthetic only.
 """
 import datetime as dt
@@ -106,9 +106,57 @@ def test_reminder_texts():
 
 def test_reminder_window_and_height():
     alt = {"max_m": 3952.0}
-    assert _row(alt, NONE, days_to=15) is None and _row(alt, NONE, days_to=0) is None
+    assert _row(alt, NONE, days_to=29) is None and _row(alt, NONE, days_to=0) is None
     assert _row(alt, NONE, days_to=14) is not None and _row(alt, NONE, days_to=1) is not None
     assert _row({"max_m": 2900.0}, NONE) is None
+    assert _row({"max_m": 2900.0}, NONE, days_to=20) is None          # under 3,000 m: never, also not early
+
+
+def test_sp258_boundaries_28_15_14():
+    """SP-258: 28 and 15 days out = 安排適應週末; 14 days out = the check as before (unchanged)."""
+    alt = {"max_m": 3952.0}
+    for n in (28, 15):
+        r = _row(alt, None, days_to=n)                                 # the early row reads no activities
+        assert r["flags"] == ["plan"] and "安排適應週末" in r["title"], n
+        assert "2,750 m 以上睡 2 晚" in r["reason"] and "合歡山松雪樓 3,150 m" in r["reason"]
+        assert "Beidleman 2018" in r["help"] and "推估" in r["help"] and r["weekends"]
+    r14 = _row(alt, NONE, days_to=14)
+    assert r14["title"] == "「玉山」最高約 3,952 m：出發前的高度適應" and r14["flags"] == ["first"]
+    assert "安排適應週末" not in r14["help"] and "weekends" not in r14
+    # the 14-day row is exactly the SP-100 one (no 行前一晚 line without a high first night)
+    assert "行前一晚" not in r14["help"]
+
+
+def test_sp258_weekends_inside_the_14_days_and_the_taper():
+    # start Monday 11/2: CDC window 10/19–11/1 → the weekends 10/24–25 and 10/31–11/1 (Fri + Sat nights)
+    start = dt.date(2026, 11, 2)
+    ws = AL.weekends(start, TODAY, taper_days=7)
+    assert [(w["sat"], w["sun"], w["taper"]) for w in ws] == [("2026-10-24", "2026-10-25", False),
+                                                              ("2026-10-31", "2026-11-01", True)]
+    r = AL.reminder({"id": "yu", "name": "玉山", "start": start, "days": 2, "taper_days": 7},
+                    {"max_m": 3952.0}, None, TODAY)
+    assert "可選：10/24–25、10/31–11/1（減量期：走輕鬆路線）" in r["reason"]
+    assert "走輕鬆的路線" in r["help"]
+    # a Saturday start: the only weekend whose Friday is inside the 14 days and that ends before the start
+    ws = AL.weekends(dt.date(2026, 10, 24), TODAY, taper_days=7)
+    assert [(w["sat"], w["taper"]) for w in ws] == [("2026-10-17", True)]
+    # no taper given: nothing marked
+    assert not any(w["taper"] for w in AL.weekends(start, TODAY))
+
+
+def test_sp258_eve_only_for_a_first_night_above_3000():
+    hi = {"max_m": 3952.0, "nights": [3402]}                           # 玉山: 排雲山莊
+    r = _row(hi, None, days_to=20)
+    assert r["flags"] == ["plan", "eve"]
+    assert "行前一晚先住約 2,500 m" in r["reason"] and "塔塔加 2,610 m" in r["reason"] and "大禹嶺 2,565 m" in r["reason"]
+    assert "不算進適應週末" in r["help"] and "玉山國家公園" in r["help"]
+    lo = _row({"max_m": 3600.0, "nights": [2800]}, None, days_to=20)   # first night under 3,000 m
+    assert lo["flags"] == ["plan"] and "行前一晚" not in lo["reason"] + lo["help"]
+    day = _row({"max_m": 3600.0}, None, days_to=20)                    # a day trip: no night
+    assert "行前一晚" not in day["reason"] + day["help"]
+    # 1–14 days: only the 說明 gets it; title, text, flags (= the id) as SP-100
+    r = _row(hi, NONE, days_to=6)
+    assert r["flags"] == ["first", "n1"] and "行前一晚" in r["help"] and "行前一晚" not in r["reason"]
 
 
 def test_box_rows_info_only_and_the_id_follows_the_conditions():
@@ -135,6 +183,27 @@ def test_box_rows_info_only_and_the_id_follows_the_conditions():
     # no event needing it: the activities are never read
     calls.clear()
     assert SG.altitude_rows(evs[1:], TODAY.isoformat(), lambda e: alt.get(e.id), alts) == [] and not calls
+
+
+def test_box_row_15_to_28_days_out_reads_no_activities_and_has_its_own_id():
+    evs = [Event("yu", "玉山", (TODAY + dt.timedelta(days=20)).isoformat(), kind="baiyue", days=2)]
+    calls = []
+
+    def alts():
+        calls.append(1)
+        return {}
+    rows = SG.altitude_rows(evs, TODAY.isoformat(), lambda e: {"max_m": 3952.0, "nights": [3402]}, alts)
+    assert len(rows) == 1 and not calls
+    r = rows[0]
+    assert r["id"] == f"altitude:yu:{r['start']}:3952:plan-eve" and r["src"].startswith(AL.SRC_PLAN) and "玉山國家公園" in r["src"]
+    # a 2-day 百岳 A event tapers 7 days (planning.taper_days): its last weekend is marked
+    assert [(w["sat"], w["taper"]) for w in r["weekends"]] == [("2026-10-17", True)]
+    # the 14-day row of the same event has another id: dismissing the early one doesn't hide it
+    dis = SG.record({}, r["id"], "dismissed", dt.datetime(2026, 10, 5, 8))
+    later = (TODAY + dt.timedelta(days=8)).isoformat()
+    rows14 = SG.altitude_rows(evs, later, lambda e: {"max_m": 3952.0, "nights": [3402]}, lambda: {})
+    assert rows14 and not rows14[0]["id"].split(":")[-1].startswith("plan")
+    assert SG.visible(rows14, SG.prune(dis, rows14, later)) == rows14
 
 
 def test_api_rows_from_the_plan_and_the_stored_gpx(store, monkeypatch):

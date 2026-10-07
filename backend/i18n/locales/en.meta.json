@@ -371,6 +371,10 @@
     "draft": true,
     "src": "backend/engine/race_feasibility.py:220"
   },
+  "CDC 建議出發前 14 天內在 2,750 m 以上睡至少 2 晚，越接近出發越好。Beidleman 2018：先在 3,000 m 住 2 天再上 4,300 m，高山症從 83% 降到 43%。": {
+    "draft": true,
+    "src": "backend/engine/altitude.py:253"
+  },
   "CDC 建議：出發前 14 天內在 2,750 m 以上睡至少 2 晚，越接近出發越好": {
     "draft": true,
     "src": "backend/engine/altitude.py:186"
@@ -1351,6 +1355,14 @@
     "draft": true,
     "src": "backend/engine/altitude.py:211"
   },
+  "「{name}」最高約 {m:,.0f} m：安排適應週末": {
+    "draft": true,
+    "src": "backend/engine/altitude.py:240"
+  },
+  "「{name}」第 {n} 晚的營地（賽事 GPX）": {
+    "draft": true,
+    "src": "backend/api/altitude_nights.py:92"
+  },
   "「{x}」只能用在主課": {
     "draft": true,
     "src": "backend/engine/workout_steps.py:671"
@@ -2075,6 +2087,10 @@
     "draft": true,
     "src": "backend/engine/planning.py:255"
   },
+  "其中 {n} 晚來自你在課表日曆記的「睡在高處」。": {
+    "draft": true,
+    "src": "backend/engine/altitude.py:423"
+  },
   "其中 {n} 次比較短，只當參考": {
     "draft": true,
     "src": "backend/engine/status.py:584"
@@ -2098,6 +2114,14 @@
   "出生年 {year} 不合理": {
     "draft": true,
     "src": "backend/api/plan.py:472"
+  },
+  "出發前 14 天內在 2,750 m 以上連睡 2 晚（例如{site}）": {
+    "draft": true,
+    "src": "backend/engine/altitude.py:246"
+  },
+  "出發前 14 天內找一個週末，在 2,750 m 以上睡 2 晚（例如{site}）。可選：{days}": {
+    "draft": true,
+    "src": "backend/engine/altitude.py:243"
   },
   "分": {
     "draft": true,
@@ -2370,6 +2394,10 @@
   "吃": {
     "draft": true,
     "src": "backend/engine/racepower/seg_targets.py:87"
+  },
+  "合歡山松雪樓 {m:,} m": {
+    "draft": true,
+    "src": "backend/engine/altitude.py:241"
   },
   "吊在單槓上不動，練握力。": {
     "draft": true,
@@ -3879,6 +3907,10 @@
     "draft": true,
     "src": "backend/engine/race_feasibility.py:216"
   },
+  "最高點與每晚的高度來自賽事的 GPX。研究多在 4,000 m 以上，套到 3,000–3,950 m 是推估。出發前 14 天內會改成檢查你最近的高度紀錄。只是提醒，不會改課表。": {
+    "draft": true,
+    "src": "backend/engine/altitude.py:262"
+  },
   "最高點與每晚的高度來自賽事的 GPX（每晚 = 分段點或營地）；你的高度來自活動的海拔紀錄，前後兩天都到 2,750 m 以上才算在高處過夜（推估）。研究多在 4,000 m 以上，套到 3,000–3,950 m 是推估。只是提醒，不會改課表。": {
     "draft": true,
     "src": "backend/engine/altitude.py:215"
@@ -4050,6 +4082,10 @@
   "樓梯一階（平地也可以）": {
     "draft": true,
     "src": "backend/engine/strength_moves.py:183"
+  },
+  "標「減量期」的週末一樣可以去，白天走輕鬆的路線、不要走長距離（推估）。": {
+    "draft": true,
+    "src": "backend/engine/altitude.py:257"
   },
   "標了「{what}」": {
     "draft": true,
@@ -4615,6 +4651,14 @@
     "draft": true,
     "src": "backend/engine/specific_phase.py:473"
   },
+  "玉山國家公園建議上 3,000 m 以上的高山前，先在 2,500 m 左右住約 1 晚。塔塔加、大禹嶺低於 2,750 m，只適合行前一晚，不算進適應週末的 2 晚。": {
+    "draft": true,
+    "src": "backend/engine/altitude.py:260"
+  },
+  "玉山國家公園管理處〈高山生理、高山症預防及處理〉": {
+    "draft": true,
+    "src": "backend/engine/altitude.py:89"
+  },
   "現在不是基礎期": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:2148"
@@ -4678,6 +4722,10 @@
   "疼痛監測（如果醫師或物理治療師說是膝前痛）：跑時 ≤ 2/10、跑完 60 分鐘內回到原本的程度（Esculier 2016 試驗計畫書）。": {
     "draft": true,
     "src": "backend/engine/injuries.py:113"
+  },
+  "疼痛紅燈還沒解除：這週先不排跑步，等下一次跑步標記改變燈號；交叉訓練和肌力照做": {
+    "draft": true,
+    "src": "backend/engine/projection.py:819"
   },
   "疼痛黃燈：先不排間歇，改成輕鬆跑": {
     "draft": true,
@@ -4915,9 +4963,17 @@
     "draft": true,
     "src": "backend/engine/planning.py:233"
   },
+  "第一晚在 3,000 m 以上：行前一晚先住約 2,500 m（玉山國家公園建議；例如塔塔加 {a:,} m、大禹嶺 {b:,} m）。": {
+    "draft": true,
+    "src": "backend/engine/altitude.py:318"
+  },
   "第一晚睡在約 {m:,.0f} m，超過 3,400 m 屬高風險（CDC；排雲山莊 3,402 m 就在線上）": {
     "draft": true,
     "src": "backend/engine/altitude.py:202"
+  },
+  "第一晚睡在約 {m:,.0f} m：行前一晚先住約 2,500 m（例如塔塔加 {a:,} m、大禹嶺 {b:,} m）": {
+    "draft": true,
+    "src": "backend/engine/altitude.py:231"
   },
   "等基礎期重新累積到 EF 持平（停滯法）": {
     "draft": true,
@@ -5975,6 +6031,10 @@
     "draft": true,
     "src": "backend/api/plan_sessions.py:1930"
   },
+  "這天沒有睡在高處的紀錄": {
+    "draft": true,
+    "src": "backend/api/altitude_nights.py:79"
+  },
   "這天的時間上限放不下": {
     "draft": true,
     "src": "backend/engine/technical.py:211"
@@ -6154,6 +6214,10 @@
   "還沒": {
     "draft": true,
     "src": "backend/engine/suggestions.py:307"
+  },
+  "還沒到的晚上不能記：到了那天或之後再記": {
+    "draft": true,
+    "src": "backend/api/altitude_nights.py:66"
   },
   "還沒到賽前 10 週的專項期：下面的數字會隨著長天和週量慢慢長上來": {
     "draft": true,
@@ -6354,6 +6418,10 @@
   "開始記錄": {
     "draft": true,
     "src": "backend/engine/coros_compare.py:122"
+  },
+  "開車上山過夜、隔天才爬，活動看不到這一晚：在課表日曆那一天按右鍵（手機長按）記「睡在高處」。": {
+    "draft": true,
+    "src": "backend/engine/altitude.py:424"
   },
   "間歇每一趟的平均功率到「目標下限 × 這個數」就算做到；留一點空間，是因為 CP 本身是估出來的。本人值 = 1 − 你相鄰兩次 CP 測試差距（取中位數）的一半；1 筆 = 一組相鄰的 CP 測試（間隔半年內）。CP 測試越穩，這個數越接近 1。": {
     "draft": true,
@@ -6671,6 +6739,14 @@
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:124"
   },
+  "高度要在 1–{mx:,} m 之間": {
+    "draft": true,
+    "src": "backend/engine/altitude.py:248"
+  },
+  "高度要是數字（公尺）": {
+    "draft": true,
+    "src": "backend/engine/altitude.py:246"
+  },
   "高強度長跑": {
     "draft": false,
     "src": "backend/engine/adapt.py"
@@ -6754,6 +6830,10 @@
   "（沒有 GPX，所以假設當天的爬升都在登頂前）": {
     "draft": true,
     "src": "backend/engine/race_feasibility.py:291"
+  },
+  "（減量期：走輕鬆路線）": {
+    "draft": true,
+    "src": "backend/engine/altitude.py:220"
   },
   "（熱天或不知道氣溫：只當提示）": {
     "draft": false,
@@ -7046,9 +7126,5 @@
   "🌡 {t:.0f} °C（{band}）": {
     "draft": true,
     "src": "backend/engine/panels/drift_bars.py:42"
-  },
-  "疼痛紅燈還沒解除：這週先不排跑步，等下一次跑步標記改變燈號；交叉訓練和肌力照做": {
-    "draft": true,
-    "src": "backend/engine/projection.py:819"
   }
 }

@@ -235,5 +235,8 @@
   "snow.season": "Yushan main-peak trail snow-season rules (about mid-December to March, when Paiyun or Baimulin has ≥ 5 cm of snow): one-day ascents are suspended; crampons, an ice axe and a helmet are required, plus snow experience",
   "snow.season_link": "park notice",
   "sleep.changed": "Sleep-point default changed: a new sleep point now gets minutes by the predicted race length (< 36 h 20 min, 36–60 h 30 min, > 60 h 90 min; Kishi 2024, Martin 2018). A blank sleep point here still counts 90 minutes, as before",
-  "sleep.changed_now": "; the new default for this race is {m} minutes"
+  "sleep.changed_now": "; the new default for this race is {m} minutes",
+  "accl.tip": "Unacclimatised: just arrived; aerobic capacity falls about 6.3% per 1000 m (from 300 m). Acclimatised: the more optimistic altitude curve. Partly acclimatised = the midpoint of the two, an estimate (no study has measured partial acclimatisation). For a Taiwan's 100 Peaks (Baiyue) trip with nothing picked: 2 or more nights slept above 2,750 m in the 14 days before the trip (activities, plus the nights up high recorded on the schedule calendar) default to partly acclimatised, otherwise unacclimatised; acclimatised only when you pick it. A route topping out under 3,000 m has no partly acclimatised option.",
+  "accl.default_partial": "Default partly acclimatised: {n} nights above 2,750 m in the 14 days before the trip (estimate)",
+  "accl.default_none": "Default unacclimatised: {n} nights above 2,750 m in the 14 days before the trip (2 or more for partly acclimatised)"
 }

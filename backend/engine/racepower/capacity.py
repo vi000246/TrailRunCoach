@@ -406,9 +406,12 @@ class WalkCapacity:
 
     def A(self, z: Optional[float], accl: str = "unacclimatised") -> float:
         """B7 with the posterior slope; 'acclimatised' × Bassett acclimatised
-        ÷ unacclimatised at z (推估)."""
+        ÷ unacclimatised at z (推估); 'partial' = the midpoint of the two (SP-260, as
+        env._alt_factor — no study measures partial acclimatisation: 推估)."""
         if z is None:
             return 1.0
+        if accl == "partial":
+            return 0.5 * (self.A(z, "unacclimatised") + self.A(z, "acclimatised"))
         b = self.alpha.get("post", ALT_PRIOR_PCT)
         a = math.exp(b / 100.0 * max(0.0, z - Z_REF) / 1000.0)
         if accl == "acclimatised":

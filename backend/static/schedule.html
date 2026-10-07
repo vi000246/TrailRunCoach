@@ -161,6 +161,14 @@ main { max-width: 1320px; margin: 0 auto; padding: 12px 16px 40px; display: grid
 .bo-chip.rest { color: color-mix(in srgb, var(--s3) 75%, var(--text)); border-color: color-mix(in srgb, var(--s3) 45%, transparent); font-weight: 600; }
 .legend .rest-sw { display: inline-block; width: 14px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px;
   background: color-mix(in srgb, var(--s3) 20%, var(--cell)); border: 1px solid color-mix(in srgb, var(--s3) 45%, transparent); }
+/* 睡在高處 (SP-259): a small mark on a day with a recorded night up high; click = edit */
+.hn-tag { flex: none; border: 1px solid color-mix(in srgb, var(--s4) 45%, transparent); background: var(--panel); color: var(--muted);
+  border-radius: 9px; padding: 0 5px; font-size: 10.5px; line-height: 17px; cursor: pointer; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.hn-tag:hover { color: var(--text); border-color: var(--s4); }
+.hn-tag:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.ag-day .hn-tag { display: block; margin-top: 3px; font-size: 11.5px; }
+.cf-body .hn-row { display: flex; align-items: center; gap: 6px; margin: 10px 0 4px; }
+.cf-body .hn-row input { width: 96px; }
 /* right-click / long-press menu */
 .menu.ctx { position: fixed; top: 0; left: 0; z-index: 60; min-width: 200px; }
 .menu.ctx button.danger { color: var(--bad); }
@@ -1047,6 +1055,10 @@ function dayTip(d, ss) {
 // 不排課日期 (engine/blackouts.py): one-off ranges, from the calendar payload
 const BOS = () => (D && D.blackouts) || [];
 const boOf = (iso) => BOS().find((b) => b.start <= iso && iso <= b.end);
+// 睡在高處的紀錄 (SP-259, api/altitude_nights.py): the night from that day's evening, from the calendar payload
+const hnOf = (iso) => ((D && D.high_nights) || []).find((n) => n.day === iso);
+const hnTag = (n) => `<button type="button" class="hn-tag" data-hn="${esc(n.day)}" aria-label="${esc(tt("hn.tag_aria", { day: md(n.day), m: n.m.toLocaleString() }))}"
+  title="${esc(tt("hn.tag_title", { m: n.m.toLocaleString() }))}">${esc(tt("hn.tag", { m: n.m.toLocaleString() }))}</button>`;
 const boChip = (b) => b.kind === "rest" ? `<button type="button" class="bo-chip rest" data-rest="${esc(b.start)}" aria-label="${esc(tt("rest.chip_aria", { day: md(b.start) }))}"
   title="${esc(tt("rest.chip_title"))}">${esc(tt("rest.chip"))}</button>` : `<button type="button" class="bo-chip" data-bo="${esc(b.id)}" aria-label="不排課 ${esc(rangeTxt(b.start, b.end))}${b.label ? "：" + esc(b.label) : ""}，修改或移除"
   title="${esc(`不排課 ${rangeTxt(b.start, b.end)}${b.label ? "（" + b.label + "）" : ""}\n點一下修改或移除`)}">🏖 ${esc(b.label || "不排課")}</button>`;
@@ -1090,12 +1102,12 @@ function render() {
         const d = addDays(ws, i), p = phaseOf(d);
         const phl = p && p.kind !== prevPh && (i === 0 || p.start === d) ? `<span class="phl ph-${esc(p.kind)}">${esc(p.label)}</span>` : "";
         if (p) prevPh = p.kind;
-        const bo = boOf(d);
+        const bo = boOf(d), hn = hnOf(d);
         const can = d >= D.today && !bo;
         const out = !week && dOf(d).getMonth() !== month;
         const items = (ss[d] || []).map((s) => chipHtml(s, week)).join("") + (acts[d] || []).map(actHtml).join("");
         cells.push(`<div class="cell ${out ? "out" : ""} ${d < D.today ? "past" : ""} ${d === D.today ? "today" : ""} ${d === S.sel ? "sel" : ""} ${can ? "can" : ""} ${bo ? "bo" : ""} ${bo && bo.kind === "rest" ? "rest-d" : ""}" role="gridcell" data-day="${d}" title="${esc(dayTip(d, ss[d]))}">
-          <div class="cell-top"><button type="button" class="dnum" data-sel="${d}" aria-label="選取 ${md(d)}（週${wd(d)}）${d === D.today ? "，今天" : ""}${bo ? "，不排課" : ""}" aria-pressed="${d === S.sel}">${dOf(d).getDate() === 1 && !week ? md(d) : dOf(d).getDate()}</button>${phl}
+          <div class="cell-top"><button type="button" class="dnum" data-sel="${d}" aria-label="選取 ${md(d)}（週${wd(d)}）${d === D.today ? "，今天" : ""}${bo ? "，不排課" : ""}" aria-pressed="${d === S.sel}">${dOf(d).getDate() === 1 && !week ? md(d) : dOf(d).getDate()}</button>${phl}${hn ? hnTag(hn) : ""}
           ${bo && (d === bo.start || i === 0) ? boChip(bo) : ""}
           ${can ? `<button type="button" class="add" data-add="${d}" aria-label="在 ${md(d)} 新增課表" title="新增">＋</button>` : ""}</div>
           <div class="chips">${items || (week && can ? restMv(d, ss) : "")}</div></div>`);
@@ -1148,7 +1160,7 @@ function agendaHtml(a, ss, acts) {
     const d = addDays(a, i), bo = boOf(d), can = d >= D.today && !bo;
     const items = (ss[d] || []).map((s) => chipHtml(s, true)).join("") + (acts[d] || []).map(actHtml).join("");
     days.push(`<div class="ag-day ${d < D.today ? "past" : ""} ${d === D.today ? "today" : ""} ${d === S.sel ? "sel" : ""} ${can ? "can" : ""} ${bo ? "bo" : ""} ${bo && bo.kind === "rest" ? "rest-d" : ""}" data-day="${d}" title="${esc(dayTip(d, ss[d]))}">
-      <div class="d"><button type="button" class="dnum" data-sel="${d}" aria-label="選取 ${md(d)}${bo ? "，不排課" : ""}" style="padding:0;height:auto;text-align:left">週${wd(d)}<b>${dOf(d).getDate()}</b></button>${d === D.today ? "今天" : ""}</div>
+      <div class="d"><button type="button" class="dnum" data-sel="${d}" aria-label="選取 ${md(d)}${bo ? "，不排課" : ""}" style="padding:0;height:auto;text-align:left">週${wd(d)}<b>${dOf(d).getDate()}</b></button>${d === D.today ? "今天" : ""}${hnOf(d) ? hnTag(hnOf(d)) : ""}</div>
       <div class="chips">${bo ? boChip(bo) : ""}${items || (bo ? "" : restMv(d, ss) || `<span class="rest">${d < D.today ? "沒有活動" : "休息"}</span>`)}</div>
       ${can ? `<button type="button" class="add" data-add="${d}" aria-label="在 ${md(d)} 新增課表">＋</button>` : "<span></span>"}</div>`);
   }
@@ -2575,6 +2587,8 @@ $("cal").addEventListener("click", (e) => {
   }
   const boc = e.target.closest("[data-bo]");
   if (boc) { const b = BOS().find((x) => x.id === boc.dataset.bo); if (b) openBo(b); return; }
+  const hnc = e.target.closest("[data-hn]");
+  if (hnc) return openHigh(hnc.dataset.hn);
   const day = e.target.closest("[data-day]");
   if (e.shiftKey && day && !e.target.closest(".chip")) {    // shift-click: a range from the selected day
     const d = day.dataset.day;
@@ -2602,7 +2616,7 @@ function paintRange(a, b) {
 $("cal").addEventListener("pointerdown", (e) => {
   if (e.button !== 0 || e.pointerType === "touch" || e.shiftKey) return;
   const c = e.target.closest("[data-day]");
-  if (!c || e.target.closest(".chip, .add, .bo-chip, .term") || CTX.el) return;
+  if (!c || e.target.closest(".chip, .add, .bo-chip, .hn-tag, .term") || CTX.el) return;
   Object.assign(RG, { a: c.dataset.day, b: c.dataset.day, x: e.clientX, y: e.clientY, on: false });
 });
 document.addEventListener("pointermove", (e) => {
@@ -2670,7 +2684,8 @@ $("cal").addEventListener("drop", async (e) => {
 });
 
 // ---------------- context menu (right-click / long-press) ----------------
-// on a session: 編輯 / 移到… / 刪除; on an empty day: 新增 / 設為休息日; on a 休息日: 取消休息日.
+// on a session: 編輯 / 移到… / 刪除; on an empty day: 新增 / 設為休息日; on a 休息日: 取消休息日;
+// on today or a past day also 記錄睡在高處 (SP-259; its 刪除 when recorded).
 // 休息日 = a one-day 不排課日期 of kind rest (api POST /rest-days): the planner skips the day
 // and puts the week's volume on its other days.
 const tt = (k, p) => (window.I18N ? I18N.t("schedule." + k, p) : k);
@@ -2689,17 +2704,19 @@ function ctxItems(target) {
     return { title: `${md(s.day)} ${s.title}`, items: out };
   }
   if (!cell || target.closest(".chip[data-act]")) return null;
-  const d = cell.dataset.day, bo = boOf(d);
-  if (bo && bo.kind === "rest") return { title: tt("ctx.day_title", { day: md(d), wd: wd(d) }), items: d >= D.today
-    ? [{ act: "unrest", day: d, label: tt("ctx.unrest") }] : [] };
-  if (bo || d < D.today) return null;
+  const d = cell.dataset.day, bo = boOf(d), hn = hnOf(d);
+  const high = d > D.today ? [] : hn ? [{ act: "high", day: d, label: tt("ctx.high_edit", { m: hn.m.toLocaleString() }) },
+    { act: "unhigh", day: d, label: tt("ctx.high_del"), danger: true }] : [{ act: "high", day: d, label: tt("ctx.high"), sub: tt("ctx.high_sub") }];
+  const title = tt("ctx.day_title", { day: md(d), wd: wd(d) });
+  if (bo && bo.kind === "rest") return { title, items: (d >= D.today ? [{ act: "unrest", day: d, label: tt("ctx.unrest") }] : []).concat(high) };
+  if (bo || d < D.today) return high.length ? { title, items: high } : null;
   const busy = (D.sessions || []).some((s) => s.day === d && ["active", "done"].includes(s.state));
   const items = [{ act: "add", day: d, label: tt("ctx.add") }];
   // a test can go next to an easy run (the suggestion's own day rules decide), so also on a busy day
   if (CTX.tests) items.push({ act: "tests", day: d, label: tt("ctx.tests"),
     sub: sugFits(d) ? tt("ctx.tests_sub", { n: CTX.tests }) : tt("ctx.tests_no_day"), muted: !sugFits(d) });
   if (!busy) items.push({ act: "rest", day: d, label: tt("ctx.rest"), sub: tt("ctx.rest_sub") });
-  return { title: tt("ctx.day_title", { day: md(d), wd: wd(d) }), items };
+  return { title, items: items.concat(high) };
 }
 function ctxOpen(target, x, y) {
   if (!D || S.busy) return false;
@@ -2733,7 +2750,42 @@ async function ctxRun({ ctx, uid, day }) {
   else if (ctx === "tests") openTests(day);
   else if (ctx === "rest") setRest(day, true);
   else if (ctx === "unrest") setRest(day, false);
+  else if (ctx === "high") openHigh(day);
+  else if (ctx === "unhigh") delHigh(day);
 }
+// 睡在高處 (SP-259): 「這一晚睡在 X m」 on today or a past day — counted by the 高度適應提醒 (≥ 2,750 m);
+// a new record is filled from a plan event's GPX night (its camp) when there is one
+async function openHigh(day) {
+  if (day > D.today) return;
+  const cur = hnOf(day);
+  let pre = null;
+  if (!cur) { try { pre = await sj("GET", `${PAPI}/high-nights/${day}/prefill`); } catch (_) { pre = null; } }
+  const m = cur ? cur.m : pre && pre.m;
+  const ok = await ask(tt("hn.title", { day: md(day), wd: wd(day) }),
+    `<p class="meta" style="margin:0">${esc(tt("hn.body"))}</p>
+     <label class="hn-row">${esc(tt("hn.m_label"))} <input id="hn-m" type="number" min="1" max="8849" step="1" inputmode="numeric" value="${m ? +m : ""}"> m</label>
+     ${!cur && pre && pre.source ? `<p class="meta" style="margin:0">${esc(tt("hn.from", { src: pre.source }))}</p>` : ""}`, tt("hn.save"));
+  if (!ok) return;
+  const v = $("hn-m").value;
+  try {
+    await sj("PUT", `${PAPI}/high-nights/${day}`, { m: v === "" ? null : +v });
+    await load();
+    window.AppSuggestions?.refresh?.();
+    msg(esc(tt(+v >= 2750 ? "hn.saved" : "hn.saved_low", { day: md(day), m: Math.round(+v).toLocaleString() })), "ok");
+  } catch (e) { errMsg(tt("hn.what"), e); }
+}
+async function delHigh(day) {
+  try {
+    await sj("DELETE", `${PAPI}/high-nights/${day}`);
+    await load();
+    window.AppSuggestions?.refresh?.();
+    msg(esc(tt("hn.deleted", { day: md(day) })), "ok");
+  } catch (e) { errMsg(tt("hn.what"), e); }
+}
+// Enter in the altitude box saves (the dialog form's first button is its ✕ = cancel)
+$("cf").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && e.target.id === "hn-m") { e.preventDefault(); $("cf-ok").click(); }
+});
 function coroNote(c) {
   if (!c || c.status === "none") return "";
   if (c.status === "ok") return tt("del.coros_ok", { n: c.removed, provider: c.provider_label || "COROS" });
