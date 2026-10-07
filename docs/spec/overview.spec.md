@@ -1,6 +1,6 @@
 # Module Spec: overview
 
-> **Last Updated**: 2026-10-06
+> **Last Updated**: 2026-10-07
 > **Status**: Active
 > **Domain Layer**: Core Domain
 
@@ -807,8 +807,15 @@ more than `MAX_WEEKS` = 8 ahead (`backend/engine/projection.py:37`):
 - Each projected week carries `mode`, hours, TSS, CTL start / end, `why`, `provisional`
   (true beyond next week) and, with preferences, `notes`.
 
-The horizon is the current phase end, at least two weeks out, capped at `MAX_WEEKS`
-(`backend/api/plan_sessions.py:80`).
+The horizon (`horizon_of`, `backend/api/plan_sessions.py:137`) is the current phase end, at
+least two weeks out (the end of next week), capped at `MAX_WEEKS`; no phase = the cap. When the
+current phase ends within 14 days (`NEXT_PHASE_DAYS`, end − today ≤ 14) it is the **next**
+phase's end instead (the first phase starting after the current one; none = the rule above),
+still within the floor and the cap (SP-327). Before, the horizon dropped to the two-week floor on
+a phase's last days (or when a new / moved race cut the current phase short), rule 5 removed the
+later weeks and they came back the next day as new rows with new uids — the calendar feed and
+COROS saw them deleted and created again. With fixed phases the horizon never moves back from
+one day to the next, so the later rows keep their uids across a boundary.
 
 ## Stored plan (`plan_store.py`, `reconcile.py`)
 
@@ -996,8 +1003,10 @@ provider** (`WT.active`, setting `plan.push.provider`; the COROS provider delega
 which one. The response keeps the `coros` field names.
 
 - **Scope** (`_range`, `backend/api/plan_sessions.py:247`): `day` = that day; `week` = the
-  Monday–Sunday week of `day`, from today on; `phase` = today to the phase end, capped at
-  `MAX_WEEKS`. `day` defaults to today; the plan's "today" is never earlier than the real date
+  Monday–Sunday week of `day`, from today on; `phase` (整個周期) = today to the phase end, capped at
+  `MAX_WEEKS` (`phase_push_end`, `backend/api/plan_sessions.py:160`) — the current phase only, also
+  on its last days when the horizon already reaches into the next phase (SP-327); the automatic
+  push (`plan.auto.push_days` from today) is independent of both. `day` defaults to today; the plan's "today" is never earlier than the real date
   (`backend/api/plan_sessions.py:229`). A `week` entirely before today is a 400 for preview,
   push and unpush instead of an empty range (`backend/api/plan_sessions.py:264`); a past `day`
   scope is not guarded.
@@ -1599,6 +1608,10 @@ preference, blackout, auto-replan, accepted-B2B, 主要訓練項目 and HR-profi
   (regeneration, tombstones, missed and late-sync done, coverage, collisions, supersede,
   horizon), persistence and edits, API initialisation, push scopes and idempotency, missed
   removal, concurrent first loads, unpush, and the stored-plan summary moving bars and projection.
+- `backend/tests/test_plan_horizon.py` (SP-327): the horizon with 0 / 3 / 14 / 15 / 20 days left in
+  the phase, no next phase, the floor / cap, never moving back day to day; 整個周期 stays the
+  current phase; the same uids the day before and after a boundary (also after a race cuts the
+  current phase short, and through the real projection).
 - `backend/tests/test_plan_prefs.py`: defaults change nothing (projection and `week_plan`);
   50-min cap within cap and volume kept; hard cap note; soft cap excess on the
   long day (and on an easy run when there is no long); long-day cap first; CP test exempt;
@@ -1677,7 +1690,7 @@ preference, blackout, auto-replan, accepted-B2B, 主要訓練項目 and HR-profi
 | superseded | an edited hard session dropped because its week became a rest week |
 | missed | an active past session with no matching activity, within the synced-data coverage |
 | reconcile | refresh the stored plan from activities and a regenerated plan (rules 1–6) |
-| horizon | the last day planned: phase end, ≥ 2 weeks, ≤ 8 weeks |
+| horizon | the last day planned: phase end (the next phase's when it ends within 14 days), ≥ 2 weeks, ≤ 8 weeks |
 | provisional | a projected week beyond next week; recalculated as weeks arrive |
 | push scope | day, week or phase range sent to COROS |
 | fingerprint | SHA-256 of day + COROS payload; unchanged → not re-pushed |
