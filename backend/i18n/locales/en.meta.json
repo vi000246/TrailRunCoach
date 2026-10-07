@@ -1879,6 +1879,14 @@
     "draft": true,
     "src": "backend/engine/hr_profile.py:213"
   },
+  "依你填的資料": {
+    "draft": false,
+    "src": "backend/engine/race_feasibility.py:152"
+  },
+  "依你填的資料：週時數用跑步經驗問卷的每週 {h:.1f} 小時（照原數字用）": {
+    "draft": false,
+    "src": "backend/engine/race_feasibility.py:154"
+  },
   "依你的跑走紀錄校正": {
     "draft": true,
     "src": "backend/engine/walk_hint.py:117"
@@ -5475,6 +5483,22 @@
     "draft": false,
     "src": "backend/engine/overview.py:1358"
   },
+  "資料還少": {
+    "draft": false,
+    "src": "backend/engine/race_feasibility.py:153"
+  },
+  "資料還少，最多先判到「有點趕」": {
+    "draft": false,
+    "src": "backend/engine/race_feasibility.py:158"
+  },
+  "資料還少：最近 {n} 週沒有跑步或健行紀錄，跑步經驗問卷也沒有可用的每週量。到「設定 → 個人資料 → 跑步經驗」填最近 4 週的量，就能先估": {
+    "draft": false,
+    "src": "backend/engine/race_feasibility.py:156"
+  },
+  "資料還少：週量照你最近 {n} 週的紀錄": {
+    "draft": false,
+    "src": "backend/engine/race_feasibility.py:155"
+  },
   "賽事 id 格式不對": {
     "draft": true,
     "src": "backend/engine/race_calc_store.py:53"
@@ -6015,6 +6039,10 @@
     "draft": true,
     "src": "backend/engine/injuries.py:94"
   },
+  "這個估法對週跑量少的人偏樂觀：你填的每週 {h:.1f} 小時不多，全馬以上的距離實際會比估的吃力（Vickers & Vertosick 2016：一場成績推全馬，週跑量少的人慢得更多）": {
+    "draft": false,
+    "src": "backend/engine/race_feasibility.py:161"
+  },
   "這個平台": {
     "draft": true,
     "src": "backend/engine/workout_steps.py:1209"
@@ -6238,6 +6266,22 @@
   "還不夠": {
     "draft": true,
     "src": "backend/engine/race_feasibility.py:321"
+  },
+  "還不知道": {
+    "draft": false,
+    "src": "backend/engine/race_feasibility.py:151"
+  },
+  "還不知道：還沒有實際的爬升紀錄": {
+    "draft": false,
+    "src": "backend/engine/race_feasibility.py:160"
+  },
+  "還不知道：還沒有實際的距離和爬升紀錄，週量和比賽最難那天的比例要等有紀錄才算（不拿猜的配速把時數換成公里）": {
+    "draft": false,
+    "src": "backend/engine/race_feasibility.py:159"
+  },
+  "還不知道：還沒有每週時數（沒有紀錄，跑步經驗也沒有可用的每週量）": {
+    "draft": false,
+    "src": "backend/engine/race_feasibility.py:665"
   },
   "還不能連續跑 30 分鐘：app 的自動排課要等你能連續跑 30 分鐘之後才準。這週先照預設排每週 {h:g} 小時、{n} 次輕鬆跑，不排長跑；每次以能完整講一句話的強度為準": {
     "draft": false,
