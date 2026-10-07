@@ -424,6 +424,19 @@ def heat_status(date: Optional[str] = None):
     return _py(heat_status_for(date))
 
 
+@router.get("/altitude-acclimatisation")
+def altitude_acclimatisation(date: Optional[str] = None):
+    """百岳的海拔適應預設 (SP-260; engine/altitude.acclimatisation_default): nights above 2,750 m in
+    the 14 days before `date` (activities + the 課表 calendar's records) → partial | unacclimatised."""
+    from backend.engine import altitude as AL
+    today = today_local()
+    try:
+        alts = AL.day_altitudes(_dataset(), today)
+    except Exception:                       # noqa: BLE001 — no data: the records alone
+        alts = {}
+    return _py(AL.acclimatisation_default(alts, today, CALC.race_day(date), AL.load_nights()))
+
+
 class HikeMetaIn(BaseModel):
     file: str
     pack_kg: Optional[float] = None

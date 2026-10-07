@@ -946,6 +946,8 @@ AMS_TOP_M = 2500.0          # 高山症提示: WMS guideline (Luks 2019) — sym
 LIMITS_NOTE = ("沒有背 10–15 kg、每天 6–10 h、連走多天的跑步資料；背負與多日效應靠公式（誤差約 ±15 %，"
                "Looney 2022、Weyand 2021），所以帶比越野寬")
 AMS_NOTE = "高山症會讓速度與行程失準，出現症狀以下撤為先"
+# SP-260 (altitude-training.md §4.1): the page and the result say what 「部分」 is
+PARTIAL_NOTE = "部分適應＝已適應與未適應兩條曲線的中點（推估；沒有研究量過部分適應）"
 
 
 def _cap_band_factor(cap) -> float:
@@ -975,7 +977,8 @@ def plan_hike(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, vali
     warnings: list[str] = []
     gpx = course.get("source") == "gpx"
     accl_in = opts.get("acclimatisation") or "unacclimatised"
-    accl = "acclimatised" if accl_in == "acclimatised" else "unacclimatised"
+    # SP-260: 「部分」 is the midpoint of the two curves (capacity.A), no longer read as 未適應
+    accl = accl_in if accl_in in ENV.ACCLIMATISATION else "unacclimatised"
     to = {x: env["to"][x] for x in ("altitude_m", "temp_c", "rh_pct")}
     kind = opts.get("trip_kind") if opts.get("trip_kind") in TRIP_KINDS else CAP.TRIP_KIND_DEFAULT
     band_id = opts.get("hr_band") if opts.get("hr_band") in CAP.HR_BANDS else "aet"
@@ -1126,8 +1129,8 @@ def plan_hike(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, vali
         cross["solo_eph_s"] = ep / inp["hiking"]["eph"]["median"] * 3600.0
     # ---- warnings ------------------------------------------------------------
     bs = cap.basis
-    if accl_in == "partial":
-        warnings.append("部分適應沒有定量研究，已改用未適應（個人海拔斜率本身就是上山第 1–2 天的未適應狀態）")
+    if accl == "partial":
+        warnings.append(PARTIAL_NOTE)
     if accl == "acclimatised":
         warnings.append("已適應：個人斜率 × Bassett 1999 已適應 ÷ 未適應的比（推估）")
     an = altitude_note(segs, accl) if gpx else None

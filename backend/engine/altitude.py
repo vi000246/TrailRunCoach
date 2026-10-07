@@ -209,6 +209,27 @@ def exposure(alts: dict, today: dt.date, start: dt.date, manual: Optional[dict] 
             "ever": bool(high), "manual": len(rec - act)}
 
 
+# 百岳計算機的海拔適應預設 (SP-260, owner 2026-10-06; altitude-training.md §4.1): ≥ 2 nights above
+# 2,750 m in the 14 days before the trip (CDC's count, the same as the reminder) → 部分, else 未適應
+# (推估: 「部分」 is itself the midpoint of the two curves); 已適應 only when the athlete picks it.
+# Routes under 3,000 m (EVENT_MIN_M) get no 部分 on the page.
+PARTIAL_NIGHTS = NIGHTS
+
+
+def accl_default(nights: int) -> str:
+    return "partial" if nights >= PARTIAL_NIGHTS else "unacclimatised"
+
+
+def acclimatisation_default(alts: dict, today: dt.date, date: Optional[dt.date],
+                            manual: Optional[dict] = None) -> dict:
+    """The calculator's default for a trip on `date` (None or past = today): {"default", "nights",
+    "manual", "since", "start"} — nights counted as exposure() does (activities + records)."""
+    start = max(date or today, today)
+    ex = exposure(alts, today, start, manual)
+    return {"default": accl_default(ex["nights"]), "nights": ex["nights"], "manual": ex["manual"],
+            "since": (start - dt.timedelta(days=REMIND_DAYS)).isoformat(), "start": start.isoformat()}
+
+
 # ---------------------------------------------------------------------------
 # 睡在高處的紀錄 (SP-259): user_settings NIGHTS_KEY = [{"day": ISO, "m": int}]
 # ---------------------------------------------------------------------------

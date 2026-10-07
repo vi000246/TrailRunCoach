@@ -381,7 +381,8 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
       <div class="row"><span class="lbl">海拔</span>
         <div class="seg" id="accl"><button data-a="acclimatised">已適應</button><button data-a="partial">部分適應</button><button data-a="unacclimatised">未適應</button></div>
         <span class="badge watch hidden" id="accl-badge">推估</span>
-        <span class="help" tabindex="0">?<span class="tip">未適應：剛上山，每升高 1000 m 有氧能力約少 6.3%（300 m 起算）。已適應：較樂觀的海拔曲線。部分適應（例如前一晚住山屋）取兩者中間，沒有研究可依，所以標推估。</span></span>
+        <span class="help" tabindex="0">?<span class="tip" data-i18n="racepower.accl.tip">未適應：剛上山，每升高 1000 m 有氧能力約少 6.3%（300 m 起算）。已適應：較樂觀的海拔曲線。部分適應＝已適應與未適應的中點，是推估（沒有研究量過部分適應）。百岳沒選時：出發前 14 天內在 2,750 m 以上睡了 2 晚以上（活動，加上課表日曆記的「睡在高處」）預設部分適應，否則未適應；已適應只在你自己選時用。路線最高不到 3,000 m 時不提供部分適應。</span></span>
+        <span class="meta" id="accl-line"></span>
       </div>
       <div class="row rf"><span class="lbl">熱</span>
         <label class="meta"><input type="checkbox" id="hourlyheat" checked> 逐段熱修正（依起跑時間與各段 ETA 取逐時氣溫、露點）</label>
@@ -597,6 +598,7 @@ const S = Object.assign({ mode: "auto", tunit: "time", punit: "w", effort: 1, cs
 const T = (k, p) => (window.I18N ? I18N.t("racepower." + k, p) : k);
 const TR = T;                     // for functions where T is a local (renderBacktest's terrain block)
 let HEAT = null;                          // /heat-status for the race date
+let ALTD = null;                          // /altitude-acclimatisation for the race date (SP-260)
 let HIKEMETA = null;                      // /hike-meta rows
 let COURSE = ls.get("course", null);      // {course_id, name, km, gain_m} — the file itself is not stored
 let LOCKS = {};                           // seg index -> power
@@ -634,12 +636,23 @@ function setType(t) {
   document.querySelectorAll(".tf").forEach((e) => e.classList.toggle("hidden", t !== "trail"));
   ["re-sec", "cp-sec", "rg-sec", "zone-sec", "gm-sec", "cad-sec"].forEach((id) => $(id).classList.toggle("hidden", hike));
   $("hike-sec").classList.toggle("hidden", !hike);
-  if (!S.accl) segOn("accl", "a", hike ? "unacclimatised" : "acclimatised");
+  if (!S.accl) segOn("accl", "a", accl());
   // user decision 2026-09-30: a 百岳 trip defaults to 3 days
   if (hike && !S.daysInit) { if ((Number($("days").value) || 1) === 1) $("days").value = 3; $("tripdays").value = $("tripdays").value || 3; S.daysInit = true; saveUI(); }
   renderDayPlan(); syncForm();
 }
-function accl() { return S.accl || (type === "baiyue" ? "unacclimatised" : "acclimatised"); }
+// SP-260 (百岳): with no choice, the 海拔 default follows the nights slept above 2,750 m in the 14 days
+// before the trip (≥ 2 → 部分, /altitude-acclimatisation); a route topping out under 3,000 m has no 部分
+function routeTop() { const z = S.csrc === "gpx" ? COURSE?.z_max : num("t-alt"); return z == null || !isFinite(z) ? null : +z; }
+function lowRoute() { const z = routeTop(); return type === "baiyue" && z != null && z < 3000; }
+function acclDefault() { return type !== "baiyue" ? "acclimatised" : ALTD?.default === "partial" && !lowRoute() ? "partial" : "unacclimatised"; }
+function accl() { const a = S.accl || acclDefault(); return a === "partial" && lowRoute() ? "unacclimatised" : a; }
+async function loadAltAccl() {
+  const before = accl();
+  try { ALTD = await j(`${API}/altitude-acclimatisation?${new URLSearchParams({ date: $("date").value || "" })}`); } catch { ALTD = null; }
+  syncForm();
+  if (accl() !== before) schedule();
+}
 // the goal follows the training basis (/goal-basis): hr → a target pace, power → a target power;
 // 百岳 keeps its three modes. A saved goal of the other kind falls back to the model (it is kept in S).
 let BASIS = null;
@@ -668,6 +681,9 @@ function syncForm() {
   $("course-gpx").classList.toggle("hidden", S.csrc !== "gpx");
   $("hills-row").classList.toggle("hidden", type === "baiyue" || S.csrc !== "gpx");
   $("accl-badge").classList.toggle("hidden", accl() !== "partial");
+  document.querySelector('#accl [data-a="partial"]').classList.toggle("hidden", lowRoute());
+  $("accl-line").textContent = type === "baiyue" && !S.accl && ALTD
+    ? T(acclDefault() === "partial" ? "accl.default_partial" : "accl.default_none", { n: ALTD.nights }) : "";
   const amt = S.amount ?? (S.strategy === "positive" && type === "trail" ? 3 : 2);
   $("amount").value = amt; $("amount-v").textContent = S.strategy === "even" ? "" : amt + "%";
   $("amt-box").classList.toggle("hidden", S.strategy === "even");
@@ -683,7 +699,7 @@ function advChanged() {
   if (S.split !== "grade" || !["sigma", "eps", "minlen", "flatpct"].every(blank)) out.push(T("adv.n.split"));
   if (!hike && S.strategy !== "even") out.push(T("adv.n.strategy"));
   if (!hike && S.csrc === "gpx" && (Number(S.hup) !== 5 || Number(S.hdown) !== 10)) out.push(T("adv.n.hills"));
-  if (S.accl && S.accl !== (hike ? "unacclimatised" : "acclimatised")) out.push(T("adv.n.accl"));
+  if (S.accl && S.accl !== acclDefault()) out.push(T("adv.n.accl"));
   if (!hike && !$("hourlyheat").checked) out.push(T("adv.n.hourly"));
   if ((S.heatAccl?.mode || "auto") !== "auto") out.push(T("adv.n.heat_accl"));
   if (hike && (S.hrband !== "aet" || !blank("packdays") || !blank("heatz"))) out.push(T("adv.n.hike"));
@@ -751,6 +767,7 @@ function heatAcclLabel() {
 async function loadHeat() {
   try { HEAT = await j(`${API}/heat-status?${new URLSearchParams({ date: $("date").value || "" })}`); } catch { HEAT = null; }
   heatAcclLabel();
+  loadAltAccl();                          // SP-260: the 百岳 海拔 default for the same date
 }
 function heatAcclBody() {
   const m = S.heatAccl?.mode || "auto";
@@ -772,7 +789,7 @@ let LAST_FILE = null;                      // the last uploaded file, so it can 
 async function loadEventGpx(eid, keep = false) {          // keep: the restored locks / terrain / splits stay
   try {
     const c = await post(`${API}/course/event/${encodeURIComponent(eid)}`, { split: S.split, ...Object.fromEntries(courseOpts(false)) });
-    COURSE = { course_id: c.course_id, event_id: eid, name: c.name, km: c.totals.km, gain_m: c.totals.gain_m, segments: c.totals.segments, start: c.start || null };
+    COURSE = { course_id: c.course_id, event_id: eid, name: c.name, km: c.totals.km, gain_m: c.totals.gain_m, segments: c.totals.segments, start: c.start || null, z_max: c.totals.z_max ?? null };
     ls.set("course", COURSE); if (!keep) { LOCKS = {}; TERRAIN = {}; SPLITS = c.day_splits_km || []; }
     $("course-warn").innerHTML = (c.warnings || []).map((w) => `<li>${esc(w)}</li>`).join("");
     STOP_SUGG = c.stop_suggestions || [];
@@ -853,7 +870,7 @@ async function uploadGpx(file) {
     if (!r.ok) throw new Error((await r.text()).slice(0, 300));
     const c = await r.json();
     LAST_FILE = file;
-    COURSE = { course_id: c.course_id, name: c.name, km: c.totals.km, gain_m: c.totals.gain_m, segments: c.totals.segments, start: c.start || null };
+    COURSE = { course_id: c.course_id, name: c.name, km: c.totals.km, gain_m: c.totals.gain_m, segments: c.totals.segments, start: c.start || null, z_max: c.totals.z_max ?? null };
     ls.set("course", COURSE); LOCKS = {}; SPLITS = (c.wpts || []).filter((w) => w.camp).map((w) => +w.km.toFixed(2)); TERRAIN = {};
     $("course-warn").innerHTML = (c.warnings || []).map((w) => `<li>${esc(w)}</li>`).join("");
     STOP_SUGG = c.stop_suggestions || [];
