@@ -124,6 +124,23 @@ def _rescale(plan: dict, factors: list[float], start_time: Optional[str], stops)
             sm["time_total_range_s"] = [x + added for x in plan["_night_range0"]]
 
 
+def _shift_snow(plan: dict, added: float) -> None:
+    """SP-252 × SP-254: the 百岳 積雪 line (summary.snow, computed by the planner before the night
+    slowdown) moves with the night's added time, so its moving / clock numbers match the plan's,
+    and the snow-free base gets the same addition — the snow difference stays snow only. The high
+    end gets the same addition too (推估: a longer trip could be a little more in the dark)."""
+    sn = (plan.get("summary") or {}).get("snow")
+    if not sn or not added:
+        return
+    ratio = float(plan["summary"].get("moving_ratio") or 1.0) or 1.0
+    for k in ("base_s", "time_s", "time_hi_s"):
+        if sn.get(k) is not None:
+            sn[k] += added
+    for k in ("clock_s", "clock_hi_s"):
+        if sn.get(k) is not None:
+            sn[k] += added / ratio
+
+
 def apply(plan: dict, *, date: Optional[str], start_time: Optional[str], stops=None,
           sun: Optional[list[dict]] = None, slow_pct: float = 0.0, mode: str = "auto") -> dict:
     """Marks each segment `night` / `dark_share` and, with slow_pct > 0 (not in target-time
@@ -160,6 +177,7 @@ def apply(plan: dict, *, date: Optional[str], start_time: Optional[str], stops=N
             if moved < TOL_S:
                 break
         added = sum(s["t"] for s in segs) - sum(plan["_night_t0"])
+        _shift_snow(plan, added)
         for k in ("_night_t0", "_night_T0", "_night_clock0", "_night_total0", "_night_range0", "_night_ep"):
             plan.pop(k, None)
     for s, x in zip(segs, sh):
