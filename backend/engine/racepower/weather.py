@@ -39,6 +39,13 @@ turns the rows in the race window into a reminder. It never changes the
 predicted time (docs/research/wet-muddy-terrain.md §4: no study gives a
 wet-trail slowdown to apply).
 
+Wind (SP-251): Open-Meteo's hourly wind_speed_10m / wind_gusts_10m /
+apparent_temperature and the CWA mountain 3-day product's 風速 (m/s, 3-hourly)
+go out as `wind` rows; cold.py turns them into the wind chill at each segment
+and the 冷風 reminder. The 鄉鎮 product's wind is left out on purpose: its point
+is the 公所 in the valley, not the ridge; the weekly products give only 12-hour
+spans and the climatology none. Never changes the predicted time.
+
 Why three models (SP-210, checked 2026-10-06 against CWA 1991–2020 station
 normals — 玉山 3845 m, 阿里山 2413 m, 日月潭 1018 m, 鞍部 838 m, 臺北, 臺中;
 2017–2020 daily means at the station elevation, monthly bias; the period
@@ -288,8 +295,16 @@ def parse_cwa(doc: dict) -> dict:
         pop = [{"start": r["start"], "end": r["end"], "pop": _first_num(r["v"], ("ProbabilityOfPrecipitation",))}
                for name, rows in s.items() if name and name.endswith("降雨機率")
                for r in rows if r["start"] and r["end"]]
+        # wind (SP-251): the element whose values carry `WindSpeed` (m/s; 「風速」 in the 3-day product's
+        # 3-hourly rows, with BeaufortScale) — CWA 產品說明文件「預報-精緻化天氣預報-休閒旅遊預報」
+        # (F-B0053-001…073, 2024-12-10). Only rows with a DataTime (the weekly 12-hour 「最大風速」 spans
+        # are left out); CWA gives no gusts.
+        wind = [{"t": r["t"], "ms": _first_num(r["v"], ("WindSpeed",))}
+                for rows in s.values() for r in rows
+                if r["t"] and isinstance(r["v"], dict) and "WindSpeed" in r["v"]]
         locs.append({**h, "hourly": hourly, "blocks": sorted(by.values(), key=lambda b: b["start"]),
-                     "pop": sorted((p for p in pop if p["pop"] is not None), key=lambda p: p["start"])})
+                     "pop": sorted((p for p in pop if p["pop"] is not None), key=lambda p: p["start"]),
+                     "wind": sorted((w for w in wind if w["ms"] is not None), key=lambda w: w["t"])})
     return {"issued": issued, "locations": locs}
 
 
@@ -484,6 +499,45 @@ def open_meteo_rain_rows(js: dict, dates: set[dt.date]) -> list[dict]:
         rows.append({"start": (end - dt.timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M"),
                      "end": key, "pop_pct": pop, "mm": mm})
     return _rain_window(rows, dates)
+
+
+# ---------------------------------------------------------------------------
+# wind (SP-251): rows {t, temp_c, wind_kmh, gust_kmh, apparent_c} in naive local time
+# ---------------------------------------------------------------------------
+
+def cwa_wind_rows(loc: dict, dates: set[dt.date]) -> list[dict]:
+    """The CWA mountain product's wind (m/s → km/h) on the event days, each row with the
+    product's own temperature at that time (hourly_at on its temperature rows; None when
+    it has none there). CWA has no gusts."""
+    temps = cwa_hourly_rows(loc, dates)
+    rows = []
+    for w in loc.get("wind") or []:
+        key = _local_key(w.get("t"))
+        if key is None or w.get("ms") is None:
+            continue
+        h = hourly_at(temps, dt.datetime.fromisoformat(key)) if temps else None
+        rows.append({"t": key, "temp_c": h["temp_c"] if h else None, "wind_kmh": float(w["ms"]) * 3.6,
+                     "gust_kmh": None, "apparent_c": None})
+    return _in_window(rows, dates)
+
+
+def open_meteo_wind_rows(js: dict, dates: set[dt.date]) -> list[dict]:
+    """Open-Meteo's hourly wind_speed_10m / wind_gusts_10m (km/h, the API's default unit) with
+    temperature_2m and apparent_temperature of the same hour; hours without a wind speed are
+    left out (no wind columns → [])."""
+    h = js.get("hourly") or {}
+
+    def at(key, i):
+        v = h.get(key) or []
+        return _num(v[i]) if i < len(v) else None
+    rows = []
+    for i, t in enumerate(h.get("time") or []):
+        key, w = _local_key(t), at("wind_speed_10m", i)
+        if key is None or w is None:
+            continue
+        rows.append({"t": key, "temp_c": at("temperature_2m", i), "wind_kmh": w,
+                     "gust_kmh": at("wind_gusts_10m", i), "apparent_c": at("apparent_temperature", i)})
+    return _in_window(rows, dates)
 
 
 Window = tuple[dt.datetime, dt.datetime]
@@ -831,14 +885,15 @@ def race_conditions(*, date: dt.date, days: int = 1, lat: Optional[float] = None
 
     want = _dates(date, days)
 
-    def done(provider, values, extra=None, hourly=None, rain=None):
+    def done(provider, values, extra=None, hourly=None, rain=None, wind=None):
         v = {"altitude_m": values.get("altitude_m", elevation_m), "temp_c": values["temp_c"], "rh_pct": values["rh_pct"],
              "dew_c": values.get("dew_c", dew_point(values["temp_c"], values["rh_pct"])["dew_c"])}
         # hourly rows from an hourly forecast (CWA 3-day, Open-Meteo) or the
         # climatology's 24-hour profile; weekly blocks have none → one heat value
         return {"provider": provider, "label": _(PROVIDER_LABEL[provider]), "values": v, "tried": tried,
                 "location": loc, "fetched_at": now, "detail": extra or {}, "lead_days": lead,
-                "hourly": hourly or None, "rain": rain or None}   # rain: SP-249 rows (forecasts only)
+                "hourly": hourly or None, "rain": rain or None,   # rain: SP-249 rows (forecasts only)
+                "wind": wind or None}   # wind: SP-251 rows (CWA mountain 3-day, Open-Meteo forecast)
 
     cwa_key = []                       # the key, read once (only when a CWA step runs)
 
@@ -877,14 +932,14 @@ def race_conditions(*, date: dt.date, days: int = 1, lat: Optional[float] = None
                                           "match": m["match"], "distance_km": m["distance_km"],
                                           "issued": doc.get("issued"), "cache": doc.get("cache")},
                                 cwa_hourly_rows(m, want) if c.get("product") == "hourly" else None,
-                                cwa_rain_rows(m, want))
+                                cwa_rain_rows(m, want), cwa_wind_rows(m, want))
                 except Exception as e:          # noqa: BLE001 — fall through to the next provider
                     tried.append({"provider": prov, "ok": False, "reason": str(e)[:120]})
     if lat is None or lon is None:
         tried.append({"provider": "open_meteo", "ok": False, "reason": "沒有座標"})
         tried.append({"provider": "cwa_town", "ok": False, "reason": _("沒有座標")})
         return {"provider": "manual", "label": _(PROVIDER_LABEL["manual"]), "values": None, "tried": tried,
-                "location": loc, "fetched_at": None, "lead_days": lead, "hourly": None, "rain": None}
+                "location": loc, "fetched_at": None, "lead_days": lead, "hourly": None, "rain": None, "wind": None}
     end = date + dt.timedelta(days=max(1, days) - 1)
     # 2. Open-Meteo forecast
     if 0 <= lead and (end - today).days < OM_HORIZON_DAYS:
@@ -894,7 +949,8 @@ def race_conditions(*, date: dt.date, days: int = 1, lat: Optional[float] = None
             q_end = end + dt.timedelta(days=1) if (end - today).days + 1 < OM_HORIZON_DAYS else end
             params = {"latitude": lat, "longitude": lon,
                       "hourly": "temperature_2m,relative_humidity_2m,dew_point_2m,surface_pressure,"
-                                "precipitation,precipitation_probability",          # SP-249
+                                "precipitation,precipitation_probability,"          # SP-249
+                                "wind_speed_10m,wind_gusts_10m,apparent_temperature",   # SP-251
                       "timezone": "auto", "start_date": date.isoformat(), "end_date": q_end.isoformat()}
             if elevation_m is not None:
                 params["elevation"] = elevation_m
@@ -904,7 +960,7 @@ def race_conditions(*, date: dt.date, days: int = 1, lat: Optional[float] = None
                 tried.append({"provider": "open_meteo", "ok": True})
                 return done("open_meteo", c, {"grid_elevation_m": c.get("grid_elevation_m"),
                                               "attribution": ATTRIBUTION}, open_meteo_hourly_rows(js, want),
-                            open_meteo_rain_rows(js, want))
+                            open_meteo_rain_rows(js, want), open_meteo_wind_rows(js, want))
             tried.append({"provider": "open_meteo", "ok": False, "reason": "回應沒有這些日期"})
         except Exception as e:               # noqa: BLE001
             tried.append({"provider": "open_meteo", "ok": False, "reason": str(e)[:120]})
@@ -962,7 +1018,7 @@ def race_conditions(*, date: dt.date, days: int = 1, lat: Optional[float] = None
     except Exception as e:                   # noqa: BLE001
         tried.append({"provider": "climatology", "ok": False, "reason": str(e)[:120] or "沒有資料"})
         return {"provider": "manual", "label": _(PROVIDER_LABEL["manual"]), "values": None, "tried": tried,
-                "location": loc, "fetched_at": None, "lead_days": lead, "hourly": None, "rain": None}
+                "location": loc, "fetched_at": None, "lead_days": lead, "hourly": None, "rain": None, "wind": None}
     tried.append({"provider": "climatology", "ok": True})
     rows = climatology_hourly_rows(c["profile"], want, c["offset_c"]) if c.get("profile") else None
     return done("climatology", c, {"years": c["years"], "models": list(CLIM_MODELS),

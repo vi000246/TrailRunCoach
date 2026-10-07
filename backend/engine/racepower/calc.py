@@ -153,6 +153,15 @@ class RainIn(BaseModel):
     mm: Optional[float] = None
 
 
+class WindIn(BaseModel):
+    """One /weather `wind` row (SP-251): local clock time, km/h."""
+    t: str
+    temp_c: Optional[float] = None
+    wind_kmh: Optional[float] = None
+    gust_kmh: Optional[float] = None
+    apparent_c: Optional[float] = None
+
+
 class PlanIn(PredictIn):
     distance_km: Optional[float] = None
     mode: Literal["time", "power", "auto"] = "auto"
@@ -179,6 +188,8 @@ class PlanIn(PredictIn):
     hourly_heat: bool = True
     # SP-249: the /weather `rain` rows → a reminder on trail / 百岳 plans; never changes the time
     rain: Optional[list[RainIn]] = None
+    # SP-251: the /weather `wind` rows → wind chill and the 冷風 reminder; never changes the time
+    wind: Optional[list[WindIn]] = None
     # heat acclimation (heat-acclimation.md §5.5): {"mode": auto|none|partial|acclimatised|custom, "s"}
     heat_acclimatisation: Optional[dict] = None
     # 百岳 capacity (baiyue-from-running.md §6.1)
@@ -578,6 +589,10 @@ def make_plan(ctx: Context, body: PlanIn) -> dict:
     from backend.engine.racepower import watch_export as WE
     out["export_block"] = WE.multi_day(out, body.start_time, body.days)
     out["rain"] = rain_reminder(body, out)
+    out["cold_wind"] = cold_reminder(body, out)
+    # SP-305: the outdoor reminders of this race merged into one line for the attention box
+    from backend.engine.racepower import cold as CD
+    out["attention"] = CD.attention(out["cold_wind"])
     if course.get("source") == "gpx":
         from backend.engine.racepower import fuel as FU
         out["stop_suggestions"] = FU.stops_from_wpts(course.get("wpts") or [], course["totals"]["km"])
@@ -597,6 +612,17 @@ def rain_reminder(body: PlanIn, out: dict) -> Optional[dict]:
     days = len(out.get("days") or []) or body.days or 1
     win = WX.race_window(body.date, body.start_time, days, dur)
     return WX.rain_alert([r.model_dump() for r in body.rain], win, "road" if body.type == "road" else "trail")
+
+
+def cold_reminder(body: PlanIn, out: dict) -> Optional[dict]:
+    """SP-251: wind chill / gusts at each segment's clock from the /weather `wind` rows
+    (cold.py) on road, trail and 百岳 plans; None without wind data. Display only."""
+    if not body.wind:
+        return None
+    from backend.engine.racepower import cold as CD
+    days = len(out.get("days") or []) or body.days or 1
+    pts = CD.points(out, body.date, body.start_time, [x.model_dump() for x in body.stops], days)
+    return CD.cold_wind(pts, [r.model_dump() for r in body.wind], body.heat_ref_alt_m, body.date)
 
 
 def fuel(ctx: Context, body: PlanIn, out: dict) -> dict:
