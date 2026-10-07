@@ -140,10 +140,12 @@ auto rule off; manual exclusions still apply. Parity mode excludes nothing (WKO5
 like the corrections.
 
 **Where it applies.** `Dataset._apply_exclusion_policy` (WKO5: filtered and renumbered before any
-index-keyed cache; features disk-cached per `.wko4` stamp in `bad_activity_v1.json` in the app's data folder)
+index-keyed cache; features disk-cached per `.wko4` stamp in `bad_activity_v1.json` in the app's data folder,
+with the code version `dataset.per_workout_code("bad_activity")`, SP-341)
 and `FitFolderDataset` (decided while loading). `ds.excluded` / `ds.exclusion_kept` list them.
 `cptest.curves` / `scan` (synced FIT files read beside the dataset) drop them via
-`cptest.bad_files` (`racepower_bad_activity.json`). `source_stamp` includes the setting and an
+`cptest.bad_files` (`racepower_bad_activity.json`, versioned by `cptest.bad_cache_code`, SP-341). A cache
+file of another code version is recomputed. `source_stamp` includes the setting and an
 overrides hash, so a change rebuilds the cached datasets. The legacy DB-row APIs
 (`/api/v1/pmc`, `/api/v1/analytics/*` and the React `frontend/`) were removed with the React SPA on 2026-10-04.
 
@@ -243,3 +245,4 @@ load and the setting key (synthetic FITs, `fit_builder.build_run(speeds_m_s=…)
 | 2026-10-01 | feature | user request (bad activity files) | Bad activity files excluded from every model (vehicle / bike speed vs world-record limits, impossible power), whole-file exclusion, keep / exclude overrides in `activity_tags.exclusion`, setting `activities.exclude_bad`, API, list / card / settings UI; tests `backend/tests/test_bad_activity.py` |
 | 2026-10-01 | bugfix | docs/research/unsourced-rules.md §0.10 step 0 | Seed matches COROS / TP races by the WKO5 start (±3 min), `--source` defaults to the data source; documented that the tags live in the app DB (table created on first write) |
 | 2026-10-04 | code-sync | N/A | Domain Model; name / free-form tags / pain columns; watch RPE in the effort precedence; trail 全力 by x*(T) − 0.03 and per-athlete rest limit; 活動編輯 page + `/activities`, `/activities/auto`, `/activities/stats`, bulk PATCH; 活動資訊 card removed; terrain `auto` reset; seed from a JSON file; file match without `coros/` / `tp/` prefix |
+| 2026-10-07 | fix | SP-341 | The bad-file and power-source caches (`bad_activity_v1.json`, `power_source_v1.json`, `racepower_bad_activity.json`, `racepower_power_source.json`) carry a code version: a changed algorithm recomputes them; registered in `backend/data_registry.py` (SP-311) |
