@@ -402,6 +402,14 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
         <label class="meta">氣溫所在海拔 m <input id="heatz" type="number" step="10" style="width:76px" placeholder="天氣點"></label>
         <span class="help" tabindex="0">?<span class="tip">跟團：主數字是「過去跟團日的 EP/h 換算的時間」，旁邊是你的能力時間；自己走：主數字是能力時間。能力時間 = 你在 AeT 的步行能力（越野跑裡走路的陡坡窗 + 百岳心率 ≥ AeT 的爬升窗，以 Pandolf 生理先驗為形狀）。心率帶：處理心率落後後，陡坡速度仍不隨心率改變，所以只有 AeT 和「能力上限」兩檔。背負預設第 1 天 9 kg、之後每天 −0.7 kg（糧食，推估）；GPX 沒有分日點時依天數平均切。每段氣溫由比賽日溫度（在「氣溫所在海拔」）以 0.0065 K/m 遞減率推算。</span></span>
       </div>
+      <!-- SP-254: night slowdown, only on the dark part of each segment (default 0 %, 推估) -->
+      <div class="row"><span class="lbl" data-i18n="racepower.night.label">夜間</span>
+        <label class="meta"><span data-i18n="racepower.night.slow">夜間減速</span> <select id="nightslow" style="width:auto">
+          <option value="0">0 %</option><option value="5">5 %</option><option value="10">10 %</option><option value="15">15 %</option></select></label>
+        <span class="badge watch" data-i18n="racepower.night.est">推估</span>
+        <span class="help" tabindex="0">?<span class="tip" data-i18n="racepower.night.tip">有起跑時間時，依比賽地點的日出日落（天氣預報，沒有就用天文公式算）把天黑時跑的段標成「夜間」，圖上畫深色底。夜間減速只把每段天黑的那部分時間拉長，ETA 和完賽時間跟著變；0 % 時預估完全不變。目標時間模式不套用。</span></span>
+        <span class="meta" data-i18n="racepower.night.note">沒有研究拆出天黑本身慢多少；Brager 2020 的 35.9 % 含疲勞</span>
+      </div>
       <div class="row tf"><span class="lbl">effort km</span>
         <label class="meta">effort km 公式 <select id="formula" style="width:auto">
           <option value="fitted_run">km + 爬升/153（你的跑步擬合）</option>
@@ -688,6 +696,7 @@ function advChanged() {
   if ((S.heatAccl?.mode || "auto") !== "auto") out.push(T("adv.n.heat_accl"));
   if (hike && (S.hrband !== "aet" || !blank("packdays") || !blank("heatz"))) out.push(T("adv.n.hike"));
   if (type === "trail" && $("formula").value !== "fitted_run") out.push(T("adv.n.formula"));
+  if (Number($("nightslow").value || 0) > 0) out.push(T("adv.n.night"));
   return out;
 }
 function renderAdvSum() {
@@ -823,7 +832,7 @@ function readDayPlan(raw) {
   const full = rows.length && rows.every((r) => r && r.km != null);
   return full ? rows.map((r) => ({ km: r.km, gain_m: r.gain_m || 0, loss_m: r.loss_m ?? null })) : null;
 }
-const FORM = ["dist", "gain", "loss", "days", "date", "target", "tpace", "tpower", "tspeed", "pack", "formula", "peak", "latlon", "start", "stops", "ogain", "sigma", "eps", "minlen", "flatpct",
+const FORM = ["dist", "gain", "loss", "days", "date", "target", "tpace", "tpower", "tspeed", "pack", "formula", "nightslow", "peak", "latlon", "start", "stops", "ogain", "sigma", "eps", "minlen", "flatpct",
   "tripdays", "packdays", "heatz", "heat-s"];
 function formValues() { const o = {}; FORM.forEach((k) => o[k] = $(k).value); o.ptrain = $("ptrain").checked; o.hourlyheat = $("hourlyheat").checked; return o; }
 function setForm(o) { FORM.forEach((k) => { if (o[k] != null) $(k).value = o[k]; }); $("ptrain").checked = !!o.ptrain; $("hourlyheat").checked = o.hourlyheat !== false; }
@@ -1117,7 +1126,8 @@ function planBody(extra = {}) {
     terrain: TERRAIN, hourly_heat: $("hourlyheat").checked && !tempOverridden(),
     hourly: $("hourlyheat").checked && !tempOverridden() ? (WX?.hourly || null) : null,
     heat_acclimatisation: heatAcclBody(), surface: type === "trail" ? (S.surface || null) : null,
-    rain: WX?.rain || null, wind: WX?.wind || null, ...extra };
+    rain: WX?.rain || null, wind: WX?.wind || null, sun: WX?.sun || null,
+    night_slow_pct: Number($("nightslow").value || 0), ...extra };
   if (type === "baiyue") {
     body.trip_kind = S.trip; body.hr_band = S.hrband;
     body.pack_kg_by_day = $("packdays").value.split(/[,，\s]+/).map(Number).filter((x) => x > 0);
@@ -1606,6 +1616,7 @@ function rowTip(r) {
   if (r.basis === "safe") lines.push(esc(T("safe")));
   if (r.fuel) lines.push("🍬 " + esc(r.fuel));
   if (r.pole_hint) lines.push(esc(r.pole_hint.text));
+  if (r.night) lines.push("🌙 " + esc(T("night.col")));
   return lines.join("<br>");
 }
 function renderProfile() {
@@ -1628,7 +1639,9 @@ function renderProfile() {
   const vals = R.map(M.val).filter(ok);
   const narrow = window.innerWidth < 700;
   const km = P.summary.km || R[R.length - 1].end_km;
-  const walkAreas = R.filter((r) => r.walk).map((r) => [{ xAxis: r.start_km, itemStyle: { color: css("--watch"), opacity: 0.10 } }, { xAxis: r.end_km }]);
+  // SP-254: segments run in the dark on a dark background (behind the walk / selection shading)
+  const walkAreas = R.filter((r) => r.night).map((r) => [{ xAxis: r.start_km, itemStyle: { color: css("--muted"), opacity: 0.16 } }, { xAxis: r.end_km }]);
+  walkAreas.push(...R.filter((r) => r.walk).map((r) => [{ xAxis: r.start_km, itemStyle: { color: css("--watch"), opacity: 0.10 } }, { xAxis: r.end_km }]));
   for (const r of R.filter((x) => SEL.has(x.i)))
     walkAreas.push([{ xAxis: r.start_km, itemStyle: { color: css("--accent"), opacity: 0.16 } }, { xAxis: r.end_km }]);
   const hv = R.find((r) => r.i === HOVER && !SEL.has(r.i));
@@ -1670,6 +1683,7 @@ function renderProfile() {
   $("chart-legend").innerHTML = `<span><i style="background:${css("--accent")}"></i>${esc(T("legend.target", { m: T("m." + m) }))}</span>` +
     (pr ? `<span><i style="background:${css("--bar")};opacity:.6"></i>${esc(T("elev"))}</span>` : "") +
     (R.some((r) => r.walk) ? `<span><i style="background:${css("--watch")};opacity:.35"></i>${esc(T("legend.walk"))}</span>` : "") +
+    (R.some((r) => r.night) ? `<span><i style="background:${css("--muted")};opacity:.35"></i>${esc(T("legend.night"))}</span>` : "") +
     (m !== "pace" && R.some((r) => M.val(r) == null) ? `<span>${esc(T(m === "power" ? "legend.gap_power" : "legend.gap_hr"))}</span>` : "") +
     // SP-224: one HR cap for the whole race; late in a trail race HR drops by itself (Kerhervé 2015)
     (m === "hr" && P.type === "trail" ? `<span>${esc(T("legend.hr_fade"))}</span>` : "") +
@@ -1794,20 +1808,21 @@ function renderSegCompact() {
   const R = rowsOf(PLAN);
   if (!R.length) { $("segcmp").innerHTML = ""; return; }
   const hike = PLAN.type === "baiyue", m = measure();
+  const nightCol = !!PLAN.night;           // SP-254: only with a start time and sunrise / sunset
   const th = (k, lab) => `<th class="n opt ${m === k ? "cur" : ""}">${esc(lab)}</th>`;
   const td = (k, r) => `<td class="n opt ${m === k ? "cur" : ""}">${fmtRow(r, k)}</td>`;
   let h = `<table><thead><tr><th>#</th><th class="n">km</th><th class="n">${esc(T("grade"))}</th>${th("pace", T("m.pace"))}${hike ? "" : th("power", T("m.power"))}${th("hr", T("m.hr"))}` +
-    `<th class="n">${esc(T("split"))}</th><th class="n">${esc(T("cum"))}</th><th>${esc(T("fuel"))}</th></tr></thead><tbody>`;
+    `<th class="n">${esc(T("split"))}</th><th class="n">${esc(T("cum"))}</th>${nightCol ? `<th>${esc(T("night.col"))}</th>` : ""}<th>${esc(T("fuel"))}</th></tr></thead><tbody>`;
   for (const r of R) {
     h += `<tr data-row="${r.i}" class="${SEL.has(r.i) ? "hl" : ""}" title="${esc(r.label)}${r.hr_cap_src ? " · " + esc(T("hrcap")) + "：" + esc(r.hr_cap_src) : ""}">
       <td>${r.mark}${hike && r.day ? ` <span class="faint">D${r.day}</span>` : ""}</td><td class="n">${f1(r.start_km)}–${f1(r.end_km)}</td>
       <td class="n ${r.walk ? "walk" : ""}">${f1((r.grade || 0) * 100)}%${r.walk ? " " + esc(T("walk")) : r.gait === "either" ? " " + esc(T("gait.either")) : ""}</td>${td("pace", r)}${hike ? "" : td("power", r)}${td("hr", r)}
       <td class="n">${dur(r.t)}</td><td class="n">${dur(r.cum_s)}${r.eta ? ` <span class="faint">${esc(r.eta)}</span>` : ""}</td>
-      <td class="fuel">${r.basis === "safe" ? `🛡️ ${esc(T("safe_short"))}${r.fuel ? "；" : ""}` : ""}${esc(r.fuel || "")}${poleHint(r.pole_hint)}</td></tr>`;
+      ${nightCol ? `<td>${r.night ? "🌙" : ""}</td>` : ""}<td class="fuel">${r.basis === "safe" ? `🛡️ ${esc(T("safe_short"))}${r.fuel ? "；" : ""}` : ""}${esc(r.fuel || "")}${poleHint(r.pole_hint)}</td></tr>`;
   }
   const s = PLAN.summary;
   h += `<tr class="center"><td colspan="2">${esc(T("total"))}</td><td></td><td class="n opt ${m === "pace" ? "cur" : ""}">${pace(s.pace_s_per_km || (s.time_s / s.km))}</td>` +
-    `${hike ? "" : `<td class="n opt ${m === "power" ? "cur" : ""}">${W(s.power)}</td>`}<td class="opt ${m === "hr" ? "cur" : ""}"></td><td class="n">${hms(s.time_s)}</td><td></td><td></td></tr></tbody></table>`;
+    `${hike ? "" : `<td class="n opt ${m === "power" ? "cur" : ""}">${W(s.power)}</td>`}<td class="opt ${m === "hr" ? "cur" : ""}"></td><td class="n">${hms(s.time_s)}</td><td></td>${nightCol ? "<td></td>" : ""}<td></td></tr></tbody></table>`;
   $("segcmp").innerHTML = h;
   $("segcmp").querySelectorAll("tr[data-row]").forEach((e) => {
     e.addEventListener("click", (ev) => pickSeg(+e.dataset.row, ev.shiftKey));
@@ -1830,7 +1845,8 @@ function renderSegments() {
   h += hike ? `<th>地形</th><th class="n">速度</th><th class="n">垂直</th>${capx ? `<th class="n" title="遞減率推算的氣溫 / 熱懲罰（適應後）">溫度</th><th class="n" title="海拔係數 A">A</th><th class="n" title="日內衰減 f_time">f時</th><th class="n" title="該段 σ（對數）">σ</th><th>資料</th>` : ""}` :
     `<th class="n">目標功率</th><th class="n">% CP</th><th>區</th><th class="n">配速</th><th class="n"${trail ? ` title="${esc(T("gap.tip"))}"` : ""}>${trail ? "GAP / 垂直" : ""}</th>`;
   const hourly = P.summary.heat?.mode === "hourly";
-  h += `<th class="n">分段時間</th><th class="n">累計</th><th class="n">ETA</th>${hike ? "" : `<th class="n">M</th><th class="n" title="該段使用的氣溫與 Hadley 熱負荷">熱${hourly ? ' <span class="badge watch">推估</span>' : ""}</th>`}<th>備註</th></tr></thead><tbody>`;
+  const nightCol = !!P.night;              // SP-254
+  h += `<th class="n">分段時間</th><th class="n">累計</th><th class="n">ETA</th>${nightCol ? `<th>${esc(T("night.col"))}</th>` : ""}${hike ? "" : `<th class="n">M</th><th class="n" title="該段使用的氣溫與 Hadley 熱負荷">熱${hourly ? ' <span class="badge watch">推估</span>' : ""}</th>`}<th>備註</th></tr></thead><tbody>`;
   for (const s of P.segments) {
     h += `<tr data-seg="${s.i}" class="${SEL.has(s.i) ? "hl" : ""}"><td>${s.i}</td>${hike ? `<td>${s.day || 1}</td>` : ""}<td><span class="dot" style="background:${segColor(s.cls)}"></span>${esc(s.cls_label)}</td>
       <td class="n">${f1(s.start_km)}–${f1(s.end_km)}</td><td class="n">${s.dist_m >= 1000 ? f1(s.dist_m / 1000) + " km" : n0(s.dist_m) + " m"}</td>
@@ -1845,14 +1861,14 @@ function renderSegments() {
         <td class="n">${pct(s.pct_cp)}</td><td>${esc(s.zone)}</td><td class="n">${pace(s.pace_s_per_km)}</td>
         <td class="n">${s.vert_m_per_h ? "↑" + n0(s.vert_m_per_h) + " m/h" : trail ? pace(s.gap_pace_s_per_km) : ""}</td>`;
     }
-    h += `<td class="n">${dur(s.t)}</td><td class="n">${dur(s.cum_s)}</td><td class="n">${s.eta || ""}</td>${hike ? "" : `<td class="n">${s.M.toFixed(3)}</td>
+    h += `<td class="n">${dur(s.t)}</td><td class="n">${dur(s.cum_s)}</td><td class="n">${s.eta || ""}</td>${nightCol ? `<td>${s.night ? "🌙" : ""}</td>` : ""}${hike ? "" : `<td class="n">${s.M.toFixed(3)}</td>
       <td class="n" title="${esc(heatText(s).replace(/<[^>]+>/g, ""))}">${f1(s.temp_c)}°${s.heat_pct > 0 ? ` <span class="wn">−${s.heat_pct.toFixed(1)}%</span>` : ""}${ok(s.heat_eff_pct) && s.heat_pct > 0 ? ` <span class="faint" title="適應後 H_eff">→ −${s.heat_eff_pct.toFixed(1)}%</span>` : ""}</td>`}
       <td class="wrap">${esc(segNote(s))}${s.badge ? ' <span class="badge watch">推估</span>' : ""}${poleHint((rowsOf(P)[P.segments.indexOf(s)] || {}).pole_hint)}</td></tr>`;
   }
   const tot = P.summary;
   h += `<tr class="center"><td colspan="${hike ? 7 : 6}">合計</td>${hike ? `<td></td><td class="n">${f1(tot.km / (tot.time_s / 3600))} km/h</td><td></td>${capx ? "<td></td><td></td><td></td><td></td><td></td>" : ""}` :
     `<td class="n">${W(tot.power)}</td><td class="n">${pct(tot.pct_cp)}</td><td></td><td class="n">${pace(tot.pace_s_per_km)}</td><td></td>`}
-    <td class="n">${hms(tot.time_s)}</td><td></td><td></td>${hike ? "" : "<td></td><td></td>"}<td></td></tr></tbody></table>`;
+    <td class="n">${hms(tot.time_s)}</td><td></td><td></td>${nightCol ? "<td></td>" : ""}${hike ? "" : "<td></td><td></td>"}<td></td></tr></tbody></table>`;
   h += `<div class="note">${hike ? "速度已含背負、海拔、地形與多日修正。" : `目標功率請${esc(PLAN.hint || "看 30 秒平均功率")}，不要看瞬間值（上坡起點讀數常會衝高）。在功率欄改數字會鎖定該段，其他段重新分配、平均不變。`}</div>`;
   // SP-248: trail GAP is Minetti's grade adjustment — a direction only (power-gap-trail-validity.md §3 #3)
   if (trail) h += `<div class="note" title="${esc(T("gap.tip"))}">${esc(T("gap.note"))}</div>`;
@@ -2493,7 +2509,7 @@ $("pick-ok").addEventListener("click", () => {
 $("amount").addEventListener("input", () => { S.amount = Number($("amount").value); syncForm(); schedule(); });
 ["hup", "hdown"].forEach((id) => $(id).addEventListener("input", () => { S[id] = num(id) ?? S[id]; schedule(); }));
 ["dist", "gain", "loss", "date", "target", "tpace", "tpower", "tspeed", "pack", "start", "stops", "ogain", "sigma", "eps", "minlen", "flatpct"].forEach((id) => $(id).addEventListener("input", schedule));
-$("ptrain").addEventListener("change", schedule); $("hourlyheat").addEventListener("change", schedule);
+$("ptrain").addEventListener("change", schedule); $("hourlyheat").addEventListener("change", schedule); $("nightslow").addEventListener("change", schedule);
 // 進階計算選項: closed by default, the viewer's last choice kept; typing inside refreshes its summary
 { const ca = $("calc-adv"); ca.open = !!ls.get("calcAdvOpen", false);
   ca.addEventListener("toggle", () => ls.set("calcAdvOpen", ca.open));

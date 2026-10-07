@@ -46,6 +46,11 @@ and the 冷風 reminder. The 鄉鎮 product's wind is left out on purpose: its p
 is the 公所 in the valley, not the ridge; the weekly products give only 12-hour
 spans and the climatology none. Never changes the predicted time.
 
+Sun (SP-254): `sun` = sunrise / sunset of the event days and the day after,
+from Open-Meteo's `daily=sunrise,sunset` when the forecast answered, else
+NOAA's solar formula (sun_times; no network). night.py marks the segments run
+in the dark.
+
 Why three models (SP-210, checked 2026-10-06 against CWA 1991–2020 station
 normals — 玉山 3845 m, 阿里山 2413 m, 日月潭 1018 m, 鞍部 838 m, 臺北, 臺中;
 2017–2020 daily means at the station elevation, monthly bias; the period
@@ -540,6 +545,67 @@ def open_meteo_wind_rows(js: dict, dates: set[dt.date]) -> list[dict]:
     return _in_window(rows, dates)
 
 
+# ---------------------------------------------------------------------------
+# sunrise / sunset (SP-254): rows {date, sunrise, sunset, src}, naive local 'YYYY-MM-DDTHH:MM'
+# ---------------------------------------------------------------------------
+
+SUN_ZENITH_DEG = 90.833           # refraction + the sun's radius (NOAA)
+
+
+def sun_times(lat: float, lon: float, date: dt.date, tz_h: float = 8.0) -> Optional[tuple[dt.datetime, dt.datetime]]:
+    """(sunrise, sunset) as naive local times (UTC + tz_h) by NOAA's 「General Solar Position
+    Calculations」 (NOAA Global Monitoring Laboratory, gml.noaa.gov/grad/solcalc/solareqns.PDF:
+    the fractional-year series for the equation of time and the declination, zenith 90.833°);
+    about a minute off at Taiwan's latitudes. None when the sun does not rise or set that day."""
+    doy = date.timetuple().tm_yday
+    g = 2.0 * math.pi / 365.0 * (doy - 1)           # at 12:00 the hour term is 0
+    eqtime = 229.18 * (0.000075 + 0.001868 * math.cos(g) - 0.032077 * math.sin(g)
+                       - 0.014615 * math.cos(2 * g) - 0.040849 * math.sin(2 * g))
+    decl = (0.006918 - 0.399912 * math.cos(g) + 0.070257 * math.sin(g) - 0.006758 * math.cos(2 * g)
+            + 0.000907 * math.sin(2 * g) - 0.002697 * math.cos(3 * g) + 0.00148 * math.sin(3 * g))
+    la = math.radians(lat)
+    x = math.cos(math.radians(SUN_ZENITH_DEG)) / (math.cos(la) * math.cos(decl)) - math.tan(la) * math.tan(decl)
+    if not -1.0 <= x <= 1.0:
+        return None
+    ha = math.degrees(math.acos(x))
+    day0 = dt.datetime(date.year, date.month, date.day) + dt.timedelta(hours=tz_h)
+    rise = day0 + dt.timedelta(minutes=720.0 - 4.0 * (lon + ha) - eqtime)
+    sset = day0 + dt.timedelta(minutes=720.0 - 4.0 * (lon - ha) - eqtime)
+    return rise, sset
+
+
+def sun_rows(lat: Optional[float], lon: Optional[float], dates: set[dt.date],
+             js: Optional[dict] = None) -> Optional[list[dict]]:
+    """Sunrise and sunset of the event days and the day after (a race can run into the next
+    morning): Open-Meteo's `daily=sunrise,sunset` when the forecast answer has them (`js`),
+    else sun_times() — UTC+8 unless the answer gives its utc_offset_seconds. None without
+    coordinates."""
+    if lat is None or lon is None or not dates:
+        return None
+    keep = sorted(dates | {max(dates) + dt.timedelta(days=1)})
+    om = {}
+    d = (js or {}).get("daily") or {}
+    rises, sets = d.get("sunrise") or [], d.get("sunset") or []
+    for i, day in enumerate(d.get("time") or []):
+        rise = rises[i] if i < len(rises) else None
+        sset = sets[i] if i < len(sets) else None
+        a, b = _local_key(rise) if rise else None, _local_key(sset) if sset else None
+        if a and b:
+            om[day[:10]] = (a, b)
+    tz_h = float((js or {}).get("utc_offset_seconds", 8 * 3600)) / 3600.0
+    out = []
+    for day in keep:
+        if day.isoformat() in om:
+            a, b = om[day.isoformat()]
+            out.append({"date": day.isoformat(), "sunrise": a, "sunset": b, "src": "open_meteo"})
+            continue
+        st = sun_times(float(lat), float(lon), day, tz_h)
+        if st:
+            out.append({"date": day.isoformat(), "sunrise": st[0].strftime("%Y-%m-%dT%H:%M"),
+                        "sunset": st[1].strftime("%Y-%m-%dT%H:%M"), "src": "noaa"})
+    return out or None
+
+
 Window = tuple[dt.datetime, dt.datetime]
 
 
@@ -885,7 +951,7 @@ def race_conditions(*, date: dt.date, days: int = 1, lat: Optional[float] = None
 
     want = _dates(date, days)
 
-    def done(provider, values, extra=None, hourly=None, rain=None, wind=None):
+    def done(provider, values, extra=None, hourly=None, rain=None, wind=None, sun_js=None, at=None):
         v = {"altitude_m": values.get("altitude_m", elevation_m), "temp_c": values["temp_c"], "rh_pct": values["rh_pct"],
              "dew_c": values.get("dew_c", dew_point(values["temp_c"], values["rh_pct"])["dew_c"])}
         # hourly rows from an hourly forecast (CWA 3-day, Open-Meteo) or the
@@ -893,7 +959,9 @@ def race_conditions(*, date: dt.date, days: int = 1, lat: Optional[float] = None
         return {"provider": provider, "label": _(PROVIDER_LABEL[provider]), "values": v, "tried": tried,
                 "location": loc, "fetched_at": now, "detail": extra or {}, "lead_days": lead,
                 "hourly": hourly or None, "rain": rain or None,   # rain: SP-249 rows (forecasts only)
-                "wind": wind or None}   # wind: SP-251 rows (CWA mountain 3-day, Open-Meteo forecast)
+                "wind": wind or None,   # wind: SP-251 rows (CWA mountain 3-day, Open-Meteo forecast)
+                # SP-254: sunrise / sunset of the event days (Open-Meteo's daily, else NOAA's formula)
+                "sun": sun_rows(*(at or (lat, lon)), want, sun_js)}
 
     cwa_key = []                       # the key, read once (only when a CWA step runs)
 
@@ -932,14 +1000,15 @@ def race_conditions(*, date: dt.date, days: int = 1, lat: Optional[float] = None
                                           "match": m["match"], "distance_km": m["distance_km"],
                                           "issued": doc.get("issued"), "cache": doc.get("cache")},
                                 cwa_hourly_rows(m, want) if c.get("product") == "hourly" else None,
-                                cwa_rain_rows(m, want), cwa_wind_rows(m, want))
+                                cwa_rain_rows(m, want), cwa_wind_rows(m, want),
+                                at=(lat, lon) if lat is not None and lon is not None else (m["lat"], m["lon"]))
                 except Exception as e:          # noqa: BLE001 — fall through to the next provider
                     tried.append({"provider": prov, "ok": False, "reason": str(e)[:120]})
     if lat is None or lon is None:
         tried.append({"provider": "open_meteo", "ok": False, "reason": "沒有座標"})
         tried.append({"provider": "cwa_town", "ok": False, "reason": _("沒有座標")})
         return {"provider": "manual", "label": _(PROVIDER_LABEL["manual"]), "values": None, "tried": tried,
-                "location": loc, "fetched_at": None, "lead_days": lead, "hourly": None, "rain": None, "wind": None}
+                "location": loc, "fetched_at": None, "lead_days": lead, "hourly": None, "rain": None, "wind": None, "sun": None}
     end = date + dt.timedelta(days=max(1, days) - 1)
     # 2. Open-Meteo forecast
     if 0 <= lead and (end - today).days < OM_HORIZON_DAYS:
@@ -951,6 +1020,7 @@ def race_conditions(*, date: dt.date, days: int = 1, lat: Optional[float] = None
                       "hourly": "temperature_2m,relative_humidity_2m,dew_point_2m,surface_pressure,"
                                 "precipitation,precipitation_probability,"          # SP-249
                                 "wind_speed_10m,wind_gusts_10m,apparent_temperature",   # SP-251
+                      "daily": "sunrise,sunset",                                     # SP-254
                       "timezone": "auto", "start_date": date.isoformat(), "end_date": q_end.isoformat()}
             if elevation_m is not None:
                 params["elevation"] = elevation_m
@@ -960,7 +1030,7 @@ def race_conditions(*, date: dt.date, days: int = 1, lat: Optional[float] = None
                 tried.append({"provider": "open_meteo", "ok": True})
                 return done("open_meteo", c, {"grid_elevation_m": c.get("grid_elevation_m"),
                                               "attribution": ATTRIBUTION}, open_meteo_hourly_rows(js, want),
-                            open_meteo_rain_rows(js, want), open_meteo_wind_rows(js, want))
+                            open_meteo_rain_rows(js, want), open_meteo_wind_rows(js, want), js)
             tried.append({"provider": "open_meteo", "ok": False, "reason": "回應沒有這些日期"})
         except Exception as e:               # noqa: BLE001
             tried.append({"provider": "open_meteo", "ok": False, "reason": str(e)[:120]})
@@ -1018,7 +1088,8 @@ def race_conditions(*, date: dt.date, days: int = 1, lat: Optional[float] = None
     except Exception as e:                   # noqa: BLE001
         tried.append({"provider": "climatology", "ok": False, "reason": str(e)[:120] or "沒有資料"})
         return {"provider": "manual", "label": _(PROVIDER_LABEL["manual"]), "values": None, "tried": tried,
-                "location": loc, "fetched_at": None, "lead_days": lead, "hourly": None, "rain": None, "wind": None}
+                "location": loc, "fetched_at": None, "lead_days": lead, "hourly": None, "rain": None, "wind": None,
+                "sun": sun_rows(lat, lon, want)}
     tried.append({"provider": "climatology", "ok": True})
     rows = climatology_hourly_rows(c["profile"], want, c["offset_c"]) if c.get("profile") else None
     return done("climatology", c, {"years": c["years"], "models": list(CLIM_MODELS),

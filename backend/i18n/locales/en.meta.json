@@ -751,6 +751,10 @@
     "draft": true,
     "src": "backend/engine/racepower/calc.py:343"
   },
+  "km {a:.1f}–{b:.1f} 天黑（{t0}–{t1}）": {
+    "draft": true,
+    "src": "backend/engine/racepower/night.py:194"
+  },
   "km {a:.1f}–{b:.1f}（{t0}–{t1}）": {
     "draft": true,
     "src": "backend/engine/racepower/cold.py:251"
@@ -2675,6 +2679,18 @@
     "draft": true,
     "src": "backend/engine/racepower/watch_export.py:319"
   },
+  "夜間": {
+    "draft": true,
+    "src": "backend/engine/racepower/cold.py:335"
+  },
+  "夜間減速 {p:g} %（推估）：天黑的部分時間拉長，共多 {m:.0f} 分鐘": {
+    "draft": true,
+    "src": "backend/engine/racepower/cold.py:341"
+  },
+  "夜間：": {
+    "draft": true,
+    "src": "backend/engine/racepower/cold.py:339"
+  },
   "大多數人從這個開始。重量抱在胸前比兩手垂著更練核心；拿在前腳的另一側，多練臀中肌。": {
     "draft": true,
     "src": "backend/engine/strength_moves.py:74"
@@ -4310,6 +4326,10 @@
   "沒有的器材要是 {choices} 其中幾個": {
     "draft": true,
     "src": "backend/engine/strength_moves.py:224"
+  },
+  "沒有研究拆出天黑本身慢多少；Brager 2020 的 35.9 % 含疲勞": {
+    "draft": true,
+    "src": "backend/engine/racepower/cold.py:343"
   },
   "沒有背包資料": {
     "draft": true,
@@ -6538,6 +6558,10 @@
   "預設，推估": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:1343"
+  },
+  "頭燈（備用電池）": {
+    "draft": true,
+    "src": "backend/engine/racepower/cold.py:338"
   },
   "顏色：時間和 TSS 偏離計畫較多的那個（±20% 內算符合，TrainingPeaks 的做法）": {
     "draft": true,
