@@ -751,6 +751,14 @@
     "draft": true,
     "src": "backend/engine/racepower/calc.py:343"
   },
+  "km {a:.1f}–{b:.1f} 天黑（{t0}–{t1}）": {
+    "draft": true,
+    "src": "backend/engine/racepower/night.py:194"
+  },
+  "km {a:.1f}–{b:.1f}（{t0}–{t1}）": {
+    "draft": true,
+    "src": "backend/engine/racepower/cold.py:251"
+  },
   "vVO2max ≈ 閾值配速 × 0.86–0.90（推估）": {
     "draft": true,
     "src": "backend/engine/workout_templates.py:310"
@@ -814,6 +822,10 @@
   "{h:.0f} bpm 那次飄移 {d:.1f}%（扣掉誤差仍 ≥ 5%）：下限不成立": {
     "draft": true,
     "src": "backend/engine/algorithms/threshold_estimate.py:334"
+  },
+  "{heads}：{wheres} → 帶{gear}": {
+    "draft": true,
+    "src": "backend/engine/racepower/cold.py:290"
   },
   "{head}：{start} 起恢復期到 {end}（{how}；Daniels 表 9.2，恢復期＝停訓天數{up}）": {
     "draft": true,
@@ -1159,6 +1171,10 @@
     "draft": true,
     "src": "backend/engine/injuries.py:689"
   },
+  "{t0}–{t1}": {
+    "draft": true,
+    "src": "backend/engine/racepower/cold.py:252"
+  },
   "{text}：{d} 起做一次 AeT 測試（UA 差距或 Friel 飄移），用賽後的 E 配速、CP、LTHR": {
     "draft": true,
     "src": "backend/engine/base_check.py:516"
@@ -1218,6 +1234,10 @@
   "{when}那次跑步 {v:.1f} 努力 km（km＋爬升÷100），比前 {d} 天最長一次（{ref:.1f}）多 {x:.0%}": {
     "draft": true,
     "src": "backend/engine/load_guard.py:427"
+  },
+  "{where}{what}": {
+    "draft": true,
+    "src": "backend/engine/racepower/cold.py:261"
   },
   "{why}：區間、TSS、賽事計算機都靠 CP": {
     "draft": true,
@@ -1835,6 +1855,10 @@
     "draft": true,
     "src": "backend/engine/walk_hint.py:117"
   },
+  "保暖層": {
+    "draft": true,
+    "src": "backend/engine/racepower/cold.py:281"
+  },
   "修改太頻繁，請稍後再試": {
     "draft": true,
     "src": "backend/tenancy_mw.py:286"
@@ -2058,6 +2082,14 @@
   "再 {n} 堂 3 區": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:1975"
+  },
+  "冷風": {
+    "draft": true,
+    "src": "backend/engine/racepower/cold.py:275"
+  },
+  "冷風：": {
+    "draft": true,
+    "src": "backend/engine/racepower/cold.py:284"
   },
   "出生年 {year} 不合理": {
     "draft": true,
@@ -2647,6 +2679,18 @@
     "draft": true,
     "src": "backend/engine/racepower/watch_export.py:319"
   },
+  "夜間": {
+    "draft": true,
+    "src": "backend/engine/racepower/cold.py:335"
+  },
+  "夜間減速 {p:g} %（推估）：天黑的部分時間拉長，共多 {m:.0f} 分鐘": {
+    "draft": true,
+    "src": "backend/engine/racepower/cold.py:341"
+  },
+  "夜間：": {
+    "draft": true,
+    "src": "backend/engine/racepower/cold.py:339"
+  },
   "大多數人從這個開始。重量抱在胸前比兩手垂著更練核心；拿在前腳的另一側，多練臀中肌。": {
     "draft": true,
     "src": "backend/engine/strength_moves.py:74"
@@ -2666,6 +2710,14 @@
   "太難了": {
     "draft": true,
     "src": "backend/engine/race_feasibility.py:50"
+  },
+  "失溫風險": {
+    "draft": true,
+    "src": "backend/engine/racepower/cold.py:350"
+  },
+  "失溫：最低約 {t} °C（依各段海拔）。失溫通常是濕、風、累、吃不夠一起來，模型算不出會不會發生，所以只列該帶的東西；門檻 5 °C、風寒 −5 °C 是推估。參考甘肅 2021 越野賽、台灣 2025 年 3 月高山事故與 ACSM 2006 冷傷害預防立場聲明": {
+    "draft": true,
+    "src": "backend/engine/racepower/cold.py:360"
   },
   "好了": {
     "draft": true,
@@ -3307,6 +3359,10 @@
     "draft": true,
     "src": "backend/engine/threshold_confidence.py:969"
   },
+  "手套帽子": {
+    "draft": true,
+    "src": "backend/engine/racepower/cold.py:281"
+  },
   "手腕光學心率偶爾會突然跳動、跳一階不回來、跟著步頻走或卡在同一個數字。量測的這段裡突然跳動、跳一階和卡住不動的秒數超過 3%，或有一次跑步中突然跳一階，飄移就只當參考：不拿來開放間歇、不算 AeT 測試、不寫進閾值。跟著步頻走只列出來，不算進門檻。原始資料不會被修改（門檻是推估）。": {
     "draft": true,
     "src": "backend/engine/workout_review.py:578"
@@ -3646,6 +3702,14 @@
   "暫時規則（推估）：輕鬆跑的心率都在 {x:.0f} bpm 附近、心率飄移都穩定（< 5%），還找不到會飄到 5% 的心率，所以只能說 AeT 至少 {x:.0f}。用 {x:.0f} 當 AeT 是保守的（真正的 AeT ≥ {x:.0f}）；區間仍照課表的 AeT。之後只要 ≤ {x:.0f} bpm 有一次飄移明顯 ≥ 5%，下限就取消、改建議測試。多跑幾次 {lo:.0f}–{hi:.0f} bpm 的真正輕鬆跑，就能找出實際的 AeT；在那之前每 8 週建議做一次 AeT 測試（可以關掉）。方法：多次飄移對心率的回歸，誤差太大的跑步不算、每次誤差加倍（GC 驗證）": {
     "draft": true,
     "src": "backend/engine/drift_agg.py:405"
+  },
+  "最低約 {t} °C": {
+    "draft": true,
+    "src": "backend/engine/racepower/cold.py:355"
+  },
+  "最低約 {t} °C，加上{why}": {
+    "draft": true,
+    "src": "backend/engine/racepower/cold.py:354"
   },
   "最可能錯的是 LTHR": {
     "draft": false,
@@ -4263,6 +4327,10 @@
     "draft": true,
     "src": "backend/engine/strength_moves.py:224"
   },
+  "沒有研究拆出天黑本身慢多少；Brager 2020 的 35.9 % 含疲勞": {
+    "draft": true,
+    "src": "backend/engine/racepower/cold.py:343"
+  },
   "沒有背包資料": {
     "draft": true,
     "src": "backend/engine/race_feasibility.py:212"
@@ -4482,6 +4550,10 @@
   "熱適應開始累積的熱指數": {
     "draft": true,
     "src": "backend/engine/advanced_params.py:23"
+  },
+  "熱食熱飲": {
+    "draft": true,
+    "src": "backend/engine/racepower/cold.py:358"
   },
   "熱：每段溫度由天氣點（{z:.0f} m）以每 100 m 0.65 °C 換算到該段海拔，濕度不變（推估）": {
     "draft": false,
@@ -6051,6 +6123,10 @@
     "draft": true,
     "src": "backend/engine/workout_review.py:2683"
   },
+  "遮住臉和手": {
+    "draft": true,
+    "src": "backend/engine/racepower/cold.py:283"
+  },
   "還不夠": {
     "draft": true,
     "src": "backend/engine/race_feasibility.py:321"
@@ -6311,6 +6387,14 @@
     "draft": true,
     "src": "backend/engine/planning.py:303"
   },
+  "防水防風外套": {
+    "draft": true,
+    "src": "backend/engine/racepower/cold.py:356"
+  },
+  "防風外套": {
+    "draft": true,
+    "src": "backend/engine/racepower/cold.py:281"
+  },
   "阿基里斯腱的肌腱病變（腳跟上方的跟腱痛）": {
     "draft": true,
     "src": "backend/engine/injuries.py:102"
@@ -6334,6 +6418,10 @@
   "陡坡（跑）": {
     "draft": false,
     "src": "backend/engine/racepower/seg_targets.py:35"
+  },
+  "陣風 {g:.0f} km/h": {
+    "draft": true,
+    "src": "backend/engine/racepower/cold.py:260"
   },
   "階梯步道、坡度穩定的路線（登山王、Koop 上坡 tempo、陡坡健走）：每組時間＋強度，心率／功率上下限照設": {
     "draft": true,
@@ -6431,6 +6519,10 @@
     "draft": true,
     "src": "backend/engine/race_feasibility.py:294"
   },
+  "預報有雨": {
+    "draft": true,
+    "src": "backend/engine/racepower/cold.py:351"
+  },
   "預報有雨：下坡和技術路段可能比預估慢，跌倒風險較高；建議用杖、注意鞋底抓地": {
     "draft": true,
     "src": "backend/engine/racepower/weather.py:533"
@@ -6467,9 +6559,21 @@
     "draft": true,
     "src": "backend/engine/quality_gate.py:1343"
   },
+  "頭燈（備用電池）": {
+    "draft": true,
+    "src": "backend/engine/racepower/cold.py:338"
+  },
   "顏色：時間和 TSS 偏離計畫較多的那個（±20% 內算符合，TrainingPeaks 的做法）": {
     "draft": true,
     "src": "backend/engine/workout_review.py:2732"
+  },
+  "風寒 {wc} °C": {
+    "draft": true,
+    "src": "backend/engine/racepower/cold.py:258"
+  },
+  "風寒用美國國家氣象局的公式，只在氣溫 ≤ 10 °C、風速 > 4.8 km/h 時算；≤ −10 °C 是加拿大環境部「長時間在外有失溫和凍傷風險」那一級，≤ −28 °C 外露皮膚 10–30 分鐘可能凍傷；陣風 ≥ 50 km/h 也提醒（推估）。氣溫依各段海拔換算。只是提醒，預估時間不變": {
+    "draft": true,
+    "src": "backend/engine/racepower/cold.py:285"
   },
   "飄很多": {
     "draft": true,
@@ -6607,6 +6711,10 @@
     "draft": true,
     "src": "backend/engine/overview.py:1856"
   },
+  "（共 {n} 處）": {
+    "draft": true,
+    "src": "backend/engine/racepower/cold.py:277"
+  },
   "（只供參考，不據此調整休息）": {
     "draft": true,
     "src": "backend/engine/workout_review.py:2534"
@@ -6646,6 +6754,10 @@
   "（這週的目標是 {w:.0f} m，一次最多排 {m} 分鐘，先爬到這裡）": {
     "draft": true,
     "src": "backend/engine/specific_phase.py:477"
+  },
+  "＋": {
+    "draft": true,
+    "src": "backend/engine/racepower/cold.py:290"
   },
   "＋平衡／腳踝": {
     "draft": true,
@@ -6739,6 +6851,10 @@
     "draft": true,
     "src": "backend/engine/race_feasibility.py:506"
   },
+  "：外露皮膚 10–30 分鐘可能凍傷": {
+    "draft": true,
+    "src": "backend/engine/racepower/cold.py:279"
+  },
   "：夠背包爬坡（≥ {a:g}）": {
     "draft": true,
     "src": "backend/engine/race_feasibility.py:505"
@@ -6814,6 +6930,10 @@
   "；傷後往上一級排（推估）": {
     "draft": true,
     "src": "backend/engine/reentry.py:164"
+  },
+  "；先想好撤退點": {
+    "draft": true,
+    "src": "backend/engine/racepower/cold.py:359"
   },
   "；其他溫度另外算（{o}）": {
     "draft": true,

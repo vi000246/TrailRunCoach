@@ -12,7 +12,7 @@ PAGE = STATIC / "racepower.html"
 CORE = ["event", "type", "tripkind", "mode", "target", "tpace", "tpower", "effort", "csrc", "dist", "gain", "loss",
         "days", "drop", "ogain", "tripdays", "date", "start", "pack", "peak", "latlon", "stops-box", "calc"]
 ADVANCED = ["split", "sigma", "eps", "minlen", "flatpct", "strategy", "amount", "hup", "hdown", "accl",
-            "hourlyheat", "heat-line", "heat-accl", "heat-s", "hrband", "packdays", "heatz", "formula"]
+            "hourlyheat", "heat-line", "heat-accl", "heat-s", "hrband", "packdays", "heatz", "formula", "nightslow"]
 
 
 class _Ids(HTMLParser):
