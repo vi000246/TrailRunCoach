@@ -223,5 +223,17 @@
   "bt.th.moving_h": "移動時數",
   "bt.th.decay": "含衰減誤差",
   "bt.th.nodecay": "不含衰減誤差",
-  "bt.th.long_badge": "≥ {h} h"
+  "bt.th.long_badge": "≥ {h} h",
+  "snow.label": "積雪",
+  "snow.none": "無",
+  "snow.trodden": "有踏跡（× 1.5）",
+  "snow.untrodden": "無踏跡（× 2–3）",
+  "snow.tip": "冬季登山的雪地時間（經驗法則，日本嚮導）：有踏跡時爬升段 × 1.5，沒有踏跡時爬升段 × 2–3。只乘爬升段，下坡和平路不變",
+  "snow.note_trodden": "積雪有踏跡：爬升段時間 × 1.5（經驗法則，日本嚮導），移動 {t}（沒有雪 {base}）",
+  "snow.note_untrodden": "積雪無踏跡：爬升段時間 × 2 到 × 3（經驗法則，日本嚮導），移動 {lo}（× 2）到 {hi}（× 3），時鐘 {clo} 到 {chi}；上面的數字用 × 2",
+  "snow.season_single": "這是單攻行程。",
+  "snow.season": "玉山主峰線雪季措施（約 12 月中到 3 月，排雲或白木林積雪 ≥ 5 cm 時實施）：暫停單攻，要帶冰爪、冰斧、頭盔，並要有雪地經驗",
+  "snow.season_link": "國家公園公告",
+  "sleep.changed": "睡眠點預設已改：新增的睡眠點依預估總時數預設（< 36 小時 20 分、36–60 小時 30 分、> 60 小時 90 分；Kishi 2024、Martin 2018）。這裡留白的睡眠點仍照舊算 90 分鐘",
+  "sleep.changed_now": "；這場新的預設是 {m} 分鐘"
 }
