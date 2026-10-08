@@ -12,7 +12,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from backend.db.models import SyncState, WorkoutFile, WorkoutMetric
+from backend.db.models import SyncState, WorkoutFile
 from backend.settings.repository import SettingsRepository
 from backend.sync import coros_client, http, purge, runner, scheduler, storage
 from backend.tests.fit_builder import build_run
@@ -173,7 +173,6 @@ async def _two_sources(s, root):
                          start_time_utc=t.replace(tzinfo=None), workout_date=dt.date(2026, 9, 2))
         s.add(wf)
         await s.flush()
-        s.add(WorkoutMetric(workout_id=wf.id, metric_key="tss", value=50.0))
     wko5 = root.parent / "WKO5" / "Me" / "2026"
     wko5.mkdir(parents=True, exist_ok=True)
     (wko5 / "x.wko4").write_bytes(b"wko4")
@@ -206,7 +205,6 @@ def test_delete_tp_files_keeps_coros_and_wko5_and_rebuilds_dedup(tmp_path, _fit_
         assert not files["tp"].exists() and files["coros"].exists() and wko5_file.exists()
         rows = (await s.execute(select(WorkoutFile))).scalars().all()
         assert [x.source for x in rows] == ["coros"] and rows[0].duplicate_of is None   # now canonical
-        assert (await s.execute(select(WorkoutMetric))).scalars().all()[0].workout_id == rows[0].id
         st = (await s.execute(select(SyncState))).scalar_one()
         assert st.last_sync_cursor is None and st.last_sync_at is None and st.coros_last_sync_at is not None
         # without a WKO5 folder the charts stay on the (now empty) 資料來源; never the other source

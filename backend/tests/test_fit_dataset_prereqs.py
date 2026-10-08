@@ -137,11 +137,32 @@ def test_settings_from_db_not_wko5(tmp_path, app_db):
     assert ds.setting("weight", FD.date_to_day(dt.date(2026, 9, 30))) == pytest.approx(66.3)
     assert ds.sport_setting("ftp", w) == pytest.approx(210.0)
     assert ds.sport_setting("tpace", w) == pytest.approx(5.0)                 # 300 s/km
-    # the COROS-profile LTHR 182 / FTP 200 (sport unrecorded) are NOT running thresholds
+    # the COROS-profile LTHR 182 (sport unrecorded) is NOT a running threshold; the legacy
+    # ftp_w 200 of an older DB is not read at all
     assert ds.sport_setting("thr", w) is None
-    assert {x["field"] for x in ds.settings_ignored} == {"lthr", "ftp_w"}
+    assert {x["field"] for x in ds.settings_ignored} == {"lthr"}
     assert ds.setting_label("weight").startswith("athlete_settings")
     assert ds.setting_label("runthr") == "未設定"
+
+
+def test_athlete_settings_read_from_the_current_schema(tmp_path):
+    """A DB made by the current models has no ftp_w column (legacy, unread): the rows still read."""
+    from sqlalchemy import create_engine
+    from backend.db.models import Base
+    p = tmp_path / "new.db"
+    eng = create_engine(f"sqlite:///{p}")
+    Base.metadata.create_all(eng)
+    eng.dispose()
+    con = sqlite3.connect(p)
+    assert "ftp_w" not in {r[1] for r in con.execute("PRAGMA table_info(athlete_settings)")}
+    con.execute("INSERT INTO athletes (id, name, data_dir, created_at) VALUES (1, 'a', 'd', '2026-01-01')")
+    con.execute("INSERT INTO athlete_settings (athlete_id, effective_date, weight_kg, lthr) "
+                "VALUES (1, '2026-09-30', 66.3, 171)")
+    con.commit()
+    con.close()
+    rows = FD.read_athlete_settings(p)
+    assert rows and rows[0]["weight_kg"] == pytest.approx(66.3) and rows[0]["lthr"] == 171
+    assert "ftp_w" not in rows[0]
 
 
 def test_plan_threshold_wins(tmp_path, app_db):

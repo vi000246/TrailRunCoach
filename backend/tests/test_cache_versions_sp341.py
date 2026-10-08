@@ -1,6 +1,7 @@
 """SP-341: caches that never noticed a code change get a code version (channel_peaks /
 workout_curves / the WKO5 power-source and bad-file caches, the race-power power-source and
-bad-file caches, mmp_cache); pmc_cache is dropped from every tenant DB; the achievements cache
+bad-file caches); pmc_cache is dropped from every tenant DB (workout_metrics / mmp_cache, no longer
+written, are left as they are); the achievements cache
 drops activities whose file is gone and is written atomically. Synthetic files in tmp_path only."""
 import asyncio
 import datetime as dt
@@ -17,7 +18,6 @@ from backend.engine.wko5expr import dataset as D
 from backend.tests.fit_builder import build_run
 
 T0 = datetime(2026, 9, 1, 7, tzinfo=timezone.utc)
-PROFILE = [400] * 180 + [300] * 720 + [220] * 1200          # a mean-max curve the CP fit can use
 
 
 def run(coro):
@@ -172,83 +172,6 @@ def test_racepower_cache_write_is_atomic(fit_home, monkeypatch):
     assert not list(home.glob("*.tmp"))
 
 
-# ---------------------------------------------------------------- mmp_cache
-async def _mmp_session(tmp_path):
-    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-    from backend.db.models import Athlete, Base, MmpCache, WorkoutFile
-    eng = create_async_engine("sqlite+aiosqlite:///:memory:")
-    async with eng.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    s = async_sessionmaker(eng, expire_on_commit=False)()
-    s.add(Athlete(id=1, name="t", data_dir=str(tmp_path)))
-    f1 = tmp_path / "1_2026-09-01_run.fit"
-    f1.write_bytes(build_run(T0, power=PROFILE))
-    s.add(WorkoutFile(id=1, athlete_id=1, file_path=str(f1), file_format="fit", sport="running",
-                      workout_date=dt.date(2026, 9, 1)))
-    s.add(WorkoutFile(id=2, athlete_id=1, file_path=str(tmp_path / "gone.fit"), file_format="fit",
-                      sport="running", workout_date=dt.date(2026, 9, 2)))
-    await s.flush()
-    for wid in (1, 2):                                        # rows from before the version column
-        for dur in (180, 720, 1200):
-            s.add(MmpCache(workout_id=wid, channel="power", duration_s=dur, value=999.0, version=None))
-    await s.commit()
-    return s, eng, f1
-
-
-def test_mmp_rows_of_another_code_version_are_recomputed(tmp_path, monkeypatch):
-    from sqlalchemy import select
-    from backend.db.models import MmpCache
-    from backend.engine.algorithms.metrics import compute_run_ftp_from_mmp
-    from backend.engine.algorithms.mmp import compute_mmp
-    from backend.files import file_service as FS
-    from backend.files.fit_reader import parse_fit
-
-    async def go():
-        s, eng, f1 = await _mmp_session(tmp_path)
-        raw = parse_fit(str(f1))
-        want = {d: v for d, v in compute_mmp(raw.power_w, raw.time_s).items() if v > 0}
-        ftp = await FS.get_run_ftp(s, 1, dt.date(2026, 9, 10))
-        rows = (await s.execute(select(MmpCache))).scalars().all()
-        assert {r.workout_id for r in rows} == {1}                       # the unreadable file's rows dropped
-        assert {r.version for r in rows} == {FS.mmp_version()}
-        assert {r.duration_s: r.value for r in rows} == want             # not the stale 999 W
-        assert ftp == compute_run_ftp_from_mmp(want) and ftp < 999
-        old = FS.mmp_version()
-        monkeypatch.setattr(FS, "MMP_CACHE_V", FS.MMP_CACHE_V + 1)       # the algorithm changed
-        assert FS.mmp_version() != old
-        assert await FS.get_run_ftp(s, 1, dt.date(2026, 9, 10)) == ftp
-        rows = (await s.execute(select(MmpCache))).scalars().all()
-        assert {r.version for r in rows} == {FS.mmp_version()} and len(rows) == len(want)
-        await s.close()
-        await eng.dispose()
-    run(go())
-
-
-def test_mmp_version_follows_the_mean_max_code():
-    from backend.files import file_service as FS
-    parts = CH.closure([FS.compute_mmp, FS.parse_fit])
-    assert "backend.engine.algorithms.mmp.compute_mmp" in parts
-    assert FS.mmp_version() == FS.mmp_version() and FS.mmp_version().startswith(f"{FS.MMP_CACHE_V}:")
-
-
-def test_import_writes_mmp_rows_with_the_version(tmp_path):
-    from sqlalchemy import select
-    from backend.db.models import MmpCache
-    from backend.files import file_service as FS
-    from backend.tests.test_sync_e2e import make_session
-
-    async def go():
-        s = await make_session(tmp_path)
-        f = tmp_path / "1_2026-09-01_run.fit"
-        f.write_bytes(build_run(T0, power=PROFILE))
-        wf = await FS._import_one_file(s, 1, f, source="coros")
-        await s.commit()
-        rows = (await s.execute(select(MmpCache).where(MmpCache.workout_id == wf.id))).scalars().all()
-        assert rows and {r.version for r in rows} == {FS.mmp_version()}
-        await s.close()
-    run(go())
-
-
 # ---------------------------------------------------------------- pmc_cache
 OLD_PMC = ("CREATE TABLE pmc_cache (id INTEGER PRIMARY KEY, athlete_id INTEGER, date DATE, ctl FLOAT, "
            "atl FLOAT, tsb FLOAT, ramp_rate FLOAT, tss FLOAT, UNIQUE (athlete_id, date))")
@@ -272,6 +195,8 @@ def _init(monkeypatch, path: Path) -> set:
 
 
 def test_pmc_cache_is_dropped_from_an_old_tenant_db(tmp_path, monkeypatch):
+    """pmc_cache (retired) is dropped; mmp_cache (legacy: no longer written or read, 2026-10-08) is
+    left exactly as it was — no destructive migration, and no column added to it any more."""
     from backend.db.models import Base
     path = tmp_path / "old.db"
     con = sqlite3.connect(str(path))
@@ -284,17 +209,18 @@ def test_pmc_cache_is_dropped_from_an_old_tenant_db(tmp_path, monkeypatch):
     con.close()
     names, cols = _init(monkeypatch, path)
     assert "pmc_cache" not in names and "pmc_cache" not in Base.metadata.tables
-    assert "version" in cols
+    assert "mmp_cache" in names and "version" not in cols and "mmp_cache" not in Base.metadata.tables
     con = sqlite3.connect(str(path))
     try:
-        assert con.execute("SELECT value, version FROM mmp_cache").fetchall() == [(300.0, None)]   # kept, stale
+        assert con.execute("SELECT workout_id, value FROM mmp_cache").fetchall() == [(1, 300.0)]   # kept as is
     finally:
         con.close()
 
 
 def test_migration_works_on_dbs_without_pmc_cache(tmp_path, monkeypatch):
     names, cols = _init(monkeypatch, tmp_path / "new.db")                      # a new tenant
-    assert "pmc_cache" not in names and "version" in cols and "workout_files" in names
+    assert "pmc_cache" not in names and "workout_files" in names
+    assert not names & {"workout_metrics", "mmp_cache"} and not cols              # no longer created
     part = tmp_path / "partial.db"                                             # a partial schema
     con = sqlite3.connect(str(part))
     con.execute("CREATE TABLE user_settings (id INTEGER PRIMARY KEY, user_id INT, key TEXT, value_json TEXT, "
@@ -303,6 +229,42 @@ def test_migration_works_on_dbs_without_pmc_cache(tmp_path, monkeypatch):
     con.close()
     names, _ = _init(monkeypatch, part)
     assert "pmc_cache" not in names and "user_settings" in names
+
+
+def test_an_older_db_keeps_workout_metrics_and_ftp_w_and_still_works(tmp_path, monkeypatch):
+    """No destructive migration (owner 2026-10-08): an older DB's workout_metrics rows and the
+    athlete_settings.ftp_w column stay as they are; the app (models without them) still writes a
+    settings row there, ftp_w left NULL."""
+    path = tmp_path / "old.db"
+    con = sqlite3.connect(str(path))
+    con.execute("CREATE TABLE athlete_settings (id INTEGER PRIMARY KEY, athlete_id INTEGER, effective_date DATE, "
+                "ftp_w FLOAT, weight_kg FLOAT, lthr INTEGER, UNIQUE (athlete_id, effective_date))")
+    con.execute("INSERT INTO athlete_settings (athlete_id, effective_date, ftp_w, lthr) VALUES (1, '2026-01-01', 287, 171)")
+    con.execute("CREATE TABLE workout_metrics (id INTEGER PRIMARY KEY, workout_id INTEGER, metric_key VARCHAR(50), "
+                "value FLOAT, computed_at DATETIME, UNIQUE (workout_id, metric_key))")
+    con.execute("INSERT INTO workout_metrics (workout_id, metric_key, value) VALUES (1, 'tss', 55)")
+    con.commit()
+    con.close()
+    names, _ = _init(monkeypatch, path)
+    assert "workout_metrics" in names
+
+    async def write():
+        from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+        from backend.db.models import Athlete, AthleteSettings
+        eng = create_async_engine(f"sqlite+aiosqlite:///{path}")
+        async with async_sessionmaker(eng)() as s:
+            s.add(Athlete(id=1, name="a", data_dir="d"))
+            s.add(AthleteSettings(athlete_id=1, effective_date=dt.date(2026, 10, 8), lthr=172, weight_kg=61.5))
+            await s.commit()
+        await eng.dispose()
+    run(write())
+    con = sqlite3.connect(str(path))
+    try:
+        assert con.execute("SELECT workout_id, metric_key, value FROM workout_metrics").fetchall() == [(1, "tss", 55.0)]
+        assert con.execute("SELECT effective_date, ftp_w, lthr FROM athlete_settings ORDER BY effective_date"
+                           ).fetchall() == [("2026-01-01", 287.0, 171), ("2026-10-08", None, 172)]
+    finally:
+        con.close()
 
 
 # ---------------------------------------------------------------- achievements cache
@@ -383,9 +345,8 @@ def test_the_versions_are_the_same_in_every_process():
     import subprocess
     import sys
     code = ("from backend.engine.wko5expr import dataset as D; from backend.engine.racepower import cptest as T;"
-            "from backend.files import file_service as FS;"
             "print([D.per_workout_code(n) for n in ('channel_peaks', 'workout_curves', 'power_source', "
-            "'bad_activity')], T.power_cache_code(), T.bad_cache_code(), FS.mmp_version())")
+            "'bad_activity')], T.power_cache_code(), T.bad_cache_code())")
     root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     outs = {subprocess.run([sys.executable, "-c", code], cwd=root, capture_output=True, text=True, check=True,
                            env={**os.environ, "PYTHONHASHSEED": seed}).stdout for seed in ("1", "2")}
@@ -399,5 +360,5 @@ def test_these_caches_are_registered_with_their_version():
                  "racepower_power_source.json", "racepower_bad_activity.json", "achievements_cache.json"):
         e = R.classify(name)
         assert e.cls == R.DERIVED and "SP-341" in e.invalidated_by, name
-    assert "SP-341" in R.table("mmp_cache").invalidated_by
+    assert R.table("mmp_cache") is None and "mmp_cache" in R.LEGACY_TABLES
     assert R.table("pmc_cache") is None and "pmc_cache" in R.RETIRED_TABLES

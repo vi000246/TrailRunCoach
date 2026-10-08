@@ -80,7 +80,7 @@ async def delete_source_files(db: AsyncSession, source: str, athlete_id: int = 1
             await db.execute(update(WorkoutFile).where(WorkoutFile.duplicate_of.in_(ids))
                              .values(duplicate_of=None))
         for r in rows:
-            await db.delete(r)            # cascades metrics + MMP cache
+            await db.delete(r)
         await db.flush()
 
         st = (await db.execute(select(SyncState).where(SyncState.athlete_id == athlete_id))).scalar_one_or_none()
