@@ -2239,13 +2239,13 @@
     "draft": true,
     "src": "backend/api/plan.py:472"
   },
-  "出發前 14 天內在 2,750 m 以上連睡 2 晚（例如{site}）": {
-    "draft": true,
-    "src": "backend/engine/altitude.py:246"
+  "出發前 14 天內在 2,750 m 以上連睡 2 晚": {
+    "draft": false,
+    "src": "backend/engine/altitude.py:365"
   },
-  "出發前 14 天內找一個週末，在 2,750 m 以上睡 2 晚（例如{site}）。可選：{days}": {
-    "draft": true,
-    "src": "backend/engine/altitude.py:243"
+  "出發前 14 天內找一個週末，在 2,750 m 以上睡 2 晚。可選：{days}": {
+    "draft": false,
+    "src": "backend/engine/altitude.py:362"
   },
   "分": {
     "draft": true,
@@ -2530,10 +2530,6 @@
   "吃": {
     "draft": true,
     "src": "backend/engine/racepower/seg_targets.py:87"
-  },
-  "合歡山松雪樓 {m:,} m": {
-    "draft": true,
-    "src": "backend/engine/altitude.py:241"
   },
   "吊在單槓上不動，練握力。": {
     "draft": true,
@@ -3626,6 +3622,10 @@
   "拉繩、岩稜要拉得住自己。基礎循環、最大肌力期和維持課會練。": {
     "draft": true,
     "src": "backend/engine/strength_moves.py:103"
+  },
+  "按 ✕ 關掉後，這趟行程不再顯示這個提醒；出發前 14 天內的高度檢查照常出現。": {
+    "draft": false,
+    "src": "backend/engine/altitude.py:379"
   },
   "按「好了」才會結案（好了的日期之後可以在傷病紀錄改）；結案後傷別要避開的課和疼痛燈號都解除，同部位 {recur} 天內再痛會標成復發。按「還沒」{snooze} 天內不再問。回到傷前 75–80% 的量才恢復正常訓練（Ohio State Wexner 回跑指引，臨床機構）；「{n} 次、跨 {span} 天」是推估。": {
     "draft": true,
@@ -4875,10 +4875,6 @@
     "draft": true,
     "src": "backend/engine/specific_phase.py:473"
   },
-  "玉山國家公園建議上 3,000 m 以上的高山前，先在 2,500 m 左右住約 1 晚。塔塔加、大禹嶺低於 2,750 m，只適合行前一晚，不算進適應週末的 2 晚。": {
-    "draft": true,
-    "src": "backend/engine/altitude.py:260"
-  },
   "玉山國家公園管理處〈高山生理、高山症預防及處理〉": {
     "draft": true,
     "src": "backend/engine/altitude.py:89"
@@ -5211,9 +5207,9 @@
     "draft": true,
     "src": "backend/engine/altitude.py:202"
   },
-  "第一晚睡在約 {m:,.0f} m：行前一晚先住約 2,500 m（例如塔塔加 {a:,} m、大禹嶺 {b:,} m）": {
-    "draft": true,
-    "src": "backend/engine/altitude.py:231"
+  "第一晚睡在約 {m:,.0f} m：行前一晚先住約 2,500 m（玉山國家公園建議上 3,000 m 以上的高山前，先在 2,500 m 左右住約 1 晚；這一晚低於 2,750 m，不算進適應週末的 2 晚）。": {
+    "draft": false,
+    "src": "backend/engine/altitude.py:375"
   },
   "等基礎期重新累積到 EF 持平（停滯法）": {
     "draft": true,
