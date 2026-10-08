@@ -545,6 +545,28 @@ async def edit_session(uid: str, patch: dict = Body(...), db: AsyncSession = Dep
     return out
 
 
+# 交換課表 (SP-359; the 課表 calendar: right-click 「交換」 then pick the other session, or drop a
+# session onto another): the two trade days in one commit, each the user's own move (like a drag).
+#   POST /api/v1/overview/plan/sessions/swap   {a, b}  -> {sessions, warnings, coros}
+@router.post("/sessions/swap")
+async def swap_sessions(body: dict = Body(...), db: AsyncSession = Depends(get_db)):
+    from backend.engine import rest_days as RD
+    a, b = str((body or {}).get("a") or ""), str((body or {}).get("b") or "")
+    if not a or not b:
+        raise HTTPException(400, "a and b are required")
+    inp = await _inputs()
+    try:
+        async with _wlock():
+            sa, sb = await PS.swap(db, a, b, _today(inp), blocked=PS.blocked_map(inp))
+    except PS.PlanError as e:
+        raise _err(e)
+    for s in (sa, sb):
+        await _b2b_moved(db, s["uid"], s["day"])    # an accepted B2B day moved: the entry follows
+    after = await PS.load(db)
+    return {"sessions": [sa, sb], "warnings": RD.swap_warnings(after, [sa["uid"], sb["uid"]]),
+            "coros": await _sync_watch(db, [sa["uid"], sb["uid"]], inp)}      # SP-358: both days on the watch
+
+
 # ---------------------------------------------------------------------------
 # tests: the editor's 測試 templates, and due tests suggested (never scheduled)
 #

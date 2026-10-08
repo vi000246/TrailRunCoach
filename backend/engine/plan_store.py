@@ -351,6 +351,41 @@ async def edit(db: AsyncSession, uid: str, patch: dict, today: str, athlete_id: 
                blocked: Optional[dict] = None) -> dict:
     """`blocked`: ISO day -> label of the 不排課日期; moving onto one is refused."""
     rows = await _rows(db, athlete_id)
+    d = _edit_row(db, rows, uid, patch, today, athlete_id, blocked)
+    await db.commit()
+    return d
+
+
+async def swap(db: AsyncSession, uid_a: str, uid_b: str, today: str, athlete_id: int = 1,
+               blocked: Optional[dict] = None) -> tuple[dict, dict]:
+    """交換課表 (SP-359): the two sessions trade days in one commit. Each move is the user's own
+    edit, exactly like a drag (`edit` with a day: edited, an auto session moved to another week
+    leaves a tombstone and becomes custom), so reconcile / auto-adjust never undo it. Both must be
+    active, from today on, not a 課表待確認 notice, on two different days, neither day blocked."""
+    rows = await _rows(db, athlete_id)
+    a, b = rows.get(uid_a), rows.get(uid_b)
+    if a is None or b is None or a.state != "active" or b.state != "active":
+        raise PlanError(_("找不到這堂課（或已經完成／錯過）"))
+    if uid_a == uid_b or a.day == b.day:
+        raise PlanError(_("兩堂課在同一天，不用交換"))
+    if a.kind in NOT_LOAD or b.kind in NOT_LOAD:
+        raise PlanError(_("課表待確認是自動調整的提醒，不能交換"))
+    if not a.day or not b.day or min(a.day, b.day) < today:
+        raise PlanError(_("過去的課不能交換"))
+    day_a, day_b = a.day, b.day
+    try:
+        da = _edit_row(db, rows, uid_a, {"day": day_b}, today, athlete_id, blocked)
+        db_ = _edit_row(db, rows, uid_b, {"day": day_a}, today, athlete_id, blocked)
+    except PlanError:
+        await db.rollback()
+        raise
+    await db.commit()
+    return da, db_
+
+
+def _edit_row(db: AsyncSession, rows: dict, uid: str, patch: dict, today: str, athlete_id: int,
+              blocked: Optional[dict]) -> dict:
+    """`edit` without the commit (swap commits its two moves together)."""
     r = rows.get(uid)
     if r is None or r.state != "active":
         raise PlanError(_("找不到這堂課（或已經完成／錯過）"))
@@ -389,7 +424,6 @@ async def edit(db: AsyncSession, uid: str, patch: dict, today: str, athlete_id: 
         d["protocol"] = patch["protocol"]           # the editor's 測試 → 方式 choice
     d.update(edited=True, week_start=new_week, provisional=False)
     _fill(r, d)
-    await db.commit()
     return d
 
 
