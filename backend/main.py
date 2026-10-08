@@ -105,6 +105,9 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
+        # quitting: the rain backfill (api/rain_backfill.py, SP-299) stops before its next call
+        from backend.api import rain_backfill
+        rain_backfill.STOP.set()
         if task is not None:
             task.cancel()
             try:

@@ -35,9 +35,11 @@ Kinds (the `type` of a row):
 
 Ids (the dismissal key): `b2b:<week>`, `test:<kind>:<week>`, `baseline:<kind>:<week>` (all per
 week: 「不要」 holds for that week), `zone:<detector id>`, `zone_update:<field>:<date>`,
-`altitude:<event id>:<start>:<max m>:<flags>` (the flags say what the reminder found, so a
-dismissed one shows again only when that changes; the 15–28 day row's flags start with `plan`, so
-dismissing it never hides the 14-day check).
+`altitude:<event id>:<start>:<max m>:<flags>` (the 1–14 day check: the flags say what the reminder
+found, so a dismissed one shows again only when that changes), `altitude_plan:<event id>:<start>`
+(the 15–28 day 安排適應週末 row, SP-258: closed once, it never shows again for that trip — prune
+keeps the close until the trip's start, even on a day the row is not computed; it never hides the
+14-day check).
 A dismissal is dropped once its suggestion is no longer computed (prune), so
 a zone suggestion that fires again later is new and shows again.
 
@@ -55,6 +57,7 @@ KEY = "plan.suggestions.dismissed"
 ACTIONS = ("accepted", "declined", "dismissed")
 ZONE_TESTS = ("aet", "cp")            # schedulable from the box (tt30: described only)
 WEEKLY = ("b2b:", "test:", "baseline:")     # ids that end in their week: a dismissal holds for that week
+PLAN_ALT = "altitude_plan:"                 # 安排適應週末 (SP-258): ends in the trip's start; held until then
 
 
 def _monday(day: str) -> str:
@@ -288,8 +291,10 @@ def altitude_rows(events: list, today: str, alt_of, alts_of, nights_of=None) -> 
                          "taper_days": _taper_days(e)}, alt, ex, d)
         if r is None:
             continue
-        out.append({**r, "id": f"altitude:{get('id')}:{r['start']}:{r['max_m']}:{'-'.join(r['flags']) or 'none'}",
-                    "type": "altitude", "pick": None, "src": r.get("src") or AL.SRC})
+        # the 15–28 day row: one id per trip, whatever it found (owner 2026-10-07: closed = gone)
+        sid = (f"{PLAN_ALT}{get('id')}:{r['start']}" if "plan" in r["flags"] else
+               f"altitude:{get('id')}:{r['start']}:{r['max_m']}:{'-'.join(r['flags']) or 'none'}")
+        out.append({**r, "id": sid, "type": "altitude", "pick": None, "src": r.get("src") or AL.SRC})
     return out
 
 
@@ -337,14 +342,29 @@ def injury_done_rows(events: list[dict], marks: list[dict], today: str) -> list[
     return out
 
 
+def _plan_alt_ids(dismissed: dict) -> dict:
+    """A 安排適應週末 close stored before the per-trip id (`altitude:<event>:<start>:<m>:plan…`,
+    SP-258 first version) under its `altitude_plan:<event>:<start>` id, so it stays closed."""
+    out = {}
+    for k, v in dismissed.items():
+        if k.startswith("altitude:"):
+            parts = k[len("altitude:"):].rsplit(":", 3)
+            if len(parts) == 4 and parts[3].startswith("plan"):
+                out.setdefault(f"{PLAN_ALT}{parts[0]}:{parts[1]}", v)
+                continue
+        out[k] = v
+    return out
+
+
 def prune(dismissed: dict, rows: list[dict], today: str) -> dict:
-    """Dismissals whose suggestion is still computed (or a B2B / test of this
-    week or later) stay; the rest go, so a later, new suggestion shows again."""
+    """Dismissals whose suggestion is still computed (or a B2B / test of this week or later, or an
+    altitude_plan close before its trip starts) stay; the rest go, so a later, new suggestion shows
+    again."""
     ids = {r["id"] for r in rows}
     mon = _monday(today)
     keep = {}
-    for k, v in (dismissed or {}).items():
-        if k in ids or (v.get("week") and v["week"] >= mon):
+    for k, v in _plan_alt_ids(dismissed or {}).items():
+        if k in ids or (v.get("week") and v["week"] >= mon) or (k.startswith(PLAN_ALT) and k.rsplit(":", 1)[-1] >= today):
             keep[k] = v
     return keep
 
