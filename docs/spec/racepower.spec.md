@@ -1016,9 +1016,12 @@ start time, aid stations. Since 2026-10-02 (賽事計算機, renamed from 賽事
   comes from that model, which keeps its own divisor (`backend/engine/racepower/trailhr.py:368`), so
   changing the formula leaves the time unchanged and moves only the v1 cross-check, the RE detail and
   the shown average power. It does move the time in 目標功率 mode and when there is no trail HR model
-  (the v1 whole-race time, `backend/engine/racepower/planner.py:505`); in 目標時間 mode the time is the
-  target and the formula moves the power needed. A ? help next to the select says so (SP-369 with
-  SP-367's answer; `racepower.formula.tip`, `backend/static/racepower.html:425`).
+  (the v1 whole-race time, `backend/engine/racepower/planner.py:505`); in 目標配速 mode (time or pace) the
+  time is the target and the formula moves the power needed. With a GPX course, the trail back-test
+  passed and no HR estimate (`v2_primary`, `backend/engine/racepower/planner.py:496`) every mode
+  solves on the segment model (`:534`, no rescaling at `:561`): the formula then moves neither the
+  time nor the power. A ? help next to the select says all of this with the mode buttons' own labels
+  (SP-369 with SP-367's answer; `racepower.formula.tip`, `backend/static/racepower.html:425`).
 - **以訓練條件功率輸入（會再乘上環境係數 M）** (`power_is_training`, 目標功率 mode, not 百岳;
   `backend/static/racepower.html:294`): the target power (W, or %CP × CP) is read as a
   training-conditions number and multiplied by the race's M — the distance-weighted mean of the
@@ -1293,8 +1296,8 @@ concurrent /grade-model fits and /cadence-check scans run once; every race type 
 node, a dropped connection and 502 / 524 read as the message with 重試 (a 400 keeps its text), one
 request while one is in flight, and 重試 asks again.
 `backend/tests/test_racepower_help_sp369.py` (SP-369): training power × M (W and %CP), the effort km
-formula moving the time in 目標功率 / the power in 目標時間 / the model prediction without an HR
-model, the HR model's own divisor; both ? helps next to their control, in both catalogs.
+formula moving the time in 目標功率 / the power in 目標配速 / the model prediction without an HR
+model and nothing on the validated segment model (GPX), the HR model's own divisor; both ? helps next to their control, in both catalogs.
 
 ## Domain Model
 
@@ -1443,3 +1446,4 @@ when set, but nothing fills it from the routes module yet.
 | 2026-10-08 | removal | SP-365 | CSV export removed (user: not needed): the 「匯出 CSV」 button and its handler, `POST /export/csv`, `calc.export_csv`, `csvplan.py`, the static demo's CSV path (`static_racepower.compute`, the shim's `RACEPOWER_POSTS` / CSV response, the parity sample), the demo write rules in `tenancy_mw.py`, the stale i18n baseline entry; the CSV-only tests went, the plan-side assertions moved to /plan (`test_racepower_export.py`, `test_racepower_fuel.py`, `test_racepower_seg_targets.py`), plus `test_csv_export_is_gone`. 「匯出至課表」 (`POST /export/plan`) and 分享 stay |
 | 2026-10-08 | bugfix | SP-366 | 坡度 RE 曲線 / 爬坡步頻分布 showed 「Failed to fetch」 on a marathon. That message is a connection that ended with no HTTP answer (a gateway timeout would show 502 / 504 / 524). Cause not confirmed: no log of the failing request; locally both answered 200 (slow only while the dataset was still being built after a start, under 3 s warm). Candidates: a server restart mid-request (restart / redeploy / container restart, an out-of-memory kill), the machine sleeping, a dropped network. Mitigations: one computation per key for GET /grade-model and /cadence-check (`backend/singleflight.py`), so concurrent callers (/plan, the other chart, a second tab) share one fit; the page shows a short message with 重試 for a dropped connection or a gateway answer and sends one request per chart at a time; every race type shows the charts (owner 2026-10-08, after a first version hid them on road); the static export opens both. i18n `charts.neterr` / `charts.retry`; test `test_racepower_charts_sp366.py` |
 | 2026-10-08 | feature | SP-369 (+ SP-367 answer A) | Two ? helps on the calculator, zh-TW + en: 「以訓練條件功率輸入（會再乘上環境係數 M）」 (the target power × the race's distance-weighted M before the time is computed; worked example) and 「effort km 公式」 (trail 模型預測 keeps the HR model's fitted divisor — only the comparison, RE detail and shown power move; 目標功率: the finish time moves; 目標時間: the power needed moves; no HR model: the model prediction uses it). The checkbox label is now i18n (`racepower.ptrain.label`). The help says 目標時間 moves the power, not the time (the code; the ticket's draft said both modes move the time). Test `test_racepower_help_sp369.py`; SP-367 / SP-369 open questions closed |
+| 2026-10-08 | bugfix | SP-369 review | 「effort km 公式」 ? help: adds the validated segment model case (GPX + trail back-test passed + no HR estimate: the time is the segment model's sum, the formula has no effect) and names the modes by their buttons (「模型預測」「目標功率」「目標配速」, not 目標時間); test `test_effort_formula_does_nothing_on_the_validated_segment_model` |

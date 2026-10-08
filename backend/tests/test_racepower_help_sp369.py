@@ -97,6 +97,30 @@ def test_help_texts_say_what_the_code_does():
     assert "環境係數 M" in zh["ptrain.tip"] and "依距離平均" in zh["ptrain.tip"] and "不勾" in zh["ptrain.tip"]
     assert "environment factor M" in en["ptrain.tip"]
     f = zh["formula.tip"]
-    assert "擬合" in f and "目標功率" in f and "目標時間" in f and "改到完賽時間" in f
-    assert "Target power" in en["formula.tip"] and "Target time" in en["formula.tip"]
+    # the mode buttons as a road / trail user sees them (racepower.goal.pace / .power / .model)
+    for label in (zh["goal.model"], zh["goal.power"], zh["goal.pace"]):
+        assert f"「{label}」" in f, label
+    assert "擬合" in f and "改到完賽時間" in f and "目標時間" not in f
+    assert "GPX" in f and "分段模型" in f and "不影響" in f            # the validated segment model (v2_primary)
+    e = en["formula.tip"]
+    for label in (en["goal.model"], en["goal.power"], en["goal.pace"]):
+        assert f"“{label}”" in e, label
+    assert "GPX" in e and "segment model" in e
     assert zh.get("ptrain.label") and en.get("ptrain.label")
+
+
+def test_effort_formula_does_nothing_on_the_validated_segment_model(client, monkeypatch):  # noqa: F811
+    """A GPX course with the trail back-test passed and no HR estimate (planner v2_primary): every mode
+    solves on the segment model, so the formula moves neither the time nor the power."""
+    from backend.engine.racepower import backtest as BT
+    from backend.engine.racepower import gpx as GPX
+    from backend.tests.test_racepower_v2 import synthetic_track
+    monkeypatch.setattr(BT, "flags", lambda path=None: ({"road": False, "trail": True, "hike": False}, False))
+    tr = synthetic_track({"len": 16000, "z": lambda x: 300 + (x * 0.08 if x < 8000 else (16000 - x) * 0.08)})
+    cid = client.post("/api/v1/racepower/course",
+                      files={"file": ("t.gpx", GPX.write_gpx(tr).encode(), "application/gpx+xml")}).json()["course_id"]
+    base = {"type": "trail", "course": {"course_id": cid}}
+    for mode, extra in (("power", {"target_power": 250}), ("time", {"target_time_s": 2.5 * 3600}), ("auto", {})):
+        s = {f: plan(client, **base, mode=mode, effort_formula=f, **extra)["summary"] for f in ("fitted_run", "itra")}
+        assert s["fitted_run"]["time_s"] == pytest.approx(s["itra"]["time_s"], abs=1.0), mode
+        assert s["fitted_run"]["power"] == pytest.approx(s["itra"]["power"], abs=0.5), mode

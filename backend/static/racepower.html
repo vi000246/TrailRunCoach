@@ -422,7 +422,7 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
           <option value="fitted_run">km + 爬升/153（你的跑步擬合）</option>
           <option value="itra">km + 爬升/100（ITRA / 健行筆記）</option>
           <option value="scarf">km + 爬升/126（Scarf）</option></select></label>
-        <span class="help" tabindex="0">?<span class="tip" data-i18n="racepower.formula.tip">越野「模型預測」：完賽時間來自心率配速模型，它用你自己擬合的爬升除數，這裡只影響對照數字、RE 明細和顯示的平均功率。目標功率：用這個 effort km 換算完賽時間，換公式會改到完賽時間。目標時間：完賽時間就是你的目標，換公式改的是需要的平均功率。沒有心率模型時，模型預測也用這個公式。</span></span>
+        <span class="help" tabindex="0">?<span class="tip" data-i18n="racepower.formula.tip">越野「模型預測」：完賽時間來自心率配速模型，它用你自己擬合的爬升除數，這裡只影響對照數字、RE 明細和顯示的平均功率。「目標功率」：用這個 effort km 換算完賽時間，換公式會改到完賽時間。「目標配速」：完賽時間就是你的目標，換公式改的是需要的平均功率。沒有心率模型時，「模型預測」也用這個公式。用 GPX 且分段模型通過回測時，完賽時間由分段模型加總，這個公式不影響。</span></span>
       </div>
     </details>
     <div class="calcbar"><button class="btn primary big" id="calc" type="button" data-i18n="racepower.calc">計算</button>
