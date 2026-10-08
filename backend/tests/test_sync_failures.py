@@ -173,6 +173,19 @@ def test_coros_cursor_stays_when_the_failed_list_cannot_be_written(tmp_path, mon
     run(go())
 
 
+def test_coros_overlap_is_fourteen_days(tmp_path):
+    async def go():
+        s = await make_session(tmp_path)
+        fake = FakeCoros([], {})
+        await _login(s, fake)
+        await _sync(s, fake)
+        ev = await _sync(s, fake)
+        want = datetime.now(timezone.utc).date() - timedelta(days=14)
+        assert coros_client.CURSOR_OVERLAP_DAYS == 14 and ev[0]["since"] == want.strftime("%Y%m%d")
+        assert coros_client.RETRY_DAYS == 4                 # the self-rating retry window did not grow
+    run(go())
+
+
 # ---------------------------------------------------------------------------- TrainingPeaks
 
 def _tp(detail, files, workouts):
