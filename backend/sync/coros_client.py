@@ -27,9 +27,10 @@ from backend.settings.secrets import SecretError, seal, unseal
 log = logging.getLogger(__name__)
 
 FIRST_SYNC_DAY = "20200101"
-# re-list a few days before the last sync: activities uploaded late (watch
-# synced the next day) would otherwise fall behind the cursor
-CURSOR_OVERLAP_DAYS = 3
+# re-list days before the last sync: activities uploaded late would otherwise fall behind the
+# cursor — the watch synced the next day, or a multi-day 百岳 trip without a phone uploads a
+# week or more later (SP-362: 3 → 14 days; the already-imported ones cost one DB lookup each)
+CURSOR_OVERLAP_DAYS = 14
 PAGE_SIZE = 20
 
 COROS_BASES = {
@@ -500,7 +501,9 @@ DETAIL_TIMEOUT_S = 20
 # what scripts/probe_coros_tl.py sends with the same read (copied from COROS's web app)
 DETAIL_SCREEN = {"screenW": 944, "screenH": 1414}
 DETAIL_PAUSE_S = 0.4          # between the detail reads of a retry / backfill pass (tests set 0)
-RETRY_DAYS = CURSOR_OVERLAP_DAYS + 1
+# the last 4 days (the listing overlap of 3 days + 1 it was written for; SP-362 widened the
+# overlap to 14 days, which must not multiply these 1.5–3 s detail reads)
+RETRY_DAYS = 4
 RETRY_MAX = 10                # detail reads per sync for rows whose read failed / not rated yet (0)
 BACKFILL_DAYS = 56            # 8 weeks (research §4.1: the RPE factor weighs recent activities)
 BACKFILL_MAX = 25             # detail reads per sync for the backfill (~1.8 MB, ~1.5 s each: live probe)
