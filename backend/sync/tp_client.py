@@ -35,6 +35,7 @@ import time
 import httpx
 from datetime import datetime, timezone, timedelta, date
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Optional, AsyncIterator
 from urllib.parse import urlencode
 
@@ -44,6 +45,7 @@ from sqlalchemy import select
 from backend.db.models import SyncState, Athlete, WorkoutFile
 from backend.i18n import _
 from backend.sync import http, session_check, storage
+from backend.sync import failures as FL
 from backend.sync.http import as_utc
 from backend.settings.secrets import SecretError, SecretKeyMissing, seal, unseal
 
@@ -52,7 +54,8 @@ log = logging.getLogger(__name__)
 
 class TpDownloadError(Exception):
     """detaildata / filedata failed (auth, premium gate, not found, server).
-    Unlike "the workout has no device file", this must not advance the cursor."""
+    Unlike "the workout has no device file", this is a failure: the workout goes to the
+    failed list (sync/failures.py, SP-362) and is retried by id."""
 
 TP_OAUTH_URL = "https://oauth.trainingpeaks.com/oauth/token"
 TP_API_BASE = "https://tpapi.trainingpeaks.com/"
@@ -679,6 +682,82 @@ async def _iter_changed(client: httpx.AsyncClient, aid: int, cursor: str, page_s
         page += 1
 
 
+async def _remember(db: AsyncSession, run: dict, coro) -> None:
+    """Write a failed-list row (sync/failures.py); when even that fails, the cursor stays (the
+    old behaviour) so the workout is not lost behind it."""
+    try:
+        await coro
+    except Exception as e:                       # noqa: BLE001
+        log.warning("TP failed list not written: %s", type(e).__name__)
+        run["hold"] = True
+        try:
+            await db.rollback()
+        except Exception:                        # noqa: BLE001
+            pass
+
+
+async def _fetch_one(db: AsyncSession, client: httpx.AsyncClient, who, athlete_id: int, wo_id, wo_day: str,
+                     run: dict) -> AsyncIterator[dict]:
+    """Download one workout's FIT and import it; its events. A listed workout, or a
+    failed-list row retried by id. A failure goes to the failed list (SP-362), a workout
+    without a FIT is remembered as no_file, a success takes it off the list."""
+    from backend.files.file_service import _import_one_file, record_corrupt
+    day = _iso_date(wo_day)
+    t_dl = time.monotonic()        # download vs import seconds (sync/runner.SyncClock)
+    try:
+        fit_path = await _download_workout_fit(client, who, wo_id, wo_day)
+    except Exception as e:
+        run["errors"].append(f"workout {wo_id}: {e}")
+        await _remember(db, run, FL.record_failure(db, athlete_id, "tp", wo_id, e, workout_date=day))
+        yield {"status": "error", "workout_id": wo_id, "workout_date": wo_day, "detail": str(e)}
+        return
+
+    dl_s = time.monotonic() - t_dl
+    if not fit_path:
+        await _remember(db, run, FL.record_no_file(db, athlete_id, "tp", wo_id, workout_date=day))
+        yield {"status": "no_file", "workout_id": wo_id, "workout_date": wo_day}
+        return
+
+    # Register + parse via the shared import pipeline. A failed import is rolled
+    # back (no half-written rows), reported and put on the failed list.
+    try:
+        record = await _import_one_file(
+            db, athlete_id, fit_path, source="trainingpeaks",
+            tp_workout_id=wo_id,
+        )
+        if record is None:
+            # unreadable FIT: remember it so it isn't re-downloaded
+            await db.rollback()
+            await record_corrupt(db, athlete_id, fit_path, source="trainingpeaks",
+                                 workout_date=day, tp_workout_id=wo_id)
+            await db.commit()
+            await _remember(db, run, FL.resolve(db, athlete_id, "tp", wo_id))
+            yield {"status": "error", "workout_id": wo_id,
+                   "workout_date": wo_day, "detail": "corrupt_fit"}
+            return
+        await db.commit()
+    except Exception as e:
+        await db.rollback()
+        msg = f"workout {wo_id}: import_failed: {e}"
+        log.warning(msg)
+        run["errors"].append(msg)
+        await _remember(db, run, FL.record_failure(db, athlete_id, "tp", wo_id, f"import_failed: {e}",
+                                                   workout_date=day))
+        yield {"status": "error", "workout_id": wo_id,
+               "workout_date": wo_day, "detail": f"import_failed: {e}"}
+        return
+    run["downloaded"] += 1
+    await _remember(db, run, FL.resolve(db, athlete_id, "tp", wo_id))
+    yield {
+        "status": "downloaded",
+        "workout_id": wo_id,
+        "workout_date": wo_day,
+        "file": str(fit_path),
+        "total_downloaded": run["downloaded"],
+        "secs": {"download": round(dl_s, 3)},
+    }
+
+
 async def sync_workouts(
     db: AsyncSession,
     athlete_id: int,
@@ -716,9 +795,12 @@ async def sync_workouts(
 
     headers = {**TP_HEADERS, "Authorization": f"Bearer {token}"}
     sync_started = datetime.now(timezone.utc)
-    total_downloaded = 0
     total_checked = 0
-    errors: list[str] = []
+    # what _fetch_one adds up; `hold` = a failure the failed list could not take (cursor stays)
+    run = {"downloaded": 0, "errors": [], "hold": False}
+    handled: set = set()          # workout ids fetched (or tried) by the listing: not retried again
+    # the id only: a rolled-back import expires the ORM row (no lazy load in async code)
+    who = SimpleNamespace(tp_athlete_id=athlete.tp_athlete_id)
     # First sync, or an explicit since=: list by workout date (date range).
     # Later syncs: workouts/changed, which filters on *modification* date.
     incremental = since is None and bool(state and state.last_sync_cursor)
@@ -773,72 +855,44 @@ async def sync_workouts(
                     }
                     continue
 
-                t_dl = time.monotonic()        # download vs import seconds (sync/runner.SyncClock)
-                try:
-                    fit_path = await _download_workout_fit(
-                        client, athlete, wo_id, wo_day
-                    )
-                except Exception as e:
-                    msg = f"workout {wo_id}: {e}"
-                    errors.append(msg)
-                    yield {
-                        "status": "error",
-                        "workout_id": wo_id,
-                        "workout_date": wo_day,
-                        "detail": str(e),
-                    }
+                # on the failed list (SP-362): no FIT at all, or automatic retries are over
+                prev = await FL.get(db, athlete_id, "tp", wo_id)
+                if prev is not None and not FL.auto_retry(prev):
+                    yield {"status": "skipped", "workout_id": wo_id, "workout_date": wo_day,
+                           "reason": "no_file" if prev.kind == FL.NO_FILE else "retry_stopped"}
                     continue
+                handled.add(str(wo_id))
+                async for ev in _fetch_one(db, client, who, athlete_id, wo_id, wo_day, run):
+                    yield ev
 
-                dl_s = time.monotonic() - t_dl
-                if not fit_path:
-                    yield {
-                        "status": "no_file",
-                        "workout_id": wo_id,
-                        "workout_date": wo_day,
-                    }
-                    continue
+        # the failed list's due rows the listing above did not meet: retried by id (SP-362)
+        try:
+            retry = [(r.provider_id, r.workout_date)
+                     for r in await FL.due(db, athlete_id, "tp") if r.provider_id not in handled]
+        except Exception as e:                   # noqa: BLE001 — e.g. a DB before the table exists
+            log.warning("TP failed list not read: %s", type(e).__name__)
+            retry, run["hold"] = [], True
+        for pid, day in retry:
+            try:
+                wo_id = int(pid)
+            except ValueError:
+                wo_id = pid
+            wo_day = day.isoformat() if day else ""
+            exists = (await db.execute(select(WorkoutFile.id).where(
+                WorkoutFile.tp_workout_id == wo_id, WorkoutFile.athlete_id == athlete_id))).scalars().first()
+            if exists is not None:
+                await FL.resolve(db, athlete_id, "tp", wo_id)
+                continue
+            total_checked += 1
+            yield {"status": "checking", "workout_id": wo_id, "workout_date": wo_day,
+                   "checked": total_checked, "retry": True}
+            async for ev in _fetch_one(db, client, who, athlete_id, wo_id, wo_day, run):
+                yield ev
 
-                # Register + parse via the shared import pipeline. A failed
-                # import is rolled back (no half-written rows) and reported;
-                # the cursor then stays put so the next sync retries it.
-                from backend.files.file_service import _import_one_file, record_corrupt
-                try:
-                    record = await _import_one_file(
-                        db, athlete_id, fit_path, source="trainingpeaks",
-                        tp_workout_id=wo_id,
-                    )
-                    if record is None:
-                        # unreadable FIT: remember it so it isn't re-downloaded
-                        await db.rollback()
-                        await record_corrupt(db, athlete_id, fit_path, source="trainingpeaks",
-                                             workout_date=_iso_date(wo_day), tp_workout_id=wo_id)
-                        await db.commit()
-                        yield {"status": "error", "workout_id": wo_id,
-                               "workout_date": wo_day, "detail": "corrupt_fit"}
-                        continue
-                    await db.commit()
-                except Exception as e:
-                    await db.rollback()
-                    msg = f"workout {wo_id}: import_failed: {e}"
-                    log.warning(msg)
-                    errors.append(msg)
-                    yield {"status": "error", "workout_id": wo_id,
-                           "workout_date": wo_day, "detail": f"import_failed: {e}"}
-                    continue
-                total_downloaded += 1
-                yield {
-                    "status": "downloaded",
-                    "workout_id": wo_id,
-                    "workout_date": wo_day,
-                    "file": str(fit_path),
-                    "total_downloaded": total_downloaded,
-                    "secs": {"download": round(dl_s, 3)},
-                }
-
-
-    # Only advance the cursor when this run actually got through cleanly —
-    # otherwise a failed/empty run would silently skip history on the next sync.
-    if state and not errors:
+    total_downloaded, errors = run["downloaded"], run["errors"]
+    # The cursor moves unless the run itself failed (it returned above) or a failed
+    # workout could not be written to the failed list (SP-362)
+    if state and not run["hold"]:
         state.last_sync_at = datetime.now(timezone.utc)
         state.last_sync_cursor = sync_started.date().isoformat()
         await db.commit()

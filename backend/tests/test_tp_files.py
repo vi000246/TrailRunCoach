@@ -128,7 +128,9 @@ def test_rawfiledata_error_is_an_error(tmp_path):
         with http.use_transport(httpx.MockTransport(fake)):
             ev = [e async for e in tp_client.sync_workouts(s, 1, since="2026-09-01")]
         assert any(e.get("status") == "error" and "rawfiledata HTTP 404" in e["detail"] for e in ev)
-        assert (await s.execute(select(SyncState))).scalar_one().last_sync_cursor is None
+        # SP-362: on the failed list (retried by id); the cursor no longer waits for it
+        from backend.sync import failures as FL
+        assert [r.provider_id for r in await FL.due(s, 1, "tp")] == ["1"]
     run(go())
 
 
