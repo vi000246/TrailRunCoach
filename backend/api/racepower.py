@@ -35,6 +35,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from backend.engine.planning import plan_path
+from backend.singleflight import SingleFlight
 from backend.engine.racepower import calc as CALC
 from backend.engine.racepower import weather as WX
 # the request bodies live with the computations (engine/racepower/calc.py); kept importable from here
@@ -48,6 +49,7 @@ DEFAULT_K = CALC.DEFAULT_K
 INPUTS_TTL_S = 600.0
 _lock = threading.Lock()
 _cache: dict = {}
+_FLIGHT = SingleFlight()            # the slow per-athlete fits: one computation per key (SP-366)
 
 
 def _dataset():
@@ -330,16 +332,28 @@ def event_course(eid: str, body: Optional[EventCourseIn] = None):
 
 
 def _grade_models() -> dict:
-    """GradeRE + HikeSpeed + the hike moving-ratio rows, memoised like /inputs."""
-    from backend.engine.achievements import KIND_HIKE, build_achievements
-    from backend.engine.racepower import athlete as A
+    """GradeRE + HikeSpeed + the hike moving-ratio rows, memoised like /inputs. One fit per
+    key at a time (SP-366): /plan, GET /grade-model and a second tab on a cold cache wait for
+    the same computation instead of each running the whole year's fit."""
     ds = _dataset()
     today = today_local()
     key = (*_tenancy.ds_key(ds), today)
-    with _lock:
-        hit = _cache.get("grade")
-        if hit and hit[0] == key and time.time() - hit[1] < INPUTS_TTL_S:
-            return hit[2]
+
+    def cached():
+        with _lock:
+            hit = _cache.get("grade")
+            if hit and hit[0] == key and time.time() - hit[1] < INPUTS_TTL_S:
+                return hit[2]
+        return None
+
+    def compute():
+        return cached() or _fit_grade_models(ds, today, key)
+    return cached() or _FLIGHT.do(("grade", key), compute)
+
+
+def _fit_grade_models(ds, today, key) -> dict:
+    from backend.engine.achievements import KIND_HIKE, build_achievements
+    from backend.engine.racepower import athlete as A
     from backend.engine.racepower import backtest as BT
     road = (inputs()["re"]["road"] or {}).get("median")
     gm = A.grade_models(ds, today, re_flat=road)
@@ -394,10 +408,16 @@ def cadence_check():
     ds = _dataset()
     today = today_local()
     key = (*_tenancy.ds_key(ds), today)
+
+    def scan():
+        hit = _cache.get("climb_cadence")
+        if not (hit and hit[0] == key):
+            hit = (key, A.climb_cadence_seconds(ds, today))   # the histogram; the texts follow the request's locale
+            _cache["climb_cadence"] = hit
+        return hit
     hit = _cache.get("climb_cadence")
     if not (hit and hit[0] == key):
-        hit = (key, A.climb_cadence_seconds(ds, today))       # the histogram; the texts follow the request's locale
-        _cache["climb_cadence"] = hit
+        hit = _FLIGHT.do(("climb_cadence", key), scan)       # SP-366: one scan for concurrent requests
     secs, n = hit[1]
     return _py({**RW.cadence_check(secs), "n_runs": n})
 

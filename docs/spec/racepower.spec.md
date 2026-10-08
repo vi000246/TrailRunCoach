@@ -34,7 +34,7 @@ decisions on the workbook's ambiguities (D1–D10) are in
 | `athlete.py` | Reads the Dataset and derives every input | `backend/engine/racepower/athlete.py:1041` |
 | `calc.py` | The /predict, /plan, /course/event computations on an athlete `Context` (no FastAPI / DB); `CalcError` → HTTP status | `backend/engine/racepower/calc.py:536` |
 | `race_estimate.py` | No CP yet (SP-293): a 推估 finish time from the shared race results — road Riegel k −0.07, trail effort km × flat easy pace × 0.85 (unsourced-rules §0.5.5) | `backend/engine/racepower/race_estimate.py` |
-| API + page | Endpoints; `LiveContext` (memoised Dataset / DB / file reads) passed to calc.py; the HTML page | `backend/api/racepower.py:170` |
+| API + page | Endpoints; `LiveContext` (memoised Dataset / DB / file reads) passed to calc.py; the HTML page | `backend/api/racepower.py:172` |
 | `gpx.py` (v2) | GPX 1.0/1.1 / FIT course parsing (stdlib ElementTree), GPX writer | `backend/engine/racepower/gpx.py:57` |
 | `course.py` (v2) | Distance, resample, smoothing, hysteresis gain, Douglas–Peucker, classes, merge | `backend/engine/racepower/course.py:358` |
 | `grade_model.py` (v2) | Personal RE(g) / v_max(g) and walking speed v_h(g) | `backend/engine/racepower/grade_model.py:70` |
@@ -188,7 +188,7 @@ decisions on the workbook's ambiguities (D1–D10) are in
   road runs; auto prior = the fastest of the year; **events** = upcoming season-plan events with
   their matched peak.
 
-`/inputs` is memoised for 10 min per (dataset, day, plan mtime) (`backend/api/racepower.py:65`).
+`/inputs` is memoised for 10 min per (dataset, day, plan mtime) (`backend/api/racepower.py:67`).
 Per-athlete calibration items (`engine/calibrate.py` registry; a manual value, else a fit of the
 local files, else the default) replace former single-runner constants: the heat β
 (`heat_calib`), the effort-km climb divisor `fitted_run` (`terrain_calib`, shrunk toward ITRA 100),
@@ -359,33 +359,33 @@ hides the CWA key, the 百岳 peak lists and presets (百岳 reads 多日登山)
 
 | Method | Path | Returns |
 |---|---|---|
-| GET | `/api/v1/racepower/inputs?refresh=` | the derived inputs (`backend/api/racepower.py:81`) |
-| GET | `/api/v1/racepower/peaks?q=&baiyue_only=` | peaks list (`backend/api/racepower.py:86`) |
-| GET | `/api/v1/racepower/weather?date=&days=&event_id=&peak=&lat=&lon=&elevation=&cwa=` | provider, values, hourly, rain, wind, sun, tried, location, fetched_at (`backend/api/racepower.py:107`) |
-| GET / POST | `/api/v1/racepower/weather/key` | masked key status / save (10–80 chars, no spaces) (`backend/api/racepower.py:152`) |
-| POST | `/api/v1/racepower/predict` | v1, unchanged: type, used, env, result, tasks, zones, warnings (百岳 adds biggest_day) (`backend/api/racepower.py:230`, `calc.predict`) |
+| GET | `/api/v1/racepower/inputs?refresh=` | the derived inputs (`backend/api/racepower.py:83`) |
+| GET | `/api/v1/racepower/peaks?q=&baiyue_only=` | peaks list (`backend/api/racepower.py:88`) |
+| GET | `/api/v1/racepower/weather?date=&days=&event_id=&peak=&lat=&lon=&elevation=&cwa=` | provider, values, hourly, rain, wind, sun, tried, location, fetched_at (`backend/api/racepower.py:109`) |
+| GET / POST | `/api/v1/racepower/weather/key` | masked key status / save (10–80 chars, no spaces) (`backend/api/racepower.py:154`) |
+| POST | `/api/v1/racepower/predict` | v1, unchanged: type, used, env, result, tasks, zones, warnings (百岳 adds biggest_day) (`backend/api/racepower.py:232`, `calc.predict`) |
 | POST | `/api/v1/racepower/estimate` | SP-293, `PlanIn`: with a CP `{available: false, model: true}`; without, the 推估 finish from the shared race results (road Riegel −0.07, trail §0.5.5) or `{available: false, reason}` (`backend/api/racepower.py`, `race_estimate.estimate`) |
-| POST | `/api/v1/racepower/course` | multipart `file` (.gpx/.fit) + segmentation options → `course_id` (content sha1; the Track is kept in a 20-entry LRU), totals, segments, profile ≤ 1500 points, climbs, waypoints, warnings; parsed in the thread pool (`backend/api/racepower.py:278`) |
-| POST | `/api/v1/racepower/course/event/{eid}` | the course of the GPX stored with a plan event (`event_gpx`), no re-upload; adds `stop_suggestions` from its waypoints, `day_splits_km`, `gpx`; 404 when the event has none (`backend/api/racepower.py:325`, `calc.event_course`) |
-| POST | `/api/v1/racepower/plan` | `PlanIn` (`backend/engine/racepower/calc.py:173`) = `PredictIn` + mode, targets (time / pace, power W / %CP), course ref (`course_id` or `event_id` + options, or manual), strategy, hills, acclimatisation, locks, start time, aid stations (typed), day splits, terrain, `hourly` (the /weather rows), `hourly_heat` (default true), `rain` (the /weather rain rows, SP-249), `wind` (the /weather wind rows, SP-251 → `cold_wind`, SP-253 `hypothermia`, `attention`), `sun` + `night_slow_pct` (SP-254 → `night`, segments' `night` / `dark_share`), `heat_acclimatisation`, 百岳 trip kind / pack per day → summary (incl. `heat`, `strategy`, `trail_hr`, `time_total_s`, `nonmoving`), effort, segments (incl. temp_c / dew_c / rh_pct / heat_pct / heat_clock / heat_src, kcal / cho / water / sodium / fuel action), heat_profile, days (百岳), compare, crosscheck, v1, course_name, `fuel`, `seg_targets`, `chart_rows`, `goal` (time / power modes), `stop_suggestions`, warnings; an unknown `course_id` reloads from `event_id`, else 410 (`backend/api/racepower.py:601`, `calc.make_plan` `backend/engine/racepower/calc.py:495`) |
-| GET | `/api/v1/racepower/goal-basis` | the training basis for goals: hr (目標配速) or power (目標功率), from 課表偏好 目標基準 else 使用功率 (`backend/api/racepower.py:638`) |
-| GET | `/api/v1/racepower/grade-model` | gait-aware RE(g) (run / walk bins, walk share, technicality per class and per downhill bin) / v_max(g) / v_h(g), the HR hike-window summary and its basis (`backend/api/racepower.py:380`) |
-| GET | `/api/v1/racepower/cadence-check` | SP-230: the climbing (≥ 3 % windows) cadence histogram of the year's outdoor runs (5-spm bins, disk-cached per activity `racepower_climb_cadence_v1`) against the 130 spm walk line: two groups or one, the valley, whether 130 sits in it, a hint; report only, the line never moves (`backend/engine/racepower/runwalk.py`, page section 爬坡步頻分布) |
-| GET | `/api/v1/racepower/heat-status?date=` | heat-acclimation S today, its history and the race-day projection (`backend/api/racepower.py:444`) |
-| GET | `/api/v1/racepower/altitude-acclimatisation?date=` | SP-260: the 百岳 海拔適應 default for a trip — nights above 2,750 m in the 14 days before it (activities + the 課表 calendar's records) → `{default, nights, manual, since, start}` (`backend/api/racepower.py:451`, `altitude.acclimatisation_default`) |
-| GET / POST | `/api/v1/racepower/hike-meta` | pack per trip (`racepower_hike_meta.json`, matched by file else start time) (`backend/api/racepower.py:504`) |
-| GET / POST | `/api/v1/racepower/solo-hikes` | the opted-in solo hikes (`{"files": [.wko4 names]}`); only these calibrate EP/h, the walking model, the hike back-test and the 登山 conversion (`backend/api/racepower.py:527`) |
-| GET / POST | `/api/v1/racepower/backtest`, `/backtest/run` | stored back-test + run state / start a background run (`backend/api/racepower.py:656`, `backend/api/racepower.py:662`) |
-| POST | `/api/v1/racepower/export/plan` | 「匯出至課表」: the plan as the race-day session of the stored plan (kind `race`, `ext_key` `racecalc:<event id>`); `event_id` required (400 without, 404 unknown; 400 for a multi-day 百岳 trip); `push: false` = preview, `push: true` writes it, `overwrite: true` needed when the earlier export was changed on the 課表 page (else 409 `EDITED`) (see Watch export) (`backend/api/racepower.py:810`) |
-| POST / GET / DELETE | `/api/v1/racepower/share`, `/shares`, `/shares/{sid}` | create a read-only share of the /plan result (`share_title`, `include_weight`, `expires_days`), list, delete (`backend/api/racepower.py:750`) |
-| GET | `/share/{sid}`, `/share/{sid}/data` | public share page and its frozen snapshot (own prefix, no-store / noindex / no-referrer; 410 after expiry) (`backend/api/racepower.py:788`) |
-| GET / PUT / DELETE | `/api/v1/racepower/saved/{eid}` | the page inputs + last result saved for a plan event (`race_calc_store`; PUT 404s for an unknown event) (`backend/api/racepower.py:890`) |
-| GET | `/api/v1/racepower/page` | the page, `render_page("racepower")` (localized) (`backend/api/racepower.py:255`) |
+| POST | `/api/v1/racepower/course` | multipart `file` (.gpx/.fit) + segmentation options → `course_id` (content sha1; the Track is kept in a 20-entry LRU), totals, segments, profile ≤ 1500 points, climbs, waypoints, warnings; parsed in the thread pool (`backend/api/racepower.py:280`) |
+| POST | `/api/v1/racepower/course/event/{eid}` | the course of the GPX stored with a plan event (`event_gpx`), no re-upload; adds `stop_suggestions` from its waypoints, `day_splits_km`, `gpx`; 404 when the event has none (`backend/api/racepower.py:327`, `calc.event_course`) |
+| POST | `/api/v1/racepower/plan` | `PlanIn` (`backend/engine/racepower/calc.py:173`) = `PredictIn` + mode, targets (time / pace, power W / %CP), course ref (`course_id` or `event_id` + options, or manual), strategy, hills, acclimatisation, locks, start time, aid stations (typed), day splits, terrain, `hourly` (the /weather rows), `hourly_heat` (default true), `rain` (the /weather rain rows, SP-249), `wind` (the /weather wind rows, SP-251 → `cold_wind`, SP-253 `hypothermia`, `attention`), `sun` + `night_slow_pct` (SP-254 → `night`, segments' `night` / `dark_share`), `heat_acclimatisation`, 百岳 trip kind / pack per day → summary (incl. `heat`, `strategy`, `trail_hr`, `time_total_s`, `nonmoving`), effort, segments (incl. temp_c / dew_c / rh_pct / heat_pct / heat_clock / heat_src, kcal / cho / water / sodium / fuel action), heat_profile, days (百岳), compare, crosscheck, v1, course_name, `fuel`, `seg_targets`, `chart_rows`, `goal` (time / power modes), `stop_suggestions`, warnings; an unknown `course_id` reloads from `event_id`, else 410 (`backend/api/racepower.py:621`, `calc.make_plan` `backend/engine/racepower/calc.py:495`) |
+| GET | `/api/v1/racepower/goal-basis` | the training basis for goals: hr (目標配速) or power (目標功率), from 課表偏好 目標基準 else 使用功率 (`backend/api/racepower.py:658`) |
+| GET | `/api/v1/racepower/grade-model` | gait-aware RE(g) (run / walk bins, walk share, technicality per class and per downhill bin) / v_max(g) / v_h(g), the HR hike-window summary and its basis (`backend/api/racepower.py:394`); one fit per key at a time — /plan, this route and a second tab on a cold cache wait for the same computation (`_grade_models`, `backend/api/racepower.py:334`, `backend/singleflight.py`; SP-366) |
+| GET | `/api/v1/racepower/cadence-check` | SP-230: the climbing (≥ 3 % windows) cadence histogram of the year's outdoor runs (5-spm bins, disk-cached per activity `racepower_climb_cadence_v1`) against the 130 spm walk line: two groups or one, the valley, whether 130 sits in it, a hint; report only, the line never moves (`backend/engine/racepower/runwalk.py`, page section 爬坡步頻分布); one scan per key for concurrent requests (`backend/api/racepower.py:404`; SP-366) |
+| GET | `/api/v1/racepower/heat-status?date=` | heat-acclimation S today, its history and the race-day projection (`backend/api/racepower.py:464`) |
+| GET | `/api/v1/racepower/altitude-acclimatisation?date=` | SP-260: the 百岳 海拔適應 default for a trip — nights above 2,750 m in the 14 days before it (activities + the 課表 calendar's records) → `{default, nights, manual, since, start}` (`backend/api/racepower.py:471`, `altitude.acclimatisation_default`) |
+| GET / POST | `/api/v1/racepower/hike-meta` | pack per trip (`racepower_hike_meta.json`, matched by file else start time) (`backend/api/racepower.py:524`) |
+| GET / POST | `/api/v1/racepower/solo-hikes` | the opted-in solo hikes (`{"files": [.wko4 names]}`); only these calibrate EP/h, the walking model, the hike back-test and the 登山 conversion (`backend/api/racepower.py:547`) |
+| GET / POST | `/api/v1/racepower/backtest`, `/backtest/run` | stored back-test + run state / start a background run (`backend/api/racepower.py:676`, `backend/api/racepower.py:682`) |
+| POST | `/api/v1/racepower/export/plan` | 「匯出至課表」: the plan as the race-day session of the stored plan (kind `race`, `ext_key` `racecalc:<event id>`); `event_id` required (400 without, 404 unknown; 400 for a multi-day 百岳 trip); `push: false` = preview, `push: true` writes it, `overwrite: true` needed when the earlier export was changed on the 課表 page (else 409 `EDITED`) (see Watch export) (`backend/api/racepower.py:830`) |
+| POST / GET / DELETE | `/api/v1/racepower/share`, `/shares`, `/shares/{sid}` | create a read-only share of the /plan result (`share_title`, `include_weight`, `expires_days`), list, delete (`backend/api/racepower.py:770`) |
+| GET | `/share/{sid}`, `/share/{sid}/data` | public share page and its frozen snapshot (own prefix, no-store / noindex / no-referrer; 410 after expiry) (`backend/api/racepower.py:808`) |
+| GET / PUT / DELETE | `/api/v1/racepower/saved/{eid}` | the page inputs + last result saved for a plan event (`race_calc_store`; PUT 404s for an unknown event) (`backend/api/racepower.py:910`) |
+| GET | `/api/v1/racepower/page` | the page, `render_page("racepower")` (localized) (`backend/api/racepower.py:257`) |
 
 Missing CP / road RE / trail RE / EP/h → HTTP 400 asking for a manual value.
 
 The in-memory caches of /inputs and the grade models are keyed on the tenant and the dataset's own
-generation (`tenancy.ds_key`, `backend/api/racepower.py:70`, `backend/api/racepower.py:338`), not on
+generation (`tenancy.ds_key`, `backend/api/racepower.py:72`, `backend/api/racepower.py:340`), not on
 `id(ds)`, so two tenants never share an entry (SP-320 ④).
 
 ## v2: three modes on a segmented course
@@ -445,7 +445,7 @@ Design: `docs/research/racepower-v2.md` (formulas F1–F18, verification §3A / 
     (`PlanIn.surface`, `backend/engine/racepower/planner.py:433`; `summary.surface`, 推估); without it
     the choice is hidden and the pooled factor is used, as before. /grade-model's `surface_ok` says
     whether the stored back-test kept the split (`backtest.surface_split_flag`,
-    `backend/api/racepower.py:355`).
+    `backend/api/racepower.py:369`).
   - v_max(g) is the p90 speed of the downhill running bins (road); on trail the bin's median (p50,
     推估: p90 is the best descent, not what a race holds). For road plans RE(0) is v1's
     CVI-adjusted road RE.
@@ -1037,7 +1037,12 @@ start time, aid stations. Since 2026-10-02 (賽事計算機, renamed from 賽事
   predicted HR it falls back to the power bar and says why), the goal-vs-model line, the 補給 card
   (below), 「📅 匯出至課表」 (SP-43, preview, then confirm; see Watch export), 「🔗 分享」 (dialog with expiry, 包含體重, the list of shares and 刪除分享). The CP / Riegel
   charts are drawn when their section opens; the Riegel block has a ? help and no longer hangs when
-  there is no usable fit. Explanations sit behind ? icons; references stay out of the page. A GPX
+  there is no usable fit. The climbing charts (坡度 RE 曲線 + 跑走切換速度, 爬坡步頻分布; GET /grade-model,
+  /cadence-check) load when their section opens on a trail race; on a road race they show one line
+  (「路跑用不到…」) and are never requested, and switching the type updates them; a dropped connection
+  (the fit can take minutes on a cold server) shows a short message with 重試 instead of the browser's
+  「Failed to fetch」 (SP-366, `chartRoad` / `chartErr`, `backend/static/racepower.html:2219`). The static
+  export opens both on a trail preset so the demo has their answers (`backend/demo/export_static.py`). Explanations sit behind ? icons; references stay out of the page. A GPX
   course also gets the course map (SP-41; see **Course map** under Share links).
 - The 熱 row toggles the per-segment heat (推估 badge; on by default). The hourly rows go with the plan
   only when the race-day temperature / humidity are the fetched values, not ones the user typed.
@@ -1116,11 +1121,11 @@ card, stations) under `secrets.token_urlsafe(16)` in the tenant's private `racep
 height / age / sex, REE, model inputs, sources, warnings and anything injury / pain related never go
 in. Optional expiry 7 / 30 / 90 days. `share.html` renders the snapshot without recomputing.
 
-**Course map** (`backend/static/racepower.html:1828`): a GPX course whose profile has coordinates
+**Course map** (`backend/static/racepower.html:1833`): a GPX course whose profile has coordinates
 gets a Leaflet map above the profile chart (`#course-map-wrap`,
 `backend/static/racepower.html:439`); a manual course has none. The route is coloured by the
 segment kind of the targets (平路／可跑, 可跑的爬坡, 陡坡, 下坡; `KIND_COLOR`,
-`backend/static/racepower.html:1796`), the hovered / selected segments are highlighted, the aid
+`backend/static/racepower.html:1801`), the hovered / selected segments are highlighted, the aid
 stations of the editor and the GPX waypoints are marked. Hovering the map moves the profile
 chart's tooltip to the nearest point, and the chart's axis pointer moves a marker on the map.
 Basemaps, overlays, the settings-page default, the tile-error hint and the route drawing come from
@@ -1131,7 +1136,7 @@ layer switch is kept under `racepower.map`.
 
 `POST /export/plan` runs the plan in the thread pool, builds the steps with `watch_export.steps_for`
 on `chart_rows` and writes them as one session of the stored plan (`race_session`,
-`backend/api/racepower.py:678`; `plan_store.upsert_external`, `backend/engine/plan_store.py:557`).
+`backend/api/racepower.py:698`; `plan_store.upsert_external`, `backend/engine/plan_store.py:557`).
 The calculator no longer pushes to the watch itself: the session is edited on the 課表 page and
 pushed with the plan's own push (overview spec, Stored plan / COROS push).
 - **lap** (default trail / 百岳): open steps ended with the lap button, named by landmark
@@ -1275,6 +1280,10 @@ decay. `backend/tests/test_race_format.py` (SP-114): 賽制 分站 / 連續, sle
 stretch. `backend/tests/test_racepower_page_adv.py` (SP-214): the core inputs in view and the tuning
 options in the collapsed 進階計算選項 panel. `backend/tests/test_altitude_nights.py` (SP-259): nights
 marked on the 課表 calendar count for the altitude reminder like nights the activities show.
+`backend/tests/test_racepower_charts_sp366.py` (SP-366): a flat road runner gets both chart answers;
+concurrent /grade-model fits and /cadence-check scans run once; the page's road guard comes before
+the request, switching the type updates the charts, and a dropped connection reads as a message
+with 重試 (both languages).
 
 ## Domain Model
 
@@ -1373,13 +1382,12 @@ when set, but nothing fills it from the routes module yet.
 | 百岳 acclimatisation default | ≥ 2 nights above 2,750 m in the 14 days before → 部分, else 未適應; the user's pick is kept; 部分 hidden under 3,000 m (`backend/engine/altitude.py:219`) | Always 未適應; 已適應 by default | CDC's 2 nights; 部分 = midpoint is 推估. Owner 2026-10-06 on SP-260 |
 | Stryd-trusted grades | −2 … +8 % only, or ≥ 30 personal windows in the bin (`backend/engine/racepower/grade_model.py:39`) | \|g\| ≤ 8 % (descents counted as validated) | van Rassel 2026 validated 0–8 % uphill only; accept that more descents show 推估. SP-246 |
 | Observed HRmax look-back | 730 days (`MAXIMAL["hrmax_window_days"]`, `backend/engine/racepower/maximal.py:84`) | 365 days, as the other windows | Maximal efforts are rare and HRmax falls only ~0.7 bpm / yr (Tanaka 2001). SP-265 follow-up |
-| Calculator export target | 「匯出至課表」: the race-day session of the stored plan, pushed with the plan (`backend/api/racepower.py:809`) | A direct COROS workout push (`/export/coros`, retired) | One place for the race day; an edit on the 課表 is not silently overwritten (409). SP-43 |
+| Calculator export target | 「匯出至課表」: the race-day session of the stored plan, pushed with the plan (`backend/api/racepower.py:829`) | A direct COROS workout push (`/export/coros`, retired) | One place for the race day; an edit on the 課表 is not silently overwritten (409). SP-43 |
 
 ## Open Questions
 
 - [ ] Time model picks walk or run from the predicted speed; only the back-test gate exists, the planner still uses the majority gait（SP-229，Todo）——尚未實作
 - [ ] Night segments without a forecast use night climatology. The premise may be partly out of date: road / trail already get the climatology's 24-hour profile (`backend/engine/racepower/weather.py:862`); what is left is the single To value (daytime mean, `DAY_HOURS`) and 百岳, so the scope needs narrowing（SP-257，Todo）——尚未實作
-- [ ] 坡度 RE 曲線 and 爬坡步頻分布 fail with 「Failed to fetch」 on a marathon race（SP-366，Bug Todo）——尚未實作
 - [ ] What does the effort km formula do? 已查明：in 自動 mode with the trail HR model it does not change the time (that model keeps its own divisor, `backend/engine/racepower/trailhr.py:368`); it moves the v1 cross-check, the RE detail and the shown power, and the time in 目標功率 mode or without the HR model (`backend/engine/racepower/calc.py:332`) — see Page（SP-367，分析，已查明）
 - [ ] Trail / 百岳: NGP or grade-adjusted pace / power instead of the average pace, and how it maps to COROS / Garmin（SP-368，決策 Todo）——尚未實作
 - [ ] A ? help for 「以訓練條件功率輸入（會再乘上環境係數 M）」（SP-369，Todo）——尚未實作
@@ -1424,3 +1432,4 @@ when set, but nothing fills it from the routes module yet.
 | 2026-10-07 | feature | SP-293, docs/research/cold-start.md §2.1, §4.4, §5 T6 | No CP yet: `POST /estimate` + `race_estimate.py` — the shared race results (`athlete.race_results`, the questionnaire's and SP-276's one list) give a 推估 finish: road Riegel k −0.07, trail §0.5.5 effort km × flat easy pace (E pace middle) × 0.85; with a CP `model: true` (the existing model); the page falls back to it only after /plan's 400 on road / trail; low self-reported week + ≥ marathon → the optimistic line; test `test_race_estimate.py` |
 | 2026-10-08 | code-sync（SP-43, SP-114, SP-118, SP-214, SP-240, SP-241, SP-247, SP-250, SP-255, SP-259, SP-285, SP-287, SP-320） | N/A | Architecture table: capacity.py, runwalk.py, cold.py, night.py, zonebar.py, tss_calib.py; API: GET /altitude-acclimatisation, cache keys on tenant + dataset generation; 路況 dry / wet technicality split; back-test long-race and x*(T) / δ double-count blocks; Page: 進階計算選項, what the effort km formula changes, 地圖選點, the zone bar, 匯出至課表; Fuelling: pre-race load wording, 睡眠點 and their default minutes; Testing: tests added since 10-04; new Decisions Log (8) and Open Questions (13) from the Obsidian tickets |
 | 2026-10-08 | removal | SP-365 | CSV export removed (user: not needed): the 「匯出 CSV」 button and its handler, `POST /export/csv`, `calc.export_csv`, `csvplan.py`, the static demo's CSV path (`static_racepower.compute`, the shim's `RACEPOWER_POSTS` / CSV response, the parity sample), the demo write rules in `tenancy_mw.py`, the stale i18n baseline entry; the CSV-only tests went, the plan-side assertions moved to /plan (`test_racepower_export.py`, `test_racepower_fuel.py`, `test_racepower_seg_targets.py`), plus `test_csv_export_is_gone`. 「匯出至課表」 (`POST /export/plan`) and 分享 stay |
+| 2026-10-08 | bugfix | SP-366 | 坡度 RE 曲線 / 爬坡步頻分布 showed 「Failed to fetch」 on a marathon: GET /grade-model and /cadence-check fit the athlete's whole year (77.6 s on a cold start of the synthetic demo athlete) and nothing joined concurrent callers (/plan, the other chart, a second tab each ran the same fit), so the request could be dropped before it answered and the page printed the browser's raw error. Now: one computation per key for both (`backend/singleflight.py`); a road race shows a one-line note and never requests them (they are about climbing); a dropped connection shows a short message with 重試; the static export opens both on a trail preset. i18n `charts.road` / `charts.neterr` / `charts.retry`; test `test_racepower_charts_sp366.py` |
