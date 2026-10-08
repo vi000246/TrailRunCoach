@@ -422,3 +422,42 @@ class UserSetting(Base):
     key: Mapped[str] = mapped_column(String(100))
     value_json: Mapped[str] = mapped_column(Text)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class DebugToken(Base):
+    """A debug API token (SP-371, backend/debug_auth.py): only the SHA-256 of the token is
+    stored (it is shown once, when made); bound to the tenant that made it. New table:
+    created by init_db's create_all."""
+    __tablename__ = "debug_tokens"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(80), index=True)
+    name: Mapped[str] = mapped_column(String(40))
+    prefix: Mapped[str] = mapped_column(String(16))           # the first characters, to tell tokens apart
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    scopes_json: Mapped[str] = mapped_column(Text, default="[]")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    expires_at: Mapped[datetime] = mapped_column(DateTime)
+    revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    last_used_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    last_ip: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    ips_json: Mapped[str] = mapped_column(Text, default="[]")  # the source IPs seen (the 新 IP hint)
+    new_ip_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+
+class DebugAudit(Base):
+    """One call of the debug API (SP-371): when, which token, which endpoint and parameters,
+    the source IP, the answer's status and size. The newest debug_auth.AUDIT_KEEP rows are kept."""
+    __tablename__ = "debug_audit"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(80), index=True)
+    at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    token_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    token_name: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
+    method: Mapped[str] = mapped_column(String(8), default="GET")
+    path: Mapped[str] = mapped_column(String(200))
+    query: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    ip: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    status: Mapped[int] = mapped_column(Integer)
+    bytes: Mapped[int] = mapped_column(Integer, default=0)
+    ms: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    new_ip: Mapped[bool] = mapped_column(Boolean, default=False)
