@@ -514,6 +514,7 @@ dialog.sd label.chk { display: flex; align-items: center; gap: 6px; color: var(-
 .eq-sum .up { color: var(--watch); } .eq-sum .down { color: var(--accent); } .eq-sum .same { color: var(--good); }
 .badge { display: inline-block; font-size: 11px; font-weight: 700; border-radius: 9px; padding: 0 7px; border: 1px solid currentColor; vertical-align: 1px; }
 .badge.est { color: var(--watch); } .badge.fit { color: var(--good); }
+.badge.stale { color: var(--watch); font-weight: 600; cursor: help; align-self: center; }
 dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 .warn { color: var(--watch); font-size: 12.5px; }
 .warn:empty { display: none; }
@@ -563,6 +564,7 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
       <button class="btn" id="go-today" type="button">今天</button>
       <button class="btn icon" id="next" type="button" aria-label="下個月">›</button>
     </span>
+    <span class="badge stale" id="stale-badge" role="status" hidden></span>
     <span class="spacer"></span>
     <span class="meta" id="phase-now"></span>
     <div class="seg" id="view-seg" role="group" aria-label="檢視">
@@ -967,6 +969,44 @@ function range() {
   const d = dOf(S.anchor), first = isoOf(new Date(d.getFullYear(), d.getMonth(), 1)), last = isoOf(new Date(d.getFullYear(), d.getMonth() + 1, 0));
   return [mondayOf(first), addDays(mondayOf(last), 6)];
 }
+// SP-362: after a sync / on a new day the calendar may come back `stale` — the previous plan, shown
+// at once while the new one is computed. Badge 「更新中」, editing waits (the server never writes
+// from a stale view), GET /fresh is polled and the calendar reloads when the new plan is ready.
+// Polling gives up after MAX_MS: the edit lock is dropped (the server computes fresh inputs for
+// every write anyway) and the badge turns into 「重新整理」.
+const STALE = { t: null, t0: 0, MAX_MS: 300000, gaveUp: false };
+const isStale = () => !!(D && D.stale) && !STALE.gaveUp;
+function staleWatch() {
+  const st = D && D.stale, b = $("stale-badge");
+  b.hidden = !st;
+  clearTimeout(STALE.t); STALE.t = null;
+  if (!st) {
+    if (STALE.t0 && $("sync-msg").textContent === tt("stale.wait")) msg("");
+    STALE.t0 = 0; STALE.gaveUp = false; return;
+  }
+  b.textContent = tt(STALE.gaveUp ? "stale.reload" : st.reason === "day" ? "stale.day" : "stale.sync");
+  b.title = tt(STALE.gaveUp ? "stale.reload_tip" : "stale.tip", { at: localTime(st.since) || "" });
+  if (STALE.gaveUp) return;
+  if (!STALE.t0) STALE.t0 = Date.now();
+  const poll = async () => {
+    if (Date.now() - STALE.t0 > STALE.MAX_MS) {               // gave up: editable again, 「重新整理」 offered
+      STALE.gaveUp = true;
+      if ($("sync-msg").textContent === tt("stale.wait")) msg("");
+      render(); staleWatch(); return;
+    }
+    try {
+      const r = await fetch(`${PAPI}/fresh`, { cache: "no-store" });
+      if (r.ok && !(await r.json()).updating) return load();
+    } catch (_) { /* next round */ }
+    STALE.t = setTimeout(poll, 3000);
+  };
+  STALE.t = setTimeout(poll, 2000);
+}
+// the badge after giving up: reload (and watch again if it is still being computed)
+$("stale-badge").addEventListener("click", () => {
+  if (!STALE.gaveUp) return;
+  STALE.gaveUp = false; STALE.t0 = 0; load();
+});
 async function load() {
   const [a, b] = range();
   $("calwrap").classList.add("loading");
@@ -974,6 +1014,7 @@ async function load() {
     D = await sj("GET", `${PAPI}/calendar?start=${a}&end=${b}`);
     if (!S.anchor) S.anchor = D.today;
     render();
+    staleWatch();
     sugCount();                                    // 排入測試 ▸ in the context menu
   } catch (e) {
     $("cal").innerHTML = `<p class="err" style="padding:20px">載入失敗：${esc(e.message)}</p>`;
@@ -982,7 +1023,7 @@ async function load() {
 
 // ---------------- rendering ----------------
 const findS = (uid) => D.sessions.find((s) => s.uid === uid);
-const editable = (s) => s.state === "active" && s.day >= D.today;
+const editable = (s) => !isStale() && s.state === "active" && s.day >= D.today;
 // SP-82: a future planned day with no active session is a rest day you can drag onto another day
 // (that day's sessions move here: POST /rest-days/move)
 function restMv(d, ss) {
@@ -1205,8 +1246,8 @@ function renderToolbar() {
   const wkd = weekDay(), [wa, wb] = scopeRange("week", wkd);
   const weekPast = wb < D.today;
   $("push-main-sub").textContent = weekPast ? "" : `這一週 ${rangeTxt(wa, wb)}`;
-  $("push-main").disabled = weekPast || S.busy;
-  $("push-caret").disabled = S.busy;
+  $("push-main").disabled = weekPast || S.busy || isStale();
+  $("push-caret").disabled = S.busy || isStale();
   const dayOk = S.sel && S.sel >= D.today;
   const bd = $("push-menu").querySelector('[data-scope="day"]');
   bd.disabled = !dayOk; $("pm-day").textContent = S.sel ? (dayOk ? rangeTxt(S.sel, S.sel) : "過去的日子不能推送") : "先點選日曆上的一天";
@@ -1214,14 +1255,14 @@ function renderToolbar() {
   $("pm-week").textContent = weekPast ? "這週已經過去" : rangeTxt(wa, wb);
   $("pm-phase").textContent = `${md(D.today)}–${md(D.phase_push_end)}${D.phase && D.phase_push_end < D.phase.end ? `（最多 ${D.max_weeks} 週）` : ""}`;
   $("um-day").textContent = S.sel ? rangeTxt(S.sel, S.sel) : "先點選一天";
-  $("more-menu").querySelector('[data-unpush="day"]').disabled = !S.sel || !C.authenticated;
-  $("more-menu").querySelector('[data-unpush="week"]').disabled = weekPast || !C.authenticated;
-  $("more-menu").querySelector('[data-unpush="phase"]').disabled = !C.authenticated;
+  $("more-menu").querySelector('[data-unpush="day"]').disabled = !S.sel || !C.authenticated || isStale();
+  $("more-menu").querySelector('[data-unpush="week"]').disabled = weekPast || !C.authenticated || isStale();
+  $("more-menu").querySelector('[data-unpush="phase"]').disabled = !C.authenticated || isStale();
   $("um-week").textContent = weekPast ? "" : rangeTxt(wa, wb);
   $("um-phase").textContent = `到 ${md(D.phase_push_end)}`;
-  $("rec-btn").disabled = S.busy;
+  $("rec-btn").disabled = S.busy || isStale();
   const nx = D.expired_open || 0;
-  $("more-menu").querySelector('[data-act="del-expired"]').disabled = !nx || S.busy;
+  $("more-menu").querySelector('[data-act="del-expired"]').disabled = !nx || S.busy || isStale();
   $("dx-n").textContent = nx ? tt("del_all.count", { n: nx }) : tt("del_all.none");
   const parts = [];
   if (C.authenticated) {
@@ -3007,6 +3048,22 @@ $("cal").addEventListener("click", (e) => { if (performance.now() < CTX.quietUnt
 document.addEventListener("pointerdown", (e) => { if (CTX.el && !CTX.el.contains(e.target)) ctxClose(); });
 addEventListener("scroll", () => ctxClose(), { passive: true, capture: true });
 addEventListener("resize", () => ctxClose());
+
+// a stale view (SP-362, staleWatch): no editing until the new plan is in — clicks, the context
+// menu, long-press, drags and range drags on the calendar wait (links still open)
+["click", "contextmenu", "dragstart", "pointerdown"].forEach((ev) => $("cal").addEventListener(ev, (e) => {
+  if (!isStale() || (ev === "click" && e.target.closest("a[href]"))) return;
+  e.stopImmediatePropagation();
+  if (ev === "pointerdown") return;                  // (no preventDefault: scrolling stays)
+  e.preventDefault();
+  msg(esc(tt("stale.wait")), "warn");
+}, true));
+// … and the floating suggestion box's 「排入」 (static/suggestions.js) waits too
+document.addEventListener("click", (e) => {
+  if (!isStale() || !e.target.closest('.sg-item [data-act="accept"]')) return;
+  e.preventDefault(); e.stopImmediatePropagation();
+  msg(esc(tt("stale.wait")), "warn");
+}, true);
 
 // ---------------- wiring ----------------
 window.onAutoPlanChange = () => load();      // autoplan.js: approve / reject / 復原 changed the plan

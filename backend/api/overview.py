@@ -87,6 +87,17 @@ def _status(ds, today: dt.date) -> Status:
     return _STATUS_FLIGHT.do(key, compute)
 
 
+def status_peek() -> Optional[Status]:
+    """This tenant's newest computed Status, whatever its key (None: none yet). For a stale
+    課表 view only (api/plan_sessions._status_for, SP-362 B4): never computes."""
+    me = _tenancy.current().id
+    with _lock:
+        for k in reversed(list(_status_cache)):
+            if k[0] == me:
+                return _status_cache[k]
+    return None
+
+
 def _day(s: Optional[str], default: dt.date) -> dt.date:
     if not s:
         return default

@@ -40,6 +40,8 @@
   "workout.elev_aria": "; distance across ({km} km in all), background: route elevation {lo}–{hi} m",
   "autoplan.log_title": "Automatic adjustment log",
   "autoplan.log_count": "({n})",
+  "autoplan.pushing": "Sending to the watch…",
+  "autoplan.interrupted": "Push interrupted; the next push catches up",
   "workout.thr_low_badge": "HR threshold uncertain",
   "workout.tip.basis": "Each step decides for itself whether it uses power, heart rate or pace: click a step's target to change it (marked \"Set\"). Steps marked \"Auto\" follow the session type (easy road runs / long runs use power, with heart rate capped at your easy-run ceiling; trail runs use heart rate; intervals use power). The numbers come from your current CP, LTHR, easy-run ceiling and threshold pace.",
   "workout.tip.chart": "The horizontal axis is time (\"until lap button\" steps are drawn at a fixed width, hatched); height and color both show intensity (≈ % CP). Heart-rate steps are converted to a power height as an estimate, which only affects this chart. Click a step to select it below.",

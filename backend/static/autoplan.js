@@ -66,7 +66,10 @@
 
   function pushText(p) {
     if (!p) return "";
-    const t = PUSH[p.status] || p.status || "";
+    // "pushing": the run saved the plan and is sending it to the watch (SP-362: outside the plan lock)
+    // "interrupted": the push was cut off (shutdown / cancelled); the next push sends what is missing
+    const t = p.status === "pushing" ? T("common.autoplan.pushing")
+      : p.status === "interrupted" ? T("common.autoplan.interrupted") : PUSH[p.status] || p.status || "";
     const err = [p.error, ...(p.errors || [])].filter(Boolean).join("；");
     return `<span class="meta">${esc(t)}${p.sent ? `（${p.sent} 堂）` : ""}</span>${err ? ` <span class="ap-err">${esc(err)}</span>` : ""}`;
   }
