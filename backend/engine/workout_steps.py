@@ -1338,12 +1338,16 @@ def _target_type(tg: Optional[dict], basis: Optional[str]) -> str:
     return {"abs": "hr_abs", "zone": "hr_zone"}.get(mode, "hr_pct")
 
 
-def target_types(items: list, basis: Optional[str] = None) -> list[str]:
+def target_types(items: list, basis: Optional[str] = None, quality: bool = False) -> list[str]:
     """The 主課強度類型 of a structure (TARGET_TYPE_IDS order): the targets of its main set —
     the work steps (inside repeats too), else the 「其他」 ones (strides), else every step — plus
     "load" when a main-set step ends on 「負荷」. Mixed main sets list each type. `basis`: the
     template's 目標用 (a library template's / a user template's target_basis), which turns a
-    「自動」 band into % CP or % LTHR; without one it stays "auto"."""
+    「自動」 band into % CP or % LTHR; without one it stays "auto" — except on a 強度課 (`quality`,
+    owner 2026-10-07, SP-84): 間歇／爬坡 run on power when nothing else is chosen
+    (target_policy.AUTO), so its 「自動」 counts as % CP."""
+    if basis not in ("hr", "power") and quality:
+        basis = "power"
     steps: list = []
 
     def walk(xs):
@@ -1358,6 +1362,14 @@ def target_types(items: list, basis: Optional[str] = None) -> list[str]:
     if any((s.get("dur") or {}).get("type") == "load" for s in main):
         got.add("load")
     return [k for k in TARGET_TYPE_IDS if k in got]
+
+
+def template_target_types(row: dict, cat: Optional[str] = None) -> list[str]:
+    """The one place that decides a template row's 主課強度類型 (SP-84) — the 範本 page's list
+    (user_templates.row) and 插入範本 (templates()) both call it: its structure, its 目標用, and
+    whether it is a 強度課 (`cat`, the group it is listed in, or the user template's `cats`)."""
+    quality = cat == "quality" or "quality" in (row.get("cats") or [])
+    return target_types(row.get("full") or row.get("items"), row.get("basis") or row.get("target_basis"), quality)
 
 
 def _has_rest_after(rows: list, st: dict) -> bool:
@@ -1815,7 +1827,7 @@ def templates(prefs=None, user: Optional[dict] = None) -> dict:
             # the editor badges these when there is no threshold pace (their pace is × it)
             r["needs_tpace"] = needs_tpace(r.get("full") or r.get("items"))
             # the 主課強度類型 filter (SP-84; user rows: user_templates.row, the same helper)
-            r["target_types"] = target_types(r.get("full") or r.get("items"), r.get("basis") or r.get("target_basis"))
+            r["target_types"] = template_target_types(r, gr["cat"])
     return {"cats": WT.cats() + list((user or {}).get("cats") or []), "groups": groups,
             "target_types": target_type_list(), "no_tpace_text": no_tpace_text()}
 
