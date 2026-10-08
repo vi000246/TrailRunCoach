@@ -30,7 +30,7 @@ def test_four_tabs_each_section_on_one():
     assert tabs["personal"][0] == "general" and "sport" in tabs["personal"]
     assert {"hr", "thresholds", "power"} <= set(tabs["body"])
     assert {"sync", "backup", "calendar"} == set(tabs["data"])
-    assert {"mode", "calib", "fixes"} == set(tabs["advanced"])
+    assert {"mode", "calib", "fixes", "debugapi"} == set(tabs["advanced"])      # debugapi: SP-371
     # a section without an id would land on 進階設定 silently: there is none
     main = PAGE[PAGE.index("<main>"):PAGE.index("</main>")]
     assert len(re.findall(r"<section\b", main)) == len(secs)
