@@ -128,3 +128,66 @@ def test_api_range_checks_and_replan(monkeypatch):
         assert kicks == [1, 1]
         await s.close()
     _run(go())
+
+
+def test_relock_may_not_be_shorter_than_the_max_gap(monkeypatch):
+    """Owner 2026-10-07: 重新上鎖天數 ≥ 最長幾天不跑 — both ways round, against the value in effect (manual or
+    default); blocked with a message naming both numbers; nothing stored, no re-plan."""
+    from backend.api import calib as API
+    from backend.engine import plan_auto as PA
+    kicks = []
+    monkeypatch.setattr(PA, "after_settings", lambda: kicks.append(1))
+    assert AP.z3_pair_error("z3_relock_days", 7, lambda n: 7) is None              # equal is fine
+    assert AP.z3_pair_error("z3_relock_days", 6, lambda n: 7)                      # (out of range anyway)
+    assert AP.z3_pair_error("heat_partial_hadley", 1, lambda n: 99) is None
+
+    async def go():
+        s = await _session()
+        await API.set_manual("z3_unlock_max_gap_days", API.Manual(value=14), db=s)
+        with pytest.raises(HTTPException) as e:                                     # relock 10 < gap 14
+            await API.set_manual("z3_relock_days", API.Manual(value=10), db=s)
+        assert e.value.status_code == 400
+        assert "10" in e.value.detail and "14" in e.value.detail and "不能短於" in e.value.detail
+        r = await API.set_manual("z3_relock_days", API.Manual(value=14), db=s)      # equal: allowed
+        assert r["value"] == 14 and r["source"] == "user"
+        with pytest.raises(HTTPException) as e:                                     # gap 20 > relock 14
+            await API.set_manual("z3_unlock_max_gap_days", API.Manual(value=20), db=s)
+        assert "14" in e.value.detail and "20" in e.value.detail
+        n = len(kicks)
+        await API.clear_manual("z3_relock_days", db=s)                              # back to 21 ≥ 14
+        assert len(kicks) == n + 1
+        # the default relock (21) against a manual gap: the bounds keep it legal (gap ≤ 21)
+        r = await API.set_manual("z3_unlock_max_gap_days", API.Manual(value=21), db=s)
+        assert r["value"] == 21
+        await API.clear_manual("z3_unlock_max_gap_days", db=s)
+        await s.close()
+    _run(go())
+
+
+def test_a_stored_invalid_pair_is_flagged_not_changed():
+    """Review L5: a pair saved before the check (re-lock < max gap) shows a warning next to both rows of the
+    list; the values stay as they are."""
+    from pathlib import Path
+    from backend.api import calib as API
+    from backend.settings.repository import SettingsRepository
+
+    async def go():
+        s = await _session()
+        repo = SettingsRepository(s, 1)
+        for name, v in (("z3_unlock_max_gap_days", 14.0), ("z3_relock_days", 10.0)):
+            await repo.set(CAL.key(name), {"value": v, "se": None, "n": 0, "fitted_at": "2026-10-01", "source": "user"})
+        await s.commit()
+        rows = {r["name"]: r for r in (await API.list_calibration(db=s))["items"]}
+        for name in ("z3_unlock_max_gap_days", "z3_relock_days"):
+            assert "10" in rows[name]["warn"] and "14" in rows[name]["warn"]
+        assert rows["z3_relock_days"]["value"] == 10 and rows["z3_unlock_max_gap_days"]["value"] == 14
+        assert not rows["z3_unlock_weeks"].get("warn") and not rows["heat_partial_hadley"].get("warn")
+        await repo.set(CAL.key("z3_relock_days"), {"value": 21.0, "se": None, "n": 0, "fitted_at": "2026-10-01",
+                                                   "source": "user"})
+        await s.commit()
+        rows = {r["name"]: r for r in (await API.list_calibration(db=s))["items"]}
+        assert not any(r.get("warn") for r in rows.values())
+        await s.close()
+    _run(go())
+    page = (Path(API.__file__).resolve().parents[1] / "static" / "settings.html").read_text(encoding="utf-8")
+    assert "it.warn" in page

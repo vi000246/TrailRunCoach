@@ -36,10 +36,44 @@ def _replan(name: str) -> None:
         PA.after_settings()
 
 
+async def _check_pair(repo: SettingsRepository, name: str, value) -> None:
+    """Cross-item checks (SP-295: 重新上鎖天數 ≥ 最長幾天不跑) against the other item's value in effect:
+    its stored manual value, else its default. `value` None = 改回自動 (the item's default)."""
+    from backend.engine import advanced_params as AP
+    if name not in AP.Z3_RULE.values():
+        return
+    cur = await _z3_values(repo)
+    msg = AP.z3_pair_error(name, value, cur.__getitem__)
+    if msg:
+        raise HTTPException(400, msg)
+
+
+async def _z3_values(repo: SettingsRepository) -> dict:
+    """{item name: value in effect} of the Zone 3 unlock items: the stored manual value, else the default."""
+    from backend.engine import advanced_params as AP
+    reg = CAL._registry()
+    cur = {}
+    for n in AP.Z3_RULE.values():
+        stored = await repo.get(CAL.key(n)) or {}
+        cur[n] = stored.get("value") if stored.get("value") is not None else reg[n].default
+    return cur
+
+
 @router.get("")
 async def list_calibration(db: AsyncSession = Depends(get_db)):
+    """Every item; a stored Zone 3 pair that breaks 重新上鎖天數 ≥ 最長幾天不跑 (saved before that check, SP-295
+    review) carries `warn` on both rows — shown next to them, the values are not changed."""
+    from backend.engine import advanced_params as AP
     repo = SettingsRepository(db, current_athlete_id())
-    return {"items": [CAL.describe(n, await repo.get(CAL.key(n))) for n in sorted(CAL._registry())]}
+    items = [CAL.describe(n, await repo.get(CAL.key(n))) for n in sorted(CAL._registry())]
+    cur = await _z3_values(repo)
+    gap, relock = AP.Z3_RULE["gap"], AP.Z3_RULE["relock"]
+    warn = AP.z3_pair_error(relock, cur[relock], cur.__getitem__)
+    if warn:
+        for it in items:
+            if it.get("name") in (gap, relock):
+                it["warn"] = warn
+    return {"items": items}
 
 
 class Manual(BaseModel):
@@ -57,6 +91,7 @@ async def set_manual(name: str, body: Manual, db: AsyncSession = Depends(get_db)
     if item.integer and body.value != int(body.value):
         raise HTTPException(400, _("{label} 要是整數", label=_(item.label)))
     repo = SettingsRepository(db, current_athlete_id())
+    await _check_pair(repo, name, body.value)
     prev = await repo.get(CAL.key(name)) or {}
     await repo.set(CAL.key(name), {"value": body.value, "se": None, "n": int(prev.get("n") or 0),
                                    "fitted_at": today_local().isoformat(), "source": "user"})
@@ -71,6 +106,7 @@ async def clear_manual(name: str, db: AsyncSession = Depends(get_db)):
     """改回自動: the manual value goes; the next fit (or the default) applies."""
     _item(name)
     repo = SettingsRepository(db, current_athlete_id())
+    await _check_pair(repo, name, None)
     await repo.set(CAL.key(name), None)
     await db.commit()
     CAL.forget_reads()

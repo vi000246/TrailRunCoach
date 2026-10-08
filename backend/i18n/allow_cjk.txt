@@ -15,7 +15,9 @@ file backend/demo/course.py
 file backend/demo/linked.py
 file backend/demo/build.py
 re 推薦 blocks|區間時數 charts|season-plan event edit
-# static_racepower's sample request: the CSV's name
+# the bare word 測試: added for the race calculator's CSV sample name (gone, SP-365); it now only
+# hides the UI label 測試 (activity_tags, plan_store, planning, status, overview.html) — drop it
+# once those go through _() / t()
 re ^測試$
 # a view's name used as its id (wko5_viewer ?view=<name>)
 re ^單次活動判讀$

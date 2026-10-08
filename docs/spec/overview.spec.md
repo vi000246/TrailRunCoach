@@ -88,8 +88,9 @@ engine config / parity mode is the same everywhere.
   meanwhile is not dropped) and a low-priority thread (`_low_priority`,
   `backend/api/wko5views.py:254`) waits until an automatic plan run has ended
   (`plan_auto.busy`, `backend/engine/plan_auto.py:1104`), re-reads the Dataset, and runs the
-  never-fitted calibration and the activity auto-classification; a warm-up during that wait
-  makes it run once more. The inputs' flight computes exactly its caller's key
+  never-fitted calibration and the activity auto-classification, then (owner only, after that job)
+  the race calculator's grade-model fit and climbing-cadence scan (`racepower.warm_charts`, SP-366);
+  a warm-up during that wait makes it run once more. The inputs' flight computes exactly its caller's key
   (`_inputs_key` → `_build_inputs`, `backend/api/plan_sessions.py:161`, `:201`). After a sync the runner starts the warm-up before the automatic
   plan run and the calibration (which waits for the plan run, `backend/engine/calibrate.py:348`);
   see wko5-coros-sync.spec.md.
@@ -402,7 +403,8 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
     (`prefix`, `backend/engine/quality_gate.py:2770`). In guardrail mode `plan_prefs.shape`
     gets `quality_cap=1` (`backend/engine/overview.py:1854`).
   - 專項期: the same two-track pick on the ladders (SP-75: trail = the uphill version; 前段 / 後段 ratios,
-    plan-auto.spec.md); drift bad → none, intensity bad → no Zone 5; this week's CTL ramp
+    plan-auto.spec.md; SP-353: a ≥ 4 h trail race's 後段 keeps one Zone 5 maintenance session, 賽前第 4 週,
+    when the Zone 5 gate and the guardrails allow — else the week note says why); drift bad → none, intensity bad → no Zone 5; this week's CTL ramp
     at the block line / volume step > 20 % → none and at the watch line → threshold only, on both
     tracks (owner 2026-10-04).
   - **Why no Zone 3** (SP-31): `week_decision`'s `z3_note` (the gate with its progress, a
@@ -1356,9 +1358,9 @@ which one. The response keeps the `coros` field names.
     an activity (`backend/static/schedule.html:1860`);
   - the session dialog's 結構 (step editor, `engine/workout_steps.py`) open by default and the
     地形與同負荷換算 fold collapsed; the push preview's pace-target warnings;
-  - 「課前要吃」 on a 強度課 / ≥ 2 h long run (SP-286, `engine/session_fuel.py`): app text only, never
-    pushed to the watch (`fuel_note`, `backend/api/plan_sessions.py:398`,
-    `backend/static/schedule.html:1955`) — the owner decided 2026-10-07 to remove it (Open Questions);
+  - no 「課前要吃」 line on any session (SP-286 removed it, owner 2026-10-07: `engine/session_fuel.py`,
+    the view's `pre_meal` and its 課表 / 總覽 displays are gone; the watch push never carried it —
+    `backend/tests/test_carb_hints.py::test_no_session_description_says_eat_before`);
   - a done run's post-run self-rating 「自評：Hard（COROS）」 (SP-231, worded by the server:
     `self_rating`, `backend/api/plan_sessions.py:222`; `backend/static/schedule.html:1008`);
   - 記錄睡在高處 on today or a past day, shown as a small mark on the day (SP-259, `high_nights`,
@@ -1604,18 +1606,21 @@ which one. The response keeps the `coros` field names.
   taper exclusion, 技術地形 hard / easy by `rpe_role`); a pick carries `mine` and the menu tags it
   我的; custom category tabs get 推薦 too.
   **主課強度 filter** (2026-10-05, SP-84): after the category, both lists filter by the main
-  set's target type. One helper, `workout_steps.target_types` (`backend/engine/workout_steps.py:1340`):
+  set's target type. One helper, `workout_steps.template_target_types` (`backend/engine/workout_steps.py:1367`,
+  over `target_types`, `:1341`):
   the targets of the work steps (inside repeats too; none → the 「其他」 steps, e.g. strides; none
   → every step), each type a mixed main set uses, in `TARGET_TYPE_IDS` order
   (`backend/engine/workout_steps.py:1307`): % CP 功率區間 (pct and Palladino zones) / 絕對功率 /
   % LTHR 心率 / 心率區間 (≤ AeT, Friel, 課表心率區間) / 絕對心率 / 配速 / RPE / 自動（依課表類型）/
   不設目標 (incl. a 自動 open step) / 負荷 (a 「負荷」 end condition on the main set). A 「自動」 band
-  takes the template's 目標用 (library `basis`, user `target_basis`: power → % CP, hr → % LTHR),
-  else stays 自動 — so the interval ladder's variants are 自動 (the session's 目標用 decides); an
+  takes the template's 目標用 (library `basis`, user `target_basis`: power → % CP, hr → % LTHR);
+  without one, a 強度課 (listed under 強度課, or a user template whose `cats` include it) counts as
+  % CP (owner 2026-10-07: 間歇／爬坡 run on power, `target_policy.AUTO`) — so the interval ladder's
+  variants are % CP — and any other category stays 自動; an
   自動 easy step is 心率區間 unless a power band under 目標用 power. Every row of
-  GET /steps/templates (`backend/engine/workout_steps.py:1818`) and GET /steps/templates/user
+  GET /steps/templates (`backend/engine/workout_steps.py:1830`) and GET /steps/templates/user
   (`row`, `backend/engine/user_templates.py:499`) carries `target_types`; both responses carry
-  the type list `target_types` [{id, label}] (translated labels, `backend/api/plan_sessions.py:1563`). The UIs
+  the type list `target_types` [{id, label}] (translated labels, `backend/api/plan_sessions.py:1709`). The UIs
   show only the types the listed rows use (by category and source; one type → no chips) plus
   全部強度: the 範本 page under its category chips (`rows`, `backend/static/templates.html:229`),
   插入範本 under its category tabs, over the 推薦 block and the rows (`menuHtml`,
@@ -2070,14 +2075,10 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 
 - [ ] Show the stored plan's future TSS / CTL on the charts (SP-219, 決策, Todo) — not decided yet
 - [ ] Mark which sessions the system changed, which were left alone, which the user edited (SP-318, Todo) — not implemented
-- [ ] Week plan generation fails with a manual 專項期 and no A race: `KeyError` at `backend/engine/quality_gate.py:2606` (SP-352, Bug, Todo) — not fixed
 - [ ] The 課表 page loads slowly, also after switching the 課表心率區間 in 設定 and while a sync runs (SP-361 Bug Todo, SP-362 In Progress) — not fixed
 - [ ] iLevel / Stryd power zones in 設定 as the 課表's default (SP-363, Todo) — not implemented
 - [ ] A warm-up time in 課表偏好 added before every session and template (SP-364, Todo) — not implemented
 - [ ] RPE load converted per level (TSS definition IF² × 100 / h as the default, fitted per level once there is data), decided 2026-10-07 (SP-57, Todo) — the code still uses one factor (`DEFAULT_FACTOR`, `backend/engine/rpe_load.py:67`)
-- [ ] A 強度課's 「自動」 target counted as % CP in the template filter, decided 2026-10-07 (SP-84, Todo) — `target_types` still leaves it "auto" without a basis (`backend/engine/workout_steps.py:1341`)
-- [ ] Remove 「課前要吃」 entirely, decided 2026-10-07 (SP-286, Todo) — still in the code (`backend/api/plan_sessions.py:398`)
-- [ ] 專項期前後段: a long trail race's late half keeps one Zone 5 session every 3 weeks, and the other four answers of 2026-10-07 (SP-353, Todo) — not implemented
 
 ## Change History
 
@@ -2156,3 +2157,7 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 | 2026-10-08 | code-sync（SP-90, SP-95, SP-96, SP-98, SP-109, SP-114, SP-115, SP-117, SP-119, SP-120, SP-191, SP-216, SP-263, SP-270, SP-271, SP-272, SP-273, SP-280, SP-285, SP-71, SP-100, SP-105, SP-122, SP-231, SP-258, SP-259, SP-286） | N/A | Re-anchored the whole spec: each anchor moved once from the commit that wrote its line (~410 of 510), then the ones written stale or still off checked by hand against the symbol, the route decorator or the code text (≈ 120 fixed, incl. the whole API table). New: the week-plan rules added after 2026-10-04 (taper by race, two A races, 中間訓練 / B races, B-race notes, 恢復期 / 回量期, ultra 轉換期, multi-day 百岳, the walking cap, illness, strength by phase / moves, 平衡／腳踝, injuries, carb note), Categories = the platform-neutral app type, compliance intensity grading, the 課表 page's fuel / self-rating / altitude lines, the 7 / 42 / 90-day PMC, 每週存檔 and its API row, the feasibility API row, the feature test files; Decisions Log (9) and Open Questions (11) |
 | 2026-10-08 | SP-258 follow-up | owner decision 2026-10-07 (ticket SP-258) | 安排適應週末 (15–28 days): no place named (松雪樓 gone, no other names), 行前一晚 only in the ? help, the weekend of a Sunday departure counts, ✕ closes it for that trip for good (`altitude_plan:<event>:<start>` id held by `prune` until the start); the 1–14 day check unchanged; zh-TW + en. Tests `test_altitude.py::test_sp258_*` |
 | 2026-10-08 | SP-258 review | owner decision 2026-10-08 + code review L3 | The 1–14 day row's ? says 「行前一晚住 2,500 m 左右」 with no place (塔塔加／大禹嶺 removed, zh-TW + en), the 適應週末 row the same wording; `prune` moves a close stored under the old `altitude:…:plan…` id to `altitude_plan:<event>:<start>`. Tests `test_altitude.py::test_sp258_eve_only_for_a_first_night_above_3000`, `::test_sp258_a_plan_row_closed_under_the_old_id_stays_closed` |
+| 2026-10-08 | fix/plan-rules-sp352-295-286-84-353 | SP-352 | A manual 專項期 without an A race no longer crashes the week plan when Zone 3's turn is the T+ maintenance session: the 後段 note and its T+ rule only in a 後段 week (`backend/engine/quality_gate.py:1700` (`_seg_note`) and `:2659-2667`; plan-auto.spec.md › The ladder: two tracks) |
+| 2026-10-08 | fix/plan-rules-sp352-295-286-84-353 | SP-286 | 「課前要吃」 removed entirely (owner 2026-10-07; reverts `ba6934d`): `backend/engine/session_fuel.py` deleted, no `pre_meal` on the session view (`backend/api/plan_sessions.py:520`), the 課表 card / title / dialog line and the 總覽 tooltip line gone (`backend/static/schedule.html`, `backend/static/overview.html`), zh-TW / en string removed; the watch push is unchanged. Test: `backend/tests/test_carb_hints.py::test_no_session_description_says_eat_before` |
+| 2026-10-08 | fix/plan-rules-sp352-295-286-84-353 | SP-84 follow-up | 主課強度 filter: a 強度課's 「自動」 main set counts as % CP when the template has no 目標用 (owner 2026-10-07); one helper `workout_steps.template_target_types` (`backend/engine/workout_steps.py:1367`) for 插入範本 (`:1830`) and the 範本 page (`backend/engine/user_templates.py:512`); an explicit 目標用 still wins, other categories keep 自動. Tests: `backend/tests/test_template_target_types.py::test_quality_auto_counts_as_pct_cp`, `::test_builtin_rows_carry_target_types`, `::test_api_field_built_in_and_user` |
+| 2026-10-08 | fix/plan-rules-sp352-295-286-84-353 | SP-353 | 專項期後段 of a ≥ 4 h / multi-day trail race: one Zone 5 maintenance session every 3 weeks (賽前第 4 週; owner 2026-10-07, specific-phase-progression.md §4.1 / §5-1) instead of none — the Zone 5 rung as it stands, uphill, not moving the rung; only when the Zone 5 gate and the guardrails allow, else the week note says why (`backend/engine/quality_gate.py:1634`, `:1687`, `:2583`, `:2627`, `:2717`). The other four answers (4-h line, uphill ladder, road ladder, MP 20→40 % every other week) confirm the code as built; acceptance tests added. Tests: `backend/tests/test_specific_split.py` |
