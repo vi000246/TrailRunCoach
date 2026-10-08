@@ -53,15 +53,6 @@ def test_profile_series_follows_distance_and_rates():
     assert R.profile_series(ch["elapsedtime"], ch["elapseddistance"], None) is None
 
 
-def test_descents_are_the_mirrored_climbs():
-    w = _trail(dt.date(2026, 9, 30))
-    ch = w.channels
-    d = R.descents_of(ch["elapsedtime"], ch["elapseddistance"], ch["elevation"])
-    assert len(d) == 1
-    assert d[0]["drop_m"] == pytest.approx(200, abs=2) and d[0]["grade"] < 0 and d[0]["rate"] < 0
-    assert d[0]["start_km"] < d[0]["end_km"]
-
-
 def test_climb_card_has_profile_numbers_and_baseline():
     today = dt.date(2026, 9, 30)
     past = [_trail(today - dt.timedelta(days=3 * k), climb_m=180.0) for k in range(1, 7)]   # VAM 540
@@ -77,7 +68,8 @@ def test_climb_card_has_profile_numbers_and_baseline():
     b = c["base"]["vam"]
     assert b["ok"] and b["n"] == 6 and b["weeks"] == 8 and b["median"] == pytest.approx(540, rel=0.02)
     assert c["vs"]["vam"] == pytest.approx(600 / 540 - 1, abs=0.02)
-    assert len(cp["descents"]) == 1
+    # SP-218 review: only what drawClimbMap reads (no descents / cp / pool_weeks computed or sent)
+    assert not {"descents", "cp", "pool_weeks"} & set(cp)
     cols = {s["name"]: s["data"]["values"] for s in r["series"] if s["data"]["kind"] == "values"}
     assert cols["段"] == ["①"] and cols["VAM 平常"] == ["540"]
     text = " ".join(s["data"]["value"] for s in r["series"] if s["data"]["kind"] == "value")
@@ -169,16 +161,27 @@ def test_climb_summary_without_climbs():
     assert sm["ascent_m"] == pytest.approx(200)
 
 
-def test_profile_uses_the_smoothed_elevation():
-    """The drawn profile is on WKO5's smoothed elevation (the evaluator's _elevation), not the raw channel."""
+def test_profile_climbs_and_map_readout_share_one_elevation(monkeypatch):
+    """SP-218 review: the drawn profile, the detected climbs and the map's readout (/samples) read the same
+    elevation — the file's WKO5-smoothed _elevation when it has one, else the raw channel."""
+    from backend.api import wko5views as V
     today = dt.date(2026, 9, 30)
     w = _trail(today)
-    rng = np.random.default_rng(1)
-    w.channels["elevation"] = list(np.asarray(w.channels["elevation"]) + rng.normal(0, 3.0, len(w.channels["elevation"])))
+    raw = np.asarray(w.channels["elevation"])
+    w.channels["elevation"] = list(raw + 500.0)            # the raw channel is off by 500 m …
+    w.channels["_elevation"] = list(raw)                   # … the file's smoothed channel is the truth
     ds = FakeDataset([w], today, settings=SETTINGS)
-    alt = np.asarray([v for v in R.review(ds, ds.workouts[0], "climbs")["climb_profile"]["profile"]["alt"] if v is not None])
-    ch = w.channels
-    raw = R.profile_series(ch["elapsedtime"], ch["elapseddistance"], ch["elevation"])["alt"]
-    raw = np.asarray([v for v in raw if v is not None])
-    # the noise (σ 3 m sample to sample) is smoothed away: the profile's steps are far smaller than on the raw channel
-    assert np.median(np.abs(np.diff(alt))) < np.median(np.abs(np.diff(raw))) / 3
+    cp = R.review(ds, ds.workouts[0], "climbs")["climb_profile"]
+    alt = [v for v in cp["profile"]["alt"] if v is not None]
+    assert min(alt) == pytest.approx(100, abs=1) and max(alt) == pytest.approx(300, abs=2)
+    assert cp["climbs"][0]["start_elev"] == pytest.approx(100, abs=2)
+    monkeypatch.setattr(V, "_dataset", lambda parity=None, source=None: ds)
+    el = [v for v in V.workout_samples(0)["elev"] if v is not None]
+    assert min(el) == pytest.approx(100, abs=1) and max(el) == pytest.approx(300, abs=1)
+    # no _elevation in the file: all three on the raw channel
+    del w.channels["_elevation"]
+    ds = FakeDataset([w], today, settings=SETTINGS)
+    monkeypatch.setattr(V, "_dataset", lambda parity=None, source=None: ds)
+    cp = R.review(ds, ds.workouts[0], "climbs")["climb_profile"]
+    assert min(v for v in cp["profile"]["alt"] if v is not None) == pytest.approx(600, abs=1)
+    assert min(v for v in V.workout_samples(0)["elev"] if v is not None) == pytest.approx(600, abs=1)
