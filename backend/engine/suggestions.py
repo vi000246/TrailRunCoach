@@ -342,6 +342,20 @@ def injury_done_rows(events: list[dict], marks: list[dict], today: str) -> list[
     return out
 
 
+def _plan_alt_ids(dismissed: dict) -> dict:
+    """A 安排適應週末 close stored before the per-trip id (`altitude:<event>:<start>:<m>:plan…`,
+    SP-258 first version) under its `altitude_plan:<event>:<start>` id, so it stays closed."""
+    out = {}
+    for k, v in dismissed.items():
+        if k.startswith("altitude:"):
+            parts = k[len("altitude:"):].rsplit(":", 3)
+            if len(parts) == 4 and parts[3].startswith("plan"):
+                out.setdefault(f"{PLAN_ALT}{parts[0]}:{parts[1]}", v)
+                continue
+        out[k] = v
+    return out
+
+
 def prune(dismissed: dict, rows: list[dict], today: str) -> dict:
     """Dismissals whose suggestion is still computed (or a B2B / test of this week or later, or an
     altitude_plan close before its trip starts) stay; the rest go, so a later, new suggestion shows
@@ -349,7 +363,7 @@ def prune(dismissed: dict, rows: list[dict], today: str) -> dict:
     ids = {r["id"] for r in rows}
     mon = _monday(today)
     keep = {}
-    for k, v in (dismissed or {}).items():
+    for k, v in _plan_alt_ids(dismissed or {}).items():
         if k in ids or (v.get("week") and v["week"] >= mon) or (k.startswith(PLAN_ALT) and k.rsplit(":", 1)[-1] >= today):
             keep[k] = v
     return keep

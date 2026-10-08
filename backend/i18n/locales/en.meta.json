@@ -5199,17 +5199,17 @@
     "draft": true,
     "src": "backend/engine/planning.py:233"
   },
-  "第一晚在 3,000 m 以上：行前一晚先住約 2,500 m（玉山國家公園建議；例如塔塔加 {a:,} m、大禹嶺 {b:,} m）。": {
-    "draft": true,
-    "src": "backend/engine/altitude.py:318"
+  "第一晚在 3,000 m 以上：行前一晚住 2,500 m 左右（玉山國家公園建議）。": {
+    "draft": false,
+    "src": "backend/engine/altitude.py:430"
   },
   "第一晚睡在約 {m:,.0f} m，超過 3,400 m 屬高風險（CDC；排雲山莊 3,402 m 就在線上）": {
     "draft": true,
     "src": "backend/engine/altitude.py:202"
   },
-  "第一晚睡在約 {m:,.0f} m：行前一晚先住約 2,500 m（玉山國家公園建議上 3,000 m 以上的高山前，先在 2,500 m 左右住約 1 晚；這一晚低於 2,750 m，不算進適應週末的 2 晚）。": {
+  "第一晚睡在約 {m:,.0f} m：行前一晚住 2,500 m 左右（玉山國家公園建議；這一晚低於 2,750 m，不算進適應週末的 2 晚）。": {
     "draft": false,
-    "src": "backend/engine/altitude.py:375"
+    "src": "backend/engine/altitude.py:370"
   },
   "等基礎期重新累積到 EF 持平（停滯法）": {
     "draft": true,

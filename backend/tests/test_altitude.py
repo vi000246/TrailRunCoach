@@ -173,7 +173,7 @@ def test_sp258_eve_only_for_a_first_night_above_3000():
     assert r["flags"] == ["plan", "eve"]
     # owner 2026-10-07: 行前一晚 only in the ? (help), never in the row's text; no place named
     assert "行前一晚" not in r["reason"] and "2,500 m" not in r["reason"]
-    assert "行前一晚先住約 2,500 m" in r["help"] and "玉山國家公園" in r["help"]
+    assert "行前一晚住 2,500 m 左右" in r["help"] and "玉山國家公園" in r["help"]
     for place in PLACES:
         assert place not in r["reason"] + r["help"], place
     lo = _row({"max_m": 3600.0, "nights": [2800]}, None, days_to=20)   # first night under 3,000 m
@@ -183,6 +183,14 @@ def test_sp258_eve_only_for_a_first_night_above_3000():
     # 1–14 days: only the 說明 gets it; title, text, flags (= the id) as SP-100
     r = _row(hi, NONE, days_to=6)
     assert r["flags"] == ["first", "n1"] and "行前一晚" in r["help"] and "行前一晚" not in r["reason"]
+    # owner 2026-10-08: the 1–14 day row's ? names no place either — just 「行前一晚住 2,500 m 左右」
+    assert "行前一晚住 2,500 m 左右" in r["help"]
+    for place in PLACES:                         # 排雲山莊 stays: the research lines' study site / CDC's 3,400 m
+        assert place == "排雲" or place not in r["help"], place
+    from backend.i18n import use_locale
+    with use_locale("en"):
+        en = _row(hi, NONE, days_to=6)["help"]
+    assert "around 2,500 m" in en and "Tataka" not in en and "Dayuling" not in en
 
 
 def test_box_rows_info_only_and_the_id_follows_the_conditions():
@@ -292,3 +300,24 @@ def test_sp258_english_plan_row_has_no_place():
     for place in ("Songxue", "Hehuan", "Tataka", "Dayuling"):
         assert place not in txt, place
     assert not any("一" <= ch <= "鿿" for ch in r["reason"])
+
+
+def test_sp258_a_plan_row_closed_under_the_old_id_stays_closed():
+    """Review L3: a 適應週末 reminder closed before the per-trip id (`altitude:<event>:<start>:<m>:plan…`)
+    is moved to `altitude_plan:<event>:<start>` by prune, so it does not come back once."""
+    start = TODAY + dt.timedelta(days=20)
+    evs = [Event("yu", "玉山", start.isoformat(), kind="baiyue", days=2)]
+    rows = SG.altitude_rows(evs, TODAY.isoformat(), lambda e: {"max_m": 3952.0, "nights": [3402]}, lambda: {})
+    old = {f"altitude:yu:{start.isoformat()}:3952:plan-eve": {"action": "dismissed", "at": "2026-10-04T08:00:00"},
+           f"altitude:yu:{start.isoformat()}:3952:first-n1": {"action": "dismissed", "at": "2026-10-04T08:00:00"},
+           f"altitude:x:y:{start.isoformat()}:3600:plan": {"action": "dismissed", "at": "2026-10-04T08:00:00"}}
+    kept = SG.prune(old, rows, TODAY.isoformat())
+    assert kept[f"altitude_plan:yu:{start.isoformat()}"]["action"] == "dismissed"
+    assert f"altitude_plan:x:y:{start.isoformat()}" in kept             # an event id with a colon
+    assert not any(k.startswith("altitude:") and k.endswith("plan-eve") for k in kept)
+    assert SG.visible(rows, kept) == []
+    # the 14-day row's old dismissal is not a plan row: left to the usual rule (gone, not computed)
+    assert f"altitude:yu:{start.isoformat()}:3952:first-n1" not in kept
+    # a past trip's old close: dropped
+    past = {f"altitude:yu:2026-09-01:3952:plan": {"action": "dismissed", "at": "2026-08-10T08:00:00"}}
+    assert SG.prune(past, [], TODAY.isoformat()) == {}
