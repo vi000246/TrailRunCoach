@@ -1048,7 +1048,7 @@
         if (st.dur.type === "load") {
           const lt = loadTl(st, r, D);
           o.load = byId[st.id].load = { tss: st.dur.value, tl: pyRound(lt.tl), err: pyRound(lt.err), fitted: lt.fitted, sec: pyRound(s), if: pyRound(loadIf(st, r, D), 3) };
-          if (st.dur.rpe) { const R = D.ws.load.rpe; o.load.rpe = { level: st.dur.rpe, min: st.dur.min ?? null, tss_h: pyRound(R.tss_h[st.dur.rpe] || 0), fitted: false, n: 0, err_pct: pyRound(R.err * 100) }; }
+          if (st.dur.rpe) { const R = D.ws.load.rpe; o.load.rpe = { level: st.dur.rpe, min: st.dur.min ?? null, tss_h: pyRound(R.tss_h[st.dur.rpe] || 0), fitted: false, adjusted: false, n: 0, err_pct: pyRound(R.err * 100) }; }
         }
         order.push(o);
       }

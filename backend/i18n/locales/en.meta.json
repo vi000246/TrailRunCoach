@@ -451,13 +451,13 @@
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:514"
   },
-  "CR-10 10 是極限：高於 CP（Coggan VO2max 區 106–120 % FTP，RPE 6–7 以上）；取 1.10（推估）": {
+  "CR-10 10 是極限，高於 CP（Coggan VO2max 區 106–120 % FTP）；全力撐 10–20 分鐘約 1.05–1.15，取 1.10（範圍有出處，取點推估）": {
     "draft": true,
-    "src": "backend/engine/rpe_load.py:96"
+    "src": "backend/engine/rpe_load.py:110"
   },
-  "CR-10 4 是 Seiler 一區上緣（≈ VT1）、Coggan 節奏區 RPE 3–4（76–90 % FTP）；取 0.82（推估）": {
+  "CR-10 4 是第一區上緣（約 VT1）；Coggan 節奏區 RPE 3–4 對 76–90 % FTP，取 VT1 附近的 0.82（範圍有出處，取點推估）": {
     "draft": true,
-    "src": "backend/engine/rpe_load.py:93"
+    "src": "backend/engine/rpe_load.py:107"
   },
   "CTL {c:.0f} 的 {pct:.0%}": {
     "draft": true,
@@ -663,18 +663,6 @@
     "draft": true,
     "src": "backend/engine/balance_plan.py:41"
   },
-  "Seiler 一區（session RPE ≤ 4，低於 VT1）、跑步功率輕鬆區 65–80 % CP；取 0.74（推估）": {
-    "draft": true,
-    "src": "backend/engine/rpe_load.py:92"
-  },
-  "Seiler 三區從 session RPE 7 起（≈ VT2 ≈ CP）、Coggan 閾值區 91–105 % FTP；持續一段取略低於 CP 的 0.95（推估）": {
-    "draft": true,
-    "src": "backend/engine/rpe_load.py:95"
-  },
-  "Seiler 二區（session RPE 5–6，VT1 到 VT2）、跑步功率中等區 80–90 % CP；取 0.88（推估）": {
-    "draft": true,
-    "src": "backend/engine/rpe_load.py:94"
-  },
   "TSB {tsb:+.0f} < −20：先維持量，不加": {
     "draft": true,
     "src": "backend/engine/overview.py:1011"
@@ -847,6 +835,18 @@
     "draft": false,
     "src": "backend/api/debug.py:230"
   },
+  "session RPE 5–6 是 Seiler 第二區（VT1 到 VT2）；跑步功率中等區 80–90 % CP，取 0.88（範圍有出處，取點推估）": {
+    "draft": true,
+    "src": "backend/engine/rpe_load.py:108"
+  },
+  "session RPE ≤ 4 是 Seiler 第一區（低於 VT1）；跑步功率輕鬆區 65–80 % CP，輕鬆跑多在上半段，取 0.74（範圍有出處，取點推估）": {
+    "draft": true,
+    "src": "backend/engine/rpe_load.py:106"
+  },
+  "session-RPE 評整段主課；7 分是第三區的起點（約 CP），整段 20–60 分鐘撐不住 106–120 % FTP，所以取 CP 略下的 0.95（範圍有出處，取點推估）": {
+    "draft": true,
+    "src": "backend/engine/rpe_load.py:109"
+  },
   "user_settings sync.*（每次同步的結果）＋ sync_state 的時間和 cursor（不含任何 token）": {
     "draft": false,
     "src": "backend/api/debug.py:544"
@@ -991,13 +991,13 @@
     "draft": true,
     "src": "backend/engine/suggestions.py:308"
   },
-  "{label}（CR-10 {cr}）每小時 {rate} TSS = IF² × 100（TSS 定義），IF {if_}：{src}。本人資料 {n} 筆，滿 {min_n} 筆才會自己擬合。": {
-    "draft": true,
-    "src": "backend/engine/rpe_load.py:347"
-  },
   "{label}（CR-10 {cr}）每小時 {rate} TSS：本人 {n} 筆有自評的活動擬合 {personal}，權重 {w:.0%}，其餘用預設 {default}（TSS 定義 IF² × 100，IF {if_}）。": {
     "draft": true,
     "src": "backend/engine/rpe_load.py:341"
+  },
+  "{label}（CR-10 {cr}）預設每小時 {rate} TSS = IF² × 100（TSS 定義），IF {if_}：{src}。預設是通用規則，不是照哪個人調的；每個人的值只從他自己有自評的活動擬合，這一檔目前 {n} 筆，滿 {min_n} 筆才開始。": {
+    "draft": true,
+    "src": "backend/engine/rpe_load.py:375"
   },
   "{label}（自動：一年內心率判定為比賽強度的標準距離跑步）": {
     "draft": true,
@@ -2026,6 +2026,10 @@
   "依你的跑走紀錄校正": {
     "draft": true,
     "src": "backend/engine/walk_hint.py:117"
+  },
+  "依相鄰檔調整": {
+    "draft": true,
+    "src": "backend/engine/rpe_load.py:374"
   },
   "保暖層": {
     "draft": true,

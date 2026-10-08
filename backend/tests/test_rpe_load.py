@@ -87,8 +87,10 @@ def test_coros_feel_maps_onto_the_levels_like_sp231():
     # COROS 1 Very Light … 5 Max Effort → workout_files.rpe 2 / 4 / 5 / 7 / 10 → the five levels in order
     for feel, k in zip(range(1, 6), IDS):
         assert RL.level_of_rpe(CR.TO_RPE[feel]) == k
-    # a FIT's own RPE: the nearest level (ties go up, as coros_rpe.level_of)
-    assert [RL.level_of_rpe(r) for r in (1, 3, 6, 8, 9)] == ["easy", "moderate", "very_hard", "very_hard", "max"]
+    # a FIT's own RPE 1–10: two values per level, 6 with 5 (Seiler's zone 2 is session RPE 5–6)
+    assert [RL.level_of_rpe(r) for r in range(1, 11)] == ["easy", "easy", "moderate", "moderate", "hard", "hard",
+                                                         "very_hard", "very_hard", "max", "max"]
+    assert RL.level_of_rpe(6.4) == "hard" and RL.level_of_rpe(6.5) == "very_hard"
     assert RL.level_of_rpe(None) is None and RL.level_of_rpe(0) is None and RL.level_of_rpe(11) is None
 
 
@@ -116,10 +118,16 @@ def _rows(level_rpe, n, rate, start=TODAY, thr=300.0):
     return out
 
 
+def _n_eff(n, start=TODAY):
+    """Σ recency weights of _rows(…, n, …): one a day back from `start` (half-life TL.HALF_LIFE_DAYS)."""
+    return sum(0.5 ** (((TODAY - start).days + i) / TL.HALF_LIFE_DAYS) for i in range(n))
+
+
 def test_fit_with_enough_data_moves_toward_the_athlete():
     new, rep = RL.refit(_rows(2, 40, 70.0), TODAY)            # 40 easy runs at 70 TSS/h
     e = new["levels"]["easy"]
-    w = 40 / (40 + RL.SHRINK_K)
+    w = _n_eff(40) / (_n_eff(40) + RL.SHRINK_K)                # the effective sample size (recency weights)
+    assert e["n_eff"] == pytest.approx(_n_eff(40), abs=1e-3)
     want = math.exp(w * math.log(70.0) + (1 - w) * math.log(_rate("easy")))
     assert e["n"] == 40 and e["w"] == pytest.approx(w, abs=1e-4) and e["personal"] == pytest.approx(70.0)
     assert e["tss_h"] == pytest.approx(want, abs=0.01) and abs(e["tss_h"] - 70) < abs(e["tss_h"] - _rate("easy"))
@@ -173,6 +181,31 @@ def test_monotonic_across_levels():
     assert out == pytest.approx(rates) and not any(adj.values())
 
 
+def test_stored_fit_reads_back_the_same_rates_under_pooling():
+    # pooled levels with and without data of their own: reading the stored value gives every level's stored rate
+    for rows in (_rows(2, 40, 100.0), _rows(2, 40, 100.0) + _rows(4, 5, 60.0), _rows(7, 30, 70.0) + _rows(10, 8, 80.0)):
+        new, _ = RL.refit(rows, TODAY)
+        m = RL.Model.of(new)
+        for k in IDS:
+            assert m.rate(k) == pytest.approx(new["levels"][k]["tss_h"], abs=0.01), (k, new["levels"])
+            assert m.level(k)["adjusted"] == new["levels"][k]["adjusted"]
+
+
+def test_unfitted_levels_read_the_default_not_a_stored_copy():
+    stored = {"levels": {"hard": {"tss_h": 70.0, "n": 0, "w": 0.0}, "easy": {"tss_h": 54.0, "n": 1, "w": 0.0}}, "n": 1}
+    m = RL.Model.of(stored)
+    assert m.rate("hard") == RL.DEFAULT_TSS_H["hard"] and m.rate("easy") == RL.DEFAULT_TSS_H["easy"]
+
+
+def test_old_ratings_count_less_than_recent_ones():
+    recent, _ = RL.refit(_rows(5, 50, 130.0), TODAY)
+    old, _ = RL.refit(_rows(5, 50, 130.0, start=TODAY - dt.timedelta(days=360)), TODAY)
+    r, o = recent["levels"]["hard"], old["levels"]["hard"]
+    assert r["n"] == o["n"] == 50 and o["n_eff"] < r["n_eff"] and o["w"] < r["w"]
+    # the same personal value, pulled less far from the default when the ratings are old
+    assert o["personal"] == pytest.approx(r["personal"]) and _rate("hard") < o["tss_h"] < r["tss_h"]
+
+
 def test_refit_without_rpe_keeps_the_default_and_threshold_cut():
     assert RL.refit([{"date": "2026-10-01", "rpe": None, "hours": 1, "tss": 50}], TODAY)[0] is None
     # an FTP change > 5 %: only the activities after it
@@ -204,6 +237,22 @@ def test_validate_and_describe():
     assert d["fitted"] and d["n"] == 12 and e["source"] == "fitted" and e["n"] == 12
     assert e["chip"]["text"] == "本人 n=12" and e["personal"] == pytest.approx(70.0)
     assert d["loo"]["mape"] == new["loo"]["mape"]
+    # the defaults read as a general rule, personalisation only from the athlete's own rated activities
+    for x in RL.describe(None)["levels"]:
+        assert "你" not in x["chip"]["tip"] and "通用" in x["chip"]["tip"]
+    assert all("你" not in RL.IF_SRC[k] for k in IDS)
+
+
+def test_a_level_moved_only_by_the_ordering_says_so():
+    new, _ = RL.refit(_rows(2, 40, 100.0), TODAY)           # easy pooled with 稍累 / 累, which have no data
+    d = {x["id"]: x for x in RL.describe(new)["levels"]}
+    assert d["easy"]["source"] == "fitted" and d["easy"]["chip"]["text"].startswith("本人")
+    for k in ("moderate", "hard"):
+        assert d[k]["source"] == "adjusted" and d[k]["chip"]["text"] == "依相鄰檔調整"
+        assert d[k]["tss_h"] != round(_rate(k)) and str(d[k]["tss_h"]) in d[k]["chip"]["tip"]
+    assert d["very_hard"]["source"] == "default" and d["very_hard"]["chip"]["text"] == "預設（推估）"
+    lv = {x["id"]: x for x in RL.levels(RL.Model.of(new))}
+    assert lv["moderate"]["adjusted"] and not lv["moderate"]["fitted"] and not lv["very_hard"]["adjusted"]
 
 
 def test_activity_rows_join_the_watch_rpe():
@@ -264,7 +313,7 @@ def test_rpe_step_is_timed_by_its_minutes_and_viewed():
     want = TL.Model.of().tl(tss, "hr", round(f, 4))
     assert o["load"]["tss"] == tss and o["load"]["tl"] == round(want["tl"]) and o["sec"] == 2400
     assert o["load"]["rpe"] == {"level": "very_hard", "min": 40, "tss_h": round(_rate("very_hard")),
-                                "fitted": False, "n": 0, "err_pct": round(RL.DEFAULT_ERR * 100)}
+                                "fitted": False, "adjusted": False, "n": 0, "err_pct": round(RL.DEFAULT_ERR * 100)}
     assert WS.fmt_dur(st["dur"]) == f"負荷 {tss:g} TSS（很累 40 分）"
     assert v["watch"]["lines"][0]["dur"] == f"負荷 {round(want['tl'])} TL"
 
@@ -285,6 +334,115 @@ def test_push_still_sends_coros_tl():
     assert spec.load_steps == [{"i": 1, "n": 2, "tss": tss, "tl": want, "basis": "hr", "if": f, "f": 1.0}]
 
 
+def test_a_fitted_rate_above_169_clamps_the_if_used_for_tl():
+    # 極限 fitted at 200 TSS/h: IF √2 = 1.41 > the step clamp 1.3 (169 TSS/h) — the TL is converted at 1.3
+    fast = RL.Model.of({"levels": {"max": {"tss_h": 200.0, "n": 30, "n_eff": 30, "w": 0.75}}, "n": 30})
+    assert fast.rate("max") == 200.0
+    d = WS.normalize(_doc(_rpe_step("max", 30)), rpe_model=fast)
+    st = d["items"][0]
+    assert st["dur"]["value"] == 100.0
+    c = WS.Ctx(cp=300.0, lthr=170.0, aet=150.0, rpe=fast)
+    assert WS.load_if(st, WS.resolve(st, c)) == WS.RPE_IF_RANGE[1]
+    o = WS.view(d, c)["order"][0]
+    assert o["load"]["tl"] == round(TL.Model.of().tl(100.0, "hr", WS.RPE_IF_RANGE[1])["tl"])
+
+
+# ---------------------------------------------------------------------------
+# stored sessions follow the rates in effect (no stale TSS vs the watch)
+# ---------------------------------------------------------------------------
+
+def _run(c):
+    import asyncio
+    return asyncio.new_event_loop().run_until_complete(c)
+
+
+async def _db():
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+    from backend.db.models import Base
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    return async_sessionmaker(engine, expire_on_commit=False)()
+
+
+def _session(uid, day, steps, tss, state="active"):
+    return {"uid": uid, "week_start": "2026-10-05", "day": day, "kind": "quality", "title": "RPE 負荷", "minutes": 50,
+            "target": "", "detail": "", "source": "", "tss": tss, "origin": "custom", "edited": True, "state": state,
+            "steps": steps}
+
+
+def test_saved_rpe_sessions_follow_the_rates_and_match_the_push(monkeypatch):
+    from backend.engine import plan_store as PS
+    from backend.settings.repository import SettingsRepository
+    th = {"cp": 300.0, "lthr": 170.0, "aet": 150.0}
+    old_factor = RL.Model.of({"levels": {k: {"tss_h": 0.3 * RL.CR10[k] * 60, "n": 99, "n_eff": 99, "w": 1.0}
+                                         for k in IDS}, "n": 99})       # = the old 0.30 × CR-10 × minutes
+    raw = _doc({"id": "w", "kind": "warm", "dur": {"type": "time", "value": 600}, "target": {"type": "none"}},
+               _rpe_step("very_hard", 40))
+    saved = WS.normalize(raw, rpe_model=old_factor)
+    assert saved["items"][1]["dur"]["value"] == 84.0                        # 很累 40′ under the old factor
+    c = WS.Ctx(cp=300.0, lthr=170.0, aet=150.0, rpe=old_factor)
+    tss_saved = WS.totals(saved, c)["tss"]
+
+    async def go():
+        db = await _db()
+        repo = SettingsRepository(db, 1)
+        # the old single-factor value as it is stored before the deploy (written past the new validation)
+        monkeypatch.setattr(RL, "validate", lambda v: None)
+        await repo.set(RL.KEY, {"factor": 0.3, "n": 4, "w": 0.29, "loo": {"mape": 0.2}})
+        await PS.save(db, [_session("up", "2026-10-10", saved, tss_saved),
+                           _session("past", "2026-10-01", saved, tss_saved),
+                           _session("done", "2026-10-12", saved, tss_saved, state="done")])
+        r1 = await RL.sync_sessions(db, 1, "2026-10-08")
+        r2 = await RL.sync_sessions(db, 1, "2026-10-08")                     # the same rates: nothing to do
+        return {s["uid"]: s for s in await PS.load(db, 1)}, r1, r2, await repo.get(RL.STAMP_KEY)
+    ss, r1, r2, stamp = _run(go())
+    assert r1["changed"] == 1 and r2["changed"] == 0 and stamp == RL.stamp(RL.Model())
+    up = ss["up"]
+    pushed = CW.session_workout({**up, "key": "u", "id": "u"}, th).load_steps[0]["tss"]
+    assert up["steps"]["items"][1]["dur"]["value"] == pushed == round(_rate("very_hard") * 40 / 60, 1)
+    assert up["tss"] == pytest.approx(WS.totals(WS.normalize(up["steps"]), WS.Ctx(cp=300.0, lthr=170.0, aet=150.0))["tss"], abs=0.11)
+    assert up["tss"] == pytest.approx(tss_saved - 84.0 + pushed, abs=0.11)
+    assert up["steps"]["items"][1]["dur"]["min"] == 40 and up["origin"] == "custom"   # the structure is the user's
+    for k in ("past", "done"):                                               # only upcoming, active sessions
+        assert ss[k]["tss"] == tss_saved and ss[k]["steps"]["items"][1]["dur"]["value"] == 84.0
+
+
+def test_a_push_first_brings_stored_sessions_to_the_rates():
+    from types import SimpleNamespace as NS
+    from backend.engine import plan_store as PS
+    from backend.settings.repository import SettingsRepository
+    saved = WS.normalize(_doc(_rpe_step("very_hard", 40)), rpe_model=RL.Model.of(
+        {"levels": {"very_hard": {"tss_h": 126.0, "n": 99, "n_eff": 99, "w": 1.0},
+                    "max": {"tss_h": 180.0, "n": 99, "n_eff": 99, "w": 1.0}}, "n": 99}))
+
+    async def go():
+        db = await _db()
+        await PS.save(db, [_session("up", "2026-10-10", saved, 84.0)])
+        await CW.push_sessions(db, [], {"cp": 300.0}, "2026-10-08", hub=NS())
+        return (await PS.load(db, 1))[0], await SettingsRepository(db, 1).get(RL.STAMP_KEY)
+    s, stamp = _run(go())
+    assert stamp == RL.stamp(RL.Model()) and s["steps"]["items"][0]["dur"]["value"] == round(_rate("very_hard") * 40 / 60, 1)
+    assert s["tss"] == pytest.approx(84.0 - 84.0 + round(_rate("very_hard") * 40 / 60, 1), abs=0.11)
+
+
+def test_a_refit_with_no_rated_activity_left_clears_the_old_fit(monkeypatch):
+    from types import SimpleNamespace as NS
+    from backend.settings.repository import SettingsRepository
+
+    async def go():
+        db = await _db()
+        repo = SettingsRepository(db, 1)
+        old, _ = RL.refit(_rows(2, 20, 80.0), TODAY)
+        await repo.set(RL.KEY, old)
+        monkeypatch.setattr(RL, "activity_rows", lambda ds: [])
+        rep = await RL.refit_and_store(db, 1, NS(workouts=[]), TODAY)
+        return rep, await repo.get(RL.KEY)
+    rep, after = _run(go())
+    assert after is None and rep["n"] == 0
+    assert RL.Model.of(after).rate("easy") == RL.DEFAULT_TSS_H["easy"]
+
+
 # ---------------------------------------------------------------------------
 # the editor (static/workout_editor.js)
 # ---------------------------------------------------------------------------
@@ -298,8 +456,9 @@ def test_editor_context_lists_the_level_rates(monkeypatch):
     monkeypatch.setattr(RL, "current", lambda user_id=1: fitted)
     ctx = PSAPI._rpe_load_ctx()
     assert [x["id"] for x in ctx["levels"]] == IDS and ctx["min_range"] == list(RL.MIN_RANGE)
-    assert ctx["levels"][0] == {"id": "easy", "cr10": 2, "tss_h": 62, "fitted": True, "n": 15}
-    assert ctx["levels"][3] == {"id": "very_hard", "cr10": 7, "tss_h": round(_rate("very_hard")), "fitted": False, "n": 0}
+    assert ctx["levels"][0] == {"id": "easy", "cr10": 2, "tss_h": 62, "fitted": True, "adjusted": False, "n": 15}
+    assert ctx["levels"][3] == {"id": "very_hard", "cr10": 7, "tss_h": round(_rate("very_hard")), "fitted": False,
+                                "adjusted": False, "n": 0}
     assert ctx["fitted"] and ctx["n"] == 15
 
 
@@ -312,16 +471,18 @@ const E = w.WorkoutEditor, D = { type: "load", value: 75 };
 const toRpe = E.loadDur(D, "lmode", "rpe", 42.4);
 const lvl = E.loadDur(toRpe, "lrpe", "max"), mins = E.loadDur(lvl, "lmin", "25");
 const levels = [["easy", 2, 55], ["moderate", 4, 67], ["hard", 5, 77], ["very_hard", 7, 90], ["max", 10, 121]]
-  .map(([id, cr10, tss_h]) => ({ id, cr10, tss_h, fitted: id === "easy", n: id === "easy" ? 12 : 0 }));
+  .map(([id, cr10, tss_h]) => ({ id, cr10, tss_h, fitted: id === "easy", adjusted: id === "moderate", n: id === "easy" ? 12 : 0 }));
 const ctx = { provider: { label: "COROS", capabilities: { load_unit: "TL" } }, rpe_load: { levels } };
 const r = { load: { tss: 60, tl: 78, err: 20, sec: 2400, rpe: { level: "very_hard", min: 40, tss_h: 90, fitted: false, n: 0 } } };
 const rMine = { load: { tss: 37, tl: 48, err: 20, sec: 2400, rpe: { level: "easy", min: 40, tss_h: 55, fitted: true, n: 12 } } };
+const rAdj = { load: { tss: 45, tl: 55, err: 20, sec: 2400, rpe: { level: "moderate", min: 40, tss_h: 67, fitted: false, adjusted: true, n: 0 } } };
 console.log(JSON.stringify({
   toRpe, lvl, mins,
   badLvl: E.loadDur(toRpe, "lrpe", "meh"), badMin: E.loadDur(toRpe, "lmin", "0"), bigMin: E.loadDur(toRpe, "lmin", "400"),
   back: E.loadDur({ ...mins, value: 50 }, "lmode", "tss"),
   html: E.loadInput(ctx, { kind: "work", dur: { type: "load", value: 60, rpe: "very_hard", min: 40 } }, r),
   mine: E.loadInput(ctx, { kind: "work", dur: { type: "load", value: 37, rpe: "easy", min: 40 } }, rMine),
+  adj: E.loadInput(ctx, { kind: "work", dur: { type: "load", value: 45, rpe: "moderate", min: 40 } }, rAdj),
   noCtx: E.loadInput({ provider: ctx.provider }, { kind: "work", dur: { type: "load", value: 60, rpe: "very_hard", min: 40 } }, r),
   plain: E.loadInput(ctx, { kind: "work", dur: { type: "load", value: 75 } }, null),
 }));
@@ -343,5 +504,9 @@ console.log(JSON.stringify({
     # the step's TSS, marked 推估 (default level) or 本人 (fitted level), then the TL
     assert "≈ 60 TSS（workout.load_rpe_src_default）≈ 78 TL" in h and 'data-f="tss"' not in h
     assert "≈ 37 TSS（workout.load_rpe_src_mine）≈ 48 TL" in g["mine"]
+    # a level moved only by the ordering: its own mark; every option says where its rate comes from
+    assert "≈ 45 TSS（workout.load_rpe_src_adjusted）≈ 55 TL" in g["adj"]
+    assert 'value="easy" title="workout.load_rpe_src_mine"' in h and 'value="moderate" title="workout.load_rpe_src_adjusted"' in h
+    assert 'value="hard" title="workout.load_rpe_src_default"' in h
     assert "TSS/h" not in g["noCtx"] and "≈ 60 TSS" in g["noCtx"]         # an old context: no rates, still works
     assert 'data-f="tss"' in g["plain"] and 'value="tss" selected' in g["plain"]

@@ -510,11 +510,11 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
         : "這個平台沒有負荷結束條件：推送時換成預估時間 TSS ÷（這段強度 IF² × 100）";
       const mode = `<select data-f="lmode" aria-label="${esc(tr("workout.load_mode"))}"${dis}>${opt("tss", "TSS", byRpe ? "rpe" : "tss")}${opt("rpe", tr("workout.load_by_rpe"), byRpe ? "rpe" : "tss")}</select>`;
       if (byRpe) {
-        const R = (L && L.rpe) || {}, lv = Object.fromEntries((((this.ctx || {}).rpe_load || {}).levels || []).filter((x) => x.tss_h != null).map((x) => [x.id, x.tss_h]));   // SP-57: each level's TSS/h (its option); the step's TSS 推估 / 本人
-        const rtip = tr("workout.load_rpe_tip", { rate: R.tss_h != null ? R.tss_h : "?", src: tr(R.fitted ? "workout.load_rpe_mine" : "workout.load_rpe_default", { n: R.n || 0 }) });
-        return mode + `<select data-f="lrpe" aria-label="RPE"${dis}>${RPE_LEVELS.map((k) => opt(k, tr("workout.rpe_" + k) + (lv[k] != null ? ` ≈ ${lv[k]} TSS/h` : ""), st.dur.rpe)).join("")}</select>` +
+        const R = (L && L.rpe) || {}, S = (x) => (x.fitted ? "mine" : x.adjusted ? "adjusted" : "default"), lv = Object.fromEntries((((this.ctx || {}).rpe_load || {}).levels || []).filter((x) => x.tss_h != null).map((x) => [x.id, x]));   // SP-57: each level's TSS/h + source (its option); the step's TSS 推估 / 依相鄰檔調整 / 本人
+        const rtip = tr("workout.load_rpe_tip", { rate: R.tss_h != null ? R.tss_h : "?", src: tr("workout.load_rpe_" + S(R), { n: R.n || 0 }) });
+        return mode + `<select data-f="lrpe" aria-label="RPE"${dis}>${RPE_LEVELS.map((k) => opt(k, tr("workout.rpe_" + k) + (lv[k] ? ` ≈ ${lv[k].tss_h} TSS/h` : ""), st.dur.rpe, lv[k] ? ` title="${esc(tr("workout.load_rpe_src_" + S(lv[k])))}"` : "")).join("")}</select>` +
           `<input class="num" type="number" step="1" min="${RPE_MIN[0]}" max="${RPE_MIN[1]}" data-f="lmin" value="${st.dur.min ?? ""}" aria-label="${esc(tr("workout.load_min"))}"${dis}><span class="faint">${esc(tr("workout.load_min"))}</span>` +
-          (L ? `<span class="we-lap" title="${esc(rtip + "\n" + tip)}">≈ ${L.tss} TSS（${esc(tr(R.fitted ? "workout.load_rpe_src_mine" : "workout.load_rpe_src_default"))}）${conv}</span>` : "");
+          (L ? `<span class="we-lap" title="${esc(rtip + "\n" + tip)}">≈ ${L.tss} TSS（${esc(tr("workout.load_rpe_src_" + S(R)))}）${conv}</span>` : "");
       }
       return mode + `<input class="num" type="number" step="1" min="1" max="500" data-f="tss" value="${st.dur.value}" aria-label="負荷 TSS"${dis}><span class="faint">TSS</span>` +
         (conv ? `<span class="we-lap" title="${esc(tip)}">${conv}</span>` : "");

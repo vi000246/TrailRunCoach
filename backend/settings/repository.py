@@ -243,7 +243,7 @@ DEFAULTS: dict[str, Any] = {
     # 「負荷」 entered by RPE (engine/rpe_load.py, SP-57): each level's TSS per hour fitted on the rated
     # activities {levels: {id: {tss_h, n, w, personal, adjusted}}, n, loo, fitted_at}; None = the defaults (推估).
     # Planning targets only — the recorded load is never corrected by RPE. Written by the refit only
-    "rpe.load_model": None,
+    "rpe.load_model": None, "rpe.load_stamp": None,    # + the rates stored sessions were last normalised with (sync_sessions)
     # debug API for AI agents (SP-371, backend/debug_auth.py; 設定 › 進階): off = /api/v1/debug/* is 404.
     # Can only be turned on when the server has TRC_DEBUG_PIN; the tokens are the debug_tokens table
     "debug.api.enabled": False,

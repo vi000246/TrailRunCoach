@@ -1710,10 +1710,10 @@ def view(steps: dict, c: Ctx, cap: Optional[float] = None, cap_mode: str = "soft
             o["load"] = rd["load"] = {"tss": st["dur"]["value"], "tl": round(lt["tl"]), "err": round(lt["err"]),
                                       "fitted": lt["fitted"], "sec": round(s), "if": round(load_if(st, r), 3)}
             if st["dur"].get("rpe"):
-                # entered by feel (SP-57): the level, minutes, its TSS per hour, own fit or default (推估)
-                lv = rpe_m.level(st["dur"]["rpe"]) or {}
+                lv = rpe_m.level(st["dur"]["rpe"]) or {}    # by feel (SP-57): level, minutes, TSS/h, fit / adjusted / default
                 o["load"]["rpe"] = {"level": st["dur"]["rpe"], "min": st["dur"].get("min"), "tss_h": round(lv.get("tss_h") or 0),
-                                    "fitted": bool(lv.get("fitted")), "n": int(lv.get("n") or 0), "err_pct": round(rpe_m.err_frac() * 100)}
+                                    "fitted": bool(lv.get("fitted")), "adjusted": bool(lv.get("adjusted") and not lv.get("fitted")),
+                                    "n": int(lv.get("n") or 0), "err_pct": round(rpe_m.err_frac() * 100)}
         order.append(o)
     eq = equivalence(steps, rung, c) if rung else None
     return {"resolved": by_id, "order": order, "totals": totals(steps, c),
