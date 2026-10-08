@@ -335,6 +335,10 @@ main > section.tab-off { display: none; }
       <div id="s-failed-wrap" hidden><div class="row"><b data-i18n="settings.syncfail.title">下載失敗的活動</b>
         <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.syncfail.help" title="同步時下載或匯入失敗的活動會記在這裡，之後的同步只重試這幾筆，不必重新列出所有活動。每筆最多自動重試 5 次或試滿 7 天，之後停止，可以按「重試」再試。沒有 FIT 檔的手動紀錄也列在這裡，之後有檔案了可以按「重試」。">?</button></div>
         <ul class="failed" id="s-failed"></ul></div>
+      <div class="row"><button type="button" id="s-check" data-i18n="settings.synccheck.button">完整檢查（找漏掉的活動）</button>
+        <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.synccheck.help" title="列出手錶／平台上的全部活動，用活動編號跟這裡的資料比對：平台有、這裡沒有的，可以按「補下載」只下載這幾筆；這裡有、平台沒有的只列出來，不會刪除；另外列出還在下載失敗清單的。COROS 大約要 40～60 秒，檢查時不能同步同一個來源，也不會改變同步進度。每週會自動檢查最近 60 天，缺的直接補下載。">?</button>
+        <span class="meta" id="s-check-st"></span></div>
+      <ul class="failed" id="s-check-res"></ul>
       <p class="meta" id="s-chart-note">「圖表資料來源」決定圖表、總覽和功率計算機讀哪一份資料；儲存後重新整理頁面就會改用新來源
         （圖表頁右上角的「資料來源」也可以直接切換）。第一次載入要讀完所有 FIT 檔，會比較久。
         想先看兩個來源的差異，可以用 <a href="/api/v1/static/compare.html">資料來源比對</a>。</p>
@@ -1174,6 +1178,7 @@ async function loadSources() {
     box(src).querySelector('[data-act="purge"]').disabled = !st.files && !st.rows;
   }
   loadFailed();
+  loadCheck();
 }
 
 // 下載失敗的活動 (sync/failures.py, SP-362): retried by id by the next syncs; 「重試」 after they
@@ -1196,6 +1201,68 @@ $("s-failed").addEventListener("click", async (e) => {
     toast(t(r.status === "started" ? "settings.syncfail.started" : "settings.syncfail.queued"));
     loadFailed();
   } catch (err) { b.disabled = false; toast(t("settings.failed", { msg: err.message.slice(0, 80) })); }
+});
+
+// 完整檢查 (sync/check.py, SP-362 A3 / A4): the last result per source is stored on the server
+// (survives a reload); while a check runs the page polls its progress
+const shortTime = (iso) => { if (!iso) return "–"; const d = new Date(iso); return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
+const idList = (xs, n) => (xs || []).slice(0, 20).map((x) => `${x.date || "–"} ${x.id}`).join("\n") + (n > 20 ? "\n…" : "");
+let checkPoll = null;
+async function loadCheck() {
+  let d;
+  try { d = await j(`${SYNC}/check`); } catch (_) { return; }
+  const busy = [], rows = [];
+  for (const src of ["coros", "tp"]) {
+    const s = d[src] || {}, name = SRC_NAME[src];
+    if (s.running) {
+      const p = s.progress || {};
+      busy.push(p.phase === "fetch" ? t("settings.synccheck.running_fetch", { src: name, done: p.done || 0, total: p.total || 0 })
+        : p.pages ? t("settings.synccheck.running_list", { src: name, pages: p.pages, n: p.listed || 0 })
+        : t("settings.synccheck.running", { src: name }));
+    }
+    const L = s.last, W = s.weekly;
+    if (!L && !W) continue;
+    const parts = [];
+    if (L && L.status === "failed") parts.push(esc(t("settings.synccheck.failed_run", { when: shortTime(L.at), err: L.error || "" })));
+    else if (L) {
+      parts.push(esc(t("settings.synccheck.result", { when: shortTime(L.at), remote: L.remote ?? 0, local: L.local ?? 0 })));
+      if (!L.missing_n && !L.local_only_n && !L.failed_n) parts.push(esc(t("settings.synccheck.all_good")));
+      if (L.missing_n) parts.push(`<span title="${esc(idList(L.missing, L.missing_n))}">${esc(t("settings.synccheck.missing", { n: L.missing_n }))}</span>`
+        + (L.missing.length ? ` <button type="button" data-fill="${src}">${esc(t("settings.synccheck.fill"))}</button>` : ""));
+      if (L.local_only_n) parts.push(`<span title="${esc(t("settings.synccheck.local_only_hint") + "\n" + idList(L.local_only, L.local_only_n))}">${esc(t("settings.synccheck.local_only", { n: L.local_only_n }))}</span>`);
+      if (L.failed_n) parts.push(`<span title="${esc(idList(L.failed, L.failed_n))}">${esc(t("settings.synccheck.failed_n", { n: L.failed_n }))}</span>`);
+      if (L.filled) parts.push(`<span class="meta">${esc(t(L.filled.errors ? "settings.synccheck.filled_err" : "settings.synccheck.filled",
+        { when: shortTime(L.filled.at), n: L.filled.downloaded || 0, e: L.filled.errors || 0 }))}</span>`);
+    }
+    if (W) parts.push(`<span class="meta">${esc(W.status === "failed" ? t("settings.synccheck.weekly_failed", { when: shortTime(W.at) })
+      : t("settings.synccheck.weekly", { when: shortTime(W.at), n: W.fetched || 0 }))}</span>`);
+    rows.push(`<li><b>${esc(name)}</b> ${parts.join(" · ")}</li>`);
+  }
+  $("s-check-res").innerHTML = rows.join("");
+  $("s-check-st").textContent = busy.join(" · ");
+  $("s-check").disabled = busy.length > 0;
+  clearTimeout(checkPoll);
+  if (busy.length) checkPoll = setTimeout(loadCheck, 2000);
+  else if ($("s-check").dataset.wasBusy) loadFailed();          // 補下載 may have added failed rows
+  $("s-check").dataset.wasBusy = busy.length ? "1" : "";
+}
+$("s-check").onclick = async () => {
+  $("s-check").disabled = true;
+  try {
+    const r = await j(`${SYNC}/check`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+    toast(t(r.started.length ? "settings.synccheck.started" : "settings.synccheck.none_ready"));
+  } catch (e) { toast(t("settings.failed", { msg: e.message.slice(0, 80) })); }
+  loadCheck();
+};
+$("s-check-res").addEventListener("click", async (e) => {
+  const b = e.target.closest("[data-fill]");
+  if (!b) return;
+  b.disabled = true;
+  try {
+    await j(`${SYNC}/check/${b.dataset.fill}/fill`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+    toast(t("settings.synccheck.fill_started"));
+  } catch (err) { b.disabled = false; toast(t("settings.failed", { msg: err.message.slice(0, 80) })); }
+  loadCheck();
 });
 
 $("s-save").onclick = async () => {
