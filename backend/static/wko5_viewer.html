@@ -3139,13 +3139,13 @@ function cmClimbAt(climbs, x) {
 }
 // the sample indices with a GPS fix inside a km range, in order: one climb's stretch of the route
 function cmSegment(s, a, b) {
-  const out = [];
-  if (!s || !s.d || !s.lat || !s.lng || a == null || b == null) return out;
+  const idx = [];
+  if (!s || !s.d || !s.lat || !s.lng || a == null || b == null) return idx;
   for (let i = 0; i < s.d.length; i++) {
     const d = s.d[i];
-    if (d != null && d >= a && d <= b && s.lat[i] != null && s.lng[i] != null) out.push(i);
+    if (d != null && d >= a && d <= b && s.lat[i] != null && s.lng[i] != null) idx.push(i);
   }
-  return out;
+  return idx;
 }
 const cmRgba = (hex, a) => {
   const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || "").trim());
