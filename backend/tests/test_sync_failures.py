@@ -114,13 +114,18 @@ def test_coros_retries_stop_after_five_attempts_and_reset_makes_it_due(tmp_path)
     run(go())
 
 
-def test_coros_retries_stop_seven_days_after_the_first_failure(tmp_path):
+def _ago(days):
+    return datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days, minutes=1)
+
+
+def test_coros_retries_stop_after_seven_days_of_trying(tmp_path):
     async def go():
         s = await make_session(tmp_path)
         fake = FakeCoros([], {"OLD": None})
         await _login(s, fake)
         row = await FL.record_failure(s, 1, "coros", "OLD", "boom", 100, date(2026, 9, 1))
-        row.first_at = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=FL.MAX_AGE_DAYS, minutes=1)
+        await FL.record_failure(s, 1, "coros", "OLD", "boom")          # a 2nd attempt …
+        row.first_at = _ago(FL.MAX_AGE_DAYS)                           # … 7 days after the 1st
         await s.commit()
         await _sync(s, fake)
         assert fake.downloads == []
@@ -128,19 +133,89 @@ def test_coros_retries_stop_seven_days_after_the_first_failure(tmp_path):
     run(go())
 
 
-def test_coros_no_file_is_not_a_failure_and_is_not_asked_again(tmp_path):
+def test_one_attempt_then_a_week_without_syncs_is_still_retried(tmp_path):
+    """Review SP-362 #2: a failure, then 8 days away (a 百岳 trip, no sync) — 7 days means 7
+    days of trying, so the next sync still tries it."""
+    async def go():
+        s = await make_session(tmp_path)
+        fake = FakeCoros([], {"AWAY": build_run(START)})
+        await _login(s, fake)
+        row = await FL.record_failure(s, 1, "coros", "AWAY", "boom", 100, START.date())
+        row.first_at = row.last_at = _ago(8)
+        await s.commit()
+        assert FL.state(row) == "retrying"
+        ev = await _sync(s, fake)
+        assert fake.downloads == ["AWAY"] and ev[-1]["total_downloaded"] == 1 and await _rows(s) == []
+    run(go())
+
+
+def test_coros_no_file_needs_two_answers_and_is_then_not_asked_again(tmp_path):
+    """Review SP-362 #3: one answer without a fileUrl is an ordinary (retryable) failure; the
+    second makes it no_file, which the listing then skips."""
     async def go():
         s = await make_session(tmp_path)
         fake = FakeCoros([act("MAN", START)], {}, no_file={"MAN"})
         await _login(s, fake)
         ev = await _sync(s, fake)
+        assert any(e.get("status") == "error" and e.get("activity_id") == "MAN" for e in ev)
+        (row,) = await _rows(s)
+        assert row.kind == "failed" and row.attempts == 1 and FL.state(row) == "retrying"
+        ev = await _sync(s, fake)
         assert {"status": "no_file", "activity_id": "MAN", "date": "2026-09-01"} in ev
         assert ev[-1]["errors"] == [] and await _cursor(s) is not None
         (row,) = await _rows(s)
-        assert row.kind == "no_file" and row.attempts == 0 and FL.state(row) == "no_file"
-        ev = await _sync(s, fake)                            # listed again: no second download request
-        assert fake.downloads == ["MAN"]
+        assert row.kind == "no_file" and FL.state(row) == "no_file"
+        ev = await _sync(s, fake)                            # listed again: no third request
+        assert fake.downloads == ["MAN", "MAN"]
         assert any(e.get("reason") == "no_file" for e in ev)
+        # 「重試」 on a no_file row: asked again by id (the file may exist now)
+        await FL.reset(s, 1, row.id)
+        fake.no_file.clear()
+        fake.files["MAN"] = build_run(START)
+        fake.listed = []
+        ev = await _sync(s, fake)
+        assert ev[-1]["total_downloaded"] == 1 and await _rows(s) == []
+    run(go())
+
+
+def test_coros_an_import_failure_is_retried_by_id(tmp_path, monkeypatch):
+    async def go():
+        s = await make_session(tmp_path)
+        fake = FakeCoros([act("IMP", START)], {"IMP": build_run(START)})
+        await _login(s, fake)
+        real = coros_client._import_one_file
+
+        async def boom(*a, **k):
+            raise RuntimeError("disk full")
+        monkeypatch.setattr(coros_client, "_import_one_file", boom)
+        ev = await _sync(s, fake)
+        assert any("import_failed" in (e.get("error") or "") for e in ev) and await _cursor(s) is not None
+        (row,) = await _rows(s)
+        assert row.kind == "failed" and "import_failed" in row.last_error
+        monkeypatch.setattr(coros_client, "_import_one_file", real)
+        fake.listed = []                                     # not listed again: retried by id
+        ev = await _sync(s, fake)
+        assert ev[-1]["total_downloaded"] == 1 and await _rows(s) == []
+        assert fake.downloads == ["IMP", "IMP"]
+    run(go())
+
+
+def test_coros_retry_by_id_stores_no_training_load_and_the_listing_fills_it(tmp_path):
+    """Review SP-362 #6: the retry-by-id path has no list item (no trainingLoad): it never
+    writes one; the overlap listing fills it as for any imported activity."""
+    async def go():
+        s = await make_session(tmp_path)
+        fake = FakeCoros([act("TL", START)], {"TL": None})
+        await _login(s, fake)
+        await _sync(s, fake)
+        fake.files["TL"], fake.listed = build_run(START), []
+        await _sync(s, fake)
+        wf = (await s.execute(select(WorkoutFile).where(WorkoutFile.coros_activity_id == "TL"))).scalar_one()
+        assert wf.coros_training_load is None
+        fake.listed = [{**act("TL", START), "trainingLoad": 55}]
+        ev = await _sync(s, fake)
+        await s.refresh(wf)
+        assert wf.coros_training_load == 55 and ev[-1]["tl_filled"] == 1
     run(go())
 
 
@@ -216,6 +291,39 @@ def test_tp_a_failed_download_is_listed_the_cursor_moves_and_it_is_retried_by_id
         assert ev2[-1]["total_downloaded"] == 1 and ev2[-1]["errors"] == []
         assert [r.provider_id for r in await _rows(s)] == ["3"]
         assert not any("/workouts/3/" in c for c in fake2.calls)    # no_file: never asked again
+    run(go())
+
+
+def test_tp_no_file_is_checked_again_when_the_listing_returns_it(tmp_path):
+    """Review SP-362 #1: a TP workout without a device file yet (planned, not uploaded) that
+    gets its file later comes back in workouts/changed — it is downloaded then."""
+    async def go():
+        s = await make_session(tmp_path)
+        await _tp_state(s, datetime.utcnow() + timedelta(hours=2))
+        wo = [{"workoutId": 5, "workoutDay": "2026-09-02"}]
+        with http.use_transport(httpx.MockTransport(_tp({5: (200, {"workoutDeviceFileInfos": []})}, {}, wo))):
+            await collect(tp_client.sync_workouts(s, 1))
+        assert [r.kind for r in await _rows(s)] == ["no_file"]
+        fake = _tp({5: (200, dev(fid=5))}, {5: (200, gzip.compress(build_run(START)))}, wo)   # changed: file now
+        with http.use_transport(httpx.MockTransport(fake)):
+            ev = await collect(tp_client.sync_workouts(s, 1))
+        assert any("/workouts/changed" in c for c in fake.calls)
+        assert ev[-1]["total_downloaded"] == 1 and await _rows(s) == []
+    run(go())
+
+
+def test_tp_listing_skips_a_stopped_row(tmp_path):
+    async def go():
+        s = await make_session(tmp_path)
+        await _tp_state(s, datetime.utcnow() + timedelta(hours=2))
+        for _ in range(FL.MAX_ATTEMPTS):
+            await FL.record_failure(s, 1, "tp", 6, "HTTP 500")
+        fake = _tp({6: (200, dev(fid=6))}, {6: (200, gzip.compress(build_run(START)))},
+                   [{"workoutId": 6, "workoutDay": "2026-09-02"}])
+        with http.use_transport(httpx.MockTransport(fake)):
+            ev = await collect(tp_client.sync_workouts(s, 1))
+        assert {"status": "skipped", "workout_id": 6, "workout_date": "2026-09-02", "reason": "retry_stopped"} in ev
+        assert not any("/workouts/6/" in c for c in fake.calls)
     run(go())
 
 

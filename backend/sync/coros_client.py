@@ -726,10 +726,21 @@ async def _fetch_one(db: AsyncSession, athlete_id: int, token: str, base: str, u
     t_dl = _time.monotonic()           # download vs import seconds (sync/runner.SyncClock)
     try:
         fit_bytes = await _download_fit(token, base, user_id, act)
-    except CorosNoFile:
-        await _remember(db, run, FL.record_no_file(db, athlete_id, "coros", label_id, sport_type, act_date))
-        yield {"status": "no_file", "activity_id": label_id,
-               "date": act_date.isoformat() if act_date else None}
+    except CorosNoFile as e:
+        # the first answer without a file is an ordinary failure (a hiccup is retried); the
+        # second in a row makes it no_file (review SP-362 #3)
+        kind = {}
+
+        async def note():
+            kind["k"] = (await FL.record_no_file_answer(db, athlete_id, "coros", label_id, sport_type,
+                                                        act_date)).kind
+        await _remember(db, run, note())
+        if kind.get("k") == FL.NO_FILE:
+            yield {"status": "no_file", "activity_id": label_id,
+                   "date": act_date.isoformat() if act_date else None}
+        else:
+            run["errors"].append(f"{label_id}: {e}")
+            yield {"status": "error", "activity_id": label_id, "error": str(e)}
         return
     except Exception as e:
         log.warning("Coros FIT download failed %s: %s", label_id, e)
@@ -763,7 +774,10 @@ async def _fetch_one(db: AsyncSession, athlete_id: int, token: str, base: str, u
                 wf.coros_sport_type = int(sport_type)
             except (TypeError, ValueError):
                 pass
-            wf.coros_training_load = act_tl
+            # a retry by id has no list item (no trainingLoad): never write None over a value;
+            # the overlap listing fills it later like any imported activity's (review SP-362 #6)
+            if act_tl is not None:
+                wf.coros_training_load = act_tl
         if wf is None:
             # FIT file is corrupt/unreadable — store a stub so we don't
             # re-download it on the next sync (coros_activity_id dup check).

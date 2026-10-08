@@ -333,8 +333,8 @@ main > section.tab-off { display: none; }
       <div class="row"><span class="meta" id="s-rpe"></span>
         <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.rpe_load.help" title="課表的「負荷」也可以用感覺填：選 輕鬆／稍累／累／很累／極限（對到 Borg CR-10 的 2／4／5／7／10），再填分鐘數，TSS ＝ 係數 × RPE × 分鐘（Foster 的 session RPE）。預設係數 0.30 是推估；每次同步後用你手錶記錄的 RPE 和那次活動的實際 TSS 校正，資料少時向預設靠攏（權重＝n ÷（n＋10））。只用來排課填目標：總覽、PMC 的負荷一律用手錶記錄，不會用 RPE 修正。">?</button></div>
       <div id="s-failed-wrap" hidden><div class="row"><b data-i18n="settings.syncfail.title">下載失敗的活動</b>
-        <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.syncfail.help" title="同步時下載或匯入失敗的活動會記在這裡，之後的同步只重試這幾筆，不必重新列出所有活動。每筆最多自動重試 5 次或 7 天，之後停止，可以按「重試」再試。">?</button></div>
-        <ul class="failed" id="s-failed"></ul><p class="meta" id="s-failed-nofile" hidden></p></div>
+        <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.syncfail.help" title="同步時下載或匯入失敗的活動會記在這裡，之後的同步只重試這幾筆，不必重新列出所有活動。每筆最多自動重試 5 次或試滿 7 天，之後停止，可以按「重試」再試。沒有 FIT 檔的手動紀錄也列在這裡，之後有檔案了可以按「重試」。">?</button></div>
+        <ul class="failed" id="s-failed"></ul></div>
       <p class="meta" id="s-chart-note">「圖表資料來源」決定圖表、總覽和功率計算機讀哪一份資料；儲存後重新整理頁面就會改用新來源
         （圖表頁右上角的「資料來源」也可以直接切換）。第一次載入要讀完所有 FIT 檔，會比較久。
         想先看兩個來源的差異，可以用 <a href="/api/v1/static/compare.html">資料來源比對</a>。</p>
@@ -1145,17 +1145,16 @@ async function loadSources() {
   loadFailed();
 }
 
-// 下載失敗的活動 (sync/failures.py, SP-362): retried by id by the next syncs; 「重試」 after they stopped
+// 下載失敗的活動 (sync/failures.py, SP-362): retried by id by the next syncs; 「重試」 after they
+// stopped, and on a 沒有 FIT 檔 row (the file may exist now)
 async function loadFailed() {
   let d;
   try { d = await j(`${SYNC}/failed`); } catch (_) { $("s-failed-wrap").hidden = true; return; }
-  const items = d.items || [], bad = items.filter((x) => x.kind !== "no_file"), none = items.length - bad.length;
+  const items = d.items || [];
   $("s-failed-wrap").hidden = !items.length;
-  $("s-failed").innerHTML = bad.map((x) => `<li><span>${esc(x.date || "–")} ${esc(SRC_NAME[x.source] || x.source)}</span>
+  $("s-failed").innerHTML = items.map((x) => `<li><span>${esc(x.date || "–")} ${esc(SRC_NAME[x.source] || x.source)}</span>
     <span class="meta" title="${esc(x.last_error || "")}">${esc(t(`settings.syncfail.${x.state}`, { n: x.attempts }))}</span>
     <button type="button" data-retry="${x.id}">${esc(t("settings.syncfail.retry"))}</button></li>`).join("");
-  $("s-failed-nofile").hidden = !none;
-  $("s-failed-nofile").textContent = none ? t("settings.syncfail.no_file", { n: none }) : "";
 }
 $("s-failed").addEventListener("click", async (e) => {
   const b = e.target.closest("[data-retry]");

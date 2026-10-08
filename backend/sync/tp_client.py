@@ -855,11 +855,13 @@ async def sync_workouts(
                     }
                     continue
 
-                # on the failed list (SP-362): no FIT at all, or automatic retries are over
+                # on the failed list (SP-362) with automatic retries over: skipped. A no_file
+                # workout is checked again: workouts/changed returns only changed workouts, and a
+                # planned / not yet uploaded one may have its device file now (review #1)
                 prev = await FL.get(db, athlete_id, "tp", wo_id)
-                if prev is not None and not FL.auto_retry(prev):
+                if prev is not None and prev.kind == FL.FAILED and not FL.auto_retry(prev):
                     yield {"status": "skipped", "workout_id": wo_id, "workout_date": wo_day,
-                           "reason": "no_file" if prev.kind == FL.NO_FILE else "retry_stopped"}
+                           "reason": "retry_stopped"}
                     continue
                 handled.add(str(wo_id))
                 async for ev in _fetch_one(db, client, who, athlete_id, wo_id, wo_day, run):
