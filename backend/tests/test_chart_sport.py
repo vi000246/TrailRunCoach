@@ -78,7 +78,7 @@ vm.runInNewContext(process.argv[1] + "\nOUT = (" + process.argv[3] + ");", ctx);
 console.log(JSON.stringify(ctx.OUT));
 """
     r = subprocess.run([NODE, "-e", js, _block(), json.dumps(data), expr], capture_output=True, text=True,
-                       encoding="utf-8", timeout=30)
+                       encoding="utf-8", errors="replace", timeout=30)
     assert r.returncode == 0, r.stderr
     return json.loads(r.stdout)
 

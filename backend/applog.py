@@ -156,14 +156,45 @@ def mask_url(url: str, guess: bool = True) -> str:
     return out
 
 
+# ---- the home folder (SP-357) ---------------------------------------------------
+# The home folder (it holds the user's name) becomes "~", and the rest of that
+# path is written with forward slashes on every platform:
+# C:\Users\<name>\.wko5coach\fit\x.fit → ~/.wko5coach/fit/x.fit, the same line
+# a mac / Linux install logs, so one log reads (and one test checks) the same
+# everywhere. Only the path that starts at the home folder is rewritten: any
+# other backslash in the message (a regex, a path elsewhere) stays as it was.
+# On Windows the home is found in either spelling (C:\Users\<name>,
+# C:/Users/<name>, a JSON-escaped C:\\Users\\<name>) and in any case, as the
+# file system ignores case; it must end at a separator or a non-name character
+# (C:\Users\<name>2 is someone else's folder). A path segment stops at
+# whitespace, a quote or a character no file name holds.
+_SEP = "[" + re.escape(os.sep + (os.altsep or "")) + "]"
+_SEG = "[^\\s\"'<>|*?" + re.escape(os.sep + (os.altsep or "")) + "]*"
+
+
+def _home_pattern(home: str) -> re.Pattern:
+    head = (_SEP + "+").join(re.escape(p) for p in re.split(_SEP, home))
+    return re.compile(rf"{head}(?![\w.-])((?:{_SEP}+{_SEG})*)", re.IGNORECASE if os.name == "nt" else 0)
+
+
+_HOME_RE: dict[str, re.Pattern] = {}
+
+
+def _redact_home(s: str) -> str:
+    home = str(Path.home())
+    if len(home) <= 1:
+        return s
+    pat = _HOME_RE.get(home)
+    if pat is None:
+        pat = _HOME_RE[home] = _home_pattern(home)
+    return pat.sub(lambda m: "~" + re.sub(_SEP + "+", "/", m.group(1)), s)
+
+
 def redact(text: str) -> str:
     """`text` with secrets and personal identifiers blanked (***)."""
     if not text:
         return text
-    s = text
-    home = str(Path.home())
-    if len(home) > 1:
-        s = s.replace(home, "~")
+    s = _redact_home(text)
     s = _URL_QUERY.sub(r"\1?***", s)
     # share paths and secret-named parameters in any path (SP-232); no guessing
     # here: a file path in a traceback keeps its folders

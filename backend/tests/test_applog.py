@@ -3,6 +3,7 @@ timing / exceptions, step timing and the per-sync summary. Synthetic data,
 temp folders only; nothing personal may ever reach a log line."""
 import asyncio
 import json
+import os
 import re
 import logging
 from datetime import timedelta
@@ -55,8 +56,28 @@ def test_redact_keeps_what_debugging_needs():
 
 
 def test_redact_hides_the_home_folder():
+    # forward slashes on every platform (SP-357): the same line on Windows and mac / Linux
     p = str(Path.home() / ".wko5coach" / "fit" / "x.fit")
     assert applog.redact(f"Import failed for {p}") == "Import failed for ~/.wko5coach/fit/x.fit"
+    fwd = p.replace("\\", "/")
+    assert applog.redact(f'File "{fwd}", line 3') == 'File "~/.wko5coach/fit/x.fit", line 3'
+
+
+def test_redact_home_leaves_other_backslashes_and_folders_alone():
+    home = str(Path.home())
+    p = str(Path.home() / "a b" / "c.fit")      # a segment stops at a space: the name is gone all the same
+    out = applog.redact(rf"bad value at {p} (pattern \d+\s*km, D:\data\x.fit)")
+    assert home not in out and Path.home().name not in out.split("(")[0]
+    assert out.endswith(r"(pattern \d+\s*km, D:\data\x.fit)")
+    assert applog.redact(f"{home}2{os.sep}x") == f"{home}2{os.sep}x"   # someone else's folder
+
+
+@pytest.mark.skipif(os.sep != "\\", reason="Windows spellings of the home folder")
+def test_redact_finds_the_windows_home_in_any_spelling():
+    home = str(Path.home())
+    escaped = json.dumps(home + "\\.wko5coach\\x.fit")                      # "C:\\Users\\<name>\\..."
+    assert applog.redact(escaped) == '"~/.wko5coach/x.fit"'
+    assert applog.redact(home.upper() + "\\x.fit") == "~/x.fit"           # the file system ignores case
 
 
 def test_formatter_redacts_arguments_and_the_traceback():

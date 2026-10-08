@@ -147,7 +147,7 @@ def test_prepare_out_refuses_a_foreign_folder(tmp_path):
 
 # ---------------------------------------------------------------- the shim (node)
 def _node(script: str):
-    r = subprocess.run([NODE, "-e", script], capture_output=True, text=True, encoding="utf-8", timeout=60)
+    r = subprocess.run([NODE, "-e", script], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
     assert r.returncode == 0, r.stderr
     return json.loads(r.stdout)
 

@@ -212,7 +212,7 @@ def test_js_port_matches_the_endpoints(scenario, monkeypatch, tmp_path):
     (tmp_path / "c.json").write_text(json.dumps({"check": cases, "derive": DERIVE}, ensure_ascii=False), "utf-8")
     script = NODE_SCRIPT % {"shim": json.dumps(str(SHIM)), "data": json.dumps(str(tmp_path / "d.json")),
                             "cases": json.dumps(str(tmp_path / "c.json"))}
-    r = subprocess.run([NODE, "-e", script], capture_output=True, text=True, encoding="utf-8", timeout=120)
+    r = subprocess.run([NODE, "-e", script], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120)
     assert r.returncode == 0, r.stderr
     got = json.loads(r.stdout)
     assert len(got["check"]) == len(want_check) and len(got["derive"]) == len(want_derive)
