@@ -1486,7 +1486,7 @@ const RV_LVL = { good: "good", warn: "watch", bad: "bad", na: "na", info: "info"
 const rvI = (n) => window.DI ? DI(n) : "";
 const rvQ = (t) => t ? `<button type="button" class="qtip" aria-label="說明" data-tip="${esc(t)}">?</button>` : "";
 function drawReviewCards(card, res) {
-  // 使用功率 off: tiles marked `power` (the 刺激 TIS tile) are hidden, like the power-only charts
+  // 使用功率 off: tiles marked `power` (平均功率, 刺激 TIS) are hidden, like the power-only charts
   const C = res.cards.filter((c) => S.usePower !== false || !c.power);
   if (res.section === "summary" && !res._zoom) card.classList.add("rv-wide");
   const tags = C.filter((c) => c.kind === "tag"), chips = C.filter((c) => c.kind === "chip");

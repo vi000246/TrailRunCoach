@@ -83,6 +83,26 @@ def test_tis_tile_english():
     assert "How to read:" in c["tip"] and not any("一" <= ch <= "鿿" for ch in c["tip"])
 
 
+def test_avg_power_tile_is_a_power_tile_too():
+    # SP-81 follow-up (2026-10-07): 「使用功率」 off hides 平均功率 like 刺激 TIS — both carry `power`
+    ds = FakeDataset([_run(TODAY, minutes=52, power=200.0)], TODAY, settings=SETTINGS)
+    C = _cards(ds)
+    assert C["power"]["power"] is True and C["tis"]["power"] is True
+    # the other stat tiles are not power tiles: they stay when 使用功率 is off
+    for k in ("time", "hr"):
+        assert "power" not in C[k], k
+    hidden = [c["id"] for c in C.values() if c.get("power")]
+    assert sorted(hidden) == ["power", "tis"]
+
+
+def test_tis_tile_has_no_typical_value_comparison():
+    # SP-81 follow-up (2026-10-07, 「先不要」): no comparison with the 90-day typical value
+    ds = FakeDataset([_run(TODAY, minutes=52, power=200.0)], TODAY, settings=SETTINGS)
+    c = _cards(ds)["tis"]
+    for word in ("中位數", "典型", "平常值", "median", "typical"):
+        assert word not in c["value"] + c["sub"] + c["tip"], word
+
+
 def test_viewer_hides_power_tiles_when_power_is_off():
     html = (STATIC / "wko5_viewer.html").read_text(encoding="utf-8")
     body = html.split("function drawReviewCards(", 1)[1].split("\n}", 1)[0]
