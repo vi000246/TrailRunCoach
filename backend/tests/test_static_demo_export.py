@@ -221,7 +221,7 @@ def test_shim_schedule_overlay():
     r = _node(OVERLAY_SCRIPT % {"shim": json.dumps(str(SHIM))})
     assert r["moved"] == "2026-10-07"
     a = next(s for s in r["afterMove"]["sessions"] if s["uid"] == "a")
-    assert a["day"] == "2026-10-07" and a["edited"] is True
+    assert a["day"] == "2026-10-07" and a["edited"] is True and a["mark"] == {"state": "user"}     # SP-318 ✎
     assert r["afterMove"]["week_rows"][0]["planned_tss"] == pytest.approx(130)
     wr = r["afterEdit"]["week_rows"][0]
     assert wr["planned_hours"] == pytest.approx(2.0) and wr["planned_tss"] == pytest.approx(100)
