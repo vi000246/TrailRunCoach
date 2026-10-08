@@ -200,6 +200,9 @@ async def _import_one_file(
     from backend.sync import dedup
 
     fmt = path.suffix.lower().lstrip(".")
+    # a new file in a synced folder: the chart Dataset's files stamp rescans (SP-362)
+    from backend.engine.wko5expr.datasource import files_changed
+    files_changed()
 
     if fmt == "wko4":
         # wko4 is WKO5's proprietary binary format. We can read metadata (sport,

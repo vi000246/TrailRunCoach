@@ -885,6 +885,24 @@ def _after_sync(source: str, result: dict) -> Optional[asyncio.Task]:
 after_sync = _after_sync           # the hook sync/runner.py calls (tests replace it)
 
 
+def busy() -> bool:
+    """An automatic run (a sync's, a threshold / settings change's) is running or queued.
+    Safe from another thread (the warm-up thread polls it, SP-362)."""
+    return any(not t.done() for t in list(_TASKS))
+
+
+async def wait_idle(timeout: float = 600.0) -> bool:
+    """Wait for this event loop's automatic runs to end (at most `timeout` s): the lower
+    priority work after a sync (calibration, engine/calibrate.py) starts after the plan
+    (SP-362). True when idle."""
+    loop, me = asyncio.get_running_loop(), asyncio.current_task()
+    pending = [t for t in list(_TASKS) if not t.done() and t is not me and t.get_loop() is loop]
+    if not pending:
+        return True
+    _done, left = await asyncio.wait(pending, timeout=timeout)
+    return not left
+
+
 def _after_thresholds() -> None:
     """api/plan.py calls this after a threshold edit (apply-cp, the plan page):
     a background run that sees the new CP (cp_of vs state["cp"]) re-zones the

@@ -73,6 +73,39 @@ the nights too (a two-day trip can hold only a few hours of walking).
 The dataset is the chart pages' shared instance (`backend/api/wko5views.py` `_dataset()`), so the
 engine config / parity mode is the same everywhere.
 
+### Caches, single flight and the 課表 timing (SP-362, 2026-10-08)
+
+- **Single flight.** The Status (`_status`, `backend/api/overview.py:45`; 9–13 s cold on the NAS)
+  and the stored-plan inputs (`_compute_inputs`, `backend/api/plan_sessions.py:50`; 3–4 s) keep
+  their keyed caches, and a cache miss now runs **one** computation per key
+  (`SingleFlight.do`, `backend/singleflight.py:33`; `backend/api/overview.py:87`,
+  `backend/api/plan_sessions.py:93`): the calendar, the suggestion calls, the warm-up thread and an
+  automatic plan run asking for the same key wait for that one result. An exception reaches every
+  waiter and is not cached (the next call computes again); a same-thread re-entry runs inline.
+  The callers are sync functions in the thread pool or the warm-up thread (never the event loop).
+- **Warm-up order** (`warm_up`, `backend/api/wko5views.py:293`; at start-up and after a sync with
+  new files): Dataset → Status → plan inputs; that thread then ends (so a warm-up asked for
+  meanwhile is not dropped) and a low-priority thread (`_low_priority`,
+  `backend/api/wko5views.py:254`) waits until an automatic plan run has ended
+  (`plan_auto.busy`, `backend/engine/plan_auto.py:868`), re-reads the Dataset, and runs the
+  never-fitted calibration and the activity auto-classification; a warm-up during that wait
+  makes it run once more. The inputs' flight computes exactly its caller's key
+  (`_build_inputs`, `backend/api/plan_sessions.py:95`). After a sync the runner starts the warm-up before the automatic
+  plan run and the calibration (which waits for the plan run, `backend/engine/calibrate.py:348`);
+  see wko5-coros-sync.spec.md.
+- **Files stamp.** `_dataset()` no longer scans the FIT folder on every call: the scan is kept
+  `FILES_STAMP_TTL_S` = 5 s while the source folder and its year folders keep their mtimes, and
+  imports / purges drop it (`files_changed`, `backend/engine/wko5expr/datasource.py:152-182`).
+- **One `/suggestions` per page load.** The floating box and the 課表's 排入測試 ▸ share one GET
+  (`AppSuggestions.load(fresh)`, `backend/static/suggestions.js:203`; `sugCount`,
+  `backend/static/schedule.html:2840`); a later reload or 排入 asks again.
+- **Calendar timing.** `GET /plan/calendar` (`backend/api/plan_sessions.py:2561`) logs one line per
+  request to the app log (`applog.phases`, `backend/applog.py:321`):
+  `calendar took 4.2 s days=42 | inputs …, lock_wait …, reconcile …, view …, extras …,
+  suggestions …, other …` — WARNING from 3 s. `sessions()` adds its phases (inputs, the writer
+  lock wait, reconcile / match / snapshot) through a context variable (`_TIMING` / `_took`,
+  `backend/api/plan_sessions.py:420`), so the week view's own response is unchanged.
+
 ## Categories
 
 `category()` (`backend/engine/overview.py:72`): 路跑 road (run, not trail; incl. treadmill),
@@ -1876,3 +1909,4 @@ deleted / superseded) are returned as reconcile `changes` (`backend/engine/recon
 | 2026-10-08 | fix/sp358-359-schedule-delete-swap | SP-358 | 刪除／移動課表沒同步到手錶: a drag / edit / delete / 不排課日期 / 休息日 only wrote the store, the watch changed only at the next manual push or after a sync with a new activity, and a range push never touched a pushed session that had moved out of the range — so the old day kept its workout. Now these endpoints sync the affected sessions at once (`_sync_watch` → `plan_auto.push_window(only=…)`, response `coros`, page note / warning, a `failed` change-log row on error); range pushes and the automatic window also re-send copies whose session moved out (`copies_in`); a COROS calendar delete is verified (`_remove_remote`); removal failures count as push failures |
 | 2026-10-08 | fix/sp358-359-schedule-delete-swap | SP-359 | 交換課表: context menu 交換… then click the other session (Esc cancels), or drop a session onto another; `POST /sessions/swap` → `plan_store.swap` trades the two days in one commit as the user's own moves (like a drag; reconcile never undoes them), done / past / blocked / notice refused, B2B follows, hard-day spacing warnings, the watch synced on both days (SP-358); legend 「⇄ 交換」 with a ? tip; zh-TW + en |
 | 2026-10-08 | fix/sp358-359-schedule-delete-swap | SP-358 review | An edit syncs only the sessions it touched (the stale / blocked / missed clean-up in `push_window(only=…)` limited to them; other copies wait for the run / manual push and never show as 失敗). A COROS calendar delete still listed after a 1.5 s pause is a reminder (`check_day` / `check_days`, 「…可能還在，請到 COROS App 確認」, app log), not a failure, no retry. Fixed the 課表 chip class glued as `st-donecp-green` (done chips lost the ✓ and compliance tint) |
+| 2026-10-08 | perf/sp362-batch1 | SP-362 | 課表頁載入效能第一批: single flight for `_status` / `_compute_inputs` (one computation per key, exceptions to every waiter, not cached; `backend/singleflight.py`); warm-up order Dataset → Status → plan inputs → (after plan_auto) calibration / auto-classification, plan inputs warmed at start-up too; the FIT-folder stamp kept 5 s while the folders keep their mtimes (`files_changed` on import / purge); one `/suggestions` GET per 課表 page load (shared by the floating box and 排入測試 ▸); `GET /plan/calendar` logs its phases (inputs, lock_wait, reconcile, view, extras, suggestions) to the app log (`applog.phases`) |
