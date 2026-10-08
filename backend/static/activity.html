@@ -641,6 +641,8 @@ const withSurface = (tags, p) => [...(tags || []).filter((t) => !isSurfaceTag(t)
 // 推估 threshold and the 路況 still 未標 → 「要標成濕路嗎？」 with a one-click 「標成濕」. Only a
 // hint: nothing is marked until the button is pressed; no hint without coordinates / weather,
 // and only on 越野跑 / 登山健行 (a.rain_kind: activity_tags.rain_kind; owner 2026-10-07).
+// the user types that make any activity a mountain day (server: activity_tags._MOUNTAIN_TYPES)
+const MOUNTAIN_TYPES = ["hike", "baiyue_group"];
 const rainHint = (a) => a.rain_kind && a.rain_mm != null && S.rainHintMm != null && a.rain_mm >= S.rainHintMm && !surfaceOf(a) ? a.rain_mm : null;
 const badge = (manual, why) => manual ? `<span class="badge man" title="${esc(T("manual_tip"))}">${esc(T("manual"))}</span>`
   : `<span class="badge" title="${esc(why || T("auto_tip"))}">${esc(T("auto"))}</span>`;
@@ -769,7 +771,11 @@ async function saveFields(a, patch) {
     } else {
       // an excluded file has no dataset index: edited by key
       await send(`${API}/activities`, "PATCH", { items: [{ key: a.key, file: a.file }], ...patch });
-      if ("activity_type" in patch) a.user_type = patch.activity_type;
+      if ("activity_type" in patch) {
+        a.user_type = patch.activity_type;
+        // no single-activity answer here: the rain hint's kind by the server's rule (rain_kind_excluded)
+        a.rain_kind = MOUNTAIN_TYPES.includes(patch.activity_type) || !!a.rain_kind_auto;
+      }
       if ("effort" in patch) a.user_effort = patch.effort;
       for (const k of ["note", "name", "tags"]) if (k in patch) a[k] = k === "name" ? (patch.name || "").trim() || null : patch[k];
       if ("poles" in patch) a.tags = withPoles(a.tags, patch.poles);

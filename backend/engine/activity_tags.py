@@ -345,13 +345,16 @@ def rain_kind(w, user: Optional[dict]) -> bool:
     return SM.kind_of(w, user) in SM.TRAIL_KINDS
 
 
-def rain_kind_excluded(sport_type: Optional[str], user: Optional[dict]) -> bool:
+def rain_kind_excluded(sport_type: Optional[str], user: Optional[dict], trail: bool = False) -> bool:
     """rain_kind of an excluded file (no dataset workout): the user's 爬山 / 百岳跟團 mark, else its
-    sport type (trail running / hiking / mountaineering)."""
+    sport type (trail running / hiking / mountaineering), else a run whose trail classification
+    says trail (`trail`: the 地形 the list shows, the DB classification with its override — what
+    classify.is_trail reads for a dataset run)."""
     from backend.engine import sport_map as SM
     if user_type(user) in _MOUNTAIN_TYPES:
         return True
-    return SM.WKO5.get((sport_type or "").lower()) in ("trail", "hike")
+    kind = SM.WKO5.get((sport_type or "").lower())
+    return kind in ("trail", "hike") or (bool(trail) and kind == "road")
 
 
 def rain_hint(rain_mm: Optional[float], surface: Optional[str], trail: bool) -> Optional[float]:
