@@ -2918,16 +2918,32 @@ async function setRest(day, on) {
 }
 // 排入測試 ▸: the floating box's test suggestions (CP / AeT / zone retest) for this day, each
 // with its templates (推薦 first); a day the suggestion's rules don't allow is greyed with why
-async function sugCount() {
+// SP-362: the page's first call shares the floating box's GET (suggestions.js AppSuggestions.load:
+// one /suggestions per page load); later calls (a reload after an edit, 排入) ask again
+let sugAsked = false;
+const sugBox = () => window.AppSuggestions ? Promise.resolve(window.AppSuggestions)
+  : !document.querySelector('script[src$="/suggestions.js"]') ? Promise.resolve(null) : new Promise((ok) => {
+  addEventListener("suggestions:ready", () => ok(window.AppSuggestions), { once: true });
+  setTimeout(() => ok(window.AppSuggestions || null), 3000);
+});
+async function sugCount(fresh) {
+  const again = fresh === true || sugAsked;
+  sugAsked = true;
+  let rows = null;
   try {
-    const r = await fetch(`${PAPI}/suggestions`, { cache: "no-store" });
-    CTX.sug = r.ok ? ((await r.json()).suggestions || []).filter((x) => x.type === "test" || x.type === "zone_test") : [];
-  } catch (_) { CTX.sug = []; }
+    const box = await sugBox();
+    if (box && box.load) rows = await box.load(again);
+    else {
+      const r = await fetch(`${PAPI}/suggestions`, { cache: "no-store" });
+      rows = r.ok ? (await r.json()).suggestions || [] : null;
+    }
+  } catch (_) { rows = null; }
+  CTX.sug = (rows || []).filter((x) => x.type === "test" || x.type === "zone_test");
   CTX.tests = CTX.sug.length;
 }
 const sugFits = (day) => (CTX.sug || []).some((x) => [...(x.options || []), ...(x.tests || []).flatMap((t) => t.options || [])]
   .some((o) => o.day === day));
-addEventListener("suggestions:changed", () => sugCount());
+addEventListener("suggestions:changed", () => sugCount(true));
 function tpDialog() {
   let d = $("tp");
   if (d) return d;

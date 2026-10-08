@@ -186,35 +186,40 @@ async def stream(db: AsyncSession, source: str, athlete_id: int = 1,
             await db.commit()
         except Exception as e:
             log.warning("could not store %s sync result: %s", source, type(e).__name__)
-        # 自動調整課表 (engine/plan_auto.py): ≥ 1 new activity -> reconcile, adapt and
-        # push in a background task with its own DB session; it never raises here
-        try:
-            from backend.engine import plan_auto
-            plan_auto.after_sync(source, result)
-        except Exception as e:           # noqa: BLE001 — the sync result stands
-            log.warning("auto plan trigger failed: %s", type(e).__name__)
-        # the athlete's time zone from the newest FIT (engine/localtime.py)
+        # after the run, in priority order (SP-362): what the pages wait for first, then
+        # the automatic plan, then the per-athlete calibration (lowest)
+        # the athlete's time zone from the newest FIT (engine/localtime.py): before the
+        # Dataset is rebuilt, which dates the activities with it
         if int(result.get("downloaded") or 0) > 0:
             try:
                 from backend.engine import localtime
                 await localtime.refresh_from_fits(db, athlete_id)
             except Exception as e:       # noqa: BLE001
                 log.warning("time zone detection failed: %s", type(e).__name__)
-        # 每人校正 (engine/calibrate.py): the same trigger re-fits the per-athlete
-        # parameters in the background
-        try:
-            from backend.engine import calibrate
-            calibrate.after_sync(source, result, athlete_id)
-        except Exception as e:           # noqa: BLE001
-            log.warning("calibration trigger failed: %s", type(e).__name__)
-        # new FIT files: rebuild the chart Dataset now (incremental: only the
-        # new files are parsed), not on the next page load
+        # ① new FIT files: rebuild the chart Dataset now (incremental: only the new files
+        # are parsed), then the overview status and the plan inputs, not on the next page
+        # load; its thread does the automatic classification last (api/wko5views.warm_up)
         if int(result.get("downloaded") or 0) > 0:
             try:
                 from backend.api import wko5views
                 wko5views.warm_up(f"sync-{source}")
             except Exception as e:       # noqa: BLE001
                 log.warning("dataset warm-up after sync failed: %s", type(e).__name__)
+        # ② 自動調整課表 (engine/plan_auto.py): ≥ 1 new activity -> reconcile, adapt and
+        # push in a background task with its own DB session; it never raises here. Its
+        # dataset / status / inputs join the warm-up's computations (single flight)
+        try:
+            from backend.engine import plan_auto
+            plan_auto.after_sync(source, result)
+        except Exception as e:           # noqa: BLE001 — the sync result stands
+            log.warning("auto plan trigger failed: %s", type(e).__name__)
+        # ③ 每人校正 (engine/calibrate.py): the same trigger re-fits the per-athlete
+        # parameters in the background, after ② has ended
+        try:
+            from backend.engine import calibrate
+            calibrate.after_sync(source, result, athlete_id)
+        except Exception as e:           # noqa: BLE001
+            log.warning("calibration trigger failed: %s", type(e).__name__)
         clock.secs["after"] += time.monotonic() - t_after
         try:
             _log_run(source, trigger, result, clock)

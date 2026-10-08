@@ -318,6 +318,22 @@ def timed(what: str, slow_s: float = SLOW_STEP_S, logger: Optional[logging.Logge
     took(what, t0, slow_s, logger, **fields)
 
 
+def phases(what: str, t0: float, parts: dict, slow_s: float = SLOW_REQUEST_S,
+           logger: Optional[logging.Logger] = None, **fields) -> float:
+    """One line with where a request's time went (SP-362: the 課表 calendar):
+    「calendar took 4.2 s | inputs 2.9 s, lock_wait 0.0 s, …, other 0.3 s」. `parts` =
+    {phase: seconds}; `other` = the rest of the time since `t0`. INFO, WARNING from `slow_s`
+    on (every call is logged, so the production timing can be read from app.log).
+    Returns the total seconds."""
+    total = time.perf_counter() - t0
+    rest = total - sum(parts.values())
+    steps = ", ".join(f"{k} {v:.1f} s" for k, v in [*parts.items(), ("other", rest)] if v >= 0.05)
+    lg = logger or log
+    lg.log(logging.WARNING if total >= slow_s else logging.INFO, "%s%s took %.1f s%s",
+           "slow: " if total >= slow_s else "", what, total, _fields(fields) + (f" | {steps}" if steps else ""))
+    return total
+
+
 # ---------------------------------------------------------------------------
 # requests
 # ---------------------------------------------------------------------------

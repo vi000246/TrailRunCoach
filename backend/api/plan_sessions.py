@@ -16,9 +16,11 @@ from __future__ import annotations
 
 from backend import tenancy as _tenancy
 import asyncio
+import contextvars
 import datetime as dt
 import functools
 import threading
+import time
 from typing import Optional
 
 from backend.i18n.pages import render_page
@@ -28,6 +30,7 @@ from starlette.concurrency import run_in_threadpool
 
 from backend.db.current import current_athlete_id
 from backend.db.database import get_db
+from backend.singleflight import SingleFlight
 from backend.engine import plan_match as PM
 from backend.engine import plan_store as PS
 from backend.engine import projection as P
@@ -41,18 +44,20 @@ router = APIRouter(prefix="/api/v1/overview/plan", tags=["overview"])
 SCOPES = ("day", "week", "phase")
 _lock = threading.Lock()
 _cache: dict = {}
+_flight = SingleFlight()        # one _compute_inputs per key at a time (SP-362)
 
 
 def _compute_inputs(blackouts: Optional[list] = None) -> dict:
     """week_plan() for this week, the projection to the horizon, activities
     of the last few weeks (for done / missed) and the current phase.
-    `blackouts`: a candidate 不排課日期 list (preview before saving); None = the stored one."""
-    from backend.api.overview import _dataset, _plan_stamp, _status
+    `blackouts`: a candidate 不排課日期 list (preview before saving); None = the stored one.
+    Single flight (SP-362): on a cache miss, concurrent callers of the same key wait for one
+    computation (_build_inputs)."""
+    from backend.api.overview import _dataset, _plan_stamp
     from backend.engine import b2b as B2B
     from backend.engine import blackouts as BL
     from backend.engine import overview as O
     from backend.engine import plan_prefs as PP
-    from backend.engine import planning
     ds = _dataset()
     today = O.day_to_date(ds.today)
     prefs = PP.load()
@@ -80,6 +85,21 @@ def _compute_inputs(blackouts: Optional[list] = None) -> dict:
            PSP.stored(), HRP.stamp(), TECH.user_stamp(), rpe_on, _recorded_stamp(recorded), AP.z3_rule_stamp(),
            EX.stamp())
     with _lock:
+        hit = _cache.get(key)
+    if hit is not None:
+        return hit
+    return _flight.do(key, functools.partial(_build_inputs, key, ds, today, prefs, bos, acc, auto_on, rpe_on,
+                                             recorded))
+
+
+def _build_inputs(key: tuple, ds, today: dt.date, prefs, bos, acc, auto_on: bool, rpe_on: bool,
+                  recorded) -> dict:
+    """One key's computation (the single flight's leader, SP-362): from exactly the inputs the
+    key was built from, stored under that key, so every waiter gets its own key's result."""
+    from backend.api.overview import _status
+    from backend.engine import overview as O
+    from backend.engine import planning
+    with _lock:                                  # a flight that just ended stored it
         hit = _cache.get(key)
     if hit is not None:
         return hit
@@ -407,10 +427,27 @@ def _meta(inp: dict) -> dict:
                       for w in inp["weeks"]]}
 
 
+# where a 課表 calendar request's time goes (SP-362; applog.phases): {phase: seconds} while
+# GET /calendar runs, None otherwise. sessions() adds its own phases to it.
+_TIMING: contextvars.ContextVar[Optional[dict]] = contextvars.ContextVar("plan_calendar_timing", default=None)
+
+
+def _took(phase: str, t0: float) -> float:
+    """Add the time since `t0` to `phase` of the running calendar timing; a new t0."""
+    now = time.perf_counter()
+    tm = _TIMING.get()
+    if tm is not None:
+        tm[phase] = tm.get(phase, 0.0) + (now - t0)
+    return now
+
+
 @router.get("/sessions")
 async def sessions(start: Optional[str] = None, end: Optional[str] = None, db: AsyncSession = Depends(get_db)):
+    t = time.perf_counter()
     inp = await _inputs(db)
+    t = _took("inputs", t)
     async with _wlock():
+        t = _took("lock_wait", t)
         await _ensure(db, inp)
         every = await PS.load(db)
         # a run synced since the last reconcile shows on its session right away
@@ -421,6 +458,7 @@ async def sessions(start: Optional[str] = None, end: Optional[str] = None, db: A
         # 每週課表存檔 (engine/plan_history.py, SP-71): this week's snapshot / last week's result, when due
         from backend.engine import plan_history as PH
         await PH.record_safe(db, inp, every)
+    t = _took("reconcile", t)
     ss = [s for s in every if not (start or end) or (s.get("day") and (not start or s["day"] >= start)
                                                      and (not end or s["day"] <= end))]
     today = _today(inp)
@@ -2645,10 +2683,31 @@ async def calendar(start: str, end: str, db: AsyncSession = Depends(get_db)):
     if (b - a).days > MAX_CAL_DAYS:
         raise HTTPException(400, f"at most {MAX_CAL_DAYS} days")
     start, end = a.isoformat(), b.isoformat()
+    # per-phase timing in app.log (SP-362): inputs, lock_wait, reconcile, view (sessions()),
+    # extras, suggestions; applog.phases when the request ends
+    tm: dict = {}
+    tok = _TIMING.set(tm)
+    t0 = time.perf_counter()
+    try:
+        return await _calendar(start, end, db, tm, t0)
+    finally:
+        _TIMING.reset(tok)
+        from backend import applog
+        applog.phases("calendar", t0, tm, days=(b - a).days + 1)
+
+
+async def _calendar(start: str, end: str, db: AsyncSession, tm: dict, t0: float) -> dict:
     body = await sessions(start=None, end=None, db=db)      # reconciles on first visit, like the week view
+    # sessions()'s own phases are in tm already: the rest of it is building the view
+    t = time.perf_counter()
+    tm["view"] = max(0.0, (t - t0) - sum(tm.values()))
     every = body["sessions"]
     inp = await _inputs()
+    t = _took("inputs", t)
     extras = await run_in_threadpool(_range_extras, start, end)
+    t = _took("extras", t)
+    sug = await _suggestions(db, inp)
+    _took("suggestions", t)
     tph = float(((inp["cur"].get("target") or {}).get("tss_per_hour")) or 50.0)
     rates = tss_rates(extras.get("tph"), every, tph)
     from backend.engine import compliance as C
@@ -2665,7 +2724,7 @@ async def calendar(start: str, end: str, db: AsyncSession = Depends(get_db)):
             "kinds": PS.KINDS, "default_titles": PS.DEFAULT_TITLES, "family_titles": PS.FAMILY_TITLES,
             "prefs": inp.get("prefs"), "goal_climb_per_km": extras.get("goal_climb_per_km"),
             "plan_notes": _plan_notes(inp, start, end),
-            "test_suggestions": await _suggestions(db, inp),
+            "test_suggestions": sug,
             "test_templates": _test_templates(inp["thresholds"] or {}, None),
             # 睡在高處的紀錄 (SP-259, api/altitude_nights.py) of the range: a small mark on the day
             "high_nights": await _high_nights(db, start, end),

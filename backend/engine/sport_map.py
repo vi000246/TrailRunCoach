@@ -68,6 +68,19 @@ FILTER_KINDS: dict[str, str] = {
     "walk": APP_TYPES["walk"], "other": APP_TYPES["other"],
 }
 RUN_TYPES = ("road", "trail")
+# the filter kinds whose single-activity charts are the trail ones (SP-218): 越野跑, 登山健行, 百岳登山
+TRAIL_KINDS = ("trail", "hike", BAIYUE)
+
+
+def chart_sport(kind: Optional[str]) -> Optional[str]:
+    """Which charts of 單次活動判讀 an activity of this filter kind shows (SP-218, owner
+    2026-10-08): the views' `"sports"` tag (primary_sport.SPORTS) is read against the
+    activity itself, not the athlete's 主要訓練項目 — a trail run, hike or 百岳 day is
+    "trail", a road run "road"; any other kind is itself (no trail / road chart applies).
+    None for an unknown kind."""
+    if not kind:
+        return None
+    return "trail" if kind in TRAIL_KINDS else kind
 
 # ---------------------------------------------------------------------------
 # the mapping table: platform -> platform code -> app type

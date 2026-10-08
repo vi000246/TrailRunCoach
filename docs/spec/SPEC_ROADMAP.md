@@ -8,15 +8,15 @@
 
 | Module | Spec | Domain Layer | Description | Sub-modules |
 |--------|------|--------------|-------------|-------------|
-| wko5-engine | [wko5-engine.spec.md](./wko5-engine.spec.md) | Core Domain | 直接讀 WKO5 二進位檔、逐位元驗證的指標演算法、WKO5 表達式引擎、parity/自有算式雙模式、核准制資料校正、自訂圖表；圖表頁：日/週/月/季/年切換、render cache、放大與 &chart= 連結、Leaflet 路線地圖與同步 hover | — |
-| coros-sync | [wko5-coros-sync.spec.md](./wko5-coros-sync.spec.md) | Supporting | COROS / TrainingPeaks 同步：每來源 FIT 資料夾、增量 cursor、跨來源去重、排程與開站自動同步、資料夾掃描、同步設定（含圖表資料來源、路線圖預設） | — |
-| overview | [overview.spec.md](./overview.spec.md) | Core Domain | 首頁「總覽」：全部運動合計的訓練狀況、週/月/年紀錄、整合 PMC；可編輯的儲存課表（reconcile、多週預估），可依日/週/周期推送到 COROS | — |
-| racepower | [racepower.spec.md](./racepower.spec.md) | Core Domain | 賽事功率：SuperPower 計算機移植到自己的活動資料，含越野／百岳模型與賽日天氣 | — |
+| wko5-engine | [wko5-engine.spec.md](./wko5-engine.spec.md) | Core Domain | 直接讀 WKO5 二進位檔、逐位元驗證的指標演算法、WKO5 表達式引擎、parity/自有算式雙模式、核准制資料校正、自訂圖表；圖表頁：日/週/月/季/年切換、render cache（程式內容簽章、依 byte 設上限）、逐格點門檻估算快取、逐筆 TIS 存磁碟、放大與 &chart= 連結、Leaflet 路線地圖與同步 hover | — |
+| coros-sync | [wko5-coros-sync.spec.md](./wko5-coros-sync.spec.md) | Supporting | COROS / TrainingPeaks 同步：每來源 FIT 資料夾、增量 cursor、失敗清單與依 id 重試、跨來源去重、排程與開站自動同步、同步計時 log、資料夾掃描、同步設定（含圖表資料來源、路線圖預設） | — |
+| overview | [overview.spec.md](./overview.spec.md) | Core Domain | 首頁「總覽」：全部運動合計的訓練狀況、週/月/年紀錄、整合 PMC；可編輯的儲存課表（reconcile、多週預估、交換課表），可依日/週/周期推送到 COROS；給 AI agent 的唯讀 Debug API | — |
+| racepower | [racepower.spec.md](./racepower.spec.md) | Core Domain | 賽事功率：SuperPower 計算機移植到自己的活動資料，含越野／百岳模型、賽日天氣（雨、風寒與失溫、夜間段）、區間條、乾濕路技術係數、匯出至課表 | — |
 | wko5-chart-units | [wko5-chart-units.spec.md](./wko5-chart-units.spec.md) | Supporting | 圖表單位登錄表、公制顯示、WKO5 圖表設計修正（views/wko5_fixes.json）、週期切換後的標題/圖例/分桶軸顯示 | — |
-| workout-review | [workout-review.spec.md](./workout-review.spec.md) | Core Domain | 單次活動判讀：依課表類型自動判讀（飄移、間歇、爬坡、耐久、跑姿參考）、8–12 週自身基準、飄移連續次數與 CP 測試回饋進度決策 | — |
+| workout-review | [workout-review.spec.md](./workout-review.spec.md) | Core Domain | 單次活動判讀：依課表類型自動判讀（飄移、間歇、爬坡、耐久、跑姿參考）、8–12 週自身基準、每人間歇校正、爬坡與地形分頁（地圖＋海拔剖面同步）、飄移連續次數與 CP 測試回饋進度決策 | — |
 | plan-auto | [plan-auto.spec.md](./plan-auto.spec.md) | Core Domain | 自動調整課表：同步後比對完成／未完成、依規則調整本週、重排後續週並推送 COROS；強度階梯、Zone 3／Zone 5 關卡（含 A 賽後重新打底）、AeT 測試、傷停與生病回歸、CP 變動重推 | — |
-| workouts | [workouts.spec.md](./workouts.spec.md) | Supporting | 單次活動中繼資料：地形分類、活動類型／努力程度／名稱／標籤／傷痛標記（自動值＋使用者覆寫）、壞檔排除、活動編輯頁 | — |
-| route-progress | [route-progress.spec.md](./route-progress.spec.md) | Supporting | 自動偵測重複路段與路線（類 Strava segments），逐次比較時間、VAM、心率、功率與天氣 | — |
+| workouts | [workouts.spec.md](./workouts.spec.md) | Supporting | 單次活動中繼資料：地形分類、活動類型／努力程度／名稱／標籤／傷痛標記（自動值＋使用者覆寫）、登山杖、路況與下雨提示、COROS 跑後自評、壞檔排除、活動編輯頁 | — |
+| route-progress | [route-progress.spec.md](./route-progress.spec.md) | Supporting | 自動偵測重複路段與路線（類 Strava segments），自動命名（最近的百岳），逐次比較時間、VAM、心率、功率與天氣 | — |
 
 ## Loading Guide
 
@@ -30,6 +30,7 @@
 
 | Date | Module | Feature SRS | One-line Summary |
 |------|--------|-------------|-----------------|
+| 2026-10-08 | 全部 9 個模組 | — | code-sync（Obsidian tickets）：prp-spec Phase 1.5，逐模組對 code 與 Obsidian 的單（commit 帶的單號＋提到模組檔名的開著的單）；錨點全面重新核對（overview 510、workout-review 276、wko5-engine 139 處等），合併 main 的 SP-362／SP-371／SP-218 後再依 diff 平移並逐字比對；各 spec 新增 Decisions Log（使用者拍板的取捨）與 Open Questions（決定了但還沒做、還開著的單）；單上要求與 code 不符的不寫進 spec，另行回報 |
 | 2026-10-08 | plan-auto | — | code-sync：補 SP-117 生病、SP-116 A 賽後重新打底、SP-98 回量期、SP-110 疲勞保險、SP-66 單次長度上限、SP-71 每週課表存檔、SP-266 心率可疑的飄移只當參考；Known limits 新增設定變更不重排、LTHR 先驗可能被當實測；11 個錨點重指 |
 | 2026-10-04 | 全部 12 個模組 | — | code-sync：依 09-30～10-03 約 700 個 commit 刷新所有 module spec（錨點重指、補 Domain Model、新增端點與行為）；5 份 5 月的 SRS 由 `docs/spec/` 移至 `docs/srs/completed/`；5 月的 PRD／plan／SRS 全部標 CANCELED（React SPA 移除） |
 | 2026-09-30 | workout-review | — | code-sync 建立：單次活動判讀卡（課表類型、Pa:HR 飄移、努力段、爬坡、耐久、跑姿）、單次活動判讀 view、飄移連續次數與 CP 測試回饋 status／本週課表 |

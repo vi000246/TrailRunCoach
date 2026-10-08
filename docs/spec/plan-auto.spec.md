@@ -85,13 +85,13 @@ Other entry points:
 - **CP change**: `api/plan.py` calls `plan_auto.after_thresholds()` after a threshold edit; that
   run (trigger `cp_change`) also starts when the stamp is unchanged (see 「CP change」 below).
 - **Settings**: `api/calib.py` calls `plan_auto._after_settings()` (trigger `settings`,
-  `backend/engine/plan_auto.py:897`) after a 進階設定 value the plan reads changed (the Zone 3
+  `backend/engine/plan_auto.py:915`) after a 進階設定 value the plan reads changed (the Zone 3
   unlock rule, SP-295). It goes through the same stamp check without `force` (see Known limits).
 - **Week snapshot** (SP-71): the end of `_run` records the week in `plan_week_snapshots`
   (`plan_history.record_safe`, `backend/engine/plan_auto.py:761-763`; `PlanWeekSnapshot`,
   `backend/db/models.py:224`), so a sync alone records it with
   no page opened; the 課表 page reads them through `GET /api/v1/overview/plan/history`
-  (`backend/api/plan_sessions.py:2751`).
+  (`backend/api/plan_sessions.py:2810`).
 - **Done / missed matching** (reconcile rule 1) is `backend/engine/plan_match.py`: same day + the
   planned sport first, one activity per session (long / quality / test also by the generator's
   week-wide match). The user can link / unlink by hand; an unlinked activity is never
@@ -120,7 +120,7 @@ day). A removal that fails is a failure of the push (`partial`, with its error).
 COROS accepted but still lists after a short pause is not a failure: the result carries
 `check_days` (a reminder to check the COROS app; `coros_workouts._remove_remote`). The 課表 page's
 own changes call it with `only` = the changed sessions (`_sync_watch`,
-`backend/api/plan_sessions.py:1986`): everything — the window push and the stale / blocked /
+`backend/api/plan_sessions.py:2024`): everything — the window push and the stale / blocked /
 missed clean-up — is limited to them (`backend/engine/plan_auto.py:493`); other leftover copies
 are left to this run and the manual push. `window` False (自動推送 off) re-sends / removes only
 copies already on the watch. A failure there adds a `failed` row (trigger `edit`) to the change log.
@@ -441,7 +441,7 @@ intensity). Each rung is the canonical variant of `backend/engine/interval_libra
   (`WorkoutEditor.applyKey`, or the dialog's 測試 kind / 方式), the user picks the day and saves
   through `POST /sessions` (a variant keeps its `variant_key` → rung, so it counts on its ladder).
   A 徐國峰 90-min test saved there (by its title, or the template row `lib:xu_e_drift` — `_is_xu90`,
-  `backend/api/plan_sessions.py:509`) replaces that day's active long run, as 排入測試 does
+  `backend/api/plan_sessions.py:547`) replaces that day's active long run, as 排入測試 does
   (`_replace_long`, shared; owner 2026-10-04) — for the dialog's own 測試 › 徐國峰 too, which posts
   the same body.
   The 總覽 card and the 基礎期 panel draw it with `static/z5flow.js` (`wko5views.z5_progress`).

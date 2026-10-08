@@ -402,3 +402,79 @@ class UserSetting(Base):
     key: Mapped[str] = mapped_column(String(100))
     value_json: Mapped[str] = mapped_column(Text)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class SyncFailure(Base):
+    """One activity a sync listed but could not fetch (SP-362, sync/failures.py): its download /
+    import failed (kind "failed": retried by id by the next syncs, at most failures.MAX_ATTEMPTS
+    times or failures.MAX_AGE_DAYS days, then kept for 設定 › 進階設定 「重試」) or it has no FIT
+    file at all (kind "no_file": a manual entry, never retried). The sync cursor no longer waits
+    for these. `source` = coros | tp (sync/runner.SOURCES); `provider_id` = COROS labelId / TP
+    workoutId. Deleted when the activity is imported, and with the source's files (purge)."""
+    __tablename__ = "sync_failures"
+    __table_args__ = (UniqueConstraint("athlete_id", "source", "provider_id"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    athlete_id: Mapped[int] = mapped_column(ForeignKey("athletes.id"), index=True)
+    source: Mapped[str] = mapped_column(String(20))
+    provider_id: Mapped[str] = mapped_column(String(64))
+    sport_type: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)     # COROS sportType
+    workout_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    kind: Mapped[str] = mapped_column(String(10), default="failed")              # failed | no_file
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    first_at: Mapped[datetime] = mapped_column(DateTime)                         # UTC, naive
+    last_at: Mapped[datetime] = mapped_column(DateTime)
+
+
+class DebugToken(Base):
+    """A debug API token (SP-371, backend/debug_auth.py): only the SHA-256 of the token is
+    stored (it is shown once, when made); bound to the tenant that made it. New table:
+    created by init_db's create_all."""
+    __tablename__ = "debug_tokens"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(80), index=True)
+    name: Mapped[str] = mapped_column(String(40))
+    prefix: Mapped[str] = mapped_column(String(16))           # the first characters, to tell tokens apart
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    scopes_json: Mapped[str] = mapped_column(Text, default="[]")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    expires_at: Mapped[datetime] = mapped_column(DateTime)
+    revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    last_used_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    last_ip: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    ips_json: Mapped[str] = mapped_column(Text, default="[]")  # the source IPs seen (the 新 IP hint)
+    new_ip_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+
+class DebugAudit(Base):
+    """One call of the debug API (SP-371): when, which token, which endpoint and parameters,
+    the source IP, the answer's status and size. The newest debug_auth.AUDIT_KEEP rows are kept."""
+    __tablename__ = "debug_audit"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(80), index=True)
+    at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    token_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    token_name: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
+    method: Mapped[str] = mapped_column(String(8), default="GET")
+    path: Mapped[str] = mapped_column(String(200))
+    query: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    ip: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    status: Mapped[int] = mapped_column(Integer)
+    bytes: Mapped[int] = mapped_column(Integer, default=0)
+    ms: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    new_ip: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class DebugAuthFailure(Base):
+    """Failed debug API authentications (SP-371), aggregated: one row per tenant, hour, source IP and
+    code (TOKEN_MISSING / INVALID / REVOKED / EXPIRED) with a count, so a flood of bad tokens adds
+    counts instead of rows. The newest debug_auth.FAIL_ROWS_KEEP rows are kept."""
+    __tablename__ = "debug_auth_failures"
+    __table_args__ = (UniqueConstraint("tenant_id", "hour", "ip", "code"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(80), index=True)
+    hour: Mapped[datetime] = mapped_column(DateTime, index=True)
+    ip: Mapped[str] = mapped_column(String(64))
+    code: Mapped[str] = mapped_column(String(20))
+    count: Mapped[int] = mapped_column(Integer, default=1)
+    last_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
