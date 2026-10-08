@@ -15,7 +15,6 @@ v2 (docs/research/racepower-v2.md §10.2):
     GET  /cadence-check climbing cadence vs the 130 spm walk line (SP-230)
     GET  /backtest      stored leave-one-out back-test;  POST /backtest/run  recompute
     POST /export/plan   plan → the race-day session in the 課表 (preview, or push=true writes it)
-    POST /export/csv    plan → CSV (UTF-8 BOM), header block + one row per segment
     GET/PUT/DELETE /saved/{event_id}   the page's inputs + last result per plan event
 """
 from __future__ import annotations
@@ -725,22 +724,6 @@ async def _db():
     from backend.db.database import get_db
     async for s in get_db():
         yield s
-
-
-@router.post("/export/csv")
-def export_csv(body: ExportIn):
-    """The /plan output as CSV (UTF-8 with BOM for Excel): a header block
-    (course totals, mode, CP / TTE / k sources, strategy, heat, date computed)
-    and one row per segment. Same body as /plan; `name` names the file."""
-    from urllib.parse import quote
-
-    from fastapi.responses import Response
-
-    text, fname = _calc(CALC.export_csv, LIVE, body)
-    q = quote(fname)
-    return Response(content=text.encode("utf-8-sig"), media_type="text/csv; charset=utf-8",
-                    headers={"Content-Disposition": f"attachment; filename=\"racepower.csv\"; filename*=UTF-8''{q}",
-                             "X-Filename": q})
 
 
 # ---------------------------------------------------------------------------

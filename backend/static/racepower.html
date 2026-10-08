@@ -447,7 +447,6 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
       <span class="meta bf" id="splits-line"></span><button class="btn bf" id="clearsplits">清除分日</button>
       <button class="btn rf" id="unlock">解除全部鎖定</button>
       <button class="btn primary" id="coros" data-i18n="racepower.coros.btn">📅 匯出至課表</button><span class="meta" id="coros-why" hidden></span>
-      <button class="btn" id="csv">匯出 CSV</button><span class="meta" id="csv-meta"></span>
       <button class="btn" id="share">🔗 分享</button></div>
     <dialog id="coros-dlg" class="dlg">
       <h2><span data-i18n="racepower.coros.title">匯出至課表</span> <span class="meta" id="cx-prov"></span>
@@ -2034,21 +2033,6 @@ $("cx-close").onclick = () => $("coros-dlg").close();
 $("cx-go").onclick = corosPush;
 document.querySelectorAll("#cx-mode button").forEach((b) => b.onclick = () => { CX_MODE = b.dataset.x; corosPreview(); });
 
-async function csvExport() {
-  $("csv-meta").textContent = "產生中…";
-  try {
-    const ev = (INP?.events || []).find((e) => e.id === $("event").value);
-    const r = await fetch(`${API}/export/csv`, { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...planBody(), name: ev ? ev.name : null }) });
-    if (!r.ok) throw new Error(await errText(r));
-    const fname = decodeURIComponent(r.headers.get("X-Filename") || "racepower.csv");
-    const url = URL.createObjectURL(await r.blob());
-    const a = document.createElement("a"); a.href = url; a.download = fname;
-    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 10000);
-    $("csv-meta").innerHTML = `<span class="ok">已下載 ✓</span> ${esc(fname)}`;
-  } catch (e) { $("csv-meta").innerHTML = `<span class="err">${esc(e.message)}</span>`; }
-}
-
 // ---------------- read-only share links ----------------
 const shareUrl = (u) => location.origin + u;
 async function loadShares() {
@@ -2612,7 +2596,6 @@ drop.addEventListener("dragleave", () => drop.classList.remove("over"));
 drop.addEventListener("drop", (e) => { e.preventDefault(); drop.classList.remove("over"); uploadGpx(e.dataTransfer.files[0]); });
 $("clearsplits").onclick = () => { SPLITS = []; saveEventSplits(); schedule(); };
 $("unlock").onclick = () => { LOCKS = {}; schedule(); };
-$("csv").onclick = csvExport;
 $("gm-sec").querySelector("details").addEventListener("toggle", (e) => { if (e.target.open) renderGM(); });
 $("cad-sec").querySelector("details").addEventListener("toggle", (e) => { if (e.target.open) renderCad(); });
 // charts inside a closed <details> have no size: draw them when opened
