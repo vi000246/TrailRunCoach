@@ -1413,7 +1413,6 @@
   "設定頁": "Settings page",
   "該重測了：{name}": "Time to retest: {name}",
   "課別分類（Zone 3 閾值或更強）跑成強度課，就當成一堂強度課：Seiler「easy days easy」；用課別分類當「太強」的界線屬推估": "A run the session classifier calls a hard session (Zone 3 threshold or harder) counts as one: Seiler's \"easy days easy\"; using the classifier as the \"too hard\" line is an estimate",
-  "課前 1–4 小時吃含碳水的一餐或點心，不要空腹做（Aird 2018、Mata 2019、Impey 2018）": "Eat a meal or snack with carbs 1–4 hours before; don't do this session fasted (Aird 2018, Mata 2019, Impey 2018)",
   "課表": "Schedule",
   "課表已改，但{provider}手錶沒有跟著更新": "The plan changed, but the {provider} watch didn't follow",
   "課表待確認是自動調整的提醒，不能交換": "A plan-confirmation notice is auto-adjust's reminder and can't be swapped",
