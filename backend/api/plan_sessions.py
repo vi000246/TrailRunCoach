@@ -2390,6 +2390,29 @@ def est_tss(s: dict, rates: dict) -> float:
     return float(s.get("tss") or 0.0) or (s.get("minutes") or 0) / 60.0 * rates.get(s.get("kind"), 50.0)
 
 
+def session_est_tss(s: dict, ds=None, sessions: Optional[list[dict]] = None) -> float:
+    """est_tss of one stored session outside the calendar (workout_review's 課表 card, SP-370),
+    so the card and the calendar grade ◐ / ≠ on the same planned TSS: the stored TSS, else the
+    minutes × the calendar's tss_rates (the dataset's TSS / h, `_range_extras`; the generator's own
+    rates from the stored plan, `sessions` or plan_store.rate_rows). The dataset scan only runs
+    for a row without a TSS. The calendar's fallback rate (the week's target TSS / h) is not read
+    here (it needs the whole plan input): 50, which only a kind with no rate of its own uses (race)."""
+    if s.get("kind") in PS.NOT_LOAD:
+        return 0.0
+    if s.get("tss"):
+        return float(s["tss"])
+    tph = None
+    if ds is not None:
+        try:
+            from backend.engine import overview as O
+            from backend.engine.wko5expr.dataset import day_to_date
+            tph = O._tss_per_hour(ds, day_to_date(ds.today))
+        except Exception:                   # noqa: BLE001 — the defaults then, as tss_rates without tph
+            tph = None
+    rates = tss_rates(tph, PS.rate_rows() if sessions is None else sessions)
+    return est_tss(s, rates)
+
+
 def _week_rows(start: str, end: str, sessions: list[dict], acts: list[dict], phases: list[dict],
                proj: list[dict], rates: dict, today: Optional[str] = None) -> list[dict]:
     """Per Monday in range: planned (active + done + missed, strength time excluded

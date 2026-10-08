@@ -843,7 +843,15 @@ def user_rpe_rows(db_path=None) -> list[dict]:
 
 
 _DONE_CACHE: dict = {}
+_RATE_CACHE: dict = {}
 LOAD_KINDS = tuple(k for k in KINDS if k not in NOT_LOAD)
+
+
+def rate_rows(db_path=None) -> list[dict]:
+    """Stored sessions with kind / minutes / tss / origin / edited: the input of
+    api/plan_sessions.tss_rates (the generator's own TSS / h) outside the calendar — the
+    workout review's 課表 card (SP-370). Read-only sqlite, cached on the file's stamp."""
+    return _plan_rows(db_path, LOAD_KINDS, _RATE_CACHE, ("origin", "edited"))
 
 
 def session_tag(s: dict) -> dict:
