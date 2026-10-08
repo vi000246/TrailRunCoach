@@ -471,6 +471,10 @@ def task_racepower(cr: Crawler, page) -> None:
     for p in ("10k", "half", "full", "trail30", "yushan"):
         if cr.click(page, f'[data-preset="{p}"]', quiet_s=1.0):
             cr.click(page, "#calc", quiet_s=1.5)
+    # the climbing charts (GET /grade-model, /cadence-check) load on a trail race when opened (SP-366)
+    if cr.click(page, '[data-preset="trail30"]', quiet_s=1.0):
+        for sec in ("gm-sec", "cad-sec"):
+            cr.click(page, f"#{sec} summary", quiet_s=2.0)
     try:
         events = page.locator("#event option").evaluate_all("(os) => os.map((o) => o.value)")
     except Exception:                      # noqa: BLE001
