@@ -397,6 +397,25 @@ def test_quality_run_easy_with_time_and_tss_on_plan_is_partial():
     assert comp["label"] == "跑成輕鬆"
 
 
+def test_softening_needs_both_time_and_tss_measured():
+    # owner 2026-10-08: a 60-min easy run vs a 60-min walk with no TSS -> ≠ (only time is known)
+    s = _done("easy", 60, 48.0, 60, 48.0, cat="walk")
+    s["done_by"]["tss"] = None
+    vs, comp, st = _verdict(s)
+    assert vs["off_plan"] and comp["level"] == "red" and comp["time_level"] is None and st == "off_plan"
+    # the same walk with its TSS on plan -> ◐ 項目不同
+    vs, comp, st = _verdict(_done("easy", 60, 48.0, 60, 48.0, cat="walk"))
+    assert vs["soft"] == "sport" and comp["level"] == "yellow" and st == "partial"
+    # a planned TSS of 0 is not measured either: the reversal stays ≠
+    s = _done("easy", 45, 0.0, 45, 36.0, session=_ses("hard_long", z3=1000))
+    vs, comp, st = _verdict(s)
+    assert vs["off_plan"] and st == "off_plan"
+    # … but with the page's estimate (api/plan_sessions.est_tss) it is measured: ◐
+    vs = PM.compare(s, 36.0)
+    comp = C.with_plan_check(C.session_compliance(s, 36.0), vs)
+    assert vs["soft"] == "intensity" and C.status_of(s, comp, "2026-10-08") == "partial"
+
+
 def test_bike_for_a_run_stays_off_plan_even_with_time_and_tss_on_plan():
     vs, comp, st = _verdict(_done("easy", 45, 36.0, 45, 36.0, cat="bike"))
     assert vs["off_plan"] and vs["wrong_sport"] and vs["text"] == "沒照課表：排輕鬆跑，實際騎車"
