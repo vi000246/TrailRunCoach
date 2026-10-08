@@ -82,7 +82,8 @@ class File:
 TABLES: tuple = (
     Table("athletes", USER, "the athlete row the other rows hang on (created by the first sync / login)",
           deidentify=("name", "tp_athlete_id", "data_dir")),
-    Table("athlete_settings", USER, "dated thresholds / weight (FTP, LTHR, threshold pace, initial CTL)",
+    Table("athlete_settings", USER, "dated thresholds / weight (run FTP, threshold pace, weight, the COROS "
+          "account's LTHR — the cold-start LTHR prior, initial CTL); an older DB's ftp_w column is unread",
           deidentify=("effective_date",)),
     Table("user_settings", USER, "key / value settings (settings/repository.py); values are free-form JSON "
           "(backup.dir is a local path, plan.calendar holds the ICS feed's link token)",
@@ -114,14 +115,6 @@ TABLES: tuple = (
     Table("coros_plan_push", IMPORTED, "COROS's ids of the plan sessions pushed to it (sync/workout_targets): "
           "the external account's state, server-side bookkeeping",
           deidentify=("day", "title", "program_id", "plan_id", "id_in_plan", "plan_program_id")),
-    Table("workout_metrics", DERIVED, "per-activity metrics computed once at import "
-          "(files/file_service._import_one_file); only scripts read them",
-          invalidated_by="never (computed once per imported file)"),
-    Table("mmp_cache", DERIVED, "per-activity power mean-max computed at import; read by "
-          "file_service.get_run_ftp",
-          invalidated_by="the row's version vs file_service.mmp_version() (compute_mmp + the FIT read, "
-                         "code_hash + MMP_CACHE_V): get_run_ftp recomputes its window's stale rows (SP-341); "
-                         "deleted with the activity row"),
     Table("sync_state", SECRET, "COROS / TP tokens, the sealed 「記住密碼」 passwords (settings/secrets.py), "
           "the accounts' ids and the sync cursors",
           secret_fields=("tp_access_token", "tp_refresh_token", "tp_web_cookie", "coros_access_token",
@@ -133,6 +126,15 @@ TABLES: tuple = (
 # (DROP TABLE IF EXISTS); unclassified_tables leaves them out until then
 RETIRED_TABLES: tuple = (
     "pmc_cache",        # SP-341: never read or written (cache-tiering.md §3 B)
+)
+
+# tables an older DB may still hold that no code reads or writes any more, and that are NOT
+# dropped (no destructive migration, owner 2026-10-08): the rows just stay there, orphaned.
+# Not in the schema (create_all no longer makes them); unclassified_tables leaves them out.
+# A backup still carries them inside the DB snapshot.
+LEGACY_TABLES: tuple = (
+    "workout_metrics",  # per-activity hrTSS / rTSS / NP / TSS written at import; never read (2026-10-08)
+    "mmp_cache",        # per-activity power mean-max, read only for those metrics' runFTP (2026-10-08)
 )
 
 # ---------------------------------------------------------------------------
@@ -299,7 +301,7 @@ def unclassified_tables(con: sqlite3.Connection) -> list[str]:
     """The tables of a DB without an entry in TABLES."""
     names = [r[0] for r in con.execute(
         "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")]
-    return [n for n in names if n not in _BY_TABLE and n not in RETIRED_TABLES]
+    return [n for n in names if n not in _BY_TABLE and n not in RETIRED_TABLES and n not in LEGACY_TABLES]
 
 
 def unclassified_files(folder: Path, skip: Iterable[str] = ()) -> list[str]:

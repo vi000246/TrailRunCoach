@@ -8,7 +8,10 @@ the differences:
   * synced rows against the WKO5 athlete folder (.wko5athlete + .wko4), which is
     what the WKO5-aligned charts read
 
-Fields: duration, distance, elevation gain, avg power, NP, avg HR, TSS.
+Fields: duration, distance, elevation gain, avg power, NP, avg HR, TSS. The synced rows
+have no TSS here (it came from the workout_metrics table the import no longer writes);
+the app's own comparison, GET /api/v1/sync/compare (engine/wko5expr/sourcecompare.py),
+compares TSS as the charts compute it.
 Nothing is written — not the DB, not the WKO5 folder.
 
 Usage:
@@ -137,8 +140,6 @@ async def load_synced(since: Optional[dt.date]) -> list[Act]:
             params["since"] = since.isoformat()
         rows = (await db.execute(text(sql), params)).all()
         for rid, source, sport, path, _wd, start in rows:
-            ms = dict((await db.execute(text(
-                "SELECT metric_key, value FROM workout_metrics WHERE workout_id=:i"), {"i": rid})).all())
             try:
                 vals = _fit_values(path)
             except Exception as e:  # missing / unreadable file: still list it
@@ -153,7 +154,6 @@ async def load_synced(since: Optional[dt.date]) -> list[Act]:
                     continue
             if start is None:
                 continue
-            vals["tss"] = ms.get("tss") if ms.get("tss") is not None else ms.get("hr_tss")
             out.append(Act(source, f"db#{rid}", start.replace(tzinfo=None), sport, vals))
     return out
 
