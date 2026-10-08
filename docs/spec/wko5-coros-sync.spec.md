@@ -22,7 +22,7 @@
 - [ ] 「負荷」的 RPE 改成每一檔各自換算：預設用 TSS 的定義（IF² × 100／小時），資料夠了逐檔擬合、往預設收縮；現在是單一係數 0.30（SP-57，Todo）——尚未實作
 - [ ] 同步效能：同步時不卡住課表載入（SP-362，In Progress）——同步側已做：失敗清單、cursor 照常推進、完整檢查／每週檢查、跑後自評回填移到背景；課表側（推送移出寫入鎖、課表先顯示上一份）另做
 - [ ] COROS 活動列表回應有沒有總筆數：沒驗證，所以每週檢查沒有做逐月筆數比對（SP-362 A4）
-- [ ] 備份拿掉 `sync_state`（token 與封存的密碼）（SP-355，Todo）——尚未實作
+- [x] 備份拿掉 `sync_state`（token 與封存的密碼）（SP-355）——已做，見「備份（SP-355）」
 - [ ] Garmin 同步，用 `garminconnect`，資料來源順序 COROS → Garmin → TrainingPeaks（SP-91，Todo）——尚未實作
 - [ ] FIT 改用內容 sha256 命名的不可變物件，會改到 `fit/<source>/` 的路徑規則（SP-308，Todo）——尚未實作
 - [ ] 手動上傳 FIT（選檔、選資料夾），接上後端去重（SP-323，Todo）——尚未實作
@@ -61,6 +61,8 @@
 | 2026-10-08 | perf/sp362-batch2-sync | SP-362 A3／A4 | **完整檢查**（`backend/sync/check.py`）：列出遠端全部活動（COROS 從 `FIRST_SYNC_DAY` 每一頁；TP 從 2010-01-01 每 90 天一次 date-range，未來的課表跳過），依 provider id 跟 DB 比對成三組：遠端有、本地沒有、不在失敗清單 → `missing`（「補下載」只下載這些，走同步自己的 `_fetch_one`，失敗照樣進失敗清單）；本地有、遠端沒有 → `local_only`，**只列出、不刪**（使用者 2026-10-08）；失敗清單 → `failed`（`compare`，`backend/sync/check.py:281`）。全部經 `runner.stream(client=…, remember=False)`（`backend/sync/runner.py:216`、`:250`）：同一個忙碌旗標（不跟同來源的同步並行；自評 job 會讓路）、有下載時跑同步後的 ①～③、不動 cursor、不寫 `last_result`／`last_ok`。結果存設定 `sync.<src>.check`（重新整理頁面還在；`backend/settings/repository.py:76`），跑的時候的進度在記憶體（`progress`）。**每週檢查**：排程 loop 啟動 10 分鐘後每分鐘看一次（`backend/sync/scheduler.py:116`），資料來源（`auto_plan`）上次每週檢查超過 7 天（失敗的隔 1 天）就列最近 60 天、比對，缺的直接下載（最多 30 筆），結果存 `sync.<src>.check_weekly`（`weekly_tick`，`backend/sync/check.py:522`）。COROS 列表回應有沒有總筆數沒有驗證過，所以**沒有做**逐月筆數比對。端點 `GET`／`POST /sync/check`、`POST /sync/check/{source}/fill`（`backend/api/sync.py:197`、`:205`、`:229`）；設定 › 資料同步 › 進階設定的按鈕與每來源一行結果（`loadCheck`，`backend/static/settings.html:1211`）。兩個新設定鍵不匯出（`EXPORT_EXCLUDE`，`backend/engine/debug_view.py:60`）。測試 `backend/tests/test_sync_check.py` |
 | 2026-10-08 | perf/sp362-batch2-sync（review） | SP-362 review #1–#8 | **排程 loop 一啟動就死掉**：`import time` 被 `from datetime import time` 蓋掉，loop 第一行（try 外）丟 AttributeError，每日同步、自動備份、每週檢查全停；改 `import time as _time`（`backend/sync/scheduler.py:18`、`:116`），測試直接跑真的 loop 幾輪、確認三個 tick 都被呼叫。**每日同步不再因忙碌整天漏掉**：來源忙碌時不記 `sync.schedule.last_run`，下一分鐘再試；開始後才回 SYNC_BUSY 的也把當天的記號清掉（`_busy_retry`／`_unmark`，`backend/sync/scheduler.py:51`、`:65`、`:77`、`:87`）。**刪除來源檔案**先請自評 job 讓路（`backend/sync/purge.py:42`），不再在頁面顯示閒置時回 409。**完整檢查**：開始時就佔住來源（`runner.reserve`／`release`，`backend/sync/runner.py:121`、`:133`；`backend/sync/check.py:472`）；補下載跳過已變成 no_file／停止重試的 id、中斷時保留已處理的（`backend/sync/check.py:419`）；TP 排了沒做的課另外計數、不下載（`tp_done`，`backend/sync/check.py:185`，欄位名稱未驗證）；每週檢查只在自動同步開著時跑（`backend/sync/check.py:532`）。設定頁：中斷／失敗的結果顯示成失敗、`missing` 超過 500 筆時仍可補下載並提示再檢查、顯示「排了沒做 N」（`backend/static/settings.html:1226`） |
 | 2026-10-08 | code-sync（SP-215, SP-67, SP-57） | N/A | 錨點全面重新對齊（10-04 之後 runner、coros_client、file_service、fitdataset、repository、wko5views 都長了）；同步流程圖的匯入不再寫「算指標」；新增「同步計時與 log」（SP-215）、COROS 門檻歷史（SP-67）；新增 Decisions Log（SP-57、`65bad11d`）與 Open Questions（SP-57 逐檔 RPE 換算等待實作的單） |
+| 2026-10-08 | fix/backup-user-files-sp355 | SP-355 | **備份帶上使用者改的檔案、拿掉機密**：登錄表裡租戶的「使用者改的」檔案與上傳的 GPX 改成 `backup=ALWAYS`（`backend/data_registry.py:172`–`:198`），備份放進 `files/`、還原放回原位，備份裡沒有的檔案不動（`backend/engine/backup.py:243`、`:683`）；DB 快照清空機密表 `sync_state`、`debug_tokens` 並 VACUUM（`backend/engine/backup.py:158`），還原保留本機的機密表（`:592`、`:611`）；格式升為 2，格式 1 照樣能還原；`SEALED_DB_COLUMNS` 補上兩個封存密碼欄位（`backend/settings/secrets.py:48`）。設定頁備份／還原說明與結果訊息跟著改（`backend/static/settings.html:1597`、`:1610`）。見「備份（SP-355）」 |
+| 2026-10-08 | fix/backup-user-files-sp355（安全審查） | SP-355 review H1, H2, M1–M4, L1, L2, L5, L6 | **快照不再碰雲端資料夾**：快照與拿掉機密改在 DB 旁的 `backups/` 做，雲端資料夾只出現做好的 zip；被中斷的殘留由 `clean_stale` 清（`backend/engine/backup.py:290`、`:470`）。**cursor 跟著資料走**：`sync_state` 不再整列清空，只把 `local_fields`（憑證、帳號身分）設 NULL；還原取本機登入、備份的 cursor，且不晚於備份時間（`backend/data_registry.py:142`、`backend/engine/backup.py:817`、`:871`）。**還原改成先驗證全部、合併後一次換掉**：`files/` 逐一驗證（路徑、上限、CRC）並解開，本機資料先併進那份 DB，再唯一一次 `backup()`，檔案預先放好再改名；DB 換過就一定跑 `after_restore`；pre-restore 列在還原清單（`backend/engine/backup.py:720`、`:888`、`:991`，`backend/api/backup.py:227`、`:281`）。**留在本機的資料**：debug token／呼叫紀錄／驗證失敗（IP）表、`backup.*`／`debug.*`／`plan.calendar` 設定不進備份、還原不蓋；分享連結備份但不還原（`backend/data_registry.py:73`、`:197`、`:341`）。上限（單檔 50 MB、合計 1 GB、10,000 個）、沙盒與別的帳號的備份拒絕（manifest 記 `tenant`）、金鑰遺失訊息說明登出重登可自救（`backend/settings/secrets.py:45`）。升級注意：舊格式備份仍含憑證，約 5 週後才會被保留規則刪掉 |
 
 ---
 
@@ -451,6 +453,74 @@ ALTER TABLE sync_state ADD COLUMN tp_password_sealed    TEXT;
 
 `sync_state` 在資料分類登錄表（`backend/data_registry.py`，SP-311）屬「機密」：只留在伺服器，
 token／封存密碼欄位不出現在任何 API 回應、匯出或同步路徑（`test_data_registry.py` 檢查）。
+
+### 備份（SP-355，`backend/engine/backup.py`）
+
+設定頁「備份」打包成 `trailruncoach-backup-YYYYMMDD-HHMMSS.zip`（格式 `FORMAT = 2`，`backend/engine/backup.py:81`）：
+
+| zip 裡 | 內容 | 依據 |
+|---|---|---|
+| `wko5coach.db` | DB 快照（sqlite backup API），**拿掉留在這台電腦的資料**（`strip_secrets`，`backend/engine/backup.py:184`）：`local` 表清空（`debug_tokens`、`debug_audit`、`debug_auth_failures`：debug token 與 IP 紀錄）；`sync_state` 的 `local_fields` 設成 NULL（COROS／TP token、到期時間、封存的密碼、帳號 e-mail／id／username），**列與同步 cursor 留著**；`user_settings` 的 `LOCAL_SETTINGS` 鍵刪掉（`backup.*`、`debug.*`、課表訂閱 `plan.calendar` 的連結 token）；最後 `secure_delete` + `VACUUM`，舊值不留在空頁 | 登錄表 `Table.local`／`local_fields`／`cursor_fields`（`backend/data_registry.py:73`、`:142`–`:157`）、`LOCAL_SETTINGS`（`:341`） |
+| `files/<相對路徑>` | 使用者改的檔案：`plan.json`、`engine.json`、`corrections.json`、`annotations.json`、`views/`、`racepower_solo_hikes.json`、`racepower_hike_meta.json`、`racepower_shares/`、`routes/names.json`、上傳的 `event_gpx/`、`template_gpx/`（`_user_files`，`backend/engine/backup.py:300`） | 登錄表 `FILES` 裡 `backup=ALWAYS` 的項目（`backend/data_registry.py:191`–`:218`）；新的使用者檔案只要在登錄表標 `ALWAYS`，備份就會帶上，不用改 backup.py |
+| `fit/<source>/<year>/<file>.gz` | 同步下來的 FIT 原檔（勾「同時備份 FIT 原始檔」才有） | `FIT`，`backup=OPT_IN` |
+| `manifest.json` | 版本、`tenant`、筆數、`db_sha256`、`fit`、`files {count, bytes}`、`local_removed {tables, columns, settings}` | |
+
+- **雲端資料夾裡只出現做好的 zip**（審查 H1）：快照與拿掉機密都在 DB 旁的 `backups/`（本機、登錄表「機密」類）做
+  （`work_dir_for`，`backend/engine/backup.py:290`；API 傳 `_local_dir()`），雲端資料夾只寫隱藏的 `.partial` 再改名。
+  被中斷留下的 `.trc-snap-*`／`.trc-restore-*`／`.trc-inspect-*` 與 `.partial`，超過一小時由 `clean_stale`
+  清掉（`backend/engine/backup.py:470`）：`prune`（每次備份後，雲端資料夾）、每次備份（本機 `backups/`）、
+  App 啟動後第一次自動備份檢查（兩處，`backend/api/backup.py:126`）。
+- 機密檔案（`secret.key`、`weather.json`、`tp_client.json`、`backups/`）在登錄表是「機密」，規定 `backup=NEVER`，
+  不會被走訪；`plan()` 也拒絕非「使用者改的／匯入的」、非租戶資料夾的項目（`backend/engine/backup.py:255`）。
+- 只有資料夾是同一個的租戶能備份／還原（`check_roots`，`backend/engine/backup.py:278`）：示範沙盒（BASE／SHARED 在別處）
+  拒絕；manifest 記 `tenant`（`backend/api/backup.py:57`），還原別的帳號的備份會拒絕（沒有 `tenant` 的舊備份照收）。
+- 上限（L1）：`files/` 單檔 50 MB、合計 1 GB、最多 10,000 個（`backend/engine/backup.py:97`）；備份時超過就報錯，
+  不會做出還原不了的備份。FIT 原檔還原時串流解壓、單檔上限 256 MB。
+
+**還原**（`restore`，`backend/engine/backup.py:991`）：
+
+1. 驗證並解開（`open_backup`／`_extract_files`，`backend/engine/backup.py:720`、`:689`）：manifest、DB（sha256、
+   integrity_check），**每個 `files/` 項目**都檢查路徑（只收登錄表 `ALWAYS` 的路徑；`../`、絕對路徑、反斜線、
+   機密檔、快取、`.tmp` 一律略過並計數）、大小上限、整個讀過一次（CRC），解到暫存資料夾。zip 損毀
+   （`BadZipFile`／`zlib.error`）一律是「備份檔損毀，不能還原」。這一步失敗，什麼都沒動。
+2. 把目前的 DB 與檔案另存成 pre-restore（同樣不含本機資料）；設定頁還原清單會列出這些（「還原前自動另存的」），
+   可以直接還原回去（`list_pre_restores`、`_source` 收 pre-restore 檔名，`backend/engine/backup.py:464`、
+   `backend/api/backup.py:227`）。
+3. 把這台電腦的資料併進解開的那份 DB（`merge_local`，`backend/engine/backup.py:888`）：`local` 表整個換成本機的列；
+   `sync_state` 依主鍵把 `local_fields`（登入）換成本機的值，備份裡沒有的列整列加入，格式 1 備份帶的憑證一律清掉
+   （`_put_local_fields`，`:817`）；`LOCAL_SETTINGS` 換成本機的；備份 schema 較舊時先補表／欄位。最後**所有同步
+   cursor 不晚於備份時間**（`_clamp_cursors`，`:871`）。
+4. 檔案先複製到目標旁的 `*.restore.tmp`（`_stage_files`，`:931`），再做**唯一一次** sqlite `backup()` 換掉 live DB
+   （`_swap_into`，`:919`）——沒有任何時刻 live DB 裡是空的登入。之後把暫存檔改名到位；這步出錯回報「資料庫已還原，
+   但…」，登入不受影響。API 只要 DB 換過，`after_restore()` 一定會跑（`finally`，`backend/api/backup.py:281`）。
+5. 補回缺的 FIT（`_restore_fit`，`:960`），壞掉的那個略過、計數（`fit_failed`）。
+
+備份裡沒有的檔案不動。**分享連結（`racepower_shares/`）會備份、但從不還原**（登錄表 `restore=False`，
+`backend/data_registry.py:197`）：刪掉／撤銷的連結不會被還原叫回來；結果訊息說「分享連結 N 個沒有還原（留在備份檔裡）」。
+格式 1（SP-355 之前）照樣能還原：沒有 `files/`，它帶的憑證不採用、cursor 採用。格式 2 給舊版 App 還原會被擋下
+（「請先更新 App」）。
+
+**`sync_state` 的決定**（2026-10-07 使用者交給 AI 決定；2026-10-08 依安全審查修正）：憑證與帳號身分不進備份、
+還原保留本機的；**同步 cursor 跟著資料走**。理由：封存用的 `secret.key` 不在備份裡，換機後封存的值解不開，帶了沒用；
+2026-09-30 以前寫入、之後沒更新的舊列可能是明文，帶進雲端資料夾反而是外洩；同一台還原時登入不該被舊備份蓋掉。
+cursor 若留本機的（第一版的做法），還原三週前的備份後，下次增量同步會從本機較新的 cursor 開始，這三週的活動就漏抓；
+現在 cursor 用備份的、而且不晚於備份時間，下次同步會把這段補回來（重複的活動由匯入去重）。`sync_failures` 跟著備份走。
+`secrets.SEALED_DB_COLUMNS` 補上 `coros_password_sealed`、`tp_password_sealed`（`backend/settings/secrets.py:52`）：
+以前只剩記住的密碼是密文時（token 過期／登出後），金鑰遺失會被默默重新產生，那份密碼就再也解不開；明文的舊列不算密文，
+`unseal` 照原樣讀。金鑰遺失時的 503 `SECRET_KEY_MISSING` 訊息與設定頁提示加上自救方法：登出 COROS 與 TrainingPeaks
+（登出會刪掉該帳號所有封存值）再重新登入，就會產生新金鑰（`RECOVER_WITHOUT_KEY`，`backend/settings/secrets.py:45`）。
+
+**升級注意（L6）**：雲端資料夾裡 SP-355 之前（格式 1）的備份仍含 `sync_state`（token、封存的密碼、帳號 e-mail）與
+debug token，要等保留規則（7 天每天＋4 週每週，約 5 週）自然刪掉；想立刻清掉就手動刪除舊的
+`trailruncoach-backup-*.zip`（建好一份新格式的備份之後）。
+
+測試：`backend/tests/test_backup.py`（SP-355 段：登錄表驅動的檔案清單、新項目自動帶上、掃描 zip 位元組找不到 token／
+密碼／e-mail／debug token／IP／ICS token／機密檔、雲端資料夾從頭到尾沒有 DB 檔、殘留清理、往返（分享連結不還原）、
+三週前的備份帶自己的 cursor、cursor 不晚於備份、舊 schema、格式 1、惡意 `files/` 路徑、損毀／超過上限什麼都不動、
+換完 DB 後出錯登入仍在、沙盒與別的帳號拒絕、API 一定跑 `after_restore`、pre-restore 可還原）、
+`backend/tests/test_data_registry.py`（每個租戶的使用者／上傳檔案都是 `ALWAYS`；機密表與有 IP 欄的表都標成留在本機；
+像憑證的設定鍵都在 `LOCAL_SETTINGS`；`restore=False` 只給 `ALWAYS` 的項目）、`backend/tests/test_secrets.py`
+（封存密碼欄位、明文舊列、金鑰遺失訊息）。
 
 ### `pmc_cache` 刪除（SP-341）；`workout_metrics`／`mmp_cache` 留在舊 DB（2026-10-08）
 

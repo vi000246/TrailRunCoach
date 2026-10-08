@@ -40,10 +40,18 @@ class SecretKeyMissing(SecretError):
 
 
 KEY_DOC = "docs/secrets-and-keys.md"
+# the way back when the key is gone (SP-355 L5): logging out deletes every sealed value of that
+# account, so once both are logged out no ciphertext is left and a new key is made at the next login
+RECOVER_WITHOUT_KEY = ("log out of COROS and TrainingPeaks (設定 › 資料同步 › 登出; 記住的密碼 is deleted "
+                       "too), then log in again — a new key is generated.")
 # where sealed values can live (paths / DB are patched in tests)
 SEALED_FILES: list[Path] = []
+# every column seal() writes: ciphertext_exists() looks at them before a new key may be generated
+# (SP-355: the two 「記住密碼」 columns were missing — a DB whose only ciphertext was a remembered
+# password let a lost key be regenerated silently, and that password could never be unsealed)
 SEALED_DB_COLUMNS = (("sync_state", "tp_access_token"), ("sync_state", "tp_refresh_token"),
-                     ("sync_state", "tp_web_cookie"), ("sync_state", "coros_access_token"))
+                     ("sync_state", "tp_web_cookie"), ("sync_state", "coros_access_token"),
+                     ("sync_state", "coros_password_sealed"), ("sync_state", "tp_password_sealed"))
 
 
 def _db_path() -> Optional[Path]:
@@ -99,7 +107,8 @@ def _fernet() -> Fernet:
             raise SecretKeyMissing(
                 f"SECRET_KEY_MISSING: encrypted data exists but no key was found at {KEY_FILE} "
                 f"and WKO5COACH_SECRET_KEY is not set. Restore the key file or set "
-                f"WKO5COACH_SECRET_KEY — see {KEY_DOC}. A new key will not be generated.")
+                f"WKO5COACH_SECRET_KEY — see {KEY_DOC}. A new key will not be generated. Without the key: "
+                f"{RECOVER_WITHOUT_KEY}")
         else:
             key = Fernet.generate_key().decode()
             KEY_FILE.parent.mkdir(parents=True, exist_ok=True)

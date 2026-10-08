@@ -27,8 +27,17 @@ temporary file next to its target). `scope`: TENANT (any tenant), INSTANCE (only
 $WKO5COACH_HOME — the server's own files; the owner's tenant folder is that same folder),
 DEMO (only a demo base / sandbox).
 
-A backup today holds the DB and, opted in, the FIT originals — not the USER files
-(plan.json, engine.json, corrections.json …); see `backup` on each entry.
+A backup (SP-355) holds the DB, every tenant file the user made (USER, and the GPX the user
+uploaded) and, opted in, the FIT originals; see `backup` on each entry. A new USER / IMPORTED
+tenant file kind must say backup=ALWAYS (or OPT_IN) — a test fails otherwise — and
+engine/backup.py then carries it without a change there. `restore=False`: kept in a backup for
+manual recovery, never written back by a restore (share links: a revoked one stays revoked).
+
+What stays on this machine (never in a backup, never overwritten by a restore): a `local` table's
+rows (debug tokens, the debug API's call / failure logs with IPs), a table's `local_fields`
+(sync_state's credentials and account identity, matched by primary key) and the user_settings keys
+in LOCAL_SETTINGS. A table's `cursor_fields` (sync cursors) travel with the data, so an older
+backup makes the next sync fetch the gap; a restore never leaves one newer than the backup.
 
 Tests: every table of the schema and every file a built demo tenant holds has an entry
 (backend/tests/test_data_registry.py, test_demo_smoke.py); a new table or file kind without
@@ -61,6 +70,9 @@ class Table:
     secret_fields: tuple = ()     # credentials: never in an API response, an export or a sync
     deidentify: tuple = ()        # columns (SP-319)
     invalidated_by: str = ""      # DERIVED: what makes a row stale
+    local: bool = False           # rows stay on this machine: emptied in a backup, kept on a restore
+    local_fields: tuple = ()      # columns that stay on this machine: NULL in a backup, this machine's on a restore
+    cursor_fields: tuple = ()     # sync cursors: travel with a backup, never newer than it after a restore
 
 
 @dataclass(frozen=True)
@@ -73,6 +85,7 @@ class File:
     backup: str = NEVER
     deidentify: tuple = ()        # fields / content (SP-319)
     invalidated_by: str = ""      # DERIVED: what makes an entry stale
+    restore: bool = True          # backup=ALWAYS but False: kept in the backup, never restored
 
 
 # ---------------------------------------------------------------------------
@@ -123,17 +136,25 @@ TABLES: tuple = (
           "the accounts' ids and the sync cursors",
           secret_fields=("tp_access_token", "tp_refresh_token", "tp_web_cookie", "coros_access_token",
                          "coros_password_sealed", "tp_password_sealed"),
-          deidentify=("coros_email", "coros_user_id", "tp_username", "coros_base_url")),
+          deidentify=("coros_email", "coros_user_id", "tp_username", "coros_base_url"),
+          # the login (credentials, their expiry, the account identity) stays on this machine; the
+          # cursors travel with the activities they describe (SP-355)
+          local_fields=("tp_access_token", "tp_refresh_token", "tp_token_expires", "tp_web_cookie",
+                        "coros_access_token", "coros_token_expires", "coros_password_sealed",
+                        "tp_password_sealed", "coros_email", "coros_user_id", "coros_base_url",
+                        "tp_username"),
+          cursor_fields=("last_sync_at", "last_sync_cursor", "coros_last_sync_at")),
     Table("debug_tokens", SECRET, "debug API tokens (SP-371, debug_auth.py): the SHA-256 of each token "
           "(the token itself is never stored), its scopes, expiry and the source IPs seen; tenant-bound",
-          secret_fields=("token_hash",), deidentify=("name", "last_ip", "ips_json", "created_at", "last_used_at")),
+          secret_fields=("token_hash",), deidentify=("name", "last_ip", "ips_json", "created_at", "last_used_at"),
+          local=True),
     Table("debug_audit", DERIVED, "the debug API's call log (SP-371): time, token name, endpoint, parameters, "
           "source IP, status, size; the newest debug_auth.AUDIT_KEEP rows are kept",
-          deidentify=("at", "query", "ip"),
+          deidentify=("at", "query", "ip"), local=True,
           invalidated_by="never recomputed: a log, pruned to the newest rows; safe to delete"),
     Table("debug_auth_failures", DERIVED, "failed debug API authentications (SP-371), counted per hour, "
           "source IP and code; the newest debug_auth.FAIL_ROWS_KEEP rows are kept",
-          deidentify=("hour", "ip", "last_at"),
+          deidentify=("hour", "ip", "last_at"), local=True,
           invalidated_by="never recomputed: a log, pruned to the newest rows; safe to delete"),
 )
 
@@ -168,30 +189,33 @@ FILES: tuple = (
          "the snapshot of wko5coach.db"),
     # -- private (tenancy.private_path) ------------------------------------
     File("plan.json", USER, ROOT, "season plan: events, phases, thresholds, profile (engine/planning.py)",
-         deidentify=("events: name, date, note", "profile")),
+         backup=ALWAYS, deidentify=("events: name, date, note", "profile")),
     File("racepower_solo_hikes.json", USER, ROOT, "which hikes were solo (racepower/athlete.py)",
-         deidentify=("activity files / starts",)),
+         backup=ALWAYS, deidentify=("activity files / starts",)),
     File("racepower_hike_meta.json", USER, ROOT, "the pack carried per trip (racepower/athlete.py)",
-         deidentify=("activity files / starts",)),
-    File("racepower_shares/**", USER, ROOT, "race plans the user shared by link (racepower/share.py)",
+         backup=ALWAYS, deidentify=("activity files / starts",)),
+    File("racepower_shares/**", USER, ROOT, "race plans the user shared by link (racepower/share.py); "
+         "never restored: a deleted / revoked link stays so", backup=ALWAYS, restore=False,
          deidentify=("the event's name / date / course",)),
-    File("event_gpx/**", IMPORTED, ROOT, "uploaded event course GPX, gzip (engine/event_gpx.py)",
+    File("event_gpx/**", IMPORTED, ROOT, "uploaded event course GPX, gzip (engine/event_gpx.py); uploaded "
+         "by the user, so backed up (no source to sync it from again)", backup=ALWAYS,
          deidentify=("GPS track",)),
     File("template_gpx/**", IMPORTED, ROOT, "uploaded training-route GPX of a 範本, gzip "
-         "(engine/user_templates.py)", deidentify=("GPS track (start / end)",)),
-    File("backups/**", SECRET, ROOT, "pre-restore copies of the whole DB (sync_state included) and restore "
+         "(engine/user_templates.py); backed up like event_gpx", backup=ALWAYS,
+         deidentify=("GPS track (start / end)",)),
+    File("backups/**", SECRET, ROOT, "pre-restore copies (made like a backup: no SECRET rows) and restore "
          "work files (api/backup.py _local_dir); they stay on the server"),
     # -- read from the base by a demo sandbox (tenancy.base_path) ----------
-    File("engine.json", USER, BASE, "chart engine settings (wko5expr/config.py)"),
+    File("engine.json", USER, BASE, "chart engine settings (wko5expr/config.py)", backup=ALWAYS),
     File("corrections.json", USER, BASE, "approved data corrections (wko5expr/corrections.py)",
-         deidentify=("activity files",)),
+         backup=ALWAYS, deidentify=("activity files",)),
     File("annotations.json", USER, BASE, "achievement names, 上河 times, notes, route names "
-         "(engine/achievements.py)", deidentify=("names / notes (free text)", "activity starts")),
-    File("views/**", USER, BASE, "the user's custom chart views (wko5expr/customviews.py)"),
+         "(engine/achievements.py)", backup=ALWAYS, deidentify=("names / notes (free text)", "activity starts")),
+    File("views/**", USER, BASE, "the user's custom chart views (wko5expr/customviews.py)", backup=ALWAYS),
     # -- shared (tenancy.shared_path) ----------------------------------------
     FIT,
     File("routes/names.json", USER, SHARED, "the user's names for detected routes (engine/routes.py)",
-         deidentify=("names (free text)",)),
+         backup=ALWAYS, deidentify=("names (free text)",)),
     File("routes/**", DERIVED, SHARED, "route index, per-activity tracks, route weather (engine/routes.py, "
          "route_weather.py)", deidentify=("tracks: GPS points", "activity_weather: positions + times"),
          invalidated_by="INDEX_VERSION, the activity files' stamps; weather refetched"),
@@ -310,6 +334,16 @@ def of_class(cls: str) -> tuple[list[Table], list[File]]:
 def backup_entries(include_fit: bool) -> list[File]:
     """What a backup holds: ALWAYS, plus OPT_IN with backup.include_fit."""
     return [f for f in FILES if f.backup == ALWAYS or (include_fit and f.backup == OPT_IN)]
+
+
+# user_settings keys (SQL LIKE) that stay on this machine: this machine's backup folder / state,
+# the debug API switch, the 課表訂閱 ICS link token (SP-355); compare debug_view.EXPORT_EXCLUDE
+LOCAL_SETTINGS: tuple = ("backup.%", "debug.%", "plan.calendar")
+
+
+def local_tables() -> list[str]:
+    """Tables whose rows stay on this machine: emptied in a backup, kept on a restore."""
+    return [t.name for t in TABLES if t.local]
 
 
 def unclassified_tables(con: sqlite3.Connection) -> list[str]:
