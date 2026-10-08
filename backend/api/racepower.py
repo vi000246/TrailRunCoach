@@ -403,8 +403,36 @@ def grade_model():
 @router.get("/cadence-check")
 def cadence_check():
     """SP-230: the climbing cadence distribution against the 130 spm walk line (report only)."""
-    from backend.engine.racepower import athlete as A
     from backend.engine.racepower import runwalk as RW
+    secs, n = _climb_cadence()
+    return _py({**RW.cadence_check(secs), "n_runs": n})
+
+
+CHART_WARM_WAIT_S = 600.0      # how long the chart warm-up waits for the classification job
+
+
+def warm_charts(job=None) -> None:
+    """The warm-up's last step (api/wko5views._low_priority; SP-366): the grade-model fit and
+    the climbing-cadence scan, so the first page that opens the charts finds them. After the
+    activity classification `job` (one heavy job at a time); owner only — the demo and other
+    tenants compute on request. A failure only logs."""
+    import logging
+    if _tenancy.demo_mode() or _tenancy.current().kind != _tenancy.OWNER:
+        return
+    t = getattr(job, "thread", None)
+    if t is not None and t.is_alive():
+        t.join(CHART_WARM_WAIT_S)
+    try:
+        _grade_models()
+        _climb_cadence()
+    except Exception as e:               # noqa: BLE001 — the page computes on request
+        logging.getLogger(__name__).warning("race chart warm-up failed: %s", type(e).__name__)
+
+
+def _climb_cadence() -> tuple:
+    """(seconds per cadence bin, runs) of the year's climbing, memoised per dataset and day;
+    one scan per key for concurrent callers (SP-366). The texts follow each request's locale."""
+    from backend.engine.racepower import athlete as A
     ds = _dataset()
     today = today_local()
     key = (*_tenancy.ds_key(ds), today)
@@ -412,14 +440,13 @@ def cadence_check():
     def scan():
         hit = _cache.get("climb_cadence")
         if not (hit and hit[0] == key):
-            hit = (key, A.climb_cadence_seconds(ds, today))   # the histogram; the texts follow the request's locale
+            hit = (key, A.climb_cadence_seconds(ds, today))
             _cache["climb_cadence"] = hit
         return hit
     hit = _cache.get("climb_cadence")
     if not (hit and hit[0] == key):
-        hit = _FLIGHT.do(("climb_cadence", key), scan)       # SP-366: one scan for concurrent requests
-    secs, n = hit[1]
-    return _py({**RW.cadence_check(secs), "n_runs": n})
+        hit = _FLIGHT.do(("climb_cadence", key), scan)
+    return hit[1]
 
 
 def heat_status_for(date: Optional[str]) -> dict:
