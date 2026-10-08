@@ -350,6 +350,24 @@ def _wlock() -> asyncio.Lock:
     return lk
 
 
+# one push to the watch at a time (SP-362 B3). COROS takes 20–30 s on the NAS: a push holds this
+# lock, never _wlock, so the page's GET /sessions / calendar and the user's edits don't wait for
+# it. Rules: never take _wlock while holding _plock (or the other way round); a push re-reads the
+# stored plan after taking _plock, so it sends what is stored then — an edit saved meanwhile is
+# sent as edited, and an edit saved after that read is sent by the edit's own _sync_watch, which
+# queues on this lock (the user's edit wins; the fingerprint keeps an up-to-date copy from being
+# uploaded again).
+_plocks: dict = {}
+
+
+def _plock() -> asyncio.Lock:
+    loop = asyncio.get_running_loop()
+    lk = _plocks.get(id(loop))
+    if lk is None:
+        lk = _plocks[id(loop)] = asyncio.Lock()
+    return lk
+
+
 def _today(inp: dict) -> str:
     return max(inp["today"], CW.real_today().isoformat())
 
@@ -1832,7 +1850,8 @@ async def _unpush_expired(db: AsyncSession, deleted: list[dict]) -> dict:
     if not keys:
         return {"status": "none", "removed": 0}
     try:
-        res = await prov.remove_keys(db, keys)
+        async with _plock():                   # one push at a time (SP-362)
+            res = await prov.remove_keys(db, keys)
     except WT.SyncAuthError as e:
         return {"status": "auth", "removed": 0, "pending": len(keys), "error": str(e), "provider_label": prov.label}
     except Exception as e:                   # noqa: BLE001 — the delete itself is done
@@ -2038,7 +2057,8 @@ async def _sync_watch(db: AsyncSession, uids, inp: Optional[dict] = None) -> dic
         return {"status": "none"}
     inp = inp or await _inputs(db)
     today = _today(inp)
-    async with _wlock():
+    # SP-362 B3: under the push lock only; the store as it is once this push's turn comes
+    async with _plock():
         new = await PS.load(db)
         res = await PA.push_window(db, new, inp, today, int(cfg["push_days"] or 7),
                                    only={u for u in uids if u}, window=auto)
@@ -2062,7 +2082,10 @@ async def push(scope: str = "week", day: Optional[str] = None, db: AsyncSession 
     today = _today(inp)
     async with _wlock():
         await _ensure(db, inp)
-        new, changes = await PS.plan_reconcile(db, inp, apply=True)
+        _, changes = await PS.plan_reconcile(db, inp, apply=True)
+    # SP-362 B3: COROS outside the writer lock; the store as it is once this push's turn comes
+    async with _plock():
+        new = await PS.load(db)
         live = {s["uid"] for s in new if s["state"] in ("active", "done", "missed")}
         prov = await WT.active(db)
         rows = await prov.all_rows(db)
@@ -2089,7 +2112,7 @@ async def push(scope: str = "week", day: Optional[str] = None, db: AsyncSession 
 async def unpush(scope: str = "week", day: Optional[str] = None, db: AsyncSession = Depends(get_db)):
     inp = await _inputs()
     a, b = _range(scope, day, inp)
-    async with _wlock():
+    async with _plock():                       # COROS only: the push lock, not the writer lock (SP-362)
         prov = await WT.active(db)
         rows = await prov.all_rows(db)
         keys = [k for k, r in rows.items() if r.day and a <= r.day <= b]
