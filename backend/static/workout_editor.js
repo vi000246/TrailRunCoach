@@ -112,6 +112,20 @@ dialog.sd .we input.dur { width: 4.6em; font-variant-numeric: tabular-nums; }
 dialog.sd .we input.num { width: 4.8em; font-variant-numeric: tabular-nums; }
 dialog.sd .we input.note { width: 100%; }
 .we-dur { display: flex; gap: 4px; align-items: center; min-width: 0; }
+/* a 「負荷」 step (SP-360): more fields (TSS／感覺 + the number) and the 「≈ … TL（推估 ±…）」
+   conversion did not fit the duration column and spilled over the target. That row gets a wider
+   duration column and grows to two lines: the fields (wrapping again only when still too narrow),
+   then the conversion on its own line */
+.we-dur:has([data-f="lmode"]) { flex-wrap: wrap; row-gap: 3px; }
+.we-dur:has([data-f="lmode"]) > * { flex: none; }
+.we-dur:has([data-f="lmode"]) > select { flex: 0 1 auto; min-width: 4.4em; max-width: 5.5em; }
+@supports (field-sizing: content) {       /* as wide as the chosen option (「RPE（感覺）」 not cut) */
+  .we-dur:has([data-f="lmode"]) > select { field-sizing: content; max-width: 100%; }
+}
+.we-dur:has([data-f="lmode"]) > .we-lap { flex: 1 1 100%; min-width: 0; white-space: normal; }
+@media (min-width: 700px) {
+  .we-row:has(.we-dur [data-f="lmode"]) { grid-template-columns: 18px 84px minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, .6fr) auto; }
+}
 .we-tbtn { display: flex; flex-wrap: wrap; gap: 0 6px; align-items: baseline; text-align: left; border: 1px dashed transparent; background: none; color: var(--text);
   padding: 2px 5px; border-radius: 6px; cursor: pointer; min-width: 0; font-size: 13px; }
 .we-tbtn:hover, .we-tbtn:focus-visible, .we-tbtn.on { border-color: var(--line); background: var(--bg); }
