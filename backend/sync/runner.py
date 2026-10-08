@@ -109,7 +109,9 @@ def _log_run(source: str, trigger: str, result: dict, clock: SyncClock) -> None:
 
 
 def is_busy(source: str) -> bool:
-    return source in _BUSY
+    """A sync, a check or a deletion of the source is running. A yielding holder (the
+    self-rating job, SP-362 A5) does not count: a sync asks it to stop and waits."""
+    return source in _BUSY and source not in _YIELD
 
 
 @contextlib.contextmanager
@@ -127,18 +129,54 @@ def hold(source: str):
         _BUSY.discard(source)
 
 
-def _client_stream(db: AsyncSession, source: str, athlete_id: int, since: Optional[str]):
+# A background job that gives way (SP-362 A5): it holds the busy flag (nothing runs beside
+# it) but a sync / check of the same source sets its stop request and waits for it to end
+# between two reads. A deletion (hold) is refused meanwhile, as during a sync.
+_YIELD: dict[str, asyncio.Event] = {}
+YIELD_WAIT_S = 30.0               # at most this long (one detail read is ≤ 20 s, DETAIL_TIMEOUT_S)
+
+
+@contextlib.contextmanager
+def hold_yielding(source: str):
+    """hold(source) for a job that stops when asked; yields the stop request (an Event)."""
+    with hold(source):
+        stop = asyncio.Event()
+        _YIELD[source] = stop
+        try:
+            yield stop
+        finally:
+            _YIELD.pop(source, None)
+
+
+async def _make_way(source: str, wait: float = YIELD_WAIT_S) -> None:
+    """Ask a yielding holder of `source` to stop and wait (at most `wait` s) until it has."""
+    stop = _YIELD.get(source)
+    if stop is None:
+        return
+    stop.set()
+    end = time.monotonic() + wait
+    while source in _BUSY and source in _YIELD and time.monotonic() < end:
+        await asyncio.sleep(0.05)
+
+
+def _client_stream(db: AsyncSession, source: str, athlete_id: int, since: Optional[str], **kw):
     if source == "coros":
         from backend.sync import coros_client
-        return coros_client.sync_workouts(db, athlete_id, since=since)
+        return coros_client.sync_workouts(db, athlete_id, since=since, **kw)
     from backend.sync import tp_client
     return tp_client.sync_workouts(db, athlete_id, since=since)
 
 
 async def stream(db: AsyncSession, source: str, athlete_id: int = 1,
-                 since: Optional[str] = None, trigger: str = "manual") -> AsyncIterator[dict]:
+                 since: Optional[str] = None, trigger: str = "manual",
+                 feel_in_background: bool = False) -> AsyncIterator[dict]:
     """Run one sync, yielding the client's progress events. Yields a single
-    SYNC_BUSY error event when the source is already running."""
+    SYNC_BUSY error event when the source is already running.
+
+    `feel_in_background` (the button's SSE and run_once; SP-362 A5): COROS's self-rating
+    passes over already-imported activities run as a job after the result is stored
+    (start_feel_job) instead of inside the run."""
+    await _make_way(source)
     try:
         ctx = hold(source)
         ctx.__enter__()
@@ -148,10 +186,16 @@ async def stream(db: AsyncSession, source: str, athlete_id: int = 1,
     result = {"at": None, "trigger": trigger, "status": "running", "downloaded": 0,
               "checked": 0, "errors": 0, "error": None}
     clock = SyncClock()
+    bg_feel = feel_in_background and source == "coros"
+    feel_read = None                  # the complete event's `feel_read`: the job is due
     try:
-        async for ev in _client_stream(db, source, athlete_id, since):
+        async for ev in _client_stream(db, source, athlete_id, since,
+                                       **({"feel_passes": False} if bg_feel else {})):
             clock.event(ev)
             if ev.get("status") == "complete":
+                if "feel_read" in ev:
+                    ev = dict(ev)
+                    feel_read = frozenset(ev.pop("feel_read") or ())
                 result.update(downloaded=ev.get("total_downloaded", 0), checked=ev.get("total_checked", 0),
                               errors=len(ev.get("errors") or []), status="ok" if not ev.get("errors") else "partial")
                 if ev.get("tl_filled"):
@@ -220,11 +264,67 @@ async def stream(db: AsyncSession, source: str, athlete_id: int = 1,
             calibrate.after_sync(source, result, athlete_id)
         except Exception as e:           # noqa: BLE001
             log.warning("calibration trigger failed: %s", type(e).__name__)
+        # ④ COROS's self-rating passes (SP-231) as a background job (SP-362 A5): the run
+        # above has ended and released the busy flag; the job holds it as a yielding holder
+        if feel_read is not None and result["status"] in OK_STATUSES:
+            try:
+                start_feel_job(db, athlete_id, feel_read)
+            except Exception as e:       # noqa: BLE001
+                log.warning("self-rating job not started: %s", type(e).__name__)
         clock.secs["after"] += time.monotonic() - t_after
         try:
             _log_run(source, trigger, result, clock)
         except Exception:                # noqa: BLE001 — logging never breaks a sync
             pass
+
+
+def start_feel_job(db: AsyncSession, athlete_id: int, read_now=frozenset()) -> asyncio.Task:
+    """COROS's self-rating passes after a sync, in the background (SP-362 A5), on their own
+    session of the sync's DB (the same tenant). Holds the COROS busy flag as a yielding holder:
+    never beside a sync / check of COROS — one that starts asks it to stop between two reads;
+    the rows left are read by the job after that run. ≥ 1 rating stored -> the automatic plan
+    and the calibration, as the sync's `rpe_filled` did (SP-231)."""
+    t = asyncio.get_running_loop().create_task(_feel_job(db.bind, athlete_id, frozenset(read_now)))
+    _TASKS.add(t)
+    t.add_done_callback(_TASKS.discard)
+    return t
+
+
+async def _feel_job(bind, athlete_id: int, read_now: frozenset) -> int:
+    from backend.sync import coros_client
+    t0 = time.monotonic()
+    try:
+        with hold_yielding("coros") as stop:
+            async with AsyncSession(bind, expire_on_commit=False) as db:
+                filled = await coros_client.feel_job(db, athlete_id, read_now, should_stop=stop.is_set)
+            stopped = stop.is_set()
+    except SyncBusy:
+        return 0                      # a check / deletion / sync took the flag first: the next job
+    except Exception as e:            # noqa: BLE001 — never raises
+        log.warning("COROS self-rating job failed: %s", type(e).__name__)
+        return 0
+    log.info("COROS self-rating job: %s stored in %.1f s%s", filled, time.monotonic() - t0,
+             " (gave way to a sync)" if stopped else "")
+    if filled >= 1:
+        await _after_feel(filled, athlete_id)
+    return filled
+
+
+async def _after_feel(filled: int, athlete_id: int) -> None:
+    """The hooks a sync with `rpe_filled` ≥ 1 calls (plan rule D / the RPE factor, SP-231),
+    after the sync's own automatic plan run (if any) has ended."""
+    res = {"status": "ok", "trigger": "rpe", "downloaded": 0, "rpe_filled": int(filled)}
+    try:
+        from backend.engine import plan_auto
+        await plan_auto.wait_idle(600.0)
+        plan_auto.after_sync("coros", res)
+    except Exception as e:            # noqa: BLE001
+        log.warning("auto plan trigger after the self-rating job failed: %s", type(e).__name__)
+    try:
+        from backend.engine import calibrate
+        calibrate.after_sync("coros", res, athlete_id)
+    except Exception as e:            # noqa: BLE001
+        log.warning("calibration trigger after the self-rating job failed: %s", type(e).__name__)
 
 
 async def run_once(source: str, athlete_id: int = 1, since: Optional[str] = None,
@@ -233,7 +333,7 @@ async def run_once(source: str, athlete_id: int = 1, since: Optional[str] = None
         from backend.db.database import AsyncSessionLocal as session_factory
     last = {}
     async with session_factory() as db:
-        async for ev in stream(db, source, athlete_id, since, trigger):
+        async for ev in stream(db, source, athlete_id, since, trigger, feel_in_background=True):
             last = ev
     return last
 
