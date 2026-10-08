@@ -9,15 +9,22 @@ How the minutes are counted (decided for SP-364; 推估 where it says so):
     minutes of the session ARE the warm-up — a warm-up at easy intensity is the same running, so the
     planned minutes, the TSS, the week's time budget and the day caps stay as planned. The detail gets
     「含暖身 N 分」 (MARK) and the step builders (workout_steps.derive → the COROS push) split the
-    session there. A run too short to keep MIN_MAIN minutes after the warm-up (plus its strides /
-    marathon-pace / cool-down) is lengthened to fit (TSS scaled with the minutes).
+    session there. The session's time NEVER changes (owner 2026-10-08): a run too short to keep
+    MIN_MAIN minutes after the warm-up (plus its strides / marathon-pace / cool-down) gets a shorter
+    one (none under 5′); a run trimmed / edited after it was marked is split the same way at push
+    time (workout_steps.carve_warm). The same for an easy-type generated structure (技術地形 RPE
+    3–4); a downhill part (RPE ≥ 5) gives nothing, its own 10′ stays.
+  * **The easy-run count never changes** (owner 2026-10-08): the minutes the warm-up adds to the
+    week's other sessions (apply_sized) come out of the easy runs evenly, but their number is counted
+    on the minutes they would have without the preference (week_plan, projection.week_sessions,
+    plan_prefs.shape via Ctx.warm_base — the sessions before the warm-up, trimmed to the cap the same way).
   * **Its own warm-up** (intervals, CP / AeT tests, the structured 技術地形／下坡 sessions): topped up to
     N, the main set is never shortened. The extra minutes count in the session (minutes + TSS at the
     easy-run rate). A library interval gets the floor inside its warm-up block
     (interval_library.blocks): the day-cap fitting sees it and the week's easy runs give the minutes
     back; the text intervals and tests are topped up before the easy runs are sized (week_plan /
     projection.week_sessions), so the week keeps its total; sessions the later passes add or rebuild
-    (技術地形／下坡 with their 10′ warm-up, the 減量期 / B-race intervals) get it on top of the week
+    (the RPE 6–7 技術地形 session, the 減量期 / B-race intervals) get it on top of the week
     (only when the floor is longer than their own warm-up). Day caps: a library interval is fitted
     with the floor (interval_library.fit); a text interval is never trimmed below it
     (plan_prefs.trim_quality: a rep goes first); the CP / AeT tests are cap-exempt as before.
@@ -97,20 +104,24 @@ def _extra_min(s: dict) -> float:
 
 
 def _carve(s: dict, n: int) -> bool:
-    """An easy-type session: its first `n` minutes are the warm-up (the mark in the detail)."""
+    """An easy-type session: its first `n` minutes are the warm-up (the mark in the detail). The
+    session's time never changes (the caps and guards before this pass hold): a run too short to
+    keep MIN_MAIN minutes (+ strides / MP / cool-down) after it gets a shorter warm-up, none under
+    MIN_RANGE's 5′ (SP-364 review, owner: 「總時間不變」)."""
     old = int(s.get("minutes") or 0)
     if old <= 0:
         return False
-    need = int(math.ceil(n + MIN_MAIN + _extra_min(s)))
-    if mark_min(s) == n and old >= need:
-        return False
+    n = min(int(n), int(math.floor(old - MIN_MAIN - _extra_min(s))))
     det = s.get("detail") or ""
+    if n < MIN_RANGE[0]:
+        if not MARK_RE.search(det):
+            return False
+        s["detail"] = re.sub(r"；?" + MARK_RE.pattern, "", det, count=1)       # too short now: no warm-up
+        return True
+    if mark_min(s) == n:
+        return False
     mark = MARK.format(n=n)
-    det = MARK_RE.sub(mark, det) if MARK_RE.search(det) else (det + "；" if det else "") + mark
-    s["detail"] = det
-    if old < need:
-        s["tss"] = float(s.get("tss") or 0.0) * need / old
-        s["minutes"] = need
+    s["detail"] = MARK_RE.sub(mark, det) if MARK_RE.search(det) else (det + "；" if det else "") + mark
     return True
 
 
@@ -168,16 +179,41 @@ def _variant(s: dict, n: int, prefs, rate: float) -> bool:
 
 
 def _steps(s: dict, n: int, rate: float) -> bool:
+    """A generated structure (技術地形／下坡): an easy-type one keeps its time — the warm-up comes out
+    of the easy step after it (workout_steps.carve_warm; a downhill / RPE ≥ 5 main part gives
+    nothing, its own 10′ stays); an RPE-quality one is topped up in front like an interval."""
     from backend.engine import workout_steps as WS
     st = s.get("steps")
     if not isinstance(st, dict) or not st.get("items"):
         return False
+    if s.get("kind") in EASY_KINDS and WS.rpe_role(st["items"]) != "quality":
+        items = WS.carve_warm(st["items"], n * 60)
+        if items is st["items"]:
+            return False
+        s["steps"] = {**st, "items": items}
+        return True
     items, add = WS.ensure_warm(st["items"], n * 60)
     if not add:
         return False
     s["steps"] = {**st, "items": items}
     _grow(s, add / 60.0, rate)
     return True
+
+
+def variant_extra(s: dict, prefs) -> float:
+    """Minutes the warm-up floor adds to a library interval's own warm-up block (0 without)."""
+    from backend.engine import interval_library as IL
+    v = IL.resolve(s.get("variant_key"), s.get("variant_reps"), s.get("variant_adj"))
+    if v is None:
+        return 0.0
+    lv = s.get("variant_blocks") or "std"
+    return float(IL.blocks(v, lv, prefs)["warm_min"] - IL.blocks(v, lv, prefs, floor=0)["warm_min"])
+
+
+def _added(s: dict, before: float, prefs) -> float:
+    if s.get("kind") == "quality" and s.get("variant_key"):
+        return variant_extra(s, prefs)          # fitted with the floor already, or topped up just now
+    return float(s.get("minutes") or 0) - before
 
 
 def apply_one(s: dict, prefs, rates: Optional[dict] = None) -> bool:
@@ -205,18 +241,39 @@ def apply(sessions: list, prefs, rates: Optional[dict] = None) -> int:
     return sum(1 for s in sessions if isinstance(s, dict) and apply_one(s, prefs, rates))
 
 
+def apply_sized(sessions: list, prefs, rates: Optional[dict] = None) -> float:
+    """apply() before the easy runs are sized: the minutes the warm-up added to the week's other
+    sessions (library intervals' floors included). The callers count the easy runs on the minutes
+    left plus these — the run count the week would have without the preference (owner 2026-10-08:
+    「輕鬆跑的次數不變」) — and size them on the minutes really left."""
+    if not floor_min(prefs):
+        return 0.0
+    extra = 0.0
+    for s in sessions:
+        if isinstance(s, dict) and not s.get("done"):
+            before = float(s.get("minutes") or 0)
+            apply_one(s, prefs, rates)
+            extra += _added(s, before, prefs)
+    return extra
+
+
 FIELDS = ("minutes", "tss", "detail", "target", "variant_adj", "steps")
 
 
-def apply_objs(sessions: list, prefs, rates: Optional[dict] = None) -> int:
-    """The same on overview.Session objects (their extra attributes, e.g. _long_day, kept)."""
+def apply_objs(sessions: list, prefs, rates: Optional[dict] = None) -> float:
+    """apply_sized on overview.Session objects (their extra attributes, e.g. _long_day, kept);
+    the minutes added to them."""
     if not floor_min(prefs):
-        return 0
-    n = 0
+        return 0.0
+    extra = 0.0
     for s in sessions:
-        d = {k: getattr(s, k, None) for k in ("id", "kind", "title", "done", "heat") + FIELDS}
+        d = {k: getattr(s, k, None) for k in ("id", "kind", "title", "done", "heat", "protocol", "variant_key",
+                                              "variant_reps", "variant_blocks") + FIELDS}
+        if d.get("done") or not isinstance(d.get("kind"), str):
+            continue
+        before = float(d.get("minutes") or 0)
         if apply_one(d, prefs, rates):
             for k in FIELDS:
                 setattr(s, k, d[k])
-            n += 1
-    return n
+        extra += _added(d, before, prefs)
+    return extra

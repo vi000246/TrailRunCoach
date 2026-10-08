@@ -379,6 +379,27 @@ def easy_hr_text(aet: Optional[float], measured: bool = False) -> str:
     return easy_cap_hr(aet, measured)
 
 
+def _used_without_warmup(hard: list, rest: list, long_s: Optional[dict], p: Prefs, c: Ctx) -> float:
+    """The long / hard / other sessions' minutes as they'd be without 每堂課前加熱身 (SP-364): a text
+    interval from its copy before the warm-up, trimmed to the weekday cap the same way; a library
+    interval less its warm-up floor; the rest (easy-type: the warm-up is inside their time) as is."""
+    from backend.engine import warmup as WU
+    base = {b.get("id"): b for b in c.warm_base or []}
+    out = 0.0
+    for s in hard:
+        b = base.get(s.get("id")) or (base.get("quality") if s.get("id") == "quality2" else None)
+        if s.get("variant_key"):
+            out += float(s["minutes"]) - WU.variant_extra(s, p)
+        elif b is not None and b.get("kind") == s.get("kind"):
+            b = dict(b)
+            if s["kind"] == "quality" and p.cap_weekday is not None:
+                trim_quality(b, p.cap_weekday)
+            out += float(b.get("minutes") or 0)
+        else:
+            out += float(s["minutes"])
+    return out + sum(float(s["minutes"]) for s in rest) + (float(long_s["minutes"]) if long_s is not None else 0.0)
+
+
 def trim_quality(s: dict, cap: int, warm_floor: int = 0) -> bool:
     """Shorten a quality session to `cap` minutes (warm-up, cool-down, then
     reps); rewrite title / detail so the COROS step builder parses the new
@@ -435,6 +456,10 @@ class Ctx:
     notes: list = field(default_factory=list)
     quality_cap: Optional[int] = None  # 間歇門檻 guardrail mode: base phase ≤ 1 (engine/quality_gate.py)
     aet_measured: bool = False        # the cap is a measured AeT (「（實測 AeT）」 in the texts)
+    # 每堂課前加熱身 (SP-364): the sessions as they were before the warm-up (warmup.apply_sized) — the easy
+    # runs are counted on the minutes they'd have without it (the run count never changes, owner
+    # 2026-10-08) and sized on what is really left; None = the preference is off
+    warm_base: Optional[list] = None
 
     def cap(self) -> str:
         """「輕鬆跑上限 N bpm」 (hr_profile.easy_cap_label)."""
@@ -590,16 +615,19 @@ def shape(ss: list[dict], total_min: float, p: Prefs, c: Ctx) -> list[dict]:
     n_fixed = len(hard) + (1 if long_s is not None else 0) + len(rest)
     used = sum(s["minutes"] for s in hard + rest) + (long_s["minutes"] if long_s is not None else 0)
     left = max(0.0, total_min - used)
+    # the count as without 每堂課前加熱身 (SP-364: never more / fewer easy runs for it)
+    left_n = max(0.0, total_min - _used_without_warmup(hard, rest, long_s, p, c)) if c.warm_base is not None \
+        else left
     cap = p.cap_weekday
     # auto: at most rest_days.AUTO_MAX_RUNS runs a week, at least one rest day (SP-82); 每週跑步次數 wins
     from backend.engine.rest_days import AUTO_MAX_RUNS
     room = max(0, min(c.slots, p.runs if p.runs is not None else AUTO_MAX_RUNS) - n_fixed)
     if p.runs is not None:
-        n_e = min(room, int(left // MIN_EASY))
+        n_e = min(room, int(left_n // MIN_EASY))
     else:
-        n_e = 0 if left < 25 else max(1, min(5, int(round(left / 50.0))))
-        if cap is not None and left >= 25:
-            n_e = max(n_e, math.ceil(left / cap))
+        n_e = 0 if left_n < 25 else max(1, min(5, int(round(left_n / 50.0))))
+        if cap is not None and left_n >= 25:
+            n_e = max(n_e, math.ceil(left_n / cap))
         n_e = min(n_e, room)
     per = left / n_e if n_e else 0.0
     excess = 0.0

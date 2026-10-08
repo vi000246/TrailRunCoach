@@ -1219,6 +1219,7 @@
   "照現在的體能，預估第 {d} 天出發後 {eta:.1f} 小時到山頂；撤退時間是 {c:g} 小時": "With your current fitness, the summit is reached {eta:.1f} h after starting on day {d}; the turnaround time is {c:g} h",
   "熟悉比賽配速與補給，代謝效益接近輕鬆跑，量以週量 15–20% 為限（Daniels）": "Practises race pace and fuelling; metabolically close to an easy run; capped at 15–20% of weekly volume (Daniels)",
   "熱校正後的心率–功率沒有正斜率，基準線不能用": "Heat-corrected HR vs power has no positive slope; the baseline is unusable",
+  "熱身 {w} 分＋主課放不進{cl}：": "Warm-up {w} min + main set don't fit {cl}: ",
   "熱身時間要在 {lo}–{hi} 分": "Warm-up time must be {lo}–{hi} min",
   "熱適應指數：每分鐘的熱劑量在這個 Hadley 以下是 0，到 150 是滿劑量。": "Heat acclimatisation index: each minute's heat dose is 0 below this Hadley and a full dose at 150.",
   "熱適應資料讀取失敗（{err}）": "Failed to read heat-acclimation data ({err})",

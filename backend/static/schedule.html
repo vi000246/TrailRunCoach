@@ -776,7 +776,7 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
       <div class="pf-r"><label class="pf-l" for="pf-tq" data-i18n="schedule.pf.t_quality">間歇地形</label>
         <span class="pf-c"><select id="pf-tq" name="terrain_quality"><option value="any" data-i18n="schedule.pf.any">都可</option><option value="flat" data-i18n="schedule.pf.flat">平路間歇</option><option value="hill" data-i18n="schedule.pf.hill">爬坡間歇</option></select></span></div>
       <div class="pf-r"><label class="pf-l" for="pf-wax" data-i18n="schedule.pf.warm_all">每堂課前加熱身</label>
-        <button type="button" class="qtip" data-i18n-attr="aria-label:schedule.pf.about;data-tip:schedule.pf.warm_all_tip" aria-label="說明" data-tip="勾了之後，每一堂跑步課和插入的範本前面都有至少這麼久的熱身。本來就有熱身的課（間歇、測試、範本）：比較短就補到這個時間，比較長就照原本的；主課不縮短，補上的時間算在那堂課裡。輕鬆跑、長跑：前面這幾分鐘當熱身，總時間不變。一週總時間照原本的目標，間歇多出來的時間從輕鬆跑扣。肌力、休息不加；你自己改過的課不會被改。">?</button>
+        <button type="button" class="qtip" data-i18n-attr="aria-label:schedule.pf.about;data-tip:schedule.pf.warm_all_tip" aria-label="說明" data-tip="勾了之後，每一堂跑步課和插入的範本前面都有至少這麼久的熱身。本來就有熱身的課（間歇、測試、範本）：比較短就補到這個時間，比較長就照原本的；主課不縮短，補上的時間算在那堂課裡。輕鬆跑、長跑：前面這幾分鐘當熱身，總時間不變。一週總時間照原本的目標，間歇多出來的時間平均從輕鬆跑扣，輕鬆跑的次數不變。肌力、休息不加；你自己改過的課不會被改。">?</button>
         <input type="checkbox" class="sw pf-c" id="pf-wax" name="warmup_on" role="switch"></div>
       <div class="pf-r" id="pf-wa-row"><label class="pf-l" for="pf-wam" data-i18n="schedule.pf.warm_min">熱身時間</label>
         <span class="pf-c stp"><input id="pf-wam" type="number" name="warmup_min" min="5" max="30" step="1" data-start="10" inputmode="numeric"><span class="u" data-i18n="schedule.pf.u_min">分</span></span></div>

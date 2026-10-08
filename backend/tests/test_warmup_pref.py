@@ -90,13 +90,45 @@ def test_easy_run_takes_its_first_minutes_as_the_warm_up():
     assert WU.apply_one(s, ON10, RATES) and WU.mark_min(s) == 10 and s["detail"].count("含暖身") == 1
 
 
-def test_a_short_easy_run_keeps_10_minutes_after_its_warm_up():
+def test_a_short_easy_run_keeps_its_time_and_gets_a_shorter_warm_up():
+    """Review #2: never lengthened after the caps — the warm-up shrinks to leave MIN_MAIN easy minutes."""
     s = easy(20)
     WU.apply_one(s, ON, RATES)
-    assert WU.MIN_MAIN == 10 and s["minutes"] == 30                           # 20 warm-up + 10 easy
-    assert s["tss"] == pytest.approx(20.0 * 30 / 20)                         # scaled with the minutes
+    assert WU.MIN_MAIN == 10 and s["minutes"] == 20 and s["tss"] == pytest.approx(20.0)
+    assert WU.mark_min(s) == 10
+    assert [x["dur"]["value"] for x in WS.derive(s, FULL)["items"]] == [600, 600]
+    s = easy(12)                                               # < 5′ left for a warm-up: none
+    assert not WU.apply_one(s, ON, RATES) and WU.mark_min(s) is None and s["minutes"] == 12
+    # strides: 6 × (20″ + 60″) = 8′ of the 30 are not easy running → 30 − 8 − 10 = 12′ warm-up
+    st = {"id": "easy2", "kind": "easy", "title": "輕鬆跑＋6×20 秒衝刺", "minutes": 30, "detail": "", "tss": 30.0}
+    WU.apply_one(st, ON, RATES)
+    assert st["minutes"] == 30 and WU.mark_min(st) == 12
+    pushed = CW.session_steps(st, CW.Thresholds.of(FULL))
+    assert pushed[0].seconds == 720 and _secs(pushed) == 30 * 60
+    # a marked run shortened again later (an easy run that no longer fits) loses the mark
+    st["minutes"] = 15
+    assert WU.apply_one(st, ON, RATES) and WU.mark_min(st) is None
+
+
+def _secs(ss) -> int:
+    return sum(x.sets * sum(y.seconds for y in x.steps) if isinstance(x, CW.Repeat) else x.seconds for x in ss)
+
+
+@pytest.mark.parametrize("minutes,warm", [(25, 900), (12, 120), (10, 0)])
+def test_a_marked_run_trimmed_or_edited_later_keeps_its_total(minutes, warm):
+    """Review #1: plan_auto's fatigue trim / a user edit keeps 「含暖身 20 分」 with fewer minutes — the
+    structure and the push keep the session's time; the warm-up is what is left over 10′ easy."""
+    s = easy(40)
+    WU.apply_one(s, ON, RATES)
+    s["minutes"] = minutes                                     # adapt._set_minutes / the editor
     d = WS.derive(s, FULL)
-    assert [x["dur"]["value"] for x in d["items"]] == [1200, 600]
+    assert sum(x["st"]["dur"]["value"] for x in WS.flat(d["items"])) == minutes * 60
+    assert (WS.lead_warm_s(d["items"]) or 0) == warm
+    pushed = CW.session_steps(s, CW.Thresholds.of(FULL))
+    assert _secs(pushed) == minutes * 60
+    heat = {"id": "e", "kind": "easy", "title": "熱適應輕鬆跑", "minutes": 25, "detail": "含暖身 20 分", "tss": 1.0,
+            "heat": True}
+    assert _secs(CW.session_steps(heat, CW.Thresholds.of(FULL))) == 25 * 60
 
 
 @pytest.mark.parametrize("sess", [
@@ -120,9 +152,10 @@ def test_easy_kinds_warm_up_in_the_steps_and_the_coros_push(sess):
     assert WS.steps_to_coros(WS.normalize(d), WS.Ctx.of(FULL, CW._basis(s))) == pushed
     # …and apart from the warm-up lap it is the old push: same steps, targets and total time
     legacy = CW.session_steps(dict(sess), th)
-    secs = lambda ss: sum(x.sets * sum(y.seconds for y in x.steps) if isinstance(x, CW.Repeat) else x.seconds
-                          for x in ss)
+    secs = _secs
     assert secs(pushed) == secs(legacy) == sess["minutes"] * 60
+    # the warm-up lap is easy: the easy-run HR cap (as the heat run's own warm-up and the hike)
+    assert pushed[0].intensity == CW.easy_hr(th)
     key = lambda ss: [(x.kind, x.intensity, x.name) if isinstance(x, CW.Step) else (x.sets, x.name)
                       for x in ss if not (isinstance(x, CW.Step) and x.kind == CW.EX_WARMUP)]
     assert key(pushed) == key(legacy)
@@ -200,17 +233,28 @@ def test_a_variant_built_without_the_preference_is_topped_up_by_the_decorator():
     assert not WU.apply_one(s, ON, RATES)                                     # once
 
 
-def test_structured_sessions_extend_their_warm_step():
+def _tech(lo, hi, kind="hike"):
     ids = WS._Ids("x")
     steps = WS.doc([WS.step(ids, "warm", 600, WS.EASY, "好走的路段暖身"),
-                    WS.step(ids, "work", 2400, {"type": "rpe", "lo": 3, "hi": 4}, "技術地形"),
+                    WS.step(ids, "work", 2400, {"type": "rpe", "lo": lo, "hi": hi}, "技術地形"),
                     WS.step(ids, "cool", 300, WS.EASY, "緩和")], "template:lib:x")
-    s = {"id": "tech", "kind": "hike", "title": "技術地形 55′", "minutes": 55, "tss": 50.0, "steps": steps,
-         "detail": "", "target": ""}
+    return {"id": "tech", "kind": kind, "title": "技術地形 55′", "minutes": 55, "tss": 50.0, "steps": steps,
+            "detail": "", "target": ""}, steps
+
+
+def test_structured_sessions_easy_inside_their_time_hard_on_top():
+    # an easy (RPE 3–4) generated structure keeps its time: the warm-up comes out of the easy part
+    s, steps = _tech(3, 4)
     assert WU.apply_one(s, ON, RATES)
-    assert s["minutes"] == 65 and s["steps"]["items"][0]["dur"]["value"] == 1200
-    assert s["steps"]["items"][1]["dur"]["value"] == 2400                    # the main part is not cut
+    assert s["minutes"] == 55 and [x["dur"]["value"] for x in s["steps"]["items"]] == [1200, 1800, 300]
     assert steps["items"][0]["dur"]["value"] == 600                          # the input was not mutated
+    # an RPE 6–7 one is a quality session: topped up in front, the main part not cut
+    s, _ = _tech(6, 7)
+    assert WU.apply_one(s, ON, RATES)
+    assert s["minutes"] == 65 and [x["dur"]["value"] for x in s["steps"]["items"]] == [1200, 2400, 300]
+    # a downhill part (RPE 3–5) gives nothing: its own 10′ warm-up stays, the time too
+    s, _ = _tech(3, 5, "easy")
+    assert not WU.apply_one(s, ON, RATES) and s["minutes"] == 55
 
 
 @pytest.mark.parametrize("kind", ["strength", "rest", "race", "notice", "heat_passive"])
@@ -253,18 +297,37 @@ def test_templates_full_structures_get_the_warm_up():
     rows = {r["key"]: r for g in plain["groups"] for r in g["rows"]}
     rows_on = {r["key"]: r for g in on["groups"] for r in g["rows"]}
     assert rows.keys() == rows_on.keys()
-    n = 0
+    easy_keys = {r["key"] for g in on["groups"] if g["cat"] == "easy" for r in g["rows"]}
+    tot = lambda items: sum(x["st"]["dur"]["value"] for x in WS.flat(items) if x["st"]["dur"]["type"] == "time")
+    n = carved = 0
     for k, r in rows_on.items():
         if not r.get("full"):
             continue
         n += 1
         before = WS.lead_warm_s(rows[k]["full"])
+        assert r["items"] == rows[k]["items"]                  # 只換主課 keeps the session's own warm-up
         if before is None:                                     # an open / distance warm-up: untouched
             assert r["full"] == rows[k]["full"]
-            continue
-        assert WS.lead_warm_s(r["full"]) == max(before, 1200), k
-        assert r["items"] == rows[k]["items"]                  # 只換主課 keeps the session's own warm-up
-    assert n > 30
+        elif k in easy_keys:
+            # an easy-category template keeps its length: the warm-up comes out of its easy part
+            assert tot(r["full"]) == tot(rows[k]["full"]) and WS.lead_warm_s(r["full"]) >= before, k
+            carved += WS.lead_warm_s(r["full"]) == max(before, 1200)
+        else:
+            assert WS.lead_warm_s(r["full"]) == max(before, 1200), k
+    assert n > 30 and carved >= 5
+
+
+def test_my_templates_keep_their_length():
+    ids = WS._Ids("u")
+    mine = {"id": 7, "name": "我的輕鬆跑", "cats": ["easy"], "steps": {"items": [
+        WS.step(ids, "work", 2400, WS.EASY, "輕鬆")]}}
+    hard = {"id": 8, "name": "我的間歇", "cats": ["quality"], "steps": {"items": [
+        WS.rep(ids, 5, [WS.step(ids, "work", 180, {"type": "power", "mode": "pct", "lo": 1.06, "hi": 1.12}),
+                        WS.step(ids, "rest", 120, WS.OPEN)], False)]}}
+    t = WS.templates(user={"templates": [mine, hard], "cats": []}, warm_floor_s=1200)
+    rows = {r["key"]: r for g in t["groups"] for r in g["rows"]}
+    assert [x["dur"]["value"] for x in rows["user:7"]["full"]] == [1200, 1200]       # 40′ still
+    assert rows["user:8"]["full"] == hard["steps"]["items"]    # no easy step to take it from: as it is
 
 
 # ---------------------------------------------------------------------------
@@ -289,12 +352,51 @@ def test_projected_week_every_run_has_a_warm_up_and_the_budget_holds():
         if s["kind"] == "strength":
             assert "暖身" not in (s.get("detail") or "")
     # the interval's 5 extra minutes come out of the easy runs: the week's total holds (± the easy
-    # runs' rounding to 5 min)
+    # runs' rounding to 5 min) and the number of easy runs is the same (owner 2026-10-08)
     tot = lambda ss: sum(s["minutes"] for s in ss if s["kind"] != "strength")
     q_on = next(s for s in on if s["kind"] == "quality")
     q_off = next(s for s in off if s["kind"] == "quality")
     assert q_on["minutes"] == q_off["minutes"] + 5
-    assert abs(tot(on) - tot(off)) <= 10
+    n_easy = sum(s["kind"] == "easy" for s in on)
+    assert n_easy == sum(s["kind"] == "easy" for s in off)
+    assert abs(tot(on) - tot(off)) <= 5 * n_easy                # each easy run is rounded to 5 min
+
+
+@pytest.mark.parametrize("hours", [2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0, 7.0, 8.0])
+@pytest.mark.parametrize("prefs_on", [PP.Prefs(warmup_on=True, warmup_min=30),
+                                      PP.Prefs(warmup_on=True, warmup_min=30, cap_weekday=45, runs=None),
+                                      PP.Prefs(warmup_on=True, warmup_min=25, cap_weekday=40, cap_mode="hard")])
+def test_the_easy_run_count_never_changes(hours, prefs_on):
+    """Owner 2026-10-08: no 3×40 → 2×60 — the intervals' extra warm-up minutes come out of the easy runs
+    evenly, their number is what it would be without the preference; the weekday cap still holds."""
+    off_p = replace(prefs_on, warmup_on=False)
+    wk = lambda p: P.week_sessions(date(2026, 10, 5), "base", "base", hours, 50.0, TGT, 6, 60.0, False, True, 17.5,
+                                   150.0, None, prefs=p if p.active else None, rates=RATES, warm_prefs=p)
+    on, off = wk(prefs_on), wk(off_p)
+    assert sum(s["kind"] == "easy" for s in on) == sum(s["kind"] == "easy" for s in off), hours
+    if prefs_on.cap_weekday:
+        cap = prefs_on.cap_weekday
+        for s in on:
+            if s["kind"] == "easy":
+                assert s["minutes"] <= cap and (WU.mark_min(s) or 0) <= cap - WU.MIN_MAIN
+
+
+def test_the_week_plan_keeps_its_easy_run_count():
+    """The synthetic week where the 5 extra minutes of the interval's warm-up turned 3 × 40′ into 2 × 60′."""
+    from backend.engine import overview as O
+    from backend.engine.status import Status
+    from backend.tests.test_quality_gate import TODAY
+    from backend.tests.test_recovery_week import LIGHT, _ds, _plan
+    ds = _ds({4: LIGHT})
+    plan = _plan("2027-03-06")
+    ds.plan = plan
+    st = Status(ds, plan, TODAY, prefs=PP.Prefs()).compute()
+    off = O.week_plan(ds, st, TODAY, prefs=PP.Prefs())
+    on = O.week_plan(ds, st, TODAY, prefs=ON)
+    ids = lambda wp: [s["id"] for s in wp["sessions"]]
+    assert ids(on) == ids(off)
+    q = lambda wp: next(s for s in wp["sessions"] if s["kind"] == "quality")["minutes"]
+    assert q(on) == q(off) + 5
 
 
 def test_project_weeks_decorates_every_projected_week():
@@ -335,6 +437,125 @@ def test_trim_quality_never_cuts_below_the_floor():
     s = {"title": "閾值 3×10 分", "minutes": 75, "tss": 70.0, "detail": "休 2 分；暖身 20 分、緩和 10 分"}
     assert PP.trim_quality(s, 60, warm_floor=20)
     assert "暖身 20 分" in s["detail"] and s["minutes"] <= 60
+
+
+def test_the_fit_note_names_the_warm_up_when_it_is_what_does_not_fit():
+    """Review #4: the floor pushes a rung to 縮量版 / a rung back under 平日上限 — the reason says so."""
+    hot = PP.Prefs(warmup_on=True, warmup_min=30)
+    found = 0
+    for rung in IL.RUNG_ORDER:
+        canon = IL.canonical(rung)
+        cap = IL.total_min(canon, "min") + 1                   # fits without the preference
+        assert "熱身" not in IL.fit(rung, cap, (), PP.Prefs())["reason"]
+        f = IL.fit(rung, cap, (), hot)
+        if f.get("reduced") or f.get("action") in ("back", "move") or "減成" in f["reason"]:
+            assert f["reason"].startswith(f"熱身 30 分＋主課放不進平日上限 {cap:.0f} 分："), (rung, f["reason"])
+            found += 1
+    assert found
+
+
+# ---------------------------------------------------------------------------
+# reconcile: stable, and back to the original when switched off
+# ---------------------------------------------------------------------------
+
+def _gen(prefs):
+    from backend.engine import plan_store as PS
+    from backend.tests.test_plan_store import PHASES, cur_plan, inputs
+    cur = cur_plan()
+    WU.apply(cur["sessions"], prefs, RATES)                    # week_plan's last pass
+    weeks = P.project_weeks(cur, PHASES, date(2026, 10, 25), prefs=prefs)
+    inp = inputs(cur=cur, weeks=weeks, horizon="2026-10-25")
+    return inp, PS.gen_weeks(inp)
+
+
+def _rows(stored):
+    keys = ("gen_key", "day", "kind", "title", "minutes", "detail", "target", "variant_adj", "steps", "state")
+    return sorted((tuple(str(s.get(k)) for k in keys) for s in stored if s["state"] == "active"))
+
+
+def test_generating_twice_changes_no_row_and_switching_off_restores_the_plan():
+    from backend.engine import reconcile as R
+    inp, g_on = _gen(ON)
+    on1, _ = R.reconcile([], g_on, inp["activities"], inp["today"], inp["horizon_end"])
+    assert any(WU.mark_min(s) for s in on1)
+    _, g_on2 = _gen(ON)
+    on2, changes = R.reconcile(on1, g_on2, inp["activities"], inp["today"], inp["horizon_end"])
+    assert changes == [] and _rows(on2) == _rows(on1)
+    # the plan without the preference, then on, then off again: the original rows
+    _, g_off = _gen(PP.Prefs())
+    off1, _ = R.reconcile([], g_off, inp["activities"], inp["today"], inp["horizon_end"])
+    on3, ch_on = R.reconcile(off1, g_on, inp["activities"], inp["today"], inp["horizon_end"])
+    assert ch_on and _rows(on3) != _rows(off1)
+    back, _ = R.reconcile(on3, g_off, inp["activities"], inp["today"], inp["horizon_end"])
+    assert _rows(back) == _rows(off1)
+    assert not any(WU.mark_min(s) or "warm" in (s.get("variant_adj") or {}) for s in back if s["state"] == "active")
+
+
+# ---------------------------------------------------------------------------
+# the AeT drift analysis, scheduling a test, the drawer swap
+# ---------------------------------------------------------------------------
+
+def test_aet_analysis_cuts_the_scheduled_longer_warm_up(monkeypatch):
+    import types
+
+    import numpy as np
+
+    from backend.engine import workout_review as WR
+    t = np.arange(0, 3900, 1.0)
+    samples = {"t": t, "hr": 135.0 + t / 3900.0 * 4, "speed": np.full_like(t, 3.0), "power": np.full_like(t, 200.0),
+               "cadence": None}
+    w = types.SimpleNamespace(idx=1, tags=[], metrics={"duration": 3900.0})
+    ds = types.SimpleNamespace(channel=lambda i, ch: None)
+    sched = {"title": "AeT 飄移測試 40 分", "kind": "test", "protocol": "aet",
+             "target": "固定功率 200 W（±3%）", "detail": "暖身 20 分到開始流汗，接著測試 40 分固定功率不要調"}
+    monkeypatch.setattr(WR, "_samples", lambda ds_, w_: samples)
+    monkeypatch.setattr(WR, "measure", lambda ds_, w_: {})
+    monkeypatch.setattr(WR, "activity_temp", lambda ds_, w_, x: (None, None))
+    monkeypatch.setattr(WR, "watch_bias_of", lambda ds_: None)
+    monkeypatch.setattr(WR, "_title", lambda w_: "")
+    monkeypatch.setattr(WR, "scheduled_aet_test", lambda ds_, w_: sched)
+    assert AT.analyze_workout(ds, w)["warm_s"] == 1200
+    monkeypatch.setattr(WR, "scheduled_aet_test", lambda ds_, w_: {**sched, "detail": "暖身 10 分到開始流汗"})
+    assert AT.analyze_workout(ds, w)["warm_s"] == 600
+
+
+def test_schedule_test_with_the_preference_on(monkeypatch):
+    from backend.api import plan_sessions
+    from backend.tests.test_plan_store import Env, run
+    with Env(monkeypatch) as e:
+        monkeypatch.setattr(PP, "load", lambda *a, **k: ON)
+        sg = {"days": [{"day": "2026-10-14"}], "session": CPP.session_for("quick")}
+        out = run(plan_sessions._schedule_test(e.db, e.inp, sg, "2026-10-14"))
+        assert out["minutes"] == 45 and "暖身 20 分" in out["detail"]
+        monkeypatch.setattr(PP, "load", lambda *a, **k: PP.Prefs())
+        out = run(plan_sessions._schedule_test(e.db, e.inp, {**sg, "days": [{"day": "2026-10-15"}]}, "2026-10-15"))
+        assert out["minutes"] == 37 and "暖身 12 分" in out["detail"]
+
+
+def test_a_drawer_swap_keeps_the_state_machine_tweak(monkeypatch):
+    """Review #3: only the warm-up floor follows the swap; rest_add / power stay on the row."""
+    import json
+
+    from sqlalchemy import select
+
+    from backend.db.models import PlanSession
+    from backend.tests.test_plan_store import API, Env, run
+    with Env(monkeypatch) as e:
+        monkeypatch.setattr(PP, "load", lambda *a, **k: ON)
+        r = e.c.post(f"{API}/sessions", json={"day": "2026-10-14", "variant_key": "t2a"})
+        assert r.status_code == 200, r.text
+        uid = r.json()["uid"]
+        row = run(e.db.execute(select(PlanSession).where(PlanSession.uid == uid))).scalars().one()
+        assert json.loads(row.variant_adj) == {"warm": 20}
+        row.variant_adj = json.dumps({"rest_add": 1, "power": 0.95, "warm": 20})
+        run(e.db.commit())
+        adj = lambda: json.loads(run(e.db.execute(select(PlanSession.variant_adj).where(PlanSession.uid == uid)))
+                                 .scalar_one() or "null")
+        assert e.c.patch(f"{API}/sessions/{uid}", json={"variant_key": "t2b"}).status_code == 200
+        assert adj() == {"rest_add": 1, "power": 0.95, "warm": 20}
+        monkeypatch.setattr(PP, "load", lambda *a, **k: PP.Prefs())       # switched off
+        assert e.c.patch(f"{API}/sessions/{uid}", json={"variant_key": "t2a"}).status_code == 200
+        assert adj() == {"rest_add": 1, "power": 0.95}
 
 
 # ---------------------------------------------------------------------------

@@ -656,6 +656,10 @@ def _fit(rung: str, cap: Optional[float] = None, history=(), prefs=None, mountai
     ok = lambda v, lv: cap is None or total_min(v, lv, prefs) <= float(cap) + 1e-6
     need = total_min(canon, "min", prefs)
     cl = f"{cap_label} {cap:.0f} 分" if cap is not None else ""
+    # 每堂課前加熱身 (SP-364): when its floor is what makes the rung not fit, the reasons below say so
+    w_min = blocks(canon, "min", prefs)["warm_min"]
+    wn = _("熱身 {w} 分＋主課放不進{cl}：", w=w_min, cl=cl) \
+        if cap is not None and w_min > blocks(canon, "min", prefs, floor=0)["warm_min"] else ""
     last = get(rh[-1]["variant_key"]) if rh else None
     for lv in LEVELS:
         for v in (std_pool[:1] if first else std_pool):
@@ -686,28 +690,28 @@ def _fit(rung: str, cap: Optional[float] = None, history=(), prefs=None, mountai
             continue
         share = tiz_s(r) / tiz_s(ref)
         if share >= EQUIV_TIZ - 1e-9:
-            return _fit_result(r, "min", n, True, True, f"{cl} → 減成 {n} 趟（目標區時間 {share * 100:.0f}%，仍算同等）",
+            return _fit_result(r, "min", n, True, True, wn + f"{cl} → 減成 {n} 趟（目標區時間 {share * 100:.0f}%，仍算同等）",
                                base=ref, rung=rung, need_min=need)
         return _fit_result(r, "min", n, False, False,
-                           f"{cl} → 縮量版 {n} 趟（目標區時間 {share * 100:.0f}% < 85%）：達標也只算維持，這一階不前進",
+                           wn + f"{cl} → 縮量版 {n} 趟（目標區時間 {share * 100:.0f}% < 85%）：達標也只算維持，這一階不前進",
                            base=ref, rung=rung, need_min=need, reduced=True)
     for label, c, *wd in alt_caps or []:
         if cap is not None and (c is None or c > cap):
             r = fit(rung, c, history, prefs, mountain, None, adj, cap_label=f"{label}上限", hill=hill)
             if r["action"] == "ok" and r["equiv"]:
                 return {**r, "action": "move", "move_to": label, "move_wd": wd[0] if wd else None,
-                        "reason": f"{cl} 放不下 {RUNG_NAME.get(rung, rung)} → 改到{label}（{r['reason']}）"}
+                        "reason": wn + f"{cl} 放不下 {RUNG_NAME.get(rung, rung)} → 改到{label}（{r['reason']}）"}
     prev = PREV_RUNG.get(rung)
     if prev:
         r = fit(prev, cap, history, prefs, mountain, None, None, cap_label, hill)
         what = f"{RUNG_NAME.get(rung, rung)} 的 {structure(canon)}"
         return {**r, "action": "back", "equiv": False, "progress": False, "rung": prev, "need_min": need,
-                "reason": f"{cl} 放不下 {what}（需要 {need:.0f} 分以上）：本週改排 {RUNG_NAME.get(prev, prev)} 的 "
+                "reason": wn + f"{cl} 放不下 {what}（需要 {need:.0f} 分以上）：本週改排 {RUNG_NAME.get(prev, prev)} 的 "
                           f"{structure(r['variant'])}，不算進階。要進階，把平日上限調到 {need:.0f} 分，或把品質課改到週末。",
                 "warn": True}
     r = with_reps(ref, floor)
     return _fit_result(r, "min", floor, False, False,
-                       f"{cl} 連 {floor} 趟都放不下：先排 {floor} 趟，達標也只算維持", base=ref, rung=rung,
+                       wn + f"{cl} 連 {floor} 趟都放不下：先排 {floor} 趟，達標也只算維持", base=ref, rung=rung,
                        need_min=need, reduced=True, warn=True)
 
 

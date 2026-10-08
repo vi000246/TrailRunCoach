@@ -395,7 +395,13 @@ def _edit_row(db: AsyncSession, rows: dict, uid: str, patch: dict, today: str, a
         raise PlanError(_(NO_RACE_ADD))
     # a library variant chosen in the swap drawer / the editor's templates (api/plan_sessions
     # builds it with interval_library.variant_patch): a user edit, kept by reconcile (rule 3)
-    ch.update(patch.get("_variant") or {})
+    var = dict(patch.get("_variant") or {})
+    if "variant_adj" in var:
+        # 每堂課前加熱身 (SP-364): only the warm-up floor follows the swap; the state machine's
+        # rest_add / power tweak on the row stays
+        keep = {k: v for k, v in (d.get("variant_adj") or {}).items() if k != "warm"}
+        var["variant_adj"] = {**keep, **(var["variant_adj"] or {})} or None
+    ch.update(var)
     if patch.get("_variant") and "steps" not in ch:
         ch["steps"] = None                  # a new library variant: its own steps, not the old structure
     if patch.get("_variant") is None and ch and d.get("variant_key") and \
