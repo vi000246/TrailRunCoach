@@ -47,18 +47,17 @@ _cache: dict = {}
 _flight = SingleFlight()        # one _compute_inputs per key at a time (SP-362)
 
 
-def _compute_inputs(blackouts: Optional[list] = None, _lead: bool = False) -> dict:
+def _compute_inputs(blackouts: Optional[list] = None) -> dict:
     """week_plan() for this week, the projection to the horizon, activities
     of the last few weeks (for done / missed) and the current phase.
     `blackouts`: a candidate 不排課日期 list (preview before saving); None = the stored one.
     Single flight (SP-362): on a cache miss, concurrent callers of the same key wait for one
-    computation (`_lead` = this call is that computation; internal)."""
-    from backend.api.overview import _dataset, _plan_stamp, _status
+    computation (_build_inputs)."""
+    from backend.api.overview import _dataset, _plan_stamp
     from backend.engine import b2b as B2B
     from backend.engine import blackouts as BL
     from backend.engine import overview as O
     from backend.engine import plan_prefs as PP
-    from backend.engine import planning
     ds = _dataset()
     today = O.day_to_date(ds.today)
     prefs = PP.load()
@@ -89,8 +88,21 @@ def _compute_inputs(blackouts: Optional[list] = None, _lead: bool = False) -> di
         hit = _cache.get(key)
     if hit is not None:
         return hit
-    if not _lead:
-        return _flight.do(key, functools.partial(_compute_inputs, blackouts, True))
+    return _flight.do(key, functools.partial(_build_inputs, key, ds, today, prefs, bos, acc, auto_on, rpe_on,
+                                             recorded))
+
+
+def _build_inputs(key: tuple, ds, today: dt.date, prefs, bos, acc, auto_on: bool, rpe_on: bool,
+                  recorded) -> dict:
+    """One key's computation (the single flight's leader, SP-362): from exactly the inputs the
+    key was built from, stored under that key, so every waiter gets its own key's result."""
+    from backend.api.overview import _status
+    from backend.engine import overview as O
+    from backend.engine import planning
+    with _lock:                                  # a flight that just ended stored it
+        hit = _cache.get(key)
+    if hit is not None:
+        return hit
     st = _status(ds, today)
     from backend.engine.panels.race_refs import calculator_hours
     cur = O.week_plan(ds, st, today, prefs=prefs, blackouts=bos, b2b_accepted=acc, race_predict=calculator_hours)
