@@ -110,6 +110,24 @@ curl -s -X PUT http://localhost:8000/api/v1/athletes/1/settings \
   | python3 -m json.tool
 ```
 
+### Step 8 — Debug API 的 PIN（選填，SP-371）
+
+給 AI agent 用的唯讀 debug API（`docs/debug-api.md`）要伺服器有 PIN 才能打開。PIN 只放在主機的
+`.env`（不進 repo）；compose 的 `environment:` 讀它：
+
+```bash
+# NAS 上、repo 外的 .env
+TRC_DEBUG_PIN=<自己選的，至少 6 碼>
+```
+
+```yaml
+# docker-compose.yml 的 wko5coach.environment
+- TRC_DEBUG_PIN=${TRC_DEBUG_PIN}
+```
+
+重啟後到 設定 › 進階設定 › Debug API 打開、產生 token。沒設 PIN 時這個功能打不開，`/api/v1/debug/*` 一律 404。
+建 image 時帶 `--build-arg GIT_SHA=$(git rev-parse --short HEAD)`，回應的 `meta.app_version` 才看得到是哪個版本。
+
 ---
 
 ## 監控 & 日誌

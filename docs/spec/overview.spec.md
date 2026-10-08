@@ -1618,6 +1618,59 @@ plan endpoints memoise their generator inputs on the dataset / day / plan key pl
 preference, blackout, auto-replan, accepted-B2B, 主要訓練項目 and HR-profile stamps
 (`backend/api/plan_sessions.py:67`). Bad scope or day → 400 (`backend/api/plan_sessions.py:247`).
 
+## Debug API for AI agents (`api/debug.py`, `debug_auth.py`, SP-371)
+
+A read-only HTTPS view of the stored plan, a day, an activity, the thresholds, the sync and the
+athlete's settings, for an AI agent debugging production without access to the host. The full
+field reference and curl examples are **`docs/debug-api.md`**; this section is the contract.
+
+**Auth** (`backend/debug_auth.py`): a FastAPI dependency `gate` (`backend/debug_auth.py:293`) on
+every `/api/v1/debug/*` route —
+1. 404 (FastAPI's own `{"detail": "Not Found"}`) in the demo, without `TRC_DEBUG_PIN` (≥ 6
+   characters, `backend/debug_auth.py:74`) or with `debug.api.enabled` off
+   (`backend/settings/repository.py:238`);
+2. `Authorization: Bearer trcd_…` only — cookies are never read; the token's SHA-256 is looked up
+   in `debug_tokens` (`backend/db/models.py:427`) of the current tenant and must belong to its
+   `tenant_id`, not be revoked or expired → else 401 (`TOKEN_MISSING` / `INVALID` / `REVOKED` /
+   `EXPIRED`);
+3. `TOKEN_BUCKET` 60 / min per token, `FAIL_BUCKET` 10 failures / 10 min per IP → a 10-minute
+   block (`backend/debug_auth.py:61`) → 429;
+4. `need(*scopes)` / `need_any` (`backend/debug_auth.py:333`) → 403 `SCOPE`.
+Every call past step 1 writes a `debug_audit` row (`backend/db/models.py:447`,
+`backend/debug_auth.py:220`; newest 1000 kept); a token's first use from an IP is flagged
+(`new_ip`). Tokens are made by `create_token` (`backend/debug_auth.py:165`) after `check_pin`
+(`backend/debug_auth.py:100`: SHA-256 both sides + `hmac.compare_digest`; 5 wrong in a row lock
+the PIN for 15 minutes, server-wide); scopes `read:activity`, `read:plan`, `read:sync`,
+`export:config` (not by default); 1 / 7 / 30 / 90 days (default 30); at most 20 active.
+
+**Read-only**: the plan views never call `sessions()` (writer lock, reconcile, week snapshots).
+`plan_view` (`backend/api/debug.py:101`) loads the stored rows, applies
+`plan_store.match_only` in memory and decorates them with the calendar's own `_decorate`
+(`plan_match.compare` + `compliance.with_plan_check(session_compliance)`), so `/debug/day`
+equals what `/plan/calendar` shows after its load; `_would_change` (`backend/api/debug.py:121`)
+runs `reconcile_with_adapt` on copies. Only `debug_tokens` / `debug_audit` are written; no
+COROS / TP call. Every answer goes through `finish` (`backend/api/debug.py:75`): `meta` (git sha,
+schema version, dataset generation, cache versions, elapsed ms), `jsonable`, then `scrub`
+(`backend/engine/debug_view.py:84`: GPS keys unless `?gps=1`, credential-named keys, values
+that look like a debug token or a Fernet blob).
+
+| Method | Path | Scope | Returns |
+|---|---|---|---|
+| GET | `/api/v1/debug/activity?date= \| id= \| label=[&streams=&every=&gps=1]` | read:activity | per activity: basic, tags (auto + override), metrics, the thresholds used with their source, `workout_review` classify + measure, the plan pairing with its why, optional streams (`backend/api/debug.py:205`, `backend/engine/debug_view.py:210`) |
+| GET | `/api/v1/debug/plan?from=&to=` | read:plan | stored sessions (with tombstones and push state), the generator's weeks, `would_change`, auto settings / pending / change log, gates and notes, thresholds (`backend/api/debug.py:254`) |
+| GET | `/api/v1/debug/day?date=` | read:plan + read:activity | each session with its activity, `vs`, `compliance`, `status`, `why`; unmatched activities with their why (`backend/api/debug.py:333`) |
+| GET | `/api/v1/debug/thresholds?date=` | read:plan or read:activity | in effect + history + source of CP / LTHR / AeT / max HR / resting HR; dataset settings and as-of estimates; what the generator used (`backend/api/debug.py:357`, `backend/engine/debug_view.py:339`) |
+| GET | `/api/v1/debug/sync?lines=` | read:sync | `sync.*` results, `sync_state` times / cursor (no token column is selected), failures, the redacted app-log tail (`backend/api/debug.py:387`) |
+| GET | `/api/v1/debug/export/config` | export:config | `schema_version`, settings by block with their `user_settings` keys, plan thresholds / weights / profile / events (+ GPX flag), injuries, activity overrides; never `backup.dir`, `plan.calendar`, sync results or a credential (`backend/api/debug.py:417`, `backend/engine/debug_view.py:462`) |
+| GET / PUT | `/api/v1/settings/debug-api` | web session | state (enabled, PIN configured / locked, tokens, last 100 calls) / `{enabled}` (400 `NO_PIN` without the PIN) (`backend/api/debug.py:456`) |
+| POST | `/api/v1/settings/debug-api/tokens` | web session | `{pin, name, scopes, days}` → the token once; 403 `PIN_WRONG`, 429 `PIN_LOCKED`, 400 `NO_PIN` (`backend/api/debug.py:475`) |
+| DELETE / POST | `/api/v1/settings/debug-api/tokens/{id}` / `…/tokens/revoke-all` | web session | revoke one / all (`backend/api/debug.py:494`) |
+
+Both routers are owner-only (`backend/main.py:152`): the demo never mounts them. The settings
+block is `#debugapi` on 設定 › 進階 (`backend/static/settings.html`, logic
+`backend/static/debug_api.js`, strings `settings.debug.*`). Data registry: `debug_tokens` SECRET
+(`token_hash`), `debug_audit` DERIVED (`backend/data_registry.py:130`).
+
 ## Testing
 
 - Tests run on synthetic data only; the comparisons on the athlete's own data (golden
@@ -1804,3 +1857,4 @@ deleted / superseded) are returned as reconcile `changes` (`backend/engine/recon
 | 2026-10-06 | change | SP-302 decision | < 3 genuinely easy runs → 推估 IF 0.80 (64 TSS / h) instead of the easy cap's IF; the projection's default path (no 課表偏好) prices easy runs with the same `easy` rate as week_plan |
 | 2026-10-07 | feat/sp291-293-data-level | docs/research/cold-start.md §4.1 | SP-291 資料等級: `data_level.level` (0 no run / hike in 28 days, 2 = the Zone 3 consistency rule on run + hike days, 1 between; week of the data; `survey`) read by the week plan (cold_start), the status page (`i_level` card, `data_level` in `/status`) and the race feasibility; the ramp lasts the rule's weeks; the cold / ramp note is the level's one line (「你的資料還在累積（第 n 週／4）：週量依你填的問卷，心率區間是推估」); plan / status cache keys carry `experience.stamp()` |
 | 2026-10-07 | feat/sp291-293-data-level | docs/research/cold-start.md §4.4 | SP-292 賽事可行性 for 資料等級 0 / 1 (`GET /overview/feasibility`, `race_feasibility` module doc): base hours = max(questionnaire as the plan reads it, actual), km / climb actual only; no actual distance → UA weekly / climb 「還不知道」, Koop's hours still judged; `data_source` tag 「依你填的資料」／「資料還少」 on the card; level 0 at most tight (cutoff / 跨級 over → tight with the reason, no 「先不跑」／「低一級」 advice; 「late」 unchanged); ≥ 42.195 km with a self-reported week < 3 h → `optimistic_note` (Vickers & Vertosick 2016); level 2 unchanged |
+| 2026-10-08 | feat/sp371-debug-api | SP-371, docs/debug-api.md | Debug API for AI agents: read-only `/api/v1/debug/{activity,plan,day,thresholds,sync,export/config}` (`backend/api/debug.py:205`–`:417`), Bearer-token auth with the server PIN `TRC_DEBUG_PIN`, hashed tokens, scopes, expiry, revoke, tenant binding, per-token / per-IP limits and the `debug_audit` log (`backend/debug_auth.py:293`); `/debug/day` = the calendar's `_decorate` on an in-memory `match_only` (no `sessions()`, no writes, no COROS call); 設定 › 進階 Debug API block (`backend/static/debug_api.js`); tables `debug_tokens` / `debug_audit` (`backend/db/models.py:427`), setting `debug.api.enabled` |
