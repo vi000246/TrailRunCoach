@@ -364,10 +364,11 @@ async def _sync_settings(repo: SettingsRepository) -> dict:
     out["tp_client_credentials_source"] = source                     # env|file|none
     from backend.sync.tp_client import TP_CLIENT_FILE
     out["tp_client_file_exists"] = TP_CLIENT_FILE.exists()           # existence only, never read here
-    from backend.settings.secrets import KEY_DOC, key_status
+    from backend.settings.secrets import KEY_DOC, RECOVER_WITHOUT_KEY, key_status
     out["secret_key_status"] = key_status()      # env|file|missing|none
     if out["secret_key_status"] == "missing":
-        out["secret_key_hint"] = f"SECRET_KEY_MISSING: deploy the key (chezmoi apply) or set WKO5COACH_SECRET_KEY — see {KEY_DOC}"
+        out["secret_key_hint"] = (f"SECRET_KEY_MISSING: deploy the key (chezmoi apply) or set WKO5COACH_SECRET_KEY — see "
+                                  f"{KEY_DOC}; or {RECOVER_WITHOUT_KEY}")
     return out
 
 

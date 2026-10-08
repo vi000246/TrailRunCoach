@@ -50,6 +50,7 @@ def test_missing_key_with_sealed_file_refuses_to_generate(monkeypatch, tmp_path)
     with pytest.raises(S.SecretKeyMissing) as ei:
         S.seal("x")
     assert "SECRET_KEY_MISSING" in str(ei.value) and "docs/secrets-and-keys.md" in str(ei.value)
+    assert "log out of COROS" in str(ei.value)          # SP-355 L5: the way back without the key
     assert not (tmp_path / "secret.key").exists()
 
 
