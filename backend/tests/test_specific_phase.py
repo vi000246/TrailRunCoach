@@ -322,7 +322,8 @@ def test_week_plan_and_projection_say_the_same_gait(store):
 
 def test_split_specific_phase_climb_gait_and_picked_moves_coexist(store):
     """Integration 2026-10-06: in the 專項期 of a long trail A race, this week and every projected
-    week carry SP-75's uphill rung for the 強度課 (and no Zone 5 in the 後段 of a ≥ 4 h race),
+    week carry SP-75's uphill rung for the 強度課 (in the 後段 of a ≥ 4 h race Zone 5 only as the one
+    maintenance session of 賽前第 4 週, SP-353 — and only once Zone 5 is open, which this history isn't),
     SP-227's race gait on the 長爬坡反覆, and SP-191's picked strength moves — none replaces another."""
     from backend.engine import overview as O
     from backend.engine import plan_prefs as PP
@@ -350,7 +351,7 @@ def test_split_specific_phase_climb_gait_and_picked_moves_coexist(store):
         ss = w["sessions"]
         q = [s for s in ss if s["kind"] == "quality"]
         assert q and all((s.get("title") or "").endswith("上坡") for s in q), (w["start"], [s.get("title") for s in q])
-        assert not any("VO2max" in (s.get("title") or "") for s in q)          # 後段 of a ≥ 4 h race: no Zone 5
+        assert not any("VO2max" in (s.get("title") or "") for s in q)          # Zone 5 not open here (SP-353)
         st_ = [s for s in ss if s["kind"] == "strength" and "肌力" in (s.get("title") or "")
                and "（" in (s.get("title") or "")]
         assert st_ and all("彈力帶划船" in s["title"] for s in st_), w["start"]  # the pick (no bar)
