@@ -12,6 +12,10 @@ COPY backend/ ./backend/
 COPY views/ ./views/
 
 ENV PYTHONPATH=/app
+# the commit the image was built from: `meta.app_version` of the debug API (docs/debug-api.md);
+# docker build --build-arg GIT_SHA=$(git rev-parse --short HEAD) .
+ARG GIT_SHA=unknown
+ENV TRC_GIT_SHA=$GIT_SHA
 # glibc gives every thread that allocates its own malloc arena (up to 8 per
 # core); the request thread pool then holds freed memory in dozens of arenas
 # and RSS only ratchets up (the NAS container sat at its 3 GB limit). Two

@@ -525,6 +525,37 @@ main > section.tab-off { display: none; }
     <div class="list" id="exlist"><span class="meta">載入中…</span></div>
     <div class="list" id="keptlist"></div>
   </section>
+
+  <!-- Debug API for AI agents (SP-371, docs/debug-api.md; logic: static/debug_api.js) -->
+  <section id="debugapi">
+    <h2><span data-i18n="settings.debug.title">Debug API（給 AI agent）</span> <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.debug.help" title="讓 AI agent 用 token 透過 HTTPS 唯讀查詢活動、課表、門檻、同步狀態，或匯出設定，用來除錯。只能讀，不能改任何東西；token 只在產生時顯示一次，伺服器只存雜湊。說明：docs/debug-api.md">?</button></h2>
+    <p class="meta" id="dbg-nopin" hidden data-i18n="settings.debug.no_pin">伺服器沒有設定 PIN（環境變數 TRC_DEBUG_PIN，至少 6 碼），不能開啟。</p>
+    <div class="row"><label><input type="checkbox" id="dbg-on"> <span data-i18n="settings.debug.enable">開啟 Debug API</span></label>
+      <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.debug.enable_help" title="關閉時 /api/v1/debug/ 底下的網址一律回 404。只認專用的 token，網頁登入的 cookie 叫不動；每個 token 每分鐘最多 60 次。">?</button></div>
+    <div id="dbg-body" hidden>
+      <div class="row"><button class="primary" id="dbg-new" data-i18n="settings.debug.new">產生 token</button>
+        <button class="danger" id="dbg-revoke-all" data-i18n="settings.debug.revoke_all">全部撤銷</button></div>
+      <div class="row" id="dbg-made" hidden><input type="text" id="dbg-token" readonly style="flex:1;min-width:240px">
+        <button id="dbg-copy" data-i18n="settings.cal.copy">複製</button>
+        <span class="meta" data-i18n="settings.debug.once">只顯示這一次，關掉就看不到了</span></div>
+      <table class="wt"><tbody id="dbg-tokens"></tbody></table>
+      <details style="margin-top:6px"><summary class="meta" data-i18n="settings.debug.audit">最近 100 次呼叫</summary>
+        <table class="wt"><tbody id="dbg-audit"></tbody></table>
+        <p class="meta" id="dbg-stats"></p>
+        <table class="wt"><tbody id="dbg-fails"></tbody></table></details>
+    </div>
+  </section>
+
+  <dialog id="dbg-dlg">
+    <h2 data-i18n="settings.debug.new">產生 token</h2>
+    <div class="row"><label><span data-i18n="settings.debug.pin">PIN 碼</span> <input type="password" id="dbg-pin" autocomplete="off" style="width:140px"></label>
+      <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.debug.pin_help" title="伺服器環境變數 TRC_DEBUG_PIN 的值。連續輸錯 5 次會鎖 15 分鐘。">?</button></div>
+    <div class="row"><label><span data-i18n="settings.debug.name">名稱</span> <input type="text" id="dbg-name" maxlength="40" value="agent" style="width:160px"></label>
+      <label><span data-i18n="settings.debug.days">有效期</span> <select id="dbg-days"></select></label></div>
+    <div class="row" id="dbg-scopes"></div>
+    <div class="row"><button class="primary" id="dbg-create" data-i18n="settings.debug.create">產生</button>
+      <button id="dbg-cancel" data-i18n="settings.debug.cancel">取消</button><span class="meta" id="dbg-msg"></span></div>
+  </dialog>
 </main>
 <div class="toast" id="toast"></div>
 <script>
@@ -1579,7 +1610,7 @@ const TABS = {
   personal: ["general", "sport", "map"],
   body: ["hr", "thresholds", "power"],
   data: ["sync", "backup", "calendar"],
-  advanced: ["mode", "calib", "fixes"],
+  advanced: ["mode", "calib", "fixes", "debugapi"],
 };
 const TAB_OF = Object.fromEntries(Object.entries(TABS).flatMap(([k, ids]) => ids.map((id) => [id, k])));
 const tabOf = (sec) => TAB_OF[sec.id] || "advanced";
@@ -1629,5 +1660,6 @@ tabFromHash();
 loadMode(); loadApplied(); loadProfile(); loadHr(); loadThr(); loadExclusions(); loadBackup(); loadCalib(); loadCal();
 loadSyncSettings().then(loadSources).catch((e) => toast("同步設定載入失敗：" + e.message.slice(0, 80)));
 </script>
+<script src="/api/v1/static/debug_api.js"></script>
 </body>
 </html>

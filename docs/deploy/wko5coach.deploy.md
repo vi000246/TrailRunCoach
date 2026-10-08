@@ -110,6 +110,34 @@ curl -s -X PUT http://localhost:8000/api/v1/athletes/1/settings \
   | python3 -m json.tool
 ```
 
+### Step 8 — Debug API 的 PIN（選填，SP-371）
+
+給 AI agent 用的唯讀 debug API（`docs/debug-api.md`）要伺服器有 PIN 才能打開。PIN 只放在主機的
+`.env`（不進 repo）；compose 的 `environment:` 讀它：
+
+```bash
+# NAS 上、repo 外的 .env
+TRC_DEBUG_PIN=<自己選的，至少 6 碼>
+```
+
+```yaml
+# docker-compose.yml 的 wko5coach.environment
+- TRC_DEBUG_PIN=${TRC_DEBUG_PIN}
+```
+
+重啟後到 設定 › 進階設定 › Debug API 打開、產生 token。沒設 PIN 時這個功能打不開，`/api/v1/debug/*` 一律 404。
+建 image 時帶 `--build-arg GIT_SHA=$(git rev-parse --short HEAD)`，回應的 `meta.app_version` 才看得到是哪個版本。
+
+**密碼代理不用改**（採用的做法）：agent 在 `Authorization` 帶代理自己的帳密、在 `X-TRC-Debug-Token`
+帶 debug token，兩樣都從 agent 那邊的環境變數讀（`TRC_PROXY_USER`／`TRC_PROXY_PASSWORD`／`TRC_DEBUG_TOKEN`，
+`backend/scripts/debug_fetch.py` 會照這樣送）。在代理上開例外的做法沒採用，寫在 `docs/debug-api.md` 最後，
+需要時再看它的警告。
+
+**來源 IP**：debug API 的稽核和「失敗太多次的 IP 暫停」看的是來源 IP。app 的 8000 埠請只綁 `127.0.0.1`
+（compose 的 `ports: - "127.0.0.1:8000:8000"`），或用 `WKO5COACH_TRUSTED_PROXIES` 只信任代理／cloudflared
+容器的 IP，讓它帶的 `CF-Connecting-IP` 被採用；不然所有人都會是 Docker 閘道的同一個 IP（有效的 token 不受影響，
+只是稽核分不出誰是誰）。這份文件只是說明，`docker-compose.yml` 本身沒有改。
+
 ---
 
 ## 監控 & 日誌
