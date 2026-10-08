@@ -1,6 +1,6 @@
 # Module Spec: overview
 
-> **Last Updated**: 2026-10-07
+> **Last Updated**: 2026-10-08
 > **Status**: Active
 > **Domain Layer**: Core Domain
 
@@ -72,6 +72,35 @@ the nights too (a two-day trip can hold only a few hours of walking).
 
 The dataset is the chart pages' shared instance (`backend/api/wko5views.py` `_dataset()`), so the
 engine config / parity mode is the same everywhere.
+
+### Caches, single flight and the 課表 timing (SP-362, 2026-10-08)
+
+- **Single flight.** The Status (`_status`, `backend/api/overview.py:45`; 9–13 s cold on the NAS)
+  and the stored-plan inputs (`_compute_inputs`, `backend/api/plan_sessions.py:50`; 3–4 s) keep
+  their keyed caches, and a cache miss now runs **one** computation per key
+  (`SingleFlight.do`, `backend/singleflight.py:33`; `backend/api/overview.py:87`,
+  `backend/api/plan_sessions.py:93`): the calendar, the suggestion calls, the warm-up thread and an
+  automatic plan run asking for the same key wait for that one result. An exception reaches every
+  waiter and is not cached (the next call computes again); a same-thread re-entry runs inline.
+  The callers are sync functions in the thread pool or the warm-up thread (never the event loop).
+- **Warm-up order** (`warm_up`, `backend/api/wko5views.py:232`; at start-up and after a sync with
+  new files): Dataset → Status → plan inputs, then — after an automatic plan run has ended
+  (`plan_auto.busy`, `backend/engine/plan_auto.py:868`) — the never-fitted calibration and the
+  activity auto-classification. After a sync the runner starts the warm-up before the automatic
+  plan run and the calibration (which waits for the plan run, `backend/engine/calibrate.py:348`);
+  see wko5-coros-sync.spec.md.
+- **Files stamp.** `_dataset()` no longer scans the FIT folder on every call: the scan is kept
+  `FILES_STAMP_TTL_S` = 5 s while the source folder and its year folders keep their mtimes, and
+  imports / purges drop it (`files_changed`, `backend/engine/wko5expr/datasource.py:152-182`).
+- **One `/suggestions` per page load.** The floating box and the 課表's 排入測試 ▸ share one GET
+  (`AppSuggestions.load(fresh)`, `backend/static/suggestions.js:203`; `sugCount`,
+  `backend/static/schedule.html:2840`); a later reload or 排入 asks again.
+- **Calendar timing.** `GET /plan/calendar` (`backend/api/plan_sessions.py:2561`) logs one line per
+  request to the app log (`applog.phases`, `backend/applog.py:321`):
+  `calendar took 4.2 s days=42 | inputs …, lock_wait …, reconcile …, view …, extras …,
+  suggestions …, other …` — WARNING from 3 s. `sessions()` adds its phases (inputs, the writer
+  lock wait, reconcile / match / snapshot) through a context variable (`_TIMING` / `_took`,
+  `backend/api/plan_sessions.py:420`), so the week view's own response is unchanged.
 
 ## Categories
 
@@ -1804,3 +1833,4 @@ deleted / superseded) are returned as reconcile `changes` (`backend/engine/recon
 | 2026-10-06 | change | SP-302 decision | < 3 genuinely easy runs → 推估 IF 0.80 (64 TSS / h) instead of the easy cap's IF; the projection's default path (no 課表偏好) prices easy runs with the same `easy` rate as week_plan |
 | 2026-10-07 | feat/sp291-293-data-level | docs/research/cold-start.md §4.1 | SP-291 資料等級: `data_level.level` (0 no run / hike in 28 days, 2 = the Zone 3 consistency rule on run + hike days, 1 between; week of the data; `survey`) read by the week plan (cold_start), the status page (`i_level` card, `data_level` in `/status`) and the race feasibility; the ramp lasts the rule's weeks; the cold / ramp note is the level's one line (「你的資料還在累積（第 n 週／4）：週量依你填的問卷，心率區間是推估」); plan / status cache keys carry `experience.stamp()` |
 | 2026-10-07 | feat/sp291-293-data-level | docs/research/cold-start.md §4.4 | SP-292 賽事可行性 for 資料等級 0 / 1 (`GET /overview/feasibility`, `race_feasibility` module doc): base hours = max(questionnaire as the plan reads it, actual), km / climb actual only; no actual distance → UA weekly / climb 「還不知道」, Koop's hours still judged; `data_source` tag 「依你填的資料」／「資料還少」 on the card; level 0 at most tight (cutoff / 跨級 over → tight with the reason, no 「先不跑」／「低一級」 advice; 「late」 unchanged); ≥ 42.195 km with a self-reported week < 3 h → `optimistic_note` (Vickers & Vertosick 2016); level 2 unchanged |
+| 2026-10-08 | perf/sp362-batch1 | SP-362 | 課表頁載入效能第一批: single flight for `_status` / `_compute_inputs` (one computation per key, exceptions to every waiter, not cached; `backend/singleflight.py`); warm-up order Dataset → Status → plan inputs → (after plan_auto) calibration / auto-classification, plan inputs warmed at start-up too; the FIT-folder stamp kept 5 s while the folders keep their mtimes (`files_changed` on import / purge); one `/suggestions` GET per 課表 page load (shared by the floating box and 排入測試 ▸); `GET /plan/calendar` logs its phases (inputs, lock_wait, reconcile, view, extras, suggestions) to the app log (`applog.phases`) |
