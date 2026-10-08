@@ -395,9 +395,17 @@
     "draft": true,
     "src": "backend/engine/hr_profile.py:77"
   },
+  "COROS 帳號": {
+    "draft": false,
+    "src": "backend/engine/debug_view.py:418"
+  },
   "COROS 帳號少了這組區間要用的數值，沒辦法比": {
     "draft": true,
     "src": "backend/engine/coros_compare.py:158"
+  },
+  "COROS 帳號（登入／同步時讀到；跑步課表不一定採用）": {
+    "draft": false,
+    "src": "backend/engine/debug_view.py:407"
   },
   "COROS 最大心率": {
     "draft": true,
@@ -450,6 +458,10 @@
   "E 配速 ≈ 閾值配速 × 1.18–1.29（Friel 2 區配速，推估）": {
     "draft": true,
     "src": "backend/engine/workout_templates.py:379"
+  },
+  "E 配速從最新一筆確認過的路跑成績算（engine/e_pace.py）": {
+    "draft": false,
+    "src": "backend/api/debug.py:509"
   },
   "EF 趨勢算不出來（輕鬆路跑不夠多）": {
     "draft": true,
@@ -595,6 +607,14 @@
     "draft": true,
     "src": "backend/engine/racepower/calc.py:280"
   },
+  "PIN 不對": {
+    "draft": false,
+    "src": "backend/api/debug.py:619"
+  },
+  "PIN 錯太多次，{m} 分鐘後再試": {
+    "draft": false,
+    "src": "backend/api/debug.py:617"
+  },
   "R 配速 ≈ 閾值配速 × 0.85–0.89（推估）": {
     "draft": true,
     "src": "backend/engine/workout_templates.py:323"
@@ -630,6 +650,10 @@
   "TSB {tsb:+.0f} < −30：改成恢復週（近 4 週的 60%）": {
     "draft": true,
     "src": "backend/engine/overview.py:1008"
+  },
+  "TSS {p}%": {
+    "draft": false,
+    "src": "backend/api/debug.py:243"
   },
   "TSS {t:.0f} > 計畫 {plan:.0f} 的 +{pct:.0f}%": {
     "draft": false,
@@ -739,6 +763,18 @@
     "draft": true,
     "src": "backend/engine/plan_auto.py:565"
   },
+  "applog（已去掉 token、e-mail、網址參數、家目錄）": {
+    "draft": false,
+    "src": "backend/engine/debug_view.py:483"
+  },
+  "auto + 使用者覆寫（activity_tags）": {
+    "draft": false,
+    "src": "backend/engine/debug_view.py:275"
+  },
+  "hrTSS = 心率時間 × (平均心率 ÷ LTHR)²；LTHR 取當天生效的值（課表門檻列 → 資料來源設定 → 估算）": {
+    "draft": false,
+    "src": "backend/engine/debug_view.py:251"
+  },
   "hrTSS（依強度）": {
     "draft": true,
     "src": "backend/engine/coros_tl.py:78"
@@ -767,9 +803,29 @@
     "draft": true,
     "src": "backend/engine/racepower/cold.py:251"
   },
+  "plan_match（課表頁同一套規則；只算不寫）": {
+    "draft": false,
+    "src": "backend/api/debug.py:366"
+  },
+  "plan_sessions 資料表（含刪除／取代的標記）": {
+    "draft": false,
+    "src": "backend/api/debug.py:436"
+  },
+  "reconcile 規則（engine/reconcile.py）＋自動調整（engine/adapt.py）；只算不寫": {
+    "draft": false,
+    "src": "backend/api/debug.py:230"
+  },
+  "user_settings sync.*（每次同步的結果）＋ sync_state 的時間和 cursor（不含任何 token）": {
+    "draft": false,
+    "src": "backend/api/debug.py:544"
+  },
   "vVO2max ≈ 閾值配速 × 0.86–0.90（推估）": {
     "draft": true,
     "src": "backend/engine/workout_templates.py:310"
+  },
+  "workout_review（快取：{key}）": {
+    "draft": false,
+    "src": "backend/engine/debug_view.py:299"
   },
   "{aet}、LTHR {lthr:.0f} → 差距 {gap:.0f}%": {
     "draft": true,
@@ -1367,6 +1423,14 @@
     "draft": true,
     "src": "backend/api/altitude_nights.py:92"
   },
+  "「{t}」已配給另一筆活動 #{i}": {
+    "draft": false,
+    "src": "backend/api/debug.py:281"
+  },
+  "「{t}」（{k}）跟這筆活動的類型不符": {
+    "draft": false,
+    "src": "backend/api/debug.py:283"
+  },
   "「{x}」只能用在主課": {
     "draft": true,
     "src": "backend/engine/workout_steps.py:671"
@@ -1579,6 +1643,10 @@
     "draft": true,
     "src": "backend/engine/overview.py:1071"
   },
+  "不排課日期、休息日、高海拔過夜": {
+    "draft": false,
+    "src": "backend/engine/debug_view.py:496"
+  },
   "不排課日期不能移動休息日": {
     "draft": true,
     "src": "backend/api/plan_sessions.py:1981"
@@ -1763,6 +1831,10 @@
     "draft": true,
     "src": "backend/api/plan_sessions.py:1977"
   },
+  "估算": {
+    "draft": false,
+    "src": "backend/engine/debug_view.py:350"
+  },
   "伸手碰三個方向": {
     "draft": true,
     "src": "backend/engine/strength_moves.py:165"
@@ -1770,6 +1842,14 @@
   "伸腳點地": {
     "draft": true,
     "src": "backend/engine/strength_moves.py:159"
+  },
+  "伺服器沒有設定 PIN（環境變數 {env}），不能開啟": {
+    "draft": false,
+    "src": "backend/api/debug.py:600"
+  },
+  "伺服器沒有設定 PIN，不能產生 token": {
+    "draft": false,
+    "src": "backend/api/debug.py:614"
   },
   "但週量上限 = 最近的正常訓練週 {ref:.1f} h（不含減量期／比賽週／賽後恢復期／轉換期）的 +10%（至少 +0.5 h）→ {cap:.1f} h": {
     "draft": true,
@@ -1846,6 +1926,10 @@
   "你自己走的登山日 EP/h 中位數（{n} 天，爬升 ≥ 600 m 的日子權重 3 倍）": {
     "draft": true,
     "src": "backend/engine/racepower/calc.py:384"
+  },
+  "使用者解除配對過，不會再自動配對（可以手動配）": {
+    "draft": false,
+    "src": "backend/api/debug.py:273"
   },
   "來不及練到攻頂日的爬升：可以換短一點、低一級的路線，多排一天把攻頂日拆短，或延後出發": {
     "draft": true,
@@ -2035,6 +2119,10 @@
     "draft": true,
     "src": "backend/engine/strength_moves.py:140"
   },
+  "備份雲端位置": {
+    "draft": false,
+    "src": "backend/engine/debug_view.py:60"
+  },
   "傷": {
     "draft": true,
     "src": "backend/engine/injuries.py:69"
@@ -2062,6 +2150,10 @@
   "傷病紀錄 #{id}（{label}）：{what}": {
     "draft": true,
     "src": "backend/engine/injuries.py:464"
+  },
+  "傷病紀錄（含生病）": {
+    "draft": false,
+    "src": "backend/engine/debug_view.py:545"
   },
   "儲備心率（COROS % HRR 6 區）": {
     "draft": true,
@@ -2158,6 +2250,10 @@
   "分": {
     "draft": true,
     "src": "backend/engine/effort_calib.py:94"
+  },
+  "分享連結": {
+    "draft": false,
+    "src": "backend/engine/debug_view.py:61"
   },
   "分段時間照你自己的速度變化分配（推估）：用了 {n} 次 ≥ {h:g} 小時的越野跑，同坡度、同心率下，第 2 到第 {k} 小時的速度約是第 1 小時的 {seq}，之後維持最後一個值。整場時間不變，只改各段怎麼分：變慢的話，前段的 ETA 提早、後段每段變長": {
     "draft": true,
@@ -2298,6 +2394,10 @@
   "功率 TSS": {
     "draft": true,
     "src": "backend/engine/coros_tl.py:78"
+  },
+  "功率 TSS 用的 FTP（= 當天生效的 CP）；沒有就改用 rTSS／hrTSS": {
+    "draft": false,
+    "src": "backend/engine/debug_view.py:286"
   },
   "功率 {lo}–{hi} W": {
     "draft": true,
@@ -2443,9 +2543,17 @@
     "draft": true,
     "src": "backend/engine/strength_moves.py:135"
   },
+  "同一天的課都已配對": {
+    "draft": false,
+    "src": "backend/api/debug.py:284"
+  },
   "同步": {
     "draft": true,
     "src": "backend/api/auth.py:175"
+  },
+  "同步結果": {
+    "draft": false,
+    "src": "backend/engine/debug_view.py:61"
   },
   "同等：不影響進階": {
     "draft": true,
@@ -2679,6 +2787,10 @@
     "draft": true,
     "src": "backend/engine/racepower/watch_export.py:192"
   },
+  "基本資料問卷、體重、主要訓練項目": {
+    "draft": false,
+    "src": "backend/engine/debug_view.py:491"
+  },
   "基礎期": {
     "draft": true,
     "src": "backend/engine/overview.py:1554"
@@ -2815,6 +2927,10 @@
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:625"
   },
+  "安靜心率": {
+    "draft": false,
+    "src": "backend/engine/debug_view.py:349"
+  },
   "完成 1 堂 3 區（「{t}」）": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:1968"
@@ -2823,9 +2939,17 @@
     "draft": true,
     "src": "backend/engine/quality_gate.py:1912"
   },
+  "完成度：{label}": {
+    "draft": false,
+    "src": "backend/api/debug.py:239"
+  },
   "定數＝時間 h×1.8＋距離 km×0.3＋爬升 km×10＋下降 km×0.6（山本正嘉）": {
     "draft": true,
     "src": "backend/engine/panels/race_refs.py:188"
+  },
+  "密碼": {
+    "draft": false,
+    "src": "backend/engine/debug_view.py:60"
   },
   "實測 AeT": {
     "draft": false,
@@ -3739,6 +3863,10 @@
     "draft": true,
     "src": "backend/engine/workout_steps.py:675"
   },
+  "時間 {p}%": {
+    "draft": false,
+    "src": "backend/api/debug.py:241"
+  },
   "時間不夠": {
     "draft": true,
     "src": "backend/engine/race_feasibility.py:51"
@@ -4191,6 +4319,10 @@
     "draft": true,
     "src": "backend/engine/strength_moves.py:132"
   },
+  "每一組：配對方式（同一天／同一週／手動）、完成度等級和原因；沒配到的活動附原因": {
+    "draft": false,
+    "src": "backend/api/debug.py:478"
+  },
   "每個坡度箱的活動都不到 {n} 次，先不畫點；只列出次數。": {
     "draft": false,
     "src": "backend/engine/panels/pole_compare.py:212"
@@ -4279,6 +4411,10 @@
     "draft": true,
     "src": "backend/engine/specific_phase.py:603"
   },
+  "比賽成績": {
+    "draft": false,
+    "src": "backend/engine/debug_view.py:495"
+  },
   "比賽日期不能在今天之後": {
     "draft": true,
     "src": "backend/api/plan.py:735"
@@ -4306,6 +4442,10 @@
   "水站": {
     "draft": true,
     "src": "backend/engine/racepower/watch_export.py:46"
+  },
+  "沒做：那天沒有對應的活動（reconcile 規則：過了那天、資料也涵蓋那天）": {
+    "draft": false,
+    "src": "backend/api/debug.py:265"
   },
   "沒回到": {
     "draft": true,
@@ -4338,6 +4478,10 @@
   "沒有 LTHR，算不出這場的平均心率，所以用功率區間": {
     "draft": false,
     "src": "backend/engine/racepower/zonebar.py:29"
+  },
+  "沒有 app.log（WKO5COACH_LOG_FILE=0 或還沒寫過）": {
+    "draft": false,
+    "src": "backend/engine/debug_view.py:472"
   },
   "沒有 {name}，區間算不出來": {
     "draft": true,
@@ -4467,6 +4611,10 @@
     "draft": true,
     "src": "backend/engine/planning.py:531"
   },
+  "沒有逐秒資料": {
+    "draft": false,
+    "src": "backend/engine/debug_view.py:322"
+  },
   "沒有這個分類：{c}": {
     "draft": false,
     "src": "backend/engine/user_templates.py:196"
@@ -4474,6 +4622,10 @@
   "沒有這個區間：{x}": {
     "draft": true,
     "src": "backend/engine/workout_steps.py:603"
+  },
+  "沒有配對": {
+    "draft": false,
+    "src": "backend/api/debug.py:363"
   },
   "沒有閾值配速：這段推到手錶不會有配速目標": {
     "draft": false,
@@ -4502,6 +4654,14 @@
   "活動日期不對": {
     "draft": true,
     "src": "backend/engine/plan_store.py:629"
+  },
+  "活動檔本身（用 /debug/activity 按需拿）": {
+    "draft": false,
+    "src": "backend/engine/debug_view.py:61"
+  },
+  "活動的手動覆寫（類型、努力程度、標籤、疼痛、壞檔排除、地形）": {
+    "draft": false,
+    "src": "backend/engine/debug_view.py:546"
   },
   "涼天 60 分鐘最高平均心率 {v:.0f}": {
     "draft": false,
@@ -4726,6 +4886,10 @@
   "生病（{what}）": {
     "draft": true,
     "src": "backend/engine/injuries.py:155"
+  },
+  "產生器這次會排的課（gen_weeks）": {
+    "draft": false,
+    "src": "backend/api/debug.py:442"
   },
   "用 {src} {race} 推算：Riegel（k {k:+.2f}，平路配速固定）→ 約 {t}。一場成績推另一個距離大約 ±5–8 %（推估）；有 CP 之後會自動改用賽事計算機的模型": {
     "draft": false,
@@ -5059,6 +5223,10 @@
     "draft": false,
     "src": "backend/engine/status.py:307"
   },
+  "等級：|實際 ÷ 計畫 − 1| ≤ 20% 符合、≤ 50% 有點偏離（TrainingPeaks）；強度見 plan_match.compare": {
+    "draft": false,
+    "src": "backend/api/debug.py:246"
+  },
   "算不出": {
     "draft": false,
     "src": "backend/engine/workout_review.py:2707"
@@ -5303,6 +5471,10 @@
     "draft": true,
     "src": "backend/engine/workout_steps.py:578"
   },
+  "自動調整設定": {
+    "draft": false,
+    "src": "backend/engine/debug_view.py:499"
+  },
   "自動（依課表類型）": {
     "draft": false,
     "src": "backend/engine/workout_steps.py:1297"
@@ -5375,6 +5547,10 @@
     "draft": true,
     "src": "backend/api/plan.py:733"
   },
+  "要看配到的那一堂課的內容，token 需要 read:plan": {
+    "draft": false,
+    "src": "backend/api/debug.py:370"
+  },
   "要知道照課表練有沒有進步，需要先有一個起點。": {
     "draft": true,
     "src": "backend/engine/suggestions.py:135"
@@ -5407,6 +5583,10 @@
     "draft": true,
     "src": "backend/engine/workout_steps.py:1472"
   },
+  "記住的帳密": {
+    "draft": false,
+    "src": "backend/engine/debug_view.py:60"
+  },
   "設定裡填的": {
     "draft": false,
     "src": "backend/engine/racepower/race_estimate.py:40"
@@ -5431,6 +5611,10 @@
     "draft": true,
     "src": "backend/engine/workout_review.py:2734"
   },
+  "課表偏好": {
+    "draft": false,
+    "src": "backend/engine/debug_view.py:497"
+  },
   "課表待確認是自動調整的提醒，不能自己新增": {
     "draft": true,
     "src": "backend/engine/plan_store.py:399"
@@ -5439,9 +5623,41 @@
     "draft": true,
     "src": "backend/engine/overview.py:1118"
   },
+  "課表產生器（overview.week_plan）這週用的門檻；目標心率／功率都從這裡來": {
+    "draft": false,
+    "src": "backend/engine/debug_view.py:425"
+  },
+  "課表的輸入算不出來（資料集讀不到？）": {
+    "draft": false,
+    "src": "backend/api/debug.py:394"
+  },
   "課表結構有誤：{e}": {
     "draft": true,
     "src": "backend/engine/plan_store.py:300"
+  },
+  "課表門檻列沒有最大心率：用 COROS 帳號的值（engine/hr_profile.py）": {
+    "draft": false,
+    "src": "backend/engine/debug_view.py:420"
+  },
+  "課表門檻列沒有當天以前的值：用資料來源的設定或估算（見 dataset）": {
+    "draft": false,
+    "src": "backend/engine/debug_view.py:403"
+  },
+  "課表門檻列沒有：用資料集當天的值（racepower.athlete.thresholds_as_of：當天以前的估算 → 資料來源的設定 → 推估）": {
+    "draft": false,
+    "src": "backend/engine/debug_view.py:415"
+  },
+  "課表門檻列裡當天以前最近一筆（planning.Plan.threshold_on）": {
+    "draft": false,
+    "src": "backend/engine/debug_view.py:402"
+  },
+  "課表頁（plan_sessions.calendar）同一套：plan_match.compare + compliance；只算不寫": {
+    "draft": false,
+    "src": "backend/api/debug.py:477"
+  },
+  "課表類型／刺激分級：workout_review.classify；飄移：measure.drift（含心率品質）；間歇：measure.intervals／efforts；爬坡段：measure.climbs": {
+    "draft": false,
+    "src": "backend/engine/debug_view.py:301"
   },
   "課表（TrailRunCoach）": {
     "draft": true,
@@ -5503,6 +5719,10 @@
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:879"
   },
+  "資料來源設定": {
+    "draft": false,
+    "src": "backend/engine/debug_view.py:494"
+  },
   "資料比較雜": {
     "draft": true,
     "src": "backend/engine/workout_review.py:2871"
@@ -5531,6 +5751,10 @@
     "draft": false,
     "src": "backend/engine/race_feasibility.py:155"
   },
+  "資料集讀不到（還沒同步，或正在重建）": {
+    "draft": false,
+    "src": "backend/api/debug.py:342"
+  },
   "賽事 id 格式不對": {
     "draft": true,
     "src": "backend/engine/race_calc_store.py:53"
@@ -5542,6 +5766,10 @@
   "賽事大小": {
     "draft": true,
     "src": "backend/engine/primary_sport.py:59"
+  },
+  "賽事清單": {
+    "draft": false,
+    "src": "backend/engine/debug_view.py:541"
   },
   "賽事計算器預測的完賽時間": {
     "draft": true,
@@ -6275,6 +6503,10 @@
     "draft": true,
     "src": "backend/engine/race_feasibility.py:68"
   },
+  "進階設定與每人校正值（含 Zone 3 解鎖數字）": {
+    "draft": false,
+    "src": "backend/engine/debug_view.py:500"
+  },
   "過去 {m} 個月單日最大 EP {ep:.0f}（{mine}，{date}）；比賽最難那天 EP {r:.0f}（{race}）": {
     "draft": true,
     "src": "backend/engine/race_feasibility.py:387"
@@ -6371,6 +6603,10 @@
     "draft": true,
     "src": "backend/engine/injuries.py:718"
   },
+  "還沒配對到活動": {
+    "draft": false,
+    "src": "backend/api/debug.py:266"
+  },
   "還缺：": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:2096"
@@ -6395,6 +6631,10 @@
     "draft": true,
     "src": "backend/engine/quality_gate.py:2062"
   },
+  "那天沒有排課（輕鬆跑不會被拉去配別天的課）": {
+    "draft": false,
+    "src": "backend/api/debug.py:276"
+  },
   "那幾週裡，每一週都要跑到這個次數才算規律訓練。": {
     "draft": true,
     "src": "backend/engine/advanced_params.py:65"
@@ -6410,6 +6650,14 @@
   "都是比較短的跑步，只當參考": {
     "draft": true,
     "src": "backend/engine/status.py:583"
+  },
+  "配對方式：{m}": {
+    "draft": false,
+    "src": "backend/api/debug.py:237"
+  },
+  "配對（match_only）只在記憶體裡套用，沒有寫回資料表": {
+    "draft": false,
+    "src": "backend/api/debug.py:440"
   },
   "配速": {
     "draft": false,
@@ -6530,6 +6778,10 @@
   "門框單槓": {
     "draft": true,
     "src": "backend/engine/strength_moves.py:104"
+  },
+  "門檻紀錄（CP／LTHR／AeT／最大心率）": {
+    "draft": false,
+    "src": "backend/engine/debug_view.py:539"
   },
   "門檻過期或沒測過": {
     "draft": true,

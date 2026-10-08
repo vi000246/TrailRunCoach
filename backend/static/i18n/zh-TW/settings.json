@@ -290,5 +290,11 @@
   "debug.scope_read_activity": "活動的完整資料（數字、門檻、判讀、配對）",
   "debug.scope_read_plan": "課表、單日配對、門檻",
   "debug.scope_read_sync": "同步結果與錯誤 log",
-  "debug.scope_export_config": "匯出全部設定（預設不勾）"
+  "debug.scope_export_config": "匯出全部設定（預設不勾）",
+  "debug.scope_read_gps": "活動的 GPS 座標（?gps=1；預設不勾）",
+  "debug.col_code": "原因",
+  "debug.col_count": "次數",
+  "debug.pin_stats": "PIN 輸錯 {n} 次（目前連續 {streak} 次，鎖過 {locks} 次）",
+  "debug.dropped": "被擋下、沒記錄的請求：太頻繁 {rate}、IP 暫停 {blocked}、忙碌 {busy}",
+  "debug.failures_empty": "近 72 小時沒有認證失敗。"
 }
