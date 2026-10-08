@@ -90,6 +90,9 @@ async def delete_source_files(db: AsyncSession, source: str, athlete_id: int = 1
             else:
                 st.last_sync_cursor = None
                 st.last_sync_at = None
+        # the cursor starts over: every activity is listed again, the failed list with it (SP-362)
+        from backend.sync import failures as FL
+        await FL.clear(db, athlete_id, source)
         repo = SettingsRepository(db, athlete_id)
         await repo.set(f"sync.{runner.SETTING_NAME[source]}.last_result", None)
         await repo.set(f"sync.{runner.SETTING_NAME[source]}.last_ok", None)

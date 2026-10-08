@@ -247,5 +247,13 @@
   "general.exp_none": "Not answered yet: the plan starts at 1.5 hours a week, 3 easy runs",
   "general.exp_hours": "Your weekly volume: about {h} hours a week",
   "general.exp_need_race": "Fill in the whole race result (distance, a time like 1:05:30, date) or leave all three blank",
-  "general.exp_saved": "Saved; the plan follows your answers"
+  "general.exp_saved": "Saved; the plan follows your answers",
+  "syncfail.title": "Activities that failed to download",
+  "syncfail.help": "Activities whose download or import failed during a sync are listed here; later syncs retry just these instead of listing every activity again. Each is retried automatically at most 5 times or for 7 days, then it stops; press Retry to try again.",
+  "syncfail.retrying": "Tried {n} times; the next sync tries again",
+  "syncfail.stopped": "Tried {n} times; automatic retries stopped",
+  "syncfail.retry": "Retry",
+  "syncfail.started": "Sync started; it tries this one again",
+  "syncfail.queued": "The next sync tries this one again",
+  "syncfail.no_file": "{n} more have no FIT file (manual entries); nothing to download"
 }

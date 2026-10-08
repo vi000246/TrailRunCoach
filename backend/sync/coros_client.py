@@ -19,6 +19,7 @@ from sqlalchemy import and_, or_, select
 from backend.db.models import SyncState, Athlete, WorkoutFile, AthleteSettings
 from backend.files.file_service import _import_one_file, record_corrupt
 from backend.sync import http, session_check, storage
+from backend.sync import failures as FL
 from backend.sync.coros_sport import COROS_SPORT_TYPES, fit_session_sport, sport_token
 from backend.sync.http import as_utc
 from backend.settings.secrets import SecretError, seal, unseal
@@ -442,6 +443,11 @@ async def _list_page(
     return inner.get("dataList") or inner.get("list") or []
 
 
+class CorosNoFile(ValueError):
+    """COROS has no FIT for the activity (detail/download answered without a file): a manual
+    entry. Recorded as no_file (sync/failures.py), never a failure (SP-362)."""
+
+
 async def _download_fit(token: str, base: str, user_id: str, activity: dict) -> bytes:
     """Download FIT bytes: try fitUrl first, then POST /activity/detail/download."""
     fit_url = activity.get("fitUrl")
@@ -468,7 +474,8 @@ async def _download_fit(token: str, base: str, user_id: str, activity: dict) -> 
         raise ValueError(f"detail/download error: {url_data.get('message')!r}")
     download_url = (url_data.get("data") or {}).get("fileUrl", "")
     if not download_url:
-        raise ValueError("detail/download: no fileUrl in response")
+        # answered, but no file to give: an activity without a FIT (a manual entry)
+        raise CorosNoFile("detail/download: no fileUrl in response")
     async with http.client(timeout=60, follow_redirects=True) as client:
         resp = await client.get(download_url)
     if resp.status_code != 200:
@@ -689,6 +696,105 @@ def list_training_load(act: dict) -> Optional[float]:
     return f if f > 0 and f == f and f != float("inf") else None
 
 
+async def _remember(db: AsyncSession, run: dict, coro) -> None:
+    """Write a failed-list row (sync/failures.py); when even that fails, the cursor stays (the
+    old behaviour) so the activity is not lost behind it."""
+    try:
+        await coro
+    except Exception as e:                       # noqa: BLE001
+        log.warning("COROS failed list not written: %s", type(e).__name__)
+        run["hold"] = True
+        try:
+            await db.rollback()
+        except Exception:                        # noqa: BLE001
+            pass
+
+
+async def _fetch_one(db: AsyncSession, athlete_id: int, token: str, base: str, user_id: str,
+                     act: dict, act_date: Optional[date], run: dict) -> AsyncIterator[dict]:
+    """Download one activity's FIT and import it; its events. A list item, or a failed-list
+    row retried by id (labelId + sportType only: detail/download). A failure goes to the
+    failed list (SP-362); a success takes the activity off it."""
+    import asyncio as _asyncio
+    import time as _time
+    label_id = str(act.get("labelId", ""))
+    sport_type = act.get("sportType", 0)
+    act_tl = list_training_load(act)
+    t_dl = _time.monotonic()           # download vs import seconds (sync/runner.SyncClock)
+    try:
+        fit_bytes = await _download_fit(token, base, user_id, act)
+    except CorosNoFile:
+        await _remember(db, run, FL.record_no_file(db, athlete_id, "coros", label_id, sport_type, act_date))
+        yield {"status": "no_file", "activity_id": label_id,
+               "date": act_date.isoformat() if act_date else None}
+        return
+    except Exception as e:
+        log.warning("Coros FIT download failed %s: %s", label_id, e)
+        run["errors"].append(f"{label_id}: {e}")
+        await _remember(db, run, FL.record_failure(db, athlete_id, "coros", label_id, e, sport_type, act_date))
+        yield {"status": "error", "activity_id": label_id, "error": str(e)}
+        return
+
+    dl_s = _time.monotonic() - t_dl
+    year = act_date.year if act_date else "unknown"
+    dest_dir = storage.year_dir("coros", year)      # ~/.wko5coach/fit/coros/<year>/
+    date_str = act_date.isoformat() if act_date else "unknown"
+    # the name's sport word comes from the FIT session (sport +
+    # sub_sport); the COROS code only when the FIT can't say
+    tmp = dest_dir / f".{label_id}.download"
+    tmp.write_bytes(fit_bytes)
+    fit_sport, fit_sub = await _asyncio.to_thread(fit_session_sport, tmp)   # FIT parsing: off the loop
+    sport_name = sport_token(fit_sport, fit_sub, sport_type)
+    filename = f"{label_id}_{date_str}_{sport_name}.fit"
+    dest = dest_dir / filename
+    tmp.replace(dest)
+
+    try:
+        wf = await _import_one_file(
+            db, athlete_id, dest,
+            source="coros",
+            coros_activity_id=label_id,
+        )
+        if wf is not None:
+            try:
+                wf.coros_sport_type = int(sport_type)
+            except (TypeError, ValueError):
+                pass
+            wf.coros_training_load = act_tl
+        if wf is None:
+            # FIT file is corrupt/unreadable — store a stub so we don't
+            # re-download it on the next sync (coros_activity_id dup check).
+            await db.rollback()
+            await record_corrupt(db, athlete_id, dest, source="coros",
+                                 workout_date=act_date, coros_activity_id=label_id)
+            await db.commit()
+            await _remember(db, run, FL.resolve(db, athlete_id, "coros", label_id))
+            log.warning("Corrupt FIT, stub recorded: %s", filename)
+            yield {"status": "error", "activity_id": label_id, "error": "corrupt_fit"}
+            return
+        await db.commit()
+        run["downloaded"] += 1
+        wf_id = wf.id
+        await _remember(db, run, FL.resolve(db, athlete_id, "coros", label_id))
+        if await _read_new_feel(db, wf, token, base, user_id, label_id, sport_type):
+            run["feel_read"].add(wf_id)
+        yield {
+            "status": "downloaded",
+            "activity_id": label_id,
+            "file": filename,
+            "sport": sport_name,
+            "secs": {"download": round(dl_s, 3)},
+        }
+    except Exception as e:
+        # nothing half-written survives; the failed list retries it
+        await db.rollback()
+        log.warning("Import failed for %s: %s", filename, e)
+        run["errors"].append(f"{label_id}: import_failed: {e}")
+        await _remember(db, run, FL.record_failure(db, athlete_id, "coros", label_id, f"import_failed: {e}",
+                                                   sport_type, act_date))
+        yield {"status": "error", "activity_id": label_id, "error": f"import_failed: {e}"}
+
+
 async def sync_workouts(
     db: AsyncSession,
     athlete_id: int = 1,
@@ -696,9 +802,12 @@ async def sync_workouts(
 ) -> AsyncIterator[dict]:
     """List Coros activities → skip known → download .fit → import → yield SSE events.
 
-    Incremental: without `since`, lists from the last clean sync minus
-    CURSOR_OVERLAP_DAYS (first sync: FIRST_SYNC_DAY). The cursor only moves
-    when the run had no download / import errors, so failures are retried."""
+    Incremental: without `since`, lists from the last sync minus
+    CURSOR_OVERLAP_DAYS (first sync: FIRST_SYNC_DAY). One activity's failed
+    download / import goes to the failed list (sync/failures.py, SP-362) and the
+    cursor moves on; the next syncs retry it by id. Only a failure of the whole
+    run (login, listing) — or a failure that could not be written to the list —
+    keeps the cursor."""
     try:
         token, base, user_id = await _get_token_and_base(db, athlete_id)
     except ValueError as e:
@@ -726,10 +835,11 @@ async def sync_workouts(
 
     page = 1
     total_checked = 0
-    total_downloaded = 0
-    feel_read: set = set()        # rows whose self-rating this sync read already (SP-231)
     tl_filled = 0                 # already-imported activities whose list trainingLoad was stored
-    errors: list[str] = []
+    # what _fetch_one adds up: downloads, per-activity errors, rows whose self-rating this sync
+    # read already (SP-231), and `hold` = a failure the failed list could not take (cursor stays)
+    run = {"downloaded": 0, "errors": [], "feel_read": set(), "hold": False}
+    handled: set = set()          # labelIds fetched (or tried) by the listing: not retried again
 
     relogged = False
     while True:
@@ -787,77 +897,44 @@ async def sync_workouts(
                 yield {"status": "skipped", "activity_id": label_id, "reason": "already_imported"}
                 continue
 
-            t_dl = _time.monotonic()           # download vs import seconds (sync/runner.SyncClock)
-            try:
-                fit_bytes = await _download_fit(token, base, user_id, act)
-            except Exception as e:
-                log.warning("Coros FIT download failed %s: %s", label_id, e)
-                errors.append(f"{label_id}: {e}")
-                yield {"status": "error", "activity_id": label_id, "error": str(e)}
+            # on the failed list (SP-362): no FIT at all, or automatic retries are over
+            prev = await FL.get(db, athlete_id, "coros", label_id)
+            if prev is not None and not FL.auto_retry(prev):
+                yield {"status": "skipped", "activity_id": label_id,
+                       "reason": "no_file" if prev.kind == FL.NO_FILE else "retry_stopped"}
                 continue
-
-            dl_s = _time.monotonic() - t_dl
-            year = act_date.year if act_date else "unknown"
-            dest_dir = storage.year_dir("coros", year)      # ~/.wko5coach/fit/coros/<year>/
-            date_str = act_date.isoformat() if act_date else "unknown"
-            # the name's sport word comes from the FIT session (sport +
-            # sub_sport); the COROS code only when the FIT can't say
-            tmp = dest_dir / f".{label_id}.download"
-            tmp.write_bytes(fit_bytes)
-            import asyncio as _asyncio
-            fit_sport, fit_sub = await _asyncio.to_thread(fit_session_sport, tmp)   # FIT parsing: off the loop
-            sport_name = sport_token(fit_sport, fit_sub, sport_type)
-            filename = f"{label_id}_{date_str}_{sport_name}.fit"
-            dest = dest_dir / filename
-            tmp.replace(dest)
-
-            try:
-                wf = await _import_one_file(
-                    db, athlete_id, dest,
-                    source="coros",
-                    coros_activity_id=label_id,
-                )
-                if wf is not None:
-                    try:
-                        wf.coros_sport_type = int(sport_type)
-                    except (TypeError, ValueError):
-                        pass
-                    wf.coros_training_load = act_tl
-                if wf is None:
-                    # FIT file is corrupt/unreadable — store a stub so we don't
-                    # re-download it on the next sync (coros_activity_id dup check).
-                    await db.rollback()
-                    await record_corrupt(db, athlete_id, dest, source="coros",
-                                         workout_date=act_date, coros_activity_id=label_id)
-                    await db.commit()
-                    log.warning("Corrupt FIT, stub recorded: %s", filename)
-                    yield {"status": "error", "activity_id": label_id, "error": "corrupt_fit"}
-                    continue
-                await db.commit()
-                total_downloaded += 1
-                if await _read_new_feel(db, wf, token, base, user_id, label_id, sport_type):
-                    feel_read.add(wf.id)
-                yield {
-                    "status": "downloaded",
-                    "activity_id": label_id,
-                    "file": filename,
-                    "sport": sport_name,
-                    "secs": {"download": round(dl_s, 3)},
-                }
-            except Exception as e:
-                # nothing half-written survives; the cursor stays so it's retried
-                await db.rollback()
-                log.warning("Import failed for %s: %s", filename, e)
-                errors.append(f"{label_id}: import_failed: {e}")
-                yield {"status": "error", "activity_id": label_id, "error": f"import_failed: {e}"}
+            handled.add(label_id)
+            async for ev in _fetch_one(db, athlete_id, token, base, user_id, act, act_date, run):
+                yield ev
 
         if len(activities) < PAGE_SIZE:
             break
         page += 1
 
+    # the failed list's due rows the listing above did not meet: retried by id (SP-362)
+    try:
+        retry = [(r.provider_id, r.sport_type, r.workout_date)
+                 for r in await FL.due(db, athlete_id, "coros") if r.provider_id not in handled]
+    except Exception as e:                       # noqa: BLE001 — e.g. a DB before the table exists
+        log.warning("COROS failed list not read: %s", type(e).__name__)
+        retry, run["hold"] = [], True
+    for label_id, sport_type, act_date in retry:
+        known = (await db.execute(select(WorkoutFile.id).where(
+            WorkoutFile.coros_activity_id == label_id))).scalars().first()
+        if known is not None:                    # imported meanwhile (a manual upload)
+            await FL.resolve(db, athlete_id, "coros", label_id)
+            continue
+        total_checked += 1
+        yield {"status": "checking", "activity_id": label_id,
+               "date": act_date.isoformat() if act_date else None, "retry": True}
+        act = {"labelId": label_id, "sportType": sport_type if sport_type is not None else 0}
+        async for ev in _fetch_one(db, athlete_id, token, base, user_id, act, act_date, run):
+            yield ev
+
+    total_downloaded, errors, feel_read = run["downloaded"], run["errors"], run["feel_read"]
     state_res = await db.execute(select(SyncState).where(SyncState.athlete_id == athlete_id))
     state = state_res.scalar_one_or_none()
-    if state and not errors:
+    if state and not run["hold"]:
         state.coros_last_sync_at = sync_started
         await db.commit()
     await refresh_hr_profile(db, athlete_id, token, base, user_id)

@@ -247,5 +247,13 @@
   "general.exp_none": "還沒填：課表先用每週 1.5 小時、3 次輕鬆跑起步",
   "general.exp_hours": "你填的週量：每週約 {h} 小時",
   "general.exp_need_race": "比賽成績要填完整（距離、像 1:05:30 的時間、日期），或三格都留空",
-  "general.exp_saved": "已儲存，課表會照你填的重排"
+  "general.exp_saved": "已儲存，課表會照你填的重排",
+  "syncfail.title": "下載失敗的活動",
+  "syncfail.help": "同步時下載或匯入失敗的活動會記在這裡，之後的同步只重試這幾筆，不必重新列出所有活動。每筆最多自動重試 5 次或 7 天，之後停止，可以按「重試」再試。",
+  "syncfail.retrying": "已試 {n} 次，下次同步會再試",
+  "syncfail.stopped": "已試 {n} 次，停止自動重試",
+  "syncfail.retry": "重試",
+  "syncfail.started": "已開始同步，會再試這一筆",
+  "syncfail.queued": "下次同步會再試這一筆",
+  "syncfail.no_file": "另有 {n} 筆沒有 FIT 檔（手動紀錄），不用下載"
 }
