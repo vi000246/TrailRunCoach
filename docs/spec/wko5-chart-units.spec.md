@@ -1,6 +1,6 @@
 # Module Spec: wko5-chart-units
 
-> **Last Updated**: 2026-10-04
+> **Last Updated**: 2026-10-08
 > **Status**: Active
 > **Domain Layer**: Supporting Domain
 
@@ -31,7 +31,7 @@ values and designs; only decimals are tidied.
 | Unit registry | label, kind, decimals, display scale, metric twin | `backend/engine/wko5expr/units.py:47` |
 | Render units | per-series prepare / finish, axis metadata | `backend/engine/wko5expr/render_units.py:64` |
 | Chart fixes | load, validate and apply overrides | `backend/engine/wko5expr/chartfixes.py:117` |
-| Integration | `render_chart` calls the pass; views API gates fixes by parity | `backend/api/wko5views.py:261` |
+| Integration | `render_chart` calls the pass; views API gates fixes by parity | `backend/api/wko5views.py:321`, `backend/api/wko5views.py:644`, `backend/api/wko5views.py:674` |
 | Audit | render every chart and flag unit problems | `backend/scripts/audit_chart_units.py:420` |
 
 ## Unit registry
@@ -50,7 +50,9 @@ values and designs; only decimals are tidied.
   (median ≥ 60), km/h (speed-like expressions such as `ngp`) or min/km; it is converted to
   min/km outside parity.
 - **CUSTOM<label> / NONE**: the label after the prefix (with known labels refined), NONE has
-  no label; both use AUTO decimals. RPM is labelled spm for runs, rpm for rides.
+  no label; both use AUTO decimals. RPM is labelled spm for runs, rpm for rides. The sport comes
+  from the workout or the sport filter, and on a season chart with only the activity-type filter
+  from that filter's `sport_hint()` (`backend/engine/wko5expr/render.py:339`, SP-263).
 
 ## Render-time flow
 
@@ -76,27 +78,29 @@ The toggle and the cache themselves are `wko5-engine` features (see
   name — 每週 → 每月, or a leading character naming the default period, 週爬升 → 月爬升, so
   words like 年齡 are left alone (`backend/engine/wko5expr/periods.py:72`).
 - **Category x axis.** A period chart draws one category per bucket from the response's
-  `buckets` (empty buckets included); a bucket total sits on the bucket's first day and
-  per-workout values become dots in their bucket (`backend/static/wko5_viewer.html:2198`,
-  `backend/static/wko5_viewer.html:2290`). The tooltip heads with the bucket label
-  (`backend/static/wko5_viewer.html:2390`); on stacked charts it ends with a 合計 row in the
-  series' unit, left out for percent shares (`backend/static/wko5_viewer.html:2413`).
+  `buckets` (empty buckets included) (`backend/static/wko5_viewer.html:2400`,
+  `backend/static/wko5_viewer.html:2553`); a bucket total sits on the bucket's first day
+  (`backend/static/wko5_viewer.html:2497`) and per-workout values become dots in their bucket
+  (`backend/static/wko5_viewer.html:2491`). The tooltip heads with the bucket label
+  (`backend/static/wko5_viewer.html:2592`); on stacked charts it ends with a 合計 row in the
+  series' unit, left out for percent shares (`backend/static/wko5_viewer.html:2614`).
 - **Tooltip units follow the drawn series.** Each ECharts series records the source series it
-  came from (`srcOf`, `backend/static/wko5_viewer.html:2256`), and the tooltip rows and the 合計
+  came from (`srcOf`, `backend/static/wko5_viewer.html:2457`), and the tooltip rows and the 合計
   row take their unit from `srcOf[p.seriesIndex]`, so a vline skipped on a category axis no
   longer shifts units onto the wrong series.
 - **Look-back note.** When the floor widens the range the card shows `range_note`, e.g.
-  「顯示近 12 個月」 (`backend/api/wko5views.py:466`, `backend/static/wko5_viewer.html:1172`).
-- **Enlarged chart.** The overlay shows the full legend and a zoom slider under the x axis,
-  now also on the log (duration) axis with duration tick labels
-  (`backend/static/wko5_viewer.html:2451`); the "已修正單位" notes are printed in full above the
-  chart (`backend/static/wko5_viewer.html:1221`).
+  「顯示近 12 個月」 (`backend/api/wko5views.py:574`, `backend/static/wko5_viewer.html:1218`); a
+  workout replay sets it too, 「重播 … 起（最多 1 年）」 (`backend/api/wko5views.py:617`).
+- **Enlarged chart.** The overlay shows the full legend and a zoom slider under the x axis
+  (`backend/static/wko5_viewer.html:2652`), now also on the log (duration) axis with duration
+  tick labels (`backend/static/wko5_viewer.html:2560`); the "已修正單位" notes are printed in full
+  above the chart (`backend/static/wko5_viewer.html:1268`).
 - **Source stamp in the cache key.** A COROS / TP FIT-folder dataset's file stamp is part of
   the data fingerprint, so a chart never shows another source's cached numbers
-  (`backend/engine/wko5expr/render_cache.py:104`).
+  (`backend/engine/wko5expr/render_cache.py:116`).
 - **Locale in the cache key.** Outside zh-TW the request locale is part of the cache key, so
   translated titles / legend names are never served to the other language
-  (`backend/engine/wko5expr/render_cache.py:147`).
+  (`backend/engine/wko5expr/render_cache.py:160`).
 - Timing footnotes for the cache (cold loads, `--reload` invalidating the code signature) are
   in `docs/reports/chart-sweep.md:101`.
 
@@ -113,11 +117,11 @@ The toggle and the cache themselves are `wko5-engine` features (see
   (`backend/engine/wko5expr/chartfixes.py:127`).
 - Applied to a deep copy; scales multiply; unmatched fixes are ignored and reported by
   `unmatched()`. Each applied fix adds its note to the chart's `fixes` list (the viewer's
-  "已修正單位" badge).
+  "已修正單位" badge, `backend/static/wko5_viewer.html:1344`).
 - Applied only outside parity; cached by the file's mtime, so an edited file is picked up on
-  the next request; a broken file falls back to raw views (`backend/api/wko5views.py:250`).
+  the next request; a broken file falls back to raw views (`backend/api/wko5views.py:310`).
 - The `.wko5chart` files are not in the repo: they are read only from `WKO5_VIEWS_DIR` or the
-  `charts.wko5_views_dir` setting (`backend/api/wko5views.py:61`); with neither set there are no
+  `charts.wko5_views_dir` setting (`backend/api/wko5views.py:63`); with neither set there are no
   WKO5 views and the fixes have nothing to hit.
 - View translations (`views/i18n/<locale>.json`) are applied after the fixes, by chart id
   (`backend/engine/wko5expr/viewi18n.py:113`).
@@ -167,6 +171,10 @@ only when `WKO5_VIEWS_DIR` points at exported views (skipped otherwise) — none
 | single-leg cadence | per-leg cadence; ×2 = steps per minute |
 | bucket | one category of a period chart (day / week / month / quarter / year start) |
 
+## Open Questions
+
+- [ ] Render cache keyed by segment fingerprints with a 90-day default, showing the stale chart while it refreshes — changes the cache-key effects above（SP-336，Todo）——尚未實作
+
 ## Change History
 
 | Date | Source | Feature SRS | Summary |
@@ -176,3 +184,4 @@ only when `WKO5_VIEWS_DIR` points at exported views (skipped otherwise) — none
 | 2026-09-30 | code-sync | N/A | Display effects of the period toggle (titles and legend names follow, bucket axis, look-back note), enlarged-chart slider on log axes, FIT-source stamp in the render-cache key; refreshed drifted anchors |
 | 2026-09-30 | bugfix | N/A | Tooltip / 合計 units from the ECharts series' source series (`srcOf`), not `series[seriesIndex]`; refreshed anchors |
 | 2026-10-04 | code-sync | N/A | Fixes keyed by chart_id / dashboard_id with `view` optional (51 fixes, none per view); .wko5chart only from WKO5_VIEWS_DIR / charts.wko5_views_dir; translations after fixes; locale in render-cache key; refreshed drifted anchors |
+| 2026-10-08 | code-sync（SP-263, SP-336） | N/A | Re-anchored the viewer / views API / render-cache references; RPM label sport from the activity-type filter (SP-263); replay range note; Open Questions for SP-336 |

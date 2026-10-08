@@ -37,9 +37,9 @@ Five layers, each depending only on the ones below it:
 |---|---|---|
 | File readers | Decode WKO5's tagged binary encoding; FIT → WKO5-equivalent channels | `backend/files/wko5chart_reader.py:127` |
 | Algorithms | Pure functions, one metric each, verified against WKO5 | `backend/engine/algorithms/wko5_power.py` and siblings |
-| Dataset | One athlete: workouts, metrics, TSS policy, caches, corrections (`FitFolderDataset` for COROS / TP folders) | `backend/engine/wko5expr/dataset.py:314` |
-| Expression engine | Parse and evaluate WKO5's expression language | `backend/engine/wko5expr/evaluator.py:508` |
-| API + viewer | Serve views, charts (through the render cache), workout samples, config, corrections; the viewer page | `backend/api/wko5views.py:304`, `backend/static/wko5_viewer.html` |
+| Dataset | One athlete: workouts, metrics, TSS policy, caches, corrections (`FitFolderDataset` for COROS / TP folders) | `backend/engine/wko5expr/dataset.py:383` |
+| Expression engine | Parse and evaluate WKO5's expression language | `backend/engine/wko5expr/evaluator.py:515` |
+| API + viewer | Serve views, charts (through the render cache), workout samples, config, corrections; the viewer page | `backend/api/wko5views.py:383`, `backend/static/wko5_viewer.html` |
 
 ## File formats
 
@@ -61,7 +61,7 @@ Every WKO5 file is `b"wko" + kind + 0x1a` followed by one tagged record
 | `.wko5chart` | View → dashboards → charts → series expressions | `backend/files/wko5chart_reader.py:330` `read_view` |
 | `.wko4` | One activity: info, ranges with WKO5's stats, sample channels, the original FIT | `backend/files/wko4_file.py:114` `read_wko4` |
 | `.wko5athlete` | Settings history, workout index with per-workout metrics, PMC snapshot | `backend/files/wko5_athlete.py:167` `read_athlete` |
-| `.wko5cache` | WKO5's per-workout expression results (e.g. `meanmax(power)`) | `backend/engine/wko5expr/dataset.py:228` `load_wko5_curve_cache` |
+| `.wko5cache` | WKO5's per-workout expression results (e.g. `meanmax(power)`) | `backend/engine/wko5expr/dataset.py:294` `load_wko5_curve_cache` |
 
 Sample channels (`backend/files/wko4_file.py:91`) are zigzag int32 delta varints divided by a
 scale, or a raw float64 array when packed field 111 = 1. `0x7fffffff` and
@@ -99,7 +99,7 @@ data-less indoor activities, and swims.
 
 ## TSS policy
 
-`backend/engine/wko5expr/dataset.py:641` `_metrics` follows WKO5's branch
+`backend/engine/wko5expr/dataset.py:733` `_metrics` follows WKO5's branch
 order, reconstructed from disassembly, and records which branch won
 (`tss_source`: power / rtss / trainingpeaks / hrtss) plus, for a power TSS,
 `ftp_used` / `ftp_source` (shown on hover in the activity list and the source
@@ -108,12 +108,12 @@ compare):
 1. **Power:** `NP² × tssduration / (FTP² × 36)` when there is a power stream
    and an FTP in effect. Skipped for a file whose power is watch-estimated
    unless `power.accept_watch_power` is on (`power_tss_blocked`). The FTP
-   (`tss_ftp`, `backend/engine/wko5expr/dataset.py:659`) is WKO5's rule: the
+   (`tss_ftp`, `backend/engine/wko5expr/dataset.py:720`) is WKO5's rule: the
    FTP stored with the workout, else the sport's dated FTP setting. On a COROS
    / TP source a run instead divides by the CP in effect — the plan's CP test,
    else the athlete's `run_ftp_w`, else the Stryd-only PD-model mFTP as of
    that day (labelled 推估), else no power TSS
-   (`backend/engine/wko5expr/fitdataset.py:996`); parity mode and the WKO5
+   (`backend/engine/wko5expr/fitdataset.py:1179`); parity mode and the WKO5
    settings opt-in keep WKO5's rule.
 2. **rTSS:** `(d/60)^1.025 × IF² / 60 × 100`, IF = threshold pace / NGP, for runs without power. The 1.025 exponent means an hour at threshold scores ~110.8, not 100; this is as disassembled and unverified against WKO5's UI.
 3. **TrainingPeaks TSS** (`.wko4` info field 4038) when present, **before** WKO5's own hrTSS. WKO5 keeps TP's `tssActual` only when `tssSource == 0`, which is not stored on disk, so "use it when present" is the closest rule available from files.
@@ -121,14 +121,14 @@ compare):
 
 Moving-time hrTSS and the elevation bonus (own formulas) apply to every
 workout whose `tss_source` is not power or rTSS
-(`backend/engine/wko5expr/dataset.py:539` `_is_hr_sourced`), so a run with NP
+(`backend/engine/wko5expr/dataset.py:609` `_is_hr_sourced`), so a run with NP
 but no FTP in effect is treated like any hrTSS day.
 
 **Walks / hikes (SP-63, own formulas only):** a `walk` workout (walking,
 hiking, mountaineering) without a threshold of its own scores hrTSS on the run
-LTHR (`hr_lthr`, `backend/engine/wko5expr/dataset.py:576`), and always over
+LTHR (`hr_lthr`, `backend/engine/wko5expr/dataset.py:638`), and always over
 moving time — whatever `hr_tss_moving_only` says (`moving_hrtss_on`,
-`backend/engine/wko5expr/dataset.py:568`): over recorded time a multi-day 百岳
+`backend/engine/wko5expr/dataset.py:630`): over recorded time a multi-day 百岳
 charges the nights. Runs follow the knob as before. Only the hrTSS path falls
 back — `aethr` and the low-intensity share still read the sport's own setting,
 so hike time does not enter the 80/20 share. Strength always scores 0 TSS,
@@ -139,11 +139,11 @@ Parity mode is unchanged. History changes with it (TSS is computed on the fly):
 CTL rises in the weeks with hikes.
 
 `tl()` is linear: `v += (x − v) / constant`, daily sums, inputs outside 0–5000
-ignored (`backend/engine/wko5expr/evaluator.py:2429` `_tl`).
+ignored (`backend/engine/wko5expr/evaluator.py:2497` `_tl`).
 
-The builtins `ctl` / `atl` / `tsb` (`backend/engine/wko5expr/evaluator.py:760`) are not plain
+The builtins `ctl` / `atl` / `tsb` (`backend/engine/wko5expr/evaluator.py:770`) are not plain
 `tl(tss, ctl/atlconstant)` since SP-68: `Evaluator.pmc`
-(`backend/engine/wko5expr/evaluator.py:2443`) starts the same recurrence from
+(`backend/engine/wko5expr/evaluator.py:2511`) starts the same recurrence from
 `load_guard.pmc_start` — the manual CTL / ATL at a date (user_settings `athlete.pmc_start`,
 read once per evaluator), else CTL = ATL = the mean daily TSS of the first 28 days with TSS,
 else 0. With years of data the start has decayed away (WKO5 parity of today's CTL / ATL / TSB
@@ -186,7 +186,7 @@ the individual knobs are a fixed, researched preset.
 3. **Approve** (`POST /corrections/approve`): only the proposals sent are stored.
 4. **Apply**: an overlay at `corrections.json` in the tenant's base folder
    (`corrections_path()`), applied when channels are read
-   (`backend/engine/wko5expr/dataset.py:839`).
+   (`backend/engine/wko5expr/dataset.py:939`).
    The `.wko4` files are never modified (WKO5 rewrites them on sync, and they
    are the only copy).
 5. **Undo** (`DELETE /corrections/{id}`).
@@ -213,12 +213,12 @@ Semantics chosen to match WKO5:
 Known gap: `startofweek` assumes Monday (WKO5 reads a user preference). The
 statistics (`stddev` / `variance` / `slr*`), `filter`, `bin` and `lookup` are
 implemented; an unknown function raises `unsupported function`
-(`backend/engine/wko5expr/evaluator.py:1071`).
+(`backend/engine/wko5expr/evaluator.py:1139`).
 
 Own functions beyond WKO5's: `drift("pace" | "power", tier)` returns the
 single-activity card's heart-rate drift of a run (warm-up excluded, fairness
 refusals → no point; not WKO5's stored `pahr` / `pwhr`) and `drift_avg`
-(`backend/engine/wko5expr/evaluator.py:1093`).
+(`backend/engine/wko5expr/evaluator.py:1161`).
 
 ## Views
 
@@ -226,7 +226,7 @@ Two kinds, one renderer:
 
 | Source | Location | Editable | Purpose |
 |---|---|---|---|
-| `wko5` | the user's own exported `*.wko5chart`, searched recursively in `WKO5_VIEWS_DIR`, else the `charts.wko5_views_dir` setting; none when neither is set (`backend/api/wko5views.py:61`) | no | Parity checking |
+| `wko5` | the user's own exported `*.wko5chart`, searched recursively in `WKO5_VIEWS_DIR`, else the `charts.wko5_views_dir` setting; none when neither is set (`backend/api/wko5views.py:63`) | no | Parity checking |
 | `custom` | `views/*.json` in the repo, then the tenant's `views/` folder (`user_views()`) | yes | The athlete's own charts |
 
 The WKO5 chart packs that used to be bundled in the repo were removed
@@ -242,8 +242,8 @@ athlete's own JSON are not translated.
 
 Custom views use the same shape as parsed WKO5 views (`customviews.py`); a
 later file with the same `name` overrides an earlier one
-(`backend/engine/wko5expr/customviews.py:266`). A chart's `kind`
-(`backend/engine/wko5expr/customviews.py:86`) is `athlete` (default),
+(`backend/engine/wko5expr/customviews.py:276`). A chart's `kind`
+(`backend/engine/wko5expr/customviews.py:89`) is `athlete` (default),
 `workout`, `zones`, `targets`, `map` (the workout's GPS route, same as WKO5's map panel), `review` (needs a `section`; a single-activity
 card — see [workout-review.spec.md](./workout-review.spec.md)), `activity`
 (a single-activity panel named by `chart`, e.g. 心率與功率, zone times),
@@ -252,7 +252,7 @@ card — see [workout-review.spec.md](./workout-review.spec.md)), `activity`
 per route) or `polecompare` (有杖 vs 沒杖 per grade bin, SP-243:
 `backend/engine/panels/pole_compare.py` + `backend/static/pole_compare.js`). Two optional chart keys drive the period toggle: `period` (day /
 week / month / quarter / year, the default bucket) and `min_days` (look-back
-floor for that default bucket) (`backend/engine/wko5expr/customviews.py:117`).
+floor for that default bucket) (`backend/engine/wko5expr/customviews.py:121`).
 
 Other optional chart keys, each validated in `_chart`:
 
@@ -287,9 +287,15 @@ keep their dashboard / chart indexes; `views/training.json:111-131`):
 formulas.md §6.10) as one dot per activity on a 0–10 axis, and 有氧／無氧刺激的長期與短期負荷
 plots `tl((tis…), ctlconstant)` / `tl((tis…), atlconstant)` — WKO5's Chronic /
 Acute TIS Load — as a PMC-like pair per energy system. Both need a power
-channel (`_builtin_workout`, `backend/engine/wko5expr/evaluator.py:879`), so
+channel (`_builtin_workout`, `backend/engine/wko5expr/evaluator.py:889`), so
 使用功率 off hides them (`tisaerobic` / `tisanaerobic` are power identifiers,
-`backend/engine/wko5expr/power_use.py:30-36`). Tests: `backend/tests/test_tis_charts.py`;
+`backend/engine/wko5expr/power_use.py:30-36`). Their per-workout values are kept on
+disk through `Dataset.cached_series` (SP-333, `backend/engine/wko5expr/evaluator.py:899-908`),
+keyed on the evaluator's workouts of the `BUILTIN_DISK_LOOKBACK_DAYS` (91) up to the
+activity (`backend/engine/wko5expr/evaluator.py:265`), the engine config and the code the
+built-in reaches: a new Dataset object draws both TIS charts in ~0.06 s instead of ~4 s.
+Only the TIS built-ins go to disk; the Dataset's other in-memory `memo` results do not
+(profiling showed TIS was the cost). Tests: `backend/tests/test_tis_charts.py`, `backend/tests/test_tis_disk_sp320.py`;
 parity with WKO5's cached per-workout scores (aerobic 359/361 equal, anaerobic
 345/361; 15 of the 16 anaerobic misses are one level off, one is two): `backend/tests/realdata/test_real_wko5_tis.py`.
 
@@ -323,11 +329,11 @@ road running is `sport="run" and !hastag("runningtrail")`.
   the range (capped at 5000), so empty buckets still get an x category.
 
 The chart endpoint applies it for `athlete` charts
-(`backend/api/wko5views.py:449` `_apply_period`): the `period` query parameter is honoured only
+(`backend/api/wko5views.py:552` `_apply_period`): the `period` query parameter is honoured only
 for custom views and unlocked charts; the floor and bucket alignment apply to
 custom views only. The response adds `x_period`, `period_default`,
 `period_toggle`, `buckets` and `range_note`
-(`backend/api/wko5views.py:470`).
+(`backend/api/wko5views.py:573`).
 
 ## Drift basis toggle (配速／功率)
 
@@ -336,7 +342,7 @@ custom views only. The response adds `x_period`, `period_default`,
 (`recentbests.py`): a chart-level spec, a server rewrite, a per-chart viewer
 toggle.
 
-- **Spec** (`backend/engine/wko5expr/customviews.py:139-150`): `"basis":
+- **Spec** (`backend/engine/wko5expr/customviews.py:143-154`): `"basis":
   {"default": "pace", "choices": ["pace", "power"], "power_note": "…"}`. Series
   carry `"basis": "pace"` or `"power"` (`SERIES_DEFAULTS`,
   `backend/engine/wko5expr/customviews.py:59`); untagged series are drawn in
@@ -354,13 +360,13 @@ toggle.
   otherwise as `basis_note` above the chart. Season charts need nothing: a run
   without power has no `pwhr` and `drift("power")` is NaN for it, so it has no
   point.
-- **API** (`backend/api/wko5views.py:376-378`): custom views, every chart kind
+- **API** (`backend/api/wko5views.py:468-470`): custom views, every chart kind
   (athlete, workout, review); `?basis=` is a query parameter, so it is part of
   the render-cache key. The response adds `basis`, `basis_default`,
   `basis_choices`, `basis_labels` and `basis_toggle`. Review cards receive the
-  basis through `_render` (`backend/api/wko5views.py:517`).
+  basis through `_render` (`backend/api/wko5views.py:620`).
 - **Charts using it**: 輕鬆路跑的心率飄移 and 耐久度 in 我的訓練 › 能力
-  (`views/training.json:302`, `views/training.json:374`), 長時間輕鬆跑的心率飄移
+  (`views/training.json:304`, `views/training.json:382`), 長時間輕鬆跑的心率飄移
   and 耐久度 in 周期化訓練 (`views/periodization.json:67`,
   `views/periodization.json:194`), and the 有氧／心率飄移 dashboard of
   單次活動判讀: 飄移判讀 (`views/workout.json:35`). 滾動有氧效率 EF and 每公里心率與速度 were
@@ -368,7 +374,7 @@ toggle.
   The two 心率飄移 season charts plot the card's `drift(basis, "all")` as
   verdict-coloured bars (`drift_bars`: < 5 % / 5–10 % / > 10 %, one 5 % line);
   the 耐久度 charts plot WKO5's stored `pahr` / `pwhr`
-  (`backend/engine/wko5expr/dataset.py:686-686`).
+  (`backend/engine/wko5expr/dataset.py:780-781`).
 - **Trail caveat**: the trail drift charts' `power_note` says Pw:HR is only a
   reference off-road because Stryd power is validated only up to about 8 %
   grade (user-supplied figure; not checked against a Stryd source here).
@@ -385,9 +391,9 @@ toggle.
 ## Render cache
 
 `backend/engine/wko5expr/render_cache.py`, used by the chart endpoint
-(`backend/api/wko5views.py:446`).
+(`backend/api/wko5views.py:549`).
 
-- **Key** (`backend/engine/wko5expr/render_cache.py:145`): sha1 of the chart
+- **Key** (`backend/engine/wko5expr/render_cache.py:157`): sha1 of the chart
   definition (after fixes, translation, variant, basis and period rewrite), the
   request (view, dashboard, chart, begin/end after the floor, parity, the data
   source, every other query parameter, the workout's file, the variant), the
@@ -397,26 +403,33 @@ toggle.
   `periodzones` the HR-profile stamp; `race_refs` the events' stored GPX;
   `climbvam` the route index / names / weather files; `polecompare` the pole
   marks (`activity_tags.pole_marks_stamp`) and today's date
-  (`backend/api/wko5views.py:385-414`). Nothing is invalidated explicitly;
+  (`backend/api/wko5views.py:477-511`). Nothing is invalidated explicitly;
   changed inputs miss.
-- **Data fingerprint** (`backend/engine/wko5expr/render_cache.py:89`): the
+- **Data fingerprint** (`backend/engine/wko5expr/render_cache.py:101`): the
   `.wko5athlete` stamps, plan and corrections file stamps, engine config,
   workout list hash, today, the chart data source with its FIT-folder stamp
-  (`backend/engine/wko5expr/render_cache.py:104`), the stored CP-test sessions
+  (`backend/engine/wko5expr/render_cache.py:116`), the stored CP-test sessions
   and done interval sessions (the review cards judge a run against its matched
-  session), and the per-activity weather file.
-- **Code signature** (`backend/engine/wko5expr/render_cache.py:70`):
-  `CACHE_VERSION` plus size/mtime of every `*.py` in `wko5expr/`,
+  session), the per-activity weather file, and the manual PMC start (SP-68).
+- **Code signature** (`backend/engine/wko5expr/render_cache.py:82`):
+  `CACHE_VERSION` plus the sha1 of the **contents** of every `*.py` in `wko5expr/`,
   `algorithms/`, `backend/engine/`, `backend/engine/panels/`, `backend/files/`
-  and of `backend/api/wko5views.py` (`_ENGINE_GLOBS`,
-  `backend/engine/wko5expr/render_cache.py:57`), taken once at import so a
+  and of `backend/api/wko5views.py` (`_content`, `backend/engine/wko5expr/render_cache.py:73`;
+  `_ENGINE_GLOBS`, `backend/engine/wko5expr/render_cache.py:60`), taken once at import so a
   process that has not reloaded never stores old-code results under a new
-  signature.
-- **Storage**: in-memory LRU of 400 entries plus JSON files under the
+  signature. Contents instead of size / mtime since SP-332 (SP-320 ①): a deploy that
+  leaves the engine files unchanged keeps every chart. It is still whole files —
+  hashing only the functions a chart reaches is left to SP-336 (module docstring
+  at `:9` still says mtimes).
+- **Storage**: in-memory LRU capped at 400 entries **and** 32 MB of JSON
+  (`MAX_MEMORY_BYTES`, `backend/engine/wko5expr/render_cache.py:49`; a per-second
+  workout chart is MB as Python objects), an entry over a quarter of that budget
+  staying on disk only (`_remember`, `backend/engine/wko5expr/render_cache.py:190`);
+  plus JSON files under the
   tenant's shared `cache/render/` (`backend/engine/wko5expr/render_cache.py:39`;
   demo sandboxes share their base's cache), pruned to 300 MB
-  least-recently-used every 50 writes (`backend/engine/wko5expr/render_cache.py:201`).
-- **Concurrency** (`backend/engine/wko5expr/render_cache.py:243`): identical
+  least-recently-used every 50 writes (`backend/engine/wko5expr/render_cache.py:227`).
+- **Concurrency** (`backend/engine/wko5expr/render_cache.py:270`): identical
   in-flight requests are coalesced; at most 2 renders run at once so other
   endpoints keep threadpool time. Errors are raised to every waiter and not
   cached.
@@ -431,12 +444,22 @@ unchanged files and unchanged code reads no FIT file at all.
   overrides the root): `index.json` (one entry per file, valid for its
   size + `mtime_ns`), `ch/*.npz` (the parsed channels, float64, NaN = no
   data), `series_*.json` (`cached_series`, up to 4 threshold variants per
-  file), `estimate.json` (the as-of LTHR estimates), `pd_mftp.json` (the
-  as-of PD refits behind `cp_as_of`).
+  file; also the per-workout TIS built-ins, SP-333), `estimate.json` (the as-of
+  LTHR estimates), `estimate_grid.json` (one entry per grid day of those
+  estimates, SP-337), `pd_mftp.json` (the as-of PD refits behind `cp_as_of`).
 - **Parsing**: only new / changed files; ≥ 12 of them go to a spawn process
-  pool (≤ 8 workers, `WKO5COACH_FIT_WORKERS`), so the web server's event loop
-  keeps the GIL. Channels load lazily, at most 256 files in memory
-  (`WKO5COACH_FIT_OPEN`).
+  pool (at most 8 workers, cpu − 2 and n / 4, `WKO5COACH_FIT_WORKERS`;
+  `backend/engine/wko5expr/fitcache.py:628`), so the web server's event loop
+  keeps the GIL. Channels load lazily, at most 12 files open
+  (`WKO5COACH_FIT_OPEN`, `backend/engine/wko5expr/fitcache.py:651`; 256 → 48 → 12
+  on 2026-10-05 — an open file is Python lists of ~32 B a sample per channel).
+- **A bad file never stops the parse** (2026-10-05): a failure anywhere in
+  `parse_file` (`backend/engine/wko5expr/fitcache.py:143`) caches the file as
+  unreadable (`{"meta": {"error", "detail"}}`, logged with its name) and the next
+  build skips it; a pool worker that dies loses only its own files, which are
+  parsed inline afterwards and not recorded as unreadable; the index is saved
+  every 10 files (`SAVE_EVERY`, `backend/engine/wko5expr/fitcache.py:64`) and in a
+  `finally`, so an interrupted build keeps what it parsed.
 - **Invalidation map** — each derived field has its own version (a constant
   plus a hash of the source of the code computing it):
 
@@ -449,15 +472,41 @@ unchanged files and unchanged code reads no FIT file at all.
   | hike / trail tags (`hiking`, `mountaineering`, `runningtrail`) | not cached: derived on every build from the sport type (`TYPE_TAGS`, the DB classification) |
   | the charts' Stryd-only CP fit of a grid day (`_estimate_cp`) | the PD-refit entry of that day (same window key, kind `stryd`) plus the source of `_estimate_cp` and `CP_FIT_MIN_RUNS`; the whole grid is also in the estimate memo |
   | hrTSS / hrIF, moving-time hrTSS | the parse; `wko5_hr.py`; the LTHR (and moving speed) — separate keys |
-  | `cached_series` (thresholds, race power, workout review, evaluator aggregates, mean-max) | the file stamp, its corrections, the thresholds in effect (as on the WKO5 Dataset) |
-  | as-of PD refit of a day | the day's 90-day window: runs (stamp, power source / use, power corrections, NP), synced FITs `cptest.curves` adds, watch-power / bad-file settings and overrides, the code of athlete / cptest / PD model / mean-max / power_source |
-  | as-of LTHR estimates | any workout (stamp, sport, tags, power source), exclusions, thresholds / weight before the estimate, plan, corrections, engine config, today, the code of thresholds / athlete / cp / PD model / mean-max |
+  | `cached_series` (thresholds, race power, workout review, evaluator aggregates, mean-max) | the file stamp, its corrections, the thresholds in effect (as on the WKO5 Dataset), plus an optional extra input (`backend/engine/wko5expr/dataset.py:812`): for the per-workout TIS built-ins the evaluator's workouts of the 91 days up to the activity, the engine config and the code the built-in reaches (SP-333) |
+  | as-of PD refit of a day | the day's 90-day window: runs (stamp, power source / use, power corrections, NP), synced FITs `cptest.curves` adds, watch-power / bad-file settings and overrides, the code those refits reach (`pd_code`, codehash, SP-332) + `ESTIMATE_CODE_V` |
+  | as-of LTHR estimates (`estimate.json`) | the global inputs (the code the estimate reaches — `estimate_code`, `backend/engine/wko5expr/fitdataset.py:375`, codehash, SP-332 —, engine config, watch power, exclusions, thresholds / weight before the estimate, plan, corrections), every workout row, and the grid's bounds — first run + 30 d … last run (`_estimate_grid`, `backend/engine/wko5expr/fitdataset.py:947`), **not today** (SP-337): a new day without a new run hits |
+  | one grid day's estimate (`estimate_grid.json`) | that day's inputs only (`_grid_sig`, `backend/engine/wko5expr/fitdataset.py:1004`): the global part, the workouts of the `ESTIMATE_LOOKBACK_DAYS` (305) up to the day and the PD memo's files / settings of that span — a sync or a deletion re-estimates only the grid days that see it (SP-337) |
   | the Dataset object (in memory) | `source_stamp` (files, DB classification / settings, watch power, bad-file setting / overrides), engine config, plan threshold edits |
 
   Not cached: the bad-file verdict itself (`judge` / `decide` read the
   features, the weight and the user's overrides, cheap).
-- **Single flight** (`backend/api/wko5views.py` `_dataset`): one lock per
-  (config, source, stamp); concurrent chart requests wait for one build.
+- **Single flight** (`_dataset`, `backend/api/wko5views.py:188`): one lock per
+  (config, source, stamp); concurrent chart requests wait for one build, which is
+  timed in the app log (`applog.timed("dataset build")`, SP-215).
+- **Datasets kept** (2026-10-05, the NAS container sat at its 3 GB limit):
+  `_DatasetCache` (`backend/api/wko5views.py:86`) keeps one Dataset per mode
+  (config, source, shared root) — a new stamp drops the old one — and at most
+  `DATASETS_MAX` (2) overall; a request still holding an old Dataset finishes with
+  it. The Dataset's method caches live on the instance (`instance_lru`,
+  `backend/engine/wko5expr/dataset.py:141`), so a dropped Dataset and its open FIT
+  channels are freed; a locked app DB answers the last good `db_stamp`
+  (`backend/engine/wko5expr/datasource.py:97`) instead of an empty one that would
+  build another whole Dataset.
+- **Code versions** (SP-332 / SP-320 ①, SP-341): `code_hash`
+  (`backend/engine/codehash.py:281`) hashes the bytecode of the functions a cache
+  reaches (globals, module attributes incl. local imports, nested code, methods of
+  reached / context classes) and the module constants they read — comments and
+  unrelated functions don't count. The estimate / PD memos (`estimate_code`,
+  `pd_code`) and `activity_auto` use it; manual constants (`ESTIMATE_CODE_V`,
+  `CACHE_V`) stay for what the walk cannot see. The WKO5 Dataset's per-workout disk
+  caches (`channel_peaks.json`, `workout_curves.json`, `power_source_v1.json`,
+  `bad_activity_v1.json`) carry `per_workout_code`
+  (`backend/engine/wko5expr/dataset.py:100`): a file of another version is recomputed.
+- **LTHR in effect** (SP-289): plan test → estimate from the runner's data → the
+  watch account (`_coros_lthr_prior`, `backend/engine/wko5expr/fitdataset.py:809`)
+  → 0.90 × max HR labelled 推估 (`_apply_lthr_prior`,
+  `backend/engine/wko5expr/fitdataset.py:833`; max HR's own last layer is
+  208 − 0.7 × age).
 - **Progress**: `backend/engine/wko5expr/buildstate.py`; `GET
   /api/v1/wko5/dataset/status` (async, answered on the event loop) returns
   `state` idle / building / ready / error, `phase` (scan, parse 解析 FIT,
@@ -504,21 +553,21 @@ unchanged files and unchanged code reads no FIT file at all.
 
 `backend/static/wko5_viewer.html`, served at `/api/v1/wko5/viewer`.
 
-- **Mode cards** (`backend/static/wko5_viewer.html:383`): the page opens on
+- **Mode cards** (`backend/static/wko5_viewer.html:401`): the page opens on
   two big cards, 趨勢 (season charts) and 單次活動 (one workout's charts).
-- **Data-source chip** (`backend/static/wko5_viewer.html:393`): `#source-chip` +
+- **Data-source chip** (`backend/static/wko5_viewer.html:411`): `#source-chip` +
   `sourcechip.js` switch `charts.data_source` between the 資料來源 (the one
   synced source in use, COROS or TrainingPeaks) and the WKO5 folder
   (cross-check), then reload; hidden in the demo. The chart, overview and
-  race-power datasets all follow it (`_dataset`, `backend/api/wko5views.py:133`;
+  race-power datasets all follow it (`_dataset`, `backend/api/wko5views.py:188`;
   source resolution in [wko5-coros-sync.spec.md](./wko5-coros-sync.spec.md)).
-- **Chart directory** (`backend/static/wko5_viewer.html:657`): custom views are
+- **Chart directory** (`backend/static/wko5_viewer.html:700`): custom views are
   one flat list of dashboard tabs with no view level, ordered by
   `CUSTOM_ORDER` = 我的訓練, 周期化訓練, then the rest
-  (`backend/static/wko5_viewer.html:539`); imported WKO5 views stay grouped per
+  (`backend/static/wko5_viewer.html:576`); imported WKO5 views stay grouped per
   view with a 匯入 tag and collapsible headers. Charts marked `power` are hidden
   when 使用功率 is off, and charts whose `sports` excludes the 主要訓練項目 are
-  hidden (`backend/static/wko5_viewer.html:547`).
+  hidden (`backend/static/wko5_viewer.html:585`).
 - **活動類型 filter** (SP-263): the filter panel lists the activity kinds of
   `engine/sport_map.py` — one platform-neutral type per activity
   (`app_type`: trail / road from the trail classification, then the COROS
@@ -530,74 +579,81 @@ unchanged files and unchanged code reads no FIT file at all.
   atomically, SP-341; owner 2026-10-06). Season charts filter their activities with it
   (`Evaluator(keep=...)`); the render-cache key carries the user's
   activity-type marks.
-- **Deep link** (`backend/static/wko5_viewer.html:590`): `?view=<name>&dash=<index
+- **Deep link** (`backend/static/wko5_viewer.html:633`): `?view=<name>&dash=<index
   or title>`, plus `&chart=<index>` to load that chart first and open it
   enlarged; `?workout=<index>&label=<name>` (from the 課表 page) opens that
   activity. The query string is then cleared.
-- **Period toggle** (`backend/static/wko5_viewer.html:1102`): when the response
+- **Period toggle** (`backend/static/wko5_viewer.html:1148`): when the response
   says `period_toggle`, the card header gets 日／週／月／季／年; the choice is
   remembered per chart in local storage (`wko5viewer.period`,
-  `backend/static/wko5_viewer.html:1011`) and re-fetches that card only. A chart
+  `backend/static/wko5_viewer.html:1057`) and re-fetches that card only. A chart
   with a `calendar` series (a day calendar such as 肌力訓練日曆,
-  `backend/static/wko5_viewer.html:2053`) never gets the toggle.
-- **Basis toggle** (`backend/static/wko5_viewer.html:1020`,
-  `backend/static/wko5_viewer.html:1142`): when the response says `basis_toggle`,
+  `backend/static/wko5_viewer.html:2255`) never gets the toggle.
+- **Basis toggle** (`backend/static/wko5_viewer.html:1066`,
+  `backend/static/wko5_viewer.html:1188`): when the response says `basis_toggle`,
   the header gets 配速／功率, remembered per chart in `wko5viewer.basis` and sent
-  as `&basis=` for athlete and workout cards (`backend/static/wko5_viewer.html:1086`);
+  as `&basis=` for athlete and workout cards (`backend/static/wko5_viewer.html:1132`);
   with 使用功率 off a `power_basis` chart is locked to pace
-  (`backend/static/wko5_viewer.html:1140`); `basis_note` is drawn above the
-  chart (`backend/static/wko5_viewer.html:1173`).
-- **Variant toggle** (`backend/static/wko5_viewer.html:1045`): a chart with
+  (`backend/static/wko5_viewer.html:1186`); `basis_note` is drawn above the
+  chart (`backend/static/wko5_viewer.html:1219`).
+- **Variant toggle** (`backend/static/wko5_viewer.html:1091`): a chart with
   `variant_choices` gets a segmented control, remembered per chart in
   `wko5viewer.variant` and sent as `&variant=`.
-- **Enlarge** (`backend/static/wko5_viewer.html:1196` `openZoom`): 「⤢ 放大」 opens a
+- **Enlarge** (`backend/static/wko5_viewer.html:1243` `openZoom`): 「⤢ 放大」 opens a
   `<dialog>` redrawn from the card's JSON (no refetch) with the full legend and
   a zoom slider; it pushes a history entry with `&chart=`, so Back, Esc, the
   close button or a backdrop click closes it
-  (`backend/static/wko5_viewer.html:1225`). A period toggle inside the overlay
+  (`backend/static/wko5_viewer.html:1272`). A period toggle inside the overlay
   re-renders both card and overlay.
 - **No 數值與公式 table.** The per-series debug table (status, points, last
   value, unit, expression) is no longer drawn; the same data stays in the chart
   JSON.
 - **Stack total.** A stacked chart's tooltip adds a 合計 row over the
   categories currently shown in the legend (hidden ones drop out); skipped for
-  percent shares (`backend/static/wko5_viewer.html:2415`). Its unit, like every
+  percent shares (`backend/static/wko5_viewer.html:2617`). Its unit, like every
   tooltip row's, comes from the source series of the ECharts series
-  (`srcOf[seriesIndex]`, `backend/static/wko5_viewer.html:2253`).
-- **Route map** (`backend/static/wko5_viewer.html:1953`): WKO5's map panel
-  (`PKMapPanelConfig`, `backend/api/wko5views.py:292`) or a custom view's `kind: "map"` chart
+  (`srcOf[seriesIndex]`, `backend/static/wko5_viewer.html:2455`).
+- **Route map** (`backend/static/wko5_viewer.html:2008`): WKO5's map panel
+  (`PKMapPanelConfig`, `backend/api/wko5views.py:352`) or a custom view's `kind: "map"` chart
   is drawn with Leaflet from the workout samples; the panel JSON (`render_map`,
-  `backend/engine/wko5expr/render.py:445`) only says which workout and whether it
+  `backend/engine/wko5expr/render.py:448`) only says which workout and whether it
   has GPS (`empty`, shown as 「沒有 GPS 資料」), no track of its own. The bundled
   單次活動判讀 view has it on its first page (`route-map`, `views/workout.json`). Basemaps
   魯地圖, Google 地形, NLSC 電子地圖, 正射影像, OSM; overlays 等高線, Google 道路, NLSC 道路
-  come from the shared `backend/static/basemaps.js:15` (also the routes page and the race
+  come from the shared `backend/static/basemaps.js:17` (also the routes page and the race
   calculator's course map). The defaults come from the settings keys `charts.map.basemap` /
-  `charts.map.overlays` (`backend/settings/repository.py:100`; basemap unset = by 地區: tw 魯地圖, intl OSM), read as `map_basemap` /
-  `map_overlays` from `GET /api/v1/sync/settings` (`backend/api/sync.py:203`,
-  `backend/static/wko5_viewer.html:571`; storage side in
+  `charts.map.overlays` (`backend/settings/repository.py:124-125`; basemap unset = by 地區: tw 魯地圖, intl OSM), read as `map_basemap` /
+  `map_overlays` from `GET /api/v1/sync/settings` (`backend/api/sync.py:212`,
+  `backend/static/wko5_viewer.html:612`; storage side in
   [wko5-coros-sync.spec.md](./wko5-coros-sync.spec.md)); a per-browser switch is kept only
-  while that default is unchanged (`backend/static/basemaps.js:52`; the viewer keeps its
-  route colour in the same entry, `backend/static/wko5_viewer.html:1941`).
+  while that default is unchanged (`backend/static/basemaps.js:54`; the viewer keeps its
+  route colour in the same entry, `backend/static/wko5_viewer.html:1996`).
   The route is coloured by 心率 / 功率 / 坡度 / 單色 (5–95th percentile ramp,
-  12 bins) with start / end markers (`MapLayers.track`, `backend/static/basemaps.js:111`).
-- **Tile-error hint** (`backend/static/basemaps.js:66`): if the active
+  12 bins) with start / end markers (`MapLayers.track`, `backend/static/basemaps.js:113`).
+- **Map chart** (SP-80, `backend/static/wko5_viewer.html:2116`): beside the route map,
+  the activity's elevation / HR / power / pace / grade as stacked panels on the
+  samples' time axis, one panel per metric with its own unit (never one shared y
+  scale). Buttons pick the panels; the layout puts the map on top or on the left
+  (narrow screens: always on top); both choices are remembered per browser
+  (`wko5viewer.mapchart`). The panels join the synced hover below (on a phone, tap).
+  Test: `backend/tests/test_viewer_mapchart.py`.
+- **Tile-error hint** (`backend/static/basemaps.js:68`): if the active
   basemap has 3 tile errors and no tile loaded, a hint offers up to three other
   basemaps (not Google 地形) as buttons.
-- **Synced hover** (`backend/static/wko5_viewer.html:1883`): the map and every
+- **Synced hover** (`backend/static/wko5_viewer.html:1931`): the map and every
   workout chart whose x is elapsed time or a distance unit join one hover
   group per workout; hovering any member shows the same sample index on all of
   them (tooltip on charts, a marker with a time / distance / HR / power /
   elevation / grade readout on the map), one flush per animation frame. Hovering
   within 24 px of the route drives the charts
-  (`backend/static/wko5_viewer.html:2042`). Every workout series that joins the
+  (`backend/static/wko5_viewer.html:2102`). Every workout series that joins the
   synced hover (time or distance x) skips `lttb` sampling so every chart's
-  tooltip lands on the same point (`backend/static/wko5_viewer.html:2313`).
-- **Samples** (`backend/api/wko5views.py:1157`): per-sample `t`, `d` (km),
+  tooltip lands on the same point (`backend/static/wko5_viewer.html:2515`).
+- **Samples** (`backend/api/wko5views.py:1321`): per-sample `t`, `d` (km),
   `lat` / `lng`, `elev`, `hr`, `power`, `grade` (%), downsampled with the same
   step as the workout charts (`MAX_POINTS` 3000, `backend/engine/wko5expr/render.py:55`),
   so chart x maps exactly to a sample index; NaN and (0, 0) GPS become null. The
-  viewer keeps the last 4 workouts' samples (`backend/static/wko5_viewer.html:1847`).
+  viewer keeps the last 4 workouts' samples (`backend/static/wko5_viewer.html:1895`).
 
 ## Mountain metrics (own formulas)
 
@@ -607,8 +663,12 @@ Not in WKO5; grounded in `docs/research/`.
 |---|---|---|
 | `minetti.py` | Energy cost of running/walking by gradient; grade-adjusted speed with a downhill floor | Minetti et al. 2002, R² 0.999, ±45% |
 | `effort.py` | Equivalent flat distance by integrating Minetti over the elevation stream | Same |
-| `trail.py` `compute_hr_drift` | Aerobic decoupling Pa:HR | TrainingPeaks / Uphill Athlete convention |
 | `chart_metrics.py` | Reference implementations of the competitor-derived charts in `views/training.json` / `views/workout.json`: Form% zones, ATL/CTL ratio, Treff PI (its chart was dropped in 2026-10), コース定数, ITRA km-effort/category, up/downhill m/h, downhill impact load (own composite; `DOWNHILL_EXPR` is shared with the 總覽 `descent` card) and, beside it, the weekly steep-downhill cadence lines (`downhill_cadence_expr`: < −8 %, moving, time-weighted, strides/min × 2 = spm, no point under 10 min; SP-237) | Friel; Gabbett 2016 via Runalyze; Treff 2019; 山本正嘉; ITRA; Gottschall & Kram 2005 + Keller 1996; Van Hooren 2024 (cadence) — sources, formulas and check results in `docs/research/competitor-charts.md` §7, tested in `test_chart_metrics.py` |
+
+Aerobic decoupling (Pa:HR) is the single-activity card's `drift()` (see Drift basis
+toggle above and [workout-review.spec.md](./workout-review.spec.md)); the old
+`algorithms/trail.py` `compute_hr_drift` went with the React SPA's endpoints
+(commit `f24cc42b`, SP-48).
 
 WKO5's ACSM grade factor `(0.19v + 0.9vg)/0.19` under-counts steep running
 against Minetti by 22% at +20% grade, 31% at +30%, and goes negative below
@@ -626,31 +686,31 @@ All under `/api/v1/wko5` (`backend/api/wko5views.py`).
 
 | Method | Path | Line | Purpose |
 |---|---|---|---|
-| GET | `/views` | 304 | Both view kinds, with source and ids; map panels report kind `map`, review / activity cards kind `workout`; each chart carries `power` / `power_basis` (使用功率), and `zoned` / `sports` / `order` when set |
-| GET | `/views/dirs` | 329 | Where custom view files live, and the WKO5 views folder |
-| GET | `/dataset/status` | 214 | Build progress of the active source's Dataset (state, phase, n_done / n_total, message) |
-| GET | `/views/{view}/dashboards/{d}/charts/{c}` | 350 | Render one chart through the render cache (`parity`, `begin`, `end`, `sports`, `workout`, `period`, `window`, `basis`, `variant`, plus panel parameters such as `zsys` / `zkind` / `route`); the dataset follows `charts.data_source` |
-| GET | `/workouts` | 565 | RHE activity list, with TSS source and the FTP of a power TSS |
-| GET / PUT | `/exclusions` | 626, 646 | Bad activity files left out / kept, and the per-activity override — see [workouts.spec.md](./workouts.spec.md) |
-| GET | `/workouts/{i}/review` | 667 | Single-activity review cards — see [workout-review.spec.md](./workout-review.spec.md) |
-| GET / PATCH | `/workouts/{i}/activity` | 759, 784 | One activity's type / effort tags (auto with reasons, user overrides, note) |
-| GET | `/workouts/{i}/pain` | 770 | The activity's 疼痛 mark (404 in the demo) |
-| GET | `/activities` | 868 | Every activity of the current source with stored user values, terrain and power source (the 活動列表) |
-| GET | `/activities/auto` | 922 | Auto activity type / effort of every activity, computed once per Dataset in the background; never waits |
-| GET | `/activities/stats` | 952 | Average HR / power per activity for the list columns |
-| PATCH | `/activities` | 1000 | Key-based bulk edit (also reaches excluded files) |
-| GET | `/activities/page` | 1043 | The 活動列表 page |
-| GET | `/sports` | 1133 | Activity kinds (越野跑 / 路跑 / 登山健行 / 百岳登山 / 騎車 / 肌力 / 走路 / 其他, `engine/sport_map.py`) with counts; the `sports` query of `/workouts` and the charts takes these keys (a WKO5 sport group such as `run` still works) |
-| GET | `/athlete` | 1057 | Settings history, WKO5's PMC snapshot |
-| GET | `/primary-sport` | 1072 | 主要訓練項目: setting, sport in effect and suggestion |
-| GET / PUT | `/config` | 1089, 1096 | Engine config |
-| GET | `/corrections` | 1109 | Applied corrections |
-| GET | `/corrections/proposals` | 1115 | Detect only — changes nothing |
-| POST | `/corrections/approve` | 1130 | Apply the proposals sent |
-| DELETE | `/corrections/{id}` | 1139 | Undo one |
-| GET | `/workouts/{idx}/samples` | 1152 | Downsampled per-sample arrays for the route map and synced hover |
-| GET | `/viewer` | 1201 | The viewer page |
-| GET | `/settings` | 1206 | The settings page (404 in the demo) |
+| GET | `/views` | 383 | Both view kinds, with source and ids; map panels report kind `map`, review / activity cards kind `workout`; each chart carries `power` / `power_basis` (使用功率), and `zoned` / `sports` / `order` when set |
+| GET | `/views/dirs` | 419 | Where custom view files live, and the WKO5 views folder |
+| GET | `/dataset/status` | 274 | Build progress of the active source's Dataset (state, phase, n_done / n_total, message) |
+| GET | `/views/{view}/dashboards/{d}/charts/{c}` | 442 | Render one chart through the render cache (`parity`, `begin`, `end`, `sports`, `workout`, `period`, `window`, `basis`, `variant`, plus panel parameters such as `zsys` / `zkind` / `route`); the dataset follows `charts.data_source` |
+| GET | `/workouts` | 677 | RHE activity list, with TSS source and the FTP of a power TSS |
+| GET / PUT | `/exclusions` | 745, 765 | Bad activity files left out / kept, and the per-activity override — see [workouts.spec.md](./workouts.spec.md) |
+| GET | `/workouts/{i}/review` | 786 | Single-activity review cards — see [workout-review.spec.md](./workout-review.spec.md) |
+| GET / PATCH | `/workouts/{i}/activity` | 889, 914 | One activity's type / effort tags (auto with reasons, user overrides, note) |
+| GET | `/workouts/{i}/pain` | 900 | The activity's 疼痛 mark (404 in the demo) |
+| GET | `/activities` | 998 | Every activity of the current source with stored user values, terrain and power source (the 活動列表) |
+| GET | `/activities/auto` | 1080 | Auto activity type / effort of every activity, computed once per Dataset in the background; never waits |
+| GET | `/activities/stats` | 1110 | Average HR / power per activity for the list columns |
+| PATCH | `/activities` | 1164 | Key-based bulk edit (also reaches excluded files) |
+| GET | `/activities/page` | 1208 | The 活動列表 page |
+| GET | `/sports` | 1213 | Activity kinds (越野跑 / 路跑 / 登山健行 / 百岳登山 / 騎車 / 肌力 / 走路 / 其他, `engine/sport_map.py`) with counts; the `sports` query of `/workouts` and the charts takes these keys (a WKO5 sport group such as `run` still works) |
+| GET | `/athlete` | 1226 | Settings history, WKO5's PMC snapshot |
+| GET | `/primary-sport` | 1241 | 主要訓練項目: setting, sport in effect and suggestion |
+| GET / PUT | `/config` | 1258, 1265 | Engine config |
+| GET | `/corrections` | 1278 | Applied corrections |
+| GET | `/corrections/proposals` | 1284 | Detect only — changes nothing |
+| POST | `/corrections/approve` | 1299 | Apply the proposals sent |
+| DELETE | `/corrections/{id}` | 1308 | Undo one |
+| GET | `/workouts/{idx}/samples` | 1321 | Downsampled per-sample arrays for the route map and synced hover |
+| GET | `/viewer` | 1370 | The viewer page |
+| GET | `/settings` | 1375 | The settings page (404 in the demo) |
 
 The WKO5 athlete folder is `WKO5_ATHLETE_DIR` (or `WKO5COACH_ATHLETE_DIR`), else the first
 folder holding a `*.wko5athlete` under the home directory's `WKO5` (`default_roots`,
@@ -675,8 +735,15 @@ the athlete-bar snapshot.
 `backend/tests/test_periods.py` covers period detection, rewrite, legend
 renaming, locks, floors and bucket lists (including `_apply_period`);
 `backend/tests/test_render_cache.py` covers key changes (chart, request, data,
-code), disk persistence, error non-caching, size eviction, coalescing and the
-concurrency cap.
+code), disk persistence, error non-caching, size eviction (count and bytes),
+coalescing and the concurrency cap.
+`backend/tests/test_dataset_memory.py` covers one Dataset per mode, `DATASETS_MAX`
+and that a dropped Dataset is freed; `backend/tests/test_fit_cache.py` the FIT
+cache (incl. an unreadable file and a dying pool worker);
+`backend/tests/test_codehash_sp320.py` that an unrelated edit keeps a code hash
+and a relevant one changes it; `backend/tests/test_estimate_grid_sp320.py` the
+per-grid-day estimate memo (a new run, a new day); `backend/tests/test_hr_prior.py`
+the max HR / LTHR priors (SP-289).
 
 `backend/tests/test_drift_basis.py` covers the basis spec and rewrite, the
 no-power note, the bundled drift charts (`backend/tests/test_drift_basis.py:159`,
@@ -726,6 +793,28 @@ source (synthetic FITs).
 | Chart data source | The folder a Dataset is built from: the synced 資料來源 (COROS or TrainingPeaks) or the WKO5 folder |
 | 使用功率 | Setting that hides power-only charts and locks 配速／功率 toggles to pace; models unchanged |
 | Drift bars | Season drift as one verdict-coloured bar per run, from the single-activity card's `drift()` |
+| Code hash | A cache's code version: the bytecode of the functions it reaches plus the constants they read (`engine/codehash.py`) |
+| Grid day | One day of the as-of LTHR estimate grid (first run + 30 d … last run), cached on that day's own inputs |
+| Dataset mode | (engine config, source, shared root): one built Dataset is kept per mode |
+
+## Decisions Log
+
+| Decision | Choice | Alternatives | Rationale |
+|---|---|---|---|
+| Memory under load | Keep the container at 3 GB; bound it in code (one Dataset per mode, `DATASETS_MAX` 2, render cache capped by bytes, 12 open FITs) and later the global rebuild cap | Raise the container limit; move to a bigger host (Hetzner CX33) | The NAS already swaps 2.2 GB; revisit when the container stays over 2.5 GB for a week or past 500 active users (SP-320 §11, owner 2026-10-07) |
+| Cache work order | All 11 cache tickets opened (SP-332 … SP-342): ④ first, ①②③⑤⑥⑦ next, ⑧⑨⑩⑪ in a second stage | Only the top few | Phase one lifts the member cap 100 → 500 (SP-320 §11, owner 2026-10-07) |
+| Data written but never read | The FIT dataset no longer reads `athlete_settings.ftp_w`; the import-time `workout_metrics` / `mmp_cache` writes are gone; the COROS LTHR stays as the cold-start prior | Keep writing them | Every TSS comes from `Dataset._metrics`; nothing read them (owner request 2026-10-08, commit `65bad11d`) |
+| LTHR / max HR priors | The age formula only as the last layer, labelled 推估; the LTHR prior is 0.90 × max HR | The age formula earlier in the chain | The age formula can be off by 10 bpm or more for one person (SP-289, owner 2026-10-06) |
+
+## Open Questions
+
+- [ ] Render cache: per-chart code signature (only the functions a chart reaches), a data fingerprint split by period with a 90-day default, and the old chart shown while it recomputes（SP-336，Todo）——尚未實作
+- [ ] A global rebuild queue with a concurrency cap; deploy-time recomputes staggered; one back-test at a time site-wide（SP-338，Todo）——尚未實作
+- [ ] `cached_series` as SQLite rows keyed on the file hash instead of one JSON per key（SP-339，Todo）——尚未實作
+- [ ] Monthly summaries and cold-data digests; per-second caches kept for one year（SP-340，Todo）——尚未實作
+- [ ] Update the Dataset in place on a sync instead of building a new object; single flight moves with it（SP-342，Todo）——尚未實作
+- [ ] FIT cache validity by content hash once FITs are sha256-named objects（SP-308，Todo）——尚未實作
+- [ ] Scope cuts awaiting the owner's confirmation: the render cache's code signature is still whole files (SP-332, In Review); only the TIS built-ins are on disk, not the other `memo` results (SP-333, In Review)
 
 ## Change History
 
@@ -752,14 +841,15 @@ source (synthetic FITs).
 | 2026-10-06 | feature | SP-300 | 「依賽事設定」: an activity matched to a plan event marked 「會用登山杖」 (`Event.poles`, SP-244) shows 有杖 until the user chooses — a 1-day road / 越野賽 event by the existing `maximal.match_events`, a 百岳 / 其他 / multi-day event every trail run / hike on each of its days (`activity_tags.race_poles`, read time, never stored); the user's 有杖 / 沒杖 / their own 未標 (hidden tag `杖未標`, API `poles: "none"`; `null` = no choice) always wins (`pole_state`); unticking the race returns the un-chosen activities to 未標. `pole_compare.chart_rows` / `compute` and `needs_met` count the race's 有杖; `GET /activities` and the activity JSON carry `poles` (effective), `poles_user`, `poles_race`. Still no model reads the mark |
 | 2026-10-07 | fix | SP-341, docs/research/cache-tiering.md §10 ⑩ | Per-workout disk caches `channel_peaks.json` / `workout_curves.json` (and the WKO5 `power_source_v1.json` / `bad_activity_v1.json`) hold a code version (`dataset.per_workout_code`: engine/codehash.py over the computation, the `.wko4` read and the corrections' apply, + the FIT parse version for the two FIT datasets share, + `PER_WORKOUT_V`); a file of another version is recomputed. `achievements_cache.json` drops entries whose file is gone (each entry records its path) and is written atomically. Registered in `backend/data_registry.py` (SP-311) |
 | 2026-10-08 | chore | owner request (drop data written but never read) | The FIT dataset no longer reads the legacy `athlete_settings.ftp_w` (the COROS account FTP; COROS login stopped writing it): `read_athlete_settings` drops it (`backend/engine/wko5expr/fitdataset.py:197`) and `_load_db_settings` keeps only `lthr` in `settings_ignored` (`:805`) — that one is still read, as the cold-start LTHR prior (`_coros_lthr_prior` `:809`, called at `:937`; it also suppresses the SP-289 0.90 × max HR prior, `:842`). The import-time `workout_metrics` / `mmp_cache` writes (never read by the engine: every TSS comes from `Dataset._metrics`) and their helpers in `backend/engine/algorithms/metrics.py` / `mmp.py` are removed; older DBs keep the tables, unread (`data_registry.LEGACY_TABLES`). Chart values unchanged |
+| 2026-10-08 | code-sync（SP-332, SP-333, SP-337, SP-341, SP-289, SP-80, SP-215, SP-48） | N/A | Render cache: code signature by file contents (SP-332), memory LRU also capped by 32 MB of JSON, fingerprint lists the manual PMC start; FIT dataset: `estimate_grid.json` and a grid-bounds estimate key without today (SP-337), per-workout TIS on disk via `cached_series` extra input (SP-333), codehash code versions (SP-332 / SP-341), one Dataset per mode / `DATASETS_MAX` / instance caches / last good `db_stamp`, 12 open FITs, a bad FIT never stops the parse, LTHR order with the SP-289 prior; viewer map chart (SP-80); `trail.py` row dropped (removed with the SPA, SP-48); API line numbers and all anchors re-checked against 73d07ad1; Decisions Log and Open Questions added |
 
 
 ## Banded charts and the 使用功率 setting (2026-10)
 
-- **`zoned`** (`backend/engine/wko5expr/customviews.py:151`): a chart option
+- **`zoned`** (`backend/engine/wko5expr/customviews.py:155`): a chart option
   `{"line": "<series name>"}`, optionally with `"ref": {"y": …, "label": …}`
   (a thin dashed reference line, e.g. 負荷比's 「1 = 跟平常一樣」). The viewer
-  (`zonedSetup`, `backend/static/wko5_viewer.html:2133`) turns the chart's
+  (`zonedSetup`, `backend/static/wko5_viewer.html:2335`) turns the chart's
   `{lo:hi}` band series into shaded bands with solid edges and the band's
   short name in the right margin, draws reference lines solid,
   colours the named line by the band it is in (ECharts piecewise visualMap,
@@ -771,7 +861,7 @@ source (synthetic FITs).
   in both charts.
 - **使用功率** (`charts.power.enabled`, default auto — on with Stryd, watch
   power only when `power.accept_watch_power` is on, off without a power meter
-  (`backend/engine/athlete_profile.py:97`); `use_power` in
+  (`backend/engine/athlete_profile.py:127`); `use_power` in
   `GET/PUT /api/v1/sync/settings`): `backend/engine/wko5expr/power_use.py`
   marks each chart in `GET /views` with `power` (every data series reads power
   / CP, or a power-only panel: watt zone tables, power zones, CP test, W′ and

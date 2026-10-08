@@ -1,6 +1,6 @@
 # Module Spec: route-progress
 
-> Last Updated: 2026-10-04 · Status: implemented (feat/route-progress, feat/routes-weather-hr, fix/routes-dedup-thumbs)
+> Last Updated: 2026-10-08 · Status: implemented (feat/route-progress, feat/routes-weather-hr, fix/routes-dedup-thumbs)
 
 ## Overview
 
@@ -22,7 +22,7 @@ User request: 「同一條路線的進步追蹤能自動產出嗎，例如判斷
 | API | `backend/api/routes.py` | `/api/v1/routes…`, `/api/v1/wko5/workouts/{idx}/segments` |
 | Page | `backend/static/routes.html` | 路線 page: list, detail (map, trend, comparison, effort table) |
 | Card | `backend/static/segments_card.js` | single-activity card in the viewer (one `<script>` tag in `wko5_viewer.html`) |
-| Map layers | `backend/static/basemaps.js` | basemaps / overlays + the settings default, the tile-error hint and the route drawing (halo, line, start / finish), shared by the viewer, this page and the race calculator |
+| Map layers | `backend/static/basemaps.js` | basemaps / overlays + the settings default, the tile-error hint and the route drawing (halo, line, start / finish), shared by the viewer, this page and the race calculator; layer names and hints come from the i18n `common.map.*` keys (`backend/static/basemaps.js:14-15`, SP-78) |
 
 The existing `algorithms/routes.py` (100 m cell Jaccard, used by the
 achievements page) is unchanged.
@@ -34,7 +34,7 @@ achievements page) is unchanged.
 | `tracks/<file>.json` | tier A: one compact track per activity |
 | `manifest.json` | `[size, mtime, ALGO_VERSION]` per workout file, and whether it has GPS |
 | `index.json` | tier B: segments, routes, pending references, efforts with metrics and weather, the build's weather call counts |
-| `names.json` | renames, keyed by segment / route id |
+| `names.json` | renames, keyed by segment / route id (see Names) |
 | `weather/<lat>_<lon>_<date>.json` | one Open-Meteo archive day per 0.25° cell, every effort point in it (see Weather) |
 | `activity_weather.json` | per-activity heat exposure for the heat-acclimation index (see Weather) |
 
@@ -47,6 +47,20 @@ the index from the cached tracks without parsing any file, ids carried over.
 A second server on the same machine (e.g. a worktree) must set
 `WKO5COACH_ROUTES_DIR`: two builds of different versions sharing one index
 would each find the other's version and rebuild it.
+
+### Names
+
+Every build gives each segment and route an `auto_name` (`routes.auto_name`,
+`backend/engine/routes.py:1516-1539`): the nearest 百岳 / 小百岳 from
+`backend/data/baiyue.json` (`PEAKS_PATH`, `backend/engine/routes.py:77`) within 1 km
+(`PEAK_NAME_RADIUS_M`, `backend/engine/routes.py:82`; `nearest_peak`, `backend/engine/routes.py:1505-1513`)
+of the landmark end — a climb's top, a descent's start, a route's highest
+point, a stretch's start — falling back to the other end (a route: its start),
+followed by the kind, the length and the gain (爬坡 / 下坡 always, a route or a
+stretch only when |gain| ≥ 50 m); without a peak, the kind, length and gain
+alone (e.g. 「爬坡 1.2 km ↑180 m」). A rename in `names.json` takes precedence
+wherever a name is served (`backend/api/routes.py:195`, `backend/api/routes.py:361`); renaming to
+an empty string clears it and the `auto_name` returns (`backend/api/routes.py:383`).
 
 ## Compact track (tier A)
 
@@ -158,6 +172,8 @@ Now, start- and direction-free:
 4. **Canonical path** = the maximal common part: the reference's kept points
    from the first to the last 25 m point that more than half of the members
    pass within 30 m (`ROUTE_COMMON` 0.5, 推估). Spurs of single runs trim away.
+   The path stored in the index and drawn on the map is thinned evenly to at
+   most 400 points (`ROUTE_MAX_POINTS`, `backend/engine/routes.py:851`, `:997`).
    Clusters whose canonical paths are the same route (both shares ≥ 0.8) are
    merged into the larger, until none is (≤ 4 passes).
 5. **Reference / id**: the previous index's reference when it is in the
@@ -262,7 +278,8 @@ moving time. Route efforts are whole activities: no VAM (a loop's net gain is
 
 Air temperature, humidity and dew point for every effort from the Open-Meteo
 historical archive (`archive-api.open-meteo.com/v1/archive`, hourly
-`temperature_2m, relative_humidity_2m, dew_point_2m`, `timezone=auto`), shown
+`temperature_2m, relative_humidity_2m, dew_point_2m, precipitation`
+(`HOURLY`, `backend/engine/route_weather.py:46`), `timezone=auto`), shown
 with the attribution *Weather data by Open-Meteo.com (CC BY 4.0)*. It reuses
 `racepower/weather.py` (client `_http_get`, `OM_ARCHIVE`, `activities_conditions`,
 `ATTRIBUTION`) and `racepower/env.py` (`dew_point`, `heat_penalty_pct`)
@@ -280,7 +297,11 @@ without changing them.
   30 min of the window is needed (an effort near midnight takes two). The
   cache holds one file per (cell, day) with its points; a full build makes one
   call per (day, cell) not yet cached, a new point in a cached group one call
-  for the new points, a rebuild none.
+  for the new points, a rebuild none. Calls go 3 at a time (`WORKERS`, well
+  under Open-Meteo's 600 calls / min) and at most 2,000 per build (`MAX_CALLS`,
+  `backend/engine/route_weather.py:53`, `backend/engine/route_weather.py:55`,
+  `backend/engine/route_weather.py:207-212`); the rest are counted as skipped
+  and wait for the next build.
 - **Why the effort's own point, not the cell centre**: the first version asked
   for the cell centre and corrected T by −6.5 °C/km to the effort's elevation.
   On a climb to a ~1,000 m summit that gave a value ~2.6 °C warmer than the
@@ -319,7 +340,10 @@ without changing them.
   has `start` and `rain_mm` = the sum of the hourly rows (Open-Meteo: the
   preceding hour's total) whose hour overlaps the activity's first → last
   sample, `None` when an overlapping hour has no value — a day cached before
-  precipitation was asked is never refetched, it just has no rain. The 活動編輯
+  precipitation was asked is never refetched, it just has no rain. The rain is
+  looked up by the activity's file, else by its start within ±3 min under
+  another source's file name (`rain_by_activity`, an `activity_key.ByStartDict`,
+  `backend/engine/route_weather.py:428-438`). The 活動編輯
   page (`GET /activities` → `rain_mm`, `rain_hint_mm`) shows 「這次活動期間下過雨
   （N mm），要標成濕路嗎？」 with a 「標成濕」 button while the 路況 is 未標 and
   `rain_mm` ≥ `activity_tags.RAIN_HINT_MM` (1 mm, 推估); it never marks anything itself.
@@ -373,7 +397,7 @@ new file: none; full recompute from cached tracks: ~40 s.
   like a small track but is a time series — the "thumbnail that does not match
   the GPX".
 - Detail: rename (click the title); Leaflet map with the settings-page basemap
-  default and the viewer's layers, the route drawn by `MapLayers.track` (`basemaps.js`); trend (time / VAM / pace over
+  default and the viewer's layers, the route drawn by `MapLayers.track` (`basemaps.js`, SP-41); trend (time / VAM / pace over
   date, below it HR ÷ VAM for climbs, avg HR otherwise; click a point to make
   it B); comparison (pace / HR / power / elevation vs distance, gap chart,
   hover moves A's and B's markers on the map — B's marker is where B was at
@@ -501,6 +525,12 @@ orientation.
 ### Domain Events
 None. Builds are triggered by requests (or `POST /rebuild`); there are no emitters or subscribers.
 
+## Open Questions
+
+- [ ] Fetch the rain of the last 12 months for days cached before `precipitation` was asked (decided 2026-10-07; today such a day is never refetched)（SP-299，Todo）——尚未實作
+- [ ] No rain hint on road runs, only on trail runs and hikes (decided 2026-10-07; `activity_tags.rain_hint` does not look at the sport)（SP-299，Todo）——尚未實作
+- [ ] Link with map.yichlin (pull / push GPX, race-day weather, pace → its itinerary); which direction first is not decided（SP-47，Backlog）——尚未實作
+
 ## Change History
 
 | Date | Type | Feature SRS | Summary |
@@ -511,3 +541,4 @@ None. Builds are triggered by requests (or `POST /rebuild`); there are no emitte
 | 2026-10-04 | code-sync | N/A | Store root per tenant (`routes.home()`); tracks from synced FITs without a WKO5 folder; effort → workout index matched by start across sources; per-activity heat exposure (`activity_weather.json`) documented; page via `render_page` |
 | 2026-10-04 | feature | SP-41 | The route on the detail map is drawn by the shared `MapLayers.track` (`basemaps.js`), the same as the activity map and the race calculator's course map |
 | 2026-10-06 | feature | SP-299 | Activity weather also stores the rain during the activity (`precipitation` in the same call and cache); 活動編輯 hints 「要標成濕路嗎？」 at ≥ 1 mm (推估) while 路況 is 未標 |
+| 2026-10-08 | code-sync（SP-78, SP-41） | N/A | Documented auto names (nearest 百岳 within 1 km, renames take precedence), the weather call cap (2,000 per build, 3 at a time), the canonical path thinned to 400 points, rain matched by file or start ±3 min, map layer strings via i18n `common.map.*`; `precipitation` added to the hourly list; Open Questions from SP-299 / SP-47 |

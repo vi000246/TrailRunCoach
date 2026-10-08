@@ -11,7 +11,9 @@ marks what was done or missed, adapts the current week to what happened, regener
 upcoming weeks and pushes the next 7 days to COROS. The athlete only reviews: they mark
 不排課日期, edit a session by hand, or approve a held change. **Their edits always win**:
 edited and custom sessions, tombstones and blackout decisions are never changed by
-automation (the reconcile rules in `backend/engine/reconcile.py`).
+automation (the reconcile rules in `backend/engine/reconcile.py`). A 交換 of two sessions (SP-359,
+`plan_store.swap`, `backend/engine/plan_store.py:359`) is two such edits in one commit — each move
+is the user's own, exactly like a drag — so reconcile and auto-adjust never undo it.
 
 An easy run done too fast or too hard is **never voided**. It stays done, counts its real
 TSS, and the following days adapt.
@@ -83,12 +85,13 @@ Other entry points:
 - **CP change**: `api/plan.py` calls `plan_auto.after_thresholds()` after a threshold edit; that
   run (trigger `cp_change`) also starts when the stamp is unchanged (see 「CP change」 below).
 - **Settings**: `api/calib.py` calls `plan_auto._after_settings()` (trigger `settings`,
-  `backend/engine/plan_auto.py:877`) after a 進階設定 value the plan reads changed (the Zone 3
+  `backend/engine/plan_auto.py:897`) after a 進階設定 value the plan reads changed (the Zone 3
   unlock rule, SP-295). It goes through the same stamp check without `force` (see Known limits).
 - **Week snapshot** (SP-71): the end of `_run` records the week in `plan_week_snapshots`
-  (`backend/engine/plan_auto.py:743`, `backend/db/models.py:244`), so a sync alone records it with
+  (`plan_history.record_safe`, `backend/engine/plan_auto.py:761-763`; `PlanWeekSnapshot`,
+  `backend/db/models.py:224`), so a sync alone records it with
   no page opened; the 課表 page reads them through `GET /api/v1/overview/plan/history`
-  (`backend/api/plan_sessions.py:2644`).
+  (`backend/api/plan_sessions.py:2751`).
 - **Done / missed matching** (reconcile rule 1) is `backend/engine/plan_match.py`: same day + the
   planned sport first, one activity per session (long / quality / test also by the generator's
   week-wide match). The user can link / unlink by hand; an unlinked activity is never
@@ -117,7 +120,7 @@ day). A removal that fails is a failure of the push (`partial`, with its error).
 COROS accepted but still lists after a short pause is not a failure: the result carries
 `check_days` (a reminder to check the COROS app; `coros_workouts._remove_remote`). The 課表 page's
 own changes call it with `only` = the changed sessions (`_sync_watch`,
-`backend/api/plan_sessions.py:1964`): everything — the window push and the stale / blocked /
+`backend/api/plan_sessions.py:1986`): everything — the window push and the stale / blocked /
 missed clean-up — is limited to them (`backend/engine/plan_auto.py:493`); other leftover copies
 are left to this run and the manual push. `window` False (自動推送 off) re-sends / removes only
 copies already on the watch. A failure there adds a `failed` row (trigger `edit`) to the change log.
@@ -129,7 +132,7 @@ copies already on the watch. A failure there adds a `failed` row (trigger `edit`
 轉換期's length while in it — is a phase change, so it is held for approval like any other (Big
 changes below). Adapt and reconcile treat the 轉換期 and the 回量期 as rest phases
 (`reconcile.REST_MODES`, `backend/engine/reconcile.py:46`; adapt's rest week,
-`backend/engine/adapt.py:504`); the re-entry block applies only in base / specific. Days inside a
+`backend/engine/adapt.py:505`); the re-entry block applies only in base / specific. Days inside a
 planned post-race phase — `planning.POST_RACE_KINDS` (`backend/engine/planning.py:1040`) = the A race's 恢復期 (7 or 14 days by the
 event's size, `planning.recovery_plan`), the 轉換期 and the 回量期 after it (auto or manual,
 `planning.post_race_days`, `backend/engine/planning.py:1071`) — are **not a running break**
@@ -490,7 +493,7 @@ analysis (`analyze_workout`: warm-up cut, window and judging rule by the title's
 The analysis uses VI ≤ 1.04 (drift v2) instead of the old 30-s CV. Heat is a band on the
 result, not a refusal (`aet_test._tag_heat`, `heat_line`): a pass in heat still counts. Every protocol is ≥ 40
 min of test, so all are the strict tier. MAF is not a drift test and is not offered.
-The retest line (SP-279, `backend/engine/aet_test.py:400`): UA < 3.5 % → 「下次起始心率 +5 bpm … 再測一次」
+The retest line (SP-279, `backend/engine/aet_test.py:404-405`; the > 5 % line `_lower_line`, `backend/engine/aet_test.py:411`): UA < 3.5 % → 「下次起始心率 +5 bpm … 再測一次」
 (UA's own number); > 5 % → 「下次起始心率降 5 bpm（約 N；5 bpm 是推估）再測一次」 (`LOWER_BPM`,
 `backend/engine/aet_test.py:80`: UA says "lower", Evoke "a slower pace", neither a number). A test
 whose HR is bad (SP-266, `hr_ref`) shows the values but no 「套用」 (`aethr_suggest` none).
@@ -681,13 +684,13 @@ overview has `data-log="none"`. The settings are in 課表偏好 (above).
   user.
 - A 進階設定 change that starts a `settings` run (SP-295) doesn't re-plan the stored sessions until
   the next sync: `_run` returns noop 「沒有新的活動」 whenever the data stamp and the CP are unchanged
-  (`backend/engine/plan_auto.py:662`), the stamp (`plan_auto.stamp`) has no settings / Zone 3 rule
+  (`backend/engine/plan_auto.py:685`), the stamp (`plan_auto.stamp`) has no settings / Zone 3 rule
   part, and `run_safe` doesn't pass `force`. The page itself re-reads the rule (`z3_rule_stamp` in
   the status / plan cache keys). Likewise a questionnaire save (SP-291's `EX.stamp()` is in the
   plan / status cache keys, not in plan_auto's stamp) starts no run. Behaviour as of 2026-10-08,
   not confirmed as intended.
 - The SP-289 LTHR prior (0.90 × max HR) is written into the athlete's `runthr` setting
-  (`backend/engine/wko5expr/fitdataset.py:829`, dated the first run). `quality_gate.lthr_info`
+  (`backend/engine/wko5expr/fitdataset.py:865`, dated the first run). `quality_gate.lthr_info`
   (`backend/engine/quality_gate.py:300`) doesn't tell it apart: without a plan LTHR row, the
   WKO5-setting branch counts any non-default value as `measured`, so the prior could pass as a
   measured LTHR for the Zone 5 UA-gap path (with a tested AeT). Adapt rule D's 94 % LTHR line
@@ -703,7 +706,7 @@ overview has `data-log="none"`. The settings are in 課表偏好 (above).
   rep length (±5 s / ±3 %) at the planned rest gap from the previous one, so 1-km auto laps
   never chain. Without matching laps, 10-s power ≥ 0.95 × the planned lower bound.
 - Moves by `adapt.py` (rule B: a missed session to a free day) don't look at 偏好的星期 or the
-  課表偏好 休息日 (SP-82, `pref_days["rest"]`): `open_days` (`backend/engine/adapt.py:223`) checks
+  課表偏好 休息日 (SP-82, `pref_days["rest"]`): `open_days` (`backend/engine/adapt.py:225`) checks
   only blocked days and the allowed weekdays, so a session can move onto the preferred rest day;
   only the generator's placement (`plan_prefs.place`) honours them.
 - 技術地形課 (SP-74, overview.spec.md): the 專項期 RPE 6–7 session is spaced 48 h from the hard
@@ -750,12 +753,41 @@ overview has `data-log="none"`. The settings are in 課表偏好 (above).
   (`workout_review.interval_lines`) are unchanged. They are display only and no longer drive
   the dose.
 
+## Decisions Log
+
+The owner's calls, gathered from the sections above (each is described there with its code).
+
+| Decision | Choice | Alternatives | Rationale |
+|---|---|---|---|
+| Zone 3 unlock rule | Any one of: 4 complete weeks with ≥ 3 runs each and no ≥ 7-day gap; the 90-min drift test < 10 %; a measured UA gap ≤ 10 %. Sticky; ≥ 21 days without running re-locks — the consistency and re-lock numbers are defaults the user can change in 進階設定 | A fixed published rule (none found) | The owner's own rule, no external source (SP-31, 2026-10-04); opened to 進階設定 as 推估 defaults (SP-295) |
+| Weekday cap on a Zone 3 rung | The rung the day can't fit becomes the 巡航版 of the same position | Drop the session; move it | Symmetric with the volume cap (SP-31 follow-up, 2026-10-04) |
+| Measured LTHR for Zone 5's UA path | No age limit; invalidated only by an event (≥ 4-week break, evidence, AeT shift) | A 12-week freshness limit (`LTHR_FRESH_DAYS`, removed) | No direct evidence for a fixed retest period (SP-39 follow-up, 2026-10-05) |
+| Short break exemption from the volume step | Counts unplanned days only; 不排課日期 / 休息日 / weekdays not ticked as 可練日 are planned rest | Any 3–5 days without a run | A planned rest pattern is not a break (SP-63 follow-up, 2026-10-04 / 05) |
+| Post-race phases | 恢復期 / 轉換期 / 回量期 are planned phases, not a running break, and are skipped as volume baselines | Treat them as a break (re-entry block, Zone 3 re-lock) | SP-73 follow-ups, 2026-10-05 |
+| Specific phase guardrails | The load guardrails apply to both tracks in 專項期 too | Exempt the specific phase | No school exempts it (2026-10-04; Friel, Nielsen 2014, Damsted 2019) |
+| 徐國峰 90-min test target | E pace ± 3 % from a confirmed race in the last 180 days, else 75–80 % of a tested CP, else the talk test; never an HR cap on the main block | An HR cap; any CP | SP-274 / SP-276, 2026-10-06 |
+| 沒痛 while red | Skips the walk check and the walk-run stages: green again | Always walk-run first | SP-273, 2026-10-06 |
+| Rule D (easy run too hard) | Two tiers: 偏強 labels only; 太強 (hard class) moves / steps down the next hard session | Adjust on any overshoot; the AeT + 3 HR condition | SP-301, 2026-10-06 |
+| Rule E red streak | A foot-sport type mismatch alone (time and TSS measured, not red) is not red | Every red compliance counts | SP-370, 2026-10-08 |
+
+## Open Questions
+
+- [ ] What the plan does when there is no A race for a long time: keep adding CTL, or a 「維持＋輪替重點」 mode (`planning.auto_phases`, `backend/engine/planning.py:799`)（SP-102，決策 Todo）——尚未定案
+- [ ] 進階設定: the 重新上鎖 days may not be shorter than the 最長間隔 — block and explain (decided 2026-10-07; `advanced_params` has no such check)（SP-295，Todo）——尚未實作
+- [ ] A manual 專項期 without an A race crashes the plan build: `ratio["weeks_out"]` in the 專項期後段 note (`backend/engine/quality_gate.py:2606`) raises `KeyError`（SP-352，Bug Todo）——尚未修
+- [ ] SP-69's other items (CTL target, recovery-week volume, RPE, TL label) are undecided; items 1 / 3 / 5 (per-athlete interval verdict, LTHR retest age, easy-run HR margin) are already in the code (`9ff5e202`, 2026-10-06 row below) while the ticket has no record of them（SP-69，分析 Needs Input）——單待補紀錄
+- [ ] A 進階設定 change or a questionnaire save doesn't re-plan stored sessions until the next sync (Known limits) — not confirmed as intended
+- [ ] The SP-289 LTHR prior may pass as a measured LTHR for the Zone 5 UA path and rule D's 94 % line (Known limits) — not verified by a test
+- [ ] Adapt's rule-B moves ignore the 課表偏好 休息日 (Known limits; SP-82 asked for rest-day preferences)（SP-82，In Review）——待確認是否要擋
+- [ ] Cross-training as the alternative session in a 傷停 or the 轉換期, cross-training load toward the running CTL（SP-238，Backlog）——尚未實作
+- [ ] Several research docs behind these rules ran out of searches before they were finished（SP-107，分析 Needs Input）
+
 ## Change History
 
 | Date | Type | Feature SRS | Summary |
 |------|------|-------------|---------|
 | 2026-10-08 | bugfix | SP-370 follow-up | `compliance.streak_red` (`backend/engine/compliance.py:161-167`) exempts a foot-sport swap only when time and TSS are both measured and not red (the same basis as the ◐ softening); a swap with no TSS counts as red |
-| 2026-10-08 | bugfix | SP-370 (owner decision 2026-10-08) | Rule E's red streak (`adapt._red_streak`, `backend/engine/adapt.py:492-499`) counts `compliance.streak_red` (`backend/engine/compliance.py:157-163`): a foot-sport type mismatch alone is not red for the streak; a non-foot sport and time / TSS reds are. The compliance levels themselves: overview.spec.md › Compliance |
+| 2026-10-08 | bugfix | SP-370 (owner decision 2026-10-08) | Rule E's red streak (`adapt._red_streak`, `backend/engine/adapt.py:492-499`) counts `compliance.streak_red` (`backend/engine/compliance.py:161-167`): a foot-sport type mismatch alone is not red for the streak; a non-foot sport and time / TSS reds are. The compliance levels themselves: overview.spec.md › Compliance |
 | 2026-10-06 | feature | SP-269–273 | 傷別 + per-condition pain text; avoided session types by condition; pain light (yellow / red reactions); walk-run after red before the re-entry block; 「好了」 proposed in the box |
 | 2026-10-04 | code-sync | N/A | Domain Model; CP-change re-zone / re-push; push provider + auto push / notify defaults; settings moved to 課表偏好, collapsible log; plan_match / match_only; corrected ladder (T1–T3, V1–V4, T+); TIZ / user-structure judging; heat bands in the gates; injury pause and 傷停 step-up; B2B TSB exception; unplanned hard runs space adapt |
 | 2026-10-04 | feature | SP-74 | Known limits for the generated 技術地形 session (adapt's hard-day checks by kind; the hook after it is done) |
@@ -789,3 +821,4 @@ overview has `data-log="none"`. The settings are in 課表偏好 (above).
 | 2026-10-06 | change | SP-301 | Rule D in two tiers: 偏強 = avg power > 80 % CP (without power: avg HR > 94 % LTHR, 推估) or TSS > planned + 20 % (the AeT + 3 HR condition removed) → label only, no session change; 太強 = the session classifier's hard class (Zone 3 or harder) → the next hard session < 48 h later moves / steps down with a reason (also the generator's own move), A-race 14-day confirm (`too_hard`), 復原; the easy-run TSS trim removed; D runs after E; D′ skips a run D's 太強 acted on |
 | 2026-10-08 | fix | SP-358 | `push_window` (`backend/engine/plan_auto.py:467`) also re-sends a session whose pushed copy sits in the window but which moved out of it (`plan_sessions.copies_in`), so the copy leaves the old day; a removal that failed makes the result `partial` with its error (it used to count as nothing); new `only` / `window` arguments serve the page's own changes (`plan_sessions._sync_watch`: a drag / edit / delete / 不排課日期 / 休息日 / swap syncs the watch at once, also with 自動推送 off for copies already on the watch; a failure logs a `failed` row, trigger `edit`) |
 | 2026-10-08 | fix | SP-358 review | With `only`, the stale / blocked / missed clean-up is limited to those sessions too (an edit syncs only what it touched); a delete COROS still lists after a 1.5 s pause is `check_days` (reminder), not a failure |
+| 2026-10-08 | code-sync（SP-359, SP-102, SP-295, SP-352, SP-69） | N/A | 交換 (SP-359) is two user edits that automation never undoes (Overview); 11 moved file:line pointers (settings trigger, week snapshot, history route, `_sync_watch`, adapt rest week, AeT retest lines, noop stamp, LTHR prior, `open_days`, `streak_red`); new Decisions Log (10, gathered from the owner's calls above) and Open Questions (9: SP-102 maintenance mode, SP-295 relock ≥ gap check, SP-352 crash, SP-69 record, the three Known limits not yet confirmed, SP-238, SP-107) |
