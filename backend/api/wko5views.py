@@ -217,12 +217,27 @@ def _dataset_in_tenant(parity: Optional[bool], source: Optional[str]) -> Dataset
 _WARM = {"thread": None}
 
 
+PLAN_IDLE_WAIT_S = 600.0       # the warm-up's low-priority part waits this long for plan_auto
+
+
+def _wait_plan_idle(limit_s: float = PLAN_IDLE_WAIT_S) -> None:
+    """Block (this background thread only) while an automatic plan run is going (SP-362)."""
+    import time
+    from backend.engine import plan_auto
+    end = time.monotonic() + limit_s
+    while plan_auto.busy() and time.monotonic() < end:
+        time.sleep(0.5)
+
+
 def warm_up(reason: str = "startup") -> Optional[threading.Thread]:
-    """Build the active source's Dataset (and the overview status, its other
-    slow part) in a background thread, so the first page load does not wait.
-    The FIT parsing inside runs in a process pool (fitcache.py); a request
-    arriving meanwhile joins the same build (single flight). None when a
-    warm-up is already running or WKO5COACH_NO_WARMUP is set."""
+    """Build what every page load needs in a background thread, so the first page load does
+    not wait. In order (SP-362): the active source's Dataset → the overview status → the
+    課表's plan inputs (api/plan_sessions._compute_inputs); then, at the lowest priority and
+    after an automatic plan run (engine/plan_auto.py) has ended, the never-fitted 每人校正
+    items and the 活動列表's automatic classification. The FIT parsing runs in a process
+    pool (fitcache.py); a request arriving meanwhile joins the same computation (single
+    flight: the dataset here, the status and the inputs in backend/singleflight.py). None
+    when a warm-up is already running or WKO5COACH_NO_WARMUP is set."""
     if os.getenv("WKO5COACH_NO_WARMUP"):
         return None
     t = _WARM["thread"]
@@ -238,6 +253,17 @@ def warm_up(reason: str = "startup") -> Optional[threading.Thread]:
             ds = _dataset()
             from backend.api import overview as OV
             OV._status(ds, OV.O.day_to_date(ds.today))
+            # the 課表 / 總覽 plan inputs: the third thing a page load waits for (SP-362)
+            try:
+                from backend.api import plan_sessions as PSA
+                PSA._compute_inputs()
+            except Exception as e:       # noqa: BLE001 — a page request will show the error
+                logging.getLogger(__name__).warning("plan inputs warm-up (%s) failed: %s", reason,
+                                                    type(e).__name__)
+            applog.took("dataset warm-up", t0, reason=reason)       # SP-215: what pages wait for
+            # lowest priority from here: after the sync's automatic plan run (it computes with
+            # the same dataset / status / inputs, now warm)
+            _wait_plan_idle()
             # 每人校正 (engine/calibrate.py): fit what was never fitted (a new
             # install, a new item) now instead of waiting for the next sync
             from backend.engine import calibrate as CAL
@@ -259,7 +285,6 @@ def warm_up(reason: str = "startup") -> Optional[threading.Thread]:
             # read from disk when nothing changed
             from backend.api import activity_auto as AA
             AA.job_for(ds)
-            applog.took("dataset warm-up", t0, reason=reason)       # SP-215
         except Exception as e:           # noqa: BLE001 — a page request will show the error
             logging.getLogger(__name__).warning("dataset warm-up (%s) failed: %s", reason, type(e).__name__,
                                                 exc_info=True)
