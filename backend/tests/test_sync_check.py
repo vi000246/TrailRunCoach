@@ -330,6 +330,40 @@ def test_tp_full_check_lists_90_day_windows_and_skips_planned_workouts(tmp_path,
     run(go())
 
 
+def test_tp_past_planned_workouts_are_not_missing_and_never_fetched(tmp_path, hooks):
+    """Review SP-362 #2: a past workout that was only planned (planned fields, no actual
+    time / distance / start) is counted apart, never offered for 補下載 and never fetched by
+    the weekly check; one with actual data is missing as before."""
+    async def go():
+        s = await make_session(tmp_path)
+        await _tp_state(s, datetime.utcnow() + timedelta(hours=2))
+        d = lambda n: (TODAY - timedelta(days=n)).isoformat()
+        wos = [{"workoutId": 2, "workoutDay": d(10), "totalTime": 1.2, "distance": 12000.0,
+                "totalTimePlanned": 1.0},
+               {"workoutId": 7, "workoutDay": d(20), "totalTime": None, "distance": None, "startTime": None,
+                "totalTimePlanned": 1.0, "distancePlanned": 10000.0},
+               {"workoutId": 8, "workoutDay": d(30), "totalTimePlanned": 0.5}]
+        fake = FakeTP(wos, {2: (200, dev(fid=2))}, {2: (200, gzip.compress(build_run(_dt(TODAY))))})
+        await _go(s, fake, source="tp")
+        res = await SettingsRepository(s, 1).get("sync.trainingpeaks.check")
+        assert [m["id"] for m in res["missing"]] == ["2"]
+        assert res["planned_n"] == 2 and [x["id"] for x in res["planned"]] == ["8", "7"]
+        await _go(s, fake, source="tp", mode=check.WEEKLY)
+        w = await SettingsRepository(s, 1).get("sync.trainingpeaks.check_weekly")
+        assert w["fetched"] == 1 and w["planned_n"] == 2
+        assert not any("/workouts/7/" in c or "/workouts/8/" in c for c in fake.calls)
+        assert (await s.execute(select(SyncFailure))).scalars().all() == []   # no fake no_file rows
+    run(go())
+
+
+def test_tp_done_classifier():
+    assert check.tp_done({"workoutId": 1, "totalTime": 0.8}) is True
+    assert check.tp_done({"workoutId": 1, "startTime": "2026-09-01T06:00:00"}) is True
+    assert check.tp_done({"workoutId": 1, "totalTime": None, "totalTimePlanned": 1}) is False
+    assert check.tp_done({"workoutId": 1, "distancePlanned": 5000}) is False
+    assert check.tp_done({"workoutId": 1, "workoutDay": "2026-09-01"}) is None      # shape unknown: as before
+
+
 # ---------------------------------------------------------------------------- WEEKLY (A4)
 
 def test_weekly_check_lists_60_days_and_fetches_the_missing_ones(tmp_path, hooks):

@@ -170,6 +170,29 @@ class _Coros:
         return {str(pid): d for pid, d in rows}
 
 
+# A TP workout in the date-range listing can be a plan that was never done (a past day with
+# only planned values). Which fields TP fills on a list item is NOT verified in this repo (the
+# fixtures carry only workoutId / workoutDay); these are the TP workout object's usual names.
+# Actual data on any of TP_ACTUAL -> done; those / the planned fields present but all empty ->
+# a plan (counted apart, never fetched); none of them present -> unknown: treated as done
+# (the old behaviour) (SP-362 review #2).
+TP_ACTUAL = ("totalTime", "distance", "startTime", "tssActual", "heartRateAverage", "powerAverage",
+             "velocityAverage", "calories", "energy", "elevationGain")
+TP_PLANNED = ("totalTimePlanned", "distancePlanned", "tssPlanned", "startTimePlanned", "caloriesPlanned",
+              "energyPlanned", "velocityPlanned", "elevationGainPlanned")
+
+
+def tp_done(wo: dict) -> Optional[bool]:
+    """True: the workout has actual data; False: only a plan; None: the item does not say."""
+    def has(v):
+        return v not in (None, "", 0, 0.0, False)
+    if any(has(wo.get(k)) for k in TP_ACTUAL):
+        return True
+    if any(k in wo for k in TP_ACTUAL + TP_PLANNED):
+        return False
+    return None
+
+
 class _Tp:
     source = "tp"
 
@@ -216,7 +239,10 @@ class _Tp:
                 day = ((wo.get("workoutDay") or wo.get("startTime") or "") if wid else "")[:10]
                 if not wid or (day and day > today):
                     continue
-                out.append({"id": str(wid), "date": day or None})
+                it = {"id": str(wid), "date": day or None}
+                if tp_done(wo) is False:
+                    it["planned"] = True              # planned, never done: not "missing"
+                out.append(it)
             yield out
 
     def run_state(self) -> dict:
@@ -260,7 +286,9 @@ def compare(remote: list[dict], local: dict[str, Optional[date]], failed: dict[s
     an edge the remote date and the athlete-local date can differ by a day; today's rows were
     just synced)."""
     seen = {it["id"] for it in remote}
-    missing = [it for it in remote if it["id"] not in local and it["id"] not in failed]
+    absent = [it for it in remote if it["id"] not in local and it["id"] not in failed]
+    missing = [it for it in absent if not it.get("planned")]
+    planned = sorted((it for it in absent if it.get("planned")), key=lambda x: (x.get("date") or "", x["id"]))
     local_only = sorted(({"id": pid, "date": d.isoformat() if d else None} for pid, d in local.items()
                          if pid not in seen and ((d is None and whole) or (d is not None and since < d < until))),
                         key=lambda x: (x["date"] or "", x["id"]))
@@ -270,7 +298,9 @@ def compare(remote: list[dict], local: dict[str, Optional[date]], failed: dict[s
     return {"remote": len(seen), "local": n_local,
             "missing": missing[:MISSING_MAX], "missing_n": len(missing),
             "local_only": local_only[:LIST_MAX], "local_only_n": len(local_only),
-            "failed": rows[:LIST_MAX], "failed_n": len(rows)}
+            "failed": rows[:LIST_MAX], "failed_n": len(rows),
+            "planned": [{"id": it["id"], "date": it.get("date")} for it in planned[:LIST_MAX]],
+            "planned_n": len(planned)}
 
 
 async def _failed_rows(db: AsyncSession, athlete_id: int, source: str) -> dict[str, dict]:
