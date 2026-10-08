@@ -1,17 +1,19 @@
 """
 Debug API for AI agents (SP-371, docs/debug-api.md): the server's own view of an activity, a
 plan range, a day, the thresholds, the sync and the athlete's settings — read-only, over HTTPS,
-with a dedicated Bearer token (backend/debug_auth.py).
+with a dedicated token (backend/debug_auth.py: `X-TRC-Debug-Token`, or `Authorization: Bearer`).
 
   GET /api/v1/debug/activity?date= | id= | label= [&streams=hr,power,…&every=10][&gps=1]   read:activity
+                                       (+ read:plan for the full plan row, + read:gps for gps=1)
   GET /api/v1/debug/plan?from=&to=                                                         read:plan
   GET /api/v1/debug/day?date=                                                  read:plan + read:activity
   GET /api/v1/debug/thresholds?date=                                       read:plan or read:activity
   GET /api/v1/debug/sync[?lines=200]                                                       read:sync
   GET /api/v1/debug/export/config                                                      export:config
 
-  (web, 設定 › 進階 › Debug API — the page's own session, never a Bearer token)
-  GET    /api/v1/settings/debug-api                      state, tokens, the last 100 calls
+  (web, 設定 › 進階 › Debug API — the page's own session, never a debug token; writes need a
+  same-origin request: Sec-Fetch-Site / Origin)
+  GET    /api/v1/settings/debug-api                      state, tokens, the last 100 calls, failures
   PUT    /api/v1/settings/debug-api                      {enabled}
   POST   /api/v1/settings/debug-api/tokens               {pin, name, scopes, days} → the token, once
   DELETE /api/v1/settings/debug-api/tokens/{id}          revoke one
@@ -20,19 +22,27 @@ with a dedicated Bearer token (backend/debug_auth.py).
 Read-only for real: the plan views never call plan_sessions.sessions() (it takes the writer lock,
 reconciles and records snapshots); they compute the same thing in memory — plan_store.match_only
 for the matches, plan_store.reconcile_with_adapt for 「what a page load would change」 — and only
-the debug tables (debug_tokens / debug_audit) are written. Never a COROS / TP call.
+the debug tables (debug_tokens / debug_audit / debug_auth_failures) are written. Never a COROS /
+TP call. Bad input is a 400 (never a 500); an unexpected error is audited and answered as a
+JSON 500 with the exception's type only (AuditedRoute).
 """
 from __future__ import annotations
 
 import copy
 import datetime as dt
 import json
+import logging
+import re
 import time
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlparse
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query
-from fastapi.responses import Response
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
+from fastapi import Path as Path_
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse, Response
+from fastapi.routing import APIRoute
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
@@ -42,10 +52,71 @@ from backend.db.database import get_db
 from backend.engine import debug_view as DV
 from backend.i18n import _
 
-router = APIRouter(prefix="/api/v1/debug", tags=["debug"], include_in_schema=False)
-admin_router = APIRouter(prefix="/api/v1/settings/debug-api", tags=["settings"])
+log = logging.getLogger("backend.api.debug")
 
 MAX_PLAN_DAYS = 120
+DAY_MIN, DAY_MAX = dt.date(1970, 1, 1), dt.date(2100, 12, 31)
+_ISO_DAY = re.compile(r"\d{4}-\d{2}-\d{2}")
+
+
+async def _audit_late(request: Request, status: int) -> None:
+    """Audit an error raised after the gate let the call in (request.state.debug_ctx), on a
+    session of its own (the request's may be closed)."""
+    ctx = getattr(request.state, "debug_ctx", None)
+    if ctx is None:
+        return
+    gen = request.app.dependency_overrides.get(get_db, get_db)()
+    try:
+        db = await gen.__anext__()
+        await DA.audit(db, ctx, status)
+    except Exception:                       # noqa: BLE001 — the answer must still go out
+        log.warning("debug API: could not audit a %s", status)
+    finally:
+        await gen.aclose()
+
+
+class AuditedRoute(APIRoute):
+    """A debug route: a validation error → 400 {code: BAD_REQUEST}; any other exception → audited,
+    logged, a JSON 500 {code: INTERNAL, error: <type>} (no traceback, no message)."""
+
+    def get_route_handler(self):
+        inner = super().get_route_handler()
+
+        async def handler(request: Request) -> Response:
+            try:
+                return await inner(request)
+            except HTTPException:
+                raise
+            except RequestValidationError as e:
+                await _audit_late(request, 400)
+                errs = [{"loc": list(x.get("loc") or ()), "msg": str(x.get("msg") or "")} for x in e.errors()]
+                return JSONResponse({"detail": {"code": "BAD_REQUEST", "errors": errs}}, status_code=400)
+            except Exception as e:          # noqa: BLE001
+                log.exception("debug API: %s failed", request.url.path)
+                await _audit_late(request, 500)
+                return JSONResponse({"detail": {"code": "INTERNAL", "error": type(e).__name__}}, status_code=500)
+        return handler
+
+
+def same_origin(request: Request) -> None:
+    """The settings writes (L1): a cross-site request is refused. Browsers send Sec-Fetch-Site;
+    without it, an Origin must match the Host. A non-browser client (neither header) passes —
+    it has no cookies a forged request could ride on."""
+    sfs = (request.headers.get("sec-fetch-site") or "").lower()
+    if sfs:
+        if sfs not in ("same-origin", "none"):
+            raise HTTPException(403, {"code": "CROSS_SITE"})
+        return
+    origin = request.headers.get("origin")
+    if origin is None:
+        return
+    host = request.headers.get("x-forwarded-host") or request.headers.get("host") or ""
+    if origin == "null" or urlparse(origin).netloc.lower() != host.split(",")[0].strip().lower():
+        raise HTTPException(403, {"code": "CROSS_SITE"})
+
+
+router = APIRouter(prefix="/api/v1/debug", tags=["debug"], include_in_schema=False, route_class=AuditedRoute)
+admin_router = APIRouter(prefix="/api/v1/settings/debug-api", tags=["settings"], include_in_schema=False)
 
 
 # ---------------------------------------------------------------------------
@@ -63,20 +134,27 @@ async def _bad(ctx: DA.Ctx, db: AsyncSession, status: int, msg: str) -> HTTPExce
     return HTTPException(status, msg)
 
 
-def _day(v: Optional[str], name: str) -> Optional[dt.date]:
+def parse_day(v: Optional[str], name: str) -> Optional[dt.date]:
+    """Strict YYYY-MM-DD within 1970–2100; None for empty; ValueError otherwise."""
     if v in (None, ""):
         return None
-    try:
-        return dt.date.fromisoformat(str(v)[:10])
-    except ValueError:
+    s = str(v)
+    if not _ISO_DAY.fullmatch(s):
         raise ValueError(f"{name} must be YYYY-MM-DD")
+    try:
+        d = dt.date.fromisoformat(s)
+    except ValueError:
+        raise ValueError(f"{name} must be a real date (YYYY-MM-DD)")
+    if not DAY_MIN <= d <= DAY_MAX:
+        raise ValueError(f"{name} must be between {DAY_MIN} and {DAY_MAX}")
+    return d
 
 
 async def finish(ctx: DA.Ctx, db: AsyncSession, body: dict, ds=None) -> Response:
     """The answer: `meta` + body, made plain JSON, scrubbed (GPS unless ?gps=1, credentials),
     audited with its size."""
     meta = {"app_version": DV.git_sha(), "schema_version": DV.SCHEMA_VERSION, "endpoint": ctx.path,
-            "query": ctx.query or None, "token_name": ctx.name,
+            "query": DA.masked_query(ctx.query), "caller": ctx.name,
             "generated_at": dt.datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
             "data_generation": DV.data_generation(ds), "cache_versions": DV.cache_versions(),
             "elapsed_ms": int((time.monotonic() - ctx.started) * 1000)}
@@ -94,28 +172,49 @@ async def _dataset_or_none():
         return None, type(e).__name__
 
 
+async def _today(ds) -> dt.date:
+    """The plan's today (plan_sessions._today: the athlete's date, at least the server's); without a
+    dataset, the athlete's local date (engine/localtime.today_local)."""
+    if ds is not None:
+        try:
+            from backend.api import plan_sessions as PSA
+            return dt.date.fromisoformat(PSA._today(await PSA._inputs(None)))
+        except Exception:                   # noqa: BLE001
+            pass
+    from backend.engine.localtime import today_local
+    return today_local()
+
+
 # ---------------------------------------------------------------------------
 # the plan, computed without writing (what the 課表 page would show)
 # ---------------------------------------------------------------------------
 
-async def plan_view(db: AsyncSession, a: dt.date, b: dt.date) -> dict:
-    """The stored plan in [a, b] as the 課表 calendar shows it (plan_sessions.calendar →
-    _decorate: planned vs actual, compliance), with the matches a page load would make
-    (plan_store.match_only) applied in memory only."""
+async def plan_base(db: AsyncSession) -> dict:
+    """The generator inputs and the stored rows with a page load's matches applied in memory."""
     from backend.api import plan_sessions as PSA
     from backend.engine import plan_store as PS
     inp = await PSA._inputs(db)
     every = await PS.load(db)
     matched, match_changes = PS.match_only(every, inp)
-    today = PSA._today(inp)
+    return {"inp": inp, "stored": every, "matched": matched, "match_changes": match_changes,
+            "today": PSA._today(inp)}
+
+
+async def plan_view(db: AsyncSession, a: dt.date, b: dt.date, base: Optional[dict] = None) -> dict:
+    """The stored plan in [a, b] (≤ MAX_PLAN_DAYS) as the 課表 calendar shows it
+    (plan_sessions.calendar → _decorate: planned vs actual, compliance)."""
+    from backend.api import plan_sessions as PSA
+    if (b - a).days > MAX_PLAN_DAYS:
+        raise ValueError(f"at most {MAX_PLAN_DAYS} days")
+    base = base or await plan_base(db)
+    inp = base["inp"]
     extras = await run_in_threadpool(PSA._range_extras, a.isoformat(), b.isoformat())
     acts = extras.get("activities") or []
-    visible = [copy.deepcopy(s) for s in matched if s["state"] not in ("deleted", "superseded")]
+    visible = [copy.deepcopy(s) for s in base["matched"] if s["state"] not in ("deleted", "superseded")]
     tph = float(((inp["cur"].get("target") or {}).get("tss_per_hour")) or 50.0)
     rates = PSA.tss_rates(extras.get("tph"), visible, tph)
     ss = PSA._decorate(visible, acts, rates, a.isoformat(), b.isoformat())
-    return {"inp": inp, "stored": every, "matched": matched, "match_changes": match_changes,
-            "sessions": ss, "activities": acts, "today": today, "rates": rates, "phases": extras.get("phases")}
+    return {**base, "sessions": ss, "activities": acts, "rates": rates, "phases": extras.get("phases")}
 
 
 def _would_change(stored: list[dict], inp: dict, a: str, b: str) -> dict:
@@ -198,18 +297,36 @@ def _pairing(pv: dict, a: str, b: str) -> dict:
     return {"sessions": rows, "unmatched_activities": loose, "today": today}
 
 
+async def _activity_pairs(db: AsyncSession, days: list[dt.date]) -> dict:
+    """{index: (session row or None, unmatched entry or None)} for the activities of `days`: one
+    plan view over the span when it is ≤ MAX_PLAN_DAYS, else one per activity day (M4)."""
+    base = await plan_base(db)
+    spans = [(min(days), max(days))] if (max(days) - min(days)).days <= MAX_PLAN_DAYS \
+        else [(d, d) for d in sorted(set(days))]
+    out: dict = {}
+    for a, b in spans:
+        pr = _pairing(await plan_view(db, a, b, base), a.isoformat(), b.isoformat())
+        for r in pr["sessions"]:
+            if r.get("activity"):
+                out[r["activity"]["index"]] = (r, None)
+        for x in pr["unmatched_activities"]:
+            out.setdefault(x["index"], (None, x))
+    return out
+
+
 # ---------------------------------------------------------------------------
 # endpoints
 # ---------------------------------------------------------------------------
 
 @router.get("/activity")
-async def activity(date: Optional[str] = None, id: Optional[int] = None, label: Optional[str] = None,
-                   streams: Optional[str] = None, every: int = 10,
+async def activity(date: Optional[str] = None, id: Optional[int] = Query(None, ge=1, le=2 ** 62),
+                   label: Optional[str] = Query(None, max_length=100), streams: Optional[str] = Query(None, max_length=80),
+                   every: int = Query(10, ge=1, le=600),
                    ctx: DA.Ctx = Depends(DA.need("read:activity")), db: AsyncSession = Depends(get_db)):
     if sum(x not in (None, "") for x in (date, id, label)) != 1:
         raise await _bad(ctx, db, 400, "give exactly one of date=YYYY-MM-DD, id=<workout_files id>, label=")
     try:
-        day = _day(date, "date")
+        day = parse_day(date, "date")
     except ValueError as e:
         raise await _bad(ctx, db, 400, str(e))
     file_name = None
@@ -224,7 +341,12 @@ async def activity(date: Optional[str] = None, id: Optional[int] = None, label: 
         return await finish(ctx, db, {"activities": [], "error": err,
                                       "why": _("資料集讀不到（還沒同步，或正在重建）")})
     ws = await run_in_threadpool(DV.find_workouts, ds, day, file_name, label)
-    names = (streams or "").split(",") if streams else []
+    names = [n for n in (streams or "").split(",") if n.strip()]
+    truncated = None
+    if (names or ctx.gps) and len(ws) > DV.MAX_STREAM_ACTIVITIES:
+        truncated = {"found": len(ws), "returned": DV.MAX_STREAM_ACTIVITIES,
+                     "why": f"streams / gps: at most {DV.MAX_STREAM_ACTIVITIES} activities per call"}
+        ws = ws[:DV.MAX_STREAM_ACTIVITIES]
     out = []
     for w in ws:
         try:
@@ -233,22 +355,26 @@ async def activity(date: Optional[str] = None, id: Optional[int] = None, label: 
             out.append({"index": w.idx, "error": type(e).__name__})
     if out:
         from backend.engine import overview as O
-        days = [O.wdate(w) for w in ws]
-        a, b = min(days), max(days)
+        full = "read:plan" in ctx.scopes
         try:
-            pv = await plan_view(db, a, b)
-            pr = _pairing(pv, a.isoformat(), b.isoformat())
+            pairs = await _activity_pairs(db, [O.wdate(w) for w in ws])
             for d in out:
-                s = next((r for r in pr["sessions"] if (r.get("activity") or {}).get("index") == d["index"]), None)
-                loose = next((x for x in pr["unmatched_activities"] if x["index"] == d["index"]), None)
-                d["plan"] = {"session": s, "matched": s is not None,
-                             "why": s["why"] if s else (loose or {}).get("why") or _("沒有配對"),
-                             "source": _("plan_match（課表頁同一套規則；只算不寫）")}
+                s, loose = pairs.get(d["index"], (None, None))
+                why = s["why"] if s else (loose or {}).get("why") or _("沒有配對")
+                if full:
+                    d["plan"] = {"session": s, "matched": s is not None, "why": why,
+                                 "source": _("plan_match（課表頁同一套規則；只算不寫）")}
+                else:                       # read:activity only: which session and its level, no plan data
+                    d["plan"] = {"matched": s is not None, "uid": (s or {}).get("uid"),
+                                 "level": ((s or {}).get("compliance") or {}).get("level"),
+                                 "why": _("要看配到的那一堂課的內容，token 需要 read:plan")}
         except Exception as e:              # noqa: BLE001
             for d in out:
                 d["plan"] = {"error": type(e).__name__}
-    return await finish(ctx, db, {"activities": out, "count": len(out),
-                                  "lookup": {"date": date, "id": id, "label": label}}, ds)
+    body = {"activities": out, "count": len(out), "lookup": {"date": date, "id": id, "label": label}}
+    if truncated:
+        body["truncated"] = truncated
+    return await finish(ctx, db, body, ds)
 
 
 @router.get("/plan")
@@ -259,7 +385,7 @@ async def plan_range(start: Optional[str] = Query(None, alias="from"), end: Opti
     from backend.engine import reconcile as R
     from backend.sync import workout_targets as WT
     try:
-        a, b = _day(start, "from"), _day(end, "to")
+        a, b = parse_day(start, "from"), parse_day(end, "to")
     except ValueError as e:
         raise await _bad(ctx, db, 400, str(e))
     try:
@@ -297,9 +423,9 @@ async def plan_range(start: Optional[str] = Query(None, alias="from"), end: Opti
     pend = await PA.pending(db)
     t0 = dt.datetime.combine(a, dt.time.min)
     t1 = dt.datetime.combine(b + dt.timedelta(days=1), dt.time.min)
-    log = (await db.execute(select(PlanChangeLog).where(PlanChangeLog.created_at >= t0,
-                                                        PlanChangeLog.created_at < t1)
-                            .order_by(PlanChangeLog.id.desc()).limit(100))).scalars().all()
+    chlog = (await db.execute(select(PlanChangeLog).where(PlanChangeLog.created_at >= t0,
+                                                          PlanChangeLog.created_at < t1)
+                              .order_by(PlanChangeLog.id.desc()).limit(100))).scalars().all()
     cur = inp.get("cur") or {}
     weeks = [{k: w.get(k) for k in ("start", "phase", "mode", "mode_label", "hours", "tss", "provisional", "why",
                                      "notes", "quality_gate")}
@@ -316,7 +442,7 @@ async def plan_range(start: Optional[str] = Query(None, alias="from"), end: Opti
                       "why": _("產生器這次會排的課（gen_weeks）")},
         "would_change": _would_change(every, inp, A, B),
         "auto": {"settings": auto, "pending": PA.entry_dict(pend) if pend is not None else None,
-                 "log": [PA.entry_dict(r) for r in log], "source": "plan_change_log + user_settings plan.auto.*"},
+                 "log": [PA.entry_dict(r) for r in chlog], "source": "plan_change_log + user_settings plan.auto.*"},
         "gates": {"this_week": {"start": (cur.get("week") or {}).get("start"), "mode": cur.get("mode"),
                                 "mode_label": cur.get("mode_label"), "why": cur.get("why"),
                                 "quality_gate": cur.get("quality_gate"), "notes": cur.get("notes")},
@@ -334,7 +460,7 @@ async def plan_range(start: Optional[str] = Query(None, alias="from"), end: Opti
 async def day_view(date: Optional[str] = None,
                    ctx: DA.Ctx = Depends(DA.need("read:plan", "read:activity")), db: AsyncSession = Depends(get_db)):
     try:
-        d = _day(date, "date")
+        d = parse_day(date, "date")
     except ValueError as e:
         raise await _bad(ctx, db, 400, str(e))
     if d is None:
@@ -359,7 +485,7 @@ async def thresholds(date: Optional[str] = None,
                      ctx: DA.Ctx = Depends(DA.need_any("read:plan", "read:activity")),
                      db: AsyncSession = Depends(get_db)):
     try:
-        d = _day(date, "date") or dt.date.today()
+        d = parse_day(date, "date")
     except ValueError as e:
         raise await _bad(ctx, db, 400, str(e))
     from backend.engine.planning import Plan
@@ -370,6 +496,8 @@ async def thresholds(date: Optional[str] = None,
     hist = await repo.get("athlete.coros_profile_history")
     races = await repo.get("athlete.race_results")
     ds, err = await _dataset_or_none()
+    if d is None:
+        d = await _today(ds)
     planner = None
     if ds is not None:
         try:
@@ -385,7 +513,7 @@ async def thresholds(date: Optional[str] = None,
 
 
 @router.get("/sync")
-async def sync_state(lines: int = 200, ctx: DA.Ctx = Depends(DA.need("read:sync")),
+async def sync_state(lines: int = Query(200, ge=1, le=2000), ctx: DA.Ctx = Depends(DA.need("read:sync")),
                      db: AsyncSession = Depends(get_db)):
     from backend.db.models import SyncState
     from backend.db.current import current_athlete_id
@@ -405,9 +533,12 @@ async def sync_state(lines: int = 200, ctx: DA.Ctx = Depends(DA.need("read:sync"
     fails = []
     for src in ("coros", "trainingpeaks"):
         r = st.get(f"sync.{src}.last_result") or {}
-        errs = r.get("errors") or ([r.get("error")] if r.get("error") else [])
-        if errs:
-            fails.append({"source": src, "at": r.get("at"), "status": r.get("status"), "errors": errs})
+        n = r.get("errors")
+        n = len(n) if isinstance(n, list) else int(n or 0) if isinstance(n, (int, float)) else 0
+        if n or r.get("error"):
+            # runner.py: `errors` = how many activities failed (a count), `error` = the run-level failure
+            fails.append({"source": src, "at": r.get("at"), "status": r.get("status"), "error_count": n,
+                          "error": r.get("error")})
     body = {"settings": st, "state": cursors, "failures": fails,
             "log": await run_in_threadpool(DV.log_tail, lines),
             "source": _("user_settings sync.*（每次同步的結果）＋ sync_state 的時間和 cursor（不含任何 token）")}
@@ -430,8 +561,8 @@ async def export_config(ctx: DA.Ctx = Depends(DA.need("export:config")), db: Asy
         return {c.name: getattr(r, c.name) for c in r.__table__.columns if c.name not in skip}
     injuries = [cols(r) for r in (await db.execute(select(InjuryEvent).order_by(InjuryEvent.onset_date)))
                 .scalars()]
-    tags = [cols(r, ("id",)) for r in (await db.execute(select(ActivityTag).order_by(ActivityTag.start_local)))
-            .scalars()]
+    tags = [cols(r, ("id", "file", "workout_id")) for r in (await db.execute(
+        select(ActivityTag).order_by(ActivityTag.start_local))).scalars()]
     over = [{"file": Path(str(fp).replace("\\", "/")).name, "date": d, "terrain": tc}
             for fp, d, tc in (await db.execute(select(WorkoutFile.file_path, WorkoutFile.workout_date,
                                                       WorkoutFile.trail_classification)
@@ -447,10 +578,11 @@ async def export_config(ctx: DA.Ctx = Depends(DA.need("export:config")), db: Asy
 
 async def _state(db: AsyncSession) -> dict:
     return {"enabled": await DA.enabled(db), "pin_configured": DA.pin_configured(), "pin_env": DA.PIN_ENV,
-            "pin_min_len": DA.PIN_MIN_LEN, "pin_locked_s": DA.pin_locked_for(),
+            "pin_min_len": DA.PIN_MIN_LEN, "pin_locked_s": DA.pin_locked_for(), "pin": DA.pin_stats(),
             "scopes": list(DA.SCOPES), "default_scopes": list(DA.DEFAULT_SCOPES), "days": list(DA.DAYS),
             "default_days": DA.DEFAULT_DAYS, "tokens": await DA.list_tokens(db),
-            "audit": await DA.audit_rows(db), "rate_per_min": 60}
+            "audit": await DA.audit_rows(db), "failures": await DA.failure_rows(db), "dropped": DA.dropped(),
+            "rate_per_min": 60}
 
 
 @admin_router.get("")
@@ -458,7 +590,7 @@ async def admin_state(db: AsyncSession = Depends(get_db)):
     return await _state(db)
 
 
-@admin_router.put("")
+@admin_router.put("", dependencies=[Depends(same_origin)])
 async def admin_set(body: dict = Body(...), db: AsyncSession = Depends(get_db)):
     from backend.settings.repository import SettingsRepository
     on = body.get("enabled")
@@ -472,10 +604,11 @@ async def admin_set(body: dict = Body(...), db: AsyncSession = Depends(get_db)):
     return await _state(db)
 
 
-@admin_router.post("/tokens")
-async def admin_create(body: dict = Body(...), db: AsyncSession = Depends(get_db)):
+@admin_router.post("/tokens", dependencies=[Depends(same_origin)])
+async def admin_create(request: Request, body: dict = Body(...), db: AsyncSession = Depends(get_db)):
+    from backend.security import ratelimit as RL
     try:
-        DA.check_pin(body.get("pin"))
+        DA.check_pin(body.get("pin"), RL.client_ip(request.scope))
     except DA.PinError as e:
         if e.code == "no_pin":
             raise HTTPException(400, {"code": "NO_PIN", "message": _("伺服器沒有設定 PIN，不能產生 token")})
@@ -491,13 +624,13 @@ async def admin_create(body: dict = Body(...), db: AsyncSession = Depends(get_db
     return {"token": token, **view}
 
 
-@admin_router.delete("/tokens/{token_id}")
-async def admin_revoke(token_id: int, db: AsyncSession = Depends(get_db)):
+@admin_router.delete("/tokens/{token_id}", dependencies=[Depends(same_origin)])
+async def admin_revoke(token_id: int = Path_(ge=1, le=2 ** 62), db: AsyncSession = Depends(get_db)):
     n = await DA.revoke(db, token_id)
     return {"revoked": n, **(await _state(db))}
 
 
-@admin_router.post("/tokens/revoke-all")
+@admin_router.post("/tokens/revoke-all", dependencies=[Depends(same_origin)])
 async def admin_revoke_all(db: AsyncSession = Depends(get_db)):
     n = await DA.revoke(db, None)
     return {"revoked": n, **(await _state(db))}

@@ -134,6 +134,10 @@ TABLES: tuple = (
           "source IP, status, size; the newest debug_auth.AUDIT_KEEP rows are kept",
           deidentify=("at", "query", "ip"),
           invalidated_by="never recomputed: a log, pruned to the newest rows; safe to delete"),
+    Table("debug_auth_failures", DERIVED, "failed debug API authentications (SP-371), counted per hour, "
+          "source IP and code; the newest debug_auth.FAIL_ROWS_KEEP rows are kept",
+          deidentify=("hour", "ip", "last_at"),
+          invalidated_by="never recomputed: a log, pruned to the newest rows; safe to delete"),
 )
 
 # tables no code uses any more: db/database._migrate_schema drops them from every tenant DB

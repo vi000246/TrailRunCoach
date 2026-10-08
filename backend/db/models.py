@@ -461,3 +461,18 @@ class DebugAudit(Base):
     bytes: Mapped[int] = mapped_column(Integer, default=0)
     ms: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     new_ip: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class DebugAuthFailure(Base):
+    """Failed debug API authentications (SP-371), aggregated: one row per tenant, hour, source IP and
+    code (TOKEN_MISSING / INVALID / REVOKED / EXPIRED) with a count, so a flood of bad tokens adds
+    counts instead of rows. The newest debug_auth.FAIL_ROWS_KEEP rows are kept."""
+    __tablename__ = "debug_auth_failures"
+    __table_args__ = (UniqueConstraint("tenant_id", "hour", "ip", "code"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(80), index=True)
+    hour: Mapped[datetime] = mapped_column(DateTime, index=True)
+    ip: Mapped[str] = mapped_column(String(64))
+    code: Mapped[str] = mapped_column(String(20))
+    count: Mapped[int] = mapped_column(Integer, default=1)
+    last_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

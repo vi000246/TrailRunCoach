@@ -212,7 +212,8 @@ def test_every_endpoint_is_read_only_and_never_calls_coros(monkeypatch, tmp_path
         assert "changes" in plan["would_change"] and plan["gates"]["this_week"]["start"] == "2026-09-28"
 
 
-SECRET_WORDS = ("password", "passwd", "access_token", "refresh_token", "cookie", "sealed", "token_hash", "secret")
+SECRET_WORDS = ("password", "passwd", "access_token", "refresh_token", "cookie", "sealed", "token_hash", "secret",
+                "email", "username", "user_id", "jwt", "authorization", "csrf", "file_path", "data_dir")
 
 
 def _keys(x, out):
@@ -226,28 +227,43 @@ def _keys(x, out):
     return out
 
 
+def await_one(e, model):
+    from sqlalchemy import select
+    return run(e.db.execute(select(model))).scalars().first()
+
+
 def test_no_answer_carries_a_credential_or_a_position(monkeypatch, tmp_path):
     with debug_env(monkeypatch, tmp_path) as e:
         enable(e)
         tok = make_token(e, ALL_SCOPES)
         _lsd_day(e, monkeypatch)
         _athlete_data(e, tmp_path)
-        plain = {"tp_access_token": "SENTINEL-TP-ACCESS", "tp_refresh_token": "SENTINEL-TP-REFRESH",
-                 "tp_web_cookie": "SENTINEL-TP-COOKIE", "coros_password_sealed": "SENTINEL-COROS-PW",
-                 "tp_password_sealed": "SENTINEL-TP-PW"}
-        sealed = {k: secrets.seal(v) for k, v in plain.items()}
+        from backend import data_registry as REG
+        # every credential column of sync_state (the registry's list), half sealed, half legacy plaintext
+        plain = {c: f"SENTINEL-{c}-{i}" for i, c in enumerate(REG.table("sync_state").secret_fields)}
+        sealed = {k: (secrets.seal(v) if i % 2 == 0 else v) for i, (k, v) in enumerate(plain.items())}
         st = run(e.db.get(SyncState, 1))
         for k, v in sealed.items():
             setattr(st, k, v)
         st.last_sync_cursor = "cursor-1"
+        st.coros_email = "athlete.sentinel@example.com"
+        st.tp_username = "SENTINEL-tp-user"
+        st.coros_user_id = "SENTINEL-coros-uid"
+        jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJzZW50aW5lbCJ9.c2VudGluZWwtc2lnbmF0dXJl"
+        run(SettingsRepository(e.db).set("sync.coros.last_result", {
+            "at": "2026-10-01T08:00:00", "status": "error", "errors": 1,
+            "error": f"401 for athlete.sentinel@example.com, Authorization: Bearer {jwt}"}))
+        tag = (await_one(e, ActivityTag))
+        tag.note = f"mail me at athlete.sentinel@example.com, token {jwt}, near lat=25.0331 lon=121.5654"
         run(e.db.commit())
         tok2 = make_token(e, ["read:sync"], name="other")
         share = "SENTINELshareLink0123456789abcd"                    # a race plan shared by link
         (tmp_path / "racepower_shares").mkdir()
         (tmp_path / "racepower_shares" / f"{share}.json").write_text('{"event": "x"}', "utf-8")
         forbidden = list(plain.values()) + list(sealed.values()) + [
-            tok, tok2, tok[5:], st.coros_access_token, "SENTINEL", str(tmp_path / "SENTINEL-BACKUP-DIR"), share,
-            "SENTINELcalendarFeedToken0123"]
+            tok, tok2, tok[5:], "SENTINEL", str(tmp_path / "SENTINEL-BACKUP-DIR"), share,
+            "SENTINELcalendarFeedToken0123", "athlete.sentinel@example.com", jwt, "eyJhbGciOiJIUzI1NiJ9",
+            "25.0331", "121.5654"]
         from backend import debug_auth as DA
         forbidden += [DA.hash_token(tok), DA.hash_token(tok2)]
         for u in _every_call(tok):
@@ -275,21 +291,48 @@ def test_scrub_drops_positions_and_credentials():
         {"v": None, "a": [0, 1], "d": "2026-01-02"}
 
 
-def test_the_cli_builds_the_calls_and_sends_only_the_bearer_header(monkeypatch, capsys):
+def test_the_cli_builds_the_calls_and_sends_the_token_in_its_own_header(monkeypatch, capsys):
+    import base64
+    import urllib.error
     from backend.scripts import debug_fetch as F
     seen = []
-    monkeypatch.setattr(F, "fetch", lambda url, token, timeout=120.0: seen.append((url, token)) or {"ok": 1})
+    monkeypatch.setattr(F, "fetch", lambda url, hdrs, timeout=120.0: seen.append((url, hdrs)) or {"ok": 1})
     monkeypatch.setenv("TRC_DEBUG_URL", "https://x.example/")
     monkeypatch.setenv("TRC_DEBUG_TOKEN", "trcd_test")
+    monkeypatch.delenv("TRC_PROXY_USER", raising=False)
     assert F.main(["day", "2026-10-05"]) == 0
     assert F.main(["activity", "--date", "2026-10-05", "--streams", "hr,speed", "--every", "30", "--gps"]) == 0
     assert F.main(["plan", "--from", "2026-09-29", "--to", "2026-10-12"]) == 0
+    monkeypatch.setenv("TRC_PROXY_USER", "owner")
+    monkeypatch.setenv("TRC_PROXY_PASSWORD", "proxy-pw")
     assert F.main(["export"]) == 0
-    assert [u for u, _t in seen] == [
+    assert [u for u, _h in seen] == [
         "https://x.example/api/v1/debug/day?date=2026-10-05",
         "https://x.example/api/v1/debug/activity?date=2026-10-05&streams=hr%2Cspeed&every=30&gps=1",
         "https://x.example/api/v1/debug/plan?from=2026-09-29&to=2026-10-12",
         "https://x.example/api/v1/debug/export/config"]
-    assert {t for _u, t in seen} == {"trcd_test"} and '"ok": 1' in capsys.readouterr().out
+    assert all(h["X-TRC-Debug-Token"] == "trcd_test" for _u, h in seen)
+    assert "Authorization" not in seen[0][1]
+    assert seen[-1][1]["Authorization"] == "Basic " + base64.b64encode(b"owner:proxy-pw").decode()
+    assert '"ok": 1' in capsys.readouterr().out
+    # never plain http to another host; no token argument; no token in the environment = refused
+    monkeypatch.setenv("TRC_DEBUG_URL", "http://x.example")
+    assert F.main(["sync"]) == 2
+    monkeypatch.setenv("TRC_DEBUG_URL", "http://localhost:8000")
+    assert F.main(["sync"]) == 0
+    try:
+        F.parser().parse_args(["--token", "trcd_x", "sync"])
+        raise AssertionError("--token accepted")
+    except SystemExit:
+        pass
     monkeypatch.delenv("TRC_DEBUG_TOKEN")
     assert F.main(["sync"]) == 2
+    # a redirect is refused, not followed
+    class R:
+        def __init__(self):
+            self.full_url = "https://x.example/a"
+    try:
+        F._NoRedirect().redirect_request(R(), None, 302, "Found", {}, "https://evil.example/")
+        raise AssertionError("followed")
+    except urllib.error.HTTPError as e:
+        assert e.code == 302

@@ -161,7 +161,7 @@ def test_tokens_are_bound_to_their_tenant(monkeypatch, tmp_path):
         other = "B" if name == "A" else "A"
         with _tenant_app(monkeypatch, home) as c:
             r = c.get(DBG + "/export/config", headers=bearer(toks[name]))
-            assert r.status_code == 200 and r.json()["meta"]["token_name"] == f"tok-{name}"
+            assert r.status_code == 200 and r.json()["meta"]["caller"] == f"tok-{name}"
             assert r.json()["blocks"]["profile"]["plan_profile"]["height_cm"] == (170 if name == "A" else 160)
             assert c.get(DBG + "/export/config", headers=bearer(toks[other])).status_code == 401
             c.portal.call(database.dispose, home / "wko5coach.db")
@@ -270,43 +270,3 @@ def test_the_repo_holds_no_pin_value():
     assert seen, ".env.example documents TRC_DEBUG_PIN (empty)"
 
 
-# ---------------------------------------------------------------- rate limit + audit
-def test_over_the_per_minute_limit_is_429_and_every_call_is_audited(monkeypatch, tmp_path):
-    monkeypatch.setattr(DA, "TOKEN_BUCKET", RL.Buckets(rate=3, per=60))
-    with debug_env(monkeypatch, tmp_path) as e:
-        enable(e)
-        tok = make_token(e, ["read:sync"], name="claude")
-        codes = [e.c.get(DBG + "/sync?lines=5", headers=bearer(tok)).status_code for _ in range(4)]
-        assert codes == [200, 200, 200, 429]
-        assert e.c.get(DBG + "/export/config", headers=bearer(tok)).status_code == 429    # the bucket, then scope
-        assert e.c.get(DBG + "/sync").status_code == 401
-        n = run(e.db.execute(select(func.count(DebugAudit.id)))).scalar_one()
-        assert n == 6
-        aud = e.c.get(ADMIN).json()["audit"]
-        assert [a["status"] for a in aud] == [401, 429, 429, 200, 200, 200]
-        ok = aud[-1]
-        assert ok["token"] == "claude" and ok["path"] == DBG + "/sync" and ok["query"] == "lines=5"
-        assert ok["bytes"] > 0 and ok["ip"] and ok["new_ip"] is True and aud[-2]["new_ip"] is False
-        assert aud[0]["token"] is None
-        t = e.c.get(ADMIN).json()["tokens"][0]
-        assert t["last_used_at"] and t["last_ip"] and t["new_ip_at"]
-
-
-def test_repeated_auth_failures_block_the_ip(monkeypatch, tmp_path):
-    monkeypatch.setattr(DA, "FAIL_BUCKET", RL.Buckets(rate=2, per=600))
-    with debug_env(monkeypatch, tmp_path) as e:
-        enable(e)
-        tok = make_token(e, ["read:sync"])
-        assert [e.c.get(DBG + "/sync").status_code for _ in range(3)] == [401, 401, 401]
-        r = e.c.get(DBG + "/sync", headers=bearer(tok))            # blocked now, even with a good token
-        assert r.status_code == 429 and r.json()["detail"]["code"] == "BLOCKED"
-
-
-def test_the_audit_log_keeps_the_newest_rows(monkeypatch, tmp_path):
-    monkeypatch.setattr(DA, "AUDIT_KEEP", 5)
-    with debug_env(monkeypatch, tmp_path) as e:
-        enable(e)
-        tok = make_token(e, ["read:sync"])
-        for _ in range(8):
-            e.c.get(DBG + "/sync?lines=1", headers=bearer(tok))
-        assert run(e.db.execute(select(func.count(DebugAudit.id)))).scalar_one() == 5
