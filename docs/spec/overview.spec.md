@@ -1172,6 +1172,23 @@ which one. The response keeps the `coros` field names.
     `backend/static/schedule.html:2574`): on a session 編輯 / 移到… / 刪除 (an expired one too);
     on a free day 新增 / 排入測試 ▸ (the suggested tests with their templates and day rules) /
     設為休息日, on a 休息日 取消休息日;
+  - **交換課表** (SP-359, 2026-10-08): on a session the context menu has 交換… (「再點另一堂課」,
+    `backend/static/schedule.html:2733`); the page then waits for the second session (hint 「點另一堂課，
+    和「…」交換日期（Esc 取消）」, the first chip outlined; paging the weeks is allowed, a click
+    elsewhere or Esc cancels, a session that can't swap says so). Dragging a session onto another
+    session swaps them too (that chip lights up; dropping on an empty part of a day still moves,
+    `swapTarget`, `backend/static/schedule.html:2673`). Swappable = what a drag may move: active,
+    from today on, not on a 不排課日期, not a 課表待確認 (`swappable`,
+    `backend/static/schedule.html:2833`), two different days; done sessions are never swappable.
+    Both go through `POST /sessions/swap {a, b}` (`swap_sessions`,
+    `backend/api/plan_sessions.py:551`) → `plan_store.swap` (`backend/engine/plan_store.py:359`):
+    the two days trade in one commit, each move the same user edit as a drag (`_edit_row`: edited,
+    non-provisional; an auto session moved to another week leaves a tombstone and becomes custom),
+    so reconcile / auto-adjust never undo it; a refused second move rolls the first back. An accepted
+    B2B day follows, hard sessions that end up < 2 days apart get the 休息日 move's warning
+    (`rest_days.swap_warnings`), and the watch follows on both days at once (`_sync_watch`, SP-358:
+    each pushed copy is re-sent on its new day, the old entries removed). The legend has 「⇄ 交換」
+    with the how-to behind its ?;
   - ⋯ → 「刪除所有過期未完成」 (`backend/static/schedule.html:573`);
   - on a done session, planned vs actual (compliance, 「沒照課表」 ≠) and a manual link / unlink to
     an activity (`backend/static/schedule.html:1800`);
@@ -1596,6 +1613,7 @@ which one. The response keeps the `coros` field names.
 | POST | `/api/v1/overview/plan/sessions` | add a custom session; 400 on a bad field (`backend/api/plan_sessions.py:372`) |
 | PATCH | `/api/v1/overview/plan/sessions/{uid}` | edit day / kind / minutes / title / target / detail / terrain / distance_km / climb_m / target_basis / steps; 400 on a bad field (`backend/api/plan_sessions.py:409`) |
 | DELETE | `/api/v1/overview/plan/sessions/{uid}` | tombstone (auto) or remove (custom); an expired one is tombstoned and taken off the watch; a B2B day cancels the pair; 404 when unknown (`backend/api/plan_sessions.py:1535`) |
+| POST | `/api/v1/overview/plan/sessions/swap` | `{a, b}` → the two sessions trade days (SP-359; both the user's own move), `{sessions, warnings, coros}`; 400 when either is done / past / missing / a notice, on the same day, or a day is blocked (`backend/api/plan_sessions.py:551`) |
 | POST | `/api/v1/overview/plan/sessions/expired/delete` | `{uids?}` → tombstone those (or all) expired open sessions, remove pushed copies; 400 for a uid that isn't one (`backend/api/plan_sessions.py:1516`) |
 | POST / DELETE | `/api/v1/overview/plan/sessions/{uid}/link` | `{index}` → pair the session with an activity / undo (the activity then stays unplanned) (`backend/api/plan_sessions.py:1558`, `backend/api/plan_sessions.py:1578`) |
 | GET | `/api/v1/overview/plan/reconcile` | preview: changes and changes by day (`backend/api/plan_sessions.py:1596`) |
@@ -1831,3 +1849,4 @@ deleted / superseded) are returned as reconcile `changes` (`backend/engine/recon
 | 2026-10-07 | feat/sp291-293-data-level | docs/research/cold-start.md §4.1 | SP-291 資料等級: `data_level.level` (0 no run / hike in 28 days, 2 = the Zone 3 consistency rule on run + hike days, 1 between; week of the data; `survey`) read by the week plan (cold_start), the status page (`i_level` card, `data_level` in `/status`) and the race feasibility; the ramp lasts the rule's weeks; the cold / ramp note is the level's one line (「你的資料還在累積（第 n 週／4）：週量依你填的問卷，心率區間是推估」); plan / status cache keys carry `experience.stamp()` |
 | 2026-10-07 | feat/sp291-293-data-level | docs/research/cold-start.md §4.4 | SP-292 賽事可行性 for 資料等級 0 / 1 (`GET /overview/feasibility`, `race_feasibility` module doc): base hours = max(questionnaire as the plan reads it, actual), km / climb actual only; no actual distance → UA weekly / climb 「還不知道」, Koop's hours still judged; `data_source` tag 「依你填的資料」／「資料還少」 on the card; level 0 at most tight (cutoff / 跨級 over → tight with the reason, no 「先不跑」／「低一級」 advice; 「late」 unchanged); ≥ 42.195 km with a self-reported week < 3 h → `optimistic_note` (Vickers & Vertosick 2016); level 2 unchanged |
 | 2026-10-08 | fix/sp358-359-schedule-delete-swap | SP-358 | 刪除／移動課表沒同步到手錶: a drag / edit / delete / 不排課日期 / 休息日 only wrote the store, the watch changed only at the next manual push or after a sync with a new activity, and a range push never touched a pushed session that had moved out of the range — so the old day kept its workout. Now these endpoints sync the affected sessions at once (`_sync_watch` → `plan_auto.push_window(only=…)`, response `coros`, page note / warning, a `failed` change-log row on error); range pushes and the automatic window also re-send copies whose session moved out (`copies_in`); a COROS calendar delete is verified (`_remove_remote`); removal failures count as push failures |
+| 2026-10-08 | fix/sp358-359-schedule-delete-swap | SP-359 | 交換課表: context menu 交換… then click the other session (Esc cancels), or drop a session onto another; `POST /sessions/swap` → `plan_store.swap` trades the two days in one commit as the user's own moves (like a drag; reconcile never undoes them), done / past / blocked / notice refused, B2B follows, hard-day spacing warnings, the watch synced on both days (SP-358); legend 「⇄ 交換」 with a ? tip; zh-TW + en |

@@ -302,5 +302,15 @@
   "mv.done": "「{title}」移到 {day}",
   "mv.what": "移動",
   "watch.ok": "，{provider} 手錶已同步",
-  "watch.fail": "；{provider} 手錶沒跟著更新：{error}（詳見自動調整紀錄）"
+  "watch.fail": "；{provider} 手錶沒跟著更新：{error}（詳見自動調整紀錄）",
+  "ctx.swap": "交換…",
+  "ctx.swap_sub": "再點另一堂課",
+  "swap.pick": "點另一堂課，和「{title}」交換日期（Esc 取消）",
+  "swap.cancelled": "已取消交換",
+  "swap.not_this": "這堂課不能交換（已完成、過去、同一天或不排課日期），請點另一堂，或按 Esc 取消",
+  "swap.working": "交換中…",
+  "swap.done": "已交換：「{a}」改到 {da}，「{b}」改到 {db}",
+  "swap.what": "交換",
+  "swap.legend": "交換",
+  "swap.legend_tip": "兩堂課互換日期：在課上按右鍵（手機長按）→「交換…」，再點另一堂；或把課拖到另一堂課上（拖到空白處是移動）。算你自己的調整，自動調整不會改回來；已在手錶上的課會一起更新。已完成或過去的課不能交換。"
 }
