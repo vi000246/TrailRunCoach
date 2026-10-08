@@ -13,9 +13,12 @@ before (they wait for the flight). A change of the user's own settings is not se
 Hand-built inputs (test_plan_store.Env) behind a scripted key; no dataset, no WKO5 data.
 """
 import copy
+import dataclasses
 import threading
 import time
+from collections import OrderedDict
 from datetime import date
+from types import SimpleNamespace
 
 import pytest
 
@@ -35,8 +38,9 @@ CAL = f"{API}/calendar?start=2026-09-28&end=2026-10-04"
 @pytest.fixture(autouse=True)
 def _fresh_state(monkeypatch):
     monkeypatch.setattr(CW, "real_today", lambda: date(2026, 9, 30))
-    for name in ("_cache", "_last", "_refreshing", "_failed"):
+    for name in ("_cache", "_refreshing", "_failed"):
         monkeypatch.setattr(PSA, name, {})
+    monkeypatch.setattr(PSA, "_last", OrderedDict())
     yield
     for _ in range(200):                 # let a background refresh this test started end
         if not PSA._refreshing:
@@ -193,3 +197,71 @@ def test_calendar_serves_the_stale_view_without_writing_then_the_fresh_one(monke
         r = e.c.get(CAL)
         assert r.status_code == 200 and not r.json().get("stale") and len(k.builds) == 2
         assert "plan_reconcile" in writes or "match_only" in writes or "record_safe" in writes   # fresh: as before
+
+
+def _as(tid, kind=tenancy.USER):
+    return tenancy.use(dataclasses.replace(tenancy.current(), id=tid, kind=kind))
+
+
+def test_two_tenants_never_see_each_others_view(monkeypatch):
+    k = Keys(make=lambda key: {"who": key[0], "gen": key[1]})
+    monkeypatch.setattr(PSA, "_inputs_key", k)
+    with _as("u1"):
+        PSA._compute_inputs()
+    with _as("u2"):
+        PSA._compute_inputs()
+    k.gen, k.gate = 2, threading.Event()
+    with _as("u2"):
+        v = _view()
+    assert v["who"] == "u2" and v["stale"]
+    with _as("u1"):
+        assert _view()["who"] == "u1"
+    k.gate.set()
+
+
+def test_the_previous_views_are_capped_and_demo_tenants_never_served_stale(monkeypatch):
+    k = Keys(make=lambda key: {"who": key[0], "gen": key[1]})
+    monkeypatch.setattr(PSA, "_inputs_key", k)
+    monkeypatch.setattr(PSA, "_LAST_MAX", 3)
+    for i in range(5):
+        with _as(f"u{i}"):
+            PSA._compute_inputs()
+    assert list(PSA._last) == ["u2", "u3", "u4"]                     # the oldest went first
+    with _as("u2"):
+        PSA._compute_inputs()                                         # used again: newest
+    assert list(PSA._last) == ["u3", "u4", "u2"]
+    # one tenant per demo visitor: never kept, never served stale (computed in the request)
+    with _as("demo-abc", tenancy.DEMO_SANDBOX):
+        PSA._compute_inputs()
+        assert "demo-abc" not in PSA._last
+        k.gen = 2
+        v = _view()
+    assert "stale" not in v and v["gen"] == 2 and not PSA._refreshing
+    assert PSA._REFRESH_POOL._max_workers == 2                          # background refreshes: 2 at a time
+
+
+def test_the_real_key_keeps_settings_apart_from_data(monkeypatch):
+    """L4: the stale view compares key[_K_SETTINGS:] — a settings change must land there, a new
+    dataset generation / day only before it (a reordered key would serve settings stale)."""
+    from backend.engine import plan_prefs as PP
+    ds1, ds2 = SimpleNamespace(today=20000.0), SimpleNamespace(today=20000.0)
+    prefs = {"v": "p1"}
+    monkeypatch.setattr(OV, "_dataset", lambda: cur["ds"])
+    monkeypatch.setattr(PP, "load", lambda: SimpleNamespace(stamp=lambda: prefs["v"]))
+    cur = {"ds": ds1}
+    k1, _b = PSA._inputs_key()
+    cur["ds"] = ds2                                                     # a sync: new generation
+    k2, _b = PSA._inputs_key()
+    assert k1[PSA._K_SETTINGS:] == k2[PSA._K_SETTINGS:] and k1[:PSA._K_SETTINGS] != k2[:PSA._K_SETTINGS]
+    assert k1[PSA._K_GEN] != k2[PSA._K_GEN]
+    cur["ds"] = SimpleNamespace(today=20001.0)                          # a new day
+    k3, _b = PSA._inputs_key()
+    assert k3[PSA._K_DAY] > k2[PSA._K_DAY] and k3[PSA._K_SETTINGS:] == k2[PSA._K_SETTINGS:]
+    cur["ds"] = ds2
+    prefs["v"] = "p2"                                                   # 課表偏好 saved
+    k4, _b = PSA._inputs_key()
+    assert k4[PSA._K_SETTINGS:] != k2[PSA._K_SETTINGS:] and k4[:PSA._K_SETTINGS] == k2[:PSA._K_SETTINGS]
+    prefs["v"] = "p1"
+    from backend.engine import blackouts as BL
+    k5, _b = PSA._inputs_key(blackouts=BL.normalize([{"start": "2026-10-02", "end": "2026-10-02", "label": "x"}]))
+    assert k5[PSA._K_SETTINGS:] != k2[PSA._K_SETTINGS:] and k5[:PSA._K_SETTINGS] == k2[:PSA._K_SETTINGS]
