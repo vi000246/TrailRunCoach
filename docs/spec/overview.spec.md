@@ -1364,7 +1364,16 @@ which one. The response keeps the `coros` field names.
   - 記錄睡在高處 on today or a past day, shown as a small mark on the day (SP-259, `high_nights`,
     `backend/api/plan_sessions.py:2729`; `backend/static/schedule.html:2720`), and the 高度適應提醒
     for events ≥ 3,000 m (their GPX) 1–28 days away (SP-100 / SP-258,
-    `backend/api/plan_sessions.py:974`).
+    `backend/api/plan_sessions.py:974`). 15–28 days out it is 「安排適應週末」 (`_plan_row`,
+    `backend/engine/altitude.py:349`): the weekends of the 14 days before the start, the weekend
+    whose Sunday is the departure day included (`weekends`, `backend/engine/altitude.py:322`); no
+    place named (owner 2026-10-07: 松雪樓 dropped too) and 行前一晚 2,500 m only in its ? help; its
+    id is `altitude_plan:<event>:<start>` (`backend/engine/suggestions.py:295`), so ✕ closes it for
+    that trip for good — `prune` keeps the close until the trip starts, even on a day the row is
+    not computed (`backend/engine/suggestions.py:367`); a close stored under the first version's
+    `altitude:<event>:<start>:<m>:plan…` id is moved to it (`_plan_alt_ids`,
+    `backend/engine/suggestions.py:345`). The 1–14 day check is another row; its ? also says only
+    「行前一晚住 2,500 m 左右」, no place (owner 2026-10-08, `backend/engine/altitude.py:430`).
 - **課表統計** page (`backend/static/compliance.html`, a tab of 課表; `GET /plan/compliance` →
   `compliance.dashboard`, `backend/engine/compliance.py:284`): KPI tiles, the current phase's
   progress, per-kind breakdown (強度課 split into 有氧間歇 ／ VO2max 間歇 ／ 速度 by `quality_family`,
@@ -2069,7 +2078,6 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 - [ ] A 強度課's 「自動」 target counted as % CP in the template filter, decided 2026-10-07 (SP-84, Todo) — `target_types` still leaves it "auto" without a basis (`backend/engine/workout_steps.py:1341`)
 - [ ] Remove 「課前要吃」 entirely, decided 2026-10-07 (SP-286, Todo) — still in the code (`backend/api/plan_sessions.py:398`)
 - [ ] 專項期前後段: a long trail race's late half keeps one Zone 5 session every 3 weeks, and the other four answers of 2026-10-07 (SP-353, Todo) — not implemented
-- [ ] The altitude reminder names no place, can be dismissed, and counts the weekend of a Sunday departure, decided 2026-10-07 (SP-258, Todo) — the reminder still names 合歡山松雪樓 (`backend/engine/altitude.py:364`)
 
 ## Change History
 
@@ -2146,3 +2154,5 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 | 2026-10-08 | feat/sp371-debug-api | SP-371, docs/debug-api.md | Debug API for AI agents: read-only `/api/v1/debug/{activity,plan,day,thresholds,sync,export/config}` (`backend/api/debug.py:321`–`:548`), Bearer-token auth with the server PIN `TRC_DEBUG_PIN`, hashed tokens, scopes, expiry, revoke, tenant binding, per-token / per-IP limits and the `debug_audit` log (`backend/debug_auth.py:384`); `/debug/day` = the calendar's `_decorate` on an in-memory `match_only` (no `sessions()`, no writes, no COROS call); 設定 › 進階 Debug API block (`backend/static/debug_api.js`); tables `debug_tokens` / `debug_audit` (`backend/db/models.py:429`), setting `debug.api.enabled` |
 | 2026-10-08 | feat/sp371-debug-api | SP-371 security review | Debug API hardening: token also in `X-TRC-Debug-Token` next to the password proxy's `Authorization` (`backend/debug_auth.py:351`); token checked before the IP block, which only refuses failed attempts; failures aggregated in `debug_auth_failures` (`backend/db/models.py:468`), 429 / 503 never stored; per-tenant bucket and a 2-call gate; `scrub` on name segments + JWT / opaque / `applog.redact` / coordinates in strings, export an allow-list (`backend/engine/debug_view.py:99`–`:524`); `read:gps` scope, `read:plan` for the activity's session row; strict bounded input, `AuditedRoute` 400 / audited 500 (`backend/api/debug.py:78`); same-origin settings writes; PIN failures logged and counted; routes out of OpenAPI; CLI header / https / no redirect / env-only token |
 | 2026-10-08 | code-sync（SP-90, SP-95, SP-96, SP-98, SP-109, SP-114, SP-115, SP-117, SP-119, SP-120, SP-191, SP-216, SP-263, SP-270, SP-271, SP-272, SP-273, SP-280, SP-285, SP-71, SP-100, SP-105, SP-122, SP-231, SP-258, SP-259, SP-286） | N/A | Re-anchored the whole spec: each anchor moved once from the commit that wrote its line (~410 of 510), then the ones written stale or still off checked by hand against the symbol, the route decorator or the code text (≈ 120 fixed, incl. the whole API table). New: the week-plan rules added after 2026-10-04 (taper by race, two A races, 中間訓練 / B races, B-race notes, 恢復期 / 回量期, ultra 轉換期, multi-day 百岳, the walking cap, illness, strength by phase / moves, 平衡／腳踝, injuries, carb note), Categories = the platform-neutral app type, compliance intensity grading, the 課表 page's fuel / self-rating / altitude lines, the 7 / 42 / 90-day PMC, 每週存檔 and its API row, the feasibility API row, the feature test files; Decisions Log (9) and Open Questions (11) |
+| 2026-10-08 | SP-258 follow-up | owner decision 2026-10-07 (ticket SP-258) | 安排適應週末 (15–28 days): no place named (松雪樓 gone, no other names), 行前一晚 only in the ? help, the weekend of a Sunday departure counts, ✕ closes it for that trip for good (`altitude_plan:<event>:<start>` id held by `prune` until the start); the 1–14 day check unchanged; zh-TW + en. Tests `test_altitude.py::test_sp258_*` |
+| 2026-10-08 | SP-258 review | owner decision 2026-10-08 + code review L3 | The 1–14 day row's ? says 「行前一晚住 2,500 m 左右」 with no place (塔塔加／大禹嶺 removed, zh-TW + en), the 適應週末 row the same wording; `prune` moves a close stored under the old `altitude:…:plan…` id to `altitude_plan:<event>:<start>`. Tests `test_altitude.py::test_sp258_eve_only_for_a_first_night_above_3000`, `::test_sp258_a_plan_row_closed_under_the_old_id_stays_closed` |

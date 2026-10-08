@@ -2920,8 +2920,9 @@ def _stat_cards(w, m: dict) -> list[dict]:
         out.append(_card("stat", id="hr", icon="hr", label=_("平均心率"), value=_num(m["avg_hr"]), unit="bpm",
                          sub=f"AeT {_num(aet)} · LTHR {_num(lthr)}" if aet or lthr else None))
     if m.get("avg_power"):
+        # `power`: the viewer hides it under 使用功率 off, like the 刺激 TIS tile (SP-81, 2026-10-07)
         out.append(_card("stat", id="power", icon="power", label=_("平均功率"), value=_num(m["avg_power"]), unit="W",
-                         sub=f"CP {_num(m.get('cp'))}" if m.get("cp") else None))
+                         sub=f"CP {_num(m.get('cp'))}" if m.get("cp") else None, power=True))
     return out
 
 

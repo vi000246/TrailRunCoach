@@ -64,10 +64,12 @@ def test_activity_rain_is_unknown_without_precipitation_or_hours():
 
 def test_rain_hint_threshold_and_never_over_a_mark():
     assert AT.RAIN_HINT_MM == 1.0                                         # 推估 (the ticket's start)
-    assert AT.rain_hint(3.2, None) == 3.2 and AT.rain_hint(1.0, None) == 1.0
-    assert AT.rain_hint(0.9, None) is None                                # no rain to speak of
-    assert AT.rain_hint(None, None) is None                               # no coordinates / weather
-    assert AT.rain_hint(12.0, "dry") is None and AT.rain_hint(12.0, "wet") is None   # already marked
+    assert AT.rain_hint(3.2, None, True) == 3.2 and AT.rain_hint(1.0, None, True) == 1.0
+    assert AT.rain_hint(0.9, None, True) is None                          # no rain to speak of
+    assert AT.rain_hint(None, None, True) is None                         # no coordinates / weather
+    assert AT.rain_hint(12.0, "dry", True) is None and AT.rain_hint(12.0, "wet", True) is None   # already marked
+    # SP-299 follow-up (owner 2026-10-07): only 越野跑 / 登山健行 — never a road run
+    assert AT.rain_hint(12.0, None, False) is None
     src = (ROOT / "engine" / "activity_tags.py").read_text(encoding="utf-8")
     assert "推估: ≥ 1 mm" in src
 
@@ -155,7 +157,7 @@ def test_list_carries_the_rain_and_the_button_marks_wet(tmp_path, no_plan, monke
     from backend.tests.test_activity_edit import _fit_ds
     db = tmp_path / "tags.db"
     monkeypatch.setattr(AT, "_default_db", lambda: db)
-    ds = _fit_ds(tmp_path)
+    ds = _fit_ds(tmp_path, classes=_trail_classes(tmp_path))
     monkeypatch.setattr(V, "_dataset", lambda parity=None, source=None: ds)
     home = tmp_path / "routes"
     monkeypatch.setattr(R, "HOME", home)
@@ -168,12 +170,13 @@ def test_list_carries_the_rain_and_the_button_marks_wet(tmp_path, no_plan, monke
     assert a["2025/0.fit"]["rain_mm"] == 3.2 and lst["rain_hint_mm"] == AT.RAIN_HINT_MM
     assert a["2025/1.fit"]["rain_mm"] is None                             # no weather: no hint
     assert a["2025/0.fit"]["surface"] is None                             # a hint, not a mark
-    assert AT.rain_hint(a["2025/0.fit"]["rain_mm"], a["2025/0.fit"]["surface"]) == 3.2
+    assert a["2025/0.fit"]["rain_kind"] is True                         # a trail run
+    assert AT.rain_hint(a["2025/0.fit"]["rain_mm"], a["2025/0.fit"]["surface"], a["2025/0.fit"]["rain_kind"]) == 3.2
     # rain under the threshold / unknown rain: the row carries it, the hint rule says no
     _weather_file(home, {"WKO5_run.wko4": {"temp_c": 25.0, "rain_mm": 0.4, "start": start},
                          "old.wko4": {"temp_c": 20.0, "start": "2025-12-14T01:00:00"}})   # pre-SP-299 row
     a = {x["file"]: x for x in V.activities_list()["activities"]}
-    assert AT.rain_hint(a["2025/0.fit"]["rain_mm"], None) is None and a["2025/1.fit"]["rain_mm"] is None
+    assert AT.rain_hint(a["2025/0.fit"]["rain_mm"], None, True) is None and a["2025/1.fit"]["rain_mm"] is None
 
     async def _inner():
         eng = create_async_engine(f"sqlite+aiosqlite:///{db}")
@@ -187,7 +190,98 @@ def test_list_carries_the_rain_and_the_button_marks_wet(tmp_path, no_plan, monke
     _run(_inner())
     _weather_file(home, {"WKO5_run.wko4": {"temp_c": 25.0, "rain_mm": 3.2, "start": start}})
     a = {x["file"]: x for x in V.activities_list()["activities"]}["2025/0.fit"]
-    assert a["surface"] == "wet" and AT.rain_hint(a["rain_mm"], a["surface"]) is None   # marked: no hint
+    assert a["surface"] == "wet" and AT.rain_hint(a["rain_mm"], a["surface"], a["rain_kind"]) is None   # marked: no hint
+
+
+def _trail_classes(tmp_path, cls="trail"):
+    """_fit_ds's classification of 2025/0.fit, as `cls` (its default is a road run)."""
+    from backend.engine.wko5expr.fitdataset import _norm
+    p = tmp_path / "fit" / "coros" / "2025" / "0.fit"
+    r = {"id": 7, "file_path": str(p), "trail_classification": cls, "classification_overridden": True,
+         "duplicate_of": None}
+    return {_norm(p): r, "_by_id": {7: r}, "_by_name": {"0.fit": [r]}, "_dups": {}}
+
+
+def test_road_runs_get_no_rain_hint_trail_and_hike_do(tmp_path, no_plan, monkeypatch):
+    """SP-299 follow-up (owner 2026-10-07): only 越野跑 and 登山健行 (incl. 百岳 and the user's 爬山
+    mark, sport_map.kind_of) — a road run is never hinted, however much it rained."""
+    import backend.db.database as D
+    from backend.api import wko5views as V
+    from backend.db.models import Base
+    from backend.engine import routes as R
+    from backend.tests.test_activity_edit import _fit_ds
+    db = tmp_path / "tags.db"
+    monkeypatch.setattr(AT, "_default_db", lambda: db)
+    ds = _fit_ds(tmp_path)                                                # 0.fit: a road run
+    monkeypatch.setattr(V, "_dataset", lambda parity=None, source=None: ds)
+    home = tmp_path / "routes"
+    monkeypatch.setattr(R, "HOME", home)
+    run = next(w for w in ds.workouts if w.entry.file == "2025/0.fit")
+    start = run.entry.start.isoformat(timespec="seconds")
+    _weather_file(home, {"0.fit": {"temp_c": 25.0, "rain_mm": 8.0, "start": start}})
+    a = {x["file"]: x for x in V.activities_list()["activities"]}
+    road, car = a["2025/0.fit"], a["2025/1.fit"]
+    assert road["rain_mm"] == 8.0 and road["rain_kind"] is False
+    assert AT.rain_hint(road["rain_mm"], road["surface"], road["rain_kind"]) is None
+    assert car["index"] is None and car["rain_kind"] is False             # an excluded file: not a trail run
+    assert AT.rain_kind(run, None) is False
+
+    async def _inner():
+        eng = create_async_engine(f"sqlite+aiosqlite:///{db}")
+        async with eng.begin() as c:
+            await c.run_sync(Base.metadata.create_all)
+        monkeypatch.setattr(D, "AsyncSessionLocal", async_sessionmaker(eng, expire_on_commit=False))
+        # the user marks it 爬山: a mountain day now → the hint applies (the PATCH answer says so)
+        r = await V.patch_activity(run.idx, {"activity_type": "hike"})
+        assert r["rain_kind"] is True
+        await eng.dispose()
+    _run(_inner())
+    road = {x["file"]: x for x in V.activities_list()["activities"]}["2025/0.fit"]
+    assert road["rain_kind"] is True and AT.rain_hint(road["rain_mm"], road["surface"], road["rain_kind"]) == 8.0
+
+
+def test_rain_kind_rule():
+    from types import SimpleNamespace as NS
+
+    def w(sport="run", sport_type="running", tags=()):
+        return NS(sport=sport, sport_type=sport_type, tags=list(tags), platform=None)
+    assert AT.rain_kind(w(sport_type="trail running"), None) is True       # 越野跑
+    assert AT.rain_kind(w(tags=["runningtrail"]), None) is True
+    assert AT.rain_kind(w(sport="other", sport_type="hiking"), None) is True   # 登山健行
+    assert AT.rain_kind(w(), None) is False                               # 路跑
+    assert AT.rain_kind(w(), {"activity_type": "hike", "activity_type_overridden": True}) is True
+    assert AT.rain_kind(w(), {"activity_type": "baiyue_group", "activity_type_overridden": True}) is True
+    assert AT.rain_kind(w(sport_type="trail running"),
+                        {"activity_type": "training", "activity_type_overridden": True}) is True
+    assert AT.rain_kind(w(sport="bike", sport_type="cycling"), None) is False
+    # an excluded file (no workout): its sport type, or the user's 爬山 mark
+    assert AT.rain_kind_excluded("trail running", None) is True
+    assert AT.rain_kind_excluded("hiking", None) is True and AT.rain_kind_excluded("running", None) is False
+    assert AT.rain_kind_excluded("running", {"activity_type": "hike", "activity_type_overridden": True}) is True
+    # L4: the file's trail classification counts like a dataset run's (a COROS run classified trail)
+    assert AT.rain_kind_excluded("running", None, trail=True) is True
+    assert AT.rain_kind_excluded("cycling", None, trail=True) is False   # only a run is a trail run
+    assert AT.rain_kind_excluded(None, None) is False
+
+
+def test_excluded_row_carries_its_auto_kind_and_the_page_follows_a_type_change(tmp_path, no_plan, monkeypatch):
+    """L2: an excluded file is edited by key (no single-activity answer), so the page recomputes
+    its rain_kind from `rain_kind_auto` and the user's type with the same rule as the server."""
+    import re
+    from backend.api import wko5views as V
+    from backend.engine import routes as R
+    from backend.tests.test_activity_edit import _fit_ds
+    monkeypatch.setattr(AT, "_default_db", lambda: tmp_path / "tags.db")
+    ds = _fit_ds(tmp_path)
+    monkeypatch.setattr(V, "_dataset", lambda parity=None, source=None: ds)
+    monkeypatch.setattr(R, "HOME", tmp_path / "routes")
+    car = {x["file"]: x for x in V.activities_list()["activities"]}["2025/1.fit"]
+    assert car["index"] is None and car["rain_kind"] is False and car["rain_kind_auto"] is False
+    page = (ROOT / "static" / "activity.html").read_text(encoding="utf-8")
+    body = page.split("// an excluded file has no dataset index: edited by key", 1)[1].split("\n    }", 1)[0]
+    assert "a.rain_kind = " in body and "a.rain_kind_auto" in body
+    js_types = re.search(r"const MOUNTAIN_TYPES = \[([^\]]*)\]", page).group(1)
+    assert sorted(t.strip().strip('"') for t in js_types.split(",")) == sorted(AT._MOUNTAIN_TYPES)
 
 
 def test_list_without_a_weather_file_has_no_hint(tmp_path, no_plan, monkeypatch):
@@ -206,7 +300,9 @@ def test_editor_hint_wiring_and_i18n():
     page = (ROOT / "static" / "activity.html").read_text(encoding="utf-8")
     assert "S.rainHintMm = r.rain_hint_mm" in page
     # shown only while 未標, with rain known and ≥ the threshold; the button is the only writer
-    assert "a.rain_mm != null && S.rainHintMm != null && a.rain_mm >= S.rainHintMm && !surfaceOf(a)" in page
+    assert "a.rain_kind && a.rain_mm != null && S.rainHintMm != null && a.rain_mm >= S.rainHintMm && !surfaceOf(a)" in page
+    # a type change in the editor moves the activity in / out of 越野跑／登山健行 (the PATCH answer)
+    assert '"rain_kind" in r' in page.split("function patchLocal(", 1)[1].split("\n}", 1)[0]
     assert 'saveFields(a, { surface: "wet" })' in page and "data-rain-wet" in page
     assert page.index('T("f_surface")') < page.index("data-rain-hint") < page.index('T("f_tags")')
     for loc in ("zh-TW", "en"):

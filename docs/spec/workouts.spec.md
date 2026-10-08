@@ -66,7 +66,7 @@ The pack carried (`pack_kg`, PATCH on the dataset workout) is not a tag column: 
 **Storage.** Table `activity_tags` (`backend/db/models.py`, created by `init_db`'s `create_all`).
 Columns added later (`exclusion`, `name`, `tags_json`, `pain`, `pain_area`, `injury_id`;
 `activity_tags.LATE_COLS`) are added by `database._migrate_schema` and by `upsert` on an older table.
-Every write (`apply_update`) sets `row.updated_at` (`backend/engine/activity_tags.py:581`). Only the user's values are stored, each with `*_overridden`; auto values
+Every write (`apply_update`) sets `row.updated_at` (`backend/engine/activity_tags.py:606`). Only the user's values are stored, each with `*_overridden`; auto values
 are computed at read time and merged (`merge`). Key: the local start minute
 (`YYYY-MM-DDTHH:MM`, Dataset `entry.start`). The dataset file (e.g. a `.wko4` name) is matched
 first — also without the 同步資料 source's `coros/` / `tp/` prefix (`activity_key.same_file`) — then
@@ -75,7 +75,7 @@ because the race-power engine reads the WKO5 / COROS / TP datasets, and most WKO
 have no row (the app DB holds only the synced COROS / TP files). The engine reads the table
 sync and read-only (`load`, like `datasource.read_setting`; memoised on the DB file's stamp with its
 WAL included, `db/filestamp.py`, so a commit still in the WAL is seen —
-`backend/engine/activity_tags.py:365`); `WKO5COACH_TAGS_DB` points it at
+`backend/engine/activity_tags.py:390`); `WKO5COACH_TAGS_DB` points it at
 another DB (back-test what-ifs); tests patch `_default_db`. The table appears in the app DB on the
 first write (an API PATCH, `upsert`, or `init_db` at server start); until then `load` returns
 `[]`. As of 2026-10-01 the real app DB has no `activity_tags` table yet: the seed and `load` both
@@ -90,7 +90,7 @@ minute ±3 min (`test_tags_written_from_wko5_apply_to_coros_workouts`,
 race word in the title → 比賽; a hike with a plan 百岳 event that day →
 百岳跟團; a hike, or a trail run with a hike word in the title → 爬山; any run →
 練跑; else 其他. "A hike" = the platform-neutral app type `hike` (SP-263: `auto_type(app_type=…)`,
-`backend/engine/activity_tags.py:737`, passed by `athlete.auto_tags`,
+`backend/engine/activity_tags.py:762`, passed by `athlete.auto_tags`,
 `backend/engine/racepower/athlete.py:773`); without an app type, the sport type hiking /
 mountaineering as before.
 
@@ -109,8 +109,8 @@ the sport), else a hike with a plan 百岳 event that day or whose GPS track pas
   long rests over the limit → 有拼但有休息. The HR rule's verdict is kept in the reason.
   Since SP-231 the RPE can also be COROS's post-run self-rating (1–5, read from the activity
   detail at sync, stored as `workout_files.coros_feel` with `rpe_source = "coros"` and mapped to a
-  10-point `rpe`; `load_recorded`, `backend/engine/activity_tags.py:657`); the reason then says
-  「COROS 跑後自評 … （換算成 RPE …，推估）」 (`effort_from_rpe`, `backend/engine/activity_tags.py:627`).
+  10-point `rpe`; `load_recorded`, `backend/engine/activity_tags.py:682`); the reason then says
+  「COROS 跑後自評 … （換算成 RPE …，推估）」 (`effort_from_rpe`, `backend/engine/activity_tags.py:652`).
 - trail / hike (`effort_hr`): moving HR ÷ own-date LTHR (`athlete.thresholds_as_of`). Trail runs
   (2026-10-02, unsourced-rules.md §A2): ≥ x*(T) − 0.03, the duration-dependent full-effort HR
   fraction (`racepower.trailhr.auto_max_frac`; Fornasiero 2018: a 12 h race spends most of its
@@ -131,14 +131,17 @@ user's own 未標 (`POLE_NONE_TAG`, `backend/engine/activity_tags.py:169`); no t
 pole tags are mutually exclusive (`exclusive_poles`) and kept out of the tag chips. **No model reads
 the mark** (calculator, HR model, downhill bump unchanged; docs/research/trekking-poles.md §4).
 
-- **依賽事設定** (SP-300, `race_poles`, `backend/engine/activity_tags.py:215`): a season-plan event
-  marked 「會用登山杖」 makes its activities 有杖 — a 1-day road / 越野賽 event: its run by the existing
-  date + kind + distance match (`maximal.match_events`); a 百岳, an 其他 or a multi-day event: every
-  trail run / hike on each of its days. Computed at read time, never stored: unticking the race puts
-  its un-chosen activities back to 未標. The user's choice (incl. their own 未標) always wins
-  (`pole_state`, `backend/engine/activity_tags.py:247`).
+- **依賽事設定** (SP-300, `race_poles`, `backend/engine/activity_tags.py:217`): a season-plan event
+  marked 「會用登山杖」 makes its activities 有杖 — every trail run / hike (`climb_vam.kind_of`) on the
+  event's day, each day of a multi-day event (`backend/engine/activity_tags.py:236-243`), whatever the
+  watch distance and also a 越野賽 recorded as a hike (owner 2026-10-07: the ±25 % date + kind +
+  distance match no longer limits this default); plus, on a 1-day road / 越野賽 event, its run by that
+  match (`maximal.match_events`: a road race's road run). The auto 比賽 type keeps the match.
+  Computed at read time, never stored: unticking the race puts its un-chosen activities back to 未標.
+  The user's choice (incl. their own 未標) always wins (`pole_state`,
+  `backend/engine/activity_tags.py:249`); no 「回到依賽事」 button.
 - **有杖 vs 沒杖 comparison** (SP-243, 能力 tab): only for someone who uses poles — in the last 365
-  days ≥ 5 activities 有杖 and ≥ 5 沒杖 (`POLE_COMPARE_MIN`, `backend/engine/activity_tags.py:260`),
+  days ≥ 5 activities 有杖 and ≥ 5 沒杖 (`POLE_COMPARE_MIN`, `backend/engine/activity_tags.py:262`),
   counting only the trail runs and hikes the chart uses (`used`,
   `backend/engine/panels/pole_compare.py:172`; the race default counts). Below that the editor says
   「再標有杖 N 次、沒杖 M 次…」.
@@ -146,18 +149,28 @@ the mark** (calculator, HR model, downhill bump unchanged; docs/research/trekkin
 ### 路況 and the rain hint (SP-250, SP-299)
 
 The user's own mark of a dry or a wet / slippery trail, stored like the pole mark as one of two
-free-form tags `乾路` / `濕路` (`SURFACES`, `backend/engine/activity_tags.py:302`); 未標 = neither. No
+free-form tags `乾路` / `濕路` (`SURFACES`, `backend/engine/activity_tags.py:304`); 未標 = neither. No
 synonym typed as a free tag (雨天, 泥濘 …) counts. The trail technicality factor splits on it when
 both groups have ≥ 30 windows on g ≤ +2 % (`SURFACE_MIN_N`, `backend/engine/racepower/grade_model.py:178`;
 `fit_gait_re`), and only then does the calculator offer 「路況：乾／濕」 (racepower.spec.md).
 
 Rain hint (SP-299): the archive rain while the activity ran (Open-Meteo hourly `precipitation`,
 asked in the same call as the temperature and cached in `activity_weather.json`,
-`backend/engine/route_weather.py:44`) — when it reached `RAIN_HINT_MM` = 1 mm (推估,
-`backend/engine/activity_tags.py:333`) and the 路況 is still 未標 (`rain_hint`,
-`backend/engine/activity_tags.py:336`), the editor shows 「這次活動期間下過雨（N mm），要標成濕路嗎？」
+`backend/engine/route_weather.py:45`) — when it reached `RAIN_HINT_MM` = 1 mm (推估,
+`backend/engine/activity_tags.py:335`) and the 路況 is still 未標 (`rain_hint`,
+`backend/engine/activity_tags.py:360`), the editor shows 「這次活動期間下過雨（N mm），要標成濕路嗎？」
 with a one-click 「標成濕」. Nothing is marked until the button is pressed; no hint without
-coordinates or weather.
+coordinates or weather. Only on 越野跑 / 登山健行 (owner 2026-10-07): `rain_kind`
+(`backend/engine/activity_tags.py:340`) = the activity's filter kind (`sport_map.kind_of`, incl. the
+user's 爬山 / 百岳跟團 mark) is one of `TRAIL_KINDS`; an excluded file by that mark, its sport type, or
+a run whose 地形 (the DB trail classification) is 越野 (`rain_kind_excluded`,
+`backend/engine/activity_tags.py:348`). `GET /activities` and the single-activity JSON carry
+`rain_kind` (`backend/api/wko5views.py:1143`, `backend/api/wko5views.py:893`), so a type change in the
+editor moves the hint (`patchLocal`, `backend/static/activity.html:757`); an excluded row also carries
+`rain_kind_auto` (without the user's type, `backend/api/wko5views.py:1160`) and the page applies a
+type change on it with the same rule (`MOUNTAIN_TYPES`, `backend/static/activity.html:777`).
+The activities cached before precipitation was asked get their rain from the one-time backfill of
+the last 12 months (route-progress.spec.md › Rain backfill).
 
 ## Power source (`backend/engine/power_source.py`, 2026-10-01)
 
@@ -231,11 +244,11 @@ flagged.
 | PATCH | `/api/v1/workouts/{id}/activity` | `{activity_type?, effort?, note?, exclusion?, name?, tags?, pain?, pain_area?, pain_side?, pain_score?, poles?, surface?}` (`ActivityUpdate`, `backend/api/workouts.py:55`); a key present with null clears it (back to auto), absent = unchanged; `tags` replaces the list, then `poles` / `surface` rewrite their tag; a pain mark attaches to / opens a 傷病紀錄 event (404 in demo mode); 400 invalid value, 404, 422 no start time. Returns `{id, …}` with the stored user values (incl. `poles`, `poles_user`, `surface`, `pain_score`) |
 | GET | `/api/v1/wko5/workouts/{idx}/activity` | dataset workout (current source): effective, auto (+ reasons), overridden flags, note, `effort_detail` (HR fraction, above-AeT share, long-rest share), `capacity` (race-power sample or not), the option labels, `power` (`source`, `used`, `label`, `setting`), `title_original`, `title_from`, `terrain`, `origin`, `pack`, `poles` / `poles_user` / `poles_race` (SP-300), `pain_state` (+ `pain_score`, the 傷別 pain-monitoring text `monitor` and the re-entry prompt `reentry`, SP-269) (`_activity_json`, `backend/api/wko5views.py:877`) |
 | GET | `/api/v1/wko5/workouts/{idx}/pain` | the pain mark only (the chart page's chip); 404 in demo mode |
-| GET | `/api/v1/wko5/activities` | every activity of the current source, newest first, with the stored user values (type / effort marks, name, tags, note, exclusion, pain, `pain_score`, `poles` / `poles_race`, `surface`), terrain, power label, recorded RPE / feel and `self_rating` (COROS, SP-231), `rain_mm` and `pole_chart` (counts toward the comparison); excluded files with `index: null`. Top level: `pole_tags`, `pole_none_tag`, `surface_tags`, `pole_compare` (the 5 + 5 counts), `rain_hint_mm` (`activities_list`, `backend/api/wko5views.py:1083`) |
+| GET | `/api/v1/wko5/activities` | every activity of the current source, newest first, with the stored user values (type / effort marks, name, tags, note, exclusion, pain, `pain_score`, `poles` / `poles_race`, `surface`), terrain, power label, recorded RPE / feel and `self_rating` (COROS, SP-231), `rain_mm` and `pole_chart` (counts toward the comparison); excluded files with `index: null`. Top level: `pole_tags`, `pole_none_tag`, `surface_tags`, `pole_compare` (the 5 + 5 counts), `rain_hint_mm` (`activities_list`, `backend/api/wko5views.py:1085`) |
 | GET | `/api/v1/wko5/activities/auto` | the auto type / effort (+ reasons) of every activity, computed in the background (`backend/api/activity_auto.py`: one job per Dataset, chunks of 25 newest first, values kept on disk per activity file); `{state computing / ready / error, n_done, n_total, stale, auto}` — the page polls. **One signature for the whole dataset** (`signature`, `backend/api/activity_auto.py:135`: every workout's file stamp / sport / tags / title / start, the plan, settings, corrections, recorded RPEs), so any change recomputes every activity; its code part hashes only the functions `compute_blocking` reaches (`_code_sig`, `backend/api/activity_auto.py:115`, SP-320 ①) |
-| GET | `/api/v1/wko5/sports` | the 圖表分析 activity-type filter: the kinds present with counts, in the filter's order (`backend/api/wko5views.py:1298`, SP-263) |
+| GET | `/api/v1/wko5/sports` | the 圖表分析 activity-type filter: the kinds present with counts, in the filter's order (`backend/api/wko5views.py:1307`, SP-263) |
 | GET | `/api/v1/wko5/activities/stats` | `{key: {avg_hr, avg_power}}` for the list columns |
-| PATCH | `/api/v1/wko5/activities` | key-based single or bulk edit (≤ 500 items `{key, file?}`): any tag field (incl. `pain_score`, `poles`, `surface`; `BulkBody`, `backend/api/wko5views.py:1221`), plus `add_tags` / `remove_tags`; works for excluded files |
+| PATCH | `/api/v1/wko5/activities` | key-based single or bulk edit (≤ 500 items `{key, file?}`): any tag field (incl. `pain_score`, `poles`, `surface`; `BulkBody`, `backend/api/wko5views.py:1230`), plus `add_tags` / `remove_tags`; works for excluded files |
 | GET | `/api/v1/wko5/workouts` | each item also has `power_source` and `power_label` (「手錶推估功率（未採用）」 for unused watch power); `tss_source` is no longer `power` for a blocked watch run |
 | PATCH | `/api/v1/wko5/workouts/{idx}/activity` | as above; keyed by start minute + file, so it applies across sources; also `exclusion` (`keep` / `exclude` / null) and `pack_kg`; the GET has `exclusion_state` {override, flagged, enabled} |
 | GET | `/api/v1/wko5/workouts` (excluded rows) | an excluded file is listed with `index: null` and `excluded` {key, label, reason, rule, auto, manual, override, avg_kmh} |
@@ -261,14 +274,14 @@ Bulk edit sets type / effort or adds / removes tags. The auto values stream in w
 
 Since 2026-10-06 the dialog also has:
 - 疼痛 with the optional 0–10 「跑的時候最痛幾分」 (SP-271; `backend/static/painpicker.js:92`);
-- 登山杖 — a 3-way chip choice 有杖 / 沒杖 / 未標, never typed (`backend/static/activity.html:719`);
+- 登山杖 — a 3-way chip choice 有杖 / 沒杖 / 未標, never typed (`backend/static/activity.html:720`);
   with no choice of the user's, a 「依賽事設定」 badge for a race marked 「會用登山杖」 (SP-300), and the
   hint 「再標有杖 N 次、沒杖 M 次…」 toward the comparison (SP-243, `poleHint`,
   `backend/static/activity.html:612`); the pole tags stay out of the tag chips;
-- 路況 — a 3-way chip choice 乾 / 濕 / 未標 (`backend/static/activity.html:724`), and while it is 未標
-  the rain hint with 「標成濕」 (SP-299, `rainHint`, `backend/static/activity.html:643`);
+- 路況 — a 3-way chip choice 乾 / 濕 / 未標 (`backend/static/activity.html:725`), and while it is 未標
+  the rain hint with 「標成濕」 on 越野跑 / 登山健行 (SP-299, `rainHint`, `backend/static/activity.html:646`);
 - the RPE line says 「自評：… （COROS）」 when the RPE came from COROS's post-run rating (SP-231,
-  `backend/static/activity.html:684`).
+  `backend/static/activity.html:685`).
 
 The old 「活動資訊」 card (`activity_tags_card.js`) on 圖表分析 → 單次活動 was removed
 (2026-10-02); the viewer (`backend/static/wko5_viewer.html`) has a 「編輯活動」 chip linking to the
@@ -327,8 +340,8 @@ indices), keep / manual exclude through a tmp tags DB, the WKO5 policy renumberi
 setting off, `source_stamp`, `cptest.bad_files`, the list / exclusions / PUT endpoints, the old-table
 load and the setting key (synthetic FITs, `fit_builder.build_run(speeds_m_s=…)`).
 `backend/tests/test_activity_poles.py`: the 登山杖 mark (store, switch, clear, the 3-way editor, no
-model reads it). `backend/tests/test_race_poles.py`: 依賽事設定 (1-day race match, multi-day trip,
-the user always wins). `backend/tests/test_pole_compare.py`: the comparison chart and its 5 + 5 gate.
+model reads it). `backend/tests/test_race_poles.py`: 依賽事設定 (every trail run / hike of the race day whatever the
+distance or a hike record, multi-day trip, the user always wins). `backend/tests/test_pole_compare.py`: the comparison chart and its 5 + 5 gate.
 `backend/tests/test_activity_surface.py`: the 路況 mark and the dry / wet split (≥ 30 windows each).
 `backend/tests/test_rain_hint.py`: the rain stored without an extra call, the threshold, never over a
 mark. `backend/tests/test_coros_rpe.py`: COROS's post-run rating as the RPE. `backend/tests/test_sport_map.py`:
@@ -340,16 +353,16 @@ the app-type table and the filter kinds.
 |---|---|---|---|
 | How the 登山杖 mark is set and used | the user's own 有杖 / 沒杖 / 未標, stored as a free-form tag; no model reads it | detect it; correct the calculator / HR model / downhill bump by it | a watch cannot tell; the research found no correction worth applying — kept only for the comparison (SP-242) |
 | When the 有杖 vs 沒杖 comparison shows | ≥ 5 有杖 and ≥ 5 沒杖 in the last 365 days, only trail runs and hikes count | always show; count every marked activity | only for someone who uses poles; a mark on a road run or a ride says nothing about the chart (SP-243, user decision 2026-10-06) |
-| An activity of a race marked 「會用登山杖」 | 有杖 「依賽事設定」 at read time; the user's choice (incl. their own 未標) wins; no 「回到依賽事」 button | store the default; ask each time | it is what the user entered on the race, not a guess; unticking the race undoes it (SP-300, answered 2026-10-07) |
+| An activity of a race marked 「會用登山杖」 | 有杖 「依賽事設定」 at read time on every trail run / hike of the race day (each day of a trip), whatever the distance; the user's choice (incl. their own 未標) wins; no 「回到依賽事」 button | store the default; ask each time; only the date + kind + ±25 % distance match | it is what the user entered on the race, not a guess; unticking the race undoes it (SP-300, answered 2026-10-07) |
 | How the 路況 is set | the user's own 乾 / 濕 / 未標; the archive rain only hints (≥ 1 mm, 推估) | mark wet automatically from the rain | rain on the trail is not the trail being wet; only marked activities enter the dry / wet groups (SP-250, SP-299) |
+| Which activities get the rain hint | 越野跑 and 登山健行 (incl. 百岳 and the user's 爬山 mark) | every activity | the 路況 groups are about trails; a road run is never asked — owner 2026-10-07 (SP-299) |
+| Rain of the activities cached before SP-299 | one backfill of the last 12 months on the server (~194 calls, paced) | leave them without rain; refetch on every build | owner 2026-10-07 (SP-299) |
 | What counts as 百岳 in the activity-type filter | the user's 百岳跟團 mark, a plan 百岳 event that day, or a GPS-detected 百岳 summit | the type mark only | the user's answer 2026-10-06 (SP-263) |
 | COROS's post-run self-rating | read at sync and used as the RPE at once (1–5 mapped to 10 points, 推估) | wait for more data before enabling | the user decided to enable it directly (SP-231, 2026-10-06) |
 | The React SPA and its DB-row routes | removed (`frontend/`, `GET /api/v1/workouts`, `/{id}` …) | keep the SPA and spec it | the static pages are the UI; the SPA was unmaintained (SP-48, user decision 2026-10-04) |
 
 ## Open Questions
 
-- [ ] The rain hint should not show on road runs, only on trail runs and hikes; today it shows on every activity (`backend/static/activity.html:643`). Also backfill the last 12 months' rain for the activities cached before SP-299（SP-299，Todo）——尚未實作
-- [ ] 依賽事設定 on a 1-day race should cover every trail run / hike of the day; today it uses the date + kind + distance match (`backend/engine/activity_tags.py:228`)（SP-300，Todo）——尚未實作
 - [ ] `activity_tags` rows get a stable id (UUID); `updated_at` is already written（SP-310，Todo）——尚未實作
 - [ ] A change-log sync trial for `user_settings` and `activity_tags`（SP-312，Todo）——尚未實作
 - [ ] `/activities/auto` per activity: a sync of one activity recomputes only that one (today one signature covers the whole dataset)（SP-334，Todo）——尚未實作
@@ -366,3 +379,6 @@ the app-type table and the filter kinds.
 | 2026-10-04 | code-sync | N/A | Domain Model; name / free-form tags / pain columns; watch RPE in the effort precedence; trail 全力 by x*(T) − 0.03 and per-athlete rest limit; 活動編輯 page + `/activities`, `/activities/auto`, `/activities/stats`, bulk PATCH; 活動資訊 card removed; terrain `auto` reset; seed from a JSON file; file match without `coros/` / `tp/` prefix |
 | 2026-10-07 | fix | SP-341 | The bad-file and power-source caches (`bad_activity_v1.json`, `power_source_v1.json`, `racepower_bad_activity.json`, `racepower_power_source.json`) carry a code version: a changed algorithm recomputes them; registered in `backend/data_registry.py` (SP-311) |
 | 2026-10-08 | code-sync（SP-231, 242, 243, 250, 263, 269, 271, 299, 300, 48） | N/A | 登山杖 mark and 依賽事設定, the 有杖 vs 沒杖 gate; 路況 mark and the rain hint; COROS self-rating as the RPE; app type / 百岳 filter kind and `GET /wko5/sports`; pain score; API fields (`poles`, `surface`, `pain_score`, `rain_mm`, `self_rating` …); DB-row GET routes removed; `/activities/auto` signature; anchors re-checked; Decisions Log and Open Questions added |
+| 2026-10-08 | SP-299 follow-up | owner decision 2026-10-07 (ticket SP-299) | The rain hint only on 越野跑 / 登山健行 (`rain_kind` / `rain_kind_excluded`, `rain_hint(…, trail)`); `rain_kind` on `GET /activities` and the single-activity JSON, copied by `patchLocal`; 路況 help (zh-TW + en) says road runs are not asked; the one-time rain backfill (route-progress.spec.md). Tests `test_rain_hint.py::test_road_runs_get_no_rain_hint_trail_and_hike_do`, `::test_rain_kind_rule`, `test_rain_backfill.py` |
+| 2026-10-08 | SP-299 review | code review of fix/activity-sp81-299-300-258 | An excluded file's rain kind also reads its trail classification (L4); its row carries `rain_kind_auto` and a type change edited by key updates `rain_kind` on the page (L2). Tests `test_rain_hint.py::test_rain_kind_rule`, `::test_excluded_row_carries_its_auto_kind_and_the_page_follows_a_type_change` |
+| 2026-10-08 | SP-300 follow-up | owner decision 2026-10-07 (ticket SP-300) | 依賽事設定 covers every trail run / hike on the race day (each day of a multi-day trip) whatever the watch distance, incl. a 越野賽 recorded as a hike; the 1-day match still adds a road race's road run; the auto 比賽 type is unchanged; 登山杖 help (zh-TW + en) says so. Tests `test_race_poles.py::test_one_day_race_covers_every_trail_run_and_hike_of_the_day`, `::test_race_day_default_never_beats_the_users_choice` |
