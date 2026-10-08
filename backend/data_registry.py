@@ -86,7 +86,10 @@ TABLES: tuple = (
           "account's LTHR — the cold-start LTHR prior, initial CTL); an older DB's ftp_w column is unread",
           deidentify=("effective_date",)),
     Table("user_settings", USER, "key / value settings (settings/repository.py); values are free-form JSON "
-          "(backup.dir is a local path, plan.calendar holds the ICS feed's link token)",
+          "(backup.dir is a local path, plan.calendar holds the ICS feed's link token); a few keys are the "
+          "server's bookkeeping, not choices: run results (sync.*.last_result / last_ok / check*) and the "
+          "one-time jobs' done marks (sync.coros.rpe_backfill; weather.rain_backfill, api/rain_backfill.py — "
+          "deleting it only reruns the backfill, which asks for nothing the weather cache already holds)",
           deidentify=("value_json",)),
     Table("activity_tags", USER, "the user's activity marks: type, effort, note, title, tags, pain, exclusion",
           deidentify=("start_local", "file", "workout_id", "label", "name", "note", "tags_json")),

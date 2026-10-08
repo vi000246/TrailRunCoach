@@ -29,6 +29,7 @@ import datetime as dt
 import json
 import math
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Callable, Optional
@@ -42,7 +43,8 @@ CELL_DEG = 0.25                  # batching cell
 POINT_DEG = 0.01                 # an effort's point, ~1 km
 ELEV_STEP_M = 10.0
 # precipitation (SP-299): asked in the same call, so the activities' rain costs no extra call;
-# a day cached before it was added has none (no rain hint there, never a refetch)
+# a day cached before it was added has none (no rain hint there; a build never refetches it —
+# only the one-time backfill of the last 12 months does, engine/rain_backfill.py)
 HOURLY = "temperature_2m,relative_humidity_2m,dew_point_2m,precipitation"
 TIMEZONE = "auto"                # local wall-clock time at the point = the activity's start clock
 # Hadley sum (°F + °F) above which pace suffers >= ~4.5 % (Hadley's 151–160
@@ -144,14 +146,31 @@ def conditions(days_js: list[dict], a: dt.datetime, b: dt.datetime) -> Optional[
             "archive_elev_m": merged["elevation"]}
 
 
+def has_rain(js: Optional[dict]) -> bool:
+    """Whether a cached archive day of a point carries the hourly precipitation (SP-299): a day
+    cached before it was added to HOURLY has none."""
+    return isinstance(js, dict) and (js.get("hourly") or {}).get("precipitation") is not None
+
+
 class Fetcher:
     """Archive days of points, grouped by (cell, day): from the disk cache or
-    one call per group (per MAX_POINTS points)."""
+    one call per group (per MAX_POINTS points).
 
-    def __init__(self, root: Path, get: Callable = WX._http_get, today: Optional[dt.date] = None):
+    `refetch(js)`: a cached point for which it is True is asked again and its cache entry
+    replaced (the one-time rain backfill, engine/rain_backfill.py: a day cached without
+    precipitation); None = the cache is always reused. `workers` calls run at once and
+    `pace_s` seconds pass between those batches (the backfill: one call at a time, paced)."""
+
+    def __init__(self, root: Path, get: Callable = WX._http_get, today: Optional[dt.date] = None,
+                 refetch: Optional[Callable[[dict], bool]] = None, workers: int = 0, pace_s: float = 0.0,
+                 sleep: Callable[[float], None] = time.sleep):
         self.root = Path(root)
         self.get = get
         self.today = today or dt.date.today()
+        self.refetch = refetch
+        self.workers = workers or WORKERS
+        self.pace_s = pace_s
+        self.sleep = sleep
         self.stats = {"needed": 0, "points": 0, "cache_hits": 0, "calls": 0, "failed": 0, "skipped": 0,
                       "empty": 0, "recent": 0}
         self.errors: list[str] = []
@@ -192,7 +211,7 @@ class Fetcher:
             missing = []
             for p in sorted(need[key], key=point_key):
                 js = have.get(point_key(p))
-                if js is not None:
+                if js is not None and not (self.refetch and self.refetch(js)):
                     out[(*key, p)] = js
                 else:
                     missing.append(p)
@@ -204,12 +223,15 @@ class Fetcher:
                 for s in range(0, len(grp), MAX_POINTS):
                     jobs.append((key, grp[s:s + MAX_POINTS]))
         consec = done = 0
-        with ThreadPoolExecutor(max_workers=WORKERS) as pool:
-            for s in range(0, len(jobs), WORKERS):
+        nw = self.workers
+        with ThreadPoolExecutor(max_workers=nw) as pool:
+            for s in range(0, len(jobs), nw):
                 if consec >= MAX_CONSEC_FAIL or self.stats["calls"] >= MAX_CALLS:
                     self.stats["skipped"] += len(jobs) - s
                     break
-                batch = jobs[s:s + WORKERS]
+                if s and self.pace_s > 0:
+                    self.sleep(self.pace_s)       # paced: never a burst (the backfill)
+                batch = jobs[s:s + nw]
                 self.stats["calls"] += len(batch)
                 for (key, pts), res, err in pool.map(self._fetch, batch):
                     done += 1
@@ -373,6 +395,24 @@ def activity_rain(days_js: list[dict], a: dt.datetime, b: dt.datetime) -> Option
     return round(total, 1) if n else None
 
 
+def activity_point(tr) -> Optional[tuple]:
+    """(a, b, point, [(cell, day), …]) of one activity's weather: its first → last sample
+    (local wall clock), its mean position / elevation as the queried point and the archive
+    days it needs. None without a usable track (no GPS, < 2 samples)."""
+    if tr is None or len(tr) < 2:
+        return None
+    t = tr.t[np.isfinite(tr.t)]
+    if not len(t):
+        return None
+    a, b = effort_window(tr.start, t[0], t[-1])
+    pl = place(tr, 0, len(tr) - 1)
+    if pl is None:
+        return None
+    cell = cell_of(pl["lat"], pl["lon"])
+    pt = point_of(pl["lat"], pl["lon"], pl["elev_m"])
+    return a, b, pt, [(cell, d) for d in window_days(a, b)]
+
+
 def fill_activities(tracks: dict, root: Path, get: Callable = WX._http_get,
                     progress: Callable = lambda *_: None, today: Optional[dt.date] = None,
                     since: Optional[dt.date] = None) -> dict:
@@ -383,20 +423,12 @@ def fill_activities(tracks: dict, root: Path, get: Callable = WX._http_get,
     need: dict = {}
     todo = []
     for f, tr in tracks.items():
-        if tr is None or len(tr) < 2:
+        ap = activity_point(tr)
+        if ap is None:
             continue
-        t = tr.t[np.isfinite(tr.t)]
-        if not len(t):
-            continue
-        a, b = effort_window(tr.start, t[0], t[-1])
+        a, b, pt, keys = ap
         if since and b.date() < since:
             continue
-        pl = place(tr, 0, len(tr) - 1)
-        if pl is None:
-            continue
-        cell = cell_of(pl["lat"], pl["lon"])
-        pt = point_of(pl["lat"], pl["lon"], pl["elev_m"])
-        keys = [(cell, d) for d in window_days(a, b)]
         for k in keys:
             need.setdefault(k, set()).add(pt)
         todo.append((f, tr, pt, keys))

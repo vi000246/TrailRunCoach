@@ -155,9 +155,16 @@ Rain hint (SP-299): the archive rain while the activity ran (Open-Meteo hourly `
 asked in the same call as the temperature and cached in `activity_weather.json`,
 `backend/engine/route_weather.py:44`) — when it reached `RAIN_HINT_MM` = 1 mm (推估,
 `backend/engine/activity_tags.py:333`) and the 路況 is still 未標 (`rain_hint`,
-`backend/engine/activity_tags.py:336`), the editor shows 「這次活動期間下過雨（N mm），要標成濕路嗎？」
+`backend/engine/activity_tags.py:355`), the editor shows 「這次活動期間下過雨（N mm），要標成濕路嗎？」
 with a one-click 「標成濕」. Nothing is marked until the button is pressed; no hint without
-coordinates or weather.
+coordinates or weather. Only on 越野跑 / 登山健行 (owner 2026-10-07): `rain_kind`
+(`backend/engine/activity_tags.py:338`) = the activity's filter kind (`sport_map.kind_of`, incl. the
+user's 爬山 / 百岳跟團 mark) is one of `TRAIL_KINDS`; an excluded file by its sport type or that mark
+(`rain_kind_excluded`, `backend/engine/activity_tags.py:346`). `GET /activities` and the
+single-activity JSON carry `rain_kind` (`backend/api/wko5views.py:1143`, `backend/api/wko5views.py:893`),
+so a type change in the editor moves the hint (`patchLocal`, `backend/static/activity.html:755`).
+The activities cached before precipitation was asked get their rain from the one-time backfill of
+the last 12 months (route-progress.spec.md › Rain backfill).
 
 ## Power source (`backend/engine/power_source.py`, 2026-10-01)
 
@@ -266,7 +273,7 @@ Since 2026-10-06 the dialog also has:
   hint 「再標有杖 N 次、沒杖 M 次…」 toward the comparison (SP-243, `poleHint`,
   `backend/static/activity.html:612`); the pole tags stay out of the tag chips;
 - 路況 — a 3-way chip choice 乾 / 濕 / 未標 (`backend/static/activity.html:724`), and while it is 未標
-  the rain hint with 「標成濕」 (SP-299, `rainHint`, `backend/static/activity.html:643`);
+  the rain hint with 「標成濕」 on 越野跑 / 登山健行 (SP-299, `rainHint`, `backend/static/activity.html:644`);
 - the RPE line says 「自評：… （COROS）」 when the RPE came from COROS's post-run rating (SP-231,
   `backend/static/activity.html:684`).
 
@@ -342,13 +349,14 @@ the app-type table and the filter kinds.
 | When the 有杖 vs 沒杖 comparison shows | ≥ 5 有杖 and ≥ 5 沒杖 in the last 365 days, only trail runs and hikes count | always show; count every marked activity | only for someone who uses poles; a mark on a road run or a ride says nothing about the chart (SP-243, user decision 2026-10-06) |
 | An activity of a race marked 「會用登山杖」 | 有杖 「依賽事設定」 at read time; the user's choice (incl. their own 未標) wins; no 「回到依賽事」 button | store the default; ask each time | it is what the user entered on the race, not a guess; unticking the race undoes it (SP-300, answered 2026-10-07) |
 | How the 路況 is set | the user's own 乾 / 濕 / 未標; the archive rain only hints (≥ 1 mm, 推估) | mark wet automatically from the rain | rain on the trail is not the trail being wet; only marked activities enter the dry / wet groups (SP-250, SP-299) |
+| Which activities get the rain hint | 越野跑 and 登山健行 (incl. 百岳 and the user's 爬山 mark) | every activity | the 路況 groups are about trails; a road run is never asked — owner 2026-10-07 (SP-299) |
+| Rain of the activities cached before SP-299 | one backfill of the last 12 months on the server (~194 calls, paced) | leave them without rain; refetch on every build | owner 2026-10-07 (SP-299) |
 | What counts as 百岳 in the activity-type filter | the user's 百岳跟團 mark, a plan 百岳 event that day, or a GPS-detected 百岳 summit | the type mark only | the user's answer 2026-10-06 (SP-263) |
 | COROS's post-run self-rating | read at sync and used as the RPE at once (1–5 mapped to 10 points, 推估) | wait for more data before enabling | the user decided to enable it directly (SP-231, 2026-10-06) |
 | The React SPA and its DB-row routes | removed (`frontend/`, `GET /api/v1/workouts`, `/{id}` …) | keep the SPA and spec it | the static pages are the UI; the SPA was unmaintained (SP-48, user decision 2026-10-04) |
 
 ## Open Questions
 
-- [ ] The rain hint should not show on road runs, only on trail runs and hikes; today it shows on every activity (`backend/static/activity.html:643`). Also backfill the last 12 months' rain for the activities cached before SP-299（SP-299，Todo）——尚未實作
 - [ ] 依賽事設定 on a 1-day race should cover every trail run / hike of the day; today it uses the date + kind + distance match (`backend/engine/activity_tags.py:228`)（SP-300，Todo）——尚未實作
 - [ ] `activity_tags` rows get a stable id (UUID); `updated_at` is already written（SP-310，Todo）——尚未實作
 - [ ] A change-log sync trial for `user_settings` and `activity_tags`（SP-312，Todo）——尚未實作
@@ -366,3 +374,4 @@ the app-type table and the filter kinds.
 | 2026-10-04 | code-sync | N/A | Domain Model; name / free-form tags / pain columns; watch RPE in the effort precedence; trail 全力 by x*(T) − 0.03 and per-athlete rest limit; 活動編輯 page + `/activities`, `/activities/auto`, `/activities/stats`, bulk PATCH; 活動資訊 card removed; terrain `auto` reset; seed from a JSON file; file match without `coros/` / `tp/` prefix |
 | 2026-10-07 | fix | SP-341 | The bad-file and power-source caches (`bad_activity_v1.json`, `power_source_v1.json`, `racepower_bad_activity.json`, `racepower_power_source.json`) carry a code version: a changed algorithm recomputes them; registered in `backend/data_registry.py` (SP-311) |
 | 2026-10-08 | code-sync（SP-231, 242, 243, 250, 263, 269, 271, 299, 300, 48） | N/A | 登山杖 mark and 依賽事設定, the 有杖 vs 沒杖 gate; 路況 mark and the rain hint; COROS self-rating as the RPE; app type / 百岳 filter kind and `GET /wko5/sports`; pain score; API fields (`poles`, `surface`, `pain_score`, `rain_mm`, `self_rating` …); DB-row GET routes removed; `/activities/auto` signature; anchors re-checked; Decisions Log and Open Questions added |
+| 2026-10-08 | SP-299 follow-up | owner decision 2026-10-07 (ticket SP-299) | The rain hint only on 越野跑 / 登山健行 (`rain_kind` / `rain_kind_excluded`, `rain_hint(…, trail)`); `rain_kind` on `GET /activities` and the single-activity JSON, copied by `patchLocal`; 路況 help (zh-TW + en) says road runs are not asked; the one-time rain backfill (route-progress.spec.md). Tests `test_rain_hint.py::test_road_runs_get_no_rain_hint_trail_and_hike_do`, `::test_rain_kind_rule`, `test_rain_backfill.py` |
