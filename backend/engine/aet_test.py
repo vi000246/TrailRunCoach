@@ -427,6 +427,14 @@ def warm_for(title: str, duration_s: float) -> float:
     return WARM_STD_S if duration_s >= WARM_STD_S + UA_MIN_S else WARM_S
 
 
+def planned_warm_s(s: Optional[dict]) -> Optional[float]:
+    """The warm-up the scheduled session asked for (「暖身 N 分」 in its target / detail), in
+    seconds, or None — 每堂課前加熱身 (SP-364) can make it longer than the protocol's."""
+    from backend.engine.warmup import WARM_RE
+    m = WARM_RE.search(f"{(s or {}).get('target') or ''} {(s or {}).get('detail') or ''}")
+    return int(m.group(1)) * 60.0 if m else None
+
+
 def analyze_workout(ds, w, m: Optional[dict] = None) -> Optional[dict]:
     """The analysis of the protocol the title (or the scheduled session's)
     names: warm-up cut, window and judging rule (PROTOCOLS); untitled = UA."""
@@ -444,6 +452,8 @@ def analyze_workout(ds, w, m: Optional[dict] = None) -> Optional[dict]:
     proto = protocol_of_title(title) or "ua60"
     judge = PROTOCOLS[proto]["judge"]
     warm = warm_for(title, _f(w.metrics.get("duration")) or float(s["t"][-1] - s["t"][0]))
+    # the scheduled session's own (longer) warm-up — 每堂課前加熱身 (SP-364) — is cut too
+    warm = max(warm, planned_warm_s(sched) or 0.0)
     main = PROTOCOLS[proto]["main"] * 60.0 if proto in ("evoke60", "friel") else MAIN_MAX_S
     return {**analyze(s["t"], s["hr"], s["speed"], s["power"], temp, m.get("climb_m_per_km"),
                       trail="runningtrail" in w.tags, warm_s=warm, main_s=main, temp_c=tc, temp_src=src,
