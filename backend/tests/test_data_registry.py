@@ -235,34 +235,63 @@ def _tenant(tmp_path: Path) -> tuple[Path, Path]:
     return home / "wko5coach.db", home / "fit"
 
 
-def test_backup_reads_the_registry_and_holds_what_it_held_before(tmp_path):
+# the user's own files (SP-355): what the user typed / chose, and the GPX the user uploaded
+USER_FILES = {"plan.json", "racepower_solo_hikes.json", "racepower_hike_meta.json",
+              "racepower_shares/abcdefghijklmnop.json", "event_gpx/demo-50k.gz", "template_gpx/3.gz",
+              "engine.json", "corrections.json", "annotations.json", "views/mine.json", "routes/names.json"}
+
+
+def test_every_user_file_of_a_tenant_is_backed_up():
+    """SP-355: a tenant file the user made (USER, or IMPORTED by an upload) is in every backup; only
+    the synced FIT originals are opt-in. A new USER / IMPORTED entry without backup=ALWAYS fails
+    here — decide on purpose (SECRET / DERIVED never go in)."""
+    for f in R.FILES:
+        if f.scope != R.TENANT or f.cls not in (R.USER, R.IMPORTED):
+            continue
+        want = R.OPT_IN if f is R.FIT else R.ALWAYS
+        assert f.backup == want, f"{f.pattern}: backup={f.backup}, want {want}"
+    for f in R.FILES:
+        if f.cls in (R.SECRET, R.DERIVED) or f.scope != R.TENANT:
+            assert f.backup == R.NEVER, f.pattern
+    always = {p for p in SAMPLES if R.classify(p) and R.classify(p).backup == R.ALWAYS}
+    assert always - {"wko5coach.db"} == USER_FILES
+
+
+def test_backup_reads_the_registry(tmp_path):
     from backend.engine import backup as B
-    assert R.backup_entries(False) == [R.DB] and R.backup_entries(True) == [R.DB, R.FIT]
+    assert R.backup_entries(False)[0] == R.DB and R.FIT not in R.backup_entries(False)
+    assert [f for f in R.backup_entries(True) if f is not R.FIT] == R.backup_entries(False)
     assert B.DB_ENTRY == "wko5coach.db" and B.FIT_DIR == "fit"
     db, fit = _tenant(tmp_path)
     now = datetime(2026, 10, 7, 4, 0, tzinfo=timezone.utc)
     plain = B.create_backup(db, tmp_path / "out1", fit_root=fit, include_fit=False, now=now)
     with_fit = B.create_backup(db, tmp_path / "out2", fit_root=fit, include_fit=True, now=now)
+    user = {B.FILES_DIR + "/" + p for p in USER_FILES}
     with zipfile.ZipFile(plain["path"]) as z:
-        assert set(z.namelist()) == {"manifest.json", "wko5coach.db"}
-        assert json.loads(z.read("manifest.json"))["fit"] == {"included": False, "files": 0, "bytes": 0}
+        assert set(z.namelist()) == {"manifest.json", "wko5coach.db"} | user
+        m = json.loads(z.read("manifest.json"))
+        assert m["fit"] == {"included": False, "files": 0, "bytes": 0}
+        assert m["files"]["count"] == len(USER_FILES)
     with zipfile.ZipFile(with_fit["path"]) as z:
         assert set(z.namelist()) == {"manifest.json", "wko5coach.db",
                                      "fit/coros/2026/123_2026-10-01_trailrun.fit.gz",
-                                     "fit/tp/2025/tp_2025_01_02_99.fit.gz"}
+                                     "fit/tp/2025/tp_2025_01_02_99.fit.gz"} | user
         assert json.loads(z.read("manifest.json"))["fit"] == {"included": True, "files": 2, "bytes": 20}
-    # every table rides in the DB snapshot, sync_state included (sealed values, as stored)
+    # every table rides in the DB snapshot; the SECRET ones are there but empty (SP-355)
     assert set(plain["row_counts"]) == {t.name for t in R.TABLES}
+    assert all(plain["row_counts"][t.name] == 0 for t in R.of_class(R.SECRET)[0])
 
 
 def test_backup_refuses_a_registry_entry_it_cannot_write(tmp_path, monkeypatch):
     from backend.engine import backup as B
-    extra = R.File("plan.json", R.USER, R.ROOT, "test", backup=R.ALWAYS)
-    monkeypatch.setattr(R, "FILES", R.FILES + (extra,))
     db, fit = _tenant(tmp_path)
-    with pytest.raises(B.BackupError):
-        B.create_backup(db, tmp_path / "out", fit_root=fit)
-    assert not list((tmp_path / "out").glob("*"))          # nothing half-written
+    for extra in (R.File("secret.key", R.SECRET, R.ROOT, "test", scope=R.INSTANCE, backup=R.ALWAYS),
+                  R.File("logs/**", R.DERIVED, R.ROOT, "test", backup=R.ALWAYS),
+                  R.File("**/*.tmp", R.USER, R.ANYWHERE, "test", backup=R.ALWAYS)):
+        monkeypatch.setattr(R, "FILES", (extra,) + R.FILES)
+        with pytest.raises(B.BackupError):
+            B.create_backup(db, tmp_path / "out", fit_root=fit)
+        assert not list((tmp_path / "out").glob("*"))          # nothing half-written
 
 
 # ---------------------------------------------------------------- secret

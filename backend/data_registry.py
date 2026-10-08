@@ -27,8 +27,10 @@ temporary file next to its target). `scope`: TENANT (any tenant), INSTANCE (only
 $WKO5COACH_HOME — the server's own files; the owner's tenant folder is that same folder),
 DEMO (only a demo base / sandbox).
 
-A backup today holds the DB and, opted in, the FIT originals — not the USER files
-(plan.json, engine.json, corrections.json …); see `backup` on each entry.
+A backup (SP-355) holds the DB without the SECRET tables' rows, every tenant file the user made
+(USER, and the GPX the user uploaded) and, opted in, the FIT originals; see `backup` on each
+entry. A new USER / IMPORTED tenant file kind must say backup=ALWAYS (or OPT_IN) — a test fails
+otherwise — and engine/backup.py then carries it without a change there.
 
 Tests: every table of the schema and every file a built demo tenant holds has an entry
 (backend/tests/test_data_registry.py, test_demo_smoke.py); a new table or file kind without
@@ -168,30 +170,32 @@ FILES: tuple = (
          "the snapshot of wko5coach.db"),
     # -- private (tenancy.private_path) ------------------------------------
     File("plan.json", USER, ROOT, "season plan: events, phases, thresholds, profile (engine/planning.py)",
-         deidentify=("events: name, date, note", "profile")),
+         backup=ALWAYS, deidentify=("events: name, date, note", "profile")),
     File("racepower_solo_hikes.json", USER, ROOT, "which hikes were solo (racepower/athlete.py)",
-         deidentify=("activity files / starts",)),
+         backup=ALWAYS, deidentify=("activity files / starts",)),
     File("racepower_hike_meta.json", USER, ROOT, "the pack carried per trip (racepower/athlete.py)",
-         deidentify=("activity files / starts",)),
+         backup=ALWAYS, deidentify=("activity files / starts",)),
     File("racepower_shares/**", USER, ROOT, "race plans the user shared by link (racepower/share.py)",
-         deidentify=("the event's name / date / course",)),
-    File("event_gpx/**", IMPORTED, ROOT, "uploaded event course GPX, gzip (engine/event_gpx.py)",
+         backup=ALWAYS, deidentify=("the event's name / date / course",)),
+    File("event_gpx/**", IMPORTED, ROOT, "uploaded event course GPX, gzip (engine/event_gpx.py); uploaded "
+         "by the user, so backed up (no source to sync it from again)", backup=ALWAYS,
          deidentify=("GPS track",)),
     File("template_gpx/**", IMPORTED, ROOT, "uploaded training-route GPX of a 範本, gzip "
-         "(engine/user_templates.py)", deidentify=("GPS track (start / end)",)),
-    File("backups/**", SECRET, ROOT, "pre-restore copies of the whole DB (sync_state included) and restore "
+         "(engine/user_templates.py); backed up like event_gpx", backup=ALWAYS,
+         deidentify=("GPS track (start / end)",)),
+    File("backups/**", SECRET, ROOT, "pre-restore copies (made like a backup: no SECRET rows) and restore "
          "work files (api/backup.py _local_dir); they stay on the server"),
     # -- read from the base by a demo sandbox (tenancy.base_path) ----------
-    File("engine.json", USER, BASE, "chart engine settings (wko5expr/config.py)"),
+    File("engine.json", USER, BASE, "chart engine settings (wko5expr/config.py)", backup=ALWAYS),
     File("corrections.json", USER, BASE, "approved data corrections (wko5expr/corrections.py)",
-         deidentify=("activity files",)),
+         backup=ALWAYS, deidentify=("activity files",)),
     File("annotations.json", USER, BASE, "achievement names, 上河 times, notes, route names "
-         "(engine/achievements.py)", deidentify=("names / notes (free text)", "activity starts")),
-    File("views/**", USER, BASE, "the user's custom chart views (wko5expr/customviews.py)"),
+         "(engine/achievements.py)", backup=ALWAYS, deidentify=("names / notes (free text)", "activity starts")),
+    File("views/**", USER, BASE, "the user's custom chart views (wko5expr/customviews.py)", backup=ALWAYS),
     # -- shared (tenancy.shared_path) ----------------------------------------
     FIT,
     File("routes/names.json", USER, SHARED, "the user's names for detected routes (engine/routes.py)",
-         deidentify=("names (free text)",)),
+         backup=ALWAYS, deidentify=("names (free text)",)),
     File("routes/**", DERIVED, SHARED, "route index, per-activity tracks, route weather (engine/routes.py, "
          "route_weather.py)", deidentify=("tracks: GPS points", "activity_weather: positions + times"),
          invalidated_by="INDEX_VERSION, the activity files' stamps; weather refetched"),
@@ -310,6 +314,11 @@ def of_class(cls: str) -> tuple[list[Table], list[File]]:
 def backup_entries(include_fit: bool) -> list[File]:
     """What a backup holds: ALWAYS, plus OPT_IN with backup.include_fit."""
     return [f for f in FILES if f.backup == ALWAYS or (include_fit and f.backup == OPT_IN)]
+
+
+def secret_tables() -> list[str]:
+    """The SECRET tables: emptied in a backup's DB copy, kept from this machine on a restore."""
+    return [t.name for t in TABLES if t.cls == SECRET]
 
 
 def unclassified_tables(con: sqlite3.Connection) -> list[str]:

@@ -42,8 +42,12 @@ class SecretKeyMissing(SecretError):
 KEY_DOC = "docs/secrets-and-keys.md"
 # where sealed values can live (paths / DB are patched in tests)
 SEALED_FILES: list[Path] = []
+# every column seal() writes: ciphertext_exists() looks at them before a new key may be generated
+# (SP-355: the two 「記住密碼」 columns were missing — a DB whose only ciphertext was a remembered
+# password let a lost key be regenerated silently, and that password could never be unsealed)
 SEALED_DB_COLUMNS = (("sync_state", "tp_access_token"), ("sync_state", "tp_refresh_token"),
-                     ("sync_state", "tp_web_cookie"), ("sync_state", "coros_access_token"))
+                     ("sync_state", "tp_web_cookie"), ("sync_state", "coros_access_token"),
+                     ("sync_state", "coros_password_sealed"), ("sync_state", "tp_password_sealed"))
 
 
 def _db_path() -> Optional[Path]:
