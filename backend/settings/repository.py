@@ -70,6 +70,13 @@ DEFAULTS: dict[str, Any] = {
     # sync/coros_client.backfill_feel): {done, passes, checked, filled, at}; internal
     "sync.coros.rpe_backfill": None,
     "sync.trainingpeaks.last_ok": None,
+    # 完整檢查 (sync/check.py, SP-362 A3): the last full listing compared with the DB —
+    # {mode, at, status, error, remote, local, missing[], local_only[], failed[], *_n, filled};
+    # and the weekly check of the last 60 days (A4) — {at, status, missing_n, fetched, …}
+    "sync.coros.check": None,
+    "sync.trainingpeaks.check": None,
+    "sync.coros.check_weekly": None,
+    "sync.trainingpeaks.check_weekly": None,
     # daily automatic sync: "HH:MM" local time, None = off
     "sync.schedule.daily_time": None,
     "sync.schedule.last_run": None,          # local ISO date of the last scheduled run
@@ -421,7 +428,9 @@ def validate(key: str, value: Any) -> None:
             raise ValueError("athlete.pmc_start must be {date: YYYY-MM-DD, ctl, atl} (0-300) or null")
     if key == "plan.hr_zone_model" and value not in ("lthr", "hrr", "hrmax"):
         raise ValueError("plan.hr_zone_model must be lthr, hrr or hrmax")
-    if key == "sync.coros.rpe_backfill" and value is not None and not isinstance(value, dict):
+    if key in ("sync.coros.rpe_backfill", "sync.coros.check", "sync.trainingpeaks.check",
+               "sync.coros.check_weekly", "sync.trainingpeaks.check_weekly") \
+            and value is not None and not isinstance(value, dict):
         raise ValueError(f"{key} must be an object or null")
     if key == "plan.auto.state" and value is not None and not isinstance(value, dict):
         raise ValueError("plan.auto.state must be an object or null")

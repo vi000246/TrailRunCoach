@@ -54,7 +54,11 @@ _COORD_PAIR = re.compile(r"-?\d{1,3}\.\d{4,}\s*,\s*-?\d{1,3}\.\d{4,}")
 EXPORT_EXCLUDE = frozenset({"backup.dir", "backup.last_result", "backup.last_ok", "plan.calendar",
                             "charts.wko5_views_dir", "sync.coros.last_result", "sync.trainingpeaks.last_result",
                             "sync.coros.last_ok", "sync.trainingpeaks.last_ok", "sync.coros.rpe_backfill",
-                            "sync.schedule.last_run", "athlete.timezone.auto"})
+                            "sync.schedule.last_run", "athlete.timezone.auto",
+                            # 完整檢查 / weekly check results (sync/check.py, SP-362): run results
+                            # with activity ids, not settings
+                            "sync.coros.check", "sync.trainingpeaks.check",
+                            "sync.coros.check_weekly", "sync.trainingpeaks.check_weekly"})
 _PATHLIKE = re.compile(r"^(?:[A-Za-z]:[\\/]|[\\/]{1,2}[^\s]|~[\\/])")
 REDACTED = "[redacted]"
 EXPORT_NOT_INCLUDED = (N_("密碼"), "COROS / TP token", N_("記住的帳密"), "debug token", N_("備份雲端位置"),

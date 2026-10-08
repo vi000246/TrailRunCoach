@@ -189,6 +189,65 @@ async def failed_retry(row_id: int, athlete_id: int = 1, db: AsyncSession = Depe
     return {"id": row_id, "source": source, "status": "started" if started else "queued"}
 
 
+class CheckBody(BaseModel):
+    source: Optional[str] = None                  # coros | tp; None = every source that can run now
+    ids: Optional[list[str]] = None               # 補下載: only these of the last check's missing ones
+
+
+@router.get("/check")
+async def check_status(athlete_id: int = 1, db: AsyncSession = Depends(get_db)):
+    """完整檢查 (sync/check.py, SP-362 A3 / A4), per source: running + progress, the last full
+    result (missing / local_only / failed groups, 補下載 outcome), the last weekly check."""
+    from backend.sync import check
+    return await check.status(db, athlete_id)
+
+
+@router.post("/check")
+async def check_start(body: Optional[CheckBody] = None, athlete_id: int = 1, db: AsyncSession = Depends(get_db)):
+    """「完整檢查」: a background full listing of every connected source (or `source`),
+    compared with the DB by provider id. Never deletes, never moves the cursor. `started` /
+    `skipped` {source: disabled | not_logged_in | busy}; 409 SYNC_BUSY when the one source
+    asked for is busy."""
+    from backend.sync import check
+    want = (body.source if body else None)
+    if want is not None and want not in runner.SOURCES:
+        raise HTTPException(400, "source must be coros or tp")
+    ready = await runner.ready_sources(db, athlete_id)
+    started, skipped = [], {}
+    for src in ([want] if want else runner.SOURCES):
+        if ready[src] != "ready":
+            skipped[src] = ready[src]
+        elif check.start(src, athlete_id, check.FULL) is None:
+            skipped[src] = "busy"
+        else:
+            started.append(src)
+    if want and skipped.get(want) == "busy":
+        raise HTTPException(409, "SYNC_BUSY")
+    return {"started": started, "skipped": skipped}
+
+
+@router.post("/check/{source}/fill")
+async def check_fill(source: str, body: Optional[CheckBody] = None, athlete_id: int = 1,
+                     db: AsyncSession = Depends(get_db)):
+    """「補下載」: download the last 完整檢查's missing activities of `source` (or `ids` of them)
+    in the background, through the sync's own fetch (a failure goes to the failed list).
+    409 SYNC_BUSY / NOT_READY, 404 when there is nothing to download."""
+    from backend.sync import check
+    if source not in runner.SOURCES:
+        raise HTTPException(400, "source must be coros or tp")
+    last = await SettingsRepository(db, athlete_id).get(check.key(source, check.FULL)) or {}
+    if not last.get("missing"):
+        raise HTTPException(404, "NOTHING_MISSING")
+    ready = (await runner.ready_sources(db, athlete_id))[source]
+    if ready == "busy":
+        raise HTTPException(409, "SYNC_BUSY")
+    if ready != "ready":
+        raise HTTPException(409, f"NOT_READY: {ready}")
+    if check.start(source, athlete_id, check.FILL, ids=(body.ids if body else None)) is None:
+        raise HTTPException(409, "SYNC_BUSY")
+    return {"source": source, "status": "started"}
+
+
 @router.get("/status")
 async def sync_status(athlete_id: int = 1, db: AsyncSession = Depends(get_db)):
     """Legacy, TrainingPeaks only: authenticated = a TP token is stored. Not the
