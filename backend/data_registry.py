@@ -27,10 +27,17 @@ temporary file next to its target). `scope`: TENANT (any tenant), INSTANCE (only
 $WKO5COACH_HOME — the server's own files; the owner's tenant folder is that same folder),
 DEMO (only a demo base / sandbox).
 
-A backup (SP-355) holds the DB without the SECRET tables' rows, every tenant file the user made
-(USER, and the GPX the user uploaded) and, opted in, the FIT originals; see `backup` on each
-entry. A new USER / IMPORTED tenant file kind must say backup=ALWAYS (or OPT_IN) — a test fails
-otherwise — and engine/backup.py then carries it without a change there.
+A backup (SP-355) holds the DB, every tenant file the user made (USER, and the GPX the user
+uploaded) and, opted in, the FIT originals; see `backup` on each entry. A new USER / IMPORTED
+tenant file kind must say backup=ALWAYS (or OPT_IN) — a test fails otherwise — and
+engine/backup.py then carries it without a change there. `restore=False`: kept in a backup for
+manual recovery, never written back by a restore (share links: a revoked one stays revoked).
+
+What stays on this machine (never in a backup, never overwritten by a restore): a `local` table's
+rows (debug tokens, the debug API's call / failure logs with IPs), a table's `local_fields`
+(sync_state's credentials and account identity, matched by primary key) and the user_settings keys
+in LOCAL_SETTINGS. A table's `cursor_fields` (sync cursors) travel with the data, so an older
+backup makes the next sync fetch the gap; a restore never leaves one newer than the backup.
 
 Tests: every table of the schema and every file a built demo tenant holds has an entry
 (backend/tests/test_data_registry.py, test_demo_smoke.py); a new table or file kind without
@@ -63,6 +70,9 @@ class Table:
     secret_fields: tuple = ()     # credentials: never in an API response, an export or a sync
     deidentify: tuple = ()        # columns (SP-319)
     invalidated_by: str = ""      # DERIVED: what makes a row stale
+    local: bool = False           # rows stay on this machine: emptied in a backup, kept on a restore
+    local_fields: tuple = ()      # columns that stay on this machine: NULL in a backup, this machine's on a restore
+    cursor_fields: tuple = ()     # sync cursors: travel with a backup, never newer than it after a restore
 
 
 @dataclass(frozen=True)
@@ -75,6 +85,7 @@ class File:
     backup: str = NEVER
     deidentify: tuple = ()        # fields / content (SP-319)
     invalidated_by: str = ""      # DERIVED: what makes an entry stale
+    restore: bool = True          # backup=ALWAYS but False: kept in the backup, never restored
 
 
 # ---------------------------------------------------------------------------
@@ -125,17 +136,25 @@ TABLES: tuple = (
           "the accounts' ids and the sync cursors",
           secret_fields=("tp_access_token", "tp_refresh_token", "tp_web_cookie", "coros_access_token",
                          "coros_password_sealed", "tp_password_sealed"),
-          deidentify=("coros_email", "coros_user_id", "tp_username", "coros_base_url")),
+          deidentify=("coros_email", "coros_user_id", "tp_username", "coros_base_url"),
+          # the login (credentials, their expiry, the account identity) stays on this machine; the
+          # cursors travel with the activities they describe (SP-355)
+          local_fields=("tp_access_token", "tp_refresh_token", "tp_token_expires", "tp_web_cookie",
+                        "coros_access_token", "coros_token_expires", "coros_password_sealed",
+                        "tp_password_sealed", "coros_email", "coros_user_id", "coros_base_url",
+                        "tp_username"),
+          cursor_fields=("last_sync_at", "last_sync_cursor", "coros_last_sync_at")),
     Table("debug_tokens", SECRET, "debug API tokens (SP-371, debug_auth.py): the SHA-256 of each token "
           "(the token itself is never stored), its scopes, expiry and the source IPs seen; tenant-bound",
-          secret_fields=("token_hash",), deidentify=("name", "last_ip", "ips_json", "created_at", "last_used_at")),
+          secret_fields=("token_hash",), deidentify=("name", "last_ip", "ips_json", "created_at", "last_used_at"),
+          local=True),
     Table("debug_audit", DERIVED, "the debug API's call log (SP-371): time, token name, endpoint, parameters, "
           "source IP, status, size; the newest debug_auth.AUDIT_KEEP rows are kept",
-          deidentify=("at", "query", "ip"),
+          deidentify=("at", "query", "ip"), local=True,
           invalidated_by="never recomputed: a log, pruned to the newest rows; safe to delete"),
     Table("debug_auth_failures", DERIVED, "failed debug API authentications (SP-371), counted per hour, "
           "source IP and code; the newest debug_auth.FAIL_ROWS_KEEP rows are kept",
-          deidentify=("hour", "ip", "last_at"),
+          deidentify=("hour", "ip", "last_at"), local=True,
           invalidated_by="never recomputed: a log, pruned to the newest rows; safe to delete"),
 )
 
@@ -175,8 +194,8 @@ FILES: tuple = (
          backup=ALWAYS, deidentify=("activity files / starts",)),
     File("racepower_hike_meta.json", USER, ROOT, "the pack carried per trip (racepower/athlete.py)",
          backup=ALWAYS, deidentify=("activity files / starts",)),
-    File("racepower_shares/**", USER, ROOT, "race plans the user shared by link (racepower/share.py)",
-         backup=ALWAYS, deidentify=("the event's name / date / course",)),
+    File("racepower_shares/**", USER, ROOT, "race plans the user shared by link (racepower/share.py); "
+         "never restored: a deleted / revoked link stays so", backup=ALWAYS, restore=False, deidentify=("the event's name / date / course",)),
     File("event_gpx/**", IMPORTED, ROOT, "uploaded event course GPX, gzip (engine/event_gpx.py); uploaded "
          "by the user, so backed up (no source to sync it from again)", backup=ALWAYS,
          deidentify=("GPS track",)),
@@ -316,9 +335,14 @@ def backup_entries(include_fit: bool) -> list[File]:
     return [f for f in FILES if f.backup == ALWAYS or (include_fit and f.backup == OPT_IN)]
 
 
-def secret_tables() -> list[str]:
-    """The SECRET tables: emptied in a backup's DB copy, kept from this machine on a restore."""
-    return [t.name for t in TABLES if t.cls == SECRET]
+# user_settings keys (SQL LIKE) that stay on this machine: this machine's backup folder / state,
+# the debug API switch, the 課表訂閱 ICS link token (SP-355); compare debug_view.EXPORT_EXCLUDE
+LOCAL_SETTINGS: tuple = ("backup.%", "debug.%", "plan.calendar")
+
+
+def local_tables() -> list[str]:
+    """Tables whose rows stay on this machine: emptied in a backup, kept on a restore."""
+    return [t.name for t in TABLES if t.local]
 
 
 def unclassified_tables(con: sqlite3.Connection) -> list[str]:

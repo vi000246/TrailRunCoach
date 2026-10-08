@@ -54,6 +54,15 @@ def _roots() -> dict:
     return B.tenant_roots(t.root, tenancy.base_of(t).root, t.shared)
 
 
+def _tenant_id() -> str:
+    """Recorded in a backup's manifest; a restore refuses another tenant's backup (SP-355 L2)."""
+    from backend import tenancy
+    return tenancy.current().id
+
+
+_cleaned_on_start = False
+
+
 def _now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -71,6 +80,7 @@ async def status(repo: SettingsRepository) -> dict:
             "last_result": last, "last_ok": last_ok,
             "auto_due": bool(d) and B.auto_due((last_ok or {}).get("at"), (last or {}).get("at")),
             "backups": backups, "keep": {"daily": B.KEEP_DAILY, "weekly": B.KEEP_WEEKLY},
+            "pre_restores": await asyncio.to_thread(B.list_pre_restores, _local_dir()),
             "cloud": await asyncio.to_thread(B.detect_cloud_folders)}
 
 
@@ -87,7 +97,9 @@ async def run_backup(db: AsyncSession, trigger: str, athlete_id: int = 1) -> dic
         folder = await asyncio.to_thread(B.check_folder, d)
         made = await asyncio.to_thread(
             B.create_backup, _db_path(), folder, fit_root=_fit_root(),
-            include_fit=await repo.get("backup.include_fit"), roots=_roots())
+            include_fit=await repo.get("backup.include_fit"), roots=_roots(), work_dir=_local_dir(),
+            tenant=_tenant_id())
+        await asyncio.to_thread(B.clean_stale, _local_dir())
         pruned = await asyncio.to_thread(B.prune, folder)
         result.update(status="ok", name=made["name"], size=made["size"],
                       fit_files=made["fit_files"], user_files=made["user_files"], pruned=len(pruned))
@@ -106,9 +118,15 @@ async def run_backup(db: AsyncSession, trigger: str, athlete_id: int = 1) -> dic
 async def auto_tick(session_factory: Callable, now: Optional[datetime] = None, athlete_id: int = 1):
     """Daily automatic backup (app start + every scheduler minute): only with a
     folder set, backup.auto on, and > 24 h since the last good backup."""
+    global _cleaned_on_start
     async with session_factory() as db:
         repo = SettingsRepository(db, athlete_id)
-        if not await repo.get("backup.dir") or not await repo.get("backup.auto"):
+        d = await repo.get("backup.dir")
+        if not _cleaned_on_start:                # app start: a killed run's leftovers (SP-355 H1)
+            _cleaned_on_start = True
+            for folder in [_local_dir()] + ([Path(d)] if d else []):
+                await asyncio.to_thread(B.clean_stale, folder)
+        if not d or not await repo.get("backup.auto"):
             return None
         last_ok, last = await repo.get("backup.last_ok"), await repo.get("backup.last_result")
         if not B.auto_due((last_ok or {}).get("at"), (last or {}).get("at"), now):
@@ -206,6 +224,8 @@ async def _source(body: SourceBody, repo: SettingsRepository) -> Path:
         if not UPLOAD_RE.match(body.upload_id):
             raise HTTPException(400, "upload_id 不正確")
         p = _local_dir() / "staging" / f"{body.upload_id}.bin"
+    elif body.name and B.PRE_RE.match(body.name):
+        p = _local_dir() / body.name             # a copy a restore saved first (SP-355 M2)
     elif body.name:
         d = await repo.get("backup.dir")
         if d and body.name.endswith(".zip.enc"):
@@ -251,12 +271,15 @@ async def post_restore(body: SourceBody, athlete_id: int = 1):
     from backend.db.database import AsyncSessionLocal
     async with AsyncSessionLocal() as db:
         p = await _source(body, SettingsRepository(db, athlete_id))
+    state: dict = {}
     try:
         r = await asyncio.to_thread(B.restore, p, _db_path(), local_dir=_local_dir(),
-                                    fit_root=_fit_root(), roots=_roots())
+                                    fit_root=_fit_root(), roots=_roots(), tenant=_tenant_id(), state=state)
     except B.BackupError as e:
         raise _err(e)
-    await after_restore()
+    finally:
+        if state.get("swapped"):                # the live DB changed: always reload (SP-355 M2)
+            await after_restore()
     if body.upload_id:
         try:
             p.unlink()

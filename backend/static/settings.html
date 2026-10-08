@@ -409,7 +409,7 @@ main > section.tab-off { display: none; }
     <div class="row">
       <button class="primary" id="b-run">立即備份</button>
       <button id="b-restore">還原…</button>
-      <button type="button" class="q" aria-label="說明" title="選一個備份檔，先檢查內容和資料庫完整性；還原前會自動把目前的資料庫和檔案另存一份到 ~/.wko5coach/backups，然後換成備份裡的資料；備份裡沒有的檔案不會動。完成後請重新啟動 App。這台電腦的備份設定（資料夾、自動備份）和 COROS／TrainingPeaks 的登入不會被覆蓋——登入不在備份裡，新電腦還原後要登入一次。舊版的加密備份（.zip.enc）不能還原。">?</button>
+      <button type="button" class="q" aria-label="說明" title="選一個備份檔，先檢查內容和資料庫完整性；還原前會自動把目前的資料庫和檔案另存一份到 ~/.wko5coach/backups（也列在清單裡，可以還原回去），然後換成備份裡的資料；備份裡沒有的檔案不會動，分享連結不會還原。完成後請重新啟動 App。這台電腦的備份設定（資料夾、自動備份）和 COROS／TrainingPeaks 的登入不會被覆蓋——登入不在備份裡，新電腦還原後要登入一次。舊版的加密備份（.zip.enc）不能還原。">?</button>
       <span class="meta" id="b-msg" role="status"></span>
     </div>
     <details style="margin-top:6px"><summary class="meta">進階設定</summary>
@@ -1564,9 +1564,10 @@ let RSRC = null, RINFO = null;
 function restoreReady() { $("r-ok").disabled = !(RINFO && $("r-confirm").value.trim() === "還原"); }
 function resetRestoreInfo() { RSRC = null; RINFO = null; $("r-info").textContent = ""; restoreReady(); }
 $("b-restore").onclick = () => {
-  const list = (BS && BS.backups) || [];
-  $("r-list").innerHTML = `<option value="">（選一個）</option>` + list.map((b) =>
-    `<option value="${esc(b.name)}">${esc(b.created_local.replace("T", " "))}・${bytes(b.size)}</option>`).join("");
+  const list = (BS && BS.backups) || [], pre = (BS && BS.pre_restores) || [];
+  const opt = (b) => `<option value="${esc(b.name)}">${esc(b.created_local.replace("T", " "))}・${bytes(b.size)}</option>`;
+  $("r-list").innerHTML = `<option value="">（選一個）</option>` + list.map(opt).join("")
+    + (pre.length ? `<optgroup label="還原前自動另存的">${pre.map(opt).join("")}</optgroup>` : "");
   $("r-file").value = ""; $("r-confirm").value = "";
   resetRestoreInfo(); $("restore-dlg").showModal();
 };
@@ -1608,6 +1609,7 @@ $("r-ok").onclick = async (e) => {
     $("b-msg").className = "meta ok-text";
     $("b-msg").textContent = `已還原（${fmtTime(r.created_at)} 的備份）`
       + (r.files_restored ? `，放回 ${r.files_restored} 個你改過的檔案` : "")
+      + (r.files_not_restored ? `；分享連結 ${r.files_not_restored} 個沒有還原（留在備份檔裡）` : "")
       + (r.fit_restored ? `，補回 ${r.fit_restored} 個 FIT 檔` : "")
       + `。還原前的資料已另存在 ${r.pre_restore || "–"}。請重新啟動 App；COROS／TrainingPeaks 的登入維持這台電腦原本的（沒登入過的話要登入一次）。`;
     toast("已還原，請重新啟動 App"); loadBackup();

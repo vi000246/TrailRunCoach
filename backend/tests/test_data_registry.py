@@ -104,8 +104,50 @@ def test_legacy_tables_of_an_older_db_are_known_but_not_in_the_schema(tmp_path):
 def test_columns_named_by_the_registry_exist():
     for t in R.TABLES:
         cols = set(Base.metadata.tables[t.name].columns.keys())
-        for f in t.user_fields + t.secret_fields + t.deidentify:
+        for f in t.user_fields + t.secret_fields + t.deidentify + t.local_fields + t.cursor_fields:
             assert f in cols, f"{t.name}.{f}"
+
+
+IP_COL = re.compile(r"(?:^|_)ips?(?:_|$)")
+
+
+def test_what_stays_on_this_machine_is_marked_local():
+    """SP-355 M3 / M4: a backup never carries a credential, an account identity, an IP log or a
+    token-like setting, and a restore never overwrites them. A SECRET table is either `local`
+    (whole rows) or lists its credentials in `local_fields`; a table with an IP column is `local`;
+    a credential-named setting key is in LOCAL_SETTINGS."""
+    for t in R.TABLES:
+        cols = set(Base.metadata.tables[t.name].columns.keys())
+        if t.cls == R.SECRET:
+            assert t.local or set(t.secret_fields) <= set(t.local_fields), t.name
+        if any(IP_COL.search(c) for c in cols):
+            assert t.local, f"{t.name} logs IPs: mark it local"
+        assert not (t.local and t.local_fields), t.name
+        assert not set(t.local_fields) & set(t.cursor_fields), t.name
+    ss = R.table("sync_state")
+    assert {"coros_email", "tp_username", "coros_user_id"} <= set(ss.local_fields)
+    assert set(ss.cursor_fields) == {"last_sync_at", "last_sync_cursor", "coros_last_sync_at"}
+    assert {t.name for t in R.TABLES if t.local} == {"debug_tokens", "debug_audit", "debug_auth_failures"}
+    from backend.engine.debug_view import secret_key
+    from backend.settings.repository import DEFAULTS
+
+    def local_key(k):
+        return any(re.fullmatch(p.replace(".", r"\.").replace("%", ".*"), k) for p in R.LOCAL_SETTINGS)
+    for k in ("plan.calendar", "debug.api.enabled", "backup.dir", "backup.last_ok"):
+        assert local_key(k), k
+    assert not local_key("athlete.timezone") and not local_key("plan.prefs.long_day")
+    for k in DEFAULTS:
+        if secret_key(k):
+            assert local_key(k), f"{k} looks like a credential: add it to LOCAL_SETTINGS"
+
+
+def test_shares_are_backed_up_but_never_restored():
+    """SP-355 M3: a restore never recreates a share link (a deleted / revoked one stays so)."""
+    shares = R.classify("racepower_shares/abcdefghijklmnop.json")
+    assert shares.backup == R.ALWAYS and shares.restore is False
+    for f in R.FILES:
+        if not f.restore:
+            assert f.backup == R.ALWAYS, f.pattern
 
 
 def test_workout_files_marks_its_user_fields_and_sync_state_is_secret():
@@ -277,9 +319,9 @@ def test_backup_reads_the_registry(tmp_path):
                                      "fit/coros/2026/123_2026-10-01_trailrun.fit.gz",
                                      "fit/tp/2025/tp_2025_01_02_99.fit.gz"} | user
         assert json.loads(z.read("manifest.json"))["fit"] == {"included": True, "files": 2, "bytes": 20}
-    # every table rides in the DB snapshot; the SECRET ones are there but empty (SP-355)
+    # every table rides in the DB snapshot; the local ones are there but empty (SP-355)
     assert set(plain["row_counts"]) == {t.name for t in R.TABLES}
-    assert all(plain["row_counts"][t.name] == 0 for t in R.of_class(R.SECRET)[0])
+    assert all(plain["row_counts"][t.name] == 0 for t in R.TABLES if t.local)
 
 
 def test_backup_refuses_a_registry_entry_it_cannot_write(tmp_path, monkeypatch):
