@@ -4,16 +4,18 @@ floating suggestion box (engine/suggestions.altitude_rows) shows what the
 athlete's own recent altitude says, 14 days before the start. Information only:
 the plan is not changed.
 
-安排適應週末 (SP-258, owner 2026-10-06; docs/research/altitude-training.md §2.2, §2.3, §4.2 單 1):
-the row starts 28 days out (EARLY_DAYS) so CDC's 2 nights still fit a weekend. 15–28 days
-before: one row 「安排適應週末」 that lists the weekends inside the 14 days before the start
-(the ones inside the event's 減量期 marked 「走輕鬆路線」) and names a place above 2,750 m
-(合歡山松雪樓 3,150 m); 1–14 days before: the checks below, as before. When the trip's first
-night is above 3,000 m (owner: 玉山、嘉明湖 kind of trips) the 15–28 day row says 「行前一晚住約
-2,500 m」 (玉山國家公園) and names 塔塔加 / 大禹嶺; the 1–14 day row only adds it to its 說明
-(its title, text and id stay as before). 塔塔加 2,610 m and 大禹嶺 2,565 m are under CDC's 2,750 m,
-so they are named for that night only, never for the weekend. Beidleman 2018 (High Alt Med Biol
-19:329, abstract): 2 days at 3,000 m before 4,300 m, AMS 83 % → 43 %.
+安排適應週末 (SP-258, owner 2026-10-06 / 2026-10-07; docs/research/altitude-training.md §2.2,
+§2.3, §4.2 單 1): the row starts 28 days out (EARLY_DAYS) so CDC's 2 nights still fit a weekend.
+15–28 days before: one row 「安排適應週末」 that lists the weekends inside the 14 days before the
+start (the weekend whose Sunday is the departure day counts; the ones inside the event's 減量期
+marked 「走輕鬆路線」) — and no place (owner 2026-10-07: 松雪樓 dropped, no other names, just the
+reminder). It can be closed (✕) for that trip for good (suggestions.altitude_rows gives it the id
+`altitude_plan:<event>:<start>`, kept by suggestions.prune until the trip starts). When the trip's
+first night is above 3,000 m (owner: 玉山、嘉明湖 kind of trips) 「行前一晚住約 2,500 m」
+(玉山國家公園) is only in its 說明 (?), never in the row's text. 1–14 days before: the checks
+below, as before (its 說明 also names 塔塔加 2,610 m / 大禹嶺 2,565 m for that night, owner
+2026-10-06). Beidleman 2018 (High Alt Med Biol 19:329, abstract): 2 days at 3,000 m before
+4,300 m, AMS 83 % → 43 %.
 
 The event's altitude comes from its stored GPX (engine/event_gpx.py): the
 highest point (the course's smoothed profile, z_max) and — for a multi-day trip
@@ -79,12 +81,10 @@ KEY = "altitude_max_v1"             # Dataset.cached_series: {"max_m", "secs"} p
 EARLY_DAYS = 28
 EVE_M = 2500.0                      # 玉山國家公園 [H13]: 「應先於海拔2,500公尺左右地區適應高度（約1晚）」
 EVE_FIRST_NIGHT_M = 3000.0          # owner 2026-10-06: the 行前一晚 line only for a first night > 3,000 m
-# places, elevations checked 2026-10-07 (docs/research/altitude-training.md §2.3, [H16], [H18]–[H20]):
-#   合歡山松雪樓 3,150 m — 林業及自然保育署 台灣山林悠遊網: the recreation area is 2,900–3,421 m; the lodge's
-#     own 3,150 m from tourism sites (清境合歡山旅遊網, CJA 清境旅遊網) — above 2,750 m either way
+# places of the 1–14 day row's 行前一晚 note, elevations checked 2026-10-07 (docs/research/
+# altitude-training.md §2.3, [H18]–[H20]); the 15–28 day row names none (owner 2026-10-07):
 #   塔塔加 2,610 m — 玉山國家公園管理處 (ysnp.gov.tw, 塔塔加遊客中心): 「海拔2,610公尺的塔塔加」
 #   大禹嶺 2,565 m — 太魯閣國家公園管理處 (taroko.gov.tw, 大禹嶺): 「海拔2,565公尺」
-SONGXUE_M = 3150
 TATAKA_M = 2610
 DAYULING_M = 2565
 
@@ -319,11 +319,12 @@ def event_night(events, day: dt.date, alt_of) -> Optional[dict]:
 def weekends(start: dt.date, today: dt.date, taper_days: int = 0) -> list[dict]:
     """安排適應週末 (SP-258): the weekends whose two nights (Friday and Saturday) both fall inside
     the 14 days before `start` (CDC's window) and not before today — [{"sat", "sun", "taper"}];
-    `taper`: the weekend reaches into the event's last `taper_days` days (its 減量期)."""
+    the weekend whose Sunday is the departure day counts (its two nights are before the trip,
+    owner 2026-10-07). `taper`: the weekend reaches into the event's last `taper_days` days."""
     since = start - dt.timedelta(days=REMIND_DAYS)
     fri = since + dt.timedelta(days=(4 - since.weekday()) % 7)        # the first Friday ≥ since
     out = []
-    while fri + dt.timedelta(days=2) < start:
+    while fri + dt.timedelta(days=2) <= start:
         if fri >= today:
             sat, sun = fri + dt.timedelta(days=1), fri + dt.timedelta(days=2)
             out.append({"sat": sat.isoformat(), "sun": sun.isoformat(),
@@ -350,40 +351,32 @@ def first_night_high(alt: Optional[dict]) -> Optional[float]:
     return float(nights[0]) if nights and nights[0] > EVE_FIRST_NIGHT_M else None
 
 
-def _eve_line(n1: float) -> str:
-    return _("第一晚睡在約 {m:,.0f} m：行前一晚先住約 2,500 m（例如塔塔加 {a:,} m、大禹嶺 {b:,} m）",
-             m=n1, a=TATAKA_M, b=DAYULING_M)
-
-
 def _plan_row(ev: dict, alt: dict, start: dt.date, today: dt.date) -> dict:
-    """15–28 days before (SP-258): 安排適應週末, the weekends of the 14-day window listed."""
+    """15–28 days before (SP-258): 安排適應週末, the weekends of the 14-day window listed. No place
+    named (owner 2026-10-07); 行前一晚 only in the 說明."""
     m = alt["max_m"]
     ws = weekends(start, today, ev.get("taper_days") or 0)
     flags = ["plan"]
     title = _("「{name}」最高約 {m:,.0f} m：安排適應週末", name=ev.get("name") or "", m=m)
-    site = _("合歡山松雪樓 {m:,} m", m=SONGXUE_M)
     if ws:
-        what = _("出發前 14 天內找一個週末，在 2,750 m 以上睡 2 晚（例如{site}）。可選：{days}",
-                 site=site, days="、".join(_weekend_label(w) for w in ws))
+        what = _("出發前 14 天內找一個週末，在 2,750 m 以上睡 2 晚。可選：{days}",
+                 days="、".join(_weekend_label(w) for w in ws))
     else:
-        what = _("出發前 14 天內在 2,750 m 以上連睡 2 晚（例如{site}）", site=site)
-    lines = [what]
-    n1 = first_night_high(alt)
-    if n1 is not None:
-        lines.append(_eve_line(n1))
-        flags.append("eve")
-    reason = "。".join(lines) + "。"
+        what = _("出發前 14 天內在 2,750 m 以上連睡 2 晚")
+    reason = what + "。"
     help_ = [_("CDC 建議出發前 14 天內在 2,750 m 以上睡至少 2 晚，越接近出發越好。Beidleman 2018："
                "先在 3,000 m 住 2 天再上 4,300 m，高山症從 83% 降到 43%。"),
              what + "。"]
     if any(w["taper"] for w in ws):
         help_.append(_("標「減量期」的週末一樣可以去，白天走輕鬆的路線、不要走長距離（推估）。"))
+    n1 = first_night_high(alt)
     if n1 is not None:
-        help_.append(_eve_line(n1) + "。")
-        help_.append(_("玉山國家公園建議上 3,000 m 以上的高山前，先在 2,500 m 左右住約 1 晚。塔塔加、大禹嶺低於 "
-                       "2,750 m，只適合行前一晚，不算進適應週末的 2 晚。"))
+        flags.append("eve")
+        help_.append(_("第一晚睡在約 {m:,.0f} m：行前一晚先住約 2,500 m（玉山國家公園建議上 3,000 m 以上的高山前，"
+                       "先在 2,500 m 左右住約 1 晚；這一晚低於 2,750 m，不算進適應週末的 2 晚）。", m=n1))
     help_ += [_("最高點與每晚的高度來自賽事的 GPX。研究多在 4,000 m 以上，套到 3,000–3,950 m 是推估。"
                 "出發前 14 天內會改成檢查你最近的高度紀錄。只是提醒，不會改課表。"),
+              _("按 ✕ 關掉後，這趟行程不再顯示這個提醒；出發前 14 天內的高度檢查照常出現。"),
               _("來源：{src}", src=_src_plan())]
     return {"event_id": ev.get("id"), "start": start.isoformat(), "days_to": (start - today).days,
             "max_m": round(m), "nights": alt.get("nights") or None, "flags": flags, "title": title,
