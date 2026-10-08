@@ -210,6 +210,15 @@ td code { background: var(--code); padding: 1px 4px; border-radius: 4px; word-br
 .badge.plt { background: none; border-color: var(--line); color: var(--muted); cursor: pointer; margin-left: 6px; vertical-align: 1px; font: inherit; font-size: 10.5px; font-weight: 400; }
 .badge.plt.on { border-color: var(--accent); color: var(--accent); }
 .badge.fix { border-color: var(--accent); color: var(--accent); font-weight: 400; margin-left: 6px; cursor: help; vertical-align: 1px; }
+/* SP-336: an out-of-date chart shown while the new one is computed; the page's progress line */
+.badge.upd { border-color: var(--accent); color: var(--accent); font-weight: 400; margin-left: 6px; cursor: help; vertical-align: 1px; animation: upd-pulse 1.6s ease-in-out infinite; }
+@keyframes upd-pulse { 50% { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { .badge.upd { animation: none; } }
+.card.is-stale .plot { opacity: .8; }
+.loadprog { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--muted); margin: 0 0 4px; }
+.loadprog[hidden] { display: none; }
+.loadprog .bar { flex: 0 0 120px; height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
+.loadprog .bar i { display: block; height: 100%; background: var(--accent); transition: width .3s; }
 table.zt td, table.zt th { padding: 4px 6px; white-space: nowrap; }
 table.zt th.num { text-align: right; }
 .vt { overflow-x: auto; }
@@ -564,7 +573,7 @@ async function j(url, retry = 1) {
   return r.json();
 }
 function save() { try { localStorage.setItem("wko5viewer", JSON.stringify({ mode: S.mode, dash: S.dash, view: S.view,
-  begin: $("begin").value, end: $("end").value, sports: selectedSports(), workout: S.workout, workoutLabel: S.workoutLabel, workoutPlan: S.workoutPlan || null })); } catch {} }
+  range: S.range, begin: $("begin").value, end: $("end").value, sports: selectedSports(), workout: S.workout, workoutLabel: S.workoutLabel, workoutPlan: S.workoutPlan || null })); } catch {} }
 function restore() { try { return JSON.parse(localStorage.getItem("wko5viewer") || "{}"); } catch { return {}; } }
 
 function viewKind(v) {
@@ -654,9 +663,12 @@ async function init() {
   if (broken.length) console.warn("view files with errors:", broken.map((v) => `${v.path}: ${v.error}`));
   await init0();
   const r = restore();
-  const today = new Date();
-  $("end").value = r.end || iso(today);
-  $("begin").value = r.begin || iso(new Date(today - 365 * 864e5));
+  // SP-336: the range is a preset counted back from today (90 天 by default: the recent data, the quickest
+  // to draw) or the dates typed in ("custom"), remembered in this browser. A choice saved before SP-336
+  // has dates only: back to the default
+  S.range = RANGE_PRESETS.includes(r.range) || (r.range === "custom" && r.begin && r.end) ? r.range : DEFAULT_RANGE;
+  if (S.range === "custom") { $("end").value = r.end; $("begin").value = r.begin; }
+  else setRangeDates(S.range);
   // a selection saved before SP-263 holds WKO5 sport groups ("run"): none of them is a kind -> all ticked
   const savedSports = r.sports && r.sports.some((x) => sports.some((s) => s.sport === x)) ? r.sports : null;
   $("sports").innerHTML = sports.map((s) => `<label><input type="checkbox" value="${esc(s.sport)}" ${!savedSports || savedSports.includes(s.sport) ? "checked" : ""}>${esc(kindLabel(s.sport))} <span class="meta">${s.count}</span></label>`).join("");
@@ -681,7 +693,7 @@ async function init() {
   }
   $("m-season").onclick = () => setMode("season");
   $("m-workout").onclick = () => setMode("workout");
-  $("begin").onchange = $("end").onchange = onFilter;
+  $("begin").onchange = $("end").onchange = () => { S.range = "custom"; onFilter(); };
   $("sports").onchange = onFilter;
   initChrome();
   filterSummary();
@@ -692,13 +704,20 @@ async function init() {
 
 function onFilter() { filterSummary(); loadActs(); if (S.mode === "season") load(); }
 
-function preset(d) {
-  const end = new Date($("end").value || iso(new Date()));
+// the range presets (SP-336): counted back from today; 1年 and 全部 are the user's own choice
+const DEFAULT_RANGE = "90", RANGE_PRESETS = ["7", "42", "90", "365", "ytd", "all"];
+function setRangeDates(d) {
+  const end = new Date();
   let begin;
   if (d === "ytd") begin = new Date(end.getFullYear(), 0, 1);
-  else if (d === "all") begin = new Date((S.athlete.first || "2000-01-01").slice(0, 10));
+  else if (d === "all") begin = new Date((S.athlete?.first || "2000-01-01").slice(0, 10));
   else begin = new Date(end - (+d - 1) * 864e5);
+  $("end").value = iso(end);
   $("begin").value = iso(begin);
+}
+function preset(d) {
+  S.range = d;
+  setRangeDates(d);
   onFilter();
 }
 
@@ -1005,6 +1024,7 @@ async function load() {
   save();
   if (ZOOM.card) closeZoom(false);
   const token = ++loadToken;
+  STALE.wait.clear();                     // the previous page's cards are gone
   charts.splice(0).forEach((c) => c.dispose());
   // null the handle too: the map's ResizeObserver fires once more as the card leaves the page
   // and must not invalidateSize() a removed map (Leaflet throws: _leaflet_pos of undefined)
@@ -1066,19 +1086,78 @@ async function load() {
     focusCard.scrollIntoView({ block: "start" });
     setTimeout(() => focusCard.classList.remove("flash"), 2500);
   }
+  const prog = loadProgress(grid, queue.length, token);
   const worker = async () => {
     while (queue.length) {
       const { c, card } = queue.shift();
       if (token !== loadToken) return;
-      if (c.kind === "z5gate" || (c.kind === "periodzones" && c.view === "weekly")) card.classList.add("wide");
-      if (!["athlete", "workout", "zones", "targets", "map", "z5gate", "periodzones", "climbvam", "polecompare"].includes(c.kind)) { card.querySelector(".loading").textContent = "這種 WKO5 面板尚未支援"; continue; }
-      if (c.kind === "map" && S.mode !== "workout") { card.querySelector(".loading").textContent = "地圖要選一筆活動才看得到"; continue; }
-      await renderCard(card, v, di, c, q, token);
+      try {
+        if (c.kind === "z5gate" || (c.kind === "periodzones" && c.view === "weekly")) card.classList.add("wide");
+        if (!["athlete", "workout", "zones", "targets", "map", "z5gate", "periodzones", "climbvam", "polecompare"].includes(c.kind)) { card.querySelector(".loading").textContent = "這種 WKO5 面板尚未支援"; continue; }
+        if (c.kind === "map" && S.mode !== "workout") { card.querySelector(".loading").textContent = "地圖要選一筆活動才看得到"; continue; }
+        await renderCard(card, v, di, c, q, token);
+      } finally { prog.tick(); }
     }
   };
   await Promise.all([worker(), worker(), worker(), worker()]);
+  prog.end();
   // cards above the search hit grew while loading; put it back in view
   if (focusCard && token === loadToken) focusCard.scrollIntoView({ block: "start" });
+}
+
+// ---- SP-336: page progress and out-of-date charts ----
+// A page whose charts take a while (a long range the first time: data older than a year is computed when
+// first viewed, up to ~10 s) says how far it got, after a short moment (a quick page shows nothing)
+function loadProgress(grid, total, token) {
+  const el = document.createElement("div");
+  el.className = "loadprog";
+  el.setAttribute("role", "status");
+  el.hidden = true;
+  grid.prepend(el);
+  let done = 0;
+  const old = S.mode === "season" && (Date.now() - new Date($("begin").value)) / 864e5 > 366;
+  const draw = () => {
+    const pct = Math.round(100 * done / Math.max(total, 1));
+    el.innerHTML = `<span>${esc(t("viewer.progress", { done, total }))}${old ? ` · ${esc(t("viewer.progress_old"))}` : ""}</span>`
+      + `<span class="bar"><i style="width:${pct}%"></i></span>`;
+  };
+  draw();
+  const show = setTimeout(() => { if (token === loadToken && done < total) el.hidden = false; }, 800);
+  return {
+    tick() { done++; draw(); },
+    end() { clearTimeout(show); el.remove(); },
+  };
+}
+// A chart whose cached drawing is out of date (new data, a new day, an update of the app) answers that
+// drawing at once with `stale`; the card says 更新中 and is drawn again when GET /render/ready lists the new
+// one. Not in the demo (the server never answers stale there; the static demo has only saved answers)
+const STALE_OK = !window.TRC_STATIC_CFG && (window.TRC_SESSION || {}).mode !== "demo";
+const STALE = { wait: new Map(), timer: null, tries: 0 };
+function markStale(card, st, again) {
+  const b = document.createElement("span");
+  b.className = "badge upd";
+  b.textContent = t("viewer.updating");
+  b.title = t("viewer.updating_tip");
+  card.querySelector("h2").appendChild(b);
+  card.classList.add("is-stale");
+  STALE.wait.set(st.key, again);
+  if (!STALE.timer) { STALE.tries = 0; STALE.timer = setTimeout(pollStale, 1000); }
+}
+async function pollStale() {
+  STALE.timer = null;
+  const keys = [...STALE.wait.keys()];
+  if (!keys.length) return;
+  let r = null;
+  try { r = await (await fetch(`${API}/render/ready?keys=${keys.slice(0, 100).join(",")}`, { cache: "no-store" })).json(); } catch (_) {}
+  const giveUp = ++STALE.tries > 120;     // ~5 minutes: ask again anyway (the request then computes it itself)
+  for (const k of keys) {
+    if (giveUp || (r && (r.ready.includes(k) || r.failed.includes(k)))) {
+      const again = STALE.wait.get(k);
+      STALE.wait.delete(k);
+      again();
+    }
+  }
+  if (STALE.wait.size && !STALE.timer) STALE.timer = setTimeout(pollStale, Math.min(1000 + STALE.tries * 200, 4000));
 }
 
 // ---- one chart card: fetch (with the remembered period) and draw; re-run by the period toggle
@@ -1185,12 +1264,14 @@ async function renderCard(card, v, di, c, q, token) {
       + (basis && (c.kind === "athlete" || c.kind === "workout") ? `&basis=${encodeURIComponent(basis)}` : "")
       + (c.kind === "periodzones" ? pzQuery(c) : "") + variantQuery(pkey)
       + (c.kind === "zones" && zsPrefs()[pkey] ? `&zsys=${encodeURIComponent(zsPrefs()[pkey])}` : "")
-      + (c.kind === "climbvam" && window.cvQuery ? cvQuery(c) : ""));   // climb_vam.js
+      + (c.kind === "climbvam" && window.cvQuery ? cvQuery(c) : "")    // climb_vam.js
+      + (STALE_OK ? "&stale=1" : ""));
     if (token !== loadToken) return;
     card._res = res;
     card._ctx = { v, di, c, q };
     disposeCardCharts(card);
     card.innerHTML = `<h2>${esc(res.title || c.title || (c.kind === "map" ? "地圖" : c.kind))}</h2>`;
+    card.classList.remove("is-stale");
     const zb = document.createElement("button");
     zb.className = "zbtn";
     zb.title = zb.ariaLabel = "放大這張圖";
@@ -1259,6 +1340,10 @@ async function renderCard(card, v, di, c, q, token) {
     }
     variantToggle(card, res, pkey, () => renderCard(card, v, di, c, q, loadToken));
     drawInto(card, res);
+    if (res.stale) markStale(card, res.stale, async () => {
+      await renderCard(card, v, di, c, q, token);
+      if (ZOOM.card === card) fillZoom();
+    });
     if (S.zoomAfter === c.index && token === loadToken) { S.zoomAfter = null; openZoom(card, zb); }
   } catch (e) {
     console.error(c.title, e);
