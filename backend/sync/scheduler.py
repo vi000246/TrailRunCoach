@@ -44,18 +44,58 @@ async def tick(session_factory: Callable, now: Optional[datetime] = None, athlet
         today = local.date().isoformat()
         if await repo.get("sync.schedule.last_run") == today or local.time() < _parse(at):
             return []
-        await repo.set("sync.schedule.last_run", today)
-        await db.commit()
         # only the 資料來源 in use (runner.auto_plan)
         todo, skipped = await runner.auto_plan(db, athlete_id)
-    started = []
-    for src in todo:
-        if start(src, athlete_id, "schedule", session_factory) is not None:
+        # the day is done only when its source started: busy (a check / 補下載 / sync at
+        # daily_time) -> the next minute tries again (SP-362 review #4)
+        if "busy" in skipped.values():
+            log.info("scheduled sync %s: source busy, retried next minute", today)
+            return []
+        await repo.set("sync.schedule.last_run", today)
+        await db.commit()
+        started = []
+        for src in todo:
+            t = start(src, athlete_id, "schedule", session_factory)
+            if t is None:
+                skipped[src] = "busy"
+                continue
             started.append(src)
-        else:
-            skipped[src] = "busy"
+            if isinstance(t, asyncio.Task):      # ended SYNC_BUSY after all: retried next minute
+                t.add_done_callback(lambda done: _busy_retry(done, session_factory, athlete_id, today))
+        if "busy" in skipped.values():
+            await repo.set("sync.schedule.last_run", None)
+            await db.commit()
+            log.info("scheduled sync %s: source busy, retried next minute", today)
+            return started
     log.warning("scheduled sync %s: started=%s skipped=%s", today, started, skipped)
     return started
+
+
+_PENDING: set = set()
+
+
+def _busy_retry(task: asyncio.Task, session_factory: Callable, athlete_id: int, today: str) -> None:
+    if task.cancelled() or task.exception() is not None:
+        return
+    last = task.result()
+    if isinstance(last, dict) and last.get("error") == "SYNC_BUSY":
+        t = asyncio.get_running_loop().create_task(_unmark(session_factory, athlete_id, today))
+        _PENDING.add(t)
+        t.add_done_callback(_PENDING.discard)
+
+
+async def _unmark(session_factory: Callable, athlete_id: int, today: str) -> None:
+    """The scheduled run got SYNC_BUSY (e.g. the self-rating job did not give way in time):
+    forget the day's mark so the next minute starts it again."""
+    try:
+        async with session_factory() as db:
+            repo = SettingsRepository(db, athlete_id)
+            if await repo.get("sync.schedule.last_run") == today:
+                await repo.set("sync.schedule.last_run", None)
+                await db.commit()
+                log.info("scheduled sync %s got SYNC_BUSY: retried next minute", today)
+    except Exception as e:                       # noqa: BLE001
+        log.warning("scheduled sync mark not reset: %s", type(e).__name__)
 
 
 async def loop(session_factory: Optional[Callable] = None, interval: float = INTERVAL_S) -> None:
