@@ -374,20 +374,29 @@ async def _list_and_compare(db, remote, source: str, athlete_id: int, mode: str,
 
 
 async def _fetch_all(remote, source: str, todo: list[dict], out: dict) -> AsyncIterator[dict]:
-    """Fetch `todo` through the sync's _fetch_one; out gets fetched / fetch_errors / handled."""
+    """Fetch `todo` through the sync's _fetch_one; out gets fetched / fetch_errors / handled —
+    also when the run aborts half-way (SP-362 review #6)."""
     run = remote.run_state()
     handled = []
     _prog(source, phase="fetch", total=len(todo), done=0)
-    for i, it in enumerate(todo):
-        if await remote.known(it["id"]):          # imported meanwhile (a sync)
+    try:
+        for i, it in enumerate(todo):
+            if await remote.known(it["id"]):          # imported meanwhile (a sync)
+                handled.append(it["id"])
+                continue
+            # a stored list can be stale: a row that is no_file or whose retries stopped since
+            # is the failed list's (「重試」 there), never flipped back by this fetch
+            row = await FL.get(remote.db, remote.aid, source, it["id"])
+            if row is not None and not FL.auto_retry(row):
+                handled.append(it["id"])
+                continue
+            async for ev in remote.fetch(it, run):
+                yield ev
             handled.append(it["id"])
-            continue
-        async for ev in remote.fetch(it, run):
-            yield ev
-        handled.append(it["id"])
-        _prog(source, done=i + 1)
-    out.update(fetched=run["downloaded"], fetch_errors=len(run["errors"]),
-               tried=len(todo), _errors=list(run["errors"]), _handled=handled)
+            _prog(source, done=i + 1)
+    finally:
+        out.update(fetched=run["downloaded"], fetch_errors=len(run["errors"]),
+                   tried=len(todo), _errors=list(run["errors"]), _handled=handled)
 
 
 async def _fill(db, remote, source: str, athlete_id: int, ids: Optional[list], out: dict) -> AsyncIterator[dict]:
@@ -425,10 +434,12 @@ async def _store_fill(db: AsyncSession, athlete_id: int, source: str, out: dict)
 
 def start(source: str, athlete_id: int = 1, mode: str = FULL, ids: Optional[list] = None,
           session_factory: Optional[Callable] = None) -> Optional[asyncio.Task]:
-    """A background run; None when the source is busy (a sync, a deletion, a check)."""
+    """A background run; None when the source is busy (a sync, a deletion, a check). The
+    source is claimed at once (runner.reserve), so a second start in the same tick — or a
+    sync started before the task runs — is busy (SP-362 review #7)."""
     if source not in REMOTES or mode not in TRIGGER:
         raise ValueError(f"unknown source / mode {source!r} / {mode!r}")
-    if runner.is_busy(source):
+    if not runner.reserve(source):
         return None
     if session_factory is None:
         from backend.db.database import AsyncSessionLocal as session_factory
@@ -437,6 +448,7 @@ def start(source: str, athlete_id: int = 1, mode: str = FULL, ids: Optional[list
     t = asyncio.get_running_loop().create_task(_run(source, athlete_id, mode, ids, session_factory, mine))
     _TASKS.add(t)
     t.add_done_callback(_TASKS.discard)
+    t.add_done_callback(lambda _t: runner.release(source))    # also when cancelled before it ran
     return t
 
 
@@ -450,6 +462,7 @@ async def _run(source: str, athlete_id: int, mode: str, ids, session_factory, mi
     except Exception as e:                       # noqa: BLE001 — a background run never raises
         log.warning("%s %s check run failed: %s", source, mode, type(e).__name__)
     finally:
+        runner.release(source)
         if _PROGRESS.get(source) is mine:        # e.g. SYNC_BUSY: the stream never ran
             _PROGRESS.pop(source, None)
     return last

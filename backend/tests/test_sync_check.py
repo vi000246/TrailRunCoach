@@ -233,6 +233,72 @@ async def _drain(gen):
     return [e async for e in gen]
 
 
+def test_two_starts_in_the_same_tick_the_second_is_busy(tmp_path, hooks):
+    """Review SP-362 #7: start claims the source before the task runs."""
+    from backend.api import sync as API
+
+    async def go():
+        s = await make_session(tmp_path)
+        fake = PagedCoros(_seed_remote()[:3])
+        await _coros_ready(s, fake)
+        with http.use_transport(httpx.MockTransport(fake)):
+            t1 = check.start("coros", 1, check.FULL, session_factory=_factory(s))
+            assert t1 is not None and runner.is_busy("coros")
+            assert check.start("coros", 1, check.FULL, session_factory=_factory(s)) is None
+            assert runner.start_background("coros", 1, session_factory=_factory(s)) is None
+            with pytest.raises(HTTPException) as ei:
+                await API.check_start(API.CheckBody(source="coros"), 1, s)
+            assert ei.value.status_code == 409
+            await t1
+        assert (await SettingsRepository(s, 1).get("sync.coros.check"))["status"] == "ok"
+        assert not runner.is_busy("coros") and check.progress("coros") is None
+    run(go())
+
+
+def test_a_stale_fill_skips_rows_now_no_file_or_stopped(tmp_path, hooks):
+    """Review SP-362 #6: 補下載 of a stored list re-reads the failed list first."""
+    async def go():
+        s = await make_session(tmp_path)
+        acts = _seed_remote()[:3]
+        fake = PagedCoros(acts)
+        await _coros_ready(s, fake)
+        await _go(s, fake)                                                   # missing A00 A01 A02
+        await FL.record_no_file(s, 1, "coros", "A00", 100, TODAY)
+        for _ in range(FL.MAX_ATTEMPTS):
+            await FL.record_failure(s, 1, "coros", "A01", "x", 100, TODAY)
+        fake.files = {a["labelId"]: build_run(_dt(TODAY)) for a in acts}
+        await _go(s, fake, mode=check.FILL)
+        assert fake.downloads == ["A02"]
+        rows = {r.provider_id: r.kind for r in (await s.execute(select(SyncFailure))).scalars()}
+        assert rows == {"A00": "no_file", "A01": "failed"}                   # not flipped back
+        res = await SettingsRepository(s, 1).get("sync.coros.check")
+        assert res["missing"] == [] and res["filled"]["downloaded"] == 1
+    run(go())
+
+
+def test_a_fill_that_aborts_keeps_what_it_did(tmp_path, hooks, monkeypatch):
+    async def go():
+        s = await make_session(tmp_path)
+        acts = _seed_remote()[:3]
+        fake = PagedCoros(acts)
+        await _coros_ready(s, fake)
+        await _go(s, fake)
+        fake.files = {a["labelId"]: build_run(_dt(TODAY)) for a in acts}
+        real = check._Coros.fetch
+
+        async def fetch(self, it, run_):
+            if it["id"] == "A01":
+                raise RuntimeError("boom")
+            async for ev in real(self, it, run_):
+                yield ev
+        monkeypatch.setattr(check._Coros, "fetch", fetch)
+        await _go(s, fake, mode=check.FILL)
+        res = await SettingsRepository(s, 1).get("sync.coros.check")
+        assert [m["id"] for m in res["missing"]] == ["A01", "A00"]            # A02 done, then the abort
+        assert res["filled"]["status"] == "aborted" and res["filled"]["downloaded"] == 1
+    run(go())
+
+
 # ---------------------------------------------------------------------------- TP
 
 def test_tp_full_check_lists_90_day_windows_and_skips_planned_workouts(tmp_path, hooks):
