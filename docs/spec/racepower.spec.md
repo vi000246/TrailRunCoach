@@ -1046,11 +1046,11 @@ start time, aid stations. Since 2026-10-02 (賽事計算機, renamed from 賽事
   (below), 「📅 匯出至課表」 (SP-43, preview, then confirm; see Watch export), 「🔗 分享」 (dialog with expiry, 包含體重, the list of shares and 刪除分享). The CP / Riegel
   charts are drawn when their section opens; the Riegel block has a ? help and no longer hangs when
   there is no usable fit. The climbing charts (坡度 RE 曲線 + 跑走切換速度, 爬坡步頻分布; GET /grade-model,
-  /cadence-check) load when their section opens on a trail race; on a road race they show one line
-  (「路跑用不到…」) and are never requested, and switching the type updates them; a dropped connection
-  (the fit can take minutes on a cold server) shows a short message with 重試 instead of the browser's
-  「Failed to fetch」 (SP-366, `chartRoad` / `chartErr`, `backend/static/racepower.html:2221`). The static
-  export opens both on a trail preset so the demo has their answers (`backend/demo/export_static.py`). Explanations sit behind ? icons; references stay out of the page. A GPX
+  /cadence-check) load when their section opens, on every race type (the road plan uses the grade
+  curve too; owner 2026-10-08). A connection that drops (「Failed to fetch」) or a gateway answer
+  (502–504, 520–524) shows a short message with 重試 instead of the raw error, and a chart sends one
+  request at a time (SP-366, `chartErr` / `NET_STATUS`, `backend/static/racepower.html:2218`). The
+  static export opens both so the demo has their answers (`backend/demo/export_static.py`). Explanations sit behind ? icons; references stay out of the page. A GPX
   course also gets the course map (SP-41; see **Course map** under Share links).
 - The 熱 row toggles the per-segment heat (推估 badge; on by default). The hourly rows go with the plan
   only when the race-day temperature / humidity are the fetched values, not ones the user typed.
@@ -1129,11 +1129,11 @@ card, stations) under `secrets.token_urlsafe(16)` in the tenant's private `racep
 height / age / sex, REE, model inputs, sources, warnings and anything injury / pain related never go
 in. Optional expiry 7 / 30 / 90 days. `share.html` renders the snapshot without recomputing.
 
-**Course map** (`backend/static/racepower.html:1835`): a GPX course whose profile has coordinates
+**Course map** (`backend/static/racepower.html:1830`): a GPX course whose profile has coordinates
 gets a Leaflet map above the profile chart (`#course-map-wrap`,
 `backend/static/racepower.html:441`); a manual course has none. The route is coloured by the
 segment kind of the targets (平路／可跑, 可跑的爬坡, 陡坡, 下坡; `KIND_COLOR`,
-`backend/static/racepower.html:1803`), the hovered / selected segments are highlighted, the aid
+`backend/static/racepower.html:1798`), the hovered / selected segments are highlighted, the aid
 stations of the editor and the GPX waypoints are marked. Hovering the map moves the profile
 chart's tooltip to the nearest point, and the chart's axis pointer moves a marker on the map.
 Basemaps, overlays, the settings-page default, the tile-error hint and the route drawing come from
@@ -1289,9 +1289,9 @@ stretch. `backend/tests/test_racepower_page_adv.py` (SP-214): the core inputs in
 options in the collapsed 進階計算選項 panel. `backend/tests/test_altitude_nights.py` (SP-259): nights
 marked on the 課表 calendar count for the altitude reminder like nights the activities show.
 `backend/tests/test_racepower_charts_sp366.py` (SP-366): a flat road runner gets both chart answers;
-concurrent /grade-model fits and /cadence-check scans run once; the page's road guard comes before
-the request, switching the type updates the charts, and a dropped connection reads as a message
-with 重試 (both languages).
+concurrent /grade-model fits and /cadence-check scans run once; every race type loads the charts; under
+node, a dropped connection and 502 / 524 read as the message with 重試 (a 400 keeps its text), one
+request while one is in flight, and 重試 asks again.
 `backend/tests/test_racepower_help_sp369.py` (SP-369): training power × M (W and %CP), the effort km
 formula moving the time in 目標功率 / the power in 目標時間 / the model prediction without an HR
 model, the HR model's own divisor; both ? helps next to their control, in both catalogs.
@@ -1441,5 +1441,5 @@ when set, but nothing fills it from the routes module yet.
 | 2026-10-07 | feature | SP-293, docs/research/cold-start.md §2.1, §4.4, §5 T6 | No CP yet: `POST /estimate` + `race_estimate.py` — the shared race results (`athlete.race_results`, the questionnaire's and SP-276's one list) give a 推估 finish: road Riegel k −0.07, trail §0.5.5 effort km × flat easy pace (E pace middle) × 0.85; with a CP `model: true` (the existing model); the page falls back to it only after /plan's 400 on road / trail; low self-reported week + ≥ marathon → the optimistic line; test `test_race_estimate.py` |
 | 2026-10-08 | code-sync（SP-43, SP-114, SP-118, SP-214, SP-240, SP-241, SP-247, SP-250, SP-255, SP-259, SP-285, SP-287, SP-320） | N/A | Architecture table: capacity.py, runwalk.py, cold.py, night.py, zonebar.py, tss_calib.py; API: GET /altitude-acclimatisation, cache keys on tenant + dataset generation; 路況 dry / wet technicality split; back-test long-race and x*(T) / δ double-count blocks; Page: 進階計算選項, what the effort km formula changes, 地圖選點, the zone bar, 匯出至課表; Fuelling: pre-race load wording, 睡眠點 and their default minutes; Testing: tests added since 10-04; new Decisions Log (8) and Open Questions (13) from the Obsidian tickets |
 | 2026-10-08 | removal | SP-365 | CSV export removed (user: not needed): the 「匯出 CSV」 button and its handler, `POST /export/csv`, `calc.export_csv`, `csvplan.py`, the static demo's CSV path (`static_racepower.compute`, the shim's `RACEPOWER_POSTS` / CSV response, the parity sample), the demo write rules in `tenancy_mw.py`, the stale i18n baseline entry; the CSV-only tests went, the plan-side assertions moved to /plan (`test_racepower_export.py`, `test_racepower_fuel.py`, `test_racepower_seg_targets.py`), plus `test_csv_export_is_gone`. 「匯出至課表」 (`POST /export/plan`) and 分享 stay |
-| 2026-10-08 | bugfix | SP-366 | 坡度 RE 曲線 / 爬坡步頻分布 showed 「Failed to fetch」 on a marathon: GET /grade-model and /cadence-check fit the athlete's whole year (77.6 s on a cold start of the synthetic demo athlete) and nothing joined concurrent callers (/plan, the other chart, a second tab each ran the same fit), so the request could be dropped before it answered and the page printed the browser's raw error. Now: one computation per key for both (`backend/singleflight.py`); a road race shows a one-line note and never requests them (they are about climbing); a dropped connection shows a short message with 重試; the static export opens both on a trail preset. i18n `charts.road` / `charts.neterr` / `charts.retry`; test `test_racepower_charts_sp366.py` |
+| 2026-10-08 | bugfix | SP-366 | 坡度 RE 曲線 / 爬坡步頻分布 showed 「Failed to fetch」 on a marathon. That message is a connection that ended with no HTTP answer (a gateway timeout would show 502 / 504 / 524). Cause not confirmed: no log of the failing request; locally both answered 200 (slow only while the dataset was still being built after a start, under 3 s warm). Candidates: a server restart mid-request (restart / redeploy / container restart, an out-of-memory kill), the machine sleeping, a dropped network. Mitigations: one computation per key for GET /grade-model and /cadence-check (`backend/singleflight.py`), so concurrent callers (/plan, the other chart, a second tab) share one fit; the page shows a short message with 重試 for a dropped connection or a gateway answer and sends one request per chart at a time; every race type shows the charts (owner 2026-10-08, after a first version hid them on road); the static export opens both. i18n `charts.neterr` / `charts.retry`; test `test_racepower_charts_sp366.py` |
 | 2026-10-08 | feature | SP-369 (+ SP-367 answer A) | Two ? helps on the calculator, zh-TW + en: 「以訓練條件功率輸入（會再乘上環境係數 M）」 (the target power × the race's distance-weighted M before the time is computed; worked example) and 「effort km 公式」 (trail 模型預測 keeps the HR model's fitted divisor — only the comparison, RE detail and shown power move; 目標功率: the finish time moves; 目標時間: the power needed moves; no HR model: the model prediction uses it). The checkbox label is now i18n (`racepower.ptrain.label`). The help says 目標時間 moves the power, not the time (the code; the ticket's draft said both modes move the time). Test `test_racepower_help_sp369.py`; SP-367 / SP-369 open questions closed |
