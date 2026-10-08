@@ -20,7 +20,8 @@ from backend.tests.wko5_fakes import FakeDataset, FakeWorkout
 TODAY = dt.date(2026, 9, 30)
 VIEW = {"source": "custom", "name": "v", "dashboards": [{"title": "d", "charts": [
     {"kind": "athlete", "id": "load", "title": "TSS", "series": [{"name": "tss", "expression": "tss"}]},
-    {"kind": "athlete", "id": "dist", "title": "km", "series": [{"name": "km", "expression": "distance"}]}]}]}
+    {"kind": "athlete", "id": "dist", "title": "km", "series": [{"name": "km", "expression": "distance"}]},
+    {"kind": "workout", "id": "one", "title": "one", "series": [{"name": "tss", "expression": "tss"}]}]}]}
 
 
 def _ds(n_days, today=TODAY, extra=()):
@@ -192,6 +193,73 @@ def test_viewer_defaults_to_90_days_remembers_the_preset_and_swaps_stale_cards()
         cat = json.loads((root / "i18n" / loc / "viewer.json").read_text(encoding="utf-8"))
         assert all(cat.get(k) for k in ("updating", "updating_tip", "progress", "progress_old")), loc
         assert "{done}" in cat["progress"] and "{total}" in cat["progress"]
+
+
+def test_a_workout_chart_keeps_its_key_across_a_new_activity_and_a_new_day(api):
+    """Review #2: the viewer asks a single-activity chart with only ?workout=; its key no longer
+    carries the defaulted [today − 365, today] range."""
+    client, holder, gate, st = api
+    url = "/api/v1/wko5/views/v/dashboards/0/charts/2?workout=150"
+    first = client.get(url)
+    assert first.status_code == 200, first.text
+    n = st["calls"]
+    holder["ds"] = _ds(200, extra=[TODAY])                         # a newer activity: index 150 unchanged
+    assert client.get(url).json() == first.json() and st["calls"] == n
+    holder["ds"] = _ds(200, today=TODAY + dt.timedelta(days=1))   # a new day
+    assert client.get(url).json() == first.json() and st["calls"] == n
+
+
+def test_zh_and_en_never_share_a_slot(api, monkeypatch):
+    from backend import i18n
+    client, holder, gate, st = api
+    zh = _get(client)
+    monkeypatch.setattr(i18n, "current_locale", lambda: "en")
+    holder["ds"] = _ds(200, extra=[TODAY - dt.timedelta(days=3)])
+    en = _get(client)                                  # never the zh-TW drawing marked stale
+    assert "stale" not in en and len(_points(en)) == len(_points(zh)) + 1
+
+
+def test_render_ready_is_per_tenant_and_reads_no_files(monkeypatch, tmp_path):
+    """/render/ready answers from memory (no file stats on the event loop), for the asking tenant's
+    cache folder only: a key another tenant's background render holds is not pending for this one."""
+    from pathlib import Path
+    from backend.engine.wko5expr import render_cache as RC
+    where = {"p": tmp_path / "a"}
+    monkeypatch.setattr(RC, "cache_dir", lambda: where["p"])
+    c = RenderCache()
+    k = "ab" * 20
+    c._refreshing[(str(where["p"]), k)] = 1.0
+    c._failed[(str(where["p"]), "cd" * 20)] = 1.0
+
+    def no_stat(self, *a, **kw):
+        raise AssertionError("ready() touched the disk")
+    monkeypatch.setattr(Path, "exists", no_stat)
+    monkeypatch.setattr(Path, "stat", no_stat)
+    assert c.ready([k, "cd" * 20, "ef" * 20]) == {"ready": ["ef" * 20], "failed": ["cd" * 20], "pending": [k]}
+    where["p"] = tmp_path / "b"                                   # another tenant
+    assert c.ready([k, "cd" * 20]) == {"ready": [k, "cd" * 20], "failed": [], "pending": []}
+
+
+def test_the_refresh_pool_shuts_down_and_comes_back():
+    from backend.engine.wko5expr import render_cache as RC
+    pool = RC.refresh_pool()
+    RC.shutdown_refresh()
+    assert pool._shutdown
+    again = RC.refresh_pool()
+    assert again is not pool and again.submit(lambda: 7).result(5) == 7
+
+
+def test_the_app_shuts_the_refresh_pool_down():
+    import inspect
+    from backend import main
+    assert "shutdown_refresh" in inspect.getsource(main.lifespan)
+
+
+def test_viewer_gives_up_waiting_without_stale():
+    from pathlib import Path
+    html = (Path(__file__).resolve().parents[1] / "static" / "wko5_viewer.html").read_text(encoding="utf-8")
+    assert "renderCard(card, v, di, c, q, token, { stale: false })" in html     # give up: computed in the request
+    assert "STALE.tries = 0; STALE.timer" not in html                            # not reset by every new card
 
 
 def test_stale_is_not_part_of_the_cache_key(api):

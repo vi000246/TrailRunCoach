@@ -1132,7 +1132,8 @@ function loadProgress(grid, total, token) {
 // drawing at once with `stale`; the card says 更新中 and is drawn again when GET /render/ready lists the new
 // one. Not in the demo (the server never answers stale there; the static demo has only saved answers)
 const STALE_OK = !window.TRC_STATIC_CFG && (window.TRC_SESSION || {}).mode !== "demo";
-const STALE = { wait: new Map(), timer: null, tries: 0 };
+const STALE = { wait: new Map(), timer: null, polls: 0 };
+const STALE_GIVE_UP_MS = 5 * 60 * 1000;   // a card waits at most this long, then asks without stale
 function markStale(card, st, again) {
   const b = document.createElement("span");
   b.className = "badge upd";
@@ -1140,24 +1141,29 @@ function markStale(card, st, again) {
   b.title = t("viewer.updating_tip");
   card.querySelector("h2").appendChild(b);
   card.classList.add("is-stale");
-  STALE.wait.set(st.key, again);
-  if (!STALE.timer) { STALE.tries = 0; STALE.timer = setTimeout(pollStale, 1000); }
+  // each card keeps the time it started waiting (a new card never restarts another's wait)
+  const since = STALE.wait.get(st.key)?.since ?? Date.now();
+  STALE.wait.set(st.key, { again, since });
+  if (!STALE.timer) STALE.timer = setTimeout(pollStale, 1000);
 }
 async function pollStale() {
   STALE.timer = null;
   const keys = [...STALE.wait.keys()];
-  if (!keys.length) return;
+  if (!keys.length) { STALE.polls = 0; return; }
   let r = null;
   try { r = await (await fetch(`${API}/render/ready?keys=${keys.slice(0, 100).join(",")}`, { cache: "no-store" })).json(); } catch (_) {}
-  const giveUp = ++STALE.tries > 120;     // ~5 minutes: ask again anyway (the request then computes it itself)
+  STALE.polls++;
   for (const k of keys) {
+    const w = STALE.wait.get(k);
+    if (!w) continue;
+    const giveUp = Date.now() - w.since > STALE_GIVE_UP_MS;
     if (giveUp || (r && (r.ready.includes(k) || r.failed.includes(k)))) {
-      const again = STALE.wait.get(k);
       STALE.wait.delete(k);
-      again();
+      w.again(giveUp);
     }
   }
-  if (STALE.wait.size && !STALE.timer) STALE.timer = setTimeout(pollStale, Math.min(1000 + STALE.tries * 200, 4000));
+  if (!STALE.wait.size) STALE.polls = 0;
+  else if (!STALE.timer) STALE.timer = setTimeout(pollStale, Math.min(1000 + STALE.polls * 200, 4000));
 }
 
 // ---- one chart card: fetch (with the remembered period) and draw; re-run by the period toggle
@@ -1252,7 +1258,7 @@ function disposeCardCharts(card) {
     inst.dispose();
   }
 }
-async function renderCard(card, v, di, c, q, token) {
+async function renderCard(card, v, di, c, q, token, opts = {}) {
   const pkey = `${v.name}|${di}|${c.index}`;
   const period = periodPrefs()[pkey];
   const win = windowPrefs()[pkey];
@@ -1265,7 +1271,7 @@ async function renderCard(card, v, di, c, q, token) {
       + (c.kind === "periodzones" ? pzQuery(c) : "") + variantQuery(pkey)
       + (c.kind === "zones" && zsPrefs()[pkey] ? `&zsys=${encodeURIComponent(zsPrefs()[pkey])}` : "")
       + (c.kind === "climbvam" && window.cvQuery ? cvQuery(c) : "")    // climb_vam.js
-      + (STALE_OK ? "&stale=1" : ""));
+      + (STALE_OK && opts.stale !== false ? "&stale=1" : ""));
     if (token !== loadToken) return;
     card._res = res;
     card._ctx = { v, di, c, q };
@@ -1340,8 +1346,9 @@ async function renderCard(card, v, di, c, q, token) {
     }
     variantToggle(card, res, pkey, () => renderCard(card, v, di, c, q, loadToken));
     drawInto(card, res);
-    if (res.stale) markStale(card, res.stale, async () => {
-      await renderCard(card, v, di, c, q, token);
+    if (res.stale) markStale(card, res.stale, async (giveUp) => {
+      // gave up waiting: ask without stale, so this request computes it itself
+      await (giveUp ? renderCard(card, v, di, c, q, token, { stale: false }) : renderCard(card, v, di, c, q, token));
       if (ZOOM.card === card) fillZoom();
     });
     if (S.zoomAfter === c.index && token === loadToken) { S.zoomAfter = null; openZoom(card, zb); }

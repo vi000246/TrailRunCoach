@@ -56,7 +56,10 @@ import hashlib
 import importlib
 import json
 import math
+import os
+import sys
 import threading
+import time
 from dataclasses import dataclass
 from typing import Any, Iterable, Optional
 
@@ -69,6 +72,26 @@ LEVEL_DAYS = SETTING_EST_DAYS  # levelfrom / bin("ilevels"): a 90-day power fit 
 PD_LOOKBACK_FNS = {"ftp", "frc", "pmax", "vo2max", "tte"}     # (curve, lookback): Evaluator._daily_pd
 LEVEL_FNS = {"levelfrom", "levelto", "levelname", "levelcount", "bin", "targetpower", "targetduration",
              "targetname"}
+HISTORY_FNS = {"lookup", "li"}                                  # lookup(<setting>, q): the setting on any date
+# Evaluator functions the analysis handles itself (their reach is not just the chart's range) …
+HANDLED_FNS = frozenset({"tl", "shift", "athleterange", "drift", "drift_avg"} | PD_LOOKBACK_FNS | LEVEL_FNS
+                        | HISTORY_FNS)
+# … and the ones that read only what their arguments read in the current range. A new fn_* must be
+# put in one of the two (test_chart_scope_sp336 audits it); one in neither = the whole history.
+RANGE_LOCAL_FNS = frozenset({
+    "abs", "avg", "ceil", "clamp", "count", "cumsum", "date", "day", "dayofweek", "delta", "dfrc", "dmax",
+    "english", "ewma", "filter", "first", "floor", "frac", "frccurve", "ftpcurve", "gaussian", "greatest",
+    "has", "hastag", "if", "isef", "isvalid", "last", "least", "length", "ln", "log", "log10", "max",
+    "meanmax", "metric", "min", "month", "monthval", "noinvalid", "nozero", "pdcurve", "pdprofile",
+    "pstddev", "pvariance", "rev", "round", "s", "sign", "slr", "slrb", "slrm", "slrrsq", "sort", "sortd",
+    "sortx", "sortxd", "sport", "sqrt", "stamina", "startofmonth", "startofquarter", "startofweek",
+    "startofyear", "stddev", "string", "sum", "tau1", "tau2", "trunc", "unique", "variance", "week",
+    "weekval", "workoutrange", "xx", "year", "yearval", "yx"})
+# render.py evaluates expression strings of its own when a chart draws a PD / mean-max curve
+# (mftp_plateau: "ftp(curve)", _pd_fails / pd_notice: "pdcurve(meanmax(runpower))")
+PD_TRIGGER_CALLS = {"meanmax", "pdcurve", "ftpcurve", "ftp", "frc", "pmax", "tte", "vo2max", "stamina",
+                    "pdprofile"}
+PD_RENDER_CALLS = {"ftp", "pdcurve", "meanmax"}
 EST_SETTING_SUFFIXES = ("tpace", "ftp")                         # Evaluator._setting's estimate fallbacks
 EXPR_KINDS = ("athlete", "workout")
 # chart kinds drawn by a panel of their own (not the expression engine): whole history + today
@@ -81,11 +104,15 @@ _ROUND = {"trunc", "floor", "round", "ceil", "int"}
 class Scope:
     """The days [lo, hi] (day numbers, inclusive) whose activities a chart reads; None = no
     bound on that side (lo None = the whole history). `today`: today's date is an input.
-    `weather`: it reads the per-activity weather (drift())."""
+    `weather`: it reads the per-activity weather (drift()). `marks`: the user's activity marks
+    (a panel: the review card's 測試 / hike type / interval flags). `history`: dated settings on
+    any date (lookup / li of a setting; a panel)."""
     lo: Optional[int]
     hi: Optional[int]
     today: bool = False
     weather: bool = False
+    marks: bool = False
+    history: bool = False
 
     @property
     def full(self) -> bool:
@@ -93,10 +120,10 @@ class Scope:
 
     @classmethod
     def whole(cls) -> "Scope":
-        return cls(None, None, True, True)
+        return cls(None, None, True, True, True, True)
 
     def as_json(self) -> list:
-        return [self.lo, self.hi, self.today, self.weather]
+        return [self.lo, self.hi, self.today, self.weather, self.marks, self.history]
 
 
 class _Unbounded(Exception):
@@ -118,7 +145,10 @@ class _Reach:
         self.lo, self.hi = b, e
         self.today = False
         self.weather = False
+        self.history = False
         self._builtin: dict = {}
+        self._depth = 0
+        self._seen: set = set()
 
     def use(self, lo: float, hi: float) -> None:
         self.lo = min(self.lo, int(math.floor(lo)))
@@ -196,13 +226,30 @@ class _Reach:
     # ---- what a node reads --------------------------------------------------
     def visit(self, n, lo, hi, vars_) -> None:
         self.use(lo, hi)
-        if n is None or isinstance(n, (P.Num, P.Str, P.Empty, P.Var)):
+        if n is None or isinstance(n, (P.Num, P.Str, P.Empty)):
+            return
+        if isinstance(n, P.Var):
+            # what the variable was assigned reads again where it is used (shift(@c, 7) of
+            # @c := tl(...) needs 7 more days of warm-up); bounded for a self-reference
+            # — only when used in a wider range than it was assigned in (else it adds nothing)
+            bound = vars_.get(("@node", n.name))
+            if bound is not None:
+                node, alo, ahi = bound
+                seen = (id(node), int(math.floor(lo)), int(math.floor(hi)))
+                if (lo < alo or hi > ahi) and seen not in self._seen and self._depth < 20:
+                    self._seen.add(seen)
+                    self._depth += 1
+                    try:
+                        self.visit(node, lo, hi, vars_)
+                    finally:
+                        self._depth -= 1
             return
         if isinstance(n, P.Ident):
             return self._ident(n.name, lo, hi)
         if isinstance(n, P.Assign):
             self.visit(n.value, lo, hi, vars_)
             vars_[n.name] = self.ival(n.value, lo, hi, vars_)
+            vars_[("@node", n.name)] = (n.value, lo, hi)
             return
         if isinstance(n, P.Call):
             return self._call(n, lo, hi, vars_)
@@ -222,10 +269,11 @@ class _Reach:
             # tsb = yesterday's ctl − atl (Evaluator.ev_Ident): one more day
             c = {"ctl": self.ctlc, "atl": self.atlc}.get(name, max(self.ctlc, self.atlc))
             self.use(lo - WARMUP_TAU * c - (1 if name == "tsb" else 0), hi)
-        elif name in EV.BUILTIN_EXPRS:
+        elif name in EV.BUILTIN_EXPRS or name in EV.CHANNEL_EXPRS:
             node = self._builtin.get(name)
             if node is None:
-                node = self._builtin[name] = P.parse(EV.BUILTIN_EXPRS[name])
+                src = EV.BUILTIN_EXPRS[name] if name in EV.BUILTIN_EXPRS else EV.CHANNEL_EXPRS[name][1]
+                node = self._builtin[name] = P.parse(src)
             self.visit(node, lo, hi, {})
         elif name.endswith(EST_SETTING_SUFFIXES) and name not in EV.WORKOUT_METRICS:
             self.use(lo - SETTING_EST_DAYS, hi)
@@ -260,12 +308,35 @@ class _Reach:
             self.weather = True
         elif name in LEVEL_FNS:
             self.use(lo - LEVEL_DAYS, hi)
+        elif name in HISTORY_FNS:
+            self.history = True
+        elif name not in RANGE_LOCAL_FNS and name not in HANDLED_FNS:
+            raise _Unbounded(name)                       # a function nobody classified
         for x in args:
             self.visit(x, lo, hi, vars_)
 
 
 def _exprs(ch: dict) -> list[str]:
     return [s.get("expression") or "" for s in ch.get("series") or []]
+
+
+_RANGE_IDENTS = {"begindate", "enddate", "today", "now"}
+
+
+def reads_range(ch: dict) -> bool:
+    """A workout chart whose expressions (any variant's too) read the chart range or today
+    (begindate / enddate / today / athleterange): its date range is an input, not only its
+    activity (review SP-336 #2)."""
+    exprs = _exprs(ch) + [s.get("expression") or "" for v in ch.get("variants") or [] for s in v.get("series") or []]
+    for x in exprs:
+        try:
+            node = P.parse(x)
+        except P.ParseError:
+            return True
+        for n in P.walk(node):
+            if (isinstance(n, P.Ident) and n.name in _RANGE_IDENTS) or (isinstance(n, P.Call) and n.name == "athleterange"):
+                return True
+    return False
 
 
 def scope_of(ch: dict, ds, b: float, e: float, workout=None) -> Scope:
@@ -275,7 +346,7 @@ def scope_of(ch: dict, ds, b: float, e: float, workout=None) -> Scope:
     kind = ch.get("kind")
     if kind == "map" and workout is not None:
         d = int(math.floor(workout.day))
-        return Scope(d, d, False, False)
+        return Scope(d, d)
     if kind not in EXPR_KINDS:
         return Scope.whole()
     if workout is not None:
@@ -289,7 +360,7 @@ def scope_of(ch: dict, ds, b: float, e: float, workout=None) -> Scope:
     except (_Unbounded, P.ParseError, RecursionError):
         return Scope.whole()
     today = r.today or r.hi >= T or bool(ch.get("race_refs"))
-    return Scope(r.lo, r.hi, today, r.weather or bool(ch.get("drift_bars")))
+    return Scope(r.lo, r.hi, today, r.weather or bool(ch.get("drift_bars")), False, r.history)
 
 
 # ---------------------------------------------------------------------------
@@ -322,8 +393,44 @@ def _global_parts(ds) -> list:
         pmc0 = manual_start()
     except Exception:                          # noqa: BLE001 — no settings store: none
         pmc0 = None
+    # settings read from a WKO5 athlete file (the WKO5 source, or a FIT source with
+    # charts.fit_settings_from_wko5, whose athlete file is not in ds.dir): fixed per file, no estimates
+    wko5_settings = _settings_history(ds) if getattr(ds, "settings_from", None) == "wko5" else None
     return [athlete, _stamp(plan_path()), _stamp(corrections_path()), cfg, getattr(ds, "source", None),
-            getattr(ds, "accept_watch_power", None), getattr(ds, "exclude_bad", None), pmc0]
+            getattr(ds, "accept_watch_power", None), getattr(ds, "exclude_bad", None), pmc0,
+            _calibration_stamp(), wko5_settings]
+
+
+def _calibration_stamp() -> Optional[dict]:
+    """Every 每人校正 value in effect (engine/calibrate.py): drift() / drift_avg / the drift bars /
+    the review card read them (workout_review.apply_calibration: drift windows; interval tolerance /
+    fade). They change rarely (a calibration run, a manual value), so every chart keys on them
+    (review SP-336 #1)."""
+    try:
+        from backend.engine import calibrate as CAL
+        return {n: CAL.entry(n).get("value") for n in sorted(CAL._registry())}
+    except Exception:                          # noqa: BLE001 — no settings store: the defaults
+        return None
+
+
+def _settings_history(ds) -> str:
+    """Every dated setting the Dataset holds (its WKO5 / DB settings and the as-of estimates it
+    wrote into athlete.settings) and the Stryd CP fits."""
+    st = getattr(getattr(ds, "athlete", None), "settings", None) or {}
+    body = [sorted((k, [[str(d), v] for d, v in (vals or [])]) for k, vals in st.items()),
+            getattr(ds, "_cp_est", None)]
+    return hashlib.sha1(json.dumps(body, sort_keys=True, default=str).encode()).hexdigest()
+
+
+def _marks_stamp() -> str:
+    """The user's activity marks and recorded RPE / feel (activity_tags): what the review card and
+    the activity panels read besides the files (測試, hike type, interval flags, poles …)."""
+    try:
+        from backend.engine import activity_tags as AT
+        body = [AT.load(), AT.load_recorded()]
+    except Exception:                          # noqa: BLE001 — no tag store: none
+        body = None
+    return hashlib.sha1(json.dumps(body, sort_keys=True, default=str).encode()).hexdigest()
 
 
 def _file_stamp(ds, w) -> Any:
@@ -431,7 +538,8 @@ def fingerprint(ds, scope: Scope) -> str:
             except Exception:                  # noqa: BLE001 — a Dataset without that setting
                 ends.append(None)
     parts = [glob, scope.as_json(), win, ends, _sessions(ds, lo, hi),
-             ds.today if scope.today else None, _weather_stamp() if (scope.weather or scope.full) else None]
+             ds.today if scope.today else None, _weather_stamp() if (scope.weather or scope.full) else None,
+             _marks_stamp() if scope.marks else None, _settings_history(ds) if scope.history else None]
     return hashlib.sha1(json.dumps(parts, sort_keys=True, default=str).encode()).hexdigest()
 
 
@@ -493,10 +601,60 @@ def _calls(ch: dict) -> set[str]:
         for n in P.walk(node):
             if isinstance(n, P.Call):
                 out.add(n.name)
-            elif isinstance(n, P.Ident) and n.name in EV.BUILTIN_EXPRS and n.name not in seen:
-                seen.add(n.name)
-                todo.append(P.parse(EV.BUILTIN_EXPRS[n.name]))
+            elif isinstance(n, P.Ident) and n.name not in seen and (
+                    n.name in EV.BUILTIN_EXPRS or n.name in EV.CHANNEL_EXPRS):
+                seen.add(n.name)            # the builtins and channel expressions are expressions too
+                todo.append(P.parse(EV.BUILTIN_EXPRS[n.name] if n.name in EV.BUILTIN_EXPRS
+                                    else EV.CHANNEL_EXPRS[n.name][1]))
+    if out & PD_TRIGGER_CALLS:
+        out |= PD_RENDER_CALLS            # render.py's own ftp(...) / pdcurve(meanmax(...)) strings
     return out
+
+
+def _post(ch: dict) -> tuple:
+    """The post-processing the endpoint applies to this chart (POST_ROOTS); a period chart is
+    found like the endpoint finds it (periods.chart_period), not only by its key."""
+    from backend.engine.wko5expr import periods as PD
+    out = []
+    for k in POST_ROOTS:
+        on = ch.get(k)
+        if k == "period":
+            try:
+                on = PD.chart_period(ch) is not None
+            except Exception:              # noqa: BLE001 — a chart periods cannot read: as declared
+                on = bool(ch.get(k))
+        if on:
+            out.append(k)
+    return tuple(out)
+
+
+# Deploy safety: codehash hashes the running bytecode, but module-level constants from the
+# source on disk (inspect.getsource). A file changed after this process started (a `git pull`
+# without a restart) may not be the code that runs: a signature computed then carries this
+# process's nonce, so its keys are never shared with another process (old or new code).
+_PROCESS_START = time.time()
+_NONCE = os.urandom(8).hex()
+_DISK: dict = {}
+DISK_CHECK_S = 60.0
+
+
+def _changed_on_disk() -> bool:
+    hit = _DISK.get("v")
+    if hit is not None and time.monotonic() - hit[0] < DISK_CHECK_S:
+        return hit[1]
+    changed = False
+    for name, m in list(sys.modules.items()):
+        if not (name == "backend" or name.startswith("backend.")):
+            continue
+        f = getattr(m, "__file__", None)
+        try:
+            if f and os.stat(f).st_mtime > _PROCESS_START:
+                changed = True
+                break
+        except OSError:
+            continue
+    _DISK["v"] = (time.monotonic(), changed)
+    return changed
 
 
 def _own_code(fn) -> str:
@@ -518,10 +676,12 @@ def code_signature(ch: dict, ds, glue: Iterable = ()) -> str:
     from backend.engine.wko5expr.evaluator import Evaluator
     kind = ch.get("kind")
     calls = tuple(sorted(_calls(ch))) if kind in EXPR_KINDS else ()
-    post = tuple(k for k in POST_ROOTS if ch.get(k))
+    post = _post(ch)
     glue = tuple(glue)
     dstype = type(ds)
-    memo_key = (kind, calls, post, dstype, tuple(id(g) for g in glue), RC.CACHE_VERSION)
+    moved = _changed_on_disk()
+    memo_key = (kind, calls, post, dstype, tuple(id(g) for g in glue), RC.CACHE_VERSION,
+                _NONCE if moved else None)
     hit = _CODE.get(memo_key)
     if hit is not None:
         return hit
@@ -550,6 +710,8 @@ def code_signature(ch: dict, ds, glue: Iterable = ()) -> str:
             parts.append((p, CH.code_hash(*rs, context=[dstype])))
         parts.append(("glue", [_own_code(g) for g in glue]))
         parts.append(("version", RC.CACHE_VERSION))
+        if moved:
+            parts.append(("process", _NONCE))
         out = hashlib.sha1(json.dumps(parts, default=str).encode()).hexdigest()
         _CODE[memo_key] = out
         return out

@@ -31,7 +31,7 @@ range — "the 90 days to today" — not its dates); `cache/render/slots/<slot>.
 points at the key last drawn for it. On a miss with stale_ok and an older
 drawing of the slot still on disk, that drawing is answered at once with
 `stale` = {key, at} and the new key is computed in the background
-(REFRESH_POOL, 2 threads, once per key, at most REFRESH_MAX keys waiting);
+(refresh_pool(), 2 threads, once per key, at most REFRESH_MAX keys waiting);
 `ready(keys)` says which are there (GET /render/ready, the viewer swaps the
 card). A background failure is remembered: that key is then computed in the
 request. Display only — the endpoint passes stale_ok only for the viewer's
@@ -72,9 +72,27 @@ MAX_CONCURRENT = 2
 REFRESH_MAX = 64          # keys waiting for a background render; more = computed in the request
 FAILED_MAX = 256
 SLOTS_DIR = "slots"
-# the background half of a stale answer: shared by every tenant (each job carries its own context)
-REFRESH_POOL = ThreadPoolExecutor(max_workers=2, thread_name_prefix="chart-refresh")
+# the background half of a stale answer: shared by every tenant (each job carries its own context);
+# shut down with the app (main.lifespan → shutdown_refresh), made again on the next use
+_POOL: dict = {"pool": None}
+_POOL_LOCK = threading.Lock()
 log = logging.getLogger(__name__)
+
+
+def refresh_pool() -> ThreadPoolExecutor:
+    with _POOL_LOCK:
+        p = _POOL["pool"]
+        if p is None or getattr(p, "_shutdown", False):
+            p = _POOL["pool"] = ThreadPoolExecutor(max_workers=2, thread_name_prefix="chart-refresh")
+        return p
+
+
+def shutdown_refresh() -> None:
+    """App shutdown: queued background renders are dropped, the running ones not waited for."""
+    with _POOL_LOCK:
+        p, _POOL["pool"] = _POOL["pool"], None
+    if p is not None:
+        p.shutdown(wait=False, cancel_futures=True)
 
 # Everything that shapes a chart's JSON (the whole-engine signature, code_signature()): wko5expr/, algorithms/, engine/*.py
 # (zones, thresholds, planning, workout_review feed the zones / targets / review
@@ -156,8 +174,8 @@ class RenderCache:
         self._since_prune = 0
         self.stats = {"hit_mem": 0, "hit_disk": 0, "miss": 0, "coalesced": 0, "stale": 0}
         self._slot_keys: dict[tuple, str] = {}           # (root, slot) -> key last pointed at (spares the file)
-        self._refreshing: dict[str, float] = {}      # key -> time the background render was queued
-        self._failed: "OrderedDict[str, float]" = OrderedDict()   # keys whose background render failed
+        self._refreshing: dict[tuple, float] = {}    # (cache folder, key) -> time its background render was queued
+        self._failed: "OrderedDict[tuple, float]" = OrderedDict()   # (cache folder, key) whose background render failed
 
     # ---- storage ----------------------------------------------------------
     def _path(self, key: str) -> Path:
@@ -323,12 +341,13 @@ class RenderCache:
         if slot is not None:
             self.slot_put(slot, key)
         with self._lock:
-            self._failed.pop(key, None)
+            self._failed.pop((str(self.root), key), None)
         return value, None
 
     def _stale(self, slot: str, key: str, compute) -> Optional[tuple[Any, dict]]:
+        rk = (str(self.root), key)                   # the tenant's cache folder + the key
         with self._lock:
-            if key in self._failed or (key not in self._refreshing and len(self._refreshing) >= REFRESH_MAX):
+            if rk in self._failed or (rk not in self._refreshing and len(self._refreshing) >= REFRESH_MAX):
                 return None
         prev = self.slot_get(slot)
         if prev is None or prev["key"] == key:
@@ -337,42 +356,46 @@ class RenderCache:
         if old is None:
             return None
         with self._lock:
-            start = key not in self._refreshing
+            start = rk not in self._refreshing
             if start:
-                self._refreshing[key] = dt.datetime.now().timestamp()
+                self._refreshing[rk] = dt.datetime.now().timestamp()
             self.stats["stale"] += 1
         if start:
             ctx = contextvars.copy_context()         # the tenant, the locale: the request's
-            REFRESH_POOL.submit(ctx.run, self._refresh, key, compute, slot)
+            try:
+                refresh_pool().submit(ctx.run, self._refresh, rk, compute, slot)
+            except RuntimeError:                     # shutting down: computed by the next request
+                with self._lock:
+                    self._refreshing.pop(rk, None)
         return old, {"key": key, "at": prev.get("at")}
 
-    def _refresh(self, key: str, compute, slot: str) -> None:
+    def _refresh(self, rk: tuple, compute, slot: str) -> None:
+        key = rk[1]
         try:
             self.get_or_compute(key, compute)        # joins a request computing the same key
         except Exception as e:                       # noqa: BLE001 — the next request computes it itself
             log.warning("chart refresh failed: %s", type(e).__name__)
             with self._lock:
-                self._failed[key] = dt.datetime.now().timestamp()
+                self._failed[rk] = dt.datetime.now().timestamp()
                 while len(self._failed) > FAILED_MAX:
                     self._failed.popitem(last=False)
         else:
             self.slot_put(slot, key)
         finally:
             with self._lock:
-                self._refreshing.pop(key, None)
+                self._refreshing.pop(rk, None)
 
     def ready(self, keys: list[str]) -> dict:
-        """{ready, failed, pending}: which keys a stale answer named can be fetched now."""
+        """{ready, failed, pending}: which keys a stale answer named can be fetched now, for the
+        asking tenant's cache folder. Memory only (GET /render/ready runs on the event loop): a
+        key no background render of this tenant holds and that did not fail is ready to ask —
+        the request then hits, or computes it itself."""
+        root = str(self.root)
         out: dict = {"ready": [], "failed": [], "pending": []}
-        for k in keys:
-            with self._lock:
-                mem, failed = k in self._mem, k in self._failed
-            if mem or self._path(k).exists():            # put(): memory first, then an atomic file
-                out["ready"].append(k)
-            elif failed:
-                out["failed"].append(k)
-            else:
-                out["pending"].append(k)
+        with self._lock:
+            for k in keys:
+                rk = (root, k)
+                out["failed" if rk in self._failed else "pending" if rk in self._refreshing else "ready"].append(k)
         return out
 
 

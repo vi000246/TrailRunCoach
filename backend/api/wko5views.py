@@ -336,12 +336,12 @@ def warm_up(reason: str = "startup") -> Optional[threading.Thread]:
             except Exception as e:       # noqa: BLE001 — a page request will show the error
                 logging.getLogger(__name__).warning("plan inputs warm-up (%s) failed: %s", reason,
                                                     type(e).__name__)
-            _warm_chart_code(ds)
             applog.took("dataset warm-up", t0, reason=reason)       # SP-215: what pages wait for
         except Exception as e:           # noqa: BLE001 — a page request will show the error
             logging.getLogger(__name__).warning("dataset warm-up (%s) failed: %s", reason, type(e).__name__,
                                                 exc_info=True)
             return
+        _warm_chart_code(ds)             # after what the first page waits for (review SP-336 #5)
         # lowest priority from here, in its own thread: after the sync's automatic plan run (it
         # computes with the same dataset / status / inputs, now warm). This thread ends, so a
         # warm-up asked for meanwhile is not dropped (review SP-362 #4)
@@ -547,6 +547,12 @@ def chart(request: Request, view: str, d: int, c: int, begin: Optional[str] = No
     if not needs_workout and ch.get("kind") not in ("athlete", "zones", "targets", "z5gate", "periodzones",
                                                     "climbvam", "polecompare"):
         raise HTTPException(400, f"unsupported panel {ch.get('class')}")
+    if needs_workout and begin is None and end is None and not CS.reads_range(ch):
+        # SP-336 review #2: a single-activity chart asked with only ?workout= is about that activity:
+        # its day is the range (not the defaulted year to today, which changed its key every day)
+        import math
+        b = e = float(math.floor(ds.workouts[workout].day))
+        asked = (b, e)
     pinfo = winfo = binfo = vinfo = None
     if v.get("source") == "custom" and VR.variant_spec(ch):
         # chart variants (variants.py): ?variant=pct — first, since it picks the axes and series

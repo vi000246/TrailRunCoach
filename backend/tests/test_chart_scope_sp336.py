@@ -103,6 +103,38 @@ def test_a_workout_chart_reads_its_own_day(ds):
     assert (s.lo, s.hi, s.today) == (int(w.day), int(w.day), False)
     s = CS.scope_of(chart("ctl", kind="workout"), ds, T - 364, T, workout=w)
     assert s.lo == T - 364 - 6 * 42 and not s.full
+    # review #2: without begin / end the endpoint scopes a workout chart on the activity's own day
+    d = int(w.day)
+    s = CS.scope_of(chart("ctl", kind="workout"), ds, d, d, workout=w)
+    assert (s.lo, s.hi, s.today) == (d - 6 * 42, d, False)
+    s = CS.scope_of(chart("avg(heartrate)", kind="workout"), ds, d, d, workout=w)
+    assert (s.lo, s.hi) == (d, d)
+    assert not CS.reads_range(chart("avg(power)", kind="workout"))
+    assert CS.reads_range(chart("athleterange(begindate, enddate, tss)", kind="workout"))
+    assert CS.reads_range({"kind": "workout", "variants": [{"series": [{"expression": "enddate"}]}]})
+
+
+def test_a_var_carries_its_warm_up_where_it_is_used(ds):
+    # review #5: `@c := tl(...)` then shift(@c, 7) reads 7 more days of warm-up
+    s = scope(chart("@c := tl(tss, ctlconstant), shift(@c, 7)"), ds)
+    assert s.lo == E - 89 - 7 - 6 * 42
+
+
+def test_lookup_of_a_setting_stamps_the_whole_setting_history(ds):
+    assert scope(chart("lookup(runthr, date)"), ds).history
+    assert not scope(chart("tss"), ds).history
+
+
+def test_every_evaluator_function_is_classified():
+    """A new fn_* must be listed as reading its range only or be handled by the scope analysis
+    (else the analysis treats it as unbounded)."""
+    fns = {k[3:] for k in vars(Evaluator) if k.startswith("fn_")}
+    assert fns == set(CS.RANGE_LOCAL_FNS) | set(CS.HANDLED_FNS), fns ^ (set(CS.RANGE_LOCAL_FNS) | set(CS.HANDLED_FNS))
+    assert not set(CS.RANGE_LOCAL_FNS) & set(CS.HANDLED_FNS)
+
+
+def test_an_unclassified_function_is_the_whole_history(ds):
+    assert scope(chart("nosuchfn(tss)"), ds).full
 
 
 def test_my_training_charts_are_bounded():
@@ -221,3 +253,105 @@ def test_code_signature_keeps_the_manual_version(ds, monkeypatch):
     monkeypatch.setattr(RC, "CACHE_VERSION", RC.CACHE_VERSION + 1)
     _fresh_code_memo()
     assert CS.code_signature(PLAIN, ds) != a
+
+
+# ---------------------------------------------------------------------------
+# review fixes: calibrations, marks, setting history, dynamic code, deploy safety
+# ---------------------------------------------------------------------------
+
+def test_a_calibration_change_invalidates_a_past_range_drift_chart(tmp_path, monkeypatch):
+    from backend.engine import calibrate as CAL
+    d = _ds(_runs(200), tmp=tmp_path)
+    drift = chart('drift("pace", "all")')
+    a = fp(drift, d, 60, T - 100)
+    names = list(CAL._registry())
+    name = next((n for n in names if n.startswith("drift")), names[0])
+    monkeypatch.setattr(CAL, "stored_entry",
+                        lambda n, user_id=1: {"value": 123.0, "source": "user"} if n == name else None)
+    assert fp(drift, d, 60, T - 100) != a
+
+
+def test_the_review_card_follows_the_users_activity_marks(tmp_path, monkeypatch):
+    from backend.engine import activity_tags as AT
+    d = _ds(_runs(50), tmp=tmp_path)
+    w = d.workouts[-3]
+    review = {"kind": "review", "section": "summary"}
+    a = CS.fingerprint(d, CS.scope_of(review, d, T - 364, T, workout=w))
+    p = fp(PLAIN, d)
+    monkeypatch.setattr(AT, "load", lambda *a, **k: [{"start_local": "2026-09-27T07:00", "tag": "x"}])
+    assert CS.fingerprint(d, CS.scope_of(review, d, T - 364, T, workout=w)) != a
+    assert fp(PLAIN, d) == p                                 # an expression chart has no marks part
+
+
+def test_the_setting_history_is_in_the_key_of_a_lookup_chart(tmp_path):
+    d = _ds(_runs(50), tmp=tmp_path)
+    look = chart("lookup(runthr, date - 400)")
+    a, p = fp(look, d), fp(PLAIN, d)
+    d.athlete.settings["runthr"] = [(dt.date(2020, 1, 1), 170.0)]       # a dated setting years ago
+    d.memo.clear()
+    assert fp(look, d) != a and fp(PLAIN, d) == p
+
+
+def test_fit_settings_from_wko5_are_in_every_key(tmp_path):
+    d = _ds(_runs(50), tmp=tmp_path)
+    d.settings_from = "wko5"
+    a = fp(PLAIN, d)
+    d.athlete.settings["runftp"] = [(dt.date(2026, 1, 1), 300.0)]
+    d.memo.clear()
+    assert fp(PLAIN, d) != a
+
+
+def test_code_signature_covers_the_pd_calls_render_makes_itself(ds, monkeypatch):
+    # render.mftp_plateau / pd_notice evaluate "ftp(...)" / "pdcurve(meanmax(runpower))" strings
+    _fresh_code_memo()
+    pd, tss = chart("meanmax(runpower)"), chart("tss")
+    a, b = CS.code_signature(pd, ds), CS.code_signature(tss, ds)
+
+    def fn_ftp(self, n, ctx):
+        return 1.0
+    monkeypatch.setattr(Evaluator, "fn_ftp", fn_ftp)
+    _fresh_code_memo()
+    assert CS.code_signature(pd, ds) != a and CS.code_signature(tss, ds) == b
+
+
+def test_code_signature_follows_channel_expressions(ds, monkeypatch):
+    _fresh_code_memo()
+    ec, tss = chart("max(ecpower)"), chart("tss")
+    a, b = CS.code_signature(ec, ds), CS.code_signature(tss, ds)
+
+    def fn_ewma(self, n, ctx):
+        return 0.0
+    monkeypatch.setattr(Evaluator, "fn_ewma", fn_ewma)          # ecpower = an ewma(power, 25) expression
+    _fresh_code_memo()
+    assert CS.code_signature(ec, ds) != a and CS.code_signature(tss, ds) == b
+
+
+def test_code_signature_sees_a_period_chart_without_a_period_key(ds, monkeypatch):
+    from backend.engine.wko5expr import periods as PD
+    _fresh_code_memo()
+    weekly, tss = chart("sum(tss, startofweek(date))"), chart("tss")
+    assert PD.chart_period(weekly) == "week" and "period" not in weekly
+    a, b = CS.code_signature(weekly, ds), CS.code_signature(tss, ds)
+
+    def bucket_start(b, period):
+        return b
+    monkeypatch.setattr(PD, "bucket_start", bucket_start)
+    _fresh_code_memo()
+    assert CS.code_signature(weekly, ds) != a and CS.code_signature(tss, ds) == b
+
+
+def test_code_changed_on_disk_after_start_never_shares_a_key(ds, monkeypatch):
+    """A `git pull` without a restart: the running code is the old one, the files the new one —
+    such a process gets keys of its own (a per-process nonce), never the new code's."""
+    _fresh_code_memo()
+    a = CS.code_signature(PLAIN, ds)
+    monkeypatch.setattr(CS, "_PROCESS_START", 0.0)             # every module file is newer than the start
+    CS._DISK.clear()
+    _fresh_code_memo()
+    b = CS.code_signature(PLAIN, ds)
+    assert b != a
+    monkeypatch.setattr(CS, "_NONCE", "another process")
+    _fresh_code_memo()
+    assert CS.code_signature(PLAIN, ds) != b
+    CS._DISK.clear()
+    _fresh_code_memo()
