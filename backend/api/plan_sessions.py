@@ -600,9 +600,10 @@ async def _sessions_body(db: AsyncSession, inp: dict, start: Optional[str], end:
     rows = await prov.all_rows(db)
     walk = await run_in_threadpool(_walk_hint, inp)
     # SP-318: auto / user / none per session, from plan_change_log (engine/plan_marks.py); the
-    # 課表 page and the 總覽 both read it here; never pushed (push_dict leaves it out)
+    # 課表 page and the 總覽 both read it here; never pushed (push_dict leaves it out); ↻ only in
+    # the push window; an error means no markers, never a failed page
     from backend.engine import plan_marks as PMK
-    mk = await PMK.load(db, every, today)
+    mk = await PMK.load_safe(db, every, today)
     out = {**_meta(inp), "summary": _summary(every, inp),
            "sessions": [{**_view(s, inp, rows, today, prov, walk), "mark": PMK.of(mk, s["uid"])}
                         for s in ss if s["state"] != "deleted" and s["state"] != "superseded"]}
