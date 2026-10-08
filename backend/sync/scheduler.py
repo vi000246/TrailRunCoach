@@ -7,13 +7,15 @@ shares the per-source lock with the button and auto-on-open).
 Missed times (app not running) are caught up the first minute the app is up
 after the time on that day; there is no catch-up for earlier days.
 
-The same loop also runs the daily automatic backup (api/backup.auto_tick).
+The same loop also runs the daily automatic backup (api/backup.auto_tick) and the weekly
+check of the last 60 days (sync/check.weekly_tick, SP-362 A4).
 """
 from __future__ import annotations
 
 import asyncio
 import logging
 import os
+import time
 from datetime import datetime, time, timezone
 from typing import Callable, Optional
 
@@ -56,9 +58,15 @@ async def tick(session_factory: Callable, now: Optional[datetime] = None, athlet
     return started
 
 
+def _monotonic() -> float:
+    return time.monotonic()
+
+
 async def loop(session_factory: Optional[Callable] = None, interval: float = INTERVAL_S) -> None:
     if session_factory is None:
         from backend.db.database import AsyncSessionLocal as session_factory
+    from backend.sync import check
+    t_start = _monotonic()
     while True:
         try:
             await tick(session_factory)
@@ -66,6 +74,15 @@ async def loop(session_factory: Optional[Callable] = None, interval: float = INT
             raise
         except Exception as e:           # never kill the loop
             log.warning("sync scheduler tick failed: %s", type(e).__name__)
+        # the weekly check of the last 60 days (sync/check.py, SP-362 A4); not in the first
+        # minutes after a start, when the warm-up has the CPU
+        try:
+            if _monotonic() - t_start >= check.STARTUP_DELAY_S:
+                await check.weekly_tick(session_factory)
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            log.warning("weekly sync check tick failed: %s", type(e).__name__)
         # daily automatic backup (api/backup.py): the first pass runs at app
         # start; afterwards only when > 24 h since the last good backup
         try:

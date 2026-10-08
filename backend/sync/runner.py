@@ -169,13 +169,17 @@ def _client_stream(db: AsyncSession, source: str, athlete_id: int, since: Option
 
 async def stream(db: AsyncSession, source: str, athlete_id: int = 1,
                  since: Optional[str] = None, trigger: str = "manual",
-                 feel_in_background: bool = False) -> AsyncIterator[dict]:
+                 feel_in_background: bool = False, client: Optional[Callable] = None,
+                 remember: bool = True) -> AsyncIterator[dict]:
     """Run one sync, yielding the client's progress events. Yields a single
     SYNC_BUSY error event when the source is already running.
 
     `feel_in_background` (the button's SSE and run_once; SP-362 A5): COROS's self-rating
     passes over already-imported activities run as a job after the result is stored
-    (start_feel_job) instead of inside the run."""
+    (start_feel_job) instead of inside the run.
+    `client(db)` replaces the source's sync stream (the 完整檢查 / weekly check and its 補下載,
+    sync/check.py): same busy flag, same post-run steps on what it downloaded; with
+    `remember` False the run is not stored as the source's last sync (last_result / last_ok)."""
     await _make_way(source)
     try:
         ctx = hold(source)
@@ -186,11 +190,12 @@ async def stream(db: AsyncSession, source: str, athlete_id: int = 1,
     result = {"at": None, "trigger": trigger, "status": "running", "downloaded": 0,
               "checked": 0, "errors": 0, "error": None}
     clock = SyncClock()
-    bg_feel = feel_in_background and source == "coros"
+    bg_feel = feel_in_background and source == "coros" and client is None
     feel_read = None                  # the complete event's `feel_read`: the job is due
     try:
-        async for ev in _client_stream(db, source, athlete_id, since,
-                                       **({"feel_passes": False} if bg_feel else {})):
+        events = client(db) if client is not None else \
+            _client_stream(db, source, athlete_id, since, **({"feel_passes": False} if bg_feel else {}))
+        async for ev in events:
             clock.event(ev)
             if ev.get("status") == "complete":
                 if "feel_read" in ev:
@@ -222,12 +227,13 @@ async def stream(db: AsyncSession, source: str, athlete_id: int = 1,
         result["secs"] = clock.summary()           # the settings page shows where the time went
         try:
             await db.rollback()
-            repo = SettingsRepository(db, athlete_id)
-            await repo.set(f"sync.{SETTING_NAME[source]}.last_result", result)
-            if result["status"] in OK_STATUSES:
-                await repo.set(f"sync.{SETTING_NAME[source]}.last_ok", {
-                    "at": result["at"], "trigger": trigger, "downloaded": result["downloaded"]})
-            await db.commit()
+            if remember:
+                repo = SettingsRepository(db, athlete_id)
+                await repo.set(f"sync.{SETTING_NAME[source]}.last_result", result)
+                if result["status"] in OK_STATUSES:
+                    await repo.set(f"sync.{SETTING_NAME[source]}.last_ok", {
+                        "at": result["at"], "trigger": trigger, "downloaded": result["downloaded"]})
+                await db.commit()
         except Exception as e:
             log.warning("could not store %s sync result: %s", source, type(e).__name__)
         # after the run, in priority order (SP-362): what the pages wait for first, then
