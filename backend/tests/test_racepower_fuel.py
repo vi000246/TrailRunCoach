@@ -2,14 +2,12 @@
 賽事計算機 補給: energy from Stryd power (van Rassel 2026) with Minetti ×
 Fletcher / Keytel / Pandolf fallbacks, carbohydrate / water / sodium by event
 type, the generic schedule on the predicted splits, aid-station types, the
-百岳 daily budget, and the CSV columns (docs/research/fueling-and-energy.md §7.5).
+百岳 daily budget (docs/research/fueling-and-energy.md §7.5).
 No WKO5 folder, no DB: the API runs on test_racepower_v2's fake inputs.
 """
 from __future__ import annotations
 
-import csv
 import datetime as dt
-import io
 import types
 
 import pytest
@@ -19,7 +17,7 @@ from backend.engine.racepower import course as CO
 from backend.engine.racepower import fuel as FU
 from backend.engine.racepower import gpx as GPX
 from backend.engine.racepower import hike as HK
-from backend.tests.test_racepower_export import client, read_csv  # noqa: F401  (fixture)
+from backend.tests.test_racepower_export import client  # noqa: F401  (fixture)
 from backend.tests.test_racepower_v2 import W, synthetic_track
 
 approx = pytest.approx
@@ -239,26 +237,14 @@ def test_plan_fuel_baiyue_daily_and_csv_columns(client):  # noqa: F811
     assert f["kcal_band"][0] <= f["kcal"] <= f["kcal_band"][1] and f["kcal_yamamoto"] > 0
     assert f["cho"]["per_h"] == [30.0, 50.0] and f["loading"]["kind"] == "normal"
     assert sum(1 for e in f["schedule"] if e["kind"] == "start") == 2
-    r = client.post("/api/v1/racepower/export/csv", json=body)
-    head, cols, rows = read_csv(r)
-    kv = {x[0]: x[1:] for x in head if x}
-    assert kv["預估熱量 kcal"][0].endswith("kcal") and kv["碳水 g/h"][0] == "30–50 g/h"
-    for c in ("熱量 kcal", "累積 kcal", "碳水 g", "水 ml", "鈉 mg", "補給動作"):
-        assert c in cols
-    ci = cols.index("熱量 kcal")
-    assert sum(float(x[ci]) for x in rows[:-1]) == approx(float(rows[-1][ci]), abs=len(rows))
-    assert any(x[cols.index("補給動作")] for x in rows[:-1])
 
 
-def test_csv_road_fuel_header_and_typed_stops(client):  # noqa: F811
+def test_plan_road_fuel_loading(client):  # noqa: F811
     body = {"type": "road", "distance_km": 42.195, "course": {"manual": {"km": 42.195, "split": "km"}},
             "start_time": "07:00", "stops": [{"km": 21, "minutes": 1, "type": "water", "name": "半程"}]}
-    head, cols, rows = read_csv(client.post("/api/v1/racepower/export/csv", json=body))
-    kv = {x[0]: x[1:] for x in head if x}
-    assert kv["補給站"] == ["21 km 1 分 水站 半程"]
-    assert kv["碳水 g/h"][0] == "60–90 g/h" and kv["賽前超補"][0] == "前一天 10–12 g/kg"
-    assert kv["賽前超補"][-1] == "總熱量也要跟著多，不只換比例"                   # SP-287
-    assert "ml/h" in kv["水 ml/h"][0]
+    f = client.post("/api/v1/racepower/plan", json=body).json()["fuel"]
+    assert f["cho"]["per_h"] == [60.0, 90.0] and f["loading"]["label"] == "前一天 10–12 g/kg"
+    assert f["loading"]["note"] == "總熱量也要跟著多，不只換比例"                   # SP-287
 
 
 def test_body_profile_prefers_settings_then_wko5():

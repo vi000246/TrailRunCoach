@@ -8,7 +8,7 @@ import pytest
 
 from backend.engine.racepower import gpx as GPX
 from backend.engine.racepower import seg_targets as ST
-from backend.tests.test_racepower_export import client, read_csv  # noqa: F401  (fixture)
+from backend.tests.test_racepower_export import client  # noqa: F401  (fixture)
 from backend.tests.test_racepower_v2 import synthetic_track
 
 approx = pytest.approx
@@ -64,7 +64,7 @@ def test_fuel_summary_counts_points_and_keeps_stations():
     assert ST.fuel_summary(plan, seg(0.0, i=9, fuel_action="")) == ""
 
 
-def test_api_trail_plan_and_csv_carry_the_targets(client):  # noqa: F811
+def test_api_trail_plan_carries_the_targets(client):  # noqa: F811
     tr = synthetic_track({"len": 16000, "z": lambda x: 300 + (x * 0.1 if x < 8000 else (16000 - x) * 0.1)})
     cid = client.post("/api/v1/racepower/course",
                       files={"file": ("t.gpx", GPX.write_gpx(tr).encode(), "application/gpx+xml")}).json()["course_id"]
@@ -73,10 +73,9 @@ def test_api_trail_plan_and_csv_carry_the_targets(client):  # noqa: F811
     assert p["seg_targets"] and len(p["seg_targets"]) == len(p["segments"])
     assert {x["kind"] for x in p["seg_targets"]} >= {"steep_climb", "descent"}
     assert any(x["fuel_action"] for x in p["seg_targets"])
-    head, cols, rows = read_csv(client.post("/api/v1/racepower/export/csv", json=body))
-    ci, ti = cols.index("目標類型"), cols.index("執行目標")
-    assert {r[ci] for r in rows[:-1]} >= {"心率", "不設目標"}
-    assert any("控制、安全" in r[ti] for r in rows[:-1])
+    tgs = [s["target"] for s in p["segments"]]
+    assert {t["basis"] for t in tgs} >= {"hr", "none"}
+    assert any("控制、安全" in t["text"] for t in tgs)
     road = client.post("/api/v1/racepower/plan", json={"type": "road", "distance_km": 10}).json()
     assert road["seg_targets"] is None
 

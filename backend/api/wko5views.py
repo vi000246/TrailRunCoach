@@ -263,8 +263,8 @@ def _low_priority(reason: str) -> None:
             _wait_plan_idle()
             ds = _dataset()
             _calibrate_never_fitted(ds)
-            from backend.api import activity_auto as AA
-            AA.job_for(ds)
+            from backend.api import activity_auto as AA, racepower as RP
+            RP.warm_charts(AA.job_for(ds))       # then the race calculator's charts (SP-366; owner only)
         except Exception as e:           # noqa: BLE001 — a page request will show the error
             logging.getLogger(__name__).warning("warm-up low-priority part (%s) failed: %s", reason,
                                                 type(e).__name__, exc_info=True)

@@ -88,8 +88,9 @@ engine config / parity mode is the same everywhere.
   meanwhile is not dropped) and a low-priority thread (`_low_priority`,
   `backend/api/wko5views.py:254`) waits until an automatic plan run has ended
   (`plan_auto.busy`, `backend/engine/plan_auto.py:1104`), re-reads the Dataset, and runs the
-  never-fitted calibration and the activity auto-classification; a warm-up during that wait
-  makes it run once more. The inputs' flight computes exactly its caller's key
+  never-fitted calibration and the activity auto-classification, then (owner only, after that job)
+  the race calculator's grade-model fit and climbing-cadence scan (`racepower.warm_charts`, SP-366);
+  a warm-up during that wait makes it run once more. The inputs' flight computes exactly its caller's key
   (`_inputs_key` → `_build_inputs`, `backend/api/plan_sessions.py:161`, `:201`). After a sync the runner starts the warm-up before the automatic
   plan run and the calibration (which waits for the plan run, `backend/engine/calibrate.py:348`);
   see wko5-coros-sync.spec.md.

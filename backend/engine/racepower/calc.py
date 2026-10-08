@@ -1,5 +1,5 @@
 """
-The race calculator's computations (POST /predict, /plan, /course/event/{id}, /export/csv)
+The race calculator's computations (POST /predict, /plan, /course/event/{id})
 on an athlete context — shared by the API (api/racepower.py: the context reads the
 Dataset / DB / files) and the static demo, which runs this module in the browser
 with Pyodide on a context exported as JSON (backend/demo/static_racepower.py).
@@ -686,16 +686,3 @@ def fuel(ctx: Context, body: PlanIn, out: dict) -> dict:
 def plan(ctx: Context, body: PlanIn) -> dict:
     """POST /plan's response."""
     return py(make_plan(ctx, body))
-
-
-def export_csv(ctx: Context, body: ExportIn) -> tuple[str, str]:
-    """POST /export/csv: (the CSV text, the file name)."""
-    from backend.engine.racepower import csvplan as CSV
-    p = py(make_plan(ctx, body))
-    fname = CSV.filename(p, body.name, body.date)
-    label = body.name or p.get("course_name") or f"{CSV.TYPE_LABEL.get(p['type'], '')} {p['summary']['km']:.1f} km"
-    text = CSV.plan_csv(p, name=label, date=body.date, start_time=body.start_time,
-                        stops=[x.model_dump() for x in body.stops],
-                        acclimatisation=body.acclimatisation or ("unacclimatised" if body.type == "baiyue"
-                                                                 else "acclimatised"))
-    return text, fname
