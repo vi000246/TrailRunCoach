@@ -28,7 +28,7 @@ docs/research/mountaineering-physiology-scholars.md §3, SP-107 #4d):
   * CDC Yellow Book (Hackett & Shlim, full text): ≥ 2 nights above 2,750 m in
     the 14 days before the trip help (the closer the better); above 3,000 m the
     sleeping altitude should not rise more than 500 m a night; a first night
-    above 3,400 m is high risk (排雲山莊 3,402 m is just over the line);
+    above 3,400 m is high risk;
     「Training and physical fitness do not affect risk」. Acclimatisation is
     partly kept 12 days back at low altitude (Beidleman 2017, J Appl Physiol
     123:1214 [400]).
@@ -407,13 +407,13 @@ def reminder(ev: dict, alt: dict, ex: Optional[dict], today: dt.date) -> Optiona
                        n=ex["pre_days"]))
         flags.append("recent")
     else:
-        lines.append(_("近 3 個月沒有到 3,000 m 以上：高山症風險較高（Shen 2024，玉山排雲山莊就診者的資料）"))
+        lines.append(_("近 3 個月沒有到 3,000 m 以上：高山症風險較高（Shen 2024）"))
     if not ex["ever"]:
         lines.append(_("紀錄裡沒有到過 3,000 m 以上：第一次上 3,000 m 是高山症的相關因子（Shen 2024）"))
         flags.append("first")
     nights = alt.get("nights") or []
     if nights and nights[0] > FIRST_NIGHT_M:
-        lines.append(_("第一晚睡在約 {m:,.0f} m，超過 3,400 m 屬高風險（CDC；排雲山莊 3,402 m 就在線上）", m=nights[0]))
+        lines.append(_("第一晚睡在約 {m:,.0f} m，超過 3,400 m 屬高風險（CDC）", m=nights[0]))
         flags.append("n1")
     jumps = [i for i in range(1, len(nights)) if nights[i] >= HIGH_M and nights[i] - nights[i - 1] > NIGHT_STEP_M]
     if jumps:

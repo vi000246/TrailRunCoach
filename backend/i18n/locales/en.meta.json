@@ -5283,7 +5283,7 @@
     "draft": false,
     "src": "backend/engine/altitude.py:430"
   },
-  "第一晚睡在約 {m:,.0f} m，超過 3,400 m 屬高風險（CDC；排雲山莊 3,402 m 就在線上）": {
+  "第一晚睡在約 {m:,.0f} m，超過 3,400 m 屬高風險（CDC）": {
     "draft": true,
     "src": "backend/engine/altitude.py:202"
   },
@@ -6383,7 +6383,7 @@
     "draft": true,
     "src": "backend/engine/altitude.py:188"
   },
-  "近 3 個月沒有到 3,000 m 以上：高山症風險較高（Shen 2024，玉山排雲山莊就診者的資料）": {
+  "近 3 個月沒有到 3,000 m 以上：高山症風險較高（Shen 2024）": {
     "draft": true,
     "src": "backend/engine/altitude.py:196"
   },

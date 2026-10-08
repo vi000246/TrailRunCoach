@@ -185,12 +185,12 @@ def test_sp258_eve_only_for_a_first_night_above_3000():
     assert r["flags"] == ["first", "n1"] and "行前一晚" in r["help"] and "行前一晚" not in r["reason"]
     # owner 2026-10-08: the 1–14 day row's ? names no place either — just 「行前一晚住 2,500 m 左右」
     assert "行前一晚住 2,500 m 左右" in r["help"]
-    for place in PLACES:                         # 排雲山莊 stays: the research lines' study site / CDC's 3,400 m
-        assert place == "排雲" or place not in r["help"], place
+    for place in PLACES:                         # owner 2026-10-08: not even as a study site / CDC example
+        assert place not in r["help"], place
     from backend.i18n import use_locale
     with use_locale("en"):
         en = _row(hi, NONE, days_to=6)["help"]
-    assert "around 2,500 m" in en and "Tataka" not in en and "Dayuling" not in en
+    assert "around 2,500 m" in en and "Tataka" not in en and "Dayuling" not in en and "Paiyun" not in en
 
 
 def test_box_rows_info_only_and_the_id_follows_the_conditions():
