@@ -269,3 +269,23 @@ def test_scrub_drops_positions_and_credentials():
     import numpy as np
     assert DV.jsonable({"v": np.float64(float("nan")), "a": np.arange(2), "d": date(2026, 1, 2)}) == \
         {"v": None, "a": [0, 1], "d": "2026-01-02"}
+
+
+def test_the_cli_builds_the_calls_and_sends_only_the_bearer_header(monkeypatch, capsys):
+    from backend.scripts import debug_fetch as F
+    seen = []
+    monkeypatch.setattr(F, "fetch", lambda url, token, timeout=120.0: seen.append((url, token)) or {"ok": 1})
+    monkeypatch.setenv("TRC_DEBUG_URL", "https://x.example/")
+    monkeypatch.setenv("TRC_DEBUG_TOKEN", "trcd_test")
+    assert F.main(["day", "2026-10-05"]) == 0
+    assert F.main(["activity", "--date", "2026-10-05", "--streams", "hr,speed", "--every", "30", "--gps"]) == 0
+    assert F.main(["plan", "--from", "2026-09-29", "--to", "2026-10-12"]) == 0
+    assert F.main(["export"]) == 0
+    assert [u for u, _t in seen] == [
+        "https://x.example/api/v1/debug/day?date=2026-10-05",
+        "https://x.example/api/v1/debug/activity?date=2026-10-05&streams=hr%2Cspeed&every=30&gps=1",
+        "https://x.example/api/v1/debug/plan?from=2026-09-29&to=2026-10-12",
+        "https://x.example/api/v1/debug/export/config"]
+    assert {t for _u, t in seen} == {"trcd_test"} and '"ok": 1' in capsys.readouterr().out
+    monkeypatch.delenv("TRC_DEBUG_TOKEN")
+    assert F.main(["sync"]) == 2

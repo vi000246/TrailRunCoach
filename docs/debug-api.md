@@ -35,6 +35,16 @@ curl -s -H "Authorization: Bearer $TOKEN" "$BASE/api/v1/debug/export/config"
 
 回應都是 JSON（UTF-8，`Cache-Control: no-store`）。
 
+不想自己組 HTTP 的話，用 CLI（`backend/scripts/debug_fetch.py`，只送 GET）：
+
+```bash
+export TRC_DEBUG_URL=https://<正式網址> TRC_DEBUG_TOKEN=trcd_...
+python -m backend.scripts.debug_fetch day 2026-10-05
+python -m backend.scripts.debug_fetch activity --date 2026-10-05 --streams hr,speed --every 30
+python -m backend.scripts.debug_fetch plan --from 2026-09-29 --to 2026-10-12
+python -m backend.scripts.debug_fetch export -o config.json
+```
+
 ---
 
 ## 認證模型
