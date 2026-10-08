@@ -21,6 +21,8 @@ import datetime as dt
 import functools
 import threading
 import time
+from collections import OrderedDict
+from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 
 from backend.i18n.pages import render_page
@@ -52,9 +54,13 @@ _flight = SingleFlight()        # one _compute_inputs per key at a time (SP-362)
 # or a new day then answers the tenant's previous computed inputs (_last), marked `stale`, and
 # computes the fresh ones in the background (_refresh, through _flight: never twice). Display only:
 # every other caller — reconcile, done / missed, 每週課表存檔, the edits, plan_auto — leaves the
-# flag off and gets fresh inputs (it waits for the flight).
+# flag off and gets fresh inputs (it waits for the flight). Bounded (review M3): _last keeps the
+# _LAST_MAX most recent tenants (LRU), demo tenants (one per visitor) are never kept nor served
+# stale, and the background computations share a 2-thread pool.
 _STALE_OK: contextvars.ContextVar[bool] = contextvars.ContextVar("plan_inputs_stale_ok", default=False)
-_last: dict = {}            # tenant id -> (key, inputs, time.time() computed) of its newest stored-plan inputs
+_LAST_MAX = 64
+_last: OrderedDict = OrderedDict()   # tenant id -> (key, inputs, time.time() computed) of its newest stored-plan inputs
+_REFRESH_POOL = ThreadPoolExecutor(max_workers=2, thread_name_prefix="plan-inputs-refresh")
 _refreshing: dict = {}      # tenant id -> the key computed in the background now
 _failed: dict = {}          # tenant id -> a key whose background computation failed (served fresh next time)
 STALE_REASONS = ("sync", "day")
@@ -83,18 +89,27 @@ def _compute_inputs(blackouts: Optional[list] = None) -> dict:
 
 
 def _remember(key: tuple, out: dict) -> None:
-    """The tenant's newest stored-plan inputs: what a stale view shows (SP-362 B4)."""
+    """The tenant's newest stored-plan inputs: what a stale view shows (SP-362 B4). LRU of
+    _LAST_MAX tenants; a demo tenant is never kept."""
+    if _tenancy.current().is_demo:
+        return
     with _lock:
         prev = _last.get(key[0])
         if prev is None or prev[0] != key:
             _last[key[0]] = (key, out, time.time())
+        _last.move_to_end(key[0])
+        while len(_last) > _LAST_MAX:
+            _last.popitem(last=False)
         _failed.pop(key[0], None)               # computed after all: a later miss may be served stale again
 
 
 def _stale_view(key: tuple, build) -> Optional[dict]:
     """The previous inputs of this tenant marked `stale` ({reason: sync | day, at}) when only
     the data or the day changed since they were computed (the user's own settings are the
-    same), and the fresh computation started in the background (once per key); else None."""
+    same), and the fresh computation started in the background (once per key); else None.
+    Never for a demo tenant."""
+    if _tenancy.current().is_demo:
+        return None
     with _lock:
         prev = _last.get(key[0])
         if prev is None or _failed.get(key[0]) == key:
@@ -108,8 +123,7 @@ def _stale_view(key: tuple, build) -> Optional[dict]:
             _refreshing[key[0]] = key
     if start:
         ctx = contextvars.copy_context()        # the tenant, the athlete: the request's
-        threading.Thread(target=ctx.run, args=(_refresh, key, build), daemon=True,
-                         name="plan-inputs-refresh").start()
+        _REFRESH_POOL.submit(ctx.run, _refresh, key, build)
     return {**pinp, "stale": {"reason": reason, "at": at}}
 
 
@@ -130,6 +144,12 @@ def _refresh(key: tuple, build) -> None:
         with _lock:
             if _refreshing.get(key[0]) == key:
                 del _refreshing[key[0]]
+
+
+def inputs_key_now() -> tuple:
+    """The key the stored-plan inputs have now (cheap: memoised reads; the Dataset if one is
+    being built). Sync: call it in the thread pool."""
+    return _inputs_key()[0]
 
 
 def refreshing() -> bool:
@@ -233,6 +253,9 @@ def _build_inputs(key: tuple, ds, today: dt.date, prefs, bos, acc, auto_on: bool
            "adapt": _adapt_ctx(ds, st, cur, monday, today, auto_on, recorded, rpe_on)}
     from backend.engine import coros_rpe as CR
     out["rpe_stamp"] = CR.stamp(out["adapt"].get("rpe")) if rpe_on else ""
+    # what these inputs were computed from: plan_auto.run checks it again inside the writer lock
+    # (a 不排課日期 / 課表偏好 saved, or newer data, while it computed — review H1)
+    out["inputs_key"] = key
     with _lock:
         while len(_cache) >= 3:                 # the stored plan + a preview or two
             _cache.pop(next(iter(_cache)))
