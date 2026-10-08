@@ -676,6 +676,31 @@ every Zone 5 state change (「Zone 5：未確認 → Zone 5：已確認（…）
 tombstoned. The window is then re-pushed. A session the user deleted as expired
 (`plan_store.USER_DELETED`) stays deleted.
 
+### 課表標記 — which sessions changed (SP-318, 2026-10-08)
+
+Every session on the 課表 page and the 總覽 carries one of three states, `mark` in
+`GET /overview/plan/calendar` (`_sessions_body`, `backend/api/plan_sessions.py:604-607`), derived at
+read time from this change log — no second copy (`backend/engine/plan_marks.py`: `marks` `:96`,
+`load` `:129`):
+
+| state | when | on screen |
+|---|---|---|
+| `auto` | an `applied` row's item changed it: an adapt rule (`missed_easy` / `missed_quality` / `missed_long` / `overhard` / `rpe_hard` / `fatigue`), a CP change (`cp`) or a re-plan from the latest data (`plan`: the generator's new output, no rule); with `rule`, `rules`, `reason`, `diff` [{key, before, after}], `entry` (the row id), `at` | ↻ on the session; rule, reason, before → after in the tooltip and the session dialog |
+| `user` | `edited` (an edit, a drag, a 交換, a session the user added, a 復原 — `restored` when a `restore` row lists it); the user's edit wins over an earlier auto change | ✎ on the session; 復原 explains itself in the dialog |
+| `none` | untouched | nothing |
+
+How long (推估, short on purpose — SP-305 few hints): only sessions still ahead (active, today or
+later; notices never), only rows of the last `MARK_DAYS` = 7 days (`:41`; the adapt rules act on the
+current week), and only a net change — before = the first `before` of the chain in that window,
+after = the session now (`_auto`, `:69`), over day / kind / title / minutes / target / detail /
+terrain / protocol. Moved and moved back = nothing; a TSS-only re-plan = nothing; a CP change =
+always ↻ (the watts on the watch changed). Undone rows are not `applied`, so 復原 takes the ↻ away
+(the restored session reads ✎). New weeks' `added` items are not marked (only an `added` with a
+rule). The marker is never pushed: `plan_store.push_dict` does not carry it, so the watch gets the
+session as it is now = the marker's after. Drawing: `backend/static/plan_mark.js` (`window.PlanMark`,
+strings `common.planmark.*`), used by `schedule.html` (`chipHtml`, the dialog's `#sd-mark`) and
+`overview.html` (`sessHtml`). Tests: `backend/tests/test_plan_marks_sp318.py`.
+
 ## CP change (2026-10-02)
 
 Power targets are % CP, but COROS running workouts take absolute watts. A run also starts when
@@ -858,6 +883,7 @@ The owner's calls, gathered from the sections above (each is described there wit
 
 | Date | Type | Feature SRS | Summary |
 |------|------|-------------|---------|
+| 2026-10-08 | feat | SP-318 | 課表標記: each session's `mark` (auto ↻ with rule / reason / before → after, user ✎ incl. 復原, none) derived from `plan_change_log` at read time (`backend/engine/plan_marks.py`; `_sessions_body`, `backend/api/plan_sessions.py:604-607`), the same on the 課表 page and the 總覽 (`backend/static/plan_mark.js`), never pushed; 7-day window, net change only, active sessions ahead only (推估). Tests: three states, marker ↔ log ↔ COROS push, 復原 clears it, manual edits win over `plan_auto` (`backend/tests/test_plan_marks_sp318.py`) |
 | 2026-10-08 | fix | SP-362 batch-2 review | H1: `run` re-checks the inputs' key inside `_wlock` and retries (`_inputs_changed`, `RUN_TRIES`, `backend/engine/plan_auto.py:728-778`), so a settings edit saved while it computed is not reverted and an older generation never lands after a newer one; M2: interrupted pushes (`_push_after` / `_interrupted`, `:887`, `:908`; `entry_dict` `:403`) and the pending watch removals in `plan.auto.state.remote` (`:477`, `:488`); L6: the notice re-read under `_plock` (`:932`). Tests in `backend/tests/test_push_outside_lock_sp362.py` (blackout while waiting, two generations, cancel mid-push, reject / approve during the notice push, undo during a run's push) |
 | 2026-10-08 | perf | SP-362 B3 | The COROS push left the plan writer lock: `run` computes the inputs before the lock, `_run` (`backend/engine/plan_auto.py:702`) holds `_wlock` for reconcile / save / log row (push `pushing`) / state / week snapshot, `_push_after` (`:802`) pushes the notice or the window under `api/plan_sessions._plock` from the stored plan re-read at that point and fills the row in (`_set_push`, `:477`); `undo` / `reject` push / remove after the lock (`:879`, `:848`); an edit during a push wins (its `_sync_watch` re-sends it); `autoplan.js` 「推送到手錶中…」 for `pushing` (`backend/static/autoplan.js:70`). Tests: `backend/tests/test_push_outside_lock_sp362.py` |
 | 2026-10-08 | bugfix | SP-370 follow-up | `compliance.streak_red` (`backend/engine/compliance.py:161-167`) exempts a foot-sport swap only when time and TSS are both measured and not red (the same basis as the ◐ softening); a swap with no TSS counts as red |
