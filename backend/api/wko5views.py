@@ -1370,6 +1370,11 @@ def workout_samples(idx: int, parity: Optional[bool] = None):
         except Exception:   # noqa: BLE001 — grade is optional colouring data
             grade = None
     lat, lng = col(ds.channel(idx, "latitude"), 6), col(ds.channel(idx, "longitude"), 6)
+    # the elevation the review cards use (workout_review._samples): the file's WKO5-smoothed
+    # _elevation when it has one, else the raw channel — the map's readout matches the climb profile
+    elev = ds.channel(idx, "_elevation")
+    if elev is None or not np.isfinite(np.asarray(elev, dtype=float)).any():
+        elev = ds.channel(idx, "elevation")
     if lat is not None and lng is not None:
         # (0, 0) is a device's "no fix", not a position
         for i, (a, b) in enumerate(zip(lat, lng)):
@@ -1378,7 +1383,7 @@ def workout_samples(idx: int, parity: Optional[bool] = None):
     return {
         "workout": idx, "step": step, "n": len(range(0, n, step)) if n else 0,
         "t": col(t, 1) or [], "d": col(ds.channel(idx, "elapseddistance"), 4),
-        "lat": lat, "lng": lng, "elev": col(ds.channel(idx, "elevation"), 1),
+        "lat": lat, "lng": lng, "elev": col(elev, 1),
         "hr": col(ds.channel(idx, "heartrate"), 0), "power": col(ds.channel(idx, "power"), 0),
         "grade": col(grade, 1),
     }
