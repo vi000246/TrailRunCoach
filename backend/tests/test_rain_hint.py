@@ -258,6 +258,30 @@ def test_rain_kind_rule():
     assert AT.rain_kind_excluded("trail running", None) is True
     assert AT.rain_kind_excluded("hiking", None) is True and AT.rain_kind_excluded("running", None) is False
     assert AT.rain_kind_excluded("running", {"activity_type": "hike", "activity_type_overridden": True}) is True
+    # L4: the file's trail classification counts like a dataset run's (a COROS run classified trail)
+    assert AT.rain_kind_excluded("running", None, trail=True) is True
+    assert AT.rain_kind_excluded("cycling", None, trail=True) is False   # only a run is a trail run
+    assert AT.rain_kind_excluded(None, None) is False
+
+
+def test_excluded_row_carries_its_auto_kind_and_the_page_follows_a_type_change(tmp_path, no_plan, monkeypatch):
+    """L2: an excluded file is edited by key (no single-activity answer), so the page recomputes
+    its rain_kind from `rain_kind_auto` and the user's type with the same rule as the server."""
+    import re
+    from backend.api import wko5views as V
+    from backend.engine import routes as R
+    from backend.tests.test_activity_edit import _fit_ds
+    monkeypatch.setattr(AT, "_default_db", lambda: tmp_path / "tags.db")
+    ds = _fit_ds(tmp_path)
+    monkeypatch.setattr(V, "_dataset", lambda parity=None, source=None: ds)
+    monkeypatch.setattr(R, "HOME", tmp_path / "routes")
+    car = {x["file"]: x for x in V.activities_list()["activities"]}["2025/1.fit"]
+    assert car["index"] is None and car["rain_kind"] is False and car["rain_kind_auto"] is False
+    page = (ROOT / "static" / "activity.html").read_text(encoding="utf-8")
+    body = page.split("// an excluded file has no dataset index: edited by key", 1)[1].split("\n    }", 1)[0]
+    assert "a.rain_kind = " in body and "a.rain_kind_auto" in body
+    js_types = re.search(r"const MOUNTAIN_TYPES = \[([^\]]*)\]", page).group(1)
+    assert sorted(t.strip().strip('"') for t in js_types.split(",")) == sorted(AT._MOUNTAIN_TYPES)
 
 
 def test_list_without_a_weather_file_has_no_hint(tmp_path, no_plan, monkeypatch):

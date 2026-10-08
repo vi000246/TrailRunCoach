@@ -655,7 +655,7 @@ unchanged files and unchanged code reads no FIT file at all.
   its km profile and its own route map (`drawMap(card, res, opts)` with `into`,
   `chart: false`, `colorKey: "climbColor"` default 坡度, `onPick`,
   `backend/static/wko5_viewer.html:2065`) mark the same sample.
-- **Samples** (`backend/api/wko5views.py:1411`): per-sample `t`, `d` (km),
+- **Samples** (`backend/api/wko5views.py:1415`): per-sample `t`, `d` (km),
   `lat` / `lng`, `elev`, `hr`, `power`, `grade` (%), downsampled with the same
   step as the workout charts (`MAX_POINTS` 3000, `backend/engine/wko5expr/render.py:55`),
   so chart x maps exactly to a sample index; NaN and (0, 0) GPS become null. The

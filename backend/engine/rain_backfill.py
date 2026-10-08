@@ -11,9 +11,14 @@ so those activities have no rain and never get the rain hint of 活動編輯
     route_weather.activity_point) asked again through route_weather.Fetcher — only the
     cached points without precipitation (`refetch`), one call at a time with PACE_S between
     calls (Open-Meteo allows 600 calls / min; ~194 calls for the owner's year);
-  * the cache entries replaced as each call lands (an interrupted run keeps what it fetched —
-    the next run asks only for what is still missing), then the rain written into
+  * each cache entry gains only the precipitation as its call lands (`merge`: the temperature /
+    humidity / dew point a build used stay as they were; an interrupted run keeps what it
+    fetched — the next run asks only for what is still missing), then the rain written into
     activity_weather.json; nothing else in that file changes.
+
+It runs in the routes Builder's slot (api/rain_backfill.py → routes.Builder.start_task), so no
+routes build writes the same cache files meanwhile; a `stop` event (the app quitting) ends it
+before the next call.
 
 Idempotent: a day once fetched with precipitation is never asked again. The scheduler starts it
 (api/rain_backfill.py) and marks it done in the setting `weather.rain_backfill`; never in tests
@@ -23,7 +28,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
-import time
+import threading
 from pathlib import Path
 from typing import Any, Callable, Optional
 
@@ -42,11 +47,15 @@ def _start_date(v: dict) -> Optional[dt.date]:
 
 
 def run(root: Path, track_of: Callable[[str], Any], get: Callable, today: dt.date,
-        pace_s: float = PACE_S, sleep: Callable[[float], None] = time.sleep) -> dict:
+        pace_s: float = PACE_S, sleep: Optional[Callable[[float], None]] = None,
+        stop: Optional[threading.Event] = None) -> dict:
     """Backfill the rain of the routes folder `root`. `track_of(file)` → the routes.Track of an
     activity (None = no track); `get` = the archive client (racepower/weather._http_get).
-    → {activities, no_track, calls, failed, skipped, filled, complete, errors} ({no_doc: True}
-    while there is no activity_weather.json yet). `complete` = nothing failed or was skipped."""
+    → {activities, no_track, calls, failed, skipped, filled, complete, stopped, errors}
+    ({no_doc: True} while there is no activity_weather.json yet). `complete` = nothing failed or
+    was skipped. `stop` set (the app is quitting): no further call, the pause cut short, nothing
+    written to activity_weather.json — what was fetched is in the cache, so the next run only
+    computes it (resumable)."""
     root = Path(root)
     doc = RW.load_activity_weather(root)
     if not doc:
@@ -72,8 +81,12 @@ def run(root: Path, track_of: Callable[[str], Any], get: Callable, today: dt.dat
             need.setdefault(k, set()).add(pt)
         todo.append((f, a, b, pt, keys))
     fch = RW.Fetcher(root / "weather", get, today, refetch=lambda js: not RW.has_rain(js),
-                     workers=WORKERS, pace_s=pace_s, sleep=sleep)
+                     workers=WORKERS, pace_s=pace_s, sleep=sleep, merge=True, stop=stop)
     got = fch.fetch_all(need) if need else {}
+    st = fch.stats
+    if stop is not None and stop.is_set():
+        return {"activities": len(todo), "no_track": no_track, "calls": st["calls"], "failed": st["failed"],
+                "skipped": st["skipped"], "filled": 0, "complete": False, "stopped": True, "errors": fch.errors}
     rain = {}
     for f, a, b, pt, keys in todo:
         days = [got[(*k, pt)] for k in keys if (*k, pt) in got]
@@ -81,7 +94,6 @@ def run(root: Path, track_of: Callable[[str], Any], get: Callable, today: dt.dat
             r = RW.activity_rain(days, a, b)
             if r is not None:
                 rain[f] = r
-    st = fch.stats
     return {"activities": len(todo), "no_track": no_track, "calls": st["calls"], "failed": st["failed"],
             "skipped": st["skipped"], "filled": _write_rain(root, rain) if rain else 0,
             "complete": not (st["failed"] or st["skipped"]), "errors": fch.errors}
@@ -99,8 +111,5 @@ def _write_rain(root: Path, rain: dict) -> int:
             e["rain_mm"] = r
             n += 1
     if n:
-        p = root / RW.ACTIVITY_WX_FILE
-        tmp = p.with_suffix(".tmp")
-        tmp.write_text(json.dumps(doc, ensure_ascii=False, separators=(",", ":")), "utf-8")
-        tmp.replace(p)
+        RW.write_atomic(root / RW.ACTIVITY_WX_FILE, json.dumps(doc, ensure_ascii=False, separators=(",", ":")))
     return n
