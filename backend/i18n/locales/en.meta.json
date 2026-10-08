@@ -5615,10 +5615,6 @@
     "draft": false,
     "src": "backend/engine/adapt.py"
   },
-  "課前 1–4 小時吃含碳水的一餐或點心，不要空腹做（Aird 2018、Mata 2019、Impey 2018）": {
-    "draft": true,
-    "src": "backend/engine/session_fuel.py:32"
-  },
   "課表": {
     "draft": true,
     "src": "backend/engine/workout_review.py:2734"

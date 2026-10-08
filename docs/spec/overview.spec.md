@@ -1356,9 +1356,9 @@ which one. The response keeps the `coros` field names.
     an activity (`backend/static/schedule.html:1860`);
   - the session dialog's 結構 (step editor, `engine/workout_steps.py`) open by default and the
     地形與同負荷換算 fold collapsed; the push preview's pace-target warnings;
-  - 「課前要吃」 on a 強度課 / ≥ 2 h long run (SP-286, `engine/session_fuel.py`): app text only, never
-    pushed to the watch (`fuel_note`, `backend/api/plan_sessions.py:398`,
-    `backend/static/schedule.html:1955`) — the owner decided 2026-10-07 to remove it (Open Questions);
+  - no 「課前要吃」 line on any session (SP-286 removed it, owner 2026-10-07: `engine/session_fuel.py`,
+    the view's `pre_meal` and its 課表 / 總覽 displays are gone; the watch push never carried it —
+    `backend/tests/test_carb_hints.py::test_no_session_description_says_eat_before`);
   - a done run's post-run self-rating 「自評：Hard（COROS）」 (SP-231, worded by the server:
     `self_rating`, `backend/api/plan_sessions.py:222`; `backend/static/schedule.html:1008`);
   - 記錄睡在高處 on today or a past day, shown as a small mark on the day (SP-259, `high_nights`,
@@ -2066,7 +2066,6 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 - [ ] A warm-up time in 課表偏好 added before every session and template (SP-364, Todo) — not implemented
 - [ ] RPE load converted per level (TSS definition IF² × 100 / h as the default, fitted per level once there is data), decided 2026-10-07 (SP-57, Todo) — the code still uses one factor (`DEFAULT_FACTOR`, `backend/engine/rpe_load.py:67`)
 - [ ] A 強度課's 「自動」 target counted as % CP in the template filter, decided 2026-10-07 (SP-84, Todo) — `target_types` still leaves it "auto" without a basis (`backend/engine/workout_steps.py:1341`)
-- [ ] Remove 「課前要吃」 entirely, decided 2026-10-07 (SP-286, Todo) — still in the code (`backend/api/plan_sessions.py:398`)
 - [ ] 專項期前後段: a long trail race's late half keeps one Zone 5 session every 3 weeks, and the other four answers of 2026-10-07 (SP-353, Todo) — not implemented
 - [ ] The altitude reminder names no place, can be dismissed, and counts the weekend of a Sunday departure, decided 2026-10-07 (SP-258, Todo) — the reminder still names 合歡山松雪樓 (`backend/engine/altitude.py:364`)
 
@@ -2146,3 +2145,4 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 | 2026-10-08 | feat/sp371-debug-api | SP-371 security review | Debug API hardening: token also in `X-TRC-Debug-Token` next to the password proxy's `Authorization` (`backend/debug_auth.py:351`); token checked before the IP block, which only refuses failed attempts; failures aggregated in `debug_auth_failures` (`backend/db/models.py:468`), 429 / 503 never stored; per-tenant bucket and a 2-call gate; `scrub` on name segments + JWT / opaque / `applog.redact` / coordinates in strings, export an allow-list (`backend/engine/debug_view.py:99`–`:524`); `read:gps` scope, `read:plan` for the activity's session row; strict bounded input, `AuditedRoute` 400 / audited 500 (`backend/api/debug.py:78`); same-origin settings writes; PIN failures logged and counted; routes out of OpenAPI; CLI header / https / no redirect / env-only token |
 | 2026-10-08 | code-sync（SP-90, SP-95, SP-96, SP-98, SP-109, SP-114, SP-115, SP-117, SP-119, SP-120, SP-191, SP-216, SP-263, SP-270, SP-271, SP-272, SP-273, SP-280, SP-285, SP-71, SP-100, SP-105, SP-122, SP-231, SP-258, SP-259, SP-286） | N/A | Re-anchored the whole spec: each anchor moved once from the commit that wrote its line (~410 of 510), then the ones written stale or still off checked by hand against the symbol, the route decorator or the code text (≈ 120 fixed, incl. the whole API table). New: the week-plan rules added after 2026-10-04 (taper by race, two A races, 中間訓練 / B races, B-race notes, 恢復期 / 回量期, ultra 轉換期, multi-day 百岳, the walking cap, illness, strength by phase / moves, 平衡／腳踝, injuries, carb note), Categories = the platform-neutral app type, compliance intensity grading, the 課表 page's fuel / self-rating / altitude lines, the 7 / 42 / 90-day PMC, 每週存檔 and its API row, the feasibility API row, the feature test files; Decisions Log (9) and Open Questions (11) |
 | 2026-10-08 | fix/plan-rules-sp352-295-286-84-353 | SP-352 | A manual 專項期 without an A race no longer crashes the week plan when Zone 3's turn is the T+ maintenance session: the 後段 note and its T+ rule only in a 後段 week (`backend/engine/quality_gate.py:2601-2612`; plan-auto.spec.md › The ladder: two tracks) |
+| 2026-10-08 | fix/plan-rules-sp352-295-286-84-353 | SP-286 | 「課前要吃」 removed entirely (owner 2026-10-07; reverts `ba6934d`): `backend/engine/session_fuel.py` deleted, no `pre_meal` on the session view (`backend/api/plan_sessions.py:520`), the 課表 card / title / dialog line and the 總覽 tooltip line gone (`backend/static/schedule.html`, `backend/static/overview.html`), zh-TW / en string removed; the watch push is unchanged. Test: `backend/tests/test_carb_hints.py::test_no_session_description_says_eat_before` |

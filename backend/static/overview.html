@@ -653,7 +653,7 @@ function sessHtml(s, today) {
     rated,
     cp ? `完成度：${cp.label}${cp.pct != null ? ` ${cp.pct}%` : ""}（實際 ÷ 計畫${cp.tss_pct != null ? `：TSS ${cp.tss_pct}%` : ""}${cp.duration_pct != null ? ` · 時間 ${cp.duration_pct}%` : ""}；綠 ±20%、黃 20–50%、紅 > 50% 或類型不符）` : "",
     done && s.vs?.off_plan ? `≠ ${s.vs.text}` : done && s.vs?.short ? `◐ ${s.vs.short_text}` : "", done ? "點一下看計畫 vs 實際、開啟活動" : "",
-    missed ? "未完成" : "", s.target ? "目標：" + s.target : "", live && s.detail ? s.detail : "", live && s.walk_hint ? s.walk_hint : "", live && s.pre_meal ? s.pre_meal.text : "",
+    missed ? "未完成" : "", s.target ? "目標：" + s.target : "", live && s.detail ? s.detail : "", live && s.walk_hint ? s.walk_hint : "",
     live && s.coros?.status ? `COROS：${CB[s.coros.status] || s.coros.status}${s.coros.status === "failed" ? " " + (s.coros.error || "") : s.coros.status === "outdated" ? " " + (s.coros.reason || "課表改過，到課表頁再同步一次") : ""}` : ""].filter(Boolean).join("\n");
   const go = done ? ` data-go="${esc(`${SCHED}?day=${s.day}&uid=${encodeURIComponent(s.uid)}`)}"` : "";
   return `<button type="button" class="sx ty-${ty} ${missed ? "missed" : ""} ${cp ? "cp-" + esc(cp.level) : ""}" data-tip="${esc(tip)}"${go} aria-label="${esc(tip.split("\n").slice(0, 3).join("，"))}">
