@@ -571,26 +571,60 @@ def ensure_warm(items: list, floor_s: int) -> tuple[list, int]:
     return out, add
 
 
-def _carve(items: list, n_s: int) -> list:
-    """An easy-type session's 「含暖身 N 分」 (engine/warmup.py): its first `n_s` seconds become the
-    warm-up — the first easy step is split (the heat run's own warm-up grows into its main part);
-    one too short for that gets the warm-up in front."""
+EASY_HR_PCT, EASY_POWER_PCT, EASY_PACE_PCT = 0.90, 0.80, 1.15     # 推估: Friel HR Z2 top, Palladino EZ, slower
+
+
+def _easy_target(tg: dict) -> bool:
+    ty, mode = tg.get("type"), tg.get("mode")
+    if ty == "auto":
+        return tg.get("intent") == "easy"
+    if ty == "rpe":
+        return (tg.get("hi") or 99) <= RPE_EASY_MAX
+    if mode == "zone":
+        return str(tg.get("zone") or "").lower() in ("aet", "1", "2", "z1", "z2")
+    if mode == "pct" and ty == "hr":
+        return (tg.get("hi") or 9) <= EASY_HR_PCT
+    if mode == "pct" and ty == "power":
+        return (tg.get("hi") or 9) <= EASY_POWER_PCT
+    if mode == "pct" and ty == "pace":
+        return (tg.get("lo") or 0) >= EASY_PACE_PCT
+    return False
+
+
+def _easy_step(st: dict) -> bool:
+    """A timed step at easy intensity (auto easy, RPE ≤ RPE_EASY_MAX, an easy HR / power / pace
+    band): one a warm-up may come out of."""
+    easy = _easy_target(st.get("target") or {})
+    d = st.get("dur") or {}
+    return st.get("kind") in ("work", "warm") and easy and d.get("type") == "time" and bool(d.get("value"))
+
+
+def carve_warm(items: list, floor_s: int) -> list:
+    """The leading warm-up block made `floor_s` long INSIDE the structure's own time (每堂課前加熱身,
+    SP-364: easy-type sessions, easy / 我的範本 templates): the missing seconds come out of the first
+    easy step after it (a warm step goes in front, split from the first step, when there is none),
+    which keeps ≥ warmup.MIN_MAIN minutes — the warm-up is shorter when that can't hold, none when
+    nothing is left. The total time never changes; the input is never mutated."""
     from backend.engine.warmup import MIN_MAIN
-    keep = MIN_MAIN * 60
-    first = items[0] if items else None
-    dur = (first or {}).get("dur") or {}
-    if first is not None and first["kind"] == "warm" and dur.get("type") == "time":
-        d = n_s - int(dur["value"])
-        nxt = next((x for x in items[1:] if x.get("kind") == "work" and (x.get("dur") or {}).get("type") == "time"),
-                   None)
-        if d > 0:
-            first["dur"] = {"type": "time", "value": n_s}
-            if nxt is not None and nxt["dur"]["value"] - d >= keep:
-                nxt["dur"] = {"type": "time", "value": nxt["dur"]["value"] - d}
+    have = lead_warm_s(items)
+    if not floor_s or not items or have is None or have >= floor_s:
         return items
-    if first is not None and first["kind"] == "work" and dur.get("type") == "time" and dur["value"] - n_s >= keep:
-        first["dur"] = {"type": "time", "value": int(dur["value"]) - n_s}
-    return [step(_Ids("wu"), "warm", n_s, dict(EASY), KIND_LABEL["warm"])] + items
+    lead = _lead(items)
+    j = lead[-1] + 1 if lead else 0
+    if j >= len(items) or not _easy_step(items[j]):
+        return items
+    take = min(int(floor_s - have), int(items[j]["dur"]["value"]) - MIN_MAIN * 60)
+    if take <= 0:
+        return items
+    out = copy.deepcopy(items)
+    out[j]["dur"] = {"type": "time", "value": int(out[j]["dur"]["value"]) - take}
+    first = next((out[i] for i in lead if out[i].get("kind") == "warm" and out[i]["dur"].get("type") == "time"),
+                 None)
+    if first is not None:
+        first["dur"] = {"type": "time", "value": int(first["dur"]["value"]) + take}
+    else:
+        out.insert(0, step(_Ids("wu"), "warm", take, dict(EASY), KIND_LABEL["warm"]))
+    return out
 
 
 def strides_names(title: str, sprint: int, n: int) -> tuple[str, str, str]:
@@ -629,7 +663,7 @@ def derive(s: dict, th: Optional[dict] = None) -> Optional[dict]:
         return None
     from backend.engine.warmup import mark_min
     n = mark_min(s)            # 每堂課前加熱身 (SP-364): its first N minutes are the warm-up
-    return doc(_carve(items, n * 60) if n else items)
+    return doc(carve_warm(items, n * 60) if n else items)
 
 
 def _easy_items(s: dict, kind: str, secs: int, ids) -> Optional[list]:
@@ -1862,7 +1896,8 @@ def templates(prefs=None, user: Optional[dict] = None, warm_floor_s: int = 0) ->
     the user's own templates first in every category they are in (「我的範本」), and their
     own categories as extra tabs. `warm_floor_s` (每堂課前加熱身, SP-364; engine/warmup.py): every
     row's whole structure (`full`, 整份換) starts with at least that much warm-up — a template's own
-    warm-up is kept and topped up (ensure_warm); the main set (`items`, 只換主課) is untouched."""
+    warm-up is kept and topped up (ensure_warm) — easy-category and 我的範本 rows inside their own
+    time (carve_warm, as an easy run); the main set (`items`, 只換主課) is untouched."""
     from backend.engine import cp_protocols as CPP
     from backend.engine import user_templates as UT
     from backend.engine import workout_templates as WT
@@ -1932,7 +1967,10 @@ def templates(prefs=None, user: Optional[dict] = None, warm_floor_s: int = 0) ->
     for gr in groups:
         for r in gr["rows"]:
             if warm_floor_s and r.get("full"):
-                r["full"] = ensure_warm(r["full"], warm_floor_s)[0]
+                # easy-category and 我的範本 structures keep their length (the warm-up comes out of
+                # their first easy step, like an easy run); the others are topped up in front
+                r["full"] = carve_warm(r["full"], warm_floor_s) if gr["cat"] == "easy" or r.get("mine") \
+                    else ensure_warm(r["full"], warm_floor_s)[0]
             # the editor badges these when there is no threshold pace (their pace is × it)
             r["needs_tpace"] = needs_tpace(r.get("full") or r.get("items"))
             # the 主課強度類型 filter (SP-84; user rows: user_templates.row, the same helper)

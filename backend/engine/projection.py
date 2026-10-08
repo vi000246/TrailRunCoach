@@ -265,15 +265,19 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
             detail=st_s["detail"], source=st_s["source"] or O.SRC_UA, tss=strength_tss / 35 * st_s["minutes"])
     # 每堂課前加熱身 (SP-364): the long run / intervals / tests get theirs before the easy runs are
     # sized, so a longer interval warm-up comes out of the week's easy minutes (as week_plan)
-    WU.apply(ss, warm_prefs if warm_prefs is not None else prefs, {"easy": easy_tph})
+    # (counted as without it: the easy-run count never changes, owner 2026-10-08)
+    w_prefs = warm_prefs if warm_prefs is not None else prefs
+    warm_base = [dict(s) for s in ss] if WU.floor_min(w_prefs) else None
+    warm_extra = WU.apply_sized(ss, w_prefs, {"easy": easy_tph})
     used = sum(s["minutes"] for s in ss if s["kind"] != "strength")
     left = max(0.0, total - used)
-    n_easy = O.easy_count(left, kind)
+    left_n = left + warm_extra
+    n_easy = O.easy_count(left_n, kind)
     if kind == "taper" and taper:
-        n_easy = O.taper_easy_count(left, taper.get("runs"), sum(1 for s in ss if s["kind"] in O.RUN_KINDS))
+        n_easy = O.taper_easy_count(left_n, taper.get("runs"), sum(1 for s in ss if s["kind"] in O.RUN_KINDS))
     n_easy = O.auto_easy_cap(n_easy, sum(1 for s in ss if s["kind"] in O.RUN_KINDS))   # ≥ 1 rest day (SP-82)
     if cold is not None and mode in ("base", "specific"):
-        n_easy = CS.easy_runs(n_easy, left, cold, sum(1 for s in ss if s["kind"] in O.RUN_KINDS))   # SP-288
+        n_easy = CS.easy_runs(n_easy, left_n, cold, sum(1 for s in ss if s["kind"] in O.RUN_KINDS))   # SP-288
     for i in range(n_easy):
         m = min(left / n_easy, O.TRANSITION_RUN_MAX) if kind in ("transition", "rebuild") else left / n_easy
         st = O.strides_for(kind, mode, i, road, transition_week)   # base; 轉換期 from week 2 (SP-103)
@@ -290,7 +294,7 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
         n_lost = sum(1 for i in range(7) if prefs.days[i] and (monday + dt.timedelta(days=i)).isoformat() in blocked)
         ctx = PP.Ctx(kind=kind, mode=mode, allow_quality=allow_quality, rates=r, aet=aet, aet_measured=aet_measured,
                      slots=max(1, sum(bool(x) for x in prefs.days) - n_lost), notes=notes if notes is not None else [],
-                     quality_cap=quality_cap)
+                     quality_cap=quality_cap, warm_base=warm_base)
         ss = PP.shape(ss, total, CS.prefs_for(prefs, cold, ctx.slots) if mode in ("base", "specific") else prefs,
                       ctx)                     # SP-288: a ramp week's run count unless 每週跑步次數 is set
         if kind in ("transition", "rebuild"):

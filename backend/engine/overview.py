@@ -1834,19 +1834,22 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
             detail=st_s["detail"], source=st_s["source"] or SRC_UA,
             tss=st_s["minutes"] / 60 * tph["strength"])
     # 每堂課前加熱身 (SP-364, engine/warmup.py): the long run / intervals get theirs before the easy runs
-    # are sized — a longer interval warm-up comes out of the week's easy minutes
-    WU.apply_objs(sessions, prefs, tph)
+    # are sized — a longer interval warm-up comes out of the week's easy minutes, but the easy runs are
+    # counted on the minutes they'd have without it (owner 2026-10-08: the run count never changes)
+    warm_base = [asdict(s) for s in sessions] if WU.floor_min(prefs) else None
+    warm_extra = WU.apply_objs(sessions, prefs, tph)
     used = sum(s.minutes for s in sessions if s.kind not in ("strength",))
     left = max(0.0, minutes_total - used)
+    left_n = left + warm_extra
     tr_wk = transition_week(phs, monday) if kind == "transition" else None
-    n_easy = easy_count(left, kind)
+    n_easy = easy_count(left_n, kind)
     if kind == "taper":
         # keep the run count, each run shorter (SP-96)
-        n_easy = taper_easy_count(left, t_ref.get("runs"), sum(1 for s in sessions if s.kind in RUN_KINDS))
+        n_easy = taper_easy_count(left_n, t_ref.get("runs"), sum(1 for s in sessions if s.kind in RUN_KINDS))
     n_easy = auto_easy_cap(n_easy, sum(1 for s in sessions if s.kind in RUN_KINDS))   # ≥ 1 rest day (SP-82)
     if cs is not None and mode in ("base", "specific"):
         # SP-288: the cold week / the ramp — DEFAULT_RUNS runs (the cold week exactly), none under MIN_EASY
-        n_easy = CS.easy_runs(n_easy, left, cs, sum(1 for s in sessions if s.kind in RUN_KINDS))
+        n_easy = CS.easy_runs(n_easy, left_n, cs, sum(1 for s in sessions if s.kind in RUN_KINDS))
     for i in range(n_easy):
         m = min(left / n_easy, TRANSITION_RUN_MAX) if kind in ("transition", "rebuild") else left / n_easy
         st = strides_for(kind, mode, i, road, tr_wk)       # base; 轉換期 from week 2 (SP-103)
@@ -1860,7 +1863,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         # 課表偏好: counts, caps, terrain, interval target (engine/plan_prefs.py)
         ctx = PP.Ctx(kind=kind, mode=mode, allow_quality=allow_quality, rates=tph, aet=aet, aet_measured=aet_meas,
                      slots=max(1, sum(bool(x) for x in PR.days) - len(lost)), notes=notes,
-                     quality_cap=1 if kind == "base" and QG.guardrail_mode(gate) else None)
+                     quality_cap=1 if kind == "base" and QG.guardrail_mode(gate) else None, warm_base=warm_base)
         shaped = PP.shape([asdict(s) for s in sessions], minutes_total,
                           CS.prefs_for(PR, cs, ctx.slots) if mode in ("base", "specific") else PR, ctx)
         sessions = []

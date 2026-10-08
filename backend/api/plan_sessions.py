@@ -672,8 +672,9 @@ def _with_variant(data: dict, inp: dict, rung: Optional[str], day: Optional[str]
     body["kind"] = "quality"
     body["_variant"] = {k: vp[k] for k in ("variant_key", "rung_key", "equiv", "swap", "swap_reason", "variant_reps",
                                            "variant_blocks", "source")}
-    if vp.get("variant_adj"):
-        body["_variant"]["variant_adj"] = vp["variant_adj"]      # 每堂課前加熱身 (SP-364): the warm-up floor
+    # 每堂課前加熱身 (SP-364): the warm-up floor as it is now (None = off); plan_store merges it into the
+    # row's variant_adj, keeping the state machine's rest / power tweak
+    body["_variant"]["variant_adj"] = vp.get("variant_adj")
     return body
 
 

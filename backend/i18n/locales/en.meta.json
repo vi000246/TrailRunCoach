@@ -2569,7 +2569,7 @@
   },
   "含暖身 {n} 分": {
     "draft": true,
-    "src": "backend/engine/warmup.py:38"
+    "src": "backend/engine/warmup.py:49"
   },
   "和": {
     "draft": false,
@@ -3917,7 +3917,7 @@
   },
   "暖身 {n} 分": {
     "draft": true,
-    "src": "backend/engine/warmup.py:39"
+    "src": "backend/engine/warmup.py:50"
   },
   "暖身後不到 40 分鐘，只當參考": {
     "draft": true,
@@ -4838,6 +4838,10 @@
   "熱校正後的心率–功率沒有正斜率，基準線不能用": {
     "draft": true,
     "src": "backend/engine/zone_events.py:485"
+  },
+  "熱身 {w} 分＋主課放不進{cl}：": {
+    "draft": true,
+    "src": "backend/engine/interval_library.py:661"
   },
   "熱身時間要在 {lo}–{hi} 分": {
     "draft": true,
