@@ -1,0 +1,892 @@
+{
+ "trail_auto": {
+  "time_s": 6428.922474788955,
+  "power": 278.361954479044,
+  "segments": [
+   {
+    "t": 298.47843914003175,
+    "power": 413.54892992690145,
+    "speed_ms": 5.025488622634723,
+    "gait": null,
+    "walk": null,
+    "notes": [
+     "超 CP"
+    ],
+    "trusted": true,
+    "badge": "推估"
+   },
+   {
+    "t": 299.84175620193423,
+    "power": 413.40521851592956,
+    "speed_ms": 4.969287863283894,
+    "gait": "run",
+    "walk": null,
+    "notes": [
+     "超 CP",
+     "走（你在這個坡度多半走）"
+    ],
+    "trusted": true,
+    "badge": "推估"
+   },
+   {
+    "t": 473.9575751463002,
+    "power": 160.22956806905077,
+    "speed_ms": 2.1309924199190937,
+    "gait": null,
+    "walk": null,
+    "notes": [
+     "下坡上限"
+    ],
+    "trusted": true,
+    "badge": "推估"
+   },
+   {
+    "t": 352.90082064067,
+    "power": 412.77485889129605,
+    "speed_ms": 4.250486007022713,
+    "gait": "run",
+    "walk": null,
+    "notes": [
+     "超 CP",
+     "走（你在這個坡度多半走）"
+    ],
+    "trusted": true,
+    "badge": "推估"
+   },
+   {
+    "t": 469.26492588742593,
+    "power": 155.85779112442168,
+    "speed_ms": 2.1309924199190937,
+    "gait": null,
+    "walk": null,
+    "notes": [
+     "下坡上限"
+    ],
+    "trusted": true,
+    "badge": "推估"
+   },
+   {
+    "t": 405.08749677824227,
+    "power": 411.230507669237,
+    "speed_ms": 3.702903723096513,
+    "gait": "run",
+    "walk": null,
+    "notes": [
+     "超 CP",
+     "走（你在這個坡度多半走）"
+    ],
+    "trusted": true,
+    "badge": "推估"
+   },
+   {
+    "t": 469.26492588742593,
+    "power": 149.74707930575192,
+    "speed_ms": 2.1309924199190937,
+    "gait": null,
+    "walk": null,
+    "notes": [
+     "下坡上限"
+    ],
+    "trusted": true,
+    "badge": "推估"
+   },
+   {
+    "t": 493.7474757991366,
+    "power": 409.04077292684605,
+    "speed_ms": 3.0177369465806705,
+    "gait": "run",
+    "walk": null,
+    "notes": [
+     "超 CP",
+     "走（你在這個坡度多半走）"
+    ],
+    "trusted": true,
+    "badge": "推估"
+   },
+   {
+    "t": 483.3428736640487,
+    "power": 147.25954479328428,
+    "speed_ms": 2.1309924199190937,
+    "gait": null,
+    "walk": null,
+    "notes": [
+     "下坡上限"
+    ],
+    "trusted": true,
+    "badge": "推估"
+   },
+   {
+    "t": 499.3808656502337,
+    "power": 406.2657046389726,
+    "speed_ms": 2.3629259372273825,
+    "gait": "run",
+    "walk": null,
+    "notes": [
+     "超 CP",
+     "走（你在這個坡度多半走）"
+    ],
+    "trusted": true,
+    "badge": "推估"
+   },
+   {
+    "t": 469.26492588742593,
+    "power": 142.98518808351457,
+    "speed_ms": 2.1309924199190937,
+    "gait": null,
+    "walk": null,
+    "notes": [
+     "下坡上限"
+    ],
+    "trusted": true,
+    "badge": "推估"
+   },
+   {
+    "t": 486.429890226316,
+    "power": 403.77401439884653,
+    "speed_ms": 1.6857516704380304,
+    "gait": "run",
+    "walk": null,
+    "notes": [
+     "超 CP",
+     "走（你在這個坡度多半走）"
+    ],
+    "trusted": true,
+    "badge": "推估"
+   },
+   {
+    "t": 924.4519039982291,
+    "power": 160.41666666666669,
+    "speed_ms": 2.1309924199190937,
+    "gait": null,
+    "walk": null,
+    "notes": [
+     "下坡上限",
+     "走（你在這個坡度多半走）"
+    ],
+    "trusted": true,
+    "badge": "推估"
+   },
+   {
+    "t": 303.5085998815349,
+    "power": 404.4269440089941,
+    "speed_ms": 4.975147328902787,
+    "gait": null,
+    "walk": null,
+    "notes": [
+     "超 CP"
+    ],
+    "trusted": true,
+    "badge": "推估"
+   }
+  ]
+ },
+ "trail_power": {
+  "time_s": 8947.837126381406,
+  "power": 199.9999999999767,
+  "segments": [
+   {
+    "t": 557.1579304411686,
+    "power": 221.54479433657784,
+    "speed_ms": 2.692234854868297,
+    "gait": null,
+    "walk": null,
+    "notes": [],
+    "trusted": true,
+    "badge": "推估"
+   },
+   {
+    "t": 547.1133588442406,
+    "power": 226.56391904720456,
+    "speed_ms": 2.723384424660325,
+    "gait": "run",
+    "walk": null,
+    "notes": [
+     "走（你在這個坡度多半走）"
+    ],
+    "trusted": true,
+    "badge": "推估"
+   },
+   {
+    "t": 473.95757514618543,
+    "power": 160.22956806905077,
+    "speed_ms": 2.1309924199196097,
+    "gait": null,
+    "walk": null,
+    "notes": [
+     "下坡上限"
+    ],
+    "trusted": true,
+    "badge": "推估"
+   },
+   {
+    "t": 629.8603399877403,
+    "power": 231.27124728217555,
+    "speed_ms": 2.381480313602848,
+    "gait": "run",
+    "walk": null,
+    "notes": [
+     "走（你在這個坡度多半走）"
+    ],
+    "trusted": true,
+    "badge": "推估"
+   },
+   {
+    "t": 469.2649258873123,
+    "power": 155.85779112442168,
+    "speed_ms": 2.1309924199196097,
+    "gait": null,
+    "walk": null,
+    "notes": [
+     "下坡上限"
+    ],
+    "trusted": true,
+    "badge": "推估"
+   },
+   {
+    "t": 721.6492923741139,
+    "power": 230.8383569566044,
+    "speed_ms": 2.0785719820568707,
+    "gait": "run",
+    "walk": null,
+    "notes": [
+     "走（你在這個坡度多半走）"
+    ],
+    "trusted": true,
+    "badge": "推估"
+   },
+   {
+    "t": 469.2649258873123,
+    "power": 149.74707930575192,
+    "speed_ms": 2.1309924199196097,
+    "gait": null,
+    "walk": null,
+    "notes": [
+     "下坡上限"
+    ],
+    "trusted": true,
+    "badge": "推估"
+   },
+   {
+    "t": 879.5939626766822,
+    "power": 229.6091807143814,
+    "speed_ms": 1.693963423152426,
+    "gait": "either",
+    "walk": "走跑皆可",
+    "notes": [
+     "走跑皆可",
+     "走（你在這個坡度多半走）"
+    ],
+    "trusted": true,
+    "badge": "推估"
+   },
+   {
+    "t": 483.3428736639317,
+    "power": 147.25954479328428,
+    "speed_ms": 2.1309924199196097,
+    "gait": null,
+    "walk": null,
+    "notes": [
+     "下坡上限"
+    ],
+    "trusted": true,
+    "badge": "推估"
+   },
+   {
+    "t": 889.6296508478656,
+    "power": 228.05143586795495,
+    "speed_ms": 1.3263946394720494,
+    "gait": "walk",
+    "walk": "走",
+    "notes": [
+     "走",
+     "走（你在這個坡度多半走）"
+    ],
+    "trusted": true,
+    "badge": "推估"
+   },
+   {
+    "t": 469.2649258873123,
+    "power": 142.98518808351457,
+    "speed_ms": 2.1309924199196097,
+    "gait": null,
+    "walk": null,
+    "notes": [
+     "下坡上限"
+    ],
+    "trusted": true,
+    "badge": "推估"
+   },
+   {
+    "t": 866.5579383794329,
+    "power": 226.65276123086278,
+    "speed_ms": 0.9462725614556114,
+    "gait": "walk",
+    "walk": "走",
+    "notes": [
+     "走",
+     "走（你在這個坡度多半走）"
+    ],
+    "trusted": true,
+    "badge": "推估"
+   },
+   {
+    "t": 924.4519039980053,
+    "power": 160.41666666666669,
+    "speed_ms": 2.1309924199196097,
+    "gait": null,
+    "walk": null,
+    "notes": [
+     "下坡上限",
+     "走（你在這個坡度多半走）"
+    ],
+    "trusted": true,
+    "badge": "推估"
+   },
+   {
+    "t": 566.7275223601025,
+    "power": 216.58919090312628,
+    "speed_ms": 2.664419743920923,
+    "gait": null,
+    "walk": null,
+    "notes": [],
+    "trusted": true,
+    "badge": "推估"
+   }
+  ]
+ },
+ "trail_validated": {
+  "time_s": 6064.027823056395,
+  "power": 251.552580527327,
+  "segments": [
+   {
+    "t": 309.9495630364974,
+    "power": 339.46166275754626,
+    "speed_ms": 4.839497063021737,
+    "gait": null,
+    "walk": null,
+    "notes": [
+     "超 CP"
+    ],
+    "trusted": true,
+    "badge": null
+   },
+   {
+    "t": 311.3652751021138,
+    "power": 339.34369723763945,
+    "speed_ms": 4.785376273932111,
+    "gait": "run",
+    "walk": null,
+    "notes": [
+     "超 CP",
+     "走（你在這個坡度多半走）"
+    ],
+    "trusted": true,
+    "badge": null
+   },
+   {
+    "t": 404.0,
+    "power": 160.22956806905077,
+    "speed_ms": 2.5,
+    "gait": null,
+    "walk": null,
+    "notes": [
+     "下坡上限"
+    ],
+    "trusted": true,
+    "badge": null
+   },
+   {
+    "t": 366.4635055984077,
+    "power": 338.82626650374505,
+    "speed_ms": 4.093177020589298,
+    "gait": "run",
+    "walk": null,
+    "notes": [
+     "超 CP",
+     "走（你在這個坡度多半走）"
+    ],
+    "trusted": true,
+    "badge": null
+   },
+   {
+    "t": 400.0,
+    "power": 155.85779112442168,
+    "speed_ms": 2.5,
+    "gait": null,
+    "walk": null,
+    "notes": [
+     "下坡上限"
+    ],
+    "trusted": true,
+    "badge": null
+   },
+   {
+    "t": 420.655820164818,
+    "power": 337.55858571488534,
+    "speed_ms": 3.5658605636605287,
+    "gait": "run",
+    "walk": null,
+    "notes": [
+     "超 CP",
+     "走（你在這個坡度多半走）"
+    ],
+    "trusted": true,
+    "badge": null
+   },
+   {
+    "t": 400.0,
+    "power": 149.74707930575192,
+    "speed_ms": 2.5,
+    "gait": null,
+    "walk": null,
+    "notes": [
+     "下坡上限"
+    ],
+    "trusted": true,
+    "badge": null
+   },
+   {
+    "t": 512.7231796549247,
+    "power": 335.76114182648894,
+    "speed_ms": 2.906051567636959,
+    "gait": "run",
+    "walk": null,
+    "notes": [
+     "超 CP",
+     "走（你在這個坡度多半走）"
+    ],
+    "trusted": true,
+    "badge": null
+   },
+   {
+    "t": 412.0,
+    "power": 147.25954479328428,
+    "speed_ms": 2.5,
+    "gait": null,
+    "walk": null,
+    "notes": [
+     "下坡上限"
+    ],
+    "trusted": true,
+    "badge": null
+   },
+   {
+    "t": 518.5730719546582,
+    "power": 333.48322686384165,
+    "speed_ms": 2.2754748825507356,
+    "gait": "run",
+    "walk": null,
+    "notes": [
+     "超 CP",
+     "走（你在這個坡度多半走）"
+    ],
+    "trusted": true,
+    "badge": null
+   },
+   {
+    "t": 400.0,
+    "power": 142.98518808351457,
+    "speed_ms": 2.5,
+    "gait": null,
+    "walk": null,
+    "notes": [
+     "下坡上限"
+    ],
+    "trusted": true,
+    "badge": null
+   },
+   {
+    "t": 505.12436462053665,
+    "power": 331.4379227878779,
+    "speed_ms": 1.6233625962905325,
+    "gait": "run",
+    "walk": null,
+    "notes": [
+     "超 CP",
+     "走（你在這個坡度多半走）"
+    ],
+    "trusted": true,
+    "badge": null
+   },
+   {
+    "t": 788.0,
+    "power": 160.41666666666669,
+    "speed_ms": 2.5,
+    "gait": null,
+    "walk": null,
+    "notes": [
+     "下坡上限",
+     "走（你在這個坡度多半走）"
+    ],
+    "trusted": true,
+    "badge": null
+   },
+   {
+    "t": 315.17304292443936,
+    "power": 331.9738800956709,
+    "speed_ms": 4.791018882797206,
+    "gait": null,
+    "walk": null,
+    "notes": [
+     "超 CP"
+    ],
+    "trusted": true,
+    "badge": null
+   }
+  ]
+ },
+ "trail_time": {
+  "time_s": 8000.000000000192,
+  "power": 190.6777309099136,
+  "segments": [
+   {
+    "t": 511.6373690044743,
+    "power": 205.64563969217073,
+    "speed_ms": 2.9317639618830937,
+    "gait": null,
+    "walk": null,
+    "notes": [],
+    "trusted": true,
+    "badge": null
+   },
+   {
+    "t": 502.41345258178245,
+    "power": 210.30456708833208,
+    "speed_ms": 2.9656849201454434,
+    "gait": "run",
+    "walk": null,
+    "notes": [
+     "走（你在這個坡度多半走）"
+    ],
+    "trusted": true,
+    "badge": null
+   },
+   {
+    "t": 404.0,
+    "power": 160.22956806905077,
+    "speed_ms": 2.5,
+    "gait": null,
+    "walk": null,
+    "notes": [
+     "下坡上限"
+    ],
+    "trusted": true,
+    "badge": null
+   },
+   {
+    "t": 578.3998927133987,
+    "power": 214.67407407232804,
+    "speed_ms": 2.59336147688959,
+    "gait": "run",
+    "walk": null,
+    "notes": [
+     "走（你在這個坡度多半走）"
+    ],
+    "trusted": true,
+    "badge": null
+   },
+   {
+    "t": 400.0,
+    "power": 155.85779112442168,
+    "speed_ms": 2.5,
+    "gait": null,
+    "walk": null,
+    "notes": [
+     "下坡上限"
+    ],
+    "trusted": true,
+    "badge": null
+   },
+   {
+    "t": 662.6895627275276,
+    "power": 214.27225010627544,
+    "speed_ms": 2.263503281727016,
+    "gait": "run",
+    "walk": null,
+    "notes": [
+     "走（你在這個坡度多半走）"
+    ],
+    "trusted": true,
+    "badge": null
+   },
+   {
+    "t": 400.0,
+    "power": 149.74707930575192,
+    "speed_ms": 2.5,
+    "gait": null,
+    "walk": null,
+    "notes": [
+     "下坡上限"
+    ],
+    "trusted": true,
+    "badge": null
+   },
+   {
+    "t": 807.7299384391288,
+    "power": 213.13128565534666,
+    "speed_ms": 1.8446759604816698,
+    "gait": "run",
+    "walk": null,
+    "notes": [
+     "走（你在這個坡度多半走）"
+    ],
+    "trusted": true,
+    "badge": null
+   },
+   {
+    "t": 412.0,
+    "power": 147.25954479328428,
+    "speed_ms": 2.5,
+    "gait": null,
+    "walk": null,
+    "notes": [
+     "下坡上限"
+    ],
+    "trusted": true,
+    "badge": null
+   },
+   {
+    "t": 816.9456972240533,
+    "power": 211.68533231494058,
+    "speed_ms": 1.4444044494139447,
+    "gait": "walk",
+    "walk": "走",
+    "notes": [
+     "走",
+     "走（你在這個坡度多半走）"
+    ],
+    "trusted": true,
+    "badge": null
+   },
+   {
+    "t": 400.0,
+    "power": 142.98518808351457,
+    "speed_ms": 2.5,
+    "gait": null,
+    "walk": null,
+    "notes": [
+     "下坡上限"
+    ],
+    "trusted": true,
+    "badge": null
+   },
+   {
+    "t": 795.7589750743215,
+    "power": 210.38703351569615,
+    "speed_ms": 1.030462772880965,
+    "gait": "walk",
+    "walk": "走",
+    "notes": [
+     "走",
+     "走（你在這個坡度多半走）"
+    ],
+    "trusted": true,
+    "badge": null
+   },
+   {
+    "t": 788.0,
+    "power": 160.41666666666669,
+    "speed_ms": 2.5,
+    "gait": null,
+    "walk": null,
+    "notes": [
+     "下坡上限",
+     "走（你在這個坡度多半走）"
+    ],
+    "trusted": true,
+    "badge": null
+   },
+   {
+    "t": 520.4251122355057,
+    "power": 201.04567497088453,
+    "speed_ms": 2.901474130472647,
+    "gait": null,
+    "walk": null,
+    "notes": [],
+    "trusted": true,
+    "badge": null
+   }
+  ]
+ },
+ "road_gpx": {
+  "time_s": 4408.505553198033,
+  "power": 285.8111404863129,
+  "segments": [
+   {
+    "t": 198.93635786152245,
+    "power": 436.8659364635033,
+    "speed_ms": 7.540099839588571,
+    "gait": null,
+    "walk": null,
+    "notes": [
+     "超 CP"
+    ],
+    "trusted": true,
+    "badge": "推估"
+   },
+   {
+    "t": 199.84501086737032,
+    "power": 436.71412221471337,
+    "speed_ms": 7.455777822689091,
+    "gait": "run",
+    "walk": null,
+    "notes": [
+     "超 CP",
+     "走（你在這個坡度多半走）"
+    ],
+    "trusted": true,
+    "badge": "推估"
+   },
+   {
+    "t": 333.70441160771554,
+    "power": 160.22956806905077,
+    "speed_ms": 3.0266306493643245,
+    "gait": null,
+    "walk": null,
+    "notes": [
+     "下坡上限"
+    ],
+    "trusted": true,
+    "badge": "推估"
+   },
+   {
+    "t": 235.2089623185833,
+    "power": 436.0482212105131,
+    "speed_ms": 6.377308012474015,
+    "gait": "run",
+    "walk": null,
+    "notes": [
+     "超 CP",
+     "走（你在這個坡度多半走）"
+    ],
+    "trusted": true,
+    "badge": "推估"
+   },
+   {
+    "t": 330.4004075323916,
+    "power": 155.85779112442168,
+    "speed_ms": 3.0266306493643245,
+    "gait": null,
+    "walk": null,
+    "notes": [
+     "下坡上限"
+    ],
+    "trusted": true,
+    "badge": "推估"
+   },
+   {
+    "t": 269.9914655694691,
+    "power": 434.4167952920065,
+    "speed_ms": 5.555731166672928,
+    "gait": "run",
+    "walk": null,
+    "notes": [
+     "超 CP",
+     "走（你在這個坡度多半走）"
+    ],
+    "trusted": true,
+    "badge": "推估"
+   },
+   {
+    "t": 330.4004075323916,
+    "power": 149.74707930575192,
+    "speed_ms": 3.0266306493643245,
+    "gait": null,
+    "walk": null,
+    "notes": [
+     "下坡上限"
+    ],
+    "trusted": true,
+    "badge": "推估"
+   },
+   {
+    "t": 329.08348362381486,
+    "power": 432.1035973857506,
+    "speed_ms": 4.527726471083743,
+    "gait": "run",
+    "walk": null,
+    "notes": [
+     "超 CP",
+     "走（你在這個坡度多半走）"
+    ],
+    "trusted": true,
+    "badge": "推估"
+   },
+   {
+    "t": 340.3124197583634,
+    "power": 147.25954479328428,
+    "speed_ms": 3.0266306493643245,
+    "gait": null,
+    "walk": null,
+    "notes": [
+     "下坡上限"
+    ],
+    "trusted": true,
+    "badge": "推估"
+   },
+   {
+    "t": 332.83814698449254,
+    "power": 429.17206324649817,
+    "speed_ms": 3.5452667030230107,
+    "gait": "run",
+    "walk": null,
+    "notes": [
+     "超 CP",
+     "走（你在這個坡度多半走）"
+    ],
+    "trusted": true,
+    "badge": "推估"
+   },
+   {
+    "t": 330.4004075323916,
+    "power": 142.98518808351457,
+    "speed_ms": 3.0266306493643245,
+    "gait": null,
+    "walk": null,
+    "notes": [
+     "下坡上限"
+    ],
+    "trusted": true,
+    "badge": "推估"
+   },
+   {
+    "t": 324.20630111645795,
+    "power": 426.5398847753266,
+    "speed_ms": 2.5292537411401153,
+    "gait": "run",
+    "walk": null,
+    "notes": [
+     "超 CP",
+     "走（你在這個坡度多半走）"
+    ],
+    "trusted": true,
+    "badge": "推估"
+   },
+   {
+    "t": 650.8888028388116,
+    "power": 160.41666666666669,
+    "speed_ms": 3.0266306493643245,
+    "gait": null,
+    "walk": null,
+    "notes": [
+     "下坡上限",
+     "走（你在這個坡度多半走）"
+    ],
+    "trusted": true,
+    "badge": "推估"
+   },
+   {
+    "t": 202.28896805425802,
+    "power": 427.22962832183333,
+    "speed_ms": 7.4645691978350035,
+    "gait": null,
+    "walk": null,
+    "notes": [
+     "超 CP"
+    ],
+    "trusted": true,
+    "badge": "推估"
+   }
+  ]
+ }
+}

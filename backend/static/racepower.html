@@ -291,7 +291,8 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
     <div class="row" id="mode-power">
       <span class="rf"><span class="seg" id="punit"><button data-u="w">W</button><button data-u="pct">%CP</button></span></span>
       <label class="f rf" style="width:120px"><span><span id="plabel">平均功率 W</span><b class="req">*</b></span><input id="tpower" type="number" step="1"></label>
-      <label class="rf meta"><input type="checkbox" id="ptrain"> 以訓練條件功率輸入（會再乘上環境係數 M）</label>
+      <label class="rf meta"><input type="checkbox" id="ptrain"> <span data-i18n="racepower.ptrain.label">以訓練條件功率輸入（會再乘上環境係數 M）</span></label>
+      <span class="help rf" tabindex="0">?<span class="tip" data-i18n="racepower.ptrain.tip">勾選：你輸入的是平常訓練條件下的功率，計算機會乘上這場比賽的環境係數 M（海拔、溫濕度和你平常訓練的差；分段時取各段 M 依距離平均），換成比賽日功率再算完賽時間。例：250 W、M 0.96 → 比賽日 240 W；%CP 也一樣。不勾：輸入的就是比賽當天的功率，不再換算。</span></span>
       <label class="f bf" style="width:170px">速度倍率（100% = 你平常的速度）<input id="tspeed" type="number" step="1" value="100"></label>
     </div>
     <div class="row" id="mode-auto">
@@ -421,6 +422,7 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
           <option value="fitted_run">km + 爬升/153（你的跑步擬合）</option>
           <option value="itra">km + 爬升/100（ITRA / 健行筆記）</option>
           <option value="scarf">km + 爬升/126（Scarf）</option></select></label>
+        <span class="help" tabindex="0">?<span class="tip" data-i18n="racepower.formula.tip">越野「模型預測」：完賽時間來自心率配速模型，它用你自己擬合的爬升除數，這裡只影響對照數字、RE 明細和顯示的平均功率。「目標功率」：用這個 effort km 換算完賽時間，換公式會改到完賽時間。「目標配速」：完賽時間就是你的目標，換公式改的是需要的平均功率。沒有心率模型時，「模型預測」也用這個公式。用 GPX 且分段模型通過回測時，完賽時間由分段模型加總，這個公式不影響。</span></span>
       </div>
     </details>
     <div class="calcbar"><button class="btn primary big" id="calc" type="button" data-i18n="racepower.calc">計算</button>
@@ -447,7 +449,6 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
       <span class="meta bf" id="splits-line"></span><button class="btn bf" id="clearsplits">清除分日</button>
       <button class="btn rf" id="unlock">解除全部鎖定</button>
       <button class="btn primary" id="coros" data-i18n="racepower.coros.btn">📅 匯出至課表</button><span class="meta" id="coros-why" hidden></span>
-      <button class="btn" id="csv">匯出 CSV</button><span class="meta" id="csv-meta"></span>
       <button class="btn" id="share">🔗 分享</button></div>
     <dialog id="coros-dlg" class="dlg">
       <h2><span data-i18n="racepower.coros.title">匯出至課表</span> <span class="meta" id="cx-prov"></span>
@@ -2034,21 +2035,6 @@ $("cx-close").onclick = () => $("coros-dlg").close();
 $("cx-go").onclick = corosPush;
 document.querySelectorAll("#cx-mode button").forEach((b) => b.onclick = () => { CX_MODE = b.dataset.x; corosPreview(); });
 
-async function csvExport() {
-  $("csv-meta").textContent = "產生中…";
-  try {
-    const ev = (INP?.events || []).find((e) => e.id === $("event").value);
-    const r = await fetch(`${API}/export/csv`, { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...planBody(), name: ev ? ev.name : null }) });
-    if (!r.ok) throw new Error(await errText(r));
-    const fname = decodeURIComponent(r.headers.get("X-Filename") || "racepower.csv");
-    const url = URL.createObjectURL(await r.blob());
-    const a = document.createElement("a"); a.href = url; a.download = fname;
-    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 10000);
-    $("csv-meta").innerHTML = `<span class="ok">已下載 ✓</span> ${esc(fname)}`;
-  } catch (e) { $("csv-meta").innerHTML = `<span class="err">${esc(e.message)}</span>`; }
-}
-
 // ---------------- read-only share links ----------------
 const shareUrl = (u) => location.origin + u;
 async function loadShares() {
@@ -2225,8 +2211,22 @@ function renderZones() {
     <div class="note">CP ${W(PLAN.used.cp.value)}；目標平均功率 ${W(PLAN.summary.power)} 落在區間 ${esc(zoneOf(PLAN.summary.power, PLAN.used.cp.value))}。</div>`;
 }
 function zoneOf(p, cp) { const zs = PLAN?.zones || LAST?.zones || []; const x = p / cp; const z = zs.find((r) => x >= r.lo && (r.hi == null || x < r.hi)); return z ? z.id : "1A 以下"; }
+// ---- climbing charts (SP-366) ----
+// 坡度 RE / 跑走 / 爬坡步頻 (every race type: the road plan uses the grade curve too). A connection that
+// drops (no answer: 「Failed to fetch」) or a gateway answer (502–504, Cloudflare 520–524) reads as a
+// short message with 重試; one request per chart at a time (toggling while it loads asks nothing more)
+const NET_STATUS = new Set([502, 503, 504, 520, 521, 522, 523, 524]);
+const netFail = (e) => !e || !e.status || NET_STATUS.has(e.status);
+function chartErr(el, e, retry) {
+  if (!netFail(e)) { $(el).innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
+  $(el).innerHTML = `<div class="err">${esc(T("charts.neterr"))} <button class="btn" type="button">${esc(T("charts.retry"))}</button></div>`;
+  $(el).querySelector("button").onclick = () => { $(el).innerHTML = ""; retry(); };
+}
+let GM_P = null, CAD_P = null;               // the request in flight
 async function renderGM() {
-  try { GM = GM || await j(`${API}/grade-model`); } catch (e) { $("gm-detail").innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
+  if (GM_P) return;
+  GM_P = GM ? Promise.resolve(GM) : j(`${API}/grade-model`);
+  try { GM = await GM_P; } catch (e) { chartErr("gm-detail", e, renderGM); return; } finally { GM_P = null; }
   const g = GM.grade_re, bins = g.bins.filter((b) => Math.abs(b.grade) <= 0.35);
   chart("gm-chart").setOption({
     animation: false, grid: { left: 48, right: 14, top: 44, bottom: 38 }, legend: { top: 0, textStyle: { color: css("--muted"), fontSize: 11 } },
@@ -2270,7 +2270,9 @@ function renderRW(rw) {
 }
 // SP-230: climbing cadence against the 130 spm walk line (a check only: the line never moves here)
 async function renderCad() {
-  try { CAD = CAD || await j(`${API}/cadence-check`); } catch (e) { $("cad-detail").innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
+  if (CAD_P) return;
+  CAD_P = CAD ? Promise.resolve(CAD) : j(`${API}/cadence-check`);
+  try { CAD = await CAD_P; } catch (e) { chartErr("cad-detail", e, renderCad); return; } finally { CAD_P = null; }
   const c = CAD, mins = c.seconds.map((x) => x / 60), on = c.bins.filter((b, i) => mins[i] > 0.05);
   const lo = on.length ? Math.max(0, Math.floor((on[0] - 15) / 10) * 10) : 60, hi = on.length ? Math.ceil((on[on.length - 1] + 15) / 10) * 10 : 220;
   const lines = [{ xAxis: c.threshold_spm, lineStyle: { color: css("--accent"), width: 2 }, label: { formatter: T("cad.line"), color: css("--accent") } }];
@@ -2290,6 +2292,7 @@ async function renderCad() {
     `<div class="note"><span class="badge ${tag[0]}">${esc(T(tag[1]))}</span> ${esc(c.hint || "")}</div>` +
     `<div class="note">${esc(T("cad.how"))}</div><div class="meta">${esc(c.source || "")}</div>`;
 }
+// ---- end climbing charts ----
 
 // ---------------- 準確度 ----------------
 async function renderBacktest() {
@@ -2347,8 +2350,10 @@ async function renderBacktest() {
     走跑分開前後的時間 |誤差|：${pct1(T.models.no_gait.median_abs)} → ${pct1(T.models.gait.median_abs)}。</div>`;
   const SG = T.speed_gait;
   if (SG) h += `<div class="note">${esc(TR("sg.line", { a: pct1(SG.segments.gait.median_abs), b: pct1(SG.segments.speed_gait.median_abs),
-    c: pct1(SG.climbs.gait.median_abs), d: pct1(SG.climbs.speed_gait.median_abs), n: SG.climbs.gait.n, k: SG.changed }))}
-    <b class="${SG.no_worse ? "ok" : "no"}">${esc(TR(SG.no_worse ? "sg.ok" : "sg.no"))}</b></div>`;
+    c: pct1(SG.climbs.gait.median_abs), d: pct1(SG.climbs.speed_gait.median_abs), n: SG.climbs.gait.n, k: SG.changed,
+    e: pct1((SG.changed_segments || {gait: {}}).gait.median_abs), f: pct1((SG.changed_segments || {speed_gait: {}}).speed_gait.median_abs),
+    m: SG.changed_activities ?? "–", kmin: SG.min_changed ?? 20, mmin: SG.min_activities ?? 3 }))}
+    <b class="${SG.no_worse ? "ok" : "no"}">${esc(TR(SG.no_worse ? "sg.ok" : SG.reason === "few" ? "sg.few" : SG.reason === "tie" ? "sg.tie" : "sg.no"))}</b></div>`;
   // trail HR pace model: race level with / without durability decay; ≥ 8 h races apart (SP-240)
   const TH = R.trail_hr;
   if (TH && TH.races) {
@@ -2612,7 +2617,6 @@ drop.addEventListener("dragleave", () => drop.classList.remove("over"));
 drop.addEventListener("drop", (e) => { e.preventDefault(); drop.classList.remove("over"); uploadGpx(e.dataTransfer.files[0]); });
 $("clearsplits").onclick = () => { SPLITS = []; saveEventSplits(); schedule(); };
 $("unlock").onclick = () => { LOCKS = {}; schedule(); };
-$("csv").onclick = csvExport;
 $("gm-sec").querySelector("details").addEventListener("toggle", (e) => { if (e.target.open) renderGM(); });
 $("cad-sec").querySelector("details").addEventListener("toggle", (e) => { if (e.target.open) renderCad(); });
 // charts inside a closed <details> have no size: draw them when opened
