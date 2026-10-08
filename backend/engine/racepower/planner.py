@@ -477,8 +477,9 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
              if x.get("power") and 0 < int(x["seg"]) <= len(segs)}
 
     # SP-229: with the back-test's go (GaitRE.speed_gait) the walking / running curve follows the
-    # predicted speed (re_at) instead of the majority gait; a manual course has no grades, so never
-    speed_gait = bool(getattr(grade_re, "speed_gait", False)) and gpx
+    # predicted speed (re_at) instead of the majority gait — trail GPX only: the gate judged trail
+    # segments, a road plan keeps the majority gait, a manual course has no grades
+    speed_gait = bool(getattr(grade_re, "speed_gait", False)) and gpx and trail
     model = PC.RunModel(weight, grade_re.re, grade_re.v_max,
                         (lambda g, p: grade_re.re_at(g, p, weight)) if speed_gait else None)
     d_eff_m = (r1.get("effort_km") or r1["distance_km"]) * 1000.0
@@ -659,15 +660,13 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
     for i, (s, r) in enumerate(zip(segs, rows)):
         cum += r["t"]
         notes = []
+        # walk / either / run from grade × the speed shown (SP-226): a label only, the time is already
+        # solved; a manual course has only its net grade, so no label there. `curve` = the curve the
+        # time used: the majority gait, or with SP-229 the one the segment's power picked (re_at)
+        gait = RW.gait(s["grade"], r["v"], rw_shift) if gpx else None
         if speed_gait:
-            # SP-229: one decision — the running curve's speed at this segment's power picks the
-            # curve the time used, the label and the note (走跑皆可 runs on the running curve)
-            gait = grade_re.gait_at(s["grade"], r["P"], weight)
-            curve = "walk" if gait == "walk" else "run"
+            curve = grade_re.curve_at(s["grade"], r["P"], weight)
         else:
-            # walk / either / run from grade × the predicted speed (SP-226): a label only, the time is
-            # already solved by the majority gait; a manual course has only its net grade, so no label there
-            gait = RW.gait(s["grade"], r["v"], rw_shift) if gpx else None
             curve = "walk" if getattr(grade_re, "walked", None) and grade_re.walked(s["grade"]) else "run"
         walk = RW.walk_label(gait)
         if walk:
@@ -678,8 +677,12 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
             notes.append("超 CP")
         if r.get("locked"):
             notes.append("已鎖定")
-        if gpx and curve == "walk":
-            notes.append(_("走（依這段的預估速度，用走的比跑省力）") if speed_gait else _("走（你在這個坡度多半走）"))
+        if speed_gait and s["grade"] >= RW.MIN_GRADE:
+            # SP-229 on a climb: 走 only below the transition speed of the speed shown (never above it)
+            if gait == "walk":
+                notes.append(_("走（依這段的預估速度，用走的比跑省力）"))
+        elif gpx and curve == "walk":
+            notes.append(_("走（你在這個坡度多半走）"))
         gf = minetti.grade_factor(s["grade"])
         v = r["v"]
         trusted = (grade_re.trusted_at(s["grade"], r["P"], weight) if speed_gait else grade_re.trusted(s["grade"])) \

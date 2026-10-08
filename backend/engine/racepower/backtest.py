@@ -230,25 +230,43 @@ def _seg_errs(rows, key="err", sel=lambda s: True):
     return [s[key] for r in rows for s in r.get("segments") or [] if s.get(key) is not None and sel(s)]
 
 
-def speed_gait_summary(rows: list[dict]) -> dict:
+SG_MIN_CHANGED = 20             # 推估: climbs whose curve changes, before the gate can pass
+SG_MIN_ACTIVITIES = 3           # 推估: … spread over at least this many trail activities
+
+
+def speed_gait_summary(rows: list[dict], sfx: str = "") -> dict:
     """SP-229's gate: the trail segment speed errors with the majority gait (err) against
-    the gait chosen by the predicted speed (err_speed), on the same segments — all, and the
-    climbs ≥ 3 % (the only ones where the two can differ). `no_worse` = the speed gait's
-    median |error| is not above the majority gait's on both (the ticket: otherwise the time
-    model stays as it is)."""
+    the curve chosen by the predicted speed (err_speed), on the same segments — all, the
+    climbs ≥ 3 % (the only ones where the two can differ) and just the climbs whose curve
+    changed. `sfx` = "_cls" judges the race-class model the planner uses when
+    class_model_flag is on. `no_worse` (the gate; the ticket's 「沒有變好就不合併」) needs
+    ≥ SG_MIN_CHANGED changed climbs over ≥ SG_MIN_ACTIVITIES activities, the changed climbs'
+    median |error| strictly below the majority gait's, and the trail segments and climbs not
+    worse; `reason` = ok / few / tie / worse."""
+    e, es, gm, gs = f"err{sfx}", f"err_speed{sfx}", f"gait{sfx}", f"gait_speed{sfx}"
     tr = [r for r in rows if r.get("category") == "trail" and r.get("err_v2") is not None]
-    both = lambda s: s.get("err") is not None and s.get("err_speed") is not None      # noqa: E731
+    both = lambda s: s.get(e) is not None and s.get(es) is not None                    # noqa: E731
     climb = lambda s: both(s) and (s.get("grade") or 0.0) >= 0.03                       # noqa: E731
-    changed = lambda s: climb(s) and (s.get("gait_speed") == "walk") != (s.get("gait") == "walk")   # noqa: E731
-    out = {"segments": {"gait": stats(_seg_errs(tr, "err", both)), "speed_gait": stats(_seg_errs(tr, "err_speed", both))},
-           "climbs": {"gait": stats(_seg_errs(tr, "err", climb)), "speed_gait": stats(_seg_errs(tr, "err_speed", climb))},
+    changed = lambda s: climb(s) and (s.get(gs) == "walk") != (s.get(gm) == "walk")     # noqa: E731
+    out = {"segments": {"gait": stats(_seg_errs(tr, e, both)), "speed_gait": stats(_seg_errs(tr, es, both))},
+           "climbs": {"gait": stats(_seg_errs(tr, e, climb)), "speed_gait": stats(_seg_errs(tr, es, climb))},
            "changed": sum(1 for r in tr for s in r.get("segments") or [] if changed(s)),
+           "changed_activities": sum(1 for r in tr if any(changed(s) for s in r.get("segments") or [])),
+           "min_changed": SG_MIN_CHANGED, "min_activities": SG_MIN_ACTIVITIES,
            # only the climbs whose curve differs: where the two models disagree at all
-           "changed_segments": {"gait": stats(_seg_errs(tr, "err", changed)),
-                                "speed_gait": stats(_seg_errs(tr, "err_speed", changed))}}
-    ok = [out[k]["speed_gait"]["median_abs"] is not None and out[k]["gait"]["median_abs"] is not None
-          and out[k]["speed_gait"]["median_abs"] <= out[k]["gait"]["median_abs"] for k in ("segments", "climbs")]
-    out["no_worse"] = bool(out["segments"]["gait"]["n"]) and all(ok)
+           "changed_segments": {"gait": stats(_seg_errs(tr, e, changed)),
+                                "speed_gait": stats(_seg_errs(tr, es, changed))}}
+    med = lambda k, m: out[k][m]["median_abs"]                                           # noqa: E731
+    if out["changed"] < SG_MIN_CHANGED or out["changed_activities"] < SG_MIN_ACTIVITIES:
+        reason = "few"
+    elif any(med(k, "speed_gait") > med(k, "gait") for k in ("segments", "climbs")):
+        reason = "worse"
+    elif not med("changed_segments", "speed_gait") < med("changed_segments", "gait"):
+        reason = "worse" if med("changed_segments", "speed_gait") > med("changed_segments", "gait") else "tie"
+    else:
+        reason = "ok"
+    out["reason"] = reason
+    out["no_worse"] = reason == "ok"
     return out
 
 
@@ -295,6 +313,7 @@ def summarise_terrain(rows: list[dict]) -> dict:
     out["models"] = {"gait": stats(r["err_v2"] for r in runs), "no_gait": stats(r.get("err_nogait") for r in runs),
                      "speed_gait": stats(r.get("err_speedgait") for r in runs)}
     out["speed_gait"] = speed_gait_summary(rows)
+    out["speed_gait_cls"] = speed_gait_summary(rows, "_cls")      # the race-class model's own gate
     out["surface_split"] = surface_split_summary(rows)
     # does the error differ clearly by class? (classes with ≥ MIN_N activities)
     meds = {k: v["segments"]["median_abs"] for k, v in out["classes"].items()
@@ -546,10 +565,16 @@ def evaluate_run(case: dict, ctx: dict) -> Optional[dict]:
             if gre_sf is not None:
                 row["err_surf"] = v_of(gre_sf) / v_act - 1.0
             if speed_gait:
-                vs = gre.re_at(s["grade"], p_seg, weight) * p_seg / weight
-                vm = gre.v_max(s["grade"])
-                vs = vm if vm and vs > vm else vs
-                row.update(err_speed=vs / v_act - 1.0, gait_speed=gre.gait_at(s["grade"], p_seg, weight))
+                def v_sp(g_):
+                    v = g_.re_at(s["grade"], p_seg, weight) * p_seg / weight
+                    vm = g_.v_max(s["grade"])
+                    return vm if vm and v > vm else v
+                # gait / gait_speed = the curve each model used (walk / run); _cls the race-class model's
+                row.update(err_speed=v_sp(gre) / v_act - 1.0, gait_speed=gre.speed_curve(s["grade"], p_seg, weight))
+                if hasattr(gre_cls, "speed_curve"):
+                    row.update(err_speed_cls=v_sp(gre_cls) / v_act - 1.0,
+                               gait_cls="walk" if gre_cls.walked(s["grade"]) else "run",
+                               gait_speed_cls=gre_cls.speed_curve(s["grade"], p_seg, weight))
         seg_rows.append(row)
     walk_t = sum(a["walk_t"] for a in act)
     out = {"km": km, "gain_m": gain, "segments_n": len(segs), "t_act": t_act, "p_act": p_act,
@@ -1407,12 +1432,17 @@ def surface_split_flag(path=None) -> bool:
     return bool((((r or {}).get("terrain") or {}).get("surface_split") or {}).get("no_worse"))
 
 
-def speed_gait_flag(path=None) -> bool:
-    """True when the stored back-test found the gait chosen by the predicted speed no worse than
-    the majority gait on the trail segments and climbs (SP-229, speed_gait_summary); nothing
-    stored → False (the planner keeps the majority gait, as before)."""
-    r = load(path)
-    return bool((((r or {}).get("terrain") or {}).get("speed_gait") or {}).get("no_worse"))
+def speed_gait_flag(path=None, class_model: bool = False) -> bool:
+    """True when the stored back-test kept the curve chosen by the predicted speed (SP-229,
+    speed_gait_summary's gate: enough changed climbs, strictly better there, not worse on the
+    trail segments); `class_model` = the planner uses the race-class model (class_model_flag),
+    so that model's own gate (speed_gait_cls) AND the pooled one must pass. Nothing stored →
+    False (the planner keeps the majority gait, as before)."""
+    te = ((load(path) or {}).get("terrain") or {})
+    ok = bool((te.get("speed_gait") or {}).get("no_worse"))
+    if class_model:
+        ok = ok and bool((te.get("speed_gait_cls") or {}).get("no_worse"))
+    return ok
 
 
 def state() -> dict:

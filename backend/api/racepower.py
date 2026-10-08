@@ -369,9 +369,9 @@ def _fit_grade_models(ds, today, key) -> dict:
     gm["surface_ok"] = BT.surface_split_flag()
     if getattr(gm["grade_re"], "surface_split", False) and not gm["surface_ok"]:
         gm["grade_re"] = gm["grade_re"].without_surface_split("backtest")
-    # SP-229: the curve by the predicted speed only when the back-test found it no worse
+    # SP-229: the curve by the predicted speed only when the back-test kept it (for the model used)
     if hasattr(gm["grade_re"], "with_speed_gait"):
-        gm["grade_re"] = gm["grade_re"].with_speed_gait(BT.speed_gait_flag())
+        gm["grade_re"] = gm["grade_re"].with_speed_gait(BT.speed_gait_flag(class_model=gm["race_model"]))
     solo = A.solo_hikes()
     try:
         # the clock ETA's moving ratio, per trip kind: group hikes rest on the
