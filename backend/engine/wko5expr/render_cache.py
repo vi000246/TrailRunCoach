@@ -3,36 +3,57 @@ Rendered-chart cache for the chart page.
 
 A chart's JSON depends on: the chart definition (after views/wko5_fixes.json —
 so editing the fixes or a custom view changes the key by itself), the request
-(date range, sports, workout, parity, data source), the data (the WKO5 athlete
-file that sync rewrites, the season plan / thresholds, approved corrections,
-the engine settings), today's date (charts use `today`) and the code that
-computes it (CACHE_VERSION plus the mtimes of the engine, file-reader and
-api/wko5views modules, _ENGINE_GLOBS, so a code change never serves stale
-numbers).
+(date range, sports, workout, parity, data source), the data it reads and the
+code that computes it. All of that goes into one sha1 key (chart_key), so
+there is nothing to invalidate explicitly: changed inputs simply miss.
 
-All of that goes into one sha1 key, so there is nothing to invalidate
-explicitly: changed inputs simply miss. Entries live in memory (small LRU) and
-on disk under ~/.wko5coach/cache/render/ (survive restarts), capped by size
-with least-recently-used eviction.
+Since SP-336 (SP-320 ⑤) the data and code parts are per chart (chartscope.py):
+the activities of the chart's range plus its warm-up (6 × 42 days for the
+PMC loads), today only for a chart that reads it or ends today, and only the
+code its chart type reaches (engine/codehash.py) plus CACHE_VERSION. One new
+activity, a new day or a deploy drops only the charts they touch.
+data_fingerprint(ds) / code_signature() remain the whole-dataset / whole-engine
+versions (a chart kind chartscope does not know falls back to them).
+
+Entries live in memory (small LRU) and on disk under <tenant>/cache/render/
+(survive restarts), capped by size with least-recently-used eviction.
 
 Two more things keep the page responsive when several charts (or a refresh
 while the previous load is still computing) ask at once:
   * identical in-flight requests are coalesced — one computation, shared;
   * at most MAX_CONCURRENT renders run at a time, so the other endpoints
     (overview, settings) still get threadpool time.
+
+Stale-while-revalidate (SP-336, the pattern of api/plan_sessions.py, SP-362):
+`serve(key, compute, slot, stale_ok)`. A *slot* names a chart request apart
+from its data and code (the endpoint builds it: view, chart, parameters, the
+range — "the 90 days to today" — not its dates); `cache/render/slots/<slot>.json`
+points at the key last drawn for it. On a miss with stale_ok and an older
+drawing of the slot still on disk, that drawing is answered at once with
+`stale` = {key, at} and the new key is computed in the background
+(REFRESH_POOL, 2 threads, once per key, at most REFRESH_MAX keys waiting);
+`ready(keys)` says which are there (GET /render/ready, the viewer swaps the
+card). A background failure is remembered: that key is then computed in the
+request. Display only — the endpoint passes stale_ok only for the viewer's
+?stale=1 and never for a demo tenant.
 """
 from __future__ import annotations
 
+import contextvars
+import datetime as dt
 import hashlib
 import json
+import logging
 import os
 import threading
 from collections import OrderedDict
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Callable, Optional
 
-# Bump when the rendered JSON changes shape or meaning without a code mtime change.
-CACHE_VERSION = 1
+# Bump when the rendered JSON changes shape or meaning in a way engine/codehash.py cannot see
+# (a registry, a getattr). 2: SP-336 per-chart keys.
+CACHE_VERSION = 2
 CACHE_DIR = None      # fixed folder (tests); None = <tenant shared>/cache/render
 
 
@@ -48,8 +69,14 @@ MAX_MEMORY_ENTRIES = 400
 # count alone let per-second workout charts add up to GB on the NAS
 MAX_MEMORY_BYTES = 32 * 1024 * 1024
 MAX_CONCURRENT = 2
+REFRESH_MAX = 64          # keys waiting for a background render; more = computed in the request
+FAILED_MAX = 256
+SLOTS_DIR = "slots"
+# the background half of a stale answer: shared by every tenant (each job carries its own context)
+REFRESH_POOL = ThreadPoolExecutor(max_workers=2, thread_name_prefix="chart-refresh")
+log = logging.getLogger(__name__)
 
-# Everything that shapes a chart's JSON: wko5expr/, algorithms/, engine/*.py
+# Everything that shapes a chart's JSON (the whole-engine signature, code_signature()): wko5expr/, algorithms/, engine/*.py
 # (zones, thresholds, planning, workout_review feed the zones / targets / review
 # panels and the plan-driven series), panels/ (workout_review uses them), files/
 # (the WKO4 / WKO5 / FIT readers that turn files into channels) and
@@ -60,14 +87,6 @@ _BACKEND = _ENGINE.parent
 _ENGINE_GLOBS = [(_ENGINE / "wko5expr", "*.py"), (_ENGINE / "algorithms", "*.py"), (_ENGINE, "*.py"),
                  (_ENGINE / "panels", "*.py"), (_BACKEND / "files", "*.py"),
                  (_BACKEND / "api", "wko5views.py")]
-
-
-def _stamp(p: Path) -> list:
-    try:
-        st = p.stat()
-        return [p.name, st.st_size, st.st_mtime_ns]
-    except OSError:
-        return [p.name, None, None]
 
 
 def _content(p: Path) -> list:
@@ -99,63 +118,17 @@ def code_signature() -> str:
 
 
 def data_fingerprint(ds) -> str:
-    """What the data looks like: athlete file (sync rewrites it), plan /
-    thresholds, corrections, engine config, workout list, today."""
-    from backend.engine.planning import plan_path
-    from backend.engine.wko5expr.corrections import corrections_path
-    athlete = [_stamp(p) for p in sorted(Path(ds.dir).glob("*.wko5athlete"))]
-    cfg = ds.config.to_dict() if hasattr(ds.config, "to_dict") else repr(ds.config)
-    wl = ds.memo.get(("render_cache", "workouts"))
-    if wl is None:
-        h = hashlib.sha1()
-        for w in ds.workouts:
-            h.update(f"{w.entry.file}|{w.day}|{w.sport}\n".encode())
-        wl = ds.memo[("render_cache", "workouts")] = f"{len(ds.workouts)}:{h.hexdigest()}"
-    # chart data source (wko5 | coros | tp, datasource.py): a source-specific
-    # Dataset may carry its name / file stamp; the workout list covers the rest
-    src = [getattr(ds, "source", None), getattr(ds, "source_stamp", None)]
-    if src[0] in ("coros", "tp") and src[1] is None:
-        # FIT-folder dataset: its files' stamp, taken once per Dataset (a sync
-        # that rewrites a FIT under the same name builds a new Dataset)
-        st = ds.memo.get(("render_cache", "source_stamp"))
-        if st is None:
-            try:
-                from backend.engine.wko5expr.datasource import source_stamp
-                st = source_stamp(src[0], Path(ds.dir))
-            except Exception:
-                st = ""
-            ds.memo[("render_cache", "source_stamp")] = st
-        src[1] = st
-    # the stored CP-test sessions: workout_review.classify recognises a test
-    # from the plan (done_by) first
-    from backend.engine.plan_store import test_sessions
-    tests = sorted((s["uid"], s["state"], s.get("day") or "", (s.get("done_by") or {}).get("index") or -1,
-                    s.get("protocol") or "") for s in test_sessions())
-    # …and the done interval sessions: the 間歇判讀 charts judge a run against the session it
-    # was matched to (interval_eval._planned), a match a sync makes after the charts were drawn
-    from backend.engine.plan_store import done_plan
-    tests += sorted((i, r.get("uid") or "", r.get("title") or "", r.get("variant_key") or "",
-                     json.dumps(r.get("steps"), sort_keys=True, default=str)) for i, r in done_plan().items())
-    # route_weather's per-activity air temperature: drift() / the review card's
-    # heat rule read it (workout_review.activity_temp), and a routes build fills it
-    try:
-        from backend.engine import route_weather as RW
-        from backend.engine.routes import home as routes_home
-        wx = _stamp(routes_home() / RW.ACTIVITY_WX_FILE)
-    except Exception:                          # noqa: BLE001 — no routes module: no archive
-        wx = None
-    # the manual PMC start (SP-68, 設定 → 閾值): the builtins ctl / atl / tsb start from it
-    try:
-        from backend.engine.load_guard import manual_start
-        pmc0 = manual_start()
-    except Exception:                          # noqa: BLE001 — no settings store: none
-        pmc0 = None
-    parts = [athlete, _stamp(plan_path()), _stamp(corrections_path()), cfg, wl, ds.today, src, tests, wx, pmc0]
-    return hashlib.sha1(json.dumps(parts, sort_keys=True, default=str).encode()).hexdigest()
+    """The whole dataset's fingerprint: every activity, today, the weather — chartscope's
+    fingerprint over the whole history (a chart of unknown scope)."""
+    from backend.engine.wko5expr import chartscope as CS
+    return CS.fingerprint(ds, CS.Scope.whole())
 
 
-def chart_key(chart: dict, request: dict, fingerprint: str) -> str:
-    body = {"chart": chart, "request": request, "data": fingerprint, "code": code_signature()}
+def chart_key(chart: dict, request: dict, fingerprint: str, code: Optional[str] = None) -> str:
+    """`fingerprint`: the data part (chartscope.fingerprint / data_fingerprint); `code`: the
+    chart's code signature (chartscope.code_signature), None = the whole engine's."""
+    body = {"chart": chart, "request": request, "data": fingerprint,
+            "code": code if code is not None else code_signature()}
     from backend.i18n import DEFAULT_LOCALE, current_locale
     if current_locale() != DEFAULT_LOCALE:      # the engine's text follows the request language (zh-TW keys unchanged)
         body["locale"] = current_locale()
@@ -181,7 +154,10 @@ class RenderCache:
         self._inflight: dict[str, dict] = {}
         self._slots = threading.BoundedSemaphore(max_concurrent)
         self._since_prune = 0
-        self.stats = {"hit_mem": 0, "hit_disk": 0, "miss": 0, "coalesced": 0}
+        self.stats = {"hit_mem": 0, "hit_disk": 0, "miss": 0, "coalesced": 0, "stale": 0}
+        self._slot_keys: dict[tuple, str] = {}           # (root, slot) -> key last pointed at (spares the file)
+        self._refreshing: dict[str, float] = {}      # key -> time the background render was queued
+        self._failed: "OrderedDict[str, float]" = OrderedDict()   # keys whose background render failed
 
     # ---- storage ----------------------------------------------------------
     def _path(self, key: str) -> Path:
@@ -260,6 +236,7 @@ class RenderCache:
     def clear(self) -> None:
         with self._lock:
             self._mem.clear()
+            self._slot_keys.clear()
         for p in self.root.glob("*/*.json"):
             try:
                 p.unlink()
@@ -302,6 +279,101 @@ class RenderCache:
             with self._lock:
                 self._inflight.pop(key, None)
             job["done"].set()
+
+    # ---- stale-while-revalidate (SP-336, module doc) -------------------------
+    def _slot_path(self, slot: str) -> Path:
+        return self.root / SLOTS_DIR / f"{slot}.json"
+
+    def slot_get(self, slot: str) -> Optional[dict]:
+        """{key, at} last drawn for this chart slot, or None."""
+        try:
+            d = json.loads(self._slot_path(slot).read_text("utf-8"))
+        except (OSError, ValueError):
+            return None
+        return d if isinstance(d, dict) and d.get("key") else None
+
+    def slot_put(self, slot: str, key: str) -> None:
+        mk = (str(self.root), slot)
+        with self._lock:
+            if self._slot_keys.get(mk) == key:
+                return
+            self._slot_keys[mk] = key
+            if len(self._slot_keys) > 4 * self.max_memory:
+                self._slot_keys.clear()
+        p = self._slot_path(slot)
+        try:
+            p.parent.mkdir(parents=True, exist_ok=True)
+            tmp = p.with_suffix(f".{threading.get_ident()}.tmp")
+            tmp.write_text(json.dumps({"key": key, "at": dt.datetime.now().isoformat(timespec="seconds")}), "utf-8")
+            os.replace(tmp, p)
+        except OSError:
+            pass
+
+    def serve(self, key: str, compute: Callable[[], Any], slot: Optional[str] = None,
+              stale_ok: bool = False) -> tuple[Any, Optional[dict]]:
+        """(value, stale): the cached / computed value of `key` and None — or, on a miss with
+        `stale_ok` and an older drawing of `slot` on disk, that drawing and {key, at} while
+        `key` is computed in the background. `slot` None: no pointer kept, never stale."""
+        hit = self.get(key)
+        if hit is None and slot is not None and stale_ok:
+            old = self._stale(slot, key, compute)
+            if old is not None:
+                return old
+        value = hit if hit is not None else self.get_or_compute(key, compute)
+        if slot is not None:
+            self.slot_put(slot, key)
+        with self._lock:
+            self._failed.pop(key, None)
+        return value, None
+
+    def _stale(self, slot: str, key: str, compute) -> Optional[tuple[Any, dict]]:
+        with self._lock:
+            if key in self._failed or (key not in self._refreshing and len(self._refreshing) >= REFRESH_MAX):
+                return None
+        prev = self.slot_get(slot)
+        if prev is None or prev["key"] == key:
+            return None
+        old = self.get(prev["key"])
+        if old is None:
+            return None
+        with self._lock:
+            start = key not in self._refreshing
+            if start:
+                self._refreshing[key] = dt.datetime.now().timestamp()
+            self.stats["stale"] += 1
+        if start:
+            ctx = contextvars.copy_context()         # the tenant, the locale: the request's
+            REFRESH_POOL.submit(ctx.run, self._refresh, key, compute, slot)
+        return old, {"key": key, "at": prev.get("at")}
+
+    def _refresh(self, key: str, compute, slot: str) -> None:
+        try:
+            self.get_or_compute(key, compute)        # joins a request computing the same key
+        except Exception as e:                       # noqa: BLE001 — the next request computes it itself
+            log.warning("chart refresh failed: %s", type(e).__name__)
+            with self._lock:
+                self._failed[key] = dt.datetime.now().timestamp()
+                while len(self._failed) > FAILED_MAX:
+                    self._failed.popitem(last=False)
+        else:
+            self.slot_put(slot, key)
+        finally:
+            with self._lock:
+                self._refreshing.pop(key, None)
+
+    def ready(self, keys: list[str]) -> dict:
+        """{ready, failed, pending}: which keys a stale answer named can be fetched now."""
+        out: dict = {"ready": [], "failed": [], "pending": []}
+        for k in keys:
+            with self._lock:
+                mem, failed = k in self._mem, k in self._failed
+            if mem or self._path(k).exists():            # put(): memory first, then an atomic file
+                out["ready"].append(k)
+            elif failed:
+                out["failed"].append(k)
+            else:
+                out["pending"].append(k)
+        return out
 
 
 CACHE = RenderCache()
