@@ -1,7 +1,7 @@
 """
 SP-285 / SP-286 / SP-287 (docs/research/carb-periodization.md §5 C-1…C-3): text-only carbohydrate
-hints — the 減量期 week note for the A race's last 1–2 days, the 「課前要吃」 line on 強度課 and
-≥ 2 h long runs, the race calculator's loading text. Synthetic.
+hints — the 減量期 week note for the A race's last 1–2 days, the race calculator's loading text; the
+「課前要吃」 line (SP-286) was removed (owner 2026-10-07) and stays gone. Synthetic.
 """
 from datetime import date
 
@@ -105,27 +105,18 @@ def test_week_plan_this_week_uses_the_settings_weight():
     assert w and f"{w:.0f} kg" in n["text"] and "10–12 g/kg" in n["text"]
 
 
-# ---- SP-286: 「課前要吃」 on 強度課 and ≥ 2 h long runs (app text only) ----------------------------
-
-PRE = "課前 1–4 小時吃含碳水的一餐或點心，不要空腹做"
-
+# ---- SP-286: 「課前要吃」 removed (owner 2026-10-07: not wanted at all) --------------------------------
 
 def _row(kind, minutes, state="active", **kw):
     return {"uid": f"u-{kind}-{minutes}", "week_start": "2026-10-05", "kind": kind, "title": "x", "minutes": minutes,
             "target": "", "detail": "暖身 15 分", "source": "", "day": "2026-10-07", "state": state, **kw}
 
 
-def test_pre_meal_on_quality_and_long_runs_only():
-    from backend.engine import session_fuel as SF
-    for r in (_row("quality", 50), _row("long", 120), _row("mountain", 150)):
-        t = SF.pre_meal(r)["text"]
-        assert PRE in t and "Aird 2018" in t and "Mata 2019" in t and "Impey 2018" in t and "g/kg" not in t
-    for r in (_row("easy", 60), _row("easy", 150), _row("long", 110), _row("strength", 40), _row("rest", 0),
-              _row("quality", 50, state="done"), _row("long", 150, state="missed")):
-        assert SF.pre_meal(r) is None, r["kind"]
-
-
-def test_pre_meal_is_on_the_view_but_never_pushed():
+def test_no_session_description_says_eat_before():
+    """No session — 間歇、節奏、爬坡、長跑、山路、測試 — carries 「課前要吃」 on the view; what goes to the watch
+    is the stored session as before."""
+    import importlib.util
+    from pathlib import Path
     from backend.api import plan_sessions as API
     from backend.engine import plan_store as PS
 
@@ -137,14 +128,23 @@ def test_pre_meal_is_on_the_view_but_never_pushed():
             return {}
 
     th = {"cp": 300.0, "lthr": 170.0, "aet": 150.0}
-    q, e = _row("quality", 50), _row("easy", 45)
-    vq = API._view(q, {"thresholds": th}, {}, "2026-10-06", Prov())
-    assert PRE in vq["pre_meal"]["text"] and vq["detail"] == "暖身 15 分"
-    assert API._view(e, {"thresholds": th}, {}, "2026-10-06", Prov())["pre_meal"] is None
-    # the watch gets the same session as before: no pre_meal, the detail unchanged
-    p = PS.push_dict(vq)
-    assert "pre_meal" not in p and p["detail"] == "暖身 15 分" and p == PS.push_dict(q)
-    assert PRE not in str(p)
+    rows = [_row("quality", 50, title="有氧間歇 3×12 分"), _row("quality", 60, title="節奏跑 30 分"),
+            _row("quality", 45, title="爬坡間歇 6×2 分 上坡"), _row("long", 150), _row("mountain", 240),
+            _row("test", 60, title="CP 測試"), _row("easy", 45)]
+    for r in rows:
+        v = API._view(r, {"thresholds": th}, {}, "2026-10-06", Prov())
+        assert "pre_meal" not in v and "課前" not in str(v), r
+        assert PS.push_dict(v) == PS.push_dict(r) and "課前" not in str(PS.push_dict(v))
+    # the generated week and the projected weeks: no session text says it either
+    ds, plan, wp = _week("2026-10-17")
+    weeks = PJ.project_weeks(wp, _phases(plan, TODAY), date(2026, 10, 25), events=plan.events, weight=60.0)
+    assert "課前" not in str(wp["sessions"]) and not any("課前" in str(w["sessions"]) for w in weeks)
+    # the code and the pages that showed it are gone
+    assert importlib.util.find_spec("backend.engine.session_fuel") is None
+    static = Path(API.__file__).resolve().parents[1] / "static"
+    for page in ("schedule.html", "overview.html"):
+        txt = (static / page).read_text(encoding="utf-8")
+        assert "pre_meal" not in txt and "sd-meal" not in txt, page
 
 
 # ---- SP-287: the calculator's loading text (total energy, an ultra over 1–2 days) ---------------
