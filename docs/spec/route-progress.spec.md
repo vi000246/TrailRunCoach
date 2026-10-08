@@ -279,7 +279,7 @@ moving time. Route efforts are whole activities: no VAM (a loop's net gain is
 Air temperature, humidity and dew point for every effort from the Open-Meteo
 historical archive (`archive-api.open-meteo.com/v1/archive`, hourly
 `temperature_2m, relative_humidity_2m, dew_point_2m, precipitation`
-(`HOURLY`, `backend/engine/route_weather.py:46`), `timezone=auto`), shown
+(`HOURLY`, `backend/engine/route_weather.py:48`), `timezone=auto`), shown
 with the attribution *Weather data by Open-Meteo.com (CC BY 4.0)*. It reuses
 `racepower/weather.py` (client `_http_get`, `OM_ARCHIVE`, `activities_conditions`,
 `ATTRIBUTION`) and `racepower/env.py` (`dew_point`, `heat_penalty_pct`)
@@ -299,8 +299,8 @@ without changing them.
   call per (day, cell) not yet cached, a new point in a cached group one call
   for the new points, a rebuild none. Calls go 3 at a time (`WORKERS`, well
   under Open-Meteo's 600 calls / min) and at most 2,000 per build (`MAX_CALLS`,
-  `backend/engine/route_weather.py:53`, `backend/engine/route_weather.py:55`,
-  `backend/engine/route_weather.py:207-212`); the rest are counted as skipped
+  `backend/engine/route_weather.py:55`, `backend/engine/route_weather.py:57`,
+  `backend/engine/route_weather.py:227-231`); the rest are counted as skipped
   and wait for the next build.
 - **Why the effort's own point, not the cell centre**: the first version asked
   for the cell centre and corrected T by −6.5 °C/km to the effort's elevation.
@@ -344,7 +344,7 @@ without changing them.
   backfill below fetches those of the last 12 months once. The rain is
   looked up by the activity's file, else by its start within ±3 min under
   another source's file name (`rain_by_activity`, an `activity_key.ByStartDict`,
-  `backend/engine/route_weather.py:428-438`). The 活動編輯
+  `backend/engine/route_weather.py:460-470`). The 活動編輯
   page (`GET /activities` → `rain_mm`, `rain_hint_mm`) shows 「這次活動期間下過雨
   （N mm），要標成濕路嗎？」 with a 「標成濕」 button while the 路況 is 未標 and
   `rain_mm` ≥ `activity_tags.RAIN_HINT_MM` (1 mm, 推估), and only on 越野跑 / 登山健行

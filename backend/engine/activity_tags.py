@@ -204,13 +204,15 @@ def exclusive_poles(tags) -> list[str]:
     return ct if sum(t in _CHOICE_OF_TAG for t in ct) <= 1 else with_poles(ct, p)
 
 
-# 「依賽事設定」 (SP-300, user decision 2026-10-06): an activity matched to a season-plan event marked
+# 「依賽事設定」 (SP-300, user decision 2026-10-06): an activity of a season-plan event marked
 # 「會用登山杖」 (planning.Event.poles, SP-244) shows 有杖 unless the user chose for it. Not a guess: it
-# is what the user entered on the race. The match is the existing one — a 1-day road / 越野賽 event:
-# its run by date + kind + distance (maximal.match_events, the auto 比賽 type); a 百岳, an 其他 or a
-# multi-day event: every trail run / hike (the activities the comparison chart uses) on each of its
-# days (the auto 百岳跟團 rule, athlete.baiyue_on). Computed at read time, never stored, so unticking
-# the race puts its un-chosen activities back to 未標. Like the mark itself it feeds no model.
+# is what the user entered on the race. Which activities (owner 2026-10-07): every trail run / hike
+# (the activities the comparison chart uses, climb_vam.kind_of) on the event's day — each day of a
+# multi-day event — whatever its watch distance (no ±25 % match) and also a 越野賽 recorded as a
+# hike; plus, on a 1-day road / 越野賽 event, its run by date + kind + distance (maximal.match_events,
+# the auto 比賽 type: a road race's road run). Only for this default — the auto 比賽 type keeps the
+# match. Computed at read time, never stored, so unticking the race puts its un-chosen activities
+# back to 未標. Like the mark itself it feeds no model.
 
 def race_poles(ds) -> dict[int, str]:
     """{workout idx: event name} of the activities a 「會用登山杖」 event covers ({} without one)."""
@@ -231,12 +233,12 @@ def race_poles(ds) -> dict[int, str]:
                  "trail": A.is_trail(w)} for w in ds.workouts if A.outdoor(w)]
         for i, m in MX.match_events(one_day, runs).items():
             out[i] = m.get("name") or ""
-    span = [e for e in events if e not in one_day]
-    for w in ds.workouts if span else []:
+    # every event, each of its days: all its trail runs / hikes (owner 2026-10-07)
+    for w in ds.workouts:
         if w.idx in out or kind_of(w) is None:
             continue
         d = w.entry.start.date()
-        e = next((e for e in span if e.start <= d < e.start + dt.timedelta(days=max(1, int(e.days or 1)))), None)
+        e = next((e for e in events if e.start <= d < e.start + dt.timedelta(days=max(1, int(e.days or 1)))), None)
         if e is not None:
             out[w.idx] = e.name or ""
     if memo is not None:
