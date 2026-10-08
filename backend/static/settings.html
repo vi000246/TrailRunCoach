@@ -394,7 +394,7 @@ main > section.tab-off { display: none; }
   </section>
 
   <section id="backup">
-    <h2>備份 <button type="button" class="q" aria-label="說明" title="把資料庫（活動紀錄、課表、設定、傷病紀錄等）打包成一個 zip，存到你選的資料夾。選雲端硬碟（iCloud Drive／OneDrive／Google 雲端硬碟／Dropbox）裡的資料夾，就由它們的同步程式自動上傳；App 不會登入任何雲端帳號。保留最近 7 天每天一份、加上最近 4 週每週一份，更舊的自動刪除——只會刪這個功能建立的備份檔，資料夾裡的其他檔案不會動。">?</button>
+    <h2>備份 <button type="button" class="q" aria-label="說明" title="把資料庫（活動紀錄、課表、設定、傷病紀錄等）和你改過的檔案（賽季計畫、校正、標註、圖表檢視、路線名稱、上傳的 GPX）打包成一個 zip，存到你選的資料夾。COROS／TrainingPeaks 的登入憑證和記住的密碼不放進備份。選雲端硬碟（iCloud Drive／OneDrive／Google 雲端硬碟／Dropbox）裡的資料夾，就由它們的同步程式自動上傳；App 不會登入任何雲端帳號。保留最近 7 天每天一份、加上最近 4 週每週一份，更舊的自動刪除——只會刪這個功能建立的備份檔，資料夾裡的其他檔案不會動。">?</button>
       <span class="pill" id="b-pill" hidden></span></h2>
     <div class="row" id="b-cloud"></div>
     <div class="row">
@@ -409,7 +409,7 @@ main > section.tab-off { display: none; }
     <div class="row">
       <button class="primary" id="b-run">立即備份</button>
       <button id="b-restore">還原…</button>
-      <button type="button" class="q" aria-label="說明" title="選一個備份檔，先檢查內容和資料庫完整性；還原前會自動把目前的資料庫另存一份到 ~/.wko5coach/backups，然後換成備份裡的資料，完成後請重新啟動 App。這台電腦的備份設定（資料夾、自動備份）不會被覆蓋。舊版的加密備份（.zip.enc）不能還原。COROS／TrainingPeaks 記住的密碼和登入憑證是用這台電腦的金鑰加密的，金鑰不在備份裡，所以在別台電腦還原後要重新登入一次。">?</button>
+      <button type="button" class="q" aria-label="說明" title="選一個備份檔，先檢查內容和資料庫完整性；還原前會自動把目前的資料庫和檔案另存一份到 ~/.wko5coach/backups，然後換成備份裡的資料；備份裡沒有的檔案不會動。完成後請重新啟動 App。這台電腦的備份設定（資料夾、自動備份）和 COROS／TrainingPeaks 的登入不會被覆蓋——登入不在備份裡，新電腦還原後要登入一次。舊版的加密備份（.zip.enc）不能還原。">?</button>
       <span class="meta" id="b-msg" role="status"></span>
     </div>
     <details style="margin-top:6px"><summary class="meta">進階設定</summary>
@@ -1594,6 +1594,7 @@ $("r-check").onclick = async (e) => {
       const c = r.row_counts || {};
       info.innerHTML = `<span class="ok-text">檢查通過</span>：建立於 ${fmtTime(r.created_at)}（App ${esc(r.app_version || "?")}）`
         + `・活動 ${c.workout_files ?? "–"} 筆・課表 ${c.plan_sessions ?? "–"} 筆`
+        + (r.files && r.files.count ? `・含 ${r.files.count} 個你改過的檔案` : "")
         + (r.fit && r.fit.included ? `・含 ${r.fit.files} 個 FIT 檔` : "");
     });
   } catch (err) { info.innerHTML = `<span class="err-text">不能還原：${esc(reason(err))}</span>`; }
@@ -1606,8 +1607,9 @@ $("r-ok").onclick = async (e) => {
     $("restore-dlg").close();
     $("b-msg").className = "meta ok-text";
     $("b-msg").textContent = `已還原（${fmtTime(r.created_at)} 的備份）`
+      + (r.files_restored ? `，放回 ${r.files_restored} 個你改過的檔案` : "")
       + (r.fit_restored ? `，補回 ${r.fit_restored} 個 FIT 檔` : "")
-      + `。還原前的資料已另存在 ${r.pre_restore || "–"}。請重新啟動 App；在別台電腦建立的備份，COROS／TrainingPeaks 要重新登入。`;
+      + `。還原前的資料已另存在 ${r.pre_restore || "–"}。請重新啟動 App；COROS／TrainingPeaks 的登入維持這台電腦原本的（沒登入過的話要登入一次）。`;
     toast("已還原，請重新啟動 App"); loadBackup();
   } catch (err) { info.innerHTML = `<span class="err-text">還原失敗：${esc(reason(err))}</span>`; }
 };

@@ -15,27 +15,40 @@ message; it is neither listed nor pruned.
 The zip holds what the data registry (backend/data_registry.py, SP-311) marks for a
 backup — `plan()`:
     manifest.json     app / app_version / format / schema_version / created_at /
-                      row_counts / db_sha256 / fit {included, files, bytes}
+                      row_counts / db_sha256 / fit {included, files, bytes} /
+                      files {count, bytes} / secrets_removed
     wko5coach.db      (registry DB, always) a consistent snapshot taken with sqlite3's
                       online backup API (safe while the app is writing); every table,
-                      so sync_state (SECRET) too, as stored — its credentials are
-                      sealed with secret.key (settings/secrets.py), never in a backup
+                      but the SECRET ones (sync_state: COROS / TP tokens, sealed
+                      passwords; debug_tokens) are emptied and the copy VACUUMed, so
+                      no credential — sealed or legacy plaintext — is in a backup (SP-355)
+    files/<rel>       (registry USER / uploaded IMPORTED files, always, SP-355) every
+                      tenant file whose entry says backup=ALWAYS, at its path relative
+                      to its tenant folder (`roots`: ROOT / BASE / SHARED); a new entry
+                      is carried without a change here
     fit/<source>/<year>/<file>.gz   (registry FIT, opt-in) only with "include FIT originals"
+Secret files (secret.key, weather.json, tp_client.json, backups/) are SECRET entries:
+never backup=ALWAYS (test_data_registry.py), so never walked.
 
 Retention (`prune`) only ever looks at files whose name matches NAME_RE exactly,
 so nothing else in the folder can be deleted.
 
 Restore: check the manifest -> extract the DB -> sha256
-and PRAGMA integrity_check -> back up the current DB (local pre-restore file) ->
-copy the backup into the live DB with the sqlite3 backup API (works while the
-app has the file open; a plain file swap does not on Windows) -> keep this
-machine's own backup.* settings -> restore FIT originals that are missing.
+and PRAGMA integrity_check -> back up the current DB and files (local pre-restore
+file) -> copy the backup into the live DB with the sqlite3 backup API (works while
+the app has the file open; a plain file swap does not on Windows) -> keep this
+machine's own backup.* settings and SECRET tables (its login stays; an older backup's
+sync_state is not taken either) -> put the backup's files/ back in place (only
+registered backup=ALWAYS paths inside the tenant; files the backup does not hold are
+left alone) -> restore FIT originals that are missing. Format 1 (before SP-355: no
+files/, the SECRET rows as stored) still restores.
 """
 from __future__ import annotations
 
 import gzip
 import hashlib
 import json
+import logging
 import os
 import re
 import shutil
@@ -50,14 +63,21 @@ from typing import Iterable, Optional
 
 from backend import data_registry as R
 
+log = logging.getLogger(__name__)
+
 APP = "TrailRunCoach"
-FORMAT = 1
+# 2 (SP-355): files/ + the SECRET tables emptied. An older app refuses it (「請先更新 App」)
+# instead of restoring it over its own login; format 1 still restores here.
+FORMAT = 2
 NAME_RE = re.compile(r"^trailruncoach-backup-(\d{8})-(\d{6})\.zip$")
 PRE_RE = re.compile(r"^trailruncoach-prerestore-(\d{8})-(\d{6})\.zip$")
 MANIFEST = "manifest.json"
 DB_ENTRY = R.DB.pattern                       # "wko5coach.db"
 FIT_DIR = R.FIT.pattern.split("/")[0]         # "fit"
 FIT_ENTRY_RE = re.compile(r"^fit/(coros|tp)/[A-Za-z0-9_.\-]{1,32}/[^/\\:*?\"<>|]{1,200}\.gz$")
+FILES_DIR = "files"                           # files/<path relative to its tenant folder>
+FILE_CLASSES = (R.USER, R.IMPORTED)           # what a files/ entry may be
+FILE_WHERES = (R.ROOT, R.BASE, R.SHARED)
 KEEP_DAILY, KEEP_WEEKLY, KEEP_PRERESTORE = 7, 4, 5
 AUTO_EVERY = timedelta(hours=24)
 RETRY_AFTER_FAIL = timedelta(hours=1)
@@ -127,6 +147,33 @@ def snapshot_db(src: Path, out: Path) -> None:
         s.close()
 
 
+def _q(name: str) -> str:
+    return '"' + name.replace('"', '""') + '"'
+
+
+def _tables(con: sqlite3.Connection) -> set[str]:
+    return {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+
+
+def strip_secrets(snap: Path) -> list[str]:
+    """Empty the SECRET tables (data_registry: sync_state, debug_tokens) of a snapshot and
+    VACUUM it, so no credential — sealed or legacy plaintext — is left on a free page.
+    Returns the tables emptied. Only ever called on a copy, never the live DB."""
+    con = sqlite3.connect(str(snap))
+    try:
+        con.execute("PRAGMA journal_mode=DELETE")       # a WAL source makes a WAL copy: no -wal left
+        con.execute("PRAGMA secure_delete=ON")
+        present = _tables(con)
+        gone = [t for t in R.secret_tables() if t in present]
+        for t in gone:
+            con.execute(f"DELETE FROM {_q(t)}")
+        con.commit()
+        con.execute("VACUUM")
+    finally:
+        con.close()
+    return gone
+
+
 def _sha256(path: Path) -> str:
     h = hashlib.sha256()
     with open(path, "rb") as f:
@@ -159,25 +206,77 @@ def _fit_files(fit_root: Optional[Path]) -> Iterable[tuple[Path, str]]:
             yield p, entry
 
 
+def _file_entry_ok(f) -> bool:
+    """A registry file entry this module can carry under files/: a tenant's own USER or
+    IMPORTED file in one of its folders (never SECRET / DERIVED / the server's files)."""
+    return f.cls in FILE_CLASSES and f.where in FILE_WHERES and f.scope == R.TENANT
+
+
 def plan(include_fit: bool) -> list:
     """The registry entries a backup holds (data_registry.backup_entries). This module
-    writes the DB snapshot and the FIT originals; an entry it cannot write is an error,
-    not silently left out."""
+    writes the DB snapshot, the files/ entries and the FIT originals; an entry it cannot
+    write is an error, not silently left out."""
     parts = R.backup_entries(include_fit)
-    unknown = [f.pattern for f in parts if f not in (R.DB, R.FIT)]
+    unknown = [f.pattern for f in parts if f not in (R.DB, R.FIT) and not _file_entry_ok(f)]
     if unknown or R.DB not in parts:
         raise BackupError(f"備份不支援這些資料：{unknown or [R.DB.pattern]}")
     return parts
 
 
+def file_entries(parts: Optional[list] = None) -> list:
+    """The files/ entries of a backup: the registry's backup=ALWAYS files besides the DB."""
+    return [f for f in (plan(False) if parts is None else parts) if f not in (R.DB, R.FIT)]
+
+
+def tenant_roots(root: Path, base: Optional[Path] = None, shared: Optional[Path] = None) -> dict:
+    """{where: folder} of a tenant (tenancy.py: private root, the base a sandbox reads,
+    shared). The owner's three are one folder ($WKO5COACH_HOME)."""
+    root = Path(root)
+    return {R.ROOT: root, R.BASE: Path(base) if base else root, R.SHARED: Path(shared) if shared else root}
+
+
+def _skipped(name: str) -> bool:
+    """A half-written file (an atomic write's *.tmp, a hidden partial): not user data."""
+    return name.endswith(".tmp") or name.startswith(".")
+
+
+def _user_files(roots: dict, entries: list) -> Iterable[tuple[Path, str]]:
+    """(path, path relative to its tenant folder) of every file of the given entries; a
+    file belongs to the entry the registry classifies it under (first match wins)."""
+    for f in entries:
+        base = Path(roots[f.where])
+        if "*" not in f.pattern:
+            cands = [base / f.pattern]
+        elif "**" not in f.pattern:
+            cands = sorted(base.glob(f.pattern))
+        else:
+            head = f.pattern.split("*", 1)[0]
+            start = base / head.rsplit("/", 1)[0] if "/" in head else base
+            cands = []
+            for dirpath, dirnames, filenames in os.walk(start):     # does not follow links
+                dirnames.sort()
+                cands += [Path(dirpath, n) for n in sorted(filenames)]
+        for p in cands:
+            if _skipped(p.name) or p.is_symlink() or not p.is_file():
+                continue
+            rel = p.relative_to(base).as_posix()
+            if R.classify(rel) == f:
+                yield p, rel
+
+
 def build_zip(db_path: Path, zip_path: Path, *, fit_root: Optional[Path] = None,
-              include_fit: bool = False, now: Optional[datetime] = None) -> dict:
-    """The plain zip (snapshot + manifest [+ FITs]). Returns the manifest."""
+              include_fit: bool = False, roots: Optional[dict] = None,
+              now: Optional[datetime] = None) -> dict:
+    """The plain zip (snapshot without the SECRET rows + the user's files + manifest
+    [+ FITs]). `roots`: the tenant's folders (tenant_roots; default: the DB's folder).
+    Returns the manifest."""
     now = now or datetime.now(timezone.utc)
     parts = plan(include_fit)
+    roots = roots or tenant_roots(Path(db_path).parent)
     with tempfile.TemporaryDirectory(dir=zip_path.parent, prefix=".trc-snap-") as td:
         snap = Path(td) / DB_ENTRY
         snapshot_db(db_path, snap)
+        removed = strip_secrets(snap)
         con = sqlite3.connect(str(snap))
         try:
             schema, counts = schema_info(con)
@@ -188,9 +287,16 @@ def build_zip(db_path: Path, zip_path: Path, *, fit_root: Optional[Path] = None,
         manifest = {"app": APP, "format": FORMAT, "app_version": app_version(),
                     "schema_version": schema, "created_at": now.astimezone(timezone.utc).isoformat(),
                     "row_counts": counts, "db_sha256": _sha256(snap),
-                    "fit": {"included": R.FIT in parts, "files": 0, "bytes": 0}}
+                    "fit": {"included": R.FIT in parts, "files": 0, "bytes": 0},
+                    "files": {"count": 0, "bytes": 0}, "secrets_removed": removed}
         with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as z:
             z.write(snap, DB_ENTRY)
+            for p, rel in _user_files(roots, file_entries(parts)):
+                data = p.read_bytes()
+                z.writestr(zipfile.ZipInfo(f"{FILES_DIR}/{rel}", date_time=_zip_time(p)), data,
+                           compress_type=zipfile.ZIP_STORED if rel.endswith(".gz") else zipfile.ZIP_DEFLATED)
+                manifest["files"]["count"] += 1
+                manifest["files"]["bytes"] += len(data)
             if R.FIT in parts:
                 for p, entry in _fit_files(fit_root):
                     z.writestr(zipfile.ZipInfo(entry, date_time=_zip_time(p)),
@@ -208,7 +314,8 @@ def _zip_time(p: Path) -> tuple:
 
 
 def create_backup(db_path: Path, dest_dir: Path, *, fit_root: Optional[Path] = None,
-                  include_fit: bool = False, now: Optional[datetime] = None) -> dict:
+                  include_fit: bool = False, roots: Optional[dict] = None,
+                  now: Optional[datetime] = None) -> dict:
     """Write one backup file into dest_dir (atomically: a hidden .partial file
     renamed at the end, so a cloud client never uploads half a backup)."""
     if not _LOCK.acquire(blocking=False):
@@ -227,7 +334,8 @@ def create_backup(db_path: Path, dest_dir: Path, *, fit_root: Optional[Path] = N
             final = dest_dir / name
         tmp = dest_dir / f".{name}.partial"
         try:
-            manifest = build_zip(db_path, tmp, fit_root=fit_root, include_fit=include_fit, now=local)
+            manifest = build_zip(db_path, tmp, fit_root=fit_root, include_fit=include_fit, roots=roots,
+                                 now=local)
             os.replace(tmp, final)
         finally:
             try:
@@ -236,7 +344,8 @@ def create_backup(db_path: Path, dest_dir: Path, *, fit_root: Optional[Path] = N
                 pass
         return {"name": name, "path": str(final), "size": final.stat().st_size,
                 "created_at": manifest["created_at"],
-                "row_counts": manifest["row_counts"], "fit_files": manifest["fit"]["files"]}
+                "row_counts": manifest["row_counts"], "fit_files": manifest["fit"]["files"],
+                "user_files": manifest["files"]["count"]}
     finally:
         _LOCK.release()
 
@@ -480,11 +589,57 @@ def _preserved_rows(con: sqlite3.Connection) -> list[tuple]:
         return []
 
 
+def _secret_rows(con: sqlite3.Connection) -> dict:
+    """This machine's SECRET tables before a restore: {table: (create sql, index sqls,
+    [(column, declared type)], rows)}."""
+    out = {}
+    for t in R.secret_tables():
+        try:
+            row = con.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name=?", (t,)).fetchone()
+            if not row:
+                continue
+            idx = [r[0] for r in con.execute(
+                "SELECT sql FROM sqlite_master WHERE type='index' AND tbl_name=? AND sql IS NOT NULL", (t,))]
+            cols = [(r[1], r[2]) for r in con.execute(f"PRAGMA table_info({_q(t)})")]
+            rows = con.execute(f"SELECT {', '.join(_q(c) for c, _ in cols)} FROM {_q(t)}").fetchall()
+        except sqlite3.Error:
+            continue
+        out[t] = (row[0], idx, cols, rows)
+    return out
+
+
+def _put_back_secrets(con: sqlite3.Connection, keep: dict) -> None:
+    """After the backup was copied in: the SECRET tables hold this machine's rows again,
+    whatever the backup had (a format-1 backup's sync_state is not taken over). A backup
+    with an older schema gets the missing table / columns first (init_db finds them there)."""
+    present = _tables(con)
+    for t in R.secret_tables():
+        if t in keep:
+            create, idx, cols, rows = keep[t]
+            if t not in present:
+                con.execute(create)
+                for s in idx:
+                    con.execute(s)
+            else:
+                have = {r[1] for r in con.execute(f"PRAGMA table_info({_q(t)})")}
+                for c, typ in cols:
+                    if c not in have:
+                        con.execute(f"ALTER TABLE {_q(t)} ADD COLUMN {_q(c)} {typ}")
+            con.execute(f"DELETE FROM {_q(t)}")
+            if rows:
+                con.executemany(f"INSERT INTO {_q(t)} ({', '.join(_q(c) for c, _ in cols)}) "
+                                f"VALUES ({', '.join('?' * len(cols))})", rows)
+        elif t in present:
+            con.execute(f"DELETE FROM {_q(t)}")
+    con.commit()
+
+
 def _write_db_into(src: Path, live: Path) -> None:
     s = sqlite3.connect(str(src))
     d = sqlite3.connect(str(live), timeout=30)
     try:
         keep = _preserved_rows(d)
+        secrets_kept = _secret_rows(d)
         s.backup(d)
         if keep:
             try:
@@ -494,19 +649,75 @@ def _write_db_into(src: Path, live: Path) -> None:
                 d.commit()
             except sqlite3.Error:
                 d.rollback()
+        try:
+            _put_back_secrets(d, secrets_kept)
+        except sqlite3.Error as e:          # the restore itself is done; the login may need redoing
+            d.rollback()
+            log.warning("restore: this machine's %s could not be put back: %s", R.secret_tables(), e)
     finally:
         d.close()
         s.close()
 
 
-def restore(path: Path, live_db: Path, *, local_dir: Path, fit_root: Optional[Path] = None, now: Optional[datetime] = None) -> dict:
-    """Validate the backup, save the current DB to local_dir first, then copy
-    the backup into the live DB. FIT originals in the backup that are missing
-    locally are written into fit_root (existing files are never overwritten)."""
+def _safe_file_target(roots: dict, rel: str, entries: list) -> Optional[Path]:
+    """Where a files/<rel> entry goes: only a registered backup=ALWAYS path, inside its
+    tenant folder; anything else (a secret, a cache, ../, an absolute path) is skipped."""
+    if not rel or "\\" in rel or ":" in rel or rel.startswith("/"):
+        return None
+    parts = rel.split("/")
+    if any(x in ("", ".", "..") for x in parts) or _skipped(parts[-1]):
+        return None
+    e = R.classify(rel)
+    if e is None or e not in entries:
+        return None
+    base = Path(roots[e.where])
+    target = base.joinpath(*parts)
+    try:
+        if base.resolve() not in target.resolve().parents:
+            return None
+    except OSError:
+        return None
+    return target
+
+
+def _restore_files(zpath: Path, roots: dict) -> int:
+    """Put the backup's files/ back (overwriting this machine's copy, atomically); a file
+    the backup does not hold is left as it is. Returns how many were written."""
+    entries = file_entries()
+    n = 0
+    with zipfile.ZipFile(zpath) as z:
+        for zi in z.infolist():
+            if zi.is_dir() or not zi.filename.startswith(FILES_DIR + "/"):
+                continue
+            target = _safe_file_target(roots, zi.filename[len(FILES_DIR) + 1:], entries)
+            if target is None:
+                continue
+            target.parent.mkdir(parents=True, exist_ok=True)
+            tmp = target.with_name(target.name + ".restore.tmp")
+            try:
+                with z.open(zi) as src, open(tmp, "wb") as dst:
+                    shutil.copyfileobj(src, dst, CHUNK)
+                os.replace(tmp, target)
+            finally:
+                try:
+                    tmp.unlink()
+                except FileNotFoundError:
+                    pass
+            n += 1
+    return n
+
+
+def restore(path: Path, live_db: Path, *, local_dir: Path, fit_root: Optional[Path] = None,
+            roots: Optional[dict] = None, now: Optional[datetime] = None) -> dict:
+    """Validate the backup, save the current DB and files to local_dir first, then copy
+    the backup into the live DB (this machine's SECRET tables kept) and its files/ into
+    `roots` (tenant_roots; default: the DB's folder). FIT originals in the backup that
+    are missing locally are written into fit_root (existing files are never overwritten)."""
     if not _LOCK.acquire(blocking=False):
         raise Busy("另一個備份或還原正在進行中")
     try:
         live_db, local_dir = Path(live_db), Path(local_dir)
+        roots = roots or tenant_roots(live_db.parent)
         local_dir.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(dir=local_dir, prefix=".trc-restore-") as td:
             info = open_backup(path, Path(td))
@@ -514,13 +725,18 @@ def restore(path: Path, live_db: Path, *, local_dir: Path, fit_root: Optional[Pa
             if live_db.exists():
                 local = (now or datetime.now(timezone.utc)).astimezone()
                 pre = local_dir / f"trailruncoach-prerestore-{local:%Y%m%d-%H%M%S}.zip"
-                build_zip(live_db, pre, now=local)
+                build_zip(live_db, pre, roots=roots, now=local)
                 for _, old in _ours(local_dir, PRE_RE)[KEEP_PRERESTORE:]:
                     try:
                         old.unlink()
                     except OSError:
                         pass
             _write_db_into(info["db"], live_db)
+            try:
+                files_restored = _restore_files(info["zip"], roots)
+            except OSError as e:
+                raise BackupError(f"資料庫已還原，但放回你改過的檔案時出錯（{e.strerror or e}）；"
+                                  f"還原前的資料在 {pre or '–'}")
             fit_restored = 0
             if fit_root is not None and info["manifest"].get("fit", {}).get("included"):
                 with zipfile.ZipFile(info["zip"]) as z:
@@ -534,7 +750,8 @@ def restore(path: Path, live_db: Path, *, local_dir: Path, fit_root: Optional[Pa
         m = info["manifest"]
         return {"created_at": m.get("created_at"), "app_version": m.get("app_version"),
                 "schema_version": m.get("schema_version"), "row_counts": info["row_counts"],
-                "pre_restore": str(pre) if pre else None, "fit_restored": fit_restored}
+                "pre_restore": str(pre) if pre else None, "fit_restored": fit_restored,
+                "files_restored": files_restored}
     finally:
         _LOCK.release()
 
@@ -546,4 +763,4 @@ def inspect(path: Path, work: Path) -> dict:
         m = info["manifest"]
         return {"created_at": m.get("created_at"), "app_version": m.get("app_version"),
                 "schema_version": m.get("schema_version"), "row_counts": info["row_counts"],
-                "fit": m.get("fit")}
+                "fit": m.get("fit"), "files": m.get("files")}

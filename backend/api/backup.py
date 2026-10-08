@@ -46,6 +46,14 @@ def _fit_root() -> Path:
     return storage.fit_root()
 
 
+def _roots() -> dict:
+    """The tenant's folders the user's files live in (data_registry where: ROOT / BASE /
+    SHARED, tenancy.py); the owner's are all $WKO5COACH_HOME (SP-355)."""
+    from backend import tenancy
+    t = tenancy.current()
+    return B.tenant_roots(t.root, tenancy.base_of(t).root, t.shared)
+
+
 def _now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -79,10 +87,10 @@ async def run_backup(db: AsyncSession, trigger: str, athlete_id: int = 1) -> dic
         folder = await asyncio.to_thread(B.check_folder, d)
         made = await asyncio.to_thread(
             B.create_backup, _db_path(), folder, fit_root=_fit_root(),
-            include_fit=await repo.get("backup.include_fit"))
+            include_fit=await repo.get("backup.include_fit"), roots=_roots())
         pruned = await asyncio.to_thread(B.prune, folder)
         result.update(status="ok", name=made["name"], size=made["size"],
-                      fit_files=made["fit_files"], pruned=len(pruned))
+                      fit_files=made["fit_files"], user_files=made["user_files"], pruned=len(pruned))
         await repo.set("backup.last_ok", {"at": at, "name": made["name"], "size": made["size"]})
     except B.Busy:
         raise
@@ -245,7 +253,7 @@ async def post_restore(body: SourceBody, athlete_id: int = 1):
         p = await _source(body, SettingsRepository(db, athlete_id))
     try:
         r = await asyncio.to_thread(B.restore, p, _db_path(), local_dir=_local_dir(),
-                                    fit_root=_fit_root())
+                                    fit_root=_fit_root(), roots=_roots())
     except B.BackupError as e:
         raise _err(e)
     await after_restore()

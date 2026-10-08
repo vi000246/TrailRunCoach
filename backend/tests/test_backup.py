@@ -232,6 +232,251 @@ def test_check_folder(tmp_path):
         B.check_folder(str(tmp_path / "f"))
 
 
+# ------------------------------------------------------------------ user files + secrets (SP-355)
+from backend import data_registry as R  # noqa: E402
+
+SRC_SECRETS = {"plain": "SENTINEL-TOKEN-SRC-legacy-plaintext", "pw": "SENTINEL-PW-SRC",
+               "hash": "SENTINEL-HASH-SRC-0123456789abcdef0123456789abcdef0123456789abcde",
+               "email": "src@example.com"}
+SECRET_FILES = {"secret.key": b"SENTINEL-KEYFILE", "weather.json": b'{"key": "SENTINEL-CWA"}',
+                "tp_client.json": b'{"secret": "SENTINEL-TPCLIENT"}',
+                "backups/trailruncoach-prerestore-20261001-000000.zip": b"SENTINEL-PRERESTORE",
+                "cache/render/ab/abc.json": b"SENTINEL-DERIVED", "routes/index.json": b"SENTINEL-ROUTE-INDEX"}
+
+
+def _sample(pattern: str) -> str:
+    """A path a registry pattern matches: `**` -> one sub folder + file, `*` -> a name."""
+    return pattern.replace("**", "sub/f.json").replace("*", "x")
+
+
+def app_tenant(home: Path, *, secrets: dict, files: dict, tz: str = "Asia/Taipei", wal: bool = False) -> Path:
+    """A tenant folder with the app schema, a login in sync_state (a legacy plaintext token and a
+    sealed password), a debug token, a setting marker and the given files; returns the DB path."""
+    from sqlalchemy import create_engine
+    from backend.db.models import Base
+    from backend.settings import secrets as S
+    home.mkdir(parents=True, exist_ok=True)
+    db = home / "wko5coach.db"
+    eng = create_engine(f"sqlite:///{db}")
+    Base.metadata.create_all(eng)
+    eng.dispose()
+    con = sqlite3.connect(str(db))
+    if wal:
+        con.execute("PRAGMA journal_mode=WAL")
+    con.execute("INSERT INTO athletes (id, name, data_dir, created_at) VALUES (1, 'a', 'd', '2026-01-01')")
+    if secrets:
+        con.execute("INSERT INTO sync_state (athlete_id, coros_email, coros_access_token, coros_password_sealed, "
+                    "tp_access_token, last_sync_cursor) VALUES (1, ?, ?, ?, ?, ?)",
+                    (secrets["email"], secrets["plain"], S.seal(secrets["pw"]), secrets["plain"] + "-tp",
+                     secrets["email"] + "-cursor"))
+        con.execute("INSERT INTO debug_tokens (tenant_id, name, prefix, token_hash, scopes_json, created_at, "
+                    "expires_at, ips_json) VALUES ('owner', 'mine', 'p', ?, '[]', '2026-10-01', '2099-01-01', '[]')",
+                    (secrets["hash"],))
+    con.execute("INSERT INTO user_settings (user_id, key, value_json, updated_at) VALUES "
+                "(1, 'athlete.timezone', ?, '2026-10-01')", (json.dumps(tz),))
+    con.commit()
+    con.close()
+    for rel, data in files.items():
+        p = home / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(data)
+    return db
+
+
+def _rows(db: Path, sql: str) -> list:
+    con = sqlite3.connect(str(db))
+    try:
+        return con.execute(sql).fetchall()
+    finally:
+        con.close()
+
+
+def _secret_state(db: Path) -> dict:
+    """{table: [row as a dict]} of the SECRET tables (column order may differ after a restore)."""
+    con = sqlite3.connect(str(db))
+    con.row_factory = sqlite3.Row
+    try:
+        return {t.name: sorted((dict(r) for r in con.execute(f"SELECT * FROM {t.name}")), key=repr)
+                for t in R.of_class(R.SECRET)[0]}
+    finally:
+        con.close()
+
+
+def _user_files() -> dict:
+    """One file for every registry entry a backup always holds (besides the DB)."""
+    out = {}
+    for f in R.backup_entries(False):
+        if f is not R.DB:
+            out[_sample(f.pattern)] = f"user {f.pattern}".encode()
+    return out
+
+
+def test_user_files_are_backed_up_from_the_registry(tmp_path):
+    """Every file the registry marks for a backup goes in under files/ (registry-driven: no list
+    here); secret, derived and half-written files do not."""
+    files = _user_files()
+    assert {"plan.json", "routes/names.json", "views/sub/f.json", "event_gpx/sub/f.json"} <= set(files)
+    junk = {"views/half.json.tmp": b"partial", "plan.json.tmp": b"partial"}
+    db = app_tenant(tmp_path / "home", secrets=SRC_SECRETS, files={**files, **SECRET_FILES, **junk})
+    r = B.create_backup(db, tmp_path / "out")
+    with zipfile.ZipFile(r["path"]) as z:
+        names = set(z.namelist())
+        m = json.loads(z.read(B.MANIFEST))
+        for rel, data in files.items():
+            assert z.read(f"{B.FILES_DIR}/{rel}") == data, rel
+    assert names == {B.MANIFEST, B.DB_ENTRY} | {f"{B.FILES_DIR}/{rel}" for rel in files}
+    assert m["format"] == 2 and m["files"]["count"] == len(files)
+    assert m["files"]["bytes"] == sum(len(v) for v in files.values())
+    assert set(m["secrets_removed"]) == {t.name for t in R.of_class(R.SECRET)[0]}
+
+
+def test_a_new_user_file_in_the_registry_is_backed_up_without_touching_backup_py(tmp_path, monkeypatch):
+    """Adding a USER entry with backup=ALWAYS to the registry is all it takes."""
+    new = R.File("new_feature/**", R.USER, R.BASE, "a file kind added later", backup=R.ALWAYS)
+    monkeypatch.setattr(R, "FILES", (new,) + R.FILES)
+    monkeypatch.setitem(R._RX, new.pattern, R._regex(new.pattern))
+    db = app_tenant(tmp_path / "home", secrets={}, files={"new_feature/a/b.json": b"NEW"})
+    r = B.create_backup(db, tmp_path / "out")
+    with zipfile.ZipFile(r["path"]) as z:
+        assert z.read(f"{B.FILES_DIR}/new_feature/a/b.json") == b"NEW"
+    live = app_tenant(tmp_path / "live", secrets={}, files={})
+    assert B.restore(r["path"], live, local_dir=tmp_path / "live" / "backups")["files_restored"] == 1
+    assert (tmp_path / "live" / "new_feature" / "a" / "b.json").read_bytes() == b"NEW"
+
+
+def test_no_secret_is_in_the_backup(tmp_path):
+    """Scan the archive (raw and every entry decompressed, the DB pages included) for the
+    tokens, the sealed and plaintext passwords, the debug token hash and the secret files."""
+    from backend.settings import secrets as S
+    db = app_tenant(tmp_path / "home", secrets=SRC_SECRETS, files={**_user_files(), **SECRET_FILES}, wal=True)
+    sealed = _rows(db, "SELECT coros_password_sealed FROM sync_state")[0][0]
+    assert sealed.startswith(S.PREFIX)
+    r = B.create_backup(db, tmp_path / "out")
+    assert r["row_counts"]["sync_state"] == 0 and r["row_counts"]["debug_tokens"] == 0
+    blobs = [Path(r["path"]).read_bytes()]
+    with zipfile.ZipFile(r["path"]) as z:
+        for n in z.namelist():
+            data = z.read(n)
+            blobs.append(data)
+            if n.endswith(".gz"):
+                blobs.append(gzip.decompress(data))
+    sentinels = [v.encode() for v in SRC_SECRETS.values()] + [sealed.encode(), b"SENTINEL-"]
+    for blob in blobs:
+        for s in sentinels:
+            assert s not in blob, s
+    # the live DB is untouched
+    assert _rows(db, "SELECT coros_email FROM sync_state") == [(SRC_SECRETS["email"],)]
+
+
+def test_round_trip_puts_user_files_back_and_keeps_this_machines_login(tmp_path):
+    files = _user_files()
+    src = app_tenant(tmp_path / "src", secrets=SRC_SECRETS, files=files, tz="Asia/Taipei")
+    r = B.create_backup(src, tmp_path / "out")
+    # another machine: its own login, debug token and older versions of some files, plus a view
+    # the backup does not have
+    mine = {"plain": "LOCAL-TOKEN", "pw": "LOCAL-PW", "hash": "LOCAL-HASH", "email": "me@here.example"}
+    home = tmp_path / "home"
+    live = app_tenant(home, secrets=mine, tz="Europe/Paris",
+                      files={"plan.json": b"LOCAL PLAN", "views/local_only.json": b"LOCAL VIEW"})
+    before = _secret_state(live)
+    res = B.restore(r["path"], live, local_dir=home / "backups")
+    assert res["files_restored"] == len(files)
+    for rel, data in files.items():
+        assert (home / rel).read_bytes() == data, rel
+    assert (home / "views" / "local_only.json").read_bytes() == b"LOCAL VIEW"   # not in the backup: kept
+    assert _rows(live, "SELECT value_json FROM user_settings WHERE key = 'athlete.timezone'") == [('"Asia/Taipei"',)]
+    after = _secret_state(live)
+    assert after == before                                # this machine's login, cursor and tokens
+    assert not list(home.rglob("*.tmp"))
+    # the pre-restore copy holds this machine's files as they were (no secrets either)
+    with zipfile.ZipFile(res["pre_restore"]) as z:
+        assert z.read(f"{B.FILES_DIR}/plan.json") == b"LOCAL PLAN"
+        assert b"LOCAL-TOKEN" not in z.read(B.DB_ENTRY)
+    info = B.inspect(r["path"], tmp_path)
+    assert info["files"]["count"] == len(files)
+
+
+def test_restore_keeps_local_secrets_when_the_backup_schema_is_older(tmp_path):
+    """A backup whose sync_state lacks newer columns (or the debug_tokens table) still gets this
+    machine's rows back in full; init_db then finds nothing left to add."""
+    src = app_tenant(tmp_path / "src", secrets={}, files={})
+    con = sqlite3.connect(str(src))
+    con.execute("DROP TABLE debug_tokens")
+    con.execute("ALTER TABLE sync_state DROP COLUMN tp_password_sealed")
+    con.commit()
+    con.close()
+    r = B.create_backup(src, tmp_path / "out")
+    mine = {"plain": "LOCAL-TOKEN", "pw": "LOCAL-PW", "hash": "LOCAL-HASH", "email": "me@here.example"}
+    live = app_tenant(tmp_path / "home", secrets=mine, files={})
+    con = sqlite3.connect(str(live))
+    con.execute("UPDATE sync_state SET tp_password_sealed = 'enc:v1:local'")
+    con.commit()
+    con.close()
+    before = _secret_state(live)
+    B.restore(r["path"], live, local_dir=tmp_path / "home" / "backups")
+    assert _secret_state(live) == before
+
+
+def _old_format_backup(path: Path, db: Path) -> Path:
+    """A backup as made before SP-355 (format 1): the whole DB, sync_state included; no files/."""
+    con = sqlite3.connect(str(db))
+    try:
+        schema, counts = B.schema_info(con)
+    finally:
+        con.close()
+    m = {"app": B.APP, "format": 1, "app_version": "0.9", "schema_version": schema,
+         "created_at": "2026-10-01T00:00:00+00:00", "row_counts": counts, "db_sha256": B._sha256(db),
+         "fit": {"included": False, "files": 0, "bytes": 0}}
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
+        z.write(db, B.DB_ENTRY)
+        z.writestr(B.MANIFEST, json.dumps(m))
+    return path
+
+
+def test_an_old_backup_still_restores_and_its_login_is_not_taken(tmp_path):
+    src = app_tenant(tmp_path / "src", secrets=SRC_SECRETS, files={}, tz="Asia/Taipei")
+    old = _old_format_backup(tmp_path / "trailruncoach-backup-20261001-000000.zip", src)
+    assert B.inspect(old, tmp_path)["files"] is None
+    # a machine that is logged in: keeps its login; its files stay as they are
+    mine = {"plain": "LOCAL-TOKEN", "pw": "LOCAL-PW", "hash": "LOCAL-HASH", "email": "me@here.example"}
+    home = tmp_path / "home"
+    live = app_tenant(home, secrets=mine, tz="Europe/Paris", files={"plan.json": b"LOCAL PLAN"})
+    before = _secret_state(live)
+    res = B.restore(old, live, local_dir=home / "backups")
+    assert res["files_restored"] == 0
+    assert _rows(live, "SELECT value_json FROM user_settings WHERE key = 'athlete.timezone'") == [('"Asia/Taipei"',)]
+    assert _secret_state(live) == before
+    assert (home / "plan.json").read_bytes() == b"LOCAL PLAN"
+    # a new machine with no login: the old backup's credentials are not carried over either
+    fresh = app_tenant(tmp_path / "fresh", secrets={}, files={})
+    B.restore(old, fresh, local_dir=tmp_path / "fresh" / "backups")
+    assert _rows(fresh, "SELECT COUNT(*) FROM sync_state") == [(0,)]
+    assert _rows(fresh, "SELECT COUNT(*) FROM debug_tokens") == [(0,)]
+    assert _rows(fresh, "SELECT COUNT(*) FROM athletes") == [(1,)]
+
+
+def test_restore_only_writes_registered_user_files_inside_the_tenant(tmp_path):
+    db = app_tenant(tmp_path / "src", secrets={}, files={})
+    m = {"app": B.APP, "format": B.FORMAT, "created_at": "2026-10-08T00:00:00+00:00",
+         "db_sha256": B._sha256(db), "fit": {"included": False}, "files": {"count": 1, "bytes": 2}}
+    bad = tmp_path / "crafted.zip"
+    with zipfile.ZipFile(bad, "w") as z:
+        z.write(db, B.DB_ENTRY)
+        z.writestr(B.MANIFEST, json.dumps(m))
+        z.writestr(f"{B.FILES_DIR}/plan.json", b"OK")
+        for rel in ("secret.key", "weather.json", "tp_client.json", "backups/x.zip", "cache/render/a/b.json",
+                    "routes/index.json", "../escape.json", "views/../../escape2.json", "/abs.json",
+                    "views\\..\\..\\escape3.json", "wko5coach.db", "fit/coros/2026/a.fit", "logs/app.log"):
+            z.writestr(f"{B.FILES_DIR}/{rel}", b"EVIL")
+    home = tmp_path / "home"
+    live = app_tenant(home, secrets={}, files={})
+    res = B.restore(bad, live, local_dir=home / "backups")
+    assert res["files_restored"] == 1 and (home / "plan.json").read_bytes() == b"OK"
+    for p in tmp_path.rglob("*"):
+        if p.is_file() and p.suffix != ".zip":
+            assert p.read_bytes() != b"EVIL", p
+
+
 # ------------------------------------------------------------------ API layer
 def _app_db(tmp_path):
     from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -251,9 +496,12 @@ def test_run_backup_auto_tick_and_settings(tmp_path, monkeypatch):
     path, engine, factory, init = _app_db(tmp_path)
     monkeypatch.setattr(A, "_db_path", lambda: path)
     monkeypatch.setattr(A, "_fit_root", lambda: tmp_path / "fit")
+    monkeypatch.setattr(A, "_roots", lambda: B.tenant_roots(tmp_path / "tenant"))
     monkeypatch.setattr(B, "detect_cloud_folders", lambda: [])
     out = tmp_path / "cloud" / "Backups"
     (tmp_path / "cloud").mkdir()
+    (tmp_path / "tenant").mkdir()
+    (tmp_path / "tenant" / "plan.json").write_text('{"events": []}')
 
     async def go():
         await init()
@@ -272,6 +520,7 @@ def test_run_backup_auto_tick_and_settings(tmp_path, monkeypatch):
             assert r2["status"] == "ok" and r2["name"].endswith(".zip") and "encrypted" not in r2
             info = await A.post_inspect(A.SourceBody(name=r2["name"]), 1, db)
             assert info["row_counts"]["user_settings"] >= 1 and "needs_password" not in info
+            assert info["files"]["count"] == 1 and r2["user_files"] == 1       # the tenant's plan.json
             # an old encrypted backup in the folder: a clear 400, not 「只能還原…」
             from fastapi import HTTPException
             with pytest.raises(HTTPException) as ei:
