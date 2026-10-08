@@ -391,11 +391,11 @@ toggle.
 ## Render cache
 
 `backend/engine/wko5expr/render_cache.py`, used by the chart endpoint
-(`backend/api/wko5views.py:640`). Since SP-336 (SP-320 ⑤) every key part except
+(`backend/api/wko5views.py:646`). Since SP-336 (SP-320 ⑤) every key part except
 the chart and the request is **per chart** (`backend/engine/wko5expr/chartscope.py`):
 one new activity, a new day or a deploy only drops the charts it touches.
 
-- **Key** (`chart_key`, `backend/engine/wko5expr/render_cache.py:127`): sha1 of the chart
+- **Key** (`chart_key`, `backend/engine/wko5expr/render_cache.py:145`): sha1 of the chart
   definition (after fixes, translation, variant, basis and period rewrite), the
   request (view, dashboard, chart, begin/end after the floor, parity, the data
   source, every other query parameter except `stale`, the workout's file, the variant), the
@@ -404,53 +404,70 @@ one new activity, a new day or a deploy only drops the charts it touches.
   stamp and the stored test sessions; `zones` / `targets` / `activity` /
   `periodzones` the HR-profile stamp; `race_refs` the events' stored GPX;
   `climbvam` the route index / names / weather files; `polecompare` the pole
-  marks (`activity_tags.pole_marks_stamp`) and today's date
-  (`backend/api/wko5views.py:560-596`). Nothing is invalidated explicitly;
-  changed inputs miss.
-- **Scope** (`scope_of`, `backend/engine/wko5expr/chartscope.py:271`; `_Reach` `:106`): a
+  marks (`activity_tags.pole_marks_stamp`) and today's date. A single-activity chart asked
+  with only `?workout=` (the viewer) takes that activity's day as its range unless its
+  expressions read the range (`reads_range`, `backend/engine/wko5expr/chartscope.py:326`;
+  `backend/api/wko5views.py:550`), so a new activity or a new day keeps its key. Nothing is
+  invalidated explicitly; changed inputs miss.
+- **Scope** (`scope_of`, `backend/engine/wko5expr/chartscope.py:342`; `_Reach` `:133`): a
   static reading of the chart's expressions gives the days [lo, hi] whose activities it can
   read. An activity metric / channel aggregation / period total: its own range. `tl(x, c)` and
-  the builtins `ctl` / `atl` / `tsb`: the range plus `WARMUP_TAU` = 6 time constants (`:65`;
+  the builtins `ctl` / `atl` / `tsb`: the range plus `WARMUP_TAU` = 6 time constants (`:68`;
   6 × 42 = 252 days for CTL, owner 2026-10-07 — an older activity moves the value by at most
   e^-6 ≈ 0.25 % of its share). `shift`, `athleterange` (interval arithmetic over `begindate` /
   `enddate` / `today` / `date` / `@vars`, min / max / trunc / startof…), `ftp(curve, lookback)`
-  and frc / pmax / vo2max / tte, the TIS builtins (`@lookback:=90`), `drift_avg` (56 days),
-  the training levels and the estimated settings `*tpace` / `*ftp` (180 days): their own
-  reach. Anything unbounded, and every panel kind (zones, targets, z5gate, periodzones,
-  climbvam, polecompare, review, activity), = the whole history with today; a map = its
-  activity's day. `today` is in scope only when the chart reads it (`today` / `now`, the season
-  goals, race reference lines) or its range reaches today.
-- **Data fingerprint** (`fingerprint`, `backend/engine/wko5expr/chartscope.py:410`):
-  global inputs (`_global_parts` `:310`: the `.wko5athlete` stamps, plan and corrections file
+  and frc / pmax / vo2max / tte, the TIS builtins (`@lookback:=90`) and channel expressions
+  (ecpower, fmax, kleg), `drift_avg` (56 days), the training levels and the estimated settings
+  `*tpace` / `*ftp` (180 days): their own reach. A `@var` read in a wider range than it was
+  assigned in carries its value's reach there (`shift(@c, 7)` of `@c := tl(...)`). `lookup` /
+  `li` (a setting on any date) mark the scope `history`. Every `fn_*` is listed either in
+  `HANDLED_FNS` or in `RANGE_LOCAL_FNS` (`:77`, `:81`; a test audits it); an unlisted function,
+  anything unbounded, and every panel kind (zones, targets, z5gate, periodzones, climbvam,
+  polecompare, review, activity) = the whole history with today, the user's activity marks and
+  the setting history; a map = its activity's day. `today` is in scope only when the chart reads
+  it (`today` / `now`, the season goals, race reference lines) or its range reaches today.
+- **Data fingerprint** (`fingerprint`, `backend/engine/wko5expr/chartscope.py:517`):
+  global inputs (`_global_parts` `:381`: the `.wko5athlete` stamps, plan and corrections file
   stamps, engine config, the source name, the watch-power / bad-file flags, the manual PMC
-  start) + one digest per activity in scope (`_digest` `:342`: file and its FitStore stamp,
-  day, sport, sport type, tags, platform, metrics, the thresholds in effect
-  `Dataset._settings_sig`, power source / blocked), memoised on the Dataset (`_rows` `:358`) +
-  the dated settings at the scope's two ends + the stored test / done interval sessions of
-  those days (`_sessions` `:372`) + today (only when in scope) + the per-activity weather
-  stamp (drift charts, drift bars, whole-history charts). `data_fingerprint(ds)`
-  (`render_cache.py:120`) is the whole-history version.
-- **Code signature** (`code_signature`, `backend/engine/wko5expr/chartscope.py:512`):
+  start, **every 每人校正 value in effect** (`_calibration_stamp` `:404` — drift windows,
+  interval tolerance / fade … read by drift(), drift_avg, the drift bars and the review card)
+  and, when the settings come from a WKO5 athlete file, the whole setting history) + one
+  digest per activity in scope (`_digest` `:449`: file and its FitStore stamp, day, sport,
+  sport type, tags, platform, metrics, the thresholds in effect `Dataset._settings_sig`, power
+  source / blocked), memoised on the Dataset (`_rows` `:465`) + the dated settings at the
+  scope's two ends + the stored test / done interval sessions of those days (`_sessions`
+  `:479`) + today (only when in scope) + the per-activity weather stamp (drift charts, drift
+  bars, whole-history charts) + the user's activity marks and recorded RPE (`_marks_stamp`
+  `:425`, panels) + the setting history and Stryd CP fits (`_settings_history` `:416`,
+  `history` scopes). `data_fingerprint(ds)` (`render_cache.py:138`) is the whole-history version.
+- **Code signature** (`code_signature`, `backend/engine/wko5expr/chartscope.py:670`):
   engine/codehash.py (SP-332) over what the chart type reaches — the Dataset class's
   `__init__` closure (metrics, thresholds, estimates), for expression charts the evaluator
-  dispatch (`ev_*`) plus each `fn_<call>` its expressions (and the builtins they name) use,
-  the renderer of its kind (`KIND_ROOTS` `:443`), its post-processing (period, window, basis,
+  dispatch (`ev_*`) plus each `fn_<call>` its expressions, builtins and channel expressions use
+  (`_calls` `:589`; a chart drawing a PD / mean-max curve also gets `ftp` / `pdcurve` /
+  `meanmax`, which render.py evaluates itself), the renderer of its kind (`KIND_ROOTS` `:551`),
+  its post-processing (`_post` `:614`: period found by `periods.chart_period`, window, basis,
   variant, race_refs, drift_bars) and the own bytecode of the endpoint glue (`chart`,
-  `_render`, `_apply_period`), + `CACHE_VERSION` = 2 (`render_cache.py:56`) for what
-  codehash cannot see. A kind it does not know falls back to the whole-engine content hash
-  `code_signature()` (`render_cache.py:115`). Memoised per process; the startup warm-up
-  computes every bundled chart's (`_warm_chart_code`, `backend/api/wko5views.py:221`, ~2.5 s
-  local).
+  `_render`, `_apply_period`), + `CACHE_VERSION` = 2 (`render_cache.py:56`) for what codehash
+  cannot see. A kind it does not know falls back to the whole-engine content hash
+  `code_signature()` (`render_cache.py:133`). **Deploy safety** (`_changed_on_disk` `:641`):
+  if any loaded `backend.*` module's file is newer than the process start (a `git pull`
+  without a restart — codehash reads module constants from the source on disk), a signature
+  computed then carries a per-process nonce, so its keys are never shared with another
+  process. Memoised per process; the warm-up computes every bundled chart's after the first
+  page's work (`_warm_chart_code`, `backend/api/wko5views.py:221`, ~2 s local).
 - **Stale-while-revalidate** (SP-336, the SP-362 pattern; `RenderCache.serve`
-  `backend/engine/wko5expr/render_cache.py:312`): the endpoint names each request's *slot*
-  (`_slot`, `backend/api/wko5views.py:645`: view, chart id, the user's parameters, locale,
+  `backend/engine/wko5expr/render_cache.py:330`): the endpoint names each request's *slot*
+  (`_slot`, `backend/api/wko5views.py:651`: view, chart id, the user's parameters, locale,
   parity, source, the range as asked — "N days to today" when it ends today). The slot's
-  last key is kept in `cache/render/slots/<slot>.json` (`slot_put` `:295`). With `?stale=1`
+  last key is kept in `cache/render/slots/<slot>.json` (`slot_put` `:313`). With `?stale=1`
   (the viewer) a miss whose slot has an older drawing on disk answers that drawing with
-  `stale` = {key, at} and renders the new key in `REFRESH_POOL` (2 threads, `:76`; once per
-  key, at most `REFRESH_MAX` = 64 waiting); `GET /render/ready?keys=` (`:661` in wko5views,
-  `RenderCache.ready` `:364`) lists ready / failed / pending. Never without `?stale=1` (the
-  static demo export, scripts), never for a demo tenant (no slot either), and a key whose
+  `stale` = {key, at} and renders the new key in `refresh_pool()` (2 threads, `:82`; once per
+  key, at most `REFRESH_MAX` = 64 waiting; shut down with the app, `shutdown_refresh` `:90`
+  from `backend/main.py:113`). `GET /render/ready?keys=` (`backend/api/wko5views.py:667`,
+  `RenderCache.ready` `:388`) answers from memory, per tenant cache folder: pending (a
+  background render of this tenant holds it), failed, else ready. Never without `?stale=1`
+  (the static demo export, scripts), never for a demo tenant (no slot either), and a key whose
   background render failed is computed in the request next time.
 - **Storage**: in-memory LRU capped at 400 entries **and** 32 MB of JSON
   (`MAX_MEMORY_BYTES`; a per-second workout chart is MB as Python objects), an entry over a
@@ -619,10 +636,11 @@ unchanged files and unchanged code reads no FIT file at all.
   (`custom`); saved with the other viewer choices in `wko5viewer` (`range`, `:576`) and
   restored relative to today (`:669`). A choice saved before SP-336 (dates only) goes back to
   90 days. The static demo export's default range follows (`export_static.viewer_ranges`).
-- **Out-of-date charts and progress** (SP-336): cards ask `&stale=1` (`:1268`; not in the demo
+- **Out-of-date charts and progress** (SP-336): cards ask `&stale=1` (`:1274`; not in the demo
   or the static demo, `STALE_OK` `:1134`); a `stale` answer is drawn with a pulsing 更新中
-  badge (`markStale` `:1136`) and redrawn when `GET /render/ready` lists its key (`pollStale`
-  `:1146`, 1–4 s, gives up after ~5 min). A page still computing after 0.8 s shows
+  badge (`markStale` `:1137`) and redrawn when `GET /render/ready` lists its key (`pollStale`
+  `:1149`, 1–4 s); a card that waited 5 min (its own clock, not reset by other cards) asks
+  again without `stale`, so that request computes it. A page still computing after 0.8 s shows
   「計算中：n／N 張圖」 with a bar, plus 「較舊的資料第一次要多算幾秒」 for a range reaching
   back over a year (`loadProgress` `:1111`). Strings in `static/i18n/*/viewer.json`.
 - **Period toggle** (`backend/static/wko5_viewer.html:1201`): when the response
@@ -791,7 +809,7 @@ invalidation scopes (an activity added in / out of range, a 3-year-old one delet
 change, an edited activity, a code change reaching only drift()); `test_chart_stale_sp336.py`
 the stale path (old drawing then the new one, one background render per key, no stale
 without `?stale=1` / for a demo tenant / after a failed render, a new day's 90-day slot) and
-the viewer's 90-day default.
+the viewer's 90-day default; the review fixes (calibrations, marks, setting history, workout-chart key, @var reach, the fn_* audit, dynamic PD calls, channel expressions, period detection, the deploy nonce, per-tenant ready, pool shutdown, the viewer's give-up).
 `backend/tests/test_dataset_memory.py` covers one Dataset per mode, `DATASETS_MAX`
 and that a dropped Dataset is freed; `backend/tests/test_fit_cache.py` the FIT
 cache (incl. an unreadable file and a dying pool worker);
@@ -902,6 +920,7 @@ source (synthetic FITs).
 | 2026-10-08 | code-sync（SP-332, SP-333, SP-337, SP-341, SP-289, SP-80, SP-215, SP-48） | N/A | Render cache: code signature by file contents (SP-332), memory LRU also capped by 32 MB of JSON, fingerprint lists the manual PMC start; FIT dataset: `estimate_grid.json` and a grid-bounds estimate key without today (SP-337), per-workout TIS on disk via `cached_series` extra input (SP-333), codehash code versions (SP-332 / SP-341), one Dataset per mode / `DATASETS_MAX` / instance caches / last good `db_stamp`, 12 open FITs, a bad FIT never stops the parse, LTHR order with the SP-289 prior; viewer map chart (SP-80); `trail.py` row dropped (removed with the SPA, SP-48); API line numbers and all anchors re-checked against 73d07ad1, then moved to main `08cf80d7` (SP-362 / SP-371 / SP-218) by diff and checked text for text; Decisions Log and Open Questions added |
 | 2026-10-08 | SP-300 follow-up | owner decision 2026-10-07 | 「依賽事設定」 (`activity_tags.race_poles`): every trail run / hike on each day of a 「會用登山杖」 event, 1-day races included (no ±25 % distance match for this default); a 1-day road race still adds its matched road run — workouts.spec.md › 登山杖 |
 | 2026-10-08 | perf | SP-336 (SP-320 ⑤, docs/research/cache-tiering.md §7.2 8–9) | Render cache keys per chart (`wko5expr/chartscope.py`): data = the activities of the chart's range + warm-up (6 × time constant for tl / ctl / atl / tsb, own reach for shift / athleterange / PD lookbacks / TIS / drift_avg / estimated settings; panels and anything unbounded = whole history), today only when read or the range reaches today; code = codehash over the chart type's code (Dataset build, evaluator dispatch + used `fn_*`, renderer, post-processing, endpoint glue) + `CACHE_VERSION` 2. Stale-while-revalidate: `?stale=1` answers the slot's previous drawing (`cache/render/slots/`) and renders in a 2-thread pool, `GET /render/ready`; never for demo tenants. Viewer: 90-day default range as a remembered preset, 更新中 badge + swap, page progress line. Startup warm-up precomputes the code signatures |
+| 2026-10-08 | fix | SP-336 review | Every 每人校正 value is in every chart key (drift charts / review card read them); panels key on the user's activity marks and the setting history; lookup / li of a setting key on the whole setting history; a single-activity chart asked with only ?workout= uses its own day (key stable across new activities and days); @var reach follows its use; every fn_* classified (audit test), unlisted = whole history; code signature covers channel expressions, render.py's own PD calls and period charts found by periods.chart_period, and carries a per-process nonce when backend files changed after start; /render/ready per tenant from memory; refresh pool shut down with the app; the viewer's give-up asks without stale |
 
 
 ## Banded charts and the 使用功率 setting (2026-10)
