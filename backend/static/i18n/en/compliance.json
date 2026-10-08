@@ -39,7 +39,7 @@
   "kpi.rate_sub": "{done} of {due} done",
   "kpi.open": "{n} not synced",
   "kpi.ok": "On target",
-  "kpi.ok_tip": "The share done as planned (✓): time and TSS within ±20 % of the plan, the right kind, and a quality session's intensity at least 80 % done.\n±20 % is TrainingPeaks' green compliance band; 20–50 % counts as partial, and so does 50–80 % of the intensity.\n\"Off plan\" = a quality session with under 50 % of its intensity (run easy), an easy run run as a quality session, or another sport.",
+  "kpi.ok_tip": "The share done as planned (✓): time and TSS within ±20 % of the plan, the right kind, and a quality session's intensity at least 80 % done.\n±20 % is TrainingPeaks' green compliance band; 20–50 % counts as partial, and so does 50–80 % of the intensity; with time and TSS on plan, a reversed intensity or another foot sport (road run, trail run, hike, walk) is partial too (estimate).\n\"Off plan\" = a sport not on foot (bike, swim …); or a reversed intensity (a quality session under 50 % of its intensity, an easy run run as a quality session) or another foot sport, with time or TSS also more than 20 % off.",
   "kpi.ok_sub": "✓ {n} · partial {partial} · off plan {off}",
   "kpi.tss": "TSS compliance",
   "kpi.tss_tip": "Due sessions: actual TSS ÷ planned TSS (intervals.icu's Compliance).\nA missed session counts 0. The black mark on the bar is 100 %.",

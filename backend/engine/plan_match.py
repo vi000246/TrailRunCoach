@@ -14,8 +14,9 @@ Matching, one activity <-> one session:
   0. kept: sessions already done (a manual link, or an earlier match). Two
      sessions on the same activity (old data) keep only the better pair; the
      other one is re-matched.
-  1. same day, the planned sport (compliance.KIND_OK: easy / long / quality /
-     test = a run, hike = hike / trail / walk, strength = strength): the pairs
+  1. same day, the planned sport (compliance.accepted: easy / long / quality /
+     test = a run, hike = hike / trail / walk, strength = strength; a walking
+     session — 陡坡健走, 登山 / 健行 … — also a hike / walk / trail run): the pairs
      with the lowest cost (duration closest to the plan, terrain, intensity,
      the generator's own pick) first — so two runs on a day each take the
      closest session.
@@ -35,13 +36,19 @@ compliance.py already uses for time / TSS (±20 % / 50 %), applied to time at
 intensity as interval-prescription.md #4 / #10 propose (TIZ ÷ planned TIZ):
   planned hard: ≥ 80 % done · 50–80 % 強度不足 (partial) · < 50 % ran easy (沒照課表)
   planned easy: a quality dose up to 150 % 偏強 (partial) · beyond: ran hard (沒照課表)
+SP-370: with time and TSS both within ±20 % (compliance.time_tss_level green) the
+「ran easy / ran hard」 and another foot sport are 部分 (short, `soft`) with the reason
+(「時間和負荷都對，但跑成強度課」); 沒照課表 stays when time or TSS is also > 20 % off, or the
+sport is not on foot. intervals.icu / TrainingPeaks rate completion by load / time; the
+combination is 推估. A long run is planned easy like an easy run (planned_intensity), so the
+150 % line and this rule apply to it the same.
 """
 from __future__ import annotations
 
 import datetime as dt
 from typing import Optional
 
-from backend.engine.compliance import KIND_OK
+from backend.engine import compliance as C
 from backend.i18n import _
 
 ENDURANCE = {"road", "trail", "hike", "bike"}
@@ -70,7 +77,8 @@ def sport_ok(s: dict, a: dict) -> bool:
     cat = a.get("category")
     if s.get("kind") in NEVER:
         return False
-    return cat in KIND_OK.get(s.get("kind"), ENDURANCE)
+    ok = C.accepted(s)                      # a walking session also takes a hike / walk (SP-370)
+    return cat in (ENDURANCE if ok is None else ok)
 
 
 def can_match(s: dict, a: dict) -> bool:
@@ -79,7 +87,7 @@ def can_match(s: dict, a: dict) -> bool:
         return False
     if s.get("kind") == "strength":
         return a.get("category") == "strength"
-    return a.get("category") in ENDURANCE
+    return a.get("category") in ENDURANCE or sport_ok(s, a)
 
 
 def hard_need(s: dict) -> float:
@@ -307,34 +315,52 @@ def assign(out: list[dict], activities: list[dict], today: str, gen_done: dict,
 INTENSITY_LABEL = {"hard": "強度", "easy": "輕鬆"}
 
 
-def compare(s: dict) -> Optional[dict]:
-    """A done session vs its activity: {off_plan, short, planned, actual, intensity_pct,
+def compare(s: dict, planned_tss: Optional[float] = None) -> Optional[dict]:
+    """A done session vs its activity: {off_plan, short, soft, planned, actual, intensity_pct,
     text, short_text, match}. off_plan (沒照課表): the planned intensity was not run
     (排間歇、跑成輕鬆 — under 50 % of the dose — or the other way) or another sport;
-    short (部分): 強度不足 (50–80 %) or 偏強. `actual` stays hard / easy (short reads hard,
-    it was intensity; 偏強 reads hard). The time / TSS deviation is compliance.py's part."""
+    short (部分): 強度不足 (50–80 %) or 偏強; or (SP-370, `soft` intensity / sport) the
+    reversal or another foot sport while time and TSS are both within ±20 % (`planned_tss`:
+    the estimate the page uses, as compliance.session_compliance). `actual` stays hard / easy
+    (short reads hard, it was intensity; 偏強 reads hard). The time / TSS colour is compliance.py's part."""
     a = s.get("done_by") if s.get("state") == "done" else None
     if not isinstance(a, dict):
         return None
     p, grade, d = graded(s, a)
     got = {"short": "hard", "over": "hard"}.get(grade, grade)
     wrong_sport = bool(a.get("category")) and not sport_ok(s, a) and s.get("kind") not in NEVER
+    reversed_ = bool(p) and grade in ("hard", "easy") and grade != p
+    # time and TSS on plan: another foot sport / the reversal is 部分, not 沒照課表 (SP-370, 推估)
+    on_plan = C.time_tss_level(s, planned_tss) == "green"
+    soft = None
     why = []
     if wrong_sport:
-        why.append(f"排{_kind_label(s)}，實際{a.get('category_label') or a.get('category')}")
-    elif p and grade in ("hard", "easy") and grade != p:
-        why.append(f"排{_kind_label(s)}，實際跑{'強度' if grade == 'hard' else '輕鬆'}")
-    short = not why and grade in ("short", "over")
+        if on_plan and C.foot_swap(s, a.get("category")):
+            soft = "sport"
+        else:
+            why.append(f"排{_kind_label(s)}，實際{a.get('category_label') or a.get('category')}")
+    elif reversed_:
+        if on_plan:
+            soft = "intensity"
+        else:
+            why.append(f"排{_kind_label(s)}，實際跑{'強度' if grade == 'hard' else '輕鬆'}")
+    short = not why and (soft is not None or grade in ("short", "over"))
     pct = None if d is None or p != "hard" else round(min(d["ratio"], 9.99) * 100)
     what = _dose_text(d)
-    short_text = "" if not short else (
-        _("強度不足：只做到這堂課的 {pct}%", pct=pct) if grade == "short" else _("輕鬆跑偏強"))
-    if short_text and what:
+    if soft == "sport":
+        short_text = _("時間和負荷都對，但項目不同：排{kind}，實際{act}", kind=_kind_label(s),
+                       act=a.get("category_label") or a.get("category"))
+    elif soft == "intensity":
+        short_text = _("時間和負荷都對，但跑成強度課") if grade == "hard" else _("時間和負荷都對，但跑成輕鬆")
+    else:
+        short_text = "" if not short else (
+            _("強度不足：只做到這堂課的 {pct}%", pct=pct) if grade == "short" else _("輕鬆跑偏強"))
+    if short_text and what and soft != "sport":
         short_text += _("（{what}）", what=what)
     ter, cat = s.get("terrain"), a.get("category")
     terrain_off = ter in ("road", "trail") and cat in ("road", "trail") and ter != cat
     hs = _f(a.get("hard_s"))
-    return {"off_plan": bool(why), "short": short, "planned": p, "actual": got, "grade": grade,
+    return {"off_plan": bool(why), "short": short, "soft": soft, "planned": p, "actual": got, "grade": grade,
             "intensity_pct": pct, "wrong_sport": wrong_sport,
             "terrain_off": terrain_off, "text": "沒照課表：" + why[0] if why else "",
             "short_text": short_text,

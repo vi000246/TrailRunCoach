@@ -207,6 +207,29 @@ def test_fatigue_two_reds_downgrade_to_fartlek():
     assert ids(out)["easy3"]["minutes"] == 40
 
 
+def _mismatch(gen_key, day, cat, index, moving_s=2700, tss=36):
+    return st(gen_key, "easy", day, state="done", minutes=45,
+              done_by={"index": index, "date": day, "category": cat, "moving_s": moving_s, "tss": tss})
+
+
+def test_fatigue_red_streak_ignores_foot_sport_mismatches_sp370():
+    gw = lambda: week([g("quality", "quality", "2026-10-01", 60), g("easy3", "easy", "2026-10-02", 50)])  # noqa: E731
+    # two walks / hikes for easy runs, time 67 % (≠ on the page) — only the sport made them red: no trigger
+    walks = [_mismatch("easy1", "2026-09-28", "walk", 1, moving_s=1800), _mismatch("easy2", "2026-09-29", "hike", 2,
+                                                                                   moving_s=1800)]
+    out, adj, _ = A.adapt(gw(), walks, ctx())
+    assert not [a for a in adj if a["rule"] == "fatigue"] and ids(out)["easy3"]["minutes"] == 50
+    # two bike rides for easy runs (time / TSS on plan): another sport still counts
+    bikes = [_mismatch("easy1", "2026-09-28", "bike", 1), _mismatch("easy2", "2026-09-29", "bike", 2)]
+    out, adj, _ = A.adapt(gw(), bikes, ctx())
+    assert ids(out)["quality"]["title"] == QG.RECOVERY[1] and ids(out)["easy3"]["minutes"] == 40
+    # a foot-sport mismatch whose time / TSS is itself red still counts (as before)
+    far = [_mismatch("easy1", "2026-09-28", "walk", 1, moving_s=900, tss=10),
+           _mismatch("easy2", "2026-09-29", "hike", 2, moving_s=900, tss=10)]
+    out, adj, _ = A.adapt(gw(), far, ctx())
+    assert ids(out)["quality"]["title"] == QG.RECOVERY[1]
+
+
 # ---- round trip through reconcile: idempotent ------------------------------
 
 def _inputs(gw_sessions, acts=(), today="2026-10-01", reviews=None):
