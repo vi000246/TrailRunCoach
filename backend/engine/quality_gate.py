@@ -1631,6 +1631,9 @@ SPEC_LATE_WEEKS = 6
 # the race: 賽前第 4 週 (then 7, 10 … — the 前段 keeps its own 2:1), so the 後段 (weeks 6–3; 5 and 3 are the
 # SP-97 recovery weeks) has exactly one. The cadence and the week are 推估. It is a Zone 5 session like any
 # other — the Zone 5 gate and the guardrails decide whether it is scheduled — and it holds the rung.
+# Not for a multi-day 百岳 (baiyue_multiday.applies): its 專項期 swaps the uphill VO2max set for SP-114's ME
+# session (specific_phase.apply_me), which would delete or replace the maintenance session — those weeks
+# stay as before (Zone 3 + ME as applicable).
 SPEC_Z5_MAINT = {"trail_long": 3}
 ROAD_5K_KM, ROAD_10K_KM, ROAD_HALF_MAX_KM = 5.0, 10.0, 30.0        # 30 = overview.MP_GOAL_MIN_KM (marathon-like)
 SPEC_RATIO = {
@@ -1672,6 +1675,8 @@ def track_ratio(events, today: dt.date) -> dict:
         out = {"z3": 2, "z5": 1, "why": f"A 賽{what}"}
     cls = race_class(e)
     early, late, tp = SPEC_RATIO[cls]
+    from backend.engine import baiyue_multiday as BM
+    every = 0 if BM.applies(e) else SPEC_Z5_MAINT.get(cls, 0)          # SP-114's ME trip: no maintenance
     if e.kind == "road":
         race = _("{km:g} km 路跑", km=e.distance_km) if e.distance_km else _("路跑")
     else:
@@ -1681,7 +1686,7 @@ def track_ratio(events, today: dt.date) -> dict:
     return {**out, "start": e.start.isoformat(), "class": cls,
             "early": {"z3": early[0], "z5": early[1], "why": _("專項期前段（A 賽：{race}）", race=race)},
             "late": {"z3": late[0], "z5": late[1], "why": _("專項期後段（A 賽：{race}）", race=race), "tp": list(tp),
-                     "z5_every": SPEC_Z5_MAINT.get(cls, 0)}}
+                     "z5_every": every}}
 
 
 def z5_maint_due(ratio: Optional[dict]) -> bool:
@@ -2579,11 +2584,14 @@ def week_decision(gate: dict, kind: str, mode: str, monday: Optional[dt.date] = 
         # SP-75: the 專項期's 前段 / 後段 ratio; `seg_note` says what the 後段 changed in this week's pick
         ratio = week_ratio(gate, kind, monday)
         maint = kind == "specific" and z5_maint_due(ratio)
+        # the 「輪到 5 區維持課，但…」 notes only for an athlete whose Zone 5 is or was open (a step, a session
+        # done) — one whose Zone 5 never opened just gets the Zone 3 week, no maintenance talk (review L3)
+        maint_known = maint and bool(zt.get("open") or zt.get("under_way"))
 
         def maint_off(out: dict, why: str) -> dict:
             # SP-353: a long trail race's Zone 5 maintenance week whose intervals a guardrail takes: say so
             return {**out, "seg_note": _seg_note(ratio, [_("這週輪到 5 區維持課，但{why}，所以不排", why=why)])} \
-                if maint else out
+                if maint_known else out
         if levels.get("drift") == "bad":
             return maint_off(none("", "本週沒排 3 區：心率飄移是 bad，先不排強度課"),
                              _("心率飄移是 bad，這週先不排強度課"))
@@ -2630,15 +2638,20 @@ def week_decision(gate: dict, kind: str, mode: str, monday: Optional[dt.date] = 
             if "z5" in avail:
                 rules.append(_("這場賽事預估 4 小時以上：後段強度課以 3 區（上坡版）為主，每 3 週留 1 堂 5 區維持課，"
                                "就是這週（照目前那一階，不往上爬）"))
-            else:
-                why = _("輕鬆跑心率偏高（強度分配是 bad）") if had_z5 else _("5 區還沒開放")
+            elif had_z5 or maint_known:
+                # the low-intensity share took an open Zone 5, or a track that was under way is closed now
+                why = _("輕鬆跑心率偏高（強度分配是 bad）") if had_z5 else _("5 區目前沒有開放")
                 rules.append(_("這場賽事預估 4 小時以上：後段強度課以 3 區（上坡版）為主；這週輪到 5 區維持課，"
                                "但{why}，所以不排", why=why))
         elif late and not ratio.get("z5"):
             # a long trail race's other 後段 weeks: no Zone 5 — not a lock, the track's gate and step stay
             avail = [t for t in avail if t != "z5"]
-            rules.append(_("這場賽事預估 4 小時以上、當天的強度不到 5 區：後段強度課只排 3 區（上坡版），"
-                           "5 區每 3 週只留 1 堂維持課（賽前第 4 週），這週 5 區不排"))
+            if ratio.get("z5_every"):
+                rules.append(_("這場賽事預估 4 小時以上、當天的強度不到 5 區：後段強度課只排 3 區（上坡版），"
+                               "5 區每 3 週只留 1 堂維持課（賽前第 4 週），這週 5 區不排"))
+            else:
+                # a multi-day 百岳 (SP-114 ME, no maintenance session): as before SP-353
+                rules.append(_("這場賽事預估 4 小時以上、當天的強度不到 5 區，強度課只排 3 區（上坡版），5 區不排"))
         elif late and n < 2 and ratio.get("z3") != ratio.get("z5"):
             rules.append(_("每週 1 堂強度課時以 {zone} 區為主（3 區：5 區 = {z3}:{z5}）", z3=ratio["z3"], z5=ratio["z5"],
                            zone=3 if ratio["z3"] > ratio["z5"] else 5))
@@ -2732,8 +2745,14 @@ def _pick_tracks(avail: list, n: int, monday: Optional[dt.date], gate: dict, s3:
             out.append({"track": t, "spec": TP, "advance": False, "adjust": None, "first": False})
             continue
         if t == "z5" and maint:
-            out.append({"track": t, "spec": track_spec(t, s), "advance": False, "adjust": None, "first": False,
-                        "maint": True})
+            # the rung as it stands, with the state machine's tweak of this week (目標太高 −5 %, 未適應 rest +1;
+            # review L1); it doesn't move the rung — overview.quality_sessions stores it 不算進階 (review M1)
+            spec, adj = track_spec(t, s), None
+            dz = d5 if d5 is not None else _track_doses(gate)[1]     # the 專項期 call passes no d5
+            if tweak and s == int(dz.get("step") or 0):
+                adj = dz.get("adjust") or None
+                spec = adjusted_spec(spec, adj)
+            out.append({"track": t, "spec": spec, "advance": False, "adjust": adj, "first": False, "maint": True})
             continue
         spec = track_spec(t, s)
         adj = None

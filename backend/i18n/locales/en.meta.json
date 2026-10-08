@@ -159,6 +159,14 @@
     "draft": true,
     "src": "backend/engine/workout_steps.py:1177"
   },
+  "5 區目前沒有開放": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2643"
+  },
+  "5 區維持課（長距離越野的專項期後段每 3 週 1 堂）：照目前那一階，判定但不算進階": {
+    "draft": true,
+    "src": "backend/engine/overview.py:1007"
+  },
   "5 區解鎖": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:1999"
@@ -6382,6 +6390,10 @@
   "這場賽事沒有 GPX": {
     "draft": true,
     "src": "backend/engine/racepower/calc.py:435"
+  },
+  "這場賽事預估 4 小時以上、當天的強度不到 5 區，強度課只排 3 區（上坡版），5 區不排": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2654"
   },
   "這場賽事預估 4 小時以上、當天的強度不到 5 區：後段強度課只排 3 區（上坡版），5 區每 3 週只留 1 堂維持課（賽前第 4 週），這週 5 區不排": {
     "draft": true,
