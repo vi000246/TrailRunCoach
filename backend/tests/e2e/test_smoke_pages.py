@@ -104,6 +104,11 @@ def test_schedule_calendar(app):
     open_page(page, _server.PAGES["schedule"])
     _calendar_ready(page)
     assert page.locator("#cal .chip[data-uid]").count() > 0, "no sessions on the calendar"
+    # state and compliance are separate class tokens (a glued 「st-donecp-green」 lost the ✓ and tint)
+    classes = page.evaluate("() => [...document.querySelectorAll('#cal .chip[data-uid]')].map((c) => c.className)")
+    assert not [c for c in classes if re.search(r"st-\w+cp-", c)], classes
+    if page.locator("#cal .chip.st-done").count():
+        assert page.locator('#cal .chip.st-done[class*="cp-"]').count() > 0, "done chips without a compliance class"
     # month / week, back and forth, today
     page.click('#view-seg button[data-view="week"]')
     _calendar_ready(page)
@@ -135,6 +140,54 @@ def test_schedule_calendar(app):
     page.keyboard.press("Escape")
     page.mouse.click(5, 300)
     expect(page.locator("#more-menu")).to_be_hidden()
+
+
+def test_schedule_swap_from_the_context_menu(app):
+    """SP-359: right-click a coming session → 交換… → click another day's session: the two trade
+    days (the message says so); Esc cancels a pick."""
+    page, _ = app
+    open_page(page, _server.PAGES["schedule"])
+    page.click('#view-seg button[data-view="week"]')
+    _calendar_ready(page)
+    live = page.locator('#cal .chip[data-uid][draggable="true"]')
+    days = page.evaluate("""() => [...document.querySelectorAll('#cal .chip[data-uid][draggable="true"]')]
+        .map((c) => [c.dataset.uid, c.closest('[data-day]').dataset.day])""")
+    pair = next(((a, b) for a in days for b in days if a[1] != b[1]), None)
+    if pair is None:                                   # a week with one session day: the next one
+        page.click("#next")
+        _calendar_ready(page)
+        days = page.evaluate("""() => [...document.querySelectorAll('#cal .chip[data-uid][draggable="true"]')]
+            .map((c) => [c.dataset.uid, c.closest('[data-day]').dataset.day])""")
+        pair = next(((a, b) for a in days for b in days if a[1] != b[1]), None)
+    assert pair, "no two coming sessions on different days"
+    (ua, da), (ub, db) = pair
+    a = page.locator(f'#cal .chip[data-uid="{ua}"]')
+    # Esc cancels
+    a.click(button="right")
+    page.click('.menu.ctx [data-ctx="swap"]')
+    expect(page.locator("#sync-msg")).to_contain_text("Esc")
+    expect(page.locator(f'#cal .chip[data-uid="{ua}"]')).to_have_class(re.compile(r"\bswap-src\b"))
+    page.keyboard.press("Escape")
+    expect(page.locator(".swap-src")).to_have_count(0)
+    # pick, then the other one (a context menu right after the last one is the long-press guard's)
+    page.wait_for_timeout(800)
+    page.locator(f'#cal .chip[data-uid="{ua}"]').click(button="right")
+    page.click('.menu.ctx [data-ctx="swap"]')
+    page.locator(f'#cal .chip[data-uid="{ub}"]').click()
+    expect(page.locator("#sync-msg")).to_contain_text("已交換", timeout=30_000)
+    _calendar_ready(page)
+    got = page.evaluate(f"""() => [document.querySelector('#cal .chip[data-uid="{ua}"]')?.closest('[data-day]')?.dataset.day,
+        document.querySelector('#cal .chip[data-uid="{ub}"]')?.closest('[data-day]')?.dataset.day]""")
+    assert got == [db, da], got
+    # dropping a session onto another swaps them back
+    page.locator("#sync-msg").evaluate("(el) => el.innerHTML = ''")
+    page.locator(f'#cal .chip[data-uid="{ub}"]').drag_to(page.locator(f'#cal .chip[data-uid="{ua}"]'))
+    expect(page.locator("#sync-msg")).to_contain_text("已交換", timeout=30_000)
+    _calendar_ready(page)
+    got = page.evaluate(f"""() => [document.querySelector('#cal .chip[data-uid="{ua}"]')?.closest('[data-day]')?.dataset.day,
+        document.querySelector('#cal .chip[data-uid="{ub}"]')?.closest('[data-day]')?.dataset.day]""")
+    assert got == [da, db], got
+    assert live.count() > 0
 
 
 def test_schedule_watch_status_glyphs(app):

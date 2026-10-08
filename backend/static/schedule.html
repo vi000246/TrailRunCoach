@@ -232,6 +232,10 @@ dialog.sd .tp-t input { margin-top: 3px; flex: none; width: auto; }
 .chip .c-x { grid-column: 1 / -1; color: var(--muted); font-size: 10.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .chip[draggable="true"] { cursor: grab; }
 .chip.dragging { opacity: .4; }
+/* SP-359 交換: the session picked first, and the one a drag would swap with */
+.chip.swap-src { outline: 2px dashed var(--accent); outline-offset: 1px; }
+.chip.swap-drop { outline: 2px solid var(--accent); outline-offset: 1px; }
+body.swapping #cal .chip[draggable="true"] { cursor: copy; }
 /* SP-82: an empty planned day's 「休息」 — drag it onto another day to swap */
 .chip.rest-mv { cursor: grab; color: var(--faint); border: 1px dashed var(--line); background: transparent; font-size: 12px; }
 .chip.st-done { background: color-mix(in srgb, var(--k) 24%, var(--cell)); }
@@ -1010,7 +1014,7 @@ function chipHtml(s, big) {
   const cpTip = (cp ? `\n${compTip(cp)}` : "") + (off ? `\n${s.vs.text}` : part ? `\n${s.vs.short_text}` : "");
   const icon = s.state === "active" && s.day >= D.today ? syIcon(c.status, c.error || c.reason || "") : "";
   const lbl = `${KINDS[s.kind] || ""}${fam ? "（" + fam.text + "）" : ""}：${s.title}，${s.minutes || 0} 分鐘，${tss.replace("→", "實際")}${s.state === "missed" ? "，未完成" : s.state === "done" ? "，已完成" : ""}${s.provisional ? "，暫定" : ""}${icon ? "，" + syLabel(c.status) : ""}`;
-  return `<button type="button" class="chip k-${esc(s.kind)}${fam ? " fam-" + esc(fam.id) : ""} st-${esc(s.state)} ${cp && cp.level !== "missed" ? "cp-" + esc(cp.level) : ""} ${s.provisional && s.state === "active" ? "prov" : ""}" data-uid="${esc(s.uid)}"
+  return `<button type="button" class="chip k-${esc(s.kind)}${fam ? " fam-" + esc(fam.id) : ""}${S.swapFrom && S.swapFrom.uid === s.uid ? " swap-src" : ""} st-${esc(s.state)} ${cp && cp.level !== "missed" ? "cp-" + esc(cp.level) : ""} ${s.provisional && s.state === "active" ? "prov" : ""}" data-uid="${esc(s.uid)}"
       ${live ? 'draggable="true"' : ""} aria-label="${esc(lbl + (cp && cp.level !== "missed" ? "，" + compTip(cp) : ""))}" title="${esc(s.title + (fam && fam.sub_label ? "\n" + fam.text : "") + "\n" + meta + cpTip + (s.target ? "\n" + s.target : "") + (s.detail ? "\n" + s.detail : "") + (s.walk_hint ? "\n" + s.walk_hint : "") + (s.pre_meal ? "\n" + s.pre_meal.text : ""))}">
     <span class="c-t">${isHeat(s) ? '<span class="heat-tag" aria-hidden="true">熱</span>' : ""}${esc(s.title)}</span><span class="c-r">${off ? `<span class="offp-i" aria-hidden="true">≠</span>` : part ? `<span class="part-i" aria-hidden="true">◐</span>` : ""}${icon}</span>
     <span class="c-m">${meta}</span>
@@ -1180,6 +1184,7 @@ function renderLegend() {
     ? FAMILIES.map((f) => `<span class="k-quality fam-${f}"><i class="sw"></i>${esc(famLabel(f))}</span>`).join("")
     : `<span class="k-${k}"><i class="sw"></i>${KINDS[k]}</span>`).join("") +
     `<span>虛線＝暫定</span><span><i class="bo-sw"></i>不排課日期</span><span><i class="rest-sw"></i>${esc(tt("rest.legend"))} <button type="button" class="qtip" aria-label="${esc(tt("rest.legend"))}" data-tip="${esc(tt("rest.legend_tip"))}">?</button></span>` +
+    `<span>⇄ ${esc(tt("swap.legend"))} <button type="button" class="qtip" aria-label="${esc(tt("swap.legend"))}" data-tip="${esc(tt("swap.legend_tip"))}">?</button></span>` +
     grp(tt("legend.done_h"), `<span title="完成的課依實際 ÷ 計畫（時間、TSS）上色">✓ <b class="cp-green cpw">±20%</b> <b class="cp-yellow cpw">20–50%</b> <b class="cp-red cpw">&gt;50% 或類型不符</b></span><span><b class="offp-i">≠</b> 沒照課表 <button type="button" class="qtip" aria-label="沒照課表的說明" data-tip="${esc(OFF_TIP())}">?</button></span><span><b class="part-i">◐</b> ${esc(tt("vs.short_legend"))}</span><span><s class="faint">未完成</s></span><span>● 沒排課的活動 <button type="button" class="qtip" aria-label="配對規則" data-tip="${esc(MATCH_TIP)}">?</button></span>`) +
     grp(tt("legend.watch_h"), ["pushed", "outdated", "failed", "not_pushed"].map((k) => `<span>${syIcon(k)}${esc(tt("legend." + k))}</span>`).join(""), tt("legend.watch_tip"));
 }
@@ -1336,8 +1341,10 @@ async function push(scope, day) {
     const k = (st) => res.sessions.filter((r) => r.status === st);
     const nNew = k("pushed").filter((r) => r.changed).length, fails = k("failed");
     const rm = (res.removed || []).filter((r) => r.status === "removed").length;
+    const chk = [...new Set([...res.sessions, ...(res.removed || [])].map((r) => r.check_day).filter(Boolean))].sort();
     await load();
     msg(`${fails.length ? "" : "✓ "}推送完成（${esc(rng)}）：新推送 ${nNew} · 更新 ${k("updated").length}${rm ? ` · 移除 ${rm}` : ""}${fails.length ? ` · <b class="err">失敗 ${fails.length}</b>` : ""}` +
+      (chk.length ? `<br><span class="warn">${esc(checkNote(chk).replace(/^[；;]\s*/, ""))}</span>` : "") +
       (fails.length ? `<ul>${fails.map((f) => `<li class="err">${md(f.day)} ${esc(f.title)}：${esc(f.error || "")}</li>`).join("")}</ul>` : ""), fails.length ? "" : "ok");
   } catch (e) { errMsg("推送", e); }
   finally { S.busy = false; if (D) renderToolbar(); }
@@ -1837,7 +1844,8 @@ $("vd").addEventListener("click", async (e) => {
     $("vd").close(); $("sd").close();
     S.sel = r.day || S.sel;
     await load();
-    msg(`已換成「${esc(r.title)}」${r.equiv ? "（同等，不影響進階）" : "（不算進階）"}`, "ok");
+    const [w, cls] = watchNote(r.coros);
+    msg(`已換成「${esc(r.title)}」${r.equiv ? "（同等，不影響進階）" : "（不算進階）"}${esc(w)}`, cls);
   } catch (err) { $("vd-err").textContent = err.message; b.disabled = false; }
 });
 // ---------------- planned vs actual (engine/plan_match.py) ----------------
@@ -2007,6 +2015,7 @@ F.addEventListener("submit", async (e) => {
   $("sd-save").disabled = true;
   try {
     const url = dlg.uid ? `${PAPI}/sessions/${encodeURIComponent(dlg.uid)}` : `${PAPI}/sessions`, method = dlg.uid ? "PATCH" : "POST";
+    let saved;
     if (wp && wp.steps) {
       let r = await WorkoutEditor.request(method, url, body);
       if (r.status === 422) {
@@ -2016,11 +2025,13 @@ F.addEventListener("submit", async (e) => {
         r = await WorkoutEditor.request(method, url, { ...body, steps_force: true });
       }
       if (!r.ok) throw new Error(typeof r.body.detail === "string" ? r.body.detail : JSON.stringify(r.body.detail || r.body).slice(0, 200));
-    } else await sj(method, url, body);
+      saved = r.body;
+    } else saved = await sj(method, url, body);
     $("sd").close();
     S.sel = body.day;
     await load();
-    msg(dlg.uid ? `已更新「${esc(body.title)}」` : `已新增「${esc(body.title)}」到 ${md(body.day)}`, "ok");
+    const [w, cls] = watchNote(saved && saved.coros);
+    msg((dlg.uid ? `已更新「${esc(body.title)}」` : `已新增「${esc(body.title)}」到 ${md(body.day)}`) + esc(w), cls);
   } catch (err) { $("sd-err").textContent = err.message; }
   finally { $("sd-save").disabled = false; }
 });
@@ -2552,7 +2563,8 @@ async function applyBlackouts(list, title, done, removing = false) {
   try {
     const r = await sj("PUT", `${PAPI}/blackouts`, { blackouts: list, decisions: dec });
     await load();
-    msg(`${done}${(r.changes || []).length ? `：${r.changes.length} 項變動` : ""}`, "ok");
+    const [w, cls] = watchNote(r.coros);
+    msg(`${done}${(r.changes || []).length ? `：${r.changes.length} 項變動` : ""}${esc(w)}`, cls);
   } catch (e) { errMsg(title, e); }
   finally { S.busy = false; if (D) renderToolbar(); }
 }
@@ -2655,15 +2667,30 @@ $("cal").addEventListener("dragstart", (e) => {
   const el = e.target.closest(".chip[draggable]"); if (!el) return;
   e.dataTransfer.setData("text/plain", el.dataset.restFrom ? "rest:" + el.dataset.restFrom : el.dataset.uid);
   e.dataTransfer.effectAllowed = "move"; el.classList.add("dragging");
+  S.dragUid = el.dataset.restFrom ? null : el.dataset.uid;          // dragover can't read dataTransfer
 });
-$("cal").addEventListener("dragend", (e) => { e.target.closest?.(".chip")?.classList.remove("dragging"); document.querySelectorAll(".drop").forEach((x) => x.classList.remove("drop")); });
+const dropClear = () => document.querySelectorAll(".drop, .swap-drop").forEach((x) => x.classList.remove("drop", "swap-drop"));
+$("cal").addEventListener("dragend", (e) => { e.target.closest?.(".chip")?.classList.remove("dragging"); S.dragUid = null; dropClear(); });
+// SP-359: over another session it may swap with → that chip lights up (a drop swaps the two days)
+const swapTarget = (e) => {
+  const c = S.dragUid && e.target.closest(".chip[data-uid]");
+  return c && canSwap(findS(S.dragUid), findS(c.dataset.uid)) ? c : null;
+};
 $("cal").addEventListener("dragover", (e) => {
+  const c = swapTarget(e);
+  if (c) {
+    e.preventDefault(); e.dataTransfer.dropEffect = "move";
+    if (!c.classList.contains("swap-drop")) { dropClear(); c.classList.add("swap-drop"); }
+    return;
+  }
   const d = e.target.closest("[data-day]"); if (!d || d.dataset.day < D.today || boOf(d.dataset.day)) return;
   e.preventDefault(); e.dataTransfer.dropEffect = "move";
-  document.querySelectorAll(".drop").forEach((x) => x !== d && x.classList.remove("drop")); d.classList.add("drop");
+  document.querySelectorAll(".drop, .swap-drop").forEach((x) => x !== d && x.classList.remove("drop", "swap-drop")); d.classList.add("drop");
 });
 $("cal").addEventListener("dragleave", (e) => { const d = e.target.closest("[data-day]"); if (d && !d.contains(e.relatedTarget)) d.classList.remove("drop"); });
 $("cal").addEventListener("drop", async (e) => {
+  const c = swapTarget(e);
+  if (c) { e.preventDefault(); dropClear(); return doSwap(findS(S.dragUid), findS(c.dataset.uid)); }
   const d = e.target.closest("[data-day]"); if (!d) return;
   e.preventDefault(); d.classList.remove("drop");
   const uid = e.dataTransfer.getData("text/plain"), s = findS(uid), day = d.dataset.day;
@@ -2673,14 +2700,19 @@ $("cal").addEventListener("drop", async (e) => {
     try {
       const r = await sj("POST", `${PAPI}/rest-days/move`, { from, to: day });
       S.sel = day; await load();
-      msg(esc(tt("rest.mv_done", { to: `${md(day)}（週${wd(day)}）`, n: r.moved.length, from: `${md(from)}（週${wd(from)}）` }))
-        + (r.warnings || []).map((w) => `<br>⚠ ${esc(w)}`).join(""), r.warnings?.length ? "err" : "ok");
+      const [wn, cls] = watchNote(r.coros);
+      msg(esc(tt("rest.mv_done", { to: `${md(day)}（週${wd(day)}）`, n: r.moved.length, from: `${md(from)}（週${wd(from)}）` }) + wn)
+        + (r.warnings || []).map((w) => `<br>⚠ ${esc(w)}`).join(""), r.warnings?.length ? "err" : cls);
     } catch (err) { errMsg(tt("rest.mv_what"), err); }
     return;
   }
   if (!s || s.day === day || day < D.today || boOf(day)) return;
-  try { await sj("PATCH", `${PAPI}/sessions/${encodeURIComponent(uid)}`, { day }); S.sel = day; await load(); msg(`「${esc(s.title)}」移到 ${md(day)}（週${wd(day)}）`, "ok"); }
-  catch (err) { errMsg("移動", err); }
+  try {
+    const r = await sj("PATCH", `${PAPI}/sessions/${encodeURIComponent(uid)}`, { day });
+    S.sel = day; await load();
+    const [w, cls] = watchNote(r.coros);
+    msg(esc(tt("mv.done", { title: s.title, day: `${md(day)}（週${wd(day)}）` }) + w), cls);
+  } catch (err) { errMsg(tt("mv.what"), err); }
 });
 
 // ---------------- context menu (right-click / long-press) ----------------
@@ -2700,6 +2732,7 @@ function ctxItems(target) {
     const out = [];
     if (editable(s)) out.push({ act: "edit", uid: s.uid, label: tt("ctx.edit") }, { act: "move", uid: s.uid, label: tt("ctx.move") });
     else out.push({ act: "open", uid: s.uid, label: tt("ctx.open") });
+    if (swappable(s)) out.push({ act: "swap", uid: s.uid, label: tt("ctx.swap"), sub: tt("ctx.swap_sub") });
     if (editable(s) || expOpen(s)) out.push({ act: "del", uid: s.uid, label: expOpen(s) ? tt("ctx.del_expired") : tt("ctx.del"), danger: true });
     return { title: `${md(s.day)} ${s.title}`, items: out };
   }
@@ -2746,6 +2779,7 @@ async function ctxRun({ ctx, uid, day }) {
   if (ctx === "edit" || ctx === "open") { if (s) { S.sel = s.day; render(); openDlg(s); } }
   else if (ctx === "move") { if (s) { S.sel = s.day; render(); openDlg(s); F.day.focus(); F.day.showPicker?.(); } }
   else if (ctx === "del") { if (s) delSession(s); }
+  else if (ctx === "swap") { if (s) swapStart(s); }
   else if (ctx === "add") { S.sel = day; render(); openDlg(null, day); }
   else if (ctx === "tests") openTests(day);
   else if (ctx === "rest") setRest(day, true);
@@ -2786,6 +2820,60 @@ async function delHigh(day) {
 $("cf").addEventListener("keydown", (e) => {
   if (e.key === "Enter" && e.target.id === "hn-m") { e.preventDefault(); $("cf-ok").click(); }
 });
+// SP-358: a change on the calendar syncs the watch right away (api _sync_watch): a short note when
+// the watch changed, a warning when it couldn't (the 調整紀錄 keeps a 失敗 row too). [text, msg class]
+function watchNote(c) {
+  const p = (c && c.provider_label) || "COROS";
+  // COROS accepted a calendar delete but still listed the entry: a reminder, not a failure
+  const chk = c && (c.check_days || []).length ? checkNote(c.check_days, p) : "";
+  if (c && ["partial", "failed"].includes(c.status)) return [tt("watch.fail", { provider: p, error: c.error || "" }) + chk, "warn"];
+  if (chk) return [chk, "warn"];
+  if (c && c.status === "ok" && (c.sent || c.removed)) return [tt("watch.ok", { provider: p }), "ok"];
+  return ["", "ok"];
+}
+const checkNote = (days, p) => tt("watch.check", { provider: p || "COROS", days: days.map(md).join("、") });
+// ---------------- 交換課表 (SP-359; api POST /sessions/swap) ----------------
+// right-click a session → 「交換…」, then click the other one (Esc cancels; the weeks can be paged
+// meanwhile), or drop a session onto another. Same rules as a drag: active, from today on, not on a
+// 不排課日期, not a 課表待確認 notice; two different days. Both become your own move.
+const swappable = (s) => !!s && editable(s) && s.kind !== "notice" && !boOf(s.day);
+function canSwap(a, b) { return swappable(a) && swappable(b) && a.uid !== b.uid && a.day !== b.day; }
+function swapStart(s) {
+  S.swapFrom = s;
+  document.body.classList.add("swapping");
+  render();
+  msg(esc(tt("swap.pick", { title: s.title })));
+}
+function swapEnd(cancelled) {
+  if (!S.swapFrom) return;
+  S.swapFrom = null;
+  document.body.classList.remove("swapping");
+  document.querySelectorAll(".swap-src").forEach((x) => x.classList.remove("swap-src"));
+  if (cancelled) msg(esc(tt("swap.cancelled")));
+}
+async function doSwap(a, b) {
+  swapEnd(false);
+  if (S.busy || !canSwap(a, b)) return;
+  S.busy = true; renderToolbar(); msg(`<span class="spin"></span> ${esc(tt("swap.working"))}`);
+  try {
+    const r = await sj("POST", `${PAPI}/sessions/swap`, { a: a.uid, b: b.uid });
+    S.sel = b.day; await load();
+    const [w, cls] = watchNote(r.coros);
+    msg(esc(tt("swap.done", { a: a.title, b: b.title, da: md(b.day), db: md(a.day) }) + w)
+      + (r.warnings || []).map((x) => `<br>⚠ ${esc(x)}`).join(""), r.warnings?.length ? "err" : cls);
+  } catch (err) { errMsg(tt("swap.what"), err); }
+  finally { S.busy = false; if (D) renderToolbar(); }
+}
+// while picking, a click on the calendar picks the second session (anything else cancels)
+$("cal").addEventListener("click", (e) => {
+  if (!S.swapFrom) return;
+  e.preventDefault(); e.stopPropagation();
+  const c = e.target.closest(".chip[data-uid]"), b = c && findS(c.dataset.uid);
+  if (!b || b.uid === S.swapFrom.uid) return swapEnd(true);
+  if (!canSwap(S.swapFrom, b)) return msg(esc(tt("swap.not_this")), "warn");
+  doSwap(S.swapFrom, b);
+}, true);
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && S.swapFrom) swapEnd(true); });
 function coroNote(c) {
   if (!c || c.status === "none") return "";
   if (c.status === "ok") return tt("del.coros_ok", { n: c.removed, provider: c.provider_label || "COROS" });
@@ -2800,6 +2888,7 @@ async function delSession(s) {
   try {
     const r = await sj("DELETE", `${PAPI}/sessions/${encodeURIComponent(s.uid)}`);
     await load();
+    if (!r.expired) { const [w, cls] = watchNote(r.coros); return msg(esc(tt("del.done", { title: s.title, day: md(s.day) }) + w), cls); }
     msg(esc(tt("del.done", { title: s.title, day: md(s.day) }) + coroNote(r.coros)), r.coros && ["auth", "failed"].includes(r.coros.status) ? "warn" : "ok");
   } catch (e) { errMsg(tt("del.what"), e); }
 }
@@ -2822,8 +2911,8 @@ async function setRest(day, on) {
   try {
     const r = on ? await sj("POST", `${PAPI}/rest-days`, { day }) : await sj("DELETE", `${PAPI}/rest-days/${day}`);
     S.sel = day; await load();
-    const n = (r.changes || []).filter((c) => c.action !== "done").length;
-    msg(esc(tt(on ? "rest.done" : "rest.undone", { day: md(day), wd: wd(day) }) + (n ? tt("rest.changes", { n }) : "")), "ok");
+    const n = (r.changes || []).filter((c) => c.action !== "done").length, [w, cls] = watchNote(r.coros);
+    msg(esc(tt(on ? "rest.done" : "rest.undone", { day: md(day), wd: wd(day) }) + (n ? tt("rest.changes", { n }) : "") + w), cls);
   } catch (e) { errMsg(tt(on ? "rest.what" : "rest.undo_what"), e); }
   finally { S.busy = false; if (D) renderToolbar(); }
 }

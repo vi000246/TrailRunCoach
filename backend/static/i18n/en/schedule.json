@@ -298,5 +298,20 @@
   "vs.intensity_pct": "intensity {pct}%",
   "vs.short_legend": "Intensity or sport not quite as planned (counts as partial)",
   "vs.levels_aria": "About the completion levels",
-  "vs.levels_tip": "Four completion levels; time, TSS and intensity all use TrainingPeaks' compliance bands (±20 %, 50 %):\n✓ Done: time and TSS within ±20 % of the plan, and a quality session's intensity at least 80 % done.\n◐ Partial: time or TSS more than 20 % off; or only 50–80 % of the intensity (intensity short); or an easy run that reached 1–1.5× a quality session's bar (too hard); or time and TSS both within ±20 % but the intensity reversed (an easy run or LSD run as a quality session, a quality session run easy) or another foot sport (road run, trail run, hike, walk).\n≠ Off plan: a sport not on foot (bike, swim …); or the intensity reversed (a quality session under 50 % of its intensity, an easy run at 1.5× a quality session's bar or more) or another foot sport, with time or TSS also more than 20 % off. At least yellow.\n✗ Missed.\nWalking sessions (steep power hiking, hikes): a hike, a walk or a trail run all count as the right sport.\nHow intensity is measured: with the session classifier, the higher of Zone 3 time (bar 10 min) and equivalent T@VO2max (bar 4 min); without it, the time at or above threshold (power ≥ 95 % CP or HR ≥ LTHR; bar 10 min, short intervals 60 % of the plan). The 80 %, 50 % and 1.5× bands applied to intensity are estimates; so is counting it partial when time and TSS are on plan (intervals.icu and TrainingPeaks rate completion by load / time)."
+  "vs.levels_tip": "Four completion levels; time, TSS and intensity all use TrainingPeaks' compliance bands (±20 %, 50 %):\n✓ Done: time and TSS within ±20 % of the plan, and a quality session's intensity at least 80 % done.\n◐ Partial: time or TSS more than 20 % off; or only 50–80 % of the intensity (intensity short); or an easy run that reached 1–1.5× a quality session's bar (too hard); or time and TSS both within ±20 % but the intensity reversed (an easy run or LSD run as a quality session, a quality session run easy) or another foot sport (road run, trail run, hike, walk).\n≠ Off plan: a sport not on foot (bike, swim …); or the intensity reversed (a quality session under 50 % of its intensity, an easy run at 1.5× a quality session's bar or more) or another foot sport, with time or TSS also more than 20 % off. At least yellow.\n✗ Missed.\nWalking sessions (steep power hiking, hikes): a hike, a walk or a trail run all count as the right sport.\nHow intensity is measured: with the session classifier, the higher of Zone 3 time (bar 10 min) and equivalent T@VO2max (bar 4 min); without it, the time at or above threshold (power ≥ 95 % CP or HR ≥ LTHR; bar 10 min, short intervals 60 % of the plan). The 80 %, 50 % and 1.5× bands applied to intensity are estimates; so is counting it partial when time and TSS are on plan (intervals.icu and TrainingPeaks rate completion by load / time).",
+  "mv.done": "Moved “{title}” to {day}",
+  "mv.what": "Move",
+  "watch.ok": "; {provider} watch synced",
+  "watch.fail": "; the {provider} watch didn't follow: {error} (see the auto-adjust log)",
+  "watch.check": "; {provider} said it was deleted, but it may still be on the calendar on {days} — please check in the {provider} app",
+  "ctx.swap": "Swap…",
+  "ctx.swap_sub": "then click another session",
+  "swap.pick": "Click another session to swap days with “{title}” (Esc cancels)",
+  "swap.cancelled": "Swap cancelled",
+  "swap.not_this": "This session can't be swapped (done, past, same day or a no-training day) — click another one, or press Esc to cancel",
+  "swap.working": "Swapping…",
+  "swap.done": "Swapped: “{a}” now on {da}, “{b}” now on {db}",
+  "swap.what": "Swap",
+  "swap.legend": "Swap",
+  "swap.legend_tip": "Two sessions trade days: right-click a session (long-press on a phone) → “Swap…”, then click the other one; or drag a session onto another (dropping on an empty spot moves it). It counts as your own change, so auto-adjust won't undo it; sessions already on the watch are updated too. Done or past sessions can't be swapped."
 }
