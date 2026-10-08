@@ -2603,6 +2603,10 @@
     "draft": true,
     "src": "backend/engine/interval_library.py:776"
   },
+  "含暖身 {n} 分": {
+    "draft": true,
+    "src": "backend/engine/warmup.py:49"
+  },
   "和": {
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:589"
@@ -3947,6 +3951,10 @@
     "draft": true,
     "src": "backend/engine/interval_library.py:758"
   },
+  "暖身 {n} 分": {
+    "draft": true,
+    "src": "backend/engine/warmup.py:50"
+  },
   "暖身後不到 40 分鐘，只當參考": {
     "draft": true,
     "src": "backend/engine/panels/drift_bars.py:52"
@@ -4394,6 +4402,10 @@
   "每個坡度箱的活動都不到 {n} 次，先不畫點；只列出次數。": {
     "draft": false,
     "src": "backend/engine/panels/pole_compare.py:212"
+  },
+  "每堂課前加熱身要是 true／false": {
+    "draft": true,
+    "src": "backend/engine/plan_prefs.py:331"
   },
   "每次用同一種測法、同一條平路、差不多的天氣，前一天不要練太重，結果才能互相比。": {
     "draft": true,
@@ -4866,6 +4878,14 @@
   "熱校正後的心率–功率沒有正斜率，基準線不能用": {
     "draft": true,
     "src": "backend/engine/zone_events.py:485"
+  },
+  "熱身 {w} 分＋主課放不進{cl}：": {
+    "draft": true,
+    "src": "backend/engine/interval_library.py:661"
+  },
+  "熱身時間要在 {lo}–{hi} 分": {
+    "draft": true,
+    "src": "backend/engine/plan_prefs.py:333"
   },
   "熱適應指數：每分鐘的熱劑量在這個 Hadley 以下是 0，到 150 是滿劑量。": {
     "draft": true,
