@@ -73,10 +73,10 @@ def test_progress_reports_every_chunk_newest_first(tmp_path, no_plan, monkeypatc
 def _slow(monkeypatch, gate: threading.Event, calls: list):
     real = AA._chunk_values
 
-    def slow(ds, chunk, recorded):
+    def slow(ds, chunk, recorded, *rest):
         calls.append(len(chunk))
         gate.wait(10)
-        return real(ds, chunk, recorded)
+        return real(ds, chunk, recorded, *rest)
     monkeypatch.setattr(AA, "_chunk_values", slow)
 
 
