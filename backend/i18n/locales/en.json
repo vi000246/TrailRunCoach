@@ -1493,6 +1493,8 @@
   "走路一群約 {w:.0f} spm、跑步一群約 {r:.0f} spm，谷底在約 {v:.0f} spm，不在 130：130–{v:.0f} spm 的快走會被算成跑步。門檻先不改": "Walking around {w:.0f} spm, running around {r:.0f} spm, but the valley is at about {v:.0f} spm, not 130: power hiking at 130–{v:.0f} spm counts as running. The line stays as it is for now",
   "走路一群約 {w:.0f} spm、跑步一群約 {r:.0f} spm，谷底在約 {v:.0f} spm，不在 130：{v:.0f}–130 spm 的慢跑會被算成走路。門檻先不改": "Walking around {w:.0f} spm, running around {r:.0f} spm, but the valley is at about {v:.0f} spm, not 130: slow running at {v:.0f}–130 spm counts as walking. The line stays as it is for now",
   "走路或極慢跑": "Walk or very slow jog",
+  "走（你在這個坡度多半走）": "walk (you mostly walk this grade)",
+  "走（依這段的預估速度，用走的比跑省力）": "walk (at this segment's predicted speed, walking costs less than running)",
   "起始 CTL 從 {date} 起算（手動設定）：前 {days} 天不看 ramp": "Starting CTL counted from {date} (set manually): ramp not checked for the first {days} days",
   "起算期（有 TSS 的第 {n} 天）：前 {days} 天 CTL 還在建立，不看 ramp": "Start-up period (day {n} with TSS): CTL is still building for the first {days} days, ramp not checked",
   "起跑讀得太高": "reads too high at the start",

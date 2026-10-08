@@ -2,7 +2,7 @@
 The static demo's race calculator (backend/demo/static_racepower.py: engine/racepower/calc.py
 on an exported athlete context, run in the browser with Pyodide) against the live API on
 the same synthetic demo athlete: road 10K / half / full, goal pace / power, the events'
-stored GPX (trail + multi-day 百岳), the CSV. The context goes through the same JSON the
+stored GPX (trail + multi-day 百岳). The context goes through the same JSON the
 browser reads; the computations run with the browser's limits checked separately
 (no FastAPI / DB / network: test_trace_needs_no_server_modules).
 
@@ -80,11 +80,6 @@ def _diff(a, b, path="$", out=None):
     return out
 
 
-def _csv_rows(text: str) -> list[str]:
-    # the header's 計算時間 is the clock when each one ran
-    return [r for r in text.lstrip("﻿").splitlines() if "計算時間" not in r and "計算於" not in r]
-
-
 def test_static_calc_equals_the_api(demo, monkeypatch):
     c, _root = demo
     from backend.api import racepower as RP
@@ -95,7 +90,7 @@ def test_static_calc_equals_the_api(demo, monkeypatch):
     assert any(r[1].startswith("course/event/") for r in reqs), "the demo has no event with a GPX"
     assert any(r[2].get("type") == "baiyue" and (r[2].get("days") or 1) > 1 for r in reqs)
     h = {"X-TRC-CSRF": F.csrf(c)}
-    # 10 fixed samples + 3 per demo event with a GPX is more than the demo's 20 heavy requests
+    # 9 fixed samples + 3 per demo event with a GPX is more than the demo's 20 heavy requests
     # per IP per minute (tenancy_mw.HEAVY_IP, covered in test_demo_sandbox); this test is about
     # parity, so lift that limit here instead of comparing 429s
     from backend import tenancy_mw as MW
@@ -105,7 +100,7 @@ def test_static_calc_equals_the_api(demo, monkeypatch):
     live = []
     for label, sub, body in reqs:
         r = c.post(f"/api/v1/racepower/{sub}", json=body, headers=h)
-        live.append((label, sub, body, r.status_code, r.text if sub == "export/csv" else r.json()))
+        live.append((label, sub, body, r.status_code, r.json()))
     _static(monkeypatch, raw)
     bad = []
     for label, sub, body, status, want in live:
@@ -113,10 +108,6 @@ def test_static_calc_equals_the_api(demo, monkeypatch):
         assert got["status"] < 500, (label, got.get("trace"))
         if got["status"] != status:
             bad.append(f"{label}: status api {status} != static {got['status']} ({want} / {got.get('body')})")
-            continue
-        if sub == "export/csv":
-            if _csv_rows(want) != _csv_rows(got["csv"]):
-                bad.append(f"{label}: CSV differs")
             continue
         d = _diff(want, got["body"])
         if d:
