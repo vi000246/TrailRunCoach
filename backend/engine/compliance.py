@@ -65,12 +65,15 @@ def foot_swap(s: dict, cat: Optional[str]) -> bool:
 
 
 def time_tss_level(s: dict, planned_tss: Optional[float] = None) -> Optional[str]:
-    """green / yellow / red from time and TSS alone (the worse one); None: neither measured."""
+    """green / yellow / red from time and TSS together (the worse one) — the basis of the SP-370
+    softening (◐ instead of ≠) and of rule E's foot-swap exemption. None unless BOTH are measured
+    (owner 2026-10-08: with no TSS — no HR, or a planned TSS of 0 — a swap / reversal stays ≠)."""
     a = s.get("done_by") if isinstance(s.get("done_by"), dict) else {}
     dur = _ratio(a.get("moving_s"), (s.get("minutes") or 0) * 60.0)
     tss = _ratio(a.get("tss"), planned_tss if planned_tss is not None else s.get("tss"))
-    devs = [abs(r - 1.0) for r in (dur, tss) if r is not None]
-    return level_of(max(devs)) if devs else None
+    if dur is None or tss is None:
+        return None
+    return level_of(max(abs(dur - 1.0), abs(tss - 1.0)))
 
 
 def _ratio(actual: Optional[float], planned: Optional[float]) -> Optional[float]:
@@ -103,11 +106,12 @@ def session_compliance(s: dict, planned_tss: Optional[float] = None) -> Optional
     tss = _ratio(a.get("tss"), planned_tss if planned_tss is not None else s.get("tss"))
     cat = a.get("category")
     wrong = bool(cat) and not sport_ok(s, cat)
-    tt = time_tss_level(s, planned_tss)
+    devs = [abs(r - 1.0) for r in (dur, tss) if r is not None]
+    tt = time_tss_level(s, planned_tss)             # None unless both time and TSS are measured
     foot = wrong and foot_swap(s, cat)
-    # SP-370: another foot sport with time and TSS on plan is ◐ (yellow), not ≠ (red)
+    # SP-370: another foot sport with time and TSS both measured and on plan is ◐ (yellow), not ≠ (red)
     soft = foot and tt == "green"
-    level = "yellow" if soft else "red" if wrong else (tt or "green")
+    level = "yellow" if soft else "red" if wrong else (level_of(max(devs)) if devs else "green")
     head = tss if tss is not None else dur
     return {"level": level, "pct": None if head is None else round(head * 100),
             "duration_pct": None if dur is None else round(dur * 100),
@@ -155,11 +159,12 @@ def soft_label(vs: dict) -> Optional[str]:
 
 
 def streak_red(comp: Optional[dict]) -> bool:
-    """Red for adapt rule E's streak (SP-370): not when only another foot sport made it red
-    (time / TSS not red themselves); another sport (a bike for a run) and time / TSS reds count."""
+    """Red for adapt rule E's streak (SP-370): not when only another foot sport made it red —
+    time and TSS both measured (`time_level`, as for the ◐ softening) and not red themselves;
+    another sport (a bike for a run), time / TSS reds and a swap without both measured count."""
     if not comp or comp.get("level") != "red":
         return False
-    return not (comp.get("foot_swap") and comp.get("time_level") != "red")
+    return not (comp.get("foot_swap") and comp.get("time_level") in ("green", "yellow"))
 
 
 def week_compliance(planned_tss: float, done_tss: float, planned_hours: float,

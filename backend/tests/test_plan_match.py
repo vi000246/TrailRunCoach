@@ -397,6 +397,52 @@ def test_quality_run_easy_with_time_and_tss_on_plan_is_partial():
     assert comp["label"] == "跑成輕鬆"
 
 
+def test_softening_needs_both_time_and_tss_measured():
+    # owner 2026-10-08: a 60-min easy run vs a 60-min walk with no TSS -> ≠ (only time is known)
+    s = _done("easy", 60, 48.0, 60, 48.0, cat="walk")
+    s["done_by"]["tss"] = None
+    vs, comp, st = _verdict(s)
+    assert vs["off_plan"] and comp["level"] == "red" and comp["time_level"] is None and st == "off_plan"
+    # the same walk with its TSS on plan -> ◐ 項目不同
+    vs, comp, st = _verdict(_done("easy", 60, 48.0, 60, 48.0, cat="walk"))
+    assert vs["soft"] == "sport" and comp["level"] == "yellow" and st == "partial"
+    # a planned TSS of 0 is not measured either: the reversal stays ≠
+    s = _done("easy", 45, 0.0, 45, 36.0, session=_ses("hard_long", z3=1000))
+    vs, comp, st = _verdict(s)
+    assert vs["off_plan"] and st == "off_plan"
+    # … but with the page's estimate (api/plan_sessions.est_tss) it is measured: ◐
+    vs = PM.compare(s, 36.0)
+    comp = C.with_plan_check(C.session_compliance(s, 36.0), vs)
+    assert vs["soft"] == "intensity" and C.status_of(s, comp, "2026-10-08") == "partial"
+
+
+def test_activity_review_card_uses_the_calendars_planned_tss(monkeypatch):
+    """The stored row has no TSS (0): the calendar grades on its estimate (minutes × the easy rate),
+    the workout review's 課表 card must too — both ◐ 跑成強度課, never ◐ on one and ≠ on the other."""
+    from types import SimpleNamespace
+
+    from backend.engine import overview as O
+    from backend.engine import workout_review as WR
+    s = _done("easy", 60, 0.0, 60, 50.0, session=_ses("hard_long", z3=1000))
+    tph = {"easy": 50.0}                                       # the dataset's easy TSS / h
+    cal = plan_sessions._decorate([dict(s)], [], plan_sessions.tss_rates(tph, [s]), s["day"], s["day"])[0]
+    assert cal["tss_est"] == 50.0 and cal["compliance"]["label"] == "跑成強度課"
+    assert C.status_of(cal, cal["compliance"], "2026-10-08") == "partial"
+    monkeypatch.setattr(PS, "done_session", lambda idx, db_path=None: dict(s))
+    monkeypatch.setattr(PS, "rate_rows", lambda db_path=None: [s])
+    monkeypatch.setattr(O, "_tss_per_hour", lambda ds, today, *a, **k: tph)
+
+    def no_row(w, ds):
+        raise RuntimeError("no dataset")
+    monkeypatch.setattr(O, "activity_row", no_row)
+    card = WR._plan_card(SimpleNamespace(today=20000.0), SimpleNamespace(idx=40, metrics={}))
+    assert card["sub"] == cal["compliance"]["label"] == "跑成強度課"
+    assert card["level"] == WR.PLAN_LEVEL[cal["compliance"]["level"]] == "warn"
+    assert "TSS：50 ／ 計畫 50（100%）" in card["tip"]
+    # the stored TSS alone (no estimate) would have left the TSS unmeasured: ≠ 沒照課表
+    assert C.with_plan_check(C.session_compliance(s), PM.compare(s))["label"] == "沒照課表"
+
+
 def test_bike_for_a_run_stays_off_plan_even_with_time_and_tss_on_plan():
     vs, comp, st = _verdict(_done("easy", 45, 36.0, 45, 36.0, cat="bike"))
     assert vs["off_plan"] and vs["wrong_sport"] and vs["text"] == "沒照課表：排輕鬆跑，實際騎車"

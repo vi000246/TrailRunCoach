@@ -3033,8 +3033,15 @@ def _plan_card(ds, w) -> Optional[dict]:
     except Exception:                       # noqa: BLE001 — the stored row then
         pass
     a = s.get("done_by") or {}
-    comp = CO.session_compliance(s) or {}
-    vs = PM.compare(s) or {}
+    # the calendar's planned TSS (api/plan_sessions._decorate: est_tss), so this card and the 課表
+    # page cannot disagree on ◐ / ≠ (SP-370: softening needs both time and TSS measured)
+    try:
+        from backend.api.plan_sessions import session_est_tss
+        est = session_est_tss(s, ds)
+    except Exception:                       # noqa: BLE001 — the stored TSS then
+        est = None
+    comp = CO.session_compliance(s, est) or {}
+    vs = PM.compare(s, est) or {}
     if vs.get("off_plan") or vs.get("short"):           # 沒照課表 / 強度不足 (SP-216)
         comp = CO.with_plan_check(comp, vs)
     tip = [_("課表：{title}（{day}，{match}）", title=s.get('title'), day=s.get('day'),
@@ -3042,8 +3049,9 @@ def _plan_card(ds, w) -> Optional[dict]:
     mov = _f(a.get("moving_s"))
     if s.get("minutes") and mov is not None:
         tip.append(_("時間：{t} ／ 計畫 {m} 分（{pct}%）", t=_hms(mov), m=int(s['minutes']), pct=comp.get('duration_pct')))
-    if s.get("tss") and a.get("tss") is not None:
-        tip.append(_("TSS：{a:.0f} ／ 計畫 {p:.0f}（{pct}%）", a=_f(a['tss']), p=_f(s['tss']), pct=comp.get('tss_pct')))
+    p_tss = est or _f(s.get("tss"))
+    if p_tss and a.get("tss") is not None:
+        tip.append(_("TSS：{a:.0f} ／ 計畫 {p:.0f}（{pct}%）", a=_f(a['tss']), p=p_tss, pct=comp.get('tss_pct')))
     if s.get("climb_m"):
         tip.append(_("爬升：{a} m ／ 計畫 {p} m", a=_num(w.metrics.get('climbing')), p=_num(s['climb_m'])))
     if s.get("target"):
