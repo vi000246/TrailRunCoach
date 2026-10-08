@@ -628,6 +628,7 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
   <form id="sd-form" novalidate>
     <div class="dh"><div><h3 id="sd-h">新增課表</h3><span class="meta" id="sd-sub"></span></div>
       <button class="x" type="button" data-close aria-label="關閉">✕</button></div>
+    <div id="sd-mark" hidden></div>
     <div class="done-box" id="sd-done" hidden></div>
     <fieldset class="kinds" id="sd-kinds"><legend>類型</legend></fieldset>
     <div class="var-box" id="sd-tb">
@@ -695,6 +696,7 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
   </form>
 </dialog>
 <script src="/api/v1/static/workout_editor.js"></script>
+<script src="/api/v1/static/plan_mark.js"></script>
 <script src="/api/v1/static/syncrun.js"></script>
 
 <!-- 換一個：the equivalent variants of an interval session (interval-prescription.md §C5.4) -->
@@ -1058,10 +1060,11 @@ function chipHtml(s, big) {
   const cp = s.compliance;
   const cpTip = (cp ? `\n${compTip(cp)}` : "") + (off ? `\n${s.vs.text}` : part ? `\n${s.vs.short_text}` : "");
   const icon = s.state === "active" && s.day >= D.today ? syIcon(c.status, c.error || c.reason || "") : "";
-  const lbl = `${KINDS[s.kind] || ""}${fam ? "（" + fam.text + "）" : ""}：${s.title}，${s.minutes || 0} 分鐘，${tss.replace("→", "實際")}${s.state === "missed" ? "，未完成" : s.state === "done" ? "，已完成" : ""}${s.provisional ? "，暫定" : ""}${icon ? "，" + syLabel(c.status) : ""}`;
+  const pm = window.PlanMark ? PlanMark.lines(s, KINDS) : [];      // SP-318: ↻ auto / ✎ yours (plan_mark.js)
+  const lbl = `${KINDS[s.kind] || ""}${fam ? "（" + fam.text + "）" : ""}：${s.title}，${s.minutes || 0} 分鐘，${tss.replace("→", "實際")}${s.state === "missed" ? "，未完成" : s.state === "done" ? "，已完成" : ""}${s.provisional ? "，暫定" : ""}${icon ? "，" + syLabel(c.status) : ""}${pm.length ? "，" + PlanMark.label(s) : ""}`;
   return `<button type="button" class="chip k-${esc(s.kind)}${fam ? " fam-" + esc(fam.id) : ""}${S.swapFrom && S.swapFrom.uid === s.uid ? " swap-src" : ""} st-${esc(s.state)} ${cp && cp.level !== "missed" ? "cp-" + esc(cp.level) : ""} ${s.provisional && s.state === "active" ? "prov" : ""}" data-uid="${esc(s.uid)}"
-      ${live ? 'draggable="true"' : ""} aria-label="${esc(lbl + (cp && cp.level !== "missed" ? "，" + compTip(cp) : ""))}" title="${esc(s.title + (fam && fam.sub_label ? "\n" + fam.text : "") + "\n" + meta + cpTip + (s.target ? "\n" + s.target : "") + (s.detail ? "\n" + s.detail : "") + (s.walk_hint ? "\n" + s.walk_hint : ""))}">
-    <span class="c-t">${isHeat(s) ? '<span class="heat-tag" aria-hidden="true">熱</span>' : ""}${esc(s.title)}</span><span class="c-r">${off ? `<span class="offp-i" aria-hidden="true">≠</span>` : part ? `<span class="part-i" aria-hidden="true">◐</span>` : ""}${icon}</span>
+      ${live ? 'draggable="true"' : ""} aria-label="${esc(lbl + (cp && cp.level !== "missed" ? "，" + compTip(cp) : ""))}" title="${esc(s.title + (fam && fam.sub_label ? "\n" + fam.text : "") + "\n" + meta + cpTip + (s.target ? "\n" + s.target : "") + (s.detail ? "\n" + s.detail : "") + (s.walk_hint ? "\n" + s.walk_hint : "") + (pm.length ? "\n" + pm.join("\n") : ""))}">
+    <span class="c-t">${isHeat(s) ? '<span class="heat-tag" aria-hidden="true">熱</span>' : ""}${esc(s.title)}</span><span class="c-r">${off ? `<span class="offp-i" aria-hidden="true">≠</span>` : part ? `<span class="part-i" aria-hidden="true">◐</span>` : ""}${pm.length ? PlanMark.icon(s) : ""}${icon}</span>
     <span class="c-m">${meta}</span>
     ${line ? `<span class="c-x">${line}</span>` : ""}${big && off ? `<span class="c-x offp-i">≠ ${esc(s.vs.text.replace("沒照課表：", "沒照課表 · "))}</span>` : ""}${big && part ? `<span class="c-x part-i">◐ ${esc(s.vs.short_text)}</span>` : ""}${big && (s.detail || s.walk_hint) && s.state !== "done" ? `<span class="c-d">${esc([s.detail, s.walk_hint].filter(Boolean).join(" "))}</span>` : ""}${s.state === "done" && s.note ? `<span class="c-x adapt-note">⚠ ${esc(s.note)}</span>` : ""}</button>`;
 }
@@ -1979,6 +1982,8 @@ function openDlg(s, day) {
   $("sd-h").textContent = !s ? "新增課表" : ro ? "課表" : "編輯課表";
   const d = s ? s.day : day;
   $("sd-sub").textContent = `${md(d)}（週${wd(d)}）${s && s.quality_family ? " · " + s.quality_family.text : ""}${s && s.provisional && s.state === "active" ? " · 暫定" : ""}${s && s.origin === "custom" ? " · 自訂" : s && s.edited ? " · 已修改" : ""}`;
+  $("sd-mark").innerHTML = s && window.PlanMark ? PlanMark.detail(s, KINDS) : "";      // SP-318
+  $("sd-mark").hidden = !$("sd-mark").innerHTML;
   const db = $("sd-done");
   const pastOpen = s && s.state === "active" && s.day <= D.today && (s.link_options || []).length;
   db.hidden = !(s && (s.state === "done" || s.state === "missed" || pastOpen));

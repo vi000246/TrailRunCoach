@@ -389,6 +389,31 @@ def pd_code() -> str:
                      extra=("pd", ESTIMATE_CODE_V))
 
 
+def synced_fit_files() -> tuple[list, Optional[str], str]:
+    """(the synced FIT files pd_model's cptest.curves reads [(date, path, size, whole-s
+    mtime)] sorted, the folder it skips (cptest.unused_folder: not the 資料來源), the
+    tenant home) — PdMemo's per-day key and api/activity_auto.py (SP-334) list the same."""
+    from backend.engine.racepower import cptest as T
+    from backend.engine.racepower import weather as WX
+    from backend.engine.wko5expr.fitcache import stamp_s
+    files = []
+    root = WX.home() / "fit"
+    skip = T.unused_folder()
+    if root.exists():
+        for p in root.rglob("*.fit"):
+            d = T._file_date(p)
+            if d is None or p.relative_to(root).parts[0] == skip:
+                continue
+            try:
+                s = p.stat()
+            except OSError:
+                continue
+            # stamp_s: a copied folder's new mtimes (same bytes) keep the refits
+            files.append((d, str(p.relative_to(root)), *stamp_s(p, s)))
+    files.sort()
+    return files, skip, str(WX.home())
+
+
 class PdMemo:
     """Disk memo of racepower.athlete._pd_mftp (the as-of PD refit behind
     cp_as_of: ~670 refits for the LTHR estimates of a full COROS history,
@@ -417,9 +442,7 @@ class PdMemo:
         import hashlib
         from backend.engine import bad_activity as BA
         from backend.engine.racepower import athlete as A
-        from backend.engine.racepower import cptest as T
-        from backend.engine.racepower import weather as WX
-        from backend.engine.wko5expr.fitcache import stamp_of, stamp_s
+        from backend.engine.wko5expr.fitcache import stamp_of
         ds = self.ds
         code = hashlib.sha1(pd_code().encode("utf-8"))
         days, rows = [], []
@@ -433,25 +456,18 @@ class PdMemo:
             days.append(w.day)
             rows.append((w.entry.file, st, A.power_ok(ds, w), A.power_source(ds, w),
                          ds._corr_sig(w.entry.file, "power"), w.metrics.get("np")))
-        files = []
-        root = WX.home() / "fit"
-        skip = T.unused_folder()
-        if root.exists():
-            for p in root.rglob("*.fit"):
-                d = T._file_date(p)
-                if d is None or p.relative_to(root).parts[0] == skip:
-                    continue
-                try:
-                    s = p.stat()
-                except OSError:
-                    continue
-                # stamp_s: a copied folder's new mtimes (same bytes) keep the refits
-                files.append((d, str(p.relative_to(root)), *stamp_s(p, s)))
-        files.sort()
-        # cptest.curves reads only the 資料來源's folder (cptest.unused_folder)
+        files, skip, home = synced_fit_files()
         glob = (code.hexdigest(), A.CP_WINDOW_DAYS, bool(ds.accept_watch_power), BA.read_setting(True),
-                BA.overrides_stamp(), str(WX.home()), skip)
+                BA.overrides_stamp(), home, skip)
         self._prep = (days, rows, files, glob)
+
+    def inputs(self) -> tuple:
+        """(the synced FIT files cptest.curves adds [(date, path, size, mtime)], the global
+        part of every day's key) — the inputs beyond ds.workouts that a refit reads, for a
+        cache keyed on a window of days (api/activity_auto.py, SP-334)."""
+        if self._prep is None:
+            self._prepare()
+        return self._prep[2], self._prep[3]
 
     def sig(self, day: dt.date) -> str:
         import bisect
