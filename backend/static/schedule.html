@@ -972,18 +972,28 @@ function range() {
 // SP-362: after a sync / on a new day the calendar may come back `stale` — the previous plan, shown
 // at once while the new one is computed. Badge 「更新中」, editing waits (the server never writes
 // from a stale view), GET /fresh is polled and the calendar reloads when the new plan is ready.
-const STALE = { t: null, t0: 0, MAX_MS: 300000 };
-const isStale = () => !!(D && D.stale);
+// Polling gives up after MAX_MS: the edit lock is dropped (the server computes fresh inputs for
+// every write anyway) and the badge turns into 「重新整理」.
+const STALE = { t: null, t0: 0, MAX_MS: 300000, gaveUp: false };
+const isStale = () => !!(D && D.stale) && !STALE.gaveUp;
 function staleWatch() {
   const st = D && D.stale, b = $("stale-badge");
   b.hidden = !st;
   clearTimeout(STALE.t); STALE.t = null;
-  if (!st) { if (STALE.t0 && $("sync-msg").textContent === tt("stale.wait")) msg(""); STALE.t0 = 0; return; }
-  b.textContent = tt(st.reason === "day" ? "stale.day" : "stale.sync");
-  b.title = tt("stale.tip", { at: localTime(st.since) || "" });
+  if (!st) {
+    if (STALE.t0 && $("sync-msg").textContent === tt("stale.wait")) msg("");
+    STALE.t0 = 0; STALE.gaveUp = false; return;
+  }
+  b.textContent = tt(STALE.gaveUp ? "stale.reload" : st.reason === "day" ? "stale.day" : "stale.sync");
+  b.title = tt(STALE.gaveUp ? "stale.reload_tip" : "stale.tip", { at: localTime(st.since) || "" });
+  if (STALE.gaveUp) return;
   if (!STALE.t0) STALE.t0 = Date.now();
   const poll = async () => {
-    if (Date.now() - STALE.t0 > STALE.MAX_MS) return;            // gave up: the badge stays, a reload fixes it
+    if (Date.now() - STALE.t0 > STALE.MAX_MS) {               // gave up: editable again, 「重新整理」 offered
+      STALE.gaveUp = true;
+      if ($("sync-msg").textContent === tt("stale.wait")) msg("");
+      render(); staleWatch(); return;
+    }
     try {
       const r = await fetch(`${PAPI}/fresh`, { cache: "no-store" });
       if (r.ok && !(await r.json()).updating) return load();
@@ -992,6 +1002,11 @@ function staleWatch() {
   };
   STALE.t = setTimeout(poll, 2000);
 }
+// the badge after giving up: reload (and watch again if it is still being computed)
+$("stale-badge").addEventListener("click", () => {
+  if (!STALE.gaveUp) return;
+  STALE.gaveUp = false; STALE.t0 = 0; load();
+});
 async function load() {
   const [a, b] = range();
   $("calwrap").classList.add("loading");
@@ -1240,14 +1255,14 @@ function renderToolbar() {
   $("pm-week").textContent = weekPast ? "這週已經過去" : rangeTxt(wa, wb);
   $("pm-phase").textContent = `${md(D.today)}–${md(D.phase_push_end)}${D.phase && D.phase_push_end < D.phase.end ? `（最多 ${D.max_weeks} 週）` : ""}`;
   $("um-day").textContent = S.sel ? rangeTxt(S.sel, S.sel) : "先點選一天";
-  $("more-menu").querySelector('[data-unpush="day"]').disabled = !S.sel || !C.authenticated;
-  $("more-menu").querySelector('[data-unpush="week"]').disabled = weekPast || !C.authenticated;
-  $("more-menu").querySelector('[data-unpush="phase"]').disabled = !C.authenticated;
+  $("more-menu").querySelector('[data-unpush="day"]').disabled = !S.sel || !C.authenticated || isStale();
+  $("more-menu").querySelector('[data-unpush="week"]').disabled = weekPast || !C.authenticated || isStale();
+  $("more-menu").querySelector('[data-unpush="phase"]').disabled = !C.authenticated || isStale();
   $("um-week").textContent = weekPast ? "" : rangeTxt(wa, wb);
   $("um-phase").textContent = `到 ${md(D.phase_push_end)}`;
   $("rec-btn").disabled = S.busy || isStale();
   const nx = D.expired_open || 0;
-  $("more-menu").querySelector('[data-act="del-expired"]').disabled = !nx || S.busy;
+  $("more-menu").querySelector('[data-act="del-expired"]').disabled = !nx || S.busy || isStale();
   $("dx-n").textContent = nx ? tt("del_all.count", { n: nx }) : tt("del_all.none");
   const parts = [];
   if (C.authenticated) {
@@ -3043,6 +3058,12 @@ addEventListener("resize", () => ctxClose());
   e.preventDefault();
   msg(esc(tt("stale.wait")), "warn");
 }, true));
+// … and the floating suggestion box's 「排入」 (static/suggestions.js) waits too
+document.addEventListener("click", (e) => {
+  if (!isStale() || !e.target.closest('.sg-item [data-act="accept"]')) return;
+  e.preventDefault(); e.stopImmediatePropagation();
+  msg(esc(tt("stale.wait")), "warn");
+}, true);
 
 // ---------------- wiring ----------------
 window.onAutoPlanChange = () => load();      // autoplan.js: approve / reject / 復原 changed the plan

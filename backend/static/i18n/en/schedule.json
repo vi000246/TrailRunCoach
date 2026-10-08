@@ -297,6 +297,8 @@
   "stale.day": "Updating for the new day",
   "stale.tip": "Showing the plan computed at {at}; the new one replaces it by itself when ready. Editing waits until then",
   "stale.wait": "The plan is updating — edit again in a few seconds",
+  "stale.reload": "Refresh",
+  "stale.reload_tip": "Showing the plan computed at {at}; the new one isn't ready yet. Click to refresh",
   "rest.mv_done": "Rest day moved to {to}: {n} session(s) moved to {from}",
   "rest.mv_what": "Move the rest day",
   "vs.intensity_pct": "intensity {pct}%",
