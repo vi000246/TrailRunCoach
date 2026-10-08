@@ -178,6 +178,22 @@ def test_a_failed_background_render_is_retried_in_the_request(api):
     assert "stale" not in new and new["series"]
 
 
+def test_viewer_defaults_to_90_days_remembers_the_preset_and_swaps_stale_cards():
+    import json
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1] / "static"
+    html = (root / "wko5_viewer.html").read_text(encoding="utf-8")
+    assert 'DEFAULT_RANGE = "90"' in html and 'RANGE_PRESETS = ["7", "42", "90", "365", "ytd", "all"]' in html
+    assert "range: S.range" in html                                   # saved with the other viewer choices
+    assert "365 * 864e5" not in html                                  # the old one-year default is gone
+    assert '"&stale=1"' in html and "/render/ready?keys=" in html and "markStale(card, res.stale" in html
+    assert "TRC_STATIC_CFG" in html                                   # the static demo never asks for stale
+    for loc in ("zh-TW", "en"):
+        cat = json.loads((root / "i18n" / loc / "viewer.json").read_text(encoding="utf-8"))
+        assert all(cat.get(k) for k in ("updating", "updating_tip", "progress", "progress_old")), loc
+        assert "{done}" in cat["progress"] and "{total}" in cat["progress"]
+
+
 def test_stale_is_not_part_of_the_cache_key(api):
     client, holder, gate, st = api
     _get(client, stale=False)
