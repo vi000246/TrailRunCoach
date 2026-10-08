@@ -16,6 +16,7 @@ from fastapi.responses import FileResponse
 
 from backend.engine import overview as O
 from backend.engine.planning import plan_path
+from backend.singleflight import SingleFlight
 from backend.engine.status import Status
 
 STATIC = Path(__file__).resolve().parents[1] / "static"
@@ -25,6 +26,7 @@ router = APIRouter(prefix="/api/v1/overview", tags=["overview"])
 _lock = threading.Lock()
 _status_cache: dict = {}          # (tenant id, ...) -> Status, insertion order = LRU
 _STATUS_MAX = 64
+_STATUS_FLIGHT = SingleFlight()   # one Status.compute per key at a time (SP-362)
 
 
 def _dataset():
@@ -63,17 +65,26 @@ def _status(ds, today: dt.date) -> Status:
         hit = _status_cache.get(key)
         if hit is not None:
             _status_cache[key] = _status_cache.pop(key)      # most recent last
-    if hit is None:
-        hit = Status(ds, today=today, prefs=prefs).compute()
+    if hit is not None:
+        return hit
+
+    def compute() -> Status:
+        with _lock:                            # a flight that just ended stored it
+            done = _status_cache.get(key)
+        if done is not None:
+            return done
+        st = Status(ds, today=today, prefs=prefs).compute()
         with _lock:
             # LRU per tenant (demo sandboxes, later users); the owner alone keeps one entry warm
             mine = [k for k in _status_cache if k[0] == key[0]]
             for k in mine:
                 _status_cache.pop(k, None)
-            _status_cache[key] = hit
+            _status_cache[key] = st
             while len(_status_cache) > _STATUS_MAX:
                 _status_cache.pop(next(iter(_status_cache)))
-    return hit
+        return st
+    # single flight (SP-362): concurrent callers of this key wait for one computation
+    return _STATUS_FLIGHT.do(key, compute)
 
 
 def _day(s: Optional[str], default: dt.date) -> dt.date:
