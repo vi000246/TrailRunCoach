@@ -451,6 +451,14 @@
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:514"
   },
+  "CR-10 10 是極限，高於 CP（Coggan VO2max 區 106–120 % FTP）；全力撐 10–20 分鐘約 1.05–1.15，取 1.10（範圍有出處，取點推估）": {
+    "draft": true,
+    "src": "backend/engine/rpe_load.py:110"
+  },
+  "CR-10 4 是第一區上緣（約 VT1）；Coggan 節奏區 RPE 3–4 對 76–90 % FTP，取 VT1 附近的 0.82（範圍有出處，取點推估）": {
+    "draft": true,
+    "src": "backend/engine/rpe_load.py:107"
+  },
   "CTL {c:.0f} 的 {pct:.0%}": {
     "draft": true,
     "src": "backend/engine/load_guard.py:128"
@@ -827,6 +835,18 @@
     "draft": false,
     "src": "backend/api/debug.py:230"
   },
+  "session RPE 5–6 是 Seiler 第二區（VT1 到 VT2）；跑步功率中等區 80–90 % CP，取 0.88（範圍有出處，取點推估）": {
+    "draft": true,
+    "src": "backend/engine/rpe_load.py:108"
+  },
+  "session RPE ≤ 4 是 Seiler 第一區（低於 VT1）；跑步功率輕鬆區 65–80 % CP，輕鬆跑多在上半段，取 0.74（範圍有出處，取點推估）": {
+    "draft": true,
+    "src": "backend/engine/rpe_load.py:106"
+  },
+  "session-RPE 評整段主課；7 分是第三區的起點（約 CP），整段 20–60 分鐘撐不住 106–120 % FTP，所以取 CP 略下的 0.95（範圍有出處，取點推估）": {
+    "draft": true,
+    "src": "backend/engine/rpe_load.py:109"
+  },
   "user_settings sync.*（每次同步的結果）＋ sync_state 的時間和 cursor（不含任何 token）": {
     "draft": false,
     "src": "backend/api/debug.py:544"
@@ -970,6 +990,14 @@
   "{label}看起來好了？最近 {n} 次沒痛、跑量回到傷前 {pct}%": {
     "draft": true,
     "src": "backend/engine/suggestions.py:308"
+  },
+  "{label}（CR-10 {cr}）每小時 {rate} TSS：本人 {n} 筆有自評的活動擬合 {personal}，權重 {w:.0%}，其餘用預設 {default}（TSS 定義 IF² × 100，IF {if_}）。": {
+    "draft": true,
+    "src": "backend/engine/rpe_load.py:341"
+  },
+  "{label}（CR-10 {cr}）預設每小時 {rate} TSS = IF² × 100（TSS 定義），IF {if_}：{src}。預設是通用規則，不是照哪個人調的；每個人的值只從他自己有自評的活動擬合，這一檔目前 {n} 筆，滿 {min_n} 筆才開始。": {
+    "draft": true,
+    "src": "backend/engine/rpe_load.py:375"
   },
   "{label}（自動：一年內心率判定為比賽強度的標準距離跑步）": {
     "draft": true,
@@ -1419,9 +1447,9 @@
     "draft": true,
     "src": "backend/engine/rest_days.py:120"
   },
-  "「{label}」段用 RPE 填：用你填的分鐘數，TSS 由 RPE × 分鐘換算": {
+  "「{label}」段用 RPE 填：用你填的分鐘數，TSS ＝ 這一檔的每小時 TSS × 時數": {
     "draft": true,
-    "src": "backend/engine/workout_steps.py:1152"
+    "src": "backend/engine/workout_steps.py:1165"
   },
   "「{name}」最高約 {m:,.0f} m：出發前的高度適應": {
     "draft": true,
@@ -1999,6 +2027,10 @@
     "draft": true,
     "src": "backend/engine/walk_hint.py:117"
   },
+  "依相鄰檔調整": {
+    "draft": true,
+    "src": "backend/engine/rpe_load.py:374"
+  },
   "保暖層": {
     "draft": true,
     "src": "backend/engine/racepower/cold.py:281"
@@ -2206,6 +2238,10 @@
   "全程維持穩定的輕鬆強度，不是全力。": {
     "draft": true,
     "src": "backend/engine/suggestions.py:142"
+  },
+  "兩堂課在同一天，不用交換": {
+    "draft": false,
+    "src": "backend/engine/plan_store.py:370"
   },
   "兩手提重物走 30–40 公尺。只提一手，多練側邊的核心。": {
     "draft": true,
@@ -4783,6 +4819,10 @@
     "draft": true,
     "src": "backend/engine/panels/activity_charts.py:65"
   },
+  "為了讓高一檔不會比低一檔少，已和相鄰的檔平均成每小時 {rate} TSS。": {
+    "draft": true,
+    "src": "backend/engine/rpe_load.py:352"
+  },
   "無氧動力": {
     "draft": true,
     "src": "backend/engine/hr_profile.py:65"
@@ -5638,6 +5678,14 @@
   "課表偏好": {
     "draft": false,
     "src": "backend/engine/debug_view.py:497"
+  },
+  "課表已改，但{provider}手錶沒有跟著更新": {
+    "draft": false,
+    "src": "backend/api/plan_sessions.py:2196"
+  },
+  "課表待確認是自動調整的提醒，不能交換": {
+    "draft": false,
+    "src": "backend/engine/plan_store.py:372"
   },
   "課表待確認是自動調整的提醒，不能自己新增": {
     "draft": true,
@@ -6590,6 +6638,10 @@
   "過去的日子不能設成休息日": {
     "draft": true,
     "src": "backend/api/plan_sessions.py:1927"
+  },
+  "過去的課不能交換": {
+    "draft": false,
+    "src": "backend/engine/plan_store.py:374"
   },
   "達到目標（≥ 10 分）": {
     "draft": true,

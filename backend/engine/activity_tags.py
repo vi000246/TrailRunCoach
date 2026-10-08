@@ -614,8 +614,8 @@ def apply_update(row, *, activity_type=_UNSET, effort=_UNSET, note=_UNSET, exclu
 # COROS APEX 2 Pro files carry NO RPE / feel field (no session field
 # 192 / 193, no developer field); Garmin fenix 7 files imported into a COROS
 # account carry both, a few with a value (RPE 1–4, feel 25–100). So the RPE is used wherever a FIT has it, whatever the
-# watch. Stored per workout_files row at import (file_service) and by
-# scripts/backfill_rpe.py; read here by start time.
+# watch (COROS FITs re-checked 2026-10-08, rated ones too: none — COROS's rating comes from the activity detail, coros_rpe.py,
+# into the same column). Stored per workout_files row at import (file_service) and by scripts/backfill_rpe.py; read by start time.
 
 FEELS = {0: "很差", 25: "差", 50: "普通", 75: "好", 100: "很好"}   # FIT workout_feel (Garmin: Very Weak … Very Strong)
 RPE_EFFORT = ((4.0, "easy"), (8.0, "moderate"))   # 推估: RPE ≤ 4 輕鬆, ≤ 8 一般, 9–10 全力 (Borg CR10 words: 4 "somewhat hard", 9–10 "extremely hard")

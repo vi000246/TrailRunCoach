@@ -213,7 +213,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
   const END_LABEL = { time: tr("workout.end.time"), distance: tr("workout.end.distance"), open: tr("workout.end.open"), load: tr("workout.end.load") };
   const provCaps = (ctx) => (((ctx || {}).provider || {}).capabilities) || null;
   // 「負荷」 entered by feel (SP-57, engine/rpe_load.py): five levels (Borg CR-10 2/4/5/7/10) + minutes;
-  // the server turns them into the step's TSS (dur.value) with the athlete's factor (推估)
+  // the server turns them into the step's TSS (dur.value) with that level's TSS per hour (推估 / the athlete's fit)
   const RPE_LEVELS = ["easy", "moderate", "hard", "very_hard", "max"];
   const RPE_MIN = [1, 360];
   // the new dur of a 「負荷」 step after one of its fields changed (null = refuse the input); pure
@@ -510,11 +510,11 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
         : "這個平台沒有負荷結束條件：推送時換成預估時間 TSS ÷（這段強度 IF² × 100）";
       const mode = `<select data-f="lmode" aria-label="${esc(tr("workout.load_mode"))}"${dis}>${opt("tss", "TSS", byRpe ? "rpe" : "tss")}${opt("rpe", tr("workout.load_by_rpe"), byRpe ? "rpe" : "tss")}</select>`;
       if (byRpe) {
-        const R = (L && L.rpe) || {};
-        const rtip = tr("workout.load_rpe_tip", { factor: R.factor != null ? R.factor : "?", src: tr(R.fitted ? "workout.load_rpe_mine" : "workout.load_rpe_default") });
-        return mode + `<select data-f="lrpe" aria-label="RPE"${dis}>${RPE_LEVELS.map((k) => opt(k, tr("workout.rpe_" + k), st.dur.rpe)).join("")}</select>` +
+        const R = (L && L.rpe) || {}, S = (x) => (x.fitted ? "mine" : x.adjusted ? "adjusted" : "default"), lv = Object.fromEntries((((this.ctx || {}).rpe_load || {}).levels || []).filter((x) => x.tss_h != null).map((x) => [x.id, x]));   // SP-57: each level's TSS/h + source (its option); the step's TSS 推估 / 依相鄰檔調整 / 本人
+        const rtip = tr("workout.load_rpe_tip", { rate: R.tss_h != null ? R.tss_h : "?", src: tr("workout.load_rpe_" + S(R), { n: R.n || 0 }) });
+        return mode + `<select data-f="lrpe" aria-label="RPE"${dis}>${RPE_LEVELS.map((k) => opt(k, tr("workout.rpe_" + k) + (lv[k] ? ` ≈ ${lv[k].tss_h} TSS/h` : ""), st.dur.rpe, lv[k] ? ` title="${esc(tr("workout.load_rpe_src_" + S(lv[k])))}"` : "")).join("")}</select>` +
           `<input class="num" type="number" step="1" min="${RPE_MIN[0]}" max="${RPE_MIN[1]}" data-f="lmin" value="${st.dur.min ?? ""}" aria-label="${esc(tr("workout.load_min"))}"${dis}><span class="faint">${esc(tr("workout.load_min"))}</span>` +
-          (L ? `<span class="we-lap" title="${esc(rtip + "\n" + tip)}">≈ ${L.tss} TSS ${conv}</span>` : "");
+          (L ? `<span class="we-lap" title="${esc(rtip + "\n" + tip)}">≈ ${L.tss} TSS（${esc(tr("workout.load_rpe_src_" + S(R)))}）${conv}</span>` : "");
       }
       return mode + `<input class="num" type="number" step="1" min="1" max="500" data-f="tss" value="${st.dur.value}" aria-label="負荷 TSS"${dis}><span class="faint">TSS</span>` +
         (conv ? `<span class="we-lap" title="${esc(tip)}">${conv}</span>` : "");

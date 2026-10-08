@@ -1100,6 +1100,7 @@ async def push_sessions(db: AsyncSession, sessions: list[dict], thresholds: Opti
     `stale_keys`: pushed sessions no longer in the plan — removed unless on a
     past day. `missed_keys`: sessions the athlete missed — removed from the
     calendar (still never an entry COROS shows as done)."""
+    await _rpe_sessions_follow(db, athlete_id, today)
     async with _push_lock:
         hub = hub or await TrainingHub.from_db(db, athlete_id)
         keys = {s["key"] for s in sessions}
@@ -1154,3 +1155,18 @@ async def _remove_row(db: AsyncSession, hub: TrainingHub, r: CorosPlanPush,
     await db.delete(r)
     await db.commit()
     return {**out, "status": "removed", **({"check_day": check} if check else {})}
+
+
+async def _rpe_sessions_follow(db: AsyncSession, athlete_id: int, today: str) -> None:
+    """Before a push (push_sessions): stored sessions with an RPE 「負荷」 step take the RPE rates in
+    effect (SP-57, engine/rpe_load.sync_sessions — a no-op unless the rates changed), so the plan's
+    TSS is the TSS this push sends. Never stops the push."""
+    try:
+        from backend.engine import rpe_load
+        await rpe_load.sync_sessions(db, athlete_id, today)
+    except Exception as e:                   # noqa: BLE001
+        try:
+            await db.rollback()
+        except Exception:                    # noqa: BLE001 — a test double without one
+            pass
+        log.warning("RPE load: stored sessions not re-normalised before the push: %s", type(e).__name__)
