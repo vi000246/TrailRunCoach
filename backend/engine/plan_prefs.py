@@ -79,6 +79,8 @@ KEY_FIELDS = {                       # user_settings key -> Prefs field
     "plan.prefs.aet_test_protocol": "aet_test_protocol",
     "plan.prefs.warmup_commute_min": "warmup_commute_min",
     "plan.prefs.cooldown_min": "cooldown_min",
+    "plan.prefs.warmup_on": "warmup_on",
+    "plan.prefs.warmup_min": "warmup_min",
     "plan.prefs.pref_days": "pref_days",
     "plan.prefs.pref_keep": "pref_keep",
     "plan.prefs.b2b": "b2b",
@@ -96,13 +98,15 @@ GATE_FIELDS = ("quality_gate", "quality_gate_weeks")
 # (aet_test.pick_day) whether or not the other preferences are set
 # warmup_commute_min / cooldown_min: the interval warm-up's city part and the cool-down
 # (engine/interval_library.py blocks) — read for every interval session, not shaping
+# warmup_on / warmup_min: 每堂課前加熱身 (SP-364, engine/warmup.py) — a warm-up in front of every
+# generated run session and inserted template; it never reshapes the week
 # b2b: whether a due B2B weekend is suggested at all (engine/b2b.py) — a suggestion, not shaping
 # transition_weeks: the 轉換期 after an A race (engine/planning.auto_phases) — a phase, not shaping
 # taper_days: the 減量期 length of a road marathon / an ultra (planning.taper_days, SP-96) — a phase too
 # strength_moves / strength_no_gear: which move each strength type uses (engine/strength_moves.py,
 # SP-191) — the strength texts only, read by strength_plan / balance_plan whether or not `active`
 NOT_SHAPING = ("cp_test_protocol", "heat", "heat_method", "aet_test_days", "aet_test_protocol",
-               "warmup_commute_min", "cooldown_min", "b2b", "transition_weeks", "taper_days",
+               "warmup_commute_min", "cooldown_min", "warmup_on", "warmup_min", "b2b", "transition_weeks", "taper_days",
                "strength_moves", "strength_no_gear") + GATE_FIELDS
 WD = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 WD_ZH = "一二三四五六日"
@@ -168,6 +172,10 @@ class Prefs:
     # city to the riverside (never cut) and the cool-down (10 when running home). Not `active`.
     warmup_commute_min: int = 10
     cooldown_min: int = 5
+    # 每堂課前加熱身 (SP-364, engine/warmup.py): on = every generated run session and every inserted
+    # template starts with ≥ warmup_min minutes of warm-up (an existing one is topped up). Not `active`.
+    warmup_on: bool = False
+    warmup_min: int = 10
     # 偏好的星期 per session type (the long run is long_day, any weekday now): ((kind, (wd1, wd2)), …)
     # for quality / aet_test / cp_test / strides; () = 不指定. pref_keep = the conflict codes
     # (day_conflicts) the athlete chose to keep anyway.
@@ -318,6 +326,11 @@ def check(p: Prefs) -> None:
         raise ValueError(_("間歇門檻要是 {choices} 其中之一", choices=MODES))
     if not isinstance(p.b2b, bool):
         raise ValueError(_("建議 B2B 要是 true／false"))
+    from backend.engine.warmup import MIN_RANGE as WR
+    if not isinstance(p.warmup_on, bool):
+        raise ValueError(_("每堂課前加熱身要是 true／false"))
+    if isinstance(p.warmup_min, bool) or not isinstance(p.warmup_min, int) or not WR[0] <= p.warmup_min <= WR[1]:
+        raise ValueError(_("熱身時間要在 {lo}–{hi} 分", lo=WR[0], hi=WR[1]))
     if p.aet_test_days not in ("weekday", "any"):
         raise ValueError(_("AeT 測試日要是 weekday 或 any"))
     from backend.engine.aet_test import PROTOCOL_CHOICES
@@ -366,10 +379,11 @@ def easy_hr_text(aet: Optional[float], measured: bool = False) -> str:
     return easy_cap_hr(aet, measured)
 
 
-def trim_quality(s: dict, cap: int) -> bool:
+def trim_quality(s: dict, cap: int, warm_floor: int = 0) -> bool:
     """Shorten a quality session to `cap` minutes (warm-up, cool-down, then
     reps); rewrite title / detail so the COROS step builder parses the new
-    structure. True when it now fits."""
+    structure. True when it now fits. The warm-up is never cut below
+    `warm_floor` (每堂課前加熱身, SP-364) — a rep goes first."""
     m = re.search(r"(\d+)\s*[×xX]\s*(\d+)\s*分", s["title"])
     if not m or s["minutes"] <= cap:
         return s["minutes"] <= cap
@@ -382,7 +396,7 @@ def trim_quality(s: dict, cap: int) -> bool:
     warm_v, cool_v = (int(warm.group(1)) if warm else 15), (int(cool.group(1)) if cool else 10)
     old = s["minutes"]
     over = old - cap
-    cut_w = min(over, max(0, warm_v - TRIM_WARM))
+    cut_w = min(over, max(0, warm_v - max(TRIM_WARM, int(warm_floor or 0))))
     warm_v -= cut_w
     over -= cut_w
     cut_c = min(over, max(0, cool_v - TRIM_COOL))
@@ -556,7 +570,8 @@ def shape(ss: list[dict], total_min: float, p: Prefs, c: Ctx) -> list[dict]:
                                 "text": NOTE_AET_TEST if s["id"] == "test_aet"
                                 else note_test(s.get("protocol") or "standard")})
             elif s["kind"] == "quality":
-                trim_quality(s, p.cap_weekday)
+                from backend.engine.warmup import floor_min
+                trim_quality(s, p.cap_weekday, floor_min(p))
 
     # ---- long --------------------------------------------------------------
     long_cap = p.long_cap

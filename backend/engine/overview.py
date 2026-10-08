@@ -25,6 +25,7 @@ import numpy as np
 
 from backend.engine import cold_start as CS
 from backend.engine import load_guard as LG
+from backend.engine import warmup as WU
 from backend.engine.hr_profile import EASY_CAP_TIP, below, easy_cap_label
 from backend.engine.wko5expr.dataset import Dataset, Workout, date_to_day, day_to_date
 from backend.engine.wko5expr.evaluator import WS, Evaluator
@@ -1832,6 +1833,9 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         add(id=f"strength{i + 1}", kind="strength", title=st_s["title"], minutes=st_s["minutes"],
             detail=st_s["detail"], source=st_s["source"] or SRC_UA,
             tss=st_s["minutes"] / 60 * tph["strength"])
+    # 每堂課前加熱身 (SP-364, engine/warmup.py): the long run / intervals get theirs before the easy runs
+    # are sized — a longer interval warm-up comes out of the week's easy minutes
+    WU.apply_objs(sessions, prefs, tph)
     used = sum(s.minutes for s in sessions if s.kind not in ("strength",))
     left = max(0.0, minutes_total - used)
     tr_wk = transition_week(phs, monday) if kind == "transition" else None
@@ -2233,6 +2237,10 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     except Exception:                       # noqa: BLE001 — the plan must still build
         pass
 
+    # ---- 每堂課前加熱身 (SP-364, engine/warmup.py): last, so every session the passes above made or
+    # rewrote has it; its extra minutes are in the TSS the projection below reads
+    WU.apply_objs(sessions, prefs, tph)
+
     # ---- projection to Sunday -------------------------------------------
     planned_by_day = {}
     for s in sessions:
@@ -2289,6 +2297,10 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
             "replaces_long": aet_proto == "xu90",
             "session": {k: a_s.get(k) for k in ("kind", "title", "minutes", "target", "detail", "source", "tss",
                                                 "protocol")}})
+    for t in test_suggestions:
+        # 每堂課前加熱身 (SP-364): 排入 schedules the session as suggested — with the warm-up
+        if WU.apply_one(t["session"], prefs, tph):
+            t["minutes"] = t["session"]["minutes"]
 
     mode_label = {"base": _("基礎期"), "specific": _("專項期"), "taper": _("減量期"), "event": _("比賽週"),
                   "recovery": _("恢復期"), "transition": _("轉換期"), "rebuild": _("回量期"), "recovery_week": _("恢復週"),

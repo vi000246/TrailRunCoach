@@ -705,6 +705,7 @@ defaults reproduce today's plan exactly.
 | AeT 測試方式 | `plan.prefs.aet_test_protocol` | `auto` (徐國峰 90′ on the weekend LSD, UA 40′ backup) / `xu90` / `ua60` / `ua40` / `evoke60` / `friel` (`auto`). **Not part of `active`**. Protocols in plan-auto.spec.md |
 | AeT 飄移測試 | `plan.prefs.aet_test_days` | `weekday` / `any` (`weekday`: weekends are often trail days). **Not part of `active`** (`NOT_SHAPING`): every placement path reads it (`aet_test.test_days` / `pick_day`): weekday = Mon–Fri in Tue-first order, ≥ 2 days from the long run and other hard days where possible, never the day after the long run unless nothing else; the 80′ standard test may fall back to a weekend day that isn't the long run's, the 50′ short one never; `any` = the interval rule. The test's **length** follows `cap_weekday` (`aet_test.variant_for`): no cap or ≥ 80 → 15′ + 60′ + 5′; < 80 → UA's minimum 10′ + 40′ (never shorter, exempt below 50). Panel: `#pf-aet` chips + AeT 排在 |
 | 間歇暖身／緩和 | `plan.prefs.warmup_commute_min`, `plan.prefs.cooldown_min` | 0–30 (10) / 0–20 (5) min: the interval's easy warm-up run and cool-down (`engine/interval_library.py`). **Not part of `active`** |
+| 每堂課前加熱身 | `plan.prefs.warmup_on`, `plan.prefs.warmup_min` | `false` / 5–30 min (`false` / 10; `backend/settings/repository.py:174`, `backend/engine/plan_prefs.py:177`). **Not part of `active`** (`NOT_SHAPING`): on = every generated run session and every inserted template starts with ≥ N minutes of warm-up (SP-364, below). Panel: switch `#pf-wax` + minutes `#pf-wam` in 課表內容／目標, the minutes row only when on (`backend/static/schedule.html:776`, `backend/static/schedule.html:2319`) |
 | 建議 B2B | `plan.prefs.b2b` | `true` / `false` (`true`): whether a due B2B weekend is suggested at all. **Not part of `active`** |
 | A 賽事後轉換期 | `plan.prefs.transition_weeks` | 0–4 weeks, 0 = off (3; `backend/settings/repository.py:167`). **Not part of `active`** (`NOT_SHAPING`, `backend/engine/plan_prefs.py:105`): it changes the season's phases (`planning.auto_phases`, `backend/engine/planning.py:799`: after each A race's recovery; Friel 3–4 weeks, Canova 4 — 3 is the low end, 推估), read by `planning.phases` (`transition_weeks_setting`, `backend/engine/planning.py:993`) so status, the week plan, the projection, the phase labels and the automatic run agree. Manual phases win (nothing is added). The next A race's backward-planned 專項期 wins: the 轉換期 ends the day before it with a phase `note` 「轉換期縮短為 N 天…」, or is skipped (< 7 days, `TRANSITION_MIN_DAYS`, 推估) with the note on the recovery phase; the note is a week note. Panel: select `#pf-trw` (`backend/static/schedule.html:823`) |
 | 熱適應 | `plan.prefs.heat`, `plan.prefs.heat_method` | `auto` / `off` (`auto`); `run` / `overdress` / `bath` / `sauna` / `mixed` (`run`). **Not part of `active`** (`NOT_SHAPING`): they only add heat sessions before a hot A/B race (`engine/heat_plan.py`). Panel: switch + select with the current S and the rules (`#pf-heat`) |
@@ -714,6 +715,44 @@ defaults reproduce today's plan exactly.
 delete, ＋ 新增; a weekday given to another row is disabled) / 課表內容／目標 / 自動調整 (the
 `plan.auto.*` settings, saved with the dialog — plan-auto.spec.md) / 進階 (collapsed: 間歇門檻,
 warm-up / cool-down, CP / AeT test, B2B, 熱適應). One control per line, explanations behind `?`.
+
+**每堂課前加熱身** (SP-364, `engine/warmup.py`; owner: 「勾選了可以填要多久的熱身，預設 10 分鐘…如果範本已有熱身時間，
+就用範本的熱身時間，時間不夠就補滿」). Off by default; `floor_min` (`backend/engine/warmup.py:58`) = the minutes when on.
+`apply_one` (`backend/engine/warmup.py:183`, idempotent) decorates the generator's session dicts:
+- **No warm-up of its own** (easy / long / hike / mountain, the heat run's own 10′): the first N minutes are the
+  warm-up — the detail gets 「含暖身 N 分」 (`MARK`, `backend/engine/warmup.py:42`); minutes, TSS, the week's
+  budget and the day caps unchanged (a warm-up at easy intensity is the same running). A run shorter than N +
+  `MIN_MAIN` (10′, 推估) + its strides / MP part / walk cool-down is lengthened to fit, TSS scaled
+  (`_carve`, `backend/engine/warmup.py:99`). `workout_steps.derive` splits the first easy step there
+  (`_carve`, `backend/engine/workout_steps.py:574`; the heat run's warm step grows into its main part) and the
+  COROS push of a marked session goes through that structure (`backend/sync/coros_workouts.py:474`) — the
+  same steps, targets and total as before plus one warm-up lap.
+- **Its own warm-up** (intervals, CP / AeT tests, structured 技術地形／下坡): topped up to N, a longer one kept,
+  the main set never shortened; the extra minutes count in the session (minutes + TSS at the easy-run rate).
+  Library intervals: the floor is inside the warm-up block (`interval_library.warm_floor` / `blocks`,
+  `backend/engine/interval_library.py:311`, `:332` — the city part grows), so `fit()` fits the day cap with it
+  and `session_for` stores it as `variant_adj["warm"]` (`backend/engine/interval_library.py:745`; `adjust`
+  reads it back) for the push / editor, which have no prefs; the drawer swap keeps it (`variant_patch`, `backend/engine/interval_library.py:865`, `_with_variant` `backend/api/plan_sessions.py:671`). Text intervals and tests: every 「暖身 N 分」 < N
+  in target / detail is rewritten (`_text`, `backend/engine/warmup.py:117`); `trim_quality` never cuts the
+  warm-up below N (a rep goes first, `backend/engine/plan_prefs.py:382`); tests stay cap-exempt. Steps
+  sessions: `workout_steps.ensure_warm` (`backend/engine/workout_steps.py:557`).
+- **Where**: week_plan before the easy runs are sized (`backend/engine/overview.py:1838`: a longer interval
+  warm-up comes out of the easy minutes, the week keeps its target — this can change the easy-run count by
+  `easy_count`'s rounding) and last, before the projection to Sunday (`backend/engine/overview.py:2242`), plus
+  the suggested tests (`backend/engine/overview.py:2302`); `projection.week_sessions` the same two points
+  (`warm_prefs`, `backend/engine/projection.py:268`, `:306`) and `project_weeks` last
+  (`backend/engine/projection.py:866`). Sessions the later passes add (技術地形／下坡, 減量期 / B-race
+  intervals) get the top-up on top of the week. Scheduling a test (`_schedule_test`,
+  `backend/api/plan_sessions.py:982`) and the 測試 dialog (`_test_templates`, `backend/api/plan_sessions.py:786`)
+  too. The AeT drift analysis cuts the scheduled session's longer warm-up (`planned_warm_s`,
+  `backend/engine/aet_test.py:430`, used at `:456`).
+- **Templates**: `workout_steps.templates(warm_floor_s=…)` (`backend/engine/workout_steps.py:1853`, `:1934`) tops
+  up every row's `full` (整份換, the ?add= deep link, 排入測試 templates, the 推薦 block; `_warm_floor_s`,
+  `backend/api/plan_sessions.py:1691`); `items` (只換主課) keeps the session's own warm-up; a lap-button /
+  distance warm-up is the athlete's own length and left alone; 複製成我的範本 copies the original.
+- **Never**: strength, rest, race, notices, passive heat, the injury walk-run stages (clinical protocol), done
+  sessions, user-edited / custom sessions (reconcile rule 3 keeps them). Known gap: plan_auto's automatic
+  downgrades (`engine/adapt.py`) keep their protocol text.
 
 **熱適應課** (`engine/heat_plan.py`, heat-acclimation.md §5.4, 推估 from §3.4; applied after
 placement in `week_plan` and per projected week in `project_weeks(events, heat_acts)`, which
@@ -1941,6 +1980,12 @@ Data registry: `debug_tokens` SECRET (`token_hash`), `debug_audit` and `debug_au
   the phase, no next phase, the floor / cap, never moving back day to day; 整個周期 stays the
   current phase; the same uids the day before and after a boundary (also after a race cuts the
   current phase short, and through the real projection).
+- `backend/tests/test_warmup_pref.py` (SP-364): default off / validation / not `active`; off changes nothing;
+  easy-type sessions carve the warm-up (time / TSS kept, short runs lengthened) and push it as the first lap
+  (same steps and total otherwise); text intervals / CP / AeT tests topped up, longer ones kept; library
+  floor in blocks / fit / session_for and the push; steps sessions extended; strength / rest / race / notice /
+  passive heat / done / walk-run untouched; templates' `full`; projection, `project_weeks`, `week_plan` and
+  the suggested tests; `trim_quality` floor; the API (prefs, `/steps/templates`, `/test-templates`).
 - `backend/tests/test_plan_prefs.py`: defaults change nothing (projection and `week_plan`);
   50-min cap within cap and volume kept; hard cap note; soft cap excess on the
   long day (and on an easy run when there is no long); long-day cap first; CP test exempt;
@@ -2077,7 +2122,7 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 - [ ] Mark which sessions the system changed, which were left alone, which the user edited (SP-318, Todo) — not implemented
 - [ ] The 課表 page loads slowly, also after switching the 課表心率區間 in 設定 and while a sync runs (SP-361 Bug Todo, SP-362 In Progress) — not fixed
 - [ ] iLevel / Stryd power zones in 設定 as the 課表's default (SP-363, Todo) — not implemented
-- [ ] A warm-up time in 課表偏好 added before every session and template (SP-364, Todo) — not implemented
+- [x] A warm-up time in 課表偏好 added before every session and template (SP-364; 每堂課前加熱身 above)
 - [ ] RPE load converted per level (TSS definition IF² × 100 / h as the default, fitted per level once there is data), decided 2026-10-07 (SP-57, Todo) — the code still uses one factor (`DEFAULT_FACTOR`, `backend/engine/rpe_load.py:67`)
 
 ## Change History
@@ -2161,3 +2206,4 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 | 2026-10-08 | fix/plan-rules-sp352-295-286-84-353 | SP-286 | 「課前要吃」 removed entirely (owner 2026-10-07; reverts `ba6934d`): `backend/engine/session_fuel.py` deleted, no `pre_meal` on the session view (`backend/api/plan_sessions.py:520`), the 課表 card / title / dialog line and the 總覽 tooltip line gone (`backend/static/schedule.html`, `backend/static/overview.html`), zh-TW / en string removed; the watch push is unchanged. Test: `backend/tests/test_carb_hints.py::test_no_session_description_says_eat_before` |
 | 2026-10-08 | fix/plan-rules-sp352-295-286-84-353 | SP-84 follow-up | 主課強度 filter: a 強度課's 「自動」 main set counts as % CP when the template has no 目標用 (owner 2026-10-07); one helper `workout_steps.template_target_types` (`backend/engine/workout_steps.py:1367`) for 插入範本 (`:1830`) and the 範本 page (`backend/engine/user_templates.py:512`); an explicit 目標用 still wins, other categories keep 自動. Tests: `backend/tests/test_template_target_types.py::test_quality_auto_counts_as_pct_cp`, `::test_builtin_rows_carry_target_types`, `::test_api_field_built_in_and_user` |
 | 2026-10-08 | fix/plan-rules-sp352-295-286-84-353 | SP-353 | 專項期後段 of a ≥ 4 h / multi-day trail race: one Zone 5 maintenance session every 3 weeks (賽前第 4 週; owner 2026-10-07, specific-phase-progression.md §4.1 / §5-1) instead of none — the Zone 5 rung as it stands, uphill, not moving the rung; only when the Zone 5 gate and the guardrails allow, else the week note says why (`backend/engine/quality_gate.py:1634`, `:1687`, `:2583`, `:2627`, `:2717`). The other four answers (4-h line, uphill ladder, road ladder, MP 20→40 % every other week) confirm the code as built; acceptance tests added. Tests: `backend/tests/test_specific_split.py` |
+| 2026-10-08 | feat/warmup-pref-sp364 | SP-364 | 課表偏好 每堂課前加熱身 (`plan.prefs.warmup_on` / `warmup_min`, off / 10, 5–30 min; not `active`): every generated run session, suggested / scheduled test and inserted template starts with ≥ N min of warm-up (`backend/engine/warmup.py`). Easy-type sessions: the first N min are the warm-up (「含暖身 N 分」, time / TSS / budget unchanged; `derive` + the COROS push split there). Own warm-up shorter: topped up, main set untouched, extra minutes in the session at the easy rate; library intervals carry the floor in `blocks` / `fit` / `variant_adj["warm"]`; text intervals / tests rewrite 「暖身 N 分」; `trim_quality` keeps the floor; applied before the easy runs are sized (week total kept) and last (week_plan, projection). Templates' `full` topped up (`ensure_warm`). AeT drift analysis cuts the planned longer warm-up. Panel switch + minutes (zh-TW / en). Tests: `backend/tests/test_warmup_pref.py` |
