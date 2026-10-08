@@ -76,10 +76,10 @@ engine config / parity mode is the same everywhere.
 ### Caches, single flight and the 課表 timing (SP-362, 2026-10-08)
 
 - **Single flight.** The Status (`_status`, `backend/api/overview.py:45`; 9–13 s cold on the NAS)
-  and the stored-plan inputs (`_compute_inputs`, `backend/api/plan_sessions.py:65`; 3–4 s) keep
+  and the stored-plan inputs (`_compute_inputs`, `backend/api/plan_sessions.py:71`; 3–4 s) keep
   their keyed caches, and a cache miss now runs **one** computation per key
   (`SingleFlight.do`, `backend/singleflight.py:33`; `backend/api/overview.py:87`,
-  `backend/api/plan_sessions.py:79`): the calendar, the suggestion calls, the warm-up thread and an
+  `backend/api/plan_sessions.py:85`): the calendar, the suggestion calls, the warm-up thread and an
   automatic plan run asking for the same key wait for that one result. An exception reaches every
   waiter and is not cached (the next call computes again); a same-thread re-entry runs inline.
   The callers are sync functions in the thread pool or the warm-up thread (never the event loop).
@@ -87,10 +87,10 @@ engine config / parity mode is the same everywhere.
   new files): Dataset → Status → plan inputs; that thread then ends (so a warm-up asked for
   meanwhile is not dropped) and a low-priority thread (`_low_priority`,
   `backend/api/wko5views.py:254`) waits until an automatic plan run has ended
-  (`plan_auto.busy`, `backend/engine/plan_auto.py:888`), re-reads the Dataset, and runs the
+  (`plan_auto.busy`, `backend/engine/plan_auto.py:1104`), re-reads the Dataset, and runs the
   never-fitted calibration and the activity auto-classification; a warm-up during that wait
   makes it run once more. The inputs' flight computes exactly its caller's key
-  (`_inputs_key` → `_build_inputs`, `backend/api/plan_sessions.py:141`, `:182`). After a sync the runner starts the warm-up before the automatic
+  (`_inputs_key` → `_build_inputs`, `backend/api/plan_sessions.py:161`, `:201`). After a sync the runner starts the warm-up before the automatic
   plan run and the calibration (which waits for the plan run, `backend/engine/calibrate.py:348`);
   see wko5-coros-sync.spec.md.
 - **Files stamp.** `_dataset()` no longer scans the FIT folder on every call: the scan is kept
@@ -99,45 +99,54 @@ engine config / parity mode is the same everywhere.
 - **One `/suggestions` per page load.** The floating box and the 課表's 排入測試 ▸ share one GET
   (`AppSuggestions.load(fresh)`, `backend/static/suggestions.js:203`; `sugCount`,
   `backend/static/schedule.html:2929`); a later reload or 排入 asks again.
-- **Calendar timing.** `GET /plan/calendar` (`backend/api/plan_sessions.py:2817`) logs one line per
+- **Calendar timing.** `GET /plan/calendar` (`backend/api/plan_sessions.py:2840`) logs one line per
   request to the app log (`applog.phases`, `backend/applog.py:321`):
   `calendar took 4.2 s days=42 | inputs …, lock_wait …, reconcile …, view …, extras …,
   suggestions …, other …` — WARNING from 3 s; a stale answer (below) adds `stale=sync` / `stale=day`.
   The inputs, the writer lock wait and reconcile / match / snapshot (`_sessions_body`,
-  `backend/api/plan_sessions.py:556`) add their phases through a context variable (`_TIMING` /
+  `backend/api/plan_sessions.py:579`) add their phases through a context variable (`_TIMING` /
   `_took`), so the week view's own response is unchanged.
 - **Stale view while the plan is recomputed (B4, 2026-10-08).** `GET /plan/calendar` alone sets
-  `_STALE_OK` (`backend/api/plan_sessions.py:56`, `:2817`). When its inputs miss the cache only because
+  `_STALE_OK` (`backend/api/plan_sessions.py:60`, `:2840`). When its inputs miss the cache only because
   the data changed (a new dataset generation: a sync imported files; or the 跑後自評 stamp) or the
   day changed, and the user's own settings in the key are the same (key layout: tenant,
-  generation, day, self-ratings, then the settings — `_inputs_key`,
-  `backend/api/plan_sessions.py:141`), it answers the tenant's previous computed inputs (`_last`,
-  kept by `_remember`, `:85`) marked `stale` and starts the fresh computation in a background
-  thread through the same single flight (`_stale_view` / `_refresh`, `:94`, `:116`): once per key; a
-  request or `plan_auto` computing the same key is joined. The response gets
-  `stale: {reason: sync | day, age_s, since}`. **Display only**: no `_ensure` reconcile, no
-  `match_only`, no 每週課表存檔, nothing saved (`_sessions_body`, `:556`); the phases / goal of the
-  view come from the tenant's previous Status (`_status_for`, `:2581`; `status_peek`,
-  `backend/api/overview.py:90`). Every other caller — GET `/sessions`, reconcile, the edits, push,
-  `plan_auto` — gets fresh inputs (it waits for the flight), so a write never uses stale data. A
-  failed background computation is not retried by the stale path: the next calendar load computes
-  it in the request and reports the error. `GET /plan/fresh` (`:591`) = `{updating}` (computes
-  nothing). The page (`staleWatch`, `backend/static/schedule.html:977`) shows a 「同步後更新中」 /
-  「換日更新中」 badge (`stale-badge`, the computed-at time in its hover), disables drag / edit / the
-  context menu / push / 重新計算 while stale (`editable`, `:1011`; the capture guard, `:3039`: 「課表
-  更新中，幾秒後再編輯」), polls `/fresh` every 3 s (5 min cap) and reloads the calendar when done.
-  A deploy / restart has no previous view: that first load still computes in the request; the
-  Dataset build itself (`_dataset()`) is still waited for.
+  generation, day, self-ratings, then the settings from `_K_SETTINGS` on — `_inputs_key`,
+  `backend/api/plan_sessions.py:161`; a test on the real key guards the split), it answers the
+  tenant's previous computed inputs (`_last`, kept by `_remember`, `:91`) marked `stale` and starts
+  the fresh computation in the background through the same single flight (`_stale_view` /
+  `_refresh`, `:106`, `:130`): once per key; a request or `plan_auto` computing the same key is
+  joined. Bounded: `_last` is an LRU of `_LAST_MAX` = 64 tenants (`:61`), a demo tenant (one per
+  visitor) is never kept nor served stale, and the background computations share a 2-thread pool
+  (`_REFRESH_POOL`, `:63`). The response gets `stale: {reason: sync | day, age_s, since}`.
+  **Display only**: no `_ensure` reconcile, no `match_only`, no 每週課表存檔, nothing saved
+  (`_sessions_body`, `:579`); the phases / goal of the view come from the tenant's previous Status
+  (`_status_for`, `:2604`; `status_peek`, `backend/api/overview.py:90`). Every other caller — GET
+  `/sessions`, reconcile, the edits, push, `plan_auto` — gets fresh inputs (it waits for the
+  flight), so a write never uses stale data. A failed background computation is not retried by the
+  stale path: the next calendar load computes it in the request and reports the error.
+  `GET /plan/fresh` (`:615`) = `{updating}` (computes nothing). The page (`staleWatch`,
+  `backend/static/schedule.html:979`) shows a 「同步後更新中」 / 「換日更新中」 badge (`stale-badge`, the
+  computed-at time in its hover) and, while stale, refuses drag / edit / the context menu
+  (`editable`, `:1026`; the capture guard, `:3054`: 「課表更新中，幾秒後再編輯」), the suggestion
+  box's 排入 (`:3063`), 推送 / 重新計算 / 刪除所有過期未完成 / 移除推送 (disabled in the toolbar);
+  it polls `/fresh` every 3 s and reloads the calendar when done. After 5 min without a fresh
+  result it stops polling, drops the edit lock (the server computes fresh inputs for any write)
+  and the badge becomes 「重新整理」 (click reloads, `:1006`). A deploy / restart has no previous
+  view: that first load still computes in the request; the Dataset build itself (`_dataset()`) is
+  still waited for.
 - **COROS push outside the writer lock (B3, 2026-10-08).** COROS takes 20–30 s on the NAS. The
   plan writer lock (`_wlock`) now covers reconcile + save only; every push to the watch runs under
-  a separate push lock (`_plock`, `backend/api/plan_sessions.py:449`) and re-reads the stored plan
+  a separate push lock (`_plock`, `backend/api/plan_sessions.py:472`) and re-reads the stored plan
   once it holds it: the automatic run (`plan_auto._push_after`), SP-358's `_sync_watch`
-  (`:2150`), the manual push (`:2186`), unpush (`:2219`) and the removal after deleting expired
-  sessions (`_unpush_expired`, `:1950`). The page's GET `/sessions` / calendar and the user's edits
+  (`:2173`), the manual push (`:2209`), unpush (`:2242`) and the removal after deleting expired
+  sessions (`_unpush_expired`, `:1973`). The page's GET `/sessions` / calendar and the user's edits
   never wait for COROS. An edit saved while a push runs wins: the push never writes sessions, it
   sends the stored rows as they were when its turn came, and the edit's own `_sync_watch` queues
   on `_plock` and re-sends the edited copy (the fingerprint skips a copy already up to date, so
-  the same version is not uploaded twice). Never take `_wlock` while holding `_plock`.
+  the same version is not uploaded twice). Never take `_wlock` while holding `_plock`. The
+  automatic run checks inside `_wlock` that its inputs (computed before it) are still current —
+  their `inputs_key` (`:258`) against `inputs_key_now` (`:149`) — so a 不排課日期 / 課表偏好 / B2B
+  saved meanwhile, or newer data, is never reverted (see plan-auto.spec.md › Safety).
 
 ## Categories
 
@@ -1089,9 +1098,9 @@ chips and week rows, the workout review 「課表」 card and the 課表統計 p
 TSS / h and `plan_store.rate_rows`, only computed for a row without a TSS).
 
 **Concurrency**: plan writes are serialized by one asyncio lock per event loop
-(`_wlock`, `backend/api/plan_sessions.py:431`), so two tabs or a preview racing a push cannot
+(`_wlock`, `backend/api/plan_sessions.py:454`), so two tabs or a preview racing a push cannot
 generate the same week twice. Pushes to the watch take a separate push lock (`_plock`,
-`backend/api/plan_sessions.py:449`), never the writer lock (SP-362 B3, see Caches above).
+`backend/api/plan_sessions.py:472`), never the writer lock (SP-362 B3, see Caches above).
 
 **Adaptation and automation**: every reconcile path goes through
 `plan_store.reconcile_with_adapt`. It applies `engine/adapt.py` to the generator's current
@@ -1800,8 +1809,8 @@ which one. The response keeps the `coros` field names.
 | POST / DELETE | `/api/v1/overview/plan/rest-days`, `/rest-days/{day}` | `{day}` → add a 休息日 (400 for a past or already blocked day) / remove it (404 when not one); both reconcile (`backend/api/plan_sessions.py:2272`, `backend/api/plan_sessions.py:2256`) |
 | GET | `/api/v1/overview/plan/equivalence` | the time model, LOO backtest per terrain, 推估 flags, sources; memoised per dataset / day / AeT (`backend/api/plan_sessions.py:2414`, `backend/api/plan_sessions.py:2368`) |
 | POST | `/api/v1/overview/plan/equivalence/design` | `{mode, minutes, climb_per_km}` → km, climb, 推估 flag (`backend/api/plan_sessions.py:2419`) |
-| GET | `/api/v1/overview/plan/calendar?start=&end=` | the 課表 page payload (≤ 120 days): sessions with `tss_est`, planned vs actual `vs`, `compliance`, `link_options`, a 強度課's `quality_family` and `steps_family`, `family_titles`; `week_rows`, `prefs`, `goal_climb_per_km`, `plan_notes`, `test_suggestions`, `test_templates`, `expired_open`, provider state; SP-362 B4: `stale: {reason, age_s, since}` when answered from the previous inputs while the fresh ones are computed (display only) (`backend/api/plan_sessions.py:2817`, `backend/api/plan_sessions.py:2847`) |
-| GET | `/api/v1/overview/plan/fresh` | SP-362 B4: `{updating}` — the fresh plan behind a stale calendar is still being computed in the background; computes nothing (`backend/api/plan_sessions.py:591`) |
+| GET | `/api/v1/overview/plan/calendar?start=&end=` | the 課表 page payload (≤ 120 days): sessions with `tss_est`, planned vs actual `vs`, `compliance`, `link_options`, a 強度課's `quality_family` and `steps_family`, `family_titles`; `week_rows`, `prefs`, `goal_climb_per_km`, `plan_notes`, `test_suggestions`, `test_templates`, `expired_open`, provider state; SP-362 B4: `stale: {reason, age_s, since}` when answered from the previous inputs while the fresh ones are computed (display only) (`backend/api/plan_sessions.py:2840`, `backend/api/plan_sessions.py:2870`) |
+| GET | `/api/v1/overview/plan/fresh` | SP-362 B4: `{updating}` — the fresh plan behind a stale calendar is still being computed in the background; computes nothing (`backend/api/plan_sessions.py:615`) |
 | GET | `/api/v1/overview/plan/schedule/page` | `backend/static/schedule.html` (`backend/api/plan_sessions.py:2745`) |
 | GET | `/api/v1/plan/calendar` | 課表訂閱: `{enabled, path, url, window}` of the feed address (`backend/api/calendar_feed.py:88`) |
 | POST / DELETE | `/api/v1/plan/calendar/token` | `{origin?}` → a new secret address (the old one is a 404 from now on) / turn the feed off (`backend/api/calendar_feed.py:93`, `backend/api/calendar_feed.py:104`) |
@@ -2133,6 +2142,7 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 | 2026-10-08 | fix/sp358-359-schedule-delete-swap | SP-358 review | An edit syncs only the sessions it touched (the stale / blocked / missed clean-up in `push_window(only=…)` limited to them; other copies wait for the run / manual push and never show as 失敗). A COROS calendar delete still listed after a 1.5 s pause is a reminder (`check_day` / `check_days`, 「…可能還在，請到 COROS App 確認」, app log), not a failure, no retry. Fixed the 課表 chip class glued as `st-donecp-green` (done chips lost the ✓ and compliance tint) |
 | 2026-10-08 | perf/sp362-batch1 | SP-362 | 課表頁載入效能第一批: single flight for `_status` / `_compute_inputs` (one computation per key, exceptions to every waiter, not cached; `backend/singleflight.py`); warm-up order Dataset → Status → plan inputs → (after plan_auto) calibration / auto-classification, plan inputs warmed at start-up too; the FIT-folder stamp kept 5 s while the folders keep their mtimes (`files_changed` on import / purge); one `/suggestions` GET per 課表 page load (shared by the floating box and 排入測試 ▸); `GET /plan/calendar` logs its phases (inputs, lock_wait, reconcile, view, extras, suggestions) to the app log (`applog.phases`) |
 | 2026-10-08 | perf/sp362-batch2-plan | SP-362 B3 / B4 | 課表頁載入效能第二批（課表側）. B3: every COROS push runs under a new push lock (`_plock`, `backend/api/plan_sessions.py:449`) instead of the writer lock and re-reads the stored plan first — `plan_auto.run` (inputs before the lock, `_push_after`, `backend/engine/plan_auto.py:682`, `:802`), `_sync_watch` (`:2150`), manual push / unpush (`:2186`, `:2219`), `_unpush_expired` (`:1950`); GET `/sessions` / calendar and edits no longer wait for COROS; an edit made during a push wins and its own watch sync re-sends it. B4: `GET /plan/calendar` answers the previous inputs marked `stale` {reason sync / day, age_s, since} after new data or a new day (same user settings), recomputes in the background through the single flight (`_stale_view` / `_refresh`, `backend/api/plan_sessions.py:94`, `:116`), display only (no reconcile / match / snapshot / write, `_sessions_body`, `:556`; previous Status via `status_peek`, `backend/api/overview.py:90`); `GET /plan/fresh` `{updating}` (`:591`); the 課表 page's 「同步後更新中」 / 「換日更新中」 badge, editing disabled while stale, poll + reload (`backend/static/schedule.html:977`, `:3039`); inputs key reordered (data parts before settings, `_inputs_key`, `:141`) |
+| 2026-10-08 | perf/sp362-batch2-plan | SP-362 batch-2 review | `_build_inputs` records `inputs_key` (`backend/api/plan_sessions.py:258`) and `inputs_key_now` (`:149`) lets `plan_auto.run` re-check it inside `_wlock` (H1); `_last` is an LRU of 64 tenants, demo tenants never kept / served stale, refreshes in a 2-worker pool (`:61`, `:63`, `:91`, `:106`; M3); the 課表 page drops the edit lock and offers 「重新整理」 after 5 min of polling, and also refuses 刪除所有過期未完成 / 移除推送 / the suggestion box's 排入 while stale (`backend/static/schedule.html:979`, `:1006`, `:3063`; L5); anchors of the B3 / B4 bullets re-pointed |
 | 2026-10-08 | feat/sp371-debug-api | SP-371, docs/debug-api.md | Debug API for AI agents: read-only `/api/v1/debug/{activity,plan,day,thresholds,sync,export/config}` (`backend/api/debug.py:321`–`:548`), Bearer-token auth with the server PIN `TRC_DEBUG_PIN`, hashed tokens, scopes, expiry, revoke, tenant binding, per-token / per-IP limits and the `debug_audit` log (`backend/debug_auth.py:384`); `/debug/day` = the calendar's `_decorate` on an in-memory `match_only` (no `sessions()`, no writes, no COROS call); 設定 › 進階 Debug API block (`backend/static/debug_api.js`); tables `debug_tokens` / `debug_audit` (`backend/db/models.py:429`), setting `debug.api.enabled` |
 | 2026-10-08 | feat/sp371-debug-api | SP-371 security review | Debug API hardening: token also in `X-TRC-Debug-Token` next to the password proxy's `Authorization` (`backend/debug_auth.py:351`); token checked before the IP block, which only refuses failed attempts; failures aggregated in `debug_auth_failures` (`backend/db/models.py:468`), 429 / 503 never stored; per-tenant bucket and a 2-call gate; `scrub` on name segments + JWT / opaque / `applog.redact` / coordinates in strings, export an allow-list (`backend/engine/debug_view.py:99`–`:524`); `read:gps` scope, `read:plan` for the activity's session row; strict bounded input, `AuditedRoute` 400 / audited 500 (`backend/api/debug.py:78`); same-origin settings writes; PIN failures logged and counted; routes out of OpenAPI; CLI header / https / no redirect / env-only token |
 | 2026-10-08 | code-sync（SP-90, SP-95, SP-96, SP-98, SP-109, SP-114, SP-115, SP-117, SP-119, SP-120, SP-191, SP-216, SP-263, SP-270, SP-271, SP-272, SP-273, SP-280, SP-285, SP-71, SP-100, SP-105, SP-122, SP-231, SP-258, SP-259, SP-286） | N/A | Re-anchored the whole spec: each anchor moved once from the commit that wrote its line (~410 of 510), then the ones written stale or still off checked by hand against the symbol, the route decorator or the code text (≈ 120 fixed, incl. the whole API table). New: the week-plan rules added after 2026-10-04 (taper by race, two A races, 中間訓練 / B races, B-race notes, 恢復期 / 回量期, ultra 轉換期, multi-day 百岳, the walking cap, illness, strength by phase / moves, 平衡／腳踝, injuries, carb note), Categories = the platform-neutral app type, compliance intensity grading, the 課表 page's fuel / self-rating / altitude lines, the 7 / 42 / 90-day PMC, 每週存檔 and its API row, the feasibility API row, the feature test files; Decisions Log (9) and Open Questions (11) |

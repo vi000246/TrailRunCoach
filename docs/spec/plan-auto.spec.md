@@ -63,6 +63,8 @@ plan_auto.after_sync() ── asyncio task, own DB session (run_safe never raise
 plan_auto.run()  ── inputs first (API._inputs, no lock; SP-362 B3)
       ▼
 _run()  ── plan writer lock (api/plan_sessions._wlock, shared with the page)
+      │  inputs_key ≠ the key now (a settings edit / newer data meanwhile) → release, recompute,
+      │  again (RUN_TRIES 3; the last try computes inside the lock)
       │  same data stamp as last run → noop (nothing changed, nothing pushed)
       ▼
 plan_store.reconcile_with_adapt()
@@ -93,10 +95,10 @@ Other entry points:
 - **CP change**: `api/plan.py` calls `plan_auto.after_thresholds()` after a threshold edit; that
   run (trigger `cp_change`) also starts when the stamp is unchanged (see 「CP change」 below).
 - **Settings**: `api/calib.py` calls `plan_auto._after_settings()` (trigger `settings`,
-  `backend/engine/plan_auto.py:915`) after a 進階設定 value the plan reads changed (the Zone 3
+  `backend/engine/plan_auto.py:1131`) after a 進階設定 value the plan reads changed (the Zone 3
   unlock rule, SP-295). It goes through the same stamp check without `force` (see Known limits).
 - **Week snapshot** (SP-71): the end of `_run` records the week in `plan_week_snapshots`
-  (`plan_history.record_safe`, `backend/engine/plan_auto.py:796-798`; `PlanWeekSnapshot`,
+  (`plan_history.record_safe`, `backend/engine/plan_auto.py:881-883`; `PlanWeekSnapshot`,
   `backend/db/models.py:224`), so a sync alone records it with
   no page opened; the 課表 page reads them through `GET /api/v1/overview/plan/history`
   (`backend/api/plan_sessions.py:2810`).
@@ -123,7 +125,7 @@ Other entry points:
 | `plan.auto.state` | — | internal: last data stamp, last phase, last CP, Zone 5 / re-entry keys, rejected fingerprints |
 | `plan.push.provider` | coros | the push target (`backend/sync/workout_targets/`); Garmin / intervals.icu are stubs, not enabled |
 
-**Push window and moved sessions** (SP-358, `push_window`, `backend/engine/plan_auto.py:467`): the
+**Push window and moved sessions** (SP-358, `push_window`, `backend/engine/plan_auto.py:535`): the
 run pushes the active sessions of the window, removes pushed ones that left the plan / were
 missed / sit on a blocked day, and re-sends the sessions whose pushed copy sits in the window
 although they moved out of it (dragged to next week: the copy would otherwise stay on the old
@@ -132,7 +134,7 @@ COROS accepted but still lists after a short pause is not a failure: the result 
 `check_days` (a reminder to check the COROS app; `coros_workouts._remove_remote`). The 課表 page's
 own changes call it with `only` = the changed sessions (`_sync_watch`,
 `backend/api/plan_sessions.py:2024`): everything — the window push and the stale / blocked /
-missed clean-up — is limited to them (`backend/engine/plan_auto.py:493`); other leftover copies
+missed clean-up — is limited to them (`backend/engine/plan_auto.py:561`); other leftover copies
 are left to this run and the manual push. `window` False (自動推送 off) re-sends / removes only
 copies already on the watch. A failure there adds a `failed` row (trigger `edit`) to the change log.
 
@@ -640,7 +642,7 @@ path for new tables. Each row holds:
 
 Since SP-362 B3 the run writes its `applied` / `pending` row under the writer lock with push
 `{status: pushing}` (or `held` / `off`) and fills the push outcome in once the push, outside the
-lock, is done (`_set_push`, `backend/engine/plan_auto.py:477`; `autoplan.js` shows 「推送到手錶中…」
+lock, is done (`_set_push`, `backend/engine/plan_auto.py:523`; `autoplan.js` shows 「推送到手錶中…」
 meanwhile). A change that only the push makes (no session item) gets its `applied` row after the
 push, as before. The `pending` row must exist before the lock is released: a page load's
 `_ensure` checks it and does not apply a waiting proposal.
@@ -686,16 +688,39 @@ overview has `data-log="none"`. The settings are in 課表偏好 (above).
 - One run at a time, enforced by the shared plan writer lock. Concurrent runs: the second one
   finds the same stamp and does nothing (the state is saved before the lock is released).
 - The writer lock covers reconcile + save + the log row + the state only (SP-362 B3,
-  `run` / `_run` / `_push_after`, `backend/engine/plan_auto.py:682`, `:702`, `:802`). The push to
+  `run` / `_run` / `_push_after`, `backend/engine/plan_auto.py:744`, `:780`, `:887`). The push to
   the watch (COROS 20–30 s on the NAS) runs after it under the push lock (`_plock`,
   `backend/api/plan_sessions.py:449`), shared with the page's pushes and SP-358's `_sync_watch`;
   so the 課表 page's GET and the user's edits never wait for COROS. The push re-reads the stored
   plan once it holds the push lock: an edit saved before that goes out as edited; an edit saved
   during the push is re-sent by its own `_sync_watch`, queued on the same lock (owner rule: the
   user's edit wins; the push never writes sessions). 復原 and 拒絕 follow the same split
-  (`undo` / `reject`, `:879`, `:848`): the 課表待確認 copy is deleted from the plan under the
+  (`undo` / `reject`, `:1007`, `:974`): the 課表待確認 copy is deleted from the plan under the
   writer lock and taken off the watch after it (`_remove_notice(remote=…)` / `_remove_remote`,
-  `:430`, `:448`).
+  `:437`, `:455`).
+- **Inputs current inside the lock** (review H1, `_inputs_changed` / `RUN_TRIES`,
+  `backend/engine/plan_auto.py:731`, `:728`): the run's inputs are computed before the writer
+  lock, so inside it their `inputs_key` (`api/plan_sessions._build_inputs`) is compared with the
+  key now (`inputs_key_now`). Different — a 不排課日期 / 休息日 / 課表偏好 / accepted B2B saved
+  meanwhile, or a newer dataset generation (COROS then TP, two syncs) — the lock is released, the
+  inputs recomputed outside and the run tries again (twice); the last try computes them inside
+  the lock, as before B3. Without this the run reconciled the stored plan with the old inputs:
+  the user's edit was reverted and pushed, and the data-only stamp kept it lost until the next
+  activity; or an older generation was applied after a newer one. Inputs without a key (tests
+  that replace the computation) are taken as current.
+- **Interrupted push** (review M2, `_push_after` / `_interrupted` / `_push_phase`, `:887`, `:908`,
+  `:921`): cancelled (shutdown, the task cancelled while it waits for `_plock` or COROS) or failing
+  outside the push itself (a locked DB writing the row), the row's push says `interrupted`
+  (shielded, best effort; `autoplan.js` 「推送中斷，下次推送會補上」). A row still `pushing` whose
+  push is not running in this process (`_PUSHING`, `:400`) reads as `interrupted` too
+  (`entry_dict`, `:403`), so it never says 推送中 forever after a restart. The 課表待確認 copies to
+  take off the watch are kept in `plan.auto.state.remote` (`_pending_remote`, `:477`, at most
+  `REMOTE_KEEP` 20) under the writer lock and dropped once off (`_forget_remote`, `:488`, briefly
+  under the writer lock after the push lock); the next run — a no-op one too — retries the rest.
+- **The notice push and approve / reject** (review L6, `:932`): a held run's 課表待確認 is pushed
+  before an approve / reject of its proposal can take it off — the run queues on `_plock` right
+  after releasing `_wlock` with no await in between and `asyncio.Lock` wakes waiters in order — and
+  it is re-read from the store under `_plock` (one already gone is not pushed).
 - A push failure is stored in the change-log row. It never raises into the run or the sync.
   A crashed run writes a `failed` row.
 - The push sends nothing when every session in the window is already up to date on COROS.
@@ -713,7 +738,7 @@ overview has `data-log="none"`. The settings are in 課表偏好 (above).
   user.
 - A 進階設定 change that starts a `settings` run (SP-295) doesn't re-plan the stored sessions until
   the next sync: `_run` returns noop 「沒有新的活動」 whenever the data stamp and the CP are unchanged
-  (`backend/engine/plan_auto.py:685`), the stamp (`plan_auto.stamp`) has no settings / Zone 3 rule
+  (`backend/engine/plan_auto.py:795`), the stamp (`plan_auto.stamp`) has no settings / Zone 3 rule
   part, and `run_safe` doesn't pass `force`. The page itself re-reads the rule (`z3_rule_stamp` in
   the status / plan cache keys). Likewise a questionnaire save (SP-291's `EX.stamp()` is in the
   plan / status cache keys, not in plan_auto's stamp) starts no run. Behaviour as of 2026-10-08,
@@ -815,6 +840,7 @@ The owner's calls, gathered from the sections above (each is described there wit
 
 | Date | Type | Feature SRS | Summary |
 |------|------|-------------|---------|
+| 2026-10-08 | fix | SP-362 batch-2 review | H1: `run` re-checks the inputs' key inside `_wlock` and retries (`_inputs_changed`, `RUN_TRIES`, `backend/engine/plan_auto.py:728-778`), so a settings edit saved while it computed is not reverted and an older generation never lands after a newer one; M2: interrupted pushes (`_push_after` / `_interrupted`, `:887`, `:908`; `entry_dict` `:403`) and the pending watch removals in `plan.auto.state.remote` (`:477`, `:488`); L6: the notice re-read under `_plock` (`:932`). Tests in `backend/tests/test_push_outside_lock_sp362.py` (blackout while waiting, two generations, cancel mid-push, reject / approve during the notice push, undo during a run's push) |
 | 2026-10-08 | perf | SP-362 B3 | The COROS push left the plan writer lock: `run` computes the inputs before the lock, `_run` (`backend/engine/plan_auto.py:702`) holds `_wlock` for reconcile / save / log row (push `pushing`) / state / week snapshot, `_push_after` (`:802`) pushes the notice or the window under `api/plan_sessions._plock` from the stored plan re-read at that point and fills the row in (`_set_push`, `:477`); `undo` / `reject` push / remove after the lock (`:879`, `:848`); an edit during a push wins (its `_sync_watch` re-sends it); `autoplan.js` 「推送到手錶中…」 for `pushing` (`backend/static/autoplan.js:70`). Tests: `backend/tests/test_push_outside_lock_sp362.py` |
 | 2026-10-08 | bugfix | SP-370 follow-up | `compliance.streak_red` (`backend/engine/compliance.py:161-167`) exempts a foot-sport swap only when time and TSS are both measured and not red (the same basis as the ◐ softening); a swap with no TSS counts as red |
 | 2026-10-08 | bugfix | SP-370 (owner decision 2026-10-08) | Rule E's red streak (`adapt._red_streak`, `backend/engine/adapt.py:492-499`) counts `compliance.streak_red` (`backend/engine/compliance.py:161-167`): a foot-sport type mismatch alone is not red for the streak; a non-foot sport and time / TSS reds are. The compliance levels themselves: overview.spec.md › Compliance |
