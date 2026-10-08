@@ -336,7 +336,7 @@ main > section.tab-off { display: none; }
         <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.syncfail.help" title="同步時下載或匯入失敗的活動會記在這裡，之後的同步只重試這幾筆，不必重新列出所有活動。每筆最多自動重試 5 次或試滿 7 天，之後停止，可以按「重試」再試。沒有 FIT 檔的手動紀錄也列在這裡，之後有檔案了可以按「重試」。">?</button></div>
         <ul class="failed" id="s-failed"></ul></div>
       <div class="row"><button type="button" id="s-check" data-i18n="settings.synccheck.button">完整檢查（找漏掉的活動）</button>
-        <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.synccheck.help" title="列出手錶／平台上的全部活動，用活動編號跟這裡的資料比對：平台有、這裡沒有的，可以按「補下載」只下載這幾筆；這裡有、平台沒有的只列出來，不會刪除；另外列出還在下載失敗清單的。COROS 大約要 40～60 秒，檢查時不能同步同一個來源，也不會改變同步進度。每週會自動檢查最近 60 天，缺的直接補下載。">?</button>
+        <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.synccheck.help" title="列出手錶／平台上的全部活動，用活動編號跟這裡的資料比對：平台有、這裡沒有的，可以按「補下載」只下載這幾筆；這裡有、平台沒有的只列出來，不會刪除；另外列出還在下載失敗清單的。COROS 大約要 40～60 秒，檢查時不能同步同一個來源，也不會改變同步進度。有開自動同步（開啟網站時自動同步或每日自動同步）時，每週也會自動檢查最近 60 天，缺的直接補下載；TrainingPeaks 上排了但沒做的課另外計數，不會下載。">?</button>
         <span class="meta" id="s-check-st"></span></div>
       <ul class="failed" id="s-check-res"></ul>
       <p class="meta" id="s-chart-note">「圖表資料來源」決定圖表、總覽和功率計算機讀哪一份資料；儲存後重新整理頁面就會改用新來源
@@ -1223,18 +1223,26 @@ async function loadCheck() {
     const L = s.last, W = s.weekly;
     if (!L && !W) continue;
     const parts = [];
-    if (L && L.status === "failed") parts.push(esc(t("settings.synccheck.failed_run", { when: shortTime(L.at), err: L.error || "" })));
+    const good = (x) => x && (x.status === "ok" || x.status === "partial");     // aborted / failed = not a result
+    if (L && !good(L)) parts.push(esc(t("settings.synccheck.failed_run", { when: shortTime(L.at), err: L.error || L.status || "" })));
     else if (L) {
+      const left = (L.missing || []).length;
       parts.push(esc(t("settings.synccheck.result", { when: shortTime(L.at), remote: L.remote ?? 0, local: L.local ?? 0 })));
-      if (!L.missing_n && !L.local_only_n && !L.failed_n) parts.push(esc(t("settings.synccheck.all_good")));
+      if (!L.missing_n && !L.local_only_n && !L.failed_n && !L.planned_n) parts.push(esc(t("settings.synccheck.all_good")));
       if (L.missing_n) parts.push(`<span title="${esc(idList(L.missing, L.missing_n))}">${esc(t("settings.synccheck.missing", { n: L.missing_n }))}</span>`
-        + (L.missing.length ? ` <button type="button" data-fill="${src}">${esc(t("settings.synccheck.fill"))}</button>` : ""));
+        + (left ? ` <button type="button" data-fill="${src}">${esc(t("settings.synccheck.fill"))}</button>` : "")
+        // the stored list holds at most 500: fill those, then check again for the rest
+        + (L.missing_n > left ? ` <span class="meta">${esc(t(left ? "settings.synccheck.more" : "settings.synccheck.more_after",
+          { k: left, n: L.missing_n - left }))}</span>` : ""));
       if (L.local_only_n) parts.push(`<span title="${esc(t("settings.synccheck.local_only_hint") + "\n" + idList(L.local_only, L.local_only_n))}">${esc(t("settings.synccheck.local_only", { n: L.local_only_n }))}</span>`);
       if (L.failed_n) parts.push(`<span title="${esc(idList(L.failed, L.failed_n))}">${esc(t("settings.synccheck.failed_n", { n: L.failed_n }))}</span>`);
-      if (L.filled) parts.push(`<span class="meta">${esc(t(L.filled.errors ? "settings.synccheck.filled_err" : "settings.synccheck.filled",
-        { when: shortTime(L.filled.at), n: L.filled.downloaded || 0, e: L.filled.errors || 0 }))}</span>`);
+      if (L.planned_n) parts.push(`<span title="${esc(t("settings.synccheck.planned_hint") + "\n" + idList(L.planned, L.planned_n))}">${esc(t("settings.synccheck.planned", { n: L.planned_n }))}</span>`);
+      if (L.filled) parts.push(`<span class="meta">${esc(!good(L.filled)
+        ? t("settings.synccheck.fill_failed", { when: shortTime(L.filled.at), n: L.filled.downloaded || 0, err: L.filled.error || L.filled.status || "" })
+        : t(L.filled.errors ? "settings.synccheck.filled_err" : "settings.synccheck.filled",
+          { when: shortTime(L.filled.at), n: L.filled.downloaded || 0, e: L.filled.errors || 0 }))}</span>`);
     }
-    if (W) parts.push(`<span class="meta">${esc(W.status === "failed" ? t("settings.synccheck.weekly_failed", { when: shortTime(W.at) })
+    if (W) parts.push(`<span class="meta">${esc(!good(W) ? t("settings.synccheck.weekly_failed", { when: shortTime(W.at) })
       : t("settings.synccheck.weekly", { when: shortTime(W.at), n: W.fetched || 0 }))}</span>`);
     rows.push(`<li><b>${esc(name)}</b> ${parts.join(" · ")}</li>`);
   }

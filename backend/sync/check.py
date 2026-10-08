@@ -522,12 +522,16 @@ def weekly_due(last: Optional[dict], now: datetime) -> bool:
 async def weekly_tick(session_factory: Callable, now: Optional[datetime] = None, athlete_id: int = 1,
                       start_fn: Optional[Callable] = None) -> list[str]:
     """Start the weekly check of every source an automatic sync would start (the 資料來源 in
-    use, enabled, logged in, idle) whose last weekly check is a week old. The sources started."""
+    use, enabled, logged in, idle) whose last weekly check is a week old. The sources started.
+    No switch of its own (owner, review #8): off while automatic syncing is off — neither
+    「開啟網站時自動同步」 nor a daily time."""
     now = now or datetime.now(timezone.utc)
     start_fn = start_fn or (lambda src, aid: start(src, aid, WEEKLY, session_factory=session_factory))
     async with session_factory() as db:
-        todo, _skipped = await runner.auto_plan(db, athlete_id)
         repo = SettingsRepository(db, athlete_id)
+        if not (await repo.get("sync.auto_on_open.enabled") or await repo.get("sync.schedule.daily_time")):
+            return []
+        todo, _skipped = await runner.auto_plan(db, athlete_id)
         due = [s for s in todo if weekly_due(await repo.get(key(s, WEEKLY)), now)]
     started = []
     for src in due:
