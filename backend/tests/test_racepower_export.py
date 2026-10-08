@@ -1,21 +1,17 @@
 """
-賽事計算機: CSV export of the plan, and the per-segment, time-of-day heat
+賽事計算機: the per-segment, time-of-day heat
 correction (weather hourly rows → segment ETA → Hadley penalty → Mᵢ, iterated
-to a fixed point).
+to a fixed point). SP-365: the CSV export is gone.
 """
 from __future__ import annotations
 
-import csv
 import datetime as dt
-import io
-from urllib.parse import unquote
 
 import pytest
 
 from backend.engine.racepower import course as CO
 from backend.engine.racepower import env as ENV
 from backend.engine.racepower import grade_model as GM
-from backend.engine.racepower import gpx as GPX
 from backend.engine.racepower import planner as PL
 from backend.engine.racepower import weather as WX
 from backend.tests.test_racepower_v2 import RE0, fake_inputs, fake_v1, synthetic_track
@@ -206,7 +202,7 @@ def test_no_hourly_or_no_start_time_falls_back_and_says_so():
     assert any("超出逐時預報範圍" in w for w in part["warnings"])
 
 
-# ---- API: /plan with hourly, /export/csv ---------------------------------------------------
+# ---- API: /plan with hourly; the CSV export is gone (SP-365) ------------------------------
 
 @pytest.fixture()
 def client(monkeypatch):
@@ -225,76 +221,29 @@ def client(monkeypatch):
     return TestClient(app)
 
 
-def read_csv(r):
-    raw = r.content
-    assert raw.startswith(b"\xef\xbb\xbf")                    # UTF-8 BOM for Excel
-    rows = list(csv.reader(io.StringIO(raw.decode("utf-8-sig"))))
-    i = rows.index([])
-    return rows[:i], rows[i + 1], rows[i + 2:]
-
-
-def test_csv_export_matches_the_plan(client):
+def test_api_plan_with_hourly_heat(client):
     body = {"type": "road", "distance_km": 21.1, "mode": "auto", "date": DATE, "start_time": "06:00",
             "stops": [{"km": 10, "minutes": 2}], "course": {"manual": {"km": 21.1, "split": "km"}},
             "hourly": rows_from(hot_later), "name": "台北 半馬"}
-    plan = client.post("/api/v1/racepower/plan", json=body).json()
-    r = client.post("/api/v1/racepower/export/csv", json=body)
+    r = client.post("/api/v1/racepower/plan", json=body)
     assert r.status_code == 200, r.text
-    assert r.headers["content-type"].startswith("text/csv")
-    fname = unquote(r.headers["x-filename"])
-    assert fname == f"賽事計算機_台北_半馬_{DATE}.csv" and "filename*=UTF-8''" in r.headers["content-disposition"]
-    head, cols, rows = read_csv(r)
-    kv = {x[0]: x[1:] for x in head if x}
-    assert kv["路線"] == ["台北 半馬"] and kv["模式"][0].startswith("通通幫我算")
-    assert kv["CP W"] == ["300", "活動"] and kv["TTE s"][0] == "3000" and kv["Riegel k"][0] == "-0.07"
-    assert kv["策略"] == ["均速"] and kv["熱修正"][0].startswith("逐段") and kv["熱修正"][1] == "推估"
-    assert kv["距離 km"] == ["21.1"] and "計算時間" in kv and kv["補給站"] == ["10 km 2 分"]
-    assert cols[:4] == ["段", "天", "起點 km", "終點 km"] and "溫度 °C" in cols and "ETA（含補給）" in cols
-    segs, total = rows[:-1], rows[-1]
-    assert len(segs) == len(plan["segments"]) == 22 and total[0] == "合計"
-    c = {k: cols.index(k) for k in cols}
-    for row, s in zip(segs, plan["segments"]):
-        assert int(row[c["段"]]) == s["i"]
-        assert float(row[c["目標功率 W"]]) == round(s["power"])
-        assert float(row[c["M"]]) == approx(s["M"], abs=1e-4)
-        assert float(row[c["溫度 °C"]]) == approx(s["temp_c"], abs=0.05)
-        assert row[c["ETA（含補給）"]] == s["eta"] and row[c["標記"]] == "推估"
+    plan = r.json()
+    assert len(plan["segments"]) == 22 and plan["summary"]["heat"]["mode"] == "hourly"
+    assert {s["heat_src"] for s in plan["segments"]} != {"single"}
     # the last ETA includes the aid stop: the finish clock
-    assert segs[-1][c["ETA（含補給）"]] == plan["summary"]["finish_eta"] == total[c["ETA（含補給）"]]
-    h, m, s_ = (int(x) for x in total[c["分段時間"]].split(":"))
-    assert h * 3600 + m * 60 + s_ == round(plan["summary"]["time_s"])
+    assert plan["segments"][-1]["eta"] == plan["summary"]["finish_eta"]
 
 
-def test_csv_export_gpx_and_hike(client):
-    tr = synthetic_track({"len": 16000, "z": lambda x: 2600 + (x * 0.1 if x < 8000 else (16000 - x) * 0.1)})
-    tr.name = "玉山 測試"
-    cid = client.post("/api/v1/racepower/course",
-                      files={"file": ("h.gpx", GPX.write_gpx(tr).encode(), "application/gpx+xml")}).json()["course_id"]
-    t = client.post("/api/v1/racepower/export/csv", json={"type": "trail", "course": {"course_id": cid}})
-    assert t.status_code == 200, t.text
-    # named after the GPX track and (no race date given) the day computed
-    assert unquote(t.headers["x-filename"]) == f"賽事計算機_玉山_測試_{dt.date.today().isoformat()}.csv"
-    head, cols, rows = read_csv(t)
-    assert len(rows) - 1 == len(client.post("/api/v1/racepower/plan",
-                                            json={"type": "trail", "course": {"course_id": cid}}).json()["segments"])
-    hk = client.post("/api/v1/racepower/export/csv", json={"type": "baiyue", "course": {"course_id": cid},
-                                                           "day_splits_km": [8], "start_time": "05:30"})
-    assert hk.status_code == 200, hk.text
-    head, cols, rows = read_csv(hk)
-    kv = {x[0]: x[1:] for x in head if x}
-    assert kv["類型"] == ["百岳"] and "總移動時間" in kv and kv["海拔適應"] == ["未適應"]
-    c = cols.index("天")
-    assert {r[c] for r in rows[:-1]} == {"1", "2"}
+def test_csv_export_is_gone(client):
+    """SP-365: no CSV export — no endpoint, no button, no module."""
+    import importlib.util
 
-
-def test_csv_names_the_trail_even_strategy_even_effort():
-    """SP-224: on trail the 「even」 strategy is even effort (the pace follows the grade); road keeps 均速."""
-    from backend.engine.racepower import csvplan as CSV
-    at = dt.datetime(2026, 10, 6, 8, 0)
-    for kind, label in (("trail", "均勻努力"), ("road", "均速")):
-        plan = {"type": kind, "summary": {"strategy": "even", "km": 10.0}, "used": {}}
-        rows = {r[0]: r[1:] for r in CSV.header_rows(plan, name="x", date=None, computed_at=at) if r}
-        assert rows["策略"] == [label]
-    plan = {"type": "trail", "summary": {"strategy": "positive", "strategy_amount": 0.03, "km": 10.0}, "used": {}}
-    rows = {r[0]: r[1:] for r in CSV.header_rows(plan, name="x", date=None, computed_at=at) if r}
-    assert rows["策略"] == ["前快後慢 3.0%"]
+    from backend.api import racepower as RP
+    from backend.engine.racepower import calc as CALC
+    body = {"type": "road", "distance_km": 10, "course": {"manual": {"km": 10, "split": "km"}}}
+    assert client.post("/api/v1/racepower/export/csv", json=body).status_code in (404, 405)
+    assert not any(getattr(rt, "path", "").endswith("/export/csv") for rt in RP.router.routes)
+    assert not hasattr(CALC, "export_csv") and not hasattr(RP, "export_csv")
+    assert importlib.util.find_spec("backend.engine.racepower.csvplan") is None
+    html = (RP.STATIC / "racepower.html").read_text(encoding="utf-8")
+    assert 'id="csv"' not in html and "export/csv" not in html and "匯出 CSV" not in html
