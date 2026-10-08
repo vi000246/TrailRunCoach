@@ -109,9 +109,29 @@ def _log_run(source: str, trigger: str, result: dict, clock: SyncClock) -> None:
 
 
 def is_busy(source: str) -> bool:
-    """A sync, a check or a deletion of the source is running. A yielding holder (the
-    self-rating job, SP-362 A5) does not count: a sync asks it to stop and waits."""
-    return source in _BUSY and source not in _YIELD
+    """A sync, a check or a deletion of the source is running (or a check is claimed and
+    about to run, `reserve`). A yielding holder (the self-rating job, SP-362 A5) does not
+    count: a sync asks it to stop and waits."""
+    return (source in _BUSY and source not in _YIELD) or source in _RESERVED
+
+
+_RESERVED: set[str] = set()
+
+
+def reserve(source: str) -> bool:
+    """Claim the source for a background run that starts on the next loop turn (a 完整檢查,
+    sync/check.start): False when it is busy. Callers that check is_busy see it busy from
+    now on; the run itself still takes hold() in stream(). release() when the run ends."""
+    if source not in SOURCES:
+        raise ValueError(f"unknown source {source!r}")
+    if is_busy(source):
+        return False
+    _RESERVED.add(source)
+    return True
+
+
+def release(source: str) -> None:
+    _RESERVED.discard(source)
 
 
 @contextlib.contextmanager
