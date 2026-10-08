@@ -162,3 +162,32 @@ def test_relock_may_not_be_shorter_than_the_max_gap(monkeypatch):
         await API.clear_manual("z3_unlock_max_gap_days", db=s)
         await s.close()
     _run(go())
+
+
+def test_a_stored_invalid_pair_is_flagged_not_changed():
+    """Review L5: a pair saved before the check (re-lock < max gap) shows a warning next to both rows of the
+    list; the values stay as they are."""
+    from pathlib import Path
+    from backend.api import calib as API
+    from backend.settings.repository import SettingsRepository
+
+    async def go():
+        s = await _session()
+        repo = SettingsRepository(s, 1)
+        for name, v in (("z3_unlock_max_gap_days", 14.0), ("z3_relock_days", 10.0)):
+            await repo.set(CAL.key(name), {"value": v, "se": None, "n": 0, "fitted_at": "2026-10-01", "source": "user"})
+        await s.commit()
+        rows = {r["name"]: r for r in (await API.list_calibration(db=s))["items"]}
+        for name in ("z3_unlock_max_gap_days", "z3_relock_days"):
+            assert "10" in rows[name]["warn"] and "14" in rows[name]["warn"]
+        assert rows["z3_relock_days"]["value"] == 10 and rows["z3_unlock_max_gap_days"]["value"] == 14
+        assert not rows["z3_unlock_weeks"].get("warn") and not rows["heat_partial_hadley"].get("warn")
+        await repo.set(CAL.key("z3_relock_days"), {"value": 21.0, "se": None, "n": 0, "fitted_at": "2026-10-01",
+                                                   "source": "user"})
+        await s.commit()
+        rows = {r["name"]: r for r in (await API.list_calibration(db=s))["items"]}
+        assert not any(r.get("warn") for r in rows.values())
+        await s.close()
+    _run(go())
+    page = (Path(API.__file__).resolve().parents[1] / "static" / "settings.html").read_text(encoding="utf-8")
+    assert "it.warn" in page

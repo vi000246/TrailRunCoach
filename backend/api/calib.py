@@ -42,20 +42,38 @@ async def _check_pair(repo: SettingsRepository, name: str, value) -> None:
     from backend.engine import advanced_params as AP
     if name not in AP.Z3_RULE.values():
         return
-    reg = CAL._registry()
-    cur = {}
-    for n in AP.Z3_RULE.values():
-        stored = await repo.get(CAL.key(n)) or {}
-        cur[n] = stored.get("value") if stored.get("value") is not None else reg[n].default
+    cur = await _z3_values(repo)
     msg = AP.z3_pair_error(name, value, cur.__getitem__)
     if msg:
         raise HTTPException(400, msg)
 
 
+async def _z3_values(repo: SettingsRepository) -> dict:
+    """{item name: value in effect} of the Zone 3 unlock items: the stored manual value, else the default."""
+    from backend.engine import advanced_params as AP
+    reg = CAL._registry()
+    cur = {}
+    for n in AP.Z3_RULE.values():
+        stored = await repo.get(CAL.key(n)) or {}
+        cur[n] = stored.get("value") if stored.get("value") is not None else reg[n].default
+    return cur
+
+
 @router.get("")
 async def list_calibration(db: AsyncSession = Depends(get_db)):
+    """Every item; a stored Zone 3 pair that breaks 重新上鎖天數 ≥ 最長幾天不跑 (saved before that check, SP-295
+    review) carries `warn` on both rows — shown next to them, the values are not changed."""
+    from backend.engine import advanced_params as AP
     repo = SettingsRepository(db, current_athlete_id())
-    return {"items": [CAL.describe(n, await repo.get(CAL.key(n))) for n in sorted(CAL._registry())]}
+    items = [CAL.describe(n, await repo.get(CAL.key(n))) for n in sorted(CAL._registry())]
+    cur = await _z3_values(repo)
+    gap, relock = AP.Z3_RULE["gap"], AP.Z3_RULE["relock"]
+    warn = AP.z3_pair_error(relock, cur[relock], cur.__getitem__)
+    if warn:
+        for it in items:
+            if it.get("name") in (gap, relock):
+                it["warn"] = warn
+    return {"items": items}
 
 
 class Manual(BaseModel):
