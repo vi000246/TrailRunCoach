@@ -20,7 +20,8 @@
 ## Open Questions
 
 - [ ] 「負荷」的 RPE 改成每一檔各自換算：預設用 TSS 的定義（IF² × 100／小時），資料夠了逐檔擬合、往預設收縮；現在是單一係數 0.30（SP-57，Todo）——尚未實作
-- [ ] 同步效能：同步時不卡住課表載入，同步只檢查上次同步之後的資料（SP-362，In Progress）——尚未實作
+- [ ] 同步效能：同步時不卡住課表載入（SP-362，In Progress）——同步側已做：失敗清單、cursor 照常推進、完整檢查／每週檢查、跑後自評回填移到背景；課表側（推送移出寫入鎖、課表先顯示上一份）另做
+- [ ] COROS 活動列表回應有沒有總筆數：沒驗證，所以每週檢查沒有做逐月筆數比對（SP-362 A4）
 - [ ] 備份拿掉 `sync_state`（token 與封存的密碼）（SP-355，Todo）——尚未實作
 - [ ] Garmin 同步，用 `garminconnect`，資料來源順序 COROS → Garmin → TrainingPeaks（SP-91，Todo）——尚未實作
 - [ ] FIT 改用內容 sha256 命名的不可變物件，會改到 `fit/<source>/` 的路徑規則（SP-308，Todo）——尚未實作
@@ -56,6 +57,8 @@
 | 2026-10-07 | feat/sp311-341-data-registry | SP-311, SP-341 | 資料分類登錄表 `backend/data_registry.py`：每張表、每類租戶檔案屬「使用者改的／匯入的／衍生的／機密」哪一類（含去識別化欄位），備份改讀它（行為不變）；`sync_state` 屬機密。`mmp_cache` 加 `version` 欄（程式改了，`get_run_ftp` 重算窗內舊列）；`pmc_cache` 表刪除；`power_source_v1.json` 帶程式版本 |
 | 2026-10-08 | chore/drop-unused-lthr-import-metrics | owner request（「既然沒用到，放這幹嘛」） | 拿掉寫了沒人讀的資料：匯入不再算、不再寫 `workout_metrics`（hrTSS／rTSS／NP／TSS／高強度秒數）與 `mmp_cache`（只拿來算那些指標的 runFTP），`WorkoutMetric`／`MmpCache` model、`get_run_ftp`、`settings_on`、`backfill_hr_load.py`、`algorithms/mmp.py` 與 `metrics.py` 只餵它們的函式一併刪除（`backend/files/file_service.py:16`、`:187`）。COROS 登入不再寫 `athlete_settings.ftp_w`、回應不再帶 `ftp_w`／`lthr`（`backend/sync/coros_client.py:234-272`）；**LTHR 照寫**：它是冷啟動的 LTHR 先驗（`fitdataset._coros_lthr_prior`，`backend/engine/wko5expr/fitdataset.py:809`、`:937`），體重照用。不做破壞性遷移：舊 DB 的兩張表與 `ftp_w` 欄原樣留著、沒人讀寫（`data_registry.LEGACY_TABLES`，`backend/data_registry.py:150`；`unclassified_tables` 略過，`:319`）；新 DB 不再建它們。`compare_sources.py` 的同步列不再有 TSS（改看 `/api/v1/sync/compare`） |
 | 2026-10-08 | perf/sp362-batch1 | SP-362 | 同步效能第一批。**失敗清單**：單一活動下載／匯入失敗（COROS、TP）寫進新表 `sync_failures`（`backend/sync/failures.py`；`SyncFailure`，`backend/db/models.py:407`；登錄表歸「匯入的」，`backend/data_registry.py:118`），cursor 照常推進；之後的同步只依 id 重試這幾筆（COROS `labelId`＋`sportType` 走 detail/download，`backend/sync/coros_client.py:928`；TP `workoutId`，`backend/sync/tp_client.py:870`），不必從很久以前重新列表（正式機原本每次 7 筆失敗 → 列 819 筆、41 頁、33–54 秒）。最多自動重試 5 次或 7 天（使用者 2026-10-08），之後停止、留在設定 › 進階設定，可按「重試」（`GET /sync/failed`、`POST /sync/failed/{id}/retry`）。沒有 FIT 的手動紀錄記成 `no_file`（COROS：detail/download 回 0000 但沒有 fileUrl，`CorosNoFile`，`backend/sync/coros_client.py:444`），不算失敗、不再問。整次失敗（登入、列表）或失敗清單寫不進去時 cursor 不推進（`backend/sync/coros_client.py:951`、`backend/sync/tp_client.py:897`）。刪除來源檔案時清空該來源的清單。**overlap**：COROS 增量列表從上次同步減 3 天改 14 天（`CURSOR_OVERLAP_DAYS`，`backend/sync/coros_client.py:33`；多天百岳沒帶手機晚上傳）；跑後自評的重試窗固定 4 天（`RETRY_DAYS`，`backend/sync/coros_client.py:503`），不跟著放大。**同步後順序**：圖表 Dataset → 總覽狀態 → 課表輸入 → 自動調整 → 每人校正／自動分類（最低，等自動調整結束；`backend/sync/runner.py:189`、`backend/api/wko5views.py:293`、`backend/engine/calibrate.py:348`、`plan_auto.wait_idle`／`busy`，`backend/engine/plan_auto.py:888`） |
+| 2026-10-08 | perf/sp362-batch2-sync | SP-362 A5 | **跑後自評回填移出同步**：重試最近 4 天未讀／沒填的、8 週回填（最多 25 筆 detail、每筆間隔 0.4 秒，最久約 65 秒）不再佔住同步。手動 SSE 與 `run_once` 叫 `runner.stream(feel_in_background=True)`（`backend/api/sync.py:55`、`backend/sync/runner.py:336`），`sync_workouts(feel_passes=False)`（`backend/sync/coros_client.py:841`、`:989`）在 `complete` 帶 `feel_read`（runner 拿掉，不送前端）；結果存好、①～③ 之後 runner 開背景 job（`start_feel_job`／`_feel_job`，`backend/sync/runner.py:277`、`:287`、`:299`；`coros_client.feel_job`，`backend/sync/coros_client.py:696`，用存的 token、不登入）。job 用「會讓路」的方式拿 COROS 忙碌旗標（`hold_yielding`，`backend/sync/runner.py:140`）：`is_busy` 不算它（`:111`），之後的同步／檢查先請它停（`_make_way`，`:151`、`:183`），它在兩次讀取之間停（`fill_feel` 的 `should_stop`，`backend/sync/coros_client.py:583`；停下不算回填一輪，`:628`），最多等 30 秒（`YIELD_WAIT_S`）；刪除來源檔案照樣回 409。job 補到 ≥ 1 筆 → 等自動調整閒下來，再呼叫 `plan_auto.after_sync`／`calibrate.after_sync`（`rpe_filled`，SP-231 行為不變；`_after_feel`，`backend/sync/runner.py:319`）。測試 `backend/tests/test_sync_feel_job.py` |
+| 2026-10-08 | perf/sp362-batch2-sync | SP-362 A3／A4 | **完整檢查**（`backend/sync/check.py`）：列出遠端全部活動（COROS 從 `FIRST_SYNC_DAY` 每一頁；TP 從 2010-01-01 每 90 天一次 date-range，未來的課表跳過），依 provider id 跟 DB 比對成三組：遠端有、本地沒有、不在失敗清單 → `missing`（「補下載」只下載這些，走同步自己的 `_fetch_one`，失敗照樣進失敗清單）；本地有、遠端沒有 → `local_only`，**只列出、不刪**（使用者 2026-10-08）；失敗清單 → `failed`（`compare`，`backend/sync/check.py:255`）。全部經 `runner.stream(client=…, remember=False)`（`backend/sync/runner.py:196`、`:230`）：同一個忙碌旗標（不跟同來源的同步並行；自評 job 會讓路）、有下載時跑同步後的 ①～③、不動 cursor、不寫 `last_result`／`last_ok`。結果存設定 `sync.<src>.check`（重新整理頁面還在；`backend/settings/repository.py:76`），跑的時候的進度在記憶體（`progress`）。**每週檢查**：排程 loop 啟動 10 分鐘後每分鐘看一次（`backend/sync/scheduler.py:81`），資料來源（`auto_plan`）上次每週檢查超過 7 天（失敗的隔 1 天）就列最近 60 天、比對，缺的直接下載（最多 30 筆），結果存 `sync.<src>.check_weekly`（`weekly_tick`，`backend/sync/check.py:479`）。COROS 列表回應有沒有總筆數沒有驗證過，所以**沒有做**逐月筆數比對。端點 `GET`／`POST /sync/check`、`POST /sync/check/{source}/fill`（`backend/api/sync.py:197`、`:205`、`:229`）；設定 › 資料同步 › 進階設定的按鈕與每來源一行結果（`loadCheck`，`backend/static/settings.html:1211`）。兩個新設定鍵不匯出（`EXPORT_EXCLUDE`，`backend/engine/debug_view.py:60`）。測試 `backend/tests/test_sync_check.py` |
 | 2026-10-08 | code-sync（SP-215, SP-67, SP-57） | N/A | 錨點全面重新對齊（10-04 之後 runner、coros_client、file_service、fitdataset、repository、wko5views 都長了）；同步流程圖的匯入不再寫「算指標」；新增「同步計時與 log」（SP-215）、COROS 門檻歷史（SP-67）；新增 Decisions Log（SP-57、`65bad11d`）與 Open Questions（SP-57 逐檔 RPE 換算等待實作的單） |
 
 ---
@@ -357,13 +360,33 @@ for each activity:
   單筆失敗不再擋 cursor；只有整次失敗（登入、列表）提早結束、或失敗清單寫不進去時不推進
 refresh_hr_profile（GET /account/query，失敗不影響）
 SSE: complete {total_downloaded, total_checked, errors}
-  ↓（runner.stream finally，backend/sync/runner.py:138）
+  （手動 SSE／run_once：跑後自評的重試與 8 週回填不在這裡跑，complete 帶 feel_read 給 runner；SP-362 A5）
+  ↓（runner.stream finally）
 寫 sync.<src>.last_result → 有新檔時 localtime.refresh_from_fits
 → ① 有新檔時 wko5views.warm_up（背景：圖表 Dataset → 總覽狀態 → 課表輸入）
 → ② plan_auto.after_sync（自動調整，與暖機共用同一份計算）
 → ③ calibrate.after_sync（每人校正，含 COROS TL 換算重擬；等 ② 結束才開始）
-  （SP-362，backend/sync/runner.py:189-222）
+→ ④ COROS：start_feel_job（背景，會讓路地拿著忙碌旗標；補到 ≥ 1 筆自評 → 再呼叫 ②③ 帶 rpe_filled）
+  （SP-362，backend/sync/runner.py:221-284）
 ```
+
+#### 完整檢查與每週檢查（SP-362 A3／A4，`backend/sync/check.py`）
+
+同步只從 cursor 往後列（COROS 減 14 天 overlap，TP 用 workouts/changed），落在 cursor 前面的活動永遠不會被抓到；這兩個檢查把遠端清單跟 DB 依 provider id（COROS `labelId`、TP `workoutId`）比對：
+
+| 組 | 條件 | 處理 |
+|---|---|---|
+| `missing` | 遠端有、DB 沒有、不在失敗清單 | 完整檢查：列出，按「補下載」只下載這些（`POST /sync/check/{src}/fill`，可帶 `ids`）；每週檢查：直接下載（最多 `WEEKLY_FETCH_MAX` 30 筆） |
+| `local_only` | DB 有、遠端沒有（只看清單的日期範圍，頭尾兩天不算） | **只列出，不刪**（使用者 2026-10-08） |
+| `failed` | 該來源在失敗清單裡的列 | 列出；重試照失敗清單的規則 |
+
+- **模式**：`full`（設定頁按鈕；COROS 從 `FIRST_SYNC_DAY` 起每一頁，約 41 頁、40～60 秒；TP 從 2010-01-01 起每 90 天一次）、`fill`（補下載上一次完整檢查的 `missing`）、`weekly`（最近 `WEEKLY_DAYS` 60 天，約 3 頁 COROS）。清單多列到明天（運動員時區比伺服器快時，今天的活動日期是明天）。
+- **跟同步的關係**：都經 `runner.stream(client=check_stream, remember=False)`：同一個忙碌旗標（同來源的同步、刪除、另一個檢查都不能同時跑；自評 job 會讓路），下載走同步的 `_fetch_one`（同樣的檔名、失敗清單、新活動的自評），有下載時跑同步後的 ①～③；**不動 cursor**，也不寫 `last_result`／`last_ok`（不算一次同步，不影響開網站自動同步的新鮮度）。
+- **結果**：`sync.coros.check`／`sync.trainingpeaks.check`（完整檢查與補下載：`{mode, at, status, error, since, until, remote, local, pages, missing[], missing_n, local_only[], local_only_n, failed[], failed_n, secs, filled{at, status, downloaded, errors}}`，清單最多 500／200 筆，筆數是全部）；`sync.<src>.check_weekly`（每週檢查，同樣欄位加 `fetched`、`fetch_errors`）。存在設定裡，重新整理頁面還在；跑的時候的進度（`phase` list／fetch、`pages`、`listed`、`done`／`total`）只在記憶體（`GET /sync/check` 的 `progress`）。
+- **每週**：排程 loop（`backend/sync/scheduler.py`）啟動滿 `STARTUP_DELAY_S`（10 分鐘，避開啟動暖機）後每分鐘呼叫 `weekly_tick`：只檢查自動同步會跑的來源（資料來源、啟用、已登入、沒在忙），上次每週檢查超過 7 天（失敗或中斷的隔 1 天）才跑。
+- **沒做**：逐月筆數比對。COROS 列表回應有沒有總筆數（`data` 裡除了 `dataList` 的欄位）在程式、測試、探測腳本裡都沒有記錄，沒驗證過就不依賴。
+- **設定頁**：設定 › 資料同步 › 進階設定的「完整檢查（找漏掉的活動）」一次檢查所有可以同步的來源；每來源一行：時間、平台／這裡筆數、缺 N（＋補下載）、只在這裡 N、失敗清單 N（id 與日期在 hover）、上次補下載、「上次檢查：…，補了 N 筆」；說明在 ? 的 hover。跑的時候每 2 秒更新進度。
+- 測試：`backend/tests/test_sync_check.py`（假的分頁 COROS、TP；記憶體 DB）。
 
 #### COROS Training Load（SP-37／SP-38，2026-10-04）
 
@@ -532,6 +555,9 @@ runFTP；SP-341 曾為它加 `version` 欄）從 2026-10-08 起不再寫，model
 | POST | `/api/v1/sync/timezone/browser` | shell.js 送一次瀏覽器的 Intl 時區，當自動時區的輸入之一（`backend/api/sync.py:341`） |
 | POST | `/api/v1/sync/dedup/rebuild` | 手動重建跨來源去重 |
 | GET | `/api/v1/sync/tp/settings` | 讀 TP 運動員設定（FTP、體重、LTHR），只回傳、不寫 DB |
+| GET | `/api/v1/sync/check` | 每來源：`running`、`progress`、`ready`、上次完整檢查 `last`、上次每週檢查 `weekly`（SP-362，`backend/api/sync.py:197`） |
+| POST | `/api/v1/sync/check` | 「完整檢查」：body `{source?}`，沒給就檢查所有能同步的來源；回 `started`／`skipped`（`disabled`／`not_logged_in`／`busy`）；指定的來源忙碌時 409 `SYNC_BUSY`（`:205`） |
+| POST | `/api/v1/sync/check/{source}/fill` | 「補下載」上次完整檢查的 `missing`（body `{ids?}`）；沒有可補的 404 `NOTHING_MISSING`，忙碌 409 `SYNC_BUSY`，未登入／停用 409 `NOT_READY`（`:229`） |
 
 `GET /auth/coros/status` 與 `/auth/tp/status` 改回 `status`（`logged_in` / `expired` / `logged_out`）、`expired`、`check`（`ok` / `expired` / `unknown`）、`password_saved`（COROS 另有 `auto_relogin`）；不回 token 或密碼（`_session_fields`，`backend/api/auth.py:129`）。`/sync/sources` 的 `logged_in` 也排除已知過期的登入。
 
