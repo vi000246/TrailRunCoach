@@ -11,12 +11,15 @@ with a manual override (engine/calibrate.py items with manual_only, no fit).
   z3_unlock_weeks, z3_unlock_runs_per_week, z3_unlock_max_gap_days, z3_relock_days
                         the Zone 3 unlock rule (quality_gate.Z3_WEEKS_NEED 4,
                         Z3_RUNS_PER_WEEK 3, Z3_MAX_GAP_DAYS 7, Z3_RELOCK_DAYS 21;
-                        SP-295) — read through z3_rule()
+                        SP-295) — read through z3_rule(); z3_pair_error keeps the
+                        re-lock days ≥ the max gap (owner 2026-10-07)
 """
 from __future__ import annotations
 
+from typing import Callable, Optional
+
 from backend.engine import calibrate as CAL
-from backend.i18n import N_
+from backend.i18n import N_, _
 
 
 def _none(ds=None, today=None):
@@ -73,6 +76,22 @@ CAL.register(CAL.Item(
     default_src=N_("推估（Coyle 1984：停練 21 天最大攝氧量掉約 7%）"), k=1, min_n=10 ** 9, fit=_none,
     bounds=(7.0, 120.0), digits=0, manual_only=True, integer=True,
     help=N_("停跑這麼多天，3 區重新上鎖，只算停跑之後的紀錄（賽後恢復期、轉換期的日子不算）。")))
+
+
+def z3_pair_error(name: str, value: float, current: Callable[[str], float]) -> Optional[str]:
+    """Owner 2026-10-07 (SP-295): 重新上鎖天數 may not be shorter than 最長幾天不跑 — a break that doesn't even
+    break the unlock streak must not re-lock Zone 3. `value` is the new value of `name` (None → its
+    default, i.e. 改回自動); `current(other)` the other one's value in effect. The message, or None."""
+    if name not in (Z3_RULE["gap"], Z3_RULE["relock"]):
+        return None
+    if value is None:
+        value = CAL._registry()[name].default
+    gap = value if name == Z3_RULE["gap"] else current(Z3_RULE["gap"])
+    relock = value if name == Z3_RULE["relock"] else current(Z3_RULE["relock"])
+    if float(relock) >= float(gap):
+        return None
+    return _("重新上鎖的停跑天數（{relock} 天）不能短於解鎖條件的最長不跑天數（{gap} 天）：連續紀錄還沒斷，不該先重新上鎖",
+             relock=f"{float(relock):g}", gap=f"{float(gap):g}")
 
 
 def z3_rule(user_id: int = 1) -> dict:

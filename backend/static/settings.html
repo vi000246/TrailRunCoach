@@ -1628,7 +1628,7 @@ $("calib-rows").onclick = async (e) => {
   // the chip's explanation on a tap too (title is hover only — phones have none; SP-69)
   const c = e.target.closest(".cchip");
   if (c) { const tip = $("calib-tip"), row = c.closest("tr");
-    tip.textContent = `${row.cells[0].textContent}：${c.title}`; tip.hidden = false; return; }
+    tip.textContent = `${row.cells[0].textContent}：${c.title}`; tip.hidden = false; tip.classList.remove("err-text"); return; }
   const b = e.target.closest("button"); if (!b) return;
   const tr = b.closest("tr"), name = tr.dataset.n;
   try {
@@ -1638,8 +1638,13 @@ $("calib-rows").onclick = async (e) => {
       if (!Number.isFinite(v)) return toast("請輸入數字");
       await j(`${CAL}/${name}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ value: v }) });
     }
-    toast("已儲存"); loadCalib();
-  } catch (err) { toast("儲存失敗：" + err.message.slice(0, 80)); }
+    toast("已儲存"); $("calib-tip").hidden = true; loadCalib();
+  } catch (err) {
+    // the API's own message (e.g. SP-295: re-lock ≥ max gap), kept under the table — the toast goes after 1.8 s
+    const m = reason(err), tip = $("calib-tip");
+    tip.textContent = `${tr.cells[0].textContent}：${m}`; tip.hidden = false; tip.classList.add("err-text");
+    toast("儲存失敗：" + m);
+  }
 };
 $("calib-run").onclick = async (e) => {
   const b = e.currentTarget; b.disabled = true; $("calib-msg").textContent = "估算中…";

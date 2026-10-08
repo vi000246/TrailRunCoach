@@ -1692,6 +1692,7 @@
   "醫護站": "Medical station",
   "里程碑（看跑過哪些距離，不看年數）：① 先完成一場 EP {lo:.0f}–{hi:.0f}（{cls} 級）的比賽": "Milestones (what distances you have done, not how many years): ① first finish a race of EP {lo:.0f}–{hi:.0f} (class {cls})",
   "里程碑：不給「幾年後」——經驗的研究看的是跑過哪些距離，不是年數（Hoffman 2013：第一場超馬前跑了 3–15 年都有）；週量的日期照現在的週量每週 +10 %、每 4 週一週恢復推算，是推估": "Milestones: no \"in N years\" — the studies of experience look at which distances you have run, not years (Hoffman 2013: runners had run anywhere from 3 to 15 years before their first ultra); the weekly-volume date is projected from your current weeks at +10 % a week with a recovery week every 4th week, an estimate",
+  "重新上鎖的停跑天數（{relock} 天）不能短於解鎖條件的最長不跑天數（{gap} 天）：連續紀錄還沒斷，不該先重新上鎖": "The re-lock break ({relock} days) can't be shorter than the unlock rule's longest gap without running ({gap} days): the streak isn't broken yet, so Zone 3 shouldn't re-lock first",
   "重新校正錨點，讓所有區間跟著真實體能移動（Friel；Uphill Athlete）": "Recalibrates the anchors so all zones move with your real fitness (Friel; Uphill Athlete)",
   "重測 1 次 30 分鐘 LTHR（{why}）": "Retest the 30-min LTHR once ({why})",
   "重測 1 次 AeT（暫停前的不算）": "Retest AeT once (tests before the pause don't count)",
