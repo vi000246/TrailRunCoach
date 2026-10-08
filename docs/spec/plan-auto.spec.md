@@ -324,7 +324,11 @@ intensity). Each rung is the canonical variant of `backend/engine/interval_libra
   (`Z3_WEEKS_NEED`, `Z3_RUNS_PER_WEEK`, `Z3_MAX_GAP_DAYS`, all 推估; `z3_consistency`) — with the
   re-lock days below these are the defaults of 設定 → 進階設定 (SP-295: `advanced_params` items
   `z3_unlock_weeks` 1–16, `z3_unlock_runs_per_week` 1–7, `z3_unlock_max_gap_days` 1–21,
-  `z3_relock_days` 7–120, whole numbers, manual only; `quality_gate.z3_rule()` reads the ones in
+  `z3_relock_days` 7–120, whole numbers, manual only; the re-lock days may not be shorter than the max
+  gap in effect — `PUT` / `DELETE /api/v1/calib/{name}` answer 400 with both numbers
+  (`advanced_params.z3_pair_error`, `backend/engine/advanced_params.py:81`; `backend/api/calib.py:39`),
+  the 設定 page keeps the message under the table (`backend/static/settings.html:1643`; owner
+  2026-10-07); `quality_gate.z3_rule()` reads the ones in
   effect, the gate's texts and the 間歇門檻 hover quote them tagged 「預設，推估」 or 「手動」; a change
   is in the status / plan cache keys (`z3_rule_stamp`) and starts a background `plan_auto` run,
   trigger `settings`); (b) the
@@ -829,7 +833,6 @@ The owner's calls, gathered from the sections above (each is described there wit
 ## Open Questions
 
 - [ ] What the plan does when there is no A race for a long time: keep adding CTL, or a 「維持＋輪替重點」 mode (`planning.auto_phases`, `backend/engine/planning.py:799`)（SP-102，決策 Todo）——尚未定案
-- [ ] 進階設定: the 重新上鎖 days may not be shorter than the 最長間隔 — block and explain (decided 2026-10-07; `advanced_params` has no such check)（SP-295，Todo）——尚未實作
 - [ ] SP-69's other items (CTL target, recovery-week volume, RPE, TL label) are undecided; items 1 / 3 / 5 (per-athlete interval verdict, LTHR retest age, easy-run HR margin) are already in the code (`9ff5e202`, 2026-10-06 row below) while the ticket has no record of them（SP-69，分析 Needs Input）——單待補紀錄
 - [ ] A 進階設定 change or a questionnaire save doesn't re-plan stored sessions until the next sync (Known limits) — not confirmed as intended
 - [ ] The SP-289 LTHR prior may pass as a measured LTHR for the Zone 5 UA path and rule D's 94 % line (Known limits) — not verified by a test
@@ -880,3 +883,4 @@ The owner's calls, gathered from the sections above (each is described there wit
 | 2026-10-08 | fix | SP-358 review | With `only`, the stale / blocked / missed clean-up is limited to those sessions too (an edit syncs only what it touched); a delete COROS still lists after a 1.5 s pause is `check_days` (reminder), not a failure |
 | 2026-10-08 | code-sync（SP-359, SP-102, SP-295, SP-352, SP-69） | N/A | 交換 (SP-359) is two user edits that automation never undoes (Overview); 11 moved file:line pointers (settings trigger, week snapshot, history route, `_sync_watch`, adapt rest week, AeT retest lines, noop stamp, LTHR prior, `open_days`, `streak_red`); new Decisions Log (10, gathered from the owner's calls above) and Open Questions (9: SP-102 maintenance mode, SP-295 relock ≥ gap check, SP-352 crash, SP-69 record, the three Known limits not yet confirmed, SP-238, SP-107) |
 | 2026-10-08 | fix | SP-352 | A manual 專項期 without an A race (or a 專項期 week after the race) crashed the plan build with `KeyError: 'weeks_out'` when Zone 3's turn was the ladder's T+ maintenance session (`z3_spec` step 6, 9, …): the T+ rule assumed every TP item was the 後段's swap. `week_decision` (`backend/engine/quality_gate.py:2601-2612`) adds the T+ rule only for the 後段's swap (`advance` False) and builds `seg_note` only in a 後段 week; without a half the default ratio picks the track and the T+ turn is scheduled as is, no note. Tests: `backend/tests/test_specific_split.py::test_manual_specific_without_an_a_race_and_zone3_on_its_tplus_turn` and the two after it |
+| 2026-10-08 | feature | SP-295 follow-up | 進階設定: 重新上鎖天數 may not be shorter than 最長幾天不跑 (owner 2026-10-07) — `advanced_params.z3_pair_error` (`backend/engine/advanced_params.py:81`) checks the new value against the other one in effect (manual or default) on 手動指定 and 改回自動 (`backend/api/calib.py:39`), 400 with both numbers, nothing stored, no re-plan; the 設定 page shows the API's message under the table (`backend/static/settings.html:1643`). Test: `backend/tests/test_z3_unlock_settings.py::test_relock_may_not_be_shorter_than_the_max_gap` |

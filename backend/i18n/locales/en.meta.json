@@ -6719,6 +6719,10 @@
     "draft": true,
     "src": "backend/engine/race_feasibility.py:130"
   },
+  "重新上鎖的停跑天數（{relock} 天）不能短於解鎖條件的最長不跑天數（{gap} 天）：連續紀錄還沒斷，不該先重新上鎖": {
+    "draft": true,
+    "src": "backend/engine/advanced_params.py:93"
+  },
   "重新校正錨點，讓所有區間跟著真實體能移動（Friel；Uphill Athlete）": {
     "draft": true,
     "src": "backend/engine/workout_templates.py:142"

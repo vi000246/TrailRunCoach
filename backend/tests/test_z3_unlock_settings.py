@@ -128,3 +128,37 @@ def test_api_range_checks_and_replan(monkeypatch):
         assert kicks == [1, 1]
         await s.close()
     _run(go())
+
+
+def test_relock_may_not_be_shorter_than_the_max_gap(monkeypatch):
+    """Owner 2026-10-07: 重新上鎖天數 ≥ 最長幾天不跑 — both ways round, against the value in effect (manual or
+    default); blocked with a message naming both numbers; nothing stored, no re-plan."""
+    from backend.api import calib as API
+    from backend.engine import plan_auto as PA
+    kicks = []
+    monkeypatch.setattr(PA, "after_settings", lambda: kicks.append(1))
+    assert AP.z3_pair_error("z3_relock_days", 7, lambda n: 7) is None              # equal is fine
+    assert AP.z3_pair_error("z3_relock_days", 6, lambda n: 7)                      # (out of range anyway)
+    assert AP.z3_pair_error("heat_partial_hadley", 1, lambda n: 99) is None
+
+    async def go():
+        s = await _session()
+        await API.set_manual("z3_unlock_max_gap_days", API.Manual(value=14), db=s)
+        with pytest.raises(HTTPException) as e:                                     # relock 10 < gap 14
+            await API.set_manual("z3_relock_days", API.Manual(value=10), db=s)
+        assert e.value.status_code == 400
+        assert "10" in e.value.detail and "14" in e.value.detail and "不能短於" in e.value.detail
+        r = await API.set_manual("z3_relock_days", API.Manual(value=14), db=s)      # equal: allowed
+        assert r["value"] == 14 and r["source"] == "user"
+        with pytest.raises(HTTPException) as e:                                     # gap 20 > relock 14
+            await API.set_manual("z3_unlock_max_gap_days", API.Manual(value=20), db=s)
+        assert "14" in e.value.detail and "20" in e.value.detail
+        n = len(kicks)
+        await API.clear_manual("z3_relock_days", db=s)                              # back to 21 ≥ 14
+        assert len(kicks) == n + 1
+        # the default relock (21) against a manual gap: the bounds keep it legal (gap ≤ 21)
+        r = await API.set_manual("z3_unlock_max_gap_days", API.Manual(value=21), db=s)
+        assert r["value"] == 21
+        await API.clear_manual("z3_unlock_max_gap_days", db=s)
+        await s.close()
+    _run(go())
