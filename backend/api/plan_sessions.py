@@ -47,12 +47,102 @@ _cache: dict = {}
 _flight = SingleFlight()        # one _compute_inputs per key at a time (SP-362)
 
 
+# stale-while-revalidate for the 課表 page (SP-362 B4): GET /calendar sets _STALE_OK for its own
+# request. A cache miss caused only by new data (a new dataset generation: a sync imported files)
+# or a new day then answers the tenant's previous computed inputs (_last), marked `stale`, and
+# computes the fresh ones in the background (_refresh, through _flight: never twice). Display only:
+# every other caller — reconcile, done / missed, 每週課表存檔, the edits, plan_auto — leaves the
+# flag off and gets fresh inputs (it waits for the flight).
+_STALE_OK: contextvars.ContextVar[bool] = contextvars.ContextVar("plan_inputs_stale_ok", default=False)
+_last: dict = {}            # tenant id -> (key, inputs, time.time() computed) of its newest stored-plan inputs
+_refreshing: dict = {}      # tenant id -> the key computed in the background now
+_failed: dict = {}          # tenant id -> a key whose background computation failed (served fresh next time)
+STALE_REASONS = ("sync", "day")
+# _inputs_key's layout: (tenant, dataset generation, day, the self-ratings stamp | the settings…)
+_K_GEN, _K_DAY, _K_SETTINGS = 1, 2, 4
+
+
 def _compute_inputs(blackouts: Optional[list] = None) -> dict:
     """week_plan() for this week, the projection to the horizon, activities
     of the last few weeks (for done / missed) and the current phase.
     `blackouts`: a candidate 不排課日期 list (preview before saving); None = the stored one.
     Single flight (SP-362): on a cache miss, concurrent callers of the same key wait for one
-    computation (_build_inputs)."""
+    computation (_build_inputs). With _STALE_OK (GET /calendar only) a miss after new data or a
+    new day answers the previous inputs at once, marked `stale` (_stale_view, SP-362 B4)."""
+    key, build = _inputs_key(blackouts)
+    with _lock:
+        hit = _cache.get(key)
+    if hit is None and blackouts is None and _STALE_OK.get():
+        old = _stale_view(key, build)
+        if old is not None:
+            return old
+    out = hit if hit is not None else _flight.do(key, build)
+    if blackouts is None:
+        _remember(key, out)
+    return out
+
+
+def _remember(key: tuple, out: dict) -> None:
+    """The tenant's newest stored-plan inputs: what a stale view shows (SP-362 B4)."""
+    with _lock:
+        prev = _last.get(key[0])
+        if prev is None or prev[0] != key:
+            _last[key[0]] = (key, out, time.time())
+        _failed.pop(key[0], None)               # computed after all: a later miss may be served stale again
+
+
+def _stale_view(key: tuple, build) -> Optional[dict]:
+    """The previous inputs of this tenant marked `stale` ({reason: sync | day, at}) when only
+    the data or the day changed since they were computed (the user's own settings are the
+    same), and the fresh computation started in the background (once per key); else None."""
+    with _lock:
+        prev = _last.get(key[0])
+        if prev is None or _failed.get(key[0]) == key:
+            return None
+        pkey, pinp, at = prev
+        if pkey == key or pkey[_K_SETTINGS:] != key[_K_SETTINGS:] or pkey[_K_DAY] > key[_K_DAY]:
+            return None
+        reason = "day" if pkey[_K_DAY] != key[_K_DAY] else "sync"
+        start = _refreshing.get(key[0]) != key
+        if start:
+            _refreshing[key[0]] = key
+    if start:
+        ctx = contextvars.copy_context()        # the tenant, the athlete: the request's
+        threading.Thread(target=ctx.run, args=(_refresh, key, build), daemon=True,
+                         name="plan-inputs-refresh").start()
+    return {**pinp, "stale": {"reason": reason, "at": at}}
+
+
+def _refresh(key: tuple, build) -> None:
+    """The background half of a stale view: the fresh inputs, through the single flight (a
+    request or plan_auto computing the same key is joined, not repeated)."""
+    _STALE_OK.set(False)
+    try:
+        out = _flight.do(key, build)
+    except Exception as e:                      # noqa: BLE001 — the next calendar load computes it itself
+        import logging
+        logging.getLogger(__name__).warning("plan inputs refresh failed: %s", type(e).__name__)
+        with _lock:
+            _failed[key[0]] = key
+    else:
+        _remember(key, out)
+    finally:
+        with _lock:
+            if _refreshing.get(key[0]) == key:
+                del _refreshing[key[0]]
+
+
+def refreshing() -> bool:
+    """This tenant's fresh plan inputs are being computed in the background (GET /fresh)."""
+    with _lock:
+        return _tenancy.current().id in _refreshing
+
+
+def _inputs_key(blackouts: Optional[list] = None) -> tuple:
+    """(key, build): the cache key of the inputs from what they are computed from, and the
+    computation of exactly that key. Key layout (tenant, dataset generation, day, self-ratings
+    stamp, then the user's own settings — _K_SETTINGS on): a stale view needs the settings part
+    unchanged (SP-362 B4)."""
     from backend.api.overview import _dataset, _plan_stamp
     from backend.engine import b2b as B2B
     from backend.engine import blackouts as BL
@@ -81,15 +171,11 @@ def _compute_inputs(blackouts: Optional[list] = None) -> dict:
     from backend.engine import advanced_params as AP
     # the 跑步經驗問卷 (SP-288 / SP-291): the cold week / ramp and the data level's line follow the answers
     from backend.engine import experience as EX
-    key = (*_tenancy.ds_key(ds), today, _plan_stamp(), prefs.stamp(), BL.stamp(bos), auto_on, B2B.accepted_stamp(acc),
-           PSP.stored(), HRP.stamp(), TECH.user_stamp(), rpe_on, _recorded_stamp(recorded), AP.z3_rule_stamp(),
-           EX.stamp())
-    with _lock:
-        hit = _cache.get(key)
-    if hit is not None:
-        return hit
-    return _flight.do(key, functools.partial(_build_inputs, key, ds, today, prefs, bos, acc, auto_on, rpe_on,
-                                             recorded))
+    # the self-ratings come with a sync (data); everything after them is the user's own settings
+    key = (*_tenancy.ds_key(ds), today, _recorded_stamp(recorded), _plan_stamp(), prefs.stamp(), BL.stamp(bos),
+           auto_on, B2B.accepted_stamp(acc), PSP.stored(), HRP.stamp(), TECH.user_stamp(), rpe_on,
+           AP.z3_rule_stamp(), EX.stamp())
+    return key, functools.partial(_build_inputs, key, ds, today, prefs, bos, acc, auto_on, rpe_on, recorded)
 
 
 def _build_inputs(key: tuple, ds, today: dt.date, prefs, bos, acc, auto_on: bool, rpe_on: bool,
@@ -464,18 +550,27 @@ async def sessions(start: Optional[str] = None, end: Optional[str] = None, db: A
     t = time.perf_counter()
     inp = await _inputs(db)
     t = _took("inputs", t)
-    async with _wlock():
-        t = _took("lock_wait", t)
-        await _ensure(db, inp)
+    return await _sessions_body(db, inp, start, end, t)
+
+
+async def _sessions_body(db: AsyncSession, inp: dict, start: Optional[str], end: Optional[str], t: float) -> dict:
+    if inp.get("stale"):
+        # a stale view (SP-362 B4) is for display only: no reconcile, no done / missed matching,
+        # no 每週課表存檔 — those wait for the fresh inputs (the page reloads when they are ready)
         every = await PS.load(db)
-        # a run synced since the last reconcile shows on its session right away
-        new, ch = PS.match_only(every, inp)
-        if ch:
-            await PS.save(db, new)
+    else:
+        async with _wlock():
+            t = _took("lock_wait", t)
+            await _ensure(db, inp)
             every = await PS.load(db)
-        # 每週課表存檔 (engine/plan_history.py, SP-71): this week's snapshot / last week's result, when due
-        from backend.engine import plan_history as PH
-        await PH.record_safe(db, inp, every)
+            # a run synced since the last reconcile shows on its session right away
+            new, ch = PS.match_only(every, inp)
+            if ch:
+                await PS.save(db, new)
+                every = await PS.load(db)
+            # 每週課表存檔 (engine/plan_history.py, SP-71): this week's snapshot / last week's result, when due
+            from backend.engine import plan_history as PH
+            await PH.record_safe(db, inp, every)
     t = _took("reconcile", t)
     ss = [s for s in every if not (start or end) or (s.get("day") and (not start or s["day"] >= start)
                                                      and (not end or s["day"] <= end))]
@@ -483,9 +578,21 @@ async def sessions(start: Optional[str] = None, end: Optional[str] = None, db: A
     prov = await WT.active(db)
     rows = await prov.all_rows(db)
     walk = await run_in_threadpool(_walk_hint, inp)
-    return {**_meta(inp), "summary": _summary(every, inp),
-            "sessions": [_view(s, inp, rows, today, prov, walk) for s in ss if s["state"] != "deleted"
-                         and s["state"] != "superseded"]}
+    out = {**_meta(inp), "summary": _summary(every, inp),
+           "sessions": [_view(s, inp, rows, today, prov, walk) for s in ss if s["state"] != "deleted"
+                        and s["state"] != "superseded"]}
+    if inp.get("stale"):
+        st = inp["stale"]
+        out["stale"] = {"reason": st["reason"], "age_s": max(0, int(time.time() - st["at"])),
+                        "since": dt.datetime.fromtimestamp(st["at"], dt.timezone.utc).isoformat()}
+    return out
+
+
+@router.get("/fresh")
+def fresh():
+    """SP-362 B4: {updating}: the fresh plan behind a stale 課表 view is still being computed in
+    the background. The page polls this (it computes nothing) and reloads the calendar after."""
+    return {"updating": refreshing()}
 
 
 def _summary(every: list[dict], inp: dict) -> dict:
@@ -2471,17 +2578,29 @@ MAX_CAL_DAYS = 120
 KIND_TARGET = {"easy": "z2", "long": "long", "hike": "long", "quality": "threshold"}
 
 
+def _status_for(ds, today: dt.date):
+    """overview._status, or on a stale calendar view (SP-362 B4, _STALE_OK) the tenant's newest
+    computed Status while the fresh one is computed in the background (the phases and the goal
+    of the view: display only)."""
+    from backend.api import overview as OV
+    if _STALE_OK.get():
+        prev = OV.status_peek()
+        if prev is not None:
+            return prev
+    return OV._status(ds, today)
+
+
 def _range_extras(start: str, end: str) -> dict:
     """Completed activities and training phases in [start, end] (reads the dataset;
     tests replace this)."""
-    from backend.api.overview import _dataset, _status
+    from backend.api.overview import _dataset
     from backend.engine import overview as O
     from backend.engine import planning
     ds = _dataset()
     today = O.day_to_date(ds.today)
     a, b = dt.date.fromisoformat(start), dt.date.fromisoformat(end)
     acts = activity_rows(ds, a, b + dt.timedelta(days=1))
-    st = _status(ds, today)
+    st = _status_for(ds, today)
     lo, hi = min(a, today) - dt.timedelta(days=400), max(b, today) + dt.timedelta(days=400)
     every = [{"kind": p.kind, "label": p.label, "start": p.start, "end": p.end} for p in planning.phases(st.plan, lo, hi)]
     phases = [p for p in every if p["end"] >= start and p["start"] <= end]
@@ -2710,23 +2829,32 @@ async def calendar(start: str, end: str, db: AsyncSession = Depends(get_db)):
     # extras, suggestions; applog.phases when the request ends
     tm: dict = {}
     tok = _TIMING.set(tm)
+    # SP-362 B4: this request may be answered from the previous inputs after new data / a new day
+    vtok = _STALE_OK.set(True)
     t0 = time.perf_counter()
+    stale = None
     try:
-        return await _calendar(start, end, db, tm, t0)
+        out = await _calendar(start, end, db, tm, t0)
+        stale = (out.get("stale") or {}).get("reason")
+        return out
     finally:
+        _STALE_OK.reset(vtok)
         _TIMING.reset(tok)
         from backend import applog
-        applog.phases("calendar", t0, tm, days=(b - a).days + 1)
+        applog.phases("calendar", t0, tm, days=(b - a).days + 1, **({"stale": stale} if stale else {}))
 
 
 async def _calendar(start: str, end: str, db: AsyncSession, tm: dict, t0: float) -> dict:
-    body = await sessions(start=None, end=None, db=db)      # reconciles on first visit, like the week view
-    # sessions()'s own phases are in tm already: the rest of it is building the view
+    t = time.perf_counter()
+    inp = await _inputs(db)
+    t = _took("inputs", t)
+    if not inp.get("stale"):
+        _STALE_OK.set(False)          # fresh inputs: the rest of the view reads fresh too (calendar() resets it)
+    body = await _sessions_body(db, inp, None, None, t)     # reconciles on first visit, like the week view
+    # the inputs / lock / reconcile phases are in tm already: the rest of it is building the view
     t = time.perf_counter()
     tm["view"] = max(0.0, (t - t0) - sum(tm.values()))
     every = body["sessions"]
-    inp = await _inputs()
-    t = _took("inputs", t)
     extras = await run_in_threadpool(_range_extras, start, end)
     t = _took("extras", t)
     sug = await _suggestions(db, inp)
