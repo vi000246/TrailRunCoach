@@ -50,7 +50,8 @@ from backend.engine.wko5expr import variants as VR
 from backend.engine.wko5expr import recentbests as RB
 from backend.engine.wko5expr import power_use as PU
 from backend.engine.wko5expr.render import render_chart, render_map
-from backend.engine.wko5expr.render_cache import CACHE as RENDER_CACHE, chart_key, data_fingerprint
+from backend.engine.wko5expr.render_cache import CACHE as RENDER_CACHE, chart_key
+from backend.engine.wko5expr import chartscope as CS
 from backend.files.wko5chart_reader import read_view
 from backend.settings.paths import athlete_dir
 from backend import tenancy
@@ -217,6 +218,19 @@ def _dataset_in_tenant(parity: Optional[bool], source: Optional[str]) -> Dataset
 _WARM = {"thread": None}
 
 
+def _warm_chart_code(ds) -> None:
+    """Each chart's code signature (chartscope.code_signature, SP-336): ~2.5 s local for every
+    chart of the bundled views, once per process — here instead of in the first chart page."""
+    try:
+        for v in _views(ds.config.parity).values():
+            for d in v.get("dashboards") or []:
+                for ch in d.get("charts") or []:
+                    CS.code_signature(ch, ds, glue=(chart, _render, _apply_period))
+    except Exception as e:               # noqa: BLE001 — the chart request computes it then
+        import logging
+        logging.getLogger(__name__).warning("chart code warm-up failed: %s", type(e).__name__)
+
+
 PLAN_IDLE_WAIT_S = 600.0       # the warm-up's low-priority part waits this long for plan_auto
 _PLAN_POLL_S = 0.5
 _LOW_LOCK = threading.Lock()
@@ -322,6 +336,7 @@ def warm_up(reason: str = "startup") -> Optional[threading.Thread]:
             except Exception as e:       # noqa: BLE001 — a page request will show the error
                 logging.getLogger(__name__).warning("plan inputs warm-up (%s) failed: %s", reason,
                                                     type(e).__name__)
+            _warm_chart_code(ds)
             applog.took("dataset warm-up", t0, reason=reason)       # SP-215: what pages wait for
         except Exception as e:           # noqa: BLE001 — a page request will show the error
             logging.getLogger(__name__).warning("dataset warm-up (%s) failed: %s", reason, type(e).__name__,
@@ -515,7 +530,9 @@ def chart(request: Request, view: str, d: int, c: int, begin: Optional[str] = No
 
     Served from the render cache (render_cache.py): the key covers the chart
     definition, every query parameter (so a future `source` / `period` param
-    is part of it automatically), the data fingerprint and the code version."""
+    is part of it automatically), the data the chart reads and its code (SP-336,
+    chartscope.py). `?stale=1` (the viewer): on a miss, the chart's previous
+    drawing marked `stale` at once while the new one is computed (GET /render/ready)."""
     ds = _dataset(parity)
     v = _view(view, ds.config.parity)
     try:
@@ -523,6 +540,7 @@ def chart(request: Request, view: str, d: int, c: int, begin: Optional[str] = No
     except IndexError:
         raise HTTPException(404, "chart not found")
     b, e = _range(ds, begin, end)
+    asked = (b, e)                               # the range as asked, before a period's floor (_slot)
     needs_workout = _panel_kind(ch) in ("workout", "map")
     if needs_workout and (workout is None or not 0 <= workout < len(ds.workouts)):
         raise HTTPException(400, "workout charts need ?workout=<index>")
@@ -542,10 +560,10 @@ def chart(request: Request, view: str, d: int, c: int, begin: Optional[str] = No
         if v.get("source") == "custom" and RB.window_spec(ch):
             # 近 7／14／28 天新高 (recentbests.py): ?window=14
             ch, winfo = RB.apply_window(ch, request.query_params.get("window"))
-    params = {k: val for k, val in request.query_params.items() if k not in ("begin", "end", "parity")}
+    params = {k: val for k, val in request.query_params.items() if k not in ("begin", "end", "parity", "stale")}
     if params.get("sports") and not needs_workout:
         # the activity-type filter reads the user's activity-type marks (百岳跟團 / 爬山) and the plan's
-        # 百岳 events (the plan is in data_fingerprint): the marks are in the key too
+        # 百岳 events (the plan is in the fingerprint, chartscope.py): the marks are in the key too
         from backend.engine import sport_map as SM
         params = {**params, "_kinds": SM.tags_stamp()}
     if ch.get("kind") == "z5gate":
@@ -583,12 +601,15 @@ def chart(request: Request, view: str, d: int, c: int, begin: Optional[str] = No
         from backend.engine import activity_tags as AT
         params = {**params, "_poles": json.dumps(AT.pole_marks_stamp(AT.load())),
                   "_today": today_local().isoformat()}
-    # the data source is in data_fingerprint too (ds.source + its source_stamp); named here as well
+    # the data source is in the fingerprint too (chartscope: ds.source, each file's stamp); named here as well
     req = {"view": view, "d": d, "c": c, "begin": b, "end": e, "parity": ds.config.parity,
            "source": getattr(ds, "source", None) or "wko5",
            "params": params, "workout_file": ds.workouts[workout].entry.file if needs_workout else None,
            "variant": vinfo["variant"] if vinfo else None}
-    key = chart_key(ch, req, data_fingerprint(ds))
+    # SP-336: only the activities of this chart's range (+ warm-up), today only when it reads it,
+    # only the code of its chart type (chartscope.py)
+    scope = CS.scope_of(ch, ds, b, e, ds.workouts[workout] if needs_workout else None)
+    key = chart_key(ch, req, CS.fingerprint(ds, scope), CS.code_signature(ch, ds, glue=(chart, _render, _apply_period)))
 
     def compute():
         res = _render(ch, ds, b, e, sports, ds.workouts[workout] if needs_workout else None, params=params)
@@ -614,7 +635,35 @@ def chart(request: Request, view: str, d: int, c: int, begin: Optional[str] = No
         if vinfo:
             res = {**res, **vinfo}
         return {**res, **pinfo} if pinfo else res
-    return RENDER_CACHE.get_or_compute(key, compute)
+    # a demo visitor never gets (nor leaves) a previous drawing; the export / scripts don't ask
+    demo = tenancy.current().is_demo
+    res, stale = RENDER_CACHE.serve(key, compute, slot=None if demo else _slot(view, ch, req, asked, ds),
+                                    stale_ok=request.query_params.get("stale") == "1" and not demo)
+    return {**res, "stale": stale} if stale else res
+
+
+def _slot(view: str, ch: dict, req: dict, asked: tuple, ds) -> str:
+    """The chart request apart from its data and code (render_cache stale-while-revalidate): the
+    view, the chart (its id), the parameters the user chose and the range as asked — 「the N days
+    to today」 when it ends today, so the next day still finds yesterday's drawing."""
+    import hashlib
+    import math
+    from backend.i18n import current_locale
+    b, e = asked
+    rng = ["today", e - b] if e >= math.floor(ds.today) else [b, e]
+    body = {"view": view, "chart": ch.get("id") or [req["d"], req["c"]], "kind": ch.get("kind"), "range": rng,
+            "params": {k: x for k, x in req["params"].items() if not k.startswith("_")},
+            "locale": current_locale(), **{k: req.get(k) for k in ("parity", "source", "workout_file", "variant")}}
+    return hashlib.sha1(json.dumps(body, sort_keys=True, default=str).encode()).hexdigest()
+
+
+@router.get("/render/ready")
+async def render_ready(keys: str = ""):
+    """Which of the keys a stale chart named (`stale.key`) can be fetched now: {ready, failed,
+    pending}. Async: answered on the event loop, never queued behind the renders."""
+    import re
+    ks = [k for k in keys.split(",") if re.fullmatch(r"[0-9a-f]{40}", k)][:100]
+    return RENDER_CACHE.ready(ks)
 
 
 def _apply_period(ch: dict, b: float, e: float, asked: Optional[str], custom: bool):
