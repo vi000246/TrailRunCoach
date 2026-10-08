@@ -580,13 +580,24 @@ const curView = () => viewsOf(S.mode).find((v) => v.name === S.view[S.mode]) || 
 // …and under 主要訓練項目 (engine/primary_sport.py): a chart tagged `sports` shows only in those modes,
 // `order` ({road: n}) moves it up in that mode (untagged charts keep the file order)
 // …and a chart with `needs` (e.g. "poles": enough 有杖／沒杖 marks, SP-243) only when the server says needs_met
-function visCharts(d) {
-  const sp = S.sport || "trail";
-  const cs = d.charts.filter((c) => (S.usePower !== false || !c.power) && (!c.sports || c.sports.includes(sp))
+// SP-218: on a single-activity page the `sports` tag is read against THAT activity (GET /workouts/{i}/kind:
+// a trail run, hike or 百岳 day = "trail"), not the athlete's 主要訓練項目; season pages keep the primary sport
+// ---- chart sport (SP-218) ----
+// the sport the `sports` / `order` tags are read against: a workout-mode dashboard follows the shown activity
+// (null while it isn't known yet = no `sports` filter, so the page never jumps away meanwhile)
+function chartSportFor(mode, primary, act) {
+  return mode === "workout" ? (act || null) : (primary || "trail");
+}
+function visChartsFor(d, sp, usePower) {
+  const cs = d.charts.filter((c) => (usePower !== false || !c.power) && (!c.sports || sp == null || c.sports.includes(sp))
     && (!c.needs || c.needs_met));
-  const rank = (c, i) => (c.order && c.order[sp] != null ? c.order[sp] : i);
+  const rank = (c, i) => (sp != null && c.order && c.order[sp] != null ? c.order[sp] : i);
   return cs.map((c, i) => [c, i]).sort((a, b) => rank(...a) - rank(...b) || a[1] - b[1]).map((x) => x[0]);
 }
+// ---- end chart sport ----
+const actChartSport = () => S.actSport && S.actSport.workout === S.workout ? S.actSport.sport : null;
+const dashSport = (d) => chartSportFor(d._mode, S.sport, actChartSport());
+function visCharts(d) { return visChartsFor(d, dashSport(d), S.usePower); }
 function selectedSports() { return [...document.querySelectorAll("#sports input:checked")].map((i) => i.value); }
 // 活動類型 (engine/sport_map.py, SP-263): 越野跑 / 路跑 / 登山健行 / 百岳登山 / 騎車 / 肌力 / 走路 / 其他
 const kindLabel = (k) => { const s = (S.sports || []).find((x) => x.sport === k); return t("viewer.kind." + k, s?.label || k || ""); };
@@ -607,7 +618,9 @@ async function init() {
   const [views, sports, cfg, us, ps] = await Promise.all([j(`${API}/views`), j(`${API}/sports`), j(`${API}/config`),
     j("/api/v1/sync/settings").catch(() => ({})), j(`${API}/primary-sport`).catch(() => ({}))]);
   S.views = views; S.sports = sports;
-  S.sport = ps.sport || "trail";       // 主要訓練項目 (設定): which charts show (visCharts)
+  // each dashboard knows its mode: a single-activity page reads `sports` against the activity (dashSport)
+  for (const v of views) if (!v.error) { const m = viewKind(v); for (const d of v.dashboards) d._mode = m; }
+  S.sport = ps.sport || "trail";       // 主要訓練項目 (設定): which season charts show (visCharts)
   // workout map defaults (settings page); the map's own switch overrides them per browser
   S.mapDefault = window.MapLayers ? MapLayers.fromSettings(us) : null;
   S.parity = !!cfg.config.parity;   // switched on the settings page
@@ -979,12 +992,20 @@ async function load() {
     $("pickact").onclick = () => openAside("acts");
     return;
   }
+  if (S.mode === "workout" && S.actSport?.workout !== S.workout) {
+    // SP-218: this activity's own type decides its trail-only charts (visCharts); unknown on an error = no filter
+    const wi = S.workout;
+    const k = await j(`${API}/workouts/${wi}/kind?${tpParam()}`).catch(() => null);
+    if (token !== loadToken) return;
+    S.actSport = { workout: wi, sport: k?.chart_sport ?? null, kind: k?.kind ?? null };
+    renderTree();                       // may move off a page that has no chart for this activity
+  }
   const di = S.dash[S.mode], d = v.dashboards[di];
   const q = (S.mode === "workout" ? `workout=${S.workout}`
     : `begin=${$("begin").value}&end=${$("end").value}&sports=${encodeURIComponent(sportsParam())}`)
     + "&" + tpParam();
   // 主要訓練項目: a dashboard may have its own text per mode (views/*.json "descriptions")
-  const ddesc = (d.descriptions || {})[S.sport] || d.description;
+  const ddesc = (d.descriptions || {})[dashSport(d)] || d.description;
   if (ddesc) {
     // the dashboard's description: behind a ? (hover / tap), not a caption paragraph
     grid.insertAdjacentHTML("beforeend", `<p class="ddesc-q">這一頁看什麼<button type="button" class="qtip" aria-label="這一頁看什麼" data-tip="${esc(ddesc)}">?</button></p>`);
@@ -994,6 +1015,7 @@ async function load() {
   if (!visCharts(d).length) {
     grid.insertAdjacentHTML("beforeend", d.charts.every((c) => c.power)
       ? `<div class="empty">這一頁都是功率的圖。設定裡「使用功率」關掉了，所以不顯示；要看請到 <a href="/api/v1/wko5/settings#power">設定</a> 打開。</div>`
+      : S.mode === "workout" ? `<div class="empty">${esc(t("viewer.trail_only"))}</div>`
       : `<div class="empty">這一頁的圖不適用你的主要訓練項目，可以到 <a href="/api/v1/wko5/settings#sport">設定</a> 切換。</div>`);
     return;
   }
@@ -1228,7 +1250,7 @@ function drawInto(box, res) {
   else if (res.kind === "polecompare" && window.drawPoleCompare) drawPoleCompare(box, res);   // pole_compare.js
   else if (res.kind === "map") drawMap(box, res);
   else if (String(res.kind || "").startsWith("act_")) drawActivity(box, res);   // panels/activity_charts.py
-  else if (res.climb_profile) drawClimbProfile(box, res);     // 爬坡段: elevation profile (cp* below)
+  else if (res.climb_profile) drawClimbMap(box, res);         // 爬坡段: map + profile + climb table (SP-218)
   else if (res.grade_profile) drawGradeProfile(box, res);     // 坡度分組: one row per grade bin
   else if (res.form_profile) drawFormProfile(box, res);       // 跑姿依坡度／隨疲勞 (form_grades / form_work)
   else if (res.cadence_profile) drawCadenceProfile(box, res); // 步頻與衝擊 (form_cadence)
@@ -2005,9 +2027,14 @@ function rampAt(f) {
 }
 function pctl(vals, p) { const v = [...vals].sort((a, b) => a - b); return v[Math.min(v.length - 1, Math.max(0, Math.round(p * (v.length - 1))))]; }
 
-async function drawMap(card, res) {
+// opts (SP-218, the 爬坡與地形 card): colorKey = the remembered route colour's own pref key (default "color"),
+// defColor = its first-time colour, chart: false = no map chart beside it, tip = the ? text, onPick(sample index
+// or null) = a click / tap on the map, into = the element the map goes in (default the card).
+// Resolves to {map, el, s, ll, tb, wrap} (undefined when there is no map).
+async function drawMap(card, res, opts = {}) {
   card.querySelector(".loading")?.remove();
-  const nodata = (t) => card.insertAdjacentHTML("beforeend", `<p class="nodata">${esc(t)}</p>`);
+  const host = opts.into || card;
+  const nodata = (t) => host.insertAdjacentHTML("beforeend", `<p class="nodata">${esc(t)}</p>`);
   if (res.empty) return nodata(res.empty);
   if (typeof L === "undefined" || !window.MapLayers) return nodata(t("viewer.map.failed"));
   const tb = document.createElement("div");
@@ -2018,7 +2045,7 @@ async function drawMap(card, res) {
   const wrap = document.createElement("div");
   wrap.className = "mapwrap";
   wrap.appendChild(el);
-  card.append(tb, wrap);
+  host.append(tb, wrap);
   let s;
   try { s = await samplesFor(res.workout); }
   catch (e) { wrap.remove(); tb.remove(); return nodata(`讀不到這筆活動的 GPS 樣本：${e.message}`); }
@@ -2026,12 +2053,12 @@ async function drawMap(card, res) {
   if (!s.gps.length) { wrap.remove(); tb.remove(); return nodata("這筆活動沒有 GPS 資料（室內或裝置沒有記錄位置）。"); }
   if (!res._zoom) card.classList.add("ac-wide");
 
-  const pref = mapPrefs();
+  const pref = mapPrefs(), ck = opts.colorKey || "color";
   const map = L.map(el, { preferCanvas: true, zoomSnap: 0.5 });
   el._lmap = map;
   const hint = document.createElement("div");
   hint.className = "maphint"; hint.hidden = true;
-  card.appendChild(hint);
+  host.appendChild(hint);
   MapLayers.attach(map, mapDefault(), MAP_KEY, { hint });
   L.control.scale({ imperial: false }).addTo(map);
 
@@ -2065,13 +2092,14 @@ async function drawMap(card, res) {
   }
   // colour toggle: 心率 / 功率 / 坡度 / 單色 (remembered per browser)
   const has = (k) => k === "none" || (s[k] && s.gps.some((i) => s[k][i] != null));
-  let color = has(pref.color) ? pref.color : ["hr", "power", "grade"].find(has) || "none";
+  const want = pref[ck] || opts.defColor || pref.color;
+  let color = has(want) ? want : ["hr", "power", "grade"].find(has) || "none";
   tb.innerHTML = `<span class="meta">路線顏色</span><div class="seg" role="group" aria-label="路線顏色">${ROUTE_COLOR.map(([k, t]) =>
     `<button data-c="${k}" class="${k === color ? "on" : ""}" aria-pressed="${k === color}" ${has(k) ? "" : "disabled"}>${t}</button>`).join("")}</div>`;
   tb.appendChild(legend);
   tb.onclick = (e) => {
     const b = e.target.closest("button[data-c]"); if (!b || b.disabled || b.dataset.c === color) return;
-    color = b.dataset.c; saveMapPrefs({ color });
+    color = b.dataset.c; saveMapPrefs({ [ck]: color });
     tb.querySelectorAll("button[data-c]").forEach((x) => { x.classList.toggle("on", x === b); x.setAttribute("aria-pressed", String(x === b)); });
     drawRoute(color);
   };
@@ -2103,14 +2131,19 @@ async function drawMap(card, res) {
     });
   });
   // a tap on the route does the same on a phone (no mouse to hover with)
-  map.on("click", (e) => { const p = e.layerPoint; hoverEmit(m, () => { if (!el._lmap) return null; const k = near(p); return k < 0 ? null : s.gps[k]; }); });
+  map.on("click", (e) => {
+    const p = e.layerPoint;
+    hoverEmit(m, () => { if (!el._lmap) return null; const k = near(p); return k < 0 ? null : s.gps[k]; });
+    if (opts.onPick) { const k = near(p); opts.onPick(k < 0 ? null : s.gps[k]); }
+  });
   map.on("mouseout", () => hoverEmit(m, null));
   el.addEventListener("mouseleave", () => hoverEmit(m, null));
   HOVER.members.add(m);
   const n = s.gps.length;
-  addTip(card, `GPS 軌跡 ${n} 點 · 右上角切換底圖和疊圖 · ${t("viewer.mapchart.tip")}`);
+  addTip(card, opts.tip ?? `GPS 軌跡 ${n} 點 · 右上角切換底圖和疊圖 · ${t("viewer.mapchart.tip")}`);
   new ResizeObserver(() => { if (el._lmap) map.invalidateSize(); }).observe(el);
-  mapChart(card, tb, wrap, s);
+  if (opts.chart !== false) mapChart(card, tb, wrap, s);
+  return { map, el, s, ll, tb, wrap };
 }
 
 // ---- map chart (SP-80): the activity beside its route map — elevation, HR, power, pace and grade
@@ -2934,13 +2967,11 @@ function drawActHrTrend(card, res) {
 }
 
 // ---- 爬坡與地形 (workout_review climbs / grades). Self-contained: its own styles (cpStyle), toggles and
-// helpers (cp*). drawClimbProfile: ONE plot against km — the elevation as a light background area on the
-// right axis (m) and the selected metric as a thick line on the left axis (the user asked for the overlay,
-// 2026-10-02: a dual scale, so both axes and the legend name their series and units), with the detected
-// climbs (①②…) and descents (↓, hatched) as bands; then one row per climb against the athlete's usual.
+// helpers (cp*). 爬坡段 is drawClimbMap (SP-218, the 「climb map」 block below: route map + elevation profile
+// with stacked metric panels + climb table, synced hover; it replaced the single dual-axis drawClimbProfile).
 // Explanations go behind the card's 「?」, not into captions. drawGradeProfile: one row
 // per grade bin — time in it, and the metric against the usual for that bin. Tables sit in 「詳細數字」.
-const CP_KEYS = { climb: "wko5viewer.climbmetric", grade: "wko5viewer.grademetric" };
+const CP_KEYS = { grade: "wko5viewer.grademetric" };
 function cpStyle() {
   if (document.getElementById("cp-style")) return;
   // --cp-metric: the climb overlay's metric line — saturated blue, far in hue and lightness from the
@@ -2979,31 +3010,9 @@ const cpDur = (s) => s == null ? "–" : hms(s);
 const cpPct = (v, d = 0) => v == null || !isFinite(v) ? "–" : `${cpMinus((v * 100).toFixed(d))}%`;
 const cpSigned = (v) => v == null ? "" : `${v >= 0 ? "+" : "−"}${Math.abs(v * 100).toFixed(0)}%`;
 const cpHas = (a) => Array.isArray(a) && a.some((v) => v != null);
-let CP_CTX = null;
-function cpTextW(t, font = "11px system-ui, sans-serif") {
-  CP_CTX ||= document.createElement("canvas").getContext("2d");
-  CP_CTX.font = font;
-  return CP_CTX.measureText(t).width;
-}
 function cpRgba(hex, a) {
   const n = parseInt(String(hex).replace("#", ""), 16);
   return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${a})`;
-}
-function cpHatch(color, alpha) {      // the descents' 135° lines (identity by pattern, not by colour alone)
-  const c = document.createElement("canvas");
-  c.width = c.height = 6;
-  const g = c.getContext("2d");
-  g.strokeStyle = cpRgba(color, alpha);
-  g.lineWidth = 1.2;
-  g.beginPath(); g.moveTo(0, 0); g.lineTo(6, 6); g.moveTo(-3, 3); g.lineTo(3, 9); g.moveTo(3, -3); g.lineTo(9, 3); g.stroke();
-  return { image: c, repeat: "repeat" };
-}
-// a value against the athlete's usual: "平常 690（+8%）" / "快 5%" for paces (lower = faster)
-function cpRel(v, b, f, pace) {
-  if (!b?.ok || v == null) return "";
-  if (!(b.median > 0) || !isFinite(v / b.median)) return `（平常 ${f(b.median)}）`;   // no % against 0 / negative
-  const d = v / b.median - 1;
-  return `（平常 ${f(b.median)}，${pace ? (d <= 0 ? "快 " : "慢 ") + Math.abs(d * 100).toFixed(0) + "%" : cpSigned(d)}）`;
 }
 // above / below the usual's middle 50 %: the only rows that get a direct label
 function cpOutside(v, b, pace) {
@@ -3056,15 +3065,6 @@ function cpSeg(opts, cur, label, onPick) {
   };
   return seg;
 }
-// the y range of a noisy rolling series: 2nd–98th percentile, padded
-function cpRange(vals, zero) {
-  const v = vals.filter((x) => x != null && isFinite(x));
-  if (!v.length) return [0, 1];
-  let lo = pctl(v, 0.02), hi = pctl(v, 0.98);
-  if (zero) { lo = Math.min(lo, 0); hi = Math.max(hi, 0); }
-  const pad = (hi - lo || Math.abs(hi) || 1) * 0.08;
-  return [lo - pad, hi + pad];
-}
 // round axis ends and a round step (paces in s: 10 s … 10 min), so ticks never land on odd ends
 function cpNice(lo, hi, k = 4, pace = false) {
   const raw = Math.max(hi - lo, 1e-9) / k;
@@ -3078,342 +3078,317 @@ function cpNice(lo, hi, k = 4, pace = false) {
 }
 const cpPaceTick = (v) => v > 0 ? cpPace(v) : "";       // a 0:00 /km tick means nothing
 
-function drawClimbProfile(card, res) {
-  cpStyle();
-  const D = res.climb_profile, P = D.profile, climbs = D.climbs || [], cp = D.cp;
-  const wrap = cpFrame(card, res, `詳細數字（${climbs.length} 段爬坡）`);
-  if (D.note) wrap.insertAdjacentHTML("beforeend", `<p class="nodata small">${esc(D.note)}</p>`);
-  if (!P || !cpHas(P.alt)) return;
-  const pctLine = cpHas(P.power) && cp ? P.power.map((v) => v == null ? null : v / cp * 100) : null;
-  const M = {
-    vam: { label: "VAM", unit: "m/h", ys: P.vam, seg: (c) => c.vam, segF: (v) => `${cpN(v)}`, axisF: (v) => cpN(v), zero: true,
-      cap: "VAM = 每小時爬升 m/h（60 秒滾動，推估）" },
-    power: { label: "功率", unit: "W", ys: P.power, seg: (c) => c.avg_power, segF: (v) => `${cpN(v)} W`, axisF: (v) => `${cpN(v)}`,
-      cap: "功率 W（60 秒平均）" },
-    pct: { label: "%CP", unit: "%", ys: pctLine, seg: (c) => c.pct_cp == null ? null : c.pct_cp * 100, segF: (v) => `${cpN(v)}%`,
-      axisF: (v) => `${cpN(v)}%`, cap: `功率佔 CP 的比例（CP ${cpN(cp)} W，60 秒平均）` },
-    hr: { label: "心率", unit: "bpm", ys: P.hr, seg: (c) => c.avg_hr, segF: (v) => `${cpN(v)}`, axisF: (v) => cpN(v), cap: "心率 bpm（60 秒平均）" },
-    pace: { label: "配速／GAP", name: "GAP", unit: "/km", ys: P.gap, ys2: P.pace, pace: true, seg: (c) => c.gap_s_per_km, segF: (v) => `GAP ${cpPace(v)}`,
-      axisF: cpPaceTick, cap: "GAP（坡度換算平地配速）與實際配速 /km；左軸上下顛倒，越上面越快" },
-  };
-  const CMP = {
-    vam: { key: "vam", f: (v) => `${cpN(v)} m/h`, axisF: (v) => cpN(v), scale: 1, name: "VAM（m/h）", hint: "越右爬得越快" },
-    power: { key: "pct_cp", f: (v) => `${cpN(v)}%`, axisF: (v) => `${cpN(v)}%`, scale: 100, name: "%CP", hint: "越右越用力" },
-    hr: { key: "hr_per_100m", f: (v) => `${cpN(v)} 下`, axisF: (v) => cpN(v), scale: 1, name: "每 100 m 爬升的心跳", hint: "越左越省力（越經濟）" },
-    pace: { key: "gap_s_per_km", f: cpPace, axisF: cpPaceTick, scale: 1, name: "GAP /km", hint: "越右越快", pace: true },
-  };
-  CMP.pct = CMP.power;
-  const avail = Object.entries(M).filter(([, m]) => cpHas(m.ys)).map(([k, m]) => [k, m.label]);
-  if (!avail.length) avail.push(["vam", "VAM"]);
-  const okKey = (k) => avail.some(([a]) => a === k);
-  const def = climbs.length && okKey("vam") ? "vam" : okKey("pace") ? "pace" : avail[0][0];
-  let metric = okKey(cpPref(CP_KEYS.climb, def)) ? cpPref(CP_KEYS.climb, def) : def;
-
-  const bar = document.createElement("div");
-  bar.className = "cpbar";
-  const leg = document.createElement("div");
-  leg.className = "cpleg";
-  leg.setAttribute("aria-label", "圖例");
-  // the overlay: elevation = light area on the RIGHT axis (m), the metric = thick line on the LEFT axis;
-  // the legend and both axis names say which is which (a dual scale the user asked for, made explicit)
-  const mName = (m) => m.name || m.label;
-  const legend = () => {
-    const m = M[metric];
-    leg.innerHTML = `<span><i class="ln" style="border-top-width:3px;border-color:var(--cp-metric)"></i>${esc(mName(m))}（左軸，${esc(m.unit)}）</span>`
-      + `<span><i style="background:${cpRgba(css("--cp-elev"), .3)};border-top:1px solid var(--cp-elev)"></i>海拔（右軸，m）</span>`
-      + (m.ys2 ? `<span><i class="ln" style="border-top-style:dashed;border-color:var(--cp-ink2)"></i>實際配速（左軸）</span>` : "")
-      + (climbs.length ? `<span><i style="background:${cpRgba(css("--cp-up"), .22)};border-bottom:2px solid var(--cp-up)"></i>①② 爬坡段</span>` : "")
-      + ((D.descents || []).length ? `<span><i class="hatch"></i>↓ 下坡段</span>` : "")
-      + (climbs.length ? `<span><i class="ln" style="border-color:var(--text)"></i>每段平均</span>` : "");
-  };
-  // explanations live behind the card's 「?」 (no inline captions): the card description + this chart's notes
-  const qBtn = () => {
-    const h2 = card.querySelector("h2");
-    if (!h2) return null;
-    let q = h2.querySelector(".qtip");
-    if (!q) {
-      q = document.createElement("button");
-      q.type = "button"; q.className = "qtip"; q.textContent = "?"; q.setAttribute("aria-label", "說明"); q.dataset.base = "";
-      const zb = h2.querySelector(".zbtn");
-      if (zb) zb.before(q); else h2.appendChild(q);
-    }
-    if (q.dataset.base == null) q.dataset.base = q.dataset.tip || "";
-    return q;
-  };
-  const tipText = () => {
-    // the card description (views/workout.json) explains the layout; this adds the current metric's notes
-    const m = M[metric], cm = CMP[metric];
-    const t = [`目前的曲線（左軸）：${m.cap}。`];
-    if (climbs.length) t.push(`每段和平常比（${cm.name}）：${cm.hint}；點 = 這段，灰條 = 平常的中間 50%，直線 = 中位數。`);
-    return t.join("\n");
-  };
-  const setTip = () => {
-    const q = qBtn();
-    if (!q) return;
-    q.dataset.tip = [q.dataset.base, tipText()].filter(Boolean).join("\n\n");
-  };
-  bar.appendChild(cpSeg(avail, metric, "曲線的指標（左軸）", (k) => { metric = k; cpSave(CP_KEYS.climb, k); legend(); setTip(); paint(); }));
-  bar.appendChild(leg);
-  legend();
-  setTip();
-  wrap.appendChild(bar);
-  const el = document.createElement("div");
-  el.className = "plot cprof";
-  el.setAttribute("role", "img");
-  el.setAttribute("aria-label", `高度圖與指標曲線（左軸指標、右軸海拔）：${climbs.length} 段爬坡、${(D.descents || []).length} 段下坡；數字在「詳細數字」表格`);
-  wrap.appendChild(el);
-  const cmpCap = document.createElement("p");
-  cmpCap.className = "cpcap";
-  const cmpEl = document.createElement("div");
-  cmpEl.className = "plot cpcmp";
-  cmpEl.style.flex = "none";
-  wrap.append(cmpCap, cmpEl);
-  if (res._zoom) el.style.minHeight = "460px";
-
-  const X = P.x, A = P.alt, n = X.length;
-  const x0 = X[0], x1 = X[n - 1];
-  const alts = A.filter((v) => v != null);
-  const aMin = Math.min(...alts), aMax = Math.max(...alts), aSpan = Math.max(20, aMax - aMin);
-  const yN0 = cpNice(aMin - aSpan * 0.04, aMax + aSpan * 0.08, 4), y0min = yN0.min, y0max = yN0.max;
-  const bands = [
-    ...climbs.map((c) => ({ up: true, c })),
-    ...(D.descents || []).map((c) => ({ up: false, c })),
-  ].filter((b) => b.c.start_km != null && b.c.end_km != null && b.c.end_km > b.c.start_km)
-    .sort((a, b) => a.c.start_km - b.c.start_km);
-  for (const b of bands) {
-    b.x0 = b.c.start_km; b.x1 = b.c.end_km;
-    b.pts = [];
-    for (let k = 0; k < n; k++) if (X[k] >= b.x0 && X[k] <= b.x1 && A[k] != null) b.pts.push([X[k], A[k]]);
-    const g = cpN(b.c.grade * 100);
-    b.full = b.up ? [`${b.c.no} +${cpN(b.c.gain_m)} m`, `${cpN(b.c.distance_km, 1)} km · ${g}%`]
-      : [`↓ −${cpN(b.c.drop_m)} m`, `${cpN(b.c.distance_km, 1)} km · ${g}%`];
-    b.short = b.up ? b.c.no : "↓";
-  }
-  const idxAt = (x) => {
-    let lo = 0, hi = n - 1;
-    while (hi - lo > 1) { const m = (lo + hi) >> 1; if (X[m] < x) lo = m; else hi = m; }
-    return Math.abs(X[lo] - x) <= Math.abs(X[hi] - x) ? lo : hi;
-  };
-  const bandAt = (x) => bands.find((b) => b.up && x >= b.x0 && x <= b.x1) || bands.find((b) => !b.up && x >= b.x0 && x <= b.x1);
-  const F1 = "600 11px system-ui, sans-serif", F2 = "11px system-ui, sans-serif";
-  // label strip above the profile, two rows. Pass 1: every band gets its mark (① / ↓) on the first
-  // free row, nudged right only when both rows are taken. Pass 2, biggest first: a band's full label
-  // (mark + gain, km · grade, two lines) replaces its mark when it overlaps no other label.
-  function layout(api) {
-    const gx0 = api.coord([x0, y0min])[0], gx1 = api.coord([x1, y0min])[0];
-    const hit = (a, b) => a[0] < b[1] + 3 && b[0] < a[1] + 3;
-    const rows = [[], []];
-    for (const b of bands) {
-      const a = api.coord([b.x0, y0min])[0], z = api.coord([b.x1, y0min])[0];
-      b.cx = (a + z) / 2;
-      b.fw = Math.max(cpTextW(b.full[0], F1), cpTextW(b.full[1], F2)) + 8;
-      const sw = cpTextW(b.short, "600 12px system-ui, sans-serif") + 6;
-      let L = Math.min(Math.max(b.cx - sw / 2, gx0 - 30), gx1 + 10 - sw);
-      let row = [0, 1].find((r) => !rows[r].some((iv) => hit([L, L + sw], iv)));
-      if (row == null) { row = 1; L = Math.max(L, ...rows[1].map((iv) => iv[1] + 4)); }
-      b.iv = [L, L + sw];
-      rows[row].push(b.iv);
-      b.lay = { full: false, x: L + sw / 2, row };
-    }
-    const size = (b) => b.up ? b.c.gain_m : b.c.drop_m;
-    const fulls = [];
-    for (const b of [...bands].sort((p, q) => size(q) - size(p))) {
-      const L = Math.min(Math.max(b.cx - b.fw / 2, gx0 - 30), gx1 + 10 - b.fw), iv = [L, L + b.fw];
-      const others = bands.filter((o) => o !== b && !o.lay.full).map((o) => o.iv);
-      if ([...others, ...fulls].some((o) => hit(iv, o))) continue;
-      b.lay = { full: true, x: L + b.fw / 2 };
-      fulls.push(iv);
-    }
-  }
-  const chart = echarts.init(el);
-  charts.push(chart);
-  const hatchTop = cpHatch(css("--cp-down"), 0.3);    // light: the metric line must stay on top visually
-
-  function paint() {
-    const m = M[metric];
-    const H = el.clientHeight || 390;
-    const top0 = bands.length ? 44 : 12, bottom = 28, h0 = H - top0 - bottom;
-    const ys = m.ys || [];
-    const yN1 = cpNice(...cpRange([...ys, ...(m.ys2 || [])], !!m.zero), 4, !!m.pace), y1min = yN1.min, y1max = yN1.max;
-    const ink = css("--text"), muted = css("--muted"), line = css("--line"), up = css("--cp-up"), down = css("--cp-down");
-    const elev = css("--cp-elev"), metricC = css("--cp-metric"), ink2 = css("--cp-ink2");
-    const lbl = { color: muted, fontSize: 10.5 };
-    // low = the metric layer (left axis): only the per-climb average rules; else the elevation layer
-    // (right axis): the band rects, the climb / descent stroke on the profile and the ①② labels
-    const bandItem = (low) => (params, api) => {
-      const b = bands[params.dataIndex];
-      if (!low && (params.dataIndex === 0 || !b.lay)) layout(api);
-      const a = api.coord([b.x0, y0min]), z = api.coord([b.x1, y0max]);
-      const yTop = Math.min(a[1], z[1]), hgt = Math.abs(a[1] - z[1]);
-      const kids = low ? [] : [{ type: "rect", silent: true, shape: { x: a[0], y: yTop, width: Math.max(1, z[0] - a[0]), height: hgt },
-        style: { fill: b.up ? cpRgba(up, 0.13) : hatchTop } }];
-      if (!low) {
-        if (b.pts.length > 1) kids.push({ type: "polyline", silent: true, shape: { points: b.pts.map((p) => api.coord(p)) },
-          style: { stroke: b.up ? up : down, lineWidth: 1.5, fill: null, lineJoin: "round", lineCap: "round" } });
-        const L = b.lay || { full: false, x: (a[0] + z[0]) / 2, row: 0 };
-        const gy = api.coord([x0, y0max])[1];
-        if (L.full) {
-          kids.push({ type: "text", silent: true, style: { text: b.full[0], x: L.x, y: gy - 27, fill: ink, font: F1, align: "center", verticalAlign: "middle" } },
-            { type: "text", silent: true, style: { text: b.full[1], x: L.x, y: gy - 12, fill: muted, font: F2, align: "center", verticalAlign: "middle" } });
-        } else {
-          kids.push({ type: "text", silent: true, style: { text: b.short, x: L.x, y: gy - (L.row ? 12 : 27), fill: ink,
-            font: "600 12px system-ui, sans-serif", align: "center", verticalAlign: "middle" } });
-        }
-      } else if (b.up) {
-        // the climb's own average on the metric panel: a short ink rule, its value above when it fits
-        const v = m.seg(b.c);
-        if (v != null && isFinite(v) && v >= Math.min(y1min, y1max) && v <= Math.max(y1min, y1max)) {
-          const p0 = api.coord([b.x0, v]), p1 = api.coord([b.x1, v]);
-          kids.push({ type: "line", silent: true, shape: { x1: p0[0], y1: p0[1], x2: p1[0], y2: p1[1] }, style: { stroke: ink, lineWidth: 2 } });
-          const t = m.segF(v), tw = cpTextW(t, F2);
-          if (p1[0] - p0[0] >= tw + 4) kids.push({ type: "text", silent: true, style: { text: t, x: (p0[0] + p1[0]) / 2, y: p0[1] - 8,
-            fill: ink, font: F2, align: "center", verticalAlign: "middle", stroke: css("--panel"), lineWidth: 3 } });
-        }
-      }
-      return { type: "group", children: kids };
-    };
-    const pts = (a) => X.map((x, k) => [x, a ? a[k] : null]);
-    const tipRow = (k) => {
-      const t = [], g = P.grade?.[k];
-      t.push(`<b>${cpN(X[k], 2)} km</b> <span style="opacity:.75">· ${cpDur(P.t?.[k])}</span>`);
-      t.push(`海拔 <b>${cpN(A[k])}</b> m · 坡度 <b>${g == null ? "–" : cpN(g, 1) + "%"}</b>`);
-      if (P.pace?.[k] != null || P.gap?.[k] != null) t.push(`配速 <b>${cpPace(P.pace?.[k])}</b> /km · GAP <b>${cpPace(P.gap?.[k])}</b>`);
-      else t.push(`配速 – （停下來或沒有速度）`);
-      const hp = [];
-      if (P.hr?.[k] != null) hp.push(`心率 <b>${cpN(P.hr[k])}</b>`);
-      if (P.power?.[k] != null) hp.push(`功率 <b>${cpN(P.power[k])}</b> W${cp ? `（${cpN(P.power[k] / cp * 100)}% CP）` : ""}`);
-      if (hp.length) t.push(hp.join(" · "));
-      if (P.vam?.[k] != null) t.push(`VAM <b>${cpN(P.vam[k])}</b> m/h`);
-      return t.join("<br>");
-    };
-    const tipBand = (b) => {
-      const c = b.c;
-      if (!b.up) return `<b>↓ 下坡</b> −${cpN(c.drop_m)} m · ${cpN(c.distance_km, 2)} km · ${cpN(c.grade * 100)}% · ${cpN(c.start_elev)} → ${cpN(c.end_elev)} m<br>`
-        + `時間 ${cpDur(c.duration_s)} · 配速 ${cpPace(c.pace_s_per_km)} /km${c.avg_hr != null ? ` · 心率 ${cpN(c.avg_hr)}` : ""}`;
-      const B = c.base || {};
-      const t = [`<b>${esc(c.no)} 爬坡</b> +${cpN(c.gain_m)} m · ${cpN(c.distance_km, 2)} km · ${cpN(c.grade * 100)}% · ${cpN(c.start_elev)} → ${cpN(c.top_elev)} m`,
-        `時間 ${cpDur(c.duration_s)} · VAM <b>${cpN(c.vam)}</b> m/h${cpRel(c.vam, B.vam, cpN)}`];
-      if (c.avg_hr != null) t.push(`心率 <b>${cpN(c.avg_hr)}</b> · 每 100 m 爬升 <b>${cpN(c.hr_per_100m)}</b> 下${cpRel(c.hr_per_100m, B.hr_per_100m, cpN)}`);
-      if (c.avg_power != null) t.push(`功率 <b>${cpN(c.avg_power)}</b> W${c.pct_cp != null ? ` · <b>${cpPct(c.pct_cp)}</b> CP${cpRel(c.pct_cp, B.pct_cp, (v) => cpPct(v))}` : ""}`);
-      t.push(`配速 <b>${cpPace(c.pace_s_per_km)}</b> · GAP <b>${cpPace(c.gap_s_per_km)}</b> /km${cpRel(c.gap_s_per_km, B.gap_s_per_km, cpPace, true)}`);
-      const vb = B.vam || {};
-      t.push(`<span style="opacity:.75">${vb.ok ? `平常 = 近 ${vb.weeks} 週坡度 ±${Math.round(D.grade_match * 100)} pp 內的爬坡中位數（${vb.n} 段，推估）`
-        : `相近坡度（±${Math.round(D.grade_match * 100)} pp）的過去爬坡只有 ${vb.n || 0} 段（< 5），不比較`}</span>`);
-      return t.join("<br>");
-    };
-    chart.setOption({
-      animation: false,
-      axisPointer: { link: [{ xAxisIndex: "all" }], lineStyle: { color: muted, width: 1 } },
-      tooltip: { ...cpTipOpts(), trigger: "axis", axisPointer: { type: "line" },
-        formatter: (ps) => {
-          const p = Array.isArray(ps) ? ps[0] : ps;
-          const x = p?.axisValue ?? p?.value?.[0];
-          if (x == null) return "";
-          const b = bandAt(+x);
-          return cpTipBox(tipRow(idxAt(+x)) + (b ? `<hr style="border:0;border-top:1px solid ${line};margin:5px 0">${tipBand(b)}` : ""));
-        } },
-      // one plot: the metric on the LEFT axis (yAxis 0), the elevation on the RIGHT axis (yAxis 1). The
-      // grid lines follow the left axis only; each axis is named with its unit next to its own swatch
-      grid: { left: 62, right: 60, top: top0, height: h0 },
-      xAxis: { type: "value", min: x0, max: x1, axisLine: { lineStyle: { color: line } }, splitLine: { show: false },
-        axisLabel: { ...lbl, showMinLabel: x0 === 0, showMaxLabel: false, formatter: (v) => `${cpN(v, v % 1 ? 1 : 0)} km` } },
-      yAxis: [
-        { type: "value", position: "left", min: y1min, max: y1max, inverse: !!m.pace, interval: yN1.interval,
-          name: `{sw|━} ${mName(m)}（${m.unit}）`, nameLocation: "middle", nameGap: 44, nameRotate: 90,
-          nameTextStyle: { color: ink, fontSize: 11, fontWeight: 600, rich: { sw: { color: metricC, fontSize: 13, fontWeight: 700 } } },
-          axisLine: { show: true, lineStyle: { color: line } }, axisTick: { show: true, lineStyle: { color: line } },
-          axisLabel: { ...lbl, color: ink, formatter: (v) => m.axisF(v) }, splitLine: { lineStyle: { color: line } } },
-        { type: "value", position: "right", min: y0min, max: y0max, interval: yN0.interval,
-          name: `{sw|▇} 海拔（m）`, nameLocation: "middle", nameGap: 44, nameRotate: -90,
-          nameTextStyle: { color: muted, fontSize: 11, fontWeight: 600, rich: { sw: { color: cpRgba(elev, 0.45), fontSize: 11 } } },
-          axisLine: { show: true, lineStyle: { color: line } }, axisTick: { show: true, lineStyle: { color: line } },
-          axisLabel: { ...lbl, formatter: (v) => `${v}` }, splitLine: { show: false } },
-      ],
-      graphic: [],
-      series: [
-        { id: "alt", name: "海拔", type: "line", yAxisIndex: 1, data: pts(A), showSymbol: false, z: 1, silent: true,
-          lineStyle: { color: cpRgba(elev, 0.6), width: 1 }, itemStyle: { color: elev }, areaStyle: { color: cpRgba(elev, 0.16) } },
-        { id: "bands", type: "custom", yAxisIndex: 1, clip: false, z: 2, silent: true,
-          data: bands.map((b) => [b.x0, b.x1]), encode: { x: [0, 1] }, renderItem: bandItem(false) },
-        { id: "bandsLow", type: "custom", yAxisIndex: 0, z: 4, silent: true,
-          data: bands.map((b) => [b.x0, b.x1]), encode: { x: [0, 1] }, renderItem: bandItem(true) },
-        { id: "m2", name: "實際配速", type: "line", yAxisIndex: 0, data: m.ys2 ? pts(m.ys2) : [], showSymbol: false,
-          connectNulls: false, lineStyle: { color: ink2, width: 1, type: "dashed", opacity: 0.8 }, itemStyle: { color: ink2 }, z: 3 },
-        { id: "m", name: mName(m), type: "line", yAxisIndex: 0, data: pts(ys), showSymbol: false, connectNulls: false,
-          lineStyle: { color: metricC, width: 2.75, cap: "round", join: "round" }, itemStyle: { color: metricC }, z: 5 },
-      ],
-    }, { replaceMerge: ["series", "graphic", "xAxis", "yAxis", "grid"] });
-    paintCmp();
-  }
-
-  // one row per climb: this climb (dot) against the usual on similar-grade climbs (bar = middle 50 %, rule = median)
-  const cmpChart = echarts.init(cmpEl);
-  charts.push(cmpChart);
-  function paintCmp() {
-    const cm = CMP[metric], rows = climbs.filter((c) => c[cm.key] != null);
-    if (!rows.length) {
-      cmpEl.style.display = "none";
-      cmpCap.innerHTML = climbs.length ? `每段和平常比：這次沒有 ${esc(cm.name)} 的資料` : "";
-      return;
-    }
-    cmpEl.style.display = "";
-    const nb = rows.filter((c) => c.base?.[cm.key]?.ok).length;
-    // a short heading only; how to read it is behind the card's 「?」 (tipText)
-    cmpCap.innerHTML = `<b>每段 ${esc(cm.name)} 和平常比</b>` + (nb < rows.length ? `（${rows.length - nb} 段樣本不足，不比較）` : "");
-    const narrow = (cmpEl.clientWidth || card.clientWidth || 800) < 520;
-    const h = rows.length * 30 + 34;
-    cmpEl.style.height = cmpEl.style.minHeight = `${h}px`;
-    const val = (c) => c[cm.key] * cm.scale;
-    const B = (c) => { const b = c.base?.[cm.key]; return b?.ok ? { ...b, q1: b.q1 * cm.scale, q3: b.q3 * cm.scale, median: b.median * cm.scale } : null; };
-    const all = rows.flatMap((c) => { const b = B(c); return [val(c), ...(b ? [b.q1, b.q3] : [])]; });
-    let lo = Math.min(...all), hi = Math.max(...all);
-    const pad = (hi - lo || Math.abs(hi) || 1) * 0.12;
-    const xn = cpNice(lo - pad, hi + pad, narrow ? 3 : 4, !!cm.pace);
-    lo = xn.min; hi = xn.max;
-    const ink = css("--text"), muted = css("--muted"), line = css("--line"), panel = css("--panel");
-    cmpChart.resize();
-    cmpChart.setOption({
-      animation: false,
-      tooltip: { ...cpTipOpts(), trigger: "item", formatter: (p) => {
-        const c = rows[p.dataIndex], b = c.base?.[cm.key];
-        if (!c) return "";
-        return cpTipBox(`<b>${esc(c.no)}</b> 從 ${cpN(c.start_km, 1)} km · +${cpN(c.gain_m)} m · ${cpN(c.grade * 100)}%<br>`
-          + `這段 <b>${cm.f(val(c))}</b>${b?.ok ? `<br>平常 中位 ${cm.f(b.median * cm.scale)}（中間 50%：${cm.f(b.q1 * cm.scale)}～${cm.f(b.q3 * cm.scale)}；${b.n} 段／${b.weeks} 週）`
-            + `<br>${cpOutside(c[cm.key], b, cm.pace) || "在平常範圍內"}` : `<br>相近坡度的過去爬坡 ${b?.n || 0} 段（< 5），不比較`}`);
-      } },
-      grid: { left: 92, right: narrow ? 14 : 124, top: 4, bottom: 26 },
-      xAxis: { type: "value", min: lo, max: hi, inverse: !!cm.pace, interval: xn.interval, axisLine: { show: false },
-        axisLabel: { color: muted, fontSize: 10.5, formatter: (v) => cm.axisF(v) }, splitLine: { lineStyle: { color: line } } },
-      yAxis: { type: "category", inverse: true, data: rows.map((c) => `${c.no}  ${cpN(c.start_km, 1)} km`),
-        axisTick: { show: false }, axisLine: { lineStyle: { color: line } }, axisLabel: { color: ink, fontSize: 11 } },
-      series: [
-        { id: "base", type: "custom", data: rows.map((c, i) => [lo, i]), encode: { x: 0, y: 1 }, z: 1,
-          renderItem: (params, api) => {
-            const c = rows[params.dataIndex], b = B(c), yc = api.coord([lo, params.dataIndex])[1];
-            const gx0 = api.coord([lo, 0])[0], gx1 = api.coord([hi, 0])[0];
-            const kids = [{ type: "rect", shape: { x: Math.min(gx0, gx1), y: yc - 14, width: Math.abs(gx1 - gx0), height: 28 },
-              style: { fill: "rgba(0,0,0,0.001)" } }];                         // the row is the hover target
-            if (b) {
-              const a = api.coord([b.q1, 0])[0], z = api.coord([b.q3, 0])[0], md = api.coord([b.median, 0])[0];
-              kids.push({ type: "rect", silent: true, shape: { x: Math.min(a, z), y: yc - 5, width: Math.max(2, Math.abs(z - a)), height: 10, r: 4 },
-                style: { fill: css("--cp-base") } },
-                { type: "line", silent: true, shape: { x1: md, y1: yc - 8, x2: md, y2: yc + 8 }, style: { stroke: css("--cp-ink2"), lineWidth: 2 } });
-            }
-            // outside the usual's middle 50 %: said in a column right of the plot (never on top of the marks)
-            const t = narrow ? null : cpOutside(c[cm.key], c.base?.[cm.key], cm.pace);
-            if (t) kids.push({ type: "text", silent: true, style: { text: t, x: Math.max(gx0, gx1) + 12, y: yc, fill: ink,
-              font: "11px system-ui, sans-serif", verticalAlign: "middle" } });
-            return { type: "group", children: kids };
-          } },
-        { id: "me", type: "scatter", silent: true, z: 3, symbolSize: 11,
-          itemStyle: { color: css("--cp-line"), borderColor: panel, borderWidth: 2 },
-          data: rows.map((c, i) => [val(c), i]) },
-      ],
-    }, { replaceMerge: ["series"] });
-  }
-  paint();
-  new ResizeObserver(() => { chart.resize(); paint(); }).observe(el);
+// ---- climb map (SP-218) ----
+// 爬坡與地形 › 爬坡段 (workout_review climbs, res.climb_profile): the route map (drawMap, coloured by grade unless
+// the reader picked another colour here) over the elevation profile against km (profile_series: WKO5-smoothed
+// elevation, centred 60-s VAM / HR / power / GAP). The metric panels stack under the elevation and are picked by
+// buttons like the map chart (each its own unit, never a shared y scale); the climbs ①② are shaded on every panel.
+// The profile joins the synced hover on the distance axis (HOVER, hoverChart "d"): hovering it moves the map's
+// marker and the other way round. A climb clicked on the profile, in the table or on the map is outlined on the
+// map and on the profile; clicking it again or anywhere else clears it; a table row under the pointer previews it.
+// Above: the whole activity's climbing as small tiles; below: one row per climb with its 「跟平常比」.
+// Strings: viewer.climbmap.* (static/i18n/*/viewer.json). Pure helpers first (tested under node).
+const CM_KEY = "wko5viewer.climbmap";
+// [id, label key, unit, colour var]
+const CM_METRICS = [["vam", "viewer.climbmap.vam", "m/h", "--cp-metric"], ["hr", "viewer.mapchart.hr", "bpm", "--ac-hr"],
+  ["power", "viewer.mapchart.power", "W", "--ac-pw"], ["gap", "viewer.climbmap.gap", "/km", "--accent"]];
+const CM_DEFAULT = ["vam", "hr"];
+const CM_ELEV_H = 150, CM_PANEL_H = 64, CM_GAP = 18, CM_TOP = 18, CM_BOTTOM = 24;
+function cmPrefs() { try { return JSON.parse(localStorage.getItem(CM_KEY) || "{}") || {}; } catch { return {}; } }
+function cmSave(patch) { try { localStorage.setItem(CM_KEY, JSON.stringify({ ...cmPrefs(), ...patch })); } catch {} }
+// the panels to draw: the remembered pick (or the default) among the metrics this activity has, in CM_METRICS order
+function cmPick(saved, has) {
+  const want = Array.isArray(saved) ? saved : CM_DEFAULT;
+  return CM_METRICS.map((r) => r[0]).filter((id) => want.includes(id) && has(id));
 }
+// the climb (index) whose km range holds x, else -1
+function cmClimbAt(climbs, x) {
+  if (x == null || !isFinite(x)) return -1;
+  return climbs.findIndex((c) => c.start_km != null && c.end_km != null && x >= c.start_km && x <= c.end_km);
+}
+// the sample indices with a GPS fix inside a km range, in order: one climb's stretch of the route
+function cmSegment(s, a, b) {
+  const out = [];
+  if (!s || !s.d || !s.lat || !s.lng || a == null || b == null) return out;
+  for (let i = 0; i < s.d.length; i++) {
+    const d = s.d[i];
+    if (d != null && d >= a && d <= b && s.lat[i] != null && s.lng[i] != null) out.push(i);
+  }
+  return out;
+}
+const cmRgba = (hex, a) => {
+  const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || "").trim());
+  if (!m) return hex;
+  const n = parseInt(m[1], 16);
+  return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${a})`;
+};
+// a value against the usual (workout_review climb_baselines: median, q1–q3): {d: change vs the median, out: outside
+// the middle 50 %}; null when not compared (fewer than 5 similar climbs, or no positive median)
+function cmVs(v, b) {
+  if (!b || !b.ok || v == null || !isFinite(v) || !(b.median > 0)) return null;
+  return { d: v / b.median - 1, out: v > b.q3 || v < b.q1 };
+}
+const cmVsText = (r) => !r ? "–" : r.out ? `${r.d >= 0 ? "▲+" : "▼−"}${Math.abs(r.d * 100).toFixed(0)}%` : "≈";
+function cmHeight(n, elevH = CM_ELEV_H) { return CM_TOP + elevH + n * (CM_PANEL_H + CM_GAP) + CM_BOTTOM; }
+// the y range of a noisy rolling series: 2nd–98th percentile, padded (a few GPS spikes don't flatten the line), on
+// round ends and a round step (paces in s: 10 s … 10 min) so the ticks never land on odd values. `climb` (VAM): the
+// axis goes no lower than minus its top, so fast descents don't squash the climbs (the line is clipped there)
+function cmRange(vals, pace = false, climb = false) {
+  const good = (vals || []).filter((v) => v != null && isFinite(v));
+  if (good.length < 2) return {};
+  let lo = pctl(good, 0.02), hi = pctl(good, 0.98);
+  if (climb && hi > 0) lo = Math.max(lo, -hi);
+  if (hi - lo < 1) { lo -= 1; hi += 1; }
+  const pad = (hi - lo) * 0.06, raw = (hi - lo + 2 * pad) / 2;       // ~3 ticks on a 64-px panel
+  let step;
+  if (pace) step = [10, 15, 30, 60, 120, 300, 600].find((x) => x >= raw) || 600;
+  else { const p = Math.pow(10, Math.floor(Math.log10(raw))), f = raw / p; step = (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * p; }
+  return { min: Math.floor((lo - pad) / step) * step, max: Math.ceil((hi + pad) / step) * step, interval: step };
+}
+// the profile's option: grid 0 = the elevation (climbs shaded and labelled ①②, climb `hl` outlined), one grid per
+// metric id under it, one km range for all. T: {elev, up, line, muted, ink, panel, colors: {id}, names: {id}, units: {id}}
+function cmOption(P, ids, climbs, hl, T, elevH = CM_ELEV_H) {
+  const X = P.x, x0 = X[0], x1 = X[X.length - 1];
+  const tops = [CM_TOP, ...ids.map((_, k) => CM_TOP + elevH + CM_GAP + k * (CM_PANEL_H + CM_GAP))];
+  const hts = [elevH, ...ids.map(() => CM_PANEL_H)];
+  const n = tops.length;
+  const lbl = { color: T.muted, fontSize: 10, hideOverlap: true };
+  const area = (k) => climbs.map((c, i) => c.start_km == null || c.end_km == null ? null : [
+    { xAxis: c.start_km,
+      itemStyle: { color: cmRgba(T.up, i === hl ? (k ? 0.2 : 0.32) : (k ? 0.06 : 0.13)),
+        borderColor: i === hl ? T.up : "rgba(0,0,0,0)", borderWidth: i === hl ? 1.5 : 0 },
+      label: k ? { show: false } : { show: true, position: "insideTop", formatter: String(c.no || ""), color: T.ink,
+        fontSize: 11, fontWeight: 600 } },
+    { xAxis: c.end_km }]).filter(Boolean);
+  const pts = (a) => X.map((x, k) => [x, a ? a[k] : null]);
+  const head = [`${T.names.elev} m`, ...ids.map((id) => `${T.names[id]} ${T.units[id]}`)];
+  return {
+    animation: false,
+    grid: tops.map((top, k) => ({ left: 52, right: 14, top, height: hts[k] })),
+    axisPointer: { link: [{ xAxisIndex: "all" }], lineStyle: { color: T.muted } },
+    tooltip: { trigger: "axis", confine: true, backgroundColor: T.panel, borderColor: T.line, textStyle: { color: T.ink } },
+    // each panel's name and unit in the gap above it (never on top of its line)
+    graphic: head.map((text, k) => ({ type: "text", left: 52, top: tops[k] - 15, z: 10, silent: true,
+      style: { text, fill: T.muted, fontSize: 10 } })),
+    xAxis: tops.map((_, k) => ({ type: "value", gridIndex: k, min: x0, max: x1, axisTick: { show: false },
+      axisLine: { lineStyle: { color: T.line } }, splitLine: { show: false },
+      axisLabel: k === n - 1 ? { ...lbl, showMaxLabel: false, formatter: (v) => `${+(+v).toFixed(1)} km` } : { show: false } })),
+    yAxis: [{ type: "value", gridIndex: 0, scale: true, splitNumber: 3, axisLabel: { ...lbl, formatter: (v) => String(Math.round(v)) },
+      splitLine: { lineStyle: { color: T.line, opacity: 0.5 } } },
+      ...ids.map((id, k) => ({ type: "value", gridIndex: k + 1, scale: true, splitNumber: 2, inverse: id === "gap",
+        ...(id === "vam" || id === "gap" ? cmRange(P[id], id === "gap", id === "vam") : {}),
+        axisLabel: { ...lbl, formatter: (v) => id === "gap" ? (v > 0 ? `${Math.floor(v / 60)}:${String(Math.round(v % 60)).padStart(2, "0")}` : "") : String(Math.round(v)) },
+        splitLine: { lineStyle: { color: T.line, opacity: 0.5 } } }))],
+    series: [
+      { id: "alt", type: "line", xAxisIndex: 0, yAxisIndex: 0, data: pts(P.alt), showSymbol: false, connectNulls: false,
+        lineStyle: { color: T.elev, width: 1.3 }, itemStyle: { color: T.elev }, areaStyle: { color: cmRgba(T.elev, 0.18) },
+        markArea: { silent: true, data: area(0) } },
+      ...ids.map((id, k) => ({ id, type: "line", xAxisIndex: k + 1, yAxisIndex: k + 1, data: pts(P[id]), showSymbol: false,
+        connectNulls: false, lineStyle: { color: T.colors[id], width: 1.4 }, itemStyle: { color: T.colors[id] },
+        markArea: { silent: true, data: area(k + 1) } })),
+    ],
+  };
+}
+function cmStyle() {
+  if (document.getElementById("cm-style")) return;
+  const st = document.createElement("style");
+  st.id = "cm-style";
+  st.textContent = `.cmsum { margin: 2px 0 10px; }
+.cmmap .plot.lmap { height: 340px; }
+@media (max-width: 600px) { .cmmap .plot.lmap { height: 270px; } .cmcard > table td.num { white-space: normal; } }
+.cmprof { margin-top: 8px; }
+.cmprof .plot.cmplot { height: 260px; }
+.cmtbl { margin-top: 8px; }
+.cmtbl table.zt { width: 100%; }
+.cmtbl tr[data-i] { cursor: pointer; }
+.cmtbl tr[data-i]:hover td, .cmtbl tr.peek td { background: var(--code); }
+.cmtbl tr.on td { background: color-mix(in srgb, var(--cp-up) 16%, transparent); }
+.cmtbl tr.on td:first-child { box-shadow: inset 3px 0 0 var(--cp-up); }
+.cmtbl tr[data-i]:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.cmtbl td.vs { font-size: 11.5px; }
+.cmtbl td.vs b { font-weight: 600; }`;
+  document.head.appendChild(st);
+}
+// the whole activity's climbing: four small tiles (the 本次重點 tile markup, rv-c)
+function cmTiles(sm) {
+  const tile = (icon, key, val, unit, sub) => `<div class="rv-c"><div class="k">${rvI(icon)}${esc(t(`viewer.climbmap.t_${key}`))}</div>${
+    rvQ(t(`viewer.climbmap.t_${key}_tip`))}<div class="v">${esc(val)}${unit ? `<small>${esc(unit)}</small>` : ""}</div>${
+    sub ? `<div class="s" title="${esc(sub)}">${esc(sub)}</div>` : ""}</div>`;
+  const pc = (x) => x == null ? null : Math.round(x * 100);
+  return `<div class="rv cmsum">`
+    + tile("gain", "ascent", cpN(sm.ascent_m), "m", sm.n ? t("viewer.climbmap.t_ascent_sub", { n: sm.n, gain: cpN(sm.gain_m) }) : null)
+    + tile("time", "time", sm.time_s ? hms(sm.time_s) : "–", "", sm.share != null ? t("viewer.climbmap.t_time_sub", { p: pc(sm.share) }) : null)
+    + tile("climb", "vam", cpN(sm.vam), "m/h", sm.run_share != null ? t("viewer.climbmap.run_pct", { p: pc(sm.run_share) }) : null)
+    + tile("hr", "hr", cpN(sm.hr_per_100m), sm.hr_per_100m != null ? t("viewer.climbmap.t_hr_unit") : "", null)
+    + `</div>`;
+}
+// one row per climb; 「跟平常比」 = VAM and HR per 100 m against similar-grade climbs (▲▼ outside the usual's middle 50 %)
+function cmTable(climbs, pwOn, gradeMatch) {
+  const pw = pwOn && climbs.some((c) => c.avg_power != null);
+  const run = climbs.some((c) => c.run_share != null);
+  const H = (k, num = true, title = "") => `<th${num ? ' class="num"' : ""}${title ? ` title="${esc(title)}"` : ""}>${esc(t(`viewer.climbmap.h_${k}`))}</th>`;
+  const pp = Math.round((gradeMatch || 0.04) * 100);
+  const vsCell = (c) => {
+    const B = c.base || {}, a = cmVs(c.vam, B.vam), b = cmVs(c.hr_per_100m, B.hr_per_100m), vb = B.vam || {};
+    const title = vb.ok
+      ? t("viewer.climbmap.vs_title", { weeks: vb.weeks, pp, n: vb.n, vam: cpN(vb.median), hr: cpN(B.hr_per_100m?.median) })
+      : t("viewer.climbmap.vs_title_none", { pp, n: vb.n || 0 });
+    const txt = !a && !b ? esc(t("viewer.climbmap.vs_none"))
+      : `VAM <b>${esc(cmVsText(a))}</b> · ${esc(t("viewer.climbmap.vs_hr"))} <b>${esc(cmVsText(b))}</b>`;
+    return `<td class="vs" title="${esc(title)}">${txt}</td>`;
+  };
+  const rows = climbs.map((c, i) => `<tr data-i="${i}" tabindex="0">`
+    + `<td><b>${esc(c.no)}</b></td><td class="num">${cpN(c.start_km, 1)}</td><td class="num">+${cpN(c.gain_m)}</td>`
+    + `<td class="num">${cpN(c.distance_km, 2)}</td><td class="num">${cpN(c.grade * 100)}%</td><td class="num">${cpDur(c.duration_s)}</td>`
+    + `<td class="num">${cpN(c.vam)}</td><td class="num">${cpN(c.avg_hr)}</td>`
+    + (pw ? `<td class="num">${cpN(c.avg_power)}</td>` : "")
+    + `<td class="num">${cpPace(c.gap_s_per_km)}</td>`
+    + (run ? `<td class="num">${c.run_share == null ? "–" : esc(t("viewer.climbmap.run_pct", { p: Math.round(c.run_share * 100) }))}</td>` : "")
+    + vsCell(c) + `</tr>`).join("");
+  return `<div class="vt"><table class="zt"><thead><tr>${H("no", false)}${H("km")}${H("gain")}${H("dist")}${H("grade")}${H("time")}`
+    + `${H("vam")}${H("hr")}${pw ? H("power") : ""}${H("gap")}${run ? H("run") : ""}${H("vs", false, t("viewer.climbmap.vs_help"))}</tr></thead>`
+    + `<tbody>${rows}</tbody></table></div>`;
+}
+async function drawClimbMap(card, res) {
+  cpStyle(); cmStyle();
+  const D = res.climb_profile, P = D.profile, climbs = D.climbs || [];
+  // the 判讀 rows and the card's ? (draw); no 「詳細數字」 table: the climb table below holds those numbers
+  draw(card, { ...res, series: (res.series || []).filter((x) => x.data.kind === "value") });
+  card.classList.add("wide", "cmcard");
+  addTip(card, t("viewer.climbmap.tip"));
+  card.insertAdjacentHTML("beforeend", cmTiles(D.summary || {}));
+  if (D.note) card.insertAdjacentHTML("beforeend", `<p class="nodata small">${esc(D.note)}</p>`);
+  const mapBox = document.createElement("div"), profBox = document.createElement("div"), tblBox = document.createElement("div");
+  mapBox.className = "cmmap"; profBox.className = "cmprof"; tblBox.className = "cmtbl";
+  card.append(mapBox, profBox, tblBox);
+  const pwOn = S.usePower !== false;
+  let sel = -1, peek = -1, ctx = null, hlLayer = null;
+  const shown = () => (peek >= 0 ? peek : sel);
+
+  // the profile: elevation + the picked metric panels against km
+  let chart = null, ids = [], paint = () => {};
+  if (P && cpHas(P.alt) && P.x?.length > 1) {
+    const has = (id) => (id !== "power" || pwOn) && cpHas(P[id]);
+    let want = Array.isArray(cmPrefs().metrics) ? cmPrefs().metrics : CM_DEFAULT;
+    ids = cmPick(want, has);
+    const bar = document.createElement("div");
+    bar.className = "maptb";
+    bar.innerHTML = `<span class="meta">${esc(t("viewer.mapchart.metrics"))}</span><div class="seg" role="group" aria-label="${esc(t("viewer.mapchart.metrics"))}">${
+      CM_METRICS.map(([id, key]) => `<button data-m="${id}" class="${ids.includes(id) ? "on" : ""}" aria-pressed="${ids.includes(id)}" ${has(id) ? "" : "disabled"}>${esc(t(key))}</button>`).join("")}</div>`;
+    const el = document.createElement("div");
+    el.className = "plot cmplot";
+    el.setAttribute("role", "img");
+    el.setAttribute("aria-label", t("viewer.climbmap.aria", { n: climbs.length }));
+    profBox.append(bar, el);
+    chart = echarts.init(el);
+    charts.push(chart);
+    const name = (id) => t(CM_METRICS.find((r) => r[0] === id)[1]);
+    const unit = (id) => CM_METRICS.find((r) => r[0] === id)[2];
+    const color = (id) => css(CM_METRICS.find((r) => r[0] === id)[3]) || css("--text");
+    const fmtV = (id, v) => v == null || !isFinite(v) ? "–" : id === "gap" ? cpPace(v) : cpN(v);
+    const tip = (pp) => {
+      pp = [].concat(pp);
+      if (!pp.length) return "";
+      const k = pp[0].dataIndex, x = P.x[k];
+      const rows = [`<b>${cpN(x, 2)} km</b>${P.t?.[k] != null ? ` · ${fmtDur(P.t[k])}` : ""}`,
+        `${esc(t("viewer.mapchart.elev"))} <b>${cpN(P.alt[k])}</b> m · ${esc(t("viewer.mapchart.grade"))} <b>${P.grade?.[k] == null ? "–" : cpN(P.grade[k], 1) + "%"}</b>`];
+      ids.forEach((id) => rows.push(`<span style="color:${color(id)}">●</span> ${esc(name(id))} <b>${fmtV(id, P[id]?.[k])}</b> ${esc(unit(id))}`));
+      const ci = cmClimbAt(climbs, x);
+      if (ci >= 0) {
+        const c = climbs[ci];
+        rows.push(`<span style="opacity:.8">${esc(t("viewer.climbmap.tip_climb", { no: c.no, gain: cpN(c.gain_m), grade: cpN(c.grade * 100) }))}</span>`);
+      }
+      return cpTipBox(rows.join("<br>"));
+    };
+    const theme = () => ({ elev: css("--cp-elev"), up: css("--cp-up"), line: css("--line"), muted: css("--muted"), ink: css("--text"),
+      panel: css("--panel"), colors: Object.fromEntries(CM_METRICS.map(([id]) => [id, color(id)])),
+      names: { elev: t("viewer.mapchart.elev"), ...Object.fromEntries(CM_METRICS.map(([id]) => [id, name(id)])) },
+      units: Object.fromEntries(CM_METRICS.map(([id]) => [id, unit(id)])) });
+    paint = () => {
+      if (chart.isDisposed()) return;
+      const eh = res._zoom ? 230 : CM_ELEV_H;
+      el.style.height = `${cmHeight(ids.length, eh)}px`;
+      chart.resize();
+      const o = cmOption(P, ids, climbs, shown(), theme(), eh);
+      o.tooltip.formatter = tip;
+      chart.setOption(o, true);
+    };
+    paint();
+    new ResizeObserver(() => chart.isDisposed() || chart.resize()).observe(el);
+    bar.onclick = (e) => {
+      const b = e.target.closest("button[data-m]");
+      if (!b || b.disabled) return;
+      const id = b.dataset.m, on = !ids.includes(id);
+      want = CM_METRICS.map((r) => r[0]).filter((x) => x === id ? on : want.includes(x));
+      ids = cmPick(want, has);
+      b.classList.toggle("on", on); b.setAttribute("aria-pressed", String(on));
+      cmSave({ metrics: want });
+      paint();
+    };
+    // a click on a climb (any panel) picks it; on it again or off the climbs clears
+    chart.getZr().on("click", (e) => {
+      if (!gridRects(chart).some((g) => e.offsetX >= g.x && e.offsetX <= g.x + g.width && e.offsetY >= g.y && e.offsetY <= g.y + g.height)) return;
+      const i = cmClimbAt(climbs, chart.convertFromPixel({ xAxisIndex: 0 }, e.offsetX));
+      select(i === sel ? -1 : i);
+    });
+  }
+
+  // the climb table
+  if (climbs.length) {
+    tblBox.innerHTML = cmTable(climbs, pwOn, D.grade_match);
+    tblBox.querySelectorAll("tr[data-i]").forEach((tr) => {
+      const i = +tr.dataset.i;
+      tr.addEventListener("mouseenter", () => { peek = i; refresh(false); });
+      tr.addEventListener("mouseleave", () => { peek = -1; refresh(false); });
+      tr.addEventListener("click", () => select(i === sel ? -1 : i));
+      tr.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); select(i === sel ? -1 : i); } });
+    });
+  }
+
+  // the picked (or previewed) climb: outlined on the map (fitted into view when picked and not fully shown)
+  function hlMap(fit) {
+    if (!ctx || !ctx.el._lmap) return;
+    const { map, s, ll } = ctx;
+    hlLayer ||= L.layerGroup().addTo(map);
+    hlLayer.clearLayers();
+    const i = shown();
+    if (i < 0) return;
+    const c = climbs[i], pts = cmSegment(s, c.start_km, c.end_km).map(ll);
+    if (pts.length < 2) return;
+    const o = { interactive: false, lineCap: "round", lineJoin: "round" };
+    // a dark outline in both themes: the map tiles are light either way
+    L.polyline(pts, { ...o, color: "#1b1b1f", weight: 10, opacity: 0.85 }).addTo(hlLayer);
+    L.polyline(pts, { ...o, color: css("--cp-up") || "#eb6834", weight: 5, opacity: 1 }).addTo(hlLayer);
+    if (fit) {
+      const b = L.latLngBounds(pts);
+      if (!map.getBounds().contains(b)) map.fitBounds(b.pad(0.3), { maxZoom: 16 });
+    }
+  }
+  function refresh(fit) {
+    paint();
+    hlMap(fit);
+    tblBox.querySelectorAll("tr[data-i]").forEach((tr) => {
+      const i = +tr.dataset.i;
+      tr.classList.toggle("on", i === sel);
+      tr.classList.toggle("peek", i === peek && i !== sel);
+      tr.setAttribute("aria-selected", String(i === sel));
+    });
+  }
+  function select(i) { sel = i; peek = -1; refresh(i >= 0); }
+
+  // the map (its own samples; the profile joins the synced hover once they are here)
+  if (D.workout == null) return;
+  ctx = await drawMap(card, { workout: D.workout }, { into: mapBox, chart: false, colorKey: "climbColor", defColor: "grade", tip: "",
+    onPick: (k) => {
+      const d = k == null || !ctx ? null : ctx.s.d?.[k];
+      const i = cmClimbAt(climbs, d);
+      select(i === sel ? -1 : i);
+    } }) || null;
+  if (!ctx || !card.isConnected) return;
+  if (chart && !chart.isDisposed()) hoverChart(chart, ctx.s, "d");
+  refresh(false);
+}
+// ---- end climb map ----
 
 function drawGradeProfile(card, res) {
   cpStyle();

@@ -897,6 +897,23 @@ def get_activity(i: int):
     return _activity_json(ds, ds.workouts[i])
 
 
+@router.get("/workouts/{i}/kind")
+def get_kind(i: int, parity: Optional[bool] = None):
+    """The activity type of one dataset workout as the viewer's filter reads it
+    (engine/sport_map.kind_of: the user's 爬山 / 百岳跟團 mark, the trail / road
+    classification with its override, the platform code) and `chart_sport`: which
+    single-activity charts apply to it (views' "sports" tag; SP-218 — the activity
+    itself decides, not 主要訓練項目). 百岳 is not told apart from 登山健行 here
+    (both are "trail"), so the GPS summit lookup is skipped."""
+    from backend.engine import activity_tags as AT
+    from backend.engine import sport_map as SM
+    ds = _dataset(parity)
+    if not 0 <= i < len(ds.workouts):
+        raise HTTPException(404, "workout not found")
+    kind = SM.KindFilter(SM.RUN_TYPES, ds, AT.load()).kind(ds.workouts[i])
+    return {"workout": i, "kind": kind, "chart_sport": SM.chart_sport(kind)}
+
+
 @router.get("/workouts/{i}/pain")
 def get_pain(i: int):
     """The 疼痛 mark of one dataset workout (the chart page's chip; light: no

@@ -116,3 +116,69 @@ def test_grade_card_rows_with_baseline():
     up = [b for b in gp["bins"] if (b["lo"] or 0) >= 10]
     assert up and all(b["metrics"]["vam"] > 0 for b in up if b["time_s"] > 120)
     assert gp["min_s"] == R.BIN_MIN_S
+
+
+# ---- SP-218: the 爬坡與地形 card's map / table numbers ------------------------------------
+
+def _with_cadence(w, up_spm=(110.0, 170.0), flat_spm=170.0):
+    """Cadence (strides/min, the channel's unit) on `w`: the first half of the climb walked
+    at up_spm[0], the second half run at up_spm[1]; flat at flat_spm."""
+    t = np.asarray(w.channels["elapsedtime"])
+    cad = np.where((t >= 600) & (t < 1200), up_spm[0] / 2, np.where((t >= 1200) & (t < 1800), up_spm[1] / 2, flat_spm / 2))
+    w.channels["cadence"] = list(cad)
+    return w
+
+
+def test_climb_run_share_from_cadence_and_the_summary():
+    today = dt.date(2026, 9, 30)
+    ds = FakeDataset([_with_cadence(_trail(today))], today, settings=SETTINGS)
+    r = R.review(ds, ds.workouts[0], "climbs")
+    cp = r["climb_profile"]
+    (c,) = cp["climbs"]
+    assert c["run_share"] == pytest.approx(0.5, abs=0.06)          # walked half the climb, ran the other half
+    sm = cp["summary"]
+    assert sm["n"] == 1 and sm["ascent_m"] == pytest.approx(200)    # the activity's own climbing
+    assert sm["gain_m"] == pytest.approx(c["gain_m"]) and sm["time_s"] == pytest.approx(c["duration_s"])
+    assert sm["share"] == pytest.approx(c["duration_s"] / 3600, rel=0.02)
+    assert sm["vam"] == pytest.approx(600, rel=0.05)                # 200 m in 20'
+    assert sm["hr_per_100m"] == pytest.approx(c["hr_per_100m"])     # one climb: the median is that climb
+    assert sm["run_share"] == pytest.approx(c["run_share"])
+    assert cp["workout"] == 0                                      # the viewer's samples / map / hover
+
+
+def test_climb_run_share_needs_cadence():
+    today = dt.date(2026, 9, 30)
+    ds = FakeDataset([_trail(today)], today, settings=SETTINGS)
+    cp = R.review(ds, ds.workouts[0], "climbs")["climb_profile"]
+    assert cp["climbs"][0]["run_share"] is None and cp["summary"]["run_share"] is None
+    s = {"t": list(range(10)), "dist": [0.1 * i for i in range(10)], "cadence": None}
+    assert R.climb_run_share(s, 0.0, 1.0) is None
+    # cadence on less than half the climb's moving seconds: not judged
+    s = {"t": list(range(100)), "dist": [0.01 * i for i in range(100)], "speed": [8.0] * 100,
+         "cadence": [80.0] * 30 + [None] * 70}
+    assert R.climb_run_share(s, 0.0, 1.0) is None
+    s["cadence"] = [80.0] * 60 + [30.0] * 40
+    assert R.climb_run_share(s, 0.0, 1.0) == pytest.approx(0.6, abs=0.02)
+
+
+def test_climb_summary_without_climbs():
+    w = _trail(dt.date(2026, 9, 30))
+    ds = FakeDataset([w], dt.date(2026, 9, 30), settings=SETTINGS)
+    sm = R.climb_summary(ds.workouts[0], {"moving_s": 3600.0, "hr_per_100m": None}, [])
+    assert sm["n"] == 0 and sm["gain_m"] is None and sm["share"] is None and sm["vam"] is None
+    assert sm["ascent_m"] == pytest.approx(200)
+
+
+def test_profile_uses_the_smoothed_elevation():
+    """The drawn profile is on WKO5's smoothed elevation (the evaluator's _elevation), not the raw channel."""
+    today = dt.date(2026, 9, 30)
+    w = _trail(today)
+    rng = np.random.default_rng(1)
+    w.channels["elevation"] = list(np.asarray(w.channels["elevation"]) + rng.normal(0, 3.0, len(w.channels["elevation"])))
+    ds = FakeDataset([w], today, settings=SETTINGS)
+    alt = np.asarray([v for v in R.review(ds, ds.workouts[0], "climbs")["climb_profile"]["profile"]["alt"] if v is not None])
+    ch = w.channels
+    raw = R.profile_series(ch["elapsedtime"], ch["elapseddistance"], ch["elevation"])["alt"]
+    raw = np.asarray([v for v in raw if v is not None])
+    # the noise (σ 3 m sample to sample) is smoothed away: the profile's steps are far smaller than on the raw channel
+    assert np.median(np.abs(np.diff(alt))) < np.median(np.abs(np.diff(raw))) / 3
