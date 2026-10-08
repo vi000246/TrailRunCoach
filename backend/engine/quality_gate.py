@@ -2598,12 +2598,19 @@ def week_decision(gate: dict, kind: str, mode: str, monday: Optional[dt.date] = 
             rules.append(_("每週 1 堂強度課時以 {zone} 區為主（3 區：5 區 = {z3}:{z5}）", z3=ratio["z3"], z5=ratio["z5"],
                            zone=3 if ratio["z3"] > ratio["z5"] else 5))
         items = _pick_tracks(avail, n, monday, gate, s3, s5, d3, first and step is None, met, ratio=ratio)
-        if any(it["spec"] is TP for it in items):
+        # SP-352: only the 後段's T+ swap (advance False, ratio["tp"] weeks) is a 後段 change worth a note. The
+        # Zone 3 ladder's own maintenance turn is also TP (z3_spec: A3, A4, T+ …) — that one is just the rung.
+        if late and any(it["spec"] is TP and not it["advance"] for it in items):
             rules.append(_("這週的 3 區改排接近閾值的巡航 3×7 分（97–100% CP），比階梯那一階更接近比賽強度"))
         out = _decision(items, avail, gate, n, monday, lock, zt, ratio)
+        # SP-352: the 後段 note needs the week's 賽前第 n 週, which only a 後段 week has. Without an A race (a
+        # manual 專項期), a week after it, or in the 前段, week_ratio has no half: the default ratio
+        # (gate["ratio"], 2:1) picks the track, a T+ maintenance turn is scheduled as is, and there is no note.
+        seg_note = _("專項期後段（賽前第 {w} 週）：{rules}。越接近比賽，練的強度越像比賽；週數和比例為推估",
+                     w=ratio["weeks_out"], rules="；".join(rules)) \
+            if items and rules and ratio.get("segment") == "late" else ""
         return {**out, "allow": True if kind == "taper" else bool(items), "warn": warn if items else "",
-                "seg_note": _("專項期後段（賽前第 {w} 週）：{rules}。越接近比賽，練的強度越像比賽；週數和比例為推估",
-                              w=ratio["weeks_out"], rules="；".join(rules)) if items and rules else ""}
+                "seg_note": seg_note}
     if first and z5.get("state") == "reentry":
         # inside a re-entry block: E days only (Daniels table 9.2; engine/reentry.py)
         return none(z5.get("text", ""))

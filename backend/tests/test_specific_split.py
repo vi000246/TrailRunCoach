@@ -113,6 +113,38 @@ def test_road_late_half_ratios_and_tplus():
     assert picks.count("z5") >= 1 and "1:2" in QG.week_decision(five, "specific", "specific", monday_of(6))["seg_note"]
 
 
+# ---- SP-352: a manual 專項期 without an A race ------------------------------------------------------------
+
+def test_manual_specific_without_an_a_race_and_zone3_on_its_tplus_turn():
+    """A manual 專項期, no A race, and Zone 3's maintenance turn is T+ (z3_spec step 6): the week used to
+    raise KeyError 'weeks_out' (no 前段／後段 without a race). Now: the ladder's T+ is scheduled as is, no 後段 note."""
+    assert QG.z3_spec(6) is QG.TP
+    for z5 in (False, True):
+        g = gate([], z5=z5, dose={"z3": {"step": 6, "met": 6, "done": 6}, "z5": {"step": 1, "done": 1}})
+        assert "late" not in g["ratio"]
+        weeks = [TODAY + dt.timedelta(weeks=k) for k in range(3)]
+        decs = [QG.week_decision(g, "specific", "specific", m) for m in weeks]
+        assert all(d["allow"] for d in decs) and all(d["seg_note"] == "" for d in decs)
+        z3 = [it for d in decs for it in d["items"] if it["track"] == "z3"]
+        assert z3 and all(it["spec"] is QG.TP and it["advance"] for it in z3)   # the ladder's own turn: it counts
+        assert all(QG.week_decision(g, "specific", "specific", m, n=2)["allow"] for m in weeks)
+
+
+def test_specific_after_the_a_race_and_zone3_on_its_tplus_turn():
+    """The same T+ turn in a 專項期 week after the A race (week_ratio has no half there): no KeyError either."""
+    g = gate([ev("road", 21.1, start=TODAY + dt.timedelta(days=3))], z5=False,
+             dose={"z3": {"step": 6, "met": 6, "done": 6}, "z5": {"step": 0, "done": 0}})
+    d = QG.week_decision(g, "specific", "specific", TODAY + dt.timedelta(weeks=2))
+    assert d["allow"] and d["items"][0]["spec"] is QG.TP and d["seg_note"] == ""
+
+
+def test_the_late_half_note_with_an_a_race_is_unchanged():
+    """With an A race the 後段 still says what it changed, the T+ week included (SP-75 as before)."""
+    half = gate([ev("road", 21.1)])
+    assert "賽前第 4 週" in QG.week_decision(half, "specific", "specific", monday_of(4))["seg_note"]
+    assert QG.week_decision(half, "specific", "specific", monday_of(8))["seg_note"] == ""
+
+
 # ---- the sessions: the ladder, uphill on trail ---------------------------------------------------------
 
 def test_fit_hill_gives_the_rungs_uphill_version_from_the_first_session():
