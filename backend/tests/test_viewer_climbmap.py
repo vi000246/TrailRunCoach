@@ -98,6 +98,42 @@ def test_option_elevation_on_top_then_one_panel_per_metric_with_the_climbs_shade
     assert _run("cmHeight(3) > cmHeight(1)")
 
 
+T0 = {"elev": "#777777", "up": "#eb6834", "line": "#dddddd", "muted": "#888888", "ink": "#111111", "panel": "#ffffff",
+      "colors": {}, "names": {"elev": "海拔"}, "units": {}}
+
+
+def test_a_pick_is_a_merge_of_the_shading_only():
+    """SP-218 review M3: picking / previewing a climb patches only the series' markArea (by id), no rebuild."""
+    o = _run("cmShade(['vam', 'hr'], DATA.c, 0, DATA.T)", c=CLIMBS, T=T0)
+    assert list(o) == ["series"] and [s["id"] for s in o["series"]] == ["alt", "vam", "hr"]
+    assert all(set(s) == {"id", "markArea"} for s in o["series"])
+    elev = o["series"][0]["markArea"]["data"]
+    assert elev[0][0]["itemStyle"]["borderWidth"] > 0 and elev[1][0]["itemStyle"]["borderWidth"] == 0
+    assert elev[0][0]["label"]["show"] is True and o["series"][1]["markArea"]["data"][0][0]["label"]["show"] is False
+    assert _run("JSON.stringify(cmShade([], DATA.c, -1, DATA.T).series[0].markArea.data) === "
+                "JSON.stringify(cmOption({x: [0, 6], alt: [1, 2]}, [], DATA.c, -1, DATA.T).series[0].markArea.data)",
+                c=CLIMBS, T=T0)
+
+
+def test_click_and_tap_rules():
+    # mouse: a climb picks it, the same climb again or off the climbs clears
+    assert _run("[cmClickPick(-1, 1, false), cmClickPick(1, 1, false), cmClickPick(1, -1, false), cmClickPick(0, 1, false)]") == [1, -1, -1, 1]
+    # tap: only ever picks another climb — tapping the picked one or between climbs reads values, keeps the pick
+    assert _run("[cmClickPick(-1, 1, true), cmClickPick(1, 1, true), cmClickPick(1, -1, true), cmClickPick(0, 1, true)]") == [1, 1, 1, 1]
+
+
+def test_refresh_skips_unchanged_picks_and_never_rebuilds_the_profile():
+    html = PAGE.read_text(encoding="utf-8")
+    body = html[html.index("async function drawClimbMap"):html.index("// ---- end climb map ----")]
+    ref = body[body.index("function refresh(fit, force = false) {"):body.index("function select(i)")]
+    assert 'if (key === last && !force) return;' in ref and "shade();" in ref and "paint()" not in ref
+    a = body.index("shade = () => { if (!chart.isDisposed())")
+    sh = body[a:body.index("\n", a)]
+    assert "resize" not in sh and "true)" not in sh                            # a merge, no notMerge, no resize
+    assert "select(cmClickPick(sel, i, isTouch(e.event)))" in body             # the profile's click / tap
+    assert "_zoom: res._zoom" in body                                          # the enlarged copy's map
+
+
 def test_option_without_metric_panels_is_the_elevation_alone():
     P = {"x": [0, 1, 2], "alt": [10, 20, 30]}
     T = {"elev": "#777777", "up": "#eb6834", "line": "#dddddd", "muted": "#888888", "ink": "#111111", "panel": "#ffffff",

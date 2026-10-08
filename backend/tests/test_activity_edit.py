@@ -433,6 +433,6 @@ def test_climb_card_is_map_profile_and_table():
     html = (STATIC / "wko5_viewer.html").read_text(encoding="utf-8")
     assert "function drawClimbProfile" not in html
     body = html[html.index("async function drawClimbMap"):html.index("// ---- end climb map ----")]
-    assert "drawMap(card, { workout: D.workout }, { into: mapBox, chart: false" in body
+    assert "drawMap(card, { workout: D.workout, _zoom: res._zoom }, { into: mapBox, chart: false" in body
     assert 'hoverChart(chart, ctx.s, "d")' in body                         # profile <-> map on the km axis
     assert "res.climb_profile) drawClimbMap(box, res)" in html
