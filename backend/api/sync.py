@@ -163,6 +163,30 @@ async def delete_source_files(source: str, athlete_id: int = 1,
         raise HTTPException(409, "SYNC_BUSY")
 
 
+@router.get("/failed")
+async def failed_list(athlete_id: int = 1, db: AsyncSession = Depends(get_db)):
+    """The failed list (sync/failures.py, SP-362): activities a sync could not download /
+    import (state retrying | stopped) and the ones without a FIT (no_file); 設定 › 進階設定."""
+    from backend.sync import failures as FL
+    return {"items": await FL.listing(db, athlete_id), "max_attempts": FL.MAX_ATTEMPTS,
+            "max_age_days": FL.MAX_AGE_DAYS}
+
+
+@router.post("/failed/{row_id}/retry")
+async def failed_retry(row_id: int, athlete_id: int = 1, db: AsyncSession = Depends(get_db)):
+    """「重試」: the row is due again (attempts from 0), and its source syncs now in the
+    background when it can (logged in, enabled, idle) — `started`; otherwise the next sync
+    retries it (`queued`)."""
+    from backend.sync import failures as FL
+    row = await FL.reset(db, athlete_id, row_id)
+    if row is None:
+        raise HTTPException(404, "no such row")
+    source = row.source
+    ready = (await runner.ready_sources(db, athlete_id)).get(source)
+    started = ready == "ready" and runner.start_background(source, athlete_id, trigger="retry") is not None
+    return {"id": row_id, "source": source, "status": "started" if started else "queued"}
+
+
 @router.get("/status")
 async def sync_status(athlete_id: int = 1, db: AsyncSession = Depends(get_db)):
     """Legacy, TrainingPeaks only: authenticated = a TP token is stored. Not the

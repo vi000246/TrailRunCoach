@@ -402,3 +402,25 @@ class UserSetting(Base):
     key: Mapped[str] = mapped_column(String(100))
     value_json: Mapped[str] = mapped_column(Text)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class SyncFailure(Base):
+    """One activity a sync listed but could not fetch (SP-362, sync/failures.py): its download /
+    import failed (kind "failed": retried by id by the next syncs, at most failures.MAX_ATTEMPTS
+    times or failures.MAX_AGE_DAYS days, then kept for 設定 › 進階設定 「重試」) or it has no FIT
+    file at all (kind "no_file": a manual entry, never retried). The sync cursor no longer waits
+    for these. `source` = coros | tp (sync/runner.SOURCES); `provider_id` = COROS labelId / TP
+    workoutId. Deleted when the activity is imported, and with the source's files (purge)."""
+    __tablename__ = "sync_failures"
+    __table_args__ = (UniqueConstraint("athlete_id", "source", "provider_id"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    athlete_id: Mapped[int] = mapped_column(ForeignKey("athletes.id"), index=True)
+    source: Mapped[str] = mapped_column(String(20))
+    provider_id: Mapped[str] = mapped_column(String(64))
+    sport_type: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)     # COROS sportType
+    workout_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    kind: Mapped[str] = mapped_column(String(10), default="failed")              # failed | no_file
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    first_at: Mapped[datetime] = mapped_column(DateTime)                         # UTC, naive
+    last_at: Mapped[datetime] = mapped_column(DateTime)

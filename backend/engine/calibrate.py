@@ -17,7 +17,8 @@ repository.py), value
 
 When: `after_sync` (sync/runner.py, next to plan_auto) starts `run_safe` in
 the background after a sync that imported an activity, at most once per
-CALIB_EVERY_DAYS (SP-320 ④); `calibrate()` can be called directly
+CALIB_EVERY_DAYS (SP-320 ④), after that sync's automatic plan run has ended
+(lowest priority, SP-362); `calibrate()` can be called directly
 (POST /api/v1/calib/run), which always runs.
 
 Reading: `value(name)` (sync, read-only) for engine code; `describe()` for
@@ -333,12 +334,27 @@ def _after_sync(source: str, result: dict, athlete_id: int = 1) -> Optional[asyn
                                                     and int(r.get("rpe_filled") or 0) < 1):
         return None
     try:
-        t = asyncio.get_running_loop().create_task(run_safe(athlete_id))
+        t = asyncio.get_running_loop().create_task(_after_the_plan(athlete_id))
     except RuntimeError:
         return None
     _TASKS.add(t)
     t.add_done_callback(_TASKS.discard)
     return t
+
+
+PLAN_WAIT_S = 600.0                # at most this long behind the automatic plan run (SP-362)
+
+
+async def _after_the_plan(athlete_id: int) -> dict:
+    """Lowest priority after a sync (SP-362): the automatic plan run the same sync started
+    (engine/plan_auto.py; it shares the dataset / status / inputs the warm-up computes) goes
+    first, then this fit."""
+    try:
+        from backend.engine import plan_auto
+        await plan_auto.wait_idle(PLAN_WAIT_S)
+    except Exception as e:                  # noqa: BLE001 — never blocks the calibration
+        log.info("calibration: plan wait skipped: %s", type(e).__name__)
+    return await run_safe(athlete_id)
 
 
 after_sync = _after_sync           # the hook sync/runner.py calls (tests replace it)

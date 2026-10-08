@@ -217,12 +217,89 @@ def _dataset_in_tenant(parity: Optional[bool], source: Optional[str]) -> Dataset
 _WARM = {"thread": None}
 
 
+PLAN_IDLE_WAIT_S = 600.0       # the warm-up's low-priority part waits this long for plan_auto
+_PLAN_POLL_S = 0.5
+_LOW_LOCK = threading.Lock()
+
+
+def _wait_plan_idle(limit_s: float = PLAN_IDLE_WAIT_S) -> None:
+    """Block (this background thread only) while an automatic plan run is going (SP-362)."""
+    import time
+    from backend.engine import plan_auto
+    end = time.monotonic() + limit_s
+    while plan_auto.busy() and time.monotonic() < end:
+        time.sleep(_PLAN_POLL_S)
+
+
+def _calibrate_never_fitted(ds) -> None:
+    """每人校正 (engine/calibrate.py): fit what was never fitted (a new install, a new item)
+    now instead of waiting for the next sync."""
+    from backend.engine import calibrate as CAL
+    if any(CAL.stored_entry(n) is None for n, it in CAL._registry().items() if not it.manual_only):
+        import asyncio
+
+        async def fit_once():
+            # its own engine: this thread runs its own event loop
+            from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+            from backend.db.database import DATABASE_URL
+            eng = create_async_engine(DATABASE_URL)
+            try:
+                async with async_sessionmaker(eng, expire_on_commit=False)() as db:
+                    await CAL.calibrate(db, ds=ds)
+            finally:
+                await eng.dispose()
+        asyncio.run(fit_once())
+
+
+def _low_priority(reason: str) -> None:
+    """The warm-up's lowest-priority part, in its own thread (review SP-362 #4): wait for an
+    automatic plan run to end, then — on the Dataset read AFTER the wait (a sync may have
+    rebuilt it meanwhile) — the never-fitted calibration and the 活動列表's automatic
+    classification (started in its own thread, read from disk when nothing changed). A
+    warm-up asked for while this waits only marks it to run once more (`low_again`)."""
+    import logging
+    while True:
+        try:
+            _wait_plan_idle()
+            ds = _dataset()
+            _calibrate_never_fitted(ds)
+            from backend.api import activity_auto as AA
+            AA.job_for(ds)
+        except Exception as e:           # noqa: BLE001 — a page request will show the error
+            logging.getLogger(__name__).warning("warm-up low-priority part (%s) failed: %s", reason,
+                                                type(e).__name__, exc_info=True)
+        with _LOW_LOCK:
+            if not _WARM.get("low_again"):
+                _WARM["low"] = None
+                return
+            _WARM["low_again"] = False
+
+
+def _start_low_priority(reason: str) -> None:
+    import contextvars
+    with _LOW_LOCK:
+        t = _WARM.get("low")
+        if t is not None and t.is_alive():
+            _WARM["low_again"] = True        # the waiting one runs once more, on the newest Dataset
+            return
+        _WARM["low_again"] = False
+        ctx = contextvars.copy_context()     # the tenant (a Thread does not carry contextvars)
+        t = threading.Thread(target=ctx.run, args=(_low_priority, reason), name=f"warmup-low-{reason}",
+                             daemon=True)
+        _WARM["low"] = t
+        t.start()
+
+
 def warm_up(reason: str = "startup") -> Optional[threading.Thread]:
-    """Build the active source's Dataset (and the overview status, its other
-    slow part) in a background thread, so the first page load does not wait.
-    The FIT parsing inside runs in a process pool (fitcache.py); a request
-    arriving meanwhile joins the same build (single flight). None when a
-    warm-up is already running or WKO5COACH_NO_WARMUP is set."""
+    """Build what every page load needs in a background thread, so the first page load does
+    not wait. In order (SP-362): the active source's Dataset → the overview status → the
+    課表's plan inputs (api/plan_sessions._compute_inputs); then, in a thread of its own
+    (_low_priority) at the lowest priority and after an automatic plan run (engine/plan_auto.py)
+    has ended, the never-fitted 每人校正 items and the 活動列表's automatic classification on the
+    Dataset read after that wait. The FIT parsing runs in a process
+    pool (fitcache.py); a request arriving meanwhile joins the same computation (single
+    flight: the dataset here, the status and the inputs in backend/singleflight.py). None
+    when a warm-up is already running or WKO5COACH_NO_WARMUP is set."""
     if os.getenv("WKO5COACH_NO_WARMUP"):
         return None
     t = _WARM["thread"]
@@ -238,31 +315,22 @@ def warm_up(reason: str = "startup") -> Optional[threading.Thread]:
             ds = _dataset()
             from backend.api import overview as OV
             OV._status(ds, OV.O.day_to_date(ds.today))
-            # 每人校正 (engine/calibrate.py): fit what was never fitted (a new
-            # install, a new item) now instead of waiting for the next sync
-            from backend.engine import calibrate as CAL
-            if any(CAL.stored_entry(n) is None for n, it in CAL._registry().items() if not it.manual_only):
-                import asyncio
-
-                async def fit_once():
-                    # its own engine: this thread runs its own event loop
-                    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-                    from backend.db.database import DATABASE_URL
-                    eng = create_async_engine(DATABASE_URL)
-                    try:
-                        async with async_sessionmaker(eng, expire_on_commit=False)() as db:
-                            await CAL.calibrate(db, ds=ds)
-                    finally:
-                        await eng.dispose()
-                asyncio.run(fit_once())
-            # the 活動列表's auto type / effort: started now (its own thread),
-            # read from disk when nothing changed
-            from backend.api import activity_auto as AA
-            AA.job_for(ds)
-            applog.took("dataset warm-up", t0, reason=reason)       # SP-215
+            # the 課表 / 總覽 plan inputs: the third thing a page load waits for (SP-362)
+            try:
+                from backend.api import plan_sessions as PSA
+                PSA._compute_inputs()
+            except Exception as e:       # noqa: BLE001 — a page request will show the error
+                logging.getLogger(__name__).warning("plan inputs warm-up (%s) failed: %s", reason,
+                                                    type(e).__name__)
+            applog.took("dataset warm-up", t0, reason=reason)       # SP-215: what pages wait for
         except Exception as e:           # noqa: BLE001 — a page request will show the error
             logging.getLogger(__name__).warning("dataset warm-up (%s) failed: %s", reason, type(e).__name__,
                                                 exc_info=True)
+            return
+        # lowest priority from here, in its own thread: after the sync's automatic plan run (it
+        # computes with the same dataset / status / inputs, now warm). This thread ends, so a
+        # warm-up asked for meanwhile is not dropped (review SP-362 #4)
+        _start_low_priority(reason)
     import contextvars              # a Thread does not carry the tenant (contextvars) by itself
     ctx = contextvars.copy_context()
     t = threading.Thread(target=ctx.run, args=(run,), name=f"dataset-warmup-{reason}", daemon=True)
