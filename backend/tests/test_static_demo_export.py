@@ -98,7 +98,8 @@ def test_calendar_ranges_match_the_schedule_page():
 
 def test_viewer_ranges_default_presets_and_both_ytd_forms():
     rs = X.viewer_ranges(dt.date(2026, 10, 3), "2025-10-04T05:25:00")
-    assert rs[0] == ("2025-10-03", "2026-10-03")        # the default: today - 365 days
+    assert rs[0] == ("2026-07-06", "2026-10-03")        # the default: 90 天 (end - 89, SP-336)
+    assert ("2025-10-04", "2026-10-03") in rs            # 1年 (end - 364)
     assert ("2026-09-27", "2026-10-03") in rs            # 7 天 (end - 6)
     assert ("2026-01-01", "2026-10-03") in rs and ("2025-12-31", "2026-10-03") in rs
     assert ("2025-10-04", "2026-10-03") in rs            # 全部
