@@ -351,31 +351,35 @@ def test_weekly_tick_only_the_source_in_use_when_due(tmp_path):
     run(go())
 
 
-@pytest.mark.parametrize("uptime,expect", [(10.0, False), (check.STARTUP_DELAY_S + 1, True)])
-def test_scheduler_loop_runs_the_weekly_tick_after_the_startup_delay(monkeypatch, uptime, expect):
+@pytest.mark.parametrize("delay,weekly_runs", [(0, True), (10 ** 6, False)])
+def test_the_real_scheduler_loop_keeps_running_every_tick(monkeypatch, delay, weekly_runs):
+    """Review SP-362 #1: the loop itself (no clock patched) runs several iterations and calls
+    the daily sync tick, the backup tick and — after the start delay — the weekly check. A
+    loop that dies on its first line (the `time` name clash) fails here."""
+    from backend.api import backup as backup_api
     seen = []
 
-    async def tick(factory, *a, **k):
-        return []
-
-    async def weekly(factory, *a, **k):
-        seen.append("weekly")
-        return []
-    monkeypatch.setattr(scheduler, "tick", tick)
-    monkeypatch.setattr(check, "weekly_tick", weekly)
-    monkeypatch.setenv("WKO5COACH_NO_AUTO_BACKUP", "1")
-    calls = {"n": 0}
-
-    def mono():
-        calls["n"] += 1
-        return 0.0 if calls["n"] == 1 else uptime          # the first call is the loop's start
-    monkeypatch.setattr(scheduler, "_monotonic", mono)
+    def rec(name):
+        async def f(*a, **k):
+            seen.append(name)
+            return []
+        return f
+    monkeypatch.setattr(scheduler, "tick", rec("tick"))
+    monkeypatch.setattr(backup_api, "auto_tick", rec("backup"))
+    monkeypatch.setattr(check, "weekly_tick", rec("weekly"))
+    monkeypatch.setattr(check, "STARTUP_DELAY_S", delay)
+    monkeypatch.delenv("WKO5COACH_NO_AUTO_BACKUP", raising=False)
 
     async def go():
-        with pytest.raises(asyncio.TimeoutError):
-            await asyncio.wait_for(scheduler.loop(object(), interval=0.01), timeout=0.1)
+        t = asyncio.create_task(scheduler.loop(object(), interval=0.01))
+        await asyncio.sleep(0.15)
+        assert not t.done(), t.exception() if t.done() else None        # still alive
+        t.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await t
     run(go())
-    assert bool(seen) is expect
+    assert seen.count("tick") >= 2 and seen.count("backup") >= 2
+    assert (seen.count("weekly") >= 2) is weekly_runs
 
 
 # ---------------------------------------------------------------------------- API
