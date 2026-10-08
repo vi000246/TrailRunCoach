@@ -451,6 +451,30 @@ def test_weekly_tick_only_the_source_in_use_when_due(tmp_path):
     run(go())
 
 
+def test_weekly_check_is_off_when_automatic_syncing_is_off(tmp_path):
+    """Owner decision (review #8): no switch of its own — the weekly check runs only while an
+    automatic sync is on (sync on open, or a daily time)."""
+    async def go():
+        s = await make_session(tmp_path)
+        s.add(SyncState(athlete_id=1, coros_access_token="t"))
+        await s.commit()
+        repo = SettingsRepository(s, 1)
+        await repo.set("sync.primary_source", "coros")
+        await repo.set("sync.auto_on_open.enabled", False)
+        await repo.set("sync.schedule.daily_time", None)
+        await s.commit()
+        start = lambda src, aid: object()
+        assert await check.weekly_tick(_factory(s), start_fn=start) == []
+        await repo.set("sync.schedule.daily_time", "06:30")
+        await s.commit()
+        assert await check.weekly_tick(_factory(s), start_fn=start) == ["coros"]
+        await repo.set("sync.schedule.daily_time", None)
+        await repo.set("sync.auto_on_open.enabled", True)
+        await s.commit()
+        assert await check.weekly_tick(_factory(s), start_fn=start) == ["coros"]
+    run(go())
+
+
 @pytest.mark.parametrize("delay,weekly_runs", [(0, True), (10 ** 6, False)])
 def test_the_real_scheduler_loop_keeps_running_every_tick(monkeypatch, delay, weekly_runs):
     """Review SP-362 #1: the loop itself (no clock patched) runs several iterations and calls
