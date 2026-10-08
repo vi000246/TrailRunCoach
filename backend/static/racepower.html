@@ -291,7 +291,8 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
     <div class="row" id="mode-power">
       <span class="rf"><span class="seg" id="punit"><button data-u="w">W</button><button data-u="pct">%CP</button></span></span>
       <label class="f rf" style="width:120px"><span><span id="plabel">平均功率 W</span><b class="req">*</b></span><input id="tpower" type="number" step="1"></label>
-      <label class="rf meta"><input type="checkbox" id="ptrain"> 以訓練條件功率輸入（會再乘上環境係數 M）</label>
+      <label class="rf meta"><input type="checkbox" id="ptrain"> <span data-i18n="racepower.ptrain.label">以訓練條件功率輸入（會再乘上環境係數 M）</span></label>
+      <span class="help rf" tabindex="0">?<span class="tip" data-i18n="racepower.ptrain.tip">勾選：你輸入的是平常訓練條件下的功率，計算機會乘上這場比賽的環境係數 M（海拔、溫濕度和你平常訓練的差；分段時取各段 M 依距離平均），換成比賽日功率再算完賽時間。例：250 W、M 0.96 → 比賽日 240 W；%CP 也一樣。不勾：輸入的就是比賽當天的功率，不再換算。</span></span>
       <label class="f bf" style="width:170px">速度倍率（100% = 你平常的速度）<input id="tspeed" type="number" step="1" value="100"></label>
     </div>
     <div class="row" id="mode-auto">
@@ -421,6 +422,7 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
           <option value="fitted_run">km + 爬升/153（你的跑步擬合）</option>
           <option value="itra">km + 爬升/100（ITRA / 健行筆記）</option>
           <option value="scarf">km + 爬升/126（Scarf）</option></select></label>
+        <span class="help" tabindex="0">?<span class="tip" data-i18n="racepower.formula.tip">越野「模型預測」：完賽時間來自心率配速模型，它用你自己擬合的爬升除數，這裡只影響對照數字、RE 明細和顯示的平均功率。目標功率：用這個 effort km 換算完賽時間，換公式會改到完賽時間。目標時間：完賽時間就是你的目標，換公式改的是需要的平均功率。沒有心率模型時，模型預測也用這個公式。</span></span>
       </div>
     </details>
     <div class="calcbar"><button class="btn primary big" id="calc" type="button" data-i18n="racepower.calc">計算</button>

@@ -1006,7 +1006,7 @@ start time, aid stations. Since 2026-10-02 (賽事計算機, renamed from 賽事
   without recomputing; an uploaded GPX can be stored onto the event (「存到「…」」, `event_gpx`), and
   day ends clicked on a multi-day course are saved back.
 - **Required inputs** are marked (red *); 百岳 跟團／自己走 is a required box; 計算 lists what is missing.
-- **進階計算選項** (SP-214, `backend/static/racepower.html:363`): the tuning options with working
+- **進階計算選項** (SP-214, `backend/static/racepower.html:364`): the tuning options with working
   defaults sit in one collapsed panel — 分段 (and its parameters), 策略, 坡道彈性, 海拔, 熱, 熱適應,
   心率帶 (百岳), 夜間, effort km. Its summary names what was changed from the defaults; the core inputs
   stay in view.
@@ -1016,10 +1016,18 @@ start time, aid stations. Since 2026-10-02 (賽事計算機, renamed from 賽事
   comes from that model, which keeps its own divisor (`backend/engine/racepower/trailhr.py:368`), so
   changing the formula leaves the time unchanged and moves only the v1 cross-check, the RE detail and
   the shown average power. It does move the time in 目標功率 mode and when there is no trail HR model
-  (the v1 whole-race time, `backend/engine/racepower/planner.py:505`).
+  (the v1 whole-race time, `backend/engine/racepower/planner.py:505`); in 目標時間 mode the time is the
+  target and the formula moves the power needed. A ? help next to the select says so (SP-369 with
+  SP-367's answer; `racepower.formula.tip`, `backend/static/racepower.html:425`).
+- **以訓練條件功率輸入（會再乘上環境係數 M）** (`power_is_training`, 目標功率 mode, not 百岳;
+  `backend/static/racepower.html:294`): the target power (W, or %CP × CP) is read as a
+  training-conditions number and multiplied by the race's M — the distance-weighted mean of the
+  segments' M (altitude, heat) — before the finish time is computed
+  (`backend/engine/racepower/planner.py:523`). Its ? help (SP-369, `racepower.ptrain.tip`) says that
+  with a worked example (250 W at M 0.96 → 240 W).
 - **環境 From / To** are computed chips (training history; race-day forecast fetched automatically,
   GPX start as the location); ✎ opens the overrides. 「🗺 地圖選點」 next to 緯度, 經度
-  (`backend/static/racepower.html:335`) opens a Leaflet map on the shared `basemaps.js`: a click
+  (`backend/static/racepower.html:336`) opens a Leaflet map on the shared `basemaps.js`: a click
   places a draggable marker, and a click within 300 m of a peak also takes its elevation.
 - **Main chart**: x = km, y = pace / power / HR (toggle, one axis), elevation as the background;
   per-segment targets from `chart_rows` (power only where valid, the HR cap except on trail descents,
@@ -1041,7 +1049,7 @@ start time, aid stations. Since 2026-10-02 (賽事計算機, renamed from 賽事
   /cadence-check) load when their section opens on a trail race; on a road race they show one line
   (「路跑用不到…」) and are never requested, and switching the type updates them; a dropped connection
   (the fit can take minutes on a cold server) shows a short message with 重試 instead of the browser's
-  「Failed to fetch」 (SP-366, `chartRoad` / `chartErr`, `backend/static/racepower.html:2219`). The static
+  「Failed to fetch」 (SP-366, `chartRoad` / `chartErr`, `backend/static/racepower.html:2221`). The static
   export opens both on a trail preset so the demo has their answers (`backend/demo/export_static.py`). Explanations sit behind ? icons; references stay out of the page. A GPX
   course also gets the course map (SP-41; see **Course map** under Share links).
 - The 熱 row toggles the per-segment heat (推估 badge; on by default). The hourly rows go with the plan
@@ -1121,11 +1129,11 @@ card, stations) under `secrets.token_urlsafe(16)` in the tenant's private `racep
 height / age / sex, REE, model inputs, sources, warnings and anything injury / pain related never go
 in. Optional expiry 7 / 30 / 90 days. `share.html` renders the snapshot without recomputing.
 
-**Course map** (`backend/static/racepower.html:1833`): a GPX course whose profile has coordinates
+**Course map** (`backend/static/racepower.html:1835`): a GPX course whose profile has coordinates
 gets a Leaflet map above the profile chart (`#course-map-wrap`,
-`backend/static/racepower.html:439`); a manual course has none. The route is coloured by the
+`backend/static/racepower.html:441`); a manual course has none. The route is coloured by the
 segment kind of the targets (平路／可跑, 可跑的爬坡, 陡坡, 下坡; `KIND_COLOR`,
-`backend/static/racepower.html:1801`), the hovered / selected segments are highlighted, the aid
+`backend/static/racepower.html:1803`), the hovered / selected segments are highlighted, the aid
 stations of the editor and the GPX waypoints are marked. Hovering the map moves the profile
 chart's tooltip to the nearest point, and the chart's axis pointer moves a marker on the map.
 Basemaps, overlays, the settings-page default, the tile-error hint and the route drawing come from
@@ -1284,6 +1292,9 @@ marked on the 課表 calendar count for the altitude reminder like nights the ac
 concurrent /grade-model fits and /cadence-check scans run once; the page's road guard comes before
 the request, switching the type updates the charts, and a dropped connection reads as a message
 with 重試 (both languages).
+`backend/tests/test_racepower_help_sp369.py` (SP-369): training power × M (W and %CP), the effort km
+formula moving the time in 目標功率 / the power in 目標時間 / the model prediction without an HR
+model, the HR model's own divisor; both ? helps next to their control, in both catalogs.
 
 ## Domain Model
 
@@ -1388,9 +1399,7 @@ when set, but nothing fills it from the routes module yet.
 
 - [ ] Time model picks walk or run from the predicted speed; only the back-test gate exists, the planner still uses the majority gait（SP-229，Todo）——尚未實作
 - [ ] Night segments without a forecast use night climatology. The premise may be partly out of date: road / trail already get the climatology's 24-hour profile (`backend/engine/racepower/weather.py:862`); what is left is the single To value (daytime mean, `DAY_HOURS`) and 百岳, so the scope needs narrowing（SP-257，Todo）——尚未實作
-- [ ] What does the effort km formula do? 已查明：in 自動 mode with the trail HR model it does not change the time (that model keeps its own divisor, `backend/engine/racepower/trailhr.py:368`); it moves the v1 cross-check, the RE detail and the shown power, and the time in 目標功率 mode or without the HR model (`backend/engine/racepower/calc.py:332`) — see Page（SP-367，分析，已查明）
 - [ ] Trail / 百岳: NGP or grade-adjusted pace / power instead of the average pace, and how it maps to COROS / Garmin（SP-368，決策 Todo）——尚未實作
-- [ ] A ? help for 「以訓練條件功率輸入（會再乘上環境係數 M）」（SP-369，Todo）——尚未實作
 - [ ] Without power: what `cp_as_of` returns, and whether an LTHR can be estimated at all（SP-294，分析 Todo）——尚未實作
 - [ ] Stable id and `updated_at` on `race_calc`（SP-310，Todo）——尚未實作
 - [ ] Backups miss `event_gpx/`, `racepower_*.json` and `racepower_shares/`（SP-355，Bug Todo）——尚未實作
@@ -1433,3 +1442,4 @@ when set, but nothing fills it from the routes module yet.
 | 2026-10-08 | code-sync（SP-43, SP-114, SP-118, SP-214, SP-240, SP-241, SP-247, SP-250, SP-255, SP-259, SP-285, SP-287, SP-320） | N/A | Architecture table: capacity.py, runwalk.py, cold.py, night.py, zonebar.py, tss_calib.py; API: GET /altitude-acclimatisation, cache keys on tenant + dataset generation; 路況 dry / wet technicality split; back-test long-race and x*(T) / δ double-count blocks; Page: 進階計算選項, what the effort km formula changes, 地圖選點, the zone bar, 匯出至課表; Fuelling: pre-race load wording, 睡眠點 and their default minutes; Testing: tests added since 10-04; new Decisions Log (8) and Open Questions (13) from the Obsidian tickets |
 | 2026-10-08 | removal | SP-365 | CSV export removed (user: not needed): the 「匯出 CSV」 button and its handler, `POST /export/csv`, `calc.export_csv`, `csvplan.py`, the static demo's CSV path (`static_racepower.compute`, the shim's `RACEPOWER_POSTS` / CSV response, the parity sample), the demo write rules in `tenancy_mw.py`, the stale i18n baseline entry; the CSV-only tests went, the plan-side assertions moved to /plan (`test_racepower_export.py`, `test_racepower_fuel.py`, `test_racepower_seg_targets.py`), plus `test_csv_export_is_gone`. 「匯出至課表」 (`POST /export/plan`) and 分享 stay |
 | 2026-10-08 | bugfix | SP-366 | 坡度 RE 曲線 / 爬坡步頻分布 showed 「Failed to fetch」 on a marathon: GET /grade-model and /cadence-check fit the athlete's whole year (77.6 s on a cold start of the synthetic demo athlete) and nothing joined concurrent callers (/plan, the other chart, a second tab each ran the same fit), so the request could be dropped before it answered and the page printed the browser's raw error. Now: one computation per key for both (`backend/singleflight.py`); a road race shows a one-line note and never requests them (they are about climbing); a dropped connection shows a short message with 重試; the static export opens both on a trail preset. i18n `charts.road` / `charts.neterr` / `charts.retry`; test `test_racepower_charts_sp366.py` |
+| 2026-10-08 | feature | SP-369 (+ SP-367 answer A) | Two ? helps on the calculator, zh-TW + en: 「以訓練條件功率輸入（會再乘上環境係數 M）」 (the target power × the race's distance-weighted M before the time is computed; worked example) and 「effort km 公式」 (trail 模型預測 keeps the HR model's fitted divisor — only the comparison, RE detail and shown power move; 目標功率: the finish time moves; 目標時間: the power needed moves; no HR model: the model prediction uses it). The checkbox label is now i18n (`racepower.ptrain.label`). The help says 目標時間 moves the power, not the time (the code; the ticket's draft said both modes move the time). Test `test_racepower_help_sp369.py`; SP-367 / SP-369 open questions closed |
