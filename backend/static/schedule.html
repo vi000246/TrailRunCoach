@@ -1014,7 +1014,7 @@ function chipHtml(s, big) {
   const cpTip = (cp ? `\n${compTip(cp)}` : "") + (off ? `\n${s.vs.text}` : part ? `\n${s.vs.short_text}` : "");
   const icon = s.state === "active" && s.day >= D.today ? syIcon(c.status, c.error || c.reason || "") : "";
   const lbl = `${KINDS[s.kind] || ""}${fam ? "（" + fam.text + "）" : ""}：${s.title}，${s.minutes || 0} 分鐘，${tss.replace("→", "實際")}${s.state === "missed" ? "，未完成" : s.state === "done" ? "，已完成" : ""}${s.provisional ? "，暫定" : ""}${icon ? "，" + syLabel(c.status) : ""}`;
-  return `<button type="button" class="chip k-${esc(s.kind)}${fam ? " fam-" + esc(fam.id) : ""}${S.swapFrom && S.swapFrom.uid === s.uid ? " swap-src" : ""} st-${esc(s.state)}${cp && cp.level !== "missed" ? "cp-" + esc(cp.level) : ""} ${s.provisional && s.state === "active" ? "prov" : ""}" data-uid="${esc(s.uid)}"
+  return `<button type="button" class="chip k-${esc(s.kind)}${fam ? " fam-" + esc(fam.id) : ""}${S.swapFrom && S.swapFrom.uid === s.uid ? " swap-src" : ""} st-${esc(s.state)} ${cp && cp.level !== "missed" ? "cp-" + esc(cp.level) : ""} ${s.provisional && s.state === "active" ? "prov" : ""}" data-uid="${esc(s.uid)}"
       ${live ? 'draggable="true"' : ""} aria-label="${esc(lbl + (cp && cp.level !== "missed" ? "，" + compTip(cp) : ""))}" title="${esc(s.title + (fam && fam.sub_label ? "\n" + fam.text : "") + "\n" + meta + cpTip + (s.target ? "\n" + s.target : "") + (s.detail ? "\n" + s.detail : "") + (s.walk_hint ? "\n" + s.walk_hint : "") + (s.pre_meal ? "\n" + s.pre_meal.text : ""))}">
     <span class="c-t">${isHeat(s) ? '<span class="heat-tag" aria-hidden="true">熱</span>' : ""}${esc(s.title)}</span><span class="c-r">${off ? `<span class="offp-i" aria-hidden="true">≠</span>` : part ? `<span class="part-i" aria-hidden="true">◐</span>` : ""}${icon}</span>
     <span class="c-m">${meta}</span>
@@ -1341,8 +1341,10 @@ async function push(scope, day) {
     const k = (st) => res.sessions.filter((r) => r.status === st);
     const nNew = k("pushed").filter((r) => r.changed).length, fails = k("failed");
     const rm = (res.removed || []).filter((r) => r.status === "removed").length;
+    const chk = [...new Set([...res.sessions, ...(res.removed || [])].map((r) => r.check_day).filter(Boolean))].sort();
     await load();
     msg(`${fails.length ? "" : "✓ "}推送完成（${esc(rng)}）：新推送 ${nNew} · 更新 ${k("updated").length}${rm ? ` · 移除 ${rm}` : ""}${fails.length ? ` · <b class="err">失敗 ${fails.length}</b>` : ""}` +
+      (chk.length ? `<br><span class="warn">${esc(checkNote(chk).replace(/^[；;]\s*/, ""))}</span>` : "") +
       (fails.length ? `<ul>${fails.map((f) => `<li class="err">${md(f.day)} ${esc(f.title)}：${esc(f.error || "")}</li>`).join("")}</ul>` : ""), fails.length ? "" : "ok");
   } catch (e) { errMsg("推送", e); }
   finally { S.busy = false; if (D) renderToolbar(); }
@@ -2822,10 +2824,14 @@ $("cf").addEventListener("keydown", (e) => {
 // the watch changed, a warning when it couldn't (the 調整紀錄 keeps a 失敗 row too). [text, msg class]
 function watchNote(c) {
   const p = (c && c.provider_label) || "COROS";
+  // COROS accepted a calendar delete but still listed the entry: a reminder, not a failure
+  const chk = c && (c.check_days || []).length ? checkNote(c.check_days, p) : "";
+  if (c && ["partial", "failed"].includes(c.status)) return [tt("watch.fail", { provider: p, error: c.error || "" }) + chk, "warn"];
+  if (chk) return [chk, "warn"];
   if (c && c.status === "ok" && (c.sent || c.removed)) return [tt("watch.ok", { provider: p }), "ok"];
-  if (c && ["partial", "failed"].includes(c.status)) return [tt("watch.fail", { provider: p, error: c.error || "" }), "warn"];
   return ["", "ok"];
 }
+const checkNote = (days, p) => tt("watch.check", { provider: p || "COROS", days: days.map(md).join("、") });
 // ---------------- 交換課表 (SP-359; api POST /sessions/swap) ----------------
 // right-click a session → 「交換…」, then click the other one (Esc cancels; the weeks can be paged
 // meanwhile), or drop a session onto another. Same rules as a drag: active, from today on, not on a

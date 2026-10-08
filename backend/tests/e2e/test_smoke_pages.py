@@ -104,6 +104,11 @@ def test_schedule_calendar(app):
     open_page(page, _server.PAGES["schedule"])
     _calendar_ready(page)
     assert page.locator("#cal .chip[data-uid]").count() > 0, "no sessions on the calendar"
+    # state and compliance are separate class tokens (a glued 「st-donecp-green」 lost the ✓ and tint)
+    classes = page.evaluate("() => [...document.querySelectorAll('#cal .chip[data-uid]')].map((c) => c.className)")
+    assert not [c for c in classes if re.search(r"st-\w+cp-", c)], classes
+    if page.locator("#cal .chip.st-done").count():
+        assert page.locator('#cal .chip.st-done[class*="cp-"]').count() > 0, "done chips without a compliance class"
     # month / week, back and forth, today
     page.click('#view-seg button[data-view="week"]')
     _calendar_ready(page)

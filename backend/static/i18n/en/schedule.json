@@ -303,6 +303,7 @@
   "mv.what": "Move",
   "watch.ok": "; {provider} watch synced",
   "watch.fail": "; the {provider} watch didn't follow: {error} (see the auto-adjust log)",
+  "watch.check": "; {provider} said it was deleted, but it may still be on the calendar on {days} — please check in the {provider} app",
   "ctx.swap": "Swap…",
   "ctx.swap_sub": "then click another session",
   "swap.pick": "Click another session to swap days with “{title}” (Esc cancels)",
