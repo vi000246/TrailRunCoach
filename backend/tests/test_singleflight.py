@@ -123,3 +123,19 @@ def test_plan_inputs_are_computed_once_for_concurrent_callers(monkeypatch):
     with pytest.raises(Boom):
         PSA._compute_inputs()
     assert len(calls) == 2                       # the failure was not remembered
+
+
+def test_plan_inputs_leader_computes_exactly_its_callers_key(monkeypatch):
+    """Review SP-362 #5: the flight's computation gets the key (and the inputs it was built
+    from) instead of rebuilding it, so a stamp changed meanwhile never answers another key."""
+    from backend.api import overview as OV
+    from backend.api import plan_sessions as PSA
+    stamps = iter(range(100))
+    seen = []
+    monkeypatch.setattr(OV, "_dataset", lambda: SimpleNamespace(today=20000.0))
+    monkeypatch.setattr(OV, "_plan_stamp", lambda: next(stamps))
+    monkeypatch.setattr(PSA, "_cache", {})
+    monkeypatch.setattr(PSA, "_build_inputs", lambda key, *a: seen.append(key) or {"key": key})
+    out = PSA._compute_inputs()
+    assert seen == [out["key"]] and 0 in out["key"]
+    assert next(stamps) == 1                       # the stamp was read once, for that one key
