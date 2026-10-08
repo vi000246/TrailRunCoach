@@ -475,7 +475,8 @@ async def push_window(db, new: list[dict], inp: dict, today: str, days: int,
     A session whose copy on the watch sits in the window but which moved out of it
     is re-sent on its new day, so the old copy comes off (SP-358).
     `only` (the user's own change, api/plan_sessions._sync_watch): just these sessions —
-    the ones in the window, and the ones already on the watch wherever they are now;
+    the ones in the window, and the ones already on the watch wherever they are now; the
+    stale / blocked / missed clean-up is limited to them too (other copies wait for the run);
     `window` False (自動推送 off): only the copies already on the watch."""
     from backend.api import plan_sessions as API
     from backend.engine import plan_store as PS
@@ -489,6 +490,11 @@ async def push_window(db, new: list[dict], inp: dict, today: str, days: int,
         stale = [k for k, r in rows.items() if k not in live and (r.day is None or r.day >= today)]
         stale += [s["uid"] for s in API._on_blocked(new, bl, today) if s["uid"] in rows]
         missed = [s["uid"] for s in new if PS.off_watch(s) and s["uid"] in rows]
+        if only is not None:
+            # the user's own change syncs only what it touched (owner, SP-358 review): other stale /
+            # missed copies are left to the automatic run and the manual push
+            stale = [k for k in stale if k in only]
+            missed = [k for k in missed if k in only]
         todo = [s for s in API._in_range(new, today, end, bl) if s["kind"] != NOTICE_KIND
                 and window and (only is None or s["uid"] in only)]
         extra = set(extra_uids or ())
@@ -505,10 +511,15 @@ async def push_window(db, new: list[dict], inp: dict, today: str, days: int,
                                        stale_keys=stale, missed_keys=missed)
         sent = sum(1 for x in res.get("sessions") or [] if x.get("changed"))
         # a copy that didn't come off the watch is a failure too (SP-358: it used to count as nothing)
-        failed = [x for x in (res.get("sessions") or []) + (res.get("removed") or []) if x.get("status") == "failed"]
-        return {"status": "partial" if failed else "ok", "start": today, "end": end, "sent": sent,
-                "removed": sum(1 for x in res.get("removed") or [] if x.get("status") == "removed"),
-                "error": "；".join(str(x.get("error")) for x in failed)[:500] or None}
+        every = (res.get("sessions") or []) + (res.get("removed") or [])
+        failed = [x for x in every if x.get("status") == "failed"]
+        out = {"status": "partial" if failed else "ok", "start": today, "end": end, "sent": sent,
+               "removed": sum(1 for x in res.get("removed") or [] if x.get("status") == "removed"),
+               "error": "；".join(str(x.get("error")) for x in failed)[:500] or None}
+        # COROS accepted a calendar delete but still listed the entry (coros_workouts._remove_remote):
+        # a reminder to check in the COROS app, not a failure
+        check = sorted({x["check_day"] for x in every if x.get("check_day")})
+        return {**out, "check_days": check} if check else out
     except Exception as e:                  # noqa: BLE001 — the push never breaks the run / the sync
         log.warning("auto plan push failed: %s", type(e).__name__)
         try:

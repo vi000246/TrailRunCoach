@@ -4,7 +4,9 @@ both become the user's own move (like a drag; reconcile never undoes it), done /
 sessions are refused, a failed second move leaves the first untouched, and the watch follows on
 both days right away (the SP-358 sync). COROS is the scripted FakeHub; synthetic plan, no WKO5 data.
 """
+import re
 from datetime import date
+from pathlib import Path
 
 import pytest
 
@@ -27,6 +29,18 @@ def _by_day(e):
 def _watch(e):
     """happenDay -> the pushed workout's name (「TRC <title> m/d」)."""
     return {x["happenDay"]: x["program"]["name"] for x in e.fake.entities}
+
+
+def test_chip_class_list_keeps_state_and_compliance_apart():
+    """The swap outline (SP-359) once glued 「st-done」 to 「cp-green」 in chipHtml's class
+    template: done chips lost their ✓ and compliance tint. Every interpolation in the class
+    attribute must be its own whitespace-separated token."""
+    html = (Path(__file__).resolve().parents[1] / "static" / "schedule.html").read_text(encoding="utf-8")
+    tpl = re.search(r'class="chip k-\$\{.*?\}" data-uid=', html, re.S)
+    assert tpl, "chipHtml's class template not found"
+    cls = tpl.group(0)
+    assert re.search(r'st-\$\{esc\(s\.state\)\}\s+\$\{cp ', cls), cls
+    assert '? "cp-"' in cls and '"cp-" + esc(cp.level)' in cls
 
 
 def test_swap_in_the_week_trades_days_and_the_watch_follows(monkeypatch):

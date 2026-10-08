@@ -4,8 +4,9 @@ left its old copy on the watch's calendar. The store was right; nothing took the
 an edit never pushed, and a push of a range never touched a pushed session that had moved out of
 that range. Now the user's change syncs the watch right away (api/plan_sessions._sync_watch →
 plan_auto.push_window), a range push also fixes the copies that sit in the range
-(plan_sessions.on_watch), and a delete COROS accepts but doesn't carry out is an error
-(coros_workouts._remove_remote checks). COROS is the scripted FakeHub; no WKO5 data.
+(plan_sessions.on_watch). Review follow-ups: an edit syncs only the sessions it touched, and a
+delete COROS accepts but still lists is a reminder (check_days), not a failure
+(coros_workouts._remove_remote). COROS is the scripted FakeHub; no WKO5 data.
 """
 import json
 from datetime import date
@@ -157,17 +158,54 @@ class DeafHub(FakeHub):
         return super().__call__(req)
 
 
-def test_a_delete_coros_ignores_is_an_error_and_logged(monkeypatch):
+def test_a_delete_coros_ignores_is_a_reminder_not_a_failure(monkeypatch):
+    # owner (SP-358 review): until a real drag shows whether COROS lags, an entry still listed
+    # after the delete is a reminder to check the COROS app — not failed, not retried, logged
     env = Env(monkeypatch)
     env.fake = DeafHub()
     with env as e:
         by = _setup(e)
+        uid = by["2026-10-02"]["uid"]
+        n_del = lambda: sum(1 for m, p in e.fake.calls if p == "/training/schedule/update")     # noqa: E731
+        before = n_del()
+        r = e.c.patch(f"{API}/sessions/{uid}", json={"day": "2026-10-03"})
+        assert r.status_code == 200
+        c = r.json()["coros"]
+        assert c["status"] == "ok" and c["check_days"] == ["2026-10-02"] and not c.get("error")
+        # one delete + one schedule of the new day: no retry of the delete
+        assert n_del() - before == 2
+        assert not [x for x in _log(e) if x.status == "failed"]
+        s = next(x for x in e.c.get(f"{API}/sessions").json()["sessions"] if x["uid"] == uid)
+        assert s["coros"]["status"] == "pushed" and s["coros"]["pushed_day"] == "2026-10-03"
+
+
+def test_a_failed_delete_of_the_touched_session_is_reported(monkeypatch):
+    with Env(monkeypatch) as e:
+        by = _setup(e)
+        e.fake.fail["/training/schedule/update"] = {"result": "5001", "message": "boom"}
         r = e.c.patch(f"{API}/sessions/{by['2026-10-02']['uid']}", json={"day": "2026-10-03"})
         assert r.status_code == 200
         c = r.json()["coros"]
-        assert c["status"] in ("partial", "failed") and "還在" in (c.get("error") or "")
+        assert c["status"] == "partial" and "boom" in c["error"]
         rows = [x for x in _log(e) if x.status == "failed"]
-        assert rows and "手錶" in rows[-1].summary
-        # the app says so on the session too
-        s = next(x for x in e.c.get(f"{API}/sessions").json()["sessions"] if x["uid"] == by["2026-10-02"]["uid"])
-        assert s["coros"]["status"] == "failed"
+        assert len(rows) == 1 and "手錶" in rows[0].summary
+
+
+def test_an_edit_syncs_only_what_it_touched(monkeypatch):
+    # owner (SP-358 review): another stale copy (here a session deleted while the watch couldn't
+    # follow) is left to the automatic run / the manual push — untouched, and no failure shown
+    with Env(monkeypatch) as e:
+        by = _setup(e)
+        _auto_push(e, False)
+        run(PS.delete(e.db, by["2026-10-02"]["uid"], today="2026-09-30"))      # stale, unrelated
+        live = len(e.fake.live())
+        r = e.c.patch(f"{API}/sessions/{by['2026-10-04']['uid']}", json={"day": "2026-10-03"})
+        assert r.status_code == 200
+        assert r.json()["coros"]["status"] == "ok" and r.json()["coros"]["removed"] == 0
+        assert _days(e.fake) == [20261001, 20261002, 20261003]                # 10/2 still there
+        assert len(e.fake.live()) == live                                       # its program too
+        assert by["2026-10-02"]["uid"] in {x.session_key for x in e.pushed()}
+        assert not [x for x in _log(e) if x.status == "failed"]
+        # the next push of the week cleans it up
+        e.c.post(f"{API}/push-coros?scope=week")
+        assert _days(e.fake) == [20261001, 20261003]

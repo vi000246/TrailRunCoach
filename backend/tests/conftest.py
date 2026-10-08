@@ -43,6 +43,13 @@ def _no_live_sync_calls():
 
 
 @pytest.fixture(autouse=True)
+def _no_recheck_pause(monkeypatch):
+    """The fake COROS deletes at once: no pause before the post-delete look (SP-358)."""
+    from backend.sync import coros_workouts as CW
+    monkeypatch.setattr(CW, "RECHECK_DELAY_S", 0)
+
+
+@pytest.fixture(autouse=True)
 def _no_user_wko5_views(monkeypatch):
     """Imported WKO5 views come only from a folder the user configures
     (WKO5_VIEWS_DIR / charts.wko5_views_dir); a test that wants one writes a

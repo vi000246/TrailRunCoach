@@ -303,6 +303,7 @@
   "mv.what": "移動",
   "watch.ok": "，{provider} 手錶已同步",
   "watch.fail": "；{provider} 手錶沒跟著更新：{error}（詳見自動調整紀錄）",
+  "watch.check": "；{provider} 回應已刪除，但 {days} 的行事曆上可能還在，請到 {provider} App 確認",
   "ctx.swap": "交換…",
   "ctx.swap_sub": "再點另一堂課",
   "swap.pick": "點另一堂課，和「{title}」交換日期（Esc 取消）",

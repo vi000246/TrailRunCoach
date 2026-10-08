@@ -1071,9 +1071,13 @@ which one. The response keeps the `coros` field names.
   copy sits in that range but which moved out of it (`copies_in` / `_with_copies`,
   `backend/api/plan_sessions.py:1952`; preview and push alike), so the copy comes off the old day.
   Before, a session dragged to next week stayed on the watch on its old day after a 「推送本週」.
-  `_remove_remote` (`backend/sync/coros_workouts.py:860`) looks the entry up again after the
-  calendar delete: one COROS answered 0000 for but still shows is an error
-  (「COROS 回應已刪除，但 m/d 的行事曆上還在」, the row `failed`), never a silent leftover.
+  `_remove_remote` (`backend/sync/coros_workouts.py:863`) looks the entry up once more after the
+  calendar delete, after a short pause (`RECHECK_DELAY_S` 1.5 s). One COROS answered 0000 for but
+  still lists is a **reminder, not a failure** (owner, SP-358 review — to be revisited after a real
+  drag shows whether COROS just lags): the row is removed / re-sent as usual, nothing is retried,
+  the app log gets a warning, and the result carries `check_day` (`push_window` →
+  `check_days`); the page adds 「；COROS 回應已刪除，但 m/d 的行事曆上可能還在，請到 COROS App
+  確認」 (`watch.check`, also after a manual push), in the warning colour.
 - **The watch follows the user's changes** (SP-358, `_sync_watch`,
   `backend/api/plan_sessions.py:1964`): after a drag / 移到… / edit (`PATCH /sessions/{uid}`), a
   delete, a 不排課日期 save (`PUT /blackouts`), a 休息日 set / undo / move and a swap (SP-359), the
@@ -1081,10 +1085,14 @@ which one. The response keeps the `coros` field names.
   re-sent on its new day (the old entry removed first) or removed when the session left the plan
   or sits on a blocked day; with 自動推送 on (`plan.auto.enabled` + `plan.auto.push`) a changed
   session that lands in the push window is pushed too; with it off only copies already on the
-  watch follow. Nothing is called when nothing on the watch is affected. The response carries
-  `coros` (`status` ok / unchanged / none / partial / failed, `sent`, `removed`, `error`); the page
-  appends 「，COROS 手錶已同步」 or warns 「；COROS 手錶沒跟著更新：…」 (`watchNote`,
-  `backend/static/schedule.html:2801`), and a failure adds a change-log row (trigger `edit`,
+  watch follow. **Only the sessions the change touched** are synced (owner, SP-358 review): the
+  stale / blocked / missed clean-up is limited to them too (`push_window`,
+  `backend/engine/plan_auto.py:493`), so other leftover copies wait for the automatic run or the
+  manual push, and their problems never show here. Nothing is called when nothing on the watch is
+  affected. The response carries
+  `coros` (`status` ok / unchanged / none / partial / failed, `sent`, `removed`, `error`,
+  `check_days`); the page appends 「，COROS 手錶已同步」 or warns 「；COROS 手錶沒跟著更新：…」
+  (`watchNote`, `backend/static/schedule.html:2825`), and a failure of a touched session adds a change-log row (trigger `edit`,
   status `failed`, 「課表已改，但COROS手錶沒有跟著更新」 with the push error). Root cause of SP-358:
   these endpoints only wrote the store; the watch changed only at the next manual push or the
   automatic run, which runs only after a sync with a new activity — so the old day's workout
@@ -1850,3 +1858,4 @@ deleted / superseded) are returned as reconcile `changes` (`backend/engine/recon
 | 2026-10-07 | feat/sp291-293-data-level | docs/research/cold-start.md §4.4 | SP-292 賽事可行性 for 資料等級 0 / 1 (`GET /overview/feasibility`, `race_feasibility` module doc): base hours = max(questionnaire as the plan reads it, actual), km / climb actual only; no actual distance → UA weekly / climb 「還不知道」, Koop's hours still judged; `data_source` tag 「依你填的資料」／「資料還少」 on the card; level 0 at most tight (cutoff / 跨級 over → tight with the reason, no 「先不跑」／「低一級」 advice; 「late」 unchanged); ≥ 42.195 km with a self-reported week < 3 h → `optimistic_note` (Vickers & Vertosick 2016); level 2 unchanged |
 | 2026-10-08 | fix/sp358-359-schedule-delete-swap | SP-358 | 刪除／移動課表沒同步到手錶: a drag / edit / delete / 不排課日期 / 休息日 only wrote the store, the watch changed only at the next manual push or after a sync with a new activity, and a range push never touched a pushed session that had moved out of the range — so the old day kept its workout. Now these endpoints sync the affected sessions at once (`_sync_watch` → `plan_auto.push_window(only=…)`, response `coros`, page note / warning, a `failed` change-log row on error); range pushes and the automatic window also re-send copies whose session moved out (`copies_in`); a COROS calendar delete is verified (`_remove_remote`); removal failures count as push failures |
 | 2026-10-08 | fix/sp358-359-schedule-delete-swap | SP-359 | 交換課表: context menu 交換… then click the other session (Esc cancels), or drop a session onto another; `POST /sessions/swap` → `plan_store.swap` trades the two days in one commit as the user's own moves (like a drag; reconcile never undoes them), done / past / blocked / notice refused, B2B follows, hard-day spacing warnings, the watch synced on both days (SP-358); legend 「⇄ 交換」 with a ? tip; zh-TW + en |
+| 2026-10-08 | fix/sp358-359-schedule-delete-swap | SP-358 review | An edit syncs only the sessions it touched (the stale / blocked / missed clean-up in `push_window(only=…)` limited to them; other copies wait for the run / manual push and never show as 失敗). A COROS calendar delete still listed after a 1.5 s pause is a reminder (`check_day` / `check_days`, 「…可能還在，請到 COROS App 確認」, app log), not a failure, no retry. Fixed the 課表 chip class glued as `st-donecp-green` (done chips lost the ✓ and compliance tint) |
