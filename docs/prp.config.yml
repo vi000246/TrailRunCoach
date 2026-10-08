@@ -1,0 +1,9 @@
+# PRP tracker binding for this repo (see ~/.claude/prp-shared.md → Tracker Config).
+# Tasks live in the Obsidian vault: 650 Projects/越野跑教練/tasks/ (SP-<n>).
+configured: true
+tracker:
+  primary:
+    kind: obsidian
+    prefix: SP
+    project: 越野跑教練
+    verify_ticket: true

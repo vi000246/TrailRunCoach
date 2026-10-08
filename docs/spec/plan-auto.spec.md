@@ -1,6 +1,6 @@
 # Module Spec: plan-auto (自動調整課表)
 
-> **Last Updated**: 2026-10-06
+> **Last Updated**: 2026-10-08
 > **Status**: Active
 > **Domain Layer**: Core Domain
 
@@ -38,7 +38,11 @@ TSS, and the following days adapt.
 | change log / 復原 | `plan_change_log` rows; undo restores the before-state as the user's own | `PlanChangeLog`, `plan_auto.undo` |
 | dose step / rung | the interval ladder position, moved only by 達標 | `quality_gate.dose_step`, `interval_library` |
 | Zone 5 gate | Zone 5 opens after an aerobic-base confirmation + Zone 3 達標 | `base_check`, `quality_gate.z5_card` |
-| 恢復期 (re-entry block) | the reduced block after a break ≥ 6 days (傷停 when it overlaps a 傷病紀錄) | `engine/reentry.py` |
+| 恢復期 (re-entry block) | the reduced block after a break ≥ 6 days (傷停 when it overlaps an injury, 生病停跑 an illness in the 傷病紀錄) | `engine/reentry.py` |
+| 賽後階段 (post-race phases) | the A race's 恢復期, 轉換期 and 回量期 (`rebuild`, SP-98): planned, not a running break | `planning.POST_RACE_KINDS` |
+| A 賽後重新打底 (rebase) | after an A race, the gates count only evidence from the first day after its post-race phases | `base_check.a_race_rebase` |
+| 生病 (illness event) | a 傷病紀錄 entry of category `illness`, type `cold` / `fever` (SP-117) | `injuries.illness_rule` |
+| 週課表紀錄 (week snapshot) | the week's plan recorded at the end of every run (SP-71) | `plan_history.record_safe`, `plan_week_snapshots` |
 
 **Domain Events** (each writes a change-log row): 課表已自動調整 (`applied`), 課表待確認
 (`pending`), 同意／拒絕／被取代 (`approved` / `rejected` / `superseded`), 復原 (`undone` +
@@ -49,7 +53,8 @@ TSS, and the following days adapt.
 
 ```
 sync/runner.stream()  ── finally: last_result stored
-      │  downloaded ≥ 1 and status ok / partial
+      │  status ok / partial and (downloaded ≥ 1 or rpe_filled ≥ 1 — a COROS self-rating
+      │  stored on an already-imported activity, SP-231)
       ▼
 plan_auto.after_sync() ── asyncio task, own DB session (run_safe never raises)
       ▼
@@ -63,6 +68,8 @@ plan_auto.diff() → classify()
       ├─ not big (or confirm_big off) → save → push_window(today … today+N−1) → log "applied"
       └─ big → save only done / missed / notes → log "pending" (+ 課表待確認 notice on the watch)
                  approve → run(force) → "applied" ; reject → fingerprint remembered
+      ▼
+plan_history.record_safe() ── the week snapshot (SP-71), every run past the stamp check
 ```
 
 `adapt` runs on the generator's weeks **before** reconcile. Reconcile rule 2 overwrites every
@@ -75,6 +82,13 @@ reconcile preview, a manual push and the automatic run. They all show the same p
 Other entry points:
 - **CP change**: `api/plan.py` calls `plan_auto.after_thresholds()` after a threshold edit; that
   run (trigger `cp_change`) also starts when the stamp is unchanged (see 「CP change」 below).
+- **Settings**: `api/calib.py` calls `plan_auto._after_settings()` (trigger `settings`,
+  `backend/engine/plan_auto.py:877`) after a 進階設定 value the plan reads changed (the Zone 3
+  unlock rule, SP-295). It goes through the same stamp check without `force` (see Known limits).
+- **Week snapshot** (SP-71): the end of `_run` records the week in `plan_week_snapshots`
+  (`backend/engine/plan_auto.py:743`, `backend/db/models.py:244`), so a sync alone records it with
+  no page opened; the 課表 page reads them through `GET /api/v1/overview/plan/history`
+  (`backend/api/plan_sessions.py:2644`).
 - **Done / missed matching** (reconcile rule 1) is `backend/engine/plan_match.py`: same day + the
   planned sport first, one activity per session (long / quality / test also by the generator's
   week-wide match). The user can link / unlink by hand; an unlinked activity is never
@@ -91,21 +105,26 @@ Other entry points:
 | `plan.auto.push_days` | 7 | days pushed from today (1–14); later sessions update in the app only |
 | `plan.auto.confirm_big` | true | hold big changes for approval |
 | `plan.auto.notify` | null = auto | `watch`: also push a 1-minute 「⚠ 課表待確認」 workout; `overview`: banner only; auto = `watch` when connected, else `overview` |
+| `plan.auto.rpe_rule` | true | adapt rule D′: an easy / long run self-rated Hard or more moves the next hard session (SP-231); in `AUTO_KEYS` and `PUT /settings` |
 | `plan.auto.state` | — | internal: last data stamp, last phase, last CP, Zone 5 / re-entry keys, rejected fingerprints |
 | `plan.push.provider` | coros | the push target (`backend/sync/workout_targets/`); Garmin / intervals.icu are stubs, not enabled |
 
 **Phases** (SP-73): the automatic run reads the same phases as the page (`planning.phases`,
-`backend/engine/planning.py:393`), including the 轉換期 after an A race's recovery (課表偏好
-`plan.prefs.transition_weeks`, default 3, 0 = off; overview.spec.md 課表偏好). Entering and
-leaving the 轉換期 — and changing its length while in it — is a phase change, so it is held for
-approval like any other (Big changes below). Adapt and reconcile treat the 轉換期 as a rest
-phase (`reconcile.REST_MODES`, adapt's rest week); the re-entry block applies only in base /
-specific. Days inside a planned post-race phase — the A race's 恢復期 (7–14 days) or the 轉換期
-after it (auto or manual, `planning.post_race_days`) — are **not a running break** (owner
-2026-10-05): a 恢復期 without a run or a transition of only cross-training / strength starts no
-re-entry block when base resumes — `reentry.find_all` counts a break's days outside those phases
-only (still ≥ 6 → a block of that length, its text 「停跑 N 天（不含賽後恢復期／轉換期 M 天）」) — and
-doesn't break the Zone 3 gate's streak or re-lock it (below).
+`backend/engine/planning.py:1019`), including the 轉換期 after an A race's recovery (課表偏好
+`plan.prefs.transition_weeks`, default 3, 0 = off; overview.spec.md 課表偏好) and the 回量期
+(`rebuild`, SP-98) after it. Entering and leaving the 轉換期 or the 回量期 — and changing the
+轉換期's length while in it — is a phase change, so it is held for approval like any other (Big
+changes below). Adapt and reconcile treat the 轉換期 and the 回量期 as rest phases
+(`reconcile.REST_MODES`, `backend/engine/reconcile.py:46`; adapt's rest week,
+`backend/engine/adapt.py:504`); the re-entry block applies only in base / specific. Days inside a
+planned post-race phase — `planning.POST_RACE_KINDS` (`backend/engine/planning.py:1040`) = the A race's 恢復期 (7 or 14 days by the
+event's size, `planning.recovery_plan`), the 轉換期 and the 回量期 after it (auto or manual,
+`planning.post_race_days`, `backend/engine/planning.py:1071`) — are **not a running break**
+(owner 2026-10-05): a 恢復期 without a run or a transition of only cross-training / strength starts
+no re-entry block when base resumes — `reentry.find_all` counts a break's days outside those
+phases only (still ≥ 6 → a block of that length, its text 「停跑 N 天（不含賽後恢復期／轉換期 M 天）」,
+the wording unchanged although M also counts 回量期 days) — and doesn't break the Zone 3 gate's
+streak or re-lock it (below).
 
 The toggles are in 課表 › ⚙ 課表偏好 › 自動調整 (`backend/static/schedule.html`, saved through
 `PUT /settings`); `autoplan.js` no longer draws them.
@@ -134,22 +153,32 @@ automatic start or the first 7 after a manual one (推估; `status` passes `ramp
 then); the volume step still runs. Rule E's TSB < −30 reads `week_plan`'s `load.tsb_today` from
 the same started PMC (SP-63 Q3), so a new user's startup weeks give no false fatigue trigger. Last week's **running-time** step against
 max(the week before, the 4 weeks before's mean) — normal weeks only (SP-73, owner 2026-10-05: a week
-touching a 減量期 / race week / post-race 恢復期 / 轉換期, `load_guard.STEP_SKIP_KINDS`, is left out and
+touching a 減量期 / race week / post-race 恢復期 / 轉換期 / 回量期, `load_guard.STEP_SKIP_KINDS`
+(`backend/engine/load_guard.py:100`), is left out and
 the most recent normal weeks before it count, up to 26 weeks back; the planner's +10 % cap reads the
 same weeks, overview.spec.md) — > 20 % → no interval (Nielsen et al. 2014, JOSPT
 44:739; Damsted et al. 2019, JOSPT 49:230 — peer-reviewed, they measured running; the 「10 %
 法則」 itself has no evidence); 10–20 % → hold the dose (推估, conservative). Exempt: the week after
 a short unplanned break — 3–5 days without a run (3 推估; ≥ 6 is a re-entry block, `reentry.MIN_BREAK`)
 touching the week before, which pulled the base down (`short_break`,
-`backend/engine/load_guard.py:322`; owner 2026-10-04). Only unplanned days count (owner
+`backend/engine/load_guard.py:341`; owner 2026-10-04). Only unplanned days count (owner
 2026-10-05): days of the user's own 不排課日期 or 休息日 (both blackout kinds, `Status(blackouts=)`,
 default `blackouts.load()`) and the weekdays not ticked as 可練日 in 課表偏好 (`plan_prefs.days`,
 `Status(prefs=)`: a Fri–Sun runner's weekly Mon–Thu gap is their week, not a break) are a chosen
 rest, so a planned gap is still checked and a partly planned one is exempt only when its unplanned
 days alone are ≥ 3 (counted, not contiguous). The status card says so (「前一週非計畫停跑 N 天，另 M
 天是自己排的休息（不排課日期／休息日／沒勾的可練日）…」) and the week gets
-an info note (`guard`'s `step_note` → `week_plan`, `backend/engine/overview.py:954`). TSB −30…−20 → hold
+an info note (`guard`'s `step_note` → the week notes, `backend/engine/overview.py:1814`). TSB −30…−20 → hold
 (Friel / TrainingPeaks). B2B weekends and the B2B TSB exemption use the block line too.
+
+**Single-run guard** (SP-66, `backend/engine/load_guard.py:107`): no single run longer than
+`LONG_CAP` = 1.10 × the longest run of the `LONG_DAYS` = 30 days before (Frandsen 2025, BJSM,
+Garmin-RUNSAFE cohort — peer-reviewed). The generator caps the planned long day with it
+(`cap_long`, `backend/engine/load_guard.py:383`, rounded down to 5 min) and says so in a week note
+(`cap_note`, src `long_cap`: 「長跑縮短為 N 分：過去 30 天最長一次 …」). A run done over the line in the
+last `LONG_RECENT_DAYS` = 7 days (推估; `session_spikes`, effort-km else minutes) only turns the status
+card's 「最長單次」 to watch (「單次跑太長：比前 30 天最長一次多 x%（> 10%）」,
+`backend/engine/status.py:729`) — a reminder, never a block on the intervals.
 
 ## Interval progression (`backend/engine/quality_gate.py`)
 
@@ -164,15 +193,19 @@ planned at.
 | 未適應 | fewer reps done than planned, or the first miss is rep 2 … second-to-last | same step with rest + 1 min; a second one in a row steps back one |
 | 邊界 | HR back under AeT 60 s into the rest on < 50 % of the reps (brake only), or only the last rep missed and it fell > 5 % | the same step again |
 | 邊界 | every rep in band but time in the target zone < 85 % of the plan (`TIZ_GOAL`, 推估; interval_eval's verdict) | the same step again |
+| 未適應（疲勞保險） | SP-110, all three: the session's 60-s HR drop (median of its reps) ≥ `FOR_FAST` = 25 % faster than the median of the same-spec sessions (rep length, rest, rest mode — `spec_key`) of the `FOR_DAYS` = 56 before it, with ≥ `FOR_MIN_N` = 5 of them; the same-spec session before it was that fast too (`FOR_STREAK` = 2); and its power missed (`interval_outcome`'s `power_ok` False) | no step forward; the note 「心率恢復變快但功率沒到，可能累積疲勞：…」 (`fatigue_check`, `backend/engine/quality_gate.py:863`); the indicator raises good / info to watch with 「這週間歇不往上加；睡眠、輕鬆跑先顧好…」. Sources Aubry 2015, Bellenger 2016, Buchheit 2014; the 25 % and 2-in-a-row are 推估 (`backend/engine/quality_gate.py:771`) |
 | 達標 | otherwise | the next ladder step |
 | 無法判定 | no bouts or no CP (the old rule counted it as 達標) | the same step again — progress only on 達標 (`unsourced-rules.md` §B4) |
 
 Thresholds: 98 % in-band, 50 % AeT-at-60 s and the 5 % last-rep fade are 推估 (doc §4.2–4.3).
+In-band, last-rep fade and the TIZ goal are the defaults; the values in effect are fitted per
+athlete (SP-69, `engine/interval_calib.py`), refitted at most every `CALIB_EVERY_DAYS` = 7 days
+after a sync (SP-320 ④, `calibrate.run_safe`; the manual `POST /calib/run` always runs).
 RPE is not recorded, so the RPE rows are skipped. Reps come from power (`count_reps`, or
 `detect_efforts`). A session judged by: the structure the user edited in the 課表 editor
 (`steps_spec`: its own reps / band, counted only when equivalent to the rung; a 「負荷」 main-set
 step counts by its estimated time TSS ÷ (IF² × 100) h at the band's middle — `load_work_s`,
-`backend/engine/workout_steps.py:1289`, SP-38, 推估), else the stored
+`backend/engine/workout_steps.py:1415`, SP-38, 推估), else the stored
 variant, else the planned title. An unplanned interval run is neutral.
 
 ### The ladder: two tracks, Zone 3 and Zone 5 (SP-31, 2026-10-04)
@@ -268,7 +301,9 @@ intensity). Each rung is the canonical variant of `backend/engine/interval_libra
   method unlocked, an aerobic-base confirmation of the Zone 5 process, the re-entry rule asking
   for Zone 3, a Zone 3 session 達標 in the 8-week history. Once met it stays open; a break of
   ≥ 21 days without running (`Z3_RELOCK_DAYS`, 推估; Coyle 1984 VO2max −7 % at 21 days,
-  detraining.md §1) re-locks it — only what comes after the break counts. Breaks of 6–20 days
+  detraining.md §1) re-locks it — only what comes after the break counts — and so does an A
+  race (below). The consistency rule (with the 進階設定 numbers in effect) is also what 資料等級 2
+  reads (`data_level.level` over 365 days, SP-291, overview.spec.md); the gate itself is unchanged. Breaks of 6–20 days
   get the re-entry block only. Post-race 恢復期 / 轉換期 days (`z3_consistency(skip=)`,
   `planning.post_race_days`; SP-73, owner 2026-10-05) are no running gap: they count neither toward the 7-day stretch nor
   the 21-day re-lock (a 3–4-week transition alone never re-locks — chosen: the transition is a
@@ -277,6 +312,19 @@ intensity). Each rung is the canonical variant of `backend/engine/interval_libra
   with ≥ 3 runs counts as usual). No low-intensity-share condition. Until it opens the base phase
   has no interval (easy running + strides); a projected week opens once the streak would reach 4
   weeks. Zone 3 and Zone 5 are **independent gates** (SP-39): the Zone 5 gate is below.
+- **A 賽後重新打底** (SP-116; `base_check.a_race_rebase`, `backend/engine/base_check.py:546`): after
+  an A race (priority A only, never B / C, the latest one within `REBASE_SCAN_DAYS` = 400 days),
+  `from` = the first day after its 恢復期 / 轉換期 / 回量期 (`POST_RACE_KINDS`); none when no 基礎期
+  follows them (推估: nothing to rebuild in). From then on only evidence dated on or after `from`
+  counts: the Zone 3 gate (`z3_gate`, `backend/engine/quality_gate.py:1489`) is opened again only by
+  a drift run, an AeT test or a 基礎期 start from that day (`_rebased`) — the consistency weeks and
+  earlier 達標 don't — and `z3_open_on` never opens a projected week during it; an unlocked method
+  re-locks unless its own evidence is that recent; Zone 5 (`z5_status`) drops AeT confirmations
+  dated before `from`. `aet_test_reason` gets the code `rebase` (`rebase_reason`): the method's own
+  test (`REBASE_TEST`: xu_drift → the 90-min test, friel_drift → Friel, ua_gap → an AeT test with a
+  measured LTHR, plateau / weeks → wait), action 「{d} 起{test}；通過前只排輕鬆跑、長跑和加速跑」 (the
+  gate reads 「3 區還沒解鎖：A 賽「…」後重新打底，…」). Mode `none` is unaffected. Source: 徐國峰's
+  「用新的 E 配速重新打底」 (`SRC_REBASE`, `backend/engine/base_check.py:113`; coach-level, no trial).
 - **Guardrails per track** (`guard` → `guard_blocks`): CTL ramp at the block line, a > 20 % running-time step and the
   injury pause block both tracks; the low-intensity share < 75 % blocks Zone 5 only — for Zone 3
   it is a warning note 「輕鬆跑心率偏高：…（底線 75%、基礎期目標 ≥ 90%）」 (the AeT is often
@@ -306,7 +354,7 @@ intensity). Each rung is the canonical variant of `backend/engine/interval_libra
      2026-10-05, replacing SP-39's 12-week `LTHR_FRESH_DAYS`: zones-and-thresholds.md §2.5 finds no
      direct evidence for a fixed retest period; unsourced-rules.md B3 moved the AeT to event
      triggers too) — the measured LTHR stays valid **unless an event invalidates it**
-     (`lthr_invalid`, `backend/engine/quality_gate.py:1387`, `gate["lthr"]["invalid"]`): (a) a
+     (`lthr_invalid`, `backend/engine/quality_gate.py:1693`, `gate["lthr"]["invalid"]`): (a) a
      running break ≥ 4 weeks after the test (`reentry.find_all`, a block with `reconfirm`;
      detraining.md); (b) evidence since the test (`threshold_confidence.lthr_evidence`, level weak
      or above: a cool long effort above LTHR, a 40–60-min race < 95 % LTHR, the CP-band
@@ -317,7 +365,11 @@ intensity). Each rung is the canonical variant of `backend/engine/interval_libra
      re-lock). The paths are re-read every day; when an event invalidates the LTHR the flow item
      names it (「重測 1 次 30 分鐘 LTHR（LTHR 測完後停跑 N 天…）」) and offers the 30-min LTHR test;
      **or** ≥ 60 min near the
-     tested AeT with first vs second half drift < 5 % (`aet_friel_drift`, Friel). **The 90-min
+     tested AeT with first vs second half drift < 5 % (`aet_friel_drift`, Friel) — a run whose
+     drift window has bad HR (SP-266: spike / step / flat seconds > 3 % of the window or one step that
+     doesn't come back, both 推估; a cadence lock is shown only; `workout_review.hr_downgrade`,
+     `backend/engine/workout_review.py:661`) is the reference tier (`hr_ref`, `ok` false) and doesn't
+     pass, `drift_agg.aet_points` skips it, and its AeT test gets no 「套用」. **The 90-min
      test is not an AeT test** (it yields no AeT number) — it opens Zone 3 only. Modes: `auto`,
      `xu_drift`, `plateau`, `weeks` use both AeT paths (their own method opens Zone 3 only);
      `ua_gap` / `friel_drift` their own; `none` = no gate (Seiler).
@@ -349,8 +401,8 @@ intensity). Each rung is the canonical variant of `backend/engine/interval_libra
   intervals in `guard` first, every phase, until it is resolved.
 - **Maintenance** (weekly, no expiry): Zone 1 time < 2/3 of the level at confirmation (mean of
   the 4 weeks up to it) for 3 complete weeks in a row → pause Zone 5 until the next
-  confirmation (Hickson 1982; 3 weeks 推估; recovery / taper / event / transition weeks and weeks
-  touching a break don't count). The late long-run HR / pace check no longer pauses Zone 5; it
+  confirmation (Hickson 1982; 3 weeks 推估; recovery / taper / event / transition / 回量期 weeks and
+  weeks touching a break don't count — `base_check._skip_week`, `backend/engine/base_check.py:497`). The late long-run HR / pace check no longer pauses Zone 5; it
   survives only as the re-entry rule's post-break drift check (`long_check`, 14–28 days off). A
   break ≥ 6 days is the re-entry rule below. A paused state says why in `z5["pause"]`
   (`kind`: `z1` / `reentry_z3` with done / need / `drift_check`).
@@ -373,7 +425,7 @@ intensity). Each rung is the canonical variant of `backend/engine/interval_libra
   (`WorkoutEditor.applyKey`, or the dialog's 測試 kind / 方式), the user picks the day and saves
   through `POST /sessions` (a variant keeps its `variant_key` → rung, so it counts on its ladder).
   A 徐國峰 90-min test saved there (by its title, or the template row `lib:xu_e_drift` — `_is_xu90`,
-  `backend/api/plan_sessions.py:393`) replaces that day's active long run, as 排入測試 does
+  `backend/api/plan_sessions.py:509`) replaces that day's active long run, as 排入測試 does
   (`_replace_long`, shared; owner 2026-10-04) — for the dialog's own 測試 › 徐國峰 too, which posts
   the same body.
   The 總覽 card and the 基礎期 panel draw it with `static/z5flow.js` (`wko5views.z5_progress`).
@@ -425,6 +477,10 @@ analysis (`analyze_workout`: warm-up cut, window and judging rule by the title's
 The analysis uses VI ≤ 1.04 (drift v2) instead of the old 30-s CV. Heat is a band on the
 result, not a refusal (`aet_test._tag_heat`, `heat_line`): a pass in heat still counts. Every protocol is ≥ 40
 min of test, so all are the strict tier. MAF is not a drift test and is not offered.
+The retest line (SP-279, `backend/engine/aet_test.py:400`): UA < 3.5 % → 「下次起始心率 +5 bpm … 再測一次」
+(UA's own number); > 5 % → 「下次起始心率降 5 bpm（約 N；5 bpm 是推估）再測一次」 (`LOWER_BPM`,
+`backend/engine/aet_test.py:80`: UA says "lower", Evoke "a slower pace", neither a number). A test
+whose HR is bad (SP-266, `hr_ref`) shows the values but no 「套用」 (`aethr_suggest` none).
 
 ### 停訓後的恢復期 (`backend/engine/reentry.py`; `docs/research/detraining.md`)
 
@@ -450,10 +506,31 @@ replaced by the block; a break < 6 days doesn't lower the base the next weeks ra
 The block's planned step-ups are exempt from the 「+20 % TSS」 big-change rule (推估); adapt's
 ramp guard skips it.
 
-**傷停** (2026-10-02, `backend/engine/injuries.py`): a break that overlaps a 傷病紀錄 event is a
+**傷停** (2026-10-02, `backend/engine/injuries.py`): a break that overlaps an injury event of the
+傷病紀錄 (category `injury` only, `injuries.overlapping`, `backend/engine/injuries.py:970`) is a
 傷停 (the text names the area and the event). With `injury.reentry_step_up` (default on) the block
 is the next category's (6–13 → 14, 14–28 → 29, 29–56 → 57 days; `reentry.STEP_UP_MIN`, 推估:
 the tissue has to re-adapt too); FVDOT stays the real break's.
+
+**生病** (SP-117, owner 2026-10-05; `docs/research/detraining.md` §6.2): an illness lives in the same
+傷病紀錄 (`injury_events.category = "illness"`, no body area, `illness` = `cold` 輕微感冒 / `fever`
+發燒或全身症狀; onset = the first day of symptoms, resolved = the first symptom-free day). It is
+left out of the injury analysis and never takes a pain mark. `injuries.illness_rule`
+(`backend/engine/injuries.py:569`) says what a day allows, the strictest when several:
+
+| rule | when | this week's plan (`overview.illness_apply`, `backend/engine/overview.py:2411`) | source |
+|---|---|---|---|
+| `off` | fever symptoms, and the `FEVER_WAIT_DAYS` = 1 after them | no run, no strength | Wallenfels (≥ 1 day after below-the-neck symptoms), Watson 24–48 h — coach-level |
+| `z1` | cold symptoms | every run → 「恢復跑（心率 1 區）」 ≤ `ILL_RUN_MAX_MIN` = 45 min (推估), flat; no interval, test, long run or strides | Kaulback 2023 (IOC consensus review), Wallenfels |
+| `first` | the first day a run is allowed after a fever | the first run → 「恢復跑（發燒後第一次）」 ≤ `FIRST_RUN_MAX_MIN` = 30 min (推估) | Wallenfels / Watson |
+
+While a rule applies the intervals pause on their own (`injuries.pause_reason`, no
+「受傷期間暫停強度課」 flag needed; text 「傷病紀錄 #id（label）：…」). The week note has src `illness`.
+Only this week is changed — the projected weeks are not. After the illness, the break (last run →
+first run back) takes reentry's block of its length with the text 「生病停跑 N 天（{type}，傷病紀錄 #id）」
+or 「傷停＋生病停跑 N 天（…）」 when an injury overlaps too (`reentry.text_of`,
+`backend/engine/reentry.py:173`); an illness never takes the injury step-up (推估: that is for tissue
+healing).
 
 **傷別、疼痛燈號、走跑、提議好了** (SP-269–273, 2026-10-06; `docs/research/injury-graded-return.md` §4.6,
 §6.1). All only cut — `load_guard` is untouched; edited / custom sessions are left alone by reconcile as
@@ -506,9 +583,9 @@ sub-threshold 3×8′ in a ramp week before the ladder reached it) are neutral i
 `dose_history` reads the planned title of the done session (`plan_store.done_titles`), and
 `planned_spec` resolves it. Since SP-79 a title may come in either spelling — the raw stored one
 (「閾值 3×8 分」) or today's (「有氧間歇（巡航）3×8 分」, `plan_store.to_dict`): `planned_spec`
-(`backend/engine/quality_gate.py:934`), `spec_by_title` (`backend/engine/quality_gate.py:492`) and
+(`backend/engine/quality_gate.py:1074`), `spec_by_title` (`backend/engine/quality_gate.py:517`) and
 `adapt._prev_row` match through `interval_library.renamed`; the old ladder's titles stay neutral in
-both spellings (`LEGACY_ANY`, `backend/engine/quality_gate.py:169`), and `spec_by_title` keeps
+both spellings (`LEGACY_ANY`, `backend/engine/quality_gate.py:179`), and `spec_by_title` keeps
 returning None for a raw old-ladder title (「VO2max 間歇 4×4 分」 is V4's title today).
 
 While a proposal is held, the stored plan only takes the done / missed / note part, and the
@@ -586,9 +663,22 @@ overview has `data-log="none"`. The settings are in 課表偏好 (above).
 - A 3:1 recovery week inside the Zone 1 maintenance run is not detected from the data (only
   phase-level recovery / taper weeks and break weeks are skipped); three low weeks are needed,
   so one recovery week alone never pauses Zone 5.
-- Illness marks (detraining.md §6.2) are not built: an illness break is only "days without a
-  run". Injuries are (傷病紀錄: the 傷停 re-entry step-up and the interval pause above); the
-  symptom-free start and the injury hand-off are left to the user.
+- Illness is built (SP-117, 生病 above), but "symptoms come back → step back" (Elliott 2020) is
+  not: a relapse is only a new illness event the user enters. The injury hand-off is left to the
+  user.
+- A 進階設定 change that starts a `settings` run (SP-295) doesn't re-plan the stored sessions until
+  the next sync: `_run` returns noop 「沒有新的活動」 whenever the data stamp and the CP are unchanged
+  (`backend/engine/plan_auto.py:662`), the stamp (`plan_auto.stamp`) has no settings / Zone 3 rule
+  part, and `run_safe` doesn't pass `force`. The page itself re-reads the rule (`z3_rule_stamp` in
+  the status / plan cache keys). Likewise a questionnaire save (SP-291's `EX.stamp()` is in the
+  plan / status cache keys, not in plan_auto's stamp) starts no run. Behaviour as of 2026-10-08,
+  not confirmed as intended.
+- The SP-289 LTHR prior (0.90 × max HR) is written into the athlete's `runthr` setting
+  (`backend/engine/wko5expr/fitdataset.py:829`, dated the first run). `quality_gate.lthr_info`
+  (`backend/engine/quality_gate.py:300`) doesn't tell it apart: without a plan LTHR row, the
+  WKO5-setting branch counts any non-default value as `measured`, so the prior could pass as a
+  measured LTHR for the Zone 5 UA-gap path (with a tested AeT). Adapt rule D's 94 % LTHR line
+  (`workout_review._thresholds`, `backend/engine/workout_review.py:1771`) may also run on the prior. Not verified by a test (2026-10-08).
 - Cross-training detection for FVDOT-2 counts non-run endurance sessions ≥ 45 min (推估); the
   doc's FVDOT-2 definition is 未驗證.
 
@@ -599,8 +689,10 @@ overview has `data-log="none"`. The settings are in 課表偏好 (above).
   the FIT that WKO5 keeps inside the .wko4 (or the FIT itself); a rep = a lap of the planned
   rep length (±5 s / ±3 %) at the planned rest gap from the previous one, so 1-km auto laps
   never chain. Without matching laps, 10-s power ≥ 0.95 × the planned lower bound.
-- Moves by `adapt.py` (rule B: a missed session to a free day) don't look at 偏好的星期;
-  only the generator's placement (`plan_prefs.place`) does.
+- Moves by `adapt.py` (rule B: a missed session to a free day) don't look at 偏好的星期 or the
+  課表偏好 休息日 (SP-82, `pref_days["rest"]`): `open_days` (`backend/engine/adapt.py:223`) checks
+  only blocked days and the allowed weekdays, so a session can move onto the preferred rest day;
+  only the generator's placement (`plan_prefs.place`) honours them.
 - 技術地形課 (SP-74, overview.spec.md): the 專項期 RPE 6–7 session is spaced 48 h from the hard
   days when it is generated, but adapt and reconcile key their hard-day checks on the session
   kind (`quality` / `test` / `long`), not on `workout_templates.session_role`, so a missed
@@ -617,8 +709,8 @@ overview has `data-log="none"`. The settings are in 課表偏好 (above).
   stored row carries `variant_key / rung_key / equiv / swap / swap_reason / variant_reps /
   variant_blocks / variant_adj`; `dose_step` judges by the variant, not the title.
 - **Titles name the family** (SP-79, 2026-10-04): a library session is titled
-  `<family> <structure>` (`title` / `title_prefix`, `backend/engine/interval_library.py:431`,
-  `backend/engine/interval_library.py:431`) — 「有氧間歇 2×15 分」 (A rungs, reps ≥ 15′ or continuous),
+  `<family> <structure>` (`title` / `title_prefix`, `backend/engine/interval_library.py:452`,
+  `backend/engine/interval_library.py:433`) — 「有氧間歇 2×15 分」 (A rungs, reps ≥ 15′ or continuous),
   「有氧間歇（巡航）3×8 分」 (T rungs, T+), 「VO2max 間歇 4×3 分」 (V rungs, 30/15), with 上坡 for a hill
   variant — instead of 「閾值／近閾值／VO2max …」; a test holds the prefix to
   `workout_templates.family_of_variant`. Raw zh-TW msgids (a stored title is never translated);
@@ -626,7 +718,7 @@ overview has `data-log="none"`. The settings are in 課表偏好 (above).
   「VO2max 間歇 5×4 分上坡」, 「有氧間歇（巡航）2×8 分」, the projection's 「有氧間歇（巡航）3×10 分」;
   `plan_prefs._quality_terrain` turns the new hill title flat too). Rung / ladder semantics are
   unchanged. A stored pre-SP-79 title is read in today's words (`interval_library.renamed`,
-  `backend/engine/interval_library.py:488`, through `plan_store.display_title`), and reconcile
+  `backend/engine/interval_library.py:490`, through `plan_store.display_title`), and reconcile
   renames a generated old title the same way (`_titled`, `backend/engine/reconcile.py:67`), so
   renaming alone is never a 「changed」 session or a change-log entry. Titles that were not the
   generator's (「閾值下 3×8 分」, your own) are left as written. The taper's 「短強度 4×3 分」 became
@@ -678,4 +770,5 @@ overview has `data-log="none"`. The settings are in 課表偏好 (above).
 | 2026-10-06 | feature | SP-69 | Per-athlete calibration (`engine/calibrate.py` items) of the interval verdict (`interval_in_band_tol` 0.98 from the CP tests, `interval_last_fade` 5 % and `interval_tiz_goal` 85 % from the planned sessions, ≥ 20; `engine/interval_calib.py`), the LTHR retest hint (`lthr_test_age_days` 56 from how fast the LTHR moved between tests) and the easy-run HR margin (`easy_hr_margin_bpm` AeT+3 from the aggregated AeT estimate's SE, ≥ 3; adapt rule D's average-HR condition and the Friel band's upper edge; `engine/threshold_calib.py`). Thin data keeps today's constants; the texts that quote a number say 本人／手動／預設 |
 | 2026-10-06 | feature | SP-231 | COROS post-run self-rating (`sportFeelInfo.feelType`, read per new activity with `POST /activity/detail/query`, 8-week backfill) as rule D′ (`rpe_hard`): an easy / long run rated Hard or more moves the next hard session < 48 h later to a free day ≥ 48 h after, else one step down; switch `plan.auto.rpe_rule`; held for approval within 14 days of an A race; the data stamp includes this week's ratings (`rpe_stamp`) and a sync that stored a rating on an already-imported activity (`rpe_filled`) starts a run |
 | 2026-10-06 | change | SP-302 | Rule D's 「TSS > planned + 20 %」 now compares against an easy run planned at the easy-only TSS / h (overview.spec.md › Session TSS; before, the all-runs median put the plan near tempo and the check almost never fired) |
+| 2026-10-08 | code-sync | N/A | Illness (SP-117: cold / fever rules, 生病停跑 re-entry text, illness pauses intervals; Known limit replaced); A 賽後重新打底 (SP-116: gates count evidence from after the post-race phases, `rebase` AeT test reason); 回量期 (SP-98) added to the post-race / rest-phase / step-skip / maintenance lists; 疲勞保險 interval outcome (SP-110); single-run guard (SP-66); week snapshot at the end of every run + `GET /plan/history` (SP-71); bad-HR drift is reference only for the gates (SP-266); AeT retest ±5 bpm wording (SP-279); `rpe_filled` trigger and `plan.auto.rpe_rule` setting (SP-231); `settings` trigger; weekly calibration refit (SP-320 ④); Known limits: settings run no-ops on an unchanged stamp, LTHR prior may count as measured, adapt moves ignore the 休息日 preference; 11 moved file:line pointers |
 | 2026-10-06 | change | SP-301 | Rule D in two tiers: 偏強 = avg power > 80 % CP (without power: avg HR > 94 % LTHR, 推估) or TSS > planned + 20 % (the AeT + 3 HR condition removed) → label only, no session change; 太強 = the session classifier's hard class (Zone 3 or harder) → the next hard session < 48 h later moves / steps down with a reason (also the generator's own move), A-race 14-day confirm (`too_hard`), 復原; the easy-run TSS trim removed; D runs after E; D′ skips a run D's 太強 acted on |
