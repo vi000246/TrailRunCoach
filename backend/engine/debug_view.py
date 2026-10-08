@@ -27,15 +27,35 @@ SCHEMA_VERSION = 1
 
 # GPS: never in an answer without ?gps=1 (SP-319 deidentify; the ticket's 共同規則)
 GPS_KEYS = frozenset({"lat", "lon", "lng", "latitude", "longitude", "position_lat", "position_long",
-                      "start_lat", "start_lon", "end_lat", "end_lon", "start_position", "end_position",
-                      "cells", "footprint", "polyline", "gps"})
-# key names that hold credentials (whatever the module): dropped from every answer
-_SECRET_KEY = re.compile(r"(password|passwd|secret|cookie|sealed|access_token|refresh_token|api_?key|"
-                         r"credential|token_hash|^token$|^pin$)", re.I)
-# settings keys never exported: the backup folder, the 課表訂閱 link, the debug switch's internals
+                      "start_lat", "start_lon", "start_lng", "end_lat", "end_lon", "end_lng", "start_latitude",
+                      "start_longitude", "end_latitude", "end_longitude", "start_position", "end_position",
+                      "latlng", "latlon", "lat_lng", "cells", "footprint", "polyline", "gps", "geometry"})
+# GPS-ish names that are also ordinary words: dropped when they hold numbers / lists / objects (a
+# track, a bounding box), kept when they hold a string (the quality gate's "track": "z5")
+GPS_SHAPED = frozenset({"track", "tracks", "points", "coords", "coordinates", "bounds", "bbox", "center",
+                        "position", "route"})
+# key names that hold credentials or account identifiers, matched on whole name segments (a key is cut
+# at any non-alphanumeric: coros_access_token → coros / access / token), so `state`, `key`, `tokens`,
+# `stamp` stay. Dropped from every answer, whatever the module
+_SECRET_SEGMENTS = ("password", "passwd", "pwd", "secret", "secrets", "cookie", "cookies", "sealed", "token",
+                    "auth", "authorization", "jwt", "bearer", "csrf", "signature", "otp", "credential",
+                    "credentials", "pin", "email", "apikey",
+                    "access_token", "refresh_token", "id_token", "api_token", "feed_token", "token_hash",
+                    "api_key", "private_key", "share_id", "session_cookie", "user_id", "username", "data_dir",
+                    "file_path")
+_SECRET_KEY = re.compile(r"(?:^|_)(?:" + "|".join(sorted(_SECRET_SEGMENTS, key=len, reverse=True)) + r")(?:_|$)")
+# credential-looking values: a debug token, a Fernet blob, a JWT
+_SECRET_VALUE = re.compile(r"^(?:trcd_|gAAAAA)|eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}")
+# coordinates inside text: lat=25.03 / longitude: 121.5 / "25.0331,121.5654"
+_COORD_KV = re.compile(r"(?i)\b(lat(?:itude)?|lon(?:gitude)?|lng)(\s*[=:]\s*)-?\d{1,3}(?:\.\d+)?")
+_COORD_PAIR = re.compile(r"-?\d{1,3}\.\d{4,}\s*,\s*-?\d{1,3}\.\d{4,}")
+# export: only these settings key prefixes (an allow-list: a new setting is not exported until it is
+# placed in a block), never a path-like value
 EXPORT_EXCLUDE = frozenset({"backup.dir", "backup.last_result", "backup.last_ok", "plan.calendar",
-                            "sync.coros.last_result", "sync.trainingpeaks.last_result", "sync.coros.last_ok",
-                            "sync.trainingpeaks.last_ok", "sync.coros.rpe_backfill", "sync.schedule.last_run"})
+                            "charts.wko5_views_dir", "sync.coros.last_result", "sync.trainingpeaks.last_result",
+                            "sync.coros.last_ok", "sync.trainingpeaks.last_ok", "sync.coros.rpe_backfill",
+                            "sync.schedule.last_run", "athlete.timezone.auto"})
+_PATHLIKE = re.compile(r"^(?:[A-Za-z]:[\\/]|[\\/]{1,2}[^\s]|~[\\/])")
 REDACTED = "[redacted]"
 EXPORT_NOT_INCLUDED = (N_("密碼"), "COROS / TP token", N_("記住的帳密"), "debug token", N_("備份雲端位置"),
                        N_("分享連結"), N_("同步結果"), N_("活動檔本身（用 /debug/activity 按需拿）"))
@@ -76,28 +96,52 @@ def jsonable(x: Any, depth: int = 0) -> Any:
     return str(x)
 
 
-def _secret_value(v: str) -> bool:
-    from backend.debug_auth import TOKEN_PREFIX
-    return v.startswith(TOKEN_PREFIX) or v.startswith("gAAAAA")
+def secret_key(k: str) -> bool:
+    """A key name that holds a credential / account identifier (segment match, any case)."""
+    return bool(_SECRET_KEY.search(re.sub(r"[^a-z0-9]+", "_", str(k).lower())))
+
+
+def _clean_text(v: str, gps: bool) -> str:
+    """A string value: blanked when it looks like a credential (debug token, Fernet blob, JWT, a
+    20+ character opaque key), else applog.redact (home folder, e-mail, URL query, Bearer, key=value
+    secrets, 32+ opaque runs) and, without ?gps=1, coordinates removed."""
+    from backend import applog
+    if _SECRET_VALUE.search(v) or applog._looks_opaque(v.strip()):
+        return REDACTED
+    out = applog.redact(v)
+    if not gps:
+        out = _COORD_PAIR.sub("***", _COORD_KV.sub(r"\1\2***", out))
+    return out
 
 
 def scrub(x: Any, gps: bool = False) -> Any:
-    """Drop GPS keys (unless `gps`) and credential-named keys; blank credential-looking strings."""
+    """Drop GPS keys (unless `gps`) and credential-named keys; clean every string (_clean_text)."""
     if isinstance(x, dict):
         out = {}
         for k, v in x.items():
-            ks = str(k)
-            if not gps and ks.lower() in GPS_KEYS:
+            kl = str(k).lower()
+            if not gps and (kl in GPS_KEYS or (kl in GPS_SHAPED and not isinstance(v, str))):
                 continue
-            if _SECRET_KEY.search(ks):
+            if secret_key(kl):
                 continue
             out[k] = scrub(v, gps)
         return out
     if isinstance(x, list):
         return [scrub(v, gps) for v in x]
-    if isinstance(x, str) and _secret_value(x):
-        return REDACTED
+    if isinstance(x, str):
+        return _clean_text(x, gps)
     return x
+
+
+def path_like(v: Any) -> bool:
+    """A setting value that is (or holds) a local path."""
+    if isinstance(v, str):
+        return bool(_PATHLIKE.match(v.strip()))
+    if isinstance(v, dict):
+        return any(path_like(x) for x in v.values())
+    if isinstance(v, list):
+        return any(path_like(x) for x in v)
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -264,6 +308,8 @@ def activity_detail(ds, w, streams: Iterable[str] = (), every: int = 10, gps: bo
     return out
 
 
+MAX_STREAM_POINTS = 5000           # per stream (SP-371 review M4): `every` is raised to stay under it
+MAX_STREAM_ACTIVITIES = 3          # activities per answer when streams are asked for
 STREAMS = {"hr": "heartrate", "power": "power", "speed": "speed", "elev": "elevation", "cadence": "cadence",
            "dist": "elapseddistance"}
 
@@ -274,9 +320,13 @@ def _streams(ds, w, names: list, every: int, gps: bool) -> dict:
     t = ds.channel(w.idx, "elapsedtime")
     if t is None:
         return {"error": _("沒有逐秒資料")}
+    asked = every
+    every = max(every, math.ceil(len(t) / MAX_STREAM_POINTS))      # at most MAX_STREAM_POINTS per stream
     step = slice(None, None, every)
     out = {"every_s": every, "t": t[step]}
-    for n in names:
+    if every != asked:
+        out["every_raised"] = {"asked": asked, "max_points": MAX_STREAM_POINTS}
+    for n in names[:len(STREAMS)]:
         ch = STREAMS.get(n)
         if ch is None:
             out[n] = {"error": f"unknown stream; one of {sorted(STREAMS)}"}
@@ -452,28 +502,37 @@ BLOCKS = (
 )
 
 
-def _block_of(key: str) -> str:
+_RESULT_SUFFIX = re.compile(r"\.(last_result|last_ok|last_run|rpe_backfill)$|_last_run$")
+
+
+def _block_of(key: str) -> Optional[str]:
     for name, _t, prefixes in BLOCKS:
         if any(key == p or key.startswith(p) for p in prefixes):
             return name
-    return "other"
+    return None
+
+
+def exportable(key: str, value: Any) -> Optional[str]:
+    """The block a settings key is exported in, or None: an allow-list (BLOCKS prefixes) minus
+    EXPORT_EXCLUDE, run results, credential-named keys and any path-like value."""
+    b = _block_of(key)
+    if b is None or key in EXPORT_EXCLUDE or _RESULT_SUFFIX.search(key) or secret_key(key) or path_like(value):
+        return None
+    return b
 
 
 def export_config(settings: dict, plan, injuries: list, tags: list, overrides: list, gpx_events: set,
                   exported_at: Optional[str] = None) -> dict:
     """The athlete's settings as one JSON (schema_version): user_settings keys by block (key names
-    as stored), the plan's thresholds / weights / profile / events, the injury log, the
-    activities' manual overrides. Never the backup folder, the 課表訂閱 link, the sync results,
-    a password, a token; never the activity files."""
+    as stored; an allow-list, `exportable`), the plan's thresholds / weights / profile / events, the
+    injury log, the activities' manual overrides. Never the backup folder, the 課表訂閱 link, the
+    sync results, a local path, a password, a token; never the activity files."""
     from dataclasses import asdict
     blocks: dict = {name: {"title": _(title), "keys": {}} for name, title, _p in BLOCKS}
-    blocks["other"] = {"title": _("其他設定"), "keys": {}}
     for k in sorted(settings):
-        if k in EXPORT_EXCLUDE or _SECRET_KEY.search(k):
-            continue
-        blocks[_block_of(k)]["keys"][k] = settings[k]
-    if not blocks["other"]["keys"]:
-        blocks.pop("other")
+        b = exportable(k, settings[k])
+        if b is not None:
+            blocks[b]["keys"][k] = settings[k]
     profile = dict(plan.profile or {})
     blocks["profile"]["plan_profile"] = profile
     blocks["profile"]["weights"] = [asdict(w) for w in sorted(plan.weights, key=lambda w: w.date)]

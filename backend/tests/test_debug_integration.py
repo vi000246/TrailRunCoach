@@ -98,7 +98,7 @@ def _keys(x, out):
     return out
 
 
-def test_activity_view_on_a_real_fit_dataset_and_every_endpoint_read_only(client, tmp_path):
+def test_activity_view_on_a_real_fit_dataset_and_every_endpoint_read_only(client, tmp_path, monkeypatch):
     from backend.db.database import db_path
     assert client.put(ADMIN, json={"enabled": True}).status_code == 200
     tok = client.post(f"{ADMIN}/tokens", json={"pin": TEST_PIN, "scopes": ALL_SCOPES}).json()["token"]
@@ -139,4 +139,16 @@ def test_activity_view_on_a_real_fit_dataset_and_every_endpoint_read_only(client
     assert [x["index"] for x in day["unmatched_activities"]] == [a["index"]] or day["sessions"]
     th = client.get(f"{DBG}/thresholds?date={DAY.isoformat()}", headers=h).json()
     assert "lthr_info" in th["dataset"] and th["dataset"]["source"] == "coros"
+    # M4: with streams at most 3 activities per call, at most MAX_STREAM_POINTS points per stream
+    many = client.get(f"{DBG}/activity?label=km&streams=hr", headers=h).json()
+    assert many["count"] == 3 and many["truncated"]["found"] == 4
+    from backend.engine import debug_view as DV
+    monkeypatch.setattr(DV, "MAX_STREAM_POINTS", 100)
+    cap = client.get(f"{DBG}/activity?date={DAY.isoformat()}&streams=hr&every=1", headers=h).json()
+    st = cap["activities"][0]["streams"]
+    assert len(st["hr"]) <= 100 and st["every_s"] == 26 and st["every_raised"]["asked"] == 1
+    # L4: read:activity alone gets which session and its level, not the plan's data
+    only = client.post(f"{ADMIN}/tokens", json={"pin": TEST_PIN, "scopes": ["read:activity"]}).json()["token"]
+    a1 = client.get(f"{DBG}/activity?date={DAY.isoformat()}", headers=bearer(only)).json()["activities"][0]
+    assert set(a1["plan"]) == {"matched", "uid", "level", "why"}
     assert _tables(db_path()) == before
