@@ -519,14 +519,12 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
   </div>
 
   <section id="gm-sec" class="tab-calc"><h2>坡度 RE 曲線 <span class="meta">你的 Stryd 功率在不同坡度換成多少速度</span></h2>
-    <details><summary>展開</summary><div class="note hidden" id="gm-road" data-i18n="racepower.charts.road">路跑用不到：這是越野爬坡用的圖（坡度、走跑、爬坡步頻），越野賽才會載入。</div>
-      <div id="gm-body"><div class="two"><div><div class="plot" id="gm-chart"></div></div><div id="gm-detail"></div></div>
-      <h3 data-i18n="racepower.rw.title">跑走切換速度</h3><div class="two"><div><div class="plot" id="rw-chart"></div></div><div id="rw-detail"></div></div></div></details>
+    <details><summary>展開</summary><div class="two"><div><div class="plot" id="gm-chart"></div></div><div id="gm-detail"></div></div>
+      <h3 data-i18n="racepower.rw.title">跑走切換速度</h3><div class="two"><div><div class="plot" id="rw-chart"></div></div><div id="rw-detail"></div></div></details>
   </section>
 
   <section id="cad-sec" class="tab-calc"><details><summary><b data-i18n="racepower.cad.title">爬坡步頻分布</b> <span class="meta" data-i18n="racepower.cad.sub">檢查「步頻 &lt; 130 spm 算走」</span></summary>
-    <div class="note hidden" id="cad-road" data-i18n="racepower.charts.road">路跑用不到：這是越野爬坡用的圖（坡度、走跑、爬坡步頻），越野賽才會載入。</div>
-    <div id="cad-body"><div class="plot" id="cad-chart"></div><div id="cad-detail"></div></div></details></section>
+    <div class="plot" id="cad-chart"></div><div id="cad-detail"></div></details></section>
 
   <section id="cp-sec" class="tab-calc"><details><summary><b>CP 分析</b> <span class="meta" id="cp-sub"></span></summary>
     <div class="two"><div><div class="plot" id="cp-chart"></div></div><div id="cp-detail"></div></div></details>
@@ -652,9 +650,6 @@ function setType(t) {
   document.querySelectorAll(".tf").forEach((e) => e.classList.toggle("hidden", t !== "trail"));
   ["re-sec", "cp-sec", "rg-sec", "zone-sec", "gm-sec", "cad-sec"].forEach((id) => $(id).classList.toggle("hidden", hike));
   $("hike-sec").classList.toggle("hidden", !hike);
-  // SP-366: road ↔ trail flips the climbing charts' note; an open one loads now
-  if ($("gm-sec").querySelector("details").open) renderGM(); else chartRoad("gm");
-  if ($("cad-sec").querySelector("details").open) renderCad(); else chartRoad("cad");
   if (!S.accl) segOn("accl", "a", accl());
   // user decision 2026-09-30: a 百岳 trip defaults to 3 days
   if (hike && !S.daysInit) { if ((Number($("days").value) || 1) === 1) $("days").value = 3; $("tripdays").value = $("tripdays").value || 3; S.daysInit = true; saveUI(); }
@@ -2216,18 +2211,22 @@ function renderZones() {
     <div class="note">CP ${W(PLAN.used.cp.value)}；目標平均功率 ${W(PLAN.summary.power)} 落在區間 ${esc(zoneOf(PLAN.summary.power, PLAN.used.cp.value))}。</div>`;
 }
 function zoneOf(p, cp) { const zs = PLAN?.zones || LAST?.zones || []; const x = p / cp; const z = zs.find((r) => x >= r.lo && (r.hi == null || x < r.hi)); return z ? z.id : "1A 以下"; }
-// SP-366: the climbing charts (坡度 RE, 跑走, 爬坡步頻) — a road race shows a note and never asks for them;
-// a dropped connection (the fit can take minutes on a cold server) reads as a short message with 重試
-function chartRoad(sec) { const road = type === "road"; $(`${sec}-road`).classList.toggle("hidden", !road); $(`${sec}-body`).classList.toggle("hidden", road); return road; }
+// ---- climbing charts (SP-366) ----
+// 坡度 RE / 跑走 / 爬坡步頻 (every race type: the road plan uses the grade curve too). A connection that
+// drops (no answer: 「Failed to fetch」) or a gateway answer (502–504, Cloudflare 520–524) reads as a
+// short message with 重試; one request per chart at a time (toggling while it loads asks nothing more)
+const NET_STATUS = new Set([502, 503, 504, 520, 521, 522, 523, 524]);
+const netFail = (e) => !e || !e.status || NET_STATUS.has(e.status);
 function chartErr(el, e, retry) {
-  if (e && e.status) { $(el).innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
+  if (!netFail(e)) { $(el).innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
   $(el).innerHTML = `<div class="err">${esc(T("charts.neterr"))} <button class="btn" type="button">${esc(T("charts.retry"))}</button></div>`;
   $(el).querySelector("button").onclick = () => { $(el).innerHTML = ""; retry(); };
 }
+let GM_P = null, CAD_P = null;               // the request in flight
 async function renderGM() {
-  if (chartRoad("gm")) return;
-  try { GM = GM || await j(`${API}/grade-model`); } catch (e) { chartErr("gm-detail", e, renderGM); return; }
-  if (type === "road") return;                 // switched to road while it loaded
+  if (GM_P) return;
+  GM_P = GM ? Promise.resolve(GM) : j(`${API}/grade-model`);
+  try { GM = await GM_P; } catch (e) { chartErr("gm-detail", e, renderGM); return; } finally { GM_P = null; }
   const g = GM.grade_re, bins = g.bins.filter((b) => Math.abs(b.grade) <= 0.35);
   chart("gm-chart").setOption({
     animation: false, grid: { left: 48, right: 14, top: 44, bottom: 38 }, legend: { top: 0, textStyle: { color: css("--muted"), fontSize: 11 } },
@@ -2271,9 +2270,9 @@ function renderRW(rw) {
 }
 // SP-230: climbing cadence against the 130 spm walk line (a check only: the line never moves here)
 async function renderCad() {
-  if (chartRoad("cad")) return;
-  try { CAD = CAD || await j(`${API}/cadence-check`); } catch (e) { chartErr("cad-detail", e, renderCad); return; }
-  if (type === "road") return;
+  if (CAD_P) return;
+  CAD_P = CAD ? Promise.resolve(CAD) : j(`${API}/cadence-check`);
+  try { CAD = await CAD_P; } catch (e) { chartErr("cad-detail", e, renderCad); return; } finally { CAD_P = null; }
   const c = CAD, mins = c.seconds.map((x) => x / 60), on = c.bins.filter((b, i) => mins[i] > 0.05);
   const lo = on.length ? Math.max(0, Math.floor((on[0] - 15) / 10) * 10) : 60, hi = on.length ? Math.ceil((on[on.length - 1] + 15) / 10) * 10 : 220;
   const lines = [{ xAxis: c.threshold_spm, lineStyle: { color: css("--accent"), width: 2 }, label: { formatter: T("cad.line"), color: css("--accent") } }];
@@ -2293,6 +2292,7 @@ async function renderCad() {
     `<div class="note"><span class="badge ${tag[0]}">${esc(T(tag[1]))}</span> ${esc(c.hint || "")}</div>` +
     `<div class="note">${esc(T("cad.how"))}</div><div class="meta">${esc(c.source || "")}</div>`;
 }
+// ---- end climbing charts ----
 
 // ---------------- 準確度 ----------------
 async function renderBacktest() {

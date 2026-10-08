@@ -1,17 +1,19 @@
 """
 SP-366: the charts at the bottom of the race calculator (坡度 RE 曲線 + 跑走切換速度,
-爬坡步頻分布) on a road race (a marathon) showed 「Failed to fetch」.
+爬坡步頻分布) showed 「Failed to fetch」 on a marathon.
 
-GET /grade-model and GET /cadence-check are not about the race: they fit the athlete's
-whole year. On a cold cache that is the slowest thing the page asks for (77 s on the
-synthetic demo athlete right after a start), and nothing stopped a second caller — /plan,
-the other chart, a second tab — from computing the same thing from scratch at the same
-time. A request that long is dropped before it answers (the page then shows the browser's
-「Failed to fetch」). Fixed by:
-  * one computation per key (backend/singleflight.py) for both, so concurrent callers wait
-    for the first one instead of multiplying the work;
-  * the page: a road race does not load them (they are about climbing: a short note
-    instead), and a dropped connection reads as a short message with 重試, not the raw error.
+「Failed to fetch」 is a connection that ended with no HTTP answer (a gateway timeout would be
+a 502 / 504 / 524 page). The cause is not confirmed: no log of the failing request exists, and
+locally both requests answered 200 (slow only while the server was still building the dataset
+after a start; warm, under 3 s). Candidates: the server restarting mid-request (a restart, a
+redeploy or container restart, an out-of-memory kill), the machine sleeping, or the network
+dropping. Mitigations here, whichever it was:
+  * one computation per key (backend/singleflight.py) for GET /grade-model and
+    /cadence-check, so concurrent callers (/plan, the other chart, a second tab) wait for the
+    first one instead of each fitting the whole year again;
+  * the page: a dropped connection or a gateway answer reads as a short message with 重試, not
+    the raw error, and a chart asks once while its request is in flight. Every race type shows
+    the charts (owner 2026-10-08: the road plan uses the grade curve too).
 
 Synthetic only: a fake Dataset of flat road runs, fake inputs (no WKO5 folder, no DB).
 """
@@ -19,6 +21,8 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
+import subprocess
 import threading
 import time
 from pathlib import Path
@@ -130,34 +134,82 @@ def test_concurrent_cadence_checks_share_one_scan(client, flat_road_athlete, mon
 
 # ---- the page --------------------------------------------------------------------------
 
-def _fn(src: str, name: str) -> str:
-    m = re.search(r"async function " + name + r"\(\) \{\n(.*?)\n\}\n", src, re.S)
-    assert m, name
-    return m.group(1)
+NODE = shutil.which("node")
 
 
-def test_page_road_race_shows_a_note_instead_of_loading():
+def _block() -> str:
+    m = re.search(r"// ---- climbing charts \(SP-366\) ----.*?// ---- end climbing charts ----",
+                  PAGE.read_text("utf-8"), re.S)
+    assert m, "climbing charts block not found"
+    return m.group(0)
+
+
+def test_every_race_type_loads_the_charts():
+    """Owner 2026-10-08: road races show them too (the road plan uses the grade curve)."""
     src = PAGE.read_text("utf-8")
-    for name, url in (("renderGM", "/grade-model"), ("renderCad", "/cadence-check")):
-        body = _fn(src, name)
-        # the road guard comes before the request: a road race never asks for it
-        guard = body.find("if (chartRoad(")
-        assert 0 <= guard < body.find(url), name
-    assert re.search(r'function chartRoad\(sec\) \{ const road = type === "road";', src)
-    for sec in ("gm", "cad"):
-        assert f'id="{sec}-road"' in src and f'id="{sec}-body"' in src
-    # switching road ↔ trail updates them (an open one loads)
-    st = re.search(r"\nfunction setType\(t\) \{\n(.*?)\n\}\n", src, re.S)
-    assert st and 'chartRoad("gm")' in st.group(1) and 'chartRoad("cad")' in st.group(1)
-
-
-def test_page_a_dropped_connection_reads_as_a_short_message_with_retry():
-    src = PAGE.read_text("utf-8")
-    for name in ("renderGM", "renderCad"):
-        body = _fn(src, name)
-        assert "chartErr(" in body, name                    # not the raw e.message
-    assert re.search(r"function chartErr\(", src)
+    assert "chartRoad" not in src and 'id="gm-road"' not in src and 'id="cad-road"' not in src
     for loc in ("zh-TW", "en"):
         cat = json.loads((STATIC / "i18n" / loc / "racepower.json").read_text("utf-8"))
-        for k in ("charts.road", "charts.neterr", "charts.retry"):
+        assert "charts.road" not in cat
+        for k in ("charts.neterr", "charts.retry"):
             assert cat.get(k), (loc, k)
+    # the type switch asks for nothing: the charts are the athlete's, not the race's
+    st = re.search(r"\nfunction setType\(t\) \{\n(.*?)\n\}\n", src, re.S)
+    assert st and "renderGM" not in st.group(1) and "renderCad" not in st.group(1)
+
+
+JS = r"""
+const vm = require("vm");
+const els = {};
+const el = (id) => els[id] || (els[id] = { id, innerHTML: "", btn: null,
+  querySelector() { return this.btn || (this.btn = { onclick: null }); } });
+let calls = 0, answer = null;
+const ctx = {
+  API: "/api", GM: null, CAD: null, console,
+  $: el, esc: (s) => String(s), T: (k) => "<" + k + ">", css: () => "", ok: (v) => v != null && isFinite(v),
+  r3: String, n0: String, f1: String, hm: String, pct: String, axisStyle: () => ({}),
+  chart: () => ({ setOption() {} }),
+  j: () => { calls += 1; return answer(); },
+};
+vm.runInNewContext(process.argv[1], ctx);
+const run = async () => {
+  const out = {};
+  // a gateway / dropped answer → the message with 重試; another error → its own text
+  for (const [name, err] of [["drop", { message: "Failed to fetch" }], ["s502", { status: 502, message: "502 Bad Gateway" }],
+                             ["s524", { status: 524, message: "524 <html>" }], ["s400", { status: 400, message: "沒有資料" }]]) {
+    answer = () => Promise.reject(err);
+    ctx.GM = null; await vm.runInNewContext("renderGM()", ctx);
+    out[name] = el("gm-detail").innerHTML;
+  }
+  // one request in flight: toggling twice while it loads asks once
+  calls = 0; let release;
+  answer = () => new Promise((res) => { release = res; });
+  ctx.GM = null;
+  const a = vm.runInNewContext("renderCad()", ctx), b = vm.runInNewContext("renderCad()", ctx);
+  out.inflight_calls = calls;
+  release({ seconds: [0, 60], bins: [100, 105], threshold_spm: 130, valley_spm: null, verdict: "few", total_s: 60, n_runs: 0 });
+  await a; await b;
+  out.after = el("cad-detail").innerHTML.length > 0;
+  // the retry button asks again
+  calls = 0;
+  answer = () => Promise.reject({ message: "Failed to fetch" });
+  ctx.CAD = null; await vm.runInNewContext("renderCad()", ctx);
+  answer = () => Promise.reject({ message: "Failed to fetch" });
+  el("cad-detail").btn.onclick(); await new Promise((r) => setTimeout(r, 0));
+  out.retry_calls = calls;
+  console.log(JSON.stringify(out));
+};
+run().catch((e) => { console.error(e); process.exit(1); });
+"""
+
+
+@pytest.mark.skipif(NODE is None, reason="node not installed")
+def test_errors_retry_and_one_request_in_flight():
+    r = subprocess.run([NODE, "-e", JS, _block()], capture_output=True, text=True, encoding="utf-8", timeout=30)
+    assert r.returncode == 0, r.stderr
+    out = json.loads(r.stdout)
+    for k in ("drop", "s502", "s524"):
+        assert "<charts.neterr>" in out[k] and "<charts.retry>" in out[k], (k, out[k])
+    assert "沒有資料" in out["s400"] and "charts.neterr" not in out["s400"]
+    assert out["inflight_calls"] == 1 and out["after"]
+    assert out["retry_calls"] == 2
