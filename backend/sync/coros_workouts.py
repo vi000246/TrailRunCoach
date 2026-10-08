@@ -857,10 +857,16 @@ def _week_range(r: CorosPlanPush) -> tuple[str, str]:
         return r.day, r.day
 
 
-async def _remove_remote(hub: TrainingHub, r: CorosPlanPush) -> None:
+RECHECK_DELAY_S = 1.5        # SP-358: the pause before looking for a deleted calendar entry again (tests: 0)
+
+
+async def _remove_remote(hub: TrainingHub, r: CorosPlanPush) -> Optional[str]:
     """Take a pushed session off the calendar and out of the library. Parts that
     are already gone (deleted in the COROS app) are skipped; an entry the
-    athlete already did (executeStatus != 0) is never removed."""
+    athlete already did (executeStatus != 0) is never removed. Returns the day
+    when COROS accepted the calendar delete but still lists the entry a moment
+    later (SP-358): a reminder to check in the COROS app, not a failure."""
+    check = None
     if r.id_in_plan:
         a, b = _week_range(r)            # the whole week: it may have been moved in the app
         if r.day and not a <= r.day <= b:
@@ -870,6 +876,14 @@ async def _remove_remote(hub: TrainingHub, r: CorosPlanPush) -> None:
             if ent.get("execute_status"):
                 raise Executed(r.session_id)
             await hub.unschedule(ent["plan_id"], ent["id_in_plan"], ent["plan_program_id"])
+            # SP-358: COROS answering 0000 is not proof — look once more after a short pause.
+            # Still listed: a reminder (the owner checks real deletes first), logged; no retry
+            if RECHECK_DELAY_S:
+                await asyncio.sleep(RECHECK_DELAY_S)
+            if await hub.find_entry(a, b, r.id_in_plan) is not None:
+                check = r.day or a
+                log.warning("COROS calendar delete accepted but the entry is still listed: session=%s day=%s",
+                            r.session_id, check)
         r.plan_id = r.id_in_plan = r.plan_program_id = None
     if r.program_id:
         # program/detail still answers for deleted programs, flagged deleted=1
@@ -883,6 +897,7 @@ async def _remove_remote(hub: TrainingHub, r: CorosPlanPush) -> None:
         if exists:
             await hub.delete_program(r.program_id)
         r.program_id = None
+    return check
 
 
 def status_of(s: dict, thresholds: Optional[dict], row: Optional[CorosPlanPush],
@@ -1034,9 +1049,10 @@ async def _push_one(db, hub: TrainingHub, athlete_id: int, s: dict,
     if row is not None and row.status == "pushed" and spec.pushed_as(row.fingerprint):
         return {**out, "status": "pushed", "name": spec.name, "changed": False, **_row_view(row)}
     replacing = row is not None and (row.program_id or row.id_in_plan)
+    check = None                                  # the old entry's day if COROS may still list it (SP-358)
     if replacing:
         try:
-            await _remove_remote(hub, row)
+            check = await _remove_remote(hub, row)
         except Executed:
             # done on the watch but not synced here yet: keep it, don't re-create
             return {**out, "status": "done", "reason": "COROS 上已完成", **_row_view(row)}
@@ -1065,7 +1081,7 @@ async def _push_one(db, hub: TrainingHub, athlete_id: int, s: dict,
         if spec.load_steps:
             await _record_load(db, athlete_id, s, spec)
         return {**out, "status": "updated" if replacing else "pushed", "name": spec.name,
-                "changed": True, **_row_view(row)}
+                "changed": True, **_row_view(row), **({"check_day": check} if check else {})}
     except CorosAuthError:
         row.error = "COROS 登入過期，請重新登入"
         await db.commit()
@@ -1125,7 +1141,7 @@ async def _remove_row(db: AsyncSession, hub: TrainingHub, r: CorosPlanPush,
     if keep_before and r.day and r.day < keep_before:
         return {**out, "status": "kept", "reason": "日期已過，保留在 COROS"}
     try:
-        await _remove_remote(hub, r)
+        check = await _remove_remote(hub, r)
     except Executed:
         await db.commit()
         return {**out, "status": "kept", "reason": "COROS 上已完成，不移除"}
@@ -1137,4 +1153,4 @@ async def _remove_row(db: AsyncSession, hub: TrainingHub, r: CorosPlanPush,
         return {**out, "status": "failed", "error": r.error}
     await db.delete(r)
     await db.commit()
-    return {**out, "status": "removed"}
+    return {**out, "status": "removed", **({"check_day": check} if check else {})}

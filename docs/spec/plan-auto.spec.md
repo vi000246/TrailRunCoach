@@ -109,6 +109,19 @@ Other entry points:
 | `plan.auto.state` | — | internal: last data stamp, last phase, last CP, Zone 5 / re-entry keys, rejected fingerprints |
 | `plan.push.provider` | coros | the push target (`backend/sync/workout_targets/`); Garmin / intervals.icu are stubs, not enabled |
 
+**Push window and moved sessions** (SP-358, `push_window`, `backend/engine/plan_auto.py:467`): the
+run pushes the active sessions of the window, removes pushed ones that left the plan / were
+missed / sit on a blocked day, and re-sends the sessions whose pushed copy sits in the window
+although they moved out of it (dragged to next week: the copy would otherwise stay on the old
+day). A removal that fails is a failure of the push (`partial`, with its error). A calendar delete
+COROS accepted but still lists after a short pause is not a failure: the result carries
+`check_days` (a reminder to check the COROS app; `coros_workouts._remove_remote`). The 課表 page's
+own changes call it with `only` = the changed sessions (`_sync_watch`,
+`backend/api/plan_sessions.py:1964`): everything — the window push and the stale / blocked /
+missed clean-up — is limited to them (`backend/engine/plan_auto.py:493`); other leftover copies
+are left to this run and the manual push. `window` False (自動推送 off) re-sends / removes only
+copies already on the watch. A failure there adds a `failed` row (trigger `edit`) to the change log.
+
 **Phases** (SP-73): the automatic run reads the same phases as the page (`planning.phases`,
 `backend/engine/planning.py:1019`), including the 轉換期 after an A race's recovery (課表偏好
 `plan.prefs.transition_weeks`, default 3, 0 = off; overview.spec.md 課表偏好) and the 回量期
@@ -773,3 +786,5 @@ overview has `data-log="none"`. The settings are in 課表偏好 (above).
 | 2026-10-06 | change | SP-302 | Rule D's 「TSS > planned + 20 %」 now compares against an easy run planned at the easy-only TSS / h (overview.spec.md › Session TSS; before, the all-runs median put the plan near tempo and the check almost never fired) |
 | 2026-10-08 | code-sync | N/A | Illness (SP-117: cold / fever rules, 生病停跑 re-entry text, illness pauses intervals; Known limit replaced); A 賽後重新打底 (SP-116: gates count evidence from after the post-race phases, `rebase` AeT test reason); 回量期 (SP-98) added to the post-race / rest-phase / step-skip / maintenance lists; 疲勞保險 interval outcome (SP-110); single-run guard (SP-66); week snapshot at the end of every run + `GET /plan/history` (SP-71); bad-HR drift is reference only for the gates (SP-266); AeT retest ±5 bpm wording (SP-279); `rpe_filled` trigger and `plan.auto.rpe_rule` setting (SP-231); `settings` trigger; weekly calibration refit (SP-320 ④); Known limits: settings run no-ops on an unchanged stamp, LTHR prior may count as measured, adapt moves ignore the 休息日 preference; 11 moved file:line pointers |
 | 2026-10-06 | change | SP-301 | Rule D in two tiers: 偏強 = avg power > 80 % CP (without power: avg HR > 94 % LTHR, 推估) or TSS > planned + 20 % (the AeT + 3 HR condition removed) → label only, no session change; 太強 = the session classifier's hard class (Zone 3 or harder) → the next hard session < 48 h later moves / steps down with a reason (also the generator's own move), A-race 14-day confirm (`too_hard`), 復原; the easy-run TSS trim removed; D runs after E; D′ skips a run D's 太強 acted on |
+| 2026-10-08 | fix | SP-358 | `push_window` (`backend/engine/plan_auto.py:467`) also re-sends a session whose pushed copy sits in the window but which moved out of it (`plan_sessions.copies_in`), so the copy leaves the old day; a removal that failed makes the result `partial` with its error (it used to count as nothing); new `only` / `window` arguments serve the page's own changes (`plan_sessions._sync_watch`: a drag / edit / delete / 不排課日期 / 休息日 / swap syncs the watch at once, also with 自動推送 off for copies already on the watch; a failure logs a `failed` row, trigger `edit`) |
+| 2026-10-08 | fix | SP-358 review | With `only`, the stale / blocked / missed clean-up is limited to those sessions too (an edit syncs only what it touched); a delete COROS still lists after a 1.5 s pause is `check_days` (reminder), not a failure |
