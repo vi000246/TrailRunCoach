@@ -196,8 +196,8 @@ class GaitRE:
     athlete's own majority gait decides which curve predicts that grade
     (推估; Minetti's running cost does not describe walking — Minetti 2002,
     Giovanelli 2016 on the walk/run crossover); with `speed_gait` (SP-229) the
-    running curve's speed at the segment power decides instead (re_at,
-    curve_at: below the transition speed, walk). `tech` is the trail
+    predicted speed decides on climbs ≥ 3 % instead (re_at / curve_at: below
+    the transition speed, walk, held at it until running is as fast). `tech` is the trail
     technicality factor on flats and descents (g ≤ +2 %): median of actual ÷
     predicted RE over the athlete's own trail running windows there (推估,
     per intensity class when ≥ 30 windows), applied only with `trail=True`.
@@ -298,22 +298,51 @@ class GaitRE:
             return None
         return RW.gait(g, self.run.re(g) * p / weight, self.rw_shift)
 
+    def _speed_pick(self, g: float, p: float, weight: float) -> Optional[tuple[float, str]]:
+        """SP-229 on a climb (g ≥ 3 %): (RE, curve). The horizontal speed at power `p` is
+
+            v = max(v_run, min(v_walk, S))      S = the (shifted) PTS as horizontal speed
+
+        i.e. below the transition speed the walking curve where it is faster per watt (walking
+        cheaper, Brill & Kram 2021), held at S until the running curve reaches it; at and above
+        S the running curve. v never falls as `p` rises (the plain switch did: walking RE is
+        above running RE on climbs, so crossing S dropped the speed). The walking curve only
+        where the bin has walked windows (no walking from the prior alone). None on flats and
+        descents and without power: those keep the majority gait (re)."""
+        from backend.engine.racepower import runwalk as RW
+        if not p or p <= 0 or not weight or g < RW.MIN_GRADE:
+            return None
+        rr = self.run.re(g)
+        if self.walk.data_n(g) <= 0:
+            return rr, "run"
+        v_run = rr * p / weight
+        v_walk = min(self.walk.re(g) * p / weight, RW.horizontal(g, RW.pts(g, self.rw_shift)))
+        if v_walk > v_run:
+            return v_walk * weight / p, "walk"
+        return rr, "run"
+
     def re_at(self, g: float, p: float, weight: float) -> float:
-        """SP-229 RE with the gait chosen by the predicted speed instead of the majority gait
-        (re): the walking curve where gait_at says walk, the running curve elsewhere (also on
-        flats and descents), the trail technicality as in re (推估: faster efforts run more,
-        a slower late race walks more). Used by the back-test's comparison, and by the planner
-        when speed_gait is on (the back-test showed it is no worse)."""
-        v = self.walk.re(g) if self.gait_at(g, p, weight) == "walk" else self.run.re(g)
-        if self.trail and g <= 0.02:
-            v *= self.tech_at(g)[0]
-        return v
+        """SP-229 RE with the curve chosen by the predicted speed instead of the majority gait
+        (re) on climbs ≥ 3 % (_speed_pick; 推估: a harder effort runs more of the climbs, an
+        easier one walks more). Flats and descents are re (the majority gait, trail
+        technicality), so only climbs can differ. The choice follows the segment's power;
+        the planner's later scaling / fade moves the shown speed and its label, not the curve.
+        Used by the back-test's comparison, and by the planner when speed_gait is on."""
+        pick = self._speed_pick(g, p, weight)
+        return self.re(g) if pick is None else pick[0]
+
+    def speed_curve(self, g: float, p: float, weight: float) -> str:
+        """"walk" / "run": the curve re_at predicts grade g with at power `p`."""
+        pick = self._speed_pick(g, p, weight)
+        if pick is None:
+            return "walk" if self.walked(g) else "run"
+        return pick[1]
 
     def curve_at(self, g: float, p: float, weight: float) -> str:
-        """"walk" / "run": the curve that predicts grade g at power `p` — gait_at's answer when
-        speed_gait is on (走跑皆可 runs), else the majority gait (walked)."""
+        """"walk" / "run": the curve that predicts grade g at power `p` — speed_curve when
+        speed_gait is on, else the majority gait (walked)."""
         if self.speed_gait:
-            return "walk" if self.gait_at(g, p, weight) == "walk" else "run"
+            return self.speed_curve(g, p, weight)
         return "walk" if self.walked(g) else "run"
 
     def with_speed_gait(self, on: bool) -> "GaitRE":

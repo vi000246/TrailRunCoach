@@ -2350,8 +2350,10 @@ async function renderBacktest() {
     走跑分開前後的時間 |誤差|：${pct1(T.models.no_gait.median_abs)} → ${pct1(T.models.gait.median_abs)}。</div>`;
   const SG = T.speed_gait;
   if (SG) h += `<div class="note">${esc(TR("sg.line", { a: pct1(SG.segments.gait.median_abs), b: pct1(SG.segments.speed_gait.median_abs),
-    c: pct1(SG.climbs.gait.median_abs), d: pct1(SG.climbs.speed_gait.median_abs), n: SG.climbs.gait.n, k: SG.changed }))}
-    <b class="${SG.no_worse ? "ok" : "no"}">${esc(TR(SG.no_worse ? "sg.ok" : "sg.no"))}</b></div>`;
+    c: pct1(SG.climbs.gait.median_abs), d: pct1(SG.climbs.speed_gait.median_abs), n: SG.climbs.gait.n, k: SG.changed,
+    e: pct1((SG.changed_segments || {gait: {}}).gait.median_abs), f: pct1((SG.changed_segments || {speed_gait: {}}).speed_gait.median_abs),
+    m: SG.changed_activities ?? "–", kmin: SG.min_changed ?? 20, mmin: SG.min_activities ?? 3 }))}
+    <b class="${SG.no_worse ? "ok" : "no"}">${esc(TR(SG.no_worse ? "sg.ok" : SG.reason === "few" ? "sg.few" : SG.reason === "tie" ? "sg.tie" : "sg.no"))}</b></div>`;
   // trail HR pace model: race level with / without durability decay; ≥ 8 h races apart (SP-240)
   const TH = R.trail_hr;
   if (TH && TH.races) {
