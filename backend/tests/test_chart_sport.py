@@ -72,7 +72,8 @@ def _block() -> str:
 def _run(expr: str, **data):
     js = r"""
 const vm = require("vm");
-const ctx = { DATA: JSON.parse(process.argv[2]) };
+const DATA = JSON.parse(process.argv[2]);
+const ctx = { DATA, S: DATA.S || {} };
 vm.runInNewContext(process.argv[1] + "\nOUT = (" + process.argv[3] + ");", ctx);
 console.log(JSON.stringify(ctx.OUT));
 """
@@ -99,3 +100,63 @@ def test_viewer_reads_the_tag_against_the_activity_on_workout_pages():
                         {"id": "n", "needs": "poles", "needs_met": False}]}
     assert _run(ids, d=mixed, sp="road") == ["r", "a", "p"]                  # `order` moves it first in that mode
     assert _run("visChartsFor(DATA.d, 'trail', false).map((c) => c.id)", d=mixed) == ["a"]
+
+
+# ---- SP-218 review: M1 (no wait on /kind), M2 (the picked page stays) ---------------------------
+
+CLIMBING = {"_mode": "workout", "charts": [{"index": 0, "id": "climbs", "sports": ["trail"]},
+                                           {"index": 1, "id": "grades", "sports": ["trail"]}]}
+
+
+@pytest.mark.skipif(NODE is None, reason="node not installed")
+def test_viewer_kind_rule_matches_the_backend():
+    kinds = list(SM.FILTER_KINDS) + [None, ""]
+    got = _run("DATA.kinds.map((k) => chartSportOfKind(k))", kinds=kinds)
+    assert got == [SM.chart_sport(k) for k in kinds]
+
+
+@pytest.mark.skipif(NODE is None, reason="node not installed")
+def test_kind_comes_from_the_activity_list_without_a_request():
+    acts = [{"index": 3, "kind": "baiyue"}, {"index": 4, "kind": "road"}]
+    assert _run("[settleActSport(), S.actSport]", S={"workout": 3, "acts": acts}) == \
+        [True, {"workout": 3, "sport": "trail", "kind": "baiyue"}]
+    assert _run("[settleActSport(), S.actSport]", S={"workout": 4, "acts": acts})[1]["sport"] == "road"
+    # outside the list (a deep link beyond the date range): false = ask /kind in the background
+    assert _run("[settleActSport(), S.actSport || null]", S={"workout": 9, "acts": acts}) == [False, None]
+    # an older answer for another index is not reused
+    assert _run("[settleActSport(), S.actSport.workout]",
+                S={"workout": 4, "acts": acts, "actSport": {"workout": 3, "sport": "trail"}}) == [True, 4]
+
+
+def _load_fn() -> str:
+    html = PAGE.read_text(encoding="utf-8")
+    return html[html.index("async function load() {"):html.index("// ---- one chart card")]
+
+
+def test_load_draws_before_any_wait():
+    """M1: an activity's page draws its loading cards at once; /kind (only for an activity outside the list)
+    runs in the background — nothing in load() awaits before the cards are on the page."""
+    body = _load_fn()
+    head = body[:body.index("const queue = visCharts(d)")]
+    assert "await" not in head and "settleActSport()" in head and "/kind?" in head
+    # an exclusion change rebuilds the dataset and shifts the indices: the cached kind is dropped with them
+    assert "S.workout = null; S.workoutLabel = null; S.actSport = null; loadActs();" in PAGE.read_text(encoding="utf-8")
+
+
+def test_tree_keeps_the_picked_page_for_another_activity():
+    """M2: the redirect to the first page with charts reads pageCharts (the page's charts whatever the activity),
+    so a road run in between never moves / saves the picked 爬坡與地形 away; that page says viewer.trail_only."""
+    html = PAGE.read_text(encoding="utf-8")
+    tree = html[html.index("function renderTree() {"):html.index("function markHit(")]
+    assert "!pageCharts(v.dashboards[S.dash[S.mode]]).length" in tree and "visCharts(v.dashboards[S.dash" not in tree
+    assert 'esc(t("viewer.trail_only"))' in _load_fn()
+
+
+@pytest.mark.skipif(NODE is None, reason="node not installed")
+def test_page_charts_ignore_the_activity_but_shown_charts_follow_it():
+    S = {"workout": 4, "actSport": {"workout": 4, "sport": "road"}, "usePower": True, "sport": "trail"}
+    ids = "(f) => f(DATA.d).map((c) => c.id)"
+    assert _run(f"({ids})(visCharts)", S=S, d=CLIMBING) == []                         # -> the trail_only message
+    assert _run(f"({ids})(pageCharts)", S=S, d=CLIMBING) == ["climbs", "grades"]       # -> the page stays picked
+    season = {**CLIMBING, "_mode": "season"}
+    assert _run(f"({ids})(pageCharts)", S={**S, "sport": "road"}, d=season) == []      # season: primary sport

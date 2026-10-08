@@ -588,16 +588,34 @@ const curView = () => viewsOf(S.mode).find((v) => v.name === S.view[S.mode]) || 
 function chartSportFor(mode, primary, act) {
   return mode === "workout" ? (act || null) : (primary || "trail");
 }
+// an activity's filter kind (GET /workouts rows, engine/sport_map.kind_of) -> its chart sport: the same rule as
+// sport_map.chart_sport (越野跑, 登山健行, 百岳 = "trail"; any other kind is itself)
+function chartSportOfKind(kind) {
+  return !kind ? null : ["trail", "hike", "baiyue"].includes(kind) ? "trail" : kind;
+}
 function visChartsFor(d, sp, usePower) {
   const cs = d.charts.filter((c) => (usePower !== false || !c.power) && (!c.sports || sp == null || c.sports.includes(sp))
     && (!c.needs || c.needs_met));
   const rank = (c, i) => (sp != null && c.order && c.order[sp] != null ? c.order[sp] : i);
   return cs.map((c, i) => [c, i]).sort((a, b) => rank(...a) - rank(...b) || a[1] - b[1]).map((x) => x[0]);
 }
-// ---- end chart sport ----
 const actChartSport = () => S.actSport && S.actSport.workout === S.workout ? S.actSport.sport : null;
 const dashSport = (d) => chartSportFor(d._mode, S.sport, actChartSport());
 function visCharts(d) { return visChartsFor(d, dashSport(d), S.usePower); }
+// the charts a page can have whatever the shown activity is: the tree keeps a workout page the reader picked
+// even when this activity has no chart on it (the page then says why, viewer.trail_only), so the choice is
+// never overwritten by a road run in between (SP-218 review)
+function pageCharts(d) { return visChartsFor(d, d._mode === "workout" ? null : dashSport(d), S.usePower); }
+// the shown activity's chart sport without a request when the activity list has its row (same KindFilter);
+// false = not in the list (a deep link outside the date range): GET /workouts/{i}/kind decides later
+function settleActSport() {
+  if (S.workout == null || S.actSport?.workout === S.workout) return true;
+  const a = (S.acts || []).find((x) => x.index === S.workout);
+  if (!a || !a.kind) return false;
+  S.actSport = { workout: S.workout, sport: chartSportOfKind(a.kind), kind: a.kind };
+  return true;
+}
+// ---- end chart sport ----
 function selectedSports() { return [...document.querySelectorAll("#sports input:checked")].map((i) => i.value); }
 // 活動類型 (engine/sport_map.py, SP-263): 越野跑 / 路跑 / 登山健行 / 百岳登山 / 騎車 / 肌力 / 走路 / 其他
 const kindLabel = (k) => { const s = (S.sports || []).find((x) => x.sport === k); return t("viewer.kind." + k, s?.label || k || ""); };
@@ -711,12 +729,14 @@ function treeOpen(view, cur) {
   return view === cur || view.source === "custom";
 }
 function renderTree() {
+  if (S.mode === "workout") settleActSport();     // the shown activity's kind, when the list already has it
   const q = $("q").value.trim();
   const v = curView();
   if (v && S.dash[S.mode] >= v.dashboards.length) S.dash[S.mode] = 0;
-  // a page of power-only charts is hidden under 使用功率 off: land on the first page that has charts
-  if (v && !visCharts(v.dashboards[S.dash[S.mode]]).length)
-    S.dash[S.mode] = Math.max(0, v.dashboards.findIndex((d) => visCharts(d).length));
+  // a page of power-only charts is hidden under 使用功率 off: land on the first page that has charts.
+  // Not for the shown activity's kind (pageCharts): a trail page stays picked on a road run (SP-218 review)
+  if (v && !pageCharts(v.dashboards[S.dash[S.mode]]).length)
+    S.dash[S.mode] = Math.max(0, v.dashboards.findIndex((d) => pageCharts(d).length));
   renderCrumb();
   if (q) return renderSearch(q);
   const vs = viewsOf(S.mode);
@@ -729,8 +749,8 @@ function renderTree() {
       const rank = (x) => (CUSTOM_ORDER.indexOf(x.name) + 1 || 99);
       return `<div class="grp flat">` + [...group].sort((a, b) => rank(a) - rank(b)).map((view) =>
         `<ul class="vw open" data-v="${esc(view.name)}">${view.dashboards.map((d, i) => {
-          if (!visCharts(d).length) return "";
           const on = view === v && i === S.dash[S.mode];
+          if (!visCharts(d).length && !on) return "";
           return `<li><button class="db ${on ? "on" : ""}" data-i="${i}" title="${esc(d.title)}" ${on ? 'aria-current="page"' : ""}>
             <span class="nm">${esc(d.title)}</span><span class="n" title="${visCharts(d).length} 張圖">${visCharts(d).length}</span></button></li>`;
         }).join("")}</ul>`).join("") + `</div>`;
@@ -741,7 +761,7 @@ function renderTree() {
         const open = treeOpen(view, v);
         return `<div class="vw ${open ? "open" : ""} ${view === v ? "has-cur" : ""}" data-v="${esc(view.name)}">
           <button class="vw-h" aria-expanded="${open}"><span class="nm">${esc(view.name)}</span><span class="n" title="${view.dashboards.length} 個頁面">${view.dashboards.length}</span></button>
-          <ul>${view.dashboards.map((d, i) => !visCharts(d).length ? "" : `<li><button class="db ${view === v && i === S.dash[S.mode] ? "on" : ""}" data-i="${i}" title="${esc(d.title)}"
+          <ul>${view.dashboards.map((d, i) => !visCharts(d).length && !(view === v && i === S.dash[S.mode]) ? "" : `<li><button class="db ${view === v && i === S.dash[S.mode] ? "on" : ""}" data-i="${i}" title="${esc(d.title)}"
             ${view === v && i === S.dash[S.mode] ? 'aria-current="page"' : ""}><span class="nm">${esc(d.title)}</span><span class="n" title="${visCharts(d).length} 張圖">${visCharts(d).length}</span></button></li>`).join("")}</ul></div>`;
       }).join("") + `</div>`;
   }).join("") || `<div class="none">沒有${MODE_LABEL[S.mode]}的 view</div>`;
@@ -946,6 +966,11 @@ async function loadActs() {
   const q = `begin=${$("begin").value}&end=${$("end").value}&sports=${encodeURIComponent(sportsParam())}&${tpParam()}`;
   const acts = S.acts = await j(`${API}/workouts?${q}`);
   $("acts-h").textContent = `活動 (${acts.length})`;
+  if (S.mode === "workout" && S.workout != null && S.actSport?.workout !== S.workout && curView()) {
+    const d = curView().dashboards[S.dash[S.mode]], shown = () => visCharts(d).map((c) => c.index).join();
+    const before = shown();
+    if (settleActSport()) { renderTree(); if (shown() !== before) load(); }
+  }
   $("acts-n").textContent = acts.length;
   renderActChip();
   // an excluded bad file (engine/bad_activity.py) has no index: shown, not openable
@@ -964,8 +989,8 @@ async function loadActs() {
       const r = await fetch(`${API}/exclusions`, { method: "PUT", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ key: b.dataset.exkey, file: b.dataset.exfile, exclusion: b.dataset.exact === "keep" ? "keep" : null }) });
       if (!r.ok) throw new Error(r.status);
-      // the dataset is rebuilt with this file back in: indices shift
-      S.workout = null; S.workoutLabel = null; loadActs();
+      // the dataset is rebuilt with this file back in: indices shift (the kind cached per index too)
+      S.workout = null; S.workoutLabel = null; S.actSport = null; loadActs();
     } catch (e) { b.disabled = false; b.textContent = "失敗：" + e.message; }
   });
   $("acts").querySelectorAll(".act:not(.excl)").forEach((el) => el.onclick = () => {
@@ -992,13 +1017,19 @@ async function load() {
     $("pickact").onclick = () => openAside("acts");
     return;
   }
-  if (S.mode === "workout" && S.actSport?.workout !== S.workout) {
-    // SP-218: this activity's own type decides its trail-only charts (visCharts); unknown on an error = no filter
-    const wi = S.workout;
-    const k = await j(`${API}/workouts/${wi}/kind?${tpParam()}`).catch(() => null);
-    if (token !== loadToken) return;
-    S.actSport = { workout: wi, sport: k?.chart_sport ?? null, kind: k?.kind ?? null };
-    renderTree();                       // may move off a page that has no chart for this activity
+  // SP-218: this activity's own type decides its trail-only charts (visCharts): from the activity list's row
+  // (settleActSport); an activity outside the list asks GET /workouts/{i}/kind in the background — meanwhile no
+  // filter, then the page is drawn again only when its charts change. Nothing here waits before drawing.
+  if (S.mode === "workout" && !settleActSport()) {
+    const wi = S.workout, shown = (x) => visCharts(x).map((c) => c.index).join();
+    const before = shown(v.dashboards[S.dash[S.mode]]);
+    j(`${API}/workouts/${wi}/kind?${tpParam()}`).then((k) => {
+      if (S.workout !== wi || S.actSport?.workout === wi) return;
+      S.actSport = { workout: wi, sport: k?.chart_sport ?? null, kind: k?.kind ?? null };
+      if (S.mode !== "workout") return;
+      renderTree();
+      if (token === loadToken && shown(curView().dashboards[S.dash[S.mode]]) !== before) load();
+    }).catch(() => {});
   }
   const di = S.dash[S.mode], d = v.dashboards[di];
   const q = (S.mode === "workout" ? `workout=${S.workout}`
@@ -2029,7 +2060,7 @@ function pctl(vals, p) { const v = [...vals].sort((a, b) => a - b); return v[Mat
 
 // opts (SP-218, the 爬坡與地形 card): colorKey = the remembered route colour's own pref key (default "color"),
 // defColor = its first-time colour, chart: false = no map chart beside it, tip = the ? text, onPick(sample index
-// or null) = a click / tap on the map, into = the element the map goes in (default the card).
+// or null, the native event) = a click / tap on the map, into = the element the map goes in (default the card).
 // Resolves to {map, el, s, ll, tb, wrap} (undefined when there is no map).
 async function drawMap(card, res, opts = {}) {
   card.querySelector(".loading")?.remove();
@@ -2134,7 +2165,7 @@ async function drawMap(card, res, opts = {}) {
   map.on("click", (e) => {
     const p = e.layerPoint;
     hoverEmit(m, () => { if (!el._lmap) return null; const k = near(p); return k < 0 ? null : s.gps[k]; });
-    if (opts.onPick) { const k = near(p); opts.onPick(k < 0 ? null : s.gps[k]); }
+    if (opts.onPick) { const k = near(p); opts.onPick(k < 0 ? null : s.gps[k], e.originalEvent); }
   });
   map.on("mouseout", () => hoverEmit(m, null));
   el.addEventListener("mouseleave", () => hoverEmit(m, null));
@@ -3147,19 +3178,36 @@ function cmRange(vals, pace = false, climb = false) {
 }
 // the profile's option: grid 0 = the elevation (climbs shaded and labelled ①②, climb `hl` outlined), one grid per
 // metric id under it, one km range for all. T: {elev, up, line, muted, ink, panel, colors: {id}, names: {id}, units: {id}}
-function cmOption(P, ids, climbs, hl, T, elevH = CM_ELEV_H) {
-  const X = P.x, x0 = X[0], x1 = X[X.length - 1];
-  const tops = [CM_TOP, ...ids.map((_, k) => CM_TOP + elevH + CM_GAP + k * (CM_PANEL_H + CM_GAP))];
-  const hts = [elevH, ...ids.map(() => CM_PANEL_H)];
-  const n = tops.length;
-  const lbl = { color: T.muted, fontSize: 10, hideOverlap: true };
-  const area = (k) => climbs.map((c, i) => c.start_km == null || c.end_km == null ? null : [
+// the climbs shaded on panel k (0 = the elevation: labelled ①②), climb `hl` outlined
+function cmAreas(climbs, hl, T, k) {
+  return climbs.map((c, i) => c.start_km == null || c.end_km == null ? null : [
     { xAxis: c.start_km,
       itemStyle: { color: cmRgba(T.up, i === hl ? (k ? 0.2 : 0.32) : (k ? 0.06 : 0.13)),
         borderColor: i === hl ? T.up : "rgba(0,0,0,0)", borderWidth: i === hl ? 1.5 : 0 },
       label: k ? { show: false } : { show: true, position: "insideTop", formatter: String(c.no || ""), color: T.ink,
         fontSize: 11, fontWeight: 600 } },
     { xAxis: c.end_km }]).filter(Boolean);
+}
+// a picked / previewed climb changes only the shading: a merge patch of the series' markArea (no rebuild, no resize,
+// so the tooltip the reader is looking at stays)
+function cmShade(ids, climbs, hl, T) {
+  return { series: [{ id: "alt", markArea: { data: cmAreas(climbs, hl, T, 0) } },
+    ...ids.map((id, k) => ({ id, markArea: { data: cmAreas(climbs, hl, T, k + 1) } }))] };
+}
+// what a click / tap on the profile at climb `i` does (-1 = off the climbs): a mouse click toggles (again or off the
+// climbs clears); a tap only ever picks another climb — a tap on the picked one or between climbs is reading the
+// values (the tooltip), not unpicking. Returns the new pick.
+function cmClickPick(sel, i, touch) {
+  if (touch) return i >= 0 && i !== sel ? i : sel;
+  return i === sel ? -1 : i;
+}
+function cmOption(P, ids, climbs, hl, T, elevH = CM_ELEV_H) {
+  const X = P.x, x0 = X[0], x1 = X[X.length - 1];
+  const tops = [CM_TOP, ...ids.map((_, k) => CM_TOP + elevH + CM_GAP + k * (CM_PANEL_H + CM_GAP))];
+  const hts = [elevH, ...ids.map(() => CM_PANEL_H)];
+  const n = tops.length;
+  const lbl = { color: T.muted, fontSize: 10, hideOverlap: true };
+  const area = (k) => cmAreas(climbs, hl, T, k);
   const pts = (a) => X.map((x, k) => [x, a ? a[k] : null]);
   const head = [`${T.names.elev} m`, ...ids.map((id) => `${T.names[id]} ${T.units[id]}`)];
   return {
@@ -3251,6 +3299,7 @@ function cmTable(climbs, pwOn, gradeMatch) {
 }
 async function drawClimbMap(card, res) {
   cpStyle(); cmStyle();
+  try { localStorage.removeItem("wko5viewer.climbmetric"); } catch {}   // the old single plot's metric (SP-218)
   const D = res.climb_profile, P = D.profile, climbs = D.climbs || [];
   // the 判讀 rows and the card's ? (draw); no 「詳細數字」 table: the climb table below holds those numbers
   draw(card, { ...res, series: (res.series || []).filter((x) => x.data.kind === "value") });
@@ -3262,11 +3311,14 @@ async function drawClimbMap(card, res) {
   mapBox.className = "cmmap"; profBox.className = "cmprof"; tblBox.className = "cmtbl";
   card.append(mapBox, profBox, tblBox);
   const pwOn = S.usePower !== false;
-  let sel = -1, peek = -1, ctx = null, hlLayer = null;
+  let sel = -1, peek = -1, ctx = null, hlLayer = null, last = null;
   const shown = () => (peek >= 0 ? peek : sel);
+  // a tap (touch) or a mouse click: a tap never unpicks (cmClickPick)
+  const isTouch = (ev) => !!ev && (ev.pointerType === "touch" || String(ev.type || "").startsWith("touch")
+    || (ev.pointerType == null && matchMedia("(hover: none)").matches));
 
   // the profile: elevation + the picked metric panels against km
-  let chart = null, ids = [], paint = () => {};
+  let chart = null, ids = [], paint = () => {}, shade = () => {};
   if (P && cpHas(P.alt) && P.x?.length > 1) {
     const has = (id) => (id !== "power" || pwOn) && cpHas(P[id]);
     let want = Array.isArray(cmPrefs().metrics) ? cmPrefs().metrics : CM_DEFAULT;
@@ -3313,6 +3365,8 @@ async function drawClimbMap(card, res) {
       o.tooltip.formatter = tip;
       chart.setOption(o, true);
     };
+    // a new pick / preview: only the shaded climbs change (merge, no resize: the tooltip stays)
+    shade = () => { if (!chart.isDisposed()) chart.setOption(cmShade(ids, climbs, shown(), theme())); };
     paint();
     new ResizeObserver(() => chart.isDisposed() || chart.resize()).observe(el);
     bar.onclick = (e) => {
@@ -3325,11 +3379,11 @@ async function drawClimbMap(card, res) {
       cmSave({ metrics: want });
       paint();
     };
-    // a click on a climb (any panel) picks it; on it again or off the climbs clears
+    // a click on a climb (any panel) picks it; on it again or off the climbs clears (a tap only picks another one)
     chart.getZr().on("click", (e) => {
       if (!gridRects(chart).some((g) => e.offsetX >= g.x && e.offsetX <= g.x + g.width && e.offsetY >= g.y && e.offsetY <= g.y + g.height)) return;
       const i = cmClimbAt(climbs, chart.convertFromPixel({ xAxisIndex: 0 }, e.offsetX));
-      select(i === sel ? -1 : i);
+      select(cmClickPick(sel, i, isTouch(e.event)));
     });
   }
 
@@ -3364,8 +3418,12 @@ async function drawClimbMap(card, res) {
       if (!map.getBounds().contains(b)) map.fitBounds(b.pad(0.3), { maxZoom: 16 });
     }
   }
-  function refresh(fit) {
-    paint();
+  // nothing to do when neither the pick nor the preview changed (a click on the picked climb, a row re-entered)
+  function refresh(fit, force = false) {
+    const key = `${sel}|${peek}`;
+    if (key === last && !force) return;
+    last = key;
+    shade();
     hlMap(fit);
     tblBox.querySelectorAll("tr[data-i]").forEach((tr) => {
       const i = +tr.dataset.i;
@@ -3378,15 +3436,15 @@ async function drawClimbMap(card, res) {
 
   // the map (its own samples; the profile joins the synced hover once they are here)
   if (D.workout == null) return;
-  ctx = await drawMap(card, { workout: D.workout }, { into: mapBox, chart: false, colorKey: "climbColor", defColor: "grade", tip: "",
-    onPick: (k) => {
+  ctx = await drawMap(card, { workout: D.workout, _zoom: res._zoom }, { into: mapBox, chart: false, colorKey: "climbColor",
+    defColor: "grade", tip: "",
+    onPick: (k, ev) => {
       const d = k == null || !ctx ? null : ctx.s.d?.[k];
-      const i = cmClimbAt(climbs, d);
-      select(i === sel ? -1 : i);
+      select(cmClickPick(sel, cmClimbAt(climbs, d), isTouch(ev)));
     } }) || null;
   if (!ctx || !card.isConnected) return;
   if (chart && !chart.isDisposed()) hoverChart(chart, ctx.s, "d");
-  refresh(false);
+  refresh(false, true);                     // a pick made before the map was there
 }
 // ---- end climb map ----
 
