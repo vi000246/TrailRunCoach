@@ -233,6 +233,9 @@ DEFAULTS: dict[str, Any] = {
     # activities with a watch RPE {factor, n, w, ratio, loo, fitted_at}; None = the default (推估).
     # Planning targets only — the recorded load is never corrected by RPE. Written by the refit only
     "rpe.load_model": None,
+    # debug API for AI agents (SP-371, backend/debug_auth.py; 設定 › 進階): off = /api/v1/debug/* is 404.
+    # Can only be turned on when the server has TRC_DEBUG_PIN; the tokens are the debug_tokens table
+    "debug.api.enabled": False,
 }
 # keys that were removed: db/database.py init_db deletes any stored row
 # (backup.encryption held the sealed scrypt-derived backup key)

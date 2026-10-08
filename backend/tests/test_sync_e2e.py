@@ -149,7 +149,11 @@ def _tp_fixture(detail2=(403, {"message": "premium only"})):
 
 
 @pytest.mark.parametrize("status", [401, 403, 404, 500])
-def test_tp_http_error_is_an_error_and_keeps_the_cursor(tmp_path, status):
+def test_tp_http_error_is_an_error_on_the_failed_list(tmp_path, status):
+    """SP-362: one workout's failure no longer holds the cursor; it goes to the failed list
+    (sync/failures.py) and is retried by id (test_sync_failures.py)."""
+    from backend.sync import failures as FL
+
     async def go():
         s = await make_session(tmp_path)
         await _tp_state(s, datetime.utcnow() + timedelta(hours=2))
@@ -160,7 +164,9 @@ def test_tp_http_error_is_an_error_and_keeps_the_cursor(tmp_path, status):
         done = ev[-1]
         assert done["status"] == "complete" and len(done["errors"]) == 1
         st = (await s.execute(select(SyncState))).scalar_one()
-        assert st.last_sync_cursor is None          # not advanced past workout 2
+        assert st.last_sync_cursor is not None
+        row = await FL.get(s, 1, "tp", 2)
+        assert row.kind == "failed" and row.attempts == 1 and str(status) in row.last_error
     run(go())
 
 
@@ -240,8 +246,9 @@ def test_tp_import_failure_rolls_back(tmp_path, monkeypatch):
         assert any("import_failed" in (e.get("detail") or "") for e in ev)
         rows = (await s.execute(select(WorkoutFile))).scalars().all()
         assert rows == []
-        st = (await s.execute(select(SyncState))).scalar_one()
-        assert st.last_sync_cursor is None
+        # SP-362: retried by id from the failed list, not by holding the cursor
+        from backend.sync import failures as FL
+        assert {r.provider_id for r in await FL.due(s, 1, "tp")} == {"1", "2"}
     run(go())
 
 
@@ -333,8 +340,9 @@ def test_coros_login_list_download_import_and_incremental_cursor(tmp_path, monke
     run(go())
 
 
-def test_coros_download_error_keeps_cursor(tmp_path, monkeypatch):
-    pass  # FIT folders are redirected to a temp dir by conftest
+def test_coros_download_error_goes_to_the_failed_list(tmp_path, monkeypatch):
+    """SP-362: the cursor moves; the failed activity is retried by id (test_sync_failures.py)."""
+    from backend.sync import failures as FL
 
     async def go():
         s = await make_session(tmp_path)
@@ -345,7 +353,8 @@ def test_coros_download_error_keeps_cursor(tmp_path, monkeypatch):
             ev = await collect(coros_client.sync_workouts(s, 1))
         assert len(ev[-1]["errors"]) == 1
         st = (await s.execute(select(SyncState))).scalar_one()
-        assert st.coros_last_sync_at is None
+        assert st.coros_last_sync_at is not None
+        assert [r.provider_id for r in await FL.due(s, 1, "coros")] == ["BAD"]
     run(go())
 
 

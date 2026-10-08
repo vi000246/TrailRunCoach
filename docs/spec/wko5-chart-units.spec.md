@@ -31,7 +31,7 @@ values and designs; only decimals are tidied.
 | Unit registry | label, kind, decimals, display scale, metric twin | `backend/engine/wko5expr/units.py:47` |
 | Render units | per-series prepare / finish, axis metadata | `backend/engine/wko5expr/render_units.py:64` |
 | Chart fixes | load, validate and apply overrides | `backend/engine/wko5expr/chartfixes.py:117` |
-| Integration | `render_chart` calls the pass; views API gates fixes by parity | `backend/api/wko5views.py:321`, `backend/api/wko5views.py:644`, `backend/api/wko5views.py:674` |
+| Integration | `render_chart` calls the pass; views API gates fixes by parity | `backend/api/wko5views.py:389`, `backend/api/wko5views.py:712`, `backend/api/wko5views.py:742` |
 | Audit | render every chart and flag unit problems | `backend/scripts/audit_chart_units.py:420` |
 
 ## Unit registry
@@ -78,23 +78,23 @@ The toggle and the cache themselves are `wko5-engine` features (see
   name — 每週 → 每月, or a leading character naming the default period, 週爬升 → 月爬升, so
   words like 年齡 are left alone (`backend/engine/wko5expr/periods.py:72`).
 - **Category x axis.** A period chart draws one category per bucket from the response's
-  `buckets` (empty buckets included) (`backend/static/wko5_viewer.html:2400`,
-  `backend/static/wko5_viewer.html:2553`); a bucket total sits on the bucket's first day
-  (`backend/static/wko5_viewer.html:2497`) and per-workout values become dots in their bucket
-  (`backend/static/wko5_viewer.html:2491`). The tooltip heads with the bucket label
-  (`backend/static/wko5_viewer.html:2592`); on stacked charts it ends with a 合計 row in the
-  series' unit, left out for percent shares (`backend/static/wko5_viewer.html:2614`).
+  `buckets` (empty buckets included) (`backend/static/wko5_viewer.html:2464`,
+  `backend/static/wko5_viewer.html:2617`); a bucket total sits on the bucket's first day
+  (`backend/static/wko5_viewer.html:2561`) and per-workout values become dots in their bucket
+  (`backend/static/wko5_viewer.html:2555`). The tooltip heads with the bucket label
+  (`backend/static/wko5_viewer.html:2656`); on stacked charts it ends with a 合計 row in the
+  series' unit, left out for percent shares (`backend/static/wko5_viewer.html:2678`).
 - **Tooltip units follow the drawn series.** Each ECharts series records the source series it
-  came from (`srcOf`, `backend/static/wko5_viewer.html:2457`), and the tooltip rows and the 合計
+  came from (`srcOf`, `backend/static/wko5_viewer.html:2521`), and the tooltip rows and the 合計
   row take their unit from `srcOf[p.seriesIndex]`, so a vline skipped on a category axis no
   longer shifts units onto the wrong series.
 - **Look-back note.** When the floor widens the range the card shows `range_note`, e.g.
-  「顯示近 12 個月」 (`backend/api/wko5views.py:574`, `backend/static/wko5_viewer.html:1218`); a
-  workout replay sets it too, 「重播 … 起（最多 1 年）」 (`backend/api/wko5views.py:617`).
+  「顯示近 12 個月」 (`backend/api/wko5views.py:642`, `backend/static/wko5_viewer.html:1271`); a
+  workout replay sets it too, 「重播 … 起（最多 1 年）」 (`backend/api/wko5views.py:685`).
 - **Enlarged chart.** The overlay shows the full legend and a zoom slider under the x axis
-  (`backend/static/wko5_viewer.html:2652`), now also on the log (duration) axis with duration
-  tick labels (`backend/static/wko5_viewer.html:2560`); the "已修正單位" notes are printed in full
-  above the chart (`backend/static/wko5_viewer.html:1268`).
+  (`backend/static/wko5_viewer.html:2716`), now also on the log (duration) axis with duration
+  tick labels (`backend/static/wko5_viewer.html:2624`); the "已修正單位" notes are printed in full
+  above the chart (`backend/static/wko5_viewer.html:1321`).
 - **Source stamp in the cache key.** A COROS / TP FIT-folder dataset's file stamp is part of
   the data fingerprint, so a chart never shows another source's cached numbers
   (`backend/engine/wko5expr/render_cache.py:116`).
@@ -117,9 +117,9 @@ The toggle and the cache themselves are `wko5-engine` features (see
   (`backend/engine/wko5expr/chartfixes.py:127`).
 - Applied to a deep copy; scales multiply; unmatched fixes are ignored and reported by
   `unmatched()`. Each applied fix adds its note to the chart's `fixes` list (the viewer's
-  "已修正單位" badge, `backend/static/wko5_viewer.html:1344`).
+  "已修正單位" badge, `backend/static/wko5_viewer.html:1397`).
 - Applied only outside parity; cached by the file's mtime, so an edited file is picked up on
-  the next request; a broken file falls back to raw views (`backend/api/wko5views.py:310`).
+  the next request; a broken file falls back to raw views (`backend/api/wko5views.py:378`).
 - The `.wko5chart` files are not in the repo: they are read only from `WKO5_VIEWS_DIR` or the
   `charts.wko5_views_dir` setting (`backend/api/wko5views.py:63`); with neither set there are no
   WKO5 views and the fixes have nothing to hit.

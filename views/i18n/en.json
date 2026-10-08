@@ -275,7 +275,7 @@
       },
       "climbing": {
         "title": "Climbing and terrain",
-        "description": "Climbs, heartbeats per 100 m of climb, HR / power per grade (grade groups). Trail and hiking; most important in the build phase."
+        "description": "This session's climbing: the map and the elevation profile (synced), each climb vs usual, HR / power per grade (grade groups). Shown only on trail runs and hikes; most important in the build phase."
       },
       "pacing-durability": {
         "title": "Pacing and durability",
@@ -352,8 +352,8 @@
         "description": "Summary of each interval set.\nLook for: whether each set's power is in the target band.\nMethod: work segments = 30-s power ≥ max(85% CP, 1.12 × this session's median power) for ≥ 1 min; the target band is the median %CP of each set (sub-threshold 88–95%, threshold 95–101%, supra-threshold 101–106%, VO2max 106–116%)."
       },
       "climbs": {
-        "title": "Climbs",
-        "description": "This session's climbs.\nHow to read: top chart, light area = elevation, thick line = the chosen metric (VAM / power / %CP / HR / GAP, 60-s rolling); ①②③ = climbs, hatched ↓ = descents, short bar on a segment = its average. Bottom chart = each segment vs usual.\nLook for: fewer heartbeats per 100 m of climb = more economical; > 5% below the 8-week median = improving.\nMethod: climb = ≥ 80 m of continuous climbing at ≥ 3% grade; usual = median and middle 50% of the same activity type over the last 8 weeks within ±4 pp of grade (widened to 12, then 26 weeks with fewer than 5 segments); the 60-s rolling window and the definition of usual are estimates. The table is under \"Details\"."
+        "title": "Climbs: map and elevation profile",
+        "description": "This session's climbing.\nHow to read: tiles = the whole activity's climbing; the map and the elevation profile are synced, ①② = climbs; table = each climb's numbers and how it compares with your usual.\nLook for: fewer heartbeats per 100 m of climb = more economical, > 5% below the 8-week median = improving; VAM above usual = climbing faster.\nMethod: climb = ≥ 80 m of continuous climbing at ≥ 3% grade; usual = median and middle 50% of the same activity type over the last 8 weeks within ±4 pp of grade (widened to 12, then 26 weeks with fewer than 5 segments); the 60-s rolling window, the definition of usual and running = cadence ≥ 130 spm are estimates."
       },
       "grades": {
         "title": "Grade groups",

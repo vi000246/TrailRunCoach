@@ -52,7 +52,7 @@ heuristics; the knee / form card always says 參考 (`backend/engine/workout_rev
 | Verdicts | Line builders for aerobic, interval, stimulus and CP cards | `backend/engine/workout_review.py:2578` |
 | Review JSON | One card per section, in the shape the viewer's `draw()` renders; small tiles in `cards` | `backend/engine/workout_review.py:2789`, `backend/engine/workout_review.py:2815-2830` |
 | View definition | Kind `review` with a `section` | `backend/engine/wko5expr/customviews.py:204-209` |
-| API | Render branch and the review endpoint | `backend/api/wko5views.py:635`, `backend/api/wko5views.py:786` |
+| API | Render branch and the review endpoint | `backend/api/wko5views.py:703`, `backend/api/wko5views.py:854` |
 | HR quality (`engine/hr_quality.py`, SP-265 / SP-266) | The one per-run HR cleaning (`clean`) and the suspect-stretch flags (`assess`: spike, step, flat, cadence lock, dropout, high start); `drift_of`'s HR-quality downgrade and the activity HR chart's shading read it | `backend/engine/hr_quality.py:219`, `backend/engine/hr_quality.py:360`, `backend/engine/workout_review.py:603` |
 | Interval calibration (`engine/interval_calib.py`, SP-69) | The per-athlete in-band tolerance, last-rep fade and TIZ goal in effect (defaults 0.98 / 5 % / 85 %, each shrunk toward the athlete's own CP tests / planned sessions); `interval_eval` and the interval cards read them | `backend/engine/interval_calib.py:191-199`, `backend/engine/interval_eval.py:282` |
 
@@ -150,8 +150,8 @@ has no humidity of its own.
 | `pacing_deciles` | Moving pace, HR, power per 10 % of the distance | Needs ≥ 0.5 km | `backend/engine/workout_review.py:1653` |
 | `baseline` / `compare` | Median and IQR; high / low / within | No comparison under 5 samples | `backend/engine/workout_review.py:1674`, `backend/engine/workout_review.py:1683` |
 | `baseline_for` | Same category (and session type) over the previous 8 weeks, widened to 12 when 8 has < 5 | — | `backend/engine/workout_review.py:2442` |
-| `profile_series` / `descents_of` | The climbs card's elevation profile (~900 points by km) with a centred 60-s VAM / pace / power / HR; descents = `detect_climbs` on the mirrored elevation | 60 s, 推估 | `backend/engine/workout_review.py:3450`, `backend/engine/workout_review.py:3506` |
-| `climb_baselines` / `bin_baselines` / `pooled` | "Your usual" per climb (past climbs within ±4 pp grade) and per grade bin (≥ 60 s in the bin), same category, 8 → 12 → 26 weeks until ≥ 5 | All 推估 | `backend/engine/workout_review.py:3554`, `backend/engine/workout_review.py:3568`, `backend/engine/workout_review.py:3539` |
+| `profile_series` | The climbs card's elevation profile (~900 points by km) with a centred 60-s VAM / pace / power / HR, on the same elevation as the detected climbs (`_elevation`, else the raw channel; SP-218). Descents are no longer computed: `descents_of` went with SP-218 (`6259a8cc`) | 60 s, 推估 | `backend/engine/workout_review.py:3450` |
+| `climb_baselines` / `bin_baselines` / `pooled` | "Your usual" per climb (past climbs within ±4 pp grade) and per grade bin (≥ 60 s in the bin), same category, 8 → 12 → 26 weeks until ≥ 5 | All 推估 | `backend/engine/workout_review.py:3539`, `backend/engine/workout_review.py:3553`, `backend/engine/workout_review.py:3524` |
 
 Climbs come from `algorithms.climbs.detect_climbs`, the grade table from
 `panels.workout.grade_bins`, and the durability curve from
@@ -258,20 +258,20 @@ runs 「品質課（間歇）」 (backtest in the research doc §5).
 | `summary` | Text rows: type · terrain · phase, time, HR vs AeT/LTHR, three zones; the type's verdict lines (trail / hike lines first). Small tiles (`cards`, `_summary_cards`): tags (type icon with the classifier's why + sources as ?, terrain, phase), stats (moving time, distance, gain, TSS, avg HR, avg power), 「課表」 (the matched 課表 session: planned vs actual time / TSS %, `compliance.session_compliance`, ±20 % = 符合, 2026-10-03; ◐ / ≠ through the shared `compliance.with_plan_check`, SP-370 levels in overview.spec.md › Compliance; SP-216: the intensity done is graded too — ≥ 80 % of the session's intensity = 做到, 50–80 % = 強度不足, < 50 % = 跑成輕鬆 (部分 when time and TSS both match, else 沒照課表), and 強度不足 goes through `with_plan_check` like 沒照課表, `backend/engine/workout_review.py:3045`, `backend/engine/workout_review.py:3064`), the three-zone bar, 「刺激 TIS」 (`_tis_card`, `backend/engine/workout_review.py:2978`, SP-81: this activity's 有氧／無氧 TIS as 「a／b」, 1–10, from the evaluator's built-ins `tisaerobic` / `tisanaerobic` through `tis_scores` — the same numbers as 我的訓練's TIS charts, see wko5-engine.spec.md; no level names, WKO5 has none; the ? says how to read it; no tile without a power channel, like 平均功率; 「–／算不出」 when the 90-day PD model gives na; shown for every type, before the strength / bike early return), 心率飄移 (judged on easy / long / AeT test, shown 「不判讀」 otherwise), 耐久 (last 20 %), 強度 (over AeT+3), 「VO2max 刺激」／「閾值刺激」, 間歇 or CP 測試, 爬坡段 (trail / hike), 「像 CP 測試？」. The 建議分頁 row is gone (user request); `suggested_dashboard` stays in the JSON | `backend/engine/workout_review.py:3235`, `backend/engine/workout_review.py:3075`, `backend/engine/workout_review.py:3013` |
 | `aerobic` | Text rows: 「心率飄移（配速／功率）」 in plain words — 「穩定 · 3.2%（start）」 (`drift_plain`: < 5 % 穩定, 5–10 % 有點飄, > 10 % 飄很多), HR and speed / power per half, one 「可信度」 row (「暖身後不到 40 分鐘，只當參考」 for the 參考 tier, 「這次資料比較雜，只當參考」 when SE > 5 pp, else 「暖身後跑滿 40 分鐘，可以判讀」; the method and ± SE only behind the ?, `drift_method`), 「已排除」, 「穩定度」, 「坡道」, 「溫度」 (source, °C, band), time over AeT+3, the same-type baseline within the same temperature band (both tiers); 這次沒有功率 without power. Header chip `res.chip` 「🌡 < 25 °C／25–28 °C／> 28 °C／溫度不明」 (hover `HEAT_TIP`). Small tiles (`_aerobic_cards`): the main drift card (value, verdict word, 「· 只當參考」; or 「不採用」 + a ≤ 8-word reason, `short_reason`), then chips: the other basis, 已排除 (前段 / 回程 / 結尾), 去坡道, temperature, VI (road), 資料比較雜, AeT+3 以上, 同類中位. On `test_aet` the sub-word is 「AeT 可以再高／前半心率＝AeT／AeT 設太高」 (owner 2026-10-02: no ± SE / Pa:HR / tier names on the surface) | `backend/engine/workout_review.py:3278`, `backend/engine/workout_review.py:3152`, `backend/engine/workout_review.py:3161` |
 | `intervals` | Per-rep table: start, duration, power, %CP, HR, max HR, 60-s drop (「每組」 on the 間歇 tab) | `backend/engine/workout_review.py:3380` |
-| `climbs` | Per-climb table (①②… numbering): start, km, gain, distance, grade, time, VAM vs 平常 (similar-grade climbs), HR, HR per 100 m, power, %CP, pace, GAP; `climb_profile` {profile, climbs with baselines, descents} drawn by the viewer's `drawClimbProfile`; verdict = HR per 100 m vs the 8-week median and which climbs' VAM sat above / below the usual IQR | `backend/engine/workout_review.py:3602` |
-| `grades` | Grade bins: time, share, distance, pace (and 平常), VAM, HR, power; `grade_profile` with per-bin baselines (`drawGradeProfile`) | `backend/engine/workout_review.py:3645` |
-| `durability` | Moving / stopped, last-20 % durability, 補給 (no data source: 沒有補給紀錄) | `backend/engine/workout_review.py:3691` |
-| `durability_curve` | Output/HR curve with 95 %（開始累，推估） and 90 % lines (`points` series), subtitle = last 20 % | `backend/engine/workout_review.py:3708` |
-| `pacing` | Pace / HR / power per 10 % distance | `backend/engine/workout_review.py:3730` |
-| `form` | First half / second half (by work done, else moving time) / change / same-type baseline, steep-downhill share; ILR/LSS only with Stryd | `backend/engine/workout_review.py:3750` |
-| `form_grades` / `form_work` | `form_bins` per grade bin, and per 10 % of the work in the all / flat / up / down bands, each vs the usual for that bin (`_form_pool` = `_pool` with trail runs and hikes apart by `hike_like`, the activity type; + `pooled`); a bin without an impact value says why (`NO_IMPACT_NOTE`); `form_profile` (`drawFormProfile`); `cadence_hint`: impact above the usual and cadence below it → 「步頻提高 5–10%（Heiderscheit 2011）」; on a downhill grade bin (hi ≤ −5 %, `HINT_DOWN_MAX`; the −5 ~ −2 % bin takes the plain hint; the 跑姿隨疲勞 card `form_work` has no grade rows, so plain only) its own line 「下坡縮小步幅、加快步頻可以減少膝蓋負擔（Van Hooren 2024、Heiderscheit 2011）」 (SP-236); none on a ≥ 15 % climb (`HINT_UP_MIN`, mostly walking) or a bin without an impact value | `backend/engine/workout_review.py:3925`, `backend/engine/workout_review.py:3957` |
-| `form_cadence` | 步頻與衝擊 (Stryd only, ≥ 10 steady windows): the personal ILR-per-+5-spm slope with 95 % CI (≥ 5 past runs, 26 weeks), no trend chart when the CI touches 0 or \|partial r\| < 0.1; this run's median cadence and the +5–10 % range; `cadence_profile` (`drawCadenceProfile`) | `backend/engine/workout_review.py:4014` |
-| `cp_test` | Protocol (and how it was matched), each bout (power, start, HR peak), CP with range and method, W′ (only when measured), quality, every check (✓ / ✗, 推估 labelled), the verdict lines; `action` = the 「套用這次的 CP」 button when not yet applied and not 不採用 | `backend/engine/workout_review.py:4063` |
-| `interval_verdict` | 間歇判讀 (`interval_eval.card_cached`): badge 達到／部分達到／未達到 and `chip_rows` (每趟 in band, 目標區時間, 逐趟判定, 掉速 / Sdec, W′ used and dFRC low, 找趟 source); a CP / AeT test is judged on even pacing per bout; a run that isn't an interval offers the 「當作間歇判讀」 action (PATCH `/api/v1/wko5/activities`, tag `當作間歇`) when bouts were detected | `backend/engine/workout_review.py:4130`, `backend/engine/workout_review.py:4112` |
-| `interval_reps` | 每趟功率 vs 目標帶: one bar per rep, green target band, in / low (< floor = lo × the in-band tolerance: default 0.98, the athlete's own when `interval_calib` has a fit — SP-69, the text says whose, `backend/engine/workout_review.py:4258`) / high (> hi × 1.02, 推估, fixed); a test's bouts vs the CP-model all-out (推估) | `backend/engine/workout_review.py:4230`, `backend/engine/workout_review.py:4269` |
-| `interval_power` | 功率、W′ 與心率: 30-s power area with CP and the target band, W′ left as dFRC (%), HR below, reps marked (`iv_trace`); every run with power | `backend/engine/workout_review.py:4291` |
-| `interval_tiz` / `interval_hr` | Time in the target zone vs the variant's plan (≥ the TIZ goal = 達到: default 85 %, 推估, the athlete's own when `interval_calib` has a fit — SP-69, `backend/engine/workout_review.py:4403`); HR over each rep's second half vs same-class sessions within ±3 % power (Buchheit 2014). Hidden on tests | `backend/engine/workout_review.py:4388`, `backend/engine/workout_review.py:4413` |
-| `interval_battery` / `wprime_battery` | dFRC battery line (WKO5's model only, the Skiba line dropped 2026-10-02); `wprime_battery` is 本次重點's compact W′ card | `backend/engine/workout_review.py:4355`, `backend/engine/workout_review.py:4383` |
+| `climbs` | Per-climb table (①②… numbering): start, km, gain, distance, grade, time, VAM vs 平常 (similar-grade climbs), HR, HR per 100 m, power, %CP, pace, GAP; `climb_profile` {profile (on the same elevation as the detected climbs and the map's `/samples` readout: the file's WKO5-smoothed `_elevation`, else the raw channel), climbs with baselines + `run_share` (`climb_run_share`: moving seconds at cadence ≥ 65 strides/min = 130 spm between the climb's km, needs cadence on ≥ 50 %, 推估), `summary` (`climb_summary`: total ascent, climbs' gain / time / share of moving time / VAM, HR per 100 m = the measure's median, time-weighted run share), `workout`} drawn by the viewer's `drawClimbMap` (SP-218: route map + km profile with VAM / HR / power / GAP panels + climb table, synced hover); verdict = HR per 100 m vs the 8-week median and which climbs' VAM sat above / below the usual IQR | `backend/engine/workout_review.py:3641`, `backend/engine/workout_review.py:3605`, `backend/engine/workout_review.py:3623` |
+| `grades` | Grade bins: time, share, distance, pace (and 平常), VAM, HR, power; `grade_profile` with per-bin baselines (`drawGradeProfile`) | `backend/engine/workout_review.py:3672` |
+| `durability` | Moving / stopped, last-20 % durability, 補給 (no data source: 沒有補給紀錄) | `backend/engine/workout_review.py:3718` |
+| `durability_curve` | Output/HR curve with 95 %（開始累，推估） and 90 % lines (`points` series), subtitle = last 20 % | `backend/engine/workout_review.py:3735` |
+| `pacing` | Pace / HR / power per 10 % distance | `backend/engine/workout_review.py:3757` |
+| `form` | First half / second half (by work done, else moving time) / change / same-type baseline, steep-downhill share; ILR/LSS only with Stryd | `backend/engine/workout_review.py:3777` |
+| `form_grades` / `form_work` | `form_bins` per grade bin, and per 10 % of the work in the all / flat / up / down bands, each vs the usual for that bin (`_form_pool` = `_pool` with trail runs and hikes apart by `hike_like`, the activity type; + `pooled`); a bin without an impact value says why (`NO_IMPACT_NOTE`); `form_profile` (`drawFormProfile`); `cadence_hint`: impact above the usual and cadence below it → 「步頻提高 5–10%（Heiderscheit 2011）」; on a downhill grade bin (hi ≤ −5 %, `HINT_DOWN_MAX`; the −5 ~ −2 % bin takes the plain hint; the 跑姿隨疲勞 card `form_work` has no grade rows, so plain only) its own line 「下坡縮小步幅、加快步頻可以減少膝蓋負擔（Van Hooren 2024、Heiderscheit 2011）」 (SP-236); none on a ≥ 15 % climb (`HINT_UP_MIN`, mostly walking) or a bin without an impact value | `backend/engine/workout_review.py:3952`, `backend/engine/workout_review.py:3984` |
+| `form_cadence` | 步頻與衝擊 (Stryd only, ≥ 10 steady windows): the personal ILR-per-+5-spm slope with 95 % CI (≥ 5 past runs, 26 weeks), no trend chart when the CI touches 0 or \|partial r\| < 0.1; this run's median cadence and the +5–10 % range; `cadence_profile` (`drawCadenceProfile`) | `backend/engine/workout_review.py:4041` |
+| `cp_test` | Protocol (and how it was matched), each bout (power, start, HR peak), CP with range and method, W′ (only when measured), quality, every check (✓ / ✗, 推估 labelled), the verdict lines; `action` = the 「套用這次的 CP」 button when not yet applied and not 不採用 | `backend/engine/workout_review.py:4090` |
+| `interval_verdict` | 間歇判讀 (`interval_eval.card_cached`): badge 達到／部分達到／未達到 and `chip_rows` (每趟 in band, 目標區時間, 逐趟判定, 掉速 / Sdec, W′ used and dFRC low, 找趟 source); a CP / AeT test is judged on even pacing per bout; a run that isn't an interval offers the 「當作間歇判讀」 action (PATCH `/api/v1/wko5/activities`, tag `當作間歇`) when bouts were detected | `backend/engine/workout_review.py:4157`, `backend/engine/workout_review.py:4139` |
+| `interval_reps` | 每趟功率 vs 目標帶: one bar per rep, green target band, in / low (< floor = lo × the in-band tolerance: default 0.98, the athlete's own when `interval_calib` has a fit — SP-69, the text says whose, `backend/engine/workout_review.py:4285`) / high (> hi × 1.02, 推估, fixed); a test's bouts vs the CP-model all-out (推估) | `backend/engine/workout_review.py:4257`, `backend/engine/workout_review.py:4296` |
+| `interval_power` | 功率、W′ 與心率: 30-s power area with CP and the target band, W′ left as dFRC (%), HR below, reps marked (`iv_trace`); every run with power | `backend/engine/workout_review.py:4318` |
+| `interval_tiz` / `interval_hr` | Time in the target zone vs the variant's plan (≥ the TIZ goal = 達到: default 85 %, 推估, the athlete's own when `interval_calib` has a fit — SP-69, `backend/engine/workout_review.py:4430`); HR over each rep's second half vs same-class sessions within ±3 % power (Buchheit 2014). Hidden on tests | `backend/engine/workout_review.py:4415`, `backend/engine/workout_review.py:4440` |
+| `interval_battery` / `wprime_battery` | dFRC battery line (WKO5's model only, the Skiba line dropped 2026-10-02); `wprime_battery` is 本次重點's compact W′ card | `backend/engine/workout_review.py:4382`, `backend/engine/workout_review.py:4410` |
 
 A card with nothing to show on this run returns `hide: true` (interval sections) or `empty`.
 
@@ -314,7 +314,7 @@ Verdict rules:
   有氧耐力夠／還在進步／不足.
   In band "at" and not applied, the card's `action` is 「套用這次的 AeT（N bpm）」 → POST
   `/api/v1/plan/thresholds/apply-estimate` `{aethr, date, note}` (the viewer's `drawAction`,
-  `backend/static/wko5_viewer.html:1484`). Without samples the three bands run on
+  `backend/static/wko5_viewer.html:1537`). Without samples the three bands run on
   `drift_of`'s drift.
 
 ### Basis (配速／功率)
@@ -379,7 +379,7 @@ keeps the synthetic and chart-definition tests in `backend/tests/test_drift_basi
   (`backend/engine/workout_review.py:3264`).
 - Trail / hike (`backend/engine/workout_review.py:3410`): HR per 100 m vs the 8-week
   median (any session type), ±5 %; last-20 % durability < 90 % → fuelling / pacing.
-- Form, reference only (`backend/engine/workout_review.py:3750`): ILR change above own
+- Form, reference only (`backend/engine/workout_review.py:3777`): ILR change above own
   IQR and steep downhill > 30 % → mind the knees; LSS down > 2 % with GCT up > 2 % →
   fatigue.
 
@@ -445,8 +445,40 @@ durability_curve, pacing), 跑姿與膝蓋負荷（參考） `form-knee` (form �
 form_grades, form_work, form_cadence) (`views/workout.json:30`, `views/workout.json:46`,
 `views/workout.json:63`, `views/workout.json:74`, `views/workout.json:87`). The scatter charts the
 old dashboards carried were removed (2026-10-02). Charts tagged `"sports": ["trail"]` (路線難度,
-爬坡段, 坡度分組, 跑姿依坡度) show only when 主要訓練項目 is trail (`engine/primary_sport.py`,
+爬坡段, 坡度分組, 跑姿依坡度) show only when THE ACTIVITY ITSELF is a trail run, hike or 百岳 day
+(SP-218, owner 2026-10-08 — before, they followed 主要訓練項目 and the whole 爬坡與地形 tab vanished
+for a trail activity when the athlete's primary sport was road): `GET /workouts/{i}/kind`
+(`backend/api/wko5views.py:969`; `sport_map.kind_of` with the user's 爬山 / 百岳跟團 mark and the
+trail / road classification override; `sport_map.chart_sport`, `backend/engine/sport_map.py:75`)
+gives the activity's chart sport; the viewer's `chartSportFor` / `visChartsFor`
+(`backend/static/wko5_viewer.html:588`) read the tag against it on workout-mode dashboards (each
+dashboard is tagged with its mode, `backend/static/wko5_viewer.html:622`). The kind comes from the activity
+list's row (`settleActSport`, `backend/static/wko5_viewer.html:611`, the same KindFilter; viewer mirror
+`chartSportOfKind`); only an activity outside the list asks `/kind`, in the background, and the page is
+drawn again only if its charts change (`load`, `backend/static/wko5_viewer.html:1023`; nothing awaits
+before the loading cards are drawn; unknown → no filter). The picked page is never moved for the
+activity's kind (`pageCharts`, `backend/static/wko5_viewer.html:608`, drives renderTree's redirect, which
+stays only for a page with no chart at all, e.g. 使用功率 off): on a road run the picked 爬坡與地形 stays
+listed and says 「這一頁的圖只適用越野跑、登山健行的活動」 (`viewer.trail_only`); other pages with no chart
+for this activity are hidden from the tree. An exclusion change (indices shift) drops the cached kind.
+Season charts keep 主要訓練項目 (`engine/primary_sport.py`,
 `backend/engine/wko5expr/customviews.py:180-185`).
+
+爬坡與地形 › 爬坡段 (`drawClimbMap`, `backend/static/wko5_viewer.html:3300`, the 「climb map (SP-218)」
+block from `backend/static/wko5_viewer.html:3112`): four tiles (總爬升, 爬坡時間 + share of moving time,
+爬坡 VAM + 跑 %, 每 100 m 心跳) from `climb_profile.summary`; the route map (`drawMap` with
+`colorKey: "climbColor"`, default 坡度, no map chart); the elevation profile against km with stacked
+VAM / 心率 / 功率 / GAP panels (buttons, default VAM + 心率, remembered in `wko5viewer.climbmap`; power
+hidden when 使用功率 is off), climbs shaded and ①② labelled; one table row per climb (gain, km, grade,
+time, VAM, HR, power, GAP, 跑 %, 跟平常比 = VAM and HR per 100 m vs the usual's median, ▲▼ only outside
+its middle 50 %). Hover syncs the profile and the map on the distance axis; a climb clicked on the
+profile, the table or the route is outlined on the map (dark halo + orange, fitted when not fully in
+view) and on the profile; clicking it again or elsewhere clears it; a hovered table row previews it. A
+new pick only merges the shaded climbs (`cmShade`, `backend/static/wko5_viewer.html:3193`; no rebuild or
+resize, so the tooltip stays) and an unchanged pick does nothing; a tap (touch) only picks another climb
+(`cmClickPick`) — tapping the picked climb or between climbs reads values and keeps the pick.
+Strings `viewer.climbmap.*` (zh-TW + en). The old single dual-axis plot (`drawClimbProfile`) and its
+per-climb comparison chart were removed.
 
 ### Activity charts (kind `activity`, `backend/engine/panels/activity_charts.py`)
 
@@ -466,22 +498,22 @@ Tests: `backend/tests/test_activity_charts.py` (synthetic).
 `customviews` accepts kind `review` and requires `section` in
 `SECTIONS + EXTRA_SECTIONS` (`backend/engine/wko5expr/customviews.py:96`,
 `backend/engine/wko5expr/customviews.py:204-209`). The API reports a review card to
-the viewer as panel kind `workout` (`backend/api/wko5views.py:355-360`), so it
-needs a selected workout (`backend/api/wko5views.py:458-460`) and renders through
-`review()` with the chart's title and description (`backend/api/wko5views.py:635-639`).
+the viewer as panel kind `workout` (`backend/api/wko5views.py:423-428`), so it
+needs a selected workout (`backend/api/wko5views.py:526-528`) and renders through
+`review()` with the chart's title and description (`backend/api/wko5views.py:703-707`).
 
 ## API
 
 | Method | Path | Line | Purpose |
 |---|---|---|---|
-| GET | `/api/v1/wko5/workouts/{i}/review` | `backend/api/wko5views.py:786` | `basis` pace (default) or power, 400 otherwise. `section` given: that card (400 if not a known section). Otherwise `{workout, classification, suggested_dashboard, sections}` with the six `SECTIONS` cards. `parity` selects the dataset mode; 404 for an unknown index |
-| GET | `/api/v1/wko5/views/{view}/dashboards/{d}/charts/{c}` | `backend/api/wko5views.py:442`, `backend/api/wko5views.py:635` | A review chart renders through the same branch (with the chart's chosen `basis`) |
+| GET | `/api/v1/wko5/workouts/{i}/review` | `backend/api/wko5views.py:854` | `basis` pace (default) or power, 400 otherwise. `section` given: that card (400 if not a known section). Otherwise `{workout, classification, suggested_dashboard, sections}` with the six `SECTIONS` cards. `parity` selects the dataset mode; 404 for an unknown index |
+| GET | `/api/v1/wko5/views/{view}/dashboards/{d}/charts/{c}` | `backend/api/wko5views.py:510`, `backend/api/wko5views.py:703` | A review chart renders through the same branch (with the chart's chosen `basis`) |
 | POST | `/api/v1/plan/thresholds/apply-cp` | `backend/api/plan.py:926` | 「套用這次的 CP」: the card's `action.body`; writes / merges the test day's threshold row (cp, wprime, cp_method, note). 400 for a future date, unknown method, W′ without `2pt`, CP outside 50–700 W |
 
 The viewer draws a card's `action` as a button (`drawAction`,
-`backend/static/wko5_viewer.html:1484`): confirm, POST (PATCH for 「當作間歇判讀」, then reload),
+`backend/static/wko5_viewer.html:1537`): confirm, POST (PATCH for 「當作間歇判讀」, then reload),
 then 已套用. Small tiles are drawn by `drawReviewCards` and the 間歇判讀 rows by `drawChipRows`
-(`backend/static/wko5_viewer.html:1435`, `backend/static/wko5_viewer.html:1421`); with `cards`
+(`backend/static/wko5_viewer.html:1488`, `backend/static/wko5_viewer.html:1474`); with `cards`
 or `chip_rows` the text rows are hidden. A tile with `power: true` (the 刺激 TIS tile) is dropped
 by `drawReviewCards` when 使用功率 is off. The TIS tile is not in `measure()`'s per-file cache:
 it reads the 90-day PD model (other workouts), so it is covered by the render cache's data
@@ -505,7 +537,7 @@ What the implementation does differently from `docs/plans/done-workout-review.pl
 | CP-test detection | 偵測到 3′ 和 12′ 兩組全力段 (`docs/plans/done-workout-review.plan.md:70`) | The plan's test session (done_by) first, then a race / TT, a threshold row or the title; the power pattern alone is only `cp_hint` and picks the protocol of a marked test (`backend/engine/workout_review.py:2356-2364`) |
 | CP-test windows | Laps within ± 10 % of the target (`docs/research/cp-test-protocols.md:408`) | Laps are not in the dataset channels: always non-overlapping mean-max windows (`backend/engine/cp_protocols.py:202`) |
 | Envelope lower bound | CP ≥ 90-day MMP floor (`docs/research/cp-test-protocols.md:435`) | Not implemented |
-| VAM by HR | 各心率下的 VAM (`docs/plans/done-workout-review.plan.md:47`) | Dropped: no VAM-vs-HR chart in `views/workout.json`; VAM appears per climb in the climbs card (vs similar-grade climbs) and as the climb profile's rolling 60-s VAM (`backend/engine/workout_review.py:3602`, `backend/engine/workout_review.py:3450`) |
+| VAM by HR | 各心率下的 VAM (`docs/plans/done-workout-review.plan.md:47`) | Dropped: no VAM-vs-HR chart in `views/workout.json`; VAM appears per climb in the climbs card (vs similar-grade climbs) and as the climb profile's rolling 60-s VAM (`backend/engine/workout_review.py:3626`, `backend/engine/workout_review.py:3450`) |
 | Not implemented | Optional `i_knee` (`docs/plans/done-workout-review.plan.md:111`); viewer auto-jump to `suggested_dashboard` (`docs/plans/done-workout-review.plan.md:122`) | Neither exists; `suggested_dashboard` is only returned — the 建議分頁 row was removed at the user's request (`backend/engine/workout_review.py:2800`, `backend/engine/workout_review.py:3274`) |
 
 ## Testing
@@ -536,7 +568,9 @@ What the implementation does differently from `docs/plans/done-workout-review.pl
 | Small cards: summary stats / zones / verdicts, intensity warning, refused drift as one card, drifting run and chips, `short_reason`, strength only time + HR, viewer hides the text rows | `backend/tests/test_review_cards.py` |
 | 刺激 TIS tile: values equal the evaluator's built-ins (steady and interval run), no tile without power, 「算不出」 without a PD model, no level names, en text, the viewer drops `power` tiles when 使用功率 is off | `backend/tests/test_review_tis_card.py` |
 | Session classifier: Z5 bouts / lower band / Z3 climb, trail power trust, HR path, hikes never Z5, power beats easy HR, cadence lock, HRpeak | `backend/tests/test_session_stimulus.py` |
-| Climb profile and grade bins: VAM, profile series, descents, per-climb baseline by grade, no altitude, grade baselines | `backend/tests/test_climb_profile.py` |
+| Climb profile and grade bins: VAM, profile series, descents, per-climb baseline by grade, no altitude, grade baselines; SP-218 run share, summary, smoothed-elevation profile | `backend/tests/test_climb_profile.py` |
+| SP-218 visibility by the activity: `chart_sport`, `GET /workouts/{i}/kind` (user mark), the viewer's chart-sport block under node | `backend/tests/test_chart_sport.py` |
+| SP-218 climb map helpers under node (panels, climb at km, GPS segment, vs usual, option) | `backend/tests/test_viewer_climbmap.py`; browser: `backend/tests/e2e/test_smoke_pages.py::test_climb_tab_follows_the_activity_with_synced_map` |
 | Form bins / cadence: grade and work deciles, impact per km, cadence hint, cadence windows and fit, cards with / without Stryd | `backend/tests/test_form_bins.py`, `backend/tests/test_form_split.py` |
 | Interval cards: text-only planned session judged by its structure, verdict / ladder, cards hide on easy runs, rep tolerances, CP test as the plan, 「當作間歇判讀」 offer, matched power HR | `backend/tests/test_interval_eval.py` |
 | Drift calibration: early / tail values, ≥ 20 runs, constants follow the values in effect, manual-only items | `backend/tests/test_drift_calib.py` |
@@ -611,8 +645,8 @@ None. The module computes on request; there are no emitters or subscribers.
 
 ## Open Questions
 
-- [ ] 「使用功率」關掉時，「平均功率」卡也要隱藏：2026-10-07 已答「要」，但卡片沒有 `power` 旗標，viewer 只藏有旗標的卡（`backend/engine/workout_review.py:2922-2924`、`backend/static/wko5_viewer.html:1437`）（SP-81，Todo）——尚未實作
-- [ ] 爬坡分析頁：VAM、對照海拔、搭配地圖 hover 點位（SP-218，決策，In Progress，尚未定案）——尚未實作
+- [ ] 「使用功率」關掉時，「平均功率」卡也要隱藏：2026-10-07 已答「要」，但卡片沒有 `power` 旗標，viewer 只藏有旗標的卡（`backend/engine/workout_review.py:2922-2924`、`backend/static/wko5_viewer.html:1490`）（SP-81，Todo）——尚未實作
+- [ ] 爬坡與地形分頁（VAM、海拔剖面、地圖同步）已實作並合併（d5ce4226），單還在 In Progress、等補驗收條件（SP-218，In Progress）
 - [ ] 逐筆衍生值快取改成 SQLite 逐列存、以檔案雜湊為 key；做了之後 Measurement 段的 `cached_series` 描述要跟著改（SP-339，Todo）——尚未實作
 - [ ] 給 AI agent 用的唯讀 debug API，會讀判讀與課表資料（SP-371，In Progress）——尚未實作
 - [ ] SP-69 單上仍是 Needs Input，第 1/3/5 項已由 9ff5e202 實作，單待補紀錄；其餘 4 項（每週 CTL 目標、恢復週的量、RPE、TL 換算標示）還沒決定（SP-69，Needs Input）——尚未實作
@@ -653,5 +687,7 @@ None. The module computes on request; there are no emitters or subscribers.
 | 2026-10-06 | SP-266 user-decision | N/A | Cadence lock no longer counts toward the downgrade (user, option c): `HRQ_DOWNGRADE_KINDS` = spike + step + flat, share > 3 % (`downgrade_share`) or any moving step → reference only; lock seconds stay in `hr_quality` (`lock_s`, `share`) and in the 「心率品質」 row as information (「…；另外 N 分鐘跟著步頻走，這項不算進門檻」), never in the reason. Owner data (COROS 2025–26, 33 runs with a drift): 3 downgraded (9 %), all by a flat line (4.9–6.4 % of the window); 9 runs have lock, none downgraded by it. `workout_review_v22` |
 | 2026-10-06 | integration 2026-10-06e | N/A | SP-264 (v20) and SP-265 / SP-266 (v20 → v22) bumped the measure cache on separate branches; merged as `workout_review_v23` so no v20 / v22 entry holding only one branch's fields is read. Cross-branch test: `test_integration_2026_10_06e.py` |
 | 2026-10-08 | bugfix | SP-370 | The 「課表」 card (`_plan_card`, `backend/engine/workout_review.py:3013`) follows the shared compliance rule: with time and TSS both within ±20 % an intensity reversal / another foot sport is ◐ (label 跑成強度課 / 跑成輕鬆 / 項目不同, reason in the tip), not 沒照課表; the intensity tip line says so (`backend/engine/workout_review.py:3065`) |
-| 2026-10-08 | bugfix | SP-370 follow-up | The 「課表」 card grades ◐ / ≠ on the calendar's planned TSS (`session_est_tss`, `backend/api/plan_sessions.py:2472`: the stored TSS, else minutes × the calendar's `tss_rates`; `backend/engine/workout_review.py:3036-3044`), and its TSS tip line shows that planned number; the ◐ softening needs time and TSS both measured (overview.spec.md › Compliance) |
-| 2026-10-08 | code-sync（SP-69, SP-80, SP-111, SP-216, SP-275, SP-279） | N/A | Anchors re-pointed against `73d07ad1` (`workout_review.py` grew ~450 lines since 2026-10-04): each one mapped from the commit that wrote it, then checked line by line. Documented: `hr_quality.py` and `interval_calib.py` in Architecture; the interval cards' in-band tolerance and TIZ goal are the athlete's own when fitted (SP-69); xu90's output-hold check and its 20 m/km flat rule (SP-275); the 5 bpm lower start marked 推估 (SP-279); a plan race marks a CP test only on the road or a 越野賽 under 20 m/km (SP-111); the 課表 tile's intensity levels (SP-216); the route map with the activity chart beside it (SP-41 / SP-80); Easy HR stays AeT+3 here, the per-athlete margin only feeds the Friel band. Testing +10 files. New Decisions Log and Open Questions |
+| 2026-10-08 | bugfix | SP-370 follow-up | The 「課表」 card grades ◐ / ≠ on the calendar's planned TSS (`session_est_tss`, `backend/api/plan_sessions.py:2510`: the stored TSS, else minutes × the calendar's `tss_rates`; `backend/engine/workout_review.py:3036-3044`), and its TSS tip line shows that planned number; the ◐ softening needs time and TSS both measured (overview.spec.md › Compliance) |
+| 2026-10-08 | SP-218 | owner decision 2026-10-08 (ticket SP-218) | 爬坡與地形 (and 路線難度, 跑姿依坡度) follow the activity itself — trail / hike / 百岳, incl. the user's 爬山 mark — not 主要訓練項目 (`GET /workouts/{i}/kind`, viewer `chartSportFor` / `visChartsFor`). 爬坡段 becomes `drawClimbMap`: summary tiles, route map (default 坡度), km profile with VAM / HR / power / GAP panels and shaded climbs, climb table with 跑 % and 跟平常比; hover synced with the map on the distance axis, a clicked climb outlined on the map. `climbs` section adds `run_share`, `summary`, `workout`, and draws the profile on the smoothed `_elevation`. No measure-cache change (computed on read) |
+| 2026-10-08 | SP-218 review | code review of feat/sp218-climb-tab | The activity's kind comes from the activity list (`/kind` only outside it, never awaited before drawing); the picked page is never moved for the activity's kind (`pageCharts`; a road run on 爬坡與地形 shows `viewer.trail_only`); a climb pick merges only the shading (`cmShade`), unchanged picks are no-ops, a tap only picks another climb; profile, climbs and `/samples` elevation are one channel (`_elevation` else raw); `climb_profile` drops descents / cp / pool_weeks (`descents_of` removed); the enlarged copy passes `_zoom` to the map; the old `wko5viewer.climbmetric` key is removed |
+| 2026-10-08 | code-sync（SP-69, SP-80, SP-111, SP-216, SP-275, SP-279） | N/A | Anchors re-pointed against `73d07ad1`, then moved to main `08cf80d7` by diff and checked text for text (`workout_review.py` grew ~450 lines since 2026-10-04): each one mapped from the commit that wrote it, then checked line by line. Documented: `hr_quality.py` and `interval_calib.py` in Architecture; the interval cards' in-band tolerance and TIZ goal are the athlete's own when fitted (SP-69); xu90's output-hold check and its 20 m/km flat rule (SP-275); the 5 bpm lower start marked 推估 (SP-279); a plan race marks a CP test only on the road or a 越野賽 under 20 m/km (SP-111); the 課表 tile's intensity levels (SP-216); the route map with the activity chart beside it (SP-41 / SP-80); Easy HR stays AeT+3 here, the per-athlete margin only feeds the Friel band. Testing +10 files. New Decisions Log and Open Questions |

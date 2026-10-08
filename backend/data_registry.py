@@ -115,11 +115,26 @@ TABLES: tuple = (
     Table("coros_plan_push", IMPORTED, "COROS's ids of the plan sessions pushed to it (sync/workout_targets): "
           "the external account's state, server-side bookkeeping",
           deidentify=("day", "title", "program_id", "plan_id", "id_in_plan", "plan_program_id")),
+    Table("sync_failures", IMPORTED, "activities a sync listed but could not fetch (sync/failures.py, SP-362): "
+          "retried by id; the cursor has moved past them, so a deleted row is an activity no sync asks for "
+          "again (not recomputable); server-side bookkeeping like coros_plan_push",
+          deidentify=("provider_id", "workout_date", "last_error", "first_at", "last_at")),
     Table("sync_state", SECRET, "COROS / TP tokens, the sealed 「記住密碼」 passwords (settings/secrets.py), "
           "the accounts' ids and the sync cursors",
           secret_fields=("tp_access_token", "tp_refresh_token", "tp_web_cookie", "coros_access_token",
                          "coros_password_sealed", "tp_password_sealed"),
           deidentify=("coros_email", "coros_user_id", "tp_username", "coros_base_url")),
+    Table("debug_tokens", SECRET, "debug API tokens (SP-371, debug_auth.py): the SHA-256 of each token "
+          "(the token itself is never stored), its scopes, expiry and the source IPs seen; tenant-bound",
+          secret_fields=("token_hash",), deidentify=("name", "last_ip", "ips_json", "created_at", "last_used_at")),
+    Table("debug_audit", DERIVED, "the debug API's call log (SP-371): time, token name, endpoint, parameters, "
+          "source IP, status, size; the newest debug_auth.AUDIT_KEEP rows are kept",
+          deidentify=("at", "query", "ip"),
+          invalidated_by="never recomputed: a log, pruned to the newest rows; safe to delete"),
+    Table("debug_auth_failures", DERIVED, "failed debug API authentications (SP-371), counted per hour, "
+          "source IP and code; the newest debug_auth.FAIL_ROWS_KEEP rows are kept",
+          deidentify=("hour", "ip", "last_at"),
+          invalidated_by="never recomputed: a log, pruned to the newest rows; safe to delete"),
 )
 
 # tables no code uses any more: db/database._migrate_schema drops them from every tenant DB

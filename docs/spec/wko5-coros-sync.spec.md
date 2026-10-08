@@ -54,7 +54,8 @@
 | 2026-10-06 | feat/coros-rpe-sp231 | SP-231 | 跑後自評：每個新活動多一個唯讀 `POST /activity/detail/query?labelId=&sportType=`（GET 回 result=1001），只讀 `data.sportFeelInfo.feelType`（1 最輕～5 最累，0 沒填；不讀 `sportNote`、語音筆記），存 `workout_files.coros_feel`，換成 `rpe`（1→2、2→4、3→5、4→7、5→10，推估；FIT 自己有 RPE 時 FIT 為準，`rpe_source`）。讀取失敗或 0 不算同步錯誤、不卡 cursor；失敗的在之後同步（最近 4 天、每次 ≤ 10 筆）重試。最近 8 週已匯入的活動在之後的同步各讀一次（每次 ≤ 80 筆、每筆間隔 0.4 秒，不登入、不寫 COROS，完成記在 `sync.coros.rpe_backfill`；token 被拒不算一輪，3 輪後停）。有補到自評時 `complete` 事件帶 `rpe_filled`，觸發自動調整與每人校正 |
 | 2026-10-06 | integrate/2026-10-06c | SP-231 follow-up | 依唯讀實測修正：每筆 detail 回整個活動（1.4–3.2 MB、約 1.5–3 秒），回填改每次同步 ≤ 25 筆（`BACKFILL_MAX`），剩下的留給之後的同步；「3 輪後停」只算有讀取失敗的輪（`failed_passes`），只是讀不完不算；沒存 `coros_sport_type` 的 COROS 活動不論運動一律用 sportType 100 讀（COROS 這個查詢不看 sportType）；最近 4 天存成 0（沒填）的活動在重試輪再讀一次（同樣每次 ≤ 10 筆，這次同步剛讀過的不重讀），之後在 COROS app 補填的自評照樣換成 RPE（FIT 有 RPE 時仍以 FIT 為準）並帶 `rpe_filled` |
 | 2026-10-07 | feat/sp311-341-data-registry | SP-311, SP-341 | 資料分類登錄表 `backend/data_registry.py`：每張表、每類租戶檔案屬「使用者改的／匯入的／衍生的／機密」哪一類（含去識別化欄位），備份改讀它（行為不變）；`sync_state` 屬機密。`mmp_cache` 加 `version` 欄（程式改了，`get_run_ftp` 重算窗內舊列）；`pmc_cache` 表刪除；`power_source_v1.json` 帶程式版本 |
-| 2026-10-08 | chore/drop-unused-lthr-import-metrics | owner request（「既然沒用到，放這幹嘛」） | 拿掉寫了沒人讀的資料：匯入不再算、不再寫 `workout_metrics`（hrTSS／rTSS／NP／TSS／高強度秒數）與 `mmp_cache`（只拿來算那些指標的 runFTP），`WorkoutMetric`／`MmpCache` model、`get_run_ftp`、`settings_on`、`backfill_hr_load.py`、`algorithms/mmp.py` 與 `metrics.py` 只餵它們的函式一併刪除（`backend/files/file_service.py:16`、`:187`）。COROS 登入不再寫 `athlete_settings.ftp_w`、回應不再帶 `ftp_w`／`lthr`（`backend/sync/coros_client.py:232-270`）；**LTHR 照寫**：它是冷啟動的 LTHR 先驗（`fitdataset._coros_lthr_prior`，`backend/engine/wko5expr/fitdataset.py:809`、`:937`），體重照用。不做破壞性遷移：舊 DB 的兩張表與 `ftp_w` 欄原樣留著、沒人讀寫（`data_registry.LEGACY_TABLES`，`backend/data_registry.py:135`；`unclassified_tables` 略過，`:304`）；新 DB 不再建它們。`compare_sources.py` 的同步列不再有 TSS（改看 `/api/v1/sync/compare`） |
+| 2026-10-08 | chore/drop-unused-lthr-import-metrics | owner request（「既然沒用到，放這幹嘛」） | 拿掉寫了沒人讀的資料：匯入不再算、不再寫 `workout_metrics`（hrTSS／rTSS／NP／TSS／高強度秒數）與 `mmp_cache`（只拿來算那些指標的 runFTP），`WorkoutMetric`／`MmpCache` model、`get_run_ftp`、`settings_on`、`backfill_hr_load.py`、`algorithms/mmp.py` 與 `metrics.py` 只餵它們的函式一併刪除（`backend/files/file_service.py:16`、`:187`）。COROS 登入不再寫 `athlete_settings.ftp_w`、回應不再帶 `ftp_w`／`lthr`（`backend/sync/coros_client.py:234-272`）；**LTHR 照寫**：它是冷啟動的 LTHR 先驗（`fitdataset._coros_lthr_prior`，`backend/engine/wko5expr/fitdataset.py:809`、`:937`），體重照用。不做破壞性遷移：舊 DB 的兩張表與 `ftp_w` 欄原樣留著、沒人讀寫（`data_registry.LEGACY_TABLES`，`backend/data_registry.py:150`；`unclassified_tables` 略過，`:319`）；新 DB 不再建它們。`compare_sources.py` 的同步列不再有 TSS（改看 `/api/v1/sync/compare`） |
+| 2026-10-08 | perf/sp362-batch1 | SP-362 | 同步效能第一批。**失敗清單**：單一活動下載／匯入失敗（COROS、TP）寫進新表 `sync_failures`（`backend/sync/failures.py`；`SyncFailure`，`backend/db/models.py:407`；登錄表歸「匯入的」，`backend/data_registry.py:118`），cursor 照常推進；之後的同步只依 id 重試這幾筆（COROS `labelId`＋`sportType` 走 detail/download，`backend/sync/coros_client.py:928`；TP `workoutId`，`backend/sync/tp_client.py:870`），不必從很久以前重新列表（正式機原本每次 7 筆失敗 → 列 819 筆、41 頁、33–54 秒）。最多自動重試 5 次或 7 天（使用者 2026-10-08），之後停止、留在設定 › 進階設定，可按「重試」（`GET /sync/failed`、`POST /sync/failed/{id}/retry`）。沒有 FIT 的手動紀錄記成 `no_file`（COROS：detail/download 回 0000 但沒有 fileUrl，`CorosNoFile`，`backend/sync/coros_client.py:444`），不算失敗、不再問。整次失敗（登入、列表）或失敗清單寫不進去時 cursor 不推進（`backend/sync/coros_client.py:951`、`backend/sync/tp_client.py:897`）。刪除來源檔案時清空該來源的清單。**overlap**：COROS 增量列表從上次同步減 3 天改 14 天（`CURSOR_OVERLAP_DAYS`，`backend/sync/coros_client.py:33`；多天百岳沒帶手機晚上傳）；跑後自評的重試窗固定 4 天（`RETRY_DAYS`，`backend/sync/coros_client.py:503`），不跟著放大。**同步後順序**：圖表 Dataset → 總覽狀態 → 課表輸入 → 自動調整 → 每人校正／自動分類（最低，等自動調整結束；`backend/sync/runner.py:189`、`backend/api/wko5views.py:293`、`backend/engine/calibrate.py:348`、`plan_auto.wait_idle`／`busy`，`backend/engine/plan_auto.py:888`） |
 | 2026-10-08 | code-sync（SP-215, SP-67, SP-57） | N/A | 錨點全面重新對齊（10-04 之後 runner、coros_client、file_service、fitdataset、repository、wko5views 都長了）；同步流程圖的匯入不再寫「算指標」；新增「同步計時與 log」（SP-215）、COROS 門檻歷史（SP-67）；新增 Decisions Log（SP-57、`65bad11d`）與 Open Questions（SP-57 逐檔 RPE 換算等待實作的單） |
 
 ---
@@ -133,17 +134,17 @@ Coros 有多個 region server，登入成功的 server 不一定是活動資料�
 
 **偵測策略**：登入成功後，依序對「上次偵測到的 server（同一 userId）→ US → 登入 server → 其餘」發一次 `/activity/query` 測試請求，找第一個回傳 `result=="0000"` 的 server，儲存為 `coros_base_url`。全部失敗（逾時、網路）時沿用上次的，否則 US，並在 log 記下每個 server 的原因。登入本身只做一次：一個 region 回 `0000` 之後就不再對其他 region 登入（再登入會讓前一個 token 失效）。
 
-**記住密碼 / 自動重新登入**（2026-10-01）：見 `docs/secrets-and-keys.md`。活動列表或 Training Hub 回 result 1019／1030（Access token is invalid）、或 token 過期時，有存密碼就自動登入一次、重試一次（`relogin`，`backend/sync/coros_client.py:363`）；同步事件流會多一筆 `{"status": "relogin"}`。
+**記住密碼 / 自動重新登入**（2026-10-01）：見 `docs/secrets-and-keys.md`。活動列表或 Training Hub 回 result 1019／1030（Access token is invalid）、或 token 過期時，有存密碼就自動登入一次、重試一次（`relogin`，`backend/sync/coros_client.py:365`）；同步事件流會多一筆 `{"status": "relogin"}`。
 
-**登入有效性檢查**（2026-10-03，`backend/sync/session_check.py`）：存著 token 不代表還登入著（COROS token 約 24 h 失效，或帳號在別處登入就失效）。`check()`（`backend/sync/session_check.py:98`）對每個來源最多每 `CHECK_TTL_S`（300 s）打一次便宜的認證呼叫（COROS：`activity/query` size=1，`probe_token`，`backend/sync/coros_client.py:100`；TP：`users/v3/user`），結果放記憶體快取；連不上伺服器 = `unknown`，頁面仍顯示已登入、60 s 後再查。任何 COROS／TP 呼叫拿到「需重新登入」就 `mark_expired()`（`backend/sync/session_check.py:60`），狀態立即翻成「登入已過期」；有記住密碼時先走自動重新登入，失敗或沒存密碼才算過期。`runner.logged_in`（`backend/sync/runner.py:251`）只讀快取判斷，所以過期的來源不會被自動同步。總覽／課表頁的橫幅 `session_banner.js` 讀 `GET /api/v1/auth/session-alerts`（`backend/api/auth.py:164`），只列「正在用」的登入（資料來源的同步、COROS 課表推送）。
+**登入有效性檢查**（2026-10-03，`backend/sync/session_check.py`）：存著 token 不代表還登入著（COROS token 約 24 h 失效，或帳號在別處登入就失效）。`check()`（`backend/sync/session_check.py:98`）對每個來源最多每 `CHECK_TTL_S`（300 s）打一次便宜的認證呼叫（COROS：`activity/query` size=1，`probe_token`，`backend/sync/coros_client.py:102`；TP：`users/v3/user`），結果放記憶體快取；連不上伺服器 = `unknown`，頁面仍顯示已登入、60 s 後再查。任何 COROS／TP 呼叫拿到「需重新登入」就 `mark_expired()`（`backend/sync/session_check.py:60`），狀態立即翻成「登入已過期」；有記住密碼時先走自動重新登入，失敗或沒存密碼才算過期。`runner.logged_in`（`backend/sync/runner.py:256`）只讀快取判斷，所以過期的來源不會被自動同步。總覽／課表頁的橫幅 `session_banner.js` 讀 `GET /api/v1/auth/session-alerts`（`backend/api/auth.py:164`），只列「正在用」的登入（資料來源的同步、COROS 課表推送）。
 
 **登入過期／無法同步時一定看得到**（2026-10-05，SP-88）。原因（假 COROS 重現）：(1) 橫幅只在頁面載入時查一次，比開網站自動同步早 1.5 s，自動同步撞到 1019 後頁面不會再讀；(2) 同步撞到 1019 只 `mark_expired`（記憶體，5 分鐘），之後重查若連不上 COROS（`unknown`）就又顯示已登入、橫幅消失、`/sync/primary` 回 `logged_in: true`；(3) 失敗的同步也寫 `last_result.at`，被 `last_sync_at` 算成上次同步：自動同步認為「已新鮮」好幾小時，`autosync.js` 還顯示「已同步 COROS +0」。現在：
-- `check()` 遇到 `unknown` 而上一個答案是過期時仍回過期（`UNKNOWN_TTL_S` 後再查），只有登入、檢查 ok 或登出才清掉（`backend/sync/session_check.py:120`）；同步撞到 1019 且自動重新登入不成時，也把 `coros_token_expires` 設成現在（`backend/sync/coros_client.py:749`），重啟後不用連線就知道過期。
-- `runner.last_sync_at` 只算 cursor 與 ok／partial 的同步（`backend/sync/runner.py:262`）；成功的同步另存 `sync.<src>.last_ok`（`{at, trigger, downloaded}`，失敗不覆蓋；刪檔時清掉）。
+- `check()` 遇到 `unknown` 而上一個答案是過期時仍回過期（`UNKNOWN_TTL_S` 後再查），只有登入、檢查 ok 或登出才清掉（`backend/sync/session_check.py:120`）；同步撞到 1019 且自動重新登入不成時，也把 `coros_token_expires` 設成現在（`backend/sync/coros_client.py:876`），重啟後不用連線就知道過期。
+- `runner.last_sync_at` 只算 cursor 與 ok／partial 的同步（`backend/sync/runner.py:267`）；成功的同步另存 `sync.<src>.last_ok`（`{at, trigger, downloaded}`，失敗不覆蓋；刪檔時清掉）。
 - `GET /auth/session-alerts` 多回 `sync`：`source`、`login`、`enabled`、`problem`（`expired`；`logged_out` 只在曾經同步過時；`failed` = 最近一次同步失敗，認證失敗在登入檢查回 ok 後就不算；同步關閉時一律 `null`）、`last_ok_at`、`last_run`；`expired` 的每一項加 `needs`（`sync`／`push`）（`backend/api/auth.py:184`）。
 - `session_banner.js`：資料來源有問題時在 `<main>` 最上方顯示紅框卡片（標題、「重新登入」或「查看同步設定」連結、上次成功同步、最近一次失敗與錯誤碼），課表推送的過期另列一行；文字在 `common.session.*`（zh-TW／en）。`autosync.js` 同步結束後呼叫 `WKO5SessionBanner.refresh()`，失敗時徽章顯示「同步失敗：COROS」不自動消失；分頁回到前景（距上次 ≥ 60 s）也重讀。
 
-**COROS 心率設定**（2026-10-03）：登入回應與每次同步結束後的 `GET /account/query`（唯讀，`refresh_hr_profile`，`backend/sync/coros_client.py:306`）解析出最大心率、安靜心率與三組 COROS 區間表（`zoneData.lthrZone` / `rhrZone` / `maxHrZone`），存在設定 `athlete.coros_profile`（`store_hr_profile`，`backend/sync/coros_client.py:285`；`ACCOUNT_KEY`，`backend/engine/hr_profile.py:59`）。每次值有變也記一筆到 `athlete.coros_profile_history`（`history_add`，`backend/engine/coros_compare.py:69`；呼叫在 `backend/sync/coros_client.py:300-302`），因為 COROS 曾把帳號 LTHR 從 182 改成 152，app 這邊沒有任何紀錄（SP-67）。失敗不影響登入或同步。讀取端（最大／安靜心率解析、圖表與課表的心率區間）在 `backend/engine/hr_profile.py`，不屬本規格。
+**COROS 心率設定**（2026-10-03）：登入回應與每次同步結束後的 `GET /account/query`（唯讀，`refresh_hr_profile`，`backend/sync/coros_client.py:308`）解析出最大心率、安靜心率與三組 COROS 區間表（`zoneData.lthrZone` / `rhrZone` / `maxHrZone`），存在設定 `athlete.coros_profile`（`store_hr_profile`，`backend/sync/coros_client.py:287`；`ACCOUNT_KEY`，`backend/engine/hr_profile.py:59`）。每次值有變也記一筆到 `athlete.coros_profile_history`（`history_add`，`backend/engine/coros_compare.py:69`；呼叫在 `backend/sync/coros_client.py:302-304`），因為 COROS 曾把帳號 LTHR 從 182 改成 152，app 這邊沒有任何紀錄（SP-67）。失敗不影響登入或同步。讀取端（最大／安靜心率解析、圖表與課表的心率區間）在 `backend/engine/hr_profile.py`，不屬本規格。
 
 ### 所有 API 呼叫的必要 Headers
 
@@ -233,7 +234,7 @@ Token 約 24h 過期，需重新 POST `/account/login`。無 refresh token 流�
 ### Out of Scope
 - WKO5 資料夾讀寫（完全獨立；WKO5 只當對照來源）
 - 兩個來源合併或互補（2026-10-02 的合併設計已於同日撤回，見 Change History）
-- demo 模式的同步（`build_app(demo=True)` 不掛 sync / auth / scan 路由，`backend/main.py:171`）
+- demo 模式的同步（`build_app(demo=True)` 不掛 sync / auth / scan 路由，`backend/main.py:176`）
 - 心跳同步 / WebSocket push
 - Coros Training Plans / Structured Workouts 解析（反方向的「把本專案課表推送到 COROS」已實作，見下方指標）
 - 多運動員帳號切換
@@ -319,7 +320,7 @@ backend/static/                 # 同步 UI 實際所在（設定頁等靜態頁
 - `discover_tagged_files`（`backend/files/file_service.py:67`）：資料夾底下若有 `storage.SOURCES`（`backend/sync/storage.py:20`）列的 `coros/`、`tp/` 子資料夾，就逐一走 `<source>/<year>/`，檔案標上 DB source（`coros` / `trainingpeaks`）；同一資料夾的傳統 `<year>/*.wko4|.fit` 版面照舊標 `local`。symlink 跳過。
 - `_sync_ids`（`backend/files/file_service.py:50`）：從同步寫出的檔名反推 provider id——COROS `<labelId>_<日期>_<sport>.fit` → `coros_activity_id`，TP `tp_<日期>_<workoutId>.fit` → `tp_workout_id`。`source` 收 DB 名稱（`coros` / `trainingpeaks`）也收資料夾 / API 名稱（`tp`），經 `storage.SOURCES` 對應。
 - `_already_imported`（`backend/files/file_service.py:82`）：路徑（原樣與 resolve 後）、同一 athlete 的 `coros_activity_id` 或 `tp_workout_id` 任一已在 DB 就跳過（兩種 provider id 都限定 athlete，`backend/files/file_service.py:93`、`backend/files/file_service.py:98`），所以同步已記錄的檔案不會被掃描重複匯入；可重複執行。
-- 每個檔案一個 savepoint（`backend/files/file_service.py:123`），失敗不留半筆資料；回傳 `new` / `skipped` / `errors` / `total` / `new_by_source`。
+- 每個檔案一個 savepoint（`backend/files/file_service.py:124`），失敗不留半筆資料；回傳 `new` / `skipped` / `errors` / `total` / `new_by_source`。
 
 測試：`backend/tests/test_scan_and_tz.py:31`（per-source 版面、冪等）、`backend/tests/test_scan_and_tz.py:47`（跳過同步已記錄者）、`backend/tests/test_scan_and_tz.py:62`（provider id 去重限定 athlete）、`backend/tests/test_scan_and_tz.py:87`（傳統版面仍為 local）。
 
@@ -334,7 +335,8 @@ _list_page(token, base, user_id, since, end, page) → activities[]
   ↓
 for each activity:
   if coros_activity_id in DB → 列表的 trainingLoad 補進 coros_training_load（有變才寫）→ SSE: skipped
-  _download_fit(token, base, user_id, activity):
+  if 在失敗清單且不再自動重試（no_file，或已停止）→ SSE: skipped（reason no_file / retry_stopped）
+  _fetch_one（backend/sync/coros_client.py:713）→ _download_fit(token, base, user_id, activity):
     1. try fitUrl (presigned S3, if present)
     2. POST /activity/detail/download?labelId=...&sportType=...&fileType=4
     3. GET presigned URL → bytes
@@ -343,42 +345,52 @@ for each activity:
   _import_one_file(db, athlete_id, dest, source="coros", coros_activity_id=id)
     → parse FIT, write workout_files（指標不存：TSS 等由圖表的 FIT Dataset 算，2026-10-08）
     → 解析失敗：record_corrupt stub（不再重複下載）
-  SSE: downloaded / error
+    → 下載／匯入失敗：寫進失敗清單（failures.record_failure，次數 +1）；
+      detail/download 回 0000 但沒有 fileUrl（手動紀錄）：第一次算一般失敗（可重試），連續第二次才記成
+      no_file（CorosNoFile、record_no_file_answer，backend/sync/failures.py:123；不算錯誤，列表 overlap 之後跳過）
+    → 成功：從失敗清單移除
+  SSE: downloaded / no_file / error
   ↓
-沒有錯誤才更新 sync_state.coros_last_sync_at（增量 cursor，下次從這天減 overlap 開始）
+失敗清單裡該重試、這次列表沒碰到的：依 labelId＋sportType 直接重下載（不重新列表；SSE checking 帶 retry: true）
+  ↓
+更新 sync_state.coros_last_sync_at（增量 cursor，下次從這天減 14 天 overlap 開始）——
+  單筆失敗不再擋 cursor；只有整次失敗（登入、列表）提早結束、或失敗清單寫不進去時不推進
 refresh_hr_profile（GET /account/query，失敗不影響）
 SSE: complete {total_downloaded, total_checked, errors}
-  ↓（runner.stream finally，backend/sync/runner.py:67）
-寫 sync.<src>.last_result → plan_auto.after_sync → 有新檔時 localtime.refresh_from_fits
-→ calibrate.after_sync（每人校正，含 COROS TL 換算重擬）→ 有新檔時 wko5views.warm_up（背景重建圖表 Dataset）
+  ↓（runner.stream finally，backend/sync/runner.py:138）
+寫 sync.<src>.last_result → 有新檔時 localtime.refresh_from_fits
+→ ① 有新檔時 wko5views.warm_up（背景：圖表 Dataset → 總覽狀態 → 課表輸入）
+→ ② plan_auto.after_sync（自動調整，與暖機共用同一份計算）
+→ ③ calibrate.after_sync（每人校正，含 COROS TL 換算重擬；等 ② 結束才開始）
+  （SP-362，backend/sync/runner.py:189-222）
 ```
 
 #### COROS Training Load（SP-37／SP-38，2026-10-04）
 
-- **儲存**：列表項目的 `trainingLoad`（`list_training_load`，`backend/sync/coros_client.py:676`）在匯入時寫進新活動，已匯入的在下次列表掃到時補上或更新（`backend/sync/coros_client.py:780-781`）；只用同步本來就抓的列表，不多打任何 COROS API。欄位 `workout_files.coros_training_load`（`backend/db/models.py:79`，加法遷移 `backend/db/database.py:130`）。
-- **重擬**：同步有新活動、或只補了已匯入活動的 TL（`complete` 事件的 `tl_filled`，經 `runner` 的 `last_result`）都會觸發每人校正；`calibrate.calibrate` 跑完 Item 後呼叫 `coros_tl.refit_and_store`（`backend/engine/calibrate.py:263`，`backend/engine/coros_tl.py:755`）：有 TL 的 COROS 活動（以檔名的 labelId 對到圖表 Dataset）× app 的 TSS → 三組（功率 TSS、hrTSS 依 IF、hrTSS 比例，`group_samples`，`backend/engine/coros_tl.py:441`）。
+- **儲存**：列表項目的 `trainingLoad`（`list_training_load`，`backend/sync/coros_client.py:686`）在匯入時寫進新活動，已匯入的在下次列表掃到時補上或更新（`backend/sync/coros_client.py:907-908`）；只用同步本來就抓的列表，不多打任何 COROS API。欄位 `workout_files.coros_training_load`（`backend/db/models.py:79`，加法遷移 `backend/db/database.py:130`）。
+- **重擬**：同步有新活動、或只補了已匯入活動的 TL（`complete` 事件的 `tl_filled`，經 `runner` 的 `last_result`）都會觸發每人校正；`calibrate.calibrate` 跑完 Item 後呼叫 `coros_tl.refit_and_store`（`backend/engine/calibrate.py:264`，`backend/engine/coros_tl.py:755`）：有 TL 的 COROS 活動（以檔名的 labelId 對到圖表 Dataset）× app 的 TSS → 三組（功率 TSS、hrTSS 依 IF、hrTSS 比例，`group_samples`，`backend/engine/coros_tl.py:441`）。
   - 只用最後一次門檻（FTP／LTHR）變動 > 5 % 之後的活動（`since_threshold_change`，`backend/engine/coros_tl.py:464`），近期權重較高（半衰期 120 天，`recency`，`backend/engine/coros_tl.py:478`）。
   - 模型族用 LOO MAE 選；樣本 < 60 時只比 A（比例）／C（冪次），避免二次式在小樣本爆掉（`choose_family`，`backend/engine/coros_tl.py:489`）。
   - 收縮：換算 = w·本人 + (1 − w)·預設，w = n ÷ (n + 30)（`SHRINK_K`，`backend/engine/coros_tl.py:84`）；預設只是先驗（推估）。
   - 時間序回測：最近 30 天當 holdout（`HOLDOUT_DAYS`，`backend/engine/coros_tl.py:90`），新擬合在 holdout 上的 MAE 不比目前存的差才換上；存回測與 LOO 誤差（`refit_group`，`backend/engine/coros_tl.py:516`）。結果存設定 `coros.tl_model`。
   - 實跑校正：推上 COROS 的「負荷」步驟（計畫 TSS、送出的 TL、強度、當時的係數）記在 `coros.tl_load_calib`；那堂課完成且活動的圈數＝推送的步驟數時，那一圈累積的 TSS ÷「未校正模型對送出 TL 的 TSS」是一個樣本（沒有時用 計畫 TSS ÷ 推送時的係數；照計畫跑完不會把係數拉回 1），收縮後（w = n ÷ (n + 5)）的係數在換算前除掉（`refresh_load`／`load_factor`，`backend/engine/coros_tl.py:650`、`backend/engine/coros_tl.py:674`）。
   - 重推門檻：重新擬合讓某個「負荷」步驟的 TL 變動 < 3（`TL_RESEND_MIN`，推估）時，推送沿用上次送出的 TL（同一計畫 TSS／依據／強度，從 `coros.tl_load_calib` 的紀錄讀，`_sent_tl`，`backend/sync/coros_workouts.py:659`；`sent_tl`，`backend/engine/workout_steps.py:1117`），指紋不變、不標「需更新」；≥ 3 才換新值重推（SP-38）。
-- **顯示**：`GET /sync/settings` 回 `coros_tl`（`describe`，`backend/api/sync.py:273`），設定頁「課表推送到」下方列出每組的模型、n、權重、回測誤差（推估）。
+- **顯示**：`GET /sync/settings` 回 `coros_tl`（`describe`，`backend/api/sync.py:297`），設定頁「課表推送到」下方列出每組的模型、n、權重、回測誤差（推估）。
 
 #### 「負荷」用 RPE 填的個人係數（SP-57，2026-10-05）
 
 - **用途**：課表「負荷」步驟可用 RPE 五檔＋分鐘填（overview.spec.md），TSS ＝ 係數 × CR-10 × 分鐘（Foster session RPE）。**只用在排課目標**：PMC、總覽與護欄的負荷一律是手錶記錄，RPE 不修正任何活動的 TSS（使用者 2026-10-04）。
-- **重擬**：與 TL 換算同一個觸發；`calibrate.calibrate` 在 TL 之後呼叫 `rpe_load.refit_and_store`（`backend/engine/calibrate.py:272`，`backend/engine/rpe_load.py:273`），自己的 try，失敗不影響其他校正。樣本＝圖表 Dataset 的活動中有手錶記錄 RPE 的（`workout_files.rpe`，經 `activity_tags.load_recorded`／`recorded_of`，與自動努力程度用的是同一個 RPE；`activity_rows`，`backend/engine/rpe_load.py:247`）：r ＝ 活動 TSS ÷（RPE × 移動分鐘），10 分鐘～20 小時、r 在 0.08–1.2 之外的丟掉（推估）。
+- **重擬**：與 TL 換算同一個觸發；`calibrate.calibrate` 在 TL 之後呼叫 `rpe_load.refit_and_store`（`backend/engine/calibrate.py:273`，`backend/engine/rpe_load.py:273`），自己的 try，失敗不影響其他校正。樣本＝圖表 Dataset 的活動中有手錶記錄 RPE 的（`workout_files.rpe`，經 `activity_tags.load_recorded`／`recorded_of`，與自動努力程度用的是同一個 RPE；`activity_rows`，`backend/engine/rpe_load.py:247`）：r ＝ 活動 TSS ÷（RPE × 移動分鐘），10 分鐘～20 小時、r 在 0.08–1.2 之外的丟掉（推估）。
   - 和 TL 一樣只用最後一次門檻變動 > 5 % 之後的活動、近期加權（半衰期 120 天；共用 `coros_tl.since_threshold_change`／`recency`）。
   - 本人係數 ＝ exp(加權平均 ln r)；在 log 空間收縮到預設 0.30（`DEFAULT_FACTOR`，`backend/engine/rpe_load.py:67`，推估）：w ＝ n ÷ (n + 10)（`SHRINK_K`，`backend/engine/rpe_load.py:69`）。
   - 誤差：留一（含收縮）預測每筆活動的 TSS 的 MAPE／MAE／偏差（`refit`，`backend/engine/rpe_load.py:205`）。結果存設定 `rpe.load_model`（`{factor, n, w, ratio, loo, fitted_at}`；沒有 RPE 的活動時不寫，用預設）。
-- **顯示**：`GET /sync/settings` 回 `rpe_load`（`describe`，`backend/engine/rpe_load.py:234`；`backend/api/sync.py:276`），設定頁在 TL 換算下方顯示「TSS ＝ 係數 × RPE × 分鐘」與 n、權重、留一誤差，或「預設 ±30 %」（`showRpe`，`backend/static/settings.html:1042`）。
+- **顯示**：`GET /sync/settings` 回 `rpe_load`（`describe`，`backend/engine/rpe_load.py:234`；`backend/api/sync.py:300`），設定頁在 TL 換算下方顯示「TSS ＝ 係數 × RPE × 分鐘」與 n、權重、留一誤差，或「預設 ±30 %」（`showRpe`，`backend/static/settings.html:1078`）。
 
-主流程在 `sync_workouts`（`backend/sync/coros_client.py:689`）。所有同步入口（手動 SSE、`/sync/auto`、每日排程）都走 `runner.stream`；自動同步只跑「資料來源」那一個（`auto_plan`，`backend/sync/runner.py:283`），另一個來源回 `not_in_use`。
+主流程在 `sync_workouts`（`backend/sync/coros_client.py:812`）。所有同步入口（手動 SSE、`/sync/auto`、每日排程）都走 `runner.stream`；自動同步只跑「資料來源」那一個（`auto_plan`，`backend/sync/runner.py:288`），另一個來源回 `not_in_use`。
 
 #### 同步計時與 log（SP-215，2026-10-06）
 
-- **計時**：`SyncClock`（`backend/sync/runner.py:47`）用 client 事件之間的間隔，把一次同步的時間分到 `list`（登入、列活動）／`check`（查已匯入的）／`download`／`import`／`finish`（cursor、心率設定）／`after`（stream 結束後的掛鉤）。下載和匯入照 client 事件帶的 `secs.download` 拆開（`backend/sync/coros_client.py:842`，TP 同樣）。
+- **計時**：`SyncClock`（`backend/sync/runner.py:47`）用 client 事件之間的間隔，把一次同步的時間分到 `list`（登入、列活動）／`check`（查已匯入的）／`download`／`import`／`finish`（cursor、心率設定）／`after`（stream 結束後的掛鉤）。下載和匯入照 client 事件帶的 `secs.download` 拆開（`backend/sync/coros_client.py:800`，TP 同樣）。
 - **存與記**：結果存進 `last_result.secs`（`backend/sync/runner.py:178`），設定頁顯示時間花在哪；每次同步寫一行 log，含各步秒數與最慢的一筆活動 id（`_log_run`，`backend/sync/runner.py:97`）。總時間 ≥ `SLOW_SYNC_S`（120 秒，`backend/applog.py:57`）或同步失敗時記 WARNING，其他記 INFO。
 - **不記個人資料**：COROS／TP client 的 log 只寫有沒有 LTHR、體重，不寫數值，也不寫 user id。
 
@@ -424,11 +436,11 @@ DROP TABLE IF EXISTS pmc_cache;                 -- 沒有程式讀寫（data_reg
 runFTP；SP-341 曾為它加 `version` 欄）從 2026-10-08 起不再寫，model 也拿掉（`backend/db/models.py:84`）。
 圖表、PMC、API 的 TSS 一律來自 FIT Dataset（`Dataset._metrics`），從來不讀這兩張表。舊 DB 裡的列原樣留著；
 刪除活動（`sync/purge.py`）不再連帶刪它們的列，留下的孤兒列也沒人讀。`init_db` 不動它們
-（`backend/db/database.py:119`），`unclassified_tables` 略過（`backend/data_registry.py:135`、`:304`）。
+（`backend/db/database.py:119`），`unclassified_tables` 略過（`backend/data_registry.py:150`、`:319`）。
 
 ### `athlete_settings` 表（已有，從 Coros 登入自動填入）
 
-登入成功後自動 upsert（`_store_login`，`backend/sync/coros_client.py:211`；寫入在 `:232-254`）：
+登入成功後自動 upsert（`_store_login`，`backend/sync/coros_client.py:213`；寫入在 `:234-256`）：
 - `lthr` ← `data.zoneData.lthr`（不是跑步門檻，是沒有夠硬的跑步可估時的冷啟動先驗，見下）
 - `weight_kg` ← `data.weight`
 - `effective_date` ← 今日
@@ -453,8 +465,9 @@ runFTP；SP-341 曾為它加 `version` 欄）從 2026-10-08 起不再寫，model
 | 同步忙碌（SYNC_BUSY） | 同一來源已在同步時的拒絕（409） | `SyncBusy`，`backend/sync/runner.py:41` |
 | 同步結果（Last result） | 每次同步的 `status`（ok／partial／failed／aborted）、下載數、錯誤數、觸發方式 | `sync.<src>.last_result` |
 | 上次成功同步（Last ok） | 最近一次 ok／partial 的同步；失敗的同步不算「同步過」 | `sync.<src>.last_ok`、`runner.last_sync_at` |
-| 增量 cursor | 上次「無錯誤」同步的時間；下次從它減 overlap 天開始列，有錯就不推進 | `sync_state.coros_last_sync_at` / `last_sync_at` |
-| 自動同步（Auto sync） | 開網站或每日排程觸發，只對資料來源、已啟用、已登入、閒置且超過門檻小時數者 | `auto_plan`，`backend/sync/runner.py:283` |
+| 增量 cursor | 上次同步的時間；COROS 下次從它減 14 天（`CURSOR_OVERLAP_DAYS`，`backend/sync/coros_client.py:33`）開始列，TP 列「之後有修改的」。單筆失敗不擋（進失敗清單）；整次失敗（登入、列表）或失敗清單寫不進去才不推進（SP-362） | `sync_state.coros_last_sync_at` / `last_sync_at` |
+| 失敗清單（Failed list） | 同步列到但下載／匯入失敗的活動（`failed`），或沒有 FIT 的手動紀錄（`no_file`）。之後的同步依 id 重試 `failed`，最多 5 次或試滿 7 天（第一次到最後一次嘗試的間隔，第 2 次起才算：一次失敗後一週沒同步仍會再試；`auto_retry`，`backend/sync/failures.py:55`），之後停止、留在設定 › 進階設定可按「重試」（`no_file` 列也可以）；匯入成功即移除，刪除來源檔案時清空。TP 的 `no_file` 在 workouts/changed 再列到時重新檢查（計畫中／還沒上傳的課之後才有檔） | `sync_failures` 表，`backend/sync/failures.py`、`SyncFailure`，`backend/db/models.py:407` |
+| 自動同步（Auto sync） | 開網站或每日排程觸發，只對資料來源、已啟用、已登入、閒置且超過門檻小時數者 | `auto_plan`，`backend/sync/runner.py:288` |
 | 登入狀態（Session status） | `logged_in` / `expired`（登入已過期）/ `logged_out`；檢查結果另有 `unknown`（連不上，仍顯示已登入） | `backend/sync/session_check.py:45` |
 | 記住密碼（Remembered password） | 勾選才存、加密存放的密碼，只用於 token 失效時自動重新登入一次 | `coros_password_sealed` / `tp_password_sealed` |
 | 資料 server（Data base URL） | COROS 實際接受 token 的資料 API region，登入時偵測 | `sync_state.coros_base_url` |
@@ -497,11 +510,13 @@ runFTP；SP-341 曾為它加 `version` 欄）從 2026-10-08 起不再寫，model
 | Method | Path | Purpose |
 |--------|------|---------|
 | GET | `/api/v1/sync/sources` | 每個來源的登入狀態、是否啟用、是否同步中、上次同步時間與結果、檔案數 / 大小 / 活動期間 |
-| GET/PUT | `/api/v1/sync/settings` | 資料來源（`primary_source`：`coros` / `trainingpeaks`）、各來源開關、時區、`daily_sync_time`（每日同步時間）、`auto_on_open`（開網站時自動同步）+ 門檻小時數、`chart_data_source`（`source` = 資料來源 / `wko5`）、`map_basemap` / `map_overlays`（單次活動路線圖的預設底圖與疊加層）、TP OAuth 開關；2026-10 起另有 `exclude_bad_activities`、`use_power`、`accept_watch_power`、`push_provider`、`region_override`、`primary_sport`（欄位對應 `_SETTING_KEYS`，`backend/api/sync.py:203`）。GET 另回傳生效值（`timezone_effective`、`region`、`power_source`、`wko5_available`…）與 secret 來源、金鑰狀態，都只給標籤、不給值。PUT 換資料來源時重建去重 |
+| GET/PUT | `/api/v1/sync/settings` | 資料來源（`primary_source`：`coros` / `trainingpeaks`）、各來源開關、時區、`daily_sync_time`（每日同步時間）、`auto_on_open`（開網站時自動同步）+ 門檻小時數、`chart_data_source`（`source` = 資料來源 / `wko5`）、`map_basemap` / `map_overlays`（單次活動路線圖的預設底圖與疊加層）、TP OAuth 開關；2026-10 起另有 `exclude_bad_activities`、`use_power`、`accept_watch_power`、`push_provider`、`region_override`、`primary_sport`（欄位對應 `_SETTING_KEYS`，`backend/api/sync.py:227`）。GET 另回傳生效值（`timezone_effective`、`region`、`power_source`、`wko5_available`…）與 secret 來源、金鑰狀態，都只給標籤、不給值。PUT 換資料來源時重建去重 |
 | POST | `/api/v1/sync/start`、`/api/v1/sync/coros/start` | 走共用 runner：同一來源已在同步時回 409 `SYNC_BUSY`，結果寫進 `sync.<src>.last_result` |
 | GET | `/api/v1/sync/primary` | 2026-10-04：目前資料來源（`source` coros／tp、`label`）、是否登入、是否啟用、是否同步中；不算檔案統計、不載 Dataset。課表頁「從 COROS 抓活動」用（`backend/api/sync.py:88`）。2026-10-05（SP-88）：`logged_in` 改走登入檢查（`session_check.check`，有快取），並回 `login`（ok／expired／unknown／logged_out）；原本只讀快取，快取過期後對已被拒的 token 回 true |
 | POST | `/api/v1/sync/auto` | 開網站時呼叫。對「已啟用、已登入、閒置、且超過 N 小時」的來源在背景啟動同步，立刻回傳；新鮮、忙碌或關閉時什麼都不做 |
-| DELETE | `/api/v1/sync/{coros\|tp}/files[?date_from&date_to]` | 刪掉該來源的 FIT 與 DB 紀錄，重建去重、重設 cursor，並拿該來源的鎖（同步中回 409）。若它正是圖表讀的資料來源且有 WKO5 資料夾，圖表改回 WKO5（`backend/sync/purge.py:101-104`） |
+| DELETE | `/api/v1/sync/{coros\|tp}/files[?date_from&date_to]` | 刪掉該來源的 FIT 與 DB 紀錄，重建去重、重設 cursor、清空該來源的失敗清單（SP-362，`backend/sync/purge.py:95`），並拿該來源的鎖（同步中回 409）。若它正是圖表讀的資料來源且有 WKO5 資料夾，圖表改回 WKO5（`backend/sync/purge.py:106-109`） |
+| GET | `/api/v1/sync/failed` | 2026-10-08（SP-362）：失敗清單 `items`（`source`、`provider_id`、`date`、`kind` failed／no_file、`state` retrying／stopped／no_file、`attempts`、`last_error`（遮蔽過、≤ 200 字）、`first_at`、`last_at`）與 `max_attempts`、`max_age_days`（`backend/api/sync.py:167`）。設定 › 資料同步 › 進階設定列出每一列（日期、來源、試了幾次／停止自動重試／沒有 FIT 檔）與「重試」（`loadFailed`，`backend/static/settings.html:1180`） |
+| POST | `/api/v1/sync/failed/{id}/retry` | 「重試」：該列 attempts 歸零、7 天重新起算（no_file 也改回 failed），來源可同步（已登入、啟用、閒置）就在背景開始同步（`started`），否則等下次同步（`queued`）（`backend/api/sync.py:176`） |
 | GET | `/api/v1/sync/compare?a=&b=&since=` | 兩個資料來源逐筆活動比對：時長、距離、爬升、NP、TSS（含所用 FTP 與來源）。頁面是 `/api/v1/static/compare.html`；沒有 WKO5 資料夾時比 `wko5` 回 404 `NO_WKO5_FOLDER` |
 | POST | `/api/v1/auth/tp/login` | 新增 `method` 參數：`auto`（預設）/ `web` / `oauth` |
 
@@ -509,39 +524,39 @@ runFTP；SP-341 曾為它加 `version` 欄）從 2026-10-08 起不再寫，model
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| GET | `/api/v1/auth/session-alerts` | 正在用的登入（資料來源的同步、COROS 課表推送）中已過期者（`expired`，含 `needs`），以及資料來源能不能同步（`sync`：`problem`、`last_ok_at`、`last_run`，SP-88），給總覽／課表的橫幅（`backend/api/auth.py:164`） |
+| GET | `/api/v1/auth/session-alerts` | 正在用的登入（資料來源的同步、COROS 課表推送）中已過期者（`expired`，含 `needs`），以及資料來源能不能同步（`sync`：`problem`、`last_ok_at`、`last_run`，SP-88），給總覽／課表的橫幅（`backend/api/auth.py:165`） |
 | PUT | `/api/v1/auth/{coros\|tp}/remember` | 取消勾選「記住密碼」立即刪除已存密碼；勾選本身不存任何東西（密碼只隨登入送出）（`backend/api/auth.py:237`） |
 | POST | `/api/v1/auth/tp/logout` | TP 登出 |
 | GET | `/api/v1/auth/tp/oauth`、`/api/v1/auth/tp/callback` | TP OAuth 轉址流程（密碼登入的替代） |
 | GET | `/api/v1/sync/status` | TP 舊狀態（`source: "tp"`、`authenticated`、`last_sync`、`cursor`）；`authenticated` 只看 TP token，與資料來源（COROS）的登入無關 |
-| POST | `/api/v1/sync/timezone/browser` | shell.js 送一次瀏覽器的 Intl 時區，當自動時區的輸入之一（`backend/api/sync.py:317`） |
+| POST | `/api/v1/sync/timezone/browser` | shell.js 送一次瀏覽器的 Intl 時區，當自動時區的輸入之一（`backend/api/sync.py:341`） |
 | POST | `/api/v1/sync/dedup/rebuild` | 手動重建跨來源去重 |
 | GET | `/api/v1/sync/tp/settings` | 讀 TP 運動員設定（FTP、體重、LTHR），只回傳、不寫 DB |
 
 `GET /auth/coros/status` 與 `/auth/tp/status` 改回 `status`（`logged_in` / `expired` / `logged_out`）、`expired`、`check`（`ok` / `expired` / `unknown`）、`password_saved`（COROS 另有 `auto_relogin`）；不回 token 或密碼（`_session_fields`，`backend/api/auth.py:129`）。`/sync/sources` 的 `logged_in` 也排除已知過期的登入。
 
-**資料來源二選一**（2026-10-02，`backend/sync/primary.py`）：`sync.primary_source` = `coros` | `trainingpeaks`，所選來源是唯一被讀的——圖表 Dataset 只讀它的資料夾（`current_source`，`backend/engine/wko5expr/datasource.py:76`）、自動同步只同步它（`auto_plan`）、CP 測試／比賽功率掃描只讀它的檔（`unused_folder`，`backend/engine/racepower/cptest.py:137`）、DB 總數只算它的列（`in_use_clause`，`backend/sync/dedup.py:34`）。另一個來源的檔案、DB 列和已存登入原封不動，切回來就能用。舊值（`auto`、未設定）在啟動時（lifespan 呼叫 `primary.migrate`，`backend/main.py:85`）或第一次讀取時改成舊「自動」會選的來源：最新活動日較新者，同日或沒資料選 COROS（`choose_initial`，`backend/sync/primary.py:62`）。活動以開始時間為鍵（`backend/engine/activity_key.py`），所以標籤、RPE、背負、課表配對在切換後仍在。設定頁切換前會先確認。
+**資料來源二選一**（2026-10-02，`backend/sync/primary.py`）：`sync.primary_source` = `coros` | `trainingpeaks`，所選來源是唯一被讀的——圖表 Dataset 只讀它的資料夾（`current_source`，`backend/engine/wko5expr/datasource.py:78`）、自動同步只同步它（`auto_plan`）、CP 測試／比賽功率掃描只讀它的檔（`unused_folder`，`backend/engine/racepower/cptest.py:137`）、DB 總數只算它的列（`in_use_clause`，`backend/sync/dedup.py:34`）。另一個來源的檔案、DB 列和已存登入原封不動，切回來就能用。舊值（`auto`、未設定）在啟動時（lifespan 呼叫 `primary.migrate`，`backend/main.py:86`）或第一次讀取時改成舊「自動」會選的來源：最新活動日較新者，同日或沒資料選 COROS（`choose_initial`，`backend/sync/primary.py:62`）。活動以開始時間為鍵（`backend/engine/activity_key.py`），所以標籤、RPE、背負、課表配對在切換後仍在。設定頁切換前會先確認。
 
-**每日排程**：`backend/sync/scheduler.py`，在 app lifespan 啟動。每分鐘檢查一次，每個本地日期到了 `daily_sync_time` 之後執行一次，只同步資料來源（`runner.auto_plan`）。設 `WKO5COACH_NO_SCHEDULER=1` 可關閉（`backend/main.py:103`；demo 模式改跑 demo 自己的 loop）。
+**每日排程**：`backend/sync/scheduler.py`，在 app lifespan 啟動。每分鐘檢查一次，每個本地日期到了 `daily_sync_time` 之後執行一次，只同步資料來源（`runner.auto_plan`）。設 `WKO5COACH_NO_SCHEDULER=1` 可關閉（`backend/main.py:104`；demo 模式改跑 demo 自己的 loop）。
 
 **開網站自動同步**：`backend/static/autosync.js`，已由 shell.js 自動載入（`backend/static/shell.js:420`；demo 模式不載入）。也可以在頁面裡放 `<script src="/api/v1/static/autosync.js" defer></script>`。它每個瀏覽器每 10 分鐘最多呼叫一次，狀態顯示在 `#nav-sync-status`（沒有這個元素就在右上角加一個小徽章）。同步失敗時顯示「同步失敗」（不自動消失）並請橫幅重讀（SP-88）；失敗的同步不算「上次同步」，下次開網站會再試。
 
 **圖表資料來源**（`charts.data_source` = `source`（預設，資料來源的資料夾）| `wko5`；舊值 `synced` / `coros` / `tp` 讀成 `source`）：`backend/engine/wko5expr/fitdataset.py` 用 FIT 資料夾建 `FitFolderDataset`，每筆活動的指標用本專案自己的公式計算。`datasource.current_source()` / `source_stamp()` 提供 Dataset 工廠。9 月 17 筆活動實測對照 WKO5（當時門檻取自 WKO5 athlete 檔）：時長、距離相同，NP ±0.5%，TSS ±0.2，爬升 1–4%。
-**手動同步的前端共用**（2026-10-04）：`backend/static/syncrun.js` 的 `TRCSync.run(src, {since, onEvent})` 打 SSE start 端點並解析進度（`total`／`checked`／`downloaded`／`errors`／`fatal`／`finished`，409 → `busy`），`TRCSync.primary()` 讀 `/sync/primary`。設定頁「立即同步」（`backend/static/settings.html:1309`）與課表頁「從 COROS 抓活動」共用，各自只負責顯示文字。
+**手動同步的前端共用**（2026-10-04）：`backend/static/syncrun.js` 的 `TRCSync.run(src, {since, onEvent})` 打 SSE start 端點並解析進度（`total`／`checked`／`downloaded`／`errors`／`fatal`／`finished`，409 → `busy`），`TRCSync.primary()` 讀 `/sync/primary`。設定頁「立即同步」（`backend/static/settings.html:1368`）與課表頁「從 COROS 抓活動」共用，各自只負責顯示文字。
 
 **FIT 資料集的前置（2026-10-01，`docs/research/unsourced-rules.md` §0.10 第 0 步）**：app 的資料要從 TP／COROS 來，WKO5 只當對照。
 
 - **越野／路跑**：`sport_of`（`backend/engine/wko5expr/fitdataset.py:122`）先看 app DB 的 `workout_files.trail_classification`（唯讀開啟，`load_classifications`，`backend/engine/wko5expr/fitdataset.py:162`），FIT 的 session sub_sport 只當後備（COROS 的 FIT 沒有 trail sub_sport，原本整批越野都被當路跑，回測越野 n = 0；sub_sport 先前也根本沒被讀進來，`fit_to_channels` 現在帶出 `sub_sport`）。跨來源重複（`duplicate_of`）視為同一筆活動：群組裡任一列的使用者覆寫優先（自己這列 → 主紀錄 → 其他重複列），否則用自己這列的自動值，再退到主紀錄（`classification_for`，`backend/engine/wko5expr/fitdataset.py:248`）。每個來源的資料集仍保留自己的檔案（不因為是重複列就丟掉，否則該來源會少活動）。越野跑同時加上 WKO5 的 `runningtrail` 標籤，因為 thresholds／品質門檻／status／成就只看標籤。
 - **門檻與體重**，依序：賽季計畫的 dated 列（`Dataset.setting` / `cp`）→ app DB 的 `athlete_settings`（體重、`run_ftp_w`、閾值配速；`_load_db_settings`，`backend/engine/wko5expr/fitdataset.py:780`）→ 從這些 FIT 估算的 as-of LTHR（`_estimate_settings`，`backend/engine/wko5expr/fitdataset.py:874`：每 30 天一個格點，推估；格點日只用當天以前的跑步，`thresholds.estimate`，每次跑步對照它自己日期的 `racepower.athlete.cp_as_of`，估出的值只套用到格點日以後；只在有 app DB 時自動估算）→ 未設定。跑步 FTP（功率 TSS）**不**用 `cp_as_of` 的估算值補：它的 PD 重擬在第一筆計畫 CP 之前沒有合理性參考，在一位跑者的 COROS 資料上，手錶功率時期的擬合值比計畫 CP 高約 70%，會讓那段時間的功率 TSS 少到約三分之一。**2026-10-03 起**跑步功率 TSS 的 FTP 改為 `tss_ftp`（`backend/engine/wko5expr/fitdataset.py:1179`）＝圖表用的同一個 CP：計畫 CP 測試 → `run_ftp_w` → **只用 Stryd 跑步**的 PD 模型 mFTP（推估，手錶功率永遠不進擬合；見「圖表分析在 COROS 來源」）→ 都沒有時用 rTSS／hrTSS（移動時間 hrTSS ＋ 爬升加成）。標籤寫出來源（`cp_info`），`/workouts` 與來源比對頁顯示所用 FTP。parity 模式與 WKO5 opt-in 仍用 WKO5 規則（`Dataset.tss_ftp`）。測試：`backend/tests/test_run_ftp_tss.py`。實測（2026-10-01，一位跑者同步進行中的 COROS 803 筆）：LTHR 估算只有前後兩段時期有值，中間約 17 個月沒有 LTHR，那段 COROS 跑步在 app 路徑上沒有 TSS。WKO5 athlete 檔只有在設定 `charts.fit_settings_from_wko5 = true`（預設 false，`backend/settings/repository.py:88`）時才讀（`dataset_for_source`，`backend/engine/wko5expr/fitdataset.py:1282`）。各處的來源標籤改走 `Dataset.setting_label`，FIT 資料集不再顯示「WKO5 設定」。
 - **`athlete_settings.lthr` / `ftp_w` 不當跑步門檻**：唯一的自動寫入者是 `coros_client.login`（COROS 帳號 `zoneData.lthr` / `.ftp` 與體重，日期 = 登入當天 UTC），沒有記錄是哪個運動；TP 的 `fetch_tp_settings` 只回傳 JSON、不寫 DB。實測時 DB 裡那列是 COROS 登入寫的，不是 TP；它的 LTHR 高於同一天 12′ 全力測試的峰值心率，不可能是現在的跑步 LTHR。`lthr` 留在 `settings_ignored`（`backend/engine/wko5expr/fitdataset.py:805`），**有用到**：沒有夠硬的跑步可以估 LTHR 時，它是冷啟動先驗（`_coros_lthr_prior`，`:809`，由 `_estimate_settings` 在 `:937` 呼叫；有它時 SP-289 的 0.90 × 最大心率先驗不套用，`_apply_lthr_prior` `:842`），所以登入照寫。`ftp_w` 從 2026-10-08 起不寫、不讀（`read_athlete_settings` 不選它，`:197`；舊 DB 留著這欄）。體重照用。
-- **快取**：`source_stamp` 多帶 `db_stamp()`（`backend/engine/wko5expr/datasource.py:97`），分類覆寫、去重或 `athlete_settings` 變了，即使 FIT 檔沒變也會重建 Dataset。`FitFolderDataset.cached_series`（`backend/engine/wko5expr/fitdataset.py:1212`）是每個 FIT 檔的磁碟快取（fitcache 資料夾的 `series_<key>.json`），key 含檔案 stamp、修正與當時的門檻，每檔保留幾組門檻版本（估算前／後）。
+- **快取**：`source_stamp` 多帶 `db_stamp()`（`backend/engine/wko5expr/datasource.py:99`），分類覆寫、去重或 `athlete_settings` 變了，即使 FIT 檔沒變也會重建 Dataset。`FitFolderDataset.cached_series`（`backend/engine/wko5expr/fitdataset.py:1212`）是每個 FIT 檔的磁碟快取（fitcache 資料夾的 `series_<key>.json`），key 含檔案 stamp、修正與當時的門檻，每檔保留幾組門檻版本（估算前／後）。
 - 測試：`backend/tests/test_fit_dataset_prereqs.py`（合成 FIT ＋ tmp SQLite，不碰 WKO5 資料夾與真實 DB）。
 
-**時區**：`FitFolderDataset` 把 FIT 的 UTC 起始時間換成運動員當地時間再取日期（`backend/engine/wko5expr/fitdataset.py:545`、`backend/engine/wko5expr/fitdataset.py:599-601`；naive 時間視為 UTC），時區來源與同步一致：`athlete.timezone` 設定 → `WKO5COACH_TZ` → 自動偵測（`athlete.timezone.auto`：同步下載新檔後由最新 FIT 的當地時間偏移決定，瀏覽器 Intl 時區一致時優先、含日光節約；`backend/engine/localtime.py`）→ 系統時區（`athlete_tz`，`backend/engine/wko5expr/datasource.py:90`；`resolve_tz`，`backend/settings/repository.py:489`）。測試：`backend/tests/test_scan_and_tz.py:115`、`backend/tests/test_scan_and_tz.py:124`、`backend/tests/test_scan_and_tz.py:130`、`backend/tests/test_region_time.py`。
+**時區**：`FitFolderDataset` 把 FIT 的 UTC 起始時間換成運動員當地時間再取日期（`backend/engine/wko5expr/fitdataset.py:545`、`backend/engine/wko5expr/fitdataset.py:599-601`；naive 時間視為 UTC），時區來源與同步一致：`athlete.timezone` 設定 → `WKO5COACH_TZ` → 自動偵測（`athlete.timezone.auto`：同步下載新檔後由最新 FIT 的當地時間偏移決定，瀏覽器 Intl 時區一致時優先、含日光節約；`backend/engine/localtime.py`）→ 系統時區（`athlete_tz`，`backend/engine/wko5expr/datasource.py:92`；`resolve_tz`，`backend/settings/repository.py:492`）。測試：`backend/tests/test_scan_and_tz.py:115`、`backend/tests/test_scan_and_tz.py:124`、`backend/tests/test_scan_and_tz.py:130`、`backend/tests/test_region_time.py`。
 
-**路線圖設定**（`charts.map.basemap` / `charts.map.overlays`，`backend/settings/repository.py:124-125`）：預設底圖 `None` = 依地區（tw `rudy`、intl `osm`，`backend/api/sync.py:254-255`）、無疊加層。底圖限 `MAP_BASEMAPS`、疊加層須為 `MAP_OVERLAYS` 內不重複的清單（`backend/settings/repository.py:245-246`、`backend/settings/repository.py:361-366`），不合法時 `PUT /sync/settings` 回 400。API 欄位在 `backend/api/sync.py:193-194`，對應的設定鍵在 `:212`。地圖本身屬 viewer，見 wko5-engine.spec.md。
+**路線圖設定**（`charts.map.basemap` / `charts.map.overlays`，`backend/settings/repository.py:124-125`）：預設底圖 `None` = 依地區（tw `rudy`、intl `osm`，`backend/api/sync.py:278-279`）、無疊加層。底圖限 `MAP_BASEMAPS`、疊加層須為 `MAP_OVERLAYS` 內不重複的清單（`backend/settings/repository.py:248-249`、`backend/settings/repository.py:364-369`），不合法時 `PUT /sync/settings` 回 400。API 欄位在 `backend/api/sync.py:217-218`，對應的設定鍵在 `:236`。地圖本身屬 viewer，見 wko5-engine.spec.md。
 
-**接線**：`_dataset()`（`backend/api/wko5views.py:188`）經 `_dataset_key`（`backend/api/wko5views.py:177`）讀 `current_source()`——資料來源的資料夾（`coros` / `tp`），只有 `charts.data_source = wko5` 且有 WKO5 athlete 檔時才是 `wko5`——並以 `source_stamp()` 當快取 key（`backend/api/wko5views.py:184`）；`_dataset_cfg`（`backend/api/wko5views.py:160`）呼叫 `dataset_for_source(source, ATHLETE_DIR, config)`（`backend/api/wko5views.py:146`）：`coros` / `tp` 建 `FitFolderDataset`（只讀一個資料夾，不合併），`wko5` 照舊是 WKO5 `Dataset`。總覽（`backend/api/overview.py:30`）與功率計算機（`backend/api/racepower.py:54`）都走同一個 `_dataset()`。render cache 把 dataset 的 `source` / `source_stamp` 放進 key（`backend/engine/wko5expr/render_cache.py:116`），圖表請求本身也帶 `source`，所以換來源或同步新檔案都不會拿到舊圖。圖表頁右上角有資料來源切換（`#source-chip` + `sourcechip.js`，`backend/static/wko5_viewer.html:411`），設定頁的說明也改成已生效（`backend/static/settings.html:333`）。實測（2026-09-30，本機資料）：`coros` 17 筆活動，5 個 view 共 186 張圖 0 錯誤；`wko5` 預設的輸出與改動前相同（只少了地圖面板不再使用的 `track`）。
+**接線**：`_dataset()`（`backend/api/wko5views.py:188`）經 `_dataset_key`（`backend/api/wko5views.py:177`）讀 `current_source()`——資料來源的資料夾（`coros` / `tp`），只有 `charts.data_source = wko5` 且有 WKO5 athlete 檔時才是 `wko5`——並以 `source_stamp()` 當快取 key（`backend/api/wko5views.py:184`）；`_dataset_cfg`（`backend/api/wko5views.py:160`）呼叫 `dataset_for_source(source, ATHLETE_DIR, config)`（`backend/api/wko5views.py:146`）：`coros` / `tp` 建 `FitFolderDataset`（只讀一個資料夾，不合併），`wko5` 照舊是 WKO5 `Dataset`。總覽（`backend/api/overview.py:32`）與功率計算機（`backend/api/racepower.py:54`）都走同一個 `_dataset()`。render cache 把 dataset 的 `source` / `source_stamp` 放進 key（`backend/engine/wko5expr/render_cache.py:116`），圖表請求本身也帶 `source`，所以換來源或同步新檔案都不會拿到舊圖。圖表頁右上角有資料來源切換（`#source-chip` + `sourcechip.js`，`backend/static/wko5_viewer.html:411`），設定頁的說明也改成已生效（`backend/static/settings.html:338`）。實測（2026-09-30，本機資料）：`coros` 17 筆活動，5 個 view 共 186 張圖 0 錯誤；`wko5` 預設的輸出與改動前相同（只少了地圖面板不再使用的 `track`）。
 
 **COROS 課表推送**（`backend/sync/coros_workouts.py`，把本專案的計畫課表依日 / 週 / 期推到 COROS 並記錄在 `coros_plan_push` 表）：屬於計畫功能，規格見 overview.spec.md。
 
@@ -719,7 +734,7 @@ TP 1086 筆（796 筆標 `duplicate_of`），COROS 808 筆。功率回測差異�
 | Risk | Likelihood | Impact | Mitigation | 現況 |
 |------|-----------|--------|------------|------|
 | Coros API endpoint 改版 | Medium | High | 追蹤 `xballoy/coros-api` issue | 已偵測到 `/activity/fit/url` 失效，改用 `/activity/detail/download` |
-| Region server 變動 | Low | High | 每次登入重新偵測 base URL | 已實作 `_detect_data_base()`（`backend/sync/coros_client.py:125`） |
+| Region server 變動 | Low | High | 每次登入重新偵測 base URL | 已實作 `_detect_data_base()`（`backend/sync/coros_client.py:127`） |
 | `yfheader` 要求改版 | Low | Medium | 動態讀取 userId，易調整 | 已實作 |
 | Token TTL 縮短 | Low | Medium | 長時間 sync 時 token 可能 mid-sync 失效 | 發生時記 error，提示重新登入 |
 | 運動類型無 FIT | Low | Low | `detail/download` 返回 error，已 graceful skip | 已測試 custom (9904)、strength (402) 均 skip |
