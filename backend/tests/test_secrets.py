@@ -50,6 +50,7 @@ def test_missing_key_with_sealed_file_refuses_to_generate(monkeypatch, tmp_path)
     with pytest.raises(S.SecretKeyMissing) as ei:
         S.seal("x")
     assert "SECRET_KEY_MISSING" in str(ei.value) and "docs/secrets-and-keys.md" in str(ei.value)
+    assert "log out of COROS" in str(ei.value)          # SP-355 L5: the way back without the key
     assert not (tmp_path / "secret.key").exists()
 
 
@@ -68,6 +69,33 @@ def test_missing_key_with_sealed_db_column_refuses(monkeypatch, tmp_path):
     with pytest.raises(S.SecretKeyMissing):
         S.unseal("enc:v1:abc")
     assert not (tmp_path / "secret.key").exists()
+
+
+def test_sealed_columns_cover_every_credential_column_and_the_sealed_passwords(monkeypatch, tmp_path):
+    """SP-355: the 「記住密碼」 columns were missing, so a DB whose only ciphertext was a remembered
+    password (tokens expired / logged out) let a lost key be silently regenerated — and the password
+    could never be unsealed again. Legacy plaintext (pre-2026-09-30 rows) is not ciphertext."""
+    import sqlite3
+    from backend import data_registry as R
+    cols = {c for t, c in S.SEALED_DB_COLUMNS if t == "sync_state"}
+    assert {"coros_password_sealed", "tp_password_sealed"} <= cols
+    assert cols == set(R.table("sync_state").secret_fields)
+    db = tmp_path / "w.db"
+    con = sqlite3.connect(db)
+    con.execute("CREATE TABLE sync_state (athlete_id INT, tp_access_token TEXT, tp_refresh_token TEXT,"
+                " tp_web_cookie TEXT, coros_access_token TEXT, coros_password_sealed TEXT,"
+                " tp_password_sealed TEXT)")
+    con.execute("INSERT INTO sync_state VALUES (1, 'legacy-plain', NULL, NULL, 'legacy-plain', NULL, NULL)")
+    con.commit()
+    monkeypatch.setattr(S, "_db_path", lambda: db)
+    assert S.ciphertext_exists() is False              # plaintext is readable with any key
+    for col in ("coros_password_sealed", "tp_password_sealed"):
+        con.execute(f"UPDATE sync_state SET {col} = 'enc:v1:abc'")
+        con.commit()
+        assert S.ciphertext_exists() is True, col
+        con.execute(f"UPDATE sync_state SET {col} = NULL")
+        con.commit()
+    con.close()
 
 
 def test_key_generated_only_without_ciphertext_and_env_wins(monkeypatch, tmp_path):
