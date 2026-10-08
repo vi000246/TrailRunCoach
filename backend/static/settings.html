@@ -1617,7 +1617,7 @@ const CAL = "/api/v1/calib";
 function calibRows(items) {
   $("calib").hidden = !items.length;
   $("calib-rows").innerHTML = items.map((it) => `<tr data-n="${esc(it.name)}">
-    <td>${esc(it.label)}</td>
+    <td>${esc(it.label)}${it.warn ? `<div class="err-text">⚠ ${esc(it.warn)}</div>` : ""}</td>
     <td>${Number(it.value).toFixed(it.digits)} ${esc(it.unit)} ${calibChip(it.chip, it.source)}</td>
     <td><input type="number" step="${it.integer ? 1 : "any"}" style="width:80px" placeholder="手動" ${it.source === "user" ? `value="${it.value}"` : ""}
       ${it.bounds ? `min="${it.bounds[0]}" max="${it.bounds[1]}"` : ""}>
