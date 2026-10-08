@@ -324,7 +324,7 @@ def test_plan_labels_use_the_personal_shift(client, monkeypatch):   # noqa: F811
     gre.runwalk = {"shift": 0.4, "personal": True, "n": 500}
     monkeypatch.setattr(RP, "_grade_models", lambda: {"grade_re": gre, "hike_speed": GM.fit_hike_speed([]), "moving_rows": []})
     p = _plan(client)
-    assert p["summary"]["runwalk"] == {"shift": 0.4, "personal": True}
+    assert p["summary"]["runwalk"] == {"shift": 0.4, "personal": True, "speed_gait": False}
     climbs = [s for s in p["segments"] if s["grade"] >= 0.03]
     assert climbs and all(s["gait"] == RW.gait(s["grade"], s["speed_ms"], 0.4) for s in climbs)
 
@@ -370,10 +370,12 @@ def test_speed_gait_summary_is_the_gate():
     def row(errs):
         return {"category": "trail", "err_v2": 0.0, "segments": [
             {"grade": g, "err": e, "err_speed": es, "gait": "walk", "gait_speed": gs} for g, e, es, gs in errs]}
-    better = [row([(0.10, 0.10, 0.02, "run"), (0.20, -0.08, -0.05, "walk"), (0.0, 0.03, 0.03, None)])] * 3
+    better = [row([(0.10, 0.10, 0.02, "run"), (0.20, -0.08, -0.05, "walk"), (0.0, 0.03, 0.03, None)])] * 20
     s = BT.speed_gait_summary(better)
-    assert s["no_worse"] and s["climbs"]["gait"]["n"] == 6 and s["changed"] == 3
-    worse = [row([(0.10, 0.02, 0.10, "run"), (0.20, -0.05, -0.08, "walk")])] * 3
+    assert s["no_worse"] and s["climbs"]["gait"]["n"] == 40 and s["changed"] == 20 and s["reason"] == "ok"
+    # SP-229 review: too few changed climbs never pass (≥ 20 over ≥ 3 activities)
+    assert BT.speed_gait_summary(better[:3])["reason"] == "few"
+    worse = [row([(0.10, 0.02, 0.10, "run"), (0.20, -0.05, -0.08, "walk")])] * 20
     assert not BT.speed_gait_summary(worse)["no_worse"]
     assert not BT.speed_gait_summary([])["no_worse"]
 

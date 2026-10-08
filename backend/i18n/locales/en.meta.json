@@ -159,9 +159,21 @@
     "draft": true,
     "src": "backend/engine/workout_steps.py:1177"
   },
+  "5 區目前沒有開放": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2643"
+  },
+  "5 區維持課（長距離越野的專項期後段每 3 週 1 堂）：照目前那一階，判定但不算進階": {
+    "draft": true,
+    "src": "backend/engine/overview.py:1007"
+  },
   "5 區解鎖": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:1999"
+  },
+  "5 區還沒開放": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2634"
   },
   "5 區開放": {
     "draft": true,
@@ -2239,13 +2251,13 @@
     "draft": true,
     "src": "backend/api/plan.py:472"
   },
-  "出發前 14 天內在 2,750 m 以上連睡 2 晚（例如{site}）": {
-    "draft": true,
-    "src": "backend/engine/altitude.py:246"
+  "出發前 14 天內在 2,750 m 以上連睡 2 晚": {
+    "draft": false,
+    "src": "backend/engine/altitude.py:365"
   },
-  "出發前 14 天內找一個週末，在 2,750 m 以上睡 2 晚（例如{site}）。可選：{days}": {
-    "draft": true,
-    "src": "backend/engine/altitude.py:243"
+  "出發前 14 天內找一個週末，在 2,750 m 以上睡 2 晚。可選：{days}": {
+    "draft": false,
+    "src": "backend/engine/altitude.py:362"
   },
   "分": {
     "draft": true,
@@ -2530,10 +2542,6 @@
   "吃": {
     "draft": true,
     "src": "backend/engine/racepower/seg_targets.py:87"
-  },
-  "合歡山松雪樓 {m:,} m": {
-    "draft": true,
-    "src": "backend/engine/altitude.py:241"
   },
   "吊在單槓上不動，練握力。": {
     "draft": true,
@@ -3415,6 +3423,10 @@
     "draft": true,
     "src": "backend/engine/aet_test.py:377"
   },
+  "心率飄移是 bad，這週先不排強度課": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2589"
+  },
   "心率飄移（功率）": {
     "draft": true,
     "src": "backend/engine/workout_review.py:549"
@@ -3626,6 +3638,10 @@
   "拉繩、岩稜要拉得住自己。基礎循環、最大肌力期和維持課會練。": {
     "draft": true,
     "src": "backend/engine/strength_moves.py:103"
+  },
+  "按 ✕ 關掉後，這趟行程不再顯示這個提醒；出發前 14 天內的高度檢查照常出現。": {
+    "draft": false,
+    "src": "backend/engine/altitude.py:379"
   },
   "按「好了」才會結案（好了的日期之後可以在傷病紀錄改）；結案後傷別要避開的課和疼痛燈號都解除，同部位 {recur} 天內再痛會標成復發。按「還沒」{snooze} 天內不再問。回到傷前 75–80% 的量才恢復正常訓練（Ohio State Wexner 回跑指引，臨床機構）；「{n} 次、跨 {span} 天」是推估。": {
     "draft": true,
@@ -4210,6 +4226,10 @@
   "本週強度預算不夠（{room}，需要 ≥ {need} 分）": {
     "draft": true,
     "src": "backend/engine/technical.py:209"
+  },
+  "本週的強度課是 5 區維持課（長距離越野的專項期後段每 3 週 1 堂，推估），3 區這週不排": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2766"
   },
   "本週維持或減量，不要再加": {
     "draft": true,
@@ -4875,10 +4895,6 @@
     "draft": true,
     "src": "backend/engine/specific_phase.py:473"
   },
-  "玉山國家公園建議上 3,000 m 以上的高山前，先在 2,500 m 左右住約 1 晚。塔塔加、大禹嶺低於 2,750 m，只適合行前一晚，不算進適應週末的 2 晚。": {
-    "draft": true,
-    "src": "backend/engine/altitude.py:260"
-  },
   "玉山國家公園管理處〈高山生理、高山症預防及處理〉": {
     "draft": true,
     "src": "backend/engine/altitude.py:89"
@@ -5203,17 +5219,17 @@
     "draft": true,
     "src": "backend/engine/planning.py:233"
   },
-  "第一晚在 3,000 m 以上：行前一晚先住約 2,500 m（玉山國家公園建議；例如塔塔加 {a:,} m、大禹嶺 {b:,} m）。": {
-    "draft": true,
-    "src": "backend/engine/altitude.py:318"
+  "第一晚在 3,000 m 以上：行前一晚住 2,500 m 左右（玉山國家公園建議）。": {
+    "draft": false,
+    "src": "backend/engine/altitude.py:430"
   },
   "第一晚睡在約 {m:,.0f} m，超過 3,400 m 屬高風險（CDC；排雲山莊 3,402 m 就在線上）": {
     "draft": true,
     "src": "backend/engine/altitude.py:202"
   },
-  "第一晚睡在約 {m:,.0f} m：行前一晚先住約 2,500 m（例如塔塔加 {a:,} m、大禹嶺 {b:,} m）": {
-    "draft": true,
-    "src": "backend/engine/altitude.py:231"
+  "第一晚睡在約 {m:,.0f} m：行前一晚住 2,500 m 左右（玉山國家公園建議；這一晚低於 2,750 m，不算進適應週末的 2 晚）。": {
+    "draft": false,
+    "src": "backend/engine/altitude.py:370"
   },
   "等基礎期重新累積到 EF 持平（停滯法）": {
     "draft": true,
@@ -5615,10 +5631,6 @@
     "draft": false,
     "src": "backend/engine/adapt.py"
   },
-  "課前 1–4 小時吃含碳水的一餐或點心，不要空腹做（Aird 2018、Mata 2019、Impey 2018）": {
-    "draft": true,
-    "src": "backend/engine/session_fuel.py:32"
-  },
   "課表": {
     "draft": true,
     "src": "backend/engine/workout_review.py:2734"
@@ -5694,6 +5706,14 @@
   "請重新整理頁面後再試一次": {
     "draft": true,
     "src": "backend/tenancy_mw.py:260"
+  },
+  "護欄擋下這週的強度課": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2607"
+  },
+  "護欄（CTL 增幅到注意線）這週只排閾值": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2614"
   },
   "讓腿部在高比例最大力量下重複上千次，限制來自腿而不是呼吸（Uphill Athlete）": {
     "draft": true,
@@ -5906,6 +5926,14 @@
   "走路或極慢跑": {
     "draft": true,
     "src": "backend/engine/interval_library.py:62"
+  },
+  "走（你在這個坡度多半走）": {
+    "draft": true,
+    "src": "backend/engine/racepower/planner.py:682"
+  },
+  "走（依這段的預估速度，用走的比跑省力）": {
+    "draft": true,
+    "src": "backend/engine/racepower/planner.py:682"
   },
   "起始 CTL 從 {date} 起算（手動設定）：前 {days} 天不看 ramp": {
     "draft": true,
@@ -6179,6 +6207,10 @@
     "draft": true,
     "src": "backend/engine/status.py:595"
   },
+  "輕鬆跑心率偏高（強度分配是 bad）": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2634"
+  },
   "輕鬆跑的心率餘裕（AeT 以上幾 bpm 還算輕鬆）": {
     "draft": true,
     "src": "backend/engine/threshold_calib.py:131"
@@ -6365,7 +6397,19 @@
   },
   "這場賽事預估 4 小時以上、當天的強度不到 5 區，強度課只排 3 區（上坡版），5 區不排": {
     "draft": true,
-    "src": "backend/engine/quality_gate.py:2540"
+    "src": "backend/engine/quality_gate.py:2654"
+  },
+  "這場賽事預估 4 小時以上、當天的強度不到 5 區：後段強度課只排 3 區（上坡版），5 區每 3 週只留 1 堂維持課（賽前第 4 週），這週 5 區不排": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2640"
+  },
+  "這場賽事預估 4 小時以上：後段強度課以 3 區（上坡版）為主，每 3 週留 1 堂 5 區維持課，就是這週（照目前那一階，不往上爬）": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2631"
+  },
+  "這場賽事預估 4 小時以上：後段強度課以 3 區（上坡版）為主；這週輪到 5 區維持課，但{why}，所以不排": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2635"
   },
   "這天不是休息日": {
     "draft": true,
@@ -6458,6 +6502,10 @@
   "這週的 3 區改排接近閾值的巡航 3×7 分（97–100% CP），比階梯那一階更接近比賽強度": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:2546"
+  },
+  "這週輪到 5 區維持課，但{why}，所以不排": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:2585"
   },
   "這週長跑全程輕鬆：馬拉松配速段隔週排，逐週加長（推估）": {
     "draft": true,
@@ -6718,6 +6766,10 @@
   "里程碑：不給「幾年後」——經驗的研究看的是跑過哪些距離，不是年數（Hoffman 2013：第一場超馬前跑了 3–15 年都有）；週量的日期照現在的週量每週 +10 %、每 4 週一週恢復推算，是推估": {
     "draft": true,
     "src": "backend/engine/race_feasibility.py:130"
+  },
+  "重新上鎖的停跑天數（{relock} 天）不能短於解鎖條件的最長不跑天數（{gap} 天）：連續紀錄還沒斷，不該先重新上鎖": {
+    "draft": true,
+    "src": "backend/engine/advanced_params.py:93"
   },
   "重新校正錨點，讓所有區間跟著真實體能移動（Friel；Uphill Athlete）": {
     "draft": true,

@@ -27,8 +27,11 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import contextlib
 import math
+import os
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Callable, Optional
@@ -42,7 +45,8 @@ CELL_DEG = 0.25                  # batching cell
 POINT_DEG = 0.01                 # an effort's point, ~1 km
 ELEV_STEP_M = 10.0
 # precipitation (SP-299): asked in the same call, so the activities' rain costs no extra call;
-# a day cached before it was added has none (no rain hint there, never a refetch)
+# a day cached before it was added has none (no rain hint there; a build never refetches it —
+# only the one-time backfill of the last 12 months does, engine/rain_backfill.py)
 HOURLY = "temperature_2m,relative_humidity_2m,dew_point_2m,precipitation"
 TIMEZONE = "auto"                # local wall-clock time at the point = the activity's start clock
 # Hadley sum (°F + °F) above which pace suffers >= ~4.5 % (Hadley's 151–160
@@ -144,14 +148,64 @@ def conditions(days_js: list[dict], a: dt.datetime, b: dt.datetime) -> Optional[
             "archive_elev_m": merged["elevation"]}
 
 
+def has_rain(js: Optional[dict]) -> bool:
+    """Whether a cached archive day of a point carries the hourly precipitation (SP-299): a day
+    cached before it was added to HOURLY has none."""
+    return isinstance(js, dict) and (js.get("hourly") or {}).get("precipitation") is not None
+
+
+def merge_rain(old: Optional[dict], new: dict) -> dict:
+    """The rain backfill's cache entry: `old` (a day cached before precipitation was asked) with
+    only `hourly.precipitation` taken from `new`, aligned on `hourly.time` (an hour `new` lacks is
+    None), so the temperature / humidity / dew point a build already used never move. `new` in
+    full when `old` has no hourly data."""
+    oh = (old or {}).get("hourly") or {}
+    times = oh.get("time") or []
+    if not times:
+        return new
+    nh = new.get("hourly") or {}
+    rain = dict(zip(nh.get("time") or [], nh.get("precipitation") or []))
+    return {**old, "hourly": {**oh, "precipitation": [rain.get(t) for t in times]}}
+
+
+def tmp_path(p: Path) -> Path:
+    """A half-written file's name next to `p`, unique per process and thread: two writers of the
+    same file never share one (data_registry: **/*.tmp)."""
+    return p.with_name(f"{p.name}.{os.getpid()}.{threading.get_ident()}.tmp")
+
+
+def write_atomic(p: Path, text: str) -> None:
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = tmp_path(p)
+    tmp.write_text(text, "utf-8")
+    tmp.replace(p)
+
+
 class Fetcher:
     """Archive days of points, grouped by (cell, day): from the disk cache or
-    one call per group (per MAX_POINTS points)."""
+    one call per group (per MAX_POINTS points).
 
-    def __init__(self, root: Path, get: Callable = WX._http_get, today: Optional[dt.date] = None):
+    `refetch(js)`: a cached point for which it is True is asked again and its cache entry
+    replaced (the one-time rain backfill, engine/rain_backfill.py: a day cached without
+    precipitation); None = the cache is always reused. `merge`: such an entry keeps its other
+    values and only gains the new precipitation (`merge_rain`). `workers` calls run at once and
+    `pace_s` seconds pass between those batches (the backfill: one call at a time, paced, in the
+    caller's own thread — no pool, so a daemon caller never holds the process at exit). `stop`: a
+    set event ends the run before the next call (the rest counted as skipped) and cuts the pause."""
+
+    def __init__(self, root: Path, get: Callable = WX._http_get, today: Optional[dt.date] = None,
+                 refetch: Optional[Callable[[dict], bool]] = None, workers: int = 0, pace_s: float = 0.0,
+                 sleep: Optional[Callable[[float], None]] = None, merge: bool = False,
+                 stop: Optional[threading.Event] = None):
         self.root = Path(root)
         self.get = get
         self.today = today or dt.date.today()
+        self.refetch = refetch
+        self.merge = merge
+        self.stop = stop
+        self.workers = workers or WORKERS
+        self.pace_s = pace_s
+        self.sleep = sleep or (stop.wait if stop is not None else time.sleep)
         self.stats = {"needed": 0, "points": 0, "cache_hits": 0, "calls": 0, "failed": 0, "skipped": 0,
                       "empty": 0, "recent": 0}
         self.errors: list[str] = []
@@ -175,11 +229,7 @@ class Fetcher:
         return job, res, None
 
     def _save(self, cell, day, doc: dict) -> None:
-        p = cache_path(self.root, cell, day)
-        p.parent.mkdir(parents=True, exist_ok=True)
-        tmp = p.with_suffix(".tmp")
-        tmp.write_text(json.dumps(doc, separators=(",", ":")), "utf-8")
-        tmp.replace(p)
+        write_atomic(cache_path(self.root, cell, day), json.dumps(doc, separators=(",", ":")))
 
     def fetch_all(self, need: dict, progress: Callable = lambda *_: None) -> dict:
         """need: {(cell, day): {point, ...}} -> {(cell, day, point): archive json}."""
@@ -192,7 +242,7 @@ class Fetcher:
             missing = []
             for p in sorted(need[key], key=point_key):
                 js = have.get(point_key(p))
-                if js is not None:
+                if js is not None and not (self.refetch and self.refetch(js)):
                     out[(*key, p)] = js
                 else:
                     missing.append(p)
@@ -204,14 +254,19 @@ class Fetcher:
                 for s in range(0, len(grp), MAX_POINTS):
                     jobs.append((key, grp[s:s + MAX_POINTS]))
         consec = done = 0
-        with ThreadPoolExecutor(max_workers=WORKERS) as pool:
-            for s in range(0, len(jobs), WORKERS):
-                if consec >= MAX_CONSEC_FAIL or self.stats["calls"] >= MAX_CALLS:
+        nw = self.workers
+        stopped = lambda: self.stop is not None and self.stop.is_set()
+        with (ThreadPoolExecutor(max_workers=nw) if nw > 1 else contextlib.nullcontext()) as pool:
+            run_batch = pool.map if pool is not None else map
+            for s in range(0, len(jobs), nw):
+                if s and self.pace_s > 0 and not stopped():
+                    self.sleep(self.pace_s)       # paced: never a burst (the backfill)
+                if consec >= MAX_CONSEC_FAIL or self.stats["calls"] >= MAX_CALLS or stopped():
                     self.stats["skipped"] += len(jobs) - s
                     break
-                batch = jobs[s:s + WORKERS]
+                batch = jobs[s:s + nw]
                 self.stats["calls"] += len(batch)
-                for (key, pts), res, err in pool.map(self._fetch, batch):
+                for (key, pts), res, err in run_batch(self._fetch, batch):
                     done += 1
                     if res is None:
                         self.stats["failed"] += 1
@@ -226,6 +281,8 @@ class Fetcher:
                     store = doc.setdefault("points", {})
                     for p, r in zip(pts, res):
                         js = {"elevation": r.get("elevation"), "timezone": r.get("timezone"), "hourly": r["hourly"]}
+                        if self.merge:
+                            js = merge_rain(store.get(point_key(p)), js)
                         out[(*key, p)] = js
                         if not [v for v in r["hourly"].get("temperature_2m") or [] if v is not None]:
                             self.stats["empty"] += 1
@@ -373,6 +430,24 @@ def activity_rain(days_js: list[dict], a: dt.datetime, b: dt.datetime) -> Option
     return round(total, 1) if n else None
 
 
+def activity_point(tr) -> Optional[tuple]:
+    """(a, b, point, [(cell, day), …]) of one activity's weather: its first → last sample
+    (local wall clock), its mean position / elevation as the queried point and the archive
+    days it needs. None without a usable track (no GPS, < 2 samples)."""
+    if tr is None or len(tr) < 2:
+        return None
+    t = tr.t[np.isfinite(tr.t)]
+    if not len(t):
+        return None
+    a, b = effort_window(tr.start, t[0], t[-1])
+    pl = place(tr, 0, len(tr) - 1)
+    if pl is None:
+        return None
+    cell = cell_of(pl["lat"], pl["lon"])
+    pt = point_of(pl["lat"], pl["lon"], pl["elev_m"])
+    return a, b, pt, [(cell, d) for d in window_days(a, b)]
+
+
 def fill_activities(tracks: dict, root: Path, get: Callable = WX._http_get,
                     progress: Callable = lambda *_: None, today: Optional[dt.date] = None,
                     since: Optional[dt.date] = None) -> dict:
@@ -383,20 +458,12 @@ def fill_activities(tracks: dict, root: Path, get: Callable = WX._http_get,
     need: dict = {}
     todo = []
     for f, tr in tracks.items():
-        if tr is None or len(tr) < 2:
+        ap = activity_point(tr)
+        if ap is None:
             continue
-        t = tr.t[np.isfinite(tr.t)]
-        if not len(t):
-            continue
-        a, b = effort_window(tr.start, t[0], t[-1])
+        a, b, pt, keys = ap
         if since and b.date() < since:
             continue
-        pl = place(tr, 0, len(tr) - 1)
-        if pl is None:
-            continue
-        cell = cell_of(pl["lat"], pl["lon"])
-        pt = point_of(pl["lat"], pl["lon"], pl["elev_m"])
-        keys = [(cell, d) for d in window_days(a, b)]
         for k in keys:
             need.setdefault(k, set()).add(pt)
         todo.append((f, tr, pt, keys))
@@ -409,11 +476,7 @@ def fill_activities(tracks: dict, root: Path, get: Callable = WX._http_get,
     doc = {"version": ACTIVITY_WX_VERSION, "at": dt.datetime.now().isoformat(timespec="seconds"),
            "stats": {**fch.stats, "activities": len(todo), "with_weather": sum(1 for v in out.values() if v),
                      "errors": fch.errors}, "attribution": WX.ATTRIBUTION, "activities": out}
-    p = Path(root) / ACTIVITY_WX_FILE
-    p.parent.mkdir(parents=True, exist_ok=True)
-    tmp = p.with_suffix(".tmp")
-    tmp.write_text(json.dumps(doc, ensure_ascii=False, separators=(",", ":")), "utf-8")
-    tmp.replace(p)
+    write_atomic(Path(root) / ACTIVITY_WX_FILE, json.dumps(doc, ensure_ascii=False, separators=(",", ":")))
     return doc
 
 

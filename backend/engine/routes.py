@@ -1583,6 +1583,17 @@ class Builder:
             self.thread.start()
             return True
 
+    def start_task(self, fn: Callable[[], None], name: str = "route-task") -> Optional[threading.Thread]:
+        """Run fn() in a daemon thread in the build's own slot (the rain backfill, SP-299): while
+        it runs, running() is True, so no build starts (start → False) and nothing else writes the
+        weather cache or activity_weather.json. `status` is left as it is. None when busy."""
+        with self.lock:
+            if self.running():
+                return None
+            self.thread = threading.Thread(target=fn, daemon=True, name=name)
+            self.thread.start()
+            return self.thread
+
     def _progress(self, phase: str, done: int, total: int) -> None:
         self.status.update(phase=phase, done=done, total=total)
 

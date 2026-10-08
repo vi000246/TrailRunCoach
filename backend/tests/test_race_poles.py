@@ -62,19 +62,39 @@ def test_pole_state_user_wins_else_the_race():
 
 # ---- which activities a race covers ----------------------------------------------------
 
-def test_one_day_race_uses_the_existing_match():
+def test_one_day_race_covers_every_trail_run_and_hike_of_the_day():
+    """Owner 2026-10-07 (SP-300 follow-up): on the race day every 越野跑 / 登山健行 activity defaults
+    to 有杖 — the date + kind + distance match no longer limits this default."""
     d = dt.date(2026, 5, 10)
     acts = [_w(d, "trail", km=21.5), _w(d, "trail", km=5.0, hour=17),     # the race and a shake-out
             _w(d + dt.timedelta(days=1), "trail", km=21.0)]
     ev = Event(id="r1", name="山之賽", date=d.isoformat(), kind="race", distance_km=22.0, poles=True)
     ds = _ds(acts, [ev])
-    assert AT.race_poles(ds) == {0: "山之賽"}                              # date + kind + distance
+    assert AT.race_poles(ds) == {0: "山之賽", 1: "山之賽"}                  # the whole day, not the next
     # 「會用登山杖」 not ticked (or ticked off later): nothing
     assert AT.race_poles(_ds(acts, [Event(id="r1", name="山之賽", date=d.isoformat(), kind="race",
                                           distance_km=22.0)])) == {}
-    # no matching run (way off the distance): nothing
-    assert AT.race_poles(_ds([_w(d, "trail", km=8.0)], [ev])) == {}
+    # the watch distance > 25 % off the race: still the race day's trail run
+    assert AT.race_poles(_ds([_w(d, "trail", km=8.0)], [ev])) == {0: "山之賽"}
+    assert AT.race_poles(_ds([_w(d, "trail", km=40.0)], [ev])) == {0: "山之賽"}
+    # a trail race recorded as a hike: covered too
+    assert AT.race_poles(_ds([_w(d, "hike", km=20.0)], [ev])) == {0: "山之賽"}
+    # a road run on the race day is not a pole activity; the day before / after are not the race
+    assert AT.race_poles(_ds([_w(d, "road", km=5.0, hour=18), _w(d - dt.timedelta(days=1), "trail", km=22.0)],
+                             [ev])) == {}
     assert AT.race_poles(FakeDataset(acts, TODAY)) == {}                   # no plan at all
+
+
+def test_race_day_default_never_beats_the_users_choice():
+    d = dt.date(2026, 5, 10)
+    ev = Event(id="r1", name="山之賽", date=d.isoformat(), kind="race", distance_km=22.0, poles=True)
+    ds = _ds([_w(d, "trail", km=8.0), _w(d, "hike", km=30.0, hour=12), _w(d, "trail", km=21.0, hour=17)], [ev])
+    race = AT.race_poles(ds)
+    assert sorted(race) == [0, 1, 2]
+    states = [AT.pole_state(tags, race.get(i)) for i, tags in enumerate(([], [WITHOUT], [NONE]))]
+    assert states[0] == {"poles": "with", "poles_user": None, "poles_race": "山之賽"}
+    assert states[1]["poles"] == "without" and states[1]["poles_race"] is None   # the user's 沒杖 wins
+    assert states[2]["poles"] is None and states[2]["poles_user"] == "none"      # their own 未標 wins
 
 
 def test_multi_day_trip_covers_each_day():
