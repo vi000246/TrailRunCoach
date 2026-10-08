@@ -356,7 +356,7 @@ async def _sync_settings(repo: SettingsRepository) -> dict:
     # 「負荷」 steps: the TSS → COROS TL conversion in effect (engine/coros_tl.py, 推估; refit after syncs)
     from backend.engine import coros_tl as TL
     out["coros_tl"] = TL.describe(await repo.get(TL.KEY), await repo.get(TL.LOAD_KEY))
-    # 「負荷」 by RPE: TSS per session-RPE unit in effect (engine/rpe_load.py, 推估; refit after syncs)
+    # 「負荷」 by RPE: each level's TSS per hour in effect (engine/rpe_load.py, 推估; refit per level after syncs)
     from backend.engine import rpe_load as RL
     out["rpe_load"] = RL.describe(await repo.get(RL.KEY))
     creds, source = lookup_client_creds()

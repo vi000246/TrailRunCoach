@@ -9,8 +9,9 @@ in neither the FIT file nor the activity list. The same object has `sportNote` a
 fields: never read (the user, 2026-10-06 — the app's own activity note is the note).
 
 Stored raw in workout_files.coros_feel and mapped onto the existing 10-point
-workout_files.rpe (the effort tag, engine/activity_tags.effort_from_rpe, and the RPE → TSS
-factor, engine/rpe_load.refit, read that column):
+workout_files.rpe (the effort tag, engine/activity_tags.effort_from_rpe, and the per-level
+RPE → TSS per hour fit, engine/rpe_load.refit — one COROS level = one load level — read that
+column):
 
   COROS  1 Very Light → 2   2 Light → 4   3 Moderate → 5   4 Hard → 7   5 Max Effort → 10
 
