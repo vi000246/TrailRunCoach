@@ -132,6 +132,55 @@ def test_concurrent_cadence_checks_share_one_scan(client, flat_road_athlete, mon
     assert len(calls) == 1, f"{len(calls)} scans for 3 concurrent requests"
 
 
+# ---- the warm-up: the charts' fit and scan last, owner only -----------------------------
+
+def _low_priority_run(monkeypatch, demo: bool):
+    from types import SimpleNamespace
+
+    from backend.api import activity_auto as AA
+    from backend.api import racepower as RP
+    from backend.api import wko5views
+    from backend.engine import calibrate as CAL
+    from backend.engine import plan_auto
+    order = []
+    if demo:
+        monkeypatch.setenv("WKO5COACH_MODE", "demo")
+    else:
+        monkeypatch.delenv("WKO5COACH_MODE", raising=False)
+    monkeypatch.setattr(plan_auto, "busy", lambda: False)
+    monkeypatch.setattr(wko5views, "_dataset", lambda: SimpleNamespace(today=20000.0))
+    monkeypatch.setattr(CAL, "_registry", lambda: {})
+    monkeypatch.setattr(AA, "job_for", lambda d: order.append("classify"))
+    monkeypatch.setattr(RP, "_grade_models", lambda: order.append("grade"))
+    monkeypatch.setattr(RP, "_climb_cadence", lambda: order.append("cadence"))
+    wko5views._WARM["low_again"] = False
+    wko5views._low_priority("test")
+    return order
+
+
+def test_warm_up_fits_the_charts_last_for_the_owner(monkeypatch):
+    assert _low_priority_run(monkeypatch, demo=False) == ["classify", "grade", "cadence"]
+
+
+def test_warm_up_skips_the_charts_in_the_demo(monkeypatch):
+    assert _low_priority_run(monkeypatch, demo=True) == ["classify"]
+
+
+def test_chart_warm_up_waits_for_the_classification_job(monkeypatch):
+    """One heavy job at a time: the fit starts after the classification thread ends."""
+    from types import SimpleNamespace
+
+    from backend.api import racepower as RP
+    monkeypatch.delenv("WKO5COACH_MODE", raising=False)
+    order = []
+    t = threading.Thread(target=lambda: (time.sleep(0.3), order.append("classified")))
+    t.start()
+    monkeypatch.setattr(RP, "_grade_models", lambda: order.append("grade"))
+    monkeypatch.setattr(RP, "_climb_cadence", lambda: order.append("cadence"))
+    RP.warm_charts(SimpleNamespace(thread=t))
+    assert order == ["classified", "grade", "cadence"]
+
+
 # ---- the page --------------------------------------------------------------------------
 
 NODE = shutil.which("node")
