@@ -221,7 +221,7 @@ console.log(JSON.stringify({
 }));
 """
     r = subprocess.run([NODE, "-e", js, str(ROOT / "static" / "workout_editor.js")],
-                       capture_output=True, text=True, timeout=30)
+                       capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30)
     assert r.returncode == 0, r.stderr
     g = json.loads(r.stdout)
     assert g["toRpe"] == {"type": "load", "value": 75, "rpe": "hard", "min": 42}

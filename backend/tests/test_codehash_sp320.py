@@ -127,5 +127,6 @@ def test_hashes_do_not_depend_on_the_hash_seed():
             "print(FD.estimate_code(), FD.pd_code(), AA._code_sig())")
     root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     outs = {subprocess.run([sys.executable, "-c", code], cwd=root, capture_output=True, text=True, check=True,
-                           env={**os.environ, "PYTHONHASHSEED": seed}).stdout for seed in ("1", "2")}
+                           encoding="utf-8", errors="replace",
+                           env={**os.environ, "PYTHONHASHSEED": seed, "PYTHONIOENCODING": "utf-8"}).stdout for seed in ("1", "2")}
     assert len(outs) == 1

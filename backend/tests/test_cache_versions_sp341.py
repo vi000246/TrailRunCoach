@@ -349,7 +349,8 @@ def test_the_versions_are_the_same_in_every_process():
             "'bad_activity')], T.power_cache_code(), T.bad_cache_code())")
     root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     outs = {subprocess.run([sys.executable, "-c", code], cwd=root, capture_output=True, text=True, check=True,
-                           env={**os.environ, "PYTHONHASHSEED": seed}).stdout for seed in ("1", "2")}
+                           encoding="utf-8", errors="replace",
+                           env={**os.environ, "PYTHONHASHSEED": seed, "PYTHONIOENCODING": "utf-8"}).stdout for seed in ("1", "2")}
     assert len(outs) == 1
 
 

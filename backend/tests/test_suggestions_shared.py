@@ -36,7 +36,7 @@ vm.runInNewContext(fs.readFileSync(process.argv[1], "utf8"), ctx);
 @pytest.mark.skipif(NODE is None, reason="node not installed")
 def test_box_and_page_share_one_request():
     r = subprocess.run([NODE, "-e", JS, str(STATIC / "suggestions.js")], capture_output=True, text=True,
-                       encoding="utf-8", timeout=30)
+                       encoding="utf-8", errors="replace", timeout=30)
     assert r.returncode == 0, r.stderr
     got = json.loads(r.stdout)
     assert got == {"n1": 1, "n2": 2, "same": True, "rows": 1}
