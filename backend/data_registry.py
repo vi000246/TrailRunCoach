@@ -195,7 +195,8 @@ FILES: tuple = (
     File("racepower_hike_meta.json", USER, ROOT, "the pack carried per trip (racepower/athlete.py)",
          backup=ALWAYS, deidentify=("activity files / starts",)),
     File("racepower_shares/**", USER, ROOT, "race plans the user shared by link (racepower/share.py); "
-         "never restored: a deleted / revoked link stays so", backup=ALWAYS, restore=False, deidentify=("the event's name / date / course",)),
+         "never restored: a deleted / revoked link stays so", backup=ALWAYS, restore=False,
+         deidentify=("the event's name / date / course",)),
     File("event_gpx/**", IMPORTED, ROOT, "uploaded event course GPX, gzip (engine/event_gpx.py); uploaded "
          "by the user, so backed up (no source to sync it from again)", backup=ALWAYS,
          deidentify=("GPS track",)),
