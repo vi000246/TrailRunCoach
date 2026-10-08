@@ -7,7 +7,14 @@
 | COROS / TrainingPeaks 登入 token、cookie | 本機資料庫 `~/.wko5coach/wko5coach.db` | 帳密本身預設不保存 |
 | COROS / TrainingPeaks 密碼（只有勾「記住密碼」時） | 同一個資料庫的 `sync_state.coros_password_sealed`、`tp_password_sealed`（+ `tp_username`） | 見下方「記住密碼」 |
 
-repo 裡**沒有**任何金鑰、client secret 或密文。
+另外兩樣不加密、但也不會出現在 repo 或 API 回應裡：
+
+| 資料 | 放在哪 | 說明 |
+|---|---|---|
+| Debug API 的 PIN（SP-371） | 只在伺服器的環境變數 `TRC_DEBUG_PIN`（NAS 的 `.env`） | 產生 debug token 前要輸入；沒設就不能開 debug API。見 `docs/debug-api.md` |
+| Debug API 的 token | 資料庫 `debug_tokens` 只存 SHA-256 雜湊 | token 只在產生時顯示一次，資料庫外流也還原不出來 |
+
+repo 裡**沒有**任何金鑰、client secret、PIN 或密文。
 
 ## TrainingPeaks OAuth client（選用）
 
