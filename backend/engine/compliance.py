@@ -12,6 +12,14 @@ competitor-charts.md, recommendation 9):
 Here: the worse of the duration and TSS deviations decides the colour (green
 ≤ 20 % off, yellow ≤ 50 %, red beyond, or the wrong kind of activity); the
 headline % is TSS when both sides have it, else duration (intervals.icu).
+
+SP-370 (owner 2026-10-08): both sites rate completion by load / time, not by the
+sport or the intensity. So when time and TSS are both green (±20 %), another
+foot sport (run / trail run / hike / walk, FOOT) or an intensity reversal
+(plan_match.compare) is ◐ 部分 with its reason, not ≠ 沒照課表; ≠ stays when time
+or TSS is also > 20 % off, or the sport is not on foot (bike, swim …). The
+combination is 推估. A walking session (target_policy.is_walk: 陡坡健走, 登山 /
+健行 / 百岳 …) takes a hike / walk / trail run as its own sport (WALK_OK).
 """
 from __future__ import annotations
 
@@ -27,6 +35,42 @@ RUN = {"road", "trail"}
 # activity categories (engine/overview.CATEGORIES) that count as the planned kind
 KIND_OK = {"easy": RUN, "long": RUN | {"hike"}, "quality": RUN, "test": RUN,
            "hike": {"hike", "trail", "walk"}, "strength": {"strength"}}
+# a walking session (target_policy.is_walk; the 陡坡健走 is stored as kind easy) also takes these
+WALK_OK = {"hike", "walk", "trail"}
+# foot sports (SP-370): one done for another is ◐ when time and TSS are on plan, not ≠
+FOOT = {"road", "trail", "hike", "walk"}
+
+
+def accepted(s: dict) -> Optional[set]:
+    """The activity categories that count as the planned sport; None = any (an unknown kind)."""
+    ok = KIND_OK.get(s.get("kind"))
+    if ok is None:
+        return None
+    if ok <= FOOT:
+        from backend.engine.target_policy import is_walk
+        if is_walk(s):
+            return ok | WALK_OK
+    return ok
+
+
+def sport_ok(s: dict, cat: Optional[str]) -> bool:
+    ok = accepted(s)
+    return ok is None or cat in ok
+
+
+def foot_swap(s: dict, cat: Optional[str]) -> bool:
+    """Another foot sport than planned (a walk for a run, a run for a hike …), not a bike / swim."""
+    ok = accepted(s)
+    return bool(cat) and ok is not None and cat not in ok and cat in FOOT and ok <= FOOT
+
+
+def time_tss_level(s: dict, planned_tss: Optional[float] = None) -> Optional[str]:
+    """green / yellow / red from time and TSS alone (the worse one); None: neither measured."""
+    a = s.get("done_by") if isinstance(s.get("done_by"), dict) else {}
+    dur = _ratio(a.get("moving_s"), (s.get("minutes") or 0) * 60.0)
+    tss = _ratio(a.get("tss"), planned_tss if planned_tss is not None else s.get("tss"))
+    devs = [abs(r - 1.0) for r in (dur, tss) if r is not None]
+    return level_of(max(devs)) if devs else None
 
 
 def _ratio(actual: Optional[float], planned: Optional[float]) -> Optional[float]:
@@ -58,14 +102,18 @@ def session_compliance(s: dict, planned_tss: Optional[float] = None) -> Optional
     dur = _ratio(a.get("moving_s"), (s.get("minutes") or 0) * 60.0)
     tss = _ratio(a.get("tss"), planned_tss if planned_tss is not None else s.get("tss"))
     cat = a.get("category")
-    wrong = bool(cat) and cat not in KIND_OK.get(s.get("kind"), {cat})
-    devs = [abs(r - 1.0) for r in (dur, tss) if r is not None]
-    level = "red" if wrong else (level_of(max(devs)) if devs else "green")
+    wrong = bool(cat) and not sport_ok(s, cat)
+    tt = time_tss_level(s, planned_tss)
+    foot = wrong and foot_swap(s, cat)
+    # SP-370: another foot sport with time and TSS on plan is ◐ (yellow), not ≠ (red)
+    soft = foot and tt == "green"
+    level = "yellow" if soft else "red" if wrong else (tt or "green")
     head = tss if tss is not None else dur
     return {"level": level, "pct": None if head is None else round(head * 100),
             "duration_pct": None if dur is None else round(dur * 100),
             "tss_pct": None if tss is None else round(tss * 100),
-            "wrong_type": wrong, "label": "類型不符" if wrong else LEVEL_LABEL[level]}
+            "wrong_type": wrong, "foot_swap": foot, "time_level": tt, "soft": "sport" if soft else None,
+            "label": _("項目不同") if soft else "類型不符" if wrong else LEVEL_LABEL[level]}
 
 
 ORDER = ("green", "yellow", "red")
@@ -77,6 +125,8 @@ def with_plan_check(comp: Optional[dict], vs: Optional[dict]) -> Optional[dict]:
         at least yellow (推估: TrainingPeaks colours time / TSS only; the kind is our addition)
       強度不足 / 偏強 (short, SP-216: 50–80 % of the planned intensity, or an easy run up to
         150 % of a quality dose): at least yellow, counted as 部分 — no longer 沒照課表.
+      跑成強度課 / 跑成輕鬆 / 項目不同 (short with `soft`, SP-370): the reversal or another foot
+        sport with time and TSS both green — 部分 too (推估, see the module docstring).
     `intensity_pct` (planned hard) joins the time / TSS %; when the intensity fell short it is
     the headline 完成度 (the number that explains the colour)."""
     if not comp or not vs or comp.get("level") == "missed":
@@ -91,8 +141,25 @@ def with_plan_check(comp: Optional[dict], vs: Optional[dict]) -> Optional[dict]:
     ipct = vs.get("intensity_pct")
     if ipct is not None and (comp.get("pct") is None or ipct < comp["pct"]):
         out["pct"] = ipct
-    return {**out, "short": True, "off_text": vs.get("short_text") or "",
-            "label": _("強度不足") if vs.get("grade") == "short" else _("強度偏高")}
+    return {**out, "short": True, "off_text": vs.get("short_text") or "", "soft": vs.get("soft"),
+            "label": soft_label(vs) or (_("強度不足") if vs.get("grade") == "short" else _("強度偏高"))}
+
+
+def soft_label(vs: dict) -> Optional[str]:
+    """The ◐ label of a reversal / another foot sport with time and TSS on plan (SP-370)."""
+    if vs.get("soft") == "sport":
+        return _("項目不同")
+    if vs.get("soft") == "intensity":
+        return _("跑成強度課") if vs.get("actual") == "hard" else _("跑成輕鬆")
+    return None
+
+
+def streak_red(comp: Optional[dict]) -> bool:
+    """Red for adapt rule E's streak (SP-370): not when only another foot sport made it red
+    (time / TSS not red themselves); another sport (a bike for a run) and time / TSS reds count."""
+    if not comp or comp.get("level") != "red":
+        return False
+    return not (comp.get("foot_swap") and comp.get("time_level") != "red")
 
 
 def week_compliance(planned_tss: float, done_tss: float, planned_hours: float,
@@ -111,9 +178,10 @@ def week_compliance(planned_tss: float, done_tss: float, planned_hours: float,
 # ---------------------------------------------------------------------------
 
 # a session's status on the dashboard: ✓ 完成 (green), 部分 (yellow / red: the
-# time or TSS is > 20 % off), 沒照課表 (planned intensity / sport not run,
-# plan_match.compare, or the wrong kind of activity), ✗ 沒做 (missed); open =
-# a past day the synced data doesn't cover yet (not counted)
+# time or TSS is > 20 % off; or, with both on plan, a reversal / another foot sport,
+# SP-370), 沒照課表 (planned intensity / sport not run, plan_match.compare, or the
+# wrong kind of activity), ✗ 沒做 (missed); open = a past day the synced data
+# doesn't cover yet (not counted)
 STATUSES = ("done", "partial", "off_plan", "missed", "open")
 DONE_STATUSES = ("done", "partial", "off_plan")
 SKIP_KINDS = ("notice", "heat_passive")      # the 課表待確認 reminder; a bath / sauna is ticked, not matched
@@ -131,7 +199,7 @@ def status_of(s: dict, comp: Optional[dict], today: str) -> Optional[str]:
     if st == "missed":
         return "missed"
     if st == "done" and comp:
-        if comp.get("off_plan") or comp.get("wrong_type"):
+        if comp.get("off_plan") or (comp.get("wrong_type") and not comp.get("soft")):
             return "off_plan"
         return "done" if comp.get("level") == "green" else "partial"
     if st == "active" and s["day"] < today:

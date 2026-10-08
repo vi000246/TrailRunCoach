@@ -2525,7 +2525,7 @@ def _decorate(every: list[dict], acts: list[dict], rates: dict, start: str, end:
         if s.get("day") and start <= s["day"] <= end:
             est = est_tss(s, rates)
             s = _fresh_done_by(s, acts_by)
-            vs = PM.compare(s)
+            vs = PM.compare(s, est)
             out.append({**s, "tss_est": round(est, 1), "vs": vs,
                         "compliance": C.with_plan_check(C.session_compliance(s, est), vs)})
     return out

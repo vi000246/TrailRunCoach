@@ -56,7 +56,9 @@ Rules (thresholds: source or 推估):
      and D and leaves alone any session another rule already changed (E's removal / step-down
      wins) and a run 太強 already acted on (one adjustment per session when both fire); ctx
      `rpe_rule` False = off (課表偏好 › 自動調整).
-  E. fatigue guard: two red-compliance sessions in a row (engine/compliance.py)
+  E. fatigue guard: two red-compliance sessions in a row (engine/compliance.py;
+     SP-370: compliance.streak_red — a session red only because another foot sport was done,
+     a hike for a run, does not count; a bike for a run and time / TSS reds do)
      -> the quality steps down to the recovery fartlek and easy minutes × 0.8;
      TSB < −30 (Friel / TrainingPeaks, coach; when week_plan has not already
      made it a recovery week) or a CTL ramp at load_guard's BLOCK line
@@ -491,11 +493,10 @@ def _red_streak(stored: list[dict], today: str) -> bool:
     from backend.engine import compliance as C
     past = sorted([s for s in stored if s["state"] in ("done", "missed") and s.get("day") and s["day"] <= today
                    and s["kind"] not in SIDE], key=lambda s: s["day"])
-    lv = []
-    for s in past[-RED_STREAK:]:
-        c = C.session_compliance(s)
-        lv.append(c and c["level"])
-    return len(lv) == RED_STREAK and all(x == "red" for x in lv)
+    # SP-370: a session red only because another foot sport was done (a hike for a run) does
+    # not count; another sport (a bike for a run) and time / TSS reds do (compliance.streak_red)
+    lv = [C.streak_red(C.session_compliance(s)) for s in past[-RED_STREAK:]]
+    return len(lv) == RED_STREAK and all(lv)
 
 
 def _fatigue(wk: _Week, stored: list[dict], ctx: dict, th: dict, out: list) -> None:
