@@ -382,6 +382,53 @@ def test_the_real_scheduler_loop_keeps_running_every_tick(monkeypatch, delay, we
     assert (seen.count("weekly") >= 2) is weekly_runs
 
 
+async def _daily_ready(s):
+    s.add(SyncState(athlete_id=1, coros_access_token="t"))
+    await s.commit()
+    repo = SettingsRepository(s, 1)
+    await repo.set("sync.schedule.daily_time", "00:00")
+    await repo.set("sync.trainingpeaks.enabled", False)
+    await s.commit()
+    return repo
+
+
+def test_a_busy_scheduled_sync_is_retried_the_next_minute(tmp_path):
+    """Review SP-362 #4: the day's run is marked done only when it started."""
+    async def go():
+        s = await make_session(tmp_path)
+        repo = await _daily_ready(s)
+        with runner.hold("coros"):                                            # a 完整檢查 at daily_time
+            assert await scheduler.tick(_factory(s), start=lambda *a: object()) == []
+        assert await repo.get("sync.schedule.last_run") is None
+        assert await scheduler.tick(_factory(s), start=lambda *a: None) == []  # lost the race
+        assert await repo.get("sync.schedule.last_run") is None
+        assert await scheduler.tick(_factory(s), start=lambda *a: object()) == ["coros"]
+        assert await repo.get("sync.schedule.last_run") is not None
+    run(go())
+
+
+def test_a_scheduled_run_that_ends_sync_busy_is_retried(tmp_path):
+    async def go():
+        s = await make_session(tmp_path)
+        repo = await _daily_ready(s)
+
+        async def busy_run():
+            return {"status": "error", "error": "SYNC_BUSY", "source": "coros"}
+        tasks = []
+
+        def start(*a):
+            tasks.append(asyncio.get_running_loop().create_task(busy_run()))
+            return tasks[-1]
+        assert await scheduler.tick(_factory(s), start=start) == ["coros"]
+        assert await repo.get("sync.schedule.last_run") is not None
+        await tasks[0]
+        for _ in range(20):                                                  # the done callback's write
+            await asyncio.sleep(0.01)
+        assert await repo.get("sync.schedule.last_run") is None
+        assert await scheduler.tick(_factory(s), start=lambda *a: object()) == ["coros"]
+    run(go())
+
+
 # ---------------------------------------------------------------------------- API
 
 def test_api_start_status_and_fill(tmp_path, hooks, monkeypatch):
