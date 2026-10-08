@@ -870,6 +870,11 @@ async def _remove_remote(hub: TrainingHub, r: CorosPlanPush) -> None:
             if ent.get("execute_status"):
                 raise Executed(r.session_id)
             await hub.unschedule(ent["plan_id"], ent["id_in_plan"], ent["plan_program_id"])
+            # SP-358: COROS answering 0000 is not proof — look again, so a delete it accepted
+            # but didn't carry out is an error (status failed, the change log), not a silent leftover
+            if await hub.find_entry(a, b, r.id_in_plan) is not None:
+                from backend.i18n import _
+                raise CorosError(_("COROS 回應已刪除，但 {day} 的行事曆上還在", day=r.day or a))
         r.plan_id = r.id_in_plan = r.plan_program_id = None
     if r.program_id:
         # program/detail still answers for deleted programs, flagged deleted=1

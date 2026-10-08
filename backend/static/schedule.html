@@ -1837,7 +1837,8 @@ $("vd").addEventListener("click", async (e) => {
     $("vd").close(); $("sd").close();
     S.sel = r.day || S.sel;
     await load();
-    msg(`已換成「${esc(r.title)}」${r.equiv ? "（同等，不影響進階）" : "（不算進階）"}`, "ok");
+    const [w, cls] = watchNote(r.coros);
+    msg(`已換成「${esc(r.title)}」${r.equiv ? "（同等，不影響進階）" : "（不算進階）"}${esc(w)}`, cls);
   } catch (err) { $("vd-err").textContent = err.message; b.disabled = false; }
 });
 // ---------------- planned vs actual (engine/plan_match.py) ----------------
@@ -2007,6 +2008,7 @@ F.addEventListener("submit", async (e) => {
   $("sd-save").disabled = true;
   try {
     const url = dlg.uid ? `${PAPI}/sessions/${encodeURIComponent(dlg.uid)}` : `${PAPI}/sessions`, method = dlg.uid ? "PATCH" : "POST";
+    let saved;
     if (wp && wp.steps) {
       let r = await WorkoutEditor.request(method, url, body);
       if (r.status === 422) {
@@ -2016,11 +2018,13 @@ F.addEventListener("submit", async (e) => {
         r = await WorkoutEditor.request(method, url, { ...body, steps_force: true });
       }
       if (!r.ok) throw new Error(typeof r.body.detail === "string" ? r.body.detail : JSON.stringify(r.body.detail || r.body).slice(0, 200));
-    } else await sj(method, url, body);
+      saved = r.body;
+    } else saved = await sj(method, url, body);
     $("sd").close();
     S.sel = body.day;
     await load();
-    msg(dlg.uid ? `已更新「${esc(body.title)}」` : `已新增「${esc(body.title)}」到 ${md(body.day)}`, "ok");
+    const [w, cls] = watchNote(saved && saved.coros);
+    msg((dlg.uid ? `已更新「${esc(body.title)}」` : `已新增「${esc(body.title)}」到 ${md(body.day)}`) + esc(w), cls);
   } catch (err) { $("sd-err").textContent = err.message; }
   finally { $("sd-save").disabled = false; }
 });
@@ -2552,7 +2556,8 @@ async function applyBlackouts(list, title, done, removing = false) {
   try {
     const r = await sj("PUT", `${PAPI}/blackouts`, { blackouts: list, decisions: dec });
     await load();
-    msg(`${done}${(r.changes || []).length ? `：${r.changes.length} 項變動` : ""}`, "ok");
+    const [w, cls] = watchNote(r.coros);
+    msg(`${done}${(r.changes || []).length ? `：${r.changes.length} 項變動` : ""}${esc(w)}`, cls);
   } catch (e) { errMsg(title, e); }
   finally { S.busy = false; if (D) renderToolbar(); }
 }
@@ -2673,14 +2678,19 @@ $("cal").addEventListener("drop", async (e) => {
     try {
       const r = await sj("POST", `${PAPI}/rest-days/move`, { from, to: day });
       S.sel = day; await load();
-      msg(esc(tt("rest.mv_done", { to: `${md(day)}（週${wd(day)}）`, n: r.moved.length, from: `${md(from)}（週${wd(from)}）` }))
-        + (r.warnings || []).map((w) => `<br>⚠ ${esc(w)}`).join(""), r.warnings?.length ? "err" : "ok");
+      const [wn, cls] = watchNote(r.coros);
+      msg(esc(tt("rest.mv_done", { to: `${md(day)}（週${wd(day)}）`, n: r.moved.length, from: `${md(from)}（週${wd(from)}）` }) + wn)
+        + (r.warnings || []).map((w) => `<br>⚠ ${esc(w)}`).join(""), r.warnings?.length ? "err" : cls);
     } catch (err) { errMsg(tt("rest.mv_what"), err); }
     return;
   }
   if (!s || s.day === day || day < D.today || boOf(day)) return;
-  try { await sj("PATCH", `${PAPI}/sessions/${encodeURIComponent(uid)}`, { day }); S.sel = day; await load(); msg(`「${esc(s.title)}」移到 ${md(day)}（週${wd(day)}）`, "ok"); }
-  catch (err) { errMsg("移動", err); }
+  try {
+    const r = await sj("PATCH", `${PAPI}/sessions/${encodeURIComponent(uid)}`, { day });
+    S.sel = day; await load();
+    const [w, cls] = watchNote(r.coros);
+    msg(esc(tt("mv.done", { title: s.title, day: `${md(day)}（週${wd(day)}）` }) + w), cls);
+  } catch (err) { errMsg(tt("mv.what"), err); }
 });
 
 // ---------------- context menu (right-click / long-press) ----------------
@@ -2786,6 +2796,14 @@ async function delHigh(day) {
 $("cf").addEventListener("keydown", (e) => {
   if (e.key === "Enter" && e.target.id === "hn-m") { e.preventDefault(); $("cf-ok").click(); }
 });
+// SP-358: a change on the calendar syncs the watch right away (api _sync_watch): a short note when
+// the watch changed, a warning when it couldn't (the 調整紀錄 keeps a 失敗 row too). [text, msg class]
+function watchNote(c) {
+  const p = (c && c.provider_label) || "COROS";
+  if (c && c.status === "ok" && (c.sent || c.removed)) return [tt("watch.ok", { provider: p }), "ok"];
+  if (c && ["partial", "failed"].includes(c.status)) return [tt("watch.fail", { provider: p, error: c.error || "" }), "warn"];
+  return ["", "ok"];
+}
 function coroNote(c) {
   if (!c || c.status === "none") return "";
   if (c.status === "ok") return tt("del.coros_ok", { n: c.removed, provider: c.provider_label || "COROS" });
@@ -2800,6 +2818,7 @@ async function delSession(s) {
   try {
     const r = await sj("DELETE", `${PAPI}/sessions/${encodeURIComponent(s.uid)}`);
     await load();
+    if (!r.expired) { const [w, cls] = watchNote(r.coros); return msg(esc(tt("del.done", { title: s.title, day: md(s.day) }) + w), cls); }
     msg(esc(tt("del.done", { title: s.title, day: md(s.day) }) + coroNote(r.coros)), r.coros && ["auth", "failed"].includes(r.coros.status) ? "warn" : "ok");
   } catch (e) { errMsg(tt("del.what"), e); }
 }
@@ -2822,8 +2841,8 @@ async function setRest(day, on) {
   try {
     const r = on ? await sj("POST", `${PAPI}/rest-days`, { day }) : await sj("DELETE", `${PAPI}/rest-days/${day}`);
     S.sel = day; await load();
-    const n = (r.changes || []).filter((c) => c.action !== "done").length;
-    msg(esc(tt(on ? "rest.done" : "rest.undone", { day: md(day), wd: wd(day) }) + (n ? tt("rest.changes", { n }) : "")), "ok");
+    const n = (r.changes || []).filter((c) => c.action !== "done").length, [w, cls] = watchNote(r.coros);
+    msg(esc(tt(on ? "rest.done" : "rest.undone", { day: md(day), wd: wd(day) }) + (n ? tt("rest.changes", { n }) : "") + w), cls);
   } catch (e) { errMsg(tt(on ? "rest.what" : "rest.undo_what"), e); }
   finally { S.busy = false; if (D) renderToolbar(); }
 }

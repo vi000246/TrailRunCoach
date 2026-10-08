@@ -602,8 +602,10 @@ def test_edit_then_push_replaces_and_delete_cleans_up(monkeypatch):
         ss = e.c.get(f"{API}/sessions").json()["sessions"]
         long = next(s for s in ss if s["day"] == "2026-10-04")
         easy = next(s for s in ss if s["day"] == "2026-10-02" and s["kind"] == "easy")
-        e.c.patch(f"{API}/sessions/{long['uid']}", json={"day": "2026-10-03"})
-        e.c.delete(f"{API}/sessions/{easy['uid']}")
+        # changed in the store while the watch couldn't follow (SP-358: the page's own edit
+        # syncs the watch right away, test_watch_sync_sp358.py) — a later push catches up
+        run(PS.edit(e.db, long["uid"], {"day": "2026-10-03"}, "2026-09-30"))
+        run(PS.delete(e.db, easy["uid"], today="2026-09-30"))
         st = {s["uid"]: s["coros"]["status"] for s in e.c.get(f"{API}/sessions").json()["sessions"]
               if "coros" in s}
         assert st[long["uid"]] == "outdated"

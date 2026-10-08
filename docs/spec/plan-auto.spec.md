@@ -1,6 +1,6 @@
 # Module Spec: plan-auto (自動調整課表)
 
-> **Last Updated**: 2026-10-06
+> **Last Updated**: 2026-10-08
 > **Status**: Active
 > **Domain Layer**: Core Domain
 
@@ -93,6 +93,15 @@ Other entry points:
 | `plan.auto.notify` | null = auto | `watch`: also push a 1-minute 「⚠ 課表待確認」 workout; `overview`: banner only; auto = `watch` when connected, else `overview` |
 | `plan.auto.state` | — | internal: last data stamp, last phase, last CP, Zone 5 / re-entry keys, rejected fingerprints |
 | `plan.push.provider` | coros | the push target (`backend/sync/workout_targets/`); Garmin / intervals.icu are stubs, not enabled |
+
+**Push window and moved sessions** (SP-358, `push_window`, `backend/engine/plan_auto.py:467`): the
+run pushes the active sessions of the window, removes pushed ones that left the plan / were
+missed / sit on a blocked day, and re-sends the sessions whose pushed copy sits in the window
+although they moved out of it (dragged to next week: the copy would otherwise stay on the old
+day). A removal that fails is a failure of the push (`partial`, with its error). The 課表 page's
+own changes call it with `only` = the changed sessions (`_sync_watch`,
+`backend/api/plan_sessions.py:1964`); `window` False (自動推送 off) re-sends / removes only copies
+already on the watch. A failure there adds a `failed` row (trigger `edit`) to the change log.
 
 **Phases** (SP-73): the automatic run reads the same phases as the page (`planning.phases`,
 `backend/engine/planning.py:393`), including the 轉換期 after an A race's recovery (課表偏好
@@ -679,3 +688,4 @@ overview has `data-log="none"`. The settings are in 課表偏好 (above).
 | 2026-10-06 | feature | SP-231 | COROS post-run self-rating (`sportFeelInfo.feelType`, read per new activity with `POST /activity/detail/query`, 8-week backfill) as rule D′ (`rpe_hard`): an easy / long run rated Hard or more moves the next hard session < 48 h later to a free day ≥ 48 h after, else one step down; switch `plan.auto.rpe_rule`; held for approval within 14 days of an A race; the data stamp includes this week's ratings (`rpe_stamp`) and a sync that stored a rating on an already-imported activity (`rpe_filled`) starts a run |
 | 2026-10-06 | change | SP-302 | Rule D's 「TSS > planned + 20 %」 now compares against an easy run planned at the easy-only TSS / h (overview.spec.md › Session TSS; before, the all-runs median put the plan near tempo and the check almost never fired) |
 | 2026-10-06 | change | SP-301 | Rule D in two tiers: 偏強 = avg power > 80 % CP (without power: avg HR > 94 % LTHR, 推估) or TSS > planned + 20 % (the AeT + 3 HR condition removed) → label only, no session change; 太強 = the session classifier's hard class (Zone 3 or harder) → the next hard session < 48 h later moves / steps down with a reason (also the generator's own move), A-race 14-day confirm (`too_hard`), 復原; the easy-run TSS trim removed; D runs after E; D′ skips a run D's 太強 acted on |
+| 2026-10-08 | fix | SP-358 | `push_window` (`backend/engine/plan_auto.py:467`) also re-sends a session whose pushed copy sits in the window but which moved out of it (`plan_sessions.copies_in`), so the copy leaves the old day; a removal that failed makes the result `partial` with its error (it used to count as nothing); new `only` / `window` arguments serve the page's own changes (`plan_sessions._sync_watch`: a drag / edit / delete / 不排課日期 / 休息日 / swap syncs the watch at once, also with 自動推送 off for copies already on the watch; a failure logs a `failed` row, trigger `edit`) |
