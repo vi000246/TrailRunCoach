@@ -465,12 +465,18 @@ async def _stale_notices(db, today: str, keep: Optional[str], errors: list) -> N
 # ---------------------------------------------------------------------------
 
 async def push_window(db, new: list[dict], inp: dict, today: str, days: int,
-                      extra_uids: Optional[set] = None) -> dict:
+                      extra_uids: Optional[set] = None, only: Optional[set] = None,
+                      window: bool = True) -> dict:
     """Push the active sessions in [today, today + days − 1] (later ones stay in
     the app); remove pushed sessions that left the plan / were missed. Nothing
     is sent when every session in the window is already up to date. Errors are
     returned, never raised. `extra_uids`: sessions after the window that are
-    on the watch already and must be re-sent too (a CP change: their watts)."""
+    on the watch already and must be re-sent too (a CP change: their watts).
+    A session whose copy on the watch sits in the window but which moved out of it
+    is re-sent on its new day, so the old copy comes off (SP-358).
+    `only` (the user's own change, api/plan_sessions._sync_watch): just these sessions —
+    the ones in the window, and the ones already on the watch wherever they are now;
+    `window` False (自動推送 off): only the copies already on the watch."""
     from backend.api import plan_sessions as API
     from backend.engine import plan_store as PS
     from backend.sync import workout_targets as WT
@@ -483,11 +489,13 @@ async def push_window(db, new: list[dict], inp: dict, today: str, days: int,
         stale = [k for k, r in rows.items() if k not in live and (r.day is None or r.day >= today)]
         stale += [s["uid"] for s in API._on_blocked(new, bl, today) if s["uid"] in rows]
         missed = [s["uid"] for s in new if PS.off_watch(s) and s["uid"] in rows]
-        todo = [s for s in API._in_range(new, today, end, bl) if s["kind"] != NOTICE_KIND]
-        if extra_uids:
-            have = {s["uid"] for s in todo}
-            todo += [s for s in new if s["uid"] in extra_uids and s["uid"] in rows and s["uid"] not in have
-                     and s["state"] == "active" and (s.get("day") or "") >= today and s.get("day") not in bl]
+        todo = [s for s in API._in_range(new, today, end, bl) if s["kind"] != NOTICE_KIND
+                and window and (only is None or s["uid"] in only)]
+        extra = set(extra_uids or ())
+        extra |= set(only) if only is not None else API.copies_in(rows, today, end)
+        have = {s["uid"] for s in todo}
+        todo += [s for s in API.on_watch(new, rows, today, bl)
+                 if s["uid"] in extra and s["uid"] not in have and s["kind"] != NOTICE_KIND]
         th = inp.get("thresholds") or {}
         need = [s for s in todo if prov.status_of(PS.push_dict(s), th, rows.get(s["uid"]), today)["status"]
                 in ("not_pushed", "outdated", "failed")]
@@ -496,7 +504,8 @@ async def push_window(db, new: list[dict], inp: dict, today: str, days: int,
         res = await prov.push_sessions(db, [PS.push_dict(s) for s in todo], th, today,
                                        stale_keys=stale, missed_keys=missed)
         sent = sum(1 for x in res.get("sessions") or [] if x.get("changed"))
-        failed = [x for x in res.get("sessions") or [] if x.get("status") == "failed"]
+        # a copy that didn't come off the watch is a failure too (SP-358: it used to count as nothing)
+        failed = [x for x in (res.get("sessions") or []) + (res.get("removed") or []) if x.get("status") == "failed"]
         return {"status": "partial" if failed else "ok", "start": today, "end": end, "sent": sent,
                 "removed": sum(1 for x in res.get("removed") or [] if x.get("status") == "removed"),
                 "error": "；".join(str(x.get("error")) for x in failed)[:500] or None}

@@ -364,7 +364,13 @@ def test_pushed_sessions_on_a_blackout_day_come_off_coros(monkeypatch):
         ss = e.c.get(f"{API}/sessions").json()["sessions"]
         q = next(s for s in ss if s["day"] == "2026-10-06")
         e.c.patch(f"{API}/sessions/{q['uid']}", json={"minutes": 50})         # edited, no decision given
-        e.c.post(f"{API}/push-coros?scope=phase")
+        # the page's save syncs the watch at once (SP-358, test_watch_sync_sp358.py); here it
+        # couldn't (e.g. an expired login), so the next push has to clean up
+        from backend.api import plan_sessions as API_MOD
+
+        async def offline(db, uids, inp=None):
+            return {"status": "failed"}
+        monkeypatch.setattr(API_MOD, "_sync_watch", offline)
         # save the blackout without a decision for the edited one: it stays in the plan (conflict) ...
         r = e.c.put(f"{API}/blackouts", json={"blackouts": BL_LIST})
         assert any(c["action"] == "conflict" and c["uid"] == q["uid"] for c in r.json()["changes"])

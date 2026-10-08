@@ -1,6 +1,6 @@
 # Module Spec: overview
 
-> **Last Updated**: 2026-10-07
+> **Last Updated**: 2026-10-08
 > **Status**: Active
 > **Domain Layer**: Core Domain
 
@@ -706,7 +706,9 @@ the week (decision `move`).
    day or removed as stale; an edited session still on a blocked day (no decision yet) is not
    pushed and its pushed copy is removed (`_on_blocked`, `backend/api/plan_sessions.py:1710`,
    used at `backend/api/plan_sessions.py:1692`). The push preview counts them
-   (`blackout_to_remove`).
+   (`blackout_to_remove`). Since SP-358 this happens when the 不排課日期 / 休息日 is saved, not
+   only at the next push: `PUT /blackouts` and the 休息日 endpoints sync the sessions reconcile
+   changed (`_sync_watch`, `backend/api/plan_sessions.py:1964`) and return `coros`.
 
 **Flow** (`backend/api/plan_sessions.py:1846`): `POST /plan/blackouts/preview` regenerates with
 the *candidate* list and returns the reconcile preview without saving anything (the generator
@@ -900,7 +902,9 @@ target_basis, steps. A day must be ISO and not in the past; kind and terrain mus
 `steps` is normalised by `workout_steps` (a bad structure is a 400); title not blank. An edit
 marks the session `edited` and non-provisional; hand-editing a library variant's text keeps the
 variant marked `swap = user`. Moving an auto session to another week leaves a tombstone in the
-old week and turns the session into a custom one. Only active sessions can be edited.
+old week and turns the session into a custom one. Only active sessions can be edited. An edit,
+a move and a delete sync the watch right away (see COROS push › The watch follows the user's
+changes, SP-358).
 
 **Add** (`backend/engine/plan_store.py:392`): a custom session needs a day; defaults kind easy,
 45 min, a title per kind (a new test follows the CP 測試方式); `notice` and `race` can't be added.
@@ -1063,6 +1067,28 @@ which one. The response keeps the `coros` field names.
   takes off the workout the calculator's retired 「匯出到 COROS」 pushed under the same key
   (`racecalc:<event id>`, not in `all_rows`; `_old_calc_keys`, `backend/api/plan_sessions.py:1704`);
   the preview counts it as `calc_to_replace`.
+- **Moved sessions** (SP-358, 2026-10-08): a push of a range also re-sends the sessions whose pushed
+  copy sits in that range but which moved out of it (`copies_in` / `_with_copies`,
+  `backend/api/plan_sessions.py:1952`; preview and push alike), so the copy comes off the old day.
+  Before, a session dragged to next week stayed on the watch on its old day after a 「推送本週」.
+  `_remove_remote` (`backend/sync/coros_workouts.py:860`) looks the entry up again after the
+  calendar delete: one COROS answered 0000 for but still shows is an error
+  (「COROS 回應已刪除，但 m/d 的行事曆上還在」, the row `failed`), never a silent leftover.
+- **The watch follows the user's changes** (SP-358, `_sync_watch`,
+  `backend/api/plan_sessions.py:1964`): after a drag / 移到… / edit (`PATCH /sessions/{uid}`), a
+  delete, a 不排課日期 save (`PUT /blackouts`), a 休息日 set / undo / move and a swap (SP-359), the
+  affected sessions are synced at once through `plan_auto.push_window(only=…)`: a pushed copy is
+  re-sent on its new day (the old entry removed first) or removed when the session left the plan
+  or sits on a blocked day; with 自動推送 on (`plan.auto.enabled` + `plan.auto.push`) a changed
+  session that lands in the push window is pushed too; with it off only copies already on the
+  watch follow. Nothing is called when nothing on the watch is affected. The response carries
+  `coros` (`status` ok / unchanged / none / partial / failed, `sent`, `removed`, `error`); the page
+  appends 「，COROS 手錶已同步」 or warns 「；COROS 手錶沒跟著更新：…」 (`watchNote`,
+  `backend/static/schedule.html:2801`), and a failure adds a change-log row (trigger `edit`,
+  status `failed`, 「課表已改，但COROS手錶沒有跟著更新」 with the push error). Root cause of SP-358:
+  these endpoints only wrote the store; the watch changed only at the next manual push or the
+  automatic run, which runs only after a sync with a new activity — so the old day's workout
+  stayed on the watch.
 - **Unpush** (`DELETE /push-coros`, `backend/api/plan_sessions.py:1705`) removes every recorded
   entry whose day falls in the range (`remove_keys`, `backend/sync/coros_workouts.py:1056`).
 - **Status per session** (`status_of`, `backend/sync/coros_workouts.py:841`): done / skipped /
@@ -1804,3 +1830,4 @@ deleted / superseded) are returned as reconcile `changes` (`backend/engine/recon
 | 2026-10-06 | change | SP-302 decision | < 3 genuinely easy runs → 推估 IF 0.80 (64 TSS / h) instead of the easy cap's IF; the projection's default path (no 課表偏好) prices easy runs with the same `easy` rate as week_plan |
 | 2026-10-07 | feat/sp291-293-data-level | docs/research/cold-start.md §4.1 | SP-291 資料等級: `data_level.level` (0 no run / hike in 28 days, 2 = the Zone 3 consistency rule on run + hike days, 1 between; week of the data; `survey`) read by the week plan (cold_start), the status page (`i_level` card, `data_level` in `/status`) and the race feasibility; the ramp lasts the rule's weeks; the cold / ramp note is the level's one line (「你的資料還在累積（第 n 週／4）：週量依你填的問卷，心率區間是推估」); plan / status cache keys carry `experience.stamp()` |
 | 2026-10-07 | feat/sp291-293-data-level | docs/research/cold-start.md §4.4 | SP-292 賽事可行性 for 資料等級 0 / 1 (`GET /overview/feasibility`, `race_feasibility` module doc): base hours = max(questionnaire as the plan reads it, actual), km / climb actual only; no actual distance → UA weekly / climb 「還不知道」, Koop's hours still judged; `data_source` tag 「依你填的資料」／「資料還少」 on the card; level 0 at most tight (cutoff / 跨級 over → tight with the reason, no 「先不跑」／「低一級」 advice; 「late」 unchanged); ≥ 42.195 km with a self-reported week < 3 h → `optimistic_note` (Vickers & Vertosick 2016); level 2 unchanged |
+| 2026-10-08 | fix/sp358-359-schedule-delete-swap | SP-358 | 刪除／移動課表沒同步到手錶: a drag / edit / delete / 不排課日期 / 休息日 only wrote the store, the watch changed only at the next manual push or after a sync with a new activity, and a range push never touched a pushed session that had moved out of the range — so the old day kept its workout. Now these endpoints sync the affected sessions at once (`_sync_watch` → `plan_auto.push_window(only=…)`, response `coros`, page note / warning, a `failed` change-log row on error); range pushes and the automatic window also re-send copies whose session moved out (`copies_in`); a COROS calendar delete is verified (`_remove_remote`); removal failures count as push failures |

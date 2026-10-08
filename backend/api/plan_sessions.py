@@ -541,6 +541,7 @@ async def edit_session(uid: str, patch: dict = Body(...), db: AsyncSession = Dep
         raise _err(e)
     if patch.get("day") and out.get("day"):
         await _b2b_moved(db, uid, out["day"])         # an accepted B2B day moved: the entry follows
+    out["coros"] = await _sync_watch(db, [uid], inp)  # SP-358: the watch's copy follows now
     return out
 
 
@@ -1815,12 +1816,15 @@ async def delete_session(uid: str, db: AsyncSession = Depends(get_db)):
     if out.get("expired"):                            # a past session never done: off the watch now
         out["coros"] = await _unpush_expired(db, [out])
         return out
+    changed = [uid]
     if out.get("b2b_cancelled"):
         from backend.engine import plan_auto as PA
         inp = await _inputs(db)                       # the week without the B2B
         async with _wlock():
             if await PA.pending(db) is None:
-                await PS.plan_reconcile(db, inp, apply=True)
+                _, ch = await PS.plan_reconcile(db, inp, apply=True)
+                changed += [c.get("uid") for c in ch]
+    out["coros"] = await _sync_watch(db, changed, inp)  # SP-358: off the watch now, not at the next sync
     return out
 
 
@@ -1907,7 +1911,8 @@ async def push_preview(scope: str = "week", day: Optional[str] = None, db: Async
     prov = await WT.active(db)
     rows = await prov.all_rows(db)
     bl = PS.blocked_map(inp)
-    todo = [_view(s, inp, rows, today, prov) for s in _in_range(new, a, b, bl)]
+    # + sessions moved out of the range whose copy is still in it (SP-358): re-sent on their new day
+    todo = [_view(s, inp, rows, today, prov) for s in _with_copies(_in_range(new, a, b, bl), new, rows, a, b, today, bl)]
     pushable = [s for s in todo if s["coros"]["status"] not in ("skipped", "done")]
     will = [s for s in pushable if s["coros"]["status"] != "pushed"]
     missed = [s for s in new if PS.off_watch(s) and s["uid"] in rows]
@@ -1934,6 +1939,54 @@ def _old_calc_keys(ss: list[dict]) -> list[str]:
 
 def _on_blocked(ss: list[dict], blocked: dict, today: str) -> list[dict]:
     return [s for s in ss if s["state"] == "active" and s.get("day") and s["day"] >= today and s["day"] in blocked]
+
+
+def on_watch(ss: list[dict], rows: dict, today: str, blocked: dict) -> list[dict]:
+    """Active sessions from today on that already have a pushed copy (a push row), wherever
+    their day is now. Re-sending one replaces its copy (push_sessions removes the old entry
+    first), so a session moved off its pushed day doesn't stay on the old day (SP-358)."""
+    return [s for s in ss if s["state"] == "active" and s["uid"] in rows and s.get("day")
+            and s["day"] >= today and s["day"] not in blocked]
+
+
+def copies_in(rows: dict, a: str, b: str) -> set:
+    """Keys whose pushed copy sits in [a, b]: a push of that range fixes them too, also when
+    their session moved out of the range (SP-358: dragged to next week, the copy stayed)."""
+    return {k for k, r in rows.items() if r.day and a <= r.day <= b}
+
+
+def _with_copies(todo: list[dict], ss: list[dict], rows: dict, a: str, b: str, today: str, blocked: dict) -> list[dict]:
+    have = {s["uid"] for s in todo}
+    keys = copies_in(rows, a, b)
+    return todo + [s for s in on_watch(ss, rows, today, blocked) if s["uid"] in keys and s["uid"] not in have]
+
+
+async def _sync_watch(db: AsyncSession, uids, inp: Optional[dict] = None) -> dict:
+    """SP-358: after the user changed the plan (dragged / swapped / edited / deleted a session,
+    set a 不排課日期 or 休息日), the watch follows right away instead of at the next sync's run:
+    a pushed copy of a changed session is re-sent on its new day (the old entry comes off) or
+    removed when the session left the plan or sits on a blocked day; with 自動推送 on, a changed
+    session that lands in the push window is pushed too. Nothing is called when nothing on the
+    watch is affected. A failure is returned (the page shows it) and logged in the change log
+    (status failed) — never raised: the plan change itself is saved."""
+    from backend.engine import plan_auto as PA
+    from backend.i18n import _
+    cfg = await PA.settings(db)
+    auto = bool(cfg["enabled"] and cfg["push"])
+    prov = await WT.active(db)
+    if not auto and not await prov.all_rows(db):
+        return {"status": "none"}
+    inp = inp or await _inputs(db)
+    today = _today(inp)
+    async with _wlock():
+        new = await PS.load(db)
+        res = await PA.push_window(db, new, inp, today, int(cfg["push_days"] or 7),
+                                   only={u for u in uids if u}, window=auto)
+    res = {**res, "provider_label": prov.label}
+    if res["status"] in ("partial", "failed"):
+        await PA._add_entry(db, trigger="edit", status="failed", items=[],
+                            summary=_("課表已改，但{provider}手錶沒有跟著更新", provider=prov.label), push=res)
+    return res
 
 
 def _auth(e: WT.SyncAuthError, prov=None):
@@ -1964,7 +2017,8 @@ async def push(scope: str = "week", day: Optional[str] = None, db: AsyncSession 
         stale += _old_calc_keys(_in_range(new, a, b, bl))
         missed = [s["uid"] for s in new if PS.off_watch(s) and s["uid"] in rows]
         try:
-            res = await prov.push_sessions(db, [PS.push_dict(s) for s in _in_range(new, a, b, bl)], inp["thresholds"],
+            todo = _with_copies(_in_range(new, a, b, bl), new, rows, a, b, today, bl)
+            res = await prov.push_sessions(db, [PS.push_dict(s) for s in todo], inp["thresholds"],
                                            today, stale_keys=stale, missed_keys=missed)
         except WT.SyncAuthError as e:
             raise _auth(e, prov)
@@ -2119,7 +2173,8 @@ async def put_blackouts(body: dict = Body(...), db: AsyncSession = Depends(get_d
     async with _wlock():
         await _ensure(db, inp)
         _, changes = await PS.plan_reconcile(db, inp, apply=True, decisions=dec)
-    return {**_meta(inp), "blackouts": cand, "changes": changes, "by_day": R.by_day(changes)}
+    coros = await _sync_watch(db, [c.get("uid") for c in changes], inp)      # SP-358
+    return {**_meta(inp), "blackouts": cand, "changes": changes, "by_day": R.by_day(changes), "coros": coros}
 
 
 # 休息日 (the 課表 calendar's context menu on an empty day): a one-day 不排課日期 of
@@ -2143,7 +2198,8 @@ async def _save_blackouts(db: AsyncSession, cand: list[dict], dec: Optional[dict
     async with _wlock():
         await _ensure(db, inp)
         _, changes = await PS.plan_reconcile(db, inp, apply=True, decisions=dec or {})
-    return {**_meta(inp), "blackouts": cand, "changes": changes, "by_day": R.by_day(changes)}
+    coros = await _sync_watch(db, [c.get("uid") for c in changes], inp)      # SP-358
+    return {**_meta(inp), "blackouts": cand, "changes": changes, "by_day": R.by_day(changes), "coros": coros}
 
 
 def _iso_day(day) -> str:
@@ -2218,7 +2274,8 @@ async def move_rest_day(body: dict = Body(...), db: AsyncSession = Depends(get_d
     for s in moved:
         await _b2b_moved(db, s["uid"], frm)
     after = await PS.load(db)
-    return {"from": frm, "to": to, "moved": moved, "warnings": RD.swap_warnings(after, [s["uid"] for s in moved])}
+    return {"from": frm, "to": to, "moved": moved, "warnings": RD.swap_warnings(after, [s["uid"] for s in moved]),
+            "coros": await _sync_watch(db, [s["uid"] for s in moved], inp)}       # SP-358
 
 
 async def _accept_injury_done(db: AsyncSession, sg: dict) -> dict:

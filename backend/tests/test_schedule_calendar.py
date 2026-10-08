@@ -68,7 +68,10 @@ def test_calendar_after_push_counts_outdated(monkeypatch):
         b = e.c.get(f"{API}/calendar?start=2026-09-28&end=2026-10-04").json()
         assert b["coros"]["last_pushed_at"] and b["coros"]["pushed"] == 3 and b["coros"]["outdated"] == 0
         long = next(s for s in b["sessions"] if s["day"] == "2026-10-04")
-        e.c.patch(f"{API}/sessions/{long['uid']}", json={"minutes": 100})
+        # changed in the store only (the page's edit re-sends at once, SP-358)
+        from backend.engine import plan_store as PS
+        from backend.tests.test_coros_workouts import run
+        run(PS.edit(e.db, long["uid"], {"minutes": 100}, "2026-09-30"))
         b = e.c.get(f"{API}/calendar?start=2026-09-28&end=2026-10-04").json()
         assert b["coros"]["outdated"] == 1
         assert next(s for s in b["sessions"] if s["uid"] == long["uid"])["coros"]["status"] == "outdated"
