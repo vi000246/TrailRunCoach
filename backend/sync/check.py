@@ -351,9 +351,9 @@ async def _list_and_compare(db, remote, source: str, athlete_id: int, mode: str,
     seen: set = set()
     pages = 0
     _prog(source, phase="list")
-    # one day past the server's today: an athlete ahead of the server's time zone has today's
-    # activities dated tomorrow
-    async for items in remote.pages(since, today + timedelta(days=1)):
+    # up to the server's today, as the sync lists (an end day in the future is not verified
+    # with COROS); local rows dated today or later never count as local_only (compare)
+    async for items in remote.pages(since, today):
         pages += 1
         for it in items:
             if it["id"] not in seen:

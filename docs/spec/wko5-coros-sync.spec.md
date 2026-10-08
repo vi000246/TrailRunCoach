@@ -380,7 +380,7 @@ SSE: complete {total_downloaded, total_checked, errors}
 | `local_only` | DB 有、遠端沒有（只看清單的日期範圍，頭尾兩天不算） | **只列出，不刪**（使用者 2026-10-08） |
 | `failed` | 該來源在失敗清單裡的列 | 列出；重試照失敗清單的規則 |
 
-- **模式**：`full`（設定頁按鈕；COROS 從 `FIRST_SYNC_DAY` 起每一頁，約 41 頁、40～60 秒；TP 從 2010-01-01 起每 90 天一次）、`fill`（補下載上一次完整檢查的 `missing`）、`weekly`（最近 `WEEKLY_DAYS` 60 天，約 3 頁 COROS）。清單多列到明天（運動員時區比伺服器快時，今天的活動日期是明天）。
+- **模式**：`full`（設定頁按鈕；COROS 從 `FIRST_SYNC_DAY` 起每一頁，約 41 頁、40～60 秒；TP 從 2010-01-01 起每 90 天一次）、`fill`（補下載上一次完整檢查的 `missing`）、`weekly`（最近 `WEEKLY_DAYS` 60 天，約 3 頁 COROS）。清單跟同步一樣列到伺服器的今天（COROS 的 endDay 給未來日期沒驗證過）；本地日期是今天或之後的列不算 `local_only`。
 - **跟同步的關係**：都經 `runner.stream(client=check_stream, remember=False)`：同一個忙碌旗標（同來源的同步、刪除、另一個檢查都不能同時跑；自評 job 會讓路），下載走同步的 `_fetch_one`（同樣的檔名、失敗清單、新活動的自評），有下載時跑同步後的 ①～③；**不動 cursor**，也不寫 `last_result`／`last_ok`（不算一次同步，不影響開網站自動同步的新鮮度）。
 - **結果**：`sync.coros.check`／`sync.trainingpeaks.check`（完整檢查與補下載：`{mode, at, status, error, since, until, remote, local, pages, missing[], missing_n, local_only[], local_only_n, failed[], failed_n, secs, filled{at, status, downloaded, errors}}`，清單最多 500／200 筆，筆數是全部）；`sync.<src>.check_weekly`（每週檢查，同樣欄位加 `fetched`、`fetch_errors`）。存在設定裡，重新整理頁面還在；跑的時候的進度（`phase` list／fetch、`pages`、`listed`、`done`／`total`）只在記憶體（`GET /sync/check` 的 `progress`）。
 - **每週**：排程 loop（`backend/sync/scheduler.py`）啟動滿 `STARTUP_DELAY_S`（10 分鐘，避開啟動暖機）後每分鐘呼叫 `weekly_tick`：只檢查自動同步會跑的來源（資料來源、啟用、已登入、沒在忙），上次每週檢查超過 7 天（失敗或中斷的隔 1 天）才跑。
