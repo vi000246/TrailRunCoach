@@ -49,7 +49,7 @@ vm.runInNewContext(process.argv[1], ctx);
 })();
 """
     r = subprocess.run([NODE, "-e", js, _block(), json.dumps(saved), json.dumps(list(clicks))],
-                       capture_output=True, text=True, timeout=30)
+                       capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30)
     assert r.returncode == 0, r.stderr
     return json.loads(r.stdout)
 

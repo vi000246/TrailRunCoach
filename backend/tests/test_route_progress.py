@@ -750,7 +750,8 @@ def test_detection_does_not_depend_on_the_hash_seed():
     outs = []
     for seed in ("1", "2", "3"):
         r = subprocess.run([sys.executable, "-c", code], cwd=root, capture_output=True, text=True,
-                           env={**os.environ, "PYTHONHASHSEED": seed}, timeout=120)
+                           encoding="utf-8", errors="replace",
+                           env={**os.environ, "PYTHONHASHSEED": seed, "PYTHONIOENCODING": "utf-8"}, timeout=120)
         assert r.returncode == 0, r.stderr[-800:]
         outs.append(r.stdout.strip().splitlines()[-1])
     assert outs[0] == outs[1] == outs[2] and json.loads(outs[0])

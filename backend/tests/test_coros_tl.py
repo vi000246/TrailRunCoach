@@ -356,7 +356,7 @@ console.log(JSON.stringify({
 """
     caps = {p["id"]: p for p in WT.available()}
     r = subprocess.run([NODE, "-e", js, str(ROOT / "static" / "workout_editor.js"), json.dumps(caps)],
-                       capture_output=True, text=True, timeout=30)
+                       capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30)
     assert r.returncode == 0, r.stderr
     got = json.loads(r.stdout)
     assert got["coros_work"] == ["time", "distance", "open", "load"]

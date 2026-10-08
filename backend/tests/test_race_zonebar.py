@@ -106,7 +106,7 @@ console.log(JSON.stringify(ctx.out));
     cat = json.loads((STATIC / "i18n" / "zh-TW" / "racepower.json").read_text(encoding="utf-8"))
     cat = {k: v for k, v in cat.items() if k.startswith("zbar.")}
     r = subprocess.run([NODE, "-e", js, _block(), json.dumps(cat), json.dumps(plan), json.dumps(basis), json.dumps(pick)],
-                       capture_output=True, text=True, timeout=30)
+                       capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30)
     assert r.returncode == 0, r.stderr
     return json.loads(r.stdout)
 
