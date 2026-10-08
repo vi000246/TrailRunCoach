@@ -134,10 +134,10 @@ def test_the_zone5_maintenance_obeys_the_gate_and_the_guardrails():
     """The maintenance session is a Zone 5 session like any other: Zone 5 locked, the low-intensity share
     (tested AeT) or a load guardrail → not scheduled, and the week note says so."""
     races = [ev("race", 42, hours=5.0)]
-    shut = gate(races, z5=False)
+    shut = gate(races, z5=False)                       # Zone 5 had been under way (step 1), now closed
     d = QG.week_decision(shut, "specific", "specific", monday_of(4))
     assert [it["track"] for it in d["items"]] == ["z3"]
-    assert "5 區維持課" in d["seg_note"] and "還沒開放" in d["seg_note"] and "不排" in d["seg_note"]
+    assert "5 區維持課" in d["seg_note"] and "沒有開放" in d["seg_note"] and "不排" in d["seg_note"]
     bad = gate(races, levels={"intensity": "bad"})
     d = QG.week_decision(bad, "specific", "specific", monday_of(4))
     assert [it["track"] for it in d["items"]] == ["z3"] and "5 區維持課" in d["seg_note"] and "強度分配" in d["seg_note"]
@@ -148,6 +148,70 @@ def test_the_zone5_maintenance_obeys_the_gate_and_the_guardrails():
     assert "5 區維持課" in d["seg_note"] and "護欄" in d["seg_note"]
     # a guardrail week that isn't the maintenance week: no 後段 note added
     assert not QG.week_decision(ramp, "specific", "specific", monday_of(6)).get("seg_note")
+
+
+def test_no_maintenance_note_when_zone5_never_opened():
+    """Review L3: an athlete whose Zone 5 never opened (no step, nothing done) gets no 「輪到 5 區維持課，但…」
+    note — locked or behind a guardrail, the week is just the Zone 3 week it would have been."""
+    races = [ev("race", 42, hours=5.0)]
+    never = {"z3": {"step": 2, "met": 2, "done": 2}, "z5": {"step": 0, "done": 0}}
+    d = QG.week_decision(gate(races, z5=False, dose=never), "specific", "specific", monday_of(4))
+    assert [it["track"] for it in d["items"]] == ["z3"] and "維持課" not in d["seg_note"]
+    ramp = {"block": True, "blocks": ["ramp"], "rule": "ramp", "verdict": "CTL 增幅太快", "verdicts": {"ramp": "CTL 增幅太快"}}
+    d = QG.week_decision(gate(races, z5=False, dose=never, guard=ramp), "specific", "specific", monday_of(4))
+    assert d["items"] == [] and not d.get("seg_note")
+
+
+def test_the_maintenance_session_takes_the_state_machines_tweak():
+    """Review L1: 目標太高 (−5 %) / 未適應 (rest +1) on the Zone 5 track apply to the maintenance session too."""
+    for adj in ({"power": QG.TARGET_DOWN}, {"rest_add": 1}):
+        g = gate([ev("race", 42, hours=5.0)], dose={"z3": {"step": 2, "met": 2, "done": 2},
+                                                    "z5": {"step": 1, "done": 1, "adjust": adj}})
+        z5 = next(it for it in QG.week_decision(g, "specific", "specific", monday_of(4))["items"] if it["track"] == "z5")
+        assert z5["maint"] and z5["adjust"] == adj and z5["spec"] == QG.adjusted_spec(QG.z5_spec(1), adj)
+
+
+def test_a_done_maintenance_session_is_judged_but_does_not_move_the_rung():
+    """Review M1: the stored maintenance session says 不算進階 (equiv / progress False) and dose_step judges it
+    without stepping the Zone 5 ladder — not only the projection."""
+    g = {**gate([ev("race", 42, hours=5.0)]), "state": "unlocked", "lthr": {"default": False}}
+    dec = QG.week_decision(g, "specific", "specific", monday_of(4))
+    s = O.quality_sessions(g, dec, "specific", {"cp": 250.0}, {}, 10.0, mountain=True)[0]
+    assert s["rung_key"] == QG.z5_spec(1)[0] and s["equiv"] is False and s["progress"] is False
+    assert "維持課" in s["swap_reason"]
+    cp, hit = 250.0, [{"power": 275, "hr_at60": None}] * 6
+    v1 = lambda: {"bouts": hit, "cp": cp, "variant_key": "v1a", "rung_key": "z5a", "equiv": True}
+    row = {"bouts": hit, "cp": cp, "variant_key": s["variant_key"], "rung_key": s["rung_key"], "equiv": s["equiv"]}
+    d = QG.dose_tracks([v1(), row])
+    assert row["outcome"] == "met" and row["counted"] is False and d["z5"]["step"] == 1
+    # the same row as a ladder session would have moved it
+    assert QG.dose_tracks([v1(), {**row, "equiv": True}])["z5"]["step"] == 2
+
+
+def test_no_zone5_maintenance_on_a_multi_day_baiyue_that_gets_me():
+    """Review H1: a multi-day 百岳 (SP-114 ME instead of the uphill VO2max set) keeps the main-branch weeks — no
+    maintenance session for apply_me to delete or replace; a long single-day trail race keeps it."""
+    from backend.engine import specific_phase as SP
+    from backend.tests.test_baiyue_multiday import race_of, trip
+    e = trip(start=RACE.isoformat())
+    g = {**gate([e]), "state": "unlocked", "lthr": {"default": False}}
+    assert QG.race_class(e) == "trail_long" and g["ratio"]["late"]["z5_every"] == 0
+    for n in (1, 2):
+        d = QG.week_decision(g, "specific", "specific", monday_of(4), n=n)
+        assert {it["track"] for it in d["items"]} == {"z3"} and not any(it.get("maint") for it in d["items"])
+        assert "5 區不排" in d["seg_note"] and "維持課" not in d["seg_note"]
+    dec = QG.week_decision(g, "specific", "specific", monday_of(4))
+    ss = O.quality_sessions(g, dec, "specific", {"cp": 250.0}, {}, 10.0, mountain=True)
+    info = SP.week_context(kind="specific", mode="specific", monday=monday_of(4), race=race_of(e, TODAY))
+    assert info.get("me_week")
+    SP.apply_me(ss, info, 0.08, 60.0)                  # ADS ≤ 10 %: ME added next to the Zone 3 session
+    assert [s["id"] for s in ss] == ["quality", "me"]
+    assert ss[0]["title"].endswith("上坡") and not ss[0]["title"].startswith("VO2max")
+    ss = O.quality_sessions(g, dec, "specific", {"cp": 250.0}, {}, 10.0, mountain=True)
+    SP.apply_me(ss, info, 0.15, 60.0)                  # ADS > 10 %: the Zone 3 session stays
+    assert [s["id"] for s in ss] == ["quality"]
+    one = gate([ev("race", 42, hours=5.0)])
+    assert any(it.get("maint") for it in QG.week_decision(one, "specific", "specific", monday_of(4))["items"])
 
 
 def test_a_short_trail_race_keeps_both_tracks_late_and_alternates_in_two_week_blocks():
