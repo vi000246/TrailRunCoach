@@ -1347,6 +1347,10 @@ def target_types(items: list, basis: Optional[str] = None, quality: bool = False
     owner 2026-10-07, SP-84): 間歇／爬坡 run on power when nothing else is chosen
     (target_policy.AUTO), so its 「自動」 counts as % CP."""
     if basis not in ("hr", "power") and quality:
+        # NOTE (review L4, open with the owner): the filter follows the owner's wording (強度課 「自動」 = % CP),
+        # but at plan time target_policy.target_policy lets 課表偏好 decide first — pref_basis(prefs) == "hr"
+        # (target_basis hr, or the old interval_target hr) runs these sessions on % LTHR, and a non-Stryd power
+        # source falls back to HR. The filter does not read 課表偏好, so for those users it says % CP anyway.
         basis = "power"
     steps: list = []
 
