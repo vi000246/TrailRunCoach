@@ -1595,18 +1595,21 @@ which one. The response keeps the `coros` field names.
   taper exclusion, 技術地形 hard / easy by `rpe_role`); a pick carries `mine` and the menu tags it
   我的; custom category tabs get 推薦 too.
   **主課強度 filter** (2026-10-05, SP-84): after the category, both lists filter by the main
-  set's target type. One helper, `workout_steps.target_types` (`backend/engine/workout_steps.py:1340`):
+  set's target type. One helper, `workout_steps.template_target_types` (`backend/engine/workout_steps.py:1367`,
+  over `target_types`, `:1341`):
   the targets of the work steps (inside repeats too; none → the 「其他」 steps, e.g. strides; none
   → every step), each type a mixed main set uses, in `TARGET_TYPE_IDS` order
   (`backend/engine/workout_steps.py:1307`): % CP 功率區間 (pct and Palladino zones) / 絕對功率 /
   % LTHR 心率 / 心率區間 (≤ AeT, Friel, 課表心率區間) / 絕對心率 / 配速 / RPE / 自動（依課表類型）/
   不設目標 (incl. a 自動 open step) / 負荷 (a 「負荷」 end condition on the main set). A 「自動」 band
-  takes the template's 目標用 (library `basis`, user `target_basis`: power → % CP, hr → % LTHR),
-  else stays 自動 — so the interval ladder's variants are 自動 (the session's 目標用 decides); an
+  takes the template's 目標用 (library `basis`, user `target_basis`: power → % CP, hr → % LTHR);
+  without one, a 強度課 (listed under 強度課, or a user template whose `cats` include it) counts as
+  % CP (owner 2026-10-07: 間歇／爬坡 run on power, `target_policy.AUTO`) — so the interval ladder's
+  variants are % CP — and any other category stays 自動; an
   自動 easy step is 心率區間 unless a power band under 目標用 power. Every row of
-  GET /steps/templates (`backend/engine/workout_steps.py:1818`) and GET /steps/templates/user
+  GET /steps/templates (`backend/engine/workout_steps.py:1830`) and GET /steps/templates/user
   (`row`, `backend/engine/user_templates.py:499`) carries `target_types`; both responses carry
-  the type list `target_types` [{id, label}] (translated labels, `backend/api/plan_sessions.py:1563`). The UIs
+  the type list `target_types` [{id, label}] (translated labels, `backend/api/plan_sessions.py:1709`). The UIs
   show only the types the listed rows use (by category and source; one type → no chips) plus
   全部強度: the 範本 page under its category chips (`rows`, `backend/static/templates.html:229`),
   插入範本 under its category tabs, over the 推薦 block and the rows (`menuHtml`,
@@ -2065,7 +2068,6 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 - [ ] iLevel / Stryd power zones in 設定 as the 課表's default (SP-363, Todo) — not implemented
 - [ ] A warm-up time in 課表偏好 added before every session and template (SP-364, Todo) — not implemented
 - [ ] RPE load converted per level (TSS definition IF² × 100 / h as the default, fitted per level once there is data), decided 2026-10-07 (SP-57, Todo) — the code still uses one factor (`DEFAULT_FACTOR`, `backend/engine/rpe_load.py:67`)
-- [ ] A 強度課's 「自動」 target counted as % CP in the template filter, decided 2026-10-07 (SP-84, Todo) — `target_types` still leaves it "auto" without a basis (`backend/engine/workout_steps.py:1341`)
 - [ ] 專項期前後段: a long trail race's late half keeps one Zone 5 session every 3 weeks, and the other four answers of 2026-10-07 (SP-353, Todo) — not implemented
 - [ ] The altitude reminder names no place, can be dismissed, and counts the weekend of a Sunday departure, decided 2026-10-07 (SP-258, Todo) — the reminder still names 合歡山松雪樓 (`backend/engine/altitude.py:364`)
 
@@ -2146,3 +2148,4 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 | 2026-10-08 | code-sync（SP-90, SP-95, SP-96, SP-98, SP-109, SP-114, SP-115, SP-117, SP-119, SP-120, SP-191, SP-216, SP-263, SP-270, SP-271, SP-272, SP-273, SP-280, SP-285, SP-71, SP-100, SP-105, SP-122, SP-231, SP-258, SP-259, SP-286） | N/A | Re-anchored the whole spec: each anchor moved once from the commit that wrote its line (~410 of 510), then the ones written stale or still off checked by hand against the symbol, the route decorator or the code text (≈ 120 fixed, incl. the whole API table). New: the week-plan rules added after 2026-10-04 (taper by race, two A races, 中間訓練 / B races, B-race notes, 恢復期 / 回量期, ultra 轉換期, multi-day 百岳, the walking cap, illness, strength by phase / moves, 平衡／腳踝, injuries, carb note), Categories = the platform-neutral app type, compliance intensity grading, the 課表 page's fuel / self-rating / altitude lines, the 7 / 42 / 90-day PMC, 每週存檔 and its API row, the feasibility API row, the feature test files; Decisions Log (9) and Open Questions (11) |
 | 2026-10-08 | fix/plan-rules-sp352-295-286-84-353 | SP-352 | A manual 專項期 without an A race no longer crashes the week plan when Zone 3's turn is the T+ maintenance session: the 後段 note and its T+ rule only in a 後段 week (`backend/engine/quality_gate.py:2601-2612`; plan-auto.spec.md › The ladder: two tracks) |
 | 2026-10-08 | fix/plan-rules-sp352-295-286-84-353 | SP-286 | 「課前要吃」 removed entirely (owner 2026-10-07; reverts `ba6934d`): `backend/engine/session_fuel.py` deleted, no `pre_meal` on the session view (`backend/api/plan_sessions.py:520`), the 課表 card / title / dialog line and the 總覽 tooltip line gone (`backend/static/schedule.html`, `backend/static/overview.html`), zh-TW / en string removed; the watch push is unchanged. Test: `backend/tests/test_carb_hints.py::test_no_session_description_says_eat_before` |
+| 2026-10-08 | fix/plan-rules-sp352-295-286-84-353 | SP-84 follow-up | 主課強度 filter: a 強度課's 「自動」 main set counts as % CP when the template has no 目標用 (owner 2026-10-07); one helper `workout_steps.template_target_types` (`backend/engine/workout_steps.py:1367`) for 插入範本 (`:1830`) and the 範本 page (`backend/engine/user_templates.py:512`); an explicit 目標用 still wins, other categories keep 自動. Tests: `backend/tests/test_template_target_types.py::test_quality_auto_counts_as_pct_cp`, `::test_builtin_rows_carry_target_types`, `::test_api_field_built_in_and_user` |
