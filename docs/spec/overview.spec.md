@@ -1521,25 +1521,36 @@ which one. The response keeps the `coros` field names.
   the editor has a 「負荷怎麼填」 choice TSS／RPE（感覺）(`loadIn`, `backend/static/workout_editor.js:506`;
   the pure field update `loadDur`, `backend/static/workout_editor.js:221`): by RPE the user picks one
   of five levels 輕鬆／稍累／累／很累／極限 = Borg CR-10 2／4／5／7／10 (Foster's anchors: easy,
-  somewhat hard, hard, very hard, maximal; `LEVELS`, `backend/engine/rpe_load.py:57`) and the
+  somewhat hard, hard, very hard, maximal; `LEVELS`, `backend/engine/rpe_load.py:63`) and the
   minutes. Stored as `{"type": "load", "value": TSS, "rpe": easy|moderate|hard|very_hard|max,
-  "min": minutes}` (1–360 min); `normalize` sets `value` = factor × CR-10 × minutes — Foster session
-  RPE × the athlete's TSS-per-AU factor (default 0.30, 推估; refit per athlete after each sync on
-  the watch-recorded RPE vs the activity's TSS — wko5-coros-sync.spec.md) — and refuses a level it
-  doesn't know, minutes out of range or a result > 500 TSS (`_norm_rpe_load`,
-  `backend/engine/workout_steps.py:737`). **RPE + minutes, not a TSS/h rate × the step's time**: a
-  load step's time is itself estimated from its TSS, so a rate would be circular; the minutes are
-  what session RPE is. Such a step is timed by its minutes and converted (TL, closed loop) at the IF
-  they imply, √(TSS ÷ (100 × h)) clamped to 0.4–1.3 (`load_if`,
-  `backend/engine/workout_steps.py:1097`); the rest — `value` in TSS, the COROS TL end condition,
-  the fingerprint, the closed-loop record — is the typed load step's. Because `normalize` runs with
-  the factor in effect, a refit moves the TSS; the push keeps the TL last sent while it moves < 3 TL
-  (`TL_RESEND_MIN`). The editor shows 「≈ N TSS ≈ M TL（推估 ±E）」 and, in its tooltip, the factor and
-  whether it is the default or calibrated (`view` adds `load.rpe` {level, min, factor, fitted,
-  err_pct}, `backend/engine/workout_steps.py:1676`); `/steps/derive` context `rpe_load` lists the
-  levels and the factor (`_rpe_load_ctx`, `backend/api/plan_sessions.py:1448`). **Planning only**
-  (the user, 2026-10-04): the PMC, the overview and every guardrail keep the watch's recorded load —
-  RPE never corrects an activity's TSS. The static demo's JS port follows (default factor).
+  "min": minutes}` (1–360 min); `normalize` sets `value` = **the level's TSS per hour × the hours**
+  (per level since 2026-10-07, the owner: one Foster factor × CR-10 was too low at 輕鬆 and too high
+  at 很累) and refuses a level it doesn't know, minutes out of range or a result > 500 TSS
+  (`_norm_rpe_load`, `backend/engine/workout_steps.py:737`). Each level's default is the TSS
+  definition, TSS/h = IF² × 100, at the level's intensity (`DEFAULT_IF` / `DEFAULT_TSS_H`,
+  `backend/engine/rpe_load.py:82`, `:98`): 輕鬆 IF 0.74 → 55, 稍累 0.82 → 67, 累 0.88 → 77, 很累
+  0.95 → 90, 極限 1.10 → 121 TSS/h. The bands are sourced — Seiler & Kjerland 2006's session-RPE
+  zones (≤ 4 below VT1, 5–6 VT1–VT2, ≥ 7 above VT2), Coggan's power levels with their CR-10 RPE
+  (L2 56–75 % RPE 2–3 … L4 91–105 % RPE 4–5, L5 106–120 % RPE 6–7), running-power zones (easy 65–80 %
+  CP, moderate 80–90 %) — the point in each band is **推估** (輕鬆 / 很累 match the owner's ≈ 55 / ≈ 90;
+  per-level reasons in `IF_SRC`, `backend/engine/rpe_load.py:91`, shown in the level's chip). Per
+  athlete each level is refit after each sync on the rated activities and shrunk toward its default,
+  and a higher level never gives less TSS/h (wko5-coros-sync.spec.md). **RPE + minutes, not a TSS/h
+  rate × the step's time**: a load step's time is itself estimated from its TSS, so it needs the
+  user's minutes — what session RPE is. Such a step is timed by its minutes and converted (TL,
+  closed loop) at the IF they imply, √(TSS ÷ (100 × h)) clamped to 0.4–1.3 (`load_if`,
+  `backend/engine/workout_steps.py:1097`) — for a default level exactly its `DEFAULT_IF`; the rest —
+  `value` in TSS, the COROS TL end condition, the fingerprint, the closed-loop record — is the typed
+  load step's (unchanged). Because `normalize` runs with the rates in effect, a refit moves the TSS;
+  the push keeps the TL last sent while it moves < 3 TL (`TL_RESEND_MIN`). The editor's level options
+  read 「很累 ≈ 90 TSS/h」 and the step 「≈ N TSS（推估｜本人）≈ M TL（推估 ±E）」 (`loadIn`,
+  `backend/static/workout_editor.js:515`), the tooltip the level's TSS/h and whether it is the default
+  or fitted (`view` adds `load.rpe` {level, min, tss_h, fitted, n, err_pct},
+  `backend/engine/workout_steps.py:1713`); `/steps/derive` context `rpe_load.levels` lists
+  {id, cr10, tss_h, fitted, n} per level (`_rpe_load_ctx`, `backend/api/plan_sessions.py:1594`).
+  **Planning only** (the user, 2026-10-04): the PMC, the overview and every guardrail keep the
+  watch's recorded load — RPE never corrects an activity's TSS. The static demo's JS port follows
+  (each level's default TSS/h).
   (`TRAIL_SPECIFIC`, `backend/engine/template_recs.py:49`). week_plan generates 技術地形 sessions
   itself (SP-74) and counts the user's own RPE ≥ 7 ones into the 20 % budget (above); a user's own
   interval (kind quality) is still not counted.
@@ -1752,7 +1763,7 @@ which one. The response keeps the `coros` field names.
   (`thrCheck`, `backend/static/overview.html:520`); the floating box renders `links` for the
   tests it doesn't schedule (`zone_rows`, `backend/engine/suggestions.py:162`). Nothing is applied
   automatically: 設定 shows the results / candidate with 「套用」 (`renderThrCheck`,
-  `backend/static/settings.html:886`). HR-target templates and sessions get a warning badge in
+  `backend/static/settings.html:888`). HR-target templates and sessions get a warning badge in
   the editor from `thresholds.thr_warn` (`_thr_warn`, `backend/api/plan_sessions.py:204`).
   SP-274 / SP-277: per session `POST /steps/check` returns `thr_warn` from
   `threshold_confidence.session_warn` — never on a test session (`is_test_session`: kind test or a
@@ -2078,7 +2089,7 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 - [ ] The 課表 page loads slowly, also after switching the 課表心率區間 in 設定 and while a sync runs (SP-361 Bug Todo, SP-362 In Progress) — not fixed
 - [ ] iLevel / Stryd power zones in 設定 as the 課表's default (SP-363, Todo) — not implemented
 - [ ] A warm-up time in 課表偏好 added before every session and template (SP-364, Todo) — not implemented
-- [ ] RPE load converted per level (TSS definition IF² × 100 / h as the default, fitted per level once there is data), decided 2026-10-07 (SP-57, Todo) — the code still uses one factor (`DEFAULT_FACTOR`, `backend/engine/rpe_load.py:67`)
+- [x] RPE load converted per level (TSS definition IF² × 100 / h as the default, fitted per level once there is data), decided 2026-10-07 (SP-57) — done 2026-10-08 (`DEFAULT_IF`, `backend/engine/rpe_load.py:82`; branch feat/rpe-per-level-sp57)
 
 ## Change History
 
@@ -2161,3 +2172,4 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 | 2026-10-08 | fix/plan-rules-sp352-295-286-84-353 | SP-286 | 「課前要吃」 removed entirely (owner 2026-10-07; reverts `ba6934d`): `backend/engine/session_fuel.py` deleted, no `pre_meal` on the session view (`backend/api/plan_sessions.py:520`), the 課表 card / title / dialog line and the 總覽 tooltip line gone (`backend/static/schedule.html`, `backend/static/overview.html`), zh-TW / en string removed; the watch push is unchanged. Test: `backend/tests/test_carb_hints.py::test_no_session_description_says_eat_before` |
 | 2026-10-08 | fix/plan-rules-sp352-295-286-84-353 | SP-84 follow-up | 主課強度 filter: a 強度課's 「自動」 main set counts as % CP when the template has no 目標用 (owner 2026-10-07); one helper `workout_steps.template_target_types` (`backend/engine/workout_steps.py:1367`) for 插入範本 (`:1830`) and the 範本 page (`backend/engine/user_templates.py:512`); an explicit 目標用 still wins, other categories keep 自動. Tests: `backend/tests/test_template_target_types.py::test_quality_auto_counts_as_pct_cp`, `::test_builtin_rows_carry_target_types`, `::test_api_field_built_in_and_user` |
 | 2026-10-08 | fix/plan-rules-sp352-295-286-84-353 | SP-353 | 專項期後段 of a ≥ 4 h / multi-day trail race: one Zone 5 maintenance session every 3 weeks (賽前第 4 週; owner 2026-10-07, specific-phase-progression.md §4.1 / §5-1) instead of none — the Zone 5 rung as it stands, uphill, not moving the rung; only when the Zone 5 gate and the guardrails allow, else the week note says why (`backend/engine/quality_gate.py:1634`, `:1687`, `:2583`, `:2627`, `:2717`). The other four answers (4-h line, uphill ladder, road ladder, MP 20→40 % every other week) confirm the code as built; acceptance tests added. Tests: `backend/tests/test_specific_split.py` |
+| 2026-10-08 | feat/rpe-per-level-sp57 | SP-57 (owner 2026-10-07) | 「負荷」 by RPE converted **per level**: the single factor (0.30) is gone; each level's default TSS/h = IF² × 100 (輕鬆 0.74 → 55, 稍累 0.82 → 67, 累 0.88 → 77, 很累 0.95 → 90, 極限 1.10 → 121; bands from Seiler & Kjerland 2006's session-RPE zones, Coggan's power levels with CR-10 RPE and running-power zones, points 推估; `DEFAULT_IF`, `backend/engine/rpe_load.py:82`), fitted per level from 3 rated activities (watch or COROS post-run rating) and shrunk toward the default, a higher level never less (isotonic, `monotone`, `:127`); the editor's options read 「很累 ≈ 90 TSS/h」 and the step 「≈ N TSS（推估｜本人）≈ M TL」 (`backend/static/workout_editor.js:515`); `view` `load.rpe` = {level, min, tss_h, fitted, n, err_pct}; context `rpe_load.levels` carries each level's tss_h; the COROS TL conversion and the PMC unchanged. Tests: `backend/tests/test_rpe_load.py`, `backend/tests/test_static_steps.py` |
