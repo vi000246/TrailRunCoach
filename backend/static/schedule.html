@@ -683,7 +683,6 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
     <div class="hint" id="sd-tgt"></div>
     <label>備註<textarea name="detail" rows="2" maxlength="500" placeholder="休息、暖身、路線…"></textarea></label>
     <div class="hint" id="sd-gl"></div>
-    <div class="hint" id="sd-meal" hidden></div>
     <p class="meta faint" style="margin:0" id="sd-q" hidden></p>
     <div class="err" id="sd-err" role="alert"></div>
     <div class="btns">
@@ -1056,10 +1055,10 @@ function chipHtml(s, big) {
   const icon = s.state === "active" && s.day >= D.today ? syIcon(c.status, c.error || c.reason || "") : "";
   const lbl = `${KINDS[s.kind] || ""}${fam ? "（" + fam.text + "）" : ""}：${s.title}，${s.minutes || 0} 分鐘，${tss.replace("→", "實際")}${s.state === "missed" ? "，未完成" : s.state === "done" ? "，已完成" : ""}${s.provisional ? "，暫定" : ""}${icon ? "，" + syLabel(c.status) : ""}`;
   return `<button type="button" class="chip k-${esc(s.kind)}${fam ? " fam-" + esc(fam.id) : ""}${S.swapFrom && S.swapFrom.uid === s.uid ? " swap-src" : ""} st-${esc(s.state)} ${cp && cp.level !== "missed" ? "cp-" + esc(cp.level) : ""} ${s.provisional && s.state === "active" ? "prov" : ""}" data-uid="${esc(s.uid)}"
-      ${live ? 'draggable="true"' : ""} aria-label="${esc(lbl + (cp && cp.level !== "missed" ? "，" + compTip(cp) : ""))}" title="${esc(s.title + (fam && fam.sub_label ? "\n" + fam.text : "") + "\n" + meta + cpTip + (s.target ? "\n" + s.target : "") + (s.detail ? "\n" + s.detail : "") + (s.walk_hint ? "\n" + s.walk_hint : "") + (s.pre_meal ? "\n" + s.pre_meal.text : ""))}">
+      ${live ? 'draggable="true"' : ""} aria-label="${esc(lbl + (cp && cp.level !== "missed" ? "，" + compTip(cp) : ""))}" title="${esc(s.title + (fam && fam.sub_label ? "\n" + fam.text : "") + "\n" + meta + cpTip + (s.target ? "\n" + s.target : "") + (s.detail ? "\n" + s.detail : "") + (s.walk_hint ? "\n" + s.walk_hint : ""))}">
     <span class="c-t">${isHeat(s) ? '<span class="heat-tag" aria-hidden="true">熱</span>' : ""}${esc(s.title)}</span><span class="c-r">${off ? `<span class="offp-i" aria-hidden="true">≠</span>` : part ? `<span class="part-i" aria-hidden="true">◐</span>` : ""}${icon}</span>
     <span class="c-m">${meta}</span>
-    ${line ? `<span class="c-x">${line}</span>` : ""}${big && off ? `<span class="c-x offp-i">≠ ${esc(s.vs.text.replace("沒照課表：", "沒照課表 · "))}</span>` : ""}${big && part ? `<span class="c-x part-i">◐ ${esc(s.vs.short_text)}</span>` : ""}${big && (s.detail || s.walk_hint) && s.state !== "done" ? `<span class="c-d">${esc([s.detail, s.walk_hint].filter(Boolean).join(" "))}</span>` : ""}${big && s.pre_meal ? `<span class="c-d">${esc(s.pre_meal.text)}</span>` : ""}${s.state === "done" && s.note ? `<span class="c-x adapt-note">⚠ ${esc(s.note)}</span>` : ""}</button>`;
+    ${line ? `<span class="c-x">${line}</span>` : ""}${big && off ? `<span class="c-x offp-i">≠ ${esc(s.vs.text.replace("沒照課表：", "沒照課表 · "))}</span>` : ""}${big && part ? `<span class="c-x part-i">◐ ${esc(s.vs.short_text)}</span>` : ""}${big && (s.detail || s.walk_hint) && s.state !== "done" ? `<span class="c-d">${esc([s.detail, s.walk_hint].filter(Boolean).join(" "))}</span>` : ""}${s.state === "done" && s.note ? `<span class="c-x adapt-note">⚠ ${esc(s.note)}</span>` : ""}</button>`;
 }
 const CAT_VAR = { road: "--s1", trail: "--s2", hike: "--s4", bike: "--s7", strength: "--s5", walk: "--s6", other: "--bar" };
 // an activity no session holds: 沒排課的活動 (click: summary, open it, pair it with a session)
@@ -1993,8 +1992,6 @@ function openDlg(s, day) {
   F.minutes.value = s ? s.minutes : 45;
   F.target.value = s ? s.target || "" : (D.targets || {}).easy || "";
   F.detail.value = s ? s.detail || "" : "";
-  // 課前要吃 (SP-286, engine/session_fuel.py): app text only, never pushed to the watch
-  $("sd-meal").textContent = s && s.pre_meal ? s.pre_meal.text : ""; $("sd-meal").hidden = !(s && s.pre_meal);
   F.querySelectorAll("input, textarea").forEach((x) => { x.disabled = !!ro; });
   $("sd-err").textContent = "";
   $("sd-save").hidden = !!ro;

@@ -1000,6 +1000,11 @@ def quality_sessions(gate: dict, dec: dict, kind: str, th: dict, tgt: dict, hour
             it = {**it, "hill": kind == "specific" and not road}        # SP-75: 越野 專項期 = the uphill version
             s = _gate_session(gate, {**it, "budget": left} if t == "z3" else it, th, hours, prefs, history, mountain,
                               cap, alt_caps, notes)
+            if it.get("maint"):
+                # SP-353's Zone 5 maintenance session: stored 不算進階 (equiv False), so a done 達標 one is
+                # judged but doesn't step the ladder (quality_gate.variant_spec → counted False), as in the projection
+                s.update(equiv=False, progress=False,
+                         swap_reason=_("5 區維持課（長距離越野的專項期後段每 3 週 1 堂）：照目前那一階，判定但不算進階"))
         if left is not None and session_tiz_min(s) > left + 1e-6:
             if reserved:
                 # the user's own sessions came first: even the 縮量版 floor must fit, else none
