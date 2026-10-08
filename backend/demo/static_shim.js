@@ -165,6 +165,7 @@
     if (body.steps === null) delete next.steps;
     if (body.tss != null && isFinite(+body.tss)) { next.tss = +body.tss; next.tss_est = +body.tss; }
     next.edited = true;
+    next.mark = { state: "user" };                 // SP-318 ✎, as GET /calendar would say
     withFamily(next);
     if (next.coros && next.coros.status && next.coros.status !== "not_pushed") next.coros = { ...next.coros, status: "outdated" };
     ov.ses[uid] = { orig, cur: next };
@@ -188,6 +189,7 @@
       uid: `local-${ov.n}`, day: body.day, kind: body.kind || "easy", title: String(body.title).trim(),
       minutes: +body.minutes || 0, target: body.target || "", detail: body.detail || "", tss, tss_est: tss,
       state: "active", origin: "custom", edited: true, provisional: false, coros: { status: "not_pushed" }, link_options: [],
+      mark: { state: "user" },                     // SP-318 ✎
     };
     for (const k of ["protocol", "terrain", "distance_km", "climb_m", "steps", "family"]) if (body[k] !== undefined) s[k] = body[k];
     withFamily(s);

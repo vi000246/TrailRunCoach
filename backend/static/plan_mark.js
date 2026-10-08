@@ -14,6 +14,8 @@
   st.textContent = `.pmk { font-weight: 700; font-size: 11px; line-height: 1; }
   .pmk.pmk-auto { color: var(--accent, #2f6fde); }
   .pmk.pmk-user { color: var(--muted, #888); }
+  .pmk.pmk-badge { position: absolute; top: -5px; right: -5px; width: 14px; height: 14px; border-radius: 50%;
+    display: grid; place-items: center; font-size: 10px; background: var(--panel, #fff); box-shadow: 0 0 0 1px var(--line, #ccc); }
   .pmk-box { margin: 4px 0 0; font-size: 12.5px; }
   .pmk-box ul { margin: 2px 0 0; padding-left: 18px; }`;
   (document.head || document.documentElement).appendChild(st);
@@ -41,12 +43,13 @@
 
   window.PlanMark = {
     state,
-    // the small glyph on the session ("" when untouched)
-    icon(s) {
+    // the small glyph on the session ("" when untouched); `badge`: a corner badge on an icon
+    // (the 總覽 day-cards: never inside the title, whose ellipsis would hide it)
+    icon(s, badge) {
       const x = state(s);
-      return GLYPH[x] ? `<span class="pmk pmk-${x}" aria-hidden="true">${GLYPH[x]}</span>` : "";
+      return GLYPH[x] ? `<span class="pmk pmk-${x}${badge ? " pmk-badge" : ""}" aria-hidden="true">${GLYPH[x]}</span>` : "";
     },
-    // the tooltip lines: label, reason, before → after (none when untouched)
+    // the tooltip lines: label, reason, before → after, the CP re-zone (none when untouched)
     lines(s, kinds) {
       const x = state(s);
       if (x === "none") return [];
@@ -56,6 +59,8 @@
         if (m.reason) out.push(m.reason);
         out.push(...diffLines(m, kinds));
       } else if (m.restored) out.push(T("restored_tip"));
+      // a CP change also re-zoned the watts (the user's own sessions too: the watch takes watts)
+      if (m.cp) out.push(m.cp);
       return out;
     },
     label,
@@ -63,7 +68,7 @@
     detail(s, kinds) {
       const x = state(s);
       // the dialog's subtitle already says 已修改 / 自訂: a plain 「yours」 adds nothing there
-      if (x === "none" || (x === "user" && !s.mark.restored)) return "";
+      if (x === "none" || (x === "user" && !s.mark.restored && !s.mark.cp)) return "";
       const rest = this.lines(s, kinds).slice(1);
       return `<div class="pmk-box"><span class="pmk pmk-${x}" aria-hidden="true">${GLYPH[x]}</span> <b>${esc(label(s))}</b>` +
         (rest.length ? `<ul>${rest.map((l) => `<li>${esc(l)}</li>`).join("")}</ul>` : "") + `</div>`;

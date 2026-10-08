@@ -1326,10 +1326,11 @@ which one. The response keeps the `coros` field names.
 - **課表標記** (SP-318, 2026-10-08): a session still ahead shows ↻ when the automatic adjustment
   changed it and ✎ when it is the user's own, nothing when untouched — the `mark` of
   `GET /overview/plan/calendar` (`backend/engine/plan_marks.py`, from `plan_change_log`; rules and the
-  7-day lifetime in plan-auto.spec.md 「課表標記」). Same glyphs on both pages through
+  7-day lifetime in plan-auto.spec.md 「課表標記」; ↻ only in the push window). Same glyphs on both pages through
   `backend/static/plan_mark.js` (`window.PlanMark`, strings `common.planmark.*`): on the 總覽 the
-  rule, reason and before → after are in the day-card's tooltip (`sessHtml`,
-  `backend/static/overview.html:652`, `:663`); on the 課表 page in the chip's tooltip and the
+  glyph is a corner badge on the day-card's icon (not in the title, whose ellipsis would hide it)
+  and the rule, reason and before → after are in its tooltip, after the duration (`sessHtml`,
+  `backend/static/overview.html:652`, `:661-662`); on the 課表 page in the chip's tooltip and the
   session dialog's `#sd-mark` (`chipHtml` `backend/static/schedule.html:1058-1062`, `openDlg`
   `backend/static/schedule.html:1980`). Not pushed to COROS (`push_dict` leaves `mark` out): the
   watch has the session as it is now, the marker's after.
@@ -2084,7 +2085,7 @@ The owner's calls behind rules above (the ticket holds the discussion).
 Open tickets that touch this module. Not implemented unless the line says otherwise.
 
 - [ ] Show the stored plan's future TSS / CTL on the charts (SP-219, 決策, Todo) — not decided yet
-- [ ] Mark which sessions the system changed, which were left alone, which the user edited (SP-318, Todo) — not implemented
+- [x] Mark which sessions the system changed, which were left alone, which the user edited (SP-318) — built (課表標記 above)
 - [ ] The 課表 page loads slowly, also after switching the 課表心率區間 in 設定 and while a sync runs (SP-361 Bug Todo, SP-362 In Progress) — not fixed
 - [ ] iLevel / Stryd power zones in 設定 as the 課表's default (SP-363, Todo) — not implemented
 - [ ] A warm-up time in 課表偏好 added before every session and template (SP-364, Todo) — not implemented
@@ -2172,3 +2173,4 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 | 2026-10-08 | fix/plan-rules-sp352-295-286-84-353 | SP-84 follow-up | 主課強度 filter: a 強度課's 「自動」 main set counts as % CP when the template has no 目標用 (owner 2026-10-07); one helper `workout_steps.template_target_types` (`backend/engine/workout_steps.py:1367`) for 插入範本 (`:1830`) and the 範本 page (`backend/engine/user_templates.py:512`); an explicit 目標用 still wins, other categories keep 自動. Tests: `backend/tests/test_template_target_types.py::test_quality_auto_counts_as_pct_cp`, `::test_builtin_rows_carry_target_types`, `::test_api_field_built_in_and_user` |
 | 2026-10-08 | fix/plan-rules-sp352-295-286-84-353 | SP-353 | 專項期後段 of a ≥ 4 h / multi-day trail race: one Zone 5 maintenance session every 3 weeks (賽前第 4 週; owner 2026-10-07, specific-phase-progression.md §4.1 / §5-1) instead of none — the Zone 5 rung as it stands, uphill, not moving the rung; only when the Zone 5 gate and the guardrails allow, else the week note says why (`backend/engine/quality_gate.py:1634`, `:1687`, `:2583`, `:2627`, `:2717`). The other four answers (4-h line, uphill ladder, road ladder, MP 20→40 % every other week) confirm the code as built; acceptance tests added. Tests: `backend/tests/test_specific_split.py` |
 | 2026-10-08 | feat/plan-change-marks-sp318 | SP-318 | 課表標記: ↻ (changed by the automatic adjustment: rule, reason, before → after in the tooltip / session dialog), ✎ (the user's own, incl. 復原) or nothing, the same on the 課表 page and the 總覽 (`backend/static/plan_mark.js`); `mark` in `GET /overview/plan/calendar` from `plan_change_log` (`backend/engine/plan_marks.py`), never pushed to COROS. Tests: `backend/tests/test_plan_marks_sp318.py` |
+| 2026-10-08 | feat/plan-change-marks-sp318 | SP-318 review | 課表標記 fixes: 總覽 glyph as a corner badge on the icon (outside the title's ellipsis), aria-label keeps the duration; ↻ only in the push window; ✎ text says a CP change recalculates the watts; the static demo shim marks local edits ✎ (`backend/demo/static_shim.js`) |

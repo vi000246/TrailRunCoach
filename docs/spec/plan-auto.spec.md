@@ -679,27 +679,45 @@ tombstoned. The window is then re-pushed. A session the user deleted as expired
 ### 課表標記 — which sessions changed (SP-318, 2026-10-08)
 
 Every session on the 課表 page and the 總覽 carries one of three states, `mark` in
-`GET /overview/plan/calendar` (`_sessions_body`, `backend/api/plan_sessions.py:604-607`), derived at
-read time from this change log — no second copy (`backend/engine/plan_marks.py`: `marks` `:96`,
-`load` `:129`):
+`GET /overview/plan/calendar` (`_sessions_body`, `backend/api/plan_sessions.py:603-608`), derived at
+read time from this change log — no second copy (`backend/engine/plan_marks.py`: `marks` `:157`,
+`load` `:195`; the page calls `load_safe` `:212`: the push window from `plan.auto.push_days`, any
+error → no markers, logged, never a failed 課表 / 總覽):
 
 | state | when | on screen |
 |---|---|---|
 | `auto` | an `applied` row's item changed it: an adapt rule (`missed_easy` / `missed_quality` / `missed_long` / `overhard` / `rpe_hard` / `fatigue`), a CP change (`cp`) or a re-plan from the latest data (`plan`: the generator's new output, no rule); with `rule`, `rules`, `reason`, `diff` [{key, before, after}], `entry` (the row id), `at` | ↻ on the session; rule, reason, before → after in the tooltip and the session dialog |
-| `user` | `edited` (an edit, a drag, a 交換, a session the user added, a 復原 — `restored` when a `restore` row lists it); the user's edit wins over an earlier auto change | ✎ on the session; 復原 explains itself in the dialog |
+| `user` | `edited` (an edit, a drag, a 交換, a session the user added, a 復原 — `restored` when a `restore` row lists it); the user's edit wins over an earlier auto change. `cp` = the CP row's reason when a CP change in the window rescaled its watts (`rescale_sessions` rescales the user's sessions too: the watch takes absolute watts) | ✎ on the session, text 「你改過的課：自動調整不改課表內容（CP 變更時功率數字會重算）」; 復原 and the CP line show in the dialog / tooltip |
 | `none` | untouched | nothing |
 
-How long (推估, short on purpose — SP-305 few hints): only sessions still ahead (active, today or
-later; notices never), only rows of the last `MARK_DAYS` = 7 days (`:41`; the adapt rules act on the
-current week), and only a net change — before = the first `before` of the chain in that window,
-after = the session now (`_auto`, `:69`), over day / kind / title / minutes / target / detail /
-terrain / protocol. Moved and moved back = nothing; a TSS-only re-plan = nothing; a CP change =
-always ↻ (the watts on the watch changed). Undone rows are not `applied`, so 復原 takes the ↻ away
+How long / where (推估, short on purpose — SP-305 few hints): only sessions still ahead (active,
+today or later; notices never); ↻ only inside the **push window** (today … today +
+`plan.auto.push_days` − 1, `window_end` `:73` — what reaches the watch; without it a CP / AeT /
+easy-cap change marked every upcoming session for a week), ✎ everywhere ahead (it says who owns
+the session); only rows of the last `MARK_DAYS` = 7 days (`:51`; the adapt rules act on the current
+week); and only a net change — before = the first `before` of the chain in that window, after =
+the session now (`_auto`, `:117`), over day / kind / title / minutes / target / detail / terrain /
+protocol. Items whose `before` has none of those fields (a TSS-only re-plan) are dropped from the
+chain unless they are `cp` / a rule's `added` (`_counts`, `:98`), so they neither mark nor
+relabel. Rule / reason = the latest adapt-rule item whose `before` touches the net diff (else a
+re-plan's, else the CP row's, else the `added`), so a fatigue cut and a CP change in one run read
+疲勞保護 with the CP line added (`cp`). For a key in both a run's own item and its CP row (same run:
+≤ `SAME_RUN_S` 600 s apart, `:57`) the CP row's `before` wins — the run rescaled the stored plan
+before diffing, so only the CP row has the original watts. Moved and moved back = nothing; a CP
+change = always ↻ (`CP_RULE in rules`: the watts on the watch changed). Undone rows are not `applied`, so 復原 takes the ↻ away
 (the restored session reads ✎). New weeks' `added` items are not marked (only an `added` with a
 rule). The marker is never pushed: `plan_store.push_dict` does not carry it, so the watch gets the
 session as it is now = the marker's after. Drawing: `backend/static/plan_mark.js` (`window.PlanMark`,
 strings `common.planmark.*`), used by `schedule.html` (`chipHtml`, the dialog's `#sd-mark`) and
-`overview.html` (`sessHtml`). Tests: `backend/tests/test_plan_marks_sp318.py`.
+`overview.html` (`sessHtml`: a corner badge on the day-card's icon, outside the title's ellipsis;
+the aria-label reads the label after the duration, never the glyph); the static demo's shim marks
+its local edits / additions ✎ (`backend/demo/static_shim.js` `opPatch` / `opAdd`). The loader selects
+only the columns it needs and parses `after_json` for `restore` rows only; no extra
+`(status, created_at)` index — `status` is indexed already, the rows are one per run, and the
+schema evolution (`db/database._migrate_schema`) only adds columns. Tests:
+`backend/tests/test_plan_marks_sp318.py` (pure: three states, A/B/C rule picking, same-run CP,
+edited + CP, push window, loader statuses, a failing read; end to end through `PA.run`: re-plan,
+CP change, rule D′ `rpe_hard`, approve, 復原, manual edits win).
 
 ## CP change (2026-10-02)
 
@@ -883,6 +901,7 @@ The owner's calls, gathered from the sections above (each is described there wit
 
 | Date | Type | Feature SRS | Summary |
 |------|------|-------------|---------|
+| 2026-10-08 | fix | SP-318 review | 課表標記: TSS-only items leave the chain; rule / reason from the latest item that explains the net diff (adapt rule > re-plan > CP > added), `cp` line added; same-run CP `before` wins; ✎ says a CP change recalculates the watts (`user.cp`); ↻ only in the push window; `load_safe` never fails the page; lean loader (`backend/engine/plan_marks.py:73-230`); 總覽 badge outside the title, aria-label after the duration; static demo ✎ |
 | 2026-10-08 | feat | SP-318 | 課表標記: each session's `mark` (auto ↻ with rule / reason / before → after, user ✎ incl. 復原, none) derived from `plan_change_log` at read time (`backend/engine/plan_marks.py`; `_sessions_body`, `backend/api/plan_sessions.py:604-607`), the same on the 課表 page and the 總覽 (`backend/static/plan_mark.js`), never pushed; 7-day window, net change only, active sessions ahead only (推估). Tests: three states, marker ↔ log ↔ COROS push, 復原 clears it, manual edits win over `plan_auto` (`backend/tests/test_plan_marks_sp318.py`) |
 | 2026-10-08 | fix | SP-362 batch-2 review | H1: `run` re-checks the inputs' key inside `_wlock` and retries (`_inputs_changed`, `RUN_TRIES`, `backend/engine/plan_auto.py:728-778`), so a settings edit saved while it computed is not reverted and an older generation never lands after a newer one; M2: interrupted pushes (`_push_after` / `_interrupted`, `:887`, `:908`; `entry_dict` `:403`) and the pending watch removals in `plan.auto.state.remote` (`:477`, `:488`); L6: the notice re-read under `_plock` (`:932`). Tests in `backend/tests/test_push_outside_lock_sp362.py` (blackout while waiting, two generations, cancel mid-push, reject / approve during the notice push, undo during a run's push) |
 | 2026-10-08 | perf | SP-362 B3 | The COROS push left the plan writer lock: `run` computes the inputs before the lock, `_run` (`backend/engine/plan_auto.py:702`) holds `_wlock` for reconcile / save / log row (push `pushing`) / state / week snapshot, `_push_after` (`:802`) pushes the notice or the window under `api/plan_sessions._plock` from the stored plan re-read at that point and fills the row in (`_set_push`, `:477`); `undo` / `reject` push / remove after the lock (`:879`, `:848`); an edit during a push wins (its `_sync_watch` re-sends it); `autoplan.js` 「推送到手錶中…」 for `pushing` (`backend/static/autoplan.js:70`). Tests: `backend/tests/test_push_outside_lock_sp362.py` |
