@@ -1362,6 +1362,17 @@ which one. The response keeps the `coros` field names.
   collapsed 歷程 list (`quality_gate.z5_history`, range capped at a year: every state change and
   event in order, the description and the sources). The render cache key adds the preference
   and test-session stamps.
+- **課表標記** (SP-318, 2026-10-08): a session still ahead shows ↻ when the automatic adjustment
+  changed it and ✎ when it is the user's own, nothing when untouched — the `mark` of
+  `GET /overview/plan/calendar` (`backend/engine/plan_marks.py`, from `plan_change_log`; rules and the
+  7-day lifetime in plan-auto.spec.md 「課表標記」; ↻ only in the push window). Same glyphs on both pages through
+  `backend/static/plan_mark.js` (`window.PlanMark`, strings `common.planmark.*`): on the 總覽 the
+  glyph is a corner badge on the day-card's icon (not in the title, whose ellipsis would hide it)
+  and the rule, reason and before → after are in its tooltip, after the duration (`sessHtml`,
+  `backend/static/overview.html:652`, `:661-662`); on the 課表 page in the chip's tooltip and the
+  session dialog's `#sd-mark` (`chipHtml` `backend/static/schedule.html:1058-1062`, `openDlg`
+  `backend/static/schedule.html:1980`). Not pushed to COROS (`push_dict` leaves `mark` out): the
+  watch has the session as it is now, the marker's after.
 - Plan editing, drag-to-move, reconcile preview and COROS push by day / week / phase live on
   the 課表 page (`backend/static/schedule.html`: session dialog `openDlg`
   `backend/static/schedule.html:1927`, reconcile `backend/static/schedule.html:1294`, push
@@ -1862,7 +1873,7 @@ which one. The response keeps the `coros` field names.
 | POST / DELETE | `/api/v1/overview/plan/rest-days`, `/rest-days/{day}` | `{day}` → add a 休息日 (400 for a past or already blocked day) / remove it (404 when not one); both reconcile (`backend/api/plan_sessions.py:2272`, `backend/api/plan_sessions.py:2256`) |
 | GET | `/api/v1/overview/plan/equivalence` | the time model, LOO backtest per terrain, 推估 flags, sources; memoised per dataset / day / AeT (`backend/api/plan_sessions.py:2414`, `backend/api/plan_sessions.py:2368`) |
 | POST | `/api/v1/overview/plan/equivalence/design` | `{mode, minutes, climb_per_km}` → km, climb, 推估 flag (`backend/api/plan_sessions.py:2419`) |
-| GET | `/api/v1/overview/plan/calendar?start=&end=` | the 課表 page payload (≤ 120 days): sessions with `tss_est`, planned vs actual `vs`, `compliance`, `link_options`, a 強度課's `quality_family` and `steps_family`, `family_titles`; `week_rows`, `prefs`, `goal_climb_per_km`, `plan_notes`, `test_suggestions`, `test_templates`, `expired_open`, provider state; SP-362 B4: `stale: {reason, age_s, since}` when answered from the previous inputs while the fresh ones are computed (display only) (`backend/api/plan_sessions.py:2840`, `backend/api/plan_sessions.py:2870`) |
+| GET | `/api/v1/overview/plan/calendar?start=&end=` | the 課表 page payload (≤ 120 days): sessions with `tss_est`, planned vs actual `vs`, `compliance`, `link_options`, a 強度課's `quality_family` and `steps_family`, `mark` (SP-318: auto / user / none, `engine/plan_marks.py`), `family_titles`; `week_rows`, `prefs`, `goal_climb_per_km`, `plan_notes`, `test_suggestions`, `test_templates`, `expired_open`, provider state; SP-362 B4: `stale: {reason, age_s, since}` when answered from the previous inputs while the fresh ones are computed (display only) (`backend/api/plan_sessions.py:2840`, `backend/api/plan_sessions.py:2870`) |
 | GET | `/api/v1/overview/plan/fresh` | SP-362 B4: `{updating}` — the fresh plan behind a stale calendar is still being computed in the background; computes nothing (`backend/api/plan_sessions.py:615`) |
 | GET | `/api/v1/overview/plan/schedule/page` | `backend/static/schedule.html` (`backend/api/plan_sessions.py:2745`) |
 | GET | `/api/v1/plan/calendar` | 課表訂閱: `{enabled, path, url, window}` of the feed address (`backend/api/calendar_feed.py:88`) |
@@ -2119,7 +2130,7 @@ The owner's calls behind rules above (the ticket holds the discussion).
 Open tickets that touch this module. Not implemented unless the line says otherwise.
 
 - [ ] Show the stored plan's future TSS / CTL on the charts (SP-219, 決策, Todo) — not decided yet
-- [ ] Mark which sessions the system changed, which were left alone, which the user edited (SP-318, Todo) — not implemented
+- [x] Mark which sessions the system changed, which were left alone, which the user edited (SP-318) — built (課表標記 above)
 - [ ] The 課表 page loads slowly, also after switching the 課表心率區間 in 設定 and while a sync runs (SP-361 Bug Todo, SP-362 In Progress) — not fixed
 - [ ] iLevel / Stryd power zones in 設定 as the 課表's default (SP-363, Todo) — not implemented
 - [x] A warm-up time in 課表偏好 added before every session and template (SP-364; 每堂課前加熱身 above)
@@ -2206,4 +2217,6 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 | 2026-10-08 | fix/plan-rules-sp352-295-286-84-353 | SP-286 | 「課前要吃」 removed entirely (owner 2026-10-07; reverts `ba6934d`): `backend/engine/session_fuel.py` deleted, no `pre_meal` on the session view (`backend/api/plan_sessions.py:520`), the 課表 card / title / dialog line and the 總覽 tooltip line gone (`backend/static/schedule.html`, `backend/static/overview.html`), zh-TW / en string removed; the watch push is unchanged. Test: `backend/tests/test_carb_hints.py::test_no_session_description_says_eat_before` |
 | 2026-10-08 | fix/plan-rules-sp352-295-286-84-353 | SP-84 follow-up | 主課強度 filter: a 強度課's 「自動」 main set counts as % CP when the template has no 目標用 (owner 2026-10-07); one helper `workout_steps.template_target_types` (`backend/engine/workout_steps.py:1367`) for 插入範本 (`:1830`) and the 範本 page (`backend/engine/user_templates.py:512`); an explicit 目標用 still wins, other categories keep 自動. Tests: `backend/tests/test_template_target_types.py::test_quality_auto_counts_as_pct_cp`, `::test_builtin_rows_carry_target_types`, `::test_api_field_built_in_and_user` |
 | 2026-10-08 | fix/plan-rules-sp352-295-286-84-353 | SP-353 | 專項期後段 of a ≥ 4 h / multi-day trail race: one Zone 5 maintenance session every 3 weeks (賽前第 4 週; owner 2026-10-07, specific-phase-progression.md §4.1 / §5-1) instead of none — the Zone 5 rung as it stands, uphill, not moving the rung; only when the Zone 5 gate and the guardrails allow, else the week note says why (`backend/engine/quality_gate.py:1634`, `:1687`, `:2583`, `:2627`, `:2717`). The other four answers (4-h line, uphill ladder, road ladder, MP 20→40 % every other week) confirm the code as built; acceptance tests added. Tests: `backend/tests/test_specific_split.py` |
+| 2026-10-08 | feat/plan-change-marks-sp318 | SP-318 | 課表標記: ↻ (changed by the automatic adjustment: rule, reason, before → after in the tooltip / session dialog), ✎ (the user's own, incl. 復原) or nothing, the same on the 課表 page and the 總覽 (`backend/static/plan_mark.js`); `mark` in `GET /overview/plan/calendar` from `plan_change_log` (`backend/engine/plan_marks.py`), never pushed to COROS. Tests: `backend/tests/test_plan_marks_sp318.py` |
+| 2026-10-08 | feat/plan-change-marks-sp318 | SP-318 review | 課表標記 fixes: 總覽 glyph as a corner badge on the icon (outside the title's ellipsis), aria-label keeps the duration; ↻ only in the push window; ✎ text says a CP change recalculates the watts; the static demo shim marks local edits ✎ (`backend/demo/static_shim.js`) |
 | 2026-10-08 | feat/warmup-pref-sp364 | SP-364 | 課表偏好 每堂課前加熱身 (`plan.prefs.warmup_on` / `warmup_min`, off / 10, 5–30 min; not `active`): every generated run session, suggested / scheduled test and inserted template starts with ≥ N min of warm-up (`backend/engine/warmup.py`). Easy-type sessions: the first N min are the warm-up (「含暖身 N 分」, time / TSS / budget unchanged; `derive` + the COROS push split there). Own warm-up shorter: topped up, main set untouched, extra minutes in the session at the easy rate; library intervals carry the floor in `blocks` / `fit` / `variant_adj["warm"]`; text intervals / tests rewrite 「暖身 N 分」; `trim_quality` keeps the floor; applied before the easy runs are sized (week total kept) and last (week_plan, projection). Templates' `full` topped up (`ensure_warm`). AeT drift analysis cuts the planned longer warm-up. Panel switch + minutes (zh-TW / en). Tests: `backend/tests/test_warmup_pref.py` |
