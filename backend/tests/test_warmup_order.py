@@ -84,4 +84,46 @@ def test_warm_up_order_dataset_status_inputs_then_low_priority(monkeypatch):
     monkeypatch.setattr(AA, "job_for", lambda d: order.append("classify"))
     t = wko5views.warm_up("test")
     t.join(10)
-    assert order == ["dataset", "status", "inputs", "plan busy", "plan idle", "classify"]
+    wko5views._WARM["low"] and wko5views._WARM["low"].join(10)
+    # the low-priority part re-reads the Dataset after its wait (review SP-362 #4)
+    assert order == ["dataset", "status", "inputs", "plan busy", "plan idle", "dataset", "classify"]
+
+
+def test_a_second_warm_up_runs_while_the_first_waits_for_the_plan(monkeypatch):
+    """Review SP-362 #4: the wait for the plan run happens in its own thread, so a warm-up
+    asked for meanwhile (a second sync) still warms the dataset / status / inputs; the
+    classification runs once the plan is idle, on the Dataset read after the wait."""
+    import threading
+    from backend.api import activity_auto as AA
+    from backend.api import overview as OV
+    from backend.api import plan_sessions as PSA
+    from backend.api import wko5views
+    from backend.engine import calibrate as CAL
+    from backend.engine import plan_auto
+    order, made, classified = [], [], []
+    release = threading.Event()
+
+    def dataset():
+        ds = SimpleNamespace(today=20000.0, n=len(made))
+        made.append(ds)
+        order.append("dataset")
+        return ds
+    monkeypatch.delenv("WKO5COACH_NO_WARMUP", raising=False)
+    monkeypatch.setattr(wko5views, "_dataset", dataset)
+    monkeypatch.setattr(OV, "_status", lambda d, today: order.append("status"))
+    monkeypatch.setattr(PSA, "_compute_inputs", lambda: order.append("inputs"))
+    monkeypatch.setattr(plan_auto, "busy", lambda: not release.is_set())
+    monkeypatch.setattr(wko5views, "_PLAN_POLL_S", 0.01)
+    monkeypatch.setattr(CAL, "_registry", lambda: {})
+    monkeypatch.setattr(AA, "job_for", lambda d: classified.append(d.n))
+    t1 = wko5views.warm_up("first")
+    t1.join(10)
+    assert not t1.is_alive()                         # the warm part is done; the wait is elsewhere
+    t2 = wko5views.warm_up("second")
+    assert t2 is not None
+    t2.join(10)
+    assert order == ["dataset", "status", "inputs"] * 2 and classified == []
+    release.set()
+    low = wko5views._WARM["low"]
+    low and low.join(10)
+    assert classified and classified[-1] == made[-1].n and made[-1].n >= 2    # read after the wait
