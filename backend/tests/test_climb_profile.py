@@ -53,15 +53,6 @@ def test_profile_series_follows_distance_and_rates():
     assert R.profile_series(ch["elapsedtime"], ch["elapseddistance"], None) is None
 
 
-def test_descents_are_the_mirrored_climbs():
-    w = _trail(dt.date(2026, 9, 30))
-    ch = w.channels
-    d = R.descents_of(ch["elapsedtime"], ch["elapseddistance"], ch["elevation"])
-    assert len(d) == 1
-    assert d[0]["drop_m"] == pytest.approx(200, abs=2) and d[0]["grade"] < 0 and d[0]["rate"] < 0
-    assert d[0]["start_km"] < d[0]["end_km"]
-
-
 def test_climb_card_has_profile_numbers_and_baseline():
     today = dt.date(2026, 9, 30)
     past = [_trail(today - dt.timedelta(days=3 * k), climb_m=180.0) for k in range(1, 7)]   # VAM 540
@@ -77,7 +68,8 @@ def test_climb_card_has_profile_numbers_and_baseline():
     b = c["base"]["vam"]
     assert b["ok"] and b["n"] == 6 and b["weeks"] == 8 and b["median"] == pytest.approx(540, rel=0.02)
     assert c["vs"]["vam"] == pytest.approx(600 / 540 - 1, abs=0.02)
-    assert len(cp["descents"]) == 1
+    # SP-218 review: only what drawClimbMap reads (no descents / cp / pool_weeks computed or sent)
+    assert not {"descents", "cp", "pool_weeks"} & set(cp)
     cols = {s["name"]: s["data"]["values"] for s in r["series"] if s["data"]["kind"] == "values"}
     assert cols["段"] == ["①"] and cols["VAM 平常"] == ["540"]
     text = " ".join(s["data"]["value"] for s in r["series"] if s["data"]["kind"] == "value")
@@ -116,3 +108,80 @@ def test_grade_card_rows_with_baseline():
     up = [b for b in gp["bins"] if (b["lo"] or 0) >= 10]
     assert up and all(b["metrics"]["vam"] > 0 for b in up if b["time_s"] > 120)
     assert gp["min_s"] == R.BIN_MIN_S
+
+
+# ---- SP-218: the 爬坡與地形 card's map / table numbers ------------------------------------
+
+def _with_cadence(w, up_spm=(110.0, 170.0), flat_spm=170.0):
+    """Cadence (strides/min, the channel's unit) on `w`: the first half of the climb walked
+    at up_spm[0], the second half run at up_spm[1]; flat at flat_spm."""
+    t = np.asarray(w.channels["elapsedtime"])
+    cad = np.where((t >= 600) & (t < 1200), up_spm[0] / 2, np.where((t >= 1200) & (t < 1800), up_spm[1] / 2, flat_spm / 2))
+    w.channels["cadence"] = list(cad)
+    return w
+
+
+def test_climb_run_share_from_cadence_and_the_summary():
+    today = dt.date(2026, 9, 30)
+    ds = FakeDataset([_with_cadence(_trail(today))], today, settings=SETTINGS)
+    r = R.review(ds, ds.workouts[0], "climbs")
+    cp = r["climb_profile"]
+    (c,) = cp["climbs"]
+    assert c["run_share"] == pytest.approx(0.5, abs=0.06)          # walked half the climb, ran the other half
+    sm = cp["summary"]
+    assert sm["n"] == 1 and sm["ascent_m"] == pytest.approx(200)    # the activity's own climbing
+    assert sm["gain_m"] == pytest.approx(c["gain_m"]) and sm["time_s"] == pytest.approx(c["duration_s"])
+    assert sm["share"] == pytest.approx(c["duration_s"] / 3600, rel=0.02)
+    assert sm["vam"] == pytest.approx(600, rel=0.05)                # 200 m in 20'
+    assert sm["hr_per_100m"] == pytest.approx(c["hr_per_100m"])     # one climb: the median is that climb
+    assert sm["run_share"] == pytest.approx(c["run_share"])
+    assert cp["workout"] == 0                                      # the viewer's samples / map / hover
+
+
+def test_climb_run_share_needs_cadence():
+    today = dt.date(2026, 9, 30)
+    ds = FakeDataset([_trail(today)], today, settings=SETTINGS)
+    cp = R.review(ds, ds.workouts[0], "climbs")["climb_profile"]
+    assert cp["climbs"][0]["run_share"] is None and cp["summary"]["run_share"] is None
+    s = {"t": list(range(10)), "dist": [0.1 * i for i in range(10)], "cadence": None}
+    assert R.climb_run_share(s, 0.0, 1.0) is None
+    # cadence on less than half the climb's moving seconds: not judged
+    s = {"t": list(range(100)), "dist": [0.01 * i for i in range(100)], "speed": [8.0] * 100,
+         "cadence": [80.0] * 30 + [None] * 70}
+    assert R.climb_run_share(s, 0.0, 1.0) is None
+    s["cadence"] = [80.0] * 60 + [30.0] * 40
+    assert R.climb_run_share(s, 0.0, 1.0) == pytest.approx(0.6, abs=0.02)
+
+
+def test_climb_summary_without_climbs():
+    w = _trail(dt.date(2026, 9, 30))
+    ds = FakeDataset([w], dt.date(2026, 9, 30), settings=SETTINGS)
+    sm = R.climb_summary(ds.workouts[0], {"moving_s": 3600.0, "hr_per_100m": None}, [])
+    assert sm["n"] == 0 and sm["gain_m"] is None and sm["share"] is None and sm["vam"] is None
+    assert sm["ascent_m"] == pytest.approx(200)
+
+
+def test_profile_climbs_and_map_readout_share_one_elevation(monkeypatch):
+    """SP-218 review: the drawn profile, the detected climbs and the map's readout (/samples) read the same
+    elevation — the file's WKO5-smoothed _elevation when it has one, else the raw channel."""
+    from backend.api import wko5views as V
+    today = dt.date(2026, 9, 30)
+    w = _trail(today)
+    raw = np.asarray(w.channels["elevation"])
+    w.channels["elevation"] = list(raw + 500.0)            # the raw channel is off by 500 m …
+    w.channels["_elevation"] = list(raw)                   # … the file's smoothed channel is the truth
+    ds = FakeDataset([w], today, settings=SETTINGS)
+    cp = R.review(ds, ds.workouts[0], "climbs")["climb_profile"]
+    alt = [v for v in cp["profile"]["alt"] if v is not None]
+    assert min(alt) == pytest.approx(100, abs=1) and max(alt) == pytest.approx(300, abs=2)
+    assert cp["climbs"][0]["start_elev"] == pytest.approx(100, abs=2)
+    monkeypatch.setattr(V, "_dataset", lambda parity=None, source=None: ds)
+    el = [v for v in V.workout_samples(0)["elev"] if v is not None]
+    assert min(el) == pytest.approx(100, abs=1) and max(el) == pytest.approx(300, abs=1)
+    # no _elevation in the file: all three on the raw channel
+    del w.channels["_elevation"]
+    ds = FakeDataset([w], today, settings=SETTINGS)
+    monkeypatch.setattr(V, "_dataset", lambda parity=None, source=None: ds)
+    cp = R.review(ds, ds.workouts[0], "climbs")["climb_profile"]
+    assert min(v for v in cp["profile"]["alt"] if v is not None) == pytest.approx(600, abs=1)
+    assert min(v for v in V.workout_samples(0)["elev"] if v is not None) == pytest.approx(600, abs=1)

@@ -731,6 +731,8 @@ def pass_activities(app: DemoApp, rec: Recorder, log) -> list[dict]:
         if a.get("index") is not None:
             _get_json(app, rec, f"/api/v1/wko5/workouts/{a['index']}/activity")
             _get_json(app, rec, f"/api/v1/wko5/workouts/{a['index']}/segments")
+            # the viewer's single-activity tabs read the activity's own type (SP-218)
+            _get_json(app, rec, f"/api/v1/wko5/workouts/{a['index']}/kind?parity=false")
     log(f"  activities: {len(acts)} activity details")
     return acts
 
@@ -1349,6 +1351,7 @@ def update(root: Path, reuse: Path, out: Path, browser: bool = True, verbose: bo
             for i in new:
                 _get_json(app, rec, f"/api/v1/wko5/workouts/{i}/activity")
                 _get_json(app, rec, f"/api/v1/wko5/workouts/{i}/segments")
+                _get_json(app, rec, f"/api/v1/wko5/workouts/{i}/kind?parity=false")
             t1 = time.time()
             if browser:
                 crawl_pages(app, rec, snapshot, verbose, log)

@@ -426,9 +426,13 @@ def test_viewer_drops_the_card_and_links_the_edit_page():
     assert Path(V.activities_page().path).name == "activity.html"
 
 
-def test_climb_profile_is_one_overlaid_plot():
+def test_climb_card_is_map_profile_and_table():
+    """SP-218 (owner 2026-10-08) replaced the single dual-axis climb plot: the 爬坡段 card is the route map
+    over an elevation profile with stacked metric panels (like the map chart), synced on the distance
+    axis; the option itself is tested under node in test_viewer_climbmap.py."""
     html = (STATIC / "wko5_viewer.html").read_text(encoding="utf-8")
-    body = html[html.index("function drawClimbProfile"):html.index("function drawGradeProfile")]
-    assert 'position: "left"' in body and 'position: "right"' in body and "海拔（m）" in body
-    assert "--cp-metric" in html and "gridIndex: 1" not in body          # one grid, no stacked panel
-    assert "graphic: []" in body                                           # no inline caption on the plot
+    assert "function drawClimbProfile" not in html
+    body = html[html.index("async function drawClimbMap"):html.index("// ---- end climb map ----")]
+    assert "drawMap(card, { workout: D.workout, _zoom: res._zoom }, { into: mapBox, chart: false" in body
+    assert 'hoverChart(chart, ctx.s, "d")' in body                         # profile <-> map on the km axis
+    assert "res.climb_profile) drawClimbMap(box, res)" in html
