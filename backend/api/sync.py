@@ -50,7 +50,9 @@ async def _sse_sync(db: AsyncSession, source: str, athlete_id: int, since: Optio
             yield {"event": "sync_progress", "data": json.dumps(
                 {"status": "error", "error": "SYNC_DISABLED", "source": source})}
             return
-        async for event in runner.stream(db, source, athlete_id, since=since, trigger="manual"):
+        # COROS's self-rating passes run after the stream ends (SP-362 A5): the button finishes earlier
+        async for event in runner.stream(db, source, athlete_id, since=since, trigger="manual",
+                                         feel_in_background=True):
             yield {"event": "sync_progress", "data": json.dumps(event)}
     return EventSourceResponse(generate())
 
