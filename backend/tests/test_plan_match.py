@@ -125,7 +125,7 @@ def test_unlinked_activity_is_not_auto_matched():
 
 def test_intervals_planned_but_ran_easy_is_linked_and_marked_off_plan():
     out = [sess("q", "2026-10-01", "quality", 60, "閾值 3×10 分")]
-    PM.assign(out, [act(9, "2026-10-01", 58, hard_s=60)], "2026-10-02", {})
+    PM.assign(out, [act(9, "2026-10-01", 58, hard_s=60, tss=30)], "2026-10-02", {})    # TSS −38 %: ≠
     q = out[0]
     assert q["state"] == "done" and q["done_by"]["index"] == 9                # still linked
     vs = PM.compare(q)
@@ -145,7 +145,7 @@ def test_easy_as_planned_is_on_plan_and_compliance_unchanged():
 
 
 def test_easy_planned_but_ran_hard_and_other_sport():
-    e = sess("e", "2026-10-01", state="done", done_by=act(11, "2026-10-01", 45, hard_s=1200))
+    e = sess("e", "2026-10-01", state="done", done_by=act(11, "2026-10-01", 45, hard_s=1200, tss=60))  # TSS +67 %
     assert PM.compare(e)["text"] == "沒照課表：排輕鬆跑，實際跑強度"
     b = sess("b", "2026-10-01", state="done", done_by=act(12, "2026-10-01", 60, cat="bike"))
     assert PM.compare(b)["wrong_sport"] and PM.compare(b)["text"] == "沒照課表：排輕鬆跑，實際騎車"
@@ -200,7 +200,7 @@ def test_api_sessions_marks_a_synced_run_done_and_link_unlink(monkeypatch):
 
 
 def test_api_calendar_has_planned_vs_actual_and_link_options(monkeypatch):
-    a = act(31, "2026-10-01", 58, hard_s=30)
+    a = act(31, "2026-10-01", 58, hard_s=30, tss=20)          # TSS far off: still ≠ (SP-370)
     extra = act(32, "2026-10-02", 30, hour=7)
 
     def fake(start, end):
@@ -259,7 +259,7 @@ def test_intensity_short_is_partial_with_its_own_label_and_headline():
 
 
 def test_under_half_the_intensity_is_still_off_plan():
-    q = _q({**act(24, "2026-10-01", 60, tss=48), "session": _ses("easy", z3=240)})       # 40 %
+    q = _q({**act(24, "2026-10-01", 60, tss=30), "session": _ses("easy", z3=240)})       # 40 %, TSS −38 %
     vs = PM.compare(q)
     assert vs["off_plan"] and not vs["short"] and vs["actual"] == "easy" and vs["intensity_pct"] == 40
     assert vs["text"] == "沒照課表：排強度課，實際跑輕鬆"
@@ -282,11 +282,11 @@ def test_easy_run_slightly_hard_is_partial_far_too_hard_is_off_plan():
     comp = C.with_plan_check(C.session_compliance(e, 36.0), vs)
     assert comp["label"] == "強度偏高" and comp["level"] == "yellow" and comp["pct"] == 100
     e = sess("e", "2026-10-01", state="done",
-             done_by={**act(27, "2026-10-01", 45, tss=36), "session": _ses("hard_long", z3=1000)})  # 1.67×
+             done_by={**act(27, "2026-10-01", 45, tss=50), "session": _ses("hard_long", z3=1000)})  # 1.67×, TSS +39 %
     assert PM.compare(e)["off_plan"] and PM.compare(e)["text"] == "沒照課表：排輕鬆跑，實際跑強度"
     # a CP test on an easy day: ran hard, never 「偏強」
     e = sess("e", "2026-10-01", state="done",
-             done_by={**act(28, "2026-10-01", 45, tss=36), "session": _ses("test_cp")})
+             done_by={**act(28, "2026-10-01", 45, tss=50), "session": _ses("test_cp")})
     assert PM.compare(e)["off_plan"]
 
 
@@ -308,3 +308,99 @@ def test_session_row_carries_the_doses(monkeypatch):
                                         "moderate": False, "z3_s": 594.0, "t_vo2_eq_s": 61.3}
     monkeypatch.setattr(WR, "classify", lambda ds, w: {"type": "strength", "stim": None})
     assert O.session_of(None, None)["z3_s"] is None
+
+
+# ---------------------------------------------------------------------------
+# SP-370: 沒照課表 only when it really wasn't the plan. A walking session takes a hike / walk;
+# time and TSS both within ±20 % -> an intensity reversal or another foot sport is ◐, not ≠
+# ---------------------------------------------------------------------------
+
+LABEL = {"road": "路跑", "trail": "越野跑", "hike": "登山健行", "walk": "走路", "bike": "騎車"}
+
+
+def _done(kind, minutes, tss, a_min, a_tss, cat="road", title=None, gen_key=None, session=None, hard_s=0.0):
+    a = {**act(40, "2026-10-05", a_min, cat=cat, tss=a_tss, hard_s=hard_s), "category_label": LABEL.get(cat, cat),
+         "match": "day"}
+    if session:
+        a["session"] = session
+    return sess("s", "2026-10-05", kind, minutes, title, state="done", gen_key=gen_key, done_by=a, tss=tss)
+
+
+def _verdict(s):
+    """What every consumer shows: calendar vs + compliance, the dashboard status."""
+    vs = PM.compare(s)
+    comp = C.with_plan_check(C.session_compliance(s), vs)
+    return vs, comp, C.status_of(s, comp, "2026-10-08")
+
+
+STEEP = "陡坡健走 13%（模擬負重 3.4 kg）"
+
+
+@pytest.mark.parametrize("cat", ["hike", "walk", "trail"])
+def test_steep_hill_walk_done_as_a_hike_is_done_not_off_plan(cat):
+    # the 10/5 shape: the planner's 陡坡健走 (kind easy, steep_hill.py) walked — time 86 %, TSS 97 %
+    s = _done("easy", 50, 40.0, 43, 38.8, cat=cat, title=STEEP, gen_key="steep")
+    vs, comp, st = _verdict(s)
+    assert not vs["off_plan"] and not vs["wrong_sport"] and not comp["wrong_type"]
+    assert comp["level"] == "green" and st == "done"
+    # a stored row the user retitled / that lost its gen_key: the title still says walking
+    vs, comp, st = _verdict(_done("easy", 50, 40.0, 43, 38.8, cat=cat, title=STEEP))
+    assert st == "done"
+
+
+def test_steep_hill_walk_matches_the_hike_of_its_day_and_still_refuses_a_bike():
+    out = [sess("w", "2026-10-05", "easy", 50, STEEP, gen_key="steep")]
+    PM.assign(out, [{**act(41, "2026-10-05", 43, cat="walk", tss=38.8), "category_label": "走路"}], "2026-10-06", {})
+    assert out[0]["state"] == "done" and PM.sport_ok(out[0], out[0]["done_by"])
+    vs, comp, st = _verdict(_done("easy", 50, 40.0, 43, 38.8, cat="bike", title=STEEP, gen_key="steep"))
+    assert vs["off_plan"] and comp["level"] == "red" and st == "off_plan"
+
+
+def test_lsd_run_as_intensity_with_time_and_tss_on_plan_is_partial():
+    # the live 10/5 shape: LSD 50′ TSS 66, run 43′ TSS 65 that the classifier calls intensity
+    s = _done("long", 50, 66.0, 43, 65.0, session=_ses("hard_long", z3=1000))            # 1.67× the bar
+    vs, comp, st = _verdict(s)
+    assert not vs["off_plan"] and vs["short"] and vs["soft"] == "intensity"
+    assert vs["short_text"] == "時間和負荷都對，但跑成強度課（Zone 3 17／10 分）"
+    assert comp["level"] == "yellow" and comp["label"] == "跑成強度課" and not comp.get("off_plan")
+    assert st == "partial"
+
+
+@pytest.mark.parametrize("cat,status", [("trail", "done"), ("hike", "done"), ("walk", "partial")])
+def test_lsd_on_another_foot_sport_with_time_and_tss_on_plan(cat, status):
+    # a trail run / hike already counts as a long day (KIND_OK); a walk is another foot sport: ◐
+    s = _done("long", 50, 66.0, 43, 65.0, cat=cat)
+    vs, comp, st = _verdict(s)
+    assert not vs["off_plan"] and st == status
+    if status == "partial":
+        assert vs["soft"] == "sport" and comp["wrong_type"] and comp["level"] == "yellow"
+        assert vs["short_text"] == "時間和負荷都對，但項目不同：排LSD，實際走路"
+        assert comp["label"] == "項目不同" and comp["off_text"] == vs["short_text"]
+
+
+def test_easy_run_as_intensity_partial_when_time_and_tss_green_off_plan_when_tss_off():
+    hard = _ses("hard_long", z3=1000)
+    vs, comp, st = _verdict(_done("easy", 45, 36.0, 45, 40.0, session=hard))             # TSS +11 %
+    assert st == "partial" and vs["soft"] == "intensity" and "跑成強度課" in vs["short_text"]
+    vs, comp, st = _verdict(_done("easy", 45, 36.0, 45, 46.8, session=hard))             # TSS +30 %
+    assert st == "off_plan" and vs["off_plan"] and vs["text"] == "沒照課表：排輕鬆跑，實際跑強度"
+    assert comp["label"] == "沒照課表"
+    # time off > 20 % keeps it ≠ too
+    vs, comp, st = _verdict(_done("easy", 45, 36.0, 33, 36.0, session=hard))             # time −27 %
+    assert st == "off_plan"
+
+
+def test_quality_run_easy_with_time_and_tss_on_plan_is_partial():
+    s = _done("quality", 60, 48.0, 58, 50.0, title="閾值 3×10 分", session=_ses("easy", z3=240))   # 40 %
+    vs, comp, st = _verdict(s)
+    assert st == "partial" and vs["soft"] == "intensity" and vs["short_text"] == "時間和負荷都對，但跑成輕鬆（Zone 3 4／10 分）"
+    assert comp["label"] == "跑成輕鬆"
+
+
+def test_bike_for_a_run_stays_off_plan_even_with_time_and_tss_on_plan():
+    vs, comp, st = _verdict(_done("easy", 45, 36.0, 45, 36.0, cat="bike"))
+    assert vs["off_plan"] and vs["wrong_sport"] and vs["text"] == "沒照課表：排輕鬆跑，實際騎車"
+    assert comp["level"] == "red" and comp["wrong_type"] and st == "off_plan"
+    # a foot sport with time off > 20 %: still ≠
+    vs, comp, st = _verdict(_done("easy", 45, 36.0, 30, 36.0, cat="walk"))
+    assert vs["off_plan"] and st == "off_plan" and comp["level"] == "red"
