@@ -197,16 +197,26 @@
     }
   });
 
-  async function refresh() {
-    try {
-      const r = await fetch(API, { cache: "no-store" });
-      if (!r.ok) return;
-      rows = (await r.json()).suggestions || [];
-      render();
-    } catch (_) { /* the box is optional: no box when it can't load */ }
+  // one GET per page load (SP-362): the box and the page (課表's 排入測試 ▸, schedule.html
+  // sugCount) share it; `fresh` asks again (after a change). Resolves to the rows or null.
+  let shared = null;
+  function load(fresh) {
+    if (!fresh && shared) return shared;
+    shared = fetch(API, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json().then((j) => j.suggestions || []) : null))
+      .catch(() => null);
+    return shared;
   }
 
-  window.AppSuggestions = { refresh };
-  const start = () => { mount(); setTimeout(refresh, 900); };   // after the page's own first requests
+  async function refresh(fresh = true) {
+    const got = await load(fresh);
+    if (got == null) return;                 // the box is optional: no box when it can't load
+    rows = got;
+    render();
+  }
+
+  window.AppSuggestions = { refresh, load };
+  window.dispatchEvent(new CustomEvent("suggestions:ready"));
+  const start = () => { mount(); setTimeout(() => refresh(false), 900); };   // after the page's own first requests
   if (document.body) start(); else document.addEventListener("DOMContentLoaded", start);
 })();
