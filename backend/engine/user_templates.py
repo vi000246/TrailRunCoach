@@ -503,12 +503,14 @@ def row(t: dict) -> dict:
     from backend.engine import workout_templates as WT
     full = (t.get("steps") or {}).get("items") or []
     fam = WT.family_of(full)
-    return {"key": f"user:{t['id']}", "id": t["id"], "label": t["name"], "title": t["name"],
-            "src": t.get("note") or _(SRC), "url": "", "src_kind": "mine", "conv": "", "note": t.get("note") or "",
-            "items": WT.main_of(full) or full, "full": full, "equiv": None, "family": fam,
-            "fam_sub": fam["id"] if fam else None, "trail_sub": WT.trail_type_of(full),
-            "purpose": "", "cats": t.get("cats") or [], "target_basis": t.get("target_basis"), "mine": True,
-            "gpx": t.get("gpx"), "role": WS.rpe_role(full), "target_types": WS.target_types(full, t.get("target_basis"))}
+    r = {"key": f"user:{t['id']}", "id": t["id"], "label": t["name"], "title": t["name"],
+         "src": t.get("note") or _(SRC), "url": "", "src_kind": "mine", "conv": "", "note": t.get("note") or "",
+         "items": WT.main_of(full) or full, "full": full, "equiv": None, "family": fam,
+         "fam_sub": fam["id"] if fam else None, "trail_sub": WT.trail_type_of(full),
+         "purpose": "", "cats": t.get("cats") or [], "target_basis": t.get("target_basis"), "mine": True,
+         "gpx": t.get("gpx"), "role": WS.rpe_role(full)}
+    r["target_types"] = WS.template_target_types(r)          # SP-84: the same helper as 插入範本
+    return r
 
 
 def groups(templates: list[dict]) -> list[dict]:

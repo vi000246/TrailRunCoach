@@ -3,7 +3,7 @@ The static demo's race calculator: the real engine (engine/racepower/calc.py) in
 browser with Pyodide, on an athlete context exported as JSON.
 
 The race calculator page asks the server for every result (POST /racepower/plan,
-/predict, /course/event/{id}, /export/csv). The static site has no server, so
+/predict, /course/event/{id}). The static site has no server, so
 static_shim.js hands those requests to a Web Worker (static_racepower_worker.js) that
 loads Pyodide from the CDN (pinned PYODIDE_VERSION), unpacks the Python files this
 module bundles (BUNDLE: calc.py and every backend module it imports, no FastAPI /
@@ -312,8 +312,8 @@ def load(text: str) -> StaticContext:
 
 
 def compute(ctx, method: str, path: str, body) -> dict:
-    """One race-calculator request → {"status", "body"} (+ "csv", "filename" for /export/csv),
-    as the API answers it. `body`: the parsed JSON (None = no body)."""
+    """One race-calculator request → {"status", "body"}, as the API answers it.
+    `body`: the parsed JSON (None = no body)."""
     from pydantic import ValidationError
 
     from backend.engine.racepower import calc as CALC
@@ -332,9 +332,6 @@ def compute(ctx, method: str, path: str, body) -> dict:
             eid = unquote(sub[len("course/event/"):])
             b = CALC.EventCourseIn.model_validate(body) if body is not None else None
             return {"status": 200, "body": CALC.event_course(ctx, eid, b)}
-        if sub == "export/csv":
-            text, fname = CALC.export_csv(ctx, CALC.ExportIn.model_validate(body or {}))
-            return {"status": 200, "csv": text, "filename": fname}
     except CALC.CalcError as e:
         return {"status": e.status, "body": {"detail": e.detail}}
     except ValidationError as e:
@@ -344,7 +341,7 @@ def compute(ctx, method: str, path: str, body) -> dict:
 
 
 def handle(method: str, path: str, body_text: Optional[str]) -> str:
-    """The worker's call: JSON text in, JSON text out ({"status", "body"|"csv", "filename"});
+    """The worker's call: JSON text in, JSON text out ({"status", "body"});
     an unexpected failure is a 500 with a short message and the traceback for the console."""
     import traceback
     try:
@@ -371,7 +368,7 @@ def _json_default(o):
 def sample_requests(ctx_doc: dict) -> list[tuple[str, str, dict]]:
     """Inputs that walk the calculator's code paths (the export's import trace and the
     parity test): road 10K / half / full, goal pace / power, every event with a GPX
-    (course + plan), multi-day 百岳, the CSV."""
+    (course + plan), multi-day 百岳."""
     base = {"effort_formula": "fitted_run", "env_from": {"altitude_m": None, "temp_c": None, "rh_pct": None},
             "env_to": {"altitude_m": None, "temp_c": None, "rh_pct": None}, "stops": [],
             "strategy": {"kind": "even", "amount": 0}, "hills": {"up": 0.05, "down": 0.1},
@@ -397,7 +394,6 @@ def sample_requests(ctx_doc: dict) -> list[tuple[str, str, dict]]:
         ("hike solo power", "plan", manual("baiyue", 14, 1300, mode="power", speed_factor=1.1, trip_kind="solo")),
         ("predict road", "predict", {"type": "road", "distance_km": 10, "gain_m": 30}),
         ("predict hike", "predict", {"type": "baiyue", "distance_km": 20, "gain_m": 1800, "days": 2}),
-        ("csv road", "export/csv", {**manual("road", 21.0975, 100), "name": "測試"}),
     ]
     for e in ctx_doc.get("events") or []:
         if not e.get("gpx"):

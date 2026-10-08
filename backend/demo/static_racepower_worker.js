@@ -4,7 +4,7 @@
  * did not precompute. It loads Pyodide from the CDN (the version pinned in
  * backend/demo/static_racepower.py, substituted below by export_static.py), unpacks the
  * bundled Python files (engine/racepower/calc.py and what it imports) and answers
- * POST /racepower/(plan|predict|course/event/<id>|export/csv) with
+ * POST /racepower/(plan|predict|course/event/<id>) with
  * static_racepower.handle() on data/racepower_ctx.json — the same functions the server runs.
  *
  * Messages in:  {type: "init", base, data}            base / data = the site's static/ and data/ URLs

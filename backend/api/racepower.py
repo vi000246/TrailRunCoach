@@ -15,7 +15,6 @@ v2 (docs/research/racepower-v2.md §10.2):
     GET  /cadence-check climbing cadence vs the 130 spm walk line (SP-230)
     GET  /backtest      stored leave-one-out back-test;  POST /backtest/run  recompute
     POST /export/plan   plan → the race-day session in the 課表 (preview, or push=true writes it)
-    POST /export/csv    plan → CSV (UTF-8 BOM), header block + one row per segment
     GET/PUT/DELETE /saved/{event_id}   the page's inputs + last result per plan event
 """
 from __future__ import annotations
@@ -36,6 +35,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from backend.engine.planning import plan_path
+from backend.singleflight import SingleFlight
 from backend.engine.racepower import calc as CALC
 from backend.engine.racepower import weather as WX
 # the request bodies live with the computations (engine/racepower/calc.py); kept importable from here
@@ -49,6 +49,7 @@ DEFAULT_K = CALC.DEFAULT_K
 INPUTS_TTL_S = 600.0
 _lock = threading.Lock()
 _cache: dict = {}
+_FLIGHT = SingleFlight()            # the slow per-athlete fits: one computation per key (SP-366)
 
 
 def _dataset():
@@ -331,16 +332,28 @@ def event_course(eid: str, body: Optional[EventCourseIn] = None):
 
 
 def _grade_models() -> dict:
-    """GradeRE + HikeSpeed + the hike moving-ratio rows, memoised like /inputs."""
-    from backend.engine.achievements import KIND_HIKE, build_achievements
-    from backend.engine.racepower import athlete as A
+    """GradeRE + HikeSpeed + the hike moving-ratio rows, memoised like /inputs. One fit per
+    key at a time (SP-366): /plan, GET /grade-model and a second tab on a cold cache wait for
+    the same computation instead of each running the whole year's fit."""
     ds = _dataset()
     today = today_local()
     key = (*_tenancy.ds_key(ds), today)
-    with _lock:
-        hit = _cache.get("grade")
-        if hit and hit[0] == key and time.time() - hit[1] < INPUTS_TTL_S:
-            return hit[2]
+
+    def cached():
+        with _lock:
+            hit = _cache.get("grade")
+            if hit and hit[0] == key and time.time() - hit[1] < INPUTS_TTL_S:
+                return hit[2]
+        return None
+
+    def compute():
+        return cached() or _fit_grade_models(ds, today, key)
+    return cached() or _FLIGHT.do(("grade", key), compute)
+
+
+def _fit_grade_models(ds, today, key) -> dict:
+    from backend.engine.achievements import KIND_HIKE, build_achievements
+    from backend.engine.racepower import athlete as A
     from backend.engine.racepower import backtest as BT
     road = (inputs()["re"]["road"] or {}).get("median")
     gm = A.grade_models(ds, today, re_flat=road)
@@ -393,17 +406,50 @@ def grade_model():
 @router.get("/cadence-check")
 def cadence_check():
     """SP-230: the climbing cadence distribution against the 130 spm walk line (report only)."""
-    from backend.engine.racepower import athlete as A
     from backend.engine.racepower import runwalk as RW
+    secs, n = _climb_cadence()
+    return _py({**RW.cadence_check(secs), "n_runs": n})
+
+
+CHART_WARM_WAIT_S = 600.0      # how long the chart warm-up waits for the classification job
+
+
+def warm_charts(job=None) -> None:
+    """The warm-up's last step (api/wko5views._low_priority; SP-366): the grade-model fit and
+    the climbing-cadence scan, so the first page that opens the charts finds them. After the
+    activity classification `job` (one heavy job at a time); owner only — the demo and other
+    tenants compute on request. A failure only logs."""
+    import logging
+    if _tenancy.demo_mode() or _tenancy.current().kind != _tenancy.OWNER:
+        return
+    t = getattr(job, "thread", None)
+    if t is not None and t.is_alive():
+        t.join(CHART_WARM_WAIT_S)
+    try:
+        _grade_models()
+        _climb_cadence()
+    except Exception as e:               # noqa: BLE001 — the page computes on request
+        logging.getLogger(__name__).warning("race chart warm-up failed: %s", type(e).__name__)
+
+
+def _climb_cadence() -> tuple:
+    """(seconds per cadence bin, runs) of the year's climbing, memoised per dataset and day;
+    one scan per key for concurrent callers (SP-366). The texts follow each request's locale."""
+    from backend.engine.racepower import athlete as A
     ds = _dataset()
     today = today_local()
     key = (*_tenancy.ds_key(ds), today)
+
+    def scan():
+        hit = _cache.get("climb_cadence")
+        if not (hit and hit[0] == key):
+            hit = (key, A.climb_cadence_seconds(ds, today))
+            _cache["climb_cadence"] = hit
+        return hit
     hit = _cache.get("climb_cadence")
     if not (hit and hit[0] == key):
-        hit = (key, A.climb_cadence_seconds(ds, today))       # the histogram; the texts follow the request's locale
-        _cache["climb_cadence"] = hit
-    secs, n = hit[1]
-    return _py({**RW.cadence_check(secs), "n_runs": n})
+        hit = _FLIGHT.do(("climb_cadence", key), scan)
+    return hit[1]
 
 
 def heat_status_for(date: Optional[str]) -> dict:
@@ -728,22 +774,6 @@ async def _db():
     from backend.db.database import get_db
     async for s in get_db():
         yield s
-
-
-@router.post("/export/csv")
-def export_csv(body: ExportIn):
-    """The /plan output as CSV (UTF-8 with BOM for Excel): a header block
-    (course totals, mode, CP / TTE / k sources, strategy, heat, date computed)
-    and one row per segment. Same body as /plan; `name` names the file."""
-    from urllib.parse import quote
-
-    from fastapi.responses import Response
-
-    text, fname = _calc(CALC.export_csv, LIVE, body)
-    q = quote(fname)
-    return Response(content=text.encode("utf-8-sig"), media_type="text/csv; charset=utf-8",
-                    headers={"Content-Disposition": f"attachment; filename=\"racepower.csv\"; filename*=UTF-8''{q}",
-                             "X-Filename": q})
 
 
 # ---------------------------------------------------------------------------
