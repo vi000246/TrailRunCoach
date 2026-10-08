@@ -245,7 +245,7 @@ flagged.
 | GET | `/api/v1/wko5/workouts/{idx}/activity` | dataset workout (current source): effective, auto (+ reasons), overridden flags, note, `effort_detail` (HR fraction, above-AeT share, long-rest share), `capacity` (race-power sample or not), the option labels, `power` (`source`, `used`, `label`, `setting`), `title_original`, `title_from`, `terrain`, `origin`, `pack`, `poles` / `poles_user` / `poles_race` (SP-300), `pain_state` (+ `pain_score`, the 傷別 pain-monitoring text `monitor` and the re-entry prompt `reentry`, SP-269) (`_activity_json`, `backend/api/wko5views.py:877`) |
 | GET | `/api/v1/wko5/workouts/{idx}/pain` | the pain mark only (the chart page's chip); 404 in demo mode |
 | GET | `/api/v1/wko5/activities` | every activity of the current source, newest first, with the stored user values (type / effort marks, name, tags, note, exclusion, pain, `pain_score`, `poles` / `poles_race`, `surface`), terrain, power label, recorded RPE / feel and `self_rating` (COROS, SP-231), `rain_mm` and `pole_chart` (counts toward the comparison); excluded files with `index: null`. Top level: `pole_tags`, `pole_none_tag`, `surface_tags`, `pole_compare` (the 5 + 5 counts), `rain_hint_mm` (`activities_list`, `backend/api/wko5views.py:1085`) |
-| GET | `/api/v1/wko5/activities/auto` | the auto type / effort (+ reasons) of every activity, computed in the background (`backend/api/activity_auto.py`: one job per Dataset, chunks of 25 newest first, values kept on disk per activity file); `{state computing / ready / error, n_done, n_total, stale, auto}` — the page polls. **One signature for the whole dataset** (`signature`, `backend/api/activity_auto.py:135`: every workout's file stamp / sport / tags / title / start, the plan, settings, corrections, recorded RPEs), so any change recomputes every activity; its code part hashes only the functions `compute_blocking` reaches (`_code_sig`, `backend/api/activity_auto.py:115`, SP-320 ①) |
+| GET | `/api/v1/wko5/activities/auto` | the auto type / effort (+ reasons) of every activity, computed in the background (`backend/api/activity_auto.py`: one job per Dataset, chunks of 25 newest first, values kept on disk per activity file); `{state computing / ready / error, n_done, n_total, stale, auto}` — the page polls. **Per activity since SP-334**: a cheap whole-data `signature` (`backend/api/activity_auto.py:241`) only decides whether a job starts; the job (in the request's tenant context) then builds every activity's own key (`_Keys`, `backend/api/activity_auto.py:341`) and recomputes only the activities whose key changed — see 「Auto values per activity」 below |
 | GET | `/api/v1/wko5/sports` | the 圖表分析 activity-type filter: the kinds present with counts, in the filter's order (`backend/api/wko5views.py:1307`, SP-263) |
 | GET | `/api/v1/wko5/activities/stats` | `{key: {avg_hr, avg_power}}` for the list columns |
 | PATCH | `/api/v1/wko5/activities` | key-based single or bulk edit (≤ 500 items `{key, file?}`): any tag field (incl. `pain_score`, `poles`, `surface`; `BulkBody`, `backend/api/wko5views.py:1230`), plus `add_tags` / `remove_tags`; works for excluded files |
@@ -259,6 +259,64 @@ flagged.
 The DB-row `GET /api/v1/workouts` and `/api/v1/workouts/{id}` (and the SPA's mmp / timeseries / zones /
 trail routes) were removed with the React SPA on 2026-10-04 (SP-48; `backend/api/workouts.py:1`);
 the `/api/v1/workouts` router keeps only the two PATCH routes above.
+
+### Auto values per activity (SP-334)
+
+`activity_auto.json` (FIT cache folder; `activity_auto_<hash>.json` for WKO5) holds one entry per
+activity file: `{key, own, pcode, probe, start, auto}` (`save_cache`,
+`backend/api/activity_auto.py:547`; a failed write removes its `.tmp`). The key (`_Keys.key`,
+`backend/api/activity_auto.py:491`) is a hash of:
+
+- **global**: `CACHE_V` (2), the Dataset type / source / engine config, `power.accept_watch_power`,
+  the 每人校正 `effort_rest_max` (P9, `activity_tags._rest_max`: read by `effort_hr` /
+  `effort_from_rpe` of every activity; review fix);
+- **the branch and its code**: `run` (outdoor runs: `capacity_samples`) or `other`, each with the
+  hash of only the functions it reaches (`_branch_code`, `backend/api/activity_auto.py:138`,
+  `engine/codehash.py`, SP-320 ①) — a changed rule recomputes only the results of its branch;
+- **own** (`_Keys._own`, `backend/api/activity_auto.py:420`): file, file stamp, sport, sport type,
+  tags, title, start, platform, the corrections of the file, the day's threshold signature
+  (`Dataset._settings_sig`), power use / source;
+- **the recorded RPE row** `activity_tags.find` returns for it (looked up on the rows near it only:
+  `_Near`, `backend/api/activity_auto.py:301`);
+- **the day's thresholds** (`_Keys.thr_sig`, `backend/api/activity_auto.py:437`): the plan's
+  threshold rows up to that day, the runs of the `thr_window_days()` (301) days before it that
+  `thresholds.estimate` / `cp_as_of` read (day, file stamp, tags, power use / source, corrections,
+  NP), the synced FITs and settings the PD refit reads (`_pd_inputs`,
+  `backend/api/activity_auto.py:212`: `PdMemo.inputs`, `backend/engine/wko5expr/fitdataset.py:464`;
+  a WKO5 Dataset without a PdMemo lists the same files with `synced_fit_files`,
+  `backend/engine/wko5expr/fitdataset.py:392`) and — only on a day with no plan LTHR up to it — the
+  Dataset's own LTHR history;
+- **run**: the matched plan race, trail or not, and for road runs the road rule's cross-run values
+  — HRmax as of the day and the longer power reference (`_Keys._cross`,
+  `backend/api/activity_auto.py:408`, the real `maximal.hrmax_as_of` / `athlete.longer_power` on a
+  window of runs); **other**: the plan 百岳 event of the day, the app type;
+- **runs (the test rule, `athlete._test_reason`)** (`_Keys._test_part`,
+  `backend/api/activity_auto.py:472`): the plan events and threshold rows of the day, the stored
+  test sessions of the day (whether done by this activity), the user's 測試 mark, and the drift
+  calibration (`workout_review.apply_calibration`: `drift.ok` → a steady AeT test) — so a weekly
+  drift refit recomputes the runs only.
+
+Every workout's `athlete.run_probe` (`backend/engine/racepower/athlete.py:638`: HRmax peak, the
+(moving s, power) of a possible longer power reference, moving time) is kept with the entry and
+reused while `own` and the run branch's code are unchanged (a kept entry's probe is refreshed when
+the run code changed); `run_context`
+(`backend/engine/racepower/athlete.py:654`) builds `capacity_samples`' cross-run lists from them
+once per job (before, every chunk of 25 rebuilt them: 20 s of a 22 s full run on a 702-activity
+synthetic history).
+
+What recomputes what: a new activity → itself (its windows look back); deleting an old hike or
+editing a note / effort mark → nothing; a user 測試 mark or a recorded RPE → that activity; a plan
+threshold row → the activities from its day; a plan race → the runs of its day; a run reclassified
+or deleted → it and the activities whose thresholds window (301 days) holds it, plus road runs whose
+HRmax / power reference actually changes. Incremental values equal a full recompute
+(`backend/tests/test_activity_auto_incremental.py`). The job trigger `signature`
+(`backend/api/activity_auto.py:241`) covers every key input that can change while a Dataset lives —
+the user's 測試 marks, the stored test sessions, the drift calibration and `effort_rest_max`
+(`_calib_part`, `backend/api/activity_auto.py:204`), the engine config, each file's FTP, WKO5's
+mFTP snapshot, the whole recorded RPE row — so a change starts a job (the test oracle checks it
+for every mutation). Not the PD refit's synced FITs: a new synced FIT is a new Dataset
+(`source_stamp`). A version-1 file (one signature) is served meanwhile and rebuilt once. The job
+thread carries the request's tenant (`contextvars.copy_context`, like the warm-up).
 
 ## UI
 
@@ -332,6 +390,10 @@ idempotence, the trail HR model and the planner estimate.
 `backend/tests/test_activity_edit.py`: name / tags store, key-based and bulk API, the terrain
 `auto` reset, the recorded RPE as an effort input. `backend/tests/test_activity_auto.py`: the
 background `/activities/auto` job (single flight, progress, disk cache).
+`backend/tests/test_activity_auto_incremental.py`: the per-activity keys (SP-334) — add, delete,
+user marks, recorded RPE, plan threshold / race, reclassification, a changed branch's code, the old
+format — each compared with a fresh full recompute; the row lookup and the cross-run window equal
+the whole-list functions.
 `backend/tests/test_effort_calib.py`: the per-athlete rest limit. `backend/tests/test_activity_key.py`:
 start-time / file matching across sources.
 `backend/tests/test_bad_activity.py`: the limits, car / vehicle-segment / power rules, descents /
@@ -360,12 +422,13 @@ the app-type table and the filter kinds.
 | What counts as 百岳 in the activity-type filter | the user's 百岳跟團 mark, a plan 百岳 event that day, or a GPS-detected 百岳 summit | the type mark only | the user's answer 2026-10-06 (SP-263) |
 | COROS's post-run self-rating | read at sync and used as the RPE at once (1–5 mapped to 10 points, 推估) | wait for more data before enabling | the user decided to enable it directly (SP-231, 2026-10-06) |
 | The React SPA and its DB-row routes | removed (`frontend/`, `GET /api/v1/workouts`, `/{id}` …) | keep the SPA and spec it | the static pages are the UI; the SPA was unmaintained (SP-48, user decision 2026-10-04) |
+| How the auto values decide what to recompute | one key per activity: its own inputs, the *values* of the cheap cross-activity inputs (HRmax, longer power, plan race, row lookups) and a 301-day runs window for the expensive one (the as-of thresholds); a branch code hash | dependency windows for everything; computing the thresholds of every day for the key | values recompute only where the answer can change; the thresholds estimate is the costly part, so it is keyed on its inputs (SP-334) |
+| Where the per-activity entries live | the existing `activity_auto.json`, one entry per file | a SQLite table | one small file per dataset already, rewritten whole once per job (~700 entries); no new store to register / back up (SP-334) |
 
 ## Open Questions
 
 - [ ] `activity_tags` rows get a stable id (UUID); `updated_at` is already written（SP-310，Todo）——尚未實作
 - [ ] A change-log sync trial for `user_settings` and `activity_tags`（SP-312，Todo）——尚未實作
-- [ ] `/activities/auto` per activity: a sync of one activity recomputes only that one (today one signature covers the whole dataset)（SP-334，Todo）——尚未實作
 - [ ] Manual FIT import (pick files / a folder) on the 活動列表 page（SP-323，Todo）——尚未實作
 
 ## Change History
@@ -382,3 +445,5 @@ the app-type table and the filter kinds.
 | 2026-10-08 | SP-299 follow-up | owner decision 2026-10-07 (ticket SP-299) | The rain hint only on 越野跑 / 登山健行 (`rain_kind` / `rain_kind_excluded`, `rain_hint(…, trail)`); `rain_kind` on `GET /activities` and the single-activity JSON, copied by `patchLocal`; 路況 help (zh-TW + en) says road runs are not asked; the one-time rain backfill (route-progress.spec.md). Tests `test_rain_hint.py::test_road_runs_get_no_rain_hint_trail_and_hike_do`, `::test_rain_kind_rule`, `test_rain_backfill.py` |
 | 2026-10-08 | SP-299 review | code review of fix/activity-sp81-299-300-258 | An excluded file's rain kind also reads its trail classification (L4); its row carries `rain_kind_auto` and a type change edited by key updates `rain_kind` on the page (L2). Tests `test_rain_hint.py::test_rain_kind_rule`, `::test_excluded_row_carries_its_auto_kind_and_the_page_follows_a_type_change` |
 | 2026-10-08 | SP-300 follow-up | owner decision 2026-10-07 (ticket SP-300) | 依賽事設定 covers every trail run / hike on the race day (each day of a multi-day trip) whatever the watch distance, incl. a 越野賽 recorded as a hike; the 1-day match still adds a road race's road run; the auto 比賽 type is unchanged; 登山杖 help (zh-TW + en) says so. Tests `test_race_poles.py::test_one_day_race_covers_every_trail_run_and_hike_of_the_day`, `::test_race_day_default_never_beats_the_users_choice` |
+| 2026-10-08 | perf | SP-334 | `/activities/auto` per activity: one key per activity (own inputs, the day's thresholds and their 301-day runs window, the day's plan rows, the road rule's cross-run values, the branch's code hash) in `activity_auto.json` (v2); only changed activities recompute (`backend/api/activity_auto.py:284`); `capacity_samples` takes the cross-run context built once per job (`athlete.run_probe` / `run_context` / `longer_power`, `backend/engine/racepower/athlete.py:638`); `PdMemo.inputs`; synthetic 702-activity history: full 20 s → 1.1–1.8 s, one added activity 0.3–0.5 s; tests `backend/tests/test_activity_auto_incremental.py` |
+| 2026-10-08 | review fix | SP-334 code review | `effort_rest_max` (每人校正 P9) in every activity's key and the job signature (a refit or manual change recomputed nothing before); the drift calibration only in the runs' key; the job thread keeps the tenant context; WKO5 Datasets list the PD refit's synced FITs (`synced_fit_files`); the run's day in the thresholds window row; the dataset's own LTHR only on days without a plan LTHR; signature covers config / FTP / mFTP snapshot / the whole RPE row; `.tmp` removed on a failed write; kept entries refresh their probe; tests for test sessions, re-index + done_by, a bad file, own LTHR, watch power, time zone, tenants |

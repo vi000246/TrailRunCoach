@@ -635,8 +635,51 @@ def effort_stats(ds, w, th: dict) -> dict:
             "low_share": sh["low"] if sh else None, "above_aet": (1.0 - sh["low"]) if sh else None}
 
 
+def run_probe(ds, w) -> Optional[dict]:
+    """One workout's part of capacity_samples' cross-run inputs (SP-334): its HRmax peak
+    (the road rule's hrmax_as_of reads every run's), its (moving s, average power) when it
+    can be a longer power reference of the road rule, and its moving time. None for a
+    workout that is no run. Reads only this workout (file, thresholds of its day, power
+    use), so a cache may keep it per activity."""
+    if w.sport != "run":
+        return None
+    st = intensity_stats(ds, w)
+    pk = hrmax_peak(ds, w) if st else None
+    # the monotonicity check compares only power the models use (no watch power)
+    held = [st["moving_s"], st["p_avg"]] if st and st.get("p_avg") and outdoor(w) and not is_trail(w) \
+        and power_ok(ds, w) else None
+    return {"peak": pk or None, "held": held, "moving_s": (st or {}).get("moving_s")}
+
+
+def run_context(ds, probes: Optional[dict] = None) -> dict:
+    """capacity_samples' cross-run inputs, built once: {"peaks": [(day, bpm)], "held":
+    [(day, moving s, power)]} from every workout's run_probe (`probes`: {idx: probe}
+    already known, e.g. from a cache; the rest are computed)."""
+    peaks, held = [], []
+    for w in ds.workouts:
+        p = probes.get(w.idx) if probes is not None and w.idx in probes else run_probe(ds, w)
+        if not p:
+            continue
+        if p.get("peak"):
+            peaks.append((w.day, p["peak"]))
+        if p.get("held"):
+            held.append((w.day, p["held"][0], p["held"][1]))
+    return {"peaks": peaks, "held": held}
+
+
+def longer_power(held: list, day: float, moving_s: Optional[float]) -> Optional[float]:
+    """The road rule's power reference: the highest average power of the power runs in
+    the RIEGEL_WINDOW_DAYS before `day` at least MAXIMAL["longer_ratio"] × as long."""
+    from backend.engine.racepower import maximal as MX
+    mv = moving_s or 0.0
+    longer = [p for d_, s_, p in held if day - RIEGEL_WINDOW_DAYS < d_ < math.floor(day)
+              and s_ >= MX.MAXIMAL["longer_ratio"] * mv]
+    return max(longer) if longer and mv else None
+
+
 def capacity_samples(ds, runs, th_of: Optional[dict] = None, tags: Optional[list] = None,
-                     tests: Optional[dict] = None, recorded: Optional[list] = None) -> dict[int, dict]:
+                     tests: Optional[dict] = None, recorded: Optional[list] = None,
+                     context: Optional[dict] = None) -> dict[int, dict]:
     """{idx: {"ok", "kind", "reason", "tags", ...}} for every outdoor run: is it
     a capacity sample? (2026-10-01, user: what matters is whether the effort
     was MAXIMAL, not whether it was a race.)
@@ -653,7 +696,8 @@ def capacity_samples(ds, runs, th_of: Optional[dict] = None, tags: Optional[list
     {idx: reason} of runs workout_review marks as tests. `recorded` =
     activity_tags.load_recorded() rows (default: the app DB): a watch-
     recorded RPE outranks the HR rule for the auto effort (a user mark
-    outranks both)."""
+    outranks both). `context` = run_context(ds) when the caller already built it (one
+    build for many calls: api/activity_auto.py, SP-334)."""
     from backend.engine import activity_tags as AT
     from backend.engine.racepower import maximal as MX
     from backend.engine.racepower import trailhr as TH
@@ -661,16 +705,8 @@ def capacity_samples(ds, runs, th_of: Optional[dict] = None, tags: Optional[list
     tags = AT.load() if tags is None else tags
     recorded = AT.load_recorded() if recorded is None else recorded
     tests = tests or {}
-    peaks, held = [], []
-    for w in ds.workouts:
-        if w.sport == "run":
-            st = intensity_stats(ds, w)
-            pk = hrmax_peak(ds, w) if st else None
-            if pk:
-                peaks.append((w.day, pk))
-            # the monotonicity check compares only power the models use (no watch power)
-            if st and st.get("p_avg") and outdoor(w) and not is_trail(w) and power_ok(ds, w):
-                held.append((w.day, st["moving_s"], st["p_avg"]))
+    ctx = context if context is not None else run_context(ds)
+    peaks, held = ctx["peaks"], ctx["held"]
     out = {}
     for w in runs:
         if not outdoor(w):
@@ -696,14 +732,12 @@ def capacity_samples(ds, runs, th_of: Optional[dict] = None, tags: Optional[list
             auto_ok = eff["effort"] == "max" and long_ok
         else:
             hrmax = MX.hrmax_as_of(peaks, w.day)      # 730 days (MAXIMAL["hrmax_window_days"]), not Riegel's 365
-            mv = st.get("moving_s") or 0.0
-            longer = [p for d_, s_, p in held if w.day - RIEGEL_WINDOW_DAYS < d_ < math.floor(w.day)
-                      and s_ >= MX.MAXIMAL["longer_ratio"] * mv]
+            lp = longer_power(held, w.day, st.get("moving_s"))
             r = MX.road_maximal({"km": km, "q4_hr": ms.get("q4_hr"), "split": ms.get("split"),
                                  "peak_hr": MX.peak_hr(st.get("hist"), st.get("hist_lo", 40)),
                                  "p_avg": st.get("p_avg"),
                                  # watch-estimated power: the power check is skipped, not failed
-                                 "longer_p": max(longer) if longer and mv and pw_ok else None},
+                                 "longer_p": lp if pw_ok else None},
                                 th.get("lthr"), hrmax)
             r["hrmax"] = hrmax
             eff = AT.effort_road(r, es, th.get("aet"))

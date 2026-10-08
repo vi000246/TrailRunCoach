@@ -225,7 +225,8 @@ FILES: tuple = (
     File("cache/fit/**", DERIVED, SHARED, "FIT dataset cache: per-second channels (npz), index, estimate / "
          "PD memos, series, activity_auto (wko5expr/fitcache.py, fitdataset.py, api/activity_auto.py)",
          deidentify=("channels: GPS", "start times"),
-         invalidated_by="file stamp + per-field versions (fitcache.versions); code_hash (SP-320 ①)"),
+         invalidated_by="file stamp + per-field versions (fitcache.versions); code_hash (SP-320 ①); "
+                        "activity_auto.json per activity key (SP-334)"),
     File("cache/render/slots/*.json", DERIVED, SHARED, "per chart request (view, chart, range as asked): the key "
          "it was last drawn with, so a changed chart first shows that drawing marked as updating "
          "(wko5expr/render_cache.py, SP-336)",
@@ -253,7 +254,10 @@ FILES: tuple = (
     File("moving_hrtss.json", DERIVED, SHARED, "WKO5 moving-time hrTSS per .wko4 (wko5expr/dataset.py)",
          invalidated_by="file stamp + LTHR"),
     File("activity_auto_*.json", DERIVED, SHARED, "WKO5 dataset's activity auto-classification "
-         "(api/activity_auto.py)", invalidated_by="one signature over the whole dataset + code"),
+         "(api/activity_auto.py)", invalidated_by="per activity: its file, metadata, the day's thresholds and their "
+                                                 "runs window, the day's plan rows, the road rule's cross-run "
+                                                 "values, its branch's code_hash (SP-334); a version-1 file is "
+                                                 "recomputed once"),
     File("racepower_cptests.json", DERIVED, SHARED, "CP tests found in the FIT files (racepower/cptest.py)",
          invalidated_by="file stamp + _KEY_VERSION"),
     File("racepower_power_source.json", DERIVED, SHARED, "power source per FIT file (racepower/cptest.py)",
