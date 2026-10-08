@@ -13,8 +13,8 @@ reminder). It can be closed (✕) for that trip for good (suggestions.altitude_r
 `altitude_plan:<event>:<start>`, kept by suggestions.prune until the trip starts). When the trip's
 first night is above 3,000 m (owner: 玉山、嘉明湖 kind of trips) 「行前一晚住約 2,500 m」
 (玉山國家公園) is only in its 說明 (?), never in the row's text. 1–14 days before: the checks
-below, as before (its 說明 also names 塔塔加 2,610 m / 大禹嶺 2,565 m for that night, owner
-2026-10-06). Beidleman 2018 (High Alt Med Biol 19:329, abstract): 2 days at 3,000 m before
+below, as before; its 說明 says 「行前一晚住 2,500 m 左右」 too, with no place named (owner
+2026-10-08). Beidleman 2018 (High Alt Med Biol 19:329, abstract): 2 days at 3,000 m before
 4,300 m, AMS 83 % → 43 %.
 
 The event's altitude comes from its stored GPX (engine/event_gpx.py): the
@@ -81,12 +81,7 @@ KEY = "altitude_max_v1"             # Dataset.cached_series: {"max_m", "secs"} p
 EARLY_DAYS = 28
 EVE_M = 2500.0                      # 玉山國家公園 [H13]: 「應先於海拔2,500公尺左右地區適應高度（約1晚）」
 EVE_FIRST_NIGHT_M = 3000.0          # owner 2026-10-06: the 行前一晚 line only for a first night > 3,000 m
-# places of the 1–14 day row's 行前一晚 note, elevations checked 2026-10-07 (docs/research/
-# altitude-training.md §2.3, [H18]–[H20]); the 15–28 day row names none (owner 2026-10-07):
-#   塔塔加 2,610 m — 玉山國家公園管理處 (ysnp.gov.tw, 塔塔加遊客中心): 「海拔2,610公尺的塔塔加」
-#   大禹嶺 2,565 m — 太魯閣國家公園管理處 (taroko.gov.tw, 大禹嶺): 「海拔2,565公尺」
-TATAKA_M = 2610
-DAYULING_M = 2565
+# no place is named in either row (owner 2026-10-07 / 2026-10-08): 「行前一晚住 2,500 m 左右」 only
 
 SRC = ("CDC Yellow Book（Hackett & Shlim，High-Altitude Travel and Altitude Illness）；"
        "Schneider…Bärtsch 2002（Med Sci Sports Exerc 34:12）；Shen 2024（J Formos Med Assoc 123:1161）")
@@ -372,8 +367,8 @@ def _plan_row(ev: dict, alt: dict, start: dt.date, today: dt.date) -> dict:
     n1 = first_night_high(alt)
     if n1 is not None:
         flags.append("eve")
-        help_.append(_("第一晚睡在約 {m:,.0f} m：行前一晚先住約 2,500 m（玉山國家公園建議上 3,000 m 以上的高山前，"
-                       "先在 2,500 m 左右住約 1 晚；這一晚低於 2,750 m，不算進適應週末的 2 晚）。", m=n1))
+        help_.append(_("第一晚睡在約 {m:,.0f} m：行前一晚住 2,500 m 左右（玉山國家公園建議；這一晚低於 2,750 m，"
+                       "不算進適應週末的 2 晚）。", m=n1))
     help_ += [_("最高點與每晚的高度來自賽事的 GPX。研究多在 4,000 m 以上，套到 3,000–3,950 m 是推估。"
                 "出發前 14 天內會改成檢查你最近的高度紀錄。只是提醒，不會改課表。"),
               _("按 ✕ 關掉後，這趟行程不再顯示這個提醒；出發前 14 天內的高度檢查照常出現。"),
@@ -429,10 +424,10 @@ def reminder(ev: dict, alt: dict, ex: Optional[dict], today: dt.date) -> Optiona
     fit = _("體能好壞不影響高山症風險（CDC）：練得好不代表不會高山症")
     title = _("「{name}」最高約 {m:,.0f} m：出發前的高度適應", name=ev.get("name") or "", m=m)
     reason = status + "。" + (lines[0] if lines else "") + ("。" if lines else "") + fit + "。"
-    # SP-258: 行前一晚 only in the 說明 here — the row's title, text and id stay as before
+    # SP-258: 行前一晚 only in the 說明 here — the row's title, text and id stay as before; no place
+    # named (owner 2026-10-08, like the 適應週末 row)
     n1 = first_night_high(alt)
-    eve = [_("第一晚在 3,000 m 以上：行前一晚先住約 2,500 m（玉山國家公園建議；例如塔塔加 {a:,} m、大禹嶺 {b:,} m）。",
-             a=TATAKA_M, b=DAYULING_M)] if n1 is not None else []
+    eve = [_("第一晚在 3,000 m 以上：行前一晚住 2,500 m 左右（玉山國家公園建議）。")] if n1 is not None else []
     # SP-259: where the nights came from, and how to add one the activities can't see
     rec = ([_("其中 {n} 晚來自你在課表日曆記的「睡在高處」。", n=ex["manual"])] if ex.get("manual") else []) + \
         [_("開車上山過夜、隔天才爬，活動看不到這一晚：在課表日曆那一天按右鍵（手機長按）記「睡在高處」。")]
