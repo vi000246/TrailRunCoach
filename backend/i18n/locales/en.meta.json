@@ -3103,7 +3103,7 @@
     "draft": true,
     "src": "backend/engine/aet_test.py:624"
   },
-  "強度：做到這堂課的 {pct}%（≥ 80% 算做到、50–80% 算強度不足、不到 50% 算沒照課表）": {
+  "強度：做到這堂課的 {pct}%（≥ 80% 算做到、50–80% 算強度不足、不到 50% 算跑成輕鬆：時間和 TSS 都對算部分，否則算沒照課表）": {
     "draft": false,
     "src": "backend/engine/workout_review.py:2833"
   },
@@ -3742,6 +3742,18 @@
   "時間不夠": {
     "draft": true,
     "src": "backend/engine/race_feasibility.py:51"
+  },
+  "時間和負荷都對，但跑成強度課": {
+    "draft": true,
+    "src": "backend/engine/plan_match.py:354"
+  },
+  "時間和負荷都對，但跑成輕鬆": {
+    "draft": true,
+    "src": "backend/engine/plan_match.py:354"
+  },
+  "時間和負荷都對，但項目不同：排{kind}，實際{act}": {
+    "draft": true,
+    "src": "backend/engine/plan_match.py:351"
   },
   "時間：{t} ／ 計畫 {m} 分（{pct}%）": {
     "draft": true,
@@ -5771,6 +5783,14 @@
     "draft": true,
     "src": "backend/engine/panels/drift_bars.py:49"
   },
+  "跑成強度課": {
+    "draft": true,
+    "src": "backend/engine/compliance.py:153"
+  },
+  "跑成輕鬆": {
+    "draft": true,
+    "src": "backend/engine/compliance.py:153"
+  },
   "跑步經驗問卷填的": {
     "draft": false,
     "src": "backend/engine/racepower/race_estimate.py:40"
@@ -6690,6 +6710,10 @@
   "靠牆提腳尖慢放": {
     "draft": true,
     "src": "backend/engine/strength_moves.py:191"
+  },
+  "項目不同": {
+    "draft": true,
+    "src": "backend/engine/compliance.py:151"
   },
   "預估 4 小時以上的{event}": {
     "draft": true,

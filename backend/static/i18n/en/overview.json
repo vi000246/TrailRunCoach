@@ -29,5 +29,5 @@
   "split.title": "Intensity distribution",
   "split.target": "Low intensity: floor 75% · target 80% (base ≥ 90%)",
   "split.tip": "Moving time of this period's endurance activities, split into three heart-rate bands.\nHow to read: low < AeT, moderate AeT–LTHR, high ≥ LTHR; bar length = share.\nLook for: 75% low intensity is the floor, 80% the target (≥ 90% in base); this is a reminder, not a condition for unlocking Zone 3.\nMethod: Seiler 2006.",
-  "week.short_aria": "Intensity short or too high (partial)"
+  "week.short_aria": "Intensity or sport not quite as planned (partial)"
 }

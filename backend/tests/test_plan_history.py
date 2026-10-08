@@ -276,11 +276,12 @@ def test_the_week_result_grades_intensity_like_the_compliance_page():
     """A 強度課 with 70 % of its dose is 強度不足 = 部分 (SP-216), not 沒照課表 and not done as
     planned; one under half is 沒照課表; an easy run slightly hard is 部分 (偏強). The stored
     result counts them exactly as compliance.dashboard on the page does."""
-    def a(index, day, z3, typ="easy"):
+    def a(index, day, z3, typ="easy", tss=50.0):
         return {"index": index, "start": f"{day}T07:00:00", "date": day, "category": "road",
-                "category_label": "路跑", "moving_s": 3600.0, "tss": 50.0, "hard_s": 0.0,
+                "category_label": "路跑", "moving_s": 3600.0, "tss": tss, "hard_s": 0.0,
                 "session": {"type": typ, "type_label": "", "z3_s": z3, "t_vo2_eq_s": None}}
-    acts = [a(1, "2026-09-29", 420), a(2, "2026-10-01", 240), a(3, "2026-10-02", 720, "quality"),
+    # q2: under half the dose AND TSS −40 % -> 沒照課表 (with TSS on plan it is 部分, SP-370)
+    acts = [a(1, "2026-09-29", 420), a(2, "2026-10-01", 240, tss=30.0), a(3, "2026-10-02", 720, "quality"),
             a(4, "2026-10-03", 900, "quality")]
     every = [_s("q1", "2026-09-29", "quality", "done", title="閾值 3×10 分", done_by=dict(acts[0], match="day")),
              _s("q2", "2026-10-01", "quality", "done", title="閾值 3×10 分", done_by=dict(acts[1], match="day")),
