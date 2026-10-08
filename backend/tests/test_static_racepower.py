@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import os
 import socket
 import subprocess
 import sys
@@ -132,7 +133,8 @@ def test_trace_needs_no_server_modules(demo, tmp_path):
     p = tmp_path / "ctx.json"
     p.write_bytes(SR.export_json(RP.LIVE))
     r = subprocess.run([sys.executable, "-m", "backend.demo.static_racepower", "--trace", str(p)],
-                       cwd=REPO, capture_output=True, text=True, encoding="utf-8", timeout=600)
+                       cwd=REPO, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=600,
+                       env={**os.environ, "PYTHONIOENCODING": "utf-8"})
     assert r.returncode == 0, r.stderr[-3000:]
     out = json.loads(r.stdout)
     assert not out["failures"], out["failures"]
