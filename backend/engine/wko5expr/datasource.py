@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import threading
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -139,19 +141,67 @@ def source_stamp(source: str, wko5_dir: Path) -> str:
             f"|ex:{int(BA.read_setting())}:{BA.overrides_stamp()}")
 
 
+# The FIT folder scan (rglob + a stat per file: 800+ files) ran on every _dataset() call, 8–12
+# times per page load (SP-362). Its result is kept FILES_STAMP_TTL_S seconds AND only while the
+# folder and its year folders keep their mtimes (a file added, removed or renamed in them
+# changes their mtime at once); the in-process writers (files/file_service._import_one_file,
+# sync/purge.py) also drop it with files_changed(). What is left — a file rewritten in place
+# by another process — shows after at most FILES_STAMP_TTL_S. The DB part (db_stamp) is read
+# on every call, as before. Chosen over a pure generation counter: changes made outside the
+# app (a copy into the folder, a restore, a script) are still seen.
+FILES_STAMP_TTL_S = 5.0
+_FILES_MEMO: dict = {}            # root -> (expires monotonic, dirs signature, stamp)
+_FILES_LOCK = threading.Lock()
+
+
+def files_changed() -> None:
+    """A FIT was added / removed by this process: the next stamp rescans the folder."""
+    with _FILES_LOCK:
+        _FILES_MEMO.clear()
+
+
+def _dirs_sig(root: Path) -> tuple:
+    """(name, mtime_ns) of the folder and its sub-folders (fit/<source>/<year>/): cheap."""
+    out = [("", root.stat().st_mtime_ns)]
+    for p in root.iterdir():
+        if p.is_dir() and not p.is_symlink():
+            out.append((p.name, p.stat().st_mtime_ns))
+    return tuple(sorted(out))
+
+
+def _scan(source: str, root: Path) -> str:
+    files = [p for p in root.rglob("*.fit*") if p.is_file() and not p.is_symlink()]
+    latest = max((p.stat().st_mtime_ns for p in files), default=0)
+    # a rename (migrate_coros_sport_names) keeps count and mtimes: the
+    # names are in the stamp too, so the Dataset doesn't keep stale paths
+    import hashlib
+    names = hashlib.sha1("\n".join(sorted(str(p.relative_to(root)) for p in files)).encode()).hexdigest()[:12]
+    return f"{source}:{len(files)}:{latest}:{names}"
+
+
+def _scan_cached(source: str, root: Path) -> str:
+    try:
+        sig = _dirs_sig(root)
+    except OSError:
+        return _scan(source, root)
+    key, now = str(root), time.monotonic()
+    with _FILES_LOCK:
+        hit = _FILES_MEMO.get(key)
+    if hit is not None and hit[0] > now and hit[1] == sig:
+        return hit[2]
+    stamp = _scan(source, root)
+    with _FILES_LOCK:
+        _FILES_MEMO[key] = (now + FILES_STAMP_TTL_S, sig, stamp)
+    return stamp
+
+
 def _files_stamp(source: str, wko5_dir: Path) -> str:
     if source in ("coros", "tp"):
         from backend.sync import storage
         root = storage.source_dir(source)
         if not root.exists():
             return f"{source}:empty"
-        files = [p for p in root.rglob("*.fit*") if p.is_file() and not p.is_symlink()]
-        latest = max((p.stat().st_mtime_ns for p in files), default=0)
-        # a rename (migrate_coros_sport_names) keeps count and mtimes: the
-        # names are in the stamp too, so the Dataset doesn't keep stale paths
-        import hashlib
-        names = hashlib.sha1("\n".join(sorted(str(p.relative_to(root)) for p in files)).encode()).hexdigest()[:12]
-        return f"{source}:{len(files)}:{latest}:{names}:{db_stamp()}"
+        return f"{_scan_cached(source, root)}:{db_stamp()}"
     try:
         return "wko5:" + ";".join(f"{p.name}:{p.stat().st_size}:{p.stat().st_mtime_ns}"
                                   for p in sorted(Path(wko5_dir).glob("*.wko5athlete")))
