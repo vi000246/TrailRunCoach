@@ -3430,7 +3430,7 @@ def _trail_lines(ds, w, m) -> list[str]:
 
 # ---------------------------------------------------------------------------
 # 爬坡段: elevation profile + per-climb comparison; 坡度分組: one row per grade bin
-# (wko5_viewer drawClimbProfile / drawGradeProfile; res.climb_profile / res.grade_profile)
+# (wko5_viewer drawClimbMap / drawGradeProfile; res.climb_profile / res.grade_profile)
 # ---------------------------------------------------------------------------
 
 PROFILE_POINTS = 900          # points on the drawn profile (display only)
@@ -3501,21 +3501,6 @@ def profile_series(t, dist, elev, grade=None, hr=None, power=None, walking: bool
     return {"x": r(dd[sel], 3), "alt": r(ee[sel], 1), "t": r(tt[sel] - tt[0], 0), "grade": r(g * 100.0, 1),
             "vam": r(vam, 0), "pace": r(pace, 0), "gap": r(gap, 0), "hr": r(wmean(hr), 0),
             "power": r(wmean(power), 0)}
-
-
-def descents_of(t, dist, elev, hr=None, moving=None) -> list[dict]:
-    """Sustained descents: detect_climbs on the mirrored elevation (≥ 80 m down, ≥ 3 %)."""
-    neg = [None if x is None else -x for x in _none_list(elev)]
-    try:
-        cl = detect_climbs(_none_list(t), _none_list(dist), neg, _none_list(hr) if hr is not None else None,
-                           moving=moving)
-    except Exception:
-        return []
-    dk = _arr(dist, len(neg))
-    return [{"start_km": _f(dk[c.start_index]), "end_km": _f(dk[c.end_index]), "t_start": c.t_start,
-             "duration_s": c.duration_s, "distance_km": c.distance_km, "drop_m": c.gain_m, "grade": -c.grade,
-             "rate": -c.vam_m_per_h, "avg_hr": c.avg_hr, "start_elev": -c.start_elev_m, "end_elev": -c.top_elev_m,
-             "pace_s_per_km": c.duration_s / c.distance_km if c.distance_km > 0 else None} for c in cl]
 
 
 def _pool(ds, w, weeks: int = POOL_WEEKS[-1], keep=None) -> list[tuple[float, dict]]:
@@ -3599,20 +3584,61 @@ def _climb_lines(cards: list[dict]) -> list[str]:
     return ["；".join(parts) + "（和近期相近坡度的爬坡比）"]
 
 
+RUN_SHARE_COVER = 0.5         # 推估: a climb's 跑／走 split needs cadence on ≥ half its moving seconds
+
+
+def climb_run_share(s: dict, start_km, end_km) -> Optional[float]:
+    """Share of a climb's moving seconds at a running cadence (≥ RUN_CADENCE strides/min =
+    130 spm, the form cards' line between walking and running), the climb being the samples
+    between its start and end km; None without cadence on ≥ RUN_SHARE_COVER of them (SP-218)."""
+    if s.get("cadence") is None or s.get("dist") is None or start_km is None or end_km is None:
+        return None
+    t = np.asarray(s["t"], dtype=float)
+    n = len(t)
+    d, cad, wt = _arr(s["dist"], n), _arr(s["cadence"], n), _dt(t)
+    seg = moving_mask(t, s.get("speed")) & np.isfinite(d) & (d >= start_km) & (d <= end_km)
+    tot = float(wt[seg].sum())
+    have = seg & np.isfinite(cad) & (cad > 0)
+    covered = float(wt[have].sum())
+    if tot <= 0 or covered < RUN_SHARE_COVER * tot:
+        return None
+    return float(wt[have & (cad >= RUN_CADENCE)].sum() / covered)
+
+
+def climb_summary(w, m: dict, cards: list[dict]) -> dict:
+    """The whole activity's climbing in one strip (SP-218): total ascent (the activity's
+    own climbing), the detected climbs' gain, time and share of the moving time, their
+    VAM (gain ÷ time), HR per 100 m (the measure's median over the climbs — the number the
+    verdict compares with the usual) and the time-weighted running share."""
+    gain = sum(float(c.get("gain_m") or 0.0) for c in cards)
+    secs = sum(float(c.get("duration_s") or 0.0) for c in cards)
+    mv = _f(m.get("moving_s"))
+    rs = [(c["run_share"], float(c.get("duration_s") or 0.0)) for c in cards if c.get("run_share") is not None]
+    rw = sum(x for _r, x in rs)
+    return {"ascent_m": _f((w.metrics or {}).get("climbing")), "n": len(cards), "gain_m": gain if cards else None,
+            "time_s": secs if cards else None, "moving_s": mv,
+            "share": (secs / mv) if cards and mv else None,
+            "vam": (gain / secs * 3600.0) if secs > 0 else None,
+            "hr_per_100m": _f(m.get("hr_per_100m")),
+            "run_share": (sum(r * x for r, x in rs) / rw) if rw > 0 else None}
+
+
 def _climbs(ds, w, m, c, base):
     cl = m.get("climbs") or []
     s = _samples(ds, w)
     walking = m.get("category") in ("hike", "walk")
     prof = None
     if s is not None and s["dist"] is not None and s["elev"] is not None:
+        # one elevation for the drawn profile, the detected climbs (measure) and the map's readout
+        # (GET /workouts/{i}/samples): the file's WKO5-smoothed _elevation when it has one, else the raw
+        # channel (_samples) — so the profile, the shaded climbs and the map agree (SP-218)
         prof = profile_series(s["t"], s["dist"], s["elev"], _eval(ds, w, "rgrade"), s["hr"], s["power"], walking)
     if not cl and prof is None:
         return {**base, "empty": "這筆活動沒有海拔資料，畫不出高度圖，也找不到爬坡段"}
     cards = _climb_cards(ds, w, m) if cl else []
-    desc = []
-    if prof is not None:
-        desc = descents_of(s["t"], s["dist"], s["elev"], s["hr"], list(moving_mask(s["t"], s["speed"])))
-    cols = []
+    if s is not None:
+        cards = [{**x, "run_share": climb_run_share(s, x.get("start_km"), x.get("end_km"))} for x in cards]
+    cols = []                     # the table for GET /workouts/{i}/review readers (the viewer draws its own)
     if cards:
         cols = [_col("段", [x["no"] for x in cards]),
                 _col("開始", [_hms(x["t_start"]) for x in cards]),
@@ -3637,9 +3663,10 @@ def _climbs(ds, w, m, c, base):
     if prof is None:
         note = "這筆活動沒有海拔資料，畫不出高度圖"
     return {**base, "series": cols + _verdict_rows(lines),
-            "climb_profile": {"profile": prof, "climbs": cards, "descents": desc, "cp": m.get("cp"),
-                              "walking": walking, "note": note,
-                              "grade_match": CLIMB_GRADE_MATCH, "pool_weeks": list(POOL_WEEKS)}}
+            "climb_profile": {"profile": prof, "climbs": cards, "walking": walking, "note": note,
+                              "summary": climb_summary(w, m, cards),
+                              "workout": w.idx,           # the viewer's samples / map / synced hover (SP-218)
+                              "grade_match": CLIMB_GRADE_MATCH}}
 
 
 def _grades(ds, w, m, c, base):

@@ -427,6 +427,36 @@ def test_single_activity_with_map(app):
     _viewer_loaded(page)
 
 
+def test_climb_tab_follows_the_activity_with_synced_map(app):
+    """SP-218: 爬坡與地形 of a trail activity shows even when 主要訓練項目 is road; the profile's hover
+    moves the map marker and a climb row outlines that climb (row marked 「on」)."""
+    page, _ = app
+    trail = [a for a in _workouts(page) if a.get("kind") in ("trail", "hike", "baiyue") and (a.get("climbing") or 0) > 150]
+    if not trail:
+        pytest.skip("the e2e athlete has no trail activity with climbing")
+    prev = _json(page, "/api/v1/sync/settings").get("primary_sport") or "auto"
+    assert page.request.put("/api/v1/sync/settings", data={"primary_sport": "road"}).ok
+    try:
+        open_page(page, f"{VIEWER}?view=單次活動判讀&dash=3&workout={trail[0]['index']}")
+        _viewer_loaded(page)
+        expect(page.locator("#tree .db.on .nm")).to_have_text("爬坡與地形")
+        expect(page.locator("#grid .cmmap .lmap.leaflet-container")).to_be_visible(timeout=30_000)
+        prof = page.locator("#grid .cmprof .cmplot")
+        expect(prof).to_be_visible()
+        prof.scroll_into_view_if_needed()
+        box = prof.bounding_box()
+        page.mouse.move(box["x"] + box["width"] / 2, box["y"] + 60)
+        expect(page.locator("#grid .cmmap .leaflet-tooltip.hovtip")).to_be_visible(timeout=5_000)
+        rows = page.locator("#grid .cmtbl tr[data-i]")
+        if rows.count():
+            rows.first.click()
+            expect(rows.first).to_have_class(re.compile(r"\bon\b"))
+            rows.first.click()
+            expect(rows.first).not_to_have_class(re.compile(r"\bon\b"))
+    finally:
+        page.request.put("/api/v1/sync/settings", data={"primary_sport": prev})
+
+
 def test_tis_charts(app):
     """我的訓練 › 負荷 PMC: the aerobic / anaerobic TIS charts (power charts: shown while 使用功率 is on)."""
     page, _ = app

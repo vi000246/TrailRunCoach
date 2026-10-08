@@ -593,6 +593,11 @@ unchanged files and unchanged code reads no FIT file at all.
   (`backend/static/wko5_viewer.html:2042`). Every workout series that joins the
   synced hover (time or distance x) skips `lttb` sampling so every chart's
   tooltip lands on the same point (`backend/static/wko5_viewer.html:2313`).
+  The 爬坡與地形 card (SP-218, `backend/static/wko5_viewer.html:3252`) joins on the
+  distance axis (`hoverChart(chart, s, "d")`, `backend/static/wko5_viewer.html:1982`):
+  its km profile and its own route map (`drawMap(card, res, opts)` with `into`,
+  `chart: false`, `colorKey: "climbColor"` default 坡度, `onPick`,
+  `backend/static/wko5_viewer.html:2034`) mark the same sample.
 - **Samples** (`backend/api/wko5views.py:1157`): per-sample `t`, `d` (km),
   `lat` / `lng`, `elev`, `hr`, `power`, `grade` (%), downsampled with the same
   step as the workout charts (`MAX_POINTS` 3000, `backend/engine/wko5expr/render.py:55`),
@@ -643,6 +648,7 @@ All under `/api/v1/wko5` (`backend/api/wko5views.py`).
 | GET | `/sports` | 1133 | Activity kinds (越野跑 / 路跑 / 登山健行 / 百岳登山 / 騎車 / 肌力 / 走路 / 其他, `engine/sport_map.py`) with counts; the `sports` query of `/workouts` and the charts takes these keys (a WKO5 sport group such as `run` still works) |
 | GET | `/athlete` | 1057 | Settings history, WKO5's PMC snapshot |
 | GET | `/primary-sport` | 1072 | 主要訓練項目: setting, sport in effect and suggestion |
+| GET | `/workouts/{i}/kind` | 901 | One activity's filter kind (`sport_map.kind_of`, the user's 爬山 / 百岳跟團 mark counts) and `chart_sport` (`sport_map.chart_sport`: trail / hike / 百岳 → trail): which `"sports"`-tagged single-activity charts apply (SP-218) |
 | GET / PUT | `/config` | 1089, 1096 | Engine config |
 | GET | `/corrections` | 1109 | Applied corrections |
 | GET | `/corrections/proposals` | 1115 | Detect only — changes nothing |
@@ -752,6 +758,7 @@ source (synthetic FITs).
 | 2026-10-06 | feature | SP-300 | 「依賽事設定」: an activity matched to a plan event marked 「會用登山杖」 (`Event.poles`, SP-244) shows 有杖 until the user chooses — a 1-day road / 越野賽 event by the existing `maximal.match_events`, a 百岳 / 其他 / multi-day event every trail run / hike on each of its days (`activity_tags.race_poles`, read time, never stored); the user's 有杖 / 沒杖 / their own 未標 (hidden tag `杖未標`, API `poles: "none"`; `null` = no choice) always wins (`pole_state`); unticking the race returns the un-chosen activities to 未標. `pole_compare.chart_rows` / `compute` and `needs_met` count the race's 有杖; `GET /activities` and the activity JSON carry `poles` (effective), `poles_user`, `poles_race`. Still no model reads the mark |
 | 2026-10-07 | fix | SP-341, docs/research/cache-tiering.md §10 ⑩ | Per-workout disk caches `channel_peaks.json` / `workout_curves.json` (and the WKO5 `power_source_v1.json` / `bad_activity_v1.json`) hold a code version (`dataset.per_workout_code`: engine/codehash.py over the computation, the `.wko4` read and the corrections' apply, + the FIT parse version for the two FIT datasets share, + `PER_WORKOUT_V`); a file of another version is recomputed. `achievements_cache.json` drops entries whose file is gone (each entry records its path) and is written atomically. Registered in `backend/data_registry.py` (SP-311) |
 | 2026-10-08 | chore | owner request (drop data written but never read) | The FIT dataset no longer reads the legacy `athlete_settings.ftp_w` (the COROS account FTP; COROS login stopped writing it): `read_athlete_settings` drops it (`backend/engine/wko5expr/fitdataset.py:197`) and `_load_db_settings` keeps only `lthr` in `settings_ignored` (`:805`) — that one is still read, as the cold-start LTHR prior (`_coros_lthr_prior` `:809`, called at `:937`; it also suppresses the SP-289 0.90 × max HR prior, `:842`). The import-time `workout_metrics` / `mmp_cache` writes (never read by the engine: every TSS comes from `Dataset._metrics`) and their helpers in `backend/engine/algorithms/metrics.py` / `mmp.py` are removed; older DBs keep the tables, unread (`data_registry.LEGACY_TABLES`). Chart values unchanged |
+| 2026-10-08 | feature | SP-218 (owner decision 2026-10-08) | `GET /workouts/{i}/kind` (`sport_map.chart_sport`, `TRAIL_KINDS` = trail / hike / 百岳): the viewer reads a single-activity chart's `"sports"` tag against that activity, not 主要訓練項目. Synced hover gains the 爬坡與地形 card's km profile + its own route map (`drawMap` options `into` / `chart` / `colorKey` / `defColor` / `tip` / `onPick`). The static demo export fetches `/kind` per activity |
 
 
 ## Banded charts and the 使用功率 setting (2026-10)

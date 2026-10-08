@@ -253,7 +253,7 @@ runs 「品質課（間歇）」 (backtest in the research doc §5).
 | `summary` | Text rows: type · terrain · phase, time, HR vs AeT/LTHR, three zones; the type's verdict lines (trail / hike lines first). Small tiles (`cards`, `_summary_cards`): tags (type icon with the classifier's why + sources as ?, terrain, phase), stats (moving time, distance, gain, TSS, avg HR, avg power), 「課表」 (the matched 課表 session: planned vs actual time / TSS %, `compliance.session_compliance`, ±20 % = 符合, 2026-10-03; ◐ / ≠ through the shared `compliance.with_plan_check`, SP-370 levels in overview.spec.md › Compliance), the three-zone bar, 「刺激 TIS」 (`_tis_card`, `backend/engine/workout_review.py:2699`, SP-81: this activity's 有氧／無氧 TIS as 「a／b」, 1–10, from the evaluator's built-ins `tisaerobic` / `tisanaerobic` through `tis_scores` — the same numbers as 我的訓練's TIS charts, see wko5-engine.spec.md; no level names, WKO5 has none; the ? says how to read it; no tile without a power channel, like 平均功率; 「–／算不出」 when the 90-day PD model gives na; shown for every type, before the strength / bike early return), 心率飄移 (judged on easy / long / AeT test, shown 「不判讀」 otherwise), 耐久 (last 20 %), 強度 (over AeT+3), 「VO2max 刺激」／「閾值刺激」, 間歇 or CP 測試, 爬坡段 (trail / hike), 「像 CP 測試？」. The 建議分頁 row is gone (user request); `suggested_dashboard` stays in the JSON | `backend/engine/workout_review.py:2887`, `backend/engine/workout_review.py:2739`, `backend/engine/workout_review.py:2692` |
 | `aerobic` | Text rows: 「心率飄移（配速／功率）」 in plain words — 「穩定 · 3.2%（start）」 (`drift_plain`: < 5 % 穩定, 5–10 % 有點飄, > 10 % 飄很多), HR and speed / power per half, one 「可信度」 row (「暖身後不到 40 分鐘，只當參考」 for the 參考 tier, 「這次資料比較雜，只當參考」 when SE > 5 pp, else 「暖身後跑滿 40 分鐘，可以判讀」; the method and ± SE only behind the ?, `drift_method`), 「已排除」, 「穩定度」, 「坡道」, 「溫度」 (source, °C, band), time over AeT+3, the same-type baseline within the same temperature band (both tiers); 這次沒有功率 without power. Header chip `res.chip` 「🌡 < 25 °C／25–28 °C／> 28 °C／溫度不明」 (hover `HEAT_TIP`). Small tiles (`_aerobic_cards`): the main drift card (value, verdict word, 「· 只當參考」; or 「不採用」 + a ≤ 8-word reason, `short_reason`), then chips: the other basis, 已排除 (前段 / 回程 / 結尾), 去坡道, temperature, VI (road), 資料比較雜, AeT+3 以上, 同類中位. On `test_aet` the sub-word is 「AeT 可以再高／前半心率＝AeT／AeT 設太高」 (owner 2026-10-02: no ± SE / Pa:HR / tier names on the surface) | `backend/engine/workout_review.py:2930`, `backend/engine/workout_review.py:2810`, `backend/engine/workout_review.py:2607` |
 | `intervals` | Per-rep table: start, duration, power, %CP, HR, max HR, 60-s drop (「每組」 on the 間歇 tab) | `backend/engine/workout_review.py:3022` |
-| `climbs` | Per-climb table (①②… numbering): start, km, gain, distance, grade, time, VAM vs 平常 (similar-grade climbs), HR, HR per 100 m, power, %CP, pace, GAP; `climb_profile` {profile, climbs with baselines, descents} drawn by the viewer's `drawClimbProfile`; verdict = HR per 100 m vs the 8-week median and which climbs' VAM sat above / below the usual IQR | `backend/engine/workout_review.py:3231` |
+| `climbs` | Per-climb table (①②… numbering): start, km, gain, distance, grade, time, VAM vs 平常 (similar-grade climbs), HR, HR per 100 m, power, %CP, pace, GAP; `climb_profile` {profile (on the same elevation as the detected climbs and the map's `/samples` readout: the file's WKO5-smoothed `_elevation`, else the raw channel), climbs with baselines + `run_share` (`climb_run_share`: moving seconds at cadence ≥ 65 strides/min = 130 spm between the climb's km, needs cadence on ≥ 50 %, 推估), `summary` (`climb_summary`: total ascent, climbs' gain / time / share of moving time / VAM, HR per 100 m = the measure's median, time-weighted run share), `workout`} drawn by the viewer's `drawClimbMap` (SP-218: route map + km profile with VAM / HR / power / GAP panels + climb table, synced hover); verdict = HR per 100 m vs the 8-week median and which climbs' VAM sat above / below the usual IQR | `backend/engine/workout_review.py:3632`, `backend/engine/workout_review.py:3596`, `backend/engine/workout_review.py:3614` |
 | `grades` | Grade bins: time, share, distance, pace (and 平常), VAM, HR, power; `grade_profile` with per-bin baselines (`drawGradeProfile`) | `backend/engine/workout_review.py:3274` |
 | `durability` | Moving / stopped, last-20 % durability, 補給 (no data source: 沒有補給紀錄) | `backend/engine/workout_review.py:3320` |
 | `durability_curve` | Output/HR curve with 95 %（開始累，推估） and 90 % lines (`points` series), subtitle = last 20 % | `backend/engine/workout_review.py:3337` |
@@ -430,8 +430,40 @@ durability_curve, pacing), 跑姿與膝蓋負荷（參考） `form-knee` (form �
 form_grades, form_work, form_cadence) (`views/workout.json:30`, `views/workout.json:46`,
 `views/workout.json:63`, `views/workout.json:74`, `views/workout.json:87`). The scatter charts the
 old dashboards carried were removed (2026-10-02). Charts tagged `"sports": ["trail"]` (路線難度,
-爬坡段, 坡度分組, 跑姿依坡度) show only when 主要訓練項目 is trail (`engine/primary_sport.py`,
+爬坡段, 坡度分組, 跑姿依坡度) show only when THE ACTIVITY ITSELF is a trail run, hike or 百岳 day
+(SP-218, owner 2026-10-08 — before, they followed 主要訓練項目 and the whole 爬坡與地形 tab vanished
+for a trail activity when the athlete's primary sport was road): `GET /workouts/{i}/kind`
+(`backend/api/wko5views.py:901`; `sport_map.kind_of` with the user's 爬山 / 百岳跟團 mark and the
+trail / road classification override; `sport_map.chart_sport`, `backend/engine/sport_map.py:75`)
+gives the activity's chart sport; the viewer's `chartSportFor` / `visChartsFor`
+(`backend/static/wko5_viewer.html:588`) read the tag against it on workout-mode dashboards (each
+dashboard is tagged with its mode, `backend/static/wko5_viewer.html:622`). The kind comes from the activity
+list's row (`settleActSport`, `backend/static/wko5_viewer.html:611`, the same KindFilter; viewer mirror
+`chartSportOfKind`); only an activity outside the list asks `/kind`, in the background, and the page is
+drawn again only if its charts change (`load`, `backend/static/wko5_viewer.html:1023`; nothing awaits
+before the loading cards are drawn; unknown → no filter). The picked page is never moved for the
+activity's kind (`pageCharts`, `backend/static/wko5_viewer.html:608`, drives renderTree's redirect, which
+stays only for a page with no chart at all, e.g. 使用功率 off): on a road run the picked 爬坡與地形 stays
+listed and says 「這一頁的圖只適用越野跑、登山健行的活動」 (`viewer.trail_only`); other pages with no chart
+for this activity are hidden from the tree. An exclusion change (indices shift) drops the cached kind.
+Season charts keep 主要訓練項目 (`engine/primary_sport.py`,
 `backend/engine/wko5expr/customviews.py:176-181`).
+
+爬坡與地形 › 爬坡段 (`drawClimbMap`, `backend/static/wko5_viewer.html:3300`, the 「climb map (SP-218)」
+block from `backend/static/wko5_viewer.html:3112`): four tiles (總爬升, 爬坡時間 + share of moving time,
+爬坡 VAM + 跑 %, 每 100 m 心跳) from `climb_profile.summary`; the route map (`drawMap` with
+`colorKey: "climbColor"`, default 坡度, no map chart); the elevation profile against km with stacked
+VAM / 心率 / 功率 / GAP panels (buttons, default VAM + 心率, remembered in `wko5viewer.climbmap`; power
+hidden when 使用功率 is off), climbs shaded and ①② labelled; one table row per climb (gain, km, grade,
+time, VAM, HR, power, GAP, 跑 %, 跟平常比 = VAM and HR per 100 m vs the usual's median, ▲▼ only outside
+its middle 50 %). Hover syncs the profile and the map on the distance axis; a climb clicked on the
+profile, the table or the route is outlined on the map (dark halo + orange, fitted when not fully in
+view) and on the profile; clicking it again or elsewhere clears it; a hovered table row previews it. A
+new pick only merges the shaded climbs (`cmShade`, `backend/static/wko5_viewer.html:3193`; no rebuild or
+resize, so the tooltip stays) and an unchanged pick does nothing; a tap (touch) only picks another climb
+(`cmClickPick`) — tapping the picked climb or between climbs reads values and keeps the pick.
+Strings `viewer.climbmap.*` (zh-TW + en). The old single dual-axis plot (`drawClimbProfile`) and its
+per-climb comparison chart were removed.
 
 ### Activity charts (kind `activity`, `backend/engine/panels/activity_charts.py`)
 
@@ -521,7 +553,9 @@ What the implementation does differently from `docs/plans/done-workout-review.pl
 | Small cards: summary stats / zones / verdicts, intensity warning, refused drift as one card, drifting run and chips, `short_reason`, strength only time + HR, viewer hides the text rows | `backend/tests/test_review_cards.py` |
 | 刺激 TIS tile: values equal the evaluator's built-ins (steady and interval run), no tile without power, 「算不出」 without a PD model, no level names, en text, the viewer drops `power` tiles when 使用功率 is off | `backend/tests/test_review_tis_card.py` |
 | Session classifier: Z5 bouts / lower band / Z3 climb, trail power trust, HR path, hikes never Z5, power beats easy HR, cadence lock, HRpeak | `backend/tests/test_session_stimulus.py` |
-| Climb profile and grade bins: VAM, profile series, descents, per-climb baseline by grade, no altitude, grade baselines | `backend/tests/test_climb_profile.py` |
+| Climb profile and grade bins: VAM, profile series, descents, per-climb baseline by grade, no altitude, grade baselines; SP-218 run share, summary, smoothed-elevation profile | `backend/tests/test_climb_profile.py` |
+| SP-218 visibility by the activity: `chart_sport`, `GET /workouts/{i}/kind` (user mark), the viewer's chart-sport block under node | `backend/tests/test_chart_sport.py` |
+| SP-218 climb map helpers under node (panels, climb at km, GPS segment, vs usual, option) | `backend/tests/test_viewer_climbmap.py`; browser: `backend/tests/e2e/test_smoke_pages.py::test_climb_tab_follows_the_activity_with_synced_map` |
 | Form bins / cadence: grade and work deciles, impact per km, cadence hint, cadence windows and fit, cards with / without Stryd | `backend/tests/test_form_bins.py`, `backend/tests/test_form_split.py` |
 | Interval cards: text-only planned session judged by its structure, verdict / ladder, cards hide on easy runs, rep tolerances, CP test as the plan, 「當作間歇判讀」 offer, matched power HR | `backend/tests/test_interval_eval.py` |
 | Drift calibration: early / tail values, ≥ 20 runs, constants follow the values in effect, manual-only items | `backend/tests/test_drift_calib.py` |
@@ -604,3 +638,5 @@ None. The module computes on request; there are no emitters or subscribers.
 | 2026-10-06 | integration 2026-10-06e | N/A | SP-264 (v20) and SP-265 / SP-266 (v20 → v22) bumped the measure cache on separate branches; merged as `workout_review_v23` so no v20 / v22 entry holding only one branch's fields is read. Cross-branch test: `test_integration_2026_10_06e.py` |
 | 2026-10-08 | bugfix | SP-370 | The 「課表」 card (`_plan_card`, `backend/engine/workout_review.py:3013`) follows the shared compliance rule: with time and TSS both within ±20 % an intensity reversal / another foot sport is ◐ (label 跑成強度課 / 跑成輕鬆 / 項目不同, reason in the tip), not 沒照課表; the intensity tip line says so (`backend/engine/workout_review.py:3057`) |
 | 2026-10-08 | bugfix | SP-370 follow-up | The 「課表」 card grades ◐ / ≠ on the calendar's planned TSS (`session_est_tss`, `backend/api/plan_sessions.py:2393`: the stored TSS, else minutes × the calendar's `tss_rates`; `backend/engine/workout_review.py:3036-3044`), and its TSS tip line shows that planned number; the ◐ softening needs time and TSS both measured (overview.spec.md › Compliance) |
+| 2026-10-08 | SP-218 | owner decision 2026-10-08 (ticket SP-218) | 爬坡與地形 (and 路線難度, 跑姿依坡度) follow the activity itself — trail / hike / 百岳, incl. the user's 爬山 mark — not 主要訓練項目 (`GET /workouts/{i}/kind`, viewer `chartSportFor` / `visChartsFor`). 爬坡段 becomes `drawClimbMap`: summary tiles, route map (default 坡度), km profile with VAM / HR / power / GAP panels and shaded climbs, climb table with 跑 % and 跟平常比; hover synced with the map on the distance axis, a clicked climb outlined on the map. `climbs` section adds `run_share`, `summary`, `workout`, and draws the profile on the smoothed `_elevation`. No measure-cache change (computed on read) |
+| 2026-10-08 | SP-218 review | code review of feat/sp218-climb-tab | The activity's kind comes from the activity list (`/kind` only outside it, never awaited before drawing); the picked page is never moved for the activity's kind (`pageCharts`; a road run on 爬坡與地形 shows `viewer.trail_only`); a climb pick merges only the shading (`cmShade`), unchanged picks are no-ops, a tap only picks another climb; profile, climbs and `/samples` elevation are one channel (`_elevation` else raw); `climb_profile` drops descents / cp / pool_weeks (`descents_of` removed); the enlarged copy passes `_zoom` to the map; the old `wko5viewer.climbmetric` key is removed |
