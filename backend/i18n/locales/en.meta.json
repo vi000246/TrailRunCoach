@@ -451,6 +451,14 @@
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:514"
   },
+  "CR-10 10 是極限：高於 CP（Coggan VO2max 區 106–120 % FTP，RPE 6–7 以上）；取 1.10（推估）": {
+    "draft": true,
+    "src": "backend/engine/rpe_load.py:96"
+  },
+  "CR-10 4 是 Seiler 一區上緣（≈ VT1）、Coggan 節奏區 RPE 3–4（76–90 % FTP）；取 0.82（推估）": {
+    "draft": true,
+    "src": "backend/engine/rpe_load.py:93"
+  },
   "CTL {c:.0f} 的 {pct:.0%}": {
     "draft": true,
     "src": "backend/engine/load_guard.py:128"
@@ -654,6 +662,18 @@
   "Schiftan 2015（平衡訓練讓踝扭傷少 35 %）；Hupperets 2009；Lesinski 2015（劑量，指標是平衡表現）；徐國峰（熱身，教練級）；動作組合是推估": {
     "draft": true,
     "src": "backend/engine/balance_plan.py:41"
+  },
+  "Seiler 一區（session RPE ≤ 4，低於 VT1）、跑步功率輕鬆區 65–80 % CP；取 0.74（推估）": {
+    "draft": true,
+    "src": "backend/engine/rpe_load.py:92"
+  },
+  "Seiler 三區從 session RPE 7 起（≈ VT2 ≈ CP）、Coggan 閾值區 91–105 % FTP；持續一段取略低於 CP 的 0.95（推估）": {
+    "draft": true,
+    "src": "backend/engine/rpe_load.py:95"
+  },
+  "Seiler 二區（session RPE 5–6，VT1 到 VT2）、跑步功率中等區 80–90 % CP；取 0.88（推估）": {
+    "draft": true,
+    "src": "backend/engine/rpe_load.py:94"
   },
   "TSB {tsb:+.0f} < −20：先維持量，不加": {
     "draft": true,
@@ -970,6 +990,14 @@
   "{label}看起來好了？最近 {n} 次沒痛、跑量回到傷前 {pct}%": {
     "draft": true,
     "src": "backend/engine/suggestions.py:308"
+  },
+  "{label}（CR-10 {cr}）每小時 {rate} TSS = IF² × 100（TSS 定義），IF {if_}：{src}。本人資料 {n} 筆，滿 {min_n} 筆才會自己擬合。": {
+    "draft": true,
+    "src": "backend/engine/rpe_load.py:347"
+  },
+  "{label}（CR-10 {cr}）每小時 {rate} TSS：本人 {n} 筆有自評的活動擬合 {personal}，權重 {w:.0%}，其餘用預設 {default}（TSS 定義 IF² × 100，IF {if_}）。": {
+    "draft": true,
+    "src": "backend/engine/rpe_load.py:341"
   },
   "{label}（自動：一年內心率判定為比賽強度的標準距離跑步）": {
     "draft": true,
@@ -1419,9 +1447,9 @@
     "draft": true,
     "src": "backend/engine/rest_days.py:120"
   },
-  "「{label}」段用 RPE 填：用你填的分鐘數，TSS 由 RPE × 分鐘換算": {
+  "「{label}」段用 RPE 填：用你填的分鐘數，TSS ＝ 這一檔的每小時 TSS × 時數": {
     "draft": true,
-    "src": "backend/engine/workout_steps.py:1152"
+    "src": "backend/engine/workout_steps.py:1165"
   },
   "「{name}」最高約 {m:,.0f} m：出發前的高度適應": {
     "draft": true,
@@ -2206,6 +2234,10 @@
   "全程維持穩定的輕鬆強度，不是全力。": {
     "draft": true,
     "src": "backend/engine/suggestions.py:142"
+  },
+  "兩堂課在同一天，不用交換": {
+    "draft": false,
+    "src": "backend/engine/plan_store.py:370"
   },
   "兩手提重物走 30–40 公尺。只提一手，多練側邊的核心。": {
     "draft": true,
@@ -4783,6 +4815,10 @@
     "draft": true,
     "src": "backend/engine/panels/activity_charts.py:65"
   },
+  "為了讓高一檔不會比低一檔少，已和相鄰的檔平均成每小時 {rate} TSS。": {
+    "draft": true,
+    "src": "backend/engine/rpe_load.py:352"
+  },
   "無氧動力": {
     "draft": true,
     "src": "backend/engine/hr_profile.py:65"
@@ -5638,6 +5674,14 @@
   "課表偏好": {
     "draft": false,
     "src": "backend/engine/debug_view.py:497"
+  },
+  "課表已改，但{provider}手錶沒有跟著更新": {
+    "draft": false,
+    "src": "backend/api/plan_sessions.py:2196"
+  },
+  "課表待確認是自動調整的提醒，不能交換": {
+    "draft": false,
+    "src": "backend/engine/plan_store.py:372"
   },
   "課表待確認是自動調整的提醒，不能自己新增": {
     "draft": true,
@@ -6590,6 +6634,10 @@
   "過去的日子不能設成休息日": {
     "draft": true,
     "src": "backend/api/plan_sessions.py:1927"
+  },
+  "過去的課不能交換": {
+    "draft": false,
+    "src": "backend/engine/plan_store.py:374"
   },
   "達到目標（≥ 10 分）": {
     "draft": true,

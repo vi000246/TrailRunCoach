@@ -1,8 +1,10 @@
 """
-「負荷」 entered by RPE (SP-57): the five levels → Borg CR-10, Foster session RPE × the
-athlete's factor → TSS (engine/rpe_load.py), its refit with shrinkage on watch-recorded RPE,
-the step in engine/workout_steps.py (normalize, timing, view), the push still sending COROS TL,
-and the editor's payload (static/workout_editor.js). Synthetic data only.
+「負荷」 entered by RPE (SP-57): the five levels → Borg CR-10, each level its own TSS per hour —
+the default from the TSS definition (IF² × 100 at the level's intensity), fitted per level on the
+athlete's watch / COROS RPE vs the activity's TSS and shrunk toward the default, never decreasing
+from one level to the next (engine/rpe_load.py); the step in engine/workout_steps.py (normalize,
+timing, view), the push still sending COROS TL, and the editor's payload
+(static/workout_editor.js). Synthetic data only.
 """
 import datetime as dt
 import json
@@ -13,13 +15,15 @@ from pathlib import Path
 
 import pytest
 
+from backend.engine import coros_rpe as CR
 from backend.engine import coros_tl as TL
 from backend.engine import rpe_load as RL
 from backend.engine import workout_steps as WS
 from backend.sync import coros_workouts as CW
 
 ROOT = Path(__file__).resolve().parents[1]
-TODAY = dt.date(2026, 10, 5)
+TODAY = dt.date(2026, 10, 8)
+IDS = ["easy", "moderate", "hard", "very_hard", "max"]
 
 
 @pytest.fixture(autouse=True)
@@ -38,89 +42,168 @@ def _rpe_step(level="very_hard", minutes=40, **kw):
             "target": {"type": "none"}, **kw}
 
 
+def _rate(level):
+    return 100.0 * RL.DEFAULT_IF[level] ** 2
+
+
 # ---------------------------------------------------------------------------
-# mapping and conversion
+# the levels and their defaults (TSS definition: TSS per hour = IF² × 100)
 # ---------------------------------------------------------------------------
 
 def test_five_levels_map_to_cr10_anchors():
     assert [(k, v) for k, _l, v in RL.LEVELS] == [("easy", 2), ("moderate", 4), ("hard", 5),
                                                     ("very_hard", 7), ("max", 10)]
     assert [RL.LABEL[k] for k in RL.CR10] == ["輕鬆", "稍累", "累", "很累", "極限"]
-    assert RL.levels()[3] == {"id": "very_hard", "cr10": 7}
 
 
-def test_session_rpe_times_the_factor():
+def test_defaults_per_level_from_if_squared():
+    assert list(RL.DEFAULT_IF) == IDS
+    for k in IDS:
+        assert RL.DEFAULT_TSS_H[k] == pytest.approx(100.0 * RL.DEFAULT_IF[k] ** 2)
+        assert RL.Model().rate(k) == pytest.approx(RL.DEFAULT_TSS_H[k])
+        # every default says where its intensity comes from, and that the point is an estimate
+        assert RL.IF_SRC[k] and "推估" in RL.IF_SRC[k]
+    # the owner's examples (2026-10-07): 輕鬆 ≈ 55, 很累 ≈ 90 TSS per hour
+    assert round(RL.DEFAULT_TSS_H["easy"]) == 55 and round(RL.DEFAULT_TSS_H["very_hard"]) == 90
+    v = [RL.DEFAULT_TSS_H[k] for k in IDS]
+    assert all(a < b for a, b in zip(v, v[1:]))
+    # the IF an RPE-entered step implies stays inside the step's clamp
+    assert all(WS.RPE_IF_RANGE[0] <= RL.DEFAULT_IF[k] <= WS.RPE_IF_RANGE[1] for k in IDS)
+
+
+def test_tss_is_the_level_rate_times_the_hours():
     m = RL.Model()
-    assert m.tss("very_hard", 40) == pytest.approx(RL.DEFAULT_FACTOR * 7 * 40)
-    assert RL.Model(factor=0.25).tss("easy", 60) == pytest.approx(30.0)
+    assert m.tss("very_hard", 40) == round(_rate("very_hard") * 40 / 60, 1)
+    assert m.tss("easy", 60) == round(_rate("easy"), 1)
     assert m.tss("nope", 40) is None and m.tss("hard", 0) is None and m.tss("hard", None) is None
-    assert RL.to_tss("max", 10, RL.Model(factor=0.5)) == 50.0
-
-
-def test_model_of_stored_value_and_error():
-    assert not RL.Model.of(None).fitted and RL.Model.of({"factor": -1}).factor == RL.DEFAULT_FACTOR
-    m = RL.Model.of({"factor": 0.4, "n": 10, "w": 0.5, "loo": {"mape": 0.1}})
-    assert m.fitted and m.factor == 0.4 and m.err_frac() == pytest.approx(0.5 * 0.1 + 0.5 * RL.DEFAULT_ERR)
-    assert RL.Model().err_frac() == RL.DEFAULT_ERR
+    assert RL.to_tss("max", 30, m) == round(_rate("max") / 2, 1)
 
 
 # ---------------------------------------------------------------------------
-# the refit (watch RPE vs actual TSS)
+# samples: watch RPE (FIT, 1–10) and COROS's post-run rating (1–5, SP-231) → a level
 # ---------------------------------------------------------------------------
 
-def _rows(n, ratio=0.5, start=TODAY, thr=300.0):
-    out = []
-    for i in range(n):
-        rpe, h = 3 + i % 5, 0.5 + (i % 3) * 0.5
-        out.append({"date": (start - dt.timedelta(days=i)).isoformat(), "rpe": rpe, "hours": h,
-                    "tss": ratio * rpe * h * 60, "thr": thr})
-    return out
+def test_coros_feel_maps_onto_the_levels_like_sp231():
+    # COROS 1 Very Light … 5 Max Effort → workout_files.rpe 2 / 4 / 5 / 7 / 10 → the five levels in order
+    for feel, k in zip(range(1, 6), IDS):
+        assert RL.level_of_rpe(CR.TO_RPE[feel]) == k
+    # a FIT's own RPE: the nearest level (ties go up, as coros_rpe.level_of)
+    assert [RL.level_of_rpe(r) for r in (1, 3, 6, 8, 9)] == ["easy", "moderate", "very_hard", "very_hard", "max"]
+    assert RL.level_of_rpe(None) is None and RL.level_of_rpe(0) is None and RL.level_of_rpe(11) is None
 
 
 def test_samples_filters():
-    rows = [{"date": "2026-10-01", "rpe": 5, "hours": 1.0, "tss": 90},       # r = 0.3: kept
+    rows = [{"date": "2026-10-01", "rpe": 5, "hours": 1.0, "tss": 80},       # kept: hard, 80 TSS/h
             {"date": "2026-10-01", "rpe": None, "hours": 1.0, "tss": 90},    # no RPE
             {"date": "2026-10-01", "rpe": 5, "hours": 0.1, "tss": 10},       # < 10 min
             {"date": "2026-10-01", "rpe": 5, "hours": 1.0, "tss": 0},        # no TSS
-            {"date": "2026-10-01", "rpe": 1, "hours": 1.0, "tss": 200}]      # r = 3.3: mis-rated
+            {"date": "2026-10-01", "rpe": 2, "hours": 1.0, "tss": 400}]      # 400 TSS/h: mis-recorded
     s = RL.samples(rows)
-    assert len(s) == 1 and s[0]["r"] == pytest.approx(0.3) and s[0]["sr"] == 300
+    assert len(s) == 1 and s[0]["level"] == "hard" and s[0]["y"] == pytest.approx(80.0) and s[0]["h"] == 1.0
 
 
-def test_refit_shrinks_toward_the_default():
-    new, rep = RL.refit(_rows(10, ratio=0.5), TODAY)
-    w = 10 / (10 + RL.SHRINK_K)
-    assert new["n"] == 10 and new["w"] == pytest.approx(w, abs=1e-4) and new["ratio"] == pytest.approx(0.5)
-    want = math.exp(w * math.log(0.5) + (1 - w) * math.log(RL.DEFAULT_FACTOR))
-    assert new["factor"] == pytest.approx(want, abs=1e-4) and rep["factor"] == new["factor"]
-    assert RL.DEFAULT_FACTOR < new["factor"] < 0.5
-    # more data: closer to the athlete's own ratio
-    big, _ = RL.refit(_rows(90, ratio=0.5), TODAY)
-    assert big["factor"] > new["factor"] and big["w"] == pytest.approx(0.9, abs=1e-4)
-    # the LOO error is reported (every sample has ratio 0.5: the error is the shrinkage bias)
-    assert new["loo"]["n"] == 10 and new["loo"]["mape"] > 0 and new["loo"]["bias"] < 0
-    assert big["loo"]["mape"] < new["loo"]["mape"]
+# ---------------------------------------------------------------------------
+# the per-level fit with shrinkage
+# ---------------------------------------------------------------------------
+
+def _rows(level_rpe, n, rate, start=TODAY, thr=300.0):
+    """n activities rated `level_rpe`, each at `rate` TSS per hour, one a day back from `start`."""
+    out = []
+    for i in range(n):
+        h = 0.5 + (i % 3) * 0.5
+        out.append({"date": (start - dt.timedelta(days=i)).isoformat(), "rpe": level_rpe, "hours": h,
+                    "tss": rate * h, "thr": thr})
+    return out
+
+
+def test_fit_with_enough_data_moves_toward_the_athlete():
+    new, rep = RL.refit(_rows(2, 40, 70.0), TODAY)            # 40 easy runs at 70 TSS/h
+    e = new["levels"]["easy"]
+    w = 40 / (40 + RL.SHRINK_K)
+    want = math.exp(w * math.log(70.0) + (1 - w) * math.log(_rate("easy")))
+    assert e["n"] == 40 and e["w"] == pytest.approx(w, abs=1e-4) and e["personal"] == pytest.approx(70.0)
+    assert e["tss_h"] == pytest.approx(want, abs=0.01) and abs(e["tss_h"] - 70) < abs(e["tss_h"] - _rate("easy"))
+    m = RL.Model.of(new)
+    assert m.fitted and m.level("easy")["fitted"] and m.rate("easy") == pytest.approx(want, abs=0.01)
+    # the other levels have no data: their defaults
+    for k in IDS[1:]:
+        assert new["levels"][k]["n"] == 0 and not m.level(k)["fitted"] and m.rate(k) == pytest.approx(_rate(k))
+    assert rep["n"] == 40 and new["n"] == 40
+    # more data → closer to the athlete
+    big, _ = RL.refit(_rows(2, 160, 70.0), TODAY)
+    assert abs(big["levels"]["easy"]["tss_h"] - 70) < abs(e["tss_h"] - 70)
+    # each level its own: very hard rated runs pull only very hard
+    both, _ = RL.refit(_rows(2, 30, 70.0) + _rows(7, 30, 110.0), TODAY)
+    assert both["levels"]["easy"]["tss_h"] > _rate("easy") and both["levels"]["very_hard"]["tss_h"] > _rate("very_hard")
+    assert both["levels"]["hard"]["tss_h"] == pytest.approx(_rate("hard"))
+    # the leave-one-out error is reported
+    assert new["loo"]["n"] == 40 and new["loo"]["mape"] is not None
     RL.validate(new)
+
+
+def test_few_samples_stay_near_the_default():
+    # below MIN_N a level keeps its default exactly (the count is still shown)
+    few, _ = RL.refit(_rows(5, RL.MIN_N - 1, 130.0), TODAY)
+    assert few["levels"]["hard"]["n"] == RL.MIN_N - 1 and few["levels"]["hard"]["tss_h"] == pytest.approx(_rate("hard"))
+    assert not RL.Model.of(few).level("hard")["fitted"]
+    # at MIN_N it moves, but only by w = n / (n + K) in log space — still near the default
+    some, _ = RL.refit(_rows(5, RL.MIN_N, 130.0), TODAY)
+    v = some["levels"]["hard"]["tss_h"]
+    assert _rate("hard") < v < _rate("hard") + 0.35 * (130.0 - _rate("hard"))
+    assert RL.Model.of(some).level("hard")["fitted"]
+
+
+def test_monotonic_across_levels():
+    # an athlete whose easy runs are hard work (100 TSS/h, many of them): easy can't pass the levels above
+    new, _ = RL.refit(_rows(2, 40, 100.0), TODAY)
+    v = [new["levels"][k]["tss_h"] for k in IDS]
+    assert all(a <= b + 1e-9 for a, b in zip(v, v[1:])), v
+    assert new["levels"]["easy"]["adjusted"] and new["levels"]["moderate"]["adjusted"]
+    assert not new["levels"]["max"]["adjusted"]
+    m = RL.Model.of(new)
+    assert all(m.rate(a) <= m.rate(b) + 1e-9 for a, b in zip(IDS, IDS[1:]))
+    # a stored value that breaks the order (hand-edited, older code) is put in order when read
+    bad = {"levels": {"easy": {"tss_h": 95.0, "n": 50, "w": 0.83}, "very_hard": {"tss_h": 60.0, "n": 50, "w": 0.83}}, "n": 100}
+    RL.validate(bad)
+    mb = RL.Model.of(bad)
+    assert all(mb.rate(a) <= mb.rate(b) + 1e-9 for a, b in zip(IDS, IDS[1:]))
+    # monotone() itself: already in order → unchanged
+    rates = dict(RL.DEFAULT_TSS_H)
+    out, adj = RL.monotone(rates, {k: 1.0 for k in IDS})
+    assert out == pytest.approx(rates) and not any(adj.values())
 
 
 def test_refit_without_rpe_keeps_the_default_and_threshold_cut():
     assert RL.refit([{"date": "2026-10-01", "rpe": None, "hours": 1, "tss": 50}], TODAY)[0] is None
     # an FTP change > 5 %: only the activities after it
-    old = _rows(20, ratio=0.2, start=TODAY - dt.timedelta(days=60), thr=250.0)
-    new = _rows(5, ratio=0.5, start=TODAY, thr=300.0)
-    fit, rep = RL.refit(old + new, TODAY)
-    assert fit["n"] == 5 and fit["ratio"] == pytest.approx(0.5)
+    old = _rows(7, 20, 60.0, start=TODAY - dt.timedelta(days=60), thr=250.0)
+    new = _rows(7, 5, 110.0, start=TODAY, thr=300.0)
+    fit, _ = RL.refit(old + new, TODAY)
+    assert fit["levels"]["very_hard"]["n"] == 5 and fit["levels"]["very_hard"]["personal"] == pytest.approx(110.0)
+
+
+def test_old_single_factor_value_reads_as_the_defaults():
+    m = RL.Model.of({"factor": 0.4, "n": 10, "w": 0.5, "loo": {"mape": 0.1}})
+    assert not m.fitted and m.rate("easy") == pytest.approx(_rate("easy"))
 
 
 def test_validate_and_describe():
     RL.validate(None)
-    with pytest.raises(ValueError):
-        RL.validate({"n": 3})
+    for bad in ({"n": 3}, {"levels": {"easy": {"tss_h": -1}}}, {"levels": {"nope": {"tss_h": 50}}}, {"levels": []}):
+        with pytest.raises(ValueError):
+            RL.validate(bad)
     d = RL.describe(None)
-    assert not d["fitted"] and d["factor"] == RL.DEFAULT_FACTOR and d["err_pct"] == round(RL.DEFAULT_ERR * 100)
-    new, _ = RL.refit(_rows(10), TODAY)
+    assert not d["fitted"] and d["err_pct"] == round(RL.DEFAULT_ERR * 100)
+    assert [x["id"] for x in d["levels"]] == IDS
+    lv = d["levels"][3]
+    assert lv["tss_h"] == round(_rate("very_hard")) and lv["if"] == RL.DEFAULT_IF["very_hard"]
+    assert lv["source"] == "default" and lv["n"] == 0 and lv["chip"]["text"] == "預設（推估）" and lv["chip"]["tip"]
+    new, _ = RL.refit(_rows(2, 12, 70.0), TODAY)
     d = RL.describe(new)
-    assert d["fitted"] and d["n"] == 10 and d["loo"]["mape"] == new["loo"]["mape"] and len(d["levels"]) == 5
+    e = d["levels"][0]
+    assert d["fitted"] and d["n"] == 12 and e["source"] == "fitted" and e["n"] == 12
+    assert e["chip"]["text"] == "本人 n=12" and e["personal"] == pytest.approx(70.0)
+    assert d["loo"]["mape"] == new["loo"]["mape"]
 
 
 def test_activity_rows_join_the_watch_rpe():
@@ -134,20 +217,24 @@ def test_activity_rows_join_the_watch_rpe():
             metrics={"tss": 50.0, "movingduration": 3600})
     ds = NS(workouts=[w, w2], sport_setting=lambda k, x: None)
     from backend.engine import activity_tags as AT
-    rec = [{"start_local": AT.key_of(start), "file": "a.fit", "rpe": 6.0, "feel": None}]
+    # a COROS post-run rating (SP-231: feel 4 → RPE 7, rpe_source coros) feeds the fit like a FIT RPE
+    rec = [{"start_local": AT.key_of(start), "file": "a.fit", "rpe": 7.0, "feel": None, "coros_feel": 4, "source": "coros"}]
     rows = RL.activity_rows(ds, rec)
-    assert rows == [{"date": "2026-10-01", "rpe": 6.0, "tss": 80.0, "hours": 1.0, "thr": 300.0}]
+    assert rows == [{"date": "2026-10-01", "rpe": 7.0, "tss": 80.0, "hours": 1.0, "thr": 300.0}]
+    assert RL.samples(rows)[0]["level"] == "very_hard"
 
 
 # ---------------------------------------------------------------------------
 # the step (engine/workout_steps.py)
 # ---------------------------------------------------------------------------
 
-def test_normalize_sets_the_tss_from_rpe_and_minutes():
+def test_normalize_sets_the_tss_from_the_level_rate_and_minutes():
     d = WS.normalize(_doc(_rpe_step("very_hard", 40)))
-    assert d["items"][0]["dur"] == {"type": "load", "value": round(0.3 * 7 * 40, 1), "rpe": "very_hard", "min": 40}
-    d = WS.normalize(_doc(_rpe_step("hard", 30)), rpe_model=RL.Model(factor=0.5))
-    assert d["items"][0]["dur"]["value"] == 75.0
+    assert d["items"][0]["dur"] == {"type": "load", "value": round(_rate("very_hard") * 40 / 60, 1),
+                                    "rpe": "very_hard", "min": 40}
+    fitted = RL.Model.of({"levels": {"hard": {"tss_h": 90.0, "n": 20, "w": 0.67}}, "n": 20})
+    d = WS.normalize(_doc(_rpe_step("hard", 30)), rpe_model=fitted)
+    assert d["items"][0]["dur"]["value"] == 45.0
     # a typed TSS step is unchanged
     assert WS.normalize(_doc({**_rpe_step(), "dur": {"type": "load", "value": 75}}))["items"][0]["dur"] == \
         {"type": "load", "value": 75}
@@ -164,18 +251,20 @@ def test_normalize_sets_the_tss_from_rpe_and_minutes():
 def test_rpe_step_is_timed_by_its_minutes_and_viewed():
     c = WS.Ctx(cp=300.0, lthr=170.0, aet=150.0, rpe=RL.Model())
     d = WS.normalize(_doc(_rpe_step("very_hard", 40)))
-    tss = 0.3 * 7 * 40
+    tss = round(_rate("very_hard") * 40 / 60, 1)
     st = d["items"][0]
     f = math.sqrt(tss / (100 * 40 / 60))
+    # a default level's step implies that level's IF
     assert WS.load_if(st, WS.resolve(st, c)) == pytest.approx(f, abs=1e-4)
+    assert f == pytest.approx(RL.DEFAULT_IF["very_hard"], abs=2e-3)
     t = WS.totals(d, c)
     assert t["sec"] == 2400 and t["tss"] == pytest.approx(tss, abs=0.1) and "RPE" in t["est_note"]
     v = WS.view(d, c)
     o = v["order"][0]
     want = TL.Model.of().tl(tss, "hr", round(f, 4))
     assert o["load"]["tss"] == tss and o["load"]["tl"] == round(want["tl"]) and o["sec"] == 2400
-    assert o["load"]["rpe"] == {"level": "very_hard", "min": 40, "factor": 0.3, "fitted": False,
-                                "err_pct": round(RL.DEFAULT_ERR * 100)}
+    assert o["load"]["rpe"] == {"level": "very_hard", "min": 40, "tss_h": round(_rate("very_hard")),
+                                "fitted": False, "n": 0, "err_pct": round(RL.DEFAULT_ERR * 100)}
     assert WS.fmt_dur(st["dur"]) == f"負荷 {tss:g} TSS（很累 40 分）"
     assert v["watch"]["lines"][0]["dur"] == f"負荷 {round(want['tl'])} TL"
 
@@ -188,8 +277,9 @@ def test_push_still_sends_coros_tl():
          "steps": doc}
     spec = CW.session_workout(s, th)
     ex = spec.payload["exercises"][1]
-    tss = 0.3 * 5 * 30
+    tss = round(_rate("hard") * 30 / 60, 1)
     f = round(math.sqrt(tss / 50.0), 4)
+    # the TSS → COROS TL conversion is the typed load step's, unchanged
     want = round(TL.Model.of().tl(tss, "hr", f)["tl"])
     assert ex["targetType"] == 6 and ex["targetValue"] == want
     assert spec.load_steps == [{"i": 1, "n": 2, "tss": tss, "tl": want, "basis": "hr", "if": f, "f": 1.0}]
@@ -202,6 +292,17 @@ def test_push_still_sends_coros_tl():
 NODE = shutil.which("node")
 
 
+def test_editor_context_lists_the_level_rates(monkeypatch):
+    from backend.api import plan_sessions as PSAPI
+    fitted = RL.Model.of({"levels": {"easy": {"tss_h": 62.0, "n": 15, "w": 0.6}}, "n": 15})
+    monkeypatch.setattr(RL, "current", lambda user_id=1: fitted)
+    ctx = PSAPI._rpe_load_ctx()
+    assert [x["id"] for x in ctx["levels"]] == IDS and ctx["min_range"] == list(RL.MIN_RANGE)
+    assert ctx["levels"][0] == {"id": "easy", "cr10": 2, "tss_h": 62, "fitted": True, "n": 15}
+    assert ctx["levels"][3] == {"id": "very_hard", "cr10": 7, "tss_h": round(_rate("very_hard")), "fitted": False, "n": 0}
+    assert ctx["fitted"] and ctx["n"] == 15
+
+
 @pytest.mark.skipif(NODE is None, reason="node not installed")
 def test_editor_payload_by_rpe():
     js = r"""
@@ -210,13 +311,18 @@ vm.runInNewContext(fs.readFileSync(process.argv[1], "utf8"), { window: w, docume
 const E = w.WorkoutEditor, D = { type: "load", value: 75 };
 const toRpe = E.loadDur(D, "lmode", "rpe", 42.4);
 const lvl = E.loadDur(toRpe, "lrpe", "max"), mins = E.loadDur(lvl, "lmin", "25");
-const ctx = { provider: { label: "COROS", capabilities: { load_unit: "TL" } } };
-const r = { load: { tss: 84, tl: 110, err: 33, sec: 2400, rpe: { level: "very_hard", min: 40, factor: 0.3, fitted: false } } };
+const levels = [["easy", 2, 55], ["moderate", 4, 67], ["hard", 5, 77], ["very_hard", 7, 90], ["max", 10, 121]]
+  .map(([id, cr10, tss_h]) => ({ id, cr10, tss_h, fitted: id === "easy", n: id === "easy" ? 12 : 0 }));
+const ctx = { provider: { label: "COROS", capabilities: { load_unit: "TL" } }, rpe_load: { levels } };
+const r = { load: { tss: 60, tl: 78, err: 20, sec: 2400, rpe: { level: "very_hard", min: 40, tss_h: 90, fitted: false, n: 0 } } };
+const rMine = { load: { tss: 37, tl: 48, err: 20, sec: 2400, rpe: { level: "easy", min: 40, tss_h: 55, fitted: true, n: 12 } } };
 console.log(JSON.stringify({
   toRpe, lvl, mins,
   badLvl: E.loadDur(toRpe, "lrpe", "meh"), badMin: E.loadDur(toRpe, "lmin", "0"), bigMin: E.loadDur(toRpe, "lmin", "400"),
   back: E.loadDur({ ...mins, value: 50 }, "lmode", "tss"),
-  html: E.loadInput(ctx, { kind: "work", dur: { type: "load", value: 84, rpe: "very_hard", min: 40 } }, r),
+  html: E.loadInput(ctx, { kind: "work", dur: { type: "load", value: 60, rpe: "very_hard", min: 40 } }, r),
+  mine: E.loadInput(ctx, { kind: "work", dur: { type: "load", value: 37, rpe: "easy", min: 40 } }, rMine),
+  noCtx: E.loadInput({ provider: ctx.provider }, { kind: "work", dur: { type: "load", value: 60, rpe: "very_hard", min: 40 } }, r),
   plain: E.loadInput(ctx, { kind: "work", dur: { type: "load", value: 75 } }, null),
 }));
 """
@@ -231,6 +337,11 @@ console.log(JSON.stringify({
     h = g["html"]
     assert 'data-f="lmode"' in h and 'value="rpe" selected' in h and 'data-f="lrpe"' in h
     assert 'value="very_hard" selected' in h and 'data-f="lmin"' in h and 'value="40"' in h
-    assert "≈ 84 TSS ≈ 110 TL" in h and 'data-f="tss"' not in h
-    assert all(f'value="{k}"' in h for k in ("easy", "moderate", "hard", "very_hard", "max"))
+    assert all(f'value="{k}"' in h for k in IDS)
+    # each level's TSS per hour on its option (picking a level shows what it is worth)
+    assert all(f"≈ {v} TSS/h" in h for v in (55, 67, 77, 90, 121))
+    # the step's TSS, marked 推估 (default level) or 本人 (fitted level), then the TL
+    assert "≈ 60 TSS（workout.load_rpe_src_default）≈ 78 TL" in h and 'data-f="tss"' not in h
+    assert "≈ 37 TSS（workout.load_rpe_src_mine）≈ 48 TL" in g["mine"]
+    assert "TSS/h" not in g["noCtx"] and "≈ 60 TSS" in g["noCtx"]         # an old context: no rates, still works
     assert 'data-f="tss"' in g["plain"] and 'value="tss" selected' in g["plain"]

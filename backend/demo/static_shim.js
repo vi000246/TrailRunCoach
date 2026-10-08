@@ -393,12 +393,12 @@
         else if (dt === "load") {
           const L = W.load;
           if (!L.kinds.includes(k)) errs.push(`「${L.label}」只能用在主課`);
-          if (dur.rpe != null) {         // entered by feel (SP-57, workout_steps._norm_rpe_load; the default factor)
+          if (dur.rpe != null) {         // entered by feel (SP-57, workout_steps._norm_rpe_load; each level's default TSS per hour)
             const R = L.rpe, lvl = dur.rpe, cr = R.cr10[lvl];
             if (cr == null) { errs.push(`RPE 要是 ${R.levels.map((x) => R.label[x.id]).join("／")}`); dur = { type: "open" }; }
             else {
               const m = f(dur.min, "負荷（RPE）的分鐘", R.min_range[0], R.min_range[1]);
-              const tss = m ? pyRound(R.factor * cr * m, 1) : null;
+              const tss = m ? pyRound(R.tss_h[lvl] * m / 60, 1) : null;
               if (!m) dur = { type: "open" };
               else if (tss > L.range[1]) { errs.push(`負荷（RPE）換算超過 ${L.range[1]} TSS：分鐘數太多`); dur = { type: "open" }; }
               else dur = { type: "load", value: Math.max(L.range[0], tss), rpe: lvl, min: pyRound(m) };
@@ -510,7 +510,7 @@
       return { thresholds, tpace_link: D.tpace_link ?? null, zones: zonesTable(e.ctx, D), policy: pol,
         basis_label: `目標用：${D.tp.label[pol.basis]}（${pol.why}）`, cap: e.cap, cap_mode: e.cap_mode, rung: e.rung,
         kinds: W.kind_label, types: W.type_label, provider: W.load.provider, load_kinds: W.load.kinds, load_range: W.load.range,
-        rpe_load: { levels: W.load.rpe.levels, min_range: W.load.rpe.min_range, factor: W.load.rpe.factor, fitted: false, n: 0 },
+        rpe_load: { levels: W.load.rpe.levels, min_range: W.load.rpe.min_range, fitted: false, n: 0 },
         rules: W.rules };
     }
 
@@ -750,7 +750,7 @@
       }
       if (lap) parts.push("「直到按下計圈」段：用課表原本寫的最短時間");
       if (rows.some((s) => s.dur.type === "load" && !s.dur.rpe)) parts.push(`「${D.ws.load.label}」段：TSS ÷（該段強度 IF² × 100）換成時間`);
-      if (rows.some((s) => s.dur.type === "load" && s.dur.rpe)) parts.push(`「${D.ws.load.label}」段用 RPE 填：用你填的分鐘數，TSS 由 RPE × 分鐘換算`);
+      if (rows.some((s) => s.dur.type === "load" && s.dur.rpe)) parts.push(`「${D.ws.load.label}」段用 RPE 填：用你填的分鐘數，TSS ＝ 這一檔的每小時 TSS × 時數`);
       return parts.length ? parts.join("；") + "（推估）" : "";
     }
     function totals(steps, c, D) {
@@ -1046,7 +1046,7 @@
         if (st.dur.type === "load") {
           const lt = loadTl(st, r, D);
           o.load = byId[st.id].load = { tss: st.dur.value, tl: pyRound(lt.tl), err: pyRound(lt.err), fitted: lt.fitted, sec: pyRound(s), if: pyRound(loadIf(st, r, D), 3) };
-          if (st.dur.rpe) { const R = D.ws.load.rpe; o.load.rpe = { level: st.dur.rpe, min: st.dur.min ?? null, factor: R.factor, fitted: false, err_pct: pyRound(R.err * 100) }; }
+          if (st.dur.rpe) { const R = D.ws.load.rpe; o.load.rpe = { level: st.dur.rpe, min: st.dur.min ?? null, tss_h: pyRound(R.tss_h[st.dur.rpe] || 0), fitted: false, n: 0, err_pct: pyRound(R.err * 100) }; }
         }
         order.push(o);
       }

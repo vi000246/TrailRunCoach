@@ -1594,8 +1594,8 @@ def _provider():
 def _rpe_load_ctx() -> dict:
     from backend.engine import rpe_load as RL
     m = RL.current()
-    return {"levels": RL.levels(), "min_range": list(RL.MIN_RANGE), "factor": round(m.factor, 4),
-            "fitted": m.fitted, "n": m.n}
+    # each level's TSS per hour in effect (default IF² × 100 or the athlete's fit, SP-57 2026-10-07)
+    return {"levels": RL.levels(m), "min_range": list(RL.MIN_RANGE), "fitted": m.fitted, "n": m.n}
 
 
 def _context(env: dict) -> dict:
@@ -1611,7 +1611,7 @@ def _context(env: dict) -> dict:
             "kinds": WS.KIND_LABEL, "types": WS.TYPE_LABEL,
             # the editor's 時長類型 dropdown: the provider's end conditions + labels (SP-38)
             "provider": env.get("provider"), "load_kinds": list(WS.LOAD_KINDS), "load_range": list(WS.LOAD_RANGE),
-            # 「負荷」 entered by feel (SP-57, engine/rpe_load.py): the five levels and the factor in effect
+            # 「負荷」 entered by feel (SP-57, engine/rpe_load.py): the five levels and their TSS per hour in effect
             "rpe_load": _rpe_load_ctx(),
             "rules": {"z5_min_rep_s": WS.Z5_MIN_REP_S, "z3_min_rep_s": WS.Z3_MIN_REP_S,
                       "z5_max_rest_s": WS.Z5_MAX_REST_S, "coros_max_steps": WS.COROS_MAX_STEPS}}
