@@ -25,8 +25,8 @@ dur       time (s) | distance (m) | open (ends with the lap button) | load (TSS,
           work steps only; COROS gets its TL end condition — engine/coros_tl.py, 推估 — and every
           other provider an estimated time = TSS ÷ (IF² × 100) h at the step's intensity);
           entered by feel (SP-57): {"type": "load", "value": TSS, "rpe": easy | moderate | hard |
-          very_hard | max, "min": minutes} — normalize sets `value` from the RPE level × minutes
-          (engine/rpe_load.py, Foster session RPE × the athlete's factor, 推估); the step is then
+          very_hard | max, "min": minutes} — normalize sets `value` = the level's TSS per hour ×
+          the hours (engine/rpe_load.py: default IF² × 100, fitted per level, 推估); the step is then
           timed by its minutes and converted at the IF those imply. Planning only: the load the
           PMC uses stays the watch's record
 target    auto — what 「目標用：自動／心率／功率」 (engine/target_policy.py) gives the step:
@@ -736,7 +736,7 @@ def normalize(d, rpe_model=None) -> dict:
 
 def _norm_rpe_load(dur: dict, errs: list, model=None) -> dict:
     """A 「負荷」 step entered by feel (SP-57): {"type": "load", "value": TSS, "rpe", "min"}, the
-    TSS = the RPE level × minutes by the athlete's factor (engine/rpe_load.py, 推估)."""
+    TSS = the level's TSS per hour × the hours (engine/rpe_load.py, per level, 推估)."""
     from backend.engine import rpe_load as RL
     lvl = dur.get("rpe")
     if lvl not in RL.CR10:
@@ -1162,7 +1162,7 @@ def estimate_note(steps: dict, c: Ctx) -> str:
     if any(s["dur"]["type"] == "load" and not s["dur"].get("rpe") for s in rows):
         parts.append(f"「{_(LOAD_LABEL)}」段：TSS ÷（該段強度 IF² × 100）換成時間")
     if any(s["dur"]["type"] == "load" and s["dur"].get("rpe") for s in rows):
-        parts.append(_("「{label}」段用 RPE 填：用你填的分鐘數，TSS 由 RPE × 分鐘換算", label=_(LOAD_LABEL)))
+        parts.append(_("「{label}」段用 RPE 填：用你填的分鐘數，TSS ＝ 這一檔的每小時 TSS × 時數", label=_(LOAD_LABEL)))
     return "；".join(parts) + "（推估）" if parts else ""
 
 
@@ -1710,10 +1710,10 @@ def view(steps: dict, c: Ctx, cap: Optional[float] = None, cap_mode: str = "soft
             o["load"] = rd["load"] = {"tss": st["dur"]["value"], "tl": round(lt["tl"]), "err": round(lt["err"]),
                                       "fitted": lt["fitted"], "sec": round(s), "if": round(load_if(st, r), 3)}
             if st["dur"].get("rpe"):
-                # entered by feel (SP-57): the level, minutes and the factor used (推估)
-                o["load"]["rpe"] = {"level": st["dur"]["rpe"], "min": st["dur"].get("min"),
-                                    "factor": round(rpe_m.factor, 4), "fitted": rpe_m.fitted,
-                                    "err_pct": round(rpe_m.err_frac() * 100)}
+                lv = rpe_m.level(st["dur"]["rpe"]) or {}    # by feel (SP-57): level, minutes, TSS/h, fit / adjusted / default
+                o["load"]["rpe"] = {"level": st["dur"]["rpe"], "min": st["dur"].get("min"), "tss_h": round(lv.get("tss_h") or 0),
+                                    "fitted": bool(lv.get("fitted")), "adjusted": bool(lv.get("adjusted") and not lv.get("fitted")),
+                                    "n": int(lv.get("n") or 0), "err_pct": round(rpe_m.err_frac() * 100)}
         order.append(o)
     eq = equivalence(steps, rung, c) if rung else None
     return {"resolved": by_id, "order": order, "totals": totals(steps, c),

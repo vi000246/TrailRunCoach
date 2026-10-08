@@ -331,7 +331,7 @@ main > section.tab-off { display: none; }
       <div class="row"><span class="meta" id="s-tl"></span>
         <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.tl.help" title="課表的「負荷」結束條件在這裡填 TSS，推到 COROS 時換算成它的 TL（Training Load）。預設係數來自一位跑者的活動（推估，誤差約 ±20%）；每次同步後用你自己有 TL 的 COROS 活動重新擬合：近期活動權重較高、門檻（CP／LTHR）大改前的活動不用，資料少時只用簡單模型並向預設靠攏（權重＝n ÷（n＋30））。新係數要在最近 30 天的活動上不比舊的差才會換上。">?</button></div>
       <div class="row"><span class="meta" id="s-rpe"></span>
-        <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.rpe_load.help" title="課表的「負荷」也可以用感覺填：選 輕鬆／稍累／累／很累／極限（對到 Borg CR-10 的 2／4／5／7／10），再填分鐘數，TSS ＝ 係數 × RPE × 分鐘（Foster 的 session RPE）。預設係數 0.30 是推估；每次同步後用你手錶記錄的 RPE 和那次活動的實際 TSS 校正，資料少時向預設靠攏（權重＝n ÷（n＋10））。只用來排課填目標：總覽、PMC 的負荷一律用手錶記錄，不會用 RPE 修正。">?</button></div>
+        <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.rpe_load.help" title="課表的「負荷」也可以用感覺填：選 輕鬆／稍累／累／很累／極限（對到 Borg CR-10 的 2／4／5／7／10），再填分鐘數，TSS ＝ 這一檔的每小時 TSS × 時數。每一檔的預設是通用規則，用 TSS 的定義：每小時 TSS ＝ IF² × 100，IF 是這一檔的強度（範圍參考 Seiler 用 session RPE 分的三區、Coggan 功率等級，取點是推估），不是照哪個人調的。每個人的值只從他自己有自評的活動（手錶記錄的 RPE 或 COROS 跑後自評）和實際 TSS 逐檔擬合：每檔滿 3 筆才開始，資料少、或是很久以前的資料時向預設靠攏；高一檔不會比低一檔少，沒有自己資料、只為了這個被調整的檔標「依相鄰檔調整」。只用來排課填目標：總覽、PMC 的負荷一律用手錶記錄，不會用 RPE 修正。">?</button></div>
       <div id="s-failed-wrap" hidden><div class="row"><b data-i18n="settings.syncfail.title">下載失敗的活動</b>
         <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.syncfail.help" title="同步時下載或匯入失敗的活動會記在這裡，之後的同步只重試這幾筆，不必重新列出所有活動。每筆最多自動重試 5 次或試滿 7 天，之後停止，可以按「重試」再試。沒有 FIT 檔的手動紀錄也列在這裡，之後有檔案了可以按「重試」。">?</button></div>
         <ul class="failed" id="s-failed"></ul></div>
@@ -503,6 +503,8 @@ main > section.tab-off { display: none; }
       <p class="meta">這些數字會用你的資料自動估算（每次同步到新活動後重算），資料不夠時用文獻或推估的預設值。點標籤（或滑過去）看說明；只有確定時才手動指定。</p>
       <p class="meta" id="calib-tip" hidden></p>
       <table class="wt"><tbody id="calib-rows"></tbody></table>
+      <p class="meta" id="calib-rpe-title" data-i18n="settings.rpe_load.calib_title" data-i18n-attr="title:settings.rpe_load.calib_tip" title="預設是通用規則（TSS 定義 IF² × 100，強度的取點是推估），不是照哪個人調的；每個人的值只從他自己有自評的活動擬合。標籤：本人 n＝自己的資料、預設（推估）＝通用規則、依相鄰檔調整＝沒有自己的資料，為了讓高一檔不會比低一檔少而調整。" hidden>「負荷」用 RPE 填：每一檔的每小時 TSS</p>
+      <table class="wt" id="calib-rpe" hidden><tbody></tbody></table>
       <div class="row"><button id="calib-run">現在重新估算</button><span class="meta" id="calib-msg"></span></div>
     </details>
   </section>
@@ -1078,15 +1080,20 @@ function showTl(t) {
   el.textContent = I18N.t("settings.tl.summary", { groups: g.join("；") + lf });
 }
 
-// 「負荷」 by RPE (engine/rpe_load.describe): TSS per session-RPE unit, n, weight, LOO error (推估)
+// 「負荷」 by RPE (engine/rpe_load.describe, SP-57): each level's TSS per hour — the default IF² × 100
+// or the athlete's fit — on one line here, and per level with its n and chip under 每人校正 (#calib-rpe)
 function showRpe(r) {
-  const el = $("s-rpe");
+  const el = $("s-rpe"), tb = $("calib-rpe");
+  const lv = (r && Array.isArray(r.levels)) ? r.levels : [];
+  if (tb) { tb.hidden = !lv.length; $("calib-rpe-title").hidden = !lv.length;
+    tb.tBodies[0].innerHTML = lv.map((x) => `<tr><td>${esc(t("settings.rpe_load.row", { label: x.label, cr: x.cr10 }))}</td>
+      <td>${esc(t("settings.rpe_load.value", { tss_h: x.tss_h, if: Number(x.if).toFixed(2) }))} ${calibChip(x.chip, x.source)}</td>
+      <td class="meta">n=${esc(x.n)}</td></tr>`).join(""); }
   if (!el) return;
-  if (!r || r.factor == null) { el.textContent = ""; return; }
+  if (!lv.length) { el.textContent = ""; return; }
   const pct = (x) => x == null ? "–" : `${Math.round(x * 100)}%`;
-  el.textContent = r.fitted
-    ? t("settings.rpe_load.fitted", { factor: r.factor.toFixed(2), n: r.n, w: Math.round(r.w * 100), err: pct((r.loo || {}).mape) })
-    : t("settings.rpe_load.default", { factor: r.factor.toFixed(2), err: r.err_pct });
+  el.textContent = t("settings.rpe_load.summary", { levels: lv.map((x) => `${x.label} ${x.tss_h}`).join(" · "),
+    src: r.fitted ? t("settings.rpe_load.src_fitted", { n: r.n, err: pct((r.loo || {}).mape) }) : t("settings.rpe_load.src_default", { err: r.err_pct }) });
 }
 
 async function loadSyncSettings() {
@@ -1650,9 +1657,14 @@ $("calib-rows").onclick = async (e) => {
     toast("儲存失敗：" + m);
   }
 };
+$("calib-rpe").onclick = (e) => {          // a level's chip: its explanation on a tap too (as the rows above)
+  const c = e.target.closest(".cchip"); if (!c) return;
+  const tip = $("calib-tip"); tip.textContent = `${c.closest("tr").cells[0].textContent}：${c.title}`; tip.hidden = false; tip.classList.remove("err-text");
+};
 $("calib-run").onclick = async (e) => {
   const b = e.currentTarget; b.disabled = true; $("calib-msg").textContent = "估算中…";
   try { const r = await j(`${CAL}/run`, { method: "POST" }); calibRows(r.items);
+    j(`${SYNC}/settings`).then((s) => showRpe(s.rpe_load)).catch(() => {});      // the RPE levels refit too (SP-57)
     $("calib-msg").textContent = r.written.length ? `更新了 ${r.written.length} 項` : "資料還不夠，維持原值"; }
   catch (err) { $("calib-msg").textContent = "失敗：" + err.message.slice(0, 80); }
   b.disabled = false;

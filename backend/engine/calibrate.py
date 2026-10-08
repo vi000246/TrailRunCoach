@@ -266,7 +266,7 @@ async def calibrate(db, athlete_id: int = 1, ds=None, today: Optional[dt.date] =
         await db.rollback()
         log.warning("COROS TL refit failed: %s", type(e).__name__)
         out["coros_tl"] = {"error": type(e).__name__}
-    # 「負荷」 by RPE (engine/rpe_load.py, SP-57): TSS per session-RPE unit from the activities
+    # 「負荷」 by RPE (engine/rpe_load.py, SP-57): each level's TSS per hour from the activities
     # with a watch RPE — planning targets only, never a correction of the recorded load
     try:
         from backend.engine import rpe_load
