@@ -476,7 +476,11 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
     locks = {int(x["seg"]) - 1: float(x["power"]) for x in opts.get("locks") or []
              if x.get("power") and 0 < int(x["seg"]) <= len(segs)}
 
-    model = PC.RunModel(weight, grade_re.re, grade_re.v_max)
+    # SP-229: with the back-test's go (GaitRE.speed_gait) the walking / running curve follows the
+    # predicted speed (re_at) instead of the majority gait; a manual course has no grades, so never
+    speed_gait = bool(getattr(grade_re, "speed_gait", False)) and gpx
+    model = PC.RunModel(weight, grade_re.re, grade_re.v_max,
+                        (lambda g, p: grade_re.re_at(g, p, weight)) if speed_gait else None)
     d_eff_m = (r1.get("effort_km") or r1["distance_km"]) * 1000.0
     cat = "trail" if trail else "road"
     f_target = float(opts.get("effort_target") or 1.0)
@@ -655,9 +659,16 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
     for i, (s, r) in enumerate(zip(segs, rows)):
         cum += r["t"]
         notes = []
-        # walk / either / run from grade × the predicted speed (SP-226): a label only, the time is
-        # already solved; a manual course has only its net grade, so no label there
-        gait = RW.gait(s["grade"], r["v"], rw_shift) if gpx else None
+        if speed_gait:
+            # SP-229: one decision — the running curve's speed at this segment's power picks the
+            # curve the time used, the label and the note (走跑皆可 runs on the running curve)
+            gait = grade_re.gait_at(s["grade"], r["P"], weight)
+            curve = "walk" if gait == "walk" else "run"
+        else:
+            # walk / either / run from grade × the predicted speed (SP-226): a label only, the time is
+            # already solved by the majority gait; a manual course has only its net grade, so no label there
+            gait = RW.gait(s["grade"], r["v"], rw_shift) if gpx else None
+            curve = "walk" if getattr(grade_re, "walked", None) and grade_re.walked(s["grade"]) else "run"
         walk = RW.walk_label(gait)
         if walk:
             notes.append(walk)
@@ -667,16 +678,17 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
             notes.append("超 CP")
         if r.get("locked"):
             notes.append("已鎖定")
-        if gpx and getattr(grade_re, "walked", None) and grade_re.walked(s["grade"]):
-            notes.append("走（你在這個坡度多半走）")
+        if gpx and curve == "walk":
+            notes.append(_("走（依這段的預估速度，用走的比跑省力）") if speed_gait else _("走（你在這個坡度多半走）"))
         gf = minetti.grade_factor(s["grade"])
         v = r["v"]
-        trusted = grade_re.trusted(s["grade"]) if gpx else True
+        trusted = (grade_re.trusted_at(s["grade"], r["P"], weight) if speed_gait else grade_re.trusted(s["grade"])) \
+            if gpx else True
         z = next((zz for zz in zs if r["P"] / cp >= zz["lo"] and (zz["hi"] is None or r["P"] / cp < zz["hi"])), None)
         out_segs.append({
             **{x: s.get(x) for x in ("i", "start_km", "end_km", "dist_m", "gain_m", "loss_m", "grade", "max_grade",
                                      "z_start", "z_end", "z_mean", "z_max", "cls", "cls_label", "climb_no")},
-            "walk": walk, "gait": gait,
+            "walk": walk, "gait": gait, "gait_curve": curve,
             "M": s["M"], "power": r["P"], "pct_cp": r["P"] / cp, "zone": z["id"] if z else "1A 以下",
             "speed_ms": v, "pace_s_per_km": _pace(v), "gap_pace_s_per_km": _pace(v * gf) if trail else None,
             "vert_m_per_h": v * s["grade"] * 3600.0 if abs(s["grade"]) >= 0.15 else None,
@@ -786,7 +798,8 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
                            "badge": "推估"}
                if trail and getattr(grade_re, "surface_split", False) else None,
                "strategy": skind, "strategy_amount": amount, "alpha": alpha, "heat": heat_info,
-               "runwalk": {"shift": rw_shift, "personal": bool((getattr(grade_re, "runwalk", None) or {}).get("personal"))},
+               "runwalk": {"shift": rw_shift, "personal": bool((getattr(grade_re, "runwalk", None) or {}).get("personal")),
+                           "speed_gait": speed_gait},
                "heat_accl": heat_accl}
     heat_profile = _heat_profile(heat_rows, start_dt, out_segs, stops) if heat_info["mode"] == "hourly" else None
     return {"type": kind, "summary": summary, "effort": eff, "segments": out_segs, "target": target,

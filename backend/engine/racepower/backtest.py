@@ -239,10 +239,13 @@ def speed_gait_summary(rows: list[dict]) -> dict:
     tr = [r for r in rows if r.get("category") == "trail" and r.get("err_v2") is not None]
     both = lambda s: s.get("err") is not None and s.get("err_speed") is not None      # noqa: E731
     climb = lambda s: both(s) and (s.get("grade") or 0.0) >= 0.03                       # noqa: E731
+    changed = lambda s: climb(s) and (s.get("gait_speed") == "walk") != (s.get("gait") == "walk")   # noqa: E731
     out = {"segments": {"gait": stats(_seg_errs(tr, "err", both)), "speed_gait": stats(_seg_errs(tr, "err_speed", both))},
            "climbs": {"gait": stats(_seg_errs(tr, "err", climb)), "speed_gait": stats(_seg_errs(tr, "err_speed", climb))},
-           "changed": sum(1 for r in tr for s in r.get("segments") or []
-                          if climb(s) and (s.get("gait_speed") == "walk") != (s.get("gait") == "walk"))}
+           "changed": sum(1 for r in tr for s in r.get("segments") or [] if changed(s)),
+           # only the climbs whose curve differs: where the two models disagree at all
+           "changed_segments": {"gait": stats(_seg_errs(tr, "err", changed)),
+                                "speed_gait": stats(_seg_errs(tr, "err_speed", changed))}}
     ok = [out[k]["speed_gait"]["median_abs"] is not None and out[k]["gait"]["median_abs"] is not None
           and out[k]["speed_gait"]["median_abs"] <= out[k]["gait"]["median_abs"] for k in ("segments", "climbs")]
     out["no_worse"] = bool(out["segments"]["gait"]["n"]) and all(ok)
@@ -1402,6 +1405,14 @@ def surface_split_flag(path=None) -> bool:
     offers no 路況 choice and behaves as before)."""
     r = load(path)
     return bool((((r or {}).get("terrain") or {}).get("surface_split") or {}).get("no_worse"))
+
+
+def speed_gait_flag(path=None) -> bool:
+    """True when the stored back-test found the gait chosen by the predicted speed no worse than
+    the majority gait on the trail segments and climbs (SP-229, speed_gait_summary); nothing
+    stored → False (the planner keeps the majority gait, as before)."""
+    r = load(path)
+    return bool((((r or {}).get("terrain") or {}).get("speed_gait") or {}).get("no_worse"))
 
 
 def state() -> dict:

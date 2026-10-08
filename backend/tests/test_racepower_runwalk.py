@@ -324,7 +324,7 @@ def test_plan_labels_use_the_personal_shift(client, monkeypatch):   # noqa: F811
     gre.runwalk = {"shift": 0.4, "personal": True, "n": 500}
     monkeypatch.setattr(RP, "_grade_models", lambda: {"grade_re": gre, "hike_speed": GM.fit_hike_speed([]), "moving_rows": []})
     p = _plan(client)
-    assert p["summary"]["runwalk"] == {"shift": 0.4, "personal": True}
+    assert p["summary"]["runwalk"] == {"shift": 0.4, "personal": True, "speed_gait": False}
     climbs = [s for s in p["segments"] if s["grade"] >= 0.03]
     assert climbs and all(s["gait"] == RW.gait(s["grade"], s["speed_ms"], 0.4) for s in climbs)
 
