@@ -65,9 +65,16 @@ class World:
         self.recorded: list = []
         self.classes: dict = {}
         self.corr = tmp_path / "corr.json"
+        self.sessions: list = []             # the stored test sessions (plan_store.test_sessions)
+        self.runthr: list = []               # the Dataset's own dated LTHR (athlete settings "runthr")
+        self.accept_watch: bool = False
+        self.tz = UTC
+        self.rest_max = AT.AUTO_EFFORT["rest_max"]
         self.keep: list = []                 # athlete.py memos key on id(ds): never let an id be reused
+        self.last_sig = None
         monkeypatch.setattr(AT, "load", lambda *a, **k: self.tags)
         monkeypatch.setattr(AT, "load_recorded", lambda *a, **k: self.recorded)
+        monkeypatch.setattr(AT, "_rest_max", lambda: self.rest_max)     # 每人校正 effort_rest_max (P9)
 
     def write(self, name, start, kw):
         (self.dir / name).write_bytes(build_run(start, **kw))
@@ -78,9 +85,12 @@ class World:
         from backend.engine.wko5expr.fitdataset import FitFolderDataset
         d = FitFolderDataset(self.dir, config=EngineConfig(parity=False), today=dt.date(2025, 8, 1),
                              corrections=CorrectionStore(self.corr), classifications=self.classes,
-                             athlete_settings=[], estimate_thresholds=False, tz=UTC)
+                             athlete_settings=[], estimate_thresholds=False, tz=self.tz,
+                             accept_watch_power=self.accept_watch)
         d.plan = self.plan
-        d.plan_test_sessions = []
+        d.plan_test_sessions = self.sessions
+        if self.runthr:
+            d.athlete.settings["runthr"] = list(self.runthr)
         self.keep.append(d)
         return d
 
@@ -88,11 +98,17 @@ class World:
         return {w.entry.file: w for w in ds.workouts}
 
     def incremental(self):
-        """(the job's values keyed like the endpoint, the files the job computed)."""
+        """(the job's values keyed like the endpoint, the files the job computed). Also
+        checks the job trigger: whenever a key changed, the signature changed too (else
+        a running server would never start the job)."""
         ds = self.ds()
+        sig = AA.signature(ds, self.recorded)
         job = AA.job_for(ds)
         snap = AA.wait(ds)
         assert snap["state"] == "ready", snap.get("error")
+        if job.computed and self.last_sig is not None:
+            assert sig != self.last_sig, "a key changed but the signature did not"
+        self.last_sig = sig
         return snap["auto"], set(job.computed)
 
     def full(self):
@@ -213,6 +229,109 @@ def test_the_branches_hash_only_the_code_they_reach():
     assert "backend.engine.racepower.athlete.baiyue_on" not in run
     assert "backend.engine.racepower.athlete.thresholds_as_of" in run and \
         "backend.engine.racepower.athlete.thresholds_as_of" in other
+
+
+def test_a_refitted_rest_limit_recomputes_and_starts_a_job(world):
+    """effort_rest_max (每人校正 P9) is read by effort_hr / effort_from_rpe of every activity:
+    a refit or a manual change starts a job (the signature) and recomputes them."""
+    world.rest_max = 0.02
+    _check(world, expect=set(ACTS))
+
+
+def test_a_drift_calibration_recomputes_only_the_runs(world, monkeypatch):
+    """The drift windows (workout_review.apply_calibration) reach only the runs' test rule."""
+    ds = world.ds()
+    runs = {w.entry.file for w in ds.workouts if w.sport == "run"}
+    monkeypatch.setattr(AA, "_calibration", lambda: "|DRIFT_EARLY_S=900")
+    _check(world, expect=runs)
+
+
+def test_a_test_session_done_by_or_the_same_day_recomputes_only_that_run(world):
+    ds = world.ds()
+    w4, w8 = world.by_name(ds)["a04_road.fit"], world.by_name(ds)["a08_road.fit"]
+    iso4 = w4.entry.start.date().isoformat()
+    world.sessions.append({"uid": "s1", "day": iso4, "state": "done", "title": "CP 測試", "protocol": "standard",
+                           "done_by": {"index": w4.idx, "date": iso4}, "gen_key": "test_cp"})
+    _check(world, expect=["a04_road.fit"])
+    iso8 = w8.entry.start.date().isoformat()
+    world.sessions.append({"uid": "s2", "day": iso8, "state": "active", "title": "CP 測試", "protocol": "standard",
+                           "done_by": None, "gen_key": "test_cp"})
+    _check(world, expect=["a08_road.fit"])
+
+
+def test_removing_an_earlier_hike_reindexes_without_breaking_done_by(world):
+    """done_by holds an activity index: deleting an earlier hike shifts the later indices,
+    so the session no longer points at its run — only that run changes."""
+    ds = world.ds()
+    w = world.by_name(ds)["a10_road.fit"]
+    iso = w.entry.start.date().isoformat()
+    world.sessions.append({"uid": "s1", "day": iso, "state": "done", "title": "CP 測試", "protocol": "standard",
+                           "done_by": {"index": w.idx, "date": iso}, "gen_key": "test_cp"})
+    _check(world, expect=["a10_road.fit"])
+    (world.dir / "a03_hike.fit").unlink()
+    _check(world, expect=["a10_road.fit"])
+
+
+def test_a_bad_file_left_out_recomputes_nothing_else(world):
+    """A car ride stored as a run: excluded from the dataset (bad_activity.py), or at most
+    itself — never a re-classification of the others."""
+    world.write("a05b_car.fit", D0 + dt.timedelta(days=16), dict(seconds=900, hr=100, speed_m_s=40.0))
+    _check(world, within=["a05b_car.fit"])
+
+
+def test_the_datasets_own_lthr_recomputes_only_the_days_without_a_plan_lthr(world):
+    """No plan LTHR before 2024-08-01: there the dataset's dated LTHR (or the estimate)
+    is the threshold; later the plan row wins and nothing changes."""
+    world.runthr = [(dt.date(2024, 1, 1), 171.0)]
+    _check(world, expect=["old_run.fit", "old_hike.fit"])
+
+
+def test_watch_power_and_the_time_zone_recompute_like_a_full_run(world):
+    world.accept_watch = True
+    _check(world)
+    world.tz = timezone(dt.timedelta(hours=8))
+    _check(world, expect=set(ACTS))
+
+
+def test_a_dataset_without_a_pd_memo_lists_the_synced_fits_the_pd_refit_reads(tmp_path, monkeypatch):
+    """A WKO5 Dataset has no PdMemo: the synced FITs pd_model's cptest.curves reads are
+    listed the same way (fitdataset.synced_fit_files), so a new one changes the key."""
+    from backend.engine.racepower import cptest as T
+    from backend.engine.racepower import weather as WX
+    monkeypatch.setattr(WX, "HOME", tmp_path / "home")
+    folder = "tp" if T.unused_folder() == "coros" else "coros"
+    d = tmp_path / "home" / "fit" / folder / "2025"
+    d.mkdir(parents=True)
+
+    class Wko5Like:
+        accept_watch_power = False
+        workouts: list = []
+    before = AA._pd_inputs(Wko5Like())
+    (d / "1_2025-06-10_run.fit").write_bytes(b"x")
+    after = AA._pd_inputs(Wko5Like())
+    assert before[0] == [] and [f[0] for f in after[0]] == [dt.date(2025, 6, 10)]
+    assert after[1] is not None
+
+
+def test_the_job_runs_in_the_tenant_of_its_request(tmp_path, monkeypatch):
+    """The background job keeps the request's tenant (contextvars), like the warm-up."""
+    from backend import tenancy
+    w = World(tmp_path, monkeypatch)
+    seen = []
+    real = AA.compute_blocking
+
+    def spy(*a, **k):
+        seen.append(tenancy.current().id)
+        return real(*a, **k)
+    monkeypatch.setattr(AA, "compute_blocking", spy)
+    for tid in ("u7", "u8"):
+        t = tenancy.Tenant(id=tid, kind=tenancy.USER, root=tmp_path / tid, shared=tmp_path / tid)
+        ds = w.ds()
+        with tenancy.use(t):
+            AA.job_for(ds)
+        AA.wait(ds)
+        AA.cache_path(ds).unlink(missing_ok=True)
+    assert seen == ["u7", "u8"]
 
 
 def test_an_old_format_cache_is_served_meanwhile_and_rebuilt_once(tmp_path, monkeypatch):

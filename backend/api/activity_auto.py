@@ -182,11 +182,60 @@ def _test_sessions(ds) -> list:
 
 
 def _calibration() -> str:
+    """The drift windows in effect (workout_review.apply_calibration): read only by the
+    runs' test rule (drift.ok → a steady AeT test)."""
     from backend.engine import workout_review as WR
     try:
         return WR.apply_calibration()
     except Exception:                        # noqa: BLE001
         return ""
+
+
+def _rest_max():
+    """每人校正 effort_rest_max (P9, effort_calib.rest_max): read by effort_hr /
+    effort_from_rpe of every activity."""
+    from backend.engine import activity_tags as AT
+    try:
+        return AT._rest_max()
+    except Exception:                        # noqa: BLE001
+        return None
+
+
+def _calib_part() -> tuple:
+    """The per-athlete calibrations the auto values read (the job trigger)."""
+    return _calibration(), _rest_max()
+
+
+_PD_INPUTS: "weakref.WeakKeyDictionary" = weakref.WeakKeyDictionary()
+
+
+def _pd_inputs(ds) -> tuple:
+    """(synced FIT files [(date, path, size, mtime)], global part) the PD refits behind
+    cp_as_of read beyond ds.workouts (pd_model → cptest.curves): the FIT Dataset's
+    PdMemo.inputs, else (a WKO5 Dataset) the same listing, once per Dataset."""
+    pm = getattr(ds, "pd_memo", None)
+    if pm is not None and hasattr(pm, "inputs"):
+        return pm.inputs()
+    try:
+        hit = _PD_INPUTS.get(ds)
+    except TypeError:                        # not weak-referenceable (a test double)
+        hit = None
+    if hit is None:
+        from backend.engine import bad_activity as BA
+        from backend.engine.racepower import athlete as A
+        from backend.engine.wko5expr.fitdataset import synced_fit_files
+        try:
+            files, skip, home = synced_fit_files()
+            glob = (A.CP_WINDOW_DAYS, bool(getattr(ds, "accept_watch_power", False)), BA.read_setting(True),
+                    BA.overrides_stamp(), home, skip)
+        except Exception:                    # noqa: BLE001
+            files, glob = [], None
+        hit = (files, glob)
+        try:
+            _PD_INPUTS[ds] = hit
+        except TypeError:
+            pass
+    return hit
 
 
 def signature(ds, recorded: list) -> str:
@@ -204,9 +253,15 @@ def signature(ds, recorded: list) -> str:
     add(_code_sig())
     add(type(ds).__name__)
     add(getattr(ds, "source", None))
+    add(repr(getattr(ds, "config", None)))
+    try:
+        add(getattr(ds, "mftp_run", None))          # WKO5's PD snapshot (Dataset.cp → _settings_sig)
+    except Exception:                        # noqa: BLE001
+        pass
     for w in ds.workouts:
         add((w.entry.file, _file_stamp(ds, w), w.sport, w.sport_type, sorted(w.tags or []),
-             getattr(w.entry, "title", ""), w.entry.start.isoformat(), sorted((getattr(w, "platform", None) or {}).items())))
+             getattr(w.entry, "title", ""), w.entry.start.isoformat(), getattr(w.entry, "ftp", None),
+             sorted((getattr(w, "platform", None) or {}).items())))
     add(repr(getattr(ds, "plan", None)))
     try:
         add(sorted((k, [(str(d), v) for d, v in vals]) for k, vals in ds.athlete.settings.items()))
@@ -216,10 +271,12 @@ def signature(ds, recorded: list) -> str:
     add([(c.file, c.channel, c.t_start, c.t_end) for c in (corr.items if corr else [])])
     add(getattr(ds, "accept_watch_power", None))
     add(_recorded_stamp(recorded))
-    add(sorted((r.get("start_local"), r.get("file"), r.get("rpe")) for r in recorded))
+    add(sorted(repr(sorted((k, repr(v)) for k, v in r.items())) for r in recorded))   # the whole row (the key's)
     add(_user_marks(AT.load()))
     add(json.dumps(_test_sessions(ds), sort_keys=True, default=str))
-    add(_calibration())
+    add(_calib_part())
+    # not the synced FITs of the PD refit (_pd_inputs): listing them costs a folder walk and
+    # the PD code hash on every poll; a new synced FIT is a new Dataset (source_stamp) anyway
     return h.hexdigest()
 
 
@@ -291,12 +348,16 @@ class _Keys:
         from backend.engine.wko5expr.dataset import date_to_day
         self.ds, self.entries = ds, entries
         self.code = _branch_code()
+        # the drift calibration is not here: only runs read it (_test_part)
         self.glob = (CACHE_V, type(ds).__name__, getattr(ds, "source", None), repr(getattr(ds, "config", None)),
-                     getattr(ds, "accept_watch_power", None), _calibration())
+                     getattr(ds, "accept_watch_power", None), _rest_max())
+        self.drift = _calibration()
         self.rec = _Near(recorded)
         self.marks = _Near(AT.load())
         plan = getattr(ds, "plan", None)
         self.plan_thr = sorted((str(t.date)[:10], repr(t)) for t in getattr(plan, "thresholds", None) or [])
+        self.first_plan_lthr = min((str(t.date)[:10] for t in getattr(plan, "thresholds", None) or []
+                                    if getattr(t, "lthr", None) is not None), default=None)
         self.plan_thr_dates = [d for d, _ in self.plan_thr]
         self.events_on: dict = {}
         for e in getattr(plan, "events", None) or []:
@@ -332,8 +393,7 @@ class _Keys:
         runs = sorted(((math.floor(w.day), w) for w in ds.workouts if w.sport == "run"), key=lambda x: x[0])
         self.run_days = [d for d, _ in runs]
         self.run_rows = [self._thr_row(w) for _, w in runs]
-        pm = getattr(ds, "pd_memo", None)
-        files, pglob = pm.inputs() if pm is not None and hasattr(pm, "inputs") else ([], None)
+        files, pglob = _pd_inputs(ds)
         self.pd_files = sorted(files)
         self.pd_dates = [f[0] for f in self.pd_files]
         self.pd_glob = pglob
@@ -370,7 +430,7 @@ class _Keys:
     def _thr_row(self, w) -> str:
         ds = self.ds
         from backend.engine.racepower import athlete as A
-        return _h((w.entry.file, self._stamp(w), w.sport_type, sorted(w.tags or []), A.power_ok(ds, w),
+        return _h((w.entry.file, math.floor(w.day), self._stamp(w), w.sport_type, sorted(w.tags or []), A.power_ok(ds, w),
                    A.power_source(ds, w), ds._corr_sig(w.entry.file) if hasattr(ds, "_corr_sig") else None,
                    (w.metrics or {}).get("np")))
 
@@ -382,7 +442,6 @@ class _Keys:
         if hit is not None:
             return hit
         import datetime as dt
-        ds = self.ds
         iso = day.isoformat()
         tday = int(math.floor(self.date_to_day(day)))
         lo = bisect.bisect_right(self.run_days, tday - self.window)
@@ -391,14 +450,24 @@ class _Keys:
         since = day - dt.timedelta(days=self.window)
         files = self.pd_files[bisect.bisect_right(self.pd_dates, since):bisect.bisect_right(self.pd_dates, day)] \
             if self.pd_files and not isinstance(self.pd_dates[0], str) else self.pd_files
+        lthr = None
+        # the dataset's own LTHR history counts only on a day without a plan LTHR up to it
+        # (thresholds_as_of: plan test → estimate → setting)
+        if self.first_plan_lthr is None or self.first_plan_lthr > iso:
+            lthr = self._own_lthr(day)
+        out = self._thr_memo[day] = _h((plan, self.run_rows[lo:hi], files, self.pd_glob, lthr))
+        return out
+
+    def _own_lthr(self, day):
+        import datetime as dt
+        ds = self.ds
         try:
             hist = ds.athlete.settings.get("runthr") or []
             lthr = (ds.athlete.setting_on("runthr", day), bool(hist) and all(d == dt.date(1980, 1, 1) for d, _ in hist),
                     ds.setting_source("runthr", "WKO5 設定") if hasattr(ds, "setting_source") else None)
         except Exception:                    # noqa: BLE001
             lthr = None
-        out = self._thr_memo[day] = _h((plan, self.run_rows[lo:hi], files, self.pd_glob, lthr))
-        return out
+        return lthr
 
     def _test_part(self, w) -> tuple:
         """What workout_review's test rule (athlete._test_reason) reads beyond the file:
@@ -417,7 +486,7 @@ class _Keys:
                            db.get("index") == w.idx))
         from backend.engine import activity_tags as AT
         return (self.events_on.get(iso, []), self.thr_on.get(iso, []), ss,
-                AT.user_type(self.marks.find(w.entry.start, w.entry.file)))
+                AT.user_type(self.marks.find(w.entry.start, w.entry.file)), self.drift)
 
     def key(self, w) -> tuple[str, str]:
         """(branch, key) of one workout."""
@@ -477,13 +546,17 @@ def load_cache(ds) -> dict:
 
 def save_cache(ds, sig: Optional[str], files: dict) -> None:
     p = cache_path(ds)
+    tmp = p.with_name(f"{p.stem}.{os.getpid()}.{threading.get_ident()}.tmp")
     try:
         p.parent.mkdir(parents=True, exist_ok=True)
-        tmp = p.with_name(f"{p.stem}.{os.getpid()}.{threading.get_ident()}.tmp")
         tmp.write_text(json.dumps({"v": CACHE_V, "sig": sig, "files": files}, ensure_ascii=False), "utf-8")
         os.replace(tmp, p)
     except OSError as e:
         log.warning("activity auto: could not write the cache (%s)", type(e).__name__)
+        try:
+            tmp.unlink(missing_ok=True)      # never leave a half-written file behind
+        except OSError:
+            pass
 
 
 # ---------------------------------------------------------------------------
@@ -525,7 +598,10 @@ class Job:
     def start(self) -> None:
         if self.state != "computing":
             return
-        t = threading.Thread(target=self._run, name="activity-auto", daemon=True)
+        import contextvars
+        # the request's tenant (a Thread does not carry contextvars), like the warm-up
+        t = threading.Thread(target=contextvars.copy_context().run, args=(self._run,), name="activity-auto",
+                             daemon=True)
         self.thread = t
         t.start()
 
@@ -546,7 +622,9 @@ class Job:
             for w in ds.workouts:
                 e = self.entries.get(w.entry.file)
                 if isinstance(e, dict) and e.get("key") == keys[w.idx] and isinstance(e.get("auto"), dict):
-                    files[w.entry.file] = e
+                    # the probe follows the run branch's code even when this result did not change
+                    files[w.entry.file] = {**e, "own": kb.own[w.idx], "pcode": kb.code["run"],
+                                           "probe": kb.probes.get(w.idx)}
                     with self.lock:
                         self.fresh[names[w.idx]] = e["auto"]
                 else:
@@ -579,6 +657,8 @@ class Job:
             log.warning("activity auto failed: %s", e, exc_info=True)
             with self.lock:
                 self.state, self.error, self.finished = "error", f"{type(e).__name__}: {e}"[:300], time.monotonic()
+        finally:
+            self.entries = {}                # the disk copy is not needed once the job is done
 
     def snapshot(self) -> dict:
         with self.lock:
