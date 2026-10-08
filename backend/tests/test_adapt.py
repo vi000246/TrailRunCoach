@@ -228,6 +228,11 @@ def test_fatigue_red_streak_ignores_foot_sport_mismatches_sp370():
            _mismatch("easy2", "2026-09-29", "hike", 2, moving_s=900, tss=10)]
     out, adj, _ = A.adapt(gw(), far, ctx())
     assert ids(out)["quality"]["title"] == QG.RECOVERY[1]
+    # a foot-sport mismatch without a TSS (only time measured): not exempt, as on the page (≠)
+    no_tss = [_mismatch("easy1", "2026-09-28", "walk", 1, tss=None), _mismatch("easy2", "2026-09-29", "hike", 2,
+                                                                                  tss=None)]
+    out, adj, _ = A.adapt(gw(), no_tss, ctx())
+    assert ids(out)["quality"]["title"] == QG.RECOVERY[1]
 
 
 # ---- round trip through reconcile: idempotent ------------------------------

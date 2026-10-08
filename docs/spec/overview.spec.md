@@ -944,8 +944,9 @@ actual ÷ planned TSS and duration; the worse deviation sets the colour — gree
 ≤ 50 %, red beyond or the wrong kind of activity (`COMPLIANCE`, `backend/engine/compliance.py:31`);
 planned vs actual (`plan_match.compare`, `backend/engine/plan_match.py:318`) flags 「沒照課表」 (≠).
 SP-370 (owner 2026-10-08; intervals.icu / TrainingPeaks rate completion by load / time, the
-combination 推估): when time **and** TSS are both within ±20 % (`compliance.time_tss_level`,
-`backend/engine/compliance.py:67`), an intensity reversal (easy / LSD run as intensity, quality run
+combination 推估): when time **and** TSS are both measured and both within ±20 %
+(`compliance.time_tss_level`, `backend/engine/compliance.py:67-76` — None when either is missing:
+no TSS, or a planned TSS of 0 with no estimate, keeps ≠), an intensity reversal (easy / LSD run as intensity, quality run
 easy) or another **foot** sport (`FOOT` = road / trail / hike / walk, `compliance.foot_swap`,
 `backend/engine/compliance.py:61`) is ◐ 部分 (yellow, `vs.short` + `vs.soft` intensity / sport,
 label 跑成強度課 / 跑成輕鬆 / 項目不同, reason 「時間和負荷都對，但…」); ≠ stays when time or TSS is
@@ -954,7 +955,10 @@ also > 20 % off, or the sport is not on foot (bike …). A walking session (`tar
 own sport (`compliance.accepted`, `WALK_OK`, `backend/engine/compliance.py:39-53`), read-side, so
 stored rows from before follow without a migration. Shown on the 本週 tiles, the 課表
 chips and week rows, the workout review 「課表」 card and the 課表統計 page — all through
-`session_compliance` + `with_plan_check` + `status_of`.
+`session_compliance` + `with_plan_check` + `status_of`, on the same planned TSS: the calendar's
+`est_tss` (stored TSS, else minutes × `tss_rates`); the workout review card gets it from
+`api/plan_sessions.session_est_tss` (`backend/api/plan_sessions.py:2393`; rates from the dataset's
+TSS / h and `plan_store.rate_rows`, only computed for a row without a TSS).
 
 **Concurrency**: plan writes are serialized by one asyncio lock per event loop
 (`_wlock`, `backend/api/plan_sessions.py:221`), so two tabs or a preview racing a push cannot
@@ -1866,6 +1870,7 @@ deleted / superseded) are returned as reconcile `changes` (`backend/engine/recon
 | 2026-10-06 | change | SP-302 | The easy run's planned TSS / h (`easy`, `easy_trail`) from genuinely easy runs only (classifier 輕鬆跑 not 中強度跑, or average HR ≤ AeT + 3; no Zone 3 / Zone 5 / test); < 3 → 推估 from the easy cap's IF (cap ÷ LTHR)² × 100 with a note; long run / quality rates unchanged; `easy_tss` in the output; `plan_prefs._easy` and `plan_sessions.tss_rates` read it |
 | 2026-10-06 | change | SP-302 decision | < 3 genuinely easy runs → 推估 IF 0.80 (64 TSS / h) instead of the easy cap's IF; the projection's default path (no 課表偏好) prices easy runs with the same `easy` rate as week_plan |
 | 2026-10-07 | feat/sp291-293-data-level | docs/research/cold-start.md §4.1 | SP-291 資料等級: `data_level.level` (0 no run / hike in 28 days, 2 = the Zone 3 consistency rule on run + hike days, 1 between; week of the data; `survey`) read by the week plan (cold_start), the status page (`i_level` card, `data_level` in `/status`) and the race feasibility; the ramp lasts the rule's weeks; the cold / ramp note is the level's one line (「你的資料還在累積（第 n 週／4）：週量依你填的問卷，心率區間是推估」); plan / status cache keys carry `experience.stamp()` |
+| 2026-10-08 | fix/sp370-compliance-looser | SP-370 follow-up (owner 2026-10-08) | The ◐ softening needs time **and** TSS both measured (`compliance.time_tss_level` None when either ratio is missing, `backend/engine/compliance.py:67-76`; used by `session_compliance` `:107-112` and `plan_match.compare` `backend/engine/plan_match.py:334`); the workout review 「課表」 card grades on the calendar's planned-TSS estimate (`api/plan_sessions.session_est_tss` `backend/api/plan_sessions.py:2393`, `plan_store.rate_rows` `backend/engine/plan_store.py:850`, `workout_review._plan_card` `backend/engine/workout_review.py:3036-3042`) |
 | 2026-10-08 | fix/sp370-compliance-looser | SP-370 (owner decision 2026-10-08) | 沒照課表 less strict: a walking session (`target_policy.is_walk`) accepts hike / walk / trail run (`compliance.accepted` / `sport_ok`, `backend/engine/compliance.py:44-58`; `plan_match.sport_ok` / `can_match` follow, `backend/engine/plan_match.py:75-90`); with time and TSS both within ±20 % an intensity reversal or another foot sport is ◐ 部分 with its reason, not ≠ (`compliance.session_compliance` `backend/engine/compliance.py:90-116`, `with_plan_check` / `soft_label` `:122-154`, `status_of` `:195`; `plan_match.compare(s, planned_tss)` `backend/engine/plan_match.py:318-370`; `api/plan_sessions._decorate` passes the page's TSS estimate, `backend/api/plan_sessions.py:2528`); a non-foot sport stays ≠; four-level texts in `static/i18n/*/schedule.json` `vs.levels_tip`, `compliance.json` `kpi.ok_tip`, `overview.json` `week.short_aria`; 推估 |
 | 2026-10-07 | feat/sp291-293-data-level | docs/research/cold-start.md §4.4 | SP-292 賽事可行性 for 資料等級 0 / 1 (`GET /overview/feasibility`, `race_feasibility` module doc): base hours = max(questionnaire as the plan reads it, actual), km / climb actual only; no actual distance → UA weekly / climb 「還不知道」, Koop's hours still judged; `data_source` tag 「依你填的資料」／「資料還少」 on the card; level 0 at most tight (cutoff / 跨級 over → tight with the reason, no 「先不跑」／「低一級」 advice; 「late」 unchanged); ≥ 42.195 km with a self-reported week < 3 h → `optimistic_note` (Vickers & Vertosick 2016); level 2 unchanged |
 | 2026-10-08 | fix/sp358-359-schedule-delete-swap | SP-358 | 刪除／移動課表沒同步到手錶: a drag / edit / delete / 不排課日期 / 休息日 only wrote the store, the watch changed only at the next manual push or after a sync with a new activity, and a range push never touched a pushed session that had moved out of the range — so the old day kept its workout. Now these endpoints sync the affected sessions at once (`_sync_watch` → `plan_auto.push_window(only=…)`, response `coros`, page note / warning, a `failed` change-log row on error); range pushes and the automatic window also re-send copies whose session moved out (`copies_in`); a COROS calendar delete is verified (`_remove_remote`); removal failures count as push failures |
