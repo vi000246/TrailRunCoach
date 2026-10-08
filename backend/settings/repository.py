@@ -169,6 +169,10 @@ DEFAULTS: dict[str, Any] = {
     # and the cool-down (10 when running home)
     "plan.prefs.warmup_commute_min": 10,
     "plan.prefs.cooldown_min": 5,
+    # 每堂課前加熱身 (engine/warmup.py, SP-364): off by default; on = ≥ warmup_min minutes of warm-up
+    # in front of every generated run session and inserted template (an existing one topped up)
+    "plan.prefs.warmup_on": False,
+    "plan.prefs.warmup_min": 10,
     # 偏好的星期 (engine/plan_prefs.py day_conflicts / place): {kind: [first, second]}; [] / missing = 不指定
     "plan.prefs.pref_days": {},
     "plan.prefs.pref_keep": [],               # conflict codes kept anyway (照我的偏好)
@@ -282,6 +286,7 @@ PREF_INTS = {                                 # key -> (lo, hi); None always all
     "plan.prefs.quality_gate_weeks": (2, 16),
     "plan.prefs.warmup_commute_min": (0, 30),
     "plan.prefs.cooldown_min": (0, 20),
+    "plan.prefs.warmup_min": (5, 30),          # = engine/warmup.MIN_RANGE
     "plan.prefs.transition_weeks": (0, 6),
     "plan.prefs.taper_days": (14, 21),
 }
@@ -466,8 +471,8 @@ def validate(key: str, value: Any) -> None:
 
 
 def _validate_pref(key: str, value: Any) -> None:
-    if key == "plan.prefs.b2b" and not isinstance(value, bool):
-        raise ValueError("plan.prefs.b2b must be true/false")
+    if key in ("plan.prefs.b2b", "plan.prefs.warmup_on") and not isinstance(value, bool):
+        raise ValueError(f"{key} must be true/false")
     if key in PREF_ENUMS and value not in PREF_ENUMS[key]:
         raise ValueError(f"{key} must be one of {PREF_ENUMS[key]}")
     if key in PREF_INTS and value is not None:

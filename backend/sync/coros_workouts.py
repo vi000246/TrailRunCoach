@@ -470,6 +470,15 @@ def session_steps(s: dict, th: Thresholds, sent_tl: Optional[dict] = None) -> li
     if secs <= 0:
         raise Unsupported("沒有時間長度")
     from backend.engine import workout_steps as WS
+    from backend.engine.warmup import EASY_KINDS, mark_min
+    if kind in EASY_KINDS and mark_min(s):
+        # 每堂課前加熱身 (SP-364): the first N minutes are a warm-up lap — the editor's structure
+        # (workout_steps.derive splits the session there), pushed as it is
+        d = WS.derive(s)
+        if d is not None:
+            c = WS.Ctx(cp=th.cp, lthr=th.lthr, aet=th.aet, tpace=th.tpace, basis=_basis(s), hrz=th.hrz,
+                       sent_tl=sent_tl, walk=th.walk_of(s))
+            return WS.steps_to_coros(WS.normalize(d), c)
     mp = WS.mp_minutes(s) if kind == "long" else None
     if mp and secs - mp * 60 - WS.MP_TAIL_S >= 10 * 60:
         # 主要訓練項目 = 路跑: easy, marathon pace, easy (workout_steps.derive / mp_target): the goal pace,

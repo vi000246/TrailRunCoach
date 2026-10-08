@@ -82,6 +82,7 @@ class Variant:
     set_rest_s: int = 0
     listed_equiv: bool = True    # False = the 非同等 options (30/15)
     grade: str = ""              # hill: "4–6%" / "6–10%"
+    warm_floor: int = 0          # 每堂課前加熱身 (SP-364): the warm-up's minimum, minutes (variant_adj "warm")
 
     # ---- derived ----------------------------------------------------------
     @property
@@ -307,23 +308,37 @@ LEVELS = ("full", "std", "min")
 LEVEL_LABEL = {"full": "完整", "std": "標準", "min": "下限"}
 
 
-def blocks(v: Variant, level: str = "std", prefs=None) -> dict:
-    """{"warm": [(code, minutes, text)], "warm_min", "cool_min", "cool_text"} (§C3)."""
-    c = commute_min(prefs)
+def warm_floor(v: Variant, prefs=None) -> int:
+    """每堂課前加熱身 (SP-364, engine/warmup.py): the warm-up's minimum in minutes — the
+    preference's, or the one the stored session carries (variant_adj "warm")."""
+    from backend.engine.warmup import floor_min
+    return max(int(v.warm_floor or 0), floor_min(prefs))
+
+
+def _warm(v: Variant, level: str, c: int) -> list:
+    """The warm-up blocks of a level with a `c`-minute city part (§C3)."""
     z5 = is_z5(v)
     city = ("city", c, f"輕鬆跑暖身 {c} 分（可以就是跑到間歇地點；≤ 75% CP，最後 2 分漸進到約 85% CP）")
     if level == "full":
         river = ("river", 5 if z5 else 3, f"輕鬆跑 {5 if z5 else 3} 分，漸進")
-        warm = [city, river] + ([("drills", 2, "動態伸展、跑姿 drill 2 分（擺腿、高抬腿、小步跑）")] if z5 else []) + \
+        return [city, river] + ([("drills", 2, "動態伸展、跑姿 drill 2 分（擺腿、高抬腿、小步跑）")] if z5 else []) + \
             [("strides", 3 if z5 else 2, f"快步跑 {3 if z5 else 2}×15–20 秒（不是衝刺），間隔慢跑 40 秒")]
-        cool = max(10, cooldown_floor(prefs))
-    elif level == "min":
-        warm = [city] + ([("drills", 2, "動態伸展、drill 2 分"), ("strides", 1, "快步跑 1×15–20 秒")] if z5 else [])
-        cool = cooldown_floor(prefs)
-    else:
-        warm = [city] + ([("drills", 2, "動態伸展、跑姿 drill 2 分")] if z5 else []) + \
-            [("strides", 3 if z5 else 2, f"快步跑 {3 if z5 else 2}×15–20 秒，間隔慢跑 40 秒")]
-        cool = cooldown_floor(prefs)
+    if level == "min":
+        return [city] + ([("drills", 2, "動態伸展、drill 2 分"), ("strides", 1, "快步跑 1×15–20 秒")] if z5 else [])
+    return [city] + ([("drills", 2, "動態伸展、跑姿 drill 2 分")] if z5 else []) + \
+        [("strides", 3 if z5 else 2, f"快步跑 {3 if z5 else 2}×15–20 秒，間隔慢跑 40 秒")]
+
+
+def blocks(v: Variant, level: str = "std", prefs=None, floor: Optional[int] = None) -> dict:
+    """{"warm": [(code, minutes, text)], "warm_min", "cool_min", "cool_text"} (§C3).
+    The warm-up is at least `floor` minutes (None = warm_floor(v, prefs); SP-364): the city
+    part grows by what is missing, a longer warm-up is kept."""
+    c = commute_min(prefs)
+    warm = _warm(v, level, c)
+    lack = (warm_floor(v, prefs) if floor is None else int(floor)) - sum(m for _, m, _ in warm)
+    if lack > 0:
+        warm = _warm(v, level, c + lack)
+    cool = max(10, cooldown_floor(prefs)) if level == "full" else cooldown_floor(prefs)
     return {"warm": warm, "warm_min": sum(m for _, m, _ in warm), "cool_min": cool,
             "cool_text": f"緩和 {cool} 分慢跑或走路" + ("（跑回家的話就是這段）" if cool >= 10 else "")}
 
@@ -563,6 +578,8 @@ def adjust(v: Variant, adj: Optional[dict]) -> Variant:
     if adj.get("power"):
         f = float(adj["power"])
         v = replace(v, lo=round(v.lo * f, 3), hi=round(v.hi * f, 3))
+    if adj.get("warm"):
+        v = replace(v, warm_floor=int(adj["warm"]))      # 每堂課前加熱身 (SP-364): the stored floor
     return v
 
 
@@ -721,13 +738,18 @@ def session_for(f: dict, th: dict, prefix: str = "", lthr_default: bool = False,
     total = int(round(total_min(v, lv, prefs)))
     detail = (f"{f['reason']}。{prefix}{body}；暖身 {b['warm_min']} 分（{warm_txt}）、緩和 {b['cool_min']} 分"
               + ("；暖身完 1–2 分內開始第一趟" if is_z5(v) else ""))
+    adj = dict(f.get("adj") or {})
+    if warm_floor(v, prefs):
+        # 每堂課前加熱身 (SP-364): the floor travels with the session, so the push / the editor
+        # (no prefs there) build the same warm-up
+        adj["warm"] = warm_floor(v, prefs)
     return {"id": "quality", "kind": "quality", "title": title(v), "minutes": total,
             "target": " · ".join(parts), "detail": detail, "source": v.src,
             "tss": total / 60.0 * RATE.get(v.cls, 70.0),
             "terrain": "trail" if v.terrain == "hill" else None,
             "variant_key": v.key, "rung_key": f.get("rung") or v.rung, "equiv": bool(f["equiv"]),
             "swap": swap, "swap_reason": f["reason"], "variant_reps": f.get("reps"),
-            "variant_blocks": lv, "variant_adj": f.get("adj") or None,
+            "variant_blocks": lv, "variant_adj": adj or None,
             "progress": bool(f.get("progress", f["equiv"])),
             **({"prefer_days": f["prefer_days"]} if f.get("prefer_days") else {})}
 
@@ -856,8 +878,11 @@ def variant_patch(key: str, rung: Optional[str], th: dict, prefs=None, cap: Opti
     why = f"你換成 {structure(v)}（{'同等，不影響進階' if equiv else '非同等：這次不算進階'}）"
     s = session_for({"variant": v, "level": lv, "reps": reps if reps and reps < v0.n else None, "equiv": equiv,
                      "progress": equiv, "reason": why, "rung": rung}, th, prefix, prefs=prefs, swap="user")
-    return {k: s[k] for k in ("title", "minutes", "target", "detail", "source", "tss", "variant_key", "rung_key",
-                              "equiv", "swap", "swap_reason", "variant_reps", "variant_blocks")}
+    out = {k: s[k] for k in ("title", "minutes", "target", "detail", "source", "tss", "variant_key", "rung_key",
+                             "equiv", "swap", "swap_reason", "variant_reps", "variant_blocks")}
+    if s.get("variant_adj"):
+        out["variant_adj"] = s["variant_adj"]       # 每堂課前加熱身 (SP-364): the warm-up floor goes with it
+    return out
 
 
 def library_table(prefs=None) -> list[dict]:

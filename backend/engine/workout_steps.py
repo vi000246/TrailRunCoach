@@ -502,6 +502,97 @@ def mp_minutes(s: dict) -> Optional[int]:
     return _num(r"馬拉松配速\s*(\d+)\s*分", s.get("title") or "")
 
 
+HEAT_WARM_S, HEAT_COOL_S = 600, 300      # the easy heat run: warm-up 10 / main / walk cool-down 5
+
+
+def strides_of(title: Optional[str]) -> Optional[tuple[int, int]]:
+    """(n, seconds) of an easy run's 「N×M 秒」 strides / hill sprints in its title, or None."""
+    m = re.search(r"(\d+)\s*[×xX]\s*(\d+)\s*秒", title or "")
+    return (int(m.group(1)), int(m.group(2))) if m else None
+
+
+def heat_run(s: dict) -> bool:
+    """An easy run that is a 熱適應 session (the flag, or the word in its title)."""
+    return bool(s.get("heat") or "熱適應" in (s.get("title") or ""))
+
+
+# ---------------------------------------------------------------------------
+# 每堂課前加熱身 (SP-364, engine/warmup.py): the leading warm-up block of a structure,
+# topping it up (templates, stored structures) or splitting an easy session's first minutes
+# ---------------------------------------------------------------------------
+
+def _kinds(items: list) -> set:
+    out = set()
+    for it in items or []:
+        out |= _kinds(it.get("items")) if it.get("kind") == "repeat" else {it.get("kind")}
+    return out
+
+
+def _lead(items: list) -> list[int]:
+    """Indices of the leading warm-up block: the warm steps at the start, and a repeat right after
+    one of them that holds no main-set step (the strides of a library warm-up)."""
+    out = []
+    for i, it in enumerate(items or []):
+        if it.get("kind") == "warm" or (it.get("kind") == "repeat" and out
+                                        and not (_kinds(it.get("items")) - {"other", "rest", "warm"})):
+            out.append(i)
+            continue
+        break
+    return out
+
+
+def lead_warm_s(items: list) -> Optional[int]:
+    """Seconds of the leading warm-up block (0 = none); None when part of it isn't timed (a
+    lap-button or distance warm-up: its length is the athlete's)."""
+    total = 0
+    for i in _lead(items):
+        for row in flat([items[i]]):
+            d = row["st"].get("dur") or {}
+            if d.get("type") != "time" or not d.get("value"):
+                return None
+            total += int(d["value"])
+    return total
+
+
+def ensure_warm(items: list, floor_s: int) -> tuple[list, int]:
+    """(items, seconds added): the leading warm-up block topped up to `floor_s` — the first timed
+    warm step gets longer, or a warm-up step goes in front when there is none. A block already
+    that long, or one that isn't timed, is left as it is (the input is never mutated)."""
+    have = lead_warm_s(items)
+    if not floor_s or have is None or have >= floor_s:
+        return items, 0
+    out = copy.deepcopy(items)
+    add = int(floor_s - have)
+    first = next((out[i] for i in _lead(out) if out[i].get("kind") == "warm"), None)
+    if first is not None:
+        first["dur"] = {"type": "time", "value": int(first["dur"]["value"]) + add}
+    else:
+        out.insert(0, step(_Ids("wu"), "warm", add, dict(EASY), KIND_LABEL["warm"]))
+    return out, add
+
+
+def _carve(items: list, n_s: int) -> list:
+    """An easy-type session's 「含暖身 N 分」 (engine/warmup.py): its first `n_s` seconds become the
+    warm-up — the first easy step is split (the heat run's own warm-up grows into its main part);
+    one too short for that gets the warm-up in front."""
+    from backend.engine.warmup import MIN_MAIN
+    keep = MIN_MAIN * 60
+    first = items[0] if items else None
+    dur = (first or {}).get("dur") or {}
+    if first is not None and first["kind"] == "warm" and dur.get("type") == "time":
+        d = n_s - int(dur["value"])
+        nxt = next((x for x in items[1:] if x.get("kind") == "work" and (x.get("dur") or {}).get("type") == "time"),
+                   None)
+        if d > 0:
+            first["dur"] = {"type": "time", "value": n_s}
+            if nxt is not None and nxt["dur"]["value"] - d >= keep:
+                nxt["dur"] = {"type": "time", "value": nxt["dur"]["value"] - d}
+        return items
+    if first is not None and first["kind"] == "work" and dur.get("type") == "time" and dur["value"] - n_s >= keep:
+        first["dur"] = {"type": "time", "value": int(dur["value"]) - n_s}
+    return [step(_Ids("wu"), "warm", n_s, dict(EASY), KIND_LABEL["warm"])] + items
+
+
 def strides_names(title: str, sprint: int, n: int) -> tuple[str, str, str]:
     """(work, recovery, repeat) step names: flat strides (路跑, 「加速跑」) or hill sprints."""
     if "加速跑" in (title or ""):
@@ -533,29 +624,39 @@ def derive(s: dict, th: Optional[dict] = None) -> Optional[dict]:
         return doc(items) if items else None
     if secs <= 0:
         return None
+    items = _easy_items(s, kind, secs, ids)
+    if items is None:
+        return None
+    from backend.engine.warmup import mark_min
+    n = mark_min(s)            # 每堂課前加熱身 (SP-364): its first N minutes are the warm-up
+    return doc(_carve(items, n * 60) if n else items)
+
+
+def _easy_items(s: dict, kind: str, secs: int, ids) -> Optional[list]:
+    """derive()'s steps of the easy-type kinds (long, mountain, hike, easy), before the warm-up."""
     mp = mp_minutes(s) if kind == "long" else None
     if mp and secs - mp * 60 - MP_TAIL_S >= 10 * 60:
-        return doc([step(ids, "work", secs - mp * 60 - MP_TAIL_S, _easy(0.80, 0.88), "輕鬆"),
-                    step(ids, "work", mp * 60, mp_target(s), "馬拉松配速"),
-                    step(ids, "cool", MP_TAIL_S, _easy(0.75, 0.80), "輕鬆收操")])
+        return [step(ids, "work", secs - mp * 60 - MP_TAIL_S, _easy(0.80, 0.88), "輕鬆"),
+                step(ids, "work", mp * 60, mp_target(s), "馬拉松配速"),
+                step(ids, "cool", MP_TAIL_S, _easy(0.75, 0.80), "輕鬆收操")]
     if kind in ("long", "mountain", "hike"):
         lo, hi = (0.80, 0.88) if kind == "long" else (0.75, 0.88)
-        return doc([step(ids, "work", secs, _easy(lo, hi))])
-    if kind == "easy" and (s.get("heat") or "熱適應" in (s.get("title") or "")) and secs >= 20 * 60:
-        return doc([step(ids, "warm", 10 * 60, EASY, "熱適應：慢慢進入"),
-                    step(ids, "work", secs - 15 * 60, EASY, "熱適應：照心率、配速放慢"),
-                    step(ids, "cool", 5 * 60, OPEN, "走路降溫")])
+        return [step(ids, "work", secs, _easy(lo, hi))]
+    if kind == "easy" and heat_run(s) and secs >= 20 * 60:
+        return [step(ids, "warm", HEAT_WARM_S, EASY, "熱適應：慢慢進入"),
+                step(ids, "work", secs - HEAT_WARM_S - HEAT_COOL_S, EASY, "熱適應：照心率、配速放慢"),
+                step(ids, "cool", HEAT_COOL_S, OPEN, "走路降溫")]
     if kind == "easy":
-        m = re.search(r"(\d+)\s*[×xX]\s*(\d+)\s*秒", s.get("title", "") or "")
-        if m:
-            n, sprint = int(m.group(1)), int(m.group(2))
+        st = strides_of(s.get("title"))
+        if st:
+            n, sprint = st
             base = secs - n * (sprint + 60)
             if base >= 10 * 60:
                 w_name, r_name, rep_name = strides_names(s.get("title") or "", sprint, n)
-                return doc([step(ids, "work", base, _easy(0.75, 0.80), CAP_NAME),
-                            rep(ids, n, [step(ids, "work", sprint, OPEN, w_name),
-                                         step(ids, "rest", 60, OPEN, r_name)], True, rep_name)])
-        return doc([step(ids, "work", secs, _easy(0.75, 0.80))])
+                return [step(ids, "work", base, _easy(0.75, 0.80), CAP_NAME),
+                        rep(ids, n, [step(ids, "work", sprint, OPEN, w_name),
+                                     step(ids, "rest", 60, OPEN, r_name)], True, rep_name)]
+        return [step(ids, "work", secs, _easy(0.75, 0.80))]
     return None
 
 
@@ -1749,7 +1850,7 @@ def template_steps(key: str, level: str = "std") -> Optional[dict]:
     return from_variant(v, level) if v is not None else None
 
 
-def templates(prefs=None, user: Optional[dict] = None) -> dict:
+def templates(prefs=None, user: Optional[dict] = None, warm_floor_s: int = 0) -> dict:
     """The editor's 插入範本 (static/workout_editor.js): {"cats": [{id, label, subs?}],
     "groups": [{"group", "cat", "sub", "title", "rows": [{key, label, title, src, url,
     src_kind, items (main set), full, equiv, family, purpose}]}]}. Each category: the
@@ -1759,7 +1860,9 @@ def templates(prefs=None, user: Optional[dict] = None) -> dict:
     other categories); 測試 also the app's CP protocols; 越野跑 split by its kind (結構化爬升 /
     技術地形 / 下坡, SP-62). `user` ({"templates", "cats"}, engine/user_templates.py, SP-36):
     the user's own templates first in every category they are in (「我的範本」), and their
-    own categories as extra tabs."""
+    own categories as extra tabs. `warm_floor_s` (每堂課前加熱身, SP-364; engine/warmup.py): every
+    row's whole structure (`full`, 整份換) starts with at least that much warm-up — a template's own
+    warm-up is kept and topped up (ensure_warm); the main set (`items`, 只換主課) is untouched."""
     from backend.engine import cp_protocols as CPP
     from backend.engine import user_templates as UT
     from backend.engine import workout_templates as WT
@@ -1828,6 +1931,8 @@ def templates(prefs=None, user: Optional[dict] = None) -> dict:
     g("trail", "附加", [hills], "climb")
     for gr in groups:
         for r in gr["rows"]:
+            if warm_floor_s and r.get("full"):
+                r["full"] = ensure_warm(r["full"], warm_floor_s)[0]
             # the editor badges these when there is no threshold pace (their pace is × it)
             r["needs_tpace"] = needs_tpace(r.get("full") or r.get("items"))
             # the 主課強度類型 filter (SP-84; user rows: user_templates.row, the same helper)

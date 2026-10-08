@@ -667,6 +667,8 @@ def _with_variant(data: dict, inp: dict, rung: Optional[str], day: Optional[str]
     body["kind"] = "quality"
     body["_variant"] = {k: vp[k] for k in ("variant_key", "rung_key", "equiv", "swap", "swap_reason", "variant_reps",
                                            "variant_blocks", "source")}
+    if vp.get("variant_adj"):
+        body["_variant"]["variant_adj"] = vp["variant_adj"]      # 每堂課前加熱身 (SP-364): the warm-up floor
     return body
 
 
@@ -776,6 +778,13 @@ def _test_templates(th: dict, prefs) -> dict:
         aet.append({"protocol": p, "label": AT.PROTOCOLS[p]["label"], "tip": AT.protocol_tip(p),
                     **{k: s.get(k) for k in ("title", "minutes", "target", "detail", "source", "tss")},
                     "protocol_stored": s.get("protocol")})
+    from backend.engine import warmup as WU
+    for row in cp + aet:
+        # 每堂課前加熱身 (SP-364): the 測試 dialog adds the session as shown — with the warm-up
+        if not row.get("none"):
+            s = {"kind": "test", **row, "protocol": row.get("protocol_stored") or row["protocol"]}
+            if WU.apply_one(s, prefs):
+                row.update({k: s[k] for k in ("minutes", "target", "detail", "tss")})
     return {"cp": cp, "aet": aet}
 
 
@@ -914,7 +923,8 @@ TEMPLATE_PROTOCOL = {"lib:stryd_cp_3_12": "standard", "lib:stryd_9_3": "standard
 
 def _test_rows() -> dict:
     from backend.engine import workout_steps as WS
-    return {r["key"]: r for g in WS.templates()["groups"] if g.get("cat") == "test" for r in g.get("rows") or []}
+    return {r["key"]: r for g in WS.templates(warm_floor_s=_warm_floor_s())["groups"] if g.get("cat") == "test"
+            for r in g.get("rows") or []}
 
 
 async def test_templates_for(kind: str, day: Optional[str], db: AsyncSession) -> list[dict]:
@@ -965,6 +975,11 @@ async def _schedule_test(db: AsyncSession, inp: dict, sg: dict, day: Optional[st
         sg = {**sg, "replaces_long": bool(sg.get("replaces_long")) and template == "lib:xu_e_drift"}
     else:
         data = {**{k: v for k, v in sg["session"].items() if v is not None}, "day": day, "kind": "test"}
+    from backend.engine import plan_prefs as PP
+    from backend.engine import warmup as WU
+    # 每堂課前加熱身 (SP-364): a suggested test is scheduled with the warm-up (idempotent: the week
+    # plan's suggestion and a template already have it)
+    WU.apply_one(data, PP.load(), ((inp.get("cur") or {}).get("tss_per_category")))
     try:
         async with _wlock():
             if sg.get("replaces_long"):
@@ -1669,7 +1684,15 @@ async def steps_check(body: dict = Body(...), db: AsyncSession = Depends(get_db)
 async def steps_templates(db: AsyncSession = Depends(get_db)):
     from backend.engine import user_templates as UT
     from backend.engine import workout_steps as WS
-    return WS.templates(user={"templates": await UT.list_all(db), "cats": await UT.custom_cats(db)})
+    return WS.templates(user={"templates": await UT.list_all(db), "cats": await UT.custom_cats(db)},
+                        warm_floor_s=_warm_floor_s())
+
+
+def _warm_floor_s() -> int:
+    """每堂課前加熱身 (SP-364, engine/warmup.py): the inserted templates' warm-up floor, seconds."""
+    from backend.engine import plan_prefs as PP
+    from backend.engine.warmup import floor_min
+    return floor_min(PP.load()) * 60
 
 
 # ---------------------------------------------------------------------------
@@ -1867,7 +1890,8 @@ async def steps_template_recs(kind: str = "easy", day: Optional[str] = None, uid
     ter = terrain or (s or {}).get("terrain")
     ter = "trail" if kind == "hike" or ter in ("trail", "hike") else "road"
     # 我的範本 ranked with the built-ins (SP-36), the same menu /steps/templates gives
-    tpl = WS.templates(user={"templates": await UT.list_all(db), "cats": await UT.custom_cats(db)})
+    tpl = WS.templates(user={"templates": await UT.list_all(db), "cats": await UT.custom_cats(db)},
+                       warm_floor_s=_warm_floor_s())
     return TR.recommend(tpl, kind=kind, cap=ctx["cap"], minutes=minutes, terrain=ter,
                         phase=_phase_on(inp, day), z5_open=bool(QG.z5_track(gate)["open"]) if gate else False,
                         rung=rung_now, ladder_key=key, ladder_reason=why,
