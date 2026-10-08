@@ -25,8 +25,12 @@ class AthleteSettings(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     athlete_id: Mapped[int] = mapped_column(ForeignKey("athletes.id"))
     effective_date: Mapped[date] = mapped_column(Date)
-    ftp_w: Mapped[Optional[float]]
+    # ftp_w (COROS account zoneData.ftp, written at login until 2026-10-08): unread, so no longer
+    # written or mapped; an older DB keeps the column, NULL-able and ignored
     weight_kg: Mapped[Optional[float]]
+    # COROS account zoneData.lthr, written at every login (sync/coros_client._store_login): not a
+    # running threshold, but the cold-start LTHR prior when no run is hard enough to estimate one
+    # (engine/wko5expr/fitdataset._coros_lthr_prior)
     lthr: Mapped[Optional[int]]
     threshold_pace_s_per_km: Mapped[Optional[float]] = mapped_column(nullable=True)
     run_ftp_w: Mapped[Optional[float]] = mapped_column(nullable=True)
@@ -75,36 +79,12 @@ class WorkoutFile(Base):
     coros_training_load: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     imported_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     athlete: Mapped["Athlete"] = relationship(back_populates="workouts")
-    metrics: Mapped[list["WorkoutMetric"]] = relationship(back_populates="workout", cascade="all, delete-orphan")
-    mmp_cache: Mapped[list["MmpCache"]] = relationship(back_populates="workout", cascade="all, delete-orphan")
 
 
-class WorkoutMetric(Base):
-    __tablename__ = "workout_metrics"
-    __table_args__ = (UniqueConstraint("workout_id", "metric_key"),)
-    id: Mapped[int] = mapped_column(primary_key=True)
-    workout_id: Mapped[int] = mapped_column(ForeignKey("workout_files.id"))
-    metric_key: Mapped[str] = mapped_column(String(50))
-    value: Mapped[Optional[float]]
-    computed_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    workout: Mapped["WorkoutFile"] = relationship(back_populates="metrics")
-
-
-class MmpCache(Base):
-    __tablename__ = "mmp_cache"
-    __table_args__ = (UniqueConstraint("workout_id", "channel", "duration_s"),)
-    id: Mapped[int] = mapped_column(primary_key=True)
-    workout_id: Mapped[int] = mapped_column(ForeignKey("workout_files.id"))
-    channel: Mapped[str] = mapped_column(String(30), default="power")
-    duration_s: Mapped[int]
-    value: Mapped[Optional[float]]
-    # the code version the row was computed with (files/file_service.mmp_version, SP-341); another
-    # one (or NULL: a row from before the column) is stale and recomputed by get_run_ftp
-    version: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
-    workout: Mapped["WorkoutFile"] = relationship(back_populates="mmp_cache")
-
-
-# pmc_cache: no code read or wrote it; dropped by database._migrate_schema (SP-341)
+# workout_metrics / mmp_cache (per-activity metrics and power mean-max written at import): no
+# code read them, so no longer written or created (2026-10-08); an older DB keeps them, orphaned
+# (data_registry.LEGACY_TABLES). pmc_cache: no code read or wrote it; dropped by
+# database._migrate_schema (SP-341)
 
 
 class SyncState(Base):

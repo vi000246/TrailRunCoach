@@ -86,6 +86,21 @@ def test_a_db_table_without_a_class_is_reported(tmp_path):
         con.close()
 
 
+def test_legacy_tables_of_an_older_db_are_known_but_not_in_the_schema(tmp_path):
+    """workout_metrics / mmp_cache: written at import, never read; an older DB keeps them (no
+    destructive migration), a new one no longer has them, and neither is reported unclassified."""
+    assert set(R.LEGACY_TABLES) == {"workout_metrics", "mmp_cache"}
+    assert not set(R.LEGACY_TABLES) & set(Base.metadata.tables)
+    assert not set(R.LEGACY_TABLES) & {t.name for t in R.TABLES} and not set(R.LEGACY_TABLES) & set(R.RETIRED_TABLES)
+    con = _con_with_schema(tmp_path / "wko5coach.db")
+    try:
+        con.execute("CREATE TABLE workout_metrics (id INTEGER PRIMARY KEY, workout_id INTEGER, metric_key TEXT)")
+        con.execute("CREATE TABLE mmp_cache (id INTEGER PRIMARY KEY, workout_id INTEGER, duration_s INTEGER)")
+        assert R.unclassified_tables(con) == []
+    finally:
+        con.close()
+
+
 def test_columns_named_by_the_registry_exist():
     for t in R.TABLES:
         cols = set(Base.metadata.tables[t.name].columns.keys())

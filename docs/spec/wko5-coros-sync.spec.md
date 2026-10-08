@@ -8,7 +8,7 @@
 - **Owner**: maintainer
 - **Status**: IMPLEMENTED（M3 delta 進行中）
 - **Generated**: 2026-05-15
-- **Last updated**: 2026-10-05
+- **Last updated**: 2026-10-08
 
 ## Change History
 
@@ -37,6 +37,7 @@
 | 2026-10-06 | feat/coros-rpe-sp231 | SP-231 | 跑後自評：每個新活動多一個唯讀 `POST /activity/detail/query?labelId=&sportType=`（GET 回 result=1001），只讀 `data.sportFeelInfo.feelType`（1 最輕～5 最累，0 沒填；不讀 `sportNote`、語音筆記），存 `workout_files.coros_feel`，換成 `rpe`（1→2、2→4、3→5、4→7、5→10，推估；FIT 自己有 RPE 時 FIT 為準，`rpe_source`）。讀取失敗或 0 不算同步錯誤、不卡 cursor；失敗的在之後同步（最近 4 天、每次 ≤ 10 筆）重試。最近 8 週已匯入的活動在之後的同步各讀一次（每次 ≤ 80 筆、每筆間隔 0.4 秒，不登入、不寫 COROS，完成記在 `sync.coros.rpe_backfill`；token 被拒不算一輪，3 輪後停）。有補到自評時 `complete` 事件帶 `rpe_filled`，觸發自動調整與每人校正 |
 | 2026-10-06 | integrate/2026-10-06c | SP-231 follow-up | 依唯讀實測修正：每筆 detail 回整個活動（1.4–3.2 MB、約 1.5–3 秒），回填改每次同步 ≤ 25 筆（`BACKFILL_MAX`），剩下的留給之後的同步；「3 輪後停」只算有讀取失敗的輪（`failed_passes`），只是讀不完不算；沒存 `coros_sport_type` 的 COROS 活動不論運動一律用 sportType 100 讀（COROS 這個查詢不看 sportType）；最近 4 天存成 0（沒填）的活動在重試輪再讀一次（同樣每次 ≤ 10 筆，這次同步剛讀過的不重讀），之後在 COROS app 補填的自評照樣換成 RPE（FIT 有 RPE 時仍以 FIT 為準）並帶 `rpe_filled` |
 | 2026-10-07 | feat/sp311-341-data-registry | SP-311, SP-341 | 資料分類登錄表 `backend/data_registry.py`：每張表、每類租戶檔案屬「使用者改的／匯入的／衍生的／機密」哪一類（含去識別化欄位），備份改讀它（行為不變）；`sync_state` 屬機密。`mmp_cache` 加 `version` 欄（程式改了，`get_run_ftp` 重算窗內舊列）；`pmc_cache` 表刪除；`power_source_v1.json` 帶程式版本 |
+| 2026-10-08 | chore/drop-unused-lthr-import-metrics | owner request（「既然沒用到，放這幹嘛」） | 拿掉寫了沒人讀的資料：匯入不再算、不再寫 `workout_metrics`（hrTSS／rTSS／NP／TSS／高強度秒數）與 `mmp_cache`（只拿來算那些指標的 runFTP），`WorkoutMetric`／`MmpCache` model、`get_run_ftp`、`settings_on`、`backfill_hr_load.py`、`algorithms/mmp.py` 與 `metrics.py` 只餵它們的函式一併刪除（`backend/files/file_service.py:16`、`:187`）。COROS 登入不再寫 `athlete_settings.ftp_w`、回應不再帶 `ftp_w`／`lthr`（`backend/sync/coros_client.py:232-270`）；**LTHR 照寫**：它是冷啟動的 LTHR 先驗（`fitdataset._coros_lthr_prior`，`backend/engine/wko5expr/fitdataset.py:809`、`:937`），體重照用。不做破壞性遷移：舊 DB 的兩張表與 `ftp_w` 欄原樣留著、沒人讀寫（`data_registry.LEGACY_TABLES`，`backend/data_registry.py:135`；`unclassified_tables` 略過，`:304`）；新 DB 不再建它們。`compare_sources.py` 的同步列不再有 TSS（改看 `/api/v1/sync/compare`） |
 
 ---
 
@@ -203,14 +204,13 @@ Token 約 24h 過期，需重新 POST `/account/login`。無 refresh token 流�
 - Region 自動偵測（EU/US/CN 依序測試）
 - 活動列表分頁拉取（含日期篩選）
 - .fit 檔案下載到使用者資料夾的 `.wko5coach/fit/coros/{year}/`
-- 新活動自動觸發 FIT 解析 + TSS/MMP 計算
+- 新活動自動觸發 FIT 解析與匯入（`workout_files` 一列；TSS 等指標由圖表的 FIT Dataset 計算，匯入不存，2026-10-08）
 - 重複活動跳過（依 `coros_activity_id` 去重）
 - SSE 串流同步進度
 - Token 持久化到 DB（`sync_state` 表，`secrets.seal` 加密）
-- FTP/LTHR/weight 從登入回應自動匯入 `athlete_settings`；心率設定存 `athlete.coros_profile`
+- LTHR／weight 從登入回應自動匯入 `athlete_settings`（帳號 FTP 不存，2026-10-08）；心率設定存 `athlete.coros_profile`
 - 登入有效性檢查與「登入已過期」提示
 - 「資料來源」二選一（COROS 或 TrainingPeaks，`sync.primary_source`）：只同步、只讀所選來源
-- PMC recompute endpoint（FTP 更新後重新計算 TSS）
 
 ### Out of Scope
 - WKO5 資料夾讀寫（完全獨立；WKO5 只當對照來源）
@@ -389,22 +389,26 @@ ALTER TABLE sync_state ADD COLUMN tp_password_sealed    TEXT;
 `sync_state` 在資料分類登錄表（`backend/data_registry.py`，SP-311）屬「機密」：只留在伺服器，
 token／封存密碼欄位不出現在任何 API 回應、匯出或同步路徑（`test_data_registry.py` 檢查）。
 
-### `mmp_cache` 版本欄位、`pmc_cache` 刪除（SP-341）
+### `pmc_cache` 刪除（SP-341）；`workout_metrics`／`mmp_cache` 留在舊 DB（2026-10-08）
 
 ```sql
-ALTER TABLE mmp_cache ADD COLUMN version TEXT;  -- file_service.mmp_version()：compute_mmp＋FIT 讀取的程式雜湊；NULL＝舊列
 DROP TABLE IF EXISTS pmc_cache;                 -- 沒有程式讀寫（data_registry.RETIRED_TABLES）
+-- workout_metrics、mmp_cache：不刪（不做破壞性遷移）、不再建、沒人讀寫（data_registry.LEGACY_TABLES）
 ```
 
-`get_run_ftp` 只讀目前版本的列；它 90 天窗內版本不同（或 NULL）的列，先從 FIT 重算（讀不到的檔就刪掉那幾列）。
+`workout_metrics`（匯入時寫的 hrTSS／rTSS／NP／TSS／高強度秒數）與 `mmp_cache`（只拿來算那些指標的
+runFTP；SP-341 曾為它加 `version` 欄）從 2026-10-08 起不再寫，model 也拿掉（`backend/db/models.py:84`）。
+圖表、PMC、API 的 TSS 一律來自 FIT Dataset（`Dataset._metrics`），從來不讀這兩張表。舊 DB 裡的列原樣留著；
+刪除活動（`sync/purge.py`）不再連帶刪它們的列，留下的孤兒列也沒人讀。`init_db` 不動它們
+（`backend/db/database.py:119`），`unclassified_tables` 略過（`backend/data_registry.py:135`、`:304`）。
 
 ### `athlete_settings` 表（已有，從 Coros 登入自動填入）
 
-登入成功後自動 upsert：
-- `ftp_w` ← `data.zoneData.ftp`
-- `lthr` ← `data.zoneData.lthr`
+登入成功後自動 upsert（`_store_login`，`backend/sync/coros_client.py:232-258`）：
+- `lthr` ← `data.zoneData.lthr`（不是跑步門檻，是沒有夠硬的跑步可估時的冷啟動先驗，見下）
 - `weight_kg` ← `data.weight`
 - `effective_date` ← 今日
+- `data.zoneData.ftp` 不存（2026-10-08 前寫進 `ftp_w`，沒有任何程式讀；舊 DB 留著這欄、model 不再對應，`backend/db/models.py:28`）
 
 ---
 
@@ -449,11 +453,12 @@ DROP TABLE IF EXISTS pmc_cache;                 -- 沒有程式讀寫（data_reg
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| POST | `/api/v1/auth/coros/login` | Coros 登入，自動偵測 region + 儲存 FTP |
+| POST | `/api/v1/auth/coros/login` | Coros 登入，自動偵測 region + 儲存帳號 LTHR／體重 |
 | GET | `/api/v1/auth/coros/status` | 登入狀態 + email + 最後同步時間 |
 | POST | `/api/v1/auth/coros/logout` | 清除 token |
 | POST | `/api/v1/sync/coros/start` | 觸發同步（SSE stream） |
-| POST | `/api/v1/pmc/recompute` | 用當前 FTP 重新計算所有 TSS |
+
+（`POST /api/v1/pmc/recompute` 已不存在：TSS 不再存 DB，由 FIT Dataset 即時算。）
 
 ### M3 新增 Endpoints（2026-06-13，統一同步頁）
 
@@ -504,7 +509,7 @@ DROP TABLE IF EXISTS pmc_cache;                 -- 沒有程式讀寫（data_reg
 
 - **越野／路跑**：`sport_of`（`backend/engine/wko5expr/fitdataset.py:110`）先看 app DB 的 `workout_files.trail_classification`（唯讀開啟，`load_classifications`，`backend/engine/wko5expr/fitdataset.py:150`），FIT 的 session sub_sport 只當後備（COROS 的 FIT 沒有 trail sub_sport，原本整批越野都被當路跑，回測越野 n = 0；sub_sport 先前也根本沒被讀進來，`fit_to_channels` 現在帶出 `sub_sport`）。跨來源重複（`duplicate_of`）視為同一筆活動：群組裡任一列的使用者覆寫優先（自己這列 → 主紀錄 → 其他重複列），否則用自己這列的自動值，再退到主紀錄（`classification_for`，`backend/engine/wko5expr/fitdataset.py:201`）。每個來源的資料集仍保留自己的檔案（不因為是重複列就丟掉，否則該來源會少活動）。越野跑同時加上 WKO5 的 `runningtrail` 標籤，因為 thresholds／品質門檻／status／成就只看標籤。
 - **門檻與體重**，依序：賽季計畫的 dated 列（`Dataset.setting` / `cp`）→ app DB 的 `athlete_settings`（體重、`run_ftp_w`、閾值配速；`_load_db_settings`，`backend/engine/wko5expr/fitdataset.py:725`）→ 從這些 FIT 估算的 as-of LTHR（`_estimate_settings`，`backend/engine/wko5expr/fitdataset.py:775`：每 30 天一個格點，推估；格點日只用當天以前的跑步，`thresholds.estimate`，每次跑步對照它自己日期的 `racepower.athlete.cp_as_of`，估出的值只套用到格點日以後；只在有 app DB 時自動估算）→ 未設定。跑步 FTP（功率 TSS）**不**用 `cp_as_of` 的估算值補：它的 PD 重擬在第一筆計畫 CP 之前沒有合理性參考，在一位跑者的 COROS 資料上，手錶功率時期的擬合值比計畫 CP 高約 70%，會讓那段時間的功率 TSS 少到約三分之一。**2026-10-03 起**跑步功率 TSS 的 FTP 改為 `tss_ftp`（`backend/engine/wko5expr/fitdataset.py:996`）＝圖表用的同一個 CP：計畫 CP 測試 → `run_ftp_w` → **只用 Stryd 跑步**的 PD 模型 mFTP（推估，手錶功率永遠不進擬合；見「圖表分析在 COROS 來源」）→ 都沒有時用 rTSS／hrTSS（移動時間 hrTSS ＋ 爬升加成）。標籤寫出來源（`cp_info`），`/workouts` 與來源比對頁顯示所用 FTP。parity 模式與 WKO5 opt-in 仍用 WKO5 規則（`Dataset.tss_ftp`）。測試：`backend/tests/test_run_ftp_tss.py`。實測（2026-10-01，一位跑者同步進行中的 COROS 803 筆）：LTHR 估算只有前後兩段時期有值，中間約 17 個月沒有 LTHR，那段 COROS 跑步在 app 路徑上沒有 TSS。WKO5 athlete 檔只有在設定 `charts.fit_settings_from_wko5 = true`（預設 false，`backend/settings/repository.py:68`）時才讀（`dataset_for_source`，`backend/engine/wko5expr/fitdataset.py:1097`）。各處的來源標籤改走 `Dataset.setting_label`，FIT 資料集不再顯示「WKO5 設定」。
-- **`athlete_settings.lthr` / `ftp_w` 不當跑步門檻**：唯一的自動寫入者是 `coros_client.login`（COROS 帳號 `zoneData.lthr` / `.ftp` 與體重，日期 = 登入當天 UTC），沒有記錄是哪個運動；TP 的 `fetch_tp_settings` 只回傳 JSON、不寫 DB。實測時 DB 裡那列是 COROS 登入寫的，不是 TP；它的 LTHR 高於同一天 12′ 全力測試的峰值心率，不可能是現在的跑步 LTHR。這兩欄留在 `settings_ignored` 供顯示，體重照用。
+- **`athlete_settings.lthr` / `ftp_w` 不當跑步門檻**：唯一的自動寫入者是 `coros_client.login`（COROS 帳號 `zoneData.lthr` / `.ftp` 與體重，日期 = 登入當天 UTC），沒有記錄是哪個運動；TP 的 `fetch_tp_settings` 只回傳 JSON、不寫 DB。實測時 DB 裡那列是 COROS 登入寫的，不是 TP；它的 LTHR 高於同一天 12′ 全力測試的峰值心率，不可能是現在的跑步 LTHR。`lthr` 留在 `settings_ignored`（`backend/engine/wko5expr/fitdataset.py:805`），**有用到**：沒有夠硬的跑步可以估 LTHR 時，它是冷啟動先驗（`_coros_lthr_prior`，`:809`，由 `_estimate_settings` 在 `:937` 呼叫；有它時 SP-289 的 0.90 × 最大心率先驗不套用，`_apply_lthr_prior` `:842`），所以登入照寫。`ftp_w` 從 2026-10-08 起不寫、不讀（`read_athlete_settings` 不選它，`:197`；舊 DB 留著這欄）。體重照用。
 - **快取**：`source_stamp` 多帶 `db_stamp()`（`backend/engine/wko5expr/datasource.py:97`），分類覆寫、去重或 `athlete_settings` 變了，即使 FIT 檔沒變也會重建 Dataset。`FitFolderDataset.cached_series`（`backend/engine/wko5expr/fitdataset.py:1029`）是每個 FIT 檔的磁碟快取（fitcache 資料夾的 `series_<key>.json`），key 含檔案 stamp、修正與當時的門檻，每檔保留幾組門檻版本（估算前／後）。
 - 測試：`backend/tests/test_fit_dataset_prereqs.py`（合成 FIT ＋ tmp SQLite，不碰 WKO5 資料夾與真實 DB）。
 
@@ -532,8 +537,6 @@ DROP TABLE IF EXISTS pmc_cache;                 -- 沒有程式讀寫（data_reg
   "email": "user@example.com",
   "region": "eu",
   "data_server": "https://teamapi.coros.com",
-  "ftp_w": 230,
-  "lthr": 178,
   "token_expires": "2026-05-16T02:15:00Z",
   "password_saved": false
 }
@@ -580,45 +583,15 @@ event: sync_progress
 data: {"status": "complete", "total_downloaded": 2, "total_checked": 2, "errors": []}
 ```
 
-**POST /api/v1/pmc/recompute**
-```json
-// Response
-{ "updated": 59, "ftp_w": 230.0 }
-```
-
 ---
 
 ## TSS 計算
 
-### 目前實作（暫用 Coggan 標準公式）
-
-```
-TSS = (NP / FTP)² × (duration_s / 3600) × 100
-```
-
-- `NP` = normalized_power_w（已從 FIT 計算，或 fallback avg_power_w）
-- `FTP` = athlete_settings.ftp_w（從 Coros 登入自動匯入）
-
-此為 `POST /api/v1/pmc/recompute` 使用的公式，對既有無 TSS 的活動批次計算。
-
-### 已實作（2026-05-16 更新）
-
-**Running TSS** 使用 power-based TSS，FTP 為 runFTP（從 90 天跑步 MMP 曲線動態計算）：
-```python
-runFTP = compute_run_ftp_from_mmp(mmp_90day)   # CP model: P=CP+W'/t
-TSS = (duration × NP × IF) / (runFTP × 3600) × 100
-# WKO5 formula: tl(if(sport="run", tss), ctlconstant)
-```
-`get_run_ftp(db, athlete_id, as_of_date)` 在 `backend/files/file_service.py` 計算，先查 `athlete_settings.run_ftp_w`（手動設定），無則從 MMP 自動算。
-
-**重新計算端點**：`POST /api/v1/athletes/{id}/recalculate-running-metrics` — 重算所有跑步 FIT 活動的 TSS、intensity 指標。
-
-| 運動類型 | 目標公式 | 狀態 |
-|----------|----------|------|
-| Cycling（有功率） | WKO5 TSS（cycling ftp_w） | ✅ 已實作 |
-| Running（Coros 跑步功率） | power-based TSS（runFTP） | ✅ 已修正 |
-| HR-only | hrTSS（by LTHR） | ⬜ 待實作 |
-| 其他（strength, custom）| 0 或不計入 PMC | ✅ 不計入 |
+匯入時不算、不存 TSS（2026-10-08 起；以前寫進 `workout_metrics`，用 COROS 帳號 `ftp_w`／90 天
+`mmp_cache` 擬合的 runFTP，但沒有任何程式讀）。圖表、PMC、總覽、API 的 TSS 都由 FIT Dataset 即時算
+（`Dataset._metrics`，`tss_source` = power／rtss／trainingpeaks／hrtss；跑步功率 TSS 的 FTP 見上方「門檻與體重」
+的 `tss_ftp`）。原本這裡描述的 `POST /api/v1/pmc/recompute`、`POST /api/v1/athletes/{id}/recalculate-running-metrics`
+早已不存在。
 
 ### 功率來源（2026-10-01，`backend/engine/power_source.py`）
 

@@ -229,12 +229,13 @@ async def _store_login(result: dict, email: str, region: str, base: str, db: Asy
     state.coros_base_url = data_base
     state.coros_user_id = user_id
 
-    # Persist FTP/LTHR from Coros profile as AthleteSettings
+    # The account's LTHR and weight as a dated AthleteSettings row (today). The LTHR is not a
+    # running threshold but the cold-start prior (fitdataset._coros_lthr_prior); the weight is
+    # used as is. zoneData.ftp is not stored: nothing read athlete_settings.ftp_w (2026-10-08)
     zone_data = result.get("zoneData") or {}
-    ftp = zone_data.get("ftp")
     lthr = zone_data.get("lthr")
     weight = result.get("weight")
-    if ftp or lthr or weight:
+    if lthr or weight:
         today = datetime.now(timezone.utc).date()
         settings_res = await db.execute(
             select(AthleteSettings).where(
@@ -246,14 +247,12 @@ async def _store_login(result: dict, email: str, region: str, base: str, db: Asy
         if not settings:
             settings = AthleteSettings(athlete_id=athlete_id, effective_date=today)
             db.add(settings)
-        if ftp:
-            settings.ftp_w = float(ftp)
         if lthr:
             settings.lthr = int(lthr)
         if weight:
             settings.weight_kg = float(weight)
-        log.info("Coros profile stored: FTP %s, LTHR %s, weight %s",      # no values: personal data
-                 *("yes" if v else "no" for v in (ftp, lthr, weight)))
+        log.info("Coros profile stored: LTHR %s, weight %s",      # no values: personal data
+                 *("yes" if v else "no" for v in (lthr, weight)))
     try:
         await store_hr_profile(db, athlete_id, result)      # max / resting HR, zone tables (hr_profile.py)
     except Exception as e:                  # noqa: BLE001 — never fails the login
@@ -269,8 +268,6 @@ async def _store_login(result: dict, email: str, region: str, base: str, db: Asy
         "email": email,
         "region": region,
         "data_server": data_base,
-        "ftp_w": ftp,
-        "lthr": lthr,
         "token_expires": expires_at.isoformat(),
     }
 

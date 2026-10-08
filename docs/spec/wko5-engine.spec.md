@@ -1,6 +1,6 @@
 # Module Spec: wko5-engine
 
-> **Last Updated**: 2026-10-04
+> **Last Updated**: 2026-10-08
 > **Status**: Active
 > **Domain Layer**: Core Domain
 
@@ -751,6 +751,7 @@ source (synthetic FITs).
 | 2026-10-06 | fix | SP-243 follow-up | The 5 + 5 有杖 / 沒杖 marks count only the trail runs and hikes the chart uses (user decision): `pole_compare.counts` / `chart_rows` / `used` (same `climb_vam.kind_of` as the panel) feed `needs_met`, the panel and `GET /activities` → `pole_compare`; each activity gets `pole_chart` (the editor's live recount skips the others); hint / empty / help text say so (zh-TW + en). 365-day window, 2 min per bin and VAM ÷ HR unchanged |
 | 2026-10-06 | feature | SP-300 | 「依賽事設定」: an activity matched to a plan event marked 「會用登山杖」 (`Event.poles`, SP-244) shows 有杖 until the user chooses — a 1-day road / 越野賽 event by the existing `maximal.match_events`, a 百岳 / 其他 / multi-day event every trail run / hike on each of its days (`activity_tags.race_poles`, read time, never stored); the user's 有杖 / 沒杖 / their own 未標 (hidden tag `杖未標`, API `poles: "none"`; `null` = no choice) always wins (`pole_state`); unticking the race returns the un-chosen activities to 未標. `pole_compare.chart_rows` / `compute` and `needs_met` count the race's 有杖; `GET /activities` and the activity JSON carry `poles` (effective), `poles_user`, `poles_race`. Still no model reads the mark |
 | 2026-10-07 | fix | SP-341, docs/research/cache-tiering.md §10 ⑩ | Per-workout disk caches `channel_peaks.json` / `workout_curves.json` (and the WKO5 `power_source_v1.json` / `bad_activity_v1.json`) hold a code version (`dataset.per_workout_code`: engine/codehash.py over the computation, the `.wko4` read and the corrections' apply, + the FIT parse version for the two FIT datasets share, + `PER_WORKOUT_V`); a file of another version is recomputed. `achievements_cache.json` drops entries whose file is gone (each entry records its path) and is written atomically. Registered in `backend/data_registry.py` (SP-311) |
+| 2026-10-08 | chore | owner request (drop data written but never read) | The FIT dataset no longer reads the legacy `athlete_settings.ftp_w` (the COROS account FTP; COROS login stopped writing it): `read_athlete_settings` drops it (`backend/engine/wko5expr/fitdataset.py:197`) and `_load_db_settings` keeps only `lthr` in `settings_ignored` (`:805`) — that one is still read, as the cold-start LTHR prior (`_coros_lthr_prior` `:809`, called at `:937`; it also suppresses the SP-289 0.90 × max HR prior, `:842`). The import-time `workout_metrics` / `mmp_cache` writes (never read by the engine: every TSS comes from `Dataset._metrics`) and their helpers in `backend/engine/algorithms/metrics.py` / `mmp.py` are removed; older DBs keep the tables, unread (`data_registry.LEGACY_TABLES`). Chart values unchanged |
 
 
 ## Banded charts and the 使用功率 setting (2026-10)
