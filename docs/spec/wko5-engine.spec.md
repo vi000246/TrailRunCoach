@@ -829,7 +829,8 @@ source (synthetic FITs).
 
 | Date | Source | SRS | Change |
 |------|--------|-----|--------|
-| 2026-10-08 | perf | SP-334 | `PdMemo.inputs()` (`backend/engine/wko5expr/fitdataset.py:456`): the synced FITs and global part a PD refit reads, for the per-activity auto-classification keys (workouts.spec.md 「Auto values per activity」); `activity_auto` code hash per branch |
+| 2026-10-08 | review fix | SP-334 code review | `synced_fit_files()` (`backend/engine/wko5expr/fitdataset.py:392`): the synced-FIT listing of `PdMemo._prepare`, shared with the auto-classification keys of a Dataset without a PdMemo (WKO5) |
+| 2026-10-08 | perf | SP-334 | `PdMemo.inputs()` (`backend/engine/wko5expr/fitdataset.py:464`): the synced FITs and global part a PD refit reads, for the per-activity auto-classification keys (workouts.spec.md 「Auto values per activity」); `activity_auto` code hash per branch |
 | 2026-10-06 | feature | SP-243 | 能力 › 有杖 vs 沒杖 (`kind: "polecompare"`, after 下坡腳程, trail mode): per grade bin (≤ −15, −15…−8, −8…−3, ≥ +15 %) the median of the activities' measured downhill vertical speed / cadence / impact G / ILR and steep-climb VAM ÷ HR, 有杖 vs 沒杖, every moving step (hike rest floor), ≥ 2 min per bin (推估), n shown, n < 3 not drawn, caveat on the card; chart key `needs` (`"poles"`) + `needs_met` on `GET /views`; `GET /activities` → `pole_compare` counts (activity editor: 「再標 N 次」); the mark still feeds no model |
 | 2026-10-04 | feature | SP-68 | Builtins `ctl` / `atl` / `tsb` start from `load_guard.pmc_start` (manual at a date → first-28-day mean → 0); `tl()` unchanged; render cache keys on the manual start |
 | 2026-10-04 | feature | SP-63 | Strength scores 0 TSS in own-formula mode even with a dated plan LTHR (`NO_TSS_SPORTS`); parity unchanged |
