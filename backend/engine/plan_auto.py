@@ -8,7 +8,10 @@ custom sessions and 不排課日期 are never changed by this (reconcile rules).
 Safety
   * one run at a time: the plan writer lock (api/plan_sessions._wlock), shared
     with the page's edits / pushes; a run that finds the same data stamp as the
-    last one does nothing (no change, no push).
+    last one does nothing (no change, no push). The lock covers reconcile + save
+    only: the push to the watch follows under the push lock
+    (api/plan_sessions._plock) from the stored plan as it is then, so the page
+    never waits for COROS and an edit made meanwhile wins (SP-362 B3).
   * a push failure never breaks the sync: the run is a separate task, and the
     push error is stored in the change log.
   * big changes are held as a proposal (plan.auto.confirm_big): the stored plan
@@ -394,11 +397,18 @@ async def _set_state(db, state: dict) -> None:
     await db.commit()
 
 
+_PUSHING: set = set()      # change-log row ids whose push runs in this process now (_push_after)
+
+
 def entry_dict(r: PlanChangeLog) -> dict:
     j = lambda x, d: json.loads(x) if x else d
+    push = j(r.push_json, None)
+    if isinstance(push, dict) and push.get("status") == "pushing" and r.id not in _PUSHING:
+        # its push is not running (a crash / restart mid-push, review M2): say so, not 「推送中」 forever
+        push = {**push, "status": "interrupted"}
     return {"id": r.id, "at": r.created_at.isoformat() + "Z" if r.created_at else None, "trigger": r.trigger,
             "status": r.status, "summary": r.summary, "items": j(r.items_json, []), "big": j(r.big_json, None),
-            "push": j(r.push_json, None), "notice_uid": r.notice_uid, "ref_id": r.ref_id,
+            "push": push, "notice_uid": r.notice_uid, "ref_id": r.ref_id,
             "can_undo": r.status == "applied" and bool(j(r.before_json, []) or j(r.after_json, []))}
 
 
@@ -424,40 +434,98 @@ async def pending(db) -> Optional[PlanChangeLog]:
     return res.scalars().first()
 
 
-async def _remove_notice(db, uid: Optional[str], errors: list) -> None:
+async def _remove_notice(db, uid: Optional[str], errors: list, remote: Optional[list] = None) -> None:
     """Take a 課表待確認 workout off the store and the watch (explicitly: an
-    automatic stale removal would keep a past-day one)."""
+    automatic stale removal would keep a past-day one). `remote` (SP-362 B3): a list the
+    uid goes into instead of calling the watch now — the caller holds the writer lock and
+    removes it after (_remove_remote, under the push lock)."""
     if not uid:
         return
-    from backend.sync import workout_targets as WT
     res = await db.execute(select(PlanSession).where(PlanSession.uid == uid))
     r = res.scalar_one_or_none()
     if r is not None:
         await db.delete(r)
         await db.commit()
-    try:
-        prov = await WT.active(db)
-        rows = await prov.rows_by_key(db, [uid])
-        if rows:
-            await prov.remove_keys(db, [uid])
-    except Exception as e:                  # noqa: BLE001 — logged, never fatal
-        errors.append(f"移除課表待確認失敗：{type(e).__name__}: {e}"[:300])
+    if remote is not None:
+        remote.append(uid)
+        return
+    await _remove_remote(db, [uid], errors)
 
 
-async def _resolve_pending(db, status: str, errors: list) -> Optional[PlanChangeLog]:
+async def _remove_remote(db, uids: list, errors: list) -> list:
+    """The watch half of _remove_notice. Returns the uids that are off the watch now (removed,
+    or nothing was there); a failed one stays pending (plan.auto.state remote)."""
+    from backend.sync import workout_targets as WT
+    done = []
+    for uid in uids:
+        try:
+            prov = await WT.active(db)
+            rows = await prov.rows_by_key(db, [uid])
+            if rows:
+                res = await prov.remove_keys(db, [uid])
+                if any((x or {}).get("status") == "failed" for x in res or []):
+                    raise RuntimeError(f"{uid} not removed")      # kept pending, reported below
+            done.append(uid)
+        except Exception as e:              # noqa: BLE001 — logged, never fatal
+            errors.append(f"移除課表待確認失敗：{type(e).__name__}: {e}"[:300])
+    return done
+
+
+REMOTE_KEEP = 20            # 課表待確認 copies still to take off the watch, at most (plan.auto.state remote)
+
+
+def _pending_remote(state: dict, new: list) -> list:
+    """state["remote"] + `new`: the removals the next push phase must do (kept in the state
+    under the writer lock, so a push interrupted before them still does them next time)."""
+    out = list(dict.fromkeys([*(state.get("remote") or []), *new]))[-REMOTE_KEEP:]
+    if out:
+        state["remote"] = out
+    else:
+        state.pop("remote", None)
+    return out
+
+
+async def _forget_remote(db, done: list) -> None:
+    """Drop the removals that are done from plan.auto.state (briefly under the writer lock: the
+    runs write the state there; never while holding the push lock)."""
+    from backend.api import plan_sessions as API
+    from backend.settings.repository import SettingsRepository
+    if not done:
+        return
+    async with API._wlock():
+        state = dict(await SettingsRepository(db).get("plan.auto.state") or {})
+        left = [u for u in state.get("remote") or [] if u not in done]
+        if left == (state.get("remote") or []):
+            return
+        if left:
+            state["remote"] = left
+        else:
+            state.pop("remote", None)
+        await _set_state(db, state)
+
+
+async def _resolve_pending(db, status: str, errors: list, remote: Optional[list] = None) -> Optional[PlanChangeLog]:
     p = await pending(db)
     if p is not None:
         p.status = status
         await db.commit()
-        await _remove_notice(db, p.notice_uid, errors)
+        await _remove_notice(db, p.notice_uid, errors, remote)
     return p
 
 
-async def _stale_notices(db, today: str, keep: Optional[str], errors: list) -> None:
+async def _stale_notices(db, today: str, keep: Optional[str], errors: list, remote: Optional[list] = None) -> None:
     res = await db.execute(select(PlanSession).where(PlanSession.kind == NOTICE_KIND))
     for r in res.scalars().all():
         if r.uid != keep and (r.day or "") < today:
-            await _remove_notice(db, r.uid, errors)
+            await _remove_notice(db, r.uid, errors, remote)
+
+
+async def _set_push(db, entry_id: int, push: dict) -> None:
+    """Fill in a change-log row's push result once the push (outside the writer lock) is done."""
+    r = await db.get(PlanChangeLog, entry_id)
+    if r is not None:
+        r.push_json = json.dumps(push, ensure_ascii=False, default=str)
+        await db.commit()
 
 
 # ---------------------------------------------------------------------------
@@ -657,21 +725,66 @@ async def _log_cp(db, old: float, new: float, items: list[dict], cfg: dict, out:
             "status": "已重新推送" if pushed else "待推送"}
 
 
+RUN_TRIES = 3               # inputs out of date inside the lock: recompute outside twice, then inside
+
+
+async def _inputs_changed(inp: dict) -> bool:
+    """The inputs' key (api/plan_sessions._build_inputs `inputs_key`) differs from the key the
+    stored-plan inputs have now: a 不排課日期 / 課表偏好 / B2B saved, or newer data, while they
+    were computed outside the writer lock (review H1). Inputs without a key (tests replace the
+    computation) are taken as current."""
+    from backend.api import plan_sessions as API
+    from starlette.concurrency import run_in_threadpool
+    key = inp.get("inputs_key")
+    if key is None:
+        return False
+    return await run_in_threadpool(API.inputs_key_now) != key
+
+
 async def run(db, trigger: str = "sync", force: bool = False, approve_id: Optional[int] = None) -> dict:
     """One automatic run (see the module doc). `force`: ignore the data stamp
-    and the big-change hold (approve, the page's 立即重算)."""
+    and the big-change hold (approve, the page's 立即重算).
+
+    SP-362 B3: the inputs are computed before the writer lock (3–4 s cold on the NAS, as GET
+    /sessions does); the writer lock (api/plan_sessions._wlock) covers reconcile, save, the
+    change-log row and the run's state only; the watch (COROS, 20–30 s on the NAS) follows under
+    the push lock (_plock) from the stored plan as it is then (_push_after). The page's GET and
+    the user's edits no longer wait for COROS; an edit saved meanwhile wins (see _plock).
+    Review H1: inside the lock the inputs' key is checked again — a settings edit (不排課日期,
+    課表偏好, an accepted B2B) or newer data since they were computed would otherwise be reverted
+    / overtaken by an older generation. Changed: the lock is released, the inputs recomputed
+    outside, and the run tries again (RUN_TRIES); the last try computes them inside the lock,
+    as before B3."""
     from backend.api import plan_sessions as API
-    async with API._wlock():
-        return await _run(db, trigger, force, approve_id)
+    if not force and not (await settings(db))["enabled"]:
+        return {"status": "disabled"}
+    inp = await API._inputs(db)
+    out, job = None, None
+    for attempt in range(RUN_TRIES):
+        async with API._wlock():
+            if await _inputs_changed(inp):
+                if attempt == RUN_TRIES - 1:
+                    inp = await API._inputs(db)
+                    out, job = await _run(db, trigger, force, approve_id, inp)
+            else:
+                out, job = await _run(db, trigger, force, approve_id, inp)
+        if out is not None:
+            break
+        log.info("auto plan run: inputs changed while computing, again (%s)", trigger)
+        inp = await API._inputs(db)
+    if job is None:
+        return out
+    return await _push_after(db, job, out)
 
 
-async def _run(db, trigger: str, force: bool, approve_id: Optional[int]) -> dict:
+async def _run(db, trigger: str, force: bool, approve_id: Optional[int], inp: dict) -> tuple[dict, Optional[dict]]:
+    """The part under the writer lock: (result, job) — `job` is what _push_after sends to the
+    watch and logs once the lock is released (None: nothing)."""
     from backend.api import plan_sessions as API
     from backend.engine import plan_store as PS
     cfg = await settings(db)
     if not cfg["enabled"] and not force:
-        return {"status": "disabled"}
-    inp = await API._inputs(db)
+        return {"status": "disabled"}, None
     today = API._today(inp)
     state = dict(cfg["state"] or {})
     stp = stamp(inp)
@@ -682,10 +795,15 @@ async def _run(db, trigger: str, force: bool, approve_id: Optional[int]) -> dict
     if not force and state.get("stamp") == stp and not cp_changed:
         if cp_new and cp_old is None:
             await _set_state(db, {**state, "cp": cp_new})        # the baseline, no event
-        return {"status": "noop", "reason": "沒有新的活動"}
+        out = {"status": "noop", "reason": "沒有新的活動"}
+        if state.get("remote"):
+            # 課表待確認 copies an interrupted push left on the watch (review M2): off now
+            return out, {"remote_only": True, "remote": list(state["remote"]), "errors": [], "entry": None}
+        return out, None
     errors: list = []
+    remote: list = []              # 課表待確認 copies to take off the watch after the lock
     p = await pending(db)
-    await _stale_notices(db, today, p.notice_uid if p is not None else None, errors)
+    await _stale_notices(db, today, p.notice_uid if p is not None else None, errors, remote)
     stored = await PS.load(db)
     cp_items: list = []
     if cp_changed:
@@ -703,8 +821,12 @@ async def _run(db, trigger: str, force: bool, approve_id: Optional[int]) -> dict
     fw = forward(items, today) + [i for i in items if i["action"] == "dropped"]
     fp = fingerprint(fw) if fw else None
     out: dict = {"status": "noop", "items": items}
+    held = bool(big and cfg["confirm_big"] and not force)
+    job: dict = {"inp": inp, "today": today, "cfg": cfg, "trigger": trigger, "errors": errors, "remote": remote,
+                 "held": held, "notice": None, "entry": None, "window": False, "days": days, "items": items,
+                 "cp_items": cp_items, "cp": (cp_old, cp_new) if cp_changed else None}
 
-    if big and cfg["confirm_big"] and not force:
+    if held:
         if fp in (state.get("rejected") or []):
             await PS.save(db, history_only(stored, new))
             out = {"status": "rejected_before", "reason": "與你拒絕過的提案相同，略過"}
@@ -712,55 +834,140 @@ async def _run(db, trigger: str, force: bool, approve_id: Optional[int]) -> dict
             await PS.save(db, history_only(stored, new))
             out = {"status": "pending", "id": p.id}
         else:
-            old = await _resolve_pending(db, "superseded", errors)
+            old = await _resolve_pending(db, "superseded", errors, remote)
             gone = {old.notice_uid} if old is not None else set()
             await PS.save(db, _without(history_only(stored, new), gone))
-            notice, push = None, None
+            notice = None
             if cfg["notify"] == "watch" and cfg["push"]:
                 cur = await PS.load(db)
-                ns = notice_session(notice_day(cur, inp.get("activities") or [], today), items, big)
-                await PS.save(db, cur + [ns])
-                notice = ns["uid"]
-                push = await _push_notice(db, ns, inp, today)
+                notice = notice_session(notice_day(cur, inp.get("activities") or [], today), items, big)
+                await PS.save(db, cur + [notice])
             before, after = _affected(stored, new, items)
+            # written under the lock: a page load must find the proposal waiting (_ensure); the
+            # notice's push result is filled in after the push (_push_after)
             e = await _add_entry(db, trigger=trigger, status="pending", summary=summary(items, held=True),
                                  items=items, before=before, after=after, big=big, fingerprint=fp,
-                                 push={**(push or {"status": "held"}), "errors": errors or None}, notice_uid=notice)
+                                 push={"status": "pushing" if notice else "held", "errors": errors or None},
+                                 notice_uid=notice["uid"] if notice else None)
+            job.update(notice=notice, entry=e.id)
             out = {"status": "pending", "id": e.id}
     else:
-        resolved = await _resolve_pending(db, "approved" if approve_id else "superseded", errors) \
+        resolved = await _resolve_pending(db, "approved" if approve_id else "superseded", errors, remote) \
             if (p is not None or approve_id) else None
         # no proposal is waiting any more: no 課表待確認 stays in the plan
         # (one still on the watch is removed by the push: it left the plan)
         new = [s for s in new if s["kind"] != NOTICE_KIND]
         await PS.save(db, new)
-        push = await push_window(db, new, inp, today, days, {i["uid"] for i in cp_items}) if cfg["push"] \
-            else {"status": "off"}
-        if errors:
-            push = {**push, "errors": errors}
-        # a push that only re-sends a CP change is logged by _log_cp (below), not twice
-        if items or (push.get("status") not in ("unchanged", "off") and not cp_items):
+        ref = resolved.id if resolved is not None and approve_id else None
+        if items:
             before, after = _affected(stored, new, items)
             e = await _add_entry(db, trigger=trigger, status="applied", summary=summary(items),
                                  items=items, before=before, after=after, big=big or None, fingerprint=fp,
-                                 push=push, ref_id=resolved.id if resolved is not None and approve_id else None)
-            out = {"status": "applied", "id": e.id, "push": push}
-        else:
-            out = {"status": "noop", "push": push}
-    if cp_changed:
-        out["cp_change"] = await _log_cp(db, cp_old, cp_new, cp_items, cfg, out, trigger,
-                                         inp.get("thresholds") or {}, today)
+                                 push={"status": "pushing" if cfg["push"] else "off"}, ref_id=ref)
+            job["entry"] = e.id
+            out = {"status": "applied", "id": e.id}
+        job.update(window=bool(cfg["push"]), big=big, fp=fp, ref=ref)
     if cp_new:
         state["cp"] = cp_new
     state["stamp"] = stp
-    if out["status"] in ("applied", "noop"):
+    if not held:
         # the phase baseline moves only once a plan is applied: a held phase
         # change must stay held on the next sync
         state["phase"] = phase
+    # the watch removals of this run and any an interrupted push left (review M2): kept in the
+    # state until done, so a cancel / crash before the push phase never loses them
+    job["remote"] = _pending_remote(state, remote)
     await _set_state(db, state)
     # 每週課表存檔 (engine/plan_history.py, SP-71): a sync alone, with no page opened, still records the week
     from backend.engine import plan_history as PH
     await PH.record_safe(db, inp)
+    return out, job
+
+
+async def _push_after(db, job: dict, out: dict) -> dict:
+    """The watch part of a run, after the writer lock (SP-362 B3): under the push lock, take the
+    old 課表待確認 copies off, push the new notice or the window (from the stored plan as it is
+    now: an edit saved since this run's save goes out as edited, never overwritten), then fill
+    in / write the change-log row and the CP row. Push errors are logged, never raised.
+    Review M2: cancelled (shutdown, the task cancelled while it waits for the push lock or
+    COROS) or failing outside the push itself, the row says `interrupted` instead of staying
+    `pushing`, and the removals not done stay in plan.auto.state for the next run."""
+    entry = job.get("entry")
+    if entry is not None:
+        _PUSHING.add(entry)
+    try:
+        return await _push_phase(db, job, out)
+    except BaseException as e:
+        log.warning("auto plan push interrupted: %s", type(e).__name__)
+        await asyncio.shield(_interrupted(db, job))
+        raise
+    finally:
+        _PUSHING.discard(entry)
+
+
+async def _interrupted(db, job: dict) -> None:
+    """Best effort: the row's push status `interrupted` (the removals are in the state already)."""
+    try:
+        try:
+            await db.rollback()
+        except Exception:                   # noqa: BLE001
+            pass
+        if job.get("entry") is not None:
+            await _set_push(db, job["entry"], {"status": "interrupted", "errors": job.get("errors") or None})
+    except BaseException as e:              # noqa: BLE001 — a dying loop / a locked DB: the reader shows it
+        log.warning("auto plan push: interrupted row not written: %s", type(e).__name__)
+
+
+async def _push_phase(db, job: dict, out: dict) -> dict:
+    from backend.api import plan_sessions as API
+    from backend.engine import plan_store as PS
+    errors = job["errors"]
+    push: Optional[dict] = None
+    done: list = []
+    if job["remote"] or job.get("notice") is not None or job.get("window"):
+        async with API._plock():
+            try:
+                done = await _remove_remote(db, job["remote"], errors)
+                if job.get("notice") is not None:
+                    # The notice is pushed before any approve / reject of its proposal removes it:
+                    # this run queued on _plock right after releasing _wlock with no await in
+                    # between, and asyncio.Lock wakes its waiters in order (review L6). Re-read
+                    # from the store anyway: one already taken out of the plan is not pushed.
+                    ns = next((s for s in await PS.load(db) if s["uid"] == job["notice"]["uid"]), None)
+                    push = await _push_notice(db, ns, job["inp"], job["today"]) if ns is not None \
+                        else {"status": "held"}
+                elif job.get("window"):
+                    push = await push_window(db, await PS.load(db), job["inp"], job["today"], job["days"],
+                                             {i["uid"] for i in job["cp_items"]})
+            except Exception as e:          # noqa: BLE001 — the push never breaks the run / the sync
+                log.warning("auto plan push failed: %s", type(e).__name__)
+                push = {"status": "failed", "error": f"{type(e).__name__}: {e}"[:500]}
+    await _forget_remote(db, done)
+    if job.get("remote_only"):
+        return out
+    inp, today, cfg = job["inp"], job["today"], job["cfg"]
+    if job["held"]:
+        if job["entry"] is not None:
+            await _set_push(db, job["entry"], {**(push or {"status": "held"}), "errors": errors or None})
+    else:
+        push = push or {"status": "off"}
+        if errors:
+            push = {**push, "errors": errors}
+        if job["entry"] is not None:
+            await _set_push(db, job["entry"], push)
+            out = {**out, "push": push}
+        # a push that only re-sends a CP change is logged by _log_cp (below), not twice
+        elif push.get("status") not in ("unchanged", "off") and not job["cp_items"]:
+            e = await _add_entry(db, trigger=job["trigger"], status="applied", summary=summary(job["items"]),
+                                 items=job["items"], before=[], after=[], big=job["big"] or None,
+                                 fingerprint=job["fp"], push=push, ref_id=job["ref"])
+            out = {"status": "applied", "id": e.id, "push": push}
+        else:
+            out = {"status": "noop", "push": push}
+    if job["cp"]:
+        old, new = job["cp"]
+        out["cp_change"] = await _log_cp(db, old, new, job["cp_items"], cfg, out, job["trigger"],
+                                         inp.get("thresholds") or {}, today)
     return out
 
 
@@ -771,17 +978,23 @@ async def reject(db, entry_id: int) -> dict:
         if r is None or r.status != "pending":
             raise ValueError("找不到待確認的提案")
         errors: list = []
+        remote: list = []
         r.status = "rejected"
         await db.commit()
-        await _remove_notice(db, r.notice_uid, errors)
+        await _remove_notice(db, r.notice_uid, errors, remote)
         cfg = await settings(db)
         state = dict(cfg["state"] or {})
         state["rejected"] = ((state.get("rejected") or []) + [r.fingerprint])[-REJECTED_KEEP:]
+        remote = _pending_remote(state, remote)         # kept until done (review M2)
         await _set_state(db, state)
-        await _add_entry(db, trigger="reject", status="rejected", summary="你拒絕了這次的課表調整：維持原本的課表",
-                         items=json.loads(r.items_json or "[]"), ref_id=r.id,
-                         push={"status": "notice_removed", "errors": errors or None})
-        return {"status": "rejected", "id": r.id}
+    if remote:
+        async with API._plock():                 # the watch after the writer lock (SP-362 B3)
+            done = await _remove_remote(db, remote, errors)
+        await _forget_remote(db, done)
+    await _add_entry(db, trigger="reject", status="rejected", summary="你拒絕了這次的課表調整：維持原本的課表",
+                     items=json.loads(r.items_json or "[]"), ref_id=r.id,
+                     push={"status": "notice_removed", "errors": errors or None})
+    return {"status": "rejected", "id": r.id}
 
 
 async def approve(db, entry_id: int) -> dict:
@@ -824,16 +1037,19 @@ async def undo(db, entry_id: int) -> dict:
         await PS.save(db, new)
         r.status = "undone"
         await db.commit()
-        inp = await API._inputs(db)
         cfg = await settings(db)
-        push = await push_window(db, new, inp, API._today(inp), int(cfg["push_days"] or 7)) if cfg["push"] \
-            else {"status": "off"}
-        n = len({s["uid"] for s in before + after})
-        e = await _add_entry(db, trigger="undo", status="restore",
-                             summary=f"復原 {n} 堂課到調整前（改為你的課，自動調整不再動它們）",
-                             items=json.loads(r.items_json or "[]"), before=after, after=before, ref_id=r.id,
-                             push=push)
-        return {"status": "undone", "id": e.id, "push": push}
+    # the watch after the writer lock, from the store as it is then (SP-362 B3)
+    push = {"status": "off"}
+    if cfg["push"]:
+        inp = await API._inputs(db)
+        async with API._plock():
+            push = await push_window(db, await PS.load(db), inp, API._today(inp), int(cfg["push_days"] or 7))
+    n = len({s["uid"] for s in before + after})
+    e = await _add_entry(db, trigger="undo", status="restore",
+                         summary=f"復原 {n} 堂課到調整前（改為你的課，自動調整不再動它們）",
+                         items=json.loads(r.items_json or "[]"), before=after, after=before, ref_id=r.id,
+                         push=push)
+    return {"status": "undone", "id": e.id, "push": push}
 
 
 # ---------------------------------------------------------------------------
