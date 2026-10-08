@@ -542,7 +542,7 @@ def chart_toggles(res: dict, kind: str) -> list[tuple[str, str]]:
 def viewer_ranges(snapshot: dt.date, first: Optional[str]) -> list[tuple[str, str]]:
     """(begin, end) of the viewer's default range and its presets (wko5_viewer.html preset())."""
     end = snapshot.isoformat()
-    out = [((snapshot - dt.timedelta(days=365)).isoformat(), end)]          # the default
+    out = [((snapshot - dt.timedelta(days=89)).isoformat(), end)]           # the default: 90 天 (SP-336)
     for d in (7, 42, 90, 365):
         out.append(((snapshot - dt.timedelta(days=d - 1)).isoformat(), end))
     # 今年: local Jan 1 -> toISOString: Jan 1 west of UTC, Dec 31 east of it

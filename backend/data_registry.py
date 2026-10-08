@@ -227,8 +227,13 @@ FILES: tuple = (
          deidentify=("channels: GPS", "start times"),
          invalidated_by="file stamp + per-field versions (fitcache.versions); code_hash (SP-320 ①); "
                         "activity_auto.json per activity key (SP-334)"),
+    File("cache/render/slots/*.json", DERIVED, SHARED, "per chart request (view, chart, range as asked): the key "
+         "it was last drawn with, so a changed chart first shows that drawing marked as updating "
+         "(wko5expr/render_cache.py, SP-336)",
+         invalidated_by="repointed when the chart is drawn again; pruned with the render cache (LRU)"),
     File("cache/render/**", DERIVED, SHARED, "chart render cache, LRU 300 MB (wko5expr/render_cache.py)",
-         invalidated_by="data fingerprint + CACHE_VERSION + engine file contents"),
+         invalidated_by="per chart (SP-336, wko5expr/chartscope.py): the activities of its range + warm-up, "
+                        "today only when it reads it, the code its chart type reaches (codehash) + CACHE_VERSION"),
     File("achievements_cache.json", DERIVED, SHARED, "per-activity GPS summaries (engine/achievements.py)",
          deidentify=("footprint cells (GPS)", "days (dates)", "paths of the activity files"),
          invalidated_by="file stamp + ALGO_VERSION + peak count; an entry whose file is gone is dropped, "
