@@ -59,6 +59,31 @@ def test_track_ratio_keeps_the_base_ratio_and_adds_the_halves():
     assert QG.track_ratio([], TODAY) == {"z3": 2, "z5": 1, "why": "沒有 A 賽"}
 
 
+@pytest.mark.parametrize("e, early, late, tp", [
+    (ev("race", 21, hours=3.0), (1, 1), (1, 1), []),          # 越野 < 4 h: 1:1 → 1:1
+    (ev("race", 42, hours=5.0), (2, 1), (1, 0), []),          # 越野 ≥ 4 h: 2:1 → Zone 3 (+ maintenance, SP-353)
+    (ev("road", 5), (1, 1), (1, 2), []),                      # 5 km: 1:2
+    (ev("road", 10), (1, 1), (1, 1), [6, 5, 4, 3]),           # 10 km: 1:1, Zone 3 = T+
+    (ev("road", 21.1), (2, 1), (3, 1), [4, 3]),               # 半馬: 3:1, T+ in weeks 4–3
+    (ev("road", 42.195), (2, 1), (3, 1), []),                 # 馬拉松: 3:1
+])
+def test_spec_ratio_table_of_sp353(e, early, late, tp):
+    """SP-353 acceptance: 前段 / 後段 as the report's tables (§4.1 / §4.2; decisions 2–4 kept as built)."""
+    r = QG.track_ratio([e], TODAY)
+    assert (r["early"]["z3"], r["early"]["z5"]) == early
+    assert (r["late"]["z3"], r["late"]["z5"]) == late and r["late"]["tp"] == tp
+    g = gate([e])
+    assert QG.week_decision(g, "specific", "specific", monday_of(8))["seg_note"] == ""     # 前段: no 後段 note
+
+
+def test_late_half_recovery_weeks_keep_the_fartlek():
+    """SP-97 in the 後段 (weeks 5 / 3): the recovery fartlek, no maintenance, no 後段 note — whatever the race."""
+    for e in (ev("race", 42, hours=5.0), ev("road", 21.1)):
+        for w in (5, 3):
+            d = QG.week_decision(gate([e]), "specific", "recovery_week", monday_of(w), n=2)
+            assert d["spec"] is QG.RECOVERY and len(d["items"]) == 1 and not d.get("seg_note")
+
+
 def test_week_ratio_picks_the_half_by_the_weeks_out():
     g = gate([ev("race", 42, hours=5.0)])
     assert QG.week_ratio(g, "base", monday_of(5)) is g["ratio"]                # base phase: unchanged
@@ -72,15 +97,28 @@ def test_week_ratio_picks_the_half_by_the_weeks_out():
 
 # ---- week_decision ---------------------------------------------------------------------------------
 
-def test_a_long_trail_race_has_no_zone5_in_the_late_half():
+def test_a_long_trail_race_keeps_one_zone5_maintenance_every_3_weeks_in_the_late_half():
+    """SP-353 decision 1 (owner 2026-10-07, report §4.1 / §5): the 後段 is Zone 3 (uphill) except one Zone 5
+    maintenance session every 3 weeks — 賽前第 4 週 (weeks 5 / 3 are the recovery weeks)."""
     g = gate([ev("race", 42, hours=5.0)])
-    for w in (6, 4):
-        for n in (1, 2):
-            d = QG.week_decision(g, "specific", "specific", monday_of(w), n=n)
-            # 2 a week: the rung + a 巡航版 Zone 3 (the existing only-Zone-3 rule), never Zone 5
-            assert {it["track"] for it in d["items"]} == {"z3"} and d["items"][0]["spec"][0] == "a3"
-            assert len(d["items"]) == n and all(it.get("cruise") for it in d["items"][1:])
-            assert "4 小時以上" in d["seg_note"] and "5 區不排" in d["seg_note"] and "推估" in d["seg_note"]
+    assert QG.track_ratio([ev("race", 42, hours=5.0)], TODAY)["late"]["z5_every"] == 3
+    for n in (1, 2):
+        d = QG.week_decision(g, "specific", "specific", monday_of(6), n=n)
+        # 2 a week: the rung + a 巡航版 Zone 3 (the existing only-Zone-3 rule), no Zone 5
+        assert {it["track"] for it in d["items"]} == {"z3"} and d["items"][0]["spec"][0] == "a3"
+        assert len(d["items"]) == n and all(it.get("cruise") for it in d["items"][1:])
+        assert "4 小時以上" in d["seg_note"] and "5 區不排" in d["seg_note"] and "每 3 週" in d["seg_note"]
+        assert "推估" in d["seg_note"]
+        # 賽前第 4 週: the maintenance session — the Zone 5 rung as it stands, it doesn't move the rung
+        m = QG.week_decision(g, "specific", "specific", monday_of(4), n=n)
+        z5 = [it for it in m["items"] if it["track"] == "z5"]
+        assert len(z5) == 1 and z5[0]["spec"] == QG.z5_spec(1) and z5[0]["advance"] is False and z5[0]["maint"]
+        assert [it["track"] for it in m["items"]] == (["z5"] if n == 1 else ["z3", "z5"])
+        assert "5 區維持課" in m["seg_note"] and "賽前第 4 週" in m["seg_note"]
+    assert "1:0" not in QG.week_decision(g, "specific", "specific", monday_of(4))["z3_note"]
+    # one in the 後段 (weeks 6–3), whatever the week's quality count
+    picks = [it["track"] for w in (6, 5, 4, 3) for it in QG.week_decision(g, "specific", "specific", monday_of(w))["items"]]
+    assert picks.count("z5") == 1
     # the 前段 keeps Zone 5 (2:1, and 2 a week = one of each); no 後段 note there
     d2 = QG.week_decision(g, "specific", "specific", monday_of(9), n=2)
     assert [it["track"] for it in d2["items"]] == ["z3", "z5"] and d2["seg_note"] == ""
@@ -88,6 +126,28 @@ def test_a_long_trail_race_has_no_zone5_in_the_late_half():
     assert "z5" in picks
     # not a lock: the gate's Zone 5 state and step are untouched
     assert g["z5"] == {"open": True} and g["dose"]["z5"]["step"] == 1
+    # the other races: no maintenance rule (they keep Zone 5 in their ratio)
+    assert not QG.track_ratio([ev("race", 21, hours=3.0)], TODAY)["late"].get("z5_every")
+
+
+def test_the_zone5_maintenance_obeys_the_gate_and_the_guardrails():
+    """The maintenance session is a Zone 5 session like any other: Zone 5 locked, the low-intensity share
+    (tested AeT) or a load guardrail → not scheduled, and the week note says so."""
+    races = [ev("race", 42, hours=5.0)]
+    shut = gate(races, z5=False)
+    d = QG.week_decision(shut, "specific", "specific", monday_of(4))
+    assert [it["track"] for it in d["items"]] == ["z3"]
+    assert "5 區維持課" in d["seg_note"] and "還沒開放" in d["seg_note"] and "不排" in d["seg_note"]
+    bad = gate(races, levels={"intensity": "bad"})
+    d = QG.week_decision(bad, "specific", "specific", monday_of(4))
+    assert [it["track"] for it in d["items"]] == ["z3"] and "5 區維持課" in d["seg_note"] and "強度分配" in d["seg_note"]
+    ramp = gate(races, guard={"block": True, "blocks": ["ramp"], "rule": "ramp", "verdict": "CTL 增幅太快",
+                             "verdicts": {"ramp": "CTL 增幅太快"}})
+    d = QG.week_decision(ramp, "specific", "specific", monday_of(4))
+    assert d["items"] == [] and d["note"] == "CTL 增幅太快"
+    assert "5 區維持課" in d["seg_note"] and "護欄" in d["seg_note"]
+    # a guardrail week that isn't the maintenance week: no 後段 note added
+    assert not QG.week_decision(ramp, "specific", "specific", monday_of(6)).get("seg_note")
 
 
 def test_a_short_trail_race_keeps_both_tracks_late_and_alternates_in_two_week_blocks():
@@ -173,6 +233,16 @@ def test_specific_quality_sessions_are_the_ladder_uphill_on_trail_flat_on_road()
     assert not any(s["title"] in (O.ROAD_SPECIFIC_Q["title"], O.TRAIL_SPECIFIC_Z5["title"]) for s in trail + road)
     # the Zone 5 uphill set is 10′ in zone at V1, not the old 20′ (in the 10–16′ of a Zone 5 session)
     assert O.session_tiz_min(trail[1]) == 10
+
+
+def test_the_zone5_maintenance_session_is_the_rungs_uphill_version():
+    """SP-353: the long trail race's maintenance week builds the Zone 5 rung's uphill session (1 or 2 a week)."""
+    g = {**gate([ev("race", 42, hours=5.0)]), "state": "unlocked", "lthr": {"default": False}}
+    for n in (1, 2):
+        dec = QG.week_decision(g, "specific", "specific", monday_of(4), n=n)
+        ss = O.quality_sessions(g, dec, "specific", {"cp": 250.0}, {}, 10.0, mountain=True)
+        z5 = [s for s in ss if s.get("rung_key") == QG.z5_spec(1)[0]]
+        assert len(z5) == 1 and z5[0]["title"].endswith("上坡") and len(ss) == n
 
 
 # ---- the road MP segment ---------------------------------------------------------------------------------

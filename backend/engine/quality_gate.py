@@ -1620,10 +1620,18 @@ def z3_open_on(z3: Optional[dict], monday: Optional[dt.date], gate_monday: Optio
 # (Zone 3, Zone 5) of 前段, of 後段, and the 後段 weeks whose Zone 3 session is T+ (97–100 % CP, near a
 # 10 km / half marathon's race intensity):
 #   越野／百岳 < 4 h (UA short races: one Zone 3 + one Zone 4; Ehrström 2018: VO2max still counts)  1:1 → 1:1
-#   越野／百岳 ≥ 4 h, multi-day (planning.event_size ≥ 馬拉松級)  2:1 → Zone 3 only, no Zone 5 kept
+#   越野／百岳 ≥ 4 h, multi-day (planning.event_size ≥ 馬拉松級)  2:1 → Zone 3, one Zone 5 maintenance
+#                                                                    session every 3 weeks (SP-353)
 #   路跑 ≤ 5 km  1:1 → 1:2          路跑 ≤ 10 km  1:1 → 1:1, Zone 3 = T+
 #   半馬 (< 30 km)  2:1 → 3:1, T+ in the second half of the 後段      馬拉松+  2:1 → 3:1
 SPEC_LATE_WEEKS = 6
+# SP-353 decision 1 (owner 2026-10-07; specific-phase-progression.md §4.1 / §5-1): a long trail race's 後段
+# keeps one Zone 5 maintenance session every 3 weeks rather than none (UA long races still allow 「Zone 3
+# or Zone 4」; none at all would stop the Zone 5 ladder for 4 weeks plus the 2-week taper). Counted back from
+# the race: 賽前第 4 週 (then 7, 10 … — the 前段 keeps its own 2:1), so the 後段 (weeks 6–3; 5 and 3 are the
+# SP-97 recovery weeks) has exactly one. The cadence and the week are 推估. It is a Zone 5 session like any
+# other — the Zone 5 gate and the guardrails decide whether it is scheduled — and it holds the rung.
+SPEC_Z5_MAINT = {"trail_long": 3}
 ROAD_5K_KM, ROAD_10K_KM, ROAD_HALF_MAX_KM = 5.0, 10.0, 30.0        # 30 = overview.MP_GOAL_MIN_KM (marathon-like)
 SPEC_RATIO = {
     "trail_short": ((1, 1), (1, 1), ()),
@@ -1672,7 +1680,25 @@ def track_ratio(events, today: dt.date) -> dict:
                 else _("預估不到 4 小時的{event}", event=ev))
     return {**out, "start": e.start.isoformat(), "class": cls,
             "early": {"z3": early[0], "z5": early[1], "why": _("專項期前段（A 賽：{race}）", race=race)},
-            "late": {"z3": late[0], "z5": late[1], "why": _("專項期後段（A 賽：{race}）", race=race), "tp": list(tp)}}
+            "late": {"z3": late[0], "z5": late[1], "why": _("專項期後段（A 賽：{race}）", race=race), "tp": list(tp),
+                     "z5_every": SPEC_Z5_MAINT.get(cls, 0)}}
+
+
+def z5_maint_due(ratio: Optional[dict]) -> bool:
+    """SP-353: this 後段 week (week_ratio) is a long trail race's Zone 5 maintenance week — the late ratio
+    has no Zone 5 but a cadence (`z5_every`), and 賽前第 n 週 is on it (n ≡ 1 mod every: 賽前第 4 週)."""
+    r = ratio or {}
+    every = int(r.get("z5_every") or 0)
+    return r.get("segment") == "late" and not r.get("z5") and every > 0 and int(r.get("weeks_out") or 0) % every == 1
+
+
+def _seg_note(ratio: dict, rules: list) -> str:
+    """The 專項期後段 week note (SP-75): what the 後段 changed this week. Only a 後段 week has its 賽前第 n 週
+    (SP-352: a manual 專項期 without an A race, a week after it and the 前段 have no note)."""
+    if not rules or ratio.get("segment") != "late":
+        return ""
+    return _("專項期後段（賽前第 {w} 週）：{rules}。越接近比賽，練的強度越像比賽；週數和比例為推估",
+             w=ratio["weeks_out"], rules="；".join(rules))
 
 
 def week_ratio(gate: dict, kind: str, monday: Optional[dt.date]) -> dict:
@@ -2550,8 +2576,17 @@ def week_decision(gate: dict, kind: str, mode: str, monday: Optional[dt.date] = 
         ok = levels.get("intensity") != "bad" and levels.get("drift") != "bad"
         if kind not in ("specific", "taper"):
             return {**none(""), "allow": ok, "z3_note": ""}
+        # SP-75: the 專項期's 前段 / 後段 ratio; `seg_note` says what the 後段 changed in this week's pick
+        ratio = week_ratio(gate, kind, monday)
+        maint = kind == "specific" and z5_maint_due(ratio)
+
+        def maint_off(out: dict, why: str) -> dict:
+            # SP-353: a long trail race's Zone 5 maintenance week whose intervals a guardrail takes: say so
+            return {**out, "seg_note": _seg_note(ratio, [_("這週輪到 5 區維持課，但{why}，所以不排", why=why)])} \
+                if maint else out
         if levels.get("drift") == "bad":
-            return none("", "本週沒排 3 區：心率飄移是 bad，先不排強度課")
+            return maint_off(none("", "本週沒排 3 區：心率飄移是 bad，先不排強度課"),
+                             _("心率飄移是 bad，這週先不排強度課"))
         if kind == "specific" and mode == "recovery_week":
             # SP-97: a 專項期 recovery week keeps one short intensity — the base phase's fartlek 4×1′
             # (the Norwegian coaches keep the intensity, shorten the sessions)
@@ -2568,15 +2603,17 @@ def week_decision(gate: dict, kind: str, mode: str, monday: Optional[dt.date] = 
             blocks = g.get("blocks") if g.get("blocks") is not None else ([g.get("rule")] if g.get("block") else [])
             load = [r for r in blocks if r in ("ramp", "volume")]
             if load:
-                return none((g.get("verdicts") or {}).get(load[0]) or g.get("verdict", ""))
+                return maint_off(none((g.get("verdicts") or {}).get(load[0]) or g.get("verdict", "")),
+                                 _("護欄擋下這週的強度課"))
             if g.get("sub"):
                 v = (g.get("verdicts") or {}).get("ramp") or g.get("verdict", "")
                 if "z3" not in avail:
-                    return none(v)
-                return {"allow": True, "spec": SUB, "advance": False, "adjust": None, "track": "z3", "note": v,
-                        "items": [{"track": "z3", "spec": SUB, "advance": False, "adjust": None, "first": False}],
-                        "z3_note": ""}
+                    return maint_off(none(v), _("護欄擋下這週的強度課"))
+                return maint_off({"allow": True, "spec": SUB, "advance": False, "adjust": None, "track": "z3", "note": v,
+                                  "items": [{"track": "z3", "spec": SUB, "advance": False, "adjust": None, "first": False}],
+                                  "z3_note": ""}, _("護欄（CTL 增幅到注意線）這週只排閾值"))
         warn = ""
+        had_z5 = "z5" in avail
         if levels.get("intensity") == "bad":
             # the low-intensity share keeps Zone 5 out, Zone 3 goes on with a warning (SP-31); with an
             # estimated AeT the share is noisy: a warning for Zone 5 too (SP-39)
@@ -2585,15 +2622,23 @@ def week_decision(gate: dict, kind: str, mode: str, monday: Optional[dt.date] = 
                 warn = "輕鬆跑心率偏高（強度分配是 bad）——只是提醒，3 區照排；5 區先不排"
             else:
                 warn = "輕鬆跑心率偏高（強度分配是 bad）——AeT 是估計值、占比不準，只是提醒：3 區、5 區照排"
-        # SP-75: the 專項期's 前段 / 後段 ratio; `seg_note` says what the 後段 changed in this week's pick
-        ratio = week_ratio(gate, kind, monday)
         late = ratio.get("segment") == "late" and "z5" in avail
         rules = []
-        if late and not ratio.get("z5"):
-            # a long trail race: Zone 5 isn't scheduled (owner 2026-10-05: no maintenance session) —
-            # not a lock, the track's gate and step stay as they are
+        if maint:
+            # SP-353: a long trail race's maintenance week — the Zone 5 rung as it stands (_pick_tracks), when
+            # the Zone 5 gate and the guardrails let Zone 5 through this week; else Zone 3 only, and the note says why
+            if "z5" in avail:
+                rules.append(_("這場賽事預估 4 小時以上：後段強度課以 3 區（上坡版）為主，每 3 週留 1 堂 5 區維持課，"
+                               "就是這週（照目前那一階，不往上爬）"))
+            else:
+                why = _("輕鬆跑心率偏高（強度分配是 bad）") if had_z5 else _("5 區還沒開放")
+                rules.append(_("這場賽事預估 4 小時以上：後段強度課以 3 區（上坡版）為主；這週輪到 5 區維持課，"
+                               "但{why}，所以不排", why=why))
+        elif late and not ratio.get("z5"):
+            # a long trail race's other 後段 weeks: no Zone 5 — not a lock, the track's gate and step stay
             avail = [t for t in avail if t != "z5"]
-            rules.append(_("這場賽事預估 4 小時以上、當天的強度不到 5 區，強度課只排 3 區（上坡版），5 區不排"))
+            rules.append(_("這場賽事預估 4 小時以上、當天的強度不到 5 區：後段強度課只排 3 區（上坡版），"
+                           "5 區每 3 週只留 1 堂維持課（賽前第 4 週），這週 5 區不排"))
         elif late and n < 2 and ratio.get("z3") != ratio.get("z5"):
             rules.append(_("每週 1 堂強度課時以 {zone} 區為主（3 區：5 區 = {z3}:{z5}）", z3=ratio["z3"], z5=ratio["z5"],
                            zone=3 if ratio["z3"] > ratio["z5"] else 5))
@@ -2606,9 +2651,7 @@ def week_decision(gate: dict, kind: str, mode: str, monday: Optional[dt.date] = 
         # SP-352: the 後段 note needs the week's 賽前第 n 週, which only a 後段 week has. Without an A race (a
         # manual 專項期), a week after it, or in the 前段, week_ratio has no half: the default ratio
         # (gate["ratio"], 2:1) picks the track, a T+ maintenance turn is scheduled as is, and there is no note.
-        seg_note = _("專項期後段（賽前第 {w} 週）：{rules}。越接近比賽，練的強度越像比賽；週數和比例為推估",
-                     w=ratio["weeks_out"], rules="；".join(rules)) \
-            if items and rules and ratio.get("segment") == "late" else ""
+        seg_note = _seg_note(ratio, rules) if items else ""
         return {**out, "allow": True if kind == "taper" else bool(items), "warn": warn if items else "",
                 "seg_note": seg_note}
     if first and z5.get("state") == "reentry":
@@ -2662,12 +2705,17 @@ def _pick_tracks(avail: list, n: int, monday: Optional[dt.date], gate: dict, s3:
     turns run in two-week blocks counted from 賽前第 6 週 (weeks 6–5, then 4–3), the bigger share first:
     賽前第 5、3 週 are the recovery weeks (specific_phase.EASY_WEEKS, SP-97), so week-by-week turns would
     give weeks 6 and 4 the same track on a 1:1. On its T+ weeks (ratio["tp"]) the Zone 3 session is T+
-    while Zone 5 is open (T+ is a maintenance session of an open Zone 5; it doesn't move the rung)."""
+    while Zone 5 is open (T+ is a maintenance session of an open Zone 5; it doesn't move the rung).
+    A long trail race's Zone 5 maintenance week (z5_maint_due, SP-353) with Zone 5 in `avail`: one a week →
+    Zone 5, two → Zone 3 + Zone 5; the Zone 5 item is the rung as it stands and doesn't move it ("maint")."""
     if not avail:
         return []
     r = ratio or gate.get("ratio") or {"z3": 2, "z5": 1}
+    maint = z5_maint_due(r) and "z5" in avail
     if n >= 2 or len(avail) == 1:
         tracks = list(avail)
+    elif maint:
+        tracks = ["z5"]
     else:
         a, b = max(1, int(r.get("z3") or 1)), max(0, int(r.get("z5") or 0))
         mon = monday or (dt.date.fromisoformat(gate["monday"]) if gate.get("monday") else None)
@@ -2682,6 +2730,10 @@ def _pick_tracks(avail: list, n: int, monday: Optional[dt.date], gate: dict, s3:
         s = s3 if t == "z3" else s5
         if t == "z3" and "z5" in avail and r.get("weeks_out") in (r.get("tp") or ()):
             out.append({"track": t, "spec": TP, "advance": False, "adjust": None, "first": False})
+            continue
+        if t == "z5" and maint:
+            out.append({"track": t, "spec": track_spec(t, s), "advance": False, "adjust": None, "first": False,
+                        "maint": True})
             continue
         spec = track_spec(t, s)
         adj = None
@@ -2710,6 +2762,8 @@ def _decision(items: list, avail: list, gate: dict, n: int, monday: Optional[dt.
         z3_note = ""
     elif lock:
         z3_note = lock
+    elif "z3" in avail and z5_maint_due(ratio):
+        z3_note = _("本週的強度課是 5 區維持課（長距離越野的專項期後段每 3 週 1 堂，推估），3 區這週不排")
     elif "z3" in avail:
         r = ratio or gate.get("ratio") or {"z3": 2, "z5": 1, "why": ""}
         z3_note = (f"本週輪到 5 區（每週 1 堂時 3 區：5 區 = {r.get('z3')}:{r.get('z5')}，{r.get('why') or ''}；推估），"
