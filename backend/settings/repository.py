@@ -69,6 +69,10 @@ DEFAULTS: dict[str, Any] = {
     # the one-time backfill of COROS's post-run self-rating over the last 8 weeks (SP-231,
     # sync/coros_client.backfill_feel): {done, passes, checked, filled, at}; internal
     "sync.coros.rpe_backfill": None,
+    # the one-time rain backfill of the last 12 months (engine/rain_backfill.py, SP-299; run by
+    # api/rain_backfill.tick): {done, at, attempts, calls_total, calls, filled, failed, skipped,
+    # waiting?, gave_up?}; internal bookkeeping
+    "weather.rain_backfill": None,
     "sync.trainingpeaks.last_ok": None,
     # 完整檢查 (sync/check.py, SP-362 A3): the last full listing compared with the DB —
     # {mode, at, status, error, remote, local, missing[], local_only[], failed[], *_n, filled};
@@ -428,7 +432,7 @@ def validate(key: str, value: Any) -> None:
             raise ValueError("athlete.pmc_start must be {date: YYYY-MM-DD, ctl, atl} (0-300) or null")
     if key == "plan.hr_zone_model" and value not in ("lthr", "hrr", "hrmax"):
         raise ValueError("plan.hr_zone_model must be lthr, hrr or hrmax")
-    if key in ("sync.coros.rpe_backfill", "sync.coros.check", "sync.trainingpeaks.check",
+    if key in ("sync.coros.rpe_backfill", "weather.rain_backfill", "sync.coros.check", "sync.trainingpeaks.check",
                "sync.coros.check_weekly", "sync.trainingpeaks.check_weekly") \
             and value is not None and not isinstance(value, dict):
         raise ValueError(f"{key} must be an object or null")

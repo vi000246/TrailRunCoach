@@ -331,13 +331,33 @@ def exclusive_surface(tags) -> list[str]:
 # 「標成濕」 to set it. 推估: ≥ 1 mm (the ticket's suggested start: a trace under 1 mm rarely wets a
 # trail through the canopy).
 RAIN_HINT_MM = 1.0
+# the user types that make any activity a mountain day (sport_map.kind_of: 爬山 → hike, 百岳跟團 → baiyue)
+_MOUNTAIN_TYPES = ("hike", "baiyue_group")
 
 
-def rain_hint(rain_mm: Optional[float], surface: Optional[str]) -> Optional[float]:
-    """The rain (mm) for the hint, else None: only when the rain reached RAIN_HINT_MM and the
-    路況 is still 未標 (`surface` None — a 乾 / 濕 mark is the user's and is never questioned).
-    Unknown rain (no coordinates, no weather, a day cached before SP-299) → None."""
-    if surface is not None or rain_mm is None or rain_mm < RAIN_HINT_MM:
+def rain_kind(w, user: Optional[dict]) -> bool:
+    """Whether the rain hint applies to this activity (owner 2026-10-07: 越野跑 and 登山健行 only, no
+    road run): its kind as the 圖表分析 filter reads it (sport_map.kind_of, incl. the user's 爬山 /
+    百岳跟團 mark) is one of sport_map.TRAIL_KINDS (越野跑, 登山健行, 百岳登山)."""
+    from backend.engine import sport_map as SM
+    return SM.kind_of(w, user) in SM.TRAIL_KINDS
+
+
+def rain_kind_excluded(sport_type: Optional[str], user: Optional[dict]) -> bool:
+    """rain_kind of an excluded file (no dataset workout): the user's 爬山 / 百岳跟團 mark, else its
+    sport type (trail running / hiking / mountaineering)."""
+    from backend.engine import sport_map as SM
+    if user_type(user) in _MOUNTAIN_TYPES:
+        return True
+    return SM.WKO5.get((sport_type or "").lower()) in ("trail", "hike")
+
+
+def rain_hint(rain_mm: Optional[float], surface: Optional[str], trail: bool) -> Optional[float]:
+    """The rain (mm) for the hint, else None: only on a 越野跑 / 登山健行 activity (`trail`,
+    rain_kind), when the rain reached RAIN_HINT_MM and the 路況 is still 未標 (`surface` None — a
+    乾 / 濕 mark is the user's and is never questioned). Unknown rain (no coordinates, no weather,
+    a day cached before SP-299 and not backfilled, engine/rain_backfill.py) → None."""
+    if not trail or surface is not None or rain_mm is None or rain_mm < RAIN_HINT_MM:
         return None
     return float(rain_mm)
 

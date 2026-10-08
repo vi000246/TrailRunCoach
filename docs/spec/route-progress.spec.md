@@ -339,14 +339,33 @@ without changing them.
   archive call (`HOURLY`), so it costs no extra call; each activity row also
   has `start` and `rain_mm` = the sum of the hourly rows (Open-Meteo: the
   preceding hour's total) whose hour overlaps the activity's first → last
-  sample, `None` when an overlapping hour has no value — a day cached before
-  precipitation was asked is never refetched, it just has no rain. The rain is
+  sample, `None` when an overlapping hour has no value — a build never refetches
+  a day cached before precipitation was asked, it just has no rain; the one-time
+  backfill below fetches those of the last 12 months once. The rain is
   looked up by the activity's file, else by its start within ±3 min under
   another source's file name (`rain_by_activity`, an `activity_key.ByStartDict`,
   `backend/engine/route_weather.py:428-438`). The 活動編輯
   page (`GET /activities` → `rain_mm`, `rain_hint_mm`) shows 「這次活動期間下過雨
   （N mm），要標成濕路嗎？」 with a 「標成濕」 button while the 路況 is 未標 and
-  `rain_mm` ≥ `activity_tags.RAIN_HINT_MM` (1 mm, 推估); it never marks anything itself.
+  `rain_mm` ≥ `activity_tags.RAIN_HINT_MM` (1 mm, 推估), and only on 越野跑 / 登山健行
+  (`rain_kind`, workouts.spec.md › 路況); it never marks anything itself.
+- **Rain backfill** (SP-299 follow-up, owner 2026-10-07; `backend/engine/rain_backfill.py:44`):
+  once, the activities of `activity_weather.json` from the last 365 days whose rain is unknown
+  get their archive days asked again — the same point / (cell, day) grouping as the build
+  (`activity_point`, `backend/engine/route_weather.py:398`) through the same `Fetcher` and cache,
+  but a cached point without precipitation counts as missing (`refetch` + `has_rain`,
+  `backend/engine/route_weather.py:149`, `backend/engine/route_weather.py:214`), one call at a
+  time with `PACE_S` = 1 s between calls (`backend/engine/route_weather.py:233`). Each call
+  replaces its cache entries as it lands, then only `rain_mm` is written into the rows still
+  without it (re-read just before the write). Idempotent: a day once fetched with precipitation
+  is never asked again, so an interrupted run resumes where it stopped. Started by the
+  scheduler loop 15 min after the app starts (`backend/sync/scheduler.py:123-131`,
+  `api/rain_backfill.tick`, `backend/api/rain_backfill.py:72`) while no routes build runs;
+  marks itself done in the setting `weather.rain_backfill` (`backend/settings/repository.py:75`);
+  a failed / cut-short run is retried 6 h later and given up after 5 attempts
+  (`next_state`, `backend/api/rain_backfill.py:56`); no `activity_weather.json` yet = waiting.
+  Never in tests (`WKO5COACH_NO_RAIN_BACKFILL`, conftest), the demo, or with
+  `WKO5COACH_ROUTES_WEATHER=0`.
 
 ## Comparison (`GET /{id}/compare?a=&b=`)
 
@@ -527,8 +546,6 @@ None. Builds are triggered by requests (or `POST /rebuild`); there are no emitte
 
 ## Open Questions
 
-- [ ] Fetch the rain of the last 12 months for days cached before `precipitation` was asked (decided 2026-10-07; today such a day is never refetched)（SP-299，Todo）——尚未實作
-- [ ] No rain hint on road runs, only on trail runs and hikes (decided 2026-10-07; `activity_tags.rain_hint` does not look at the sport)（SP-299，Todo）——尚未實作
 - [ ] Link with map.yichlin (pull / push GPX, race-day weather, pace → its itinerary); which direction first is not decided（SP-47，Backlog）——尚未實作
 
 ## Change History
@@ -542,3 +559,4 @@ None. Builds are triggered by requests (or `POST /rebuild`); there are no emitte
 | 2026-10-04 | feature | SP-41 | The route on the detail map is drawn by the shared `MapLayers.track` (`basemaps.js`), the same as the activity map and the race calculator's course map |
 | 2026-10-06 | feature | SP-299 | Activity weather also stores the rain during the activity (`precipitation` in the same call and cache); 活動編輯 hints 「要標成濕路嗎？」 at ≥ 1 mm (推估) while 路況 is 未標 |
 | 2026-10-08 | code-sync（SP-78, SP-41） | N/A | Documented auto names (nearest 百岳 within 1 km, renames take precedence), the weather call cap (2,000 per build, 3 at a time), the canonical path thinned to 400 points, rain matched by file or start ±3 min, map layer strings via i18n `common.map.*`; `precipitation` added to the hourly list; Open Questions from SP-299 / SP-47 |
+| 2026-10-08 | SP-299 follow-up | owner decision 2026-10-07 (ticket SP-299) | The rain hint only on 越野跑 / 登山健行 (`activity_tags.rain_kind`); the one-time rain backfill of the last 12 months (`engine/rain_backfill.py`, `api/rain_backfill.py`, setting `weather.rain_backfill`): `Fetcher` gains `refetch` / `workers` / `pace_s`, `activity_point` shared with `fill_activities`. Tests `test_rain_backfill.py` (HTTP faked) |

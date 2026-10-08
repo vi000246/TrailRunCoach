@@ -639,8 +639,9 @@ function surfaceOf(a) {
 const withSurface = (tags, p) => [...(tags || []).filter((t) => !isSurfaceTag(t)), ...(S.surfaceTags[p] ? [S.surfaceTags[p]] : [])];
 // SP-299: the archive rain while the activity ran (server: route_weather.activity_rain) ≥ the
 // 推估 threshold and the 路況 still 未標 → 「要標成濕路嗎？」 with a one-click 「標成濕」. Only a
-// hint: nothing is marked until the button is pressed; no hint without coordinates / weather.
-const rainHint = (a) => a.rain_mm != null && S.rainHintMm != null && a.rain_mm >= S.rainHintMm && !surfaceOf(a) ? a.rain_mm : null;
+// hint: nothing is marked until the button is pressed; no hint without coordinates / weather,
+// and only on 越野跑 / 登山健行 (a.rain_kind: activity_tags.rain_kind; owner 2026-10-07).
+const rainHint = (a) => a.rain_kind && a.rain_mm != null && S.rainHintMm != null && a.rain_mm >= S.rainHintMm && !surfaceOf(a) ? a.rain_mm : null;
 const badge = (manual, why) => manual ? `<span class="badge man" title="${esc(T("manual_tip"))}">${esc(T("manual"))}</span>`
   : `<span class="badge" title="${esc(why || T("auto_tip"))}">${esc(T("auto"))}</span>`;
 function setMsg(t, cls) { const m = $("msg"); if (m) { m.textContent = t; m.className = "msg " + (cls || ""); } }
@@ -751,6 +752,7 @@ function patchLocal(a, r) {
   // r: the single-activity JSON (PATCH /workouts/{i}/activity)
   if ("activity_type_overridden" in r) a.user_type = r.activity_type_overridden ? r.activity_type : null;
   if ("effort_overridden" in r) a.user_effort = r.effort_overridden ? r.effort : null;
+  if ("rain_kind" in r) a.rain_kind = r.rain_kind;          // a type change (爬山) moves the rain hint
   for (const k of ["note", "name", "tags"]) if (k in r) a[k] = r[k];
   if (r.pain_state) { a.pain = r.pain_state.pain; a.pain_area = r.pain_state.pain_area; a.pain_score = r.pain_state.pain_score ?? null; a.injury_id = r.pain_state.injury?.id ?? null; }
 }
