@@ -1,5 +1,5 @@
 import asyncio
-from datetime import date, datetime, timedelta, timezone, tzinfo
+from datetime import date, datetime, timezone, tzinfo
 from pathlib import Path
 from typing import Optional
 
@@ -7,57 +7,17 @@ import numpy as np
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from backend.db.models import Athlete, WorkoutFile, WorkoutMetric, MmpCache
+from backend.db.models import Athlete, WorkoutFile
 from backend.files.wko4_reader import parse_wko4_metadata
 from backend.files.fit_reader import parse_fit
-from backend.engine.algorithms.mmp import compute_mmp
-from backend.engine.algorithms.metrics import (
-    compute_all_metrics, compute_run_ftp_from_mmp, compute_load_metrics,
-)
 from backend.engine.algorithms.classify import classify_trail
 
 WKO5_ROOT = Path.home() / "WKO5"
-# SP-341: bump when the mmp_cache rows change through code engine/codehash.py cannot follow
-MMP_CACHE_V = 1
-
-
-def mmp_version() -> str:
-    """The code version mmp_cache rows are written with (SP-341): the code of compute_mmp and
-    of the FIT read (engine/codehash.py) + MMP_CACHE_V. Rows of another version are stale."""
-    from backend.engine.codehash import code_hash
-    return f"{MMP_CACHE_V}:{code_hash(compute_mmp, parse_fit, extra=('mmp', MMP_CACHE_V))[:12]}"
-
-
-def _add_mmp(db: AsyncSession, workout_id: int, raw, version: str) -> None:
-    for dur, val in compute_mmp(raw.power_w, raw.time_s).items():
-        if val > 0:
-            db.add(MmpCache(workout_id=workout_id, channel="power", duration_s=dur, value=val, version=version))
-
-
-async def _refresh_stale_mmp(db: AsyncSession, athlete_id: int, since: date, until: date, version: str) -> int:
-    """Recompute the mmp_cache rows of another code version (SP-341) of the running workouts
-    dated since…until from their FIT file; a file that can't be read drops its rows. The
-    number of workouts refreshed."""
-    from sqlalchemy import delete, or_
-    stale = (await db.execute(
-        select(WorkoutFile.id, WorkoutFile.file_path).distinct()
-        .join(MmpCache, MmpCache.workout_id == WorkoutFile.id)
-        .where(WorkoutFile.athlete_id == athlete_id, WorkoutFile.sport == "running",
-               WorkoutFile.workout_date >= since, WorkoutFile.workout_date <= until,
-               or_(MmpCache.version.is_(None), MmpCache.version != version)))).fetchall()
-    for wid, path in stale:
-        raw = None
-        if str(path).lower().endswith(".fit"):
-            try:
-                raw = await asyncio.to_thread(parse_fit, str(path))    # FIT parsing: off the event loop
-            except Exception:                                          # noqa: BLE001 — gone / unreadable
-                raw = None
-        await db.execute(delete(MmpCache).where(MmpCache.workout_id == wid))
-        if raw is not None and raw.has_power:
-            _add_mmp(db, wid, raw, version)
-    if stale:
-        await db.flush()
-    return len(stale)
+# The import used to also write per-activity metrics (workout_metrics: hrTSS / rTSS / NP / TSS /
+# time above runFTP) and a power mean-max (mmp_cache, read only to get the runFTP for those
+# metrics). Nothing read either: the charts, PMC and API take every value from the FIT dataset
+# (engine/wko5expr/fitdataset.py). Both tables stay as they are in older DBs, unread and unwritten
+# (data_registry.LEGACY_TABLES).
 
 
 def _apply_classification(wf: WorkoutFile) -> None:
@@ -175,58 +135,6 @@ async def scan_and_import(db: AsyncSession, athlete_id: int, athlete_dir: str) -
             "new_by_source": by_source}
 
 
-async def get_run_ftp(db: AsyncSession, athlete_id: int, as_of_date: Optional[date] = None) -> Optional[float]:
-    """
-    Compute runFTP for an athlete as of a given date.
-
-    WKO5 formula: athleterange(date-89, date, ftp(meanmax(runpower)))
-    Uses a 2-parameter Critical Power model fit to running MMP data from the
-    preceding 90-day window. Falls back to manually set run_ftp_w if no MMP data.
-    """
-    from backend.db.models import AthleteSettings
-    if as_of_date is None:
-        as_of_date = date.today()
-
-    # Check for a manually set run_ftp_w first
-    settings_q = await db.execute(
-        select(AthleteSettings)
-        .where(AthleteSettings.athlete_id == athlete_id)
-        .order_by(AthleteSettings.effective_date.desc())
-    )
-    settings = settings_q.scalars().first()
-    if settings and settings.run_ftp_w and settings.run_ftp_w > 0:
-        return settings.run_ftp_w
-
-    # Compute from 90-day running MMP window (rows of the current code version only, SP-341)
-    window_start = as_of_date - timedelta(days=89)
-    version = mmp_version()
-    await _refresh_stale_mmp(db, athlete_id, window_start, as_of_date, version)
-    mmp_q = await db.execute(
-        select(MmpCache.duration_s, MmpCache.value)
-        .join(WorkoutFile, MmpCache.workout_id == WorkoutFile.id)
-        .where(
-            WorkoutFile.athlete_id == athlete_id,
-            WorkoutFile.sport == "running",
-            WorkoutFile.workout_date >= window_start,
-            WorkoutFile.workout_date <= as_of_date,
-            MmpCache.channel == "power",
-            MmpCache.value > 0,
-            MmpCache.version == version,
-        )
-    )
-    rows = mmp_q.fetchall()
-    if not rows:
-        return None
-
-    # Aggregate: for each duration, take the max across all workouts in window
-    by_duration: dict[int, float] = {}
-    for dur, val in rows:
-        if val and (dur not in by_duration or val > by_duration[dur]):
-            by_duration[dur] = val
-
-    return compute_run_ftp_from_mmp(by_duration)
-
-
 def utc_and_local(start: Optional[datetime], tz: tzinfo, is_local: bool) -> tuple[Optional[datetime], Optional[date]]:
     """(naive UTC start, athlete-local date). FIT timestamps are UTC; .wko4
     start times are the local wall clock WKO5 shows."""
@@ -240,24 +148,6 @@ def utc_and_local(start: Optional[datetime], tz: tzinfo, is_local: bool) -> tupl
         aware = start.replace(tzinfo=timezone.utc)
     utc = aware.astimezone(timezone.utc)
     return utc.replace(tzinfo=None), aware.astimezone(tz).date()
-
-
-async def settings_on(db: AsyncSession, athlete_id: int, day: date):
-    """The AthleteSettings row in effect on `day` (latest effective_date <= day),
-    falling back to the earliest row when the workout predates all of them."""
-    from backend.db.models import AthleteSettings
-    q = await db.execute(
-        select(AthleteSettings)
-        .where(AthleteSettings.athlete_id == athlete_id, AthleteSettings.effective_date <= day)
-        .order_by(AthleteSettings.effective_date.desc())
-    )
-    row = q.scalars().first()
-    if row is None:
-        q = await db.execute(
-            select(AthleteSettings).where(AthleteSettings.athlete_id == athlete_id)
-            .order_by(AthleteSettings.effective_date.asc()))
-        row = q.scalars().first()
-    return row
 
 
 def elevation_gain(raw) -> Optional[float]:
@@ -302,9 +192,10 @@ async def _import_one_file(
     tp_workout_id: Optional[int] = None,
     coros_activity_id: Optional[str] = None,
 ) -> Optional[WorkoutFile]:
-    """Parse one file, compute metrics, persist to DB (flush only — the
-    caller commits, or rolls back on error). Returns None for unreadable
-    files."""
+    """Parse one file and persist its workout_files row: date, sport, distance, elevation,
+    trail / road, the watch's RPE (flush only — the caller commits, or rolls back on error).
+    Returns None for unreadable files. Per-activity metrics are not stored: the FIT dataset
+    computes them (engine/wko5expr/fitdataset.py)."""
     from backend.settings.repository import SettingsRepository
     from backend.sync import dedup
 
@@ -362,57 +253,5 @@ async def _import_one_file(
     # the watch's post-workout RPE / feel, when the FIT has it (activity_tags: it outranks the HR effort rule)
     from backend.engine.activity_tags import recorded_from_session
     wf.rpe, wf.feel = recorded_from_session(raw.session)
-
-    is_running = (raw.sport == "running")
-    workout_date = local_day or date.today()
-    day_settings = await settings_on(db, athlete_id, workout_date)
-
-    # Trail/run load metrics (hrTSS primary, rTSS alongside) — running only.
-    # Computed before the power check: most runs have no power and still need
-    # a load.
-    if is_running:
-        load_metrics = compute_load_metrics(
-            hr=raw.heart_rate_bpm if raw.has_hr else None,
-            duration_s=raw.duration_s,
-            distance_m=raw.total_distance_m,
-            lthr=day_settings.lthr if day_settings else None,
-            threshold_pace_s_per_km=day_settings.threshold_pace_s_per_km if day_settings else None,
-        )
-        for key, val in load_metrics.items():
-            db.add(WorkoutMetric(workout_id=wf.id, metric_key=key, value=float(val)))
-
-    if not raw.has_power:
-        return wf
-
-    # Determine the correct FTP for this sport:
-    # - running → runFTP (computed from 90-day running MMP, or manually set run_ftp_w)
-    # - all others → ftp_w in effect on the workout date
-    if is_running:
-        ftp_w = await get_run_ftp(db, athlete_id, as_of_date=workout_date)
-    else:
-        ftp_w = day_settings.ftp_w if day_settings else None
-
-    metrics_dict = compute_all_metrics(
-        raw.power_w, ftp_w=ftp_w, duration_s=raw.duration_s,
-        hr=raw.heart_rate_bpm if raw.has_hr else None,
-        cadence=raw.cadence_rpm if raw.has_cadence else None,
-    )
-    for key, val in metrics_dict.items():
-        if isinstance(val, (float, int)) and val is not None:
-            db.add(WorkoutMetric(workout_id=wf.id, metric_key=key, value=float(val)))
-
-    _add_mmp(db, wf.id, raw, mmp_version())
-
-    # Intensity metrics for running: seconds at or above runFTP thresholds
-    # WKO5: sum(if(runpower >= runFTP * 0.95, deltatime, 0))
-    #        sum(if(runpower >= runFTP * 1.03, deltatime, 0))
-    if is_running and ftp_w and ftp_w > 0:
-        power_arr = raw.power_w
-        hi_95 = float(np.sum(power_arr >= 0.95 * ftp_w))
-        hi_103 = float(np.sum(power_arr >= 1.03 * ftp_w))
-        if hi_95 > 0:
-            db.add(WorkoutMetric(workout_id=wf.id, metric_key="high_intensity_95pct_s", value=hi_95))
-        if hi_103 > 0:
-            db.add(WorkoutMetric(workout_id=wf.id, metric_key="high_intensity_103pct_s", value=hi_103))
 
     return wf

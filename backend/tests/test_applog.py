@@ -482,7 +482,7 @@ def test_login_and_sync_log_no_personal_data(tmp_path, caplog):
     # the app's own messages: what the app log writes (its handlers sit on the `backend` logger;
     # caplog.text also holds source line numbers and the SQL driver's debug lines)
     text = "\n".join(r.getMessage() for r in caplog.records if r.name.startswith("backend"))
-    assert "Coros profile stored: FTP yes, LTHR yes, weight yes" in text and "Coros HR profile updated" in text
+    assert "Coros profile stored: LTHR yes, weight yes" in text and "Coros HR profile updated" in text
     for personal in ("runner@example.com", "pw-Secret-1", "ctok-9f8e7d6c5b4a39281706f5e4d3c2b1a0",
                      "4242424242", "61.5", "193", "194", "171", "172", "287", "47", "46"):
         assert not re.search(rf"(?<![\d.]){re.escape(personal)}(?![\d.])", text), personal

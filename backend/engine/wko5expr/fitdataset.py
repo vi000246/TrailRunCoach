@@ -30,8 +30,9 @@ the WKO5 athlete folder.
   (tss_ftp; parity mode / the WKO5 opt-in keep WKO5's FTP setting).
 * thresholds / weight, in order: the season plan's dated rows (Dataset.setting
   / cp) -> athlete_settings in the app DB (weight, run_ftp_w, threshold pace;
-  not lthr / ftp_w, see _load_db_settings) -> as-of LTHR / CP estimates from
-  these FITs (_estimate_settings) -> unset ("未設定"). The WKO5 athlete file
+  not lthr, see _load_db_settings) -> as-of LTHR / CP estimates from
+  these FITs (_estimate_settings; without any, the COROS account LTHR, then
+  0.90 × max HR) -> unset ("未設定"). The WKO5 athlete file
   only when settings_dir is passed (dataset_for_source: the opt-in setting
   charts.fit_settings_from_wko5). PMC constants: 42 / 7 (WKO5's defaults).
 * power source per workout (backend/engine/power_source.py): stryd (Stryd
@@ -102,7 +103,7 @@ SETTING_LABELS = {
     "prior": N_("推估（最大心率的 90 %）"),
 }
 IGNORED_WHY = ("COROS 帳號 zoneData 的值（登入時寫入），沒有記錄是哪個運動；"
-               "不當跑步 LTHR／FTP 用")
+               "不當跑步 LTHR 用")
 
 # FIT sport / sub_sport -> (sport group, sport type) like WKO5 uses them
 SPORTS = {
@@ -199,7 +200,9 @@ def read_athlete_settings(db: Optional[Path] = None, athlete_id: int = 1) -> lis
     db = _app_db() if db is None else db
     if db is None:
         return []
-    cols = ("effective_date", "ftp_w", "weight_kg", "lthr", "threshold_pace_s_per_km", "run_ftp_w")
+    # not ftp_w: a legacy column (COROS account FTP, no sport recorded) nothing reads; an older
+    # DB still has it, a new one does not
+    cols = ("effective_date", "weight_kg", "lthr", "threshold_pace_s_per_km", "run_ftp_w")
     try:
         con = _ro(db)
         try:
@@ -777,11 +780,13 @@ class FitFolderDataset(Dataset):
     def _load_db_settings(self, rows: Optional[list] = None) -> None:
         """athlete_settings rows (app DB, read-only) -> dated settings.
         Used: weight_kg -> weight, run_ftp_w -> runftp, threshold_pace_s_per_km
-        -> runtpace. NOT used: `lthr` and `ftp_w` — the only automatic writer
-        is coros_client.login, which stores COROS's account zoneData.lthr /
-        .ftp without saying which sport they are for (one such row had an
-        LTHR ~10 bpm above the peak HR of that day's maximal 12′ test, so
-        not the athlete's running LTHR); they stay in settings_ignored."""
+        -> runtpace. NOT a running threshold: `lthr` — the only automatic
+        writer is coros_client.login, which stores COROS's account
+        zoneData.lthr without saying which sport it is for (one such row had
+        an LTHR ~10 bpm above the peak HR of that day's maximal 12′ test, so
+        not the athlete's running LTHR); it stays in settings_ignored, the
+        cold-start prior of _coros_lthr_prior. The legacy `ftp_w` column
+        (the account FTP, no longer written) is not read at all."""
         rows = read_athlete_settings() if rows is None else rows
         s = self.athlete.settings
         for r in sorted(rows, key=lambda r: str(r.get("effective_date"))):
@@ -797,10 +802,9 @@ class FitFolderDataset(Dataset):
                     # (as Plan.weight_on: the earliest entry before the first)
                     s.setdefault(name, [] if name == "weight" else [NOT_BEFORE]).append((d, float(v) * f))
                     self._setting_labels[name] = SETTING_LABELS["db"]
-            for col in ("lthr", "ftp_w"):
-                if r.get(col):
-                    self.settings_ignored.append({"field": col, "value": r[col], "date": d.isoformat(),
-                                                  "why": IGNORED_WHY})
+            if r.get("lthr"):
+                self.settings_ignored.append({"field": "lthr", "value": r["lthr"], "date": d.isoformat(),
+                                              "why": IGNORED_WHY})
 
     def _coros_lthr_prior(self) -> list:
         """generalize-athlete P7: without any hard run to estimate from, the

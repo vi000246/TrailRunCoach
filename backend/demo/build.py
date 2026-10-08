@@ -416,22 +416,20 @@ def _stage_maokong(base: Path, warm: bool) -> None:
 
 def reimport(c, base: Path, rels: list[str]) -> dict:
     """Re-import FITs whose bytes changed (`rels`, relative to `base`): their
-    workout_files rows (and metrics, MMP) are dropped and scan_and_import reads them
+    workout_files rows are dropped and scan_and_import reads them
     again, the code a sync runs. `c`: the TestClient (owner mode) on `base`."""
     want = {(base / r).resolve() for r in rels}
 
     async def run():
         from sqlalchemy import delete, select, update
         from backend.db import database
-        from backend.db.models import MmpCache, WorkoutFile, WorkoutMetric
+        from backend.db.models import WorkoutFile
         from backend.files.file_service import scan_and_import
         async with database.AsyncSessionLocal() as db:
             rows = (await db.execute(select(WorkoutFile.id, WorkoutFile.file_path))).all()
             ids = [i for i, fp in rows if fp and Path(fp).resolve() in want]
             if ids:
                 await db.execute(update(WorkoutFile).where(WorkoutFile.duplicate_of.in_(ids)).values(duplicate_of=None))
-                await db.execute(delete(WorkoutMetric).where(WorkoutMetric.workout_id.in_(ids)))
-                await db.execute(delete(MmpCache).where(MmpCache.workout_id.in_(ids)))
                 await db.execute(delete(WorkoutFile).where(WorkoutFile.id.in_(ids)))
                 await db.commit()
             return {"dropped": len(ids), **(await scan_and_import(db, 1, str(base / "fit")))}

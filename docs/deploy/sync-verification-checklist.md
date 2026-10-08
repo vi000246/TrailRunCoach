@@ -42,7 +42,7 @@
   `python -m backend.scripts.compare_sources --since YYYY-MM-DD --athlete-dir "<你的 WKO5 athlete 資料夾>" --csv compare.csv`
   - 「COROS vs TrainingPeaks」：配對筆數應該接近兩邊共有的活動數。
   - 標 `!!` 的列代表超過容差：時長 / 距離 2%、爬升 10%、功率 / NP 3%、HR 2%、TSS 5%。
-  - 最常見的差異是爬升（裝置 `total_ascent` vs WKO5 平滑後的 elevation）和 TSS（FTP / 門檻設定不同）。
+  - 最常見的差異是爬升（裝置 `total_ascent` vs WKO5 平滑後的 elevation）。同步列沒有 TSS（匯入不再存 TSS，2026-10-08）；TSS 的比對看 app 內的資料來源比對（`GET /api/v1/sync/compare`）。
   - `only coros` / `only tp` 清單：確認是否真的只存在於一邊。例如 TP 裡的手動課沒有 FIT，就只會出現在 TP。
 - [ ] 把 `primary_source` 切換成另一邊（`PUT /api/v1/sync/settings`），`dedup.duplicates` 數量應該不變，只是改由另一邊為主。
 
@@ -55,7 +55,6 @@
 
 ## 已知、尚未處理
 
-- COROS 登入時會用 COROS profile 的 FTP 覆寫當天的 `ftp_w`。這涉及 plan / 門檻的檔案，而那些檔案另一個分支正在改，所以暫不動。
 - COROS token 效期 24 h，沒有 refresh grant，過期要重新登入。同步會回傳 `COROS_AUTH_REQUIRED` 事件。
 - WKO5 對齊的圖表讀的是 WKO5 資料夾裡的 `.wko4`，不是 SQLite 裡的同步資料。所以同步進來的 COROS 活動目前還不會出現在 WKO5 圖表上；這需要另外一個「FIT → Dataset」的整合階段。
 - token 目前仍以明文存在 SQLite。之後的使用者設定階段會改成 Fernet 加密。

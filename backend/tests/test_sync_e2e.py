@@ -20,8 +20,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from backend.db.models import (Athlete, AthleteSettings, Base, SyncState, WorkoutFile,
-                               WorkoutMetric)
+from backend.db.models import Athlete, AthleteSettings, Base, SyncState, WorkoutFile
 from backend.settings.repository import SettingsRepository
 from backend.sync import coros_client, dedup, http, tp_client
 from backend.tests.fit_builder import build_run
@@ -40,7 +39,7 @@ async def make_session(tmp_path, tz="Asia/Taipei", **settings):
     s = async_sessionmaker(engine, expire_on_commit=False)()
     s.add(Athlete(id=1, name="tester", data_dir=str(tmp_path / "tp"), tp_athlete_id=77))
     s.add(AthleteSettings(athlete_id=1, effective_date=date(2020, 1, 1), lthr=170,
-                          run_ftp_w=250.0, ftp_w=200.0, threshold_pace_s_per_km=300.0))
+                          run_ftp_w=250.0, threshold_pace_s_per_km=300.0))
     await s.flush()
     repo = SettingsRepository(s, 1)
     await repo.set("athlete.timezone", tz)
@@ -178,9 +177,49 @@ def test_tp_clean_run_advances_cursor_and_stores_local_date(tmp_path):
         assert wf.source == "trainingpeaks"
         assert wf.start_time_utc == datetime(2026, 9, 1, 22, 30)
         assert wf.workout_date == date(2026, 9, 2)   # Taipei, not the UTC day
-        keys = {m.metric_key for m in (await s.execute(
-            select(WorkoutMetric).where(WorkoutMetric.workout_id == wf.id))).scalars()}
-        assert "tss" in keys and "hr_tss" in keys
+    run(go())
+
+
+def test_import_stores_no_per_activity_metrics(tmp_path):
+    """The import writes the workout_files row only: workout_metrics / mmp_cache (written at import,
+    never read) are no longer part of the schema, so a new DB does not even have them."""
+    from sqlalchemy import text
+    from backend.files import file_service
+
+    async def go():
+        s = await make_session(tmp_path)
+        f = tmp_path / "1_2026-09-01_run.fit"
+        f.write_bytes(build_run(START, power=240))
+        wf = await file_service._import_one_file(s, 1, f, source="coros")
+        await s.commit()
+        assert wf is not None and wf.sport == "running" and wf.workout_date == date(2026, 9, 2)
+        names = {r[0] for r in (await s.execute(text("SELECT name FROM sqlite_master WHERE type='table'")))}
+        assert "workout_files" in names and not names & {"workout_metrics", "mmp_cache"}
+        await s.close()
+    run(go())
+
+
+def test_coros_login_stores_lthr_and_weight_not_ftp(tmp_path):
+    """The account's LTHR (the cold-start prior, fitdataset._coros_lthr_prior) and weight are kept as
+    a dated athlete_settings row; zoneData.ftp is not stored or returned (nothing read it)."""
+    class Profile(FakeCoros):
+        def __call__(self, request):
+            if request.url.path == "/account/login":
+                return httpx.Response(200, json={"result": "0000", "data": {
+                    "accessToken": "ctok", "userId": 42, "weight": 61.5,
+                    "zoneData": {"ftp": 287, "lthr": 171}}})
+            return super().__call__(request)
+
+    async def go():
+        s = await make_session(tmp_path)
+        with http.use_transport(httpx.MockTransport(Profile([]))):
+            info = await coros_client.login("me@example.com", "pw", s, 1)
+        assert info["authenticated"] and "ftp_w" not in info and "lthr" not in info
+        today = datetime.now(timezone.utc).date()
+        row = (await s.execute(select(AthleteSettings).where(AthleteSettings.effective_date == today))).scalar_one()
+        assert row.lthr == 171 and row.weight_kg == pytest.approx(61.5)
+        assert not hasattr(row, "ftp_w")
+        await s.close()
     run(go())
 
 
@@ -291,10 +330,6 @@ def test_coros_login_list_download_import_and_incremental_cursor(tmp_path, monke
         rows = (await s.execute(select(WorkoutFile).order_by(WorkoutFile.id))).scalars().all()
         assert [r.coros_activity_id for r in rows] == ["A1", "A2"]
         assert rows[0].workout_date == date(2026, 9, 2)
-        # no power on A2: still gets an HR load
-        keys = {m.metric_key for m in (await s.execute(
-            select(WorkoutMetric).where(WorkoutMetric.workout_id == rows[1].id))).scalars()}
-        assert "hr_tss" in keys
     run(go())
 
 
