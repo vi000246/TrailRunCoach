@@ -7,11 +7,15 @@ Now a single activity's failure is written here and the cursor moves as normal; 
 the whole run (login, listing) still keeps the cursor (coros_client / tp_client).
 
   * kind "failed": the download or the import failed. The next syncs retry it BY ID (no
-    re-listing), at most MAX_ATTEMPTS attempts in all or MAX_AGE_DAYS days after the first
-    one (owner 2026-10-08); then automatic retries stop and the row stays for 設定 ›
-    進階設定, whose 「重試」 (reset) makes it due again.
+    re-listing), at most MAX_ATTEMPTS attempts in all or MAX_AGE_DAYS days of trying (from
+    the first to the last attempt, from the 2nd attempt on; owner 2026-10-08, review #2);
+    then automatic retries stop and the row stays for 設定 › 進階設定, whose 「重試」
+    (reset) makes it due again.
   * kind "no_file": the activity has no FIT file at all (a manual entry). Not a failure:
-    never retried, never holds the cursor; kept so the listing overlap does not ask again.
+    not retried by id, never holds the cursor. COROS: after NO_FILE_ANSWERS answers without
+    a file (the first is an ordinary failure); its listing overlap then skips the row. TP:
+    its listing (workouts/changed) checks the workout again whenever it returns it. 「重試」
+    works on these rows too.
 
 A row is deleted when the activity is imported, and with the source's files (sync/purge.py).
 Table sync_failures (db/models.SyncFailure; data_registry: IMPORTED bookkeeping).
@@ -49,11 +53,16 @@ def _short(error) -> str:
 
 
 def auto_retry(row: SyncFailure, now: Optional[datetime] = None) -> bool:
-    """Whether the next sync retries this row by itself."""
+    """Whether the next sync retries this row by itself: fewer than MAX_ATTEMPTS attempts, and
+    not yet MAX_AGE_DAYS days OF TRYING — from the first to the last attempt, counted only from
+    the 2nd attempt on, so a week without any sync (a 百岳 trip) does not use the days up
+    (review SP-362 #2). `now` is unused (kept for callers)."""
     if row.kind != FAILED:
         return False
-    now = now or _now()
-    return int(row.attempts or 0) < MAX_ATTEMPTS and now - row.first_at < timedelta(days=MAX_AGE_DAYS)
+    n = int(row.attempts or 0)
+    if n >= MAX_ATTEMPTS:
+        return False
+    return n < 2 or (row.last_at or row.first_at) - row.first_at < timedelta(days=MAX_AGE_DAYS)
 
 
 def state(row: SyncFailure, now: Optional[datetime] = None) -> str:
@@ -101,8 +110,26 @@ async def record_failure(db: AsyncSession, athlete_id: int, source: str, provide
 
 async def record_no_file(db: AsyncSession, athlete_id: int, source: str, provider_id,
                          sport_type=None, workout_date: Optional[date] = None) -> SyncFailure:
-    """The activity has no FIT file (a manual entry): remembered, never retried. Commits."""
+    """The activity has no FIT file (a manual entry): remembered, not retried by id. Commits.
+    COROS's listing skips the row; TP's checks it again whenever workouts/changed returns it
+    (review SP-362 #1); 「重試」 (reset) makes it due."""
     return await _upsert(db, athlete_id, source, provider_id, NO_FILE, sport_type, workout_date)
+
+
+NO_FILE_ERROR = "no FIT file in the answer"
+NO_FILE_ANSWERS = 2           # COROS: this many answers without a file make it no_file (review SP-362 #3)
+
+
+async def record_no_file_answer(db: AsyncSession, athlete_id: int, source: str, provider_id,
+                                sport_type=None, workout_date: Optional[date] = None) -> SyncFailure:
+    """An answer without a file (COROS detail/download without a fileUrl). One could be a
+    hiccup: the first is an ordinary, retryable failure; the NO_FILE_ANSWERS-th in a row makes
+    the row no_file. Commits; the row's kind says which it became."""
+    row = await get(db, athlete_id, source, provider_id)
+    if row is not None and row.kind == FAILED and row.last_error == NO_FILE_ERROR \
+            and int(row.attempts or 0) + 1 >= NO_FILE_ANSWERS:
+        return await record_no_file(db, athlete_id, source, provider_id, sport_type, workout_date)
+    return await record_failure(db, athlete_id, source, provider_id, NO_FILE_ERROR, sport_type, workout_date)
 
 
 async def resolve(db: AsyncSession, athlete_id: int, source: str, provider_id) -> bool:
@@ -143,7 +170,8 @@ async def reset(db: AsyncSession, athlete_id: int, row_id: int) -> Optional[Sync
                                                       SyncFailure.id == row_id))).scalar_one_or_none()
     if row is None:
         return None
-    row.kind, row.attempts, row.first_at = FAILED, 0, _now()
+    now = _now()
+    row.kind, row.attempts, row.first_at, row.last_at, row.last_error = FAILED, 0, now, now, None
     await db.commit()
     return row
 
