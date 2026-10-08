@@ -10,7 +10,7 @@ import json
 import logging
 from datetime import datetime, timezone, date, timedelta
 from pathlib import Path
-from typing import Optional, AsyncIterator
+from typing import AsyncIterator, Callable, Optional
 
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -491,6 +491,9 @@ async def _download_fit(token: str, base: str, user_id: str, activity: dict) -> 
 # own, nothing written to COROS), rate-limited, marked done in the setting BACKFILL_KEY.
 # Live probe 2026-10-06: each detail answer is the whole activity (1.4–3.2 MB, ~1.5–3 s), so
 # the backfill reads at most BACKFILL_MAX per sync and spreads the rest over later syncs.
+# SP-362 A5: these passes (up to ~65 s) run as a background job after the sync result is
+# stored (feel_job, started by sync/runner.start_feel_job); the new activities' own reads
+# (_read_new_feel) stay in the sync.
 # ---------------------------------------------------------------------------
 
 DETAIL_TIMEOUT_S = 20
@@ -548,13 +551,14 @@ def _detail_sport(wf: WorkoutFile) -> int:
 
 async def fill_feel(db: AsyncSession, athlete_id: int, token: str, base: str, user_id: str,
                     since: date, limit: int, until: Optional[date] = None, unrated_since: Optional[date] = None,
-                    skip_ids=frozenset()) -> dict:
+                    skip_ids=frozenset(), should_stop: Optional[Callable[[], bool]] = None) -> dict:
     """Read the self-rating of the already-imported COROS activities in [since, until) that were
     never read (coros_feel NULL) — plus, with `unrated_since`, the ones stored as 0 (not rated)
     on or after that day, so a rating added later in the COROS app arrives — newest first, at
-    most `limit`; `skip_ids` = rows already read in this sync. {checked, filled (RPE changed),
-    failed, left (rows still unread beyond the limit), stopped (why a pass ended early or
-    None)}. Commits per row; never raises."""
+    most `limit`; `skip_ids` = rows already read in this sync. `should_stop` is asked before
+    each read: True ends the pass there (stopped "yield": a sync of COROS wants the busy flag,
+    SP-362 A5). {checked, filled (RPE changed), failed, left (rows still unread beyond the
+    limit), stopped (why a pass ended early or None)}. Commits per row; never raises."""
     from backend.engine import coros_rpe as CR
     out = {"checked": 0, "filled": 0, "failed": 0, "left": 0, "stopped": None}
     which = WorkoutFile.coros_feel.is_(None)
@@ -576,6 +580,10 @@ async def fill_feel(db: AsyncSession, athlete_id: int, token: str, base: str, us
     for i, wf in enumerate(rows[:limit]):
         if i:
             await _pause()
+        if should_stop is not None and should_stop():
+            out["stopped"] = "yield"
+            out["left"] += len(rows[:limit]) - i
+            break
         feel, why = await read_feel(token, base, user_id, wf.coros_activity_id, _detail_sport(wf))
         out["checked"] += 1
         if feel is None:
@@ -599,7 +607,8 @@ async def fill_feel(db: AsyncSession, athlete_id: int, token: str, base: str, us
 
 
 async def backfill_feel(db: AsyncSession, athlete_id: int, token: str, base: str, user_id: str,
-                        today: Optional[date] = None) -> Optional[dict]:
+                        today: Optional[date] = None,
+                        should_stop: Optional[Callable[[], bool]] = None) -> Optional[dict]:
     """The one-time backfill of the last BACKFILL_DAYS (idempotent: rows already read are never
     read again; done once a pass leaves nothing unread, or after BACKFILL_PASSES passes that had
     a failed read — a pass that only ran out of its BACKFILL_MAX reads is not one). None when it
@@ -615,8 +624,8 @@ async def backfill_feel(db: AsyncSession, athlete_id: int, token: str, base: str
     today = today or datetime.now(timezone.utc).date()
     # the last RETRY_DAYS are the retry pass's (_feel_passes): not read twice in one sync
     res = await fill_feel(db, athlete_id, token, base, user_id, today - timedelta(days=BACKFILL_DAYS), BACKFILL_MAX,
-                          until=today - timedelta(days=RETRY_DAYS))
-    if res["stopped"] in ("token", "db"):
+                          until=today - timedelta(days=RETRY_DAYS), should_stop=should_stop)
+    if res["stopped"] in ("token", "db", "yield"):
         return res                               # not a pass: tried again by the next sync
     passes = int(mark.get("passes") or 0) + 1
     failed_passes = int(mark.get("failed_passes") or 0) + (1 if res["failed"] else 0)
@@ -658,21 +667,22 @@ async def _read_new_feel(db: AsyncSession, wf, token: str, base: str, user_id: s
 
 
 async def _feel_passes(db: AsyncSession, athlete_id: int, token: str, base: str, user_id: str,
-                       read_now=frozenset()) -> int:
-    """The end of a sync: retry the recent unread rows and re-read the recent ones stored as 0
+                       read_now=frozenset(), should_stop: Optional[Callable[[], bool]] = None) -> int:
+    """After a sync: retry the recent unread rows and re-read the recent ones stored as 0
     (not rated yet; `read_now` = rows read by this sync already), then the backfill. The number
-    of already-imported activities whose RPE changed. Never raises."""
+    of already-imported activities whose RPE changed. Never raises. Run by feel_job in the
+    background since SP-362 A5 (inline only when sync_workouts is asked to)."""
     filled = 0
     try:
         today = datetime.now(timezone.utc).date()
         since = today - timedelta(days=RETRY_DAYS)
         r = await fill_feel(db, athlete_id, token, base, user_id, since, RETRY_MAX, unrated_since=since,
-                            skip_ids=read_now)
+                            skip_ids=read_now, should_stop=should_stop)
         if r["checked"]:
             await _pause()
         filled += r["filled"]
-        if r["stopped"] != "token":
-            b = await backfill_feel(db, athlete_id, token, base, user_id, today)
+        if r["stopped"] not in ("token", "yield"):
+            b = await backfill_feel(db, athlete_id, token, base, user_id, today, should_stop=should_stop)
             filled += (b or {}).get("filled", 0)
     except Exception as e:                       # noqa: BLE001 — the sync result stands
         log.warning("COROS self-rating pass failed: %s", type(e).__name__)
@@ -681,6 +691,21 @@ async def _feel_passes(db: AsyncSession, athlete_id: int, token: str, base: str,
         except Exception:                        # noqa: BLE001
             pass
     return filled
+
+
+async def feel_job(db: AsyncSession, athlete_id: int = 1, read_now=frozenset(),
+                   should_stop: Optional[Callable[[], bool]] = None) -> int:
+    """The self-rating passes as a background job after a sync (SP-362 A5): sync/runner.py
+    start_feel_job holds the COROS busy flag as a yielding holder and passes its stop request
+    as `should_stop`. Uses the stored token, never logs in. The number of activities whose RPE
+    changed; never raises."""
+    try:
+        token, base, user_id = await _get_token_and_base(db, athlete_id, auto_relogin=False)
+    except Exception as e:                       # noqa: BLE001 — logged out meanwhile: the next sync's job
+        log.info("COROS self-rating job skipped: %s", type(e).__name__)
+        return 0
+    return await _feel_passes(db, athlete_id, token, base, user_id, read_now=frozenset(read_now),
+                              should_stop=should_stop)
 
 
 def list_training_load(act: dict) -> Optional[float]:
@@ -813,8 +838,13 @@ async def sync_workouts(
     db: AsyncSession,
     athlete_id: int = 1,
     since: Optional[str] = None,
+    feel_passes: bool = True,
 ) -> AsyncIterator[dict]:
     """List Coros activities → skip known → download .fit → import → yield SSE events.
+
+    `feel_passes` False (sync/runner.py, SP-362 A5): the self-rating passes over
+    already-imported activities are left to a background job (feel_job); the complete event
+    then carries `feel_read` (the rows this sync read already) for it, and rpe_filled 0.
 
     Incremental: without `since`, lists from the last sync minus
     CURSOR_OVERLAP_DAYS (first sync: FIRST_SYNC_DAY). One activity's failed
@@ -953,9 +983,14 @@ async def sync_workouts(
         await db.commit()
     await refresh_hr_profile(db, athlete_id, token, base, user_id)
     # the post-run self-rating of already-imported activities: unread recent ones, the
-    # one-time 8-week backfill (SP-231); never fails the sync, never moves the cursor
-    rpe_filled = await _feel_passes(db, athlete_id, token, base, user_id, read_now=frozenset(feel_read))
+    # one-time 8-week backfill (SP-231); never fails the sync, never moves the cursor.
+    # Up to ~65 s of detail reads: the runner leaves them to a background job (SP-362 A5)
+    extra = {}
+    if feel_passes:
+        rpe_filled = await _feel_passes(db, athlete_id, token, base, user_id, read_now=frozenset(feel_read))
+    else:
+        rpe_filled, extra = 0, {"feel_read": sorted(feel_read)}
 
     yield {"status": "complete", "total_downloaded": total_downloaded,
            "total_checked": total_checked, "errors": errors, "tl_filled": tl_filled,
-           "rpe_filled": rpe_filled}
+           "rpe_filled": rpe_filled, **extra}
