@@ -108,6 +108,9 @@ async def lifespan(app: FastAPI):
         # quitting: the rain backfill (api/rain_backfill.py, SP-299) stops before its next call
         from backend.api import rain_backfill
         rain_backfill.STOP.set()
+        # …and the charts' background renders (SP-336): queued ones dropped, running ones not waited for
+        from backend.engine.wko5expr import render_cache
+        render_cache.shutdown_refresh()
         if task is not None:
             task.cancel()
             try:
