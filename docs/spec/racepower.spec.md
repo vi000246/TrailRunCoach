@@ -431,7 +431,10 @@ Design: `docs/research/racepower-v2.md` (formulas F1–F18, verification §3A / 
     RE_flat·Cr(0)/Cr(g) with the 0.9 downhill floor.
   - Walked windows fit `walk`, towards Minetti's walking prior RE_flat·Cr(0)/Cw(g) (same paper;
     that Stryd follows walking cost is 待驗證).
-  - Per bin, the athlete's majority gait picks the curve (推估).
+  - Per bin, the athlete's majority gait picks the curve (推估). With `GaitRE.speed_gait` (SP-229,
+    on only when the athlete's trail back-test says it is no worse) the running curve's speed at
+    the segment power picks it instead: below the (shifted) PTS, walk
+    (`backend/engine/racepower/grade_model.py:312`).
   - Trail technicality factor (推估): on flats and descents (g ≤ +2 %), the median actual ÷
     predicted RE over the athlete's own trail running windows. It is computed per intensity class
     when there are ≥ 30 windows, bounded 0.6–1.2, and applied only to trail plans (race class).
@@ -1112,6 +1115,8 @@ Personal transition speed (SP-228, `runwalk.fit_shift`, set on `GaitRE.runwalk` 
 
 SP-229 gate (back-test only): `GaitRE.re_at` / `gait_at` pick the walking curve where the running curve's speed at the segment power is below the (shifted) PTS; `RunModel.re_at` lets `course_time` use it. The terrain back-test reports it beside the majority gait (`models.speed_gait`, `speed_gait`: trail segment and climb |error|, segments whose gait changed, `no_worse`) and the 準確度 tab shows the line. The planner keeps the majority gait until a back-test on the athlete's data shows `no_worse`.
 
+SP-229 time model (gated): `GaitRE.speed_gait` (default False, `backend/engine/racepower/grade_model.py:229`) is set by the API from the stored back-test (`backtest.speed_gait_flag`, `backend/engine/racepower/backtest.py:1410`; `with_speed_gait`, `backend/api/racepower.py:360`) — on only when `terrain.speed_gait.no_worse` (trail segment and climb median |error| both not above the majority gait's). When on, the planner passes `re_at` to `RunModel` (`backend/engine/racepower/planner.py:481`) and one decision per segment — `gait_at` on the running curve's speed at the segment power — gives the curve (`gait_curve`), the label (`gait` / `walk`, 走跑皆可 runs on the running curve) and the note 「走（依這段的預估速度，用走的比跑省力）」 (`planner.py:662`, `:682`); `trusted` reads that curve's bin (`trusted_at`). Off: unchanged — majority gait, the SP-226 label from the final speed, the note 「走（你在這個坡度多半走）」. Every segment carries `gait_curve` (walk / run: the curve the time used); `summary.runwalk.speed_gait` says which model ran. A higher target never adds walked segments (power rises with the target, so the running speed only crosses the PTS upwards). `speed_gait_summary.changed_segments` adds both models' errors on just the climbs whose curve differs. On the demo athlete (who walks by a fixed > 19 % rule) the gate fails (trail segments 9.4 % → 10.6 %, climbs 12.5 % → 17.8 %), so the demo keeps the majority gait; the owner's NAS back-test decides for real data.
+
 ### Share links (`backend/engine/racepower/share.py:75`)
 
 「分享」 freezes one /plan result into a whitelisted snapshot (profile, splits, segment targets, 補給
@@ -1297,6 +1302,10 @@ decay. `backend/tests/test_race_format.py` (SP-114): 賽制 分站 / 連續, sle
 stretch. `backend/tests/test_racepower_page_adv.py` (SP-214): the core inputs in view and the tuning
 options in the collapsed 進階計算選項 panel. `backend/tests/test_altitude_nights.py` (SP-259): nights
 marked on the 課表 calendar count for the altitude reminder like nights the activities show.
+`backend/tests/test_racepower_speed_gait.py` (SP-229): the speed-chosen curve is off by default and
+survives the planner's copies; flag off = the majority-gait plan; flag on = one decision for curve,
+label and note; raising the target (auto / power) never adds walked segments; the stored back-test
+sets the API's switch.
 
 ## Domain Model
 
@@ -1399,7 +1408,7 @@ when set, but nothing fills it from the routes module yet.
 
 ## Open Questions
 
-- [ ] Time model picks walk or run from the predicted speed; only the back-test gate exists, the planner still uses the majority gait（SP-229，Todo）——尚未實作
+- [ ] Time model picks walk or run from the predicted speed: implemented behind the back-test gate (`GaitRE.speed_gait`, on only when the athlete's trail back-test shows `no_worse`); on the demo athlete it is worse, so the default stays the majority gait — the owner's back-test on the NAS data decides（SP-229，In Progress）
 - [ ] Night segments without a forecast use night climatology. The premise may be partly out of date: road / trail already get the climatology's 24-hour profile (`backend/engine/racepower/weather.py:862`); what is left is the single To value (daytime mean, `DAY_HOURS`) and 百岳, so the scope needs narrowing（SP-257，Todo）——尚未實作
 - [ ] Remove the CSV export (button, `POST /export/csv`, `csvplan.py`); the CSV export section goes with it（SP-365，Todo）——尚未實作
 - [ ] 坡度 RE 曲線 and 爬坡步頻分布 fail with 「Failed to fetch」 on a marathon race（SP-366，Bug Todo）——尚未實作
@@ -1446,3 +1455,4 @@ when set, but nothing fills it from the routes module yet.
 | 2026-10-07 | fix | SP-341, docs/research/cache-tiering.md §10 ⑩ | `racepower_power_source.json` / `racepower_bad_activity.json` carry a code version (`{"v", "files"}`; the older flat form is recomputed once) and are written atomically; `workout_curves.json` (the `_curve` source) is versioned by `dataset.per_workout_code`; all registered in `backend/data_registry.py` (SP-311) |
 | 2026-10-07 | feature | SP-293, docs/research/cold-start.md §2.1, §4.4, §5 T6 | No CP yet: `POST /estimate` + `race_estimate.py` — the shared race results (`athlete.race_results`, the questionnaire's and SP-276's one list) give a 推估 finish: road Riegel k −0.07, trail §0.5.5 effort km × flat easy pace (E pace middle) × 0.85; with a CP `model: true` (the existing model); the page falls back to it only after /plan's 400 on road / trail; low self-reported week + ≥ marathon → the optimistic line; test `test_race_estimate.py` |
 | 2026-10-08 | code-sync（SP-43, SP-114, SP-118, SP-214, SP-240, SP-241, SP-247, SP-250, SP-255, SP-259, SP-285, SP-287, SP-320） | N/A | Architecture table: capacity.py, runwalk.py, cold.py, night.py, zonebar.py, tss_calib.py; API: GET /altitude-acclimatisation, cache keys on tenant + dataset generation; 路況 dry / wet technicality split; back-test long-race and x*(T) / δ double-count blocks; Page: 進階計算選項, what the effort km formula changes, 地圖選點, the zone bar, 匯出至課表; Fuelling: pre-race load wording, 睡眠點 and their default minutes; Testing: tests added since 10-04; new Decisions Log (8) and Open Questions (13) from the Obsidian tickets |
+| 2026-10-08 | feature | SP-229, docs/research/run-walk-threshold.md §5.3 | Time model picks the walking or running curve from the predicted speed (`GaitRE.speed_gait` → `RunModel.re_at`; one decision for curve, label and the new note 「走（依這段的預估速度，用走的比跑省力）」; segments carry `gait_curve`, `summary.runwalk.speed_gait`), gated on the stored trail back-test (`backtest.speed_gait_flag` = `terrain.speed_gait.no_worse`, set in the API); default stays the majority gait. `speed_gait_summary.changed_segments`. Demo back-test: worse (segments 9.4 % → 10.6 %, climbs 12.5 % → 17.8 %, 55 climbs changed), so the demo keeps the majority gait |

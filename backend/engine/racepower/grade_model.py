@@ -195,7 +195,9 @@ class GaitRE:
     walked windows fit `walk` (Minetti walking prior). For each 2 % bin the
     athlete's own majority gait decides which curve predicts that grade
     (推估; Minetti's running cost does not describe walking — Minetti 2002,
-    Giovanelli 2016 on the walk/run crossover). `tech` is the trail
+    Giovanelli 2016 on the walk/run crossover); with `speed_gait` (SP-229) the
+    running curve's speed at the segment power decides instead (re_at,
+    curve_at: below the transition speed, walk). `tech` is the trail
     technicality factor on flats and descents (g ≤ +2 %): median of actual ÷
     predicted RE over the athlete's own trail running windows there (推估,
     per intensity class when ≥ 30 windows), applied only with `trail=True`.
@@ -221,6 +223,10 @@ class GaitRE:
     # ("dry" / "wet" / None = the pooled factor, as before)
     tech_surface: dict = field(default_factory=dict)
     surface: Optional[str] = None
+    # SP-229: the time model picks the curve by the predicted speed (re_at / curve_at) instead of
+    # the majority gait (walked). Off unless the athlete's own trail back-test says it is no worse
+    # (backtest.speed_gait_flag; the API sets it with with_speed_gait)
+    speed_gait: bool = False
 
     @property
     def surface_split(self) -> bool:
@@ -296,12 +302,24 @@ class GaitRE:
         """SP-229 RE with the gait chosen by the predicted speed instead of the majority gait
         (re): the walking curve where gait_at says walk, the running curve elsewhere (also on
         flats and descents), the trail technicality as in re (推估: faster efforts run more,
-        a slower late race walks more). Used by the back-test's comparison; the planner
-        keeps re until that shows it is no worse."""
+        a slower late race walks more). Used by the back-test's comparison, and by the planner
+        when speed_gait is on (the back-test showed it is no worse)."""
         v = self.walk.re(g) if self.gait_at(g, p, weight) == "walk" else self.run.re(g)
         if self.trail and g <= 0.02:
             v *= self.tech_at(g)[0]
         return v
+
+    def curve_at(self, g: float, p: float, weight: float) -> str:
+        """"walk" / "run": the curve that predicts grade g at power `p` — gait_at's answer when
+        speed_gait is on (走跑皆可 runs), else the majority gait (walked)."""
+        if self.speed_gait:
+            return "walk" if self.gait_at(g, p, weight) == "walk" else "run"
+        return "walk" if self.walked(g) else "run"
+
+    def with_speed_gait(self, on: bool) -> "GaitRE":
+        """The same model with the SP-229 switch on / off (a copy)."""
+        from dataclasses import replace
+        return replace(self, speed_gait=bool(on))
 
     def v_max(self, g: float) -> Optional[float]:
         return self.run.v_max(g, TRAIL_VMAX_Q if self.trail else 90)
@@ -312,6 +330,13 @@ class GaitRE:
 
     def data_n(self, g: float) -> int:
         return (self.walk if self.walked(g) else self.run).data_n(g)
+
+    def trusted_at(self, g: float, p: float, weight: float) -> bool:
+        """trusted() for the curve the segment is predicted with (curve_at)."""
+        return stryd_valid(g) or self.data_n_at(g, p, weight) >= SHRINK_N
+
+    def data_n_at(self, g: float, p: float, weight: float) -> int:
+        return (self.walk if self.curve_at(g, p, weight) == "walk" else self.run).data_n(g)
 
     def with_flat(self, re_flat: float) -> "GaitRE":
         from dataclasses import replace
@@ -347,6 +372,7 @@ class GaitRE:
         from backend.engine.racepower import runwalk as RW
         j.update(walk_samples=self.walk.n_samples, tech=self.tech, tech_used={"f": f, "class": which},
                  tech_bins=self.tech_bins, trail_vmax_q=TRAIL_VMAX_Q, tech_surface=self.tech_surface,
+                 speed_gait=self.speed_gait,
                  runwalk={**(self.runwalk or {"shift": 0.0, "personal": False, "n": 0, "bins": []}),
                           "curve": RW.curve_json(self.rw_shift)})
         return j
