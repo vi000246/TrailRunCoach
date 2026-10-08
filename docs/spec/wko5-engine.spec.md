@@ -625,7 +625,7 @@ unchanged files and unchanged code reads no FIT file at all.
   魯地圖, Google 地形, NLSC 電子地圖, 正射影像, OSM; overlays 等高線, Google 道路, NLSC 道路
   come from the shared `backend/static/basemaps.js:17` (also the routes page and the race
   calculator's course map). The defaults come from the settings keys `charts.map.basemap` /
-  `charts.map.overlays` (`backend/settings/repository.py:124-125`; basemap unset = by 地區: tw 魯地圖, intl OSM), read as `map_basemap` /
+  `charts.map.overlays` (`backend/settings/repository.py:128-129`; basemap unset = by 地區: tw 魯地圖, intl OSM), read as `map_basemap` /
   `map_overlays` from `GET /api/v1/sync/settings` (`backend/api/sync.py:236`,
   `backend/static/wko5_viewer.html:643`; storage side in
   [wko5-coros-sync.spec.md](./wko5-coros-sync.spec.md)); a per-browser switch is kept only
@@ -657,7 +657,7 @@ unchanged files and unchanged code reads no FIT file at all.
   its km profile and its own route map (`drawMap(card, res, opts)` with `into`,
   `chart: false`, `colorKey: "climbColor"` default 坡度, `onPick`,
   `backend/static/wko5_viewer.html:2065`) mark the same sample.
-- **Samples** (`backend/api/wko5views.py:1406`): per-sample `t`, `d` (km),
+- **Samples** (`backend/api/wko5views.py:1415`): per-sample `t`, `d` (km),
   `lat` / `lng`, `elev`, `hr`, `power`, `grade` (%), downsampled with the same
   step as the workout charts (`MAX_POINTS` 3000, `backend/engine/wko5expr/render.py:55`),
   so chart x maps exactly to a sample index; NaN and (0, 0) GPS become null. The
@@ -853,6 +853,7 @@ source (synthetic FITs).
 | 2026-10-08 | chore | owner request (drop data written but never read) | The FIT dataset no longer reads the legacy `athlete_settings.ftp_w` (the COROS account FTP; COROS login stopped writing it): `read_athlete_settings` drops it (`backend/engine/wko5expr/fitdataset.py:197`) and `_load_db_settings` keeps only `lthr` in `settings_ignored` (`:805`) — that one is still read, as the cold-start LTHR prior (`_coros_lthr_prior` `:809`, called at `:937`; it also suppresses the SP-289 0.90 × max HR prior, `:842`). The import-time `workout_metrics` / `mmp_cache` writes (never read by the engine: every TSS comes from `Dataset._metrics`) and their helpers in `backend/engine/algorithms/metrics.py` / `mmp.py` are removed; older DBs keep the tables, unread (`data_registry.LEGACY_TABLES`). Chart values unchanged |
 | 2026-10-08 | feature | SP-218 (owner decision 2026-10-08) | `GET /workouts/{i}/kind` (`sport_map.chart_sport`, `TRAIL_KINDS` = trail / hike / 百岳): the viewer reads a single-activity chart's `"sports"` tag against that activity, not 主要訓練項目. Synced hover gains the 爬坡與地形 card's km profile + its own route map (`drawMap` options `into` / `chart` / `colorKey` / `defColor` / `tip` / `onPick`). The static demo export fetches `/kind` per activity |
 | 2026-10-08 | code-sync（SP-332, SP-333, SP-337, SP-341, SP-289, SP-80, SP-215, SP-48） | N/A | Render cache: code signature by file contents (SP-332), memory LRU also capped by 32 MB of JSON, fingerprint lists the manual PMC start; FIT dataset: `estimate_grid.json` and a grid-bounds estimate key without today (SP-337), per-workout TIS on disk via `cached_series` extra input (SP-333), codehash code versions (SP-332 / SP-341), one Dataset per mode / `DATASETS_MAX` / instance caches / last good `db_stamp`, 12 open FITs, a bad FIT never stops the parse, LTHR order with the SP-289 prior; viewer map chart (SP-80); `trail.py` row dropped (removed with the SPA, SP-48); API line numbers and all anchors re-checked against 73d07ad1, then moved to main `08cf80d7` (SP-362 / SP-371 / SP-218) by diff and checked text for text; Decisions Log and Open Questions added |
+| 2026-10-08 | SP-300 follow-up | owner decision 2026-10-07 | 「依賽事設定」 (`activity_tags.race_poles`): every trail run / hike on each day of a 「會用登山杖」 event, 1-day races included (no ±25 % distance match for this default); a 1-day road race still adds its matched road run — workouts.spec.md › 登山杖 |
 
 
 ## Banded charts and the 使用功率 setting (2026-10)

@@ -357,7 +357,7 @@ def test_activity_list_carries_every_mark_and_the_viewer_list_the_kind(tmp_path,
     a = {x["file"]: x for x in lst["activities"]}["2025/0.fit"]
     assert (a["poles"], a["poles_race"], a["poles_user"]) == ("with", "河濱賽", None)      # SP-300
     assert a["surface"] == "wet" and a["tags"] == [AT.SURFACES["wet"]]                    # SP-250
-    assert a["rain_mm"] == 3.2 and AT.rain_hint(a["rain_mm"], a["surface"]) is None      # SP-299: marked
+    assert a["rain_mm"] == 3.2 and AT.rain_hint(a["rain_mm"], a["surface"], True) is None   # SP-299: marked
     assert (a["pain"], a["pain_area"], a["pain_score"]) == (2, "knee", 3)                 # SP-271
     assert lst["pole_none_tag"] == AT.POLE_NONE_TAG and lst["surface_tags"] == AT.SURFACES
     # the viewer's list: the same activity with its platform-neutral kind (SP-263)

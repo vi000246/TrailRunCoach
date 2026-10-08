@@ -86,8 +86,26 @@ def test_builtin_rows_carry_target_types():
     # library rows by their source's own targets / 目標用; ladder variants follow the session
     lib = [r for r in rows.values() if r["key"].startswith("lib:")]
     assert {x for r in lib for x in r["target_types"]} >= {"hr_pct", "pace", "power_pct", "rpe"}
-    assert all(r["target_types"] == ["auto"] for r in rows.values() if r.get("variant"))
+    # the ladder variants are 強度課 with 「自動」 bands: % CP (SP-84, owner 2026-10-07)
+    assert all(r["target_types"] == ["power_pct"] for r in rows.values() if r.get("variant"))
     assert rows["strides"]["target_types"] == ["none"]
+
+
+def test_quality_auto_counts_as_pct_cp():
+    """Owner 2026-10-07: a 強度課's 「自動」 main set is % CP in the filter (間歇／爬坡 run on power,
+    target_policy.AUTO) — one function for both lists; an explicit 目標用 still wins; other categories
+    keep 「自動」."""
+    items = wrap(st("work", 300, BAND))
+    assert WS.target_types(items, None, quality=True) == ["power_pct"]
+    assert WS.target_types(items, "hr", quality=True) == ["hr_pct"]
+    assert WS.target_types(items, None, quality=False) == ["auto"]
+    # the one helper both lists use: a row's category / cats decide
+    assert WS.template_target_types({"items": items, "cats": ["quality"]}) == ["power_pct"]
+    assert WS.template_target_types({"items": items, "cats": ["easy"]}) == ["auto"]
+    assert WS.template_target_types({"items": items}, "quality") == ["power_pct"]
+    assert WS.template_target_types({"items": items, "target_basis": "hr", "cats": ["quality"]}) == ["hr_pct"]
+    # an easy-intent warm-up / a 「其他」-only main set don't change
+    assert WS.target_types([st("work", 1800, EASY)], None, quality=True) == ["hr_zone"]
 
 
 def test_api_field_built_in_and_user(monkeypatch):
@@ -97,16 +115,18 @@ def test_api_field_built_in_and_user(monkeypatch):
         a = e.c.post(UAPI, json={"name": "絕對功率", "cats": ["quality"], "steps": pw}).json()
         b = e.c.post(UAPI, json={"name": "自動心率", "cats": ["quality"], "steps": band, "target_basis": "hr"}).json()
         c = e.c.post(UAPI, json={"name": "自動", "cats": ["easy"], "steps": band}).json()
+        d = e.c.post(UAPI, json={"name": "強度自動", "cats": ["quality"], "steps": band}).json()
         # the 範本 page's list
         u = e.c.get(UAPI).json()
         assert [x["id"] for x in u["target_types"]] == list(WS.TARGET_TYPE_IDS)
         got = {t["id"]: t["row"]["target_types"] for t in u["templates"]}
-        assert got == {a["id"]: ["power_abs"], b["id"]: ["hr_pct"], c["id"]: ["auto"]}
+        assert got == {a["id"]: ["power_abs"], b["id"]: ["hr_pct"], c["id"]: ["auto"], d["id"]: ["power_pct"]}
         # 插入範本: the same per row, the built-in rows too
         m = e.c.get(f"{API}/steps/templates").json()
         assert [x["id"] for x in m["target_types"]] == list(WS.TARGET_TYPE_IDS)
         mine = {r["key"]: r["target_types"] for g in m["groups"] if g.get("mine") for r in g["rows"]}
-        assert mine == {f"user:{a['id']}": ["power_abs"], f"user:{b['id']}": ["hr_pct"], f"user:{c['id']}": ["auto"]}
+        assert mine == {f"user:{a['id']}": ["power_abs"], f"user:{b['id']}": ["hr_pct"], f"user:{c['id']}": ["auto"],
+                        f"user:{d['id']}": ["power_pct"]}
         assert all("target_types" in r for g in m["groups"] for r in g["rows"])
         # 複製成我的範本 keeps a library row's type (its 目標用 goes with it)
         lib = next(r for g in m["groups"] if not g.get("mine") for r in g["rows"]

@@ -81,6 +81,8 @@ def _row(alt, ex, days_to=6, name="玉山"):
 
 
 NONE = {"nights": 0, "pre_days": 0, "recent": False, "ever": False}
+# SP-258 follow-up (owner 2026-10-07): the 適應週末 row names no place
+PLACES = ("松雪樓", "合歡山", "塔塔加", "大禹嶺", "排雲", "滑雪山莊")
 
 
 def test_reminder_texts():
@@ -118,8 +120,12 @@ def test_sp258_boundaries_28_15_14():
     for n in (28, 15):
         r = _row(alt, None, days_to=n)                                 # the early row reads no activities
         assert r["flags"] == ["plan"] and "安排適應週末" in r["title"], n
-        assert "2,750 m 以上睡 2 晚" in r["reason"] and "合歡山松雪樓 3,150 m" in r["reason"]
-        assert "Beidleman 2018" in r["help"] and "推估" in r["help"] and r["weekends"]
+        assert "2,750 m 以上睡 2 晚" in r["reason"] and "Beidleman 2018" in r["help"] and "推估" in r["help"]
+        assert r["weekends"]
+        # owner 2026-10-07: no place at all (松雪樓 gone too) — only the reminder
+        for place in PLACES:
+            assert place not in r["title"] + r["reason"] + r["help"], (n, place)
+        assert "✕" in r["help"]                                        # it can be closed for good
     r14 = _row(alt, NONE, days_to=14)
     assert r14["title"] == "「玉山」最高約 3,952 m：出發前的高度適應" and r14["flags"] == ["first"]
     assert "安排適應週末" not in r14["help"] and "weekends" not in r14
@@ -144,12 +150,32 @@ def test_sp258_weekends_inside_the_14_days_and_the_taper():
     assert not any(w["taper"] for w in AL.weekends(start, TODAY))
 
 
+def test_sp258_the_weekend_ending_on_a_sunday_departure_counts():
+    """Owner 2026-10-07: a trip leaving on a Sunday — that weekend's Friday and Saturday nights are
+    before it, so it counts (the Saturday start still has one weekend only)."""
+    sun = dt.date(2026, 11, 1)                                          # a Sunday
+    ws = AL.weekends(sun, TODAY)
+    # CDC window 10/18–10/31: Fridays 10/23 and 10/30 → 10/24–25 and 10/31–11/1 (the departure day)
+    assert [(w["sat"], w["sun"]) for w in ws] == [("2026-10-24", "2026-10-25"), ("2026-10-31", "2026-11-01")]
+    r = AL.reminder({"id": "yu", "name": "玉山", "start": sun, "days": 2}, {"max_m": 3952.0}, None, TODAY)
+    assert "可選：10/24–25、10/31–11/1" in r["reason"]
+    # the boundary days: a Monday departure has the same two; a Saturday one only the weekend before
+    assert [w["sat"] for w in AL.weekends(sun + dt.timedelta(days=1), TODAY)] == ["2026-10-24", "2026-10-31"]
+    sat = sun - dt.timedelta(days=1)                                    # Saturday 10/31 departure
+    assert [(w["sat"], w["sun"]) for w in AL.weekends(sat, TODAY)] == [("2026-10-24", "2026-10-25")]
+    # a weekend already begun (today is its Saturday) is not offered any more
+    assert [w["sat"] for w in AL.weekends(sun, dt.date(2026, 10, 24))] == ["2026-10-31"]
+
+
 def test_sp258_eve_only_for_a_first_night_above_3000():
     hi = {"max_m": 3952.0, "nights": [3402]}                           # 玉山: 排雲山莊
     r = _row(hi, None, days_to=20)
     assert r["flags"] == ["plan", "eve"]
-    assert "行前一晚先住約 2,500 m" in r["reason"] and "塔塔加 2,610 m" in r["reason"] and "大禹嶺 2,565 m" in r["reason"]
-    assert "不算進適應週末" in r["help"] and "玉山國家公園" in r["help"]
+    # owner 2026-10-07: 行前一晚 only in the ? (help), never in the row's text; no place named
+    assert "行前一晚" not in r["reason"] and "2,500 m" not in r["reason"]
+    assert "行前一晚住 2,500 m 左右" in r["help"] and "玉山國家公園" in r["help"]
+    for place in PLACES:
+        assert place not in r["reason"] + r["help"], place
     lo = _row({"max_m": 3600.0, "nights": [2800]}, None, days_to=20)   # first night under 3,000 m
     assert lo["flags"] == ["plan"] and "行前一晚" not in lo["reason"] + lo["help"]
     day = _row({"max_m": 3600.0}, None, days_to=20)                    # a day trip: no night
@@ -157,6 +183,14 @@ def test_sp258_eve_only_for_a_first_night_above_3000():
     # 1–14 days: only the 說明 gets it; title, text, flags (= the id) as SP-100
     r = _row(hi, NONE, days_to=6)
     assert r["flags"] == ["first", "n1"] and "行前一晚" in r["help"] and "行前一晚" not in r["reason"]
+    # owner 2026-10-08: the 1–14 day row's ? names no place either — just 「行前一晚住 2,500 m 左右」
+    assert "行前一晚住 2,500 m 左右" in r["help"]
+    for place in PLACES:                         # 排雲山莊 stays: the research lines' study site / CDC's 3,400 m
+        assert place == "排雲" or place not in r["help"], place
+    from backend.i18n import use_locale
+    with use_locale("en"):
+        en = _row(hi, NONE, days_to=6)["help"]
+    assert "around 2,500 m" in en and "Tataka" not in en and "Dayuling" not in en
 
 
 def test_box_rows_info_only_and_the_id_follows_the_conditions():
@@ -195,9 +229,10 @@ def test_box_row_15_to_28_days_out_reads_no_activities_and_has_its_own_id():
     rows = SG.altitude_rows(evs, TODAY.isoformat(), lambda e: {"max_m": 3952.0, "nights": [3402]}, alts)
     assert len(rows) == 1 and not calls
     r = rows[0]
-    assert r["id"] == f"altitude:yu:{r['start']}:3952:plan-eve" and r["src"].startswith(AL.SRC_PLAN) and "玉山國家公園" in r["src"]
+    assert r["id"] == f"altitude_plan:yu:{r['start']}" and r["src"].startswith(AL.SRC_PLAN) and "玉山國家公園" in r["src"]
     # a 2-day 百岳 A event tapers 7 days (planning.taper_days): its last weekend is marked
-    assert [(w["sat"], w["taper"]) for w in r["weekends"]] == [("2026-10-17", True)]
+    # (the trip leaves on Sunday 10/25: that weekend counts too, owner 2026-10-07)
+    assert [(w["sat"], w["taper"]) for w in r["weekends"]] == [("2026-10-17", True), ("2026-10-24", True)]
     # the 14-day row of the same event has another id: dismissing the early one doesn't hide it
     dis = SG.record({}, r["id"], "dismissed", dt.datetime(2026, 10, 5, 8))
     later = (TODAY + dt.timedelta(days=8)).isoformat()
@@ -218,3 +253,71 @@ def test_api_rows_from_the_plan_and_the_stored_gpx(store, monkeypatch):
     rows = API._altitude_suggestions(TODAY.isoformat())
     assert [r["event_id"] for r in rows] == ["yu"]
     assert rows[0]["flags"] == ["recent", "n1"] and "第一晚睡在約" in rows[0]["help"]
+
+
+def test_sp258_plan_row_once_closed_never_comes_back_for_that_trip():
+    """Owner 2026-10-07: the 適應週末 reminder can be closed (✕); once closed it does not show again
+    for that trip — not the next day, not when its GPX / first night changes, not after a day the
+    row was not computed. The 14-day check is another row and still shows."""
+    start = TODAY + dt.timedelta(days=20)
+    evs = [Event("yu", "玉山", start.isoformat(), kind="baiyue", days=2)]
+    alt = {"max_m": 3952.0, "nights": [3402]}
+    rows = SG.altitude_rows(evs, TODAY.isoformat(), lambda e: alt, lambda: {})
+    r = rows[0]
+    assert r["id"] == f"altitude_plan:yu:{start.isoformat()}"
+    dis = SG.record({}, r["id"], "dismissed", dt.datetime(2026, 10, 5, 8))
+    assert SG.visible(rows, SG.prune(dis, rows, TODAY.isoformat())) == []
+    for k in (1, 5, 13):                                                # days 19, 15, 7…: every later day
+        day = (TODAY + dt.timedelta(days=k)).isoformat()
+        alt2 = {"max_m": 3960.0, "nights": [2900]} if k == 5 else alt  # a new GPX: other height, no 行前一晚
+        rows_k = SG.altitude_rows(evs, day, lambda e, a=alt2: a, lambda: {})
+        dis = SG.prune(dis, rows_k, day)
+        assert not [x for x in SG.visible(rows_k, dis) if x["id"].startswith("altitude_plan:")], k
+    # a day the row is not computed at all (GPX removed): the close is kept while the trip is ahead
+    day = (TODAY + dt.timedelta(days=2)).isoformat()
+    dis = SG.prune(dis, [], day)
+    assert f"altitude_plan:yu:{start.isoformat()}" in dis
+    rows_back = SG.altitude_rows(evs, day, lambda e: alt, lambda: {})
+    assert SG.visible(rows_back, dis) == []
+    # the 14-day check of the same trip is another row: shown
+    day14 = (start - dt.timedelta(days=10)).isoformat()
+    rows14 = SG.altitude_rows(evs, day14, lambda e: alt, lambda: {})
+    assert rows14 and SG.visible(rows14, SG.prune(dis, rows14, day14)) == rows14
+    # the trip is over: the close is dropped
+    assert SG.prune(dis, [], (start + dt.timedelta(days=1)).isoformat()) == {}
+    # another trip (or the same one moved to another date) is a new reminder
+    moved = [Event("yu", "玉山", (start + dt.timedelta(days=3)).isoformat(), kind="baiyue", days=2)]
+    rows_m = SG.altitude_rows(moved, TODAY.isoformat(), lambda e: alt, lambda: {})
+    assert SG.visible(rows_m, SG.prune(dis, rows_m, TODAY.isoformat())) == rows_m
+
+
+def test_sp258_english_plan_row_has_no_place():
+    from backend.i18n import use_locale
+    with use_locale("en"):
+        r = _row({"max_m": 3952.0, "nights": [3402]}, None, days_to=20)
+    txt = r["title"] + r["reason"] + r["help"]
+    assert "acclimatisation weekend" in r["title"] and "2,500 m" in r["help"] and "2,500 m" not in r["reason"]
+    for place in ("Songxue", "Hehuan", "Tataka", "Dayuling"):
+        assert place not in txt, place
+    assert not any("一" <= ch <= "鿿" for ch in r["reason"])
+
+
+def test_sp258_a_plan_row_closed_under_the_old_id_stays_closed():
+    """Review L3: a 適應週末 reminder closed before the per-trip id (`altitude:<event>:<start>:<m>:plan…`)
+    is moved to `altitude_plan:<event>:<start>` by prune, so it does not come back once."""
+    start = TODAY + dt.timedelta(days=20)
+    evs = [Event("yu", "玉山", start.isoformat(), kind="baiyue", days=2)]
+    rows = SG.altitude_rows(evs, TODAY.isoformat(), lambda e: {"max_m": 3952.0, "nights": [3402]}, lambda: {})
+    old = {f"altitude:yu:{start.isoformat()}:3952:plan-eve": {"action": "dismissed", "at": "2026-10-04T08:00:00"},
+           f"altitude:yu:{start.isoformat()}:3952:first-n1": {"action": "dismissed", "at": "2026-10-04T08:00:00"},
+           f"altitude:x:y:{start.isoformat()}:3600:plan": {"action": "dismissed", "at": "2026-10-04T08:00:00"}}
+    kept = SG.prune(old, rows, TODAY.isoformat())
+    assert kept[f"altitude_plan:yu:{start.isoformat()}"]["action"] == "dismissed"
+    assert f"altitude_plan:x:y:{start.isoformat()}" in kept             # an event id with a colon
+    assert not any(k.startswith("altitude:") and k.endswith("plan-eve") for k in kept)
+    assert SG.visible(rows, kept) == []
+    # the 14-day row's old dismissal is not a plan row: left to the usual rule (gone, not computed)
+    assert f"altitude:yu:{start.isoformat()}:3952:first-n1" not in kept
+    # a past trip's old close: dropped
+    past = {f"altitude:yu:2026-09-01:3952:plan": {"action": "dismissed", "at": "2026-08-10T08:00:00"}}
+    assert SG.prune(past, [], TODAY.isoformat()) == {}

@@ -56,14 +56,14 @@ WRITE_ALLOW: list[tuple[frozenset, re.Pattern]] = [(frozenset(m.split()), re.com
     ("PUT", r"/api/v1/plan/(events|phases)"),
     ("DELETE", r"/api/v1/plan/events/[^/]+"),
     ("POST PUT DELETE", r"/api/v1/plan/events/[^/]+/gpx(/splits)?"),
-    ("POST", r"/api/v1/racepower/(predict|course|plan|export/csv|hike-meta|solo-hikes)"),
+    ("POST", r"/api/v1/racepower/(predict|course|plan|hike-meta|solo-hikes)"),
     ("POST", r"/api/v1/racepower/course/event/[^/]+"),
     ("PUT DELETE", r"/api/v1/racepower/saved/[^/]+"),
     ("POST", r"/api/v1/expr/evaluate"),
     ("POST", r"/api/v1/demo/reset"),
 ]]
 # writes that need no sandbox (they change nothing stored)
-NO_SANDBOX = re.compile(r"/api/v1/(demo/reset|expr/evaluate|racepower/(predict|course|plan|export/csv)"
+NO_SANDBOX = re.compile(r"/api/v1/(demo/reset|expr/evaluate|racepower/(predict|course|plan)"
                         r"|overview/plan/(steps-preview|steps/check|blackouts/preview|prefs/conflicts))$")
 HEAVY = re.compile(r"/api/v1/(racepower/(predict|course|plan)|racepower/course/event/[^/]+|expr/evaluate"
                    r"|overview/plan/(equivalence/design|reconcile|steps-preview))$")

@@ -169,6 +169,8 @@ def _fit_cache_in_tmp(monkeypatch, tmp_path_factory):
     monkeypatch.setenv("WKO5COACH_NO_WARMUP", "1")
     # nor runs the daily automatic backup (it would read the real DB's backup folder)
     monkeypatch.setenv("WKO5COACH_NO_AUTO_BACKUP", "1")
+    # nor the one-time rain backfill (api/rain_backfill.py: Open-Meteo calls, SP-299)
+    monkeypatch.setenv("WKO5COACH_NO_RAIN_BACKFILL", "1")
 
 
 @pytest.fixture(autouse=True)

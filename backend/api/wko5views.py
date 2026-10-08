@@ -263,8 +263,8 @@ def _low_priority(reason: str) -> None:
             _wait_plan_idle()
             ds = _dataset()
             _calibrate_never_fitted(ds)
-            from backend.api import activity_auto as AA
-            AA.job_for(ds)
+            from backend.api import activity_auto as AA, racepower as RP
+            RP.warm_charts(AA.job_for(ds))       # then the race calculator's charts (SP-366; owner only)
         except Exception as e:           # noqa: BLE001 — a page request will show the error
             logging.getLogger(__name__).warning("warm-up low-priority part (%s) failed: %s", reason,
                                                 type(e).__name__, exc_info=True)
@@ -889,6 +889,8 @@ def _activity_json(ds, w) -> dict:
             "types": AT.TYPES, "efforts": AT.EFFORTS, **t,
             # 登山杖: the user's choice, else 有杖 「依賽事設定」 (SP-300)
             **AT.pole_state(t.get("tags"), AT.race_poles(ds).get(w.idx)),
+            # 「要標成濕路嗎？」 applies to 越野跑 / 登山健行 only (SP-299): a type change moves it in / out
+            "rain_kind": AT.rain_kind(w, AT.user_of(w)),
             # bad activity files (engine/bad_activity.py): an excluded file is not
             # in ds.workouts; `flagged` = the rule's reason when the user kept it
             "exclusion_state": {"override": t.get("exclusion"), "flagged": kept["reason"] if kept else None,
@@ -1137,20 +1139,27 @@ def activities_list():
                     "origin": _origin(ds, w), "excluded": None, **rpe_part(w.entry.start, w.entry.file),
                     # its 有杖 / 沒杖 mark counts toward the comparison (trail runs and hikes, SP-243)
                     "pole_chart": PC.used(w), "rain_mm": rain_mm(w.entry.start, w.entry.file),
+                    # the rain hint is for 越野跑 / 登山健行 only (SP-299, owner 2026-10-07)
+                    "rain_kind": AT.rain_kind(w, u),
                     **user_part(u, race_pole.get(w.idx))})
     for x in getattr(ds, "excluded", []):
         start = dt.datetime.fromisoformat(x["start"])
         u = AT.find(tags, start, x["file"])
         km = x.get("distance")
         lab = f"{start:%Y-%m-%d} {A.SPORT_ZH.get(x['sport_type'], x['sport_type'])}" + (f" {km:.1f} km" if km else "")
+        terr = _terrain(ds, x["file"], x["sport_type"] == "trail running")
+        # the rain hint's kind without the user's type (the page applies a type change itself)
+        kind_auto = AT.rain_kind_excluded(x["sport_type"], None, terr["value"] == "trail")
         out.append({"index": None, "key": x.get("key") or AT.key_of(start), "start": x["start"], "file": x["file"],
                     "sport": x["sport"], "sport_type": x["sport_type"], "title_original": lab, "label": lab,
                     "duration": x.get("duration"), "distance": km, "climbing": None, "tss": None,
                     "trail": x["sport_type"] == "trail running",
-                    "terrain": _terrain(ds, x["file"], x["sport_type"] == "trail running"),
+                    "terrain": terr,
                     "power_label": None, "origin": _origin(ds, file=x["file"]),
                     "excluded": _exclusion_json(x), **rpe_part(start, x["file"]), "pole_chart": False,
-                    "rain_mm": rain_mm(start, x["file"]), **user_part(u)})
+                    "rain_mm": rain_mm(start, x["file"]), "rain_kind_auto": kind_auto,
+                    "rain_kind": AT.rain_kind_excluded(x["sport_type"], u, terr["value"] == "trail"),
+                    **user_part(u)})
     out.sort(key=lambda a: a["start"], reverse=True)
     return {"source": getattr(ds, "source", None) or "wko5", "origin_labels": ORIGIN_LABELS,
             "types": AT.TYPES, "efforts": AT.EFFORTS, "pole_tags": AT.POLES, "pole_none_tag": AT.POLE_NONE_TAG,

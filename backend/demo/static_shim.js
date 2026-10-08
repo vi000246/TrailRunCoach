@@ -33,7 +33,7 @@
   const ENGINE_ERR_MSG = "示範版算不出這組輸入，請換一組數字再試";
   // the race calculator's computations: the precomputed answer, else the engine in the browser
   // (static/trc_racepower_worker.js: engine/racepower/calc.py with Pyodide; backend/demo/static_racepower.py)
-  const RACEPOWER_POSTS = /^\/api\/v1\/racepower\/(predict|plan|course\/event\/[^/]+|export\/csv)$/;
+  const RACEPOWER_POSTS = /^\/api\/v1\/racepower\/(predict|plan|course\/event\/[^/]+)$/;
   const RACEPOWER_WORKER = "trc_racepower_worker.js";
   const RACEPOWER_SAVED = "racepower_saved.json";             // static_racepower.SAVED_FILE
   const OV_KEY = "trc.static.overlay.v1";
@@ -1233,7 +1233,7 @@
         readyP.then(() => pill(null), () => pill(null));
         return readyP;
       }
-      // -> {status, body} | {status, csv, filename}
+      // -> {status, body}
       async function call(method, path, body) {
         try { await start(); }
         catch (e) {
@@ -1254,10 +1254,6 @@
       return { call, start, get loadMs() { return loadMs; } };
     })();
     const engineResponse = (r) => {
-      if (r.csv != null) {
-        return new win.Response("﻿" + r.csv, { status: 200, headers: { "Content-Type": "text/csv; charset=utf-8",
-          "X-Filename": encodeURIComponent(r.filename || "racepower.csv") } });
-      }
       return json(r.status, r.body);
     };
     // GET /racepower/weather the export did not save: what the server answers without network

@@ -7,8 +7,9 @@ shares the per-source lock with the button and auto-on-open).
 Missed times (app not running) are caught up the first minute the app is up
 after the time on that day; there is no catch-up for earlier days.
 
-The same loop also runs the daily automatic backup (api/backup.auto_tick) and the weekly
-check of the last 60 days (sync/check.weekly_tick, SP-362 A4).
+The same loop also runs the daily automatic backup (api/backup.auto_tick), the weekly
+check of the last 60 days (sync/check.weekly_tick, SP-362 A4) and, once, the rain backfill
+(api/rain_backfill.tick, SP-299).
 """
 from __future__ import annotations
 
@@ -119,6 +120,15 @@ async def loop(session_factory: Optional[Callable] = None, interval: float = INT
             raise
         except Exception as e:
             log.warning("weekly sync check tick failed: %s", type(e).__name__)
+        # the one-time rain backfill of the last 12 months (api/rain_backfill.py, SP-299)
+        try:
+            from backend.api import rain_backfill
+            if _time.monotonic() - t_start >= rain_backfill.STARTUP_DELAY_S:
+                await rain_backfill.tick(session_factory)
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            log.warning("rain backfill tick failed: %s", type(e).__name__)
         # daily automatic backup (api/backup.py): the first pass runs at app
         # start; afterwards only when > 24 h since the last good backup
         try:

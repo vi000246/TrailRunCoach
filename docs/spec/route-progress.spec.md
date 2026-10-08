@@ -279,7 +279,7 @@ moving time. Route efforts are whole activities: no VAM (a loop's net gain is
 Air temperature, humidity and dew point for every effort from the Open-Meteo
 historical archive (`archive-api.open-meteo.com/v1/archive`, hourly
 `temperature_2m, relative_humidity_2m, dew_point_2m, precipitation`
-(`HOURLY`, `backend/engine/route_weather.py:46`), `timezone=auto`), shown
+(`HOURLY`, `backend/engine/route_weather.py:50`), `timezone=auto`), shown
 with the attribution *Weather data by Open-Meteo.com (CC BY 4.0)*. It reuses
 `racepower/weather.py` (client `_http_get`, `OM_ARCHIVE`, `activities_conditions`,
 `ATTRIBUTION`) and `racepower/env.py` (`dew_point`, `heat_penalty_pct`)
@@ -299,8 +299,8 @@ without changing them.
   call per (day, cell) not yet cached, a new point in a cached group one call
   for the new points, a rebuild none. Calls go 3 at a time (`WORKERS`, well
   under Open-Meteo's 600 calls / min) and at most 2,000 per build (`MAX_CALLS`,
-  `backend/engine/route_weather.py:53`, `backend/engine/route_weather.py:55`,
-  `backend/engine/route_weather.py:207-212`); the rest are counted as skipped
+  `backend/engine/route_weather.py:57`, `backend/engine/route_weather.py:59`,
+  `backend/engine/route_weather.py:259-266`); the rest are counted as skipped
   and wait for the next build.
 - **Why the effort's own point, not the cell centre**: the first version asked
   for the cell centre and corrected T by −6.5 °C/km to the effort's elevation.
@@ -339,14 +339,47 @@ without changing them.
   archive call (`HOURLY`), so it costs no extra call; each activity row also
   has `start` and `rain_mm` = the sum of the hourly rows (Open-Meteo: the
   preceding hour's total) whose hour overlaps the activity's first → last
-  sample, `None` when an overlapping hour has no value — a day cached before
-  precipitation was asked is never refetched, it just has no rain. The rain is
+  sample, `None` when an overlapping hour has no value — a build never refetches
+  a day cached before precipitation was asked, it just has no rain; the one-time
+  backfill below fetches those of the last 12 months once. The rain is
   looked up by the activity's file, else by its start within ±3 min under
   another source's file name (`rain_by_activity`, an `activity_key.ByStartDict`,
-  `backend/engine/route_weather.py:428-438`). The 活動編輯
+  `backend/engine/route_weather.py:491-501`). The 活動編輯
   page (`GET /activities` → `rain_mm`, `rain_hint_mm`) shows 「這次活動期間下過雨
   （N mm），要標成濕路嗎？」 with a 「標成濕」 button while the 路況 is 未標 and
-  `rain_mm` ≥ `activity_tags.RAIN_HINT_MM` (1 mm, 推估); it never marks anything itself.
+  `rain_mm` ≥ `activity_tags.RAIN_HINT_MM` (1 mm, 推估), and only on 越野跑 / 登山健行
+  (`rain_kind`, workouts.spec.md › 路況); it never marks anything itself.
+- **Rain backfill** (SP-299 follow-up, owner 2026-10-07; `backend/engine/rain_backfill.py:49`):
+  once, the activities of `activity_weather.json` from the last 365 days whose rain is unknown
+  get their archive days asked again — the same point / (cell, day) grouping as the build
+  (`activity_point`, `backend/engine/route_weather.py:433`) through the same `Fetcher` and cache,
+  but a cached point without precipitation counts as missing (`refetch` + `has_rain`,
+  `backend/engine/route_weather.py:151`, `backend/engine/route_weather.py:245`), one call at a
+  time in the caller's own thread (no pool) with `PACE_S` = 1 s between calls
+  (`backend/engine/route_weather.py:258-266`). Each answer only adds `hourly.precipitation` to the
+  cached entry, aligned on `hourly.time` (`merge_rain`, `backend/engine/route_weather.py:157`,
+  applied at `backend/engine/route_weather.py:284`): the temperature / humidity / dew point a
+  build used never move; an entry without hourly data is replaced. Then only `rain_mm` is written
+  into the rows still without it (re-read just before the write). Cache and
+  `activity_weather.json` writes go through a tmp name unique per process and thread
+  (`tmp_path` / `write_atomic`, `backend/engine/route_weather.py:171`). Idempotent: a day once
+  fetched with precipitation is never asked again, so an interrupted run resumes where it
+  stopped.
+  **One writer at a time** (code review M1): the job runs in the routes Builder's own slot
+  (`Builder.start_task`, `backend/engine/routes.py:1586`, a daemon thread), so `running()` is True
+  meanwhile and no build starts (`_ensure_fresh` / 「重建」 find it busy; the build starts after
+  it); it starts only when no build runs (`backend/api/rain_backfill.py:121`).
+  **Stop** (M2): `STOP` (`backend/api/rain_backfill.py:40`), set in the app's lifespan on quit
+  (`backend/main.py:110`), ends the run before its next call and cuts the pause; a stopped run
+  writes no `rain_mm`, is not an attempt and the next start resumes it.
+  Started by the scheduler loop 15 min after the app starts (`backend/sync/scheduler.py:123-131`,
+  `api/rain_backfill.tick`, `backend/api/rain_backfill.py:80`: the next tick after the thread ends
+  records the result); marks itself done in the setting `weather.rain_backfill`
+  (`backend/settings/repository.py:75`); a failed / cut-short run is retried 6 h later and given
+  up after 5 attempts (`next_state`, `backend/api/rain_backfill.py:62`); no
+  `activity_weather.json` yet = waiting.
+  Never in tests (`WKO5COACH_NO_RAIN_BACKFILL`, conftest), the demo, or with
+  `WKO5COACH_ROUTES_WEATHER=0`.
 
 ## Comparison (`GET /{id}/compare?a=&b=`)
 
@@ -527,8 +560,6 @@ None. Builds are triggered by requests (or `POST /rebuild`); there are no emitte
 
 ## Open Questions
 
-- [ ] Fetch the rain of the last 12 months for days cached before `precipitation` was asked (decided 2026-10-07; today such a day is never refetched)（SP-299，Todo）——尚未實作
-- [ ] No rain hint on road runs, only on trail runs and hikes (decided 2026-10-07; `activity_tags.rain_hint` does not look at the sport)（SP-299，Todo）——尚未實作
 - [ ] Link with map.yichlin (pull / push GPX, race-day weather, pace → its itinerary); which direction first is not decided（SP-47，Backlog）——尚未實作
 
 ## Change History
@@ -542,3 +573,5 @@ None. Builds are triggered by requests (or `POST /rebuild`); there are no emitte
 | 2026-10-04 | feature | SP-41 | The route on the detail map is drawn by the shared `MapLayers.track` (`basemaps.js`), the same as the activity map and the race calculator's course map |
 | 2026-10-06 | feature | SP-299 | Activity weather also stores the rain during the activity (`precipitation` in the same call and cache); 活動編輯 hints 「要標成濕路嗎？」 at ≥ 1 mm (推估) while 路況 is 未標 |
 | 2026-10-08 | code-sync（SP-78, SP-41） | N/A | Documented auto names (nearest 百岳 within 1 km, renames take precedence), the weather call cap (2,000 per build, 3 at a time), the canonical path thinned to 400 points, rain matched by file or start ±3 min, map layer strings via i18n `common.map.*`; `precipitation` added to the hourly list; Open Questions from SP-299 / SP-47 |
+| 2026-10-08 | SP-299 follow-up | owner decision 2026-10-07 (ticket SP-299) | The rain hint only on 越野跑 / 登山健行 (`activity_tags.rain_kind`); the one-time rain backfill of the last 12 months (`engine/rain_backfill.py`, `api/rain_backfill.py`, setting `weather.rain_backfill`): `Fetcher` gains `refetch` / `workers` / `pace_s`, `activity_point` shared with `fill_activities`. Tests `test_rain_backfill.py` (HTTP faked) |
+| 2026-10-08 | SP-299 review | code review of fix/activity-sp81-299-300-258 | Rain backfill: runs in the routes Builder's slot (`Builder.start_task`), so no build writes the same cache meanwhile (M1); `STOP` set on quit ends it before the next call, no thread pool for one call at a time (M2); only `hourly.precipitation` merged into the cached day (`merge_rain`, L1); tmp names unique per process / thread (`write_atomic`). Tests `test_rain_backfill.py` (merge, stop, slot, tmp names) |
