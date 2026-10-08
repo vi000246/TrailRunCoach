@@ -71,13 +71,16 @@ def test_the_web_session_cookie_alone_is_401(monkeypatch, tmp_path):
 
 
 def test_the_demo_never_answers(monkeypatch, tmp_path):
+    # backend.main builds its module-level `app` from WKO5COACH_MODE on first import: import it in
+    # owner mode first, so a later `from backend.main import app` is not a demo app
+    from backend.main import build_app
     with debug_env(monkeypatch, tmp_path) as e:
         enable(e)
         tok = make_token(e, ALL_SCOPES)
         monkeypatch.setenv("WKO5COACH_MODE", "demo")
         assert e.c.get(DBG + "/sync", headers=bearer(tok)).status_code == 404
+        monkeypatch.delenv("WKO5COACH_MODE")
     # and the demo app does not mount the routes at all
-    from backend.main import build_app
 
     def paths(app):
         stack, out = list(app.routes), set()

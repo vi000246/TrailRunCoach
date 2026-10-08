@@ -242,8 +242,12 @@ def test_no_answer_carries_a_credential_or_a_position(monkeypatch, tmp_path):
         st.last_sync_cursor = "cursor-1"
         run(e.db.commit())
         tok2 = make_token(e, ["read:sync"], name="other")
+        share = "SENTINELshareLink0123456789abcd"                    # a race plan shared by link
+        (tmp_path / "racepower_shares").mkdir()
+        (tmp_path / "racepower_shares" / f"{share}.json").write_text('{"event": "x"}', "utf-8")
         forbidden = list(plain.values()) + list(sealed.values()) + [
-            tok, tok2, tok[5:], st.coros_access_token, "SENTINEL", str(tmp_path / "SENTINEL-BACKUP-DIR")]
+            tok, tok2, tok[5:], st.coros_access_token, "SENTINEL", str(tmp_path / "SENTINEL-BACKUP-DIR"), share,
+            "SENTINELcalendarFeedToken0123"]
         from backend import debug_auth as DA
         forbidden += [DA.hash_token(tok), DA.hash_token(tok2)]
         for u in _every_call(tok):
