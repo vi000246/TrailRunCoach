@@ -38,6 +38,8 @@ async def delete_source_files(db: AsyncSession, source: str, athlete_id: int = 1
                               date_to: Optional[dt.date] = None) -> dict:
     storage.check_source(source)
     db_source = storage.SOURCES[source]
+    # the COROS self-rating job gives way (it does not show as busy; SP-362 review #3)
+    await runner._make_way(source)
     with runner.hold(source):
         q = select(WorkoutFile).where(WorkoutFile.athlete_id == athlete_id,
                                       WorkoutFile.source == db_source)

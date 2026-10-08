@@ -174,6 +174,28 @@ def test_a_check_or_deletion_holding_the_flag_keeps_the_job_out(tmp_path, hooks)
     run(go())
 
 
+def test_deleting_source_files_makes_the_job_give_way(tmp_path):
+    """Review SP-362 #3: the page shows COROS idle while the job runs; 刪除 must not 409."""
+    from backend.db.models import SyncState
+    from backend.sync import purge
+
+    async def job():
+        with runner.hold_yielding("coros") as stop:
+            while not stop.is_set():
+                await asyncio.sleep(0.01)
+
+    async def go():
+        s = await make_session(tmp_path)
+        s.add(SyncState(athlete_id=1))
+        await s.commit()
+        t = asyncio.create_task(job())
+        await asyncio.sleep(0.02)
+        out = await purge.delete_source_files(s, "coros", 1)
+        await t
+        assert isinstance(out, dict)
+    run(go())
+
+
 def test_the_yielding_holder_gives_way_also_to_start_background(tmp_path):
     async def go():
         with runner.hold_yielding("coros"):
