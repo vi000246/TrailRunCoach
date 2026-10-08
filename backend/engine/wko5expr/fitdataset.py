@@ -453,6 +453,14 @@ class PdMemo:
                 BA.overrides_stamp(), str(WX.home()), skip)
         self._prep = (days, rows, files, glob)
 
+    def inputs(self) -> tuple:
+        """(the synced FIT files cptest.curves adds [(date, path, size, mtime)], the global
+        part of every day's key) — the inputs beyond ds.workouts that a refit reads, for a
+        cache keyed on a window of days (api/activity_auto.py, SP-334)."""
+        if self._prep is None:
+            self._prepare()
+        return self._prep[2], self._prep[3]
+
     def sig(self, day: dt.date) -> str:
         import bisect
         import hashlib

@@ -11,13 +11,18 @@ minutes on a full COROS history. So:
   * background: the work runs in a daemon thread (like the dataset warm-up);
     a request returns at once with what is known plus {state, n_done,
     n_total} the page polls;
-  * incremental: activities are evaluated in chunks, newest first, and each
-    finished chunk is visible to the next poll;
-  * on disk: the result is kept per activity file (the FIT dataset cache
-    folder, or ~/.wko5coach for WKO5) under a signature of everything it
-    reads, so a restart answers from disk at once; after a change (a sync,
-    a plan edit) the previous values are served, marked stale, while the
-    recomputation runs.
+  * per activity (SP-334): every activity has its own key (`activity_keys`):
+    its file and metadata, the user's 測試 mark, the recorded RPE, the
+    thresholds of its day (the plan rows up to that day and the runs of the
+    window the as-of estimate reads), the plan rows of its day, the road
+    rule's cross-run values (HRmax, the longer power reference) and the hash
+    of the code its branch runs (outdoor run / other). Only the activities
+    whose key changed are recomputed — a sync of one activity computes that
+    one; deleting an old hike or editing a note computes nothing;
+  * on disk: per activity file (the FIT dataset cache folder, or ~/.wko5coach
+    for WKO5) with its key, so a restart answers from disk at once; after a
+    change (a sync, a plan edit) the previous values are served, marked
+    stale, while the changed ones are recomputed, newest first, in chunks.
 
 The values are those of racepower.athlete.auto_tags_all (the same rules,
 called per chunk: capacity_samples for outdoor runs, the HR effort rule for
@@ -25,9 +30,11 @@ the rest).
 """
 from __future__ import annotations
 
+import bisect
 import hashlib
 import json
 import logging
+import math
 import os
 import threading
 import time
@@ -38,7 +45,7 @@ from typing import Optional
 log = logging.getLogger(__name__)
 
 CHUNK = 25                 # activities per published step
-CACHE_V = 1
+CACHE_V = 2                # 2: per-activity keys (SP-334); 1 was one signature over the dataset
 _JOBS: "weakref.WeakKeyDictionary" = weakref.WeakKeyDictionary()
 _LOCK = threading.Lock()
 
@@ -70,35 +77,48 @@ def _other(ds, w, recorded) -> dict:
     return {"activity_type": typ, "activity_type_reason": why, "effort": eff["effort"], "effort_reason": eff["reason"]}
 
 
-def _chunk_values(ds, chunk: list, recorded: list) -> dict[int, dict]:
+def _runs(ds, runs: list, recorded, context: Optional[dict] = None) -> dict[int, dict]:
+    """Outdoor runs: auto_tags_all's first branch (capacity_samples). `context` =
+    athlete.run_context(ds), built once per job instead of once per chunk."""
+    from backend.engine.racepower import athlete as A
+    tests = {w.idx: t for w in runs if (t := A._test_reason(ds, w))}
+    caps = A.capacity_samples(ds, runs, tags=[], tests=tests, recorded=recorded, context=context)
+    out: dict[int, dict] = {}
+    for w in runs:
+        tg = caps[w.idx]["tags"]
+        out[w.idx] = {"activity_type": tg["activity_type_auto"], "activity_type_reason": tg["activity_type_reason"],
+                      "effort": tg["effort_auto"], "effort_reason": tg["effort_reason"]}
+    return out
+
+
+def _chunk_values(ds, chunk: list, recorded: list, context: Optional[dict] = None) -> dict[int, dict]:
     from backend.engine.racepower import athlete as A
     runs = [w for w in chunk if A.outdoor(w)]
-    out: dict[int, dict] = {}
-    if runs:
-        tests = {w.idx: t for w in runs if (t := A._test_reason(ds, w))}
-        caps = A.capacity_samples(ds, runs, tags=[], tests=tests, recorded=recorded)
-        for w in runs:
-            tg = caps[w.idx]["tags"]
-            out[w.idx] = {"activity_type": tg["activity_type_auto"], "activity_type_reason": tg["activity_type_reason"],
-                          "effort": tg["effort_auto"], "effort_reason": tg["effort_reason"]}
+    out: dict[int, dict] = _runs(ds, runs, recorded, context) if runs else {}
     for w in chunk:
         if w.idx not in out:
             out[w.idx] = _other(ds, w, recorded)
     return out
 
 
-def compute_blocking(ds, progress=None, recorded: Optional[list] = None) -> dict[int, dict]:
-    """{idx: auto values} of every workout, newest first in chunks;
-    `progress(done, total, {idx: values})` after each chunk. Series writes
-    are batched (dataset.batched_flush)."""
+def compute_blocking(ds, progress=None, recorded: Optional[list] = None, only: Optional[set] = None,
+                     context: Optional[dict] = None) -> dict[int, dict]:
+    """{idx: auto values} of every workout (or of the `only` idx), newest first in
+    chunks; `progress(done, total, {idx: values})` after each chunk. Series writes
+    are batched (dataset.batched_flush). `context` = athlete.run_context(ds) when the
+    caller has it (built here otherwise, once)."""
     from backend.engine import activity_tags as AT
+    from backend.engine.racepower import athlete as A
     from backend.engine.wko5expr.dataset import batched_flush
     recorded = AT.load_recorded() if recorded is None else recorded
-    order = sorted(ds.workouts, key=lambda w: w.entry.start, reverse=True)
+    order = sorted((w for w in ds.workouts if only is None or w.idx in only), key=lambda w: w.entry.start,
+                   reverse=True)
     out: dict[int, dict] = {}
     with batched_flush(ds):
+        if context is None and any(A.outdoor(w) for w in order):
+            context = A.run_context(ds)
         for i in range(0, len(order), CHUNK):
-            part = _chunk_values(ds, order[i:i + CHUNK], recorded)
+            part = _chunk_values(ds, order[i:i + CHUNK], recorded, context)
             out.update(part)
             if progress is not None:
                 progress(min(i + CHUNK, len(order)), len(order), part)
@@ -106,22 +126,31 @@ def compute_blocking(ds, progress=None, recorded: Optional[list] = None) -> dict
 
 
 # ---------------------------------------------------------------------------
-# the disk cache
+# code versions: one per branch (SP-320 ①: only the functions each one reaches)
 # ---------------------------------------------------------------------------
 
+# what each branch's values come from; the run branch reaches capacity_samples,
+# run_context / run_probe (the probes kept per activity) and workout_review's test rule
+BRANCH_ROOTS = {"run": lambda: [_runs], "other": lambda: [_other]}
 _CODE: dict = {}
 
 
-def _code_sig() -> str:
-    """The code the values come from (a rule change recomputes)."""
-    if not _CODE:
-        # SP-320 ①: the functions compute_blocking reaches (engine/codehash.py), not the
-        # whole of athlete.py / workout_review.py …: a deploy that edits other code keeps it
+def _branch_code() -> dict[str, str]:
+    """{"run": hash, "other": hash}: a changed rule invalidates only the results that ran it."""
+    hit = _CODE.get("branches")
+    if hit is None:
         from backend.engine.codehash import code_hash
         from backend.engine.wko5expr.dataset import Dataset
         from backend.engine.wko5expr.fitdataset import FitFolderDataset
-        _CODE["v"] = f"{CACHE_V}:{code_hash(compute_blocking, context=[Dataset, FitFolderDataset])[:12]}"
-    return _CODE["v"]
+        hit = _CODE["branches"] = {b: code_hash(*roots(), context=[Dataset, FitFolderDataset], extra=(b, CACHE_V))
+                                   for b, roots in BRANCH_ROOTS.items()}
+    return hit
+
+
+def _code_sig() -> str:
+    """The code the values come from, both branches (the job trigger, `signature`)."""
+    b = _branch_code()
+    return f"{CACHE_V}:{hashlib.sha1((b['run'] + b['other']).encode()).hexdigest()[:12]}"
 
 
 def _file_stamp(ds, w):
@@ -132,10 +161,41 @@ def _file_stamp(ds, w):
         return None
 
 
+# ---------------------------------------------------------------------------
+# the job trigger: a cheap signature of every input (a change starts a job, which
+# then recomputes only the activities whose own key changed)
+# ---------------------------------------------------------------------------
+
+def _user_marks(rows: list) -> list:
+    """The part of the user's activity tags the auto values read: the 測試 type mark
+    (workout_review.classify → the test rule); an effort mark or a note is never read."""
+    return [(r.get("start_local"), r.get("file"), r.get("activity_type"), bool(r.get("activity_type_overridden")))
+            for r in rows or []]
+
+
+def _test_sessions(ds) -> list:
+    from backend.engine import workout_review as WR
+    try:
+        return WR._plan_test_sessions(ds)
+    except Exception:                        # noqa: BLE001
+        return []
+
+
+def _calibration() -> str:
+    from backend.engine import workout_review as WR
+    try:
+        return WR.apply_calibration()
+    except Exception:                        # noqa: BLE001
+        return ""
+
+
 def signature(ds, recorded: list) -> str:
-    """Everything the auto values read: the code, every workout (file stamp,
-    sport, tags, title, start), the plan (events, tests, thresholds), the
-    dated settings and corrections, the watch RPEs and the power settings."""
+    """Everything the auto values read, in one cheap hash: the code, every workout
+    (file stamp, sport, tags, title, start), the plan (events, tests, thresholds),
+    the stored test sessions, the user's 測試 marks, the dated settings and
+    corrections, the watch RPEs, the drift calibration and the power settings. A
+    change starts a job; the job recomputes only the activities whose key changed."""
+    from backend.engine import activity_tags as AT
     h = hashlib.sha1()
 
     def add(x):
@@ -157,8 +217,241 @@ def signature(ds, recorded: list) -> str:
     add(getattr(ds, "accept_watch_power", None))
     add(_recorded_stamp(recorded))
     add(sorted((r.get("start_local"), r.get("file"), r.get("rpe")) for r in recorded))
+    add(_user_marks(AT.load()))
+    add(json.dumps(_test_sessions(ds), sort_keys=True, default=str))
+    add(_calibration())
     return h.hexdigest()
 
+
+# ---------------------------------------------------------------------------
+# per-activity keys (SP-334)
+# ---------------------------------------------------------------------------
+
+def _h(x) -> str:
+    return hashlib.sha1(repr(x).encode("utf-8")).hexdigest()[:20]
+
+
+def thr_window_days() -> int:
+    """The days before an activity whose runs its thresholds read: thresholds.estimate
+    takes the runs of the 180 days up to the day, each measured against cp_as_of its
+    own date — a plan CP, else the PD refit of the 90 days before that date or of one
+    of the 30 days before it (athlete.CP_ASOF_BACK_DAYS)."""
+    from backend.engine import thresholds as TH
+    from backend.engine.racepower import athlete as A
+    return int(TH.WINDOWS[-1] + A.CP_ASOF_BACK_DAYS + A.CP_WINDOW_DAYS + 1)
+
+
+class _Near:
+    """activity_tags.find without a scan of every row: find on the rows it could return
+    — every row of the same file and every row starting within MATCH_TOL_MIN (+1) of
+    the activity, in their stored order — gives the same answer as on all rows (the
+    first same-file row, else the first same-minute row, else the nearest within the
+    tolerance, the first of equals)."""
+
+    def __init__(self, rows: list):
+        from backend.engine.activity_key import bare, to_dt
+        self.rows = rows or []
+        self.by_file: dict = {}
+        times = []
+        for i, r in enumerate(self.rows):
+            if r.get("file"):
+                self.by_file.setdefault(bare(str(r["file"])), []).append(i)
+            t = to_dt(r.get("start_local"))
+            if t is not None:
+                times.append((t, i))
+        times.sort()
+        self.times = times
+        self.keys = [t for t, _ in times]
+
+    def find(self, start, file: Optional[str]) -> Optional[dict]:
+        from backend.engine import activity_tags as AT
+        return AT.find(self.near(start, file), start, file) if self.rows else None
+
+    def near(self, start, file: Optional[str]) -> list:
+        import datetime as dt
+        from backend.engine import activity_tags as AT
+        from backend.engine.activity_key import bare, to_dt
+        hit = set(self.by_file.get(bare(str(file)), ())) if file else set()
+        s = to_dt(start)
+        if s is not None:
+            s = s.replace(second=0, microsecond=0)
+            tol = dt.timedelta(minutes=AT.MATCH_TOL_MIN + 1)
+            lo, hi = bisect.bisect_left(self.keys, s - tol), bisect.bisect_right(self.keys, s + tol)
+            hit.update(i for _, i in self.times[lo:hi])
+        return [self.rows[i] for i in sorted(hit)]
+
+
+class _Keys:
+    """Builds every activity's key once per job (see the module doc)."""
+
+    def __init__(self, ds, recorded: list, entries: dict):
+        from backend.engine import activity_tags as AT
+        from backend.engine import workout_review as WR
+        from backend.engine.racepower import athlete as A
+        from backend.engine.wko5expr.dataset import date_to_day
+        self.ds, self.entries = ds, entries
+        self.code = _branch_code()
+        self.glob = (CACHE_V, type(ds).__name__, getattr(ds, "source", None), repr(getattr(ds, "config", None)),
+                     getattr(ds, "accept_watch_power", None), _calibration())
+        self.rec = _Near(recorded)
+        self.marks = _Near(AT.load())
+        plan = getattr(ds, "plan", None)
+        self.plan_thr = sorted((str(t.date)[:10], repr(t)) for t in getattr(plan, "thresholds", None) or [])
+        self.plan_thr_dates = [d for d, _ in self.plan_thr]
+        self.events_on: dict = {}
+        for e in getattr(plan, "events", None) or []:
+            self.events_on.setdefault(str(e.date)[:10], []).append(repr(e))
+        self.thr_on: dict = {}
+        for d, r in self.plan_thr:
+            self.thr_on.setdefault(d, []).append(r)
+        self.sessions = _test_sessions(ds)
+        self.races = A.plan_race_runs(ds)
+        self.window = thr_window_days()
+        self.date_to_day = date_to_day
+        self.wdate = WR._wdate
+        # own part + per-run probe of every workout (the probe reused from disk while
+        # the activity's own inputs and the run branch's code are the same)
+        self._stamps: dict = {}
+        self.own: dict[int, str] = {}
+        self.probes: dict[int, Optional[dict]] = {}
+        for w in ds.workouts:
+            own = self._own(w)
+            self.own[w.idx] = own
+            e = entries.get(w.entry.file)
+            if isinstance(e, dict) and e.get("own") == own and e.get("pcode") == self.code["run"] and "probe" in e:
+                self.probes[w.idx] = e["probe"]
+            else:
+                self.probes[w.idx] = A.run_probe(ds, w)
+        self.context = A.run_context(ds, self.probes)
+        # sorted by day, for the window superset _cross hands to the real functions
+        self.peaks = sorted(self.context["peaks"], key=lambda x: x[0])
+        self.peak_days = [d for d, _ in self.peaks]
+        self.held = sorted(self.context["held"], key=lambda x: x[0])
+        self.held_days = [d for d, *_ in self.held]
+        # the runs the thresholds of a day read: sorted by day, one short hash each
+        runs = sorted(((math.floor(w.day), w) for w in ds.workouts if w.sport == "run"), key=lambda x: x[0])
+        self.run_days = [d for d, _ in runs]
+        self.run_rows = [self._thr_row(w) for _, w in runs]
+        pm = getattr(ds, "pd_memo", None)
+        files, pglob = pm.inputs() if pm is not None and hasattr(pm, "inputs") else ([], None)
+        self.pd_files = sorted(files)
+        self.pd_dates = [f[0] for f in self.pd_files]
+        self.pd_glob = pglob
+        self._thr_memo: dict = {}
+
+    def _stamp(self, w):
+        hit = self._stamps.get(w.idx, self)
+        if hit is self:
+            hit = self._stamps[w.idx] = _file_stamp(self.ds, w)
+        return hit
+
+    def _cross(self, w, moving_s) -> tuple:
+        """The road rule's cross-run values of one run (capacity_samples): HRmax as of
+        its day and the longer power reference — the real functions, handed only the
+        runs of a window around the day that holds theirs (both are order-free)."""
+        from backend.engine.racepower import athlete as A
+        from backend.engine.racepower import maximal as MX
+        wh = MX.MAXIMAL["hrmax_window_days"] + 1
+        pk = self.peaks[bisect.bisect_left(self.peak_days, w.day - wh):bisect.bisect_right(self.peak_days, w.day + 1)]
+        wr = A.RIEGEL_WINDOW_DAYS + 1
+        hd = self.held[bisect.bisect_left(self.held_days, w.day - wr):bisect.bisect_right(self.held_days, w.day + 1)]
+        return MX.hrmax_as_of(pk, w.day), A.longer_power(hd, w.day, moving_s)
+
+    def _own(self, w) -> str:
+        ds = self.ds
+        from backend.engine.racepower import athlete as A
+        corr = ds._corr_sig(w.entry.file) if hasattr(ds, "_corr_sig") else None
+        sset = ds._settings_sig(w) if hasattr(ds, "_settings_sig") else None
+        return _h((w.entry.file, self._stamp(w), w.sport, w.sport_type, sorted(w.tags or []),
+                   getattr(w.entry, "title", "") or "", w.entry.start.isoformat(), getattr(w.entry, "ftp", None),
+                   sorted((getattr(w, "platform", None) or {}).items()), corr, sset,
+                   A.power_ok(ds, w), A.power_source(ds, w)))
+
+    def _thr_row(self, w) -> str:
+        ds = self.ds
+        from backend.engine.racepower import athlete as A
+        return _h((w.entry.file, self._stamp(w), w.sport_type, sorted(w.tags or []), A.power_ok(ds, w),
+                   A.power_source(ds, w), ds._corr_sig(w.entry.file) if hasattr(ds, "_corr_sig") else None,
+                   (w.metrics or {}).get("np")))
+
+    def thr_sig(self, day) -> str:
+        """The inputs of athlete.thresholds_as_of(ds, day): the plan rows up to the day
+        (tests: LTHR / AeT / CP, their labels), the runs of the window before it, the
+        synced files and settings the PD refits read, and the dataset's own LTHR history."""
+        hit = self._thr_memo.get(day)
+        if hit is not None:
+            return hit
+        import datetime as dt
+        ds = self.ds
+        iso = day.isoformat()
+        tday = int(math.floor(self.date_to_day(day)))
+        lo = bisect.bisect_right(self.run_days, tday - self.window)
+        hi = bisect.bisect_right(self.run_days, tday)
+        plan = self.plan_thr[:bisect.bisect_right(self.plan_thr_dates, iso)]
+        since = day - dt.timedelta(days=self.window)
+        files = self.pd_files[bisect.bisect_right(self.pd_dates, since):bisect.bisect_right(self.pd_dates, day)] \
+            if self.pd_files and not isinstance(self.pd_dates[0], str) else self.pd_files
+        try:
+            hist = ds.athlete.settings.get("runthr") or []
+            lthr = (ds.athlete.setting_on("runthr", day), bool(hist) and all(d == dt.date(1980, 1, 1) for d, _ in hist),
+                    ds.setting_source("runthr", "WKO5 設定") if hasattr(ds, "setting_source") else None)
+        except Exception:                    # noqa: BLE001
+            lthr = None
+        out = self._thr_memo[day] = _h((plan, self.run_rows[lo:hi], files, self.pd_glob, lthr))
+        return out
+
+    def _test_part(self, w) -> tuple:
+        """What workout_review's test rule (athlete._test_reason) reads beyond the file:
+        the plan rows of the day (events, thresholds), the stored test sessions of the
+        day or done by an activity (whether by this one), the user's 測試 mark."""
+        if w.sport != "run":
+            return ()
+        iso = self.wdate(w).isoformat()
+        ss = []
+        for s in self.sessions:
+            db = s.get("done_by") or {}
+            if s.get("day") == iso or (db and db.get("date", iso) == iso):
+                s2 = {k: v for k, v in s.items() if k != "done_by"}
+                db2 = {k: v for k, v in db.items() if k != "index"}
+                ss.append((json.dumps(s2, sort_keys=True, default=str), json.dumps(db2, sort_keys=True, default=str),
+                           db.get("index") == w.idx))
+        from backend.engine import activity_tags as AT
+        return (self.events_on.get(iso, []), self.thr_on.get(iso, []), ss,
+                AT.user_type(self.marks.find(w.entry.start, w.entry.file)))
+
+    def key(self, w) -> tuple[str, str]:
+        """(branch, key) of one workout."""
+        from backend.engine import sport_map as SM
+        from backend.engine.racepower import athlete as A
+        from backend.engine.racepower import maximal as MX
+        ds = self.ds
+        day = w.entry.start.date()
+        r = self.rec.find(w.entry.start, Path(str(w.entry.file).replace("\\", "/")).name)
+        rec = None if r is None else sorted((k, repr(v)) for k, v in r.items())
+        if A.outdoor(w):
+            branch = "run"
+            trail = A.is_trail(w)
+            cross = None
+            if not trail:
+                p = self.probes.get(w.idx) or {}
+                cross = self._cross(w, p.get("moving_s"))
+            part = (self.races.get(w.idx), trail, cross)
+        else:
+            branch = "other"
+            part = (A.baiyue_on(ds, day), SM.app_type(w), A.is_trail(w))
+        return branch, _h((self.glob, branch, self.code[branch], self.own[w.idx], rec, self.thr_sig(day), part,
+                           self._test_part(w)))
+
+
+def activity_keys(ds, recorded: list, entries: Optional[dict] = None) -> tuple[dict, "_Keys"]:
+    """({idx: key}, the builder: own parts, probes, the run context) of every workout."""
+    k = _Keys(ds, recorded, entries or {})
+    return {w.idx: k.key(w)[1] for w in ds.workouts}, k
+
+
+# ---------------------------------------------------------------------------
+# the disk cache
+# ---------------------------------------------------------------------------
 
 def cache_path(ds) -> Path:
     store = getattr(ds, "_store", None)
@@ -170,7 +463,9 @@ def cache_path(ds) -> Path:
 
 
 def load_cache(ds) -> dict:
-    """{"sig": ..., "files": {file: {"stamp": ..., "start": ..., "auto": {...}}}} (empty when unreadable)."""
+    """{"v": 2, "sig": ..., "files": {file: {"key", "own", "pcode", "probe", "start", "auto"}}}
+    (empty when unreadable). A version-1 file ({"sig", "files": {file: {"stamp", "start",
+    "auto"}}}) loads too: its values are shown meanwhile and recomputed once."""
     try:
         d = json.loads(cache_path(ds).read_text("utf-8"))
         if isinstance(d, dict) and isinstance(d.get("files"), dict):
@@ -185,7 +480,7 @@ def save_cache(ds, sig: Optional[str], files: dict) -> None:
     try:
         p.parent.mkdir(parents=True, exist_ok=True)
         tmp = p.with_name(f"{p.stem}.{os.getpid()}.{threading.get_ident()}.tmp")
-        tmp.write_text(json.dumps({"sig": sig, "files": files}, ensure_ascii=False), "utf-8")
+        tmp.write_text(json.dumps({"v": CACHE_V, "sig": sig, "files": files}, ensure_ascii=False), "utf-8")
         os.replace(tmp, p)
     except OSError as e:
         log.warning("activity auto: could not write the cache (%s)", type(e).__name__)
@@ -211,10 +506,11 @@ class Job:
         self.finished: Optional[float] = None
         self.fresh: dict[str, dict] = {}            # key -> values computed by this job
         self.stale: dict[str, dict] = {}            # key -> values from an earlier signature (shown meanwhile)
+        self.computed: list[str] = []               # the files this job recomputed (tests, logs)
         self.lock = threading.Lock()
         disk = load_cache(ds)
-        by_file = disk.get("files") or {}
-        same = disk.get("sig") == sig
+        self.entries = by_file = disk.get("files") or {}
+        same = disk.get("v") == CACHE_V and disk.get("sig") == sig
         for w in ds.workouts:
             e = by_file.get(w.entry.file)
             if not isinstance(e, dict) or not isinstance(e.get("auto"), dict):
@@ -235,23 +531,47 @@ class Job:
 
     def _run(self) -> None:
         from backend.engine import activity_tags as AT
+        from backend.engine.wko5expr.dataset import batched_flush
         ds = self.ds_ref()
         if ds is None:
             return
-        keys = {w.idx: AT.key_of(w.entry.start) for w in ds.workouts}
-
-        def progress(done, total, part):
-            with self.lock:
-                for i, v in part.items():
-                    self.fresh[keys[i]] = v
-                self.n_done = done
         try:
-            out = compute_blocking(ds, progress=progress, recorded=self.recorded)
-            files = {}
+            t0 = time.monotonic()
+            with batched_flush(ds):
+                keys, kb = activity_keys(ds, self.recorded, self.entries)
+            t_keys = time.monotonic() - t0
+            names = {w.idx: AT.key_of(w.entry.start) for w in ds.workouts}
+            files: dict[str, dict] = {}
+            todo: set[int] = set()
             for w in ds.workouts:
-                files[w.entry.file] = {"stamp": _file_stamp(ds, w), "start": w.entry.start.isoformat(),
-                                       "auto": out.get(w.idx)}
+                e = self.entries.get(w.entry.file)
+                if isinstance(e, dict) and e.get("key") == keys[w.idx] and isinstance(e.get("auto"), dict):
+                    files[w.entry.file] = e
+                    with self.lock:
+                        self.fresh[names[w.idx]] = e["auto"]
+                else:
+                    todo.add(w.idx)
+            kept = len(ds.workouts) - len(todo)
+            with self.lock:
+                self.n_done = kept
+
+            def progress(done, total, part):
+                with self.lock:
+                    for i, v in part.items():
+                        self.fresh[names[i]] = v
+                    self.n_done = kept + done
+            out = compute_blocking(ds, progress=progress, recorded=self.recorded, only=todo,
+                                   context=kb.context) if todo else {}
+            run_code = kb.code["run"]
+            for w in ds.workouts:
+                if w.idx in out:
+                    files[w.entry.file] = {"key": keys[w.idx], "own": kb.own[w.idx], "pcode": run_code,
+                                           "probe": kb.probes.get(w.idx), "start": w.entry.start.isoformat(),
+                                           "auto": out[w.idx]}
+                    self.computed.append(w.entry.file)
             save_cache(ds, self.sig, files)
+            log.info("activity auto: %d of %d recomputed (keys %.2f s, total %.2f s)", len(todo), len(ds.workouts),
+                     t_keys, time.monotonic() - t0)
             with self.lock:
                 self.state, self.n_done, self.finished = "ready", self.n_total, time.monotonic()
                 self.stale.clear()
