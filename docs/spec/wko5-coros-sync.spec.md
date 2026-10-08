@@ -8,7 +8,7 @@
 - **Owner**: maintainer
 - **Status**: IMPLEMENTED（M3 delta 進行中）
 - **Generated**: 2026-05-15
-- **Last updated**: 2026-10-05
+- **Last updated**: 2026-10-08
 
 ## Change History
 
@@ -37,6 +37,7 @@
 | 2026-10-06 | feat/coros-rpe-sp231 | SP-231 | 跑後自評：每個新活動多一個唯讀 `POST /activity/detail/query?labelId=&sportType=`（GET 回 result=1001），只讀 `data.sportFeelInfo.feelType`（1 最輕～5 最累，0 沒填；不讀 `sportNote`、語音筆記），存 `workout_files.coros_feel`，換成 `rpe`（1→2、2→4、3→5、4→7、5→10，推估；FIT 自己有 RPE 時 FIT 為準，`rpe_source`）。讀取失敗或 0 不算同步錯誤、不卡 cursor；失敗的在之後同步（最近 4 天、每次 ≤ 10 筆）重試。最近 8 週已匯入的活動在之後的同步各讀一次（每次 ≤ 80 筆、每筆間隔 0.4 秒，不登入、不寫 COROS，完成記在 `sync.coros.rpe_backfill`；token 被拒不算一輪，3 輪後停）。有補到自評時 `complete` 事件帶 `rpe_filled`，觸發自動調整與每人校正 |
 | 2026-10-06 | integrate/2026-10-06c | SP-231 follow-up | 依唯讀實測修正：每筆 detail 回整個活動（1.4–3.2 MB、約 1.5–3 秒），回填改每次同步 ≤ 25 筆（`BACKFILL_MAX`），剩下的留給之後的同步；「3 輪後停」只算有讀取失敗的輪（`failed_passes`），只是讀不完不算；沒存 `coros_sport_type` 的 COROS 活動不論運動一律用 sportType 100 讀（COROS 這個查詢不看 sportType）；最近 4 天存成 0（沒填）的活動在重試輪再讀一次（同樣每次 ≤ 10 筆，這次同步剛讀過的不重讀），之後在 COROS app 補填的自評照樣換成 RPE（FIT 有 RPE 時仍以 FIT 為準）並帶 `rpe_filled` |
 | 2026-10-07 | feat/sp311-341-data-registry | SP-311, SP-341 | 資料分類登錄表 `backend/data_registry.py`：每張表、每類租戶檔案屬「使用者改的／匯入的／衍生的／機密」哪一類（含去識別化欄位），備份改讀它（行為不變）；`sync_state` 屬機密。`mmp_cache` 加 `version` 欄（程式改了，`get_run_ftp` 重算窗內舊列）；`pmc_cache` 表刪除；`power_source_v1.json` 帶程式版本 |
+| 2026-10-08 | perf/sp362-batch1 | SP-362 | 同步效能第一批。**失敗清單**：單一活動下載／匯入失敗（COROS、TP）寫進新表 `sync_failures`（`backend/sync/failures.py`；`SyncFailure`，`backend/db/models.py:427`；登錄表歸「匯入的」，`backend/data_registry.py:117`），cursor 照常推進；之後的同步只依 id 重試這幾筆（COROS `labelId`＋`sportType` 走 detail/download，`backend/sync/coros_client.py:917`；TP `workoutId`，`backend/sync/tp_client.py:868`），不必從很久以前重新列表（正式機原本每次 7 筆失敗 → 列 819 筆、41 頁、33–54 秒）。最多自動重試 5 次或 7 天（使用者 2026-10-08），之後停止、留在設定 › 進階設定，可按「重試」（`GET /sync/failed`、`POST /sync/failed/{id}/retry`）。沒有 FIT 的手動紀錄記成 `no_file`（COROS：detail/download 回 0000 但沒有 fileUrl，`CorosNoFile`，`backend/sync/coros_client.py:447`），不算失敗、不再問。整次失敗（登入、列表）或失敗清單寫不進去時 cursor 不推進（`backend/sync/coros_client.py:940`、`backend/sync/tp_client.py:895`）。刪除來源檔案時清空該來源的清單。**overlap**：COROS 增量列表從上次同步減 3 天改 14 天（`CURSOR_OVERLAP_DAYS`，`backend/sync/coros_client.py:33`；多天百岳沒帶手機晚上傳）；跑後自評的重試窗固定 4 天（`RETRY_DAYS`，`backend/sync/coros_client.py:506`），不跟著放大。**同步後順序**：圖表 Dataset → 總覽狀態 → 課表輸入 → 自動調整 → 每人校正／自動分類（最低，等自動調整結束；`backend/sync/runner.py:189`、`backend/api/wko5views.py:232`、`backend/engine/calibrate.py:348`、`plan_auto.wait_idle`／`busy`，`backend/engine/plan_auto.py:868`） |
 
 ---
 
@@ -316,7 +317,8 @@ _list_page(token, base, user_id, since, end, page) → activities[]
   ↓
 for each activity:
   if coros_activity_id in DB → 列表的 trainingLoad 補進 coros_training_load（有變才寫）→ SSE: skipped
-  _download_fit(token, base, user_id, activity):
+  if 在失敗清單且不再自動重試（no_file，或已停止）→ SSE: skipped（reason no_file / retry_stopped）
+  _fetch_one（backend/sync/coros_client.py:716）→ _download_fit(token, base, user_id, activity):
     1. try fitUrl (presigned S3, if present)
     2. POST /activity/detail/download?labelId=...&sportType=...&fileType=4
     3. GET presigned URL → bytes
@@ -325,14 +327,23 @@ for each activity:
   _import_one_file(db, athlete_id, dest, source="coros", coros_activity_id=id)
     → parse FIT, compute metrics (TSS if FTP available, MMP, HR zones)
     → 解析失敗：record_corrupt stub（不再重複下載）
-  SSE: downloaded / error
+    → 下載／匯入失敗：寫進失敗清單（failures.record_failure，次數 +1）；
+      detail/download 回 0000 但沒有 fileUrl（手動紀錄）：記成 no_file（CorosNoFile，不算錯誤）
+    → 成功：從失敗清單移除
+  SSE: downloaded / no_file / error
   ↓
-沒有錯誤才更新 sync_state.coros_last_sync_at（增量 cursor，下次從這天減 overlap 開始）
+失敗清單裡該重試、這次列表沒碰到的：依 labelId＋sportType 直接重下載（不重新列表；SSE checking 帶 retry: true）
+  ↓
+更新 sync_state.coros_last_sync_at（增量 cursor，下次從這天減 14 天 overlap 開始）——
+  單筆失敗不再擋 cursor；只有整次失敗（登入、列表）提早結束、或失敗清單寫不進去時不推進
 refresh_hr_profile（GET /account/query，失敗不影響）
 SSE: complete {total_downloaded, total_checked, errors}
   ↓（runner.stream finally，backend/sync/runner.py:67）
-寫 sync.<src>.last_result → plan_auto.after_sync → 有新檔時 localtime.refresh_from_fits
-→ calibrate.after_sync（每人校正，含 COROS TL 換算重擬）→ 有新檔時 wko5views.warm_up（背景重建圖表 Dataset）
+寫 sync.<src>.last_result → 有新檔時 localtime.refresh_from_fits
+→ ① 有新檔時 wko5views.warm_up（背景：圖表 Dataset → 總覽狀態 → 課表輸入）
+→ ② plan_auto.after_sync（自動調整，與暖機共用同一份計算）
+→ ③ calibrate.after_sync（每人校正，含 COROS TL 換算重擬；等 ② 結束才開始）
+  （SP-362，backend/sync/runner.py:189-222）
 ```
 
 #### COROS Training Load（SP-37／SP-38，2026-10-04）
@@ -425,7 +436,8 @@ DROP TABLE IF EXISTS pmc_cache;                 -- 沒有程式讀寫（data_reg
 | 同步忙碌（SYNC_BUSY） | 同一來源已在同步時的拒絕（409） | `SyncBusy`，`backend/sync/runner.py:34` |
 | 同步結果（Last result） | 每次同步的 `status`（ok／partial／failed／aborted）、下載數、錯誤數、觸發方式 | `sync.<src>.last_result` |
 | 上次成功同步（Last ok） | 最近一次 ok／partial 的同步；失敗的同步不算「同步過」 | `sync.<src>.last_ok`、`runner.last_sync_at` |
-| 增量 cursor | 上次「無錯誤」同步的時間；下次從它減 overlap 天開始列，有錯就不推進 | `sync_state.coros_last_sync_at` / `last_sync_at` |
+| 增量 cursor | 上次同步的時間；COROS 下次從它減 14 天（`CURSOR_OVERLAP_DAYS`，`backend/sync/coros_client.py:33`）開始列，TP 列「之後有修改的」。單筆失敗不擋（進失敗清單）；整次失敗（登入、列表）或失敗清單寫不進去才不推進（SP-362） | `sync_state.coros_last_sync_at` / `last_sync_at` |
+| 失敗清單（Failed list） | 同步列到但下載／匯入失敗的活動（`failed`），或沒有 FIT 的手動紀錄（`no_file`）。之後的同步依 id 重試 `failed`，最多 5 次或 7 天，之後停止、留在設定 › 進階設定可按「重試」；匯入成功即移除，刪除來源檔案時清空 | `sync_failures` 表，`backend/sync/failures.py`、`SyncFailure`，`backend/db/models.py:427` |
 | 自動同步（Auto sync） | 開網站或每日排程觸發，只對資料來源、已啟用、已登入、閒置且超過門檻小時數者 | `auto_plan`，`backend/sync/runner.py:202` |
 | 登入狀態（Session status） | `logged_in` / `expired`（登入已過期）/ `logged_out`；檢查結果另有 `unknown`（連不上，仍顯示已登入） | `backend/sync/session_check.py:41` |
 | 記住密碼（Remembered password） | 勾選才存、加密存放的密碼，只用於 token 失效時自動重新登入一次 | `coros_password_sealed` / `tp_password_sealed` |
@@ -472,7 +484,9 @@ DROP TABLE IF EXISTS pmc_cache;                 -- 沒有程式讀寫（data_reg
 | POST | `/api/v1/sync/start`、`/api/v1/sync/coros/start` | 走共用 runner：同一來源已在同步時回 409 `SYNC_BUSY`，結果寫進 `sync.<src>.last_result` |
 | GET | `/api/v1/sync/primary` | 2026-10-04：目前資料來源（`source` coros／tp、`label`）、是否登入、是否啟用、是否同步中；不算檔案統計、不載 Dataset。課表頁「從 COROS 抓活動」用（`backend/api/sync.py:126`）。2026-10-05（SP-88）：`logged_in` 改走登入檢查（`session_check.check`，有快取），並回 `login`（ok／expired／unknown／logged_out）；原本只讀快取，快取過期後對已被拒的 token 回 true |
 | POST | `/api/v1/sync/auto` | 開網站時呼叫。對「已啟用、已登入、閒置、且超過 N 小時」的來源在背景啟動同步，立刻回傳；新鮮、忙碌或關閉時什麼都不做 |
-| DELETE | `/api/v1/sync/{coros\|tp}/files[?date_from&date_to]` | 刪掉該來源的 FIT 與 DB 紀錄，重建去重、重設 cursor，並拿該來源的鎖（同步中回 409）。若它正是圖表讀的資料來源且有 WKO5 資料夾，圖表改回 WKO5（`backend/sync/purge.py:100`） |
+| DELETE | `/api/v1/sync/{coros\|tp}/files[?date_from&date_to]` | 刪掉該來源的 FIT 與 DB 紀錄，重建去重、重設 cursor、清空該來源的失敗清單（SP-362，`backend/sync/purge.py:95`），並拿該來源的鎖（同步中回 409）。若它正是圖表讀的資料來源且有 WKO5 資料夾，圖表改回 WKO5（`backend/sync/purge.py:100`） |
+| GET | `/api/v1/sync/failed` | 2026-10-08（SP-362）：失敗清單 `items`（`source`、`provider_id`、`date`、`kind` failed／no_file、`state` retrying／stopped／no_file、`attempts`、`last_error`（遮蔽過、≤ 200 字）、`first_at`、`last_at`）與 `max_attempts`、`max_age_days`（`backend/api/sync.py:167`）。設定 › 資料同步 › 進階設定列出 failed 的列（日期、來源、試了幾次）與「重試」，no_file 只顯示筆數（`loadFailed`，`backend/static/settings.html:1149`） |
+| POST | `/api/v1/sync/failed/{id}/retry` | 「重試」：該列 attempts 歸零、7 天重新起算（no_file 也改回 failed），來源可同步（已登入、啟用、閒置）就在背景開始同步（`started`），否則等下次同步（`queued`）（`backend/api/sync.py:176`） |
 | GET | `/api/v1/sync/compare?a=&b=&since=` | 兩個資料來源逐筆活動比對：時長、距離、爬升、NP、TSS（含所用 FTP 與來源）。頁面是 `/api/v1/static/compare.html`；沒有 WKO5 資料夾時比 `wko5` 回 404 `NO_WKO5_FOLDER` |
 | POST | `/api/v1/auth/tp/login` | 新增 `method` 參數：`auto`（預設）/ `web` / `oauth` |
 
