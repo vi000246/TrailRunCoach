@@ -306,6 +306,19 @@ def test_weekly_check_skips_failed_list_rows_and_caps_downloads(tmp_path, hooks,
     run(go())
 
 
+def test_compare_groups_and_window_edges():
+    since, until = date(2026, 8, 1), date(2026, 9, 30)
+    remote = [{"id": "R1", "date": "2026-09-01"}, {"id": "R2", "date": "2026-09-02"}, {"id": "F", "date": "2026-09-03"}]
+    local = {"R1": date(2026, 9, 1), "EDGE0": since, "EDGE1": until, "MID": date(2026, 9, 10), "OLD": date(2026, 1, 1),
+             "NODATE": None}
+    g = check.compare(remote, local, {"F": {"id": "F", "date": "2026-09-03", "state": "stopped"}}, since, until, whole=False)
+    assert [m["id"] for m in g["missing"]] == ["R2"]
+    assert [x["id"] for x in g["local_only"]] == ["MID"]                     # edges, old and undated skipped
+    assert g["failed_n"] == 1 and g["remote"] == 3
+    g = check.compare(remote, local, {}, since, until, whole=True)
+    assert [x["id"] for x in g["local_only"]] == ["NODATE", "MID"]
+
+
 def test_weekly_due():
     now = datetime(2026, 10, 8, 12, tzinfo=timezone.utc)
     assert check.weekly_due(None, now)

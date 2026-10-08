@@ -256,12 +256,13 @@ def compare(remote: list[dict], local: dict[str, Optional[date]], failed: dict[s
             since: date, until: date, whole: bool) -> dict:
     """The three groups. `local` = provider id -> workout date of every DB row of the source;
     `failed` = provider id -> failed-list row summary. local_only looks only inside the
-    listed window (`whole`: also rows without a date); its first day is skipped (a date near
-    the window edge can differ by a day between the remote and the athlete-local date)."""
+    listed window (`whole`: also rows without a date) without its first and last day (near
+    an edge the remote date and the athlete-local date can differ by a day; today's rows were
+    just synced)."""
     seen = {it["id"] for it in remote}
     missing = [it for it in remote if it["id"] not in local and it["id"] not in failed]
     local_only = sorted(({"id": pid, "date": d.isoformat() if d else None} for pid, d in local.items()
-                         if pid not in seen and ((d is None and whole) or (d is not None and since < d <= until))),
+                         if pid not in seen and ((d is None and whole) or (d is not None and since < d < until))),
                         key=lambda x: (x["date"] or "", x["id"]))
     n_local = sum(1 for d in local.values() if (d is None and whole) or (d is not None and since <= d <= until))
     missing.sort(key=lambda x: (x.get("date") or "", x["id"]))
@@ -350,7 +351,9 @@ async def _list_and_compare(db, remote, source: str, athlete_id: int, mode: str,
     seen: set = set()
     pages = 0
     _prog(source, phase="list")
-    async for items in remote.pages(since, today):
+    # one day past the server's today: an athlete ahead of the server's time zone has today's
+    # activities dated tomorrow
+    async for items in remote.pages(since, today + timedelta(days=1)):
         pages += 1
         for it in items:
             if it["id"] not in seen:
