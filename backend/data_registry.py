@@ -127,6 +127,13 @@ TABLES: tuple = (
           secret_fields=("tp_access_token", "tp_refresh_token", "tp_web_cookie", "coros_access_token",
                          "coros_password_sealed", "tp_password_sealed"),
           deidentify=("coros_email", "coros_user_id", "tp_username", "coros_base_url")),
+    Table("debug_tokens", SECRET, "debug API tokens (SP-371, debug_auth.py): the SHA-256 of each token "
+          "(the token itself is never stored), its scopes, expiry and the source IPs seen; tenant-bound",
+          secret_fields=("token_hash",), deidentify=("name", "last_ip", "ips_json", "created_at", "last_used_at")),
+    Table("debug_audit", DERIVED, "the debug API's call log (SP-371): time, token name, endpoint, parameters, "
+          "source IP, status, size; the newest debug_auth.AUDIT_KEEP rows are kept",
+          deidentify=("at", "query", "ip"),
+          invalidated_by="never recomputed: a log, pruned to the newest rows; safe to delete"),
 )
 
 # tables no code uses any more: db/database._migrate_schema drops them from every tenant DB

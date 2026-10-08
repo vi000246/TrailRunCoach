@@ -26,6 +26,7 @@ from backend.api import calib as calib_api
 from backend.api import region as region_api
 from backend.api import calendar_feed as calendar_api
 from backend.api import altitude_nights as altitude_nights_api
+from backend.api import debug as debug_api
 
 
 # pages the demo never serves: the WKO5 comparison, the settings and the injury log
@@ -147,7 +148,8 @@ def build_app(demo: bool | None = None) -> FastAPI:
 
     owner_only = {id(r) for r in (sync.router, auth.router,
                                   plan_auto_api.router, injuries_api.router, backup_api.router, calib_api.router,
-                                  calendar_api.router, calendar_api.feed_router)}
+                                  calendar_api.router, calendar_api.feed_router,
+                                  debug_api.router, debug_api.admin_router)}
     routers = [
         workouts.router, expr.router,
         sync.router, auth.router,        # owner only (sync, connect)
@@ -164,6 +166,9 @@ def build_app(demo: bool | None = None) -> FastAPI:
         calendar_api.router,             # 課表訂閱 address (settings page; owner only)
         calendar_api.feed_router,        # /share/calendar/<token>.ics: public, token-only (owner only)
         session_api.router,              # GET /api/v1/session (the shell), POST /api/v1/demo/reset
+        # debug API for AI agents (SP-371, docs/debug-api.md): Bearer token only, 404 unless turned on;
+        # its settings block (設定 › 進階). Owner only: the demo never mounts either
+        debug_api.router, debug_api.admin_router,
     ]
     for r in routers:
         # the demo never mounts sync / connect / auto-plan / backup / injuries (§3.1 item 4),

@@ -101,7 +101,8 @@ def test_workout_files_marks_its_user_fields_and_sync_state_is_secret():
     sealed = {c for t, c in secrets.SEALED_DB_COLUMNS if t == "sync_state"}
     assert sealed <= set(ss.secret_fields)
     assert {"coros_password_sealed", "tp_password_sealed"} <= set(ss.secret_fields)
-    assert [t.name for t in R.of_class(R.SECRET)[0]] == ["sync_state"]
+    # SP-371: the debug API's token hashes are credentials too
+    assert [t.name for t in R.of_class(R.SECRET)[0]] == ["sync_state", "debug_tokens"]
 
 
 # ---------------------------------------------------------------- files
