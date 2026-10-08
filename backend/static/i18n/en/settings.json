@@ -290,5 +290,11 @@
   "debug.scope_read_activity": "Full activity data (numbers, thresholds, review, plan match)",
   "debug.scope_read_plan": "Plan, day matches, thresholds",
   "debug.scope_read_sync": "Sync results and the error log",
-  "debug.scope_export_config": "Export all settings (off by default)"
+  "debug.scope_export_config": "Export all settings (off by default)",
+  "debug.scope_read_gps": "Activity GPS positions (?gps=1; off by default)",
+  "debug.col_code": "Reason",
+  "debug.col_count": "Count",
+  "debug.pin_stats": "Wrong PINs: {n} (now {streak} in a row, locked {locks} times)",
+  "debug.dropped": "Refused, not logged: too frequent {rate}, IP paused {blocked}, busy {busy}",
+  "debug.failures_empty": "No failed authentications in the last 72 hours."
 }

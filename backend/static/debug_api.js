@@ -60,6 +60,17 @@
     el("dbg-audit").innerHTML = s.audit.length ? ah + s.audit.map(auditRow).join("")
       : `<tr><td class="meta">${esc(t("settings.debug.audit_empty"))}</td></tr>`;
     el("dbg-revoke-all").disabled = !s.tokens.some((k) => k.active);
+    const d = s.dropped || {}, p = s.pin || {};
+    el("dbg-stats").textContent = [
+      t("settings.debug.pin_stats", { n: p.wrong_total || 0, streak: p.wrong_in_a_row || 0, locks: p.locks || 0 }),
+      t("settings.debug.dropped", { rate: d.RATE_LIMITED || 0, blocked: d.BLOCKED || 0, busy: d.BUSY || 0 }),
+    ].join(" · ");
+    const fh = `<tr><th>${esc(t("settings.debug.col_time"))}</th><th>IP</th><th>${esc(t("settings.debug.col_code"))}</th>
+      <th>${esc(t("settings.debug.col_count"))}</th></tr>`;
+    el("dbg-fails").innerHTML = (s.failures || []).length
+      ? fh + s.failures.map((f) => `<tr><td class="meta">${esc(when(f.hour))}</td><td class="meta">${esc(f.ip)}</td>
+          <td class="meta">${esc(f.code)}</td><td>${esc(f.count)}</td></tr>`).join("")
+      : `<tr><td class="meta">${esc(t("settings.debug.failures_empty"))}</td></tr>`;
   }
 
   async function load() {
