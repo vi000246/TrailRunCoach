@@ -83,10 +83,14 @@ engine config / parity mode is the same everywhere.
   automatic plan run asking for the same key wait for that one result. An exception reaches every
   waiter and is not cached (the next call computes again); a same-thread re-entry runs inline.
   The callers are sync functions in the thread pool or the warm-up thread (never the event loop).
-- **Warm-up order** (`warm_up`, `backend/api/wko5views.py:232`; at start-up and after a sync with
-  new files): Dataset → Status → plan inputs, then — after an automatic plan run has ended
-  (`plan_auto.busy`, `backend/engine/plan_auto.py:868`) — the never-fitted calibration and the
-  activity auto-classification. After a sync the runner starts the warm-up before the automatic
+- **Warm-up order** (`warm_up`, `backend/api/wko5views.py:293`; at start-up and after a sync with
+  new files): Dataset → Status → plan inputs; that thread then ends (so a warm-up asked for
+  meanwhile is not dropped) and a low-priority thread (`_low_priority`,
+  `backend/api/wko5views.py:254`) waits until an automatic plan run has ended
+  (`plan_auto.busy`, `backend/engine/plan_auto.py:868`), re-reads the Dataset, and runs the
+  never-fitted calibration and the activity auto-classification; a warm-up during that wait
+  makes it run once more. The inputs' flight computes exactly its caller's key
+  (`_build_inputs`, `backend/api/plan_sessions.py:95`). After a sync the runner starts the warm-up before the automatic
   plan run and the calibration (which waits for the plan run, `backend/engine/calibrate.py:348`);
   see wko5-coros-sync.spec.md.
 - **Files stamp.** `_dataset()` no longer scans the FIT folder on every call: the scan is kept
