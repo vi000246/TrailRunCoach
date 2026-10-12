@@ -119,7 +119,12 @@ def test_migration_creates_activity_tags_table():
     _run(_inner())
 
 
-# ---- API (workout_files rows) -------------------------------------------------
+# ---- the store behind the PATCH routes (save_activity_tag) ---------------------
+# (the SPA-era PATCH /api/v1/workouts/{id}/activity these tests went through is gone, SP-48;
+# its 404 unknown row / 422 no start time went with it)
+
+KEY = "2025-10-18T20:54"
+
 
 async def _session():
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
@@ -137,31 +142,26 @@ async def _session():
     return s
 
 
-def test_patch_activity_sets_user_values():
+def test_save_activity_tag_sets_user_values():
     async def _inner():
-        from backend.api.workouts import update_activity, ActivityUpdate
+        from backend.api.workouts import save_activity_tag, ActivityUpdate
         s = await _session()
-        r = await update_activity(10, ActivityUpdate(activity_type="training", effort="moderate", note="平日"), s)
-        assert r["activity_type"] == "training" and r["activity_type_overridden"]
-        assert r["effort"] == "moderate" and r["effort_overridden"] and r["note"] == "平日"
-        r = await update_activity(10, ActivityUpdate(effort=None), s)          # null → back to auto
-        assert r["effort"] is None and not r["effort_overridden"] and r["activity_type"] == "training"
+        r = await save_activity_tag(s, ActivityUpdate(activity_type="training", effort="moderate", note="平日"),
+                                    start_local=KEY)
+        assert r.activity_type == "training" and r.activity_type_overridden
+        assert r.effort == "moderate" and r.effort_overridden and r.note == "平日"
+        r = await save_activity_tag(s, ActivityUpdate(effort=None), start_local=KEY)   # null → back to auto
+        assert r.effort is None and not r.effort_overridden and r.activity_type == "training"
     _run(_inner())
 
 
-def test_patch_activity_errors():
+def test_save_activity_tag_refuses_a_bad_value():
     async def _inner():
-        from backend.api.workouts import update_activity, ActivityUpdate
+        from backend.api.workouts import save_activity_tag, ActivityUpdate
         s = await _session()
         with pytest.raises(HTTPException) as e:
-            await update_activity(10, ActivityUpdate(effort="all_out"), s)
+            await save_activity_tag(s, ActivityUpdate(effort="all_out"), start_local=KEY)
         assert e.value.status_code == 400
-        with pytest.raises(HTTPException) as e:
-            await update_activity(999, ActivityUpdate(effort="max"), s)
-        assert e.value.status_code == 404
-        with pytest.raises(HTTPException) as e:
-            await update_activity(11, ActivityUpdate(effort="max"), s)           # no start time
-        assert e.value.status_code == 422
     _run(_inner())
 
 

@@ -99,16 +99,18 @@ def test_api_save_list_and_bulk(tmp_path, no_plan, monkeypatch):
     _run(_inner())
 
 
-def test_workout_files_activity_update_carries_surface():
-    from backend.api.workouts import ActivityUpdate, update_activity
-    from backend.tests.test_activity_tags import _session
+def test_save_activity_tag_carries_surface():
+    """The store behind both PATCH routes (the SPA-era workout_files route is gone, SP-48)."""
+    from backend.api.workouts import ActivityUpdate, save_activity_tag
+    from backend.tests.test_activity_tags import KEY, _session
 
     async def _inner():
         s = await _session()
-        r = await update_activity(10, ActivityUpdate(surface="dry"), s)
-        assert r["surface"] == "dry" and r["tags"] == [DRY]
-        r = await update_activity(10, ActivityUpdate(surface=None), s)
-        assert r["surface"] is None and r["tags"] == []
+        tags = lambda r: AT.tags_of({"tags_json": r.tags_json})                 # noqa: E731
+        r = await save_activity_tag(s, ActivityUpdate(surface="dry"), start_local=KEY)
+        assert AT.surface_of(tags(r)) == "dry" and tags(r) == [DRY]
+        r = await save_activity_tag(s, ActivityUpdate(surface=None), start_local=KEY)
+        assert AT.surface_of(tags(r)) is None and tags(r) == []
     _run(_inner())
 
 

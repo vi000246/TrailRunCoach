@@ -79,7 +79,7 @@ PAGE_ALIASES: dict[str, str] = {
 # POSTs that change nothing stored (the demo's NO_SANDBOX computations): the crawl
 # records their answers to the pages' default inputs; any other body is refused
 COMPUTE_POSTS = re.compile(
-    r"^/api/v1/(racepower/(predict|course|plan|course/event/[^/]+)|expr/evaluate"
+    r"^/api/v1/(racepower/(predict|course|plan|course/event/[^/]+)"
     r"|overview/plan/(steps-preview|steps/check|steps/derive|blackouts/preview|prefs/conflicts))$")
 # ... of which the structure editor's: answered in the browser (static_shim.js Steps), not recorded
 STEPS_POSTS = re.compile(r"^/api/v1/overview/plan/steps/(check|derive)$")

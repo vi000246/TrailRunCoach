@@ -127,18 +127,20 @@ def test_api_save_load_and_mutual_exclusion(tmp_path, no_plan, monkeypatch):
     _run(_inner())
 
 
-def test_workout_files_activity_update_carries_poles():
-    from backend.api.workouts import ActivityUpdate, update_activity
-    from backend.tests.test_activity_tags import _session
+def test_save_activity_tag_carries_poles():
+    """The store behind both PATCH routes (the SPA-era workout_files route is gone, SP-48)."""
+    from backend.api.workouts import ActivityUpdate, save_activity_tag
+    from backend.tests.test_activity_tags import KEY, _session
 
     async def _inner():
         s = await _session()
-        r = await update_activity(10, ActivityUpdate(poles="with"), s)
-        assert r["poles"] == "with" and r["tags"] == [WITH]
-        r = await update_activity(10, ActivityUpdate(tags=["a", WITH, WITHOUT]), s)
-        assert r["poles"] == "without" and r["tags"] == ["a", WITHOUT]
-        r = await update_activity(10, ActivityUpdate(poles=None), s)
-        assert r["poles"] is None and r["tags"] == ["a"]
+        tags = lambda r: AT.tags_of({"tags_json": r.tags_json})                 # noqa: E731
+        r = await save_activity_tag(s, ActivityUpdate(poles="with"), start_local=KEY)
+        assert AT.poles_of(tags(r)) == "with" and tags(r) == [WITH]
+        r = await save_activity_tag(s, ActivityUpdate(tags=["a", WITH, WITHOUT]), start_local=KEY)
+        assert AT.poles_of(tags(r)) == "without" and tags(r) == ["a", WITHOUT]
+        r = await save_activity_tag(s, ActivityUpdate(poles=None), start_local=KEY)
+        assert AT.poles_of(tags(r)) is None and tags(r) == ["a"]
     _run(_inner())
 
 

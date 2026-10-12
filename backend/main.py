@@ -11,7 +11,7 @@ from backend.db.database import init_db
 from backend.i18n import UserError
 from backend.i18n.pages import STATIC as PAGES_DIR, render_page
 from backend.request_context import RequestContextMiddleware
-from backend.api import workouts, expr, sync, auth
+from backend.api import workouts, sync, auth
 from backend.api import wko5views
 from backend.api import achievements as achievements_api
 from backend.api import overview as overview_api
@@ -180,7 +180,7 @@ def build_app(demo: bool | None = None) -> FastAPI:
                                   calendar_api.router, calendar_api.feed_router,
                                   debug_api.router, debug_api.admin_router)}
     routers = [
-        workouts.router, expr.router,
+        workouts.router,
         sync.router, auth.router,        # owner only (sync, connect)
         wko5views.router, achievements_api.router,
         plan_api.router, plan_auto_api.router, plan_sessions_api.router, overview_api.router,

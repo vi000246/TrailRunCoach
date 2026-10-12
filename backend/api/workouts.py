@@ -1,7 +1,9 @@
-"""workout_files rows: the user's trail / road override (activity.html) and the
-activity tags (save_activity_tag, also called by the wko5views activity routes).
+"""workout_files rows: the user's trail / road override (activity.html), and the
+activity tags' store (save_activity_tag: the wko5views activity routes, PATCH
+/api/v1/wko5/workouts/{i}/activity and /api/v1/wko5/activities, are its callers).
 The React SPA's GET list / detail / mmp / timeseries / zones / trail routes were
-removed with it (2026-10-04)."""
+removed with it (2026-10-04); its PATCH /{id}/activity, which no page called,
+on 2026-10-12 (SP-48)."""
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
@@ -170,49 +172,3 @@ async def _attach_injury(db: AsyncSession, row: ActivityTag, side: Optional[str]
     if res["delete"] is not None and res["delete"] != new_id:
         await db.delete(by[res["delete"]])
     INJ._memo.clear()
-
-
-def _tag_json(t: Optional[ActivityTag]) -> dict:
-    """The stored user tag fields of a workout_files row (auto values need the
-    dataset: GET /api/v1/wko5/workouts/{idx}/activity)."""
-    from backend.engine import activity_tags as AT
-    ty = t.activity_type if t and t.activity_type_overridden else None
-    ef = t.effort if t and t.effort_overridden else None
-    return {"activity_type": ty, "activity_type_label": AT.TYPES.get(ty), "activity_type_overridden": ty is not None,
-            "effort": ef, "effort_label": AT.EFFORTS.get(ef), "effort_overridden": ef is not None,
-            "note": t.note if t else None, "key": t.start_local if t else None,
-            "exclusion": AT.user_exclusion({"exclusion": t.exclusion}) if t else None,
-            "name": AT.name_of({"name": t.name}) if t else None,
-            "tags": AT.tags_of({"tags_json": t.tags_json}) if t else [],
-            **AT.pole_state(AT.tags_of({"tags_json": t.tags_json}) if t else [], None),
-            "surface": AT.surface_of(AT.tags_of({"tags_json": t.tags_json})) if t else None,
-            "pain": t.pain if t else None, "pain_area": t.pain_area if t else None,
-            "pain_score": t.pain_score if t else None,
-            "injury_id": t.injury_id if t else None}
-
-
-def _local_start(wf: WorkoutFile) -> Optional[str]:
-    from backend.engine import activity_tags as AT
-    if wf.start_time_utc is None:
-        return None
-    import datetime as _dt
-    from backend.engine.wko5expr.datasource import athlete_tz
-    loc = wf.start_time_utc.replace(tzinfo=_dt.timezone.utc).astimezone(athlete_tz()).replace(tzinfo=None)
-    return AT.key_of(loc)
-
-
-@router.patch("/{workout_id}/activity")
-async def update_activity(workout_id: int, body: ActivityUpdate, db: AsyncSession = Depends(get_db)):
-    """Set the activity type / effort / note of a workout_files row — the
-    same pattern as update_classification: user values with *_overridden
-    flags that auto re-classification never touches."""
-    wf = (await db.execute(select(WorkoutFile).where(WorkoutFile.id == workout_id))).scalar_one_or_none()
-    if not wf:
-        raise HTTPException(404, "WORKOUT_NOT_FOUND")
-    key = _local_start(wf)
-    if key is None:
-        raise HTTPException(422, "NO_START_TIME")
-    row = await save_activity_tag(db, body, start_local=key, athlete_id=wf.athlete_id, source=wf.source,
-                                  workout_id=wf.id,
-                                  distance_km=(wf.total_distance_m or 0) / 1000.0 if wf.total_distance_m else None)
-    return {"id": wf.id, **_tag_json(row)}

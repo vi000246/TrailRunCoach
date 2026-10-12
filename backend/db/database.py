@@ -209,6 +209,59 @@ async def _migrate_schema():
             await _migrate_race_result(conn)
         for key in RETIRED_KEYS if has_settings else ():
             await conn.execute(text("DELETE FROM user_settings WHERE key = :k"), {"k": key})
+    # the AI coach's stored API key (SP-48): its own transaction, then the WAL is truncated
+    await _clear_retired_columns()
+
+
+# columns an older DB may still hold that no code reads any more and whose values must not stay
+# behind: the AI coach's provider / API key / model on athlete_settings (the model lost them with
+# the AI coach, 2026-10-04; owner 2026-10-07, SP-48)
+RETIRED_COLUMNS: dict = {"athlete_settings": ("ai_provider", "ai_api_key", "ai_model")}
+DROP_COLUMN_SQLITE = (3, 35, 0)          # the first SQLite with ALTER TABLE … DROP COLUMN
+
+
+async def _clear_retired_columns() -> None:
+    """RETIRED_COLUMNS out of the current tenant's DB (init_db: the owner's at start-up, a user
+    tenant's on its first use, a restored backup). The values are set to NULL with secure_delete
+    on, so the old bytes are zeroed on the page instead of left in a freed cell; then, where the
+    SQLite has DROP COLUMN, the columns are dropped too (the table then matches a new DB's). When
+    anything changed, the WAL is checkpointed and truncated: older page images there can still
+    hold the value. Idempotent: a new DB, or a second run, only reads PRAGMA table_info. Logs
+    column names and counts, never a value."""
+    import logging
+    import sqlite3
+    from sqlalchemy.exc import OperationalError
+    log = logging.getLogger(__name__)
+    done = []
+    async with get_engine().begin() as conn:
+        for table, retired in RETIRED_COLUMNS.items():
+            have = {r[1] for r in (await conn.execute(text(f'PRAGMA table_info("{table}")'))).fetchall()}
+            cols = [c for c in retired if c in have]
+            if not cols:
+                continue
+            # the pooled connection's own setting (0 / 1 / 2 = FAST), put back afterwards
+            prev = {1: "ON", 2: "FAST"}.get((await conn.execute(text("PRAGMA secure_delete"))).scalar(), "OFF")
+            await conn.execute(text("PRAGMA secure_delete=ON"))
+            try:
+                n = (await conn.execute(text(
+                    f'UPDATE "{table}" SET ' + ", ".join(f'"{c}" = NULL' for c in cols)
+                    + " WHERE " + " OR ".join(f'"{c}" IS NOT NULL' for c in cols)))).rowcount
+                if n:
+                    done.append(f"{table}: {n} rows cleared")
+                if sqlite3.sqlite_version_info >= DROP_COLUMN_SQLITE:
+                    for c in cols:
+                        try:
+                            await conn.execute(text(f'ALTER TABLE "{table}" DROP COLUMN "{c}"'))
+                            done.append(f"{table}.{c} dropped")
+                        except OperationalError as e:        # e.g. an index on it: stays, emptied
+                            log.warning("retired column %s.%s kept (values cleared): %s", table, c,
+                                        type(e.orig).__name__ if e.orig is not None else type(e).__name__)
+            finally:
+                await conn.execute(text(f"PRAGMA secure_delete={prev}"))
+    if done:
+        async with get_engine().connect() as conn:
+            await conn.execute(text("PRAGMA wal_checkpoint(TRUNCATE)"))
+        log.info("retired columns: %s", "; ".join(done))
 
 
 async def _migrate_race_result(conn) -> None:

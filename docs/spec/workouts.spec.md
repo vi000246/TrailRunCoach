@@ -1,6 +1,6 @@
 # Module Spec: workouts (activity metadata)
 
-> **Last Updated**: 2026-10-08
+> **Last Updated**: 2026-10-12
 > **Status**: Active
 > **Domain Layer**: Supporting
 
@@ -244,8 +244,7 @@ flagged.
 
 | Method | Path | Body / result |
 |---|---|---|
-| PATCH | `/api/v1/workouts/{id}/classification` | `{trail_classification}`: `road` / `trail` / `unknown` = a user override (`VALID_CLASSIFICATIONS`, `backend/api/workouts.py:17`); `auto` clears it and re-applies `classify_trail` |
-| PATCH | `/api/v1/workouts/{id}/activity` | `{activity_type?, effort?, note?, exclusion?, name?, tags?, pain?, pain_area?, pain_side?, pain_score?, poles?, surface?}` (`ActivityUpdate`, `backend/api/workouts.py:55`); a key present with null clears it (back to auto), absent = unchanged; `tags` replaces the list, then `poles` / `surface` rewrite their tag; a pain mark attaches to / opens a 傷病紀錄 event (404 in demo mode); 400 invalid value, 404, 422 no start time. Returns `{id, …}` with the stored user values (incl. `poles`, `poles_user`, `surface`, `pain_score`) |
+| PATCH | `/api/v1/workouts/{id}/classification` | `{trail_classification}`: `road` / `trail` / `unknown` = a user override (`VALID_CLASSIFICATIONS`, `backend/api/workouts.py:19`); `auto` clears it and re-applies `classify_trail` |
 | GET | `/api/v1/wko5/workouts/{idx}/activity` | dataset workout (current source): effective, auto (+ reasons), overridden flags, note, `effort_detail` (HR fraction, above-AeT share, long-rest share), `capacity` (race-power sample or not), the option labels, `power` (`source`, `used`, `label`, `setting`), `title_original`, `title_from`, `terrain`, `origin`, `pack`, `poles` / `poles_user` / `poles_race` (SP-300), `pain_state` (+ `pain_score`, the 傷別 pain-monitoring text `monitor` and the re-entry prompt `reentry`, SP-269) (`_activity_json`, `backend/api/wko5views.py:877`) |
 | GET | `/api/v1/wko5/workouts/{idx}/pain` | the pain mark only (the chart page's chip); 404 in demo mode |
 | GET | `/api/v1/wko5/activities` | every activity of the current source, newest first, with the stored user values (type / effort marks, name, tags, note, exclusion, pain, `pain_score`, `poles` / `poles_race`, `surface`), terrain, power label, recorded RPE / feel and `self_rating` (COROS, SP-231), `rain_mm` and `pole_chart` (counts toward the comparison); excluded files with `index: null`. Top level: `pole_tags`, `pole_none_tag`, `surface_tags`, `pole_compare` (the 5 + 5 counts), `rain_hint_mm` (`activities_list`, `backend/api/wko5views.py:1085`) |
@@ -254,7 +253,7 @@ flagged.
 | GET | `/api/v1/wko5/activities/stats` | `{key: {avg_hr, avg_power}}` for the list columns |
 | PATCH | `/api/v1/wko5/activities` | key-based single or bulk edit (≤ 500 items `{key, file?}`): any tag field (incl. `pain_score`, `poles`, `surface`; `BulkBody`, `backend/api/wko5views.py:1230`), plus `add_tags` / `remove_tags`; works for excluded files |
 | GET | `/api/v1/wko5/workouts` | each item also has `power_source` and `power_label` (「手錶推估功率（未採用）」 for unused watch power); `tss_source` is no longer `power` for a blocked watch run |
-| PATCH | `/api/v1/wko5/workouts/{idx}/activity` | as above; keyed by start minute + file, so it applies across sources; also `exclusion` (`keep` / `exclude` / null) and `pack_kg`; the GET has `exclusion_state` {override, flagged, enabled} |
+| PATCH | `/api/v1/wko5/workouts/{idx}/activity` | `{activity_type?, effort?, note?, exclusion?, name?, tags?, pain?, pain_area?, pain_side?, pain_score?, poles?, surface?, pack_kg?}`: the tag fields are `ActivityUpdate` (`backend/api/workouts.py:57`), stored by `save_activity_tag` (`:91`); a key present with null clears it (back to auto), absent = unchanged; `tags` replaces the list, then `poles` / `surface` rewrite their tag; a pain mark attaches to / opens a 傷病紀錄 event (404 in demo mode); `exclusion` `keep` / `exclude` / null; `pack_kg` the pack carried. Keyed by start minute + file, so it applies across sources; 400 invalid value, 404 no such workout. Returns the GET's single-activity JSON (`patch_activity`, `backend/api/wko5views.py:1127`); the GET has `exclusion_state` {override, flagged, enabled} |
 | GET | `/api/v1/wko5/workouts` (excluded rows) | an excluded file is listed with `index: null` and `excluded` {key, label, reason, rule, auto, manual, override, avg_kmh} |
 | GET | `/api/v1/wko5/exclusions` | `{enabled, setting, source, excluded: […], kept: […]}` of the current source |
 | PUT | `/api/v1/wko5/exclusions` | `{key, file?, exclusion}`: override any activity by its start minute; 400 bad key / value |
@@ -262,7 +261,9 @@ flagged.
 
 The DB-row `GET /api/v1/workouts` and `/api/v1/workouts/{id}` (and the SPA's mmp / timeseries / zones /
 trail routes) were removed with the React SPA on 2026-10-04 (SP-48; `backend/api/workouts.py:1`);
-the `/api/v1/workouts` router keeps only the two PATCH routes above.
+its `PATCH /api/v1/workouts/{id}/activity` (the tags of a workout_files row), which no page called, followed
+on 2026-10-12 (SP-48, owner 2026-10-07): the pages edit the tags through `/api/v1/wko5/workouts/{idx}/activity`
+and `/api/v1/wko5/activities`. The `/api/v1/workouts` router keeps only the classification PATCH above.
 
 ### Auto values per activity (SP-334)
 
@@ -389,8 +390,8 @@ defaults to `charts.data_source`; the trail rows need the FIT dataset's trail cl
 ## Testing
 
 `backend/tests/test_activity_tags.py`: rules, rest spells, merge, tmp-DB store, the migration,
-the PATCH / list API on an in-memory DB, capacity gating with user marks, the seed matcher and
-idempotence, the trail HR model and the planner estimate.
+the tag store behind the PATCH routes (`save_activity_tag`) on an in-memory DB, capacity gating with
+user marks, the seed matcher and idempotence, the trail HR model and the planner estimate.
 `backend/tests/test_activity_edit.py`: name / tags store, key-based and bulk API, the terrain
 `auto` reset, the recorded RPE as an effort input. `backend/tests/test_activity_auto.py`: the
 background `/activities/auto` job (single flight, progress, disk cache).
@@ -398,6 +399,7 @@ background `/activities/auto` job (single flight, progress, disk cache).
 user marks, recorded RPE, plan threshold / race, reclassification, a changed branch's code, the old
 format — each compared with a fresh full recompute; the row lookup and the cross-run window equal
 the whole-list functions.
+`backend/tests/test_spa_leftovers_sp48.py`: the SPA-only routes are gone, the pages' routes stay.
 `backend/tests/test_effort_calib.py`: the per-athlete rest limit. `backend/tests/test_activity_key.py`:
 start-time / file matching across sources.
 `backend/tests/test_bad_activity.py`: the limits, car / vehicle-segment / power rules, descents /
@@ -426,6 +428,7 @@ the app-type table and the filter kinds.
 | What counts as 百岳 in the activity-type filter | the user's 百岳跟團 mark, a plan 百岳 event that day, or a GPS-detected 百岳 summit | the type mark only | the user's answer 2026-10-06 (SP-263) |
 | COROS's post-run self-rating | read at sync and used as the RPE at once (1–5 mapped to 10 points, 推估) | wait for more data before enabling | the user decided to enable it directly (SP-231, 2026-10-06) |
 | The React SPA and its DB-row routes | removed (`frontend/`, `GET /api/v1/workouts`, `/{id}` …) | keep the SPA and spec it | the static pages are the UI; the SPA was unmaintained (SP-48, user decision 2026-10-04) |
+| The SPA-era `PATCH /api/v1/workouts/{id}/activity` | removed | keep it beside the pages' routes | no page called it; the pages edit tags by start minute + file (`/api/v1/wko5/…`), which also covers activities without a workout_files row (SP-48, owner 2026-10-07) |
 | How the auto values decide what to recompute | one key per activity: its own inputs, the *values* of the cheap cross-activity inputs (HRmax, longer power, plan race, row lookups) and a 301-day runs window for the expensive one (the as-of thresholds); a branch code hash | dependency windows for everything; computing the thresholds of every day for the key | values recompute only where the answer can change; the thresholds estimate is the costly part, so it is keyed on its inputs (SP-334) |
 | Where the per-activity entries live | the existing `activity_auto.json`, one entry per file | a SQLite table | one small file per dataset already, rewritten whole once per job (~700 entries); no new store to register / back up (SP-334) |
 
@@ -453,3 +456,4 @@ the app-type table and the filter kinds.
 | 2026-10-08 | review fix | SP-334 code review | `effort_rest_max` (每人校正 P9) in every activity's key and the job signature (a refit or manual change recomputed nothing before); the drift calibration only in the runs' key; the job thread keeps the tenant context; WKO5 Datasets list the PD refit's synced FITs (`synced_fit_files`); the run's day in the thresholds window row; the dataset's own LTHR only on days without a plan LTHR; signature covers config / FTP / mFTP snapshot / the whole RPE row; `.tmp` removed on a failed write; kept entries refresh their probe; tests for test sessions, re-index + done_by, a bad file, own LTHR, watch power, time zone, tenants |
 | 2026-10-08 | feature | SP-57 | The recorded RPE (FIT or COROS's post-run rating) also feeds the per-level 「負荷」 RPE conversion (`backend/engine/rpe_load.py:280`); COROS FITs re-checked: no RPE field, the rating comes from the activity detail (SP-231) |
 | 2026-10-08 | review fix | SP-57 code review | A FIT RPE maps two values per level (6 → 累, Seiler zone 2 = session RPE 5–6; COROS 1–5 unchanged), `backend/engine/rpe_load.py:121` |
+| 2026-10-12 | chore | SP-48 (owner 2026-10-07) | `PATCH /api/v1/workouts/{id}/activity` removed with its own helpers (`_tag_json`, `_local_start`): no page called it; the tag fields and `save_activity_tag` stay for the `/api/v1/wko5/…` routes. Its tests now call `save_activity_tag` (the 404 / 422 of the route went with it); `test_spa_leftovers_sp48.py` checks the route table |
