@@ -7,6 +7,12 @@ Where it goes
   * <data folder>/logs/app.log (~/.wko5coach/logs: on the NAS volume, so it
     survives a container restart), rotated at LOG_FILE_BYTES × LOG_FILE_KEEP.
   WKO5COACH_LOG_LEVEL (default INFO), WKO5COACH_LOG_FILE=0 turns the file off.
+  * <data folder>/logs/perf.log (SP-379): the performance log — one plain-text line
+    per timed operation, for tuning: every API request (its category 圖表 / 課表 /
+    賽事計算 / 同步 / 總覽, method, route template, status, seconds) and every
+    step timed with took() / timed() / phases() (dataset build, auto plan, sync,
+    the calendar's phases). A new file each day (perf.log.YYYY-MM-DD), files
+    older than PERF_KEEP_DAYS deleted. WKO5COACH_PERF_LOG=0 (or LOG_FILE=0) off.
 
 What is logged
   * RequestLogMiddleware: a request slower than SLOW_REQUEST_S (WARNING), a
@@ -60,6 +66,11 @@ LOG_FILE_BYTES = 1_000_000
 LOG_FILE_KEEP = 5
 
 FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
+# perf.log (SP-379): tab-separated, so it reads as a table (sort / awk / a spreadsheet)
+PERF_FORMAT = "%(asctime)s\t%(message)s"
+PERF_KEEP_DAYS = 31                  # 「log 紀錄的過期時間為一個月」 (the user, SP-379)
+perf_log = logging.getLogger("backend.perf")
+perf_log.propagate = False           # its own file only: app.log keeps the slow / failed lines
 
 # ---------------------------------------------------------------------------
 # redaction
@@ -310,7 +321,81 @@ def setup() -> logging.Logger:
                 fh._trc = "file"
                 fh.setFormatter(fmt)
                 root.addHandler(fh)
+        _setup_perf()
     return root
+
+
+def perf_file() -> Optional[Path]:
+    """<data folder>/logs/perf.log; None when WKO5COACH_PERF_LOG=0 or the log file is off."""
+    if os.getenv("WKO5COACH_PERF_LOG", "1").strip().lower() in ("0", "false", "no", "off"):
+        return None
+    path = log_file()
+    return None if path is None else path.with_name("perf.log")
+
+
+def prune_perf(path: Path, keep_days: int = PERF_KEEP_DAYS, now: Optional[float] = None) -> int:
+    """Delete perf.log.* files last written more than `keep_days` ago (the daily rotation keeps
+    PERF_KEEP_DAYS files, but only once the server writes past midnight — an app that sat idle
+    for weeks would keep older ones). Returns how many were deleted."""
+    cut = (now if now is not None else time.time()) - keep_days * 86400
+    n = 0
+    for f in path.parent.glob(path.name + ".*"):
+        try:
+            if f.is_file() and f.stat().st_mtime < cut:
+                f.unlink()
+                n += 1
+        except OSError:
+            pass
+    return n
+
+
+def _setup_perf() -> None:
+    """perf_log's file handler (SP-379), following the data folder like app.log. Caller holds _SETUP_LOCK."""
+    path = perf_file()
+    perf_log.setLevel(logging.INFO)
+    old = [h for h in perf_log.handlers if getattr(h, "_trc", None) == "perf"]
+    if old and path is not None and all(Path(h.baseFilename) == path for h in old):
+        return
+    for h in old:
+        perf_log.removeHandler(h)
+        h.close()
+    if path is None:
+        return
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        prune_perf(path)
+        fh = logging.handlers.TimedRotatingFileHandler(path, when="midnight", backupCount=PERF_KEEP_DAYS,
+                                                       encoding="utf-8")
+    except OSError as e:
+        log.warning("perf log unavailable: %s", type(e).__name__)
+        return
+    fh._trc = "perf"
+    fh.setFormatter(RedactingFormatter(PERF_FORMAT))
+    perf_log.addHandler(fh)
+
+
+# the API's areas, by route template prefix (longest first): what a perf.log line is about
+PERF_AREAS = (("/api/v1/overview/plan", "plan"), ("/api/v1/plan", "plan"), ("/api/v1/overview", "overview"),
+              ("/api/v1/wko5", "chart"), ("/api/v1/expr", "chart"), ("/api/v1/workouts", "chart"),
+              ("/api/v1/achievements", "chart"), ("/api/v1/racepower", "racepower"), ("/api/v1/routes", "racepower"),
+              ("/api/v1/sync", "sync"), ("/api/v1/auth", "sync"), ("/share", "share"))
+
+
+def perf_area(route: str) -> Optional[str]:
+    """The area of a route template; None for what perf.log leaves out (static files, the page
+    shell's own small calls are kept: they are the app's)."""
+    if not route or route == "(no route)" or route.endswith("/…") or route.startswith("/api/v1/static/"):
+        return None
+    for prefix, area in PERF_AREAS:
+        if route == prefix or route.startswith(prefix + "/"):
+            return area
+    return "other" if route.startswith("/api/") else "page"
+
+
+def perf(area: str, what: str, seconds: float, **fields) -> None:
+    """One perf.log line: area, seconds, what, key=value fields (counts and names only)."""
+    if perf_log.handlers:
+        perf_log.info("%s\t%.3f\t%s%s", area, seconds, what, _fields(fields))
 
 
 # ---------------------------------------------------------------------------
@@ -332,6 +417,7 @@ def took(what: str, t0: float, slow_s: float = SLOW_STEP_S, logger: Optional[log
         lg.warning("slow: %s took %.1f s%s", what, dt, _fields(fields))
     else:
         lg.info("%s took %.1f s%s", what, dt, _fields(fields))
+    perf("step", what, dt, **fields)
     return dt
 
 
@@ -344,7 +430,9 @@ def timed(what: str, slow_s: float = SLOW_STEP_S, logger: Optional[logging.Logge
     try:
         yield
     except BaseException:
-        (logger or log).warning("%s failed after %.1f s%s", what, time.perf_counter() - t0, _fields(fields))
+        dt = time.perf_counter() - t0
+        (logger or log).warning("%s failed after %.1f s%s", what, dt, _fields(fields))
+        perf("step", what, dt, failed=1, **fields)
         raise
     took(what, t0, slow_s, logger, **fields)
 
@@ -362,6 +450,8 @@ def phases(what: str, t0: float, parts: dict, slow_s: float = SLOW_REQUEST_S,
     lg = logger or log
     lg.log(logging.WARNING if total >= slow_s else logging.INFO, "%s%s took %.1f s%s",
            "slow: " if total >= slow_s else "", what, total, _fields(fields) + (f" | {steps}" if steps else ""))
+    perf("step", what, total, **fields,
+         phases=",".join(f"{k}:{v:.2f}" for k, v in parts.items() if v >= 0.005) or None)
     return total
 
 
@@ -415,6 +505,11 @@ class RequestLogMiddleware:
         dt = time.perf_counter() - t0
         status = resp["status"] or 0
         slow = SLOW_REQUEST_S if self.slow_s is None else self.slow_s
+        if not resp["stream"]:                          # SP-379: every request's time, by area
+            route = route_label(scope)
+            area = perf_area(route)
+            if area:
+                perf(area, f"{method} {route}", dt, status=status)
         if status >= 500:
             log.warning("server error: %s %s -> %s in %.2f s", method, route_label(scope), status, dt)
         elif dt >= slow and not resp["stream"]:

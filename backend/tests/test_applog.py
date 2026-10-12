@@ -507,3 +507,97 @@ def test_login_and_sync_log_no_personal_data(tmp_path, caplog):
     for personal in ("runner@example.com", "pw-Secret-1", "ctok-9f8e7d6c5b4a39281706f5e4d3c2b1a0",
                      "4242424242", "61.5", "193", "194", "171", "172", "287", "47", "46"):
         assert not re.search(rf"(?<![\d.]){re.escape(personal)}(?![\d.])", text), personal
+
+
+# ---- perf.log (SP-379) -----------------------------------------------------------------------
+
+@pytest.fixture
+def clean_perf():
+    def drop():
+        for h in list(applog.perf_log.handlers):
+            applog.perf_log.removeHandler(h)
+            h.close()
+    drop()
+    yield applog.perf_log
+    drop()
+
+
+def _perf_lines(tmp_path):
+    for h in applog.perf_log.handlers:
+        h.flush()
+    return (tmp_path / "logs" / "perf.log").read_text("utf-8").splitlines()
+
+
+def test_perf_log_is_its_own_daily_file_kept_31_days(tmp_path, monkeypatch, clean_handlers, clean_perf):
+    monkeypatch.setenv("WKO5COACH_HOME", str(tmp_path))
+    monkeypatch.delenv("WKO5COACH_LOG_FILE", raising=False)
+    monkeypatch.delenv("WKO5COACH_PERF_LOG", raising=False)
+    applog.setup()
+    applog.setup()
+    hs = [h for h in clean_perf.handlers if getattr(h, "_trc", None) == "perf"]
+    assert len(hs) == 1 and hs[0].when == "MIDNIGHT" and hs[0].backupCount == applog.PERF_KEEP_DAYS == 31
+    assert Path(hs[0].baseFilename) == tmp_path / "logs" / "perf.log"
+    applog.perf("chart", "GET /api/v1/wko5/charts/{key}", 1.23456, status=200)
+    line = _perf_lines(tmp_path)[-1]
+    date, area, secs, what = line.split("\t")
+    assert area == "chart" and secs == "1.235" and what == "GET /api/v1/wko5/charts/{key} status=200"
+    assert re.match(r"\d{4}-\d\d-\d\d \d\d:\d\d:\d\d", date)
+    # not in app.log (its own file)
+    for h in clean_handlers.handlers:
+        h.flush()
+    assert "charts/{key}" not in (tmp_path / "logs" / "app.log").read_text("utf-8")
+
+
+def test_perf_log_off_and_old_files_pruned(tmp_path, monkeypatch, clean_handlers, clean_perf):
+    monkeypatch.setenv("WKO5COACH_HOME", str(tmp_path))
+    monkeypatch.setenv("WKO5COACH_PERF_LOG", "0")
+    applog.setup()
+    assert not [h for h in clean_perf.handlers if getattr(h, "_trc", None) == "perf"] and applog.perf_file() is None
+    applog.perf("chart", "x", 1.0)                                     # no handler: nothing, no error
+    logs = tmp_path / "logs"
+    old, new = logs / "perf.log.2026-08-01", logs / "perf.log.2026-10-01"
+    for f in (old, new):
+        f.write_text("x\n", "utf-8")
+    now = 1_800_000_000
+    os.utime(old, (now - 40 * 86400, now - 40 * 86400))
+    os.utime(new, (now - 5 * 86400, now - 5 * 86400))
+    assert applog.prune_perf(logs / "perf.log", now=now) == 1
+    assert not old.exists() and new.exists()
+
+
+def test_requests_and_steps_reach_the_perf_log(tmp_path, monkeypatch, clean_handlers, clean_perf):
+    monkeypatch.setenv("WKO5COACH_HOME", str(tmp_path))
+    monkeypatch.delenv("WKO5COACH_LOG_FILE", raising=False)
+    monkeypatch.delenv("WKO5COACH_PERF_LOG", raising=False)
+    applog.setup()
+    app = FastAPI()
+    app.add_middleware(applog.RequestLogMiddleware)
+
+    @app.get("/api/v1/overview/plan/sessions/{uid}")
+    def one(uid: str):
+        return {"uid": uid}
+
+    @app.get("/api/v1/racepower/estimate")
+    def est():
+        return {}
+    c = TestClient(app)
+    c.get("/api/v1/overview/plan/sessions/abc123def456?token=secret")
+    c.get("/api/v1/racepower/estimate")
+    with applog.timed("dataset build", source="coros"):
+        pass
+    import time as _t
+    applog.phases("calendar", _t.perf_counter(), {"inputs": 0.01})
+    lines = _perf_lines(tmp_path)
+    text = "\n".join(lines)
+    assert "\tplan\t" in text and "GET /api/v1/overview/plan/sessions/{uid} status=200" in text
+    assert "abc123def456" not in text and "secret" not in text               # the template, never the path
+    assert "\tracepower\t" in text and "\tstep\t" in text and "dataset build source=coros" in text
+    assert "calendar phases=inputs:0.01" in text
+
+
+def test_perf_area_by_route():
+    a = applog.perf_area
+    assert a("/api/v1/wko5/charts/{key}") == "chart" and a("/api/v1/overview/plan/sessions/swap") == "plan"
+    assert a("/api/v1/plan/page") == "plan" and a("/api/v1/overview/page") == "overview"
+    assert a("/api/v1/racepower/estimate") == "racepower" and a("/api/v1/sync/coros") == "sync"
+    assert a("/api/v1/static/…") is None and a("(no route)") is None and a("/api/v1/static/{name}.html") is None
