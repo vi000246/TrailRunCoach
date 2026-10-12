@@ -116,7 +116,8 @@ async def _migrate_schema():
     New TABLES (e.g. activity_tags, 2026-10-01) need no entry here: init_db's
     create_all creates any missing table and leaves existing ones alone. Retired
     tables (data_registry.RETIRED_TABLES) are dropped; legacy ones
-    (data_registry.LEGACY_TABLES, e.g. workout_metrics) are left as they are."""
+    (data_registry.LEGACY_TABLES, e.g. workout_metrics) are left as they are.
+    The stable ids of the user-edited tables (uid, updated_at; SP-310): db/stable_ids.migrate."""
     new_cols = [
         ("workout_files", "coros_activity_id", "TEXT"),
         ("workout_files", "coros_sport_type", "INTEGER"),
@@ -200,6 +201,10 @@ async def _migrate_schema():
         if "garmin_activity_id" in cols:
             await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_workout_files_garmin_activity_id "
                                     "ON workout_files (garmin_activity_id)"))
+        # SP-310: a stable uid (UUID) and updated_at on the tables the user edits, ids for the rows
+        # from before, the unique index (db/stable_ids.py)
+        from backend.db import stable_ids
+        await stable_ids.migrate(conn)
         # settings that no longer exist (settings/repository.py RETIRED_KEYS), e.g. the
         # sealed backup-encryption key: deleted, not left behind in the DB
         from backend.settings.repository import RETIRED_KEYS

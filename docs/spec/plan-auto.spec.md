@@ -657,6 +657,14 @@ path for new tables. Each row holds:
 - the affected sessions before and after
 - why it was held
 - the push outcome, or the push error
+- a stable id `uid` (UUID4 hex, unique index `ux_plan_change_log_uid`) next to the integer `id`,
+  and `updated_at` (UTC) that every status / push-result change moves (the model's `onupdate`,
+  `backend/db/models.py:242`). SP-310: the id a device sync (SP-312) keys the row by; the rows
+  from before get theirs, and `updated_at` = `created_at`, at `init_db` on every tenant DB
+  (`backend/db/stable_ids.py:84`). `GET /plan/auto`'s `log` entries carry `uid`
+  (`entry_dict`, `backend/engine/plan_auto.py:421`); 同意 / 拒絕 / 復原 still take the integer id.
+  `ref_id` still points at the integer id. plan_sessions keeps its own `uid` (12 hex
+  characters of a UUID4, unique per athlete, kept through every regeneration — the COROS push key)
 
 Since SP-362 B3 the run writes its `applied` / `pending` row under the writer lock with push
 `{status: pushing}` (or `held` / `off`) and fills the push outcome in once the push, outside the
@@ -956,3 +964,4 @@ The owner's calls, gathered from the sections above (each is described there wit
 | 2026-10-08 | fix | SP-295 review | A stored Zone 3 pair already breaking 重新上鎖天數 ≥ 最長幾天不跑 (saved before the check) is flagged, not changed: `list_calibration` adds `warn` to both rows (`backend/api/calib.py:63`), shown next to them in 進階設定 (`backend/static/settings.html:1627`). Test: `backend/tests/test_z3_unlock_settings.py::test_a_stored_invalid_pair_is_flagged_not_changed` |
 | 2026-10-12 | feature | SP-378 | Power bands: road easy 65–80 % CP, road long 65–88 % (were 75–80 / 80–88); the watch gets an interval band's judging band (upper × 1.05, Zone 5 to 116 %), the page keeps the prescription; the editor starts an easy step's power override at 65–80 %. `backend/engine/zones.py` (`EASY_BAND`, `LONG_BAND`, `watch_band`), `backend/engine/workout_steps.py` (`_watch_band`), `backend/sync/coros_workouts.py`. Tests: `backend/tests/test_power_bands_sp378.py` |
 | 2026-10-12 | feature | SP-383 | A user's 區間 target may span zones (從–到, `zone_to`): pushed from the first zone's lower to the last zone's upper bound, as typed (no `watch_band`); one-zone steps unchanged. `backend/engine/workout_steps.py` (`zone_span`). Tests: `backend/tests/test_zone_range_sp383.py::test_the_watch_gets_the_whole_range` |
+| 2026-10-12 | feature | SP-310 | Stable ids: `plan_change_log.uid` (UUID4 hex) + `updated_at` (UTC, moved by every status / push change) and `injury_events.uid` (UUID4 hex; `updated_at` now also moves on any ORM / Core update), unique indexes, the rows from before filled by `init_db` on every tenant DB (`backend/db/stable_ids.py`); `uid` in the change-log entries and the 傷病紀錄 API (`EVENT_COLS`, `event_json`); every endpoint still takes the integer id; plan_sessions' existing `uid` confirmed as its stable id. Tests `backend/tests/test_stable_ids_sp310.py` |

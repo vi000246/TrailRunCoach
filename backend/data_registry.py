@@ -114,15 +114,15 @@ TABLES: tuple = (
           "auto rows are rewritten by plan_auto (engine/plan_store.py)",
           deidentify=("day", "title", "note", "done_by")),
     Table("plan_change_log", USER, "each automatic plan run / user decision with before / after (復原); "
-          "a history, not recomputable", deidentify=("created_at", "summary", "items_json", "before_json",
-                                                    "after_json")),
+          "a history, not recomputable", deidentify=("created_at", "updated_at", "summary", "items_json",
+                                                    "before_json", "after_json")),
     Table("plan_week_snapshots", USER, "每週課表存檔 (SP-71): the plan frozen at each week's start; "
           "a history, not recomputable", deidentify=("week_start",)),
     Table("workout_templates_user", USER, "the user's 課表範本 (SP-36); the route GPX is template_gpx/",
           deidentify=("name", "note", "gpx_filename")),
     Table("workout_template_cats", USER, "categories the user added to the 範本 page", deidentify=("label",)),
     Table("race_calc", USER, "the race calculator's saved inputs + last result per event",
-          deidentify=("saved_at",)),
+          deidentify=("saved_at", "updated_at")),
     Table("event_gpx", USER, "metadata of an event's uploaded course (the file is event_gpx/<id>.gz)",
           deidentify=("filename", "uploaded_at")),
     Table("workout_files", IMPORTED, "one row per synced / imported activity file; rpe / feel / coros_feel "
