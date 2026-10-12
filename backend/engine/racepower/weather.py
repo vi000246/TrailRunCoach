@@ -141,7 +141,8 @@ def load_key(path: Optional[Path] = None) -> Optional[str]:
     if path is None and not tenancy.is_owner():
         return None
     path = path or key_path()
-    env = os.getenv("CWA_API_KEY")
+    from backend.settings.env_secrets import secret_env
+    env = secret_env("CWA_API_KEY")          # or CWA_API_KEY_FILE (a Docker secret, SP-387)
     if env:
         return env.strip()
     try:
