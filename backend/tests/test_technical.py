@@ -69,7 +69,9 @@ def test_specific_quality_role_spaced_and_within_the_budget():
     before = sum(x["minutes"] for x in ss if x["kind"] != "strength")
     T.apply(ss, info, hours=8.0, rates={"trail": 60.0}, notes=notes)
     s = next(x for x in ss if x["id"] == "tech")
-    assert s["kind"] == "hike" and WT.session_role(s) == "quality"                 # RPE 6–7
+    # RPE 6–7: a quality session, and its kind says so (SP-87 §4 #6; was kind hike) — adapt / reconcile
+    # key their hard-day checks on the kind
+    assert s["kind"] == "quality" and WT.session_role(s) == "quality"
     day = date.fromisoformat(s["day"])
     for h in (date.fromisoformat(d(1)), date.fromisoformat(d(5))):                 # quality Tue, long Sat
         assert abs((day - h).days) >= 2
@@ -91,7 +93,7 @@ def test_specific_without_budget_or_spacing_is_kept_easy():
     info = T.week_context(kind="specific", mode="specific", monday=MON, road=False)
     T.apply(ss, info, hours=4.0, notes=notes)
     s = next(x for x in ss if x["id"] == "tech")
-    assert WT.session_role(s) == "easy" and s["title"].endswith("（RPE 4–5）")
+    assert WT.session_role(s) == "easy" and s["title"].endswith("（RPE 4–5）") and s["kind"] == "hike"
     assert "強度預算不夠" in notes[0]["text"] and info["planned"][0]["role"] == "easy"
     # quality on Thu: no easy day ≥ 2 days from it and the Sat long run
     ss, notes = _week(q_day=3), []
@@ -161,7 +163,8 @@ def test_week_plan_and_projection_trail_vs_road():
     for w in built:
         t = next(s for s in w["sessions"] if s["id"] == "tech")
         if WT.session_role(t) == "quality":
-            hard = [date.fromisoformat(s["day"]) for s in w["sessions"] if s["kind"] in ("quality", "long")]
+            # (SP-87: the tech session is kind quality itself now — the other hard days)
+            hard = [date.fromisoformat(s["day"]) for s in w["sessions"] if s["kind"] in ("quality", "long") and s is not t]
             assert all(abs((date.fromisoformat(t["day"]) - h).days) >= 2 for h in hard)
         assert any(n.get("src") == "technical" for n in w["notes"])
     assert any(WT.session_role(next(s for s in w["sessions"] if s["id"] == "tech")) == "quality" for w in built)
@@ -298,7 +301,9 @@ def test_the_walking_cap_is_named_in_the_text_only():
         T.apply(ss, info, hours=8.0, rates={"trail": 60.0}, walk=w)
         t = next(s for s in ss if "技術地形" in (s.get("title") or ""))
         assert "心率參考上限約 146 bpm（75% 最大心率）或 RPE ≤ 13；技術路段以安全為主，不用硬壓心率" in t["detail"]
-        assert t["target"] == "" and TP.target_policy(t)["type"] in ("hike", "trail_long")
+        # the RPE 6–7 one is kind quality (SP-87): its policy reads 「hill」, its push is the RPE structure
+        # (no HR target past the warm-up's AeT, checked below)
+        assert t["target"] == "" and TP.target_policy(t)["type"] in ("hike", "trail_long", "hill")
         th = CW.Thresholds.of({"lthr": 165.0, "aet": 145.0, "walk_cap": w})
         steps = CW.session_steps({**t, "basis": "hr"}, th)
         assert all(not st.intensity or st.intensity[0] != "hr" or st.intensity[2] <= 145 for st in steps)
@@ -389,3 +394,55 @@ def test_the_event_keeps_its_trail_share(tmp_path, monkeypatch):
     assert P.Plan().upsert_event({"name": "x", "date": "2027-01-10", "trail_pct": ""}).trail_pct is None
     (tmp_path / "old.json").write_text('{"events": [{"id": "o", "name": "舊", "date": "2027-01-10"}]}', "utf-8")
     assert P.Plan.load(tmp_path / "old.json").events[0].trail_pct is None
+
+
+# ---- SP-87 §4 #6: the RPE 6–7 technical session is kind quality — what reads the kind ----------------
+
+def test_an_rpe_quality_session_is_not_graded_by_hr_or_power():
+    """plan_match.planned_intensity: an RPE-set 強度課 (技術地形 RPE 6–7, no HR / power target — footing,
+    not the heart, sets the effort) is not graded by threshold time (None, like the old kind hike);
+    an interval still is."""
+    from backend.engine import plan_match as PM
+    ss = _week()
+    T.apply(ss, T.week_context(kind="specific", mode="specific", monday=MON, road=False), hours=8.0)
+    t = next(x for x in ss if x["id"] == "tech")
+    assert t["kind"] == "quality" and PM.planned_intensity(t) is None
+    assert PM.graded(t, {"category": "trail", "hard_s": 0.0}) == (None, None, None)
+    assert PM.planned_intensity(next(x for x in ss if x["id"] == "quality")) == "hard"
+
+
+def test_the_stored_quality_tech_row_counts_as_the_users_own_and_stays_out_of_the_ladder(tmp_path):
+    """A stored kind-quality 技術地形 row (custom, or the generated one edited) is the user's own RPE ≥ 7
+    session for the 20 % budget (plan_store.user_rpe_rows → user_quality), as a kind hike one was; an
+    interval (a library variant or HR steps) is not. done_plan (the interval ladder's history) leaves
+    RPE-set sessions out, as it did while they were kind hike."""
+    import json
+    import sqlite3
+    from sqlalchemy import create_engine
+    from backend.db.models import Base
+    from backend.engine import plan_store as PS
+    db = tmp_path / "w.db"
+    eng = create_engine(f"sqlite:///{db}")
+    Base.metadata.create_all(eng)
+    eng.dispose()
+    rpe = json.dumps(_user_row(d(3))["steps"], ensure_ascii=False)
+    b = WT.B()
+    hr = json.dumps(WS.doc([b.warm(15), b.t("work", 1200, WT.hr(0.95, 1.0), "閾值"), b.cool(10)], origin="user"),
+                    ensure_ascii=False)
+    con = sqlite3.connect(db)
+    for uid, kind, origin, edited, state, st, vk, done in (
+            ("q", "quality", "auto", 1, "active", rpe, None, None),
+            ("c", "quality", "custom", 0, "done", rpe, None, '{"index": 7}'),
+            ("v", "quality", "custom", 0, "active", rpe, "v3c", None),
+            ("h", "quality", "custom", 0, "active", hr, None, None),
+            ("i", "quality", "auto", 0, "done", None, "v3c", '{"index": 8}')):
+        con.execute("INSERT INTO plan_sessions (athlete_id, uid, week_start, day, kind, title, minutes, origin, edited,"
+                    " provisional, state, steps, variant_key, done_by, updated_at) VALUES (1, ?, '2026-10-05',"
+                    " '2026-10-08', ?, '技術地形 85′', 85, ?, ?, 0, ?, ?, ?, ?, '2026-10-05')",
+                    (uid, kind, origin, edited, state, st, vk, done))
+    con.commit()
+    con.close()
+    got = PS.user_rpe_rows(db)
+    assert sorted(r["uid"] for r in got) == ["c", "q"]
+    assert sorted(x["uid"] for x in T.user_quality(got, MON)) == ["c", "q"]
+    assert set(PS.done_plan(db)) == {8}                    # the interval only; the done tech run (7) is out

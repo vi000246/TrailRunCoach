@@ -559,7 +559,8 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
     LSD stays on steady terrain (its HR drift reads the aerobic base only there); the week's
     `technical.why` says 「基礎期不排技術地形課…」. The 基礎期's climbing is the weekly 長爬坡有氧 and the downhill
     dose below. (SP-74 turned every even ISO week's LSD into 「技術地形 N′（低 RPE 3–4）」.)
-  - **專項期**: one session a week out of a placed easy run (id `tech`, kind `hike` 越野跑),
+  - **專項期**: one session a week out of a placed easy run (id `tech`; kind `quality` for the RPE 6–7
+    one — SP-87 §4 #6, was `hike` — and `hike` 越野跑 for the RPE 4–5 one),
     near the race's terrain — only when the next A race's **土徑比** (`Event.trail_pct`, SP-87 owner
     2026-10-12: the 賽事周期 event form's 「土徑比 %」, 0–100, blank = not set, `PUT /api/v1/plan/events`
     `trail_pct`, 400 outside 0–100) is ≥ 50 % (`TRAIL_PCT_MIN`) or not set; < 50 % → none that week
@@ -573,7 +574,8 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
     Otherwise the same session at RPE 4–5 (an easy one) on that easy run's time. A week note
     (`src: technical`) says which and why (budget left, no spaced day, the day cap).
   - **The user's own** (SP-74 follow-up): a stored 技術地形 session the user added (custom) or an
-    auto one they edited, kind easy / long / hike, active or done, whose structure makes it a
+    auto one they edited, kind easy / long / hike (SP-87: or quality when RPE-set with no library
+    variant, `plan_match.rpe_set`), active or done, whose structure makes it a
     quality session (`workout_templates.session_role`: an RPE work step ≥ 7) counts like the
     generated one. `plan_store.user_rpe_rows` (`backend/engine/plan_store.py:870`, read-only) →
     `user_quality` (`backend/engine/technical.py:136`) per week; its RPE ≥ 7 work
@@ -1534,7 +1536,7 @@ which one. The response keeps the `coros` field names.
   `workout_steps.templates`, `backend/engine/workout_steps.py:1735`, for the published templates
   and the interval ladder's rows alike — Palladino 4×2:40 now files as VO2max, 4×4:30 @ 98–104 %
   as 巡航); the 推薦 block (`template_recs._score`, `backend/engine/template_recs.py:134`: Zone 5
-  closed → no VO2max / 速度 template; 基礎期 favours 有氧間歇, 強化期／專項期 巡航間歇; the
+  closed → no VO2max / 速度 template; 基礎期 favours 有氧間歇, 專項期 巡航間歇 (SP-87: no 強化期 — planning has none); the
   「同一類」 bonus by `_rung_family`, `backend/engine/template_recs.py:236`); and the plan's
   強度課: `session_family` (`backend/engine/workout_templates.py:667`, the stored steps, else the
   derived ones) gives every session read through `_view` (`backend/api/plan_sessions.py:393`) a
@@ -2321,3 +2323,4 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 | 2026-10-12 | feat/trail-climb-sessions-sp87 | SP-87 (owner 2026-10-05 decision 4, 2026-10-12) | 每週爬升量目標 (`engine/vert_target.py`, display only): before the next A race with a climb, 賽前第 20 → 3 週 50 % of the race's single-day climb straight up to 95 % (long) / 110 % (short), ≤ +10 % a week (the first week over the last 4 weeks' actual mean), recovery week 50 % of the week before, taper week 1 75 % / race week 40 % of the peak, 100 mi+ a 3-week taper 75 → 55 → 40 %; `_build_inputs` → `climb_targets`; the 課表's `week_rows[].climb` {target, planned, done, short, …} (`_climb_row`, none for 路跑) shown under 時間／TSS in the 週統計 and the agenda (「爬升 done / target m」, 「已排 P m，差 Y m」). Tests: `backend/tests/test_vert_target.py` |
 | 2026-10-12 | feat/trail-climb-sessions-sp87 | SP-87 (owner 2026-10-12) | 賽事 土徑比 %: `Event.trail_pct` (0–100, None = not set; `upsert_event` 400 「土徑比要在 0–100 %」), `EventIn.trail_pct`, the 賽事周期 form's 「土徑比 %」 input (`plan.ev.trail_pct`); `technical.week_context(events=)`: the next A race's share < 50 % → no 專項期 技術地形 session, ≥ 50 % or blank as before; week_plan and the projection pass the events. Tests: `backend/tests/test_technical.py::test_trail_share_of_the_race_decides_the_specific_session`, `::test_week_plan_and_projection_follow_the_trail_share`, `::test_the_event_keeps_its_trail_share` |
 | 2026-10-12 | feat/trail-climb-sessions-sp87 | SP-87 (owner: 「我想要爬山，就把 LSD 改成同強度的穩定地形爬坡課表」) | 課表: a long run can be swapped for the 長爬坡有氧 of the same time — `PATCH /sessions/{uid}` `{"swap_to": "climb"}` (`_with_swap`, built by `base_climb.session_fields`; same day / minutes / kind long / TSS; a user edit), the context menu's 「換成長爬坡有氧（同樣時間）」 and the dialog's button (`climbable`, `toClimb`; `schedule` catalog `ctx.to_climb*`, `climb.swap*`). The existing 換一個 drawer is for the interval ladder only and 插入範本 takes the template's own length, so neither keeps the long run's time. Tests: `backend/tests/test_base_climb.py::test_the_schedule_swaps_a_long_run_for_a_long_climb_of_the_same_time` |
+| 2026-10-12 | feat/trail-climb-sessions-sp87 | SP-87 §4 #6 | Small fixes: the 專項期 技術地形 RPE 6–7 session is kind `quality` (was `hike`; RPE 4–5 stays `hike`), so adapt / reconcile see it as a hard day; what reads the kind follows — `plan_match.rpe_set` / `planned_intensity` (an RPE-set 強度課 is not graded by threshold time: None, as the kind hike was), `plan_store.user_rpe_rows` / `technical.user_quality` (a kind-quality RPE row with no library variant is the user's own RPE ≥ 7 session), `plan_store.done_plan` (RPE-set sessions stay out of the interval ladder's history), `adapt._downgrade` / `_to_recovery` (`_drop_steps`: the run it becomes keeps no RPE structure); the push is unchanged. `template_recs`: no 強化期 (`build`) scores or label — planning has none (an unknown phase reads as 基礎期). Tests: `backend/tests/test_technical.py::test_an_rpe_quality_session_is_not_graded_by_hr_or_power`, `::test_the_stored_quality_tech_row_counts_as_the_users_own_and_stays_out_of_the_ladder`, `test_adapt.py::test_a_downgraded_rpe_quality_session_drops_its_rpe_structure`, `test_template_recs.py::test_no_build_phase_is_scored` |

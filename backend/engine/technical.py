@@ -141,16 +141,21 @@ def user_work_min(s: dict) -> float:
 
 def user_quality(rows: list, monday: dt.date) -> list[dict]:
     """The user's own RPE ≥ 7 sessions in the week of `monday` (plan_store.user_rpe_rows rows
-    whose workout_templates.session_role is "quality"): [{"uid", "day", "title", "work"}]."""
+    whose workout_templates.session_role is "quality"): [{"uid", "day", "title", "work"}]. A kind
+    quality row counts only when it is RPE-set (an RPE ≥ 7 work step, no library variant — the
+    generated RPE 6–7 one is kind quality since SP-87); an interval never does."""
+    from backend.engine import workout_steps as WS
     from backend.engine import workout_templates as WT
     a, b = monday.isoformat(), (monday + dt.timedelta(days=6)).isoformat()
     out = []
     for r in rows or ():
         day = str(r.get("day") or "")[:10]
-        if not (a <= day <= b) or r.get("kind") in ("quality", "test") or r.get("state") not in ("active", "done"):
+        if not (a <= day <= b) or r.get("kind") == "test" or r.get("state") not in ("active", "done"):
             continue
         doc = _steps_doc(r)
         if doc is None or WT.session_role({"steps": doc}) != "quality":
+            continue
+        if r.get("kind") == "quality" and (r.get("variant_key") or WS.rpe_role(doc.get("items") or []) != "quality"):
             continue
         out.append({"uid": r.get("uid"), "day": day, "title": r.get("title") or "",
                     "work": round(user_work_min({**r, "steps": doc}), 1)})
@@ -246,8 +251,9 @@ def apply(ss: list, info: Optional[dict], *, hours: Optional[float] = None, rate
     `hard_done`: hard days already done this week (dates). `user`: the user's own RPE ≥ 7 sessions
     this week (user_quality) — the 專項期 one already, none added.
     `walk` (hr_profile.walk_cap, SP-115; owner 2026-10-05): the 75 % HRmax figure goes into the
-    detail as guidance only — the session keeps no HR target (target_policy: kind hike, HR ≤ AeT on
-    the watch), its steps and push are unchanged."""
+    detail as guidance only — the session keeps no HR target (its RPE structure is what the watch
+    gets: the warm-up at HR ≤ AeT, the main part by RPE), its steps and push are unchanged.
+    Kind: `quality` for the RPE 6–7 one (SP-87; was hike), `hike` for the RPE 4–5 one."""
     if not info or not info.get("active") or info.get("phase") != "specific":
         return ss                                       # SP-87: never in the 基礎期
     info["planned"] = []
@@ -315,7 +321,10 @@ def apply(ss: list, info: Optional[dict], *, hours: Optional[float] = None, rate
     delta = m - int(pick.get("minutes") or 0)
     steps = _steps(work, rpe)
     climb = steps["items"][1]["target"].get("up")
-    pick.update(id="tech", kind="hike", terrain="trail", minutes=m, target="", steps=steps,
+    # RPE 6–7 = a quality session, and its kind says so (SP-87 §4 #6: adapt / reconcile key their
+    # hard-day checks on the kind); RPE 4–5 stays a 越野跑 (hike) easy session
+    pick.update(id="tech", kind="quality" if role == "quality" else "hike", terrain="trail", minutes=m, target="",
+                steps=steps,
                 title=f"技術地形 {m}′（{_rpe_txt(rpe)}）",
                 detail=(f"找接近比賽路況的技術路段，{_rpe_txt(rpe)}" + (f"，爬升約 {climb} m" if climb else "")
                         + "；心率、功率不當目標" + _hint(walk) + ("；算強度課，前後一天輕鬆" if role == "quality" else "")),

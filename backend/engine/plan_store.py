@@ -838,8 +838,11 @@ def done_plan(db_path=None) -> dict:
     against what was planned (its library variant; a recovery fartlek is not a
     ladder step)."""
     out: dict = {}
+    from backend.engine.plan_match import rpe_set
     for r in _plan_rows(db_path, ("quality", "test"), _TITLE_CACHE):
         d = r.get("done_by")
+        if rpe_set(r):
+            continue                        # SP-87: an RPE-set 強度課 (技術地形 RPE 6–7) is no interval session
         if r.get("state") == "done" and isinstance(d, dict) and d.get("index") is not None:
             out[d["index"]] = r
     return out
@@ -876,10 +879,14 @@ _RPE_CACHE: dict = {}
 def user_rpe_rows(db_path=None) -> list[dict]:
     """The user's own stored 越野跑 / easy / long sessions (custom, or auto ones the user edited;
     active / done) that carry a structure — engine/technical.py reads their RPE (SP-74: a 技術地形
-    session the user added counts in the week's quality budget like the generated one)."""
-    return [r for r in _plan_rows(db_path, ("easy", "long", "hike"), _RPE_CACHE, ("origin", "edited", "gen_key"))
+    session the user added counts in the week's quality budget like the generated one). SP-87: also a
+    kind quality one set by RPE (no library variant) — the generated RPE 6–7 技術地形 is kind quality,
+    and the 課表 dialog makes an RPE ≥ 7 structure a 強度課."""
+    from backend.engine.plan_match import rpe_set
+    return [r for r in _plan_rows(db_path, ("easy", "long", "hike", "quality"), _RPE_CACHE, ("origin", "edited", "gen_key"))
             if r.get("steps") and r.get("state") in ("active", "done")
-            and (r.get("origin") == "custom" or r.get("edited"))]
+            and (r.get("origin") == "custom" or r.get("edited"))
+            and (r.get("kind") != "quality" or rpe_set(r))]
 
 
 _HOOK_CACHE: dict = {}

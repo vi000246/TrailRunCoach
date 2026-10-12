@@ -178,7 +178,8 @@ def test_my_templates_score_by_the_same_rules(mine_tpl):
     assert TR._score(d, "trail", "downhill", _s(kind="hike", phase="taper")).v <= TR.DROP_BELOW
     _g, t = _row(mine_tpl, "user:3")
     assert t["trail_sub"] == "technical" and t["role"] == "quality"
-    assert any("接近比賽的路況" in w for _p, w in TR._score(t, "trail", "technical", _s(kind="hike", phase="build")).plus)
+    # (SP-87: the plan has no 強化期 — the 專項期 is where the race-terrain bonus goes)
+    assert any("接近比賽的路況" in w for _p, w in TR._score(t, "trail", "technical", _s(kind="hike", phase="specific")).plus)
     _g, u = _row(mine_tpl, "user:4")
     assert any("有氧爬坡" in w for _p, w in TR._score(u, "trail", "climb", _s(kind="hike", phase="base")).plus)
 
@@ -211,3 +212,12 @@ def test_api_recs_include_my_templates(monkeypatch):
         # the 插入範本 menu has the row the pick points at
         menu = e.c.get(f"{API}/steps/templates").json()
         assert any(r["key"] == f"user:{t['id']}" for g in menu["groups"] if g["cat"] == c["id"] for r in g["rows"])
+
+
+def test_no_build_phase_is_scored():
+    """SP-87 §4 #6: planning has 轉換期／基礎期／專項期／減量期 (and the recovery ones), no 強化期 — the
+    recommendations no longer score one (a stray 「build」 reads as the 基礎期, like any unknown phase)."""
+    assert "build" not in TR.PHASE_OF and "build" not in TR.PHASE_LABEL
+    assert "強化期" not in TR.EXPLAIN and "強化期" not in "".join(TR.PHASE_LABEL.values())
+    out = TR.recommend({"cats": [], "groups": []}, kind="easy", phase="build")
+    assert out["inputs"]["phase"] == "base" and out["inputs"]["phase_label"] == "基礎期"
