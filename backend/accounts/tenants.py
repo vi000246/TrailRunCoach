@@ -59,6 +59,28 @@ async def ensure_ready(t: tenancy.Tenant) -> None:
         _READY.add(key)
 
 
+def active_tenants(days: int = 7) -> list[tenancy.Tenant]:
+    """The users who signed in within `days` (SP-338 第 3 條: after a deploy only these are warmed
+    up ahead; the others are brought up to date on their first visit, old values marked 更新中)."""
+    import datetime as dt
+    if not accounts.enabled():
+        return []
+    cutoff = dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=days)
+    out = []
+    try:
+        for u in store.users():
+            if u.is_owner or not u.last_login_at:
+                continue
+            try:
+                if dt.datetime.fromisoformat(u.last_login_at) >= cutoff:
+                    out.append(tenant_of(u))
+            except ValueError:
+                continue
+    except Exception as e:                       # noqa: BLE001
+        log.warning("accounts.db unreadable, no deploy warm-up for users: %s", type(e).__name__)
+    return out
+
+
 def sync_tenants() -> list[tenancy.Tenant]:
     """Every tenant whose daily sync the scheduler checks: the owner, plus in multi-user mode
     every enabled user (each reads its own sync.schedule.daily_time; a user without one is

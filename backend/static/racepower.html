@@ -2307,9 +2307,11 @@ async function renderBacktest() {
   let r;
   try { r = await j(`${API}/backtest`); } catch (e) { $("bt-body").innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
   const st = r.state;
-  $("bt-meta").textContent = st.running ? `回測中… ${st.progress ? `${st.progress.i + 1}/${st.progress.n} ${st.progress.label || ""}` : ""}` :
+  // SP-338: the server runs one back-test at a time; a queued one shows its place in line
+  $("bt-meta").textContent = st.queued ? `排隊中：前面還有 ${Math.max(0, (st.position || 1) - 1)} 個回測，輪到時會自動開始` :
+    st.running ? `回測中… ${st.progress ? `${st.progress.i + 1}/${st.progress.n} ${st.progress.label || ""}` : ""}` :
     st.error ? `上次失敗：${st.error}` : r.result ? `上次回測 ${r.result.computed_at.slice(0, 16).replace("T", " ")}（${r.result.seconds} 秒）` : "";
-  if (st.running) setTimeout(renderBacktest, 3000);
+  if (st.running || st.queued) setTimeout(renderBacktest, 3000);
   const R = r.result;
   $("bt-body").classList.remove("loading");
   if (!R) { $("bt-body").innerHTML = `<div class="meta">還沒有回測結果，按「重新回測」。</div>`; return; }

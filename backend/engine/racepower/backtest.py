@@ -107,7 +107,17 @@ BIN_LABELS = ["≤ −15%", "−15…−8%", "−8…−2%", "±2%", "+2…+8%",
 NO_CAPACITY_MSG = "沒有全力比賽或測試紀錄，無法驗證能力模型；請做 3'/12' CP 測試或報名一場 B 級比賽"
 
 _run_lock = threading.Lock()
-_state = {"running": False, "started": None, "progress": None, "error": None}
+# per tenant (SP-338 / SP-384): tenant id -> {running, queued, position, started, progress, error}
+_states: dict = {}
+
+
+def _tid() -> str:
+    from backend import tenancy
+    return tenancy.current().id
+
+
+def _state_of(tid: Optional[str] = None) -> dict:
+    return _states.setdefault(tid or _tid(), {"running": False, "started": None, "progress": None, "error": None})
 
 
 def grade_bin(g: float) -> str:
@@ -1446,25 +1456,37 @@ def speed_gait_flag(path=None, class_model: bool = False) -> bool:
 
 
 def state() -> dict:
-    return dict(_state)
+    """This tenant's back-test: running, or queued (`position` = how many go first: the server
+    runs one back-test at a time, SP-338), progress, error."""
+    from backend import jobs
+    st = dict(_state_of())
+    job = jobs.find(("backtest", _tid()))
+    if job is not None and job.state == "queued":
+        st.update(queued=True, position=jobs.position(job))
+    else:
+        st.update(queued=False, position=0)
+    return st
 
 
 def start_background(ds_factory: Callable, today: Optional[dt.date] = None) -> bool:
-    """Run the back-test in a thread; False when one is already running."""
+    """Queue this tenant's back-test (the server runs one at a time, others wait their turn —
+    SP-338 第 2 條); False when one of this tenant's is already queued or running."""
+    from backend import jobs
+    st = _state_of()
     with _run_lock:
-        if _state["running"]:
+        if st["running"] or st.get("queued"):
             return False
-        _state.update(running=True, started=dt.datetime.now(WX.TZ).isoformat(timespec="seconds"),
-                      progress=None, error=None)
+        st.update(queued=True, progress=None, error=None)
 
-    def work():
+    def work(job):
+        st.update(running=True, queued=False, started=dt.datetime.now(WX.TZ).isoformat(timespec="seconds"))
         try:
             def prog(i, n, c):
-                _state["progress"] = {"i": i, "n": n, "label": c.get("label")}
+                st["progress"] = job.progress = {"i": i, "n": n, "label": c.get("label")}
             save(backtest(ds_factory(), today, prog))
         except Exception as e:              # noqa: BLE001
-            _state["error"] = f"{type(e).__name__}: {str(e)[:200]}"
+            st["error"] = f"{type(e).__name__}: {str(e)[:200]}"
         finally:
-            _state["running"] = False
-    threading.Thread(target=work, daemon=True).start()
+            st["running"] = False
+    jobs.submit(work, cls="backtest", priority="user", label="race back-test", key=("backtest", _tid()))
     return True

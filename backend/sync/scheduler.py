@@ -41,6 +41,15 @@ def _parse(hhmm: str) -> time:
     return time(int(h), int(m))
 
 
+NIGHT_START = "01:00"     # the free tier's daily sync: somewhere in 01:00–05:00 (SP-330 / SP-338 第 5、11 條)
+NIGHT_SPAN_MIN = 240
+
+
+def night_slot(tenant_id: str) -> tuple[str, int]:
+    """(HH:MM, offset) of a free-tier tenant's nightly sync: spread over NIGHT_SPAN_MIN by its id."""
+    return NIGHT_START, int(hashlib.sha256(("night:" + tenant_id).encode("utf-8")).hexdigest(), 16) % NIGHT_SPAN_MIN
+
+
 def offset_minutes(tenant_id: str) -> int:
     """The fixed shift of a tenant's daily sync: 0 for the owner, else 0..STAGGER_MIN-1 from a
     hash of its id (the same every day, so a user's sync time does not wander)."""
@@ -55,13 +64,17 @@ def _due(local: datetime, at: str, offset_min: int) -> bool:
 
 
 async def tick(session_factory: Callable, now: Optional[datetime] = None, athlete_id: int = 1,
-               start: Callable = runner.start_background, offset_min: int = 0) -> list[str]:
-    """One scheduler check of the current tenant. Returns the sources started."""
+               start: Callable = runner.start_background, offset_min: int = 0,
+               night: Optional[tuple] = None) -> list[str]:
+    """One scheduler check of the current tenant. Returns the sources started. `night`
+    (HH:MM, offset): the free tier's nightly slot replaces the tenant's own daily_time."""
     async with session_factory() as db:
         repo = SettingsRepository(db, athlete_id)
         at = await repo.get("sync.schedule.daily_time")
         if not at:
             return []
+        if night is not None:
+            at, offset_min = night
         tz = await repo.timezone()
         local = (now or datetime.now(timezone.utc)).astimezone(tz)
         today = local.date().isoformat()
@@ -136,7 +149,9 @@ async def tick_all(session_factory: Optional[Callable] = None, now: Optional[dat
                 sf = session_factory
                 if sf is None:
                     from backend.db.database import AsyncSessionLocal as sf
-                out[t.id] = await tick(sf, now=now, start=start, offset_min=offset_minutes(t.id))
+                from backend import membership as MS
+                night = None if t.id == "owner" or MS.has("sync:auto_realtime", t) else night_slot(t.id)
+                out[t.id] = await tick(sf, now=now, start=start, offset_min=offset_minutes(t.id), night=night)
             except asyncio.CancelledError:
                 raise
             except Exception as e:           # noqa: BLE001 — never kill the loop for one tenant

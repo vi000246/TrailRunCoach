@@ -237,6 +237,8 @@ def _site_state_per_test(monkeypatch, tmp_path_factory):
     monkeypatch.setattr(events, "PATH", d / "sync_events.jsonl")
     site_settings.reset_cache()
     coros_limits.reset()
+    from backend.sync import runner
+    runner._LAST_AUTO.clear()                 # SP-338: the 5-minute merge of automatic runs
     yield
     coros_limits.reset()
     site_settings.reset_cache()

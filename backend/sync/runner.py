@@ -413,11 +413,23 @@ async def run_once(source: str, athlete_id: int = 1, since: Optional[str] = None
     return last
 
 
+MERGE_S = 300.0              # automatic runs of one tenant's source within this many seconds: one (SP-338 第 5 條)
+AUTOMATIC = ("open", "auto", "webhook")
+_LAST_AUTO: dict = {}        # runner._k(source) -> monotonic start of its last automatic run
+
+
 def start_background(source: str, athlete_id: int = 1, trigger: str = "auto",
                      session_factory: Optional[Callable] = None) -> Optional[asyncio.Task]:
-    """Fire-and-forget run; None when the source is busy."""
+    """Fire-and-forget run; None when the source is busy, or (an automatic trigger) when this
+    tenant's source started an automatic run less than MERGE_S ago — the new activities of
+    several quick syncs are picked up by one run."""
     if is_busy(source):
         return None
+    if trigger in AUTOMATIC:
+        k, now = _k(source), time.monotonic()
+        if now - _LAST_AUTO.get(k, -1e9) < MERGE_S:
+            return None
+        _LAST_AUTO[k] = now
     t = asyncio.create_task(run_once(source, athlete_id, trigger=trigger, session_factory=session_factory))
     _TASKS.add(t)
     t.add_done_callback(_TASKS.discard)
