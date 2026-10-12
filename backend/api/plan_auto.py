@@ -52,6 +52,8 @@ async def put_settings(body: dict = Body(...), db: AsyncSession = Depends(get_db
 
 @router.post("/run")
 async def run_now(db: AsyncSession = Depends(get_db)):
+    from backend import membership as MS
+    MS.require("plan:auto")
     # stamp ignored, but a big change is still held for approval: force=False + no stamp
     cfg = await PA.settings(db)
     st = dict(cfg["state"] or {})

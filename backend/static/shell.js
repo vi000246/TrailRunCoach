@@ -209,6 +209,63 @@
   };
   if (!window.TRC_SESSION || DEMO) csrf();     // the cookie (and, without the inline copy, the session)
 
+  // ---- plans and scopes (SP-330) -------------------------------------------
+  // GET /api/v1/session's `membership.scopes` says what this person's plan / role allows. A control
+  // marked data-scope="calc:backtest" is disabled with the reason; a 403 SCOPE_REQUIRED / 429
+  // QUOTA_EXCEEDED from any request shows the reason and, for the free tier, the upgrade hint.
+  // No membership (the owner's single-user app, an old server): everything stays as it was.
+  const MS = SESSION.membership || null;
+  const SCOPES = MS ? new Set(MS.scopes || []) : null;
+  const hasScope = (s) => !SCOPES || SCOPES.has(s);
+  window.AppScopes = { has: hasScope, membership: MS };
+  const UPGRADE = "訂閱後可用（NT$99／月）";
+  // the pages' controls by selector (so a page needn't know about plans)
+  const SCOPE_SELECTORS = [
+    ["calc:backtest", "#bt-run"],
+    ["sync:tp_web", "#src-tp [data-act=login], #src-tp [data-act=sync]"],
+    ["sync:coros_credential", "#src-coros [data-act=login], #src-coros [data-act=sync]"],
+  ];
+  const lockScopes = (root) => {
+    if (!SCOPES || !root || !root.querySelectorAll) return;
+    for (const [sc, sel] of SCOPE_SELECTORS) {
+      if (hasScope(sc)) continue;
+      for (const el of root.querySelectorAll(sel)) if (!el.dataset.scope) el.dataset.scope = sc;
+    }
+    for (const el of root.querySelectorAll("[data-scope]")) {
+      if (el.dataset.scopeLocked) continue;
+      const need = el.dataset.scope.split(/\s+/).filter(Boolean);
+      if (need.every(hasScope)) continue;
+      el.dataset.scopeLocked = "1";
+      const paused = need.some((s) => (MS.paused_sources || []).includes(s));
+      el.title = paused ? "這個資料來源全站暫停中" : (MS.role === "user" ? UPGRADE : "你的帳號沒有這個功能");
+      if ("disabled" in el) el.disabled = true;
+      el.setAttribute("aria-disabled", "true");
+      el.addEventListener("click", (e) => { e.preventDefault(); e.stopImmediatePropagation(); toast(el.title); }, true);
+    }
+  };
+  if (SCOPES) {
+    const run = () => { lockScopes(document); new MutationObserver((ms) => ms.forEach((m) => m.addedNodes.forEach(lockScopes)))
+      .observe(document.body, { childList: true, subtree: true }); };
+    if (document.body) run(); else document.addEventListener("DOMContentLoaded", run);
+    const scopedFetch = window.fetch;
+    let lastNote = 0;
+    window.fetch = async (input, init) => {
+      const r = await scopedFetch(input, init);
+      if ((r.status === 403 || r.status === 429) && Date.now() - lastNote > 4000) {
+        r.clone().json().then((j) => {
+          const d = j && j.detail;
+          if (!d || (d.code !== "SCOPE_REQUIRED" && d.code !== "QUOTA_EXCEEDED")) return;
+          lastNote = Date.now();
+          const what = d.label || d.scope || d.quota || "";
+          toast(d.code === "QUOTA_EXCEEDED"
+            ? `${what}已用完${d.upgrade ? "；" + UPGRADE : ""}`
+            : (d.paused ? `${what}：全站暫停中` : `${what}：${d.upgrade ? UPGRADE : "你的帳號沒有這個功能"}`));
+        }).catch(() => {});
+      }
+      return r;
+    };
+  }
+
   // ---- the demo banner + locked buttons ----------------------------------
   let renderBanner = () => {};
   if (DEMO) {

@@ -37,6 +37,7 @@ from pydantic import BaseModel, Field
 from backend.engine.planning import plan_path
 from backend.singleflight import SingleFlight
 from backend.tenant_cache import TenantSlots
+from backend import membership as MS
 from backend.engine.racepower import calc as CALC
 from backend.engine.racepower import weather as WX
 # the request bodies live with the computations (engine/racepower/calc.py); kept importable from here
@@ -722,7 +723,8 @@ async def goal_basis():
 
 
 @router.post("/plan")
-def plan(body: PlanIn):
+def plan(body: PlanIn, _q=Depends(MS.use_quota("calc"))):
+    """One race plan = one use of the calculator (the free tier's monthly count, SP-330)."""
     return _py(make_plan(body))
 
 
@@ -732,7 +734,8 @@ def backtest_result():
     return {"state": BT.state(), "result": BT.load()}
 
 
-@router.post("/backtest/run")
+@router.post("/backtest/run", dependencies=[Depends(MS.require_scope("calc:backtest")),
+                                             Depends(MS.use_quota("backtest"))])
 def backtest_run():
     from backend.engine.racepower import backtest as BT
     return {"started": BT.start_background(_dataset), "state": BT.state()}

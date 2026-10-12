@@ -483,11 +483,23 @@ async def ready_sources(db: AsyncSession, athlete_id: int = 1) -> dict[str, str]
             out[s] = "not_logged_in"
         elif s == "coros" and not _coros_site_on():
             out[s] = "site_paused"            # the server-wide switch is off (SP-385): data kept
+        elif not _source_allowed(s):
+            out[s] = _source_block(s)          # SP-330: not in this plan / role, or off for the server
         elif is_busy(s):
             out[s] = "busy"
         else:
             out[s] = "ready"
     return out
+
+
+def _source_allowed(source: str) -> bool:
+    from backend import membership as MS
+    return MS.has(MS.SYNC_SOURCE_SCOPE[source])
+
+
+def _source_block(source: str) -> str:
+    from backend import membership as MS
+    return "site_paused" if MS.SYNC_SOURCE_SCOPE[source] in MS.sources_off() else "not_allowed"
 
 
 def _coros_site_on() -> bool:

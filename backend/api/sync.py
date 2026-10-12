@@ -117,6 +117,10 @@ async def auto_sync(athlete_id: int = 1, db: AsyncSession = Depends(get_db)):
     repo = SettingsRepository(db, athlete_id)
     if not await repo.get("sync.auto_on_open.enabled"):
         return {"started": [], "skipped": {s: "auto_off" for s in runner.SOURCES}}
+    from backend import membership as MS
+    if not MS.has("sync:auto_realtime"):
+        # the free tier syncs once a night (SP-330 / SP-321); opening a page starts nothing
+        return {"started": [], "skipped": {s: "plan_nightly" for s in runner.SOURCES}}
     hours = float(await repo.get("sync.auto_on_open.hours"))
     now = datetime.now(timezone.utc)
     # only the 資料來源 in use (sync/primary.py)

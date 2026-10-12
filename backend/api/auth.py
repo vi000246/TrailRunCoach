@@ -34,6 +34,8 @@ async def tp_login_password(body: LoginRequest, db: AsyncSession = Depends(get_d
     Note: download requires premium or coach account.
     """
     from backend.sync.tp_client import save_password
+    from backend import membership as MS
+    MS.require("sync:tp_web")              # TP's website login: the owner's only (SP-330, owner 2026-10-12)
     try:
         result = await login_password(body.username, body.password, db, body.athlete_id,
                                       prefer=body.method)
@@ -199,7 +201,9 @@ async def coros_login(body: CorosLoginRequest, db: AsyncSession = Depends(get_db
     COROS_LOGIN_BUSY — COROS keeps only the latest token). remember=true
     stores the password sealed for the automatic re-login; false deletes it."""
     from backend.sync import coros_limits as CL, events as EV
-    from backend import tenancy
+    from backend import membership as MS, tenancy
+    if "sync:coros_credential" not in MS.ROLE_SCOPES.get(MS.member().role, frozenset()):
+        raise MS.scope_error("sync:coros_credential")
     await _coros_consent(db, body.athlete_id, body.consent_version)
     try:
         CL.check_allowed()

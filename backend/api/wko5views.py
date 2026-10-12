@@ -566,6 +566,11 @@ def chart(request: Request, view: str, d: int, c: int, begin: Optional[str] = No
     except IndexError:
         raise HTTPException(404, "chart not found")
     b, e = _range(ds, begin, end)
+    # SP-330: how far back the plan reaches (90 days free / 365 / the full history), and the free
+    # tier's dashboards a day (one dashboard counts once a day, however many charts it draws)
+    from backend import membership as MS
+    MS.require(MS.chart_scope(float(ds.today) - float(b)))
+    MS.consume("charts", item=f"{view}/{d}")
     asked = (b, e)                               # the range as asked, before a period's floor (_slot)
     needs_workout = _panel_kind(ch) in ("workout", "map")
     if needs_workout and (workout is None or not 0 <= workout < len(ds.workouts)):

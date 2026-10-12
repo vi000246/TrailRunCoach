@@ -36,6 +36,12 @@ def session_info(had_cookie: bool = False) -> dict:
     t = tenancy.current()
     body: dict = {"mode": "demo" if tenancy.demo_mode() else "owner",
                   "caps": sorted(t.caps), "user": None}
+    # SP-330: role, plan, scopes (what the pages may show), paused data sources, the quotas left
+    try:
+        from backend import membership as MS
+        body["membership"] = MS.session_view(t)
+    except Exception:                      # noqa: BLE001 — the page still loads; the API still checks
+        body["membership"] = None
     if tenancy.demo_mode():
         from backend.demo import sandbox as SB
         demo: dict = {"sandbox": t.kind == tenancy.DEMO_SANDBOX, "base": None, "expires_at": None,
