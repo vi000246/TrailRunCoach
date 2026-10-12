@@ -66,8 +66,10 @@ from backend.engine.algorithms.threshold_estimate import (
 from backend.engine.panels.workout import MAX_DT, durability, grade_bins
 from backend.i18n import N_, _
 
-# cached_series keys on the file and the thresholds, not on this code: bump the
-# version whenever _measure's output changes
+# cached_series keys on the file, the thresholds and (since SP-339) the code _measure reaches
+# (engine/codehash.py), so an edit there recomputes by itself; bump the version only for a change
+# the hash cannot see (a dynamic lookup, data read from a file). Before SP-339 every output change
+# bumped it:
 # v6 (two branches): Pw:HR on drift_of's own halves (pw_drift / pw_ok / p1 / p2), and cp_bouts
 # per CP-test protocol (engine/cp_protocols.py); v7 = both merged, so no cache from either v6 is reused
 # v8: drift_of's 40 min counted after the warm-up, fast-finish refusal, Pa/Pw on one shared window,

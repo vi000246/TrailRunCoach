@@ -399,7 +399,8 @@ def warm_up(reason: str = "startup") -> Optional[threading.Thread]:
                                                 exc_info=True)
             return
         _warm_chart_code(ds)             # after what the first page waits for (review SP-336 #5)
-        try:                             # the new versions are in: old series_* files go (SP-338 第 4 條)
+        try:                             # the new versions are in: old series rows / leftover series_*.json
+                                         # files go (SP-338 第 4 條, SP-339)
             from backend.engine.wko5expr.dataset import sweep_series
             sweep_series()
         except Exception:                # noqa: BLE001 — a cache sweep never fails the warm-up

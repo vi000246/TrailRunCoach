@@ -11,7 +11,7 @@ def test_cached_series_is_thread_safe(tmp_path, monkeypatch):
     f.write_bytes(b"x")
     ds = D.Dataset.__new__(D.Dataset)          # just the cache machinery
     ds.dir = tmp_path
-    ds._series, ds._series_dirty, ds._series_lock = {}, set(), threading.Lock()
+    ds._series, ds._series_lock = {}, threading.Lock()
     ds._corr_sig = lambda *a: ""
     ds._settings_sig = lambda w: ""
     ws = [types.SimpleNamespace(entry=types.SimpleNamespace(file="a.wko4"))]
@@ -31,4 +31,12 @@ def test_cached_series_is_thread_safe(tmp_path, monkeypatch):
     for t in ts:
         t.join()
     assert not errors
-    assert len(list(tmp_path.glob("series_*.json"))) == 7
+    # SP-339: rows of one SQLite store (seriesdb.py), every key written, no JSON file
+    import sqlite3
+    from backend.engine.wko5expr import seriesdb
+    con = sqlite3.connect(str(tmp_path / seriesdb.FILE_NAME))
+    try:
+        assert con.execute("SELECT COUNT(DISTINCT key) FROM series").fetchone()[0] == 7
+    finally:
+        con.close()
+    assert not list(tmp_path.glob("series_*.json"))

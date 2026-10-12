@@ -97,7 +97,15 @@ def test_new_dataset_reads_tis_from_disk(tmp_path, monkeypatch):
     days = {w.entry.file: w.entry.start.date() for w in ds_c.workouts}
     assert calls and len(calls) < 2 * len(days)
     assert all(dt.date(2026, 6, 9) <= days[f] <= dt.date(2026, 9, 10) for f in calls)
-    # equal to a cold computation
-    for p in fitcache.home_of(root).glob("series_builtin*"):
-        p.unlink()
+    # equal to a cold computation (SP-339: the TIS rows of the series store deleted)
+    import sqlite3
+    from backend.engine.wko5expr import seriesdb
+    con = sqlite3.connect(str(fitcache.home_of(root) / seriesdb.FILE_NAME))
+    try:
+        assert con.execute("DELETE FROM series WHERE key LIKE 'builtin%'").rowcount > 0
+        con.commit()
+    finally:
+        con.close()
+    calls.clear()
     assert _tis(_mk(root)) == c
+    assert len(calls) == 2 * len(days)                 # every TIS computed again

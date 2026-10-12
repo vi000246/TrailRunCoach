@@ -233,10 +233,12 @@ FILES: tuple = (
          "route_weather.py)", deidentify=("tracks: GPS points", "activity_weather: positions + times"),
          invalidated_by="INDEX_VERSION, the activity files' stamps; weather refetched"),
     File("cache/fit/**", DERIVED, SHARED, "FIT dataset cache: per-second channels (npz), index, estimate / "
-         "PD memos, series, activity_auto (wko5expr/fitcache.py, fitdataset.py, api/activity_auto.py)",
+         "PD memos, series (series.db, SP-339), activity_auto (wko5expr/fitcache.py, fitdataset.py, "
+         "wko5expr/seriesdb.py, api/activity_auto.py)",
          deidentify=("channels: GPS", "start times"),
          invalidated_by="file stamp + per-field versions (fitcache.versions); code_hash (SP-320 ①); "
-                        "activity_auto.json per activity key (SP-334)"),
+                        "activity_auto.json per activity key (SP-334); series rows per file content hash + "
+                        "the code their compute reaches (SP-339)"),
     File("cache/render/slots/*.json", DERIVED, SHARED, "per chart request (view, chart, range as asked): the key "
          "it was last drawn with, so a changed chart first shows that drawing marked as updating "
          "(wko5expr/render_cache.py, SP-336)",
@@ -257,8 +259,15 @@ FILES: tuple = (
          invalidated_by="file stamp; the file's code version dataset.per_workout_code (SP-341)"),
     File("bad_activity_v1.json", DERIVED, SHARED, "WKO5 .wko4 bad-file features (wko5expr/dataset.py)",
          invalidated_by="file stamp + corrections; the file's code version dataset.per_workout_code (SP-341)"),
-    File("series_*.json", DERIVED, SHARED, "WKO5 dataset per-activity values (wko5expr/dataset.py "
-         "cached_series)", invalidated_by="file stamp + corrections + the day's thresholds; _vN in the key"),
+    File("series.db", DERIVED, SHARED, "WKO5 dataset per-activity values, one row each (wko5expr/dataset.py "
+         "cached_series, wko5expr/seriesdb.py, SP-339)",
+         invalidated_by="per row: the file (path + stamp), the code its compute reaches (codehash) + SERIES_V, "
+                        "corrections, the day's thresholds, extra input; _vN in the key; 4 rows per file and key; "
+                        "a (key, code) unread since the start and unwritten for 14 days goes after a warm-up"),
+    File("series.db-*", DERIVED, SHARED, "series.db's WAL / shared memory"),
+    File("series_*.json", DERIVED, SHARED, "WKO5 dataset per-activity values before SP-339 (wko5expr/dataset.py "
+         "cached_series)", invalidated_by="moved into series.db on the first read of its key, then deleted; a "
+                                          "leftover (an old version) unchanged for 14 days goes after a warm-up"),
     File("tp_tss.json", DERIVED, SHARED, "WKO5 TSS synced from TP, per .wko4 (wko5expr/dataset.py)",
          invalidated_by="file stamp"),
     File("moving_hrtss.json", DERIVED, SHARED, "WKO5 moving-time hrTSS per .wko4 (wko5expr/dataset.py)",
