@@ -629,12 +629,15 @@ def fresh():
 
 
 def _summary(every: list[dict], inp: dict) -> dict:
-    """Bars + PMC projection from the stored plan (edits included)."""
+    """Bars + PMC projection from the stored plan (edits included). A session's planned TSS is
+    the calendar's own (est_tss with plan_rates, SP-219): one with only minutes counts too."""
     cur = inp["cur"]
     load = cur.get("load") or {}
+    rates = plan_rates(inp, every)
     return PS.plan_summary(every, cur["week"]["start"], inp["today"], float(load.get("ctl_today") or 0.0),
                            float(load.get("atl_today") or 0.0), float(inp.get("cc") or 42.0),
-                           float(inp.get("ac") or 7.0), inp.get("horizon_end"))
+                           float(inp.get("ac") or 7.0), inp.get("horizon_end"),
+                           est=lambda s: est_tss(s, rates))
 
 
 def _err(e: Exception):
@@ -2712,6 +2715,23 @@ def est_tss(s: dict, rates: dict) -> float:
     return float(s.get("tss") or 0.0) or (s.get("minutes") or 0) / 60.0 * rates.get(s.get("kind"), 50.0)
 
 
+_INPUTS_TPH = object()      # plan_rates: the plan inputs' own TSS / h per category
+
+
+def plan_rates(inp: dict, every: list[dict], tph=_INPUTS_TPH) -> dict[str, float]:
+    """The 課表's TSS / h per session kind (est_tss), one rule for the calendar, the compliance
+    page, the stored-plan projection (_summary) and the PMC charts' projection
+    (engine/panels/plan_projection.py, SP-219): tss_rates over the sessions the 課表 shows
+    (`every` without deleted / superseded rows: the generator's own rates), the dataset's TSS / h
+    per category `tph` (the calendar's _range_extras; left out = the plan inputs' own, week_plan's
+    tss_per_category — the same overview._tss_per_hour of the same dataset and day) and the week's
+    target TSS / h for a kind with no rate of its own (a race without its own TSS)."""
+    cur = inp.get("cur") or {}
+    fallback = float(((cur.get("target") or {}).get("tss_per_hour")) or 50.0)
+    shown = [s for s in every if s.get("state") not in ("deleted", "superseded")]
+    return tss_rates(cur.get("tss_per_category") if tph is _INPUTS_TPH else tph, shown, fallback)
+
+
 def session_est_tss(s: dict, ds=None, sessions: Optional[list[dict]] = None) -> float:
     """est_tss of one stored session outside the calendar (workout_review's 課表 card, SP-370),
     so the card and the calendar grade ◐ / ≠ on the same planned TSS: the stored TSS, else the
@@ -2923,7 +2943,7 @@ async def _calendar(start: str, end: str, db: AsyncSession, tm: dict, t0: float)
     sug = await _suggestions(db, inp)
     _took("suggestions", t)
     tph = float(((inp["cur"].get("target") or {}).get("tss_per_hour")) or 50.0)
-    rates = tss_rates(extras.get("tph"), every, tph)
+    rates = plan_rates(inp, every, extras.get("tph"))
     from backend.engine import compliance as C
     ss = _decorate(every, extras["activities"], rates, start, end)
     _link_options(ss, every, extras["activities"], body["today"])
@@ -2993,8 +3013,7 @@ async def compliance(start: str, end: str, db: AsyncSession = Depends(get_db)):
     hi = max(b.isoformat(), ph["end"]) if ph else b.isoformat()
     # activities: the range and the phase so far (the phase may reach into the future)
     extras = await run_in_threadpool(_range_extras, lo, min(hi, max(today, b.isoformat())))
-    tph = float(((inp["cur"].get("target") or {}).get("tss_per_hour")) or 50.0)
-    rates = tss_rates(extras.get("tph"), every, tph)
+    rates = plan_rates(inp, every, extras.get("tph"))
     allss = _decorate(every, extras["activities"], rates, lo, hi)
     start, end = a.isoformat(), b.isoformat()
     ss = [s for s in allss if start <= s["day"] <= end]
