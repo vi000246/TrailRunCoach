@@ -140,6 +140,12 @@ async def _migrate_schema():
         ("sync_state", "coros_password_sealed", "TEXT"),
         ("sync_state", "tp_username", "TEXT"),
         ("sync_state", "tp_password_sealed", "TEXT"),
+        ("sync_state", "garmin_token_sealed", "TEXT"),             # Garmin trial (SP-91)
+        ("sync_state", "garmin_token_expires", "DATETIME"),
+        ("sync_state", "garmin_email", "TEXT"),
+        ("sync_state", "garmin_password_sealed", "TEXT"),
+        ("sync_state", "garmin_last_sync_at", "DATETIME"),
+        ("workout_files", "garmin_activity_id", "TEXT"),
         ("athlete_settings", "threshold_pace_s_per_km", "REAL"),
         ("athlete_settings", "run_ftp_w", "REAL"),
         ("athlete_settings", "initial_ctl_run", "REAL"),
@@ -188,6 +194,12 @@ async def _migrate_schema():
                 await conn.execute(
                     text(f"ALTER TABLE {table} ADD COLUMN {col} {col_type}")
                 )
+        # the Garmin activity id is looked up once per listed activity (SP-91): indexed like the
+        # model's index=True on a new DB; IF NOT EXISTS keeps it idempotent
+        cols = {row[1] for row in (await conn.execute(text("PRAGMA table_info(workout_files)"))).fetchall()}
+        if "garmin_activity_id" in cols:
+            await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_workout_files_garmin_activity_id "
+                                    "ON workout_files (garmin_activity_id)"))
         # settings that no longer exist (settings/repository.py RETIRED_KEYS), e.g. the
         # sealed backup-encryption key: deleted, not left behind in the DB
         from backend.settings.repository import RETIRED_KEYS

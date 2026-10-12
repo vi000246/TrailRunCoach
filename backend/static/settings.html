@@ -318,9 +318,10 @@ main > section.tab-off { display: none; }
       <span>資料來源</span>
       <div class="seg" role="radiogroup" aria-label="資料來源" id="s-source">
         <label><input type="radio" name="s-src" value="coros"> COROS</label>
+        <label data-src-opt="garmin"><input type="radio" name="s-src" value="garmin"> Garmin</label>
         <label><input type="radio" name="s-src" value="trainingpeaks"> TrainingPeaks</label>
       </div>
-      <button type="button" class="q" aria-label="說明" title="一次只用一個來源：圖表、總覽、功率計算機、CP 測試、自動同步都只用這個來源的資料，另一個來源的活動不會拿來補。切換後圖表會用新來源的資料重新計算；另一個來源的檔案和登入資料會保留，隨時可以切回來。活動的標籤、RPE、疼痛、背包重量和課表配對是用開始時間對應的，切換後都還在。">?</button>
+      <button type="button" class="q" aria-label="說明" title="一次只用一個來源：圖表、總覽、功率計算機、CP 測試、自動同步都只用這個來源的資料，其他來源的活動不會拿來補（Garmin 是試運行）。切換後圖表會用新來源的資料重新計算；另一個來源的檔案和登入資料會保留，隨時可以切回來。活動的標籤、RPE、疼痛、背包重量和課表配對是用開始時間對應的，切換後都還在。">?</button>
       <button class="primary" id="s-save">儲存同步設定</button>
     </div>
     <details style="margin:4px 0 8px"><summary class="meta">進階設定</summary>
@@ -372,6 +373,41 @@ main > section.tab-off { display: none; }
       </div>
       <div class="log" data-f="log"></div>
       <div class="row"><button class="danger" data-act="purge">刪除這個來源的同步檔案</button></div>
+    </div>
+
+    <!-- SP-91: the Garmin trial (unofficial garminconnect). Login with an optional MFA code step,
+         the disclaimer until ticked, the server's state and today's syncs left in plain words -->
+    <div class="src" id="src-garmin">
+      <h3>Garmin <span class="pill warn">試運行</span> <span class="pill" data-f="login">…</span>
+        <span class="pill" data-f="busy" hidden>同步中</span>
+        <label style="margin-left:auto;font-weight:400"><input type="checkbox" data-f="enabled"> 啟用</label></h3>
+      <p class="meta err-text" data-f="sitemsg" role="status" hidden></p>
+      <div data-f="connect">
+        <div class="row" data-f="loginform">
+          <input type="email" placeholder="Garmin Connect 帳號（email）" data-f="user" autocomplete="off">
+          <input type="password" placeholder="密碼" data-f="pass" autocomplete="new-password">
+          <button data-act="login">連接 Garmin</button>
+        </div>
+        <div class="row" data-f="mfarow" hidden>
+          <input type="text" inputmode="numeric" placeholder="驗證碼" data-f="mfa" autocomplete="one-time-code" style="width:120px">
+          <button data-act="mfa">送出驗證碼</button>
+          <span class="meta">Garmin 把驗證碼寄到你的 email 或手機了；打錯可以重打，10 分鐘內有效。</span>
+        </div>
+        <div class="row" data-f="consentrow" hidden><label style="font-weight:400"><input type="checkbox" data-f="consent">
+          <span data-f="consenttxt"></span></label></div>
+      </div>
+      <div class="row" data-f="rememberrow"><label><input type="checkbox" data-f="remember"> 記住密碼</label>
+        <span class="meta">密碼以本機金鑰加密存在伺服器；取消勾選或中斷連接會立即刪除。勾選後，Garmin 不再接受登入憑證時會自動重新登入一次（算在每天的同步次數裡；被 Garmin 暫時鎖住的期間不會重新登入）。</span></div>
+      <div class="row"><button data-act="logout">中斷連接</button> <span class="meta" data-f="authmsg" role="status"></span></div>
+      <dl class="kv" data-f="kv"></dl>
+      <div class="row">
+        <label>第一次同步從 <input type="date" data-f="since"></label>
+        <button class="primary" data-act="sync">立即同步</button> <span class="meta" data-f="left"></span>
+        <progress data-f="prog" hidden></progress><span class="meta" data-f="progtxt"></span>
+      </div>
+      <div class="log" data-f="log"></div>
+      <div class="row"><button class="danger" data-act="purge">刪除這個來源的同步檔案</button>
+        <span class="meta">中斷連接不會刪除已匯入的活動。</span></div>
     </div>
 
     <div class="src" id="src-tp">
@@ -1074,7 +1110,7 @@ loadRace();
 
 // ---- 資料同步 -------------------------------------------------------------
 const SYNC = "/api/v1/sync";
-const SRC_NAME = { coros: "COROS", tp: "TrainingPeaks" };
+const SRC_NAME = { coros: "COROS", garmin: "Garmin", tp: "TrainingPeaks" };
 const SRC_LABEL = { env: "環境變數", file: "~/.wko5coach/tp_client.json",
   none: "未設定（只能用網站登入）" };
 const fmtTime = (iso) => iso ? new Date(iso).toLocaleString("zh-TW", { hour12: false }) : "–";
@@ -1145,6 +1181,7 @@ async function loadSyncSettings() {
   f("tp", "usewko5").disabled = !SS.tp_client_credentials_configured;
   box("tp").querySelector('[data-method="oauth"]').disabled = !SS.tp_client_credentials_configured;
   f("coros", "enabled").checked = SS.coros_enabled; f("tp", "enabled").checked = SS.trainingpeaks_enabled;
+  f("garmin", "enabled").checked = SS.garmin_enabled !== false;
   $("keystat").innerHTML = SS.secret_key_status === "missing"
     ? ` <span class="pill err">找不到加密金鑰</span> ${esc(SS.secret_key_hint || "")}` : "";
 }
@@ -1200,6 +1237,7 @@ async function loadSources() {
       <dt>活動期間</dt><dd>${st.date_from ? `${st.date_from} ~ ${st.date_to}（${st.rows} 筆）` : "–"}</dd>`;
     box(src).querySelector('[data-act="purge"]').disabled = !st.files && !st.rows;
   }
+  loadGarmin();
   loadCorosSite();
   loadFailed();
   loadCheck();
@@ -1313,6 +1351,7 @@ $("s-save").onclick = async () => {
 function showSource(src) {
   document.querySelectorAll('input[name="s-src"]').forEach((r) => r.checked = r.value === src);
   box("coros").hidden = src !== "coros";
+  box("garmin").hidden = src !== "garmin";
   box("tp").hidden = src !== "trainingpeaks";
 }
 let SWITCH_TO = null;
@@ -1320,7 +1359,7 @@ $("s-source").addEventListener("change", (e) => {
   const to = e.target.value;
   if (!SS || to === SS.primary_source) return;
   SWITCH_TO = to;
-  const name = { coros: "COROS", trainingpeaks: "TrainingPeaks" }, from = name[SS.primary_source] || "";
+  const name = { coros: "COROS", garmin: "Garmin", trainingpeaks: "TrainingPeaks" }, from = name[SS.primary_source] || "";
   $("sd-title").textContent = `改用 ${name[to]} 當資料來源？`;
   $("sd-body").innerHTML = `圖表、總覽、功率計算機和 CP 測試會<b>只用 ${esc(name[to])} 的資料重新計算</b>`
     + `（第一次要讀完所有 FIT 檔，會比較久），自動同步也只同步 ${esc(name[to])}。`
@@ -1382,6 +1421,7 @@ $("u-watch").onchange = async (e) => {
 };
 f("coros", "enabled").onchange = (e) => putSetting({ coros_enabled: e.target.checked }).then(() => toast("已更新"));
 f("tp", "enabled").onchange = (e) => putSetting({ trainingpeaks_enabled: e.target.checked }).then(() => toast("已更新"));
+f("garmin", "enabled").onchange = (e) => putSetting({ garmin_enabled: e.target.checked }).then(() => toast("已更新"));
 f("tp", "usewko5").onchange = (e) => putSetting({ tp_use_wko5_client: e.target.checked }).then(() => toast("已更新"));
 
 // a button's request in progress: label 「登入中…」 etc., disabled (no double
@@ -1430,6 +1470,102 @@ async function loadCorosSite() {
   } catch (_) { /* the rest of the page still works */ }
 }
 
+// ---- Garmin (SP-91 試運行): connect with an optional MFA step, the disclaimer until ticked, the
+// server's state (switch / breaker / this account paused) and today's syncs left, in plain words
+let GARMIN = { site: {}, disclaimer: { version: null } };
+async function loadGarmin() {
+  let gs, d;
+  try { gs = await j("/api/v1/auth/garmin/status"); } catch (_) { return; }
+  try { d = GARMIN.disclaimer = await j("/api/v1/auth/garmin/disclaimer"); } catch (_) { d = {}; }
+  const site = GARMIN.site = gs.site || {}, s = (SOURCES || {}).garmin || {}, st = s.stats || {}, r = s.last_result;
+  // the server-wide switch off / no package: no connect option (the data stays)
+  const closed = site.state === "disabled" || site.state === "unavailable";
+  const opt = document.querySelector('[data-src-opt="garmin"]');
+  if (opt) opt.hidden = closed && SS && SS.primary_source !== "garmin";
+  const pill = f("garmin", "login"), expired = !!gs.expired;
+  pill.className = "pill " + (gs.authenticated ? "ok" : expired ? "err" : "warn");
+  pill.textContent = gs.authenticated ? `已連接 ${gs.email || ""}` : expired ? "登入已過期" : gs.mfa_pending ? "等待驗證碼" : "未連接";
+  f("garmin", "connect").hidden = closed || !!gs.authenticated;
+  f("garmin", "loginform").hidden = !!gs.mfa_pending;
+  f("garmin", "mfarow").hidden = !gs.mfa_pending;
+  f("garmin", "consentrow").hidden = !!d.consented || !!gs.mfa_pending;
+  f("garmin", "consenttxt").textContent = (d.text || "") + "　我已閱讀並同意。";
+  f("garmin", "remember").checked = !!gs.password_saved;
+  f("garmin", "rememberrow").hidden = closed && !gs.password_saved;
+  box("garmin").querySelector('[data-act="logout"]').hidden = !gs.authenticated && !expired && !gs.password_saved;
+  if (expired && gs.email && !f("garmin", "user").value) f("garmin", "user").value = gs.email;
+  if (expired) {
+    f("garmin", "connect").hidden = closed;
+    authMsg("garmin", gs.password_saved
+      ? "Garmin 不再接受登入憑證；下一次同步會用記住的密碼自動重新登入一次，失敗的話請重新連接 Garmin。"
+      : "請重新連接 Garmin（登入憑證已失效，沒有記住密碼，無法自動重新登入）。", "err-text");
+  }
+  const msg = f("garmin", "sitemsg");
+  msg.textContent = site.message || ""; msg.hidden = !site.message;
+  f("garmin", "busy").hidden = !s.busy;
+  const left = site.left || {};
+  f("garmin", "left").textContent = gs.authenticated
+    ? `今天還可以手動同步 ${left.manual ?? "–"} 次（自動同步 ${left.auto ?? "–"} 次）` : "";
+  const sync = box("garmin").querySelector('[data-act="sync"]');
+  sync.disabled = !gs.authenticated || site.state !== "ok";
+  sync.title = site.state === "limit" ? site.message : "";
+  const res = r ? `${({ ok: "成功", partial: "部分失敗", failed: "失敗", aborted: "中斷" })[r.status] || r.status}：`
+    + `下載 ${r.downloaded}、檢查 ${r.checked}、錯誤 ${r.errors}${r.error ? "（" + esc(r.error) + "）" : ""}`
+    + (r.more ? "；今天的下載量已到上限，剩下的明天繼續" : "") + esc(syncTook(r.secs)) : "–";
+  f("garmin", "kv").innerHTML = `<dt>上次同步</dt><dd>${fmtTime(s.last_sync_at)}</dd>
+    <dt>上次結果</dt><dd>${res}</dd>
+    <dt>同步檔案</dt><dd>${st.files ?? 0} 個、${esc(st.size || "0 B")}（${esc(st.folder || "")}）</dd>
+    <dt>活動期間</dt><dd>${st.date_from ? `${st.date_from} ~ ${st.date_to}（${st.rows} 筆）` : "–"}</dd>`;
+  box("garmin").querySelector('[data-act="purge"]').disabled = !st.files && !st.rows;
+}
+function garminErr(e) {
+  const m = String(e.message || e), code = (m.match(/GARMIN_[A-Z_]+/) || [""])[0];
+  return { code, text: {
+    GARMIN_LOGIN_FAILED: "Garmin 帳號或密碼不對",
+    GARMIN_MFA_WRONG: "驗證碼不對，請再輸入一次",
+    GARMIN_MFA_EXPIRED: "驗證碼已過期或錯太多次，請重新輸入帳號密碼",
+    GARMIN_CONSENT_REQUIRED: "請先閱讀並勾選上面的聲明",
+    GARMIN_PAUSED: GARMIN.site.message || "Garmin 暫時鎖住登入，通常 2–3 天會恢復，這段時間會自動暫停同步",
+    GARMIN_RATE_LIMITED: "Garmin 暫時鎖住登入，通常 2–3 天會恢復，這段時間會自動暫停同步",
+    GARMIN_DISABLED: "Garmin 同步全站暫停中，已匯入的活動都還在",
+    GARMIN_UNAVAILABLE: "這台伺服器沒有安裝 Garmin 同步需要的套件",
+  }[code] || (m.startsWith("409") ? "另一個登入還在進行中，請稍候" : reason(e)) };
+}
+async function garminLogin(btn) {
+  const user = f("garmin", "user").value.trim(), pass = f("garmin", "pass").value;
+  if (!user || !pass) { toast("請輸入帳號與密碼"); return; }
+  const body = { email: user, password: pass, remember: f("garmin", "remember").checked };
+  if (!f("garmin", "consentrow").hidden) {
+    // no connection without the disclaimer ticked; its version goes with the login
+    if (!f("garmin", "consent").checked) { toast("請先閱讀並勾選上面的聲明"); return; }
+    body.consent_version = GARMIN.disclaimer.version;
+  }
+  authMsg("garmin", "連接中…（Garmin 登入可能要 10–30 秒）");
+  try {
+    const r = await busy(btn, "連接中…", () => j("/api/v1/auth/garmin/login", { method: "POST",
+      headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }));
+    if (r.mfa_required) { authMsg("garmin", "請輸入 Garmin 寄給你的驗證碼"); toast("請輸入驗證碼"); }
+    else { authMsg("garmin", "已連接 Garmin" + (r.password_saved ? "，已記住密碼" : ""), "ok-text"); toast("已連接 Garmin"); }
+  } catch (e) { authMsg("garmin", "連接失敗：" + garminErr(e).text, "err-text"); toast("連接失敗"); }
+  finally { f("garmin", "pass").value = ""; loadSources(); }
+}
+async function garminMfa(btn) {
+  const code = f("garmin", "mfa").value.trim();
+  if (!code) { toast("請輸入驗證碼"); return; }
+  try {
+    const r = await busy(btn, "驗證中…", () => j("/api/v1/auth/garmin/mfa", { method: "POST",
+      headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code }) }));
+    f("garmin", "mfa").value = "";
+    authMsg("garmin", "已連接 Garmin" + (r.password_saved ? "，已記住密碼" : ""), "ok-text"); toast("已連接 Garmin");
+    loadSources();
+  } catch (e) {
+    const g = garminErr(e);
+    f("garmin", "mfa").select();
+    authMsg("garmin", g.text, "err-text");
+    if (g.code !== "GARMIN_MFA_WRONG") loadSources();          // expired: back to the email / password
+  }
+}
+
 async function login(src, method, btn) {
   const user = f(src, "user").value.trim(), pass = f(src, "pass").value;
   if (!user || !pass) { toast("請輸入帳號與密碼"); return; }
@@ -1465,12 +1601,13 @@ async function login(src, method, btn) {
 async function logout(src, btn) {
   authMsg(src, "登出中…");
   try {
-    await busy(btn, "登出中…", () => j(`/api/v1/auth/${src === "coros" ? "coros" : "tp"}/logout`, { method: "POST" }));
-    authMsg(src, "已登出（儲存的密碼已刪除）", "ok-text"); toast("已登出");
+    await busy(btn, "登出中…", () => j(`/api/v1/auth/${src}/logout`, { method: "POST" }));
+    if (src === "garmin") { authMsg(src, "已中斷連接（登入憑證和儲存的密碼已刪除，已匯入的活動保留）", "ok-text"); toast("已中斷連接"); }
+    else { authMsg(src, "已登出（儲存的密碼已刪除）", "ok-text"); toast("已登出"); }
   } catch (e) { authMsg(src, "登出失敗：" + reason(e), "err-text"); }
   loadSources();
 }
-for (const src of ["coros", "tp"]) {
+for (const src of ["coros", "garmin", "tp"]) {
   f(src, "remember").onchange = async (e) => {
     if (e.target.checked) { authMsg(src, "下次登入時會記住密碼（加密存在這台電腦）"); return; }
     try {
@@ -1502,8 +1639,12 @@ async function syncNow(src) {
       else if (ev.status === "skipped") logLine(src, `· ${t("settings.sync.ev_skipped", { day, id })}`);
       else if (ev.status === "no_file") logLine(src, `· ${t("settings.sync.ev_no_file", { day, id })}`);
       else if (ev.status === "relogin") logLine(src, "· " + t("settings.sync.ev_relogin"), "d");
+      else if (ev.status === "queued") logLine(src, "· " + (ev.detail || ""));
       else if (ev.status === "error" || ev.error) logLine(src, `✗ ${day} ${id} ${ev.error || ""} ${ev.detail || ""}`, "e");
-      else if (ev.status === "complete") logLine(src, t("settings.sync.ev_complete", { dl: ev.total_downloaded, checked: ev.total_checked, err: (ev.errors || []).length }), "d");
+      else if (ev.status === "complete") {
+        logLine(src, t("settings.sync.ev_complete", { dl: ev.total_downloaded, checked: ev.total_checked, err: (ev.errors || []).length }), "d");
+        if (ev.more) logLine(src, ev.detail || "今天的下載量已到上限，剩下的明天自動繼續", "d");
+      }
       if (st.total) { prog.max = st.total; prog.value = Math.min(st.checked, st.total); }
       txt.textContent = t("settings.sync.progress", { checked: st.checked + (st.total ? " / " + st.total : ""), dl: st.downloaded, err: st.errors });
     } });
@@ -1554,11 +1695,13 @@ $("pd-ok").onclick = async () => {
   } catch (e) { toast("刪除失敗：" + e.message.slice(0, 100)); }
 };
 
-for (const src of ["coros", "tp"]) {
+for (const src of ["coros", "garmin", "tp"]) {
   box(src).addEventListener("click", (e) => {
     const act = e.target.dataset.act; if (!act) return;
     const btn = e.target.closest("button[data-act]");
     if (!btn || btn.disabled) return;
+    if (act === "login" && src === "garmin") { garminLogin(btn); return; }
+    if (act === "mfa") { garminMfa(btn); return; }
     if (act === "login") login(src, btn.dataset.method, btn);
     if (act === "logout") logout(src, btn);
     if (act === "sync") syncNow(src);

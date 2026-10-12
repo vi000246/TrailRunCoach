@@ -51,7 +51,8 @@ SEALED_FILES: list[Path] = []
 # password let a lost key be regenerated silently, and that password could never be unsealed)
 SEALED_DB_COLUMNS = (("sync_state", "tp_access_token"), ("sync_state", "tp_refresh_token"),
                      ("sync_state", "tp_web_cookie"), ("sync_state", "coros_access_token"),
-                     ("sync_state", "coros_password_sealed"), ("sync_state", "tp_password_sealed"))
+                     ("sync_state", "coros_password_sealed"), ("sync_state", "tp_password_sealed"),
+                     ("sync_state", "garmin_token_sealed"), ("sync_state", "garmin_password_sealed"))
 
 
 def _db_path() -> Optional[Path]:

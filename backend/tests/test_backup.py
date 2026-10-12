@@ -334,6 +334,7 @@ def _local_state(db: Path) -> dict:
 
 
 def _cursors(db: Path) -> list:
+    # (TP last_sync_at, TP cursor, COROS cursor, Garmin cursor — SP-91; these tests sync no Garmin)
     return _rows(db, "SELECT " + ", ".join(R.table("sync_state").cursor_fields) + " FROM sync_state")
 
 
@@ -406,7 +407,7 @@ def test_no_secret_is_in_the_backup(tmp_path):
         for s in sentinels:
             assert s not in blob, s
     snap = tmp_path / "x" / B.DB_ENTRY
-    assert _cursors(snap) == [("2026-10-01 06:00:00.000000", "2026-10-01", "2026-10-01 06:00:00.000000")]
+    assert _cursors(snap) == [("2026-10-01 06:00:00.000000", "2026-10-01", "2026-10-01 06:00:00.000000", None)]
     cols = ", ".join(R.table("sync_state").local_fields)
     assert _rows(snap, f"SELECT {cols} FROM sync_state") == [(None,) * len(R.table("sync_state").local_fields)]
     assert _rows(snap, "SELECT key FROM user_settings") == [("athlete.timezone",)]
@@ -499,7 +500,7 @@ def test_round_trip_puts_user_files_back_and_keeps_this_machines_local_data(tmp_
     assert (home / "views" / "local_only.json").read_bytes() == b"LOCAL VIEW"   # not in the backup: kept
     assert _rows(live, "SELECT value_json FROM user_settings WHERE key = 'athlete.timezone'") == [('"Asia/Taipei"',)]
     assert _local_state(live) == before                   # login, debug tables, ICS link, backup.*, debug.*
-    assert _cursors(live) == [("2026-09-30 06:00:00.000000", "2026-09-30", "2026-09-30 06:00:00.000000")]
+    assert _cursors(live) == [("2026-09-30 06:00:00.000000", "2026-09-30", "2026-09-30 06:00:00.000000", None)]
     assert not list(home.rglob("*.tmp")) and not list((home / "backups").glob(".trc-*"))
     # the pre-restore copy holds this machine's files as they were (no secrets either)
     with zipfile.ZipFile(res["pre_restore"]) as z:
@@ -522,7 +523,7 @@ def test_a_three_week_old_backup_brings_its_own_sync_cursors(tmp_path):
     live = app_tenant(tmp_path / "home", secrets=MINE, files={}, synced="2026-10-08 05:00:00.000000")
     before = _local_state(live)
     B.restore(r["path"], live, local_dir=tmp_path / "home" / "backups")
-    assert _cursors(live) == [("2026-09-17 05:00:00.000000", "2026-09-17", "2026-09-17 05:00:00.000000")]
+    assert _cursors(live) == [("2026-09-17 05:00:00.000000", "2026-09-17", "2026-09-17 05:00:00.000000", None)]
     assert _local_state(live) == before
     assert _rows(live, "SELECT provider_id FROM sync_failures") == [("42",)]
     # what the next incremental sync reads: TP lists from last_sync_cursor, COROS from coros_last_sync_at
@@ -538,7 +539,7 @@ def test_a_cursor_is_never_newer_than_the_restored_data(tmp_path):
     before = _local_state(live)
     B.restore(r["path"], live, local_dir=tmp_path / "home" / "backups")
     assert _local_state(live) == before
-    assert _cursors(live) == [("2026-09-17 06:00:00.000000", "2026-09-17", "2026-09-17 06:00:00.000000")]
+    assert _cursors(live) == [("2026-09-17 06:00:00.000000", "2026-09-17", "2026-09-17 06:00:00.000000", None)]
 
 
 def test_restore_keeps_local_data_when_the_backup_schema_is_older(tmp_path):
@@ -592,14 +593,14 @@ def test_an_old_backup_still_restores_and_its_login_is_not_taken(tmp_path):
     assert res["files_restored"] == 0
     assert _rows(live, "SELECT value_json FROM user_settings WHERE key = 'athlete.timezone'") == [('"Asia/Taipei"',)]
     assert _local_state(live) == before
-    assert _cursors(live) == [("2026-09-30 06:00:00.000000", "2026-09-30", "2026-09-30 06:00:00.000000")]
+    assert _cursors(live) == [("2026-09-30 06:00:00.000000", "2026-09-30", "2026-09-30 06:00:00.000000", None)]
     assert (home / "plan.json").read_bytes() == b"LOCAL PLAN"
     # a new machine with no login: the old backup's credentials are not carried over, its cursors are
     fresh = app_tenant(tmp_path / "fresh", secrets={}, files={})
     B.restore(old, fresh, local_dir=tmp_path / "fresh" / "backups")
     cols = ", ".join(R.table("sync_state").local_fields)
     assert _rows(fresh, f"SELECT {cols} FROM sync_state") == [(None,) * len(R.table("sync_state").local_fields)]
-    assert _cursors(fresh) == [("2026-09-30 06:00:00.000000", "2026-09-30", "2026-09-30 06:00:00.000000")]
+    assert _cursors(fresh) == [("2026-09-30 06:00:00.000000", "2026-09-30", "2026-09-30 06:00:00.000000", None)]
     for t in R.TABLES:
         if t.local:
             assert _rows(fresh, f"SELECT COUNT(*) FROM {t.name}") == [(0,)], t.name

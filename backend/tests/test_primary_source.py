@@ -231,7 +231,7 @@ def test_settings_api_switch_dedup_totals_and_auto_sync(tmp_path):
             runner.ready_sources = real
         # 自動 and unknown values are refused now
         from fastapi import HTTPException
-        for bad in ("auto", "local", "garmin"):
+        for bad in ("auto", "local", "polar"):           # garmin is a 資料來源 since SP-91
             with pytest.raises(HTTPException):
                 await put_sync_settings(SyncSettingsBody(primary_source=bad), 1, s)
         with pytest.raises(HTTPException):

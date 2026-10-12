@@ -376,6 +376,11 @@ probe 腳本：`backend/scripts/garmin_probe.py`。它是獨立腳本，沒有�
 6. GitHub issue #444（API 403）是否修正，例如改成 opt-in 的 curl_cffi API session；有沒有新的大規模登入失效 issue。
 7. `upload_workout`、`schedule_workout`、`unschedule_workout`、`download_activity(ORIGINAL)` 的簽名與回傳格式。
 8. `workout.py` 的 sport／step／condition／target ID 是否變動；`childStepId` 是否必要；名稱長度上限。
+
+> **2026-10-12 重查第 5–7 項（SP-91 動工前；PyPI JSON ＋ 離線讀 0.3.17 wheel，GitHub 這次連不上）**
+> - 第 5 項：PyPI 最新版仍是 **0.3.17**（上傳 2026-09-29），`requires_python >=3.12`，相依仍是 `curl_cffi>=0.15.0`、`requests>=2.33.0`、`ua-generator>=1.0`。登入仍是 `client.py` 檔頭的 5 段策略鏈；`Garmin(..., return_on_mfa=True).login()` 回 `("needs_mfa", None)`，再 `resume_login(state, code)` 完成；驗證碼打錯時 pending 的 session 保留，可以重打（`Client.resume_login` 的 docstring）。`Garmin(retry_attempts=3)` 預設會對 5xx／網路錯誤退避重試（429／401／4xx 不重試）；SP-91 一律傳 `retry_attempts=0`。登入後的 token 仍是 `client.dumps()` 的 JSON（`di_token`、`di_refresh_token`、`di_client_id`），`client.loads()` 載回，API 呼叫遇到快過期會自己用 refresh token 換新。
+> - 第 6 項：#444 的狀態沒辦法查（GitHub 被擋）。0.3.17 的資料呼叫仍走一般 `requests` session（`Client._api_session`），沒有 opt-in 的 curl_cffi API session，所以 #444 描述的「登入成功、資料 API 全部 403」在程式碼層面沒有變。SP-91 把資料呼叫的 403 當成被擋：不重試、該帳號暫停到下一次排程。
+> - 第 7 項（只查 SP-91 用到的）：`download_activity(activity_id, dl_fmt=ActivityDownloadFormat.TCX) -> bytes`，**預設是 TCX**，要明確傳 `ORIGINAL`；ORIGINAL 打 `/download-service/files/activity/{id}`，回傳 ZIP 的 bytes（docstring：「up to user to extract it」）。`get_activities(start=0, limit=20)`（`limit` ≤ 1000）、`get_heart_rate_zones()`（`/biometric-service/heartRateZones`）簽名沒變。`upload_workout`／`schedule_workout` SP-91 不用（不推課表），沒有重查。
 9. 手錶端：心率範圍、功率（原生／Stryd）、步驟備註的顯示。這要使用者實測。
 10. Export Your Data 的 ZIP 結構（資料夾名稱）與寄送時間。
 11. FIT workout 編碼：FIT SDK Profile 裡自訂心率／功率的 offset。
