@@ -190,6 +190,48 @@ def test_schedule_swap_from_the_context_menu(app):
     assert live.count() > 0
 
 
+
+def test_schedule_swap_locks_both_sessions_until_done(app):
+    """SP-359 R1: while the server swaps (slowed down here like a COROS push) a toast at the bottom
+    right says 交換中 and both sessions are locked — a click opens nothing; once it answers, the
+    calendar shows the new days, the lock is gone and the toast says 已交換."""
+    page, _ = app
+    open_page(page, _server.PAGES["schedule"])
+    page.click('#view-seg button[data-view="week"]')
+    _calendar_ready(page)
+    pick = """() => [...document.querySelectorAll('#cal .chip[data-uid][draggable="true"]')]
+        .map((c) => [c.dataset.uid, c.closest('[data-day]').dataset.day])"""
+    days = page.evaluate(pick)
+    pair = next(((a, b) for a in days for b in days if a[1] != b[1]), None)
+    if pair is None:
+        page.click("#next")
+        _calendar_ready(page)
+        days = page.evaluate(pick)
+        pair = next(((a, b) for a in days for b in days if a[1] != b[1]), None)
+    assert pair, "no two coming sessions on different days"
+    (ua, da), (ub, db) = pair
+
+    def slow(route):
+        page.wait_for_timeout(2500)
+        route.continue_()
+    page.route("**/plan/sessions/swap", slow)
+    page.locator(f'#cal .chip[data-uid="{ua}"]').click(button="right")
+    page.click('.menu.ctx [data-ctx="swap"]')
+    expect(page.locator("#swap-toast")).to_be_visible()
+    expect(page.locator("#swap-toast [data-swap-cancel]")).to_be_visible()     # phones have no Esc
+    page.locator(f'#cal .chip[data-uid="{ub}"]').click()
+    expect(page.locator("#swap-toast")).to_contain_text("交換中")
+    for u in (ua, ub):
+        expect(page.locator(f'#cal .chip[data-uid="{u}"]')).to_have_class(re.compile(r"\bswap-lock\b"))
+    page.locator(f'#cal .chip[data-uid="{ua}"]').click(force=True)
+    expect(page.locator("#sd")).not_to_have_attribute("open", "")            # locked: no editor
+    expect(page.locator("#swap-toast")).to_contain_text("已交換", timeout=30_000)
+    expect(page.locator(".chip.swap-lock")).to_have_count(0)
+    got = page.evaluate(f"""() => [document.querySelector('#cal .chip[data-uid="{ua}"]')?.closest('[data-day]')?.dataset.day,
+        document.querySelector('#cal .chip[data-uid="{ub}"]')?.closest('[data-day]')?.dataset.day]""")
+    assert got == [db, da], got
+    page.unroute("**/plan/sessions/swap")
+
 def test_schedule_watch_status_glyphs(app):
     """手錶狀態圖示 (推送狀態): the legend's four states, each an <svg> glyph with its label."""
     page, _ = app
