@@ -332,5 +332,13 @@
   "sm.now": "Now: {list}.",
   "swap.what": "Swap",
   "swap.legend": "Swap",
-  "swap.legend_tip": "Two sessions trade days: right-click a session (long-press on a phone) → “Swap…”, then click the other one; or drag a session onto another (dropping on an empty spot moves it). It counts as your own change, so auto-adjust won't undo it; sessions already on the watch are updated too. Done or past sessions can't be swapped."
+  "swap.legend_tip": "Two sessions trade days: right-click a session (long-press on a phone) → “Swap…”, then click the other one; or drag a session onto another (dropping on an empty spot moves it). It counts as your own change, so auto-adjust won't undo it; sessions already on the watch are updated too. Done or past sessions can't be swapped.",
+  "climb.label": "Climb",
+  "climb.aria": "Climb done {done} / target {target} m",
+  "climb.planned": "Planned {planned} m",
+  "climb.gap": "Planned {planned} m, {short} m short",
+  "climb.tip": "Weekly climb target (shown only, not enforced; nothing is added when the plan falls short): {race}'s single-day climb is {r} m; from week 20 to week 3 before the race it rises in a straight line from 50% to the peak (long race 95%, short race 110%), at most +10% a week; a recovery week is half the week before, the first taper week 75% of the peak and the race week 40% (a 3-week taper for 100 miles and more). Source: Uphill Athlete, some numbers are estimates. This week: week {w} before the race, {pct}% of the race's climb",
+  "climb.tip_recovery": "; recovery week: half the week before",
+  "climb.tip_capped": "; at most +10% a week: the target is below the straight line",
+  "climb.tip_none": "Climb: only the actual climb this week (a target starts 20 weeks before an A race with a known climb)"
 }

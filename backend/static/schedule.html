@@ -280,6 +280,9 @@ body.swapping #cal .chip[draggable="true"] { cursor: copy; }
 .trk { height: 5px; border-radius: 3px; background: var(--line); overflow: hidden; }
 .trk i { display: block; height: 100%; background: var(--ph); border-radius: 3px; }
 .sum .tag { font-size: 10.5px; color: var(--faint); }
+/* SP-87 每週爬升量目標: the gap line under the 爬升 bar (display only) */
+.sum .clg { font-size: 10.5px; color: var(--faint); text-align: right; }
+.sum .clg.short, .ag-sum .clg.short { color: var(--warn, #b45309); }
 
 /* week view: same grid, one tall row with more detail */
 .cal.week .cell { min-height: 420px; }
@@ -1160,8 +1163,39 @@ function sumHtml(w) {
     ${future ? "" : `<div class="trk" role="img" aria-label="完成 ${h1(w.done_hours)} / 計畫 ${h1(w.planned_hours)} 小時"><i style="width:${pct(w.done_hours, w.planned_hours).toFixed(0)}%"></i></div>`}
     <div class="r"><span>TSS</span><span>${future ? "" : `<b>${n0(w.done_tss)}</b> / `}${n0(w.planned_tss)}</span></div>
     ${future ? "" : `<div class="trk" role="img" aria-label="TSS 完成 ${n0(w.done_tss)} / 計畫 ${n0(w.planned_tss)}"><i style="width:${pct(w.done_tss, w.planned_tss).toFixed(0)}%"></i></div>`}
+    ${climbW(w, future)}
     ${compW(w)}
     ${w.provisional ? `<span class="tag">暫定（重排時會依進度調整）</span>` : cur ? `<span class="tag">本週</span>` : ""}`;
+}
+// 每週爬升量目標 (SP-87, api/plan_sessions._climb_row; engine/vert_target.py): done / target like 時間,
+// then what the week's sessions plan and how much is missing — display only, nothing is added to the plan
+const climbN = (x) => Math.round(+x || 0).toLocaleString();
+function climbTip(c) {
+  if (c.target == null) return tt("climb.tip_none");
+  return tt("climb.tip", { race: c.race || "", r: climbN(c.r), w: c.weeks_out, pct: Math.round((c.share || 0) * 100) }) +
+    (c.recovery ? tt("climb.tip_recovery") : "") + (c.capped ? tt("climb.tip_capped") : "");
+}
+function climbGap(c) {
+  return c.short > 0 ? tt("climb.gap", { planned: climbN(c.planned), short: climbN(c.short) }) : tt("climb.planned", { planned: climbN(c.planned) });
+}
+function climbW(w, future) {
+  const c = w.climb;
+  if (!c) return "";
+  const lab = esc(tt("climb.label")), tip = esc(climbTip(c));
+  if (c.target == null)
+    return `<div class="r" title="${tip}"><span>${lab}</span><span>${future ? esc(tt("climb.planned", { planned: climbN(c.planned) })) : `<b>${climbN(c.done)}</b> m`}</span></div>`;
+  const pct = c.target > 0 ? Math.min(100, c.done / c.target * 100) : 0;
+  return `<div class="r" title="${tip}"><span>${lab}</span><span>${future ? "" : `<b>${climbN(c.done)}</b> / `}${climbN(c.target)} m</span></div>
+    ${future ? "" : `<div class="trk" role="img" aria-label="${esc(tt("climb.aria", { done: climbN(c.done), target: climbN(c.target) }))}"><i style="width:${pct.toFixed(0)}%"></i></div>`}
+    <div class="clg${c.short > 0 ? " short" : ""}" title="${tip}">${esc(climbGap(c))}</div>`;
+}
+function climbAg(w, future) {
+  const c = w.climb;
+  if (!c) return "";
+  const tip = esc(climbTip(c));
+  if (c.target == null) return `<span title="${tip}">${esc(tt("climb.label"))} ${future ? esc(climbN(c.planned)) : `<b>${climbN(c.done)}</b>`} m</span>`;
+  return `<span title="${tip}">${esc(tt("climb.label"))} ${future ? "" : `<b>${climbN(c.done)}</b> / `}${climbN(c.target)} m</span>` +
+    `<span class="clg${c.short > 0 ? " short" : ""}">${esc(climbGap(c))}</span>`;
 }
 const compW = (w) => w.compliance ? `<div class="r cp-${esc(w.compliance.level)}" title="到${w.end < D.today ? "週日" : "昨天（今天完成的也算）"}為止：完成 TSS ÷ 計畫 TSS（綠 ±20%、黃 20–50%、紅 > 50%）"><span>完成度</span><span class="cpw">${w.compliance.pct} %</span></div>` : "";
 function render() {
@@ -1253,6 +1287,7 @@ function agendaHtml(a, ss, acts) {
       ${w.phase_label || w.mode_label ? `<span class="php">${esc(w.phase_label || w.mode_label)}</span>` : ""}
       <span>時間 ${future ? "" : `<b>${h1(w.done_hours)}</b> / `}${h1(w.planned_hours)} h</span>
       <span>TSS ${future ? "" : `<b>${n0(w.done_tss)}</b> / `}${n0(w.planned_tss)}</span>
+      ${climbAg(w, future)}
       ${w.compliance ? `<span class="cp-${esc(w.compliance.level)}">完成度 <span class="cpw">${w.compliance.pct} %</span></span>` : ""}
       ${w.provisional ? `<span class="faint">暫定</span>` : ""}</div>${days.join("")}</div>`;
 }
