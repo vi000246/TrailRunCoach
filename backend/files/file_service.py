@@ -207,13 +207,15 @@ async def _import_one_file(
     source: str = "local",
     tp_workout_id: Optional[int] = None,
     coros_activity_id: Optional[str] = None,
+    parsed=None,
 ) -> Optional[WorkoutFile]:
     """Parse one file and persist its workout_files row: date, sport, distance, elevation,
     trail / road, the watch's RPE (flush only — the caller commits, or rolls back on error).
     Returns None for unreadable files. Per-activity metrics are not stored: the FIT dataset
     computes them (engine/wko5expr/fitdataset.py). `path`: a file (a scan, a legacy sync
     file) or a FIT object key (the sync since SP-308, files/fitstore.py), stored as is in
-    file_path."""
+    file_path. `parsed`: the FIT's RawWorkout when the caller has parsed it already (the
+    manual import checks a file before storing it, sync/upload.py): not parsed twice."""
     from backend.files import fitstore
     from backend.settings.repository import SettingsRepository
     from backend.sync import dedup
@@ -235,11 +237,14 @@ async def _import_one_file(
         duration_s = meta.duration_s
         total_distance_m = meta.total_distance_m
     elif fmt == "fit":
-        try:
-            import asyncio
-            raw = await asyncio.to_thread(parse_fit, str(path))     # FIT parsing: off the event loop
-        except Exception:
-            return None
+        if parsed is not None:
+            raw = parsed
+        else:
+            try:
+                import asyncio
+                raw = await asyncio.to_thread(parse_fit, str(path))     # FIT parsing: off the event loop
+            except Exception:
+                return None
         start_time = raw.start_time
         sport = raw.sport
         duration_s = raw.duration_s

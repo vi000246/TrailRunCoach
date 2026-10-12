@@ -1515,6 +1515,14 @@
     "draft": true,
     "src": "backend/engine/strength_moves.py:112"
   },
+  "一次上傳最多 {mb} MB": {
+    "draft": true,
+    "src": "backend/api/sync.py:539"
+  },
+  "一次最多 {n} 個檔": {
+    "draft": true,
+    "src": "backend/api/sync.py:554"
+  },
   "一次跑步的飄移本來就會差個幾 %，看最近幾次的走向比只看一次準。\n方法：單次誤差約 ±4–6 個百分點（心率樣本前後高度相關），用回歸法的標準誤估；心率延遲 τ = 60 s 取自 Hunt 2015／2019、Wang & Hunt 2021，接成一個回歸是推估。": {
     "draft": true,
     "src": "backend/engine/workout_review.py:510"
@@ -2494,6 +2502,10 @@
   "反式划船": {
     "draft": true,
     "src": "backend/engine/strength_moves.py:109"
+  },
+  "另一個匯入還在進行，請稍後再試": {
+    "draft": true,
+    "src": "backend/api/sync.py:563"
   },
   "另一腳前後擺": {
     "draft": true,
@@ -4615,6 +4627,10 @@
     "draft": true,
     "src": "backend/engine/racepower/weather.py:772"
   },
+  "沒有收到檔案": {
+    "draft": true,
+    "src": "backend/api/sync.py:552"
+  },
   "沒有最大心率，到設定填": {
     "draft": true,
     "src": "backend/engine/hr_profile.py:84"
@@ -5783,6 +5799,10 @@
     "draft": true,
     "src": "backend/engine/quality_gate.py:2614"
   },
+  "讀不懂上傳的內容": {
+    "draft": true,
+    "src": "backend/api/sync.py:549"
+  },
   "讓腿部在高比例最大力量下重複上千次，限制來自腿而不是呼吸（Uphill Athlete）": {
     "draft": true,
     "src": "backend/engine/workout_templates.py:139"
@@ -6426,6 +6446,10 @@
   "這個估法對週跑量少的人偏樂觀：你填的每週 {h:.1f} 小時不多，全馬以上的距離實際會比估的吃力（Vickers & Vertosick 2016：一場成績推全馬，週跑量少的人慢得更多）": {
     "draft": false,
     "src": "backend/engine/race_feasibility.py:161"
+  },
+  "這個帳號不能匯入 FIT 檔": {
+    "draft": true,
+    "src": "backend/api/sync.py:507"
   },
   "這個平台": {
     "draft": true,

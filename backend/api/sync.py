@@ -2,7 +2,7 @@ import json
 from datetime import date, datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,9 +10,10 @@ from sqlalchemy import select
 
 from backend.db.database import get_db
 from backend.db.models import SyncState
+from backend.i18n import N_, UserError
 from backend.settings.repository import SettingsRepository
 from backend.sync.tp_client import sync_workouts, fetch_tp_settings
-from backend.sync import coros_client, dedup, purge, runner, storage
+from backend.sync import coros_client, dedup, purge, runner, storage, upload
 
 
 async def _disabled(db: AsyncSession, athlete_id: int, source: str) -> bool:
@@ -413,7 +414,8 @@ async def put_sync_settings(body: SyncSettingsBody, athlete_id: int = 1,
                             db: AsyncSession = Depends(get_db)):
     """Only the fields sent are changed. Switching the 資料來源 re-runs the
     de-dup so totals switch to that source immediately; the chart Dataset
-    follows through datasource.current_source (that source's folder only)."""
+    follows through datasource.current_source (that source's folder only), and
+    the imported FITs (SP-323, sync/upload.py) move into that folder with it."""
     repo = SettingsRepository(db, athlete_id)
     sent = body.model_dump(exclude_unset=True)
     try:
@@ -421,9 +423,10 @@ async def put_sync_settings(body: SyncSettingsBody, athlete_id: int = 1,
             await repo.set(_SETTING_KEYS[k], v)
     except ValueError as e:
         raise HTTPException(400, str(e))
+    moved = await upload.rehome(db, athlete_id) if "primary_source" in sent else None
     rebuilt = await dedup.rebuild(db, athlete_id) if "primary_source" in sent else None
     await db.commit()
-    return {**await _sync_settings(repo), "dedup": rebuilt}
+    return {**await _sync_settings(repo), "dedup": rebuilt, "upload": moved}
 
 
 class BrowserZone(BaseModel):
@@ -492,6 +495,79 @@ async def dedup_unlink(row_id: int, athlete_id: int = 1, db: AsyncSession = Depe
     r = await dedup.unlink(db, athlete_id, row_id)
     await db.commit()
     return r
+
+
+# ---------------------------------------------------------------------------- 手動匯入 FIT (SP-323)
+
+def _may_upload() -> None:
+    """The `upload.fit` capability (tenancy.py: never in the demo) and the plan's `import:fit`
+    scope (membership.py)."""
+    from backend import membership as MS, tenancy
+    if not tenancy.can("upload.fit"):
+        raise UserError(N_("這個帳號不能匯入 FIT 檔"), code="UPLOAD_FIT_FORBIDDEN", status=403)
+    MS.require("import:fit")
+
+
+def _mb(n: int) -> int:
+    return max(1, n // (1024 * 1024))
+
+
+@router.get("/upload/fit")
+async def upload_fit_status(db: AsyncSession = Depends(get_db)):
+    """The imported activities (rows, date span) and the limits the page batches by."""
+    from backend.db.current import current_athlete_id
+    _may_upload()
+    return await upload.stats(db, current_athlete_id())
+
+
+@router.post("/upload/fit")
+async def upload_fit(request: Request, db: AsyncSession = Depends(get_db)):
+    """「匯入 FIT 檔」: multipart `files` (≤ upload.MAX_FILES, the body ≤ MAX_REQUEST_BYTES; the
+    page sends a big folder in batches) into the current tenant only (sync/upload.py). `last` = 0
+    on every batch but the last one, `earlier_added` = what the earlier batches added: the steps
+    after a sync (Dataset warm-up, overview, plan inputs, automatic plan) run once, after the last.
+    {added, duplicate, failed, skipped, folder, items: [{name, status, reason, date, sport, of}]}."""
+    from starlette.exceptions import HTTPException as StarletteHTTPException
+    from backend import tenancy
+    from backend.db.current import current_athlete_id
+    _may_upload()
+    try:
+        size = int(request.headers.get("content-length") or 0)
+    except ValueError:
+        size = 0
+    if size > upload.MAX_REQUEST_BYTES:
+        raise UserError(N_("一次上傳最多 {mb} MB"), code="UPLOAD_TOO_LARGE", status=413,
+                        mb=_mb(upload.MAX_REQUEST_BYTES))
+    athlete_id = current_athlete_id()
+    try:
+        with upload.claim(tenancy.current().id):
+            try:
+                form = await request.form(max_files=upload.MAX_FILES + 1, max_fields=20)
+            except StarletteHTTPException as e:
+                if "too many files" in str(e.detail).lower():
+                    raise UserError(N_("一次最多 {n} 個檔"), code="UPLOAD_TOO_MANY", status=413, n=upload.MAX_FILES)
+                raise UserError(N_("讀不懂上傳的內容"), code="UPLOAD_BAD_FORM", status=400)
+            try:                                  # the spooled temporary files go in every case
+                files = [v for k, v in form.multi_items() if k == "files" and not isinstance(v, str)]
+                if not files:
+                    raise UserError(N_("沒有收到檔案"), code="UPLOAD_NO_FILES", status=400)
+                if len(files) > upload.MAX_FILES:
+                    raise UserError(N_("一次最多 {n} 個檔"), code="UPLOAD_TOO_MANY", status=413, n=upload.MAX_FILES)
+                res = await upload.import_files(db, athlete_id, files)
+                last = str(form.get("last") or "1") != "0"
+                try:
+                    earlier = max(0, int(form.get("earlier_added") or 0))
+                except ValueError:
+                    earlier = 0
+            finally:
+                await form.close()
+    except upload.UploadBusy:
+        raise UserError(N_("另一個匯入還在進行，請稍後再試"), code="UPLOAD_BUSY", status=409)
+    added = res["added"] + earlier
+    if last and added > 0:
+        await runner.after_import(db, upload.SOURCE, {"status": "partial" if res["failed"] else "ok",
+                                                      "downloaded": added, "trigger": "upload"}, athlete_id)
+    return res
 
 
 @router.get("/tp/settings")
