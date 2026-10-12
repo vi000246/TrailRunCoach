@@ -4,6 +4,8 @@ thresholds. Data lives in ~/.wko5coach/plan.json (backend/engine/planning.py).
 """
 from __future__ import annotations
 
+import functools
+
 import datetime as dt
 from functools import lru_cache
 from pathlib import Path
@@ -41,15 +43,30 @@ PHASE_DASHBOARD = {
 
 
 def _wko5_athlete():
-    """The WKO5 athlete file, or None for a runner without a WKO5 folder."""
+    """The WKO5 athlete file, or None for a runner without a WKO5 folder (and for every tenant
+    but the owner's, SP-384)."""
+    from backend.settings.paths import for_tenant
     try:
-        f = next(Path(ATHLETE_DIR).glob("*.wko5athlete"), None)
+        f = next(for_tenant(ATHLETE_DIR).glob("*.wko5athlete"), None)
         return None if f is None else read_athlete(f)
     except OSError:
         return None
 
 
-@lru_cache(maxsize=1)
+def _owner_cached(fn):
+    """lru_cache(1) of an owner-only WKO5 read: every other tenant computes it fresh (it reads
+    no folder, so it is cheap), never the owner's cached copy (SP-384). Keeps cache_clear()."""
+    cached = lru_cache(maxsize=1)(fn)
+
+    @functools.wraps(fn)
+    def w():
+        from backend import tenancy
+        return cached() if tenancy.is_owner() else fn()
+    w.cache_clear = cached.cache_clear
+    return w
+
+
+@_owner_cached
 def _wko5_settings() -> dict:
     ath = _wko5_athlete()
     if ath is None:
@@ -375,7 +392,7 @@ def put_phases(body: list[PhaseIn]):
     return {"phases": [P.phase_json(p) for p in plan.phases]}
 
 
-@lru_cache(maxsize=1)
+@_owner_cached
 def _wko5_profile() -> dict:
     """What WKO5 has on file, shown next to the editable profile."""
     ath = _wko5_athlete()

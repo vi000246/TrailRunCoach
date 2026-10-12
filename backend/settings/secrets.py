@@ -97,10 +97,26 @@ def key_status() -> str:
     return "missing" if ciphertext_exists() else "none"
 
 
+class ServerKeyRequired(SecretError):
+    """Multi-user mode (WKO5COACH_ACCOUNTS=1) without WKO5COACH_SECRET_KEY: the one server key
+    must come from the environment, never from a file inside a tenant folder (SP-384, auth-and-demo
+    plan §5 — the owner's ~/.wko5coach is a tenant folder too)."""
+
+
+def require_server_key() -> None:
+    """Raise ServerKeyRequired in multi-user mode without the env key (start-up check, main.py)."""
+    from backend import accounts
+    if accounts.enabled() and not os.getenv("WKO5COACH_SECRET_KEY"):
+        raise ServerKeyRequired(
+            "WKO5COACH_SECRET_KEY must be set when WKO5COACH_ACCOUNTS=1 (one server key from the "
+            f"environment; move the contents of {KEY_FILE} into it — see docs/deploy/accounts.md)")
+
+
 @lru_cache(maxsize=1)
 def _fernet() -> Fernet:
     key = os.getenv("WKO5COACH_SECRET_KEY")
     if not key:
+        require_server_key()
         if KEY_FILE.exists():
             key = KEY_FILE.read_text("ascii").strip()
         elif ciphertext_exists():

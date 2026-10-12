@@ -33,6 +33,7 @@ from starlette.concurrency import run_in_threadpool
 from backend.db.current import current_athlete_id
 from backend.db.database import get_db
 from backend.singleflight import SingleFlight
+from backend.tenant_cache import TenantLRU
 from backend.engine import plan_match as PM
 from backend.engine import plan_store as PS
 from backend.engine import projection as P
@@ -45,7 +46,8 @@ router = APIRouter(prefix="/api/v1/overview/plan", tags=["overview"])
 
 SCOPES = ("day", "week", "phase")
 _lock = threading.Lock()
-_cache: dict = {}
+# the stored plan + a preview or two, for each tenant (SP-374 第 4 條: was 3 for the whole server)
+_cache = TenantLRU(per_tenant=3)
 _flight = SingleFlight()        # one _compute_inputs per key at a time (SP-362)
 
 
@@ -257,8 +259,6 @@ def _build_inputs(key: tuple, ds, today: dt.date, prefs, bos, acc, auto_on: bool
     # (a 不排課日期 / 課表偏好 saved, or newer data, while it computed — review H1)
     out["inputs_key"] = key
     with _lock:
-        while len(_cache) >= 3:                 # the stored plan + a preview or two
-            _cache.pop(next(iter(_cache)))
         _cache[key] = out
     return out
 
@@ -447,33 +447,40 @@ async def _unlinked(db: AsyncSession, acts: list[dict]) -> set:
 
 
 # one writer at a time: two tabs / a preview racing a push must not generate
-# the same week twice (fresh uids each time) and push the duplicates
+# the same week twice (fresh uids each time) and push the duplicates.
+# Per tenant (SP-374 第 1 條): one person's automatic adjustment or edit never makes another
+# person's 課表 page wait. Keyed by (event loop, tenant id): tests run several loops.
 _locks: dict = {}
 
 
+def _lock_key() -> tuple:
+    return id(asyncio.get_running_loop()), _tenancy.current().id
+
+
 def _wlock() -> asyncio.Lock:
-    loop = asyncio.get_running_loop()          # one lock per event loop (tests run several)
-    lk = _locks.get(id(loop))
+    k = _lock_key()
+    lk = _locks.get(k)
     if lk is None:
-        lk = _locks[id(loop)] = asyncio.Lock()
+        lk = _locks[k] = asyncio.Lock()
     return lk
 
 
-# one push to the watch at a time (SP-362 B3). COROS takes 20–30 s on the NAS: a push holds this
-# lock, never _wlock, so the page's GET /sessions / calendar and the user's edits don't wait for
-# it. Rules: never take _wlock while holding _plock (or the other way round); a push re-reads the
-# stored plan after taking _plock, so it sends what is stored then — an edit saved meanwhile is
-# sent as edited, and an edit saved after that read is sent by the edit's own _sync_watch, which
-# queues on this lock (the user's edit wins; the fingerprint keeps an up-to-date copy from being
-# uploaded again).
+# one push to the watch at a time (SP-362 B3), per tenant (SP-374). COROS takes 20–30 s on the
+# NAS: a push holds this lock, never _wlock, so the page's GET /sessions / calendar and the
+# user's edits don't wait for it. Rules: never take _wlock while holding _plock (or the other
+# way round); a push re-reads the stored plan after taking _plock, so it sends what is stored
+# then — an edit saved meanwhile is sent as edited, and an edit saved after that read is sent by
+# the edit's own _sync_watch, which queues on this lock (the user's edit wins; the fingerprint
+# keeps an up-to-date copy from being uploaded again). Two tenants push at the same time; the
+# COROS calls themselves go through the server-wide rate limit (sync/coros_limits.py, SP-385).
 _plocks: dict = {}
 
 
 def _plock() -> asyncio.Lock:
-    loop = asyncio.get_running_loop()
-    lk = _plocks.get(id(loop))
+    k = _lock_key()
+    lk = _plocks.get(k)
     if lk is None:
-        lk = _plocks[id(loop)] = asyncio.Lock()
+        lk = _plocks[k] = asyncio.Lock()
     return lk
 
 

@@ -53,7 +53,7 @@ from backend.engine.wko5expr.render import render_chart, render_map
 from backend.engine.wko5expr.render_cache import CACHE as RENDER_CACHE, chart_key
 from backend.engine.wko5expr import chartscope as CS
 from backend.files.wko5chart_reader import read_view
-from backend.settings.paths import athlete_dir
+from backend.settings.paths import athlete_dir, for_tenant
 from backend import tenancy
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -144,7 +144,7 @@ def _build_dataset(cfg_json: str, source: str = "wko5", stamp: str = "", shared:
     from backend import applog
     try:
         with applog.timed("dataset build", source=source):        # SP-215: the wait behind every chart
-            ds = dataset_for_source(source, ATHLETE_DIR, config=EngineConfig.from_dict(json.loads(cfg_json)))
+            ds = dataset_for_source(source, for_tenant(ATHLETE_DIR), config=EngineConfig.from_dict(json.loads(cfg_json)))
     except BaseException as e:
         st.fail(e)
         raise
@@ -182,7 +182,7 @@ def _dataset_key(parity: Optional[bool] = None, source: Optional[str] = None) ->
     if parity is not None and parity != cfg.parity:
         cfg = cfg.replace(parity=parity)
     src = source if source in DSRC.SOURCES else DSRC.current_source()
-    return (json.dumps(cfg.to_dict(), sort_keys=True), src, DSRC.source_stamp(src, ATHLETE_DIR),
+    return (json.dumps(cfg.to_dict(), sort_keys=True), src, DSRC.source_stamp(src, for_tenant(ATHLETE_DIR)),
             str(tenancy.current().shared))
 
 
@@ -215,7 +215,28 @@ def _dataset_in_tenant(parity: Optional[bool], source: Optional[str]) -> Dataset
         return _dataset_cfg(*key)
 
 
-_WARM = {"thread": None}
+# the warm-up's threads, one set for each tenant (SP-374 第 3 條): tenant id -> {"thread", "low",
+# "low_again"}. With one slot for the server, B's warm-up after a sync was dropped while A's ran,
+# and B's low-priority part re-ran in A's context. An entry goes when its threads are done.
+_WARM: dict = {}
+_WARM_LOCK = threading.Lock()
+
+
+def _warm_slot(tid: Optional[str] = None) -> dict:
+    """This tenant's warm-up slot (made on first use; dead ones are dropped here)."""
+    if tid is None:
+        try:
+            tid = tenancy.current().id
+        except Exception:                # noqa: BLE001 — a demo instance without its data yet
+            tid = "default"
+    with _WARM_LOCK:
+        for k in [k for k, w in _WARM.items() if k != tid and not _alive(w)]:
+            del _WARM[k]
+        return _WARM.setdefault(tid, {"thread": None})
+
+
+def _alive(w: dict) -> bool:
+    return any(t is not None and t.is_alive() for t in (w.get("thread"), w.get("low")))
 
 
 def _warm_chart_code(ds) -> None:
@@ -265,7 +286,7 @@ def _calibrate_never_fitted(ds) -> None:
         asyncio.run(fit_once())
 
 
-def _low_priority(reason: str) -> None:
+def _low_priority(reason: str, slot: Optional[dict] = None) -> None:
     """The warm-up's lowest-priority part, in its own thread (review SP-362 #4): wait for an
     automatic plan run to end, then — on the Dataset read AFTER the wait (a sync may have
     rebuilt it meanwhile) — the never-fitted calibration and the 活動列表's automatic
@@ -282,25 +303,29 @@ def _low_priority(reason: str) -> None:
         except Exception as e:           # noqa: BLE001 — a page request will show the error
             logging.getLogger(__name__).warning("warm-up low-priority part (%s) failed: %s", reason,
                                                 type(e).__name__, exc_info=True)
+        w = slot if slot is not None else _warm_slot()
         with _LOW_LOCK:
-            if not _WARM.get("low_again"):
-                _WARM["low"] = None
+            if not w.get("low_again"):
+                w["low"] = None
                 return
-            _WARM["low_again"] = False
+            w["low_again"] = False
 
 
 def _start_low_priority(reason: str) -> None:
+    """The tenant's own low-priority thread: another tenant's waiting one is not reused (it
+    would run in that tenant's context, SP-374 第 3 條)."""
     import contextvars
+    w = _warm_slot()
     with _LOW_LOCK:
-        t = _WARM.get("low")
+        t = w.get("low")
         if t is not None and t.is_alive():
-            _WARM["low_again"] = True        # the waiting one runs once more, on the newest Dataset
+            w["low_again"] = True            # the waiting one runs once more, on the newest Dataset
             return
-        _WARM["low_again"] = False
+        w["low_again"] = False
         ctx = contextvars.copy_context()     # the tenant (a Thread does not carry contextvars)
-        t = threading.Thread(target=ctx.run, args=(_low_priority, reason), name=f"warmup-low-{reason}",
+        t = threading.Thread(target=ctx.run, args=(_low_priority, reason, w), name=f"warmup-low-{reason}",
                              daemon=True)
-        _WARM["low"] = t
+        w["low"] = t
         t.start()
 
 
@@ -316,7 +341,8 @@ def warm_up(reason: str = "startup") -> Optional[threading.Thread]:
     when a warm-up is already running or WKO5COACH_NO_WARMUP is set."""
     if os.getenv("WKO5COACH_NO_WARMUP"):
         return None
-    t = _WARM["thread"]
+    w = _warm_slot()                     # this tenant's: another tenant's warm-up does not drop it (SP-374)
+    t = w["thread"]
     if t is not None and t.is_alive():
         return None
 
@@ -349,7 +375,7 @@ def warm_up(reason: str = "startup") -> Optional[threading.Thread]:
     import contextvars              # a Thread does not carry the tenant (contextvars) by itself
     ctx = contextvars.copy_context()
     t = threading.Thread(target=ctx.run, args=(run,), name=f"dataset-warmup-{reason}", daemon=True)
-    _WARM["thread"] = t
+    w["thread"] = t
     t.start()
     return t
 

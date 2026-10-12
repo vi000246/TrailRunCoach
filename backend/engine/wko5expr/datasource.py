@@ -59,9 +59,9 @@ def read_setting(key: str, default=None, user_id: int = 1):
 def wko5_available(wko5_dir: Optional[Path] = None) -> bool:
     """A WKO5 athlete file (*.wko5athlete) is there. A runner without WKO5
     (COROS / TP only) has none: the charts then read the synced FITs."""
-    if wko5_dir is None:
-        from backend.settings.paths import athlete_dir
-        wko5_dir = athlete_dir()
+    from backend.settings.paths import athlete_dir, for_tenant
+    # only the owner's tenant has a WKO5 folder (SP-384): a module constant passed in is the owner's
+    wko5_dir = athlete_dir() if wko5_dir is None else for_tenant(wko5_dir)
     try:
         return any(Path(wko5_dir).glob("*.wko5athlete"))
     except OSError:

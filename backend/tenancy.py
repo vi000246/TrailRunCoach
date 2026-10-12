@@ -17,7 +17,9 @@ Kinds:
                 requests without a sandbox cookie read it
   demo_sandbox  one visitor's copy-on-write sandbox: root = its own folder (DB,
                 plan.json ...), shared = the demo base (FIT, caches)
-  user          (later: signed-in users, §5)
+  user          a signed-in user (SP-384, backend/accounts): root = shared =
+                <server-root>/users/<id>/, USER_CAPS, no WKO5 folder. The owner signed in
+                is still the owner tenant (migrated in place, same id and folder)
 
 The tenant is set per request by backend/tenancy_mw.py (a pure ASGI middleware:
 contextvars set there reach async endpoints and, through AnyIO's context copy,
@@ -45,8 +47,14 @@ ALL_CAPS = frozenset({
     "plan.write", "thresholds.write", "profile.write", "dataset.write", "settings",
     "sync", "connect", "push", "upload.fit", "upload.gpx", "ai", "share",
     "weather.key", "backtest", "backup", "injuries", "wko5", "achievements",
+    "tp.client", "ai.owner_key",
 })
 DEMO_CAPS = frozenset({"plan.write", "upload.gpx"})
+# the owner's own resources (auth-and-demo plan §5, SP-384): the WKO5 folder, the CWA key, the TP
+# WKO5 client (its terms forbid handing the developer credentials to others), the server-side
+# backup / restore of the whole folder, and the owner's AI key (SP-306, when it exists)
+OWNER_ONLY_CAPS = frozenset({"wko5", "weather.key", "tp.client", "backup", "ai.owner_key"})
+USER_CAPS = ALL_CAPS - OWNER_ONLY_CAPS
 
 ENV_HOME = "WKO5COACH_HOME"
 ENV_MODE = "WKO5COACH_MODE"
@@ -181,3 +189,9 @@ def db_path() -> Path:
 
 def can(cap: str) -> bool:
     return current().can(cap)
+
+
+def is_owner(t: Optional[Tenant] = None) -> bool:
+    """The owner's tenant: the only one that may read the owner's own resources (OWNER_ONLY_CAPS:
+    the WKO5 folder, the CWA key, the TP WKO5 client, the owner's AI key)."""
+    return (t or current()).kind == OWNER

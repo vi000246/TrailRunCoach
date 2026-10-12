@@ -36,6 +36,7 @@ from pydantic import BaseModel, Field
 
 from backend.engine.planning import plan_path
 from backend.singleflight import SingleFlight
+from backend.tenant_cache import TenantSlots
 from backend.engine.racepower import calc as CALC
 from backend.engine.racepower import weather as WX
 # the request bodies live with the computations (engine/racepower/calc.py); kept importable from here
@@ -48,7 +49,9 @@ router = APIRouter(prefix="/api/v1/racepower", tags=["racepower"])
 DEFAULT_K = CALC.DEFAULT_K
 INPUTS_TTL_S = 600.0
 _lock = threading.Lock()
-_cache: dict = {}
+# named slots ("inputs", "grade", ...) for each tenant (SP-374 第 4 條: was one per slot for the
+# whole server, so two people using the calculator pushed each other's results out)
+_cache = TenantSlots()
 _FLIGHT = SingleFlight()            # the slow per-athlete fits: one computation per key (SP-366)
 
 
@@ -65,18 +68,36 @@ def _plan_stamp() -> float:
 
 
 def inputs(refresh: bool = False) -> dict:
-    """derive() for today, memoised per dataset / plan / day for 10 minutes."""
+    """derive() for today, memoised per dataset / plan / day for 10 minutes. Computed outside
+    the lock (SP-374 第 1 條: derive() takes ~3.4 s cold on the NAS, and it used to hold the one
+    server-wide lock, so every other tenant's calculator waited); concurrent callers of the
+    same key share one computation (_FLIGHT)."""
     from backend.engine.racepower.athlete import derive
     ds = _dataset()
     today = today_local()
     key = (*_tenancy.ds_key(ds), today, _plan_stamp())
-    with _lock:
-        hit = _cache.get("inputs")
-        if not refresh and hit and hit[0] == key and time.time() - hit[1] < INPUTS_TTL_S:
+
+    def cached():
+        with _lock:
+            hit = _cache.get("inputs")
+        if hit and hit[0] == key and time.time() - hit[1] < INPUTS_TTL_S:
             return hit[2]
+        return None
+
+    if not refresh:
+        got = cached()
+        if got is not None:
+            return got
+
+    def compute():
+        got = None if refresh else cached()
+        if got is not None:
+            return got
         d = derive(ds, today)
-        _cache["inputs"] = (key, time.time(), d)
+        with _lock:
+            _cache["inputs"] = (key, time.time(), d)
         return d
+    return _FLIGHT.do(("inputs", key, refresh), compute)
 
 
 @router.get("/inputs")
@@ -158,6 +179,8 @@ def key_status():
 
 @router.post("/weather/key")
 def save_key(body: KeyIn):
+    if not _tenancy.can("weather.key"):
+        raise HTTPException(403, "氣象署授權碼只有站主能設定")
     k = body.key.strip()
     if k and (len(k) < 10 or len(k) > 80 or any(c.isspace() for c in k)):
         raise HTTPException(400, "授權碼格式不對")

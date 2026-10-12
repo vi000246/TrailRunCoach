@@ -157,10 +157,11 @@ _LOGIN_LOCKS: dict = {}
 
 def _login_lock():
     import asyncio
-    loop = asyncio.get_running_loop()
-    lk = _LOGIN_LOCKS.get(id(loop))
+    from backend import tenancy
+    key = (id(asyncio.get_running_loop()), tenancy.current().id)      # per tenant (SP-384)
+    lk = _LOGIN_LOCKS.get(key)
     if lk is None:
-        lk = _LOGIN_LOCKS[id(loop)] = asyncio.Lock()
+        lk = _LOGIN_LOCKS[key] = asyncio.Lock()
     return lk
 
 

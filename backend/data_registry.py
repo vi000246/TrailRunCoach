@@ -279,6 +279,15 @@ FILES: tuple = (
     File("secret.key", SECRET, ROOT, "the key that seals sync_state's secrets (settings/secrets.py)",
          scope=INSTANCE),
     File("tp_client.json", SECRET, ROOT, "TP OAuth client id / secret (sync/tp_client.py)", scope=INSTANCE),
+    # multi-user mode (SP-384, backend/accounts): the server's account tables and the users' tenant
+    # folders sit in the server root, which is the owner's folder unless WKO5COACH_SERVER_ROOT
+    # says otherwise. Never in the owner's backup: they are other people's data
+    File("accounts.db", SECRET, ROOT, "accounts (backend/accounts/store.py): users (role, Google sub, "
+         "e-mail, tenant folder, plan), identities, sessions (sha256 of the cookie only), shares, waitlist",
+         scope=INSTANCE, deidentify=("email", "display_name", "google_sub")),
+    File("accounts.db-*", SECRET, ROOT, "accounts.db's WAL / shared memory", scope=INSTANCE),
+    File("users/**", USER, ROOT, "multi-user mode: each users/<id>/ is a signed-in user's tenant folder "
+         "(classified on its own, like the owner's)", scope=INSTANCE),
     File("logs/**", DERIVED, ROOT, "the server log (applog.py); disposable, not tenant data (a demo base "
          "holds one: its build runs there)", scope=INSTANCE),
     File("research/**", DERIVED, ROOT, "probe-script output (backend/scripts/probe_coros_tl.py)",

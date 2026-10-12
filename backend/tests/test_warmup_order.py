@@ -86,7 +86,8 @@ def test_warm_up_order_dataset_status_inputs_then_low_priority(monkeypatch):
     monkeypatch.setattr(RP, "warm_charts", lambda job=None: order.append("charts"))      # SP-366, last
     t = wko5views.warm_up("test")
     t.join(10)
-    wko5views._WARM["low"] and wko5views._WARM["low"].join(10)
+    low = wko5views._warm_slot().get("low")
+    low and low.join(10)
     # the low-priority part re-reads the Dataset after its wait (review SP-362 #4)
     assert order == ["dataset", "status", "inputs", "plan busy", "plan idle", "dataset", "classify", "charts"]
 
@@ -128,6 +129,6 @@ def test_a_second_warm_up_runs_while_the_first_waits_for_the_plan(monkeypatch):
     t2.join(10)
     assert order == ["dataset", "status", "inputs"] * 2 and classified == []
     release.set()
-    low = wko5views._WARM["low"]
+    low = wko5views._warm_slot()["low"]
     low and low.join(10)
     assert classified and classified[-1] == made[-1].n and made[-1].n >= 2    # read after the wait

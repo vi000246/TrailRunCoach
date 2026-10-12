@@ -145,9 +145,11 @@ async def compare_sources_api(a: str = "wko5", b: str = "coros", since: Optional
     if a not in ("wko5", "coros", "tp") or b not in ("wko5", "coros", "tp") or a == b:
         raise HTTPException(400, "a and b must be two different sources of wko5, coros, tp")
     from backend.engine.wko5expr.datasource import wko5_available
-    if "wko5" in (a, b) and not wko5_available(ATHLETE_DIR):
+    from backend.settings.paths import for_tenant
+    wdir = for_tenant(ATHLETE_DIR)                  # the owner's folder only (SP-384)
+    if "wko5" in (a, b) and not wko5_available(wdir):
         raise HTTPException(404, "NO_WKO5_FOLDER")
-    return await asyncio.to_thread(compare, a, b, ATHLETE_DIR, since)
+    return await asyncio.to_thread(compare, a, b, wdir, since)
 
 
 @router.delete("/{source}/files")

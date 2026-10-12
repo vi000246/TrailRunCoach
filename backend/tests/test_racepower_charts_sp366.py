@@ -153,7 +153,7 @@ def _low_priority_run(monkeypatch, demo: bool):
     monkeypatch.setattr(AA, "job_for", lambda d: order.append("classify"))
     monkeypatch.setattr(RP, "_grade_models", lambda: order.append("grade"))
     monkeypatch.setattr(RP, "_climb_cadence", lambda: order.append("cadence"))
-    wko5views._WARM["low_again"] = False
+    wko5views._warm_slot()["low_again"] = False
     wko5views._low_priority("test")
     return order
 

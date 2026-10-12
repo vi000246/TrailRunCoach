@@ -50,8 +50,18 @@ def no_wko5_dir() -> Path:
     return tenancy.home_root() / "_no_wko5"
 
 
+def for_tenant(d) -> Path:
+    """The WKO5 folder `d` for the owner's tenant; for anyone else a folder that never holds
+    one (SP-384: the modules keep `ATHLETE_DIR = athlete_dir()` from import time, which is the
+    owner's — every read goes through this)."""
+    from backend import tenancy
+    return Path(d) if tenancy.is_owner() else no_wko5_dir()
+
+
 def athlete_dir() -> Path:
     from backend import tenancy
+    if not tenancy.demo_mode() and not tenancy.is_owner():
+        return no_wko5_dir()             # a signed-in user never sees the owner's WKO5 folder (SP-384)
     if tenancy.demo_mode():
         # the demo instance never looks for (or at) a WKO5 folder, env or not
         if any(os.getenv(n) for n in ENV_VARS):

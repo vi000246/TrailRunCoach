@@ -54,14 +54,15 @@ def _source():
     from backend.engine.wko5expr.dataset import Dataset
     from backend.api.wko5views import ATHLETE_DIR
     from backend.engine.wko5expr.datasource import wko5_available
-    if not wko5_available(ATHLETE_DIR):
+    from backend.settings.paths import for_tenant
+    if not wko5_available(for_tenant(ATHLETE_DIR)):
         # no WKO5 folder: the synced FITs (the charts' Dataset; its parsed files carry the GPS channels)
         ds = _ds()
         rows = _workouts(ds)
         by_file = {w.entry.file: w.idx for w in ds.workouts}
         return rows, (lambda f, p, meta: R.read_track(f, p, meta, getattr(ds, "corrections", None),
                                                       parsed=ds.wko4(by_file[f]) if f in by_file else None))
-    ds = Dataset(ATHLETE_DIR, config=EngineConfig.load())
+    ds = Dataset(for_tenant(ATHLETE_DIR), config=EngineConfig.load())
     return _workouts(ds), (lambda f, p, meta: R.read_track(f, p, meta, ds.corrections))
 
 
