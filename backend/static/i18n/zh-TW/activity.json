@@ -59,6 +59,8 @@
   "pain.3": "中斷",
   "src_tip": "資料來自 {src}",
   "src_fill": "（主要資料來源沒有這筆，才用這個來源補上）",
+  "src_upload": "匯入",
+  "src_upload_long": "匯入的 FIT 檔",
   "source.synced": "同步資料",
   "source.primary": "（主要：{src}）",
   "source.line": "資料來源：{src} · {n} 筆",

@@ -39,6 +39,8 @@ textarea { padding: 5px 7px; width: 100%; resize: vertical; }
 
 main { max-width: 1400px; margin: 0 auto; padding: 12px 16px 24px; }
 .head { display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; margin-bottom: 10px; }
+.head #fi-open { margin-left: auto; }
+.fi-panel { margin-bottom: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; }
 h1 { font-size: 17px; margin: 0; }
 h2 { font-size: 15px; margin: 0; }
 
@@ -207,7 +209,11 @@ dialog#exp .row .sp { flex: 1; }
     </div>
     <span class="meta" id="hdr"></span>
     <span class="meta" id="autost" role="status" aria-live="polite" hidden></span>
+    <button type="button" id="fi-open" data-acts-only data-cap="upload.fit" aria-expanded="false" aria-controls="fi-panel"
+      data-i18n="common.fitimport.open">匯入 FIT 檔</button>
   </div>
+  <!-- SP-323: 手動匯入 FIT (static/fitimport.js); the list reloads when activities came in -->
+  <section id="fi-panel" class="fi-panel" data-acts-only hidden data-i18n-attr="aria-label:common.fitimport.open" aria-label=""></section>
   <div class="filters" role="search">
     <input type="search" id="f-q" class="q" data-i18n-attr="placeholder:activity.f.q;aria-label:activity.f.q_label" placeholder="" aria-label="">
     <span class="range"><input type="date" id="f-from" data-i18n-attr="aria-label:activity.f.from" aria-label="">–<input type="date" id="f-to" data-i18n-attr="aria-label:activity.f.to" aria-label=""></span>
@@ -258,6 +264,7 @@ dialog#exp .row .sp { flex: 1; }
 <dialog id="ed" aria-labelledby="ed-title"></dialog>
 <datalist id="tag-list"></datalist>
 <script src="/api/v1/static/painpicker.js"></script>
+<script src="/api/v1/static/fitimport.js"></script>
 <script>
 const API = "/api/v1/wko5";
 const T = (k, p) => (window.I18N ? I18N.t("activity." + k, p) : k);
@@ -268,7 +275,8 @@ const hms = (s) => { if (s == null) return "—"; s = Math.round(s); const h = M
 const num = (v, d = 0) => (v == null || Number.isNaN(+v) ? "—" : (+v).toFixed(d));
 const SPORTS = ["running", "trail running", "indoor running", "treadmill running", "hiking", "mountaineering", "walking", "cycling", "swimming", "strength", "strength training", "generic"];
 const sportName = (a) => { const k = a.sport_type || a.sport || ""; return SPORTS.includes(k) ? T("sport." + k) : k; };
-const SRC_SHORT = { coros: "COROS", tp: "TP", wko5: "WKO5" };
+// upload: a FIT the user imported (SP-323, backend/sync/upload.py)
+const SRC_SHORT = { coros: "COROS", tp: "TP", wko5: "WKO5", upload: T("src_upload") };
 const PREF = "activitylist.filters", PER = 50;
 // usePower: settings 「使用功率」 (off = no 平均功率 column, no 功率來源 row)
 // pain: the 傷病紀錄 meta (null in the demo mode: no 疼痛 column / filter / row)
@@ -526,7 +534,7 @@ async function loadList() {
   S.poleCompare = r.pole_compare || null;
   S.surfaceTags = r.surface_tags || {};
   S.rainHintMm = r.rain_hint_mm ?? null;
-  S.merge = r.merge || null; S.originLabels = r.origin_labels || {};
+  S.merge = r.merge || null; S.originLabels = { upload: T("src_upload_long"), ...(r.origin_labels || {}) };
   S.actMin = new Map();
   for (const a of S.acts) { const m = minOf(a.key); if (m != null && (!S.actMin.has(m) || a.index != null)) S.actMin.set(m, a); }
   const src = { synced: T("source.synced"), wko5: "WKO5", coros: "COROS", tp: "TrainingPeaks" }[r.source] || r.source;
@@ -1127,6 +1135,22 @@ document.querySelector(".tabs").addEventListener("keydown", (e) => {
   setTab(S.tab === "ach" ? "acts" : "ach"); document.querySelector(`[data-tab="${S.tab}"]`).focus();
 });
 addEventListener("hashchange", () => setTab(location.hash === "#achievements" ? "ach" : "acts"));
+
+// ---- 匯入 FIT (SP-323) --------------------------------------------------------
+// static/fitimport.js in a panel under the header; once activities came in the list is read
+// again (the server rebuilds the Dataset meanwhile; the request waits for that build)
+let fiMounted = false;
+$("fi-open").addEventListener("click", () => {
+  const p = $("fi-panel"), open = p.hidden;
+  p.hidden = !open;
+  $("fi-open").setAttribute("aria-expanded", String(open));
+  if (!open || fiMounted || !window.FitImport) return;
+  fiMounted = true;
+  FitImport.mount(p, { onDone: (r) => {
+    if (!r.added && !r.duplicate) return;
+    loadList().then(() => { loadStats(); loadAuto(); }).catch(() => {});
+  } });
+});
 
 // ---- start ------------------------------------------------------------------
 (async () => {

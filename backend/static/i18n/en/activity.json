@@ -59,6 +59,8 @@
   "pain.3": "Stopped",
   "src_tip": "From {src}",
   "src_fill": " (the primary source lacks it, so this source fills in)",
+  "src_upload": "Imported",
+  "src_upload_long": "an imported FIT file",
   "source.synced": "Synced data",
   "source.primary": " (primary: {src})",
   "source.line": "Source: {src} · {n} activities",
