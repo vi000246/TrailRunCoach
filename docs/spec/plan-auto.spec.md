@@ -833,11 +833,15 @@ overview has `data-log="none"`. The settings are in 課表偏好 (above).
   only blocked days and the allowed weekdays, so a session can move onto the preferred rest day;
   only the generator's placement (`plan_prefs.place`) honours them.
 - 技術地形課 (SP-74, overview.spec.md): the 專項期 RPE 6–7 session is spaced 48 h from the hard
-  days when it is generated, but adapt and reconcile key their hard-day checks on the session
-  kind (`quality` / `test` / `long`), not on `workout_templates.session_role`, so a missed
-  interval that adapt moves can land next to it. Like the 陡坡健走, once the technical run is done
-  (matched as an easy run by the generator) the hook may pick another easy run that week; the
-  stored done `tech` row blocks a second one and that easy row is removed.
+  days when it is generated; adapt and reconcile key their hard-day checks on the session kind
+  (`quality` / `test` / `long`), and since SP-87 (2026-10-12) that session is kind `quality`, so a
+  missed interval that adapt moves keeps 48 h from it too (it was kind `hike` and they didn't see
+  it). A user's own RPE ≥ 7 session saved with another kind (easy / long / hike) is still only
+  seen by `session_role`. Once a hook session is behind (done, missed, or
+  today's with a run logged) the generator still counts that run as an easy run; since SP-87
+  (2026-10-12) week_plan reads this week's stored `tech` / `downhill` / `climb_base` rows
+  (`plan_store.hook_days`) and makes that hook inactive, so it no longer turns the next easy run into
+  a second one (reconcile used to drop that easy row). The 陡坡健走 still has the old behaviour.
 
 ## Interval library, swaps and tests (2026-10-01, interval-prescription.md)
 

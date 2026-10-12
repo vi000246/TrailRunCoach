@@ -2125,11 +2125,20 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     except Exception as e:                  # noqa: BLE001 — heat sessions never break the plan
         heat_info = {"active": False, "reason": _("熱適應資料讀取失敗（{err}）", err=type(e).__name__)}
 
-    # ---- 下坡課 (engine/downhill.py, SP-99): 專項期 賽前第 9、6、3 週 before an A race with a clear descent
+    # the hook sessions of this week already behind (SP-87, plan_store.hook_days): done, missed, or
+    # today's with a run logged — the done run counts as an easy run above, so a hook would otherwise
+    # turn the next easy run into a second one
+    try:
+        from backend.engine import plan_store as PS_
+        hooks_behind = {k: v for k, v in PS_.hook_days(monday).items() if v < first.isoformat()}
+    except Exception:                       # noqa: BLE001 — the plan must still build
+        hooks_behind = {}
+    # ---- 下坡課 (engine/downhill.py, SP-99 / SP-87): 越野跑 only — 專項期 every week, 基礎期 every 2 weeks,
+    # none in the last 2 weeks before an A race (a race without a clear descent: none)
     from backend.engine import downhill as DH
     dh = DH.week_context(kind=kind, mode=mode, monday=monday, events=getattr(getattr(status, "plan", None),
                                                                               "events", None), phases=phs, road=road,
-                        injury=inj_rule)
+                        injury=inj_rule, behind=hooks_behind.get("downhill"))
     if dh.get("active"):
         try:
             dd = [asdict(s) for s in sessions]
@@ -2138,9 +2147,24 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         except Exception as e:              # noqa: BLE001 — the plan must still build
             dh = {**dh, "error": type(e).__name__}
 
-    # ---- 技術地形課 (engine/technical.py, SP-74): 越野跑 only; 基礎期 every other week's LSD,
-    # 專項期 one a week out of an easy run (RPE 6–7 = a quality session: spacing + budget)
-    tech = TECH.week_context(kind=kind, mode=mode, monday=monday, road=road, b2b=b2b, injury=inj_rule)
+    # ---- 長爬坡有氧 (engine/base_climb.py, SP-87): 越野跑 only; one 基礎期 easy run a week becomes a
+    # steady-terrain climb of the same time (HR ≤ the easy cap: an easy session)
+    from backend.engine import base_climb as BC
+    bc = BC.week_context(kind=kind, mode=mode, monday=monday, road=road, injury=inj_rule,
+                         behind=hooks_behind.get(BC.ID))
+    if bc.get("active"):
+        try:
+            dd = [asdict(s) for s in sessions]
+            BC.apply(dd, bc, aet=aet, aet_measured=aet_meas, notes=notes)
+            sessions = [Session(**{k: v for k, v in d.items() if k in Session.__dataclass_fields__}) for d in dd]
+        except Exception as e:              # noqa: BLE001 — the plan must still build
+            bc = {**bc, "error": type(e).__name__}
+
+    # ---- 技術地形課 (engine/technical.py, SP-74): 越野跑 only; 專項期 one a week out of an easy run
+    # (RPE 6–7 = a quality session: spacing + budget); none in the 基礎期 (SP-87: the LSD stays steady)
+    tech = TECH.week_context(kind=kind, mode=mode, monday=monday, road=road, b2b=b2b, injury=inj_rule,
+                             behind=hooks_behind.get("tech"),
+                             events=getattr(getattr(status, "plan", None), "events", None))
     if tech.get("active"):
         try:
             dd = [asdict(s) for s in sessions]
@@ -2388,6 +2412,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         "technical": TECH.public(tech),
         # 下坡課 (engine/downhill.py, SP-99): this week's countdown rule and the session it made
         "downhill": DH.public(dh),
+        # 長爬坡有氧 (engine/base_climb.py, SP-87): this week's rule and the session it made
+        "base_climb": BC.public(bc),
         # 賽前停肌力 (SP-86): the A events' no-strength windows, for the projection
         "strength_stop": s_stops,
         # the A races ahead (engine/strength_plan.py): the projection's 肌力課依期別 and its 平衡／腳踝 block (SP-119, SP-120)
@@ -2495,7 +2521,8 @@ def illness_apply(ss: list, events: list, cap_txt: str = "") -> list:
 # 膝前痛／髂脛束 the trail long run becomes flat. The modules also ask the rule first (no downhill /
 # technical / steep session is made); this pass covers the days a mid-week onset touches and the
 # sessions made elsewhere (長爬坡反覆, ME, strides). Never adds anything; no condition = `ss` unchanged.
-_COND_IDS = {"downhill": "downhill", "tech": "technical", "climb": "climb", "steep": "steep", "me": "me"}
+_COND_IDS = {"downhill": "downhill", "tech": "technical", "climb": "climb", "steep": "steep", "me": "me",
+             "climb_base": "climb"}            # SP-87: the 基礎期's 長爬坡有氧 (engine/base_climb.py)
 _STRIDES = (ROAD_STRIDES, HILL_STRIDES, TRANSITION_STRIDES)
 
 

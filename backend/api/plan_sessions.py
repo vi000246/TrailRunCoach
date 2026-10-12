@@ -231,7 +231,11 @@ def _build_inputs(key: tuple, ds, today: dt.date, prefs, bos, acc, auto_on: bool
     since = monday - dt.timedelta(weeks=4)
     acts = activity_rows(ds, since, today + dt.timedelta(days=1), recorded)
     last_act = max((O.wdate(w) for w in ds.workouts if O.wdate(w) <= today), default=None)
+    # 每週爬升量目標 (SP-87, engine/vert_target.py): this week and the projected ones, display only
+    from backend.engine import vert_target as VT
+    climb_targets = VT.annotate(cur, weeks, st.plan.events, acts)
     out = {"cur": cur, "weeks": weeks, "activities": acts, "today": cur["week"]["today"],
+           "climb_targets": climb_targets,
            # the first day `activities` covers (engine/plan_history.py: a week inside it has its totals)
            "activities_since": since.isoformat(),
            "horizon_end": horizon.isoformat(),
@@ -726,9 +730,44 @@ async def _replace_long(db: AsyncSession, day: str) -> None:
             await PS.delete(db, s["uid"])
 
 
+SWAP_TO = ("climb",)
+
+
+def _with_swap(patch: dict, inp: dict, cur: Optional[dict]) -> dict:
+    """A body that swaps the session for another of the same time (`swap_to`; SP-87, the 課表's
+    「換成長爬坡有氧（同樣時間）」 on a long run — owner: 「我想要爬山，就把 LSD 改成同強度的穩定地形爬坡
+    課表」): the long run keeps its day, minutes, kind and TSS and becomes engine/base_climb's 長爬坡有氧
+    (title, detail, trail, structure at HR ≤ the easy cap, climb). A user edit like any other."""
+    from backend.engine import base_climb as BC
+    from backend.engine.hr_profile import easy_cap_measured
+    from backend.i18n import _
+    to = patch.get("swap_to")
+    if to not in SWAP_TO:
+        raise HTTPException(400, _("不支援的換課：{v!r}", v=to))
+    if cur is None:
+        raise HTTPException(404, _("找不到這堂課"))
+    if cur.get("kind") != "long":
+        raise HTTPException(400, _("只有長跑能換成長爬坡有氧"))
+    th = inp.get("thresholds") or {}
+    f = BC.session_fields(int(cur.get("minutes") or 0), th.get("aet"), easy_cap_measured(th))
+    if f is None:
+        raise HTTPException(400, _("長跑不到 {need} 分，放不下長爬坡有氧（暖身、緩和各 {wc} 分）",
+                                   need=BC.MIN_MINUTES, wc=BC.WARM))
+    body = {k: v for k, v in patch.items() if k != "swap_to"}
+    for k in ("title", "detail", "terrain", "climb_m", "steps"):
+        body.setdefault(k, f[k])
+    body.setdefault("minutes", cur.get("minutes"))
+    if cur.get("tss") is not None:
+        body.setdefault("tss", cur["tss"])                  # same time at the same easy HR
+    return body
+
+
 @router.patch("/sessions/{uid}")
 async def edit_session(uid: str, patch: dict = Body(...), db: AsyncSession = Depends(get_db)):
     inp = await _inputs()
+    if patch.get("swap_to") is not None:
+        cur = next((s for s in await PS.load(db) if s["uid"] == uid), None)
+        patch = _with_swap(patch, inp, cur)
     if patch.get("variant_key"):
         cur = next((s for s in await PS.load(db) if s["uid"] == uid), None)
         patch = _with_variant(patch, inp, (cur or {}).get("rung_key"), patch.get("day") or (cur or {}).get("day"))
@@ -2755,11 +2794,30 @@ def session_est_tss(s: dict, ds=None, sessions: Optional[list[dict]] = None) -> 
     return est_tss(s, rates)
 
 
+def _climb_row(target: Optional[dict], ss: list[dict], aa: list[dict]) -> Optional[dict]:
+    """The week's 爬升 (SP-87, engine/vert_target.py): {target, planned (the sessions' climb_m), done
+    (the foot activities' climb), short (target − planned when the plan falls short), race, weeks_out,
+    share, recovery, taper, capped}; None with no target and nothing planned / done."""
+    from backend.engine import vert_target as VT
+    planned = sum(float(s.get("climb_m") or 0.0) for s in ss)
+    done = sum(float(x.get("climbing_m") or 0.0) for x in aa if x.get("category") in VT.FOOT)
+    t = (target or {}).get("target")
+    if t is None and not planned and not done:
+        return None
+    return {"target": t, "planned": round(planned), "done": round(done),
+            "short": round(t - planned) if t is not None and planned < t else 0,
+            "race": ((target or {}).get("race") or {}).get("name"),
+            **{k: (target or {}).get(k) for k in ("weeks_out", "share", "r", "recovery", "taper", "capped")}}
+
+
 def _week_rows(start: str, end: str, sessions: list[dict], acts: list[dict], phases: list[dict],
-               proj: list[dict], rates: dict, today: Optional[str] = None) -> list[dict]:
+               proj: list[dict], rates: dict, today: Optional[str] = None,
+               climb: Optional[dict] = None) -> list[dict]:
     """Per Monday in range: planned (active + done + missed, strength time excluded
     like week_plan()) vs done (the activities), the phase of the week, and the
-    week's 完成度 over the days up to today (engine/compliance.py)."""
+    week's 完成度 over the days up to today (engine/compliance.py). `climb` (SP-87): the weekly
+    climb targets ({monday: vert_target.plan info}; None = no 爬升 row, e.g. 主要訓練項目 路跑) →
+    each row's `climb` (_climb_row)."""
     from backend.engine import compliance as C
     by_start = {w["start"]: w for w in proj}
     out = []
@@ -2790,7 +2848,8 @@ def _week_rows(start: str, end: str, sessions: list[dict], acts: list[dict], pha
                     "done_hours": sum(float(x.get("moving_s") or 0) for x in aa) / 3600.0,
                     "done_tss": sum(float(x.get("tss") or 0) for x in aa),
                     "phase": ph["kind"] if ph else w.get("phase"), "phase_label": ph["label"] if ph else None,
-                    "mode_label": w.get("mode_label"), "provisional": bool(w.get("provisional"))})
+                    "mode_label": w.get("mode_label"), "provisional": bool(w.get("provisional")),
+                    **({"climb": _climb_row(climb.get(a), ss, aa)} if climb is not None else {})})
         d += dt.timedelta(days=7)
     return out
 
@@ -2951,7 +3010,7 @@ async def _calendar(start: str, end: str, db: AsyncSession, tm: dict, t0: float)
     return {**{k: v for k, v in body.items() if k != "sessions"}, "start": start, "end": end,
             "sessions": ss, "activities": extras["activities"], "phases": extras["phases"],
             "week_rows": _week_rows(start, end, ss, extras["activities"], extras["phases"], inp["weeks"], rates,
-                                    body["today"]),
+                                    body["today"], climb=_climb_targets(inp)),
             "compliance_levels": C.COMPLIANCE,
             "thresholds": inp["thresholds"], "tss_per_hour": tph, "tss_rates": rates,
             "targets": {k: tt.get(v, "") for k, v in KIND_TARGET.items()},
@@ -2965,6 +3024,14 @@ async def _calendar(start: str, end: str, db: AsyncSession, tm: dict, t0: float)
             # 刪除所有過期未完成: how many past sessions were never done (whole plan, not just the range)
             "expired_open": sum(1 for s in every if PS.is_expired_open(s, body["today"])),
             "coros": await _coros_state(db, every)}
+
+
+def _climb_targets(inp: dict) -> Optional[dict]:
+    """The weekly climb targets of the inputs (SP-87, _build_inputs → vert_target.annotate); None for
+    主要訓練項目 路跑 (the 課表 shows no 爬升 row)."""
+    if ((inp.get("cur") or {}).get("primary_sport") or "trail") == "road":
+        return None
+    return inp.get("climb_targets") or {}
 
 
 async def _high_nights(db: AsyncSession, start: str, end: str) -> list[dict]:

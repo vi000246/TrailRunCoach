@@ -548,27 +548,71 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
   easy run of a 專項期 week becomes a 40–50 min steep walk at the Pandolf grade that costs what
   the pack would (no pack in training).
 - **熱適應課** (`engine/heat_plan.py`): below.
-- **下坡課** (SP-99, `engine/downhill.py`; after placement, just before the 技術地形課, in week_plan
-  and per projected week): 專項期 賽前第 9、6、3 週 (`DOWNHILL_WEEKS`: ≤ 3 weeks apart — one
-  downhill run protects 3–6 weeks, not 9, controlled trials — and the last 14–21 days out, 推估)
-  before an A race that is not road and descends ≥ 20 m/km (推估; GPX, else descent = climb);
-  主要訓練項目 路跑: none. One easy run becomes SP-62's 下坡離心 (−10～−15 %, RPE 3–5, warm-up /
-  cool-down 10′, the template's steps; 25′ downhill, the first one of the phase 15′) on a day ≥ 14
-  days before the race, not on / the day before a hard day, not in the easy days after a B2B; the
-  first keeps the 2 days after it easy. The weekday cap shrinks the downhill part (≥ 10′); the
+- **下坡課** (SP-99, SP-87; `engine/downhill.py`; after placement, before the 長爬坡有氧 and the
+  技術地形課, in week_plan and per projected week). SP-87 (owner 2026-10-05, decision 3;
+  trail-terrain-and-climb-sessions.md §2.2, §4 #3): **專項期 every week** — SP-62's 下坡離心 (−10～−15 %,
+  RPE 3–5, warm-up / cool-down 10′, the template's steps), the downhill part 15 → 20 → 25′ (+5′ a week
+  from the phase's first Monday, `SPEC_STEP`; without phases by 賽前第 10 週) — and **基礎期 every 2
+  weeks** (an even ISO week, `base_week`): 「緩下坡（下坡 N′）」 −5～−10 % at RPE 3–5 (so 每堂課前加熱身 leaves its downhill part whole, SP-364), 10′ the first
+  even week of the phase, then 15′ (`BASE_FIRST_WORK` / `BASE_WORK`, ≈ 10 m descent a minute; the
+  report's 10–15′). **None in 賽前第 1–2 週** (`LAST_WEEKS`; and no day < 14 days before the race),
+  nor in the race's real 減量期 or its post-race days. The next A race decides as before: a road race
+  or one descending < 20 m/km (推估; GPX, else descent = climb) → none, in the 基礎期 too; a 基礎期 with
+  no A race ahead keeps its dose (a trail athlete between races); 主要訓練項目 路跑: none. 「第一次」
+  (smaller, the 2 days after it easy): the 基礎期's first even week, or the 專項期's first week when no
+  基礎期 came right before it. Day rules unchanged: ≥ 14 days before the race, not on / the day before a
+  hard day, not in the easy days after a B2B; the weekday cap shrinks the downhill part (≥ 10′); the
   other easy runs give the extra minutes. The 技術地形 session keeps ≥ 2 days from it
-  (`technical.HARD_IDS`). A week note (`src: downhill`) says when / why or that no day fit.
+  (`technical.HARD_IDS`). A week note (`src: downhill`) says when / why or that no day fit. Frequencies
+  and doses are 推估 (Bontemps 2020 / 2025: the protection fades by 9 weeks, 10 runs cut soreness and 5
+  did not). (SP-99 had 賽前第 9、6、3 週 only.)
+- **長爬坡有氧（穩定地形爬升課）** (SP-87, `engine/base_climb.py`; trail-terrain-and-climb-sessions.md §4 #2,
+  owner 2026-10-05 decision 2; after the downhill pass, before the 技術地形課, in week_plan and per
+  projected week): 主要訓練項目 越野跑, 基礎期 only (recovery weeks included — an easy session; not the
+  re-entry block, not while an injury rule avoids `climb`). One placed easy run a week (the longest
+  that is not done / the heat / the downhill session; a day before the long run or an interval last)
+  becomes 「長爬坡有氧 N′（穩定地形）」 of the same day, minutes and TSS: id `climb_base`, kind `easy`,
+  terrain `trail`, SP-62's long_climb structure (warm-up 10′, the climb at HR ≤ the easy-run cap
+  (`WT.AET`), walk down 10′), the detail names stairs / 階梯步道 / a treadmill incline 8–15 %, `climb_m`
+  = the uphill minutes × 400 m/h (`CLIMB_M_PER_H`, 推估). An easy run < 40′ (`MIN_MINUTES`) → none and a
+  week note (`src: base_climb`). The 坡度走路提示 shows the athlete's own climbing rate next to it.
+- **A hook session already behind** (SP-87, `plan_store.hook_days`): week_plan reads this week's
+  stored `climb_base` / `downhill` / `tech` rows; one whose day is before the first plannable day
+  (done, missed, or today's with a run logged) makes that hook inactive this week (「本週的…已經排在
+  M/D」) — the generator counts the done run as an easy run, so it used to turn the next easy run into a
+  second one and reconcile then dropped an easy row (the SP-74 known limit).
+- **每週爬升量目標** (SP-87, `engine/vert_target.py`; trail-terrain-and-climb-sessions.md §7, owner
+  2026-10-05 / 2026-10-12: 「比照馬拉松的周量目標」 — shown like the week's 時間 on the 課表's 週統計, display
+  only). `_build_inputs` runs `vert_target.annotate(cur, weeks, events, activities)` → the inputs'
+  `climb_targets` {Monday: info}; the calendar's `week_rows[].climb` (`_climb_row`) = {target, planned
+  (the week's sessions' `climb_m`), done (the foot activities' climb), short (target − planned when it
+  falls short), race, weeks_out, share, r, recovery, taper, capped}; `null` with no target and nothing
+  planned / done; no `climb` key at all for 主要訓練項目 路跑. Only before the next A race (not a road race)
+  with a climb: R = its biggest single-day climb (`race_refs.course_of`: the GPX, the trip's per-day
+  numbers, else the event's climb). 賽前第 20 → 3 週 (→ 4 for 100 mi+) a straight line from 50 % of R to
+  the peak (long race 95 %, short 110 %; long = a predicted ≥ 6 h, else ≥ 50 km — 推估); ≤ +10 % a week
+  over the last normal week's target, the first week over the mean of the 4 complete weeks' actual
+  foot climb before it (when any — a late start or a low base lowers the peak); a recovery week
+  (`mode` recovery_week) 50 % of the week before; 減量期 week 1 75 % of the peak (the highest normal
+  week), the race week 40 % (推估); 100 mi+ (≥ 160 km) 75 → 55 → 40 % (55 % 推估). Before 賽前第 20 週:
+  no target, only the done / planned climb. Nothing is added when the plan falls short: the 週統計 shows
+  「爬升 done / target m」, a bar, and 「已排 P m，差 Y m」 (schedule.html `climbW`, the agenda `climbAg`;
+  the hover gives the rule; strings in the `schedule` catalog `climb.*`). Tests:
+  `backend/tests/test_vert_target.py`.
 - **技術地形課** (SP-74, `engine/technical.py`; applied last, after placement, the climb / steep
   walk and heat hooks, `backend/engine/overview.py:2132`, and the same per projected week,
-  `backend/engine/projection.py:780`): 主要訓練項目 越野跑 only (路跑: none), base / 專項期, not
-  in a recovery / re-entry week (`week_context`, `backend/engine/technical.py:70`).
-  - **基礎期**: every other week (an even ISO week number, `base_week`; 推估) the week's LSD
-    becomes 「技術地形 N′（低 RPE 3–4）」 of the same minutes on the same day — it stays the `long`
-    session (an easy one, so the long-run rules hold) with the structure warm-up 10′ + RPE 3–4
-    work (+ ≈ 5 m climb per minute, the template's 300 m / 60′) + 5′, no HR / power target. Not
-    in a B2B week, when the long run is done or carries the heat session.
-  - **專項期**: one session a week out of a placed easy run (id `tech`, kind `hike` 越野跑),
-    near the race's terrain. RPE 6–7 (a quality session by `workout_steps.rpe_role`) when an easy
+  `backend/engine/projection.py:780`): 主要訓練項目 越野跑 only (路跑: none), 專項期 only, not
+  in a recovery / re-entry week (`week_context`, `backend/engine/technical.py:60`).
+  - **基礎期**: none (SP-87, owner 2026-10-05; trail-terrain-and-climb-sessions.md §4 #1, §5): the
+    LSD stays on steady terrain (its HR drift reads the aerobic base only there); the week's
+    `technical.why` says 「基礎期不排技術地形課…」. The 基礎期's climbing is the weekly 長爬坡有氧 and the downhill
+    dose below. (SP-74 turned every even ISO week's LSD into 「技術地形 N′（低 RPE 3–4）」.)
+  - **專項期**: one session a week out of a placed easy run (id `tech`; kind `quality` for the RPE 6–7
+    one — SP-87 §4 #6, was `hike` — and `hike` 越野跑 for the RPE 4–5 one),
+    near the race's terrain — only when the next A race's **土徑比** (`Event.trail_pct`, SP-87 owner
+    2026-10-12: the 賽事周期 event form's 「土徑比 %」, 0–100, blank = not set, `PUT /api/v1/plan/events`
+    `trail_pct`, 400 outside 0–100) is ≥ 50 % (`TRAIL_PCT_MIN`) or not set; < 50 % → none that week
+    (`technical.why` names the race and its share; `technical.trail_pct`). RPE 6–7 (a quality session by `workout_steps.rpe_role`) when an easy
     run's day is ≥ 2 days from the long run, the B2B days, the race-climb repeats, every quality /
     test session and the hard runs done this week, and the week's budget has ≥ 30′ left
     (`SPEC_WORK_MIN`, 推估): work = min(90′ (the template), 20 % of the week − the intervals'
@@ -578,7 +622,8 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
     Otherwise the same session at RPE 4–5 (an easy one) on that easy run's time. A week note
     (`src: technical`) says which and why (budget left, no spaced day, the day cap).
   - **The user's own** (SP-74 follow-up): a stored 技術地形 session the user added (custom) or an
-    auto one they edited, kind easy / long / hike, active or done, whose structure makes it a
+    auto one they edited, kind easy / long / hike (SP-87: or quality when RPE-set with no library
+    variant, `plan_match.rpe_set`), active or done, whose structure makes it a
     quality session (`workout_templates.session_role`: an RPE work step ≥ 7) counts like the
     generated one. `plan_store.user_rpe_rows` (`backend/engine/plan_store.py:870`, read-only) →
     `user_quality` (`backend/engine/technical.py:136`) per week; its RPE ≥ 7 work
@@ -1539,7 +1584,7 @@ which one. The response keeps the `coros` field names.
   `workout_steps.templates`, `backend/engine/workout_steps.py:1735`, for the published templates
   and the interval ladder's rows alike — Palladino 4×2:40 now files as VO2max, 4×4:30 @ 98–104 %
   as 巡航); the 推薦 block (`template_recs._score`, `backend/engine/template_recs.py:134`: Zone 5
-  closed → no VO2max / 速度 template; 基礎期 favours 有氧間歇, 強化期／專項期 巡航間歇; the
+  closed → no VO2max / 速度 template; 基礎期 favours 有氧間歇, 專項期 巡航間歇 (SP-87: no 強化期 — planning has none); the
   「同一類」 bonus by `_rung_family`, `backend/engine/template_recs.py:236`); and the plan's
   強度課: `session_family` (`backend/engine/workout_templates.py:667`, the stored steps, else the
   derived ones) gives every session read through `_view` (`backend/api/plan_sessions.py:393`) a
@@ -1964,7 +2009,7 @@ which one. The response keeps the `coros` field names.
 | GET | `/api/v1/overview/page` | `backend/static/overview.html` (`backend/api/overview.py:226`) |
 | GET | `/api/v1/overview/plan/sessions?start=&end=` | reconcile-if-needed, match new runs, then stored sessions (not deleted / superseded) with push status, week meta, projected weeks and `summary` (`backend/api/plan_sessions.py:444`) |
 | POST | `/api/v1/overview/plan/sessions` | add a custom session; 400 on a bad field (`backend/api/plan_sessions.py:527`) |
-| PATCH | `/api/v1/overview/plan/sessions/{uid}` | edit day / kind / minutes / title / target / detail / terrain / distance_km / climb_m / target_basis / steps; 400 on a bad field (`backend/api/plan_sessions.py:565`) |
+| PATCH | `/api/v1/overview/plan/sessions/{uid}` | edit day / kind / minutes / title / target / detail / terrain / distance_km / climb_m / target_basis / steps; 400 on a bad field (`backend/api/plan_sessions.py:565`). SP-87 `{"swap_to": "climb"}` (`_with_swap`): a long run becomes the 長爬坡有氧 of the same day, minutes, kind and TSS (`base_climb.session_fields`: title, detail, trail, structure at HR ≤ the easy cap, climb) — a user edit (re-planning keeps it, the watch gets the new steps); 400 for another kind, an unknown swap or a long run < 40′ — the 課表's 「換成長爬坡有氧（同樣時間）」 (right-click / long-press on a long run, or the session dialog's button) |
 | DELETE | `/api/v1/overview/plan/sessions/{uid}` | tombstone (auto) or remove (custom); an expired one is tombstoned and taken off the watch; a B2B day cancels the pair; 404 when unknown (`backend/api/plan_sessions.py:1865`) |
 | POST | `/api/v1/overview/plan/sessions/swap` | `{a, b}` → the two sessions trade days (SP-359; both the user's own move), `{sessions, warnings, coros}`; 400 when either is done / past / missing / a notice, on the same day, or a day is blocked (`backend/api/plan_sessions.py:589`) |
 | POST | `/api/v1/overview/plan/sessions/expired/delete` | `{uids?}` → tombstone those (or all) expired open sessions, remove pushed copies; 400 for a uid that isn't one (`backend/api/plan_sessions.py:1846`) |
@@ -1987,7 +2032,7 @@ which one. The response keeps the `coros` field names.
 | POST / DELETE | `/api/v1/overview/plan/rest-days`, `/rest-days/{day}` | `{day}` → add a 休息日 (400 for a past or already blocked day) / remove it (404 when not one); both reconcile (`backend/api/plan_sessions.py:2272`, `backend/api/plan_sessions.py:2256`) |
 | GET | `/api/v1/overview/plan/equivalence` | the time model, LOO backtest per terrain, 推估 flags, sources; memoised per dataset / day / AeT (`backend/api/plan_sessions.py:2414`, `backend/api/plan_sessions.py:2368`) |
 | POST | `/api/v1/overview/plan/equivalence/design` | `{mode, minutes, climb_per_km}` → km, climb, 推估 flag (`backend/api/plan_sessions.py:2419`) |
-| GET | `/api/v1/overview/plan/calendar?start=&end=` | the 課表 page payload (≤ 120 days): sessions with `tss_est`, planned vs actual `vs`, `compliance`, `link_options`, a 強度課's `quality_family` and `steps_family`, `mark` (SP-318: auto / user / none, `engine/plan_marks.py`), `family_titles`; `week_rows`, `prefs`, `goal_climb_per_km`, `plan_notes`, `test_suggestions`, `test_templates`, `expired_open`, provider state; SP-362 B4: `stale: {reason, age_s, since}` when answered from the previous inputs while the fresh ones are computed (display only) (`backend/api/plan_sessions.py:2840`, `backend/api/plan_sessions.py:2870`) |
+| GET | `/api/v1/overview/plan/calendar?start=&end=` | the 課表 page payload (≤ 120 days): sessions with `tss_est`, planned vs actual `vs`, `compliance`, `link_options`, a 強度課's `quality_family` and `steps_family`, `mark` (SP-318: auto / user / none, `engine/plan_marks.py`), `family_titles`; `week_rows` (SP-87: + `climb`, below), `prefs`, `goal_climb_per_km`, `plan_notes`, `test_suggestions`, `test_templates`, `expired_open`, provider state; SP-362 B4: `stale: {reason, age_s, since}` when answered from the previous inputs while the fresh ones are computed (display only) (`backend/api/plan_sessions.py:2840`, `backend/api/plan_sessions.py:2870`) |
 | GET | `/api/v1/overview/plan/fresh` | SP-362 B4: `{updating}` — the fresh plan behind a stale calendar is still being computed in the background; computes nothing (`backend/api/plan_sessions.py:615`) |
 | GET | `/api/v1/overview/plan/schedule/page` | `backend/static/schedule.html` (`backend/api/plan_sessions.py:2745`) |
 | GET | `/api/v1/plan/calendar` | 課表訂閱: `{enabled, path, url, window}` of the feed address (`backend/api/calendar_feed.py:88`) |
@@ -2351,3 +2396,12 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 | 2026-10-12 | feature | SP-310 | `workout_templates_user.uid` (UUID4 hex, unique index) next to the integer id; `updated_at` also moves on any ORM / Core update (`onupdate`); the rows from before filled by `init_db` on every tenant DB (`backend/db/stable_ids.py`), `_ensure` adds the column to an older table (`backend/engine/user_templates.py:95`); `uid` in every template the API returns (`to_dict`, `backend/engine/user_templates.py:226`); the `/steps/templates/user/{tid}` routes unchanged. Tests `backend/tests/test_stable_ids_sp310.py::test_template_new_and_edited_rows` |
 | 2026-10-12 | feat/pmc-projection-sp219 | SP-219 (owner 2026-10-12) | The stored-plan projection counts a session with only minutes: `plan_summary(…, est=)` / `planned_by_day` / `session_tss(s, est)` take the 課表's own estimate (`est_tss` with the new `plan_rates`, also used by the calendar and 課表達成率), so the overview's Sunday CTL / next-Monday TSB / week TSS target and the PMC charts' projection match the calendar's 預估 TSS; the 圖表分析 PMC charts draw that projection on a future range (wko5-engine.spec.md 「PMC projection」) |
 | 2026-10-12 | perf | SP-394 (SP-338 follow-up) | The status computation is a `single` / `user` job of the server's queue (`jobs.call`; at once inside the warm-up's job); `GET /status` answers the previous status marked `stale` after new data, a new day or a restart (kept in memory and in `cache/overview_status.json`), computes the new one in the background, `GET /status/fresh`; the page's 「更新中」 badge and polling, 套用 buttons wait while stale |
+| 2026-10-12 | feat/trail-climb-sessions-sp87 | SP-87 (owner 2026-10-05, decision 1) | No 技術地形 in the 基礎期: `technical.week_context` is inactive for a base week (「基礎期不排技術地形課：長跑留在穩定地形，爬升改排長爬坡有氧」), `apply` acts in the 專項期 only; the LSD stays on steady terrain every week (was: every even ISO week a 「技術地形 N′（低 RPE 3–4）」 of the same time). Tests: `backend/tests/test_technical.py::test_base_long_stays_a_steady_terrain_lsd`, `::test_week_context_rules`, `::test_week_plan_and_projection_trail_vs_road` |
+| 2026-10-12 | feat/trail-climb-sessions-sp87 | SP-87 (owner 2026-10-05, decision 2) | 長爬坡有氧 in the 基礎期 (`engine/base_climb.py`): a 越野跑 athlete's base week turns one placed easy run (the longest not done / heat / downhill; a day before the long run or an interval last) into 「長爬坡有氧 N′（穩定地形）」 of the same day, minutes and TSS — id `climb_base`, kind easy, SP-62 long_climb steps at HR ≤ the easy cap, stairs / 階梯步道 / treadmill 8–15 %, `climb_m` = uphill minutes × 400 m/h (推估); none for 路跑, the 專項期, re-entry, an injury rule avoiding climb, or an easy run < 40′; week_plan (`base_climb` key) and every projected base week alike; `_COND_IDS` flattens it on an injury day. `plan_store.hook_days`: a stored `climb_base` / `downhill` / `tech` row already behind this week makes that hook inactive (no second one; the SP-74 known limit). Tests: `backend/tests/test_base_climb.py`, `test_technical.py::test_a_tech_session_already_behind_blocks_a_second_one`, `test_downhill.py::test_a_downhill_session_already_behind_blocks_a_second_one` |
+| 2026-10-12 | feat/trail-climb-sessions-sp87 | SP-87 (owner 2026-10-05, decision 3) | 下坡課 as a steady dose (`engine/downhill.py`): 專項期 every week (downhill part 15 → 20 → 25′, `SPEC_STEP`), 基礎期 every 2 weeks (even ISO week; 「緩下坡」 −5～−10 %, RPE 3–4, 10′ the phase's first then 15′), none in 賽前第 1–2 週 (`LAST_WEEKS`) / the real 減量期 / post-race days; a 基礎期 with no A race keeps its dose, a road / flat next A race → none; 「第一次」 = the 基礎期's first even week or a 專項期 first week with no 基礎期 before it (was: 賽前第 9、6、3 週 only). Tests: `backend/tests/test_downhill.py::test_which_weeks_and_which_races`, `::test_week_plan_and_projection`, `::test_base_phase_every_other_week_a_gentle_dose` |
+| 2026-10-12 | feat/trail-climb-sessions-sp87 | SP-87 (owner 2026-10-05 decision 4, 2026-10-12) | 每週爬升量目標 (`engine/vert_target.py`, display only): before the next A race with a climb, 賽前第 20 → 3 週 50 % of the race's single-day climb straight up to 95 % (long) / 110 % (short), ≤ +10 % a week (the first week over the last 4 weeks' actual mean), recovery week 50 % of the week before, taper week 1 75 % / race week 40 % of the peak, 100 mi+ a 3-week taper 75 → 55 → 40 %; `_build_inputs` → `climb_targets`; the 課表's `week_rows[].climb` {target, planned, done, short, …} (`_climb_row`, none for 路跑) shown under 時間／TSS in the 週統計 and the agenda (「爬升 done / target m」, 「已排 P m，差 Y m」). Tests: `backend/tests/test_vert_target.py` |
+| 2026-10-12 | feat/trail-climb-sessions-sp87 | SP-87 (owner 2026-10-12) | 賽事 土徑比 %: `Event.trail_pct` (0–100, None = not set; `upsert_event` 400 「土徑比要在 0–100 %」), `EventIn.trail_pct`, the 賽事周期 form's 「土徑比 %」 input (`plan.ev.trail_pct`); `technical.week_context(events=)`: the next A race's share < 50 % → no 專項期 技術地形 session, ≥ 50 % or blank as before; week_plan and the projection pass the events. Tests: `backend/tests/test_technical.py::test_trail_share_of_the_race_decides_the_specific_session`, `::test_week_plan_and_projection_follow_the_trail_share`, `::test_the_event_keeps_its_trail_share` |
+| 2026-10-12 | feat/trail-climb-sessions-sp87 | SP-87 (owner: 「我想要爬山，就把 LSD 改成同強度的穩定地形爬坡課表」) | 課表: a long run can be swapped for the 長爬坡有氧 of the same time — `PATCH /sessions/{uid}` `{"swap_to": "climb"}` (`_with_swap`, built by `base_climb.session_fields`; same day / minutes / kind long / TSS; a user edit), the context menu's 「換成長爬坡有氧（同樣時間）」 and the dialog's button (`climbable`, `toClimb`; `schedule` catalog `ctx.to_climb*`, `climb.swap*`). The existing 換一個 drawer is for the interval ladder only and 插入範本 takes the template's own length, so neither keeps the long run's time. Tests: `backend/tests/test_base_climb.py::test_the_schedule_swaps_a_long_run_for_a_long_climb_of_the_same_time` |
+| 2026-10-12 | feat/trail-climb-sessions-sp87 | SP-87 §4 #6 | Small fixes: the 專項期 技術地形 RPE 6–7 session is kind `quality` (was `hike`; RPE 4–5 stays `hike`), so adapt / reconcile see it as a hard day; what reads the kind follows — `plan_match.rpe_set` / `planned_intensity` (an RPE-set 強度課 is not graded by threshold time: None, as the kind hike was), `plan_store.user_rpe_rows` / `technical.user_quality` (a kind-quality RPE row with no library variant is the user's own RPE ≥ 7 session), `plan_store.done_plan` (RPE-set sessions stay out of the interval ladder's history), `adapt._downgrade` / `_to_recovery` (`_drop_steps`: the run it becomes keeps no RPE structure); the push is unchanged. `template_recs`: no 強化期 (`build`) scores or label — planning has none (an unknown phase reads as 基礎期). Tests: `backend/tests/test_technical.py::test_an_rpe_quality_session_is_not_graded_by_hr_or_power`, `::test_the_stored_quality_tech_row_counts_as_the_users_own_and_stays_out_of_the_ladder`, `test_adapt.py::test_a_downgraded_rpe_quality_session_drops_its_rpe_structure`, `test_template_recs.py::test_no_build_phase_is_scored` |
+| 2026-10-12 | feat/trail-climb-sessions-sp87 | SP-87 acceptance 8 | A road athlete's plan is unchanged by SP-87: no 長爬坡有氧 / downhill / 技術地形 session and no weekly climb target in the 基礎期, before a road A race or before a trail race when 主要訓練項目 is set to 路跑, in week_plan and the projection (`backend/tests/test_sp87_road.py`); the 課表 week rows carry no `climb` for them (`test_vert_target.py`) |
+| 2026-10-12 | feat/trail-climb-sessions-sp87 | SP-87 (found by the kind change) | The 專項期 技術地形 RPE 6–7 session (a hard day) stays out of the easy days after an accepted B2B (`b2b.post.until`, kept in `technical.week_context` as `b2b_until`), like the downhill session and the 長爬坡反覆; without another spaced day it is the RPE 4–5 one (easy). Before, it could land there (kind hike hid it from `test_b2b.py::test_week_after_an_accepted_b2b_easy_days_no_recovery_week`). Test: `backend/tests/test_technical.py::test_the_quality_session_stays_out_of_the_easy_days_after_a_b2b` |

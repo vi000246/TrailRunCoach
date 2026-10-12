@@ -152,6 +152,8 @@ button.link { border: 0; background: none; color: var(--accent); padding: 0 4px;
           <th class="num" data-i18n="plan.ev.day_loss">下降 m（選填）</th></tr></thead><tbody id="dayplanrows"></tbody></table>
       </div>
       <label>預估移動時間 h<input type="number" name="est_hours" step="0.5" min="0"></label>
+      <!-- SP-87 土徑比 (engine/technical.py): ≥ 50 % → the 專項期's weekly 技術地形 session, < 50 % none, blank as before -->
+      <label data-i18n-attr="title:plan.ev.trail_pct_tip" title="路線中土徑、山徑（不是柏油、水泥路）的比例。≥ 50%：專項期每週排一堂接近比賽路況的技術地形課；< 50%：路線多半是柏油或水泥，不排；空白：照原本的規則排（每週一堂）。"><span data-i18n="plan.ev.trail_pct">土徑比 %</span><input type="number" name="trail_pct" step="1" min="0" max="100" data-i18n-attr="placeholder:plan.ev.optional" placeholder="選填"></label>
       <label title="百岳／多日行程第 1 天的背包重量；空白 = 體重 × 13 %（沒有體重時 9 kg，推估）。百岳預測用它，賽前的陡坡健走也用它算模擬負重的坡度">行程背包 kg<input type="number" name="pack_kg" step="0.5" min="0" max="40" placeholder="9"></label>
       <!-- SP-105 (engine/race_feasibility.py): 賽事 = 關門時間; 百岳 = 撤退時間 (hours from the summit day's start) + the summit km -->
       <label id="cutwrap"><span id="cutlab" data-i18n="plan.ev.cutoff">關門時間 h</span><input type="number" name="cutoff_hours" step="0.25" min="0" max="240" data-i18n-attr="placeholder:plan.ev.optional" placeholder="選填"></label>
@@ -405,7 +407,7 @@ $("#evform").addEventListener("submit", async (ev) => {
   ev.preventDefault();
   const f = new FormData(ev.target), body = {};
   for (const [k, v] of f.entries()) body[k] = v === "" ? null : v;
-  for (const k of ["days", "distance_km", "climbing_m", "est_hours", "pack_kg", "cutoff_hours", "summit_km"]) if (body[k] != null) body[k] = Number(body[k]);
+  for (const k of ["days", "distance_km", "climbing_m", "est_hours", "pack_kg", "cutoff_hours", "summit_km", "trail_pct"]) if (body[k] != null) body[k] = Number(body[k]);
   body.days = body.days || 1; body.note = body.note || "";
   body.poles = ev.target.poles.checked;
   body.day_plan = needsDayPlan() ? readDayRows().map((r) => ({ km: r.km, gain_m: r.gain_m, loss_m: r.loss_m })) : null;
@@ -484,7 +486,7 @@ $("#events").addEventListener("click", async (ev) => {
   const ed = ev.target.dataset.edit, del = ev.target.dataset.del;
   if (ed) {
     const e = S.events.find((x) => x.id === ed), f = $("#evform");
-    for (const k of ["id", "name", "date", "kind", "priority", "days", "distance_km", "climbing_m", "est_hours", "pack_kg", "cutoff_hours", "summit_km", "note"]) f[k].value = e[k] ?? "";
+    for (const k of ["id", "name", "date", "kind", "priority", "days", "distance_km", "climbing_m", "est_hours", "pack_kg", "cutoff_hours", "summit_km", "trail_pct", "note"]) f[k].value = e[k] ?? "";
     f.race_format.value = e.race_format || "stage";
     f.poles.checked = !!e.poles;
     cutoffLabels(); dayPlanForm(e.day_plan || []);
