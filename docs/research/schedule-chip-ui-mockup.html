@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="zh-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>課表小卡 UI 方案（SP-375）</title>
+<style>
+:root { --bg:#f7f7f5; --cell:#fff; --panel:#fff; --text:#1f1e1b; --muted:#52514e; --faint:#8a8984; --line:#e3e3df;
+  --good:#1a7f37; --watch:#b45309; --bad:#c62828; --accent:#2a78d6; --type:#52514e; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg:#151514; --cell:#1a1a19; --panel:#1f1f1e; --text:#ecebe4; --muted:#c3c2b7; --faint:#8f8e86; --line:#2e2e2b;
+  --good:#4ade80; --watch:#fbbf24; --bad:#f87171; --accent:#3987e5; --type:#c3c2b7; } }
+:root[data-theme="dark"] { --bg:#151514; --cell:#1a1a19; --panel:#1f1f1e; --text:#ecebe4; --muted:#c3c2b7; --faint:#8f8e86; --line:#2e2e2b;
+  --good:#4ade80; --watch:#fbbf24; --bad:#f87171; --accent:#3987e5; --type:#c3c2b7; }
+* { box-sizing:border-box }
+body { margin:0; padding:16px; background:var(--bg); color:var(--text); font:13px/1.45 "Fira Mono", ui-monospace, system-ui, sans-serif; }
+h1 { font-size:18px; margin:0 0 4px } h2 { font-size:15px; margin:28px 0 6px } p.meta { color:var(--muted); margin:0 0 10px }
+.bar { display:flex; gap:8px; flex-wrap:wrap; margin:10px 0 18px }
+.bar button { font:inherit; padding:5px 10px; border:1px solid var(--line); border-radius:6px; background:var(--panel); color:var(--text); cursor:pointer }
+.bar button.on { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) }
+.wrap { max-width: 1100px } .wrap.phone { max-width: 390px }
+.cal { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); border:1px solid var(--line); border-radius:8px; overflow:hidden; background:var(--line); gap:1px }
+.cell { background:var(--cell); min-height:112px; padding:4px 5px 6px; display:flex; flex-direction:column; gap:3px }
+.cell.past { background:color-mix(in srgb, var(--bg) 70%, var(--cell)) }
+.dn { font-size:12px; font-weight:600; width:22px; height:20px; border-radius:10px; display:inline-grid; place-items:center }
+.cell.today .dn { background:var(--accent); color:#fff }
+.note { color:var(--muted); font-size:11.5px; margin:6px 0 0 }
+.leg { display:flex; gap:14px 18px; flex-wrap:wrap; font-size:12px; color:var(--muted); margin:8px 0 }
+.leg span { display:inline-flex; align-items:center; gap:6px }
+
+/* ---- 共通：chip 骨架 ---- */
+.chip { position:relative; display:grid; grid-template-columns:22px minmax(0,1fr) auto; column-gap:5px; align-items:center; text-align:left;
+  padding:3px 5px 4px 4px; border-radius:6px; font-size:11.5px; color:var(--text); border:1px solid var(--line); background:var(--cell) }
+.chip .ic { width:22px; height:22px; border-radius:6px; display:grid; place-items:center; color:var(--type); position:relative }
+.chip .ic svg { width:15px; height:15px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round }
+.chip .t { font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+.chip .m { grid-column:2 / -1; color:var(--muted); font-size:10.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-variant-numeric:tabular-nums }
+.chip .r { display:inline-flex; align-items:center; gap:4px; color:var(--faint); font-size:11px }
+.chip .g { font-weight:800; font-size:12px; line-height:1 }
+.chip .bd { position:absolute; top:-5px; left:15px; width:13px; height:13px; border-radius:50%; background:var(--panel); border:1px solid var(--line); font-size:9px; line-height:11px; text-align:center; color:var(--accent) }
+.chip .bd.u { color:var(--muted) }
+.chip .sy svg { width:13px; height:13px }
+/* 未來的課：只有外框（COROS），灰字 */
+.chip.fut { border-style:solid; color:var(--muted) } .chip.fut .t { color:var(--text); font-weight:500 }
+.chip.fut.prov { border-style:dashed }
+/* 未完成：灰外框＋劃線 */
+.chip.miss { border-color:var(--line); color:var(--faint) } .chip.miss .t { text-decoration:line-through; font-weight:500; color:var(--faint) }
+.chip.miss .ic { color:var(--faint) }
+/* 完成度顏色 */
+.cp-ok { --cp:var(--good) } .cp-part { --cp:var(--watch) } .cp-off { --cp:var(--bad) }
+.chip .g { color:var(--cp) }
+/* 課表外活動 */
+.chip.act { border-style:dotted }
+
+/* ---- V1：左側色條 ---- */
+.v1 .chip.done { border-left:4px solid var(--cp) }
+/* ---- V2：整張填色 ---- */
+.v2 .chip.done { background:color-mix(in srgb, var(--cp) 16%, var(--cell)); border-color:color-mix(in srgb, var(--cp) 45%, transparent) }
+/* ---- V3：icon 方塊上色 ---- */
+.v3 .chip.done .ic { background:var(--cp); color:#fff }
+.v3 .chip.done .g { position:absolute; right:-4px; bottom:-4px; background:var(--panel); border-radius:50%; width:13px; height:13px; font-size:9px; line-height:12px; text-align:center; border:1px solid var(--line) }
+.v3 .chip.fut .ic { border:1.5px solid var(--type); border-radius:6px }
+
+.phone .cal { grid-template-columns:1fr } .phone .cell { min-height:0 } .phone .dn { margin-right:6px }
+.phone .cell .chip { font-size:12.5px }
+</style>
+</head>
+<body>
+<h1>課表小卡 UI 方案 mockup（SP-375 第一輪）</h1>
+<p class="meta">方向（使用者 2026-10-12 定）：完成度用顏色、類型用 icon、未來的課只畫外框。三個變體只差「完成度顏色塗在哪」。資料是假的。</p>
+<div class="bar">
+  <button data-v="v1" class="on">V1 左側色條</button><button data-v="v2">V2 整張填色</button><button data-v="v3">V3 icon 方塊上色</button>
+  <span style="flex:1"></span>
+  <button data-t="light">淺色</button><button data-t="dark">深色</button><button data-w="phone">手機寬度</button><button data-w="wide" class="on">桌機</button>
+</div>
+
+<div class="leg">
+  <span><b style="color:var(--good)">✓</b> 完成（±20%）</span>
+  <span><b style="color:var(--watch)">◐</b> 部分（20–50%、強度不足／偏強、項目可替代）</span>
+  <span><b style="color:var(--bad)">≠</b> 沒照課表（&gt;50%、跑反強度、換運動）</span>
+  <span><s style="color:var(--faint)">未完成</s></span>
+  <span>外框＝還沒做（虛線＝暫定）</span>
+  <span>icon＝課的類型；角落 <b style="color:var(--accent)">↻</b> 系統改過 <b style="color:var(--muted)">✎</b> 你改過</span>
+</div>
+
+<div class="wrap" id="wrap">
+<div class="cal v1" id="cal"></div>
+</div>
+<p class="note">右上角只放一件事：未來的課放手錶狀態；完成的課什麼都不放（≠／◐ 已併進完成度形狀）。細節一律 hover／點開。</p>
+
+<h2>三案取捨</h2>
+<table style="border-collapse:collapse; font-size:12.5px">
+<tr><th style="text-align:left;padding:4px 8px">　</th><th style="text-align:left;padding:4px 8px">V1 左側色條</th><th style="text-align:left;padding:4px 8px">V2 整張填色</th><th style="text-align:left;padding:4px 8px">V3 icon 方塊上色</th></tr>
+<tr><td style="padding:4px 8px">一眼掃「這週練得怎樣」</td><td style="padding:4px 8px">中（色條細）</td><td style="padding:4px 8px"><b>強</b>（面積大，TP 桌機／COROS 完成態）</td><td style="padding:4px 8px">中強（色塊固定位置，掃一欄即可）</td></tr>
+<tr><td style="padding:4px 8px">畫面安靜度</td><td style="padding:4px 8px"><b>最安靜</b>（TP 手機版做法）</td><td style="padding:4px 8px">最吵；一週 5 張彩色卡</td><td style="padding:4px 8px">安靜，顏色只在 22px 方塊</td></tr>
+<tr><td style="padding:4px 8px">與「未來＝外框」的對比</td><td style="padding:4px 8px">弱（兩者都是白底）</td><td style="padding:4px 8px"><b>最清楚</b>（空／實）</td><td style="padding:4px 8px">清楚（icon 空框／實色）</td></tr>
+<tr><td style="padding:4px 8px">手機 7 欄月檢視</td><td style="padding:4px 8px">色條 4px 還看得到</td><td style="padding:4px 8px">OK</td><td style="padding:4px 8px">OK（icon 可單獨成卡）</td></tr>
+<tr><td style="padding:4px 8px">深色主題</td><td style="padding:4px 8px">OK</td><td style="padding:4px 8px">淡色填底要重新調 16%→22%</td><td style="padding:4px 8px">OK（白 icon on 色塊）</td></tr>
+<tr><td style="padding:4px 8px">改動量</td><td style="padding:4px 8px">小</td><td style="padding:4px 8px">小</td><td style="padding:4px 8px">中（icon 方塊是新元件，總覽可共用）</td></tr>
+</table>
+<p class="note">建議：<b>V3</b>。完成度顏色與類型 icon 住在同一個方塊，卡片本體乾淨，和總覽本週清單的 icon 方塊是同一個元件，兩頁一致；未來課的空框 icon 對完成課的實色 icon，就是 COROS 的「外框 vs 填色」。V2 是最像 TrainingPeaks 的，若你要的是「一眼看完成度」優先，選 V2。</p>
+
+<script>
+const I = {
+  easy:'<path d="M19 14c1.5-1.5 3-3.2 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.8 0-3 .5-4.5 2-1.5-1.5-2.7-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4 3 5.5l7 7Z"/>',
+  z5:'<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>', z3:'<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',
+  long:'<path d="m8 4 4 7 3-3 7 12H2L8 4z"/>', hike:'<path d="m8 4 4 7 3-3 7 12H2L8 4z"/><path d="m6.5 13 2 1.5L11 12"/>',
+  test:'<path d="M9 2v6.5L4.2 18.6A2 2 0 0 0 6 21.5h12a2 2 0 0 0 1.8-2.9L15 8.5V2"/><path d="M7.5 2h9M6.5 15h11"/>',
+  strength:'<path d="M6.5 6v12M17.5 6v12M3 9.5v5M21 9.5v5M6.5 12h11"/>', rest:'<path d="M20.5 14.5A8.5 8.5 0 1 1 9.5 3.5a7 7 0 0 0 11 11Z"/>',
+  bike:'<circle cx="6" cy="16" r="3.5"/><circle cx="18" cy="16" r="3.5"/><path d="M6 16 10 7h4l4 9M10 7h5"/>' };
+const SY = { ok:'<svg viewBox="0 0 16 16"><path d="M5.6 1h4.8l.7 2.3H4.9zM5.6 15h4.8l.7-2.3H4.9z" fill="currentColor"/><rect x="3.2" y="3.2" width="9.6" height="9.6" rx="2.8" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 5.6V8l1.6 1.1" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>',
+  warn:'<svg viewBox="0 0 16 16" style="color:var(--watch)"><path d="M5.6 1h4.8l.7 2.3H4.9zM5.6 15h4.8l.7-2.3H4.9z" fill="currentColor"/><rect x="2.6" y="2.6" width="10.8" height="10.8" rx="3" fill="currentColor"/><path d="M10.4 7.1A2.5 2.5 0 1 0 10.1 9.4" fill="none" stroke="#fff" stroke-width="1.4"/></svg>',
+  none:'<svg viewBox="0 0 16 16"><path d="M5.6 1h4.8l.7 2.3H4.9zM5.6 15h4.8l.7-2.3H4.9z" fill="currentColor"/><rect x="3.2" y="3.2" width="9.6" height="9.6" rx="2.8" fill="none" stroke="currentColor" stroke-width="1.3" stroke-dasharray="2.2 1.8"/></svg>' };
+const G = { ok:"✓", part:"◐", off:"≠" };
+const svg = k => `<svg viewBox="0 0 24 24" aria-hidden="true">${I[k]}</svg>`;
+const chip = s => {
+  const cls = ["chip", s.state, s.cp ? "cp-"+s.cp : "", s.prov ? "prov" : "", s.act ? "act" : ""].join(" ");
+  const bd = s.mark ? `<span class="bd ${s.mark==="✎"?"u":""}" title="${s.mark==="↻"?"自動調整改過：疲勞保護，60′ → 45′":"你改過的課"}">${s.mark}</span>` : "";
+  const g = s.cp ? `<span class="g" aria-label="${{ok:"完成",part:"部分",off:"沒照課表"}[s.cp]}">${G[s.cp]}</span>` : "";
+  const r = s.state==="fut" && s.sy ? `<span class="r sy" title="手錶">${SY[s.sy]}</span>` : (s.state==="done" ? "" : "");
+  return `<button class="${cls}" title="${s.tip||""}"><span class="ic">${svg(s.k)}${bd}${document.getElementById("cal").classList.contains("v3")?g:""}</span><span class="t">${s.t}</span>${r}${s.state==="done"&&!document.getElementById("cal").classList.contains("v3")?`<span class="r">${g}</span>`:""}<span class="m">${s.m}</span></button>`;
+};
+const days = [
+  {d:6, past:1, s:[{k:"easy",t:"輕鬆跑",m:"45′ · TSS 35 → 38",state:"done",cp:"ok",tip:"完成度 92%（符合計畫；TSS 109% · 時間 96%）"}]},
+  {d:7, past:1, s:[{k:"z5",t:"VO2max 間歇 5×3′",m:"60′ · TSS 70 → 52",state:"done",cp:"part",tip:"強度不足：只做到這堂課的 72%"}]},
+  {d:8, past:1, s:[{k:"long",t:"LSD",m:"120′ · TSS 90",state:"miss",tip:"未完成：這天沒有對應的活動"}]},
+  {d:9, past:1, s:[{k:"easy",t:"輕鬆跑",m:"50′ · TSS 38 → 71",state:"done",cp:"off",tip:"沒照課表：排輕鬆跑，實際跑強度"},{k:"bike",t:"單車 · 課表外",m:"1:20 · TSS 55",state:"done",act:1,cp:"ok"}]},
+  {d:10, today:1, s:[{k:"strength",t:"肌力",m:"40′",state:"fut",sy:"none",mark:"✎"}]},
+  {d:11, s:[{k:"z3",t:"長 tempo 2×20′",m:"有氧間歇 · 70′ · TSS 80",state:"fut",sy:"warn",mark:"↻"}]},
+  {d:12, s:[{k:"hike",t:"越野長跑",m:"150′ · 18 km ↑900 m · TSS 120",state:"fut",sy:"ok",prov:1}]},
+];
+const W = ["一","二","三","四","五","六","日"];
+function render(){ const cal=document.getElementById("cal"); cal.innerHTML = days.map((d,i)=>`<div class="cell ${d.past?"past":""} ${d.today?"today":""}"><span class="dn" title="週${W[i]}">${d.d}</span>${d.s.map(chip).join("")}</div>`).join(""); }
+document.querySelectorAll("[data-v]").forEach(b=>b.onclick=()=>{document.querySelectorAll("[data-v]").forEach(x=>x.classList.toggle("on",x===b)); const c=document.getElementById("cal"); c.className="cal "+b.dataset.v; render();});
+document.querySelectorAll("[data-t]").forEach(b=>b.onclick=()=>document.documentElement.dataset.theme=b.dataset.t);
+document.querySelectorAll("[data-w]").forEach(b=>b.onclick=()=>{document.querySelectorAll("[data-w]").forEach(x=>x.classList.toggle("on",x===b)); document.getElementById("wrap").classList.toggle("phone", b.dataset.w==="phone"); render();});
+render();
+</script>
+</body>
+</html>
