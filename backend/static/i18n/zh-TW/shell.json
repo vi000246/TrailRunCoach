@@ -33,6 +33,8 @@
   "build.preparing": "正在準備資料…",
   "build.elapsed": "已 {s} 秒",
   "build.failed": "資料處理失敗：{error}",
+  "build.backfill": "正在補算較舊的活動 {done}／{total}（近 90 天的資料已可使用）",
+  "build.backfill_done": "較舊的活動已補齊，重新整理頁面即可看到全部",
   "lang.title": "切換語言（Language）",
   "lang.zh-TW": "中文",
   "lang.en": "EN",

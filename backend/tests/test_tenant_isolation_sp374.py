@@ -166,7 +166,7 @@ def test_b_warm_up_is_queued_not_dropped_while_a_runs_and_runs_as_b(tmp_path, mo
     monkeypatch.setattr(PSA, "_compute_inputs", lambda: None)
     monkeypatch.setattr(plan_auto, "busy", lambda tenant_id=None: False)
     monkeypatch.setattr(CAL, "_registry", lambda: {})
-    monkeypatch.setattr(AA, "job_for", lambda d: classified.append((tenancy.current().id, d.who)))
+    monkeypatch.setattr(AA, "job_for", lambda d, **kw: classified.append((tenancy.current().id, d.who)))
     monkeypatch.setattr(RP, "warm_charts", lambda job=None: None)
     try:
         with tenancy.use(a):

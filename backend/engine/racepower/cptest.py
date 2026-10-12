@@ -225,6 +225,40 @@ def mean_max_curve(p: np.ndarray, grid=None) -> Optional[list]:
     return [xs, ys]
 
 
+# SP-394 第 4 條: the files a hot-first build of the FIT Dataset left out (a first import / a re-parse:
+# fitdataset.HOT_FIRST_FROM) are left out here too — neither read nor listed (_files,
+# fitdataset.synced_fit_files) — until the back-fill has parsed them (api/backfill.py: read_ahead,
+# then release), so the estimates of that Dataset read the same activities and a request never
+# reads the whole cold folder. Per FIT root (home / "fit"): {key relative to it}. In-process: a
+# restart builds hot-first again and holds what is still unparsed.
+_HELD: dict = {}
+_HELD_LOCK = threading.Lock()
+
+
+def hold(root: Path, keys) -> None:
+    """Leave these files of `root` (home / "fit"; keys as _listing's: relative to it) out."""
+    with _HELD_LOCK:
+        _HELD.setdefault(str(root), set()).update(str(k) for k in keys)
+
+
+def release(root: Path, keys=None) -> None:
+    """Read these files again (None: every held file of `root`)."""
+    with _HELD_LOCK:
+        if keys is None:
+            _HELD.pop(str(root), None)
+            return
+        held = _HELD.get(str(root))
+        if held is not None:
+            held.difference_update(str(k) for k in keys)
+            if not held:
+                del _HELD[str(root)]
+
+
+def held(root: Path) -> frozenset:
+    with _HELD_LOCK:
+        return frozenset(_HELD.get(str(root), ()))
+
+
 def _primary_files(home: Path, since: dt.date, until: dt.date) -> list[dict]:
     """_files of the 資料來源 only (the other synced folder is left out)."""
     return _files(home, since, until, skip_folder=unused_folder())
@@ -405,7 +439,8 @@ def _files(home: Path, since: dt.date, until: dt.date, skip_folder=None) -> list
     cache = _load_cache(cache_p)
     files = cache["files"]
     root = home / "fit"
-    listing = [r for r in _listing(root) if not skipped(skip_folder, Path(r[1]).parts[0])]
+    out_ = held(root)                     # a hot-first build's deferred files (SP-394)
+    listing = [r for r in _listing(root) if not skipped(skip_folder, Path(r[1]).parts[0]) and r[1] not in out_]
 
     def unread(r):
         return not (files.get(r[1]) and files[r[1]][0] == r[3])
@@ -418,15 +453,8 @@ def _files(home: Path, since: dt.date, until: dt.date, skip_folder=None) -> list
         else:
             for r in todo:
                 files[r[1]] = [r[3], _read(r[0])]
-        try:
-            cache_p.parent.mkdir(parents=True, exist_ok=True)
-            text = json.dumps(cache, ensure_ascii=False, default=float)
-            cache_p.write_text(text, "utf-8")
-            cache = json.loads(text)        # what a later call reads back (lists, plain floats)
-            files = cache["files"]
-            _CACHE_MEMO[str(cache_p)] = (cache_p.stat().st_mtime_ns, cache)
-        except OSError:
-            pass
+        cache = _save_cache(cache_p, cache)
+        files = cache["files"]
     lo, hi = since.isoformat(), until.isoformat()
     out = []
     for r in rows:
@@ -434,6 +462,50 @@ def _files(home: Path, since: dt.date, until: dt.date, skip_folder=None) -> list
         if v and v.get("date") and lo <= v["date"] <= hi:
             out.append({**v, "path": r[1]})
     return sorted(out, key=lambda x: x["date"])
+
+
+def _save_cache(cache_p: Path, cache: dict) -> dict:
+    """Write racepower_cptests.json; returns what a later call reads back (lists, plain floats)."""
+    try:
+        cache_p.parent.mkdir(parents=True, exist_ok=True)
+        text = json.dumps(cache, ensure_ascii=False, default=float)
+        cache_p.write_text(text, "utf-8")
+        cache = json.loads(text)
+        _CACHE_MEMO[str(cache_p)] = (cache_p.stat().st_mtime_ns, cache)
+    except OSError:
+        pass
+    return cache
+
+
+def read_ahead(paths) -> int:
+    """Read these synced FIT files into the race-power caches now (CP test, mean-max curve, bad
+    file, power source — one pool pass, like _files' cold folder), held or not: a back-fill chunk
+    (api/backfill.py, SP-394) reads its files here before releasing them, so no later request
+    reads them. Returns how many were read."""
+    from backend.engine.racepower import weather as WX
+    home = WX.home()
+    root = home / "fit"
+    keys = set()
+    for p in paths:
+        try:
+            keys.add(str(Path(p).relative_to(root)))
+        except ValueError:
+            continue                              # not a synced file of this home: never read here
+    if not keys:
+        return 0
+    cache_p = home / CACHE_NAME
+    cache = _load_cache(cache_p)
+    files = cache["files"]
+    todo = [r for r in _listing(root) if r[1] in keys and not (files.get(r[1]) and files[r[1]][0] == r[3])]
+    if not todo:
+        return 0
+    if len(todo) >= POOL_MIN_READS:
+        _prefetch(home, todo, files)
+    else:
+        for r in todo:
+            files[r[1]] = [r[3], _read(r[0])]
+    _save_cache(cache_p, cache)
+    return len(todo)
 
 
 POWER_CACHE_NAME = "racepower_power_source.json"   # {"v", "files": {path: [size, mtime, stryd|watch|none]}}

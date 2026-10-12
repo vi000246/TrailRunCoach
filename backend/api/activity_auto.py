@@ -25,7 +25,18 @@ minutes on a full COROS history. So:
   * on disk: per activity file (the FIT dataset cache folder, or ~/.wko5coach
     for WKO5) with its key, so a restart answers from disk at once; after a
     change (a sync, a plan edit) the previous values are served, marked
-    stale, while the changed ones are recomputed, newest first, in chunks.
+    stale, while the changed ones are recomputed, newest first, in chunks;
+  * in age tiers (SP-394 第 3 條): when at least FULL_FROM activities are to be
+    computed (a code change after a deploy, a new user), the last 90 days go
+    first — one job at the caller's priority (`sync_hot` / `deploy_hot` from the
+    warm-up), stored on disk as soon as they are done — then the warm (to 365
+    days) and cold (older) activities, each tier its own job at `warm` / `cold`
+    (backend/jobs.py tier_of / tier_priority), newest first. The list shows the
+    new hot values and the previous older ones (stale) meanwhile; the file keeps
+    no signature until the last tier is done (a restart recomputes the rest). A
+    change of the inputs between two tiers starts a new job (only the activities
+    whose key changed again); `when_done` callbacks (the warm-up's sweep of the
+    old series rows, api/wko5views._low_priority) run after the last tier.
 
 The values are those of racepower.athlete.auto_tags_all (the same rules,
 called per chunk: capacity_samples for outdoor runs, the HR effort rule for
@@ -572,17 +583,38 @@ def to_compute(ds, disk: dict) -> int:
     """At most how many activities a job will compute, known before the keys are built (the
     queue class): those without a stored value, every one after a code change (the file's
     `code`; a file written before it: each entry's run-branch code `pcode`)."""
+    return sum(to_compute_tiers(ds, disk).values())
+
+
+def _today(ds):
+    import datetime as dt
+    from backend.engine.wko5expr.dataset import day_to_date
+    t = getattr(ds, "today", None)
+    return dt.date.today() if t is None else day_to_date(t)
+
+
+def _tier(w, today) -> str:
+    from backend import jobs
+    return jobs.tier_of(w.entry.start.date(), today)
+
+
+def to_compute_tiers(ds, disk: dict) -> dict[str, int]:
+    """to_compute by age tier ({"hot", "warm", "cold"}: backend/jobs.py tier_of on the
+    activity's date, as of the Dataset's today)."""
+    from backend import jobs
     files = disk.get("files") or {}
     code = disk.get("code")
-    if disk.get("v") != CACHE_V or (code is not None and code != _code_sig()):
-        return len(ds.workouts)
-    run = _branch_code()["run"] if code is None else None
-    n = 0
+    every = disk.get("v") != CACHE_V or (code is not None and code != _code_sig())
+    run = _branch_code()["run"] if code is None and not every else None
+    today = _today(ds)
+    out = dict.fromkeys(jobs.TIERS, 0)
     for w in ds.workouts:
-        e = files.get(w.entry.file)
-        if not (isinstance(e, dict) and isinstance(e.get("auto"), dict)) or (run is not None and e.get("pcode") != run):
-            n += 1
-    return n
+        if not every:
+            e = files.get(w.entry.file)
+            if isinstance(e, dict) and isinstance(e.get("auto"), dict) and (run is None or e.get("pcode") == run):
+                continue
+        out[_tier(w, today)] += 1
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -590,10 +622,12 @@ def to_compute(ds, disk: dict) -> int:
 # ---------------------------------------------------------------------------
 
 class Job:
-    """One background computation of one Dataset's auto values: a job of the server's queue
-    (`thread`: the jobs.Job — join / is_alive like the thread it replaced)."""
+    """One background computation of one Dataset's auto values: a job of the server's queue,
+    or one per age tier (`thread`: the jobs.Job of the step queued or running now — join /
+    is_alive like the thread it replaced; `join` waits for every step)."""
 
     def __init__(self, ds, sig: str, recorded: list):
+        from backend import jobs
         from backend.engine import activity_tags as AT
         self.ds_ref = weakref.ref(ds)
         self.sig = sig
@@ -608,6 +642,9 @@ class Job:
         self.stale: dict[str, dict] = {}            # key -> values from an earlier signature (shown meanwhile)
         self.computed: list[str] = []               # the files this job recomputed (tests, logs)
         self.lock = threading.Lock()
+        self.done = threading.Event()
+        self.superseded = False
+        self._callbacks: dict = {}                  # key -> fn, run once the last step is done
         disk = load_cache(ds)
         self.entries = by_file = disk.get("files") or {}
         same = disk.get("v") == CACHE_V and disk.get("sig") == sig
@@ -620,71 +657,172 @@ class Job:
         # by key: two activities starting in the same minute share one
         if same and len(self.fresh) == len({AT.key_of(w.entry.start) for w in ds.workouts}):
             self.state, self.n_done, self.finished = "ready", self.n_total, time.monotonic()
-        self.cls = "single" if same or to_compute(ds, disk) < FULL_FROM else "full"
-        self.thread = None                  # the jobs.Job once started
+            self.done.set()
+        n = dict.fromkeys(jobs.TIERS, 0) if same else to_compute_tiers(ds, disk)
+        # SP-394 第 3 條: a whole recompute goes by age tier, the last 90 days first
+        self.tiered = sum(n.values()) >= FULL_FROM
+        self.step = "hot" if self.tiered else "all"
+        self.cls = _cls(n["hot"] if self.tiered else sum(n.values()))
+        self.priority = "warm"
+        self.thread = None                  # the jobs.Job of the step queued / running now
+        # the first step builds these; the later tiers reuse them
+        self.keys: Optional[dict] = None
+        self.kb = None
+        self.files: dict[str, dict] = {}
+        self.todo: set[int] = set()
+        self.tier_by_idx: dict[int, str] = {}
 
     def start(self, priority: str = "warm") -> None:
         if self.state != "computing":
             return
-        from backend import jobs
-        # in the caller's tenant (the queue keeps its contextvars), like the warm-up
-        self.thread = jobs.submit(lambda job: self._run(), cls=self.cls, priority=priority,
-                                  label="activity auto-classification")
+        self.priority = priority
+        self._submit(self.step, self.cls)
 
-    def _run(self) -> None:
+    def _submit(self, step: str, cls: str) -> None:
+        from backend import jobs
+        prio = self.priority if step in ("hot", "all") else _later(step, self.priority)
+        # in the caller's tenant (the queue keeps its contextvars), like the warm-up
+        self.thread = jobs.submit(lambda job, step=step: self._run(step), cls=cls, priority=prio,
+                                  label="activity auto-classification" + ("" if step == "all" else f" ({step})"))
+
+    def _run(self, step: str) -> None:
+        from backend import jobs
         from backend.engine import activity_tags as AT
         from backend.engine.wko5expr.dataset import batched_flush
         ds = self.ds_ref()
-        if ds is None:
+        if ds is None or self.superseded:
+            self._end()
             return
         try:
             t0 = time.monotonic()
-            with batched_flush(ds):
-                keys, kb = activity_keys(ds, self.recorded, self.entries)
-            t_keys = time.monotonic() - t0
-            names = {w.idx: AT.key_of(w.entry.start) for w in ds.workouts}
-            files: dict[str, dict] = {}
-            todo: set[int] = set()
-            for w in ds.workouts:
-                e = self.entries.get(w.entry.file)
-                if isinstance(e, dict) and e.get("key") == keys[w.idx] and isinstance(e.get("auto"), dict):
-                    # the probe follows the run branch's code even when this result did not change
-                    files[w.entry.file] = {**e, "own": kb.own[w.idx], "pcode": kb.code["run"],
-                                           "probe": kb.probes.get(w.idx)}
-                    with self.lock:
-                        self.fresh[names[w.idx]] = e["auto"]
-                else:
-                    todo.add(w.idx)
-            kept = len(ds.workouts) - len(todo)
-            with self.lock:
-                self.n_done = kept
-
-            def progress(done, total, part):
+            if self.keys is None:
+                with batched_flush(ds):
+                    keys, kb = activity_keys(ds, self.recorded, self.entries)
+                today = _today(ds)
+                self.keys, self.kb = keys, kb
+                self.names = {w.idx: AT.key_of(w.entry.start) for w in ds.workouts}
+                self.tier_by_idx = {w.idx: _tier(w, today) for w in ds.workouts}
+                for w in ds.workouts:
+                    e = self.entries.get(w.entry.file)
+                    if isinstance(e, dict) and e.get("key") == keys[w.idx] and isinstance(e.get("auto"), dict):
+                        # the probe follows the run branch's code even when this result did not change
+                        self.files[w.entry.file] = {**e, "own": kb.own[w.idx], "pcode": kb.code["run"],
+                                                    "probe": kb.probes.get(w.idx)}
+                        with self.lock:
+                            self.fresh[self.names[w.idx]] = e["auto"]
+                    else:
+                        self.todo.add(w.idx)
                 with self.lock:
-                    for i, v in part.items():
+                    self.n_done = len(ds.workouts) - len(self.todo)
+                log.info("activity auto: keys of %d activities in %.2f s, %d to compute", len(ds.workouts),
+                         time.monotonic() - t0, len(self.todo))
+            keys, kb, names = self.keys, self.kb, self.names
+            part = set(self.todo) if step == "all" else {i for i in self.todo if self.tier_by_idx.get(i) == step}
+
+            def progress(done, total, values):
+                with self.lock:
+                    for i, v in values.items():
                         self.fresh[names[i]] = v
-                    self.n_done = kept + done
-            out = compute_blocking(ds, progress=progress, recorded=self.recorded, only=todo,
-                                   context=kb.context) if todo else {}
+                    self.n_done += len(values)
+            out = compute_blocking(ds, progress=progress, recorded=self.recorded, only=part,
+                                   context=kb.context) if part else {}
             run_code = kb.code["run"]
             for w in ds.workouts:
                 if w.idx in out:
-                    files[w.entry.file] = {"key": keys[w.idx], "own": kb.own[w.idx], "pcode": run_code,
-                                           "probe": kb.probes.get(w.idx), "start": w.entry.start.isoformat(),
-                                           "auto": out[w.idx]}
+                    self.files[w.entry.file] = {"key": keys[w.idx], "own": kb.own[w.idx], "pcode": run_code,
+                                                "probe": kb.probes.get(w.idx), "start": w.entry.start.isoformat(),
+                                                "auto": out[w.idx]}
                     self.computed.append(w.entry.file)
-            save_cache(ds, self.sig, files)
-            log.info("activity auto: %d of %d recomputed (keys %.2f s, total %.2f s)", len(todo), len(ds.workouts),
-                     t_keys, time.monotonic() - t0)
+            self.todo -= part
+            nxt = next((t for t in jobs.TIERS[jobs.TIERS.index(step) + 1:]
+                        if any(self.tier_by_idx.get(i) == t for i in self.todo)), None) if step != "all" else None
+            if self.superseded:              # a newer job computes (and stores) from here
+                self._end()
+                return
+            # what is not computed yet keeps its previous entry (served stale after a restart), and
+            # the file its signature only once nothing is left
+            pending = {w.entry.file: self.entries[w.entry.file] for w in ds.workouts
+                       if w.idx in self.todo and isinstance(self.entries.get(w.entry.file), dict)}
+            save_cache(ds, None if nxt else self.sig, {**pending, **self.files})
+            log.info("activity auto (%s): %d of %d recomputed in %.2f s", step, len(part), len(ds.workouts),
+                     time.monotonic() - t0)
+            if nxt is not None and not self.superseded:
+                with self.lock:
+                    self.step = nxt
+                n = sum(1 for i in self.todo if self.tier_by_idx.get(i) == nxt)
+                self._submit(nxt, _cls(n))
+                return
             with self.lock:
                 self.state, self.n_done, self.finished = "ready", self.n_total, time.monotonic()
                 self.stale.clear()
+            callbacks = list(self._callbacks.values())
+            self._end()
+            for cb in callbacks:
+                try:
+                    cb()
+                except Exception:            # noqa: BLE001 — a callback never fails the job
+                    log.warning("activity auto: a done callback failed", exc_info=True)
         except Exception as e:               # noqa: BLE001 — reported to the page, the next request retries
             log.warning("activity auto failed: %s", e, exc_info=True)
             with self.lock:
                 self.state, self.error, self.finished = "error", f"{type(e).__name__}: {e}"[:300], time.monotonic()
-        finally:
-            self.entries = {}                # the disk copy is not needed once the job is done
+            self._end()
+
+    def _end(self) -> None:
+        """No step left: drop what only the steps needed and wake the waiters."""
+        self.entries = {}                    # the disk copy is not needed once the job is done
+        self.keys = self.kb = None
+        self.files = {}
+        if self.state == "computing" and self.superseded:
+            self.finished = time.monotonic()
+        self.done.set()
+
+    def when_done(self, fn, key: Optional[str] = None) -> None:
+        """Run `fn()` once every step is done (at once when it is; never after an error). One
+        callback per `key` (the latest)."""
+        with self.lock:
+            if not self.done.is_set():
+                self._callbacks[key or id(fn)] = fn
+                return
+            ok = self.state == "ready"
+        if ok:
+            fn()
+
+    def supersede(self, newer: "Job") -> None:
+        """The inputs changed while a later tier waited for its place: `newer` takes over (the
+        waiting step does nothing) and runs this job's done callbacks."""
+        with self.lock:
+            self.superseded = True
+            cbs, self._callbacks = self._callbacks, {}
+        for k, fn in cbs.items():
+            newer.when_done(fn, key=k)
+        t = self.thread
+        if t is None or t.state == "queued":
+            self._end()
+
+    def join(self, timeout: Optional[float] = None) -> bool:
+        """Wait for every step; True when done."""
+        return self.done.wait(timeout)
+
+    def wait_for(self, tier: str, timeout: Optional[float] = None) -> None:
+        """Wait (at most `timeout` s) until the steps up to `tier` are done (the race charts
+        read the year's activities: the hot and warm tiers)."""
+        from backend import jobs
+        end = time.monotonic() + (timeout if timeout is not None else 1e9)
+        order = jobs.TIERS
+        while not self.done.is_set() and time.monotonic() < end:
+            step = self.step
+            if step != "all" and step in order and order.index(step) > order.index(tier):
+                return
+            t = self.thread
+            if t is not None:
+                t.join(min(1.0, max(0.0, end - time.monotonic())))
+            else:
+                self.done.wait(min(1.0, max(0.0, end - time.monotonic())))
+
+    def can_supersede(self) -> bool:
+        t = self.thread
+        return self.step not in ("hot", "all") and t is not None and t.state == "queued"
 
     def snapshot(self) -> dict:
         with self.lock:
@@ -692,14 +830,30 @@ class Job:
             el = (self.finished or time.monotonic()) - self.started
             return {"state": self.state, "n_done": self.n_done, "n_total": self.n_total,
                     "stale": bool(self.stale) and self.state != "ready", "error": self.error,
-                    "elapsed_s": round(el, 1), "auto": auto}
+                    "elapsed_s": round(el, 1), "tier": self.step if self.state == "computing" else None,
+                    "auto": auto}
+
+
+def _cls(n: int) -> str:
+    """The queue class of a step computing `n` activities."""
+    return "full" if n >= FULL_FROM else "single"
+
+
+def _later(tier: str, priority: str) -> str:
+    """A warm / cold tier's priority: its own, or the caller's when that is lower still."""
+    from backend import jobs
+    own = jobs.tier_priority(tier)
+    return own if jobs.PRIORITIES[own] >= jobs.PRIORITIES.get(priority, 0) else priority
 
 
 def job_for(ds, recorded: Optional[list] = None, priority: str = "warm") -> Job:
     """The Dataset's job (single flight): started on first use, restarted
-    when the inputs changed (signature) and the previous one is not running.
-    `priority`: the queue's (backend/jobs.py) — `warm` for the warm-up's call,
-    `user` when someone waits; a job still queued is moved up to it."""
+    when the inputs changed (signature) and the previous one is not running —
+    or only waits between two tiers (SP-394: superseded, `newer` takes over).
+    `priority`: the queue's (backend/jobs.py) — the warm-up's after a sync / a
+    deploy (`sync_hot` / `deploy_hot`: its hot tier; the warm and cold tiers at
+    `warm` / `cold`), `user` when someone waits; a hot (or only) step still
+    queued is moved up to it, a warm / cold back-fill never."""
     from backend import jobs
     from backend.engine import activity_tags as AT
     recorded = AT.load_recorded() if recorded is None else recorded
@@ -707,25 +861,26 @@ def job_for(ds, recorded: Optional[list] = None, priority: str = "warm") -> Job:
     with _LOCK:
         job = _JOBS.get(ds)
         running = job is not None and job.state == "computing" and job.thread is not None and job.thread.is_alive()
-        if job is not None and (job.sig == sig and job.state != "error" or running):
-            if job.thread is not None:
+        if job is not None and (job.sig == sig and job.state != "error" or running and not job.can_supersede()):
+            if job.thread is not None and job.step in ("hot", "all"):
                 jobs.promote(job.thread, priority)
             return job
-        job = Job(ds, sig, recorded)
-        _JOBS[ds] = job
-        job.start(priority)
-        return job
+        new = Job(ds, sig, recorded)
+        if job is not None and running:
+            job.supersede(new)
+        _JOBS[ds] = new
+        new.start(priority)
+        return new
 
 
 def status(ds) -> dict:
-    """The endpoint's answer: {state, n_done, n_total, stale, error, elapsed_s, auto: {key: values}}."""
+    """The endpoint's answer: {state, n_done, n_total, stale, error, elapsed_s, tier, auto: {key: values}}
+    (`tier`: the age tier computing now — hot / warm / cold, or all — while computing)."""
     return job_for(ds, priority="user").snapshot()
 
 
 def wait(ds, timeout: float = 600.0) -> dict:
-    """Block until the job is done (tests, scripts)."""
+    """Block until the job is done, every tier (tests, scripts)."""
     job = job_for(ds, priority="user")
-    t = job.thread
-    if t is not None:
-        t.join(timeout)
+    job.join(timeout)
     return job.snapshot()

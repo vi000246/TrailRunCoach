@@ -145,6 +145,14 @@ engine config / parity mode is the same everywhere.
   for background work (a `user` job may take the tenant's second place), within one priority the
   tenants take turns. The warm-up's low-priority steps are jobs at `warm` too (wko5-engine.spec.md
   › Warm-up), and the activity auto-classification (workouts.spec.md).
+- **A first import, hot first (SP-394 第 4 條, 2026-10-12).** A new user's first sync / a big FIT
+  import builds the Dataset of the last 90 days first (wko5-engine.spec.md › Hot first): the warm-up
+  computes the status and the plan inputs on it before any older file is parsed, so the overview and
+  the 課表 are usable in about the time of a sync; until the back-fill's complete Dataset is in, the
+  PMC (CTL / ATL / TSB) counts only those 90 days (CTL starts at 0 there) and every page shows the
+  back-fill's progress under the nav; the status computed on the complete Dataset then replaces it
+  (shown stale meanwhile, below). The Dataset a request builds is a `build` job of the queue (two at
+  a time for the server, one per tenant).
 - **Stale status card (SP-394, 2026-10-12).** `GET /overview/status` (`status_answer`,
   `backend/api/overview.py:228`) answers, on a cache miss caused by new data (a new dataset
   generation — a sync, or a restart / deploy) or a new day, the tenant's previous status marked
@@ -2351,3 +2359,4 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 | 2026-10-12 | feature | SP-310 | `workout_templates_user.uid` (UUID4 hex, unique index) next to the integer id; `updated_at` also moves on any ORM / Core update (`onupdate`); the rows from before filled by `init_db` on every tenant DB (`backend/db/stable_ids.py`), `_ensure` adds the column to an older table (`backend/engine/user_templates.py:95`); `uid` in every template the API returns (`to_dict`, `backend/engine/user_templates.py:226`); the `/steps/templates/user/{tid}` routes unchanged. Tests `backend/tests/test_stable_ids_sp310.py::test_template_new_and_edited_rows` |
 | 2026-10-12 | feat/pmc-projection-sp219 | SP-219 (owner 2026-10-12) | The stored-plan projection counts a session with only minutes: `plan_summary(…, est=)` / `planned_by_day` / `session_tss(s, est)` take the 課表's own estimate (`est_tss` with the new `plan_rates`, also used by the calendar and 課表達成率), so the overview's Sunday CTL / next-Monday TSB / week TSS target and the PMC charts' projection match the calendar's 預估 TSS; the 圖表分析 PMC charts draw that projection on a future range (wko5-engine.spec.md 「PMC projection」) |
 | 2026-10-12 | perf | SP-394 (SP-338 follow-up) | The status computation is a `single` / `user` job of the server's queue (`jobs.call`; at once inside the warm-up's job); `GET /status` answers the previous status marked `stale` after new data, a new day or a restart (kept in memory and in `cache/overview_status.json`), computes the new one in the background, `GET /status/fresh`; the page's 「更新中」 badge and polling, 套用 buttons wait while stale |
+| 2026-10-12 | perf | SP-394 第 4 條 | A first import (and a re-parse) builds the last 90 days first: the status and the plan inputs come before the back-fill of the older activities, whose progress shows under the nav; the PMC counts the 90 days until the complete Dataset is in. A request's Dataset build is a `build` job of the queue. Tests: `backend/tests/test_queue_hot_first_sp394.py` |

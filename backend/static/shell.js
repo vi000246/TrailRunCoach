@@ -470,7 +470,7 @@
   const WAITING = /^(載入中|計算中|讀取中|讀取你的活動資料中|計算訓練狀況中|排本週課表中|載入課表中|…$)/;
   const placeholders = () => [...document.querySelectorAll(".loading, .empty, .meta, td.empty")]
     .filter((el) => el.dataset.buildWait || (!el.children.length && WAITING.test(el.textContent.trim())));
-  let tries = 0, wasBuilding = false;
+  let tries = 0, wasBuilding = false, wasBackfill = false;
   async function poll() {
     let s = null;
     try { s = await (await fetch("/api/v1/wko5/dataset/status", { cache: "no-store" })).json(); } catch (_) {}
@@ -499,6 +499,27 @@
         if (el.textContent === el.dataset.buildMsg) el.textContent = el.dataset.buildWait;
         delete el.dataset.buildWait; delete el.dataset.buildMsg;
       }
+    }
+    // SP-394: a first import / a re-parse built the last 90 days first; the older activities are
+    // filled in in the background (api/backfill.py): their progress, then a note to reload
+    const b = s && s.backfill;
+    if (b && b.state === "running") {
+      wasBackfill = true;
+      const p = bar.querySelector("progress");
+      p.hidden = false;
+      if (b.n_total) { p.max = b.n_total; p.value = Math.min(b.n_done, b.n_total); } else p.removeAttribute("value");
+      bar.querySelector(".an-b-msg").textContent = T("build.backfill", { done: b.n_done || 0, total: b.n_total || 0 });
+      bar.querySelector(".an-b-sub").textContent = "";
+      bar.hidden = false;
+      setTimeout(poll, 5000);
+      return;
+    }
+    if (wasBackfill) {
+      wasBackfill = false;
+      bar.hidden = false; bar.querySelector("progress").hidden = true;
+      bar.querySelector(".an-b-msg").textContent = T("build.backfill_done");
+      bar.querySelector(".an-b-sub").textContent = "";
+      return;
     }
     // a failed build: say so, also when it failed before this page opened
     // (the pages behind it would otherwise wait with 「載入中」 and no reason)

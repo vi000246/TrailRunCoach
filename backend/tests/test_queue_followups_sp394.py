@@ -398,7 +398,7 @@ def test_the_warm_ups_low_priority_steps_are_queue_jobs_at_warm(monkeypatch):
     monkeypatch.setattr(PSA, "_compute_inputs", lambda: where("inputs"))
     monkeypatch.setattr(plan_auto, "busy", lambda: False)
     monkeypatch.setattr(CAL, "_registry", lambda: {})
-    monkeypatch.setattr(AA, "job_for", lambda d: where("classify"))
+    monkeypatch.setattr(AA, "job_for", lambda d, **kw: where("classify"))
     monkeypatch.setattr(RP, "_grade_models", lambda: where("grade"))
     monkeypatch.setattr(RP, "_climb_cadence", lambda: where("cadence"))
     t = wko5views.warm_up("startup")
