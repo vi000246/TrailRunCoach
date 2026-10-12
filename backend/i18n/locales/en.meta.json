@@ -671,6 +671,10 @@
     "draft": true,
     "src": "backend/engine/overview.py:1008"
   },
+  "TSB（預估）": {
+    "draft": true,
+    "src": "backend/engine/panels/plan_projection.py:177"
+  },
   "TSS {p}%": {
     "draft": false,
     "src": "backend/api/debug.py:243"
@@ -915,6 +919,14 @@
     "draft": true,
     "src": "backend/engine/panels/race_refs.py:171"
   },
+  "{grade} 賽「{name}」：預估 CTL {ctl:.0f}、TSB {tsb:+.0f}": {
+    "draft": true,
+    "src": "backend/engine/panels/plan_projection.py:142"
+  },
+  "{grade} 賽的理想 TSB：{lo:+.0f}～{hi:+.0f}": {
+    "draft": true,
+    "src": "backend/engine/panels/plan_projection.py:144"
+  },
   "{h:.0f} bpm 那次飄移 {d:.1f}%（扣掉誤差仍 ≥ 5%）：下限不成立": {
     "draft": true,
     "src": "backend/engine/algorithms/threshold_estimate.py:334"
@@ -1138,6 +1150,10 @@
   "{name}（留 2 下）": {
     "draft": true,
     "src": "backend/engine/strength_plan.py:59"
+  },
+  "{name}（預估）": {
+    "draft": true,
+    "src": "backend/engine/panels/plan_projection.py:169"
   },
   "{name}：把 COROS 的 {watch} 改成 {app}": {
     "draft": true,
@@ -1846,6 +1862,18 @@
   "乳酸閾值心率（COROS % LTHR 6 區）": {
     "draft": true,
     "src": "backend/engine/hr_profile.py:71"
+  },
+  "今天以後是照課表的預估（空心長條、虛線），畫到最後一堂排好的課（{until}）": {
+    "draft": true,
+    "src": "backend/engine/panels/plan_projection.py:187"
+  },
+  "今天以後是照課表的預估（虛線），畫到最後一堂排好的課（{until}）": {
+    "draft": true,
+    "src": "backend/engine/panels/plan_projection.py:181"
+  },
+  "今天以後課表沒有排課，沒有預估可畫": {
+    "draft": true,
+    "src": "backend/engine/panels/plan_projection.py:200"
   },
   "仰躺，對側的手腳慢慢伸出去再收回。下背不舒服時選這個。": {
     "draft": true,
@@ -5379,6 +5407,10 @@
     "draft": false,
     "src": "backend/engine/user_templates.py:265"
   },
+  "篩選活動類型時不畫預估：課表是所有運動合計": {
+    "draft": true,
+    "src": "backend/engine/panels/plan_projection.py:195"
+  },
   "紀錄裡沒有到過 3,000 m 以上：第一次上 3,000 m 是高山症的相關因子（Shen 2024）": {
     "draft": true,
     "src": "backend/engine/altitude.py:198"
@@ -7138,6 +7170,10 @@
   "預估 4 小時以上的{event}": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:1619"
+  },
+  "預估 TSS": {
+    "draft": true,
+    "src": "backend/engine/panels/plan_projection.py:184"
   },
   "預估不到 4 小時的{event}": {
     "draft": true,

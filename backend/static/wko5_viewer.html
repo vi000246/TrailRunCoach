@@ -461,6 +461,8 @@ table.z5ev td { white-space: normal; }
       <div class="row presets" style="margin-top:6px">
         <button data-d="7" data-i18n="viewer.p7">7天</button><button data-d="42" data-i18n="viewer.p42">42天</button><button data-d="90" data-i18n="viewer.p90">90天</button>
         <button data-d="365" data-i18n="viewer.p365">1年</button><button data-d="ytd" data-i18n="viewer.pytd">今年</button><button data-d="all" data-i18n="viewer.pall">全部</button>
+        <!-- SP-219: into the future (GET /plan-range); shown when the plan has a phase end / a target race ahead -->
+        <button data-d="phase" data-i18n="viewer.pphase" hidden>到階段結束</button><button data-d="race" data-i18n="viewer.prace" hidden>到目標賽</button>
       </div>
     </details>
     <details open data-k="sports">
@@ -657,9 +659,12 @@ async function init0() {
 }
 
 async function init() {
-  const [views, sports, cfg, us, ps] = await Promise.all([j(`${API}/views`), j(`${API}/sports`), j(`${API}/config`),
-    j("/api/v1/sync/settings").catch(() => ({})), j(`${API}/primary-sport`).catch(() => ({}))]);
+  const [views, sports, cfg, us, ps, pr] = await Promise.all([j(`${API}/views`), j(`${API}/sports`), j(`${API}/config`),
+    j("/api/v1/sync/settings").catch(() => ({})), j(`${API}/primary-sport`).catch(() => ({})),
+    j(`${API}/plan-range`).catch(() => null)]);
   S.views = views; S.sports = sports;
+  S.planRange = pr;                    // SP-219: 到階段結束 / 到目標賽 (null: not offered)
+  futurePresets();
   // each dashboard knows its mode: a single-activity page reads `sports` against the activity (dashSport)
   for (const v of views) if (!v.error) { const m = viewKind(v); for (const d of v.dashboards) d._mode = m; }
   S.sport = ps.sport || "trail";       // 主要訓練項目 (設定): which season charts show (visCharts)
@@ -681,7 +686,9 @@ async function init() {
   // SP-336: the range is a preset counted back from today (90 天 by default: the recent data, the quickest
   // to draw) or the dates typed in ("custom"), remembered in this browser. A choice saved before SP-336
   // has dates only: back to the default
-  S.range = RANGE_PRESETS.includes(r.range) || (r.range === "custom" && r.begin && r.end) ? r.range : DEFAULT_RANGE;
+  // SP-219: 到階段結束 / 到目標賽 come back while the plan still has that phase end / race ahead
+  S.range = RANGE_PRESETS.includes(r.range) || (FUTURE_PRESETS.includes(r.range) && futureEnd(r.range))
+    || (r.range === "custom" && r.begin && r.end) ? r.range : DEFAULT_RANGE;
   if (S.range === "custom") { $("end").value = r.end; $("begin").value = r.begin; }
   else setRangeDates(S.range);
   // a selection saved before SP-263 holds WKO5 sport groups ("run"): none of them is a kind -> all ticked
@@ -721,9 +728,35 @@ function onFilter() { filterSummary(); loadActs(); if (S.mode === "season") load
 
 // the range presets (SP-336): counted back from today; 1年 and 全部 are the user's own choice
 const DEFAULT_RANGE = "90", RANGE_PRESETS = ["7", "42", "90", "365", "ytd", "all"];
+// SP-219: two presets into the future (GET /plan-range, panels/plan_projection.range_options): from FUTURE_BACK days
+// back to the current phase's end / the next target race (A, else B). The PMC charts draw the stored plan's
+// projection after today (dashed lines, outlined bars); every other chart ends today
+const FUTURE_PRESETS = ["phase", "race"], FUTURE_BACK = 42;
+const futureEnd = (d) => d === "phase" ? S.planRange?.phase?.end : d === "race" ? S.planRange?.race?.date : null;
+function futurePresets() {
+  const pr = S.planRange, md = (x) => x.slice(5).split("-").map(Number).join("/");    // 2026-11-05 → 11/5
+  for (const b of document.querySelectorAll(".presets button[data-d]")) {
+    const d = b.dataset.d;
+    if (!FUTURE_PRESETS.includes(d)) continue;
+    const end = futureEnd(d);
+    b.hidden = !end;
+    if (!end) continue;
+    b.title = d === "phase" ? t("viewer.pphase_tip", "到 {date}（{phase}結束）", { date: md(end), phase: pr.phase.label || "" })
+      : t("viewer.prace_tip", "到 {date}（{grade} 賽 {name}）", { date: md(end), grade: pr.race.grade || "", name: pr.race.name || "" });
+  }
+}
 function setRangeDates(d) {
   const end = new Date();
   let begin;
+  if (FUTURE_PRESETS.includes(d)) {
+    const fe = futureEnd(d);
+    if (fe) {
+      $("end").value = fe;
+      $("begin").value = iso(new Date(end - (FUTURE_BACK - 1) * 864e5));
+      return;
+    }
+    d = DEFAULT_RANGE;                    // the phase ended / the race passed meanwhile
+  }
   if (d === "ytd") begin = new Date(end.getFullYear(), 0, 1);
   else if (d === "all") begin = new Date((S.athlete?.first || "2000-01-01").slice(0, 10));
   else begin = new Date(end - (+d - 1) * 864e5);
@@ -911,7 +944,8 @@ function filterSummary() {
   $("sports-txt").textContent = sp;
   const isToday = e === iso(new Date());
   document.querySelectorAll(".presets button").forEach((x) => x.classList.toggle("on",
-    isToday && ((+x.dataset.d && +x.dataset.d === days) || (x.dataset.d === "ytd" && b === `${e.slice(0, 4)}-01-01`))));
+    (FUTURE_PRESETS.includes(x.dataset.d) && x.dataset.d === S.range && e === futureEnd(S.range))
+    || (isToday && ((+x.dataset.d && +x.dataset.d === days) || (x.dataset.d === "ytd" && b === `${e.slice(0, 4)}-01-01`)))));
 }
 
 // an activity's start (already the athlete's local time, naive ISO) -> 26/10/02 07:15
@@ -2875,8 +2909,11 @@ function drawPlot(card, res, series) {
         if (i != null && y != null) arr[i] = y;
       }
       if (s.type === "bar" || s.type === "stackedbar") {
+        // bar_style hollow (SP-219): outlined, in the stack's slot (its days have no done bar), not a slot of its own
+        const hollow = s.bar_style === "hollow";
         put({ name: s.name, yAxisIndex: yi, data: arr, color, type: "bar",
-          stack: s.type === "stackedbar" ? "st" + yi : undefined, barCategoryGap: "25%" }, s);
+          stack: s.type === "stackedbar" || hollow ? "st" + yi : undefined, barCategoryGap: "25%",
+          itemStyle: hollow ? { color: "transparent", borderColor: color, borderWidth: 1.2 } : undefined }, s);
       } else {
         put({ name: s.name, yAxisIndex: yi, data: arr, color, type: "line", connectNulls: false,
           step: s.type === "squareline" ? "middle" : false, showSymbol: cats.length <= 60, symbolSize: 4,
@@ -2894,8 +2931,10 @@ function drawPlot(card, res, series) {
     const lab = s.labels ? { show: true, position: "top", color: text, fontSize: 10,
       formatter: (p) => s.labels[p.dataIndex] ?? "" } : undefined;
     if (s.type === "bar" || s.type === "stackedbar") {
+      // bar_style hollow (SP-219, panels/plan_projection.py): the plan's projected TSS, outlined beside the solid done bars
+      const hollow = s.bar_style === "hollow" ? { color: "transparent", borderColor: color, borderWidth: 1.2 } : null;
       put({ ...base, type: "bar", stack: s.type === "stackedbar" ? "st" + yi : undefined, barMaxWidth: s.bar_width || 6,
-        barGap: "-100%", label: lab, itemStyle: s.bar_width ? { borderRadius: [4, 4, 0, 0] } : undefined }, s);
+        barGap: "-100%", label: lab, itemStyle: hollow || (s.bar_width ? { borderRadius: [4, 4, 0, 0] } : undefined) }, s);
     } else if (s.labels) {
       // a few labelled markers (the battery's minimum)
       put({ name: s.name, yAxisIndex: yi, data: pts, color, type: "scatter", symbolSize: 9, label: lab,
@@ -2919,6 +2958,45 @@ function drawPlot(card, res, series) {
       markLine: { silent: true, symbol: "none", lineStyle: { color: muted, type: "dashed", width: 1.2 },
         label: { show: true, position: "insideEndTop", color: muted, fontSize: 10, formatter: PL.label },
         data: [{ yAxis: PL.y }] } }, null);
+  }
+  // SP-219: the stored plan's projection on a range into the future (res.projection, panels/plan_projection.py):
+  // a 「今天」 line; on the PMC each race day in it — the race's line and name (both labels along their line, so a
+  // race a few days ahead never covers 今天), its projected CTL and TSB as two
+  // marked points and, for an A / B race, the TSB range its grade aims for (A +10～+20, B −5～+5) as a short band.
+  // Unnamed series: not in the legend. A day-bucket chart (每日 TSS: one category a day) gets the 今天 line
+  const PJ = res.projection && (cat ? cat === "day" : xKind === "date") ? res.projection : null;
+  if (PJ) {
+    const localMs = (d) => { const [y, m, dd] = String(d).slice(0, 10).split("-").map(Number); return new Date(y, m - 1, dd).getTime(); };
+    const yiP = Math.max(0, axisIds.indexOf(series.find((s) => s.role === "projection")?.y_axis || "NONE"));
+    put({ type: "line", yAxisIndex: yiP, data: [], _proj: true,
+      markLine: { silent: true, symbol: "none", lineStyle: { color: muted, type: [4, 3], width: 1 },
+        label: { show: true, position: "insideEndTop", color: muted, fontSize: 10, formatter: t("viewer.proj.today", "今天") },
+        data: [{ xAxis: cat ? catIdx.get(PJ.today) : PJ.today }] } }, null);
+    // the band is a few days wide so a phone still shows it (one day is ~2 px on a 90-day axis)
+    const hw = Math.max(0.6 * 864e5, (localMs(res.end) - localMs(res.begin)) * 0.012);
+    const bands = [];
+    for (const r of cat ? [] : PJ.races || []) {
+      const x = localMs(r.date);
+      if (r.band) bands.push(r.band);
+      put({ type: "scatter", yAxisIndex: yiP, _race: r, symbol: "diamond", symbolSize: 9, z: 5,
+        itemStyle: { color: r.color, borderColor: css("--bg") || "#fff", borderWidth: 1 },
+        data: [[r.date, r.ctl], [r.date, r.tsb]], labelLayout: { hideOverlap: true },
+        label: { show: true, position: "right", color: r.color, fontSize: 10,
+          formatter: (p) => p.dataIndex === 0 ? `CTL ${Math.round(r.ctl)}` : `TSB ${r.tsb >= 0 ? "+" : ""}${Math.round(r.tsb)}` },
+        markLine: { silent: true, symbol: "none", lineStyle: { color: r.color, type: "dashed", width: 1 },
+          label: { show: true, position: "insideEndTop", color: r.color, fontSize: 10, formatter: `${r.grade} ${r.name}` },
+          data: [{ xAxis: r.date }] },
+        markArea: r.band ? { silent: true, itemStyle: { color: r.color, opacity: 0.18 },
+          data: [[{ xAxis: x - hw, yAxis: r.band[0] }, { xAxis: x + hw, yAxis: r.band[1] }]] } : undefined }, null);
+    }
+    const cfg = axisCfg[axisIds[yiP]] || {};
+    if (bands.length && cfg.min == null && cfg.max == null) {
+      // a markArea doesn't stretch the axis (like the race lines above): keep the whole band in view
+      const lo = Math.min(...bands.map((b) => b[0])), hi = Math.max(...bands.map((b) => b[1]));
+      const pmin = yAxis[yiP].min, pmax = yAxis[yiP].max;
+      yAxis[yiP].min = (e) => Math.floor(Math.min(typeof pmin === "function" ? pmin(e) : pmin ?? e.min, lo) / 5) * 5;
+      yAxis[yiP].max = (e) => Math.ceil(Math.max(typeof pmax === "function" ? pmax(e) : pmax ?? e.max, hi) / 5) * 5;
+    }
   }
   const lbl = { color: muted, fontSize: 10, hideOverlap: true };
   const axLine = { lineStyle: { color: line } };
@@ -2960,12 +3038,16 @@ function drawPlot(card, res, series) {
   const tooltip = { trigger: "axis", confine: true, formatter: (ps) => {
     // category (bucket) series carry a bare y; other series [x, y]
     const yOf = (p) => Array.isArray(p.value) ? p.value[1] : p.value;
-    ps = [].concat(ps).filter((p) => (cat || Array.isArray(p.value)) && yOf(p) != null);
+    ps = [].concat(ps).filter((p) => (cat || Array.isArray(p.value)) && yOf(p) != null && !out[p.seriesIndex]?._race);
+    // SP-219: the projected lines start on today at the solid lines' values: listed from tomorrow on
+    const dayOf = (p) => cat ? cats[p.dataIndex] || "" : String(p.value[0]).slice(0, 10);
+    if (PJ) ps = ps.filter((p) => !(srcOf[p.seriesIndex]?.role === "projection" && dayOf(p) <= PJ.today));
     if (!ps.length) return "";
     const x = cat ? null : ps[0].value[0];
     const head = cat ? bucketLabel(cats[ps[0].dataIndex] ?? cats[ps[0].value?.[0]] ?? "", cat, true)
       : xKind === "date" ? String(x).slice(0, 10) : xKind === "datetime" ? String(x).slice(0, 16).replace("T", " ")
       : xKind === "value" ? fmtU(x, xUnit) : fmtDur(x);
+    const ahead = PJ && dayOf(ps[0]) > PJ.today;                 // a projected day: says 預估 next to the date
     // 目標線 (res.race_ref, panels/race_refs.py): each point as a share of the nearest race's
     // single-day target (a single-day race's constant, a multi-day trip's per-day average)
     const tgt = res.race_ref?.target, goal = +(tgt?.goal ?? tgt?.cc);
@@ -2990,7 +3072,10 @@ function drawPlot(card, res, series) {
       const tot = g.reduce((a, p) => a + +yOf(p), 0);
       rows.push(`<span style="display:block;border-top:1px solid rgba(128,128,128,.35);margin-top:3px;padding-top:2px">合計 <b style="float:right;margin-left:12px">${esc(fmtU(tot, u))}</b></span>`);
     }
-    return `<div style="font-size:11.5px">${esc(head)}<br>${rows.join("<br>")}</div>`;
+    // SP-219: a race day in the projection: its projected CTL / TSB and the TSB range its grade aims for
+    for (const r of PJ?.races || []) if (r.date === dayOf(ps[0]))
+      rows.push(`<span style="color:${esc(r.color)}">◆</span> ${esc(r.text)}${r.band_text ? `<br><span style="opacity:.8">${esc(r.band_text)}</span>` : ""}`);
+    return `<div style="font-size:11.5px">${esc(head)}${ahead ? ` · <b>${esc(t("viewer.proj.est", "預估"))}</b>` : ""}<br>${rows.join("<br>")}</div>`;
   } };
   // enlarged: the whole legend (click a name to hide / show it) and a zoom slider under the x axis
   const zoom = !!res._zoom;

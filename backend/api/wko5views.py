@@ -605,12 +605,20 @@ def chart(request: Request, view: str, d: int, c: int, begin: Optional[str] = No
     except IndexError:
         raise HTTPException(404, "chart not found")
     b, e = _range(ds, begin, end)
+    # SP-219: there is no activity after today — every chart is evaluated up to today (tl() over the
+    # empty days would draw a falling line); a `plan_projection` chart draws on from the stored plan
+    # to the end asked (panels/plan_projection.py)
+    import math
+    T = float(math.floor(ds.today))
+    want_end = e
+    if e > T:
+        e, b = T, min(b, T)
     # SP-330: how far back the plan reaches (90 days free / 365 / the full history), and the free
     # tier's dashboards a day (one dashboard counts once a day, however many charts it draws)
     from backend import membership as MS
     MS.require(MS.chart_scope(float(ds.today) - float(b)))
     MS.consume("charts", item=f"{view}/{d}")
-    asked = (b, e)                               # the range as asked, before a period's floor (_slot)
+    asked = (b, want_end)                        # the range as asked, before a period's floor (_slot)
     needs_workout = _panel_kind(ch) in ("workout", "map")
     if needs_workout and (workout is None or not 0 <= workout < len(ds.workouts)):
         raise HTTPException(400, "workout charts need ?workout=<index>")
@@ -677,6 +685,24 @@ def chart(request: Request, view: str, d: int, c: int, begin: Optional[str] = No
         from backend.engine import activity_tags as AT
         params = {**params, "_poles": json.dumps(AT.pole_marks_stamp(AT.load())),
                   "_today": today_local().isoformat()}
+    proj_mode = ch.get("plan_projection") if ch.get("kind") == "athlete" and want_end > T else None
+    proj = proj_why = end_iso = None
+    if proj_mode:
+        # SP-219: the plan's part of the projection (the days after today with the 課表's planned TSS,
+        # the races on them) is computed on every request and keyed: an edit on the 課表 page misses
+        from backend.engine.panels import plan_projection as PJ
+        from backend.engine.wko5expr.dataset import day_to_date
+        end_iso = day_to_date(int(math.floor(want_end))).isoformat()
+        if _kind_filter(ds, sports) is not None:
+            proj_why = "filtered"            # the plan is every sport together
+        else:
+            try:
+                proj = PJ.inputs(day_to_date(int(T)), day_to_date(int(math.floor(want_end))))
+            except Exception as ex:          # noqa: BLE001 — the chart still draws, up to today
+                import logging
+                logging.getLogger(__name__).warning("plan projection failed: %s", type(ex).__name__)
+            proj_why = None if proj else "none"
+        params = {**params, "_plan": json.dumps([proj_mode, end_iso, proj, proj_why], default=str, sort_keys=True)}
     # the data source is in the fingerprint too (chartscope: ds.source, each file's stamp); named here as well
     req = {"view": view, "d": d, "c": c, "begin": b, "end": e, "parity": ds.config.parity,
            "source": getattr(ds, "source", None) or "wko5",
@@ -710,7 +736,19 @@ def chart(request: Request, view: str, d: int, c: int, begin: Optional[str] = No
             res = {**res, **binfo}
         if vinfo:
             res = {**res, **vinfo}
-        return {**res, **pinfo} if pinfo else res
+        if pinfo:
+            res = {**res, **pinfo}
+        if proj_mode:
+            # SP-219: dashed CTL / ATL / TSB and outlined planned-TSS bars after today (or why not)
+            from backend.engine.panels import plan_projection as PJ
+            if proj_why == "filtered":
+                res = PJ.filtered_note(res)
+            elif proj is None:
+                res = PJ.none_note(res)
+            else:
+                res = PJ.apply(res, proj, proj_mode, float(ds.athlete.ctlconstant), float(ds.athlete.atlconstant),
+                               end_iso)
+        return res
     # a demo visitor never gets (nor leaves) a previous drawing; the export / scripts don't ask
     demo = tenancy.current().is_demo
     res, stale = RENDER_CACHE.serve(key, compute, slot=None if demo else _slot(view, ch, req, asked, ds),
@@ -1459,6 +1497,17 @@ def athlete_summary(parity: Optional[bool] = None):
         "wko5_pmc_snapshot": a.pmc_snapshot,
         "settings": {k: [[d.isoformat(), val] for d, val in v] for k, v in a.settings.items()},
     }
+
+
+@router.get("/plan-range")
+def plan_range():
+    """「到階段結束」/「到目標賽」 (SP-219): the viewer's future range presets — the current phase's
+    end and the next target race after today (panels/plan_projection.range_options)."""
+    import math
+    from backend.engine.panels import plan_projection as PJ
+    from backend.engine.wko5expr.dataset import day_to_date
+    ds = _dataset()
+    return PJ.range_options(PJ.load_plan(), day_to_date(int(math.floor(ds.today))))
 
 
 @router.get("/primary-sport")

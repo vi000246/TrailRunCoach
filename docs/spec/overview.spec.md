@@ -219,12 +219,30 @@ today's CTL / ATL / TSB. The status and chart render caches key on the manual va
 `project()` (`backend/engine/overview.py:329`) continues the recurrence with planned daily TSS.
 
 The stored-plan projection is `plan_store.plan_summary()`
-(`backend/engine/plan_store.py:702`): today's CTL / ATL continued with the TSS of the **stored**
-active sessions on each day after today, up to the horizon, so edits change it. It replaces
+(`backend/engine/plan_store.py:723`): today's CTL / ATL continued with the TSS of the **stored**
+active sessions on each day after today, up to the horizon, so edits change it. A session's
+planned TSS is the 課表 calendar's own estimate (SP-219, 2026-10-12): `_summary`
+(`backend/api/plan_sessions.py:631`) passes `est` = `est_tss` with `plan_rates`
+(`backend/api/plan_sessions.py:2721`) — the stored TSS, else minutes × the kind's TSS / h — to
+`plan_summary` and `planned_by_day` (`backend/engine/plan_store.py:711`); before, a session with only
+minutes counted 0 here while the calendar showed minutes × TSS / h, so the projection ran low. The
+week's target TSS counts it the same way (`session_tss(s, est)`, `:698`). `plan_rates` is the one
+rate rule of the calendar, 課表達成率, this projection and the PMC charts' (below): `tss_rates` over the
+sessions the 課表 shows (deleted / superseded left out), the dataset's TSS / h per category (the
+calendar's `_range_extras`, else the plan inputs' `tss_per_category` — the same
+`overview._tss_per_hour`), the week target's TSS / h for a kind with none. It replaces
 `week_plan()`'s own week targets, Sunday CTL and next-Monday TSB once the stored plan has loaded
 (`paintPlanLoad`, `backend/static/overview.html:698`). The overview's PMC chart itself shows only
 the last 90 days (CTL / ATL lines, TSB bars in the PMC's Form% colours; `loadPmc`,
 `backend/static/overview.html:907`) — no projection line (2026-10-03).
+
+**Projection on the 圖表分析 PMC charts (SP-219, owner 2026-10-12).** 我的訓練 › 負荷 PMC's PMC and
+每日 TSS charts draw the stored plan's future when the viewer's range ends after today (the 到階段結束 /
+到目標賽 presets, or dates typed in): dashed CTL / ATL / TSB from today's values, the planned TSS of each
+later day as outlined bars (the same per-day sums the 課表 calendar shows), a 今天 line, and on race
+day the projected CTL / TSB with the grade's TSB range (A +10～+20, B −5～+5, C none). It stops at the
+last planned session and recomputes on every load. Details in
+[wko5-engine.spec.md](./wko5-engine.spec.md) (「PMC projection」); `backend/engine/panels/plan_projection.py`.
 
 ## Week plan (`week_plan`)
 
@@ -2053,6 +2071,10 @@ Data registry: `debug_tokens` SECRET (`token_hash`), `debug_audit` and `debug_au
   (regeneration, tombstones, missed and late-sync done, coverage, collisions, supersede,
   horizon), persistence and edits, API initialisation, push scopes and idempotency, missed
   removal, concurrent first loads, unpush, and the stored-plan summary moving bars and projection.
+- `backend/tests/test_pmc_projection_sp219.py` (SP-219): `plan_summary` / `planned_by_day` count a
+  session with only minutes by the calendar's estimate (the old stored-TSS default unchanged without
+  `est`); `GET /sessions`' projection equals the calendar's 預估 TSS day by day (a minutes-only session
+  added through the API); the PMC charts' projection — see wko5-engine.spec.md.
 - `backend/tests/test_plan_horizon.py` (SP-327): the horizon with 0 / 3 / 14 / 15 / 20 days left in
   the phase, no next phase, the floor / cap, never moving back day to day; 整個周期 stays the
   current phase; the same uids the day before and after a boundary (also after a race cuts the
@@ -2194,12 +2216,13 @@ The owner's calls behind rules above (the ticket holds the discussion).
 | Carb-loading note | Grams when the settings have a body weight | g/kg only | owner 2026-10-06 (SP-285) |
 | Load source | The PMC follows the watch's load; RPE only sets planned targets | RPE-corrected PMC | owner 2026-10-04 (SP-62, SP-57) |
 | 沒照課表 | Time and TSS both within ±20 % → an intensity reversal or another foot sport is ◐ 部分; a walking session accepts hike / walk / trail run | always ≠ | owner 2026-10-08 (SP-370) |
+| Future CTL / TSS | On the 圖表分析 PMC charts with a range into the future: dashed lines, outlined planned-TSS bars, a 今天 line, race-day CTL / TSB with the grade's TSB range; up to the last planned session; the projection's TSS = the calendar's estimate | the 總覽 card; the 課表 page; plan vs actual; drawing past the last session to the race | owner 2026-10-12 (SP-219) |
 
 ## Open Questions
 
 Open tickets that touch this module. Not implemented unless the line says otherwise.
 
-- [ ] Show the stored plan's future TSS / CTL on the charts (SP-219, 決策, Todo) — not decided yet
+- [x] Show the stored plan's future TSS / CTL on the charts (SP-219) — decided 2026-10-12 and built on the 圖表分析 PMC charts (above; not the 總覽 card, the 課表 page, plan vs actual or the days after the last planned session)
 - [x] Mark which sessions the system changed, which were left alone, which the user edited (SP-318) — built (課表標記 above)
 - [ ] The 課表 page loads slowly, also after switching the 課表心率區間 in 設定 and while a sync runs (SP-361 Bug Todo, SP-362 In Progress) — not fixed
 - [ ] iLevel / Stryd power zones in 設定 as the 課表's default (SP-363, Todo) — not implemented
@@ -2296,3 +2319,4 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 | 2026-10-08 | main | SP-258 owner 2026-10-08 | The altitude ? research lines drop the place too: 「高山症風險較高（Shen 2024）」 (was 「…玉山排雲山莊就診者的資料」) and 「超過 3,400 m 屬高風險（CDC）」 (was 「…；排雲山莊 3,402 m 就在線上」); `test_altitude` now forbids 排雲 / Paiyun in the help. |
 | 2026-10-12 | feat/zone-range-sp383 | SP-383 (docs/research/power-zone-width.md §5.2) | The editor's 區間 can span zones (從–到, e.g. Palladino 1B–2): a second dropdown 「到」 in the same set (power, Friel pace / HR, or the 課表心率區間 in use; 「只這一格」 first; none on the easy-run cap), stored `zone_to`, easy → hard (a reversed pick is swapped), resolved from the first zone's lower to the last zone's upper bound for the page, the push, TSS / chart, the ladder band and the template family; one-zone steps unchanged; the demo port follows. `backend/engine/workout_steps.py` (`zone_span`, `zone_set`, `zone_range_text`, `_hr_model_zone`, `normalize`, `resolve`), `backend/static/workout_editor.js` (`zoneEdit`, `zoneSpan`, `tgHtml`), `backend/demo/static_shim.js`. Tests: `backend/tests/test_zone_range_sp383.py` |
 | 2026-10-12 | feature | SP-310 | `workout_templates_user.uid` (UUID4 hex, unique index) next to the integer id; `updated_at` also moves on any ORM / Core update (`onupdate`); the rows from before filled by `init_db` on every tenant DB (`backend/db/stable_ids.py`), `_ensure` adds the column to an older table (`backend/engine/user_templates.py:95`); `uid` in every template the API returns (`to_dict`, `backend/engine/user_templates.py:226`); the `/steps/templates/user/{tid}` routes unchanged. Tests `backend/tests/test_stable_ids_sp310.py::test_template_new_and_edited_rows` |
+| 2026-10-12 | feat/pmc-projection-sp219 | SP-219 (owner 2026-10-12) | The stored-plan projection counts a session with only minutes: `plan_summary(…, est=)` / `planned_by_day` / `session_tss(s, est)` take the 課表's own estimate (`est_tss` with the new `plan_rates`, also used by the calendar and 課表達成率), so the overview's Sunday CTL / next-Monday TSB / week TSS target and the PMC charts' projection match the calendar's 預估 TSS; the 圖表分析 PMC charts draw that projection on a future range (wko5-engine.spec.md 「PMC projection」) |
