@@ -56,7 +56,12 @@ h1 { font-size:18px; margin:0 0 4px } h2 { font-size:15px; margin:28px 0 6px } p
 /* ---- V2：整張填色 ---- */
 .v2 .chip.done { background:color-mix(in srgb, var(--cp) 16%, var(--cell)); border-color:color-mix(in srgb, var(--cp) 45%, transparent) }
 /* ---- V3：icon 方塊上色 ---- */
-.v3 .chip.done .ic { background:var(--cp); color:#fff }
+/* 方塊用比狀態色更深的一組（--tile-*），白 icon 對比在淺色 ≥ 6.9:1、深色 ≥ 4.5:1；文字與形狀仍用 --good/--watch/--bad */
+:root { --tile-ok:#166534; --tile-part:#92400e; --tile-off:#991b1b }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --tile-ok:#15803d; --tile-part:#b45309; --tile-off:#b91c1c } }
+:root[data-theme="dark"] { --tile-ok:#15803d; --tile-part:#b45309; --tile-off:#b91c1c }
+.v3 .chip.done.cp-ok .ic { background:var(--tile-ok) } .v3 .chip.done.cp-part .ic { background:var(--tile-part) } .v3 .chip.done.cp-off .ic { background:var(--tile-off) }
+.v3 .chip.done .ic { color:#fff } .v3 .chip.done .ic svg { stroke-width:2.4 }
 .v3 .chip.done .g { position:absolute; right:-4px; bottom:-4px; background:var(--panel); border-radius:50%; width:13px; height:13px; font-size:9px; line-height:12px; text-align:center; border:1px solid var(--line) }
 .v3 .chip.fut .ic { border:1.5px solid var(--type); border-radius:6px }
 
@@ -68,7 +73,7 @@ h1 { font-size:18px; margin:0 0 4px } h2 { font-size:15px; margin:28px 0 6px } p
 <h1>課表小卡 UI 方案 mockup（SP-375 第一輪）</h1>
 <p class="meta">方向（使用者 2026-10-12 定）：完成度用顏色、類型用 icon、未來的課只畫外框。三個變體只差「完成度顏色塗在哪」。資料是假的。</p>
 <div class="bar">
-  <button data-v="v1" class="on">V1 左側色條</button><button data-v="v2">V2 整張填色</button><button data-v="v3">V3 icon 方塊上色</button>
+  <button data-v="v1">V1 左側色條</button><button data-v="v2">V2 整張填色</button><button data-v="v3" class="on">V3 icon 方塊上色（已選）</button>
   <span style="flex:1"></span>
   <button data-t="light">淺色</button><button data-t="dark">深色</button><button data-w="phone">手機寬度</button><button data-w="wide" class="on">桌機</button>
 </div>
@@ -83,7 +88,7 @@ h1 { font-size:18px; margin:0 0 4px } h2 { font-size:15px; margin:28px 0 6px } p
 </div>
 
 <div class="wrap" id="wrap">
-<div class="cal v1" id="cal"></div>
+<div class="cal v3" id="cal"></div>
 </div>
 <p class="note">右上角只放一件事：未來的課放手錶狀態；完成的課什麼都不放（≠／◐ 已併進完成度形狀）。細節一律 hover／點開。</p>
 
