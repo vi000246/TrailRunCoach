@@ -408,6 +408,20 @@ def test_racepower_course_map(app):
 # 設定: 閾值可信度, 課表訂閱
 # ---------------------------------------------------------------------------
 
+def test_settings_hides_the_experience_questions_with_a_history(app):
+    """SP-372: the demo athlete has months of runs, so 一般設定 shows one line instead of the
+    跑步經驗 questionnaire; with the detect call failing the questionnaire is shown."""
+    page, _ = app
+    open_page(page, _server.PAGES["settings"] + "#general")
+    expect(page.locator("#exp-hist")).to_be_visible(timeout=30_000)
+    expect(page.locator("#exp-block")).to_be_hidden()
+    page.route("**/plan/profile/detect", lambda r: r.fulfill(status=200, json={"has_history": False,
+                                                                              "power_source": {}, "labels": {}}))
+    page.reload()
+    expect(page.locator("#exp-block")).to_be_visible(timeout=30_000)
+    expect(page.locator("#x-n")).to_be_visible()
+    expect(page.locator("#exp-hist")).to_be_hidden()
+
 def test_settings_threshold_confidence(app):
     page, _ = app
     open_page(page, _server.PAGES["settings"] + "#thresholds")          # 生理數據 tab (SP-213)
