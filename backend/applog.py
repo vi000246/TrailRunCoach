@@ -384,7 +384,7 @@ def _setup_perf() -> None:
 
 # the API's areas, by route template prefix (longest first): what a perf.log line is about
 PERF_AREAS = (("/api/v1/overview/plan", "plan"), ("/api/v1/plan", "plan"), ("/api/v1/overview", "overview"),
-              ("/api/v1/wko5", "chart"), ("/api/v1/expr", "chart"), ("/api/v1/workouts", "chart"),
+              ("/api/v1/wko5", "chart"), ("/api/v1/workouts", "chart"),
               ("/api/v1/achievements", "chart"), ("/api/v1/racepower", "racepower"), ("/api/v1/routes", "racepower"),
               ("/api/v1/sync", "sync"), ("/api/v1/auth", "sync"), ("/share", "share"))
 

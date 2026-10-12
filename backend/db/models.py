@@ -292,8 +292,9 @@ class ActivityTag(Base):
     Dataset entry.start), not by a workout_files row: the race-power engine
     reads the WKO5 / COROS / TP datasets, and most WKO5 activities have no
     workout_files row. `file` (the dataset's entry.file, e.g. a .wko4 name)
-    is matched first when present; `workout_id` links a workout_files row
-    when the tag was set through /api/v1/workouts/{id}/activity."""
+    is matched first when present; `workout_id` links a workout_files row on
+    the rows set through the SPA-era PATCH /api/v1/workouts/{id}/activity
+    (removed 2026-10-12, SP-48); nothing sets it any more."""
     __tablename__ = "activity_tags"
     __table_args__ = (UniqueConstraint("athlete_id", "start_local"),)
     id: Mapped[int] = mapped_column(primary_key=True)

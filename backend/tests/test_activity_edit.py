@@ -100,17 +100,19 @@ async def _session():
     return s
 
 
-def test_update_activity_name_and_tags():
+def test_save_activity_tag_name_and_tags():
+    """The store behind both PATCH routes (the SPA-era workout_files route is gone, SP-48)."""
     async def _inner():
-        from backend.api.workouts import update_activity, ActivityUpdate
+        from backend.api.workouts import save_activity_tag, ActivityUpdate
         s = await _session()
-        r = await update_activity(10, ActivityUpdate(name="東眼山", tags=["賽前", "賽前", "熱"]), s)
-        assert r["name"] == "東眼山" and r["tags"] == ["賽前", "熱"]
-        r = await update_activity(10, ActivityUpdate(name=None), s)
-        assert r["name"] is None and r["tags"] == ["賽前", "熱"]
+        key = "2025-10-18T20:54"
+        r = await save_activity_tag(s, ActivityUpdate(name="東眼山", tags=["賽前", "賽前", "熱"]), start_local=key)
+        assert AT.name_of({"name": r.name}) == "東眼山" and AT.tags_of({"tags_json": r.tags_json}) == ["賽前", "熱"]
+        r = await save_activity_tag(s, ActivityUpdate(name=None), start_local=key)
+        assert AT.name_of({"name": r.name}) is None and AT.tags_of({"tags_json": r.tags_json}) == ["賽前", "熱"]
         from fastapi import HTTPException
         with pytest.raises(HTTPException) as e:
-            await update_activity(10, ActivityUpdate(tags=["x" * 40]), s)
+            await save_activity_tag(s, ActivityUpdate(tags=["x" * 40]), start_local=key)
         assert e.value.status_code == 400
     _run(_inner())
 
