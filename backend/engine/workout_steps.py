@@ -60,7 +60,7 @@ from backend.engine import interval_library as IL
 from backend.engine.hr_profile import EASY_CAP
 from backend.engine.hr_profile import ZONE_IDS as HR_MODEL_ZONES
 from backend.i18n import N_, _
-from backend.engine.zones import FRIEL_HR, FRIEL_PACE, PALLADINO_POWER_ZONES
+from backend.engine.zones import EASY_BAND, FRIEL_HR, FRIEL_PACE, LONG_BAND, PALLADINO_POWER_ZONES, TRAIL_BAND, watch_band
 
 V = 1
 KINDS = ("warm", "work", "rest", "cool", "other")
@@ -670,11 +670,11 @@ def _easy_items(s: dict, kind: str, secs: int, ids) -> Optional[list]:
     """derive()'s steps of the easy-type kinds (long, mountain, hike, easy), before the warm-up."""
     mp = mp_minutes(s) if kind == "long" else None
     if mp and secs - mp * 60 - MP_TAIL_S >= 10 * 60:
-        return [step(ids, "work", secs - mp * 60 - MP_TAIL_S, _easy(0.80, 0.88), "輕鬆"),
+        return [step(ids, "work", secs - mp * 60 - MP_TAIL_S, _easy(*LONG_BAND), "輕鬆"),
                 step(ids, "work", mp * 60, mp_target(s), "馬拉松配速"),
-                step(ids, "cool", MP_TAIL_S, _easy(0.75, 0.80), "輕鬆收操")]
+                step(ids, "cool", MP_TAIL_S, _easy(*EASY_BAND), "輕鬆收操")]
     if kind in ("long", "mountain", "hike"):
-        lo, hi = (0.80, 0.88) if kind == "long" else (0.75, 0.88)
+        lo, hi = LONG_BAND if kind == "long" else TRAIL_BAND
         return [step(ids, "work", secs, _easy(lo, hi))]
     if kind == "easy" and heat_run(s) and secs >= 20 * 60:
         return [step(ids, "warm", HEAT_WARM_S, EASY, "熱適應：慢慢進入"),
@@ -687,10 +687,10 @@ def _easy_items(s: dict, kind: str, secs: int, ids) -> Optional[list]:
             base = secs - n * (sprint + 60)
             if base >= 10 * 60:
                 w_name, r_name, rep_name = strides_names(s.get("title") or "", sprint, n)
-                return [step(ids, "work", base, _easy(0.75, 0.80), CAP_NAME),
+                return [step(ids, "work", base, _easy(*EASY_BAND), CAP_NAME),
                         rep(ids, n, [step(ids, "work", sprint, OPEN, w_name),
                                      step(ids, "rest", 60, OPEN, r_name)], True, rep_name)]
-        return [step(ids, "work", secs, _easy(0.75, 0.80))]
+        return [step(ids, "work", secs, _easy(*EASY_BAND))]
     return None
 
 
@@ -991,6 +991,17 @@ class Resolved:
                 "level": level(self.frac), "label": TYPE_LABEL.get(self.type, self.type)}
 
 
+def _watch_band(r: Resolved, c: Ctx, lo: float, hi: float) -> Resolved:
+    """An auto interval band on power (SP-378): the step shows the prescription (lo–hi), the watch
+    gets zones.watch_band — the band the app judges the rep by (upper × 1.05; Zone 5 open to 116 %)."""
+    wlo, whi = watch_band(lo, hi)
+    w = _power(c, wlo, whi)
+    if w and w != r.intensity:
+        r.intensity = w
+        r.sub = (r.sub + " · " if r.sub else "") + f"手錶上限 {w[2]:.0f} W"
+    return r
+
+
 def _from_int(it: Optional[tuple], c: Ctx, auto: bool = True, warn: str = "") -> Resolved:
     if not it:
         return Resolved("none", text="不設目標", auto=auto, warn=warn)
@@ -1074,10 +1085,12 @@ def resolve(st: dict, c: Ctx) -> Resolved:
             if h:
                 return _from_int(h, c)
             p = _power(c, tg["lo"], tg["hi"])
-            return _from_int(p, c, warn="沒有 LTHR：改用功率" if p else "沒有 LTHR／CP：不設目標")
+            if p:                                   # the power fallback: the watch band too (SP-378)
+                return _watch_band(_from_int(p, c, warn="沒有 LTHR：改用功率"), c, tg["lo"], tg["hi"])
+            return _from_int(p, c, warn="沒有 LTHR／CP：不設目標")
         p = _power(c, tg["lo"], tg["hi"])
         if p:
-            return _from_int(p, c)
+            return _watch_band(_from_int(p, c), c, tg["lo"], tg["hi"])
         h = _work_hr(c, tg)
         return _from_int(h, c, warn="沒有 CP：改用心率" if h else "沒有 CP／LTHR：不設目標")
     mode = tg.get("mode", "pct")

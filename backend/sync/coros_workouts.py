@@ -54,7 +54,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.db.models import CorosPlanPush
-from backend.engine.zones import WORKOUT_TARGETS
+from backend.engine.zones import EASY_BAND, LONG_BAND, TRAIL_BAND, WORKOUT_TARGETS, watch_band
 from backend.sync import http
 from backend.sync.coros_client import _get_token_and_base, _headers
 # the provider interface's errors (sync/workout_targets/base.py); Unsupported is shared
@@ -214,7 +214,7 @@ def _work_hr(s: dict, th: Thresholds, cls: Optional[str]) -> Optional[tuple]:
     return ("hr", round(lo or 0.89 * th.lthr), round(b * th.lthr))
 
 
-def easy_target(s: dict, th: Thresholds, frac: tuple = (0.75, 0.80)) -> Optional[tuple]:
+def easy_target(s: dict, th: Thresholds, frac: tuple = EASY_BAND) -> Optional[tuple]:
     """Easy / long / hike by the session's basis: HR ≤ AeT (auto), a power band (課表偏好 or the
     session's own 功率: Palladino Z2), or nothing. A walking session's HR cap is its uphill
     cap (hr_profile.walk_band, SP-115)."""
@@ -250,7 +250,7 @@ def _variant_steps(s: dict, th: Thresholds) -> Optional[list[StepLike]]:
     v = IL.resolve(s.get("variant_key"), s.get("variant_reps"), s.get("variant_adj"))
     if v is None:
         return None
-    work_int = power(th, v.lo, v.hi)
+    work_int = power(th, *watch_band(v.lo, v.hi))          # SP-378: the band the rep is judged by
     if _basis(s) == "hr":
         work_int = _work_hr(s, th, v.cls) or work_int
     elif _basis(s) == "none":
@@ -293,7 +293,7 @@ def _quality_steps(s: dict, th: Thresholds) -> list[StepLike]:
     pm = re.search(r"(\d+)\s*[–-]\s*(\d+)\s*%\s*CP", detail + " " + target)
     if pm:
         plo, phi = int(pm.group(1)) / 100.0, int(pm.group(2)) / 100.0
-    work_int = power(th, plo, phi)
+    work_int = power(th, *watch_band(plo, phi))            # SP-378: the band the rep is judged by
     # 課表偏好 間歇目標 = 心率 (engine/plan_prefs.py): the target carries only a heart-rate range
     hm = re.search(r"心率\s*(\d+)\s*[–-]\s*(\d+)\s*bpm", target)
     if (hm and "功率" not in target) or s.get("basis") == "hr":
@@ -490,11 +490,11 @@ def session_steps(s: dict, th: Thresholds, sent_tl: Optional[dict] = None) -> li
             mp_t = ("pace", round(WS.MP_PACE[0] * th.tpace), round(WS.MP_PACE[1] * th.tpace))
         else:
             mp_t = ("hr", round(WS.MP_HR[0] * th.lthr), round(WS.MP_HR[1] * th.lthr)) if th.lthr else None
-        return [Step(EX_TRAIN, secs - mp * 60 - WS.MP_TAIL_S, easy_target(s, th, (0.80, 0.88)), "輕鬆"),
+        return [Step(EX_TRAIN, secs - mp * 60 - WS.MP_TAIL_S, easy_target(s, th, LONG_BAND), "輕鬆"),
                 Step(EX_TRAIN, mp * 60, mp_t, "馬拉松配速"),
                 Step(EX_COOLDOWN, WS.MP_TAIL_S, easy_target(s, th), "輕鬆收操")]
     if kind in ("long", "mountain", "hike"):
-        it = easy_target(s, th, (0.80, 0.88) if kind == "long" else (0.75, 0.88))
+        it = easy_target(s, th, LONG_BAND if kind == "long" else TRAIL_BAND)
         return [Step(EX_TRAIN, secs, it, easy_name(s, th, it))]
     if kind == "easy" and (s.get("heat") or "熱適應" in (s.get("title") or "")) and secs >= 20 * 60:
         # heat-acclimation.md §5.4: warm-up 10 / main / cool-down 5 (walk), HR ≤ AeT

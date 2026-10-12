@@ -36,6 +36,29 @@ PALLADINO_3ZONE = {"low": 0.80, "high": 0.95}
 Z3_LO = 0.88          # 3A: threshold stimulus from here
 Z4_LO = 1.01          # 4: supra-threshold (above CP)
 Z5_LO = 1.06          # 5: maximal aerobic power (VO2max)
+Z5_TOP = 1.16         # 5's upper edge
+
+# × CP of the easy kinds when they run by power (SP-378, WORKOUT_TARGETS z2 / long / trail): a road
+# easy run the whole of Zone 1, a road long run Zone 1–2; mountain / hike days (HR first) keep
+# 75–88 %. engine/workout_steps and sync/coros_workouts both read these.
+EASY_BAND = (0.65, 0.80)
+LONG_BAND = (0.65, 0.88)
+TRAIL_BAND = (0.75, 0.88)
+
+# SP-378: what an interval band becomes on the watch. The app judges a rep by its mean (≥ 0.98 ×
+# the lower bound) and the time in zone up to hi × 1.05, and a Zone 5 rep has no upper bound
+# (interval_eval: TIZ_HI_TOL, z5) — the watch's red light now follows the same band, so it no
+# longer complains about a rep the app counts as done. The lower bound stays.
+WATCH_HI_TOL = 1.05   # = interval_eval.TIZ_HI_TOL
+
+
+def watch_band(lo: float, hi: float) -> tuple[float, float]:
+    """(lo, hi) × CP pushed to the watch for an interval band (lo, hi) × CP: a Zone 5 band (middle
+    ≥ Z5_LO, as interval_library classes it) up to Zone 5's top (or its own hi above that), any
+    other up to hi × WATCH_HI_TOL."""
+    if (lo + hi) / 2 >= Z5_LO:
+        return lo, max(hi, Z5_TOP)
+    return lo, round(hi * WATCH_HI_TOL, 4)
 
 
 def palladino_rows(open_hi: float = 99.0) -> list[tuple]:
@@ -391,8 +414,15 @@ TERRAIN_NOTE = ("山路長天、越野輕鬆看心率（≤ 輕鬆跑上限）�
 WORKOUT_TARGETS = [
     # (id, name, power lo, power hi, hr lo (×LTHR or "aet"), hr hi, primary, example, source)
     ("recovery", "恢復跑", None, 0.75, None, 0.85, "心率", "20–40 分鐘，隔天有強度課時", "Palladino 1A–1B；Friel Z1"),
-    ("z2", "輕鬆跑（Zone 2）", 0.75, 0.80, None, "aet", "心率", "大部分的跑步；心率不超過輕鬆跑上限", "Palladino 1C；Uphill Athlete AeT"),
-    ("long", "長跑（路跑）", 0.80, 0.88, None, "aet", "心率", "60 分鐘以上；心率壓在輕鬆跑上限以下", "Palladino Z2；Uphill Athlete"),
+    # SP-378 (docs/research/power-zone-width.md, the user 2026-10-12): the easy run is the whole of
+    # Zone 1 (65–80 % CP = Stryd Zone 1 = Palladino 1B + 1C), not 1C alone (75–80 %: a 10 W band that a
+    # steady run's 30-s power, CV ≈ 9 %, stays in only ~27 % of the time); the long run 65–88 % (Z1–Z2)
+    ("z2", "輕鬆跑（Zone 1）", 0.65, 0.80, None, "aet", "心率",
+     "大部分的跑步；Zone 1 整段都算輕鬆，多數人落在 75–80% CP；心率不超過輕鬆跑上限",
+     "Palladino Zone 1（1B–1C）＝ Stryd Zone 1；Uphill Athlete AeT"),
+    ("long", "長跑（路跑）", 0.65, 0.88, None, "aet", "心率",
+     "60 分鐘以上；建議 75–88% CP，後段掉到 Zone 1 也沒關係；心率壓在輕鬆跑上限以下",
+     "Palladino Zone 1–2；Uphill Athlete"),
     # primary = engine/target_policy.py (vo2max-gate-and-trail-metric.md §2.5: long trail days by HR)
     ("trail", "山路長天 / 越野輕鬆", 0.75, 0.88, None, "aet", "心率",
      "心率不超過輕鬆跑上限（可以走）；功率只當參考，陡坡、下坡不看功率",

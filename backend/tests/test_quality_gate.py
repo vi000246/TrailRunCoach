@@ -376,11 +376,11 @@ def test_dose_sessions_parse_for_coros_and_the_cap():
     steps = CW.session_steps(s, CW.Thresholds.of(th))
     rep = steps[1]
     assert rep.sets == 3 and rep.steps[0].seconds == 480 and rep.steps[1].seconds == 120
-    assert rep.steps[0].intensity == ("power", 225, 238)                    # 90–95 % CP
+    assert rep.steps[0].intensity == ("power", 225, 249)                    # 90–95 % CP, watch upper × 1.05 (SP-378)
     v = QG.session(QG.Z5[0], th)
     assert "休 2 分鐘（走路或極慢跑）" in v["detail"]                         # Buchheit: < 2–3 min passive
     st = CW.session_steps(v, CW.Thresholds.of(th))
-    assert st[1].sets == 5 and st[1].steps[0].seconds == 120 and st[1].steps[0].intensity == ("power", 265, 280)
+    assert st[1].sets == 5 and st[1].steps[0].seconds == 120 and st[1].steps[0].intensity == ("power", 265, 290)
     assert "心率" not in QG.session(QG.Z5[3], th, lthr_default=True)["target"]      # WKO5 default LTHR
     assert QG.hard_need("閾值 3×8 分", 600) == pytest.approx(600)
     assert QG.hard_need("VO2max 5×2 分", 600, "v1a") == pytest.approx(360)
@@ -394,7 +394,7 @@ def test_dose_sessions_parse_for_coros_and_the_cap():
     work = [x for x in cs if isinstance(x, CW.Step) and x.kind == CW.EX_TRAIN]
     rest = [x for x in cs if isinstance(x, CW.Step) and x.kind == CW.EX_REST]
     assert len(work) == 5 and len(rest) == 4 and all(r.intensity is None and r.name == "走路或極慢跑" for r in rest)
-    assert work[0].intensity == ("power", 265, 280)
+    assert work[0].intensity == ("power", 265, 290)
     total = CW.session_workout({**ls, "day": "2026-10-07"}, th, "2026-10-01").payload["estimatedTime"]
     assert total == ls["minutes"] * 60
     z3 = QG.session(QG.ZONE3, th, hours=6.0)

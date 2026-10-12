@@ -96,6 +96,7 @@ def constants() -> dict:
     from backend.engine import target_policy as TP
     from backend.engine import workout_steps as WS
     from backend.sync import coros_workouts as CW
+    from backend.engine import zones as _Z
     return {
         "ws": {"zones": {k: [list(r) for r in v] for k, v in WS.ZONES.items()},
                "hr_work": {k: list(v) for k, v in WS.HR_WORK.items()},
@@ -110,6 +111,9 @@ def constants() -> dict:
                          "z5_max_rest_s": WS.Z5_MAX_REST_S, "coros_max_steps": WS.COROS_MAX_STEPS},
                "mp": {"pace": list(WS.MP_PACE), "hr": list(WS.MP_HR), "goal_band": WS.MP_GOAL_BAND,
                       "tail_s": WS.MP_TAIL_S},
+               # SP-378: the easy kinds' power bands and the watch band of an interval (zones.py)
+               "bands": {"easy": list(WS.EASY_BAND), "long": list(WS.LONG_BAND), "trail": list(WS.TRAIL_BAND)},
+               "watch": {"hi_tol": _Z.WATCH_HI_TOL, "z5_lo": _Z.Z5_LO, "z5_top": _Z.Z5_TOP},
                "step_name": {str(k): v for k, v in CW.STEP_NAME.items()},
                "rpe": {"min": WS.RPE_MIN, "max": WS.RPE_MAX, "word": {str(k): v for k, v in WS.RPE_WORD.items()},
                        "frac": {str(k): v for k, v in WS.RPE_FRAC.items()}, "easy_max": WS.RPE_EASY_MAX,

@@ -65,7 +65,7 @@ def test_threshold_intervals_repeat_group_and_unique_orders():
 
 def test_power_is_a_note_by_default_and_a_target_when_asked():
     s = sess("quality", "閾值 3×10 分", 60, detail="休 2–3 分鐘；暖身 15 分、緩和 10 分")
-    lo, hi = round(0.95 * 300), round(1.01 * 300)
+    lo, hi = round(0.95 * 300), round(1.01 * 1.05 * 300)          # SP-378: the judging band on the watch
     work = steps_of(GP.garmin_workout(s, TH))[1]["workoutSteps"][0]
     assert work["targetType"]["workoutTargetTypeKey"] == "no.target"
     assert "targetValueOne" not in work and f"目標功率 {lo}–{hi} W" in work["description"]

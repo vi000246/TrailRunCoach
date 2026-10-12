@@ -32,7 +32,7 @@ def test_threshold_intervals_repeat_block():
     lines = text.split("\n")
     assert lines[0].startswith("- 暖身 15m ") and lines[0].endswith("% LTHR")
     assert lines[1] == "" and lines[2] == "Main Set 3x"
-    assert lines[3] == f"- 主課 10m {round(0.95 * 300)}-{round(1.01 * 300)}w"
+    assert lines[3] == f"- 主課 10m {round(0.95 * 300)}-{round(1.01 * 1.05 * 300)}w"   # SP-378: × 1.05 on the watch
     assert lines[4] == "- 恢復 3m"
     assert lines[5] == "" and lines[6].startswith("- 緩和 10m ")
     assert len(lines) == 7
