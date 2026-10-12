@@ -803,6 +803,12 @@ async def _run(db, trigger: str, force: bool, approve_id: Optional[int], inp: di
     errors: list = []
     remote: list = []              # 課表待確認 copies to take off the watch after the lock
     p = await pending(db)
+    if approve_id is not None and (p is None or p.id != approve_id):
+        # SP-377: a second approve that passed approve()'s check before the first one took the lock
+        r = await db.get(PlanChangeLog, approve_id)
+        if r is not None and r.status == "approved":
+            return {"status": "already_approved", "id": approve_id}, None
+        raise ValueError("找不到待確認的提案")
     await _stale_notices(db, today, p.notice_uid if p is not None else None, errors, remote)
     stored = await PS.load(db)
     cp_items: list = []
@@ -998,7 +1004,13 @@ async def reject(db, entry_id: int) -> dict:
 
 
 async def approve(db, entry_id: int) -> dict:
+    """Apply a pending proposal. SP-377: approving twice (a second click while the first is still
+    pushing to the watch, 20–30 s) is not an error — an already approved proposal answers
+    {"status": "already_approved"} and changes nothing; the check is made again under the writer
+    lock (_run) so two requests that both found it pending apply it once."""
     r = await db.get(PlanChangeLog, entry_id)
+    if r is not None and r.status == "approved":
+        return {"status": "already_approved", "id": entry_id}
     if r is None or r.status != "pending":
         raise ValueError("找不到待確認的提案")
     return await run(db, trigger="approve", force=True, approve_id=entry_id)

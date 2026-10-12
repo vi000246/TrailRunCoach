@@ -26,6 +26,8 @@
   #autoplan button { font: inherit; font-size: 12.5px; border: 1px solid var(--line); background: var(--panel); color: var(--text);
     border-radius: 6px; padding: 3px 10px; cursor: pointer; }
   #autoplan button.pri { background: var(--accent); color: #fff; border-color: var(--accent); }
+  #autoplan button:disabled { opacity: .55; cursor: progress; }
+  #autoplan .ap-busy { margin-top: 6px; }
   #autoplan details summary { cursor: pointer; color: var(--muted); font-size: 12.5px; }
   #autoplan details.ap-log > summary { padding: 1px 0; }
   #autoplan details.ap-log[open] > summary { margin-bottom: 4px; }
@@ -104,18 +106,35 @@
     root.innerHTML = out.join("");
   }
 
-  async function act(fn, label) {
-    try { await fn(); } catch (e) { alert(`${label}失敗：${e.message}`); }
+  // SP-377: 同意／拒絕／復原 wait for the push to the watch (20–30 s): while one runs every button
+  // in the box is disabled and the box says what is happening, so a second click can't send it again
+  let busy = false;
+  async function act(fn, label, t, msg) {
+    if (busy) return;
+    busy = true;
+    const box = t.closest(".ap-box") || root;
+    box.querySelectorAll("button").forEach((b) => { b.disabled = true; });
+    box.setAttribute("aria-busy", "true");
+    const note = document.createElement("div");
+    note.className = "meta ap-busy";
+    note.setAttribute("role", "status");
+    note.textContent = msg;
+    t.parentElement.after(note);
+    try {
+      const r = await fn();
+      if (r && r.status === "already_approved") note.textContent = T("common.autoplan.already_approved");
+    } catch (e) { alert(`${label}失敗：${e.message}`); }
+    busy = false;
     await render();
     if (typeof window.onAutoPlanChange === "function") window.onAutoPlanChange();
   }
 
   root.addEventListener("click", (e) => {
     const t = e.target.closest("button");
-    if (!t) return;
-    if (t.dataset.approve) act(() => sj("POST", `${API}/proposal/${t.dataset.approve}/approve`), "同意");
-    else if (t.dataset.reject) act(() => sj("POST", `${API}/proposal/${t.dataset.reject}/reject`), "拒絕");
-    else if (t.dataset.undo && confirm("把這次自動調整動到的課還原，並重新推送到手錶？")) act(() => sj("POST", `${API}/log/${t.dataset.undo}/undo`), "復原");
+    if (!t || t.disabled || busy) return;
+    if (t.dataset.approve) act(() => sj("POST", `${API}/proposal/${t.dataset.approve}/approve`), "同意", t, T("common.autoplan.approving"));
+    else if (t.dataset.reject) act(() => sj("POST", `${API}/proposal/${t.dataset.reject}/reject`), "拒絕", t, T("common.autoplan.rejecting"));
+    else if (t.dataset.undo && confirm("把這次自動調整動到的課還原，並重新推送到手錶？")) act(() => sj("POST", `${API}/log/${t.dataset.undo}/undo`), "復原", t, T("common.autoplan.undoing"));
   });
   window.autoPlanRefresh = render;
   render();
