@@ -75,6 +75,14 @@ async def lifespan(app: FastAPI):
         DI.startup_checks()          # refuses to start next to the owner's data (§3.1)
     await init_db()
     await _ensure_athlete()
+    # multi-user mode (SP-384): the one server key from the env, accounts.db with the owner as
+    # user 1 pointing at this folder in place (idempotent; nothing is moved)
+    from backend import accounts
+    if accounts.enabled():
+        from backend.accounts import store as account_store
+        from backend.settings import secrets as _secrets
+        _secrets.require_server_key()
+        account_store.migrate_owner()
     # 賽事大小 (SP-111): planning.event_size reads the race calculator and the personal climb
     # divisor; the engine stays pure (and its tests) until the app installs them
     from backend.engine import planning as _planning

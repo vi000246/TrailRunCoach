@@ -34,8 +34,16 @@ log = logging.getLogger(__name__)
 SOURCES = ("coros", "tp")
 SETTING_NAME = {"coros": "coros", "tp": "trainingpeaks"}      # sync.<name>.* keys
 OK_STATUSES = ("ok", "partial")                               # a run that synced
+# busy / reserved / yielding, per (tenant, source) (SP-384): one person's sync never makes another
+# person's SYNC_BUSY. The owner's keys are the bare source name, as before.
 _BUSY: set[str] = set()
 _TASKS: set[asyncio.Task] = set()
+
+
+def _k(source: str) -> str:
+    from backend import tenancy
+    tid = tenancy.current().id
+    return source if tid == "owner" else f"{tid}:{source}"
 
 
 class SyncBusy(RuntimeError):
@@ -117,7 +125,8 @@ def is_busy(source: str) -> bool:
     """A sync, a check or a deletion of the source is running (or a check is claimed and
     about to run, `reserve`). A yielding holder (the self-rating job, SP-362 A5) does not
     count: a sync asks it to stop and waits."""
-    return (source in _BUSY and source not in _YIELD) or source in _RESERVED
+    k = _k(source)
+    return (k in _BUSY and k not in _YIELD) or k in _RESERVED
 
 
 _RESERVED: set[str] = set()
@@ -131,12 +140,12 @@ def reserve(source: str) -> bool:
         raise ValueError(f"unknown source {source!r}")
     if is_busy(source):
         return False
-    _RESERVED.add(source)
+    _RESERVED.add(_k(source))
     return True
 
 
 def release(source: str) -> None:
-    _RESERVED.discard(source)
+    _RESERVED.discard(_k(source))
 
 
 @contextlib.contextmanager
@@ -145,13 +154,14 @@ def hold(source: str):
     asyncio, so check-and-add is atomic."""
     if source not in SOURCES:
         raise ValueError(f"unknown source {source!r}")
-    if source in _BUSY:
+    k = _k(source)
+    if k in _BUSY:
         raise SyncBusy(source)
-    _BUSY.add(source)
+    _BUSY.add(k)
     try:
         yield
     finally:
-        _BUSY.discard(source)
+        _BUSY.discard(k)
 
 
 # A background job that gives way (SP-362 A5): it holds the busy flag (nothing runs beside
@@ -166,21 +176,23 @@ def hold_yielding(source: str):
     """hold(source) for a job that stops when asked; yields the stop request (an Event)."""
     with hold(source):
         stop = asyncio.Event()
-        _YIELD[source] = stop
+        k = _k(source)
+        _YIELD[k] = stop
         try:
             yield stop
         finally:
-            _YIELD.pop(source, None)
+            _YIELD.pop(k, None)
 
 
 async def _make_way(source: str, wait: float = YIELD_WAIT_S) -> None:
     """Ask a yielding holder of `source` to stop and wait (at most `wait` s) until it has."""
-    stop = _YIELD.get(source)
+    k = _k(source)
+    stop = _YIELD.get(k)
     if stop is None:
         return
     stop.set()
     end = time.monotonic() + wait
-    while source in _BUSY and source in _YIELD and time.monotonic() < end:
+    while k in _BUSY and k in _YIELD and time.monotonic() < end:
         await asyncio.sleep(0.05)
 
 

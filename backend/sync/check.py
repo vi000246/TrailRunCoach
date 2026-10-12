@@ -66,12 +66,12 @@ def key(source: str, mode: str) -> str:
     return f"sync.{runner.SETTING_NAME[source]}.{'check_weekly' if mode == WEEKLY else 'check'}"
 
 
-_PROGRESS: dict[str, dict] = {}   # source -> {mode, phase, pages, listed, done, total, at}
+_PROGRESS: dict[str, dict] = {}   # runner._k(source) -> {mode, phase, pages, listed, done, total, at}
 _TASKS: set[asyncio.Task] = set()
 
 
 def progress(source: str) -> Optional[dict]:
-    p = _PROGRESS.get(source)
+    p = _PROGRESS.get(runner._k(source))
     return dict(p) if p else None
 
 
@@ -324,7 +324,7 @@ async def _store(db: AsyncSession, athlete_id: int, source: str, mode: str, valu
 
 
 def _prog(source: str, **kw) -> None:
-    p = _PROGRESS.setdefault(source, {})
+    p = _PROGRESS.setdefault(runner._k(source), {})
     p.update(kw)
 
 
@@ -365,7 +365,7 @@ async def check_stream(db: AsyncSession, source: str, athlete_id: int, mode: str
             await _store_fill(db, athlete_id, source, out)
         else:
             await _store(db, athlete_id, source, mode, out)
-        _PROGRESS.pop(source, None)
+        _PROGRESS.pop(runner._k(source), None)
     if out["status"] not in runner.OK_STATUSES:
         return                                   # the error event above is the run's outcome
     yield {"status": "complete", "total_downloaded": out.get("fetched", 0),
@@ -474,7 +474,7 @@ def start(source: str, athlete_id: int = 1, mode: str = FULL, ids: Optional[list
     if session_factory is None:
         from backend.db.database import AsyncSessionLocal as session_factory
     mine = {"mode": mode, "phase": "start", "pages": 0, "listed": 0, "done": 0, "total": 0, "at": _now_iso()}
-    _PROGRESS[source] = mine
+    _PROGRESS[runner._k(source)] = mine
     t = asyncio.get_running_loop().create_task(_run(source, athlete_id, mode, ids, session_factory, mine))
     _TASKS.add(t)
     t.add_done_callback(_TASKS.discard)
@@ -493,13 +493,13 @@ async def _run(source: str, athlete_id: int, mode: str, ids, session_factory, mi
         log.warning("%s %s check run failed: %s", source, mode, type(e).__name__)
     finally:
         runner.release(source)
-        if _PROGRESS.get(source) is mine:        # e.g. SYNC_BUSY: the stream never ran
-            _PROGRESS.pop(source, None)
+        if _PROGRESS.get(runner._k(source)) is mine:        # e.g. SYNC_BUSY: the stream never ran
+            _PROGRESS.pop(runner._k(source), None)
     return last
 
 
 def running(source: str) -> bool:
-    return source in _PROGRESS
+    return runner._k(source) in _PROGRESS
 
 
 # ---------------------------------------------------------------------------

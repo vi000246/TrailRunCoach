@@ -135,6 +135,11 @@ PROVIDER_LABEL = {"cwa_hourly": "中央氣象署 登山三天預報", "cwa_weekl
 # ---------------------------------------------------------------------------
 
 def load_key(path: Optional[Path] = None) -> Optional[str]:
+    """The CWA authorisation code: the owner's (env CWA_API_KEY or weather.json). Every other
+    tenant has none (SP-384, auth-and-demo plan §5): its forecasts fall back to Open-Meteo."""
+    from backend import tenancy
+    if path is None and not tenancy.is_owner():
+        return None
     path = path or key_path()
     env = os.getenv("CWA_API_KEY")
     if env:
@@ -146,6 +151,9 @@ def load_key(path: Optional[Path] = None) -> Optional[str]:
 
 
 def save_key(key: str, path: Optional[Path] = None) -> None:
+    from backend import tenancy
+    if path is None and not tenancy.is_owner():
+        raise PermissionError("the CWA key is the owner's (weather.key)")
     path = path or key_path()
     try:
         data = json.loads(path.read_text("utf-8"))
@@ -167,8 +175,7 @@ def mask_key(key: Optional[str]) -> Optional[str]:
 
 
 def key_status(path: Optional[Path] = None) -> dict:
-    path = path or key_path()
-    k = load_key(path)
+    k = load_key(path)                   # None for anyone but the owner (SP-384)
     return {"configured": bool(k), "masked": mask_key(k),
             "source": "env CWA_API_KEY" if os.getenv("CWA_API_KEY") else ("weather.json" if k else None)}
 

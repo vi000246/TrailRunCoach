@@ -21,7 +21,7 @@ from backend.engine.achievements import (
 from backend.engine.activity_key import key_of
 from backend.engine.wko5expr.config import EngineConfig
 from backend.engine.wko5expr.dataset import Dataset
-from backend.settings.paths import athlete_dir
+from backend.settings.paths import athlete_dir, for_tenant
 
 ATHLETE_DIR = athlete_dir()
 
@@ -42,14 +42,14 @@ SORT_KEYS = {
 def _wko5_dataset() -> Dataset:
     # distance / climbing / time come from WKO5's index and don't depend on
     # the TSS policy, so the parity config is fine here.
-    return Dataset(ATHLETE_DIR, config=EngineConfig())
+    return Dataset(for_tenant(ATHLETE_DIR), config=EngineConfig())
 
 
 def _dataset():
     """The WKO5 folder's Dataset; without one (a COROS / TP-only runner) the
     charts' shared Dataset of the synced FITs."""
     from backend.engine.wko5expr.datasource import wko5_available
-    if wko5_available(ATHLETE_DIR):
+    if wko5_available(for_tenant(ATHLETE_DIR)):        # the owner only (SP-384)
         return _wko5_dataset()
     from backend.api.wko5views import _dataset as shared
     return shared()

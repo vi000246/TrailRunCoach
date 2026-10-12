@@ -179,6 +179,8 @@ def key_status():
 
 @router.post("/weather/key")
 def save_key(body: KeyIn):
+    if not _tenancy.can("weather.key"):
+        raise HTTPException(403, "氣象署授權碼只有站主能設定")
     k = body.key.strip()
     if k and (len(k) < 10 or len(k) > 80 or any(c.isspace() for c in k)):
         raise HTTPException(400, "授權碼格式不對")

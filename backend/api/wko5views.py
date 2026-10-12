@@ -53,7 +53,7 @@ from backend.engine.wko5expr.render import render_chart, render_map
 from backend.engine.wko5expr.render_cache import CACHE as RENDER_CACHE, chart_key
 from backend.engine.wko5expr import chartscope as CS
 from backend.files.wko5chart_reader import read_view
-from backend.settings.paths import athlete_dir
+from backend.settings.paths import athlete_dir, for_tenant
 from backend import tenancy
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -144,7 +144,7 @@ def _build_dataset(cfg_json: str, source: str = "wko5", stamp: str = "", shared:
     from backend import applog
     try:
         with applog.timed("dataset build", source=source):        # SP-215: the wait behind every chart
-            ds = dataset_for_source(source, ATHLETE_DIR, config=EngineConfig.from_dict(json.loads(cfg_json)))
+            ds = dataset_for_source(source, for_tenant(ATHLETE_DIR), config=EngineConfig.from_dict(json.loads(cfg_json)))
     except BaseException as e:
         st.fail(e)
         raise
@@ -182,7 +182,7 @@ def _dataset_key(parity: Optional[bool] = None, source: Optional[str] = None) ->
     if parity is not None and parity != cfg.parity:
         cfg = cfg.replace(parity=parity)
     src = source if source in DSRC.SOURCES else DSRC.current_source()
-    return (json.dumps(cfg.to_dict(), sort_keys=True), src, DSRC.source_stamp(src, ATHLETE_DIR),
+    return (json.dumps(cfg.to_dict(), sort_keys=True), src, DSRC.source_stamp(src, for_tenant(ATHLETE_DIR)),
             str(tenancy.current().shared))
 
 
