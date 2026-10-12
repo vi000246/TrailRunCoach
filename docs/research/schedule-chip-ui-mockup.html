@@ -52,7 +52,7 @@ h1 { font-size:18px; margin:0 0 4px } h2 { font-size:15px; margin:28px 0 6px } p
 .chip.act { border-style:dotted }
 
 /* ---- V1：左側色條 ---- */
-.v1 .chip.done { border-left:4px solid var(--cp) }
+.v1 .chip.done { border-left:4px solid var(--cp) } .v1 .chip.done .ic { color:var(--text) }
 /* ---- V2：整張填色 ---- */
 .v2 .chip.done { background:color-mix(in srgb, var(--cp) 16%, var(--cell)); border-color:color-mix(in srgb, var(--cp) 45%, transparent) }
 /* ---- V3：icon 方塊上色 ---- */
@@ -73,7 +73,7 @@ h1 { font-size:18px; margin:0 0 4px } h2 { font-size:15px; margin:28px 0 6px } p
 <h1>課表小卡 UI 方案 mockup（SP-375 第一輪）</h1>
 <p class="meta">方向（使用者 2026-10-12 定）：完成度用顏色、類型用 icon、未來的課只畫外框。三個變體只差「完成度顏色塗在哪」。資料是假的。</p>
 <div class="bar">
-  <button data-v="v1">V1 左側色條</button><button data-v="v2">V2 整張填色</button><button data-v="v3" class="on">V3 icon 方塊上色（已選）</button>
+  <button data-v="v1" class="on">V1 左側色條（已選）</button><button data-v="v2">V2 整張填色</button><button data-v="v3">V3 icon 方塊上色</button>
   <span style="flex:1"></span>
   <button data-t="light">淺色</button><button data-t="dark">深色</button><button data-w="phone">手機寬度</button><button data-w="wide" class="on">桌機</button>
 </div>
@@ -84,9 +84,9 @@ h1 { font-size:18px; margin:0 0 4px } h2 { font-size:15px; margin:28px 0 6px } p
 </div>
 
 <div class="wrap" id="wrap">
-<div class="cal v3" id="cal"></div>
+<div class="cal v1" id="cal"></div>
 </div>
-<p class="note">三件事三個位置：左邊方塊＝課表類型（icon）＋完成度著色；右欄＝完成度圓圈（還沒做的課是空圈，旁邊再放手錶狀態）。方塊角落只剩 ↻／✎ 小徽章。細節一律 hover／點開。</p>
+<p class="note">V1：左邊 4px 色條＝完成度顏色；方塊＝課表類型 icon（不上色）；右欄＝完成度圓圈（還沒做的課是空圈，旁邊再放手錶狀態）。方塊角落只剩 ↻／✎ 小徽章。細節一律 hover／點開。</p>
 
 <h2>三案取捨</h2>
 <table style="border-collapse:collapse; font-size:12.5px">
