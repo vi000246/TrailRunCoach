@@ -68,8 +68,8 @@ def week_context(*, kind: str, mode: str, monday: dt.date, road: bool, b2b: Opti
     """Whether this week gets a 技術地形 session and which rule: {"active", "phase", "why"}.
     `injury`: injuries.condition_week's rule (SP-270) — 膝前痛／髂脛束進行中 = no 技術地形. `behind`:
     the day of this week's stored one when it is already behind (plan_store.hook_days, SP-87) — no
-    second one. `events`: the season plan's events — the next A race's 土徑比 (SP-87). (`b2b` is no
-    longer read: it only kept the 基礎期's LSD swap out of a B2B week.)"""
+    second one. `events`: the season plan's events — the next A race's 土徑比 (SP-87). `b2b`: this
+    week's B2B info — its easy days after the pair (`post.until`) take no RPE 6–7 session."""
     info = {"active": False, "phase": kind, "monday": monday.isoformat()}
     if behind:
         b = _d(behind)
@@ -84,6 +84,10 @@ def week_context(*, kind: str, mode: str, monday: dt.date, road: bool, b2b: Opti
     if kind == "base":
         # SP-87: the LSD stays on steady terrain (the module docstring)
         return {**info, "why": _("基礎期不排技術地形課：長跑留在穩定地形，爬升改排長爬坡有氧")}
+    # SP-87: the easy days after an accepted B2B take no RPE 6–7 session (a hard day), only the easy one
+    until = ((b2b or {}).get("post") or {}).get("until")
+    if until:
+        info["b2b_until"] = str(until)[:10]
     e = min((x for x in events or () if getattr(x, "priority", None) == "A" and x.start > monday),
             key=lambda x: x.start, default=None)
     pct = getattr(e, "trail_pct", None) if e is not None else None
@@ -277,7 +281,9 @@ def apply(ss: list, info: Optional[dict], *, hours: Optional[float] = None, rate
         return ss
     cap = getattr(prefs, "cap_weekday", None) if prefs is not None and getattr(prefs, "active", False) else None
     long_cap = getattr(prefs, "long_cap", None) if prefs is not None and getattr(prefs, "active", False) else None
-    spaced = [s for s in easy if all(abs((_d(s["day"]) - h).days) >= 2 for h in hard)]
+    until = _d(info.get("b2b_until"))
+    spaced = [s for s in easy if all(abs((_d(s["day"]) - h).days) >= 2 for h in hard)
+              and (until is None or _d(s["day"]) > until)]
     room, room_txt = budget_room(ss, hours)
     warm_cool = WARM + COOL
 
@@ -315,7 +321,8 @@ def apply(ss: list, info: Optional[dict], *, hours: Optional[float] = None, rate
             return ss
         reason = _("本週強度預算不夠（{room}，需要 ≥ {need} 分）", room=room_txt, need=SPEC_WORK_MIN) \
             if spaced and room is not None and room < SPEC_WORK_MIN else \
-            _("沒有離長跑和其他強度課 ≥ 2 天的日子") if not spaced else _("這天的時間上限放不下")
+            (_("沒有離長跑和其他強度課 ≥ 2 天、又不在 B2B 之後輕鬆日的日子") if until is not None else
+             _("沒有離長跑和其他強度課 ≥ 2 天的日子")) if not spaced else _("這天的時間上限放不下")
         why = _("專項期每週 1 堂技術地形 {m}′，但{reason}：改成 {rpe}，算輕鬆課（不佔強度預算、不用隔 48 小時）",
                 m=m, reason=reason, rpe=_rpe_txt(rpe))
     delta = m - int(pick.get("minutes") or 0)

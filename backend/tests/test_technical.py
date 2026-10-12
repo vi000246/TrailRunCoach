@@ -446,3 +446,21 @@ def test_the_stored_quality_tech_row_counts_as_the_users_own_and_stays_out_of_th
     assert sorted(r["uid"] for r in got) == ["c", "q"]
     assert sorted(x["uid"] for x in T.user_quality(got, MON)) == ["c", "q"]
     assert set(PS.done_plan(db)) == {8}                    # the interval only; the done tech run (7) is out
+
+
+def test_the_quality_session_stays_out_of_the_easy_days_after_a_b2b():
+    """SP-87 (surfaced by kind quality): the RPE 6–7 session is a hard day, so not in the easy days after
+    an accepted B2B (b2b.post.until) — like the downhill session and the 長爬坡反覆; without another spaced
+    day it is the RPE 4–5 one (easy, allowed there)."""
+    b2b = {"post": {"start": d(-2), "end": d(-1), "until": d(3)}}
+    info = T.week_context(kind="specific", mode="specific", monday=MON, road=False, b2b=b2b)
+    ss, notes = _week(), []
+    T.apply(ss, info, hours=8.0, notes=notes)
+    t = next(x for x in ss if x["id"] == "tech")
+    assert t["kind"] == "hike" and WT.session_role(t) == "easy"            # Wed / Thu were the spaced days
+    assert "B2B" in notes[0]["text"]
+    ss = _week()
+    T.apply(ss, T.week_context(kind="specific", mode="specific", monday=MON, road=False,
+                               b2b={"post": {"until": d(2)}}), hours=8.0)
+    t = next(x for x in ss if x["id"] == "tech")
+    assert t["kind"] == "quality" and t["day"] == d(3)                      # Thu: after the easy days

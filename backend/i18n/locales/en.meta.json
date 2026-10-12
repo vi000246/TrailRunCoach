@@ -4759,6 +4759,10 @@
     "draft": false,
     "src": "backend/engine/workout_steps.py:117"
   },
+  "沒有離長跑和其他強度課 ≥ 2 天、又不在 B2B 之後輕鬆日的日子": {
+    "draft": true,
+    "src": "backend/engine/technical.py:324"
+  },
   "沒有離長跑和其他強度課 ≥ 2 天的日子": {
     "draft": true,
     "src": "backend/engine/technical.py:211"
