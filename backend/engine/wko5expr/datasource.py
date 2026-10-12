@@ -99,7 +99,7 @@ def athlete_tz(user_id: int = 1):
 def db_stamp() -> str:
     """What a FIT dataset reads from the app DB besides the files: the trail
     classification (incl. user overrides), the duplicate links and the
-    athlete_settings rows (fitdataset.py). A change there must rebuild the
+    athlete_settings rows and the deleted FIT objects (fitdataset.py). A change there must rebuild the
     cached Dataset even when no FIT file changed. Read-only; "" without a DB."""
     db = _db_path()
     if db is None or not db.exists():
@@ -116,6 +116,10 @@ def db_stamp() -> str:
                                 "FROM athlete_settings").fetchone()
             except sqlite3.Error:
                 b = ()
+            try:            # FIT objects marked deleted leave the Dataset (SP-308, files/fitstore.py)
+                c = con.execute("SELECT count(*), sum(deleted) FROM fit_objects").fetchone()
+            except sqlite3.Error:
+                c = ()
         finally:
             con.close()
     except sqlite3.Error:
@@ -123,6 +127,8 @@ def db_stamp() -> str:
         # rebuilt (and kept) another whole Dataset
         return _LAST_DB_STAMP.get(str(db), "")
     s = ",".join("" if v is None else str(v) for v in (*a, *b))
+    if c and c[1]:
+        s += f",fo:{c[1]}"          # only once an object was deleted: older stamps stay as they were
     _LAST_DB_STAMP[str(db)] = s
     return s
 
@@ -161,11 +167,16 @@ def files_changed() -> None:
 
 
 def _dirs_sig(root: Path) -> tuple:
-    """(name, mtime_ns) of the folder and its sub-folders (fit/<source>/<year>/): cheap."""
+    """(name, mtime_ns) of the folder and its sub-folders (fit/<source>/<year>/, and the FIT
+    objects' shard folders fit/<source>/objects/<aa>/, SP-308): cheap."""
     out = [("", root.stat().st_mtime_ns)]
     for p in root.iterdir():
         if p.is_dir() and not p.is_symlink():
             out.append((p.name, p.stat().st_mtime_ns))
+            if p.name == "objects":
+                for q in p.iterdir():
+                    if q.is_dir() and not q.is_symlink():
+                        out.append((f"objects/{q.name}", q.stat().st_mtime_ns))
     return tuple(sorted(out))
 
 

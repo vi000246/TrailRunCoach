@@ -17,6 +17,9 @@ changes nothing. Rows are matched by their exact old file_path; a row's
 `sport` is set from the FIT too when it disagrees (it normally already
 matches — file_service reads it from the FIT). A target that already exists
 with other content is a conflict and left in place.
+
+SP-308: run this BEFORE backend/scripts/fit_objects_migrate.py. Afterwards the FITs are
+gzip objects named by their sha256 (files/fitstore.py) and this script finds nothing to do.
 """
 from __future__ import annotations
 

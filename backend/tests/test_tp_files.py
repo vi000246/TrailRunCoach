@@ -72,7 +72,11 @@ def test_first_sync_lists_by_date_range_in_chunks_and_downloads_fit_gz(tmp_path)
         assert not any("/detaildata" in c or "/filedata/" in c for c in fake.calls)
         wf = (await s.execute(select(WorkoutFile))).scalar_one()
         assert wf.file_format == "fit" and wf.tp_workout_id == 1
-        assert open(wf.file_path, "rb").read()[8:12] == b".FIT"       # stored gunzipped
+        # stored as a FIT object (SP-308): gzip on disk, named by the FIT bytes' sha256
+        from backend.files import fitstore
+        assert fitstore.is_object_key(wf.file_path) and wf.file_path.startswith("tp/objects/")
+        assert fitstore.read_bytes(wf.file_path)[8:12] == b".FIT"
+        assert fitstore.resolve(wf.file_path).read_bytes()[:2] == fitstore.GZIP_MAGIC
     run(go())
 
 

@@ -18,7 +18,7 @@ from sqlalchemy import and_, or_, select
 
 from backend.db.models import SyncState, Athlete, WorkoutFile, AthleteSettings
 from backend.files.file_service import _import_one_file, record_corrupt
-from backend.sync import http, session_check, storage
+from backend.sync import http, session_check
 from backend.sync import failures as FL
 from backend.sync.coros_sport import COROS_SPORT_TYPES, fit_session_sport, sport_token
 from backend.sync.http import as_utc
@@ -772,18 +772,24 @@ async def _fetch_one(db: AsyncSession, athlete_id: int, token: str, base: str, u
         return
 
     dl_s = _time.monotonic() - t_dl
-    year = act_date.year if act_date else "unknown"
-    dest_dir = storage.year_dir("coros", year)      # ~/.wko5coach/fit/coros/<year>/
     date_str = act_date.isoformat() if act_date else "unknown"
-    # the name's sport word comes from the FIT session (sport +
-    # sub_sport); the COROS code only when the FIT can't say
-    tmp = dest_dir / f".{label_id}.download"
-    tmp.write_bytes(fit_bytes)
-    fit_sport, fit_sub = await _asyncio.to_thread(fit_session_sport, tmp)   # FIT parsing: off the loop
+    # the FIT is stored once, gzip, named by its sha256 (SP-308, files/fitstore.py):
+    # ~/.wko5coach/fit/coros/objects/<aa>/<sha256>.fit.gz; workout_files.file_path = that key
+    from backend.files import fitstore
+    stored = await fitstore.store_fit(db, fit_bytes, "coros", coros_activity_id=label_id)
+    dest = stored.key
+    # the activity's name (the sync log, the event below) still says what it is; its sport
+    # word comes from the FIT session (sport + sub_sport), the COROS code only when the FIT can't say
+    fit_sport, fit_sub = await _asyncio.to_thread(fit_session_sport, dest)   # FIT parsing: off the loop
     sport_name = sport_token(fit_sport, fit_sub, sport_type)
     filename = f"{label_id}_{date_str}_{sport_name}.fit"
-    dest = dest_dir / filename
-    tmp.replace(dest)
+    if await fitstore.live_row(db, dest) is not None:
+        # the same bytes are already an activity (another labelId with an identical file):
+        # stored once, recorded once
+        await db.commit()
+        await _remember(db, run, FL.resolve(db, athlete_id, "coros", label_id))
+        yield {"status": "skipped", "activity_id": label_id, "reason": "same_content", "key": dest}
+        return
 
     try:
         wf = await _import_one_file(
@@ -804,6 +810,8 @@ async def _fetch_one(db: AsyncSession, athlete_id: int, token: str, base: str, u
             # FIT file is corrupt/unreadable — store a stub so we don't
             # re-download it on the next sync (coros_activity_id dup check).
             await db.rollback()
+            # the object stays recorded (the stub points at it)
+            await fitstore.store_fit(db, fit_bytes, "coros", coros_activity_id=label_id)
             await record_corrupt(db, athlete_id, dest, source="coros",
                                  workout_date=act_date, coros_activity_id=label_id)
             await db.commit()
@@ -821,6 +829,7 @@ async def _fetch_one(db: AsyncSession, athlete_id: int, token: str, base: str, u
             "status": "downloaded",
             "activity_id": label_id,
             "file": filename,
+            "key": dest,
             "sport": sport_name,
             "secs": {"download": round(dl_s, 3)},
         }

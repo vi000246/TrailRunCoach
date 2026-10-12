@@ -78,8 +78,11 @@ def test_synced_files_land_in_per_source_folders(tmp_path, _fit_root_in_tmp):
         s = await make_session(tmp_path)
         await _coros_synced(s, [_coros_act("A1", START)])
         wf = (await s.execute(select(WorkoutFile))).scalar_one()
-        p = Path(wf.file_path)
-        assert p.parent == _fit_root_in_tmp / "coros" / "2026" and p.exists()
+        # a FIT object in the source's folder (SP-308): fit/coros/objects/<aa>/<sha256>.fit.gz
+        from backend.files import fitstore
+        assert fitstore.is_object_key(wf.file_path) and wf.file_path.startswith("coros/objects/")
+        p = fitstore.resolve(wf.file_path)
+        assert p.parent.parent == (_fit_root_in_tmp / "coros" / "objects").resolve() and p.exists()
     run(go())
 
 

@@ -66,9 +66,10 @@ class RawWorkout:
         return 0.0
 
 
-def parse_fit(path: str) -> RawWorkout:
+def parse_fit(path) -> RawWorkout:
     """
-    Parse a .fit file and return a RawWorkout.
+    Parse a FIT file and return a RawWorkout. `path`: a .fit / .fit.gz file, or an
+    object key (workout_files.file_path since SP-308, files/fitstore.py).
 
     Tries fitparse first; falls back to fitdecode (lenient) for Coros 'other'
     sport files that have a non-standard uint32 field size.
@@ -77,8 +78,20 @@ def parse_fit(path: str) -> RawWorkout:
         FileNotFoundError: if path does not exist
         ValueError: if file cannot be parsed by either library
     """
+    from backend.files import fitstore
+    path = str(path)
+    if fitstore.is_object_key(path):
+        # an object key (SP-308, files/fitstore.py): gzip in the tenant's FIT store
+        try:
+            raw = fitstore.read_bytes(path)
+        except OSError:
+            raise FileNotFoundError(f"FIT file not found: {path}")
+        return parse_fit_bytes(raw, source_file=path)
     if not os.path.exists(path):
         raise FileNotFoundError(f"FIT file not found: {path}")
+    if fitstore.is_gzip_file(path):                       # a legacy .fit.gz (the magic decides)
+        with open(path, "rb") as f:
+            return parse_fit_bytes(fitstore.gunzip_if(f.read()), source_file=path)
 
     try:
         return _parse_fit_fitparse(path)
@@ -91,7 +104,23 @@ def parse_fit(path: str) -> RawWorkout:
         raise ValueError(f"Cannot parse FIT file (tried fitparse + fitdecode): {e}")
 
 
-def _parse_fit_fitparse(path: str) -> RawWorkout:
+def parse_fit_bytes(raw: bytes, source_file: str = "") -> RawWorkout:
+    """parse_fit of FIT bytes (gzip is unpacked): fitparse and fitdecode both read a
+    file-like, so the same two parsers run as on a path."""
+    import io
+    from backend.files import fitstore
+    raw = fitstore.gunzip_if(raw)
+    try:
+        return _parse_fit_fitparse(io.BytesIO(raw), source_file)
+    except Exception:
+        pass
+    try:
+        return _parse_fit_fitdecode(io.BytesIO(raw), source_file)
+    except Exception as e:
+        raise ValueError(f"Cannot parse FIT file (tried fitparse + fitdecode): {e}")
+
+
+def _parse_fit_fitparse(path, source_file: str = None) -> RawWorkout:
     import fitparse
 
     fit = fitparse.FitFile(path)
@@ -131,7 +160,7 @@ def _parse_fit_fitparse(path: str) -> RawWorkout:
 
     if not records:
         return RawWorkout(
-            source_file=path,
+            source_file=path if source_file is None else source_file,
             sport=sport,
             start_time=start_time,
             device=device_name,
@@ -141,7 +170,7 @@ def _parse_fit_fitparse(path: str) -> RawWorkout:
 
     return _build_raw_workout(
         records=records,
-        source_file=path,
+        source_file=path if source_file is None else source_file,
         sport=sport,
         start_time=start_time,
         device=device_name,
@@ -150,7 +179,7 @@ def _parse_fit_fitparse(path: str) -> RawWorkout:
     )
 
 
-def _parse_fit_fitdecode(path: str) -> RawWorkout:
+def _parse_fit_fitdecode(path, source_file: str = None) -> RawWorkout:
     """Lenient fallback parser for Coros non-standard FIT files."""
     import fitdecode
 
@@ -220,7 +249,7 @@ def _parse_fit_fitdecode(path: str) -> RawWorkout:
 
     if not records:
         return RawWorkout(
-            source_file=path,
+            source_file=path if source_file is None else source_file,
             sport=sport,
             start_time=start_time,
             device=device_name,
@@ -230,7 +259,7 @@ def _parse_fit_fitdecode(path: str) -> RawWorkout:
 
     return _build_raw_workout(
         records=records,
-        source_file=path,
+        source_file=path if source_file is None else source_file,
         sport=sport,
         start_time=start_time,
         device=device_name,

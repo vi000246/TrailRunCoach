@@ -34,7 +34,9 @@ def _apply_classification(wf: WorkoutFile) -> None:
 
 
 def discover_workout_files(athlete_dir: Path) -> list[Path]:
-    """Scan athlete directory for .wko4 and .fit files, sorted by date."""
+    """Scan athlete directory for .wko4, .fit and .fit.gz files in its year folders, sorted by
+    date. The FIT objects of a sync folder (<source>/objects/, files/fitstore.py) are not
+    year folders: the sync recorded them already."""
     files = []
     if not athlete_dir.exists():
         return files
@@ -42,7 +44,7 @@ def discover_workout_files(athlete_dir: Path) -> list[Path]:
         if not year_dir.is_dir() or not year_dir.name.isdigit():
             continue
         for f in sorted(year_dir.iterdir()):
-            if f.suffix.lower() in (".wko4", ".fit"):
+            if f.suffix.lower() in (".wko4", ".fit") or f.name.lower().endswith(".fit.gz"):
                 files.append(f)
     return files
 
@@ -80,12 +82,16 @@ def discover_tagged_files(athlete_dir: Path) -> list[tuple[Path, str]]:
 
 
 async def _already_imported(db: AsyncSession, athlete_id: int, path: Path, ids: dict) -> bool:
-    """Same file (by path, however it was spelled) or the same provider activity."""
+    """Same file (by path, however it was spelled; or its object key) or the same provider activity."""
+    from backend.files import fitstore
     cands = {str(path)}
     try:
         cands.add(str(path.resolve()))
     except OSError:
         pass
+    key = fitstore.default_store().key_of(path)
+    if key and fitstore.is_object_key(key):
+        cands.add(key)
     q = select(WorkoutFile.id).where(WorkoutFile.file_path.in_(cands))
     if (await db.execute(q)).first():
         return True
@@ -166,10 +172,11 @@ def elevation_gain(raw) -> Optional[float]:
     return None
 
 
-async def record_corrupt(db: AsyncSession, athlete_id: int, path: Path, source: str,
+async def record_corrupt(db: AsyncSession, athlete_id: int, path, source: str,
                          workout_date: Optional[date] = None, tp_workout_id: Optional[int] = None,
                          coros_activity_id: Optional[str] = None) -> WorkoutFile:
-    """Stub row for an unreadable file, so the sync doesn't re-download it."""
+    """Stub row for an unreadable file, so the sync doesn't re-download it. `path`: a file,
+    or the object key the sync stored it as (files/fitstore.py)."""
     res = await db.execute(select(WorkoutFile).where(WorkoutFile.file_path == str(path)))
     stub = res.scalar_one_or_none()
     if stub is None:
@@ -184,10 +191,19 @@ async def record_corrupt(db: AsyncSession, athlete_id: int, path: Path, source: 
     return stub
 
 
+def file_format(path) -> str:
+    """"fit" for .fit / .fit.gz and FIT object keys (files/fitstore.py), "wko4", else the suffix."""
+    from backend.files import fitstore
+    s = str(path).lower()
+    if fitstore.is_object_key(str(path)) or s.endswith(".fit") or s.endswith(".fit.gz"):
+        return "fit"
+    return Path(s).suffix.lstrip(".")
+
+
 async def _import_one_file(
     db: AsyncSession,
     athlete_id: int,
-    path: Path,
+    path,
     source: str = "local",
     tp_workout_id: Optional[int] = None,
     coros_activity_id: Optional[str] = None,
@@ -195,11 +211,14 @@ async def _import_one_file(
     """Parse one file and persist its workout_files row: date, sport, distance, elevation,
     trail / road, the watch's RPE (flush only — the caller commits, or rolls back on error).
     Returns None for unreadable files. Per-activity metrics are not stored: the FIT dataset
-    computes them (engine/wko5expr/fitdataset.py)."""
+    computes them (engine/wko5expr/fitdataset.py). `path`: a file (a scan, a legacy sync
+    file) or a FIT object key (the sync since SP-308, files/fitstore.py), stored as is in
+    file_path."""
+    from backend.files import fitstore
     from backend.settings.repository import SettingsRepository
     from backend.sync import dedup
 
-    fmt = path.suffix.lower().lstrip(".")
+    fmt = file_format(path)
     # a new file in a synced folder: the chart Dataset's files stamp rescans (SP-362)
     from backend.engine.wko5expr.datasource import files_changed
     files_changed()
@@ -246,6 +265,8 @@ async def _import_one_file(
     )
     db.add(wf)
     await db.flush()
+    if fitstore.is_object_key(str(path)):
+        await fitstore.note_import(db, str(path), start_time=start_utc, coros_activity_id=coros_activity_id)
     await dedup.resolve(db, wf)
 
     if raw is None:
