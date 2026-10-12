@@ -14,7 +14,6 @@ from __future__ import annotations
 import argparse
 import asyncio
 import sys
-from pathlib import Path
 from typing import Optional
 
 from sqlalchemy import select
@@ -22,8 +21,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 
 def file_start(path: str):
-    p = Path(path)
-    fmt = p.suffix.lower().lstrip(".")
+    from backend.files.file_service import file_format
+    fmt = file_format(path)            # .fit / .fit.gz / a FIT object key (SP-308) -> "fit"
     if fmt == "fit":
         from backend.files.fit_reader import parse_fit
         return parse_fit(path).start_time, False

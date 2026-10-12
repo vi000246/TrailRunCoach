@@ -130,6 +130,10 @@ TABLES: tuple = (
           user_fields=("trail_classification", "classification_overridden"),
           deidentify=("file_path", "workout_date", "start_time_utc", "coros_activity_id", "tp_workout_id",
                       "imported_at")),
+    Table("fit_objects", IMPORTED, "one row per stored FIT original, named by its sha256 (SP-308, "
+          "files/fitstore.py): size, first source, COROS id, start; `deleted` marks an object whose "
+          "activity was deleted (the file is removed later, sync/purge.cleanup_objects)",
+          deidentify=("sha256", "coros_activity_id", "start_time", "created_at")),
     Table("coros_plan_push", IMPORTED, "COROS's ids of the plan sessions pushed to it (sync/workout_targets): "
           "the external account's state, server-side bookkeeping",
           deidentify=("day", "title", "program_id", "plan_id", "id_in_plan", "plan_program_id")),
@@ -183,10 +187,11 @@ LEGACY_TABLES: tuple = (
 # ---------------------------------------------------------------------------
 
 DB = File("wko5coach.db", PER_TABLE, ROOT, "the app DB (db/database.py); its tables: TABLES", backup=ALWAYS)
-FIT = File("fit/**", IMPORTED, SHARED, "synced FIT originals fit/{coros,tp}/<year>/<file>.fit "
-           "(sync/storage.py)", backup=OPT_IN,
+FIT = File("fit/**", IMPORTED, SHARED, "synced FIT originals: gzip objects named by content "
+           "fit/{coros,tp}/objects/<aa>/<sha256>.fit.gz (SP-308, files/fitstore.py); before the "
+           "migration fit/{coros,tp}/<year>/<file>.fit (sync/storage.py)", backup=OPT_IN,
            deidentify=("GPS track (start / end)", "timestamps", "device serial / user profile in the file",
-                       "file name: COROS labelId or TP workout id + date"))
+                       "legacy file name: COROS labelId or TP workout id + date"))
 
 FILES: tuple = (
     DB,

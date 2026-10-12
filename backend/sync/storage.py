@@ -1,8 +1,9 @@
 """
 Where synced FIT files live — one folder per source:
 
-    ~/.wko5coach/fit/coros/<year>/...
-    ~/.wko5coach/fit/tp/<year>/...
+    ~/.wko5coach/fit/coros/objects/<aa>/<sha256>.fit.gz   (SP-308, files/fitstore.py)
+    ~/.wko5coach/fit/tp/objects/<aa>/<sha256>.fit.gz
+    ~/.wko5coach/fit/{coros,tp}/<year>/...                (before the fit_objects migration)
 
 Everything that deletes files goes through `confined()`, which resolves the
 path and refuses symlinks and anything outside the source's own folder, so a
@@ -69,15 +70,16 @@ def confined(path: Path | str, source: str) -> Path:
 
 
 def folder_stats(source: str) -> dict:
-    """File count and total bytes on disk (the date span comes from the DB)."""
-    root = source_dir(source)
+    """File count and total bytes on disk (the date span comes from the DB): the source
+    folder's files through the FIT store's listing (files/fitstore.py: gzip objects and
+    legacy .fit alike; symlinks and half-written temporary files left out)."""
+    from backend.files.fitstore import LocalDirStore
+    check_source(source)
     count, size = 0, 0
-    if root.exists():
-        for p in root.rglob("*"):
-            if p.is_symlink() or not p.is_file():
-                continue
+    if source_dir(source).is_dir():
+        for o in LocalDirStore(fit_root()).list(source):
             count += 1
-            size += p.stat().st_size
+            size += o.size
     return {"files": count, "bytes": size}
 
 

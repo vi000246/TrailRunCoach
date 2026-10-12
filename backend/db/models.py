@@ -94,6 +94,23 @@ class ActivityLink(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class FitObject(Base):
+    """One stored FIT original, named by the sha256 of its bytes (SP-308, files/fitstore.py):
+    the object <source folder>/objects/<sha[:2]>/<sha>.fit.gz under the tenant's fit/ folder,
+    which workout_files.file_path points at. One row per content: the same FIT imported
+    again (from any source) is not stored twice. `deleted`: the activity's files were
+    deleted (sync/purge.py); the object file goes later (purge.cleanup_objects) and the row
+    stays as the mark (a device sync can carry it, research local-first-sync.md §5.3)."""
+    __tablename__ = "fit_objects"
+    sha256: Mapped[str] = mapped_column(String(64), primary_key=True)
+    size: Mapped[int] = mapped_column(Integer)                       # FIT bytes (uncompressed)
+    source: Mapped[str] = mapped_column(String(20))                  # workout_files.source of the first import
+    coros_activity_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, index=True)
+    start_time: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)   # UTC (naive)
+    deleted: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 # workout_metrics / mmp_cache (per-activity metrics and power mean-max written at import): no
 # code read them, so no longer written or created (2026-10-08); an older DB keeps them, orphaned
 # (data_registry.LEGACY_TABLES). pmc_cache: no code read or wrote it; dropped by

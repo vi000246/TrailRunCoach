@@ -12,6 +12,9 @@ whose target already exists with the same size is treated as moved. Only
 files the DB knows about are moved; anything else found in the legacy
 folders is counted and left in place. Empty legacy folders are removed on
 --apply.
+
+SP-308: run this BEFORE backend/scripts/fit_objects_migrate.py. Afterwards the FITs are
+gzip objects named by their sha256 (files/fitstore.py) and this script finds nothing to do.
 """
 from __future__ import annotations
 

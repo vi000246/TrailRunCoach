@@ -124,9 +124,29 @@ def estimate(test: dict, weight: float, sex: str = "male", wind: bool = False) -
 # the FIT folder
 # ---------------------------------------------------------------------------
 
-def _file_date(p: Path) -> Optional[dt.date]:
-    """The date in a synced file name: COROS …_YYYY-MM-DD_….fit, TP tp_YYYY_MM_DD_….fit."""
+def object_info() -> dict:
+    """fit_objects of the app DB (files/fitstore.object_info): each FIT object's date and
+    deleted mark; {} without a DB."""
+    from backend.engine.wko5expr.datasource import _db_path
+    from backend.files import fitstore
+    return fitstore.object_info(_db_path())
+
+
+def _file_date(p: Path, info: Optional[dict] = None) -> Optional[dt.date]:
+    """The date in a synced file name: COROS …_YYYY-MM-DD_….fit, TP tp_YYYY_MM_DD_….fit. A
+    FIT object (<sha256>.fit.gz, SP-308) has none in its name: its activity's local date
+    from the app DB (`info`, object_info()); None when unknown or deleted (left out)."""
     import re
+    from backend.files.fitstore import object_sha
+    sha = object_sha(p)
+    if sha is not None:
+        o = (info if info is not None else object_info()).get(sha)
+        if not o or o.get("deleted") or not o.get("date"):
+            return None
+        try:
+            return dt.date.fromisoformat(o["date"])
+        except ValueError:
+            return None
     m = re.search(r"(\d{4})-(\d{2})-(\d{2})", p.name) or re.match(r"tp_(\d{4})_(\d{2})_(\d{2})_", p.name)
     try:
         return dt.date(*(int(x) for x in m.groups())) if m else None
@@ -197,8 +217,8 @@ POOL_MIN_READS = 12            # fewer unread files than this: read inline (no p
 
 def _dir_sig(dirs: list[str], root: Path) -> Optional[tuple]:
     """mtimes of the listed folders (a file added / removed / renamed changes
-    its folder's) and of the FIT dataset cache indexes (rewritten when a
-    rebuild sees a changed file)."""
+    its folder's), of the FIT dataset cache indexes (rewritten when a
+    rebuild sees a changed file) and the FIT objects' DB signature."""
     from backend.engine.wko5expr import fitcache
     out = []
     try:
@@ -211,11 +231,16 @@ def _dir_sig(dirs: list[str], root: Path) -> Optional[tuple]:
             out.append(fitcache.index_path_of(root / f).stat().st_mtime_ns)
         except OSError:
             out.append(None)
+    # the FIT objects' dates / deleted marks live in the app DB (SP-308)
+    from backend.engine.wko5expr.datasource import _db_path
+    from backend.files import fitstore
+    out.append(fitstore.object_sig(_db_path()))
     return tuple(out)
 
 
 def _listing(root: Path) -> list[tuple]:
-    """[(path, key, date, stamp)] of every *.fit under root (sorted). A PD
+    """[(path, key, date, stamp)] of every *.fit / *.fit.gz under root (sorted; a FIT object
+    dated from the app DB, a deleted one left out). A PD
     refit per day (the as-of LTHR estimates, the back-test) calls _files
     hundreds of times; each call used to walk and stat the whole folder.
     Reused while no folder changed (_dir_sig)."""
@@ -224,6 +249,7 @@ def _listing(root: Path) -> list[tuple]:
     if m is not None and _dir_sig(m[0], root) == m[1]:
         return m[2]
     rows, dirs = [], []
+    info = object_info() if root.exists() else {}
     if root.exists():
         stack = [str(root)]
         while stack:
@@ -234,9 +260,9 @@ def _listing(root: Path) -> list[tuple]:
                     for e in it:
                         if e.is_dir():
                             stack.append(e.path)
-                        elif (e.name.lower() if os.name == "nt" else e.name).endswith(".fit"):
+                        elif (e.name.lower() if os.name == "nt" else e.name).endswith((".fit", ".fit.gz")):
                             p = Path(e.path)
-                            fd = _file_date(p)
+                            fd = _file_date(p, info)
                             if fd is None:
                                 continue
                             try:

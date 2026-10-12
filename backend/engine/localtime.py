@@ -73,7 +73,9 @@ def fit_offset_min(path) -> Optional[int]:
     15 min; None when the file has no local_timestamp."""
     try:
         import fitdecode
-        with fitdecode.FitReader(str(path), error_handling=fitdecode.ErrorHandling.IGNORE) as fit:
+        from backend.files import fitstore
+        # a FIT object key or a legacy path, gzip or not (SP-308)
+        with fitdecode.FitReader(fitstore.open_fit(path), error_handling=fitdecode.ErrorHandling.IGNORE) as fit:
             for fr in fit:
                 if isinstance(fr, fitdecode.FitDataMessage) and fr.name == "activity":
                     ts = fr.get_value("timestamp", fallback=None)
@@ -105,11 +107,15 @@ async def refresh_from_fits(db, athlete_id: int = 1, n: int = 3) -> Optional[dic
                                                        WorkoutFile.file_format == "fit",
                                                        WorkoutFile.start_time_utc.is_not(None))
                              .order_by(WorkoutFile.start_time_utc.desc()).limit(n))).scalars().all()
+    from backend.files import fitstore
     for r in rows:
-        p = Path(r.file_path)
+        try:
+            p = fitstore.resolve(r.file_path)          # an object key or a legacy path (SP-308)
+        except ValueError:
+            continue
         if not p.exists():
             continue
-        off = fit_offset_min(p)
+        off = fit_offset_min(r.file_path)
         if off is None:
             continue
         repo = SettingsRepository(db, athlete_id)

@@ -66,10 +66,13 @@ def test_sync_names_files_from_the_fit_session(tmp_path, _fit_root_in_tmp):
         rows = {r.coros_activity_id: r for r in (await s.execute(select(WorkoutFile))).scalars()}
         assert rows["111"].sport == "running" and rows["111"].coros_sport_type == 100
         assert rows["333"].sport == "training"
-        assert rows["111"].file_path.endswith("111_2026-09-01_run.fit")
-        files = sorted(p.name for p in (_fit_root_in_tmp / "coros").rglob("*") if p.is_file())
-        assert files == ["111_2026-09-01_run.fit", "222_2026-09-02_trail_run.fit",
-                         "333_2026-09-03_strength.fit"]              # no leftover download temp
+        # the files are FIT objects named by content (SP-308); the name above is the event's only
+        from backend.files import fitstore
+        assert all(fitstore.is_object_key(r.file_path) and r.file_path.startswith("coros/objects/")
+                   for r in rows.values())
+        files = sorted(p.relative_to(_fit_root_in_tmp).as_posix()
+                       for p in (_fit_root_in_tmp / "coros").rglob("*") if p.is_file())
+        assert files == sorted(r.file_path for r in rows.values())   # no leftover download temp
     run(go())
 
 

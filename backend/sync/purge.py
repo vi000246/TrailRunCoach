@@ -5,6 +5,10 @@ Delete one source's synced files (「刪除這個來源的同步檔案」).
   paths, no symlinks, nothing outside); the WKO5 folder, the other source and
   unmigrated legacy folders are never touched — their rows are still removed
   from the DB, the files are reported as "refused"
+* FIT objects (SP-308, files/fitstore.py: rows whose file_path is an object key) are
+  not unlinked here: their fit_objects row is marked `deleted` (the Dataset and the
+  race-power scan leave them out at once) and cleanup_objects removes the files later —
+  only objects no live workout_files row points at
 * DB: the source's WorkoutFile rows with their metrics / MMP cache, then the
   cross-source de-dup is rebuilt so a workout the other source also has
   becomes canonical there
@@ -26,7 +30,8 @@ from typing import Optional
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.db.models import SyncState, WorkoutFile
+from backend.db.models import FitObject, SyncState, WorkoutFile
+from backend.files import fitstore
 from backend.settings.repository import SettingsRepository
 from backend.sync import dedup, runner, storage
 
@@ -48,8 +53,24 @@ async def delete_source_files(db: AsyncSession, source: str, athlete_id: int = 1
         if date_to:
             q = q.where(WorkoutFile.workout_date <= date_to)
         rows = (await db.execute(q)).scalars().all()
-        files, size, refused = 0, 0, 0
+        files, size, refused, marked = 0, 0, 0, 0
+        store = fitstore.default_store()
+        going = {r.id for r in rows}
         for r in rows:
+            if fitstore.is_object_key(r.file_path):
+                # a FIT object: marked deleted, the file goes in cleanup_objects (SP-308)
+                if fitstore.folder_of_key(r.file_path) != source:
+                    refused += 1
+                    continue
+                n = await mark_deleted(db, r.file_path, keep_row_ids=going)
+                if n:
+                    try:
+                        size += store.path(r.file_path).stat().st_size
+                    except (OSError, ValueError):
+                        pass
+                    files += 1
+                    marked += 1
+                continue
             try:
                 p = storage.confined(r.file_path, source)
             except storage.PathNotConfined:
@@ -61,11 +82,19 @@ async def delete_source_files(db: AsyncSession, source: str, athlete_id: int = 1
                 files += 1
         whole = date_from is None and date_to is None
         if whole:
-            # stray files in the source folder that no row points at
+            # stray files in the source folder that no row points at; the FIT objects
+            # (objects/) are cleanup_objects' (only the unreferenced ones, later)
             root = storage.source_dir(source)
+            objects = (root / fitstore.OBJECTS).resolve()
             if root.exists():
                 for p in sorted(root.rglob("*"), reverse=True):
                     if p.is_symlink():
+                        continue
+                    try:
+                        rp0 = p.resolve()
+                    except OSError:
+                        continue
+                    if rp0 == objects or objects in rp0.parents:
                         continue
                     if p.is_file():
                         try:
@@ -112,7 +141,7 @@ async def delete_source_files(db: AsyncSession, source: str, athlete_id: int = 1
         rebuilt = await dedup.rebuild(db, athlete_id)
         await db.commit()
     out = {"source": source, "rows_deleted": len(rows), "files_deleted": files, "bytes_deleted": size,
-           "files_refused": refused, "cursor_reset": True, "chart_source_switched_to_wko5": switched,
+           "files_refused": refused, "objects_marked_deleted": marked, "cursor_reset": True, "chart_source_switched_to_wko5": switched,
            "dedup": rebuilt, "date_from": date_from.isoformat() if date_from else None,
            "date_to": date_to.isoformat() if date_to else None}
     log.warning("deleted %s sync data: rows=%d files=%d bytes=%d refused=%d",
@@ -131,3 +160,106 @@ async def source_stats(db: AsyncSession, source: str, athlete_id: int = 1) -> di
     return {"folder": f"~/.wko5coach/fit/{source}", "files": fs["files"], "bytes": fs["bytes"],
             "size": storage.human_size(fs["bytes"]), "rows": n,
             "date_from": d0.isoformat() if d0 else None, "date_to": d1.isoformat() if d1 else None}
+
+
+async def mark_deleted(db: AsyncSession, key: str, keep_row_ids: frozenset | set = frozenset()) -> int:
+    """Mark the FIT object `key` deleted (fit_objects.deleted) unless a workout_files row
+    other than `keep_row_ids` (the rows being deleted) still points at it. 1 when marked."""
+    sha = fitstore.sha_of_key(key)
+    if sha is None:
+        return 0
+    others = (await db.execute(select(WorkoutFile.id).where(WorkoutFile.file_path == key))).scalars().all()
+    if any(i not in keep_row_ids for i in others):
+        return 0
+    row = (await db.execute(select(FitObject).where(FitObject.sha256 == sha))).scalar_one_or_none()
+    if row is None:
+        # an object stored before its row existed (or a lost row): the mark needs one
+        st = fitstore.default_store()
+        try:
+            size = len(st.get(key))
+        except (OSError, ValueError):
+            size = 0
+        row = FitObject(sha256=sha, size=size, source=storage.SOURCES.get(fitstore.folder_of_key(key), fitstore.folder_of_key(key)))
+        db.add(row)
+    row.deleted = True
+    await db.flush()
+    return 1
+
+
+ORPHAN_MIN_AGE_S = 3600     # an object a running sync just stored is not an orphan yet
+
+
+async def cleanup_objects(db: AsyncSession, apply: bool = True, min_age_s: float = ORPHAN_MIN_AGE_S,
+                          store: Optional["fitstore.LocalDirStore"] = None) -> dict:
+    """Remove the files of FIT objects nobody uses (SP-308, files/fitstore.py):
+
+    * fit_objects rows marked `deleted` that no workout_files row points at: the file is
+      removed, the row stays (the deleted mark; a later import of the same content stores
+      the file again and lifts the mark);
+    * orphan object files — no fit_objects row and no workout_files row (a sync that
+      stored the object and then failed) — older than `min_age_s`.
+
+    Never touches a legacy (non-object) file or anything a live row points at. `apply`
+    False only counts. Returns counts and bytes."""
+    import time
+    store = store or fitstore.default_store()
+    live = {fp for fp in (await db.execute(select(WorkoutFile.file_path))).scalars().all()
+            if fitstore.is_object_key(fp)}
+    objs = {r.sha256: r for r in (await db.execute(select(FitObject))).scalars().all()}
+    out = {"removed": 0, "bytes": 0, "orphans_removed": 0, "kept_live": 0, "applied": apply}
+    now = time.time()
+    for folder in storage.SOURCES:
+        if not storage.source_dir(folder).is_dir():
+            continue
+        for o in list(store.list(f"{folder}/{fitstore.OBJECTS}")):
+            sha = fitstore.sha_of_key(o.key)
+            if sha is None:
+                continue
+            if o.key in live:
+                out["kept_live"] += 1
+                continue
+            row = objs.get(sha)
+            if row is not None and not row.deleted:
+                continue                      # recorded, not deleted: a row is about to point at it
+            if row is None:
+                try:
+                    if now - store.path(o.key).stat().st_mtime < min_age_s:
+                        continue
+                except (OSError, ValueError):
+                    continue
+            if apply:
+                store.delete(o.key)
+            out["orphans_removed" if row is None else "removed"] += 1
+            out["bytes"] += o.size
+    if out["removed"] or out["orphans_removed"]:
+        log.info("FIT objects cleanup: removed=%d orphans=%d bytes=%d applied=%s",
+                 out["removed"], out["orphans_removed"], out["bytes"], apply)
+    return out
+
+
+CLEANUP_EVERY_S = 24 * 3600
+_CLEANUP_AT: dict = {}
+
+
+async def cleanup_tick(session_factory, now: Optional[float] = None) -> Optional[dict]:
+    """cleanup_objects at most once a day per tenant DB (the scheduler loop, sync/scheduler.py).
+    Skipped while a sync or a deletion holds a source (runner.hold): a sync may be storing
+    or reviving an object right now; the next minute tries again."""
+    import contextlib
+    import time
+    from backend.db.database import db_path
+    t = time.monotonic() if now is None else now
+    key = str(db_path())
+    last = _CLEANUP_AT.get(key)
+    if last is not None and t - last < CLEANUP_EVERY_S:
+        return None
+    try:
+        with contextlib.ExitStack() as st:
+            for src in runner.SOURCES:
+                st.enter_context(runner.hold(src))
+            async with session_factory() as db:
+                res = await cleanup_objects(db)
+    except runner.SyncBusy:
+        return None
+    _CLEANUP_AT[key] = t
+    return res
