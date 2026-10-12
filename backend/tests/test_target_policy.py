@@ -71,15 +71,16 @@ def test_the_push_uses_the_chosen_basis():
     v = IL.session_for(IL.fit("z3b", None), TH)
     s = {**v, "day": "2026-10-07"}
     work = lambda st: [x for x in st if isinstance(x, CW.Step) and x.kind == CW.EX_TRAIN and x.seconds == 480]
-    assert work(CW.session_steps({**s, "basis": "power"}, th))[0].intensity == ("power", 225, 238)
+    # SP-378: the watch's upper bound is the judging one (0.95 × 1.05 × CP); the easy run the whole of Zone 1
+    assert work(CW.session_steps({**s, "basis": "power"}, th))[0].intensity == ("power", 225, 249)
     hr = work(CW.session_steps({**s, "basis": "hr"}, th))[0].intensity
     assert hr[0] == "hr" and hr[2] == 165
     easy = {"kind": "easy", "title": "輕鬆跑", "minutes": 45, "day": "2026-10-07"}
     assert CW.session_steps({**easy, "basis": "hr"}, th)[0].intensity == ("hr", 124, 145)
-    assert CW.session_steps({**easy, "basis": "power"}, th)[0].intensity == ("power", 188, 200)
+    assert CW.session_steps({**easy, "basis": "power"}, th)[0].intensity == ("power", round(0.65 * TH["cp"]), 200)
     assert CW.session_steps({**easy, "basis": "none"}, th)[0].intensity is None
     lines = CW.step_lines(CW.session_steps({**s, "basis": "power"}, th))
-    assert lines[0].startswith("① 暖身") and any("×3 功率 225–238 W，休息 2 分" in ln for ln in lines)
+    assert lines[0].startswith("① 暖身") and any("×3 功率 225–249 W，休息 2 分" in ln for ln in lines)
 
 
 def test_push_dict_resolves_the_basis_with_the_prefs(monkeypatch):

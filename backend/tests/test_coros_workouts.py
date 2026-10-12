@@ -205,7 +205,8 @@ def test_threshold_intervals_use_cp_power():
     assert grp["sets"] == 3 and grp["targetValue"] == 13 * 60
     assert work["groupId"] == str(grp["id"]) and rest["groupId"] == str(grp["id"])
     assert work["targetValue"] == 600 and work["intensityType"] == CW.INT_POWER
-    assert (work["intensityValue"], work["intensityValueExtend"]) == (round(0.95 * 300), round(1.01 * 300))
+    # SP-378: the watch's upper bound is the one the rep is judged by (× 1.05)
+    assert (work["intensityValue"], work["intensityValueExtend"]) == (round(0.95 * 300), round(1.01 * 1.05 * 300))
     assert rest["targetValue"] == 180 and rest["intensityType"] == CW.INT_NONE
     assert cool["targetValue"] == 10 * 60
     assert grp["sortNo"] < work["sortNo"] < rest["sortNo"] < cool["sortNo"]
@@ -219,12 +220,12 @@ def test_hill_repeats_and_taper_percent():
     ex = _flat(CW.session_workout(s, TH).payload)
     work, rest = ex[2], ex[3]
     assert ex[1]["sets"] == 5 and work["targetValue"] == 240 and rest["targetValue"] == 240
-    assert (work["intensityValue"], work["intensityValueExtend"]) == (round(1.01 * 300), round(1.06 * 300))
+    assert (work["intensityValue"], work["intensityValueExtend"]) == (round(1.01 * 300), round(1.06 * 1.05 * 300))   # SP-378
     for title in ("短強度 4×3 分", "有氧間歇（巡航）4×3 分"):          # renamed 2026-10-05; intensity unchanged
         t = sess("quality", "quality", title, 45, "2026-10-01", detail="保留強度、不累積疲勞（98–102% CP）")
         ex = _flat(CW.session_workout(t, TH).payload)
         assert ex[1]["sets"] == 4
-        assert (ex[2]["intensityValue"], ex[2]["intensityValueExtend"]) == (294, 306)
+        assert (ex[2]["intensityValue"], ex[2]["intensityValueExtend"]) == (294, 321)   # SP-378: × 1.05 on the watch
 
 
 def _cp_sess(protocol):

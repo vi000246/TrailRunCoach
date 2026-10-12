@@ -550,6 +550,17 @@
     }
     const zoneOf = (ty, zid, D) => { const r = D.ws.zones[ty].find((x) => x[0] === zid); return r ? [r[1], r[2]] : [null, null]; };
     const R = (type, o = {}) => ({ type, lo: null, hi: null, frac: null, text: "", sub: "", auto: true, warn: "", err: "", intensity: null, need: "", ...o });
+    // SP-378 (zones.watch_band, workout_steps._watch_band): the step shows the prescription, the watch
+    // gets the band the rep is judged by — upper × hi_tol, a Zone 5 band up to Zone 5's top
+    function watchBand(r, c, D, lo, hi) {
+      const W = D.ws.watch, whi = (lo + hi) / 2 >= W.z5_lo ? Math.max(hi, W.z5_top) : Math.round(hi * W.hi_tol * 10000) / 10000;
+      const w = power(c, lo, whi);
+      if (w && r.intensity && (w[1] !== r.intensity[1] || w[2] !== r.intensity[2])) {
+        r.intensity = w;
+        r.sub = (r.sub ? r.sub + " · " : "") + `手錶上限 ${fx(w[2])} W`;
+      }
+      return r;
+    }
     function fromInt(it, c, D, auto = true, warn = "") {
       if (!it) return R("none", { text: "不設目標", auto, warn });
       const [typ, lo, hi] = it;
@@ -607,10 +618,11 @@
           const h = workHr(c, tg, D);
           if (h) return fromInt(h, c, D);
           const p = power(c, tg.lo, tg.hi);
-          return fromInt(p, c, D, true, p ? "沒有 LTHR：改用功率" : "沒有 LTHR／CP：不設目標");
+          if (p) return watchBand(fromInt(p, c, D, true, "沒有 LTHR：改用功率"), c, D, tg.lo, tg.hi);
+          return fromInt(p, c, D, true, "沒有 LTHR／CP：不設目標");
         }
         const p = power(c, tg.lo, tg.hi);
-        if (p) return fromInt(p, c, D);
+        if (p) return watchBand(fromInt(p, c, D), c, D, tg.lo, tg.hi);
         const h = workHr(c, tg, D);
         return fromInt(h, c, D, true, h ? "沒有 CP：改用心率" : "沒有 CP／LTHR：不設目標");
       }
@@ -1083,10 +1095,10 @@
         const gp = g ? +g[1] * 60 + +g[2] : null;
         const mt = gp ? { type: "pace", mode: "abs", lo: pyRound(gp * (1 - M.goal_band)), hi: pyRound(gp * (1 + M.goal_band)) }
           : { type: "pace", mode: "pct", lo: M.pace[0], hi: M.pace[1], hrp: M.hr.slice() };
-        const a = step("work", sec - +mpm * 60 - M.tail_s, easy(0.8, 0.88), "輕鬆");
-        return doc([a, step("work", +mpm * 60, mt, "馬拉松配速"), step("cool", M.tail_s, easy(0.75, 0.8), "輕鬆收操")]);
+        const a = step("work", sec - +mpm * 60 - M.tail_s, easy(...D.ws.bands.long), "輕鬆");
+        return doc([a, step("work", +mpm * 60, mt, "馬拉松配速"), step("cool", M.tail_s, easy(...D.ws.bands.easy), "輕鬆收操")]);
       }
-      if (["long", "mountain", "hike"].includes(kind)) { const [lo, hi] = kind === "long" ? [0.8, 0.88] : [0.75, 0.88]; return doc([step("work", sec, easy(lo, hi))]); }
+      if (["long", "mountain", "hike"].includes(kind)) { const [lo, hi] = kind === "long" ? D.ws.bands.long : D.ws.bands.trail; return doc([step("work", sec, easy(lo, hi))]); }
       if (kind === "easy" && (s.heat || title.includes("熱適應")) && sec >= 1200)
         return doc([step("warm", 600, EASY, "熱適應：慢慢進入"), step("work", sec - 900, EASY, "熱適應：照心率、配速放慢"), step("cool", 300, OPEN, "走路降溫")]);
       if (kind === "easy") {
@@ -1096,12 +1108,12 @@
           if (base >= 600) {
             const flatRun = title.includes("加速跑");
             const [w, r, rn] = flatRun ? [`${sp} 秒加速跑（平路）`, "慢跑回來", `加速跑 ${k}×${sp} 秒`] : [`${sp} 秒上坡衝刺`, "走下來", `衝刺 ${k}×${sp} 秒`];
-            const a = step("work", base, easy(0.75, 0.8), "心率 ≤ 輕鬆跑上限");
+            const a = step("work", base, easy(...D.ws.bands.easy), "心率 ≤ 輕鬆跑上限");
             const kids = [step("work", sp, OPEN, w), step("rest", 60, OPEN, r)];
             return doc([a, { id: ids(), kind: "repeat", times: k, last_rest: true, note: rn, items: kids }]);   // rep() takes its id after its kids
           }
         }
-        return doc([step("work", sec, easy(0.75, 0.8))]);
+        return doc([step("work", sec, easy(...D.ws.bands.easy))]);
       }
       return null;
     }

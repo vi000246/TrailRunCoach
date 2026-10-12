@@ -409,8 +409,11 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       const f = r.frac, rd = (x) => Math.round(x * 100) / 100;
       if (type === "power") {
         if (r.type === "power" && th.cp) return { type, mode: "pct", lo: rd(r.lo / th.cp), hi: rd(r.hi / th.cp) };
+        // SP-378: an easy step (warm-up, cool-down, an easy run) starts at the whole of Zone 1, 65–80 % CP
+        // (zones.EASY_BAND), not a ±3 % band or zone 1C alone (a 10 W band nobody runs inside)
+        if (st.kind !== "work" || (st.target || {}).intent === "easy") return { type, mode: "pct", lo: 0.65, hi: 0.8 };
         if (f) return { type, mode: "pct", lo: rd(f - 0.03), hi: rd(f + 0.03) };
-        return { type, mode: "zone", zone: st.kind === "work" ? "3A" : "1C" };
+        return { type, mode: "zone", zone: "3A" };
       }
       if (type === "hr") {
         if (r.type === "hr" && /輕鬆跑上限|AeT/.test(r.sub || "")) return { type, mode: "zone", zone: "aet" };
