@@ -6443,6 +6443,10 @@
     "draft": true,
     "src": "backend/engine/quality_gate.py:1818"
   },
+  "這兩格不能當一段區間：{a}–{b}": {
+    "draft": true,
+    "src": "backend/engine/workout_steps.py:782"
+  },
   "這堂用你挑的動作：{moves}": {
     "draft": true,
     "src": "backend/engine/strength_moves.py:258"

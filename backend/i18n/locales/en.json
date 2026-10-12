@@ -1619,6 +1619,7 @@
   "這個平台": "This platform",
   "這個範本沒有 GPX": "This template has no GPX",
   "這個間歇門檻不開 5 區": "This interval gate doesn't open Zone 5",
+  "這兩格不能當一段區間：{a}–{b}": "These two zones can't make one range: {a}–{b}",
   "這堂用你挑的動作：{moves}": "your picked moves this session: {moves}",
   "這堂課不是過期未完成的課：{uid}": "This session is not an overdue, unfinished one: {uid}",
   "這堂課沒有配對的活動": "This session has no linked activity",

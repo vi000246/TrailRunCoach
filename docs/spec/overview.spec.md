@@ -1637,6 +1637,26 @@ which one. The response keeps the `coros` field names.
   (`TRAIL_SPECIFIC`, `backend/engine/template_recs.py:49`). week_plan generates 技術地形 sessions
   itself (SP-74) and counts the user's own RPE ≥ 7 ones into the 20 % budget (above); a user's own
   interval (kind quality) is still not counted.
+- **區間 從–到 (SP-383, 2026-10-12; docs/research/power-zone-width.md §5.2)**. A power / HR / pace
+  step in 填法 區間 can span several zones of one set: next to the zone dropdown (「從」) a second one
+  「到」 lists the same set — Palladino power 1A–7, Friel pace, Friel HR, or the 課表心率區間's Z1–Z6
+  (設定's choice, so the bpm follow the model in use) — with 「只這一格」 first; none on 「≤ 輕鬆跑上限」,
+  which is in no set (`tgHtml`, `zoneSet`, `backend/static/workout_editor.js:233`, `:570`). Stored
+  `{"mode": "zone", "zone": "1B", "zone_to": "2"}`, always easy → hard: a 「到」 below the 「從」 is
+  **swapped**, not refused (editor `zoneEdit`, `:240`; `normalize`, `backend/engine/workout_steps.py:769`);
+  「到」 = 「從」 or empty is one zone (no `zone_to`), so one-zone steps and every structure saved
+  before are unchanged; the easy-run cap or two sets in one range is an error
+  (「這兩格不能當一段區間：aet–2」). Resolved from the first zone's lower to the last zone's upper bound
+  (`zone_span`, `:990`; `_hr_model_zone`, `:265`; pace, listed easy → hard, the run's fastest to its
+  slowest edge): CP 200, 1B–2 → 130–176 W, the step reads 「功率 130–176 W · 65–88% CP · Z1B–Z2」
+  (`zone_range_text`, `:1012`, in place of the middle's zone), and that band is what COROS gets (a
+  user's own target, pushed as typed — no `watch_band`). Everything else reads the span too: the
+  chart height and TSS 估 (the resolved band's middle), the ladder's band (`_work_band`, `:1592`),
+  a warm-up carved from an easy step (`_easy_target`, by the range's harder end, `:586`), the
+  template family (`workout_templates._level`, `backend/engine/workout_templates.py:543`); the 填法
+  switch to % keeps the whole span (`zoneSpan`, `backend/static/workout_editor.js:249`), the switch
+  back picks one zone. The static demo's JS port follows (`zoneOf`, `backend/demo/static_shim.js:559`).
+  Tests: `backend/tests/test_zone_range_sp383.py`, `backend/tests/test_static_steps.py` (`zone_ranges`).
 - **範本 page and 我的範本** (2026-10-04, SP-36, the user's answers). 課表's third mode card
   **範本** (`backend/static/templates.html`, `GET /plan/templates/page`,
   `backend/api/plan_sessions.py:2791`; also on 課表統計) lists the user's own templates and the
@@ -2272,3 +2292,4 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 | 2026-10-08 | feat/warmup-pref-sp364 | SP-364 | 課表偏好 每堂課前加熱身 (`plan.prefs.warmup_on` / `warmup_min`, off / 10, 5–30 min; not `active`): every generated run session, suggested / scheduled test and inserted template starts with ≥ N min of warm-up (`backend/engine/warmup.py`). Easy-type sessions: the first N min are the warm-up (「含暖身 N 分」, time / TSS / budget unchanged; `derive` + the COROS push split there). Own warm-up shorter: topped up, main set untouched, extra minutes in the session at the easy rate; library intervals carry the floor in `blocks` / `fit` / `variant_adj["warm"]`; text intervals / tests rewrite 「暖身 N 分」; `trim_quality` keeps the floor; applied before the easy runs are sized (week total kept) and last (week_plan, projection). Templates' `full` topped up (`ensure_warm`). AeT drift analysis cuts the planned longer warm-up. Panel switch + minutes (zh-TW / en). Tests: `backend/tests/test_warmup_pref.py` |
 | 2026-10-08 | feat/warmup-pref-sp364 | SP-364 review + owner 2026-10-08 | Easy-type sessions never change their time: a run too short gets a shorter warm-up (none < 5′), and the structure / push split a marked run inside its own time (`workout_steps.carve_warm`) — a run trimmed / edited later keeps its total; an easy generated structure (技術地形 RPE 3–4) the same, downhill keeps its 10′. The easy-run count never changes: counted on the minutes without the preference (`left_n`, `plan_prefs.Ctx.warm_base` / `_used_without_warmup`), the extra minutes out of the easy runs evenly. Easy / 我的範本 templates keep their length. A drawer swap merges only `variant_adj["warm"]` (`rest_add` / `power` kept). The fit reason names the warm-up when it is what doesn't fit. Fixed: `apply_objs` passed no variant fields, so a library interval was handled as text. Tests: `backend/tests/test_warmup_pref.py` |
 | 2026-10-08 | main | SP-258 owner 2026-10-08 | The altitude ? research lines drop the place too: 「高山症風險較高（Shen 2024）」 (was 「…玉山排雲山莊就診者的資料」) and 「超過 3,400 m 屬高風險（CDC）」 (was 「…；排雲山莊 3,402 m 就在線上」); `test_altitude` now forbids 排雲 / Paiyun in the help. |
+| 2026-10-12 | feat/zone-range-sp383 | SP-383 (docs/research/power-zone-width.md §5.2) | The editor's 區間 can span zones (從–到, e.g. Palladino 1B–2): a second dropdown 「到」 in the same set (power, Friel pace / HR, or the 課表心率區間 in use; 「只這一格」 first; none on the easy-run cap), stored `zone_to`, easy → hard (a reversed pick is swapped), resolved from the first zone's lower to the last zone's upper bound for the page, the push, TSS / chart, the ladder band and the template family; one-zone steps unchanged; the demo port follows. `backend/engine/workout_steps.py` (`zone_span`, `zone_set`, `zone_range_text`, `_hr_model_zone`, `normalize`, `resolve`), `backend/static/workout_editor.js` (`zoneEdit`, `zoneSpan`, `tgHtml`), `backend/demo/static_shim.js`. Tests: `backend/tests/test_zone_range_sp383.py` |

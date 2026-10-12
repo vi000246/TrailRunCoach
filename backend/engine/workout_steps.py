@@ -35,8 +35,10 @@ target    auto — what 「目標用：自動／心率／功率」 (engine/targe
              intent open   no target (drills, walk rests, all-out bouts)
           power | hr | pace — the user's override of one step:
              mode pct (× CP / × LTHR / × threshold pace), zone (Palladino / Friel id,
-             hr also "aet"), abs (W / bpm / s per km — never rescaled by a threshold
-             change, except watts on a CP change: engine/plan_auto.rescale_sessions)
+             hr also "aet" and the 課表心率區間's Z1–Z6; with `zone_to` a run of zones of
+             one set, 從–到 (SP-383): {"zone": "1B", "zone_to": "2"} = 1B's lower to 2's
+             upper bound, stored easy → hard), abs (W / bpm / s per km — never rescaled by a
+             threshold change, except watts on a CP change: engine/plan_auto.rescale_sessions)
           rpe — 技術地形／下坡 (SP-62): lo–hi on Borg CR-10 (1–10), optional `up` / `down`
              (m of climb / descent to cover). No HR / power target: COROS gets the step
              with no intensity and the RPE + climb in its name; the editor shows a
@@ -260,8 +262,15 @@ def hr_model_zones(c: Optional[Ctx]) -> Optional[list]:
     return out
 
 
-def _hr_model_zone(c: Optional[Ctx], zid: str) -> Optional[tuple]:
-    return next(((lo, hi) for z, _n, lo, hi in hr_model_zones(c) or [] if z == zid), None)
+def _hr_model_zone(c: Optional[Ctx], zid: str, zto: Optional[str] = None) -> Optional[tuple]:
+    """(lo, hi) bpm of a 課表心率區間 zone, or of the run `zid`–`zto` (SP-383: the first zone's lower to
+    the last one's upper bound); None without that model or for an id it lacks."""
+    zs = hr_model_zones(c) or []
+    ids = [z for z, _n, _lo, _hi in zs]
+    if zid not in ids or (zto and zto not in ids):
+        return None
+    i, j = sorted((ids.index(zid), ids.index(zto or zid)))
+    return min(z[2] for z in zs[i:j + 1]), max(z[3] for z in zs[i:j + 1])
 
 
 def _power(c: Ctx, lo: float, hi: float) -> Optional[tuple]:
@@ -580,8 +589,8 @@ def _easy_target(tg: dict) -> bool:
         return tg.get("intent") == "easy"
     if ty == "rpe":
         return (tg.get("hi") or 99) <= RPE_EASY_MAX
-    if mode == "zone":
-        return str(tg.get("zone") or "").lower() in ("aet", "1", "2", "z1", "z2")
+    if mode == "zone":                    # a run of zones (SP-383) by its harder end
+        return str(tg.get("zone_to") or tg.get("zone") or "").lower() in ("aet", "1", "2", "z1", "z2")
     if mode == "pct" and ty == "hr":
         return (tg.get("hi") or 9) <= EASY_HR_PCT
     if mode == "pct" and ty == "power":
@@ -757,10 +766,22 @@ def _norm_target(t, errs: list) -> dict:
         return dict(OPEN)
     out = {"type": ty, "mode": mode}
     if mode == "zone":
+        known = {r[0] for r in ZONES[ty]} | (set(HR_MODEL_ZONES) if ty == "hr" else set())
         z = str(t.get("zone") or "")
-        if z not in {r[0] for r in ZONES[ty]} | (set(HR_MODEL_ZONES) if ty == "hr" else set()):
+        if z not in known:
             errs.append(_("沒有這個區間：{x}", x=repr(z)))
         out["zone"] = z
+        zt = str(t.get("zone_to") or "")
+        if zt and zt != z and z in known:
+            # 從–到 (SP-383): a run of zones inside one set, stored easy → hard — a 「到」 below the
+            # 「從」 is swapped, not refused; 「到」 = 「從」 or empty is one zone (no zone_to)
+            ids = zone_set(ty, z)
+            if zt not in known:
+                errs.append(_("沒有這個區間：{x}", x=repr(zt)))
+            elif z not in ids or zt not in ids:
+                errs.append(_("這兩格不能當一段區間：{a}–{b}", a=z, b=zt))
+            else:
+                out["zone"], out["zone_to"] = sorted((z, zt), key=ids.index)
         return out
     rng = {("power", "pct"): (0.2, 3.0), ("hr", "pct"): (0.3, 1.3), ("pace", "pct"): (0.5, 2.5),
            ("power", "abs"): (20, 1500), ("hr", "abs"): (40, 230), ("pace", "abs"): (120, 1200)}[(ty, mode)]
@@ -966,9 +987,34 @@ def hr_to_p(f: float) -> float:
     return _HR_P[-1][1]
 
 
-def _zone_of(ty: str, zid: str) -> tuple:
-    r = next((r for r in ZONES[ty] if r[0] == zid), None)
-    return (r[1], r[2]) if r else (None, None)
+def zone_span(ty: str, zid: str, zto: Optional[str] = None) -> tuple:
+    """(lo, hi) fractions of one zone, or of the run of zones `zid`–`zto` (SP-383): the first zone's
+    lower to the last one's upper bound (pace, × threshold pace and listed easy → hard: the run's
+    fastest to its slowest edge). (None, None) for an id the table lacks and the easy-run cap."""
+    ids = [r[0] for r in ZONES[ty]]
+    if zid not in ids or (zto and zto not in ids):
+        return (None, None)
+    i, j = sorted((ids.index(zid), ids.index(zto or zid)))
+    run = ZONES[ty][i:j + 1]
+    if any(r[1] is None for r in run):
+        return (None, None)
+    return (min(r[1] for r in run), max(r[2] for r in run))
+
+
+def zone_set(ty: str, zid: str) -> list:
+    """The ids of the zone set `zid` belongs to, easy → hard — a 從–到 range stays inside one set
+    (SP-383): Palladino power, Friel pace, Friel HR (not the easy-run cap) or the 課表心率區間's Z1–Z6."""
+    if ty == "hr" and zid in HR_MODEL_ZONES:
+        return list(HR_MODEL_ZONES)
+    return [r[0] for r in ZONES[ty] if r[1] is not None]
+
+
+def zone_range_text(tg: dict) -> str:
+    """「Z1B–Z2」 of a zone-range target (SP-383); "" for one zone."""
+    z, zt = str(tg.get("zone") or ""), str(tg.get("zone_to") or "")
+    if not zt or zt == z:
+        return ""
+    return "–".join(x if x in HR_MODEL_ZONES else f"Z{x}" for x in (z, zt))
 
 
 @dataclass
@@ -1097,7 +1143,7 @@ def resolve(st: dict, c: Ctx) -> Resolved:
     lo, hi = tg.get("lo"), tg.get("hi")
     if ty == "power":
         if mode == "zone":
-            lo, hi = _zone_of("power", tg.get("zone"))
+            lo, hi = zone_span("power", tg.get("zone"), tg.get("zone_to"))
         if mode != "abs":
             if not c.cp:
                 return Resolved("none", text="不設目標", auto=False, err="選了功率卻沒有 CP")
@@ -1110,13 +1156,13 @@ def resolve(st: dict, c: Ctx) -> Resolved:
                 return Resolved("none", text="不設目標", auto=False, err="選了心率卻沒有 AeT／LTHR")
             r = _from_int(e, c, auto=False)
         elif mode == "zone" and tg.get("zone") in HR_MODEL_ZONES:
-            b = _hr_model_zone(c, tg["zone"])
+            b = _hr_model_zone(c, tg["zone"], tg.get("zone_to"))
             if not b:
                 return Resolved("none", text="不設目標", auto=False, err="選了心率區間卻沒有課表心率區間")
             r = _from_int(("hr", *b), c, auto=False)
         else:
             if mode == "zone":
-                lo, hi = _zone_of("hr", tg.get("zone"))
+                lo, hi = zone_span("hr", tg.get("zone"), tg.get("zone_to"))
             if mode != "abs":
                 if not c.lthr:
                     return Resolved("none", text="不設目標", auto=False, err="選了心率卻沒有 LTHR")
@@ -1124,7 +1170,7 @@ def resolve(st: dict, c: Ctx) -> Resolved:
             r = _from_int(("hr", round(lo), round(hi)), c, auto=False)
     else:                                                    # pace
         if mode == "zone":
-            lo, hi = _zone_of("pace", tg.get("zone"))
+            lo, hi = zone_span("pace", tg.get("zone"), tg.get("zone_to"))
         if mode != "abs":
             if not c.tpace:
                 if tg.get("hrp") and c.lthr:
@@ -1143,6 +1189,11 @@ def resolve(st: dict, c: Ctx) -> Resolved:
         # COROS intensityType 3, s/km (verified 2026-10-02): lo = the faster bound
         r = Resolved("pace", a, b, f, f"{mmss(a)}–{mmss(b)} /km", sub, False,
                      intensity=("pace", round(a), round(b)))
+    rz = zone_range_text(tg) if mode == "zone" else ""
+    if rz and r.type == ty:
+        # 從–到 (SP-383): the step reads as the run 「65–88% CP · Z1B–Z2」, not as its middle's zone
+        base = r.sub.rsplit(" · ", 1)[0] if ty == "power" else r.sub
+        r.sub = f"{base} · {rz}" if base else rz
     if r.lo is not None and r.hi is not None and r.lo > r.hi and r.type != "pace":
         r.err = "下限比上限高"
     # no plausible-range check on HR or power: this branch is the user's own override
@@ -1548,7 +1599,7 @@ def _work_band(st: dict, c: Optional[Ctx]) -> Optional[tuple]:
         if tg.get("mode") == "pct":
             return tg["lo"], tg["hi"], False
         if tg.get("mode") == "zone":
-            lo, hi = _zone_of("power", tg.get("zone"))
+            lo, hi = zone_span("power", tg.get("zone"), tg.get("zone_to"))
             return (lo, hi, False) if lo is not None else None
         if c and c.cp:
             return tg["lo"] / c.cp, tg["hi"] / c.cp, False
@@ -1557,12 +1608,12 @@ def _work_band(st: dict, c: Optional[Ctx]) -> Optional[tuple]:
         if tg.get("mode") == "pct":
             m = (tg["lo"] + tg["hi"]) / 2
         elif tg.get("mode") == "zone" and tg.get("zone") in HR_MODEL_ZONES:
-            b = _hr_model_zone(c, tg["zone"])
+            b = _hr_model_zone(c, tg["zone"], tg.get("zone_to"))
             if not (b and c.lthr):
                 return None
             m = (b[0] + b[1]) / 2 / c.lthr
         elif tg.get("mode") == "zone" and tg.get("zone") != "aet":
-            lo, hi = _zone_of("hr", tg.get("zone"))
+            lo, hi = zone_span("hr", tg.get("zone"), tg.get("zone_to"))
             m = (lo + hi) / 2
         elif tg.get("mode") == "abs" and c and c.lthr:
             m = (tg["lo"] + tg["hi"]) / 2 / c.lthr

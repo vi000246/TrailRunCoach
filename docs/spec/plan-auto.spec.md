@@ -869,7 +869,9 @@ overview has `data-log="none"`. The settings are in 課表偏好 (above).
   `WORKOUT_TARGETS` z2 / long); mountain / hike days keep 75–88 % (`TRAIL_BAND`). An auto interval
   band keeps its prescription on the page, but the watch gets `zones.watch_band`: the upper bound
   × 1.05 (= `interval_eval.TIZ_HI_TOL`), a Zone 5 band (middle ≥ 106 %) up to 116 % — the band the
-  rep is judged by. A user's own power target (pct / zone / abs) is pushed as typed.
+  rep is judged by. A user's own power target (pct / zone / abs) is pushed as typed — a 區間 從–到
+  range (SP-383, e.g. 1B–2) as the first zone's lower to the last zone's upper bound
+  (`workout_steps.zone_span`; overview.spec.md › Page, 區間 從–到).
 - The 「休息 60 秒心率降幅 < 20」 line and the fade line in the workout review card
   (`workout_review.interval_lines`) are unchanged. They are display only and no longer drive
   the dose.
@@ -953,3 +955,4 @@ The owner's calls, gathered from the sections above (each is described there wit
 | 2026-10-08 | fix | SP-353 review | No maintenance session for a multi-day 百岳 (`baiyue_multiday.applies`, `backend/engine/quality_gate.py:1679`): SP-114's `apply_me` would delete / replace it — those weeks stay Zone 3 + ME with the pre-SP-353 note. The stored maintenance session is 不算進階 (`equiv` / `progress` False, `backend/engine/overview.py:1003`), so `dose_step` judges a done one without stepping Zone 5. It takes the Zone 5 state machine's tweak (`:2747`). The 「輪到 5 區維持課，但…」 notes only when Zone 5 is or was open (`:2589`). Tests: `backend/tests/test_specific_split.py::test_no_zone5_maintenance_on_a_multi_day_baiyue_that_gets_me`, `::test_a_done_maintenance_session_is_judged_but_does_not_move_the_rung`, `::test_the_maintenance_session_takes_the_state_machines_tweak`, `::test_no_maintenance_note_when_zone5_never_opened` |
 | 2026-10-08 | fix | SP-295 review | A stored Zone 3 pair already breaking 重新上鎖天數 ≥ 最長幾天不跑 (saved before the check) is flagged, not changed: `list_calibration` adds `warn` to both rows (`backend/api/calib.py:63`), shown next to them in 進階設定 (`backend/static/settings.html:1627`). Test: `backend/tests/test_z3_unlock_settings.py::test_a_stored_invalid_pair_is_flagged_not_changed` |
 | 2026-10-12 | feature | SP-378 | Power bands: road easy 65–80 % CP, road long 65–88 % (were 75–80 / 80–88); the watch gets an interval band's judging band (upper × 1.05, Zone 5 to 116 %), the page keeps the prescription; the editor starts an easy step's power override at 65–80 %. `backend/engine/zones.py` (`EASY_BAND`, `LONG_BAND`, `watch_band`), `backend/engine/workout_steps.py` (`_watch_band`), `backend/sync/coros_workouts.py`. Tests: `backend/tests/test_power_bands_sp378.py` |
+| 2026-10-12 | feature | SP-383 | A user's 區間 target may span zones (從–到, `zone_to`): pushed from the first zone's lower to the last zone's upper bound, as typed (no `watch_band`); one-zone steps unchanged. `backend/engine/workout_steps.py` (`zone_span`). Tests: `backend/tests/test_zone_range_sp383.py::test_the_watch_gets_the_whole_range` |
