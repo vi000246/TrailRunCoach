@@ -145,6 +145,14 @@ engine config / parity mode is the same everywhere.
   for background work (a `user` job may take the tenant's second place), within one priority the
   tenants take turns. The warm-up's low-priority steps are jobs at `warm` too (wko5-engine.spec.md
   › Warm-up), and the activity auto-classification (workouts.spec.md).
+- **A first import, hot first (SP-394 第 4 條, 2026-10-12).** A new user's first sync / a big FIT
+  import builds the Dataset of the last 90 days first (wko5-engine.spec.md › Hot first): the warm-up
+  computes the status and the plan inputs on it before any older file is parsed, so the overview and
+  the 課表 are usable in about the time of a sync; until the back-fill's complete Dataset is in, the
+  PMC (CTL / ATL / TSB) counts only those 90 days (CTL starts at 0 there) and every page shows the
+  back-fill's progress under the nav; the status computed on the complete Dataset then replaces it
+  (shown stale meanwhile, below). The Dataset a request builds is a `build` job of the queue (two at
+  a time for the server, one per tenant).
 - **Stale status card (SP-394, 2026-10-12).** `GET /overview/status` (`status_answer`,
   `backend/api/overview.py:228`) answers, on a cache miss caused by new data (a new dataset
   generation — a sync, or a restart / deploy) or a new day, the tenant's previous status marked
@@ -2405,3 +2413,4 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 | 2026-10-12 | feat/trail-climb-sessions-sp87 | SP-87 §4 #6 | Small fixes: the 專項期 技術地形 RPE 6–7 session is kind `quality` (was `hike`; RPE 4–5 stays `hike`), so adapt / reconcile see it as a hard day; what reads the kind follows — `plan_match.rpe_set` / `planned_intensity` (an RPE-set 強度課 is not graded by threshold time: None, as the kind hike was), `plan_store.user_rpe_rows` / `technical.user_quality` (a kind-quality RPE row with no library variant is the user's own RPE ≥ 7 session), `plan_store.done_plan` (RPE-set sessions stay out of the interval ladder's history), `adapt._downgrade` / `_to_recovery` (`_drop_steps`: the run it becomes keeps no RPE structure); the push is unchanged. `template_recs`: no 強化期 (`build`) scores or label — planning has none (an unknown phase reads as 基礎期). Tests: `backend/tests/test_technical.py::test_an_rpe_quality_session_is_not_graded_by_hr_or_power`, `::test_the_stored_quality_tech_row_counts_as_the_users_own_and_stays_out_of_the_ladder`, `test_adapt.py::test_a_downgraded_rpe_quality_session_drops_its_rpe_structure`, `test_template_recs.py::test_no_build_phase_is_scored` |
 | 2026-10-12 | feat/trail-climb-sessions-sp87 | SP-87 acceptance 8 | A road athlete's plan is unchanged by SP-87: no 長爬坡有氧 / downhill / 技術地形 session and no weekly climb target in the 基礎期, before a road A race or before a trail race when 主要訓練項目 is set to 路跑, in week_plan and the projection (`backend/tests/test_sp87_road.py`); the 課表 week rows carry no `climb` for them (`test_vert_target.py`) |
 | 2026-10-12 | feat/trail-climb-sessions-sp87 | SP-87 (found by the kind change) | The 專項期 技術地形 RPE 6–7 session (a hard day) stays out of the easy days after an accepted B2B (`b2b.post.until`, kept in `technical.week_context` as `b2b_until`), like the downhill session and the 長爬坡反覆; without another spaced day it is the RPE 4–5 one (easy). Before, it could land there (kind hike hid it from `test_b2b.py::test_week_after_an_accepted_b2b_easy_days_no_recovery_week`). Test: `backend/tests/test_technical.py::test_the_quality_session_stays_out_of_the_easy_days_after_a_b2b` |
+| 2026-10-12 | perf | SP-394 第 4 條 | A first import (and a re-parse) builds the last 90 days first: the status and the plan inputs come before the back-fill of the older activities, whose progress shows under the nav; the PMC counts the 90 days until the complete Dataset is in. A request's Dataset build is a `build` job of the queue. Tests: `backend/tests/test_queue_hot_first_sp394.py` |

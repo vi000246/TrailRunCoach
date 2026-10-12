@@ -81,7 +81,7 @@ def test_warm_up_order_dataset_status_inputs_then_low_priority(monkeypatch):
         return b
     monkeypatch.setattr(plan_auto, "busy", busy)
     monkeypatch.setattr(CAL, "_registry", lambda: {})          # nothing never-fitted
-    monkeypatch.setattr(AA, "job_for", lambda d: order.append("classify"))
+    monkeypatch.setattr(AA, "job_for", lambda d, **kw: order.append("classify"))
     from backend.api import racepower as RP
     monkeypatch.setattr(RP, "warm_charts", lambda job=None: order.append("charts"))      # SP-366, last
     t = wko5views.warm_up("test")
@@ -118,7 +118,7 @@ def test_a_second_warm_up_runs_while_the_first_waits_for_the_plan(monkeypatch):
     monkeypatch.setattr(plan_auto, "busy", lambda: not release.is_set())
     monkeypatch.setattr(wko5views, "_PLAN_POLL_S", 0.01)
     monkeypatch.setattr(CAL, "_registry", lambda: {})
-    monkeypatch.setattr(AA, "job_for", lambda d: classified.append(d.n))
+    monkeypatch.setattr(AA, "job_for", lambda d, **kw: classified.append(d.n))
     from backend.api import racepower as RP
     monkeypatch.setattr(RP, "warm_charts", lambda job=None: None)
     t1 = wko5views.warm_up("first")

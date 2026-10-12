@@ -258,7 +258,7 @@ flagged.
 | GET | `/api/v1/wko5/workouts/{idx}/activity` | dataset workout (current source): effective, auto (+ reasons), overridden flags, note, `effort_detail` (HR fraction, above-AeT share, long-rest share), `capacity` (race-power sample or not), the option labels, `power` (`source`, `used`, `label`, `setting`), `title_original`, `title_from`, `terrain`, `origin`, `pack`, `poles` / `poles_user` / `poles_race` (SP-300), `pain_state` (+ `pain_score`, the 傷別 pain-monitoring text `monitor` and the re-entry prompt `reentry`, SP-269), `tag_uid` (the stored mark's `uid`, null when nothing is stored; SP-310) (`_activity_json`, `backend/api/wko5views.py:1002`) |
 | GET | `/api/v1/wko5/workouts/{idx}/pain` | the pain mark only (the chart page's chip); 404 in demo mode |
 | GET | `/api/v1/wko5/activities` | every activity of the current source, newest first, with the stored user values (type / effort marks, name, tags, note, exclusion, pain, `pain_score`, `poles` / `poles_race`, `surface`), terrain, power label, recorded RPE / feel and `self_rating` (COROS, SP-231), `rain_mm` and `pole_chart` (counts toward the comparison), `tag_uid` (the stored mark's `uid`, null when none; SP-310); excluded files with `index: null`. Top level: `pole_tags`, `pole_none_tag`, `surface_tags`, `pole_compare` (the 5 + 5 counts), `rain_hint_mm` (`activities_list`, `backend/api/wko5views.py:1085`) |
-| GET | `/api/v1/wko5/activities/auto` | the auto type / effort (+ reasons) of every activity, computed in the background (`backend/api/activity_auto.py`: one job per Dataset, chunks of 25 newest first, values kept on disk per activity file); `{state computing / ready / error, n_done, n_total, stale, auto}` — the page polls. **Per activity since SP-334**: a cheap whole-data `signature` (`backend/api/activity_auto.py:241`) only decides whether a job starts; the job (in the request's tenant context) then builds every activity's own key (`_Keys`, `backend/api/activity_auto.py:341`) and recomputes only the activities whose key changed — see 「Auto values per activity」 below |
+| GET | `/api/v1/wko5/activities/auto` | the auto type / effort (+ reasons) of every activity, computed in the background (`backend/api/activity_auto.py`: one job per Dataset, chunks of 25 newest first, values kept on disk per activity file); `{state computing / ready / error, n_done, n_total, stale, auto}` — the page polls. **Per activity since SP-334**: a cheap whole-data `signature` (`backend/api/activity_auto.py:259`) only decides whether a job starts; the job (in the request's tenant context) then builds every activity's own key (`_Keys`, `backend/api/activity_auto.py:359`) and recomputes only the activities whose key changed — see 「Auto values per activity」 below |
 | GET | `/api/v1/wko5/sports` | the 圖表分析 activity-type filter: the kinds present with counts, in the filter's order (`backend/api/wko5views.py:1307`, SP-263) |
 | GET | `/api/v1/wko5/activities/stats` | `{key: {avg_hr, avg_power}}` for the list columns |
 | PATCH | `/api/v1/wko5/activities` | key-based single or bulk edit (≤ 500 items `{key, file?}`): any tag field (incl. `pain_score`, `poles`, `surface`; `BulkBody`, `backend/api/wko5views.py:1230`), plus `add_tags` / `remove_tags`; works for excluded files |
@@ -279,34 +279,34 @@ and `/api/v1/wko5/activities`. The `/api/v1/workouts` router keeps only the clas
 
 `activity_auto.json` (FIT cache folder; `activity_auto_<hash>.json` for WKO5) holds one entry per
 activity file: `{key, own, pcode, probe, start, auto}` (`save_cache`,
-`backend/api/activity_auto.py:547`; a failed write removes its `.tmp`). The key (`_Keys.key`,
-`backend/api/activity_auto.py:491`) is a hash of:
+`backend/api/activity_auto.py:565`; a failed write removes its `.tmp`). The key (`_Keys.key`,
+`backend/api/activity_auto.py:509`) is a hash of:
 
 - **global**: `CACHE_V` (2), the Dataset type / source / engine config, `power.accept_watch_power`,
   the 每人校正 `effort_rest_max` (P9, `activity_tags._rest_max`: read by `effort_hr` /
   `effort_from_rpe` of every activity; review fix);
 - **the branch and its code**: `run` (outdoor runs: `capacity_samples`) or `other`, each with the
-  hash of only the functions it reaches (`_branch_code`, `backend/api/activity_auto.py:138`,
+  hash of only the functions it reaches (`_branch_code`, `backend/api/activity_auto.py:156`,
   `engine/codehash.py`, SP-320 ①) — a changed rule recomputes only the results of its branch;
-- **own** (`_Keys._own`, `backend/api/activity_auto.py:420`): file, file stamp, sport, sport type,
+- **own** (`_Keys._own`, `backend/api/activity_auto.py:438`): file, file stamp, sport, sport type,
   tags, title, start, platform, the corrections of the file, the day's threshold signature
   (`Dataset._settings_sig`), power use / source;
 - **the recorded RPE row** `activity_tags.find` returns for it (looked up on the rows near it only:
-  `_Near`, `backend/api/activity_auto.py:301`);
-- **the day's thresholds** (`_Keys.thr_sig`, `backend/api/activity_auto.py:437`): the plan's
+  `_Near`, `backend/api/activity_auto.py:319`);
+- **the day's thresholds** (`_Keys.thr_sig`, `backend/api/activity_auto.py:455`): the plan's
   threshold rows up to that day, the runs of the `thr_window_days()` (301) days before it that
   `thresholds.estimate` / `cp_as_of` read (day, file stamp, tags, power use / source, corrections,
   NP), the synced FITs and settings the PD refit reads (`_pd_inputs`,
-  `backend/api/activity_auto.py:212`: `PdMemo.inputs`, `backend/engine/wko5expr/fitdataset.py:464`;
+  `backend/api/activity_auto.py:230`: `PdMemo.inputs`, `backend/engine/wko5expr/fitdataset.py:464`;
   a WKO5 Dataset without a PdMemo lists the same files with `synced_fit_files`,
   `backend/engine/wko5expr/fitdataset.py:392`) and — only on a day with no plan LTHR up to it — the
   Dataset's own LTHR history;
 - **run**: the matched plan race, trail or not, and for road runs the road rule's cross-run values
   — HRmax as of the day and the longer power reference (`_Keys._cross`,
-  `backend/api/activity_auto.py:408`, the real `maximal.hrmax_as_of` / `athlete.longer_power` on a
+  `backend/api/activity_auto.py:426`, the real `maximal.hrmax_as_of` / `athlete.longer_power` on a
   window of runs); **other**: the plan 百岳 event of the day, the app type;
 - **runs (the test rule, `athlete._test_reason`)** (`_Keys._test_part`,
-  `backend/api/activity_auto.py:472`): the plan events and threshold rows of the day, the stored
+  `backend/api/activity_auto.py:490`): the plan events and threshold rows of the day, the stored
   test sessions of the day (whether done by this activity), the user's 測試 mark, and the drift
   calibration (`workout_review.apply_calibration`: `drift.ok` → a steady AeT test) — so a weekly
   drift refit recomputes the runs only.
@@ -325,24 +325,41 @@ threshold row → the activities from its day; a plan race → the runs of its d
 or deleted → it and the activities whose thresholds window (301 days) holds it, plus road runs whose
 HRmax / power reference actually changes. Incremental values equal a full recompute
 (`backend/tests/test_activity_auto_incremental.py`). The job trigger `signature`
-(`backend/api/activity_auto.py:241`) covers every key input that can change while a Dataset lives —
+(`backend/api/activity_auto.py:259`) covers every key input that can change while a Dataset lives —
 the user's 測試 marks, the stored test sessions, the drift calibration and `effort_rest_max`
-(`_calib_part`, `backend/api/activity_auto.py:204`), the engine config, each file's FTP, WKO5's
+(`_calib_part`, `backend/api/activity_auto.py:222`), the engine config, each file's FTP, WKO5's
 mFTP snapshot, the whole recorded RPE row — so a change starts a job (the test oracle checks it
 for every mutation). Not the PD refit's synced FITs: a new synced FIT is a new Dataset
 (`source_stamp`). A version-1 file (one signature) is served meanwhile and rebuilt once. The job
 carries the request's tenant (the queue keeps the caller's contextvars, like the warm-up).
 
 **In the server's job queue (SP-394, 2026-10-12).** The job is a job of `backend/jobs.py`
-(`Job.start`, `backend/api/activity_auto.py:626`; `Job.thread` is the queue's job — `join` /
+(`Job.start`, `backend/api/activity_auto.py:675`; `Job.thread` is the queue's job — `join` /
 `is_alive` as the thread it replaced). Its class is known before the keys are built
-(`to_compute`, `:571`): `full` (one at a time for the server) when at least `FULL_FROM` = 100
+(`to_compute`, `:582`): `full` (one at a time for the server) when at least `FULL_FROM` = 100
 activities (推估: ~5 s on the NAS) have no stored value of the current code — a new user, a code
 change (the file's `code` = both branches' code hash, written since SP-394; an older file: each
-entry's `pcode`) — else `single`. Priority (`job_for`, `:698`): `warm` from the warm-up's
+entry's `pcode`) — else `single`. Priority (`job_for`, `:849`): `warm` from the warm-up's
 low-priority part, `user` from `GET /activities/auto` and `wait`; a job still queued is moved up
 (`jobs.promote`) when the 活動列表 asks for it. The page keeps answering at once while it waits for a
 place (`computing`, `n_done` 0). Still one job per Dataset for every request (single flight).
+
+**In age tiers (SP-394 第 3 條, 2026-10-12).** When at least `FULL_FROM` activities are to be computed
+(`to_compute_tiers`, `backend/api/activity_auto.py:601`: by `jobs.tier_of` of the activity's date as of
+the Dataset's today) the job runs in steps (`Job._run`, `:688`): the first builds every key and
+computes the hot tier (the last 90 days) at the caller's priority — the warm-up's `sync_hot` /
+`deploy_hot` (`wko5views._hot_priority`), `warm` after a back-fill — then the warm tier (to 365 days)
+and the cold tier (older) each as their own job at `warm` / `cold` (`_later`, `:842`; class by the
+tier's count, `_cls`), newest first; fewer stay one `single` / `full` job as before. After each step
+`activity_auto.json` holds the new values and the previous entries of what is left, without the
+signature until the last step (a restart recomputes the rest); `GET /activities/auto` serves the new
+hot values and the older stale ones meanwhile, with `tier` (hot / warm / cold / all) — the 活動列表
+says 「近 90 天已分類；較舊的活動在背景補算中」 for warm / cold. The 活動列表 asking (`user`) moves up a
+queued hot / single step only, never the warm / cold back-fill. A change of the inputs while a later
+tier waits for its place starts a new job (`supersede`, `:791`; only the keys that changed again) and
+hands it the `when_done` callbacks (`:780`) — the warm-up's sweep of this tenant's old series rows
+runs there, after the last tier (wko5-engine.spec.md). `join` waits for every step, `wait_for(tier)`
+up to a tier (the race charts wait for the warm one, `racepower.warm_charts`).
 
 ## UI
 
@@ -479,4 +496,5 @@ the app-type table and the filter kinds.
 | 2026-10-08 | review fix | SP-57 code review | A FIT RPE maps two values per level (6 → 累, Seiler zone 2 = session RPE 5–6; COROS 1–5 unchanged), `backend/engine/rpe_load.py:121` |
 | 2026-10-12 | chore | SP-48 (owner 2026-10-07) | `PATCH /api/v1/workouts/{id}/activity` removed with its own helpers (`_tag_json`, `_local_start`): no page called it; the tag fields and `save_activity_tag` stay for the `/api/v1/wko5/…` routes. Its tests now call `save_activity_tag` (the 404 / 422 of the route went with it); `test_spa_leftovers_sp48.py` checks the route table |
 | 2026-10-12 | feature | SP-310 | Stable id: `activity_tags.uid` (UUID5 of `athlete_id` + `start_local`, unique index `ux_activity_tags_uid`; `backend/db/stable_ids.py`), filled for the rows from before by `init_db` on every tenant DB; `updated_at` also moves on Core / ORM updates (`onupdate`); API: `tag_uid` on the activity JSON and `GET /activities`; the integer ids and the start-minute key unchanged. Tests `backend/tests/test_stable_ids_sp310.py` |
+| 2026-10-12 | perf | SP-394 第 3 條 | The classification in age tiers after a version change / for a new user (≥ `FULL_FROM`): hot (90 d) at the warm-up's priority, then warm / cold jobs at `warm` / `cold`, newest first, stored after each; `tier` in the answer and the 活動列表's 「較舊的活動在背景補算中」; supersede between tiers, `when_done` / `join` / `wait_for`. Tests: `backend/tests/test_queue_hot_first_sp394.py` |
 | 2026-10-12 | perf | SP-394 (SP-338 follow-up) | `/activities/auto`'s background computation is a job of the server's queue (`backend/jobs.py`): `full` when ≥ `FULL_FROM` (100) activities lack a stored value of the current code (`to_compute`; `activity_auto.json` now records `code`), else `single`; `warm` from the warm-up, `user` from the page (a queued job is promoted). Tests: `backend/tests/test_queue_followups_sp394.py` |

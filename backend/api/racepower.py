@@ -447,9 +447,13 @@ def warm_charts(job=None) -> None:
     import logging
     if _tenancy.demo_mode() or _tenancy.current().kind != _tenancy.OWNER:
         return
-    t = getattr(job, "thread", None)
-    if t is not None and t.is_alive():
-        t.join(CHART_WARM_WAIT_S)
+    wait_for = getattr(job, "wait_for", None)
+    if wait_for is not None:
+        wait_for("warm", CHART_WARM_WAIT_S)  # the year's activities (SP-394: not the cold back-fill)
+    else:
+        t = getattr(job, "thread", None)
+        if t is not None and t.is_alive():
+            t.join(CHART_WARM_WAIT_S)
     try:
         from backend import jobs
         jobs.call(_warm_chart_fits, cls="full", priority="warm", label="race charts warm-up")

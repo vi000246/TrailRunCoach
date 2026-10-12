@@ -150,7 +150,7 @@ def _low_priority_run(monkeypatch, demo: bool):
     monkeypatch.setattr(plan_auto, "busy", lambda: False)
     monkeypatch.setattr(wko5views, "_dataset", lambda: SimpleNamespace(today=20000.0))
     monkeypatch.setattr(CAL, "_registry", lambda: {})
-    monkeypatch.setattr(AA, "job_for", lambda d: order.append("classify"))
+    monkeypatch.setattr(AA, "job_for", lambda d, **kw: order.append("classify"))
     monkeypatch.setattr(RP, "_grade_models", lambda: order.append("grade"))
     monkeypatch.setattr(RP, "_climb_cadence", lambda: order.append("cadence"))
     wko5views._warm_slot()["low_again"] = False

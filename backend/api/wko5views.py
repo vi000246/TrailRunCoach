@@ -126,14 +126,26 @@ class _DatasetCache:
 
     def __call__(self, cfg_json: str, source: str = "wko5", stamp: str = "", shared: str = "") -> Dataset:
         key = (cfg_json, source, stamp, shared)
+        hit = self.peek(key)
+        if hit is not None:
+            return hit
+        ds = self._build(*key)
+        self.put(key, ds)
+        return ds
+
+    def peek(self, key: tuple) -> Optional[Dataset]:
+        """The Dataset built for `key` (most recently used now), or None — never builds."""
         with self._lock:
             hit = self._d.get(key)
             if hit is not None:
                 self._d.move_to_end(key)
-                return hit
-        ds = self._build(*key)
+            return hit
+
+    def put(self, key: tuple, ds: Dataset) -> None:
+        """Keep `ds` as the Dataset of `key` (a build just done, or a complete Dataset replacing
+        a hot-first one: api/backfill.py): the other stamps of its mode go, then the LRU limits."""
         with self._lock:
-            mode = (cfg_json, source, shared)
+            mode = (key[0], key[1], key[3])
             for k in [k for k in self._d if (k[0], k[1], k[3]) == mode and k != key]:
                 del self._d[k]
             self._d[key] = ds
@@ -143,7 +155,6 @@ class _DatasetCache:
             budget = dataset_budget_mb()
             while len(self._d) > 1 and sum(dataset_mb(d) for d in self._d.values()) > budget:
                 self._d.popitem(last=False)         # least recently used first (SP-338 第 7 條)
-        return ds
 
     def cache_clear(self) -> None:
         with self._lock:
@@ -154,13 +165,21 @@ class _DatasetCache:
             return list(self._d)
 
 
-def _build_dataset(cfg_json: str, source: str = "wko5", stamp: str = "", shared: str = "") -> Dataset:
+# SP-394 第 4 條: the app's FIT builds are hot first (fitdataset.HOT_FIRST_FROM files or more to
+# parse: the last 90 days now, the rest back-filled by api/backfill.py)
+HOT_FIRST = True
+
+
+def _build_dataset(cfg_json: str, source: str = "wko5", stamp: str = "", shared: str = "",
+                   hot_first: Optional[bool] = None) -> Dataset:
     """The Dataset for charts.data_source: the WKO5 athlete folder, or the
     COROS / TP FIT folder (FitFolderDataset: thresholds from the plan, the
     app DB's athlete_settings and as-of estimates; WKO5 only when opted in).
     `stamp` = datasource.source_stamp: a sync that adds FITs or WKO5
     rewriting its index gives a new stamp, so a fresh Dataset (_DatasetCache
-    then drops the one of the old stamp)."""
+    then drops the one of the old stamp). A FIT build is hot first (HOT_FIRST;
+    `hot_first` False: the back-fill's complete one) and a build that deferred
+    older files starts their back-fill (api/backfill.py)."""
     from backend.engine.wko5expr import buildstate
     st = buildstate.get(source)
     st.begin()                      # runs only on a cache miss: a real build
@@ -168,13 +187,27 @@ def _build_dataset(cfg_json: str, source: str = "wko5", stamp: str = "", shared:
         st.phase("wko5")
     from backend import applog
     try:
-        with applog.timed("dataset build", source=source):        # SP-215: the wait behind every chart
+        from backend.engine.wko5expr.fitdataset import hot_first_builds
+        with applog.timed("dataset build", source=source), \
+                hot_first_builds(HOT_FIRST if hot_first is None else hot_first):    # SP-215: the wait behind every chart
             ds = dataset_for_source(source, for_tenant(ATHLETE_DIR), config=EngineConfig.from_dict(json.loads(cfg_json)))
     except BaseException as e:
         st.fail(e)
+        try:                        # a failed hot-first build: no back-fill will release what it held
+            from backend.api import backfill
+            backfill.build_failed()
+        except Exception:           # noqa: BLE001
+            pass
         raise
     st.finish()
     _LIVE.add(ds)
+    if getattr(ds, "deferred", None):
+        try:
+            from backend.api import backfill
+            backfill.schedule(ds, (cfg_json, source, stamp, shared))
+        except Exception:           # noqa: BLE001 — the next build parses them instead
+            import logging
+            logging.getLogger(__name__).warning("back-fill not started", exc_info=True)
     try:                            # stored plan rows find their activities by start (activity_key.py)
         from backend.engine import activity_key as AK
         AK.register_dataset(ds)
@@ -211,6 +244,11 @@ def _dataset_key(parity: Optional[bool] = None, source: Optional[str] = None) ->
             str(tenancy.current().shared))
 
 
+def _restamp(key: tuple) -> tuple:
+    """`key` with the source's files stamp of now (the same mode: config, source, shared root)."""
+    return (key[0], key[1], DSRC.source_stamp(key[1], for_tenant(ATHLETE_DIR)), key[3])
+
+
 def _dataset(parity: Optional[bool] = None, source: Optional[str] = None) -> Dataset:
     """parity=True reproduces WKO5 exactly (verification mode); False applies
     the athlete's own adjusted formulas from ~/.wko5coach/engine.json.
@@ -220,15 +258,22 @@ def _dataset(parity: Optional[bool] = None, source: Optional[str] = None) -> Dat
 
     Single flight: concurrent callers of the same key (the viewer asks for a
     dozen charts at once) wait for ONE build instead of each building its
-    own; the build's progress is in buildstate (GET /dataset/status)."""
+    own; the build's progress is in buildstate (GET /dataset/status).
+
+    Through the server's job queue (SP-394 第 4 條): a request's build is a `build` job someone
+    waits for (`user`; backend/jobs.py: two places, background work takes at most one), one per
+    key — after a deploy ten idle tenants opening a page build two at a time, not ten at once.
+    Inside a job (the warm-up's `full`, a status `single`: it holds a place) or a single flight's
+    leader (a job may be waiting for it: singleflight.leading()) the build runs at once, as
+    before. A request never holds the build lock while it waits for a place, and waits for a
+    build a job is doing now outside the queue (_dataset_in_tenant)."""
     # built from the base's data (DB settings, thresholds): a sandbox that
     # triggers the build never puts its own copy into the shared Dataset
     with tenancy.use(tenancy.base_of()):
         return _dataset_in_tenant(parity, source)
 
 
-def _dataset_in_tenant(parity: Optional[bool], source: Optional[str]) -> Dataset:
-    key = _dataset_key(parity, source)
+def _flight_lock(key: tuple) -> threading.Lock:
     with _FLIGHT_LOCK:
         lk = _FLIGHT.get(key)
         if lk is None:
@@ -236,8 +281,30 @@ def _dataset_in_tenant(parity: Optional[bool], source: Optional[str]) -> Dataset
             for k in [k for k in _FLIGHT if k[1] == key[1] and k != key and not _FLIGHT[k].locked()]:
                 del _FLIGHT[k]
             lk = _FLIGHT[key] = threading.Lock()
-    with lk:
-        return _dataset_cfg(*key)
+        return lk
+
+
+def _dataset_in_tenant(parity: Optional[bool], source: Optional[str]) -> Dataset:
+    from backend import jobs
+    from backend.singleflight import leading
+    key = _dataset_key(parity, source)
+    hit = _dataset_cfg.peek(key)
+    if hit is not None:
+        return hit
+    lk = _flight_lock(key)
+
+    def build() -> Dataset:
+        with lk:                             # the lock holder always holds a place (or leads a flight)
+            return _dataset_cfg(*key)
+    if jobs.current() is not None or leading():
+        return build()
+    if lk.locked():
+        with lk:                             # a job builds it now (the warm-up): wait without a place
+            pass
+        hit = _dataset_cfg.peek(key)
+        if hit is not None:
+            return hit
+    return jobs.call(build, cls="build", priority="user", label="dataset build (request)", key=("dataset", *key))
 
 
 # the warm-up's threads, one set for each tenant (SP-374 第 3 條): tenant id -> {"thread", "low",
@@ -331,8 +398,11 @@ def _low_priority(reason: str, slot: Optional[dict] = None) -> None:
     hot work goes first: on the Dataset read AFTER the wait (a sync may have rebuilt it
     meanwhile) the never-fitted calibration (`full`), the 活動列表's automatic classification
     (activity_auto.job_for: its own job, `single` or `full`; read from disk when nothing
-    changed) and, owner only, the race calculator's charts (racepower.warm_charts, `full`). A
-    warm-up asked for while this waits only marks it to run once more (`low_again`)."""
+    changed; after a version change in age tiers, the hot one at the warm-up's priority —
+    _hot_priority, SP-394 第 3 條 — and once its last tier is done the old series rows of this
+    tenant go, _sweep_when_done) and, owner only, the race calculator's charts
+    (racepower.warm_charts, `full`, after the classification's warm tier). A warm-up asked for
+    while this waits only marks it to run once more (`low_again`)."""
     import logging
     from backend import jobs
     while True:
@@ -340,7 +410,11 @@ def _low_priority(reason: str, slot: Optional[dict] = None) -> None:
             _wait_plan_idle()
             ds = jobs.call(_calibrated, cls="full", priority="warm", label=f"warm-up calibration ({reason})")
             from backend.api import activity_auto as AA, racepower as RP
-            RP.warm_charts(AA.job_for(ds))       # then the race calculator's charts (SP-366; owner only)
+            # the classification: after a version change in age tiers, its hot tier at the warm-up's
+            # priority (SP-394 第 3 條); once its last tier is done, the old series rows go
+            job = AA.job_for(ds, priority=_hot_priority(reason))
+            _sweep_when_done(job, ds)
+            RP.warm_charts(job)                  # then the race calculator's charts (SP-366; owner only)
         except Exception as e:           # noqa: BLE001 — a page request will show the error
             logging.getLogger(__name__).warning("warm-up low-priority part (%s) failed: %s", reason,
                                                 type(e).__name__, exc_info=True)
@@ -350,6 +424,43 @@ def _low_priority(reason: str, slot: Optional[dict] = None) -> None:
                 w["low"] = None
                 return
             w["low_again"] = False
+
+
+def _priority(reason: str) -> str:
+    """The warm-up job's priority: after a sync `sync_hot`, after a deploy `deploy_hot`, after the
+    back-fill of a hot-first build (api/backfill.py) `warm`, else someone changed something: `user`."""
+    if reason.startswith("sync"):
+        return "sync_hot"
+    return "deploy_hot" if reason in ("startup", "deploy") else "warm" if reason == "backfill" else "user"
+
+
+def _hot_priority(reason: str) -> str:
+    """The priority of the hot tier of the warm-up's background steps: the warm-up's own, never
+    `user` (nobody waits for them; a page that does moves them up)."""
+    p = _priority(reason)
+    return "sync_hot" if p == "user" else p
+
+
+def _sweep_when_done(job, ds) -> None:
+    """SP-394 第 3 條 (補完新版才刪舊版): the old series rows / files of this tenant's store go once
+    the classification's last tier is done — the new version is filled in by then — instead of at
+    the end of the warm-up (dataset.sweep_series, SP-338 第 4 條 / SP-339)."""
+    when = getattr(job, "when_done", None)
+    if when is None:
+        return
+    try:
+        home = ds._series_home()
+    except Exception:                    # noqa: BLE001 — not a Dataset with a series store
+        return
+    from backend.engine.wko5expr import seriesdb
+
+    def sweep() -> None:
+        from backend.engine.wko5expr import dataset as D
+        try:
+            D.sweep_series(stores=[home / seriesdb.FILE_NAME])
+        except Exception:                # noqa: BLE001 — a cache sweep never fails anything
+            pass
+    when(sweep, key="sweep")
 
 
 def _start_low_priority(reason: str) -> None:
@@ -376,8 +487,10 @@ def warm_up(reason: str = "startup") -> Optional[threading.Thread]:
     課表's plan inputs (api/plan_sessions._compute_inputs); then, in a thread of its own
     (_low_priority) at the lowest priority and after an automatic plan run (engine/plan_auto.py)
     has ended, the never-fitted 每人校正 items and the 活動列表's automatic classification on the
-    Dataset read after that wait — each step a job of the server's queue at `warm` (SP-394).
-    The FIT parsing runs in a process
+    Dataset read after that wait — each step a job of the server's queue at `warm` (SP-394), the
+    classification's hot tier at the warm-up's own priority (_priority: after a sync `sync_hot`,
+    after a deploy `deploy_hot`, after a back-fill `warm`). A first import / a re-parse builds
+    the last 90 days first (HOT_FIRST; api/backfill.py fills in the rest). The FIT parsing runs in a process
     pool (fitcache.py); a request arriving meanwhile joins the same computation (single
     flight: the dataset here, the status and the inputs in backend/singleflight.py). None
     when a warm-up is already running or WKO5COACH_NO_WARMUP is set."""
@@ -410,12 +523,7 @@ def warm_up(reason: str = "startup") -> Optional[threading.Thread]:
                                                 exc_info=True)
             return
         _warm_chart_code(ds)             # after what the first page waits for (review SP-336 #5)
-        try:                             # the new versions are in: old series rows / leftover series_*.json
-                                         # files go (SP-338 第 4 條, SP-339)
-            from backend.engine.wko5expr.dataset import sweep_series
-            sweep_series()
-        except Exception:                # noqa: BLE001 — a cache sweep never fails the warm-up
-            pass
+        # the old series rows go once the classification's last tier is done (_low_priority, SP-394)
         # lowest priority from here, in its own thread: after the sync's automatic plan run (it
         # computes with the same dataset / status / inputs, now warm). This thread ends, so a
         # warm-up asked for meanwhile is not dropped (review SP-362 #4)
@@ -424,8 +532,7 @@ def warm_up(reason: str = "startup") -> Optional[threading.Thread]:
     # for the whole server (memory), a sync's before a deploy's; a second tenant's waits its turn
     # (queued, never dropped), in its own tenant (the queue keeps the caller's contextvars)
     from backend import jobs
-    prio = "sync_hot" if reason.startswith("sync") else "deploy_hot" if reason in ("startup", "deploy") else "user"
-    t = jobs.submit(lambda job: run(), cls="full", priority=prio, label=f"dataset warm-up ({reason})",
+    t = jobs.submit(lambda job: run(), cls="full", priority=_priority(reason), label=f"dataset warm-up ({reason})",
                     key=("warm", w_tid(w)))
     w["thread"] = t
     return t
@@ -461,13 +568,16 @@ async def warm_up_startup(demo: bool = False) -> list[str]:
 async def dataset_status():
     """Progress of the chart Dataset build of the active data source:
     state idle | building | ready | error, phase (解析 FIT, 整理活動, 估算門檻
-    ...), n_done / n_total, and `message` (「正在處理第 350／808 筆（解析 FIT）…」).
+    ...), n_done / n_total, and `message` (「正在處理第 350／808 筆（解析 FIT）…」);
+    `backfill`: this tenant's back-fill of older activities (api/backfill.progress) or null.
     Async on purpose: answered on the event loop, never queued behind the
     builds in the thread pool."""
+    from backend.api import backfill
     from backend.engine.wko5expr import buildstate
     src = DSRC.current_source()
     cur = buildstate.get(src).snapshot()
-    return {**cur, "sources": buildstate.all_states()}
+    # SP-394 第 4 條: this tenant's back-fill of the older activities a hot-first build left out
+    return {**cur, "sources": buildstate.all_states(), "backfill": backfill.progress()}
 
 
 def _wko5_views_raw() -> dict[str, dict]:
