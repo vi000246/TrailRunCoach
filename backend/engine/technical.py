@@ -60,10 +60,15 @@ def _d(x) -> Optional[dt.date]:
 
 
 def week_context(*, kind: str, mode: str, monday: dt.date, road: bool, b2b: Optional[dict] = None,
-                 injury: Optional[dict] = None) -> dict:
+                 injury: Optional[dict] = None, behind: Optional[str] = None) -> dict:
     """Whether this week gets a 技術地形 session and which rule: {"active", "phase", "why"}.
-    `injury`: injuries.condition_week's rule (SP-270) — 膝前痛／髂脛束進行中 = no 技術地形."""
+    `injury`: injuries.condition_week's rule (SP-270) — 膝前痛／髂脛束進行中 = no 技術地形. `behind`:
+    the day of this week's stored one when it is already behind (plan_store.hook_days, SP-87) — no
+    second one. (`b2b` is no longer read: it only kept the 基礎期's LSD swap out of a B2B week.)"""
     info = {"active": False, "phase": kind, "monday": monday.isoformat()}
+    if behind:
+        b = _d(behind)
+        return {**info, "why": _("本週的技術地形課已經排在 {day}，不另外排", day=f"{b.month}/{b.day}")}
     if road:
         return {**info, "why": _("主要訓練項目：路跑")}
     if kind not in ("base", "specific") or mode in ("recovery_week", "reentry"):

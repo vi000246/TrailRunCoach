@@ -510,6 +510,21 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
   first keeps the 2 days after it easy. The weekday cap shrinks the downhill part (≥ 10′); the
   other easy runs give the extra minutes. The 技術地形 session keeps ≥ 2 days from it
   (`technical.HARD_IDS`). A week note (`src: downhill`) says when / why or that no day fit.
+- **長爬坡有氧（穩定地形爬升課）** (SP-87, `engine/base_climb.py`; trail-terrain-and-climb-sessions.md §4 #2,
+  owner 2026-10-05 decision 2; after the downhill pass, before the 技術地形課, in week_plan and per
+  projected week): 主要訓練項目 越野跑, 基礎期 only (recovery weeks included — an easy session; not the
+  re-entry block, not while an injury rule avoids `climb`). One placed easy run a week (the longest
+  that is not done / the heat / the downhill session; a day before the long run or an interval last)
+  becomes 「長爬坡有氧 N′（穩定地形）」 of the same day, minutes and TSS: id `climb_base`, kind `easy`,
+  terrain `trail`, SP-62's long_climb structure (warm-up 10′, the climb at HR ≤ the easy-run cap
+  (`WT.AET`), walk down 10′), the detail names stairs / 階梯步道 / a treadmill incline 8–15 %, `climb_m`
+  = the uphill minutes × 400 m/h (`CLIMB_M_PER_H`, 推估). An easy run < 40′ (`MIN_MINUTES`) → none and a
+  week note (`src: base_climb`). The 坡度走路提示 shows the athlete's own climbing rate next to it.
+- **A hook session already behind** (SP-87, `plan_store.hook_days`): week_plan reads this week's
+  stored `climb_base` / `downhill` / `tech` rows; one whose day is before the first plannable day
+  (done, missed, or today's with a run logged) makes that hook inactive this week (「本週的…已經排在
+  M/D」) — the generator counts the done run as an easy run, so it used to turn the next easy run into a
+  second one and reconcile then dropped an easy row (the SP-74 known limit).
 - **技術地形課** (SP-74, `engine/technical.py`; applied last, after placement, the climb / steep
   walk and heat hooks, `backend/engine/overview.py:2132`, and the same per projected week,
   `backend/engine/projection.py:780`): 主要訓練項目 越野跑 only (路跑: none), 專項期 only, not
@@ -2272,3 +2287,4 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 | 2026-10-08 | feat/warmup-pref-sp364 | SP-364 review + owner 2026-10-08 | Easy-type sessions never change their time: a run too short gets a shorter warm-up (none < 5′), and the structure / push split a marked run inside its own time (`workout_steps.carve_warm`) — a run trimmed / edited later keeps its total; an easy generated structure (技術地形 RPE 3–4) the same, downhill keeps its 10′. The easy-run count never changes: counted on the minutes without the preference (`left_n`, `plan_prefs.Ctx.warm_base` / `_used_without_warmup`), the extra minutes out of the easy runs evenly. Easy / 我的範本 templates keep their length. A drawer swap merges only `variant_adj["warm"]` (`rest_add` / `power` kept). The fit reason names the warm-up when it is what doesn't fit. Fixed: `apply_objs` passed no variant fields, so a library interval was handled as text. Tests: `backend/tests/test_warmup_pref.py` |
 | 2026-10-08 | main | SP-258 owner 2026-10-08 | The altitude ? research lines drop the place too: 「高山症風險較高（Shen 2024）」 (was 「…玉山排雲山莊就診者的資料」) and 「超過 3,400 m 屬高風險（CDC）」 (was 「…；排雲山莊 3,402 m 就在線上」); `test_altitude` now forbids 排雲 / Paiyun in the help. |
 | 2026-10-12 | feat/trail-climb-sessions-sp87 | SP-87 (owner 2026-10-05, decision 1) | No 技術地形 in the 基礎期: `technical.week_context` is inactive for a base week (「基礎期不排技術地形課：長跑留在穩定地形，爬升改排長爬坡有氧」), `apply` acts in the 專項期 only; the LSD stays on steady terrain every week (was: every even ISO week a 「技術地形 N′（低 RPE 3–4）」 of the same time). Tests: `backend/tests/test_technical.py::test_base_long_stays_a_steady_terrain_lsd`, `::test_week_context_rules`, `::test_week_plan_and_projection_trail_vs_road` |
+| 2026-10-12 | feat/trail-climb-sessions-sp87 | SP-87 (owner 2026-10-05, decision 2) | 長爬坡有氧 in the 基礎期 (`engine/base_climb.py`): a 越野跑 athlete's base week turns one placed easy run (the longest not done / heat / downhill; a day before the long run or an interval last) into 「長爬坡有氧 N′（穩定地形）」 of the same day, minutes and TSS — id `climb_base`, kind easy, SP-62 long_climb steps at HR ≤ the easy cap, stairs / 階梯步道 / treadmill 8–15 %, `climb_m` = uphill minutes × 400 m/h (推估); none for 路跑, the 專項期, re-entry, an injury rule avoiding climb, or an easy run < 40′; week_plan (`base_climb` key) and every projected base week alike; `_COND_IDS` flattens it on an injury day. `plan_store.hook_days`: a stored `climb_base` / `downhill` / `tech` row already behind this week makes that hook inactive (no second one; the SP-74 known limit). Tests: `backend/tests/test_base_climb.py`, `test_technical.py::test_a_tech_session_already_behind_blocks_a_second_one`, `test_downhill.py::test_a_downhill_session_already_behind_blocks_a_second_one` |

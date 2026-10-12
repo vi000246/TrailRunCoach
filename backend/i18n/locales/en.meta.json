@@ -2119,6 +2119,10 @@
     "draft": true,
     "src": "backend/engine/overview.py:1556"
   },
+  "停訓後恢復期不排": {
+    "draft": true,
+    "src": "backend/engine/base_climb.py:62"
+  },
   "停訓：Coyle 1986、Houmard 1992": {
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:416"
@@ -2507,6 +2511,10 @@
     "draft": true,
     "src": "backend/engine/technical.py:64"
   },
+  "只在基礎期排（專項期練比賽的坡）": {
+    "draft": true,
+    "src": "backend/engine/base_climb.py:60"
+  },
   "只在專項期排（停訓後恢復期不排）": {
     "draft": true,
     "src": "backend/engine/downhill.py:82"
@@ -2842,6 +2850,10 @@
   "基礎期不排技術地形課：長跑留在穩定地形，爬升改排長爬坡有氧": {
     "draft": true,
     "src": "backend/engine/technical.py:76"
+  },
+  "基礎期每週 1 堂長爬坡有氧：這週的輕鬆跑都不到 {need} 分，放不下": {
+    "draft": true,
+    "src": "backend/engine/base_climb.py:123"
   },
   "基礎期第 {w} 週 / {n} 週": {
     "draft": true,
@@ -3655,6 +3667,10 @@
     "draft": true,
     "src": "backend/engine/plan_store.py:354"
   },
+  "找穩定、好走的長坡持續往上（階梯步道、樓梯，或跑步機坡度 8–15%），跑走混合，心率不超過{cap}；上坡約 {work} 分、爬升約 {climb:.0f} m（推估）；下坡用走的，不衝。暖身、緩和各 {wc} 分": {
+    "draft": true,
+    "src": "backend/engine/base_climb.py:98"
+  },
   "技術地形": {
     "draft": true,
     "src": "backend/engine/workout_templates.py:481"
@@ -4243,6 +4259,10 @@
     "draft": true,
     "src": "backend/engine/calibrate.py:161"
   },
+  "本週一堂長爬坡有氧（{day}，{m} 分、爬升約 {climb:.0f} m）：基礎期每週在穩定地形練爬升（階梯步道、樓梯、跑步機坡度），心率不超過輕鬆跑上限，算輕鬆課；時間和原本的輕鬆跑一樣": {
+    "draft": true,
+    "src": "backend/engine/base_climb.py:130"
+  },
   "本週低強度占比 < 75%（實測 AeT）：5 區先不排": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:1991"
@@ -4263,9 +4283,21 @@
     "draft": true,
     "src": "backend/engine/technical.py:209"
   },
+  "本週的下坡課已經排在 {day}，不另外排": {
+    "draft": true,
+    "src": "backend/engine/downhill.py:87"
+  },
   "本週的強度課是 5 區維持課（長距離越野的專項期後段每 3 週 1 堂，推估），3 區這週不排": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:2766"
+  },
+  "本週的技術地形課已經排在 {day}，不另外排": {
+    "draft": true,
+    "src": "backend/engine/technical.py:71"
+  },
+  "本週的長爬坡有氧已經排在 {day}，不另外排": {
+    "draft": true,
+    "src": "backend/engine/base_climb.py:56"
   },
   "本週維持或減量，不要再加": {
     "draft": true,
@@ -6890,6 +6922,10 @@
   "長爬坡反覆 {n}×{rep} 分（{g:.0f}% 坡）": {
     "draft": false,
     "src": "backend/engine/specific_phase.py:670"
+  },
+  "長爬坡有氧 {m}′（穩定地形）": {
+    "draft": true,
+    "src": "backend/engine/base_climb.py:96"
   },
   "長跑": {
     "draft": true,

@@ -882,6 +882,27 @@ def user_rpe_rows(db_path=None) -> list[dict]:
             and (r.get("origin") == "custom" or r.get("edited"))]
 
 
+_HOOK_CACHE: dict = {}
+# the generated sessions the hooks make out of an easy run, one a week (SP-87: 長爬坡有氧 engine/base_climb.py,
+# 下坡課 engine/downhill.py, 技術地形 engine/technical.py)
+HOOK_IDS = ("climb_base", "downhill", "tech")
+
+
+def hook_days(monday, db_path=None) -> dict:
+    """{gen_key: day} of the week of `monday`'s stored hook sessions (HOOK_IDS; active / done /
+    missed). week_plan reads it so a hook session already behind (done, missed, or today's with a
+    run logged) keeps the week from turning another easy run into a second one — the generator
+    counts the done run as an easy run and would otherwise pick the next one, and reconcile then
+    dropped an easy row (SP-87; the SP-74 known limit). Read-only sqlite; {} without the DB."""
+    ws = monday.isoformat() if hasattr(monday, "isoformat") else str(monday)[:10]
+    out: dict = {}
+    for r in _plan_rows(db_path, ("easy", "long", "hike", "quality"), _HOOK_CACHE, ("gen_key", "week_start", "origin")):
+        if r.get("week_start") == ws and r.get("gen_key") in HOOK_IDS and r.get("state") in ("active", "done", "missed") \
+                and r.get("day"):
+            out[r["gen_key"]] = min(out.get(r["gen_key"], r["day"]), r["day"])
+    return out
+
+
 _DONE_CACHE: dict = {}
 _RATE_CACHE: dict = {}
 LOAD_KINDS = tuple(k for k in KINDS if k not in NOT_LOAD)

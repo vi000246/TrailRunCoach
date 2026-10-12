@@ -204,3 +204,12 @@ def test_illness_wins_over_the_downhill_session(monkeypatch):
     assert left and all(s["title"] == "恢復跑（心率 1 區）" for s in left)
     assert not any(s["id"] == "downhill" and s["title"].startswith("下坡離心") for s in wp["sessions"]
                    if not s["done"] and s["day"] and s["day"] >= TODAY.isoformat())
+
+
+def test_a_downhill_session_already_behind_blocks_a_second_one():
+    """SP-87 (plan_store.hook_days): this week's stored downhill session already behind (done, missed,
+    or today's with a run logged) → no second one that week."""
+    m6 = RACE - dt.timedelta(days=RACE.weekday()) - dt.timedelta(weeks=5)
+    c = ctx(m6, behind=(m6 + dt.timedelta(days=1)).isoformat())
+    assert not c["active"] and "已經排在" in c["why"]
+    assert ctx(m6, behind=None)["active"]

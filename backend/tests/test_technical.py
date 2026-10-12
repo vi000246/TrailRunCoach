@@ -310,3 +310,11 @@ def test_the_walking_cap_is_named_in_the_text_only():
     ss = _week(MON)
     T.apply(ss, T.week_context(kind="specific", mode="specific", monday=MON, road=False), hours=8.0, walk=None)
     assert "心率參考上限" not in next(s for s in ss if s["id"] == "tech")["detail"]
+
+
+def test_a_tech_session_already_behind_blocks_a_second_one():
+    """SP-87 (plan_store.hook_days): this week's stored 技術地形 already behind → no second one (the
+    SP-74 known limit: the generator counted the done run as an easy run and picked the next)."""
+    c = T.week_context(kind="specific", mode="specific", monday=MON, road=False, behind=d(2))
+    assert not c["active"] and "已經排在" in c["why"]
+    assert T.week_context(kind="specific", mode="specific", monday=MON, road=False, behind=None)["active"]

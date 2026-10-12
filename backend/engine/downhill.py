@@ -42,7 +42,8 @@ WARM, COOL = 10, 10                 # the template's
 DOWN_M_PER_MIN = 350 / 25           # the template's descent (DOWNHILL_M over 25′)
 EASY_MIN = 20                       # the other easy runs give the difference, never below this
 HARD_IDS = ("long", "long2", "long3", "climb")
-SKIP_IDS = ("climb", "steep", "tech", "downhill")    # (tech: a user's own / an earlier pass)
+SKIP_IDS = ("climb", "steep", "tech", "downhill",    # (tech: a user's own / an earlier pass)
+            "climb_base")                       # SP-87: the 基礎期's 長爬坡有氧 (engine/base_climb.py)
 SRC = ("下坡跑的保護效果（重複回合效應）維持 3–6 週、9 週消失（對照試驗；3 週間隔另有三個研究重複）；"
        "第一次之後 48 小時只排輕鬆課；最後一次在賽前 14–21 天、第一次量小為推估")
 
@@ -75,10 +76,15 @@ def _phase_start(phases: list, monday: dt.date) -> Optional[dt.date]:
 
 
 def week_context(*, kind: str, mode: str, monday: dt.date, events, phases=None, road: bool = False,
-                 injury: Optional[dict] = None) -> dict:
+                 injury: Optional[dict] = None, behind: Optional[str] = None) -> dict:
     """Whether this week gets a downhill session: {"active", "race", "weeks_out", "first", "why"}.
-    `injury`: injuries.condition_week's rule (SP-270) — 膝前痛／髂脛束進行中 = no downhill session."""
+    `injury`: injuries.condition_week's rule (SP-270) — 膝前痛／髂脛束進行中 = no downhill session.
+    `behind`: the day of this week's stored one when it is already behind (plan_store.hook_days,
+    SP-87) — no second one."""
     info = {"active": False, "monday": monday.isoformat()}
+    if behind:
+        b = _d(behind)
+        return {**info, "why": _("本週的下坡課已經排在 {day}，不另外排", day=f"{b.month}/{b.day}")}
     if road:
         return {**info, "why": _("主要訓練項目：路跑")}
     if kind != "specific" or mode == "reentry":
