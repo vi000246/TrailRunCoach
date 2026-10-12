@@ -134,9 +134,16 @@ Google OAuth 的 redirect URI 必須是固定網址；quick tunnel 每次啟動�
 - 只改畫面、文案、設定頁的部署不受限，隨時可以上。
 - 判斷「有沒有動到引擎」：diff 碰到 `backend/engine/**`、`fitcache` 的版本號、`CACHE_VERSION`、`INDEX_VERSION`、`ALGO_VERSION` 任一個就算。
 
-## 7. NAS 備份 ⏳（等 SP-384 合進 main 之後補）
+## 7. NAS 備份 🧑‍💻✅（整台伺服器，SP-384 之後）
 
-多使用者之後，每日備份要涵蓋 `accounts.db` 與所有 `users/<id>/`（接 SP-355）。擁有者自己的備份（設定 › 備份）刻意**不含**別人的資料（`data_registry`：`accounts.db`、`users/**` 是伺服器自己的檔案，`backup=never`），所以要另一支整台伺服器的備份，還沒做。
+多使用者之後，每日備份要涵蓋 `accounts.db` 與所有 `users/<id>/`（接 SP-355）。擁有者自己的備份（設定 › 備份）刻意**不含**別人的資料（`data_registry`：`accounts.db`、`users/**`、`site.json` 是伺服器自己的檔案，`backup=never`），所以另有一支整台伺服器的備份：`backend/accounts/server_backup.py`。
+
+- 👤 設 `WKO5COACH_SERVER_BACKUP_DIR`（NAS 上、伺服器資料夾以外的共用資料夾，例如 `/volume1/trc-backups`；放在伺服器資料夾裡面會被拒絕）。要連 FIT 原檔一起備份再加 `WKO5COACH_SERVER_BACKUP_FIT=1`。
+- 多使用者模式下，排程每天跑一次（和擁有者的每日備份同一個迴圈）；也可以手動：`python -m backend.accounts.server_backup`。
+- 每次一個資料夾 `server-YYYYMMDD-HHMMSS/`：`accounts.db` 快照、`site.json`、每位使用者一個 SP-355 格式的 zip（DB 不含同步憑證，加上使用者自己的檔案）、`manifest.json`（人數、大小、失敗的使用者）。保留最近 7 次。
+- 某一位使用者備份失敗不影響其他人，記在 manifest。
+- 測試：`backend/tests/test_server_backup_sp387.py`。
+- 👆 上線前在 NAS 實際跑一次 `python -m backend.accounts.server_backup`，打開其中一個使用者的 zip 確認有 `wko5coach.db` 和 `files/`。
 
 ## 完成條件對照
 
@@ -147,4 +154,4 @@ Google OAuth 的 redirect URI 必須是固定網址；quick tunnel 每次啟動�
 | 登入上線那次部署同時拿掉密碼 proxy；沒登入只有白名單打得開 | 📅 第 3、4 節（等 SP-58） |
 | 所有密鑰只在 env 或 secret，`docker logs` 與 app log 都搜不到 | ✅ 第 5 節 |
 | `deploy/` 文件寫明步驟與「引擎部署每週一次深夜」 | ✅ 本文件 |
-| 每日備份包含 `accounts.db` 與所有 user 租戶目錄 | ⏳ 第 7 節 |
+| 每日備份包含 `accounts.db` 與所有 user 租戶目錄 | ✅ 第 7 節（👆 NAS 實跑一次） |

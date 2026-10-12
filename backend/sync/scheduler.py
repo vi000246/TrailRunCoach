@@ -211,4 +211,14 @@ async def loop(session_factory: Optional[Callable] = None, interval: float = INT
                 raise
             except Exception as e:
                 log.warning("backup tick failed: %s", type(e).__name__)
+            # multi-user mode: the whole server's daily backup — accounts.db and every user's
+            # tenant (accounts/server_backup.py, SP-387 第 7 條)
+            try:
+                from backend.accounts import server_backup
+                if not os.getenv("WKO5COACH_NO_AUTO_BACKUP"):
+                    await server_backup.tick()
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                log.warning("server backup tick failed: %s", type(e).__name__)
         await asyncio.sleep(interval)
