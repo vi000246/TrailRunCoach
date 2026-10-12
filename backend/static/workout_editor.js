@@ -228,6 +228,31 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
     if (f === "lmin") { const m = Math.round(+v); return m >= RPE_MIN[0] && m <= RPE_MIN[1] ? { ...d, min: m } : null; }
     return null;
   }
+  // 區間 從–到 (SP-383, workout_steps.zone_set): the zones of the set `id` belongs to (easy → hard) —
+  // Palladino power, Friel pace / HR, or the 課表心率區間's Z1–Z6; the easy-run cap is in no set
+  const zoneSet = (zones, id) => {
+    const z = id === "aet" ? null : zones.find((x) => x.id === id);
+    return z ? zones.filter((x) => x.id !== "aet" && !x.legacy === !z.legacy) : [];
+  };
+  // the target after its 「從」 (tzone) or 「到」 (tzone2) changed; pure (tests/test_zone_range_sp383.py):
+  // kept easy → hard (a 「到」 below the 「從」 is swapped, as normalize does); 「到」 = 「從」, empty or
+  // in another set = one zone
+  function zoneEdit(t, f, v, zones) {
+    const out = { ...t, [f === "tzone" ? "zone" : "zone_to"]: v };
+    const ids = zoneSet(zones, out.zone).map((x) => x.id), i = ids.indexOf(out.zone), j = ids.indexOf(out.zone_to);
+    if (i < 0 || j < 0 || i === j) delete out.zone_to;
+    else if (j < i) [out.zone, out.zone_to] = [out.zone_to, out.zone];
+    return out;
+  }
+  // {lo, hi} fractions of a zone target, a 從–到 run included (workout_steps.zone_span), null when a
+  // zone has no fractions (the easy-run cap, 課表心率區間 zones without LTHR)
+  function zoneSpan(zones, t) {
+    const ids = zones.map((x) => x.id), i = ids.indexOf(t.zone), j = t.zone_to ? ids.indexOf(t.zone_to) : i;
+    if (i < 0 || j < 0) return null;
+    const run = zones.slice(Math.min(i, j), Math.max(i, j) + 1);
+    if (run.some((x) => x.lo == null || x.hi == null)) return null;
+    return { lo: Math.min(...run.map((x) => x.lo)), hi: Math.max(...run.map((x) => x.hi)) };
+  }
   const TIP = {
     basis: tr("workout.tip.basis"),
     chart: tr("workout.tip.chart"),
@@ -439,7 +464,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       }
       if (mode === "pct") {
         if (r.lo != null && base) return { type: t.type, mode, lo: Math.round(r.lo / base * 100) / 100, hi: Math.round(r.hi / base * 100) / 100 };
-        const z = zones.find((x) => x.id === t.zone && x.lo != null);
+        const z = zoneSpan(zones, t);                 // a 從–到 run: its whole span (SP-383)
         return { type: t.type, mode, lo: z ? z.lo : 0.9, hi: z ? z.hi : 0.95 };
       }
       const mid = r.lo != null && base ? (r.lo + r.hi) / 2 / base : null;
@@ -537,8 +562,14 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       }
       if (["power", "hr", "pace"].includes(ty)) {
         h += `<select data-f="tmode" aria-label="填法">${opt("zone", "區間", t.mode)}${opt("pct", ty === "power" ? "% CP" : ty === "hr" ? "% LTHR" : "% 閾值配速", t.mode)}${opt("abs", "自訂數字", t.mode)}</select>`;
-        if (t.mode === "zone") h += `<select data-f="tzone" aria-label="區間">${zones.filter((z) => !z.legacy || z.id === t.zone).map((z) => opt(z.id, `${z.label}${z.text ? " · " + z.text : ""}`, t.zone)).join("")}</select>`;
-        else if (t.mode === "pct") h += `<input class="num" type="number" step="1" data-f="tlo" value="${Math.round(t.lo * 100)}" aria-label="下限 %">–<input class="num" type="number" step="1" data-f="thi" value="${Math.round(t.hi * 100)}" aria-label="上限 %"><span class="faint">%</span>${ty === "pace" ? q(TIP.pacePct) : ""}`;
+        const zl = (z) => `${z.label}${z.text ? " · " + z.text : ""}`;
+        if (t.mode === "zone") {
+          h += `<select data-f="tzone" aria-label="區間">${zones.filter((z) => !z.legacy || z.id === t.zone).map((z) => opt(z.id, zl(z), t.zone)).join("")}</select>`;
+          // 從–到 (SP-383): the last zone of a run in the same set (「只這一格」 = one zone); none on the easy-run cap
+          const set = zoneSet(zones, t.zone);
+          if (set.length > 1) h += `<span class="faint">${esc(tr("workout.zone_to"))}</span><select data-f="tzone2" aria-label="${esc(tr("workout.zone_to_label"))}">` +
+            opt("", tr("workout.zone_to_none"), t.zone_to || "") + set.map((z) => opt(z.id, zl(z), t.zone_to || "")).join("") + `</select>`;
+        } else if (t.mode === "pct") h += `<input class="num" type="number" step="1" data-f="tlo" value="${Math.round(t.lo * 100)}" aria-label="下限 %">–<input class="num" type="number" step="1" data-f="thi" value="${Math.round(t.hi * 100)}" aria-label="上限 %"><span class="faint">%</span>${ty === "pace" ? q(TIP.pacePct) : ""}`;
         else if (ty === "pace") h += `<input class="dur" data-f="tlo" value="${mmss(t.lo)}" aria-label="快的一端 分:秒/km">–<input class="dur" data-f="thi" value="${mmss(t.hi)}" aria-label="慢的一端 分:秒/km"><span class="faint">/km</span>`;
         else h += `<input class="num" type="number" step="1" data-f="tlo" value="${Math.round(t.lo)}" aria-label="下限">–<input class="num" type="number" step="1" data-f="thi" value="${Math.round(t.hi)}" aria-label="上限"><span class="faint">${ty === "power" ? "W" : "bpm"}</span>`;
       }
@@ -796,7 +827,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
         it.target = v === "auto" ? this.autoFor(it) : this.fill(it, v);
         this.openT = it.id;
       } else if (k === "tmode") { it.target = this.convert(it, v); this.openT = it.id; }
-      else if (k === "tzone") it.target = { ...it.target, zone: v };
+      else if (k === "tzone" || k === "tzone2") it.target = zoneEdit(it.target, k, v, ((this.ctx || {}).zones || {})[it.target.type] || []);
       else if (k === "tlo" || k === "thi") {
         const key = k === "tlo" ? "lo" : "hi", t = it.target;
         const n = t.type === "rpe" ? Math.max(1, Math.min(10, Math.round(+v) || 0)) : t.mode === "pct" ? (+v || 0) / 100 : t.type === "pace" ? parseSec(v) : +v;
@@ -1087,5 +1118,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
   window.WorkoutEditor = { mount: (root, opts) => new Editor(root, opts), request: req,
     endOptions: (ctx, st) => Editor.prototype.endOpts.call({ ctx }, st),
     // SP-57 (tests/test_rpe_load.py): a 「負荷」 step's dur after an edit, and its input html
-    loadDur, loadInput: (ctx, st, r) => Editor.prototype.loadIn.call({ ctx }, st, r, "") };
+    loadDur, loadInput: (ctx, st, r) => Editor.prototype.loadIn.call({ ctx }, st, r, ""),
+    // SP-383 (tests/test_zone_range_sp383.py): the 區間 從–到 edit, a zone target's span, the target panel html
+    zoneEdit, zoneSpan, targetHtml: (ctx, st, r) => Editor.prototype.tgHtml.call({ ctx }, st, r) };
 })();

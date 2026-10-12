@@ -361,9 +361,16 @@
         if (!["pct", "zone", "abs"].includes(mode)) { errs.push(`目標填法不對：${repr(mode)}`); return OPEN(); }
         const out = { type: ty, mode };
         if (mode === "zone") {
-          const z = String(t.zone || "");
-          if (!zoneIds(ty).has(z)) errs.push(`沒有這個區間：${repr(z)}`);
+          const z = String(t.zone || ""), zt = String(t.zone_to || ""), known = zoneIds(ty);
+          if (!known.has(z)) errs.push(`沒有這個區間：${repr(z)}`);
           out.zone = z;
+          if (zt && zt !== z && known.has(z)) {
+            // 從–到 (SP-383, workout_steps.zone_set): one set (the demo has no 課表心率區間), easy → hard
+            const ids = W.zones[ty].filter((r) => r[1] != null).map((r) => r[0]);
+            if (!known.has(zt)) errs.push(`沒有這個區間：${repr(zt)}`);
+            else if (!ids.includes(z) || !ids.includes(zt)) errs.push(`這兩格不能當一段區間：${z}–${zt}`);
+            else [out.zone, out.zone_to] = ids.indexOf(zt) < ids.indexOf(z) ? [zt, z] : [z, zt];
+          }
           return out;
         }
         const rng = { "power|pct": [0.2, 3.0], "hr|pct": [0.3, 1.3], "pace|pct": [0.5, 2.5], "power|abs": [20, 1500], "hr|abs": [40, 230], "pace|abs": [120, 1200] }[`${ty}|${mode}`];
@@ -548,7 +555,16 @@
       }
       return P[P.length - 1][1];
     }
-    const zoneOf = (ty, zid, D) => { const r = D.ws.zones[ty].find((x) => x[0] === zid); return r ? [r[1], r[2]] : [null, null]; };
+    // workout_steps.zone_span: one zone, or the run zid–zto (SP-383) from its first zone's lower to its last one's upper bound
+    function zoneOf(ty, zid, D, zto) {
+      const rows = D.ws.zones[ty], ids = rows.map((x) => x[0]), i = ids.indexOf(zid), j = zto ? ids.indexOf(zto) : i;
+      if (i < 0 || j < 0) return [null, null];
+      const run = rows.slice(Math.min(i, j), Math.max(i, j) + 1);
+      if (run.some((x) => x[1] == null)) return [null, null];
+      return [Math.min(...run.map((x) => x[1])), Math.max(...run.map((x) => x[2]))];
+    }
+    // workout_steps.zone_range_text: 「Z1B–Z2」 of a zone range, "" for one zone (the demo has no 課表心率區間 ids)
+    const zoneRangeText = (tg) => (tg.zone_to && tg.zone_to !== tg.zone ? `Z${tg.zone}–Z${tg.zone_to}` : "");
     const R = (type, o = {}) => ({ type, lo: null, hi: null, frac: null, text: "", sub: "", auto: true, warn: "", err: "", intensity: null, need: "", ...o });
     // SP-378 (zones.watch_band, workout_steps._watch_band): the step shows the prescription, the watch
     // gets the band the rep is judged by — upper × hi_tol, a Zone 5 band up to Zone 5's top
@@ -629,7 +645,7 @@
       const mode = tg.mode || "pct";
       let lo = tg.lo, hi = tg.hi, r;
       if (ty === "power") {
-        if (mode === "zone") [lo, hi] = zoneOf("power", tg.zone, D);
+        if (mode === "zone") [lo, hi] = zoneOf("power", tg.zone, D, tg.zone_to);
         if (mode !== "abs") {
           if (!c.cp) return R("none", { text: "不設目標", auto: false, err: "選了功率卻沒有 CP" });
           lo *= c.cp; hi *= c.cp;
@@ -641,7 +657,7 @@
           if (!e) return R("none", { text: "不設目標", auto: false, err: "選了心率卻沒有 AeT／LTHR" });
           r = fromInt(e, c, D, false);
         } else {
-          if (mode === "zone") [lo, hi] = zoneOf("hr", tg.zone, D);
+          if (mode === "zone") [lo, hi] = zoneOf("hr", tg.zone, D, tg.zone_to);
           if (mode !== "abs") {
             if (!c.lthr) return R("none", { text: "不設目標", auto: false, err: "選了心率卻沒有 LTHR" });
             lo *= c.lthr; hi *= c.lthr;
@@ -649,7 +665,7 @@
           r = fromInt(["hr", pyRound(lo), pyRound(hi)], c, D, false);
         }
       } else {
-        if (mode === "zone") [lo, hi] = zoneOf("pace", tg.zone, D);
+        if (mode === "zone") [lo, hi] = zoneOf("pace", tg.zone, D, tg.zone_to);
         if (mode !== "abs") {
           if (!c.tpace) {
             if (tg.hrp && tg.hrp.length && c.lthr) {
@@ -665,6 +681,11 @@
         const f = c.tpace ? 1 / ((a + b) / 2 / c.tpace) : 0.8;
         const sub = c.tpace ? `${fx(a / c.tpace * 100)}–${fx(b / c.tpace * 100)}% 閾值配速（推估）` : "";
         r = R("pace", { lo: a, hi: b, frac: f, text: `${mmss(a)}–${mmss(b)} /km`, sub, auto: false, intensity: ["pace", pyRound(a), pyRound(b)] });
+      }
+      const rz = mode === "zone" ? zoneRangeText(tg) : "";
+      if (rz && r.type === ty) {             // 從–到 (SP-383): 「65–88% CP · Z1B–Z2」, not the middle's zone
+        const k = ty === "power" ? r.sub.lastIndexOf(" · ") : -1, base = k >= 0 ? r.sub.slice(0, k) : r.sub;
+        r.sub = base ? `${base} · ${rz}` : rz;
       }
       if (r.lo != null && r.hi != null && r.lo > r.hi && r.type !== "pace") r.err = "下限比上限高";
       return r;
@@ -889,14 +910,14 @@
       if (ty === "auto" && tg.intent === "band") return [tg.lo, tg.hi, false];
       if (ty === "power") {
         if (tg.mode === "pct") return [tg.lo, tg.hi, false];
-        if (tg.mode === "zone") { const [lo, hi] = zoneOf("power", tg.zone, D); return lo != null ? [lo, hi, false] : null; }
+        if (tg.mode === "zone") { const [lo, hi] = zoneOf("power", tg.zone, D, tg.zone_to); return lo != null ? [lo, hi, false] : null; }
         if (c && c.cp) return [tg.lo / c.cp, tg.hi / c.cp, false];
         return null;
       }
       if (ty === "hr") {
         let m;
         if (tg.mode === "pct") m = (tg.lo + tg.hi) / 2;
-        else if (tg.mode === "zone" && tg.zone !== "aet") { const [lo, hi] = zoneOf("hr", tg.zone, D); m = (lo + hi) / 2; }
+        else if (tg.mode === "zone" && tg.zone !== "aet") { const [lo, hi] = zoneOf("hr", tg.zone, D, tg.zone_to); m = (lo + hi) / 2; }
         else if (tg.mode === "abs" && c && c.lthr) m = (tg.lo + tg.hi) / 2 / c.lthr;
         else return null;
         const cls = m >= 1.03 ? "Z5" : m >= 1.0 ? "Z4" : m >= 0.95 ? "Z3near" : m >= 0.88 ? "Z3sub" : null;

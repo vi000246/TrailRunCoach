@@ -102,6 +102,14 @@ CUSTOM = {
         {"id": "b", "kind": "work", "dur": {"type": "load", "rpe": "easy", "min": "25"},
          "target": {"type": "hr", "mode": "pct", "lo": 0.8, "hi": 0.85}},
         {"id": "c", "kind": "work", "dur": {"type": "load", "rpe": "max", "min": 1}, "target": {"type": "power", "mode": "pct", "lo": 1.1, "hi": 1.2}}],
+    # 區間 從–到 (SP-383): a run of zones, a reversed one (swapped), 「到」 = 「從」 (one zone), Zone 6–7
+    "zone_ranges": [
+        {"id": "a", "kind": "warm", "dur": {"type": "time", "value": 900}, "target": {"type": "power", "mode": "zone", "zone": "1B", "zone_to": "2"}},
+        {"id": "b", "kind": "work", "dur": {"type": "time", "value": 600}, "target": {"type": "power", "mode": "zone", "zone": "3B", "zone_to": "3A"}},
+        {"id": "c", "kind": "work", "dur": {"type": "distance", "value": 2000}, "target": {"type": "pace", "mode": "zone", "zone": "4", "zone_to": "2"}},
+        {"id": "d", "kind": "work", "dur": {"type": "time", "value": 600}, "target": {"type": "hr", "mode": "zone", "zone": "4", "zone_to": "5b"}},
+        {"id": "e", "kind": "work", "dur": {"type": "time", "value": 120}, "target": {"type": "power", "mode": "zone", "zone": "6", "zone_to": "7"}},
+        {"id": "f", "kind": "cool", "dur": {"type": "time", "value": 300}, "target": {"type": "hr", "mode": "zone", "zone": "2", "zone_to": "2"}}],
 }
 BAD = [{"items": [{"kind": "x"}]}, {"items": []}, {"nope": 1},
        {"items": [{"kind": "repeat", "times": 0, "items": [{"kind": "work", "dur": {"type": "time", "value": 2}}]}]},
@@ -110,7 +118,10 @@ BAD = [{"items": [{"kind": "x"}]}, {"items": []}, {"nope": 1},
        {"items": [{"kind": "warm", "dur": {"type": "load", "value": 40}}, {"kind": "work", "dur": {"type": "load", "value": 900}}]},
        {"items": [{"kind": "work", "dur": {"type": "load", "rpe": "meh", "min": 30}},
                   {"kind": "work", "dur": {"type": "load", "rpe": "max", "min": 360}},
-                  {"kind": "work", "dur": {"type": "load", "rpe": "hard", "min": 0}}]}]
+                  {"kind": "work", "dur": {"type": "load", "rpe": "hard", "min": 0}}]},
+       # SP-383: the easy-run cap in a range, an unknown 「到」
+       {"items": [{"kind": "work", "dur": {"type": "time", "value": 60}, "target": {"type": "hr", "mode": "zone", "zone": "aet", "zone_to": "2"}},
+                  {"kind": "work", "dur": {"type": "time", "value": 60}, "target": {"type": "power", "mode": "zone", "zone": "1B", "zone_to": "9"}}]}]
 
 DERIVE = [
     {"kind": "easy", "title": "輕鬆跑", "minutes": 45},

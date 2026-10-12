@@ -540,8 +540,8 @@ def _level(t: Optional[dict], th: Optional[dict] = None) -> Optional[str]:
     if mode == "zone":
         if ty == "hr" and t.get("zone") == "aet":
             return "easy"
-        row = next((r for r in WS.ZONES[ty] if r[0] == t.get("zone") and r[1] is not None), None)
-        m = (row[1] + row[2]) / 2.0 if row else None
+        lo, hi = WS.zone_span(ty, t.get("zone"), t.get("zone_to"))      # a 從–到 run too (SP-383)
+        m = (lo + hi) / 2.0 if lo is not None else None
     else:
         m = _mid(t)
         if m is not None and mode == "abs":
