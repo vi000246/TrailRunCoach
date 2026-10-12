@@ -59,6 +59,8 @@ class WorkoutFile(Base):
     tp_workout_id: Mapped[Optional[int]]
     coros_activity_id: Mapped[Optional[str]] = mapped_column(String(100), index=True)
     coros_sport_type: Mapped[Optional[int]]
+    # Garmin Connect's activityId of a row synced from Garmin (sync/garmin_client.py, SP-91)
+    garmin_activity_id: Mapped[Optional[str]] = mapped_column(String(40), index=True, nullable=True)
     elevation_gain_m: Mapped[Optional[float]] = mapped_column(nullable=True)
     trail_classification: Mapped[Optional[str]] = mapped_column(String(20), default="unknown")
     classification_overridden: Mapped[Optional[bool]] = mapped_column(Boolean, default=False)
@@ -108,6 +110,14 @@ class SyncState(Base):
     coros_password_sealed: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     tp_username: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     tp_password_sealed: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Garmin Connect (SP-91 trial, sync/garmin_client.py): the library's token JSON (DI token +
+    # refresh token) sealed with the local key, never returned; garmin_token_expires is set only
+    # when Garmin refused the token (登入已過期), None while it is good. 「記住密碼」 as COROS
+    garmin_token_sealed: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    garmin_token_expires: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    garmin_email: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    garmin_password_sealed: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    garmin_last_sync_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
 
 class CorosPlanPush(Base):

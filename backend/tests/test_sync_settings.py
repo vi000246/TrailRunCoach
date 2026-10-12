@@ -19,7 +19,7 @@ def test_repository_defaults_validation_and_unknown_keys(tmp_path):
         assert await repo.get("sync.primary_source") is None          # migrated on first read (sync/primary.py)
         assert await repo.get("sync.coros.enabled") is True
         with pytest.raises(ValueError):
-            await repo.set("sync.primary_source", "garmin")
+            await repo.set("sync.primary_source", "polar")             # garmin is valid since SP-91
         with pytest.raises(ValueError):
             await repo.set("athlete.timezone", "Mars/Olympus")
         with pytest.raises(UnknownSetting):

@@ -1,7 +1,8 @@
 """
 資料來源 (2026-10-02, owner decision): ONE synced source is used at a time.
 
-Setting `sync.primary_source`: "coros" | "trainingpeaks". The chosen source is
+Setting `sync.primary_source`: "coros" | "garmin" | "trainingpeaks" (Garmin since the SP-91
+trial; the settings page lists them in that order). The chosen source is
 the only one read anywhere — the chart Dataset reads only its folder
 (wko5expr/datasource.py), automatic syncs only sync it (sync/runner.py
 auto_plan), the CP-test / race-power scan reads only its files
@@ -22,10 +23,10 @@ import datetime as dt
 from typing import Optional
 
 SETTING_KEY = "sync.primary_source"
-DB_SOURCES = ("coros", "trainingpeaks")          # workout_files.source / settings names
-FOLDER = {"coros": "coros", "trainingpeaks": "tp"}  # -> sync/storage.py folder names
+DB_SOURCES = ("coros", "garmin", "trainingpeaks")          # workout_files.source / settings names
+FOLDER = {"coros": "coros", "garmin": "garmin", "trainingpeaks": "tp"}  # -> sync/storage.py folder names
 DB_OF = {v: k for k, v in FOLDER.items()}
-LABELS = {"coros": "COROS", "trainingpeaks": "TrainingPeaks"}
+LABELS = {"coros": "COROS", "garmin": "Garmin", "trainingpeaks": "TrainingPeaks"}
 DEFAULT = "coros"
 
 
@@ -37,7 +38,7 @@ def to_db(name: Optional[str]) -> Optional[str]:
 
 
 def normalize(value) -> Optional[str]:
-    """The stored setting -> "coros" | "trainingpeaks", None for an old /
+    """The stored setting -> "coros" | "garmin" | "trainingpeaks", None for an old /
     unknown value that still has to be migrated."""
     v = to_db(value) if isinstance(value, str) else None
     return v if v in DB_SOURCES else None
@@ -54,9 +55,16 @@ def folder(value) -> str:
 
 
 def other_folder(value) -> str:
-    """The folder of the source NOT in use."""
+    """The COROS / TP folder NOT in use (the two-source answer, kept for old callers; with Garmin
+    there are two folders not in use: other_folders)."""
     f = folder(value)
     return "tp" if f == "coros" else "coros"
+
+
+def other_folders(value) -> tuple:
+    """Every synced folder NOT in use (COROS, Garmin, TP order)."""
+    f = folder(value)
+    return tuple(x for x in FOLDER.values() if x != f)
 
 
 def choose_initial(latest: dict) -> str:

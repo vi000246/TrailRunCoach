@@ -228,6 +228,177 @@ async def coros_login(body: CorosLoginRequest, db: AsyncSession = Depends(get_db
         raise HTTPException(502, f"COROS_LOGIN_ERROR: {detail}")
 
 
+# ---------------------------------------------------------------------------
+# Garmin Connect (SP-91 trial): unofficial `garminconnect`, limits in sync/garmin_limits.py
+# ---------------------------------------------------------------------------
+
+class GarminLoginRequest(BaseModel):
+    email: str
+    password: str
+    athlete_id: int = 1
+    remember: bool = False            # 「記住密碼」
+    consent_version: Optional[str] = None   # the 非官方介面 disclaimer ticked: its version
+
+
+class GarminMfaRequest(BaseModel):
+    code: str
+    athlete_id: int = 1
+
+
+GARMIN_CONSENT_KEY = "sync.garmin.consent"
+
+
+def _garmin_text() -> str:
+    from backend.i18n import current_locale
+    from backend.sync import garmin_limits as GL
+    return GL.DISCLAIMER.get(current_locale(), GL.DISCLAIMER["en"])
+
+
+async def _garmin_consent(db: AsyncSession, athlete_id: int, version: Optional[str]) -> None:
+    """Connecting Garmin needs the disclaimer ticked — everyone, the owner too (no Garmin connection
+    existed before the trial). Its version and the time are kept in the tenant's settings. 400
+    GARMIN_CONSENT_REQUIRED with the text to show otherwise."""
+    import datetime as _dt
+    from backend.settings.repository import SettingsRepository
+    from backend.sync import garmin_limits as GL
+    repo = SettingsRepository(db, athlete_id)
+    have = await repo.get(GARMIN_CONSENT_KEY)
+    if version == GL.DISCLAIMER_VERSION:
+        if not (isinstance(have, dict) and have.get("version") == version):
+            await repo.set(GARMIN_CONSENT_KEY, {"version": version,
+                                                "at": _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds")})
+            await db.commit()
+        return
+    if isinstance(have, dict) and have.get("version") == GL.DISCLAIMER_VERSION:
+        return
+    raise HTTPException(400, {"code": "GARMIN_CONSENT_REQUIRED", "version": GL.DISCLAIMER_VERSION,
+                              "message": _garmin_text()})
+
+
+@router.get("/garmin/disclaimer")
+async def garmin_disclaimer(athlete_id: int = 1, db: AsyncSession = Depends(get_db)):
+    """The 非官方介面 disclaimer shown before connecting Garmin and whether this tenant has ticked
+    the current version."""
+    from backend.settings.repository import SettingsRepository
+    from backend.sync import garmin_limits as GL
+    have = await SettingsRepository(db, athlete_id).get(GARMIN_CONSENT_KEY)
+    return {"version": GL.DISCLAIMER_VERSION, "text": _garmin_text(),
+            "consented": isinstance(have, dict) and have.get("version") == GL.DISCLAIMER_VERSION,
+            "consented_at": have.get("at") if isinstance(have, dict) else None}
+
+
+class GarminSiteIn(BaseModel):
+    enabled: Optional[bool] = None
+    auto_per_day: Optional[int] = None
+    manual_per_day: Optional[int] = None
+    requests_per_day: Optional[int] = None
+    gap_s: Optional[float] = None
+
+
+@router.get("/garmin/site")
+def garmin_site():
+    """The server-wide Garmin state (switch, breaker, this account's pause and what is left of
+    today's syncs, the limits) in plain words; the event log is the owner's."""
+    from backend import tenancy
+    from backend.sync import events as EV, garmin_limits as GL
+    out = GL.status()
+    if tenancy.is_owner():
+        out["events"] = EV.read("garmin", 50)
+    return out
+
+
+@router.put("/garmin/site")
+def put_garmin_site(body: GarminSiteIn):
+    """The owner turns the server-wide Garmin switch off / back on (a tripped breaker too) and sets
+    the limits — until SP-351's admin pages. 403 for anyone else."""
+    from backend import tenancy, site_settings as SS
+    from backend.sync import garmin_limits as GL
+    if not tenancy.is_owner():
+        raise HTTPException(403, "只有站主能切換 Garmin 全站開關")
+    vals = {}
+    for k in ("auto_per_day", "manual_per_day", "requests_per_day", "gap_s"):
+        v = getattr(body, k)
+        if v is not None:
+            if v < 0 or (k in ("requests_per_day", "gap_s") and v <= 0):
+                raise HTTPException(400, f"{k} must be > 0")
+            vals[f"garmin.{k}"] = v
+    if vals:
+        SS.update(vals)
+    if body.enabled is not None:
+        GL.set_enabled(bool(body.enabled), by="owner")
+    return GL.status()
+
+
+def _garmin_error(e: Exception) -> HTTPException:
+    from backend.sync import garmin_client as GC, garmin_limits as GL
+    if isinstance(e, GL.GarminBlocked):
+        return HTTPException(503, {"code": e.code, "message": e.detail or str(e), "site": GL.status()})
+    if isinstance(e, GC.GarminUnavailable):
+        return HTTPException(503, {"code": "GARMIN_UNAVAILABLE", "site": GL.status()})
+    if isinstance(e, GC.LoginBusy):
+        return HTTPException(409, str(e))
+    if isinstance(e, SecretKeyMissing):
+        return HTTPException(503, str(e))
+    if isinstance(e, GC.GarminLoginFailed):
+        status = 502 if e.code == "GARMIN_LOGIN_ERROR" else 401
+        return HTTPException(status, {"code": e.code, "message": str(e).split(": ", 1)[-1]})
+    return HTTPException(502, {"code": "GARMIN_LOGIN_ERROR", "message": type(e).__name__})
+
+
+@router.post("/garmin/login")
+async def garmin_login(body: GarminLoginRequest, db: AsyncSession = Depends(get_db)):
+    """Connect Garmin: email + password once. {mfa_required: true} when the account asks for a
+    code (then POST /garmin/mfa). remember=true stores the password sealed for one automatic
+    re-login; false deletes a stored one. Never returns the token / password."""
+    from backend import membership as MS
+    from backend.sync import garmin_client as GC, garmin_limits as GL
+    if "sync:garmin_trial" not in MS.ROLE_SCOPES.get(MS.member().role, frozenset()):
+        raise MS.scope_error("sync:garmin_trial")
+    await _garmin_consent(db, body.athlete_id, body.consent_version)
+    try:
+        GL.check_allowed(scheduled=False)
+        return await GC.login(body.email, body.password, db, body.athlete_id, remember=body.remember)
+    except Exception as e:                       # noqa: BLE001 — mapped to plain codes
+        raise _garmin_error(e)
+
+
+@router.post("/garmin/mfa")
+async def garmin_mfa(body: GarminMfaRequest, db: AsyncSession = Depends(get_db)):
+    """The MFA code of the login waiting for it (step 2). 401 GARMIN_MFA_WRONG: type it again;
+    GARMIN_MFA_EXPIRED: log in again."""
+    from backend.sync import garmin_client as GC
+    try:
+        return await GC.login_mfa(body.code, db, body.athlete_id)
+    except Exception as e:                       # noqa: BLE001
+        raise _garmin_error(e)
+
+
+@router.get("/garmin/status")
+async def garmin_auth_status(athlete_id: int = 1, db: AsyncSession = Depends(get_db)):
+    """Connected / 登入已過期 / not connected, the remembered password (yes / no only), a login
+    waiting for its MFA code, and the server's Garmin state. No Garmin request is made."""
+    from sqlalchemy import select
+    from backend.db.models import SyncState
+    from backend.sync import garmin_client as GC, garmin_limits as GL
+    st = (await db.execute(select(SyncState).where(SyncState.athlete_id == athlete_id))).scalar_one_or_none()
+    saved = bool(st and st.garmin_password_sealed)               # never the value
+    out = {"password_saved": saved, "mfa_pending": GC.mfa_pending(), "site": GL.status()}
+    if not st or not st.garmin_token_sealed:
+        return {**out, "authenticated": False, "expired": False, "status": "logged_out", "email": None}
+    verdict = await session_check.check(db, "garmin", athlete_id)
+    return {**out, **_session_fields(verdict), "email": st.garmin_email,
+            "last_sync": st.garmin_last_sync_at.isoformat() if st.garmin_last_sync_at else None,
+            "auto_relogin": saved}
+
+
+@router.post("/garmin/logout")
+async def garmin_logout(athlete_id: int = 1, db: AsyncSession = Depends(get_db)):
+    """中斷連接: deletes the token and the remembered password; the imported activities stay."""
+    from backend.sync import garmin_client as GC
+    await GC.logout(db, athlete_id)
+    return {"logged_out": True}
+
+
 def _session_fields(verdict: str) -> dict:
     """status: logged_in | expired (登入已過期) | logged_out. check: the
     login check's answer (sync/session_check.py); "unknown" = COROS / TP not
@@ -280,7 +451,7 @@ async def session_alerts(athlete_id: int = 1, db: AsyncSession = Depends(get_db)
     use = P.FOLDER[db_name]
     repo = SettingsRepository(db, athlete_id)
     push = await repo.get("plan.push.provider")
-    names = {"coros": "COROS", "tp": "TrainingPeaks"}
+    names = {"coros": "COROS", "garmin": "Garmin", "tp": "TrainingPeaks"}
     out, verdicts = [], {}
     for src in session_check.SOURCES:
         needs = ([_("同步")] if src == use else []) + ([_("推送")] if src == "coros" and push == "coros" else [])
@@ -340,18 +511,22 @@ class RememberBody(BaseModel):
 async def set_remember(source: str, body: RememberBody, db: AsyncSession = Depends(get_db)):
     """Unticking 「記住密碼」 deletes the stored password immediately. Ticking
     it alone stores nothing (the password is only sent with a login)."""
-    if source not in ("coros", "tp"):
-        raise HTTPException(400, "source must be coros or tp")
+    if source not in ("coros", "garmin", "tp"):
+        raise HTTPException(400, "source must be coros, garmin or tp")
     if not body.remember:
         if source == "coros":
             await coros_client.save_password(db, body.athlete_id, None)
+        elif source == "garmin":
+            from backend.sync import garmin_client
+            await garmin_client.save_password(db, body.athlete_id, None)
         else:
             from backend.sync.tp_client import save_password
             await save_password(db, body.athlete_id, None, None)
     from sqlalchemy import select
     from backend.db.models import SyncState
     st = (await db.execute(select(SyncState).where(SyncState.athlete_id == body.athlete_id))).scalar_one_or_none()
-    saved = bool(st and (st.coros_password_sealed if source == "coros" else st.tp_password_sealed))
+    saved = bool(st and {"coros": st.coros_password_sealed, "garmin": st.garmin_password_sealed}.get(
+        source, st.tp_password_sealed if st else None))
     return {"password_saved": saved}
 
 

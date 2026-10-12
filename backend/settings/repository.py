@@ -23,7 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.db.models import UserSetting
 
 DEFAULT_USER = 1
-SOURCES = ("coros", "trainingpeaks", "local")
+SOURCES = ("coros", "garmin", "trainingpeaks", "local")
 
 DEFAULTS: dict[str, Any] = {
     # IANA zone for local workout dates; None = WKO5COACH_TZ env, then the system zone
@@ -51,10 +51,11 @@ DEFAULTS: dict[str, Any] = {
     # next A race) | trail (越野跑, the original behaviour) | road (路跑／馬拉松)
     "athlete.primary_sport": "auto",
     # 資料來源 (backend/sync/primary.py): the ONE synced source in use — charts,
-    # automatic syncs, CP scan and totals read only it. coros | trainingpeaks;
-    # None / an old "auto" is migrated on first read (primary.current)
+    # automatic syncs, CP scan and totals read only it. coros | garmin (SP-91 trial) |
+    # trainingpeaks; None / an old "auto" is migrated on first read (primary.current)
     "sync.primary_source": None,
     "sync.coros.enabled": True,
+    "sync.garmin.enabled": True,
     "sync.trainingpeaks.enabled": True,
     # log in with OAuth client credentials from TP_CLIENT_ID/SECRET or
     # ~/.wko5coach/tp_client.json (see .env.example). None = auto: on only when the
@@ -62,16 +63,21 @@ DEFAULTS: dict[str, Any] = {
     "sync.trainingpeaks.use_wko5_client": None,
     # outcome of the last run: {at, trigger, status, downloaded, checked, errors, error}
     "sync.coros.last_result": None,
+    "sync.garmin.last_result": None,
     "sync.trainingpeaks.last_result": None,
     # the last run that worked (status ok / partial): {at, trigger, downloaded}. A
     # failed run never moves it (SP-88: 上次成功同步 on the overview banner)
     "sync.coros.last_ok": None,
+    "sync.garmin.last_ok": None,
     # the one-time backfill of COROS's post-run self-rating over the last 8 weeks (SP-231,
     # sync/coros_client.backfill_feel): {done, passes, checked, filled, at}; internal
     "sync.coros.rpe_backfill": None,
     # the COROS 非官方介面 disclaimer ticked before connecting (SP-385, sync/coros_limits.py):
     # {version, at}; a new disclaimer version asks again
     "sync.coros.consent": None,
+    # the Garmin 非官方介面 disclaimer ticked before connecting (SP-91, sync/garmin_limits.py):
+    # {version, at}; a new disclaimer version asks again
+    "sync.garmin.consent": None,
     # the one-time rain backfill of the last 12 months (engine/rain_backfill.py, SP-299; run by
     # api/rain_backfill.tick): {done, at, attempts, calls_total, calls, filled, failed, skipped,
     # waiting?, gave_up?}; internal bookkeeping
@@ -125,6 +131,10 @@ DEFAULTS: dict[str, Any] = {
     # change [{at, lthr, max_hr, rest_hr, ratios, hr_zone_type}], oldest first; written by the
     # COROS login / sync only. None = nothing recorded yet
     "athlete.coros_profile_history": None,
+    # the Garmin account's HR settings (SP-91 trial, sync/garmin_client.py), read at the end of a
+    # Garmin sync from its heart-rate zones: {max_hr, rest_hr, lthr, ratios: {}, hr_zone_type,
+    # at, source: "garmin"}; engine/hr_profile.account() uses it while Garmin is the 資料來源
+    "athlete.garmin_profile": None,
     # 起始 CTL／ATL (engine/load_guard.py PMC_START_KEY, SP-68): {date: ISO, ctl, atl} — the
     # PMC's values at the start of that date (charts, status, guardrails); None = automatic
     # (the first 4 weeks' mean daily TSS). Replaces athlete_settings.initial_ctl_run /
@@ -368,8 +378,8 @@ def validate(key: str, value: Any) -> None:
         resolve_tz(value, strict=True)
     if key == "athlete.primary_sport" and value not in ("auto", "trail", "road"):
         raise ValueError("primary sport must be auto, trail or road")
-    if key == "sync.primary_source" and value not in ("coros", "trainingpeaks"):
-        raise ValueError("data source must be coros or trainingpeaks")
+    if key == "sync.primary_source" and value not in ("coros", "garmin", "trainingpeaks"):
+        raise ValueError("data source must be coros, garmin or trainingpeaks")
     if key == "sync.schedule.daily_time" and value is not None:
         import re
         if not (isinstance(value, str) and re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", value)):
@@ -429,8 +439,9 @@ def validate(key: str, value: Any) -> None:
         if not (isinstance(value, list) and len(value) <= INJ.CUSTOM_MAX
                 and all(INJ.clean_custom(v) == v for v in value) and len(set(value)) == len(value)):
             raise ValueError(f"injury.custom_areas must be distinct labels of 1-{INJ.CUSTOM_MAX_LEN} characters")
-    if key == "athlete.coros_profile" and value is not None and not isinstance(value, dict):
-        raise ValueError("athlete.coros_profile must be an object or null")
+    if key in ("athlete.coros_profile", "athlete.garmin_profile") and value is not None \
+            and not isinstance(value, dict):
+        raise ValueError(f"{key} must be an object or null")
     if key == "athlete.coros_profile_history":
         from backend.engine.coros_compare import validate as validate_history
         validate_history(value)
@@ -441,7 +452,7 @@ def validate(key: str, value: Any) -> None:
     if key == "plan.hr_zone_model" and value not in ("lthr", "hrr", "hrmax"):
         raise ValueError("plan.hr_zone_model must be lthr, hrr or hrmax")
     if key in ("sync.coros.rpe_backfill", "weather.rain_backfill", "sync.coros.check", "sync.trainingpeaks.check",
-               "sync.coros.consent",
+               "sync.coros.consent", "sync.garmin.consent",
                "sync.coros.check_weekly", "sync.trainingpeaks.check_weekly") \
             and value is not None and not isinstance(value, dict):
         raise ValueError(f"{key} must be an object or null")

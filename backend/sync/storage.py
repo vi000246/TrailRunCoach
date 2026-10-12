@@ -2,6 +2,7 @@
 Where synced FIT files live — one folder per source:
 
     ~/.wko5coach/fit/coros/<year>/...
+    ~/.wko5coach/fit/garmin/<year>/...      (the Garmin trial, SP-91)
     ~/.wko5coach/fit/tp/<year>/...
 
 Everything that deletes files goes through `confined()`, which resolves the
@@ -17,7 +18,7 @@ from pathlib import Path
 log = logging.getLogger(__name__)
 
 FIT_ROOT = None      # fixed folder (tests); None = the tenant's shared fit/
-SOURCES = {"coros": "coros", "tp": "trainingpeaks"}          # folder / API name -> DB source
+SOURCES = {"coros": "coros", "garmin": "garmin", "tp": "trainingpeaks"}   # folder / API name -> DB source
 DB_TO_FOLDER = {v: k for k, v in SOURCES.items()}
 
 

@@ -21,8 +21,8 @@ import time
 from pathlib import Path
 from typing import Optional
 
-SOURCES = ("wko5", "coros", "tp")          # what a Dataset can be built from
-FIT_SOURCES = ("coros", "tp")
+SOURCES = ("wko5", "coros", "garmin", "tp")          # what a Dataset can be built from
+FIT_SOURCES = ("coros", "garmin", "tp")              # the synced folders (garmin: SP-91)
 
 
 def _db_path() -> Optional[Path]:
@@ -69,7 +69,7 @@ def wko5_available(wko5_dir: Optional[Path] = None) -> bool:
 
 
 def primary_folder(user_id: int = 1) -> str:
-    """The 資料來源's folder ("coros" / "tp") from the settings store,
+    """The 資料來源's folder ("coros" / "garmin" / "tp") from the settings store,
     read-only; COROS until a setting exists (primary.effective)."""
     from backend.sync import primary as P
     return P.folder(read_setting(P.SETTING_KEY, None, user_id))
@@ -196,7 +196,7 @@ def _scan_cached(source: str, root: Path) -> str:
 
 
 def _files_stamp(source: str, wko5_dir: Path) -> str:
-    if source in ("coros", "tp"):
+    if source in FIT_SOURCES:
         from backend.sync import storage
         root = storage.source_dir(source)
         if not root.exists():

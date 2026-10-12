@@ -14,3 +14,4 @@ pydantic-settings>=2.0.0
 greenlet>=3.0.0
 tzdata>=2024.1          # IANA zones for zoneinfo on Windows
 cryptography>=42.0.0     # Fernet: tokens encrypted at rest
+garminconnect>=0.3.17,<0.4   # Garmin trial (SP-91): unofficial Garmin Connect; optional at runtime (imported lazily)

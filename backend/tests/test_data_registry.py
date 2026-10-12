@@ -27,6 +27,7 @@ SAMPLES = {
     "backups/.trc-restore-x/restore.db": R.SECRET,
     "engine.json": R.USER, "corrections.json": R.USER, "annotations.json": R.USER, "views/mine.json": R.USER,
     "fit/coros/2026/123_2026-10-01_trailrun.fit": R.IMPORTED, "fit/tp/2025/tp_2025_01_02_99.fit": R.IMPORTED,
+    "fit/garmin/2026/9001_2026-10-01_trail_run.fit": R.IMPORTED, "fit/garmin/2026/.9002.download": R.IMPORTED,
     "fit/coros/2026/.124.download": R.IMPORTED,
     "routes/names.json": R.USER, "routes/index.json": R.DERIVED, "routes/manifest.json": R.DERIVED,
     "routes/tracks/2026__demo_0001.fit.json": R.DERIVED, "routes/activity_weather.json": R.DERIVED,
@@ -125,8 +126,8 @@ def test_what_stays_on_this_machine_is_marked_local():
         assert not (t.local and t.local_fields), t.name
         assert not set(t.local_fields) & set(t.cursor_fields), t.name
     ss = R.table("sync_state")
-    assert {"coros_email", "tp_username", "coros_user_id"} <= set(ss.local_fields)
-    assert set(ss.cursor_fields) == {"last_sync_at", "last_sync_cursor", "coros_last_sync_at"}
+    assert {"coros_email", "tp_username", "coros_user_id", "garmin_email"} <= set(ss.local_fields)
+    assert set(ss.cursor_fields) == {"last_sync_at", "last_sync_cursor", "coros_last_sync_at", "garmin_last_sync_at"}
     assert {t.name for t in R.TABLES if t.local} == {"debug_tokens", "debug_audit", "debug_auth_failures"}
     from backend.engine.debug_view import secret_key
     from backend.settings.repository import DEFAULTS
@@ -339,7 +340,8 @@ def test_backup_refuses_a_registry_entry_it_cannot_write(tmp_path, monkeypatch):
 # ---------------------------------------------------------------- secret
 SECRET_USERS = {      # the modules that may read the credential columns: login, sync, status flags
     "api/auth.py", "api/plan_sessions.py", "api/sync.py", "db/database.py", "db/models.py",
-    "settings/secrets.py", "sync/coros_client.py", "sync/runner.py", "sync/session_check.py",
+    "settings/secrets.py", "sync/coros_client.py", "sync/garmin_client.py", "sync/runner.py",
+    "sync/session_check.py",
     "sync/tp_client.py", "data_registry.py",
 }
 SECRET_FILE_USERS = {"secret.key": {"settings/secrets.py"}, "tp_client.json": {"sync/tp_client.py"},

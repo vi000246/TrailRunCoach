@@ -226,6 +226,22 @@ def tp_creds(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _no_live_garmin(monkeypatch):
+    """Never a live Garmin call (SP-91): the garminconnect package is replaced by a fake that
+    refuses every call, unless the test installs its own (test_garmin_sp91.py); no 2-s gap
+    between the fake's calls; the half-done MFA logins and the limits' clocks start clean."""
+    from backend.sync import garmin_client, garmin_limits
+    from backend.tests.garmin_fakes import refusing_module
+    monkeypatch.setattr(garmin_client, "_LIB", refusing_module())
+    monkeypatch.setattr(garmin_limits, "GAP_S", 0.0)
+    garmin_client._PENDING.clear()
+    garmin_limits.reset()
+    yield
+    garmin_client._PENDING.clear()
+    garmin_limits.reset()
+
+
+@pytest.fixture(autouse=True)
 def _site_state_per_test(monkeypatch, tmp_path_factory):
     """The server-wide state (site.json: the COROS switch, breaker, paused accounts) and the sync
     event log live in a temp folder per test, and the COROS limits start clean (SP-385): a test

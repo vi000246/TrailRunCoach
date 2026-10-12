@@ -164,7 +164,8 @@ def test_a_data_source_switched_off_for_the_server(server, tmp_path):
             await s.commit()
             return await runner.ready_sources(s, 1)
     ready = asyncio.run(go())
-    assert ready == {"coros": "site_paused", "tp": "not_allowed"}     # TP: the owner's only
+    assert ready == {"coros": "site_paused", "garmin": "not_logged_in",       # Garmin: SP-91
+                     "tp": "not_allowed"}     # TP: the owner's only
     MS.set_source("sync:coros_credential", True)
     from backend.sync import coros_limits as CL
     assert CL.enabled()

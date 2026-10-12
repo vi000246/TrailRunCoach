@@ -8,7 +8,8 @@ Where the numbers come from (resolution order, per date):
   max HR   1. the user's own value: plan thresholds `mhr` dated on or before the
               day (設定 → 心率; the same dated plan.thresholds rows)        「你的設定 YYYY-MM-DD」
            2. the watch account (COROS zoneData.maxHr, stored at login / sync,
-              「來自手錶」; a future Garmin source goes here too) — owner
+              「來自手錶」; the Garmin account's zones while Garmin is the 資料來源,
+              SP-91) — owner
               2026-10-03: 「就用手錶的資料」
            3. thresholds.estimate_mhr (runs of the 365 days up to the day,
               「推估」), only without a watch value — training runs rarely reach
@@ -142,9 +143,18 @@ def parse_account(data: Optional[dict]) -> Optional[dict]:
     return out
 
 
+GARMIN_KEY = "athlete.garmin_profile"      # user_settings: the Garmin account's HR settings (SP-91)
+
+
 def account(user_id: int = 1) -> Optional[dict]:
-    """The stored COROS account HR settings (read-only), or None."""
+    """The stored watch-account HR settings (read-only), or None: the COROS account's; while Garmin
+    is the 資料來源 (SP-91 trial) the Garmin account's (its zones, sync/garmin_client.py) first."""
     from backend.engine.wko5expr.datasource import read_setting
+    from backend.sync import primary as P
+    if P.normalize(read_setting(P.SETTING_KEY, None, user_id)) == "garmin":
+        g = read_setting(GARMIN_KEY, None, user_id)
+        if isinstance(g, dict):
+            return g
     v = read_setting(ACCOUNT_KEY, None, user_id)
     return v if isinstance(v, dict) else None
 

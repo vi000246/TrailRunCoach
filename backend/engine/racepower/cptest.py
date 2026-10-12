@@ -134,12 +134,31 @@ def _file_date(p: Path) -> Optional[dt.date]:
         return None
 
 
-def unused_folder() -> str:
-    """The synced folder NOT in use ("coros" / "tp"): only the 資料來源's
-    files are scanned (backend/sync/primary.py), like the charts."""
+def unused_folder():
+    """The synced folder(s) NOT in use: only the 資料來源's files are scanned
+    (backend/sync/primary.py), like the charts. A folder name ("tp") while only one of them
+    exists on disk — the COROS / TP install's value, so its cache keys stay as they were —
+    else a tuple of names (a Garmin folder too, SP-91). `skipped` reads either."""
     from backend.engine.wko5expr.datasource import read_setting
     from backend.sync import primary as P
-    return P.other_folder(read_setting(P.SETTING_KEY, None))
+    value = read_setting(P.SETTING_KEY, None)
+    others = P.other_folders(value)
+    try:
+        from backend.sync import storage
+        there = tuple(f for f in others if storage.source_dir(f).exists())
+    except Exception:                       # noqa: BLE001
+        there = others
+    if len(there) > 1:
+        return there
+    return there[0] if there else P.other_folder(value)
+
+
+def skipped(skip, top: str) -> bool:
+    """`top` (a top folder of home/fit) is left out by `skip` (unused_folder: a name, a tuple
+    of names, or None)."""
+    if not skip:
+        return False
+    return top == skip if isinstance(skip, str) else top in skip
 
 
 def _read(p: Path) -> Optional[dict]:
@@ -206,7 +225,8 @@ def _dir_sig(dirs: list[str], root: Path) -> Optional[tuple]:
             out.append(os.stat(d).st_mtime_ns)
     except OSError:
         return None
-    for f in ("coros", "tp"):
+    from backend.engine.wko5expr.datasource import FIT_SOURCES
+    for f in FIT_SOURCES:
         try:
             out.append(fitcache.index_path_of(root / f).stat().st_mtime_ns)
         except OSError:
@@ -352,14 +372,14 @@ def _prefetch(home: Path, rows: list, files: dict) -> None:
         _save_json(pw_p, pw_c, pw_v)
 
 
-def _files(home: Path, since: dt.date, until: dt.date, skip_folder: Optional[str] = None) -> list[dict]:
+def _files(home: Path, since: dt.date, until: dt.date, skip_folder=None) -> list[dict]:
     """Every running FIT file in home/fit/** dated since…until, cached per file;
-    `skip_folder` = a top folder of home/fit ("tp") left out unread."""
+    `skip_folder` = a top folder of home/fit ("tp"), or a tuple of them, left out unread."""
     cache_p = home / CACHE_NAME
     cache = _load_cache(cache_p)
     files = cache["files"]
     root = home / "fit"
-    listing = [r for r in _listing(root) if not (skip_folder and Path(r[1]).parts[0] == skip_folder)]
+    listing = [r for r in _listing(root) if not skipped(skip_folder, Path(r[1]).parts[0])]
 
     def unread(r):
         return not (files.get(r[1]) and files[r[1]][0] == r[3])
@@ -459,7 +479,8 @@ def _fit_entry(home: Path, key: str) -> Optional[dict]:
     power source / bad-file features need no second parse."""
     from backend.engine.wko5expr import fitcache
     head, _, rest = key.replace("\\", "/").partition("/")
-    if head not in ("coros", "tp") or not rest:
+    from backend.engine.wko5expr.datasource import FIT_SOURCES
+    if head not in FIT_SOURCES or not rest:
         return None
     d = Path(home) / "fit" / head
     try:

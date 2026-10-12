@@ -1133,7 +1133,7 @@ def _set_pack(w, kg) -> None:
 # values, the auto values in a second (slower) call, key-based and bulk edits
 # ---------------------------------------------------------------------------
 
-ORIGIN_LABELS = {"coros": "COROS", "tp": "TrainingPeaks", "wko5": "WKO5"}
+ORIGIN_LABELS = {"coros": "COROS", "garmin": "Garmin", "tp": "TrainingPeaks", "wko5": "WKO5"}
 
 
 def _origin(ds, w=None, file: Optional[str] = None) -> Optional[str]:

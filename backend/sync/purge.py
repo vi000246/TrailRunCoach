@@ -89,6 +89,8 @@ async def delete_source_files(db: AsyncSession, source: str, athlete_id: int = 1
         if st is not None:
             if source == "coros":
                 st.coros_last_sync_at = None
+            elif source == "garmin":
+                st.garmin_last_sync_at = None
             else:
                 st.last_sync_cursor = None
                 st.last_sync_at = None
