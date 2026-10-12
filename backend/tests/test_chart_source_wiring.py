@@ -58,9 +58,20 @@ def test_default_source_is_still_the_wko5_folder(isolated, monkeypatch):
     assert stamp_args == ["tp"] and seen[-1][0] == "tp"
 
 
-def test_viewer_has_the_source_chip_and_settings_says_it_is_live():
+def test_viewer_has_the_sport_chip_and_settings_switches_the_source():
+    """SP-381: the viewer's top right switches 專項 (主要訓練項目), not the data source; the source
+    is chosen in 設定 › 資料同步 (s-chart), which says it is live."""
     html = (STATIC / "wko5_viewer.html").read_text(encoding="utf-8")
-    assert '<span id="source-chip"></span>' in html and "/api/v1/static/sourcechip.js" in html
+    assert '<span id="sport-chip"></span>' in html and "/api/v1/static/sportchip.js" in html
+    assert "sourcechip.js" not in html
+    js = (STATIC / "sportchip.js").read_text(encoding="utf-8")
+    assert 'const SPORTS = ["auto", "trail", "road"];' in js
+    assert "/api/v1/wko5/primary-sport" in js and "primary_sport: sel.value" in js and "location.reload()" in js
+    import json
+    for loc in ("zh-TW", "en"):
+        cat = json.loads((STATIC / "i18n" / loc / "common.json").read_text(encoding="utf-8"))
+        for k in ("label", "auto", "trail", "road", "tip", "demo", "failed"):
+            assert cat[f"sportchip.{k}"]
     s = (STATIC / "settings.html").read_text(encoding="utf-8")
     assert "接線完成後才會生效" not in s and "仍讀 WKO5" not in s and 'id="s-chart"' in s
 

@@ -282,6 +282,24 @@ def test_schedule_phone_cards_and_editor_save(app):
         return r.bottom <= innerHeight && !!el && !!el.closest('#sd-save'); }""")
     assert hit, "儲存 is off screen or covered"
 
+
+def test_viewer_sport_chip_switches_the_main_sport(app):
+    """SP-381: 圖表分析's top right is a 專項 select (自動／越野跑／路跑・馬拉松) instead of the data
+    source; choosing one saves 主要訓練項目 and reloads; set back to 自動 afterwards."""
+    page, _ = app
+    open_page(page, VIEWER)
+    sel = page.locator("#sport-chip select#sport-sel")
+    expect(sel).to_be_visible(timeout=60_000)
+    assert page.locator("#source-chip").count() == 0
+    assert sel.locator("option").all_inner_texts()[1:] == ["越野跑", "路跑／馬拉松"]
+    with page.expect_navigation():
+        sel.select_option("road")
+    expect(page.locator("#sport-sel")).to_have_value("road", timeout=60_000)
+    assert _json(page, "/api/v1/wko5/primary-sport")["setting"] == "road"
+    with page.expect_navigation():
+        page.locator("#sport-sel").select_option("auto")
+    expect(page.locator("#sport-sel")).to_have_value("auto", timeout=60_000)
+
 def test_schedule_watch_status_glyphs(app):
     """手錶狀態圖示 (推送狀態): the legend's four states, each an <svg> glyph with its label."""
     page, _ = app
