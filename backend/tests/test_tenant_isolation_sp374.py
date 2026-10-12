@@ -96,7 +96,7 @@ def test_a_running_auto_adjustment_is_not_busy_for_b(tmp_path, monkeypatch):
 
     async def go():
         with tenancy.use(a):
-            t = plan_auto._after_sync("coros", {"status": "ok", "downloaded": 1})
+            t = plan_auto._after_sync("coros", {"status": "ok", "downloaded": 1, "trigger": "schedule"})
         assert t is not None
         await asyncio.sleep(0)
         with tenancy.use(a):
@@ -135,7 +135,11 @@ def test_b_low_priority_warm_up_does_not_wait_for_a_plan_run(tmp_path, monkeypat
 
 # ---------------------------------------------------------------- 3. the warm-up per tenant
 
-def test_b_warm_up_starts_its_own_while_a_runs_and_low_priority_runs_as_b(tmp_path, monkeypatch):
+def test_b_warm_up_is_queued_not_dropped_while_a_runs_and_runs_as_b(tmp_path, monkeypatch):
+    """SP-374 第 3 條 with SP-338's queue: B's warm-up while A's runs is not dropped (it is queued:
+    one whole-Dataset rebuild at a time for the server) and it runs in B's own context, its
+    low-priority part too."""
+    from backend import jobs
     from backend.api import activity_auto as AA
     from backend.api import overview as OV
     from backend.api import plan_sessions as PSA
@@ -146,12 +150,13 @@ def test_b_warm_up_starts_its_own_while_a_runs_and_low_priority_runs_as_b(tmp_pa
     a, b = _t(tmp_path, "uA"), _t(tmp_path, "uB")
     monkeypatch.delenv("WKO5COACH_NO_WARMUP", raising=False)
     monkeypatch.setattr(wko5views, "_WARM", {})
+    jobs.reset()
     hold = threading.Event()
-    dataset_by, classified = [], []
+    built, classified = [], []
 
     def dataset():
         tid = tenancy.current().id
-        dataset_by.append(tid)
+        built.append(tid)
         if tid == "uA":
             assert hold.wait(10)                    # A's warm-up is busy building
         return SimpleNamespace(today=20000.0, who=tid)
@@ -167,20 +172,25 @@ def test_b_warm_up_starts_its_own_while_a_runs_and_low_priority_runs_as_b(tmp_pa
         with tenancy.use(a):
             ta = wko5views.warm_up("sync-A")
         assert ta is not None
+        import time
+        for _ in range(100):
+            if built:
+                break
+            time.sleep(0.01)
         with tenancy.use(b):
             tb = wko5views.warm_up("sync-B")
         assert tb is not None, "B's warm-up was dropped while A's ran"
-        tb.join(5)
-        low = wko5views._warm_slot("uB").get("low")
-        low and low.join(5)
-        assert ("uB", "uB") in classified           # B's low-priority part ran in B's context
-        assert all(c == ("uB", "uB") for c in classified)
+        assert tb.state == "queued" and jobs.position(tb) == 1           # waits its turn
+        assert built == ["uA"]
     finally:
         hold.set()
-        ta.join(5)
-        low = wko5views._warm_slot("uA").get("low")
+    ta.join(5)
+    tb.join(5)
+    for tid in ("uA", "uB"):
+        low = wko5views._warm_slot(tid).get("low")
         low and low.join(5)
-    assert ("uA", "uA") in classified
+    assert built[0] == "uA" and "uB" in built                        # B built after A (its low part re-reads A)
+    assert ("uB", "uB") in classified and ("uA", "uA") in classified   # each in its own context
 
 
 # ---------------------------------------------------------------- 4. room for each tenant

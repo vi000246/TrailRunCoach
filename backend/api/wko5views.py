@@ -81,7 +81,29 @@ router = APIRouter(prefix="/api/v1/wko5", tags=["wko5-views"])
 _LIVE: "weakref.WeakSet[Dataset]" = weakref.WeakSet()
 
 
-DATASETS_MAX = 2       # Datasets kept at once (all modes together)
+DATASETS_MAX = 8       # Datasets kept at once at most (all modes and tenants together)
+# SP-338 第 7 條: kept by a memory budget (LRU), not a count: WKO5COACH_DATASET_MEM_MB (default
+# 1200 of the container's 3 GB), each Dataset estimated as DATASET_BASE_MB + DATASET_PER_WORKOUT_MB
+# per activity (推估 from SP-320: a tenant's working set 200–400 MB, the owner's ~1,900 files ≈ 400 MB).
+# The newest one always stays, whatever its size.
+DATASET_BASE_MB = 50.0
+DATASET_PER_WORKOUT_MB = 0.18
+
+
+def dataset_budget_mb() -> float:
+    try:
+        return max(100.0, float(os.environ.get("WKO5COACH_DATASET_MEM_MB", "") or 1200))
+    except ValueError:
+        return 1200.0
+
+
+def dataset_mb(ds) -> float:
+    """The estimated resident size of a built Dataset (MB)."""
+    try:
+        n = len(getattr(ds, "workouts", None) or [])
+    except TypeError:
+        n = 0
+    return DATASET_BASE_MB + DATASET_PER_WORKOUT_MB * n
 
 
 class _DatasetCache:
@@ -118,6 +140,9 @@ class _DatasetCache:
             self._d.move_to_end(key)
             while len(self._d) > DATASETS_MAX:
                 self._d.popitem(last=False)
+            budget = dataset_budget_mb()
+            while len(self._d) > 1 and sum(dataset_mb(d) for d in self._d.values()) > budget:
+                self._d.popitem(last=False)         # least recently used first (SP-338 第 7 條)
         return ds
 
     def cache_clear(self) -> None:
@@ -233,6 +258,12 @@ def _warm_slot(tid: Optional[str] = None) -> dict:
         for k in [k for k, w in _WARM.items() if k != tid and not _alive(w)]:
             del _WARM[k]
         return _WARM.setdefault(tid, {"thread": None})
+
+
+def w_tid(w: dict) -> str:
+    """The tenant id a warm-up slot belongs to."""
+    with _WARM_LOCK:
+        return next((k for k, v in _WARM.items() if v is w), "default")
 
 
 def _alive(w: dict) -> bool:
@@ -368,15 +399,23 @@ def warm_up(reason: str = "startup") -> Optional[threading.Thread]:
                                                 exc_info=True)
             return
         _warm_chart_code(ds)             # after what the first page waits for (review SP-336 #5)
+        try:                             # the new versions are in: old series_* files go (SP-338 第 4 條)
+            from backend.engine.wko5expr.dataset import sweep_series
+            sweep_series()
+        except Exception:                # noqa: BLE001 — a cache sweep never fails the warm-up
+            pass
         # lowest priority from here, in its own thread: after the sync's automatic plan run (it
         # computes with the same dataset / status / inputs, now warm). This thread ends, so a
         # warm-up asked for meanwhile is not dropped (review SP-362 #4)
         _start_low_priority(reason)
-    import contextvars              # a Thread does not carry the tenant (contextvars) by itself
-    ctx = contextvars.copy_context()
-    t = threading.Thread(target=ctx.run, args=(run,), name=f"dataset-warmup-{reason}", daemon=True)
+    # through the server's job queue (backend/jobs.py, SP-338): one whole-Dataset rebuild at a time
+    # for the whole server (memory), a sync's before a deploy's; a second tenant's waits its turn
+    # (queued, never dropped), in its own tenant (the queue keeps the caller's contextvars)
+    from backend import jobs
+    prio = "sync_hot" if reason.startswith("sync") else "deploy_hot" if reason in ("startup", "deploy") else "user"
+    t = jobs.submit(lambda job: run(), cls="full", priority=prio, label=f"dataset warm-up ({reason})",
+                    key=("warm", w_tid(w)))
     w["thread"] = t
-    t.start()
     return t
 
 
@@ -566,6 +605,11 @@ def chart(request: Request, view: str, d: int, c: int, begin: Optional[str] = No
     except IndexError:
         raise HTTPException(404, "chart not found")
     b, e = _range(ds, begin, end)
+    # SP-330: how far back the plan reaches (90 days free / 365 / the full history), and the free
+    # tier's dashboards a day (one dashboard counts once a day, however many charts it draws)
+    from backend import membership as MS
+    MS.require(MS.chart_scope(float(ds.today) - float(b)))
+    MS.consume("charts", item=f"{view}/{d}")
     asked = (b, e)                               # the range as asked, before a period's floor (_slot)
     needs_workout = _panel_kind(ch) in ("workout", "map")
     if needs_workout and (workout is None or not 0 <= workout < len(ds.workouts)):

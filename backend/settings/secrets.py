@@ -90,11 +90,17 @@ def ciphertext_exists() -> bool:
 
 def key_status() -> str:
     """env | file | missing (sealed data exists: deploy the key) | none (will be generated)."""
-    if os.getenv("WKO5COACH_SECRET_KEY"):
+    if _env_key():
         return "env"
     if KEY_FILE.exists():
         return "file"
     return "missing" if ciphertext_exists() else "none"
+
+
+def _env_key() -> Optional[str]:
+    """WKO5COACH_SECRET_KEY, or the file named by WKO5COACH_SECRET_KEY_FILE (a Docker secret)."""
+    from backend.settings.env_secrets import secret_env
+    return secret_env("WKO5COACH_SECRET_KEY")
 
 
 class ServerKeyRequired(SecretError):
@@ -106,7 +112,7 @@ class ServerKeyRequired(SecretError):
 def require_server_key() -> None:
     """Raise ServerKeyRequired in multi-user mode without the env key (start-up check, main.py)."""
     from backend import accounts
-    if accounts.enabled() and not os.getenv("WKO5COACH_SECRET_KEY"):
+    if accounts.enabled() and not _env_key():
         raise ServerKeyRequired(
             "WKO5COACH_SECRET_KEY must be set when WKO5COACH_ACCOUNTS=1 (one server key from the "
             f"environment; move the contents of {KEY_FILE} into it — see docs/deploy/accounts.md)")
@@ -114,7 +120,7 @@ def require_server_key() -> None:
 
 @lru_cache(maxsize=1)
 def _fernet() -> Fernet:
-    key = os.getenv("WKO5COACH_SECRET_KEY")
+    key = _env_key()
     if not key:
         require_server_key()
         if KEY_FILE.exists():

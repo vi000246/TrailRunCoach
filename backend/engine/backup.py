@@ -84,7 +84,10 @@ PRE_RE = re.compile(r"^trailruncoach-prerestore-(\d{8})-(\d{6})\.zip$")
 MANIFEST = "manifest.json"
 DB_ENTRY = R.DB.pattern                       # "wko5coach.db"
 FIT_DIR = R.FIT.pattern.split("/")[0]         # "fit"
-FIT_ENTRY_RE = re.compile(r"^fit/(coros|tp)/[A-Za-z0-9_.\-]{1,32}/[^/\\:*?\"<>|]{1,200}\.gz$")
+# fit/<source>/<year>/<file>.gz (a legacy FIT), or fit/<source>/objects/<aa>/<sha256>.fit.gz.gz (an object,
+# SP-308 files/fitstore.py: the stored gzip, gzipped once more like every FIT entry)
+FIT_ENTRY_RE = re.compile(r"^fit/(coros|tp)/(?:[A-Za-z0-9_.\-]{1,32}/[^/\\:*?\"<>|]{1,200}"
+                          r"|objects/[0-9a-f]{2}/[0-9a-f]{64}\.fit\.gz)\.gz$")
 FILES_DIR = "files"                           # files/<path relative to its tenant folder>
 FILE_CLASSES = (R.USER, R.IMPORTED)           # what a files/ entry may be
 FILE_WHERES = (R.ROOT, R.BASE, R.SHARED)

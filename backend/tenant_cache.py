@@ -14,7 +14,7 @@ the tenant (tenancy.ds_key, SP-320 ④) — this is about room, not correctness.
 
 How many tenants are kept: WKO5COACH_CACHE_TENANTS (default 32). The total stays bounded by
 that × the per-tenant room; a tenant that was not used for a while is the first to go. The
-memory budget of SP-338 第 7 條 is the Dataset cache's (api/wko5views.DATASETS_MAX); these
+memory budget of SP-338 第 7 條 is the Dataset cache's (api/wko5views.dataset_budget_mb); these
 entries are small next to a Dataset.
 
 Not thread-safe by themselves: the callers hold their own lock around them, as before.

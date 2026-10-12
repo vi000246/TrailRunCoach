@@ -51,11 +51,16 @@ def plan(con: sqlite3.Connection) -> list[dict]:
     if not {"rpe", "feel"} <= have:
         raise SystemExit("workout_files has no rpe / feel columns yet: start the app once (init_db migrates)")
     out = []
+    from backend.files import fitstore
     for i, fp in con.execute("SELECT id, file_path FROM workout_files WHERE file_format='fit' "
                              "AND rpe IS NULL AND feel IS NULL").fetchall():
-        if not fp or not Path(fp).exists():
+        try:
+            p = fitstore.resolve(fp) if fp else None      # an object key (SP-308) or a legacy path
+        except ValueError:
+            p = None
+        if p is None or not p.exists():
             continue
-        rpe, feel = recorded_from_session(session_of(Path(fp)))
+        rpe, feel = recorded_from_session(session_of(p))
         if rpe is not None or feel is not None:
             out.append({"id": i, "file_path": fp, "rpe": rpe, "feel": feel})
     return out

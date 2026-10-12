@@ -8,7 +8,8 @@ Missed times (app not running) are caught up the first minute the app is up
 after the time on that day; there is no catch-up for earlier days.
 
 The same loop also runs the daily automatic backup (api/backup.auto_tick), the weekly
-check of the last 60 days (sync/check.weekly_tick, SP-362 A4) and, once, the rain backfill
+check of the last 60 days (sync/check.weekly_tick, SP-362 A4), the daily cleanup of deleted
+FIT objects (sync/purge.cleanup_tick, SP-308) and, once, the rain backfill
 (api/rain_backfill.tick, SP-299).
 
 Every tenant (SP-384, SP-374 第 5 條): each minute the loop walks accounts.tenants.sync_tenants()
@@ -41,6 +42,15 @@ def _parse(hhmm: str) -> time:
     return time(int(h), int(m))
 
 
+NIGHT_START = "01:00"     # the free tier's daily sync: somewhere in 01:00–05:00 (SP-330 / SP-338 第 5、11 條)
+NIGHT_SPAN_MIN = 240
+
+
+def night_slot(tenant_id: str) -> tuple[str, int]:
+    """(HH:MM, offset) of a free-tier tenant's nightly sync: spread over NIGHT_SPAN_MIN by its id."""
+    return NIGHT_START, int(hashlib.sha256(("night:" + tenant_id).encode("utf-8")).hexdigest(), 16) % NIGHT_SPAN_MIN
+
+
 def offset_minutes(tenant_id: str) -> int:
     """The fixed shift of a tenant's daily sync: 0 for the owner, else 0..STAGGER_MIN-1 from a
     hash of its id (the same every day, so a user's sync time does not wander)."""
@@ -55,13 +65,17 @@ def _due(local: datetime, at: str, offset_min: int) -> bool:
 
 
 async def tick(session_factory: Callable, now: Optional[datetime] = None, athlete_id: int = 1,
-               start: Callable = runner.start_background, offset_min: int = 0) -> list[str]:
-    """One scheduler check of the current tenant. Returns the sources started."""
+               start: Callable = runner.start_background, offset_min: int = 0,
+               night: Optional[tuple] = None) -> list[str]:
+    """One scheduler check of the current tenant. Returns the sources started. `night`
+    (HH:MM, offset): the free tier's nightly slot replaces the tenant's own daily_time."""
     async with session_factory() as db:
         repo = SettingsRepository(db, athlete_id)
         at = await repo.get("sync.schedule.daily_time")
         if not at:
             return []
+        if night is not None:
+            at, offset_min = night
         tz = await repo.timezone()
         local = (now or datetime.now(timezone.utc)).astimezone(tz)
         today = local.date().isoformat()
@@ -136,7 +150,9 @@ async def tick_all(session_factory: Optional[Callable] = None, now: Optional[dat
                 sf = session_factory
                 if sf is None:
                     from backend.db.database import AsyncSessionLocal as sf
-                out[t.id] = await tick(sf, now=now, start=start, offset_min=offset_minutes(t.id))
+                from backend import membership as MS
+                night = None if t.id == "owner" or MS.has("sync:auto_realtime", t) else night_slot(t.id)
+                out[t.id] = await tick(sf, now=now, start=start, offset_min=offset_minutes(t.id), night=night)
             except asyncio.CancelledError:
                 raise
             except Exception as e:           # noqa: BLE001 — never kill the loop for one tenant
@@ -176,6 +192,9 @@ async def loop(session_factory: Optional[Callable] = None, interval: float = INT
         # minutes after a start, when the warm-up has the CPU
         if _time.monotonic() - t_start >= check.STARTUP_DELAY_S:
             await _each_tenant(lambda: check.weekly_tick(sf()), "weekly sync check")
+            # once a day per tenant: the files of deleted / orphan FIT objects (sync/purge.cleanup_objects, SP-308)
+            from backend.sync import purge
+            await _each_tenant(lambda: purge.cleanup_tick(sf()), "FIT objects cleanup")
         with tenancy.use(tenancy.owner()):
             # the one-time rain backfill of the last 12 months (api/rain_backfill.py, SP-299)
             try:
@@ -196,4 +215,14 @@ async def loop(session_factory: Optional[Callable] = None, interval: float = INT
                 raise
             except Exception as e:
                 log.warning("backup tick failed: %s", type(e).__name__)
+            # multi-user mode: the whole server's daily backup — accounts.db and every user's
+            # tenant (accounts/server_backup.py, SP-387 第 7 條)
+            try:
+                from backend.accounts import server_backup
+                if not os.getenv("WKO5COACH_NO_AUTO_BACKUP"):
+                    await server_backup.tick()
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                log.warning("server backup tick failed: %s", type(e).__name__)
         await asyncio.sleep(interval)

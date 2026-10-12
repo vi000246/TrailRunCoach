@@ -198,5 +198,15 @@
   "race.on_tip": "Mark as a race: the race prediction is checked against this result",
   "race.off_tip": "You marked this as a race; tap again to undo",
   "race.on_label": "Mark “{name}” as a race",
-  "race.off_label": "Remove the race mark from “{name}”"
+  "race.off_label": "Remove the race mark from “{name}”",
+  "dup.title": "The same activity from other sources",
+  "dup.counts": "Counted",
+  "dup.dup": "Duplicate, not counted",
+  "dup.split": "Not the same (split)",
+  "dup.merge": "Same activity (merge)",
+  "dup.cands": "Other records within 30 minutes",
+  "dup.none": "No copies from other sources",
+  "dup.linked": "Set by you",
+  "dup.unlink": "Back to automatic",
+  "dup.saved": "Updated; reload to see it everywhere"
 }

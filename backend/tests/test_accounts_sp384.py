@@ -279,6 +279,8 @@ def test_the_daily_sync_runs_for_every_tenant_at_its_own_time(server, monkeypatc
     monkeypatch.setenv(accounts.ENV_ENABLED, "1")
     store.migrate_owner()
     a, b, c = (store.create_user(email=f"{n}@x.tw") for n in "abc")
+    for u in (a, b, c):
+        store.set_plan(u.id, "subscriber")          # their own time; the free tier syncs at night (SP-338)
     ts = {t.id: t for t in TN.sync_tenants()}
     assert set(ts) == {"owner", "u2", "u3", "u4"}
 

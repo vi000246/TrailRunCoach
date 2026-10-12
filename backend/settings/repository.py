@@ -69,6 +69,9 @@ DEFAULTS: dict[str, Any] = {
     # the one-time backfill of COROS's post-run self-rating over the last 8 weeks (SP-231,
     # sync/coros_client.backfill_feel): {done, passes, checked, filled, at}; internal
     "sync.coros.rpe_backfill": None,
+    # the COROS 非官方介面 disclaimer ticked before connecting (SP-385, sync/coros_limits.py):
+    # {version, at}; a new disclaimer version asks again
+    "sync.coros.consent": None,
     # the one-time rain backfill of the last 12 months (engine/rain_backfill.py, SP-299; run by
     # api/rain_backfill.tick): {done, at, attempts, calls_total, calls, filled, failed, skipped,
     # waiting?, gave_up?}; internal bookkeeping
@@ -438,6 +441,7 @@ def validate(key: str, value: Any) -> None:
     if key == "plan.hr_zone_model" and value not in ("lthr", "hrr", "hrmax"):
         raise ValueError("plan.hr_zone_model must be lthr, hrr or hrmax")
     if key in ("sync.coros.rpe_backfill", "weather.rain_backfill", "sync.coros.check", "sync.trainingpeaks.check",
+               "sync.coros.consent",
                "sync.coros.check_weekly", "sync.trainingpeaks.check_weekly") \
             and value is not None and not isinstance(value, dict):
         raise ValueError(f"{key} must be an object or null")

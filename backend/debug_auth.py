@@ -86,7 +86,8 @@ _NOT_FOUND = {"detail": "Not Found"}               # FastAPI's own 404 body: the
 # ---------------------------------------------------------------------------
 
 def _pin() -> Optional[str]:
-    v = (os.environ.get(PIN_ENV) or "").strip()
+    from backend.settings.env_secrets import secret_env
+    v = secret_env(PIN_ENV) or ""                 # or TRC_DEBUG_PIN_FILE (a Docker secret, SP-387)
     return v if len(v) >= PIN_MIN_LEN else None
 
 

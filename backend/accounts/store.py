@@ -10,6 +10,10 @@ written on sign-in / sign-up.
   sessions    sha256 of the cookie token only (a stolen DB opens no session), expiry sliding
   shares      public /share/<id> -> the user whose tenant holds it
   waitlist    e-mails waiting for a place once sign-up is capped (SP-58)
+  usage       the free tier's counters per user / quota / period (SP-330); usage_items: what
+              was counted, when a distinct item counts once a period (a chart dashboard a day)
+  api_tokens  service tokens of another project (inReachLiveTrack, SP-329): sha256 only, the
+              link:* scopes they carry
 
 Every function opens its own connection (short; WAL + busy_timeout), so it is safe from the
 event loop thread, the thread pool and the scheduler alike. User 1 is the owner, migrated in
@@ -75,6 +79,28 @@ CREATE TABLE IF NOT EXISTS shares (
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     kind TEXT NOT NULL DEFAULT 'racepower',
     created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS usage (
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    key TEXT NOT NULL,
+    period TEXT NOT NULL,
+    used INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (user_id, key, period)
+);
+CREATE TABLE IF NOT EXISTS usage_items (
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    key TEXT NOT NULL,
+    period TEXT NOT NULL,
+    item TEXT NOT NULL,
+    PRIMARY KEY (user_id, key, period, item)
+);
+CREATE TABLE IF NOT EXISTS api_tokens (
+    token_hash TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    client TEXT NOT NULL,
+    scopes TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    expires_at TEXT
 );
 CREATE TABLE IF NOT EXISTS waitlist (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -352,3 +378,84 @@ def waitlist() -> list[dict]:
     init()
     with connect() as con:
         return [dict(r) for r in con.execute("SELECT * FROM waitlist ORDER BY id")]
+
+
+# ---------------------------------------------------------------------------- plans, usage (SP-330)
+
+def set_plan(uid: int, plan: str, expires_at: Optional[str] = None) -> None:
+    """free | subscriber, with the time it ends (None = open-ended). Payment (SP-328) calls it."""
+    if plan not in ("free", "subscriber"):
+        raise ValueError("plan must be free or subscriber")
+    init()
+    with _LOCK, connect() as con:
+        con.execute("UPDATE users SET plan = ?, plan_expires_at = ? WHERE id = ?", (plan, expires_at, int(uid)))
+
+
+def usage_get(uid: int, key: str, period: str) -> int:
+    init()
+    with connect() as con:
+        r = con.execute("SELECT used FROM usage WHERE user_id = ? AND key = ? AND period = ?",
+                        (int(uid), key, period)).fetchone()
+        return int(r[0]) if r else 0
+
+
+def usage_add(uid: int, key: str, period: str, limit: int, item: Optional[str] = None) -> Optional[int]:
+    """Count one use (a distinct `item` once per period); the new count, or None when it would
+    pass `limit` (nothing counted then). Counters of older periods are left as history."""
+    init()
+    with _LOCK, connect() as con:
+        if item is not None and con.execute(
+                "SELECT 1 FROM usage_items WHERE user_id = ? AND key = ? AND period = ? AND item = ?",
+                (int(uid), key, period, item)).fetchone():
+            return usage_get_con(con, uid, key, period)
+        used = usage_get_con(con, uid, key, period)
+        if used >= limit:
+            return None
+        con.execute("INSERT INTO usage(user_id, key, period, used) VALUES (?, ?, ?, 1) "
+                    "ON CONFLICT(user_id, key, period) DO UPDATE SET used = used + 1", (int(uid), key, period))
+        if item is not None:
+            con.execute("INSERT OR IGNORE INTO usage_items(user_id, key, period, item) VALUES (?, ?, ?, ?)",
+                        (int(uid), key, period, item))
+        return used + 1
+
+
+def usage_get_con(con, uid: int, key: str, period: str) -> int:
+    r = con.execute("SELECT used FROM usage WHERE user_id = ? AND key = ? AND period = ?",
+                    (int(uid), key, period)).fetchone()
+    return int(r[0]) if r else 0
+
+
+def create_service_token(uid: int, client: str, scopes: list, days: Optional[int] = 365) -> str:
+    """A token another project uses to call this API as `uid` with `scopes` (link:*)."""
+    init()
+    token = "trc_" + _secrets.token_urlsafe(32)
+    now = _now()
+    with _LOCK, connect() as con:
+        con.execute("INSERT INTO api_tokens(token_hash, user_id, client, scopes, created_at, expires_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    (_hash(token), int(uid), client, " ".join(sorted(set(scopes))), _iso(now),
+                     _iso(now + dt.timedelta(days=days)) if days else None))
+    return token
+
+
+def service_token(token: str, now: Optional[dt.datetime] = None) -> Optional[tuple]:
+    """(user, scopes) of a live service token, else None."""
+    init()
+    now = now or _now()
+    with connect() as con:
+        row = con.execute("SELECT t.scopes AS t_scopes, t.expires_at AS t_exp, u.* FROM api_tokens t "
+                          "JOIN users u ON u.id = t.user_id WHERE t.token_hash = ?", (_hash(token),)).fetchone()
+    if row is None:
+        return None
+    if row["t_exp"] and dt.datetime.fromisoformat(row["t_exp"]) <= now:
+        return None
+    u = _user(row)
+    if u.disabled:
+        return None
+    return u, frozenset((row["t_scopes"] or "").split())
+
+
+def revoke_service_token(token: str) -> None:
+    init()
+    with _LOCK, connect() as con:
+        con.execute("DELETE FROM api_tokens WHERE token_hash = ?", (_hash(token),))

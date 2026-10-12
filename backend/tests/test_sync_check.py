@@ -396,7 +396,9 @@ def test_weekly_check_skips_failed_list_rows_and_caps_downloads(tmp_path, hooks,
     async def go():
         s = await make_session(tmp_path)
         acts = _seed_remote()[:6]
-        fake = PagedCoros(acts, files={a["labelId"]: build_run(_dt(TODAY)) for a in acts})
+        # different bytes per activity: the same bytes twice are one stored FIT (SP-308)
+        fake = PagedCoros(acts, files={a["labelId"]: build_run(_dt(TODAY), seconds=300 + i)
+                                       for i, a in enumerate(acts)})
         await _coros_ready(s, fake)
         await FL.record_failure(s, 1, "coros", "A00", "x", 100, TODAY)
         await _go(s, fake, mode=check.WEEKLY)

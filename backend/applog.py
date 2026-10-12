@@ -214,6 +214,14 @@ def redact(text: str) -> str:
     s = _KV.sub(r"\1***", s)
     s = _EMAIL.sub("***@***", s)
     s = _OPAQUE.sub(_opaque, s)
+    # the server's own secrets by value (SP-387: env / Docker secrets), whatever their shape
+    try:
+        from backend.settings.env_secrets import values as _secret_values
+        for v in _secret_values():
+            if v in s:
+                s = s.replace(v, "***")
+    except Exception:                      # noqa: BLE001 — redaction never breaks a log line
+        pass
     return s
 
 

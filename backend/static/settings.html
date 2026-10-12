@@ -357,6 +357,10 @@ main > section.tab-off { display: none; }
         <input type="password" placeholder="密碼" data-f="pass" autocomplete="new-password">
         <button data-act="login">登入</button>
       </div>
+      <!-- SP-385: the 非官方介面 disclaimer, ticked before connecting (its version is kept) -->
+      <div class="row" data-f="consentrow" hidden><label style="font-weight:400"><input type="checkbox" data-f="consent">
+        <span data-f="consenttxt"></span></label></div>
+      <p class="meta err-text" data-f="sitemsg" role="status" hidden></p>
       <div class="row"><label><input type="checkbox" data-f="remember"> 記住密碼</label>
         <span class="meta">密碼以本機金鑰加密存在這台電腦；取消勾選或登出會立即刪除。勾選後，登入過期（24 小時）或憑證失效時會自動重新登入一次。</span></div>
       <div class="row"><button data-act="logout">登出</button> <span class="meta" data-f="authmsg" role="status"></span></div>
@@ -1196,6 +1200,7 @@ async function loadSources() {
       <dt>活動期間</dt><dd>${st.date_from ? `${st.date_from} ~ ${st.date_to}（${st.rows} 筆）` : "–"}</dd>`;
     box(src).querySelector('[data-act="purge"]').disabled = !st.files && !st.rows;
   }
+  loadCorosSite();
   loadFailed();
   loadCheck();
 }
@@ -1395,8 +1400,34 @@ function authMsg(src, text, cls) {
 function reason(e) {
   const m = String(e.message || e);
   const body = m.replace(/^\d+\s*/, "");
-  try { const d = JSON.parse(body).detail; if (d) return String(d).slice(0, 160); } catch (_) {}
+  try {
+    const d = JSON.parse(body).detail;
+    if (d && typeof d === "object") return String(d.message || d.code || JSON.stringify(d)).slice(0, 300);
+    if (d) return String(d).slice(0, 160);
+  } catch (_) {}
   return body.slice(0, 160);
+}
+
+// SP-385: the 非官方介面 disclaimer (until ticked) and the server-wide COROS state, in plain words
+let COROS_DISCLAIMER = { version: null };
+async function loadCorosSite() {
+  try {
+    const d = COROS_DISCLAIMER = await j("/api/v1/auth/coros/disclaimer");
+    f("coros", "consenttxt").textContent = d.text + "　我已閱讀並同意。";
+    f("coros", "consentrow").hidden = !d.required || !!d.consented || f("coros", "loginform").hidden;
+  } catch (_) { f("coros", "consentrow").hidden = true; }
+  try {
+    const st = await j("/api/v1/auth/coros/site");
+    const el = f("coros", "sitemsg");
+    const txt = {
+      disabled: st.tripped
+        ? "COROS 同步全站暫停中：短時間內有多個帳號被 COROS 擋下登入，為了不讓整台伺服器被封鎖，已自動暫停，站主確認後才會恢復。已匯入的活動都還在。"
+        : "COROS 同步全站暫停中（站主關閉）。已匯入的活動都還在。",
+      cooldown: `COROS 最近常拒絕連線，全站先暫停 ${Math.ceil(st.cooldown_s / 60)} 分鐘再試。已匯入的活動都還在。`,
+      paused: "你的 COROS 帳號上次被 COROS 暫時擋下（請求太頻繁或登入被拒），為了保護帳號，下一次每日自動同步才會再試；在那之前請不要反覆按同步。",
+    }[st.state];
+    el.textContent = txt || ""; el.hidden = !txt;
+  } catch (_) { /* the rest of the page still works */ }
 }
 
 async function login(src, method, btn) {
@@ -1405,6 +1436,11 @@ async function login(src, method, btn) {
   const url = src === "coros" ? "/api/v1/auth/coros/login" : "/api/v1/auth/tp/login";
   const remember = f(src, "remember").checked;
   const body = src === "coros" ? { email: user, password: pass, remember } : { username: user, password: pass, method, remember };
+  if (src === "coros" && !f("coros", "consentrow").hidden) {
+    // SP-385: no connection without the disclaimer ticked; its version goes with the login
+    if (!f("coros", "consent").checked) { toast("請先閱讀並勾選上面的聲明"); return; }
+    body.consent_version = COROS_DISCLAIMER.version;
+  }
   // every login / logout / sync button of this source waits for this one
   const others = [...box(src).querySelectorAll("button[data-act]")].filter((b) => b !== btn);
   others.forEach((b) => b.disabled = true);

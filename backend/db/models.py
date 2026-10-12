@@ -81,6 +81,36 @@ class WorkoutFile(Base):
     athlete: Mapped["Athlete"] = relationship(back_populates="workouts")
 
 
+class ActivityLink(Base):
+    """The user's own say on cross-source duplicates (SP-344, sync/dedup.py): `same` = these two
+    workout_files rows are one activity (merged by hand), `different` = never one (split by hand).
+    a_id < b_id; every regrouping obeys them."""
+    __tablename__ = "activity_links"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    athlete_id: Mapped[int] = mapped_column(ForeignKey("athletes.id"), index=True)
+    a_id: Mapped[int] = mapped_column(Integer, index=True)
+    b_id: Mapped[int] = mapped_column(Integer, index=True)
+    kind: Mapped[str] = mapped_column(String(10))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class FitObject(Base):
+    """One stored FIT original, named by the sha256 of its bytes (SP-308, files/fitstore.py):
+    the object <source folder>/objects/<sha[:2]>/<sha>.fit.gz under the tenant's fit/ folder,
+    which workout_files.file_path points at. One row per content: the same FIT imported
+    again (from any source) is not stored twice. `deleted`: the activity's files were
+    deleted (sync/purge.py); the object file goes later (purge.cleanup_objects) and the row
+    stays as the mark (a device sync can carry it, research local-first-sync.md §5.3)."""
+    __tablename__ = "fit_objects"
+    sha256: Mapped[str] = mapped_column(String(64), primary_key=True)
+    size: Mapped[int] = mapped_column(Integer)                       # FIT bytes (uncompressed)
+    source: Mapped[str] = mapped_column(String(20))                  # workout_files.source of the first import
+    coros_activity_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, index=True)
+    start_time: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)   # UTC (naive)
+    deleted: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 # workout_metrics / mmp_cache (per-activity metrics and power mean-max written at import): no
 # code read them, so no longer written or created (2026-10-08); an older DB keeps them, orphaned
 # (data_registry.LEGACY_TABLES). pmc_cache: no code read or wrote it; dropped by

@@ -40,6 +40,11 @@ _BUSY: set[str] = set()
 _TASKS: set[asyncio.Task] = set()
 
 
+def _tenant_id() -> str:
+    from backend import tenancy
+    return tenancy.current().id
+
+
 def _k(source: str) -> str:
     from backend import tenancy
     tid = tenancy.current().id
@@ -224,6 +229,20 @@ async def stream(db: AsyncSession, source: str, athlete_id: int = 1,
     except SyncBusy as e:
         yield {"status": "error", "error": "SYNC_BUSY", "source": source, "detail": str(e)}
         return
+    # COROS (SP-385): the server-wide switch / cooldown / this account's pause, then one of the
+    # server's sync places (waits); a scheduled run clears the account's pause and tries again
+    slot = None
+    if source == "coros":
+        from backend.sync import coros_limits as CL
+        try:
+            slot = CL.sync_slot(scheduled=(trigger == "schedule"))
+            await slot.__aenter__()
+        except CL.CorosBlocked as e:
+            ctx.__exit__(None, None, None)
+            from backend.sync import events as EV
+            EV.log("coros", "sync_skipped", tenant=_tenant_id(), code=e.code, trigger=trigger)
+            yield {"status": "error", "error": e.code, "source": source, "detail": str(e)}
+            return
     result = {"at": None, "trigger": trigger, "status": "running", "downloaded": 0,
               "checked": 0, "errors": 0, "error": None}
     clock = SyncClock()
@@ -252,11 +271,24 @@ async def stream(db: AsyncSession, source: str, athlete_id: int = 1,
                 result.update(status="failed", error=str(ev.get("error")))
             yield ev
     except Exception as e:  # keep the stream well-formed; record the failure
-        log.warning("%s sync failed: %s", source, type(e).__name__, exc_info=True)
-        result.update(status="failed", error=type(e).__name__)
-        yield {"status": "error", "error": "SYNC_FAILED", "detail": type(e).__name__}
+        code = getattr(e, "code", None) if type(e).__name__ == "CorosBlocked" else None
+        if code:                                    # SP-385: blocked by COROS, no retry
+            result.update(status="failed", error=code)
+            yield {"status": "error", "error": code, "detail": str(e)}
+        else:
+            log.warning("%s sync failed: %s", source, type(e).__name__, exc_info=True)
+            result.update(status="failed", error=type(e).__name__)
+            yield {"status": "error", "error": "SYNC_FAILED", "detail": type(e).__name__}
     finally:
         ctx.__exit__(None, None, None)
+        if slot is not None:
+            try:
+                await slot.__aexit__(None, None, None)
+            except Exception:                       # noqa: BLE001
+                pass
+            from backend.sync import events as EV
+            EV.log("coros", "sync_" + str(result["status"]), tenant=_tenant_id(), trigger=trigger,
+                   downloaded=int(result.get("downloaded") or 0), error=result.get("error"))
         t_after = time.monotonic()                 # storing the result and the post-sync steps
         if result["status"] == "running":
             result["status"] = "aborted"
@@ -381,11 +413,23 @@ async def run_once(source: str, athlete_id: int = 1, since: Optional[str] = None
     return last
 
 
+MERGE_S = 300.0              # automatic runs of one tenant's source within this many seconds: one (SP-338 第 5 條)
+AUTOMATIC = ("open", "auto", "webhook")
+_LAST_AUTO: dict = {}        # runner._k(source) -> monotonic start of its last automatic run
+
+
 def start_background(source: str, athlete_id: int = 1, trigger: str = "auto",
                      session_factory: Optional[Callable] = None) -> Optional[asyncio.Task]:
-    """Fire-and-forget run; None when the source is busy."""
+    """Fire-and-forget run; None when the source is busy, or (an automatic trigger) when this
+    tenant's source started an automatic run less than MERGE_S ago — the new activities of
+    several quick syncs are picked up by one run."""
     if is_busy(source):
         return None
+    if trigger in AUTOMATIC:
+        k, now = _k(source), time.monotonic()
+        if now - _LAST_AUTO.get(k, -1e9) < MERGE_S:
+            return None
+        _LAST_AUTO[k] = now
     t = asyncio.create_task(run_once(source, athlete_id, trigger=trigger, session_factory=session_factory))
     _TASKS.add(t)
     t.add_done_callback(_TASKS.discard)
@@ -449,8 +493,27 @@ async def ready_sources(db: AsyncSession, athlete_id: int = 1) -> dict[str, str]
             out[s] = "disabled"
         elif not await logged_in(db, s, athlete_id):
             out[s] = "not_logged_in"
+        elif s == "coros" and not _coros_site_on():
+            out[s] = "site_paused"            # the server-wide switch is off (SP-385): data kept
+        elif not _source_allowed(s):
+            out[s] = _source_block(s)          # SP-330: not in this plan / role, or off for the server
         elif is_busy(s):
             out[s] = "busy"
         else:
             out[s] = "ready"
     return out
+
+
+def _source_allowed(source: str) -> bool:
+    from backend import membership as MS
+    return MS.has(MS.SYNC_SOURCE_SCOPE[source])
+
+
+def _source_block(source: str) -> str:
+    from backend import membership as MS
+    return "site_paused" if MS.SYNC_SOURCE_SCOPE[source] in MS.sources_off() else "not_allowed"
+
+
+def _coros_site_on() -> bool:
+    from backend.sync import coros_limits as CL
+    return CL.enabled()

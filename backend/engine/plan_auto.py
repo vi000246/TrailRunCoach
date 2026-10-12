@@ -1119,6 +1119,9 @@ def _after_sync(source: str, result: dict) -> Optional[asyncio.Task]:
     if r.get("status") not in ("ok", "partial") or (int(r.get("downloaded") or 0) < 1
                                                     and int(r.get("rpe_filled") or 0) < 1):
         return None
+    from backend import membership as MS
+    if not MS.has("plan:auto") or (r.get("trigger") != "schedule" and not MS.has("plan:auto_realtime")):
+        return None                       # SP-330: the free tier re-plans after the nightly sync only
     try:
         t = asyncio.get_running_loop().create_task(run_safe(f"sync:{source}"))
     except RuntimeError:

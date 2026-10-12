@@ -108,6 +108,8 @@ TABLES: tuple = (
           deidentify=("start_local", "file", "workout_id", "label", "name", "note", "tags_json")),
     Table("injury_events", USER, "傷病紀錄 (engine/injuries.py); never sent to COROS / TP or the AI coach",
           deidentify=("onset_date", "onset_key", "onset_file", "resolved_date", "walkrun_from", "note")),
+    Table("activity_links", USER, "the user's own merges / splits of cross-source duplicates (sync/dedup.py, "
+          "SP-344): two workout_files ids and same | different", deidentify=("created_at",)),
     Table("plan_sessions", USER, "the stored plan: origin=custom and edited rows are the user's, the "
           "auto rows are rewritten by plan_auto (engine/plan_store.py)",
           deidentify=("day", "title", "note", "done_by")),
@@ -128,6 +130,10 @@ TABLES: tuple = (
           user_fields=("trail_classification", "classification_overridden"),
           deidentify=("file_path", "workout_date", "start_time_utc", "coros_activity_id", "tp_workout_id",
                       "imported_at")),
+    Table("fit_objects", IMPORTED, "one row per stored FIT original, named by its sha256 (SP-308, "
+          "files/fitstore.py): size, first source, COROS id, start; `deleted` marks an object whose "
+          "activity was deleted (the file is removed later, sync/purge.cleanup_objects)",
+          deidentify=("sha256", "coros_activity_id", "start_time", "created_at")),
     Table("coros_plan_push", IMPORTED, "COROS's ids of the plan sessions pushed to it (sync/workout_targets): "
           "the external account's state, server-side bookkeeping",
           deidentify=("day", "title", "program_id", "plan_id", "id_in_plan", "plan_program_id")),
@@ -181,10 +187,11 @@ LEGACY_TABLES: tuple = (
 # ---------------------------------------------------------------------------
 
 DB = File("wko5coach.db", PER_TABLE, ROOT, "the app DB (db/database.py); its tables: TABLES", backup=ALWAYS)
-FIT = File("fit/**", IMPORTED, SHARED, "synced FIT originals fit/{coros,tp}/<year>/<file>.fit "
-           "(sync/storage.py)", backup=OPT_IN,
+FIT = File("fit/**", IMPORTED, SHARED, "synced FIT originals: gzip objects named by content "
+           "fit/{coros,tp}/objects/<aa>/<sha256>.fit.gz (SP-308, files/fitstore.py); before the "
+           "migration fit/{coros,tp}/<year>/<file>.fit (sync/storage.py)", backup=OPT_IN,
            deidentify=("GPS track (start / end)", "timestamps", "device serial / user profile in the file",
-                       "file name: COROS labelId or TP workout id + date"))
+                       "legacy file name: COROS labelId or TP workout id + date"))
 
 FILES: tuple = (
     DB,
@@ -286,6 +293,8 @@ FILES: tuple = (
          "e-mail, tenant folder, plan), identities, sessions (sha256 of the cookie only), shares, waitlist",
          scope=INSTANCE, deidentify=("email", "display_name", "google_sub")),
     File("accounts.db-*", SECRET, ROOT, "accounts.db's WAL / shared memory", scope=INSTANCE),
+    File("site.json", USER, ROOT, "server-wide settings and state (backend/site_settings.py): the COROS "
+         "switch, breaker, limits and paused accounts (SP-385; tenants by id only)", scope=INSTANCE),
     File("users/**", USER, ROOT, "multi-user mode: each users/<id>/ is a signed-in user's tenant folder "
          "(classified on its own, like the owner's)", scope=INSTANCE),
     File("logs/**", DERIVED, ROOT, "the server log (applog.py); disposable, not tenant data (a demo base "
