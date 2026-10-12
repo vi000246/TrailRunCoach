@@ -91,7 +91,8 @@ BOTH = {"state": "unlocked", "guard": {}, "z3": Z3_OPEN, "z5": {"open": True, "s
 
 
 def _q(wp):
-    return [s for s in wp["sessions"] if s["kind"] == "quality"]
+    # the interval sessions (SP-87: the 專項期 技術地形 RPE 6–7 session is kind quality too — not an interval)
+    return [s for s in wp["sessions"] if s["kind"] == "quality" and s["id"] != "tech"]
 
 
 def test_two_a_week_is_one_zone3_and_one_zone5():
