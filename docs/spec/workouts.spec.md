@@ -331,7 +331,18 @@ the user's 測試 marks, the stored test sessions, the drift calibration and `ef
 mFTP snapshot, the whole recorded RPE row — so a change starts a job (the test oracle checks it
 for every mutation). Not the PD refit's synced FITs: a new synced FIT is a new Dataset
 (`source_stamp`). A version-1 file (one signature) is served meanwhile and rebuilt once. The job
-thread carries the request's tenant (`contextvars.copy_context`, like the warm-up).
+carries the request's tenant (the queue keeps the caller's contextvars, like the warm-up).
+
+**In the server's job queue (SP-394, 2026-10-12).** The job is a job of `backend/jobs.py`
+(`Job.start`, `backend/api/activity_auto.py:626`; `Job.thread` is the queue's job — `join` /
+`is_alive` as the thread it replaced). Its class is known before the keys are built
+(`to_compute`, `:571`): `full` (one at a time for the server) when at least `FULL_FROM` = 100
+activities (推估: ~5 s on the NAS) have no stored value of the current code — a new user, a code
+change (the file's `code` = both branches' code hash, written since SP-394; an older file: each
+entry's `pcode`) — else `single`. Priority (`job_for`, `:698`): `warm` from the warm-up's
+low-priority part, `user` from `GET /activities/auto` and `wait`; a job still queued is moved up
+(`jobs.promote`) when the 活動列表 asks for it. The page keeps answering at once while it waits for a
+place (`computing`, `n_done` 0). Still one job per Dataset for every request (single flight).
 
 ## UI
 
@@ -468,3 +479,4 @@ the app-type table and the filter kinds.
 | 2026-10-08 | review fix | SP-57 code review | A FIT RPE maps two values per level (6 → 累, Seiler zone 2 = session RPE 5–6; COROS 1–5 unchanged), `backend/engine/rpe_load.py:121` |
 | 2026-10-12 | chore | SP-48 (owner 2026-10-07) | `PATCH /api/v1/workouts/{id}/activity` removed with its own helpers (`_tag_json`, `_local_start`): no page called it; the tag fields and `save_activity_tag` stay for the `/api/v1/wko5/…` routes. Its tests now call `save_activity_tag` (the 404 / 422 of the route went with it); `test_spa_leftovers_sp48.py` checks the route table |
 | 2026-10-12 | feature | SP-310 | Stable id: `activity_tags.uid` (UUID5 of `athlete_id` + `start_local`, unique index `ux_activity_tags_uid`; `backend/db/stable_ids.py`), filled for the rows from before by `init_db` on every tenant DB; `updated_at` also moves on Core / ORM updates (`onupdate`); API: `tag_uid` on the activity JSON and `GET /activities`; the integer ids and the start-minute key unchanged. Tests `backend/tests/test_stable_ids_sp310.py` |
+| 2026-10-12 | perf | SP-394 (SP-338 follow-up) | `/activities/auto`'s background computation is a job of the server's queue (`backend/jobs.py`): `full` when ≥ `FULL_FROM` (100) activities lack a stored value of the current code (`to_compute`; `activity_auto.json` now records `code`), else `single`; `warm` from the warm-up, `user` from the page (a queued job is promoted). Tests: `backend/tests/test_queue_followups_sp394.py` |

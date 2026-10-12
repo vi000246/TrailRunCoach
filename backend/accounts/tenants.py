@@ -60,25 +60,38 @@ async def ensure_ready(t: tenancy.Tenant) -> None:
 
 
 def active_tenants(days: int = 7) -> list[tenancy.Tenant]:
-    """The users who signed in within `days` (SP-338 第 3 條: after a deploy only these are warmed
-    up ahead; the others are brought up to date on their first visit, old values marked 更新中)."""
+    """The users active within `days` — signed in (a sign-in, or a session in use: its
+    last_seen_at slides with the visits) or synced (a COROS / Garmin sync that worked,
+    sync/events.py) — the most recently active first. SP-338 第 3 條, SP-394: after a deploy only
+    these are warmed up ahead, one at a time behind the owner; the others are brought up to date
+    on their first visit, old values marked 更新中 meanwhile. Not the owner (always warmed), not a
+    disabled user."""
     import datetime as dt
     if not accounts.enabled():
         return []
     cutoff = dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=days)
+
+    def epoch(iso) -> float:
+        try:
+            t = dt.datetime.fromisoformat(iso)
+        except (TypeError, ValueError):
+            return 0.0
+        return (t if t.tzinfo else t.replace(tzinfo=dt.timezone.utc)).timestamp()
     out = []
     try:
+        seen = store.last_seen()
+        from backend.sync import events
+        synced = events.last_syncs(since=cutoff.timestamp())
         for u in store.users():
-            if u.is_owner or not u.last_login_at:
+            if u.is_owner:
                 continue
-            try:
-                if dt.datetime.fromisoformat(u.last_login_at) >= cutoff:
-                    out.append(tenant_of(u))
-            except ValueError:
-                continue
+            t = tenant_of(u)
+            last = max(epoch(u.last_login_at), epoch(seen.get(u.id)), synced.get(t.id, 0.0))
+            if last >= cutoff.timestamp():
+                out.append((last, t))
     except Exception as e:                       # noqa: BLE001
         log.warning("accounts.db unreadable, no deploy warm-up for users: %s", type(e).__name__)
-    return out
+    return [t for _last, t in sorted(out, key=lambda x: -x[0])]
 
 
 def sync_tenants() -> list[tenancy.Tenant]:

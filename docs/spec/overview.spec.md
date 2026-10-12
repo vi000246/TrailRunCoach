@@ -1,6 +1,6 @@
 # Module Spec: overview
 
-> **Last Updated**: 2026-10-08
+> **Last Updated**: 2026-10-12
 > **Status**: Active
 > **Domain Layer**: Core Domain
 
@@ -90,7 +90,8 @@ engine config / parity mode is the same everywhere.
   (`plan_auto.busy`, `backend/engine/plan_auto.py:1104`), re-reads the Dataset, and runs the
   never-fitted calibration and the activity auto-classification, then (owner only, after that job)
   the race calculator's grade-model fit and climbing-cadence scan (`racepower.warm_charts`, SP-366);
-  a warm-up during that wait makes it run once more. The inputs' flight computes exactly its caller's key
+  a warm-up during that wait makes it run once more. Since SP-394 each of those steps is a job of the
+  server's queue at `warm` (below); the low-priority thread only waits. The inputs' flight computes exactly its caller's key
   (`_inputs_key` → `_build_inputs`, `backend/api/plan_sessions.py:161`, `:201`). After a sync the runner starts the warm-up before the automatic
   plan run and the calibration (which waits for the plan run, `backend/engine/calibrate.py:348`);
   see wko5-coros-sync.spec.md.
@@ -134,7 +135,36 @@ engine config / parity mode is the same everywhere.
   result it stops polling, drops the edit lock (the server computes fresh inputs for any write)
   and the badge becomes 「重新整理」 (click reloads, `:1006`). A deploy / restart has no previous
   view: that first load still computes in the request; the Dataset build itself (`_dataset()`) is
-  still waited for.
+  still waited for. (The overview's status card does keep its previous answer across a restart:
+  below.)
+- **Through the server's job queue (SP-394, 2026-10-12).** A status computation is a job of
+  `backend/jobs.py` (SP-338's queue): the flight's leader calls `jobs.call(compute, cls="single",
+  priority="user")` (`_status`, `backend/api/overview.py:94`) and waits; the job runs only the
+  computation, never a flight. Inside a job already — the warm-up's (`full`) — it runs at once in
+  that job. So at most two status / classification jobs run at once for the server, one per tenant
+  for background work (a `user` job may take the tenant's second place), within one priority the
+  tenants take turns. The warm-up's low-priority steps are jobs at `warm` too (wko5-engine.spec.md
+  › Warm-up), and the activity auto-classification (workouts.spec.md).
+- **Stale status card (SP-394, 2026-10-12).** `GET /overview/status` (`status_answer`,
+  `backend/api/overview.py:228`) answers, on a cache miss caused by new data (a new dataset
+  generation — a sync, or a restart / deploy) or a new day, the tenant's previous status marked
+  `stale: {reason: data | day, age_s, since}` and computes the new one in the background
+  (`_stale_status` / `_refresh_status`, `:187`, `:213`: a waiting thread; the computation is the
+  flight's queue job, once per key, joined by any request). Only when the user's own settings in
+  the key are the same (key layout `_status_key`, `:71`: tenant, generation, day, then the settings
+  from `_SK_SETTINGS` on — 課表偏好, test sessions, plan stamp, HR zones, PMC start, Z3 rule,
+  experience) and the day did not go back; a settings change is computed in the request. The
+  previous status is kept per tenant in memory (`_status_last`, LRU of 64, `:49`) **and on disk**
+  (`cache/overview_status.json` in the tenant folder, written atomically by `_remember_status`,
+  `:138`), so after a deploy a tenant that was not warmed up ahead still sees it at once (only the
+  Dataset build is waited for). Never for a demo tenant (not kept either); a failed background
+  computation is computed in the request next time (and reports its error). `GET
+  /overview/status/fresh` (`:275`, async, computes nothing) = `{updating}`. Display only: `/weekplan`,
+  `/z5`, `/b2b`, the 課表 and plan_auto keep computing fresh — they join the same flight. The page
+  (`staleWatch`, `backend/static/overview.html:457`) shows a pulsing 「更新中」 badge in the header
+  (`stale-badge`, the computed-at time in its hover; strings `overview.stale.*`), keeps the 套用這次的
+  AeT / CP buttons from posting while stale (「狀態更新中，幾秒後再套用」), polls `/status/fresh` every
+  3 s and reloads the card when done; after 5 min it stops and the badge becomes 「重新整理」.
 - **COROS push outside the writer lock (B3, 2026-10-08).** COROS takes 20–30 s on the NAS. The
   plan writer lock (`_wlock`) now covers reconcile + save only; every push to the watch runs under
   a separate push lock (`_plock`, `backend/api/plan_sessions.py:472`) and re-reads the stored plan
@@ -2320,3 +2350,4 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 | 2026-10-12 | feat/zone-range-sp383 | SP-383 (docs/research/power-zone-width.md §5.2) | The editor's 區間 can span zones (從–到, e.g. Palladino 1B–2): a second dropdown 「到」 in the same set (power, Friel pace / HR, or the 課表心率區間 in use; 「只這一格」 first; none on the easy-run cap), stored `zone_to`, easy → hard (a reversed pick is swapped), resolved from the first zone's lower to the last zone's upper bound for the page, the push, TSS / chart, the ladder band and the template family; one-zone steps unchanged; the demo port follows. `backend/engine/workout_steps.py` (`zone_span`, `zone_set`, `zone_range_text`, `_hr_model_zone`, `normalize`, `resolve`), `backend/static/workout_editor.js` (`zoneEdit`, `zoneSpan`, `tgHtml`), `backend/demo/static_shim.js`. Tests: `backend/tests/test_zone_range_sp383.py` |
 | 2026-10-12 | feature | SP-310 | `workout_templates_user.uid` (UUID4 hex, unique index) next to the integer id; `updated_at` also moves on any ORM / Core update (`onupdate`); the rows from before filled by `init_db` on every tenant DB (`backend/db/stable_ids.py`), `_ensure` adds the column to an older table (`backend/engine/user_templates.py:95`); `uid` in every template the API returns (`to_dict`, `backend/engine/user_templates.py:226`); the `/steps/templates/user/{tid}` routes unchanged. Tests `backend/tests/test_stable_ids_sp310.py::test_template_new_and_edited_rows` |
 | 2026-10-12 | feat/pmc-projection-sp219 | SP-219 (owner 2026-10-12) | The stored-plan projection counts a session with only minutes: `plan_summary(…, est=)` / `planned_by_day` / `session_tss(s, est)` take the 課表's own estimate (`est_tss` with the new `plan_rates`, also used by the calendar and 課表達成率), so the overview's Sunday CTL / next-Monday TSB / week TSS target and the PMC charts' projection match the calendar's 預估 TSS; the 圖表分析 PMC charts draw that projection on a future range (wko5-engine.spec.md 「PMC projection」) |
+| 2026-10-12 | perf | SP-394 (SP-338 follow-up) | The status computation is a `single` / `user` job of the server's queue (`jobs.call`; at once inside the warm-up's job); `GET /status` answers the previous status marked `stale` after new data, a new day or a restart (kept in memory and in `cache/overview_status.json`), computes the new one in the background, `GET /status/fresh`; the page's 「更新中」 badge and polling, 套用 buttons wait while stale |

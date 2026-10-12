@@ -76,6 +76,12 @@ h2 .di { font-size: 16px; color: var(--muted); }
 /* status words: colour + icon + text, never colour alone */
 .st { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; white-space: nowrap; }
 .st.good { color: var(--good); } .st.watch { color: var(--watch); } .st.bad { color: var(--bad); } .st.info, .st.na { color: var(--muted); }
+/* SP-394: the status card is the previous one while the new one is computed (staleWatch) */
+.badge.stale { font-size: 12px; font-weight: 600; color: var(--watch); white-space: nowrap; cursor: help;
+  align-self: center; animation: upd-pulse 1.6s ease-in-out infinite; }
+.badge.stale.gave-up { cursor: pointer; text-decoration: underline; animation: none; }
+@keyframes upd-pulse { 50% { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { .badge.stale { animation: none; } }
 
 /* ---- KPI row ---- */
 .kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
@@ -248,6 +254,7 @@ td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
   </nav>
   <span class="spacer" style="flex:1"></span>
   <span class="meta" id="asof"></span>
+  <span class="badge stale" id="stale-badge" role="status" hidden></span>
 </header>
 <main>
   <!-- the pending 課表待確認 proposal only; the change log lives on 課表 (data-log="none") -->
@@ -441,9 +448,41 @@ function kpiWord(i) {
 }
 
 // ---------------- status: to-do, indicators ----------------
+// SP-394: after new data, a new day or an update of the app the status may come back `stale` — the
+// previous one, shown at once while the new one is computed in the server's queue. Badge 「更新中」,
+// the 套用 buttons wait; GET /status/fresh is polled and the card reloads when the new one is ready.
+// Polling gives up after MAX_MS: the badge turns into 「重新整理」.
+const STALE = { t: null, t0: 0, MAX_MS: 300000, gaveUp: false };
+const atTime = (iso) => { const d = new Date(iso); return isNaN(d) ? "" : `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
+function staleWatch(s) {
+  const st = s && s.stale, b = $("stale-badge");
+  b.hidden = !st;
+  clearTimeout(STALE.t); STALE.t = null;
+  if (!st) { STALE.t0 = 0; STALE.gaveUp = false; return; }
+  b.classList.toggle("gave-up", STALE.gaveUp);
+  b.textContent = STALE.gaveUp ? tO("stale.reload") : tO("stale.updating");
+  b.title = tO(STALE.gaveUp ? "stale.reload_tip" : "stale.tip", { at: atTime(st.since) });
+  if (STALE.gaveUp) return;
+  if (!STALE.t0) STALE.t0 = Date.now();
+  const poll = async () => {
+    if (Date.now() - STALE.t0 > STALE.MAX_MS) { STALE.gaveUp = true; staleWatch(STATUS); return; }
+    try {
+      const r = await fetch(`${API}/status/fresh`, { cache: "no-store" });
+      if (r.ok && !(await r.json()).updating) return loadStatus().catch(() => { STALE.t = setTimeout(poll, 3000); });
+    } catch (_) { /* next round */ }
+    STALE.t = setTimeout(poll, 3000);
+  };
+  STALE.t = setTimeout(poll, 2000);
+}
+// the badge after giving up: reload (and watch again if it is still being computed)
+$("stale-badge").addEventListener("click", () => {
+  if (!STALE.gaveUp) return;
+  STALE.gaveUp = false; STALE.t0 = 0; loadStatus().catch(() => {});
+});
 async function loadStatus() {
   const s = STATUS = await j(`${API}/status`);
   $("asof").textContent = `資料到 ${s.today}`;
+  staleWatch(s);
   renderKpis();
   // to-do: icon + short title; the detail opens on click
   const lvl = (a) => (ind((a.because || [])[0]) || {}).level || "info";
@@ -505,6 +544,7 @@ document.addEventListener("click", async (ev) => {
   const at = ((STATUS.indicators.find((x) => x.id === "testing") || {}).extra || {}).aet_test;
   if (!at || !at.apply) return;
   const a = at.apply, msg = b.parentElement.querySelector("[data-apply-msg]");
+  if (STATUS.stale) { msg.textContent = tO("stale.wait"); return; }      // from the previous status: wait
   if (!confirm(`把 ${a.date} 的 AeT 設成 ${a.aethr} bpm？區間和間歇門檻會重新計算`)) return;
   b.disabled = true;
   try {
@@ -549,6 +589,7 @@ document.addEventListener("click", async (ev) => {
   const ct = ((STATUS.indicators.find((x) => x.id === "testing") || {}).extra || {}).cp_test;
   if (!ct || !ct.apply) return;
   const a = ct.apply, msg = b.parentElement.querySelector("[data-apply-msg]");
+  if (STATUS.stale) { msg.textContent = tO("stale.wait"); return; }      // from the previous status: wait
   if (!confirm(`把 ${a.date} 的 CP 設成 ${a.cp} W（${ct.method_label}，品質 ${ct.quality}）？區間和 TSS 會重新計算`)) return;
   b.disabled = true;
   try {

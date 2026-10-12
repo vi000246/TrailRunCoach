@@ -441,8 +441,9 @@ CHART_WARM_WAIT_S = 600.0      # how long the chart warm-up waits for the classi
 def warm_charts(job=None) -> None:
     """The warm-up's last step (api/wko5views._low_priority; SP-366): the grade-model fit and
     the climbing-cadence scan, so the first page that opens the charts finds them. After the
-    activity classification `job` (one heavy job at a time); owner only — the demo and other
-    tenants compute on request. A failure only logs."""
+    activity classification `job` (waited for here, holding no place), as a job of the server's
+    queue (backend/jobs.py, SP-394: `full`, `warm` — after every tenant's hot work); owner only —
+    the demo and other tenants compute on request. A failure only logs."""
     import logging
     if _tenancy.demo_mode() or _tenancy.current().kind != _tenancy.OWNER:
         return
@@ -450,10 +451,15 @@ def warm_charts(job=None) -> None:
     if t is not None and t.is_alive():
         t.join(CHART_WARM_WAIT_S)
     try:
-        _grade_models()
-        _climb_cadence()
+        from backend import jobs
+        jobs.call(_warm_chart_fits, cls="full", priority="warm", label="race charts warm-up")
     except Exception as e:               # noqa: BLE001 — the page computes on request
         logging.getLogger(__name__).warning("race chart warm-up failed: %s", type(e).__name__)
+
+
+def _warm_chart_fits() -> None:
+    _grade_models()
+    _climb_cadence()
 
 
 def _climb_cadence() -> tuple:

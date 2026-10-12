@@ -113,23 +113,11 @@ async def lifespan(app: FastAPI):
     import anyio.to_thread
     anyio.to_thread.current_default_thread_limiter().total_tokens = int(os.getenv("WKO5COACH_THREADS", "200"))
     # build the active data source's Dataset now, not on the first page load
-    # (FIT parsing in a process pool, fitcache.py); WKO5COACH_NO_WARMUP=1 disables
-    wko5views.warm_up("startup")
-    # after a deploy, the users active in the last 7 days are warmed up too, one at a time behind
-    # the owner (the job queue, SP-338 第 3 條); everyone else on their first visit
-    if not demo:
-        from backend import accounts as _acc
-        if _acc.enabled():
-            from backend import tenancy as _ten
-            from backend.accounts import tenants as _TN
-            for _t in _TN.active_tenants():
-                try:
-                    await _TN.ensure_ready(_t)
-                    with _ten.use(_t):
-                        wko5views.warm_up("deploy")
-                except Exception as e:           # noqa: BLE001 — their first visit warms it instead
-                    import logging
-                    logging.getLogger(__name__).warning("deploy warm-up of a user skipped: %s", type(e).__name__)
+    # (FIT parsing in a process pool, fitcache.py); WKO5COACH_NO_WARMUP=1 disables. After a
+    # deploy, the users active in the last 7 days (signed in or synced) are warmed up too, one at
+    # a time behind the owner (the job queue, SP-338 第 3 條, SP-394); everyone else on their first
+    # visit, the overview status and the charts showing the previous values marked 更新中 meanwhile
+    await wko5views.warm_up_startup(demo)
     # daily auto-sync (sync.schedule.daily_time); WKO5COACH_NO_SCHEDULER=1 disables
     if demo:
         # no sync in the demo; its janitor (expired sandboxes) and weekly data rebuild instead

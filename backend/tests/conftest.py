@@ -131,6 +131,17 @@ def _no_event_size_hooks(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _empty_job_queue():
+    """The server's job queue (backend/jobs.py) is per test: the overview status and the
+    classification are queue jobs (SP-394), so a job one test left running (a gate it never
+    released) must not hold a place in the next one."""
+    from backend import jobs
+    jobs.reset()
+    yield
+    jobs.reset()
+
+
+@pytest.fixture(autouse=True)
 def _no_registered_dataset():
     """engine/activity_key.py's registry of the last built Dataset is per
     test: a dataset built by one test never re-indexes another's plan rows."""

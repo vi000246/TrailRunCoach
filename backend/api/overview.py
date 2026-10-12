@@ -5,8 +5,15 @@ month / year (all sports together), the combined PMC and this week's plan.
 from __future__ import annotations
 
 from backend import tenancy as _tenancy
+import contextvars
 import datetime as dt
+import hashlib
+import json
+import logging
+import os
 import threading
+import time
+from collections import OrderedDict
 from pathlib import Path
 from typing import Optional
 
@@ -27,6 +34,25 @@ _lock = threading.Lock()
 _status_cache: dict = {}          # (tenant id, ...) -> Status, insertion order = LRU
 _STATUS_MAX = 64
 _STATUS_FLIGHT = SingleFlight()   # one Status.compute per key at a time (SP-362)
+log = logging.getLogger(__name__)
+
+# The status card after new data, a new day or a restart (SP-394, the 課表's SP-362 B4 for the
+# overview): GET /status answers this tenant's previous status at once, marked `stale`
+# ({reason: data | day, since, age_s}), while the new one is computed in the background — through
+# the single flight and the server's job queue (backend/jobs.py), never twice; GET /status/fresh
+# says when it is done and the page reloads the card. Only when the user's own settings are the
+# same (_SK_SETTINGS on: a change of theirs is computed in the request, they expect its effect)
+# and the day did not go back. The previous status is also on disk (_last_path): after a deploy
+# the in-memory caches are empty, and a tenant not warmed up ahead (accounts/tenants
+# .active_tenants) still sees it at once. Display only: GET /weekplan, /z5, /b2b, the 課表 and
+# plan_auto compute fresh (they join the same flight). Demo tenants: never kept, never stale.
+_status_last: OrderedDict = OrderedDict()   # tenant id -> {settings, day, at, status} of its newest status
+_STATUS_LAST_MAX = 64
+_status_refreshing: dict = {}     # tenant id -> the key computed in the background now
+_status_failed: dict = {}         # tenant id -> a key whose background computation failed (computed in the request next)
+STALE_REASONS = ("data", "day")
+# _status_key's layout: (tenant, dataset generation, day, then the user's own settings)
+_SK_DAY, _SK_SETTINGS = 2, 3
 
 
 def _dataset():
@@ -42,8 +68,9 @@ def _plan_stamp() -> float:
         return 0.0
 
 
-def _status(ds, today: dt.date) -> Status:
-    """Status is the slow part (it reads samples); memoise per dataset / day / plan edit."""
+def _status_key(ds, today: dt.date) -> tuple:
+    """(key, prefs): the status's cache key from what it is computed from — (tenant, dataset
+    generation, day, then the user's own settings, _SK_SETTINGS on) — and the 課表偏好 read for it."""
     from backend.engine import plan_prefs as PP
     from backend.engine.plan_store import test_sessions
     # the 課表偏好 (CP-test protocol, 間歇門檻 for status.i_gate) and the stored
@@ -61,6 +88,14 @@ def _status(ds, today: dt.date) -> Status:
     from backend.engine import experience as EX
     key = (*_tenancy.ds_key(ds), today, _plan_stamp(), prefs.stamp(), tests, HRP.stamp(),
            None if pmc0 is None else tuple(sorted(pmc0.items())), AP.z3_rule_stamp(), EX.stamp())
+    return key, prefs
+
+
+def _status(ds, today: dt.date) -> Status:
+    """Status is the slow part (it reads samples); memoise per dataset / day / plan edit.
+    Computed as a job of the server's queue (backend/jobs.py, SP-394: `single`, `user` — at
+    once inside a job already, e.g. the warm-up's); concurrent callers of a key share one."""
+    key, prefs = _status_key(ds, today)
     with _lock:
         hit = _status_cache.get(key)
         if hit is not None:
@@ -82,9 +117,131 @@ def _status(ds, today: dt.date) -> Status:
             _status_cache[key] = st
             while len(_status_cache) > _STATUS_MAX:
                 _status_cache.pop(next(iter(_status_cache)))
+        _remember_status(key, st)
         return st
-    # single flight (SP-362): concurrent callers of this key wait for one computation
-    return _STATUS_FLIGHT.do(key, compute)
+    # single flight (SP-362): concurrent callers of this key wait for one computation, a job of
+    # the server's queue (SP-394; the job runs only compute(), never a flight: backend/jobs.py)
+    from backend import jobs
+    return _STATUS_FLIGHT.do(key, lambda: jobs.call(compute, cls="single", priority="user", label="overview status"))
+
+
+def _settings_sig(key: tuple) -> str:
+    """The user's own settings part of a status key, stable across restarts."""
+    return hashlib.sha1(repr(key[_SK_SETTINGS:]).encode("utf-8")).hexdigest()[:16]
+
+
+def _last_path() -> Path:
+    """This tenant's previous status on disk (data_registry: cache/overview_status.json)."""
+    return _tenancy.private_path("cache", "overview_status.json")
+
+
+def _remember_status(key: tuple, st: Status) -> None:
+    """The tenant's newest status (memory, LRU of _STATUS_LAST_MAX tenants, and disk): what a
+    stale answer shows. Never for a demo tenant; a failure here never fails the status."""
+    if _tenancy.current().is_demo:
+        return
+    try:
+        rec = {"settings": _settings_sig(key), "day": key[_SK_DAY].isoformat(), "at": time.time(),
+               "status": st.to_dict()}
+    except Exception as e:                     # noqa: BLE001 — only the stale answer is missed
+        log.warning("status not kept for a stale answer: %s", type(e).__name__)
+        return
+    with _lock:
+        _status_last[key[0]] = rec
+        _status_last.move_to_end(key[0])
+        while len(_status_last) > _STATUS_LAST_MAX:
+            _status_last.popitem(last=False)
+        _status_failed.pop(key[0], None)       # computed after all: a later miss may be served stale again
+    p = _last_path()
+    tmp = p.with_name(f"{p.stem}.{os.getpid()}.{threading.get_ident()}.tmp")
+    try:
+        p.parent.mkdir(parents=True, exist_ok=True)
+        tmp.write_text(json.dumps({"v": 1, **rec}, ensure_ascii=False, default=str), "utf-8")
+        os.replace(tmp, p)
+    except OSError as e:
+        log.warning("status not written for a stale answer: %s", type(e).__name__)
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
+def _previous_status(tid: str) -> Optional[dict]:
+    """The tenant's newest kept status: memory, else the disk (after a restart)."""
+    with _lock:
+        rec = _status_last.get(tid)
+    if rec is not None:
+        return rec
+    try:
+        d = json.loads(_last_path().read_text("utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not (isinstance(d, dict) and d.get("v") == 1 and isinstance(d.get("status"), dict)):
+        return None
+    rec = {k: d.get(k) for k in ("settings", "day", "at", "status")}
+    with _lock:
+        _status_last.setdefault(tid, rec)
+    return rec
+
+
+def _stale_status(key: tuple, ds, today: dt.date) -> Optional[dict]:
+    """The previous status of this tenant marked `stale` when only the data or the day changed
+    since it was computed, and the new one started in the background (once per key); else None."""
+    if _tenancy.current().is_demo:
+        return None
+    tid = key[0]
+    with _lock:
+        if _status_failed.get(tid) == key:
+            return None
+    prev = _previous_status(tid)
+    if prev is None or prev.get("settings") != _settings_sig(key) or str(prev.get("day")) > key[_SK_DAY].isoformat():
+        return None
+    reason = "day" if prev.get("day") != key[_SK_DAY].isoformat() else "data"
+    with _lock:
+        start = _status_refreshing.get(tid) != key
+        if start:
+            _status_refreshing[tid] = key
+    if start:
+        ctx = contextvars.copy_context()       # the tenant, the locale: the request's
+        threading.Thread(target=ctx.run, args=(_refresh_status, key, ds, today), name="status-refresh",
+                         daemon=True).start()
+    at = float(prev.get("at") or 0.0)
+    return {**prev["status"], "stale": {"reason": reason, "age_s": max(0, int(time.time() - at)),
+                                        "since": dt.datetime.fromtimestamp(at, dt.timezone.utc).isoformat()}}
+
+
+def _refresh_status(key: tuple, ds, today: dt.date) -> None:
+    """The background half of a stale answer: this thread only waits — the computation is the
+    single flight's, a job of the server's queue (a request asking meanwhile joins it)."""
+    try:
+        _status(ds, today)
+    except Exception as e:                     # noqa: BLE001 — the next GET /status computes it itself
+        log.warning("overview status refresh failed: %s", type(e).__name__)
+        with _lock:
+            _status_failed[key[0]] = key
+    finally:
+        with _lock:
+            if _status_refreshing.get(key[0]) == key:
+                del _status_refreshing[key[0]]
+
+
+def status_answer(ds, today: dt.date) -> dict:
+    """GET /status: the status as a dict — or, on a miss after new data / a new day / a restart,
+    the previous one marked `stale` while the new one is computed (SP-394)."""
+    key, _prefs = _status_key(ds, today)
+    with _lock:
+        hit = _status_cache.get(key)
+    if hit is None:
+        old = _stale_status(key, ds, today)
+        if old is not None:
+            return old
+    return _status(ds, today).to_dict()
+
+
+def status_updating() -> bool:
+    """This tenant's new status is being computed behind a stale answer (GET /status/fresh)."""
+    with _lock:
+        return _tenancy.current().id in _status_refreshing
 
 
 def status_peek() -> Optional[Status]:
@@ -109,9 +266,17 @@ def _day(s: Optional[str], default: dt.date) -> dt.date:
 
 @router.get("/status")
 def status():
+    """The status card (indicators, to-do, KPIs); `stale` when it is the previous one (SP-394)."""
     ds = _dataset()
     today = O.day_to_date(ds.today)
-    return _status(ds, today).to_dict()
+    return status_answer(ds, today)
+
+
+@router.get("/status/fresh")
+async def status_fresh():
+    """SP-394: {updating}: the new status behind a stale GET /status is still being computed. The
+    overview polls this (it computes nothing; answered on the event loop) and reloads the card after."""
+    return {"updating": status_updating()}
 
 
 @router.get("/summary")

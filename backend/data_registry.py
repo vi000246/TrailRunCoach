@@ -237,6 +237,11 @@ FILES: tuple = (
          deidentify=("channels: GPS", "start times"),
          invalidated_by="file stamp + per-field versions (fitcache.versions); code_hash (SP-320 ①); "
                         "activity_auto.json per activity key (SP-334)"),
+    File("cache/overview_status.json", DERIVED, ROOT, "the tenant's last overview status (indicators, to-do, "
+         "KPIs) and its settings stamp: shown marked as updating while a new one is computed, also after a "
+         "restart (api/overview.py, SP-394)",
+         invalidated_by="rewritten by every status computation; shown only while the user's own settings are "
+                        "the same; never for a demo tenant"),
     File("cache/render/slots/*.json", DERIVED, SHARED, "per chart request (view, chart, range as asked): the key "
          "it was last drawn with, so a changed chart first shows that drawing marked as updating "
          "(wko5expr/render_cache.py, SP-336)",
