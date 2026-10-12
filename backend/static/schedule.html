@@ -552,6 +552,18 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
   .menu { min-width: min(260px, 88vw); }
   .legend { font-size: 11.5px; }
   dialog.sd { width: 100vw; max-width: 100vw; margin: auto 0 0; border-radius: 14px 14px 0 0; max-height: 92vh; }
+  /* SP-376: a phone's browser bars cover the bottom of a 92vh sheet (vh = the viewport with the bars
+     hidden), and a long editor pushed 儲存 below them — size by the visible height (dvh) and keep the
+     button row pinned to the bottom of the sheet */
+  dialog.sd { max-height: 92dvh; }
+  dialog.sd form { max-height: 92dvh; padding-bottom: 0; }
+  dialog.sd form > .btns { position: sticky; bottom: 0; z-index: 3; background: var(--panel); margin: 4px -16px 0;
+    padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid var(--line); }
+  #swap-toast { right: 12px; bottom: calc(84px + env(safe-area-inset-bottom, 0px)); }   /* above the bottom nav */
+  /* SP-376: a card shows its title, time / TSS and target; the note is cut to two lines (tap opens it) */
+  .ag-day .chip .c-d { grid-column: 1 / -1; color: var(--muted); font-size: 12px; margin-top: 2px; white-space: normal;
+    display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .ag-day .chip .c-x { display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 }
 @media (min-width: 700px) { #rec-btn .lbl-short, #pull-btn .lbl-short { display: none; } }
 @media (max-width: 1000px) and (min-width: 700px) { .cal { --sumw: 112px; } .cell { min-height: 104px; } .chip .c-x { display: none; } }

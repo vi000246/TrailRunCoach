@@ -258,6 +258,30 @@ def test_strength_session_opens_the_move_picker(app):
     expect(page.locator("#sd")).to_have_attribute("open", "")
     expect(page.locator("#sd-sm")).to_be_hidden()
 
+
+def test_schedule_phone_cards_and_editor_save(app):
+    """SP-376: on a phone (a short screen, as with the browser bars) a card's note is cut to two lines,
+    and the editor of a long session keeps 儲存 on screen and clickable."""
+    page, _ = app
+    page.set_viewport_size({"width": 390, "height": 664})
+    open_page(page, _server.PAGES["schedule"])
+    _calendar_ready(page)
+    tall = page.evaluate("""() => [...document.querySelectorAll('.ag-day .chip .c-d')]
+        .filter((e) => e.getBoundingClientRect().height > parseFloat(getComputedStyle(e).lineHeight) * 2 + 2).length""")
+    assert tall == 0
+    for _ in range(4):
+        if page.locator("#cal .chip.k-quality[data-uid]").count():
+            break
+        page.click("#next")
+        _calendar_ready(page)
+    page.locator("#cal .chip.k-quality[data-uid]").first.click()
+    expect(page.locator("#sd")).to_have_attribute("open", "")
+    page.wait_for_timeout(1000)
+    hit = page.evaluate("""() => { const r = document.getElementById('sd-save').getBoundingClientRect();
+        const el = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        return r.bottom <= innerHeight && !!el && !!el.closest('#sd-save'); }""")
+    assert hit, "儲存 is off screen or covered"
+
 def test_schedule_watch_status_glyphs(app):
     """手錶狀態圖示 (推送狀態): the legend's four states, each an <svg> glyph with its label."""
     page, _ = app
