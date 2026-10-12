@@ -288,6 +288,17 @@ dialog#zoom::backdrop { background: rgba(0,0,0,.45); }
   .mapwrap.left .plot.lmap { height: 320px; min-height: 0; }
   .maplayout { display: none; }
 }
+/* SP-217: 疊加 — the elevation behind the lines, shaded by |grade| band (< 3, 3–8, 8–15, 15–25, ≥ 25 %), one hue */
+:root { --mc-g0: rgba(82,81,78,.08); --mc-g1: rgba(82,81,78,.17); --mc-g2: rgba(82,81,78,.27); --mc-g3: rgba(82,81,78,.38); --mc-g4: rgba(82,81,78,.50); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --mc-g0: rgba(195,194,183,.08); --mc-g1: rgba(195,194,183,.15);
+  --mc-g2: rgba(195,194,183,.24); --mc-g3: rgba(195,194,183,.34); --mc-g4: rgba(195,194,183,.46); } }
+:root[data-theme="dark"] { --mc-g0: rgba(195,194,183,.08); --mc-g1: rgba(195,194,183,.15); --mc-g2: rgba(195,194,183,.24);
+  --mc-g3: rgba(195,194,183,.34); --mc-g4: rgba(195,194,183,.46); }
+.mapside .ac-leg { margin: 0 0 2px; gap: 3px 10px; }
+.mapside .ac-leg[hidden] { display: none; }
+.mapside .ac-leg i.band { width: 14px; border: 1px solid var(--line); }
+.mcgrp { display: inline-flex; align-items: center; gap: 6px; }
+.mcdot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 4px; vertical-align: 1px; }
 .maplegend { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); }
 .maplegend i { display: inline-block; width: 90px; height: 8px; border-radius: 4px; }
 .maphint { margin: 6px 0 0; padding: 6px 10px; border-radius: 6px; font-size: 11.5px; color: var(--warn);
@@ -2105,14 +2116,16 @@ function gridRects(chart) {
   return rects.length ? rects : [gridRect(chart)];
 }
 // a time-x (axis "t", seconds) or distance-x (axis "d", km × f) workout chart joins the hover group;
-// `off`: the chart's x 0 in the samples' units (activity_charts' time axis starts at the first sample)
+// `off`: the chart's x 0 in the samples' units (activity_charts' time axis starts at the first sample).
+// `axis` may be a function returning "t" / "d": a chart that switches its x (the map chart, SP-217) stays one member
 function hoverChart(chart, s, axis, f = 1, off = 0) {
-  const lk = axis === "t" ? s.byT : s.byD, arr = axis === "t" ? s.t : s.d;
-  if (!lk) return;
+  const ax = typeof axis === "function" ? axis : () => axis;
+  const lkOf = () => ax() === "t" ? s.byT : s.byD;
+  if (typeof axis !== "function" && !lkOf()) return;
   const m = {
     workout: s.workout, on: false, dead: () => chart.isDisposed(),
     show(i) {
-      const x = arr[i], g = gridRect(chart);
+      const x = (ax() === "t" ? s.t : s.d)?.[i], g = gridRect(chart);
       const px = x == null ? NaN : chart.convertToPixel({ xAxisIndex: 0 }, (x - off) * f);
       if (!isFinite(px) || px < g.x - 0.5 || px > g.x + g.width + 0.5) return this.hide();
       chart.dispatchAction({ type: "showTip", x: px, y: g.y + g.height / 2 });
@@ -2124,7 +2137,8 @@ function hoverChart(chart, s, axis, f = 1, off = 0) {
   zr.on("mousemove", (e) => {
     const px = e.offsetX, py = e.offsetY;
     hoverEmit(m, () => {
-      if (chart.isDisposed()) return null;
+      const lk = lkOf();
+      if (chart.isDisposed() || !lk) return null;
       if (!gridRects(chart).some((g) => px >= g.x && px <= g.x + g.width && py >= g.y && py <= g.y + g.height)) return null;
       const x = chart.convertFromPixel({ xAxisIndex: 0 }, px);
       return isFinite(x) ? nearestIn(lk, x / f + off) : null;
@@ -2274,18 +2288,33 @@ async function drawMap(card, res, opts = {}) {
 }
 
 // ---- map chart (SP-80): the activity beside its route map — elevation, HR, power, pace and grade
-// on the samples' time axis, one stacked panel per metric (each has its own unit, never one shared
-// y scale). Buttons pick the panels; the layout puts the map on top or on the left (narrow screens:
-// always on top). Hovering the map, these panels or the activity's other time / distance charts
-// marks the same moment everywhere (HOVER; on a phone, tap). Choices remembered per browser.
+// on the samples' time (or distance) axis. Two arrangements (SP-217; 疊加 is the default):
+//  - 疊加 (over): one grid. The elevation is a pale background with no scale, shaded by its |grade| band (MC_GRADE_EDGES:
+//    pole_compare's 3 / 8 / 15 % + 25 %; up and down alike, the direction reads off the profile's shape); the grade is
+//    the elevation change over ≥ 100 m (mcGrade) and a band run under ~200 m joins a neighbour (mcGradeSegs), so the
+//    background has no thin stripes. HR / power / pace lines on top: the first one picked has its scale on the left,
+//    the second on the right, a third none (its value in the tooltip, like every line's, the elevation's and the grade's).
+//  - 分開 (split): SP-80's stacked panels, one per metric (each its own unit, never one shared y scale).
+// Power is a centred 30-s average (mcSmooth), pace the distance over ±15 s (mcPace). Buttons pick the arrangement,
+// the lines / panels and the x axis (time / distance); the layout puts the map on top or on the left (narrow screens:
+// always on top). Hovering the map, this chart or the activity's other time / distance charts marks the same moment
+// everywhere (HOVER; on a phone, tap). Choices remembered per browser (MC_KEY).
 const MC_KEY = "wko5viewer.mapchart";
 // [id, label key, unit, colour var]
 const MC_METRICS = [["elev", "viewer.mapchart.elev", "m", "--ac-ink2"], ["hr", "viewer.mapchart.hr", "bpm", "--ac-hr"],
   ["power", "viewer.mapchart.power", "W", "--ac-pw"], ["pace", "viewer.mapchart.pace", "/km", "--accent"],
   ["grade", "viewer.mapchart.grade", "%", "--muted"]];
 const MC_DEFAULT = ["elev", "hr", "power", "pace"];
+const MC_OVER = ["hr", "power", "pace"];             // 疊加's lines (the elevation is the background, the grade its shade)
+const MC_GRADE_EDGES = [3, 8, 15, 25];               // |grade| % band edges: < 3, 3–8, 8–15, 15–25, ≥ 25 (--mc-g0 … 4)
+const MC_GRADE_WIN = 0.1, MC_SEG_MIN = 0.2;          // km: the grade's distance window, the shortest band run
+const MC_OVER_H = 240;                               // px: the 疊加 chart's height
 function mcPrefs() { try { return JSON.parse(localStorage.getItem(MC_KEY) || "{}") || {}; } catch { return {}; } }
 function mcSave(patch) { try { localStorage.setItem(MC_KEY, JSON.stringify({ ...mcPrefs(), ...patch })); } catch {} }
+// the remembered arrangement and x axis: 疊加 unless 分開 was picked; time unless distance was (and there is distance)
+function mcView(pref, hasD) {
+  return { mode: pref?.mode === "split" ? "split" : "over", x: pref?.x === "d" && hasD ? "d" : "t" };
+}
 // pace (s/km) from the distance covered within ±`half` s of each sample (a moving window, so GPS
 // jitter doesn't spike it); null below `minKmh` (standing) or without distance
 function mcPace(t, d, half = 15, minKmh = 1.6) {
@@ -2304,27 +2333,122 @@ function mcPace(t, d, half = 15, minKmh = 1.6) {
   }
   return out;
 }
+// a centred moving average over ±`half` s (power: 30 s, like the 心率與功率 chart): the mean of the values within
+// the window, null where the sample has no time or the window no value
+function mcSmooth(t, v, half = 15) {
+  const out = new Array(t.length).fill(null);
+  if (!v) return out;
+  const k = [];
+  for (let i = 0; i < t.length; i++) if (t[i] != null) k.push(i);
+  let a = 0, b = -1, sum = 0, n = 0;
+  for (let j = 0; j < k.length; j++) {
+    const ti = t[k[j]];
+    while (b + 1 < k.length && t[k[b + 1]] <= ti + half) { b++; const x = v[k[b]]; if (x != null && isFinite(x)) { sum += x; n++; } }
+    while (t[k[a]] < ti - half) { const x = v[k[a]]; if (x != null && isFinite(x)) { sum -= x; n--; } a++; }
+    if (n > 0) out[k[j]] = sum / n;
+  }
+  return out;
+}
+// grade (%) at each sample: the elevation change over a distance window of at least `win` km centred on it (near
+// either end it takes more of the other side), so a few metres of GPS / barometer noise never make a 30 % spike.
+// All null without distance or elevation.
+function mcGrade(d, elev, win = MC_GRADE_WIN) {
+  const n = (d || elev || []).length, out = new Array(n).fill(null);
+  if (!d || !elev) return out;
+  const v = [];
+  for (let i = 0; i < n; i++) if (d[i] != null && elev[i] != null) v.push(i);
+  if (v.length < 2) return out;
+  const D = (k) => d[v[k]], half = win / 2;
+  let a = 0, b = 0;
+  for (let k = 0; k < v.length; k++) {
+    while (D(a) < D(k) - half) a++;
+    if (b < k) b = k;
+    while (b + 1 < v.length && D(b + 1) <= D(k) + half) b++;
+    let lo = a, hi = b;
+    while (D(hi) - D(lo) < win && hi + 1 < v.length) hi++;
+    while (D(hi) - D(lo) < win && lo > 0) lo--;
+    const dd = D(hi) - D(lo);
+    if (dd > 0) out[v[k]] = (elev[v[hi]] - elev[v[lo]]) / (dd * 1000) * 100;
+  }
+  return out;
+}
+// the |grade| band 0–4 (MC_GRADE_EDGES); null without a grade
+const mcBand = (g) => g == null || !isFinite(g) ? null : MC_GRADE_EDGES.filter((e) => Math.abs(g) >= e).length;
+// the grade bands as runs of samples [{a, b, band, km}] (a … b inclusive, in order, together every sample): a run
+// shorter than `minKm` joins the neighbour with the nearer band (the longer one on a tie), shortest first, and
+// neighbours of one band become one run. Gaps take the band / distance before them (the leading one, the first).
+// [] without distance or grade.
+function mcGradeSegs(d, g, minKm = MC_SEG_MIN) {
+  const n = (g || []).length;
+  if (!d || !n) return [];
+  const fill = (arr) => {
+    const out = arr.slice();
+    let last = null;
+    for (let i = 0; i < n; i++) { if (out[i] == null) out[i] = last; else last = out[i]; }
+    const first = out.find((x) => x != null);
+    for (let i = 0; i < n && out[i] == null; i++) out[i] = first ?? null;
+    return out;
+  };
+  const dd = fill(d.slice(0, n)), band = fill(g.map(mcBand));
+  if (dd[0] == null || band[0] == null) return [];
+  const runs = [];
+  for (let i = 0; i < n; i++) {
+    if (!runs.length || runs[runs.length - 1].band !== band[i]) runs.push({ a: i, b: i, band: band[i], km: 0 });
+    else runs[runs.length - 1].b = i;
+  }
+  runs.forEach((r, k) => { r.km = dd[k + 1 < runs.length ? runs[k + 1].a : n - 1] - dd[r.a]; });
+  for (;;) {
+    let k = -1;
+    runs.forEach((r, i) => { if (r.km < minKm && (k < 0 || r.km < runs[k].km)) k = i; });
+    if (k < 0 || runs.length < 2) break;
+    const r = runs[k], p = runs[k - 1], q = runs[k + 1];
+    const gap = (o) => Math.abs(o.band - r.band);
+    const into = !p ? q : !q ? p : gap(p) !== gap(q) ? (gap(p) < gap(q) ? p : q) : q.km > p.km ? q : p;
+    into.a = Math.min(into.a, r.a); into.b = Math.max(into.b, r.b); into.km += r.km;
+    runs.splice(k, 1);
+    for (let i = runs.length - 1; i > 0; i--) {
+      if (runs[i].band !== runs[i - 1].band) continue;
+      runs[i - 1].b = runs[i].b; runs[i - 1].km += runs[i].km;
+      runs.splice(i, 1);
+    }
+  }
+  return runs;
+}
 // the panels to draw: the remembered pick (or the default) among the metrics this activity has
 function mcPick(saved, has) {
   const want = Array.isArray(saved) ? saved : MC_DEFAULT;
   return MC_METRICS.map((r) => r[0]).filter((id) => want.includes(id) && has(id));
 }
+// 疊加's lines: HR / power / pace among the remembered pick, in MC_METRICS order (the first's scale left, the second's right)
+const mcPickOver = (saved, has) => mcPick(saved, has).filter((id) => MC_OVER.includes(id));
 const mcFmt = (id, v) => v == null || !isFinite(v) ? "—" : id === "pace" ? ACT.pace(v) : id === "grade" ? (+v).toFixed(1) : String(Math.round(v));
-function mcOption(s, ids, vals) {
+const mcMeta = (T) => Object.fromEntries(MC_METRICS.map((r) => [r[0], { name: t(r[1]), unit: r[2], color: css(r[3]) || T.ink2 }]));
+// pace and grade: the 2nd–98th percentile, so a few GPS spikes don't flatten the line
+function mcRange(id, vals) {
+  if (id !== "pace" && id !== "grade") return {};
+  const good = vals[id].filter((v) => v != null && isFinite(v));
+  if (good.length < 2) return {};
+  let lo = pctl(good, 0.02), hi = pctl(good, 0.98);
+  if (hi - lo < 1) { lo -= 1; hi += 1; }
+  const pad = (hi - lo) * 0.08;
+  return { min: Math.floor(lo - pad), max: Math.ceil(hi + pad) };
+}
+// the x axis on time (s, ticks from the first sample) or distance (km): values, range and labels
+function mcX(s, ax, T) {
+  const d = ax === "d", lk = d ? s.byD : s.byT, xs = lk.xs, x0 = xs[0], x1 = xs[xs.length - 1];
+  const span = Math.max(d ? 0.01 : 1, x1 - x0);
+  return { arr: d ? s.d : s.t, x0, x1, base: { type: "value", min: x0, max: x1, ...(d ? {} : { interval: ACT.interval(span) }),
+    axisLine: { lineStyle: { color: T.line } }, axisTick: { show: false }, splitLine: { lineStyle: { color: T.line, opacity: 0.5 } } },
+    label: { color: T.muted, fontSize: 10, hideOverlap: true, showMaxLabel: false,
+      formatter: d ? (v) => `${+(+v).toFixed(1)} km` : (v) => ACT.tick(v - x0, span) } };
+}
+// the tooltip's first row: time from the start · km
+const mcHead = (s, i) => `<b>${fmtDur(s.t[i] - s.byT.xs[0])}</b>${s.d?.[i] != null ? ` · ${s.d[i].toFixed(2)} km` : ""}`;
+const mcRow = (m, id, v) => `<span style="color:${m.color}">●</span> ${esc(m.name)} <b>${mcFmt(id, v)}</b> ${m.unit}`;
+function mcOption(s, ids, vals, ax = "t") {
   const T = ACT.theme(), P = 76, G = 16, top = 6, n = ids.length;
-  const xs = s.byT.xs, t0 = xs[0], t1 = xs[xs.length - 1], span = Math.max(1, t1 - t0);
-  const lbl = { color: T.muted, fontSize: 10, hideOverlap: true };
-  const meta = Object.fromEntries(MC_METRICS.map((r) => [r[0], { name: t(r[1]), unit: r[2], color: css(r[3]) || T.ink2 }]));
-  const yRange = (id) => {
-    // pace and grade: the 2nd–98th percentile, so a few GPS spikes don't flatten the line
-    if (id !== "pace" && id !== "grade") return {};
-    const good = vals[id].filter((v) => v != null && isFinite(v));
-    if (good.length < 2) return {};
-    let lo = pctl(good, 0.02), hi = pctl(good, 0.98);
-    if (hi - lo < 1) { lo -= 1; hi += 1; }
-    const pad = (hi - lo) * 0.08;
-    return { min: Math.floor(lo - pad), max: Math.ceil(hi + pad) };
-  };
+  const X = mcX(s, ax, T), lbl = { color: T.muted, fontSize: 10, hideOverlap: true };
+  const meta = mcMeta(T);
   return {
     animation: false,
     grid: ids.map((id, k) => ({ left: 52, right: 12, top: top + k * (P + G), height: P })),
@@ -2332,33 +2456,115 @@ function mcOption(s, ids, vals) {
     tooltip: { trigger: "axis", confine: true, backgroundColor: T.panel, borderColor: T.line, textStyle: { color: T.text },
       formatter: (pp) => {
         pp = [].concat(pp); if (!pp.length) return "";
-        const i = pp[0].dataIndex, rows = [`<b>${fmtDur(s.t[i] - t0)}</b>${s.d?.[i] != null ? ` · ${s.d[i].toFixed(2)} km` : ""}`];
-        ids.forEach((id) => rows.push(`<span style="color:${meta[id].color}">●</span> ${esc(meta[id].name)} <b>${mcFmt(id, vals[id][i])}</b> ${meta[id].unit}`));
-        return ACT.tipBox(rows.join("<br>"));
+        const i = pp[0].dataIndex;
+        return ACT.tipBox([mcHead(s, i), ...ids.map((id) => mcRow(meta[id], id, vals[id][i]))].join("<br>"));
       } },
     graphic: ids.map((id, k) => ({ type: "text", left: 56, top: top + k * (P + G) + 1, z: 10, silent: true,
       style: { text: `${meta[id].name} ${meta[id].unit}`, fill: T.muted, fontSize: 10 } })),
-    xAxis: ids.map((id, k) => ({ type: "value", gridIndex: k, min: t0, max: t1, interval: ACT.interval(span),
-      axisLine: { lineStyle: { color: T.line } }, axisTick: { show: false },
-      splitLine: { lineStyle: { color: T.line, opacity: 0.5 } },
-      axisLabel: k === n - 1 ? { ...lbl, showMaxLabel: false, formatter: (v) => ACT.tick(v - t0, span) } : { show: false } })),
-    yAxis: ids.map((id, k) => ({ type: "value", gridIndex: k, scale: true, splitNumber: 2, inverse: id === "pace", ...yRange(id),
+    xAxis: ids.map((id, k) => ({ ...X.base, gridIndex: k, axisLabel: k === n - 1 ? X.label : { show: false } })),
+    yAxis: ids.map((id, k) => ({ type: "value", gridIndex: k, scale: true, splitNumber: 2, inverse: id === "pace", ...mcRange(id, vals),
       axisLabel: { ...lbl, formatter: (v) => mcFmt(id, v) }, splitLine: { lineStyle: { color: T.line, opacity: 0.5 } } })),
     series: ids.map((id, k) => ({ id, name: meta[id].name, type: "line", xAxisIndex: k, yAxisIndex: k, showSymbol: false,
-      connectNulls: false, data: s.t.map((x, i) => [x, vals[id][i]]),
+      connectNulls: false, data: X.arr.map((x, i) => [x, vals[id][i]]),
       lineStyle: { color: meta[id].color, width: 1.3 }, itemStyle: { color: meta[id].color },
       ...(id === "elev" ? { areaStyle: { color: meta[id].color, opacity: 0.18 } } : {}) })),
   };
 }
+// the bands as visualMap pieces on x: each run from its first sample's x to the next run's (the last to the end)
+function mcPieces(segs, arr, x1) {
+  const xa = (r) => { for (let i = r.a; i <= r.b; i++) if (arr[i] != null) return arr[i]; return null; };
+  const rs = segs.map((r) => ({ x: xa(r), band: r.band })).filter((r) => r.x != null);
+  return rs.map((r, k) => ({ gte: r.x, ...(k + 1 < rs.length ? { lt: rs[k + 1].x } : { lte: Math.max(r.x, x1) }),
+    color: css(`--mc-g${r.band}`) }));
+}
+// 疊加: one grid — yAxis 0 the elevation (no scale; shaded by `segs` through a visualMap on x, one plain tone without),
+// then one y axis per line in `ids`: the first on the left, the second on the right, the rest without a scale.
+// vals.g100: the grade over ≥ 100 m (mcGrade) for the tooltip; ax: "t" / "d"
+function mcOverOption(s, ids, vals, ax = "t", segs = []) {
+  const T = ACT.theme(), X = mcX(s, ax, T), meta = mcMeta(T);
+  const lbl = { color: T.muted, fontSize: 10, hideOverlap: true };
+  const elev = Array.isArray(vals.elev) && vals.elev.some((v) => v != null) ? vals.elev : null;
+  const grade = [vals.g100, vals.grade].find((g) => Array.isArray(g) && g.some((v) => v != null)) || null;
+  const ev = elev ? elev.filter((v) => v != null) : [];
+  const elo = ev.length ? Math.min(...ev) : 0, ehi = ev.length ? Math.max(...ev) : 1, er = Math.max(10, ehi - elo);
+  const bandCol = (i) => { const r = segs.find((o) => i >= o.a && i <= o.b); return r ? css(`--mc-g${r.band}`) : T.ink2; };
+  const shade = elev && segs.length;
+  return {
+    animation: false,
+    grid: { left: ids.length ? 46 : 12, right: ids.length > 1 ? 46 : 12, top: 22, bottom: 22 },
+    axisPointer: { lineStyle: { color: T.ink2 } },
+    tooltip: { trigger: "axis", confine: true, backgroundColor: T.panel, borderColor: T.line, textStyle: { color: T.text },
+      formatter: (pp) => {
+        pp = [].concat(pp); if (!pp.length) return "";
+        const i = pp[0].dataIndex, rows = [mcHead(s, i)];
+        if (elev) rows.push(`<span style="color:${T.ink2}">▲</span> ${esc(meta.elev.name)} <b>${mcFmt("elev", elev[i])}</b> m`);
+        if (grade) rows.push(`<span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${bandCol(i)}"></span> ${
+          esc(meta.grade.name)} <b>${mcFmt("grade", grade[i])}</b>%`);
+        ids.forEach((id) => rows.push(mcRow(meta[id], id, vals[id][i])));
+        return ACT.tipBox(rows.join("<br>"));
+      } },
+    xAxis: { ...X.base, axisLabel: X.label },
+    yAxis: [
+      { type: "value", show: false, min: elo - er * 0.04, max: ehi + er * 0.12 },
+      ...ids.map((id, k) => k < 2
+        ? { type: "value", position: k ? "right" : "left", scale: true, splitNumber: 3, inverse: id === "pace", ...mcRange(id, vals),
+          name: `${meta[id].name} ${meta[id].unit}`, nameLocation: "end", nameGap: 6,
+          nameTextStyle: { color: meta[id].color, fontSize: 10, align: k ? "right" : "left" },
+          axisLine: { show: false }, axisTick: { show: false }, axisLabel: { ...lbl, color: meta[id].color, formatter: (v) => mcFmt(id, v) },
+          splitLine: k ? { show: false } : { lineStyle: { color: T.line, opacity: 0.5 } } }
+        : { type: "value", show: false, scale: true, inverse: id === "pace", ...mcRange(id, vals) }),
+    ],
+    ...(shade ? { visualMap: { type: "piecewise", show: false, dimension: 0, seriesIndex: 0, pieces: mcPieces(segs, X.arr, X.x1),
+      outOfRange: { color: css("--mc-g0") } } } : {}),
+    series: [
+      // the background: a faint outline over the shaded area (the shade comes from the visualMap; no area colour of its own)
+      ...(elev ? [{ id: "elev", name: meta.elev.name, type: "line", yAxisIndex: 0, z: 1, silent: true, showSymbol: false,
+        connectNulls: false, data: X.arr.map((x, i) => [x, elev[i]]), lineStyle: { color: T.ink2, width: 0.8, opacity: 0.45 },
+        areaStyle: shade ? { opacity: 1 } : { color: T.ink2, opacity: 0.16 } }] : []),
+      ...ids.map((id, k) => ({ id, name: meta[id].name, type: "line", yAxisIndex: k + 1, z: 3, showSymbol: false,
+        connectNulls: false, data: X.arr.map((x, i) => [x, vals[id][i]]),
+        lineStyle: { color: meta[id].color, width: 1.3 }, itemStyle: { color: meta[id].color } })),
+    ],
+  };
+}
+// the buttons over the chart: arrangement (data-v), the lines / panels (data-m; a coloured dot = the line's colour,
+// disabled without data) and the x axis (data-x; distance disabled without it)
+function mcBar(mode, ids, has, x, hasD) {
+  const seg = (label, html) => `<div class="seg" role="group" aria-label="${esc(label)}">${html}</div>`;
+  const btn = (attr, k, on, label, off = false, dot = "") =>
+    `<button ${attr}="${k}" class="${on ? "on" : ""}" aria-pressed="${on}"${off ? " disabled" : ""}>${dot}${esc(label)}</button>`;
+  const metrics = MC_METRICS.filter(([id]) => mode === "split" || MC_OVER.includes(id));
+  // a label wraps together with its buttons on a narrow screen
+  return `<span class="mcgrp"><span class="meta">${esc(t("viewer.mapchart.metrics"))}</span>`
+    + seg(t("viewer.mapchart.mode"), [["over", "viewer.mapchart.over"], ["split", "viewer.mapchart.split"]]
+      .map(([k, key]) => btn("data-v", k, k === mode, t(key))).join("")) + "</span>"
+    + seg(t("viewer.mapchart.metrics"), metrics.map(([id, key, , c]) =>
+      btn("data-m", id, ids.includes(id), t(key), !has(id), `<i class="mcdot" style="background:var(${c})"></i>`)).join(""))
+    + `<span class="mcgrp"><span class="meta">${esc(t("viewer.mapchart.x"))}</span>`
+    + seg(t("viewer.mapchart.x"), [["t", "viewer.mapchart.x_t"], ["d", "viewer.mapchart.x_d"]]
+      .map(([k, key]) => btn("data-x", k, k === x, t(key), k === "d" && !hasD)).join("")) + "</span>";
+}
+// 疊加's legend: the five grade shades (when there are bands) and the smoothing
+function mcLegend(bands) {
+  const lab = ["< 3%", ...MC_GRADE_EDGES.slice(1).map((e, k) => `${MC_GRADE_EDGES[k]}–${e}%`), `≥ ${MC_GRADE_EDGES[MC_GRADE_EDGES.length - 1]}%`];
+  return (bands ? `<span>${esc(t("viewer.mapchart.bands"))}</span>`
+    + lab.map((l, k) => `<span><i class="band" style="background:var(--mc-g${k})"></i>${esc(l)}</span>`).join("") : "")
+    + `<span>${esc(t("viewer.mapchart.smooth"))}</span>`;
+}
 function mapChart(card, tb, wrap, s) {
   if (!s.byT) return;                         // no time axis: the map alone
   const pwOn = S.usePower !== false;
-  const vals = { elev: s.elev, hr: s.hr, power: pwOn ? s.power : null, pace: mcPace(s.t, s.d), grade: s.grade };
+  const g100 = mcGrade(s.d, s.elev);
+  const vals = { elev: s.elev, hr: s.hr, power: pwOn && s.power ? mcSmooth(s.t, s.power) : null, pace: mcPace(s.t, s.d),
+    grade: s.grade, g100 };
   const has = (id) => Array.isArray(vals[id]) && vals[id].some((v) => v != null);
+  const segs = mcGradeSegs(s.d, g100);
   const pref = mcPrefs();
   // `want` keeps a pick this activity can't show (no power here) for the next activity
   let want = Array.isArray(pref.metrics) ? pref.metrics : MC_DEFAULT;
-  let ids = mcPick(want, has), layout = pref.layout === "left" ? "left" : "top";
+  let view = mcView(pref, !!s.byD), layout = pref.layout === "left" ? "left" : "top";
+  const pick = () => view.mode === "over" ? mcPickOver(want, has) : mcPick(want, has);
+  let ids = pick();
   // layout: map on top / on the left (hidden on narrow screens, where it is always on top)
   const lay = document.createElement("span");
   lay.className = "maplayout";
@@ -2370,8 +2576,10 @@ function mapChart(card, tb, wrap, s) {
   side.className = "mapside";
   const bar = document.createElement("div");
   bar.className = "maptb mcbar";
-  bar.innerHTML = `<span class="meta">${esc(t("viewer.mapchart.metrics"))}</span><div class="seg" role="group" aria-label="${esc(t("viewer.mapchart.metrics"))}">${
-    MC_METRICS.map(([id, key]) => `<button data-m="${id}" class="${ids.includes(id) ? "on" : ""}" aria-pressed="${ids.includes(id)}" ${has(id) ? "" : "disabled"}>${esc(t(key))}</button>`).join("")}</div>`;
+  const leg = document.createElement("div");
+  leg.className = "ac-leg";
+  leg.setAttribute("aria-label", t("viewer.mapchart.bands"));
+  leg.innerHTML = mcLegend(segs.length > 0);
   const el = document.createElement("div");
   el.className = "plot mapchart";
   el.setAttribute("role", "img");
@@ -2379,28 +2587,34 @@ function mapChart(card, tb, wrap, s) {
   const none = document.createElement("p");
   none.className = "nodata";
   none.textContent = t("viewer.mapchart.none");
-  side.append(bar, el, none);
+  side.append(bar, leg, el, none);
   wrap.appendChild(side);
   wrap.classList.toggle("left", layout === "left");
   const chart = echarts.init(el);
   charts.push(chart);
   new ResizeObserver(() => chart.isDisposed() || chart.resize()).observe(el);
   const draw = () => {
-    none.hidden = ids.length > 0; el.hidden = !ids.length;
-    if (!ids.length) return;
-    el.style.height = `${6 + ids.length * 92 + 18}px`;
+    const over = view.mode === "over", show = over ? ids.length > 0 || has("elev") : ids.length > 0;
+    bar.innerHTML = mcBar(view.mode, ids, has, view.x, !!s.byD);
+    leg.hidden = !over || !show;
+    none.hidden = show; el.hidden = !show;
+    if (!show) return;
+    el.style.height = `${over ? MC_OVER_H : 6 + ids.length * 92 + 18}px`;
     chart.resize();
-    chart.setOption(mcOption(s, ids, vals), true);
+    chart.setOption(over ? mcOverOption(s, ids, vals, view.x, segs) : mcOption(s, ids, vals, view.x), true);
   };
   draw();
-  hoverChart(chart, s, "t");
+  hoverChart(chart, s, () => view.x);
   bar.onclick = (e) => {
-    const b = e.target.closest("button[data-m]"); if (!b || b.disabled) return;
-    const id = b.dataset.m, on = !ids.includes(id);
-    want = MC_METRICS.map((r) => r[0]).filter((x) => x === id ? on : want.includes(x));
-    ids = mcPick(want, has);
-    b.classList.toggle("on", on); b.setAttribute("aria-pressed", String(on));
-    mcSave({ metrics: want });
+    const b = e.target.closest("button"); if (!b || b.disabled) return;
+    if (b.dataset.v && b.dataset.v !== view.mode) { view = { ...view, mode: b.dataset.v }; mcSave({ mode: view.mode }); }
+    else if (b.dataset.x && b.dataset.x !== view.x) { view = { ...view, x: b.dataset.x }; mcSave({ x: view.x }); }
+    else if (b.dataset.m) {
+      const id = b.dataset.m, on = !ids.includes(id);
+      want = MC_METRICS.map((r) => r[0]).filter((x) => x === id ? on : want.includes(x));
+      mcSave({ metrics: want });
+    } else return;
+    ids = pick();
     draw();
   };
   lay.onclick = (e) => {
