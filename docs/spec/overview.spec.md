@@ -500,16 +500,24 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
   easy run of a 專項期 week becomes a 40–50 min steep walk at the Pandolf grade that costs what
   the pack would (no pack in training).
 - **熱適應課** (`engine/heat_plan.py`): below.
-- **下坡課** (SP-99, `engine/downhill.py`; after placement, just before the 技術地形課, in week_plan
-  and per projected week): 專項期 賽前第 9、6、3 週 (`DOWNHILL_WEEKS`: ≤ 3 weeks apart — one
-  downhill run protects 3–6 weeks, not 9, controlled trials — and the last 14–21 days out, 推估)
-  before an A race that is not road and descends ≥ 20 m/km (推估; GPX, else descent = climb);
-  主要訓練項目 路跑: none. One easy run becomes SP-62's 下坡離心 (−10～−15 %, RPE 3–5, warm-up /
-  cool-down 10′, the template's steps; 25′ downhill, the first one of the phase 15′) on a day ≥ 14
-  days before the race, not on / the day before a hard day, not in the easy days after a B2B; the
-  first keeps the 2 days after it easy. The weekday cap shrinks the downhill part (≥ 10′); the
+- **下坡課** (SP-99, SP-87; `engine/downhill.py`; after placement, before the 長爬坡有氧 and the
+  技術地形課, in week_plan and per projected week). SP-87 (owner 2026-10-05, decision 3;
+  trail-terrain-and-climb-sessions.md §2.2, §4 #3): **專項期 every week** — SP-62's 下坡離心 (−10～−15 %,
+  RPE 3–5, warm-up / cool-down 10′, the template's steps), the downhill part 15 → 20 → 25′ (+5′ a week
+  from the phase's first Monday, `SPEC_STEP`; without phases by 賽前第 10 週) — and **基礎期 every 2
+  weeks** (an even ISO week, `base_week`): 「緩下坡（下坡 N′）」 −5～−10 % at RPE 3–4, 10′ the first
+  even week of the phase, then 15′ (`BASE_FIRST_WORK` / `BASE_WORK`, ≈ 10 m descent a minute; the
+  report's 10–15′). **None in 賽前第 1–2 週** (`LAST_WEEKS`; and no day < 14 days before the race),
+  nor in the race's real 減量期 or its post-race days. The next A race decides as before: a road race
+  or one descending < 20 m/km (推估; GPX, else descent = climb) → none, in the 基礎期 too; a 基礎期 with
+  no A race ahead keeps its dose (a trail athlete between races); 主要訓練項目 路跑: none. 「第一次」
+  (smaller, the 2 days after it easy): the 基礎期's first even week, or the 專項期's first week when no
+  基礎期 came right before it. Day rules unchanged: ≥ 14 days before the race, not on / the day before a
+  hard day, not in the easy days after a B2B; the weekday cap shrinks the downhill part (≥ 10′); the
   other easy runs give the extra minutes. The 技術地形 session keeps ≥ 2 days from it
-  (`technical.HARD_IDS`). A week note (`src: downhill`) says when / why or that no day fit.
+  (`technical.HARD_IDS`). A week note (`src: downhill`) says when / why or that no day fit. Frequencies
+  and doses are 推估 (Bontemps 2020 / 2025: the protection fades by 9 weeks, 10 runs cut soreness and 5
+  did not). (SP-99 had 賽前第 9、6、3 週 only.)
 - **長爬坡有氧（穩定地形爬升課）** (SP-87, `engine/base_climb.py`; trail-terrain-and-climb-sessions.md §4 #2,
   owner 2026-10-05 decision 2; after the downhill pass, before the 技術地形課, in week_plan and per
   projected week): 主要訓練項目 越野跑, 基礎期 only (recovery weeks included — an easy session; not the
@@ -2288,3 +2296,4 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 | 2026-10-08 | main | SP-258 owner 2026-10-08 | The altitude ? research lines drop the place too: 「高山症風險較高（Shen 2024）」 (was 「…玉山排雲山莊就診者的資料」) and 「超過 3,400 m 屬高風險（CDC）」 (was 「…；排雲山莊 3,402 m 就在線上」); `test_altitude` now forbids 排雲 / Paiyun in the help. |
 | 2026-10-12 | feat/trail-climb-sessions-sp87 | SP-87 (owner 2026-10-05, decision 1) | No 技術地形 in the 基礎期: `technical.week_context` is inactive for a base week (「基礎期不排技術地形課：長跑留在穩定地形，爬升改排長爬坡有氧」), `apply` acts in the 專項期 only; the LSD stays on steady terrain every week (was: every even ISO week a 「技術地形 N′（低 RPE 3–4）」 of the same time). Tests: `backend/tests/test_technical.py::test_base_long_stays_a_steady_terrain_lsd`, `::test_week_context_rules`, `::test_week_plan_and_projection_trail_vs_road` |
 | 2026-10-12 | feat/trail-climb-sessions-sp87 | SP-87 (owner 2026-10-05, decision 2) | 長爬坡有氧 in the 基礎期 (`engine/base_climb.py`): a 越野跑 athlete's base week turns one placed easy run (the longest not done / heat / downhill; a day before the long run or an interval last) into 「長爬坡有氧 N′（穩定地形）」 of the same day, minutes and TSS — id `climb_base`, kind easy, SP-62 long_climb steps at HR ≤ the easy cap, stairs / 階梯步道 / treadmill 8–15 %, `climb_m` = uphill minutes × 400 m/h (推估); none for 路跑, the 專項期, re-entry, an injury rule avoiding climb, or an easy run < 40′; week_plan (`base_climb` key) and every projected base week alike; `_COND_IDS` flattens it on an injury day. `plan_store.hook_days`: a stored `climb_base` / `downhill` / `tech` row already behind this week makes that hook inactive (no second one; the SP-74 known limit). Tests: `backend/tests/test_base_climb.py`, `test_technical.py::test_a_tech_session_already_behind_blocks_a_second_one`, `test_downhill.py::test_a_downhill_session_already_behind_blocks_a_second_one` |
+| 2026-10-12 | feat/trail-climb-sessions-sp87 | SP-87 (owner 2026-10-05, decision 3) | 下坡課 as a steady dose (`engine/downhill.py`): 專項期 every week (downhill part 15 → 20 → 25′, `SPEC_STEP`), 基礎期 every 2 weeks (even ISO week; 「緩下坡」 −5～−10 %, RPE 3–4, 10′ the phase's first then 15′), none in 賽前第 1–2 週 (`LAST_WEEKS`) / the real 減量期 / post-race days; a 基礎期 with no A race keeps its dose, a road / flat next A race → none; 「第一次」 = the 基礎期's first even week or a 專項期 first week with no 基礎期 before it (was: 賽前第 9、6、3 週 only). Tests: `backend/tests/test_downhill.py::test_which_weeks_and_which_races`, `::test_week_plan_and_projection`, `::test_base_phase_every_other_week_a_gentle_dose` |

@@ -2133,7 +2133,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         hooks_behind = {k: v for k, v in PS_.hook_days(monday).items() if v < first.isoformat()}
     except Exception:                       # noqa: BLE001 — the plan must still build
         hooks_behind = {}
-    # ---- 下坡課 (engine/downhill.py, SP-99): 專項期 賽前第 9、6、3 週 before an A race with a clear descent
+    # ---- 下坡課 (engine/downhill.py, SP-99 / SP-87): 越野跑 only — 專項期 every week, 基礎期 every 2 weeks,
+    # none in the last 2 weeks before an A race (a race without a clear descent: none)
     from backend.engine import downhill as DH
     dh = DH.week_context(kind=kind, mode=mode, monday=monday, events=getattr(getattr(status, "plan", None),
                                                                               "events", None), phases=phs, road=road,

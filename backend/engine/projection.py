@@ -778,7 +778,7 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
                     planned_heat[d] = 1.0
             except Exception:              # noqa: BLE001 — never breaks the projection
                 heat_w = None
-        # 下坡課 (engine/downhill.py, SP-99): the same countdown rule as week_plan
+        # 下坡課 (engine/downhill.py, SP-99 / SP-87): the same rule as week_plan
         from backend.engine import downhill as DH
         dh = DH.week_context(kind=kind, mode=mode, monday=week, events=events, phases=phases, road=road,
                              injury=inj_rule)
