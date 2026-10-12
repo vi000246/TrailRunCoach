@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="zh-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>正向課表統計 mockup（SP-393）</title>
+<style>
+:root { --bg:#f7f7f5; --cell:#fff; --panel:#fff; --text:#1f1e1b; --muted:#52514e; --faint:#8a8984; --line:#e3e3df;
+  --good:#1a7f37; --watch:#b45309; --bad:#c62828; --accent:#2a78d6; --type:#52514e; --ph:#6b8ec9; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg:#151514; --cell:#1a1a19; --panel:#1f1f1e; --text:#ecebe4; --muted:#c3c2b7; --faint:#8f8e86; --line:#2e2e2b;
+  --good:#4ade80; --watch:#fbbf24; --bad:#f87171; --accent:#3987e5; --type:#c3c2b7; --ph:#7ea3dd; } }
+:root[data-theme="dark"] { --bg:#151514; --cell:#1a1a19; --panel:#1f1f1e; --text:#ecebe4; --muted:#c3c2b7; --faint:#8f8e86; --line:#2e2e2b;
+  --good:#4ade80; --watch:#fbbf24; --bad:#f87171; --accent:#3987e5; --type:#c3c2b7; --ph:#7ea3dd; }
+* { box-sizing:border-box }
+body { margin:0; padding:16px; background:var(--bg); color:var(--text); font:13px/1.45 "Fira Mono", ui-monospace, system-ui, sans-serif; }
+h1 { font-size:18px; margin:0 0 4px } h2 { font-size:15px; margin:28px 0 6px } p.meta { color:var(--muted); margin:0 0 10px }
+.bar { display:flex; gap:8px; flex-wrap:wrap; margin:10px 0 18px }
+.bar button { font:inherit; padding:5px 10px; border:1px solid var(--line); border-radius:6px; background:var(--panel); color:var(--text); cursor:pointer }
+.bar button.on { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) }
+.wrap { max-width:860px } .wrap.phone { max-width:390px }
+.note { color:var(--muted); font-size:11.5px; margin:6px 0 0 }
+.q { display:inline-grid; place-items:center; width:16px; height:16px; border-radius:50%; border:1px solid var(--line); font-size:10px; color:var(--muted); margin-left:6px; cursor:help }
+.card { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px 14px; margin-bottom:10px }
+.card h3 { margin:0 0 8px; font-size:13px; color:var(--muted); font-weight:600; display:flex; align-items:center }
+.kpis { display:grid; grid-template-columns:repeat(4,1fr); gap:8px }
+.phone .kpis { grid-template-columns:repeat(2,1fr) }
+.kpi { border:1px solid var(--line); border-radius:8px; padding:8px 10px; min-width:0 }
+.kpi .k { font-size:11.5px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+.kpi .v { font-size:22px; font-weight:700; font-variant-numeric:tabular-nums; line-height:1.2 } .kpi .v small { font-size:12px; font-weight:500; color:var(--muted); margin-left:2px }
+.kpi .s { font-size:11px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+.kpi.neg .v { color:var(--bad) }
+.track { height:7px; background:color-mix(in srgb, var(--line) 85%, transparent); border-radius:4px; overflow:hidden; position:relative; margin-top:6px }
+.track i { display:block; height:100%; background:var(--good) }
+.track b { position:absolute; top:-2px; bottom:-2px; width:2px; background:var(--text) }
+.split { display:flex; height:7px; border-radius:4px; overflow:hidden; gap:2px; margin-top:6px }
+.split i { display:block } .bg-done { background:var(--good) } .bg-partial { background:color-mix(in srgb, var(--watch) 70%, var(--panel)) }
+.bg-off { background:repeating-linear-gradient(45deg, var(--watch) 0 3px, color-mix(in srgb, var(--watch) 45%, var(--panel)) 3px 6px) }
+.bg-missed { background:var(--bad) } .bg-skip { background:var(--line) }
+/* 課顆列：做完的課一顆一顆（類型 icon），還沒到的空圈；跳過的不畫 */
+.dots { display:flex; gap:6px; flex-wrap:wrap; margin:10px 0 4px }
+.dot { width:26px; height:26px; border-radius:50%; display:grid; place-items:center; border:1.5px solid var(--line); color:var(--faint) }
+.dot.done { border-color:var(--good); color:var(--text); background:color-mix(in srgb, var(--good) 14%, var(--panel)) }
+.dot.part { border-color:var(--watch); background:color-mix(in srgb, var(--watch) 12%, var(--panel)); color:var(--text) }
+.dot svg { width:14px; height:14px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round }
+.hl { display:flex; gap:8px; align-items:flex-start; padding:8px 10px; border-radius:8px; background:color-mix(in srgb, var(--good) 8%, var(--panel)); margin-top:8px; font-size:12.5px }
+.hl b { color:var(--good) }
+.calm { display:flex; gap:8px; align-items:flex-start; padding:8px 10px; border-radius:8px; border:1px dashed var(--line); margin-top:8px; font-size:12.5px; color:var(--muted) }
+.calm b { color:var(--accent) }
+details.coach { margin-top:6px } details.coach summary { cursor:pointer; color:var(--muted); font-size:12px; padding:6px 0 }
+.bars { display:flex; gap:6px; align-items:flex-end; height:70px; margin-top:8px }
+.bars .b { flex:1; display:grid; grid-template-rows:1fr auto; height:100%; gap:3px; text-align:center; font-size:10.5px; color:var(--muted) }
+.bars .b i { display:block; align-self:end; background:var(--good); border-radius:3px 3px 0 0; opacity:.9 }
+.bars .b i.cur { opacity:.5 }
+.bars .b.lo i { background:var(--watch) }
+.line { position:absolute; left:0; right:0; border-top:1px dashed var(--watch) }
+.list { display:grid; gap:4px; margin-top:6px; font-size:12px }
+.row { display:grid; grid-template-columns:48px 1fr auto; gap:8px; align-items:center; padding:4px 0; border-top:1px solid var(--line) }
+.row .st { font-weight:600 } .st-done { color:var(--good) } .st-part { color:var(--watch) } .st-miss { color:var(--bad) } .st-skip { color:var(--faint) } .st-off { color:var(--watch) }
+/* C 圓環 */
+.ring { display:grid; grid-template-columns:120px 1fr; gap:14px; align-items:center } .phone .ring { grid-template-columns:100px 1fr }
+.ring svg { width:120px; height:120px } .phone .ring svg { width:100px; height:100px }
+.ring .big { font-size:26px; font-weight:700 } .ring .big small { font-size:12px; color:var(--muted); font-weight:500 }
+.tabs { display:flex; gap:6px; margin:6px 0 }
+.tabs span { border:1px solid var(--line); border-radius:6px; padding:2px 8px; font-size:11.5px; color:var(--muted) } .tabs span.on { border-color:var(--accent); color:var(--text) }
+</style>
+</head>
+<body>
+<h1>正向課表統計 mockup（SP-393）</h1>
+<p class="meta">同一組假資料：這週排 6 堂，完成 3、部分 1、換了課 0、跳過 2（週三間歇、週六 LSD）；系統已把間歇延到週五。三個方案只差「第一屏給你看什麼」。</p>
+<div class="bar">
+  <button data-v="now">現況</button><button data-v="a">A 溫和版</button><button data-v="b" class="on">B 本週累積（推薦）</button><button data-v="c">C 圓環</button>
+  <span style="flex:1"></span>
+  <button data-t="light">淺色</button><button data-t="dark">深色</button><button data-w="phone">手機寬度</button><button data-w="wide" class="on">桌機</button>
+</div>
+<div class="wrap" id="wrap"><div id="v"></div></div>
+<p class="note" id="vn"></p>
+
+<h2>取捨</h2>
+<table style="border-collapse:collapse; font-size:12.5px">
+<tr><th style="text-align:left;padding:4px 8px">　</th><th style="text-align:left;padding:4px 8px">A 溫和版</th><th style="text-align:left;padding:4px 8px">B 本週累積</th><th style="text-align:left;padding:4px 8px">C 圓環</th></tr>
+<tr><td style="padding:4px 8px">焦慮的結構（分母）</td><td style="padding:4px 8px">還在，只是講得客氣</td><td style="padding:4px 8px"><b>拿掉</b></td><td style="padding:4px 8px">拿掉，但「合環」是新目標</td></tr>
+<tr><td style="padding:4px 8px">成就感</td><td style="padding:4px 8px">弱</td><td style="padding:4px 8px"><b>強</b>（四個只往上的數字＋亮點）</td><td style="padding:4px 8px">強（動畫）</td></tr>
+<tr><td style="padding:4px 8px">教練數字</td><td style="padding:4px 8px">第一屏</td><td style="padding:4px 8px">收合區</td><td style="padding:4px 8px">收合區</td></tr>
+<tr><td style="padding:4px 8px">改動量</td><td style="padding:4px 8px">小</td><td style="padding:4px 8px">中</td><td style="padding:4px 8px">中大</td></tr>
+</table>
+
+<script>
+const I = { easy:'<path d="M19 14c1.5-1.5 3-3.2 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.8 0-3 .5-4.5 2-1.5-1.5-2.7-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4 3 5.5l7 7Z"/>',
+  z5:'<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>', z3:'<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>', long:'<path d="m8 4 4 7 3-3 7 12H2L8 4z"/>', strength:'<path d="M6.5 6v12M17.5 6v12M3 9.5v5M21 9.5v5M6.5 12h11"/>' };
+const svg = k => `<svg viewBox="0 0 24 24" aria-hidden="true">${I[k]}</svg>`;
+const q = t => `<span class="q" title="${t}">?</span>`;
+const sessions = [
+  {d:"一",k:"easy",t:"輕鬆跑",s:"done",h:0.75,c:120},
+  {d:"二",k:"strength",t:"肌力",s:"done",h:0.6,c:0},
+  {d:"三",k:"z5",t:"VO2max 間歇",s:"skip"},
+  {d:"四",k:"easy",t:"輕鬆跑",s:"part",h:0.6,c:80},
+  {d:"五",k:"z5",t:"VO2max 間歇（延後）",s:"done",h:1.0,c:140,auto:1},
+  {d:"六",k:"long",t:"LSD",s:"skip"},
+];
+const dots = (showSkip) => `<div class="dots">${sessions.filter(s=>showSkip||s.s!=="skip").map(s=>`<span class="dot ${s.s}" title="週${s.d} ${s.t}${s.s==="skip"?"（跳過）":s.s==="part"?"（部分）":""}">${s.s==="skip"?"":svg(s.k)}</span>`).join("")}<span class="dot" title="週日 還沒到"></span></div>`;
+const weeks = [["9/14",5],["9/21",6],["9/28",4],["10/5",5],["本週",4]];
+const barsPlain = () => `<div class="bars">${weeks.map(([l,n],i)=>`<div class="b"><i class="${i===4?"cur":""}" style="height:${n/6*100}%"></i><span>${l}</span></div>`).join("")}</div>`;
+const barsPass = () => `<div class="bars" style="position:relative"><span class="line" style="bottom:${80/100*70+14}px"></span>${weeks.map(([l,n],i)=>`<div class="b ${n/6<0.8?"lo":""}"><i style="height:${n/6*100}%"></i><span>${l}</span></div>`).join("")}</div><p class="note">虛線 80%＝連續達標門檻；橘＝沒達到</p>`;
+const coach = (words) => `<details class="coach"><summary>▸ 教練視角（完成率、達標率、依類型、每堂課）</summary>
+  <div class="kpis" style="margin-top:6px">
+    <div class="kpi"><div class="k">完成率${q("本期排了 6 堂，有做的 4 堂")}</div><div class="v">67<small>%</small></div><div class="s">4 / 6 堂</div></div>
+    <div class="kpi"><div class="k">照計畫完成</div><div class="v">3<small>堂</small></div><div class="s">部分 1 · ${words.off} 0</div></div>
+    <div class="kpi"><div class="k">負荷</div><div class="v">310<small>/ 400</small></div><div class="track"><i style="width:78%"></i></div></div>
+    <div class="kpi"><div class="k">時數</div><div class="v">3.0<small>/ 4.5 h</small></div></div></div>
+  <div class="list">${sessions.slice().reverse().map(s=>`<div class="row"><span>週${s.d}</span><span>${s.t}</span><span class="st st-${s.s}">${{done:"完成",part:"部分",skip:words.skip}[s.s]}</span></div>`).join("")}</div></details>`;
+
+const V = {
+  now: () => `<div class="card"><h3>課表統計 · 4 週</h3>
+    <div class="kpis">
+      <div class="kpi"><div class="k">完成率${q("到期的課裡，有做的比例")}</div><div class="v">67<small>%</small></div><div class="s">完成 4 / 6 堂</div><div class="split"><i class="bg-done" style="flex:3"></i><i class="bg-partial" style="flex:1"></i><i class="bg-missed" style="flex:2"></i></div></div>
+      <div class="kpi"><div class="k">達標率${q("照計畫完成（✓）的比例")}</div><div class="v">50<small>%</small></div><div class="s">✓ 3 · 部分 1 · 沒照課表 0</div></div>
+      <div class="kpi"><div class="k">TSS 完成度</div><div class="v">78<small>%</small></div><div class="s">實際 310 / 計畫 400</div><div class="track"><i style="width:52%"></i><b style="left:66.7%"></b></div></div>
+      <div class="kpi neg"><div class="k">連續達標</div><div class="v">0<small>週</small></div><div class="s">這段期間最長 3 週</div></div>
+    </div>
+    <h3 style="margin-top:14px">每週完成率</h3>${barsPass()}
+    <h3 style="margin-top:14px">每堂課</h3><div class="tabs"><span class="on">全部 6</span><span>完成 3</span><span>部分 1</span><span>沒做 2</span></div>
+    <div class="list">${sessions.slice().reverse().map(s=>`<div class="row"><span>週${s.d}</span><span>${s.t}</span><span class="st st-${s.s==="skip"?"miss":s.s}">${{done:"✓ 完成",part:"◐ 部分",skip:"✗ 沒做"}[s.s]}</span></div>`).join("")}</div></div>`,
+  a: () => `<div class="card"><h3>課表統計 · 4 週</h3>
+    <div class="kpis">
+      <div class="kpi"><div class="k">完成${q("本期排了 6 堂，有做的 4 堂")}</div><div class="v">4<small>/ 6 堂</small></div><div class="split"><i class="bg-done" style="flex:3"></i><i class="bg-partial" style="flex:1"></i><i class="bg-skip" style="flex:2"></i></div></div>
+      <div class="kpi"><div class="k">照計畫完成</div><div class="v">3<small>堂</small></div><div class="s">部分 1 · 換了課 0</div></div>
+      <div class="kpi"><div class="k">負荷</div><div class="v">310<small>/ 400</small></div><div class="track"><i style="width:78%"></i></div></div>
+      <div class="kpi"><div class="k">連續有練</div><div class="v">5<small>週</small></div></div>
+    </div>
+    <h3 style="margin-top:14px">每週完成堂數</h3>${barsPlain()}
+    <h3 style="margin-top:14px">每堂課</h3>
+    <div class="list">${sessions.slice().reverse().map(s=>`<div class="row"><span>週${s.d}</span><span>${s.t}</span><span class="st st-${s.s}">${{done:"完成",part:"部分",skip:"跳過"}[s.s]}</span></div>`).join("")}</div></div>`,
+  b: () => `<div class="card"><h3>本週${q("只往上加的數字：做了什麼、累積多少。排了幾堂、完成率在「教練視角」")}</h3>
+    <div class="kpis">
+      <div class="kpi"><div class="k">完成</div><div class="v">4<small>堂</small></div></div>
+      <div class="kpi"><div class="k">時間</div><div class="v">3.0<small>h</small></div></div>
+      <div class="kpi"><div class="k">爬升</div><div class="v">340<small>m</small></div></div>
+      <div class="kpi"><div class="k">連續有練${q("每週至少一堂；休息週、暫停不算斷")}</div><div class="v">5<small>週</small></div></div>
+    </div>
+    ${dots(false)}
+    <div class="hl">✨ <span><b>這週最長的一跑</b>：週五 VO2max 間歇 1:00，比上週多 10 分</span></div>
+    <div class="calm"><b>↻</b> <span>課表已依這週的狀況調整，不用補（週三的間歇延到週五，週六的 LSD 併入下週）</span></div>
+    ${coach({skip:"跳過",off:"換了課"})}
+  </div>
+  <div class="card"><h3>每週完成堂數</h3>${barsPlain()}</div>`,
+  c: () => { const R=50, C=2*Math.PI*R, p=310/400; return `<div class="card"><h3>本週</h3>
+    <div class="ring"><svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="${R}" fill="none" stroke="var(--line)" stroke-width="12"/><circle cx="60" cy="60" r="${R}" fill="none" stroke="var(--good)" stroke-width="12" stroke-linecap="round" stroke-dasharray="${p*C} ${C}" transform="rotate(-90 60 60)"/><text x="60" y="56" text-anchor="middle" font-size="20" font-weight="700" fill="var(--text)">310</text><text x="60" y="72" text-anchor="middle" font-size="10" fill="var(--muted)">TSS</text></svg>
+      <div><div class="big">4<small> 堂 · 3.0 h · ↑340 m</small></div>${dots(false)}<div class="s" style="color:var(--muted);font-size:11.5px">連續 5 週有練</div></div></div>
+    <div class="hl">✨ <span><b>這週最長的一跑</b>：週五 VO2max 間歇 1:00</span></div>
+    <div class="calm"><b>↻</b> <span>課表已依這週的狀況調整，不用補</span></div>
+    ${coach({skip:"跳過",off:"換了課"})}
+  </div><div class="card"><h3>每週完成堂數</h3>${barsPlain()}</div>`; },
+};
+const NOTE = { now:"現況：五個 KPI 有四個是 ÷ 計畫；紅段＝沒做；連續達標 0；每週圖有 80% 及格線；每堂課列表 ✗ 沒做紅字。",
+  a:"A：字眼改中性（跳過／換了課）、紅色退場、分母變小字、及格線拿掉。結構沒變，分母還在。",
+  b:"B：第一屏只有四個只往上的數字＋做完的課一顆一顆（跳過的不畫）＋一條亮點＋一句安心話。完成率等教練數字收進收合區。",
+  c:"C：圓環填到計畫負荷，缺口是底色沒有顏色；其餘同 B。圓環「合上」本身是個會沒達到的目標，所以不推薦。" };
+function render(v){ document.getElementById("v").innerHTML = V[v](); document.getElementById("vn").textContent = NOTE[v]; }
+document.querySelectorAll("[data-v]").forEach(b=>b.onclick=()=>{document.querySelectorAll("[data-v]").forEach(x=>x.classList.toggle("on",x===b)); render(b.dataset.v);});
+document.querySelectorAll("[data-t]").forEach(b=>b.onclick=()=>document.documentElement.dataset.theme=b.dataset.t);
+document.querySelectorAll("[data-w]").forEach(b=>b.onclick=()=>{document.querySelectorAll("[data-w]").forEach(x=>x.classList.toggle("on",x===b)); document.getElementById("wrap").classList.toggle("phone", b.dataset.w==="phone");});
+render("b");
+</script>
+</body>
+</html>
