@@ -198,5 +198,15 @@
   "race.on_tip": "標成比賽：賽事預測會拿這場的實際成績來比對",
   "race.off_tip": "你標成比賽了；再按一次取消",
   "race.on_label": "把「{name}」標成比賽",
-  "race.off_label": "取消「{name}」的比賽標記"
+  "race.off_label": "取消「{name}」的比賽標記",
+  "dup.title": "其他來源的同一次運動",
+  "dup.counts": "算進總量的這筆",
+  "dup.dup": "重複，不算",
+  "dup.split": "不是同一次（拆開）",
+  "dup.merge": "是同一次（合併）",
+  "dup.cands": "前後 30 分鐘內的其他紀錄",
+  "dup.none": "沒有其他來源的紀錄",
+  "dup.linked": "你手動設定的",
+  "dup.unlink": "改回自動判斷",
+  "dup.saved": "已更新，重新整理後生效"
 }

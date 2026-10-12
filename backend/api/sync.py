@@ -424,6 +424,52 @@ async def rebuild_dedup(athlete_id: int = 1, db: AsyncSession = Depends(get_db))
     return r
 
 
+class DedupIds(BaseModel):
+    ids: list[int]
+
+
+@router.get("/dedup/group/{row_id}")
+async def dedup_group(row_id: int, athlete_id: int = 1, db: AsyncSession = Depends(get_db)):
+    """The copies of one activity from every source (SP-344): which one counts, which are duplicates."""
+    return {"rows": await dedup.group_of(db, athlete_id, row_id)}
+
+
+@router.get("/dedup/near/{row_id}")
+async def dedup_near(row_id: int, athlete_id: int = 1, db: AsyncSession = Depends(get_db)):
+    """The activity editor's 「其他來源」 box: the copies, and nearby rows to merge by hand."""
+    return await dedup.near(db, athlete_id, row_id)
+
+
+@router.post("/dedup/merge")
+async def dedup_merge(body: DedupIds, athlete_id: int = 1, db: AsyncSession = Depends(get_db)):
+    """「這幾筆是同一次運動」: merged by hand whatever their times (SP-344); counted once."""
+    try:
+        r = await dedup.merge(db, athlete_id, body.ids)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    await db.commit()
+    return r
+
+
+@router.post("/dedup/split/{row_id}")
+async def dedup_split(row_id: int, athlete_id: int = 1, db: AsyncSession = Depends(get_db)):
+    """「這筆是另一次運動」: split from its group by hand (SP-344); counted on its own."""
+    try:
+        r = await dedup.split(db, athlete_id, row_id)
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+    await db.commit()
+    return r
+
+
+@router.delete("/dedup/links/{row_id}")
+async def dedup_unlink(row_id: int, athlete_id: int = 1, db: AsyncSession = Depends(get_db)):
+    """Forget the user's merges / splits of this activity: the automatic rule decides again."""
+    r = await dedup.unlink(db, athlete_id, row_id)
+    await db.commit()
+    return r
+
+
 @router.get("/tp/settings")
 async def get_tp_settings(athlete_id: int = 1, db: AsyncSession = Depends(get_db)):
     """Fetch TP athlete settings (FTP, weight, LTHR, etc)."""

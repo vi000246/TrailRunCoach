@@ -738,12 +738,46 @@ function renderEditor() {
       <div class="ctl" style="display:block"><textarea data-note rows="3" aria-label="${esc(T("f_note"))}">${esc(a.note || "")}</textarea></div></div>
     <div class="fld"><span class="lab">${esc(T("f_terrain"))}${qt(T("help.terrain"))}</span><div class="ctl">${terrainCtl}</div></div>
     <div class="fld"><span class="lab">${esc(T("f_exclude"))}${qt(T("help.exclude"))}</span><div class="ctl">${exCtl}</div></div>
+    ${tr.workout_file_id ? `<div class="fld"><span class="lab">${esc(T("dup.title"))}</span><div class="ctl" style="display:block" data-dup="${tr.workout_file_id}">…</div></div>` : ""}
     ${!S.usePower ? "" : `<div class="fld"><span class="lab">${esc(T("f_power"))}${qt(T("help.power"))}</span><div class="ctl">${a.index == null ? "—" : !d ? esc(T("loading"))
       : p && p.source && p.source !== "none" ? esc(p.label || p.source) + (p.used || /未採用|not used/i.test(p.label || "") ? "" : esc(T("power_unused"))) : esc(T("power_none"))}</div></div>`}
     ${href ? `<div class="edlinks"><a href="${esc(href)}">${esc(T("open_chart"))} →</a></div>` : ""}
     <div class="msg" id="msg" role="status"></div></div>`;
   if ($("ed").open && !$("ed").contains(document.activeElement)) $("ed").querySelector("[data-close]").focus();   // keep focus in the dialog
   wireEditor(a);
+  const dupBox = $("ed").querySelector("[data-dup]");
+  if (dupBox) renderDup(dupBox);
+}
+
+// SP-344: this activity's copies from other sources (which one counts), the records nearby to merge
+// by hand, and 拆開 / 合併 / 改回自動 (POST /api/v1/sync/dedup/…)
+async function renderDup(box) {
+  const id = box.dataset.dup;
+  let d;
+  try { d = await j(`/api/v1/sync/dedup/near/${id}`); } catch (_) { box.textContent = "—"; return; }
+  const when = (r) => r.start ? r.start.slice(11, 16) : "";
+  const km = (r) => r.distance_m ? `${(r.distance_m / 1000).toFixed(2)} km` : "";
+  const min = (r) => r.duration_s ? `${Math.round(r.duration_s / 60)} min` : "";
+  const line = (r, btn) => `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:2px 0">
+    <span>${esc(r.source)} · ${esc(r.file_format)} · ${esc(when(r))} ${esc(min(r))} ${esc(km(r))}</span>${btn}</div>`;
+  const others = d.group.filter((r) => String(r.id) !== String(id) || d.group.length > 1);
+  let html = d.group.length > 1 ? d.group.map((r) => line(r,
+    `<span class="badge${r.canonical ? "" : " ex"}">${esc(T(r.canonical ? "dup.counts" : "dup.dup"))}</span>`
+    + (r.linked ? `<span class="badge man">${esc(T("dup.linked"))}</span> <button type="button" data-dup-unlink="${r.id}">${esc(T("dup.unlink"))}</button>` : "")
+    + (String(r.id) === String(id) ? `<button type="button" data-dup-split="${r.id}">${esc(T("dup.split"))}</button>` : ""))).join("")
+    : `<div class="meta">${esc(T("dup.none"))}</div>`;
+  if (!others.length && d.group.length <= 1 && !d.candidates.length) html = `<div class="meta">${esc(T("dup.none"))}</div>`;
+  if (d.candidates.length) html += `<div class="meta" style="margin-top:4px">${esc(T("dup.cands"))}</div>`
+    + d.candidates.map((r) => line(r, `<button type="button" data-dup-merge="${r.id}">${esc(T("dup.merge"))}</button>`)).join("");
+  box.innerHTML = html;
+  const act = async (url, method, body) => {
+    setMsg(T("saving"));
+    try { await send(url, method, body || {}); setMsg(T("dup.saved")); renderDup(box); }
+    catch (e) { setMsg(T("save_failed", { err: e.message }), "err"); }
+  };
+  box.querySelectorAll("[data-dup-split]").forEach((b) => b.onclick = () => act(`/api/v1/sync/dedup/split/${b.dataset.dupSplit}`, "POST"));
+  box.querySelectorAll("[data-dup-merge]").forEach((b) => b.onclick = () => act("/api/v1/sync/dedup/merge", "POST", { ids: [Number(id), Number(b.dataset.dupMerge)] }));
+  box.querySelectorAll("[data-dup-unlink]").forEach((b) => b.onclick = () => act(`/api/v1/sync/dedup/links/${b.dataset.dupUnlink}`, "DELETE"));
 }
 
 function painState(a) {

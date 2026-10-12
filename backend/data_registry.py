@@ -108,6 +108,8 @@ TABLES: tuple = (
           deidentify=("start_local", "file", "workout_id", "label", "name", "note", "tags_json")),
     Table("injury_events", USER, "傷病紀錄 (engine/injuries.py); never sent to COROS / TP or the AI coach",
           deidentify=("onset_date", "onset_key", "onset_file", "resolved_date", "walkrun_from", "note")),
+    Table("activity_links", USER, "the user's own merges / splits of cross-source duplicates (sync/dedup.py, "
+          "SP-344): two workout_files ids and same | different", deidentify=("created_at",)),
     Table("plan_sessions", USER, "the stored plan: origin=custom and edited rows are the user's, the "
           "auto rows are rewritten by plan_auto (engine/plan_store.py)",
           deidentify=("day", "title", "note", "done_by")),
