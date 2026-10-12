@@ -1,7 +1,8 @@
 """
-SP-74: 技術地形課 in the generated plan (engine/technical.py) — 基礎期 every other week's LSD as a
-low-RPE technical run, 專項期 one session a week as a quality session (RPE 6–7: 48 h spacing, the
-week's 20 % budget) or, without room, an easy one (RPE 4–5); road athletes get none. Synthetic.
+SP-74: 技術地形課 in the generated plan (engine/technical.py) — 專項期 one session a week as a quality
+session (RPE 6–7: 48 h spacing, the week's 20 % budget) or, without room, an easy one (RPE 4–5); road
+athletes get none. SP-87 (owner 2026-10-05): the 基礎期 no longer turns the LSD into a technical run
+(the LSD stays on steady terrain). Synthetic.
 """
 import datetime as dt
 from datetime import date
@@ -29,9 +30,10 @@ def test_week_context_rules():
     assert not T.week_context(**{**on, "kind": "taper", "mode": "taper"})["active"]
     assert not T.week_context(**{**on, "kind": "transition", "mode": "transition"})["active"]
     base = dict(kind="base", mode="base", road=False)
-    assert T.week_context(**base, monday=EVEN)["active"]
-    assert not T.week_context(**base, monday=MON)["active"]                        # every other week
-    assert not T.week_context(**base, monday=EVEN, b2b={"due": True})["active"]
+    # SP-87: no 基礎期 week has one any more (was: every even ISO week's LSD)
+    for mon in (EVEN, MON):
+        b = T.week_context(**base, monday=mon)
+        assert not b["active"] and "基礎期" in b["why"]
 
 
 def _week(mon=MON, q_day=1, long_min=150, easy=(50, 60, 50), q_title="閾值 2×20 分"):
@@ -44,23 +46,21 @@ def _week(mon=MON, q_day=1, long_min=150, easy=(50, 60, 50), q_title="閾值 2×
     return ss
 
 
-def test_base_long_becomes_low_rpe_technical_of_the_same_time():
-    info = T.week_context(kind="base", mode="base", monday=EVEN, road=False)
-    ss, notes = _week(EVEN), []
-    T.apply(ss, info, hours=7.0, rates={"trail": 60.0}, notes=notes)
-    s = next(x for x in ss if x["id"] == "long")
-    assert s["kind"] == "long" and s["minutes"] == 150 and s["day"] == d(5, EVEN)   # same slot, same time
-    assert s["title"] == "技術地形 150′（低 RPE 3–4）" and s["terrain"] == "trail" and s["target"] == ""
-    assert WS.rpe_role(s["steps"]["items"]) == "easy" and WT.session_role(s) == "easy"
-    assert WS.normalize(s["steps"])["items"][1]["target"]["type"] == "rpe"
-    assert s["climb_m"] and s["tss"] == pytest.approx(150.0)
-    assert info["planned"][0]["replaces"] == "long"
-    assert any(n["src"] == "technical" and "隔週" in n["text"] for n in notes)
-    # done / already technical: untouched
-    done = _week(EVEN)
-    done[0]["done"] = True
-    T.apply(done, T.week_context(kind="base", mode="base", monday=EVEN, road=False))
-    assert done[0]["title"] == "LSD"
+def test_base_long_stays_a_steady_terrain_lsd():
+    """SP-87 (decision 1): the 基礎期 LSD is never turned into 技術地形 — even and odd weeks alike, so
+    the long run stays on steady terrain (its HR drift reads the aerobic base)."""
+    for mon in (EVEN, MON):
+        info = T.week_context(kind="base", mode="base", monday=mon, road=False)
+        ss, notes = _week(mon), []
+        T.apply(ss, info, hours=7.0, rates={"trail": 60.0}, notes=notes)
+        s = next(x for x in ss if x["id"] == "long")
+        assert s["title"] == "LSD" and "steps" not in s and not notes
+        assert not any("技術地形" in (x.get("title") or "") for x in ss)
+    # even an info forced active for a 基礎期 week adds nothing (the base branch is gone)
+    ss = _week(EVEN)
+    T.apply(ss, {"active": True, "phase": "base", "monday": EVEN.isoformat()}, hours=7.0)
+    assert next(x for x in ss if x["id"] == "long")["title"] == "LSD"
+    assert not any(x.get("id") == "tech" for x in ss)
 
 
 def test_specific_quality_role_spaced_and_within_the_budget():
@@ -123,8 +123,8 @@ def test_specific_respects_the_weekday_cap():
 
 
 def test_week_plan_and_projection_trail_vs_road():
-    """A trail athlete: 基礎期 even ISO weeks' LSD is technical, odd weeks plain, in week_plan and
-    in the projection alike; 專項期 one tech session a week; road athletes none."""
+    """A trail athlete: 基礎期 LSD stays plain every week (SP-87; was: even ISO weeks technical), in
+    week_plan and in the projection alike; 專項期 one tech session a week; road athletes none."""
     from backend.engine import overview as O
     from backend.engine import plan_prefs as PP
     from backend.engine import projection as PJ
@@ -139,14 +139,12 @@ def test_week_plan_and_projection_trail_vs_road():
     st = Status(ds, plan, TODAY, prefs=PP.Prefs()).compute()
     wp = O.week_plan(ds, st, TODAY, sport="trail")                    # week of 9/28 = ISO 40 (even)
     lg = next(s for s in wp["sessions"] if s["id"] == "long")
-    assert lg["title"].startswith("技術地形") and lg["steps"] and wp["technical"]["planned"]
+    assert wp["phase"] == "base" and not lg["title"].startswith("技術地形") and not wp["technical"]["active"]
     weeks = PJ.project_weeks(wp, _phases(plan, TODAY), date(2026, 11, 8))
+    assert weeks
     for w in weeks:
-        long_s = next((s for s in w["sessions"] if s["id"] == "long"), None)
-        if long_s is None:
-            continue
-        even = date.fromisoformat(w["start"]).isocalendar()[1] % 2 == 0
-        assert long_s["title"].startswith("技術地形") == even, w["start"]
+        assert not any("技術地形" in s["title"] or s["id"] == "tech" for s in w["sessions"]), w["start"]
+        assert "technical" not in w
     road = O.week_plan(ds, st, TODAY, sport="road")
     assert not road["technical"]["active"] and not any("技術地形" in s["title"] for s in road["sessions"])
     for w in PJ.project_weeks(road, _phases(plan, TODAY), date(2026, 11, 8)):
@@ -294,7 +292,7 @@ def test_the_walking_cap_is_named_in_the_text_only():
     from backend.engine import target_policy as TP
     from backend.sync import coros_workouts as CW
     w = HP.walk_cap(195.0, aet=145.0)
-    for mon, kind in ((EVEN, "base"), (MON, "specific")):
+    for mon, kind in ((MON, "specific"),):                       # SP-87: the 基礎期 has none any more
         info = T.week_context(kind=kind, mode=kind, monday=mon, road=False)
         ss = _week(mon)
         T.apply(ss, info, hours=8.0, rates={"trail": 60.0}, walk=w)

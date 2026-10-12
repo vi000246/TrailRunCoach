@@ -512,13 +512,12 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
   (`technical.HARD_IDS`). A week note (`src: downhill`) says when / why or that no day fit.
 - **技術地形課** (SP-74, `engine/technical.py`; applied last, after placement, the climb / steep
   walk and heat hooks, `backend/engine/overview.py:2132`, and the same per projected week,
-  `backend/engine/projection.py:780`): 主要訓練項目 越野跑 only (路跑: none), base / 專項期, not
-  in a recovery / re-entry week (`week_context`, `backend/engine/technical.py:70`).
-  - **基礎期**: every other week (an even ISO week number, `base_week`; 推估) the week's LSD
-    becomes 「技術地形 N′（低 RPE 3–4）」 of the same minutes on the same day — it stays the `long`
-    session (an easy one, so the long-run rules hold) with the structure warm-up 10′ + RPE 3–4
-    work (+ ≈ 5 m climb per minute, the template's 300 m / 60′) + 5′, no HR / power target. Not
-    in a B2B week, when the long run is done or carries the heat session.
+  `backend/engine/projection.py:780`): 主要訓練項目 越野跑 only (路跑: none), 專項期 only, not
+  in a recovery / re-entry week (`week_context`, `backend/engine/technical.py:60`).
+  - **基礎期**: none (SP-87, owner 2026-10-05; trail-terrain-and-climb-sessions.md §4 #1, §5): the
+    LSD stays on steady terrain (its HR drift reads the aerobic base only there); the week's
+    `technical.why` says 「基礎期不排技術地形課…」. The 基礎期's climbing is the weekly 長爬坡有氧 and the downhill
+    dose below. (SP-74 turned every even ISO week's LSD into 「技術地形 N′（低 RPE 3–4）」.)
   - **專項期**: one session a week out of a placed easy run (id `tech`, kind `hike` 越野跑),
     near the race's terrain. RPE 6–7 (a quality session by `workout_steps.rpe_role`) when an easy
     run's day is ≥ 2 days from the long run, the B2B days, the race-climb repeats, every quality /
@@ -2272,3 +2271,4 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 | 2026-10-08 | feat/warmup-pref-sp364 | SP-364 | 課表偏好 每堂課前加熱身 (`plan.prefs.warmup_on` / `warmup_min`, off / 10, 5–30 min; not `active`): every generated run session, suggested / scheduled test and inserted template starts with ≥ N min of warm-up (`backend/engine/warmup.py`). Easy-type sessions: the first N min are the warm-up (「含暖身 N 分」, time / TSS / budget unchanged; `derive` + the COROS push split there). Own warm-up shorter: topped up, main set untouched, extra minutes in the session at the easy rate; library intervals carry the floor in `blocks` / `fit` / `variant_adj["warm"]`; text intervals / tests rewrite 「暖身 N 分」; `trim_quality` keeps the floor; applied before the easy runs are sized (week total kept) and last (week_plan, projection). Templates' `full` topped up (`ensure_warm`). AeT drift analysis cuts the planned longer warm-up. Panel switch + minutes (zh-TW / en). Tests: `backend/tests/test_warmup_pref.py` |
 | 2026-10-08 | feat/warmup-pref-sp364 | SP-364 review + owner 2026-10-08 | Easy-type sessions never change their time: a run too short gets a shorter warm-up (none < 5′), and the structure / push split a marked run inside its own time (`workout_steps.carve_warm`) — a run trimmed / edited later keeps its total; an easy generated structure (技術地形 RPE 3–4) the same, downhill keeps its 10′. The easy-run count never changes: counted on the minutes without the preference (`left_n`, `plan_prefs.Ctx.warm_base` / `_used_without_warmup`), the extra minutes out of the easy runs evenly. Easy / 我的範本 templates keep their length. A drawer swap merges only `variant_adj["warm"]` (`rest_add` / `power` kept). The fit reason names the warm-up when it is what doesn't fit. Fixed: `apply_objs` passed no variant fields, so a library interval was handled as text. Tests: `backend/tests/test_warmup_pref.py` |
 | 2026-10-08 | main | SP-258 owner 2026-10-08 | The altitude ? research lines drop the place too: 「高山症風險較高（Shen 2024）」 (was 「…玉山排雲山莊就診者的資料」) and 「超過 3,400 m 屬高風險（CDC）」 (was 「…；排雲山莊 3,402 m 就在線上」); `test_altitude` now forbids 排雲 / Paiyun in the help. |
+| 2026-10-12 | feat/trail-climb-sessions-sp87 | SP-87 (owner 2026-10-05, decision 1) | No 技術地形 in the 基礎期: `technical.week_context` is inactive for a base week (「基礎期不排技術地形課：長跑留在穩定地形，爬升改排長爬坡有氧」), `apply` acts in the 專項期 only; the LSD stays on steady terrain every week (was: every even ISO week a 「技術地形 N′（低 RPE 3–4）」 of the same time). Tests: `backend/tests/test_technical.py::test_base_long_stays_a_steady_terrain_lsd`, `::test_week_context_rules`, `::test_week_plan_and_projection_trail_vs_road` |

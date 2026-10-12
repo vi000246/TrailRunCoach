@@ -343,10 +343,6 @@
     "draft": true,
     "src": "backend/engine/post_race.py:355"
   },
-  "B2B 週：長跑照 B2B 排": {
-    "draft": true,
-    "src": "backend/engine/technical.py:67"
-  },
   "Bompa & Buzzichelli 2015（最大肌力）；山本正嘉（深蹲和下山用的肌肉相近，教練級）；動作：Uphill Athlete（教練級）": {
     "draft": true,
     "src": "backend/engine/strength_plan.py:150"
@@ -2843,6 +2839,10 @@
     "draft": true,
     "src": "backend/engine/overview.py:1554"
   },
+  "基礎期不排技術地形課：長跑留在穩定地形，爬升改排長爬坡有氧": {
+    "draft": true,
+    "src": "backend/engine/technical.py:76"
+  },
   "基礎期第 {w} 週 / {n} 週": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:2147"
@@ -2850,10 +2850,6 @@
   "基礎期第 {w} 週，EF 近 6 週 {ef:+.1f}%": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:2143"
-  },
-  "基礎期隔週一次：這週照常 LSD": {
-    "draft": true,
-    "src": "backend/engine/technical.py:69"
   },
   "基礎期：輕鬆的有氧課，可以取代部分長跑": {
     "draft": true,
@@ -4246,10 +4242,6 @@
   "本人資料 {n} 筆，滿 {min_n} 筆才會自己擬合。": {
     "draft": true,
     "src": "backend/engine/calibrate.py:161"
-  },
-  "本週 LSD 換成技術地形 {m}′（{rpe}，算輕鬆課）：基礎期隔週一次，練腳步和路況判斷、不練心肺；時間和 LSD 一樣": {
-    "draft": true,
-    "src": "backend/engine/technical.py:156"
   },
   "本週低強度占比 < 75%（實測 AeT）：5 區先不排": {
     "draft": true,

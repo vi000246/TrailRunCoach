@@ -2138,8 +2138,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         except Exception as e:              # noqa: BLE001 — the plan must still build
             dh = {**dh, "error": type(e).__name__}
 
-    # ---- 技術地形課 (engine/technical.py, SP-74): 越野跑 only; 基礎期 every other week's LSD,
-    # 專項期 one a week out of an easy run (RPE 6–7 = a quality session: spacing + budget)
+    # ---- 技術地形課 (engine/technical.py, SP-74): 越野跑 only; 專項期 one a week out of an easy run
+    # (RPE 6–7 = a quality session: spacing + budget); none in the 基礎期 (SP-87: the LSD stays steady)
     tech = TECH.week_context(kind=kind, mode=mode, monday=monday, road=road, b2b=b2b, injury=inj_rule)
     if tech.get("active"):
         try:

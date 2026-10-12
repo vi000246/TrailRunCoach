@@ -6,12 +6,11 @@ Only for 主要訓練項目 = 越野跑 (a road athlete gets none). Applied afte
 like engine/steep_hill.py, in week_plan and in every projected week (the same rule, so reconcile
 never flips a week back and forth):
 
-  * 基礎期 — every other week (an even ISO week number; 推估) the week's LSD becomes a low-RPE
-    技術地形 run of the same time (RPE 3–4: an easy session in the long-run slot — Koop: train on
-    the race's terrain; Uphill Athlete: aerobic base). It stays the `long` session (same day,
-    same minutes), so the long-run rules (day, 48 h from the intervals, B2B, the projection's
-    long-run base) are unchanged. Not in a recovery / re-entry week, not when the long run is
-    done, a B2B week, or the 90-min AeT test week.
+  * 基礎期 — none (SP-87, owner 2026-10-05; docs/research/trail-terrain-and-climb-sessions.md §4 #1,
+    §5): the LSD stays on steady terrain — no study asks for technical terrain far from the race,
+    and the long run's HR drift reads the aerobic base only on steady ground. The 基礎期's climbing
+    is the weekly 長爬坡有氧 (engine/base_climb.py) and the small downhill dose (engine/downhill.py).
+    (SP-74 turned every other week's LSD into a low-RPE technical run.)
   * 專項期 — one 技術地形 session a week close to the race's terrain, out of a placed easy run.
     RPE 6–7 (the template 「技術地形 90′」) counts as a quality session (workout_steps.rpe_role:
     RPE ≥ 7), so it needs a day ≥ 2 days from the long run and every hard day (台灣教練) and room
@@ -41,18 +40,16 @@ from typing import Optional
 
 from backend.i18n import _
 
-BASE_RPE = (3, 4)            # 技術地形 60′ (低 RPE) — the template's
 SPEC_RPE = (6, 7)            # 技術地形 90′ — RPE 7 = a quality session (workout_steps.RPE_HARD_MIN)
 SPEC_EASY_RPE = (4, 5)       # 專項期 without room / a spaced day: kept easy (推估)
-CLIMB_PER_MIN = {"base": 5.0, "specific": 600 / 90}   # m per work minute: the templates' 300 m / 60′, 600 m / 90′
+CLIMB_PER_MIN = 600 / 90     # m per work minute: the template's 600 m / 90′
 SPEC_WORK_MAX = 90           # the template's main block
 SPEC_WORK_MIN = 30           # 推估: a shorter RPE 6–7 block is not worth a hard day
-WARM = {"base": 10, "specific": 15}
-COOL = {"base": 5, "specific": 10}
+WARM, COOL = 15, 10          # the template's
 EASY_MIN = 20                # the other easy runs give the difference, never below this
 HARD_IDS = ("long", "long2", "long3", "climb",   # B2B days and the race-climb repeats (steep_hill: its hard list)
             "downhill")                         # SP-99: ≥ 2 days from the downhill session (eccentric load)
-SRC = ("Koop（賽道專項：練和比賽相同的地形）；Uphill Athlete；隔週一次、RPE 對強度預算的換算是這個 app 的"
+SRC = ("Koop（賽道專項：練和比賽相同的地形）；Uphill Athlete；RPE 對強度預算的換算是這個 app 的"
        "建議（推估）")
 
 
@@ -60,11 +57,6 @@ def _d(x) -> Optional[dt.date]:
     if not x:
         return None
     return x if isinstance(x, dt.date) else dt.date.fromisoformat(str(x)[:10])
-
-
-def base_week(monday: dt.date) -> bool:
-    """基礎期: the weeks whose LSD becomes 技術地形 — every other week, by the ISO week number."""
-    return monday.isocalendar()[1] % 2 == 0
 
 
 def week_context(*, kind: str, mode: str, monday: dt.date, road: bool, b2b: Optional[dict] = None,
@@ -79,24 +71,21 @@ def week_context(*, kind: str, mode: str, monday: dt.date, road: bool, b2b: Opti
     from backend.engine import injuries as INJ
     if INJ.avoids(injury, "technical"):
         return {**info, "why": "；".join(injury["notes"])}
-    b = b2b or {}
-    if kind == "base" and (b.get("due") or b.get("candidate") or b.get("post")):
-        return {**info, "why": _("B2B 週：長跑照 B2B 排")}
-    if kind == "base" and not base_week(monday):
-        return {**info, "why": _("基礎期隔週一次：這週照常 LSD")}
+    if kind == "base":
+        # SP-87: the LSD stays on steady terrain (the module docstring)
+        return {**info, "why": _("基礎期不排技術地形課：長跑留在穩定地形，爬升改排長爬坡有氧")}
     return {**info, "active": True}
 
 
-def _steps(phase: str, work: int, rpe: tuple) -> dict:
+def _steps(work: int, rpe: tuple) -> dict:
     from backend.engine import workout_steps as WS
     from backend.engine import workout_templates as WT
     b = WT.B()
-    up = int(round(work * CLIMB_PER_MIN[phase] / 50.0) * 50) or None
-    items = [b.warm(WARM[phase], "好走的路段暖身"),
-             b.t("work", work * 60, WT.rpe(rpe[0], rpe[1], up=up),
-                 "技術路段，跑走混合，練腳步" if phase == "base" else "接近比賽路況的技術路段"),
-             b.t("cool", COOL[phase] * 60, WT.OPEN, "收操")]
-    return WS.doc(items, origin="template:lib:" + ("tech_easy" if phase == "base" else "tech_hard"))
+    up = int(round(work * CLIMB_PER_MIN / 50.0) * 50) or None
+    items = [b.warm(WARM, "好走的路段暖身"),
+             b.t("work", work * 60, WT.rpe(rpe[0], rpe[1], up=up), "接近比賽路況的技術路段"),
+             b.t("cool", COOL * 60, WT.OPEN, "收操")]
+    return WS.doc(items, origin="template:lib:tech_hard")
 
 
 def _steps_doc(s: dict) -> Optional[dict]:
@@ -236,43 +225,21 @@ def _hint(walk: Optional[dict]) -> str:
 def apply(ss: list, info: Optional[dict], *, hours: Optional[float] = None, rates: Optional[dict] = None,
           prefs=None, notes: Optional[list] = None, hard_done=(), user=(), walk: Optional[dict] = None,
           **_kw) -> list:
-    """Turn the week's LSD (基礎期) or one easy run (專項期) into the 技術地形 session, in place;
-    sets info["planned"]. `hard_done`: hard days already done this week (dates). `user`: the
-    user's own RPE ≥ 7 sessions this week (user_quality) — the 專項期 one already, none added.
+    """Turn one easy run of a 專項期 week into the 技術地形 session, in place; sets info["planned"].
+    `hard_done`: hard days already done this week (dates). `user`: the user's own RPE ≥ 7 sessions
+    this week (user_quality) — the 專項期 one already, none added.
     `walk` (hr_profile.walk_cap, SP-115; owner 2026-10-05): the 75 % HRmax figure goes into the
     detail as guidance only — the session keeps no HR target (target_policy: kind hike, HR ≤ AeT on
     the watch), its steps and push are unchanged."""
-    if not info or not info.get("active"):
-        return ss
+    if not info or not info.get("active") or info.get("phase") != "specific":
+        return ss                                       # SP-87: never in the 基礎期
     info["planned"] = []
     if any(s.get("id") == "tech" for s in ss):
         return ss                                       # one a week
-    if user and info["phase"] == "specific":
+    if user:
         info["user"] = list(user)
         return ss                                       # the user's own is this week's (user_note says so)
     rate = _rate(rates)
-    if info["phase"] == "base":
-        s = next((x for x in ss if x.get("id") == "long" and x.get("kind") == "long"), None)
-        if s is None or s.get("done") or not s.get("day") or s.get("heat"):
-            return ss
-        m = int(s.get("minutes") or 0)
-        work = m - WARM["base"] - COOL["base"]
-        if work < 30:
-            return ss
-        steps = _steps("base", work, BASE_RPE)
-        climb = steps["items"][1]["target"].get("up")
-        s.update(title=f"技術地形 {m}′（低 {_rpe_txt(BASE_RPE)}）", terrain="trail", target="", steps=steps,
-                 detail=(f"技術路段跑走混合，{_rpe_txt(BASE_RPE)}（輕鬆、可以講話）"
-                         + (f"，爬升約 {climb} m" if climb else "") + "；心率、功率不當目標（腳步才是瓶頸）"
-                         + _hint(walk)),
-                 source=SRC, climb_m=float(climb) if climb else None, tss=round(rate * m / 60.0, 1))
-        info["planned"].append({"day": s["day"], "minutes": m, "rpe": list(BASE_RPE), "role": "easy",
-                                "replaces": "long"})
-        if notes is not None:
-            notes.append({"level": "info", "src": "technical",
-                          "text": _("本週 LSD 換成技術地形 {m}′（{rpe}，算輕鬆課）：基礎期隔週一次，"
-                                    "練腳步和路況判斷、不練心肺；時間和 LSD 一樣", m=m, rpe=_rpe_txt(BASE_RPE))})
-        return ss
     # 專項期: one session out of a placed easy run
     hard = [_d(s["day"]) for s in ss if s.get("day") and (s.get("kind") in ("quality", "test", "race")
                                                            or s.get("id") in HARD_IDS)]
@@ -289,7 +256,7 @@ def apply(ss: list, info: Optional[dict], *, hours: Optional[float] = None, rate
     long_cap = getattr(prefs, "long_cap", None) if prefs is not None and getattr(prefs, "active", False) else None
     spaced = [s for s in easy if all(abs((_d(s["day"]) - h).days) >= 2 for h in hard)]
     room, room_txt = budget_room(ss, hours)
-    warm_cool = WARM["specific"] + COOL["specific"]
+    warm_cool = WARM + COOL
 
     def day_cap(s) -> Optional[float]:
         return long_cap if _d(s["day"]).weekday() >= 5 else cap
@@ -329,7 +296,7 @@ def apply(ss: list, info: Optional[dict], *, hours: Optional[float] = None, rate
         why = _("專項期每週 1 堂技術地形 {m}′，但{reason}：改成 {rpe}，算輕鬆課（不佔強度預算、不用隔 48 小時）",
                 m=m, reason=reason, rpe=_rpe_txt(rpe))
     delta = m - int(pick.get("minutes") or 0)
-    steps = _steps("specific", work, rpe)
+    steps = _steps(work, rpe)
     climb = steps["items"][1]["target"].get("up")
     pick.update(id="tech", kind="hike", terrain="trail", minutes=m, target="", steps=steps,
                 title=f"技術地形 {m}′（{_rpe_txt(rpe)}）",
