@@ -80,7 +80,25 @@ NOTICE_KIND = "notice"
 REJECTED_KEEP = 20
 
 SESSION_FACTORY: Optional[Callable] = None      # tests replace; default AsyncSessionLocal
-_TASKS: set = set()
+_TASKS: set = set()       # the running / queued automatic runs, each tagged with its tenant (_track)
+
+
+def _tenant_id() -> str:
+    from backend import tenancy
+    return tenancy.current().id
+
+
+def _track(t: "asyncio.Task", tenant_id: Optional[str] = None) -> "asyncio.Task":
+    """Remember a background run and whose it is (SP-374 第 2 條: busy() / wait_idle() look at
+    the asking tenant's runs only)."""
+    t._trc_tenant = tenant_id or _tenant_id()
+    _TASKS.add(t)
+    t.add_done_callback(_TASKS.discard)
+    return t
+
+
+def _mine(t, tenant_id: str) -> bool:
+    return getattr(t, "_trc_tenant", None) in (None, tenant_id)
 
 
 # ---------------------------------------------------------------------------
@@ -1105,26 +1123,28 @@ def _after_sync(source: str, result: dict) -> Optional[asyncio.Task]:
         t = asyncio.get_running_loop().create_task(run_safe(f"sync:{source}"))
     except RuntimeError:
         return None
-    _TASKS.add(t)
-    t.add_done_callback(_TASKS.discard)
-    return t
+    return _track(t)
 
 
 after_sync = _after_sync           # the hook sync/runner.py calls (tests replace it)
 
 
-def busy() -> bool:
-    """An automatic run (a sync's, a threshold / settings change's) is running or queued.
-    Safe from another thread (the warm-up thread polls it, SP-362)."""
-    return any(not t.done() for t in list(_TASKS))
+def busy(tenant_id: Optional[str] = None) -> bool:
+    """An automatic run (a sync's, a threshold / settings change's) of this tenant (default: the
+    current one) is running or queued. Another tenant's run does not count (SP-374 第 2 條:
+    with people syncing all day, the low-priority work after a sync would otherwise wait until
+    its time-out). Safe from another thread (the warm-up thread polls it, SP-362)."""
+    tid = tenant_id or _tenant_id()
+    return any(not t.done() and _mine(t, tid) for t in list(_TASKS))
 
 
 async def wait_idle(timeout: float = 600.0) -> bool:
-    """Wait for this event loop's automatic runs to end (at most `timeout` s): the lower
-    priority work after a sync (calibration, engine/calibrate.py) starts after the plan
-    (SP-362). True when idle."""
-    loop, me = asyncio.get_running_loop(), asyncio.current_task()
-    pending = [t for t in list(_TASKS) if not t.done() and t is not me and t.get_loop() is loop]
+    """Wait for this tenant's automatic runs on this event loop to end (at most `timeout` s):
+    the lower priority work after a sync (calibration, engine/calibrate.py) starts after the
+    plan (SP-362). True when idle. Other tenants' runs are not waited for (SP-374)."""
+    loop, me, tid = asyncio.get_running_loop(), asyncio.current_task(), _tenant_id()
+    pending = [t for t in list(_TASKS) if not t.done() and t is not me and t.get_loop() is loop
+               and _mine(t, tid)]
     if not pending:
         return True
     _done, left = await asyncio.wait(pending, timeout=timeout)
@@ -1147,10 +1167,13 @@ def _after_settings() -> None:
 
 
 def _start_run(trigger: str) -> None:
+    import contextvars
+    # the caller's context (its tenant), also when started on the app's loop from a worker
+    # thread: the run must re-plan the tenant whose threshold / setting changed (SP-374)
+    ctx, tid = contextvars.copy_context(), _tenant_id()
+
     def start():
-        t = asyncio.get_running_loop().create_task(run_safe(trigger))
-        _TASKS.add(t)
-        t.add_done_callback(_TASKS.discard)
+        _track(asyncio.get_running_loop().create_task(run_safe(trigger), context=ctx), tid)
     try:
         asyncio.get_running_loop()
     except RuntimeError:
