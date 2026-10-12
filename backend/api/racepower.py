@@ -980,7 +980,7 @@ def put_saved(eid: str, body: SavedIn):
         r = RC.save(eid, body.inputs, body.result)
     except RC.RaceCalcError as e:
         raise HTTPException(400, str(e))
-    return {"event_id": eid, "saved_at": r["saved_at"] if r else None}
+    return {"event_id": eid, "saved_at": r["saved_at"] if r else None, "uid": r.get("uid") if r else None}
 
 
 @router.delete("/saved/{eid}")

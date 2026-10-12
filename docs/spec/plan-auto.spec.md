@@ -657,6 +657,14 @@ path for new tables. Each row holds:
 - the affected sessions before and after
 - why it was held
 - the push outcome, or the push error
+- a stable id `uid` (UUID4 hex, unique index `ux_plan_change_log_uid`) next to the integer `id`,
+  and `updated_at` (UTC) that every status / push-result change moves (the model's `onupdate`,
+  `backend/db/models.py:242`). SP-310: the id a device sync (SP-312) keys the row by; the rows
+  from before get theirs, and `updated_at` = `created_at`, at `init_db` on every tenant DB
+  (`backend/db/stable_ids.py:84`). `GET /plan/auto`'s `log` entries carry `uid`
+  (`entry_dict`, `backend/engine/plan_auto.py:421`); 同意 / 拒絕 / 復原 still take the integer id.
+  `ref_id` still points at the integer id. plan_sessions keeps its own `uid` (12 hex
+  characters of a UUID4, unique per athlete, kept through every regeneration — the COROS push key)
 
 Since SP-362 B3 the run writes its `applied` / `pending` row under the writer lock with push
 `{status: pushing}` (or `held` / `off`) and fills the push outcome in once the push, outside the
@@ -953,3 +961,4 @@ The owner's calls, gathered from the sections above (each is described there wit
 | 2026-10-08 | fix | SP-353 review | No maintenance session for a multi-day 百岳 (`baiyue_multiday.applies`, `backend/engine/quality_gate.py:1679`): SP-114's `apply_me` would delete / replace it — those weeks stay Zone 3 + ME with the pre-SP-353 note. The stored maintenance session is 不算進階 (`equiv` / `progress` False, `backend/engine/overview.py:1003`), so `dose_step` judges a done one without stepping Zone 5. It takes the Zone 5 state machine's tweak (`:2747`). The 「輪到 5 區維持課，但…」 notes only when Zone 5 is or was open (`:2589`). Tests: `backend/tests/test_specific_split.py::test_no_zone5_maintenance_on_a_multi_day_baiyue_that_gets_me`, `::test_a_done_maintenance_session_is_judged_but_does_not_move_the_rung`, `::test_the_maintenance_session_takes_the_state_machines_tweak`, `::test_no_maintenance_note_when_zone5_never_opened` |
 | 2026-10-08 | fix | SP-295 review | A stored Zone 3 pair already breaking 重新上鎖天數 ≥ 最長幾天不跑 (saved before the check) is flagged, not changed: `list_calibration` adds `warn` to both rows (`backend/api/calib.py:63`), shown next to them in 進階設定 (`backend/static/settings.html:1627`). Test: `backend/tests/test_z3_unlock_settings.py::test_a_stored_invalid_pair_is_flagged_not_changed` |
 | 2026-10-12 | feature | SP-378 | Power bands: road easy 65–80 % CP, road long 65–88 % (were 75–80 / 80–88); the watch gets an interval band's judging band (upper × 1.05, Zone 5 to 116 %), the page keeps the prescription; the editor starts an easy step's power override at 65–80 %. `backend/engine/zones.py` (`EASY_BAND`, `LONG_BAND`, `watch_band`), `backend/engine/workout_steps.py` (`_watch_band`), `backend/sync/coros_workouts.py`. Tests: `backend/tests/test_power_bands_sp378.py` |
+| 2026-10-12 | feature | SP-310 | Stable ids: `plan_change_log.uid` (UUID4 hex) + `updated_at` (UTC, moved by every status / push change) and `injury_events.uid` (UUID4 hex; `updated_at` now also moves on any ORM / Core update), unique indexes, the rows from before filled by `init_db` on every tenant DB (`backend/db/stable_ids.py`); `uid` in the change-log entries and the 傷病紀錄 API (`EVENT_COLS`, `event_json`); every endpoint still takes the integer id; plan_sessions' existing `uid` confirmed as its stable id. Tests `backend/tests/test_stable_ids_sp310.py` |

@@ -424,8 +424,9 @@ def entry_dict(r: PlanChangeLog) -> dict:
     if isinstance(push, dict) and push.get("status") == "pushing" and r.id not in _PUSHING:
         # its push is not running (a crash / restart mid-push, review M2): say so, not 「推送中」 forever
         push = {**push, "status": "interrupted"}
-    return {"id": r.id, "at": r.created_at.isoformat() + "Z" if r.created_at else None, "trigger": r.trigger,
-            "status": r.status, "summary": r.summary, "items": j(r.items_json, []), "big": j(r.big_json, None),
+    return {"id": r.id, "uid": r.uid, "at": r.created_at.isoformat() + "Z" if r.created_at else None,
+            "trigger": r.trigger, "status": r.status, "summary": r.summary, "items": j(r.items_json, []),
+            "big": j(r.big_json, None),
             "push": push, "notice_uid": r.notice_uid, "ref_id": r.ref_id,
             "can_undo": r.status == "applied" and bool(j(r.before_json, []) or j(r.after_json, []))}
 

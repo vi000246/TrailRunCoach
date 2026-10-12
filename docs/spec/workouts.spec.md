@@ -66,7 +66,17 @@ The pack carried (`pack_kg`, PATCH on the dataset workout) is not a tag column: 
 **Storage.** Table `activity_tags` (`backend/db/models.py`, created by `init_db`'s `create_all`).
 Columns added later (`exclusion`, `name`, `tags_json`, `pain`, `pain_area`, `injury_id`;
 `activity_tags.LATE_COLS`) are added by `database._migrate_schema` and by `upsert` on an older table.
-Every write (`apply_update`) sets `row.updated_at` (`backend/engine/activity_tags.py:606`). Only the user's values are stored, each with `*_overridden`; auto values
+Every write (`apply_update`) sets `row.updated_at` (`backend/engine/activity_tags.py:607`), and any other
+ORM / Core update moves it too (the model's `onupdate`, e.g. 刪除傷病紀錄 clearing `injury_id`).
+**Stable id (SP-310).** Each row also has `uid`, a UUID5 of its key (`athlete_id`, `start_local`)
+as 32 hex characters (`stable_ids.tag_uid`, `backend/db/stable_ids.py:57`; the model's insert default,
+`backend/db/models.py:310`), unique (`ux_activity_tags_uid`), never changed: the same activity marked
+on two devices gets the same `uid`, so a later device sync (SP-312) merges the marks into one row.
+Rows are never deleted (a cleared mark is NULLs), so a key never needs a second id. Not the FIT
+hash (SP-308): most WKO5 activities have no FIT, and the COROS and the TP copy of one run differ
+in bytes but share the start minute. The rows from before get theirs at `init_db`
+(`stable_ids.migrate`, `backend/db/stable_ids.py:84`); `upsert` on an older table adds the column
+(`LATE_COLS`). The integer `id` stays. Only the user's values are stored, each with `*_overridden`; auto values
 are computed at read time and merged (`merge`). Key: the local start minute
 (`YYYY-MM-DDTHH:MM`, Dataset `entry.start`). The dataset file (e.g. a `.wko4` name) is matched
 first — also without the 同步資料 source's `coros/` / `tp/` prefix (`activity_key.same_file`) — then
@@ -245,10 +255,10 @@ flagged.
 | Method | Path | Body / result |
 |---|---|---|
 | PATCH | `/api/v1/workouts/{id}/classification` | `{trail_classification}`: `road` / `trail` / `unknown` = a user override (`VALID_CLASSIFICATIONS`, `backend/api/workouts.py:17`); `auto` clears it and re-applies `classify_trail` |
-| PATCH | `/api/v1/workouts/{id}/activity` | `{activity_type?, effort?, note?, exclusion?, name?, tags?, pain?, pain_area?, pain_side?, pain_score?, poles?, surface?}` (`ActivityUpdate`, `backend/api/workouts.py:55`); a key present with null clears it (back to auto), absent = unchanged; `tags` replaces the list, then `poles` / `surface` rewrite their tag; a pain mark attaches to / opens a 傷病紀錄 event (404 in demo mode); 400 invalid value, 404, 422 no start time. Returns `{id, …}` with the stored user values (incl. `poles`, `poles_user`, `surface`, `pain_score`) |
-| GET | `/api/v1/wko5/workouts/{idx}/activity` | dataset workout (current source): effective, auto (+ reasons), overridden flags, note, `effort_detail` (HR fraction, above-AeT share, long-rest share), `capacity` (race-power sample or not), the option labels, `power` (`source`, `used`, `label`, `setting`), `title_original`, `title_from`, `terrain`, `origin`, `pack`, `poles` / `poles_user` / `poles_race` (SP-300), `pain_state` (+ `pain_score`, the 傷別 pain-monitoring text `monitor` and the re-entry prompt `reentry`, SP-269) (`_activity_json`, `backend/api/wko5views.py:877`) |
+| PATCH | `/api/v1/workouts/{id}/activity` | `{activity_type?, effort?, note?, exclusion?, name?, tags?, pain?, pain_area?, pain_side?, pain_score?, poles?, surface?}` (`ActivityUpdate`, `backend/api/workouts.py:55`); a key present with null clears it (back to auto), absent = unchanged; `tags` replaces the list, then `poles` / `surface` rewrite their tag; a pain mark attaches to / opens a 傷病紀錄 event (404 in demo mode); 400 invalid value, 404, 422 no start time. Returns `{id, …}` with the stored user values (incl. `poles`, `poles_user`, `surface`, `pain_score`) and the tag row's `uid` (SP-310) |
+| GET | `/api/v1/wko5/workouts/{idx}/activity` | dataset workout (current source): effective, auto (+ reasons), overridden flags, note, `effort_detail` (HR fraction, above-AeT share, long-rest share), `capacity` (race-power sample or not), the option labels, `power` (`source`, `used`, `label`, `setting`), `title_original`, `title_from`, `terrain`, `origin`, `pack`, `poles` / `poles_user` / `poles_race` (SP-300), `pain_state` (+ `pain_score`, the 傷別 pain-monitoring text `monitor` and the re-entry prompt `reentry`, SP-269), `tag_uid` (the stored mark's `uid`, null when nothing is stored; SP-310) (`_activity_json`, `backend/api/wko5views.py:1002`) |
 | GET | `/api/v1/wko5/workouts/{idx}/pain` | the pain mark only (the chart page's chip); 404 in demo mode |
-| GET | `/api/v1/wko5/activities` | every activity of the current source, newest first, with the stored user values (type / effort marks, name, tags, note, exclusion, pain, `pain_score`, `poles` / `poles_race`, `surface`), terrain, power label, recorded RPE / feel and `self_rating` (COROS, SP-231), `rain_mm` and `pole_chart` (counts toward the comparison); excluded files with `index: null`. Top level: `pole_tags`, `pole_none_tag`, `surface_tags`, `pole_compare` (the 5 + 5 counts), `rain_hint_mm` (`activities_list`, `backend/api/wko5views.py:1085`) |
+| GET | `/api/v1/wko5/activities` | every activity of the current source, newest first, with the stored user values (type / effort marks, name, tags, note, exclusion, pain, `pain_score`, `poles` / `poles_race`, `surface`), terrain, power label, recorded RPE / feel and `self_rating` (COROS, SP-231), `rain_mm` and `pole_chart` (counts toward the comparison), `tag_uid` (the stored mark's `uid`, null when none; SP-310); excluded files with `index: null`. Top level: `pole_tags`, `pole_none_tag`, `surface_tags`, `pole_compare` (the 5 + 5 counts), `rain_hint_mm` (`activities_list`, `backend/api/wko5views.py:1085`) |
 | GET | `/api/v1/wko5/activities/auto` | the auto type / effort (+ reasons) of every activity, computed in the background (`backend/api/activity_auto.py`: one job per Dataset, chunks of 25 newest first, values kept on disk per activity file); `{state computing / ready / error, n_done, n_total, stale, auto}` — the page polls. **Per activity since SP-334**: a cheap whole-data `signature` (`backend/api/activity_auto.py:241`) only decides whether a job starts; the job (in the request's tenant context) then builds every activity's own key (`_Keys`, `backend/api/activity_auto.py:341`) and recomputes only the activities whose key changed — see 「Auto values per activity」 below |
 | GET | `/api/v1/wko5/sports` | the 圖表分析 activity-type filter: the kinds present with counts, in the filter's order (`backend/api/wko5views.py:1307`, SP-263) |
 | GET | `/api/v1/wko5/activities/stats` | `{key: {avg_hr, avg_power}}` for the list columns |
@@ -431,7 +441,7 @@ the app-type table and the filter kinds.
 
 ## Open Questions
 
-- [ ] `activity_tags` rows get a stable id (UUID); `updated_at` is already written（SP-310，Todo）——尚未實作
+- [x] `activity_tags` rows get a stable id (UUID); `updated_at` is already written（SP-310）——已做 2026-10-12：`uid` = UUID5 of (athlete, start minute), see Storage
 - [ ] A change-log sync trial for `user_settings` and `activity_tags`（SP-312，Todo）——尚未實作
 - [ ] Manual FIT import (pick files / a folder) on the 活動列表 page（SP-323，Todo）——尚未實作
 
@@ -453,3 +463,4 @@ the app-type table and the filter kinds.
 | 2026-10-08 | review fix | SP-334 code review | `effort_rest_max` (每人校正 P9) in every activity's key and the job signature (a refit or manual change recomputed nothing before); the drift calibration only in the runs' key; the job thread keeps the tenant context; WKO5 Datasets list the PD refit's synced FITs (`synced_fit_files`); the run's day in the thresholds window row; the dataset's own LTHR only on days without a plan LTHR; signature covers config / FTP / mFTP snapshot / the whole RPE row; `.tmp` removed on a failed write; kept entries refresh their probe; tests for test sessions, re-index + done_by, a bad file, own LTHR, watch power, time zone, tenants |
 | 2026-10-08 | feature | SP-57 | The recorded RPE (FIT or COROS's post-run rating) also feeds the per-level 「負荷」 RPE conversion (`backend/engine/rpe_load.py:280`); COROS FITs re-checked: no RPE field, the rating comes from the activity detail (SP-231) |
 | 2026-10-08 | review fix | SP-57 code review | A FIT RPE maps two values per level (6 → 累, Seiler zone 2 = session RPE 5–6; COROS 1–5 unchanged), `backend/engine/rpe_load.py:121` |
+| 2026-10-12 | feature | SP-310 | Stable id: `activity_tags.uid` (UUID5 of `athlete_id` + `start_local`, unique index `ux_activity_tags_uid`; `backend/db/stable_ids.py`), filled for the rows from before by `init_db` on every tenant DB; `updated_at` also moves on Core / ORM updates (`onupdate`); API: `uid` on PATCH `/api/v1/workouts/{id}/activity`, `tag_uid` on the activity JSON and `GET /activities`; the integer ids and the start-minute key unchanged. Tests `backend/tests/test_stable_ids_sp310.py` |

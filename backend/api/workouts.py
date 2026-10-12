@@ -181,6 +181,7 @@ def _tag_json(t: Optional[ActivityTag]) -> dict:
     return {"activity_type": ty, "activity_type_label": AT.TYPES.get(ty), "activity_type_overridden": ty is not None,
             "effort": ef, "effort_label": AT.EFFORTS.get(ef), "effort_overridden": ef is not None,
             "note": t.note if t else None, "key": t.start_local if t else None,
+            "uid": t.uid if t else None,                  # the tag row's stable id (SP-310)
             "exclusion": AT.user_exclusion({"exclusion": t.exclusion}) if t else None,
             "name": AT.name_of({"name": t.name}) if t else None,
             "tags": AT.tags_of({"tags_json": t.tags_json}) if t else [],

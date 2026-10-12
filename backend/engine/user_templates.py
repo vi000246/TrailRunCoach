@@ -94,11 +94,15 @@ def _loads(raw, default):
 
 async def _ensure(db: AsyncSession) -> None:
     """The two tables, in a DB made before them that init_db hasn't migrated yet (a demo
-    sandbox copied from an older base): create_all is idempotent (checkfirst)."""
+    sandbox copied from an older base): create_all is idempotent (checkfirst); a table from
+    before SP-310 gets its uid column (db/stable_ids.migrate fills the ids at the next init_db)."""
     def mk(sess):
+        from sqlalchemy import text
         conn = sess.connection()
         for tbl in (WorkoutTemplateUser.__table__, WorkoutTemplateCat.__table__):
             tbl.create(conn, checkfirst=True)
+        if "uid" not in {r[1] for r in conn.execute(text("PRAGMA table_info(workout_templates_user)"))}:
+            conn.execute(text("ALTER TABLE workout_templates_user ADD COLUMN uid VARCHAR(32)"))
     await db.run_sync(mk)
 
 
@@ -220,8 +224,9 @@ def clean(data: dict, custom_ids: set, partial: bool = False) -> dict:
 
 
 def to_dict(t: WorkoutTemplateUser) -> dict:
-    return {"id": t.id, "name": t.name, "cats": _loads(t.cats_json, []), "target_basis": t.target_basis,
-            "steps": _loads(t.steps_json, {}), "note": t.note or "", "copied_from": t.copied_from,
+    return {"id": t.id, "uid": t.uid, "name": t.name, "cats": _loads(t.cats_json, []),
+            "target_basis": t.target_basis, "steps": _loads(t.steps_json, {}), "note": t.note or "",
+            "copied_from": t.copied_from,
             "gpx": gpx_meta(t),
             "created_at": t.created_at.isoformat() if t.created_at else None,
             "updated_at": t.updated_at.isoformat() if t.updated_at else None}

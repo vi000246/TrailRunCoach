@@ -133,12 +133,13 @@ def _db_path(db_path=None) -> Optional[Path]:
 _memo: dict = {}
 COLS = ("id", "athlete_id", "start_local", "source", "file", "workout_id", "distance_km", "label",
         "activity_type", "activity_type_overridden", "effort", "effort_overridden", "note", "exclusion",
-        "name", "tags_json", "pain", "pain_area", "injury_id", "pain_score")
+        "name", "tags_json", "pain", "pain_area", "injury_id", "pain_score", "uid")
 EXCLUSIONS = ("keep", "exclude")    # bad_activity.KEEP / EXCLUDE; None = the auto rule
 # columns added after the table first shipped (database._migrate_schema; upsert adds them too)
 LATE_COLS = {"exclusion": "TEXT", "name": "TEXT", "tags_json": "TEXT",
              "pain": "INTEGER", "pain_area": "TEXT", "injury_id": "INTEGER",   # pain*: engine/injuries.py
-             "pain_score": "INTEGER"}                                         # 0–10 (SP-271)
+             "pain_score": "INTEGER",                                         # 0–10 (SP-271)
+             "uid": "VARCHAR(32)"}               # the stable id (SP-310, db/stable_ids.tag_uid)
 NAME_MAX = 200
 TAG_MAX_LEN = 30
 TAGS_MAX = 20

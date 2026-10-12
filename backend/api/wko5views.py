@@ -1007,7 +1007,9 @@ def _activity_json(ds, w) -> dict:
     src = A.power_source(ds, w)
     kept = next((x for x in getattr(ds, "exclusion_kept", []) if x["file"] == w.entry.file), None)
     title = getattr(w.entry, "title", "") or ""
+    u = AT.user_of(w)
     return {"workout": w.idx, "key": AT.key_of(w.entry.start), "file": w.entry.file, "label": A.label(w),
+            "tag_uid": (u or {}).get("uid"),          # the stored mark's stable id (SP-310), None = none
             "title_original": title or A.label(w), "title_from": "activity" if title else "label",
             "terrain": _terrain(ds, w.entry.file, A.is_trail(w)),
             "origin": _origin(ds, w),
@@ -1015,7 +1017,7 @@ def _activity_json(ds, w) -> dict:
             # 登山杖: the user's choice, else 有杖 「依賽事設定」 (SP-300)
             **AT.pole_state(t.get("tags"), AT.race_poles(ds).get(w.idx)),
             # 「要標成濕路嗎？」 applies to 越野跑 / 登山健行 only (SP-299): a type change moves it in / out
-            "rain_kind": AT.rain_kind(w, AT.user_of(w)),
+            "rain_kind": AT.rain_kind(w, u),
             # bad activity files (engine/bad_activity.py): an excluded file is not
             # in ds.workouts; `flagged` = the rule's reason when the user kept it
             "exclusion_state": {"override": t.get("exclusion"), "flagged": kept["reason"] if kept else None,
@@ -1241,7 +1243,9 @@ def activities_list():
                 "surface": AT.surface_of(AT.tags_of(u)),
                 "note": (u or {}).get("note"),
                 "user_type": AT.user_type(u), "user_effort": AT.user_effort(u),
-                "user_exclusion": AT.user_exclusion(u), **_pain_part(u)}
+                "user_exclusion": AT.user_exclusion(u), **_pain_part(u),
+                # the stored mark's stable id (SP-310); None = nothing stored for it
+                "tag_uid": (u or {}).get("uid")}
 
     def rpe_part(start, file):
         # the watch's post-workout RPE / feel (FIT session workout_rpe / workout_feel), read only

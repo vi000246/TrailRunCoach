@@ -439,9 +439,9 @@ def event_json(ev: dict, today: dt.date, linked: int = 0, auto_days: Optional[in
     o = _d(ev.get("onset_date")) or today
     end = end_of(ev, today)
     ill = is_illness(ev)
-    return {**{k: ev.get(k) for k in ("id", "area", "side", "kind", "severity", "pain_max", "onset_date", "onset_key",
-                                      "onset_file", "status", "resolved_date", "days_missed", "pause_quality",
-                                      "recurrence_of", "note", "illness")},
+    return {**{k: ev.get(k) for k in ("id", "uid", "area", "side", "kind", "severity", "pain_max", "onset_date",
+                                      "onset_key", "onset_file", "status", "resolved_date", "days_missed",
+                                      "pause_quality", "recurrence_of", "note", "illness")},
             "category": "illness" if ill else "injury",
             "illness_label": _(ILLNESS[ev["illness"]]) if ill and ev.get("illness") in ILLNESS else "",
             # 傷別 (SP-269): the condition and its pain-monitoring text (illness: none)
@@ -471,7 +471,7 @@ def summary(ev: Optional[dict], today: dt.date) -> Optional[dict]:
 
 EVENT_COLS = ("id", "athlete_id", "area", "side", "kind", "severity", "pain_max", "onset_date", "onset_key",
               "onset_file", "status", "resolved_date", "days_missed", "pause_quality", "recurrence_of", "note",
-              "category", "illness", "condition", "walkrun_from")
+              "category", "illness", "condition", "walkrun_from", "uid")      # uid: the stable id (SP-310)
 _memo: dict = {}
 
 

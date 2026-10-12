@@ -1,7 +1,8 @@
 from datetime import datetime, date
 from typing import Optional
-from sqlalchemy import String, Integer, Float, Boolean, DateTime, Date, Text, ForeignKey, UniqueConstraint
+from sqlalchemy import String, Integer, Float, Boolean, DateTime, Date, Text, ForeignKey, Index, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from backend.db.stable_ids import new_uid, tag_uid_default
 
 
 class Base(DeclarativeBase):
@@ -244,7 +245,13 @@ class PlanChangeLog(Base):
     COROS push outcome, and a held proposal waiting for approval. New table:
     created by init_db's create_all (the schema's migration for new tables)."""
     __tablename__ = "plan_change_log"
+    __table_args__ = (Index("ux_plan_change_log_uid", "uid", unique=True),)
     id: Mapped[int] = mapped_column(primary_key=True)
+    # SP-310 (db/stable_ids.py): the row's stable id (UUID4 hex, a device sync's key; the integer id
+    # stays every API's), and when the row last changed (a status / push result moves it)
+    uid: Mapped[Optional[str]] = mapped_column(String(32), nullable=True, default=new_uid)
+    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, default=datetime.utcnow,
+                                                           onupdate=datetime.utcnow)
     athlete_id: Mapped[int] = mapped_column(ForeignKey("athletes.id"), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     trigger: Mapped[str] = mapped_column(String(40))          # sync:coros / sync:tp / manual / approve / undo …
@@ -295,8 +302,12 @@ class ActivityTag(Base):
     is matched first when present; `workout_id` links a workout_files row
     when the tag was set through /api/v1/workouts/{id}/activity."""
     __tablename__ = "activity_tags"
-    __table_args__ = (UniqueConstraint("athlete_id", "start_local"),)
+    __table_args__ = (UniqueConstraint("athlete_id", "start_local"),
+                      Index("ux_activity_tags_uid", "uid", unique=True))
     id: Mapped[int] = mapped_column(primary_key=True)
+    # SP-310 (db/stable_ids.py): the stable id, a UUID5 of (athlete_id, start_local) — the same
+    # activity marked on two devices gets the same one; written on insert, never changed
+    uid: Mapped[Optional[str]] = mapped_column(String(32), nullable=True, default=tag_uid_default)
     athlete_id: Mapped[int] = mapped_column(Integer, default=1, index=True)
     start_local: Mapped[str] = mapped_column(String(16), index=True)
     source: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
@@ -325,7 +336,7 @@ class ActivityTag(Base):
     # with the mark). Added by database._migrate_schema.
     pain_score: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     injury_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
 class InjuryEvent(Base):
@@ -336,7 +347,9 @@ class InjuryEvent(Base):
     (start minute) plus the dataset file, as activity_tags. New table:
     created by init_db's create_all."""
     __tablename__ = "injury_events"
+    __table_args__ = (Index("ux_injury_events_uid", "uid", unique=True),)
     id: Mapped[int] = mapped_column(primary_key=True)
+    uid: Mapped[Optional[str]] = mapped_column(String(32), nullable=True, default=new_uid)   # SP-310, UUID4 hex
     athlete_id: Mapped[int] = mapped_column(Integer, default=1, index=True)
     area: Mapped[str] = mapped_column(String(40), default="unknown")
     side: Mapped[Optional[str]] = mapped_column(String(8), nullable=True)
@@ -364,7 +377,7 @@ class InjuryEvent(Base):
     # pain light the walk-run stages start from it (or from a ≥ 30-min walk marked 沒痛／痠)
     walkrun_from: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
 class EventGpx(Base):
@@ -392,13 +405,18 @@ class EventGpx(Base):
 class RaceCalc(Base):
     """The race calculator's saved inputs + last result per season-plan event
     (engine/race_calc_store.py, plain sqlite3 with the same DDL). New table:
-    created by init_db's create_all (additive)."""
+    created by init_db's create_all (additive). saved_at: the server's local time (shown on the
+    page); updated_at: UTC like the other tables (SP-310), both written by race_calc_store.save."""
     __tablename__ = "race_calc"
+    __table_args__ = (Index("ux_race_calc_uid", "uid", unique=True),)
     id: Mapped[int] = mapped_column(primary_key=True)
     event_id: Mapped[str] = mapped_column(String(64), unique=True)
     inputs_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     result_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     saved_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    uid: Mapped[Optional[str]] = mapped_column(String(32), nullable=True, default=new_uid)   # SP-310, UUID4 hex
+    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, default=datetime.utcnow,
+                                                           onupdate=datetime.utcnow)
 
 
 class WorkoutTemplateUser(Base):
@@ -408,7 +426,9 @@ class WorkoutTemplateUser(Base):
     for, and an optional training-route GPX (the file: <HOME>/template_gpx/<id>.gz; its
     elevation profile cached here). New table: created by init_db's create_all."""
     __tablename__ = "workout_templates_user"
+    __table_args__ = (Index("ux_workout_templates_user_uid", "uid", unique=True),)
     id: Mapped[int] = mapped_column(primary_key=True)
+    uid: Mapped[Optional[str]] = mapped_column(String(32), nullable=True, default=new_uid)   # SP-310, UUID4 hex
     name: Mapped[str] = mapped_column(String(80))
     cats_json: Mapped[str] = mapped_column(Text, default="[]")
     target_basis: Mapped[Optional[str]] = mapped_column(String(8), nullable=True)   # hr / power; None = 自動
@@ -422,7 +442,7 @@ class WorkoutTemplateUser(Base):
     gpx_loss_m: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     gpx_profile_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)   # {"km": [...], "z": [...]}
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
 class WorkoutTemplateCat(Base):
