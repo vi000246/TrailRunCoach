@@ -15,4 +15,4 @@ greenlet>=3.0.0
 tzdata>=2024.1          # IANA zones for zoneinfo on Windows
 cryptography>=42.0.0     # Fernet: tokens encrypted at rest
 garminconnect>=0.3.17,<0.4   # Garmin trial (SP-91): unofficial Garmin Connect; optional at runtime (imported lazily)
-authlib>=1.8             # Google sign-in (SP-58): the OAuth client (PKCE, code exchange); its joserfc verifies the id_token
+authlib>=1.8,<1.9        # Google sign-in (SP-58): authorization URL, PKCE, token request; its joserfc verifies the id_token

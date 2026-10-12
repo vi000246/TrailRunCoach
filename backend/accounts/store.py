@@ -44,6 +44,7 @@ from backend import accounts
 OWNER, USER = "owner", "user"
 ROLES = (OWNER, USER)
 SESSION_DAYS = 30
+SESSION_MAX_DAYS = 90          # however much it is used, a session ends this long after the sign-in (SP-58)
 SCHEMA_VERSION = 1
 _LOCK = threading.Lock()
 DB_PATH: Optional[Path] = None        # fixed file (tests); None = accounts.accounts_db_path()
@@ -174,7 +175,10 @@ class User:
 
     def folder(self) -> Path:
         """The tenant folder: tenant_dir as stored (absolute for the owner), or relative to the
-        server root (users/<id>), so the server root can move."""
+        server root (users/<id>), so the server root can move. An empty one is refused: it would
+        make the server root itself (accounts.db, everyone's folders) this user's tenant."""
+        if not (self.tenant_dir or "").strip():
+            raise ValueError(f"user {self.id} has no tenant folder")
         p = Path(self.tenant_dir)
         return p if p.is_absolute() else accounts.server_root() / p
 
@@ -251,13 +255,19 @@ def migrate_owner(owner_dir: Optional[Path] = None) -> User:
 
 
 def create_user(email: Optional[str] = None, google_sub: Optional[str] = None,
-                display_name: Optional[str] = None, role: str = USER, email_verified: bool = False) -> User:
+                display_name: Optional[str] = None, role: str = USER, email_verified: bool = False,
+                cap: Optional[int] = None) -> Optional[User]:
     """A new user and its tenant folder name (users/<id>; the folder itself is made by
-    tenants.ensure_ready on first use). The owner is user 1 (migrate_owner), never made here."""
+    tenants.ensure_ready on first use). The owner is user 1 (migrate_owner), never made here.
+    `cap`: None (made) when the server already holds that many users — counted in the same
+    write transaction as the insert, so two sign-ups can't both take the last place (SP-58)."""
     if role not in ROLES or role == OWNER:
         raise ValueError(f"role must be {USER!r} (the owner is user 1, migrate_owner)")
     init()
     with _LOCK, connect() as con:
+        con.execute("BEGIN IMMEDIATE")
+        if cap is not None and con.execute("SELECT count(*) FROM users").fetchone()[0] >= cap:
+            return None
         if con.execute("SELECT 1 FROM users WHERE id = 1").fetchone() is None:
             # keep id 1 for the owner even when a user signs up before the migration ran
             if con.execute("SELECT 1 FROM sqlite_sequence WHERE name = 'users'").fetchone() is None:
@@ -310,15 +320,6 @@ def set_disabled(uid: int, disabled: bool, reason: Optional[str] = None) -> None
                     (_iso(_now()) if disabled else None, reason if disabled else None, int(uid)))
         if disabled:
             con.execute("DELETE FROM sessions WHERE user_id = ?", (int(uid),))
-
-
-def link_google(uid: int, sub: str, email: Optional[str] = None) -> None:
-    """The owner's (or a user's) Google identity, linked once at sign-in (SP-58)."""
-    init()
-    with _LOCK, connect() as con:
-        con.execute("UPDATE users SET google_sub = ?, email = coalesce(?, email) WHERE id = ?", (sub, email, int(uid)))
-        con.execute("INSERT OR IGNORE INTO identities(user_id, provider, subject, email, created_at) "
-                    "VALUES (?, 'google', ?, ?, ?)", (int(uid), sub, email, _iso(_now())))
 
 
 def claim_owner_google(sub: str, email: Optional[str] = None) -> bool:
@@ -374,30 +375,34 @@ def session_user(token: Optional[str], now: Optional[dt.datetime] = None) -> Opt
 
 
 def session_lookup(token: Optional[str], now: Optional[dt.datetime] = None) -> Optional[tuple]:
-    """(user, slid) of a live session — slid: the expiry was just moved SESSION_DAYS ahead (at
-    most once an hour; the sign-in gate then renews the cookie too). None for no / an expired
-    (deleted here) / a disabled user's session."""
+    """(user, renew) of a live session — renew: the cookie's new Max-Age in seconds when the
+    expiry was just moved ahead (at most once an hour, SESSION_DAYS from now but never past
+    SESSION_MAX_DAYS after the sign-in), else None. None for no / an expired or too old (deleted
+    here) / a disabled user's session."""
     if not token:
         return None
     init()
     now = now or _now()
     h = _hash(token)
     with connect() as con:
-        row = con.execute("SELECT s.expires_at, s.last_seen_at, u.* FROM sessions s JOIN users u ON u.id = s.user_id "
-                          "WHERE s.token_hash = ?", (h,)).fetchone()
+        row = con.execute("SELECT s.expires_at, s.last_seen_at, s.created_at AS s_created, u.* FROM sessions s "
+                          "JOIN users u ON u.id = s.user_id WHERE s.token_hash = ?", (h,)).fetchone()
         if row is None:
             return None
-        if dt.datetime.fromisoformat(row["expires_at"]) <= now:
+        end = dt.datetime.fromisoformat(row["s_created"]) + dt.timedelta(days=SESSION_MAX_DAYS)
+        if dt.datetime.fromisoformat(row["expires_at"]) <= now or end <= now:
             con.execute("DELETE FROM sessions WHERE token_hash = ?", (h,))
             return None
         u = _user(row)
         if u.disabled:
             return None
-        slid = now - dt.datetime.fromisoformat(row["last_seen_at"]) >= dt.timedelta(hours=1)
-        if slid:
+        renew = None
+        if now - dt.datetime.fromisoformat(row["last_seen_at"]) >= dt.timedelta(hours=1):
+            until = min(now + dt.timedelta(days=SESSION_DAYS), end)
             con.execute("UPDATE sessions SET last_seen_at = ?, expires_at = ? WHERE token_hash = ?",
-                        (_iso(now), _iso(now + dt.timedelta(days=SESSION_DAYS)), h))
-        return u, slid
+                        (_iso(now), _iso(until), h))
+            renew = int((until - now).total_seconds())
+        return u, renew
 
 
 def delete_session(token: Optional[str]) -> None:
@@ -498,9 +503,9 @@ def pop_oauth_state(state: str) -> Optional[dict]:
     h = _hash(state)
     with _LOCK, connect() as con:
         row = con.execute("SELECT * FROM oauth_states WHERE state_hash = ?", (h,)).fetchone()
-        if row is None:
+        # taken once: only the request whose DELETE removed the row may use it
+        if row is None or con.execute("DELETE FROM oauth_states WHERE state_hash = ?", (h,)).rowcount != 1:
             return None
-        con.execute("DELETE FROM oauth_states WHERE state_hash = ?", (h,))
     out = dict(row)
     if dt.datetime.fromisoformat(out["expires_at"]) <= _now():
         return None
@@ -545,9 +550,8 @@ def take_signup_ticket(token: Optional[str]) -> Optional[dict]:
     h = _hash(token)
     with _LOCK, connect() as con:
         row = con.execute("SELECT * FROM signup_tickets WHERE token_hash = ?", (h,)).fetchone()
-        if row is None:
+        if row is None or con.execute("DELETE FROM signup_tickets WHERE token_hash = ?", (h,)).rowcount != 1:
             return None
-        con.execute("DELETE FROM signup_tickets WHERE token_hash = ?", (h,))
     out = dict(row)
     return None if dt.datetime.fromisoformat(out["expires_at"]) <= _now() else out
 

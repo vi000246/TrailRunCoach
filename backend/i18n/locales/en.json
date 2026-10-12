@@ -1087,6 +1087,7 @@
   "核心": "Core",
   "條件：戴胸帶（手腕光學常有尖峰）、休息充足（前 48 小時沒有硬課）、沒生病、涼爽、找 2–3 分鐘的坡、最好有人陪。有心血管疾病或風險、胸痛、頭暈的人不要做，先問醫師（ACSM 運動前篩檢，Riebe 2015）；不舒服立刻停。替代：最近一場 5 K 比賽的最後衝刺也可以（現場、比賽與實驗室的最高心率沒有差別，Boudet 2002）。app 的讀法：濾掉尖峰與步頻鎖定後，撐 ≥ 5 秒的最高心率（推估）；結果要在設定頁按「套用」才會寫入": "Conditions: chest strap (wrist optical often spikes), well rested (no hard session in the previous 48 hours), not ill, cool weather, a 2–3 minute hill, ideally with company. If you have cardiovascular disease or risk, chest pain or dizziness, don't do it — ask a doctor first (ACSM pre-exercise screening, Riebe 2015); stop at once if you feel unwell. Alternative: the final sprint of a recent 5 K race works too (field, race and lab maximum heart rates don't differ, Boudet 2002). How the app reads it: after filtering spikes and cadence lock, the highest heart rate held for ≥ 5 seconds (estimate); the result is only saved after you press \"Apply\" on the settings page",
   "條款剛更新了，請重新閱讀後再同意": "The terms were just updated. Please read them again before accepting",
+  "條款已更新，請先閱讀並同意": "The terms have changed. Please read and accept them first",
   "棒式": "Plank",
   "棒式 2 × 30 秒": "plank 2 × 30 s",
   "棒式 30 秒": "plank 30 s",

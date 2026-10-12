@@ -1,10 +1,11 @@
 """
 Accounts and user tenants (SP-384; docs/plans/auth-and-demo.plan.md §2.2, §4.3, §5).
 
-    accounts.enabled()          WKO5COACH_ACCOUNTS=1: multi-user mode. With a Google client too
-                                (login.required()) every request needs a session and is bound to
-                                its user's tenant (tenancy_mw). Off (the default, today's
-                                self-hosted app): every request is the owner, nothing here is read.
+    accounts.enabled()          WKO5COACH_ACCOUNTS=1: multi-user mode. With the whole set of sign-in
+                                settings too (login.decide(), frozen at start-up) every request
+                                needs a session and is bound to its user's tenant (tenancy_mw).
+                                Off (the default, today's self-hosted app): every request is the
+                                owner, nothing here is read.
     accounts.server_root()      where accounts.db and users/<id>/ live
     store                       accounts.db: users, identities, sessions, shares, waitlist, consents,
                                 the sign-ins in progress

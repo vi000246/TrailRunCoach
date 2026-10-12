@@ -170,7 +170,7 @@
       let to = "/login";
       try {
         const j = await (await window.fetch("/api/v1/account/logout", { method: "POST" })).json();
-        if (j && typeof j.next === "string" && j.next.startsWith("/")) to = j.next;
+        if (j && typeof j.next === "string" && j.next.startsWith("/") && !j.next.startsWith("//")) to = j.next;
       } catch (_) {}
       location.href = to;
     });
@@ -292,17 +292,19 @@
   }
 
   // ---- sign-in mode (SP-58): a session that ended meanwhile (signed out elsewhere, expired,
-  // disabled) answers 401 LOGIN_REQUIRED: back to the sign-in page, then to this page
+  // disabled) answers 401 LOGIN_REQUIRED: back to the sign-in page, then to this page; new terms
+  // answer 403 TERMS_REQUIRED: to the terms page, then back here
   if (SESSION.login) {
     const authedFetch = window.fetch;
     let leaving = false;
     window.fetch = async (input, init) => {
       const r = await authedFetch(input, init);
-      if (r.status === 401 && !leaving) {
+      if ((r.status === 401 || r.status === 403) && !leaving) {
         r.clone().json().then((j) => {
-          if (!j || j.code !== "LOGIN_REQUIRED" || leaving) return;
+          const to = j && j.code === "LOGIN_REQUIRED" ? "/login" : j && j.code === "TERMS_REQUIRED" ? "/signup" : null;
+          if (!to || leaving) return;
           leaving = true;
-          location.href = "/login?" + new URLSearchParams({ next: location.pathname + location.search });
+          location.href = to + "?" + new URLSearchParams({ next: location.pathname + location.search });
         }).catch(() => {});
       }
       return r;

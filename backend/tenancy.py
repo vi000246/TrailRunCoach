@@ -20,6 +20,8 @@ Kinds:
   user          a signed-in user (SP-384, backend/accounts): root = shared =
                 <server-root>/users/<id>/, USER_CAPS, no WKO5 folder. The owner signed in
                 is still the owner tenant (migrated in place, same id and folder)
+  anonymous     signed out in sign-in mode (SP-58, anonymous()): no caps, its folders raise
+                NoTenant
 
 The tenant is set per request by backend/tenancy_mw.py (a pure ASGI middleware:
 contextvars set there reach async endpoints and, through AnyIO's context copy,
@@ -75,6 +77,38 @@ class Tenant:
 
     def can(self, cap: str) -> bool:
         return cap in self.caps
+
+
+ANONYMOUS = "anonymous"
+
+
+class NoTenant(PermissionError):
+    """Signed out in sign-in mode (SP-58): there is no tenant whose data could be read."""
+
+
+class _Anonymous(Tenant):
+    """The tenant of a signed-out request in sign-in mode (SP-58): no caps, and asking for any of
+    its folders (root, shared, the WKO5 one) raises NoTenant — so a public path that reached
+    tenant data fails instead of reading the owner's (the default tenant)."""
+
+    def __getattribute__(self, name):
+        if name in ("root", "shared", "wko5_dir"):
+            raise NoTenant("signed out: no tenant data")
+        return object.__getattribute__(self, name)
+
+    def __repr__(self) -> str:
+        return "Tenant(anonymous)"
+
+    def __eq__(self, other) -> bool:
+        return isinstance(other, _Anonymous)
+
+    def __hash__(self) -> int:
+        return hash(ANONYMOUS)
+
+
+def anonymous() -> Tenant:
+    return _Anonymous(id=ANONYMOUS, kind=ANONYMOUS, root=Path("/nonexistent"), shared=Path("/nonexistent"),
+                      caps=frozenset())
 
 
 _CURRENT: ContextVar[Optional[Tenant]] = ContextVar("trc_tenant", default=None)

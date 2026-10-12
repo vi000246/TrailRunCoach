@@ -12,6 +12,7 @@
   "error.disabled": "This account is disabled.",
   "error.full": "We are full right now. Your email is on the waiting list; we will let you know when there is a place.",
   "error.rate_limited": "Too many sign-in attempts. Please try again in 15 minutes.",
+  "error.setup": "The site is still being set up; sign-up is not open yet. Please try again later.",
   "signup.h": "Create your account",
   "signup.lead": "{who}: before your first sign-in, please read and accept the documents below.",
   "signup.accept": "Accept and create account",

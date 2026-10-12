@@ -6,8 +6,9 @@ the shell (static/shell.js) reads it first. Later sign-in keeps the shape:
      "demo": {"sandbox": true, "expires_at": "…", "base": "2026-09-28"},
      "user": null, "csrf": "<token>"}
 
-It also issues the CSRF cookie (trc_csrf, readable by the page): writes send
-it back as the X-TRC-CSRF header (double submit, backend/tenancy_mw.py).
+It also issues the CSRF cookie (trc_csrf, readable by the page; __Host-trc_csrf in sign-in mode;
+an existing value is echoed only when it looks like one of ours): writes send it back as the
+X-TRC-CSRF header (double submit, backend/tenancy_mw.py).
 
 Sign-in mode (SP-58, backend/accounts/login.py): public (the sign-in page reads it too);
 signed out it says only {"mode": "signed_out", "caps": [], "user": null, "membership": null,
@@ -21,6 +22,7 @@ from __future__ import annotations
 
 import datetime as dt
 import os
+import re
 import secrets as _secrets
 from typing import Optional
 
@@ -85,13 +87,22 @@ def session_info(had_cookie: bool = False) -> dict:
 
 @router.get("/api/v1/session")
 def get_session(request: Request):
+    from backend.accounts import login as LG
     from backend.demo.sandbox import COOKIE
     body = session_info(bool(cookie(request.scope, COOKIE)))
-    tok = cookie(request.scope, CSRF_COOKIE) or _secrets.token_urlsafe(24)
+    signin = not tenancy.demo_mode() and LG.required()
+    name = LG.cookie_name(CSRF_COOKIE) if signin else CSRF_COOKIE    # __Host-trc_csrf in sign-in mode
+    tok = cookie(request.scope, name)
+    if not (tok and _CSRF_OK.fullmatch(tok)):        # only a value of our own making is echoed back
+        tok = _secrets.token_urlsafe(24)
     body["csrf"] = tok
     resp = JSONResponse(body, headers={"Cache-Control": "no-store"})
-    resp.headers.append("set-cookie", f"{CSRF_COOKIE}={tok}; {cookie_attrs(30 * 86400, http_only=False)}")
+    attrs = LG.cookie_attrs(30 * 86400, http_only=False) if signin else cookie_attrs(30 * 86400, http_only=False)
+    resp.headers.append("set-cookie", f"{name}={tok}; {attrs}")
     return resp
+
+
+_CSRF_OK = re.compile(r"[A-Za-z0-9_-]{20,64}")
 
 
 @router.post("/api/v1/demo/reset")
