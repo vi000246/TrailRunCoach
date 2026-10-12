@@ -727,9 +727,44 @@ async def _replace_long(db: AsyncSession, day: str) -> None:
             await PS.delete(db, s["uid"])
 
 
+SWAP_TO = ("climb",)
+
+
+def _with_swap(patch: dict, inp: dict, cur: Optional[dict]) -> dict:
+    """A body that swaps the session for another of the same time (`swap_to`; SP-87, the 課表's
+    「換成長爬坡有氧（同樣時間）」 on a long run — owner: 「我想要爬山，就把 LSD 改成同強度的穩定地形爬坡
+    課表」): the long run keeps its day, minutes, kind and TSS and becomes engine/base_climb's 長爬坡有氧
+    (title, detail, trail, structure at HR ≤ the easy cap, climb). A user edit like any other."""
+    from backend.engine import base_climb as BC
+    from backend.engine.hr_profile import easy_cap_measured
+    from backend.i18n import _
+    to = patch.get("swap_to")
+    if to not in SWAP_TO:
+        raise HTTPException(400, _("不支援的換課：{v!r}", v=to))
+    if cur is None:
+        raise HTTPException(404, _("找不到這堂課"))
+    if cur.get("kind") != "long":
+        raise HTTPException(400, _("只有長跑能換成長爬坡有氧"))
+    th = inp.get("thresholds") or {}
+    f = BC.session_fields(int(cur.get("minutes") or 0), th.get("aet"), easy_cap_measured(th))
+    if f is None:
+        raise HTTPException(400, _("長跑不到 {need} 分，放不下長爬坡有氧（暖身、緩和各 {wc} 分）",
+                                   need=BC.MIN_MINUTES, wc=BC.WARM))
+    body = {k: v for k, v in patch.items() if k != "swap_to"}
+    for k in ("title", "detail", "terrain", "climb_m", "steps"):
+        body.setdefault(k, f[k])
+    body.setdefault("minutes", cur.get("minutes"))
+    if cur.get("tss") is not None:
+        body.setdefault("tss", cur["tss"])                  # same time at the same easy HR
+    return body
+
+
 @router.patch("/sessions/{uid}")
 async def edit_session(uid: str, patch: dict = Body(...), db: AsyncSession = Depends(get_db)):
     inp = await _inputs()
+    if patch.get("swap_to") is not None:
+        cur = next((s for s in await PS.load(db) if s["uid"] == uid), None)
+        patch = _with_swap(patch, inp, cur)
     if patch.get("variant_key"):
         cur = next((s for s in await PS.load(db) if s["uid"] == uid), None)
         patch = _with_variant(patch, inp, (cur or {}).get("rung_key"), patch.get("day") or (cur or {}).get("day"))

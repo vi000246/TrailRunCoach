@@ -684,6 +684,11 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
       <div class="var-cur" id="sd-var-cur"></div>
       <button class="btn" type="button" id="sd-swap" hidden>換一個（同等課表）</button>
     </div>
+    <!-- SP-87: a long run → the same time as a 長爬坡有氧 on steady terrain (api PATCH {swap_to: "climb"}) -->
+    <div class="var-box" id="sd-climbbox" hidden>
+      <div class="hint" data-i18n="schedule.climb.swap_hint">想爬山：把這堂長跑換成同樣時間的長爬坡有氧（階梯步道、樓梯、跑步機坡度；心率不超過輕鬆跑上限）。算你的修改，自動調整不會改回來。</div>
+      <button class="btn" type="button" id="sd-climb" data-i18n="schedule.ctx.to_climb">換成長爬坡有氧（同樣時間）</button>
+    </div>
     <div class="row2">
       <label>日期<input type="date" name="day" required></label>
       <label><span><span id="sd-min-lbl">分鐘</span><button type="button" class="qtip" id="sd-min-q" aria-label="說明" data-tip="" hidden>?</button></span><input type="number" name="minutes" min="0" max="1440" step="5" inputmode="numeric"></label>
@@ -2100,6 +2105,7 @@ function openDlg(s, day) {
   // a past session that wasn't done can be deleted too (it never comes back; off the watch)
   const del = $("sd-del"); del.hidden = !s || (ro && !expOpen(s)); del.classList.remove("armed"); del.textContent = "刪除";
   $("sd-push").hidden = !s || ro || !(D.coros || {}).authenticated || s.kind === "strength" || s.kind === "heat_passive";
+  $("sd-climbbox").hidden = !climbable(s);
   dlg.titleTouched = false;
   F.minutes.readOnly = false;
   eqInit(s);
@@ -2885,6 +2891,7 @@ function ctxItems(target) {
     if (editable(s)) out.push({ act: "edit", uid: s.uid, label: tt("ctx.edit") }, { act: "move", uid: s.uid, label: tt("ctx.move") });
     else out.push({ act: "open", uid: s.uid, label: tt("ctx.open") });
     if (swappable(s)) out.push({ act: "swap", uid: s.uid, label: tt("ctx.swap"), sub: tt("ctx.swap_sub") });
+    if (climbable(s)) out.push({ act: "climb", uid: s.uid, label: tt("ctx.to_climb"), sub: tt("ctx.to_climb_sub") });
     if (editable(s) || expOpen(s)) out.push({ act: "del", uid: s.uid, label: expOpen(s) ? tt("ctx.del_expired") : tt("ctx.del"), danger: true });
     return { title: `${md(s.day)} ${s.title}`, items: out };
   }
@@ -2932,6 +2939,7 @@ async function ctxRun({ ctx, uid, day }) {
   else if (ctx === "move") { if (s) { S.sel = s.day; render(); openDlg(s); F.day.focus(); F.day.showPicker?.(); } }
   else if (ctx === "del") { if (s) delSession(s); }
   else if (ctx === "swap") { if (s) swapStart(s); }
+  else if (ctx === "climb") { if (s) toClimb(s); }
   else if (ctx === "add") { S.sel = day; render(); openDlg(null, day); }
   else if (ctx === "tests") openTests(day);
   else if (ctx === "rest") setRest(day, true);
@@ -2984,6 +2992,25 @@ function watchNote(c) {
   return ["", "ok"];
 }
 const checkNote = (days, p) => tt("watch.check", { provider: p || "COROS", days: days.map(md).join("、") });
+// ---------------- 長跑 → 長爬坡有氧 (SP-87; api PATCH /sessions/{uid} {swap_to: "climb"}) ----------------
+// the same day, minutes and TSS; still the week's long run (engine/base_climb.py's structure)
+const climbable = (s) => !!s && editable(s) && s.kind === "long" && !/^長爬坡有氧/.test(s.title || "");
+async function toClimb(s) {
+  if (S.busy || !climbable(s)) return;
+  try {
+    const r = await sj("PATCH", `${PAPI}/sessions/${encodeURIComponent(s.uid)}`, { swap_to: "climb" });
+    S.sel = r.day || S.sel;
+    await load();
+    const [w, cls] = watchNote(r.coros);
+    msg(esc(tt("climb.swapped", { title: r.title })) + esc(w), cls);
+  } catch (err) { errMsg(tt("climb.swap_what"), err); }
+}
+$("sd-climb").addEventListener("click", () => {
+  const s = dlg && dlg.uid ? findS(dlg.uid) : null;
+  if (!s) return;
+  $("sd").close();
+  toClimb(s);
+});
 // ---------------- 交換課表 (SP-359; api POST /sessions/swap) ----------------
 // right-click a session → 「交換…」, then click the other one (Esc cancels; the weeks can be paged
 // meanwhile), or drop a session onto another. Same rules as a drag: active, from today on, not on a

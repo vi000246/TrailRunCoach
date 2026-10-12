@@ -183,3 +183,31 @@ def test_hook_days_reads_this_weeks_stored_hook_rows(tmp_path):
     con.close()
     assert PS.hook_days(MON, db) == {"climb_base": "2026-10-07", "downhill": "2026-10-09"}
     assert PS.hook_days(MON, tmp_path / "missing.db") == {}
+
+
+def test_the_schedule_swaps_a_long_run_for_a_long_climb_of_the_same_time(monkeypatch):
+    """SP-87 (owner: 「我想要爬山，就把 LSD 改成同強度的穩定地形爬坡課表」): PATCH /sessions/{uid}
+    {"swap_to": "climb"} on a long run — the same day, minutes, kind (still the week's long run) and
+    TSS, now 「長爬坡有氧 N′（穩定地形）」 with its structure and climb; the user's edit (re-planning keeps
+    it, COROS gets the new steps). Only a long run; one shorter than BC.MIN_MINUTES is refused."""
+    from backend.tests.test_plan_store import API, Env
+    with Env(monkeypatch) as e:
+        ss = e.c.get(f"{API}/sessions").json()["sessions"]
+        lng = next(s for s in ss if s["kind"] == "long" and s["day"] == "2026-10-04")
+        r = e.c.patch(f"{API}/sessions/{lng['uid']}", json={"swap_to": "climb"})
+        assert r.status_code == 200, r.text
+        s = r.json()
+        assert (s["kind"], s["day"], s["minutes"], s["tss"]) == ("long", "2026-10-04", lng["minutes"], lng["tss"])
+        assert s["title"] == f"長爬坡有氧 {lng['minutes']}′（穩定地形）" and s["edited"] is True
+        assert s["terrain"] == "trail" and s["climb_m"] == BC.climb_of(lng["minutes"] - BC.WARM - BC.COOL)
+        assert "階梯步道" in s["detail"] and s["steps"]["items"][1]["kind"] == "work"
+        assert s["coros"] is not None
+        assert e.c.get(f"{API}/reconcile").json()["changes"] == []          # the user's edit: kept
+        # only a long run
+        q = next(x for x in ss if x["kind"] == "quality")
+        r = e.c.patch(f"{API}/sessions/{q['uid']}", json={"swap_to": "climb"})
+        assert r.status_code == 400 and "長跑" in r.json()["detail"]
+        assert e.c.patch(f"{API}/sessions/{lng['uid']}", json={"swap_to": "rocket"}).status_code == 400
+        short = e.c.patch(f"{API}/sessions/{lng['uid']}", json={"minutes": 30}).json()
+        r = e.c.patch(f"{API}/sessions/{short['uid']}", json={"swap_to": "climb"})
+        assert r.status_code == 400 and str(BC.MIN_MINUTES) in r.json()["detail"]

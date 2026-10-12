@@ -1707,6 +1707,10 @@
     "draft": true,
     "src": "backend/engine/plan_store.py:289"
   },
+  "不支援的換課：{v!r}": {
+    "draft": true,
+    "src": "backend/api/plan_sessions.py:743"
+  },
   "不支援的類型：{v!r}": {
     "draft": true,
     "src": "backend/engine/plan_store.py:278"
@@ -2550,6 +2554,10 @@
   "只有確定時才手動指定。": {
     "draft": true,
     "src": "backend/engine/calibrate.py:160"
+  },
+  "只有長跑能換成長爬坡有氧": {
+    "draft": true,
+    "src": "backend/api/plan_sessions.py:747"
   },
   "只看全力，不設目標；手腕光學心率的平均誤差比胸帶大。條件：< 25 °C、平路環線或田徑場、戴胸帶、前 48 小時沒有硬課、不在減量期／比賽週；自己一個人跑，不要跟人跑、不要在比賽中測": {
     "draft": true,
@@ -6958,6 +6966,10 @@
   "長跑": {
     "draft": true,
     "src": "backend/engine/post_race.py:336"
+  },
+  "長跑不到 {need} 分，放不下長爬坡有氧（暖身、緩和各 {wc} 分）": {
+    "draft": true,
+    "src": "backend/api/plan_sessions.py:751"
   },
   "長跑日上限不能比平日上限短": {
     "draft": true,
