@@ -1188,6 +1188,7 @@
   "沒有閾值配速：這段推到手錶不會有配速目標": "No threshold pace: this step reaches the watch without a pace target",
   "沒有離長跑和其他強度課 ≥ 2 天的日子": "no day ≥ 2 days from the long run and other quality sessions",
   "沒有靜息心率，到設定填": "No resting HR; enter it in Settings",
+  "沒有預報：比賽日溫度用賽道上 {h:.1f} 小時的氣候值 {t:.1f} °C／濕度 {rh:.0f} %（其中 {n:.1f} 小時在 06:00–18:00 以外，用同一時段的歷史平均；白天平均 {day:.1f} °C，推估）": "No forecast: the race-day temperature is the climatology over {h:.1f} hours on course, {t:.1f} °C / humidity {rh:.0f} % ({n:.1f} of those hours are outside 06:00–18:00 and take the historical mean of the same hours; daytime mean {day:.1f} °C, estimate)",
   "沒痛": "No pain",
   "沒辦法確認配速有沒有維持（沒有速度也沒有功率）：只看心率": "Can't tell whether the pace was held (no speed or power): heart rate only",
   "活動擬合": "Fitted from activities",

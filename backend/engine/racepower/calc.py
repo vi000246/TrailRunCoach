@@ -194,6 +194,10 @@ class PlanIn(PredictIn):
     # Open-Meteo); none, or no date / start time → the single To value
     hourly: Optional[list[HourIn]] = None
     hourly_heat: bool = True
+    # SP-257: the /weather provider the To temperature / RH were filled from (the page sends it while
+    # the athlete has not typed their own). "climatology": To is its daytime 06–18 mean, and a race
+    # run outside those hours gets the mean over its hours on course instead (climatology_to)
+    to_provider: Optional[str] = Field(None, max_length=32)
     # SP-249: the /weather `rain` rows → a reminder on trail / 百岳 plans; never changes the time
     rain: Optional[list[RainIn]] = None
     # SP-251: the /weather `wind` rows → wind chill and the 冷風 reminder; never changes the time
@@ -533,13 +537,15 @@ def v1_for(ctx: Context, body: PlanIn, course: dict) -> dict:
     return predict(ctx, PredictIn(**data))
 
 
-def make_plan(ctx: Context, body: PlanIn) -> dict:
+CLIM_TO_PASSES = 3                # SP-257: re-solves with the on-course To (the ETAs move by seconds: 1 in practice)
+CLIM_TO_TOL_C = 0.05              # … until the To read from the new ETAs moves less than this
+
+
+def solve(ctx: Context, body: PlanIn, course: dict) -> dict:
+    """The plan itself on a resolved course: v1 (the baseline / cross-check), the planner
+    (plan_hike / plan_run, with the goal against the model in time / power mode) and the
+    night marks; make_plan adds what is read from it (fuel, targets, reminders)."""
     from backend.engine.racepower import planner as PL
-    course = resolve_course(ctx, body)
-    if body.type == "baiyue" and course.get("source") == "gpx" and not body.day_splits_km and (body.days or 1) > 1:
-        # a multi-day trip without split points: cut the course into equal-km days
-        km = course["totals"]["km"]
-        body = body.model_copy(update={"day_splits_km": [km * i / body.days for i in range(1, body.days)]})
     v1 = v1_for(ctx, body, course)
     validated, effort_ok = ctx.flags()
     from backend.engine.racepower import night as NI
@@ -597,7 +603,38 @@ def make_plan(ctx: Context, body: PlanIn) -> dict:
         raise CalcError(400, str(e))
     out.update(used=v1["used"], env=v1["env"], v1=v1, course_source=course.get("source"),
                course_id=body.course.course_id if body.course else None, course_name=course.get("name"))
+    return out
+
+
+def make_plan(ctx: Context, body: PlanIn) -> dict:
+    course = resolve_course(ctx, body)
+    if body.type == "baiyue" and course.get("source") == "gpx" and not body.day_splits_km and (body.days or 1) > 1:
+        # a multi-day trip without split points: cut the course into equal-km days
+        km = course["totals"]["km"]
+        body = body.model_copy(update={"day_splits_km": [km * i / body.days for i in range(1, body.days)]})
+    out = solve(ctx, body, course)
+    # SP-257: no forecast — the climatology's daytime To widened to the hours on course, the plan
+    # solved again with it (its ETAs, read again, give the To; a daytime race keeps its plan)
+    base, clim, nxt = body, None, climatology_to(body, out)
+    for _n in range(CLIM_TO_PASSES):
+        if nxt is None or (clim is not None and abs(nxt["temp_c"] - clim["temp_c"]) < CLIM_TO_TOL_C):
+            break
+        clim = nxt
+        body = base.model_copy(update={"env_to": base.env_to.model_copy(
+            update={"temp_c": clim["temp_c"], "rh_pct": clim["rh_pct"]})})
+        out = solve(ctx, body, course)
+        nxt = climatology_to(base, out)
+    if clim is not None and nxt is not None:
+        # the To the plan was solved with; the hours on course of that plan
+        clim = {**clim, "hours": nxt["hours"], "night_h": nxt["night_h"]}
+    out["to_clim"] = clim
+    if clim:
+        out["warnings"].append(_("沒有預報：比賽日溫度用賽道上 {h:.1f} 小時的氣候值 {t:.1f} °C／濕度 {rh:.0f} %"
+                                 "（其中 {n:.1f} 小時在 06:00–18:00 以外，用同一時段的歷史平均；"
+                                 "白天平均 {day:.1f} °C，推估）", h=clim["hours"], t=clim["temp_c"],
+                                 rh=clim["rh_pct"], n=clim["night_h"], day=clim["day_temp_c"]))
     out["fuel"] = fuel(ctx, body, out)
+    from backend.engine.racepower import night as NI
     from backend.engine.racepower import seg_targets as ST
     aet_d = ctx.inputs().get("aet") or {}
     out["seg_targets"] = ST.plan_targets(out, aet=aet_d.get("aet"), lthr=aet_d.get("lthr"))
@@ -654,6 +691,39 @@ def cold_reminders(body: PlanIn, out: dict) -> tuple[Optional[dict], Optional[di
     cw = CD.cold_wind(pts, wind, body.heat_ref_alt_m, body.date) if wind else None
     hours = [r.model_dump() for r in body.hourly or []]
     return cw, CD.hypothermia(pts, cw, out.get("rain"), body.type, wind, hours, body.heat_ref_alt_m)
+
+
+def climatology_to(body: PlanIn, out: dict) -> Optional[dict]:
+    """SP-257 (docs/research/night-and-sleep.md §3 G5 / §4.2 單 4): with no forecast the page's To
+    is the climatology's daytime (06:00–17:59) mean; weather.climatology_to widens it to the hours
+    this plan is on course (the daytime hours keep it, the others take the climatology's own hour
+    from the /weather hourly rows). On course: road / trail from the start to the predicted finish
+    (moving + non-moving time + aid stops); 百岳 each day from the start time to its last segment's
+    end (cold.points: moving time ÷ the moving ratio + stops, as the ETAs). None — To unchanged —
+    unless To came from the climatology (`to_provider`) with its hourly rows, the plan has a start
+    time and segments, and part of it is outside 06–18."""
+    if body.to_provider != "climatology" or not body.hourly or body.env_to is None \
+            or body.env_to.temp_c is None or body.env_to.rh_pct is None:
+        return None
+    import datetime as dt
+    from backend.engine.racepower import cold as CD
+    from backend.engine.racepower import weather as WX
+    segs = out.get("segments") or []
+    t0 = CD._start(body.date, body.start_time)
+    if t0 is None or not segs:
+        return None
+    if out.get("type") == "baiyue":
+        days = len(out.get("days") or []) or body.days or 1
+        pts = CD.points(out, body.date, body.start_time, [x.model_dump() for x in body.stops], days)
+        by_day: dict[int, list[dict]] = {}
+        for s, p in zip(segs, pts):
+            by_day.setdefault(int(s.get("day") or 1), []).append(p)
+        wins = [(min(p["begin"] for p in ps), max(p["end"] for p in ps)) for _d, ps in sorted(by_day.items())]
+    else:
+        s = out.get("summary") or {}
+        on = (s.get("time_total_s") or s.get("time_s") or 0.0) + (s.get("stops_s") or 0.0)
+        wins = [(t0, t0 + dt.timedelta(seconds=float(on)))]
+    return WX.climatology_to([r.model_dump() for r in body.hourly], wins, body.env_to.temp_c, body.env_to.rh_pct)
 
 
 def snow_season(body: PlanIn, course: dict, out: dict) -> None:

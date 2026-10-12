@@ -486,7 +486,7 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
         <span class="help" tabindex="0">?<span class="tip" data-i18n="racepower.env.tip">From = 你平常訓練的條件（你功率量到的地方）：近 90 天跑步的中位海拔，溫濕度取那些跑步當下的歷史天氣，沒有時用你所有活動的中位溫濕度。To = 比賽日：選了賽事、日期和地點（山名、座標或 GPX 起點）就自動查預報（中央氣象署 → Open-Meteo），超過 16 天的日期用近 10 年同一個月（比賽日前後 15 天）的平均，含一天裡每個小時的冷熱。兩邊的差換成環境係數 M。要自己改按 ✎。</span></span></h2>
       <div class="envchips">
         <div class="echip"><span class="k"><span data-i18n="racepower.env.from">From 訓練</span> <span class="badge" id="from-badge"></span></span><b id="from-v">–</b><span class="s" id="from-s"></span></div>
-        <div class="echip"><span class="k"><span data-i18n="racepower.env.to">To 比賽日</span> <span class="badge" id="to-badge">未取得</span></span><b id="to-v">–</b><span class="s" id="wx-meta"></span></div>
+        <div class="echip"><span class="k"><span data-i18n="racepower.env.to">To 比賽日</span> <span class="badge" id="to-badge">未取得</span></span><b id="to-v">–</b><span class="s" id="wx-meta"></span><span class="s hidden" id="to-clim"></span></div>
         <button class="btn icon" id="env-edit" type="button" title="自己改 From / To" data-i18n-attr="title:racepower.env.edit">✎</button>
       </div>
       <div class="kv" id="env-kv" style="margin-top:8px"></div>
@@ -1095,6 +1095,10 @@ function renderEnvChips() {
   else if (v) $("to-v").textContent = envTxt(PLAN?.course_source === "gpx" ? null : v.altitude_m, v.temp_c, v.rh_pct);
   else if (!WX) $("to-v").textContent = T("env.to_wait");
   if (tOvr) { $("to-badge").className = "badge watch"; $("to-badge").textContent = T("env.manual"); }
+  // SP-257: no forecast and the race runs outside 06–18 — the plan's To is the climatology over its hours on course
+  const c = !tOvr && PLAN?.to_clim;
+  $("to-clim").textContent = c ? T("env.clim_night", { h: c.hours.toFixed(1), n: c.night_h.toFixed(1), t: f1(c.temp_c), day: f1(c.day_temp_c) }) : "";
+  $("to-clim").classList.toggle("hidden", !c);
 }
 function renderEnv() {
   const e = LAST?.env; if (!e) { renderEnvChips(); return; }
@@ -1174,7 +1178,9 @@ function planBody(extra = {}) {
     effort_target: Number(S.effort), wbal: null,
     locks: Object.entries(LOCKS).map(([seg, power]) => ({ seg: +seg, power })), day_splits_km: SPLITS,
     terrain: TERRAIN, hourly_heat: $("hourlyheat").checked && !tempOverridden(),
-    hourly: $("hourlyheat").checked && !tempOverridden() ? (WX?.hourly || null) : null,
+    // SP-257: the climatology's rows go even with per-segment heat off: the plan widens its daytime To to the hours on course
+    hourly: !tempOverridden() && ($("hourlyheat").checked || WX?.provider === "climatology") ? (WX?.hourly || null) : null,
+    to_provider: tempOverridden() ? null : (WX?.provider || null),
     heat_acclimatisation: heatAcclBody(), surface: type === "trail" ? (S.surface || null) : null,
     rain: WX?.rain || null, wind: WX?.wind || null, sun: WX?.sun || null,
     night_slow_pct: Number($("nightslow").value || 0), ...extra };
