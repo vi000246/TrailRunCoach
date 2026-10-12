@@ -478,6 +478,8 @@ dialog.sd input.sw:focus-visible { outline: 2px solid var(--accent); outline-off
 .pf-adv[open] > summary h4::after { content: "▾"; }
 /* 肌力動作 (engine/strength_moves.py, SP-191): who a move suits, under its select (no hover needed) */
 .pf-mv-grp { padding-top: 8px; font-size: 12px; font-weight: 700; }
+.pf-sm-ar { display: inline-block; transition: transform .15s; }
+#pf-sm[open] .pf-sm-ar { transform: rotate(90deg); }
 .pf-mv-who { flex-basis: 100%; font-size: 12px; line-height: 1.45; }
 #pf .tseg label { padding: 4px 10px; font-size: 13px !important; flex: none; }
 #pf .tseg label:has(input:checked) { background: var(--accent); border-color: var(--accent); color: #fff !important; }
@@ -648,6 +650,12 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
            (each step picks power / HR / pace; 自動 steps follow target_policy by session type), watch preview -->
       <div id="sd-we"></div>
     </div>
+    <!-- SP-191 R1: a strength session says where its moves come from and opens the picker
+         (課表偏好 › 肌力動作) — the picker alone, folded mid-dialog, wasn't found -->
+    <div class="var-box" id="sd-sm" hidden>
+      <div class="hint" id="sd-sm-txt"></div>
+      <button class="btn" type="button" id="sd-sm-go" data-i18n="schedule.sm.go">選肌力動作 ›</button>
+    </div>
     <div class="var-box" id="sd-test" hidden>
       <div class="row2">
         <label>哪一種測試<select id="sd-tkind"><option value="">先選…</option><option value="cp">CP 測試</option><option value="aet">AeT 測試</option></select></label>
@@ -775,7 +783,7 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
 功率：全部用功率區間（Palladino % CP）；測試和下坡照它們自己的規則。
 只影響系統排的課；每一段也可以在課表的「結構」裡自己改用功率、心率或配速，範本用來源自己的目標。">?</button>
         <span class="pf-c tseg" role="radiogroup" aria-labelledby="pf-tb-l"><label><input type="radio" name="target_basis" value="auto"><span data-i18n="schedule.pf.auto">自動</span></label><label><input type="radio" name="target_basis" value="hr"><span data-i18n="schedule.pf.hr">心率</span></label><label><input type="radio" name="target_basis" value="power"><span data-i18n="schedule.pf.power">功率</span></label></span></div>
-      <details class="pf-adv" id="pf-sm"><summary><div class="pf-r"><span class="pf-l"><span data-i18n="schedule.pf.g.moves">肌力動作</span> ▸</span></div></summary>
+      <details class="pf-adv" id="pf-sm"><summary><div class="pf-r"><span class="pf-l"><span data-i18n="schedule.pf.g.moves">肌力動作</span> <span class="pf-sm-ar" aria-hidden="true">▸</span></span></div></summary>
         <div class="meta pf-st" data-i18n="schedule.pf.mv.intro">期別決定這堂練哪幾類、做幾組幾下；每一類用哪個動作由你挑，沒挑就用預設。勾了「沒有的器材」，需要它的動作會自動換成不用它的。</div>
         <div class="pf-r"><span class="pf-l" id="pf-ng-l" data-i18n="schedule.pf.mv.no_gear">沒有的器材</span>
           <span class="pf-c" id="pf-ng" role="group" aria-labelledby="pf-ng-l"></span></div>
@@ -1745,9 +1753,33 @@ function tgtHint() {
   const g = [F.title.value, F.target.value, F.detail.value].filter(hasGl);
   $("sd-gl").innerHTML = g.length ? `名詞說明：${g.map(gl).join(" · ")}` : "";
   $("sd-test").hidden = kindVal() !== "test" || !!dlg.ro;
+  smBox();
   varLoad();
   stepsPreview();
 }
+// SP-191 R1: 肌力動作 on the strength session itself — the moves in use (課表偏好 › 肌力動作,
+// GET /prefs) and a button that opens that section
+let SM_PICKS = null;
+async function smBox() {
+  const on = kindVal() === "strength" && !dlg.ro;
+  $("sd-sm").hidden = !on;
+  if (!on) return;
+  $("sd-sm-txt").textContent = tt("sm.intro");
+  try {
+    if (!SM_PICKS) {
+      const b = await sj("GET", `${PAPI}/prefs`);
+      PF_SM = b.strength_options || PF_SM;
+      SM_PICKS = { moves: (b.prefs || {}).strength_moves || {}, lack: (b.prefs || {}).strength_no_gear || [] };
+    }
+    const names = PF_SM.types.map((t) => {
+      const key = SM_PICKS.moves[t.key] || t.default;
+      const m = (t.moves || []).find((x) => x.key === key);
+      return m ? m.name : null;
+    }).filter(Boolean);
+    if (names.length && !$("sd-sm").hidden) $("sd-sm-txt").textContent = tt("sm.intro") + " " + tt("sm.now", { list: names.join("、") });
+  } catch (_) { /* the button still works */ }
+}
+$("sd-sm-go").addEventListener("click", () => { $("sd").close(); openPrefs({ section: "sm" }); });
 
 // The structured editor (static/workout_editor.js): every step shows what it resolves to — its own
 // basis (power / HR / pace), or 自動 = engine/target_policy.py by session type; one step is changed
@@ -2519,8 +2551,9 @@ function pdCheckSoon() {                        // live conflict hints for the u
     } catch { /* the save validates again */ }
   }, 250);
 }
-async function openPrefs() {
+async function openPrefs(opt = {}) {
   closeMenus();
+  SM_PICKS = null;                              // the strength box re-reads the picks after a save
   PF_WARNED = null;
   $("pf-err").textContent = "";
   let b;
@@ -2536,6 +2569,13 @@ async function openPrefs() {
   pfFill({ ...b.prefs, _conflicts: b.day_conflicts || [], _dropped: b.pref_dropped || [] });
   $("pf").showModal();
   if (PF_AVAIL == null) gateAvail();          // needs the dataset: filled in when it arrives
+  if (opt.section === "sm") {                   // from a strength session (SP-191 R1): that section, open
+    const sec = $("pf-sm");
+    sec.open = true;
+    sec.scrollIntoView({ block: "start" });
+    (sec.querySelector("select") || sec.querySelector("summary")).focus();
+    return;
+  }
   PFF.querySelector('input[name="pf-day"]').focus();
 }
 $("pf").addEventListener("click", (e) => { if (e.target.closest("[data-close]") || e.target === $("pf")) $("pf").close(); });

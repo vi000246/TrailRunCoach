@@ -232,6 +232,32 @@ def test_schedule_swap_locks_both_sessions_until_done(app):
     assert got == [db, da], got
     page.unroute("**/plan/sessions/swap")
 
+
+def test_strength_session_opens_the_move_picker(app):
+    """SP-191 R1: a strength session's editor lists the moves in use and 「選肌力動作」 opens
+    課表偏好 at 肌力動作, unfolded, with a select per movement type."""
+    page, _ = app
+    open_page(page, _server.PAGES["schedule"])
+    _calendar_ready(page)
+    chip = page.locator("#cal .chip.k-strength[data-uid]")
+    if chip.count() == 0:
+        page.click("#next")
+        _calendar_ready(page)
+    page.locator("#cal .chip.k-strength[data-uid]").first.click()
+    expect(page.locator("#sd")).to_have_attribute("open", "")
+    expect(page.locator("#sd-sm")).to_be_visible()
+    expect(page.locator("#sd-sm-txt")).to_contain_text("目前：", timeout=20_000)
+    page.click("#sd-sm-go")
+    expect(page.locator("#pf")).to_have_attribute("open", "")
+    expect(page.locator("#pf-sm")).to_have_attribute("open", "")
+    assert page.locator("#pf-mv select[data-mv]").count() >= 5
+    expect(page.locator("#sd")).not_to_have_attribute("open", "")
+    # a run's editor has no such box
+    page.locator("#pf [data-close]").first.click()
+    page.locator("#cal .chip.k-easy[data-uid]").first.click()
+    expect(page.locator("#sd")).to_have_attribute("open", "")
+    expect(page.locator("#sd-sm")).to_be_hidden()
+
 def test_schedule_watch_status_glyphs(app):
     """手錶狀態圖示 (推送狀態): the legend's four states, each an <svg> glyph with its label."""
     page, _ = app

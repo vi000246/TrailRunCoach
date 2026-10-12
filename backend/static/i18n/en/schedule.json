@@ -327,6 +327,9 @@
   "swap.done_toast": "✓ Swapped",
   "swap.failed_toast": "The swap didn't go through; the plan is unchanged",
   "swap.locked": "This session is being swapped; wait until it's done",
+  "sm.go": "Choose strength moves ›",
+  "sm.intro": "The phase sets this session's moves and sets × reps; which move each type uses can be changed in Plan preferences › Strength moves.",
+  "sm.now": "Now: {list}.",
   "swap.what": "Swap",
   "swap.legend": "Swap",
   "swap.legend_tip": "Two sessions trade days: right-click a session (long-press on a phone) → “Swap…”, then click the other one; or drag a session onto another (dropping on an empty spot moves it). It counts as your own change, so auto-adjust won't undo it; sessions already on the watch are updated too. Done or past sessions can't be swapped."
