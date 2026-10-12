@@ -236,6 +236,7 @@
   "general.wko5": "WKO5 裡的資料：身高 {h} cm、性別 {sex}、體重紀錄 {list}",
   "general.wko5_none": "無",
   "general.saved": "已儲存，圖表會用新的體重重算",
+  "general.exp_history": "有 4 週以上的跑步紀錄：課表照你的紀錄排，不需要填跑步經驗。",
   "general.exp_title": "跑步經驗",
   "general.exp_intro": "用來排第一個月的課表；每一題都可以不填，填的週量照原數字用。有 4 週以上的紀錄之後，課表改看你的紀錄。",
   "general.exp_q1": "最近 4 週平均一週",

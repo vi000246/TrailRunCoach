@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import base64
+import os
+from pathlib import Path
 
 # a 1×1 transparent PNG: the answer to every map-tile request
 _TILE = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=")
@@ -20,6 +22,31 @@ def blank_tiles(ctx, base_url: str) -> None:
         else:
             route.fulfill(status=204, body=b"")
     ctx.route(external, handle)
+    local_cdn(ctx)
+
+
+def local_cdn(ctx) -> None:
+    """TRC_E2E_CDN_DIR=<dir>: answer the CDN's ECharts / Leaflet from the npm packages unpacked
+    there (<dir>/echarts/package/dist, <dir>/leaflet/package/dist) — for machines that can't reach
+    cdnjs (a cloud session's proxy). Unset: the CDN is fetched as usual."""
+    base = os.environ.get("TRC_E2E_CDN_DIR")
+    if not base:
+        return
+    root = Path(base)
+
+    def handle(route):
+        url = route.request.url
+        name = url.rsplit("/", 1)[-1]
+        if "/echarts/" in url:
+            f, ctype = root / "echarts/package/dist/echarts.min.js", "application/javascript"
+        elif "/leaflet/" in url and name.endswith(".css"):
+            f, ctype = root / "leaflet/package/dist/leaflet.css", "text/css"
+        elif "/leaflet/" in url:
+            f, ctype = root / "leaflet/package/dist/leaflet.js", "application/javascript"
+        else:
+            return route.continue_()
+        route.fulfill(status=200, content_type=ctype, body=f.read_bytes())
+    ctx.route(f"https://{CDN}/**", handle)
 
 
 class Watch:

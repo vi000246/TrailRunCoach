@@ -416,8 +416,9 @@ table.z5ev td { white-space: normal; }
     </div>
     <div class="crumb" id="crumb"></div>
     <span class="spacer"></span>
-    <!-- charts.data_source: the 資料來源 (COROS or TP) / WKO5 folder; changing it saves the setting and reloads -->
-    <span id="source-chip"></span><script src="/api/v1/static/sourcechip.js" defer></script>
+    <!-- SP-381: 專項 (主要訓練項目: auto / 越野跑 / 路跑・馬拉松) decides which charts show; changing it saves
+         the setting and reloads. It replaced the 資料來源 chip (the source is set in 設定 › 資料同步) -->
+    <span id="sport-chip"></span><script src="/api/v1/static/sportchip.js" defer></script>
     <a class="pill" id="modepill" href="/api/v1/wko5/settings#mode"></a>
   </div>
   <div class="tb2">
@@ -469,6 +470,9 @@ table.z5ev td { white-space: normal; }
   <div class="zb card" id="zoombody"></div>
 </dialog>
 <script>
+// SP-380: a touch screen: one finger scrolls the page, never a chart or a map (two fingers zoom / move)
+const TOUCH = matchMedia("(pointer: coarse)").matches;
+const TOUCH_ZOOM = TOUCH ? { moveOnMouseMove: false, preventDefaultMouseMove: false } : {};
 const $ = (id) => document.getElementById(id);
 const API = "/api/v1/wko5";
 const S = { mode: "season", views: [], sports: [], athlete: null, workout: null, dash: { season: 0, workout: 0 }, view: {} };
@@ -2177,7 +2181,7 @@ async function drawMap(card, res, opts = {}) {
   if (!res._zoom) card.classList.add("ac-wide");
 
   const pref = mapPrefs(), ck = opts.colorKey || "color";
-  const map = L.map(el, { preferCanvas: true, zoomSnap: 0.5 });
+  const map = L.map(el, { preferCanvas: true, zoomSnap: 0.5, dragging: !TOUCH });   // SP-380: two fingers on a phone
   el._lmap = map;
   const hint = document.createElement("div");
   hint.className = "maphint"; hint.hidden = true;
@@ -2805,11 +2809,13 @@ function drawPlot(card, res, series) {
       ...(PL ? { selected: { [PLATEAU_NAME]: plateauOn() } } : {}) },
     ...(Z ? { visualMap: Z.visualMap } : {}),
     xAxis, yAxis, series: out,
+    // SP-380: on a touch screen one finger scrolls the page (inside dataZoom used to take the drag
+    // and pan the chart); two fingers still zoom, the slider pans
     dataZoom: zoom
-      ? [{ type: "inside" }, { type: "slider", bottom: Z ? 6 : 8 + legendRows * 22, height: 18, borderColor: line,
+      ? [{ type: "inside", ...TOUCH_ZOOM }, { type: "slider", bottom: Z ? 6 : 8 + legendRows * 22, height: 18, borderColor: line,
           textStyle: { color: muted, fontSize: 10 },
           labelFormatter: xKind === "duration" ? (v) => durTick(Math.round(v)) : undefined }]
-      : [{ type: "inside" }],
+      : [{ type: "inside", ...TOUCH_ZOOM }],
   });
   new ResizeObserver(() => chart.resize()).observe(el);
   // clicking 「mFTP」 in the legend is the same toggle as the header button

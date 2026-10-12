@@ -552,6 +552,8 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
   </section>
 </main>
 <script>
+// SP-380: a touch screen (a phone, a tablet): one finger scrolls the page, never a chart or a map
+const TOUCH = matchMedia("(pointer: coarse)").matches;
 const API = "/api/v1/racepower";
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -1757,13 +1759,18 @@ function renderProfile() {
   const yElev = { type: "value", show: false, scale: true, min: pr ? Math.min(...pr.z) - (Math.max(...pr.z) - Math.min(...pr.z) || 50) * 0.1 : null };
   const tick = km <= 12 ? 1 : km <= 30 ? 2 : km <= 60 ? 5 : 10;
   chart("profile").setOption({
-    animation: false, grid: { left: 52, right: 14, top: 32, bottom: narrow ? 30 : 52 },
+    animation: false, grid: { left: 52, right: 14, top: 32, bottom: narrow && !TOUCH ? 30 : 52 },
     tooltip: { trigger: "axis", confine: true, axisPointer: { type: "line" },
       formatter: (ps) => { const k = ps[0]?.axisValue ?? ps[0]?.value?.[0]; const r = rowAt(+k); return r ? rowTip(r) : `${f1(+k)} km`; } },
     xAxis: { type: "value", name: "km", min: 0, max: Math.ceil(km * 10) / 10, interval: tick, ...axisStyle(),
       axisLabel: { color: css("--muted"), fontSize: 11, formatter: (v) => Math.round(v), showMaxLabel: false } },
     yAxis: [yMain, yElev],
-    dataZoom: narrow ? [{ type: "inside" }] : [{ type: "inside" }, { type: "slider", height: 14, bottom: 6 }],
+    // SP-380: on a touch screen a one-finger drag over the chart panned it and the page didn't
+    // scroll (inside dataZoom cancels the touch) — there the finger scrolls the page, two fingers
+    // zoom, and the slider underneath pans
+    dataZoom: TOUCH ? [{ type: "inside", moveOnMouseMove: false, preventDefaultMouseMove: false },
+                       { type: "slider", height: 14, bottom: 4 }]
+      : [{ type: "inside" }, { type: "slider", height: 14, bottom: 6 }],
     series,
   }, true);
   $("chart-legend").innerHTML = `<span><i style="background:${css("--accent")}"></i>${esc(T("legend.target", { m: T("m." + m) }))}</span>` +
@@ -1841,7 +1848,8 @@ function renderCourseMap() {
   const key = `${ll.length}|${ll[0]}|${ll[ll.length - 1]}|${pr.km[pr.km.length - 1]}`;
   if (!CMAP || CMAP.key !== key) {
     if (CMAP) CMAP.map.remove();
-    const map = L.map(el, { preferCanvas: true, zoomSnap: 0.5 });
+    // SP-380: a one-finger drag scrolls the page on a touch screen; two fingers move / zoom the map
+    const map = L.map(el, { preferCanvas: true, zoomSnap: 0.5, dragging: !TOUCH });
     MapLayers.attach(map, MAP_DEF, "racepower.map", { hint: $("course-map-hint") });
     L.control.scale({ imperial: false }).addTo(map);
     CMAP = { map, key, ll, km: pr.km, z: pr.z, rkey: null, fitted: false,

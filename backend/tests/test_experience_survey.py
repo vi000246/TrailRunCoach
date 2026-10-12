@@ -235,6 +235,19 @@ def test_settings_page_edits_the_answers():
     assert "/api/v1/plan/profile/experience" in s and "renderExperience()" in s
 
 
+def test_settings_page_shows_the_questionnaire_only_without_a_history():
+    """SP-372: the block starts hidden and GET /profile/detect decides — has_history true hides it
+    (one line says why), false / unknown / an error shows it."""
+    s = (STATIC / "settings.html").read_text("utf-8")
+    assert '<div id="exp-block" hidden>' in s and 'id="exp-hist" hidden' in s
+    assert "expShow(d.has_history !== true)" in s and ".catch(() => expShow(true))" in s
+    i, j = s.index('<div id="exp-block" hidden>'), s.index('id="saveexp"')
+    assert i < j and s.index("</div>", s.index('id="expnow"')) < s.index('<section id="mode">')
+    for loc in ("zh-TW", "en"):
+        cat = json.loads((STATIC / "i18n" / loc / "settings.json").read_text("utf-8"))
+        assert cat["general.exp_history"]
+
+
 # ---- old DB ------------------------------------------------------------------------------------
 
 def test_an_old_db_reads_no_answer_and_takes_one(tmp_path, monkeypatch):

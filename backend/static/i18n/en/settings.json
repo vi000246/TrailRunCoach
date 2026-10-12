@@ -236,6 +236,7 @@
   "general.wko5": "WKO5 data: height {h} cm, sex {sex}, weight log {list}",
   "general.wko5_none": "none",
   "general.saved": "Saved; the charts will be recalculated with the new weight",
+  "general.exp_history": "You have 4+ weeks of running on record: the plan follows your record, so the running-experience questions aren't needed.",
   "general.exp_title": "Your running",
   "general.exp_intro": "Used to plan your first month; every question can be left blank and the weekly volume is used as entered. Once you have 4 weeks or more of activities, the plan goes by them instead.",
   "general.exp_q1": "Last 4 weeks, on average a week",

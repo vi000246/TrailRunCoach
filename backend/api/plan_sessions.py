@@ -2216,10 +2216,15 @@ async def _sync_watch(db: AsyncSession, uids, inp: Optional[dict] = None) -> dic
     inp = inp or await _inputs(db)
     today = _today(inp)
     # SP-362 B3: under the push lock only; the store as it is once this push's turn comes
+    from backend import applog
+    t0 = time.perf_counter()
     async with _plock():
         new = await PS.load(db)
         res = await PA.push_window(db, new, inp, today, int(cfg["push_days"] or 7),
                                    only={u for u in uids if u}, window=auto)
+    # SP-379: the watch's share of an edit / drag / swap (lock wait included)
+    applog.took("watch push after edit", t0, provider=prov.id, status=res.get("status"),
+                sessions=len([u for u in uids if u]))
     res = {**res, "provider_label": prov.label}
     if res["status"] in ("partial", "failed"):
         await PA._add_entry(db, trigger="edit", status="failed", items=[],

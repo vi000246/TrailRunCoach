@@ -190,6 +190,116 @@ def test_schedule_swap_from_the_context_menu(app):
     assert live.count() > 0
 
 
+
+def test_schedule_swap_locks_both_sessions_until_done(app):
+    """SP-359 R1: while the server swaps (slowed down here like a COROS push) a toast at the bottom
+    right says 交換中 and both sessions are locked — a click opens nothing; once it answers, the
+    calendar shows the new days, the lock is gone and the toast says 已交換."""
+    page, _ = app
+    open_page(page, _server.PAGES["schedule"])
+    page.click('#view-seg button[data-view="week"]')
+    _calendar_ready(page)
+    pick = """() => [...document.querySelectorAll('#cal .chip[data-uid][draggable="true"]')]
+        .map((c) => [c.dataset.uid, c.closest('[data-day]').dataset.day])"""
+    days = page.evaluate(pick)
+    pair = next(((a, b) for a in days for b in days if a[1] != b[1]), None)
+    if pair is None:
+        page.click("#next")
+        _calendar_ready(page)
+        days = page.evaluate(pick)
+        pair = next(((a, b) for a in days for b in days if a[1] != b[1]), None)
+    assert pair, "no two coming sessions on different days"
+    (ua, da), (ub, db) = pair
+
+    def slow(route):
+        page.wait_for_timeout(2500)
+        route.continue_()
+    page.route("**/plan/sessions/swap", slow)
+    page.locator(f'#cal .chip[data-uid="{ua}"]').click(button="right")
+    page.click('.menu.ctx [data-ctx="swap"]')
+    expect(page.locator("#swap-toast")).to_be_visible()
+    expect(page.locator("#swap-toast [data-swap-cancel]")).to_be_visible()     # phones have no Esc
+    page.locator(f'#cal .chip[data-uid="{ub}"]').click()
+    expect(page.locator("#swap-toast")).to_contain_text("交換中")
+    for u in (ua, ub):
+        expect(page.locator(f'#cal .chip[data-uid="{u}"]')).to_have_class(re.compile(r"\bswap-lock\b"))
+    page.locator(f'#cal .chip[data-uid="{ua}"]').click(force=True)
+    expect(page.locator("#sd")).not_to_have_attribute("open", "")            # locked: no editor
+    expect(page.locator("#swap-toast")).to_contain_text("已交換", timeout=30_000)
+    expect(page.locator(".chip.swap-lock")).to_have_count(0)
+    got = page.evaluate(f"""() => [document.querySelector('#cal .chip[data-uid="{ua}"]')?.closest('[data-day]')?.dataset.day,
+        document.querySelector('#cal .chip[data-uid="{ub}"]')?.closest('[data-day]')?.dataset.day]""")
+    assert got == [db, da], got
+    page.unroute("**/plan/sessions/swap")
+
+
+def test_strength_session_opens_the_move_picker(app):
+    """SP-191 R1: a strength session's editor lists the moves in use and 「選肌力動作」 opens
+    課表偏好 at 肌力動作, unfolded, with a select per movement type."""
+    page, _ = app
+    open_page(page, _server.PAGES["schedule"])
+    _calendar_ready(page)
+    chip = page.locator("#cal .chip.k-strength[data-uid]")
+    if chip.count() == 0:
+        page.click("#next")
+        _calendar_ready(page)
+    page.locator("#cal .chip.k-strength[data-uid]").first.click()
+    expect(page.locator("#sd")).to_have_attribute("open", "")
+    expect(page.locator("#sd-sm")).to_be_visible()
+    expect(page.locator("#sd-sm-txt")).to_contain_text("目前：", timeout=20_000)
+    page.click("#sd-sm-go")
+    expect(page.locator("#pf")).to_have_attribute("open", "")
+    expect(page.locator("#pf-sm")).to_have_attribute("open", "")
+    assert page.locator("#pf-mv select[data-mv]").count() >= 5
+    expect(page.locator("#sd")).not_to_have_attribute("open", "")
+    # a run's editor has no such box
+    page.locator("#pf [data-close]").first.click()
+    page.locator("#cal .chip.k-easy[data-uid]").first.click()
+    expect(page.locator("#sd")).to_have_attribute("open", "")
+    expect(page.locator("#sd-sm")).to_be_hidden()
+
+
+def test_schedule_phone_cards_and_editor_save(app):
+    """SP-376: on a phone (a short screen, as with the browser bars) a card's note is cut to two lines,
+    and the editor of a long session keeps 儲存 on screen and clickable."""
+    page, _ = app
+    page.set_viewport_size({"width": 390, "height": 664})
+    open_page(page, _server.PAGES["schedule"])
+    _calendar_ready(page)
+    tall = page.evaluate("""() => [...document.querySelectorAll('.ag-day .chip .c-d')]
+        .filter((e) => e.getBoundingClientRect().height > parseFloat(getComputedStyle(e).lineHeight) * 2 + 2).length""")
+    assert tall == 0
+    for _ in range(4):
+        if page.locator("#cal .chip.k-quality[data-uid]").count():
+            break
+        page.click("#next")
+        _calendar_ready(page)
+    page.locator("#cal .chip.k-quality[data-uid]").first.click()
+    expect(page.locator("#sd")).to_have_attribute("open", "")
+    page.wait_for_timeout(1000)
+    hit = page.evaluate("""() => { const r = document.getElementById('sd-save').getBoundingClientRect();
+        const el = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        return r.bottom <= innerHeight && !!el && !!el.closest('#sd-save'); }""")
+    assert hit, "儲存 is off screen or covered"
+
+
+def test_viewer_sport_chip_switches_the_main_sport(app):
+    """SP-381: 圖表分析's top right is a 專項 select (自動／越野跑／路跑・馬拉松) instead of the data
+    source; choosing one saves 主要訓練項目 and reloads; set back to 自動 afterwards."""
+    page, _ = app
+    open_page(page, VIEWER)
+    sel = page.locator("#sport-chip select#sport-sel")
+    expect(sel).to_be_visible(timeout=60_000)
+    assert page.locator("#source-chip").count() == 0
+    assert sel.locator("option").all_inner_texts()[1:] == ["越野跑", "路跑／馬拉松"]
+    with page.expect_navigation():
+        sel.select_option("road")
+    expect(page.locator("#sport-sel")).to_have_value("road", timeout=60_000)
+    assert _json(page, "/api/v1/wko5/primary-sport")["setting"] == "road"
+    with page.expect_navigation():
+        page.locator("#sport-sel").select_option("auto")
+    expect(page.locator("#sport-sel")).to_have_value("auto", timeout=60_000)
+
 def test_schedule_watch_status_glyphs(app):
     """手錶狀態圖示 (推送狀態): the legend's four states, each an <svg> glyph with its label."""
     page, _ = app
@@ -339,6 +449,20 @@ def test_racepower_course_map(app):
 # ---------------------------------------------------------------------------
 # 設定: 閾值可信度, 課表訂閱
 # ---------------------------------------------------------------------------
+
+def test_settings_hides_the_experience_questions_with_a_history(app):
+    """SP-372: the demo athlete has months of runs, so 一般設定 shows one line instead of the
+    跑步經驗 questionnaire; with the detect call failing the questionnaire is shown."""
+    page, _ = app
+    open_page(page, _server.PAGES["settings"] + "#general")
+    expect(page.locator("#exp-hist")).to_be_visible(timeout=30_000)
+    expect(page.locator("#exp-block")).to_be_hidden()
+    page.route("**/plan/profile/detect", lambda r: r.fulfill(status=200, json={"has_history": False,
+                                                                              "power_source": {}, "labels": {}}))
+    page.reload()
+    expect(page.locator("#exp-block")).to_be_visible(timeout=30_000)
+    expect(page.locator("#x-n")).to_be_visible()
+    expect(page.locator("#exp-hist")).to_be_hidden()
 
 def test_settings_threshold_confidence(app):
     page, _ = app

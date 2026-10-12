@@ -236,6 +236,18 @@ dialog.sd .tp-t input { margin-top: 3px; flex: none; width: auto; }
 .chip.swap-src { outline: 2px dashed var(--accent); outline-offset: 1px; }
 .chip.swap-drop { outline: 2px solid var(--accent); outline-offset: 1px; }
 body.swapping #cal .chip[draggable="true"] { cursor: copy; }
+/* SP-359 R1: the two sessions being swapped are locked until the server answers, and a toast at the
+   bottom right says what is happening (picking / swapping / done) — the toolbar line was off screen */
+.chip.swap-lock { opacity: .55; cursor: progress; position: relative; }
+.chip.swap-lock::after { content: "⇄"; position: absolute; top: 2px; right: 4px; font-size: 12px; animation: swapPulse 1s ease-in-out infinite; }
+@keyframes swapPulse { 50% { opacity: .25; } }
+#swap-toast { position: fixed; right: 16px; bottom: 16px; z-index: 60; max-width: min(360px, calc(100vw - 32px));
+  background: var(--panel); color: var(--text); border: 1px solid var(--accent); border-radius: 10px;
+  box-shadow: 0 6px 24px rgba(0,0,0,.18); padding: 10px 12px; font-size: 13px; display: flex; gap: 10px; align-items: center; }
+#swap-toast[hidden] { display: none; }
+#swap-toast .st-txt { flex: 1; min-width: 0; }
+#swap-toast.ok { border-color: #2e8b57; }
+#swap-toast button { font: inherit; font-size: 12.5px; border: 1px solid var(--line); background: var(--panel); color: var(--text); border-radius: 6px; padding: 3px 10px; cursor: pointer; }
 /* SP-82: an empty planned day's 「休息」 — drag it onto another day to swap */
 .chip.rest-mv { cursor: grab; color: var(--faint); border: 1px dashed var(--line); background: transparent; font-size: 12px; }
 .chip.st-done { background: color-mix(in srgb, var(--k) 24%, var(--cell)); }
@@ -466,6 +478,8 @@ dialog.sd input.sw:focus-visible { outline: 2px solid var(--accent); outline-off
 .pf-adv[open] > summary h4::after { content: "▾"; }
 /* 肌力動作 (engine/strength_moves.py, SP-191): who a move suits, under its select (no hover needed) */
 .pf-mv-grp { padding-top: 8px; font-size: 12px; font-weight: 700; }
+.pf-sm-ar { display: inline-block; transition: transform .15s; }
+#pf-sm[open] .pf-sm-ar { transform: rotate(90deg); }
 .pf-mv-who { flex-basis: 100%; font-size: 12px; line-height: 1.45; }
 #pf .tseg label { padding: 4px 10px; font-size: 13px !important; flex: none; }
 #pf .tseg label:has(input:checked) { background: var(--accent); border-color: var(--accent); color: #fff !important; }
@@ -538,6 +552,18 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
   .menu { min-width: min(260px, 88vw); }
   .legend { font-size: 11.5px; }
   dialog.sd { width: 100vw; max-width: 100vw; margin: auto 0 0; border-radius: 14px 14px 0 0; max-height: 92vh; }
+  /* SP-376: a phone's browser bars cover the bottom of a 92vh sheet (vh = the viewport with the bars
+     hidden), and a long editor pushed 儲存 below them — size by the visible height (dvh) and keep the
+     button row pinned to the bottom of the sheet */
+  dialog.sd { max-height: 92dvh; }
+  dialog.sd form { max-height: 92dvh; padding-bottom: 0; }
+  dialog.sd form > .btns { position: sticky; bottom: 0; z-index: 3; background: var(--panel); margin: 4px -16px 0;
+    padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid var(--line); }
+  #swap-toast { right: 12px; bottom: calc(84px + env(safe-area-inset-bottom, 0px)); }   /* above the bottom nav */
+  /* SP-376: a card shows its title, time / TSS and target; the note is cut to two lines (tap opens it) */
+  .ag-day .chip .c-d { grid-column: 1 / -1; color: var(--muted); font-size: 12px; margin-top: 2px; white-space: normal;
+    display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .ag-day .chip .c-x { display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 }
 @media (min-width: 700px) { #rec-btn .lbl-short, #pull-btn .lbl-short { display: none; } }
 @media (max-width: 1000px) and (min-width: 700px) { .cal { --sumw: 112px; } .cell { min-height: 104px; } .chip .c-x { display: none; } }
@@ -635,6 +661,12 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
       <!-- the structured editor (static/workout_editor.js, engine/workout_steps.py): chart, steps, per-step targets
            (each step picks power / HR / pace; 自動 steps follow target_policy by session type), watch preview -->
       <div id="sd-we"></div>
+    </div>
+    <!-- SP-191 R1: a strength session says where its moves come from and opens the picker
+         (課表偏好 › 肌力動作) — the picker alone, folded mid-dialog, wasn't found -->
+    <div class="var-box" id="sd-sm" hidden>
+      <div class="hint" id="sd-sm-txt"></div>
+      <button class="btn" type="button" id="sd-sm-go" data-i18n="schedule.sm.go">選肌力動作 ›</button>
     </div>
     <div class="var-box" id="sd-test" hidden>
       <div class="row2">
@@ -763,7 +795,7 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
 功率：全部用功率區間（Palladino % CP）；測試和下坡照它們自己的規則。
 只影響系統排的課；每一段也可以在課表的「結構」裡自己改用功率、心率或配速，範本用來源自己的目標。">?</button>
         <span class="pf-c tseg" role="radiogroup" aria-labelledby="pf-tb-l"><label><input type="radio" name="target_basis" value="auto"><span data-i18n="schedule.pf.auto">自動</span></label><label><input type="radio" name="target_basis" value="hr"><span data-i18n="schedule.pf.hr">心率</span></label><label><input type="radio" name="target_basis" value="power"><span data-i18n="schedule.pf.power">功率</span></label></span></div>
-      <details class="pf-adv" id="pf-sm"><summary><div class="pf-r"><span class="pf-l"><span data-i18n="schedule.pf.g.moves">肌力動作</span> ▸</span></div></summary>
+      <details class="pf-adv" id="pf-sm"><summary><div class="pf-r"><span class="pf-l"><span data-i18n="schedule.pf.g.moves">肌力動作</span> <span class="pf-sm-ar" aria-hidden="true">▸</span></span></div></summary>
         <div class="meta pf-st" data-i18n="schedule.pf.mv.intro">期別決定這堂練哪幾類、做幾組幾下；每一類用哪個動作由你挑，沒挑就用預設。勾了「沒有的器材」，需要它的動作會自動換成不用它的。</div>
         <div class="pf-r"><span class="pf-l" id="pf-ng-l" data-i18n="schedule.pf.mv.no_gear">沒有的器材</span>
           <span class="pf-c" id="pf-ng" role="group" aria-labelledby="pf-ng-l"></span></div>
@@ -1062,8 +1094,8 @@ function chipHtml(s, big) {
   const icon = s.state === "active" && s.day >= D.today ? syIcon(c.status, c.error || c.reason || "") : "";
   const pm = window.PlanMark ? PlanMark.lines(s, KINDS) : [];      // SP-318: ↻ auto / ✎ yours (plan_mark.js)
   const lbl = `${KINDS[s.kind] || ""}${fam ? "（" + fam.text + "）" : ""}：${s.title}，${s.minutes || 0} 分鐘，${tss.replace("→", "實際")}${s.state === "missed" ? "，未完成" : s.state === "done" ? "，已完成" : ""}${s.provisional ? "，暫定" : ""}${icon ? "，" + syLabel(c.status) : ""}${pm.length ? "，" + PlanMark.label(s) : ""}`;
-  return `<button type="button" class="chip k-${esc(s.kind)}${fam ? " fam-" + esc(fam.id) : ""}${S.swapFrom && S.swapFrom.uid === s.uid ? " swap-src" : ""} st-${esc(s.state)} ${cp && cp.level !== "missed" ? "cp-" + esc(cp.level) : ""} ${s.provisional && s.state === "active" ? "prov" : ""}" data-uid="${esc(s.uid)}"
-      ${live ? 'draggable="true"' : ""} aria-label="${esc(lbl + (cp && cp.level !== "missed" ? "，" + compTip(cp) : ""))}" title="${esc(s.title + (fam && fam.sub_label ? "\n" + fam.text : "") + "\n" + meta + cpTip + (s.target ? "\n" + s.target : "") + (s.detail ? "\n" + s.detail : "") + (s.walk_hint ? "\n" + s.walk_hint : "") + (pm.length ? "\n" + pm.join("\n") : ""))}">
+  return `<button type="button" class="chip k-${esc(s.kind)}${fam ? " fam-" + esc(fam.id) : ""}${S.swapFrom && S.swapFrom.uid === s.uid ? " swap-src" : ""}${S.swapLock && S.swapLock.has(s.uid) ? " swap-lock" : ""} st-${esc(s.state)} ${cp && cp.level !== "missed" ? "cp-" + esc(cp.level) : ""} ${s.provisional && s.state === "active" ? "prov" : ""}" data-uid="${esc(s.uid)}"
+      ${live && !(S.swapLock && S.swapLock.has(s.uid)) ? 'draggable="true"' : ""}${S.swapLock && S.swapLock.has(s.uid) ? ' aria-disabled="true"' : ""} aria-label="${esc(lbl + (cp && cp.level !== "missed" ? "，" + compTip(cp) : ""))}" title="${esc(s.title + (fam && fam.sub_label ? "\n" + fam.text : "") + "\n" + meta + cpTip + (s.target ? "\n" + s.target : "") + (s.detail ? "\n" + s.detail : "") + (s.walk_hint ? "\n" + s.walk_hint : "") + (pm.length ? "\n" + pm.join("\n") : ""))}">
     <span class="c-t">${isHeat(s) ? '<span class="heat-tag" aria-hidden="true">熱</span>' : ""}${esc(s.title)}</span><span class="c-r">${off ? `<span class="offp-i" aria-hidden="true">≠</span>` : part ? `<span class="part-i" aria-hidden="true">◐</span>` : ""}${pm.length ? PlanMark.icon(s) : ""}${icon}</span>
     <span class="c-m">${meta}</span>
     ${line ? `<span class="c-x">${line}</span>` : ""}${big && off ? `<span class="c-x offp-i">≠ ${esc(s.vs.text.replace("沒照課表：", "沒照課表 · "))}</span>` : ""}${big && part ? `<span class="c-x part-i">◐ ${esc(s.vs.short_text)}</span>` : ""}${big && (s.detail || s.walk_hint) && s.state !== "done" ? `<span class="c-d">${esc([s.detail, s.walk_hint].filter(Boolean).join(" "))}</span>` : ""}${s.state === "done" && s.note ? `<span class="c-x adapt-note">⚠ ${esc(s.note)}</span>` : ""}</button>`;
@@ -1733,9 +1765,33 @@ function tgtHint() {
   const g = [F.title.value, F.target.value, F.detail.value].filter(hasGl);
   $("sd-gl").innerHTML = g.length ? `名詞說明：${g.map(gl).join(" · ")}` : "";
   $("sd-test").hidden = kindVal() !== "test" || !!dlg.ro;
+  smBox();
   varLoad();
   stepsPreview();
 }
+// SP-191 R1: 肌力動作 on the strength session itself — the moves in use (課表偏好 › 肌力動作,
+// GET /prefs) and a button that opens that section
+let SM_PICKS = null;
+async function smBox() {
+  const on = kindVal() === "strength" && !dlg.ro;
+  $("sd-sm").hidden = !on;
+  if (!on) return;
+  $("sd-sm-txt").textContent = tt("sm.intro");
+  try {
+    if (!SM_PICKS) {
+      const b = await sj("GET", `${PAPI}/prefs`);
+      PF_SM = b.strength_options || PF_SM;
+      SM_PICKS = { moves: (b.prefs || {}).strength_moves || {}, lack: (b.prefs || {}).strength_no_gear || [] };
+    }
+    const names = PF_SM.types.map((t) => {
+      const key = SM_PICKS.moves[t.key] || t.default;
+      const m = (t.moves || []).find((x) => x.key === key);
+      return m ? m.name : null;
+    }).filter(Boolean);
+    if (names.length && !$("sd-sm").hidden) $("sd-sm-txt").textContent = tt("sm.intro") + " " + tt("sm.now", { list: names.join("、") });
+  } catch (_) { /* the button still works */ }
+}
+$("sd-sm-go").addEventListener("click", () => { $("sd").close(); openPrefs({ section: "sm" }); });
 
 // The structured editor (static/workout_editor.js): every step shows what it resolves to — its own
 // basis (power / HR / pace), or 自動 = engine/target_policy.py by session type; one step is changed
@@ -2507,8 +2563,9 @@ function pdCheckSoon() {                        // live conflict hints for the u
     } catch { /* the save validates again */ }
   }, 250);
 }
-async function openPrefs() {
+async function openPrefs(opt = {}) {
   closeMenus();
+  SM_PICKS = null;                              // the strength box re-reads the picks after a save
   PF_WARNED = null;
   $("pf-err").textContent = "";
   let b;
@@ -2524,6 +2581,13 @@ async function openPrefs() {
   pfFill({ ...b.prefs, _conflicts: b.day_conflicts || [], _dropped: b.pref_dropped || [] });
   $("pf").showModal();
   if (PF_AVAIL == null) gateAvail();          // needs the dataset: filled in when it arrives
+  if (opt.section === "sm") {                   // from a strength session (SP-191 R1): that section, open
+    const sec = $("pf-sm");
+    sec.open = true;
+    sec.scrollIntoView({ block: "start" });
+    (sec.querySelector("select") || sec.querySelector("summary")).focus();
+    return;
+  }
   PFF.querySelector('input[name="pf-day"]').focus();
 }
 $("pf").addEventListener("click", (e) => { if (e.target.closest("[data-close]") || e.target === $("pf")) $("pf").close(); });
@@ -2726,7 +2790,7 @@ const dropClear = () => document.querySelectorAll(".drop, .swap-drop").forEach((
 $("cal").addEventListener("dragend", (e) => { e.target.closest?.(".chip")?.classList.remove("dragging"); S.dragUid = null; dropClear(); });
 // SP-359: over another session it may swap with → that chip lights up (a drop swaps the two days)
 const swapTarget = (e) => {
-  const c = S.dragUid && e.target.closest(".chip[data-uid]");
+  const c = S.dragUid && !S.swapLock && e.target.closest(".chip[data-uid]");
   return c && canSwap(findS(S.dragUid), findS(c.dataset.uid)) ? c : null;
 };
 $("cal").addEventListener("dragover", (e) => {
@@ -2891,39 +2955,80 @@ const checkNote = (days, p) => tt("watch.check", { provider: p || "COROS", days:
 // 不排課日期, not a 課表待確認 notice; two different days. Both become your own move.
 const swappable = (s) => !!s && editable(s) && s.kind !== "notice" && !boOf(s.day);
 function canSwap(a, b) { return swappable(a) && swappable(b) && a.uid !== b.uid && a.day !== b.day; }
+function swapToast(text, opt = {}) {
+  let el = $("swap-toast");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "swap-toast"; el.setAttribute("role", "status"); el.setAttribute("aria-live", "polite");
+    document.body.appendChild(el);
+    el.addEventListener("click", (e) => { if (e.target.closest("[data-swap-cancel]")) swapEnd(true); });
+  }
+  clearTimeout(swapToast.t);
+  if (!text) { el.hidden = true; return; }
+  el.className = opt.cls || "";
+  el.innerHTML = `${opt.spin ? '<span class="spin"></span>' : ""}<span class="st-txt">${esc(text)}</span>` +
+    (opt.cancel ? `<button type="button" data-swap-cancel>${esc(tt("swap.cancel"))}</button>` : "");
+  el.hidden = false;
+  if (opt.ms) swapToast.t = setTimeout(() => { el.hidden = true; }, opt.ms);
+}
 function swapStart(s) {
+  if (S.swapLock) return;
   S.swapFrom = s;
   document.body.classList.add("swapping");
   render();
   msg(esc(tt("swap.pick", { title: s.title })));
+  swapToast(tt("swap.pick_toast", { title: s.title }), { cancel: true });
 }
 function swapEnd(cancelled) {
   if (!S.swapFrom) return;
   S.swapFrom = null;
   document.body.classList.remove("swapping");
   document.querySelectorAll(".swap-src").forEach((x) => x.classList.remove("swap-src"));
-  if (cancelled) msg(esc(tt("swap.cancelled")));
+  if (cancelled) { msg(esc(tt("swap.cancelled"))); swapToast(tt("swap.cancelled"), { ms: 2000 }); }
 }
+// SP-359 R1: while the server swaps (and updates the watch: 20–30 s with COROS) both sessions are
+// locked — no click, drag, context menu or second swap on them — and the toast says 交換中; the
+// calendar is redrawn from the server's answer, then they unlock
 async function doSwap(a, b) {
   swapEnd(false);
-  if (S.busy || !canSwap(a, b)) return;
-  S.busy = true; renderToolbar(); msg(`<span class="spin"></span> ${esc(tt("swap.working"))}`);
+  if (S.busy || S.swapLock || !canSwap(a, b)) return;
+  S.busy = true; S.swapLock = new Set([a.uid, b.uid]);
+  render(); renderToolbar();
+  msg(`<span class="spin"></span> ${esc(tt("swap.working"))}`);
+  swapToast(tt("swap.working_toast", { a: a.title, b: b.title }), { spin: true });
+  let ok = false;
   try {
     const r = await sj("POST", `${PAPI}/sessions/swap`, { a: a.uid, b: b.uid });
     S.sel = b.day; await load();
+    ok = true;
     const [w, cls] = watchNote(r.coros);
     msg(esc(tt("swap.done", { a: a.title, b: b.title, da: md(b.day), db: md(a.day) }) + w)
       + (r.warnings || []).map((x) => `<br>⚠ ${esc(x)}`).join(""), r.warnings?.length ? "err" : cls);
   } catch (err) { errMsg(tt("swap.what"), err); }
-  finally { S.busy = false; if (D) renderToolbar(); }
+  finally {
+    S.busy = false; S.swapLock = null;
+    if (D) { render(); renderToolbar(); }
+    swapToast(ok ? tt("swap.done_toast") : tt("swap.failed_toast"), { cls: ok ? "ok" : "", ms: 3000 });
+  }
 }
+// a locked session takes nothing until the swap is done (capture: before every other handler)
+const swapLocked = (e) => {
+  if (!S.swapLock) return false;
+  const c = e.target.closest?.(".chip[data-uid]");
+  return !!c && S.swapLock.has(c.dataset.uid);
+};
+["click", "dblclick", "contextmenu", "dragstart", "pointerdown", "keydown"].forEach((ev) => $("cal").addEventListener(ev, (e) => {
+  if (!swapLocked(e)) return;
+  e.preventDefault(); e.stopImmediatePropagation();
+  if (ev === "click" || ev === "contextmenu") swapToast(tt("swap.locked"), { spin: true });
+}, true));
 // while picking, a click on the calendar picks the second session (anything else cancels)
 $("cal").addEventListener("click", (e) => {
   if (!S.swapFrom) return;
   e.preventDefault(); e.stopPropagation();
   const c = e.target.closest(".chip[data-uid]"), b = c && findS(c.dataset.uid);
   if (!b || b.uid === S.swapFrom.uid) return swapEnd(true);
-  if (!canSwap(S.swapFrom, b)) return msg(esc(tt("swap.not_this")), "warn");
+  if (!canSwap(S.swapFrom, b)) { swapToast(tt("swap.not_this"), { cancel: true }); return msg(esc(tt("swap.not_this")), "warn"); }
   doSwap(S.swapFrom, b);
 }, true);
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && S.swapFrom) swapEnd(true); });

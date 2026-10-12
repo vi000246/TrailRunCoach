@@ -106,6 +106,11 @@ def _log_run(source: str, trigger: str, result: dict, clock: SyncClock) -> None:
             source, trigger, result["status"], s["total"], result.get("checked", 0),
             result.get("downloaded", 0), result.get("errors", 0),
             f" | {steps}" if steps else "", slow)
+    # SP-379: the same run in perf.log (the sync's request is a stream, not timed per request)
+    applog.perf("sync", f"sync {source} ({trigger})", s["total"], status=result["status"],
+                checked=result.get("checked", 0), downloaded=result.get("downloaded", 0),
+                errors=result.get("errors", 0),
+                steps=",".join(f"{k}:{s[k]:.1f}" for k in SyncClock.STEPS if s[k] >= 0.05) or None)
 
 
 def is_busy(source: str) -> bool:

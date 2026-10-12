@@ -11,6 +11,8 @@ One session server (_server.py): the synthetic demo athlete, built into a temp
 folder and served by uvicorn on a free port in owner mode. The pages load
 ECharts / Leaflet from cdnjs, so the run needs the internet; map tiles are
 answered locally with a blank tile (no tile-server traffic, no flaky tiles).
+Without access to cdnjs, TRC_E2E_CDN_DIR=<dir> serves them from the npm packages
+unpacked in <dir> (echarts@5.5.0, leaflet@1.9.4; see _browser.local_cdn).
 
 Every test gets a fresh browser context (`app`): it records page errors,
 console errors and the app's own 5xx answers, and the test fails on any of them
