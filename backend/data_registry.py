@@ -129,7 +129,7 @@ TABLES: tuple = (
           "are the athlete's own rating but entered on the watch / in COROS and imported, not edited here",
           user_fields=("trail_classification", "classification_overridden"),
           deidentify=("file_path", "workout_date", "start_time_utc", "coros_activity_id", "tp_workout_id",
-                      "imported_at")),
+                      "garmin_activity_id", "imported_at")),
     Table("fit_objects", IMPORTED, "one row per stored FIT original, named by its sha256 (SP-308, "
           "files/fitstore.py): size, first source, COROS id, start; `deleted` marks an object whose "
           "activity was deleted (the file is removed later, sync/purge.cleanup_objects)",
@@ -141,18 +141,20 @@ TABLES: tuple = (
           "retried by id; the cursor has moved past them, so a deleted row is an activity no sync asks for "
           "again (not recomputable); server-side bookkeeping like coros_plan_push",
           deidentify=("provider_id", "workout_date", "last_error", "first_at", "last_at")),
-    Table("sync_state", SECRET, "COROS / TP tokens, the sealed 「記住密碼」 passwords (settings/secrets.py), "
-          "the accounts' ids and the sync cursors",
+    Table("sync_state", SECRET, "COROS / TP / Garmin (SP-91) tokens, the sealed 「記住密碼」 passwords "
+          "(settings/secrets.py), the accounts' ids and the sync cursors",
           secret_fields=("tp_access_token", "tp_refresh_token", "tp_web_cookie", "coros_access_token",
-                         "coros_password_sealed", "tp_password_sealed"),
-          deidentify=("coros_email", "coros_user_id", "tp_username", "coros_base_url"),
+                         "coros_password_sealed", "tp_password_sealed", "garmin_token_sealed",
+                         "garmin_password_sealed"),
+          deidentify=("coros_email", "coros_user_id", "tp_username", "coros_base_url", "garmin_email"),
           # the login (credentials, their expiry, the account identity) stays on this machine; the
           # cursors travel with the activities they describe (SP-355)
           local_fields=("tp_access_token", "tp_refresh_token", "tp_token_expires", "tp_web_cookie",
                         "coros_access_token", "coros_token_expires", "coros_password_sealed",
                         "tp_password_sealed", "coros_email", "coros_user_id", "coros_base_url",
-                        "tp_username"),
-          cursor_fields=("last_sync_at", "last_sync_cursor", "coros_last_sync_at")),
+                        "tp_username", "garmin_token_sealed", "garmin_token_expires", "garmin_email",
+                        "garmin_password_sealed"),
+          cursor_fields=("last_sync_at", "last_sync_cursor", "coros_last_sync_at", "garmin_last_sync_at")),
     Table("debug_tokens", SECRET, "debug API tokens (SP-371, debug_auth.py): the SHA-256 of each token "
           "(the token itself is never stored), its scopes, expiry and the source IPs seen; tenant-bound",
           secret_fields=("token_hash",), deidentify=("name", "last_ip", "ips_json", "created_at", "last_used_at"),
@@ -188,10 +190,11 @@ LEGACY_TABLES: tuple = (
 
 DB = File("wko5coach.db", PER_TABLE, ROOT, "the app DB (db/database.py); its tables: TABLES", backup=ALWAYS)
 FIT = File("fit/**", IMPORTED, SHARED, "synced FIT originals: gzip objects named by content "
-           "fit/{coros,tp}/objects/<aa>/<sha256>.fit.gz (SP-308, files/fitstore.py); before the "
-           "migration fit/{coros,tp}/<year>/<file>.fit (sync/storage.py)", backup=OPT_IN,
+           "fit/{coros,garmin,tp}/objects/<aa>/<sha256>.fit.gz (SP-308, files/fitstore.py; garmin = the .fit "
+           "taken out of Garmin's original ZIP, SP-91); before the migration fit/{coros,tp}/<year>/<file>.fit "
+           "(sync/storage.py)", backup=OPT_IN,
            deidentify=("GPS track (start / end)", "timestamps", "device serial / user profile in the file",
-                       "legacy file name: COROS labelId or TP workout id + date"))
+                       "legacy file name: COROS labelId, Garmin activityId or TP workout id + date"))
 
 FILES: tuple = (
     DB,
@@ -294,11 +297,15 @@ FILES: tuple = (
          scope=INSTANCE, deidentify=("email", "display_name", "google_sub")),
     File("accounts.db-*", SECRET, ROOT, "accounts.db's WAL / shared memory", scope=INSTANCE),
     File("site.json", USER, ROOT, "server-wide settings and state (backend/site_settings.py): the COROS "
-         "switch, breaker, limits and paused accounts (SP-385; tenants by id only)", scope=INSTANCE),
+         "switch, breaker, limits and paused accounts (SP-385); the Garmin trial's switch, breaker, paused "
+         "accounts and per-account daily counts (SP-91, sync/garmin_limits.py); tenants by id only",
+         scope=INSTANCE),
     File("users/**", USER, ROOT, "multi-user mode: each users/<id>/ is a signed-in user's tenant folder "
          "(classified on its own, like the owner's)", scope=INSTANCE),
-    File("logs/**", DERIVED, ROOT, "the server log (applog.py); disposable, not tenant data (a demo base "
-         "holds one: its build runs there)", scope=INSTANCE),
+    File("logs/**", DERIVED, ROOT, "the server log (applog.py) and the sync event log logs/sync_events.jsonl "
+         "(sync/events.py: COROS / Garmin logins, syncs, blocks; tenants by id only — the Garmin trial's "
+         "record, backend/scripts/garmin_trial_report.py); disposable, not tenant data (a demo base holds one: "
+         "its build runs there)", scope=INSTANCE),
     File("research/**", DERIVED, ROOT, "probe-script output (backend/scripts/probe_coros_tl.py)",
          scope=INSTANCE),
     File("fits/**", IMPORTED, ROOT, "the COROS folder before fit/coros (backend/scripts/"

@@ -84,7 +84,8 @@ SCOPES: dict[str, str] = {
     "link:participant_ability": "inReachLiveTrack 讀報名者能力值",
 }
 SOURCE_SCOPES = ("sync:coros_credential", "sync:garmin_trial", "sync:intervals", "sync:coros_mcp", "sync:tp_web")
-SYNC_SOURCE_SCOPE = {"coros": "sync:coros_credential", "tp": "sync:tp_web"}      # runner's sources
+SYNC_SOURCE_SCOPE = {"coros": "sync:coros_credential", "garmin": "sync:garmin_trial",
+                     "tp": "sync:tp_web"}      # runner's sources
 LINK_SCOPES = ("link:gpx_sync", "link:calc", "link:participant_ability")
 
 _FREE = frozenset({"plan:view", "plan:edit", "safety", "import:fit", "export:data", "ai:chat", "charts:90d",
@@ -206,12 +207,16 @@ def user_id_of(t) -> Optional[int]:
 
 
 def sources_off() -> set:
-    """Data-source scopes switched off for the whole server (site_settings + the COROS switch)."""
+    """Data-source scopes switched off for the whole server (site_settings + the COROS switch +
+    the Garmin trial's switch, SP-91)."""
     from backend import site_settings as SS
     off = {s for s in (SS.get("sources.off") or []) if s in SOURCE_SCOPES}
     from backend.sync import coros_limits as CL
     if not CL.enabled():
         off.add("sync:coros_credential")
+    from backend.sync import garmin_limits as GL
+    if not GL.enabled():
+        off.add("sync:garmin_trial")
     return off
 
 
@@ -232,6 +237,9 @@ def set_source(scope: str, on: bool) -> list:
     if scope == "sync:coros_credential":
         from backend.sync import coros_limits as CL
         CL.set_enabled(on, by="owner")
+    if scope == "sync:garmin_trial":
+        from backend.sync import garmin_limits as GL
+        GL.set_enabled(on, by="owner")
     off = set(SS.get("sources.off") or [])
     (off.discard if on else off.add)(scope)
     SS.update({"sources.off": sorted(off) or None})

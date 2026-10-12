@@ -38,7 +38,8 @@ from backend.db.models import SyncState
 
 log = logging.getLogger(__name__)
 
-SOURCES = ("coros", "tp")
+SOURCES = ("coros", "garmin", "tp")
+TOKEN_FIELD = {"coros": "coros_access_token", "garmin": "garmin_token_sealed", "tp": "tp_access_token"}
 CHECK_TTL_S = 300            # a checked login is trusted this long (the page never hammers COROS / TP)
 UNKNOWN_TTL_S = 60           # a check that could not reach the server is retried sooner
 
@@ -101,7 +102,7 @@ async def check(db: AsyncSession, source: str, athlete_id: int = 1) -> str:
     if source not in SOURCES:
         raise ValueError(f"unknown source {source!r}")
     st = await _state(db, athlete_id)
-    if st is None or not (st.coros_access_token if source == "coros" else st.tp_access_token):
+    if st is None or not getattr(st, TOKEN_FIELD[source]):
         return LOGGED_OUT
     hit = cached(source, athlete_id)
     if hit is not None:
@@ -112,7 +113,7 @@ async def check(db: AsyncSession, source: str, athlete_id: int = 1) -> str:
             return hit
         prev = _CACHE.get((source, athlete_id), (None,))[0]      # stale answer, if any
         try:
-            result = await (_check_coros(db, athlete_id) if source == "coros" else _check_tp(db, athlete_id))
+            result = await {"coros": _check_coros, "garmin": _check_garmin, "tp": _check_tp}[source](db, athlete_id)
         except Exception as e:                   # noqa: BLE001 — a check never breaks the page
             log.warning("%s login check failed: %s", source.upper(), type(e).__name__)
             result = UNKNOWN
@@ -149,6 +150,21 @@ async def _check_coros(db: AsyncSession, athlete_id: int) -> str:
     if st is not None and st.coros_password_sealed and await C.relogin(db, athlete_id, since=t0):
         return OK
     return EXPIRED
+
+
+# ---------------------------------------------------------------------------
+# Garmin (SP-91 trial)
+# ---------------------------------------------------------------------------
+
+async def _check_garmin(db: AsyncSession, athlete_id: int) -> str:
+    """No live check: every Garmin request counts against the account's daily budget and the
+    lock-out risk (sync/garmin_limits.py). The stored token is good until Garmin refused it during
+    a sync (garmin_token_expires set, sync/garmin_client.py); a remembered password renews it at the
+    next sync, never from here."""
+    st = await _state(db, athlete_id)
+    if st is None or not st.garmin_token_sealed:
+        return LOGGED_OUT
+    return EXPIRED if st.garmin_token_expires is not None else OK
 
 
 # ---------------------------------------------------------------------------

@@ -58,11 +58,11 @@ def canonical_clause():
 
 def in_use_clause(primary: str):
     """`.where(...)` predicate for every total: canonical rows that are not
-    from the synced source NOT in use (primary = "coros" | "trainingpeaks")."""
+    from the synced sources NOT in use (primary = "coros" | "garmin" | "trainingpeaks")."""
     from sqlalchemy import and_
     from backend.sync import primary as P
-    other = P.to_db(P.other_folder(primary))
-    return and_(canonical_clause(), WorkoutFile.source != other)
+    others = [P.to_db(f) for f in P.other_folders(primary)]     # two since Garmin (SP-91)
+    return and_(canonical_clause(), WorkoutFile.source.notin_(others))
 
 
 async def in_use(db: AsyncSession, user_id: int = 1):

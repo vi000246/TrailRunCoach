@@ -67,6 +67,17 @@ async def start_coros_sync(
     return await _sse_sync(db, "coros", athlete_id, since)
 
 
+@router.post("/garmin/start")
+async def start_garmin_sync(
+    athlete_id: int = 1,
+    since: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+):
+    """「立即同步」 Garmin (SP-91 trial): one of today's 3 manual runs (sync/garmin_limits.py).
+    Streams progress events via Server-Sent Events, as COROS."""
+    return await _sse_sync(db, "garmin", athlete_id, since)
+
+
 @router.get("/sources")
 async def sync_sources(athlete_id: int = 1, db: AsyncSession = Depends(get_db)):
     """Everything the settings page shows per source: login state, enabled,
@@ -99,7 +110,7 @@ async def sync_primary(athlete_id: int = 1, db: AsyncSession = Depends(get_db)):
     src = P.FOLDER[use]
     login = await session_check.check(db, src, athlete_id)
     return {
-        "source": src,                                   # coros | tp (the /sync/<src> start URL)
+        "source": src,                                   # coros | garmin | tp (the /sync/<src> start URL)
         "label": P.LABELS[use],
         "logged_in": login not in (session_check.EXPIRED, session_check.LOGGED_OUT),
         "login": login,                                  # ok | expired | unknown | logged_out
@@ -127,6 +138,16 @@ async def auto_sync(athlete_id: int = 1, db: AsyncSession = Depends(get_db)):
     todo, skipped = await runner.auto_plan(db, athlete_id)
     started = []
     for src in todo:
+        if src == "garmin":
+            # SP-91: the day's one automatic Garmin run (or the account is paused until its
+            # scheduled sync): opening a page starts nothing then
+            from backend.sync import garmin_limits as GL
+            if GL.paused():
+                skipped[src] = "paused"
+                continue
+            if not GL.can_start("open"):
+                skipped[src] = "daily_limit"
+                continue
         last = await runner.last_sync_at(db, src, athlete_id)
         if last and (now - last).total_seconds() < hours * 3600:
             skipped[src] = "fresh"
@@ -162,9 +183,9 @@ async def delete_source_files(source: str, athlete_id: int = 1,
                               db: AsyncSession = Depends(get_db)):
     """Delete one source's synced FIT files + DB rows (confined to
     ~/.wko5coach/fit/<source>/), rebuild de-dup, reset the cursor.
-    source ∈ {coros, tp}; 409 SYNC_BUSY while that source syncs."""
+    source ∈ {coros, garmin, tp}; 409 SYNC_BUSY while that source syncs."""
     if source not in storage.SOURCES:
-        raise HTTPException(400, "source must be coros or tp")
+        raise HTTPException(400, "source must be coros, garmin or tp")
     try:
         return await purge.delete_source_files(db, source, athlete_id, date_from, date_to)
     except runner.SyncBusy:
@@ -216,11 +237,13 @@ async def check_start(body: Optional[CheckBody] = None, athlete_id: int = 1, db:
     asked for is busy."""
     from backend.sync import check
     want = (body.source if body else None)
-    if want is not None and want not in runner.SOURCES:
+    if want is not None and want not in check.REMOTES:
         raise HTTPException(400, "source must be coros or tp")
     ready = await runner.ready_sources(db, athlete_id)
     started, skipped = [], {}
-    for src in ([want] if want else runner.SOURCES):
+    # Garmin (SP-91 trial) has no full check: a listing of the whole history would use the
+    # account's daily budget (check.REMOTES are COROS and TP)
+    for src in ([want] if want else [s for s in runner.SOURCES if s in check.REMOTES]):
         if ready[src] != "ready":
             skipped[src] = ready[src]
         elif check.start(src, athlete_id, check.FULL) is None:
@@ -239,7 +262,7 @@ async def check_fill(source: str, body: Optional[CheckBody] = None, athlete_id: 
     in the background, through the sync's own fetch (a failure goes to the failed list).
     409 SYNC_BUSY / NOT_READY, 404 when there is nothing to download."""
     from backend.sync import check
-    if source not in runner.SOURCES:
+    if source not in check.REMOTES:
         raise HTTPException(400, "source must be coros or tp")
     last = await SettingsRepository(db, athlete_id).get(check.key(source, check.FULL)) or {}
     if not last.get("missing"):
@@ -272,9 +295,10 @@ async def sync_status(athlete_id: int = 1, db: AsyncSession = Depends(get_db)):
 
 
 class SyncSettingsBody(BaseModel):
-    primary_source: Optional[str] = None          # 資料來源 (the only one used): coros | trainingpeaks (sync/primary.py)
+    primary_source: Optional[str] = None          # 資料來源 (the only one used): coros | garmin | trainingpeaks (sync/primary.py)
     timezone: Optional[str] = None
     coros_enabled: Optional[bool] = None
+    garmin_enabled: Optional[bool] = None
     trainingpeaks_enabled: Optional[bool] = None
     tp_use_wko5_client: Optional[bool] = None     # null = auto (on when creds configured)
     daily_sync_time: Optional[str] = None         # "HH:MM" or null (off)
@@ -293,7 +317,7 @@ class SyncSettingsBody(BaseModel):
 
 _SETTING_KEYS = {"exclude_bad_activities": "activities.exclude_bad", "primary_source": "sync.primary_source",
                  "timezone": "athlete.timezone",
-                 "coros_enabled": "sync.coros.enabled",
+                 "coros_enabled": "sync.coros.enabled", "garmin_enabled": "sync.garmin.enabled",
                  "trainingpeaks_enabled": "sync.trainingpeaks.enabled",
                  "tp_use_wko5_client": "sync.trainingpeaks.use_wko5_client",
                  "daily_sync_time": "sync.schedule.daily_time",

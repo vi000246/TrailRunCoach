@@ -532,7 +532,8 @@ async def weekly_tick(session_factory: Callable, now: Optional[datetime] = None,
         if not (await repo.get("sync.auto_on_open.enabled") or await repo.get("sync.schedule.daily_time")):
             return []
         todo, _skipped = await runner.auto_plan(db, athlete_id)
-        due = [s for s in todo if weekly_due(await repo.get(key(s, WEEKLY)), now)]
+        # Garmin (SP-91) has no full check: a listing of the whole history would use its daily budget
+        due = [s for s in todo if s in REMOTES and weekly_due(await repo.get(key(s, WEEKLY)), now)]
     started = []
     for src in due:
         if start_fn(src, athlete_id) is not None:
@@ -549,6 +550,8 @@ async def status(db: AsyncSession, athlete_id: int = 1) -> dict:
     ready = await runner.ready_sources(db, athlete_id)
     out = {}
     for src in runner.SOURCES:
+        if src not in REMOTES:                   # Garmin (SP-91): no full check
+            continue
         out[src] = {"running": running(src), "progress": progress(src), "ready": ready.get(src),
                     "last": await repo.get(key(src, FULL)), "weekly": await repo.get(key(src, WEEKLY))}
     return out

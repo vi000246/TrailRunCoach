@@ -9,7 +9,7 @@ Research + usage: docs/research/garmin.md (§6 「使用者測試步驟」).
     .venv\\Scripts\\python.exe -m backend.scripts.garmin_probe --cleanup
     .venv\\Scripts\\python.exe -m backend.scripts.garmin_probe --forget
 
-Needs `pip install garminconnect==0.3.17` in the venv (not in requirements.txt).
+Needs garminconnect ≥ 0.3.17 in the venv (in requirements.txt since the SP-91 trial, sync/garmin_client.py).
 
 Credentials: email via input(), password via getpass(), MFA code via input().
 The password is never stored. The session token (garminconnect's DI token

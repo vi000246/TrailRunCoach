@@ -18,7 +18,7 @@
   "use strict";
   const KEY = "wko5coach.autosync.last";
   const MIN_GAP_MS = 10 * 60 * 1000;
-  const SRC = { coros: "COROS", tp: "TP" };
+  const SRC = { coros: "COROS", garmin: "Garmin", tp: "TP" };
   const T = (k, p) => (window.I18N && window.I18N.t ? window.I18N.t("common." + k, p) : k);
 
   function el() {
