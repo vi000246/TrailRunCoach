@@ -10,7 +10,7 @@ unrelated function — threw every entry away on deploy (~2.5 NAS CPU-min per te
   source text — comments, blank lines and edits elsewhere in the file don't count;
 * reached through a global name, a module attribute (`A.pd_model`, also after a local
   `from … import … as A`), a nested function / lambda / comprehension, or a method name
-  called on any object (`ds.cached_series(…)`) when that method belongs to a reached
+  called on any object (`ds.channel(…)`) when that method belongs to a reached
   class or to one of the `context` classes;
 * module-level constants a reached function reads (`WINDOWS`, `A.CP_WINDOW_DAYS`): the
   AST of their top-level assignment, so editing the value changes the hash;
@@ -19,6 +19,15 @@ unrelated function — threw every entry away on deploy (~2.5 NAS CPU-min per te
 Dynamic lookups (`getattr(m, name)`, a registry filled at import time) are not seen: every
 caller keeps a manual version constant next to the hash for those, and a test pins the
 roots of each cache.
+
+Cache plumbing (PLUMBING: `Dataset.cached_series`, `flush_series` …) is never followed:
+memoising a value does not change it, and an edit to the cache machinery would otherwise drop
+every value cached through it (SP-339).
+
+`callable_hash(fn)` (SP-339) is for a callable made at the call site — `ds.cached_series(key, w,
+lambda w=w: _measure(ds, w))`: its defaults are inputs, not code, so they are left out; what it
+reaches through its closure cells is followed (a nested function, a local `import … as A` read
+as `A.f`, the classes of the objects of ours it closes over, whose methods it calls by name).
 """
 from __future__ import annotations
 
@@ -36,6 +45,16 @@ PKG = "backend"
 
 _MEMO: dict = {}
 _ASSIGN: dict = {}
+_CALLABLE: dict = {}
+
+# cache plumbing, never followed (see the module doc): qualified names of functions / classes
+PLUMBING = frozenset({
+    "backend.engine.wko5expr.dataset.Dataset.cached_series",
+    "backend.engine.wko5expr.dataset.Dataset.flush_series",
+    "backend.engine.wko5expr.fitdataset.FitFolderDataset.flush_series",
+    "backend.engine.wko5expr.dataset.batched_flush",
+    "backend.engine.wko5expr.dataset.flush_held",
+})
 
 
 def _ours(obj) -> bool:
@@ -243,6 +262,8 @@ def closure(roots: Iterable[Any], context: Iterable[type] = ()) -> dict:
             if isinstance(o, type):
                 if _ours(o):
                     seen_ids.add(id(o))
+                    if f"{o.__module__}.{o.__qualname__}" in PLUMBING:
+                        continue
                     classes.append(o)
                     parts[f"class:{o.__module__}.{o.__qualname__}"] = repr([b.__qualname__ for b in o.__mro__])
                     todo.extend(class_methods(o))
@@ -255,6 +276,8 @@ def closure(roots: Iterable[Any], context: Iterable[type] = ()) -> dict:
             if not _ours(fn):
                 continue
             seen_ids.add(id(fn))
+            if f"{fn.__module__}.{fn.__qualname__}" in PLUMBING:
+                continue
             h = hashlib.sha1()
             for p in _code_parts(fn.__code__):
                 h.update(p if isinstance(p, bytes) else _stable(p).encode("utf-8"))
@@ -284,7 +307,12 @@ def code_hash(*roots, context: Iterable[type] = (), extra: Any = None) -> str:
     hit = _MEMO.get(key)
     if hit is not None:
         return hit
-    parts = closure(roots, context)
+    out = _digest(closure(roots, context), extra)
+    _MEMO[key] = out
+    return out
+
+
+def _digest(parts: dict, extra: Any) -> str:
     h = hashlib.sha1()
     for k in sorted(parts):
         h.update(k.encode("utf-8"))
@@ -292,6 +320,88 @@ def code_hash(*roots, context: Iterable[type] = (), extra: Any = None) -> str:
         h.update(str(parts[k]).encode("utf-8"))
         h.update(b"\n")
     h.update(_stable(extra).encode("utf-8"))
-    out = h.hexdigest()[:16]
-    _MEMO[key] = out
+    return h.hexdigest()[:16]
+
+
+def _cells(fn) -> dict:
+    """{free variable name: value} of a function's closure (an empty cell left out)."""
+    out = {}
+    for name, cell in zip(fn.__code__.co_freevars, fn.__closure__ or ()):
+        try:
+            out[name] = cell.cell_contents
+        except ValueError:
+            pass
     return out
+
+
+def _shape(fn, depth: int = 0):
+    """What the code of a call-site callable depends on, as a memo key: its module and code and,
+    per closure cell, the shape of a function, the name of a module, a class of ours or the class
+    of an object of ours. Never the cells' other values or the defaults (inputs, not code)."""
+    fn = _unwrap(fn)
+    if isinstance(fn, types.MethodType):
+        return ("m", fn.__func__.__module__, fn.__func__.__code__, type(fn.__self__))
+    if not isinstance(fn, types.FunctionType):
+        return ("o", type(fn))
+    cells = []
+    for name, v in sorted(_cells(fn).items(), key=lambda kv: kv[0]):
+        if isinstance(v, (types.FunctionType, types.MethodType)):
+            cells.append((name, _shape(v, depth + 1) if depth < 3 else None))
+        elif isinstance(v, types.ModuleType):
+            cells.append((name, v.__name__))
+        elif isinstance(v, type):
+            cells.append((name, v if _ours(v) else None))
+        elif _ours(type(v)):
+            cells.append((name, type(v)))
+    return ("f", fn.__module__, fn.__code__, tuple(cells))
+
+
+def callable_roots(fn) -> tuple[list, list]:
+    """(roots, context) for closure() of a call-site callable (see the module doc)."""
+    roots: list = []
+    context: list = []
+
+    def walk(f, depth):
+        f = _unwrap(f)
+        if isinstance(f, types.MethodType):
+            roots.append(f.__func__)
+            if _ours(type(f.__self__)):
+                context.append(type(f.__self__))
+            return
+        if not isinstance(f, types.FunctionType):
+            if _ours(type(f)):                   # a callable object of ours
+                context.append(type(f))
+            return
+        # the same code, globals and closure without the defaults (`lambda w=w: …`)
+        roots.append(types.FunctionType(f.__code__, f.__globals__, f.__name__, None, f.__closure__))
+        cells = _cells(f)
+        for co in _codes(f.__code__):            # `A.f` with A a module in a cell
+            ins = list(dis.get_instructions(co))
+            for a, b in zip(ins, ins[1:]):
+                if a.opname == "LOAD_DEREF" and b.opname in ("LOAD_ATTR", "LOAD_METHOD"):
+                    m = cells.get(a.argval)
+                    if isinstance(m, types.ModuleType) and _ours(m) and hasattr(m, b.argval):
+                        roots.append(getattr(m, b.argval))
+        for v in cells.values():
+            if isinstance(v, (types.FunctionType, types.MethodType)):
+                if depth < 3:
+                    walk(v, depth + 1)
+            elif isinstance(v, type):
+                if _ours(v):
+                    roots.append(v)
+            elif not isinstance(v, types.ModuleType) and _ours(type(v)):
+                context.append(type(v))
+    walk(fn, 0)
+    return roots, context
+
+
+def callable_hash(fn, context: Iterable[type] = (), extra: Any = None) -> str:
+    """code_hash of a call-site callable (callable_roots), memoised on its shape (_shape): a
+    lambda made anew for each activity hashes once per process."""
+    ctx = tuple(context)
+    key = (_shape(fn), ctx, _stable(extra))
+    hit = _CALLABLE.get(key)
+    if hit is None:
+        roots, more = callable_roots(fn)
+        hit = _CALLABLE[key] = _digest(closure(roots, list(ctx) + more), extra)
+    return hit

@@ -178,11 +178,23 @@ def test_page_polls_while_computing():
 
 
 def test_batched_flush_writes_once_at_the_end(tmp_path, no_plan):
-    from backend.engine.wko5expr.dataset import batched_flush
+    import sqlite3
+    from backend.engine.wko5expr import seriesdb
+    from backend.engine.wko5expr.dataset import _safe, batched_flush
     ds = _fit_ds(tmp_path, n=2)
+
+    def rows():                                         # SP-339: rows of the series store
+        db = ds._store.home / seriesdb.FILE_NAME
+        if not db.exists():
+            return 0
+        con = sqlite3.connect(str(db))
+        try:
+            return con.execute("SELECT COUNT(*) FROM series WHERE key = ?", (_safe("t_k_x"),)).fetchone()[0]
+        finally:
+            con.close()
     with batched_flush(ds):
         for w in ds.workouts:
             ds.cached_series("t_k_x", w, lambda: {"v": 1})
             ds.flush_series()                           # held: no write inside
-        assert not list(ds._store.home.glob("series_t_k_x*.json"))
-    assert len(list(ds._store.home.glob("series_t_k_x*.json"))) == 1    # written on leaving
+        assert rows() == 0
+    assert rows() == 2                                  # written on leaving
