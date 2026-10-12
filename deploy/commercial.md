@@ -8,35 +8,19 @@
 
 ## 0. 現在的樣子（不動）
 
-- `coach` named tunnel → 密碼 proxy → `:8000`；proxy 只放行 `/share/`。
-- 示範主機是另一個 process（`WKO5COACH_MODE=demo`、`:8001`），自己的 tunnel，前面沒有 proxy（§3.8）。
+- `coach.yichlin.com` 已經走 Cloudflare **named tunnel** 到 NAS 的 `:8000`（SP-65，2026-10-05 設好）。
+- 外網進來先經過 **Cloudflare Access**（Zero Trust）的登入頁；`/share` 另外設了 Bypass。這就是 auth plan 裡說的「密碼 proxy」。
+- 示範主機還沒有自己的 hostname（靜態示範在 GitHub Pages，SP-350 搬到 Cloudflare Pages）。
 
-上線前，下面每一步都不能讓擁有者的 `:8000` 少掉密碼那一層，**拿掉 proxy 只在第 3 步、和登入同一次部署**。
+上線前，下面每一步都不能讓 `coach.yichlin.com` 少掉 Access 那一層，**拿掉 Access 只在第 3 步、和登入同一次部署**。
 
-## 1. 固定網域與 named tunnel 👤
+## 1. 網域與 tunnel ✅（已經有，不用另外準備）
 
-Google OAuth 的 redirect URI 必須是固定網址；quick tunnel 每次啟動網址都會變，不能用。
-
-1. 決定網域（例如 `<網域>`），交給 Cloudflare 管 DNS。
-2. 在 NAS 上（已經有 `cloudflared` 的話沿用）：
-   ```bash
-   cloudflared tunnel login
-   cloudflared tunnel create trc-app                 # 擁有者／商業版主機
-   cloudflared tunnel route dns trc-app app.<網域>
-   cloudflared tunnel create trc-demo                # 示範主機，維持獨立
-   cloudflared tunnel route dns trc-demo demo.<網域>
-   ```
-3. `~/.cloudflared/config.yml`（示意；憑證檔路徑照 `tunnel create` 的輸出）：
-   ```yaml
-   tunnel: trc-app
-   credentials-file: /home/<you>/.cloudflared/<trc-app-id>.json
-   ingress:
-     - hostname: app.<網域>
-       service: http://localhost:8080        # 上線前：密碼 proxy；上線那天改成 http://localhost:8000
-     - service: http_status:404
-   ```
-   示範主機另一份 config，`service: http://localhost:8001`。
-4. 驗收：`https://app.<網域>` 打得開（還是會先問密碼）；`https://demo.<網域>` 打開是示範資料，讀不到真實資料（§3.8 的三層保證）。
+- Google OAuth 的 redirect 用 `https://coach.yichlin.com/oauth/google/callback`（固定網址，tunnel 是 named tunnel，不是每次會變的 quick tunnel）。
+- 示範主機要上線時，在同一條 tunnel 加一個 public hostname（Cloudflare Zero Trust › Networks › Tunnels › 這條 tunnel › Public Hostname），例如：
+  - 靜態示範：`demo.yichlin.com` 指向 Cloudflare Pages（不經 tunnel，見 `deploy/static/README.md` §2b）；
+  - 伺服器版示範（`WKO5COACH_MODE=demo`）：例如 `try.yichlin.com` → `http://localhost:8001`，前面**不**加 Access（§3.8）。
+- 驗收：`https://coach.yichlin.com` 照舊先問 Access；示範主機打得開、讀不到真實資料（§3.8 的三層保證）。
 
 ## 2. Google OAuth client 👤
 
@@ -47,14 +31,14 @@ Google OAuth 的 redirect URI 必須是固定網址；quick tunnel 每次啟動�
    - **Privacy policy URL**：SP-60 的隱私權政策網址（文件要先有；沒有就先不要 Publish）。
    - Scopes：`openid`、`.../auth/userinfo.email`、`.../auth/userinfo.profile`。
 2. **Credentials › Create credentials › OAuth client ID**：Web application。
-   - Authorized redirect URIs：`https://app.<網域>/oauth/google/callback`；開發時另加 `http://localhost:8000/oauth/google/callback`（SP-58 開發用，不擋這張）。
+   - Authorized redirect URIs：`https://coach.yichlin.com/oauth/google/callback`；開發時另加 `http://localhost:8000/oauth/google/callback`（SP-58 開發用，不擋這張）。
 3. client id 與 secret **只放 NAS 的 env 或 Docker secret**（第 5 節），不交給 Claude、不 commit、不貼到 issue 或對話裡。
 
-## 3. 拿掉密碼 proxy 📅（和 SP-58 登入上線同一次部署）
+## 3. 拿掉 Cloudflare Access 📅👤（和 SP-58 登入上線同一次部署）
 
-- app 自己做登入之後，前面那層密碼會擋住 OAuth callback 和公開路徑（§7）。
+- app 自己做登入之後，Access 那層會擋住 OAuth callback 和公開路徑（auth plan §7）。
 - **不能提早拿**：app 的登入還沒上線就拿掉，等於把擁有者的資料公開。
-- 做法：tunnel 的 `service` 從 proxy 改指 `http://localhost:8000`，重啟 cloudflared；proxy 容器停掉。
+- 做法：Cloudflare Zero Trust › Access › Applications → `coach.yichlin.com` 那個 application → 刪除（或把 policy 改成 Bypass everyone）；`/share` 的 Bypass 規則一起不需要了。
 - 驗收（上線當天）：沒登入時只有第 4 節的白名單路徑打得開，其他回 401 或導到登入頁。
 
 ## 4. 公開路徑白名單 🧑‍💻（SP-58 實作，這裡只記清單）
@@ -149,9 +133,9 @@ Google OAuth 的 redirect URI 必須是固定網址；quick tunnel 每次啟動�
 
 | 完成條件 | 狀態 |
 |---|---|
-| 固定網域可以連到 app；示範主機在另一個 hostname，讀不到真實資料 | 👤 第 1 節 |
+| Google 登入的回呼 `https://coach.yichlin.com/oauth/google/callback` 從外網打得到 | 等 SP-58（網域與 tunnel 已有，第 1 節） |
 | Google OAuth client 建好、redirect 指向固定網域、同意畫面有隱私權政策網址 | 👤 第 2 節（隱私權政策等 SP-60） |
-| 登入上線那次部署同時拿掉密碼 proxy；沒登入只有白名單打得開 | 📅 第 3、4 節（等 SP-58） |
+| 登入上線那次部署同時拿掉 Cloudflare Access；沒登入只有白名單打得開 | 📅👤 第 3、4 節（等 SP-58） |
 | 所有密鑰只在 env 或 secret，`docker logs` 與 app log 都搜不到 | ✅ 第 5 節 |
 | `deploy/` 文件寫明步驟與「引擎部署每週一次深夜」 | ✅ 本文件 |
 | 每日備份包含 `accounts.db` 與所有 user 租戶目錄 | ✅ 第 7 節（👆 NAS 實跑一次） |

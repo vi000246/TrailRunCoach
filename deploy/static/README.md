@@ -108,7 +108,7 @@ git push --force origin gh-pages                      # 只對 gh-pages 強制�
 ## 2b. 搬到 Cloudflare Pages（repo 轉 private 之前要先做，SP-350）
 
 個人帳號的 private repo 不能免費用 GitHub Pages，所以 **先把示範搬到 Cloudflare Pages、確認新網址打得開，再把 repo 轉 private**。
-匯出和第 1 節完全一樣；只是發佈的地方換了。網域和固定 tunnel 的規劃跟商業版一起（`deploy/commercial.md` §1：`demo.<網域>`）。
+匯出和第 1 節完全一樣；只是發佈的地方換了。網域和固定 tunnel 的規劃跟商業版一起（`deploy/commercial.md` §1：`demo.yichlin.com`）。
 
 👤 擁有者做（要 Cloudflare 帳號，Claude 拿不到也不該拿到 token）：
 
@@ -123,11 +123,11 @@ git push --force origin gh-pages                      # 只對 gh-pages 強制�
    wrangler pages deploy dist/static-demo --project-name trc-demo --branch main
    ```
    網站在 `https://trc-demo.pages.dev/`。匯出全是相對網址，放在網域根目錄也能用。
-3. Cloudflare dashboard → Workers & Pages → `trc-demo` → **Custom domains** → 加 `demo.<網域>`（DNS 在同一個 Cloudflare 帳號時自動設好）。
-   - 伺服器版示範（`WKO5COACH_MODE=demo`）之後要上的話，用另一個 hostname，例如 `try.<網域>`，兩者不要共用。
+3. Cloudflare dashboard → Workers & Pages → `trc-demo` → **Custom domains** → 加 `demo.yichlin.com`（DNS 在同一個 Cloudflare 帳號時自動設好）。
+   - 伺服器版示範（`WKO5COACH_MODE=demo`）之後要上的話，用另一個 hostname，例如 `try.yichlin.com`，兩者不要共用。
 4. 驗收：
-   - `https://demo.<網域>/` 打開是虛構跑者的總覽；課表能改、重新整理後還在（localStorage）；其他寫入顯示「唯讀示範」。
-   - 打開瀏覽器 DevTools → Network：只有 `demo.<網域>` 和 cdnjs 的請求。
+   - `https://demo.yichlin.com/` 打開是虛構跑者的總覽；課表能改、重新整理後還在（localStorage）；其他寫入顯示「唯讀示範」。
+   - 打開瀏覽器 DevTools → Network：只有 `demo.yichlin.com` 和 cdnjs 的請求。
 5. 改連結：README 第 6 行、本文件開頭、`WKO5COACH_DEMO_CTA_URL`（伺服器版示範的「看靜態示範」連結，有設的話）。
 6. 確認新網址正常之後，才到 GitHub **Settings → General → Danger Zone → Change visibility → Private**。
    GitHub Pages 會跟著停用；`gh-pages` 分支可以留著當歷史，也可以刪掉。

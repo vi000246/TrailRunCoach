@@ -5,7 +5,7 @@
 
 > **線上示範**：<https://vi000246.github.io/TrailRunCoach/> — 一位虛構跑者的一年資料，不用登入就能看訓練總覽、圖表、
 > 賽事計算機和週期規劃，課表可以試著改（修改只存在你的瀏覽器）。唯讀的靜態網站，沒有伺服器。
-> （repo 轉 private 之前會搬到 Cloudflare Pages，網址改成 `demo.<網域>`，步驟見 [`deploy/static/`](deploy/static/README.md) §2b。）
+> （repo 轉 private 之前會搬到 Cloudflare Pages，網址改成 `demo.yichlin.com`，步驟見 [`deploy/static/`](deploy/static/README.md) §2b。）
 
 ![訓練總覽](docs/screenshots/overview.webp)
 
