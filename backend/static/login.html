@@ -95,7 +95,7 @@ footer { display: flex; justify-content: flex-end; margin-top: 14px; }
     <label class="check"><input type="checkbox" id="lg-agree"><span data-i18n="login.agree">我已閱讀並同意服務條款、隱私權政策（含去識別化後的跨使用者分析）、健康風險聲明與第三方串接免責。</span></label>
     <div class="actions">
       <button type="button" class="btn primary" id="lg-accept" disabled data-i18n="login.signup.accept">同意並建立帳號</button>
-      <a class="btn" href="/login" data-i18n="login.cancel">取消</a>
+      <a class="btn" href="/login" id="lg-cancel" data-i18n="login.cancel">取消</a>
     </div>
     <p class="err-line" id="lg-su-err" role="alert" hidden></p>
   </section>
@@ -107,7 +107,7 @@ footer { display: flex; justify-content: flex-end; margin-top: 14px; }
   const T = (k, p) => (window.I18N ? window.I18N.t("login." + k, p) : k);
   const $ = (id) => document.getElementById(id);
   const q = new URLSearchParams(location.search);
-  const KNOWN = ["expired", "failed", "cancelled", "unverified", "disabled", "full", "rate_limited"];
+  const KNOWN = ["expired", "failed", "cancelled", "unverified", "disabled", "full", "rate_limited", "setup"];
 
   // the language switch (the shell's job on the other pages)
   const L = window.I18N;
@@ -126,7 +126,7 @@ footer { display: flex; justify-content: flex-end; margin-top: 14px; }
   const err = q.get("error");
   if (err && KNOWN.includes(err)) {
     msg.textContent = T("error." + err);
-    msg.className = "msg " + (err === "full" ? "info" : "err");
+    msg.className = "msg " + (err === "full" || err === "setup" ? "info" : "err");
     msg.hidden = false;
   } else if (q.has("signed_out")) {
     msg.textContent = T("signed_out");
@@ -169,6 +169,17 @@ footer { display: flex; justify-content: flex-end; margin-top: 14px; }
       docs.append(det);
     }
     agree.addEventListener("change", () => { btn.disabled = !agree.checked; });
+    if (again) {
+      // new terms: 取消 signs out (a signed-in user would otherwise be sent back here at once)
+      $("lg-cancel").addEventListener("click", async (e) => {
+        e.preventDefault();
+        try {
+          await fetch("/api/v1/account/logout", { method: "POST", credentials: "same-origin",
+            headers: { "X-TRC-CSRF": await csrf() } });
+        } catch (_) {}
+        location.replace("/login?signed_out=1");
+      });
+    }
     const fail = (text) => { const e = $("lg-su-err"); e.textContent = text || T("signup.error"); e.hidden = false; };
     btn.addEventListener("click", async () => {
       btn.disabled = true;
@@ -177,7 +188,8 @@ footer { display: flex; justify-content: flex-end; margin-top: 14px; }
         const r = await fetch("/api/v1/account/signup", {
           method: "POST", credentials: "same-origin",
           headers: { "Content-Type": "application/json", "X-TRC-CSRF": await csrf() },
-          body: JSON.stringify({ accept: agree.checked, version: info.terms.version }),
+          body: JSON.stringify({ accept: agree.checked, version: info.terms.version, digest: info.terms.digest,
+            next: q.get("next") || null }),
         });
         const j = await r.json().catch(() => ({}));
         if (r.ok && j.next) { location.replace(j.next); return; }

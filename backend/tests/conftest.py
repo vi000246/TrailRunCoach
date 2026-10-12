@@ -44,16 +44,23 @@ def _no_live_sync_calls():
 
 @pytest.fixture(autouse=True)
 def _no_live_google(monkeypatch):
-    """Never a live Google sign-in call (SP-58): the OAuth client and the JWKS fetch go to a
-    transport that refuses, unless the test installs its own fake (test_login_sp58.py)."""
-    from backend.accounts import google
+    """Never a live Google sign-in call (SP-58): the token exchange and the JWKS fetch go to a
+    transport that refuses, unless the test installs its own fake (test_login_sp58.py). The
+    sign-in mode is frozen per process at start-up: every test starts undecided, with fresh
+    sign-in limits."""
+    import httpx
+    from backend.accounts import google, login
 
     def refuse(request):
-        raise google.HTTP.ConnectError(f"no live network in tests: {request.url.host}", request=request)
-    monkeypatch.setattr(google, "TRANSPORT", google.HTTP.MockTransport(refuse))
+        raise httpx.ConnectError(f"no live network in tests: {request.url.host}", request=request)
+    monkeypatch.setattr(google, "TRANSPORT", httpx.MockTransport(refuse))
     google.forget_keys()
+    login.reset_mode()
+    login.reset_limits()
     yield
     google.forget_keys()
+    login.reset_mode()
+    login.reset_limits()
 
 
 @pytest.fixture(autouse=True)

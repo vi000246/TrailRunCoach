@@ -84,7 +84,10 @@ DEFAULT_TRUSTED = "127.0.0.1/32,::1/128"
 
 
 def trusted_networks() -> list:
-    raw = os.environ.get("WKO5COACH_TRUSTED_PROXIES", DEFAULT_TRUSTED)
+    return trusted_networks_of(os.environ.get("WKO5COACH_TRUSTED_PROXIES", DEFAULT_TRUSTED))
+
+
+def trusted_networks_of(raw: str) -> list:
     out = []
     for part in raw.split(","):
         part = part.strip()
@@ -132,6 +135,21 @@ def client_ip(scope) -> str:
             if not any(a in n for n in nets):
                 return str(a)
     return str(addr)
+
+
+def limit_key(ip: str) -> str:
+    """The key a per-client limit counts under: an IPv4 address as it is, an IPv6 one by its /64
+    (one subscriber usually holds a whole /64; counting single addresses would let it rotate
+    through them, SP-58)."""
+    try:
+        a = ipaddress.ip_address(ip)
+    except ValueError:
+        return ip
+    if a.version == 6:
+        if a.ipv4_mapped is not None:
+            return str(a.ipv4_mapped)
+        return str(ipaddress.ip_network(f"{a}/64", strict=False))
+    return str(a)
 
 
 class Gate:

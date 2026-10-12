@@ -84,16 +84,14 @@ async def lifespan(app: FastAPI):
         from backend.settings import secrets as _secrets
         _secrets.require_server_key()
         account_store.migrate_owner()
-        # Google sign-in (SP-58): on only with a whole Google client too; then the owner's Google
-        # account must be known (else LoginConfigError stops the start, with the reason)
-        from backend.accounts import login as _login
-        if _login.required():
-            _login.check_config()
-        else:
-            import logging
-            logging.getLogger(__name__).warning(
-                "multi-user mode without a Google client (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET): sign-in is "
-                "off, every request is the owner (as before SP-58)")
+    # Google sign-in (SP-58): the mode is decided here, once, and frozen (accounts/login.py). A
+    # half-done set of sign-in settings raises LoginConfigError: the app does not start
+    from backend.accounts import login as _login
+    if _login.decide() == _login.OWNER_MODE and accounts.enabled():
+        import logging
+        logging.getLogger(__name__).warning(
+            "multi-user mode without the sign-in settings: sign-in is off, every request is the owner "
+            "(as before SP-58)")
     # 賽事大小 (SP-111): planning.event_size reads the race calculator and the personal climb
     # divisor; the engine stays pure (and its tests) until the app installs them
     from backend.engine import planning as _planning
@@ -260,10 +258,12 @@ def build_app(demo: bool | None = None) -> FastAPI:
         def _home():
             return RedirectResponse("/api/v1/overview/page")
 
-        # monitoring: public in sign-in mode too (SP-58, deploy/commercial.md §4)
+        # monitoring: public in sign-in mode too (SP-58, deploy/commercial.md §4); says which
+        # mode the process froze at start-up (signin | owner), the deploy's smoke test reads it
         @app.get("/healthz", include_in_schema=False)
         def _healthz_owner():
-            return {"ok": True}
+            from backend.accounts import login as _login
+            return {"ok": True, "mode": _login.mode() or _login.OWNER_MODE}
 
         # bookmarks of the removed React SPA (frontend/, 2026-10-04) → their static page;
         # its pages without one (/running, /trail, /ai) are gone and 404

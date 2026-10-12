@@ -4403,6 +4403,10 @@
     "draft": true,
     "src": "backend/api/account.py:162"
   },
+  "條款已更新，請先閱讀並同意": {
+    "draft": true,
+    "src": "backend/tenancy_mw.py:361"
+  },
   "棒式": {
     "draft": true,
     "src": "backend/engine/strength_moves.py:125"
