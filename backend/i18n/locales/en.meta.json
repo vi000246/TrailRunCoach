@@ -2151,6 +2151,10 @@
     "draft": true,
     "src": "backend/engine/advanced_params.py:75"
   },
+  "健康風險聲明": {
+    "draft": true,
+    "src": "backend/accounts/terms.py:40"
+  },
   "健行不判 5 區": {
     "draft": true,
     "src": "backend/engine/workout_review.py:2686"
@@ -3975,6 +3979,10 @@
     "draft": true,
     "src": "backend/engine/quality_gate.py:1986"
   },
+  "暫時無法確認登入狀態，請稍後再試": {
+    "draft": true,
+    "src": "backend/tenancy_mw.py:289"
+  },
   "暫時規則（推估）：輕鬆跑的心率都在 {x:.0f} bpm 附近、心率飄移都穩定（< 5%），還找不到會飄到 5% 的心率，所以只能說 AeT 至少 {x:.0f}。用 {x:.0f} 當 AeT 是保守的（真正的 AeT ≥ {x:.0f}）；區間仍照課表的 AeT。之後只要 ≤ {x:.0f} bpm 有一次飄移明顯 ≥ 5%，下限就取消、改建議測試。多跑幾次 {lo:.0f}–{hi:.0f} bpm 的真正輕鬆跑，就能找出實際的 AeT；在那之前每 8 週建議做一次 AeT 測試（可以關掉）。方法：多次飄移對心率的回歸，誤差太大的跑步不算、每次誤差加倍（GC 驗證）": {
     "draft": true,
     "src": "backend/engine/drift_agg.py:405"
@@ -4219,6 +4227,10 @@
     "draft": true,
     "src": "backend/engine/workout_review.py:530"
   },
+  "服務條款": {
+    "draft": true,
+    "src": "backend/accounts/terms.py:38"
+  },
   "未使用": {
     "draft": true,
     "src": "backend/engine/racepower/weather.py:768"
@@ -4298,6 +4310,10 @@
   "條件：戴胸帶（手腕光學常有尖峰）、休息充足（前 48 小時沒有硬課）、沒生病、涼爽、找 2–3 分鐘的坡、最好有人陪。有心血管疾病或風險、胸痛、頭暈的人不要做，先問醫師（ACSM 運動前篩檢，Riebe 2015）；不舒服立刻停。替代：最近一場 5 K 比賽的最後衝刺也可以（現場、比賽與實驗室的最高心率沒有差別，Boudet 2002）。app 的讀法：濾掉尖峰與步頻鎖定後，撐 ≥ 5 秒的最高心率（推估）；結果要在設定頁按「套用」才會寫入": {
     "draft": true,
     "src": "backend/engine/workout_templates.py:165"
+  },
+  "條款剛更新了，請重新閱讀後再同意": {
+    "draft": true,
+    "src": "backend/api/account.py:162"
   },
   "棒式": {
     "draft": true,
@@ -5051,6 +5067,10 @@
     "draft": true,
     "src": "backend/engine/injuries.py:58"
   },
+  "登入逾時，請重新登入": {
+    "draft": true,
+    "src": "backend/api/account.py:143"
+  },
   "登山健行": {
     "draft": true,
     "src": "backend/engine/sport_map.py:58"
@@ -5290,6 +5310,10 @@
   "第一晚睡在約 {m:,.0f} m：行前一晚住 2,500 m 左右（玉山國家公園建議；這一晚低於 2,750 m，不算進適應週末的 2 晚）。": {
     "draft": false,
     "src": "backend/engine/altitude.py:370"
+  },
+  "第三方串接免責": {
+    "draft": true,
+    "src": "backend/accounts/terms.py:41"
   },
   "等基礎期重新累積到 EF 持平（停滯法）": {
     "draft": true,
@@ -5758,6 +5782,14 @@
   "課表：{title}（{day}，{match}）": {
     "draft": true,
     "src": "backend/engine/workout_review.py:2719"
+  },
+  "請先勾選同意條款": {
+    "draft": true,
+    "src": "backend/api/account.py:160"
+  },
+  "請先登入": {
+    "draft": true,
+    "src": "backend/tenancy_mw.py:303"
   },
   "請到設定頁重新登入 TrainingPeaks": {
     "draft": true,
@@ -7026,6 +7058,10 @@
   "隨時可用：只看護欄": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:2149"
+  },
+  "隱私權政策": {
+    "draft": true,
+    "src": "backend/accounts/terms.py:39"
   },
   "雙腳蹲，重量抱在胸前。單腳還做不穩時先練這個；腳跟墊高，下背比較舒服。": {
     "draft": true,

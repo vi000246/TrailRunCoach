@@ -14,6 +14,14 @@ written on sign-in / sign-up.
               was counted, when a distinct item counts once a period (a chart dashboard a day)
   api_tokens  service tokens of another project (inReachLiveTrack, SP-329): sha256 only, the
               link:* scopes they carry
+  consents    each acceptance of the terms (SP-58): user, terms version, the sha256 of every
+              document shown, the cross-user analysis bundled with them, when
+  oauth_states  a Google sign-in in progress (SP-58): sha256 of the state, sha256 of the
+              browser's binding cookie, the nonce, the PKCE verifier, where to go back; 10 minutes,
+              taken once
+  signup_tickets  signed in at Google, waiting at the terms (SP-58): sha256 of the cookie, the
+              Google account (sub, e-mail, name) or the user asked to accept new terms; 30 minutes,
+              taken once
 
 Every function opens its own connection (short; WAL + busy_timeout), so it is safe from the
 event loop thread, the thread pool and the scheduler alike. User 1 is the owner, migrated in
@@ -108,6 +116,36 @@ CREATE TABLE IF NOT EXISTS waitlist (
     created_at TEXT NOT NULL,
     invited_at TEXT,
     note TEXT
+);
+CREATE TABLE IF NOT EXISTS consents (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    terms_version TEXT NOT NULL,
+    documents TEXT NOT NULL,
+    analysis INTEGER NOT NULL DEFAULT 1,
+    accepted_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS consents_user ON consents(user_id);
+CREATE TABLE IF NOT EXISTS oauth_states (
+    state_hash TEXT PRIMARY KEY,
+    binding_hash TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    nonce TEXT NOT NULL,
+    code_verifier TEXT NOT NULL,
+    redirect_uri TEXT NOT NULL,
+    next_url TEXT NOT NULL,
+    expires_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS signup_tickets (
+    token_hash TEXT PRIMARY KEY,
+    kind TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    subject TEXT NOT NULL,
+    email TEXT,
+    display_name TEXT,
+    user_id INTEGER,
+    next_url TEXT NOT NULL,
+    expires_at TEXT NOT NULL
 );
 """
 
@@ -283,6 +321,24 @@ def link_google(uid: int, sub: str, email: Optional[str] = None) -> None:
                     "VALUES (?, 'google', ?, ?, ?)", (int(uid), sub, email, _iso(_now())))
 
 
+def claim_owner_google(sub: str, email: Optional[str] = None) -> bool:
+    """Link a Google account to user 1, the owner, only while user 1 has none (SP-58): one
+    conditional UPDATE, so two sign-ins racing can't both take it and a later account never
+    replaces the first. False when user 1 is missing, already linked, or the sub is someone's."""
+    init()
+    try:
+        with _LOCK, connect() as con:
+            cur = con.execute("UPDATE users SET google_sub = ?, email = coalesce(?, email), email_verified = 1 "
+                              "WHERE id = 1 AND role = ? AND google_sub IS NULL", (sub, email, OWNER))
+            if cur.rowcount != 1:
+                return False
+            con.execute("INSERT INTO identities(user_id, provider, subject, email, created_at) "
+                        "VALUES (1, 'google', ?, ?, ?)", (sub, email, _iso(_now())))
+            return True
+    except sqlite3.IntegrityError:          # the sub belongs to another user already
+        return False
+
+
 def find_identity(provider: str, subject: str) -> Optional[User]:
     init()
     with connect() as con:
@@ -313,6 +369,14 @@ def create_session(uid: int, days: int = SESSION_DAYS) -> str:
 def session_user(token: Optional[str], now: Optional[dt.datetime] = None) -> Optional[User]:
     """The user of a live session (not expired, user not disabled); slides the expiry at most
     once an hour. None otherwise."""
+    found = session_lookup(token, now)
+    return found[0] if found else None
+
+
+def session_lookup(token: Optional[str], now: Optional[dt.datetime] = None) -> Optional[tuple]:
+    """(user, slid) of a live session — slid: the expiry was just moved SESSION_DAYS ahead (at
+    most once an hour; the sign-in gate then renews the cookie too). None for no / an expired
+    (deleted here) / a disabled user's session."""
     if not token:
         return None
     init()
@@ -329,10 +393,11 @@ def session_user(token: Optional[str], now: Optional[dt.datetime] = None) -> Opt
         u = _user(row)
         if u.disabled:
             return None
-        if now - dt.datetime.fromisoformat(row["last_seen_at"]) >= dt.timedelta(hours=1):
+        slid = now - dt.datetime.fromisoformat(row["last_seen_at"]) >= dt.timedelta(hours=1)
+        if slid:
             con.execute("UPDATE sessions SET last_seen_at = ?, expires_at = ? WHERE token_hash = ?",
                         (_iso(now), _iso(now + dt.timedelta(days=SESSION_DAYS)), h))
-        return u
+        return u, slid
 
 
 def delete_session(token: Optional[str]) -> None:
@@ -378,6 +443,113 @@ def waitlist() -> list[dict]:
     init()
     with connect() as con:
         return [dict(r) for r in con.execute("SELECT * FROM waitlist ORDER BY id")]
+
+
+# ---------------------------------------------------------------------------- consents (SP-58)
+
+def record_consent(uid: int, version: str, documents: dict, analysis: bool = True) -> None:
+    """One acceptance of the terms: the version, {document id: sha256 of the text shown}, and the
+    cross-user analysis that is bundled with them (not a separate tick, SP-58)."""
+    import json
+    init()
+    with _LOCK, connect() as con:
+        con.execute("INSERT INTO consents(user_id, terms_version, documents, analysis, accepted_at) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    (int(uid), version, json.dumps(documents, sort_keys=True), int(bool(analysis)), _iso(_now())))
+
+
+def consent_version(uid: int) -> Optional[str]:
+    """The terms version the user accepted last (None: never)."""
+    init()
+    with connect() as con:
+        r = con.execute("SELECT terms_version FROM consents WHERE user_id = ? ORDER BY id DESC LIMIT 1",
+                        (int(uid),)).fetchone()
+        return r[0] if r else None
+
+
+def consents(uid: int) -> list[dict]:
+    init()
+    with connect() as con:
+        return [dict(r) for r in con.execute("SELECT * FROM consents WHERE user_id = ? ORDER BY id", (int(uid),))]
+
+
+# ---------------------------------------------------------------------------- sign-in in progress (SP-58)
+
+def put_oauth_state(state: str, binding: str, provider: str, nonce: str, code_verifier: str, redirect_uri: str,
+                    next_url: str, ttl_s: int) -> None:
+    """A sign-in started: kept by the sha256 of its state (the state itself travels in URLs) and
+    bound to the browser by the sha256 of its binding cookie. Expired rows are dropped here."""
+    init()
+    now = _now()
+    with _LOCK, connect() as con:
+        con.execute("DELETE FROM oauth_states WHERE expires_at <= ?", (_iso(now),))
+        con.execute("INSERT INTO oauth_states(state_hash, binding_hash, provider, nonce, code_verifier, redirect_uri, "
+                    "next_url, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    (_hash(state), _hash(binding), provider, nonce, code_verifier, redirect_uri, next_url,
+                     _iso(now + dt.timedelta(seconds=ttl_s))))
+
+
+def pop_oauth_state(state: str) -> Optional[dict]:
+    """Take a sign-in's state once (deleted whether it is still valid or not); None when unknown
+    or expired."""
+    if not state:
+        return None
+    init()
+    h = _hash(state)
+    with _LOCK, connect() as con:
+        row = con.execute("SELECT * FROM oauth_states WHERE state_hash = ?", (h,)).fetchone()
+        if row is None:
+            return None
+        con.execute("DELETE FROM oauth_states WHERE state_hash = ?", (h,))
+    out = dict(row)
+    if dt.datetime.fromisoformat(out["expires_at"]) <= _now():
+        return None
+    return out
+
+
+def binding_matches(row: dict, binding: Optional[str]) -> bool:
+    """The callback came back to the browser that started the sign-in (its binding cookie)."""
+    return bool(binding) and _secrets.compare_digest(_hash(binding), row.get("binding_hash") or "")
+
+
+def put_signup_ticket(token: str, kind: str, provider: str, subject: str, email: Optional[str],
+                      display_name: Optional[str], user_id: Optional[int], next_url: str, ttl_s: int) -> None:
+    """Signed in at Google, now at the terms: kind signup (a new person) or reconsent (user_id)."""
+    init()
+    now = _now()
+    with _LOCK, connect() as con:
+        con.execute("DELETE FROM signup_tickets WHERE expires_at <= ?", (_iso(now),))
+        con.execute("INSERT INTO signup_tickets(token_hash, kind, provider, subject, email, display_name, user_id, "
+                    "next_url, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (_hash(token), kind, provider, subject, email, display_name, user_id, next_url,
+                     _iso(now + dt.timedelta(seconds=ttl_s))))
+
+
+def signup_ticket(token: Optional[str]) -> Optional[dict]:
+    """A live sign-up ticket (not taken)."""
+    if not token:
+        return None
+    init()
+    with connect() as con:
+        row = con.execute("SELECT * FROM signup_tickets WHERE token_hash = ?", (_hash(token),)).fetchone()
+    if row is None or dt.datetime.fromisoformat(row["expires_at"]) <= _now():
+        return None
+    return dict(row)
+
+
+def take_signup_ticket(token: Optional[str]) -> Optional[dict]:
+    """The ticket, deleted (single use); None when unknown or expired."""
+    if not token:
+        return None
+    init()
+    h = _hash(token)
+    with _LOCK, connect() as con:
+        row = con.execute("SELECT * FROM signup_tickets WHERE token_hash = ?", (h,)).fetchone()
+        if row is None:
+            return None
+        con.execute("DELETE FROM signup_tickets WHERE token_hash = ?", (h,))
+    out = dict(row)
+    return None if dt.datetime.fromisoformat(out["expires_at"]) <= _now() else out
 
 
 # ---------------------------------------------------------------------------- plans, usage (SP-330)

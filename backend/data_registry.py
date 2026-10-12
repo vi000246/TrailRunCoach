@@ -293,7 +293,9 @@ FILES: tuple = (
     # folders sit in the server root, which is the owner's folder unless WKO5COACH_SERVER_ROOT
     # says otherwise. Never in the owner's backup: they are other people's data
     File("accounts.db", SECRET, ROOT, "accounts (backend/accounts/store.py): users (role, Google sub, "
-         "e-mail, tenant folder, plan), identities, sessions (sha256 of the cookie only), shares, waitlist",
+         "e-mail, tenant folder, plan), identities, sessions (sha256 of the cookie only), shares, waitlist, "
+         "consents (terms version and time, SP-58), and the sign-ins in progress (oauth_states: nonce and "
+         "PKCE verifier, 10 min; signup_tickets: the Google account at the terms, 30 min)",
          scope=INSTANCE, deidentify=("email", "display_name", "google_sub")),
     File("accounts.db-*", SECRET, ROOT, "accounts.db's WAL / shared memory", scope=INSTANCE),
     File("site.json", USER, ROOT, "server-wide settings and state (backend/site_settings.py): the COROS "

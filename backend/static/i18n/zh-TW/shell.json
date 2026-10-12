@@ -58,5 +58,7 @@
   "demo.static_edits": "已修改課表",
   "demo.static_none": "還沒有修改",
   "demo.static_reset_title": "清掉你在這個瀏覽器裡對課表的修改",
-  "demo.static_locked": "唯讀示範：這個操作在示範版不能用"
+  "demo.static_locked": "唯讀示範：這個操作在示範版不能用",
+  "account.logout": "登出",
+  "account.logout_title": "在這個裝置登出"
 }

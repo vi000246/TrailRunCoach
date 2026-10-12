@@ -1,16 +1,19 @@
 """
 Accounts and user tenants (SP-384; docs/plans/auth-and-demo.plan.md §2.2, §4.3, §5).
 
-    accounts.enabled()          WKO5COACH_ACCOUNTS=1: requests are bound to the signed-in user's
-                                tenant (tenancy_mw). Off (the default, today's self-hosted app):
-                                every request is the owner, nothing here is read.
+    accounts.enabled()          WKO5COACH_ACCOUNTS=1: multi-user mode. With a Google client too
+                                (login.required()) every request needs a session and is bound to
+                                its user's tenant (tenancy_mw). Off (the default, today's
+                                self-hosted app): every request is the owner, nothing here is read.
     accounts.server_root()      where accounts.db and users/<id>/ live
-    store                       accounts.db: users, identities, sessions, shares, waitlist
+    store                       accounts.db: users, identities, sessions, shares, waitlist, consents,
+                                the sign-ins in progress
     tenants                     user row -> Tenant; ready a new tenant's folder and DB; the
                                 tenants the scheduler walks
+    login, google, terms        signing in (SP-58): the switch and who becomes whom, the Google
+                                OIDC client, the terms a new user accepts
 
-The login flow and the sign-up screen are SP-58; deleting an account SP-386; plans and scopes
-SP-330; the admin pages SP-351. This package only holds the data and the tenant mapping.
+Deleting an account is SP-386; plans and scopes SP-330; the admin pages SP-351.
 """
 from __future__ import annotations
 
