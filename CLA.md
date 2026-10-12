@@ -2,6 +2,10 @@
 
 Version 1.0, 2026-10-05
 
+> No longer offered: the repository is private from 2026-10 on and takes no external
+> contributions (SP-350). Kept as the record of the terms that contributions received while it
+> was public were made under.
+
 This agreement is between you (the "Contributor") and vi000246 (the "Maintainer"), the
 copyright holder of TrailRunCoach (the "Project", https://github.com/vi000246/TrailRunCoach).
 It applies to every Contribution you submit to the Project, now or later.

@@ -100,10 +100,40 @@ git push --force origin gh-pages                      # 只對 gh-pages 強制�
 - `.nojekyll` 一定要在根目錄（匯出已經加了）：沒有它 GitHub 會用 Jekyll 處理檔案。
 - GitHub Pages 的限制：網站 ≤ 1 GB、單檔 < 100 MB、每月流量軟上限 100 GB。預設匯出大約幾十 MB。
 - 示範的「今天」是匯出那天；資料想保持新鮮，就定期重新 `build` + `export_static` 再推一次。
-- repo 改成 private 的話，免費方案的 GitHub Pages 會停用。
+- repo 改成 private 的話，免費方案的 GitHub Pages 會停用：先照 §2b 搬到 Cloudflare Pages。
 
 （替代做法：在 GitHub Actions 用 `actions/upload-pages-artifact` + `actions/deploy-pages` 部署一個預先建好、
 放在 Release 附件裡的 zip。需要多維護一個 workflow 和一個 Release，目前不需要。）
+
+## 2b. 搬到 Cloudflare Pages（repo 轉 private 之前要先做，SP-350）
+
+個人帳號的 private repo 不能免費用 GitHub Pages，所以 **先把示範搬到 Cloudflare Pages、確認新網址打得開，再把 repo 轉 private**。
+匯出和第 1 節完全一樣；只是發佈的地方換了。網域和固定 tunnel 的規劃跟商業版一起（`deploy/commercial.md` §1：`demo.<網域>`）。
+
+👤 擁有者做（要 Cloudflare 帳號，Claude 拿不到也不該拿到 token）：
+
+1. 第一次：
+   ```bash
+   npm i -g wrangler                       # 或每次用 npx wrangler
+   wrangler login                          # 瀏覽器登入 Cloudflare
+   wrangler pages project create trc-demo --production-branch main
+   ```
+2. 每次發佈（重新匯出之後）：
+   ```bash
+   wrangler pages deploy dist/static-demo --project-name trc-demo --branch main
+   ```
+   網站在 `https://trc-demo.pages.dev/`。匯出全是相對網址，放在網域根目錄也能用。
+3. Cloudflare dashboard → Workers & Pages → `trc-demo` → **Custom domains** → 加 `demo.<網域>`（DNS 在同一個 Cloudflare 帳號時自動設好）。
+   - 伺服器版示範（`WKO5COACH_MODE=demo`）之後要上的話，用另一個 hostname，例如 `try.<網域>`，兩者不要共用。
+4. 驗收：
+   - `https://demo.<網域>/` 打開是虛構跑者的總覽；課表能改、重新整理後還在（localStorage）；其他寫入顯示「唯讀示範」。
+   - 打開瀏覽器 DevTools → Network：只有 `demo.<網域>` 和 cdnjs 的請求。
+5. 改連結：README 第 6 行、本文件開頭、`WKO5COACH_DEMO_CTA_URL`（伺服器版示範的「看靜態示範」連結，有設的話）。
+6. 確認新網址正常之後，才到 GitHub **Settings → General → Danger Zone → Change visibility → Private**。
+   GitHub Pages 會跟著停用；`gh-pages` 分支可以留著當歷史，也可以刪掉。
+
+Cloudflare Pages 免費方案（以官網為準，2026-10 推估）：每月 500 次建置、單檔 25 MB、每個網站 20,000 個檔案。
+匯出大約幾千個 JSON、幾十 MB，在範圍內；`--activities` 開太大時先看 `export.json` 的檔案數。
 
 ## 3. （選用）Hugging Face 靜態 Space
 

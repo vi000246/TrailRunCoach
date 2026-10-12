@@ -5,6 +5,7 @@
 
 > **線上示範**：<https://vi000246.github.io/TrailRunCoach/> — 一位虛構跑者的一年資料，不用登入就能看訓練總覽、圖表、
 > 賽事計算機和週期規劃，課表可以試著改（修改只存在你的瀏覽器）。唯讀的靜態網站，沒有伺服器。
+> （repo 轉 private 之前會搬到 Cloudflare Pages，網址改成 `demo.<網域>`，步驟見 [`deploy/static/`](deploy/static/README.md) §2b。）
 
 ![訓練總覽](docs/screenshots/overview.webp)
 
@@ -123,7 +124,8 @@ an overview dashboard (PMC, load ratio, status), an automatic weekly schedule yo
 COROS watch, interval and heart-rate-drift analysis per activity, a race calculator (GPX + weather +
 fitness → pacing, power, finish time, fuelling), season periodisation, schedule statistics and an
 injury log. Your data stays on your machine. The public demo (a synthetic athlete) is a static,
-read-only export hosted on GitHub Pages: <https://vi000246.github.io/TrailRunCoach/>
+read-only export (GitHub Pages today, Cloudflare Pages once the repository is private):
+<https://vi000246.github.io/TrailRunCoach/>
 (`python -m backend.demo.export_static`, see `deploy/static/`); schedule edits are kept in the
 visitor's browser. The server-side demo (`WKO5COACH_MODE=demo`, per-visitor sandboxes) stays
 available as a Docker image (`deploy/hf/Dockerfile`) for any Docker host, e.g. a (paid) Hugging Face
@@ -134,20 +136,18 @@ English catalog.
 
 ## License
 
-[PolyForm Noncommercial 1.0.0](LICENSE). The source is public, but it is not an open-source
-license:
+The repository is private from 2026-10 on (SP-350): new versions are not published, and using
+them needs an agreement with the author.
 
-- Personal use, study, research, hobby projects and use by non-profit, educational and
-  public organisations are free.
-- Any commercial use (selling it, running it as a paid service, using it inside a business,
-  or building a commercial product on it) needs a separate license from the author. Ask by
-  opening an issue at https://github.com/vi000246/TrailRunCoach.
+What was published stays under the license it was published with:
 
-Versions published before 2026-10-05 were released under the MIT license and remain
-available under MIT; the PolyForm license applies from this commit on.
+- Versions published before 2026-10-05: the MIT license.
+- Versions published from 2026-10-05 until the repository went private:
+  [PolyForm Noncommercial 1.0.0](LICENSE) — personal use, study, research, hobby projects and
+  non-profit use are free; any commercial use needs a separate license from the author.
 
-Contributions need the [Contributor License Agreement](CLA.md); see
-[CONTRIBUTING.md](CONTRIBUTING.md).
+External contributions are no longer accepted (see [CONTRIBUTING.md](CONTRIBUTING.md)); the
+contributions received under the [Contributor License Agreement](CLA.md) keep its terms.
 
 Third-party data: GoldenCheetah OpenData and the Lovdal dataset used by the
 validation scripts are CC0; they are fetched or placed outside the repo, not bundled.

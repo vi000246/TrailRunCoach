@@ -104,6 +104,30 @@ Google OAuth 的 redirect URI 必須是固定網址；quick tunnel 每次啟動�
   ```
 - 驗收：`docker logs wko5coach 2>&1 | grep -F "<secret 的前 8 個字>"` 與 `grep -rF` app.log 都找不到。
 
+## 5b. repo 轉 private 之後，NAS 用唯讀 deploy key 拉 repo 👤（SP-350）
+
+1. NAS 上產生一把只給這個 repo 用的 key（不設密碼，因為部署腳本要自動拉）：
+   ```bash
+   ssh-keygen -t ed25519 -f ~/.ssh/trc_deploy -C "nas-deploy trailruncoach" -N ""
+   cat ~/.ssh/trc_deploy.pub
+   ```
+2. GitHub → repo → **Settings → Deploy keys → Add deploy key**：貼上 `.pub`，**不要勾** Allow write access。
+3. NAS 的 `~/.ssh/config`：
+   ```
+   Host github-trc
+     HostName github.com
+     User git
+     IdentityFile ~/.ssh/trc_deploy
+     IdentitiesOnly yes
+   ```
+4. 把 NAS 上那份 clone 的 remote 換掉：`git remote set-url origin git@github-trc:vi000246/TrailRunCoach.git`，`git fetch` 成功。
+5. 重新部署一次（`./deploy.sh` 或 compose `up --build -d`），確認版本號（Debug API 的 `TRC_GIT_SHA`）是新的。
+6. 其他會拉這個 repo 的地方：
+   - 其他電腦的 clone：用自己的 GitHub 帳號登入（private repo 你本人有權限），不用 deploy key。
+   - vault 的 `repo-docs/` 鏡像：從本機 clone 讀，不經 GitHub，不受影響。
+   - Claude 的雲端 session：靠 GitHub App 授權，private 後照常（App 要裝在這個 repo 上）。
+   - GitHub Actions：目前沒有 workflow；之後加的話 private repo 每月有免費分鐘數。
+
 ## 6. 部署的營運規則
 
 - **動到引擎模組或升判讀版本的部署，集中在每週一次深夜**（SP-338）。這類部署會讓所有租戶的衍生快取失效、要重算；集中在深夜一次，重算排進 SP-338 的全域佇列，最近 7 天有登入或同步的租戶先補。
