@@ -9,6 +9,11 @@ the shell (static/shell.js) reads it first. Later sign-in keeps the shape:
 It also issues the CSRF cookie (trc_csrf, readable by the page): writes send
 it back as the X-TRC-CSRF header (double submit, backend/tenancy_mw.py).
 
+Sign-in mode (SP-58, backend/accounts/login.py): public (the sign-in page reads it too);
+signed out it says only {"mode": "signed_out", "caps": [], "user": null, "membership": null,
+"login": {"required": true, "signed_in": false}}; signed in, mode "owner" | "user" and
+"user": {"id", "name", "email", "role"}.
+
 POST /api/v1/demo/reset — the demo's 「重設示範」: delete the visitor's sandbox;
 the next write starts a fresh one from the demo base.
 """
@@ -17,6 +22,7 @@ from __future__ import annotations
 import datetime as dt
 import os
 import secrets as _secrets
+from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -31,11 +37,30 @@ def _iso(ts: float) -> str:
     return dt.datetime.fromtimestamp(ts, dt.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
+def _login_view() -> tuple[Optional[dict], Optional[object]]:
+    """Sign-in mode (SP-58): ({required, signed_in}, the user); (None, None) when sign-in is off."""
+    from backend.accounts import login as LG
+    if tenancy.demo_mode() or not LG.required():
+        return None, None
+    u = LG.current_user()
+    return {"required": True, "signed_in": u is not None}, u
+
+
 def session_info(had_cookie: bool = False) -> dict:
-    """{mode, caps, demo?, user}: also inlined into every page (i18n/pages.render_page)."""
+    """{mode, caps, demo?, user}: also inlined into every page (i18n/pages.render_page).
+    Sign-in mode adds `login` {required, signed_in}; signed out: mode "signed_out", no caps,
+    no membership (nothing of the owner's tenant leaks to a page the gate let through);
+    signed in: mode "owner" | "user" and user {id, name, email, role}."""
+    login, u = _login_view()
+    if login is not None and u is None:
+        return {"mode": "signed_out", "caps": [], "user": None, "membership": None, "login": login}
     t = tenancy.current()
     body: dict = {"mode": "demo" if tenancy.demo_mode() else "owner",
                   "caps": sorted(t.caps), "user": None}
+    if login is not None:
+        body["mode"] = "owner" if u.is_owner else "user"
+        body["user"] = {"id": u.id, "name": u.display_name, "email": u.email, "role": u.role}
+        body["login"] = login
     # SP-330: role, plan, scopes (what the pages may show), paused data sources, the quotas left
     try:
         from backend import membership as MS

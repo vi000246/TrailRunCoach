@@ -27,10 +27,11 @@ from backend.api import region as region_api
 from backend.api import calendar_feed as calendar_api
 from backend.api import altitude_nights as altitude_nights_api
 from backend.api import debug as debug_api
+from backend.api import account as account_api
 
 
-# pages the demo never serves: the WKO5 comparison, the settings and the injury log
-DEMO_HIDDEN_PAGES = {"compare", "settings", "injuries"}
+# pages the demo never serves: the WKO5 comparison, the settings, the injury log and the sign-in page
+DEMO_HIDDEN_PAGES = {"compare", "settings", "injuries", "login"}
 
 # the removed React SPA's routes that have a static page (bookmarks keep working)
 OLD_SPA_PATHS = {
@@ -83,6 +84,16 @@ async def lifespan(app: FastAPI):
         from backend.settings import secrets as _secrets
         _secrets.require_server_key()
         account_store.migrate_owner()
+        # Google sign-in (SP-58): on only with a whole Google client too; then the owner's Google
+        # account must be known (else LoginConfigError stops the start, with the reason)
+        from backend.accounts import login as _login
+        if _login.required():
+            _login.check_config()
+        else:
+            import logging
+            logging.getLogger(__name__).warning(
+                "multi-user mode without a Google client (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET): sign-in is "
+                "off, every request is the owner (as before SP-58)")
     # 賽事大小 (SP-111): planning.event_size reads the race calculator and the personal climb
     # divisor; the engine stays pure (and its tests) until the app installs them
     from backend.engine import planning as _planning
@@ -198,11 +209,13 @@ def build_app(demo: bool | None = None) -> FastAPI:
         # debug API for AI agents (SP-371, docs/debug-api.md): Bearer token only, 404 unless turned on;
         # its settings block (設定 › 進階). Owner only: the demo never mounts either
         debug_api.router, debug_api.admin_router,
+        # Google sign-in, the terms, sign-out (SP-58): 404 unless sign-in is on (accounts/login.py)
+        account_api.router,
     ]
     for r in routers:
         # the demo never mounts sync / connect / auto-plan / backup / injuries (§3.1 item 4),
-        # nor the public share pages or the 課表訂閱 feed (it creates no shares)
-        if demo and (id(r) in owner_only or r is racepower_api.share_router):
+        # nor the public share pages or the 課表訂閱 feed (it creates no shares), nor sign-in
+        if demo and (id(r) in owner_only or r is racepower_api.share_router or r is account_api.router):
             continue
         app.include_router(r)
     # the tenant of each request (and the demo's rules): outermost, so every route sees it
@@ -258,6 +271,11 @@ def build_app(demo: bool | None = None) -> FastAPI:
         @app.get("/", include_in_schema=False)
         def _home():
             return RedirectResponse("/api/v1/overview/page")
+
+        # monitoring: public in sign-in mode too (SP-58, deploy/commercial.md §4)
+        @app.get("/healthz", include_in_schema=False)
+        def _healthz_owner():
+            return {"ok": True}
 
         # bookmarks of the removed React SPA (frontend/, 2026-10-04) → their static page;
         # its pages without one (/running, /trail, /ai) are gone and 404

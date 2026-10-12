@@ -58,5 +58,7 @@
   "demo.static_edits": "Schedule edited",
   "demo.static_none": "No changes yet",
   "demo.static_reset_title": "Drop the schedule changes saved in this browser",
-  "demo.static_locked": "Read-only demo: not available here"
+  "demo.static_locked": "Read-only demo: not available here",
+  "account.logout": "Sign out",
+  "account.logout_title": "Sign out on this device"
 }

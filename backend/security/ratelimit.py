@@ -4,6 +4,7 @@ plain dicts are enough; nothing is stored on disk and no IP is logged.
 
     b = Buckets(rate=60, per=60, burst=60)    # 60 / minute
     b.take(key)                               # False when empty
+    w = Window(limit=10, per=900)             # at most 10 in any 15 minutes (sign-in, SP-58)
     client_ip(scope)                          # CF-Connecting-IP only from a trusted proxy
 """
 from __future__ import annotations
@@ -44,6 +45,39 @@ class Buckets:
     def reset(self) -> None:
         with self._lock:
             self._b.clear()
+
+
+class Window:
+    """At most `limit` events per key within any `per` seconds (a sliding window: the sign-in
+    limit, 10 per IP in 15 minutes, SP-58). A refused attempt is not counted, so the key is free
+    again `per` seconds after its oldest counted event."""
+
+    def __init__(self, limit: int, per: float, max_keys: int = 50_000):
+        self.limit = int(limit)
+        self.per = float(per)
+        self.max_keys = max_keys
+        self._w: dict = {}
+        self._lock = threading.Lock()
+
+    def take(self, key: str) -> bool:
+        t = clock()
+        with self._lock:
+            q = [x for x in self._w.get(key, ()) if t - x < self.per]
+            ok = len(q) < self.limit
+            if ok:
+                q.append(t)
+            if q:
+                self._w[key] = q
+            else:
+                self._w.pop(key, None)
+            if len(self._w) > self.max_keys:          # forget the keys idle the longest
+                for k in sorted(self._w, key=lambda k: self._w[k][-1])[: self.max_keys // 2]:
+                    self._w.pop(k, None)
+            return ok
+
+    def reset(self) -> None:
+        with self._lock:
+            self._w.clear()
 
 
 DEFAULT_TRUSTED = "127.0.0.1/32,::1/128"

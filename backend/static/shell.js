@@ -118,11 +118,16 @@
   .appnav .an-menu a.an-item { border-radius: 7px; min-height: 40px; }
   .appnav .an-menu a.an-item[aria-current="page"]::after { display: none; }
   .appnav .an-menu .an-purpose { display: block !important; }
+  /* sign out (sign-in mode, SP-58): a button styled as the menu links */
+  .appnav .an-menu button.an-item { border: 0; border-top: 1px solid var(--line, #e1e5ea); border-radius: 0 0 7px 7px;
+    background: none; font: inherit; text-align: left; cursor: pointer; min-height: 40px; width: 100%; }
+  .appnav .an-menu button.an-item .an-purpose { overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
   @media (max-width: 699px) {
     .appnav .an-more { flex: 1 1 0; min-width: 0; }
     .appnav .an-more > summary { width: 100%; }
     .appnav .an-more .an-menu { top: auto; bottom: calc(100% + 6px); left: auto; right: 4px; }
-    .appnav .an-menu a.an-item { flex-direction: row; justify-content: flex-start; padding: 6px 10px; min-height: 44px; }
+    .appnav .an-menu a.an-item, .appnav .an-menu button.an-item { flex-direction: row; justify-content: flex-start;
+      padding: 6px 10px; min-height: 44px; }
   }
   @media print { .appnav { display: none; } }
   `;
@@ -151,6 +156,26 @@
   const more = nav.querySelector(".an-more");
   document.addEventListener("click", (e) => { if (more.open && !more.contains(e.target)) more.open = false; });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") more.open = false; });
+  // sign-in mode (SP-58): 登出 at the end of 更多, with whose account this is
+  if (SESSION.login && SESSION.user) {
+    const out = document.createElement("button");
+    out.type = "button";
+    out.className = "an-item an-logout";
+    out.setAttribute("role", "menuitem");
+    out.innerHTML = `${I('<path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3"/><path d="M10 17l-5-5 5-5"/><path d="M5 12h11"/>')}<span class="an-name"></span><span class="an-purpose"></span>`;
+    out.querySelector(".an-name").textContent = T("account.logout");
+    out.querySelector(".an-purpose").textContent = SESSION.user.email || SESSION.user.name || "";
+    out.title = T("account.logout_title");
+    out.addEventListener("click", async () => {
+      let to = "/login";
+      try {
+        const j = await (await window.fetch("/api/v1/account/logout", { method: "POST" })).json();
+        if (j && typeof j.next === "string" && j.next.startsWith("/")) to = j.next;
+      } catch (_) {}
+      location.href = to;
+    });
+    nav.querySelector(".an-menu").appendChild(out);
+  }
 
   // optional pages: drop the link when the feature is off (傷病紀錄 in the demo mode); remembered per tab
   (async () => {
@@ -260,6 +285,24 @@
           toast(d.code === "QUOTA_EXCEEDED"
             ? `${what}已用完${d.upgrade ? "；" + UPGRADE : ""}`
             : (d.paused ? `${what}：全站暫停中` : `${what}：${d.upgrade ? UPGRADE : "你的帳號沒有這個功能"}`));
+        }).catch(() => {});
+      }
+      return r;
+    };
+  }
+
+  // ---- sign-in mode (SP-58): a session that ended meanwhile (signed out elsewhere, expired,
+  // disabled) answers 401 LOGIN_REQUIRED: back to the sign-in page, then to this page
+  if (SESSION.login) {
+    const authedFetch = window.fetch;
+    let leaving = false;
+    window.fetch = async (input, init) => {
+      const r = await authedFetch(input, init);
+      if (r.status === 401 && !leaving) {
+        r.clone().json().then((j) => {
+          if (!j || j.code !== "LOGIN_REQUIRED" || leaving) return;
+          leaving = true;
+          location.href = "/login?" + new URLSearchParams({ next: location.pathname + location.search });
         }).catch(() => {});
       }
       return r;

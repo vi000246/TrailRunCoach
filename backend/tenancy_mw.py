@@ -6,6 +6,18 @@ reaches async endpoints and, through AnyIO's context copy, sync ones.
 
 Owner mode: nothing changes (every request is the owner tenant).
 
+Sign-in mode (SP-58; backend/accounts/login.required(): WKO5COACH_ACCOUNTS=1 AND a Google
+client — anything less is owner mode above), per request:
+  1. /share/* (public shares and the 課表 feed) and CORS preflights pass as in owner mode
+  2. the `trc_session` cookie -> its user (accounts.db, sha256 of the token only; the expiry
+     slides, the cookie is renewed with it); a dead cookie is cleared
+  3. no user and not a public path (login.PUBLIC_PATHS: /login, /signup, /oauth/*/callback,
+     /api/v1/session, /api/v1/account/login|signup|logout, /api/v1/static/*, /healthz):
+     a page (a browser navigation) is sent to /login?next=<path>, anything else gets
+     401 {"code": "LOGIN_REQUIRED"}
+  4. a write (not GET / HEAD) must carry the CSRF header (the demo's double submit), public or not
+  5. tenant: the user's (the owner's own for user 1); a new user's folder and DB on first use
+
 Demo mode, per request:
   1. abuse limits: body ≤ 6 MB, a token bucket per client IP (client_ip:
      CF-Connecting-IP / X-Forwarded-For only from a trusted proxy)
@@ -27,6 +39,7 @@ import re
 import secrets as _secrets
 from http.cookies import SimpleCookie
 from typing import Optional
+from urllib.parse import urlencode
 
 from backend import i18n, tenancy
 from backend.i18n import _
@@ -105,11 +118,12 @@ def cookie(scope, name: str) -> Optional[str]:
     return m.value if m else None
 
 
-def cookie_attrs(max_age: Optional[int], http_only: bool = True) -> str:
+def cookie_attrs(max_age: Optional[int], http_only: bool = True, same_site: Optional[str] = None) -> str:
     """Secure unless WKO5COACH_COOKIE_SECURE=0 (local http); SameSite from
     WKO5COACH_COOKIE_SAMESITE (Lax; None + Partitioned when the page runs in
-    an iframe on another site, e.g. a Hugging Face Space)."""
-    same = (os.environ.get("WKO5COACH_COOKIE_SAMESITE") or "Lax").strip().capitalize()
+    an iframe on another site, e.g. a Hugging Face Space). `same_site` fixes it
+    whatever the env says (the sign-in cookies: always Lax, SP-58)."""
+    same = (same_site or os.environ.get("WKO5COACH_COOKIE_SAMESITE") or "Lax").strip().capitalize()
     if same not in ("Lax", "Strict", "None"):
         same = "Lax"
     secure = os.environ.get("WKO5COACH_COOKIE_SECURE", "1") != "0" or same == "None"
@@ -136,6 +150,29 @@ async def _json_response(send, status: int, body: dict, extra: Optional[list] = 
 
 def _demo_error(code: str, message: str) -> dict:
     return {"code": code, "detail": {"code": code, "message": message}}
+
+
+async def _redirect(send, location: str, extra: Optional[list] = None) -> None:
+    headers = [(b"location", location.encode("latin-1")), (b"content-length", b"0"),
+               (b"cache-control", b"no-store")] + (extra or [])
+    await send({"type": "http.response.start", "status": 302, "headers": headers})
+    await send({"type": "http.response.body", "body": b""})
+
+
+def _wants_page(scope) -> bool:
+    """A browser opening a page (sent to the sign-in page), not a script's request (401)."""
+    h = _headers(scope)
+    return ("text/html" in (h.get("accept") or "") or h.get("sec-fetch-dest") == "document"
+            or h.get("sec-fetch-mode") == "navigate")
+
+
+def csrf_ok(scope) -> bool:
+    """Double submit: the X-TRC-CSRF header equals the trc_csrf cookie (a cross-site form or
+    request can send the cookie, never read it into a header)."""
+    hdr = _headers(scope).get(CSRF_HEADER.decode())
+    ck = cookie(scope, CSRF_COOKIE)
+    # bytes: compare_digest refuses non-ASCII str (a forged header would be a 500, not a 403)
+    return bool(hdr and ck and _secrets.compare_digest(hdr.encode("utf-8", "replace"), ck.encode("utf-8", "replace")))
 
 
 async def _read_body(receive) -> tuple[Optional[bytes], list]:
@@ -212,16 +249,94 @@ class TenancyMiddleware:
         self.app = app
 
     async def __call__(self, scope, receive, send):
-        if scope.get("type") != "http" or not tenancy.demo_mode():
+        kind = scope.get("type")
+        demo = tenancy.demo_mode()
+        signin = False
+        if not demo and kind in ("http", "websocket"):
+            from backend.accounts import login as LG
+            signin = LG.required()
+        if signin and kind == "websocket":            # none exist; never one past the gate
+            await send({"type": "websocket.close", "code": 1008})
+            return
+        if kind != "http" or not (demo or signin):
             await self.app(scope, receive, send)
             return
         # the error texts below are built before RequestContextMiddleware (inside) sets the language
         from backend.request_context import locale_for_scope
         ltok = i18n.set_locale(locale_for_scope(scope)[0])
         try:
-            await self._demo(scope, receive, send)
+            if demo:
+                await self._demo(scope, receive, send)
+            else:
+                await self._signed_in(scope, receive, send)
         finally:
             i18n.reset_locale(ltok)
+
+    async def _signed_in(self, scope, receive, send):
+        """Sign-in mode (SP-58): the module docstring's steps."""
+        from backend.accounts import login as LG, store, tenants as TN
+        method = scope.get("method", "GET").upper()
+        path = scope.get("path", "")
+        if path == "/share" or path.startswith("/share/") or method == "OPTIONS":
+            await self.app(scope, receive, send)
+            return
+        token = cookie(scope, LG.SESSION_COOKIE)
+        try:
+            found = store.session_lookup(token) if token else None
+        except Exception as e:                     # noqa: BLE001 — accounts.db unreadable: nobody is let in
+            import logging
+            logging.getLogger(__name__).warning("session lookup failed: %s", type(e).__name__)
+            await _json_response(send, 503, _demo_error("UNAVAILABLE", _("暫時無法確認登入狀態，請稍後再試")),
+                                 [(b"retry-after", b"10")])
+            return
+        user = found[0] if found else None
+        set_cookies: list[bytes] = []
+        if token and found is None:                # expired, signed out elsewhere, or disabled
+            set_cookies.append(f"{LG.SESSION_COOKIE}=; {cookie_attrs(0, same_site='Lax')}".encode())
+        if user is None and not LG.is_public(path):
+            extra = [(b"set-cookie", c) for c in set_cookies]
+            if method in ("GET", "HEAD") and _wants_page(scope):
+                qs = (scope.get("query_string") or b"").decode("latin-1")
+                target = path + ("?" + qs if qs else "")
+                await _redirect(send, "/login?" + urlencode({"next": LG.safe_next(target)}), extra)
+                return
+            body = _demo_error("LOGIN_REQUIRED", _("請先登入"))
+            body["login"] = "/login"
+            await _json_response(send, 401, body, extra)
+            return
+        if method not in ("GET", "HEAD") and not csrf_ok(scope):
+            await _json_response(send, 403, _demo_error("CSRF", _("請重新整理頁面後再試一次")),
+                                 [(b"set-cookie", c) for c in set_cookies])
+            return
+        if found is not None and found[1]:          # the expiry slid: so does the cookie
+            set_cookies.append(f"{LG.SESSION_COOKIE}={token}; "
+                               f"{cookie_attrs(LG.SESSION_MAX_AGE, same_site='Lax')}".encode())
+        tenant = TN.tenant_of(user) if user is not None else None
+        if tenant is not None:
+            await TN.ensure_ready(tenant)
+
+        mine = f"{LG.SESSION_COOKIE}=".encode()
+
+        async def send_wrapper(message):
+            if message.get("type") == "http.response.start" and set_cookies:
+                headers = list(message.get("headers", []))
+                # the route set the session cookie itself (signed in, out): its cookie wins, ours
+                # (clearing a dead one, renewing a slid one) would come after it and replace it
+                if not any(k.lower() == b"set-cookie" and v.startswith(mine) for k, v in headers):
+                    headers.extend((b"set-cookie", c) for c in set_cookies)
+                    message = {**message, "headers": headers}
+            await send(message)
+
+        ttok = tenancy.set_current(tenant) if tenant is not None else None
+        utok = LG.set_user(user)
+        if tenant is not None:
+            scope.setdefault("state", {})["tenant"] = tenant
+        try:
+            await self.app(scope, receive, send_wrapper)
+        finally:
+            LG.reset_user(utok)
+            if ttok is not None:
+                tenancy.reset(ttok)
 
     async def _demo(self, scope, receive, send):
         from backend.demo import sandbox as SB

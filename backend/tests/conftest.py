@@ -43,6 +43,20 @@ def _no_live_sync_calls():
 
 
 @pytest.fixture(autouse=True)
+def _no_live_google(monkeypatch):
+    """Never a live Google sign-in call (SP-58): the OAuth client and the JWKS fetch go to a
+    transport that refuses, unless the test installs its own fake (test_login_sp58.py)."""
+    from backend.accounts import google
+
+    def refuse(request):
+        raise google.HTTP.ConnectError(f"no live network in tests: {request.url.host}", request=request)
+    monkeypatch.setattr(google, "TRANSPORT", google.HTTP.MockTransport(refuse))
+    google.forget_keys()
+    yield
+    google.forget_keys()
+
+
+@pytest.fixture(autouse=True)
 def _no_recheck_pause(monkeypatch):
     """The fake COROS deletes at once: no pause before the post-delete look (SP-358)."""
     from backend.sync import coros_workouts as CW
