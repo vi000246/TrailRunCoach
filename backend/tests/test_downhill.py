@@ -178,7 +178,7 @@ def test_week_plan_and_projection():
 
 def test_base_phase_every_other_week_a_gentle_dose():
     """SP-87: a trail athlete's 基礎期 (an A race 25 weeks out) — a gentle downhill (−5～−10 %, 10–15′
-    downhill, RPE 3–4) every even ISO week, none in the odd ones; week_plan and the projection alike."""
+    downhill, RPE 3–5) every even ISO week, none in the odd ones; week_plan and the projection alike."""
     from backend.engine import overview as O
     from backend.engine import plan_prefs as PP
     from backend.engine.status import Status

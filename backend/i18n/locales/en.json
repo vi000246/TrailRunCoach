@@ -925,7 +925,7 @@
   "扣本人的手腕偏差 {b:.1f} °C（{n} 次跑步配對）": "minus your own wrist offset of {b:.1f} °C ({n} paired runs)",
   "扣預設的手腕偏差 {b:.1f} °C（本人配對 {n} 次，未滿 {min} 次；單一使用者推估）": "minus the default wrist offset of {b:.1f} °C (only {n} of your runs are paired, fewer than {min}; estimate from a single user)",
   "找 −10～−15% 的下坡（步道或產業道路），下坡 {work} 分、約 ↓{down} m，RPE 3–5、放鬆不衝，上坡用走的回去；暖身、緩和各 10 分平路": "Find a −10 to −15% downhill (trail or farm road): {work} min downhill, about ↓{down} m, RPE 3–5, relaxed, never pushing; walk back up; 10 min flat warm-up and cool-down",
-  "找 −5～−10% 的緩下坡（步道、產業道路或公園坡道），下坡 {work} 分、約 ↓{down} m，RPE 3–4、放鬆小步，上坡用走的回去；暖身、緩和各 10 分平路": "Find a gentle −5 to −10% downhill (trail, farm road or park slope): {work} min downhill, about ↓{down} m, RPE 3–4, relaxed short steps; walk back up; 10 min flat warm-up and cool-down",
+  "找 −5～−10% 的緩下坡（步道、產業道路或公園坡道），下坡 {work} 分、約 ↓{down} m，RPE 3–5、放鬆小步，上坡用走的回去；暖身、緩和各 10 分平路": "Find a gentle −5 to −10% downhill (trail, farm road or park slope): {work} min downhill, about ↓{down} m, RPE 3–5, relaxed short steps; walk back up; 10 min flat warm-up and cool-down",
   "找不到備份檔": "Backup file not found",
   "找不到這個分類": "Category not found",
   "找不到這個範本": "Template not found",

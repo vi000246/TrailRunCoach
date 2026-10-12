@@ -505,7 +505,7 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
   trail-terrain-and-climb-sessions.md §2.2, §4 #3): **專項期 every week** — SP-62's 下坡離心 (−10～−15 %,
   RPE 3–5, warm-up / cool-down 10′, the template's steps), the downhill part 15 → 20 → 25′ (+5′ a week
   from the phase's first Monday, `SPEC_STEP`; without phases by 賽前第 10 週) — and **基礎期 every 2
-  weeks** (an even ISO week, `base_week`): 「緩下坡（下坡 N′）」 −5～−10 % at RPE 3–4, 10′ the first
+  weeks** (an even ISO week, `base_week`): 「緩下坡（下坡 N′）」 −5～−10 % at RPE 3–5 (so 每堂課前加熱身 leaves its downhill part whole, SP-364), 10′ the first
   even week of the phase, then 15′ (`BASE_FIRST_WORK` / `BASE_WORK`, ≈ 10 m descent a minute; the
   report's 10–15′). **None in 賽前第 1–2 週** (`LAST_WEEKS`; and no day < 14 days before the race),
   nor in the race's real 減量期 or its post-race days. The next A race decides as before: a road race

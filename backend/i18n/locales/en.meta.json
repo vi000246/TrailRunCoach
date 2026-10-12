@@ -3667,9 +3667,9 @@
     "draft": true,
     "src": "backend/engine/downhill.py:189"
   },
-  "找 −5～−10% 的緩下坡（步道、產業道路或公園坡道），下坡 {work} 分、約 ↓{down} m，RPE 3–4、放鬆小步，上坡用走的回去；暖身、緩和各 10 分平路": {
+  "找 −5～−10% 的緩下坡（步道、產業道路或公園坡道），下坡 {work} 分、約 ↓{down} m，RPE 3–5、放鬆小步，上坡用走的回去；暖身、緩和各 10 分平路": {
     "draft": true,
-    "src": "backend/engine/downhill.py:282"
+    "src": "backend/engine/downhill.py:283"
   },
   "找不到備份檔": {
     "draft": true,

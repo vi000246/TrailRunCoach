@@ -6,7 +6,8 @@ docs/research/trail-terrain-and-climb-sessions.md §2.2, §4 #3) makes it a stea
   * 專項期 — every week, the downhill part rising FIRST_WORK_MIN → WORK_MIN (15 → 20 → 25′, SPEC_STEP a
     week from the phase's first week): SP-62's 「下坡離心預適應」 (workout_templates.downhill_ecc:
     −10～−15 % at RPE 3–5, time + descent, no HR / power target);
-  * 基礎期 — every 2 weeks (an even ISO week), a gentle dose inside an easy run: −5～−10 % at RPE 3–4,
+  * 基礎期 — every 2 weeks (an even ISO week), a gentle dose inside an easy run: −5～−10 % at RPE 3–5
+    (the template's range: an RPE ≤ 4 part would give its minutes to 每堂課前加熱身, SP-364),
     BASE_FIRST_WORK the first time in the phase, then BASE_WORK (10 / 15′; the report's 10–15′);
   * none in the last 2 weeks before the race (賽前第 1–2 週; no day < DOWNHILL_LAST_DAYS), nor in the
     race's real 減量期 or its post-race days.
@@ -196,7 +197,7 @@ def _steps(work: int, base: bool = False) -> dict:
     from backend.engine import workout_steps as WS
     from backend.engine import workout_templates as WT
     b = WT.B()
-    main = b.t("work", work * 60, WT.rpe(3, 4, down=_down(work, True)), "−5～−10% 緩下坡，放鬆小步") if base else \
+    main = b.t("work", work * 60, WT.rpe(3, 5, down=_down(work, True)), "−5～−10% 緩下坡，放鬆小步") if base else \
         b.t("work", work * 60, WT.rpe(3, 5, down=_down(work, False)), "−10～−15% 下坡，輕鬆到中等")
     items = [b.warm(WARM, "平路暖身"), main, b.cool(COOL, "平路緩和")]
     return WS.doc(items, origin="template:lib:downhill_ecc")
@@ -279,7 +280,7 @@ def apply(ss: list, info: Optional[dict], *, prefs=None, rates: Optional[dict] =
     rate = float((rates or {}).get("trail") or (rates or {}).get("road") or 60.0)
     if base:
         title = (_("緩下坡（第一次，下坡 {work}′）", work=work) if first else _("緩下坡（下坡 {work}′）", work=work))
-        detail = _("找 −5～−10% 的緩下坡（步道、產業道路或公園坡道），下坡 {work} 分、約 ↓{down} m，RPE 3–4、"
+        detail = _("找 −5～−10% 的緩下坡（步道、產業道路或公園坡道），下坡 {work} 分、約 ↓{down} m，RPE 3–5、"
                    "放鬆小步，上坡用走的回去；暖身、緩和各 10 分平路", work=work, down=down)
     else:
         title = (_("下坡離心（第一次，下坡 {work}′）", work=work) if first else _("下坡離心（下坡 {work}′）", work=work))
