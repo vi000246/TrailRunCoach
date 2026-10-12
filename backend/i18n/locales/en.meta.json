@@ -4719,6 +4719,10 @@
     "draft": true,
     "src": "backend/engine/hr_profile.py:83"
   },
+  "沒有預報：比賽日溫度用賽道上 {h:.1f} 小時的氣候值 {t:.1f} °C／濕度 {rh:.0f} %（其中 {n:.1f} 小時在 06:00–18:00 以外，用同一時段的歷史平均；白天平均 {day:.1f} °C，推估）": {
+    "draft": true,
+    "src": "backend/engine/racepower/calc.py:632"
+  },
   "沒痛": {
     "draft": true,
     "src": "backend/engine/injuries.py:58"

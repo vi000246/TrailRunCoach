@@ -84,6 +84,7 @@
   "env.clim_meta": "，近 {years} 年同月、{models} 個模型平均，溫度已換算到這個海拔",
   "env.clim_partial": "（有幾年沒取到，下次會再補）",
   "env.clim_hourly": "；含每個小時的平均（清晨涼、午後熱），可逐段修正熱",
+  "env.clim_night": "計算用賽道上 {h} 小時的平均 {t} °C：其中 {n} 小時在 06–18 以外，用同一時段的歷史平均（白天平均 {day} °C，推估）",
   "env.town_meta": "，鄉鎮預報：{name}（距離 {km} km），溫度從公所海拔 {from} m 換算到 {to} m（{dz} m，{dc} °C），濕度不變",
   "rain.pop": "比賽時段降雨機率最高 {p} %",
   "rain.mm": "累積雨量約 {mm} mm",

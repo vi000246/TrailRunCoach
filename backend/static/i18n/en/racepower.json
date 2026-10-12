@@ -84,6 +84,7 @@
   "env.clim_meta": ", the same month over {years} years, mean of {models} models, temperature taken to this altitude",
   "env.clim_partial": " (some years missing; fetched again next time)",
   "env.clim_hourly": "; includes each hour's mean (cool dawn, warm afternoon), so heat is set per segment",
+  "env.clim_night": "The plan uses {t} °C, the mean over its {h} hours on course: {n} of them outside 06–18 take the same hours' historical mean (daytime mean {day} °C, estimate)",
   "env.town_meta": ", township forecast: {name} ({km} km away), temperature moved from the township office's {from} m to {to} m ({dz} m, {dc} °C), humidity unchanged",
   "rain.pop": "highest chance of rain in the race window {p} %",
   "rain.mm": "about {mm} mm in total",

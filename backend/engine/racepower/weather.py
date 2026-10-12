@@ -30,7 +30,9 @@ Provider chain for race day (first success wins; every value stays editable):
      differs), each hour the mean of three reanalyses (ERA5, ERA5-Land,
      ECMWF IFS 9 km). Gives the daytime mean and a 24-hour profile (the mean
      of each clock hour), so far-off races still get per-segment heat.
-     Cached on disk for good (past years do not change).
+     Cached on disk for good (past years do not change). The daytime mean is
+     the single value; a plan run outside 06–18 widens it to its own hours on
+     course from the profile (climatology_to, SP-257; no further call).
   5. Manual values.
 
 Rain (SP-249): the forecasts' probability of precipitation (CWA 3- / 12-hour
@@ -874,6 +876,62 @@ def climatology_hourly_rows(profile: list[dict], dates: set[dt.date], offset_c: 
     keep = sorted(dates | {max(dates) + dt.timedelta(days=1)})
     return [_hour_row(f"{d.isoformat()}T{p['hour']:02d}:00", p["temp_c"] + offset_c, p["rh_pct"], None)
             for d in keep for p in profile]
+
+
+CLIM_TO_STEP_MIN = 10            # SP-257: the on-course windows are read in 10-minute pieces (06:00 / 18:00 on a mark)
+
+
+def _clock_profile(rows: list[dict]) -> Optional[dict[int, tuple[float, float]]]:
+    """{hour of day: (temp_c, dew_c)} of climatology rows (the same 24-hour profile on every day,
+    climatology_hourly_rows), each hour's mean over the days; None unless all 24 hours are there."""
+    acc: dict[int, list[tuple[float, float]]] = {}
+    for r in rows or []:
+        x = _hour_row(r.get("t"), r.get("temp_c"), r.get("rh_pct"), r.get("dew_c"))
+        if x:
+            acc.setdefault(int(x["t"][11:13]), []).append((x["temp_c"], x["dew_c"]))
+    if len(acc) < 24:
+        return None
+    return {h: (mean(v[0] for v in vs), mean(v[1] for v in vs)) for h, vs in acc.items()}
+
+
+def climatology_to(rows: list[dict], windows: list[Window], temp_c: float,
+                   rh_pct: float) -> Optional[dict]:
+    """SP-257 (docs/research/night-and-sleep.md §3 G5 / §4.2 單 4): the climatology's single
+    race-day value over the hours actually on course. `temp_c` / `rh_pct` = its daytime mean
+    (`values`, DAY_HOURS 06:00–17:59); `windows` = the local (start, end) clock spans on course;
+    `rows` = its /weather hourly rows (the 24-hour profile on each event day). Each
+    CLIM_TO_STEP_MIN piece of the windows takes the daytime mean when its clock is in DAY_HOURS —
+    so the daytime part is what it was — else the profile at its midpoint, read by the hour of
+    day (the profile repeats each day, so a day past the rows reads the same hours), temperature
+    and dew point linear between hours and RH rebuilt (as hourly_at). Returns the time-weighted
+    {temp_c, rh_pct, dew_c, day_temp_c, day_rh_pct, hours, night_h}; None when no piece is outside
+    DAY_HOURS (the value stays as it is), or without rows / windows / a full profile."""
+    prof = _clock_profile(rows) if windows else None
+    if prof is None:
+        return None
+    step = dt.timedelta(minutes=CLIM_TO_STEP_MIN)
+    w_t = w_rh = tot = night = 0.0
+    for a, b in windows:
+        t = a
+        while t < b:
+            mark = t.replace(second=0, microsecond=0) - dt.timedelta(minutes=t.minute % CLIM_TO_STEP_MIN)
+            e = min(b, mark + step)
+            mid, w = t + (e - t) / 2, (e - t).total_seconds()
+            if mid.hour in DAY_HOURS:
+                temp, rh = temp_c, rh_pct
+            else:
+                (t0, d0), (t1, d1) = prof[mid.hour], prof[(mid.hour + 1) % 24]
+                f = (mid.minute * 60 + mid.second + mid.microsecond / 1e6) / 3600.0
+                temp, dew = t0 + f * (t1 - t0), d0 + f * (d1 - d0)
+                rh = rh_from_dew_point(temp, dew)
+                night += w
+            w_t, w_rh, tot = w_t + w * temp, w_rh + w * rh, tot + w
+            t = e
+    if night <= 0 or tot <= 0:
+        return None
+    t_on, rh_on = w_t / tot, w_rh / tot
+    return {"temp_c": t_on, "rh_pct": rh_on, "dew_c": dew_point(t_on, rh_on)["dew_c"],
+            "day_temp_c": temp_c, "day_rh_pct": rh_pct, "hours": tot / 3600.0, "night_h": night / 3600.0}
 
 
 def clim_point(lat: float, lon: float, elevation_m: Optional[float]) -> tuple:
