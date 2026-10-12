@@ -36,11 +36,11 @@ def test_phases_line_levels_and_rest(caplog):
     with caplog.at_level(logging.INFO, logger="backend"):
         t0 = time.perf_counter() - 5.0                          # 5 s ago: slow
         total = applog.phases("calendar", t0, {"inputs": 3.0, "extras": 0.01}, days=7)
-    rec = caplog.records[-1]
+    rec = [r for r in caplog.records if r.name == "backend.applog"][-1]    # not perf.log's line (SP-379)
     assert total >= 5.0 and rec.levelno == logging.WARNING
     msg = rec.getMessage()
     assert msg.startswith("slow: calendar took 5.0 s days=7 | inputs 3.0 s, other 2.0 s")
     assert "extras" not in msg                                  # under 0.05 s: left out
     with caplog.at_level(logging.INFO, logger="backend"):
         applog.phases("calendar", time.perf_counter(), {})
-    assert caplog.records[-1].levelno == logging.INFO
+    assert [r for r in caplog.records if r.name == "backend.applog"][-1].levelno == logging.INFO

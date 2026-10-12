@@ -394,7 +394,7 @@ def perf_area(route: str) -> Optional[str]:
 
 def perf(area: str, what: str, seconds: float, **fields) -> None:
     """One perf.log line: area, seconds, what, key=value fields (counts and names only)."""
-    if perf_log.handlers:
+    if any(getattr(h, "_trc", None) == "perf" for h in perf_log.handlers):     # perf.log on (setup)
         perf_log.info("%s\t%.3f\t%s%s", area, seconds, what, _fields(fields))
 
 
