@@ -1,6 +1,6 @@
 # Module Spec: workouts (activity metadata)
 
-> **Last Updated**: 2026-10-08
+> **Last Updated**: 2026-10-12
 > **Status**: Active
 > **Domain Layer**: Supporting
 
@@ -320,7 +320,18 @@ the user's 測試 marks, the stored test sessions, the drift calibration and `ef
 mFTP snapshot, the whole recorded RPE row — so a change starts a job (the test oracle checks it
 for every mutation). Not the PD refit's synced FITs: a new synced FIT is a new Dataset
 (`source_stamp`). A version-1 file (one signature) is served meanwhile and rebuilt once. The job
-thread carries the request's tenant (`contextvars.copy_context`, like the warm-up).
+carries the request's tenant (the queue keeps the caller's contextvars, like the warm-up).
+
+**In the server's job queue (SP-394, 2026-10-12).** The job is a job of `backend/jobs.py`
+(`Job.start`, `backend/api/activity_auto.py:626`; `Job.thread` is the queue's job — `join` /
+`is_alive` as the thread it replaced). Its class is known before the keys are built
+(`to_compute`, `:571`): `full` (one at a time for the server) when at least `FULL_FROM` = 100
+activities (推估: ~5 s on the NAS) have no stored value of the current code — a new user, a code
+change (the file's `code` = both branches' code hash, written since SP-394; an older file: each
+entry's `pcode`) — else `single`. Priority (`job_for`, `:698`): `warm` from the warm-up's
+low-priority part, `user` from `GET /activities/auto` and `wait`; a job still queued is moved up
+(`jobs.promote`) when the 活動列表 asks for it. The page keeps answering at once while it waits for a
+place (`computing`, `n_done` 0). Still one job per Dataset for every request (single flight).
 
 ## UI
 
@@ -453,3 +464,4 @@ the app-type table and the filter kinds.
 | 2026-10-08 | review fix | SP-334 code review | `effort_rest_max` (每人校正 P9) in every activity's key and the job signature (a refit or manual change recomputed nothing before); the drift calibration only in the runs' key; the job thread keeps the tenant context; WKO5 Datasets list the PD refit's synced FITs (`synced_fit_files`); the run's day in the thresholds window row; the dataset's own LTHR only on days without a plan LTHR; signature covers config / FTP / mFTP snapshot / the whole RPE row; `.tmp` removed on a failed write; kept entries refresh their probe; tests for test sessions, re-index + done_by, a bad file, own LTHR, watch power, time zone, tenants |
 | 2026-10-08 | feature | SP-57 | The recorded RPE (FIT or COROS's post-run rating) also feeds the per-level 「負荷」 RPE conversion (`backend/engine/rpe_load.py:280`); COROS FITs re-checked: no RPE field, the rating comes from the activity detail (SP-231) |
 | 2026-10-08 | review fix | SP-57 code review | A FIT RPE maps two values per level (6 → 累, Seiler zone 2 = session RPE 5–6; COROS 1–5 unchanged), `backend/engine/rpe_load.py:121` |
+| 2026-10-12 | perf | SP-394 (SP-338 follow-up) | `/activities/auto`'s background computation is a job of the server's queue (`backend/jobs.py`): `full` when ≥ `FULL_FROM` (100) activities lack a stored value of the current code (`to_compute`; `activity_auto.json` now records `code`), else `single`; `warm` from the warm-up, `user` from the page (a queued job is promoted). Tests: `backend/tests/test_queue_followups_sp394.py` |

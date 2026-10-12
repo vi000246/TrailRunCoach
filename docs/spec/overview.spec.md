@@ -1,6 +1,6 @@
 # Module Spec: overview
 
-> **Last Updated**: 2026-10-08
+> **Last Updated**: 2026-10-12
 > **Status**: Active
 > **Domain Layer**: Core Domain
 
@@ -90,7 +90,8 @@ engine config / parity mode is the same everywhere.
   (`plan_auto.busy`, `backend/engine/plan_auto.py:1104`), re-reads the Dataset, and runs the
   never-fitted calibration and the activity auto-classification, then (owner only, after that job)
   the race calculator's grade-model fit and climbing-cadence scan (`racepower.warm_charts`, SP-366);
-  a warm-up during that wait makes it run once more. The inputs' flight computes exactly its caller's key
+  a warm-up during that wait makes it run once more. Since SP-394 each of those steps is a job of the
+  server's queue at `warm` (below); the low-priority thread only waits. The inputs' flight computes exactly its caller's key
   (`_inputs_key` → `_build_inputs`, `backend/api/plan_sessions.py:161`, `:201`). After a sync the runner starts the warm-up before the automatic
   plan run and the calibration (which waits for the plan run, `backend/engine/calibrate.py:348`);
   see wko5-coros-sync.spec.md.
@@ -134,7 +135,36 @@ engine config / parity mode is the same everywhere.
   result it stops polling, drops the edit lock (the server computes fresh inputs for any write)
   and the badge becomes 「重新整理」 (click reloads, `:1006`). A deploy / restart has no previous
   view: that first load still computes in the request; the Dataset build itself (`_dataset()`) is
-  still waited for.
+  still waited for. (The overview's status card does keep its previous answer across a restart:
+  below.)
+- **Through the server's job queue (SP-394, 2026-10-12).** A status computation is a job of
+  `backend/jobs.py` (SP-338's queue): the flight's leader calls `jobs.call(compute, cls="single",
+  priority="user")` (`_status`, `backend/api/overview.py:94`) and waits; the job runs only the
+  computation, never a flight. Inside a job already — the warm-up's (`full`) — it runs at once in
+  that job. So at most two status / classification jobs run at once for the server, one per tenant
+  for background work (a `user` job may take the tenant's second place), within one priority the
+  tenants take turns. The warm-up's low-priority steps are jobs at `warm` too (wko5-engine.spec.md
+  › Warm-up), and the activity auto-classification (workouts.spec.md).
+- **Stale status card (SP-394, 2026-10-12).** `GET /overview/status` (`status_answer`,
+  `backend/api/overview.py:228`) answers, on a cache miss caused by new data (a new dataset
+  generation — a sync, or a restart / deploy) or a new day, the tenant's previous status marked
+  `stale: {reason: data | day, age_s, since}` and computes the new one in the background
+  (`_stale_status` / `_refresh_status`, `:187`, `:213`: a waiting thread; the computation is the
+  flight's queue job, once per key, joined by any request). Only when the user's own settings in
+  the key are the same (key layout `_status_key`, `:71`: tenant, generation, day, then the settings
+  from `_SK_SETTINGS` on — 課表偏好, test sessions, plan stamp, HR zones, PMC start, Z3 rule,
+  experience) and the day did not go back; a settings change is computed in the request. The
+  previous status is kept per tenant in memory (`_status_last`, LRU of 64, `:49`) **and on disk**
+  (`cache/overview_status.json` in the tenant folder, written atomically by `_remember_status`,
+  `:138`), so after a deploy a tenant that was not warmed up ahead still sees it at once (only the
+  Dataset build is waited for). Never for a demo tenant (not kept either); a failed background
+  computation is computed in the request next time (and reports its error). `GET
+  /overview/status/fresh` (`:275`, async, computes nothing) = `{updating}`. Display only: `/weekplan`,
+  `/z5`, `/b2b`, the 課表 and plan_auto keep computing fresh — they join the same flight. The page
+  (`staleWatch`, `backend/static/overview.html:457`) shows a pulsing 「更新中」 badge in the header
+  (`stale-badge`, the computed-at time in its hover; strings `overview.stale.*`), keeps the 套用這次的
+  AeT / CP buttons from posting while stale (「狀態更新中，幾秒後再套用」), polls `/status/fresh` every
+  3 s and reloads the card when done; after 5 min it stops and the badge becomes 「重新整理」.
 - **COROS push outside the writer lock (B3, 2026-10-08).** COROS takes 20–30 s on the NAS. The
   plan writer lock (`_wlock`) now covers reconcile + save only; every push to the watch runs under
   a separate push lock (`_plock`, `backend/api/plan_sessions.py:472`) and re-reads the stored plan
@@ -2272,3 +2302,4 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 | 2026-10-08 | feat/warmup-pref-sp364 | SP-364 | 課表偏好 每堂課前加熱身 (`plan.prefs.warmup_on` / `warmup_min`, off / 10, 5–30 min; not `active`): every generated run session, suggested / scheduled test and inserted template starts with ≥ N min of warm-up (`backend/engine/warmup.py`). Easy-type sessions: the first N min are the warm-up (「含暖身 N 分」, time / TSS / budget unchanged; `derive` + the COROS push split there). Own warm-up shorter: topped up, main set untouched, extra minutes in the session at the easy rate; library intervals carry the floor in `blocks` / `fit` / `variant_adj["warm"]`; text intervals / tests rewrite 「暖身 N 分」; `trim_quality` keeps the floor; applied before the easy runs are sized (week total kept) and last (week_plan, projection). Templates' `full` topped up (`ensure_warm`). AeT drift analysis cuts the planned longer warm-up. Panel switch + minutes (zh-TW / en). Tests: `backend/tests/test_warmup_pref.py` |
 | 2026-10-08 | feat/warmup-pref-sp364 | SP-364 review + owner 2026-10-08 | Easy-type sessions never change their time: a run too short gets a shorter warm-up (none < 5′), and the structure / push split a marked run inside its own time (`workout_steps.carve_warm`) — a run trimmed / edited later keeps its total; an easy generated structure (技術地形 RPE 3–4) the same, downhill keeps its 10′. The easy-run count never changes: counted on the minutes without the preference (`left_n`, `plan_prefs.Ctx.warm_base` / `_used_without_warmup`), the extra minutes out of the easy runs evenly. Easy / 我的範本 templates keep their length. A drawer swap merges only `variant_adj["warm"]` (`rest_add` / `power` kept). The fit reason names the warm-up when it is what doesn't fit. Fixed: `apply_objs` passed no variant fields, so a library interval was handled as text. Tests: `backend/tests/test_warmup_pref.py` |
 | 2026-10-08 | main | SP-258 owner 2026-10-08 | The altitude ? research lines drop the place too: 「高山症風險較高（Shen 2024）」 (was 「…玉山排雲山莊就診者的資料」) and 「超過 3,400 m 屬高風險（CDC）」 (was 「…；排雲山莊 3,402 m 就在線上」); `test_altitude` now forbids 排雲 / Paiyun in the help. |
+| 2026-10-12 | perf | SP-394 (SP-338 follow-up) | The status computation is a `single` / `user` job of the server's queue (`jobs.call`; at once inside the warm-up's job); `GET /status` answers the previous status marked `stale` after new data, a new day or a restart (kept in memory and in `cache/overview_status.json`), computes the new one in the background, `GET /status/fresh`; the page's 「更新中」 badge and polling, 套用 buttons wait while stale |

@@ -17,10 +17,25 @@ Priorities (lower first; SP-338 第 1 條):
     cold        background fill of the cold data
     archive     the monthly archive (SP-317)
 
-Classes and how many run at once (第 2 條): `full` (a whole-Dataset rebuild) 1, `single` (one
-activity, one small job) 2, `backtest` 1 for the whole server. Within one priority the tenants take
-turns (第 9 條: round-robin by who was served least recently), and one tenant holds at most one
-`single` place at a time.
+Classes and how many run at once (第 2 條): `full` (a whole-Dataset rebuild, a whole recompute) 1,
+`single` (one activity, one small job) 2, `backtest` 1 for the whole server. Within one priority the
+tenants take turns (第 9 條: round-robin by who was served least recently), and one tenant holds at
+most one `single` place at a time for background work — a job someone waits for (`user`) may take
+the other one (SP-394: the overview status of a tenant whose classification runs).
+
+What goes through it (SP-394): the Dataset warm-up (`full`, wko5views.warm_up), its low-priority
+steps at `warm` (the never-fitted calibration and the race charts `full`; the activity
+classification `single`, or `full` when most activities are recomputed — api/activity_auto.py),
+the overview status (`single`, api/overview._status), the back-test (`backtest`) and, once SP-317
+exists, the monthly archive (`submit_archive`).
+
+A caller that needs the result waits with `call(fn, ...)`: it queues `fn` and returns its result
+(or raises its exception). Called from inside a job (`current()`), `fn` runs at once in that job's
+thread — the job already holds a place, and queuing would wait for itself. A single flight's
+leader (backend/singleflight.py) may wait in `call`, so a job never joins a flight whose leader
+waits for a job of its own class: the status job (`single`) runs only the computation, never a
+flight; the warm-up (`full`) joins the status / plan-inputs flights, whose leaders wait at most
+for a `single` job.
 
 Every job records its tenant and its CPU seconds (第 6 條, thread CPU time) in the perf log and in
 `cpu_today()` — the free tier's compute budget (SP-330) reads it once that budget exists.
@@ -87,6 +102,7 @@ _SERVED: dict = {}                 # (cls, tenant) -> serve counter (round-robin
 _SERVE_N = itertools.count(1)
 _CPU: dict = {}                    # (local day, tenant) -> cpu seconds
 _INLINE = False                    # tests: run the dispatch synchronously in the caller's thread
+_LOCAL = threading.local()         # .job: the job this thread runs now (current())
 
 
 def _tenant_id() -> str:
@@ -118,6 +134,55 @@ def submit(fn: Callable, *, cls: str = "single", priority: str = "warm", label: 
         _QUEUED.append(job)
     _dispatch()
     return job
+
+
+def call(fn: Callable[[], Any], *, cls: str = "single", priority: str = "user", label: str = "",
+         tenant: Optional[str] = None) -> Any:
+    """`fn()` through the queue for a caller that waits for it (a request, a single flight's
+    leader, a waiting background thread): its result, or its exception raised again here. Inside
+    a job already (`current()`), `fn` runs at once in this thread: that job holds a place. The
+    result goes to the caller only: the finished job kept for status questions holds neither
+    (a Status, a Dataset)."""
+    if current() is not None:
+        return fn()
+    box: dict = {}
+
+    def body(job):
+        try:
+            box["value"] = fn()
+        except BaseException as e:         # noqa: BLE001 — raised again in the caller
+            box["error"] = e
+            raise
+    job = submit(body, cls=cls, priority=priority, label=label or getattr(fn, "__name__", "job"), tenant=tenant)
+    job.join()
+    if "error" in box:
+        raise box.pop("error")
+    return box.pop("value", None)
+
+
+def current() -> Optional[Job]:
+    """The job the calling thread runs (None outside the queue). Per thread: a thread a job
+    starts is not inside it (it holds no place)."""
+    return getattr(_LOCAL, "job", None)
+
+
+def promote(job: Job, priority: str) -> None:
+    """Someone now waits for a queued job: move it up to `priority` (never down)."""
+    if priority not in PRIORITIES:
+        raise ValueError(f"unknown priority {priority}")
+    with _LOCK:
+        if job.state == "queued" and PRIORITIES[priority] < job.priority:
+            job.priority = PRIORITIES[priority]
+
+
+def submit_archive(fn: Callable, *, label: str = "monthly archive", key: Optional[Hashable] = None,
+                   tenant: Optional[str] = None) -> Job:
+    """The monthly archive's place in the queue (SP-317, not built yet: its job starts here).
+    `archive`, the lowest priority — after every waiting job of every other kind, the cold
+    fill included; `full` (it rewrites one tenant's cold summaries and moves its old FITs).
+    SP-317 runs it in its 03:00–05:00 window: one call per tenant due, `key` = ("archive",
+    tenant id, month) so a second call before it ran is the same job."""
+    return submit(fn, cls="full", priority="archive", label=label, key=key, tenant=tenant)
 
 
 def _order(jobs: list[Job]) -> list[Job]:
@@ -153,8 +218,8 @@ def _pick() -> list[Job]:
         for j in _order([j for j in _QUEUED if j.cls == cls]):
             if free <= 0:
                 break
-            if cls == "single" and j.tenant in busy_tenants:
-                continue                       # one single place per tenant
+            if cls == "single" and j.tenant in busy_tenants and j.priority != PRIORITIES["user"]:
+                continue                       # one single place per tenant (someone waiting: the second)
             start.append(j)
             busy_tenants.add(j.tenant)
             free -= 1
@@ -179,6 +244,8 @@ def _dispatch() -> None:
 
 def _run(job: Job) -> None:
     t_cpu = time.thread_time()
+    outer = getattr(_LOCAL, "job", None)  # _INLINE: the caller's thread may be in a job already
+    _LOCAL.job = job
     try:
         job.result = job.ctx.run(job.fn, job)
         job.state = "done"
@@ -187,6 +254,8 @@ def _run(job: Job) -> None:
         job.error = f"{type(e).__name__}: {str(e)[:200]}"
         log.warning("job %s (%s) failed: %s", job.label, job.cls, type(e).__name__)
     finally:
+        _LOCAL.job = outer
+        job.fn = None                      # kept in _DONE: never what fn closed over (a Dataset)
         job.cpu_s = time.thread_time() - t_cpu
         job.finished = time.monotonic()
         _account(job)

@@ -335,6 +335,15 @@ def session_user(token: Optional[str], now: Optional[dt.datetime] = None) -> Opt
         return u
 
 
+def last_seen() -> dict[int, str]:
+    """user id -> the newest last_seen_at of its sessions (ISO): a session slides at most once an
+    hour while it is used, so a user who stays signed in shows up here, not in last_login_at."""
+    init()
+    with connect() as con:
+        return {int(r[0]): r[1] for r in con.execute("SELECT user_id, MAX(last_seen_at) FROM sessions GROUP BY user_id")
+                if r[1]}
+
+
 def delete_session(token: Optional[str]) -> None:
     if not token:
         return

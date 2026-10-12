@@ -54,6 +54,31 @@ def log(source: str, event: str, **fields) -> None:
         logging.getLogger(__name__).warning("sync event not written: %s", type(e).__name__)
 
 
+SYNCED = ("sync_ok", "sync_partial")   # a sync that worked (a failed / skipped one is not a sync)
+
+
+def last_syncs(since: float = 0.0) -> dict[str, float]:
+    """tenant id -> the time (epoch s) of its newest sync that worked at or after `since`, from
+    this log and its rotated copy (accounts/tenants.active_tenants, SP-394). COROS and Garmin
+    only: the sources that write here."""
+    out: dict[str, float] = {}
+    p = path()
+    for f in (p.with_name(p.name + ".1"), p):
+        try:
+            lines = f.read_text("utf-8").splitlines()
+        except OSError:
+            continue
+        for ln in lines:
+            try:
+                r = json.loads(ln)
+            except ValueError:
+                continue
+            at, tid = r.get("at"), r.get("tenant")
+            if r.get("event") in SYNCED and tid and isinstance(at, (int, float)) and at >= since:
+                out[tid] = max(out.get(tid, 0.0), float(at))
+    return out
+
+
 def read(source: Optional[str] = None, limit: int = 200) -> list[dict]:
     """The newest `limit` events (oldest first), optionally of one source."""
     try:

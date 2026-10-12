@@ -8,9 +8,12 @@ effort, the run review's test detection, the as-of thresholds), several
 minutes on a full COROS history. So:
 
   * single flight: one computation per Dataset, every request shares it;
-  * background: the work runs in a daemon thread (like the dataset warm-up);
-    a request returns at once with what is known plus {state, n_done,
-    n_total} the page polls;
+  * background: the work is a job of the server's queue (backend/jobs.py, SP-394),
+    like the dataset warm-up — `warm` when the warm-up asks, `user` once the
+    活動列表 asks (a queued one is moved up); `single`, or `full` when most
+    activities are to be computed (FULL_FROM: a new user, a code change). A
+    request returns at once with what is known plus {state, n_done, n_total}
+    the page polls;
   * per activity (SP-334): every activity has its own key (`activity_keys`):
     its file and metadata, the user's 測試 mark, the recorded RPE, the
     thresholds of its day (the plan rows up to that day and the runs of the
@@ -46,6 +49,10 @@ log = logging.getLogger(__name__)
 
 CHUNK = 25                 # activities per published step
 CACHE_V = 2                # 2: per-activity keys (SP-334); 1 was one signature over the dataset
+# a job with at least this many activities without a stored value of the current code is a
+# whole recompute: the queue's `full` class (one at a time for the server), else `single`
+# (推估: ~0.05 s an activity on the NAS, SP-320 §4 — 100 ≈ 5 s, four chunks)
+FULL_FROM = 100
 _JOBS: "weakref.WeakKeyDictionary" = weakref.WeakKeyDictionary()
 _LOCK = threading.Lock()
 
@@ -549,7 +556,9 @@ def save_cache(ds, sig: Optional[str], files: dict) -> None:
     tmp = p.with_name(f"{p.stem}.{os.getpid()}.{threading.get_ident()}.tmp")
     try:
         p.parent.mkdir(parents=True, exist_ok=True)
-        tmp.write_text(json.dumps({"v": CACHE_V, "sig": sig, "files": files}, ensure_ascii=False), "utf-8")
+        # `code`: both branches' code (_code_sig), read back by to_compute (SP-394)
+        tmp.write_text(json.dumps({"v": CACHE_V, "sig": sig, "code": _code_sig(), "files": files},
+                                  ensure_ascii=False), "utf-8")
         os.replace(tmp, p)
     except OSError as e:
         log.warning("activity auto: could not write the cache (%s)", type(e).__name__)
@@ -559,12 +568,30 @@ def save_cache(ds, sig: Optional[str], files: dict) -> None:
             pass
 
 
+def to_compute(ds, disk: dict) -> int:
+    """At most how many activities a job will compute, known before the keys are built (the
+    queue class): those without a stored value, every one after a code change (the file's
+    `code`; a file written before it: each entry's run-branch code `pcode`)."""
+    files = disk.get("files") or {}
+    code = disk.get("code")
+    if disk.get("v") != CACHE_V or (code is not None and code != _code_sig()):
+        return len(ds.workouts)
+    run = _branch_code()["run"] if code is None else None
+    n = 0
+    for w in ds.workouts:
+        e = files.get(w.entry.file)
+        if not (isinstance(e, dict) and isinstance(e.get("auto"), dict)) or (run is not None and e.get("pcode") != run):
+            n += 1
+    return n
+
+
 # ---------------------------------------------------------------------------
 # the job
 # ---------------------------------------------------------------------------
 
 class Job:
-    """One background computation of one Dataset's auto values."""
+    """One background computation of one Dataset's auto values: a job of the server's queue
+    (`thread`: the jobs.Job — join / is_alive like the thread it replaced)."""
 
     def __init__(self, ds, sig: str, recorded: list):
         from backend.engine import activity_tags as AT
@@ -593,17 +620,16 @@ class Job:
         # by key: two activities starting in the same minute share one
         if same and len(self.fresh) == len({AT.key_of(w.entry.start) for w in ds.workouts}):
             self.state, self.n_done, self.finished = "ready", self.n_total, time.monotonic()
-        self.thread: Optional[threading.Thread] = None
+        self.cls = "single" if same or to_compute(ds, disk) < FULL_FROM else "full"
+        self.thread = None                  # the jobs.Job once started
 
-    def start(self) -> None:
+    def start(self, priority: str = "warm") -> None:
         if self.state != "computing":
             return
-        import contextvars
-        # the request's tenant (a Thread does not carry contextvars), like the warm-up
-        t = threading.Thread(target=contextvars.copy_context().run, args=(self._run,), name="activity-auto",
-                             daemon=True)
-        self.thread = t
-        t.start()
+        from backend import jobs
+        # in the caller's tenant (the queue keeps its contextvars), like the warm-up
+        self.thread = jobs.submit(lambda job: self._run(), cls=self.cls, priority=priority,
+                                  label="activity auto-classification")
 
     def _run(self) -> None:
         from backend.engine import activity_tags as AT
@@ -669,9 +695,12 @@ class Job:
                     "elapsed_s": round(el, 1), "auto": auto}
 
 
-def job_for(ds, recorded: Optional[list] = None) -> Job:
+def job_for(ds, recorded: Optional[list] = None, priority: str = "warm") -> Job:
     """The Dataset's job (single flight): started on first use, restarted
-    when the inputs changed (signature) and the previous one is not running."""
+    when the inputs changed (signature) and the previous one is not running.
+    `priority`: the queue's (backend/jobs.py) — `warm` for the warm-up's call,
+    `user` when someone waits; a job still queued is moved up to it."""
+    from backend import jobs
     from backend.engine import activity_tags as AT
     recorded = AT.load_recorded() if recorded is None else recorded
     sig = signature(ds, recorded)
@@ -679,21 +708,23 @@ def job_for(ds, recorded: Optional[list] = None) -> Job:
         job = _JOBS.get(ds)
         running = job is not None and job.state == "computing" and job.thread is not None and job.thread.is_alive()
         if job is not None and (job.sig == sig and job.state != "error" or running):
+            if job.thread is not None:
+                jobs.promote(job.thread, priority)
             return job
         job = Job(ds, sig, recorded)
         _JOBS[ds] = job
-        job.start()
+        job.start(priority)
         return job
 
 
 def status(ds) -> dict:
     """The endpoint's answer: {state, n_done, n_total, stale, error, elapsed_s, auto: {key: values}}."""
-    return job_for(ds).snapshot()
+    return job_for(ds, priority="user").snapshot()
 
 
 def wait(ds, timeout: float = 600.0) -> dict:
     """Block until the job is done (tests, scripts)."""
-    job = job_for(ds)
+    job = job_for(ds, priority="user")
     t = job.thread
     if t is not None:
         t.join(timeout)

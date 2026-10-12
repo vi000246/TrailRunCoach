@@ -317,18 +317,28 @@ def _calibrate_never_fitted(ds) -> None:
         asyncio.run(fit_once())
 
 
+def _calibrated():
+    """The Dataset read now, with the never-fitted 每人校正 items fitted (a low-priority step)."""
+    ds = _dataset()
+    _calibrate_never_fitted(ds)
+    return ds
+
+
 def _low_priority(reason: str, slot: Optional[dict] = None) -> None:
     """The warm-up's lowest-priority part, in its own thread (review SP-362 #4): wait for an
-    automatic plan run to end, then — on the Dataset read AFTER the wait (a sync may have
-    rebuilt it meanwhile) — the never-fitted calibration and the 活動列表's automatic
-    classification (started in its own thread, read from disk when nothing changed). A
+    automatic plan run to end, then queue each step in the server's job queue at `warm`
+    (backend/jobs.py, SP-394) and wait for it — this thread holds no place, so every tenant's
+    hot work goes first: on the Dataset read AFTER the wait (a sync may have rebuilt it
+    meanwhile) the never-fitted calibration (`full`), the 活動列表's automatic classification
+    (activity_auto.job_for: its own job, `single` or `full`; read from disk when nothing
+    changed) and, owner only, the race calculator's charts (racepower.warm_charts, `full`). A
     warm-up asked for while this waits only marks it to run once more (`low_again`)."""
     import logging
+    from backend import jobs
     while True:
         try:
             _wait_plan_idle()
-            ds = _dataset()
-            _calibrate_never_fitted(ds)
+            ds = jobs.call(_calibrated, cls="full", priority="warm", label=f"warm-up calibration ({reason})")
             from backend.api import activity_auto as AA, racepower as RP
             RP.warm_charts(AA.job_for(ds))       # then the race calculator's charts (SP-366; owner only)
         except Exception as e:           # noqa: BLE001 — a page request will show the error
@@ -366,7 +376,8 @@ def warm_up(reason: str = "startup") -> Optional[threading.Thread]:
     課表's plan inputs (api/plan_sessions._compute_inputs); then, in a thread of its own
     (_low_priority) at the lowest priority and after an automatic plan run (engine/plan_auto.py)
     has ended, the never-fitted 每人校正 items and the 活動列表's automatic classification on the
-    Dataset read after that wait. The FIT parsing runs in a process
+    Dataset read after that wait — each step a job of the server's queue at `warm` (SP-394).
+    The FIT parsing runs in a process
     pool (fitcache.py); a request arriving meanwhile joins the same computation (single
     flight: the dataset here, the status and the inputs in backend/singleflight.py). None
     when a warm-up is already running or WKO5COACH_NO_WARMUP is set."""
@@ -417,6 +428,32 @@ def warm_up(reason: str = "startup") -> Optional[threading.Thread]:
                     key=("warm", w_tid(w)))
     w["thread"] = t
     return t
+
+
+async def warm_up_startup(demo: bool = False) -> list[str]:
+    """At start-up / after a deploy (main.lifespan): the owner's warm-up, then — multi-user mode,
+    not the demo — the users active in the last 7 days (signed in or synced,
+    accounts/tenants.active_tenants), the most recently active first, each queued behind the
+    owner's at `deploy_hot` (backend/jobs.py: one whole-Dataset rebuild at a time; SP-338 第 3
+    條, SP-394). Idle users are not computed ahead: on their first visit the overview status
+    and the charts show their previous values marked 更新中 while the new ones are computed.
+    Returns the tenant ids whose warm-up was asked for, in that order."""
+    import logging
+    from backend import accounts
+    warm_up("startup")
+    out = [tenancy.current().id]          # the owner (the demo: its base)
+    if demo or not accounts.enabled():
+        return out
+    from backend.accounts import tenants as TN
+    for t in TN.active_tenants():
+        try:
+            await TN.ensure_ready(t)
+            with tenancy.use(t):
+                warm_up("deploy")
+            out.append(t.id)
+        except Exception as e:           # noqa: BLE001 — their first visit warms it instead
+            logging.getLogger(__name__).warning("deploy warm-up of a user skipped: %s", type(e).__name__)
+    return out
 
 
 @router.get("/dataset/status")
