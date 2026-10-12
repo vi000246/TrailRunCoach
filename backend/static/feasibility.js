@@ -98,8 +98,10 @@
     out.push(`</div><details><summary>${esc(T("detail"))}</summary><h4>${esc(T("feas"))}</h4>${list(r.checks)}`);
     if (sg.length > 1) out.push(`<ul class="feas-more">${sg.slice(1).map((s) => `<li>${esc(s)}</li>`).join("")}</ul>`);
     if (rd) out.push(`<h4>${esc(T("ready"))}</h4>${list(rd.checks)}`);
-    const src = [...new Set([...(r.src || []), ...((rd && rd.src) || [])])];
-    out.push(`<p class="feas-m">${esc(T("how_text"))}</p><h4>${esc(T("src"))}</h4>${src.map((s) => `<p class="feas-m">${esc(s)}</p>`).join("")}</details></div>`);
+    // the sources (a second `const src` here — the data level's, above — was a SyntaxError that
+    // stopped this whole file: no feasibility card on 賽事周期 since SP-292)
+    const refs = [...new Set([...(r.src || []), ...((rd && rd.src) || [])])];
+    out.push(`<p class="feas-m">${esc(T("how_text"))}</p><h4>${esc(T("src"))}</h4>${refs.map((s) => `<p class="feas-m">${esc(s)}</p>`).join("")}</details></div>`);
     return out.join("");
   }
 
