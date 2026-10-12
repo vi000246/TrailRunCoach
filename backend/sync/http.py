@@ -16,10 +16,34 @@ import httpx
 _TRANSPORT: Optional[httpx.AsyncBaseTransport] = None
 
 
+def _is_coros(request: httpx.Request) -> bool:
+    from backend.sync import coros_limits as CL
+    host = request.url.host or ""
+    return host == CL.HOST_SUFFIX or host.endswith("." + CL.HOST_SUFFIX)
+
+
+async def _coros_before(request: httpx.Request) -> None:
+    """Requests to *.coros.com go through the server-wide COROS limits (sync/coros_limits.py,
+    SP-385): the switch / pauses and the rate limit before sending…"""
+    if _is_coros(request):
+        from backend.sync import coros_limits as CL
+        await CL.before_request(request.url.host)
+
+
+async def _coros_after(response: httpx.Response) -> None:
+    """…and the 429 count after (raises CorosBlocked: no retry loop)."""
+    if _is_coros(response.request):
+        from backend.sync import coros_limits as CL
+        CL.after_response(response.status_code, login=response.request.url.path.endswith("/account/login"))
+
+
 def client(**kw) -> httpx.AsyncClient:
     if _TRANSPORT is not None:
         kw.setdefault("transport", _TRANSPORT)
-    return httpx.AsyncClient(**kw)
+    hooks = dict(kw.pop("event_hooks", None) or {})
+    hooks["request"] = [_coros_before, *hooks.get("request", [])]
+    hooks["response"] = [_coros_after, *hooks.get("response", [])]
+    return httpx.AsyncClient(event_hooks=hooks, **kw)
 
 
 @contextmanager

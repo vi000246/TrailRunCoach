@@ -104,6 +104,93 @@ class CorosLoginRequest(BaseModel):
     password: str
     athlete_id: int = 1
     remember: bool = False            # 「記住密碼」
+    consent_version: Optional[str] = None   # the 非官方介面 disclaimer ticked (SP-385): its version
+
+
+CONSENT_KEY = "sync.coros.consent"
+
+
+async def _coros_consent(db: AsyncSession, athlete_id: int, version: Optional[str]) -> None:
+    """SP-385: connecting COROS needs the disclaimer ticked (its version and the time are kept in
+    the tenant's settings). The owner's existing connection needs none. 400 COROS_CONSENT_REQUIRED
+    with the text to show otherwise."""
+    from backend import tenancy
+    from backend.settings.repository import SettingsRepository
+    from backend.sync import coros_limits as CL
+    repo = SettingsRepository(db, athlete_id)
+    have = await repo.get(CONSENT_KEY)
+    if version == CL.DISCLAIMER_VERSION:
+        if not (isinstance(have, dict) and have.get("version") == version):
+            import datetime as _dt
+            await repo.set(CONSENT_KEY, {"version": version,
+                                         "at": _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds")})
+            await db.commit()
+        return
+    if isinstance(have, dict) and have.get("version") == CL.DISCLAIMER_VERSION:
+        return
+    if tenancy.is_owner():
+        from sqlalchemy import select
+        from backend.db.models import SyncState
+        st = (await db.execute(select(SyncState).where(SyncState.athlete_id == athlete_id))).scalar_one_or_none()
+        if st is not None and (st.coros_email or st.coros_access_token):
+            return                            # the owner's existing connection: no new tick needed
+    from backend.i18n import current_locale
+    raise HTTPException(400, {"code": "COROS_CONSENT_REQUIRED", "version": CL.DISCLAIMER_VERSION,
+                              "message": CL.DISCLAIMER.get(current_locale(), CL.DISCLAIMER["en"])})
+
+
+@router.get("/coros/disclaimer")
+async def coros_disclaimer(athlete_id: int = 1, db: AsyncSession = Depends(get_db)):
+    """The 非官方介面 disclaimer shown before connecting COROS (SP-385) and whether this tenant
+    has ticked the current version."""
+    from backend.i18n import current_locale
+    from backend.settings.repository import SettingsRepository
+    from backend.sync import coros_limits as CL
+    have = await SettingsRepository(db, athlete_id).get(CONSENT_KEY)
+    return {"version": CL.DISCLAIMER_VERSION, "text": CL.DISCLAIMER.get(current_locale(), CL.DISCLAIMER["en"]),
+            "consented": isinstance(have, dict) and have.get("version") == CL.DISCLAIMER_VERSION,
+            "consented_at": have.get("at") if isinstance(have, dict) else None}
+
+
+class CorosSiteIn(BaseModel):
+    enabled: Optional[bool] = None
+    rate_per_s: Optional[float] = None
+    rate_per_min: Optional[float] = None
+    max_concurrent: Optional[int] = None
+
+
+@router.get("/coros/site")
+def coros_site():
+    """The server-wide COROS state (SP-385): switch, breaker, cooldown, this account's pause,
+    the limits. Plain, nothing personal; the event log is the owner's."""
+    from backend import tenancy
+    from backend.sync import coros_limits as CL, events as EV
+    out = CL.status()
+    if tenancy.is_owner():
+        out["events"] = EV.read("coros", 50)
+    return out
+
+
+@router.put("/coros/site")
+def put_coros_site(body: CorosSiteIn):
+    """The owner turns the server-wide COROS switch off / back on (a tripped breaker too) and sets
+    the limits — until SP-351's admin pages. 403 for anyone else."""
+    from backend import tenancy, site_settings as SS
+    from backend.sync import coros_limits as CL
+    if not tenancy.is_owner():
+        raise HTTPException(403, "只有站主能切換 COROS 全站開關")
+    vals = {}
+    for k in ("rate_per_s", "rate_per_min", "max_concurrent"):
+        v = getattr(body, k)
+        if v is not None:
+            if v <= 0:
+                raise HTTPException(400, f"{k} must be > 0")
+            vals[f"coros.{k}"] = v
+    if vals:
+        SS.update(vals)
+    if body.enabled is not None:
+        CL.set_enabled(bool(body.enabled), by="owner")
+    return CL.status()
 
 
 @router.post("/coros/login")
@@ -111,16 +198,27 @@ async def coros_login(body: CorosLoginRequest, db: AsyncSession = Depends(get_db
     """Log in (one login at a time: a second concurrent one gets 409
     COROS_LOGIN_BUSY — COROS keeps only the latest token). remember=true
     stores the password sealed for the automatic re-login; false deletes it."""
+    from backend.sync import coros_limits as CL, events as EV
+    from backend import tenancy
+    await _coros_consent(db, body.athlete_id, body.consent_version)
+    try:
+        CL.check_allowed()
+    except CL.CorosBlocked as e:
+        raise HTTPException(503, {"code": e.code, "site": CL.status()})
     try:
         result = await coros_client.login(body.email, body.password, db, body.athlete_id)
         await coros_client.save_password(db, body.athlete_id, body.password if body.remember else None)
+        EV.log("coros", "login_ok", tenant=tenancy.current().id)
         return {**result, "password_saved": bool(body.remember)}
+    except CL.CorosBlocked as e:
+        raise HTTPException(503, {"code": e.code, "site": CL.status()})
     except coros_client.LoginBusy as e:
         raise HTTPException(409, str(e))
     except SecretKeyMissing as e:
         raise HTTPException(503, str(e))
     except Exception as e:
         detail = str(e)
+        EV.log("coros", "login_failed", tenant=tenancy.current().id)
         if "401" in detail or "login failed" in detail.lower():
             raise HTTPException(401, f"COROS_LOGIN_FAILED: {detail}")
         raise HTTPException(502, f"COROS_LOGIN_ERROR: {detail}")

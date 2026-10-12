@@ -286,6 +286,8 @@ FILES: tuple = (
          "e-mail, tenant folder, plan), identities, sessions (sha256 of the cookie only), shares, waitlist",
          scope=INSTANCE, deidentify=("email", "display_name", "google_sub")),
     File("accounts.db-*", SECRET, ROOT, "accounts.db's WAL / shared memory", scope=INSTANCE),
+    File("site.json", USER, ROOT, "server-wide settings and state (backend/site_settings.py): the COROS "
+         "switch, breaker, limits and paused accounts (SP-385; tenants by id only)", scope=INSTANCE),
     File("users/**", USER, ROOT, "multi-user mode: each users/<id>/ is a signed-in user's tenant folder "
          "(classified on its own, like the owner's)", scope=INSTANCE),
     File("logs/**", DERIVED, ROOT, "the server log (applog.py); disposable, not tenant data (a demo base "

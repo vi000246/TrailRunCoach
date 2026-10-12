@@ -223,3 +223,20 @@ def tp_creds(monkeypatch):
     monkeypatch.setenv("TP_CLIENT_ID", FAKE_TP_CLIENT[0])
     monkeypatch.setenv("TP_CLIENT_SECRET", FAKE_TP_CLIENT[1])
     return FAKE_TP_CLIENT
+
+
+@pytest.fixture(autouse=True)
+def _site_state_per_test(monkeypatch, tmp_path_factory):
+    """The server-wide state (site.json: the COROS switch, breaker, paused accounts) and the sync
+    event log live in a temp folder per test, and the COROS limits start clean (SP-385): a test
+    whose mock COROS answers 429 never pauses the next test's account."""
+    from backend import site_settings
+    from backend.sync import coros_limits, events
+    d = tmp_path_factory.mktemp("site")
+    monkeypatch.setattr(site_settings, "PATH", d / "site.json")
+    monkeypatch.setattr(events, "PATH", d / "sync_events.jsonl")
+    site_settings.reset_cache()
+    coros_limits.reset()
+    yield
+    coros_limits.reset()
+    site_settings.reset_cache()
