@@ -62,8 +62,7 @@ h1 { font-size:18px; margin:0 0 4px } h2 { font-size:15px; margin:28px 0 6px } p
 :root[data-theme="dark"] { --tile-ok:#15803d; --tile-part:#b45309; --tile-off:#b91c1c }
 .v3 .chip.done.cp-ok .ic { background:var(--tile-ok) } .v3 .chip.done.cp-part .ic { background:var(--tile-part) } .v3 .chip.done.cp-off .ic { background:var(--tile-off) }
 .v3 .chip.done .ic { color:#fff } .v3 .chip.done .ic svg { stroke-width:2.4 }
-.v3 .chip .g { position:absolute; right:-5px; bottom:-5px; background:var(--panel); border-radius:50%; width:15px; height:15px; place-items:center; box-shadow:0 0 0 1px var(--line) }
-.v3 .chip .g svg.cg { width:13px; height:13px }
+.chip .r .g svg.cg { width:16px; height:16px }
 .v3 .chip.fut .ic { border:1.5px solid var(--type); border-radius:6px }
 
 .phone .cal { grid-template-columns:1fr } .phone .cell { min-height:0 } .phone .dn { margin-right:6px }
@@ -87,7 +86,7 @@ h1 { font-size:18px; margin:0 0 4px } h2 { font-size:15px; margin:28px 0 6px } p
 <div class="wrap" id="wrap">
 <div class="cal v3" id="cal"></div>
 </div>
-<p class="note">右上角只放一件事：未來的課放手錶狀態；完成的課什麼都不放（≠／◐ 已併進完成度形狀）。細節一律 hover／點開。</p>
+<p class="note">三件事三個位置：左邊方塊＝課表類型（icon）＋完成度著色；右欄＝完成度圓圈（還沒做的課是空圈，旁邊再放手錶狀態）。方塊角落只剩 ↻／✎ 小徽章。細節一律 hover／點開。</p>
 
 <h2>三案取捨</h2>
 <table style="border-collapse:collapse; font-size:12.5px">
@@ -129,8 +128,9 @@ const chip = s => {
   const bd = s.mark ? `<span class="bd ${s.mark==="✎"?"u":""}" title="${s.mark==="↻"?"自動調整改過：疲勞保護，60′ → 45′":"你改過的課"}">${s.mark}</span>` : "";
   const ico = s.state==="miss" ? G.x() : s.cp==="off" ? G.slash() : s.cp==="ok" && (s.pct==null || Math.abs(s.pct-100)<=20) ? G.check() : s.cp ? G.pie(s.pct ?? 100) : s.prov ? G.dotted() : G.todo();
   const g = `<span class="g" aria-label="${s.state==="miss"?"未完成":s.cp==="off"?"沒照課表":s.cp?`完成度 ${s.pct??100}%`:"還沒做"}">${ico}</span>`;
-  const r = s.state==="fut" && s.sy ? `<span class="r sy" title="手錶">${SY[s.sy]}</span>` : (s.state==="done" ? "" : "");
-  return `<button class="${cls}" title="${s.tip||""}"><span class="ic">${svg(s.k)}${bd}${document.getElementById("cal").classList.contains("v3")?g:""}</span><span class="t">${s.t}</span>${r}${!document.getElementById("cal").classList.contains("v3")?`<span class="r">${g}</span>`:""}<span class="m">${s.m}</span></button>`;
+  // 右欄：完成度圓圈（永遠）＋ 未來課的手錶 icon；類型 icon 方塊不再被蓋到
+  const r = `<span class="r">${g}${s.state==="fut" && s.sy ? `<span class="sy" title="手錶">${SY[s.sy]}</span>` : ""}</span>`;
+  return `<button class="${cls}" title="${s.tip||""}"><span class="ic">${svg(s.k)}${bd}</span><span class="t">${s.t}</span>${r}<span class="m">${s.m}</span></button>`;
 };
 const days = [
   {d:6, past:1, s:[{k:"easy",t:"輕鬆跑",m:"45′ · TSS 35 → 38",state:"done",cp:"ok",pct:92,tip:"完成度 92%（符合計畫；TSS 109% · 時間 96%）"}]},
