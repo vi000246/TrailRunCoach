@@ -318,3 +318,74 @@ def test_a_tech_session_already_behind_blocks_a_second_one():
     c = T.week_context(kind="specific", mode="specific", monday=MON, road=False, behind=d(2))
     assert not c["active"] and "已經排在" in c["why"]
     assert T.week_context(kind="specific", mode="specific", monday=MON, road=False, behind=None)["active"]
+
+
+# ---- SP-87: the race's 土徑比 decides the 專項期 technical session (owner 2026-10-12: 50 %) --------------
+
+def _race(trail_pct=None, kind="race"):
+    from backend.engine.planning import Event
+    return Event("e1", "越野賽", "2026-12-05", kind=kind, priority="A", distance_km=30, climbing_m=2000,
+                 est_hours=5.0, trail_pct=trail_pct)
+
+
+def test_trail_share_of_the_race_decides_the_specific_session():
+    on = dict(kind="specific", mode="specific", monday=MON, road=False)
+    assert T.week_context(**on, events=[_race(50)])["active"]                     # ≥ 50 %: as before
+    assert T.week_context(**on, events=[_race(80)])["active"]
+    assert T.week_context(**on, events=[_race(None)])["active"]                   # not set: as before
+    assert T.week_context(**on, events=[])["active"] and T.week_context(**on)["active"]
+    low = T.week_context(**on, events=[_race(30)])
+    assert not low["active"] and "30%" in low["why"] and "50%" in low["why"]
+    # a B race or one already past doesn't decide
+    from backend.engine.planning import Event
+    b = Event("b1", "B 賽", "2026-11-01", kind="race", priority="B", distance_km=20, climbing_m=800, trail_pct=10)
+    past = Event("p1", "舊賽", "2026-09-01", kind="race", priority="A", distance_km=20, trail_pct=10)
+    assert T.week_context(**on, events=[b, past, _race(None)])["active"]
+    ss = _week()
+    T.apply(ss, T.week_context(**on, events=[_race(30)]), hours=8.0)
+    assert not any(x.get("id") == "tech" for x in ss)
+
+
+def test_week_plan_and_projection_follow_the_trail_share():
+    from backend.engine import overview as O
+    from backend.engine import plan_prefs as PP
+    from backend.engine import projection as PJ
+    from backend.engine.status import Status
+    from backend.tests.test_b2b import _history, _phases, _plan_with
+    from backend.tests.test_quality_gate import TODAY
+    ds = _history(TODAY)
+    plan = _plan_with("2026-12-05", 1, TODAY)
+    plan.events = [_race(20)]
+    ds.plan = plan
+    st = Status(ds, plan, TODAY, prefs=PP.Prefs()).compute()
+    wp = O.week_plan(ds, st, TODAY, sport="trail")
+    assert wp["phase"] == "specific" and not wp["technical"]["active"] and "土徑比" in wp["technical"]["why"]
+    weeks = PJ.project_weeks(wp, _phases(plan, TODAY), date(2026, 11, 8), events=plan.events)
+    assert weeks and not any(s["id"] == "tech" for w in weeks for s in w["sessions"])
+    plan.events = [_race(60)]
+    st = Status(ds, plan, TODAY, prefs=PP.Prefs()).compute()
+    wp = O.week_plan(ds, st, TODAY, sport="trail")
+    weeks = PJ.project_weeks(wp, _phases(plan, TODAY), date(2026, 11, 8), events=plan.events)
+    assert any(s["id"] == "tech" for w in weeks for s in w["sessions"])
+
+
+def test_the_event_keeps_its_trail_share(tmp_path, monkeypatch):
+    """賽事設定: 土徑比 % (0–100, blank = not set) through the API and plan.json; old events have none."""
+    from fastapi import HTTPException
+    from backend.api import plan as A
+    from backend.engine import planning as P
+    monkeypatch.setattr(P, "PLAN_PATH", tmp_path / "plan.json")
+    monkeypatch.setattr(A, "_notify", lambda thresholds: None)
+    r = A.put_event(A.EventIn(id="t", name="越野 30K", date="2027-01-10", kind="race", distance_km=30,
+                              climbing_m=1500, trail_pct=65))
+    assert r["event"]["trail_pct"] == 65
+    assert P.Plan.load().events[0].trail_pct == 65
+    r = A.put_event(A.EventIn(id="t", name="越野 30K", date="2027-01-10", kind="race", distance_km=30))
+    assert r["event"]["trail_pct"] is None
+    for bad in (-1, 120):
+        with pytest.raises(HTTPException) as x:
+            A.put_event(A.EventIn(id="t", name="越野 30K", date="2027-01-10", trail_pct=bad))
+        assert x.value.status_code == 400 and "土徑比" in x.value.detail
+    assert P.Plan().upsert_event({"name": "x", "date": "2027-01-10", "trail_pct": ""}).trail_pct is None
+    (tmp_path / "old.json").write_text('{"events": [{"id": "o", "name": "舊", "date": "2027-01-10"}]}', "utf-8")
+    assert P.Plan.load(tmp_path / "old.json").events[0].trail_pct is None

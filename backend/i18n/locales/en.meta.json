@@ -1103,6 +1103,10 @@
     "draft": false,
     "src": "backend/engine/status.py:934"
   },
+  "{name} 土徑比 {pct:.0f}%（< {min:.0f}%）：路線多半是柏油或水泥，專項期不排技術地形課": {
+    "draft": true,
+    "src": "backend/engine/technical.py:92"
+  },
   "{name} 登入已過期，重新登入後才能{what}": {
     "draft": true,
     "src": "backend/api/auth.py:180"
@@ -2770,6 +2774,10 @@
   "固定功率 75–80% CP，不要調": {
     "draft": true,
     "src": "backend/engine/aet_test.py:658"
+  },
+  "土徑比要在 0–100 %": {
+    "draft": true,
+    "src": "backend/engine/planning.py:760"
   },
   "在 AeT 附近跑 1 次 ≥ 60 分鐘，飄移 < 5%": {
     "draft": true,

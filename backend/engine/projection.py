@@ -796,7 +796,8 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
             except Exception:              # noqa: BLE001 — never breaks the projection
                 bc = {"active": False}
         # 技術地形課 (engine/technical.py, SP-74): the same rule as week_plan, per projected week
-        tech = TECH.week_context(kind=kind, mode=mode, monday=week, road=road, b2b=b2b_info, injury=inj_rule)
+        tech = TECH.week_context(kind=kind, mode=mode, monday=week, road=road, b2b=b2b_info, injury=inj_rule,
+                                 events=events)
         if tech.get("active"):
             try:
                 TECH.apply(ss, tech, hours=hours, rates=cur.get("tss_per_category"), prefs=prefs, notes=notes,

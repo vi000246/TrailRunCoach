@@ -11,7 +11,10 @@ never flips a week back and forth):
     and the long run's HR drift reads the aerobic base only on steady ground. The 基礎期's climbing
     is the weekly 長爬坡有氧 (engine/base_climb.py) and the small downhill dose (engine/downhill.py).
     (SP-74 turned every other week's LSD into a low-RPE technical run.)
-  * 專項期 — one 技術地形 session a week close to the race's terrain, out of a placed easy run.
+  * 專項期 — one 技術地形 session a week close to the race's terrain, out of a placed easy run, when
+    the next A race's 土徑比 (planning.Event.trail_pct, SP-87 owner 2026-10-12) is ≥ TRAIL_PCT_MIN or
+    not set; a mostly paved course (< 50 %) gets none (Koop: train on the race's terrain — the reverse
+    holds too, 推估).
     RPE 6–7 (the template 「技術地形 90′」) counts as a quality session (workout_steps.rpe_role:
     RPE ≥ 7), so it needs a day ≥ 2 days from the long run and every hard day (台灣教練) and room
     in SP-31's budget: its RPE 6–7 work + the intervals' time in zone ≤ 20 % of the week (the
@@ -47,6 +50,7 @@ SPEC_WORK_MAX = 90           # the template's main block
 SPEC_WORK_MIN = 30           # 推估: a shorter RPE 6–7 block is not worth a hard day
 WARM, COOL = 15, 10          # the template's
 EASY_MIN = 20                # the other easy runs give the difference, never below this
+TRAIL_PCT_MIN = 50.0         # SP-87 (owner 2026-10-12): a race with ≥ 50 % dirt / trail gets the 專項期 session
 HARD_IDS = ("long", "long2", "long3", "climb",   # B2B days and the race-climb repeats (steep_hill: its hard list)
             "downhill")                         # SP-99: ≥ 2 days from the downhill session (eccentric load)
 SRC = ("Koop（賽道專項：練和比賽相同的地形）；Uphill Athlete；RPE 對強度預算的換算是這個 app 的"
@@ -60,11 +64,12 @@ def _d(x) -> Optional[dt.date]:
 
 
 def week_context(*, kind: str, mode: str, monday: dt.date, road: bool, b2b: Optional[dict] = None,
-                 injury: Optional[dict] = None, behind: Optional[str] = None) -> dict:
+                 injury: Optional[dict] = None, behind: Optional[str] = None, events=None) -> dict:
     """Whether this week gets a 技術地形 session and which rule: {"active", "phase", "why"}.
     `injury`: injuries.condition_week's rule (SP-270) — 膝前痛／髂脛束進行中 = no 技術地形. `behind`:
     the day of this week's stored one when it is already behind (plan_store.hook_days, SP-87) — no
-    second one. (`b2b` is no longer read: it only kept the 基礎期's LSD swap out of a B2B week.)"""
+    second one. `events`: the season plan's events — the next A race's 土徑比 (SP-87). (`b2b` is no
+    longer read: it only kept the 基礎期's LSD swap out of a B2B week.)"""
     info = {"active": False, "phase": kind, "monday": monday.isoformat()}
     if behind:
         b = _d(behind)
@@ -79,7 +84,14 @@ def week_context(*, kind: str, mode: str, monday: dt.date, road: bool, b2b: Opti
     if kind == "base":
         # SP-87: the LSD stays on steady terrain (the module docstring)
         return {**info, "why": _("基礎期不排技術地形課：長跑留在穩定地形，爬升改排長爬坡有氧")}
-    return {**info, "active": True}
+    e = min((x for x in events or () if getattr(x, "priority", None) == "A" and x.start > monday),
+            key=lambda x: x.start, default=None)
+    pct = getattr(e, "trail_pct", None) if e is not None else None
+    if pct is not None and float(pct) < TRAIL_PCT_MIN:
+        return {**info, "trail_pct": float(pct),
+                "why": _("{name} 土徑比 {pct:.0f}%（< {min:.0f}%）：路線多半是柏油或水泥，專項期不排技術地形課",
+                         name=e.name, pct=float(pct), min=TRAIL_PCT_MIN)}
+    return {**info, "active": True, **({"trail_pct": float(pct)} if pct is not None else {})}
 
 
 def _steps(work: int, rpe: tuple) -> dict:
@@ -316,7 +328,7 @@ def apply(ss: list, info: Optional[dict], *, hours: Optional[float] = None, rate
     return ss
 
 
-PUBLIC = ("active", "phase", "why", "planned", "user")
+PUBLIC = ("active", "phase", "why", "planned", "user", "trail_pct")
 
 
 def public(info: Optional[dict]) -> Optional[dict]:
