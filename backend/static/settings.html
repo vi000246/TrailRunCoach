@@ -1414,7 +1414,7 @@ async function loadCorosSite() {
   try {
     const d = COROS_DISCLAIMER = await j("/api/v1/auth/coros/disclaimer");
     f("coros", "consenttxt").textContent = d.text + "　我已閱讀並同意。";
-    f("coros", "consentrow").hidden = !!d.consented || f("coros", "loginform").hidden;
+    f("coros", "consentrow").hidden = !d.required || !!d.consented || f("coros", "loginform").hidden;
   } catch (_) { f("coros", "consentrow").hidden = true; }
   try {
     const st = await j("/api/v1/auth/coros/site");

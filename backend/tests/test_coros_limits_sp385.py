@@ -274,18 +274,12 @@ def test_no_coros_connection_without_the_disclaimer(client):
     assert d["consented"] is True and d["consented_at"]
 
 
-def test_the_owners_existing_connection_needs_no_new_tick(client):
-    import asyncio as _a
-    from backend.db import database
-    from backend.db.models import SyncState
-
-    async def connect():
-        async with database.AsyncSessionLocal() as db:
-            db.add(SyncState(athlete_id=1, coros_email="owner@x.tw", coros_access_token="t"))
-            await db.commit()
-    _a.run(connect())
+def test_the_owner_is_not_asked_to_tick(client):
+    """The server's owner (the self-hosted app) connects as before; users are asked."""
     r = client.post("/api/v1/auth/coros/login", json={"email": "owner@x.tw", "password": "pw"})
     assert r.status_code != 400
+    assert client.get("/api/v1/auth/coros/disclaimer").json()["required"] is False
+    assert client.get("/api/v1/auth/coros/disclaimer", headers={"X-Test-Tenant": "user"}).json()["required"] is True
 
 
 def test_only_the_owner_flips_the_switch(client):

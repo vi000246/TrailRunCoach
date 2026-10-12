@@ -114,8 +114,9 @@ CONSENT_KEY = "sync.coros.consent"
 
 async def _coros_consent(db: AsyncSession, athlete_id: int, version: Optional[str]) -> None:
     """SP-385: connecting COROS needs the disclaimer ticked (its version and the time are kept in
-    the tenant's settings). The owner's existing connection needs none. 400 COROS_CONSENT_REQUIRED
-    with the text to show otherwise."""
+    the tenant's settings). Not the owner: the owner runs the server (the self-hosted app behaves
+    as before; the owner's existing connection needed no new tick anyway). 400
+    COROS_CONSENT_REQUIRED with the text to show otherwise."""
     from backend import tenancy
     from backend.settings.repository import SettingsRepository
     from backend.sync import coros_limits as CL
@@ -131,11 +132,7 @@ async def _coros_consent(db: AsyncSession, athlete_id: int, version: Optional[st
     if isinstance(have, dict) and have.get("version") == CL.DISCLAIMER_VERSION:
         return
     if tenancy.is_owner():
-        from sqlalchemy import select
-        from backend.db.models import SyncState
-        st = (await db.execute(select(SyncState).where(SyncState.athlete_id == athlete_id))).scalar_one_or_none()
-        if st is not None and (st.coros_email or st.coros_access_token):
-            return                            # the owner's existing connection: no new tick needed
+        return                                # the server's owner: no tick asked
     from backend.i18n import current_locale
     raise HTTPException(400, {"code": "COROS_CONSENT_REQUIRED", "version": CL.DISCLAIMER_VERSION,
                               "message": CL.DISCLAIMER.get(current_locale(), CL.DISCLAIMER["en"])})
@@ -148,8 +145,10 @@ async def coros_disclaimer(athlete_id: int = 1, db: AsyncSession = Depends(get_d
     from backend.i18n import current_locale
     from backend.settings.repository import SettingsRepository
     from backend.sync import coros_limits as CL
+    from backend import tenancy
     have = await SettingsRepository(db, athlete_id).get(CONSENT_KEY)
     return {"version": CL.DISCLAIMER_VERSION, "text": CL.DISCLAIMER.get(current_locale(), CL.DISCLAIMER["en"]),
+            "required": not tenancy.is_owner(),
             "consented": isinstance(have, dict) and have.get("version") == CL.DISCLAIMER_VERSION,
             "consented_at": have.get("at") if isinstance(have, dict) else None}
 
