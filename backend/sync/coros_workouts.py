@@ -471,9 +471,10 @@ def session_steps(s: dict, th: Thresholds, sent_tl: Optional[dict] = None) -> li
         raise Unsupported("沒有時間長度")
     from backend.engine import workout_steps as WS
     from backend.engine.warmup import EASY_KINDS, mark_min
-    if kind in EASY_KINDS and mark_min(s):
-        # 每堂課前加熱身 (SP-364): the first N minutes are a warm-up lap — the editor's structure
-        # (workout_steps.derive splits the session there), pushed as it is
+    if kind in EASY_KINDS and (mark_min(s) or WS.climb_reps(s) or WS.steep_walk(s)):
+        # 每堂課前加熱身 (SP-364): the first N minutes are a warm-up lap; 長爬坡反覆 / 陡坡健走 (SP-409):
+        # warm-up, repeats / the steep part, cool-down — the editor's structure (workout_steps.derive),
+        # pushed as it is
         d = WS.derive(s)
         if d is not None:
             c = WS.Ctx(cp=th.cp, lthr=th.lthr, aet=th.aet, tpace=th.tpace, basis=_basis(s), hrz=th.hrz,
