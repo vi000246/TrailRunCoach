@@ -34,7 +34,7 @@ from dataclasses import asdict
 from backend.engine.wko5expr.chartfixes import FIXES_PATH, apply_fixes, load_fixes
 from backend.engine.wko5expr.viewids import ensure_ids
 from backend.engine.wko5expr import viewi18n as VI
-from backend.engine.wko5expr.config import config_path, MOUNTAIN_PRESET, EngineConfig
+from backend.engine.wko5expr.config import config_path, MOUNTAIN_PRESET, EngineConfig, parity_allowed
 from backend.engine.wko5expr.corrections import (
     CorrectionStore, detect_spikes, proposals_to_corrections,
 )
@@ -241,6 +241,8 @@ def _dataset_key(parity: Optional[bool] = None, source: Optional[str] = None) ->
     """(engine config, source, files stamp, the tenant's shared root): every
     demo sandbox maps to its base, so they all share one Dataset (§2.4)."""
     cfg = EngineConfig.load()
+    if parity and not parity_allowed():
+        parity = False                   # SP-464: ?parity=true is an admin's tool in sign-in mode
     if parity is not None and parity != cfg.parity:
         cfg = cfg.replace(parity=parity)
     src = source if source in DSRC.SOURCES else DSRC.current_source()
@@ -1763,17 +1765,27 @@ def primary_sport():
 
 @router.get("/config")
 def get_config():
+    """The tenant's engine config. `can_switch` (SP-464): whether 設定 › 計算模式 is offered —
+    false for a non-admin in sign-in mode, whose config is always 我的算式 (parity off)."""
     cfg = EngineConfig.load()
     return {"config": cfg.to_dict(), "path": str(config_path()),
-            "mountain_preset": MOUNTAIN_PRESET.to_dict()}
+            "mountain_preset": MOUNTAIN_PRESET.to_dict(), "can_switch": parity_allowed()}
 
 
 @router.put("/config")
 def put_config(body: dict):
-    """Persist the engine config. parity=True reproduces WKO5 exactly."""
+    """Persist the engine config. parity=True reproduces WKO5 exactly.
+    SP-464: in sign-in mode only an admin may (403 SCOPE_REQUIRED `admin` otherwise); the file is
+    the admin's own (tenancy.base_path), and only their own Datasets are dropped."""
+    if not parity_allowed():
+        from backend import membership as MS
+        raise MS.scope_error("admin")
     cfg = EngineConfig.from_dict({**EngineConfig.load().to_dict(), **body})
     cfg.save()
-    _dataset_cfg.cache_clear()
+    mine = str(tenancy.base_of().shared)
+    for k in _dataset_cfg.entries():
+        if k[3] == mine:
+            _dataset_cfg.drop(k)
     return {"config": cfg.to_dict()}
 
 
