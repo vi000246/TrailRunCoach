@@ -68,9 +68,11 @@ _last: OrderedDict = OrderedDict()   # tenant id -> (key, inputs, time.time() co
 _REFRESH_POOL = ThreadPoolExecutor(max_workers=2, thread_name_prefix="plan-inputs-refresh")
 _refreshing: dict = {}      # tenant id -> the key computed in the background now
 _failed: dict = {}          # tenant id -> a key whose background computation failed (served fresh next time)
-STALE_REASONS = ("sync", "day")
-# _inputs_key's layout: (tenant, dataset generation, day, the self-ratings stamp | the settings…)
-_K_GEN, _K_DAY, _K_SETTINGS = 1, 2, 4
+STALE_REASONS = ("sync", "day", "hr")
+# _inputs_key's layout: (tenant, dataset generation, day, the self-ratings stamp | the settings…);
+# _K_HR: the 課表心率區間 / COROS max-rest HR stamp (HRP.stamp()) among the settings — the one
+# setting whose change is served stale too (SP-361 Q1 = B: the new HR targets follow in seconds)
+_K_GEN, _K_DAY, _K_SETTINGS, _K_HR = 1, 2, 4, 10
 
 
 def _compute_inputs(blackouts: Optional[list] = None) -> dict:
@@ -109,10 +111,11 @@ def _remember(key: tuple, out: dict) -> None:
 
 
 def _stale_view(key: tuple, build) -> Optional[dict]:
-    """The previous inputs of this tenant marked `stale` ({reason: sync | day, at}) when only
-    the data or the day changed since they were computed (the user's own settings are the
-    same), and the fresh computation started in the background (once per key); else None.
-    Never for a demo tenant."""
+    """The previous inputs of this tenant marked `stale` ({reason: sync | day | hr, at}) when
+    only the data or the day changed since they were computed (the user's own settings are the
+    same) — or, of the settings, only the HR stamp (課表心率區間 switched, SP-361: reason hr) — and
+    the fresh computation started in the background (once per key); else None. Never for a
+    demo tenant."""
     if _tenancy.current().is_demo:
         return None
     with _lock:
@@ -120,9 +123,10 @@ def _stale_view(key: tuple, build) -> Optional[dict]:
         if prev is None or _failed.get(key[0]) == key:
             return None
         pkey, pinp, at = prev
-        if pkey == key or pkey[_K_SETTINGS:] != key[_K_SETTINGS:] or pkey[_K_DAY] > key[_K_DAY]:
+        hr = pkey[_K_HR:_K_HR + 1] != key[_K_HR:_K_HR + 1]
+        if pkey == key or _but_hr(pkey) != _but_hr(key) or pkey[_K_DAY] > key[_K_DAY]:
             return None
-        reason = "day" if pkey[_K_DAY] != key[_K_DAY] else "sync"
+        reason = "hr" if hr else "day" if pkey[_K_DAY] != key[_K_DAY] else "sync"
         start = _refreshing.get(key[0]) != key
         if start:
             _refreshing[key[0]] = key
@@ -130,6 +134,11 @@ def _stale_view(key: tuple, build) -> Optional[dict]:
         ctx = contextvars.copy_context()        # the tenant, the athlete: the request's
         _REFRESH_POOL.submit(ctx.run, _refresh, key, build)
     return {**pinp, "stale": {"reason": reason, "at": at}}
+
+
+def _but_hr(key: tuple) -> tuple:
+    """The settings part of an inputs key without the HR stamp (_K_HR)."""
+    return key[_K_SETTINGS:_K_HR] + key[_K_HR + 1:]
 
 
 def _refresh(key: tuple, build) -> None:
@@ -531,14 +540,16 @@ def _range(scope: str, day: Optional[str], inp: dict) -> tuple[str, str]:
     return today, inp["phase_push_end"]
 
 
-def _view(s: dict, inp: dict, rows: dict, today: str, prov=None, walk: Optional[dict] = None) -> dict:
+def _view(s: dict, inp: dict, rows: dict, today: str, prov=None, walk: Optional[dict] = None,
+          prefs=PS.PREFS_UNREAD) -> dict:
     """`coros` keeps its name in the API: the push status at the active provider.
     `quality_family`: a 強度課's 有氧間歇 / VO2max 間歇 / 速度 (workout_templates.session_family: the
     stored `family` the user picked, else read from the steps); `steps_family` = what the steps
     read as (the editor's 「步驟看起來像…」 hint when it differs, SP-79).
     `walk_hint` (SP-298): on a planned hill easy run / long run, 「坡度超過約 X% 用走的比較省」
     (engine/walk_hint.py, `walk` = _walk_hint) — shown next to the detail, never stored or pushed.
-    (SP-286's 「課前要吃」 line was removed, owner 2026-10-07.)"""
+    (SP-286's 「課前要吃」 line was removed, owner 2026-10-07.)
+    `prefs`: 課表偏好 read once for every session of the view (SP-462; plan_store.push_dict)."""
     prov = prov or WT.get(WT.DEFAULT)
     v = dict(s)
     from backend.engine import walk_hint as WH
@@ -549,7 +560,7 @@ def _view(s: dict, inp: dict, rows: dict, today: str, prov=None, walk: Optional[
     v["quality_family"] = WTPL.session_family(s, inp["thresholds"], derived=got)
     v["steps_family"] = got
     if s["state"] == "active":
-        v["coros"] = prov.status_of(PS.push_dict(s), inp["thresholds"], rows.get(s["uid"]), today)
+        v["coros"] = prov.status_of(PS.push_dict(s, prefs), inp["thresholds"], rows.get(s["uid"]), today)
         note = pace_note(s, inp["thresholds"])
         if note:
             v["coros"] = {**v["coros"], "pace_note": note, "tpace_link": tpace_link()}
@@ -633,8 +644,9 @@ async def _sessions_body(db: AsyncSession, inp: dict, start: Optional[str], end:
     # the push window; an error means no markers, never a failed page
     from backend.engine import plan_marks as PMK
     mk = await PMK.load_safe(db, every, today)
+    prefs = PS.load_prefs_safe()                # once, not per session (SP-462)
     out = {**_meta(inp), "summary": _summary(every, inp),
-           "sessions": [{**_view(s, inp, rows, today, prov, walk), "mark": PMK.of(mk, s["uid"])}
+           "sessions": [{**_view(s, inp, rows, today, prov, walk, prefs), "mark": PMK.of(mk, s["uid"])}
                         for s in ss if s["state"] != "deleted" and s["state"] != "superseded"]}
     if inp.get("stale"):
         st = inp["stale"]
@@ -2721,13 +2733,17 @@ KIND_TARGET = {"easy": "z2", "long": "long", "hike": "long", "quality": "thresho
 def _status_for(ds, today: dt.date):
     """overview._status, or on a stale calendar view (SP-362 B4, _STALE_OK) the tenant's newest
     computed Status while the fresh one is computed in the background (the phases and the goal
-    of the view: display only)."""
+    of the view: display only). Its callers (_range_extras) read only the plan's phases and the
+    goals: a cached Status differing only by the HR stamp serves them too (SP-361)."""
     from backend.api import overview as OV
     if _STALE_OK.get():
         prev = OV.status_peek()
         if prev is not None:
             return prev
-    return OV._status(ds, today)
+    # SP-361: switched back to a 課表心率區間 used before, the inputs are cached but the Status
+    # (one per tenant) is the other model's: the plan, phases and goals read from it are the same
+    twin = OV.status_but_hr(ds, today)
+    return twin if twin is not None else OV._status(ds, today)
 
 
 def _range_extras(start: str, end: str) -> dict:
@@ -2751,7 +2767,28 @@ def _range_extras(start: str, end: str) -> dict:
                          key=lambda p: p["start"])
     goal_d = ((st.goals.get("targets") or {}).get("climb_per_km") or {}).get("value")
     return {"activities": acts, "phases": phases, "plan_phases": plan_phases,
-            "tph": O._tss_per_hour(ds, today) if _EXTRAS_TPH.get() else None, "goal_climb_per_km": goal_d}
+            "tph": _dataset_tph(ds, today) if _EXTRAS_TPH.get() else None, "goal_climb_per_km": goal_d}
+
+
+def _dataset_tph(ds, today: dt.date) -> dict:
+    """overview._tss_per_hour(ds, today): TSS / h per category over the last 180 days. Taken from
+    the cached plan inputs of the same dataset and day when there are some — week_plan computed
+    exactly this (tss_per_category, easy_tss = its easy_info) — else computed (SP-462: the
+    session classifier over every run of 180 days on each month switch of the 課表, ≈ 190 ms on
+    the demo data)."""
+    from backend.engine import overview as O
+    head = (*_tenancy.ds_key(ds), today)
+    with _lock:
+        for k in reversed(_cache.keys()):
+            if k[:len(head)] != head:
+                continue
+            cur = (_cache.get(k) or {}).get("cur") or {}
+            if cur.get("tss_per_category") is not None:
+                out = dict(cur["tss_per_category"])
+                if cur.get("easy_tss") is not None:
+                    out["easy_info"] = cur["easy_tss"]
+                return out
+    return O._tss_per_hour(ds, today)
 
 
 def _run_history(before: str) -> list[dict]:

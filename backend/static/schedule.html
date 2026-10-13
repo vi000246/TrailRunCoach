@@ -230,6 +230,8 @@ body.swapping #cal .chip[draggable="true"] { cursor: copy; }
 .chip.swap-lock { opacity: .55; cursor: progress; position: relative; }
 .chip.swap-lock::after { content: "⇄"; position: absolute; top: 2px; right: 4px; font-size: 12px; animation: swapPulse 1s ease-in-out infinite; }
 @keyframes swapPulse { 50% { opacity: .25; } }
+/* SP-445: a session just moved / edited, shown where it now is while the server saves it */
+.chip.swap-lock.pend::after { content: "↻"; }
 #swap-toast { position: fixed; right: 16px; bottom: 16px; z-index: 60; max-width: min(360px, calc(100vw - 32px));
   background: var(--panel); color: var(--text); border: 1px solid var(--accent); border-radius: 10px;
   box-shadow: 0 6px 24px rgba(0,0,0,.18); padding: 10px 12px; font-size: 13px; display: flex; gap: 10px; align-items: center; }
@@ -994,7 +996,8 @@ function range() {
   const d = dOf(S.anchor), first = isoOf(new Date(d.getFullYear(), d.getMonth(), 1)), last = isoOf(new Date(d.getFullYear(), d.getMonth() + 1, 0));
   return [mondayOf(first), addDays(mondayOf(last), 6)];
 }
-// SP-362: after a sync / on a new day the calendar may come back `stale` — the previous plan, shown
+// SP-362: after a sync / on a new day (SP-361: or a 課表心率區間 switch, reason hr — the HR targets
+// shown are the previous model's until then) the calendar may come back `stale` — the previous plan, shown
 // at once while the new one is computed. Badge 「更新中」, editing waits (the server never writes
 // from a stale view), GET /fresh is polled and the calendar reloads when the new plan is ready.
 // Polling gives up after MAX_MS: the edit lock is dropped (the server computes fresh inputs for
@@ -1009,7 +1012,7 @@ function staleWatch() {
     if (STALE.t0 && $("sync-msg").textContent === tt("stale.wait")) msg("");
     STALE.t0 = 0; STALE.gaveUp = false; return;
   }
-  b.textContent = tt(STALE.gaveUp ? "stale.reload" : st.reason === "day" ? "stale.day" : "stale.sync");
+  b.textContent = tt(STALE.gaveUp ? "stale.reload" : st.reason === "day" ? "stale.day" : st.reason === "hr" ? "stale.hr" : "stale.sync");
   b.title = tt(STALE.gaveUp ? "stale.reload_tip" : "stale.tip", { at: localTime(st.since) || "" });
   if (STALE.gaveUp) return;
   if (!STALE.t0) STALE.t0 = Date.now();
@@ -1032,9 +1035,9 @@ $("stale-badge").addEventListener("click", () => {
   if (!STALE.gaveUp) return;
   STALE.gaveUp = false; STALE.t0 = 0; load();
 });
-async function load() {
+async function load(quiet) {
   const [a, b] = range();
-  $("calwrap").classList.add("loading");
+  if (quiet !== true) $("calwrap").classList.add("loading");     // SP-445: an edit's reload keeps the calendar usable
   try {
     D = await sj("GET", `${PAPI}/calendar?start=${a}&end=${b}`);
     if (!S.anchor) S.anchor = D.today;
@@ -1050,7 +1053,35 @@ async function load() {
 // ---------------- rendering ----------------
 const findS = (uid) => D.sessions.find((s) => s.uid === uid);
 // SP-314: offline (shell.js AppOffline) the sessions open read-only, nothing drags
-const editable = (s) => !isStale() && !(window.AppOffline && AppOffline.active) && s.state === "active" && s.day >= D.today;
+const editable = (s) => !isStale() && !(window.AppOffline && AppOffline.active) && !pending() && s.state === "active" && s.day >= D.today;
+// SP-445: an edit shows at once. Dragging a session to another day, saving it in the dialog (編輯 /
+// 移到…) or deleting it changes the calendar the moment it is sent — the session sits on its new day
+// with its new numbers (locked, ↻) or is gone — and the toast says 「重新排課中」 while the server saves
+// it (the watch follows: a COROS push takes seconds on the NAS) and the calendar reloads quietly (no
+// grey-out). Editing waits until then. A failure puts the calendar back as it was and says why.
+// S.pend: the uids being saved (their cards are locked, ↻)
+const pending = () => !!(S.pend && S.pend.size);
+async function optimistic(uids, change, send) {
+  const before = D;
+  D = { ...D, sessions: change((D.sessions || []).map((s) => ({ ...s }))) };
+  S.pend = S.pend || new Set();
+  for (const u of uids) S.pend.add(u);
+  render();
+  swapToast(tt("pend.toast"), { spin: true });
+  try {
+    const r = await send();
+    await load(true);
+    swapToast(tt("pend.done_toast"), { cls: "ok", ms: 2500 });
+    return r;
+  } catch (e) {
+    D = before;
+    swapToast(tt("pend.failed_toast", { err: e.message }), { ms: 8000 });
+    throw e;
+  } finally {
+    for (const u of uids) S.pend.delete(u);
+    if (D) render();
+  }
+}
 // SP-82: a future planned day with no active session is a rest day you can drag onto another day
 // (that day's sessions move here: POST /rest-days/move)
 function restMv(d, ss) {
@@ -1110,14 +1141,14 @@ function chipHtml(s, big) {
   const vdFull = vd ? vd + (nums ? `（${nums}）` : "") : "";
   const watch = s.state === "active" && s.day >= D.today && WATCH_ON_CARD.includes(c.status) ? syIcon(c.status, c.error || c.reason || "") : "";
   const pm = window.PlanMark ? PlanMark.lines(s, KINDS) : [];      // SP-318: ↻ auto / ✎ yours (plan_mark.js)
-  const lock = !!(S.swapLock && S.swapLock.has(s.uid));
+  const pend = !!(S.pend && S.pend.has(s.uid)), lock = pend || !!(S.swapLock && S.swapLock.has(s.uid));
   // §7.1: type：title, time, TSS, the verdict, 暫定, changed by, the watch — the reading order on screen
   const lbl = [`${KINDS[s.kind] || ""}${fam ? "（" + fam.text + "）" : ""}：${s.title}`, `${s.minutes || 0} 分鐘`, tss.replace("→", "實際"),
     vdFull, prov ? SessChip.label("todo", null, { prov: true }) : "", pm.length ? PlanMark.label(s) : "", watch ? syLabel(c.status) : ""].filter(Boolean).join("，");
   const tip = [s.title, fam && fam.sub_label ? fam.text : "", meta, vdFull, SessChip.hrNote(s.compliance), st === "partial" && s.vs && s.vs.short_text ? s.vs.short_text : "",
     actual, s.target, s.detail, s.walk_hint, s.state === "done" && s.note ? "⚠ " + s.note : "", ...pm,
     watch ? syLabel(c.status) + (c.error || c.reason ? "\n" + (c.error || c.reason) : "") : ""].filter(Boolean).join("\n");
-  return `<button type="button" class="chip sc ${SessChip.cls(s)}${S.swapFrom && S.swapFrom.uid === s.uid ? " swap-src" : ""}${lock ? " swap-lock" : ""}" data-uid="${esc(s.uid)}" data-kind="${esc(s.kind)}"
+  return `<button type="button" class="chip sc ${SessChip.cls(s)}${S.swapFrom && S.swapFrom.uid === s.uid ? " swap-src" : ""}${lock ? " swap-lock" : ""}${pend ? " pend" : ""}" data-uid="${esc(s.uid)}" data-kind="${esc(s.kind)}"
       ${live && !lock ? 'draggable="true"' : ""}${lock ? ' aria-disabled="true"' : ""} aria-label="${esc(lbl)}" title="${esc(tip)}">
     ${SessChip.icon(SessChip.kind(s), { badge: pm.length ? PlanMark.icon(s, true) : "" })}<span class="c-t sc-t">${esc(s.title)}</span><span class="c-r">${SessChip.ring(st, (s.compliance || {}).pct, { prov })}${watch}</span>
     <span class="c-m">${esc(meta)}</span>
@@ -2186,6 +2217,20 @@ F.addEventListener("submit", async (e) => {
   // the structure: saved only when you changed it (a user edit — 自動重排不會再改它)
   const wp = WE.payload();
   if (wp) Object.assign(body, wp);
+  if (dlg.uid && !(wp && wp.steps)) {
+    // SP-445: an edit of an existing session (day, minutes, title …) shows at once; a failure
+    // reopens the dialog with what you typed (a structure edit may ask first: below, as before)
+    const uid = dlg.uid, was = S.sel;
+    $("sd").close();
+    S.sel = body.day;
+    try {
+      const saved = await optimistic([uid], (ss) => ss.map((x) => (x.uid === uid ? { ...x, ...body, tss_est: body.tss } : x)),
+        () => sj("PATCH", `${PAPI}/sessions/${encodeURIComponent(uid)}`, body));
+      const [w, cls] = watchNote(saved && saved.coros);
+      msg(`已更新「${esc(body.title)}」` + esc(w), cls);
+    } catch (err) { S.sel = was; if (D) render(); $("sd").showModal(); $("sd-err").textContent = err.message; }
+    return;
+  }
   $("sd-save").disabled = true;
   try {
     const url = dlg.uid ? `${PAPI}/sessions/${encodeURIComponent(dlg.uid)}` : `${PAPI}/sessions`, method = dlg.uid ? "PATCH" : "POST";
@@ -2218,10 +2263,12 @@ $("sd-del").addEventListener("click", async () => {
     b.textContent = expOpen(s) ? tt("del.confirm_expired") : pushed ? "確定刪除（下次同步時也會從 COROS 移除）" : "確定刪除？";
     return;
   }
+  $("sd").close();
   try {
-    const r = await sj("DELETE", `${PAPI}/sessions/${encodeURIComponent(s.uid)}`);
-    $("sd").close(); await load(); msg(`已刪除「${esc(s.title)}」（${md(s.day)}）${esc(coroNote(r.coros))}`, "ok");
-  } catch (err) { $("sd-err").textContent = err.message; }
+    const r = await optimistic([s.uid], (ss) => ss.filter((x) => x.uid !== s.uid),
+      () => sj("DELETE", `${PAPI}/sessions/${encodeURIComponent(s.uid)}`));
+    msg(`已刪除「${esc(s.title)}」（${md(s.day)}）${esc(coroNote(r.coros))}`, "ok");
+  } catch (err) { errMsg(tt("del.what"), err); }
 });
 $("sd-push").addEventListener("click", () => { const s = findS(dlg.uid); if (!s) return; $("sd").close(); S.sel = s.day; render(); push("day", s.day); });
 
@@ -2893,13 +2940,14 @@ $("cal").addEventListener("drop", async (e) => {
     } catch (err) { errMsg(tt("rest.mv_what"), err); }
     return;
   }
-  if (!s || s.day === day || day < D.today || boOf(day)) return;
+  if (!s || s.day === day || day < D.today || boOf(day) || pending()) return;
+  S.sel = day;
   try {
-    const r = await sj("PATCH", `${PAPI}/sessions/${encodeURIComponent(uid)}`, { day });
-    S.sel = day; await load();
+    const r = await optimistic([uid], (ss) => ss.map((x) => (x.uid === uid ? { ...x, day } : x)),
+      () => sj("PATCH", `${PAPI}/sessions/${encodeURIComponent(uid)}`, { day }));
     const [w, cls] = watchNote(r.coros);
     msg(esc(tt("mv.done", { title: s.title, day: `${md(day)}（週${wd(day)}）` }) + w), cls);
-  } catch (err) { errMsg(tt("mv.what"), err); }
+  } catch (err) { S.sel = s.day; if (D) render(); errMsg(tt("mv.what"), err); }
 });
 
 // ---------------- context menu (right-click / long-press) ----------------
@@ -3135,8 +3183,8 @@ async function delSession(s) {
     tt("del.ok"), { danger: true });
   if (!ok) return;
   try {
-    const r = await sj("DELETE", `${PAPI}/sessions/${encodeURIComponent(s.uid)}`);
-    await load();
+    const r = await optimistic([s.uid], (ss) => ss.filter((x) => x.uid !== s.uid),
+      () => sj("DELETE", `${PAPI}/sessions/${encodeURIComponent(s.uid)}`));
     if (!r.expired) { const [w, cls] = watchNote(r.coros); return msg(esc(tt("del.done", { title: s.title, day: md(s.day) }) + w), cls); }
     msg(esc(tt("del.done", { title: s.title, day: md(s.day) }) + coroNote(r.coros)), r.coros && ["auth", "failed"].includes(r.coros.status) ? "warn" : "ok");
   } catch (e) { errMsg(tt("del.what"), e); }

@@ -753,8 +753,13 @@ def plan_summary(ss: list[dict], week_start: str, today: str, ctl0: float, atl0:
             "tsb_next": ctl_end - atl_end}
 
 
-def push_dict(s: dict) -> dict:
-    """A stored session in the shape coros_workouts expects (key = uid)."""
+PREFS_UNREAD = object()       # push_dict / _basis_for: read 課表偏好 now (plan_prefs.load)
+
+
+def push_dict(s: dict, prefs=PREFS_UNREAD) -> dict:
+    """A stored session in the shape coros_workouts expects (key = uid). `prefs`: 課表偏好 read
+    once by a caller with many sessions (the 課表 calendar, SP-462: one plan_prefs.load per
+    session was ~4.5 ms each); None = could not be read; left out = read here."""
     return {"id": s["uid"], "key": s["uid"], "week_start": s["week_start"], "kind": s["kind"],
             "title": s["title"], "minutes": s["minutes"], "target": s.get("target") or "",
             "detail": s.get("detail") or "", "source": s.get("source") or "", "day": s.get("day"),
@@ -764,16 +769,22 @@ def push_dict(s: dict) -> dict:
                                      "target_basis", "steps")
                if s.get(k) is not None},
             # 目標用: the session's own choice, else 課表偏好 目標依據, else 自動 (engine/target_policy.py)
-            "basis": _basis_for(s)}
+            "basis": _basis_for(s, prefs)}
 
 
-def _basis_for(s: dict) -> str:
+def load_prefs_safe():
+    """課表偏好 (plan_prefs.load), None when it cannot be read."""
     from backend.engine import plan_prefs as PP
-    from backend.engine import target_policy as TP
     try:
-        prefs = PP.load()
+        return PP.load()
     except Exception:                       # noqa: BLE001
-        prefs = None
+        return None
+
+
+def _basis_for(s: dict, prefs=PREFS_UNREAD) -> str:
+    from backend.engine import target_policy as TP
+    if prefs is PREFS_UNREAD:
+        prefs = load_prefs_safe()
     return TP.target_policy(s, prefs)["basis"]
 
 

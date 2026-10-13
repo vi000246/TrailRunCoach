@@ -51,8 +51,9 @@ _STATUS_LAST_MAX = 64
 _status_refreshing: dict = {}     # tenant id -> the key computed in the background now
 _status_failed: dict = {}         # tenant id -> a key whose background computation failed (computed in the request next)
 STALE_REASONS = ("data", "day")
-# _status_key's layout: (tenant, dataset generation, day, then the user's own settings)
-_SK_DAY, _SK_SETTINGS = 2, 3
+# _status_key's layout: (tenant, dataset generation, day, then the user's own settings);
+# _SK_HR: the HR stamp (HRP.stamp(), 課表心率區間) among them (status_but_hr, SP-361)
+_SK_DAY, _SK_SETTINGS, _SK_HR = 2, 3, 6
 
 
 def _dataset():
@@ -301,6 +302,22 @@ def status_peek() -> Optional[Status]:
     with _lock:
         for k in reversed(list(_status_cache)):
             if k[0] == me:
+                return _status_cache[k]
+    return None
+
+
+def status_but_hr(ds, today: dt.date) -> Optional[Status]:
+    """The cached Status of this key, else one of this tenant whose key differs only by the HR
+    stamp (_SK_HR: 課表心率區間 switched); None when neither is cached — never computes. For
+    readers of the plan, its phases and goals only (api/plan_sessions._status_for, SP-361): none
+    of them depends on the HR model, the HR targets / zones of the Status do."""
+    key, _prefs = _status_key(ds, today)
+    with _lock:
+        hit = _status_cache.get(key)
+        if hit is not None:
+            return hit
+        for k in reversed(list(_status_cache)):
+            if k[:_SK_HR] == key[:_SK_HR] and k[_SK_HR + 1:] == key[_SK_HR + 1:]:
                 return _status_cache[k]
     return None
 
