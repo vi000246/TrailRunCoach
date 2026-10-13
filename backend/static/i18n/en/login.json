@@ -22,5 +22,11 @@
   "reconsent.accept": "Accept and continue",
   "draft": "These documents are still drafts; you will be asked to read and accept the final versions.",
   "agree": "I have read and accept the Terms of Service, the Privacy Policy (including the de-identified analysis across users), the Health Risk Notice and the Third-Party Services Disclaimer.",
-  "cancel": "Cancel"
+  "cancel": "Cancel",
+  "doc_meta": "Version {version} · effective {effective}",
+  "doc_open": "Open the full text in a new tab",
+  "links.terms": "Terms of Service",
+  "links.privacy": "Privacy Policy",
+  "links.health": "Health Risk Notice",
+  "links.third_party": "Third-Party Services Disclaimer"
 }

@@ -91,10 +91,13 @@ CALLBACK_LIMIT = RL.Window(limit=10, per=15 * 60)     # callbacks past the state
 
 # reachable without a session (deploy/commercial.md §4; auth-and-demo plan §7). /share/* is
 # public too but read as before (the owner's shares), outside the gate entirely.
+# The legal documents (SP-60) too, each by its exact path: /legal and /legal/<id> of terms.DOCUMENTS
+# (the privacy policy's address goes on Google's OAuth consent screen, SP-387) — nothing next to them.
 PUBLIC_PATHS = frozenset({
     "/login", "/signup", "/api/v1/session", "/healthz",
     "/api/v1/account/login", "/api/v1/account/signup", "/api/v1/account/logout",
-})
+    "/legal",
+} | {terms.URL_PREFIX + d.id for d in terms.DOCUMENTS})
 PUBLIC_PREFIXES = ("/api/v1/static/",)
 _OAUTH_CALLBACK = ("/oauth/", "/callback")
 # never a place to come back to after signing in (loops)

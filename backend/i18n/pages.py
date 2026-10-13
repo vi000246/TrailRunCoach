@@ -145,9 +145,14 @@ _CACHE: dict[tuple, tuple[list, str]] = {}
 _LOCK = threading.Lock()
 
 
-def render_page(name: str, loc: Optional[str] = None, headers: Optional[dict] = None) -> PageResponse:
-    """A page route's response: `return render_page("overview")`."""
+def render_page(name: str, loc: Optional[str] = None, headers: Optional[dict] = None,
+                fill: Optional[dict[str, str]] = None) -> PageResponse:
+    """A page route's response: `return render_page("overview")`. `fill` {key: html} replaces the
+    page's `<!--fill:key-->` markers per request (the caller escapes what goes in: the /legal
+    pages put a document there, SP-60)."""
     out = render(name, loc)
+    for k, v in (fill or {}).items():
+        out = out.replace(f"<!--fill:{k}-->", v)
     # who the page is for (mode, caps, demo sandbox): per request, so outside the cache;
     # the shell reads it synchronously (banner, hidden pages, locked buttons)
     try:

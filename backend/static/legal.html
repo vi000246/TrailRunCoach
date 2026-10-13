@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<!--fill:robots-->
+<title><!--fill:title--></title>
+<style>
+/* 法律文件 (SP-60): /legal and /legal/<id>, public, no shell (its pages need a session). The
+   document is put in on the server (account.legal_doc); this page only frames it. */
+:root {
+  color-scheme: light;
+  --bg: #f4f5f7; --panel: #fcfcfb; --text: #0b0b0b; --muted: #52514e; --line: #e3e3df;
+  --accent: #2a78d6; --soft: #e8efff; --warn-bg: #fff4e0; --warn: #8a4b00; --mark: #fff1b8;
+  --shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 16px rgba(0,0,0,.05);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #111110; --panel: #1a1a19; --text: #ffffff; --muted: #c3c2b7; --line: #2e2e2b;
+    --accent: #3987e5; --soft: #1c2a40; --warn-bg: #3a2a0c; --warn: #fbbf24; --mark: #4a3b0a;
+    --shadow: none;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #111110; --panel: #1a1a19; --text: #ffffff; --muted: #c3c2b7; --line: #2e2e2b;
+  --accent: #3987e5; --soft: #1c2a40; --warn-bg: #3a2a0c; --warn: #fbbf24; --mark: #4a3b0a;
+  --shadow: none;
+}
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100vh; background: var(--bg); color: var(--text);
+  font: 15px/1.75 system-ui, -apple-system, "Segoe UI", "Noto Sans TC", sans-serif; }
+main { max-width: 760px; margin: 0 auto; padding: 32px 16px 56px; }
+.top { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+.brand { display: flex; align-items: center; gap: 9px; font-weight: 700; letter-spacing: .02em; color: var(--text); text-decoration: none; }
+.brand i { width: 30px; height: 30px; border-radius: 8px; background: var(--accent); display: grid; place-items: center; }
+.brand svg { width: 19px; height: 19px; color: #fff; }
+nav { display: flex; gap: 14px; font-size: 14px; }
+a { color: var(--accent); }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); padding: 24px 22px; }
+h1 { margin: 0 0 4px; font-size: 24px; line-height: 1.3; }
+h2 { margin: 28px 0 8px; font-size: 18px; line-height: 1.4; }
+h3 { margin: 18px 0 6px; font-size: 16px; }
+p, li { overflow-wrap: anywhere; }
+p { margin: 0 0 12px; }
+ul, ol { margin: 0 0 12px; padding-left: 1.4em; }
+li { margin: 0 0 4px; }
+.meta { display: block; color: var(--muted); font-size: 13px; margin: 0 0 16px; }
+blockquote { margin: 0 0 16px; padding: 10px 14px; border-left: 3px solid var(--warn); background: var(--warn-bg); border-radius: 0 9px 9px 0; }
+blockquote p { margin: 0; }
+mark { background: var(--mark); color: inherit; padding: 0 2px; border-radius: 3px; }
+.draft { display: none; margin: 0 0 14px; padding: 9px 12px; border-radius: 9px; background: var(--warn-bg); color: var(--warn); font-size: 14px; }
+body[data-draft="1"] .draft { display: block; }
+.zh-only { margin: 0 0 14px; padding: 9px 12px; border-radius: 9px; background: var(--soft); font-size: 14px; }
+.doc-list { list-style: none; padding: 0; margin: 12px 0 0; display: grid; gap: 10px; }
+.doc-list li { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; background: var(--bg); }
+.doc-list a { font-weight: 600; font-size: 16px; }
+.doc-list .meta { margin: 2px 0 0; }
+footer { display: flex; justify-content: flex-end; margin-top: 14px; }
+.lang { font: inherit; font-size: 12.5px; padding: 4px 10px; border-radius: 7px; cursor: pointer;
+  border: 1px solid var(--line); background: none; color: var(--muted); }
+.lang:hover { color: var(--accent); border-color: var(--accent); }
+a:focus-visible, .lang:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+[hidden] { display: none !important; }
+</style>
+</head>
+<body data-draft="<!--fill:draft-->">
+<main>
+  <div class="top">
+    <a class="brand" href="/"><i><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/><path d="M7.5 13h2M11 13h2M14.5 13h2M7.5 16.5h2M11 16.5h2"/></svg></i><span>TrailRunCoach</span></a>
+    <nav><a href="/legal" data-i18n="legal.all">所有法律文件</a><a href="/" data-i18n="legal.home">回到 TrailRunCoach</a></nav>
+  </div>
+  <div class="draft" role="note" data-i18n="legal.draft">這些文件還是草稿，尚待律師審閱，不是正式生效的版本。</div>
+  <p class="zh-only" id="lg-zh-only" hidden data-i18n="legal.zh_only">目前只有繁體中文版本。</p>
+  <section class="card"><!--fill:main--></section>
+  <footer><button type="button" class="lang" id="lg-lang"></button></footer>
+</main>
+<script>
+(() => {
+  // the language switch (the shell's job on the other pages); the documents are Chinese for now (SP-78)
+  const L = window.I18N;
+  const lang = document.getElementById("lg-lang");
+  if (!L) { lang.hidden = true; return; }
+  const other = L.locale === "en" ? "zh-TW" : "en";
+  lang.textContent = L.t("shell.lang." + other);
+  lang.lang = other;
+  lang.addEventListener("click", () => L.setLocale(other));
+  document.getElementById("lg-zh-only").hidden = L.locale === "zh-TW";
+})();
+</script>
+</body>
+</html>

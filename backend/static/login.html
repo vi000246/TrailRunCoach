@@ -57,15 +57,27 @@ p { margin: 0 0 14px; color: var(--muted); }
 .docs { display: grid; gap: 8px; margin: 0 0 14px; }
 details { border: 1px solid var(--line); border-radius: 10px; background: var(--bg); }
 summary { cursor: pointer; padding: 10px 12px; font-weight: 600; min-height: 44px; display: flex; align-items: center; }
-.doc { padding: 0 12px 12px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13.5px; line-height: 1.65;
+.doc { padding: 0 12px 12px; overflow-wrap: anywhere; font-size: 13.5px; line-height: 1.65;
   color: var(--muted); max-height: 46vh; overflow: auto; }
+.doc h2 { margin: 14px 0 4px; font-size: 14.5px; color: var(--text); }
+.doc h3 { margin: 10px 0 4px; font-size: 13.5px; color: var(--text); }
+.doc p { margin: 0 0 8px; color: var(--muted); }
+.doc ul, .doc ol { margin: 0 0 8px; padding-left: 1.3em; }
+.doc blockquote { margin: 0 0 10px; padding: 6px 10px; border-left: 3px solid var(--warn); background: var(--warn-bg); border-radius: 0 8px 8px 0; }
+.doc blockquote p { margin: 0; color: var(--text); }
+.doc mark { background: var(--warn-bg); color: inherit; padding: 0 2px; border-radius: 3px; }
+.doc-meta { display: flex; flex-wrap: wrap; gap: 4px 12px; justify-content: space-between; margin: 0 0 8px; font-size: 12.5px; }
+.doc-meta a { color: var(--accent); }
 .check { display: flex; gap: 10px; align-items: flex-start; margin: 0 0 16px; font-size: 14px; cursor: pointer; }
 .check input { width: 20px; height: 20px; margin: 2px 0 0; flex: none; accent-color: var(--accent); }
 .actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 .actions .btn.primary { flex: 1 1 200px; }
 .err-line { margin: 12px 0 0; color: var(--err); font-size: 13.5px; }
 .err-line[hidden] { display: none; }
-footer { display: flex; justify-content: flex-end; margin-top: 14px; }
+footer { display: flex; flex-wrap: wrap; gap: 8px 14px; justify-content: space-between; align-items: center; margin-top: 14px; }
+.legal-links { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12.5px; }
+.legal-links a { color: var(--muted); }
+.legal-links a:hover { color: var(--accent); }
 .lang { font: inherit; font-size: 12.5px; padding: 4px 10px; border-radius: 7px; cursor: pointer;
   border: 1px solid var(--line); background: none; color: var(--muted); }
 .lang:hover { color: var(--accent); border-color: var(--accent); }
@@ -100,7 +112,15 @@ footer { display: flex; justify-content: flex-end; margin-top: 14px; }
     <p class="err-line" id="lg-su-err" role="alert" hidden></p>
   </section>
 
-  <footer><button type="button" class="lang" id="lg-lang"></button></footer>
+  <footer>
+    <nav class="legal-links">
+      <a href="/legal/terms" data-i18n="login.links.terms">服務條款</a>
+      <a href="/legal/privacy" data-i18n="login.links.privacy">隱私權政策</a>
+      <a href="/legal/health" data-i18n="login.links.health">健康風險聲明</a>
+      <a href="/legal/third_party" data-i18n="login.links.third_party">第三方串接免責</a>
+    </nav>
+    <button type="button" class="lang" id="lg-lang"></button>
+  </footer>
 </main>
 <script>
 (() => {
@@ -108,6 +128,54 @@ footer { display: flex; justify-content: flex-end; margin-top: 14px; }
   const $ = (id) => document.getElementById(id);
   const q = new URLSearchParams(location.search);
   const KNOWN = ["expired", "failed", "cancelled", "unverified", "disabled", "full", "rate_limited", "setup"];
+
+  // the documents' few marks (terms.to_html does the same on /legal): ## / ### headings, - and 1.
+  // lists, > notes, blank-line paragraphs, 【…】 marked. Text only (textContent), never markup.
+  const PH = /\u3010[^\u3010\u3011\n]*\u3011/g;
+  const inline = (el, text) => {
+    let at = 0;
+    for (const m of text.matchAll(PH)) {
+      if (m.index > at) el.append(text.slice(at, m.index));
+      const mk = document.createElement("mark");
+      mk.textContent = m[0];
+      el.append(mk);
+      at = m.index + m[0].length;
+    }
+    if (at < text.length) el.append(text.slice(at));
+    return el;
+  };
+  const renderDoc = (text) => {
+    const frag = document.createDocumentFragment();
+    let para = [], list = null, quote = [];
+    const lines = (el, xs) => xs.forEach((x, i) => { if (i) el.append(document.createElement("br")); inline(el, x); });
+    const flush = () => {
+      if (para.length) { const p = document.createElement("p"); lines(p, para); frag.append(p); para = []; }
+      list = null;
+      if (quote.length) {
+        const q = document.createElement("blockquote"), p = document.createElement("p");
+        lines(p, quote); q.append(p); frag.append(q); quote = [];
+      }
+    };
+    for (const raw of text.split("\n")) {
+      const line = raw.trim();
+      if (!line) { flush(); continue; }
+      const h = /^(###?) (.*)$/.exec(line);
+      if (h) { flush(); frag.append(inline(document.createElement(h[1].length === 3 ? "h3" : "h2"), h[2].trim())); continue; }
+      const li = /^- (.*)$/.exec(line), oi = /^\d+\.\s+(.*)$/.exec(line);
+      if (li || oi) {
+        const kind = li ? "UL" : "OL";
+        if (para.length || quote.length || (list && list.tagName !== kind)) flush();
+        if (!list) { list = document.createElement(kind); frag.append(list); }
+        list.append(inline(document.createElement("li"), (li || oi)[1].trim()));
+        continue;
+      }
+      if (line.startsWith(">")) { if (para.length || list) flush(); quote.push(line.slice(1).trim()); continue; }
+      if (list || quote.length) flush();
+      para.push(line);
+    }
+    flush();
+    return frag;
+  };
 
   // the language switch (the shell's job on the other pages)
   const L = window.I18N;
@@ -164,7 +232,20 @@ footer { display: flex; justify-content: flex-end; margin-top: 14px; }
       sum.textContent = d.title;
       const body = document.createElement("div");
       body.className = "doc";
-      body.textContent = d.body;
+      const meta = document.createElement("div");
+      meta.className = "doc-meta";
+      const ver = document.createElement("span");
+      ver.textContent = T("doc_meta", { version: d.version || "", effective: d.effective || "" });
+      meta.append(ver);
+      if (d.url) {
+        const open = document.createElement("a");
+        open.href = d.url;
+        open.target = "_blank";
+        open.rel = "noopener";
+        open.textContent = T("doc_open");
+        meta.append(open);
+      }
+      body.append(meta, renderDoc(d.body || ""));
       det.append(sum, body);
       docs.append(det);
     }

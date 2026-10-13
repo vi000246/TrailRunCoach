@@ -18,12 +18,18 @@ mounts this router.
                                  texts shown (and the account, for a new person), then a session.
                                  CSRF-checked like every write
   POST /api/v1/account/logout    the session row deleted, the cookie cleared
+  GET  /legal                    the legal documents (SP-60): a list; public, signed in or not
+  GET  /legal/<id>               one of them (terms.DOCUMENTS: terms, privacy, health, third_party),
+                                 rendered on the server — the privacy policy's address for Google's
+                                 OAuth consent screen (SP-387). Only these exact paths are public
+                                 (login.PUBLIC_PATHS); an unknown id signed out is the gate's 401
 
 Cookies are named by login.cookie_name (__Host- over https). /login?error= codes the page
 explains: expired, failed, cancelled, unverified, disabled, full, rate_limited, setup.
 """
 from __future__ import annotations
 
+import html
 import logging
 import secrets as _secrets
 from typing import Optional
@@ -34,7 +40,7 @@ from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
 from backend.accounts import google, login as LG, store, terms
-from backend.i18n import N_, UserError
+from backend.i18n import N_, UserError, _
 from backend.i18n.pages import render_page
 from backend.security import ratelimit as RL
 from backend.tenancy_mw import cookie
@@ -211,3 +217,48 @@ def logout(request: Request):
     resp = JSONResponse({"ok": True, "next": "/login?signed_out=1"})
     _clear(resp, LG.SESSION_COOKIE)
     return resp
+
+
+# ---------------------------------------------------------------------------- the legal documents (SP-60)
+
+_E = html.escape
+
+
+def _doc_meta(d: terms.Doc) -> str:
+    m = terms.meta(d)
+    return _E(_("版本 {version}・生效日 {effective}・最後更新 {updated}", version=m["version"],
+                effective=m["effective"], updated=m["updated"]), quote=False)
+
+
+def _legal(title: str, main: str):
+    fill = {
+        "title": _E(f"{title} · TrailRunCoach", quote=False),
+        # a draft is not for search engines; the lawyer's version is
+        "robots": '<meta name="robots" content="noindex">' if terms.DRAFT else "",
+        "draft": "1" if terms.DRAFT else "0",          # <body data-draft>: the banner (CSS, no script)
+        "main": main,
+    }
+    # private: the page inlines the session (a signed-in user's name), like every other page
+    return render_page("legal", headers={"Cache-Control": "private, no-store"}, fill=fill)
+
+
+@router.get("/legal")
+def legal_index():
+    _on()
+    items = "".join(
+        f'<li><a href="{terms.URL_PREFIX}{d.id}">{_E(_(d.title), quote=False)}</a>'
+        f'<span class="meta">{_doc_meta(d)}</span></li>' for d in terms.DOCUMENTS)
+    h = _("法律文件")
+    return _legal(h, f'<h1>{_E(h, quote=False)}</h1><ul class="doc-list">{items}</ul>')
+
+
+@router.get("/legal/{doc_id}")
+def legal_doc(doc_id: str):
+    _on()
+    d = terms.by_id(doc_id)
+    if d is None:
+        raise HTTPException(404, "not found")
+    title = _E(_(d.title), quote=False)
+    main = (f'<h1>{title}</h1><p class="meta">{_doc_meta(d)}</p>'
+            f'<article class="doc" lang="zh-Hant">{terms.to_html(terms.body(d))}</article>')
+    return _legal(_(d.title), main)
