@@ -569,3 +569,90 @@ def test_no_old_completion_words_on_the_card_pages_sp398():
         for ns in ("schedule", "overview", "common", "compliance"):
             cat = _catalog(loc, ns)
             assert not [k for k, v in cat.items() if "沒照課表" in v or "未完成" in v], ns
+
+
+# ---------------------------------------------------------------------------
+# SP-446: switching the period is slow — GET /compliance built the 課表 page's watch-push status
+# (PS.push_dict → plan_prefs.load, 33 sqlite reads per active session) for every session of the
+# plan, and the page never shows it
+# ---------------------------------------------------------------------------
+
+def test_api_compliance_skips_the_watch_push_status_sp446(monkeypatch):
+    from backend.api import plan_sessions
+    monkeypatch.setattr(plan_sessions, "_range_extras", lambda a, b: {
+        "activities": [x for x in (ACT_929,) if a <= x["date"] <= b], "phases": []})
+    monkeypatch.setattr(plan_sessions, "_run_history", lambda before: [])
+    with Env(monkeypatch) as e:
+        _two_days_on(e, monkeypatch)
+        view = {s["uid"]: s for s in e.c.get(f"{API}/sessions").json()["sessions"]}
+        calls = []
+        real = PS.push_dict
+        monkeypatch.setattr(PS, "push_dict", lambda s: calls.append(s["uid"]) or real(s))
+        b = e.c.get(f"{API}/compliance?start=2026-09-21&end=2026-10-04").json()
+        assert calls == []
+        # what the page does read from a session's view is still there: the 強度課 family (SP-79)
+        q = next(x for x in b["week"]["dots"] if x["kind"] == "quality")
+        assert q["family"] == (view[q["uid"]].get("quality_family") or {}).get("id")
+        # deleted / superseded rows stay out, as in the 課表 view
+        assert {x["uid"] for x in b["week"]["dots"]} <= set(view)
+
+
+def test_range_extras_can_skip_the_tss_rates_sp446(monkeypatch):
+    """The dataset's TSS / h (180 days of runs through the session classifier) is the plan inputs'
+    own tss_per_category (week_plan, same dataset and day): 課表統計 reads that, so its extras skip it."""
+    from types import SimpleNamespace
+    from backend.api import overview as OVA
+    from backend.api import plan_sessions as P
+    from backend.engine import overview as O
+    from backend.engine import planning
+    calls = []
+    monkeypatch.setattr(OVA, "_dataset", lambda: SimpleNamespace(today=O.date_to_day(date(2026, 10, 2))))
+    monkeypatch.setattr(P, "activity_rows", lambda ds, a, b: [])
+    monkeypatch.setattr(P, "_status_for", lambda ds, today: SimpleNamespace(plan=None, goals={}))
+    monkeypatch.setattr(planning, "phases", lambda plan, lo, hi: [])
+    monkeypatch.setattr(O, "_tss_per_hour", lambda ds, today: calls.append(today) or {"road": 61.0})
+    assert P._range_extras("2026-09-01", "2026-10-02")["tph"] == {"road": 61.0} and len(calls) == 1
+    tok = P._EXTRAS_TPH.set(False)
+    try:
+        out = P._range_extras("2026-09-01", "2026-10-02")
+    finally:
+        P._EXTRAS_TPH.reset(tok)
+    assert out.get("tph") is None and len(calls) == 1
+
+
+def test_api_compliance_prices_sessions_with_the_plan_inputs_rates_sp446(monkeypatch):
+    from backend.api import plan_sessions
+    seen = []
+
+    def extras(a, b, tph=None):
+        seen.append(plan_sessions._EXTRAS_TPH.get())
+        return {"activities": [x for x in (ACT_929,) if a <= x["date"] <= b], "phases": [],
+                **({"tph": tph} if tph else {})}
+    real, tphs = plan_sessions.plan_rates, []
+
+    def rates(inp, every, tph=plan_sessions._INPUTS_TPH):
+        tphs.append(tph)
+        return real(inp, every, tph)
+    monkeypatch.setattr(plan_sessions, "_run_history", lambda before: [])
+    with Env(monkeypatch) as e:
+        _two_days_on(e, monkeypatch)
+        monkeypatch.setattr(plan_sessions, "plan_rates", rates)
+        # a dataset TSS / h in the extras is not read: the inputs' own rates price the plan
+        monkeypatch.setattr(plan_sessions, "_range_extras", lambda a, b: extras(a, b, {"easy": 200.0, "road": 200.0}))
+        assert e.c.get(f"{API}/compliance?start=2026-09-28&end=2026-10-18").status_code == 200
+    assert seen == [False]
+    assert tphs == [plan_sessions._INPUTS_TPH]
+
+
+def test_period_switch_page_side_sp446():
+    """課表統計's period switch (static check): the 負荷比 request runs next to the stats one (not
+    after it), an answer for a period no longer picked is dropped, and 本周期 stays within the
+    server's 371 days (a longer phase: its last 371 days, not 「載入失敗」)."""
+    from pathlib import Path
+    html = (Path(C.__file__).parents[1] / "static" / "compliance.html").read_text("utf-8")
+    load = html[html.index("\nasync function load("):]
+    load = load[: load.index("\n}\n") + 2]
+    assert load.index("loadRatio(a, b)") < load.index("await fetch(")
+    assert "seq !== LOAD.seq" in load
+    rng = _fn(html, "range")
+    assert "MAX_DAYS" in rng.split('S.period === "phase"')[1].split("\n")[0]

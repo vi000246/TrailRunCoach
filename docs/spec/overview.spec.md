@@ -1649,7 +1649,11 @@ which one. The response keeps the `coros` field names.
   the streak (weeks with ≥ 80 % of the due sessions done, 推估), a compact session list (跳過 grey
   `--faint` with ○, listed after the rest; no red for a status — SP-398), a
   per-phase period filter and a zoned 負荷比 ATL ÷ CTL chart (hover 「值 · 區間（範圍）」, a dashed
-  line at 1). 每週存檔 (SP-71, `engine/plan_history.py`; `backend/static/compliance.html:649`): one
+  line at 1). A period switch (SP-446): `GET /plan/compliance` reads the stored sessions reconciled like the
+  calendar (`_reconciled`) with only the 強度課 family of the calendar's view (`_stats_view`; no watch-push status),
+  and prices the plan with the inputs' own TSS / h (`plan_rates` default; `_range_extras` skips its `tph` under
+  `_EXTRAS_TPH`); the page asks for the 負荷比 next to the stats (not after), drops an answer for a period no longer
+  picked, and 本周期 longer than 371 days shows its last 371 days. 每週存檔 (SP-71, `engine/plan_history.py`; `backend/static/compliance.html:649`): one
   row per stored week, the plan as it began and how it went; `GET /sessions` takes this week's
   snapshot / last week's result when due (`backend/api/plan_sessions.py:458`). The 基線測試 rows
   (SP-71) are in plan-auto.spec.md.
@@ -2579,3 +2583,4 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 | 2026-10-13 | bugfix | SP-443 | The multi-day 百岳's 「ME 負重爬坡」 (kind quality, no variant, no 「N×M 分」) derived to nothing and its push raised 「看不懂間歇結構」. Now `workout_steps.derive` gives 暖身 (detail, 10′) → 上坡 the title's climb at `ME_UP_MPH` (auto easy = the walk cap, target_policy unchanged) → 下坡 the rest of the session (RPE 3–4 + 下降 N m, `ME_DOWN_RPE` 推估), and `coros_workouts.session_steps` pushes that structure; structure TSS ≈ 0.88 × the card. Tests: `backend/tests/test_me_climb_structure_sp443.py` |
 | 2026-10-13 | bugfix | SP-449 | 設定 › 閾值 and the plan page show the CP the 課表 uses and its source (`effective_thresholds.cp.label`; `zones.cp_in_effect`) — they said 「WKO5 的 mFTP」 / `wko5_mftp` (null on a COROS install) while the 課表 used the Stryd PD fit; the 「沒填的話用…」 help says the PD model (zh / en) |
 | 2026-10-13 | feature | SP-450 | The 專項 chip (主要訓練項目, `backend/static/sportchip.js`) is in the 課表's top row too (`backend/static/schedule.html:578`): choosing 自動／越野跑／路跑・馬拉松 saves `athlete.primary_sport` and reloads; the plan's `PSP.stored()` stamp re-plans (路跑: no 爬升 week row). Demo: shown, disabled |
+| 2026-10-13 | bugfix | SP-446 | 課表統計's period switch was slow: `GET /plan/compliance` built the calendar's whole view through `sessions()` — per active session the watch-push status (`PS.push_dict` → `plan_prefs.load`, 33 sqlite reads each) — and recomputed the dataset's TSS / h (180 days of runs through the session classifier) that the plan inputs already hold. Now `_reconciled` + `_stats_view` (the 強度課 family only) and the inputs' rates; same payload on the demo athlete, 382 → 62 ms (4 週), 431 → 130 ms (12 週). The page fetches 負荷比 in parallel, drops a stale answer, and caps 本周期 at 371 days (a longer phase was 「載入失敗：at most 371 days」). |

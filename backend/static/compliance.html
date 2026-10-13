@@ -378,7 +378,7 @@ const planPhase = (p) => (String(p).startsWith("ph:") ? ((S.data && S.data.plan_
 function range(today, phase) {
   const ws = mondayOf(today);
   if (S.period === "12w") return [addDays(ws, -77), today];
-  if (S.period === "phase" && phase) return [phase.start, today < phase.end ? today : phase.end];
+  if (S.period === "phase" && phase) { const e = today < phase.end ? today : phase.end, lo = addDays(e, -MAX_DAYS); return [phase.start > lo ? phase.start : lo, e]; }   // ≤ the server's 371 days (SP-446)
   const pp = planPhase(S.period);
   if (pp) { const cap = addDays(pp.start, MAX_DAYS); return [pp.start, pp.end < cap ? pp.end : cap]; }
   if (S.period === "custom" && S.a && S.b && S.a <= S.b) return [S.a, S.b];
@@ -398,6 +398,8 @@ function renderPhases() {
   markPeriod();
 }
 
+// SP-446: a period switch's answer that arrives after a newer switch is dropped (LOAD.seq)
+const LOAD = { seq: 0 };
 async function load() {
   // a stored phase that is no longer in the plan falls back to 4 weeks
   if (S.data && String(S.period).startsWith("ph:") && !planPhase(S.period)) S.period = "4w";
@@ -406,9 +408,14 @@ async function load() {
   const today = S.today || isoOf(new Date());
   const [a, b] = range(today, S.data && S.data.current_phase);
   $("range").textContent = `${mdw(a)} – ${mdw(b)}`;
+  const seq = ++LOAD.seq;
+  // 負荷比 has its own request: next to the stats one, not after it (SP-446) — once the server's today is known
+  const early = !!S.today;
+  if (early) loadRatio(a, b);
   try {
     const r = await fetch(`${API}?start=${a}&end=${b}`);
     const j = await r.json();
+    if (seq !== LOAD.seq) return;
     if (!r.ok) throw new Error(typeof j.detail === "string" ? j.detail : r.statusText);
     const first = !S.data;
     S.data = j; S.today = j.today;
@@ -419,8 +426,9 @@ async function load() {
     if (first && (a2 !== a || b2 !== b)) return load();
     if (!$("c-a").value) { $("c-a").value = a; $("c-b").value = b; }
     render();
-    loadRatio(a, b);
+    if (!early) loadRatio(a, b);
   } catch (e) {
+    if (seq !== LOAD.seq) return;
     $("acc").innerHTML = `<div class="kpi"><div class="err">${esc(T("load_failed", { error: e.message }))}</div></div>`;
     $("kpis").innerHTML = "";
   }

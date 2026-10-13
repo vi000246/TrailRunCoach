@@ -60,6 +60,9 @@ _flight = SingleFlight()        # one _compute_inputs per key at a time (SP-362)
 # _LAST_MAX most recent tenants (LRU), demo tenants (one per visitor) are never kept nor served
 # stale, and the background computations share a 2-thread pool.
 _STALE_OK: contextvars.ContextVar[bool] = contextvars.ContextVar("plan_inputs_stale_ok", default=False)
+# _range_extras' `tph` (the dataset's TSS / h: 180 days of runs through the session classifier);
+# 課表統計 turns it off and prices the plan with the inputs' own, the same numbers (SP-446)
+_EXTRAS_TPH: contextvars.ContextVar[bool] = contextvars.ContextVar("range_extras_tph", default=True)
 _LAST_MAX = 64
 _last: OrderedDict = OrderedDict()   # tenant id -> (key, inputs, time.time() computed) of its newest stored-plan inputs
 _REFRESH_POOL = ThreadPoolExecutor(max_workers=2, thread_name_prefix="plan-inputs-refresh")
@@ -585,7 +588,9 @@ async def sessions(start: Optional[str] = None, end: Optional[str] = None, db: A
     return await _sessions_body(db, inp, start, end, t)
 
 
-async def _sessions_body(db: AsyncSession, inp: dict, start: Optional[str], end: Optional[str], t: float) -> dict:
+async def _reconciled(db: AsyncSession, inp: dict, t: float) -> tuple[list[dict], float]:
+    """The stored sessions after the first-visit reconcile (done / missed, a run synced since the
+    last one, 每週課表存檔): what the 課表 view and 課表統計 (SP-446) both read; (rows, a new t)."""
     if inp.get("stale"):
         # a stale view (SP-362 B4) is for display only: no reconcile, no done / missed matching,
         # no 每週課表存檔 — those wait for the fresh inputs (the page reloads when they are ready)
@@ -603,7 +608,11 @@ async def _sessions_body(db: AsyncSession, inp: dict, start: Optional[str], end:
             # 每週課表存檔 (engine/plan_history.py, SP-71): this week's snapshot / last week's result, when due
             from backend.engine import plan_history as PH
             await PH.record_safe(db, inp, every)
-    t = _took("reconcile", t)
+    return every, _took("reconcile", t)
+
+
+async def _sessions_body(db: AsyncSession, inp: dict, start: Optional[str], end: Optional[str], t: float) -> dict:
+    every, t = await _reconciled(db, inp, t)
     ss = [s for s in every if not (start or end) or (s.get("day") and (not start or s["day"] >= start)
                                                      and (not end or s["day"] <= end))]
     today = _today(inp)
@@ -2733,7 +2742,7 @@ def _range_extras(start: str, end: str) -> dict:
                          key=lambda p: p["start"])
     goal_d = ((st.goals.get("targets") or {}).get("climb_per_km") or {}).get("value")
     return {"activities": acts, "phases": phases, "plan_phases": plan_phases,
-            "tph": O._tss_per_hour(ds, today), "goal_climb_per_km": goal_d}
+            "tph": O._tss_per_hour(ds, today) if _EXTRAS_TPH.get() else None, "goal_climb_per_km": goal_d}
 
 
 def _run_history(before: str) -> list[dict]:
@@ -3104,6 +3113,14 @@ def schedule_page():
 MAX_COMPLIANCE_DAYS = 371
 
 
+def _stats_view(s: dict, inp: dict) -> dict:
+    """A stored session as 課表統計 reads it: the row and its 強度課 family (SP-79, as _view)."""
+    if s.get("kind") != "quality":
+        return s
+    th = inp["thresholds"]
+    return {**s, "quality_family": WTPL.session_family(s, th, derived=WTPL.steps_family(s, th))}
+
+
 @router.get("/compliance")
 async def compliance(start: str, end: str, db: AsyncSession = Depends(get_db)):
     from backend.engine import compliance as C
@@ -3115,10 +3132,13 @@ async def compliance(start: str, end: str, db: AsyncSession = Depends(get_db)):
         raise HTTPException(400, "end before start")
     if (b - a).days > MAX_COMPLIANCE_DAYS:
         raise HTTPException(400, f"at most {MAX_COMPLIANCE_DAYS} days")
-    body = await sessions(start=None, end=None, db=db)      # reconciles (done / missed) like the calendar
-    every = body["sessions"]
-    today = body["today"]
-    inp = await _inputs()
+    # SP-446: the stored sessions, reconciled like the calendar (done / missed), with only what this
+    # page reads of the calendar's view — not sessions(): its per-session watch-push status
+    # (PS.push_dict → 課表偏好 read from the DB each time) was ~90 % of every period switch
+    inp = await _inputs(db)
+    rows, _ = await _reconciled(db, inp, time.perf_counter())
+    every = [_stats_view(s, inp) for s in rows if s["state"] not in ("deleted", "superseded")]
+    today = _today(inp)
     ph = inp.get("phase")
     # 本週 (SP-400) is always this week, whatever the period: the range takes it in too
     td = dt.date.fromisoformat(today)
@@ -3126,8 +3146,14 @@ async def compliance(start: str, end: str, db: AsyncSession = Depends(get_db)):
     lo = min(a.isoformat(), ph["start"], mon.isoformat()) if ph else min(a.isoformat(), mon.isoformat())
     hi = max(b.isoformat(), ph["end"], sun.isoformat()) if ph else max(b.isoformat(), sun.isoformat())
     # activities: the range and the phase so far (the phase may reach into the future)
-    extras = await run_in_threadpool(_range_extras, lo, min(hi, max(today, b.isoformat())))
-    rates = plan_rates(inp, every, extras.get("tph"))
+    # the plan is priced with the inputs' own TSS / h (plan_rates' default: week_plan's _tss_per_hour of
+    # the same dataset and day), so the extras skip computing it again (SP-446)
+    tok = _EXTRAS_TPH.set(False)
+    try:
+        extras = await run_in_threadpool(_range_extras, lo, min(hi, max(today, b.isoformat())))
+    finally:
+        _EXTRAS_TPH.reset(tok)
+    rates = plan_rates(inp, every)
     allss = _decorate(every, extras["activities"], rates, lo, hi)
     start, end = a.isoformat(), b.isoformat()
     ss = [s for s in allss if start <= s["day"] <= end]
