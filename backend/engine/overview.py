@@ -2198,14 +2198,15 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     s_stops = strength_stops(getattr(getattr(status, "plan", None), "events", None) or (), monday, phs)
     sessions = drop_strength_before_a(sessions, s_stops, monday, notes)
     # 減量期規則 (SP-96): quality by days to the race, the last long run, no hard downhill / climbing
-    sessions = taper_rules(sessions, t_ctx, monday, notes, road, today)
+    sessions = taper_rules(sessions, t_ctx, monday, notes, road, today, easy_target=tgt.get("z2", ""))
     # 賽後的日子 (SP-98): no run the first 2 days, ≤ 40 min the first week, flat after a big downhill
-    sessions = PR_.apply(sessions, PR_.a_windows(phs, plan_events, monday), monday, notes, today, bmap)
+    sessions = PR_.apply(sessions, PR_.a_windows(phs, plan_events, monday), monday, notes, today, bmap,
+                         easy_target=tgt.get("z2", ""))
     # B / C races (SP-95): the mini-taper days, the race as the week's key session, the B recovery,
     # a C race in place of a quality session or the long run; the hints
     sessions = PR_.bc_apply(sessions, plan_events, monday, notes, today, bmap, rate=tph.get("trail") or 60.0,
                             done_days={wdate(w).isoformat() for w in week_ws if category(w) in ENDURANCE},
-                            factory=Session)
+                            factory=Session, easy_target=tgt.get("z2", ""))
     b_ctl = None
     if any(getattr(e, "priority", None) == "B" and monday - dt.timedelta(weeks=PR_.B_CTL_WEEKS) <= e.start < monday
            for e in plan_events):
@@ -2953,12 +2954,13 @@ def carb_load_note(tc: Optional[dict], ev, weight: Optional[float], monday: dt.d
 
 
 def taper_rules(ss: list, tc: Optional[dict], monday: dt.date, notes: Optional[list] = None,
-                road: bool = False, today: Optional[dt.date] = None) -> list:
+                road: bool = False, today: Optional[dt.date] = None, easy_target: str = "") -> list:
     """`ss` (Session objects or dicts, placed) with the 減量期 rules applied to the not-done sessions on
     a day of `tc`'s taper (taper_context): the quality sessions by days to the race (full ≥ 10, the
     same kind shorter, the half-volume short one 3–5 days out — moved onto an easy day there when it
     landed later, else an easy run), the long run ≤ 90 min and ≥ 7 (14 when sore) days out, the
-    長爬坡反覆 a flat easy run. Notes say what changed."""
+    長爬坡反覆 a flat easy run. Notes say what changed. `easy_target`: the week's easy-run target
+    text, for a session made an easy run (SP-408: never the long run's / quality's own)."""
     if not tc or not ss:
         return ss
     is_d = isinstance(ss[0], dict)
@@ -2991,7 +2993,7 @@ def taper_rules(ss: list, tc: Optional[dict], monday: dt.date, notes: Optional[l
         put(s, id=f"easy{n_easy + 1}" if g(s, "kind") != "easy" else g(s, "id"), kind="easy", title=_("輕鬆跑"),
             minutes=nm, tss=round(float(g(s, "tss") or 0.0) * (nm / m if m else 1.0) * 0.8, 1),
             detail=why, terrain="road" if tc.get("sore") or terr == "road" else g(s, "terrain"),
-            **{k: None for k in _VARIANT_KEYS})
+            target=easy_target or "", source="", **{k: None for k in _VARIANT_KEYS})
 
     def as_q(s, tmpl: dict):
         put(s, **{**{k: None for k in _VARIANT_KEYS}, "source": SRC_TAPER_WEEK, "terrain": None, **tmpl})

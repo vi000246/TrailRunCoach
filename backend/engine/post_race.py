@@ -84,10 +84,11 @@ def a_windows(phases, events, monday: dt.date) -> list[dict]:
 
 
 def apply(ss: list, wins: list, monday: dt.date, notes: Optional[list] = None, today: Optional[dt.date] = None,
-          blocked=()) -> list:
+          blocked=(), easy_target: str = "") -> list:
     """`ss` (Session objects or dicts, placed) with the rules of `wins` (a_windows) applied to the
     not-done sessions: moved off / dropped from the no-run days, capped easy runs in the first week,
-    the flat days after a big downhill. Returns the kept sessions; notes say what changed."""
+    the flat days after a big downhill. Returns the kept sessions; notes say what changed.
+    `easy_target`: the week's easy-run target text, for a session made an easy run (SP-408)."""
     if not wins or not ss:
         return ss
     from backend.engine import planning as P
@@ -142,7 +143,7 @@ def apply(ss: list, wins: list, monday: dt.date, notes: Optional[list] = None, t
                 detail += _("，平路、不跑下坡")
             if _get(s, "kind") != "easy":
                 n_easy += 1
-                put(s, id=f"easy{n_easy}", kind="easy", title=_("輕鬆跑"), **{k: None for k in _CLEAR})
+                put(s, id=f"easy{n_easy}", kind="easy", title=_("輕鬆跑"), **_easy_fields(easy_target))
             put(s, minutes=nm, tss=round(float(_get(s, "tss") or 0.0) * (nm / m if m else 1.0), 1), detail=detail)
             if flat:
                 put(s, terrain="road", climb_m=None)
@@ -234,12 +235,20 @@ def b_windows(events, monday: dt.date) -> list[dict]:
     return out
 
 
-def _as_easy(ss, s, cap: float, why: str, put) -> None:
+def _easy_fields(easy_target: str) -> dict:
+    """What a session made an easy run sets besides id / kind / title: the variant and structure keys
+    cleared, and the easy run's target — never the old session's (SP-408: a quality session kept
+    「功率 255–263 W（98–101% CP）」 and its fartlek source while its structure and the watch had the easy
+    band). "" when the caller has no easy text (the card then shows none, as the injury passes do)."""
+    return {**{k: None for k in _CLEAR}, "target": easy_target or "", "source": ""}
+
+
+def _as_easy(ss, s, cap: float, why: str, put, easy_target: str = "") -> None:
     m = int(_get(s, "minutes") or 0)
     nm = int(min(m, cap) // 5 * 5) or m
     if _get(s, "kind") != "easy":
         n_easy = sum(1 for x in ss if _get(x, "kind") == "easy")
-        put(s, id=f"easy{n_easy + 1}", kind="easy", title=_("輕鬆跑"), **{k: None for k in _CLEAR})
+        put(s, id=f"easy{n_easy + 1}", kind="easy", title=_("輕鬆跑"), **_easy_fields(easy_target))
     put(s, minutes=nm, tss=round(float(_get(s, "tss") or 0.0) * (nm / m if m else 1.0) * 0.8, 1), detail=why)
 
 
@@ -256,10 +265,11 @@ def _race_session(e, is_d: bool, rate: float, done: bool, factory=None):
 
 
 def bc_apply(ss: list, events, monday: dt.date, notes: Optional[list] = None, today: Optional[dt.date] = None,
-             blocked=(), rate: float = RACE_TSS_PER_H, done_days=(), factory=None) -> list:
+             blocked=(), rate: float = RACE_TSS_PER_H, done_days=(), factory=None, easy_target: str = "") -> list:
     """`ss` (Session objects or dicts, placed) with the B / C race rules of the week of `monday`
     (b_week / the mini-taper days / b_windows / the C race swap). `factory` makes a Session from a
-    dict (week_plan); `done_days`: ISO days with an activity (the race then counts as done)."""
+    dict (week_plan); `done_days`: ISO days with an activity (the race then counts as done);
+    `easy_target`: the week's easy-run target text, for a session made an easy run (SP-408)."""
     from backend.engine import planning as P
     if not events:
         return ss
@@ -287,15 +297,15 @@ def bc_apply(ss: list, events, monday: dt.date, notes: Optional[list] = None, to
             out = (e.start - d).days
             k = _get(s, "kind")
             if monday <= e.start <= sunday and (k == "long" or _get(s, "id") in ("long", "long2")) and out != 0:
-                _as_easy(keep, s, B_EASY_MAX, _("B 賽事「{race}」那週不排長跑：輕鬆跑", race=e.name), put)
+                _as_easy(keep, s, B_EASY_MAX, _("B 賽事「{race}」那週不排長跑：輕鬆跑", race=e.name), put, easy_target)
                 said.append(_("不排長跑"))
             elif 1 <= out <= B_TEMPO_LONG_DAYS and (k in ("quality", "test", "long")):
                 _as_easy(keep, s, B_EASY_MAX, _("B 賽事「{race}」前 {n} 天內不排節奏跑、長跑：輕鬆跑",
-                                                race=e.name, n=B_TEMPO_LONG_DAYS), put)
+                                                race=e.name, n=B_TEMPO_LONG_DAYS), put, easy_target)
                 said.append(_("賽前 {n} 天內不排節奏跑、長跑", n=B_TEMPO_LONG_DAYS))
             elif out == B_INTERVAL_DAYS and k in ("quality", "test") and not _tempo(s):
                 _as_easy(keep, s, B_EASY_MAX, _("B 賽事「{race}」前 {n} 天內不排間歇：輕鬆跑",
-                                                race=e.name, n=B_INTERVAL_DAYS), put)
+                                                race=e.name, n=B_INTERVAL_DAYS), put, easy_target)
                 said.append(_("賽前 {n} 天內不排間歇", n=B_INTERVAL_DAYS))
         if monday <= e.start <= sunday:
             race_days = {(e.start + dt.timedelta(days=i)).isoformat() for i in range((e.end - e.start).days + 1)}
@@ -314,12 +324,12 @@ def bc_apply(ss: list, events, monday: dt.date, notes: Optional[list] = None, to
         for s in [x for x in keep if not _get(x, "done") and _get(x, "day")]:
             d = _d(_get(s, "day"))
             if w["end"] < d <= w["easy"] and _get(s, "kind") in ("long", "quality", "test"):
-                _as_easy(keep, s, B_EASY_MAX, _("B 賽事「{race}」後 {n} 天只排輕鬆跑", race=w["race"], n=w["days"]), put)
+                _as_easy(keep, s, B_EASY_MAX, _("B 賽事「{race}」後 {n} 天只排輕鬆跑", race=w["race"], n=w["days"]), put, easy_target)
                 said = True
             elif w["end"] < d <= w["easy"] and _get(s, "kind") == "easy":
                 said = True
         if w["short"] > w["end"] or w["flat"] is not None:
-            keep = apply(keep, [w], monday, notes, today, blocked)
+            keep = apply(keep, [w], monday, notes, today, blocked, easy_target)
         if said and notes is not None:
             notes.append({"level": "info", "src": "race",
                           "text": _("B 賽事「{race}」{date} 後 {n} 天只排輕鬆跑（依賽事大小：短 3 天、中 5 天、"
