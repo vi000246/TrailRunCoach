@@ -297,6 +297,18 @@ def _easy_runs(wp):
     return [s for s in wp["sessions"] if s["kind"] == "easy" and s["minutes"]]
 
 
+def _priced_at(s: dict, wp: dict, rate: float) -> bool:
+    """SP-437 (Q1 A): an easy run's easy steps at `rate` (the whole run when it is all easy: minutes ×
+    rate); its strides, an intensity, at IF² × 100 per hour on top."""
+    from backend.engine import session_structure as SST
+    from backend.engine import workout_steps as WS
+    th = wp["thresholds"]
+    tot = WS.totals(SST.structure_of(s, th), WS.session_ctx(s, th))
+    if not WS.strides_of(s["title"]):
+        return tot["easy_s"] == tot["sec"] and s["tss"] == pytest.approx(s["minutes"] / 60 * rate)
+    return tot["tss_hard"] > 0 and s["tss"] == pytest.approx(tot["tss_hard"] + tot["easy_s"] / 3600 * rate, abs=0.05)
+
+
 def test_cold_start_without_any_threshold_prices_easy_runs_at_the_estimated_default(cold_week):
     from backend.engine import overview as O
     wp = cold_week()
@@ -306,7 +318,8 @@ def test_cold_start_without_any_threshold_prices_easy_runs_at_the_estimated_defa
     assert info["n"] == 0 and info["estimated"] and info["source"] == O.SRC_EASY_TSS_EST
     assert tph["easy"] == pytest.approx(64.0)
     runs = _easy_runs(wp)
-    assert len(runs) == 3 and all(s["tss"] == pytest.approx(s["minutes"] / 60 * tph["easy"]) for s in runs)
+    assert len(runs) == 3 and all(_priced_at(s, wp, tph["easy"]) for s in runs)
+    assert sum(1 for s in runs if s["tss"] == pytest.approx(s["minutes"] / 60 * tph["easy"])) >= 2
     srcs = [n.get("src") for n in wp["notes"]]
     assert "easy_tss" in srcs and "cold_start" in srcs
 
@@ -319,7 +332,7 @@ def test_cold_start_with_the_lthr_prior_prices_easy_runs_at_the_estimate_too(col
     info, tph = wp["easy_tss"], wp["tss_per_category"]
     assert info["estimated"] and info["source"] == O.SRC_EASY_TSS_EST
     assert tph["easy"] == pytest.approx(64.0)                  # IF 0.80, not the prior cap ÷ LTHR
-    assert all(s["tss"] == pytest.approx(s["minutes"] / 60 * tph["easy"]) for s in _easy_runs(wp))
+    assert _easy_runs(wp) and all(_priced_at(s, wp, tph["easy"]) for s in _easy_runs(wp))
     # the long-run / category rates stay the defaults (no history)
     assert tph["road"] == O.TSS_PER_HOUR_DEFAULT["road"]
 
