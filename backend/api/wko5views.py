@@ -1446,7 +1446,9 @@ def activities_list():
     """Every activity of the current data source (newest first) with the
     stored user values (activity_tags: type / effort marks, name, tags,
     note, exclusion), the terrain and the power source. Excluded bad files
-    are included (index null). The auto values: GET /activities/auto."""
+    are included (index null), so are the archived activities (SP-317: index
+    null, `archived` true, values from their frozen summary). The auto values:
+    GET /activities/auto."""
     from backend.engine import activity_tags as AT
     from backend.engine.panels import pole_compare as PC
     from backend.engine.racepower import athlete as A
@@ -1521,6 +1523,25 @@ def activities_list():
                     "rain_mm": rain_mm(start, x["file"]), "rain_kind_auto": kind_auto,
                     "rain_kind": AT.rain_kind_excluded(x["sport_type"], u, terr["value"] == "trail"),
                     **user_part(u)})
+    # archived activities (SP-317): their FIT went in the monthly archive; listed from their frozen
+    # summary (wko5expr/coldstore.py), marked 已封存，原始檔已移除 — no index (no samples to open),
+    # the user's own marks still editable by key, the terrain fixed (nothing recomputes them)
+    from backend.i18n import _
+    cold = getattr(ds, "cold", None)
+    for w in (getattr(cold, "archived", None) or []):
+        u = AT.find(tags, w.entry.start, w.entry.file)
+        m = w.metrics
+        trail = bool(A.is_trail(w))
+        out.append({"index": None, "key": AT.key_of(w.entry.start), "start": w.entry.start.isoformat(),
+                    "file": w.entry.file, "sport": w.sport, "sport_type": w.sport_type,
+                    "title_original": A.label(w), "label": A.label(w),
+                    "duration": m.get("duration"), "distance": m.get("distance"), "climbing": m.get("climbing"),
+                    "tss": m.get("tss"), "trail": trail,
+                    "terrain": {"value": "trail" if trail else "road", "editable": False, "overridden": False,
+                                "workout_file_id": None, "why": _("已封存，原始檔已移除")},
+                    "power_label": None, "origin": _origin(ds, file=w.entry.file), "excluded": None,
+                    "archived": True, "rpe": None, "feel": None, "self_rating": None, "pole_chart": False,
+                    "rain_mm": None, "rain_kind": False, **user_part(u)})
     out.sort(key=lambda a: a["start"], reverse=True)
     return {"source": getattr(ds, "source", None) or "wko5", "origin_labels": ORIGIN_LABELS,
             "types": AT.TYPES, "efforts": AT.EFFORTS, "pole_tags": AT.POLES, "pole_none_tag": AT.POLE_NONE_TAG,

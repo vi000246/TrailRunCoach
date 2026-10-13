@@ -21,6 +21,7 @@ from backend.api import plan_sessions as plan_sessions_api
 from backend.api import plan_auto as plan_auto_api
 from backend.api import routes as routes_api
 from backend.api import injuries as injuries_api
+from backend.api import archive as archive_api
 from backend.api import backup as backup_api
 from backend.api import calib as calib_api
 from backend.api import region as region_api
@@ -175,6 +176,7 @@ def build_app(demo: bool | None = None) -> FastAPI:
 
     owner_only = {id(r) for r in (sync.router, auth.router,
                                   plan_auto_api.router, injuries_api.router, backup_api.router, calib_api.router,
+                                  archive_api.router,
                                   calendar_api.router, calendar_api.feed_router,
                                   debug_api.router, debug_api.admin_router)}
     routers = [
@@ -188,6 +190,7 @@ def build_app(demo: bool | None = None) -> FastAPI:
         routes_api.router, routes_api.workout_router,
         injuries_api.router,             # 傷病紀錄 (hidden in the demo)
         backup_api.router,               # 備份 (settings page)
+        archive_api.router,              # 運動紀錄保留期限、下載全部 FIT (settings page, SP-317)
         calib_api.router,                # 每人校正 (settings page, 進階設定)
         region_api.router,               # 地區 tw | intl (static/region.js)
         calendar_api.router,             # 課表訂閱 address (settings page; owner only)

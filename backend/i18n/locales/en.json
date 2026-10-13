@@ -807,6 +807,7 @@
   "工休比不在 3:1–6:1": "Work:rest ratio not within 3:1–6:1",
   "差一點": "Almost",
   "差距 {gap}% → 繼續打底，之後重測 AeT": "Gap {gap}% → keep building the base, then retest AeT",
+  "已封存，原始檔已移除": "Archived — original file removed",
   "已經有這個分類": "That category already exists",
   "已經超過 {hi} 週了。": "It's been more than {hi} weeks.",
   "已經連續 {n} 週沒有恢復週（Koop：一段加量最多 6 週）：這週是恢復週（前 3 週平均的 65%）": "{n} weeks in a row without a recovery week (Koop: at most 6 weeks of loading): this is a recovery week (65% of the last 3 weeks' average)",

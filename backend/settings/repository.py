@@ -93,6 +93,9 @@ DEFAULTS: dict[str, Any] = {
     # daily automatic sync: "HH:MM" local time, None = off
     "sync.schedule.daily_time": None,
     "sync.schedule.last_run": None,          # local ISO date of the last scheduled run
+    # 運動紀錄保留期限 (SP-317, engine/fit_archive.py): FIT originals older than this many years go
+    # in the monthly archive (their summaries stay); one of fit_archive.CHOICES
+    "archive.retention_years": 3,
     # sync when a page is opened and the last sync is older than N hours
     "sync.auto_on_open.enabled": True,
     "sync.auto_on_open.hours": 6,
@@ -384,6 +387,9 @@ def validate(key: str, value: Any) -> None:
         import re
         if not (isinstance(value, str) and re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", value)):
             raise ValueError("daily sync time must be HH:MM (24 h) or null")
+    if key == "archive.retention_years":
+        from backend.engine import fit_archive
+        fit_archive.validate_years(value)
     if key == "sync.auto_on_open.hours" and not (isinstance(value, (int, float)) and 0 < value <= 168):
         raise ValueError("auto-sync threshold must be 1-168 hours")
     if key == "charts.data_source" and value not in ("source", "wko5"):

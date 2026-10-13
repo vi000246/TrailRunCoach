@@ -335,5 +335,20 @@
   "debug.col_count": "Count",
   "debug.pin_stats": "Wrong PINs: {n} (now {streak} in a row, locked {locks} times)",
   "debug.dropped": "Refused, not logged: too frequent {rate}, IP paused {blocked}, busy {busy}",
-  "debug.failures_empty": "No failed authentications in the last 72 hours."
+  "debug.failures_empty": "No failed authentications in the last 72 hours.",
+  "arch.title": "Activity retention",
+  "arch.help": "Activities older than the retention lose their FIT original and per-second cache in an automatic cleanup on the 1st of each month, between 3 and 5 a.m., without notice. Each activity's metrics, the PMC / CTL, best efforts, achievements and Taiwan's 100 Peaks (Baiyue) summits stay in its summary, so the long-term charts do not change; the activity list still shows it, marked “Archived — original file removed”, but its single-activity charts can no longer be opened. Activities the current thresholds or plan tests use are kept for now. Download your files first if you want to keep the originals.",
+  "arch.intro": "FIT originals past the retention are removed every month; summaries, the PMC, best efforts and achievements stay.",
+  "arch.keep": "Keep the last",
+  "arch.years": "{n} years",
+  "arch.years_default": "{n} years (default)",
+  "arch.saved": "Saved",
+  "arch.failed": "Failed: {msg}",
+  "arch.never": "No cleanup yet; next cleanup: {next}",
+  "arch.skipped": "The last cleanup ({date}) was postponed: the first import is still being filled in, it will try again; next cleanup: {next}",
+  "arch.last_none": "Last cleanup: {date}, nothing past the retention; next cleanup: {next}",
+  "arch.last": "Last cleanup: {date}, {n} removed ({from} to {to}), {mb} MB freed; next cleanup: {next}",
+  "arch.kept": " ({n} used by a threshold or plan test, kept for now)",
+  "arch.download": "Download all my FIT files",
+  "arch.download_help": "Packs every FIT original you synced or imported into one zip. Available any time, independent of the cleanup. With many files it takes a moment to start."
 }

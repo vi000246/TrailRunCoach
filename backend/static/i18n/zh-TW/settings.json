@@ -335,5 +335,20 @@
   "debug.col_count": "次數",
   "debug.pin_stats": "PIN 輸錯 {n} 次（目前連續 {streak} 次，鎖過 {locks} 次）",
   "debug.dropped": "被擋下、沒記錄的請求：太頻繁 {rate}、IP 暫停 {blocked}、忙碌 {busy}",
-  "debug.failures_empty": "近 72 小時沒有認證失敗。"
+  "debug.failures_empty": "近 72 小時沒有認證失敗。",
+  "arch.title": "運動紀錄保留",
+  "arch.help": "超過保留期限的活動，每月 1 號凌晨 3～5 點自動移除 FIT 原始檔和逐秒快取，不會事先通知。每筆活動的指標、PMC／CTL、最佳成績、成就與百岳登頂都留在摘要裡，長期圖表不會變；活動列表照樣列出，標「已封存，原始檔已移除」，只是不能再打開單次活動圖表。被目前門檻或課表測試用到的活動會先保留。想留原始檔，請先下載。",
+  "arch.intro": "超過期限的 FIT 原始檔每月自動移除；摘要、PMC、最佳成績和成就都會留下。",
+  "arch.keep": "保留最近",
+  "arch.years": "{n} 年",
+  "arch.years_default": "{n} 年（預設）",
+  "arch.saved": "已儲存",
+  "arch.failed": "失敗：{msg}",
+  "arch.never": "還沒有清理過；下次清理：{next}",
+  "arch.skipped": "最近一次清理（{date}）延後了：第一次匯入的資料還在補算，會再試；下次清理：{next}",
+  "arch.last_none": "最近一次清理：{date}，沒有超過期限的活動；下次清理：{next}",
+  "arch.last": "最近一次清理：{date} 移除 {n} 筆（{from}～{to}），釋放 {mb} MB；下次清理：{next}",
+  "arch.kept": "（{n} 筆被門檻或課表測試用到，先保留）",
+  "arch.download": "下載我的全部 FIT",
+  "arch.download_help": "把你所有同步、匯入的 FIT 原始檔打包成一個 zip 下載，隨時都能用，跟清理無關。檔案多的話要等一下才會開始。"
 }
