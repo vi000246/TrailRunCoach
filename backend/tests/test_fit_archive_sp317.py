@@ -342,6 +342,19 @@ def test_settings_api_retention_and_last_cleanup(tmp_path, monkeypatch):
     assert (last["deleted"], last["first"], last["last"]) == (171, "2020-03-01", "2023-10-30")
 
 
+def test_the_last_cleanup_date_is_the_athletes_day(tmp_path, monkeypatch):
+    """A run on the 1st at 03:00 Taipei is stored in UTC (the 31st, 19:00): the page shows the
+    athlete's day — the 1st —, not the UTC date's prefix."""
+    api = Api(monkeypatch, tmp_path)
+    with tenancy.use(tenancy.owner()):
+        FA._record({"at": "2026-10-31T19:00:41+00:00", "status": "ok", "deleted": 171, "bytes": 1,
+                    "npz_bytes": 0, "first": "2020-03-01", "last": "2023-10-30"}, "2026-11")
+    last = api.c.get("/api/v1/archive/status").json()["last"]
+    assert last["at"].startswith("2026-10-31") and last["date_local"] == "2026-11-01"
+    page = (Path(__file__).parents[1] / "static" / "settings.html").read_text("utf-8")
+    assert "arDate(L.at)" not in page and "L.date_local" in page
+
+
 def test_download_all_fit_streams_only_this_tenants_files(tmp_path, monkeypatch, tmp_path_factory):
     from backend.files import fitstore
     api = Api(monkeypatch, tmp_path)

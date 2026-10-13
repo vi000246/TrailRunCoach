@@ -50,7 +50,20 @@ async def _status(repo: SettingsRepository) -> dict:
     except Exception:                              # noqa: BLE001 — the page shows no date then
         pass
     return {"retention_years": years, "choices": list(FA.CHOICES), "default": FA.DEFAULT_YEARS,
-            "min_years": FA.MIN_YEARS, "last": FA.last_run(), "next_run": nxt}
+            "min_years": FA.MIN_YEARS, "last": _with_local_date(FA.last_run()), "next_run": nxt}
+
+
+def _with_local_date(last):
+    """The run's day in the athlete's zone (`date_local`): `at` is UTC, so a run on the 1st at
+    03:00 Taipei is the 31st's evening there — the page shows this field, never `at`'s prefix."""
+    if not last:
+        return last
+    out = dict(last)
+    try:
+        out["date_local"] = dt.datetime.fromisoformat(str(last["at"])).astimezone(FA._tz()).date().isoformat()
+    except (KeyError, TypeError, ValueError):
+        out["date_local"] = None
+    return out
 
 
 @router.get("/status")
