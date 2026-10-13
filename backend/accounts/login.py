@@ -97,6 +97,9 @@ PUBLIC_PATHS = frozenset({
     "/login", "/signup", "/api/v1/session", "/healthz",
     "/api/v1/account/login", "/api/v1/account/signup", "/api/v1/account/logout",
     "/legal",
+    # the installable app (SP-314, api/pwa.py): no one's data in either; the browser fetches the
+    # manifest without cookies, and the worker before anyone signs in
+    "/sw.js", "/manifest.webmanifest",
 } | {terms.URL_PREFIX + d.id for d in terms.DOCUMENTS})
 PUBLIC_PREFIXES = ("/api/v1/static/",)
 _OAUTH_CALLBACK = ("/oauth/", "/callback")

@@ -1,0 +1,10 @@
+{
+  "title": "Offline",
+  "heading": "This page isn't saved for offline use",
+  "text": "There is no connection, and this page isn't kept on this device. Offline you can open these pages (the saved data, read-only):",
+  "home": "Overview: today's session, this week's plan and your training status",
+  "schedule": "Schedule: today's and the next weeks' sessions",
+  "activity": "Activities: each activity's summary (when saved)",
+  "retry": "Try again",
+  "note": "Once you're connected, this device updates the saved data by itself."
+}

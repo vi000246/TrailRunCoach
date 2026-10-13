@@ -28,6 +28,7 @@ from backend.api import calendar_feed as calendar_api
 from backend.api import altitude_nights as altitude_nights_api
 from backend.api import debug as debug_api
 from backend.api import account as account_api
+from backend.api import pwa as pwa_api
 
 
 # pages the demo never serves: the WKO5 comparison, the settings, the injury log and the sign-in page
@@ -197,11 +198,14 @@ def build_app(demo: bool | None = None) -> FastAPI:
         debug_api.router, debug_api.admin_router,
         # Google sign-in, the terms, sign-out (SP-58): 404 unless sign-in is on (accounts/login.py)
         account_api.router,
+        # /sw.js and /manifest.webmanifest: the offline copy and 加到主畫面 (SP-314); not in the demo
+        pwa_api.router,
     ]
     for r in routers:
         # the demo never mounts sync / connect / auto-plan / backup / injuries (§3.1 item 4),
         # nor the public share pages or the 課表訂閱 feed (it creates no shares), nor sign-in
-        if demo and (id(r) in owner_only or r is racepower_api.share_router or r is account_api.router):
+        if demo and (id(r) in owner_only or r is racepower_api.share_router or r is account_api.router
+                     or r is pwa_api.router):
             continue
         app.include_router(r)
     # the tenant of each request (and the demo's rules): outermost, so every route sees it

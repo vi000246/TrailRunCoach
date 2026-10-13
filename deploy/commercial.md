@@ -55,6 +55,7 @@
 | `/api/v1/static/*` | 靜態檔 |
 | `/healthz` | 監控 |
 | `/legal`、`/legal/terms`、`/legal/privacy`、`/legal/health`、`/legal/third_party` | 四份法律文件（SP-60）；Google OAuth 同意畫面要填隱私權政策網址。只開這幾個完整路徑，旁邊的路徑（`/legal/x`、`/legal/privacy/…`）照樣要登入 |
+| `/sw.js`、`/manifest.webmanifest` | 離線快取的 service worker 與加到主畫面的 manifest（SP-314；不含任何人的資料，完全比對） |
 
 其他路徑都要登入。測試要等 SP-58。
 

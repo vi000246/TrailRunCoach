@@ -1045,7 +1045,8 @@ async function load() {
 
 // ---------------- rendering ----------------
 const findS = (uid) => D.sessions.find((s) => s.uid === uid);
-const editable = (s) => !isStale() && s.state === "active" && s.day >= D.today;
+// SP-314: offline (shell.js AppOffline) the sessions open read-only, nothing drags
+const editable = (s) => !isStale() && !(window.AppOffline && AppOffline.active) && s.state === "active" && s.day >= D.today;
 // SP-82: a future planned day with no active session is a rest day you can drag onto another day
 // (that day's sessions move here: POST /rest-days/move)
 function restMv(d, ss) {
