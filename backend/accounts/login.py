@@ -71,9 +71,11 @@ ENV_MAX_USERS = "WKO5COACH_MAX_USERS"
 ENV_PUBLIC_URL = google.ENV_PUBLIC_URL
 ENV_PROXIES = "WKO5COACH_TRUSTED_PROXIES"
 DEFAULT_MAX_USERS = 100            # SP-58: until SP-351's site settings
-# the settings that only mean something with sign-in: any of them set asks for the whole set
+# the settings that only mean something with sign-in: any of them set asks for the whole set.
+# Not WKO5COACH_PUBLIC_URL: the site's own address is a site setting (the 課表 feed's links, SP-54)
+# set on the owner's app too; sign-in still needs it (_public_url) once the settings above are there.
 SIGNIN_ENV = ("GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_ID_FILE", "GOOGLE_CLIENT_SECRET", "GOOGLE_CLIENT_SECRET_FILE",
-              ENV_OWNER_SUB, ENV_OWNER_EMAIL, ENV_PUBLIC_URL)
+              ENV_OWNER_SUB, ENV_OWNER_EMAIL)
 _ON = frozenset({"1", "true", "yes", "on"})
 _OFF = frozenset({"", "0", "false", "no", "off"})
 SIGNIN, OWNER_MODE, DEMO_MODE = "signin", "owner", "demo"

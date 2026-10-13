@@ -256,6 +256,9 @@ def new_terms(monkeypatch, version: str = "2099-01-01"):
     {"WKO5COACH_ACCOUNTS": "1"},          # multi-user data (SP-384), no sign-in settings at all yet
     {"WKO5COACH_ACCOUNTS": "0"},
     {"WKO5COACH_ACCOUNTS": "off", "WKO5COACH_TRUSTED_PROXIES": PROXY, "WKO5COACH_COOKIE_SECURE": "0"},
+    # the production NAS before sign-in: the site address is set for the 課表 feed's links
+    # (SP-54, api/calendar_feed.py) — a site setting, not a sign-in one (owner 2026-10-13)
+    {"WKO5COACH_PUBLIC_URL": "https://coach.example.com", "WKO5COACH_TRUSTED_PROXIES": PROXY},
 ])
 def test_without_sign_in_settings_nothing_changes(on, monkeypatch, tmp_path):
     """No sign-in setting at all: every request is the owner as before (no 401, no CSRF header
@@ -280,7 +283,7 @@ def test_without_sign_in_settings_nothing_changes(on, monkeypatch, tmp_path):
 
 
 @pytest.mark.parametrize("case", [
-    "google_without_accounts", "owner_email_without_accounts", "public_url_without_accounts",
+    "google_without_accounts", "owner_email_without_accounts",
     "id_without_secret", "secret_file_unreadable", "no_public_url", "public_url_not_https",
     "public_url_with_path", "https_with_default_proxies", "https_with_no_proxy_at_all", "accounts_typo", "no_owner",
 ])
@@ -297,8 +300,6 @@ def test_a_half_done_sign_in_setup_refuses_to_start(case, monkeypatch, tmp_path)
     elif case == "owner_email_without_accounts":
         monkeypatch.setenv("WKO5COACH_ACCOUNTS", "0")
         off("GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "WKO5COACH_PUBLIC_URL")
-    elif case == "public_url_without_accounts":
-        off("WKO5COACH_ACCOUNTS", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "WKO5COACH_OWNER_EMAIL")
     elif case == "id_without_secret":
         off("GOOGLE_CLIENT_SECRET")
     elif case == "secret_file_unreadable":

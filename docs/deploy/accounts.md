@@ -59,7 +59,7 @@
 
 | 設定 | 模式 |
 |---|---|
-| 一個登入設定都沒有（`WKO5COACH_ACCOUNTS` 沒設、`0`，或只有 `1`） | **owner**：每個請求都是擁有者，跟 SP-58 之前完全一樣；`/login` 等登入路徑回 404 |
+| 一個登入設定都沒有（`WKO5COACH_ACCOUNTS` 沒設、`0`，或只有 `1`） | **owner**：每個請求都是擁有者，跟 SP-58 之前完全一樣；`/login` 等登入路徑回 404。`WKO5COACH_PUBLIC_URL` 不算登入設定——它是全站網址（課表訂閱的連結也用，SP-54），擁有者模式照樣可以設（2026-10-13 使用者決定）；開了登入才必填 |
 | `WKO5COACH_ACCOUNTS=1` ＋ §5.2 整組 | **signin**：沒登入只有公開路徑打得開（§5.3），其他 API 回 401、頁面導到 `/login` |
 | 示範 instance（`WKO5COACH_MODE=demo`） | 不受影響（不掛登入路由） |
 | 其他任何組合 | **拒絕啟動**（`LoginConfigError`，訊息寫明缺什麼）。例如：設了 Google client 但 `WKO5COACH_ACCOUNTS` 沒開；開了但少 secret、少 `WKO5COACH_PUBLIC_URL`；`*_FILE` 讀不到；`WKO5COACH_PUBLIC_URL` 不是 https（localhost 除外）或帶路徑；https 但 `WKO5COACH_TRUSTED_PROXIES` 沒設或還是預設值；擁有者的 Google 帳號認不出來（user 1 還沒綁，也沒設 `WKO5COACH_OWNER_*`）；`WKO5COACH_ACCOUNTS` 不是 on／off 的值 |
