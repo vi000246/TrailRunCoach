@@ -1597,7 +1597,20 @@ which one. The response keeps the `coros` field names.
   then 計畫／實際 and the long reason; 跳過 = empty ring + 跳過; the ⚠ note in `--watch` (was a
   hard-coded orange); a new line `#sd-watch` 「手錶（COROS）：已推送／需更新…／推送失敗／未推送」
   (`schedule.sy.line`) for the states a card no longer draws. The week summary and the legend are
-  unchanged here (SP-399, SP-401).
+  unchanged here (SP-401).
+- **Legend** (2026-10-13, SP-399; design §7): the 課表 page's legend row is one 「? 圖例」
+  (`<details class="sc-leg">`, `SessChip.legend`, `renderLegend`), the same table as the 總覽 本週
+  list's: 類型 (every icon with its name), 完成度 (the six rings with their rule; the thresholds only
+  here, from the payload's `compliance_levels`; the intensity's 80 % / 50 % in the words), 其他 (↻,
+  ✎, the dotted activity card + the page's rows: 需更新 / 推送失敗 watch, 不排課 hatch, 休息日, 交換,
+  the week's phase bar, the pairing rule — each long explanation behind its own `?`). The dialog's
+  single `?` reads the same 完成度 rules as text (`SessChip.levelsText`) + the pairing rule. Gone from
+  both pages: `.k-*` / `--k` / `.fam-*` type colours, `.ty-*`, `--s1…s7` and `--qf2/3` on the 課表 page
+  (phase colours are `--ph-*` tokens; 休息日 uses `--good`; 睡在高處 `--line`), `.heat-tag`, `.offp-i` /
+  `.part-i` / `.offp` / `.part`, `.cp-green|yellow|red` and `.cpw`, `.chip.k-notice`, `CAT_VAR`; the
+  editor's 類型 radios show the type icon instead of a colour dot (`label[data-kind]`). Words in
+  `common.legend.*`; `schedule.legend.*` (7), `vs.short_legend`, `vs.levels_tip` and
+  `overview.week.short_aria` removed.
 - **課表卡片元件** (2026-10-13, SP-395; design `docs/research/schedule-chip-ui.md` §6–7, §10 ①,
   mockup `docs/research/schedule-chip-ui-mockup.html`, which now loads the app's own scripts).
   `backend/static/sesschip.js` (`window.SessChip`) holds the parts both the 課表 page and the 總覽
@@ -2454,3 +2467,4 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 | 2026-10-13 | feat/session-cards-sp395-402 | SP-395 (docs/research/schedule-chip-ui.md §10 ①) | Shared session-card parts `backend/static/sesschip.js` (`SessChip.kind` / `actKind` / `status` / `cls` / `label` / `ring` / `icon`, `SessChip.CSS`): type icon tile, Linear-style completion ring (check / pie to the % / slash / empty / dotted), green / yellow / grey only; `bike` / `other` in dashicons.js; `common.legend.status.*` (zh-TW + en); the mockup loads the app's scripts. Tests: `backend/tests/test_sesschip.py` |
 | 2026-10-13 | feat/session-cards-sp395-402 | SP-396 (docs/research/schedule-chip-ui.md §8.1, §8.3, §10 ②) | 課表 cards on `SessChip`: type tile instead of type colours, left bar + Linear ring by status (no ✓ / ◐ / ≠ / 熱 / 未完成 / strike-through, no red), the watch only for 需更新 / 失敗, provisional = dashed card (week hatch removed), activity cards dotted with an icon, aria-label in the §7.1 order, ⚠ note to hover + dialog; the dialog's 完成盒 = ring + verdict, the three numbers, one `?`, plus a 手錶 status line (`schedule.sy.line`, `vs.time_pct`). Tests: `backend/tests/test_schedule_cards_sp396.py`; `test_swap_sp359` class-template check and the e2e selectors follow the new classes (`data-kind`) |
 | 2026-10-13 | feat/session-cards-sp395-402 | SP-397 (docs/research/schedule-chip-ui.md §8.4, §10 ③) | 總覽 本週 cards on `SessChip` like the 課表 page (same icon, bar colour, ring): `.ty-*` type tiles, the `.ok` ✓ corner, the ≠ / ◐ prefix, the faded strike-through of a missed session and the dead `.mini.*` CSS removed; the type list (`TYPES` / `stype` / `actTy`) is sesschip.js's (`SessChip.kind`, `typeName` → `common.legend.type.*`); hover: the verdict with its % for every done session, no thresholds, the watch with `provider_label` and `not_pushed` worded (`overview.week.sy.*`); `overview.week.short_aria` removed. Tests: `backend/tests/test_overview_cards_sp397.py` (same parts as the 課表 card per status); `test_review_cards` reads the type names from `common.legend.type.*` |
+| 2026-10-13 | feat/session-cards-sp395-402 | SP-399 (docs/research/schedule-chip-ui.md §7, §10 ⑤) | Old card styles removed from 課表 / 總覽 (type colours `.k-*` / `--k` / `.fam-*` / `.ty-*`, `--s1…s7` + `--qf*` on the 課表 page → `--ph-*` phase tokens, `.heat-tag`, `.offp-i` / `.part-i`, completion `.cp-*` / `.cpw`, `CAT_VAR`); one 「? 圖例」 on both pages (`SessChip.legend` / `levelsText`, thresholds from `compliance_levels`, `common.legend.*` zh-TW + en, page rows `schedule.lg.*`); editor type radios with icons; orphan keys removed. Tests: `backend/tests/test_legend_cleanup_sp399.py` (the ticket's grep, no orphan keys in common / schedule / overview, the legend's sections); e2e watch-glyph test opens the legend and expects the two states |

@@ -127,7 +127,7 @@ h2 .di { font-size: 16px; color: var(--muted); }
 .rest { margin-top: auto; margin-bottom: auto; display: flex; align-items: center; justify-content: center; gap: 5px; color: var(--faint); font-size: 12px; }
 .badges { display: flex; gap: 4px; flex-wrap: wrap; }
 .legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: var(--muted); margin: 8px 0 0; }
-.legend span { display: inline-flex; align-items: center; gap: 2px; }
+
 @media (max-width: 899px) {
   .week { grid-template-columns: 1fr; gap: 6px; }
   .dc { min-height: 0; display: grid; grid-template-columns: 52px 1fr; gap: 6px; padding: 6px 8px; align-items: center; }
@@ -719,8 +719,8 @@ function renderPlan() {
     days.push(dayHtml(iso, by[iso] || [], PLAN.done.activities.filter((a) => a.date === iso && !used.has(a.index)), today));
   }
   $("wk-days").innerHTML = days.join("");
-  const seen = [...new Set(SP.sessions.filter((s) => s.day).map(SessChip.kind))];
-  $("wk-legend").innerHTML = seen.map((t) => `<span>${SessChip.icon(t)}${esc(SessChip.typeName(t))}</span>`).join("");
+  // the 課表 page's legend (SP-399): one 「? 圖例」, the same table (sesschip.js)
+  if (!$("wk-legend").firstChild) $("wk-legend").innerHTML = SessChip.legend({ levels: SP.compliance_levels });
   const wc = (SP.week_rows || [])[0]?.compliance;
   $("wk-cp").innerHTML = wc ? `<span class="st ${{ green: "good", yellow: "watch", red: "bad" }[wc.level] || "info"}" title="到今天為止：完成 TSS ÷ 計畫 TSS（綠 ±20%、黃 20–50%、紅 > 50%）">${I({ green: "good", yellow: "watch", red: "bad" }[wc.level] || "info")}完成度 ${wc.pct}%</span>` : "";
   paintPlanLoad();

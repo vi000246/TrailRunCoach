@@ -302,13 +302,15 @@ def test_viewer_sport_chip_switches_the_main_sport(app):
     expect(page.locator("#sport-sel")).to_have_value("auto", timeout=60_000)
 
 def test_schedule_watch_status_glyphs(app):
-    """手錶狀態圖示 (推送狀態): the legend's four states, each an <svg> glyph with its label."""
+    """手錶狀態圖示 (推送狀態): SP-399 — the legend (behind 「? 圖例」) shows the two states a card draws
+    (需更新 / 失敗), each an <svg> glyph with its label; the dialog names the others."""
     page, _ = app
     open_page(page, _server.PAGES["schedule"])
     _calendar_ready(page)
+    page.locator("#legend details.sc-leg > summary").click()
     glyphs = page.locator("#legend .sy")
-    expect(glyphs).to_have_count(4)
-    for cls in ("sy-ok", "sy-warn", "sy-bad", "sy-none"):
+    expect(glyphs).to_have_count(2)
+    for cls in ("sy-warn", "sy-bad"):
         g = page.locator(f"#legend .sy.{cls}")
         expect(g).to_have_count(1)
         assert g.locator("svg").count() == 1, cls

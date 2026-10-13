@@ -121,7 +121,23 @@
   .sc.miss, .sc.miss .sc-t, .sc.miss .sc-ic { color: var(--faint); }
   .sc.miss .sc-t { font-weight: 500; }
   .sc.act { border-style: dotted; }
-  .sc.act .sc-t { font-weight: 500; }`;
+  .sc.act .sc-t { font-weight: 500; }
+  .sc-leg { font-size: 12px; color: var(--muted); }
+  .sc-leg > summary { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; list-style: none; color: var(--text); }
+  .sc-leg > summary::-webkit-details-marker { display: none; }
+  .sc-leg > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+  .sc-q { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--line);
+    font: 600 11px/1 system-ui, sans-serif; color: var(--muted); background: var(--panel); }
+  .sc-leg-pop { margin-top: 6px; max-width: 640px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); padding: 6px 10px 8px; }
+  .sc-leg table { border-collapse: collapse; width: 100%; }
+  .sc-leg th { text-align: left; color: var(--text); font-weight: 600; padding: 8px 0 3px; }
+  .sc-leg td { padding: 2px 8px 2px 0; vertical-align: top; line-height: 1.45; }
+  .sc-leg td:first-child { width: 24px; }
+  .sc-leg td b { color: var(--text); font-weight: 600; }
+  .sc-leg-types { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 2px 12px; }
+  .sc-leg-types span { display: inline-flex; align-items: center; gap: 4px; }
+  .sc-leg-act { display: inline-block; width: 16px; height: 12px; border: 1px dotted var(--muted); border-radius: 3px; }
+  .sc-leg .pmk { font-weight: 700; } .sc-leg .pmk-auto { color: var(--accent); } .sc-leg .pmk-user { color: var(--muted); }`;
   if (typeof document !== "undefined" && document.createElement) {
     const st = document.createElement("style");
     st.textContent = CSS;
@@ -131,5 +147,33 @@
   // the type's name (common.legend.type.*): the icon is never alone — hover, aria-label, legend
   const typeName = (k) => T("type." + k);
 
-  W.SessChip = { kind, actKind, typeName, status, cls, label, ring, icon, CSS };
+  // ---- the legend (design §7): one 「? 圖例」 on the 課表 page and the 總覽 本週 list, three sections —
+  // 類型 / 完成度 / 其他 (+ the page's own rows: the watch, the day grid …). Thresholds are written only
+  // here, from the payload's `compliance_levels` (engine/compliance.COMPLIANCE); the intensity's 80 % /
+  // 50 % (plan_match.graded) are in the words.
+  const TYPES = ["easy", "z3", "z5", "long", "b2b", "loaded", "hike", "test", "strength", "race", "heat", "rest", "notice", "bike", "other"];
+  const STATES = [["done"], ["partial"], ["off_plan"], ["missed"], ["todo"], ["todo", true]];
+  const pctOf = (v, d) => Math.round((v != null ? v : d) * 100);
+  const esc = (x) => String(x == null ? "" : x).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const tipOf = (st, prov, lv) => T((prov ? "prov" : st) + "_tip", { green: pctOf(lv.green, 0.2), yellow: pctOf(lv.yellow, 0.5) });
+  // the 完成度 section as plain text (the 課表 dialog's ?): 「完成：時間和 TSS …」 one per line
+  function levelsText(lv) {
+    lv = lv || {};
+    return STATES.slice(0, 4).map(([st]) => T("line", { label: label(st), tip: tipOf(st, false, lv) })).join("\n");
+  }
+  function legend(o) {
+    o = o || {};
+    const lv = o.levels || {};
+    const head = (k) => `<tr><th colspan="2" scope="colgroup">${esc(T(k))}</th></tr>`;
+    const row = (ic, txt) => `<tr><td>${ic}</td><td>${txt}</td></tr>`;
+    const other = [[`<span class="pmk pmk-auto" aria-hidden="true">↻</span>`, esc(T("auto"))], [`<span class="pmk pmk-user" aria-hidden="true">✎</span>`, esc(T("user"))],
+      [`<span class="sc-leg-act" aria-hidden="true"></span>`, esc(T("act"))], ...(o.other || [])];
+    return `<details class="sc-leg"><summary aria-label="${esc(T("aria"))}"><span class="sc-q" aria-hidden="true">?</span>${esc(T("title"))}</summary>` +
+      `<div class="sc-leg-pop"><table>` + head("h_type") +
+      `<tr><td colspan="2"><div class="sc-leg-types">${TYPES.map((k) => `<span>${icon(k)}${esc(typeName(k))}</span>`).join("")}</div></td></tr>` +
+      head("h_status") + STATES.map(([st, pv]) => row(ring(st, 65, { prov: pv }), `<b>${esc(label(st, null, { prov: pv }))}</b> ${esc(tipOf(st, pv, lv))}`)).join("") +
+      head("h_other") + other.map(([ic, txt]) => row(ic, txt)).join("") + `</table></div></details>`;
+  }
+
+  W.SessChip = { kind, actKind, typeName, status, cls, label, ring, icon, legend, levelsText, CSS };
 })();

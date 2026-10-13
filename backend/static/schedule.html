@@ -10,9 +10,8 @@
   --bg: #f4f5f7; --panel: #fcfcfb; --text: #0b0b0b; --muted: #52514e; --faint: #8a8984; --line: #e3e3df;
   --accent: #2a78d6; --soft: #e8efff;
   --good: #1a7f37; --watch: #b45309; --bad: #c62828; --info: #52514e;
-  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4; --s6: #008300; --s7: #4a3aa7;
   --lo: #1baf7a; --mid: #eda100; --hi: #e34948; --bar: #b9b8b1;
-  --qf2: #d32f2f; --qf3: #8e24aa;
+  --ph-base: #2a78d6; --ph-specific: #eb6834; --ph-taper: #eda100; --ph-recovery: #1baf7a; --ph-transition: #4a3aa7;
   --cell: #ffffff; --out: #f7f7f5;
 }
 @media (prefers-color-scheme: dark) {
@@ -21,9 +20,8 @@
     --bg: #111110; --panel: #1a1a19; --text: #ffffff; --muted: #c3c2b7; --faint: #8f8e86; --line: #2e2e2b;
     --accent: #3987e5; --soft: #1c2a40;
     --good: #4ade80; --watch: #fbbf24; --bad: #f87171; --info: #c3c2b7;
-    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #008300; --s7: #9085e9;
     --lo: #199e70; --mid: #c98500; --hi: #e66767; --bar: #5a5954;
-    --qf2: #f0605d; --qf3: #c27ad6;
+    --ph-base: #3987e5; --ph-specific: #d95926; --ph-taper: #c98500; --ph-recovery: #199e70; --ph-transition: #9085e9;
     --cell: #1a1a19; --out: #151514;
   }
 }
@@ -32,9 +30,8 @@
   --bg: #111110; --panel: #1a1a19; --text: #ffffff; --muted: #c3c2b7; --faint: #8f8e86; --line: #2e2e2b;
   --accent: #3987e5; --soft: #1c2a40;
   --good: #4ade80; --watch: #fbbf24; --bad: #f87171; --info: #c3c2b7;
-  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #008300; --s7: #9085e9;
   --lo: #199e70; --mid: #c98500; --hi: #e66767; --bar: #5a5954;
-  --qf2: #f0605d; --qf3: #c27ad6;
+  --ph-base: #3987e5; --ph-specific: #d95926; --ph-taper: #c98500; --ph-recovery: #199e70; --ph-transition: #9085e9;
   --cell: #1a1a19; --out: #151514;
 }
 * { box-sizing: border-box; }
@@ -49,16 +46,9 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .ok { color: var(--good); }
 main { max-width: 1320px; margin: 0 auto; padding: 12px 16px 40px; display: grid; gap: 10px; }
 
-/* kind + phase palettes */
-.k-easy { --k: var(--s3); } .k-long { --k: var(--s1); } .k-quality { --k: var(--s2); }
-/* 強度課 by family (SP-79): 有氧間歇 keeps the 強度課 orange, VO2max 間歇 red, 速度 purple
-   (≥ 3:1 against --cell in both themes); one with no interval work stays orange */
-.k-quality.fam-aerobic { --k: var(--s2); } .k-quality.fam-vo2max { --k: var(--qf2); } .k-quality.fam-speed { --k: var(--qf3); }
-.k-test { --k: var(--s7); } .k-strength { --k: var(--s5); } .k-hike { --k: var(--s4); } .k-heat_passive { --k: var(--hi); } .k-race { --k: var(--hi); }
-.heat-tag { display: inline-block; margin-right: 3px; padding: 0 3px; border-radius: 3px; font-size: 10px; line-height: 14px;
-  background: color-mix(in srgb, var(--hi) 25%, transparent); color: var(--hi); font-weight: 700; }
-.ph-base { --ph: var(--s1); } .ph-specific { --ph: var(--s2); } .ph-taper { --ph: var(--s4); }
-.ph-event { --ph: var(--hi); } .ph-recovery { --ph: var(--s3); } .ph-transition { --ph: var(--s7); } .ph-rebuild { --ph: var(--s3); } .ph-none { --ph: var(--line); }
+/* phase palette (the week row's left bar, SP-399: its own tokens — a session's type is an icon, sesschip.js) */
+.ph-base { --ph: var(--ph-base); } .ph-specific { --ph: var(--ph-specific); } .ph-taper { --ph: var(--ph-taper); }
+.ph-event { --ph: var(--hi); } .ph-recovery { --ph: var(--ph-recovery); } .ph-transition { --ph: var(--ph-transition); } .ph-rebuild { --ph: var(--ph-recovery); } .ph-none { --ph: var(--line); }
 
 /* ---- buttons ---- */
 .btn { border: 1px solid var(--line); background: var(--panel); color: var(--text); border-radius: 7px;
@@ -151,16 +141,16 @@ main { max-width: 1320px; margin: 0 auto; padding: 12px 16px 40px; display: grid
 .legend .bo-sw { display: inline-block; width: 14px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; border: 1px solid var(--line);
   background: repeating-linear-gradient(45deg, var(--cell) 0 3px, color-mix(in srgb, var(--faint) 45%, var(--cell)) 3px 4px); }
 /* 休息日 (kind rest): a plain soft-green wash with a dotted outline, no hatch — the day off you chose */
-.wk .cell.bo.rest-d, .ag-day.bo.rest-d { background-image: none; background-color: color-mix(in srgb, var(--s3) 9%, var(--cell));
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--s3) 35%, transparent); }
+.wk .cell.bo.rest-d, .ag-day.bo.rest-d { background-image: none; background-color: color-mix(in srgb, var(--good) 8%, var(--cell));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--good) 30%, transparent); }
 .wk .cell.bo.rest-d.sel, .ag-day.bo.rest-d.sel { box-shadow: inset 0 0 0 2px var(--accent); }
-.bo-chip.rest { color: color-mix(in srgb, var(--s3) 75%, var(--text)); border-color: color-mix(in srgb, var(--s3) 45%, transparent); font-weight: 600; }
+.bo-chip.rest { color: var(--good); border-color: color-mix(in srgb, var(--good) 40%, transparent); font-weight: 600; }
 .legend .rest-sw { display: inline-block; width: 14px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px;
-  background: color-mix(in srgb, var(--s3) 20%, var(--cell)); border: 1px solid color-mix(in srgb, var(--s3) 45%, transparent); }
+  background: color-mix(in srgb, var(--good) 8%, var(--cell)); border: 1px solid color-mix(in srgb, var(--good) 30%, transparent); }
 /* 睡在高處 (SP-259): a small mark on a day with a recorded night up high; click = edit */
-.hn-tag { flex: none; border: 1px solid color-mix(in srgb, var(--s4) 45%, transparent); background: var(--panel); color: var(--muted);
+.hn-tag { flex: none; border: 1px solid var(--line); background: var(--panel); color: var(--muted);
   border-radius: 9px; padding: 0 5px; font-size: 10.5px; line-height: 17px; cursor: pointer; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.hn-tag:hover { color: var(--text); border-color: var(--s4); }
+.hn-tag:hover { color: var(--text); border-color: var(--faint); }
 .hn-tag:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .ag-day .hn-tag { display: block; margin-top: 3px; font-size: 11.5px; }
 .cf-body .hn-row { display: flex; align-items: center; gap: 6px; margin: 10px 0 4px; }
@@ -249,9 +239,6 @@ body.swapping #cal .chip[draggable="true"] { cursor: copy; }
 #swap-toast button { font: inherit; font-size: 12.5px; border: 1px solid var(--line); background: var(--panel); color: var(--text); border-radius: 6px; padding: 3px 10px; cursor: pointer; }
 /* SP-82: an empty planned day's 「休息」 — drag it onto another day to swap */
 .chip.rest-mv { cursor: grab; border-style: dashed; background: transparent; font-size: 12px; }
-/* the week summary's 完成度 (engine/compliance.week_compliance) */
-.cp-green { --cpc: var(--good); } .cp-yellow { --cpc: var(--watch); } .cp-red { --cpc: var(--bad); }
-.cpw { font-weight: 700; color: var(--cpc, var(--text)); }
 .chip.act { cursor: default; }
 
 /* 推送狀態: on a card only 需更新 / 失敗 (right of the ring); every state in the legend and the dialog */
@@ -298,10 +285,9 @@ body.swapping #cal .chip[draggable="true"] { cursor: copy; }
 .ag-day .add { opacity: 1; width: 32px; height: 32px; border-color: var(--line); }
 
 .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--muted); align-items: center; }
-.legend .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; background: var(--k); margin-right: 5px; vertical-align: -1px; }
 .legend .sy { vertical-align: -2px; margin-right: 3px; }
-.legend .lg-g { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding-left: 12px; border-left: 1px solid var(--line); }
-.legend .lg-h { color: var(--text); font-weight: 600; }
+.legend .ph-sw { display: inline-block; width: 4px; height: 14px; border-radius: 2px; background: var(--ph-base); vertical-align: -2px; }
+.legend .bo-sw, .legend .rest-sw { margin-right: 0; }
 
 /* glossary hover (AeT / CP) */
 .term { position: relative; border-bottom: 1px dotted currentColor; cursor: help; }
@@ -332,9 +318,10 @@ dialog.sd .err:empty { display: none; }
 .kinds legend { font-size: 12.5px; color: var(--muted); padding: 0; margin-bottom: 3px; }
 .kinds label { display: inline-flex !important; align-items: center; gap: 5px; border: 1px solid var(--line); border-radius: 14px; padding: 3px 10px 3px 8px;
   cursor: pointer; font-size: 13px !important; color: var(--text) !important; }
-.kinds label::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--k); }
+.kinds label .sc-ic { width: 18px; height: 18px; }
+.kinds label .sc-ic svg { width: 14px; height: 14px; }
 .kinds input { position: absolute; opacity: 0; width: 1px !important; height: 1px; pointer-events: none; }
-.kinds label:has(input:checked) { border-color: var(--k); background: color-mix(in srgb, var(--k) 15%, transparent); font-weight: 600; }
+.kinds label:has(input:checked) { border-color: var(--accent); background: var(--soft); font-weight: 600; }
 .kinds label:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 1px; }
 .kinds label:has(input:disabled) { cursor: default; }
 .kinds label[hidden] { display: none !important; }
@@ -350,19 +337,11 @@ dialog.sd input.locked { background: var(--soft); color: var(--muted); cursor: p
 .vs { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 10px; margin: 6px 0 4px; font-variant-numeric: tabular-nums; }
 .vs dt { color: var(--muted); font-size: 12px; } .vs dd { margin: 0; overflow-wrap: anywhere; }
 .vs dd.off { color: var(--watch); font-weight: 600; }
-.offp { display: inline-flex; align-items: center; gap: 3px; font-size: 12px; font-weight: 700; color: var(--watch);
-  border: 1px solid color-mix(in srgb, var(--watch) 45%, transparent); border-radius: 999px; padding: 0 7px; }
-.chip .offp-i { color: var(--watch); font-weight: 800; font-size: 11px; }
-/* 強度不足／偏強 (SP-216): counted as 部分, not 沒照課表 */
-.part { display: inline-flex; align-items: center; gap: 3px; font-size: 12px; font-weight: 600; color: var(--watch);
-  border: 1px dashed color-mix(in srgb, var(--watch) 45%, transparent); border-radius: 999px; padding: 0 7px; }
-.chip .part-i { color: var(--watch); font-weight: 700; font-size: 11px; }
 .vs dd.part { color: var(--watch); }
 .vs-act { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 6px; }
 .vs-act select { max-width: 100%; }
 a.btn { text-decoration: none; display: inline-flex; align-items: center; gap: 4px; }
 button.chip.act { cursor: pointer; }
-button.chip.act:hover { background: color-mix(in srgb, var(--k) 10%, var(--cell)); }
 /* interval library: editor templates + the 換一個 drawer (engine/interval_library.py) */
 .var-box { display: grid; gap: 6px; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
 .var-box select { width: 100%; }
@@ -418,7 +397,6 @@ dialog.sd .pd-row select { width: auto; max-width: 100%; padding: 4px 8px; font-
 
 /* ---- 自動調整 (autoplan.js) ---- */
 .adapt-note { color: var(--watch); }
-.chip.k-notice { border-style: dashed; opacity: .85; }
 /* ---- 課表偏好 dialog ---- */
 dialog.sd.wide { width: min(580px, 96vw); }
 dialog.sd form { max-height: calc(100vh - 40px); overflow: auto; }
@@ -1057,6 +1035,7 @@ async function load() {
     D = await sj("GET", `${PAPI}/calendar?start=${a}&end=${b}`);
     if (!S.anchor) S.anchor = D.today;
     render();
+    renderLegend();
     staleWatch();
     sugCount();                                    // 排入測試 ▸ in the context menu
   } catch (e) {
@@ -1321,17 +1300,23 @@ function agendaHtml(a, ss, acts) {
       ${w.compliance ? `<span class="cp-${esc(w.compliance.level)}">完成度 <span class="cpw">${w.compliance.pct} %</span></span>` : ""}
       ${w.provisional ? `<span class="faint">暫定</span>` : ""}</div>${days.join("")}</div>`;
 }
+// the legend (SP-399; design §7): one 「? 圖例」, the table shared with the 總覽 (SessChip.legend: 類型 /
+// 完成度 / 其他) plus this page's rows — the watch (only the two states a card draws), the day grid, 交換,
+// the pairing rule. Thresholds from the payload (compliance_levels), drawn again when they change.
+let legendKey = null;
 function renderLegend() {
-  // 完成狀態 (chip colour + ✓) and 推送狀態 (the watch at the top right) are separate groups
-  const grp = (h, items, tip) => `<span class="lg-g" role="group" aria-label="${esc(h)}"><b class="lg-h">${esc(h)}${tip ? ` <button type="button" class="qtip" aria-label="${esc(h)}" data-tip="${esc(tip)}">?</button>` : ""}</b>${items}</span>`;
-  // 強度課 as its three families (SP-79), each with its own colour
-  $("legend").innerHTML = KIND_ORDER.map((k) => k === "quality"
-    ? FAMILIES.map((f) => `<span class="k-quality fam-${f}"><i class="sw"></i>${esc(famLabel(f))}</span>`).join("")
-    : `<span class="k-${k}"><i class="sw"></i>${KINDS[k]}</span>`).join("") +
-    `<span>虛線＝暫定</span><span><i class="bo-sw"></i>不排課日期</span><span><i class="rest-sw"></i>${esc(tt("rest.legend"))} <button type="button" class="qtip" aria-label="${esc(tt("rest.legend"))}" data-tip="${esc(tt("rest.legend_tip"))}">?</button></span>` +
-    `<span>⇄ ${esc(tt("swap.legend"))} <button type="button" class="qtip" aria-label="${esc(tt("swap.legend"))}" data-tip="${esc(tt("swap.legend_tip"))}">?</button></span>` +
-    grp(tt("legend.done_h"), `<span title="完成的課依實際 ÷ 計畫（時間、TSS）上色">✓ <b class="cp-green cpw">±20%</b> <b class="cp-yellow cpw">20–50%</b> <b class="cp-red cpw">&gt;50% 或類型不符</b></span><span><b class="offp-i">≠</b> 沒照課表 <button type="button" class="qtip" aria-label="沒照課表的說明" data-tip="${esc(OFF_TIP())}">?</button></span><span><b class="part-i">◐</b> ${esc(tt("vs.short_legend"))}</span><span><s class="faint">未完成</s></span><span>● 沒排課的活動 <button type="button" class="qtip" aria-label="配對規則" data-tip="${esc(MATCH_TIP)}">?</button></span>`) +
-    grp(tt("legend.watch_h"), ["pushed", "outdated", "failed", "not_pushed"].map((k) => `<span>${syIcon(k)}${esc(tt("legend." + k))}</span>`).join(""), tt("legend.watch_tip"));
+  const lv = (D && D.compliance_levels) || {};
+  const key = JSON.stringify(lv);
+  if (key === legendKey) return;
+  legendKey = key;
+  const q = (label, tip) => ` <button type="button" class="qtip" aria-label="${esc(label)}" data-tip="${esc(tip)}">?</button>`;
+  $("legend").innerHTML = SessChip.legend({ levels: lv, other: [
+    [syIcon("outdated"), esc(tt("sy.outdated"))], [syIcon("failed"), esc(tt("sy.failed")) + esc(tt("lg.failed_red"))],
+    ['<i class="bo-sw" aria-hidden="true"></i>', esc(tt("lg.blackout"))],
+    ['<i class="rest-sw" aria-hidden="true"></i>', esc(tt("rest.legend")) + q(tt("rest.legend"), tt("rest.legend_tip"))],
+    ['<span aria-hidden="true">⇄</span>', esc(tt("swap.legend")) + q(tt("swap.legend"), tt("swap.legend_tip"))],
+    ['<i class="ph-sw" aria-hidden="true"></i>', esc(tt("lg.phase"))],
+    ['<span aria-hidden="true">⇆</span>', esc(tt("lg.match")) + q(tt("lg.match"), MATCH_TIP)]] });
 }
 
 // ---------------- toolbar ----------------
@@ -1567,8 +1552,8 @@ let dlg = { uid: null, targetTouched: false };
 // 強度課 is offered as its three families (SP-79): each radio is kind quality + data-fam; the
 // family is saved only when you pick one (else it is read from the steps, session_family)
 $("sd-kinds").insertAdjacentHTML("beforeend", [...KIND_ORDER, "heat_passive", "race"].map((k) => k === "quality"
-  ? FAMILIES.map((f) => `<label class="k-quality fam-${f}"><input type="radio" name="kind" value="quality" data-fam="${f}">${esc(famLabel(f))}</label>`).join("")
-  : `<label class="k-${k}"${KIND_ORDER.includes(k) ? "" : " hidden"}><input type="radio" name="kind" value="${k}">${KINDS[k]}</label>`).join(""));
+  ? FAMILIES.map((f) => `<label data-kind="quality" data-fam="${f}"><input type="radio" name="kind" value="quality" data-fam="${f}">${SessChip.icon("quality", { fam: f })}${esc(famLabel(f))}</label>`).join("")
+  : `<label data-kind="${k}"${KIND_ORDER.includes(k) ? "" : " hidden"}><input type="radio" name="kind" value="${k}">${SessChip.icon(SessChip.kind({ kind: k }))}${KINDS[k]}</label>`).join(""));
 const F = $("sd-form");
 const kindVal = () => (F.querySelector('input[name="kind"]:checked') || {}).value || "easy";
 const famVal = () => { const r = F.querySelector('input[name="kind"]:checked'); return r && r.value === "quality" ? r.dataset.fam || null : null; };
@@ -2021,8 +2006,9 @@ $("vd").addEventListener("click", async (e) => {
 const MATCH_TIP = "配對：同一天、同類運動（路跑／越野）先配；一天兩筆以上時，配時間和強度最接近的課。長跑、強度課、測試在同一週別天做完也算。" +
   "一筆活動只算一堂課；沒排課那天的跑步維持獨立一筆，不會把之後的課拉過來。可以手動改配或取消，取消後這筆活動不再自動配對。" +
   "（COROS 的活動檔沒有記錄是照哪個課表跑的，所以由日期和運動類型配對。）";
-// 完成度等級 (SP-216, engine/plan_match.graded): a function — tt is defined further down
-const OFF_TIP = () => tt("vs.levels_tip");
+// 完成度等級 (SP-216, engine/plan_match.graded): the legend's 完成度 section as text (sesschip.js), with
+// the payload's thresholds
+const OFF_TIP = () => SessChip.levelsText(D && D.compliance_levels);
 const INT_LB = { hard: "強度", easy: "輕鬆" };
 const VIEWER = (a) => `/api/v1/wko5/viewer?${new URLSearchParams({ workout: a.index, label: `${md(a.date)} ${a.category_label || ""} ${hm(a.moving_s)}` })}`;
 const actOf = (i) => (D.activities || []).find((a) => a.index === i);
@@ -2128,8 +2114,8 @@ function openDlg(s, day) {
   dlg.stepsFam = s ? s.steps_family || null : null;
   setKind(s ? s.kind : "easy", s && s.quality_family ? s.quality_family.id : null);
   famHint();
-  F.querySelector('#sd-kinds label.k-heat_passive').hidden = !(s && s.kind === "heat_passive");
-  F.querySelector('#sd-kinds label.k-race').hidden = !(s && s.kind === "race");
+  F.querySelector('#sd-kinds label[data-kind="heat_passive"]').hidden = !(s && s.kind === "heat_passive");
+  F.querySelector('#sd-kinds label[data-kind="race"]').hidden = !(s && s.kind === "race");
   F.title.value = s ? s.title : (D.default_titles || {}).easy || "輕鬆跑";
   F.minutes.value = s ? s.minutes : 45;
   F.target.value = s ? s.target || "" : (D.targets || {}).easy || "";
