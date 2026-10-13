@@ -136,7 +136,18 @@ main > section.tab-off { display: none; }
 .ds-a2hs { margin-top: 12px; border: 1px solid var(--accent); background: var(--soft); border-radius: 8px; padding: 10px 12px; font-size: 13px; }
 .ds-a2hs p { margin: 4px 0 0; }
 @media (max-width: 480px) { .ds-kv { grid-template-columns: 1fr; gap: 0; } .ds-kv dt { margin-top: 8px; font-size: 12px; } }
+/* SP-480: the sentences about 計算模式 (我的算式 / WKO5 對照模式), hidden for whoever cannot switch it */
+html.nomode .mode-note { display: none; }
 </style>
+<script>
+// SP-480: a user who cannot switch 計算模式 (sign-in mode without the `admin` scope: SP-464) reads
+// nothing about the two modes. Decided here, before the first paint, from the session the server
+// inlined (no flash); GET /config's can_switch confirms it (loadMode). The owner's app / the demo: no `login`.
+(() => {
+  const s = window.TRC_SESSION, scopes = (s && s.membership && s.membership.scopes) || [];
+  document.documentElement.classList.toggle("nomode", !!(s && s.login) && !scopes.includes("admin"));
+})();
+</script>
 </head>
 <body>
 <script src="/api/v1/static/shell.js" data-page="settings"></script>
@@ -272,7 +283,7 @@ main > section.tab-off { display: none; }
 
   <section id="thresholds">
     <h2><span data-i18n="settings.thr.title">閾值測試紀錄（LTHR／AeT／CP）</span>
-      <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.thr.help" title="每次測試記一列，從測試那天起生效、不往回套（跟 WKO5 一樣）。hrTSS、功率 TSS、輕鬆跑上限、間歇門檻、課表的心率／功率目標都用它。只在「我的算式」模式生效；「WKO5 對照模式」一律用 WKO5 裡的設定。最大心率和靜息心率在上面的「心率」設定。">?</button></h2>
+      <button type="button" class="q" id="thr-q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.thr.help" title="每次測試記一列，從測試那天起生效、不往回套（跟 WKO5 一樣）。hrTSS、功率 TSS、輕鬆跑上限、間歇門檻、課表的心率／功率目標都用它。只在「我的算式」模式生效；「WKO5 對照模式」一律用 WKO5 裡的設定。最大心率和靜息心率在上面的「心率」設定。">?</button></h2>
     <p class="meta" id="thr-now" role="status"></p>
     <p class="meta" id="thr-wko5"></p>
     <div class="est" id="thr-est"><span class="meta" data-i18n="settings.thr.est_loading">正在從你的跑步資料估算 LTHR / AeT…</span></div>
@@ -659,7 +670,7 @@ main > section.tab-off { display: none; }
 
   <section id="fixes">
     <h2>資料校正</h2>
-    <p class="meta">找出功率異常尖峰（例如 1800 W）。只會列出建議，<b>按下套用才會生效</b>；不會改到 .wko4 原始檔，隨時可以撤銷。只在「我的算式」模式生效。</p>
+    <p class="meta">找出功率異常尖峰（例如 1800 W）。只會列出建議，<b>按下套用才會生效</b>；不會改到 .wko4 原始檔，隨時可以撤銷。<span class="mode-note" data-i18n="settings.mode.only_mine">只在「我的算式」模式生效。</span></p>
     <div class="row">
       <button id="scanbtn">掃描壞點</button>
       <button id="fixbtn" class="primary" disabled>套用勾選的修正</button>
@@ -673,7 +684,7 @@ main > section.tab-off { display: none; }
     <p class="meta">跑步／登山的檔案如果速度或功率不可能是人跑出來的（例如忘了停錶就騎車、開車），整筆活動會被排除：
       留在資料庫和活動清單（標「已排除」），但不進 PMC／TSS、功率曲線／CP、比賽功率、飄移／AeT、課表比對和圖表。
       門檻：持續 1 分鐘以上比同時間的世界紀錄均速快 15%（推估餘裕），或平均功率超過 10 W/kg（推估）。
-      在單次活動的「活動資訊」卡也可以手動排除或標成正常。只在「我的算式」模式生效。</p>
+      在單次活動的「活動資訊」卡也可以手動排除或標成正常。<span class="mode-note" data-i18n="settings.mode.only_mine">只在「我的算式」模式生效。</span></p>
     <div class="row"><label><input type="checkbox" id="ex-on"> 自動排除疑似交通工具／騎車的活動（預設開）</label>
       <span class="meta" id="ex-msg"></span></div>
     <div class="list" id="exlist"><span class="meta">載入中…</span></div>
@@ -726,10 +737,18 @@ async function j(url, opt) { const r = await fetch(url, opt); if (!r.ok) throw n
 // anyone else) until GET /config says can_switch; the owner's own app shows it as before
 const SIGNIN = !!(window.TRC_SESSION && window.TRC_SESSION.login);
 if (SIGNIN) $("mode").hidden = true;
+// SP-480: the texts that mention the two modes, or their mode-free twins (html.nomode: set in <head>)
+function modeTexts() {
+  const nomode = document.documentElement.classList.contains("nomode");
+  $("thr-q").title = t(nomode ? "settings.thr.help_nomode" : "settings.thr.help");
+}
+modeTexts();
 async function loadMode() {
   const { config, can_switch } = await j(`${API}/config`);
   $("mode").hidden = can_switch === false;
   $("mode-admin").hidden = !SIGNIN || can_switch === false;
+  document.documentElement.classList.toggle("nomode", can_switch === false);
+  modeTexts();
   tabNote();
   document.querySelectorAll(".mode").forEach((b) => b.classList.toggle("on", String(!!config.parity) === b.dataset.parity));
 }
