@@ -853,8 +853,11 @@ def done_plan(db_path=None) -> dict:
     against what was planned (its library variant; a recovery fartlek is not a
     ladder step)."""
     out: dict = {}
+    from backend.engine.plan_match import rpe_set
     for r in _plan_rows(db_path, ("quality", "test"), _TITLE_CACHE):
         d = r.get("done_by")
+        if rpe_set(r):
+            continue                        # SP-87: an RPE-set 強度課 (技術地形 RPE 6–7) is no interval session
         if r.get("state") == "done" and isinstance(d, dict) and d.get("index") is not None:
             out[d["index"]] = r
     return out
@@ -891,10 +894,35 @@ _RPE_CACHE: dict = {}
 def user_rpe_rows(db_path=None) -> list[dict]:
     """The user's own stored 越野跑 / easy / long sessions (custom, or auto ones the user edited;
     active / done) that carry a structure — engine/technical.py reads their RPE (SP-74: a 技術地形
-    session the user added counts in the week's quality budget like the generated one)."""
-    return [r for r in _plan_rows(db_path, ("easy", "long", "hike"), _RPE_CACHE, ("origin", "edited", "gen_key"))
+    session the user added counts in the week's quality budget like the generated one). SP-87: also a
+    kind quality one set by RPE (no library variant) — the generated RPE 6–7 技術地形 is kind quality,
+    and the 課表 dialog makes an RPE ≥ 7 structure a 強度課."""
+    from backend.engine.plan_match import rpe_set
+    return [r for r in _plan_rows(db_path, ("easy", "long", "hike", "quality"), _RPE_CACHE, ("origin", "edited", "gen_key"))
             if r.get("steps") and r.get("state") in ("active", "done")
-            and (r.get("origin") == "custom" or r.get("edited"))]
+            and (r.get("origin") == "custom" or r.get("edited"))
+            and (r.get("kind") != "quality" or rpe_set(r))]
+
+
+_HOOK_CACHE: dict = {}
+# the generated sessions the hooks make out of an easy run, one a week (SP-87: 長爬坡有氧 engine/base_climb.py,
+# 下坡課 engine/downhill.py, 技術地形 engine/technical.py)
+HOOK_IDS = ("climb_base", "downhill", "tech")
+
+
+def hook_days(monday, db_path=None) -> dict:
+    """{gen_key: day} of the week of `monday`'s stored hook sessions (HOOK_IDS; active / done /
+    missed). week_plan reads it so a hook session already behind (done, missed, or today's with a
+    run logged) keeps the week from turning another easy run into a second one — the generator
+    counts the done run as an easy run and would otherwise pick the next one, and reconcile then
+    dropped an easy row (SP-87; the SP-74 known limit). Read-only sqlite; {} without the DB."""
+    ws = monday.isoformat() if hasattr(monday, "isoformat") else str(monday)[:10]
+    out: dict = {}
+    for r in _plan_rows(db_path, ("easy", "long", "hike", "quality"), _HOOK_CACHE, ("gen_key", "week_start", "origin")):
+        if r.get("week_start") == ws and r.get("gen_key") in HOOK_IDS and r.get("state") in ("active", "done", "missed") \
+                and r.get("day"):
+            out[r["gen_key"]] = min(out.get(r["gen_key"], r["day"]), r["day"])
+    return out
 
 
 _DONE_CACHE: dict = {}

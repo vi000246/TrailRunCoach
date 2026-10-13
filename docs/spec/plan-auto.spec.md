@@ -1,6 +1,6 @@
 # Module Spec: plan-auto (自動調整課表)
 
-> **Last Updated**: 2026-10-08
+> **Last Updated**: 2026-10-13
 > **Status**: Active
 > **Domain Layer**: Core Domain
 
@@ -797,6 +797,16 @@ overview has `data-log="none"`. The settings are in 課表偏好 (above).
   mocked in `backend/tests/test_plan_auto.py` (and `backend/tests/test_plan_auto_cp.py` for the
   CP change), either with a stubbed `push_sessions` or with the scripted FakeHub.
 
+## A first import's back-fill (SP-394, owner 2026-10-13)
+
+A new user's first import is built hot first (wko5-engine.spec.md › Hot first): its Dataset holds
+the last ~90 days until the back-fill of the older activities is done, so its CTL / ATL / TSB — the
+load guard's ramp, the projection, the TSB rules — would be wrong. `run` checks after computing the
+inputs (`_history_pending`, `backend/engine/plan_auto.py:1096`): on a hot-first Dataset the run is
+postponed (`{"status": "history_pending"}`, nothing reconciled, saved or pushed) and registered with
+`backfill.when_complete`; once the complete Dataset is in, `_rerun` (`:1116`) starts the same trigger's
+run on the app's event loop in that tenant. `force` (the page's 立即重算) is postponed too.
+
 ## Known limits
 
 - A 3:1 recovery week inside the Zone 1 maintenance run is not detected from the data (only
@@ -833,11 +843,15 @@ overview has `data-log="none"`. The settings are in 課表偏好 (above).
   only blocked days and the allowed weekdays, so a session can move onto the preferred rest day;
   only the generator's placement (`plan_prefs.place`) honours them.
 - 技術地形課 (SP-74, overview.spec.md): the 專項期 RPE 6–7 session is spaced 48 h from the hard
-  days when it is generated, but adapt and reconcile key their hard-day checks on the session
-  kind (`quality` / `test` / `long`), not on `workout_templates.session_role`, so a missed
-  interval that adapt moves can land next to it. Like the 陡坡健走, once the technical run is done
-  (matched as an easy run by the generator) the hook may pick another easy run that week; the
-  stored done `tech` row blocks a second one and that easy row is removed.
+  days when it is generated; adapt and reconcile key their hard-day checks on the session kind
+  (`quality` / `test` / `long`), and since SP-87 (2026-10-12) that session is kind `quality`, so a
+  missed interval that adapt moves keeps 48 h from it too (it was kind `hike` and they didn't see
+  it). A user's own RPE ≥ 7 session saved with another kind (easy / long / hike) is still only
+  seen by `session_role`. Once a hook session is behind (done, missed, or
+  today's with a run logged) the generator still counts that run as an easy run; since SP-87
+  (2026-10-12) week_plan reads this week's stored `tech` / `downhill` / `climb_base` rows
+  (`plan_store.hook_days`) and makes that hook inactive, so it no longer turns the next easy run into
+  a second one (reconcile used to drop that easy row). The 陡坡健走 still has the old behaviour.
 
 ## Interval library, swaps and tests (2026-10-01, interval-prescription.md)
 
@@ -965,3 +979,4 @@ The owner's calls, gathered from the sections above (each is described there wit
 | 2026-10-12 | feature | SP-378 | Power bands: road easy 65–80 % CP, road long 65–88 % (were 75–80 / 80–88); the watch gets an interval band's judging band (upper × 1.05, Zone 5 to 116 %), the page keeps the prescription; the editor starts an easy step's power override at 65–80 %. `backend/engine/zones.py` (`EASY_BAND`, `LONG_BAND`, `watch_band`), `backend/engine/workout_steps.py` (`_watch_band`), `backend/sync/coros_workouts.py`. Tests: `backend/tests/test_power_bands_sp378.py` |
 | 2026-10-12 | feature | SP-383 | A user's 區間 target may span zones (從–到, `zone_to`): pushed from the first zone's lower to the last zone's upper bound, as typed (no `watch_band`); one-zone steps unchanged. `backend/engine/workout_steps.py` (`zone_span`). Tests: `backend/tests/test_zone_range_sp383.py::test_the_watch_gets_the_whole_range` |
 | 2026-10-12 | feature | SP-310 | Stable ids: `plan_change_log.uid` (UUID4 hex) + `updated_at` (UTC, moved by every status / push change) and `injury_events.uid` (UUID4 hex; `updated_at` now also moves on any ORM / Core update), unique indexes, the rows from before filled by `init_db` on every tenant DB (`backend/db/stable_ids.py`); `uid` in the change-log entries and the 傷病紀錄 API (`EVENT_COLS`, `event_json`); every endpoint still takes the integer id; plan_sessions' existing `uid` confirmed as its stable id. Tests `backend/tests/test_stable_ids_sp310.py` |
+| 2026-10-13 | perf | SP-394 (owner 2026-10-13) | During a first import's back-fill an automatic run is postponed (`history_pending`) and runs once the complete Dataset is in (`backfill.when_complete` → `_rerun` on the app's loop): never with an incomplete CTL. Tests: `backend/tests/test_queue_hot_first_sp394.py::test_during_the_back_fill_the_pmc_and_the_ctl_wait_and_the_auto_plan_too` |

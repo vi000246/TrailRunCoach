@@ -152,7 +152,8 @@ def render_page(name: str, loc: Optional[str] = None, headers: Optional[dict] = 
     # the shell reads it synchronously (banner, hidden pages, locked buttons)
     try:
         from backend.api.session import session_info
-        sess = json.dumps(session_info(), ensure_ascii=False).replace("</", "<\\/")
+        # every "<" escaped: a user's own text (a Google display name) can never close the script
+        sess = json.dumps(session_info(), ensure_ascii=False).replace("<", "\\u003c")
         m = _HEAD.search(out)
         tag = f"<script>window.TRC_SESSION = {sess};</script>"
         out = out[:m.end()] + tag + out[m.end():] if m else tag + out

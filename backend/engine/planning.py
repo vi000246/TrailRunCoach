@@ -181,6 +181,9 @@ class Event:
     # SP-244 「會用登山杖」: the race calculator adds a hint on steep climbs / descents
     # (seg_targets.pole_hint); no prediction reads it (trekking-poles.md §4)
     poles: bool = False
+    # SP-87 土徑比 %: the share of the course on dirt / trail (not asphalt / concrete), 0–100; None = not
+    # set. engine/technical.py: ≥ TRAIL_PCT_MIN → the 專項期 technical session, below → none
+    trail_pct: Optional[float] = None
 
     @property
     def continuous(self) -> bool:
@@ -749,6 +752,12 @@ class Plan:
             data["pack_kg"] = float(data["pack_kg"])
             if not 0 <= data["pack_kg"] <= PACK_MAX_KG:
                 raise EventError(_("行程背包要在 0–{max:g} kg", max=PACK_MAX_KG))
+        if data.get("trail_pct") in ("",):
+            data["trail_pct"] = None
+        if data.get("trail_pct") is not None:
+            data["trail_pct"] = float(data["trail_pct"])
+            if not 0 <= data["trail_pct"] <= 100:
+                raise EventError(_("土徑比要在 0–100 %"))
         for k, hi in (("cutoff_hours", CUTOFF_MAX_H), ("summit_km", None)):
             if data.get(k) in ("",):
                 data[k] = None

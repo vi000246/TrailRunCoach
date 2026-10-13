@@ -1,18 +1,20 @@
 """
 Google sign-in (OpenID Connect, authorization code flow with PKCE; SP-58).
 
-    configured()                               GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET (env or *_FILE)
-    redirect_uri(base)                         $WKO5COACH_PUBLIC_URL/oauth/google/callback (else the
-                                               request's own origin: http://localhost:8000 in development)
+    configure(id, secret, public_url)          the client, frozen at start-up (login.decide())
+    configured()                               configure() ran
+    redirect_uri()                             <public URL>/oauth/google/callback (the registered one)
     authorize_url(state, nonce, verifier, uri) where the browser is sent (scope openid email profile)
     await identity(code, verifier, uri, nonce) -> Identity, after exchanging the code and verifying
                                                the id_token; LoginFailed(reason) otherwise
 
-The client is authlib's httpx one (AsyncOAuth2Client: the code exchange with the PKCE verifier
-and client_secret_basic; the authorization URL from the same authlib helpers it uses). The id_token is verified here with joserfc against Google's JWKS:
-RS256 only, the signature, iss, aud (and azp when aud lists several), exp, iat, the nonce of
-this sign-in, a non-empty sub. The JWKS is cached for an hour and fetched again when a token
-names an unknown key (Google rotates them), at most once a minute for that reason.
+authlib builds the authorization URL, the PKCE challenge and the token request body; the HTTP
+calls are plain httpx (our own client: not authlib's, which picks httpx2 when it happens to be
+installed). The code exchange authenticates with client_secret_basic. The id_token is verified
+here with joserfc against Google's JWKS: RS256 only, the signature, iss, aud (and azp when aud
+lists several), exp, iat, the nonce of this sign-in, a non-empty sub. The JWKS is cached for an
+hour and fetched again when a token names an unknown key (Google rotates them), at most once a
+minute for that reason.
 
 The state, nonce and PKCE verifier are made and kept by the caller (backend/accounts/login.py,
 accounts.db oauth_states): no request.session (itsdangerous is not installed). Nothing here
@@ -26,9 +28,7 @@ import time
 from dataclasses import dataclass
 from typing import Optional
 
-from authlib.integrations.httpx_client._compat import httpx2 as HTTP
-
-from backend.settings.env_secrets import secret_env
+import httpx
 
 AUTHORIZE_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 TOKEN_URL = "https://oauth2.googleapis.com/token"
@@ -42,9 +42,7 @@ JWKS_TTL_S = 3600
 JWKS_REFETCH_S = 60            # an unknown key id refetches the JWKS at most this often
 TIMEOUT_S = 10.0
 
-# authlib's HTTP library: httpx2 when installed (authlib 1.8 prefers it), else httpx. The JWKS fetch
-# uses the same one, so one transport (tests: HTTP.MockTransport, a fake Google) serves both
-TRANSPORT = None
+TRANSPORT: Optional[httpx.AsyncBaseTransport] = None   # tests: httpx.MockTransport (a fake Google)
 clock = time.monotonic                                  # tests replace
 
 
@@ -65,33 +63,37 @@ class Identity:
     name: Optional[str]
 
 
+# the client, set once at start-up by login.decide(): a request never reads the environment
+_CONF: dict = {"id": None, "secret": None, "public": None}
+
+
+def configure(cid: Optional[str], secret: Optional[str], public_url: Optional[str]) -> None:
+    _CONF.update(id=cid, secret=secret, public=(public_url or "").rstrip("/") or None)
+
+
 def client_id() -> Optional[str]:
-    return secret_env("GOOGLE_CLIENT_ID")
+    return _CONF["id"]
 
 
 def client_secret() -> Optional[str]:
-    return secret_env("GOOGLE_CLIENT_SECRET")
+    return _CONF["secret"]
 
 
 def configured() -> bool:
-    return bool(client_id() and client_secret())
+    return bool(_CONF["id"] and _CONF["secret"] and _CONF["public"])
 
 
-def redirect_uri(request_base: str) -> str:
-    """The fixed public address when set (behind Cloudflare the app sees http://, so the
-    request's own origin would not be the registered https:// URI), else the request's origin."""
-    import os
-    base = (os.environ.get(ENV_PUBLIC_URL) or "").strip() or request_base
-    return base.rstrip("/") + CALLBACK_PATH
+def redirect_uri() -> str:
+    """The registered redirect: the fixed public address (behind Cloudflare the app itself sees
+    http:// and an internal host, so the request's own origin is never used)."""
+    return (_CONF["public"] or "") + CALLBACK_PATH
 
 
-def _client(redirect: Optional[str] = None):
-    from authlib.integrations.httpx_client import AsyncOAuth2Client
-    kw = {"timeout": TIMEOUT_S, "trust_env": False}
+def _http() -> httpx.AsyncClient:
+    kw = {"timeout": TIMEOUT_S, "trust_env": False, "follow_redirects": False}
     if TRANSPORT is not None:
         kw["transport"] = TRANSPORT
-    return AsyncOAuth2Client(client_id=client_id(), client_secret=client_secret(), scope=SCOPE,
-                             redirect_uri=redirect, code_challenge_method="S256", **kw)
+    return httpx.AsyncClient(**kw)
 
 
 def authorize_url(state: str, nonce: str, code_verifier: str, redirect: str) -> str:
@@ -117,11 +119,8 @@ def forget_keys() -> None:
 
 async def _fetch_jwks():
     from joserfc.jwk import KeySet
-    kw = {"timeout": TIMEOUT_S, "trust_env": False}
-    if TRANSPORT is not None:
-        kw["transport"] = TRANSPORT
     try:
-        async with HTTP.AsyncClient(**kw) as c:
+        async with _http() as c:
             r = await c.get(JWKS_URL)
     except Exception as e:         # noqa: BLE001 — Google unreachable: the sign-in fails, nothing else
         raise LoginFailed("jwks_" + type(e).__name__) from None
@@ -199,17 +198,21 @@ async def verify_id_token(id_token: str, nonce: str, now: Optional[int] = None) 
 
 async def identity(code: str, code_verifier: str, redirect: str, nonce: str) -> Identity:
     """Exchange the code (with this sign-in's PKCE verifier) and verify the id_token."""
-    if not code:
-        raise LoginFailed("no_code")
+    from authlib.oauth2.rfc6749.parameters import prepare_token_request
+    if not code or not configured():
+        raise LoginFailed("no_code" if not code else "not_configured")
+    body = prepare_token_request("authorization_code", code=code, redirect_uri=redirect, code_verifier=code_verifier)
     try:
-        async with _client(redirect) as c:
-            token = await c.fetch_token(TOKEN_URL, grant_type="authorization_code", code=code,
-                                        code_verifier=code_verifier, redirect_uri=redirect)
-    except LoginFailed:
-        raise
-    except Exception as e:                               # noqa: BLE001 — refused code, network, bad JSON
+        async with _http() as c:
+            r = await c.post(TOKEN_URL, content=body, auth=(client_id(), client_secret()),
+                             headers={"Content-Type": "application/x-www-form-urlencoded", "Accept": "application/json"})
+        token = r.json()
+    except Exception as e:                               # noqa: BLE001 — network, not JSON
         raise LoginFailed("token_" + type(e).__name__) from None
-    claims = await verify_id_token(token.get("id_token") if isinstance(token, dict) else None, nonce)
+    if r.status_code != 200 or not isinstance(token, dict) or "error" in token:
+        err = token.get("error") if isinstance(token, dict) else None
+        raise LoginFailed("token_" + (err if isinstance(err, str) and err.isidentifier() else str(r.status_code)))
+    claims = await verify_id_token(token.get("id_token"), nonce)
     email = claims.get("email") if isinstance(claims.get("email"), str) else None
     name = claims.get("name") if isinstance(claims.get("name"), str) else None
     verified = claims.get("email_verified")

@@ -741,7 +741,8 @@ def _test_week(gate):
 
 
 def _quality_by_week(weeks):
-    return {w["start"]: [s["title"] for s in w["sessions"] if s["kind"] == "quality"]
+    # the interval sessions (SP-87: the 專項期 技術地形 RPE 6–7 session is kind quality too — not an interval)
+    return {w["start"]: [s["title"] for s in w["sessions"] if s["kind"] == "quality" and s["id"] != "tech"]
             for w in weeks if w["mode"] != "recovery_week"}
 
 

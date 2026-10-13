@@ -558,7 +558,10 @@ async function loadAuto() {
   const st = $("autost");
   if (r.state === "computing") {
     st.hidden = false;
-    st.textContent = T("auto_progress", { done: r.n_done || 0, total: r.n_total || 0 });
+    // SP-394: after a version change / a first import the last 90 days come first, the older
+    // activities later in the background (tier warm / cold)
+    const n = { done: r.n_done || 0, total: r.n_total || 0 };
+    st.textContent = r.tier === "warm" || r.tier === "cold" ? T("auto_progress_older", n) : T("auto_progress", n);
     setTimeout(() => { if (gen === S.autoGen) loadAuto(); }, 1500);
   } else {
     st.hidden = r.state !== "error";

@@ -1,7 +1,8 @@
 """
-SP-74: 技術地形課 in the generated plan (engine/technical.py) — 基礎期 every other week's LSD as a
-low-RPE technical run, 專項期 one session a week as a quality session (RPE 6–7: 48 h spacing, the
-week's 20 % budget) or, without room, an easy one (RPE 4–5); road athletes get none. Synthetic.
+SP-74: 技術地形課 in the generated plan (engine/technical.py) — 專項期 one session a week as a quality
+session (RPE 6–7: 48 h spacing, the week's 20 % budget) or, without room, an easy one (RPE 4–5); road
+athletes get none. SP-87 (owner 2026-10-05): the 基礎期 no longer turns the LSD into a technical run
+(the LSD stays on steady terrain). Synthetic.
 """
 import datetime as dt
 from datetime import date
@@ -29,9 +30,10 @@ def test_week_context_rules():
     assert not T.week_context(**{**on, "kind": "taper", "mode": "taper"})["active"]
     assert not T.week_context(**{**on, "kind": "transition", "mode": "transition"})["active"]
     base = dict(kind="base", mode="base", road=False)
-    assert T.week_context(**base, monday=EVEN)["active"]
-    assert not T.week_context(**base, monday=MON)["active"]                        # every other week
-    assert not T.week_context(**base, monday=EVEN, b2b={"due": True})["active"]
+    # SP-87: no 基礎期 week has one any more (was: every even ISO week's LSD)
+    for mon in (EVEN, MON):
+        b = T.week_context(**base, monday=mon)
+        assert not b["active"] and "基礎期" in b["why"]
 
 
 def _week(mon=MON, q_day=1, long_min=150, easy=(50, 60, 50), q_title="閾值 2×20 分"):
@@ -44,23 +46,21 @@ def _week(mon=MON, q_day=1, long_min=150, easy=(50, 60, 50), q_title="閾值 2×
     return ss
 
 
-def test_base_long_becomes_low_rpe_technical_of_the_same_time():
-    info = T.week_context(kind="base", mode="base", monday=EVEN, road=False)
-    ss, notes = _week(EVEN), []
-    T.apply(ss, info, hours=7.0, rates={"trail": 60.0}, notes=notes)
-    s = next(x for x in ss if x["id"] == "long")
-    assert s["kind"] == "long" and s["minutes"] == 150 and s["day"] == d(5, EVEN)   # same slot, same time
-    assert s["title"] == "技術地形 150′（低 RPE 3–4）" and s["terrain"] == "trail" and s["target"] == ""
-    assert WS.rpe_role(s["steps"]["items"]) == "easy" and WT.session_role(s) == "easy"
-    assert WS.normalize(s["steps"])["items"][1]["target"]["type"] == "rpe"
-    assert s["climb_m"] and s["tss"] == pytest.approx(150.0)
-    assert info["planned"][0]["replaces"] == "long"
-    assert any(n["src"] == "technical" and "隔週" in n["text"] for n in notes)
-    # done / already technical: untouched
-    done = _week(EVEN)
-    done[0]["done"] = True
-    T.apply(done, T.week_context(kind="base", mode="base", monday=EVEN, road=False))
-    assert done[0]["title"] == "LSD"
+def test_base_long_stays_a_steady_terrain_lsd():
+    """SP-87 (decision 1): the 基礎期 LSD is never turned into 技術地形 — even and odd weeks alike, so
+    the long run stays on steady terrain (its HR drift reads the aerobic base)."""
+    for mon in (EVEN, MON):
+        info = T.week_context(kind="base", mode="base", monday=mon, road=False)
+        ss, notes = _week(mon), []
+        T.apply(ss, info, hours=7.0, rates={"trail": 60.0}, notes=notes)
+        s = next(x for x in ss if x["id"] == "long")
+        assert s["title"] == "LSD" and "steps" not in s and not notes
+        assert not any("技術地形" in (x.get("title") or "") for x in ss)
+    # even an info forced active for a 基礎期 week adds nothing (the base branch is gone)
+    ss = _week(EVEN)
+    T.apply(ss, {"active": True, "phase": "base", "monday": EVEN.isoformat()}, hours=7.0)
+    assert next(x for x in ss if x["id"] == "long")["title"] == "LSD"
+    assert not any(x.get("id") == "tech" for x in ss)
 
 
 def test_specific_quality_role_spaced_and_within_the_budget():
@@ -69,7 +69,9 @@ def test_specific_quality_role_spaced_and_within_the_budget():
     before = sum(x["minutes"] for x in ss if x["kind"] != "strength")
     T.apply(ss, info, hours=8.0, rates={"trail": 60.0}, notes=notes)
     s = next(x for x in ss if x["id"] == "tech")
-    assert s["kind"] == "hike" and WT.session_role(s) == "quality"                 # RPE 6–7
+    # RPE 6–7: a quality session, and its kind says so (SP-87 §4 #6; was kind hike) — adapt / reconcile
+    # key their hard-day checks on the kind
+    assert s["kind"] == "quality" and WT.session_role(s) == "quality"
     day = date.fromisoformat(s["day"])
     for h in (date.fromisoformat(d(1)), date.fromisoformat(d(5))):                 # quality Tue, long Sat
         assert abs((day - h).days) >= 2
@@ -91,7 +93,7 @@ def test_specific_without_budget_or_spacing_is_kept_easy():
     info = T.week_context(kind="specific", mode="specific", monday=MON, road=False)
     T.apply(ss, info, hours=4.0, notes=notes)
     s = next(x for x in ss if x["id"] == "tech")
-    assert WT.session_role(s) == "easy" and s["title"].endswith("（RPE 4–5）")
+    assert WT.session_role(s) == "easy" and s["title"].endswith("（RPE 4–5）") and s["kind"] == "hike"
     assert "強度預算不夠" in notes[0]["text"] and info["planned"][0]["role"] == "easy"
     # quality on Thu: no easy day ≥ 2 days from it and the Sat long run
     ss, notes = _week(q_day=3), []
@@ -123,8 +125,8 @@ def test_specific_respects_the_weekday_cap():
 
 
 def test_week_plan_and_projection_trail_vs_road():
-    """A trail athlete: 基礎期 even ISO weeks' LSD is technical, odd weeks plain, in week_plan and
-    in the projection alike; 專項期 one tech session a week; road athletes none."""
+    """A trail athlete: 基礎期 LSD stays plain every week (SP-87; was: even ISO weeks technical), in
+    week_plan and in the projection alike; 專項期 one tech session a week; road athletes none."""
     from backend.engine import overview as O
     from backend.engine import plan_prefs as PP
     from backend.engine import projection as PJ
@@ -139,14 +141,12 @@ def test_week_plan_and_projection_trail_vs_road():
     st = Status(ds, plan, TODAY, prefs=PP.Prefs()).compute()
     wp = O.week_plan(ds, st, TODAY, sport="trail")                    # week of 9/28 = ISO 40 (even)
     lg = next(s for s in wp["sessions"] if s["id"] == "long")
-    assert lg["title"].startswith("技術地形") and lg["steps"] and wp["technical"]["planned"]
+    assert wp["phase"] == "base" and not lg["title"].startswith("技術地形") and not wp["technical"]["active"]
     weeks = PJ.project_weeks(wp, _phases(plan, TODAY), date(2026, 11, 8))
+    assert weeks
     for w in weeks:
-        long_s = next((s for s in w["sessions"] if s["id"] == "long"), None)
-        if long_s is None:
-            continue
-        even = date.fromisoformat(w["start"]).isocalendar()[1] % 2 == 0
-        assert long_s["title"].startswith("技術地形") == even, w["start"]
+        assert not any("技術地形" in s["title"] or s["id"] == "tech" for s in w["sessions"]), w["start"]
+        assert "technical" not in w
     road = O.week_plan(ds, st, TODAY, sport="road")
     assert not road["technical"]["active"] and not any("技術地形" in s["title"] for s in road["sessions"])
     for w in PJ.project_weeks(road, _phases(plan, TODAY), date(2026, 11, 8)):
@@ -163,7 +163,8 @@ def test_week_plan_and_projection_trail_vs_road():
     for w in built:
         t = next(s for s in w["sessions"] if s["id"] == "tech")
         if WT.session_role(t) == "quality":
-            hard = [date.fromisoformat(s["day"]) for s in w["sessions"] if s["kind"] in ("quality", "long")]
+            # (SP-87: the tech session is kind quality itself now — the other hard days)
+            hard = [date.fromisoformat(s["day"]) for s in w["sessions"] if s["kind"] in ("quality", "long") and s is not t]
             assert all(abs((date.fromisoformat(t["day"]) - h).days) >= 2 for h in hard)
         assert any(n.get("src") == "technical" for n in w["notes"])
     assert any(WT.session_role(next(s for s in w["sessions"] if s["id"] == "tech")) == "quality" for w in built)
@@ -294,13 +295,15 @@ def test_the_walking_cap_is_named_in_the_text_only():
     from backend.engine import target_policy as TP
     from backend.sync import coros_workouts as CW
     w = HP.walk_cap(195.0, aet=145.0)
-    for mon, kind in ((EVEN, "base"), (MON, "specific")):
+    for mon, kind in ((MON, "specific"),):                       # SP-87: the 基礎期 has none any more
         info = T.week_context(kind=kind, mode=kind, monday=mon, road=False)
         ss = _week(mon)
         T.apply(ss, info, hours=8.0, rates={"trail": 60.0}, walk=w)
         t = next(s for s in ss if "技術地形" in (s.get("title") or ""))
         assert "心率參考上限約 146 bpm（75% 最大心率）或 RPE ≤ 13；技術路段以安全為主，不用硬壓心率" in t["detail"]
-        assert t["target"] == "" and TP.target_policy(t)["type"] in ("hike", "trail_long")
+        # the RPE 6–7 one is kind quality (SP-87): its policy reads 「hill」, its push is the RPE structure
+        # (no HR target past the warm-up's AeT, checked below)
+        assert t["target"] == "" and TP.target_policy(t)["type"] in ("hike", "trail_long", "hill")
         th = CW.Thresholds.of({"lthr": 165.0, "aet": 145.0, "walk_cap": w})
         steps = CW.session_steps({**t, "basis": "hr"}, th)
         assert all(not st.intensity or st.intensity[0] != "hr" or st.intensity[2] <= 145 for st in steps)
@@ -312,3 +315,152 @@ def test_the_walking_cap_is_named_in_the_text_only():
     ss = _week(MON)
     T.apply(ss, T.week_context(kind="specific", mode="specific", monday=MON, road=False), hours=8.0, walk=None)
     assert "心率參考上限" not in next(s for s in ss if s["id"] == "tech")["detail"]
+
+
+def test_a_tech_session_already_behind_blocks_a_second_one():
+    """SP-87 (plan_store.hook_days): this week's stored 技術地形 already behind → no second one (the
+    SP-74 known limit: the generator counted the done run as an easy run and picked the next)."""
+    c = T.week_context(kind="specific", mode="specific", monday=MON, road=False, behind=d(2))
+    assert not c["active"] and "已經排在" in c["why"]
+    assert T.week_context(kind="specific", mode="specific", monday=MON, road=False, behind=None)["active"]
+
+
+# ---- SP-87: the race's 土徑比 decides the 專項期 technical session (owner 2026-10-12: 50 %) --------------
+
+def _race(trail_pct=None, kind="race"):
+    from backend.engine.planning import Event
+    return Event("e1", "越野賽", "2026-12-05", kind=kind, priority="A", distance_km=30, climbing_m=2000,
+                 est_hours=5.0, trail_pct=trail_pct)
+
+
+def test_trail_share_of_the_race_decides_the_specific_session():
+    on = dict(kind="specific", mode="specific", monday=MON, road=False)
+    assert T.week_context(**on, events=[_race(50)])["active"]                     # ≥ 50 %: as before
+    assert T.week_context(**on, events=[_race(80)])["active"]
+    assert T.week_context(**on, events=[_race(None)])["active"]                   # not set: as before
+    assert T.week_context(**on, events=[])["active"] and T.week_context(**on)["active"]
+    low = T.week_context(**on, events=[_race(30)])
+    assert not low["active"] and "30%" in low["why"] and "50%" in low["why"]
+    # a B race or one already past doesn't decide
+    from backend.engine.planning import Event
+    b = Event("b1", "B 賽", "2026-11-01", kind="race", priority="B", distance_km=20, climbing_m=800, trail_pct=10)
+    past = Event("p1", "舊賽", "2026-09-01", kind="race", priority="A", distance_km=20, trail_pct=10)
+    assert T.week_context(**on, events=[b, past, _race(None)])["active"]
+    ss = _week()
+    T.apply(ss, T.week_context(**on, events=[_race(30)]), hours=8.0)
+    assert not any(x.get("id") == "tech" for x in ss)
+
+
+def test_week_plan_and_projection_follow_the_trail_share():
+    from backend.engine import overview as O
+    from backend.engine import plan_prefs as PP
+    from backend.engine import projection as PJ
+    from backend.engine.status import Status
+    from backend.tests.test_b2b import _history, _phases, _plan_with
+    from backend.tests.test_quality_gate import TODAY
+    ds = _history(TODAY)
+    plan = _plan_with("2026-12-05", 1, TODAY)
+    plan.events = [_race(20)]
+    ds.plan = plan
+    st = Status(ds, plan, TODAY, prefs=PP.Prefs()).compute()
+    wp = O.week_plan(ds, st, TODAY, sport="trail")
+    assert wp["phase"] == "specific" and not wp["technical"]["active"] and "土徑比" in wp["technical"]["why"]
+    weeks = PJ.project_weeks(wp, _phases(plan, TODAY), date(2026, 11, 8), events=plan.events)
+    assert weeks and not any(s["id"] == "tech" for w in weeks for s in w["sessions"])
+    plan.events = [_race(60)]
+    st = Status(ds, plan, TODAY, prefs=PP.Prefs()).compute()
+    wp = O.week_plan(ds, st, TODAY, sport="trail")
+    weeks = PJ.project_weeks(wp, _phases(plan, TODAY), date(2026, 11, 8), events=plan.events)
+    assert any(s["id"] == "tech" for w in weeks for s in w["sessions"])
+
+
+def test_the_event_keeps_its_trail_share(tmp_path, monkeypatch):
+    """賽事設定: 土徑比 % (0–100, blank = not set) through the API and plan.json; old events have none."""
+    from fastapi import HTTPException
+    from backend.api import plan as A
+    from backend.engine import planning as P
+    monkeypatch.setattr(P, "PLAN_PATH", tmp_path / "plan.json")
+    monkeypatch.setattr(A, "_notify", lambda thresholds: None)
+    r = A.put_event(A.EventIn(id="t", name="越野 30K", date="2027-01-10", kind="race", distance_km=30,
+                              climbing_m=1500, trail_pct=65))
+    assert r["event"]["trail_pct"] == 65
+    assert P.Plan.load().events[0].trail_pct == 65
+    r = A.put_event(A.EventIn(id="t", name="越野 30K", date="2027-01-10", kind="race", distance_km=30))
+    assert r["event"]["trail_pct"] is None
+    for bad in (-1, 120):
+        with pytest.raises(HTTPException) as x:
+            A.put_event(A.EventIn(id="t", name="越野 30K", date="2027-01-10", trail_pct=bad))
+        assert x.value.status_code == 400 and "土徑比" in x.value.detail
+    assert P.Plan().upsert_event({"name": "x", "date": "2027-01-10", "trail_pct": ""}).trail_pct is None
+    (tmp_path / "old.json").write_text('{"events": [{"id": "o", "name": "舊", "date": "2027-01-10"}]}', "utf-8")
+    assert P.Plan.load(tmp_path / "old.json").events[0].trail_pct is None
+
+
+# ---- SP-87 §4 #6: the RPE 6–7 technical session is kind quality — what reads the kind ----------------
+
+def test_an_rpe_quality_session_is_not_graded_by_hr_or_power():
+    """plan_match.planned_intensity: an RPE-set 強度課 (技術地形 RPE 6–7, no HR / power target — footing,
+    not the heart, sets the effort) is not graded by threshold time (None, like the old kind hike);
+    an interval still is."""
+    from backend.engine import plan_match as PM
+    ss = _week()
+    T.apply(ss, T.week_context(kind="specific", mode="specific", monday=MON, road=False), hours=8.0)
+    t = next(x for x in ss if x["id"] == "tech")
+    assert t["kind"] == "quality" and PM.planned_intensity(t) is None
+    assert PM.graded(t, {"category": "trail", "hard_s": 0.0}) == (None, None, None)
+    assert PM.planned_intensity(next(x for x in ss if x["id"] == "quality")) == "hard"
+
+
+def test_the_stored_quality_tech_row_counts_as_the_users_own_and_stays_out_of_the_ladder(tmp_path):
+    """A stored kind-quality 技術地形 row (custom, or the generated one edited) is the user's own RPE ≥ 7
+    session for the 20 % budget (plan_store.user_rpe_rows → user_quality), as a kind hike one was; an
+    interval (a library variant or HR steps) is not. done_plan (the interval ladder's history) leaves
+    RPE-set sessions out, as it did while they were kind hike."""
+    import json
+    import sqlite3
+    from sqlalchemy import create_engine
+    from backend.db.models import Base
+    from backend.engine import plan_store as PS
+    db = tmp_path / "w.db"
+    eng = create_engine(f"sqlite:///{db}")
+    Base.metadata.create_all(eng)
+    eng.dispose()
+    rpe = json.dumps(_user_row(d(3))["steps"], ensure_ascii=False)
+    b = WT.B()
+    hr = json.dumps(WS.doc([b.warm(15), b.t("work", 1200, WT.hr(0.95, 1.0), "閾值"), b.cool(10)], origin="user"),
+                    ensure_ascii=False)
+    con = sqlite3.connect(db)
+    for uid, kind, origin, edited, state, st, vk, done in (
+            ("q", "quality", "auto", 1, "active", rpe, None, None),
+            ("c", "quality", "custom", 0, "done", rpe, None, '{"index": 7}'),
+            ("v", "quality", "custom", 0, "active", rpe, "v3c", None),
+            ("h", "quality", "custom", 0, "active", hr, None, None),
+            ("i", "quality", "auto", 0, "done", None, "v3c", '{"index": 8}')):
+        con.execute("INSERT INTO plan_sessions (athlete_id, uid, week_start, day, kind, title, minutes, origin, edited,"
+                    " provisional, state, steps, variant_key, done_by, updated_at) VALUES (1, ?, '2026-10-05',"
+                    " '2026-10-08', ?, '技術地形 85′', 85, ?, ?, 0, ?, ?, ?, ?, '2026-10-05')",
+                    (uid, kind, origin, edited, state, st, vk, done))
+    con.commit()
+    con.close()
+    got = PS.user_rpe_rows(db)
+    assert sorted(r["uid"] for r in got) == ["c", "q"]
+    assert sorted(x["uid"] for x in T.user_quality(got, MON)) == ["c", "q"]
+    assert set(PS.done_plan(db)) == {8}                    # the interval only; the done tech run (7) is out
+
+
+def test_the_quality_session_stays_out_of_the_easy_days_after_a_b2b():
+    """SP-87 (surfaced by kind quality): the RPE 6–7 session is a hard day, so not in the easy days after
+    an accepted B2B (b2b.post.until) — like the downhill session and the 長爬坡反覆; without another spaced
+    day it is the RPE 4–5 one (easy, allowed there)."""
+    b2b = {"post": {"start": d(-2), "end": d(-1), "until": d(3)}}
+    info = T.week_context(kind="specific", mode="specific", monday=MON, road=False, b2b=b2b)
+    ss, notes = _week(), []
+    T.apply(ss, info, hours=8.0, notes=notes)
+    t = next(x for x in ss if x["id"] == "tech")
+    assert t["kind"] == "hike" and WT.session_role(t) == "easy"            # Wed / Thu were the spaced days
+    assert "B2B" in notes[0]["text"]
+    ss = _week()
+    T.apply(ss, T.week_context(kind="specific", mode="specific", monday=MON, road=False,
+                               b2b={"post": {"until": d(2)}}), hours=8.0)
+    t = next(x for x in ss if x["id"] == "tech")
+    assert t["kind"] == "quality" and t["day"] == d(3)                      # Thu: after the easy days

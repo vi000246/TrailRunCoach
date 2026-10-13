@@ -1,8 +1,9 @@
 # 多使用者模式：帳號資料庫、擁有者遷移與 Google 登入（SP-384、SP-58）
 
-> 狀態：資料面（SP-384）與 Google 登入（SP-58）都已完成。**登入只在 `WKO5COACH_ACCOUNTS=1` 而且設了
-> `GOOGLE_CLIENT_ID`＋`GOOGLE_CLIENT_SECRET` 時才啟用**；少任何一個，每個請求都還是擁有者，跟以前一樣（§5.1）。
-> 正式環境要等 SP-387 的前置（固定網域、OAuth client、拿掉 Cloudflare Access）同一次部署才打開。
+> 狀態：資料面（SP-384）與 Google 登入（SP-58）都已完成。**登入模式在啟動時決定一次、之後不會變**：
+> `WKO5COACH_ACCOUNTS=1` 加上整組登入設定才是登入模式；一個登入設定都沒有就是原本的擁有者模式；
+> 設了一部分（或讀不到 secret 檔）就**拒絕啟動**（§5.1）。
+> 正式環境要等 SP-387 的前置（固定網域、OAuth client、拿掉 Cloudflare Access）同一次部署才打開，部署後照 §5.6 驗。
 > 規格：`docs/plans/auth-and-demo.plan.md` §2.2、§4、§5、§7。
 
 ## 1. 放在哪裡
@@ -51,52 +52,81 @@
 
 ## 5. Google 登入（SP-58）
 
-### 5.1 開關：什麼時候要求登入
+### 5.1 模式：啟動時決定一次
 
-| `WKO5COACH_ACCOUNTS` | Google client（ID＋SECRET 都有） | 結果 |
-|---|---|---|
-| 沒設 | 任何 | 單人模式：每個請求都是擁有者，跟 SP-58 之前完全一樣；`/login` 等登入路徑回 404 |
-| `1` | 沒有或只有一半 | 多使用者資料面（SP-384），但**不要求登入**，每個請求還是擁有者；啟動時 log 一行警告 |
-| `1` | 有 | **要求登入**：沒登入只有公開路徑打得開（§5.3），其他 API 回 401、頁面導到 `/login` |
-| 示範 instance（`WKO5COACH_MODE=demo`） | 任何 | 不受影響（示範模式永遠不是多使用者模式，也不掛登入路由） |
+模式在啟動時（`backend/accounts/login.py` 的 `decide()`）決定、凍結，之後每個請求都只看這個結果，不會再讀環境變數
+（secret 檔後來讀不到、env 被改，都不會讓某個請求變回擁有者模式）。`/healthz` 回 `{"ok": true, "mode": "signin" | "owner"}`。
 
-要求登入時，啟動會先確認**擁有者的 Google 帳號**認得出來（user 1 已經綁過，或設了下面其中一個 env）；認不出來就停在啟動
-（`LoginConfigError`），不會帶著「擁有者登不進自己資料」的狀態上線。
+| 設定 | 模式 |
+|---|---|
+| 一個登入設定都沒有（`WKO5COACH_ACCOUNTS` 沒設、`0`，或只有 `1`） | **owner**：每個請求都是擁有者，跟 SP-58 之前完全一樣；`/login` 等登入路徑回 404 |
+| `WKO5COACH_ACCOUNTS=1` ＋ §5.2 整組 | **signin**：沒登入只有公開路徑打得開（§5.3），其他 API 回 401、頁面導到 `/login` |
+| 示範 instance（`WKO5COACH_MODE=demo`） | 不受影響（不掛登入路由） |
+| 其他任何組合 | **拒絕啟動**（`LoginConfigError`，訊息寫明缺什麼）。例如：設了 Google client 但 `WKO5COACH_ACCOUNTS` 沒開；開了但少 secret、少 `WKO5COACH_PUBLIC_URL`；`*_FILE` 讀不到；`WKO5COACH_PUBLIC_URL` 不是 https（localhost 除外）或帶路徑；https 但 `WKO5COACH_TRUSTED_PROXIES` 沒設或還是預設值；擁有者的 Google 帳號認不出來（user 1 還沒綁，也沒設 `WKO5COACH_OWNER_*`）；`WKO5COACH_ACCOUNTS` 不是 on／off 的值 |
+
+「登入設定」指：`GOOGLE_CLIENT_ID[_FILE]`、`GOOGLE_CLIENT_SECRET[_FILE]`、`WKO5COACH_OWNER_GOOGLE_SUB`、`WKO5COACH_OWNER_EMAIL`、`WKO5COACH_PUBLIC_URL`。
+**部署前先檢查 NAS 的 `.env`**：如果已經預先放了其中任何一個，但 `WKO5COACH_ACCOUNTS` 還沒開，這個版本會拒絕啟動。
 
 ### 5.2 環境變數
 
 | 名字 | 用途 |
 |---|---|
+| `WKO5COACH_ACCOUNTS=1` | 多使用者開關（SP-384）；也要 `WKO5COACH_SECRET_KEY` |
 | `GOOGLE_CLIENT_ID`、`GOOGLE_CLIENT_SECRET` | Google OAuth client（Web application）。只從 env 或 `*_FILE`（Docker secret）讀，見 `deploy/commercial.md` §2、§5 |
-| `WKO5COACH_PUBLIC_URL` | 固定的對外網址，例如 `https://coach.yichlin.com`；redirect URI 是 `<它>/oauth/google/callback`。沒設就用請求自己的網址（本機開發 `http://localhost:8000` 可以；在 Cloudflare 後面一定要設，否則 app 看到的是 `http://`） |
-| `WKO5COACH_OWNER_GOOGLE_SUB` | 擁有者 Google 帳號的 `sub`（Google 帳號的固定 ID）。設了就**只認這個 sub**，email 不算 |
-| `WKO5COACH_OWNER_EMAIL` | 沒有 sub 時用：Google 說已驗證、而且等於這個 email 的帳號是擁有者 |
+| `WKO5COACH_PUBLIC_URL` | **必填**。固定的對外網址，只有 origin，例如 `https://coach.yichlin.com`；redirect URI 是 `<它>/oauth/google/callback`。一定要 https；本機開發可用 `http://localhost:8000` |
+| `WKO5COACH_TRUSTED_PROXIES` | https 時**必填**。只填 cloudflared 容器的位址（`/32`），例如 `172.18.0.5/32`。app 只在直接連線端是它時才採用 `CF-Connecting-IP`，登入限流才算得到真正的使用者 IP；填整段 Docker 網段的話，同網段的任何容器都能假造 IP |
+| `WKO5COACH_OWNER_GOOGLE_SUB` | 擁有者 Google 帳號的 `sub`（Google 帳號的固定 ID）。**建議用這個**；設了就只認這個 sub，email 不算 |
+| `WKO5COACH_OWNER_EMAIL` | 沒有 sub 時用：Google 說已驗證、而且等於這個 email 的帳號是擁有者。只設這個時啟動會記一行 warning 建議改用 sub |
 | `WKO5COACH_MAX_USERS` | 註冊上限，預設 100（擁有者與停用的帳號也算）。到上限後新的 Google 帳號只記進候補名單（`waitlist`），不建帳號與租戶 |
-| `WKO5COACH_COOKIE_SECURE=0` | 只限本機 http 開發（cookie 不加 `Secure`）；正式環境不要設 |
+| `WKO5COACH_COOKIE_SECURE=0` | 只限 `http://localhost` 開發；`WKO5COACH_PUBLIC_URL` 是 https 時不管它設什麼，登入 cookie 一律 `Secure` |
 
-### 5.3 公開路徑
+**app 的埠只給 cloudflared 連**：`8000` 只綁 `127.0.0.1`（`ports: ["127.0.0.1:8000:8000"]`），或乾脆不發布、讓 cloudflared 走同一個
+Docker network。repo 的 `docker-compose.yml` 目前是 `"8000:8000"`（所有介面都開），**這張單沒有改它**：NAS 上 cloudflared 怎麼連進來要
+擁有者確認後再改，避免把現在的部署弄壞。
+
+### 5.3 公開路徑與 cookie
 
 `/login`、`/signup`、`/oauth/*/callback`、`/api/v1/account/login|signup|logout`、`/api/v1/session`、`/api/v1/static/*`、`/healthz`，
-以及 `/share/*`（照舊讀擁有者的分享與課表訂閱，不看 session）。其他路徑都要登入；寫入（非 GET／HEAD）一律檢查 CSRF
-（`X-TRC-CSRF` 等於 `trc_csrf` cookie，跟示範模式同一套）。
+以及 `/share/*`（照舊讀擁有者的分享與課表訂閱，不看 session；`accounts.db` 的 `shares` 表還沒有分享頁在寫，所以還沒辦法對到別的使用者）。
+其他路徑都要登入；寫入（非 GET／HEAD）一律檢查 CSRF（`X-TRC-CSRF` 等於 CSRF cookie，跟示範模式同一套）。路徑裡有 `/./`、`/../`、`//`、
+反斜線或編碼過的 `/`、`\`、`.`（`%2f`、`%5c`、`%2e`）一律回 400。沒登入的請求沒有租戶（讀資料會失敗），不會變成擁有者。
+
+登入模式的 cookie 在 https 下都用 `__Host-` 前綴（`Secure`、`Path=/`、沒有 `Domain`、`SameSite=Lax`）：
+`__Host-trc_session`、`__Host-trc_oauth`、`__Host-trc_signup`、`__Host-trc_csrf`。擁有者模式與示範模式的 cookie 名稱不變（`trc_csrf`、`trc_demo`）。
 
 ### 5.4 擁有者第一次登入
 
 1. 照 §2 遷移完（`WKO5COACH_ACCOUNTS=1`、server key 在 env）。
-2. 在 `.env` 設 `WKO5COACH_OWNER_EMAIL=<你的 Gmail>`（或 `WKO5COACH_OWNER_GOOGLE_SUB`），加上 Google client 與 `WKO5COACH_PUBLIC_URL`，重新啟動。
+2. 在 `.env` 設 `WKO5COACH_OWNER_GOOGLE_SUB`（或 `WKO5COACH_OWNER_EMAIL=<你的 Gmail>`），加上 Google client、`WKO5COACH_PUBLIC_URL`、`WKO5COACH_TRUSTED_PROXIES`，重新啟動。
 3. 打開網站 → 用 Google 登入 → 應該直接回到總覽，看到原本的資料（user 1；擁有者不需要同意條款）。
 4. 這一次登入就把這個 Google 帳號綁到 user 1；之後只有這個帳號（同一個 `sub`）是擁有者，env 的 email 改了或別人用同一個 email
    開了新的 Google 帳號，都搶不走 user 1。要換擁有者的 Google 帳號只能手動改 `accounts.db`（`users.google_sub`、`identities`）。
+5. **擁有者登入之前，其他人一律不能註冊**（畫面顯示「網站還在設定中」）：env 的 email 打錯字時，擁有者不會被建成一個新的空帳號。
 
 ### 5.5 一般使用者
 
 - 第一次用 Google 登入：先到 `/signup` 看四份文件（`backend/legal/`，目前是草稿，待 SP-60），勾選同意才建帳號與自己的租戶，
   之後進到總覽，首次精靈（性別、年齡、體重、跑步經驗問卷）自己會跳出來。
-- 同意紀錄：`consents` 表（使用者、條款版本 `backend/accounts/terms.py` 的 `VERSION`、每份文件的 sha256、時間）。
-  改了任何一份文件就要改 `VERSION`，所有人下次登入時會被要求重新同意。
+- 同意紀錄：`consents` 表（使用者、條款版本、使用者看到的那幾份文件的 sha256、時間）。頁面送出時要帶回它看到的那組 digest，對不上就要求重看。
+- **改條款**：改 `backend/legal/` 的文件時，一定要同時改 `backend/accounts/terms.py` 的 `VERSION`，並把新的 digest 記進 `PINNED`
+  （`test_terms_digests_are_pinned_to_the_version` 會擋）。改版後，已登入的人下一個請求就被擋下（API 403 `TERMS_REQUIRED`，
+  頁面導到 `/signup`），同意後繼續用；擁有者不受影響。
 - Google email 沒驗證的帳號、被停用的帳號（`store.set_disabled`）不能登入。
-- Session：只存 token 的 sha256；30 天，使用中每小時最多延長一次；每次登入換新 token；登出刪掉那一列。
-- 限流：同一個 IP 15 分鐘內最多 10 次開始登入、10 次回呼。
+- Session：只存 token 的 sha256；30 天，使用中每小時最多延長一次，**最長登入後 90 天**一定要重新登入；每次登入換新 token；登出刪掉那一列。
+- 限流：每個用戶端（IPv6 以 /64 計）15 分鐘內最多 10 次開始登入；回呼只有通過 state 檢查的才算，同樣 15 分鐘 10 次（亂打回呼不會用掉別人的額度）。
+
+### 5.6 部署後的 smoke test
+
+拿掉 Cloudflare Access 之前與之後各跑一次（從外網）：
+
+```bash
+curl -s https://coach.yichlin.com/healthz                                   # {"ok":true,"mode":"signin"}
+curl -s -o /dev/null -w '%{http_code}\n' https://coach.yichlin.com/api/v1/plan   # 一定要是 401
+curl -s -o /dev/null -w '%{http_code} %{redirect_url}\n' -H 'Accept: text/html' \
+     https://coach.yichlin.com/api/v1/overview/page                          # 302 → /login?next=…
+```
+
+`/healthz` 不是 `signin`、或 `/api/v1/plan` 不是 401，就**不要拿掉 Access**，先查 `.env`。
 
 ## 6. 還沒做的（別的單）
 

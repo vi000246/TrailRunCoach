@@ -174,10 +174,31 @@ def _dose_text(d: Optional[dict]) -> str:
     return _("閾值以上 {a:.0f}／{b:.0f} 分", a=a, b=b)
 
 
+def rpe_set(s: dict) -> bool:
+    """A session whose structure is set by RPE (技術地形／下坡, SP-62) and is no library interval: footing,
+    not the heart, sets its effort, so threshold time doesn't measure it (SP-87: the 專項期 技術地形
+    RPE 6–7 session is kind quality)."""
+    if s.get("variant_key"):
+        return False
+    st = s.get("steps")
+    if isinstance(st, str):
+        import json
+        try:
+            st = json.loads(st)
+        except ValueError:
+            return False
+    if not isinstance(st, dict):
+        return False
+    from backend.engine import workout_steps as WS
+    return WS.rpe_role(st.get("items") or []) is not None
+
+
 def planned_intensity(s: dict) -> Optional[str]:
     k = s.get("kind")
     if k == "test" and is_aet(s):
         return "easy"                       # the AeT test is a steady run below AeT
+    if k in HARD and rpe_set(s):
+        return None                         # an RPE-set 強度課 (技術地形 RPE 6–7): not measured (as kind hike was)
     if k in HARD:
         return "hard"
     if k in ("easy", "long"):

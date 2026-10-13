@@ -293,7 +293,15 @@ def _downgrade(g: dict, th: dict) -> str:
     m = min(int(g.get("minutes") or 45), 45)
     g.update(kind="easy", title="輕鬆跑", minutes=m, target="", detail=f"心率不超過{easy_cap_label(th or {})}（原本的強度課改成輕鬆跑）",
              tss=round(m * rate, 1), protocol=None, **NO_VARIANT)
+    _drop_steps(g)
     return "輕鬆跑"
+
+
+def _drop_steps(g: dict) -> None:
+    """A session that became another one keeps no structure of the old (SP-87: the 專項期 技術地形 RPE
+    6–7 session is kind quality, so these downgrades reach it — its RPE structure would be pushed)."""
+    if g.get("steps"):
+        g["steps"] = None
 
 
 NO_VARIANT = {k: None for k in ("variant_key", "rung_key", "equiv", "swap", "swap_reason", "variant_reps",
@@ -304,6 +312,7 @@ def _to_recovery(g: dict, th: dict) -> str:
     from backend.engine import quality_gate as QG
     s = QG.session(QG.RECOVERY, th or {})
     g.update({k: s[k] for k in ("title", "minutes", "target", "detail", "tss")}, **NO_VARIANT)
+    _drop_steps(g)
     return s["title"]
 
 

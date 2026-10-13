@@ -125,10 +125,12 @@ def _same_series(a: dict, b: dict, tol=1e-9):
 # ---------------------------------------------------------------------------- tiers / layout
 
 def test_tiers_are_hot_90_days_warm_a_year_cold_older():
-    assert (coldstore.HOT_DAYS, coldstore.WARM_DAYS, coldstore.NPZ_KEEP_DAYS) == (90, 365, 365)
-    assert coldstore.tier(T, T) == "hot" and coldstore.tier(T - 89, T) == "hot"
-    assert coldstore.tier(T - 90, T) == "warm" and coldstore.tier(T - 364, T) == "warm"
-    assert coldstore.tier(T - 365, T) == "cold"
+    """One definition (backend/jobs.py, SP-394): hot ≤ 90 days, warm ≤ 365, cold older."""
+    assert (jobs.HOT_DAYS, jobs.WARM_DAYS, coldstore.NPZ_KEEP_DAYS) == (90, 365, 365)
+    assert not hasattr(coldstore, "HOT_DAYS") and not hasattr(coldstore, "WARM_DAYS")
+    assert coldstore.tier(T, T) == "hot" and coldstore.tier(T - 90, T) == "hot"
+    assert coldstore.tier(T - 91, T) == "warm" and coldstore.tier(T - 365, T) == "warm"
+    assert coldstore.tier(T - 366, T) == "cold" and coldstore.is_cold(T - 366, T)
 
 
 # ---------------------------------------------------------------------------- prepare_archive
@@ -383,8 +385,8 @@ def test_an_object_the_user_deleted_takes_its_frozen_summary_with_it(tmp_path, m
 
 def test_sweep_keeps_channels_a_year_and_recalls_them_from_the_fit(env, monkeypatch):
     ds = _build(env)
-    cold = [w for w in ds.workouts if T - math.floor(w.day) >= coldstore.WARM_DAYS]
-    warm = [w for w in ds.workouts if T - math.floor(w.day) < coldstore.WARM_DAYS]
+    cold = [w for w in ds.workouts if coldstore.is_cold(w.day, T)]
+    warm = [w for w in ds.workouts if not coldstore.is_cold(w.day, T)]
     assert cold and warm
     keep = {w.entry.file: ds._store.arrays(w.entry.file) for w in cold[:3]}
     st = coldstore.sweep(ds)
@@ -527,19 +529,57 @@ def test_the_sweep_is_a_cold_job_of_the_queue(monkeypatch):
     assert coldstore._sweep_job(ref, None) is None and len(ran) == 1
 
 
-def test_the_warm_up_queues_the_sweep_last(monkeypatch):
+def test_the_warm_up_queues_the_sweep_after_the_classification(monkeypatch, tmp_path):
+    """Queued when the classification's last tier is done, right after SP-394's sweep of the old
+    series rows (the same moment: 補完新版才刪舊版); at once when there was nothing to classify."""
     from backend.api import activity_auto as AA, racepower as RP, wko5views
     from backend.engine import calibrate as CAL, plan_auto
+    from backend.engine.wko5expr import dataset as D
     order = []
-    ds = object.__new__(FitFolderDataset)
+
+    class DS:
+        def _series_home(self):
+            return tmp_path
+
+    class Job:
+        def __init__(self):
+            self.cbs = {}
+
+        def when_done(self, fn, key=None):
+            self.cbs[key] = fn
+    ds, job = DS(), Job()
     monkeypatch.setattr(wko5views, "_dataset", lambda: ds)
     monkeypatch.setattr(plan_auto, "busy", lambda: False)
     monkeypatch.setattr(CAL, "_registry", lambda: {})
-    monkeypatch.setattr(AA, "job_for", lambda d: order.append("classify"))
+    monkeypatch.setattr(AA, "job_for", lambda d, priority=None: order.append("classify") or job)
     monkeypatch.setattr(RP, "warm_charts", lambda j: order.append("charts"))
-    monkeypatch.setattr(coldstore, "schedule_sweep", lambda reason, d=None: order.append(("sweep", d)))
+    monkeypatch.setattr(D, "sweep_series", lambda stores=None, **k: order.append("series"))
+    monkeypatch.setattr(coldstore, "schedule_sweep", lambda reason, d=None: order.append(("cold", d)))
     wko5views._low_priority("test", {})
-    assert order == ["classify", "charts", ("sweep", ds)]
+    assert order == ["classify", "charts"]                  # the classification still runs
+    job.cbs["sweep"]()                                       # its last tier done
+    assert order == ["classify", "charts", "series", ("cold", ds)]
+    monkeypatch.setattr(AA, "job_for", lambda d, priority=None: order.append("classify") or None)
+    order.clear()
+    wko5views._low_priority("test", {})
+    assert order == ["classify", ("cold", ds), "charts"]   # nothing to classify: queued at once
+
+
+def test_nothing_is_frozen_or_dropped_while_a_first_import_is_back_filled(env, monkeypatch):
+    """A hot-first Dataset (SP-394 第 4 條: older files deferred, or FitStore.first_import while its
+    back-fill runs) holds only part of the history: the sweep skips it, the archive refuses."""
+    ds = _build(env)
+    ds.deferred = [(dt.date(2023, 1, 1), env / "2023" / "x.fit")]
+    assert coldstore.sweep(ds)["skipped"] == "backfill"
+    with pytest.raises(coldstore.NotComplete):
+        coldstore.prepare_archive(CUTOFF, ds=ds)
+    ds.deferred = []
+    ds._store.first_import = True
+    assert coldstore.sweep(ds)["skipped"] == "backfill"
+    assert not coldstore.ColdStore(env).months()
+    assert all(ds._store.npz(w.entry.file).exists() for w in ds.workouts)
+    ds._store.first_import = False
+    assert coldstore.sweep(ds)["npz_dropped"] > 0
 
 
 def test_dataset_status_shows_a_recall_like_a_build(monkeypatch):

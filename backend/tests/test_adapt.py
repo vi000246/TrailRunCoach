@@ -290,3 +290,21 @@ def test_done_session_counts_its_actual_tss():
     assert PS.session_tss(s) == 60.0
     assert PS.session_tss({**s, "kind": "notice"}) == 0.0
     assert PS.session_tss({**s, "state": "active"}) == 36.0
+
+
+def test_a_downgraded_rpe_quality_session_drops_its_rpe_structure():
+    """SP-87: the 專項期 技術地形 RPE 6–7 session is kind quality now, so adapt's downgrades reach it — the
+    recovery run / easy run it becomes must not keep the RPE 6–7 technical structure (pushed to the
+    watch otherwise)."""
+    from backend.engine import adapt as A
+    from backend.engine import technical as T
+    steps = T._steps(55, T.SPEC_RPE)
+    g = {"id": "tech", "kind": "quality", "title": "技術地形 80′（RPE 6–7）", "minutes": 80, "steps": steps,
+         "day": "2026-10-08", "tss": 80.0}
+    became = A._downgrade(dict(g), {})
+    d = dict(g)
+    A._downgrade(d, {})
+    assert became == "輕鬆跑" and d["kind"] == "easy" and d.get("steps") is None
+    r = dict(g)
+    A._to_recovery(r, {})
+    assert r.get("steps") is None and "技術地形" not in r["title"]

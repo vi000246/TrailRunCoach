@@ -17,12 +17,22 @@ caller computes and the others wait for its result.
   thread pool (async endpoints via run_in_threadpool) or in the warm-up thread. Never call
   do() on the event loop thread: a waiter blocks its thread.
 * A compute() that asks for its own key on the same thread runs it inline (no self-deadlock).
+* `leading()`: True while this thread computes a flight (a leader that others may wait for). A
+  `full` job (the warm-up) joins the status / plan-inputs flights, so a leader must never wait for
+  a place in the job queue a job holds: wko5views._dataset builds inline then (SP-394).
 """
 from __future__ import annotations
 
 import threading
 from concurrent.futures import Future
 from typing import Any, Callable, Hashable
+
+_LOCAL = threading.local()            # .depth: flights this thread is computing now
+
+
+def leading() -> bool:
+    """This thread is computing a flight now (other callers may be waiting for it)."""
+    return getattr(_LOCAL, "depth", 0) > 0
 
 
 class SingleFlight:
@@ -45,6 +55,7 @@ class SingleFlight:
             if owner == me:                    # re-entered from inside its own compute()
                 return compute()
             return fut.result()
+        _LOCAL.depth = getattr(_LOCAL, "depth", 0) + 1
         try:
             value = compute()
         except BaseException as e:
@@ -54,6 +65,7 @@ class SingleFlight:
             fut.set_result(value)
             return value
         finally:
+            _LOCAL.depth -= 1
             with self._lock:
                 if self._flights.get(key, (None,))[0] is fut:
                     del self._flights[key]

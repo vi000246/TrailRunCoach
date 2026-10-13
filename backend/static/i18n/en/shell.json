@@ -33,6 +33,8 @@
   "build.preparing": "Preparing your data…",
   "build.elapsed": "{s} s so far",
   "build.failed": "Data processing failed: {error}",
+  "build.backfill": "Filling in older activities {done}/{total} (the last 90 days are ready)",
+  "build.backfill_done": "Older activities are in: reload the page to see them all",
   "lang.title": "Language",
   "lang.zh-TW": "中文",
   "lang.en": "EN",

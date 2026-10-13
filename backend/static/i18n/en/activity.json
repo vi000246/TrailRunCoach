@@ -76,6 +76,7 @@
   "auto_opt": "Auto ({v})",
   "auto_was": "Auto: {v} ({why})",
   "auto_progress": "Auto type / effort: {done} / {total}",
+  "auto_progress_older": "The last 90 days are done; older activities are being filled in: {done} / {total}",
   "auto_failed": "Auto type / effort could not be computed; reload later",
   "computing": "computing…",
   "recorded": "Watch recorded: {v}",

@@ -12,6 +12,7 @@
   "error.disabled": "這個帳號已停用。",
   "error.full": "目前額滿。我們已把你的 email 記進候補名單，有名額時會通知你。",
   "error.rate_limited": "登入嘗試太頻繁，請 15 分鐘後再試。",
+  "error.setup": "網站還在設定中，暫時不開放註冊，請稍後再試。",
   "signup.h": "建立帳號",
   "signup.lead": "{who}，第一次登入前，請先閱讀並同意以下文件。",
   "signup.accept": "同意並建立帳號",
