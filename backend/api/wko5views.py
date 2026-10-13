@@ -857,6 +857,14 @@ def chart(request: Request, view: str, d: int, c: int, begin: Optional[str] = No
         from backend.engine import activity_tags as AT
         params = {**params, "_poles": json.dumps(AT.pole_marks_stamp(AT.load())),
                   "_today": today_local().isoformat()}
+    cpref = None
+    if ch.get("cp_ref") and ch.get("kind") == "athlete":
+        # SP-465: the mFTP line = the CP the 課表 uses on the range's last day (panels/cp_ref.py); its
+        # value is in the key, so a new CP test / a new fit never gets the old line
+        from backend.engine.panels import cp_ref as CR
+        from backend.engine.wko5expr.dataset import tenant_plan
+        cpref = CR.line(ds, e, plan=tenant_plan())    # the season plan's CP test first, as the settings page
+        params = {**params, "_cp_ref": json.dumps(cpref, sort_keys=True, default=str)}
     proj_mode = ch.get("plan_projection") if ch.get("kind") == "athlete" and want_end > T else None
     proj = proj_why = end_iso = None
     if proj_mode:
@@ -906,6 +914,9 @@ def chart(request: Request, view: str, d: int, c: int, begin: Optional[str] = No
         if winfo:
             rb = RB.summarize(res, ds, winfo["window"])      # also drops the gain series
             res = {**res, **winfo, "recent_bests": rb}
+        if cpref is not None:
+            from backend.engine.panels import cp_ref as CR
+            res = CR.apply(res, cpref)
         if binfo:
             if needs_workout:
                 from backend.engine.workout_review import _has
