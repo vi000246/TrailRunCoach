@@ -2008,5 +2008,9 @@
   "CP {w} W · {md}": "CP {w} W · {md}",
   "CP {w} W · 測試": "CP {w} W · test",
   "CP {w} W · 測試 {md}": "CP {w} W · test {md}",
-  "課表與設定頁用的就是這個 CP：{w} W\n來源：{src}": "This is the CP the plan and the settings page use: {w} W\nSource: {src}"
+  "課表與設定頁用的就是這個 CP：{w} W\n來源：{src}": "This is the CP the plan and the settings page use: {w} W\nSource: {src}",
+  "沒有體重：VO2max 是每公斤（ml/kg/min），算不出；請到 設定 → 個人資料 填體重。mFTP 照樣畫。": "No body weight: VO2max is per kg (ml/kg/min) and cannot be computed; enter your weight under Settings → Personal. mFTP is drawn anyway.",
+  "有 {n} 個點那天沒有體重，VO2max 只畫有體重的點。": "{n} points have no body weight on their day; VO2max is drawn only where there is one.",
+  "這段期間沒有 PD 模型擬合：90 天內至少要 {n} 次 Stryd 功率跑步（手錶推估功率不採用），mFTP 與 VO2max 才算得出來。": "No PD model fit in this period: mFTP and VO2max need at least {n} runs with Stryd power within 90 days (watch-estimated power is not used).",
+  "每個點＝課表用的 Stryd 功率 PD 模型擬合（每 30 天一次，加上最後一次跑步那天）；VO2max＝WKO5 的算法 (FRC/589 + mFTP)/84.5 + 0.656 L/min ÷ 當天體重（推估）": "Each point = a fit of the plan's PD model on Stryd power (every 30 days, plus the day of the last run); VO2max = WKO5's formula (FRC/589 + mFTP)/84.5 + 0.656 L/min ÷ that day's body weight (an estimate)"
 }

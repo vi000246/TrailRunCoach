@@ -795,7 +795,7 @@ def chart(request: Request, view: str, d: int, c: int, begin: Optional[str] = No
     if needs_workout and (workout is None or not 0 <= workout < len(ds.workouts)):
         raise HTTPException(400, "workout charts need ?workout=<index>")
     if not needs_workout and ch.get("kind") not in ("athlete", "zones", "targets", "z5gate", "periodzones",
-                                                    "climbvam", "polecompare"):
+                                                    "climbvam", "polecompare", "pdtrend"):
         raise HTTPException(400, f"unsupported panel {ch.get('class')}")
     if needs_workout and begin is None and end is None and not CS.reads_range(ch):
         # SP-336 review #2: a single-activity chart asked with only ?workout= is about that activity:
@@ -857,6 +857,10 @@ def chart(request: Request, view: str, d: int, c: int, begin: Optional[str] = No
         from backend.engine import activity_tags as AT
         params = {**params, "_poles": json.dumps(AT.pole_marks_stamp(AT.load())),
                   "_today": today_local().isoformat()}
+    if ch.get("kind") == "pdtrend":
+        # SP-466: VO2max per kg reads the body weight of each fit's day (plan.json is in the
+        # fingerprint; the DB's weight settings are not): the Dataset's weight history is in the key
+        params = {**params, "_weights": json.dumps(ds.athlete.settings.get("weight") or [], default=str)}
     cpref = None
     if ch.get("cp_ref") and ch.get("kind") == "athlete":
         # SP-465: the mFTP line = the CP the 課表 uses on the range's last day (panels/cp_ref.py); its
@@ -1064,6 +1068,10 @@ def _render(ch: dict, ds: Dataset, b: float, e: float, sports: Optional[str], w,
         # steady-climb VAM:HR on trail runs and hikes; ?route=<route id> (part of the render-cache key)
         from backend.engine.panels.climb_vam import render as render_climb_vam
         return render_climb_vam(ds, ch, b, e, params or {})
+    if ch.get("kind") == "pdtrend":
+        # mFTP / VO2max over time from the 課表's PD fits (SP-466); never refits
+        from backend.engine.panels.pd_trend import render as render_pd_trend
+        return render_pd_trend(ds, ch, b, e, params or {})
     if ch.get("kind") == "polecompare":
         # 有杖 vs 沒杖 per grade bin (SP-243); the marks are in the key (chart())
         from backend.engine.panels.pole_compare import render as render_pole_compare

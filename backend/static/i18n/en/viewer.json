@@ -141,5 +141,22 @@
   "pole.col_metric": "Measure",
   "pole.col_bin": "Grade",
   "pole.col_group": "Poles",
-  "pole.no_impact": "These activities have no impact data (a watch or Stryd may not record it when walking), so downhill compares only vertical speed and cadence."
+  "pole.no_impact": "These activities have no impact data (a watch or Stryd may not record it when walking), so downhill compares only vertical speed and cadence.",
+  "pdtrend.help": "Help",
+  "pdtrend.mftp_axis": "mFTP (W, left axis)",
+  "pdtrend.vo2_axis": "VO2max (ml/kg/min, right axis, WKO5's formula, an estimate)",
+  "pdtrend.aria": "Line chart of mFTP and VO2max over time",
+  "pdtrend.tip_no_vo2": "VO2max: no body weight, cannot be computed",
+  "pdtrend.tip_no_weight": "Body weight: none",
+  "pdtrend.tip_weight": "Body weight {kg} kg",
+  "pdtrend.tip_runs": "{n} Stryd runs in the last 90 days",
+  "pdtrend.table": "Numbers of each fit",
+  "pdtrend.col_date": "Fit date",
+  "pdtrend.col_weight": "Weight (kg)",
+  "pdtrend.col_runs": "Runs",
+  "pdtrend.none": "No PD model fit in this period",
+  "pdtrend.latest": "Latest {date}: mFTP {w}",
+  "pdtrend.latest_vo2": "VO2max {v} ml/kg/min (body weight {kg} kg)",
+  "pdtrend.no_vo2": "VO2max cannot be computed (no body weight)",
+  "pdtrend.weight_link": "Enter your weight →"
 }
