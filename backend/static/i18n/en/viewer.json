@@ -158,5 +158,7 @@
   "pdtrend.latest": "Latest {date}: mFTP {w}",
   "pdtrend.latest_vo2": "VO2max {v} ml/kg/min (body weight {kg} kg)",
   "pdtrend.no_vo2": "VO2max cannot be computed (no body weight)",
-  "pdtrend.weight_link": "Enter your weight →"
+  "pdtrend.weight_link": "Enter your weight →",
+  "parity_tag": "WKO5 parity",
+  "parity_tag_tip": "Settings › Calculation mode is set to WKO5 parity: the charts use WKO5's formulas (your own adjustments are off)"
 }

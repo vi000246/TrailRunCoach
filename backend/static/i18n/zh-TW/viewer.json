@@ -158,5 +158,7 @@
   "pdtrend.latest": "最新 {date}：mFTP {w}",
   "pdtrend.latest_vo2": "VO2max {v} ml/kg/min（體重 {kg} kg）",
   "pdtrend.no_vo2": "VO2max 算不出（沒有體重）",
-  "pdtrend.weight_link": "去填體重 →"
+  "pdtrend.weight_link": "去填體重 →",
+  "parity_tag": "WKO5 對照",
+  "parity_tag_tip": "設定 › 計算模式 選了 WKO5 對照模式：圖表用 WKO5 的算法（不套自己的修正）"
 }
