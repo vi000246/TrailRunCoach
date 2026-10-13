@@ -534,7 +534,7 @@ def heat_run(s: dict) -> bool:
 CLIMB_WARM_S = 15 * 60                  # specific_phase.climb_minutes / climb_text: 暖身 15 分
 CLIMB_COOL_MIN_S = 5 * 60               # 推估: a shorter 緩和 = a session cut below its repeats → one block
 CLIMB_UP_RPE = (4, 4)                   # 推估: 「心率約輕鬆跑上限」 ≈ the top of RPE ≤ 4 (RPE_EASY_MAX, Seiler)
-CLIMB_DOWN_RPE = (3, 4)                 # 推估: running down easy (下坡用跑的), as the downhill session's low end
+CLIMB_DOWN_RPE = (3, 4)                 # 推估: running down easy (下坡用跑的), the old downhill session's low end
 # 陡坡健走 (steep_hill.session_text): 暖身 10 分平路 → 陡坡 N 分 → 緩和 5 分, N = the rest of the session
 STEEP_WARM_S, STEEP_COOL_S, STEEP_MIN_S = 10 * 60, 5 * 60, 10 * 60
 

@@ -35,8 +35,9 @@ def test_a_road_athlete_gets_none_of_the_trail_sessions(events):
     st = Status(ds, plan, TODAY, prefs=PP.Prefs()).compute()
     wp = O.week_plan(ds, st, TODAY, sport="road")
     assert wp["primary_sport"] == "road"
-    for k in ("base_climb", "downhill", "technical"):
+    for k in ("base_climb", "technical"):
         assert not wp[k]["active"] and wp[k]["why"] == "主要訓練項目：路跑", k
+    assert "downhill" not in wp                                               # SP-442: no separate 下坡課
     weeks = PJ.project_weeks(wp, _phases(plan, TODAY), date(2026, 11, 29), events=plan.events)
     assert weeks
     for w in [wp] + weeks:

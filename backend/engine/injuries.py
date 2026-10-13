@@ -602,14 +602,15 @@ def illness_rule(events: list[dict], day: dt.date) -> Optional[dict]:
 # ---- 依傷別迴避課型 (SP-270; injury-graded-return.md §1.2, §2.2, §4.2, §4.5, owner §6.1 points 3–4) -----
 # While an event with a condition is open (any severity; the day it resolves the rule is gone — §6.1
 # point 3), these session types are not planned. Tags (overview.condition_apply maps them to sessions):
-#   downhill   下坡離心課 (engine/downhill.py)        technical  技術地形課 (engine/technical.py)
+#   downhill   running down (the 長爬坡有氧's run-down, engine/base_climb.py; SP-442)
+#              technical  技術地形課 (engine/technical.py)
 #   climb      長爬坡反覆 (specific_phase.apply_climb: climbs, then runs down at race grade)
 #   steep      陡坡健走 (engine/steep_hill.py)        me         ME 負重爬坡 (specific_phase.apply_me)
 #   strides    加速跑／坡道衝刺 on an easy run
 # 膝前痛 / 髂脛束: downhill is their main load factor — Esculier 2016 (「avoid downhill running」),
 # Fredericson & Wolf 2005 (downhill among the training factors), Van Hooren 2024 (downhill loads the
 # patellofemoral joint more); the trail long run becomes flat (§6.1 point 4). The 長爬坡反覆 runs down
-# at race grade, so it goes too (推估: the same reason as the downhill session).
+# at race grade, so it goes too (推估: the same reason as running down).
 # 跟腱: no hill repeats, steep walk or strides — a coach's rule, plausible (uphill: forefoot strike,
 # more calf work, Vernillo 2017) but no measuring study found: 推估. The long run keeps its terrain.
 # 足底筋膜 / 其他: no session type is avoided. load_guard is untouched: these rules only cut.
@@ -617,8 +618,8 @@ CONDITION_AVOID = {"pfp": ("downhill", "technical", "climb"), "itb": ("downhill"
                    "achilles": ("climb", "steep", "me", "strides")}
 FLAT_LONG = ("pfp", "itb")
 CONDITION_NOTE = {
-    "pfp": N_("膝前痛進行中：先不排下坡課（Esculier 2016）；技術地形、長爬坡反覆也先不排，越野長跑改平路"),
-    "itb": N_("髂脛束進行中：先不排下坡課（Fredericson 2005）；技術地形、長爬坡反覆也先不排，越野長跑改平路"),
+    "pfp": N_("膝前痛進行中：先不跑下坡（Esculier 2016）；技術地形、長爬坡也先不排，越野長跑改平路"),
+    "itb": N_("髂脛束進行中：先不跑下坡（Fredericson 2005）；技術地形、長爬坡也先不排，越野長跑改平路"),
     "achilles": N_("跟腱進行中：先不排爬坡反覆、陡坡健走、加速跑（推估：教練的說法，沒有找到量測研究）；長跑地形不變"),
 }
 
@@ -652,7 +653,7 @@ def condition_rule(events: list[dict], day: dt.date) -> Optional[dict]:
 
 
 def condition_week(events: list[dict], monday: dt.date, today: Optional[dt.date] = None) -> Optional[dict]:
-    """The condition rule a week's session modules ask (downhill / technical / steep_hill week_context):
+    """The condition rule a week's session modules ask (base_climb / technical / steep_hill week_context):
     the one on the week's first planning day (today inside the current week, else its Monday)."""
     first = max(monday, today) if today is not None and today <= monday + dt.timedelta(days=6) else monday
     return condition_rule(events, first)
