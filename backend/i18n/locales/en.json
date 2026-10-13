@@ -2272,5 +2272,8 @@
   "這筆活動沒有海拔資料，畫不出高度圖": "This activity has no elevation data, so there's no elevation profile",
   "這筆活動沒有海拔資料，畫不出高度圖，也找不到爬坡段": "This activity has no elevation data, so there's no elevation profile and no climbs",
   "（沒有心率，無法比較爬坡經濟性）": "(no heart rate, so climbing economy can't be compared)",
-  "dFRC（WKO5）": "dFRC (WKO5)"
+  "dFRC（WKO5）": "dFRC (WKO5)",
+  "已收到 {n} 筆體重（最新 {kg:.1f} kg），{at} 才會套用": "Received {n} weight value(s) (latest {kg:.1f} kg); applied at {at}",
+  "沒有收到可用的體重：{why}": "No usable weight received: {why}",
+  "這次沒有體重資料": "No weight in this request"
 }

@@ -158,6 +158,13 @@ TABLES: tuple = (
                         "tp_username", "garmin_token_sealed", "garmin_token_expires", "garmin_email",
                         "garmin_password_sealed"),
           cursor_fields=("last_sync_at", "last_sync_cursor", "coros_last_sync_at", "garmin_last_sync_at")),
+    Table("weight_measurements", USER, "body-weight measurements sent in through the weight API (SP-472, "
+          "api/weight.py: the iOS Shortcut / Health Auto Export reading Apple Health), every one kept with its "
+          "source; the nightly apply copies some into plan.json's weights",
+          deidentify=("measured_at", "day", "received_at", "applied_at", "device")),
+    Table("weight_tokens", SECRET, "weight API tokens (SP-472, weight_auth.py): the SHA-256 of each token (shown "
+          "once, never stored), scope weight:write only; tenant-bound",
+          secret_fields=("token_hash",), deidentify=("name", "created_at", "last_used_at"), local=True),
     Table("debug_tokens", SECRET, "debug API tokens (SP-371, debug_auth.py): the SHA-256 of each token "
           "(the token itself is never stored), its scopes, expiry and the source IPs seen; tenant-bound",
           secret_fields=("token_hash",), deidentify=("name", "last_ip", "ips_json", "created_at", "last_used_at"),

@@ -8778,5 +8778,17 @@
   "dFRC（WKO5）": {
     "draft": true,
     "src": "backend/engine/workout_review.py:4447"
+  },
+  "已收到 {n} 筆體重（最新 {kg:.1f} kg），{at} 才會套用": {
+    "draft": true,
+    "src": "backend/api/weight.py"
+  },
+  "沒有收到可用的體重：{why}": {
+    "draft": true,
+    "src": "backend/api/weight.py"
+  },
+  "這次沒有體重資料": {
+    "draft": true,
+    "src": "backend/api/weight.py"
   }
 }

@@ -370,5 +370,12 @@
   "sugg.scheduled": "已排入 {list}",
   "sugg.item": "{day}「{title}」",
   "sugg.sep": "、",
-  "sugg.to_schedule": "（到課表看）"
+  "sugg.to_schedule": "（到課表看）",
+  "weighthint.title": "手錶帳號的體重不一樣",
+  "weighthint.text": "COROS 帳號裡的體重是 {kg} kg（{date}），體重紀錄最新是 {cur} kg（{cdate}），差 {diff} kg。要更新嗎？",
+  "weighthint.accept": "更新成 {kg} kg",
+  "weighthint.dismiss": "不用",
+  "weighthint.done": "已更新成 {kg} kg，圖表會重算",
+  "weighthint.help": "COROS 帳號的體重是個人資料裡的設定值，不會自動寫進體重紀錄；按「更新」才會。按「不用」之後，這個數字不會再問，COROS 帳號的體重改了才會再提醒。",
+  "weighthint.failed": "沒有更新成功：{msg}"
 }

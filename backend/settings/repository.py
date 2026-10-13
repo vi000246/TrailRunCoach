@@ -271,6 +271,11 @@ DEFAULTS: dict[str, Any] = {
     # debug API for AI agents (SP-371, backend/debug_auth.py; 設定 › 進階): off = /api/v1/debug/* is 404.
     # Can only be turned on when the server has TRC_DEBUG_PIN; the tokens are the debug_tokens table
     "debug.api.enabled": False,
+    # 體重同步 (SP-472, api/weight.py): the nightly apply's last run {last_run (local date), at, status,
+    # added, skipped}; written by the apply only
+    "weight.sync.state": None,
+    # the COROS account weight the user said 「不用」 to (kg): its hint stays hidden until it changes
+    "weight.coros.dismissed": None,
 }
 # keys that were removed: db/database.py init_db deletes any stored row
 # (backup.encryption held the sealed scrypt-derived backup key)
@@ -396,6 +401,11 @@ def validate(key: str, value: Any) -> None:
         fit_archive.validate_years(value)
     if key == "sync.auto_on_open.hours" and not (isinstance(value, (int, float)) and 0 < value <= 168):
         raise ValueError("auto-sync threshold must be 1-168 hours")
+    if key == "weight.sync.state" and value is not None and not isinstance(value, dict):
+        raise ValueError("weight.sync.state must be an object or null")
+    if key == "weight.coros.dismissed" and value is not None and not (
+            isinstance(value, (int, float)) and not isinstance(value, bool) and 0 < value < 1000):
+        raise ValueError("weight.coros.dismissed must be a weight in kg or null")
     if key == "charts.data_source" and value not in ("source", "wko5"):
         raise ValueError("chart data source must be source or wko5")
     if key == "charts.wko5_views_dir" and value is not None and not (isinstance(value, str) and value.strip()):

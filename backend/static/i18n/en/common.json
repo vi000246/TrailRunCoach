@@ -373,5 +373,12 @@
   "sugg.scheduled": "Scheduled: {list}",
   "sugg.item": "{day} “{title}”",
   "sugg.sep": ", ",
-  "sugg.to_schedule": "(see the Schedule)"
+  "sugg.to_schedule": "(see the Schedule)",
+  "weighthint.title": "Your watch account's weight differs",
+  "weighthint.text": "Your COROS account says {kg} kg ({date}); your newest weight entry is {cur} kg ({cdate}), {diff} kg apart. Update it?",
+  "weighthint.accept": "Update to {kg} kg",
+  "weighthint.dismiss": "No",
+  "weighthint.done": "Updated to {kg} kg; the charts are recomputed",
+  "weighthint.help": "The COROS account weight is a profile setting and is never written into your weight entries by itself; only “Update” does. After “No” this value is not asked about again, only a new COROS weight is.",
+  "weighthint.failed": "Not updated: {msg}"
 }
