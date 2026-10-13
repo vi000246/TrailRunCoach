@@ -5,6 +5,7 @@
   "google": "Sign in with Google",
   "note": "We only read your Google account ID, name and email, nothing else from Google.",
   "signed_out": "You are signed out.",
+  "deleted": "Your account and all its data have been deleted.",
   "error.expired": "The sign-in timed out or the link is no longer valid. Please sign in again.",
   "error.failed": "The sign-in did not complete. Please sign in again.",
   "error.cancelled": "You cancelled the Google sign-in.",

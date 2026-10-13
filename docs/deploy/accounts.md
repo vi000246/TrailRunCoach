@@ -134,6 +134,6 @@ curl -s -o /dev/null -w '%{http_code} %{redirect_url}\n' -H 'Accept: text/html' 
 
 - 拿掉密碼 proxy（Cloudflare Access）、固定網域、OAuth client 申請：SP-387
 - 條款正式內容：SP-60（換掉 `backend/legal/` 的草稿並改 `terms.VERSION`）
-- 刪除帳號、下載我的資料：SP-386
+- 刪除帳號、下載我的資料：SP-386 已做（設定 › 個人資料 › 帳號）。半途失敗的刪除（帳號停用、原因 `deleting`）或用 e-mail 申請的刪除，在伺服器上跑 `python -m backend.accounts.deletion <user id>`（不會刪 user 1）
 - 方案與權限 scope（`user`／`subscriber`／`owner`）：SP-330
 - 管理後台：SP-351

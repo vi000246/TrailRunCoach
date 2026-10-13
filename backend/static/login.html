@@ -200,6 +200,10 @@ footer { display: flex; flex-wrap: wrap; gap: 8px 14px; justify-content: space-b
     msg.textContent = T("signed_out");
     msg.className = "msg info";
     msg.hidden = false;
+  } else if (q.has("deleted")) {          // 刪除帳號 done (SP-386)
+    msg.textContent = T("deleted");
+    msg.className = "msg info";
+    msg.hidden = false;
   }
   if (location.pathname !== "/signup") return;
 

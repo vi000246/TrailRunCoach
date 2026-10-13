@@ -385,6 +385,12 @@ def find(key: Hashable) -> Optional[Job]:
     return None
 
 
+def of_tenant(tenant: str) -> list[Job]:
+    """The queued and running jobs of a tenant (an account being deleted waits for them, SP-386)."""
+    with _LOCK:
+        return [j for j in _QUEUED + _RUNNING if j.tenant == tenant]
+
+
 def cpu_today(tenant: Optional[str] = None) -> float:
     """CPU seconds of this tenant's jobs today (Taiwan day)."""
     day = dt.datetime.now(dt.timezone(dt.timedelta(hours=8))).date().isoformat()

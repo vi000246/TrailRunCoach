@@ -14,7 +14,10 @@ Accounts and user tenants (SP-384; docs/plans/auth-and-demo.plan.md §2.2, §4.3
     login, google, terms        signing in (SP-58): the switch and who becomes whom, the Google
                                 OIDC client, the terms a new user accepts
 
-Deleting an account is SP-386; plans and scopes SP-330; the admin pages SP-351.
+    export, deletion            下載我的資料 and 刪除帳號 (SP-386): the user's own data off the data
+                                registry; an account and all its data deleted (never the owner)
+
+Plans and scopes SP-330; the admin pages SP-351.
 """
 from __future__ import annotations
 
