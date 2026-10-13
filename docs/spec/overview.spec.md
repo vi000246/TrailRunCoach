@@ -510,7 +510,8 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
   - Returned as `quality_gate` (the gate dict + `levels`, `allowed`, `this_week`,
     `this_week_tracks`, `quality_n`, `aet_test`) for the projection
     (`backend/engine/overview.py:2330`).
-- Taper: one session by the two-track pick — Zone 3 有氧間歇（巡航）2×8′ (88–95 % CP), Zone 5 or no track
+- Taper: one session by the two-track pick — Zone 3 有氧間歇（巡航）2×8′ (88–95 % CP; target: those watts and
+  the Zone 3 row's HR, SP-478), Zone 5 or no track
   open 有氧間歇（巡航）4×3′ (98–102 % CP, intensity unchanged; renamed from 「短強度 4×3 分」 2026-10-05 —
   its short reps read as 有氧間歇・巡航 to `family_of`; a stored old title is mapped on read). Event week: the race.
 - Strength ×2 in base / transition / recovery or when the `strength` indicator is bad / watch,
@@ -825,8 +826,11 @@ tickets is in plan-auto.spec.md):
   and the projection (`backend/engine/projection.py:806`) pass it as `z3_target` from the week's
   thresholds (`hr_model`, the easy-run cap, LTHR); the card, the structure (the text's HR) and the
   push (目標依據 心率) read the same band. Road 95–101 % and the short 98–102 % keep the threshold row.
-  Not changed (reported): the 減量期 quality_sessions' Zone 3 track pick `TAPER_Z3` 「有氧間歇（巡航）
-  2×8 分」 (88–95 % CP) still takes the threshold row (`backend/engine/overview.py:1016`).
+  The 減量期 quality_sessions' Zone 3 track pick `TAPER_Z3` 「有氧間歇（巡航）2×8 分」 (88–95 % CP) does the
+  same since SP-478 (`backend/engine/overview.py:1015`, `TAPER_Z3_TARGET` `:1298`): `taper_q_target` with
+  the template's 88–95 % CP in watts and `z3_hr_text` of the week's thresholds (`hr_model`, the easy-run
+  cap — `easy_cap` first, else `aet` —, LTHR), so its card no longer carries the threshold row's watts
+  and HR; the 4×3′ `TAPER_Q` keeps the threshold row.
 - **The 減量期 templates' minutes are their structure's** (SP-411 option A, the owner 2026-10-13): the
   trail `TAPER_FULL` / `TAPER_CUT` (`backend/engine/overview.py:2835`) are 85 / 65 min (were 60 / 50) —
   their text has no 「休 N 分」, so the jog down is a rep long in the structure and the push
@@ -2681,3 +2685,4 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 | 2026-10-13 | bugfix | SP-474 | Walking sessions' warm-up (ME 負重爬坡, 陡坡健走, 攻頂日模擬 with 含暖身) pushes no HR target: `workout_steps.resolve` gives an auto-easy `warm` step under a walk cap (`Ctx.walk`) 「不設目標」 instead of `hr_profile.walk_band` (easy-band floor → 75 % HRmax); the uphill / steep part keeps the band, the 陡坡健走's cool-down and running warm-ups are unchanged, an explicit target the user set stays. Structure TSS: the warm-up at IF 0.65 (`NONE_IF["warm"]`) instead of the band's ≈ 0.725 (−1.7 to −2.6 per session in the tests); card TSS unchanged. Demo: 暖身 心率 134–150 bpm → 不設目標. Tests: `backend/tests/test_walk_warmup_hr_floor_sp474.py` |
 | 2026-10-13 | test | SP-411 | The 57 TSS / h of the trail 減量 上坡節奏跑 (already in `7511cf19`) is pinned, with the road (70 / 65 an hour) and short (60 an hour) templates unchanged and the session carrying the template's TSS; the structure check (`test_taper_trail_quality_minutes_are_the_structures`) measures the session's own power basis since SP-408 (card 80.8 / 61.8 vs structure 78.7 / 59.7, within 5 %). No week is re-sized by it. Tests: `backend/tests/test_taper_rules.py::test_taper_card_tss_rates_trail_57_road_and_short_unchanged` |
 | 2026-10-13 | bugfix | SP-474 | (follow-up, the user 2026-10-13) The 陡坡健走's 平路緩和 5 分 pushes no HR target either: `workout_steps.resolve` (`backend/engine/workout_steps.py:1210`) gives an auto-easy `cool` step under a walk cap 「不設目標」, as the warm-up (the HR is coming down after the steep part, under the walk band's easy-cap floor, and the watch kept alerting). Running sessions' cool-downs (no walk cap) keep the easy band; an explicit target the user set on the step stays. Structure TSS: the cool-down at IF 0.65 (`NONE_IF["cool"]`) instead of the band's ≈ 0.725: 45′ 陡坡健走 37.7 → 36.8 (−0.9); card TSS unchanged. The ME 負重爬坡 / 攻頂日模擬 have no cool-down step (unchanged). `test_walking_cool_down_and_running_warm_ups_unchanged` → `test_running_warm_ups_and_an_explicit_warm_up_target_unchanged` (its 陡坡健走 cool-down = walk band assertion was this rule; now the opposite, in the new tests). Tests: `backend/tests/test_walk_warmup_hr_floor_sp474.py` (`test_steep_walk_cool_down_pushes_no_hr_floor`, `test_steep_walk_cool_down_resolves_to_no_target_and_a_cool_down_if`, `test_running_cool_downs_and_an_explicit_cool_down_target_unchanged`) |
+| 2026-10-13 | bugfix | SP-478 | The 減量期 Zone 3 track pick 「有氧間歇（巡航）2×8 分」 (`TAPER_Z3`, 88–95 % CP; `quality_sessions`, `backend/engine/overview.py:1015`) takes the Zone 3 row's HR, as SP-408's 越野 上坡節奏跑: `taper_q_target` with `TAPER_Z3_TARGET` (`power_pct` 0.88–0.95, `hr_cls` Z3sub) and `z3_hr_text` of the week's thresholds (`hr_model`, the easy-run cap, LTHR — week_plan's `tt` / the projection's thresholds, no new parameter). The card's power is the template's 88–95 % CP in watts too (was the threshold row's watts, while the structure already read 88–95 % from the detail); card, structure and push agree. The 4×3′ `TAPER_Q` keeps the threshold row. Demo athlete (CP 260, LTHR 168, 課表心率區間 Z3 151–160): card 功率 247–263 W · 心率 160–171 bpm → 功率 229–247 W（88–95% CP） · 心率 151–160 bpm; structure / push (目標依據 心率) 160–171 → 151–160 bpm; power push 229–259 W unchanged. Tests: `backend/tests/test_taper_rules.py` (`test_taper_z3_pick_card_structure_and_push_use_zone_3`, `test_taper_z3_pick_power_basis_is_the_templates_power`, `test_taper_z3_pick_without_hr_model_takes_aet_to_lthr`, `test_taper_4x3_pick_keeps_the_threshold_row`, `test_week_plan_and_projection_taper_z3_pick_takes_zone_3`) |

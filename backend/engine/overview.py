@@ -1012,8 +1012,15 @@ def quality_sessions(gate: dict, dec: dict, kind: str, th: dict, tgt: dict, hour
         elif kind == "specific" and it.get("spec") is QG.SUB:
             # 專項期 under a CTL ramp at the watch line (week_decision): the threshold-only session, as in the base phase
             s = _gate_session(gate, it, th, hours, prefs, history, mountain, cap, alt_caps, notes)
+        elif kind == "taper" and t == "z3":
+            # SP-478: the Zone 3 row's HR and the template's % CP (TAPER_Z3_TARGET), as taper_rules' 越野 ones;
+            # `th` = the week's thresholds (week_plan's tt / the projection's): its easy-run cap first
+            z3 = z3_hr_text(th.get("hr_model"), (th.get("easy_cap") or {}).get("value") or th.get("aet"),
+                            th.get("lthr"))
+            s = dict(TAPER_Z3, target=taper_q_target({**TAPER_Z3, **TAPER_Z3_TARGET}, th.get("cp"),
+                                                     tgt.get("threshold", ""), prefs, z3))
         elif kind == "taper":
-            s = dict(TAPER_Z3 if t == "z3" else TAPER_Q, target=tgt.get("threshold", ""))
+            s = dict(TAPER_Q, target=tgt.get("threshold", ""))
         else:
             it = {**it, "hill": kind == "specific" and not road}        # SP-75: 越野 專項期 = the uphill version
             s = _gate_session(gate, {**it, "budget": left} if t == "z3" else it, th, hours, prefs, history, mountain,
@@ -1285,6 +1292,10 @@ TAPER_Q = dict(id="quality", kind="quality", title="有氧間歇（巡航）4×3
 TAPER_Z3 = dict(id="quality", kind="quality", title="有氧間歇（巡航）2×8 分", minutes=45,
                 detail="保留強度、量減半（88–95% CP）；休 2 分慢跑；暖身 15 分、緩和 10 分",
                 source=f"{SRC_BOSQUET}；{SRC_DANIELS}（Phase IV 保留 T）", tss=45 / 60 * 62)
+# TAPER_Z3's target (SP-478, as SP-408's 越野 上坡節奏跑): its 88–95 % CP = the library's Z3sub, so the
+# card says the template's % CP in watts and the Zone 3 row's HR (taper_q_target / z3_hr_text), not the
+# week's threshold row (Zone 4) TAPER_Q keeps; the structure and the push read the same
+TAPER_Z3_TARGET = dict(power_pct=(0.88, 0.95), hr_cls="Z3sub")
 # the base-phase strides for 路跑 (instead of hill sprints): title, detail, source suffixes
 ROAD_STRIDES = ("＋加速跑 6×20 秒", "；最後 6 趟 20 秒平路加速跑（快而放鬆，不是衝刺），慢跑回來",
                 f"；{SRC_DANIELS} strides")
