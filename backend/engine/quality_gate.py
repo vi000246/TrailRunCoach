@@ -773,8 +773,8 @@ FOR_STREAK = 2          # Buchheit 2014 citing Brink 2010 (「2–3 consecutive 
 FOR_MIN_N = 5           # 推估 (doc §4.3): the baseline needs ≥ 5 same-spec sessions
 FOR_DAYS = 56           # doc §4.3: the 8 weeks before
 SRC_FOR = N_("Aubry 2015；Bellenger 2016；Buchheit 2014（門檻 25 %、連續 2 堂為推估）")
-OUTCOME_LABEL = {"met": "達標", "border": "邊界", "unadapted": "未適應", "too_high": "未適應（目標太高）",
-                 "unknown": "無法判定"}
+OUTCOME_LABEL = {"met": N_("達標"), "border": N_("邊界"), "unadapted": N_("未適應"), "too_high": N_("未適應（目標太高）"),
+                 "unknown": N_("無法判定")}
 
 
 def interval_outcome(bouts: list[dict], spec: tuple, cp: Optional[float], aet: Optional[float] = None) -> dict:
