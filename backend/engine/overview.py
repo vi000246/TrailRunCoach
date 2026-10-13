@@ -3081,13 +3081,15 @@ def taper_rules(ss: list, tc: Optional[dict], monday: dt.date, notes: Optional[l
         d = dt.date.fromisoformat(g(s, "day"))
         return (race - d).days if t0 <= d < race else None
 
-    def as_easy(s, cap: float, why: str):
+    def as_easy(s, cap: float, how: str = ""):
+        # `how`: what the session is (「平路或緩坡輕鬆跑」), never the taper rule that made it one — that
+        # is the week's taper note (SP-470)
         m = int(g(s, "minutes") or 0)
         nm = int(min(m, cap) // 5 * 5) or m
         n_easy = sum(1 for x in ss if g(x, "kind") == "easy")
         put(s, id=f"easy{n_easy + 1}" if g(s, "kind") != "easy" else g(s, "id"), kind="easy", title=_("輕鬆跑"),
             minutes=nm, tss=round(float(g(s, "tss") or 0.0) * (nm / m if m else 1.0) * 0.8, 1),
-            detail=why, terrain="road" if tc.get("sore") or terr == "road" else g(s, "terrain"),
+            detail=how, terrain="road" if tc.get("sore") or terr == "road" else g(s, "terrain"),
             target=easy_target or "", source="", **{k: None for k in _VARIANT_KEYS})
 
     def as_q(s, tmpl: dict):
@@ -3104,7 +3106,7 @@ def taper_rules(ss: list, tc: Optional[dict], monday: dt.date, notes: Optional[l
         k, sid = g(s, "kind"), g(s, "id")
         if k == "long" or sid in ("long", "long2"):
             if out < tc["long_days"]:
-                as_easy(s, 60, _("減量期：賽前 {n} 天內不跑長跑", n=tc["long_days"]))
+                as_easy(s, 60)
                 said.append(_("賽前 {n} 天內不跑長跑", n=tc["long_days"]))
             elif (g(s, "minutes") or 0) > TAPER_LONG_MAX_MIN or tc.get("sore"):
                 m = int(g(s, "minutes") or 0)
@@ -3137,11 +3139,11 @@ def taper_rules(ss: list, tc: Optional[dict], monday: dt.date, notes: Optional[l
                 elif out > TAPER_SHORT_Q_DAYS[1]:
                     as_q(s, TAPER_CUT[terr])
                 else:
-                    as_easy(s, 40, _("賽前 {n} 天內不排強度課：輕鬆跑", n=TAPER_SHORT_Q_DAYS[0]))
+                    as_easy(s, 40)
                     said.append(_("賽前 {n} 天內不排強度課", n=TAPER_SHORT_Q_DAYS[0]))
         elif sid == "climb":
             # the 長爬坡反覆 runs down at race grade: no hard downhill in the taper
-            as_easy(s, g(s, "minutes") or 60, _("減量期不排長爬坡反覆、高強度下坡：平路或緩坡輕鬆跑"))
+            as_easy(s, g(s, "minutes") or 60, _("平路或緩坡輕鬆跑"))
             said.append(_("不排長爬坡反覆"))
     if notes is not None and touched:
         notes.append({"level": "info", "src": "taper",

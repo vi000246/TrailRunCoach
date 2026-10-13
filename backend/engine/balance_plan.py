@@ -128,7 +128,8 @@ def attach(ss: list, ctx: Optional[dict]) -> int:
 def session(ctx: dict, day: Optional[str]) -> dict:
     """The balance-only strength session (a plain dict, as week_plan's sessions)."""
     return {"id": ID, "kind": "strength", "title": _("肌力：平衡／腳踝 {m} 分", m=MINUTES), "minutes": MINUTES,
-            "target": "", "detail": block(ctx) + "；" + _("賽前停了一般肌力，平衡照做（負荷低，不累腿）"),
+            # what the session is, not the race rule (SP-470): 「賽前停了一般肌力」 is the week's strength-stop note
+            "target": "", "detail": block(ctx) + "；" + _("平衡照做（負荷低，不累腿）"),
             "source": source(ctx), "tss": 0.0, "day": day, "done": False, "done_by": None}
 
 

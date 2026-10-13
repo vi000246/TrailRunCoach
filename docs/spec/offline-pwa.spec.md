@@ -202,3 +202,4 @@ None stored server side.
 |---|---|
 | 2026-10-13 | Created (SP-314): service worker, tiers, offline bar, write guard, manifest + icons, multi-tenant clearing |
 | 2026-10-13 | SP-322: 設定 › 這台裝置的離線資料 (`device_storage.js`, `#device` on 資料同步): usage vs 20 MB, P0/P1/P2 state, persistence + ask, last refresh, iPhone-tab home-screen hint, 無法取得 without the APIs; `status()` adds `present` per tier |
+| 2026-10-13 | SP-470: `sesspop.js` (the 課表 card hover) added to `APP_FILES` — the offline 課表 page loads it |

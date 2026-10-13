@@ -93,9 +93,12 @@ def test_partial_card_is_a_yellow_bar_with_a_pie_and_no_old_marks():
     assert 'class="sc-ic"' in h and _run('DI("z5")') in h                  # 強度課 VO2max → lightning, no colour
     assert "sc-r-partial" in h and "stroke-dasharray" in h
     assert not [o for o in OLD if o in h], [o for o in OLD if o in h]
-    title = re.search(r'title="([^"]+)"', h).group(1)
-    assert "部分 72% · 強度不足" in title and "TSS 74% · 時間 87% · 強度 72%" in title
-    assert "±20" not in title and "綠" not in title                         # no thresholds on the card
+    # SP-470: no plain title text — the hover is sesspop.js's card, from popModel (same words)
+    assert 'title=""' in h
+    pm = _run("popModel(DATA.s)", s=_done(short=True))
+    assert pm["label"] == "部分 72%" and pm["verdict"] == "強度不足" and pm["nums"] == "TSS 74% · 時間 87% · 強度 72%"
+    shown = json.dumps(pm, ensure_ascii=False)
+    assert "±20" not in shown and "綠" not in shown                         # no thresholds on the card
 
 
 def test_done_off_plan_and_skipped():

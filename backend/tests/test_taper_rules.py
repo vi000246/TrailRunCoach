@@ -153,7 +153,8 @@ def test_last_long_run():
 def test_no_long_climb_repeats_and_untouched_outside_the_taper():
     ss = [s("climb", "easy", "2026-10-05", 70, climb_m=600), s("long", "long", "2026-10-02", 150)]
     O.taper_rules(ss, tc(), date(2026, 9, 28))
-    assert ss[0]["climb_m"] is None and "不排長爬坡反覆" in ss[0]["detail"]
+    # SP-470: the detail says the session (flat / gentle), the taper note says why (「不排長爬坡反覆」)
+    assert ss[0]["climb_m"] is None and ss[0]["detail"] == "平路或緩坡輕鬆跑"
     assert ss[1]["minutes"] == 150                                                             # before the taper
     assert O.taper_rules(ss, None, date(2026, 9, 28)) is ss
 

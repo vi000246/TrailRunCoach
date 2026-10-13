@@ -722,6 +722,7 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
 <script src="/api/v1/static/plan_mark.js"></script>
 <script src="/api/v1/static/dashicons.js"></script>
 <script src="/api/v1/static/sesschip.js"></script>
+<script src="/api/v1/static/sesspop.js"></script>
 <script src="/api/v1/static/syncrun.js"></script>
 
 <!-- 換一個：the equivalent variants of an interval session (interval-prescription.md §C5.4) -->
@@ -1148,14 +1149,41 @@ function chipHtml(s, big) {
   // §7.1: type：title, time, TSS, the verdict, 暫定, changed by, the watch — the reading order on screen
   const lbl = [`${KINDS[s.kind] || ""}${fam ? "（" + fam.text + "）" : ""}：${s.title}`, `${s.minutes || 0} 分鐘`, tss.replace("→", "實際"),
     vdFull, prov ? SessChip.label("todo", null, { prov: true }) : "", pm.length ? PlanMark.label(s) : "", watch ? syLabel(c.status) : ""].filter(Boolean).join("，");
-  const tip = [s.title, fam && fam.sub_label ? fam.text : "", meta, vdFull, SessChip.hrNote(s.compliance), st === "partial" && s.vs && s.vs.short_text ? s.vs.short_text : "",
-    actual, s.target, s.detail, s.walk_hint, s.state === "done" && s.note ? "⚠ " + s.note : "", ...pm,
-    watch ? syLabel(c.status) + (c.error || c.reason ? "\n" + (c.error || c.reason) : "") : ""].filter(Boolean).join("\n");
   return `<button type="button" class="chip sc ${SessChip.cls(s)}${S.swapFrom && S.swapFrom.uid === s.uid ? " swap-src" : ""}${lock ? " swap-lock" : ""}${pend ? " pend" : ""}" data-uid="${esc(s.uid)}" data-kind="${esc(s.kind)}"
-      ${live && !lock ? 'draggable="true"' : ""}${lock ? ' aria-disabled="true"' : ""} aria-label="${esc(lbl)}" title="${esc(tip)}">
+      ${live && !lock ? 'draggable="true"' : ""}${lock ? ' aria-disabled="true"' : ""} aria-label="${esc(lbl)}" title="">
     ${SessChip.icon(SessChip.kind(s), { badge: pm.length ? PlanMark.icon(s, true) : "" })}<span class="c-t sc-t">${esc(s.title)}</span><span class="c-r">${SessChip.ring(st, (s.compliance || {}).pct, { prov })}${watch}</span>
     <span class="c-m">${esc(meta)}</span>
     ${line ? `<span class="c-x">${esc(line)}</span>` : ""}${big && why ? `<span class="c-x c-why">${esc(vd)}</span>` : ""}${big && (s.detail || s.walk_hint) && s.state !== "done" ? `<span class="c-d">${esc([s.detail, s.walk_hint].filter(Boolean).join(" "))}</span>` : ""}</button>`;
+}
+// the hover (SP-470, sesspop.js): the card's facts as a model — header, numbers, 完成情況, 目標, 怎麼練,
+// 調整, 手錶 — laid out by SessPop.html. The chip keeps title="" so neither the browser's plain text
+// nor the day cell's own title (dayTip) shows over it.
+function popModel(s) {
+  if (!s) return null;
+  const c = s.coros || {}, st = SessChip.status(s), prov = !!(s.provisional && s.state === "active");
+  const done = s.state === "done" && s.done_by, fam = s.quality_family || null, db = s.done_by || {};
+  const est = s.tss_est ?? s.tss, pct = (s.compliance || {}).pct;
+  const sl = done && db.session && db.session.type_label ? ` · ${db.session.type_label}` : "";
+  return {
+    title: s.title, icon: SessChip.icon(SessChip.kind(s)), status: st,
+    // the type under the title, unless the title already says it (「輕鬆跑」 · 輕鬆跑)
+    kind: s.title === KINDS[s.kind] ? "" : (KINDS[s.kind] || "") + (fam ? "（" + (fam.sub_label ? fam.text : fam.label) + "）" : ""),
+    day: s.day && window.I18N && I18N.fmt ? I18N.fmt.date(s.day, "mdw") : s.day || "",
+    // the pill: 完成 / 部分 72% / 換了課 / 跳過 / 暫定; none for a plain session still to come
+    label: st === "todo" && !prov ? "" : SessChip.label(st, st === "partial" ? pct : null, { prov }),
+    ring: st === "todo" && !prov ? "" : SessChip.ring(st, pct, { prov }),
+    stats: [{ k: "time", v: s.minutes ? s.minutes + "′" : "" }, { k: "dist", v: s.distance_km ? `${(+s.distance_km).toFixed(1)} km` : "" },
+      { k: "climb", v: s.climb_m ? `↑${Math.round(s.climb_m)} m` : "" },
+      { k: "tss", v: `${n0(est)}${done && db.tss != null ? ` → ${n0(db.tss)}` : ""}` }],
+    verdict: cardWhy(s), nums: compNums(s.compliance), hr: SessChip.hrNote(s.compliance),
+    short: st === "partial" && s.vs && s.vs.short_text ? s.vs.short_text : "",
+    actual: done ? `${(db.category_label || "") + sl} ${hm(db.moving_s)}${db.distance_km ? ` · ${(+db.distance_km).toFixed(1)} km` : ""}${db.self_rating ? ` · ${db.self_rating.text}` : ""}`.trim() : "",
+    note: s.state === "done" && s.note ? s.note : "",
+    target: s.target || "", detail: s.detail || "", walk: s.walk_hint || "",
+    marks: window.PlanMark ? PlanMark.lines(s, KINDS) : [],
+    watch: s.state === "active" && s.day >= D.today && WATCH_ON_CARD.includes(c.status)
+      ? { label: syLabel(c.status), why: c.error || c.reason || "", bad: c.status === "failed" } : null,
+  };
 }
 // an activity no session holds: 沒排課的活動, a dotted outline + its category's icon (click: summary,
 // open it, pair it with a session)
@@ -2824,6 +2852,8 @@ $("bo-del").addEventListener("click", () => {
 
 // ---------------- calendar interaction ----------------
 function select(d) { S.sel = S.sel === d ? S.sel : d; render(); }
+// the session card's hover (SP-470): the laid-out 說明 next to the card
+if (window.SessPop) SessPop.bind($("cal"), (el) => popModel(((D && D.sessions) || []).find((x) => x.uid === el.dataset.uid)));
 $("cal").addEventListener("click", (e) => {
   if (e.target.closest(".term")) return;
   if (performance.now() < RG.quietUntil) return;             // the click that ends a range drag
