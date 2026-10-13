@@ -95,12 +95,10 @@ def test_already_removed_by_rule_e_is_left_alone():
     assert rpe_adj(adj) == [] and any(a["rule"] == "fatigue" and a["action"] == "removed" for a in adj)
 
 
-def test_already_stepped_down_by_rule_e_is_not_stepped_again():
-    red = [st(f"e{i}", "easy", d, state="done", minutes=45,
-              done_by={"index": 90 + i, "date": d, "category": "road", "moving_s": 900, "tss": 10})
-           for i, d in enumerate(("2026-09-28", "2026-09-29"))]
-    out, adj, _ = A.adapt(wk(easy_day="2026-10-02"), red, c(rpe=rated(4)))
-    assert ids(out)["quality"]["title"] == QG.RECOVERY[1] and rpe_adj(adj) == []
+def test_already_removed_by_rule_e_is_not_touched_again():
+    # SP-398: two reds no longer trigger rule E (load only); its TSB removal still wins
+    out, adj, _ = A.adapt(wk(easy_day="2026-10-02"), [], c(rpe=rated(4), load={"tsb": -35}))
+    assert "quality" not in ids(out) and rpe_adj(adj) == []
 
 
 def test_user_edited_or_added_sessions_never_move():

@@ -519,9 +519,10 @@ def test_card_reads_every_done_b2b_weekend_and_the_trend():
     assert c["cells"]["durable"]["label"] == "耐久性好"
 
 
-def test_adapt_red_streak_still_acts_during_a_b2b():
+def test_adapt_two_reds_do_not_act_during_a_b2b_sp398():
+    # SP-398: two red sessions are no longer a rule E trigger (the B2B's TSB drop alone is exempt)
     red = [{"uid": f"r{i}", "state": "done", "kind": "easy", "day": f"2026-09-2{i}", "minutes": 60, "tss": 40.0,
             "done_by": {"index": i, "moving_s": 600, "tss": 5.0, "category": "road"}} for i in (8, 9)]
     out, adj, _ = A.adapt(_gw(), red, _actx(b2b={"due": True}))
     q = next(s for s in out[0]["sessions"] if s["id"] == "quality")
-    assert q["title"] != "爬坡間歇 5×4 分"                                   # downgraded to the recovery fartlek
+    assert q["title"] == "爬坡間歇 5×4 分" and not [a for a in adj if a["rule"] == "fatigue"]

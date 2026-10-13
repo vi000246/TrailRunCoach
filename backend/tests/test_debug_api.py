@@ -68,7 +68,7 @@ def test_day_pairs_the_lsd_with_the_43_minute_run_like_the_plan_page(monkeypatch
         [s] = body["sessions"]
         assert s["kind"] == "long" and s["minutes"] == 50 and s["activity"]["index"] == 41
         assert s["activity"]["match"] == "day" and s["status"] == "done"
-        assert s["compliance"]["duration_pct"] == 86 and s["compliance"]["label"] == "符合計畫"
+        assert s["compliance"]["duration_pct"] == 86 and s["compliance"]["label"] == "完成"
         assert "配對方式：同一天" in s["why"] and "時間 86%" in s["why"]
         assert body["unmatched_activities"] == []
         assert body["meta"]["schema_version"] == 1 and body["meta"]["app_version"]

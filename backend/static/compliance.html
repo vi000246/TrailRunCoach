@@ -147,12 +147,13 @@ h2 .meta { font-weight: 400; }
 .kbar { display: flex; height: 12px; border-radius: 4px; overflow: hidden; gap: 2px; background: color-mix(in srgb, var(--line) 80%, transparent); }
 .kbar i { display: block; height: 100%; }
 
-/* status: icon + word + colour, never colour alone */
+/* status: icon + word + colour, never colour alone. 跳過 is grey, not red (SP-398: a skipped session is
+   not an error — the plan adapts; red stays for real errors) */
 .st { display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; font-weight: 650; white-space: nowrap; }
-.st-done { color: var(--good); } .st-partial { color: var(--watch); } .st-off_plan { color: var(--watch); } .st-missed { color: var(--bad); } .st-open { color: var(--muted); }
+.st-done { color: var(--good); } .st-partial { color: var(--watch); } .st-off_plan { color: var(--watch); } .st-missed { color: var(--faint); font-weight: 500; } .st-open { color: var(--muted); }
 .bg-done { background: var(--good); } .bg-partial { background: color-mix(in srgb, var(--watch) 70%, var(--panel)); }
 .bg-off_plan { background: repeating-linear-gradient(45deg, var(--watch) 0 3px, color-mix(in srgb, var(--watch) 45%, var(--panel)) 3px 6px); }
-.bg-missed { background: var(--bad); }
+.bg-missed { background: color-mix(in srgb, var(--faint) 55%, var(--panel)); }
 
 /* list */
 .filters { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
@@ -168,6 +169,7 @@ h2 .meta { font-weight: 400; }
 .row .t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .row .t .meta { margin-left: 6px; }
 .row .p { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+.row.missed .t, .row.missed .p { color: var(--faint); font-weight: 400; }
 .row .x { text-align: right; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .more { margin-top: 8px; }
 /* 每週存檔 (engine/plan_history.py, SP-71): one row per stored week, the plan as it began and how it went */
@@ -299,10 +301,15 @@ const pc = (r) => (r == null ? "–" : Math.round(r * 100));
 const hm = (s) => (s == null ? "" : F ? F.dur(s, "hm") : `${Math.round(s / 60)}′`);
 const store = { get(k, d) { try { const v = localStorage.getItem("compliance." + k); return v == null ? d : JSON.parse(v); } catch (_) { return d; } },
   set(k, v) { try { localStorage.setItem("compliance." + k, JSON.stringify(v)); } catch (_) { /* blocked */ } } };
-const STATUS = ["done", "partial", "off_plan", "missed", "open"];
-const ICON = { done: "✓", partial: "◐", off_plan: "≠", missed: "✗", open: "…" };
+const STATUS = ["done", "partial", "off_plan", "open", "missed"];        // 跳過 last (SP-398)
+const ICON = { done: "✓", partial: "◐", off_plan: "≠", missed: "○", open: "…" };
 const sw = (s) => `<span class="st st-${s}"><span aria-hidden="true">${ICON[s]}</span><span class="lb">${esc(T("status." + s))}</span></span>`;
 const q = (tip, label) => `<button type="button" class="q" data-tip="${esc(tip)}" aria-label="${esc(label || T("help"))}">?</button>`;
+// the four levels, one text with 課表 (SP-398, common.legend.levels); thresholds from the payload's `levels`
+const levelsTip = () => {
+  const L = (S.data && S.data.levels) || { green: 0.2, yellow: 0.5 };
+  return window.I18N ? I18N.t("common.legend.levels", { green: Math.round(L.green * 100), yellow: Math.round(L.yellow * 100) }) : "";
+};
 
 const S = { period: store.get("period", "4w"), a: store.get("a", null), b: store.get("b", null), metric: store.get("metric", "tss"),
   unit: ["day", "week", "month"].includes(store.get("unit", "week")) ? store.get("unit", "week") : "week",
@@ -377,7 +384,7 @@ function render() {
     kpi(T("kpi.rate"), T("kpi.rate_tip"), t.due ? `${pc(t.rate)}<small>%</small>` : "–",
       t.due ? esc(T("kpi.rate_sub", { done: t.completed, due: t.due })) + (t.open ? ` · ${esc(T("kpi.open", { n: t.open }))}` : "") : esc(T("empty_short")),
       t.due ? `<div class="split" role="img" aria-label="${esc(STATUS.filter((s) => s !== "open").map((s) => `${T("status." + s)} ${t[s]}`).join("，"))}">${split}</div>` : ""),
-    kpi(T("kpi.ok"), T("kpi.ok_tip"), t.due ? `${pc(t.ok_rate)}<small>%</small>` : "–",
+    kpi(T("kpi.ok"), `${T("kpi.ok_tip")}\n\n${levelsTip()}`, t.due ? `${pc(t.ok_rate)}<small>%</small>` : "–",
       esc(T("kpi.ok_sub", { n: t.done, partial: t.partial, off: t.off_plan }))),
     kpi(T("kpi.tss"), T("kpi.tss_tip"), t.tss_pct != null ? `${t.tss_pct}<small>%</small>` : "–",
       esc(T("kpi.tss_sub", { a: n0(t.actual_tss), p: n0(t.planned_tss) })),
@@ -558,6 +565,7 @@ function renderTrend(ws, st) {
         lineStyle: { color: css("--faint"), type: [4, 4] }, data: [{ yAxis: th }] } }] }, true);
 }
 
+const KSTAT = ["done", "partial", "off_plan", "missed"];
 // a 強度課 row / session by its family (SP-79: 有氧間歇 / VO2max 間歇 / 速度; none = 強度課)
 const kindName = (k) => (k.kind === "quality" && k.family ? T("family." + k.family) : T("kind." + k.kind));
 const kindCls = (k) => `k-${esc(k.kind)}${k.kind === "quality" && k.family ? " fam-" + esc(k.family) : ""}`;
@@ -565,13 +573,13 @@ function renderKinds(ks) {
   $("kd-q").innerHTML = q(T("kinds.tip"));
   if (!ks.length) { $("kinds").innerHTML = `<p class="meta">${esc(T("empty"))}</p>`; $("st-legend").innerHTML = ""; return; }
   $("kinds").innerHTML = ks.map((k) => {
-    const segs = ["done", "partial", "off_plan", "missed"].filter((s) => k[s]).map((s) =>
+    const segs = KSTAT.filter((s) => k[s]).map((s) =>
       `<i class="bg-${s}" style="flex:${k[s]}" title="${esc(T("status." + s))} ${k[s]}"></i>`).join("");
     return `<div class="kr ${kindCls(k)}"><span class="kl" title="${esc(kindName(k))}"><i></i>${esc(kindName(k))}</span>
       <div class="kbar" role="img" aria-label="${esc(T("kinds.aria", { kind: kindName(k), done: k.completed, due: k.due }))}">${segs}</div>
       <span class="n" title="${esc(T("kinds.tss", { p: n0(k.planned_tss), a: n0(k.actual_tss) }))}"><b>${k.due ? pc(k.rate) + "%" : "–"}</b> · ${k.completed}/${k.due}</span></div>`;
   }).join("");
-  $("st-legend").innerHTML = ["done", "partial", "off_plan", "missed"].map((s) => `<span><i class="bg-${s}"></i>${sw(s)}</span>`).join("");
+  $("st-legend").innerHTML = KSTAT.map((s) => `<span><i class="bg-${s}"></i>${sw(s)}</span>`).join("");
 }
 
 function renderList() {
@@ -581,16 +589,18 @@ function renderList() {
   $("ls-sub").textContent = T("list.sub", { n: d.sessions.length });
   $("filters").innerHTML = [["all", T("list.all"), d.sessions.length], ...STATUS.filter((s) => counts[s]).map((s) => [s, T("status." + s), counts[s]])]
     .map(([k, l, n]) => `<button type="button" class="fchip" data-f="${k}" aria-pressed="${S.filter === k}">${esc(l)} ${n}</button>`).join("");
-  const rows = d.sessions.filter((r) => S.filter === "all" || r.status === S.filter);
+  // newest first, 跳過 after the rest (SP-398: what was done comes first)
+  const rows = d.sessions.filter((r) => S.filter === "all" || r.status === S.filter)
+    .map((r, i) => [r, i]).sort((x, y) => (x[0].status === "missed") - (y[0].status === "missed") || x[1] - y[1]).map((x) => x[0]);
   if (!rows.length) { $("list").innerHTML = `<p class="meta">${esc(T("empty"))}</p>`; $("more").innerHTML = ""; return; }
   $("list").innerHTML = rows.slice(0, S.limit).map((r) => {
     const act = r.actual_tss != null || r.actual_s ? `${r.actual_s ? hm(r.actual_s) : ""}${r.actual_tss != null ? ` · TSS ${n0(r.planned_tss)}→${n0(r.actual_tss)}` : ""}`
       : `${r.minutes ? r.minutes + "′" : ""} · TSS ${n0(r.planned_tss)}`;
     const tip = [r.title, r.off_text, r.duration_pct != null ? T("list.dur_pct", { pct: r.duration_pct }) : "", r.tss_pct != null ? T("list.tss_pct", { pct: r.tss_pct }) : ""].filter(Boolean).join("\n");
-    return `<a class="row ${kindCls(r)}" href="${SCHED}?day=${r.day}&uid=${encodeURIComponent(r.uid)}" title="${esc(tip)}">
+    return `<a class="row ${kindCls(r)}${r.status === "missed" ? " missed" : ""}" href="${SCHED}?day=${r.day}&uid=${encodeURIComponent(r.uid)}" title="${esc(tip)}">
       <span class="d">${esc(md(r.day))}</span><span class="kd" aria-hidden="true"></span>
       <span class="t">${esc(r.title)}<span class="meta">${esc(kindName(r))}</span></span>
-      ${sw(r.status)}<span class="p">${r.pct != null ? r.pct + "%" : "–"}</span><span class="x">${esc(act)}</span></a>`;
+      ${sw(r.status)}<span class="p">${r.pct != null && r.status !== "missed" ? r.pct + "%" : "–"}</span><span class="x">${esc(act)}</span></a>`;
   }).join("");
   $("more").innerHTML = rows.length > S.limit ? `<button class="btn" type="button" id="more-btn">${esc(T("list.more", { n: rows.length - S.limit }))}</button>` : "";
 }

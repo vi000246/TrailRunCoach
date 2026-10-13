@@ -56,10 +56,9 @@ Rules (thresholds: source or 推估):
      and D and leaves alone any session another rule already changed (E's removal / step-down
      wins) and a run 太強 already acted on (one adjustment per session when both fire); ctx
      `rpe_rule` False = off (課表偏好 › 自動調整).
-  E. fatigue guard: two red-compliance sessions in a row (engine/compliance.py;
-     SP-370: compliance.streak_red — a session red only because another foot sport was done,
-     a hike for a run, does not count; a bike for a run and time / TSS reds do)
-     -> the quality steps down to the recovery fartlek and easy minutes × 0.8;
+  E. fatigue guard, on load only (SP-398, the user 2026-10-12: 「疲勞保護要看是不是有高強度或
+     TSS 過高，跟完成度沒關係」 — the old third trigger, two red-compliance sessions in a row, is
+     gone: it read too little, a bike ride for a run … as fatigue):
      TSB < −30 (Friel / TrainingPeaks, coach; when week_plan has not already
      made it a recovery week) or a CTL ramp at load_guard's BLOCK line
      (min(10, max(5, 15 % of CTL 7 days ago)); SP-63) -> the quality is removed
@@ -70,8 +69,8 @@ Rules (thresholds: source or 推估):
      existing block: those are not repeated when they already acted.
      Exception (engine/b2b.py, user-approved): during a planned B2B week and
      the easy days after one, TSB < −30 alone is the expected drop and does
-     nothing (an adjustment "note" logs why); the red streak and the ramp
-     still act — they are signs beyond the expected drop.
+     nothing (an adjustment "note" logs why); the ramp still acts — a sign
+     beyond the expected drop.
 """
 from __future__ import annotations
 
@@ -99,7 +98,6 @@ SPACING_DAYS = 2           # plan_prefs.place(): 48 h between hard days / the lo
 # E. fatigue guard
 TSB_FLOOR = -30.0          # week_plan(): TSB < −30 -> recovery week
 FATIGUE_CUT = 0.80         # 推估: easy minutes × 0.8
-RED_STREAK = 2             # 推估: two red sessions in a row
 
 SRC_SEILER = "Seiler：easy days easy；不補課屬推估"
 SRC_SPACING = "硬課之間隔 ≥ 2 天：台灣教練（5 區一週最多 2 次、間隔至少 2 天）"
@@ -110,7 +108,7 @@ SRC_TOO_HARD = N_("課別分類（Zone 3 閾值或更強）跑成強度課，就
                   "用課別分類當「太強」的界線屬推估")
 OVERHARD_RULE = "overhard"
 SRC_FATIGUE = ("CTL ramp 到擋線（min(10, max(5, CTL 的 15%))，Friel 5–8／10 換算，推估）；"
-               "TSB < −30（Friel／TrainingPeaks）；連兩堂紅色、減 20% 推估")
+               "TSB < −30（Friel／TrainingPeaks）；減 20% 推估")
 SRC_B2B = "Johnston（UA）B2B 後「three or four light days」；B2B 造成的 TSB 下降不觸發減量為推估"
 SRC_RPE = "跑後自評：Nuuttila 2021（心率恢復了、自覺費力仍偏高）；門檻 Hard 是使用者決定；規則與 1–5 級換算推估"
 RPE_RULE = "rpe_hard"
@@ -498,23 +496,13 @@ def _rpe_hard(wk: _Week, rated: dict, th: dict, out: list) -> None:
                      SRC_RPE, before_title=old, activity=a.get("index"))
 
 
-def _red_streak(stored: list[dict], today: str) -> bool:
-    from backend.engine import compliance as C
-    past = sorted([s for s in stored if s["state"] in ("done", "missed") and s.get("day") and s["day"] <= today
-                   and s["kind"] not in SIDE], key=lambda s: s["day"])
-    # SP-370: a session red only because another foot sport was done (a hike for a run) does
-    # not count; another sport (a bike for a run) and time / TSS reds do (compliance.streak_red)
-    lv = [C.streak_red(C.session_compliance(s)) for s in past[-RED_STREAK:]]
-    return len(lv) == RED_STREAK and all(lv)
-
-
 def _fatigue(wk: _Week, stored: list[dict], ctx: dict, th: dict, out: list) -> None:
     load = ctx.get("load") or {}
     tsb, ramp, base = load.get("tsb"), load.get("ramp"), load.get("ramp_base")
     rest_week = ctx.get("mode") in ("recovery_week", "recovery", "taper", "event", "transition", "rebuild", "reentry")
     why, remove = None, False
     tsb_hit = tsb is not None and tsb < TSB_FLOOR and not rest_week
-    # a planned B2B (engine/b2b.py): its TSB drop is expected — only the ramp / red streak still act
+    # a planned B2B (engine/b2b.py): its TSB drop is expected — only the ramp still acts
     b2b_why = _b2b_exempt(ctx.get("b2b"), wk.today) if tsb_hit else None
     if b2b_why:
         _adj(out, "b2b", wk, {"day": wk.today}, "note",
@@ -524,8 +512,6 @@ def _fatigue(wk: _Week, stored: list[dict], ctx: dict, th: dict, out: list) -> N
     elif LG.ramp_level(ramp, base) == LG.BLOCK and ctx.get("mode") != "reentry":
         # the re-entry block's 50 → 75 → 100 % steps are planned, not overload (detraining.md §6.5, 推估)
         why, remove = LG.ramp_text(ramp, base, LG.BLOCK), True
-    elif _red_streak(stored, wk.today):
-        why = f"連續 {RED_STREAK} 堂偏離計畫（紅色）"
     if not why:
         return
     for q in [g for g in wk.gens() if g.get("kind") == "quality" and wk.free(g) and g.get("day") and g["day"] >= wk.today]:

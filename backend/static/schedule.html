@@ -1996,8 +1996,12 @@ $("vd").addEventListener("click", async (e) => {
 const MATCH_TIP = "配對：同一天、同類運動（路跑／越野）先配；一天兩筆以上時，配時間和強度最接近的課。長跑、強度課、測試在同一週別天做完也算。" +
   "一筆活動只算一堂課；沒排課那天的跑步維持獨立一筆，不會把之後的課拉過來。可以手動改配或取消，取消後這筆活動不再自動配對。" +
   "（COROS 的活動檔沒有記錄是照哪個課表跑的，所以由日期和運動類型配對。）";
-// 完成度等級 (SP-216, engine/plan_match.graded): a function — tt is defined further down
-const OFF_TIP = () => tt("vs.levels_tip");
+// 完成度等級 (SP-216, engine/plan_match.graded): a function — tt is defined further down. One text for
+// 課表 and 課表統計 (SP-398, common.legend.levels), the thresholds from the payload (compliance.COMPLIANCE)
+const OFF_TIP = () => {
+  const L = (D && D.compliance_levels) || { green: 0.2, yellow: 0.5 };
+  return window.I18N ? I18N.t("common.legend.levels", { green: Math.round(L.green * 100), yellow: Math.round(L.yellow * 100) }) : "";
+};
 const INT_LB = { hard: "強度", easy: "輕鬆" };
 const VIEWER = (a) => `/api/v1/wko5/viewer?${new URLSearchParams({ workout: a.index, label: `${md(a.date)} ${a.category_label || ""} ${hm(a.moving_s)}` })}`;
 const actOf = (i) => (D.activities || []).find((a) => a.index === i);

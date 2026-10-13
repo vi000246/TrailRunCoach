@@ -196,43 +196,42 @@ def test_fatigue_tsb_skipped_when_already_recovery_week():
     assert adj == [] and ids(out)["easy1"]["minutes"] == 50
 
 
-def test_fatigue_two_reds_downgrade_to_fartlek():
-    red1 = st("easy1", "easy", "2026-09-28", state="done", minutes=45,
-              done_by={"index": 1, "date": "2026-09-28", "category": "road", "moving_s": 900, "tss": 10})
-    red2 = st("easy2", "easy", "2026-09-29", state="done", minutes=45,
-              done_by={"index": 2, "date": "2026-09-29", "category": "road", "moving_s": 900, "tss": 10})
-    gw = week([g("quality", "quality", "2026-10-01", 60), g("easy3", "easy", "2026-10-02", 50)])
-    out, adj, _ = A.adapt(gw, [red1, red2], ctx())
-    assert ids(out)["quality"]["title"] == QG.RECOVERY[1]
-    assert ids(out)["easy3"]["minutes"] == 40
-
-
-def _mismatch(gen_key, day, cat, index, moving_s=2700, tss=36):
+def _red(gen_key, day, index, cat="road", moving_s=900, tss=10):
     return st(gen_key, "easy", day, state="done", minutes=45,
               done_by={"index": index, "date": day, "category": cat, "moving_s": moving_s, "tss": tss})
 
 
-def test_fatigue_red_streak_ignores_foot_sport_mismatches_sp370():
+def test_fatigue_two_reds_no_longer_trigger_sp398():
+    # SP-398 (the user 2026-10-12): rule E looks at load, not at the completion colour — two red
+    # sessions in a row (too short, a bike ride for a run, a walk for a run …) change nothing
     gw = lambda: week([g("quality", "quality", "2026-10-01", 60), g("easy3", "easy", "2026-10-02", 50)])  # noqa: E731
-    # two walks / hikes for easy runs, time 67 % (≠ on the page) — only the sport made them red: no trigger
-    walks = [_mismatch("easy1", "2026-09-28", "walk", 1, moving_s=1800), _mismatch("easy2", "2026-09-29", "hike", 2,
-                                                                                   moving_s=1800)]
-    out, adj, _ = A.adapt(gw(), walks, ctx())
-    assert not [a for a in adj if a["rule"] == "fatigue"] and ids(out)["easy3"]["minutes"] == 50
-    # two bike rides for easy runs (time / TSS on plan): another sport still counts
-    bikes = [_mismatch("easy1", "2026-09-28", "bike", 1), _mismatch("easy2", "2026-09-29", "bike", 2)]
-    out, adj, _ = A.adapt(gw(), bikes, ctx())
-    assert ids(out)["quality"]["title"] == QG.RECOVERY[1] and ids(out)["easy3"]["minutes"] == 40
-    # a foot-sport mismatch whose time / TSS is itself red still counts (as before)
-    far = [_mismatch("easy1", "2026-09-28", "walk", 1, moving_s=900, tss=10),
-           _mismatch("easy2", "2026-09-29", "hike", 2, moving_s=900, tss=10)]
-    out, adj, _ = A.adapt(gw(), far, ctx())
-    assert ids(out)["quality"]["title"] == QG.RECOVERY[1]
-    # a foot-sport mismatch without a TSS (only time measured): not exempt, as on the page (≠)
-    no_tss = [_mismatch("easy1", "2026-09-28", "walk", 1, tss=None), _mismatch("easy2", "2026-09-29", "hike", 2,
-                                                                                  tss=None)]
-    out, adj, _ = A.adapt(gw(), no_tss, ctx())
-    assert ids(out)["quality"]["title"] == QG.RECOVERY[1]
+    cases = [
+        [_red("easy1", "2026-09-28", 1), _red("easy2", "2026-09-29", 2)],                       # time / TSS red
+        [_red("easy1", "2026-09-28", 1, "bike", 2700, 36), _red("easy2", "2026-09-29", 2, "bike", 2700, 36)],
+        [_red("easy1", "2026-09-28", 1, "walk"), _red("easy2", "2026-09-29", 2, "hike")],
+        [_red("easy1", "2026-09-28", 1, "walk", 2700, None), _red("easy2", "2026-09-29", 2, "hike", 2700, None)],
+    ]
+    for reds in cases:
+        out, adj, _ = A.adapt(gw(), reds, ctx())
+        assert not [a for a in adj if a["rule"] == "fatigue"]
+        assert ids(out)["quality"]["title"] == "閾值 3×10 分" and ids(out)["easy3"]["minutes"] == 50
+
+
+def test_fatigue_tsb_and_ramp_still_act_with_two_reds_sp398():
+    reds = [_red("easy1", "2026-09-28", 1), _red("easy2", "2026-09-29", 2)]
+    gw = lambda: week([g("quality", "quality", "2026-10-01", 60), g("easy3", "easy", "2026-10-02", 50)])  # noqa: E731
+    for load, why in (({"tsb": -35}, "TSB -35 < -30"), ({"ramp": 8.5}, "")):
+        out, adj, _ = A.adapt(gw(), reds, ctx(load=load))
+        assert "quality" not in ids(out) and ids(out)["easy3"]["minutes"] == 40
+        fat = [a for a in adj if a["rule"] == "fatigue"]
+        assert fat and all(why in a["reason"] and "紅" not in a["reason"] for a in fat)
+
+
+def test_two_red_trigger_is_gone_sp398():
+    import re
+    from backend.engine import compliance as C
+    assert not [n for n in dir(A) + dir(C) if re.search(r"red_?streak|streak_?red", n, re.I)]
+    assert "紅" not in A.SRC_FATIGUE
 
 
 # ---- round trip through reconcile: idempotent ------------------------------

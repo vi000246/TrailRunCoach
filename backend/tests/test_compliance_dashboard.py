@@ -229,7 +229,7 @@ def _s(uid, day, kind, state, minutes=60, tss=50.0, comp=None, done_by=None):
 
 def _comp(level, pct, off=False, wrong=False):
     return {"level": level, "pct": pct, "duration_pct": pct, "tss_pct": pct, "wrong_type": wrong,
-            **({"off_plan": True, "off_text": "沒照課表：排強度課，實際跑輕鬆"} if off else {})}
+            **({"off_plan": True, "off_text": "換了課：排強度課，實際跑輕鬆"} if off else {})}
 
 
 def _done(moving_s=3600, tss=50):
@@ -344,3 +344,48 @@ def test_dashboard_day_buckets_count_their_sessions():
     d0, d1 = d["days"]
     assert (d0["due"], d0["rate"]) == (0, None)
     assert (d1["due"], d1["completed"], d1["rate"], d1["planned_tss"]) == (2, 1, 0.5, 150)
+
+
+# ---------------------------------------------------------------------------
+# SP-398: neutral words (完成／部分／換了課／跳過), no red on 課表統計
+# ---------------------------------------------------------------------------
+
+def _catalog(loc, ns):
+    from pathlib import Path
+    return json.loads((Path(C.__file__).parents[1] / "static" / "i18n" / loc / f"{ns}.json").read_text("utf-8"))
+
+
+def test_status_words_are_neutral_sp398():
+    assert C.LEVEL_LABEL == {"green": "完成", "yellow": "部分", "red": "部分", "missed": "跳過"}
+    assert C.session_compliance({"kind": "easy", "state": "missed", "day": "2026-09-29"})["label"] == "跳過"
+    vs = {"off_plan": True, "text": "換了課：排強度課，實際跑輕鬆", "intensity_pct": 30}
+    assert C.with_plan_check(_comp("green", 100), vs)["label"] == "換了課"
+    zh, en = _catalog("zh-TW", "compliance"), _catalog("en", "compliance")
+    assert [zh["status." + s] for s in ("done", "partial", "off_plan", "missed")] == ["完成", "部分", "換了課", "跳過"]
+    assert [en["status." + s] for s in ("done", "partial", "off_plan", "missed")] == \
+        ["Done", "Partly", "Different session", "Skipped"]
+    words = ("沒做", "沒照課表", "走樣", "沒達到")
+    assert not [(k, w) for k, v in zh.items() for w in words if w in v]
+
+
+def test_levels_legend_has_one_source_sp398():
+    # the four levels are written once (common.legend.levels, thresholds from the payload's
+    # compliance_levels); 課表's own copy is gone
+    for loc in ("zh-TW", "en"):
+        lv = _catalog(loc, "common")["legend.levels"]
+        assert "{green}" in lv and "{yellow}" in lv
+        assert "vs.levels_tip" not in _catalog(loc, "schedule")
+    from pathlib import Path
+    static = Path(C.__file__).parents[1] / "static"
+    assert 'I18N.t("common.legend.levels"' in (static / "schedule.html").read_text("utf-8")
+    assert 'I18N.t("common.legend.levels"' in (static / "compliance.html").read_text("utf-8")
+
+
+def test_compliance_page_has_no_red_for_skipped_sp398():
+    import re
+    from pathlib import Path
+    html = (Path(C.__file__).parents[1] / "static" / "compliance.html").read_text("utf-8")
+    css = {m.group(1): m.group(2) for m in re.finditer(r"\.(st-missed|bg-missed|st-off_plan)\s*\{([^}]*)\}", html)}
+    assert "--faint" in css["st-missed"] and "--bad" not in css["st-missed"]
+    assert "--faint" in css["bg-missed"] and "--bad" not in css["bg-missed"]
+    assert "--watch" in css["st-off_plan"]

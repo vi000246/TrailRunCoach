@@ -130,9 +130,9 @@ def test_intervals_planned_but_ran_easy_is_linked_and_marked_off_plan():
     assert q["state"] == "done" and q["done_by"]["index"] == 9                # still linked
     vs = PM.compare(q)
     assert vs["off_plan"] and vs["planned"] == "hard" and vs["actual"] == "easy"
-    assert vs["text"] == "沒照課表：排強度課，實際跑輕鬆" and vs["need_min"] == 10.0
+    assert vs["text"] == "換了課：排強度課，實際跑輕鬆" and vs["need_min"] == 10.0
     comp = C.with_plan_check(C.session_compliance(q, 48.0), vs)
-    assert comp["label"] == "沒照課表" and comp["level"] in ("yellow", "red") and comp["off_plan"]
+    assert comp["label"] == "換了課" and comp["level"] in ("yellow", "red") and comp["off_plan"]
 
 
 def test_easy_as_planned_is_on_plan_and_compliance_unchanged():
@@ -146,9 +146,9 @@ def test_easy_as_planned_is_on_plan_and_compliance_unchanged():
 
 def test_easy_planned_but_ran_hard_and_other_sport():
     e = sess("e", "2026-10-01", state="done", done_by=act(11, "2026-10-01", 45, hard_s=1200, tss=60))  # TSS +67 %
-    assert PM.compare(e)["text"] == "沒照課表：排輕鬆跑，實際跑強度"
+    assert PM.compare(e)["text"] == "換了課：排輕鬆跑，實際跑強度"
     b = sess("b", "2026-10-01", state="done", done_by=act(12, "2026-10-01", 60, cat="bike"))
-    assert PM.compare(b)["wrong_sport"] and PM.compare(b)["text"] == "沒照課表：排輕鬆跑，實際騎車"
+    assert PM.compare(b)["wrong_sport"] and PM.compare(b)["text"] == "換了課：排輕鬆跑，實際騎車"
     # no intensity data (no hard_s): no verdict
     n = sess("n", "2026-10-01", "quality", 60, state="done", done_by={**act(13, "2026-10-01", 60), "hard_s": None})
     assert not PM.compare(n)["off_plan"]
@@ -212,7 +212,7 @@ def test_api_calendar_has_planned_vs_actual_and_link_options(monkeypatch):
         e.inp["activities"] = [a, extra]
         b = e.c.get(f"{API}/calendar?start=2026-09-28&end=2026-10-04").json()
         q = next(s for s in b["sessions"] if s["kind"] == "quality" and s["day"] == "2026-10-01")
-        assert q["state"] == "done" and q["vs"]["off_plan"] and q["compliance"]["label"] == "沒照課表"
+        assert q["state"] == "done" and q["vs"]["off_plan"] and q["compliance"]["label"] == "換了課"
         assert q["link_options"] == [32]                                     # the 10/2 run, ± 1 day
 
 
@@ -262,9 +262,9 @@ def test_under_half_the_intensity_is_still_off_plan():
     q = _q({**act(24, "2026-10-01", 60, tss=30), "session": _ses("easy", z3=240)})       # 40 %, TSS −38 %
     vs = PM.compare(q)
     assert vs["off_plan"] and not vs["short"] and vs["actual"] == "easy" and vs["intensity_pct"] == 40
-    assert vs["text"] == "沒照課表：排強度課，實際跑輕鬆"
+    assert vs["text"] == "換了課：排強度課，實際跑輕鬆"
     comp = C.with_plan_check(C.session_compliance(q, 48.0), vs)
-    assert comp["label"] == "沒照課表" and C.status_of(q, comp, "2026-10-02") == "off_plan"
+    assert comp["label"] == "換了課" and C.status_of(q, comp, "2026-10-02") == "off_plan"
 
 
 def test_a_classified_hard_run_is_done_even_without_its_numbers():
@@ -283,7 +283,7 @@ def test_easy_run_slightly_hard_is_partial_far_too_hard_is_off_plan():
     assert comp["label"] == "強度偏高" and comp["level"] == "yellow" and comp["pct"] == 100
     e = sess("e", "2026-10-01", state="done",
              done_by={**act(27, "2026-10-01", 45, tss=50), "session": _ses("hard_long", z3=1000)})  # 1.67×, TSS +39 %
-    assert PM.compare(e)["off_plan"] and PM.compare(e)["text"] == "沒照課表：排輕鬆跑，實際跑強度"
+    assert PM.compare(e)["off_plan"] and PM.compare(e)["text"] == "換了課：排輕鬆跑，實際跑強度"
     # a CP test on an easy day: ran hard, never 「偏強」
     e = sess("e", "2026-10-01", state="done",
              done_by={**act(28, "2026-10-01", 45, tss=50), "session": _ses("test_cp")})
@@ -383,8 +383,8 @@ def test_easy_run_as_intensity_partial_when_time_and_tss_green_off_plan_when_tss
     vs, comp, st = _verdict(_done("easy", 45, 36.0, 45, 40.0, session=hard))             # TSS +11 %
     assert st == "partial" and vs["soft"] == "intensity" and "跑成強度課" in vs["short_text"]
     vs, comp, st = _verdict(_done("easy", 45, 36.0, 45, 46.8, session=hard))             # TSS +30 %
-    assert st == "off_plan" and vs["off_plan"] and vs["text"] == "沒照課表：排輕鬆跑，實際跑強度"
-    assert comp["label"] == "沒照課表"
+    assert st == "off_plan" and vs["off_plan"] and vs["text"] == "換了課：排輕鬆跑，實際跑強度"
+    assert comp["label"] == "換了課"
     # time off > 20 % keeps it ≠ too
     vs, comp, st = _verdict(_done("easy", 45, 36.0, 33, 36.0, session=hard))             # time −27 %
     assert st == "off_plan"
@@ -440,12 +440,12 @@ def test_activity_review_card_uses_the_calendars_planned_tss(monkeypatch):
     assert card["level"] == WR.PLAN_LEVEL[cal["compliance"]["level"]] == "warn"
     assert "TSS：50 ／ 計畫 50（100%）" in card["tip"]
     # the stored TSS alone (no estimate) would have left the TSS unmeasured: ≠ 沒照課表
-    assert C.with_plan_check(C.session_compliance(s), PM.compare(s))["label"] == "沒照課表"
+    assert C.with_plan_check(C.session_compliance(s), PM.compare(s))["label"] == "換了課"
 
 
 def test_bike_for_a_run_stays_off_plan_even_with_time_and_tss_on_plan():
     vs, comp, st = _verdict(_done("easy", 45, 36.0, 45, 36.0, cat="bike"))
-    assert vs["off_plan"] and vs["wrong_sport"] and vs["text"] == "沒照課表：排輕鬆跑，實際騎車"
+    assert vs["off_plan"] and vs["wrong_sport"] and vs["text"] == "換了課：排輕鬆跑，實際騎車"
     assert comp["level"] == "red" and comp["wrong_type"] and st == "off_plan"
     # a foot sport with time off > 20 %: still ≠
     vs, comp, st = _verdict(_done("easy", 45, 36.0, 30, 36.0, cat="walk"))

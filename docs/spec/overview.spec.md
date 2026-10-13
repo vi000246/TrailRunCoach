@@ -1236,7 +1236,9 @@ CTL / ATL and next-Monday TSB.
 **Compliance** (`engine/compliance.py`; TrainingPeaks / intervals.icu): a done session's
 actual ÷ planned TSS and duration; the worse deviation sets the colour — green ≤ 20 %, yellow
 ≤ 50 %, red beyond or the wrong kind of activity (`COMPLIANCE`, `backend/engine/compliance.py:31`);
-planned vs actual (`plan_match.compare`, `backend/engine/plan_match.py:318`) flags 「沒照課表」 (≠).
+planned vs actual (`plan_match.compare`, `backend/engine/plan_match.py:318`) flags 「換了課」 (≠; 「沒照課表」 until
+SP-398). The words (SP-398, `compliance.LEVEL_LABEL`): 完成／部分／換了課／跳過 (en Done／Partly／Different
+session／Skipped); a red level from time / TSS alone reads 部分 like its status; the levels are unchanged.
 The intensity is graded, not pass / fail (SP-216; TrainingPeaks' compliance colours applied to the
 quality dose, 推估; `backend/engine/plan_match.py:60-64`): a planned hard session at ≥ 80 % of the
 dose it needs is done, 50–80 % is 強度不足, < 50 % ran easy (≠); a planned easy run with a quality
@@ -1555,7 +1557,8 @@ which one. The response keeps the `coros` field names.
   then one with no interval work as 強度課 — `FAMILY_ORDER`, `backend/engine/compliance.py:197`;
   each row's own colour, planned → actual TSS on hover, `renderKinds`,
   `backend/static/compliance.html:564`; the session list names the family), planned vs actual TSS / hours and completion rate per 天／週／月,
-  the streak (weeks with ≥ 80 % of the due sessions done, 推估), a compact session list, a
+  the streak (weeks with ≥ 80 % of the due sessions done, 推估), a compact session list (跳過 grey
+  `--faint` with ○, listed after the rest; no red for a status — SP-398), a
   per-phase period filter and a zoned 負荷比 ATL ÷ CTL chart (hover 「值 · 區間（範圍）」, a dashed
   line at 1). 每週存檔 (SP-71, `engine/plan_history.py`; `backend/static/compliance.html:649`): one
   row per stored week, the plan as it began and how it went; `GET /sessions` takes this week's
@@ -2414,3 +2417,4 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 | 2026-10-12 | feat/trail-climb-sessions-sp87 | SP-87 acceptance 8 | A road athlete's plan is unchanged by SP-87: no 長爬坡有氧 / downhill / 技術地形 session and no weekly climb target in the 基礎期, before a road A race or before a trail race when 主要訓練項目 is set to 路跑, in week_plan and the projection (`backend/tests/test_sp87_road.py`); the 課表 week rows carry no `climb` for them (`test_vert_target.py`) |
 | 2026-10-12 | feat/trail-climb-sessions-sp87 | SP-87 (found by the kind change) | The 專項期 技術地形 RPE 6–7 session (a hard day) stays out of the easy days after an accepted B2B (`b2b.post.until`, kept in `technical.week_context` as `b2b_until`), like the downhill session and the 長爬坡反覆; without another spaced day it is the RPE 4–5 one (easy). Before, it could land there (kind hike hid it from `test_b2b.py::test_week_after_an_accepted_b2b_easy_days_no_recovery_week`). Test: `backend/tests/test_technical.py::test_the_quality_session_stays_out_of_the_easy_days_after_a_b2b` |
 | 2026-10-12 | perf | SP-394 第 4 條 | A first import (and a re-parse) builds the last 90 days first: the status and the plan inputs come before the back-fill of the older activities, whose progress shows under the nav; the PMC counts the 90 days until the complete Dataset is in. A request's Dataset build is a `build` job of the queue. Tests: `backend/tests/test_queue_hot_first_sp394.py` |
+| 2026-10-13 | feature | SP-398 | Neutral completion words 完成／部分／換了課／跳過 (`compliance.status.*`, `LEVEL_LABEL`, `with_plan_check`, `plan_match.compare`'s 「換了課：…」); the four levels' explanation is one text, `common.legend.levels`, with the thresholds from the payload (`compliance_levels` / `levels`) — 課表's ? (`OFF_TIP`) and 課表統計's 達標率 ?; 課表統計: 跳過 grey (`.st-missed` / `.bg-missed` `--faint`), ○ instead of ✗, listed last, no 「沒做／沒照課表／走樣／沒達到」 in its texts. Rule E's red-streak trigger is gone (plan-auto.spec.md). Tests: `backend/tests/test_compliance_dashboard.py` (`*_sp398`) |

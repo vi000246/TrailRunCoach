@@ -29,7 +29,10 @@ from backend.i18n import _
 
 # |actual / planned − 1| upper bounds per level (TrainingPeaks ±20 % / 50 %)
 COMPLIANCE = {"green": 0.20, "yellow": 0.50}
-LEVEL_LABEL = {"green": "符合計畫", "yellow": "有點偏離", "red": "偏離計畫", "missed": "未完成"}
+# the words (SP-398, docs/research/schedule-chip-ui.md §9.1): the 課表統計 page's statuses —
+# 完成 / 部分 / 換了課 / 跳過 —, neutral; a red level from time / TSS alone is 部分 there
+# (status_of), 換了課 comes from with_plan_check / the wrong kind. The level itself is unchanged.
+LEVEL_LABEL = {"green": "完成", "yellow": "部分", "red": "部分", "missed": "跳過"}
 
 RUN = {"road", "trail"}
 # activity categories (engine/overview.CATEGORIES) that count as the planned kind
@@ -66,7 +69,7 @@ def foot_swap(s: dict, cat: Optional[str]) -> bool:
 
 def time_tss_level(s: dict, planned_tss: Optional[float] = None) -> Optional[str]:
     """green / yellow / red from time and TSS together (the worse one) — the basis of the SP-370
-    softening (◐ instead of ≠) and of rule E's foot-swap exemption. None unless BOTH are measured
+    softening (◐ instead of ≠). None unless BOTH are measured
     (owner 2026-10-08: with no TSS — no HR, or a planned TSS of 0 — a swap / reversal stays ≠)."""
     a = s.get("done_by") if isinstance(s.get("done_by"), dict) else {}
     dur = _ratio(a.get("moving_s"), (s.get("minutes") or 0) * 60.0)
@@ -125,7 +128,7 @@ ORDER = ("green", "yellow", "red")
 
 def with_plan_check(comp: Optional[dict], vs: Optional[dict]) -> Optional[dict]:
     """The intensity part of a done session (engine/plan_match.compare), on top of time / TSS:
-      沒照課表 (off_plan: planned intervals, ran easy — or the other way — or another sport):
+      換了課 (was 沒照課表, SP-398; off_plan: planned intervals, ran easy — or the other way — or another sport):
         at least yellow (推估: TrainingPeaks colours time / TSS only; the kind is our addition)
       強度不足 / 偏強 (short, SP-216: 50–80 % of the planned intensity, or an easy run up to
         150 % of a quality dose): at least yellow, counted as 部分 — no longer 沒照課表.
@@ -141,7 +144,7 @@ def with_plan_check(comp: Optional[dict], vs: Optional[dict]) -> Optional[dict]:
     level = ORDER[max(ORDER.index(lv), 1)]
     out = {**comp, "level": level, "intensity_pct": vs.get("intensity_pct")}
     if vs.get("off_plan"):
-        return {**out, "off_plan": True, "label": "沒照課表", "off_text": vs.get("text") or ""}
+        return {**out, "off_plan": True, "label": "換了課", "off_text": vs.get("text") or ""}
     ipct = vs.get("intensity_pct")
     if ipct is not None and (comp.get("pct") is None or ipct < comp["pct"]):
         out["pct"] = ipct
@@ -156,15 +159,6 @@ def soft_label(vs: dict) -> Optional[str]:
     if vs.get("soft") == "intensity":
         return _("跑成強度課") if vs.get("actual") == "hard" else _("跑成輕鬆")
     return None
-
-
-def streak_red(comp: Optional[dict]) -> bool:
-    """Red for adapt rule E's streak (SP-370): not when only another foot sport made it red —
-    time and TSS both measured (`time_level`, as for the ◐ softening) and not red themselves;
-    another sport (a bike for a run), time / TSS reds and a swap without both measured count."""
-    if not comp or comp.get("level") != "red":
-        return False
-    return not (comp.get("foot_swap") and comp.get("time_level") in ("green", "yellow"))
 
 
 def week_compliance(planned_tss: float, done_tss: float, planned_hours: float,
@@ -184,9 +178,9 @@ def week_compliance(planned_tss: float, done_tss: float, planned_hours: float,
 
 # a session's status on the dashboard: ✓ 完成 (green), 部分 (yellow / red: the
 # time or TSS is > 20 % off; or, with both on plan, a reversal / another foot sport,
-# SP-370), 沒照課表 (planned intensity / sport not run, plan_match.compare, or the
-# wrong kind of activity), ✗ 沒做 (missed); open = a past day the synced data
-# doesn't cover yet (not counted)
+# SP-370), 換了課 (was 沒照課表, SP-398: planned intensity / sport not run,
+# plan_match.compare, or the wrong kind of activity), 跳過 (missed, was 沒做); open = a
+# past day the synced data doesn't cover yet (not counted)
 STATUSES = ("done", "partial", "off_plan", "missed", "open")
 DONE_STATUSES = ("done", "partial", "off_plan")
 SKIP_KINDS = ("notice", "heat_passive")      # the 課表待確認 reminder; a bath / sauna is ticked, not matched
