@@ -445,6 +445,7 @@ function cell(c, a) {
     case "name": {
       const sub = [sportName(a), hms(a.duration), a.climbing != null ? `↑${Math.round(a.climbing)} m` : ""].filter(Boolean).join(" · ");
       return `<span class="nm">${esc(title(a))}</span>${a.excluded ? ` <span class="badge ex">${esc(T("excluded"))}</span>` : ""}` +
+        `${a.archived ? ` <span class="badge" title="${esc(T("archived_help"))}">${esc(T("archived"))}</span>` : ""}` +
         `${a.user_type === "race" ? ` <span class="badge rc">${esc(T("race.badge"))}</span>` : ""}${achBadge(a)}` +
         `<span class="sub">${esc(sub)} ${painBadge(a)}</span>`;
     }
@@ -707,7 +708,9 @@ function renderEditor() {
     : `<span>${esc(T("terrain." + (tr.value === "trail" ? "trail" : "road")))}</span><span class="meta">（${esc(tr.why || T("terrain.locked"))}）</span>`;
   const x = a.excluded, ov = a.user_exclusion, flagged = d?.exclusion_state?.flagged;
   const exBtn = (v, t, cls = "") => `<button type="button" data-ex="${v}" class="${cls}">${esc(t)}</button>`;
-  const exCtl = x
+  // an archived activity (SP-317): its FIT is gone, its values come from the frozen summary — no exclusion to change
+  const exCtl = a.archived ? `<span class="badge">${esc(T("archived"))}</span><span class="meta">${esc(T("archived_help"))}</span>`
+    : x
     ? `<span class="badge ex">${esc(T("excluded"))}</span><span>${esc(x.reason || x.label || "")}</span>` +
       (x.auto ? exBtn("keep", T("ex.keep")) : exBtn("auto", T("ex.unmanual")))
     : ov === "keep"

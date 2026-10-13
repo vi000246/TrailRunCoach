@@ -9,7 +9,9 @@ after the time on that day; there is no catch-up for earlier days.
 
 The same loop also runs the daily automatic backup (api/backup.auto_tick), the weekly
 check of the last 60 days (sync/check.weekly_tick, SP-362 A4), the daily cleanup of deleted
-FIT objects (sync/purge.cleanup_tick, SP-308) and, once, the rain backfill
+FIT objects (sync/purge.cleanup_tick, SP-308), the monthly archive of the FITs past the
+retention (engine/fit_archive.tick, SP-317: the 1st, 03:00–05:00 local, tenants staggered)
+and, once, the rain backfill
 (api/rain_backfill.tick, SP-299).
 
 Every tenant (SP-384, SP-374 第 5 條): each minute the loop walks accounts.tenants.sync_tenants()
@@ -195,6 +197,10 @@ async def loop(session_factory: Optional[Callable] = None, interval: float = INT
             # once a day per tenant: the files of deleted / orphan FIT objects (sync/purge.cleanup_objects, SP-308)
             from backend.sync import purge
             await _each_tenant(lambda: purge.cleanup_tick(sf()), "FIT objects cleanup")
+            # the monthly archive of FITs past the retention (engine/fit_archive.py, SP-317): on the
+            # 1st, 03:00–05:00 local, each tenant at its own slot; queued at `archive` priority
+            from backend.engine import fit_archive
+            await _each_tenant(fit_archive.tick_async, "monthly archive")
         with tenancy.use(tenancy.owner()):
             # the one-time rain backfill of the last 12 months (api/rain_backfill.py, SP-299)
             try:

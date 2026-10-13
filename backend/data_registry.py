@@ -2,9 +2,10 @@
 Data registry: the class of every per-tenant file and DB table (SP-311,
 docs/research/local-first-sync.md §3.2, §11 ④).
 
-Backup (engine/backup.py) reads this list to decide what a backup holds; the device sync,
-account deletion and data retention (SP-317) are to read it too, instead of each keeping
-its own list. Classes:
+Backup (engine/backup.py) reads this list to decide what a backup holds; the device sync and
+account deletion are to read it too, instead of each keeping its own list. Data retention
+(SP-317, engine/fit_archive.py) deletes only IMPORTED fit/** originals, after their cold/**
+summaries are frozen; the DERIVED cache/fit channels of those files go with them. Classes:
 
   USER      使用者改的: what the user typed or chose. Not recomputable; small; the
             candidates for a device sync (§5.1).
@@ -216,6 +217,12 @@ FILES: tuple = (
     File("template_gpx/**", IMPORTED, ROOT, "uploaded training-route GPX of a 範本, gzip "
          "(engine/user_templates.py); backed up like event_gpx", backup=ALWAYS,
          deidentify=("GPS track (start / end)",)),
+    File("archive_log.json", DERIVED, ROOT, "the monthly archive's runs (SP-317, engine/fit_archive.py): per run "
+         "its time, cutoff, files deleted (count, date range, bytes), the activities kept (no summary, referenced "
+         "by a threshold / a plan test) and the month done — 設定's 最近一次清理 line",
+         deidentify=("activity files", "dates"),
+         invalidated_by="never recomputed: a log of the last runs; safe to delete (the next window runs the "
+                        "archive again, which is idempotent)"),
     File("backups/**", SECRET, ROOT, "pre-restore copies (made like a backup: no SECRET rows) and restore "
          "work files (api/backup.py _local_dir); they stay on the server"),
     # -- read from the base by a demo sandbox (tenancy.base_path) ----------

@@ -40,8 +40,9 @@ builds (`build`, `user`: wko5views._dataset), the back-fill of the older activit
 build left out (`full` chunks at `warm` / `cold`, then `build` at `cold`: api/backfill.py), the
 back-test (`backtest`), the cold-data sweep queued once the classification's last tier is done
 (`full` at `cold`: the summaries of the activities older than WARM_DAYS, their per-second
-channels dropped; SP-340, wko5expr/coldstore.schedule_sweep) and, once SP-317 exists, the monthly
-archive (`submit_archive`; its job calls coldstore.prepare_archive first).
+channels dropped; SP-340, wko5expr/coldstore.schedule_sweep) and the monthly archive
+(`submit_archive`, SP-317: engine/fit_archive.tick queues it; its job calls
+coldstore.prepare_archive first).
 
 A caller that needs the result waits with `call(fn, ...)`: it queues `fn` and returns its result
 (or raises its exception); with a `key`, concurrent callers share one job and its result (the
@@ -235,7 +236,7 @@ def promote(job: Job, priority: str) -> None:
 
 def submit_archive(fn: Callable, *, label: str = "monthly archive", key: Optional[Hashable] = None,
                    tenant: Optional[str] = None) -> Job:
-    """The monthly archive's place in the queue (SP-317, not built yet: its job starts here).
+    """The monthly archive's place in the queue (SP-317, engine/fit_archive.tick → run).
     `archive`, the lowest priority — after every waiting job of every other kind, the cold
     fill included; `full` (it rewrites one tenant's cold summaries and moves its old FITs).
     SP-317 runs it in its 03:00–05:00 window: one call per tenant due, `key` = ("archive",
