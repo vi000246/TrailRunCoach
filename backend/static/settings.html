@@ -54,6 +54,9 @@ table.wt th { color: var(--muted); font-weight: 600; font-size: 12px; }
 .tw { overflow-x: auto; }
 .tw table.wt { width: 100%; }
 .tw td { white-space: nowrap; }
+/* 門檻變更紀錄 (SP-467): the source column wraps; a value the 課表 did not take is muted */
+.tw td.hs { white-space: normal; min-width: 160px; }
+tr.off td { color: var(--muted); }
 .est { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; margin-top: 10px; }
 .est .card { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; }
 .est .k, .est .s { color: var(--muted); font-size: 12px; }
@@ -294,6 +297,10 @@ main > section.tab-off { display: none; }
         <th>% CP</th><th>W</th></tr></thead>
       <tbody id="thr-pz"></tbody></table></div>
       <p class="meta" id="thr-pzsrc"></p></details>
+    <details id="thr-hist" style="margin-top:6px"><summary class="meta" data-i18n="settings.thr.hist_h">門檻變更紀錄：哪個門檻在哪天變了</summary>
+      <p class="meta" data-i18n="settings.thr.hist_intro">課表的心率／功率區間跟著這些門檻走。同一種課的區間跟上一堂不一樣時，看兩堂課日期之間的紀錄。</p>
+      <div id="thr-hist-body"><span class="meta" data-i18n="settings.pmc.loading">載入中…</span></div>
+    </details>
     <div class="sub" id="pmc">
       <b data-i18n="settings.pmc.title">起始 CTL／ATL</b>
       <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.pmc.help" title="CTL／ATL 要有一個起點。順序：你填的值（從那天開始）→ 自動（有 TSS 的前 28 天平均每日 TSS，CTL 和 ATL 都用它）→ 0。總覽、圖表、體能 CTL 的 ramp 護欄、TSB &lt; −30 改恢復週都用同一組。手動值從填的日期重新起算，那天以前照自動；資料只有幾週、但你在別的平台（例如 TrainingPeaks）知道當時的 CTL／ATL 時才需要填。">?</button>
@@ -978,6 +985,7 @@ async function loadThr() {
   try { TS = await j(THR); }
   catch (e) { $("thr-now").textContent = t("settings.thr.load_failed", { msg: e.message.slice(0, 100) }); return; }
   renderThr(); loadThrEstimate(); loadThrCheck();
+  if (HS) { HS = null; if ($("thr-hist").open) loadHist(); }   // a save / 套用 adds rows: read again when shown
 }
 function renderThr() {
   const ef = TS.effective_thresholds, w = TS.wko5_settings.runthr, m = TS.wko5_settings.runmhr;
@@ -1107,6 +1115,41 @@ $("thr-save").onclick = async () => {
     toast(t("settings.thr.saved")); loadThr(); loadHr();
   } catch (e) { toast(t("settings.thr.failed", { msg: e.message.slice(0, 80) })); }
 };
+
+// ---- 門檻變更紀錄 (SP-467; api/plan.py GET /threshold-history, engine/threshold_history.py) ----
+// Read when opened (or opened by #thr-hist): the plan rows, the PD fits and as-of LTHR already on
+// the Dataset (nothing refitted), the watch account and the 課表心率區間 switches — newest first,
+// HIST_SHOWN rows until 「顯示全部」. A value the 課表 did not take (in_effect false) is muted.
+const HIST = "/api/v1/plan/threshold-history";
+const HIST_SHOWN = 20;
+let HS = null, histAll = false;
+async function loadHist() {
+  try { HS = await j(HIST); }
+  catch (e) { $("thr-hist-body").innerHTML = `<span class="meta">${esc(t("settings.thr.load_failed", { msg: e.message.slice(0, 100) }))}</span>`; return; }
+  renderHist();
+}
+function renderHist() {
+  const val = (x, lab, unit) => lab ? lab : x == null ? "–" : `${Math.round(x * 10) / 10}${unit ? " " + unit : ""}`;
+  const change = (e) => e.key === "hr_zones" ? esc(e.note)
+    : `${esc(val(e.from, e.from_label, e.unit))} → <b>${esc(val(e.to, e.to_label, e.unit))}</b>`;
+  const why = (e) => [e.detail, e.key === "hr_zones" ? "" : e.note].filter(Boolean).map(esc).join(" · ");
+  const rows = HS.entries.slice(0, histAll ? undefined : HIST_SHOWN).map((e) => `<tr${e.in_effect === false ? ' class="off"' : ""}>
+    <td>${esc(e.date)}</td><td>${esc(e.name)}</td><td>${change(e)}</td>
+    <td class="hs">${esc(e.source_label)}${why(e) ? `<div class="meta">${why(e)}</div>` : ""}</td></tr>`).join("");
+  const more = !histAll && HS.entries.length > HIST_SHOWN
+    ? `<div class="row"><button type="button" id="thr-hist-all">${esc(t("settings.thr.hist_all", { n: HS.entries.length }))}</button></div>` : "";
+  $("thr-hist-body").innerHTML = (HS.pending ? `<p class="meta">${esc(HS.pending.message)}</p>` : "")
+    + (rows ? `<div class="tw"><table class="wt"><thead><tr><th>${esc(t("settings.thr.hist_date"))}</th>
+      <th>${esc(t("settings.thr.hist_name"))}</th><th>${esc(t("settings.thr.hist_change"))}</th>
+      <th>${esc(t("settings.thr.hist_source"))}</th></tr></thead><tbody>${rows}</tbody></table></div>`
+      : `<p class="meta">${esc(t("settings.thr.hist_empty"))}</p>`)
+    + more
+    + `<ul class="meta" style="margin:6px 0;padding-left:18px">${HS.notes.map((n) => `<li>${esc(n)}</li>`).join("")}</ul>`;
+  const b = $("thr-hist-all");
+  if (b) b.onclick = () => { histAll = true; renderHist(); };
+}
+$("thr-hist").addEventListener("toggle", () => { if ($("thr-hist").open && !HS) loadHist(); });
+if (location.hash === "#thr-hist") $("thr-hist").open = true;
 
 // ---- 起始 CTL／ATL (SP-68; api/plan.py GET / PUT /pmc-start, engine/load_guard.py pmc_start) ----
 // manual (the user's value at a date) → auto (the first 28 days' mean daily TSS) → 0: the one

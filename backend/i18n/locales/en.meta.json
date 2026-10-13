@@ -619,6 +619,10 @@
     "draft": true,
     "src": "backend/engine/overview.py:2454"
   },
+  "PD 擬合": {
+    "draft": false,
+    "src": "backend/engine/threshold_history.py:41"
+  },
   "PD 模型重算的 TTE": {
     "draft": true,
     "src": "backend/engine/racepower/calc.py:280"
@@ -2523,6 +2527,10 @@
     "draft": true,
     "src": "backend/sync/workout_targets/garmin.py:22"
   },
+  "區間比例改過": {
+    "draft": false,
+    "src": "backend/engine/threshold_history.py:53"
+  },
   "區間設定改過": {
     "draft": true,
     "src": "backend/engine/coros_compare.py:109"
@@ -3027,6 +3035,10 @@
     "draft": true,
     "src": "backend/engine/racepower/cold.py:360"
   },
+  "套用的自動估算": {
+    "draft": false,
+    "src": "backend/engine/threshold_history.py:41"
+  },
   "好了": {
     "draft": true,
     "src": "backend/engine/suggestions.py:307"
@@ -3519,6 +3531,10 @@
     "draft": true,
     "src": "backend/engine/algorithms/threshold_estimate.py:348"
   },
+  "心率模型": {
+    "draft": false,
+    "src": "backend/engine/threshold_history.py:42"
+  },
   "心率約{cap}": {
     "draft": false,
     "src": "backend/engine/specific_phase.py:668"
@@ -3707,9 +3723,21 @@
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:289"
   },
+  "手錶帳號的心率設定從 {day} 起有紀錄（每次同步時比對，日期是發現改變的那次同步）。": {
+    "draft": false,
+    "src": "backend/engine/threshold_history.py:48"
+  },
+  "手錶帳號設定": {
+    "draft": false,
+    "src": "backend/engine/threshold_history.py:42"
+  },
   "手錶推估功率": {
     "draft": false,
     "src": "backend/engine/athlete_profile.py:41"
+  },
+  "手錶的心率區間設定": {
+    "draft": false,
+    "src": "backend/engine/threshold_history.py:39"
   },
   "扣本人的手腕偏差 {b:.1f} °C（{n} 次跑步配對）": {
     "draft": true,
@@ -3786,6 +3814,10 @@
   "推估": {
     "draft": true,
     "src": "backend/engine/advanced_params.py:29"
+  },
+  "推估（0.89 × LTHR）": {
+    "draft": false,
+    "src": "backend/engine/threshold_history.py:44"
   },
   "推估（7 場比賽 0–5 %，留餘裕）": {
     "draft": true,
@@ -4134,6 +4166,10 @@
   "最大心率的 90 %（推估）": {
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:290"
+  },
+  "最大心率的自動估算（近 365 天跑步）沒有留歷史，沒有列；手錶帳號和你填的值有列。": {
+    "draft": false,
+    "src": "backend/engine/threshold_history.py:50"
   },
   "最大心率（COROS % HRmax 6 區）": {
     "draft": true,
@@ -4702,6 +4738,10 @@
   "沒有下一場 A 賽事": {
     "draft": true,
     "src": "backend/engine/downhill.py:86"
+  },
+  "沒有列未套用的 AeT 自動估算：它不改課表的區間（輕鬆跑上限用課表心率區間的 Z2 上緣，量過的 AeT 才優先）。": {
+    "draft": false,
+    "src": "backend/engine/threshold_history.py:49"
   },
   "沒有到 VO2max": {
     "draft": true,
@@ -5715,9 +5755,21 @@
     "draft": true,
     "src": "backend/engine/strength_moves.py:137"
   },
+  "自動": {
+    "draft": false,
+    "src": "backend/engine/threshold_history.py:44"
+  },
   "自動估算": {
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:289"
+  },
+  "自動估算的 LTHR 和 PD 擬合每 30 天算一次（PD 擬合另外算最後一次跑步那天），列的是有變的那幾次。": {
+    "draft": false,
+    "src": "backend/engine/threshold_history.py:51"
+  },
+  "自動估算（你的跑步）": {
+    "draft": false,
+    "src": "backend/engine/threshold_history.py:42"
   },
   "自動估算（當天以前的跑步，Friel 30 分鐘段）": {
     "draft": true,
@@ -5871,6 +5923,10 @@
     "draft": true,
     "src": "backend/engine/workout_review.py:2734"
   },
+  "課表仍用 {v}": {
+    "draft": false,
+    "src": "backend/engine/threshold_history.py:46"
+  },
   "課表偏好": {
     "draft": false,
     "src": "backend/engine/debug_view.py:497"
@@ -5886,6 +5942,14 @@
   "課表待確認是自動調整的提醒，不能自己新增": {
     "draft": true,
     "src": "backend/engine/plan_store.py:399"
+  },
+  "課表心率區間": {
+    "draft": false,
+    "src": "backend/engine/threshold_history.py:39"
+  },
+  "課表心率區間（心率模型）的切換以前沒有留紀錄，這裡只有這次更新之後的切換，之前的沒有；目前用 {model}。": {
+    "draft": false,
+    "src": "backend/engine/threshold_history.py:47"
   },
   "課表心率用{label}：輕鬆跑上限 {aet:.0f} bpm（{src}）": {
     "draft": true,

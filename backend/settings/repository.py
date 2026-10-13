@@ -146,6 +146,10 @@ DEFAULTS: dict[str, Any] = {
     # 課表心率區間 (engine/hr_profile.py): lthr (COROS % LTHR, default) | hrr | hrmax — the
     # 課表's HR targets only; the HR-zone charts keep their own selector
     "plan.hr_zone_model": "lthr",
+    # its switches (engine/threshold_history.py, SP-467: 設定 → 門檻變更紀錄): [{date, from, to}], oldest
+    # first, one per change, written by PUT /api/v1/plan/hr-profile; None = never switched since SP-467
+    # (the switches before it were not recorded)
+    "plan.hr_zone_model_history": None,
     # workout route map (viewer 單次活動): default basemap id and overlay ids;
     # the map can switch them temporarily (remembered per browser)
     "charts.map.basemap": None,               # None = by 地區 (engine/region.py): tw 魯地圖, intl OSM
@@ -457,6 +461,9 @@ def validate(key: str, value: Any) -> None:
             raise ValueError("athlete.pmc_start must be {date: YYYY-MM-DD, ctl, atl} (0-300) or null")
     if key == "plan.hr_zone_model" and value not in ("lthr", "hrr", "hrmax"):
         raise ValueError("plan.hr_zone_model must be lthr, hrr or hrmax")
+    if key == "plan.hr_zone_model_history":
+        from backend.engine.threshold_history import validate_model_history
+        validate_model_history(value)
     if key in ("sync.coros.rpe_backfill", "weather.rain_backfill", "sync.coros.check", "sync.trainingpeaks.check",
                "sync.coros.consent", "sync.garmin.consent",
                "sync.coros.check_weekly", "sync.trainingpeaks.check_weekly") \
