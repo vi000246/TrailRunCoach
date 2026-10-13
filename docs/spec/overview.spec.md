@@ -591,36 +591,35 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
   平路暖身 10′ → the steep part (the rest, at the walk cap, 「上坡心率 ≤ 爬坡上限或 RPE ≤ 13；下坡看感覺」) →
   平路緩和 5′, as its detail says (one block, as before, under 25′).
 - **熱適應課** (`engine/heat_plan.py`): below.
-- **下坡課** (SP-99, SP-87; `engine/downhill.py`; after placement, before the 長爬坡有氧 and the
-  技術地形課, in week_plan and per projected week). SP-87 (owner 2026-10-05, decision 3;
-  trail-terrain-and-climb-sessions.md §2.2, §4 #3): **專項期 every week** — SP-62's 下坡離心 (−10～−15 %,
-  RPE 3–5, warm-up / cool-down 10′, the template's steps), the downhill part 15 → 20 → 25′ (+5′ a week
-  from the phase's first Monday, `SPEC_STEP`; without phases by 賽前第 10 週) — and **基礎期 every 2
-  weeks** (an even ISO week, `base_week`): 「緩下坡（下坡 N′）」 −5～−10 % at RPE 3–5 (so 每堂課前加熱身 leaves its downhill part whole, SP-364), 10′ the first
-  even week of the phase, then 15′ (`BASE_FIRST_WORK` / `BASE_WORK`, ≈ 10 m descent a minute; the
-  report's 10–15′). **None in 賽前第 1–2 週** (`LAST_WEEKS`; and no day < 14 days before the race),
-  nor in the race's real 減量期 or its post-race days. The next A race decides as before: a road race
-  or one descending < 20 m/km (推估; GPX, else descent = climb) → none, in the 基礎期 too; a 基礎期 with
-  no A race ahead keeps its dose (a trail athlete between races); 主要訓練項目 路跑: none. 「第一次」
-  (smaller, the 2 days after it easy): the 基礎期's first even week, or the 專項期's first week when no
-  基礎期 came right before it. Day rules unchanged: ≥ 14 days before the race, not on / the day before a
-  hard day, not in the easy days after a B2B; the weekday cap shrinks the downhill part (≥ 10′); the
-  other easy runs give the extra minutes. The 技術地形 session keeps ≥ 2 days from it
-  (`technical.HARD_IDS`). A week note (`src: downhill`) says when / why or that no day fit. Frequencies
-  and doses are 推估 (Bontemps 2020 / 2025: the protection fades by 9 weeks, 10 runs cut soreness and 5
-  did not). (SP-99 had 賽前第 9、6、3 週 only.)
+- **下坡課**: none since SP-442 (owner 2026-10-13: 「下坡課跟上坡課合併吧，既然有爬升就有下降」). The
+  downhill lives in the climbing sessions: the 基礎期's 長爬坡有氧 runs down (below), the 專項期's
+  長爬坡反覆 runs down at race grade (SP-409). No `downhill` key in week_plan / the projected weeks; a
+  stored untouched auto `downhill` row is removed by the next reconcile (its easy run comes back), an
+  edited one stays. (SP-99 / SP-87 had `engine/downhill.py`: 專項期 every week 15 → 25′, 基礎期 every
+  2 weeks 10–15′.)
 - **長爬坡有氧（穩定地形爬升課）** (SP-87, `engine/base_climb.py`; trail-terrain-and-climb-sessions.md §4 #2,
-  owner 2026-10-05 decision 2; after the downhill pass, before the 技術地形課, in week_plan and per
+  owner 2026-10-05 decision 2; after the heat pass, before the 技術地形課, in week_plan and per
   projected week): 主要訓練項目 越野跑, 基礎期 only (recovery weeks included — an easy session; not the
   re-entry block, not while an injury rule avoids `climb`). One placed easy run a week (the longest
-  that is not done / the heat / the downhill session; a day before the long run or an interval last)
+  that is not done / the heat session; a day before the long run or an interval last)
   becomes 「長爬坡有氧 N′（穩定地形）」 of the same day, minutes and TSS: id `climb_base`, kind `easy`,
   terrain `trail`, SP-62's long_climb structure (warm-up 10′, the climb at HR ≤ the easy-run cap
   (`WT.AET`), walk down 10′), the detail names stairs / 階梯步道 / a treadmill incline 8–15 %, `climb_m`
   = the uphill minutes × 400 m/h (`CLIMB_M_PER_H`, 推估). An easy run < 40′ (`MIN_MINUTES`) → none and a
   week note (`src: base_climb`). The 坡度走路提示 shows the athlete's own climbing rate next to it.
+  **跑下山** (SP-442, the old 基礎期 downhill dose): when the next A race descends ≥ 20 m/km
+  (`MIN_DESCENT_M_PER_KM`; GPX, else descent = climb) or there is no A race ahead, the way down is run —
+  「長爬坡有氧 N′（跑下山 D′）」, structure warm-up 10′ → the climb (N − 10 − D, `WT.AET`) → D′ run-down
+  at RPE 3–5 with its descent (`WT.rpe(3, 5, down=D × 10 m)`, no HR / power target on the watch, the RPE
+  gives the IF), D = 10′ the base phase's first week (`DOWN_FIRST_WORK`), else 15′ (`DOWN_WORK`), cut so
+  the climb keeps ≥ 20′ (< 10′ → walking down). Every week. The detail says 「有下坡路就用跑的下來，在
+  跑步機或樓梯就走下來，這週不算下坡」; `base_climb.run_down` / `down_work` / `down_why` in the week
+  info. Walking down instead: a road A race, one descending < 20 m/km, 賽前第 1–2 週, a picked day
+  < 14 days before the race, in its real 減量期 (`planning.taper_start`), on its post-race days, on the
+  easy days after a B2B, or an injury rule avoiding `downhill` (the week note says why). The base
+  phase's first run-down also prefers a day with no hard day in the next 2 days (soft, 推估).
 - **A hook session already behind** (SP-87, `plan_store.hook_days`): week_plan reads this week's
-  stored `climb_base` / `downhill` / `tech` rows; one whose day is before the first plannable day
+  stored `climb_base` / `tech` rows (SP-442: no `downhill` any more); one whose day is before the first plannable day
   (done, missed, or today's with a run logged) makes that hook inactive this week (「本週的…已經排在
   M/D」) — the generator counts the done run as an easy run, so it used to turn the next easy run into a
   second one and reconcile then dropped an easy row (the SP-74 known limit).
@@ -648,8 +647,8 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
   in a recovery / re-entry week (`week_context`, `backend/engine/technical.py:60`).
   - **基礎期**: none (SP-87, owner 2026-10-05; trail-terrain-and-climb-sessions.md §4 #1, §5): the
     LSD stays on steady terrain (its HR drift reads the aerobic base only there); the week's
-    `technical.why` says 「基礎期不排技術地形課…」. The 基礎期's climbing is the weekly 長爬坡有氧 and the downhill
-    dose below. (SP-74 turned every even ISO week's LSD into 「技術地形 N′（低 RPE 3–4）」.)
+    `technical.why` says 「基礎期不排技術地形課…」. The 基礎期's climbing is the weekly 長爬坡有氧, which
+    also carries the downhill dose (SP-442). (SP-74 turned every even ISO week's LSD into 「技術地形 N′（低 RPE 3–4）」.)
   - **專項期**: one session a week out of a placed easy run (id `tech`; kind `quality` for the RPE 6–7
     one — SP-87 §4 #6, was `hike` — and `hike` 越野跑 for the RPE 4–5 one),
     near the race's terrain — only when the next A race's **土徑比** (`Event.trail_pct`, SP-87 owner
@@ -2598,3 +2597,4 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 | 2026-10-13 | feature | SP-467 | 設定 › 閾值 gets 「門檻變更紀錄」 (`GET /api/v1/plan/threshold-history`, `backend/engine/threshold_history.py`): which threshold changed on which day, from → to and its source (手動／測試／套用的自動估算／PD 擬合／自動估算／手錶帳號設定／心率模型), built from the plan rows, the Dataset's existing PD fits and as-of LTHR (no refit), the watch account's history; the 課表心率區間 switch is recorded from now on in the new user_settings key `plan.hr_zone_model_history` (`PUT /api/v1/plan/hr-profile`). zh-TW + en. Session format unchanged. Tests: `backend/tests/test_threshold_history_sp467.py` |
 | 2026-10-13 | bugfix | SP-468 | 測試 indicator: a CP test counts as the CP's test day by itself (its CP is WKO5's mFTP, which the 課表 uses); no 要更新 / 「套用這次的 CP」 action or button (`applyCpBtn` removed) — nothing is applied any more (`backend/engine/status.py:864`). The 90-minute AeT test's 「實測 CP」 also counts WKO5's mFTP with a CP test inside its 90-day window (`aet_test.cp_tested`, `backend/engine/aet_test.py:638`; a fit without a test still does not, owner 2026-10-06). The CP 測試 glossary says the CP is computed the WKO5 way, nothing to apply |
 | 2026-10-13 | bugfix | SP-446 | 課表統計's period switch was slow: `GET /plan/compliance` built the calendar's whole view through `sessions()` — per active session the watch-push status (`PS.push_dict` → `plan_prefs.load`, 33 sqlite reads each) — and recomputed the dataset's TSS / h (180 days of runs through the session classifier) that the plan inputs already hold. Now `_reconciled` + `_stats_view` (the 強度課 family only) and the inputs' rates; same payload on the demo athlete, 382 → 62 ms (4 週), 431 → 130 ms (12 週). The page fetches 負荷比 in parallel, drops a stale answer, and caps 本周期 at 371 days (a longer phase was 「載入失敗：at most 371 days」). |
+| 2026-10-13 | feature | SP-442 | No separate 下坡課: `engine/downhill.py` is gone (week_plan / projection no longer make a `downhill` session or week key; `technical.HARD_IDS`, `base_climb.SKIP_IDS`, `plan_store.HOOK_IDS`, `overview._COND_IDS` drop it; the 膝前痛／髂脛束 notes say 「先不跑下坡」). The 基礎期 長爬坡有氧 runs down instead of walking down: 「長爬坡有氧 N′（跑下山 D′）」, warm-up → climb → D′ at RPE 3–5 (D 10′ the phase's first week, then 15′), every week, before an A race descending ≥ 20 m/km or with none ahead; walking down for a road / flat race, 賽前第 1–2 週, < 14 days out, the 減量期, post-race days, after a B2B or an injury rule avoiding downhill. Same day, minutes and TSS (the week's total unchanged). The 專項期 keeps the 長爬坡反覆's own run-down (none in the last 14 days / the taper). A stored untouched auto `downhill` row goes at the next reconcile, an edited one stays. Tests: `backend/tests/test_downhill_into_climbs_sp442.py` (`test_downhill.py` removed: its behaviour was the session that is gone) |

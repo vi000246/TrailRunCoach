@@ -402,10 +402,8 @@ def test_the_week_plan_keeps_its_easy_run_count():
 def test_project_weeks_decorates_every_projected_week():
     from backend.tests.test_plan_store import PHASES, cur_plan
     weeks = P.project_weeks(cur_plan(), PHASES, date(2026, 11, 1), prefs=ON)
-    # (a downhill session keeps its own 10′ — its downhill part gives nothing; SP-87 put one in every
-    # other 基礎期 week)
-    runs = [s for w in weeks for s in w["sessions"] if s["kind"] in ("easy", "long", "quality", "test", "hike")
-            and s["id"] != "downhill"]
+    # (SP-442: no separate downhill session any more — every run gets the warm-up)
+    runs = [s for w in weeks for s in w["sessions"] if s["kind"] in ("easy", "long", "quality", "test", "hike")]
     assert runs and all(lead_s(struct(s)) >= 1200 for s in runs)
     plain = P.project_weeks(cur_plan(), PHASES, date(2026, 11, 1), prefs=PP.Prefs())
     assert not any(WU.mark_min(s) for w in plain for s in w["sessions"])
@@ -424,10 +422,7 @@ def test_week_plan_sessions_and_suggested_tests_carry_the_warm_up():
     on = O.week_plan(ds, st, TODAY, prefs=ON)
     left = [s for s in on["sessions"] if not s["done"] and s["kind"] in O.RUN_KINDS]
     assert left
-    for s in left:
-        if s["id"] == "downhill":           # its own 10′ stays (SP-87: one every other 基礎期 week)
-            assert lead_s(struct(s)) == 600, s["title"]
-            continue
+    for s in left:                          # SP-442: no separate downhill session (its own 10′ warm-up)
         assert lead_s(struct(s)) >= 1200, s["title"]
     # strength untouched; the week's time stays the target (the interval's longer warm-up came out
     # of the easy runs; ± the easy runs' 5-min rounding)

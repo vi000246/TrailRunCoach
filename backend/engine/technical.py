@@ -9,7 +9,7 @@ never flips a week back and forth):
   * 基礎期 — none (SP-87, owner 2026-10-05; docs/research/trail-terrain-and-climb-sessions.md §4 #1,
     §5): the LSD stays on steady terrain — no study asks for technical terrain far from the race,
     and the long run's HR drift reads the aerobic base only on steady ground. The 基礎期's climbing
-    is the weekly 長爬坡有氧 (engine/base_climb.py) and the small downhill dose (engine/downhill.py).
+    is the weekly 長爬坡有氧 (engine/base_climb.py), which also carries the small downhill dose (SP-442).
     (SP-74 turned every other week's LSD into a low-RPE technical run.)
   * 專項期 — one 技術地形 session a week close to the race's terrain, out of a placed easy run, when
     the next A race's 土徑比 (planning.Event.trail_pct, SP-87 owner 2026-10-12) is ≥ TRAIL_PCT_MIN or
@@ -51,8 +51,7 @@ SPEC_WORK_MIN = 30           # 推估: a shorter RPE 6–7 block is not worth a 
 WARM, COOL = 15, 10          # the template's
 EASY_MIN = 20                # the other easy runs give the difference, never below this
 TRAIL_PCT_MIN = 50.0         # SP-87 (owner 2026-10-12): a race with ≥ 50 % dirt / trail gets the 專項期 session
-HARD_IDS = ("long", "long2", "long3", "climb",   # B2B days and the race-climb repeats (steep_hill: its hard list)
-            "downhill")                         # SP-99: ≥ 2 days from the downhill session (eccentric load)
+HARD_IDS = ("long", "long2", "long3", "climb")   # B2B days and the race-climb repeats (steep_hill: its hard list)
 SRC = ("Koop（賽道專項：練和比賽相同的地形）；Uphill Athlete；RPE 對強度預算的換算是這個 app 的"
        "建議（推估）")
 
@@ -209,7 +208,7 @@ def _rate(rates: Optional[dict]) -> float:
 def _rebalance(ss: list, me: dict, delta: int) -> None:
     """The week's total stays: the other easy runs give / take `delta` minutes (≥ EASY_MIN)."""
     for x in sorted((x for x in ss if x is not me and x.get("kind") == "easy" and not x.get("done")
-                     and x.get("id") not in ("climb", "steep", "downhill") and not x.get("heat")),
+                     and x.get("id") not in ("climb", "steep") and not x.get("heat")),
                     key=lambda x: -(x.get("minutes") or 0)):
         if delta <= 0:
             break
@@ -272,7 +271,7 @@ def apply(ss: list, info: Optional[dict], *, hours: Optional[float] = None, rate
                                                            or s.get("id") in HARD_IDS)]
     hard += [_d(d) for d in hard_done or ()]
     easy = sorted((s for s in ss if s.get("kind") == "easy" and not s.get("done") and s.get("day")
-                   and s.get("id") not in ("climb", "steep", "downhill") and not s.get("heat")),
+                   and s.get("id") not in ("climb", "steep") and not s.get("heat")),
                   key=lambda s: (-(int(s.get("minutes") or 0)), s["day"]))
     if not easy:
         if notes is not None:

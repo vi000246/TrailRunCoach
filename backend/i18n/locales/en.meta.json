@@ -1651,14 +1651,6 @@
     "draft": false,
     "src": "backend/engine/panels/pole_compare.py:53"
   },
-  "下坡離心（下坡 {work}′）": {
-    "draft": true,
-    "src": "backend/engine/downhill.py:188"
-  },
-  "下坡離心（第一次，下坡 {work}′）": {
-    "draft": true,
-    "src": "backend/engine/downhill.py:188"
-  },
   "下坡：Stryd 功率低估下坡的負荷（Gravina-Cognetti 2025：−7～+7 % 時功率 +90 %、耗氧只 +74 %），看下降量與技術": {
     "draft": false,
     "src": "backend/engine/target_policy.py:49"
@@ -2551,10 +2543,6 @@
     "draft": true,
     "src": "backend/engine/race_feasibility.py:232"
   },
-  "只在基礎期、專項期排（停訓後恢復期不排）": {
-    "draft": true,
-    "src": "backend/engine/downhill.py:118"
-  },
   "只在基礎期、專項期（恢復週、停訓後恢復期不排）": {
     "draft": true,
     "src": "backend/engine/technical.py:64"
@@ -2906,14 +2894,6 @@
   "基礎期不排技術地形課：長跑留在穩定地形，爬升改排長爬坡有氧": {
     "draft": true,
     "src": "backend/engine/technical.py:76"
-  },
-  "基礎期每 2 週一次小劑量的緩下坡（{day}，下坡 {work} 分）：下坡跑的保護效果維持 3–6 週、9 週沒做就消失，所以專項期之前就小量開始（頻率、分鐘數為推估）{first}": {
-    "draft": true,
-    "src": "backend/engine/downhill.py:298"
-  },
-  "基礎期每 2 週一次：這週不排下坡": {
-    "draft": true,
-    "src": "backend/engine/downhill.py:123"
   },
   "基礎期每週 1 堂長爬坡有氧：這週的輕鬆跑都不到 {need} 分，放不下": {
     "draft": true,
@@ -3735,14 +3715,6 @@
     "draft": true,
     "src": "backend/engine/workout_review.py:435"
   },
-  "找 −10～−15% 的下坡（步道或產業道路），下坡 {work} 分、約 ↓{down} m，RPE 3–5、放鬆不衝，上坡用走的回去；暖身、緩和各 10 分平路": {
-    "draft": true,
-    "src": "backend/engine/downhill.py:189"
-  },
-  "找 −5～−10% 的緩下坡（步道、產業道路或公園坡道），下坡 {work} 分、約 ↓{down} m，RPE 3–5、放鬆小步，上坡用走的回去；暖身、緩和各 10 分平路": {
-    "draft": true,
-    "src": "backend/engine/downhill.py:283"
-  },
   "找不到備份檔": {
     "draft": true,
     "src": "backend/api/backup.py:248"
@@ -4394,10 +4366,6 @@
   "本週強度預算不夠（{room}，需要 ≥ {need} 分）": {
     "draft": true,
     "src": "backend/engine/technical.py:209"
-  },
-  "本週的下坡課已經排在 {day}，不另外排": {
-    "draft": true,
-    "src": "backend/engine/downhill.py:87"
   },
   "本週的強度課是 5 區維持課（長距離越野的專項期後段每 3 週 1 堂，推估），3 區這週不排": {
     "draft": true,
@@ -5615,14 +5583,6 @@
     "draft": true,
     "src": "backend/engine/quality_gate.py:1981"
   },
-  "緩下坡（下坡 {work}′）": {
-    "draft": true,
-    "src": "backend/engine/downhill.py:281"
-  },
-  "緩下坡（第一次，下坡 {work}′）": {
-    "draft": true,
-    "src": "backend/engine/downhill.py:281"
-  },
   "緩和": {
     "draft": true,
     "src": "backend/engine/workout_steps.py:1472"
@@ -5727,9 +5687,9 @@
     "draft": true,
     "src": "backend/engine/injuries.py:100"
   },
-  "膝前痛進行中：先不排下坡課（Esculier 2016）；技術地形、長爬坡反覆也先不排，越野長跑改平路": {
+  "膝前痛進行中：先不跑下坡（Esculier 2016）；技術地形、長爬坡也先不排，越野長跑改平路": {
     "draft": true,
-    "src": "backend/engine/injuries.py:586"
+    "src": "backend/engine/injuries.py:621"
   },
   "膝蓋微彎做提踵，練小腿深層的比目魚肌：長下坡、長時間跑的小腿耐力。": {
     "draft": true,
@@ -6103,9 +6063,9 @@
     "draft": true,
     "src": "backend/engine/race_calc_store.py:53"
   },
-  "賽事下降不明顯（每公里 ↓{d:.0f} m < {min:.0f} m）：不排下坡課": {
+  "賽事下降不明顯（每公里 ↓{d:.0f} m < {min:.0f} m）：下坡用走的": {
     "draft": true,
-    "src": "backend/engine/downhill.py:96"
+    "src": "backend/engine/base_climb.py:145"
   },
   "賽事大小": {
     "draft": true,
@@ -6151,9 +6111,9 @@
     "draft": true,
     "src": "backend/engine/overview.py:1962"
   },
-  "賽前 {n} 週內不排下坡課": {
+  "賽前 {n} 週內不跑下坡：下坡用走的": {
     "draft": true,
-    "src": "backend/engine/downhill.py:144"
+    "src": "backend/engine/base_climb.py:150"
   },
   "賽前 ≥ 2 週做；效果約 9 週，之後 2–3 天輕鬆；下坡功率、心率都不準，看 RPE": {
     "draft": true,
@@ -6166,10 +6126,6 @@
   "賽前停了一般肌力，平衡照做（負荷低，不累腿）": {
     "draft": true,
     "src": "backend/engine/balance_plan.py:113"
-  },
-  "賽前第 {w} 週的下坡課（{day}，下坡 {work} 分）：專項期每週一次，逐週加到 25 分；賽前 2 週內、減量期不排（頻率、分鐘數為推估）{first}": {
-    "draft": true,
-    "src": "backend/engine/downhill.py:300"
   },
   "賽後第 1 週：輕鬆跑 ≤ {max} 分": {
     "draft": true,
@@ -6431,9 +6387,9 @@
     "draft": false,
     "src": "backend/engine/racepower/zonebar.py:28"
   },
-  "路跑賽事不排下坡課": {
+  "下一場 A 賽事是路跑：下坡用走的": {
     "draft": true,
-    "src": "backend/engine/downhill.py:89"
+    "src": "backend/engine/base_climb.py:138"
   },
   "路跑／馬拉松": {
     "draft": true,
@@ -6847,10 +6803,6 @@
     "draft": true,
     "src": "backend/engine/quality_gate.py:2546"
   },
-  "這週該排下坡課，但沒有適合的輕鬆日（長跑、強度課的當天和前一天不放{first}；賽前 {days} 天內不放）": {
-    "draft": true,
-    "src": "backend/engine/downhill.py:268"
-  },
   "這週輪到 5 區維持課，但{why}，所以不排": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:2585"
@@ -7186,6 +7138,42 @@
   "長爬坡有氧 {m}′（穩定地形）": {
     "draft": true,
     "src": "backend/engine/base_climb.py:96"
+  },
+  "找穩定、好走的長坡持續往上（階梯步道、樓梯，或跑步機坡度 8–15%），跑走混合，心率不超過{cap}；上坡約 {work} 分、爬升約 {climb:.0f} m（推估）。下山用跑的：−5～−10% 的緩下坡 {d} 分、約 ↓{down} m，RPE 3–5、放鬆小步不衝，心率、功率在下坡不準，看 RPE；有下坡路就用跑的下來，在跑步機或樓梯就走下來，這週不算下坡。暖身 {wc} 分": {
+    "draft": true,
+    "src": "backend/engine/base_climb.py:235"
+  },
+  "時間不夠跑下山（上坡至少 {n} 分）": {
+    "draft": true,
+    "src": "backend/engine/base_climb.py:295"
+  },
+  "減量期不跑下坡": {
+    "draft": true,
+    "src": "backend/engine/base_climb.py:256"
+  },
+  "賽前 {n} 天內不跑下坡": {
+    "draft": true,
+    "src": "backend/engine/base_climb.py:254"
+  },
+  "賽後恢復期不跑下坡": {
+    "draft": true,
+    "src": "backend/engine/base_climb.py:258"
+  },
+  "連續長天之後的輕鬆日不跑下坡": {
+    "draft": true,
+    "src": "backend/engine/base_climb.py:262"
+  },
+  "長爬坡有氧 {m}′（跑下山 {d}′）": {
+    "draft": true,
+    "src": "backend/engine/base_climb.py:233"
+  },
+  "；下坡用走的（{why}）": {
+    "draft": true,
+    "src": "backend/engine/base_climb.py:316"
+  },
+  "；跑下山 {d} 分（−5～−10% 緩下坡、RPE 3–5）：下坡跑的保護效果維持 3–6 週、9 週沒做就消失，所以專項期之前每週小量練（分鐘數為推估）{first}": {
+    "draft": true,
+    "src": "backend/engine/base_climb.py:310"
   },
   "長跑": {
     "draft": true,
@@ -7543,9 +7531,9 @@
     "draft": true,
     "src": "backend/engine/injuries.py:104"
   },
-  "髂脛束進行中：先不排下坡課（Fredericson 2005）；技術地形、長爬坡反覆也先不排，越野長跑改平路": {
+  "髂脛束進行中：先不跑下坡（Fredericson 2005）；技術地形、長爬坡也先不排，越野長跑改平路": {
     "draft": true,
-    "src": "backend/engine/injuries.py:587"
+    "src": "backend/engine/injuries.py:622"
   },
   "體能好壞不影響高山症風險（CDC）：練得好不代表不會高山症": {
     "draft": true,
@@ -7727,10 +7715,6 @@
     "draft": true,
     "src": "backend/engine/planning.py:367"
   },
-  "，第一次之後 2 天也要輕鬆": {
-    "draft": true,
-    "src": "backend/engine/downhill.py:178"
-  },
   "，賽後 {h} 小時內不排硬課、不跑下坡": {
     "draft": true,
     "src": "backend/engine/planning.py:384"
@@ -7859,10 +7843,6 @@
     "draft": true,
     "src": "backend/engine/status.py:588"
   },
-  "；其餘 {m} 分平路輕鬆跑": {
-    "draft": true,
-    "src": "backend/engine/downhill.py:191"
-  },
   "；分溫度區：{bands}": {
     "draft": true,
     "src": "backend/engine/status.py:570"
@@ -7886,10 +7866,6 @@
   "；已經做了 {n} 次": {
     "draft": true,
     "src": "backend/engine/baiyue_multiday.py:159"
-  },
-  "；心率、功率在下坡不準，看 RPE": {
-    "draft": true,
-    "src": "backend/engine/downhill.py:193"
   },
   "；或": {
     "draft": true,
@@ -7923,10 +7899,6 @@
     "draft": true,
     "src": "backend/engine/overview.py:2407"
   },
-  "；第一次量小，之後 2 天只排輕鬆課": {
-    "draft": true,
-    "src": "backend/engine/downhill.py:192"
-  },
   "；聚合估計還不夠準或有偏移": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:2122"
@@ -7935,9 +7907,9 @@
     "draft": true,
     "src": "backend/engine/hr_profile.py:198"
   },
-  "；這是第一次，量小、之後 2 天輕鬆": {
+  "；這是第一次，量小": {
     "draft": true,
-    "src": "backend/engine/downhill.py:204"
+    "src": "backend/engine/base_climb.py:312"
   },
   "；這次誤差約 ±{se:.1f} 個百分點（回歸標準誤）": {
     "draft": true,

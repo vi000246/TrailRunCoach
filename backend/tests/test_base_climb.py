@@ -45,7 +45,12 @@ def test_week_context_rules():
 
 
 def test_one_easy_run_becomes_a_long_aerobic_climb_of_the_same_time():
-    info = BC.week_context(kind="base", mode="base", monday=MON, road=False)
+    # SP-442: an A race without a clear descent (10 m/km) keeps the walking-down structure below (no A
+    # race ahead now runs down: test_downhill_into_climbs_sp442.py)
+    from backend.engine.planning import Event
+    flat = Event("e1", "平緩越野", "2027-03-27", kind="race", priority="A", distance_km=30, climbing_m=300,
+                 est_hours=4.0)
+    info = BC.week_context(kind="base", mode="base", monday=MON, road=False, events=[flat])
     ss, notes = _week(), []
     before = [(x["id"], x["day"], x["minutes"]) for x in ss]
     total_tss = sum(x["tss"] for x in ss)
@@ -74,14 +79,14 @@ def test_one_easy_run_becomes_a_long_aerobic_climb_of_the_same_time():
 
 
 def test_which_easy_run_and_when_none_fits():
-    # done / heat / the downhill session are never taken; the next longest is
+    # done / heat / another hook session (技術地形) are never taken; the next longest is
     ss = _week()
     ss[3]["done"] = True                                                # Thu 60′ done
     ss[2]["heat"] = True                                                # Wed 50′ the heat session
     BC.apply(ss, BC.week_context(kind="base", mode="base", monday=MON, road=False), aet=145.0)
     assert next(x for x in ss if x["id"] == BC.ID)["day"] == d(6)      # Sun 45′
     ss = _week()
-    ss[3]["id"] = "downhill"
+    ss[3]["id"] = "tech"
     BC.apply(ss, BC.week_context(kind="base", mode="base", monday=MON, road=False), aet=145.0)
     assert next(x for x in ss if x["id"] == BC.ID)["day"] == d(2)      # Wed 50′
     # every easy run shorter than MIN_MINUTES: none, the note says why
@@ -181,7 +186,8 @@ def test_hook_days_reads_this_weeks_stored_hook_rows(tmp_path):
                     " '2026-10-05')", (uid, ws, day, kind, state, gk))
     con.commit()
     con.close()
-    assert PS.hook_days(MON, db) == {"climb_base": "2026-10-07", "downhill": "2026-10-09"}
+    # SP-442: no separate 下坡課 any more — an old stored downhill row is no hook
+    assert PS.hook_days(MON, db) == {"climb_base": "2026-10-07"}
     assert PS.hook_days(MON, tmp_path / "missing.db") == {}
 
 

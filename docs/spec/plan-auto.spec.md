@@ -593,9 +593,10 @@ always, and the change log / undo cover them like any generated change.
   area; `injuries.monitor`): the pain-monitoring text — 跟腱 Silbernagel 2007, 膝前痛 Esculier 2016
   (≤ 2/10, back within 60 min), the rest and none = the general rules (Ohio State Wexner).
 - **Avoided session types** (`injuries.condition_rule` / `condition_week`, `overview.condition_apply`;
-  week_plan and the projection): while 膝前痛 / 髂脛束 is open no downhill session, 技術地形 or 長爬坡反覆
+  week_plan and the projection): while 膝前痛 / 髂脛束 is open no running downhill, 技術地形 or 長爬坡（有氧／反覆）
   and the trail long run goes flat; while 跟腱 is open no 長爬坡反覆 / ME, 陡坡健走 or strides (推估). The
-  downhill / technical / steep_hill `week_context` ask the rule; what is left becomes a flat easy run of
+  base_climb / technical / steep_hill `week_context` ask the rule (SP-442: an injury rule avoiding only downhill
+  walks the 長爬坡有氧 down); what is left becomes a flat easy run of
   the same minutes. The rule ends the day the event resolves.
 - **Pain light** (`activity_tags.pain_score` 0–10; `injuries.light`, `overview.light_apply`; this week
   only): green / yellow / red from the last marked run (limits 跟腱 5, 膝前痛 2, others relative; +2 =
@@ -866,7 +867,7 @@ run on the app's event loop in that tenant. `force` (the page's 立即重算) is
   it). A user's own RPE ≥ 7 session saved with another kind (easy / long / hike) is still only
   seen by `session_role`. Once a hook session is behind (done, missed, or
   today's with a run logged) the generator still counts that run as an easy run; since SP-87
-  (2026-10-12) week_plan reads this week's stored `tech` / `downhill` / `climb_base` rows
+  (2026-10-12) week_plan reads this week's stored `tech` / `climb_base` rows (SP-442: no `downhill` session any more)
   (`plan_store.hook_days`) and makes that hook inactive, so it no longer turns the next easy run into
   a second one (reconcile used to drop that easy row). The 陡坡健走 still has the old behaviour.
 

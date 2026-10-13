@@ -1,7 +1,8 @@
 """
 SP-270 依傷別迴避課型 (engine/injuries.condition_rule / condition_week, overview.condition_apply, the
-downhill / technical / steep_hill modules, week_plan, projection): while a 膝前痛 / 髂脛束 event is open
-no downhill session, no 技術地形, the trail long run becomes flat; while a 跟腱 event is open no hill
+base_climb / technical / steep_hill modules, week_plan, projection): while a 膝前痛 / 髂脛束 event is open
+no running down (SP-442: the downhill lives in the climbing sessions), no climbing session, no 技術地形,
+the trail long run becomes flat; while a 跟腱 event is open no hill
 repeats, steep walk or strides (推估); 足底筋膜 / 其他 / no condition change nothing. The rule ends on
 the day the event resolves; an avoided session's time stays as easy running (the week's volume holds).
 Synthetic data only (docs/research/injury-graded-return.md §4.2, §4.5, §6.1 points 3–4).
@@ -14,7 +15,7 @@ from datetime import date
 
 import pytest
 
-from backend.engine import downhill as DH
+from backend.engine import base_climb as BC
 from backend.engine import injuries as INJ
 from backend.engine import overview as O
 from backend.engine import projection as P
@@ -26,7 +27,7 @@ from backend.tests.test_quality_gate import TODAY
 from backend.tests.test_recovery_week import LIGHT, _week
 
 MON = TODAY - dt.timedelta(days=TODAY.weekday())               # 2026-09-28
-PFP_NOTE = "膝前痛進行中：先不排下坡課（Esculier 2016）"
+PFP_NOTE = "膝前痛進行中：先不跑下坡（Esculier 2016）"
 
 
 @pytest.fixture(autouse=True)
@@ -48,7 +49,7 @@ def cev(id, onset, condition, area=None, **kw):
 def test_rule_by_condition():
     r = INJ.condition_rule([cev(1, "2026-09-20", "pfp", side="right")], TODAY)
     assert r["avoid"] == {"downhill", "technical", "climb"} and r["flat_long"]
-    assert r["notes"] == ["右膝・" + PFP_NOTE + "；技術地形、長爬坡反覆也先不排，越野長跑改平路"]
+    assert r["notes"] == ["右膝・" + PFP_NOTE + "；技術地形、長爬坡也先不排，越野長跑改平路"]
     r = INJ.condition_rule([cev(1, "2026-09-20", "itb")], TODAY)
     assert "downhill" in r["avoid"] and r["flat_long"] and "Fredericson 2005" in r["notes"][0]
     r = INJ.condition_rule([cev(1, "2026-09-20", "achilles")], TODAY)
@@ -70,7 +71,7 @@ def test_rule_ends_the_day_the_event_resolves():
 def test_modules_ask_the_rule():
     knee = INJ.condition_rule([cev(1, "2026-09-20", "pfp")], TODAY)
     heel = INJ.condition_rule([cev(1, "2026-09-20", "achilles")], TODAY)
-    d = DH.week_context(kind="specific", mode="specific", monday=MON, events=[], injury=knee)
+    d = BC.week_context(kind="base", mode="base", monday=MON, events=[], injury=knee)
     assert not d["active"] and PFP_NOTE in d["why"]
     t = TECH.week_context(kind="base", mode="base", monday=MON, road=False, injury=knee)
     assert not t["active"] and PFP_NOTE in t["why"]
@@ -96,7 +97,8 @@ def _s(id, kind, day, minutes, **kw):
 def _week_ss():
     return [_s("easy1", "easy", "2026-09-29", 50, title="輕鬆跑" + O.ROAD_STRIDES[0],
                detail="心率不超過 142" + O.ROAD_STRIDES[1], source=O.SRC_UA + O.ROAD_STRIDES[2]),
-            _s("downhill", "easy", "2026-09-30", 50, title="下坡離心（下坡 20′）", terrain="trail", steps={"v": 1}),
+            _s("climb_base", "easy", "2026-09-30", 50, title="長爬坡有氧 50′（跑下山 15′）", terrain="trail",
+               steps={"v": 1}),
             _s("climb", "easy", "2026-10-01", 60, title="長爬坡反覆", terrain="trail"),
             _s("steep", "easy", "2026-10-02", 60, title="陡坡健走", terrain="trail"),
             _s("strength1", "strength", "2026-10-01", 35),
@@ -112,7 +114,7 @@ def test_knee_week():
     notes: list = []
     ss = O.condition_apply(_week_ss(), [cev(1, "2026-09-20", "pfp")], notes)
     by = {s.title: s for s in ss}
-    assert not any(s.id in ("downhill", "climb") for s in ss if not s.done)
+    assert not any(s.id in ("climb_base", "climb") for s in ss if not s.done)
     assert sum(1 for s in ss if s.title == "輕鬆跑" and s.terrain == "road" and s.steps is None) == 2
     assert next(s for s in ss if s.id == "steep").title == "陡坡健走"           # not avoided for the knee
     lng = next(s for s in ss if s.kind == "long")
@@ -129,8 +131,7 @@ def test_achilles_week():
     ss = O.condition_apply(_week_ss(), [cev(1, "2026-09-20", "achilles")], notes)
     e1 = next(s for s in ss if s.day == "2026-09-29")
     assert e1.title == "輕鬆跑" and "加速跑" not in e1.detail and "strides" not in e1.source
-    assert not any(s.id in ("climb", "steep") for s in ss)
-    assert next(s for s in ss if s.id == "downhill").title.startswith("下坡離心")   # downhill: not the heel's rule
+    assert not any(s.id in ("climb", "steep", "climb_base") for s in ss)
     lng = next(s for s in ss if s.kind == "long")
     assert lng.title == "LSD（山路）" and lng.terrain is None                      # 長跑地形不變
     assert _run_min(ss) == _run_min(_week_ss())
@@ -154,7 +155,7 @@ def test_plantar_other_and_no_condition_change_nothing():
 def test_mid_week_resolution_only_touches_the_days_before():
     e = [cev(1, "2026-09-20", "pfp", status="resolved", resolved="2026-10-01")]
     ss = O.condition_apply(_week_ss(), e)
-    assert not any(s.id == "downhill" for s in ss)                           # 9/30: still open
+    assert not any(s.id == "climb_base" for s in ss)                         # 9/30: still open
     assert any(s.id == "climb" for s in ss)                                  # 10/1: resolved that day
     assert next(s for s in ss if s.kind == "long").terrain is None
 
@@ -173,7 +174,7 @@ def test_tech_lsd_goes_back_to_a_flat_long_run():
 def _wp(monkeypatch, events):
     from backend.engine import plan_prefs as PP
     from backend.engine.status import Status
-    ds, plan, _ = _week("2026-11-28", {4: LIGHT})                       # 賽前第 9 週: a downhill week
+    ds, plan, _ = _week("2026-11-28", {4: LIGHT})                       # 賽前第 9 週
     monkeypatch.setattr(INJ, "load_events", lambda *a, **k: list(events))
     st = Status(ds, plan, TODAY, prefs=PP.Prefs()).compute()
     return ds, plan, O.week_plan(ds, st, TODAY)
@@ -185,18 +186,17 @@ def _strip(wp):
 
 def test_week_plan_knee(monkeypatch):
     _, _, base = _wp(monkeypatch, [])
-    assert base["downhill"]["active"] and any(s["id"] == "downhill" for s in base["sessions"])
+    assert "downhill" not in base                                        # SP-442: no separate 下坡課
     _, plan, wp = _wp(monkeypatch, [cev(1, "2026-09-20", "pfp", side="right")])
-    assert not wp["downhill"]["active"] and PFP_NOTE in wp["downhill"]["why"]
-    assert not any(s["id"] in ("downhill", "climb", "tech") for s in wp["sessions"])
+    assert not any(s["id"] in ("climb_base", "climb", "tech") for s in wp["sessions"])
     assert any(PFP_NOTE in n["text"] for n in wp["notes"])
     lng = next(s for s in wp["sessions"] if s["kind"] == "long")
     assert lng["terrain"] == "road"
     tot = lambda w: sum(s["minutes"] for s in w["sessions"] if s["kind"] in O.RUN_KINDS)   # noqa: E731
     assert abs(tot(wp) - tot(base)) <= 5                                  # the week's volume holds
-    # the projected weeks: no downhill while the event stays open
+    # the projected weeks: no climbing session (and so no running down) while the event stays open
     weeks = P.project_weeks(wp, _phases(plan, TODAY), date(2026, 11, 28), events=plan.events)
-    assert weeks and not any(s["id"] == "downhill" for w in weeks for s in w["sessions"])
+    assert weeks and not any(s["id"] in ("climb_base", "climb", "tech") for w in weeks for s in w["sessions"])
 
 
 def test_week_plan_no_condition_is_unchanged(monkeypatch):
@@ -205,4 +205,4 @@ def test_week_plan_no_condition_is_unchanged(monkeypatch):
                 [cev(1, "2026-09-01", "pfp", status="resolved", resolved="2026-09-29")]):
         _, _, wp = _wp(monkeypatch, evs)
         assert _strip(wp) == _strip(base)
-        assert wp["downhill"] == base["downhill"]
+        assert wp["base_climb"] == base["base_climb"]

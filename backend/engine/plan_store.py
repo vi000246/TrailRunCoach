@@ -908,8 +908,8 @@ def user_rpe_rows(db_path=None) -> list[dict]:
 
 _HOOK_CACHE: dict = {}
 # the generated sessions the hooks make out of an easy run, one a week (SP-87: 長爬坡有氧 engine/base_climb.py,
-# 下坡課 engine/downhill.py, 技術地形 engine/technical.py)
-HOOK_IDS = ("climb_base", "downhill", "tech")
+# 技術地形 engine/technical.py; SP-442: no separate 下坡課 any more)
+HOOK_IDS = ("climb_base", "tech")
 
 
 def hook_days(monday, db_path=None) -> dict:
