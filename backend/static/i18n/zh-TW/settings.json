@@ -344,11 +344,12 @@
   "arch.years_default": "{n} 年（預設）",
   "arch.saved": "已儲存",
   "arch.failed": "失敗：{msg}",
-  "arch.never": "還沒有清理過；下次清理：{next}",
-  "arch.skipped": "最近一次清理（{date}）延後了：第一次匯入的資料還在補算，會再試；下次清理：{next}",
-  "arch.last_none": "最近一次清理：{date}，沒有超過期限的活動；下次清理：{next}",
-  "arch.last": "最近一次清理：{date} 移除 {n} 筆（{from}～{to}），釋放 {mb} MB；下次清理：{next}",
-  "arch.kept": "（{n} 筆被門檻或課表測試用到，先保留）",
+  "arch.never": "還沒有清理過",
+  "arch.skipped": "最近一次清理（{date}）延後了：第一次匯入的資料還在補算，會再試",
+  "arch.last_none": "最近一次清理：{date}，沒有超過期限的活動",
+  "arch.last": "最近一次清理：{date} 移除 {n} 筆（{from}～{to}），釋放 {mb} MB",
+  "arch.kept": "，另有 {n} 筆被門檻或課表測試用到、先保留",
   "arch.download": "下載我的全部 FIT",
-  "arch.download_help": "把你所有同步、匯入的 FIT 原始檔打包成一個 zip 下載，隨時都能用，跟清理無關。檔案多的話要等一下才會開始。"
+  "arch.download_help": "把你所有同步、匯入的 FIT 原始檔打包成一個 zip 下載，隨時都能用，跟清理無關。檔案多的話要等一下才會開始。",
+  "arch.next": "；下次清理：{next}"
 }

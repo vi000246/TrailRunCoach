@@ -428,5 +428,9 @@ def test_the_settings_page_has_the_block_and_its_strings_are_translated():
     en = json.loads((Path(__file__).parents[1] / "static" / "i18n" / "en" / "settings.json").read_text("utf-8"))
     keys = [k for k in zh if k.startswith("arch.")]
     assert len(keys) >= 8 and all(k in en for k in keys)
+    # the ? buttons show their text on a tap too (a phone has no hover title); the kept ones are
+    # part of the last cleanup's sentence, before the next date
+    assert '$("archive").addEventListener("click"' in page and 'id="ar-note"' in page
+    assert page.index('"settings.arch.kept"') < page.index('"settings.arch.next"')
     act_zh = json.loads((Path(__file__).parents[1] / "static" / "i18n" / "zh-TW" / "activity.json").read_text("utf-8"))
     assert "archived" in act_zh
