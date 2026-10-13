@@ -76,6 +76,7 @@
   "planmark.rule.fatigue": "疲勞保護",
   "planmark.rule.cp": "CP 變更，功率目標重算",
   "planmark.rule.plan": "依最新資料重排",
+  "planmark.rule.structure": "課表改用結構的時間、TSS、目標（一次性）",
   "planmark.field.day": "日期",
   "planmark.field.kind": "類型",
   "planmark.field.title": "課名",

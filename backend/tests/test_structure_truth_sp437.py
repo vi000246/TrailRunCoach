@@ -71,7 +71,7 @@ def test_kind_rate_is_the_generators_category_rate():
 
 def test_an_all_easy_session_keeps_its_card():
     s = {"kind": "easy", "title": "輕鬆跑", "minutes": 45, "tss": 37.80123, "target": "", "detail": ""}
-    assert not SST.apply_one(s, TH, RATES)
+    assert not SST.apply_one(s, TH, RATES, target=False)
     assert (s["minutes"], s["tss"]) == (45, 37.80123)        # the generator's own rate, exactly
 
 
@@ -298,3 +298,76 @@ def test_an_easy_run_edited_keeps_its_own_rate(monkeypatch):
                                         {"thresholds": dict(TH), "cur": {"tss_per_category": RATES}}, cur))
     assert out["minutes"] == 60 and out["tss"] == pytest.approx(48.0, abs=0.05)       # 36 / 45 × 60
     assert out["title"] == "輕鬆跑"
+
+
+# ---- Q2 B: the auto sessions' target text = the structure's summary -------------------------------
+
+def test_auto_target_is_the_structures_summary():
+    """The owner 2026-10-13 (Q2 B): an easy run's card says what its structure is (the power band and, on a
+    power session, its HR cap) instead of the generator's own text."""
+    s = {"id": "easy1", "kind": "easy", "title": "輕鬆跑", "minutes": 45, "tss": 37.8, "detail": "",
+         "target": "心率 < 150 bpm · 功率 169–208 W · 最近 6 次輕鬆跑：AeT 150 bpm ≈ 5:23/km"}
+    assert SST.apply_one(s, TH, RATES)
+    assert s["target"] == "功率 169–208 W（65–80% CP） · 心率 ≤ 150 bpm"
+    assert (s["minutes"], s["tss"]) == (45, 37.8)
+    assert not SST.apply_one(s, TH, RATES)                                      # idempotent
+
+
+def test_interval_target_keeps_the_hr_its_steps_carry():
+    s = next({**x, "id": "quality"} for x in (QG.session(sp, TH) for sp in QG.LADDER) if "心率" in (x.get("target") or ""))
+    th = {**TH}
+    before = CW.session_steps(dict(s), CW.Thresholds.of(th))
+    SST.apply_one(s, th, RATES)
+    assert "心率" in s["target"] and CW.session_steps(s, CW.Thresholds.of(th)) == before
+
+
+def test_a_target_the_structure_reads_is_kept():
+    """長爬坡反覆's steps take their note from the target text (workout_steps._climb_items): the summary
+    would change what the watch gets, so the session keeps its text."""
+    s = {"id": "easy2", "kind": "easy", "title": "長爬坡反覆 3×20 分（9% 坡）", "minutes": 120, "tss": 100.0,
+         "target": "心率約輕鬆跑上限 150 bpm（實測 AeT）", "detail": "暖身 15 分、緩和 10 分", "terrain": "trail"}
+    was = s["target"]
+    SST.apply_one(s, TH, RATES)
+    assert s["target"] == was
+
+
+def test_generated_push_is_unchanged(generated):
+    """What the watch gets for every generated session is the same with and without the pass (minutes,
+    TSS and target rewritten, nothing re-pushed) — and the target is the summary wherever it can be."""
+    name, _plan, wp, weeks, before = generated
+    th = {**TH, **{k: v for k, v in wp["thresholds"].items() if v is not None}}
+    after = [{"sessions": wp["sessions"]}] + weeks
+    n_sum = n_all = 0
+    for a, b in zip(after, before):
+        bb = {(s.get("id"), s.get("day")): s for s in b["sessions"]}
+        for s in _runs(a["sessions"]):
+            o = bb.get((s.get("id"), s.get("day")))
+            if o is None:
+                continue
+            got, want = SST._pushed(s, th), SST._pushed(o, th)
+            assert got == want, (name, s["title"])
+            f = SST.figures(s, th, wp["tss_per_category"])
+            if f is not None:
+                n_all += 1
+                n_sum += s.get("target") == f["summary"]
+    assert n_sum >= 0.6 * n_all, (name, n_sum, n_all)
+
+
+def test_first_run_relabel_is_one_time_and_not_a_big_change():
+    """plan_auto: the first run on the structure rule marks its minutes / TSS / target-only items
+    (rule 「structure」) and they don't count for 「> 3 sessions changed」; an adapt item keeps its rule."""
+    from backend.engine import plan_auto as PA
+    days = ["2026-10-14", "2026-10-15", "2026-10-16", "2026-10-17", "2026-10-18"]
+    stored = [{"uid": f"u{i}", "day": d, "kind": "easy", "title": "輕鬆跑", "minutes": 45, "tss": 37.0, "target": "心率 < 150",
+               "state": "active", "week_start": "2026-10-12"} for i, d in enumerate(days)]
+    new = [dict(s, target="功率 169–208 W（65–80% CP） · 心率 ≤ 150 bpm") for s in stored]
+    new[0]["tss"] = 39.0                                       # one TSS up (a quality session's structure TSS)
+    items = PA.diff(stored, new, [], [])
+    assert len(items) == 5 and not all(PA.is_reduction(i) for i in items)
+    args = ("2026-10-13", "2026-10-19", "base", "base", None)
+    assert [b["rule"] for b in PA.classify(stored, new, items, *args)] == ["many"]
+    assert PA.mark_structure(items) == 5
+    assert all(i["rule"] == PA.STRUCTURE_RULE and i["reason"] for i in items)
+    assert PA.classify(stored, new, items, *args) == []
+    adapt = [{"action": "changed", "uid": "x", "rule": "fatigue", "before": {"minutes": 50}}]
+    assert PA.mark_structure(adapt) == 0 and adapt[0]["rule"] == "fatigue"

@@ -108,7 +108,46 @@ def figures(s: dict, th: Optional[dict] = None, rates: Optional[dict] = None, pr
     else:
         tss = round(tot["tss_hard"] + tot["easy_s"] * rate / 3600.0, 1)
     return {"sec": tot["sec"], "minutes": minutes, "tss": tss,
-            "rate": rate, "easy_s": tot["easy_s"], "summary": WS.steps_text(st, c), "ctx": c, "steps": st}
+            "rate": rate, "easy_s": tot["easy_s"], "summary": card_summary(st, c, s), "ctx": c, "steps": st}
+
+
+def card_summary(st: dict, c, s: Optional[dict] = None) -> str:
+    """The card's target text from the structure: workout_steps.steps_text (the editor's summary), plus on
+    a power session with an HR cap (target_policy hr_cap) the HR its steps carry — an interval band's
+    「心率 a–b bpm」 (interval_library / quality_gate texts), an easy step's cap (workout_steps.easy_hr) —
+    as the cards said before, unless the summary already says 心率. A walking session (target_policy.is_walk,
+    SP-115) adds 「或 RPE ≤ 13，先到的為準」: its watch step says so too (hr_profile.walk_step_name)."""
+    from backend.engine import workout_steps as WS
+    out = _hr_part(st, c, WS.steps_text(st, c))
+    if s is not None and out and "RPE" not in out:
+        from backend.engine.target_policy import is_walk
+        if is_walk(s):
+            from backend.engine.hr_profile import WALK_RPE
+            out = _("{hr} 或 RPE ≤ {rpe}，先到的為準", hr=out, rpe=WALK_RPE)
+    return out
+
+
+def _hr_part(st: dict, c, out: str) -> str:
+    from backend.engine import workout_steps as WS
+    if "心率" in out:
+        return out
+    part = ""
+    for r in WS.flat(st.get("items") or []):
+        x = r["st"]
+        tg = x.get("target") or {}
+        if x.get("kind") != "work":
+            continue
+        if tg.get("intent") == "band" and tg.get("hr"):
+            part = f"心率 {int(tg['hr'][0])}–{int(tg['hr'][1])} bpm"
+            break
+        if tg.get("intent") == "easy" and c.hr_cap and c.basis == "power":
+            e = WS.easy_hr(c)
+            if e:
+                part = f"心率 ≤ {int(e[2])} bpm"
+                break
+    if not part:
+        return out
+    return f"{out} · {part}" if out else part
 
 
 def easy_rate(s: dict, rates: Optional[dict], tot: Optional[dict] = None) -> float:
@@ -126,21 +165,69 @@ def _all_easy_own(s: dict, tot: Optional[dict]) -> bool:
                 and tot.get("easy_s") == tot["sec"] and _f(s.get("minutes")) and _f(s.get("tss")))
 
 
-def apply_one(s: dict, th: Optional[dict] = None, rates: Optional[dict] = None, prefs=None) -> bool:
-    """The structure's minutes and TSS on one generated session dict (in place); True when it changed."""
+def _canon(steps: Optional[dict]):
+    """A structure without its step ids (two derivations of the same session compare equal)."""
+    def one(x):
+        out = {k: v for k, v in x.items() if k != "id"}
+        if x.get("kind") == "repeat":
+            out["items"] = [one(y) for y in x.get("items") or []]
+        return out
+    return None if not steps else [one(x) for x in steps.get("items") or []]
+
+
+def _pushed(s: dict, th: Optional[dict]):
+    """What the watch gets for `s` (sync/coros_workouts.session_steps; None = not pushed)."""
+    from backend.sync import coros_workouts as CW
+    try:
+        return CW.session_steps(s, CW.Thresholds.of(th or {}))
+    except Exception:                       # noqa: BLE001 — Unsupported, an unreadable text: compared as such
+        return None
+
+
+def summary_target(s: dict, f: dict, th: Optional[dict] = None) -> Optional[str]:
+    """The owner 2026-10-13 (Q2 B): a generated session's target text = its structure's summary
+    (workout_steps.steps_text, what the editor writes for a saved structure) — only when nothing reads
+    the old text into the structure or the push: with the summary as its target the session derives
+    the same steps and pushes the same workout (the text paths read an interval's HR, a test's 「休 N 分」
+    / 固定功率, the climb's note from it). None = keep the target as it is."""
+    new = (f.get("summary") or "").strip()
+    if not new or new == (s.get("target") or ""):
+        return None
+    if isinstance(s.get("steps"), dict) and s["steps"].get("items"):
+        return new                          # a stored structure: the text is not read
+    from backend.engine import workout_steps as WS
+    t = {**s, "target": new}
+    try:
+        same = _canon(WS.derive(t, th)) == _canon(f["steps"])
+    except Exception:                       # noqa: BLE001
+        same = False
+    if not same or _pushed(t, th) != _pushed(s, th):
+        return None
+    return new
+
+
+def apply_one(s: dict, th: Optional[dict] = None, rates: Optional[dict] = None, prefs=None,
+              target: bool = True) -> bool:
+    """The structure's minutes, TSS and (`target`) target summary on one generated session dict (in
+    place); True when it changed."""
     if s.get("done") or s.get("kind") not in RUN_KINDS:
         return False
     f = figures(s, th, rates, prefs)
     if f is None:
         return False
-    old = (s.get("minutes"), s.get("tss"))
+    old = (s.get("minutes"), s.get("tss"), s.get("target"))
     s["minutes"], s["tss"] = f["minutes"], f["tss"]
-    return old != (s["minutes"], s["tss"])
+    if target:
+        t = summary_target(s, f, th)
+        if t is not None:
+            s["target"] = t
+    return old != (s["minutes"], s["tss"], s.get("target"))
 
 
-def apply(sessions: list, th: Optional[dict] = None, rates: Optional[dict] = None, prefs=None) -> int:
+def apply(sessions: list, th: Optional[dict] = None, rates: Optional[dict] = None, prefs=None,
+          target: bool = True) -> int:
     """apply_one over a list of session dicts; the number changed."""
-    return sum(1 for s in sessions if isinstance(s, dict) and apply_one(s, th, rates, prefs))
+    return sum(1 for s in sessions if isinstance(s, dict) and apply_one(s, th, rates, prefs, target))
 
 
 FIELDS = ("id", "kind", "title", "minutes", "tss", "target", "detail", "source", "done", "terrain", "protocol",
@@ -148,13 +235,14 @@ FIELDS = ("id", "kind", "title", "minutes", "tss", "target", "detail", "source",
           "target_basis")
 
 
-def apply_objs(sessions: list, th: Optional[dict] = None, rates: Optional[dict] = None, prefs=None) -> int:
+def apply_objs(sessions: list, th: Optional[dict] = None, rates: Optional[dict] = None, prefs=None,
+               target: bool = True) -> int:
     """apply on overview.Session objects (week_plan)."""
     n = 0
     for s in sessions:
         d = {k: getattr(s, k, None) for k in FIELDS}
-        if apply_one(d, th, rates, prefs):
-            s.minutes, s.tss = d["minutes"], d["tss"]
+        if apply_one(d, th, rates, prefs, target):
+            s.minutes, s.tss, s.target = d["minutes"], d["tss"], d["target"]
             n += 1
     return n
 
