@@ -314,34 +314,34 @@ def range_stats(res: dict, ka: int, kb: int) -> dict:
 # ---------------------------------------------------------------------------
 
 HR_MODELS = [
-    {"id": "frielhr", "title": "Friel 7 區（% LTHR）", "basis": "lthr", "zones": lambda: Z.FRIEL_HR,
+    {"id": "frielhr", "title": N_("Friel 7 區（% LTHR）"), "basis": "lthr", "zones": lambda: Z.FRIEL_HR,
      "source": "Friel 心率區間（WKO5 的 Friel HR 表，% LTHR）"},
-    {"id": "classichr", "title": "WKO5 Classic 5 區（% LTHR）", "basis": "lthr", "zones": lambda: Z.CLASSIC_HR,
+    {"id": "classichr", "title": N_("WKO5 Classic 5 區（% LTHR）"), "basis": "lthr", "zones": lambda: Z.CLASSIC_HR,
      "source": "WKO5 Classic HR 區間（% LTHR）"},
-    {"id": "seiler3", "title": "Seiler 3 區（AeT／LTHR）", "basis": "aet_lthr",
+    {"id": "seiler3", "title": N_("Seiler 3 區（AeT／LTHR）"), "basis": "aet_lthr",
      "source": "Seiler 三區模型：1 區 < 第一閾值、2 區 兩閾值之間、3 區 > 第二閾值；這裡第一閾值用 AeT、第二用 LTHR"},
     # the watch's own three models (engine/hr_profile.py, user request 2026-10-03). The
     # 2026-10-01 decision dropped %HRmax zones (zones.py: Iannetta 2020); the user re-added
     # them 2026-10-03 as a choice — the limitation is in the model's 來源 text. A remembered
     # 「hrmax5」 choice is not in the list and falls back to the default (Friel).
-    {"id": "coroslthr", "title": "COROS 乳酸閾 6 區（% LTHR）", "basis": "coros", "coros": "lthr",
+    {"id": "coroslthr", "title": N_("COROS 乳酸閾 6 區（% LTHR）"), "basis": "coros", "coros": "lthr",
      "source": HP.SOURCE["lthr"]},
     # id kept from the RQ model (a remembered choice still works): COROS's HRR table is RQ's
-    {"id": "rqhrr", "title": "COROS 儲備心率 6 區（% HRR，同 RQ）", "basis": "coros", "coros": "hrr",
+    {"id": "rqhrr", "title": N_("COROS 儲備心率 6 區（% HRR，同 RQ）"), "basis": "coros", "coros": "hrr",
      "source": HP.SOURCE["hrr"] + "；T 區 84–88% HRR 也見 runningquotient.com/article/single/52"},
-    {"id": "coroshrmax", "title": "COROS 最大心率 6 區（% HRmax）", "basis": "coros", "coros": "hrmax",
+    {"id": "coroshrmax", "title": N_("COROS 最大心率 6 區（% HRmax）"), "basis": "coros", "coros": "hrmax",
      "source": HP.SOURCE["hrmax"]},
 ]
 POWER_MODELS = [
-    {"id": "palladino", "title": "Palladino 10 區（% CP）", "basis": "cp", "zones": lambda: Z.PALLADINO_POWER_ZONES,
+    {"id": "palladino", "title": N_("Palladino 10 區（% CP）"), "basis": "cp", "zones": lambda: Z.PALLADINO_POWER_ZONES,
      "source": Z.SOURCE},
     # power zones are Palladino's everywhere (owner 2026-10-02): the Coggan (cycling % FTP) and
     # Stryd sets are gone, and so are WKO5 iLevels (owner 2026-10-02); a remembered choice falls
     # back to the default.
-    {"id": "palladino3", "title": "3 區（Palladino 80／95% CP）", "basis": "cp",
-     "zones": lambda: [("1", "低強度", 0.0, Z.PALLADINO_3ZONE["low"]),
-                       ("2", "中強度", Z.PALLADINO_3ZONE["low"], Z.PALLADINO_3ZONE["high"]),
-                       ("3", "高強度", Z.PALLADINO_3ZONE["high"], None)],
+    {"id": "palladino3", "title": N_("3 區（Palladino 80／95% CP）"), "basis": "cp",
+     "zones": lambda: [("1", N_("低強度"), 0.0, Z.PALLADINO_3ZONE["low"]),
+                       ("2", N_("中強度"), Z.PALLADINO_3ZONE["low"], Z.PALLADINO_3ZONE["high"]),
+                       ("3", N_("高強度"), Z.PALLADINO_3ZONE["high"], None)],
      "source": "Palladino 的三區摘要（低 < 80% CP、中 80–95%、高 ≥ 95%），即功率版的 Seiler 三區"},
 ]
 MODELS = {"hr": HR_MODELS, "power": POWER_MODELS}
@@ -367,8 +367,8 @@ def _bounds(ds, w, kind: str, model: dict, ctx: dict) -> dict:
     if b == "aet_lthr":
         if not aet or not lthr:
             return {"reason": _("沒有 AeT 或 LTHR")}
-        return {"rows": [("1", "低強度（< AeT）", 0.0, aet), ("2", "中強度（AeT–LTHR）", aet, lthr),
-                         ("3", "高強度（≥ LTHR）", lthr, None)],
+        return {"rows": [("1", N_("低強度（< AeT）"), 0.0, aet), ("2", N_("中強度（AeT–LTHR）"), aet, lthr),
+                         ("3", N_("高強度（≥ LTHR）"), lthr, None)],
                 "basis_text": f"AeT {aet:.0f}、LTHR {lthr:.0f} bpm", "estimate": est}
     if b == "coros":
         return _coros_bounds(ds, w, model["coros"], lthr, ctx)
@@ -431,14 +431,14 @@ def zone_times(ds, w, kind: str) -> dict:
     out = []
     for m in MODELS[kind]:
         b = _bounds(ds, w, kind, m, ctx)
-        item = {"id": m["id"], "title": m["title"], "source": m["source"]}
+        item = {"id": m["id"], "title": _(m["title"]), "source": m["source"]}
         if "reason" in b:
             out.append({**item, "available": False, "reason": b["reason"]})
             continue
         secs, total = time_in(vals, b["rows"])
         out.append({**item, "available": True, "estimate": b.get("estimate", False),
                     "basis_text": b.get("basis_text"), "total_s": total,
-                    "rows": [{"id": zid, "name": nm, "from": _r(lo, 0), "to": _r(hi, 0), "seconds": s,
+                    "rows": [{"id": zid, "name": _(nm), "from": _r(lo, 0), "to": _r(hi, 0), "seconds": s,
                               "share": s / total if total else None}
                              for (zid, nm, lo, hi), s in zip(b["rows"], secs)]})
     has = vals is not None and bool(np.isfinite(vals).any() and (np.nan_to_num(vals) > 0).any())
@@ -504,6 +504,7 @@ def hr_variation(t, hr, power=None, speed=None) -> Optional[dict]:
             "decoupling": out_ratio, "decoupling_basis": basis}
 
 
+# zh only: the viewer shows its own words for `variability` / `trend` (viewer.tr.v_* / t_*)
 VARIABILITY_LABEL = {"steady": "穩定", "mixed": "混合", "variable": "變化大"}
 TREND_LABEL = {"declining": "下降", "consistent": "持平", "increasing": "上升"}
 

@@ -13,24 +13,26 @@
 (() => {
   // i18n: common.map.* (static/i18n/i18n.js; the common catalog is inlined on every page)
   const T = (k, p) => (window.I18N ? window.I18N.t("common.map." + k, p) : k);
-  const NLSC_ATTR = '© <a href="https://maps.nlsc.gov.tw/" target="_blank" rel="noopener">內政部國土測繪中心</a>';
+  const NLSC_ATTR = `© <a href="https://maps.nlsc.gov.tw/" target="_blank" rel="noopener">${T("nlsc_name")}</a>`;
+  const OSM_ATTR = `© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> ${T("osm_contrib")}`;
+  const RUDY = `<a href="https://rudy.basecamp.tw/" target="_blank" rel="noopener">${T("rudy")}</a>`;
   const BASEMAPS = [
-    { id: "rudy", name: "魯地圖", url: "https://tile.happyman.idv.tw/map/rudy/{z}/{x}/{y}.png", maxZoom: 18,
-      attr: '<a href="https://rudy.basecamp.tw/" target="_blank" rel="noopener">魯地圖</a> · © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> 貢獻者' },
+    { id: "rudy", name: T("rudy"), url: "https://tile.happyman.idv.tw/map/rudy/{z}/{x}/{y}.png", maxZoom: 18,
+      attr: `${RUDY} · ${OSM_ATTR}` },
     { id: "google-terrain", name: T("google_terrain"), url: "https://mt1.google.com/vt/lyrs=p&x={x}&y={y}&z={z}", maxZoom: 15,
-      attr: "地圖資料 © Google" },
+      attr: T("google_data") },
     { id: "nlsc-emap", name: T("nlsc_emap"), url: "https://wmts.nlsc.gov.tw/wmts/EMAP/default/GoogleMapsCompatible/{z}/{y}/{x}",
       maxZoom: 19, attr: NLSC_ATTR },
     { id: "nlsc-photo", name: T("nlsc_photo"), url: "https://wmts.nlsc.gov.tw/wmts/PHOTO2/default/GoogleMapsCompatible/{z}/{y}/{x}",
       maxZoom: 19, attr: NLSC_ATTR },
     { id: "osm", name: "OSM", url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png", maxZoom: 19,
-      attr: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> 貢獻者' },
+      attr: OSM_ATTR },
   ];
   const OVERLAYS = [
     { id: "contour", name: T("contour"), url: "https://tile.happyman.idv.tw/map/moi_osm/{z}/{x}/{y}.png", opacity: 0.8, maxZoom: 18,
-      attr: '等高線：<a href="https://rudy.basecamp.tw/" target="_blank" rel="noopener">魯地圖</a>' },
+      attr: `${T("contour_by")}${RUDY}` },
     { id: "google-roads", name: T("google_roads"), url: "https://mt1.google.com/vt/lyrs=h&x={x}&y={y}&z={z}", opacity: 0.9, maxZoom: 19,
-      attr: "道路 © Google" },
+      attr: T("google_roads_attr") },
     { id: "nlsc-roads", name: T("nlsc_roads"), url: "https://wmts.nlsc.gov.tw/wmts/EMAP2/default/GoogleMapsCompatible/{z}/{y}/{x}",
       opacity: 0.9, maxZoom: 19, attr: NLSC_ATTR },
   ];

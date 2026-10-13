@@ -102,14 +102,14 @@
 
   function picker(r) {
     if (r.pick === "pair" || r.pick === "day") {
-      if (!(r.options || []).length) return `<span class="sg-none">${r.pick === "pair" ? "這兩週沒有連續兩天可以排（可練日、不排課日期、你自己的課）" : "兩週內沒有適合的日子"}</span>`;
-      return `<select data-role="day" aria-label="${r.pick === "pair" ? "選兩天" : "選日期"}">${opts(r.options)}</select>`;
+      if (!(r.options || []).length) return `<span class="sg-none">${esc(T(r.pick === "pair" ? "no_pair" : "no_day"))}</span>`;
+      return `<select data-role="day" aria-label="${esc(T(r.pick === "pair" ? "pick_pair" : "pick_day"))}">${opts(r.options)}</select>`;
     }
     if (r.pick === "test_day") {
       const ts = r.tests || [];
-      return (ts.length > 1 ? `<select data-role="test" aria-label="選測試">${ts.map((t) => `<option value="${esc(t.key)}">${esc(t.label)}</option>`).join("")}</select>` :
+      return (ts.length > 1 ? `<select data-role="test" aria-label="${esc(T("pick_test"))}">${ts.map((t) => `<option value="${esc(t.key)}">${esc(t.label)}</option>`).join("")}</select>` :
         `<span class="sg-none" style="flex-basis:100%">${esc(ts[0].label)}</span>`) +
-        `<select data-role="day" aria-label="選日期">${opts(ts[0].options || [])}</select>`;
+        `<select data-role="day" aria-label="${esc(T("pick_day"))}">${opts(ts[0].options || [])}</select>`;
     }
     return "";
   }
@@ -119,8 +119,8 @@
       : r.pick === "test_day" ? (r.tests || []).some((t) => (t.options || []).length) : r.pick === "confirm";
     return `<div class="sg-item" data-id="${esc(r.id)}">
       <div class="sg-tools">
-        ${r.help ? `<button type="button" class="sg-ico" data-act="help" aria-expanded="false" aria-label="說明" title="說明">?</button>` : ""}
-        <button type="button" class="sg-ico" data-act="dismiss" aria-label="關掉這個建議" title="關掉（不再顯示）">✕</button>
+        ${r.help ? `<button type="button" class="sg-ico" data-act="help" aria-expanded="false" aria-label="${esc(T("help"))}" title="${esc(T("help"))}">?</button>` : ""}
+        <button type="button" class="sg-ico" data-act="dismiss" aria-label="${esc(T("dismiss"))}" title="${esc(T("dismiss_tip"))}">✕</button>
       </div>
       <div class="sg-title"><span class="sg-tag">${esc(KIND[r.type] || T("title"))}</span>${esc(r.title)}</div>
       ${r.reason ? `<div class="sg-reason">${esc(r.reason)}</div>` : ""}
@@ -138,7 +138,7 @@
     if (!rows.length) { box.innerHTML = ""; return; }
     box.classList.toggle("collapsed", ls.get());
     box.innerHTML = `<div class="sg-card"><button type="button" class="sg-head" data-act="toggle" aria-expanded="${!ls.get()}">
-        ${ICON}<span>${esc(T("title"))}</span><span class="sg-n" aria-label="${rows.length} 個建議">${rows.length}</span>
+        ${ICON}<span>${esc(T("title"))}</span><span class="sg-n" aria-label="${esc(T("n", { n: rows.length }))}">${rows.length}</span>
         <svg class="sg-chev" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg>
       </button><div class="sg-list">${rows.map(item).join("")}</div></div>`;
   }
@@ -184,8 +184,8 @@
         const bl = out.blackouts || [];
         // a server message (SP-273 「已記成好了」) wins over the 已排入 / 已設成不排課 texts
         el.querySelector(".sg-act").outerHTML = out.message ? `<div class="sg-ok">${esc(out.message)}</div>` : bl.length
-          ? `<div class="sg-ok">已設成不排課 ${bl.map((b) => `${md(b.start)}–${md(b.end)}`).join("、")}（<a href="${SCHEDULE}">到課表看</a>）</div>`
-          : `<div class="sg-ok">已排入 ${ss.map((s) => `${md(s.day)}「${esc(s.title)}」`).join("、")}（<a href="${SCHEDULE}">到課表看</a>）</div>`;
+          ? `<div class="sg-ok">${esc(T("blacked_out", { days: bl.map((b) => `${md(b.start)}–${md(b.end)}`).join(T("sep")) }))} <a href="${SCHEDULE}">${esc(T("to_schedule"))}</a></div>`
+          : `<div class="sg-ok">${esc(T("scheduled", { list: ss.map((s) => T("item", { day: md(s.day), title: s.title })).join(T("sep")) }))} <a href="${SCHEDULE}">${esc(T("to_schedule"))}</a></div>`;
         window.dispatchEvent(new CustomEvent("suggestions:changed", { detail: { id, sessions: ss } }));
         drop(id, 6000);
       } else {

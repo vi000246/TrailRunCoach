@@ -7938,5 +7938,845 @@
   "🌡 {t:.0f} °C（{band}）": {
     "draft": true,
     "src": "backend/engine/panels/drift_bars.py:42"
+  },
+  "達到訓練目標": {
+    "draft": true,
+    "src": "backend/engine/interval_eval.py:72"
+  },
+  "部分達到": {
+    "draft": true,
+    "src": "backend/engine/interval_eval.py:72"
+  },
+  "未達到": {
+    "draft": true,
+    "src": "backend/engine/interval_eval.py:72"
+  },
+  "無法判定": {
+    "draft": true,
+    "src": "backend/engine/interval_eval.py:73"
+  },
+  "測試配速分配：每段都平均": {
+    "draft": true,
+    "src": "backend/engine/interval_eval.py:75"
+  },
+  "測試配速分配：有一段不平均": {
+    "draft": true,
+    "src": "backend/engine/interval_eval.py:75"
+  },
+  "測試配速分配：{n} 段不平均": {
+    "draft": true,
+    "src": "backend/engine/interval_eval.py:454"
+  },
+  "Friel 7 區（% LTHR）": {
+    "draft": true,
+    "src": "backend/engine/panels/activity_charts.py:317"
+  },
+  "WKO5 Classic 5 區（% LTHR）": {
+    "draft": true,
+    "src": "backend/engine/panels/activity_charts.py:319"
+  },
+  "Seiler 3 區（AeT／LTHR）": {
+    "draft": true,
+    "src": "backend/engine/panels/activity_charts.py:321"
+  },
+  "COROS 乳酸閾 6 區（% LTHR）": {
+    "draft": true,
+    "src": "backend/engine/panels/activity_charts.py:327"
+  },
+  "COROS 儲備心率 6 區（% HRR，同 RQ）": {
+    "draft": true,
+    "src": "backend/engine/panels/activity_charts.py:330"
+  },
+  "COROS 最大心率 6 區（% HRmax）": {
+    "draft": true,
+    "src": "backend/engine/panels/activity_charts.py:332"
+  },
+  "Palladino 10 區（% CP）": {
+    "draft": true,
+    "src": "backend/engine/panels/activity_charts.py:336"
+  },
+  "3 區（Palladino 80／95% CP）": {
+    "draft": true,
+    "src": "backend/engine/panels/activity_charts.py:341"
+  },
+  "低強度": {
+    "draft": true,
+    "src": "backend/engine/panels/activity_charts.py:342"
+  },
+  "中強度": {
+    "draft": true,
+    "src": "backend/engine/panels/activity_charts.py:343"
+  },
+  "高強度": {
+    "draft": true,
+    "src": "backend/engine/panels/activity_charts.py:344"
+  },
+  "低強度（< AeT）": {
+    "draft": true,
+    "src": "backend/engine/panels/activity_charts.py:370"
+  },
+  "中強度（AeT–LTHR）": {
+    "draft": true,
+    "src": "backend/engine/panels/activity_charts.py:370"
+  },
+  "高強度（≥ LTHR）": {
+    "draft": true,
+    "src": "backend/engine/panels/activity_charts.py:371"
+  },
+  "達標": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:776"
+  },
+  "邊界": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:776"
+  },
+  "未適應": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:776"
+  },
+  "未適應（目標太高）": {
+    "draft": true,
+    "src": "backend/engine/quality_gate.py:776"
+  },
+  "功率": {
+    "draft": true,
+    "src": "backend/engine/wko5expr/basis.py:32"
+  },
+  "高強度長天": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:236"
+  },
+  "中強度跑": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:237"
+  },
+  "功率型態像 CP 測試，但課表、標題都沒說是測試，所以不當測試、不算 CP；是的話在課表標成 CP 測試或標題寫「CP 測試」": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2188"
+  },
+  "間歇": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:218"
+  },
+  "AeT 飄移測試": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:219"
+  },
+  "越野": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:221"
+  },
+  "Z5 間歇": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:235"
+  },
+  "Z3 閾值": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:235"
+  },
+  "判讀": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2798"
+  },
+  "中位 {med}（IQR {q1}～{q3}，{n} 次／{weeks} 週）": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2805"
+  },
+  "衝擊 G": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3892"
+  },
+  "每公里衝擊量（推估）": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3892"
+  },
+  "觸地時間": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3893"
+  },
+  "步頻": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3893"
+  },
+  "垂直振幅": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3893"
+  },
+  "全部坡度": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3932"
+  },
+  "平路 −3～+3%": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3932"
+  },
+  "上坡 ≥ 3%": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3932"
+  },
+  "下坡 < −3%": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3932"
+  },
+  "W′ 最低 {pct:.0f}%（{t}）· 整趟高於 CP 的功 {kj:.1f} kJ（{share:.0f}% W′，含回充後再用）": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:4418"
+  },
+  "整趟高於 CP 的功 {kj:.1f} kJ（{share:.0f}% W′，含回充後再用），電池最低 {pct:.0f}%（{t}）": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:4452"
+  },
+  "閾值下": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:214"
+  },
+  "超閾值": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:214"
+  },
+  "無氧": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:215"
+  },
+  "樣本 {n} 次（< 5），不比較": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2804"
+  },
+  "太熱（{t:.0f} °C）": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2861"
+  },
+  "最後 20%：{pct:.0f}% → {word}": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3813"
+  },
+  "衝擊負荷 ILR": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3832"
+  },
+  "腿部剛性 LSS kN/m": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3832"
+  },
+  "觸地時間 ms": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3833"
+  },
+  "步頻 spm": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3833"
+  },
+  "垂直振幅 cm": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3833"
+  },
+  "衝擊 G（fmax／體重）": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3834"
+  },
+  "{v}（平常 {usual}）": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3989"
+  },
+  "當作間歇判讀": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:4193"
+  },
+  "已標記「{tag}」，重新判讀中…（到活動編輯頁移除這個標籤可以取消）": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:4196"
+  },
+  "；dFRC = WKO5 的 dfrc 模型，跑步沒驗證（推估）": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:4224"
+  },
+  "{name}（{rule}）": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:4264"
+  },
+  "未設定周期": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2438"
+  },
+  "沒有心率或速度": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2862"
+  },
+  "不是跑步": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2862"
+  },
+  "有坡（越野）": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2862"
+  },
+  "停太久": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2863"
+  },
+  "跑走交替": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2863"
+  },
+  "功率起伏大": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2863"
+  },
+  "強度太高": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2864"
+  },
+  "前後半強度不同": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2864"
+  },
+  "結尾加速": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2864"
+  },
+  "沒有功率": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2865"
+  },
+  "功率不完整": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2865"
+  },
+  "功率不夠": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2865"
+  },
+  "資料不夠": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2866"
+  },
+  "太短（{m} 分）": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2870"
+  },
+  "太短": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2870"
+  },
+  "組": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3445"
+  },
+  "開始": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3446"
+  },
+  "時長": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3447"
+  },
+  "功率 W": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3448"
+  },
+  "最高心率": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3451"
+  },
+  "休 60 秒降": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3452"
+  },
+  "沒有距離或海拔，算不出坡度": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3735"
+  },
+  "坡度": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3743"
+  },
+  "佔比": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3745"
+  },
+  "距離 km": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3746"
+  },
+  "配速 /km": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3747"
+  },
+  "配速平常": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3748"
+  },
+  "移動／停留": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3779"
+  },
+  "移動 {moving}，停留 {stopped}": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3779"
+  },
+  "補給": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3791"
+  },
+  "沒有補給紀錄": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3791"
+  },
+  "資料不夠：要有心率和功率（或速度），且超過 20 分鐘": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3798"
+  },
+  "同樣心率的輸出（暖身後 = 100%）": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3803"
+  },
+  "95%：開始累（推估）": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3805"
+  },
+  "90%：明顯掉了，補給或配速要調": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3807"
+  },
+  "沒有距離資料": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3820"
+  },
+  "距離太短": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3823"
+  },
+  "段": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3824"
+  },
+  "從 km": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3825"
+  },
+  "參考：只有跑步、而且有跑步動態資料時才有這一頁": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3840"
+  },
+  "指標（參考）": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3855"
+  },
+  "變化": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3857"
+  },
+  "同類課表變化基準": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3857"
+  },
+  "參考：LSS {lss:+.1f}%、觸地 {gct:+.1f}%：疲勞跡象": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3881"
+  },
+  "參考：沒有明顯的跑姿／膝蓋負荷變化": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3883"
+  },
+  "判讀（參考）": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3931"
+  },
+  "參考：只有跑步、而且有跑步動態資料時才有這一張": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:4019"
+  },
+  "這次沒有跑步動態資料（步頻、觸地時間…）": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:4024"
+  },
+  "{label}（平常）": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:4039"
+  },
+  "參考：只有跑步才有這一張": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:4106"
+  },
+  "這次沒有 Stryd：ILR（衝擊負荷率）是 Stryd 腳掌感測器算的，手錶沒有，所以不畫步頻與衝擊": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:4108"
+  },
+  "這次穩定跑的 30 秒段只有 {n} 段（< {need}），看不出步頻和衝擊的關係": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:4111"
+  },
+  "這次不是 CP 測試（課表偏好的 CP 測試方式：20 分全力／12 分＋3 分／5–10 K 比賽）": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:4146"
+  },
+  "找不到趟": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:4217"
+  },
+  "這次不是間歇課": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:4217"
+  },
+  "用掉 {kj:.1f} kJ": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:4225"
+  },
+  "dFRC 最低 {pct:.0f}%": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:4226"
+  },
+  "找趟": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:4265"
+  },
+  "每趟": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:4267"
+  },
+  "最低": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:4446"
+  },
+  "計畫（這份課表）": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:4476"
+  },
+  "實際": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:4479"
+  },
+  "還沒有功率相近（±3%）的同類間歇可以比": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:4500"
+  },
+  "之前的同類間歇": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:4504"
+  },
+  "這次": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:4506"
+  },
+  "沒有功率，算不出 CP": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2774"
+  },
+  "找不到這個流程的全力段，算不出 CP": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2774"
+  },
+  "沒有偵測到 ≥ 1 分鐘的用力段（需要功率）": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3443"
+  },
+  "這次是{type}，不是間歇課": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3444"
+  },
+  "這次是{type}，下表只是偵測到的用力段": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3461"
+  },
+  "資料不夠（要有心率、功率或速度，且 ≥ 20 分鐘）": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3784"
+  },
+  "最後 20% 耐久": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3786"
+  },
+  "{pct:.0f}%（輸出／心率，和前段相比）": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3786"
+  },
+  "最後 20% 耐久 {pct:.0f}%（< 90%）：補給、配速要調整": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3788"
+  },
+  "最後 20% 耐久 {pct:.0f}%：後段撐得住": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3790"
+  },
+  "前半（作功）": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3855"
+  },
+  "前半（移動時間）": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3855"
+  },
+  "後半（作功）": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3856"
+  },
+  "後半（移動時間）": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3856"
+  },
+  "陡下坡（< −10%）": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3863"
+  },
+  "說明": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3870"
+  },
+  "沒有 Stryd：只看步頻、觸地、振幅、kleg、衝擊 G，無法判讀衝擊與剛性": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3870"
+  },
+  "參考：後段 ILR 升幅超出自己的 IQR，且陡下坡佔 > 30%：留意膝蓋，下坡放慢或縮步": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3878"
+  },
+  "作功段": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:4070"
+  },
+  "移動時間段": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:4070"
+  },
+  "偵測": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:4215"
+  },
+  "用力段 = ≥ 95% CP、≥ 40 秒的短趟（至少 3 趟），否則 3 區以上（≥ 0.95 × 88% CP）≥ 2.5 分的段": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:4216"
+  },
+  "整趟高於 CP 的功（含回充後再用）÷ W′ {kj:.1f} kJ；dFRC 最低 = 電池最低剩多少。": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:4227"
+  },
+  "（你標了「當作間歇」：用偵測到的趟）": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:4255"
+  },
+  "（沒有對應的課表：用偵測到的趟）": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:4255"
+  },
+  "COROS 推送的分段": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:4262"
+  },
+  "功率型態": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:4262"
+  },
+  "短趟偵測": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:4262"
+  },
+  "3 區偵測": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:4262"
+  },
+  "0.95 × 目標下限": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:4263"
+  },
+  "{hit}/{n} 趟在目標帶": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:4267"
+  },
+  "全部達標": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:4267"
+  },
+  "差 {k} 趟": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:4267"
+  },
+  "目標區時間": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:4275"
+  },
+  "逐趟判定": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:4282"
+  },
+  "掉速": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:4284"
+  },
+  "{src}。課表：{sub}": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:4287"
+  },
+  "最低 {pct:.0f}%": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:4447"
+  },
+  "計畫 {m:.0f} 分": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:4477"
+  },
+  "實際 {m:.1f} 分（{pct:.0f}%）": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:4481"
+  },
+  "中強度健行": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2432"
+  },
+  "輕鬆健行": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:2434"
+  },
+  "只看時間與心率": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3158"
+  },
+  "{type}：只看時間與心率，沒有其他判讀": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3159"
+  },
+  "像 CP 測試？": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3210"
+  },
+  "{t}（時間 {ts}、距離 {ds}、衝擊量 {imp}）": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3864"
+  },
+  "{t}（時間 {ts}、距離 {ds}）": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3867"
+  },
+  "無法判讀": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:4210"
+  },
+  "偵測到 {n} 趟用力段，可以當作間歇判讀": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:4215"
+  },
+  "沒有偵測到用力段，當作間歇也沒有趟可判讀": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:4215"
+  },
+  "{a:.1f} / {b:.0f} 分": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:4275"
+  },
+  "夠": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:4276"
+  },
+  "不足": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:4276"
+  },
+  "掉速 = 最後一趟比第一趟；Sdec = 衰退分數（Glaister 2008），只顯示、不判讀。": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:4285"
+  },
+  "這次 {v:.0f}": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:4507"
+  },
+  "強度": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3177"
+  },
+  "心率超過 AeT+3（{hr} bpm）的時間佔 {pct:.0f}%；輕鬆跑、長跑 ≤ 10% 才算壓在有氧區。": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3180"
+  },
+  "組在 {band} 帶": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3192"
+  },
+  "爬坡段": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3205"
+  },
+  "共 {gain:.0f} m · 每 100 m {hr} 下": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3206"
+  },
+  "太高：下次放慢": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3178"
+  },
+  "AeT+3 以下": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3178"
+  },
+  "沒有偵測到": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3192"
+  },
+  "詳細在「間歇」。": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3193"
+  },
+  "偵測到 {n} 趟（{band}）": {
+    "draft": true,
+    "src": "backend/engine/interval_eval.py:275"
+  },
+  "用力段": {
+    "draft": true,
+    "src": "backend/engine/interval_eval.py:275"
+  },
+  "，少做 {k} 趟": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:4332"
+  },
+  "{a}／{b}": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3051"
+  },
+  "{n} 趟中 {k} 趟在目標內": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:4329"
+  },
+  "，{k} 趟偏低": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:4330"
+  },
+  "每 100 m 爬升 {hp:.0f} 下心跳（近期爬坡樣本 {n} 次，不比較）": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3486"
+  },
+  "，{k} 趟偏高": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:4329"
+  },
+  "每 100 m 爬升 {hp:.0f} 下心跳，比近 {weeks} 週中位 {med:.0f} 低 {pct:.0f}%：爬坡經濟性變好": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3478"
+  },
+  "每 100 m 爬升 {hp:.0f} 下心跳，比近 {weeks} 週中位 {med:.0f} 高 {pct:.0f}%": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3481"
+  },
+  "每 100 m 爬升 {hp:.0f} 下心跳，和近 {weeks} 週差不多": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3484"
+  },
+  "這次沒有 ≥ 80 m、坡度 ≥ 3% 的連續爬坡": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3724"
+  },
+  "這筆活動沒有海拔資料，畫不出高度圖": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3726"
+  },
+  "這筆活動沒有海拔資料，畫不出高度圖，也找不到爬坡段": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3699"
+  },
+  "（沒有心率，無法比較爬坡經濟性）": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:3723"
+  },
+  "dFRC（WKO5）": {
+    "draft": true,
+    "src": "backend/engine/workout_review.py:4447"
   }
 }

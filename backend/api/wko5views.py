@@ -714,6 +714,9 @@ def list_views():
     return [
         {"name": name, "source": v.get("source", "wko5"), "path": v.get("path"),
          "error": v.get("error"),
+         # the shown name in the request's language (views/i18n sidecar, viewi18n.translate_view);
+         # `name` stays the id the viewer and the deep links match on
+         **({"label": v["label"]} if v.get("label") else {}),
          "dashboards": [
             {"index": i, "id": d.get("id"), "title": d["title"], "description": d.get("description"),
              **({"descriptions": d["descriptions"]} if d.get("descriptions") else {}),

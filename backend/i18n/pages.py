@@ -53,11 +53,20 @@ def _read_ns(loc: str, ns: str) -> dict:
         data = json.loads(p.read_text("utf-8"))
     except (OSError, ValueError):
         return {}
-    return {f"{ns}.{k}": v for k, v in data.items() if isinstance(v, str)} if isinstance(data, dict) else {}
+    if not isinstance(data, dict):
+        return {}
+    # a plural ({"one": …, "other": …}) goes to the page as it is: t() picks the form by {n}
+    return {f"{ns}.{k}": v for k, v in data.items()
+            if isinstance(v, str) or (isinstance(v, dict) and v and all(isinstance(x, str) for x in v.values()))}
+
+
+def _flat(t):
+    """A catalog entry as one text (markup replaced server side has no {n}: a plural gives its "other")."""
+    return t.get("other") or next(iter(t.values()), None) if isinstance(t, dict) else t
 
 
 def page_catalog(namespaces: Iterable[str], loc: str, debug: bool = False) -> dict[str, str]:
-    """{full key: text} — the locale's text, else zh-TW's (⟦…⟧ in debug mode)."""
+    """{full key: text} — the locale's text (a plural: {"one", "other"}), else zh-TW's (⟦…⟧ in debug mode)."""
     out: dict[str, str] = {}
     for ns in namespaces:
         base = _read_ns(i18n.DEFAULT_LOCALE, ns)
@@ -83,7 +92,7 @@ _HEAD = re.compile(r"<head\b[^>]*>", re.I)
 def apply_catalog(src: str, cat: dict[str, str]) -> str:
     """Server-side replacement of data-i18n / data-i18n-attr (keys not in `cat` are left as written)."""
     def elem(m: re.Match) -> str:
-        t = cat.get(m.group(3))
+        t = _flat(cat.get(m.group(3)))
         if t is None:
             return m.group(0)
         return f"<{m.group(1)}{m.group(2)}>{html.escape(t, quote=False)}</{m.group(1)}>"
@@ -94,7 +103,7 @@ def apply_catalog(src: str, cat: dict[str, str]) -> str:
             if ":" not in pair:
                 continue
             name, key = (x.strip() for x in pair.split(":", 1))
-            t = cat.get(key)
+            t = _flat(cat.get(key))
             if t is None or not re.fullmatch(r"[\w-]+", name):
                 continue
             val = html.escape(t, quote=True)

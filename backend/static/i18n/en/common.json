@@ -349,5 +349,28 @@
   "eptest.no_day": "No suitable day in the next two weeks (too close to a long run or a hard session)",
   "eptest.done": "Scheduled {what}",
   "eptest.to_schedule": "see the schedule",
-  "eptest.help": "Tests are suggestions and never go into the plan by themselves: pick a day and press Schedule. The power band stays as it is; run the easy runs by heart rate for now."
+  "eptest.help": "Tests are suggestions and never go into the plan by themselves: pick a day and press Schedule. The power band stays as it is; run the easy runs by heart rate for now.",
+  "map.nlsc_name": "NLSC (Taiwan)",
+  "map.osm_contrib": "contributors",
+  "map.rudy": "Rudy Map",
+  "map.google_data": "Map data © Google",
+  "map.contour_by": "Contours: ",
+  "map.google_roads_attr": "Roads © Google",
+  "sugg.no_pair": "No two days in a row free in these two weeks (training days, blocked dates, your own sessions)",
+  "sugg.no_day": "No suitable day in the next two weeks",
+  "sugg.pick_pair": "Pick two days",
+  "sugg.pick_day": "Pick a day",
+  "sugg.pick_test": "Pick a test",
+  "sugg.help": "Help",
+  "sugg.dismiss": "Dismiss this suggestion",
+  "sugg.dismiss_tip": "Dismiss (don't show again)",
+  "sugg.n": {
+    "one": "{n} suggestion",
+    "other": "{n} suggestions"
+  },
+  "sugg.blacked_out": "Blocked for training: {days}",
+  "sugg.scheduled": "Scheduled: {list}",
+  "sugg.item": "{day} “{title}”",
+  "sugg.sep": ", ",
+  "sugg.to_schedule": "(see the Schedule)"
 }

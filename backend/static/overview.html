@@ -237,9 +237,9 @@ td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
 <body>
 <script src="/api/v1/static/shell.js" data-page="home"></script>
 <header>
-  <h1>總覽</h1>
-  <nav class="jump" id="jump" aria-label="本頁段落">
-    <a href="#s-status">狀況</a><a href="#s-log">紀錄</a><a href="#s-ind">指標</a><a href="#s-week">本週</a><a href="#s-todo">待辦</a>
+  <h1 data-i18n="overview.h1">總覽</h1>
+  <nav class="jump" id="jump" aria-label="本頁段落" data-i18n-attr="aria-label:overview.jump.aria">
+    <a href="#s-status" data-i18n="overview.jump.status">狀況</a><a href="#s-log" data-i18n="overview.jump.log">紀錄</a><a href="#s-ind" data-i18n="overview.jump.ind">指標</a><a href="#s-week" data-i18n="overview.jump.week">本週</a><a href="#s-todo" data-i18n="overview.jump.todo">待辦</a>
   </nav>
   <span class="spacer" style="flex:1"></span>
   <span class="meta" id="asof"></span>
@@ -257,7 +257,7 @@ td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
 
   <!-- KPI row: CTL, TSB, this week's volume, countdown to the next A race -->
   <div data-sec id="s-status" style="display:grid;gap:10px">
-    <div class="kpis" id="kpis"><div class="kpi"><div class="loading">計算訓練狀況中…</div></div></div>
+    <div class="kpis" id="kpis"><div class="kpi"><div class="loading" data-i18n="overview.kpi.loading">計算訓練狀況中…</div></div></div>
     <!-- PMC, the last 7 / 42 / 90 days (GET /overview/pmc): CTL / ATL lines, TSB bars in views/training.json's PMC colours -->
     <section aria-labelledby="pmc-h">
       <h2 id="pmc-h"><span data-i18n="overview.pmc.title">體能・疲勞・狀況</span> <span class="seg" id="pmc-days" role="group"></span><span id="pmc-q"></span></h2>
@@ -365,7 +365,8 @@ const md = (iso) => { const d = new Date(iso + "T00:00:00"); return `${d.getMont
 const wd = (iso) => WD[(new Date(iso + "T00:00:00").getDay() + 6) % 7];
 const CAT_VAR = { road: "--s1", trail: "--s2", hike: "--s3", bike: "--s4", strength: "--s5", walk: "--s6", other: "--s7" };
 const catColor = (k) => css(CAT_VAR[k] || "--s7");
-const LEVEL = { good: "良好", watch: "注意", bad: "要處理", info: "參考", na: "資料不足" };
+const LEVEL = { good: t("overview.level.good"), watch: t("overview.level.watch"), bad: t("overview.level.bad"),
+  info: t("overview.level.info"), na: t("overview.level.na") };
 const stw = (lvl, word) => `<span class="st ${esc(lvl)}">${I(lvl)}${esc(word ?? LEVEL[lvl] ?? "")}</span>`;
 
 const charts = {};
@@ -405,16 +406,16 @@ const bar = (label, done, tgt, fmt) => `<div class="b"><span>${label}</span>
 
 // ---------------- KPI tiles ----------------
 const ind = (id) => (STATUS?.indicators || []).find((x) => x.id === id);
-const tipOf = (i) => i ? [i.verdict, i.why, i.action ? "→ " + i.action : "", i.source ? "來源：" + i.source : ""].filter(Boolean).join("\n") : "";
+const tipOf = (i) => i ? [i.verdict, i.why, i.action ? "→ " + i.action : "", i.source ? t("overview.kpi.source", { src: i.source }) : ""].filter(Boolean).join("\n") : "";
 function renderKpis() {
   if (!STATUS) return;
   const F = ind("fitness"), T = ind("form"), ph = ind("phase"), g = STATUS.goals;
   const out = [];
   const ramp = F?.extra?.ramp_week;
-  out.push(`<div class="kpi"><div class="k">${I("fitness")}體能 CTL${q(tipOf(F))}</div>
+  out.push(`<div class="kpi"><div class="k">${I("fitness")}${esc(t("overview.kpi.ctl"))}${q(tipOf(F))}</div>
     <div class="row"><div class="v">${esc(F?.text ?? "–")}</div>${spark(F?.spark, F?.level)}</div>
-    <div class="sub"><span class="num">${ramp == null ? "" : `本週 ${sgn(ramp, (v) => v.toFixed(1))}/週`}</span>${F ? stw(F.level, kpiWord(F)) : ""}</div></div>`);
-  out.push(`<div class="kpi"><div class="k">${I("form")}狀況 TSB${q(tipOf(T))}</div>
+    <div class="sub"><span class="num">${ramp == null ? "" : esc(t("overview.kpi.ramp", { v: sgn(ramp, (v) => v.toFixed(1)) }))}</span>${F ? stw(F.level, kpiWord(F)) : ""}</div></div>`);
+  out.push(`<div class="kpi"><div class="k">${I("form")}${esc(t("overview.kpi.tsb"))}${q(tipOf(T))}</div>
     <div class="row"><div class="v">${esc(T?.text ?? "–")}</div>${spark(T?.spark, T?.level)}</div>
     <div class="sub"><span class="num">${T?.why ? esc(T.why.replace(/^TSB [^（]*/, "").replace(/[（）]/g, "")) : ""}</span>${T ? stw(T.level, kpiWord(T)) : ""}</div></div>`);
   // this week: from the stored plan once loaded (the user's edits), else the generated targets
@@ -422,16 +423,16 @@ function renderKpis() {
   const th = S?.hours ?? PLAN?.target?.hours, tt = S?.tss ?? PLAN?.target?.tss;
   if (PLAN) {
     const f = th > 0 ? D.hours / th : 0;
-    const wtip = [...(PLAN.why || []), "時數不含肌力；TSS 以你近 6 週每小時 " + n0(PLAN.target.tss_per_hour) + " TSS 換算"].join("\n");
-    out.push(`<div class="kpi"><div class="k">${I("volume")}本週訓練量${q(wtip)}</div>
+    const wtip = [...(PLAN.why || []), t("overview.kpi.week_tip", { tph: n0(PLAN.target.tss_per_hour) })].join("\n");
+    out.push(`<div class="kpi"><div class="k">${I("volume")}${esc(t("overview.kpi.week"))}${q(wtip)}</div>
       <div class="row"><div class="v">${hrN(D.hours)}<small>/ ${hrs(th)}</small></div>${ring(f, f >= 1 ? "var(--good)" : "var(--accent)")}</div>
-      <div class="sub"><span class="num">TSS ${n0(D.tss)} / ${n0(tt)}</span>${stw(f >= 1 ? "good" : "info", f >= 1 ? "達成" : f >= 0.5 ? "過半" : "進行中")}</div></div>`);
-  } else out.push(`<div class="kpi"><div class="k">${I("volume")}本週訓練量</div><div class="loading">…</div></div>`);
+      <div class="sub"><span class="num">TSS ${n0(D.tss)} / ${n0(tt)}</span>${stw(f >= 1 ? "good" : "info", t(f >= 1 ? "overview.kpi.done" : f >= 0.5 ? "overview.kpi.half" : "overview.kpi.going"))}</div></div>`);
+  } else out.push(`<div class="kpi"><div class="k">${I("volume")}${esc(t("overview.kpi.week"))}</div><div class="loading">…</div></div>`);
   const name = ph?.extra?.next_a;
-  out.push(`<div class="kpi"><div class="k">${I("flag")}下一場 A 賽${q(ph ? [ph.text, ph.verdict, ph.why].filter(Boolean).join("\n") : "")}</div>
-    ${g.next_a ? `<div class="row"><div class="v">${g.days_to_next_a}<small>天</small></div></div>
+  out.push(`<div class="kpi"><div class="k">${I("flag")}${esc(t("overview.kpi.next_a"))}${q(ph ? [ph.text, ph.verdict, ph.why].filter(Boolean).join("\n") : "")}</div>
+    ${g.next_a ? `<div class="row"><div class="v">${g.days_to_next_a}<small>${esc(t("overview.kpi.days", { n: g.days_to_next_a }))}</small></div></div>
       <div class="sub"><span>${esc(name || "")}</span>${STATUS.phase ? stw("info", STATUS.phase.label).replace(I("info"), I("flag")) : ""}</div>`
-      : `<div class="row"><div class="v">–</div></div><div class="sub"><a href="/api/v1/plan/page">新增目標賽事 →</a></div>`}</div>`);
+      : `<div class="row"><div class="v">–</div></div><div class="sub"><a href="/api/v1/plan/page">${esc(t("overview.kpi.add_race"))}</a></div>`}</div>`);
   $("kpis").innerHTML = out.join("");
 }
 // one word for a KPI tile: the verdict before its first punctuation when short, else the level word
@@ -474,7 +475,7 @@ $("stale-badge").addEventListener("click", () => {
 });
 async function loadStatus() {
   const s = STATUS = await j(`${API}/status`);
-  $("asof").textContent = `資料到 ${s.today}`;
+  $("asof").textContent = t("overview.asof", { d: s.today });
   staleWatch(s);
   renderKpis();
   // to-do: icon + short title; the detail opens on click
