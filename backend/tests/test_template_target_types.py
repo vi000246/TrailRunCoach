@@ -134,3 +134,83 @@ def test_api_field_built_in_and_user(monkeypatch):
         cp = e.c.post(f"{UAPI}/copy", json={"key": lib["key"]}).json()
         row = next(t["row"] for t in e.c.get(UAPI).json()["templates"] if t["id"] == cp["id"])
         assert row["target_types"] == lib["target_types"]
+
+
+# ---------------------------------------------------------------------------
+# a 強度課's 「自動」 follows what the planner runs it on (owner 2026-10-13, SP-84): the same
+# target_policy.target_policy call — 課表偏好 hr, or a non-Stryd power source → % LTHR
+# ---------------------------------------------------------------------------
+
+def _source(monkeypatch, src):
+    from backend.engine import planning as PL
+    monkeypatch.setattr(PL.Plan, "load", classmethod(lambda cls, path=None: PL.Plan(profile={"power_source": src})))
+
+
+def test_quality_auto_follows_the_plan_basis(monkeypatch):
+    from backend.engine import plan_prefs as PP
+    from backend.engine import target_policy as TP
+    _source(monkeypatch, "stryd")
+    # the filter's basis is the planner's own call for a 強度課 (間歇 / 爬坡 alike)
+    for p in (PP.Prefs(), PP.Prefs(target_basis="hr"), PP.Prefs(target_basis="power"), PP.Prefs(interval_target="hr")):
+        for s in ({"kind": "quality", "title": "Z5 間歇 5×3 分"}, {"kind": "quality", "title": "爬坡重複 6×2 分"}):
+            assert WS.quality_auto_basis(p) == TP.target_policy(s, p)["basis"]
+    assert WS.quality_auto_basis(PP.Prefs()) == "power"
+    assert WS.quality_auto_basis(PP.Prefs(target_basis="hr")) == "hr"
+    assert WS.quality_auto_basis(PP.Prefs(interval_target="hr")) == "hr"          # the old 間歇目標 hr
+    assert WS.quality_auto_basis(PP.Prefs(target_basis="power")) == "power"
+    _source(monkeypatch, "none")                                                   # power not from a Stryd
+    assert WS.quality_auto_basis(PP.Prefs()) == "hr"
+    assert WS.quality_auto_basis(PP.Prefs(target_basis="power")) == "power"       # an explicit 功率 still wins
+    items = wrap(st("work", 300, BAND))
+    assert WS.target_types(items, None, quality=True, qbasis="hr") == ["hr_pct"]
+    assert WS.target_types(items, None, quality=True, qbasis="power") == ["power_pct"]
+    # the template's own 目標用 wins; other categories keep 「自動」
+    assert WS.target_types(items, "power", quality=True, qbasis="hr") == ["power_pct"]
+    assert WS.template_target_types({"items": items, "target_basis": "power", "cats": ["quality"]}, qbasis="hr") \
+        == ["power_pct"]
+    assert WS.template_target_types({"items": items, "cats": ["easy"]}, qbasis="hr") == ["auto"]
+    # no qbasis given: 課表偏好 read now (plan_prefs.load), like the planner
+    monkeypatch.setattr(PP, "load", lambda *a, **k: PP.Prefs(target_basis="hr"))
+    assert WS.template_target_types({"items": items, "cats": ["quality"]}) == ["hr_pct"]
+    _source(monkeypatch, "stryd")
+    monkeypatch.setattr(PP, "load", lambda *a, **k: PP.Prefs())
+    assert WS.template_target_types({"items": items, "cats": ["quality"]}) == ["power_pct"]
+
+
+def _both_lists(e):
+    """{user:<id>: types} of the 範本 page's list and of 插入範本's 我的範本 rows, plus the ladder variants'."""
+    page = {f"user:{t['id']}": t["row"]["target_types"] for t in e.c.get(UAPI).json()["templates"]}
+    m = e.c.get(f"{API}/steps/templates").json()
+    mine = {r["key"]: r["target_types"] for g in m["groups"] if g.get("mine") for r in g["rows"]}
+    variants = {tuple(r["target_types"]) for g in m["groups"] for r in g["rows"] if r.get("variant")}
+    return page, mine, variants
+
+
+def test_api_hr_basis_both_lists_agree(monkeypatch):
+    from backend.engine import plan_prefs as PP
+    _source(monkeypatch, "stryd")
+    # 課表偏好 as the planner reads it (plan_prefs.load: its own read-only sqlite, not the test's db)
+    prefs = {"p": PP.Prefs()}
+    monkeypatch.setattr(PP, "load", lambda *a, **k: prefs["p"])
+    with Env(monkeypatch) as e:
+        band = {"items": wrap(st("work", 480, BAND))}
+        q = e.c.post(UAPI, json={"name": "強度自動", "cats": ["quality"], "steps": band}).json()
+        qp = e.c.post(UAPI, json={"name": "強度功率", "cats": ["quality"], "steps": band, "target_basis": "power"}).json()
+        qh = e.c.post(UAPI, json={"name": "強度心率", "cats": ["quality"], "steps": band, "target_basis": "hr"}).json()
+        ez = e.c.post(UAPI, json={"name": "輕鬆自動", "cats": ["easy"], "steps": band}).json()
+        ids = [f"user:{t['id']}" for t in (q, qp, qh, ez)]
+
+        def check(want_q):
+            page, mine, variants = _both_lists(e)
+            assert page == mine                                   # 範本 page = 插入範本
+            assert [page[k] for k in ids] == [[want_q], ["power_pct"], ["hr_pct"], ["auto"]]
+            assert variants == {(want_q,)}                        # the built-in ladder's 「自動」 too
+        check("power_pct")                                        # 課表偏好 自動, a Stryd: % CP as before
+        prefs["p"] = PP.Prefs(target_basis="hr")
+        check("hr_pct")                                           # 課表偏好 心率: % LTHR
+        prefs["p"] = PP.Prefs()
+        check("power_pct")
+        _source(monkeypatch, "none")                              # 自動, power not from a Stryd: HR
+        check("hr_pct")
+        prefs["p"] = PP.Prefs(target_basis="power")
+        check("power_pct")                                        # 課表偏好 功率
