@@ -127,3 +127,11 @@ def test_levels_text_for_the_done_box_question_mark():
     t = _legend("SessChip.levelsText({ green: 0.2, yellow: 0.5 })")["out"]
     assert t.splitlines()[0].startswith("完成：") and "±20%" in t and "換了課：" in t and "跳過：" in t
     assert "✓" not in t and "≠" not in t and "◐" not in t
+
+
+@pytest.mark.skipif(NODE is None, reason="node not installed")
+def test_the_legend_table_ignores_a_page_s_own_table_look():
+    """Review shot SP-399 #4 (2026-10-13): the 總覽's `th, td { white-space: nowrap; border-bottom }` made
+    the legend's lines run past its box with rules between them."""
+    css = _legend("SessChip.CSS")["out"]
+    assert re.search(r"\.sc-leg th, \.sc-leg td \{ border: 0; white-space: normal;", css)
