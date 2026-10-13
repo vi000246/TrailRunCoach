@@ -57,9 +57,10 @@ def test_settings_links_to_the_login_open_the_sync_tab():
     sched = (STATIC / "schedule.html").read_text("utf-8")
     assert 'href="/api/v1/wko5/settings"' not in sched
     assert sched.count('/api/v1/wko5/settings#sync"') == 4
-    for page, frag in (("plan.html", "#thresholds"), ("wko5_viewer.html", "#mode"),
-                       ("session_banner.js", "#sync")):
+    for page, frag in (("plan.html", "#thresholds"), ("session_banner.js", "#sync")):
         assert f"/api/v1/wko5/settings{frag}" in (STATIC / page).read_text("utf-8")
+    # SP-448: 圖表分析's 算式 pill (the link to #mode) is gone; the mode is picked in 設定 only
+    assert "/api/v1/wko5/settings#mode" not in (STATIC / "wko5_viewer.html").read_text("utf-8")
 
 
 def _section_of(element_id: str) -> str:
