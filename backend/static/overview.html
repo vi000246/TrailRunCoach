@@ -682,7 +682,7 @@ function sessHtml(s, today) {
   const vd = verdictTxt(s);
   const tip = [s.title, `${SessChip.typeName(ty)}${s.origin === "custom" ? " · 自訂" : s.edited ? " · 已修改" : ""}`,
     done && s.done_by ? `完成：${s.done_by.category_label || ""}${s.done_by.session && s.done_by.session.type_label ? " · " + s.done_by.session.type_label : ""} ${hm(s.done_by.moving_s)} · TSS 計畫 ${n0(est)} → 實際 ${n0(s.done_by.tss)}` : `${s.minutes ? s.minutes + " 分鐘" : ""}${est ? ` · TSS ${n0(est)}` : ""}`,
-    vd, prov ? SessChip.label("todo", null, { prov: true }) : "", ...pm, rated, done ? "點一下看計畫 vs 實際、開啟活動" : "",
+    vd, SessChip.hrNote(cp), prov ? SessChip.label("todo", null, { prov: true }) : "", ...pm, rated, done ? "點一下看計畫 vs 實際、開啟活動" : "",
     s.target ? "目標：" + s.target : "", live && s.detail ? s.detail : "", live && s.walk_hint ? s.walk_hint : "", live ? watchTxt(s.coros) : ""].filter(Boolean).join("\n");
   const go = done ? ` data-go="${esc(`${SCHED}?day=${s.day}&uid=${encodeURIComponent(s.uid)}`)}"` : "";
   // §7.1: type：title, time / TSS, the verdict, 暫定, changed by

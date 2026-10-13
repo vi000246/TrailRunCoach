@@ -125,7 +125,8 @@ def session_of(ds: Dataset, w: Workout) -> dict:
 
 def activity_row(w: Workout, ds: Optional[Dataset] = None) -> dict:
     """One activity for the week / calendar views; with `ds` also its session class
-    (`session`: Z5 間歇 / Z3 閾值 / 高強度長跑 / 中強度跑 … and the dashicon)."""
+    (`session`: Z5 間歇 / Z3 閾值 / 高強度長跑 / 中強度跑 … and the dashicon) and its
+    `hr_quality` (SP-402)."""
     m = w.metrics
     cat = category(w)
     row = {
@@ -138,7 +139,18 @@ def activity_row(w: Workout, ds: Optional[Dataset] = None) -> dict:
     }
     if ds is not None and cat in ("road", "trail", "hike"):
         row["session"] = session_of(ds, w)
+        row["hr_quality"] = hr_quality_of(ds, w)
     return row
+
+
+def hr_quality_of(ds: Dataset, w: Workout) -> Optional[str]:
+    """The run's HR quality, "low" / "ok" / None (workout_review.run_hr_quality, SP-402): a done
+    session's `done_by.hr_quality`, so an unreliable HR's TSS doesn't grade it down."""
+    from backend.engine import workout_review as WR
+    try:
+        return WR.run_hr_quality(ds, w)
+    except Exception:                       # noqa: BLE001 — a row never breaks the overview
+        return None
 
 
 # ---------------------------------------------------------------------------

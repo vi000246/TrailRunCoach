@@ -1109,7 +1109,7 @@ function chipHtml(s, big) {
   // §7.1: type：title, time, TSS, the verdict, 暫定, changed by, the watch — the reading order on screen
   const lbl = [`${KINDS[s.kind] || ""}${fam ? "（" + fam.text + "）" : ""}：${s.title}`, `${s.minutes || 0} 分鐘`, tss.replace("→", "實際"),
     vdFull, prov ? SessChip.label("todo", null, { prov: true }) : "", pm.length ? PlanMark.label(s) : "", watch ? syLabel(c.status) : ""].filter(Boolean).join("，");
-  const tip = [s.title, fam && fam.sub_label ? fam.text : "", meta, vdFull, st === "partial" && s.vs && s.vs.short_text ? s.vs.short_text : "",
+  const tip = [s.title, fam && fam.sub_label ? fam.text : "", meta, vdFull, SessChip.hrNote(s.compliance), st === "partial" && s.vs && s.vs.short_text ? s.vs.short_text : "",
     actual, s.target, s.detail, s.walk_hint, s.state === "done" && s.note ? "⚠ " + s.note : "", ...pm,
     watch ? syLabel(c.status) + (c.error || c.reason ? "\n" + (c.error || c.reason) : "") : ""].filter(Boolean).join("\n");
   return `<button type="button" class="chip sc ${SessChip.cls(s)}${S.swapFrom && S.swapFrom.uid === s.uid ? " swap-src" : ""}${lock ? " swap-lock" : ""}" data-uid="${esc(s.uid)}" data-kind="${esc(s.kind)}"
@@ -2036,6 +2036,7 @@ function vsHtml(s) {
     `<button type="button" class="qtip" aria-label="${esc(tt("vs.levels_aria"))}" data-tip="${esc(OFF_TIP() + "\n\n" + MATCH_TIP)}">?</button>` +
     (vs.match_label ? `<span class="meta">${esc(vs.match_label)}</span>` : "") + `</div>` +
     (nums ? `<div class="vs-nums">${esc(nums)}</div>` : "") +
+    (SessChip.hrNote(cp) ? `<div class="vs-nums">${esc(SessChip.hrNote(cp))}</div>` : "") +
     `<dl class="vs"><dt>計畫</dt><dd>${esc(plan)}</dd><dt>實際</dt><dd class="${vs.off_plan ? "off" : ""}">${esc(real)}</dd>` +
     (vs.off_plan ? `<dt></dt><dd class="off">${esc(vs.text.replace("沒照課表：", ""))}</dd>` : "") +
     (vs.short ? `<dt></dt><dd class="part">${esc(vs.short_text)}</dd>` : "") +

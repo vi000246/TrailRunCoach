@@ -102,7 +102,7 @@ console.log(JSON.stringify({ out: ctx.OUT, used: [...used] }));
 @pytest.mark.skipif(NODE is None, reason="node not installed")
 def test_legend_table_three_sections_with_the_payload_thresholds():
     got = _legend('SessChip.legend({ levels: { green: 0.25, yellow: 0.5 }, other: [["<i>x</i>", "頁面自己的列"]] })'
-                  ' + "\\n" + SessChip.levelsText({ green: 0.25 })')
+                  ' + "\\n" + SessChip.levelsText({ green: 0.25 }) + SessChip.hrNote({ uncertain: true })')
     h = got["out"]
     assert h.startswith('<details class="sc-leg"') and h.count("<summary") == 1 and "圖例" in h
     assert "完成：時間和 TSS 都在計畫 ±25% 內" in h

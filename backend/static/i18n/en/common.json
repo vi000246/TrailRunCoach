@@ -80,6 +80,7 @@
   "legend.status.missed": "Skipped",
   "legend.status.todo": "Not done yet",
   "legend.status.prov": "Provisional",
+  "legend.hr_uncertain": "HR quality low — judged by time",
   "legend.type.easy": "Easy run",
   "legend.type.z3": "Aerobic intervals / threshold",
   "legend.type.z5": "VO2max / speed",

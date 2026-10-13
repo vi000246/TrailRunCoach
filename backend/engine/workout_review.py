@@ -618,6 +618,26 @@ def hr_quality_check(t, hr, grid, window, cadence_spm=None, speed=None) -> Optio
     return sm
 
 
+HRQ_RUN_KEY = "hr_quality_run_v1"
+
+
+def run_hr_quality(ds, w) -> Optional[str]:
+    """SP-402: the whole run's HR quality for the plan's 完成度 (compliance.session_compliance:
+    an unreliable HR's TSS never grades a session down) — "low" when the SP-266 check would
+    downgrade it (spike + step + flat seconds > HRQ_MAX_SHARE of the recording, or a step),
+    "ok", None without HR. Its own disk-memoised row per activity (cached_series), computed
+    when an activity row first asks — not part of `measure`, so no re-measure of every run."""
+    def compute():
+        s = _samples(ds, w)
+        if s is None or s.get("hr") is None:
+            return {"q": None}
+        hq = hr_quality_check(s["t"], s["hr"], None, None, s.get("cadence"), s.get("speed"))
+        return {"q": None if hq is None else "low" if hq.get("downgrade") else "ok"}
+    cache = getattr(ds, "cached_series", None)
+    r = cache(HRQ_RUN_KEY, w, compute) if cache is not None else compute()
+    return (r or {}).get("q")
+
+
 def hr_quality_parts(hq: Optional[dict], lock: bool = True) -> list[str]:
     """The plain parts of the HR-quality note (in the request's language);
     `lock` False leaves cadence lock out (it never downgrades)."""

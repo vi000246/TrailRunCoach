@@ -1259,6 +1259,16 @@ chips and week rows, the workout review 「課表」 card and the 課表統計 p
 `api/plan_sessions.session_est_tss` (`backend/api/plan_sessions.py:2510`; rates from the dataset's
 TSS / h and `plan_store.rate_rows`, only computed for a row without a TSS).
 
+SP-402 (2026-10-13; `docs/research/positive-compliance.md` §4 原則 5 「不確定就不扣」): an activity
+row carries `hr_quality` — the whole run's SP-266 HR check (`workout_review.run_hr_quality`,
+spike + step + flat seconds > 3 % of the recording or a step = "low", else "ok", None without HR; its
+own `cached_series` row `hr_quality_run_v1` per activity, computed when a row first asks, not part of
+`measure`; `overview.activity_row` / `hr_quality_of`) and so a done session's `done_by.hr_quality`.
+"low" → `session_compliance` grades on time only (TSS shown, never grading down; the headline % is
+time's) and returns `uncertain: True`; `with_plan_check` then ignores an intensity shortfall (`vs.short`)
+too (換了課 / another sport stays). The 課表 card's hover, the dialog's 完成盒 and the 總覽 hover add
+「心率品質不穩，依時間判定」 (`SessChip.hrNote`, `common.legend.hr_uncertain`). 推估 (the 3 % line is SP-266's).
+
 **Concurrency**: plan writes are serialized by one asyncio lock per event loop
 (`_wlock`, `backend/api/plan_sessions.py:454`), so two tabs or a preview racing a push cannot
 generate the same week twice. Pushes to the watch take a separate push lock (`_plock`,
@@ -2468,3 +2478,4 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 | 2026-10-13 | feat/session-cards-sp395-402 | SP-396 (docs/research/schedule-chip-ui.md §8.1, §8.3, §10 ②) | 課表 cards on `SessChip`: type tile instead of type colours, left bar + Linear ring by status (no ✓ / ◐ / ≠ / 熱 / 未完成 / strike-through, no red), the watch only for 需更新 / 失敗, provisional = dashed card (week hatch removed), activity cards dotted with an icon, aria-label in the §7.1 order, ⚠ note to hover + dialog; the dialog's 完成盒 = ring + verdict, the three numbers, one `?`, plus a 手錶 status line (`schedule.sy.line`, `vs.time_pct`). Tests: `backend/tests/test_schedule_cards_sp396.py`; `test_swap_sp359` class-template check and the e2e selectors follow the new classes (`data-kind`) |
 | 2026-10-13 | feat/session-cards-sp395-402 | SP-397 (docs/research/schedule-chip-ui.md §8.4, §10 ③) | 總覽 本週 cards on `SessChip` like the 課表 page (same icon, bar colour, ring): `.ty-*` type tiles, the `.ok` ✓ corner, the ≠ / ◐ prefix, the faded strike-through of a missed session and the dead `.mini.*` CSS removed; the type list (`TYPES` / `stype` / `actTy`) is sesschip.js's (`SessChip.kind`, `typeName` → `common.legend.type.*`); hover: the verdict with its % for every done session, no thresholds, the watch with `provider_label` and `not_pushed` worded (`overview.week.sy.*`); `overview.week.short_aria` removed. Tests: `backend/tests/test_overview_cards_sp397.py` (same parts as the 課表 card per status); `test_review_cards` reads the type names from `common.legend.type.*` |
 | 2026-10-13 | feat/session-cards-sp395-402 | SP-399 (docs/research/schedule-chip-ui.md §7, §10 ⑤) | Old card styles removed from 課表 / 總覽 (type colours `.k-*` / `--k` / `.fam-*` / `.ty-*`, `--s1…s7` + `--qf*` on the 課表 page → `--ph-*` phase tokens, `.heat-tag`, `.offp-i` / `.part-i`, completion `.cp-*` / `.cpw`, `CAT_VAR`); one 「? 圖例」 on both pages (`SessChip.legend` / `levelsText`, thresholds from `compliance_levels`, `common.legend.*` zh-TW + en, page rows `schedule.lg.*`); editor type radios with icons; orphan keys removed. Tests: `backend/tests/test_legend_cleanup_sp399.py` (the ticket's grep, no orphan keys in common / schedule / overview, the legend's sections); e2e watch-glyph test opens the legend and expects the two states |
+| 2026-10-13 | feat/session-cards-sp395-402 | SP-402 (docs/research/positive-compliance.md §4 原則 5, §8 ④) | Unreliable optical HR doesn't grade a session down: `workout_review.run_hr_quality` (whole-run SP-266 check, cached per activity) → activity row / `done_by.hr_quality`; `compliance.session_compliance` with "low" grades on time only + `uncertain`, `with_plan_check` skips an intensity shortfall for it; card hover / dialog / 總覽 hover 「心率品質不穩，依時間判定」 (zh-TW + en). Tests: `backend/tests/test_compliance_hr_quality.py` |

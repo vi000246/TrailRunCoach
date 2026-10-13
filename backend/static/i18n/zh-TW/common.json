@@ -80,6 +80,7 @@
   "legend.status.missed": "跳過",
   "legend.status.todo": "還沒做",
   "legend.status.prov": "暫定",
+  "legend.hr_uncertain": "心率品質不穩，依時間判定",
   "legend.type.easy": "輕鬆跑",
   "legend.type.z3": "有氧間歇／閾值",
   "legend.type.z5": "VO2max／速度",

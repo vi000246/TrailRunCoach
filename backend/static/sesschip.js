@@ -175,5 +175,9 @@
       head("h_other") + other.map(([ic, txt]) => row(ic, txt)).join("") + `</table></div></details>`;
   }
 
-  W.SessChip = { kind, actKind, typeName, status, cls, label, ring, icon, legend, levelsText, CSS };
+  // SP-402: graded on time only because the run's HR is unreliable (compliance `uncertain`) — a hover /
+  // dialog line, the ring stays what the time says
+  const hrNote = (cp) => (cp && cp.uncertain ? T("hr_uncertain") : "");
+
+  W.SessChip = { kind, actKind, typeName, status, cls, label, ring, icon, legend, levelsText, hrNote, CSS };
 })();
