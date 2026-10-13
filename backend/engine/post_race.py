@@ -3,6 +3,9 @@
 projection.project_weeks and applied after the placement (like the 減量期 rules, overview.taper_rules).
 
 A race (its `event` phase, auto or manual):
+  * its own days hold the race only (SP-492): a session the placement put there moves like one on
+    the no-run days below, else it goes (a quality session there first follows the 減量期's race-week
+    rule, overview.taper_rules);
   * the first planning.REC_NO_RUN_DAYS days no running and no strength: a session there moves to a
     free later day of the week, else it goes (a controlled trial: a 40-min easy run from 48 h on did
     no harm [256]; Higdon: 3 days off [446] — 教練級);
@@ -56,9 +59,9 @@ def _get(p, k):
 
 
 def a_windows(phases, events, monday: dt.date) -> list[dict]:
-    """The A races whose first REC_SHORT_DAYS after their last day touch the week of `monday`:
-    [{"race", "id", "end", "no_run", "short", "flat"}] (dates; `flat` None without a big downhill).
-    `phases`: Phase objects or dicts; `events`: planning.Event (for the downhill verdict)."""
+    """The A races whose days or first REC_SHORT_DAYS after their last day touch the week of `monday`:
+    [{"race", "id", "start", "end", "no_run", "short", "flat"}] (dates; `flat` None without a big
+    downhill). `phases`: Phase objects or dicts; `events`: planning.Event (for the downhill verdict)."""
     from backend.engine import planning as P
     sunday = monday + dt.timedelta(days=6)
     by_id = {e.id: e for e in events or ()}
@@ -67,7 +70,8 @@ def a_windows(phases, events, monday: dt.date) -> list[dict]:
         if _get(p, "kind") != "event":
             continue
         end, start = _d(_get(p, "end")), _d(_get(p, "start"))
-        if not (monday - dt.timedelta(days=P.REC_SHORT_DAYS) <= end < sunday):
+        # SP-492: a race ending on the Sunday too (its race day is in the week), was `end < sunday`
+        if not (monday - dt.timedelta(days=P.REC_SHORT_DAYS) <= end and start <= sunday):
             continue
         ev = by_id.get(_get(p, "event_id")) or next((e for e in events or () if e.start == start), None)
         dh = None
@@ -76,7 +80,8 @@ def a_windows(phases, events, monday: dt.date) -> list[dict]:
                 dh = P.downhill(ev)
             except Exception:                   # noqa: BLE001 — the plan must still build
                 dh = None
-        out.append({"race": ev.name if ev is not None else _("A 賽事"), "id": _get(p, "event_id"), "end": end,
+        out.append({"race": ev.name if ev is not None else _("A 賽事"), "id": _get(p, "event_id"),
+                    "start": start, "end": end,
                     "no_run": end + dt.timedelta(days=P.REC_NO_RUN_DAYS),
                     "short": end + dt.timedelta(days=P.REC_SHORT_DAYS),
                     "flat": end + dt.timedelta(days=P.DOWNHILL_FLAT_DAYS) if dh and dh.get("big") else None})
@@ -86,8 +91,10 @@ def a_windows(phases, events, monday: dt.date) -> list[dict]:
 def apply(ss: list, wins: list, monday: dt.date, notes: Optional[list] = None, today: Optional[dt.date] = None,
           blocked=(), easy_target: str = "") -> list:
     """`ss` (Session objects or dicts, placed) with the rules of `wins` (a_windows) applied to the
-    not-done sessions: moved off / dropped from the no-run days, capped easy runs in the first week,
-    the flat days after a big downhill. Returns the kept sessions; notes say what changed.
+    not-done sessions: moved off / dropped from the race days (SP-492: an A race's day holds the race
+    only — a `start` row; b_windows rows have none, bc_apply clears a B race's day) and the no-run days,
+    capped easy runs in the first week, the flat days after a big downhill. Returns the kept sessions;
+    notes say what changed.
     `easy_target`: the week's easy-run target text, for a session made an easy run (SP-408)."""
     if not wins or not ss:
         return ss
@@ -106,15 +113,19 @@ def apply(ss: list, wins: list, monday: dt.date, notes: Optional[list] = None, t
     blocked = {str(b) for b in blocked or ()}
     keep = list(ss)
     for w in wins:
-        touched, gone = False, 0
-        # 1. the no-run days: move to a free later day, else drop
+        touched, on_race, gone = False, False, 0
+        first = w.get("start") or w["end"] + dt.timedelta(days=1)
+        # 1. the race days (SP-492) and the no-run days: move to a free later day, else drop
         for s in sorted(keep, key=lambda x: _get(x, "day") or "9"):
             if _get(s, "done") or not _get(s, "day"):
                 continue
             d = _d(_get(s, "day"))
-            if not (w["end"] < d <= w["no_run"]) or _get(s, "kind") not in RUN_KINDS + ("strength",):
+            if not (first <= d <= w["no_run"]) or _get(s, "kind") not in RUN_KINDS + ("strength",):
                 continue
-            touched = True
+            if d <= w["end"]:
+                on_race = True
+            else:
+                touched = True
             run = _get(s, "kind") in RUN_KINDS
             used = {_get(x, "day") for x in keep if x is not s and not _get(x, "done")
                     and (_get(x, "kind") in RUN_KINDS) == run}
@@ -148,14 +159,20 @@ def apply(ss: list, wins: list, monday: dt.date, notes: Optional[list] = None, t
             put(s, minutes=nm, tss=round(float(_get(s, "tss") or 0.0) * (nm / m if m else 1.0), 1), detail=detail)
             if flat:
                 put(s, terrain="road", climb_m=None)
-        if touched and notes is not None:
+        if (touched or on_race) and notes is not None:
             date = f"{w['end'].month}/{w['end'].day}"
-            if w["short"] > w["end"]:
+            if not touched:
+                # only the race day had something (SP-492): a Sunday race, or nothing after it this week
+                txt = _("{p} 賽事「{race}」{date} 當天只排比賽", p="B" if w.get("b") else "A", race=w["race"],
+                        date=f"{first.month}/{first.day}")
+            elif w["short"] > w["end"]:
                 txt = _("{p} 賽事「{race}」{date} 後：前 {n} 天不排跑步和肌力，第 1 週每次 ≤ {max} 分輕鬆跑",
                         p="B" if w.get("b") else "A", race=w["race"], date=date, n=P.REC_NO_RUN_DAYS,
                         max=P.REC_SHORT_MIN)
             else:
                 txt = _("{p} 賽事「{race}」{date} 後", p="B" if w.get("b") else "A", race=w["race"], date=date)
+            if touched and on_race:
+                txt += _("；比賽當天只排比賽")
             if w["flat"] is not None:
                 txt += _("；下坡比你近 6 週練過的多，賽後 {h} 小時內走平路、不排硬課", h=P.DOWNHILL_FLAT_DAYS * 24)
             if gone:
