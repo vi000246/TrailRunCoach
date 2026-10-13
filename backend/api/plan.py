@@ -719,8 +719,16 @@ async def put_hr_profile(body: HrProfileIn, db: AsyncSession = Depends(get_db)):
                            if any(getattr(t, f) is not None for f in P.Threshold.THRESHOLD_FIELDS)]
         plan.save()
     if body.model is not None:
+        from backend.engine import threshold_history as TH
         from backend.settings.repository import SettingsRepository
-        await SettingsRepository(db, current_athlete_id()).set(HP.MODEL_KEY, body.model)
+        repo = SettingsRepository(db, current_athlete_id())
+        old = await repo.get(HP.MODEL_KEY)
+        await repo.set(HP.MODEL_KEY, body.model)
+        # SP-467: the switch goes into 門檻變更紀錄 (the model kept no history before)
+        hist = TH.model_history_add(await repo.get(TH.MODEL_HISTORY_KEY), dt.date.fromisoformat(today),
+                                    old if old in HP.PLAN_MODELS else HP.DEFAULT_PLAN_MODEL, body.model)
+        if hist is not None:
+            await repo.set(TH.MODEL_HISTORY_KEY, hist)
         await db.commit()
     if changed:
         _notify(True)          # zones / targets / the pushed workouts follow
@@ -891,6 +899,39 @@ def threshold_estimate():
     from backend.engine.thresholds import estimate
     ds = _estimate_dataset()
     return _estimate_pending(ds) or estimate(ds, today_local())
+
+
+def _history_settings() -> tuple:
+    """(the 課表心率區間 journal, the watch account's HR history, the model in use) — user_settings."""
+    from backend.engine import coros_compare as CC
+    from backend.engine import hr_profile as HP
+    from backend.engine import threshold_history as TH
+    from backend.engine.wko5expr.datasource import read_setting
+    return read_setting(TH.MODEL_HISTORY_KEY, None), read_setting(CC.HISTORY_KEY, None), HP.plan_model()
+
+
+@router.get("/threshold-history")
+def threshold_history():
+    """設定 › 門檻變更紀錄 (SP-467, engine/threshold_history.py): which threshold changed on which day,
+    from what to what and where from — the plan rows, the Stryd PD fits and as-of LTHR already on the
+    charts' Dataset (nothing refitted), the watch account's history, the 課表心率區間 switches.
+    {today, entries (newest first), notes, pending}. Nothing is saved."""
+    from backend.engine import localtime
+    from backend.engine import threshold_history as TH
+    today = today_local()
+    plan = P.Plan.load()
+    try:
+        ds = _estimate_dataset()
+    except Exception:                       # noqa: BLE001 — no data yet: the plan rows alone
+        ds = None
+    pend = _estimate_pending(ds) if ds is not None else None
+    models, watch, model_now = _history_settings()
+    try:
+        tz = localtime.zone()
+    except Exception:                       # noqa: BLE001
+        tz = None
+    out = TH.build(plan, ds, today, model_history=models, coros_history=watch, model_now=model_now, tz=tz)
+    return {"today": today.isoformat(), **out, "pending": (pend or {}).get("pending")}
 
 
 class ApplyEstimate(BaseModel):

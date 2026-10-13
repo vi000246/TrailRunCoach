@@ -531,6 +531,18 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
   page (`backend/static/plan.html:190`) shows a read-only line — what is in effect, the latest test
   date and count — with 「到設定修改」 (`/api/v1/wko5/settings#thresholds`); the status action for a
   default LTHR points to 設定 too (`backend/engine/status.py:1071`). No data-model change.
+- **門檻變更紀錄** (2026-10-13, SP-467; SP-449 Q2 ③ B): a collapsed 「門檻變更紀錄：哪個門檻在哪天變了」 under
+  the power-zone table (`backend/static/settings.html:299`, read when opened or via `#thr-hist`) lists, newest
+  first, each change: threshold, date, from → to, source — 手動 / 測試 (with the method) / 套用的自動估算 (the
+  plan rows), PD 擬合 (the Stryd PD fits already on the Dataset, `_cp_est`), 自動估算（你的跑步） (the dated
+  as-of `runthr`), 手錶帳號設定 (`athlete.coros_profile_history`: max / resting HR, zone ratios) and 心率模型
+  (the 課表心率區間 switches). CP / LTHR rows say whether the 課表's value changed that day (the Dataset's
+  own `cp` / `sport_setting("thr")` on the last run moved to that day); a fit the 課表 did not take is muted
+  with 「課表仍用 …」. Nothing is refitted (`backend/engine/threshold_history.py`). The model switch had no
+  history: `PUT /api/v1/plan/hr-profile` now appends `{date, from, to}` to `plan.hr_zone_model_history`
+  (user_settings, USER) — switches before SP-467 are not there (a note says so), nor the automatic max-HR
+  estimate or an AeT estimate that was never applied (it does not move the 課表's ranges). Session storage
+  unchanged.
 - With active preferences the template is then shaped by `plan_prefs.shape()`
   (`backend/engine/overview.py:1855`; see 課表偏好 below).
 
@@ -2172,6 +2184,7 @@ which one. The response keeps the `coros` field names.
 | GET | `/api/v1/plan/thresholds` | 設定 › 閾值測試紀錄 (SP-46): `{today, thresholds, effective_thresholds, power_zones, wko5_settings}` — the same rows and effective values as `GET /api/v1/plan`, without the rest of the season plan. `effective_thresholds.cp` = `{value, source, label, date}`: a plan CP row (`plan`, 「你的測試 …」), else the CP the 課表 uses (`zones.cp_in_effect`: `estimate` = the Stryd PD fit with its 「推估：Stryd 功率 PD 模型 …」 label, `setting`, or `wko5_mftp` only on the WKO5 source; SP-449 — was always `wko5_mftp`, null without a WKO5 file) (`backend/api/plan.py:319`); saved with `PUT /api/v1/plan/thresholds` (whole table, `backend/api/plan.py:335`) |
 | POST | `/api/v1/plan/thresholds/apply-estimate` | now takes an optional `date` (the test day; not in the future) so 「套用這次的 AeT」 dates the row on the test; SP-64: also `mhr` + `mhr_method` (`planning.MHR_METHODS`; a max-HR test = test, the sustained-peak candidate = estimate) and `lthr_method: friel30` for a 30-min test (`backend/api/plan.py:879`) |
 | GET | `/api/v1/plan/threshold-check` | SP-64: `threshold_confidence.check` — LTHR / max / resting HR confidence and signals, diagnosis, suggestions, latest test results with `apply` bodies; nothing saved (`backend/api/plan.py:854`) |
+| GET | `/api/v1/plan/threshold-history` | SP-467: 設定 › 門檻變更紀錄 — `{today, entries, notes, pending}`; each entry `{date, key (cp / lthr / aethr / mhr / rhr / hr_model / hr_zones), name, from, to, unit, source (manual / test / estimate / pd_fit / auto / watch / hr_model), source_label, detail, note, in_effect, from_label, to_label}`, newest first; reads the cached Dataset's PD fits and as-of LTHR (no refit), the plan rows and two user_settings histories; nothing saved (`backend/api/plan.py:913`) |
 | PUT | `/api/v1/overview/plan/prefs` | the whole preference set (Prefs field names, missing = default); 400 on a bad / unknown value or a cross-field rule (`backend/api/plan_sessions.py:2165`) |
 | GET | `/api/v1/overview/plan/blackouts` | `{blackouts}` — the stored 不排課日期 (`backend/api/plan_sessions.py:2202`) |
 | POST | `/api/v1/overview/plan/blackouts/preview` | `{blackouts}` → the reconcile preview with that list; nothing saved; 400 on a bad range (`backend/api/plan_sessions.py:2209`) |
@@ -2579,3 +2592,4 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 | 2026-10-13 | bugfix | SP-443 | The multi-day 百岳's 「ME 負重爬坡」 (kind quality, no variant, no 「N×M 分」) derived to nothing and its push raised 「看不懂間歇結構」. Now `workout_steps.derive` gives 暖身 (detail, 10′) → 上坡 the title's climb at `ME_UP_MPH` (auto easy = the walk cap, target_policy unchanged) → 下坡 the rest of the session (RPE 3–4 + 下降 N m, `ME_DOWN_RPE` 推估), and `coros_workouts.session_steps` pushes that structure; structure TSS ≈ 0.88 × the card. Tests: `backend/tests/test_me_climb_structure_sp443.py` |
 | 2026-10-13 | bugfix | SP-449 | 設定 › 閾值 and the plan page show the CP the 課表 uses and its source (`effective_thresholds.cp.label`; `zones.cp_in_effect`) — they said 「WKO5 的 mFTP」 / `wko5_mftp` (null on a COROS install) while the 課表 used the Stryd PD fit; the 「沒填的話用…」 help says the PD model (zh / en) |
 | 2026-10-13 | feature | SP-450 | The 專項 chip (主要訓練項目, `backend/static/sportchip.js`) is in the 課表's top row too (`backend/static/schedule.html:578`): choosing 自動／越野跑／路跑・馬拉松 saves `athlete.primary_sport` and reloads; the plan's `PSP.stored()` stamp re-plans (路跑: no 爬升 week row). Demo: shown, disabled |
+| 2026-10-13 | feature | SP-467 | 設定 › 閾值 gets 「門檻變更紀錄」 (`GET /api/v1/plan/threshold-history`, `backend/engine/threshold_history.py`): which threshold changed on which day, from → to and its source (手動／測試／套用的自動估算／PD 擬合／自動估算／手錶帳號設定／心率模型), built from the plan rows, the Dataset's existing PD fits and as-of LTHR (no refit), the watch account's history; the 課表心率區間 switch is recorded from now on in the new user_settings key `plan.hr_zone_model_history` (`PUT /api/v1/plan/hr-profile`). zh-TW + en. Session format unchanged. Tests: `backend/tests/test_threshold_history_sp467.py` |
