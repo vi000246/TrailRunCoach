@@ -2017,5 +2017,16 @@
   "沒有體重：熱量、碳水、水、鈉的補給建議算不出（都要用體重）；請到 設定 → 個人資料 填寫體重": "No body weight: the energy, carbohydrate, water and sodium suggestions cannot be computed (they all need it); enter your weight under Settings → Personal",
   "沒有體重：百岳能力模型算不出，這項回測跳過；請到 設定 → 個人資料 填寫體重": "No body weight: the Baiyue (Taiwan's 100 Peaks) walking-capacity model cannot be computed, so this back-test is skipped; enter your weight under Settings → Personal",
   "沒有體重：步行能力模型算不出，分段用舊的步行模型（Tobler 先驗加上你的爬升窗）": "No body weight: the walking-capacity model cannot be computed, so the segments use the older walking model (Tobler prior plus your climbing windows)",
-  "輕鬆跑功率帶可能偏低：最近 {n} 次輕鬆跑在輕鬆跑上限 {aet:.0f} bpm 時約 {pw:.0f} W，是 CP {cp:.0f} W 的 {pct:.0f}%，比功率帶上限 {hi:.0f} W（{hip:.0f}% CP）高很多。CP 可能估低了（或心率上限估高了）；建議做一次 CP 測試（或 AeT 測試）。功率帶先不改，輕鬆跑以心率為主": "Easy power band may be too low: your last {n} easy runs held about {pw:.0f} W at the easy-run HR cap of {aet:.0f} bpm, {pct:.0f}% of your CP of {cp:.0f} W, far above the band's top of {hi:.0f} W ({hip:.0f}% CP). The CP is probably too low (or the HR cap too high); do a CP test (or an AeT test). The power band stays as it is for now; run the easy runs by heart rate"
+  "輕鬆跑功率帶可能偏低：最近 {n} 次輕鬆跑在輕鬆跑上限 {aet:.0f} bpm 時約 {pw:.0f} W，是 CP {cp:.0f} W 的 {pct:.0f}%，比功率帶上限 {hi:.0f} W（{hip:.0f}% CP）高很多。CP 可能估低了（或心率上限估高了）；建議做一次 CP 測試（或 AeT 測試）。功率帶先不改，輕鬆跑以心率為主": "Easy power band may be too low: your last {n} easy runs held about {pw:.0f} W at the easy-run HR cap of {aet:.0f} bpm, {pct:.0f}% of your CP of {cp:.0f} W, far above the band's top of {hi:.0f} W ({hip:.0f}% CP). The CP is probably too low (or the HR cap too high); do a CP test (or an AeT test). The power band stays as it is for now; run the easy runs by heart rate",
+  "mFTP {w} W": "mFTP {w} W",
+  "mFTP {w} W · {md}": "mFTP {w} W · {md}",
+  "CP {w} W": "CP {w} W",
+  "CP {w} W · {md}": "CP {w} W · {md}",
+  "CP {w} W · 測試": "CP {w} W · test",
+  "CP {w} W · 測試 {md}": "CP {w} W · test {md}",
+  "課表與設定頁用的就是這個 CP：{w} W\n來源：{src}": "This is the CP the plan and the settings page use: {w} W\nSource: {src}",
+  "沒有體重：VO2max 是每公斤（ml/kg/min），算不出；請到 設定 → 個人資料 填體重。mFTP 照樣畫。": "No body weight: VO2max is per kg (ml/kg/min) and cannot be computed; enter your weight under Settings → Personal. mFTP is drawn anyway.",
+  "有 {n} 個點那天沒有體重，VO2max 只畫有體重的點。": "{n} points have no body weight on their day; VO2max is drawn only where there is one.",
+  "這段期間沒有 PD 模型擬合：90 天內至少要 {n} 次 Stryd 功率跑步（手錶推估功率不採用），mFTP 與 VO2max 才算得出來。": "No PD model fit in this period: mFTP and VO2max need at least {n} runs with Stryd power within 90 days (watch-estimated power is not used).",
+  "每個點＝課表用的 Stryd 功率 PD 模型擬合（每 30 天一次，加上最後一次跑步那天）；VO2max＝WKO5 的算法 (FRC/589 + mFTP)/84.5 + 0.656 L/min ÷ 當天體重（推估）": "Each point = a fit of the plan's PD model on Stryd power (every 30 days, plus the day of the last run); VO2max = WKO5's formula (FRC/589 + mFTP)/84.5 + 0.656 L/min ÷ that day's body weight (an estimate)"
 }
