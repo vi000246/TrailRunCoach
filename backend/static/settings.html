@@ -117,6 +117,22 @@ dialog::backdrop { background: rgba(0,0,0,.35); }
 main > section.tab-off { display: none; }
 /* 生理數據: 心率 → 閾值測試紀錄 → 功率 (grid order; the HTML order stays) */
 #hr { order: 1; } #thresholds { order: 2; } #power { order: 3; }
+/* 這台裝置的離線資料 (SP-322, device_storage.js) */
+.ds-kv { grid-template-columns: minmax(96px, max-content) 1fr; gap: 6px 14px; align-items: baseline; }
+.ds-kv dd .meta { margin-left: 2px; }
+.ds-bar { height: 6px; max-width: 260px; margin-top: 4px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.ds-bar i { display: block; height: 100%; background: var(--accent); }
+.ds-bar.over i { background: var(--warn); }
+.ds-warn { color: var(--warn); }
+.ds-st { font-weight: 600; }
+.ds-ok { color: var(--ok); }
+.ds-partial, .ds-evicted, .ds-failed { color: var(--warn); }
+.ds-none, .ds-empty, .ds-na { color: var(--muted); }
+.ds-st.ds-na { font-weight: 400; }
+.ds-kv button { font-size: 12.5px; padding: 2px 8px; margin-left: 4px; }
+.ds-a2hs { margin-top: 12px; border: 1px solid var(--accent); background: var(--soft); border-radius: 8px; padding: 10px 12px; font-size: 13px; }
+.ds-a2hs p { margin: 4px 0 0; }
+@media (max-width: 480px) { .ds-kv { grid-template-columns: 1fr; gap: 0; } .ds-kv dt { margin-top: 8px; font-size: 12px; } }
 </style>
 </head>
 <body>
@@ -124,6 +140,7 @@ main > section.tab-off { display: none; }
 <script src="/api/v1/static/calib_chip.js"></script>
 <script src="/api/v1/static/syncrun.js"></script>
 <script src="/api/v1/static/fitimport.js"></script>
+<script src="/api/v1/static/device_storage.js"></script>
 <header>
   <h1>設定</h1>
 </header>
@@ -491,6 +508,14 @@ main > section.tab-off { display: none; }
       <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.arch.download_help" title="把你所有同步、匯入的 FIT 原始檔打包成一個 zip 下載，隨時都能用，跟清理無關。檔案多的話要等一下才會開始。">?</button>
     </div>
     <p class="meta" id="ar-note" role="status"></p>
+  </section>
+
+  <!-- SP-322: 這台裝置的離線資料 (device_storage.js; the copy itself: SP-314, offline_core.js) -->
+  <section id="device">
+    <h2><span data-i18n="settings.device.title">這台裝置的離線資料</span> <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.device.help" title="沒訊號時，總覽、課表和活動列表從這台裝置存的資料打開（只能看、不能改）。存的內容分三層：P0 一定要有（總覽、課表）、P1 應該要有（活動列表、成就）、P2 有空間再存；全部加起來最多 20 MB，超過時先清 P2、再清 P1。連上網路時會自動更新。每台裝置、每個瀏覽器各存一份，登出就刪掉。">?</button></h2>
+    <p class="meta" data-i18n="settings.device.intro">沒訊號時從這裡打開總覽和課表。這裡看存了多少、會不會被瀏覽器清掉。</p>
+    <div id="ds-body" aria-live="polite"><span class="meta" data-i18n="settings.device.loading">讀取中…</span></div>
+    <p class="meta" id="ds-note" role="status"></p>
   </section>
 
   <dialog id="restore-dlg">
@@ -1947,6 +1972,9 @@ $("ar-years").onchange = async (e) => {
   try { showArchive(await jput(`${ARCH}/settings`, { retention_years: +e.target.value })); $("ar-msg").textContent = t("settings.arch.saved"); }
   catch (err) { $("ar-msg").textContent = t("settings.arch.failed", { msg: err.message.slice(0, 80) }); loadArchive(); }
 };
+// ---- 這台裝置的離線資料 (SP-322, device_storage.js) ----------------------------------------
+$("device").addEventListener("click", (e) => { const q = e.target.closest("button.q"); if (q) $("ds-note").textContent = q.title; });
+if (window.DeviceStorage) DeviceStorage.mount($("ds-body"), { t });
 
 // ---- 分頁 (SP-213) ------------------------------------------------------------------------
 // which tab each section is on; a section not listed goes to 進階設定. A URL hash picks the
@@ -1954,7 +1982,7 @@ $("ar-years").onchange = async (e) => {
 const TABS = {
   personal: ["general", "sport", "map"],
   body: ["hr", "thresholds", "power"],
-  data: ["sync", "backup", "archive", "calendar"],
+  data: ["sync", "backup", "archive", "device", "calendar"],
   advanced: ["mode", "calib", "fixes", "debugapi"],
 };
 const TAB_OF = Object.fromEntries(Object.entries(TABS).flatMap(([k, ids]) => ids.map((id) => [id, k])));

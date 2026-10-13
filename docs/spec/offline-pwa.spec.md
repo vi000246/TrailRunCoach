@@ -14,9 +14,9 @@ reason (never queued). Back online the copy refreshes by itself. One copy per br
 person signed in there; it goes on sign-out and when someone else signs in. Not in the demo.
 
 Tickets: SP-314 (this), SP-319 (the tiers and the 20 MB budget, `docs/research/fit-on-device.md`
-§9.2, §9.3, §12 #1), SP-307 (`docs/research/local-first-sync.md` §7, §10, §11 #7). Follow-ups:
-SP-322 (the settings page shows the copy: size, persistence, the home-screen hint), SP-325 (charts
-drawn on the device — the API the empty p2 tier waits for).
+§9.2, §9.3, §12 #1), SP-307 (`docs/research/local-first-sync.md` §7, §10, §11 #7), SP-322 (設定 ›
+這台裝置的離線資料: size, tiers, persistence, the home-screen hint; §3, §12 #2). Follow-up: SP-325
+(charts drawn on the device — the API the empty p2 tier waits for).
 
 ## Architecture
 
@@ -41,6 +41,7 @@ drawn on the device — the API the empty p2 tier waits for).
 | Rules + engine | what is kept, whose, when refilled, what is dropped | `backend/static/offline_core.js` |
 | Pages | register, offline bar, write guard, locked controls, sign-out clear, 加到主畫面 hint, manifest links | `backend/static/shell.js` (`// ---- offline copy (SP-314)`) |
 | Fallback page | a page not kept, offline | `backend/static/offline.html` (+ `i18n/*/offline.json`) |
+| Settings block | 設定 › 資料同步 › 這台裝置的離線資料 (SP-322) | `backend/static/device_storage.js` (`window.DeviceStorage`), `settings.html` `#device` (+ `settings.device.*`) |
 | Icons | any (rounded), maskable, apple-touch | `backend/static/icons/` |
 
 ## What is kept (tiers, SP-319)
@@ -114,7 +115,28 @@ One fixed budget per browser: **20 MB** (`BUDGET`), program included.
 - 課表: `editable()` is false offline — sessions open read-only, nothing drags.
 - 加到主畫面: manifest + icons + `apple-mobile-web-app-*` added to `<head>` by the shell; on an
   iPhone / iPad in Safari (not installed), 總覽 shows the hint once until 「知道了」 (`trc.a2hs`).
-- `AppOffline.status()` → `{user, version, budget, bytes: {app, p0, p1, p2}, total, tiers}` (SP-322).
+- `AppOffline.status()` → `{user, version, budget, bytes: {app, p0, p1, p2}, total, tiers, present: {p0, p1, p2}}`
+  (`present`: the tier's cache still exists — the browser may delete one while `tiers` still has its record).
+
+## 設定 › 這台裝置的離線資料 (SP-322)
+
+`settings.html` `#device` on the 資料同步 tab; `device_storage.js` reads, builds a model, renders
+(`read` → `view` → `html`; `mount` wires it to the page). Device-local, nothing sent to the server.
+
+| Row | Source | Shown |
+|---|---|---|
+| 用量 | `navigator.storage.estimate().usage` (the whole origin) | `{mb} MB／預算 20 MB` + a bar (capped at 100 %, warn colour and a note over the budget) + the copy's own `status().total` |
+| P0 / P1 / P2 | `AppOffline.status()` (the worker's `tiers`, `bytes`, `present`; never recomputed) | 已存好 · MB / 部分存好（n 項沒存到）/ 沒存到 (ok 0, failed > 0) / 空間不夠，已先清掉 (ok > 0, 0 bytes) / 目前沒有要存的資料 (ok 0, failed 0: P2 until SP-325) / 還沒存 (no record, cache gone, nobody signed in) |
+| 持久保存 | `navigator.storage.persisted()` | 是 / 否 + 「要求持久保存」(`persist()`; the answer: 已取得 / 瀏覽器沒有同意 / 不能要求) |
+| 最後更新 | the newest `tiers[*].at` | device-local `YYYY-MM-DD HH:mm`, 還沒存過, + 「重新讀取」 |
+| 加到主畫面 | `isIosTab`: iPhone / iPod / iPad (incl. iPadOS as `MacIntel` + touch), not `navigator.standalone`, not `display-mode: standalone` | a note: Safari clears a tab's storage after 7 days without the site; the home-screen app is exempt and keeps its own copy (sign in again there) |
+
+- The budget is fixed at 20 MB (`DeviceStorage.BUDGET` = `offline_core.js` `BUDGET`, tested); the
+  user does not choose it (SP-319).
+- Any API missing, throwing, rejecting or answering garbage → that row says 無法取得; the worker
+  not answering (demo, no controller yet, `status()` null) → the three tiers and 最後更新 say
+  無法取得. Nothing throws out of `read` / `view` / `mount`.
+- settings.html is not a cached page (not in `PAGES`), so `device_storage.js` is not in `APP_FILES`.
 
 ## Updates
 
@@ -137,7 +159,9 @@ new worker on the next navigation (at least every 24 h), `skipWaiting` + `client
 |---|---|
 | `backend/tests/test_offline_pwa.py` (node, fake Cache Storage + server) | `classify` (only listed GETs; writes, sign-in, shares untouched), `userKeyOf`, `warmDerived`, `pickFallback`, `planEviction`, `markOfflineHtml`; offline reads the copy / online refreshes it; slow network; 5xx; pages offline + offline page; nobody known → nothing kept; sync p0 → p1 → p2, throttles, a cleared tier refilled, forced p0; another person never sees the copy; sign-out / signed out / 401 / redirect delete it; writes never kept; budget and quota eviction; install / new version; CDN with CORS |
 | `backend/tests/test_pwa_sp314.py` | the routes (owner mode), the public paths exact in sign-in mode (signed out / in), the demo mounts neither, `build_id`, the pre-cached program = what the cached pages load, every listed path is a GET route, the shell wiring (sign-out clears first), the texts in both languages |
-| `backend/tests/test_static_js_syntax.py` | `sw.js`, `offline_core.js` parse |
+| `backend/tests/test_static_js_syntax.py` | `sw.js`, `offline_core.js`, `device_storage.js` parse |
+| `backend/tests/test_device_storage_sp322.py` (node, fake `navigator.storage` / `AppOffline`) | usage vs the 20 MB budget, the bar cap, each tier state, nobody / never refilled, persisted + asking (granted / denied / no API), every API missing / throwing / garbage → 無法取得, the iPhone-tab hint (Safari tab, `navigator.standalone`, `display-mode: standalone`, iPadOS, Mac, Android), the page wiring, both languages, the budget equal to the worker's |
+| `backend/tests/test_offline_pwa.py::test_status_says_which_tiers_are_still_there` | `status().present` per tier |
 
 ## Domain Model
 
@@ -177,3 +201,4 @@ None stored server side.
 | Date | Change |
 |---|---|
 | 2026-10-13 | Created (SP-314): service worker, tiers, offline bar, write guard, manifest + icons, multi-tenant clearing |
+| 2026-10-13 | SP-322: 設定 › 這台裝置的離線資料 (`device_storage.js`, `#device` on 資料同步): usage vs 20 MB, P0/P1/P2 state, persistence + ask, last refresh, iPhone-tab home-screen hint, 無法取得 without the APIs; `status()` adds `present` per tier |

@@ -523,12 +523,17 @@
       return old;
     }
 
-    /** For the settings page (SP-322): whose copy, how big per tier, when refreshed. */
+    /** For the settings page (SP-322): whose copy, how big per tier, when refreshed, and whether
+     * each tier's cache is still there (the browser may delete one without telling the bookkeeping). */
     async function status() {
       const st = await load();
       const by = { app: 0, p0: 0, p1: 0, p2: 0 };
       for (const e of Object.values(st.entries)) by[e.kind === "app" ? "app" : e.tier] += e.bytes || 0;
-      return { user: st.user, version, budget, bytes: by, total: by.app + by.p0 + by.p1 + by.p2, tiers: st.tiers };
+      const present = {};
+      for (const tier of TIERS) {
+        try { present[tier] = !!st.user && (await caches.has(userCache(st.user, tier))); } catch (_) { present[tier] = false; }
+      }
+      return { user: st.user, version, budget, bytes: by, total: by.app + by.p0 + by.p1 + by.p2, tiers: st.tiers, present };
     }
 
     return { handleFetch, sync, setUser, setSession, clearUser, install, activate, status, enforce, bytesOf,
