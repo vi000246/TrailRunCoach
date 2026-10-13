@@ -226,18 +226,21 @@ def test_week_plan_and_projection_in_the_taper():
 # ---- SP-408: the 減量期 quality session takes its template's target -------------------------------
 
 TH_TARGET = "功率 247–263 W · 心率 160–168 bpm"        # the week's threshold row (tgt["threshold"]), CP 260
+Z3_TARGET = "心率 150–159 bpm"                         # the week's Zone 3 row (z3_hr_text), the 越野 88–95 % CP ones
 OLD_TARGET = "功率 276–302 W（106–116% CP） · 心率 175–182 bpm"   # the session's own before the taper (VO2)
 
 
 def _taper_q(day, monday, road=False, **kw):
     ss = [s("quality", "quality", day, target=OLD_TARGET, source="Seiler")]
-    O.taper_rules(ss, tc(trail=not road), monday, road=road, cp=260.0, q_target=TH_TARGET, **kw)
+    O.taper_rules(ss, tc(trail=not road), monday, road=road, cp=260.0, q_target=TH_TARGET, z3_target=Z3_TARGET,
+                  **kw)
     return ss[0]
 
 
 @pytest.mark.parametrize("day, monday, road, tmpl, text", [
-    ("2026-10-06", date(2026, 10, 5), False, ("full", "trail"), "功率 229–247 W（88–95% CP） · 心率 160–168 bpm"),
-    ("2026-10-09", date(2026, 10, 5), False, ("cut", "trail"), "功率 229–247 W（88–95% CP） · 心率 160–168 bpm"),
+    # SP-408 (the user 2026-10-13): the 越野 88–95 % CP ones take the Zone 3 row's HR, not the threshold row's
+    ("2026-10-06", date(2026, 10, 5), False, ("full", "trail"), "功率 229–247 W（88–95% CP） · 心率 150–159 bpm"),
+    ("2026-10-09", date(2026, 10, 5), False, ("cut", "trail"), "功率 229–247 W（88–95% CP） · 心率 150–159 bpm"),
     ("2026-10-06", date(2026, 10, 5), True, ("full", "road"), "功率 247–263 W（95–101% CP） · 心率 160–168 bpm"),
     ("2026-10-09", date(2026, 10, 5), True, ("cut", "road"), "功率 247–263 W（95–101% CP） · 心率 160–168 bpm"),
     ("2026-10-13", date(2026, 10, 12), False, ("short", None), "功率 255–265 W（98–102% CP） · 心率 160–168 bpm"),
@@ -262,13 +265,13 @@ def test_taper_quality_takes_its_templates_target(day, monday, road, tmpl, text)
 
 
 def test_taper_quality_target_follows_the_basis_and_never_keeps_the_old_text():
-    """SP-408: 課表偏好 目標依據 心率 → only the threshold row's HR (pushed as is), never the old session's
-    (VO2) HR; 功率 → only the power; no CP and no threshold text → empty, not the old text."""
+    """SP-408: 課表偏好 目標依據 心率 → only the HR (the 越野 one's Zone 3 row since 2026-10-13; pushed as
+    is), never the old session's (VO2) HR; 功率 → only the power; no CP and no HR text → empty, not the old text."""
     from backend.sync import coros_workouts as CW
     x = _taper_q("2026-10-06", date(2026, 10, 5), prefs=PP.Prefs(target_basis="hr"))
-    assert x["target"] == "心率 160–168 bpm"
+    assert x["target"] == "心率 150–159 bpm"
     rep = CW.session_steps({**x, "basis": "hr"}, CW.Thresholds.of({"cp": 260.0, "lthr": 170.0}))[1]
-    assert rep.steps[0].intensity == ("hr", 160, 168)
+    assert rep.steps[0].intensity == ("hr", 150, 159)
     x = _taper_q("2026-10-06", date(2026, 10, 5), prefs=PP.Prefs(target_basis="power"))
     assert x["target"] == "功率 229–247 W（88–95% CP）"
     ss = [s("quality", "quality", "2026-10-06", target=OLD_TARGET)]
@@ -317,8 +320,71 @@ def test_taper_trail_quality_minutes_are_the_structures(day, monday, tmpl, minut
     x = _taper_q(day, monday)
     assert x["minutes"] == t["minutes"] == minutes
     th = {"cp": 260.0, "lthr": 170.0, "aet": 150.0}
-    tot = WS.totals(WS.derive(x, th), WS.Ctx.of({**th, "basis": "power"}))
+    # the session's own basis (target_policy: 「hill」 → power); SP-408 fixed this from Ctx.of({**th, "basis":
+    # "power"}), whose dict key Ctx.of ignores (→ HR, the target text's HR row)
+    ctx = WS.session_ctx(x, th)
+    assert ctx.basis == "power"
+    tot = WS.totals(WS.derive(x, th), ctx)
     assert tot["sec"] == minutes * 60
     assert _pushed_seconds(CW.session_steps(x, CW.Thresholds.of(th))) == minutes * 60
     if tmpl != "short":
         assert x["tss"] == pytest.approx(tot["tss"], rel=0.05)
+
+
+# ---- SP-408 (the user 2026-10-13): the 越野 減量 tempo's HR is Zone 3, not the threshold row ---------
+
+HRZ = {"work": {"Z3sub": [150.4, 158.6], "Z3near": [159.0, 168.0]}}      # a 課表心率區間 (hr_profile.plan_hr_zones)
+
+
+def test_z3_hr_text_is_the_zone_3_row():
+    """z3_hr_text: the 課表心率區間's Z3 (hr_profile.work_band — what a library Z3sub step pushes), else
+    AeT–LTHR (interval_library.session_for / workout_steps.HR_WORK's Z3sub), else nothing."""
+    assert O.z3_hr_text(HRZ, 140.0, 170.0) == "心率 150–159 bpm"
+    assert O.z3_hr_text(None, 148.0, 170.0) == "心率 148–170 bpm"
+    assert O.z3_hr_text(None, None, 170.0) == "" and O.z3_hr_text(None, 148.0, None) == ""
+
+
+@pytest.mark.parametrize("basis", ["auto", "hr"])
+def test_trail_taper_tempo_card_structure_and_push_use_zone_3(basis):
+    """The 越野 減量 上坡節奏跑 (88–95 % CP): the card, the structure and the watch (目標依據 心率) all say
+    the Zone 3 row — not the threshold row (Zone 4) the session used to take."""
+    from backend.engine import workout_steps as WS
+    from backend.sync import coros_workouts as CW
+    z3 = O.z3_hr_text(HRZ, 140.0, 170.0)
+    for day in ("2026-10-06", "2026-10-09"):                                 # the full one, the shorter one
+        ss = [s("quality", "quality", day, target=OLD_TARGET)]
+        O.taper_rules(ss, tc(), date(2026, 10, 5), cp=260.0, q_target=TH_TARGET, z3_target=z3,
+                      prefs=PP.Prefs(target_basis=basis))
+        x = ss[0]
+        assert "上坡節奏跑" in x["title"] and "心率 150–159 bpm" in x["target"] and "160–168" not in x["target"]
+        assert "hr_cls" not in x                                             # template-only key
+        th = {"cp": 260.0, "lthr": 170.0, "aet": 140.0, "hr_model": HRZ}
+        work = WS.derive(x, th)["items"][1]["items"][0]["target"]
+        hr = (work["lo"], work["hi"]) if work["type"] == "hr" else tuple(work["hr"])
+        assert hr == (150, 159)                                              # the structure = the card
+        rep = CW.session_steps({**x, "basis": "hr"}, CW.Thresholds.of(th))[1]
+        assert rep.steps[0].intensity == ("hr", 150, 159)                    # the watch = the card
+
+
+@pytest.mark.parametrize("day, monday, road", [
+    ("2026-10-06", date(2026, 10, 5), True), ("2026-10-09", date(2026, 10, 5), True),      # road full / cut
+    ("2026-10-13", date(2026, 10, 12), False),                                              # the short one
+])
+def test_other_taper_quality_keeps_the_threshold_row(day, monday, road):
+    """Only the 越野 88–95 % CP ones changed: road 95–101 % and the short 98–102 % keep the threshold row."""
+    x = _taper_q(day, monday, road)
+    assert x["target"].endswith("心率 160–168 bpm")
+
+
+def test_week_plan_and_projection_trail_taper_tempo_take_zone_3():
+    """week_plan and the projection pass the week's Zone 3 row (z3_hr_text of its thresholds) to the taper
+    rules: the 越野 上坡節奏跑 says it, the short one keeps the threshold row."""
+    ds, plan, wp = _week("2026-10-17")          # 10/03–10/16 taper: this week's 10/02– gets the full one
+    th = wp["thresholds"]
+    z3 = O.z3_hr_text(th.get("hr_model"), th.get("aet"), th.get("lthr"))
+    assert z3
+    weeks = PJ.project_weeks(wp, _phases(plan, TODAY), date(2026, 10, 25), events=plan.events)
+    trail = [x for w in [{"sessions": wp["sessions"]}] + weeks for x in w["sessions"]
+             if x["kind"] == "quality" and not x.get("done")
+             and x["title"] in (O.TAPER_FULL["trail"]["title"], O.TAPER_CUT["trail"]["title"])]
+    assert trail and all(x["target"].endswith(z3) for x in trail)
