@@ -1,4 +1,5 @@
-/* Dashboard icons shared by 總覽 (overview.html) and 圖表分析 本次重點 (wko5_viewer.html).
+/* Dashboard icons shared by 總覽 (overview.html), 圖表分析 本次重點 (wko5_viewer.html) and the
+ * 課表 session cards (sesschip.js).
  *
  *   <script src="/api/v1/static/dashicons.js"></script>
  *   DI("zap")                 -> an inline <svg> string (1em, currentColor, aria-hidden)
@@ -24,6 +25,9 @@
     heat: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
     rest: '<path d="M20.5 14.5A8.5 8.5 0 1 1 9.5 3.5a7 7 0 0 0 11 11Z"/>',
     notice: '<circle cx="12" cy="12" r="9.5"/><path d="M12 16v-5M12 8h.01"/>',
+    // activities no session holds (課表 cards, SP-395): a ride, anything else
+    bike: '<circle cx="6" cy="16" r="3.5"/><circle cx="18" cy="16" r="3.5"/><path d="M6 16 10 7h4l4 9M10 7h5"/>',
+    other: '<circle cx="12" cy="12" r="3"/>',
     // status (always next to a word)
     good: '<circle cx="12" cy="12" r="9.5"/><path d="m8 12.5 2.8 2.8L16.5 9"/>',
     watch: '<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4.5M12 17h.01"/>',

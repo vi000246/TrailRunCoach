@@ -137,31 +137,21 @@ p.meta, p.note { color:var(--muted); margin:6px 0 10px; font-size:12px; max-widt
 <tr><td style="padding:4px 8px">改動量</td><td style="padding:4px 8px">小</td><td style="padding:4px 8px">小</td><td style="padding:4px 8px">中</td></tr>
 </table>
 
+<!-- SP-395: the type icons and the completion ring come from the app's own scripts -->
+<script src="../../backend/static/dashicons.js"></script>
+<script src="../../backend/static/sesschip.js"></script>
 <script>
-const I = {
-  easy:'<path d="M19 14c1.5-1.5 3-3.2 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.8 0-3 .5-4.5 2-1.5-1.5-2.7-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4 3 5.5l7 7Z"/>',
-  z5:'<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>', z3:'<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',
-  long:'<path d="m8 4 4 7 3-3 7 12H2L8 4z"/>', hike:'<path d="m8 4 4 7 3-3 7 12H2L8 4z"/><path d="m6.5 13 2 1.5L11 12"/>',
-  test:'<path d="M9 2v6.5L4.2 18.6A2 2 0 0 0 6 21.5h12a2 2 0 0 0 1.8-2.9L15 8.5V2"/><path d="M7.5 2h9M6.5 15h11"/>',
-  strength:'<path d="M6.5 6v12M17.5 6v12M3 9.5v5M21 9.5v5M6.5 12h11"/>', rest:'<path d="M20.5 14.5A8.5 8.5 0 1 1 9.5 3.5a7 7 0 0 0 11 11Z"/>',
-  race:'<path d="M4 21V4"/><path d="M4 4.5c3-2 6 0 8 1s5 1.5 8-.5v9c-3 2-6 1.5-8 .5s-5-3-8-1"/>',
-  heat:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
-  notice:'<circle cx="12" cy="12" r="9.5"/><path d="M12 16v-5M12 8h.01"/>',
-  bike:'<circle cx="6" cy="16" r="3.5"/><circle cx="18" cy="16" r="3.5"/><path d="M6 16 10 7h4l4 9M10 7h5"/>', other:'<circle cx="12" cy="12" r="3"/>' };
 const TN = { easy:"輕鬆跑", z3:"有氧間歇／閾值", z5:"VO2max／速度", long:"LSD／長跑", hike:"越野跑／健行", test:"測試", strength:"肌力", race:"比賽", heat:"熱適應", rest:"休息", notice:"課表待確認", bike:"單車（課表外）", other:"其他活動" };
 const SY = { warn:'<svg viewBox="0 0 16 16" style="color:var(--watch)"><path d="M5.6 1h4.8l.7 2.3H4.9zM5.6 15h4.8l.7-2.3H4.9z" fill="currentColor"/><rect x="2.6" y="2.6" width="10.8" height="10.8" rx="3" fill="currentColor"/><path d="M8 5.5v3.2M8 10.6h.01" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/></svg>',
   bad:'<svg viewBox="0 0 16 16" style="color:var(--bad)"><path d="M5.6 1h4.8l.7 2.3H4.9zM5.6 15h4.8l.7-2.3H4.9z" fill="currentColor"/><rect x="2.6" y="2.6" width="10.8" height="10.8" rx="3" fill="currentColor"/><path d="M5.8 5.8l4.4 4.4M10.2 5.8l-4.4 4.4" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/></svg>' };
-const R=6, C=2*Math.PI*R;
-const circ = (inner, dash="") => `<svg viewBox="0 0 16 16" class="cg"><circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" stroke-width="1.5" ${dash}/>${inner}</svg>`;
+// SessChip.ring (backend/static/sesschip.js): done check / partial pie / off_plan slash / missed + todo empty / provisional dotted
 const G = {
-  pie: pct => circ(`<circle cx="8" cy="8" r="${R/2}" fill="none" stroke="currentColor" stroke-width="${R}" stroke-dasharray="${Math.min(1,pct/100)*C/2} ${C/2}" transform="rotate(-90 8 8)"/>`),
-  check: () => circ('<path d="m5 8.3 2 2L11 6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>'),
-  slash: () => circ('<path d="M11 5 5 11" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>'),
-  todo: () => circ(""), dotted: () => circ("", 'stroke-dasharray="2 1.6"'),
+  pie: pct => SessChip.ring("partial", pct), check: () => SessChip.ring("done"), slash: () => SessChip.ring("off_plan"),
+  todo: () => SessChip.ring("todo"), dotted: () => SessChip.ring("todo", null, { prov: true }),
 };
-const svg = k => `<svg viewBox="0 0 24 24" aria-hidden="true">${I[k]}</svg>`;
+const svg = k => DI(k);
 // 狀態 → 圓圈與文字（同 compliance.status_of：done / partial / off_plan / missed；未來：todo / prov）
-const ring = s => s.state==="miss" ? G.todo() : s.cp==="off" ? G.slash() : s.cp==="ok" ? G.check() : s.cp ? G.pie(s.pct ?? 100) : s.prov ? G.dotted() : G.todo();
+const ring = s => SessChip.ring(s.state==="miss" ? "missed" : s.cp==="off" ? "off_plan" : s.cp==="ok" ? "done" : s.cp ? "partial" : "todo", s.pct ?? 100, { prov: s.prov });
 const label = s => s.state==="miss" ? "跳過" : s.cp==="off" ? "換了課" : s.cp==="ok" ? "完成" : s.cp ? `部分 ${s.pct ?? 100}%` : s.prov ? "暫定" : "還沒做";
 const chip = s => {
   const cls = ["chip", s.state, s.cp ? "cp-"+s.cp : "", s.prov ? "prov" : "", s.act ? "act" : ""].join(" ");

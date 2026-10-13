@@ -1273,6 +1273,16 @@ chips and week rows, the workout review 「課表」 card and the 課表統計 p
 `api/plan_sessions.session_est_tss` (`backend/api/plan_sessions.py:2510`; rates from the dataset's
 TSS / h and `plan_store.rate_rows`, only computed for a row without a TSS).
 
+SP-402 (2026-10-13; `docs/research/positive-compliance.md` §4 原則 5 「不確定就不扣」): an activity
+row carries `hr_quality` — the whole run's SP-266 HR check (`workout_review.run_hr_quality`,
+spike + step + flat seconds > 3 % of the recording or a step = "low", else "ok", None without HR; its
+own `cached_series` row `hr_quality_run_v1` per activity, computed when a row first asks, not part of
+`measure`; `overview.activity_row` / `hr_quality_of`) and so a done session's `done_by.hr_quality`.
+"low" → `session_compliance` grades on time only (TSS shown, never grading down; the headline % is
+time's) and returns `uncertain: True`; `with_plan_check` then ignores an intensity shortfall (`vs.short`)
+too (換了課 / another sport stays). The 課表 card's hover, the dialog's 完成盒 and the 總覽 hover add
+「心率品質不穩，依時間判定」 (`SessChip.hrNote`, `common.legend.hr_uncertain`). 推估 (the 3 % line is SP-266's).
+
 **Concurrency**: plan writes are serialized by one asyncio lock per event loop
 (`_wlock`, `backend/api/plan_sessions.py:454`), so two tabs or a preview racing a push cannot
 generate the same week twice. Pushes to the watch take a separate push lock (`_plock`,
@@ -1452,9 +1462,12 @@ which one. The response keeps the `coros` field names.
   remembered per browser; SP-122, `backend/static/overview.html:899`); 做了什麼 (period totals, the tables
   behind 詳細數字); 指標 as compact cards (value, sparkline, one-line verdict; why / action /
   source behind 詳細, `loadStatus`, `backend/static/overview.html:443`); **本週** as seven
-  day-cards — one icon + colour per session type (輕鬆, 3 區, 5 區, LSD, B2B, 負重, 測試, 肌力 …),
-  ✓ and the compliance colour when done, activities outside the plan with their session class,
-  a click opens the 課表 page on that day (`dayHtml` / `renderPlan`,
+  day-cards — since SP-397 the 課表 page's card (sesschip.js: the same type icon, no type colour,
+  the same left bar and ring for the same session; `sessHtml` / `extraHtml`, block 「this week card」),
+  the % in the hover for every done session (「完成 92%（TSS … · 時間 …）」, no thresholds), the
+  watch worded with the provider (「COROS 未推送」, `overview.week.sy.*`), activities outside the plan
+  dotted with their category's icon, the type legend under it as icon + word (SP-399 turns it into the
+  shared `?`); a click opens the 課表 page on that day (`dayHtml` / `renderPlan`,
   `backend/static/overview.html:666`, `backend/static/overview.html:678`), the week notes and a 詳細
   with the bars, the reasons, CTL → Sunday, next-Monday TSB and the thresholds line (incl. the
   輕鬆跑上限 and its `?`) (`loadWeek`, `backend/static/overview.html:711`); the bottom row holds the
@@ -1586,12 +1599,59 @@ which one. The response keeps the `coros` field names.
   `SYNC_BUSY` is a hint, not an error. When it ends the calendar reloads (new activities pair:
   ✓／未完成) and, if anything was downloaded, reloads once more ~5 s later together with the
   自動調整 box (`window.autoPlanRefresh`) for the background `plan_auto.after_sync`.
-- **Calendar status glyphs** (2026-10-04): 完成 = the chip itself (✓ before the title + compliance
-  colour, ≠, 未完成, ● activity chips). 推送狀態 = a small watch at the chip's top right, only on
-  active sessions today or later (`SYNC` / `SY_SVG`, `backend/static/schedule.html:952`): 已推送
-  neutral grey outline, 需更新 yellow, 失敗 red, 未推送 dashed; labels are provider-neutral
-  (手錶). ✓ is never used for push. The legend has two titled groups, 完成 and 手錶
-  (`renderLegend`, `backend/static/schedule.html:1179`). 已推送 stays visible (subtle).
+- **Calendar cards** (2026-10-13, SP-396; was 「Calendar status glyphs」 2026-10-04 — ✓ before the
+  title, the compliance tint over the type colour, ≠ / ◐, 未完成 struck through, ● activity chips,
+  a watch on every future chip). `chipHtml` (`backend/static/schedule.html`, block 「session card」)
+  draws a session with sesschip.js (below): the type tile (no type colour any more; 「熱」 tag → the
+  sun icon; ↻／✎ in the tile's corner), the title, then the right column — the completion ring and,
+  on an active session today or later, the watch **only for 需更新 / 失敗** (`WATCH_ON_CARD`); minutes /
+  TSS under it. Done = white card with a 4px left bar (green 完成, yellow 部分 / 換了課) + check / pie /
+  slash; 跳過 (missed) = grey text, grey outline, empty ring, no bar, no strike-through; not done yet =
+  outline + empty ring; 暫定 = dashed outline + dotted ring (the week row's 135° hatch is gone);
+  沒排課的活動 = dotted outline + its category's icon. The month view hides the second line (what was
+  actually run / the target); the week view and the agenda keep it and add the verdict
+  (`verdict(s)`: 「部分 72% · 強度不足」, 「換了課 · 排強度課，實際騎車」, the status words of
+  `common.legend.status.*` + `cardWhy`). Hover: title, family, minutes / TSS, the verdict with
+  「TSS 74% · 時間 87% · 強度 72%」 (`compNums`, no thresholds), the long reason, the actual run, target,
+  detail, the ⚠ 自動調整 note (moved off the card), the ↻／✎ lines, the watch. aria-label in the
+  reading order of design §7.1: 類型：標題，時間，TSS，完成度一句話，暫定，改過，手錶. A 7-column month
+  grid under 700 px would show tile + bar + ring only (phones get the agenda, so this only guards the
+  grid). The session dialog's 完成盒 (`vsHtml`, block 「done box」): ring + status + % + reason on the
+  first line, the three numbers on the next, **one** `?` (the levels and the pairing rule together),
+  then 計畫／實際 and the long reason; 跳過 = empty ring + 跳過; the ⚠ note in `--watch` (was a
+  hard-coded orange); a new line `#sd-watch` 「手錶（COROS）：已推送／需更新…／推送失敗／未推送」
+  (`schedule.sy.line`) for the states a card no longer draws. The week summary and the legend are
+  unchanged here (SP-401).
+- **Legend** (2026-10-13, SP-399; design §7): the 課表 page's legend row is one 「? 圖例」
+  (`<details class="sc-leg">`, `SessChip.legend`, `renderLegend`), the same table as the 總覽 本週
+  list's: 類型 (every icon with its name), 完成度 (the six rings with their rule; the thresholds only
+  here, from the payload's `compliance_levels`; the intensity's 80 % / 50 % in the words), 其他 (↻,
+  ✎, the dotted activity card + the page's rows: 需更新 / 推送失敗 watch, 不排課 hatch, 休息日, 交換,
+  the week's phase bar, the pairing rule — each long explanation behind its own `?`). The dialog's
+  single `?` reads the same 完成度 rules as text (`SessChip.levelsText`) + the pairing rule. Gone from
+  both pages: `.k-*` / `--k` / `.fam-*` type colours, `.ty-*`, `--s1…s7` and `--qf2/3` on the 課表 page
+  (phase colours are `--ph-*` tokens; 休息日 uses `--good`; 睡在高處 `--line`), `.heat-tag`, `.offp-i` /
+  `.part-i` / `.offp` / `.part`, `.cp-green|yellow|red` and `.cpw`, `.chip.k-notice`, `CAT_VAR`; the
+  editor's 類型 radios show the type icon instead of a colour dot (`label[data-kind]`). Words in
+  `common.legend.*`; `schedule.legend.*` (7), `vs.short_legend`, `vs.levels_tip` and
+  `overview.week.short_aria` removed.
+- **課表卡片元件** (2026-10-13, SP-395; design `docs/research/schedule-chip-ui.md` §6–7, §10 ①,
+  mockup `docs/research/schedule-chip-ui-mockup.html`, which now loads the app's own scripts).
+  `backend/static/sesschip.js` (`window.SessChip`) holds the parts both the 課表 page and the 總覽
+  本週 list draw a session from, one channel per question: `kind(s)` / `actKind(a)` = the type icon
+  (dashicons.js; 強度課 by family — 有氧間歇 z3, VO2max 間歇／速度 z5 — 熱適應 by the title = sun,
+  B2B / 負重 as on the 總覽; an activity by its category, a run by its session class; `bike` and
+  `other` added to dashicons.js), `icon(key, {fam, badge})` = the 22px tile, icon not coloured,
+  ↻／✎ (`PlanMark.icon(s, true)`) in its corner; `status(s)` = done / partial / off_plan / missed /
+  todo, the same rule as `compliance.status_of`; `ring(status, pct, {prov})` = the Linear-style
+  16px ring: check, pie filled to `pct` (a circle of r 3 stroked 6 wide, dash = pct × 6π, capped at
+  100 %), slash, empty (跳過 and 還沒做), dotted (暫定); `cls(s)` = `done cp-ok|cp-part|cp-off`,
+  `miss`, `fut [prov]`; `label()` = 完成／部分 72%／換了課／跳過／還沒做／暫定
+  (`common.legend.status.*`, zh-TW + en). Its injected CSS (`SessChip.CSS`) gives a card with
+  class `sc` the shared look: 1px outline, done = 4px left bar in `--cp` (green `--good` for done,
+  yellow `--watch` for partial and off_plan), `prov` dashed, `miss` grey, `act` dotted.
+  **No red for completion** (SP-393: red is only a failed push); the backend's `level` is not read
+  by the card.
 - **強度課的家族** (2026-10-04, SP-32; `docs/research/coach-schools-zones-periodization.md` R1). One
   classifier, `workout_templates.family_of` (`backend/engine/workout_templates.py:618`, rule in
   `classify`, `backend/engine/workout_templates.py:594`), splits a structure's `work` steps by
@@ -2429,3 +2489,8 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 | 2026-10-12 | feat/trail-climb-sessions-sp87 | SP-87 (found by the kind change) | The 專項期 技術地形 RPE 6–7 session (a hard day) stays out of the easy days after an accepted B2B (`b2b.post.until`, kept in `technical.week_context` as `b2b_until`), like the downhill session and the 長爬坡反覆; without another spaced day it is the RPE 4–5 one (easy). Before, it could land there (kind hike hid it from `test_b2b.py::test_week_after_an_accepted_b2b_easy_days_no_recovery_week`). Test: `backend/tests/test_technical.py::test_the_quality_session_stays_out_of_the_easy_days_after_a_b2b` |
 | 2026-10-12 | perf | SP-394 第 4 條 | A first import (and a re-parse) builds the last 90 days first: the status and the plan inputs come before the back-fill of the older activities, whose progress shows under the nav; the PMC counts the 90 days until the complete Dataset is in. A request's Dataset build is a `build` job of the queue. Tests: `backend/tests/test_queue_hot_first_sp394.py` |
 | 2026-10-13 | perf | SP-394 第 4 條 (owner 2026-10-13) | Hot first only on a first import (a re-parse / an import into an account with activities: whole); CTL never shown wrong — during the back-fill the status cards that read further back (`STATUS_READS`), `/pmc`, `/weekplan` and the 課表 projection's CTL / ATL / TSB, older `/summary` periods, the Z5 card, 賽事評估 and the threshold estimate / check answer 「計算中（較舊的活動補算中 n／N）」 until the complete Dataset; the overview reloads when it is in. Tests: `backend/tests/test_queue_hot_first_sp394.py` |
+| 2026-10-13 | feat/session-cards-sp395-402 | SP-395 (docs/research/schedule-chip-ui.md §10 ①) | Shared session-card parts `backend/static/sesschip.js` (`SessChip.kind` / `actKind` / `status` / `cls` / `label` / `ring` / `icon`, `SessChip.CSS`): type icon tile, Linear-style completion ring (check / pie to the % / slash / empty / dotted), green / yellow / grey only; `bike` / `other` in dashicons.js; `common.legend.status.*` (zh-TW + en); the mockup loads the app's scripts. Tests: `backend/tests/test_sesschip.py` |
+| 2026-10-13 | feat/session-cards-sp395-402 | SP-396 (docs/research/schedule-chip-ui.md §8.1, §8.3, §10 ②) | 課表 cards on `SessChip`: type tile instead of type colours, left bar + Linear ring by status (no ✓ / ◐ / ≠ / 熱 / 未完成 / strike-through, no red), the watch only for 需更新 / 失敗, provisional = dashed card (week hatch removed), activity cards dotted with an icon, aria-label in the §7.1 order, ⚠ note to hover + dialog; the dialog's 完成盒 = ring + verdict, the three numbers, one `?`, plus a 手錶 status line (`schedule.sy.line`, `vs.time_pct`). Tests: `backend/tests/test_schedule_cards_sp396.py`; `test_swap_sp359` class-template check and the e2e selectors follow the new classes (`data-kind`) |
+| 2026-10-13 | feat/session-cards-sp395-402 | SP-397 (docs/research/schedule-chip-ui.md §8.4, §10 ③) | 總覽 本週 cards on `SessChip` like the 課表 page (same icon, bar colour, ring): `.ty-*` type tiles, the `.ok` ✓ corner, the ≠ / ◐ prefix, the faded strike-through of a missed session and the dead `.mini.*` CSS removed; the type list (`TYPES` / `stype` / `actTy`) is sesschip.js's (`SessChip.kind`, `typeName` → `common.legend.type.*`); hover: the verdict with its % for every done session, no thresholds, the watch with `provider_label` and `not_pushed` worded (`overview.week.sy.*`); `overview.week.short_aria` removed. Tests: `backend/tests/test_overview_cards_sp397.py` (same parts as the 課表 card per status); `test_review_cards` reads the type names from `common.legend.type.*` |
+| 2026-10-13 | feat/session-cards-sp395-402 | SP-399 (docs/research/schedule-chip-ui.md §7, §10 ⑤) | Old card styles removed from 課表 / 總覽 (type colours `.k-*` / `--k` / `.fam-*` / `.ty-*`, `--s1…s7` + `--qf*` on the 課表 page → `--ph-*` phase tokens, `.heat-tag`, `.offp-i` / `.part-i`, completion `.cp-*` / `.cpw`, `CAT_VAR`); one 「? 圖例」 on both pages (`SessChip.legend` / `levelsText`, thresholds from `compliance_levels`, `common.legend.*` zh-TW + en, page rows `schedule.lg.*`); editor type radios with icons; orphan keys removed. Tests: `backend/tests/test_legend_cleanup_sp399.py` (the ticket's grep, no orphan keys in common / schedule / overview, the legend's sections); e2e watch-glyph test opens the legend and expects the two states |
+| 2026-10-13 | feat/session-cards-sp395-402 | SP-402 (docs/research/positive-compliance.md §4 原則 5, §8 ④) | Unreliable optical HR doesn't grade a session down: `workout_review.run_hr_quality` (whole-run SP-266 check, cached per activity) → activity row / `done_by.hr_quality`; `compliance.session_compliance` with "low" grades on time only + `uncertain`, `with_plan_check` skips an intensity shortfall for it; card hover / dialog / 總覽 hover 「心率品質不穩，依時間判定」 (zh-TW + en). Tests: `backend/tests/test_compliance_hr_quality.py` |
