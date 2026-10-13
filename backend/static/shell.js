@@ -724,6 +724,15 @@
   as.defer = true;
   document.head.appendChild(as);
 
+  // SP-324: the remembered FIT folder (desktop Chrome / Edge only) imports its new files on open
+  if (typeof window.showDirectoryPicker === "function" && can("upload.fit")) {
+    const ff = document.createElement("script");
+    ff.src = "/api/v1/static/fitfolder.js";
+    ff.dataset.auto = "1";
+    ff.defer = true;
+    document.head.appendChild(ff);
+  }
+
   // the floating suggestion box (B2B weekends, due tests, zone retests): every page shows it
   const sg = document.createElement("script");
   sg.src = "/api/v1/static/suggestions.js";

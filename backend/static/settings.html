@@ -140,6 +140,7 @@ main > section.tab-off { display: none; }
 <script src="/api/v1/static/calib_chip.js"></script>
 <script src="/api/v1/static/syncrun.js"></script>
 <script src="/api/v1/static/fitimport.js"></script>
+<script src="/api/v1/static/fitfolder.js"></script>
 <script src="/api/v1/static/device_storage.js"></script>
 <header>
   <h1>設定</h1>
@@ -462,6 +463,8 @@ main > section.tab-off { display: none; }
     <div class="src" id="src-upload">
       <h3 data-i18n="common.fitimport.open">匯入 FIT 檔</h3>
       <div id="fit-import"></div>
+      <!-- SP-324: 自動匯入資料夾 (desktop Chrome / Edge: showDirectoryPicker; static/fitfolder.js; hidden elsewhere) -->
+      <div id="fit-folder" hidden></div>
     </div>
   </section>
 
@@ -2149,6 +2152,8 @@ loadAccount();
 loadSyncSettings().then(loadSources).catch((e) => toast("同步設定載入失敗：" + e.message.slice(0, 80)));
 // 匯入 FIT (SP-323): the imported files sit in the 資料來源's folder, so its stats change too
 if (window.FitImport) FitImport.mount($("fit-import"), { listLink: true, onDone: (r) => { if (r.added || r.duplicate) loadSources(); } });
+// 自動匯入資料夾 (SP-324): only desktop Chrome / Edge show it (FitFolder.mount hides it elsewhere)
+if (window.FitFolder) FitFolder.mount($("fit-folder"), { onDone: (r) => { if (r.added || r.duplicate) loadSources(); } });
 </script>
 <script src="/api/v1/static/debug_api.js"></script>
 </body>
