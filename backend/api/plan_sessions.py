@@ -3079,7 +3079,8 @@ def _plan_notes(inp: dict, start: str, end: str) -> list[dict]:
         if ep and not easy_power:
             out.append({"week_start": ws, **ep})
             easy_power = True
-    return out
+    from backend.engine import hints as H
+    return H.notes(out)            # SP-482: with the hint fields (engine/hints.py)
 
 
 def _fresh_done_by(s: dict, acts_by: dict) -> dict:

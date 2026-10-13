@@ -842,7 +842,8 @@ def test_T15_hike_plan_and_coros_preview(client, monkeypatch):
     assert r.status_code == 200, r.text
     j = r.json()
     assert len(j["days"]) == 2 and j["summary"]["acclimatisation"] == "partial"
-    assert any("部分適應" in w for w in j["warnings"])
+    # SP-482: the response's warnings are hint objects (engine/hints.py); the partial-acclimatisation line is RC13
+    assert any("部分適應" in w["text"] and w["id"] == "RC13" for w in j["warnings"])
     from backend.api import racepower as RP
     from backend.tests.test_coros_workouts import make_db, run
     db = run(make_db())

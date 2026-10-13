@@ -53,7 +53,7 @@
     "/api/v1/static/plan_mark.js", "/api/v1/static/autoplan.js", "/api/v1/static/session_banner.js",
     "/api/v1/static/workout_editor.js", "/api/v1/static/syncrun.js", "/api/v1/static/fitimport.js",
     "/api/v1/static/painpicker.js", "/api/v1/static/sportchip.js", "/api/v1/static/fitfolder.js",
-    "/api/v1/static/eptest.js", "/api/v1/static/weight_hint.js",
+    "/api/v1/static/eptest.js", "/api/v1/static/weight_hint.js", "/api/v1/static/hints.js",
   ];
   // the chart library of 總覽 (fetched with CORS, never as an opaque answer)
   const CDN = ["https://cdnjs.cloudflare.com/ajax/libs/echarts/5.5.0/echarts.min.js"];
@@ -76,6 +76,7 @@
     "/api/v1/overview/plan/equivalence": "p0",
     "/api/v1/sync/settings": "p0",
     "/api/v1/region": "p0",
+    "/api/v1/plan/profile/hint-level": "p0",     // 提示多寡 (static/hints.js, SP-482)
     "/api/v1/wko5/activities": "p1",
     "/api/v1/wko5/activities/stats": "p1",
     "/api/v1/achievements": "p1",

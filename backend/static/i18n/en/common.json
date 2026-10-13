@@ -380,5 +380,10 @@
   "weighthint.dismiss": "No",
   "weighthint.done": "Updated to {kg} kg; the charts are recomputed",
   "weighthint.help": "The COROS account weight is a profile setting and is never written into your weight entries by itself; only “Update” does. After “No” this value is not asked about again, only a new COROS weight is.",
-  "weighthint.failed": "Not updated: {msg}"
+  "weighthint.failed": "Not updated: {msg}",
+  "hints.ack": "Got it",
+  "hints.unack": "Remind me again",
+  "hints.more": "More reminders: {n}",
+  "hints.too_many": "Too many tips?",
+  "hints.ack_failed": "Not saved, please try again"
 }

@@ -8,6 +8,7 @@ from __future__ import annotations
 import math
 from typing import Optional, Sequence
 
+from backend.engine import hints as H
 from backend.engine.racepower import re as RE
 from backend.engine.racepower import riegel as R
 
@@ -139,9 +140,9 @@ def predict_run(*, distance_km: float, cp: float, tte: float, k: float, re: floa
     }
     w = R.extrapolation_warning(t, longest_effort_s)
     if w:
-        out["warnings"].append(w)
+        out["warnings"].append(H.tag("RC14", w))
     if t > 3 * 3600:
-        out["warnings"].append("超過 3 小時的比賽，訓練中很少有真正最大努力的紀錄——個人 k 通常偏負（預估偏慢），可與查表 k 比較")
+        out["warnings"].append(H.tag("RC1", "超過 3 小時的比賽，訓練中很少有真正最大努力的紀錄——個人 k 通常偏負（預估偏慢），可與查表 k 比較"))
     if target_time_s:
         imp = improvement_needed(d_m, target_time_s, re, mass, cp, tte, k, m)
         out["target"] = {"time_s": target_time_s, **imp,
@@ -217,8 +218,8 @@ def predict_baiyue(*, day_plan: list[dict], eph: float, weight: Optional[float],
     out = {"kind": "baiyue", "days": rows, "total": tot, "eph_personal": eph, "eph_used": rate,
            "pack_factor": pack_factor, "pack_kg": pack_kg, "hist_pack_kg": hist_pack_kg, "M": m,
            "time_s": tot["moving_h"] * 3600.0,
-           "warnings": ["百岳是步行模型：以你過去登山日的 EP/h（km + 爬升/100 每小時）推估移動時間，"
-                        "不含休息、拍照、排隊；環境係數與背負係數都是保守假設"]}
+           "warnings": [H.tag("RC1", "百岳是步行模型：以你過去登山日的 EP/h（km + 爬升/100 每小時）推估移動時間，"
+                              "不含休息、拍照、排隊；環境係數與背負係數都是保守假設")]}
     if target_moving_h:
         need = tot["ep"] / target_moving_h
         out["target"] = {"moving_h": target_moving_h, "ep_per_h_needed": need,

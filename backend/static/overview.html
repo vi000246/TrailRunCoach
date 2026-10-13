@@ -9,6 +9,7 @@
 <script src="/api/v1/static/z5flow.js"></script>
 <script src="/api/v1/static/plan_mark.js"></script>
 <script src="/api/v1/static/sesschip.js"></script>
+<script src="/api/v1/static/hints.js"></script>
 <style>
 :root {
   color-scheme: light;
@@ -149,7 +150,7 @@ details.more ul { margin: 0; padding-left: 18px; }
 /* ---- status cards row ---- */
 .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; align-items: start; }
 .cards:has(#b2bcard[hidden]) #todocard { grid-column: 1 / -1; }
-.alerts { display: grid; gap: 6px; }
+.alerts { display: grid; gap: 6px; } .alerts[hidden] { display: none; }
 details.al { border: 1px solid var(--line); border-radius: 9px; padding: 0; border-left: 4px solid var(--lc, var(--line)); }
 details.al.good { --lc: var(--good); } details.al.watch { --lc: var(--watch); } details.al.bad { --lc: var(--bad); } details.al.info, details.al.na { --lc: var(--line); }
 details.al > summary { list-style: none; cursor: pointer; display: grid; grid-template-columns: 18px minmax(0, auto) minmax(0, 1fr) 12px; gap: 7px; align-items: center;
@@ -728,19 +729,35 @@ const HP = () => (PLAN && PLAN.history_pending) || (SP && SP.summary && SP.summa
 const ctlHtml = (c0, c1) => c0 == null || c1 == null ? `CTL ${esc(HP()?.message || "–")}`
   : `CTL <b>${n0(c0)}</b> → 週日 <b>${n0(c1)}</b>（${sgn(c1 - c0, (v) => v.toFixed(1))}/週）`;
 const tsbHtml = (t) => t == null ? "" : `下週一 TSB <b>${sgn(t)}</b>`;
+// one week note (its colour = the note's level)
+const noteHtml = (n) => `<details class="al ${esc(n.level)}"><summary>${I(n.level)}<b>${gl(String(n.text).split("：")[0])}</b><span class="s">${gl(String(n.text).split("：").slice(1).join("："))}</span></summary>
+    <div class="body">${gl(n.text)}</div></details>`;
+// SP-482 (static/hints.js, engine/hints.py): the week notes through 提示多寡 — class 1 in one box, at most 3
+// reminders, the rest under 「還有 N 則提醒」; ▷ / 知道了 ones in 「詳細」. Without hints.js: every note, as before
+function drawNotes(w, st) {
+  const box = $("wk-notes"), more = $("wk-notes-detail");
+  if (!box) return;
+  if (!window.Hints || !st) { box.innerHTML = (w.notes || []).map(noteHtml).join(""); box.hidden = !box.innerHTML; return; }
+  const r = Hints.render(w.notes || [], { ...st, item: noteHtml });
+  box.innerHTML = r.html; box.hidden = !r.html;
+  if (more) { more.innerHTML = r.detailHtml; more.hidden = !r.detailHtml; }
+  Hints.bind(box, (s2) => drawNotes(w, s2));
+  if (more) Hints.bind(more, (s2) => drawNotes(w, s2));
+}
 async function loadWeek() {
+  const hintsP = window.Hints ? Hints.state() : Promise.resolve(null);      // in parallel with the week
   const w = PLAN = await j(`${API}/weekplan`);
   $("wk-sub").textContent = `${md(w.week.start)}–${md(w.week.end)} · ${w.mode_label}`;
   const T = w.target, D = w.done, L = w.load;
-  const notes = (w.notes || []).map((n) => `<details class="al ${esc(n.level)}"><summary>${I(n.level)}<b>${gl(String(n.text).split("：")[0])}</b><span class="s">${gl(String(n.text).split("：").slice(1).join("："))}</span></summary>
-    <div class="body">${gl(n.text)}</div></details>`).join("");
-  $("week").innerHTML = `${notes ? `<div class="alerts" style="margin-top:10px">${notes}</div>` : ""}
+  $("week").innerHTML = `<div class="alerts" id="wk-notes" style="margin-top:10px" hidden></div>
     <details class="more"><summary>詳細</summary><div class="body">
+      <div id="wk-notes-detail" hidden></div>
       <div class="bars" id="wk-prog" style="display:grid;gap:4px;max-width:360px">${progHtml(D, T.hours, T.tss)}</div>
       <ul>${w.why.map((x) => `<li>${gl(x)}</li>`).join("")}<li>時數不含肌力；TSS 以你近 6 週每小時 ${n0(T.tss_per_hour)} TSS 換算</li></ul>
       <div><span id="wk-ctl">${ctlHtml(L.ctl_week_start, L.ctl_end)}</span> · <span id="wk-tsb">${tsbHtml(L.tsb_next)}</span></div>
       <div>門檻：${USE_POWER ? `CP ${n0(w.thresholds.cp)} W（${esc(w.thresholds.cp_source)}）· ` : ""}${esc(w.thresholds.easy_cap_label || `輕鬆跑上限 ${n0(w.thresholds.aet)} bpm`)}${q(w.thresholds.easy_cap_tip, "輕鬆跑上限")}${w.thresholds.aet_pm ? ` <span class="pmb">±${w.thresholds.aet_pm.pm} bpm${q(w.thresholds.aet_pm.tip, "AeT 誤差")}</span>` : ""}（${esc(w.thresholds.aet_source)}）</div>
       <div id="later"></div></div></details>`;
+  drawNotes(w, await hintsP);               // asked in parallel with the week: no extra wait
   renderKpis();
   // Not shown (sources live in backend/engine/overview.py SRC_*; w.rules still carries them):
   // week targets follow a weekly CTL goal of max(2, 5 %) / max(2.5, 7 %) of CTL (load_guard.ramp_goal), Uphill Athlete's

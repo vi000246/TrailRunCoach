@@ -16,6 +16,7 @@ from typing import Literal, Optional, Protocol
 
 from pydantic import BaseModel, Field
 
+from backend.engine import hints as H
 from backend.engine.algorithms.effort import SIMPLE_FORMULAS
 from backend.engine.racepower import env as ENV
 from backend.engine.racepower import predict as PR
@@ -334,7 +335,7 @@ def predict(ctx: Context, body: PredictIn) -> dict:
     # the short-range (F2) CP of a two-anchor source (PD model mFTP + test CP)
     used["cp2"] = _src(s_.get("cp2"), s_.get("short_label"))
     if d["cp"].get("lower_bound_message") and not body.cp:
-        warnings.append(d["cp"]["lower_bound_message"])
+        warnings.append(H.tag("RC16", d["cp"]["lower_bound_message"]))
 
     # effort distance & RE
     trail = body.type == "trail"
@@ -379,7 +380,7 @@ def predict(ctx: Context, body: PredictIn) -> dict:
         prior = {"distance_km": a["km"], "time_s": a["time_s"], "power": a["avg_power"],
                  "label": _("{label}（自動：一年內心率判定為比賽強度的標準距離跑步）", label=a['label'])}
     elif prior is None:
-        warnings.append(_("沒有比賽強度的標準距離紀錄可當查表依據：k 用預設 −0.07（≈ Stryd 比賽功率表）"))
+        warnings.append(H.tag("RC1", _("沒有比賽強度的標準距離紀錄可當查表依據：k 用預設 −0.07（≈ Stryd 比賽功率表）")))
     tk = R.table_k(target_m, prior["distance_km"] * 1000.0, prior["time_s"]) if prior else None
     pr = d.get("riegel") or {}
     ksrc = body.k_source or ("manual" if body.k is not None else None)
@@ -394,7 +395,7 @@ def predict(ctx: Context, body: PredictIn) -> dict:
     elif tk and tk.get("k") is not None:
         k, k_label, ksrc = tk["k"], _("查表"), "table"
         if body.k_source is None and pr.get("k") is not None and not pr.get("valid"):
-            warnings.append(_("個人 Riegel k 不可靠（{why}），改用查表 k", why="；".join(pr.get("invalid_reasons") or [])))
+            warnings.append(H.tag("RC1", _("個人 Riegel k 不可靠（{why}），改用查表 k", why="；".join(pr.get("invalid_reasons") or []))))
     else:
         k, k_label, ksrc = DEFAULT_K, _("預設 −0.07"), "manual"
     used["k"] = _src(k, k_label, kind=ksrc)
@@ -403,12 +404,12 @@ def predict(ctx: Context, body: PredictIn) -> dict:
         from backend.engine.racepower.athlete import enforce_lower_bound
         cp_eff, lb_k = enforce_lower_bound(d, cp, w_prime, tte, k, (used.get("cp2") or {}).get("value"))
         if cp_eff > cp:
-            warnings.append(_("k {k:+.2f} 下，CP {cp:.0f} W 撐不住你 {min:.0f} 分鐘 {p:.0f} W 的紀錄："
-                              "提高到 {cp_eff:.0f} W", k=k, cp=cp, min=lb_k['t_s'] / 60, p=lb_k['p'], cp_eff=cp_eff))
+            warnings.append(H.tag("RC16", _("k {k:+.2f} 下，CP {cp:.0f} W 撐不住你 {min:.0f} 分鐘 {p:.0f} W 的紀錄："
+                              "提高到 {cp_eff:.0f} W", k=k, cp=cp, min=lb_k['t_s'] / 60, p=lb_k['p'], cp_eff=cp_eff)))
             cp = cp_eff
             used["cp"] = _src(cp, _("{src}；依 k {k:+.2f} 提高到下限", src=used['cp']['source'], k=k), id=used["cp"].get("id"))
     if tk and tk.get("warning"):
-        warnings.append(_("查表 k：") + tk["warning"])
+        warnings.append(H.tag("RC1", _("查表 k：") + tk["warning"]))
 
     res = PR.predict_run(distance_km=body.distance_km, cp=cp, tte=tte, k=k, re=re_v, weight=weight, m=m,
                          gain_m=body.gain_m, effort_divisor=divisor, target_time_s=body.target_time_s,
@@ -420,9 +421,9 @@ def predict(ctx: Context, body: PredictIn) -> dict:
     if trail:
         res["ep_itra_per_h"] = RE.effort_km(body.distance_km, body.gain_m, 100.0) / (res["time_s"] / 3600.0)
         res["effort_km_itra"] = RE.effort_km(body.distance_km, body.gain_m, 100.0)
-        warnings.append(_("爬坡功率上限 110 % 是經驗法則（非研究結論）；下坡讓功率自然掉下來"))
+        warnings.append(H.tag("RC1", _("爬坡功率上限 110 % 是經驗法則（非研究結論）；下坡讓功率自然掉下來")))
     if race_cvi is not None and not trail and race_cvi >= 25:
-        warnings.append(_("路線 CVI {cvi:.0f}（丘陵），已用 CVI 調整 RE；起伏很大的路線請改用「越野」", cvi=race_cvi))
+        warnings.append(H.tag("RC1", _("路線 CVI {cvi:.0f}（丘陵），已用 CVI 調整 RE；起伏很大的路線請改用「越野」", cvi=race_cvi)))
 
     tasks = {}
     if prior:
@@ -458,17 +459,17 @@ def predict_baiyue(ctx: Context, body: PredictIn, d: dict, weight: float, env: d
             eph = CAP.course_eph(cap, body.distance_km, body.gain_m, body.loss_m, body.hist_pack_kg)
             src = _("推估：你的步行能力模型在這條路線的 EP/h（越野走路窗 + 百岳心率窗，AeT；{note}）",
                     note=h.get("note") or _("百岳多為跟團"))
-            warnings.append(_("整趟時間是推估：{note}；用你的步行能力模型（待回測）", note=h.get("note") or ""))
+            warnings.append(H.tag("RC1", _("整趟時間是推估：{note}；用你的步行能力模型（待回測）", note=h.get("note") or "")))
         else:
             eph = HK.tobler_eph(body.distance_km, body.gain_m, body.loss_m)
             src = _("推估：Tobler 步行函數在這條路線的 EP/h（{note}）", note=h.get("note") or _("百岳多為跟團"))
             if not d["weight"]["value"]:
                 # SP-414: the capacity model needs the settings weight (it is in W/kg)
-                warnings.append(_("整趟時間是推估：{note}；沒有體重，步行能力模型算不出，用 Tobler 步行函數",
-                                  note=h.get("note") or ""))
+                warnings.append(H.tag("RC1", _("整趟時間是推估：{note}；沒有體重，步行能力模型算不出，用 Tobler 步行函數",
+                                  note=h.get("note") or "")))
             else:
-                warnings.append(_("整趟時間是推估：{note}；沒有跑步資料可建能力模型，用 Tobler 步行函數",
-                                  note=h.get("note") or ""))
+                warnings.append(H.tag("RC1", _("整趟時間是推估：{note}；沒有跑步資料可建能力模型，用 Tobler 步行函數",
+                                  note=h.get("note") or "")))
     used["eph"] = _src(eph, src)
     days = max(1, body.days or 1)
     from backend.engine.racepower import capacity as _cap
@@ -481,8 +482,8 @@ def predict_baiyue(ctx: Context, body: PredictIn, d: dict, weight: float, env: d
         pack = body.pack_kg
         used["pack_kg"] = _src(pack, _("手動（沒有體重：不影響速度）") if pack is not None
                                else _("沒有體重：背包預設算不出"))
-        warnings.append(_("沒有體重：背負係數取 1（速度不依背包重量調整），熱量、飲水算不出；"
-                          "請到 設定 → 個人資料 填寫體重"))
+        warnings.append(H.tag("RC28", _("沒有體重：背負係數取 1（速度不依背包重量調整），熱量、飲水算不出；"
+                          "請到 設定 → 個人資料 填寫體重"), cls=1))
     used["hist_pack_kg"] = _src(body.hist_pack_kg, _("假設：過去登山日多為輕裝（約 5 kg）"))
     plan = PR.split_days(days, body.distance_km, body.gain_m, body.loss_m,
                          [x.model_dump() for x in body.day_plan] if body.day_plan else None)
@@ -494,7 +495,7 @@ def predict_baiyue(ctx: Context, body: PredictIn, d: dict, weight: float, env: d
                             target_moving_h=(body.target_time_s / 3600.0) if body.target_time_s else None,
                             biggest_day=big)
     if not body.day_plan and days > 1:
-        warnings.append(_("沒有每日行程：距離與爬升平均分配到每一天；實際行程請逐日輸入"))
+        warnings.append(H.tag("RC8", _("沒有每日行程：距離與爬升平均分配到每一天；實際行程請逐日輸入")))
     return {"type": "baiyue", "used": used, "env": env, "result": res, "tasks": {},
             "biggest_day": big, "zones": [], "warnings": res.pop("warnings") + warnings}
 
@@ -514,8 +515,8 @@ def event_course(ctx: Context, eid: str, body: Optional[EventCourseIn] = None) -
     c = build(track, course_opts((body or EventCourseIn()).model_dump()))
     sug = FU.stops_from_wpts(c.get("wpts") or [], c["totals"]["km"])
     splits = ctx.event_splits(row, e.days or 1) if (e.days or 1) > 1 else []
-    return py({"course_id": cid, "event_id": eid, "name": track.name or row.get("filename"), **c,
-               "stop_suggestions": sug, "day_splits_km": splits, "gpx": ctx.event_meta(row)})
+    return py(respond({"course_id": cid, "event_id": eid, "name": track.name or row.get("filename"), **c,
+                       "stop_suggestions": sug, "day_splits_km": splits, "gpx": ctx.event_meta(row)}))
 
 
 def resolve_course(ctx: Context, body: PlanIn) -> dict:
@@ -659,10 +660,10 @@ def make_plan(ctx: Context, body: PlanIn) -> dict:
         clim = {**clim, "hours": nxt["hours"], "night_h": nxt["night_h"]}
     out["to_clim"] = clim
     if clim:
-        out["warnings"].append(_("沒有預報：比賽日溫度用賽道上 {h:.1f} 小時的氣候值 {t:.1f} °C／濕度 {rh:.0f} %"
+        out["warnings"].append(H.tag("RC29", _("沒有預報：比賽日溫度用賽道上 {h:.1f} 小時的氣候值 {t:.1f} °C／濕度 {rh:.0f} %"
                                  "（其中 {n:.1f} 小時在 06:00–18:00 以外，用同一時段的歷史平均；"
                                  "白天平均 {day:.1f} °C，推估）", h=clim["hours"], t=clim["temp_c"],
-                                 rh=clim["rh_pct"], n=clim["night_h"], day=clim["day_temp_c"]))
+                                 rh=clim["rh_pct"], n=clim["night_h"], day=clim["day_temp_c"])))
     out["fuel"] = fuel(ctx, body, out)
     from backend.engine.racepower import night as NI
     from backend.engine.racepower import seg_targets as ST
@@ -788,6 +789,26 @@ def fuel(ctx: Context, body: PlanIn, out: dict) -> dict:
                         start_time=body.start_time, hr_bpm=hr, body=ctx.body())
 
 
+def respond(out: dict) -> dict:
+    """SP-482: the response's warnings as hint objects (engine/hints.py: {id, cls, prio, smart, text, detail,
+    show, ack, fp}) — the result's, the course's and the 補給 card's. The engine keeps strings (tagged with
+    their id: every string check still works); an untagged / old string becomes id RC, shown as before."""
+    if not isinstance(out, dict):
+        return out
+    out = dict(out)
+    for k in ("warnings", "course_warnings"):
+        if isinstance(out.get(k), list):
+            out[k] = H.warnings(out[k])
+    if isinstance(out.get("fuel"), dict) and isinstance(out["fuel"].get("warnings"), list):
+        out["fuel"] = {**out["fuel"], "warnings": H.warnings(out["fuel"]["warnings"])}
+    return out
+
+
+def predict_response(ctx: Context, body: PredictIn) -> dict:
+    """POST /predict's response (v1; the API and the static demo's worker)."""
+    return py(respond(predict(ctx, body)))
+
+
 def plan(ctx: Context, body: PlanIn) -> dict:
     """POST /plan's response."""
-    return py(make_plan(ctx, body))
+    return py(respond(make_plan(ctx, body)))

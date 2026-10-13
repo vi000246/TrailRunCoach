@@ -144,8 +144,9 @@ def test_the_program_kept_is_what_the_cached_pages_load():
 
 @pytest.mark.skipif(NODE is None, reason="node not installed")
 def test_every_listed_path_is_a_get_route():
-    from backend.api import achievements, overview, plan_sessions, region, sync, wko5views
-    gets = {r.path for m in (achievements, overview, plan_sessions, region, sync, wko5views)
+    from backend.api import achievements, overview, plan, plan_sessions, region, sync, wko5views
+    # plan: 提示多寡 GET /plan/profile/hint-level (static/hints.js, SP-482)
+    gets = {r.path for m in (achievements, overview, plan, plan_sessions, region, sync, wko5views)
             for r in m.router.routes if "GET" in (getattr(r, "methods", None) or set())}
     core = _core()
     for p in list(core["API"]) + [x for x in core["PAGES"] if not x.startswith("/api/v1/static/")]:

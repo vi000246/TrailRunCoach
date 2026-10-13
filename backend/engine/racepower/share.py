@@ -24,6 +24,7 @@ import secrets
 from pathlib import Path
 from typing import Optional
 
+from backend.engine import hints as H
 from backend.engine.racepower import weather as WX
 
 SHARES_DIR = None      # fixed folder (tests); None = the tenant's (private) racepower_shares/
@@ -94,7 +95,8 @@ def snapshot(plan: dict, *, title: str, include_weight: bool = False, expires_da
         fuel["loading"] = ld
     if fuel.get("daily"):
         fuel["daily"] = [{k: v for k, v in d.items() if k != "ree"} for d in fuel["daily"]]
-    fuel["warnings"] = [w for w in fuel.get("warnings") or [] if "基礎代謝" not in w]
+    # a hint object (SP-482) or an old plain string: the text decides
+    fuel["warnings"] = [w for w in fuel.get("warnings") or [] if "基礎代謝" not in H.text(w)]
     eff = plan.get("effort") or {}
     prof = plan.get("profile") or None
     stops = [{k: st.get(k) for k in ("km", "type", "name", "minutes")} for st in req.get("stops") or []]

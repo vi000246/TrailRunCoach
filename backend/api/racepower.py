@@ -255,7 +255,7 @@ def _calc(fn, *args):
 
 @router.post("/predict")
 def predict(body: PredictIn):
-    return _calc(CALC.predict, LIVE, body)
+    return _calc(CALC.predict_response, LIVE, body)
 
 
 def _predict_baiyue(body: PredictIn, d: dict, weight: float, env: dict, used: dict, warnings: list):
@@ -322,7 +322,7 @@ async def upload_course(file: UploadFile = File(...), sigma_m: Optional[float] =
         "official_gain_m": official_gain_m}))
     from backend.engine.racepower import fuel as FU
     sug = FU.stops_from_wpts(c.get("wpts") or [], c["totals"]["km"])
-    return _py({"course_id": cid, "name": track.name or file.filename, **c, "stop_suggestions": sug})
+    return _py(CALC.respond({"course_id": cid, "name": track.name or file.filename, **c, "stop_suggestions": sug}))
 
 
 def _cache_course(cid: str, track) -> None:
@@ -735,7 +735,7 @@ async def goal_basis():
 @router.post("/plan")
 def plan(body: PlanIn, _q=Depends(MS.use_quota("calc"))):
     """One race plan = one use of the calculator (the free tier's monthly count, SP-330)."""
-    return _py(make_plan(body))
+    return _py(CALC.respond(make_plan(body)))      # SP-482: warnings as hint objects (= calc.plan)
 
 
 @router.get("/backtest")

@@ -377,5 +377,10 @@
   "weighthint.dismiss": "不用",
   "weighthint.done": "已更新成 {kg} kg，圖表會重算",
   "weighthint.help": "COROS 帳號的體重是個人資料裡的設定值，不會自動寫進體重紀錄；按「更新」才會。按「不用」之後，這個數字不會再問，COROS 帳號的體重改了才會再提醒。",
-  "weighthint.failed": "沒有更新成功：{msg}"
+  "weighthint.failed": "沒有更新成功：{msg}",
+  "hints.ack": "知道了",
+  "hints.unack": "再提醒我",
+  "hints.more": "還有 {n} 則提醒",
+  "hints.too_many": "提示太多？",
+  "hints.ack_failed": "沒存到，請再試一次"
 }

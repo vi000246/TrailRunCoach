@@ -564,6 +564,92 @@ async def put_experience(body: ExperienceIn, db: AsyncSession = Depends(get_db))
     return {"experience": exp, "experience_hours": EX.weekly_hours(exp), "survey_race": race}
 
 
+# ---------------------------------------------------------------------------
+# 提示多寡 (SP-482, engine/hints.py; docs/research/ui-hint-audit.md §4): 設定 → 個人資料, under 跑步經驗
+#   GET /api/v1/plan/profile/hint-level   {level, chosen, auto, auto_level, reason, suggest_lean, acks, levels, cap}
+#   PUT /api/v1/plan/profile/hint-level   {level: full | standard | lean | null (automatic)}
+#   POST /api/v1/plan/profile/hint-ack    {id, fp, undo?}: 「知道了」 on one hint (its condition's fingerprint)
+# ---------------------------------------------------------------------------
+
+def _hint_history() -> tuple[Optional[bool], Optional[float]]:
+    """(has_history, the longest foot session of the last hints.LEAN_LONG_WEEKS weeks in minutes) from the
+    Dataset; (None, None) when it can't be read (no data yet: the automatic level is then 標準)."""
+    from backend.engine import experience as EX
+    from backend.engine import hints as H
+    from backend.engine import overview as O
+    try:
+        from backend.api.wko5views import _dataset
+        ds = _dataset()
+        today = today_local()
+        hist = EX.has_history(ds, today)
+        longest = max((O.moving_s(w) for w in O.workouts_between(ds, today - dt.timedelta(weeks=H.LEAN_LONG_WEEKS),
+                                                                   today + dt.timedelta(days=1))
+                       if O.category(w) in O.FOOT), default=0.0) / 60.0
+        return hist, longest
+    except Exception:                       # noqa: BLE001 — no data yet
+        return None, None
+
+
+def _hint_state(chosen, acks) -> dict:
+    from backend.engine import experience as EX
+    from backend.engine import hints as H
+    from backend.engine import race_results as RR
+    hist, longest = _hint_history()
+    acks = acks if isinstance(acks, list) else []
+    st = H.resolve(chosen, hist, EX.load())
+    return {**st, "has_history": hist,
+            "suggest_lean": st["auto"] and H.suggest_lean(hist, RR.load(), longest, today_local(), acks),
+            "acks": [{"id": a.get("id"), "fp": a.get("fp")} for a in acks if isinstance(a, dict)],
+            "levels": list(H.LEVELS), "cap": H.CAP}
+
+
+@router.get("/profile/hint-level")
+def get_hint_level():
+    from backend.engine import hints as H
+    from backend.engine.wko5expr.datasource import read_setting
+    return _hint_state(read_setting(H.LEVEL_KEY, None), read_setting(H.ACK_KEY, []))
+
+
+class HintLevelIn(BaseModel):
+    level: Optional[str] = None            # None = automatic (§4.2)
+
+
+@router.put("/profile/hint-level")
+async def put_hint_level(body: HintLevelIn, db: AsyncSession = Depends(get_db)):
+    from backend.engine import hints as H
+    from backend.settings.repository import SettingsRepository
+    try:
+        H.validate_level(body.level)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    repo = SettingsRepository(db, current_athlete_id())
+    await repo.set(H.LEVEL_KEY, body.level)
+    acks = await repo.get(H.ACK_KEY)
+    await db.commit()
+    return _hint_state(body.level, acks)
+
+
+class HintAckIn(BaseModel):
+    id: str
+    fp: str
+    undo: bool = False                     # 「再提醒我」: the hint comes back
+
+
+@router.post("/profile/hint-ack")
+async def post_hint_ack(body: HintAckIn, db: AsyncSession = Depends(get_db)):
+    from backend.engine import hints as H
+    from backend.settings.repository import SettingsRepository
+    if body.id != H.LEAN_ASK and body.id not in H.CATALOG:
+        raise HTTPException(400, f"unknown hint id {body.id!r}")
+    if not 0 < len(body.fp) <= 64:
+        raise HTTPException(400, "fp must be 1-64 characters")
+    repo = SettingsRepository(db, current_athlete_id())
+    acks = H.with_ack(await repo.get(H.ACK_KEY), body.id, body.fp, undo=body.undo)
+    await repo.set(H.ACK_KEY, acks)
+    await db.commit()
+    return {"acks": [{"id": a["id"], "fp": a["fp"]} for a in acks]}
+
+
 class SetupIn(BaseModel):
     done: bool = True
     later: bool = False                    # 「稍後再說」: ask again in AP.REMIND_DAYS
