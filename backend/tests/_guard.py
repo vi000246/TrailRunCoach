@@ -28,7 +28,9 @@ import tempfile
 from pathlib import Path
 
 REALDATA = os.environ.get("WKO5COACH_REALDATA") == "1"
-REAL_HOME = Path.home()
+# pytest-xdist workers inherit the faked HOME from the controller, so the controller passes the
+# real one down (install() sets it); without it a worker would guard the controller's temp home.
+REAL_HOME = Path(os.environ.get("WKO5COACH_TEST_TRUE_HOME") or Path.home())
 REAL_WKO5 = REAL_HOME / "WKO5"
 REAL_APPDATA = REAL_HOME / ".wko5coach"
 FAKE_HOME: Path | None = None
@@ -98,6 +100,7 @@ def install() -> None:
     if FAKE_HOME is not None:
         return
     athlete = _real_athlete_dir() if REALDATA else None
+    os.environ["WKO5COACH_TEST_TRUE_HOME"] = str(REAL_HOME)          # for xdist workers (above)
     FAKE_HOME = Path(tempfile.mkdtemp(prefix="trc-test-home-"))
     atexit.register(shutil.rmtree, FAKE_HOME, True)
     for k in ("USERPROFILE", "HOME"):
