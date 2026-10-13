@@ -221,3 +221,104 @@ def test_week_plan_and_projection_in_the_taper():
             assert 3 <= out <= 5 and x["title"] == O.TAPER_SHORT["title"]
         assert x["kind"] != "long"                                   # sore race: no long run in 14 days
     assert any(n.get("src") == "taper" for n in race_wk.get("notes") or [])
+
+
+# ---- SP-408: the 減量期 quality session takes its template's target -------------------------------
+
+TH_TARGET = "功率 247–263 W · 心率 160–168 bpm"        # the week's threshold row (tgt["threshold"]), CP 260
+OLD_TARGET = "功率 276–302 W（106–116% CP） · 心率 175–182 bpm"   # the session's own before the taper (VO2)
+
+
+def _taper_q(day, monday, road=False, **kw):
+    ss = [s("quality", "quality", day, target=OLD_TARGET, source="Seiler")]
+    O.taper_rules(ss, tc(trail=not road), monday, road=road, cp=260.0, q_target=TH_TARGET, **kw)
+    return ss[0]
+
+
+@pytest.mark.parametrize("day, monday, road, tmpl, text", [
+    ("2026-10-06", date(2026, 10, 5), False, ("full", "trail"), "功率 229–247 W（88–95% CP） · 心率 160–168 bpm"),
+    ("2026-10-09", date(2026, 10, 5), False, ("cut", "trail"), "功率 229–247 W（88–95% CP） · 心率 160–168 bpm"),
+    ("2026-10-06", date(2026, 10, 5), True, ("full", "road"), "功率 247–263 W（95–101% CP） · 心率 160–168 bpm"),
+    ("2026-10-09", date(2026, 10, 5), True, ("cut", "road"), "功率 247–263 W（95–101% CP） · 心率 160–168 bpm"),
+    ("2026-10-13", date(2026, 10, 12), False, ("short", None), "功率 255–265 W（98–102% CP） · 心率 160–168 bpm"),
+])
+def test_taper_quality_takes_its_templates_target(day, monday, road, tmpl, text):
+    """SP-408 (a): the session the taper makes a 減量期 quality session says the template's own % CP in
+    watts (the demo's 10/27 上坡節奏跑: card 247–263 W, structure 229–247 W), not the old session's
+    text; the structure has the same band and the watch the SP-378 band (lo, hi × 1.05)."""
+    from backend.engine import workout_steps as WS
+    from backend.engine.zones import watch_band
+    from backend.sync import coros_workouts as CW
+    t = {"full": O.TAPER_FULL, "cut": O.TAPER_CUT}[tmpl[0]][tmpl[1]] if tmpl[1] else O.TAPER_SHORT
+    x = _taper_q(day, monday, road)
+    assert x["title"] == t["title"] and x["target"] == text
+    lo, hi = t["power_pct"]
+    th = {"cp": 260.0, "lthr": 170.0, "aet": 150.0}
+    work = WS.derive(x, th)["items"][1]["items"][0]
+    assert (work["target"]["lo"], work["target"]["hi"]) == (lo, hi)                # structure = the card
+    rep = CW.session_steps(x, CW.Thresholds.of(th))[1]
+    wl, wh = watch_band(lo, hi)
+    assert rep.steps[0].intensity == ("power", round(wl * 260), round(wh * 260))  # the watch: SP-378's band
+
+
+def test_taper_quality_target_follows_the_basis_and_never_keeps_the_old_text():
+    """SP-408: 課表偏好 目標依據 心率 → only the threshold row's HR (pushed as is), never the old session's
+    (VO2) HR; 功率 → only the power; no CP and no threshold text → empty, not the old text."""
+    from backend.sync import coros_workouts as CW
+    x = _taper_q("2026-10-06", date(2026, 10, 5), prefs=PP.Prefs(target_basis="hr"))
+    assert x["target"] == "心率 160–168 bpm"
+    rep = CW.session_steps({**x, "basis": "hr"}, CW.Thresholds.of({"cp": 260.0, "lthr": 170.0}))[1]
+    assert rep.steps[0].intensity == ("hr", 160, 168)
+    x = _taper_q("2026-10-06", date(2026, 10, 5), prefs=PP.Prefs(target_basis="power"))
+    assert x["target"] == "功率 229–247 W（88–95% CP）"
+    ss = [s("quality", "quality", "2026-10-06", target=OLD_TARGET)]
+    O.taper_rules(ss, tc(), date(2026, 10, 5))
+    assert ss[0]["target"] == ""
+
+
+def test_week_plan_and_projection_taper_quality_take_the_templates_target():
+    """SP-408: week_plan and the projection pass the CP and the threshold row to the taper rules."""
+    ds, plan, wp = _week("2026-10-10")
+    cp = float(wp["thresholds"]["cp"])
+
+    def want(t):
+        lo, hi = t["power_pct"]
+        return f"功率 {lo * cp:.0f}–{hi * cp:.0f} W（{lo * 100:.0f}–{hi * 100:.0f}% CP）"
+    q = [x for x in wp["sessions"] if x["kind"] == "quality" and x["day"] and not x["done"]
+         and x["title"] in (O.TAPER_FULL["trail"]["title"], O.TAPER_CUT["trail"]["title"], O.TAPER_SHORT["title"])]
+    by_title = {t["title"]: t for t in (O.TAPER_FULL["trail"], O.TAPER_CUT["trail"], O.TAPER_SHORT)}
+    for x in q:
+        assert x["target"].startswith(want(by_title[x["title"]]))
+    weeks = PJ.project_weeks(wp, _phases(plan, TODAY), date(2026, 10, 18), events=plan.events)
+    race_wk = next(w for w in weeks if w["start"] == "2026-10-05")
+    pq = [x for x in race_wk["sessions"] if x["kind"] == "quality"]
+    assert pq and all(x["target"].startswith(want(O.TAPER_SHORT)) for x in pq)
+
+
+# ---- SP-411: the 減量期 trail template's minutes are the structure's ---------------------------------
+
+def _pushed_seconds(steps) -> int:
+    from backend.sync import coros_workouts as CW
+    return sum(x.seconds if isinstance(x, CW.Step) else x.sets * _pushed_seconds(x.steps) for x in steps)
+
+
+@pytest.mark.parametrize("day, monday, tmpl, minutes", [
+    ("2026-10-06", date(2026, 10, 5), "full", 85),      # 15 + 3 × (10 + 10 jog down) + 10
+    ("2026-10-09", date(2026, 10, 5), "cut", 65),       # 15 + 2 × (10 + 10) + 10
+    ("2026-10-13", date(2026, 10, 12), "short", 35),    # 15 + 2 × (3 + 2) + 10 (already right; TSS untouched)
+])
+def test_taper_trail_quality_minutes_are_the_structures(day, monday, tmpl, minutes):
+    """SP-411 (A, the owner 2026-10-13): the card's minutes = the structure / watch total — the trail
+    templates said 60 / 50 while the steps (the rest = the rep when the text has no 「休 N 分」) were
+    85 / 65; the TSS follows (≈ the structure's estimate)."""
+    from backend.engine import workout_steps as WS
+    from backend.sync import coros_workouts as CW
+    t = {"full": O.TAPER_FULL["trail"], "cut": O.TAPER_CUT["trail"], "short": O.TAPER_SHORT}[tmpl]
+    x = _taper_q(day, monday)
+    assert x["minutes"] == t["minutes"] == minutes
+    th = {"cp": 260.0, "lthr": 170.0, "aet": 150.0}
+    tot = WS.totals(WS.derive(x, th), WS.Ctx.of({**th, "basis": "power"}))
+    assert tot["sec"] == minutes * 60
+    assert _pushed_seconds(CW.session_steps(x, CW.Thresholds.of(th))) == minutes * 60
+    if tmpl != "short":
+        assert x["tss"] == pytest.approx(tot["tss"], rel=0.05)
