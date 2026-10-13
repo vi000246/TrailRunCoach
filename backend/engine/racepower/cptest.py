@@ -90,16 +90,17 @@ def detect(laps: list[dict]) -> Optional[dict]:
 W_PRIME_PRIOR_KJ = {"male": (13.1, 4.0), "female": (6.4, 2.2)}
 
 
-def w_prime_prior(weight: float, sex: str = "male", wind: bool = False) -> dict:
+def w_prime_prior(weight: Optional[float], sex: str = "male", wind: bool = False) -> dict:
     """W′ prior for a single-bout estimate: Ruiz-Alias 2025's amateur mean,
     the range ± 1 SD; the workbook's RWC "Medium" band is reported beside it
-    as a cross-check."""
+    as a cross-check. The prior itself is in kJ (no body weight); only the
+    J/kg band needs one — None without a weight (SP-414: never a default)."""
     sex = "female" if str(sex).lower().startswith("f") else "male"
     m, sd = W_PRIME_PRIOR_KJ[sex]
     bands = CP.RWC_BANDS[(sex, bool(wind), "jkg")]
     return {"lo": (m - sd) * 1000.0, "hi": (m + sd) * 1000.0, "mid": m * 1000.0,
             "source": f"Ruiz-Alias 2025 業餘{'男' if sex == 'male' else '女'}性 Stryd 9/3 測試 W′ {m} ± {sd} kJ",
-            "rwc_band_j": [bands[1] * weight, bands[2] * weight]}
+            "rwc_band_j": [bands[1] * weight, bands[2] * weight] if weight and weight > 0 else None}
 
 
 def estimate(test: dict, weight: float, sex: str = "male", wind: bool = False) -> dict:
