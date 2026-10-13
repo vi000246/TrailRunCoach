@@ -331,7 +331,8 @@ def _low_priority(reason: str, slot: Optional[dict] = None) -> None:
     hot work goes first: on the Dataset read AFTER the wait (a sync may have rebuilt it
     meanwhile) the never-fitted calibration (`full`), the 活動列表's automatic classification
     (activity_auto.job_for: its own job, `single` or `full`; read from disk when nothing
-    changed) and, owner only, the race calculator's charts (racepower.warm_charts, `full`). A
+    changed) and, owner only, the race calculator's charts (racepower.warm_charts, `full`); then
+    the cold-data sweep is queued at `cold` (coldstore.schedule_sweep, SP-340; not waited for). A
     warm-up asked for while this waits only marks it to run once more (`low_again`)."""
     import logging
     from backend import jobs
@@ -341,6 +342,9 @@ def _low_priority(reason: str, slot: Optional[dict] = None) -> None:
             ds = jobs.call(_calibrated, cls="full", priority="warm", label=f"warm-up calibration ({reason})")
             from backend.api import activity_auto as AA, racepower as RP
             RP.warm_charts(AA.job_for(ds))       # then the race calculator's charts (SP-366; owner only)
+            # last, at `cold`: the cold summaries and a year of channels on this Dataset (SP-340)
+            from backend.engine.wko5expr import coldstore
+            coldstore.schedule_sweep(reason, ds)
         except Exception as e:           # noqa: BLE001 — a page request will show the error
             logging.getLogger(__name__).warning("warm-up low-priority part (%s) failed: %s", reason,
                                                 type(e).__name__, exc_info=True)
@@ -467,6 +471,12 @@ async def dataset_status():
     from backend.engine.wko5expr import buildstate
     src = DSRC.current_source()
     cur = buildstate.get(src).snapshot()
+    if cur.get("state") != "building":
+        # SP-340: a page re-parsing cold activities' FITs (their channels went after a year) is
+        # shown like a build (「正在從 FIT 重算較舊的活動」), `recall` true
+        rc = buildstate.recall(src).snapshot()
+        if rc.get("state") == "building":
+            cur = {**rc, "recall": True}
     return {**cur, "sources": buildstate.all_states()}
 
 

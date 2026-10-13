@@ -323,6 +323,9 @@ def baiyue_summits(ds, peaks: Optional[list[dict]] = None) -> dict[str, list[str
             dirty = dirty or d
             if s and s.get("peaks"):
                 out[w.entry.file] = [p["name"] for p in s["peaks"]]
+        for a, kind, s in _archived(ds):
+            if kind == KIND_HIKE and s.get("peaks"):
+                out[a.entry.file] = [p["name"] for p in s["peaks"]]
         if dirty:
             _save_cache(cache)
         return out
@@ -330,9 +333,36 @@ def baiyue_summits(ds, peaks: Optional[list[dict]] = None) -> dict[str, list[str
         return {}
 
 
+def _archived(ds) -> list:
+    """(activity, kind, summary) of the activities SP-317 archived: their summary is frozen in
+    their cold record (wko5expr/coldstore.py, SP-340) — the FIT, and so this cache's entry, is gone."""
+    cold = getattr(ds, "cold", None)
+    out = []
+    for a in (cold.archived if cold is not None else ()):
+        ach = (getattr(a, "cold", None) or {}).get("achievement") or {}
+        if ach.get("kind") and ach.get("summary"):
+            out.append((a, ach["kind"], ach["summary"]))
+    return out
+
+
+def _record(w, kind: str, s: dict) -> "Achievement":
+    m = w.metrics
+    top = s["top_m"]
+    mc = mountain_class(top)
+    return Achievement(
+        id=w.entry.file, start=w.entry.start.isoformat(), kind=kind, mclass=mc,
+        auto_name=_auto_name(s, mc, kind),
+        distance_km=m.get("distance"), climbing_m=m.get("climbing"),
+        descending_m=m.get("descending"), moving_s=s["moving_s"],
+        elapsed_s=s["elapsed_s"], top_m=top, peaks=s["peaks"],
+        best_climb=s["best_climb"], efd_km=s["efd_km"], avg_hr=s["avg_hr"],
+        days=s["days"], footprint=s["footprint"])
+
+
 def build_achievements(ds, peaks: Optional[list[dict]] = None) -> list[Achievement]:
     """One Achievement per trail run / mountain day, oldest first, with route
-    clusters assigned. Uses (and refreshes) the on-disk cache."""
+    clusters assigned. Uses (and refreshes) the on-disk cache; the activities SP-317
+    archived come from their cold records (SP-340)."""
     peaks = load_peaks() if peaks is None else peaks
     cache = _load_cache()
     dirty = _prune(ds, cache)
@@ -345,17 +375,10 @@ def build_achievements(ds, peaks: Optional[list[dict]] = None) -> list[Achieveme
         dirty = dirty or d
         if not s:
             continue
-        m = w.metrics
-        top = s["top_m"]
-        mc = mountain_class(top)
-        out.append(Achievement(
-            id=w.entry.file, start=w.entry.start.isoformat(), kind=kind, mclass=mc,
-            auto_name=_auto_name(s, mc, kind),
-            distance_km=m.get("distance"), climbing_m=m.get("climbing"),
-            descending_m=m.get("descending"), moving_s=s["moving_s"],
-            elapsed_s=s["elapsed_s"], top_m=top, peaks=s["peaks"],
-            best_climb=s["best_climb"], efd_km=s["efd_km"], avg_hr=s["avg_hr"],
-            days=s["days"], footprint=s["footprint"]))
+        out.append(_record(w, kind, s))
+    old = [_record(a, kind, s) for a, kind, s in _archived(ds)]
+    if old:
+        out = sorted(old + out, key=lambda r: r.start)      # oldest first, as before the archive
     if dirty:
         _save_cache(cache)
     _assign_routes(out)

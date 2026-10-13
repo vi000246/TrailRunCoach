@@ -26,8 +26,11 @@ the other one (SP-394: the overview status of a tenant whose classification runs
 What goes through it (SP-394): the Dataset warm-up (`full`, wko5views.warm_up), its low-priority
 steps at `warm` (the never-fitted calibration and the race charts `full`; the activity
 classification `single`, or `full` when most activities are recomputed — api/activity_auto.py),
-the overview status (`single`, api/overview._status), the back-test (`backtest`) and, once SP-317
-exists, the monthly archive (`submit_archive`).
+the overview status (`single`, api/overview._status), the back-test (`backtest`), the cold-data
+sweep the warm-up's low-priority part queues last (`full` at `cold`: the summaries of the
+activities older than a year, their per-second channels dropped; SP-340,
+wko5expr/coldstore.schedule_sweep) and, once SP-317 exists, the monthly archive
+(`submit_archive`; its job calls coldstore.prepare_archive first).
 
 A caller that needs the result waits with `call(fn, ...)`: it queues `fn` and returns its result
 (or raises its exception). Called from inside a job (`current()`), `fn` runs at once in that job's
@@ -181,7 +184,9 @@ def submit_archive(fn: Callable, *, label: str = "monthly archive", key: Optiona
     `archive`, the lowest priority — after every waiting job of every other kind, the cold
     fill included; `full` (it rewrites one tenant's cold summaries and moves its old FITs).
     SP-317 runs it in its 03:00–05:00 window: one call per tenant due, `key` = ("archive",
-    tenant id, month) so a second call before it ran is the same job."""
+    tenant id, month) so a second call before it ran is the same job. Its `fn` first calls
+    wko5expr/coldstore.prepare_archive(cutoff) (SP-340: freezes the cold summaries; idempotent)
+    and deletes only the files that returns."""
     return submit(fn, cls="full", priority="archive", label=label, key=key, tenant=tenant)
 
 

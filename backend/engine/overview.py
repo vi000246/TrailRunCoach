@@ -285,6 +285,11 @@ def daily_tss(ds: Dataset) -> dict[int, float]:
         if v is not None and 0 <= v <= 5000:
             d = int(math.floor(w.day))
             out[d] = out.get(d, 0.0) + v
+    cold = getattr(ds, "cold", None)
+    if cold is not None and cold.archived:
+        # the activities SP-317 archived: their month summaries' daily TSS (SP-340, coldstore.py)
+        for d, v in cold.daily_tss().items():
+            out[d] = out.get(d, 0.0) + v
     return out
 
 
