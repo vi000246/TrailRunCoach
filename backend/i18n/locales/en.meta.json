@@ -5739,6 +5739,14 @@
     "draft": true,
     "src": "backend/engine/calendar_feed.py:154"
   },
+  "計算中": {
+    "draft": true,
+    "src": "backend/api/overview.py:269"
+  },
+  "計算中（較舊的活動補算中 {done}／{total}）": {
+    "draft": true,
+    "src": "backend/api/backfill.py:249"
+  },
   "計算太頻繁，請稍後再試": {
     "draft": true,
     "src": "backend/tenancy_mw.py:271"

@@ -22,6 +22,15 @@ from the same activities. The rest, here:
      (reason `backfill`, at `warm`) computes the overview status, the plan inputs and the
      activity classification on it.
 
+What a page shows of a hot-first Dataset (owner 2026-10-13: CTL must never be wrong — it waits
+for the whole history): a chart or a number is drawn only when every day it reads (chartscope's
+scope: the range + 6 time constants of warm-up for CTL / ATL / TSB, the estimates' look-back …;
+api/overview.py's table for the status) is inside the hot-first Dataset (`coverage(ds)`: the days
+after its newest deferred file) — so CTL / ATL / TSB, a 365-day chart, an estimate wait for the
+complete Dataset, while what reads the last 90 days only is shown at once; else `pending(ds, …)`:
+{n_done, n_total, message} 「計算中（較舊的活動補算中 n／N）」. The automatic plan waits for the
+complete Dataset (`when_complete`).
+
 A chunk that fails leaves its files to the complete build (it parses whatever is still unparsed).
 Progress per tenant: `progress()` — GET /api/v1/wko5/dataset/status's `backfill`, shown by
 shell.js under the nav. In-process only: after a restart the next build is hot-first again and
@@ -60,6 +69,7 @@ class Backfill:
         self.store = None                    # the newest hot-first Dataset's FitStore (its index in memory)
         self.keys: set = set()               # the Dataset cache keys built hot first
         self.job = None                      # the jobs.Job queued / running now
+        self.waiting: list = []              # when_complete callbacks
         self.started = time.monotonic()
         self.error: Optional[str] = None
         self.lock = threading.Lock()
@@ -137,6 +147,14 @@ def _failed(bf: Backfill, e: BaseException) -> None:
     with bf.lock:
         bf.state, bf.step, bf.error = "error", None, f"{type(e).__name__}: {e}"[:300]
     _release(None)
+    try:                                     # the next request builds (and back-fills) it again,
+        from backend.api import wko5views as WV   # instead of 「計算中」 for good
+        for key in bf.keys:
+            now = WV._restamp(key)
+            if getattr(WV._dataset_cfg.peek(now), "deferred", None):
+                WV._dataset_cfg.drop(now)
+    except Exception:                        # noqa: BLE001
+        pass
 
 
 def _root() -> Path:
@@ -179,6 +197,18 @@ def _chunk(bf: Backfill, part: list) -> None:
     _next(bf)
 
 
+def _rebuild_complete(bf: Backfill) -> None:
+    """Each hot-first Dataset still cached, built again complete. A request meanwhile keeps the
+    one it has."""
+    from backend.api import wko5views as WV
+    for key in sorted(bf.keys):
+        now = WV._restamp(key)
+        cur = WV._dataset_cfg.peek(now)
+        if cur is None or not getattr(cur, "deferred", None):
+            continue                         # gone (the next request builds it complete) or complete already
+        WV._dataset_cfg.put(now, WV._build_dataset(*now, hot_first=False))
+
+
 def _complete(bf: Backfill) -> None:
     """The complete Dataset in place of each hot-first one still cached (a request keeps the
     hot-first one until then), then a warm-up on it."""
@@ -186,13 +216,7 @@ def _complete(bf: Backfill) -> None:
     t0 = time.monotonic()
     try:
         _release(None)                       # every file is read now (a failed chunk's: by this build)
-        for key in sorted(bf.keys):
-            now = WV._restamp(key)
-            cur = WV._dataset_cfg.peek(now)
-            if cur is None or not getattr(cur, "deferred", None):
-                continue                     # gone (the next request builds it complete) or complete already
-            ds = WV._build_dataset(*now, hot_first=False)
-            WV._dataset_cfg.put(now, ds)
+        _rebuild_complete(bf)
     except Exception as e:                   # noqa: BLE001 — reported in progress(); the next build retries
         _failed(bf, e)
         return
@@ -203,9 +227,68 @@ def _complete(bf: Backfill) -> None:
         return
     with bf.lock:
         bf.state, bf.step = "done", None
+    _fire(bf)
     log.info("back-fill of %d older activities done; complete dataset in %.1f s", bf.n_total,
              time.monotonic() - t0)
     WV.warm_up("backfill")
+
+
+def coverage(ds) -> Optional[float]:
+    """The first day number from which `ds` holds every activity: the day after its newest
+    deferred file (a hot-first Dataset), None when it is complete."""
+    deferred = getattr(ds, "deferred", None)
+    if not deferred:
+        return None
+    from backend.engine.wko5expr.dataset import date_to_day
+    return float(date_to_day(max(d for d, _ in deferred))) + 1.0
+
+
+def pending(ds, lo: Optional[float]) -> Optional[dict]:
+    """None when what reads the days from `lo` on (a day number; None: the whole history) is
+    complete in `ds`; else {n_done, n_total, message} — 「計算中（較舊的活動補算中 n／N）」."""
+    cov = coverage(ds)
+    if cov is None or (lo is not None and lo >= cov):
+        return None
+    from backend.i18n import _
+    p = progress() or {}
+    total = int(p.get("n_total") or len(ds.deferred))
+    done = min(int(p.get("n_done") or 0), total)
+    return {"n_done": done, "n_total": total,
+            "message": _("計算中（較舊的活動補算中 {done}／{total}）", done=done, total=total)}
+
+
+def pending_back(ds, days: Optional[float]) -> Optional[dict]:
+    """pending() of what reads the `days` before the Dataset's today (None: the whole history)."""
+    import math
+    t = getattr(ds, "today", None)
+    if days is None or t is None:
+        return pending(ds, None)
+    return pending(ds, float(math.floor(t)) - float(days))
+
+
+def when_complete(ds, fn) -> bool:
+    """Call `fn()` once this tenant's back-fill is done, when `ds` is a hot-first Dataset (the
+    automatic plan: never with an incomplete CTL). False: `ds` is complete (nothing kept)."""
+    if coverage(ds) is None:
+        return False
+    with _LOCK:
+        mine = [bf for (t, _), bf in _STATE.items() if t == _tid() and bf.state == "running"]
+    if not mine:
+        return False
+    with mine[0].lock:
+        mine[0].waiting.append(fn)
+    return True
+
+
+def _fire(bf: Backfill) -> None:
+    """The when_complete callbacks (the back-fill is done)."""
+    with bf.lock:
+        due, bf.waiting = bf.waiting, []
+    for fn in due:
+        try:
+            fn()
+        except Exception:                    # noqa: BLE001 — a callback never stops the back-fill
+            log.warning("back-fill: a when_complete callback failed", exc_info=True)
 
 
 def build_failed() -> None:

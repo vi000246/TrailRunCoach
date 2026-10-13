@@ -607,6 +607,7 @@ const Z5_ICON = { confirmed: "good", open: "good", paused: "watch", reentry: "ba
 async function loadZ5() {
   const c = await j(`${API}/z5`);
   if (c.history_href) $("z5-hist").href = c.history_href;
+  if (c.pending) { $("z5-st").innerHTML = ""; $("z5").innerHTML = `<p class="meta">${esc(c.pending.message)}</p>`; return; }   // SP-394
   // the pill: the Zone 5 track (z5_gate = quality_gate.z5_track, the flag week_decision reads)
   const zg = c.z5_gate || {};
   const sub = zg.text || (c.state === "confirmed" ? `${c.since || ""} · ${c.path_label || ""}` : (c.reason || ""));
@@ -744,13 +745,17 @@ function paintPlanLoad() {
   if (!S || !PLAN) return;
   if ($("wk-prog")) $("wk-prog").innerHTML = progHtml(PLAN.done, S.hours, S.tss);
   if ($("wk-ctl")) $("wk-ctl").innerHTML = ctlHtml(PLAN.load.ctl_week_start, S.ctl_end);
-  if ($("wk-tsb")) $("wk-tsb").innerHTML = `下週一 TSB <b>${sgn(S.tsb_next)}</b>`;
+  if ($("wk-tsb")) $("wk-tsb").innerHTML = tsbHtml(S.tsb_next);
   PLAN.projection = S.projection;
   const weeks = SP.weeks || [];
   if ($("later")) $("later").innerHTML = weeks.length ? `之後已排到 ${md(SP.horizon_end)}（${weeks.length} 週）· <a href="/api/v1/overview/plan/schedule/page">日曆、修改、同步到 COROS →</a>` : "";
 }
 const progHtml = (D, hours, tss) => `${bar("時間", D.hours, hours, hrs)}${bar("TSS", D.tss, tss, n0)}<span class="num">${hrs(D.hours)} / ${hrs(hours)} · TSS ${n0(D.tss)} / ${n0(tss)}</span>`;
-const ctlHtml = (c0, c1) => `CTL <b>${n0(c0)}</b> → 週日 <b>${n0(c1)}</b>（${sgn(c1 - c0, (v) => v.toFixed(1))}/週）`;
+// SP-394: during a first import's back-fill CTL / TSB are not shown (null + history_pending's message)
+const HP = () => (PLAN && PLAN.history_pending) || (SP && SP.summary && SP.summary.history_pending) || (STATUS && STATUS.history_pending);
+const ctlHtml = (c0, c1) => c0 == null || c1 == null ? `CTL ${esc(HP()?.message || "–")}`
+  : `CTL <b>${n0(c0)}</b> → 週日 <b>${n0(c1)}</b>（${sgn(c1 - c0, (v) => v.toFixed(1))}/週）`;
+const tsbHtml = (t) => t == null ? "" : `下週一 TSB <b>${sgn(t)}</b>`;
 async function loadWeek() {
   const w = PLAN = await j(`${API}/weekplan`);
   $("wk-sub").textContent = `${md(w.week.start)}–${md(w.week.end)} · ${w.mode_label}`;
@@ -761,7 +766,7 @@ async function loadWeek() {
     <details class="more"><summary>詳細</summary><div class="body">
       <div class="bars" id="wk-prog" style="display:grid;gap:4px;max-width:360px">${progHtml(D, T.hours, T.tss)}</div>
       <ul>${w.why.map((x) => `<li>${gl(x)}</li>`).join("")}<li>時數不含肌力；TSS 以你近 6 週每小時 ${n0(T.tss_per_hour)} TSS 換算</li></ul>
-      <div><span id="wk-ctl">${ctlHtml(L.ctl_week_start, L.ctl_end)}</span> · <span id="wk-tsb">下週一 TSB <b>${sgn(L.tsb_next)}</b></span></div>
+      <div><span id="wk-ctl">${ctlHtml(L.ctl_week_start, L.ctl_end)}</span> · <span id="wk-tsb">${tsbHtml(L.tsb_next)}</span></div>
       <div>門檻：${USE_POWER ? `CP ${n0(w.thresholds.cp)} W（${esc(w.thresholds.cp_source)}）· ` : ""}${esc(w.thresholds.easy_cap_label || `輕鬆跑上限 ${n0(w.thresholds.aet)} bpm`)}${q(w.thresholds.easy_cap_tip, "輕鬆跑上限")}${w.thresholds.aet_pm ? ` <span class="pmb">±${w.thresholds.aet_pm.pm} bpm${q(w.thresholds.aet_pm.tip, "AeT 誤差")}</span>` : ""}（${esc(w.thresholds.aet_source)}）</div>
       <div id="later"></div></div></details>`;
   renderKpis();
@@ -781,6 +786,10 @@ async function loadPeriod() {
   const qs = `unit=${PS.unit}&n=${N[PS.unit]}${PS.anchor ? "&anchor=" + PS.anchor : ""}`;
   $("period").innerHTML = `<div class="loading">計算中…</div>`;
   const R = PS.data = await j(`${API}/summary?${qs}`);
+  if (R.pending) {                          // SP-394: older periods are still being back-filled
+    $("period").innerHTML = `<p class="meta">${esc(R.pending.message)}</p>`;
+    return;
+  }
   const B = R.buckets, C = R.current;
   $("per-label").textContent = C.label;
   const cats = Object.keys(R.categories).filter((k) => B.some((b) => b.by_category[k]));
@@ -955,6 +964,13 @@ async function loadPmc() {
   const begin = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   const res = await j(`${API}/pmc?begin=${begin}&end=${end}`);
   if (seq !== PMC_SEQ) return;              // a newer pick meanwhile
+  if (res.pending) {                        // SP-394: CTL waits for the whole history (first import)
+    PMC = null;
+    const el = $("pmc"), inst = window.echarts && echarts.getInstanceByDom(el);
+    if (inst) inst.dispose();
+    el.innerHTML = `<p class="meta">${esc(res.pending.message)}</p>`;
+    return;
+  }
   PMC = res.series;
   PMC_MARKS = res.marks || [];              // SP-289: the day the LTHR prior was replaced
   renderPmc();
@@ -1018,6 +1034,16 @@ $("wk-ic").innerHTML = I("time");
   loadZ5().catch(fail("z5"));
   loadB2B().catch(() => {});                  // optional card: stays hidden when it can't load
   await Promise.all([loadWeek().then(() => loadPlan().catch(fail("wk-days"))).catch(fail("week")), loadPeriod().catch(fail("period"))]);
+  // SP-394: a first import's older activities still back-filling: once the complete data is in
+  // (GET /dataset/status's backfill gone) the page reloads itself, the CTL / TSB cards with it
+  if (STATUS && STATUS.history_pending) {
+    const wait = async () => {
+      let b = null;
+      try { b = (await (await fetch("/api/v1/wko5/dataset/status", { cache: "no-store" })).json()).backfill; } catch (_) { b = {}; }
+      if (b) setTimeout(wait, 15000); else location.reload();
+    };
+    setTimeout(wait, 15000);
+  }
 })();
 </script>
 </body>

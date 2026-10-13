@@ -145,14 +145,28 @@ engine config / parity mode is the same everywhere.
   for background work (a `user` job may take the tenant's second place), within one priority the
   tenants take turns. The warm-up's low-priority steps are jobs at `warm` too (wko5-engine.spec.md
   › Warm-up), and the activity auto-classification (workouts.spec.md).
-- **A first import, hot first (SP-394 第 4 條, 2026-10-12).** A new user's first sync / a big FIT
-  import builds the Dataset of the last 90 days first (wko5-engine.spec.md › Hot first): the warm-up
-  computes the status and the plan inputs on it before any older file is parsed, so the overview and
-  the 課表 are usable in about the time of a sync; until the back-fill's complete Dataset is in, the
-  PMC (CTL / ATL / TSB) counts only those 90 days (CTL starts at 0 there) and every page shows the
-  back-fill's progress under the nav; the status computed on the complete Dataset then replaces it
-  (shown stale meanwhile, below). The Dataset a request builds is a `build` job of the queue (two at
-  a time for the server, one per tenant).
+- **A first import, hot first (SP-394 第 4 條, 2026-10-12; owner 2026-10-13).** Only a new user's
+  first import (a first COROS / Garmin sync, or a big FIT import into an account without activities)
+  builds the Dataset of the last 90 days first (wko5-engine.spec.md › Hot first); a re-parse or a
+  big import into an account with activities is built whole, as before. The warm-up computes the
+  status and the plan inputs on it before any older file is parsed, and every page shows the
+  back-fill's progress under the nav. **CTL is never shown wrong**: until the complete Dataset is
+  in, whatever reads further back than it holds answers 「計算中（較舊的活動補算中 n／N）」
+  (`api/backfill.pending`) and draws no number or line — the status cards by `STATUS_READS`
+  (`backend/api/overview.py:251`, the days each card reads back from today: phase 0, data /
+  density / descent 28, strength 35, durability 84 are shown; fitness / form (CTL / ATL / TSB,
+  6 × 42 days of warm-up), volume (26 weeks), efficiency (181 d), heat (119 d), long (365 d), climb
+  (all earlier), intensity / drift / gate / testing / level (the day's thresholds: as-of estimates
+  over 305 days) and any unlisted card wait; `history_mask`, `:254`: level `na`, no value / spark,
+  their to-dos left out, `history_pending`), `GET /pmc` (`:350`: the range − 1 − 6 × 42 days),
+  `GET /weekplan`'s CTL / ATL / TSB and projection (`history_load`, `:280`) and the stored plan's
+  projected CTL (SP-219, `plan_sessions.history_summary`, `backend/api/plan_sessions.py:644`), the
+  `/summary` periods older than it holds (`:333`), the Z5 card (`:383`), 賽事評估 (`:427`), and the
+  threshold estimate / check on 設定 (`backend/api/plan.py:847`, 305 days). The 課表's sessions,
+  recent activities and single-activity pages are shown at once. The overview reloads itself once
+  `GET /dataset/status` has no `backfill` any more. The automatic plan waits for the complete
+  Dataset (plan-auto.spec.md). The Dataset a request builds is a `build` job of the queue (two at a
+  time for the server, one per tenant).
 - **Stale status card (SP-394, 2026-10-12).** `GET /overview/status` (`status_answer`,
   `backend/api/overview.py:228`) answers, on a cache miss caused by new data (a new dataset
   generation — a sync, or a restart / deploy) or a new day, the tenant's previous status marked
@@ -2360,3 +2374,4 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 | 2026-10-12 | feat/pmc-projection-sp219 | SP-219 (owner 2026-10-12) | The stored-plan projection counts a session with only minutes: `plan_summary(…, est=)` / `planned_by_day` / `session_tss(s, est)` take the 課表's own estimate (`est_tss` with the new `plan_rates`, also used by the calendar and 課表達成率), so the overview's Sunday CTL / next-Monday TSB / week TSS target and the PMC charts' projection match the calendar's 預估 TSS; the 圖表分析 PMC charts draw that projection on a future range (wko5-engine.spec.md 「PMC projection」) |
 | 2026-10-12 | perf | SP-394 (SP-338 follow-up) | The status computation is a `single` / `user` job of the server's queue (`jobs.call`; at once inside the warm-up's job); `GET /status` answers the previous status marked `stale` after new data, a new day or a restart (kept in memory and in `cache/overview_status.json`), computes the new one in the background, `GET /status/fresh`; the page's 「更新中」 badge and polling, 套用 buttons wait while stale |
 | 2026-10-12 | perf | SP-394 第 4 條 | A first import (and a re-parse) builds the last 90 days first: the status and the plan inputs come before the back-fill of the older activities, whose progress shows under the nav; the PMC counts the 90 days until the complete Dataset is in. A request's Dataset build is a `build` job of the queue. Tests: `backend/tests/test_queue_hot_first_sp394.py` |
+| 2026-10-13 | perf | SP-394 第 4 條 (owner 2026-10-13) | Hot first only on a first import (a re-parse / an import into an account with activities: whole); CTL never shown wrong — during the back-fill the status cards that read further back (`STATUS_READS`), `/pmc`, `/weekplan` and the 課表 projection's CTL / ATL / TSB, older `/summary` periods, the Z5 card, 賽事評估 and the threshold estimate / check answer 「計算中（較舊的活動補算中 n／N）」 until the complete Dataset; the overview reloads when it is in. Tests: `backend/tests/test_queue_hot_first_sp394.py` |

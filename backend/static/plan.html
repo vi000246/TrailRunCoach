@@ -461,6 +461,11 @@ async function loadFeas() {
   try {
     const r = await Feas.load();
     if (r.chart_href) $("#feaschart").href = r.chart_href;
+    if (r.pending) {                         // SP-394: CTL and the long runs wait for the whole history
+      sec.hidden = false;
+      box.innerHTML = `<p class="meta">${esc(r.pending.message)}</p>`;
+      return;
+    }
     sec.hidden = !(r.races || []).length;
     box.innerHTML = (r.races || []).map(Feas.html).join("");
   } catch (x) {

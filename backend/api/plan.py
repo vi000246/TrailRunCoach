@@ -844,11 +844,22 @@ def _estimate_dataset():
     return _dataset(parity=False)
 
 
+def _estimate_pending(ds) -> Optional[dict]:
+    """SP-394 (owner 2026-10-13): the estimates read the runs of up to 180 days before today, each
+    against the PD refit of the 90 (+30) days before it (fitdataset.ESTIMATE_LOOKBACK_DAYS): during
+    a first import's back-fill they wait for the complete Dataset — {pending: {…}} meanwhile."""
+    from backend.api import backfill as BF
+    from backend.engine.wko5expr.fitdataset import ESTIMATE_LOOKBACK_DAYS
+    p = BF.pending_back(ds, ESTIMATE_LOOKBACK_DAYS) if BF.coverage(ds) is not None else None
+    return None if p is None else {"pending": p}
+
+
 @router.get("/threshold-estimate")
 def threshold_estimate():
     """Suggested LTHR / AeT from recent runs. Nothing is saved."""
     from backend.engine.thresholds import estimate
-    return estimate(_estimate_dataset(), today_local())
+    ds = _estimate_dataset()
+    return _estimate_pending(ds) or estimate(ds, today_local())
 
 
 class ApplyEstimate(BaseModel):
@@ -876,6 +887,9 @@ def threshold_check():
     from backend.engine import zone_events as ZE
     from backend.engine import reentry as RE
     ds = _estimate_dataset()
+    pend = _estimate_pending(ds)
+    if pend is not None:
+        return pend
     today = today_local()
     plan = P.Plan.load()
     try:

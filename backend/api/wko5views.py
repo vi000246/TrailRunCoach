@@ -156,6 +156,10 @@ class _DatasetCache:
             while len(self._d) > 1 and sum(dataset_mb(d) for d in self._d.values()) > budget:
                 self._d.popitem(last=False)         # least recently used first (SP-338 第 7 條)
 
+    def drop(self, key: tuple) -> None:
+        with self._lock:
+            self._d.pop(key, None)
+
     def cache_clear(self) -> None:
         with self._lock:
             self._d.clear()
@@ -859,6 +863,11 @@ def chart(request: Request, view: str, d: int, c: int, begin: Optional[str] = No
     # SP-336: only the activities of this chart's range (+ warm-up), today only when it reads it,
     # only the code of its chart type (chartscope.py)
     scope = CS.scope_of(ch, ds, b, e, ds.workouts[workout] if needs_workout else None)
+    # SP-394 (owner 2026-10-13): a first import's hot-first Dataset draws only what its days hold —
+    # CTL / ATL / TSB (6 × 42 days of warm-up), a year, an estimate wait for the complete Dataset
+    pend = _scope_pending(ds, scope)
+    if pend is not None:
+        return {"title": ch.get("title"), "kind": ch.get("kind"), "pending": pend}
     key = chart_key(ch, req, CS.fingerprint(ds, scope), CS.code_signature(ch, ds, glue=(chart, _render, _apply_period)))
 
     def compute():
@@ -902,6 +911,23 @@ def chart(request: Request, view: str, d: int, c: int, begin: Optional[str] = No
     res, stale = RENDER_CACHE.serve(key, compute, slot=None if demo else _slot(view, ch, req, asked, ds),
                                     stale_ok=request.query_params.get("stale") == "1" and not demo)
     return {**res, "stale": stale} if stale else res
+
+
+def _scope_pending(ds, scope) -> Optional[dict]:
+    from backend.api import backfill as BF
+    if BF.coverage(ds) is None:
+        return None
+    return BF.pending(ds, None if scope.full else scope.lo)
+
+
+def _chart_pending(ch: dict, ds, b: float, e: float, workout=None) -> Optional[dict]:
+    """{n_done, n_total, message} while the chart over [b, e] reads days a first import's
+    hot-first Dataset does not hold yet (chartscope.scope_of: the range + its warm-up); None:
+    draw it (api/backfill.py)."""
+    from backend.api import backfill as BF
+    if BF.coverage(ds) is None:
+        return None
+    return _scope_pending(ds, CS.scope_of(ch, ds, b, e, workout))
 
 
 def _slot(view: str, ch: dict, req: dict, asked: tuple, ds) -> str:
