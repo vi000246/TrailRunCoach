@@ -152,7 +152,7 @@ button.link { border: 0; background: none; color: var(--accent); padding: 0 4px;
       <div id="dayplanwrap" class="dayplan" hidden>
         <div class="meta" data-i18n="plan.ev.dayplan_help">每天的距離和爬升都要填（下降選填，空白＝跟爬升一樣）；總距離、總爬升會自動加總。有 GPX 而且標好每天的終點時，以 GPX 為準。</div>
         <!-- SP-412: editing an old trip saved without them — the rows are not required, this asks for them -->
-        <div id="dayplanold" class="hint" data-i18n="plan.ev.dayplan_old" hidden>這筆舊行程還沒填每天的距離和爬升，可以先照原樣存；沒填時每天的量是用總距離、總爬升平均分的，補上會比較準。要補就每天的距離和爬升都要填。</div>
+        <div id="dayplanold" class="hint" data-i18n="plan.ev.dayplan_old" hidden>這筆舊行程還沒填每天的距離和爬升，可以先照原樣存，總距離、總爬升也可以直接改；沒填時每天的量是用總距離、總爬升平均分的，補上會比較準。要補就每天的距離和爬升都要填。</div>
         <table><thead><tr><th></th><th class="num" data-i18n="plan.ev.day_km">距離 km</th><th class="num" data-i18n="plan.ev.day_gain">爬升 m</th>
           <th class="num" data-i18n="plan.ev.day_loss">下降 m（選填）</th></tr></thead><tbody id="dayplanrows"></tbody></table>
       </div>
@@ -428,8 +428,9 @@ let dayPlanLenient = false, dayPlanTotals = null;
 const dayFilled = (rows) => rows.some((r) => r && ["km", "gain_m", "loss_m"].some((k) => r[k] != null));
 function dayPlanRequired(rows) { return !dayPlanLenient || dayFilled(rows || readDayRows()); }
 function syncDayRequired() {
-  const req = dayPlanRequired();
+  const req = dayPlanRequired(), f = $("#evform");
   $("#dayplanrows").querySelectorAll('input[data-k="km"], input[data-k="gain_m"]').forEach((x) => { x.required = req; });
+  f.distance_km.readOnly = f.climbing_m.readOnly = needsDayPlan() && req;   // SP-412: see dayPlanForm
 }
 function needsDayPlan() {
   const f = $("#evform"), n = Number(f.days.value) || 1, k = f.kind.value;
@@ -449,8 +450,10 @@ function dayPlanForm(plan) {
   const on = needsDayPlan();
   const tP = (k, p) => (window.I18N ? I18N.t("plan.ev." + k, p) : k);
   $("#dayplanwrap").hidden = !on;
-  f.distance_km.readOnly = f.climbing_m.readOnly = on;
   const old = plan || readDayRows(), req = dayPlanRequired(old);
+  // the totals are the sums of the days (read-only) — but an old trip without its per-day numbers
+  // (SP-412, decision 2026-10-13) has only its totals: editable while its rows are blank
+  f.distance_km.readOnly = f.climbing_m.readOnly = on && req;
   $("#dayplanold").hidden = !(on && dayPlanLenient);
   $("#dayplanrows").innerHTML = on ? Array.from({ length: n }, (_, i) => `<tr><td>${esc(tP("day_n", { n: i + 1 }))}</td>`
     + ["km", "gain_m", "loss_m"].map((k) => `<td><input type="number" data-d="${i}" data-k="${k}" step="${k === "km" ? 0.1 : 10}" min="0"`
@@ -461,12 +464,16 @@ function sumDays() {
   if (!needsDayPlan()) return;
   const f = $("#evform"), rows = readDayRows();
   const s = (k) => rows.reduce((a, r) => a + (r && r[k] != null ? r[k] : 0), 0);
-  // SP-412: the old trip's rows emptied again → its own totals back (they are what gets saved)
+  // SP-412: the old trip's rows emptied again → its totals back (as saved, or as typed since; they are what gets saved)
   if (dayPlanTotals && !dayFilled(rows)) { f.distance_km.value = dayPlanTotals.distance_km; f.climbing_m.value = dayPlanTotals.climbing_m; return; }
   if (rows.some((r) => r && r.km != null)) f.distance_km.value = Math.round(s("km") * 10) / 10;
   if (rows.some((r) => r && r.gain_m != null)) f.climbing_m.value = Math.round(s("gain_m"));
 }
 $("#dayplanrows").addEventListener("input", () => { sumDays(); syncDayRequired(); });
+// SP-412: a total typed into an old trip is what comes back when its rows are emptied again
+for (const k of ["distance_km", "climbing_m"]) $("#evform")[k].addEventListener("input", () => {
+  if (dayPlanTotals && !dayFilled(readDayRows())) dayPlanTotals[k] = $("#evform")[k].value;
+});
 $("#evform").days.addEventListener("input", () => dayPlanForm());
 $("#evform").race_format.addEventListener("change", () => dayPlanForm());
 // 賽事評估 of the upcoming A / B races (static/feasibility.js; GET /api/v1/overview/feasibility):

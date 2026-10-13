@@ -73,3 +73,85 @@ def test_a_new_multi_day_trip_still_requires_every_day(app):
     expect(page.locator("#dayplanwrap")).to_be_visible()
     expect(page.locator("#dayplanold")).to_be_hidden()
     assert page.locator(f"{ROWS}[required]").count() == 6
+
+
+# ---- SP-412 follow-up (decision 2026-10-13): the old trip's totals are editable ----
+
+def _totals(page):
+    f = page.locator("#evform")
+    return f.locator("[name=distance_km]"), f.locator("[name=climbing_m]")
+
+
+def _locked(loc) -> bool:
+    return loc.evaluate("x => x.readOnly")
+
+
+def test_an_old_trips_totals_can_be_edited_and_saved(app):
+    page, _ = app
+    before = _event(page)
+    _edit_old_trip(page)
+    km, gain = _totals(page)
+    assert not _locked(km) and not _locked(gain)
+    km.fill("41.5")
+    gain.fill("4100")
+    page.locator("#evsubmit").click()
+    expect(page.locator("text=已儲存")).to_be_visible()
+    after = _event(page)
+    assert (after["distance_km"], after["climbing_m"]) == (41.5, 4100)
+    assert after["day_plan_missing"] is True and not after["day_plan"]
+    # put the demo trip's own totals back (one server for the whole run), through the same form
+    _edit_old_trip(page)
+    km.fill(str(before["distance_km"]))
+    gain.fill(str(before["climbing_m"]))
+    page.locator("#evsubmit").click()
+    expect(page.locator("text=已儲存").first).to_be_visible()
+    page.wait_for_function(f"""async () => {{
+        const r = await fetch('/api/v1/plan'); const e = (await r.json()).events.find((x) => x.id === '{EID}');
+        return e.distance_km === {before['distance_km']} && e.climbing_m === {before['climbing_m']}; }}""")
+
+
+def test_filling_a_day_locks_the_totals_and_emptying_it_brings_back_the_typed_ones(app):
+    page, _ = app
+    _edit_old_trip(page)
+    km, gain = _totals(page)
+    km.fill("44")
+    gain.fill("4200")
+    cell = page.locator(f'{ROWS}[data-d="0"][data-k="km"]')
+    cell.fill("12")
+    assert _locked(km) and _locked(gain)                               # the sums of the days now
+    assert km.input_value() == "12"
+    cell.fill("")
+    assert not _locked(km) and not _locked(gain)
+    assert (km.input_value(), gain.input_value()) == ("44", "4200")    # what was typed, not the saved ones
+
+
+def test_a_new_multi_day_trip_keeps_its_totals_read_only(app):
+    page, _ = app
+    open_page(page, _server.PAGES["plan"])
+    f = page.locator("#evform")
+    f.locator("[name=kind]").select_option("baiyue")
+    f.locator("[name=days]").fill("3")
+    expect(page.locator("#dayplanwrap")).to_be_visible()
+    km, gain = _totals(page)
+    assert _locked(km) and _locked(gain)
+
+
+def test_a_trip_with_its_day_numbers_keeps_its_totals_read_only(app):
+    page, _ = app
+    days = [{"km": 12.0, "gain_m": 1500, "loss_m": None}, {"km": 14.0, "gain_m": 1300, "loss_m": None},
+            {"km": 12.0, "gain_m": 1000, "loss_m": None}]
+
+    def patch(route):                                                  # the demo trip as if it had them
+        r = route.fetch()
+        body = r.json()
+        for e in body["events"]:
+            if e["id"] == EID:
+                e.update(day_plan=days, day_plan_missing=False)
+        route.fulfill(response=r, json=body)
+
+    page.route("**/api/v1/plan", patch)
+    _edit_old_trip(page)
+    expect(page.locator("#dayplanold")).to_be_hidden()
+    km, gain = _totals(page)
+    assert _locked(km) and _locked(gain)
+    assert page.locator(f"{ROWS}[required]").count() == 6
