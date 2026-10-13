@@ -99,6 +99,19 @@ def _notify(thresholds: bool) -> None:
         PA.after_thresholds()
 
 
+def _cp_in_effect(today: dt.date) -> dict:
+    """The CP the 課表 uses today (zones.cp_in_effect on the charts' Dataset): a dated setting or,
+    on a COROS / TP source, the Stryd PD fit — never a separate WKO5 lookup (SP-449: this page said
+    「wko5_mftp」 with no WKO5 file while the 課表 used the PD fit). Empty when it cannot be built."""
+    try:
+        from backend.engine.wko5expr.dataset import date_to_day
+        from backend.engine.zones import cp_in_effect
+        ds = _estimate_dataset()
+        return cp_in_effect(ds, int(date_to_day(today)))
+    except Exception:                       # noqa: BLE001 — no data yet: no CP
+        return {"value": None, "source": None, "date": None, "kind": None}
+
+
 def _effective(plan: P.Plan, today: dt.date) -> dict:
     wk = _wko5_settings()
     lthr = plan.threshold_on("lthr", today)
@@ -107,9 +120,19 @@ def _effective(plan: P.Plan, today: dt.date) -> dict:
     lthr_v = lthr if lthr is not None else (wk["runthr"] or {}).get("value")
     cp = plan.threshold_on("cp", today)
     lr, ar = P.threshold_row(plan, "lthr", today), P.threshold_row(plan, "aethr", today)
+    if cp is not None:
+        d = max(t.date[:10] for t in plan.thresholds if t.cp is not None and t.date[:10] <= today.isoformat())
+        cp_eff = {"value": cp, "source": "plan", "label": _("你的測試 {day}", day=d), "date": d}
+    else:
+        # the 課表's own CP and its words (zones.cp_in_effect): estimate (the PD fit) / setting / wko5
+        ci = _cp_in_effect(today)
+        kind = ci.get("kind")
+        src = ("estimate" if kind == "estimate" else "wko5_mftp" if ci.get("source") == "WKO5 mFTP"
+               else "setting" if ci.get("value") is not None else "none")
+        cp_eff = {"value": None if ci.get("value") is None else round(float(ci["value"]), 1), "source": src,
+                  "label": ci.get("source"), "date": ci.get("date")}
     return {
-        "cp": {"value": cp if cp is not None else wk.get("mftp"),
-               "source": "plan" if cp is not None else "wko5_mftp"},
+        "cp": cp_eff,
         "lthr": {"value": lthr_v, "source": "plan" if lthr is not None else "wko5",
                  "wko5_default": lthr is None and bool((wk["runthr"] or {}).get("is_default")),
                  "method": (lr or {}).get("method"), "label": (lr or {}).get("label")},

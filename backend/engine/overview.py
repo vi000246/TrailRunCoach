@@ -1648,6 +1648,10 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         et = None
     if et and tgt.get("z2") is not None:
         tgt = {**tgt, "z2": (tgt["z2"] + " · " if tgt["z2"] else "") + et["text"]}
+        # SP-449: their own power at the HR cap far above the power band → say so (the band stays)
+        en = BC.easy_power_note(et, tt.get("cp"), aet)
+        if en:
+            notes.append(en)
     lvl = lambda iid: getattr(by.get(iid), "level", "na")
     days_to = goals.get("days_to_next_a")
     goal_h = (goals["targets"].get("est_hours") or {}).get("value")

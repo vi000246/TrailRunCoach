@@ -1028,9 +1028,40 @@ def pd_model(ds, today: dt.date, runs_90, ref_cp: Optional[float], any_power: bo
             "source": "wko5_pdmodel（WKO5 5.0.587 PD 模型的移植，已對 WKO5 快照驗證）"}
 
 
+CP_FIT_MIN_RUNS = 5              # = fitdataset.CP_FIT_MIN_RUNS (a Dataset without stryd_cp_fit)
+
+
+def stryd_pd(ds, day: dt.date) -> Optional[dict]:
+    """WKO5's mFTP as of `day`, the way the 課表 gets its CP before a plan CP test: the PD model
+    fitted to the 90-day mean-max envelope up to `day` (docs/research/wko5-mftp-logic.md) —
+    {mftp, frc, date, runs, n_points}, None when it cannot be fitted. A FIT source reads its own
+    Stryd-only fit (FitFolderDataset.stryd_cp_fit, the same disk memo as the 課表's); another
+    Dataset (WKO5) fits its usable power. SP-449: the CP of a CP test whose two points make no
+    model — WKO5 never drops an effort, it fits the curve's upper edge."""
+    f = getattr(ds, "stryd_cp_fit", None)
+    try:
+        if f is not None:
+            r = f(day)
+            return None if not r else {"mftp": r["cp"], "frc": r["frc_j"], "date": r["date"].isoformat(),
+                                       "runs": r["runs"], "n_points": r.get("n_points")}
+        from backend.engine.wko5expr.dataset import date_to_day
+        tday = date_to_day(day)
+        runs = [w for w in ds.workouts if w.sport == "run" and tday - CP_WINDOW_DAYS < w.day < tday + 1
+                and power_ok(ds, w) and power_source(ds, w) != "none"]
+        if len(runs) < CP_FIT_MIN_RUNS:
+            return None
+        pdm = pd_model(ds, day, runs, None)
+    except Exception:                       # noqa: BLE001 — no fit: the test keeps its own estimate
+        return None
+    return None if not pdm else {"mftp": pdm["mftp"], "frc": pdm["frc"], "date": day.isoformat(),
+                                 "runs": len(runs), "n_points": pdm.get("n_points")}
+
+
 def cp_tests(ds, today: dt.date, weight: float, sex: str) -> list[dict]:
     """3′/12′ tests in the synced FIT files dated within 365 days up to today,
-    each with its estimate (cptest.estimate). Suggestions only."""
+    each with its estimate (cptest.estimate; when the two bouts make no
+    two-point model, WKO5's mFTP fitted up to the test day, stryd_pd).
+    Suggestions only."""
     from backend.engine.racepower import cptest as T
     try:
         found = T.scan(WX.home(), today - dt.timedelta(days=RIEGEL_WINDOW_DAYS), today,
@@ -1039,7 +1070,7 @@ def cp_tests(ds, today: dt.date, weight: float, sex: str) -> list[dict]:
         return []
     out = []
     for t in found:
-        e = T.estimate(t, weight, sex)
+        e = T.estimate(t, weight, sex, pd=lambda t=t: stryd_pd(ds, dt.date.fromisoformat(t["date"])))
         if e.get("cp"):
             age = (today - dt.date.fromisoformat(t["date"])).days
             out.append({**t, "estimate": e, "age_days": age, "fresh": age <= PLAN_CP_MAX_AGE_DAYS})

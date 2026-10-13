@@ -2184,7 +2184,7 @@ def _plan_test(ds, day: dt.date) -> dict:
 
 SAME_DAY_BOUT = 1.05          # an unfinished test that day counts with a ≥ 3′ bout ≥ 1.05 × CP
 QUICK_PATTERN = 1.03          # 推估: a 20′ window ≥ 1.03 × CP without a test session = a 20′ all-out
-METHOD_PROTOCOL = {"2pt": "standard", "1pt_prior": "standard", "tt20": "quick", "race": "race"}
+METHOD_PROTOCOL = {"2pt": "standard", "1pt_prior": "standard", "pd_model": "standard", "tt20": "quick", "race": "race"}
 CP_HINT = "功率型態像 CP 測試，但課表、標題都沒說是測試，所以不當測試、不算 CP；是的話在課表標成 CP 測試或標題寫「CP 測試」"
 MATCH_LABEL = {"done_by": "課表對應", "same_day": "當天課表", "race": "比賽／計時跑", "threshold": "已套用的門檻",
                "title": "標題", "pattern": "功率型態", "steady": "≥ 55 分鐘穩定跑",
@@ -2548,6 +2548,16 @@ def last_quality(ds, today: dt.date, days: int = 28) -> Optional[dict]:
     return best
 
 
+def test_pd_fit(ds, day: dt.date) -> Optional[dict]:
+    """WKO5's mFTP fitted up to a CP test's day (racepower.athlete.stryd_pd, the 課表's own
+    fit) — the CP of a 12′ + 3′ whose points make no two-point model (SP-449)."""
+    try:
+        from backend.engine.racepower import athlete as A
+        return A.stryd_pd(ds, day)
+    except Exception:                       # noqa: BLE001 — no fit: the 12′ bout with the prior
+        return None
+
+
 def cp_eval(ds, w, m: dict, c: dict) -> Optional[dict]:
     """The CP-test result of a test_cp activity by its protocol
     (cp_protocols.result), compared with the previous result of the same
@@ -2555,10 +2565,11 @@ def cp_eval(ds, w, m: dict, c: dict) -> Optional[dict]:
     from backend.engine import cp_protocols as CPP
     plan = getattr(ds, "plan", None)
     sex = CPP.athlete_sex(ds)
-    res = CPP.result(m.get("cp_bouts"), c.get("protocol"), m.get("lthr"), sex)
+    date = c.get("date") or _wdate(w).isoformat()
+    res = CPP.result(m.get("cp_bouts"), c.get("protocol"), m.get("lthr"), sex,
+                     pd=lambda: test_pd_fit(ds, dt.date.fromisoformat(date)))
     if res is None:
         return None
-    date = c.get("date") or _wdate(w).isoformat()
     ths = getattr(plan, "thresholds", None) or []
     ref = CPP.reference(ths, date, res["method"], m.get("cp"))
     delta = (res["cp"] / ref["cp"] - 1.0) if ref.get("cp") else None
@@ -2752,6 +2763,10 @@ def cp_headline(ev: dict) -> str:
     if ev["method"] == "1pt_prior":
         return (f"只用 12 分 {ev['p12']:.0f} W − W′ 先驗 {ev['wprime_prior'] / 1000:.1f} kJ ÷ 720 → "
                 f"CP {ev['cp']:.0f} W{rng}，{ev['quality']}")
+    if ev["method"] == "pd_model":
+        pd = ev.get("pd") or {}
+        return (f"12 分 {ev['p12']:.0f} W、3 分 {ev['p3']:.0f} W 不成兩點模型 → 比照 WKO5：{pd.get('date') or ''} "
+                f"前 90 天 mean-max 上緣（含這次）的 PD 模型 mFTP {ev['cp']:.0f} W，{ev['quality']}")
     if ev["method"] == "tt20":
         return f"20 分 {ev['p20']:.0f} W × 0.95 → CP {ev['cp']:.0f} W{rng}"
     return f"{ev['race_s'] / 60:.0f} 分 {ev['race_power']:.0f} W → CP {ev['cp']:.0f} W{rng}（Riegel 換算，外插）"
@@ -2765,7 +2780,7 @@ def cp_compare_line(ev: dict) -> Optional[str]:
     if dlt is None:
         return "沒有可以比較的 CP（還沒有門檻）"
     who = (f"上一次同方法（{ref['date']}）" if ref.get("same_method") else
-           f"目前的 CP（{ref.get('method') or 'WKO5'}{'，換算到同一基準' if ref.get('converted') else ''}）")
+           f"目前的 CP（{ref.get('method') or '課表用的'}{'，換算到同一基準' if ref.get('converted') else ''}）")
     verdict = "建議更新" if abs(dlt) > CP_DELTA else "不用改"
     return f"和{who} {ref['cp']:.0f} W 差 {dlt * 100:+.1f}%" + ("（> 3%）" if abs(dlt) > CP_DELTA else "") + f"：{verdict}"
 

@@ -265,6 +265,21 @@ def threshold_info(ds, basis: str, ref, end_day: int) -> dict:
             "date": day.isoformat() if est.get("value") else None}
 
 
+def cp_in_effect(ds, end_day: int) -> dict:
+    """{"value", "source", "date", "kind"}: the CP the 課表 uses on `end_day` — training_targets'
+    `cp` / `cp_source` (the last run moved to that day, _on_day): a plan CP test, else the dated
+    setting, else (a COROS / TP source) the Stryd PD fit in effect. SP-449: the settings page
+    (api/plan.py _effective) shows this one instead of WKO5's mFTP, which a COROS install has not."""
+    import math
+    runs = [w for w in ds.workouts if w.sport == "run" and math.floor(w.day) <= end_day]
+    ref = _on_day(runs[-1], end_day) if runs else None
+    if ref is None:
+        return {"value": None, "source": None, "date": None, "kind": None}
+    ci = threshold_info(ds, "cp", ref, end_day)
+    return {"value": ds.cp(ref), "kind": ci.get("kind"), "date": ci.get("date"),
+            "source": ci.get("source") or ("WKO5 mFTP" if ds.settings_from == "wko5" else ds.setting_label("runftp"))}
+
+
 def _no_data_reason(basis: str, T, n_runs: int, days: int) -> str:
     name = {"cp": "CP", "lthr": "LTHR", "tpace": _("閾值配速")}[basis]
     if not n_runs:

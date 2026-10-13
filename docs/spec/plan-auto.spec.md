@@ -489,7 +489,10 @@ intensity). Each rung is the canonical variant of `backend/engine/interval_libra
   removed 2026-10-03: no source).
 - **Faster at the same HR**: the easy targets show pace / power at the AeT HR from the median
   EF of the last 6 easy road runs (`base_check.easy_targets`, 推估); the AeT HR is unchanged and
-  needs no retest. CP drives the Zone 3 / 5 power targets (the CP-test track is unchanged).
+  needs no retest. When that power is above 88 % CP (`base_check.EASY_POWER_CONFLICT`, 推估: above
+  Palladino Zone 2, LT1 ≈ 80 % CP) the week gets a `watch` note (`src` `easy_power`): the CP may be
+  too low (or the HR cap too high), do a CP / AeT test — the power band is not changed (SP-449); the
+  課表 page lists it once (`plan_sessions._plan_notes`). CP drives the Zone 3 / 5 power targets (the CP-test track is unchanged).
 - **History** (`quality_gate.z5_history`): the lifecycle replayed on every day of a range with
   the inputs evaluate() would have had that day (the plan's AeT / LTHR in effect, `reentry.find`
   on that day, the interval sessions of the 8 weeks before it) through the same `_z5`, so the
@@ -983,3 +986,4 @@ The owner's calls, gathered from the sections above (each is described there wit
 | 2026-10-13 | perf | SP-394 (owner 2026-10-13) | During a first import's back-fill an automatic run is postponed (`history_pending`) and runs once the complete Dataset is in (`backfill.when_complete` → `_rerun` on the app's loop): never with an incomplete CTL. Tests: `backend/tests/test_queue_hot_first_sp394.py::test_during_the_back_fill_the_pmc_and_the_ctl_wait_and_the_auto_plan_too` |
 | 2026-10-13 | feature | SP-398 | Rule E (fatigue guard) on load only: the 「two red-compliance sessions in a row」 trigger is gone (`adapt._fatigue`, `backend/engine/adapt.py:499`; `compliance.streak_red` removed) — the owner: fatigue is intensity / TSS, not the completion colour. TSB < −30 and the CTL ramp BLOCK act as before. The completion words are 完成／部分／換了課／跳過 (`compliance.LEVEL_LABEL`, `with_plan_check`, `plan_match.compare` text 「換了課：…」); levels unchanged. Tests: `backend/tests/test_adapt.py` (`test_fatigue_two_reds_no_longer_trigger_sp398`, `test_fatigue_tsb_and_ramp_still_act_with_two_reds_sp398`), `backend/tests/test_b2b.py` |
 | 2026-10-13 | feature | SP-404 | Rule E's new trigger 「連續 2 堂輕鬆課跑太強」: the last 2 done easy / long runs of the week both too hard (rule D 太強 / 偏強 on an easy run, a self-rating ≥ Hard on an easy / long run; a 偏強 from HR alone does not count with `hr_quality` low) -> the quality steps down to the recovery fartlek, easy minutes × 0.8; TSB / ramp win (`adapt._too_hard_streak`, `adapt.overhard(hr=)`, `OVERHARD_STREAK = 2`, 推估). It acts in a B2B week too. Tests: `backend/tests/test_adapt.py` (`*_sp404`), `backend/tests/test_adapt_rpe.py`, `backend/tests/test_b2b.py` |
+| 2026-10-13 | feature | SP-449 | A week note when the easy runs' own power at the easy-run HR cap is above 88 % CP (`base_check.easy_power_note`; e.g. 169 W at 154 bpm vs CP 175 W, band top 140 W): CP may be too low, do a CP / AeT test; the easy power band (65–80 % CP) is unchanged. Shown in the overview's week notes and once on the 課表 page (`plan_sessions._plan_notes`, the first week in view) (zh / en) |

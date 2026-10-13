@@ -251,7 +251,7 @@ function renderNow() {
     <div class="s"><a href="/api/v1/wko5/viewer?view=${encodeURIComponent("周期化訓練")}&dash=${encodeURIComponent(c.dashboard)}">圖表分析 → 我的圖表 → 周期化訓練</a></div></div>`);
   const th = S.effective_thresholds;   // not `t`: that is the i18n t()
   cards.push(`<div class="card"><div class="k">目前區間用的門檻</div><div class="v" style="font-size:16px">AeT ${fmt(th.aethr.value)}${pmBadge(th.aethr.pm)} / LTHR ${fmt(th.lthr.value)} / CP ${fmt(th.cp.value)} W</div>
-    <div class="s ${th.lthr.wko5_default ? "warn" : ""}">${th.lthr.wko5_default ? t("plan.thr.lthr_default") : th.lthr.source === "plan" ? `LTHR：${esc(th.lthr.label || "季計畫")}` : "心率來自 WKO5 設定"}；AeT：${esc(th.aethr.label || "")}；CP ${th.cp.source === "plan" ? "來自你的測試" : "＝WKO5 的 mFTP"}</div></div>`);
+    <div class="s ${th.lthr.wko5_default ? "warn" : ""}">${th.lthr.wko5_default ? t("plan.thr.lthr_default") : th.lthr.source === "plan" ? `LTHR：${esc(th.lthr.label || "季計畫")}` : "心率來自 WKO5 設定"}；AeT：${esc(th.aethr.label || "")}；${esc(t("plan.thr.cp_src", { src: th.cp.label || "–" }))}</div></div>`);
   $("#now").innerHTML = cards.join("");
 }
 

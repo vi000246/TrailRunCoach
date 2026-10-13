@@ -481,6 +481,30 @@ def easy_targets(ds, today: dt.date, aet: Optional[float]) -> Optional[dict]:
     return {"pace_s_km": pace, "power": pw, "n": len(ev), "text": txt}
 
 
+# 推估 (SP-449): the easy runs' own power at the easy-run HR cap above the top of Palladino Zone 2
+# (88 % CP) contradicts the CP — LT1 sits near 80 % CP (docs/research/power-zone-width.md §3), so an
+# easy run cannot be that close to CP. The easy band's top (zones.EASY_BAND, 80 %) is left as it is.
+EASY_POWER_CONFLICT = 0.88
+
+
+def easy_power_note(et: Optional[dict], cp: Optional[float], aet: Optional[float]) -> Optional[dict]:
+    """A 課表 note when easy_targets' power at the easy-run HR cap is above EASY_POWER_CONFLICT ×
+    CP: the CP may be too low (or the HR cap too high), a CP / AeT test is suggested. The power
+    band is not changed (the user 2026-10-13, SP-449: say it, don't silently hold the runner
+    back). None when nothing is off or something is missing."""
+    from backend.engine.zones import EASY_BAND
+    pw = (et or {}).get("power")
+    if not pw or not cp or not aet or pw <= EASY_POWER_CONFLICT * cp:
+        return None
+    return {"level": "watch", "src": "easy_power",
+            "text": _("輕鬆跑功率帶可能偏低：最近 {n} 次輕鬆跑在輕鬆跑上限 {aet:.0f} bpm 時約 {pw:.0f} W，"
+                      "是 CP {cp:.0f} W 的 {pct:.0f}%，比功率帶上限 {hi:.0f} W（{hip:.0f}% CP）高很多。"
+                      "CP 可能估低了（或心率上限估高了）；建議做一次 CP 測試（或 AeT 測試）。"
+                      "功率帶先不改，輕鬆跑以心率為主",
+                      n=et.get("n") or 0, aet=aet, pw=pw, cp=cp, pct=pw / cp * 100, hi=EASY_BAND[1] * cp,
+                      hip=EASY_BAND[1] * 100)}
+
+
 # ---------------------------------------------------------------------------
 # the Zone 5 lifecycle
 # ---------------------------------------------------------------------------
