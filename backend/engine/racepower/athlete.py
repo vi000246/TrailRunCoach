@@ -210,12 +210,26 @@ def _per_run(ds, w, weight) -> Optional[dict]:
     return m
 
 
+def _per_run_w(ds, w) -> Optional[dict]:
+    """SP-444, no body weight: the same metrics at a 1-kg unit mass (RE.re_mass) — RE is speed ÷
+    watts; LSS/kg needs the weight and is None."""
+    m = _per_run(ds, w, RE.re_mass(None))
+    if m is not None:
+        m["lss_kg"] = None
+    return m
+
+
 def run_metrics(ds, runs, weight) -> dict[int, dict]:
     """Per-run power metrics (RE, moving power, …) of the runs whose power
-    the models use (power_ok); watch-estimated power is left out."""
+    the models use (power_ok); watch-estimated power is left out. Without a body
+    weight RE is speed ÷ watts (SP-444, `_per_run_w`; its own cached compute, so the
+    per-kg rows of a runner with a weight keep their code version)."""
     out = {}
     for w in power_runs(ds, runs):
-        v = ds.cached_series(METRICS_KEY, w, lambda w=w: _per_run(ds, w, weight))
+        if not weight:
+            v = ds.cached_series(METRICS_KEY, w, lambda w=w: _per_run_w(ds, w))
+        else:
+            v = ds.cached_series(METRICS_KEY, w, lambda w=w: _per_run(ds, w, weight))
         if v:
             out[w.idx] = v
     ds.flush_series()
@@ -1264,6 +1278,8 @@ def derive(ds, today: Optional[dt.date] = None, fetch_weather: bool = True,
                  if x >= 60]
 
     # ---- RE -------------------------------------------------------------------
+    # SP-444: per kg with a body weight; without one speed ÷ watts for every run (RE.re_mass)
+    re_unit = RE.re_unit(weight)
     road_rows, trail_rows = [], []
     for w in runs_365:
         m = metrics.get(w.idx)
@@ -1277,7 +1293,7 @@ def derive(ds, today: Optional[dt.date] = None, fetch_weather: bool = True,
                "intensity": (cls.get(w.idx) or {}).get("cls")}
         if row["trail"]:
             if (climb or 0) >= TRAIL_MIN_CLIMB_M and m["moving_s"] >= TRAIL_MIN_MOVING_S and km:
-                row["re_trail"] = {f: RE.trail_re(km, climb, m["moving_s"], m["avg_power"], weight,
+                row["re_trail"] = {f: RE.trail_re(km, climb, m["moving_s"], m["avg_power"], RE.re_mass(weight),
                                                   divisor_of(f)) for f in ("fitted_run", "itra", "scarf")}
                 trail_rows.append(row)
         elif c is not None and c < ROAD_MAX_CVI_ADJ and m["moving_s"] >= ROAD_MIN_MOVING_S \
@@ -1286,7 +1302,7 @@ def derive(ds, today: Optional[dt.date] = None, fetch_weather: bool = True,
             # road run to flat, so the flat RE rests on the whole year instead
             # of the few runs under 25 ft/mi
             row["cvi_adj"] = RE.cvi_adjust(c, 0.0)
-            row["re_flat"] = m["re"] + row["cvi_adj"]
+            row["re_flat"] = RE.with_cvi(m["re"], row["cvi_adj"], re_unit)
             road_rows.append(row)
     road = RE.summary([r["re_flat"] for r in road_rows])
     if road:
@@ -1361,7 +1377,7 @@ def derive(ds, today: Optional[dt.date] = None, fetch_weather: bool = True,
         "wko5": {"mftp": pd.get(("mftp", "Run")), "tte": tte, "frc": pd.get(("frc", "Run")),
                  "pmax": pd.get(("pmax", "Run")), "stamina": pd.get(("stamina", "Run"))},
         "riegel": riegel, "envelope": chart_env,
-        "re": {"road": road, "road_cvi": road_cvi, "train_cvi": train_cvi, "trail": trail,
+        "re": {"unit": re_unit, "road": road, "road_cvi": road_cvi, "train_cvi": train_cvi, "trail": trail,
                "road_runs": road_rows[-60:], "trail_runs": trail_rows,
                "window_days": RE_WINDOW_DAYS},
         "hiking": {"eph": eph, "days": hdays, "biggest": biggest, "error": hike_err,
@@ -1511,6 +1527,27 @@ def grade_samples(ds, runs, exclude: Optional[set] = None, power_only: bool = Tr
                         "date": w.entry.start.date().isoformat()})
     ds.flush_series()
     return out
+
+
+def grade_samples_per_w(gs: list[dict]) -> list[dict]:
+    """SP-444, no body weight (all-or-nothing, RE.re_mass): each window's RE as speed ÷ watts — the
+    unit of every other RE of this athlete. grade_samples itself is left as it is (with a weight
+    each window keeps its own day's weight)."""
+    for s in gs:
+        if s.get("re") is None and s.get("p") and s.get("v") is not None:
+            s["re"] = s["v"] / (s["p"] / RE.re_mass(None))
+    return gs
+
+
+def flat_re_fallback(gs: list[dict]) -> float:
+    """The flat RE when there is no flat window, per W (SP-444): the per-kg default 1.0 has no per-W
+    value, so the running windows' RE brought to flat by the Minetti prior (re × Cr(g)/Cr(0), the
+    same factor grade_model.re_prior divides by), median. 1.0 only when there is no window at all."""
+    from backend.engine.algorithms import minetti
+    from backend.engine.racepower.grade_model import DOWNHILL_FLOOR
+    xs = [s["re"] * minetti.grade_factor(s["g"], downhill_floor=DOWNHILL_FLOOR) for s in gs
+          if s.get("re") and (s.get("run") is None or s["run"] >= 0.5)]
+    return float(median(xs)) if xs else 1.0
 
 
 CLIMB_CAD_KEY = "racepower_climb_cadence_v1"   # SP-230: seconds per 5-spm bin on climbs ≥ 3 %
@@ -1773,9 +1810,12 @@ def grade_models(ds, today: Optional[dt.date] = None, re_flat: Optional[float] =
     if only_classes:
         runs = [w for w in runs if cmap.get(w.idx) in only_classes]
     gs = grade_samples(ds, runs, exclude)
+    per_w = not ds.setting("weight", tday)
+    if per_w:
+        gs = grade_samples_per_w(gs)
     if re_flat is None:
         flat = [s["re"] for s in gs if s["re"] and abs(s["g"]) <= 0.01 and (s["run"] is None or s["run"] >= 0.5)]
-        re_flat = float(median(flat)) if flat else 1.0
+        re_flat = float(median(flat)) if flat else (flat_re_fallback(gs) if per_w else 1.0)
     if surfaces is None:
         surfaces = surface_marks(ds, runs)
     if not hikes:

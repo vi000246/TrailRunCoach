@@ -95,6 +95,7 @@ class PredictIn(BaseModel):
     k: Optional[float] = None
     k_source: Optional[Literal["personal", "table", "manual"]] = None
     re: Optional[float] = None
+    re_unit: Optional[Literal["per_kg", "per_w"]] = None     # SP-444: the typed RE's unit (default per kg)
     weight: Optional[float] = None
     eph: Optional[float] = None
     effort_formula: str = "fitted_run"
@@ -306,11 +307,10 @@ def predict(ctx: Context, body: PredictIn) -> dict:
 
     if body.type == "baiyue":
         return predict_baiyue(ctx, body, d, weight, env, used, warnings)
-    if not weight or weight <= 0:
-        # SP-414: RE is per kg and the power ↔ speed step divides by the weight — a road / trail
-        # prediction needs one (a typed RE too); never a default weight
-        raise CalcError(400, _("沒有體重：跑步 RE（每公斤）算不出，越野／路跑預測做不了；"
-                               "請到 設定 → 個人資料 填寫體重"))
+    # SP-444: the derived RE is per kg with a body weight in the settings; without one it is speed ÷
+    # watts (`re.unit`, RE.re_mass) and the power ↔ speed step divides by 1 — a weight typed into
+    # 「你的數字」 then only gives the W/kg (never a default weight)
+    re_unit = (d.get("re") or {}).get("unit") or RE.PER_KG
 
     # CP
     srcs = {s["id"]: s for s in d["cp"]["sources"]}
@@ -345,6 +345,13 @@ def predict(ctx: Context, body: PredictIn) -> dict:
     race_cvi = RE.cvi(body.gain_m, body.distance_km)
     if body.re:
         re_v, re_src = body.re, _("手動")
+        typed_unit = body.re_unit or RE.PER_KG
+        if typed_unit != re_unit:
+            if not weight or weight <= 0:
+                # a per-kg RE typed in, no weight anywhere to bring it to speed ÷ watts
+                raise CalcError(400, _("手動填的 RE 是每公斤，沒有體重換算不了；請填體重，"
+                                       "或不要手動填 RE（沒有體重時用你的速度／瓦）"))
+            re_v = re_v / weight if re_unit == RE.PER_W else re_v * weight
     elif trail:
         s = d["re"]["trail"].get(fx)
         if not s:
@@ -356,9 +363,13 @@ def predict(ctx: Context, body: PredictIn) -> dict:
             raise CalcError(400, _("沒有路跑 RE：請手動輸入"))
         base_cvi = (d["re"]["road_cvi"] or {}).get("median") or 0.0
         adj = RE.cvi_adjust(base_cvi, race_cvi or 0.0)
-        re_v = s["median"] + adj
-        re_src = _("你的平路 RE 中位數（{n} 次）", n=s['n']) + (_("，CVI 調整 {adj:+.2f}", adj=adj) if adj else "")
-    used["re"] = _src(re_v, re_src)
+        re_v = RE.with_cvi(s["median"], adj, re_unit)
+        re_src = _("你的平路 RE 中位數（{n} 次）", n=s['n']) + (
+            (_("，CVI 調整 {pct:+.0f} %（推估）", pct=adj * 100) if re_unit == RE.PER_W else
+             _("，CVI 調整 {adj:+.2f}", adj=adj)) if adj else "")
+    if re_unit == RE.PER_W:
+        re_src += _("（速度／瓦：沒有體重）")
+    used["re"] = _src(re_v, re_src, unit=re_unit)
 
     # Riegel k
     target_m = d_eff_km * 1000.0
@@ -405,7 +416,7 @@ def predict(ctx: Context, body: PredictIn) -> dict:
                          road_re=(d["re"]["road"] or {}).get("median"),
                          # the CVI that road RE was measured at (its own flat runs),
                          # not the all-run training CVI — §1.3 adjusts from there
-                         train_cvi=(d["re"]["road_cvi"] or {}).get("median"))
+                         train_cvi=(d["re"]["road_cvi"] or {}).get("median"), re_unit=re_unit)
     if trail:
         res["ep_itra_per_h"] = RE.effort_km(body.distance_km, body.gain_m, 100.0) / (res["time_s"] / 3600.0)
         res["effort_km_itra"] = RE.effort_km(body.distance_km, body.gain_m, 100.0)

@@ -109,25 +109,32 @@ def predict_run(*, distance_km: float, cp: float, tte: float, k: float, re: floa
                 weight: float, m: float = 1.0, gain_m: float = 0.0,
                 effort_divisor: Optional[float] = None, target_time_s: Optional[float] = None,
                 w_prime: Optional[float] = None, longest_effort_s: Optional[float] = None,
-                road_re: Optional[float] = None, train_cvi: Optional[float] = None) -> dict:
+                road_re: Optional[float] = None, train_cvi: Optional[float] = None,
+                re_unit: str = RE.PER_KG) -> dict:
     """Road (effort_divisor None: D = true distance) or trail (D = effort
-    distance km + gain/X, RE = the personal trail RE)."""
+    distance km + gain/X, RE = the personal trail RE).
+    SP-444: `re_unit` PER_W — RE (and `road_re`) are speed ÷ watts, the power ↔ speed step divides
+    by 1 (`RE.re_mass`) and `weight` (None, or one typed in) only gives the W/kg."""
+    if re_unit == RE.PER_W:
+        weight, mass = (weight if weight and weight > 0 else None), 1.0
+    else:
+        mass = weight
     trail = effort_divisor is not None
     d_eff_km = RE.effort_km(distance_km, gain_m, effort_divisor) if trail else distance_km
     d_m = d_eff_km * 1000.0
-    sol = solve_riegel_re(d_m, cp, tte, k, re, weight, m)
+    sol = solve_riegel_re(d_m, cp, tte, k, re, mass, m)
     t, p = sol["time_s"], sol["power"]
     out = {
         "kind": "trail" if trail else "road",
         "distance_km": distance_km, "effort_km": d_eff_km, "effort_divisor": effort_divisor,
-        "time_s": t, "power": p, "pct_cp": p / cp, "w_per_kg": p / weight,
+        "time_s": t, "power": p, "pct_cp": p / cp, "w_per_kg": p / weight if weight else None,
         "pace_s_per_km": t / distance_km,
         "effort_pace_s_per_km": t / d_eff_km if trail else None,
         "ep_per_h": d_eff_km / (t / 3600.0),
         "solver": {k_: sol[k_] for k_ in ("iterations", "method")},
         "task8_power": R.power_from_cp(cp, t, tte, k) * m,
-        "task15_time_s": time_for_power(d_m, p / m, re, weight, m),
-        "scenarios": scenarios(d_m, t, cp, tte, k, re, weight, m, true_km=distance_km),
+        "task15_time_s": time_for_power(d_m, p / m, re, mass, m),
+        "scenarios": scenarios(d_m, t, cp, tte, k, re, mass, m, true_km=distance_km),
         "warnings": [],
     }
     w = R.extrapolation_warning(t, longest_effort_s)
@@ -136,20 +143,21 @@ def predict_run(*, distance_km: float, cp: float, tte: float, k: float, re: floa
     if t > 3 * 3600:
         out["warnings"].append("超過 3 小時的比賽，訓練中很少有真正最大努力的紀錄——個人 k 通常偏負（預估偏慢），可與查表 k 比較")
     if target_time_s:
-        imp = improvement_needed(d_m, target_time_s, re, weight, cp, tte, k, m)
+        imp = improvement_needed(d_m, target_time_s, re, mass, cp, tte, k, m)
         out["target"] = {"time_s": target_time_s, **imp,
                          "pct_cp": imp["power_required"] / cp,
                          "pace_s_per_km": target_time_s / distance_km}
     if not trail and w_prime and d_m <= ROAD_TASK17_MAX_M:
-        out["task17"] = cp_wprime_scenario(d_m, re, weight, cp, w_prime, m)
+        out["task17"] = cp_wprime_scenario(d_m, re, mass, cp, w_prime, m)
     if trail:
         out["climb_power_cap"] = CLIMB_POWER_CAP * p
         if road_re and train_cvi is not None:
             race_cvi = RE.cvi(gain_m, distance_km)
             adj = RE.cvi_adjust(train_cvi, race_cvi)
-            alt = solve_riegel_re(distance_km * 1000.0, cp, tte, k, road_re + adj, weight, m)
+            re_used = RE.with_cvi(road_re, adj, re_unit)
+            alt = solve_riegel_re(distance_km * 1000.0, cp, tte, k, re_used, mass, m)
             out["cvi_crosscheck"] = {"road_re": road_re, "train_cvi": train_cvi, "race_cvi": race_cvi,
-                                     "adjust": adj, "re_used": road_re + adj,
+                                     "adjust": adj, "re_used": re_used,
                                      "time_s": alt["time_s"], "power": alt["power"]}
     return out
 

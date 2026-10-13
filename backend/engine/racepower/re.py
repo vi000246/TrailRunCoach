@@ -1,5 +1,6 @@
 """
-Running effectiveness (RE = speed m/s ÷ power W/kg), the workbook's CVI hill
+Running effectiveness (RE = speed m/s ÷ power W/kg; without a body weight speed ÷ watts, SP-444
+`re_mass`), the workbook's CVI hill
 adjustment (task 18, §1.3), the personal trail RE (§3.1) and the per-activity
 Stryd metrics of task 3.
 
@@ -25,6 +26,29 @@ CVI_CATEGORIES = [      # (label, lower bound inclusive) — index = category nu
     ("多丘 Very Hilly", 76),
     ("極多丘 Extremely Hilly", 101),
 ]
+
+
+PER_KG, PER_W = "per_kg", "per_w"    # SP-444: the unit of every RE of one athlete
+
+
+def re_mass(weight_kg: Optional[float]) -> float:
+    """SP-444: the mass of the RE ↔ speed step (v = RE · P / mass): the body weight, else 1 — RE is
+    then speed ÷ watts (m/s per W, `PER_W`). A body weight is all-or-nothing (the plan's and WKO5's
+    dated weights back-fill), so every RE of an athlete without one is per W and every prediction
+    divides by the same 1: the weight cancels exactly as it does with one. Never a default weight —
+    W/kg, LSS/kg, energy stay None without one."""
+    return weight_kg if weight_kg and weight_kg > 0 else 1.0
+
+
+def re_unit(weight_kg: Optional[float]) -> str:
+    return PER_KG if weight_kg and weight_kg > 0 else PER_W
+
+
+def with_cvi(re: float, adj: float, unit: str = PER_KG) -> float:
+    """The workbook's CVI adjustment (+0.01 RE per category, `cvi_adjust`) applied to an RE: added
+    to a per-kg RE (as before); per W it is relative, × (1 + adj) — +0.01 per-kg RE ≈ +1 % at a
+    typical RE of 1.00 (推估, SP-444: an absolute per-kg step has no per-W value without a weight)."""
+    return re * (1.0 + adj) if unit == PER_W else re + adj
 
 
 def re_value(speed_ms: float, power_w: float, weight_kg: float) -> Optional[float]:

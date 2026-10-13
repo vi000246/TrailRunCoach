@@ -267,7 +267,7 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
 </header>
 <main>
   <!-- SP-414: shown while the settings have no body weight (INP.weight.value null) -->
-  <div id="noweight" class="noweight" role="status" hidden><span data-i18n="racepower.noweight.banner">沒有體重：跑步 RE（越野／路跑預測）、百岳能力模型、背包預設、熱量／補給、W/kg 算不出，請到 設定 → 個人資料 填寫。</span> <a href="/api/v1/wko5/settings#personal" data-i18n="racepower.noweight.link">去填體重 →</a></div>
+  <div id="noweight" class="noweight" role="status" hidden><span data-i18n="racepower.noweight.banner">沒有體重：百岳能力模型、背包預設、熱量／補給、W/kg 算不出（越野／路跑預測改用你的速度／瓦，照樣算），請到 設定 → 個人資料 填寫。</span> <a href="/api/v1/wko5/settings#personal" data-i18n="racepower.noweight.link">去填體重 →</a></div>
   <section id="target-sec" class="tab-calc">
     <h2>目標 <span class="meta">從賽季計畫帶入，或自己輸入</span></h2>
     <div class="toolbar">
@@ -584,6 +584,9 @@ const pct1 = (v) => ok(v) ? (v * 100).toFixed(1) + "%" : "–";
 const spct = (v) => ok(v) ? (v > 0 ? "+" : v < 0 ? "−" : "±") + Math.abs(v * 100).toFixed(1) + "%" : "–";
 const k3 = (v) => ok(v) ? v.toFixed(3) : "–";
 const r3 = (v) => ok(v) ? v.toFixed(3) : "–";
+// SP-444: RE per W (no body weight) is ~1/60 of a per-kg RE — 4 decimals
+const reW = () => INP?.re?.unit === "per_w";
+const reF = (v) => ok(v) ? v.toFixed(reW() ? 4 : 3) : "–";
 const f1 = (v) => ok(v) ? v.toFixed(1) : "–";
 const n0 = (v) => ok(v) ? Math.round(v).toLocaleString() : "–";
 function hms(s) { if (!ok(s)) return "–"; s = Math.round(s); return `${Math.floor(s / 3600)}:${String(Math.floor(s % 3600 / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`; }
@@ -1028,7 +1031,7 @@ function renderInputs() {
     rows.push(`<tr><td>CP</td><td colspan="2"><div class="seg" id="cpmode" style="display:inline-flex">
         <button type="button" data-cpm="auto" class="${manual ? "" : "on"}">自動</button><button type="button" data-cpm="manual" class="${manual ? "on" : ""}">手動</button></div>
       ${manual ? ` <input data-o="cp" class="ovr" type="number" step="1" style="width:90px" value="${ovr.cp}"> W`
-        : ` <b class="num">${W(u.cp?.value)}</b> <span class="meta">${wkg((u.cp?.value) / (u.weight?.value || 1))} · ${esc(u.cp?.source || "")}</span>`}
+        : ` <b class="num">${W(u.cp?.value)}</b> <span class="meta">${wkg(u.weight?.value ? u.cp?.value / u.weight.value : null)} · ${esc(u.cp?.source || "")}</span>`}
       <a href="#cp-sec" class="meta">看依據</a></td></tr>`);
     // everything below is derived automatically; shown only under 進階設定
     rows.push(`<tr><td colspan="3"><details id="adv" ${ls.get("advOpen", false) ? "open" : ""}><summary class="meta">進階設定（W′、TTE、Riegel k、RE、先前賽事）：平常不用動，都自動算</summary>
@@ -1043,7 +1046,7 @@ function renderInputs() {
       <option value="table" ${kcur === "table" ? "selected" : ""}>查表 ${k3(tk?.k)}</option>
       <option value="manual" ${kcur === "manual" && ovr.k_source ? "selected" : ""}>手動</option></select></td></tr>`);
     rows.push(inputRow("Riegel k", "k", u.k?.value, (v) => v.toFixed(3), u.k?.source || "", ` <a href="#rg-sec">看依據</a>`, 0.005));
-    rows.push(inputRow("RE", "re", u.re?.value, (v) => v.toFixed(3), u.re?.source || "", ` <a href="#re-sec">看依據</a>`, 0.005));
+    rows.push(inputRow(reW() ? T("re.per_w_label") : "RE", "re", u.re?.value, (v) => reF(v), u.re?.source || "", ` <a href="#re-sec">看依據</a>`, reW() ? 0.0001 : 0.005));
     const pr = LAST?.tasks?.prior;
     const opts = [`<option value="">自動（${esc(INP.auto_prior?.label || "無")}）</option>`].concat(INP.priors.map((p, i) =>
       `<option value="${i}" ${String(i) === ls.get("prior", "") ? "selected" : ""}>${esc(p.label)} ${dur(p.time_s)} ${W(p.avg_power)}</option>`));
@@ -1224,6 +1227,7 @@ function planBody(extra = {}) {
     body.course = { manual: { km: num("dist"), gain: num("gain") || 0, loss: num("loss"), split: S.split === "km" ? "km" : "none" } };
   }
   for (const k of ["cp", "w_prime", "tte", "k", "re", "weight", "eph"]) if (ovr[k] != null) body[k] = ovr[k];
+  if (ovr.re != null && reW()) body.re_unit = "per_w";       // SP-444: the RE shown (and typed) is speed ÷ watts
   if (ovr.cp_source) body.cp_source = ovr.cp_source;
   if (ovr.k_source) body.k_source = ovr.k_source;
   // SP-244: the plan event's 會用登山杖 (賽季計畫) → hints on steep segments only, no number changes
@@ -2182,12 +2186,13 @@ function renderRiegel() {
 function renderRE() {
   const re = INP.re, fx = $("formula").value;
   const row = (r, trail) => `<tr><td>${esc(r.label)}</td><td class="n">${f1(r.km)}</td><td class="n">${n0(r.climb_m)}</td><td class="n">${n0(r.cvi)}</td>
-    <td class="n">${dur(r.moving_s)}</td><td class="n">${W(r.avg_power)}</td><td class="n">${r3(r.re)}</td>${trail ? `<td class="n">${r3(r.re_trail[fx])}</td>` : ""}
+    <td class="n">${dur(r.moving_s)}</td><td class="n">${W(r.avg_power)}</td><td class="n">${reF(r.re)}</td>${trail ? `<td class="n">${reF(r.re_trail[fx])}</td>` : ""}
     <td class="n">${r.lss_kg != null ? r.lss_kg.toFixed(3) : "–"}</td><td class="n">${r.air_pct != null ? r.air_pct.toFixed(1) + "%" : "–"}</td><td class="n">${r.form_pct != null ? Math.round(r.form_pct) + "%" : "–"}</td></tr>`;
   const head = (trail) => `<thead><tr><th>活動</th><th class="n">km</th><th class="n">爬升</th><th class="n">CVI</th><th class="n">移動</th><th class="n">功率</th><th class="n">RE</th>${trail ? '<th class="n">越野 RE</th>' : ""}<th class="n">LSS/kg</th><th class="n">風阻 Pa</th><th class="n">Form</th></tr></thead>`;
-  const s = (x) => x ? `<b>${r3(x.median)}</b>（IQR ${r3(x.q1)}–${r3(x.q3)}，${x.n} 次）` : "–";
+  const s = (x) => x ? `<b>${reF(x.median)}</b>（IQR ${reF(x.q1)}–${reF(x.q3)}，${x.n} 次）` : "–";
   $("re-detail").innerHTML = `<div class="kv"><span>平路 RE（CVI &lt; 51 的路跑各自調到平路）${s(re.road)}</span><span>越野 RE（effort km）${s(re.trail[fx])}</span>
     <span>訓練 CVI 中位 <b>${n0(re.train_cvi?.median)}</b>（近 90 天）</span></div>
+    ${re.unit === "per_w" ? `<div class="note noweight">${esc(T("re.per_w_note"))}</div>` : ""}
     <div class="note">越野 RE = (effort 距離 m ÷ 移動秒) ÷ (功率 ÷ 體重)，近 ${re.window_days} 天有功率、爬升 ≥ 150 m、移動 ≥ 45 分的越野跑。移動 = 功率 &gt; 0 且速度 &gt; 1 km/h。</div>
     <details><summary>越野跑（${re.trail_runs.length}）</summary><div class="tablewrap"><table>${head(true)}<tbody>${re.trail_runs.slice().reverse().map((r) => row(r, true)).join("")}</tbody></table></div></details>
     <details><summary>平路跑（${re.road_runs.length}）</summary><div class="tablewrap"><table>${head(false)}<tbody>${re.road_runs.slice().reverse().map((r) => row(r, false)).join("")}</tbody></table></div></details>`;
@@ -2266,7 +2271,7 @@ async function renderGM() {
       { name: "先驗（坡度能耗）", type: "line", data: bins.map((b) => [b.grade * 100, b.prior_re]), symbol: "none", lineStyle: { color: css("--muted"), type: "dashed" } },
     ],
   }, true);
-  $("gm-detail").innerHTML = `<div class="kv"><span>平路 RE <b>${r3(g.re_flat)}</b></span><span>100 m 窗 <b>${n0(g.n_samples)}</b></span><span>活動 <b>${g.n_activities}</b></span></div>
+  $("gm-detail").innerHTML = `<div class="kv"><span>平路 RE <b>${reF(g.re_flat)}</b></span><span>100 m 窗 <b>${n0(g.n_samples)}</b></span><span>活動 <b>${g.n_activities}</b></span></div>
     <div class="note">每一點是你在那個坡度（每 2% 一格）的 100 m 窗「速度 ÷ (功率/體重)」中位數，點越大樣本越多。樣本少的坡度會往「由平路 RE 與坡度能耗推出來」的虛線靠。這條曲線已經包含 Stryd 在陡坡的讀數特性與你上坡快走的習慣。</div>`;
   renderRW(g.runwalk);
 }
