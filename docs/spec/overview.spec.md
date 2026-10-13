@@ -545,7 +545,9 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
   賽前第 10 / 9 / 8 週, 35 % at 6, 40 % at 4, all easy at 7 / 5 / 3 and before a road race ≤ 10 km; 40 %
   without a known race; within 20–75 min, 推估;
   the A road race's goal pace when ≥ 30 km, else threshold pace × 1.04–1.08), and base strides
-  are 「加速跑 6×20 秒」 (`ROAD_STRIDES`, `backend/engine/overview.py:1266`).
+  are 「加速跑 6×20 秒」 (`ROAD_STRIDES`, `backend/engine/overview.py:1266`). The 課表 page switches it in its top
+  row (the 專項 chip, `backend/static/sportchip.js`, `backend/static/schedule.html:578`, SP-450; the same chip
+  as 圖表分析): it saves the setting and reloads, and the new stamp re-plans (路跑: no 爬升 week row).
 - **專項期** (`engine/specific_phase.py`): the LSD follows the next A race's コース定數 (the race
   calculator's single-day target; a 推估 share per week from week 10 to 3 before the race, still
   ≤ +15 % over the 4-week longest); the race GPX's longest climb becomes one 長爬坡反覆 easy run,
@@ -2576,3 +2578,4 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 | 2026-10-13 | bugfix | SP-409 | 長爬坡反覆 and 陡坡健走 (kind easy, no stored steps) were derived and pushed as one block of the whole session — the 長爬坡反覆 with no target, its structure TSS at the no-target 1.05 (165 vs the card's 87). Now `workout_steps.derive` gives 暖身 15 → N ×（上坡 M＋下坡 0.6 M）→ 緩和 (the uphill with no watch target, named with the session's HR suggestion, RPE 4 / descent RPE 3–4 for the IF) and 暖身 10 → 陡坡 → 緩和 5; `coros_workouts.session_steps` pushes that structure (sessions already on the watch show 需更新 once). target_policy unchanged. Tests: `backend/tests/test_special_easy_structure_sp409.py`, `test_workout_steps.py` golden list, `test_walk_cap.py` (the steep part is step [1]) |
 | 2026-10-13 | bugfix | SP-443 | The multi-day 百岳's 「ME 負重爬坡」 (kind quality, no variant, no 「N×M 分」) derived to nothing and its push raised 「看不懂間歇結構」. Now `workout_steps.derive` gives 暖身 (detail, 10′) → 上坡 the title's climb at `ME_UP_MPH` (auto easy = the walk cap, target_policy unchanged) → 下坡 the rest of the session (RPE 3–4 + 下降 N m, `ME_DOWN_RPE` 推估), and `coros_workouts.session_steps` pushes that structure; structure TSS ≈ 0.88 × the card. Tests: `backend/tests/test_me_climb_structure_sp443.py` |
 | 2026-10-13 | bugfix | SP-449 | 設定 › 閾值 and the plan page show the CP the 課表 uses and its source (`effective_thresholds.cp.label`; `zones.cp_in_effect`) — they said 「WKO5 的 mFTP」 / `wko5_mftp` (null on a COROS install) while the 課表 used the Stryd PD fit; the 「沒填的話用…」 help says the PD model (zh / en) |
+| 2026-10-13 | feature | SP-450 | The 專項 chip (主要訓練項目, `backend/static/sportchip.js`) is in the 課表's top row too (`backend/static/schedule.html:578`): choosing 自動／越野跑／路跑・馬拉松 saves `athlete.primary_sport` and reloads; the plan's `PSP.stored()` stamp re-plans (路跑: no 爬升 week row). Demo: shown, disabled |

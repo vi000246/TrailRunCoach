@@ -573,6 +573,9 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
     <div class="seg" id="view-seg" role="group" aria-label="檢視">
       <button type="button" data-view="month" aria-pressed="true">月</button><button type="button" data-view="week" aria-pressed="false">週</button>
     </div>
+    <!-- SP-450: 專項 (主要訓練項目, static/sportchip.js) — the 自動課表 follows it (路跑: no 爬升 row,
+         no B2B / steep-hill sessions); changing it saves the setting and reloads, which re-plans -->
+    <span id="sport-chip"></span><script src="/api/v1/static/sportchip.js" defer></script>
   </div>
 
   <section class="sync" aria-label="手錶與活動同步" data-i18n-attr="aria-label:schedule.sync.label">
