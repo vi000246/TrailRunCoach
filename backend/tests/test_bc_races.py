@@ -333,7 +333,8 @@ def test_week_plan_and_projection_easy_runs_after_a_b_race_keep_the_easy_target(
     weeks = PJ.project_weeks(wp, _phases(plan, TODAY), date(2026, 10, 18), events=plan.events)
     nxt = next(w for w in weeks if w["start"] == "2026-10-12")
     easy = [x for x in nxt["sessions"] if x["kind"] == "easy" and x["title"] == "輕鬆跑"]
-    down = [x for x in easy if "只排輕鬆跑" in (x.get("detail") or "")]
+    # the downgraded ones: no source and (SP-470) no detail — the rule is the week's note, not their text
+    down = [x for x in easy if not x.get("source") and not x.get("detail")]
     assert down, [(x["day"], x["kind"], x["title"], x.get("target"), x.get("detail")) for x in nxt["sessions"]]
     want = PJ.target_texts(wp["thresholds"] if "thresholds" in wp else {}).get("z2")
     for x in down:

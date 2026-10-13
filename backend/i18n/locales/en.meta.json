@@ -4895,6 +4895,10 @@
     "draft": true,
     "src": "backend/engine/overview.py:1998"
   },
+  "平路或緩坡輕鬆跑": {
+    "draft": true,
+    "src": "backend/engine/overview.py:3146"
+  },
   "減量期天數要在 {lo}–{hi} 天": {
     "draft": true,
     "src": "backend/engine/plan_prefs.py:314"
@@ -6127,9 +6131,17 @@
     "draft": true,
     "src": "backend/engine/balance_plan.py:113"
   },
+  "平衡照做（負荷低，不累腿）": {
+    "draft": true,
+    "src": "backend/engine/balance_plan.py:132"
+  },
   "賽後第 1 週：輕鬆跑 ≤ {max} 分": {
     "draft": true,
     "src": "backend/engine/post_race.py:116"
+  },
+  "輕鬆跑 ≤ {max} 分": {
+    "draft": true,
+    "src": "backend/engine/post_race.py:142"
   },
   "走": {
     "draft": false,

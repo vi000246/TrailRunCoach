@@ -138,7 +138,8 @@ def apply(ss: list, wins: list, monday: dt.date, notes: Optional[list] = None, t
             touched = True
             m = int(_get(s, "minutes") or 0)
             nm = min(m, P.REC_SHORT_MIN) if short else m
-            detail = _("賽後第 1 週：輕鬆跑 ≤ {max} 分", max=P.REC_SHORT_MIN) if short else _("輕鬆跑")
+            # the session itself only (SP-470): 「賽後第 1 週」 is the week's recovery note
+            detail = _("輕鬆跑 ≤ {max} 分", max=P.REC_SHORT_MIN) if short else _("輕鬆跑")
             if flat:
                 detail += _("，平路、不跑下坡")
             if _get(s, "kind") != "easy":
@@ -243,13 +244,16 @@ def _easy_fields(easy_target: str) -> dict:
     return {**{k: None for k in _CLEAR}, "target": easy_target or "", "source": ""}
 
 
-def _as_easy(ss, s, cap: float, why: str, put, easy_target: str = "") -> None:
+def _as_easy(ss, s, cap: float, put, easy_target: str = "") -> None:
+    """`s` made an easy run of ≤ `cap` minutes. Its detail is cleared, not set to the race rule that
+    did it (SP-470: a session's text says what the session is — 「B 賽事「X」前 4 天內不排節奏跑」 sat in
+    every one of them; the week's race note already says it)."""
     m = int(_get(s, "minutes") or 0)
     nm = int(min(m, cap) // 5 * 5) or m
     if _get(s, "kind") != "easy":
         n_easy = sum(1 for x in ss if _get(x, "kind") == "easy")
         put(s, id=f"easy{n_easy + 1}", kind="easy", title=_("輕鬆跑"), **_easy_fields(easy_target))
-    put(s, minutes=nm, tss=round(float(_get(s, "tss") or 0.0) * (nm / m if m else 1.0) * 0.8, 1), detail=why)
+    put(s, minutes=nm, tss=round(float(_get(s, "tss") or 0.0) * (nm / m if m else 1.0) * 0.8, 1), detail="")
 
 
 def _race_session(e, is_d: bool, rate: float, done: bool, factory=None):
@@ -297,15 +301,13 @@ def bc_apply(ss: list, events, monday: dt.date, notes: Optional[list] = None, to
             out = (e.start - d).days
             k = _get(s, "kind")
             if monday <= e.start <= sunday and (k == "long" or _get(s, "id") in ("long", "long2")) and out != 0:
-                _as_easy(keep, s, B_EASY_MAX, _("B 賽事「{race}」那週不排長跑：輕鬆跑", race=e.name), put, easy_target)
+                _as_easy(keep, s, B_EASY_MAX, put, easy_target)
                 said.append(_("不排長跑"))
             elif 1 <= out <= B_TEMPO_LONG_DAYS and (k in ("quality", "test", "long")):
-                _as_easy(keep, s, B_EASY_MAX, _("B 賽事「{race}」前 {n} 天內不排節奏跑、長跑：輕鬆跑",
-                                                race=e.name, n=B_TEMPO_LONG_DAYS), put, easy_target)
+                _as_easy(keep, s, B_EASY_MAX, put, easy_target)
                 said.append(_("賽前 {n} 天內不排節奏跑、長跑", n=B_TEMPO_LONG_DAYS))
             elif out == B_INTERVAL_DAYS and k in ("quality", "test") and not _tempo(s):
-                _as_easy(keep, s, B_EASY_MAX, _("B 賽事「{race}」前 {n} 天內不排間歇：輕鬆跑",
-                                                race=e.name, n=B_INTERVAL_DAYS), put, easy_target)
+                _as_easy(keep, s, B_EASY_MAX, put, easy_target)
                 said.append(_("賽前 {n} 天內不排間歇", n=B_INTERVAL_DAYS))
         if monday <= e.start <= sunday:
             race_days = {(e.start + dt.timedelta(days=i)).isoformat() for i in range((e.end - e.start).days + 1)}
@@ -324,7 +326,7 @@ def bc_apply(ss: list, events, monday: dt.date, notes: Optional[list] = None, to
         for s in [x for x in keep if not _get(x, "done") and _get(x, "day")]:
             d = _d(_get(s, "day"))
             if w["end"] < d <= w["easy"] and _get(s, "kind") in ("long", "quality", "test"):
-                _as_easy(keep, s, B_EASY_MAX, _("B 賽事「{race}」後 {n} 天只排輕鬆跑", race=w["race"], n=w["days"]), put, easy_target)
+                _as_easy(keep, s, B_EASY_MAX, put, easy_target)
                 said = True
             elif w["end"] < d <= w["easy"] and _get(s, "kind") == "easy":
                 said = True
