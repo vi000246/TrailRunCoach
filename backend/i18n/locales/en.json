@@ -1459,6 +1459,8 @@
   "要選日期": "Choose a date",
   "規律跑：每週 ≥ {n} 次、別連續 {g} 天沒跑": "Run regularly: ≥ {n} times a week, never {g} days in a row without running",
   "計畫：{text}": "Planned: {text}",
+  "計算中": "Calculating",
+  "計算中（較舊的活動補算中 {done}／{total}）": "Calculating (filling in older activities {done}/{total})",
   "計算太頻繁，請稍後再試": "Too many calculations; please try again later",
   "訓練": "Work",
   "記住的帳密": "remembered credentials",

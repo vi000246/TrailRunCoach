@@ -916,6 +916,8 @@ async function loadThrEstimate() {
   let E;
   try { E = await j("/api/v1/plan/threshold-estimate"); }
   catch { $("thr-est").innerHTML = `<span class="meta">${esc(t("settings.thr.est_failed"))}</span>`; return; }
+  // SP-394: a first import's older activities still back-filling: the estimates wait for them
+  if (E.pending) { $("thr-est").innerHTML = `<span class="meta">${esc(E.pending.message)}</span>`; return; }
   const cur = TS.effective_thresholds;
   const card = (key, label, est, curV, help) => {
     const ok = est && est.value != null;
@@ -953,6 +955,7 @@ async function loadThrCheck() {
 function renderThrCheck() {
   const box = (id, html) => { $(id).innerHTML = html; $(id).hidden = !html; };
   if (!TC) { box("thr-check", ""); box("hr-check", ""); return; }
+  if (TC.pending) { box("thr-check", `<div class="s">${esc(TC.pending.message)}</div>`); box("hr-check", ""); return; }
   const conf = (c) => ({ high: t("settings.thr.chk_conf_high"), medium: t("settings.thr.chk_conf_medium"),
     low: t("settings.thr.chk_conf_low") })[c] || c;
   const why = (v) => (v.signals || []).filter((s) => s.level !== "hint").map((s) => `<li>${esc(s.text)}</li>`).join("");

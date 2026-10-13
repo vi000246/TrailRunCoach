@@ -47,6 +47,7 @@ row says 「…，待推送」 and nothing is sent; each item says 已重新推�
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import datetime as dt
 import hashlib
 import json
@@ -778,6 +779,8 @@ async def run(db, trigger: str = "sync", force: bool = False, approve_id: Option
     if not force and not (await settings(db))["enabled"]:
         return {"status": "disabled"}
     inp = await API._inputs(db)
+    if await _history_pending(trigger):
+        return {"status": "history_pending"}
     out, job = None, None
     for attempt in range(RUN_TRIES):
         async with API._wlock():
@@ -1086,6 +1089,38 @@ async def undo(db, entry_id: int) -> dict:
 # ---------------------------------------------------------------------------
 # the sync hook
 # ---------------------------------------------------------------------------
+
+_APP_LOOP: Optional[asyncio.AbstractEventLoop] = None     # where a postponed run starts (_rerun)
+
+
+async def _history_pending(trigger: str) -> bool:
+    """SP-394 (owner 2026-10-13): a first import's back-fill is not done — its Dataset holds the
+    last ~90 days only, so its CTL / ATL / TSB (the load guard, the projection) would be wrong.
+    The run is postponed: it starts again once the complete Dataset is in (api/backfill.py
+    when_complete -> _rerun). True: postponed."""
+    global _APP_LOOP
+    from backend.api import backfill as BF
+    from backend.api.wko5views import _dataset
+    try:
+        ds = await asyncio.to_thread(contextvars.copy_context().run, _dataset)
+    except Exception:                       # noqa: BLE001 — the run itself reports a missing Dataset
+        return False
+    if BF.coverage(ds) is None:
+        return False
+    _APP_LOOP = asyncio.get_running_loop()
+    BF.when_complete(ds, lambda: _rerun(trigger))
+    log.info("auto plan run (%s) postponed: the older activities are still being back-filled", trigger)
+    return True
+
+
+def _rerun(trigger: str) -> None:
+    """A postponed run, from the back-fill's thread: started on the app's loop in this tenant."""
+    loop = _APP_LOOP
+    if loop is None or loop.is_closed():
+        return
+    ctx, tid = contextvars.copy_context(), _tenant_id()
+    loop.call_soon_threadsafe(lambda: _track(loop.create_task(run_safe(trigger), context=ctx), tid))
+
 
 async def run_safe(trigger: str) -> dict:
     """A run in its own DB session; never raises (the sync must not break)."""

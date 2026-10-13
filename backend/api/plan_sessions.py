@@ -638,10 +638,27 @@ def _summary(every: list[dict], inp: dict) -> dict:
     cur = inp["cur"]
     load = cur.get("load") or {}
     rates = plan_rates(inp, every)
-    return PS.plan_summary(every, cur["week"]["start"], inp["today"], float(load.get("ctl_today") or 0.0),
-                           float(load.get("atl_today") or 0.0), float(inp.get("cc") or 42.0),
-                           float(inp.get("ac") or 7.0), inp.get("horizon_end"),
-                           est=lambda s: est_tss(s, rates))
+    out = PS.plan_summary(every, cur["week"]["start"], inp["today"], float(load.get("ctl_today") or 0.0),
+                          float(load.get("atl_today") or 0.0), float(inp.get("cc") or 42.0),
+                          float(inp.get("ac") or 7.0), inp.get("horizon_end"),
+                          est=lambda s: est_tss(s, rates))
+    return history_summary(out)
+
+
+def history_summary(out: dict) -> dict:
+    """SP-394 (owner 2026-10-13): during a first import's back-fill the projected CTL / ATL / TSB
+    (SP-219) start from an incomplete CTL: None, with `history_pending`; hours / TSS stay."""
+    from backend.api import backfill as BF
+    from backend.api.overview import _dataset
+    try:
+        ds = _dataset()
+    except Exception:                         # noqa: BLE001 — no Dataset: nothing to hold back
+        return out
+    p = BF.pending(ds, None) if BF.coverage(ds) is not None else None
+    if p is None:
+        return out
+    return {**out, "projection": [{"date": r.get("date")} for r in out.get("projection") or []],
+            "ctl_end": None, "atl_end": None, "tsb_next": None, "history_pending": p}
 
 
 def _err(e: Exception):
