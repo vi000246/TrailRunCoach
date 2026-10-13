@@ -759,6 +759,16 @@ plan's watts rescaled, unedited auto sessions regenerated with the new text (e.g
 pushed ones re-pushed (or 待推送). The CP itself changes only by ≥ 3 W (`wko5-engine.spec.md`, CP
 hold).
 
+Known issue (SP-473, open, P0): `rescale_sessions` takes `state.cp` as the old CP of every row
+(`backend/engine/plan_auto.py:815`, `:839`, `:319`). The stored rows are not all at `state.cp`:
+paths other than the run write them with the CP in effect — the 課表 page's reconcile (`_ensure`,
+`plan_reconcile`), 推送, the user's moves / adds / variant swaps copying those texts, and every
+write while `plan.auto.enabled` is off (`state.cp` then stays put). Rows already at the new CP are
+multiplied again (production 2026-10-13: custom 10/15, 10/16 「功率 124–153 W」 → 「135–167 W」,
+pushed). Unedited auto rows come out right only because reconcile regenerates them; the change
+log's `before` shows them already multiplied. Reproduced by
+`backend/tests/test_cp_rescale_once_sp473.py` (strict xfail until fixed).
+
 API (`backend/api/plan_auto.py`, prefix `/api/v1/overview/plan/auto`):
 - `GET ""`: settings, the pending proposal, the last entries and the thresholds
 - `PUT /settings`
@@ -1006,3 +1016,4 @@ The owner's calls, gathered from the sections above (each is described there wit
 | 2026-10-13 | feature | SP-449 | A week note when the easy runs' own power at the easy-run HR cap is above 88 % CP (`base_check.easy_power_note`; e.g. 169 W at 154 bpm vs CP 175 W, band top 140 W): CP may be too low, do a CP / AeT test; the easy power band (65–80 % CP) is unchanged. Shown in the overview's week notes and once on the 課表 page (`plan_sessions._plan_notes`, the first week in view) (zh / en) |
 | 2026-10-13 | bugfix | SP-468 | A CP that changed without a run (a refit after a deploy, no new activity) re-zones the stored sessions: opening the 課表 calls `plan_auto.check_cp` (`backend/engine/plan_auto.py:1208`, from `backend/api/plan_sessions.py:611`), which starts the `cp_change` run when the CP in effect differs from `state.cp`; before, only a threshold edit or a sync with a new activity did, and the stored easy runs kept 「功率 114–140 W」 at CP 191 W |
 | 2026-10-13 | feature | SP-471 | The easy-power note (SP-449) becomes a test suggestion: `base_check.easy_power_tests` picks AeT / LTHR (cap within `EP_CAP_LTHR_GAP_BPM` 5 of LTHR, or a low-confidence LTHR estimate) and / or CP (CP > `EP_CP_STALE_DAYS` 42 days old, or no CP test / race in `EP_ALL_OUT_DAYS` 42), CP when neither; `easy_power_blocked` keeps the tests' limits; `overview.easy_power_suggestions` joins `test_suggestions` (排入 as any test, `easy_power` on the row) |
+| 2026-10-13 | test | SP-473 | Known issue documented and reproduced (strict xfail, not fixed): the `cp_change` run rescales every upcoming row by new ÷ `state.cp`, so rows already written with the new CP (page reconcile, user moves / adds) are multiplied twice (`backend/engine/plan_auto.py:839`, `backend/tests/test_cp_rescale_once_sp473.py`) |
