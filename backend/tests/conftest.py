@@ -36,10 +36,10 @@ def _no_live_sync_calls():
 
     def refuse(request):
         raise httpx.ConnectError(f"no live network in tests: {request.url.host}", request=request)
-    session_check.forget()
+    session_check.clear()
     with http.use_transport(httpx.MockTransport(refuse)):
         yield
-    session_check.forget()
+    session_check.clear()
 
 
 @pytest.fixture(autouse=True)
