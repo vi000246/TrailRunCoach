@@ -349,5 +349,10 @@
   "eptest.no_day": "兩週內沒有適合的日子（離長跑、強度課太近）",
   "eptest.done": "已排入 {what}",
   "eptest.to_schedule": "到課表看",
-  "eptest.help": "測試是建議，不會自動排進課表：挑一天按「排入」。功率帶先不改，輕鬆跑先以心率為主。"
+  "eptest.help": "測試是建議，不會自動排進課表：挑一天按「排入」。功率帶先不改，輕鬆跑先以心率為主。",
+  "hints.ack": "知道了",
+  "hints.unack": "再提醒我",
+  "hints.more": "還有 {n} 則提醒",
+  "hints.too_many": "提示太多？",
+  "hints.ack_failed": "沒存到，請再試一次"
 }

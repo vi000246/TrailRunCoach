@@ -76,6 +76,18 @@ tr.off td { color: var(--muted); }
 .seg input { position: absolute; opacity: 0; pointer-events: none; }
 .seg label:has(input:checked) { background: var(--soft); color: var(--accent); font-weight: 600; }
 .seg label:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: -2px; }
+/* 提示多寡 (SP-482): three cards, the automatic level's outlined dashed with 「自動」 */
+.hl-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 6px 0; }
+@media (max-width: 560px) { .hl-grid { grid-template-columns: 1fr; } }
+.hl-grid label { display: grid; gap: 2px; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; cursor: pointer; }
+.hl-grid label b { display: flex; gap: 6px; align-items: center; }
+.hl-grid input { position: absolute; opacity: 0; pointer-events: none; }
+.hl-grid label:has(input:checked) { border-color: var(--accent); background: var(--soft); }
+.hl-grid label:has(input:checked) b { color: var(--accent); }
+.hl-grid label:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 1px; }
+.hl-grid label.is-auto { border-style: dashed; border-color: var(--accent); }
+.hl-grid .hl-auto { display: none; font-size: 11px; font-weight: 500; padding: 0 6px; border-radius: 10px; border: 1px solid var(--line); color: var(--muted); }
+.hl-grid label.is-auto .hl-auto { display: inline-block; }
 .src h3 { font-size: 14px; margin: 0; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .pill { font-size: 11.5px; padding: 1px 8px; border-radius: 10px; border: 1px solid var(--line); color: var(--muted); font-weight: 500; }
 .pill.ok { color: var(--ok); border-color: var(--ok); }
@@ -199,6 +211,28 @@ main > section.tab-off { display: none; }
       <button class="primary" id="saveexp" data-i18n="settings.general.save">儲存</button>
       <span class="meta" id="expnow"></span>
     </div>
+    </div>
+    <!-- SP-482 hint level (engine/hints.py, docs/research/ui-hint-audit.md §4; GET/PUT /api/v1/plan/profile/hint-level):
+         right under the running-experience block, the automatic level comes from it; every page's
+         "too many tips?" link lands here (#hint-level) -->
+    <div id="hint-level">
+      <h3 id="hint-level-title" data-i18n="settings.hints.title">提示多寡</h3>
+      <p class="meta" data-i18n="settings.hints.intro">決定頁面上直接顯示多少說明和提醒。會改變做法或跟安全有關的提示（疼痛紅燈、課表待確認、關門時間這類）三段都會顯示；其他的依這裡的選擇收進「詳細」。每頁最多直接顯示 3 則提醒，多的收成「還有 N 則提醒」。</p>
+      <div class="hl-grid" role="radiogroup" aria-labelledby="hint-level-title">
+        <label><input type="radio" name="hint-level" value="full"><b><span data-i18n="settings.hints.full">完整</span><span class="hl-auto" data-i18n="settings.hints.auto_tag">自動</span></b>
+          <span class="meta" data-i18n="settings.hints.full_note">每個數字怎麼來的都說明；適合剛開始跑、第一次用這個 app</span></label>
+        <label><input type="radio" name="hint-level" value="standard"><b><span data-i18n="settings.hints.standard">標準</span><span class="hl-auto" data-i18n="settings.hints.auto_tag">自動</span></b>
+          <span class="meta" data-i18n="settings.hints.standard_note">說明只在符合條件時出現，其他收進「詳細」；多數人用這個</span></label>
+        <label><input type="radio" name="hint-level" value="lean"><b><span data-i18n="settings.hints.lean">精簡</span><span class="hl-auto" data-i18n="settings.hints.auto_tag">自動</span></b>
+          <span class="meta" data-i18n="settings.hints.lean_note">只顯示會改變做法或跟安全有關的提示；適合知道課前要吃、陡坡要走、下雨路滑的老手</span></label>
+      </div>
+      <div class="row">
+        <span class="meta" id="hint-now"></span>
+        <button type="button" id="hint-auto" hidden data-i18n="settings.hints.to_auto">改回自動</button>
+      </div>
+      <p class="meta" id="hint-suggest" hidden><span data-i18n="settings.hints.suggest">你有跑步紀錄、近一年有比賽成績，也跑過 2 小時以上：提示好像比較多，要改成精簡嗎？</span>
+        <button type="button" id="hint-suggest-yes" data-i18n="settings.hints.suggest_yes">改成精簡</button>
+        <button type="button" id="hint-suggest-no" data-i18n="settings.hints.suggest_no">不要</button></p>
     </div>
   </section>
 
@@ -878,6 +912,41 @@ $("saveexp").onclick = async () => {
     toast(t("settings.general.exp_saved")); loadProfile();
   } catch (e) { toast(t("settings.failed", { msg: e.message.slice(0, 80) })); }
 };
+// ---- 提示多寡 (SP-482; engine/hints.py, GET/PUT /api/v1/plan/profile/hint-level) ----------------
+// automatic (no choice): 完整 for a new runner, else 標準 — never 精簡 (only the runner picks it)
+const HINT_API = "/api/v1/plan/profile/hint-level";
+function renderHintLevel(s) {
+  const name = (l) => t(`settings.hints.${l}`);
+  document.querySelectorAll('input[name="hint-level"]').forEach((r) => {
+    r.checked = !s.auto && r.value === s.level;
+    r.closest("label").classList.toggle("is-auto", !!s.auto && r.value === s.level);
+  });
+  $("hint-now").textContent = s.auto
+    ? t("settings.hints.now_auto", { level: name(s.level) }) + (s.reason === "new_runner" ? t("settings.hints.why_new") : "")
+    : t("settings.hints.now_chosen", { level: name(s.level) });
+  $("hint-auto").hidden = !!s.auto;
+  $("hint-suggest").hidden = !s.suggest_lean;
+}
+async function putHintLevel(level) {
+  try {
+    renderHintLevel(await j(HINT_API, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ level }) }));
+    toast(t("settings.hints.saved"));
+  } catch (e) { toast(t("settings.failed", { msg: e.message.slice(0, 80) })); loadHintLevel(); }
+}
+function loadHintLevel() {
+  return j(HINT_API).then(renderHintLevel).catch(() => { $("hint-now").textContent = t("settings.hints.load_failed"); });
+}
+document.querySelectorAll('input[name="hint-level"]').forEach((r) => r.addEventListener("change", () => putHintLevel(r.value)));
+$("hint-auto").onclick = () => putHintLevel(null);
+$("hint-suggest-yes").onclick = () => putHintLevel("lean");
+$("hint-suggest-no").onclick = async () => {           // 「不要」: never asked again (hints.LEAN_ASK)
+  try {
+    await j("/api/v1/plan/profile/hint-ack", { method: "POST", headers: { "Content-Type": "application/json" },
+                                               body: JSON.stringify({ id: "ask.lean", fp: "1" }) });
+    $("hint-suggest").hidden = true;
+  } catch (e) { toast(t("settings.failed", { msg: e.message.slice(0, 80) })); }
+};
+loadHintLevel();
 // one weight only (date + kg): saving overwrites the stored list with this single entry
 function renderWeights() {
   const last = PROF.weights.at(-1);

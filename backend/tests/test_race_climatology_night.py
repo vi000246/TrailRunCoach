@@ -111,7 +111,9 @@ def test_a_race_across_midnight_gets_the_night_to(client, kind):   # noqa: F811
     assert c["day_temp_c"] == DAY_T
     # the single To of the whole plan (v1, the env chips, M) is the widened one
     assert p["env"]["to"]["temp_c"] == approx(c["temp_c"]) and p["env"]["to"]["rh_pct"] == approx(c["rh_pct"])
-    assert any(f"{c['temp_c']:.1f} °C" in w and f"{DAY_T:.1f} °C" in w for w in p["warnings"])
+    # SP-482: hint objects; the climatology line is the 環境卡's RC29
+    assert any(f"{c['temp_c']:.1f} °C" in w["text"] and f"{DAY_T:.1f} °C" in w["text"] and w["id"] == "RC29"
+               for w in p["warnings"])
     # exactly the plan that To typed in gives
     typed = _plan(client, kind, start_time="23:30",
                   env_to={"altitude_m": 500.0, "temp_c": c["temp_c"], "rh_pct": c["rh_pct"]})

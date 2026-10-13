@@ -392,6 +392,15 @@ def _is_baiyue(e) -> bool:
     return getattr(e, "kind", None) == "baiyue"
 
 
+def _fp(kind: str, *events) -> str:
+    """The condition of a B-race warning (SP-482 「知道了」, engine/hints.py): which warning and the races'
+    names, dates and distances — a changed date or distance shows the warning again (R7)."""
+    from backend.engine import hints as H
+    return H.fingerprint("OV8b", (kind,) + tuple((getattr(x, "name", None), str(getattr(x, "start", None)),
+                                                  str(getattr(x, "end", None)), getattr(x, "distance_km", None))
+                                                 for x in events))
+
+
 def b_hints(events, monday: dt.date, ctl: Optional[list] = None, phases=None,
             taper_pref: Optional[int] = None) -> list[dict]:
     """The week notes about the B races of the week of `monday` (b_week): too many (> B_PER_MONTH in 30
@@ -410,12 +419,14 @@ def b_hints(events, monday: dt.date, ctl: Optional[list] = None, phases=None,
         near = [x for x in bs if x is not e and abs((x.start - e.start).days) < 30]
         if len(near) + 1 > B_PER_MONTH:
             out.append({"level": "watch", "src": "race",
+                        # SP-482: 「知道了」 holds while the same B races stay in the same days (R7)
+                        "fp": _fp("many", e, *near),
                         "text": _("B 賽太多，等於一直在減量：「{race}」前後 30 天內還有 {n} 場 B 賽（CTS：訓練用的比賽一個月最多 1 場）",
                                   race=e.name, n=len(near))})
         a = next((x for x in sorted(events, key=lambda x: x.start) if getattr(x, "priority", None) == "A"
                   and 0 < (x.start - e.end).days <= B_NEAR_A_DAYS), None)
         if a is not None and P.event_size(e) >= P.MEDIUM:
-            out.append({"level": "watch", "src": "race",
+            out.append({"level": "watch", "src": "race", "fp": _fp("near_a", e, a),
                         "text": _("長距離 B 賽「{race}」在 A 賽事「{a}」前 {n} 天：A 賽前 2–4 週只建議較短、地形相似的熱身賽，"
                                   "或把它改成 C 賽輕鬆跑（CTS）", race=e.name, a=a.name, n=(a.start - e.end).days)})
         # SP-280 (Runna [482], 廠商規則, 推估): the next A race's 減量期, or longer than that A race —
@@ -440,7 +451,8 @@ def b_hints(events, monday: dt.date, ctl: Optional[list] = None, phases=None,
                     "或把它改成 C 賽輕鬆跑（Runna：B 賽要比 A 賽短；廠商規則，推估）", race=e.name, a=nxt.name, cmp=longer)
         else:
             continue
-        out.append({"level": "watch", "src": "race", "text": txt})
+        out.append({"level": "watch", "src": "race", "text": txt,
+                    "fp": _fp("taper" if in_taper else "longer", e, nxt) + ("+longer" if in_taper and longer else "")})
     if ctl:
         lo = monday - dt.timedelta(weeks=B_CTL_WEEKS)
         if any(lo <= e.start < monday for e in bs):

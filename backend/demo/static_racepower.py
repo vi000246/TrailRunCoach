@@ -326,7 +326,7 @@ def compute(ctx, method: str, path: str, body) -> dict:
         if sub == "plan":
             return {"status": 200, "body": CALC.plan(ctx, CALC.PlanIn.model_validate(body or {}))}
         if sub == "predict":
-            return {"status": 200, "body": CALC.py(CALC.predict(ctx, CALC.PredictIn.model_validate(body or {})))}
+            return {"status": 200, "body": CALC.predict_response(ctx, CALC.PredictIn.model_validate(body or {}))}
         if sub.startswith("course/event/"):
             from urllib.parse import unquote
             eid = unquote(sub[len("course/event/"):])

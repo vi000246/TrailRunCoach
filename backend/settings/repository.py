@@ -268,6 +268,12 @@ DEFAULTS: dict[str, Any] = {
     # activities {levels: {id: {tss_h, n, w, personal, adjusted}}, n, loo, fitted_at}; None = the defaults (推估).
     # Planning targets only — the recorded load is never corrected by RPE. Written by the refit only
     "rpe.load_model": None, "rpe.load_stamp": None,    # + the rates stored sessions were last normalised with (sync_sessions)
+    # 提示多寡 (engine/hints.py, SP-482; docs/research/ui-hint-audit.md §4): full | standard | lean;
+    # None = automatic (完整 for a new runner, else 標準 — never 精簡: only the runner picks it)
+    "ui.hint_level": None,
+    # 「知道了」 on a hint (§4.4 step 4): [{id, fp, at}] — the hint stays put away while its condition's
+    # fingerprint is the same; also the one-time 「改成精簡？」 answered 不要 (hints.LEAN_ASK)
+    "ui.hint_ack": [],
     # debug API for AI agents (SP-371, backend/debug_auth.py; 設定 › 進階): off = /api/v1/debug/* is 404.
     # Can only be turned on when the server has TRC_DEBUG_PIN; the tokens are the debug_tokens table
     "debug.api.enabled": False,
@@ -493,6 +499,12 @@ def validate(key: str, value: Any) -> None:
     if key == "racepower.race_tss_calib":
         from backend.engine.racepower.tss_calib import validate as validate_calib
         validate_calib(value)
+    if key == "ui.hint_level":
+        from backend.engine import hints as H
+        H.validate_level(value)
+    if key == "ui.hint_ack":
+        from backend.engine import hints as H
+        H.validate_acks(value)
     if key == "plan.match.unlinked" and not (isinstance(value, list) and all(
             isinstance(e, dict) and isinstance(e.get("start"), str) for e in value)):
         raise ValueError("plan.match.unlinked must be a list of {start, index}")

@@ -349,5 +349,10 @@
   "eptest.no_day": "No suitable day in the next two weeks (too close to a long run or a hard session)",
   "eptest.done": "Scheduled {what}",
   "eptest.to_schedule": "see the schedule",
-  "eptest.help": "Tests are suggestions and never go into the plan by themselves: pick a day and press Schedule. The power band stays as it is; run the easy runs by heart rate for now."
+  "eptest.help": "Tests are suggestions and never go into the plan by themselves: pick a day and press Schedule. The power band stays as it is; run the easy runs by heart rate for now.",
+  "hints.ack": "Got it",
+  "hints.unack": "Remind me again",
+  "hints.more": "More reminders: {n}",
+  "hints.too_many": "Too many tips?",
+  "hints.ack_failed": "Not saved, please try again"
 }

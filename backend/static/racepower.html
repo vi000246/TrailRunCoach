@@ -820,7 +820,7 @@ async function loadEventGpx(eid, keep = false) {          // keep: the restored 
     const c = await post(`${API}/course/event/${encodeURIComponent(eid)}`, { split: S.split, ...Object.fromEntries(courseOpts(false)) });
     COURSE = { course_id: c.course_id, event_id: eid, name: c.name, km: c.totals.km, gain_m: c.totals.gain_m, segments: c.totals.segments, start: c.start || null, z_max: c.totals.z_max ?? null };
     ls.set("course", COURSE); if (!keep) { LOCKS = {}; TERRAIN = {}; SPLITS = c.day_splits_km || []; }
-    $("course-warn").innerHTML = (c.warnings || []).map((w) => `<li>${esc(w)}</li>`).join("");
+    $("course-warn").innerHTML = (c.warnings || []).map((w) => `<li>${esc(wText(w))}</li>`).join("");
     STOP_SUGG = c.stop_suggestions || [];
     S.csrc = "gpx"; saveUI(); syncForm(); renderStops();
     return true;
@@ -902,7 +902,7 @@ async function uploadGpx(file) {
     LAST_FILE = file;
     COURSE = { course_id: c.course_id, name: c.name, km: c.totals.km, gain_m: c.totals.gain_m, segments: c.totals.segments, start: c.start || null, z_max: c.totals.z_max ?? null };
     ls.set("course", COURSE); LOCKS = {}; SPLITS = (c.wpts || []).filter((w) => w.camp).map((w) => +w.km.toFixed(2)); TERRAIN = {};
-    $("course-warn").innerHTML = (c.warnings || []).map((w) => `<li>${esc(w)}</li>`).join("");
+    $("course-warn").innerHTML = (c.warnings || []).map((w) => `<li>${esc(wText(w))}</li>`).join("");
     STOP_SUGG = c.stop_suggestions || [];
     S.csrc = "gpx"; saveUI(); syncForm(); renderStops(); schedule(); autoWeather();
   } catch (e) { $("course-line").innerHTML = `<span class="err">${esc(e.message)}</span>`; }
@@ -1329,7 +1329,9 @@ function snowNote() {
   return h + `</div>`;
 }
 function tile(k, v, s, main) { return `<div class="tile ${main ? "main" : ""}"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s || ""}</div></div>`; }
-function warnList(ws) { return ws && ws.length ? `<ul class="warn">${ws.map((w) => `<li>${esc(w)}</li>`).join("")}</ul>` : ""; }
+// SP-482: a warning is a hint object {id, cls, prio, text, …} (engine/hints.py) or, in an old saved result, a string
+const wText = (w) => (w && typeof w === "object" ? (w.text || "") : String(w ?? ""));
+function warnList(ws) { return ws && ws.length ? `<ul class="warn">${ws.map((w) => `<li>${esc(wText(w))}</li>`).join("")}</ul>` : ""; }
 
 // effort bar: 60–110 % mapped across the width
 const EMIN = 0.6, EMAX = 1.1;

@@ -155,7 +155,8 @@ def test_baiyue_predict_without_weight_answers_with_the_reason(client):
     assert d["result"]["pack_factor"] == 1.0
     assert d["result"]["total"]["kcal"] is None
     assert d["used"]["pack_kg"]["value"] is None and NO_W in d["used"]["pack_kg"]["source"]
-    assert any(NO_W in w for w in d["warnings"])
+    # SP-482: hint objects — no weight is a missing required input (RC28), class 1 in every level
+    assert any(NO_W in w["text"] and w["id"] == "RC28" and w["cls"] == 1 for w in d["warnings"])
     assert d["result"]["time_s"] > 0
 
 
@@ -165,7 +166,7 @@ def test_baiyue_plan_without_weight_answers_with_the_reason(client):
     d = r.json()
     assert d["summary"]["time_s"] > 0 and d["summary"]["kcal"] is None
     assert NO_W in d["fuel"]["unavailable"]
-    assert any(NO_W in w for w in d["warnings"])
+    assert any(NO_W in w["text"] and w["id"] == "RC28" and w["cls"] == 1 for w in d["warnings"])     # SP-482
 
 
 @pytest.mark.parametrize("path", ["predict", "plan"])
