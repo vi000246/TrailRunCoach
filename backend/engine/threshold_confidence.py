@@ -909,12 +909,13 @@ def check(ds, plan, today: dt.date, brk: Optional[dict] = None, cool: Optional[d
     """assess() on the dataset: the thresholds in effect, the runs, the test results."""
     memo = getattr(ds, "memo", None)
     import json
+    from backend.engine import hr_profile as HP
+    # the 課表心率區間 and the watch account (HP.stamp) too: a model switch keeps the Dataset (SP-361)
     mk = ("threshold_confidence", today.isoformat(), json.dumps(
         [t.__dict__ for t in getattr(plan, "thresholds", None) or []], sort_keys=True, default=str),
-        len(getattr(ds, "workouts", []) or []), kind, days_to_a)
+        len(getattr(ds, "workouts", []) or []), kind, days_to_a, HP.stamp())
     if isinstance(memo, dict) and mk in memo:
         return memo[mk]
-    from backend.engine import hr_profile as HP
     acc = HP.account()
     lt = lthr_info(ds, plan, today)
     mh, rh = mhr_info(ds, today, acc), rhr_info(ds, today, acc)
