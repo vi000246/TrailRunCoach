@@ -1151,6 +1151,7 @@ async def _all_suggestions(db: AsyncSession, inp: dict) -> list[dict]:
     # every 6–8 weeks — in place of this week's `test` row of the same kind, never both
     base = await _baseline_rows(inp, stored, today, tpl, aet_p, days_for)
     covered = {b["kind"] for b in base}
+    SG.carry_easy_power(rows + base)                 # SP-471: the stand-in keeps the easy-power reason
     rows = [r for r in rows if not (r["type"] == "test" and r["kind"] in covered)] + base
     # SP-288: no CP test in a new runner's first weeks (week_plan's cold_start)
     no_cp = {"cp"} if (inp.get("cur") or {}).get("cold_start") else set()

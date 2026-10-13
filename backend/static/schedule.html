@@ -619,6 +619,9 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
   <script src="/api/v1/static/autoplan.js" defer></script>
   <script src="/api/v1/static/session_banner.js" defer></script>
   <ul class="pnotes" id="pnotes" aria-label="課表偏好的提醒" hidden></ul>
+  <!-- SP-471: the easy-power conflict's test with 排入 (static/eptest.js) -->
+  <div id="eptest" hidden></div>
+  <script src="/api/v1/static/eptest.js" defer></script>
   <div class="tsug" id="tsug" aria-label="建議的測試" hidden></div>
   <div class="calwrap loading" id="calwrap"><div id="cal"><p class="meta" style="padding:30px;text-align:center">載入課表中…</p></div></div>
   <div class="legend" id="legend"></div>
@@ -3193,6 +3196,8 @@ async function sugCount(fresh) {
 const sugFits = (day) => (CTX.sug || []).some((x) => [...(x.options || []), ...(x.tests || []).flatMap((t) => t.options || [])]
   .some((o) => o.day === day));
 addEventListener("suggestions:changed", () => sugCount(true));
+// SP-471: a test 排入 from the page's own block (static/eptest.js) → show it on the calendar
+addEventListener("suggestions:changed", (e) => { if ((e.detail || {}).from === "eptest") load(); });
 function tpDialog() {
   let d = $("tp");
   if (d) return d;

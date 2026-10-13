@@ -495,7 +495,9 @@ intensity). Each rung is the canonical variant of `backend/engine/interval_libra
   needs no retest. When that power is above 88 % CP (`base_check.EASY_POWER_CONFLICT`, 推估: above
   Palladino Zone 2, LT1 ≈ 80 % CP) the week gets a `watch` note (`src` `easy_power`): the CP may be
   too low (or the HR cap too high), do a CP / AeT test — the power band is not changed (SP-449); the
-  課表 page lists it once (`plan_sessions._plan_notes`). CP drives the Zone 3 / 5 power targets (the CP-test track is unchanged).
+  課表 page lists it once (`plan_sessions._plan_notes`). SP-471: the note also suggests the test it
+  points at (`base_check.easy_power_tests` — AeT / LTHR for the HR side, CP for the power side; see
+  overview.spec.md 「Easy-power test」) with 排入, in its own block on 總覽 and 課表. CP drives the Zone 3 / 5 power targets (the CP-test track is unchanged).
 - **History** (`quality_gate.z5_history`): the lifecycle replayed on every day of a range with
   the inputs evaluate() would have had that day (the plan's AeT / LTHR in effect, `reentry.find`
   on that day, the interval sessions of the 8 weeks before it) through the same `_z5`, so the
@@ -1002,3 +1004,4 @@ The owner's calls, gathered from the sections above (each is described there wit
 | 2026-10-13 | feature | SP-404 | Rule E's new trigger 「連續 2 堂輕鬆課跑太強」: the last 2 done easy / long runs of the week both too hard (rule D 太強 / 偏強 on an easy run, a self-rating ≥ Hard on an easy / long run; a 偏強 from HR alone does not count with `hr_quality` low) -> the quality steps down to the recovery fartlek, easy minutes × 0.8; TSB / ramp win (`adapt._too_hard_streak`, `adapt.overhard(hr=)`, `OVERHARD_STREAK = 2`, 推估). It acts in a B2B week too. Tests: `backend/tests/test_adapt.py` (`*_sp404`), `backend/tests/test_adapt_rpe.py`, `backend/tests/test_b2b.py` |
 | 2026-10-13 | feature | SP-449 | A week note when the easy runs' own power at the easy-run HR cap is above 88 % CP (`base_check.easy_power_note`; e.g. 169 W at 154 bpm vs CP 175 W, band top 140 W): CP may be too low, do a CP / AeT test; the easy power band (65–80 % CP) is unchanged. Shown in the overview's week notes and once on the 課表 page (`plan_sessions._plan_notes`, the first week in view) (zh / en) |
 | 2026-10-13 | bugfix | SP-468 | A CP that changed without a run (a refit after a deploy, no new activity) re-zones the stored sessions: opening the 課表 calls `plan_auto.check_cp` (`backend/engine/plan_auto.py:1208`, from `backend/api/plan_sessions.py:611`), which starts the `cp_change` run when the CP in effect differs from `state.cp`; before, only a threshold edit or a sync with a new activity did, and the stored easy runs kept 「功率 114–140 W」 at CP 191 W |
+| 2026-10-13 | feature | SP-471 | The easy-power note (SP-449) becomes a test suggestion: `base_check.easy_power_tests` picks AeT / LTHR (cap within `EP_CAP_LTHR_GAP_BPM` 5 of LTHR, or a low-confidence LTHR estimate) and / or CP (CP > `EP_CP_STALE_DAYS` 42 days old, or no CP test / race in `EP_ALL_OUT_DAYS` 42), CP when neither; `easy_power_blocked` keeps the tests' limits; `overview.easy_power_suggestions` joins `test_suggestions` (排入 as any test, `easy_power` on the row) |

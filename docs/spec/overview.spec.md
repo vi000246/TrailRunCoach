@@ -407,6 +407,24 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
   還缺什麼. The AeT test follows `plan.prefs.aet_test_protocol` (`replaces_long` for 徐國峰's 90′).
   A scheduled test carries `protocol` (Session field, `plan_sessions.protocol` column + migration,
   `reconcile.FIELDS`, `plan_store.to_dict` / `push_dict`).
+- **Easy-power test** (SP-471, the user 2026-10-13): when SP-449's `easy_power` note fires (the easy
+  runs' own power at the easy-run HR cap > 88 % CP), `base_check.easy_power_tests`
+  (`backend/engine/base_check.py:546`, 推估; named constants `EP_*` at `backend/engine/base_check.py:512`)
+  picks the test from the athlete's own numbers — the **AeT test** when the cap is within
+  `EP_CAP_LTHR_GAP_BPM` (5) of LTHR or at / above it, or the LTHR is an automatic estimate with low
+  confidence (`testing` extra `thr_check.lthr.confidence`) / the 0.90 × max-HR prior (then 「或 30 分鐘 LTHR
+  測試」 and the 30-min test's 安排課表 link); the **CP test** when the CP's own date is older than
+  `EP_CP_STALE_DAYS` (42) or there was no CP test (the review's or a plan CP row not typed by hand,
+  `last_cp_test_day`) and no race (`last_race_day`, not 百岳 / other) in `EP_ALL_OUT_DAYS` (42); both
+  when both; neither → the CP test. A kind done in `EP_RETEST_DAYS` (28) is left out. Not in a new
+  runner's first weeks, ≤ 10 days before an A race, a 恢復週 / 停訓後恢復期, or 減量期 / 比賽週 / 恢復期 /
+  轉換期 / 回量期 (`easy_power_blocked`). `overview.easy_power_suggestions`
+  (`backend/engine/overview.py:1373`) adds the reason to a test already suggested or builds the row like
+  the due CP / AeT test (`src: easy_power`); every such row carries `easy_power {summary, why,
+  lthr_doubt}` with the numbers (「輕鬆跑上限 154 bpm 時約 169 W ＝ 88% CP…」「心率上限 154 跟 LTHR 155
+  幾乎一樣…」). The box rows keep it (`suggestions.test_rows`; a 基線測試 row standing in takes it,
+  `carry_easy_power`); a test of that kind already in the plan ends it (`plan_sessions._suggestions`).
+  Cost: a few µs per week plan (no PD refit, no activity scan) and no extra request.
 - **間歇門檻 — quality gate** (`backend/engine/quality_gate.py`; design
   `docs/research/aerobic-base-readiness.md` §4–§5). The old 「連續 3 次輕鬆路跑飄移 < 5%」
   rule had no source and is gone (`STREAK_NEED` is legacy only,
@@ -1537,7 +1555,13 @@ which one. The response keeps the `coros` field names.
   5 區 card (full width), 待辦與警示 and, left of it, the B2B card (shown only before a multi-day /
   ≥ 6 h A event or once B2B weekends exist; `GET /overview/b2b`). Due tests, B2B weekends and zone
   retests are in the shared floating suggestion box (`static/suggestions.js`); its
-  `suggestions:changed` event reloads the week (`backend/static/overview.html:967`). No sideways
+  `suggestions:changed` event reloads the week (`backend/static/overview.html:967`).
+  SP-471: **「心率和功率對不起來：建議做測試」** — a block of its own at the top of the page, above the
+  KPI row (`backend/static/overview.html:255`, `static/eptest.js`), and on the 課表 page under its notes
+  (`backend/static/schedule.html:623`): the summary with the numbers, each suggested test (AeT / CP) with
+  its reason, a day picker, 排入 (`POST …/suggestions/accept`), the 30-min LTHR test's 安排課表 link when
+  the LTHR is the doubt, and 不要. Its rows are the floating box's (`suggestions:loaded`, fired after
+  every box GET — no request of its own); 排入 fires `suggestions:changed` and the 課表 reloads. No sideways
   scroll at phone width (long alert titles wrap).
 - **Glossary hovers**: the terms `AeT` and `CP 測試` inside engine text (actions, indicator
   verdict / why / action, week reasons, notes, the thresholds line) get a hover / tap
@@ -2593,3 +2617,4 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 | 2026-10-13 | feature | SP-450 | The 專項 chip (主要訓練項目, `backend/static/sportchip.js`) is in the 課表's top row too (`backend/static/schedule.html:578`): choosing 自動／越野跑／路跑・馬拉松 saves `athlete.primary_sport` and reloads; the plan's `PSP.stored()` stamp re-plans (路跑: no 爬升 week row). Demo: shown, disabled |
 | 2026-10-13 | feature | SP-467 | 設定 › 閾值 gets 「門檻變更紀錄」 (`GET /api/v1/plan/threshold-history`, `backend/engine/threshold_history.py`): which threshold changed on which day, from → to and its source (手動／測試／套用的自動估算／PD 擬合／自動估算／手錶帳號設定／心率模型), built from the plan rows, the Dataset's existing PD fits and as-of LTHR (no refit), the watch account's history; the 課表心率區間 switch is recorded from now on in the new user_settings key `plan.hr_zone_model_history` (`PUT /api/v1/plan/hr-profile`). zh-TW + en. Session format unchanged. Tests: `backend/tests/test_threshold_history_sp467.py` |
 | 2026-10-13 | bugfix | SP-468 | 測試 indicator: a CP test counts as the CP's test day by itself (its CP is WKO5's mFTP, which the 課表 uses); no 要更新 / 「套用這次的 CP」 action or button (`applyCpBtn` removed) — nothing is applied any more (`backend/engine/status.py:864`). The 90-minute AeT test's 「實測 CP」 also counts WKO5's mFTP with a CP test inside its 90-day window (`aet_test.cp_tested`, `backend/engine/aet_test.py:638`; a fit without a test still does not, owner 2026-10-06). The CP 測試 glossary says the CP is computed the WKO5 way, nothing to apply |
+| 2026-10-13 | feature | SP-471 (the user 2026-10-13: 「我想要讓它獨立一個區塊顯眼一點」) | The easy-power conflict (SP-449's note) suggests the test it points at: AeT / LTHR when the easy-run cap is within 5 bpm of LTHR or the LTHR is a low-confidence estimate, CP when the CP is > 42 days old or there was no CP test / race in 42 days, both when both, CP otherwise (`base_check.easy_power_tests`, `EP_*` constants); not before an A race (10 days), in a 恢復週 / 停訓後恢復期 / 恢復期 etc. or a new runner's first weeks; not when that kind is in the plan or was done in 28 days. Shown with 排入 in a block of its own on 總覽 (top) and on 課表 (`static/eptest.js`; the box rows' `easy_power`, `suggestions:loaded`), reasons with the numbers (zh / en) |

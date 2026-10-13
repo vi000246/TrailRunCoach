@@ -502,7 +502,108 @@ def easy_power_note(et: Optional[dict], cp: Optional[float], aet: Optional[float
                       "CP 可能估低了（或心率上限估高了）；建議做一次 CP 測試（或 AeT 測試）。"
                       "功率帶先不改，輕鬆跑以心率為主",
                       n=et.get("n") or 0, aet=aet, pw=pw, cp=cp, pct=pw / cp * 100, hi=EASY_BAND[1] * cp,
-                      hip=EASY_BAND[1] * 100)}
+                      hip=EASY_BAND[1] * 100),
+            # SP-471: the numbers, for easy_power_tests (which test the conflict points at)
+            "nums": {"power": pw, "cap": aet, "cp": cp, "pct": pw / cp * 100, "band_top": EASY_BAND[1] * cp,
+                     "band_top_pct": EASY_BAND[1] * 100}}
+
+
+# 推估 (SP-471): which test an easy_power_note points at. Every number is a named constant.
+EP_CAP_LTHR_GAP_BPM = 5.0   # the easy-run HR cap within 5 bpm of LTHR: an easy cap at threshold is the HR cap's fault
+EP_CP_STALE_DAYS = 42       # the CP's own date (a test row / the PD fit) older than 6 weeks (status.TEST_DAYS_WATCH)
+EP_ALL_OUT_DAYS = 42        # no CP test and no race in 6 weeks: the PD fit has no all-out effort to stand on
+EP_RETEST_DAYS = 28         # a test of that kind already done this recently: its result first (aet_test: ≥ 28 days)
+# Phases / modes with no test suggestion (as week_plan's CP / AeT tests): 減量期, 比賽週, 恢復期,
+# 轉換期, 回量期; the 恢復週 and the 停訓後恢復期 (re-entry block) are modes
+EP_NO_TEST_PHASES = ("taper", "event", "recovery", "transition", "rebuild")
+EP_NO_TEST_MODES = ("recovery_week", "reentry")
+EP_RACE_DAYS = 10           # no test in the 10 days before an A race (the CP / AeT tests' rule)
+
+
+def easy_power_blocked(days_to_a: Optional[int], phase: Optional[str], mode: Optional[str],
+                       cold_start: bool) -> Optional[str]:
+    """Why the easy-power test is not suggested this week (the CP / AeT tests' own limits): "cold_start"
+    (a new runner's first weeks, SP-288), "race" (≤ EP_RACE_DAYS before an A race), "mode" (恢復週 /
+    停訓後恢復期), "phase" (減量期, 比賽週, 恢復期, 轉換期, 回量期); None = it may be."""
+    if cold_start:
+        return "cold_start"
+    if days_to_a is not None and days_to_a <= EP_RACE_DAYS:
+        return "race"
+    if mode in EP_NO_TEST_MODES:
+        return "mode"
+    if phase in EP_NO_TEST_PHASES or mode in EP_NO_TEST_PHASES:
+        return "phase"
+    return None
+
+
+def _days_ago(today: dt.date, day: Optional[str]) -> Optional[int]:
+    try:
+        return (today - dt.date.fromisoformat(str(day)[:10])).days if day else None
+    except ValueError:
+        return None
+
+
+def easy_power_tests(note: Optional[dict], today: dt.date, *, lthr: Optional[float] = None,
+                     lthr_measured: bool = False, lthr_conf: Optional[str] = None, lthr_prior: bool = False,
+                     cp_date: Optional[str] = None, last_cp_test: Optional[str] = None,
+                     last_race: Optional[str] = None, last_aet_test: Optional[str] = None) -> Optional[dict]:
+    """SP-471: the tests an easy_power_note points at, from the athlete's own numbers.
+
+    * AeT test (an LTHR test too when the LTHR is the doubt) — the HR side: the easy-run cap within
+      EP_CAP_LTHR_GAP_BPM of LTHR (an easy run cannot sit at threshold), or the LTHR is an automatic
+      estimate with low confidence (threshold_confidence) / the 0.90 × max-HR prior;
+    * CP test — the power side: the CP's own date older than EP_CP_STALE_DAYS, or no CP test and no
+      race in EP_ALL_OUT_DAYS (WKO5's PD model only rises on all-out efforts);
+    * neither side: the CP test (the cap sits well below a believable LTHR, so the CP is the likelier
+      one to be low).
+    A kind done in the last EP_RETEST_DAYS is left out (its result first). Both can be listed, each
+    with its reason. {"summary", "tests": [{"kind", "why", "lthr_doubt"}]}; None without a note or
+    with nothing left."""
+    nums = (note or {}).get("nums") or {}
+    if not note or note.get("src") != "easy_power" or nums.get("power") is None:
+        return None
+    cap, cp = nums.get("cap"), nums.get("cp")
+    summary = _("輕鬆跑上限 {cap:.0f} bpm 時約 {pw:.0f} W ＝ {pct:.0f}% CP（CP {cp:.0f} W），"
+                "但輕鬆跑功率帶上限是 {hi:.0f} W（{hip:.0f}% CP）",
+                cap=cap, pw=nums["power"], pct=nums["pct"], cp=cp, hi=nums["band_top"], hip=nums["band_top_pct"])
+    hr_why = []
+    if lthr and cap and cap >= lthr:
+        hr_why.append(_("心率上限 {cap:.0f} 不低於 LTHR {lthr:.0f}：輕鬆跑上限可能設太高", cap=cap, lthr=lthr))
+    elif lthr and cap and lthr - cap < EP_CAP_LTHR_GAP_BPM:
+        hr_why.append(_("心率上限 {cap:.0f} 跟 LTHR {lthr:.0f} 幾乎一樣（差 {gap:.0f} bpm，不到 {lim:.0f}）："
+                        "輕鬆跑上限可能設太高", cap=cap, lthr=lthr, gap=lthr - cap, lim=EP_CAP_LTHR_GAP_BPM))
+    lthr_doubt = bool(lthr) and not lthr_measured and (lthr_prior or lthr_conf == "low")
+    if lthr_doubt:
+        hr_why.append(_("LTHR {lthr:.0f} 是自動估算、可信度低", lthr=lthr))
+    cp_why = []
+    age = _days_ago(today, cp_date)
+    if age is not None and age > EP_CP_STALE_DAYS:
+        cp_why.append(_("CP 是 {d} 天前的（超過 {lim} 天）", d=age, lim=EP_CP_STALE_DAYS))
+    hard = [x for x in (_days_ago(today, last_cp_test), _days_ago(today, last_race)) if x is not None and x >= 0]
+    if not hard or min(hard) > EP_ALL_OUT_DAYS:
+        cp_why.append(_("最近 {lim} 天沒有 CP 測試或比賽（接近全力的努力），PD 模型的 CP 可能偏低",
+                        lim=EP_ALL_OUT_DAYS))
+
+    def recent(day: Optional[str]) -> bool:
+        d = _days_ago(today, day)
+        return d is not None and 0 <= d < EP_RETEST_DAYS
+
+    def why(parts: list, advice: str) -> str:
+        return _("{reasons}。{advice}", reasons=_("；").join(parts), advice=advice)
+
+    tests = []
+    if hr_why and not recent(last_aet_test):
+        tests.append({"kind": "aet", "lthr_doubt": lthr_doubt,
+                      "why": why(hr_why, _("建議做 AeT 測試（或 30 分鐘 LTHR 測試）") if lthr_doubt
+                                 else _("建議做 AeT 測試"))})
+    if not hr_why and not cp_why and lthr and cap:
+        cp_why.append(_("心率上限離 LTHR {lthr:.0f} 還有 {gap:.0f} bpm、LTHR 可信：比較像是 CP 估低了",
+                        lthr=lthr, gap=lthr - cap))
+    if cp_why and not recent(last_cp_test):
+        tests.append({"kind": "cp", "lthr_doubt": False, "why": why(cp_why, _("建議做 CP 測試"))})
+    if not tests:
+        return None
+    return {"summary": summary, "tests": tests}
 
 
 # ---------------------------------------------------------------------------

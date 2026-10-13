@@ -1348,6 +1348,63 @@ def talk_test(detail: str) -> str:
     return detail if t in (detail or "") else ((detail + "；") if detail else "") + t
 
 
+def last_race_day(plan, today: dt.date) -> Optional[str]:
+    """The last race day on or before `today` in the season plan (every kind but 百岳 / other, as
+    racepower.athlete.race_dates) — an all-out effort for SP-471's CP side; None without one."""
+    best = None
+    for e in getattr(plan, "events", None) or ():
+        if getattr(e, "kind", None) in ("baiyue", "other") or e.start > today:
+            continue
+        d = min(e.end, today)
+        best = d if best is None or d > best else best
+    return best.isoformat() if best else None
+
+
+def last_cp_test_day(plan, today: dt.date, review_day: Optional[str]) -> Optional[str]:
+    """The last CP test on or before `today`: the review's (workout_review.latest_cp_test, the 測試
+    indicator's extra.cp_test) or a plan CP row not typed by hand (planning.Threshold.cp_manual — the
+    rows 「套用這次的 CP」 wrote before SP-468), whichever is later. SP-471's CP side."""
+    rows = [str(t.date)[:10] for t in getattr(plan, "thresholds", None) or []
+            if t.cp is not None and not getattr(t, "cp_manual", None) and str(t.date)[:10] <= today.isoformat()]
+    days = [d for d in rows + [str(review_day)[:10] if review_day else None] if d]
+    return max(days) if days else None
+
+
+def easy_power_suggestions(tests: list, ep: Optional[dict], cp_session, aet_session, aet_proto: Optional[str] = None) -> list:
+    """SP-471: base_check.easy_power_tests → week_plan's test_suggestions (in place; also returned).
+    A kind already suggested gets the easy-power reason added; a new one is built like the due CP / AeT
+    test (`cp_session()` / `aet_session()`; a CP test with 課表偏好 「用比賽」 has none → not offered).
+    Every row it touches carries `easy_power` {summary, why, lthr_doubt} (the overview's own block and
+    the 課表 page show those); a doubtful LTHR adds the 30-min LTHR test's 安排課表 link."""
+    if not ep:
+        return tests
+    from backend.engine import threshold_confidence as TC
+    for t in ep.get("tests") or []:
+        info = {"summary": ep["summary"], "why": t["why"], "lthr_doubt": bool(t.get("lthr_doubt"))}
+        links = [TC.schedule_link("tt30")] if t.get("lthr_doubt") else []
+        ex = next((x for x in tests if x["kind"] == t["kind"]), None)
+        if ex is not None:
+            ex["easy_power"] = info
+            ex["reason"] = " · ".join(x for x in (ex.get("reason"), t["why"]) if x)
+            if links:
+                ex["links"] = list(ex.get("links") or []) + links
+            continue
+        s = cp_session() if t["kind"] == "cp" else aet_session()
+        if not s:
+            continue
+        row = {"kind": t["kind"], "protocol": aet_proto if t["kind"] == "aet" else s.get("protocol"),
+               "title": s["title"], "minutes": s["minutes"], "reason": t["why"], "src": "easy_power",
+               "easy_power": info,
+               "session": {k: s.get(k) for k in ("kind", "title", "minutes", "target", "detail", "source", "tss",
+                                                 "protocol")}}
+        if t["kind"] == "aet":
+            row["replaces_long"] = aet_proto == "xu90"
+        if links:
+            row["links"] = links
+        tests.append(row)
+    return tests
+
+
 def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, blackouts=None,
               b2b_accepted: Optional[list] = None, race_predict=None, sport: Optional[str] = None) -> dict:
     """Target volume and sessions for the current Monday–Sunday week.
@@ -1648,6 +1705,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         et = BC.easy_targets(ds, today, aet) if not ds.config.parity else None
     except Exception:                       # noqa: BLE001
         et = None
+    en = None                               # SP-449's easy-power note (SP-471: its test suggestion below)
     if et and tgt.get("z2") is not None:
         tgt = {**tgt, "z2": (tgt["z2"] + " · " if tgt["z2"] else "") + et["text"]}
         # SP-449: their own power at the HR cap far above the power band → say so (the band stays)
@@ -2339,16 +2397,33 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
             "reason": _("{why}：區間、TSS、賽事計算機都靠 CP", why=getattr(ti, "verdict", "") or _("門檻過期或沒測過")),
             "session": {k: test_s.get(k) for k in ("kind", "title", "minutes", "target", "detail", "source", "tss",
                                                    "protocol")}})
+    def aet_session() -> dict:
+        return AT.session({**tt, "cp_measured": cp_meas, "e_pace": e_pc},
+                          AT.start_hr((est.get("aethr") or {}).get("value"), tt.get("lthr")),
+                          AT.start_power(tt.get("cp")), getattr(prefs, "cap_weekday", None), aet_proto,
+                          getattr(prefs, "long_cap", None) if prefs is not None else None)
+
     if aet_due:
-        a_s = AT.session({**tt, "cp_measured": cp_meas, "e_pace": e_pc}, AT.start_hr((est.get("aethr") or {}).get("value"), tt.get("lthr")),
-                         AT.start_power(tt.get("cp")), getattr(prefs, "cap_weekday", None), aet_proto,
-                         getattr(prefs, "long_cap", None) if prefs is not None else None)
+        a_s = aet_session()
         test_suggestions.append({
             "kind": "aet", "protocol": aet_proto, "title": a_s["title"], "minutes": a_s["minutes"],
             "reason": (gate.get("aet_test_reason") or {}).get("text") or _("AeT 需要重新確認"),
             "replaces_long": aet_proto == "xu90",
             "session": {k: a_s.get(k) for k in ("kind", "title", "minutes", "target", "detail", "source", "tss",
                                                 "protocol")}})
+    # SP-471: the easy runs' power at the HR cap far above the power band (SP-449's note) → the test it
+    # points at (base_check.easy_power_tests: AeT / LTHR for the HR side, CP for the power side), with the
+    # CP / AeT tests' own limits (easy_power_blocked); 排入 as any suggested test
+    from backend.engine import base_check as BCK         # (BC is base_climb further down)
+    if en is not None and BCK.easy_power_blocked(days_to, kind, mode, cs is not None) is None:
+        thr = (tx.get("thr_check") or {}).get("lthr") or {}
+        ep = BCK.easy_power_tests(
+            en, today, lthr=tt.get("lthr"), lthr_measured=bool(tt.get("lthr_measured")),
+            lthr_conf=thr.get("confidence"), lthr_prior=bool(tt.get("lthr_prior")), cp_date=tt.get("cp_date"),
+            last_cp_test=last_cp_test_day(status.plan, today, (tx.get("cp_test") or {}).get("date")),
+            last_race=last_race_day(status.plan, today),
+            last_aet_test=tx.get("aet_last_test"))
+        easy_power_suggestions(test_suggestions, ep, lambda: CPP.session_for(protocol), aet_session, aet_proto)
     for t in test_suggestions:
         # 每堂課前加熱身 (SP-364): 排入 schedules the session as suggested — with the warm-up
         if WU.apply_one(t["session"], prefs, tph):

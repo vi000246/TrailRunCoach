@@ -14,7 +14,8 @@
  * every page; styled from the page's tokens (--panel, --text, --muted,
  * --line, --accent). The collapsed state is a per-browser convenience
  * (localStorage). Pages can call AppSuggestions.refresh() after a change and
- * listen for the "suggestions:changed" event (fired after 排入).
+ * listen for the "suggestions:changed" event (fired after 排入); "suggestions:loaded"
+ * ({rows}) follows every GET (static/eptest.js shows the easy-power test rows from it).
  */
 (() => {
   if (window.AppSuggestions) return;
@@ -205,6 +206,8 @@
     shared = fetch(API, { cache: "no-store" })
       .then((r) => (r.ok ? r.json().then((j) => j.suggestions || []) : null))
       .catch(() => null);
+    // SP-471: every load's rows, for a page's own view of them (static/eptest.js)
+    shared.then((got) => { if (got) window.dispatchEvent(new CustomEvent("suggestions:loaded", { detail: { rows: got } })); });
     return shared;
   }
 
