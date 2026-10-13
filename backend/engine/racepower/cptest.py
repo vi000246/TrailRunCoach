@@ -1,8 +1,8 @@
 """
 Formal CP tests (3′ / 12′, the Stryd / Palladino protocol the athlete uses)
 found in the synced FIT files (~/.wko5coach/fit/**), for the race-power
-capacity model and back-test. A detected test is only a SUGGESTION: it is
-never written into the season plan's thresholds; the user applies it.
+capacity model and back-test. A detected test is never written into the
+season plan's thresholds (SP-468: nothing to apply).
 
 Per bout the power is the mean-max over the bout's own duration from the
 1-s records (the lap average when there are no records).
@@ -11,17 +11,13 @@ Per bout `maximal` (the back-test's capacity samples only, backtest.py):
   * the workbook's "falling" rule (cp.validity): the shorter bout must have
     the higher power — a 3′ at or below the 12′ power is below the curve;
   * 推估: its peak HR is ≥ HR_GAP_BPM below the other bout's peak.
-The CP (estimate) never drops the test (SP-449, the user 2026-10-13: judge it
-the way WKO5 builds its mFTP — docs/research/wko5-mftp-logic.md: WKO5 has no
-"this effort does not count", it fits the PD model to the upper edge of the
-90-day mean-max curve). The 2-parameter model through the two points
-(work = CP·t + W′, Jones & Vanhatalo 2017) when the points make one
-(cp_protocols.two_point: 3′ > 12′, W′ within the prior ± 2 SD); else WKO5's
-mFTP fitted on the 90-day envelope up to the test day (the test included;
-racepower.athlete.stryd_pd); without that fit the 12′ bout alone,
-CP = P − W′/t with a W′ prior = Ruiz-Alias et al. 2025's amateur Stryd 9/3 mean
-(men 13.1 ± 4.0 kJ, women 6.4 ± 2.2 kJ; the range is ± 1 SD, a higher W′ gives
-the lower CP), the workbook's RWC band beside it. HR never decides it.
+The test's CP (estimate) is WKO5's mFTP fitted on the 90-day envelope up to the test day, the
+test included (racepower.athlete.stryd_pd, the 課表's own fit): SP-449 (the user 2026-10-13,
+「不要擅自決定我做的 CP test 不算」, docs/research/wko5-mftp-logic.md: WKO5 has no "this effort
+does not count", it fits the PD model to the upper edge of the 90-day mean-max curve) and SP-468
+(the user 2026-10-13, 「兩點算法…刪掉，還有待套用這個也刪掉，完全比照 WKO5 用自動計算的」): no
+two-point model, no single bout with a W′ prior, and nothing to apply — the 課表's CP follows the
+same fit by itself. Without a PD fit there is no CP. HR never decides it.
 """
 from __future__ import annotations
 
@@ -109,30 +105,22 @@ def w_prime_prior(weight: Optional[float], sex: str = "male", wind: bool = False
 
 
 def estimate(test: dict, weight: float, sex: str = "male", wind: bool = False, pd=None) -> dict:
-    """CP / W′ from the detected bouts (see the module docstring). `pd`: a callable (or a
-    dict) giving WKO5's PD fit up to the test day {mftp, frc, date, runs} or None."""
+    """The test's CP: WKO5's mFTP fitted on the 90-day mean-max envelope up to the test day, the
+    test in it (SP-468 — the user 2026-10-13, 「完全比照 WKO5 用自動計算的」: no two-point or
+    single-bout CP any more; see the module docstring). `pd`: a callable (or a dict) giving that
+    fit {mftp, frc, date, runs} or None; without it `cp` is None. W′ = the fit's FRC. `weight`,
+    `sex`, `wind` are kept for the callers' signature."""
     from backend.engine import cp_protocols as CPP
-    bouts = test["bouts"]
-    s, lo = (bouts[0], bouts[1]) if bouts[0]["nominal_s"] < bouts[1]["nominal_s"] else (bouts[1], bouts[0])
-    tp = CPP.two_point(s["p"], lo["p"], "female" if str(sex).lower().startswith("f") else "male")
-    if tp["ok"]:
-        # the model through the laps' own durations (as before SP-449); two_point only decides
-        f = CP.fit_cp([(s["t"], s["p"]), (lo["t"], lo["p"])])
-        return {"method": "two_point", "cp": f["cp"], "w_prime": f["w_prime"], "cp_range": [f["cp"], f["cp"]],
-                "label": "3′ / 12′ 兩點（CP 模型）", "note": ""}
-    note = tp["text"] + "；" + CPP.PD_NOTE
+    from backend.i18n import _
     fit = pd() if callable(pd) else pd
     if fit and fit.get("mftp"):
-        return {"method": "pd_model", "cp": float(fit["mftp"]), "w_prime": fit.get("frc"),
-                "cp_range": [float(fit["mftp"])] * 2, "pd": fit, "note": note,
-                "label": f"比照 WKO5：PD 模型 mFTP（{fit.get('date') or test.get('date') or ''} 前 90 天 mean-max 上緣，"
-                         "含這次測試）"}
-    pr = w_prime_prior(weight, sex, wind)
-    cp = lo["p"] - pr["mid"] / lo["t"]
-    return {"method": "single_bout", "cp": cp, "w_prime": pr["mid"],
-            "cp_range": [lo["p"] - pr["hi"] / lo["t"], lo["p"] - pr["lo"] / lo["t"]], "w_prime_prior": pr,
-            "bout_s": lo["t"], "bout_p": lo["p"], "note": tp["text"] + "；算不出 PD 模型，只用 12′ 段",
-            "label": "只用 12′ 段：CP = P − W′/t，W′ 用先驗"}
+        mftp = float(fit["mftp"])
+        return {"method": "pd_model", "cp": mftp, "w_prime": fit.get("frc"), "cp_range": [mftp, mftp], "pd": fit,
+                "note": "",
+                "label": _("比照 WKO5：這次測試後的 mFTP（{d} 前 90 天 mean-max 上緣的 PD 模型，含這次測試）",
+                           d=fit.get("date") or test.get("date") or "")}
+    return {"method": "pd_model", "cp": None, "w_prime": None, "cp_range": None, "pd": None,
+            "note": _(CPP.NO_FIT), "label": _("比照 WKO5：算不出 mFTP")}
 
 
 # ---------------------------------------------------------------------------

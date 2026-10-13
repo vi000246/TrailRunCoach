@@ -236,6 +236,8 @@ def _no_auto_plan_after_sync(monkeypatch):
     monkeypatch.setattr(plan_auto, "after_thresholds", lambda *a, **k: None)
     # nor a 進階設定 change the plan reads (api/calib.py: the Zone 3 unlock rule, SP-295)
     monkeypatch.setattr(plan_auto, "after_settings", lambda *a, **k: None)
+    # nor a CP that moved by itself, seen when the 課表 is opened (plan_auto.check_cp, SP-468)
+    monkeypatch.setattr(plan_auto, "after_cp_moved", lambda *a, **k: None)
     # nor a background calibration run (engine/calibrate.py; test_calibrate calls it itself)
     from backend.engine import calibrate
     monkeypatch.setattr(calibrate, "after_sync", lambda *a, **k: None)

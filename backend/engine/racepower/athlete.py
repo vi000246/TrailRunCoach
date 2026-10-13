@@ -1059,9 +1059,9 @@ def stryd_pd(ds, day: dt.date) -> Optional[dict]:
 
 def cp_tests(ds, today: dt.date, weight: float, sex: str) -> list[dict]:
     """3′/12′ tests in the synced FIT files dated within 365 days up to today,
-    each with its estimate (cptest.estimate; when the two bouts make no
-    two-point model, WKO5's mFTP fitted up to the test day, stryd_pd).
-    Suggestions only."""
+    each with its estimate (cptest.estimate: WKO5's mFTP fitted up to the test
+    day, stryd_pd — SP-468: the only CP of a test, None without a fit; the
+    test is kept for its bouts, backtest.py). Never applied to the plan."""
     from backend.engine.racepower import cptest as T
     try:
         found = T.scan(WX.home(), today - dt.timedelta(days=RIEGEL_WINDOW_DAYS), today,
@@ -1071,9 +1071,8 @@ def cp_tests(ds, today: dt.date, weight: float, sex: str) -> list[dict]:
     out = []
     for t in found:
         e = T.estimate(t, weight, sex, pd=lambda t=t: stryd_pd(ds, dt.date.fromisoformat(t["date"])))
-        if e.get("cp"):
-            age = (today - dt.date.fromisoformat(t["date"])).days
-            out.append({**t, "estimate": e, "age_days": age, "fresh": age <= PLAN_CP_MAX_AGE_DAYS})
+        age = (today - dt.date.fromisoformat(t["date"])).days
+        out.append({**t, "estimate": e, "age_days": age, "fresh": age <= PLAN_CP_MAX_AGE_DAYS})
     return out
 
 
@@ -1213,7 +1212,7 @@ def derive(ds, today: Optional[dt.date] = None, fetch_weather: bool = True,
     if plan_cp and plan_cp["fresh"]:
         short = {"cp2": plan_cp["cp"], "w_prime": (test or {}).get("estimate", {}).get("w_prime") or
                  cptest_prior(weight, sex)["mid"], "label": f"計畫 CP 測試 {plan_cp['date']}"}
-    elif test and test["fresh"]:
+    elif test and test["fresh"] and test["estimate"].get("cp"):
         e = test["estimate"]
         short = {"cp2": e["cp"], "w_prime": e["w_prime"], "label": f"偵測到的 CP 測試 {test['date']}（{e['label']}）"}
     elif pdm:
@@ -1255,11 +1254,12 @@ def derive(ds, today: Optional[dt.date] = None, fetch_weather: bool = True,
     if plan_cp:
         sources.append({"id": "plan", "label": f"賽季計畫 CP 測試（{plan_cp['date']}）", "cp": plan_cp["cp"],
                         "date": plan_cp["date"], "fresh": plan_cp["fresh"]})
-    if test:
+    if test and test["estimate"].get("cp"):
+        # SP-468: WKO5's mFTP after the test (nothing to apply: the 課表 follows the same fit)
         e = test["estimate"]
-        sources.append({"id": "cptest", "label": f"偵測到的 CP 測試 {test['date']}（{e['label']}；尚未套用）",
+        sources.append({"id": "cptest", "label": f"偵測到的 CP 測試 {test['date']}（{e['label']}）",
                         "cp": e["cp"], "w_prime": e["w_prime"], "cp_range": e.get("cp_range"),
-                        "date": test["date"], "fresh": test["fresh"], "suggestion": True})
+                        "date": test["date"], "fresh": test["fresh"]})
     if pd.get(("mftp", "Run")):
         sources.append({"id": "wko5", "label": "WKO5 模型 mFTP（WKO5 存的快照）", "cp": pd[("mftp", "Run")],
                         "tte": pd.get(("tte", "Run")), "frc": pd.get(("frc", "Run")), "w_prime": pd.get(("frc", "Run"))})

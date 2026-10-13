@@ -285,7 +285,7 @@ main > section.tab-off { display: none; }
       <ul class="meta" style="margin:4px 0;padding-left:18px">
         <li data-i18n="settings.thr.how_aet">AeT 測試（Uphill Athlete）：暖身 10 分後在跑步機或平路用固定功率跑 40–60 分鐘（課表排 40 分；UA 不建議短於 40 分），前後半段的心率飄移 &lt; 5% 就代表那個心率在有氧閾值以下，逐次往上找到飄移剛好約 5% 的心率。</li>
         <li data-i18n="settings.thr.how_lthr">LTHR 測試（Friel）：單獨一人 30 分鐘全力跑，取最後 20 分鐘的平均心率。</li>
-        <li data-i18n="settings.thr.how_cp">CP 測試的方式在「課表」頁的課表偏好選（快速 20 分全力／標準 12 分＋休 30 分＋3 分／用 5–10 K 比賽）；每 4–6 週或賽前 10–21 天做一次。測完在活動判讀卡按「套用這次的 CP」，會寫成測試那天的一列。沒填的話用課表推估的 CP：Stryd 功率的 PD 模型（比照 WKO5 算 mFTP 的方式，用近 90 天每次跑步的 mean-max 曲線上緣擬合；30–60 分鐘的功率，通常比兩點 CP 低 5–10%）。</li>
+        <li data-i18n="settings.thr.how_cp">CP 測試的方式在「課表」頁的課表偏好選（快速 20 分全力／標準 12 分＋休 30 分＋3 分／用 5–10 K 比賽）；每 4–6 週或賽前 10–21 天做一次。CP 比照 WKO5 自動計算：測試只是近 90 天功率曲線上的一次全力，沒有套用按鈕。這裡沒填的話，課表用 Stryd 功率 PD 模型的 mFTP（用近 90 天每次跑步的 mean-max 曲線上緣擬合，含 CP 測試；30–60 分鐘的功率；新的擬合跟目前的 CP 差 3 W 以上才換）。這裡手動填的 CP 優先。</li>
       </ul>
     </details>
     <details style="margin-top:6px"><summary class="meta" data-i18n="settings.thr.pz_h">功率區間（Palladino 官方表，依目前 CP）</summary>
@@ -1081,7 +1081,7 @@ $("thr").addEventListener("change", (ev) => {
   const i = ev.target.dataset.t; if (i == null) return;
   const f = ev.target.dataset.f, v = ev.target.value, r = TS.thresholds[i];
   r[f] = THR_SHOWN.includes(f) ? (v === "" ? null : Number(v)) : v;
-  // a CP typed by hand is no longer the test's result (套用這次的 CP stores how it was measured)
+  // a CP typed by hand is no longer a test's result (rows 「套用這次的 CP」 wrote before SP-468 carry cp_method)
   // and is marked as typed by hand (SP-274: the 90-minute test doesn't take it as a tested CP)
   if (f === "cp") { r.cp_method = null; r.wprime = null; r.cp_manual = v === "" ? null : true; }
   // likewise an LTHR / AeT typed by hand is no longer the applied estimate / test

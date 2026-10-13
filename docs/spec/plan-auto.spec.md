@@ -94,6 +94,9 @@ reconcile preview, a manual push and the automatic run. They all show the same p
 Other entry points:
 - **CP change**: `api/plan.py` calls `plan_auto.after_thresholds()` after a threshold edit; that
   run (trigger `cp_change`) also starts when the stamp is unchanged (see 「CP change」 below).
+  SP-468: opening the 課表 (`GET /sessions`, the calendar) with fresh inputs calls
+  `plan_auto.check_cp` — the CP in effect differs from `state.cp` and no run is going → the same
+  `cp_change` run (`after_cp_moved`).
 - **Settings**: `api/calib.py` calls `plan_auto._after_settings()` (trigger `settings`,
   `backend/engine/plan_auto.py:1131`) after a 進階設定 value the plan reads changed (the Zone 3
   unlock rule, SP-295). It goes through the same stamp check without `force` (see Known limits).
@@ -742,6 +745,17 @@ rescaled new ÷ old (`rescale_sessions`); the pushed ones go out of date and are
 held or failed); each item is 已重新推送 / 待推送 / 只在 app (`_log_cp`). `plan.auto.enabled`
 off: nothing (the next enabled run catches up).
 
+A CP that moves by itself (SP-468) — a refit after a deploy, an activity excluded, no new activity —
+started no run before: only a threshold edit or a sync that downloaded something did, so the stored
+sessions kept the old watts (production 2026-10-13: CP 191 W, the easy runs still 「功率 114–140 W」
+from CP 175). `check_cp(db, inp)` (`backend/engine/plan_auto.py:1208`), called by
+`api/plan_sessions._sessions_body` after the reconcile (fresh inputs only; a failure never fails
+the page), starts the `cp_change` run when `plan.auto.enabled`, `state.cp` is set, `cp_of(inp)`
+differs from it (rounded) and no run of the tenant is going. The run is the one above: the stored
+plan's watts rescaled, unedited auto sessions regenerated with the new text (e.g. 124–153 W), the
+pushed ones re-pushed (or 待推送). The CP itself changes only by ≥ 3 W (`wko5-engine.spec.md`, CP
+hold).
+
 API (`backend/api/plan_auto.py`, prefix `/api/v1/overview/plan/auto`):
 - `GET ""`: settings, the pending proposal, the last entries and the thresholds
 - `PUT /settings`
@@ -987,3 +1001,4 @@ The owner's calls, gathered from the sections above (each is described there wit
 | 2026-10-13 | feature | SP-398 | Rule E (fatigue guard) on load only: the 「two red-compliance sessions in a row」 trigger is gone (`adapt._fatigue`, `backend/engine/adapt.py:499`; `compliance.streak_red` removed) — the owner: fatigue is intensity / TSS, not the completion colour. TSB < −30 and the CTL ramp BLOCK act as before. The completion words are 完成／部分／換了課／跳過 (`compliance.LEVEL_LABEL`, `with_plan_check`, `plan_match.compare` text 「換了課：…」); levels unchanged. Tests: `backend/tests/test_adapt.py` (`test_fatigue_two_reds_no_longer_trigger_sp398`, `test_fatigue_tsb_and_ramp_still_act_with_two_reds_sp398`), `backend/tests/test_b2b.py` |
 | 2026-10-13 | feature | SP-404 | Rule E's new trigger 「連續 2 堂輕鬆課跑太強」: the last 2 done easy / long runs of the week both too hard (rule D 太強 / 偏強 on an easy run, a self-rating ≥ Hard on an easy / long run; a 偏強 from HR alone does not count with `hr_quality` low) -> the quality steps down to the recovery fartlek, easy minutes × 0.8; TSB / ramp win (`adapt._too_hard_streak`, `adapt.overhard(hr=)`, `OVERHARD_STREAK = 2`, 推估). It acts in a B2B week too. Tests: `backend/tests/test_adapt.py` (`*_sp404`), `backend/tests/test_adapt_rpe.py`, `backend/tests/test_b2b.py` |
 | 2026-10-13 | feature | SP-449 | A week note when the easy runs' own power at the easy-run HR cap is above 88 % CP (`base_check.easy_power_note`; e.g. 169 W at 154 bpm vs CP 175 W, band top 140 W): CP may be too low, do a CP / AeT test; the easy power band (65–80 % CP) is unchanged. Shown in the overview's week notes and once on the 課表 page (`plan_sessions._plan_notes`, the first week in view) (zh / en) |
+| 2026-10-13 | bugfix | SP-468 | A CP that changed without a run (a refit after a deploy, no new activity) re-zones the stored sessions: opening the 課表 calls `plan_auto.check_cp` (`backend/engine/plan_auto.py:1208`, from `backend/api/plan_sessions.py:611`), which starts the `cp_change` run when the CP in effect differs from `state.cp`; before, only a threshold edit or a sync with a new activity did, and the stored easy runs kept 「功率 114–140 W」 at CP 191 W |

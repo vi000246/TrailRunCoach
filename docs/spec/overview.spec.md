@@ -2075,14 +2075,13 @@ which one. The response keeps the `coros` field names.
   the A event is named the right time; < 10 days → 「賽前 10 天內不要測，賽後再測」, watch. The
   action names the 課表偏好 protocol (`_cp_protocol`, `backend/engine/status.py:852`); `race` →
   「用 5–10 K 比賽或計時跑代替 CP 測試」. It also reads the latest CP test in the data
-  (`workout_review.latest_cp_test`, 120 days, `backend/engine/workout_review.py:2549`), whose
-  `delta` is against the **previous result of the same method** (`cp_protocols.reference`;
-  across methods converted two-point ≈ 1.05 × a 30-min CP, 外插), so rotating quick / standard
-  doesn't keep flagging. Not applied (no CP row dated on / after the test), an `apply` payload
-  (not 不採用) and |delta| > `CP_DELTA` 3 % → at least watch, 要更新, action 「套用這次的 CP」.
-  `extra.cp_test` carries method, quality, `ref`, `apply`, `applied`; the 總覽 測試 card draws
-  the apply button from it (`applyCpBtn`, `backend/static/overview.html:538`), POSTing
-  `/api/v1/plan/thresholds/apply-cp` (see `workout-review.spec.md`).
+  (`workout_review.latest_cp_test`, 120 days, `backend/engine/workout_review.py:2575`). SP-468: its
+  CP is WKO5's mFTP after the test and the 課表 follows that fit by itself, so the test day counts as
+  the CP's test day for the age (the later of it and the last plan CP row); `why` says 「最近一次
+  CP 測試 {date}：這次測試後的 mFTP {cp} W（比照 WKO5，課表自動採用）」 (or 「算不出 mFTP」).
+  Nothing to apply: no 要更新 / 「套用這次的 CP」, no apply button on the 總覽 測試 card, no
+  `POST /api/v1/plan/thresholds/apply-cp`. `extra.cp_test` carries the date, protocol, method,
+  `cp`, `cp_now`, `pd`.
   `extra.cp_due` (CP missing / > 42 days, `backend/engine/status.py:902`) decides the CP-test
   suggestion in `week_plan` (the CP test measures CP only). The latest AeT drift test
   (`aet_test.latest_aet_test`) → `extra.aet_test` (`backend/engine/status.py:962`): band "at" and
@@ -2579,3 +2578,4 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 | 2026-10-13 | bugfix | SP-443 | The multi-day 百岳's 「ME 負重爬坡」 (kind quality, no variant, no 「N×M 分」) derived to nothing and its push raised 「看不懂間歇結構」. Now `workout_steps.derive` gives 暖身 (detail, 10′) → 上坡 the title's climb at `ME_UP_MPH` (auto easy = the walk cap, target_policy unchanged) → 下坡 the rest of the session (RPE 3–4 + 下降 N m, `ME_DOWN_RPE` 推估), and `coros_workouts.session_steps` pushes that structure; structure TSS ≈ 0.88 × the card. Tests: `backend/tests/test_me_climb_structure_sp443.py` |
 | 2026-10-13 | bugfix | SP-449 | 設定 › 閾值 and the plan page show the CP the 課表 uses and its source (`effective_thresholds.cp.label`; `zones.cp_in_effect`) — they said 「WKO5 的 mFTP」 / `wko5_mftp` (null on a COROS install) while the 課表 used the Stryd PD fit; the 「沒填的話用…」 help says the PD model (zh / en) |
 | 2026-10-13 | feature | SP-450 | The 專項 chip (主要訓練項目, `backend/static/sportchip.js`) is in the 課表's top row too (`backend/static/schedule.html:578`): choosing 自動／越野跑／路跑・馬拉松 saves `athlete.primary_sport` and reloads; the plan's `PSP.stored()` stamp re-plans (路跑: no 爬升 week row). Demo: shown, disabled |
+| 2026-10-13 | bugfix | SP-468 | 測試 indicator: a CP test counts as the CP's test day by itself (its CP is WKO5's mFTP, which the 課表 uses); no 要更新 / 「套用這次的 CP」 action or button (`applyCpBtn` removed) — nothing is applied any more (`backend/engine/status.py:864`). The 90-minute AeT test's 「實測 CP」 also counts WKO5's mFTP with a CP test inside its 90-day window (`aet_test.cp_tested`, `backend/engine/aet_test.py:638`; a fit without a test still does not, owner 2026-10-06). The CP 測試 glossary says the CP is computed the WKO5 way, nothing to apply |

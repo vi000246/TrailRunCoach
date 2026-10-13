@@ -12,10 +12,10 @@ Why (docs/research/plan-backtest-feasibility.md §1.2, §5.1–§5.2):
     it takes 3–4 tests, 6–8 months, to see a trend;
   * the first two tests carry a learning effect (Hopkins, Schabort & Hawley 2001: + 1.2 %), so
     the baseline is worth doing now;
-  * the same method every time: the two-point 12′ + 3′ test (cp_protocols "standard"), whatever
-    課表偏好 CP 測試方式 says — methods are not interchangeable (a two-point CP runs ≈ 5 % above a
-    30-min one, cp_protocols.CP_2PT_OVER_30MIN). The AeT test follows 課表偏好 (one method per
-    athlete already).
+  * the same protocol every time: the 12′ + 3′ test (cp_protocols "standard"), whatever
+    課表偏好 CP 測試方式 says — the same efforts on the curve each time. (Its CP is WKO5's mFTP
+    after the test since SP-468, like every protocol's.) The AeT test follows 課表偏好 (one
+    method per athlete already).
 
 Suggested, never scheduled (owner 2026-10-05): due() feeds rows of the floating box
 (engine/suggestions.baseline_rows); the athlete picks the day there.
@@ -27,8 +27,8 @@ the last valid test; from 8 weeks on the row says it is late.
 
 What counts as the last valid test (latest()):
   cp   the latest CP test the review found (status.i_testing's cp_test =
-       workout_review.latest_cp_test) when it is the two-point one and its result may be applied
-       (cp_protocols.apply_payload: quality not 不採用); else the latest done stored test session
+       workout_review.latest_cp_test) when it is the 12′ + 3′ one and it gave WKO5's mFTP
+       (SP-468: no PD fit = no CP); else the latest done stored test session
        of protocol standard — but not the very run the review rejected (a test that was not
        all-out is no baseline);
   aet  the same with the latest AeT test (aet_test.latest_aet_test, `ok`) and the done stored

@@ -306,11 +306,11 @@ def phase_push_end(today: dt.date, phase_end: Optional[dt.date]) -> dt.date:
 def _latest_tests(st) -> dict:
     """The testing indicator's latest CP / AeT test (status.i_testing: workout_review.latest_cp_test,
     aet_test.latest_aet_test), trimmed to what engine/baseline_test.latest reads. A CP test counts
-    (`ok`) when its result was applied or may be (cp_protocols.apply_payload: not 不採用)."""
+    (`ok`) when it gave WKO5's mFTP (SP-468: nothing is applied any more; no PD fit = no CP)."""
     tx = next(((i.extra or {}) for i in st.indicators if i.id == "testing"), {})
     cp, ae = tx.get("cp_test") or {}, tx.get("aet_test") or {}
     return {"cp": {"date": cp.get("date"), "method": cp.get("method"), "protocol": cp.get("protocol"),
-                   "ok": bool(cp.get("applied") or cp.get("apply"))} if cp else None,
+                   "ok": cp.get("cp") is not None} if cp else None,
             "aet": {"date": ae.get("date"), "ok": bool(ae.get("ok"))} if ae else None}
 
 
@@ -603,6 +603,15 @@ async def _sessions_body(db: AsyncSession, inp: dict, start: Optional[str], end:
             # 每週課表存檔 (engine/plan_history.py, SP-71): this week's snapshot / last week's result, when due
             from backend.engine import plan_history as PH
             await PH.record_safe(db, inp, every)
+        # SP-468: the CP in effect moved since the automatic run last saw it (a refit after a deploy,
+        # no new activity): start the cp_change run that re-zones the stored sessions (it takes the
+        # writer lock after this request; the page shows the new watts on its next load)
+        from backend.engine import plan_auto as PA
+        try:
+            await PA.check_cp(db, inp)
+        except Exception as e:              # noqa: BLE001 — never fail the page over it
+            import logging
+            logging.getLogger(__name__).warning("plan: CP check failed (%s)", type(e).__name__)
     t = _took("reconcile", t)
     ss = [s for s in every if not (start or end) or (s.get("day") and (not start or s["day"] >= start)
                                                      and (not end or s["day"] <= end))]

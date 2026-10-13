@@ -1667,9 +1667,8 @@ function addTip(card, text) {
   q.dataset.tip = [q.dataset.tip, text].filter(Boolean).join("\n\n");
 }
 
-// a review card's action button (workout_review: 「套用這次的 CP」 -> POST apply-cp;
-// 「套用這次的 AeT」 -> POST apply-estimate with the test date; 「當作間歇判讀」 -> PATCH
-// activities add_tags, then `reload` redraws the dashboard)
+// a review card's action button (workout_review: 「套用這次的 AeT」 -> POST apply-estimate with the
+// test date; 「當作間歇判讀」 -> PATCH activities add_tags, then `reload` redraws the dashboard)
 function drawAction(card, a) {
   const wrap = document.createElement("p");
   wrap.className = "card-action";

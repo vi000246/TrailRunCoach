@@ -201,7 +201,6 @@ REST_AET_TIP = N_("只供參考，不據此調整休息。\n"
                   "同一份課表前後比）。\n"
                   "・舊的「60 秒降不到 20 下就拉長休息」找不到訓練上的來源，已拿掉；20 下接近臨床篩心臟風險用的"
                   "運動後心率恢復門檻（Cole 1999、Cleveland Clinic），不是給組間休息用的。")
-CP_DELTA = 0.03
 CLIMB_BETTER = 0.05
 LAST20_MIN = 0.90
 STEEP_DOWN = -0.10
@@ -2550,38 +2549,32 @@ def last_quality(ds, today: dt.date, days: int = 28) -> Optional[dict]:
 
 def test_pd_fit(ds, day: dt.date) -> Optional[dict]:
     """WKO5's mFTP fitted up to a CP test's day (racepower.athlete.stryd_pd, the 課表's own
-    fit) — the CP of a 12′ + 3′ whose points make no two-point model (SP-449)."""
+    fit) — the CP of every CP test (SP-449, SP-468)."""
     try:
         from backend.engine.racepower import athlete as A
         return A.stryd_pd(ds, day)
-    except Exception:                       # noqa: BLE001 — no fit: the 12′ bout with the prior
+    except Exception:                       # noqa: BLE001 — no fit: no CP (cp_protocols.NO_FIT)
         return None
 
 
 def cp_eval(ds, w, m: dict, c: dict) -> Optional[dict]:
-    """The CP-test result of a test_cp activity by its protocol
-    (cp_protocols.result), compared with the previous result of the same
-    method (cp_protocols.reference), and the 「套用這次的 CP」 payload."""
+    """The CP-test reading of a test_cp activity (cp_protocols.result): its bouts by protocol and
+    WKO5's mFTP fitted up to the test day, the test in it. SP-468: nothing to compare or apply —
+    the 課表's CP follows the same fit by itself (fitdataset.stryd_cp_fit); `cp_now` = the CP in
+    effect on the day."""
     from backend.engine import cp_protocols as CPP
-    plan = getattr(ds, "plan", None)
-    sex = CPP.athlete_sex(ds)
     date = c.get("date") or _wdate(w).isoformat()
-    res = CPP.result(m.get("cp_bouts"), c.get("protocol"), m.get("lthr"), sex,
+    res = CPP.result(m.get("cp_bouts"), c.get("protocol"), m.get("lthr"), CPP.athlete_sex(ds),
                      pd=lambda: test_pd_fit(ds, dt.date.fromisoformat(date)))
     if res is None:
         return None
-    ths = getattr(plan, "thresholds", None) or []
-    ref = CPP.reference(ths, date, res["method"], m.get("cp"))
-    delta = (res["cp"] / ref["cp"] - 1.0) if ref.get("cp") else None
-    applied = any(t.date == date and t.cp is not None for t in ths)
-    return {**res, "idx": w.idx, "date": date, "cp_now": m.get("cp"), "ref": ref, "delta": delta,
-            "applied": applied, "method_label": CPP.METHOD_LABEL.get(res["method"], res["method"]),
-            "apply": None if applied else CPP.apply_payload(res, date, w.idx)}
+    return {**res, "idx": w.idx, "date": date, "cp_now": m.get("cp"),
+            "method_label": CPP.METHOD_LABEL.get(res["method"], res["method"])}
 
 
 def latest_cp_test(ds, today: dt.date, days: int = 120) -> Optional[dict]:
-    """The latest run classified test_cp: its CP by protocol (cp_eval), the
-    delta against the previous result of the same method, and the apply payload."""
+    """The latest run classified test_cp and its reading (cp_eval: WKO5's mFTP after the test,
+    None without a PD fit)."""
     from backend.engine.wko5expr.dataset import date_to_day
     tday = math.floor(date_to_day(today))
     found = None
@@ -2600,9 +2593,8 @@ def latest_cp_test(ds, today: dt.date, days: int = 120) -> Optional[dict]:
         ev = cp_eval(ds, w, m, c)
         if ev is None:
             continue
-        found = {k: ev[k] for k in ("idx", "date", "cp", "wprime", "cp_range", "cp_now", "delta", "ref", "method",
-                                    "method_label", "protocol", "protocol_label", "quality", "reasons", "apply",
-                                    "applied")}
+        found = {k: ev.get(k) for k in ("idx", "date", "cp", "cp_range", "cp_now", "method", "method_label",
+                                        "protocol", "protocol_label", "reasons", "pd")}
     _flush(ds)
     return found
 
@@ -2755,34 +2747,25 @@ def stimulus_tip(c: dict) -> Optional[str]:
 
 
 def cp_headline(ev: dict) -> str:
-    """One line: the bouts → CP (by method)."""
-    lo, hi = ev["cp_range"]
-    rng = f"（{lo:.0f}–{hi:.0f} W）" if hi - lo >= 1 else ""
-    if ev["method"] == "2pt":
-        return f"12 分 {ev['p12']:.0f} W、3 分 {ev['p3']:.0f} W → CP {ev['cp']:.0f} W，W′ {ev['wprime'] / 1000:.1f} kJ"
-    if ev["method"] == "1pt_prior":
-        return (f"只用 12 分 {ev['p12']:.0f} W − W′ 先驗 {ev['wprime_prior'] / 1000:.1f} kJ ÷ 720 → "
-                f"CP {ev['cp']:.0f} W{rng}，{ev['quality']}")
-    if ev["method"] == "pd_model":
-        pd = ev.get("pd") or {}
-        return (f"12 分 {ev['p12']:.0f} W、3 分 {ev['p3']:.0f} W 不成兩點模型 → 比照 WKO5：{pd.get('date') or ''} "
-                f"前 90 天 mean-max 上緣（含這次）的 PD 模型 mFTP {ev['cp']:.0f} W，{ev['quality']}")
-    if ev["method"] == "tt20":
-        return f"20 分 {ev['p20']:.0f} W × 0.95 → CP {ev['cp']:.0f} W{rng}"
-    return f"{ev['race_s'] / 60:.0f} 分 {ev['race_power']:.0f} W → CP {ev['cp']:.0f} W{rng}（Riegel 換算，外插）"
+    """One line: the bouts → WKO5's mFTP after the test (SP-468: the only CP of a CP test)."""
+    if ev["protocol"] == "standard":
+        eff = _("12 分 {p12} W、3 分 {p3} W", p12=f"{ev['p12']:.0f}", p3=f"{ev['p3']:.0f}")
+    elif ev["protocol"] == "quick":
+        eff = _("20 分 {p} W", p=f"{ev['p20']:.0f}")
+    else:
+        eff = _("{m} 分 {p} W", m=f"{ev['race_s'] / 60:.0f}", p=f"{ev['race_power']:.0f}")
+    if ev.get("cp") is None:
+        return _("{eff} → 算不出 mFTP", eff=eff)
+    pd = ev.get("pd") or {}
+    return _("{eff} → 這次測試後的 mFTP {cp} W（比照 WKO5：{d} 前 90 天 mean-max 上緣的 PD 模型，含這次測試）",
+             eff=eff, cp=f"{ev['cp']:.0f}", d=pd.get("date") or ev["date"])
 
 
-def cp_compare_line(ev: dict) -> Optional[str]:
-    """vs the previous result of the same method (cp_protocols.reference)."""
-    if ev.get("applied"):
-        return f"已套用到 {ev['date']} 的門檻"
-    ref, dlt = ev.get("ref") or {}, ev.get("delta")
-    if dlt is None:
-        return "沒有可以比較的 CP（還沒有門檻）"
-    who = (f"上一次同方法（{ref['date']}）" if ref.get("same_method") else
-           f"目前的 CP（{ref.get('method') or '課表用的'}{'，換算到同一基準' if ref.get('converted') else ''}）")
-    verdict = "建議更新" if abs(dlt) > CP_DELTA else "不用改"
-    return f"和{who} {ref['cp']:.0f} W 差 {dlt * 100:+.1f}%" + ("（> 3%）" if abs(dlt) > CP_DELTA else "") + f"：{verdict}"
+def cp_follow_line(ev: dict) -> str:
+    """What the 課表 does with it (SP-468): nothing to do — its CP is the same fit."""
+    now = ev.get("cp_now")
+    return ((_("當天課表的 CP {cp} W；", cp=f"{now:.0f}") if now else "") +
+            _("課表的 CP 自動用同一個擬合（差 ≥ 3 W 才換；設定頁手動填的 CP 優先）"))
 
 
 def cp_lines(ev: Optional[dict], has_power: bool = True) -> list[str]:
@@ -2790,10 +2773,8 @@ def cp_lines(ev: Optional[dict], has_power: bool = True) -> list[str]:
         return ["沒有功率，算不出 CP" if not has_power else "找不到這個流程的全力段，算不出 CP"]
     lines = [cp_headline(ev)]
     if ev.get("reasons"):
-        lines.append(ev["reasons"][0])
-    cmp_ = cp_compare_line(ev)
-    if cmp_:
-        lines.append(cmp_)
+        lines.append(_(ev["reasons"][0]))
+    lines.append(cp_follow_line(ev))
     return lines
 
 
@@ -3210,13 +3191,11 @@ def _summary_cards(ds, w, m: dict, c: dict, lines: list[str], ev: Optional[dict]
                            level=lvl, tip="\n".join(il) + "\n詳細在「間歇」。"
                            + ("\n\n" + _(REST_AET_TIP) if rest and rest in il else "")))
     elif typ == "test_cp":
+        # SP-468: WKO5's mFTP after the test — nothing to apply
         cp = (ev or {}).get("cp")
-        dlt = (ev or {}).get("delta")
         cards.append(_card("status", id="cp", icon="test", label="CP 測試", value=_num(cp) if cp else "–", unit="W" if cp else None,
-                           sub=("已套用" if (ev or {}).get("applied") else "建議更新" if dlt is not None and abs(dlt) > CP_DELTA
-                                else "不用改" if dlt is not None else "算不出" if not ev else None),
-                           level="na" if not ev else "warn" if dlt is not None and abs(dlt) > CP_DELTA and not ev.get("applied") else "good",
-                           tip="\n".join(lines)))
+                           sub=_("mFTP（比照 WKO5）") if cp else _("算不出"),
+                           level="good" if cp else "na", tip="\n".join(lines)))
     # 爬坡（越野、健行）
     if c["terrain"] in ("trail", "hike"):
         cl = m.get("climbs") or []
@@ -3340,8 +3319,6 @@ def _summary(ds, w, m, c, base):
     else:
         ev = cp_eval(ds, w, m, c)
         lines = cp_lines(ev, m.get("avg_power") is not None)
-        if ev and ev.get("apply"):
-            base = {**base, "action": _apply_action(ev)}
     cards = _summary_cards(ds, w, m, c, lines, ev)
     if c["terrain"] in ("trail", "hike"):
         cl = m.get("climbs") or []
@@ -4158,15 +4135,6 @@ def _form_cadence(ds, w, m, c, base):
                                 "speed_ref": v_ref, "grade_ref": g_ref, "median_cad": med_cad, "suggest": sug}}
 
 
-def _apply_action(ev: dict) -> dict:
-    """The review card's 「套用這次的 CP」 button (viewer draw(): res.action)."""
-    a = ev["apply"]
-    return {"kind": "apply_cp", "label": a["label"], "method": "POST", "url": "/api/v1/plan/thresholds/apply-cp",
-            "body": {k: a[k] for k in ("date", "cp", "wprime", "cp_method", "activity_index", "note")},
-            "done": f"已套用：{a['date']} CP {a['cp']} W", "confirm":
-            f"把 {a['date']} 的 CP 設成 {a['cp']} W（{ev['method_label']}，品質 {ev['quality']}）？區間和 TSS 會重新計算"}
-
-
 def _cp(ds, w, m, c, base):
     if c["type"] != "test_cp":
         return {**base, "empty": "這次不是 CP 測試（課表偏好的 CP 測試方式：20 分全力／12 分＋3 分／5–10 K 比賽）"}
@@ -4179,19 +4147,13 @@ def _cp(ds, w, m, c, base):
     for b in ev.get("bouts") or []:
         hr = f"，最高心率 {b['hr_peak']:.0f}" if b.get("hr_peak") is not None else ""
         rows.append(_row(f"{b['duration_s'] / 60:.0f} 分段", f"{b['power']:.0f} W（{_hms(b['start_s'])} 開始{hr}）"))
-    lo, hi = ev["cp_range"]
-    rows.append(_row("CP", f"{ev['cp']:.0f} W" + (f"（{lo:.0f}–{hi:.0f}）" if hi - lo >= 1 else "")
-                     + f" · {ev['method_label']}"))
-    rows.append(_row("W′", f"{ev['wprime'] / 1000:.1f} kJ" if ev.get("wprime") is not None
-                     else "沒量到" + (f"（CP 用先驗 {ev['wprime_prior'] / 1000:.1f} kJ 算）"
-                                      if ev.get("wprime_prior") and ev["method"] == "1pt_prior" else "")))
-    rows.append(_row("品質", ev["quality"]))
+    # SP-468: the test's CP is WKO5's mFTP after it; the checks only describe the effort
+    from backend.engine.cp_protocols import NO_FIT
+    rows.append(_row("mFTP", f"{ev['cp']:.0f} W · {_(ev['method_label'])}" if ev.get("cp") is not None
+                     else _(NO_FIT)))
     for k in ev.get("checks") or []:
-        rows.append(_row("檢查", ("✓ " if k["ok"] else "✗ ") + k["text"]))
-    out = {**base, "series": rows + _verdict_rows(cp_lines(ev))}
-    if ev.get("apply"):
-        out["action"] = _apply_action(ev)
-    return out
+        rows.append(_row(_("努力"), ("✓ " if k["ok"] else "✗ ") + k["text"]))
+    return {**base, "series": rows + _verdict_rows(cp_lines(ev))}
 
 
 # ---------------------------------------------------------------------------

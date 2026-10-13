@@ -1618,12 +1618,14 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     aet_meas = bool(hrz.get("aet_measured")) if hrz else bool(tt.get("aet_measured"))
     cap_txt = easy_cap_label(None, aet, aet_meas)
     # SP-274: the 90-minute test's intensity — the E pace of a confirmed race (engine/e_pace.py),
-    # else 75–80 % of a tested CP (a plan CP row not typed by hand — aet_test.cp_tested; not WKO5's
-    # mFTP / a PD fit: owner 2026-10-06), else the talk test
+    # else 75–80 % of a tested CP (a plan CP row not typed by hand, or — SP-468 — WKO5's mFTP with a
+    # CP test inside its 90-day window: aet_test.cp_tested; a PD fit without a test still does not
+    # count, owner 2026-10-06), else the talk test
     from backend.engine import e_pace as EP
     from backend.engine.aet_test import cp_tested
     try:
-        cp_meas = bool(tt.get("cp")) and cp_tested(ds.plan, today)
+        ct_day = ((getattr(by.get("testing"), "extra", None) or {}).get("cp_test") or {}).get("date")
+        cp_meas = bool(tt.get("cp")) and cp_tested(ds.plan, today, ct_day)
     except Exception:                       # noqa: BLE001 — a dataset without a plan (tests)
         cp_meas = False
     e_pc = EP.current(today)

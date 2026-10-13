@@ -46,7 +46,7 @@ decisions on the workbook's ambiguities (D1–D10) are in
 | `planner.py` (v2) | Plan orchestration, the validation gate, per-segment heat fixed point | `backend/engine/racepower/planner.py:412` |
 | `backtest.py` (v2) | Two leave-one-out back-tests (capacity, terrain), pass rule, stored flags | `backend/engine/racepower/backtest.py:937` |
 | `intensity.py` (v2) | Per-activity HR / power stats, the easy / steady / race classifier, INTENSITY constant | `backend/engine/racepower/intensity.py:169` |
-| `cptest.py` (v2) | 3′/12′ tests in the synced FIT files, two-point CP or WKO5's PD mFTP up to the test day (SP-449), FIT mean-max curves | `backend/engine/racepower/cptest.py:51` |
+| `cptest.py` (v2) | 3′/12′ tests in the synced FIT files, their CP = WKO5's PD mFTP up to the test day (SP-449, SP-468), FIT mean-max curves | `backend/engine/racepower/cptest.py:51` |
 | `hikehr.py` (v2) | HR-filtered steep hike windows: VAM, personal altitude factor, multi-day fatigue | `backend/engine/racepower/hikehr.py:54` |
 | `maximal.py` (v2) | Capacity samples: plan-event matching, self-paced maximal road rule, race-like trail rule, observed HRmax | `backend/engine/racepower/maximal.py:156` |
 | `hrcap.py` (v2) | HR-based capacity: per-run steady points, OLS power on HR → P at LTHR, training-intensity distribution | `backend/engine/racepower/hrcap.py:100` |
@@ -128,19 +128,21 @@ decisions on the workbook's ambiguities (D1–D10) are in
     (`enforce_lower_bound`, `backend/engine/racepower/athlete.py:904`).
 - **CP tests** (`backend/engine/racepower/cptest.py:51`): laps of 150–210 s and 660–780 s, each
   ≥ 1.3 × the other laps' median power (推估). The mean-max is taken inside the lap. **No test is
-  dropped** (SP-449, judged the way WKO5 builds its mFTP — `docs/research/wko5-mftp-logic.md`):
-  the two-point CP when the bouts make a model (`cp_protocols.two_point`: 3′ above 12′ and W′
-  within the prior ± 2 SD); else `pd_model` = WKO5's PD mFTP on the 90-day mean-max envelope up to
-  the test day, the test included (`athlete.stryd_pd`, the 課表's own Stryd fit), its FRC as the
-  short-range W′; only without that fit the 12′ bout alone, CP = P − W′/t, with the W′ prior
-  13.1 ± 4.0 kJ for men and 6.4 ± 2.2 kJ for women (Ruiz-Alias et al. 2025, amateur Stryd 9/3)
-  and the range at ± 1 SD. HR never decides it; a bout's `maximal` (3′ not above 12′, or a peak
-  HR ≥ 10 bpm under the other bout's, 推估) only selects the back-test's capacity samples. The
-  page says why the two points made no model (`estimate.note`), never 「不是全力」.
-  The prior is in kJ and needs no body weight; only the workbook's J/kg RWC band beside it
+  dropped** (SP-449) and **the CP is WKO5's PD mFTP** (SP-468, the user 2026-10-13: 「完全比照
+  WKO5 用自動計算的」): `pd_model` on the 90-day mean-max envelope up to the test day, the test
+  included (`athlete.stryd_pd`, the 課表's own Stryd fit), its FRC as the short-range W′
+  (`cptest.estimate`, `backend/engine/racepower/cptest.py:107`); no two-point model, no 12′ bout with
+  a W′ prior. Without a PD fit there is no CP (`estimate.cp` None, `note` = `cp_protocols.NO_FIT`);
+  the test still lists its bouts for the back-test (`athlete.cp_tests` keeps it). HR never decides
+  it; a bout's `maximal` (3′ not above 12′, or a peak HR ≥ 10 bpm under the other bout's, 推估) only
+  selects the back-test's capacity samples. The page shows 「偵測到 CP 測試 {date}：… → mFTP {cp}。
+  課表的 CP 自動用同一個擬合（差 ≥ 3 W 才換），不用另外設定」 (`racepower.cp.test_mftp`, 中英), never
+  「這只是建議，要到賽季計畫自己套用」; the cptest source is no longer 「尚未套用」.
+  The W′ prior (13.1 ± 4.0 kJ men, 6.4 ± 2.2 kJ women, Ruiz-Alias et al. 2025) stays for the
+  back-test. The prior is in kJ and needs no body weight; only the workbook's J/kg RWC band beside it
   (`rwc_band_j`, `cptest.w_prime_prior`) needs one and is None without a weight (SP-414 — never a
   default weight). The same prior is the season-plan CP test's W′ in `derive` (`short`).
-  E.g. the synthetic 範例跑者 test (3′ 234 W < 12′ 238 W, 3′ peak 25 bpm under the 12′): with a PD fit its mFTP; without one CP = 238 − 13 100 / 720 ≈ 220 W (214–225). `workout_review.cp_test` now takes non-overlapping
+  E.g. the synthetic 範例跑者 test (3′ 234 W < 12′ 238 W, 3′ peak 25 bpm under the 12′): with a PD fit its mFTP; without one no CP (SP-468; was 238 − 13 100 / 720 ≈ 220 W). `workout_review.cp_test` now takes non-overlapping
   windows (the 3′ is ≥ 10 min away from the 12′), and falls back to the same single-bout estimate.
   A separate 3′ at ≥ 98 % CP still marks the session test_cp.
 - **TTE**: that of the default source (PD refit), else the WKO5 snapshot, else 3000 s.
@@ -1543,3 +1545,4 @@ when set, but nothing fills it from the routes module yet.
 | 2026-10-13 | feature | SP-444 | Road / trail predictions without a body weight: RE is speed ÷ watts (`re.unit` `per_w`) for every run, grade window and prediction, so the weight cancels; CVI adjustment relative (× (1 + 0.01) per category, 推估), the flat-RE default from the windows, W/kg / LSS/kg None, a typed per-kg RE needs a weight (400 with the reason) unless sent as `re_unit: "per_w"`; the SP-414 400 「沒有體重：跑步 RE…算不出」 is gone, the page banner no longer lists running RE and says the predictions use speed per watt (zh / en). With a weight every number is unchanged (demo athlete, bitwise; the per-kg per-run cache keeps its code hash). |
 | 2026-10-13 | bugfix | SP-449 (the user 2026-10-13: 「比照 WKO5 算 mFTP 的判斷，不要擅自決定我做的 CP test 不算」) | Detected CP tests are never dropped: two-point when the bouts make a model (3′ > 12′, W′ within the prior ± 2 SD, `cp_protocols.two_point`), else WKO5's PD mFTP up to the test day incl. the test (`method` `pd_model`, `athlete.stryd_pd`, FRC as the short-range W′), the 12′ single bout only without a fit. HR no longer decides (was: a 3′ ≤ 12′ or a 3′ HR peak ≥ 10 bpm lower → 「3′ 不是全力」). E.g. 3′ 217 / 12′ 221 W: was 221 − 13.1 kJ/720 ≈ 203 W; now the PD fit (synthetic 90 days 179 → 196 W, `docs/research/wko5-mftp-logic.md` §6) |
 | 2026-10-13 | feature | SP-450 | The 專項 chip (主要訓練項目, `backend/static/sportchip.js`) is in the calculator's header (`backend/static/racepower.html:269`): choosing 自動／越野跑／路跑・馬拉松 saves `athlete.primary_sport` and reloads; 路跑 hides the 越野／百岳 types and presets (`applySport`). Demo: shown, disabled |
+| 2026-10-13 | bugfix | SP-468 (the user 2026-10-13) | A detected CP test's CP is always WKO5's PD mFTP up to the test day (no two-point, no single bout with the W′ prior; none without a fit, the test kept for the back-test); the page no longer says 「這只是建議，要到賽季計畫自己套用」 nor 「尚未套用」 (`backend/engine/racepower/cptest.py:107`, `backend/engine/racepower/athlete.py:1060`, `backend/static/racepower.html`) |

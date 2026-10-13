@@ -348,7 +348,7 @@ class ThresholdIn(BaseModel):
     rhr: Optional[float] = None          # resting HR (設定 → 心率, engine/hr_profile.py)
     cp: Optional[float] = None
     note: str = ""
-    wprime: Optional[float] = None       # carried through so an edit keeps what apply-cp wrote
+    wprime: Optional[float] = None       # carried through so an edit keeps what apply-cp wrote (before SP-468)
     cp_method: Optional[str] = None
     cp_manual: Optional[bool] = None     # True = CP typed by hand in 設定 (planning.Threshold.cp_manual)
     lthr_method: Optional[str] = None    # carried through likewise (planning.LTHR_METHODS)
@@ -971,54 +971,6 @@ def apply_estimate(body: ApplyEstimate):
         row.mhr = round(body.mhr)
         row.mhr_method = body.mhr_method or ("test" if body.date else "estimate")
     row.note = (row.note + "；" if row.note else "") + (body.note or "由活動資料自動估算")
-    plan.save()
-    _notify(True)
-    return {"threshold": row.__dict__}
-
-
-class ApplyCP(BaseModel):
-    date: str                           # the test day (not today)
-    cp: float
-    cp_method: str
-    wprime: Optional[float] = None      # J; only a measured (two-point) W′
-    activity_index: Optional[int] = None
-    note: str = ""
-
-
-@router.post("/thresholds/apply-cp")
-def apply_cp(body: ApplyCP):
-    """「套用這次的 CP」: write the CP-test result (engine/cp_protocols.py) as a
-    threshold row dated the test day, so the testing indicator's age and the
-    90-day freshness are right. Merges into an existing row of that day."""
-    from backend.engine import cp_protocols as CPP
-    try:
-        d = P._d(body.date)
-    except (TypeError, ValueError) as e:
-        raise HTTPException(400, f"bad date: {e}")
-    if d is None or d > today_local():
-        raise HTTPException(400, _("測試日期不能在未來"))
-    if body.cp_method not in CPP.METHOD_LABEL:
-        raise HTTPException(400, f"cp_method must be one of {tuple(CPP.METHOD_LABEL)}")
-    if not 50 <= body.cp <= 700:
-        raise HTTPException(400, _("CP {cp} W 不合理", cp=body.cp))
-    if body.wprime is not None and not 0 < body.wprime <= 60000:
-        raise HTTPException(400, _("W′ {wp} J 不合理", wp=body.wprime))
-    if body.wprime is not None and body.cp_method != "2pt":
-        raise HTTPException(400, _("W′ 只在兩點測試量得到"))
-    plan = P.Plan.load()
-    iso = d.isoformat()
-    row = next((t for t in plan.thresholds if t.date == iso), None)
-    if row is None:
-        row = P.Threshold(iso)
-        plan.thresholds.append(row)
-    row.cp = round(body.cp)
-    row.wprime = None if body.wprime is None else round(body.wprime)
-    row.cp_method = body.cp_method
-    row.cp_manual = None                 # a test result now, not a hand-typed CP
-    note = body.note or f"CP 測試（{CPP.METHOD_LABEL[body.cp_method]}）"
-    if body.activity_index is not None:
-        note += f"；活動 #{body.activity_index}"
-    row.note = (row.note + "；" if row.note else "") + note
     plan.save()
     _notify(True)
     return {"threshold": row.__dict__}

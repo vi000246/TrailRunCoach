@@ -112,21 +112,21 @@ def _laps(p3, hr3, p12, hr12):
             {"t": 511.0, "p": 105.0, "hr_max": 165}]
 
 
-def test_cptest_detects_a_non_maximal_3min_and_falls_back_to_one_bout():
+def test_cptest_detects_a_non_maximal_3min():
     t = T.detect(_laps(234.0, 152, 238.0, 177))       # the synthetic 範例跑者 test (fixtures/make_cp_test_fixture.py)
     s, l = t["bouts"]
     assert not s["maximal"] and l["maximal"] and "低 25 bpm" in s["why"]
+    # SP-468: the test's CP is WKO5's mFTP (no single bout with a W′ prior); none without a fit
     e = T.estimate(t, 70.0, "male")
-    assert e["method"] == "single_bout" and e["w_prime"] == 13100.0            # Ruiz-Alias 2025 men
-    assert e["cp"] == approx(238.0 - 13100.0 / 720.0)
-    assert e["cp_range"] == [approx(238.0 - 17100.0 / 720.0), approx(238.0 - 9100.0 / 720.0)]
+    assert e["method"] == "pd_model" and e["cp"] is None
+    assert T.w_prime_prior(70.0, "male")["mid"] == 13100.0                      # Ruiz-Alias 2025 men (back-test)
 
 
-def test_cptest_two_point_when_both_bouts_are_maximal():
+def test_cptest_bouts_are_maximal_and_the_cp_is_the_pd_fit():
     t = T.detect(_laps(300.0, 170, 260.0, 172))
-    e = T.estimate(t, 68.0)
-    assert e["method"] == "two_point"
-    assert e["cp"] == approx((260 * 720 - 300 * 180) / 540) and e["w_prime"] == approx((300 - e["cp"]) * 180)
+    assert all(b["maximal"] for b in t["bouts"])
+    e = T.estimate(t, 68.0, pd={"mftp": 240.0, "frc": 14000.0, "date": "2026-09-30", "runs": 30})
+    assert e["method"] == "pd_model" and e["cp"] == 240.0 and e["w_prime"] == 14000.0     # was two-point 243.3
     assert T.detect([{"t": 3000.0, "p": 180.0}, {"t": 600.0, "p": 150.0}]) is None      # not a test
 
 

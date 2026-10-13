@@ -250,5 +250,7 @@
   "noweight.banner": "No body weight: the Baiyue (Taiwan's 100 Peaks) walking-capacity model, the default pack, energy / fuelling and W/kg cannot be computed (trail / road predictions use your speed per watt instead). Enter it under Settings → Personal.",
   "noweight.link": "Enter your weight →",
   "re.per_w_label": "RE (m/s per W)",
-  "re.per_w_note": "No body weight: RE is speed m/s ÷ power W (not per kg); the predictions use the same unit, so they still work. The road CVI adjustment becomes ±1 % per category (estimate). With a weight it goes back to per kg."
+  "re.per_w_note": "No body weight: RE is speed m/s ÷ power W (not per kg); the predictions use the same unit, so they still work. The road CVI adjustment becomes ±1 % per category (estimate). With a weight it goes back to per kg.",
+  "cp.test_mftp": "CP test found on {date}: {label} → mFTP {cp}. The plan's CP uses the same fit by itself (it changes only by 3 W or more); nothing to set.",
+  "cp.test_nofit": "CP test found on {date}: {note}"
 }

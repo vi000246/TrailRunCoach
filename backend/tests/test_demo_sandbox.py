@@ -260,7 +260,7 @@ def test_csrf_required(demo):
     ("PUT", "/api/v1/plan/thresholds"), ("PUT", "/api/v1/plan/profile"),
     ("POST", "/api/v1/overview/plan/push-coros"), ("POST", "/api/v1/racepower/share"),
     ("POST", "/api/v1/racepower/export/plan"), ("POST", "/api/v1/racepower/backtest/run"),
-    ("POST", "/api/v1/racepower/weather/key"), ("POST", "/api/v1/plan/thresholds/apply-cp"),
+    ("POST", "/api/v1/racepower/weather/key"),
 ])
 def test_owner_writes_are_refused(demo, method, path):
     c, _r, _b = demo
