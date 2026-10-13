@@ -383,7 +383,7 @@ def compare(s: dict, planned_tss: Optional[float] = None) -> Optional[dict]:
     hs = _f(a.get("hard_s"))
     return {"off_plan": bool(why), "short": short, "soft": soft, "planned": p, "actual": got, "grade": grade,
             "intensity_pct": pct, "wrong_sport": wrong_sport,
-            "terrain_off": terrain_off, "text": "沒照課表：" + why[0] if why else "",
+            "terrain_off": terrain_off, "text": "換了課：" + why[0] if why else "",
             "short_text": short_text,
             "hard_min": None if hs is None else round(hs / 60.0, 1),
             "need_min": round(hard_need(s) / 60.0, 1) if p == "hard" else None,

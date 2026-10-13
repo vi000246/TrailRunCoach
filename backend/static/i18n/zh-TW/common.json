@@ -289,5 +289,6 @@
   "fitimport.reason.http": "伺服器錯誤（{status}），請再試一次",
   "fitimport.stopped.too_many": "一次最多 {max} 個 FIT 檔，請分幾次選",
   "fitimport.stopped.busy": "另一個匯入還在進行，其餘的檔案沒有上傳",
-  "fitimport.stopped.forbidden": "這個帳號不能匯入 FIT 檔"
+  "fitimport.stopped.forbidden": "這個帳號不能匯入 FIT 檔",
+  "legend.levels_note": "陡坡健走、登山健行這類走路的課：登山健行、走路、越野跑都算對的項目。\n強度怎麼算：有課表分類時，取 Zone 3 時間（門檻 10 分）和等效 T@VO2max（門檻 4 分）比較高的那個；沒有分類時，用閾值以上（功率 ≥ 95% CP 或心率 ≥ LTHR）的時間（門檻 10 分，短間歇是計畫的 60%）。80%、50%、1.5 倍用在強度上是推估；時間和 TSS 都對就算「部分」也是推估（intervals.icu、TrainingPeaks 都用負荷／時間算完成度）。"
 }

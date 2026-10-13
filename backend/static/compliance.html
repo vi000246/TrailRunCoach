@@ -5,10 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title data-i18n="compliance.page_title">課表達成率</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.5.0/echarts.min.js"></script>
+<script src="/api/v1/static/dashicons.js"></script>
+<script src="/api/v1/static/sesschip.js"></script>
 <style>
 /* 課表統計 (engine/compliance.dashboard, GET /api/v1/overview/plan/compliance): a tab of
-   課表. Period filter (incl. each phase of the plan), KPI tiles, charts (負荷比 ATL ÷ CTL,
-   planned vs actual per week, weekly completion, per kind), then a compact session list. Tokens as overview.html (light / dark / data-theme). */
+   課表. First 本週 (SP-400: numbers that only add up — no %, no denominator —, the week's
+   sessions one dot each, the 安心句 when the plan was adjusted), then the period filter (incl.
+   each phase of the plan), 教練視角 (collapsed: KPI tiles, phase, per kind, the session list),
+   charts (負荷比 ATL ÷ CTL, planned vs actual per week, weekly completion). Tokens as
+   overview.html (light / dark / data-theme). */
 :root {
   color-scheme: light;
   --bg: #f4f5f7; --panel: #fcfcfb; --text: #0b0b0b; --muted: #52514e; --faint: #8a8984; --line: #e3e3df;
@@ -114,7 +119,41 @@ h2 .meta { font-weight: 400; }
 .split i { display: block; height: 100%; }
 .track { height: 8px; background: color-mix(in srgb, var(--line) 85%, transparent); border-radius: 4px; overflow: hidden; position: relative; margin-top: 6px; }
 .track i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; background: var(--accent); }
-.track b { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--text); border-radius: 1px; }
+
+/* 本週 (SP-400): four tiles that only add up, the week's sessions one dot each (done ones by
+   kind, skipped ones not drawn, the rest an empty ring), the 安心句 (plan_marks auto) */
+.acc { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 699px) { .acc { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; } }
+.dots { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.dot { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; flex: none;
+  border: 1.5px solid var(--line); color: var(--faint); background: transparent; }
+.dot svg { width: 15px; height: 15px; }
+.dot.done { border-color: var(--good); color: var(--text); background: color-mix(in srgb, var(--good) 14%, var(--panel)); }
+.dot.partial, .dot.off_plan { border-color: var(--watch); color: var(--text); background: color-mix(in srgb, var(--watch) 13%, var(--panel)); }
+/* 這週亮點 (SP-403): one line, only when there is one */
+.hl { display: flex; gap: 8px; align-items: baseline; margin: 10px 0 0; padding: 7px 11px; border-radius: 8px; font-size: 13px;
+  background: color-mix(in srgb, var(--good) 9%, var(--panel)); }
+.hl b { color: var(--good); white-space: nowrap; }
+.hl[hidden] { display: none; }
+.calm { margin-top: 10px; padding: 7px 11px; border-radius: 8px; border: 1px dashed var(--line); font-size: 13px; color: var(--muted); }
+.calm summary { cursor: pointer; list-style: none; display: flex; gap: 6px; align-items: baseline; }
+.calm summary::-webkit-details-marker { display: none; }
+.calm summary b { color: var(--accent); }
+.calm summary::after { content: "▸"; margin-left: auto; color: var(--faint); }
+.calm[open] summary::after { content: "▾"; }
+.calm ul { margin: 6px 0 2px; padding-left: 20px; }
+.calm li { margin: 2px 0; }
+.calm[hidden] { display: none; }
+/* 教練視角 (SP-400): the period's raw numbers, collapsed; open / closed remembered (localStorage) */
+details.coach > summary { cursor: pointer; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; font-weight: 650; font-size: 14.5px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px 16px; box-shadow: var(--shadow); list-style: none; }
+details.coach > summary::-webkit-details-marker { display: none; }
+details.coach > summary::before { content: "▸"; color: var(--faint); }
+details.coach[open] > summary::before { content: "▾"; }
+details.coach > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+details.coach > summary .meta { font-weight: 400; }
+details.coach[open] > summary { margin-bottom: 12px; }
+.coach-body { display: grid; gap: 12px; }
 
 /* phase */
 .phase { display: grid; grid-template-columns: minmax(0, 1.2fr) repeat(3, minmax(0, 1fr)); gap: 10px 18px; align-items: center; }
@@ -147,12 +186,13 @@ h2 .meta { font-weight: 400; }
 .kbar { display: flex; height: 12px; border-radius: 4px; overflow: hidden; gap: 2px; background: color-mix(in srgb, var(--line) 80%, transparent); }
 .kbar i { display: block; height: 100%; }
 
-/* status: icon + word + colour, never colour alone */
+/* status: icon + word + colour, never colour alone. 跳過 is grey, not red (SP-398: a skipped session is
+   not an error — the plan adapts; red stays for real errors) */
 .st { display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; font-weight: 650; white-space: nowrap; }
-.st-done { color: var(--good); } .st-partial { color: var(--watch); } .st-off_plan { color: var(--watch); } .st-missed { color: var(--bad); } .st-open { color: var(--muted); }
+.st-done { color: var(--good); } .st-partial { color: var(--watch); } .st-off_plan { color: var(--watch); } .st-missed { color: var(--faint); font-weight: 500; } .st-open { color: var(--muted); }
 .bg-done { background: var(--good); } .bg-partial { background: color-mix(in srgb, var(--watch) 70%, var(--panel)); }
 .bg-off_plan { background: repeating-linear-gradient(45deg, var(--watch) 0 3px, color-mix(in srgb, var(--watch) 45%, var(--panel)) 3px 6px); }
-.bg-missed { background: var(--bad); }
+.bg-missed { background: color-mix(in srgb, var(--faint) 55%, var(--panel)); }
 
 /* list */
 .filters { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
@@ -168,6 +208,7 @@ h2 .meta { font-weight: 400; }
 .row .t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .row .t .meta { margin-left: 6px; }
 .row .p { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+.row.missed .t, .row.missed .p { color: var(--faint); font-weight: 400; }
 .row .x { text-align: right; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .more { margin-top: 8px; }
 /* 每週存檔 (engine/plan_history.py, SP-71): one row per stored week, the plan as it began and how it went */
@@ -209,6 +250,14 @@ h2 .meta { font-weight: 400; }
       <span><b data-i18n="compliance.tabs.templates">範本</b><small data-i18n="compliance.tabs.templates_sub">自己的課表範本</small></span></a>
   </nav>
 
+  <section id="now-card" aria-labelledby="now-h">
+    <h2 id="now-h"><span data-i18n="compliance.now.title">本週</span> <span class="meta num" id="now-sub"></span><span id="now-q"></span></h2>
+    <div class="acc" id="acc"><div class="loading" data-i18n="compliance.loading">載入中…</div></div>
+    <div class="dots" id="dots" role="img"></div>
+    <p class="hl" id="hl" hidden></p>
+    <details class="calm" id="calm" hidden><summary><b aria-hidden="true">↻</b><span data-i18n="compliance.calm.title">課表已依這週的狀況調整，不用補</span></summary><ul id="calm-list"></ul></details>
+  </section>
+
   <div class="top">
     <h1 data-i18n="compliance.title">課表統計</h1>
     <div class="seg" id="period" role="group" data-i18n-attr="aria-label:compliance.period.label" aria-label="期間">
@@ -225,6 +274,9 @@ h2 .meta { font-weight: 400; }
     <span class="meta num" id="range"></span>
   </div>
 
+  <details class="coach" id="coach">
+    <summary><span data-i18n="compliance.coach.title">教練視角</span><span class="meta" data-i18n="compliance.coach.sub">完成率、達標率、依類型、每堂課</span></summary>
+    <div class="coach-body">
   <div class="kpis" id="kpis"><div class="kpi"><div class="loading" data-i18n="compliance.loading">載入中…</div></div></div>
 
   <div class="charts">
@@ -238,6 +290,16 @@ h2 .meta { font-weight: 400; }
       <div class="legend" id="st-legend" style="margin-top:10px"></div>
     </section>
   </div>
+
+  <section aria-labelledby="ls-h">
+      <h2 id="ls-h"><span data-i18n="compliance.list.title">每堂課</span> <span class="meta" id="ls-sub"></span><span id="ls-q"></span></h2>
+      <div class="filters" id="filters"></div>
+      <div class="list" id="list"></div>
+      <div class="more" id="more"></div>
+    </section>
+
+    </div>
+  </details>
 
   <section aria-labelledby="ra-h">
     <h2 id="ra-h"><span data-i18n="compliance.ratio.title">負荷比 ATL ÷ CTL</span><span id="ra-q"></span></h2>
@@ -258,20 +320,13 @@ h2 .meta { font-weight: 400; }
       <div class="legend" id="wk-legend"></div>
     </section>
     <section aria-labelledby="tr-h">
-      <h2 id="tr-h"><span id="tr-t" data-i18n="compliance.trend.title">每週完成率</span> <span class="meta" id="tr-sub"></span>
+      <h2 id="tr-h"><span id="tr-t" data-i18n="compliance.trend.title">每週完成堂數</span>
         <span class="seg unitsw" role="group" data-i18n-attr="aria-label:compliance.unit.label" aria-label="單位" style="margin-left:auto">
           <button type="button" data-u="day" data-i18n="compliance.unit.day">天</button><button type="button" data-u="week" data-i18n="compliance.unit.week">週</button><button type="button" data-u="month" data-i18n="compliance.unit.month">月</button>
         </span><span id="tr-q"></span></h2>
       <div class="plot" id="tr-plot" role="img"></div>
     </section>
   </div>
-
-  <section aria-labelledby="ls-h">
-      <h2 id="ls-h"><span data-i18n="compliance.list.title">每堂課</span> <span class="meta" id="ls-sub"></span><span id="ls-q"></span></h2>
-      <div class="filters" id="filters"></div>
-      <div class="list" id="list"></div>
-      <div class="more" id="more"></div>
-    </section>
 
   <section aria-labelledby="hs-h">
     <h2 id="hs-h"><span data-i18n="compliance.history.title">每週存檔</span> <span class="meta" id="hs-sub"></span><span id="hs-q"></span></h2>
@@ -299,10 +354,14 @@ const pc = (r) => (r == null ? "–" : Math.round(r * 100));
 const hm = (s) => (s == null ? "" : F ? F.dur(s, "hm") : `${Math.round(s / 60)}′`);
 const store = { get(k, d) { try { const v = localStorage.getItem("compliance." + k); return v == null ? d : JSON.parse(v); } catch (_) { return d; } },
   set(k, v) { try { localStorage.setItem("compliance." + k, JSON.stringify(v)); } catch (_) { /* blocked */ } } };
-const STATUS = ["done", "partial", "off_plan", "missed", "open"];
-const ICON = { done: "✓", partial: "◐", off_plan: "≠", missed: "✗", open: "…" };
-const sw = (s) => `<span class="st st-${s}"><span aria-hidden="true">${ICON[s]}</span><span class="lb">${esc(T("status." + s))}</span></span>`;
+const STATUS = ["done", "partial", "off_plan", "open", "missed"];        // 跳過 last (SP-398)
+const ICON = { done: "✓", partial: "◐", off_plan: "≠", missed: "○", open: "…" };
+// the status words: one source with the 課表 cards (common.legend.status.*, sesschip.js); 待同步 is this page's
+const SW = (s) => (s === "open" ? T("status.open") : window.I18N ? I18N.t("common.legend.status." + s) : s);
+const sw = (s) => `<span class="st st-${s}"><span aria-hidden="true">${ICON[s]}</span><span class="lb">${esc(SW(s))}</span></span>`;
 const q = (tip, label) => `<button type="button" class="q" data-tip="${esc(tip)}" aria-label="${esc(label || T("help"))}">?</button>`;
+// the four levels: the 課表 legend's text (sesschip.js levelsText, common.legend.*_tip), thresholds from the payload
+const levelsTip = () => (window.SessChip ? SessChip.levelsText(S.data && S.data.levels) : "");
 
 const S = { period: store.get("period", "4w"), a: store.get("a", null), b: store.get("b", null), metric: store.get("metric", "tss"),
   unit: ["day", "week", "month"].includes(store.get("unit", "week")) ? store.get("unit", "week") : "week",
@@ -362,8 +421,56 @@ async function load() {
     render();
     loadRatio(a, b);
   } catch (e) {
-    $("kpis").innerHTML = `<div class="kpi"><div class="err">${esc(T("load_failed", { error: e.message }))}</div></div>`;
+    $("acc").innerHTML = `<div class="kpi"><div class="err">${esc(T("load_failed", { error: e.message }))}</div></div>`;
+    $("kpis").innerHTML = "";
   }
+}
+
+// 本週 (SP-400): the session's icon (dashicons.js) by kind / 強度課 family
+const ICON_OF = (x) => (x.kind === "quality" ? (x.family === "vo2max" || x.family === "speed" ? "z5" : "z3")
+  : { easy: "easy", long: "long", hike: "hike", test: "test", strength: "strength", heat_passive: "heat" }[x.kind] || "easy");
+const di = (n) => (window.DI ? DI(n) : "");
+function renderNow() {
+  const d = S.data, w = d.week || {}, st = d.active_streak || { weeks: 0, best: 0 };
+  $("now-sub").textContent = w.start ? `${mdw(w.start)} – ${mdw(w.end)}` : "";
+  $("now-q").innerHTML = q(T("now.tip"));
+  const tile = (k, v, unit, tip) => `<div class="kpi"><div class="k"><span>${esc(k)}</span>${tip ? q(tip, k) : ""}</div><div class="v">${v}<small>${esc(unit)}</small></div></div>`;
+  $("acc").innerHTML = [
+    tile(T("now.done"), n0(w.completed || 0), T("kpi.sessions_unit")),
+    tile(T("now.hours"), h1(w.actual_hours || 0), "h"),
+    tile(T("now.climb"), n0(w.climb_m || 0), "m"),
+    tile(T("now.streak"), n0(st.weeks), T("kpi.weeks_unit"), T("kpi.streak_tip")),
+  ].join("");
+  const dots = w.dots || [];
+  const done = dots.filter((x) => x.status !== "upcoming");
+  $("dots").setAttribute("aria-label", T("now.dots_aria", { done: done.length, ahead: dots.length - done.length }));
+  $("dots").innerHTML = dots.map((x) => {
+    const word = x.status === "upcoming" ? T("now.ahead") : SW(x.status);
+    return `<span class="dot ${esc(x.status)}" title="${esc(`${mdw(x.day)} ${x.title} · ${word}`)}">${x.status === "upcoming" ? "" : di(ICON_OF(x))}</span>`;
+  }).join("");
+  renderHighlight(d.highlight);
+  const adj = d.adjusted || [];
+  $("calm").hidden = !adj.length;
+  $("calm-list").innerHTML = adj.map((a) => `<li>${esc(T("calm.item", { day: mdw(a.day), title: a.title, reason: a.reason }))}</li>`).join("");
+}
+
+// 這週亮點 (SP-403, achievements.week_highlight): one line; none -> nothing drawn, no filler
+function hlText(h) {
+  const day = h.day ? mdw(h.day) : "", title = h.title || "";
+  const km = (x) => (F ? F.num(x, 1) : (+x).toFixed(1));
+  if (h.kind === "pr" && h.what === "distance") return T("hl.pr_distance", { day, title, km: km(h.value), prev: km(h.prev) });
+  if (h.kind === "pr" && h.what === "climb") return T("hl.pr_climb", { day, title, m: n0(h.value), prev: n0(h.prev) });
+  if (h.kind === "pr") return T("hl.pr_time", { day, title, h: hm(h.value), prev: hm(h.prev) });
+  if (h.kind === "streak") return T("hl.streak", { n: h.weeks });
+  if (h.kind === "longest") return T("hl.longest", { day, title, h: hm(h.moving_s), d: hm(h.more_s) });
+  if (h.kind === "highest") return T("hl.highest", { day, title, m: n0(h.climb_m), d: n0(h.more_m) });
+  if (h.kind === "count") return T("hl.count", { n: h.n });
+  return "";
+}
+function renderHighlight(h) {
+  const t = h ? hlText(h).replace(/\s{2,}/g, " ") : "";
+  $("hl").hidden = !t;
+  $("hl").innerHTML = t ? `<span aria-hidden="true">✨</span><span><b>${esc(T("hl.label"))}</b> · ${esc(t)}</span>` : "";
 }
 
 function kpi(k, tip, v, sub, extra = "") {
@@ -371,25 +478,28 @@ function kpi(k, tip, v, sub, extra = "") {
 }
 function render() {
   const d = S.data, t = d.totals;
-  const split = STATUS.filter((s) => s !== "open" && t[s]).map((s) => `<i class="bg-${s}" style="flex:${t[s]}" title="${esc(T("status." + s))} ${t[s]}"></i>`).join("");
-  const st = d.streak;
+  const split = STATUS.filter((s) => s !== "open" && t[s]).map((s) => `<i class="bg-${s}" style="flex:${t[s]}" title="${esc(SW(s))} ${t[s]}"></i>`).join("");
+  const ast = d.active_streak || { weeks: 0, best: 0 };
+  const unit = `<small>${esc(T("kpi.sessions_unit"))}</small>`;
+  renderNow();
   $("kpis").innerHTML = [
-    kpi(T("kpi.rate"), T("kpi.rate_tip"), t.due ? `${pc(t.rate)}<small>%</small>` : "–",
-      t.due ? esc(T("kpi.rate_sub", { done: t.completed, due: t.due })) + (t.open ? ` · ${esc(T("kpi.open", { n: t.open }))}` : "") : esc(T("empty_short")),
-      t.due ? `<div class="split" role="img" aria-label="${esc(STATUS.filter((s) => s !== "open").map((s) => `${T("status." + s)} ${t[s]}`).join("，"))}">${split}</div>` : ""),
-    kpi(T("kpi.ok"), T("kpi.ok_tip"), t.due ? `${pc(t.ok_rate)}<small>%</small>` : "–",
-      esc(T("kpi.ok_sub", { n: t.done, partial: t.partial, off: t.off_plan }))),
+    // 教練視角 (SP-400): counts on top, the rates underneath
+    kpi(T("kpi.rate"), T("kpi.rate_tip"), `${t.completed}${unit}`,
+      t.due ? esc(T("kpi.rate_due", { due: t.due, pct: pc(t.rate) })) + (t.open ? ` · ${esc(T("kpi.open", { n: t.open }))}` : "") : esc(T("empty_short")),
+      t.due ? `<div class="split" role="img" aria-label="${esc(STATUS.filter((s) => s !== "open").map((s) => `${SW(s)} ${t[s]}`).join("，"))}">${split}</div>` : ""),
+    kpi(T("kpi.ok"), `${T("kpi.ok_tip")}\n\n${levelsTip()}`, `${t.done}${unit}`,
+      esc(T("kpi.ok_sub", { pct: t.due ? pc(t.ok_rate) : "–", partial: t.partial, off: t.off_plan }))),
     kpi(T("kpi.tss"), T("kpi.tss_tip"), t.tss_pct != null ? `${t.tss_pct}<small>%</small>` : "–",
       esc(T("kpi.tss_sub", { a: n0(t.actual_tss), p: n0(t.planned_tss) })),
-      `<div class="track" role="img" aria-label="${esc(T("kpi.tss_sub", { a: n0(t.actual_tss), p: n0(t.planned_tss) }))}"><i style="width:${Math.min(100, (t.tss_pct || 0) / 1.5)}%"></i><b style="left:${100 / 1.5}%"></b></div>`),
+      `<div class="track" role="img" aria-label="${esc(T("kpi.tss_sub", { a: n0(t.actual_tss), p: n0(t.planned_tss) }))}"><i style="width:${Math.min(100, t.tss_pct || 0)}%"></i></div>`),
     kpi(T("kpi.hours"), T("kpi.hours_tip"), `${h1(t.actual_hours)}<small>/ ${h1(t.planned_hours)} h</small>`,
       esc(t.planned_hours ? T("kpi.hours_sub", { pct: Math.round(t.actual_hours / t.planned_hours * 100) }) : T("empty_short"))),
-    kpi(T("kpi.streak"), T("kpi.streak_tip", { pct: Math.round(st.threshold * 100) }), `${st.weeks}<small>${esc(T("kpi.weeks_unit"))}</small>`,
-      esc(T("kpi.streak_sub", { best: st.best }))),
+    kpi(T("kpi.streak"), T("kpi.streak_tip"), `${ast.weeks}<small>${esc(T("kpi.weeks_unit"))}</small>`,
+      esc(T("kpi.streak_sub", { best: ast.best }))),
   ].join("");
   renderPhase(d.phase);
   renderWeeks(buckets());
-  renderTrend(buckets(), st);
+  renderTrend(buckets());
   renderKinds(d.by_kind);
   renderList();
 }
@@ -538,26 +648,24 @@ function renderRatio() {
           borderColor: lb.c, borderWidth: 1, borderRadius: 4, padding: [2, 5], formatter: () => `${F ? F.num(last[1], 2) : last[1].toFixed(2)} ${name(lb)}` } }] } }] }, true);
 }
 
-function renderTrend(ws, st) {
-  const rows = ws.filter((w) => w.due);
-  $("tr-q").innerHTML = q(T("trend.tip" + sfx(), { pct: Math.round(st.threshold * 100) }));
-  $("tr-sub").textContent = rows.length ? T("trend.sub", { pct: Math.round(st.threshold * 100) }) : "";
+// 每週完成堂數 (SP-401): how many sessions were done per 天 / 週 / 月 — bars that only add up, no
+// pass line and no colour for falling short (docs/research/positive-compliance.md §1 #7)
+function renderTrend(ws) {
+  const rows = ws.filter((w) => w.start <= S.today && (S.unit !== "day" || w.due || w.completed));
+  $("tr-q").innerHTML = q(T("trend.tip" + sfx()));
   $("tr-plot").setAttribute("aria-label", T("trend.aria" + sfx()));
-  const th = Math.round(st.threshold * 100);
-  chart("tr-plot").setOption({ ...axisBase(), grid: { left: 40, right: 38, top: 14, bottom: 26 },
-    tooltip: { ...axisBase().tooltip, axisPointer: { type: "line", lineStyle: { color: css("--faint") } }, formatter: (ps) => {
+  chart("tr-plot").setOption({ ...axisBase(), grid: { left: 40, right: 12, top: 14, bottom: 26 },
+    tooltip: { ...axisBase().tooltip, formatter: (ps) => {
       const w = rows[ps[0].dataIndex];
-      return `<b>${esc(bHead(w))}</b><br>${esc(T("trend.rate"))} ${pc(w.rate)}%<br>${esc(T("kpi.rate_sub", { done: w.completed, due: w.due }))}` +
+      return `<b>${esc(bHead(w))}</b><br>${esc(T("trend.done", { n: w.completed || 0 }))}` +
         (w.current ? `<br>${esc(T("trend.current" + sfx()))}` : "");
     } },
-    xAxis: xAxis(rows.map(bLabel)), yAxis: yAxis({ min: 0, max: 100, axisLabel: { color: css("--muted"), fontSize: 11, formatter: "{value}%" } }),
-    series: [{ type: "line", data: rows.map((w) => ({ value: Math.round((w.rate || 0) * 100),
-        itemStyle: { color: (w.rate || 0) >= st.threshold ? css("--good") : css("--watch"), borderColor: css("--panel"), borderWidth: 2 } })),
-      symbol: "circle", symbolSize: 9, lineStyle: { width: 2, color: css("--s1") },
-      markLine: { silent: true, symbol: "none", label: { color: css("--muted"), fontSize: 11, formatter: `${th}%` },
-        lineStyle: { color: css("--faint"), type: [4, 4] }, data: [{ yAxis: th }] } }] }, true);
+    xAxis: xAxis(rows.map(bLabel)), yAxis: yAxis({ minInterval: 1 }),
+    series: [{ type: "bar", barMaxWidth: 26, data: rows.map((w) => ({ value: w.completed || 0,
+      itemStyle: { color: css("--good"), opacity: w.current ? 0.55 : 0.9, borderRadius: [4, 4, 0, 0] } })) }] }, true);
 }
 
+const KSTAT = ["done", "partial", "off_plan", "missed"];
 // a 強度課 row / session by its family (SP-79: 有氧間歇 / VO2max 間歇 / 速度; none = 強度課)
 const kindName = (k) => (k.kind === "quality" && k.family ? T("family." + k.family) : T("kind." + k.kind));
 const kindCls = (k) => `k-${esc(k.kind)}${k.kind === "quality" && k.family ? " fam-" + esc(k.family) : ""}`;
@@ -565,13 +673,13 @@ function renderKinds(ks) {
   $("kd-q").innerHTML = q(T("kinds.tip"));
   if (!ks.length) { $("kinds").innerHTML = `<p class="meta">${esc(T("empty"))}</p>`; $("st-legend").innerHTML = ""; return; }
   $("kinds").innerHTML = ks.map((k) => {
-    const segs = ["done", "partial", "off_plan", "missed"].filter((s) => k[s]).map((s) =>
-      `<i class="bg-${s}" style="flex:${k[s]}" title="${esc(T("status." + s))} ${k[s]}"></i>`).join("");
+    const segs = KSTAT.filter((s) => k[s]).map((s) =>
+      `<i class="bg-${s}" style="flex:${k[s]}" title="${esc(SW(s))} ${k[s]}"></i>`).join("");
     return `<div class="kr ${kindCls(k)}"><span class="kl" title="${esc(kindName(k))}"><i></i>${esc(kindName(k))}</span>
       <div class="kbar" role="img" aria-label="${esc(T("kinds.aria", { kind: kindName(k), done: k.completed, due: k.due }))}">${segs}</div>
       <span class="n" title="${esc(T("kinds.tss", { p: n0(k.planned_tss), a: n0(k.actual_tss) }))}"><b>${k.due ? pc(k.rate) + "%" : "–"}</b> · ${k.completed}/${k.due}</span></div>`;
   }).join("");
-  $("st-legend").innerHTML = ["done", "partial", "off_plan", "missed"].map((s) => `<span><i class="bg-${s}"></i>${sw(s)}</span>`).join("");
+  $("st-legend").innerHTML = KSTAT.map((s) => `<span><i class="bg-${s}"></i>${sw(s)}</span>`).join("");
 }
 
 function renderList() {
@@ -579,18 +687,20 @@ function renderList() {
   const counts = Object.fromEntries(STATUS.map((s) => [s, d.sessions.filter((r) => r.status === s).length]));
   $("ls-q").innerHTML = q(T("list.tip"));
   $("ls-sub").textContent = T("list.sub", { n: d.sessions.length });
-  $("filters").innerHTML = [["all", T("list.all"), d.sessions.length], ...STATUS.filter((s) => counts[s]).map((s) => [s, T("status." + s), counts[s]])]
+  $("filters").innerHTML = [["all", T("list.all"), d.sessions.length], ...STATUS.filter((s) => counts[s]).map((s) => [s, SW(s), counts[s]])]
     .map(([k, l, n]) => `<button type="button" class="fchip" data-f="${k}" aria-pressed="${S.filter === k}">${esc(l)} ${n}</button>`).join("");
-  const rows = d.sessions.filter((r) => S.filter === "all" || r.status === S.filter);
+  // newest first, 跳過 after the rest (SP-398: what was done comes first)
+  const rows = d.sessions.filter((r) => S.filter === "all" || r.status === S.filter)
+    .map((r, i) => [r, i]).sort((x, y) => (x[0].status === "missed") - (y[0].status === "missed") || x[1] - y[1]).map((x) => x[0]);
   if (!rows.length) { $("list").innerHTML = `<p class="meta">${esc(T("empty"))}</p>`; $("more").innerHTML = ""; return; }
   $("list").innerHTML = rows.slice(0, S.limit).map((r) => {
     const act = r.actual_tss != null || r.actual_s ? `${r.actual_s ? hm(r.actual_s) : ""}${r.actual_tss != null ? ` · TSS ${n0(r.planned_tss)}→${n0(r.actual_tss)}` : ""}`
       : `${r.minutes ? r.minutes + "′" : ""} · TSS ${n0(r.planned_tss)}`;
     const tip = [r.title, r.off_text, r.duration_pct != null ? T("list.dur_pct", { pct: r.duration_pct }) : "", r.tss_pct != null ? T("list.tss_pct", { pct: r.tss_pct }) : ""].filter(Boolean).join("\n");
-    return `<a class="row ${kindCls(r)}" href="${SCHED}?day=${r.day}&uid=${encodeURIComponent(r.uid)}" title="${esc(tip)}">
+    return `<a class="row ${kindCls(r)}${r.status === "missed" ? " missed" : ""}" href="${SCHED}?day=${r.day}&uid=${encodeURIComponent(r.uid)}" title="${esc(tip)}">
       <span class="d">${esc(md(r.day))}</span><span class="kd" aria-hidden="true"></span>
       <span class="t">${esc(r.title)}<span class="meta">${esc(kindName(r))}</span></span>
-      ${sw(r.status)}<span class="p">${r.pct != null ? r.pct + "%" : "–"}</span><span class="x">${esc(act)}</span></a>`;
+      ${sw(r.status)}<span class="p">${r.pct != null && r.status !== "missed" ? r.pct + "%" : "–"}</span><span class="x">${esc(act)}</span></a>`;
   }).join("");
   $("more").innerHTML = rows.length > S.limit ? `<button class="btn" type="button" id="more-btn">${esc(T("list.more", { n: rows.length - S.limit }))}</button>` : "";
 }
@@ -614,9 +724,11 @@ $("c-go").onclick = () => {
 document.querySelectorAll(".unitsw").forEach((g) => g.addEventListener("click", (e) => {
   const b = e.target.closest("button[data-u]"); if (!b || !S.data) return;
   S.unit = b.dataset.u; store.set("unit", S.unit);
-  renderWeeks(buckets()); renderTrend(buckets(), S.data.streak);
+  renderWeeks(buckets()); renderTrend(buckets());
 }));
 $("metric").addEventListener("click", (e) => { const b = e.target.closest("button[data-m]"); if (!b) return; S.metric = b.dataset.m; store.set("metric", S.metric); renderWeeks(buckets()); });
+$("coach").open = !!store.get("coach", false);
+$("coach").addEventListener("toggle", () => store.set("coach", $("coach").open));
 $("filters").addEventListener("click", (e) => { const b = e.target.closest("[data-f]"); if (!b) return; S.filter = b.dataset.f; S.limit = 40; renderList(); });
 $("more").addEventListener("click", (e) => { if (e.target.id === "more-btn") { S.limit += 80; renderList(); } });
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { if (S.data) render(); if (RATIO.rows) renderRatio(); });

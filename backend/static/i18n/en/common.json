@@ -289,5 +289,6 @@
   "fitimport.reason.http": "server error ({status}); try again",
   "fitimport.stopped.too_many": "At most {max} FIT files at a time; choose them in a few rounds",
   "fitimport.stopped.busy": "Another import is still running; the other files were not uploaded",
-  "fitimport.stopped.forbidden": "This account cannot import FIT files"
+  "fitimport.stopped.forbidden": "This account cannot import FIT files",
+  "legend.levels_note": "Walking sessions (steep power hiking, hikes): a hike, a walk or a trail run all count as the right sport.\nHow intensity is measured: with the session classifier, the higher of Zone 3 time (bar 10 min) and equivalent T@VO2max (bar 4 min); without it, the time at or above threshold (power ≥ 95 % CP or HR ≥ LTHR; bar 10 min, short intervals 60 % of the plan). The 80 %, 50 % and 1.5× bands applied to intensity are estimates; so is counting it partly done when time and TSS are on plan (intervals.icu and TrainingPeaks rate completion by load / time)."
 }

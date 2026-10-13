@@ -156,10 +156,12 @@
   const pctOf = (v, d) => Math.round((v != null ? v : d) * 100);
   const esc = (x) => String(x == null ? "" : x).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const tipOf = (st, prov, lv) => T((prov ? "prov" : st) + "_tip", { green: pctOf(lv.green, 0.2), yellow: pctOf(lv.yellow, 0.5) });
-  // the 完成度 section as plain text (the 課表 dialog's ?): 「完成：時間和 TSS …」 one per line
+  // the 完成度 section as plain text (the 課表 dialog's ?, 課表統計's 照計畫完成 ?): 「完成：時間和 TSS …」
+  // one per line, then how intensity and a walking session are judged (levels_note, SP-398)
   function levelsText(lv) {
     lv = lv || {};
-    return STATES.slice(0, 4).map(([st]) => T("line", { label: label(st), tip: tipOf(st, false, lv) })).join("\n");
+    return STATES.slice(0, 4).map(([st]) => T("line", { label: label(st), tip: tipOf(st, false, lv) })).join("\n") +
+      "\n" + T("levels_note");
   }
   function legend(o) {
     o = o || {};

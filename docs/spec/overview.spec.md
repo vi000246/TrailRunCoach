@@ -1250,7 +1250,9 @@ CTL / ATL and next-Monday TSB.
 **Compliance** (`engine/compliance.py`; TrainingPeaks / intervals.icu): a done session's
 actual ÷ planned TSS and duration; the worse deviation sets the colour — green ≤ 20 %, yellow
 ≤ 50 %, red beyond or the wrong kind of activity (`COMPLIANCE`, `backend/engine/compliance.py:31`);
-planned vs actual (`plan_match.compare`, `backend/engine/plan_match.py:318`) flags 「沒照課表」 (≠).
+planned vs actual (`plan_match.compare`, `backend/engine/plan_match.py:318`) flags 「換了課」 (≠; 「沒照課表」 until
+SP-398). The words (SP-398, `compliance.LEVEL_LABEL`): 完成／部分／換了課／跳過 (en Done／Partly／Different
+session／Skipped); a red level from time / TSS alone reads 部分 like its status; the levels are unchanged.
 The intensity is graded, not pass / fail (SP-216; TrainingPeaks' compliance colours applied to the
 quality dose, 推估; `backend/engine/plan_match.py:60-64`): a planned hard session at ≥ 80 % of the
 dose it needs is done, 50–80 % is 強度不足, < 50 % ran easy (≠); a planned easy run with a quality
@@ -1577,12 +1579,26 @@ which one. The response keeps the `coros` field names.
     research lines cite only the source (「（Shen 2024）」, 「（CDC）」), no study site or example place
     (owner 2026-10-08, `backend/engine/altitude.py:410`).
 - **課表統計** page (`backend/static/compliance.html`, a tab of 課表; `GET /plan/compliance` →
-  `compliance.dashboard`, `backend/engine/compliance.py:284`): KPI tiles, the current phase's
+  `compliance.dashboard`, `backend/engine/compliance.py`). First 本週 (SP-400, docs/research/positive-compliance.md
+  §5 方案 B; always this week, whatever the period): four tiles that only add up — 完成 n 堂, 時間 h, 爬升 m,
+  連續有練 n 週 — (`week` = `_count` of this week's sessions with `climb_m` / `distance_km` from done_by's
+  climbing_m / distance_km; `active_streak` = `_active_streak` over every stored session: weeks with ≥ 1 session
+  done, a week with nothing due neither counts nor breaks it, this week counts once one is done), the week's
+  sessions one dot each (`week.dots`: done / partial / off_plan by kind icon, a skipped one not drawn, the rest
+  `upcoming`, an empty ring), 這週亮點 (SP-403, `highlight` = `achievements.week_highlight`: one line — a record
+  (distance / climb of a run or hike, long-run time of a run; only after 10 earlier runs, 推估) > a 連續有練 milestone
+  (4, 8, 12 … weeks) > this week's longest run / most climbing beating last week's > the sessions done; none → not
+  drawn; history from `_run_history`, the dataset's metrics only; no milestone toast), and — only when this week has plan_marks `auto` sessions (a CP change alone left out,
+  `adjusted`) — the 安心句 「課表已依這週的狀況調整，不用補」, opening to the list; no % and no denominator.
+  Then the period filter and 教練視角 (`<details id="coach">`, open / closed in localStorage `compliance.coach`):
+  KPI tiles (完成 n 堂 with 本期排了 / 完成率 below, 照計畫完成 n 堂 with 達標率, TSS, 時數, 連續有練), the current phase's
   progress, per-kind breakdown (強度課 split into 有氧間歇 ／ VO2max 間歇 ／ 速度 by `quality_family`,
   then one with no interval work as 強度課 — `FAMILY_ORDER`, `backend/engine/compliance.py:197`;
   each row's own colour, planned → actual TSS on hover, `renderKinds`,
-  `backend/static/compliance.html:564`; the session list names the family), planned vs actual TSS / hours and completion rate per 天／週／月,
-  the streak (weeks with ≥ 80 % of the due sessions done, 推估), a compact session list, a
+  `backend/static/compliance.html:564`; the session list names the family), planned vs actual TSS / hours and the sessions done per 天／週／月
+  (SP-401: bars of `completed`, no 80 % line, no green / orange dots; the 負荷 tile's bar stops at 100 %, no target mark),
+  the streak (weeks with ≥ 80 % of the due sessions done, 推估), a compact session list (跳過 grey
+  `--faint` with ○, listed after the rest; no red for a status — SP-398), a
   per-phase period filter and a zoned 負荷比 ATL ÷ CTL chart (hover 「值 · 區間（範圍）」, a dashed
   line at 1). 每週存檔 (SP-71, `engine/plan_history.py`; `backend/static/compliance.html:649`): one
   row per stored week, the plan as it began and how it went; `GET /sessions` takes this week's
@@ -2494,3 +2510,8 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 | 2026-10-13 | feat/session-cards-sp395-402 | SP-397 (docs/research/schedule-chip-ui.md §8.4, §10 ③) | 總覽 本週 cards on `SessChip` like the 課表 page (same icon, bar colour, ring): `.ty-*` type tiles, the `.ok` ✓ corner, the ≠ / ◐ prefix, the faded strike-through of a missed session and the dead `.mini.*` CSS removed; the type list (`TYPES` / `stype` / `actTy`) is sesschip.js's (`SessChip.kind`, `typeName` → `common.legend.type.*`); hover: the verdict with its % for every done session, no thresholds, the watch with `provider_label` and `not_pushed` worded (`overview.week.sy.*`); `overview.week.short_aria` removed. Tests: `backend/tests/test_overview_cards_sp397.py` (same parts as the 課表 card per status); `test_review_cards` reads the type names from `common.legend.type.*` |
 | 2026-10-13 | feat/session-cards-sp395-402 | SP-399 (docs/research/schedule-chip-ui.md §7, §10 ⑤) | Old card styles removed from 課表 / 總覽 (type colours `.k-*` / `--k` / `.fam-*` / `.ty-*`, `--s1…s7` + `--qf*` on the 課表 page → `--ph-*` phase tokens, `.heat-tag`, `.offp-i` / `.part-i`, completion `.cp-*` / `.cpw`, `CAT_VAR`); one 「? 圖例」 on both pages (`SessChip.legend` / `levelsText`, thresholds from `compliance_levels`, `common.legend.*` zh-TW + en, page rows `schedule.lg.*`); editor type radios with icons; orphan keys removed. Tests: `backend/tests/test_legend_cleanup_sp399.py` (the ticket's grep, no orphan keys in common / schedule / overview, the legend's sections); e2e watch-glyph test opens the legend and expects the two states |
 | 2026-10-13 | feat/session-cards-sp395-402 | SP-402 (docs/research/positive-compliance.md §4 原則 5, §8 ④) | Unreliable optical HR doesn't grade a session down: `workout_review.run_hr_quality` (whole-run SP-266 check, cached per activity) → activity row / `done_by.hr_quality`; `compliance.session_compliance` with "low" grades on time only + `uncertain`, `with_plan_check` skips an intensity shortfall for it; card hover / dialog / 總覽 hover 「心率品質不穩，依時間判定」 (zh-TW + en). Tests: `backend/tests/test_compliance_hr_quality.py` |
+| 2026-10-13 | feature | SP-398 | Neutral completion words 完成／部分／換了課／跳過 (`compliance.status.*`, `LEVEL_LABEL`, `with_plan_check`, `plan_match.compare`'s 「換了課：…」); the four levels' explanation is one text, `common.legend.levels`, with the thresholds from the payload (`compliance_levels` / `levels`) — 課表's ? (`OFF_TIP`) and 課表統計's 達標率 ?; 課表統計: 跳過 grey (`.st-missed` / `.bg-missed` `--faint`), ○ instead of ✗, listed last, no 「沒做／沒照課表／走樣／沒達到」 in its texts. Rule E's red-streak trigger is gone (plan-auto.spec.md). Tests: `backend/tests/test_compliance_dashboard.py` (`*_sp398`) |
+| 2026-10-13 | feature | SP-400 | 課表統計's first screen is 本週: 完成 n 堂 / 時間 / 爬升 / 連續有練 tiles, the week's sessions as dots, the 安心句 when the plan was adjusted this week; the old KPIs, phase, per-kind and session list move into 教練視角 (collapsed, remembered). `compliance.dashboard` returns `week`, `active_streak`, `adjusted`; `_count` sums `climb_m` / `distance_km`; the API passes this week's sessions, every stored session and the plan marks. Tests: `backend/tests/test_compliance_dashboard.py` (`*_sp400`) |
+| 2026-10-13 | feature | SP-403 | 課表統計's 這週亮點: `achievements.week_highlight` (record > 連續有練 milestone > longest / highest vs last week > sessions done; None = no card), `compliance.dashboard` `highlight` (an activity that did a planned session carries its title), `GET /plan/compliance` reads the earlier runs (`_run_history`; a failure = no highlight). Tests: `backend/tests/test_week_highlight.py`, `backend/tests/test_compliance_dashboard.py` (`*_sp403`) |
+| 2026-10-13 | feature | SP-401 | 課表統計's weekly chart is the sessions done per 天／週／月 (bars, no pass line, no colour for falling short); the TSS tile's bar stops at 100 % without the black target mark. 課表's 週統計 (`compW`) and the agenda summary show 「完成 TSS n」 (the week's done TSS, no colour) with the planned TSS in the hover (`schedule.wk.*`), instead of the coloured 完成度 %. Tests: `backend/tests/test_compliance_dashboard.py` (`*_sp401`) |
+| 2026-10-13 | merge | SP-398 × SP-395…402 | One source for the completion words and levels after the card line: the status words are `common.legend.status.*` (課表統計 reads them too; `compliance.status.*` keeps only `open` 待同步), the four levels are the cards' `common.legend.*_tip` plus `legend.levels_note` (how intensity / a walking session is judged) through `SessChip.levelsText` — the 課表 dialog's ? and 課表統計's 照計畫完成 ? (`compliance.html` loads sesschip.js); `common.legend.levels` is gone. `plan_match.compare`'s 「換了課：」 is stripped in the card hover / dialog; 「未完成」 → 跳過 in the reconcile preview, the link menu, 刪除所有過期跳過的課 and `plan_store`'s error; the workout review's intensity tip says 換了課. SP-404 reads SP-402's `done_by.hr_quality` "low" (the field `session_compliance` uses for `uncertain`). Tests: `test_no_old_completion_words_on_the_card_pages_sp398`, `test_fatigue_streak_reads_sp402s_hr_quality_from_the_activity_row_sp404` |

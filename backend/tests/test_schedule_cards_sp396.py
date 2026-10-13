@@ -69,7 +69,7 @@ def _done(level="yellow", **cp):
             "tss_est": 70, "quality_family": {"id": "vo2max", "label": "VO2max 間歇", "text": "VO2max 間歇"},
             "done_by": {"tss": 52, "moving_s": 3120, "category_label": "路跑", "index": 7, "session": {"type_label": "Z5 間歇"}},
             "vs": {"short": level == "yellow" and cp.get("short"), "short_text": "強度不足：只做到這堂課的 72%", "planned": "hard", "actual": "hard",
-                   "off_plan": cp.get("off_plan"), "text": "沒照課表：排強度課，實際騎車" if cp.get("off_plan") else ""},
+                   "off_plan": cp.get("off_plan"), "text": "換了課：排強度課，實際騎車" if cp.get("off_plan") else ""},
             "compliance": {"level": level, "pct": 72, "tss_pct": 74, "duration_pct": 87, "intensity_pct": 72,
                            "label": "強度不足" if cp.get("short") else "符合計畫", **cp}}
 

@@ -589,14 +589,14 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
         </div>
       </div>
       <a class="btn login" id="login-link" href="/api/v1/wko5/settings#sync" hidden>COROS 未登入 · 到設定頁登入 →</a>
-      <button class="btn" id="rec-btn" type="button" title="依實際完成狀況重算：錯過的標成未完成，之後的課重排（你改過的保留）">
+      <button class="btn" id="rec-btn" type="button" title="依實際完成狀況重算：錯過的標成跳過，之後的課重排（你改過的保留）">
         <span class="lbl-long">依實際進度重排</span><span class="lbl-short">重排</span></button>
       <button class="btn" id="pf-btn" type="button" title="課表偏好：可練日、時間上限、課表內容、自動調整" data-i18n-attr="title:schedule.pf.btn_title" aria-haspopup="dialog">⚙<span class="lbl-long" data-i18n="schedule.pf.btn"> 課表偏好</span></button>
       <div class="more">
         <button class="btn icon" id="more-btn" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="more-menu" aria-label="更多">⋯</button>
         <div class="menu right" id="more-menu" role="menu" aria-label="更多" hidden>
           <button type="button" role="menuitem" data-act="blackout">🏖 設定不排課日期 <span class="meta">連假、出遊</span></button>
-          <button type="button" role="menuitem" data-act="del-expired"><span data-i18n="schedule.del_all.menu">刪除所有過期未完成</span> <span class="meta" id="dx-n"></span></button>
+          <button type="button" role="menuitem" data-act="del-expired"><span data-i18n="schedule.del_all.menu">刪除所有過期跳過的課</span> <span class="meta" id="dx-n"></span></button>
           <hr>
           <div class="menu-h">從 COROS 移除（只動這裡推送過的）</div>
           <button type="button" role="menuitem" data-unpush="day">這一天 <span class="meta" id="um-day"></span></button>
@@ -1066,7 +1066,7 @@ const WATCH_ON_CARD = ["outdated", "failed"];
 // time / TSS are off (the pie's fill says how much)
 function cardWhy(s) {
   const st = SessChip.status(s), cp = s.compliance || {}, vs = s.vs || {};
-  if (st === "off_plan") return (vs.text || cp.off_text || "").replace(/^沒照課表：/, "");
+  if (st === "off_plan") return (vs.text || cp.off_text || "").replace(/^換了課：/, "");
   if (st === "partial" && (cp.short || cp.soft)) return cp.label || "";
   return "";
 }
@@ -1207,7 +1207,8 @@ function climbAg(w, future) {
   return `<span title="${tip}">${esc(tt("climb.label"))} ${future ? "" : `<b>${climbN(c.done)}</b> / `}${climbN(c.target)} m</span>` +
     `<span class="clg${c.short > 0 ? " short" : ""}">${esc(climbGap(c))}</span>`;
 }
-const compW = (w) => w.compliance ? `<div class="r cp-${esc(w.compliance.level)}" title="到${w.end < D.today ? "週日" : "昨天（今天完成的也算）"}為止：完成 TSS ÷ 計畫 TSS（綠 ±20%、黃 20–50%、紅 > 50%）"><span>完成度</span><span class="cpw">${w.compliance.pct} %</span></div>` : "";
+// the week's TSS done (SP-401): a number that only adds up, no colour; the plan in the hover
+const compW = (w) => w.compliance ? `<div class="r" title="${esc(tt("wk.plan_tss_tip", { p: n0(w.planned_tss) }))}"><span>${esc(tt("wk.done_tss"))}</span><b>${n0(w.done_tss)}</b></div>` : "";
 function render() {
   const [a, b] = range();
   const { ss, acts } = byDay();
@@ -1298,7 +1299,7 @@ function agendaHtml(a, ss, acts) {
       <span>時間 ${future ? "" : `<b>${h1(w.done_hours)}</b> / `}${h1(w.planned_hours)} h</span>
       <span>TSS ${future ? "" : `<b>${n0(w.done_tss)}</b> / `}${n0(w.planned_tss)}</span>
       ${climbAg(w, future)}
-      ${w.compliance ? `<span class="cp-${esc(w.compliance.level)}">完成度 <span class="cpw">${w.compliance.pct} %</span></span>` : ""}
+      ${w.compliance ? `<span title="${esc(tt("wk.plan_tss_tip", { p: n0(w.planned_tss) }))}">${esc(tt("wk.done_tss"))} <b>${n0(w.done_tss)}</b></span>` : ""}
       ${w.provisional ? `<span class="faint">暫定</span>` : ""}</div>${days.join("")}</div>`;
 }
 // the legend (SP-399; design §7): one 「? 圖例」, the table shared with the 總覽 (SessChip.legend: 類型 /
@@ -1405,7 +1406,7 @@ function ask(title, html, ok = "確定", { cancel = "取消", danger = false } =
 }
 
 // ---- reconcile ----
-const ACT = { added: ["＋ 新增", "add-c"], changed: ["～ 變更", "ch-c"], removed: ["－ 移除", "rm-c"], missed: ["✕ 未完成", "rm-c"], done: ["✓ 完成", "add-c"],
+const ACT = { added: ["＋ 新增", "add-c"], changed: ["～ 變更", "ch-c"], removed: ["－ 移除", "rm-c"], missed: ["○ 跳過", "rm-c"], done: ["✓ 完成", "add-c"],
   conflict: ["⚠ 在不排課日期內", "ch-c"] };
 // `decide`: edited sessions on a 不排課日期 get a move / delete / keep choice (read by decisions())
 function changesHtml(byDay, decide = false) {
@@ -1434,7 +1435,7 @@ async function reconcile(opts = {}) {
   try { p = await sj("GET", `${PAPI}/reconcile`); } catch (e) { return errMsg("重排", e); }
   msg("");
   const n = (p.changes || []).length;
-  const ok = await ask(opts.title || "依實際進度重排", `<p class="meta" style="margin:0">${opts.intro || "錯過的課標成未完成，之後還沒改過的課依目前狀況重排；你改過或自己加的課會保留。"}</p>${changesHtml(p.by_day, true)}`,
+  const ok = await ask(opts.title || "依實際進度重排", `<p class="meta" style="margin:0">${opts.intro || "錯過的課標成跳過，之後還沒改過的課依目前狀況重排；你改過或自己加的課會保留。"}</p>${changesHtml(p.by_day, true)}`,
     n ? `套用 ${n} 項變動` : "", { cancel: n ? "取消" : "關閉" });
   if (!ok) { if (opts.cancelMsg) msg(n ? opts.cancelMsg : "偏好已儲存；課表不需要變動", n ? "" : "ok"); return; }
   const dec = decisions();
@@ -1502,7 +1503,7 @@ async function unpush(scope) {
 // ---- 抓活動: 資料來源 (COROS／TP) → 這裡 ----
 // The same run as 設定 › 立即同步 (syncrun.js, POST /sync/<src>/start): only the 資料來源 in use
 // (GET /sync/primary). The sync router isn't mounted in the demo — the button stays hidden.
-// Done: reload (new activities pair with sessions: ✓／未完成), then once more a few seconds later
+// Done: reload (new activities pair with sessions: ✓／跳過), then once more a few seconds later
 // for the background 自動調整 (plan_auto.after_sync: proposal banner / log, re-push).
 let PRI = null;                                    // { source, label, logged_in, enabled, busy }
 const PULL_REPOLL_MS = 5000;
@@ -2039,7 +2040,7 @@ function vsHtml(s) {
     (nums ? `<div class="vs-nums">${esc(nums)}</div>` : "") +
     (SessChip.hrNote(cp) ? `<div class="vs-nums">${esc(SessChip.hrNote(cp))}</div>` : "") +
     `<dl class="vs"><dt>計畫</dt><dd>${esc(plan)}</dd><dt>實際</dt><dd class="${vs.off_plan ? "off" : ""}">${esc(real)}</dd>` +
-    (vs.off_plan ? `<dt></dt><dd class="off">${esc(vs.text.replace("沒照課表：", ""))}</dd>` : "") +
+    (vs.off_plan ? `<dt></dt><dd class="off">${esc(vs.text.replace(/^換了課：/, ""))}</dd>` : "") +
     (vs.short ? `<dt></dt><dd class="part">${esc(vs.short_text)}</dd>` : "") +
     (hard ? `<dt></dt><dd class="meta">${esc(hard)}</dd>` : "") + `</dl>` +
     `<div class="vs-act">${a.index != null ? `<a class="btn" href="${esc(VIEWER(a))}">📈 開啟活動</a>` : ""}` +
@@ -2079,7 +2080,7 @@ function openAct(index) {
   $("ad-body").innerHTML = `<p class="meta" style="margin:0 0 6px">這天沒有對應的課表，算計畫外的訓練 <button type="button" class="qtip" aria-label="配對規則" data-tip="${esc(MATCH_TIP)}">?</button></p>` +
     `<dl class="vs">${rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("")}</dl>` +
     `<div class="vs-act"><a class="btn" href="${esc(VIEWER(a))}">📈 開啟活動</a>` +
-    (ss.length ? `<select id="ad-link" aria-label="配對到課表"><option value="">配對到課表…</option>${ss.map((s) => `<option value="${esc(s.uid)}">${esc(`${md(s.day)} ${s.title}${s.state === "done" ? "（改配這筆）" : s.state === "missed" ? "（未完成）" : ""}`)}</option>`).join("")}</select>` : "") +
+    (ss.length ? `<select id="ad-link" aria-label="配對到課表"><option value="">配對到課表…</option>${ss.map((s) => `<option value="${esc(s.uid)}">${esc(`${md(s.day)} ${s.title}${s.state === "done" ? "（改配這筆）" : s.state === "missed" ? "（跳過）" : ""}`)}</option>`).join("")}</select>` : "") +
     `</div>`;
   $("ad").showModal();
 }

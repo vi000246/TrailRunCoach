@@ -3086,7 +3086,7 @@ def _plan_card(ds, w) -> Optional[dict]:
     tip.append(_("顏色：時間和 TSS 偏離計畫較多的那個（±20% 內算符合，TrainingPeaks 的做法）"))
     if vs.get("intensity_pct") is not None:
         tip.append(_("強度：做到這堂課的 {pct}%（≥ 80% 算做到、50–80% 算強度不足、不到 50% 算跑成輕鬆："
-                     "時間和 TSS 都對算部分，否則算沒照課表）",
+                     "時間和 TSS 都對算部分，否則算換了課）",
                      pct=vs["intensity_pct"]))
     pct = comp.get("pct")
     return _card("status", id="plan", icon=PS.session_tag(s).get("icon"), label=_("課表"),

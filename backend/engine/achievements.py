@@ -504,3 +504,63 @@ def to_row(rec: Achievement, ann: Annotations) -> dict:
                              if rec.moving_s and rec.efd_km else None),
     })
     return row
+
+
+# ---------------------------------------------------------------------------
+# 這週亮點 (SP-403, docs/research/positive-compliance.md §5.1): one line a week for 課表統計's
+# 本週 card — specific, unexpected, informational praise (Deci, Koestner & Ryan 1999), never filler.
+# ---------------------------------------------------------------------------
+
+FOOT = ("road", "trail", "hike")       # distance / climb records and this week's highest
+RUNS = ("road", "trail")               # the long-run time record and this week's longest
+PR_MIN_BEFORE = 10                     # 推估: no record before 10 earlier runs (the first weeks would set one every run)
+STREAK_MILESTONE = 4                   # 推估: 4, 8, 12 … weeks of 連續有練
+
+
+def _f(x) -> float:
+    try:
+        return float(x or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _top(acts: list[dict], key: str, cats: tuple) -> Optional[dict]:
+    xs = [a for a in acts if a.get("category") in cats and _f(a.get(key)) > 0]
+    return max(xs, key=lambda a: (_f(a.get(key)), a.get("date") or "")) if xs else None
+
+
+def week_highlight(week: list[dict], before: list[dict], monday: str, streak_weeks: int,
+                   streak_this_week: bool, completed: int) -> Optional[dict]:
+    """The week's one highlight, or None. `week`: this week's activities (overview.activity_row
+    shape: date, category, distance_km, climbing_m, moving_s; `title` when it did a planned
+    session), `before`: the earlier ones (records, last week); `streak_weeks`: 連續有練
+    (compliance._active_streak), `streak_this_week`: this week is in it; `completed`: the
+    sessions done this week. Rank (the user's, 2026-10-12): a record — distance, climb (runs and
+    hikes), long-run time (runs) — > a 連續有練 milestone (every STREAK_MILESTONE weeks) > this
+    week's longest run / highest climb beating last week's > the sessions done. The thresholds
+    are 推估."""
+    def pick(a: dict) -> dict:
+        return {"day": a.get("date"), "title": a.get("title") or ""}
+    foot_before = [a for a in before if a.get("category") in FOOT]
+    if len(foot_before) >= PR_MIN_BEFORE:
+        for what, key, cats in (("distance", "distance_km", FOOT), ("climb", "climbing_m", FOOT),
+                                ("time", "moving_s", RUNS)):
+            a, prev = _top(week, key, cats), _top(before, key, cats)
+            if a is not None and prev is not None and _f(a[key]) > _f(prev[key]):
+                v, p = _f(a[key]), _f(prev[key])
+                r = (lambda x: round(x, 1)) if key == "distance_km" else (lambda x: int(round(x)))
+                return {"kind": "pr", "what": what, **pick(a), "value": r(v), "prev": r(p)}
+    if streak_this_week and streak_weeks >= STREAK_MILESTONE and streak_weeks % STREAK_MILESTONE == 0:
+        return {"kind": "streak", "weeks": streak_weeks}
+    import datetime as _dt
+    last_mon = (_dt.date.fromisoformat(monday) - _dt.timedelta(days=7)).isoformat()
+    last = [a for a in before if last_mon <= (a.get("date") or "") < monday]
+    a, p = _top(week, "moving_s", RUNS), _top(last, "moving_s", RUNS)
+    if a is not None and p is not None and _f(a["moving_s"]) > _f(p["moving_s"]):
+        return {"kind": "longest", **pick(a), "moving_s": int(_f(a["moving_s"])),
+                "more_s": int(_f(a["moving_s"]) - _f(p["moving_s"]))}
+    a, p = _top(week, "climbing_m", FOOT), _top(last, "climbing_m", FOOT)
+    if a is not None and p is not None and _f(a["climbing_m"]) > _f(p["climbing_m"]):
+        return {"kind": "highest", **pick(a), "climb_m": int(round(_f(a["climbing_m"]))),
+                "more_m": int(round(_f(a["climbing_m"]) - _f(p["climbing_m"])))}
+    return {"kind": "count", "n": completed} if completed > 0 else None

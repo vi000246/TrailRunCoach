@@ -665,7 +665,7 @@ function watchTxt(c) {
 function verdictTxt(s) {
   const st = SessChip.status(s), cp = s.compliance || {}, vs = s.vs || {};
   if (st === "todo") return "";
-  const why = st === "off_plan" ? (vs.text || cp.off_text || "").replace(/^沒照課表：/, "") : st === "partial" && (cp.short || cp.soft) ? cp.label || "" : "";
+  const why = st === "off_plan" ? (vs.text || cp.off_text || "").replace(/^換了課：/, "") : st === "partial" && (cp.short || cp.soft) ? cp.label || "" : "";
   const pct = st === "done" || st === "partial" ? cp.pct : null;
   const head = SessChip.label(st, st === "partial" ? pct : null) + (st === "done" && pct != null ? ` ${pct}%` : "") + (why ? " · " + why : "");
   const nums = st === "missed" ? "" : [cp.tss_pct != null ? `TSS ${cp.tss_pct}%` : "", cp.duration_pct != null ? tO("week.time_pct", { pct: cp.duration_pct }) : "",

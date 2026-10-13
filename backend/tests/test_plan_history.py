@@ -296,6 +296,6 @@ def test_the_week_result_grades_intensity_like_the_compliance_page():
     ss = PSAPI._decorate([dict(s) for s in every], acts, {}, "2026-09-28", "2026-10-04")
     by = {s["uid"]: s["compliance"] for s in ss}
     assert by["q1"]["label"] == "強度不足" and by["q1"]["pct"] == 70 and not by["q1"].get("off_plan")
-    assert by["q2"]["label"] == "沒照課表" and by["e1"]["label"] == "強度偏高"
+    assert by["q2"]["label"] == "換了課" and by["e1"]["label"] == "強度偏高"
     t = C.dashboard(ss, [], "2026-10-06", "2026-09-28", "2026-10-04")["totals"]
     assert (t["done"], t["partial"], t["off_plan"]) == (r["ok"], r["partial"], r["off_plan"])

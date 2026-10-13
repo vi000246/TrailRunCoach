@@ -2736,6 +2736,27 @@ def _range_extras(start: str, end: str) -> dict:
             "tph": O._tss_per_hour(ds, today), "goal_climb_per_km": goal_d}
 
 
+def _run_history(before: str) -> list[dict]:
+    """Every run / hike before `before` (課表統計's 這週亮點, SP-403: records and last week): date,
+    category, distance, climb and moving time from the dataset's metrics only (no parse; tests
+    replace this)."""
+    from backend.api.overview import _dataset
+    from backend.engine import overview as O
+    ds = _dataset()
+    hi = O.date_to_day(dt.date.fromisoformat(before))
+    out = []
+    for w in ds.workouts:
+        if w.day >= hi:
+            continue
+        cat = O.category(w)
+        if cat in ("road", "trail", "hike"):
+            m = w.metrics
+            out.append({"index": w.idx, "date": O.wdate(w).isoformat(), "category": cat,
+                        "distance_km": O._n(m.get("distance")), "climbing_m": O._n(m.get("climbing")),
+                        "moving_s": O.moving_s(w)})
+    return out
+
+
 # TSS per hour of a planned session by kind: week_plan() / projection use the
 # athlete's median TSS/h per category (road for long, hike, strength; the easy run's own
 # rate from genuinely easy runs, overview.easy_tss_rates — SP-302) and fixed rates for the
@@ -3093,8 +3114,11 @@ async def compliance(start: str, end: str, db: AsyncSession = Depends(get_db)):
     today = body["today"]
     inp = await _inputs()
     ph = inp.get("phase")
-    lo = min(a.isoformat(), ph["start"]) if ph else a.isoformat()
-    hi = max(b.isoformat(), ph["end"]) if ph else b.isoformat()
+    # 本週 (SP-400) is always this week, whatever the period: the range takes it in too
+    td = dt.date.fromisoformat(today)
+    mon, sun = td - dt.timedelta(days=td.weekday()), td + dt.timedelta(days=6 - td.weekday())
+    lo = min(a.isoformat(), ph["start"], mon.isoformat()) if ph else min(a.isoformat(), mon.isoformat())
+    hi = max(b.isoformat(), ph["end"], sun.isoformat()) if ph else max(b.isoformat(), sun.isoformat())
     # activities: the range and the phase so far (the phase may reach into the future)
     extras = await run_in_threadpool(_range_extras, lo, min(hi, max(today, b.isoformat())))
     rates = plan_rates(inp, every, extras.get("tph"))
@@ -3105,7 +3129,16 @@ async def compliance(start: str, end: str, db: AsyncSession = Depends(get_db)):
     phases = [p for p in extras["phases"] if p["end"] >= start and p["start"] <= end]
     weeks = _week_rows(start, end, ss, acts, phases, inp["weeks"], rates, today)
     days = _day_rows(start, end, ss, acts, rates)
-    out = C.dashboard(ss, weeks, today, start, end, phase=ph, phase_sessions=allss, day_rows=days)
+    # the plan's adjustments this week (SP-318 markers) for 課表統計's 安心句; an error -> none
+    from backend.engine import plan_marks as PMK
+    mk = await PMK.load_safe(db, every, today)
+    try:                                    # 這週亮點 (SP-403): a failure means no highlight, never a broken page
+        before = await run_in_threadpool(_run_history, mon.isoformat())
+    except Exception:                       # noqa: BLE001
+        before = []
+    out = C.dashboard(ss, weeks, today, start, end, phase=ph, phase_sessions=allss, day_rows=days,
+                      week_sessions=[s for s in allss if mon.isoformat() <= s["day"] <= sun.isoformat()],
+                      all_sessions=every, marks=mk, week_acts=extras["activities"], before_acts=before)
     return {**out, "phases": phases, "current_phase": ph, "kinds": PS.KINDS,
             "plan_phases": extras.get("plan_phases", extras["phases"]),
             "plan_start": min((s["day"] for s in every if s.get("day")), default=None)}

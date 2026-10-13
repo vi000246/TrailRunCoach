@@ -29,7 +29,10 @@ from backend.i18n import _
 
 # |actual / planned − 1| upper bounds per level (TrainingPeaks ±20 % / 50 %)
 COMPLIANCE = {"green": 0.20, "yellow": 0.50}
-LEVEL_LABEL = {"green": "符合計畫", "yellow": "有點偏離", "red": "偏離計畫", "missed": "未完成"}
+# the words (SP-398, docs/research/schedule-chip-ui.md §9.1): the 課表統計 page's statuses —
+# 完成 / 部分 / 換了課 / 跳過 —, neutral; a red level from time / TSS alone is 部分 there
+# (status_of), 換了課 comes from with_plan_check / the wrong kind. The level itself is unchanged.
+LEVEL_LABEL = {"green": "完成", "yellow": "部分", "red": "部分", "missed": "跳過"}
 
 RUN = {"road", "trail"}
 # activity categories (engine/overview.CATEGORIES) that count as the planned kind
@@ -66,7 +69,7 @@ def foot_swap(s: dict, cat: Optional[str]) -> bool:
 
 def time_tss_level(s: dict, planned_tss: Optional[float] = None) -> Optional[str]:
     """green / yellow / red from time and TSS together (the worse one) — the basis of the SP-370
-    softening (◐ instead of ≠) and of rule E's foot-swap exemption. None unless BOTH are measured
+    softening (◐ instead of ≠). None unless BOTH are measured
     (owner 2026-10-08: with no TSS — no HR, or a planned TSS of 0 — a swap / reversal stays ≠)."""
     a = s.get("done_by") if isinstance(s.get("done_by"), dict) else {}
     dur = _ratio(a.get("moving_s"), (s.get("minutes") or 0) * 60.0)
@@ -130,7 +133,7 @@ ORDER = ("green", "yellow", "red")
 
 def with_plan_check(comp: Optional[dict], vs: Optional[dict]) -> Optional[dict]:
     """The intensity part of a done session (engine/plan_match.compare), on top of time / TSS:
-      沒照課表 (off_plan: planned intervals, ran easy — or the other way — or another sport):
+      換了課 (was 沒照課表, SP-398; off_plan: planned intervals, ran easy — or the other way — or another sport):
         at least yellow (推估: TrainingPeaks colours time / TSS only; the kind is our addition)
       強度不足 / 偏強 (short, SP-216: 50–80 % of the planned intensity, or an easy run up to
         150 % of a quality dose): at least yellow, counted as 部分 — no longer 沒照課表.
@@ -147,7 +150,7 @@ def with_plan_check(comp: Optional[dict], vs: Optional[dict]) -> Optional[dict]:
     level = ORDER[max(ORDER.index(lv), 1)]
     out = {**comp, "level": level, "intensity_pct": vs.get("intensity_pct")}
     if vs.get("off_plan"):
-        return {**out, "off_plan": True, "label": "沒照課表", "off_text": vs.get("text") or ""}
+        return {**out, "off_plan": True, "label": "換了課", "off_text": vs.get("text") or ""}
     ipct = vs.get("intensity_pct")
     if ipct is not None and (comp.get("pct") is None or ipct < comp["pct"]):
         out["pct"] = ipct
@@ -162,15 +165,6 @@ def soft_label(vs: dict) -> Optional[str]:
     if vs.get("soft") == "intensity":
         return _("跑成強度課") if vs.get("actual") == "hard" else _("跑成輕鬆")
     return None
-
-
-def streak_red(comp: Optional[dict]) -> bool:
-    """Red for adapt rule E's streak (SP-370): not when only another foot sport made it red —
-    time and TSS both measured (`time_level`, as for the ◐ softening) and not red themselves;
-    another sport (a bike for a run), time / TSS reds and a swap without both measured count."""
-    if not comp or comp.get("level") != "red":
-        return False
-    return not (comp.get("foot_swap") and comp.get("time_level") in ("green", "yellow"))
 
 
 def week_compliance(planned_tss: float, done_tss: float, planned_hours: float,
@@ -190,9 +184,9 @@ def week_compliance(planned_tss: float, done_tss: float, planned_hours: float,
 
 # a session's status on the dashboard: ✓ 完成 (green), 部分 (yellow / red: the
 # time or TSS is > 20 % off; or, with both on plan, a reversal / another foot sport,
-# SP-370), 沒照課表 (planned intensity / sport not run, plan_match.compare, or the
-# wrong kind of activity), ✗ 沒做 (missed); open = a past day the synced data
-# doesn't cover yet (not counted)
+# SP-370), 換了課 (was 沒照課表, SP-398: planned intensity / sport not run,
+# plan_match.compare, or the wrong kind of activity), 跳過 (missed, was 沒做); open = a
+# past day the synced data doesn't cover yet (not counted)
 STATUSES = ("done", "partial", "off_plan", "missed", "open")
 DONE_STATUSES = ("done", "partial", "off_plan")
 SKIP_KINDS = ("notice", "heat_passive")      # the 課表待確認 reminder; a bath / sauna is ticked, not matched
@@ -240,6 +234,7 @@ def session_row(s: dict, today: str) -> Optional[dict]:
             "planned_tss": round(_f(s.get("tss_est", s.get("tss"))), 1),
             "actual_tss": None if a.get("tss") is None else round(_f(a.get("tss")), 1),
             "actual_s": a.get("moving_s"), "category_label": a.get("category_label"),
+            "climb_m": a.get("climbing_m"), "distance_km": a.get("distance_km"),
             "index": a.get("index"), "status": stt,
             "pct": 0 if stt == "missed" else (comp or {}).get("pct"),
             "duration_pct": (comp or {}).get("duration_pct"), "tss_pct": (comp or {}).get("tss_pct"),
@@ -256,7 +251,10 @@ def _count(rows: list[dict]) -> dict:
     a_tss = sum(r["actual_tss"] or 0.0 for r in counted)
     p_h = sum(r["minutes"] for r in counted if r["kind"] != "strength") / 60.0
     a_h = sum(_f(r["actual_s"]) for r in counted if r["kind"] != "strength") / 3600.0
-    return {**n, "due": due, "completed": done,
+    # what was done adds up (SP-400): climb and distance of the done sessions' activities
+    climb = sum(_f(r.get("climb_m")) for r in counted if r["status"] in DONE_STATUSES)
+    km = sum(_f(r.get("distance_km")) for r in counted if r["status"] in DONE_STATUSES)
+    return {**n, "due": due, "completed": done, "climb_m": round(climb), "distance_km": round(km, 1),
             "rate": round(done / due, 3) if due else None,
             "ok_rate": round(n["done"] / due, 3) if due else None,
             "planned_tss": round(p_tss, 1), "actual_tss": round(a_tss, 1),
@@ -287,14 +285,103 @@ def _streak(weeks: list[dict], today: str) -> dict:
     return {"weeks": n, "best": best, "threshold": STREAK_RATE, "broken": broke}
 
 
+def _monday(day: str) -> str:
+    import datetime as _dt
+    d = _dt.date.fromisoformat(day[:10])
+    return (d - _dt.timedelta(days=d.weekday())).isoformat()
+
+
+def _active_streak(sessions: list[dict], today: str) -> dict:
+    """連續有練 (SP-400, docs/research/positive-compliance.md §5): consecutive weeks (newest first)
+    with at least one session done. A week with nothing due — a rest / paused week, nothing
+    planned — neither counts nor breaks it (Duolingo's streak freeze, Sharif & Shu 2019); the
+    running week counts once one is done and never breaks it. `best`: the longest run. The ≥ 1
+    rule is the user's (2026-10-12); the rest-week exemption is 推估."""
+    weeks: dict = {}
+    for s in sessions:
+        if s.get("kind") in SKIP_KINDS or not s.get("day"):
+            continue
+        w = weeks.setdefault(s.get("week_start") or _monday(s["day"]), {"done": 0, "due": 0})
+        if s.get("state") == "done":
+            w["done"] += 1
+            w["due"] += 1
+        elif s.get("state") == "missed":
+            w["due"] += 1
+    this = _monday(today)
+    n, best, cur = 0, 0, 0
+    for ws in sorted(weeks):
+        w = weeks[ws]
+        if w["done"]:
+            cur += 1
+        elif w["due"] and ws < this:
+            cur = 0
+        best = max(best, cur)
+    for ws in sorted(weeks, reverse=True):
+        w = weeks[ws]
+        if ws > this or (not w["done"] and (ws == this or not w["due"])):
+            continue                       # ahead, this week with nothing done yet, a week with nothing due
+        if not w["done"]:
+            break
+        n += 1
+    return {"weeks": n, "best": best}
+
+
+def _week_view(ws: list[dict], today: str) -> dict:
+    """本週 (SP-400): what this week's done sessions add up to, and one dot per session — done ones
+    with their status, skipped ones left out, the rest `upcoming` (still ahead, or not synced yet)."""
+    rows = [r for r in (session_row(s, today) for s in ws) if r]
+    by = {r["uid"]: r for r in rows}
+    dots = []
+    for s in sorted(ws, key=lambda s: (s.get("day") or "", s.get("uid") or "")):
+        if s.get("kind") in SKIP_KINDS or not s.get("day") or s.get("state") not in ("active", "done", "missed"):
+            continue
+        st = (by.get(s["uid"]) or {}).get("status")
+        if st == "missed":
+            continue
+        fam = (s.get("quality_family") or {}).get("id") if s.get("kind") == "quality" else None
+        dots.append({"uid": s["uid"], "day": s["day"], "kind": s.get("kind"), "family": fam, "title": s.get("title") or "",
+                     "status": st if st in DONE_STATUSES else "upcoming"})
+    return {**_count(rows), "dots": dots}
+
+
+def _adjusted(ws: list[dict], marks: Optional[dict]) -> list[dict]:
+    """This week's sessions the automatic run changed (plan_marks `auto`, SP-318) for the 安心句
+    (SP-400) — a CP change alone (new watts, nothing about the week) is left out."""
+    out = []
+    for s in sorted(ws, key=lambda s: (s.get("day") or "", s.get("uid") or "")):
+        m = (marks or {}).get(s.get("uid")) or {}
+        if m.get("state") == "auto" and m.get("rule") != "cp":
+            out.append({"uid": s["uid"], "day": s.get("day"), "kind": s.get("kind"), "title": s.get("title") or "",
+                        "rule": m.get("rule"), "reason": m.get("reason") or ""})
+    return out
+
+
+def _highlight(ws: list[dict], out: dict, acts: list[dict], before: list[dict], mon: str, sun: str) -> Optional[dict]:
+    """這週亮點 (SP-403, achievements.week_highlight); an activity that did a planned session
+    carries its title."""
+    from backend.engine import achievements as AC
+    title = {(s.get("done_by") or {}).get("index"): s.get("title") for s in ws
+             if s.get("state") == "done" and isinstance(s.get("done_by"), dict)}
+    week = [{**a, "title": title.get(a.get("index")) or a.get("category_label") or ""} for a in acts
+            if mon <= (a.get("date") or "") <= sun]
+    done = out["week"]["completed"]
+    return AC.week_highlight(week, [a for a in before if (a.get("date") or "") < mon], mon,
+                             out["active_streak"]["weeks"], done > 0, done)
+
+
 def dashboard(sessions: list[dict], week_rows: list[dict], today: str, start: str, end: str,
               phase: Optional[dict] = None, phase_sessions: Optional[list[dict]] = None,
-              day_rows: Optional[list[dict]] = None) -> dict:
+              day_rows: Optional[list[dict]] = None, week_sessions: Optional[list[dict]] = None,
+              all_sessions: Optional[list[dict]] = None, marks: Optional[dict] = None,
+              week_acts: Optional[list[dict]] = None, before_acts: Optional[list[dict]] = None) -> dict:
     """`sessions`: calendar-shaped stored sessions in [start, end] (deleted /
     superseded already left out); `week_rows`: api/plan_sessions._week_rows of the
     range (planned vs done hours / TSS per week); `day_rows`: the same per day
     (api/plan_sessions._day_rows; the page sums them into months); `phase_sessions`:
-    the same shape over the current phase (its progress)."""
+    the same shape over the current phase (its progress). SP-400: `week_sessions` the same
+    shape over this week (本週), `all_sessions` every stored session (連續有練), `marks`
+    uid -> plan_marks marker (the week's adjustments). SP-403: `week_acts` this week's activities,
+    `before_acts` the earlier ones (achievements.week_highlight: records, last week)."""
     rows = [r for r in (session_row(s, today) for s in sessions if start <= (s.get("day") or "") <= end) if r]
     rows.sort(key=lambda r: (r["day"], r["uid"]), reverse=True)
 
@@ -316,9 +403,15 @@ def dashboard(sessions: list[dict], week_rows: list[dict], today: str, start: st
                 kinds.append({"kind": k, **({"family": fam} if k == "quality" else {}),
                               **{x: c[x] for x in ("due", "completed", "done", "partial", "off_plan", "missed",
                                                    "rate", "tss_pct", "planned_tss", "actual_tss")}})
+    mon = _monday(today)
+    import datetime as _dt
+    sun = (_dt.date.fromisoformat(mon) + _dt.timedelta(days=6)).isoformat()
+    ws = [s for s in (week_sessions or []) if mon <= (s.get("day") or "") <= sun]
     out = {"start": start, "end": end, "today": today, "totals": _count(rows), "sessions": rows,
            "weeks": weeks, "days": days, "streak": _streak(weeks, today), "by_kind": kinds, "phase": None,
-           "levels": COMPLIANCE}
+           "levels": COMPLIANCE, "week": {"start": mon, "end": sun, **_week_view(ws, today)},
+           "active_streak": _active_streak(all_sessions or [], today), "adjusted": _adjusted(ws, marks)}
+    out["highlight"] = _highlight(ws, out, week_acts or [], before_acts or [], mon, sun)
     if phase:
         a, b = phase["start"], phase["end"]
         ps = [s for s in (phase_sessions or []) if a <= (s.get("day") or "") <= b and s.get("kind") not in SKIP_KINDS
