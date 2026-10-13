@@ -1578,6 +1578,23 @@ which one. The response keeps the `coros` field names.
   neutral grey outline, 需更新 yellow, 失敗 red, 未推送 dashed; labels are provider-neutral
   (手錶). ✓ is never used for push. The legend has two titled groups, 完成 and 手錶
   (`renderLegend`, `backend/static/schedule.html:1179`). 已推送 stays visible (subtle).
+- **課表卡片元件** (2026-10-13, SP-395; design `docs/research/schedule-chip-ui.md` §6–7, §10 ①,
+  mockup `docs/research/schedule-chip-ui-mockup.html`, which now loads the app's own scripts).
+  `backend/static/sesschip.js` (`window.SessChip`) holds the parts both the 課表 page and the 總覽
+  本週 list draw a session from, one channel per question: `kind(s)` / `actKind(a)` = the type icon
+  (dashicons.js; 強度課 by family — 有氧間歇 z3, VO2max 間歇／速度 z5 — 熱適應 by the title = sun,
+  B2B / 負重 as on the 總覽; an activity by its category, a run by its session class; `bike` and
+  `other` added to dashicons.js), `icon(key, {fam, badge})` = the 22px tile, icon not coloured,
+  ↻／✎ (`PlanMark.icon(s, true)`) in its corner; `status(s)` = done / partial / off_plan / missed /
+  todo, the same rule as `compliance.status_of`; `ring(status, pct, {prov})` = the Linear-style
+  16px ring: check, pie filled to `pct` (a circle of r 3 stroked 6 wide, dash = pct × 6π, capped at
+  100 %), slash, empty (跳過 and 還沒做), dotted (暫定); `cls(s)` = `done cp-ok|cp-part|cp-off`,
+  `miss`, `fut [prov]`; `label()` = 完成／部分 72%／換了課／跳過／還沒做／暫定
+  (`common.legend.status.*`, zh-TW + en). Its injected CSS (`SessChip.CSS`) gives a card with
+  class `sc` the shared look: 1px outline, done = 4px left bar in `--cp` (green `--good` for done,
+  yellow `--watch` for partial and off_plan), `prov` dashed, `miss` grey, `act` dotted.
+  **No red for completion** (SP-393: red is only a failed push); the backend's `level` is not read
+  by the card.
 - **強度課的家族** (2026-10-04, SP-32; `docs/research/coach-schools-zones-periodization.md` R1). One
   classifier, `workout_templates.family_of` (`backend/engine/workout_templates.py:618`, rule in
   `classify`, `backend/engine/workout_templates.py:594`), splits a structure's `work` steps by
@@ -2414,3 +2431,4 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 | 2026-10-12 | feat/trail-climb-sessions-sp87 | SP-87 acceptance 8 | A road athlete's plan is unchanged by SP-87: no 長爬坡有氧 / downhill / 技術地形 session and no weekly climb target in the 基礎期, before a road A race or before a trail race when 主要訓練項目 is set to 路跑, in week_plan and the projection (`backend/tests/test_sp87_road.py`); the 課表 week rows carry no `climb` for them (`test_vert_target.py`) |
 | 2026-10-12 | feat/trail-climb-sessions-sp87 | SP-87 (found by the kind change) | The 專項期 技術地形 RPE 6–7 session (a hard day) stays out of the easy days after an accepted B2B (`b2b.post.until`, kept in `technical.week_context` as `b2b_until`), like the downhill session and the 長爬坡反覆; without another spaced day it is the RPE 4–5 one (easy). Before, it could land there (kind hike hid it from `test_b2b.py::test_week_after_an_accepted_b2b_easy_days_no_recovery_week`). Test: `backend/tests/test_technical.py::test_the_quality_session_stays_out_of_the_easy_days_after_a_b2b` |
 | 2026-10-12 | perf | SP-394 第 4 條 | A first import (and a re-parse) builds the last 90 days first: the status and the plan inputs come before the back-fill of the older activities, whose progress shows under the nav; the PMC counts the 90 days until the complete Dataset is in. A request's Dataset build is a `build` job of the queue. Tests: `backend/tests/test_queue_hot_first_sp394.py` |
+| 2026-10-13 | feat/session-cards-sp395-402 | SP-395 (docs/research/schedule-chip-ui.md §10 ①) | Shared session-card parts `backend/static/sesschip.js` (`SessChip.kind` / `actKind` / `status` / `cls` / `label` / `ring` / `icon`, `SessChip.CSS`): type icon tile, Linear-style completion ring (check / pie to the % / slash / empty / dotted), green / yellow / grey only; `bike` / `other` in dashicons.js; `common.legend.status.*` (zh-TW + en); the mockup loads the app's scripts. Tests: `backend/tests/test_sesschip.py` |
