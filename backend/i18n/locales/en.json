@@ -941,6 +941,7 @@
   "找不到備份檔": "Backup file not found",
   "找不到這個分類": "Category not found",
   "找不到這個範本": "Template not found",
+  "只有改過或刪掉的自動排課（今天以後）能還原成自動；自己新增的課、已完成的課不行": "Only an automatic session you edited or deleted (today or later) can revert to automatic; not a session you added or a done one",
   "找不到這堂課": "Session not found",
   "找不到這堂課（或已經完成／錯過）": "Session not found (or already done / missed)",
   "找穩定、好走的長坡持續往上（階梯步道、樓梯，或跑步機坡度 8–15%），跑走混合，心率不超過{cap}；上坡約 {work} 分、爬升約 {climb:.0f} m（推估）；下坡用走的，不衝。暖身、緩和各 {wc} 分": "Find a steady, easy-footed long climb and keep going up (stepped trail, stairs, or a treadmill at 8–15%), run-walk mixed, heart rate no higher than {cap}; about {work} min uphill, about {climb:.0f} m of climbing (estimate); walk down, don't push. Warm-up and cool-down {wc} min each",

@@ -21,7 +21,8 @@ Rules:
   3. edited and custom sessions are kept. An edited long / quality / test is
      superseded when the regenerated week is a rest week (recovery / taper /
      event) that no longer has it. Deleted auto sessions stay deleted
-     (tombstones block their gen_key for that week). A kept race row (the 賽事計算機's
+     (tombstones block their gen_key for that week) — until 還原成自動 (plan_store.reset_rows,
+     SP-469) makes one the generator's again before reconcile. A kept race row (the 賽事計算機's
      「匯出至課表」, plan_store.upsert_external) blocks the generator's own race of that
      week, so it is never added beside it or moved to another day.
   4. an auto session that lands on the same day as a kept edited / custom
