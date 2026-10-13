@@ -108,23 +108,48 @@ def figures(s: dict, th: Optional[dict] = None, rates: Optional[dict] = None, pr
     else:
         tss = round(tot["tss_hard"] + tot["easy_s"] * rate / 3600.0, 1)
     return {"sec": tot["sec"], "minutes": minutes, "tss": tss,
-            "rate": rate, "easy_s": tot["easy_s"], "summary": card_summary(st, c, s), "ctx": c, "steps": st}
+            "rate": rate, "easy_s": tot["easy_s"], "summary": card_summary(st, c, s, th), "ctx": c, "steps": st}
 
 
-def card_summary(st: dict, c, s: Optional[dict] = None) -> str:
-    """The card's target text from the structure: workout_steps.steps_text (the editor's summary), plus on
-    a power session with an HR cap (target_policy hr_cap) the HR its steps carry — an interval band's
-    「心率 a–b bpm」 (interval_library / quality_gate texts), an easy step's cap (workout_steps.easy_hr) —
-    as the cards said before, unless the summary already says 心率. A walking session (target_policy.is_walk,
-    SP-115) adds 「或 RPE ≤ 13，先到的為準」: its watch step says so too (hr_profile.walk_step_name)."""
+def card_summary(st: dict, c, s: Optional[dict] = None, th: Optional[dict] = None) -> str:
+    """The card's target text from the structure, in the cards' own words (it must not change what the target
+    means): each main step's target as workout_steps.steps_text says it — power with its % CP, an HR band
+    as plain bpm (the editor's 「% LTHR」 note is left out: the band may come from a 課表心率區間 / 儲備心率
+    model, not from LTHR), 「（≤ 輕鬆跑上限）」 on the easy-run cap — plus on a power session with an HR cap
+    (target_policy hr_cap) the HR its steps carry (an interval band's 「心率 a–b bpm」, an easy step's
+    「心率 ≤ cap」). A walking session (target_policy.is_walk, SP-115) says its HR as the uphill cap the
+    generator wrote (hr_profile.walk_cap_hr: 「心率 ≤ 爬坡上限 X bpm … 或 RPE ≤ 13，先到的為準」) — the watch
+    gets that cap (hr_profile.walk_band) and the RPE rule in its step name."""
     from backend.engine import workout_steps as WS
-    out = _hr_part(st, c, WS.steps_text(st, c))
-    if s is not None and out and "RPE" not in out:
+    walk = False
+    if s is not None:
         from backend.engine.target_policy import is_walk
-        if is_walk(s):
-            from backend.engine.hr_profile import WALK_RPE
-            out = _("{hr} 或 RPE ≤ {rpe}，先到的為準", hr=out, rpe=WALK_RPE)
-    return out
+        walk = is_walk(s)
+    parts = _parts(st, c, skip_hr=walk)
+    if walk:
+        from backend.engine import hr_profile as HP
+        parts.append(HP.walk_cap_hr(c.walk, c.aet, bool((th or {}).get("aet_measured"))))
+        return " · ".join(parts)[:200]
+    return _hr_part(st, c, " · ".join(parts)[:200])
+
+
+def _parts(st: dict, c, skip_hr: bool = False) -> list[str]:
+    """workout_steps.steps_text's parts without the HR band's 「% LTHR」 note (and without HR at all)."""
+    from backend.engine import workout_steps as WS
+    rows = WS.flat(st.get("items") or [])
+    work = [r["st"] for r in rows if r["st"]["kind"] == "work"] or [r["st"] for r in rows][:1]
+    out = []
+    for x in work:
+        r = WS.resolve(x, c)
+        if r.type == "none" or (skip_hr and r.type == "hr"):
+            continue
+        sub = r.sub.split(" · ")[0] if r.sub else ""
+        if r.type == "hr" and not sub.startswith("≤"):
+            sub = ""
+        t = f"{WS.TYPE_LABEL[r.type]} {r.text}" + (f"（{sub}）" if sub else "")
+        if t not in out:
+            out.append(t)
+    return out[:3]
 
 
 def _hr_part(st: dict, c, out: str) -> str:

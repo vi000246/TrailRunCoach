@@ -117,7 +117,18 @@ def test_projection_default_path_prices_easy_runs_like_week_plan():
     assert abs(float(wp["target"]["tss_per_hour"]) - 41.0) > 5
     weeks = P.project_weeks(wp, [], dt.date.fromisoformat(wp["week"]["start"]) + dt.timedelta(weeks=3))
     easy = [s for w in weeks for s in w["sessions"] if s["kind"] == "easy" and s["minutes"] and s["id"].startswith("easy")]
-    assert easy and all(s["tss"] / s["minutes"] * 60 == pytest.approx(41.0, rel=2.5 / s["minutes"]) for s in easy)
+    # SP-437 (Q1 A): a run's easy steps at the easy rate; its strides (加速跑／坡道衝刺) are an intensity at
+    # IF² × 100 per hour on top — the easy part is still priced at 41, never at the all-runs rate
+    from backend.engine import session_structure as SST
+    from backend.engine import workout_steps as WS
+    th = wp["thresholds"]
+    plain = [s for s in easy if not WS.strides_of(s["title"])]
+    strides = [s for s in easy if WS.strides_of(s["title"])]
+    assert plain and all(s["tss"] / s["minutes"] * 60 == pytest.approx(41.0, rel=2.5 / s["minutes"]) for s in plain)
+    for s in strides:
+        tot = WS.totals(SST.structure_of(s, th), WS.session_ctx(s, th))
+        assert tot["tss_hard"] > 0 and tot["easy_s"] < tot["sec"] == s["minutes"] * 60
+        assert (s["tss"] - tot["tss_hard"]) / tot["easy_s"] * 3600 == pytest.approx(41.0, abs=0.05)
     # the week_sessions default path directly: rates' "easy", else the plain rate as before
     from backend.tests.test_plan_prefs import MON, TGT
     ss = P.week_sessions(MON, "base", "base", 5.0, 70.0, TGT, 5, 90.0, False, False, 17.5, 150.0,

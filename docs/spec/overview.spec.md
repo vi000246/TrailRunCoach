@@ -871,10 +871,12 @@ tickets is in plan-auto.spec.md):
   minutes). A structure with a lap-button / distance step keeps its card. Synthetic seasons (road
   marathon, 百岳, trail taper, base): the weekly target hours unchanged, the weekly planned TSS −0.5 to
   +3.7 %, the taper / recovery weeks unchanged in hours (`backend/tests/test_structure_truth_sp437.py`).
-  Target text (Q2 B): the card's `target` = the structure's summary (`session_structure.card_summary`:
-  `workout_steps.steps_text`, plus on a power session with an HR cap the HR its steps carry — an
-  interval band's 「心率 a–b bpm」, an easy step's 「心率 ≤ cap」 — and on a walking session 「或 RPE ≤ 13，
-  先到的為準」), e.g. 「功率 169–208 W（65–80% CP） · 心率 ≤ 150 bpm」 instead of 「心率 < 150 bpm · 功率
+  Target text (Q2 B): the card's `target` = the structure's summary in the cards' own words
+  (`session_structure.card_summary`: each main step's target as `workout_steps.steps_text` says it, but
+  an HR band as plain bpm — no editor 「% LTHR」 note, the band may be a 儲備心率 / 課表心率區間 one — plus on
+  a power session with an HR cap the HR its steps carry: an interval band's 「心率 a–b bpm」, an easy
+  step's 「心率 ≤ cap」; a walking session keeps the uphill cap as `hr_profile.walk_cap_hr` writes it,
+  「心率 ≤ 爬坡上限 X bpm … 或 RPE ≤ 13，先到的為準」), e.g. 「功率 169–208 W（65–80% CP） · 心率 ≤ 150 bpm」 instead of 「心率 < 150 bpm · 功率
   169–208 W · 最近 6 次輕鬆跑…」. Only where nothing reads the old text into the structure or the push
   (`summary_target`: with the summary as its target the session must derive the same steps and push the
   same workout — 長爬坡反覆's step note, a test's 「休 N 分」／固定功率 keep their text); so no session is
@@ -2734,3 +2736,4 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 | 2026-10-13 | feature | SP-437 | Phase 2 (Q2 B): the generated run sessions' target text is their structure's summary (`session_structure.card_summary` / `summary_target`, guarded: the session must derive the same steps and push the same workout with it, else the text stays). The first automatic run on it labels its minutes / TSS / target-only items rule `structure` (「課表改用結構的時間、TSS、目標（一次性）」, `plan_auto.mark_structure`, `state.structure_v`) and leaves them out of 「> 3 sessions changed」. Demo athlete's first run: 16 targets + 2 TSS change, 3 ↻ in the push window, 0 re-push, no 課表待確認. Existing tests changed for it: `test_b2b.py::test_week_plan_accepted_b2b_on_the_users_days_volume_unchanged`, `test_bc_races.py::test_week_plan_and_projection_easy_runs_after_a_b_race_keep_the_easy_target` |
 | 2026-10-13 | research | SP-493 | (the user: 「選儲備心率時不靠 LTHR，那幹嘛一直提醒我 LTHR 不準」) Inventory of what LTHR feeds under each 課表心率區間 (lthr / hrr / hrmax), read from the code: `docs/research/lthr-low-confidence-testing.md` §9. Under %HRR / %HRmax LTHR still sets the interval sessions' HR (the target text's bpm, × LTHR in `interval_library.session_for` / `quality_gate.session`, which the push reads before `work_band`), the projected weeks' target texts (`projection.target_texts`), hrTSS (runs without power / threshold pace, hikes), planned-step IF, the race calculator, the activity review and the HR-zone charts — the ticket's stop condition. **No behaviour change**: the reminders (總覽 測試 card, 建議框, 設定 LTHR card, editor badge, SP-471) are unchanged until the user picks one of §9.5's options |
 | 2026-10-13 | bugfix | SP-477 | 總覽 in English: the page title, the section jump bar (狀況／紀錄／指標／本週／待辦, `data-i18n`) and the four KPI tiles' labels, words and hover (`overview.json` `jump.*`, `kpi.*`, `level.*`, `asof`); the rest of the page (indicators, log, week, to-do texts) is still Chinese |
+| 2026-10-14 | bugfix | SP-437 | The target summary keeps the cards' meaning: a walking session's target stays the uphill cap (「心率 ≤ 爬坡上限 X bpm … 或 RPE ≤ 13」, was rewritten as an HR band with 「% LTHR」), HR bands drop the editor's 「% LTHR」 note (`session_structure.card_summary` / `_parts`). Tests updated for Q1 A (strides runs: easy steps at the easy rate, the strides at IF²): `test_easy_tss_rate.py::test_projection_default_path_prices_easy_runs_like_week_plan`, `test_integration_2026_10_06e.py` cold-start ×2 |

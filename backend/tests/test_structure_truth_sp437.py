@@ -371,3 +371,21 @@ def test_first_run_relabel_is_one_time_and_not_a_big_change():
     assert PA.classify(stored, new, items, *args) == []
     adapt = [{"action": "changed", "uid": "x", "rule": "fatigue", "before": {"minutes": 50}}]
     assert PA.mark_structure(adapt) == 0 and adapt[0]["rule"] == "fatigue"
+
+
+def test_summary_keeps_the_cards_meaning():
+    """The summary must not change what a card's target means: a walking session keeps the uphill cap the
+    generator wrote (SP-115: 「心率 ≤ 爬坡上限 X bpm … 或 RPE ≤ 13，先到的為準」, what walk_band pushes), and
+    an HR band says plain bpm — no editor 「% LTHR」 note (the band may be a 儲備心率 / 課表心率區間 one)."""
+    from backend.engine import hr_profile as HP
+    walk = {"value": 147, "pct": 0.75, "source": "max_hr"}
+    th = {**TH, "walk_cap": walk}
+    s = {"id": "long", "kind": "long", "title": "攻頂日模擬｜大小霸", "minutes": 240, "tss": 180.0, "terrain": "trail",
+         "detail": "背 12 kg 的背包", "target": HP.walk_cap_hr(walk, TH["aet"])}
+    was = s["target"]
+    SST.apply_one(s, th, RATES)
+    assert s["target"] == was and s["target"].startswith("心率 ≤ 爬坡上限 147 bpm") and "RPE ≤ 13" in s["target"]
+    q = {"id": "quality", "kind": "quality", "title": "有氧間歇（巡航）3×10 分", "minutes": 60, "tss": 70.0,
+         "target": "心率 150–160 bpm", "detail": "休 2 分；暖身 15 分、緩和 10 分", "target_basis": "hr"}
+    SST.apply_one(q, TH, RATES)
+    assert "LTHR" not in q["target"] and q["target"].startswith("心率 ")
