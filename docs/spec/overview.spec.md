@@ -854,7 +854,31 @@ tickets is in plan-auto.spec.md):
   TSS moves by the difference only (the demo's 10/26 taper week 276 vs 379 the week before, −27 %).
   Road `TAPER_FULL` / `TAPER_CUT` still say 60 / 50
   against a 61 / 51 min structure (the rest after the last rep); SP-437 (minutes / TSS from the
-  structure) is open.
+  structure) settles them: the cards are 61 / 51 (next bullet).
+- **The structure is the session** (SP-437, the owner 2026-10-13): every run session the generator makes
+  (week_plan after the warm-up pass, `backend/engine/overview.py` `SST.apply_objs`; each projected week
+  after its warm-up pass, before its TSS moves the CTL, `backend/engine/projection.py` `SST.apply`; the
+  suggested CP / AeT tests; adapt's rewrites in `plan_store.reconcile_with_adapt`) takes its minutes and
+  TSS from its structure — the stored `steps`, else `workout_steps.derive` — i.e. what the watch gets
+  (`backend/engine/session_structure.py`). TSS (Q1 A): the warm-up, cool-down, rests and easy-target
+  steps (`workout_steps.rate_easy`) at the runner's own TSS per hour (`session_structure.kind_rate`: the
+  easy runs SP-302's rate, trail easy runs `easy_trail`, the long run the road / trail median, 越野跑 the
+  hike one, quality / tests the easy-run rate), the other steps IF² × 100 per hour; a session whose
+  structure is all easy keeps the generator's own rate, so its TSS doesn't move. Minutes (Q3 A): the text
+  intervals whose card was short of their structure (the rest after the last rep, an unwritten rest =
+  the rep) now carry the structure's: 2×15 60 → 61, 減量 2×10 50 → 51, fartlek 4×1 35 → 37, 巡航 4×3
+  45 → 49, 5×4 上坡 60 → 65 — the push does not change (its cool-down already filled the card's
+  minutes). A structure with a lap-button / distance step keeps its card. Synthetic seasons (road
+  marathon, 百岳, trail taper, base): the weekly target hours unchanged, the weekly planned TSS −0.5 to
+  +3.7 %, the taper / recovery weeks unchanged in hours (`backend/tests/test_structure_truth_sp437.py`).
+  Target text (Q2 B): the card's `target` = the structure's summary (`session_structure.card_summary`:
+  `workout_steps.steps_text`, plus on a power session with an HR cap the HR its steps carry — an
+  interval band's 「心率 a–b bpm」, an easy step's 「心率 ≤ cap」 — and on a walking session 「或 RPE ≤ 13，
+  先到的為準」), e.g. 「功率 169–208 W（65–80% CP） · 心率 ≤ 150 bpm」 instead of 「心率 < 150 bpm · 功率
+  169–208 W · 最近 6 次輕鬆跑…」. Only where nothing reads the old text into the structure or the push
+  (`summary_target`: with the summary as its target the session must derive the same steps and push the
+  same workout — 長爬坡反覆's step note, a test's 「休 N 分」／固定功率 keep their text); so no session is
+  re-pushed by it.
 - **恢復期 / 回量期** (SP-98): post-race hours are a share of the level before the race, not of the
   taper weeks (`recovery_hours` `backend/engine/overview.py:524`, `rebuild_hours`
   `backend/engine/overview.py:534`, used at `backend/engine/overview.py:1489`).
@@ -2706,3 +2730,5 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 | 2026-10-13 | code-sync | SP-67 | Recorded what `043624fa` (2026-10-06) shipped and the spec never said: 設定 → 心率's 「app 和手錶數值對照」 card (app vs. COROS LTHR / max / resting HR and zone edges, flagged when more than 5 bpm apart, what to change by hand in the COROS app, the account's change history) and the push payload's `intensityPercent` / `intensityPercentExtend` = 0 with `legacy_fingerprint` so rows pushed before were not pushed again. No code change. Tests: `backend/tests/test_coros_compare.py`, `backend/tests/test_coros_workouts.py::test_trail_easy_run_is_hr_capped_at_aet`, `::test_workouts_pushed_before_sp67_are_not_pushed_again` |
 | 2026-10-13 | bugfix | SP-474 | (follow-up, the user 2026-10-13) The 陡坡健走's 平路緩和 5 分 pushes no HR target either: `workout_steps.resolve` (`backend/engine/workout_steps.py:1210`) gives an auto-easy `cool` step under a walk cap 「不設目標」, as the warm-up (the HR is coming down after the steep part, under the walk band's easy-cap floor, and the watch kept alerting). Running sessions' cool-downs (no walk cap) keep the easy band; an explicit target the user set on the step stays. Structure TSS: the cool-down at IF 0.65 (`NONE_IF["cool"]`) instead of the band's ≈ 0.725: 45′ 陡坡健走 37.7 → 36.8 (−0.9); card TSS unchanged. The ME 負重爬坡 / 攻頂日模擬 have no cool-down step (unchanged). `test_walking_cool_down_and_running_warm_ups_unchanged` → `test_running_warm_ups_and_an_explicit_warm_up_target_unchanged` (its 陡坡健走 cool-down = walk band assertion was this rule; now the opposite, in the new tests). Tests: `backend/tests/test_walk_warmup_hr_floor_sp474.py` (`test_steep_walk_cool_down_pushes_no_hr_floor`, `test_steep_walk_cool_down_resolves_to_no_target_and_a_cool_down_if`, `test_running_cool_downs_and_an_explicit_cool_down_target_unchanged`) |
 | 2026-10-13 | bugfix | SP-478 | The 減量期 Zone 3 track pick 「有氧間歇（巡航）2×8 分」 (`TAPER_Z3`, 88–95 % CP; `quality_sessions`, `backend/engine/overview.py:1015`) takes the Zone 3 row's HR, as SP-408's 越野 上坡節奏跑: `taper_q_target` with `TAPER_Z3_TARGET` (`power_pct` 0.88–0.95, `hr_cls` Z3sub) and `z3_hr_text` of the week's thresholds (`hr_model`, the easy-run cap, LTHR — week_plan's `tt` / the projection's thresholds, no new parameter). The card's power is the template's 88–95 % CP in watts too (was the threshold row's watts, while the structure already read 88–95 % from the detail); card, structure and push agree. The 4×3′ `TAPER_Q` keeps the threshold row. Demo athlete (CP 260, LTHR 168, 課表心率區間 Z3 151–160): card 功率 247–263 W · 心率 160–171 bpm → 功率 229–247 W（88–95% CP） · 心率 151–160 bpm; structure / push (目標依據 心率) 160–171 → 151–160 bpm; power push 229–259 W unchanged. Tests: `backend/tests/test_taper_rules.py` (`test_taper_z3_pick_card_structure_and_push_use_zone_3`, `test_taper_z3_pick_power_basis_is_the_templates_power`, `test_taper_z3_pick_without_hr_model_takes_aet_to_lthr`, `test_taper_4x3_pick_keeps_the_threshold_row`, `test_week_plan_and_projection_taper_z3_pick_takes_zone_3`) |
+| 2026-10-13 | feature | SP-437 | 課表結構是唯一來源 phase 1: the generator's run sessions (week_plan, each projected week before its CTL step, the suggested tests, adapt's rewrites) take minutes / TSS from their structure (`backend/engine/session_structure.py`); `workout_steps.totals` gains `easy_s` / `tss_hard` and `Ctx.easy_tph` (the easy steps at the runner's own TSS / h, Q1 A); text intervals 1–5 min short of their structure now carry its minutes (Q3 A, road 減量 60 / 50 → 61 / 51); `week_plan(tpace=)` so a % pace step's TSS matches the editor's. A saved structure (`api/plan_sessions._with_steps`) stores its own minutes and TSS (the dialog's old-rate TSS is no longer kept) and the title's 「N×M 分／秒」 follows it, else 「（已改）」 (Q4 A, a title the user typed wins); the editor's 預估 TSS uses the same rate (`_steps_env`, the static demo's port too). Tests: `backend/tests/test_structure_truth_sp437.py` |
+| 2026-10-13 | feature | SP-437 | Phase 2 (Q2 B): the generated run sessions' target text is their structure's summary (`session_structure.card_summary` / `summary_target`, guarded: the session must derive the same steps and push the same workout with it, else the text stays). The first automatic run on it labels its minutes / TSS / target-only items rule `structure` (「課表改用結構的時間、TSS、目標（一次性）」, `plan_auto.mark_structure`, `state.structure_v`) and leaves them out of 「> 3 sessions changed」. Demo athlete's first run: 16 targets + 2 TSS change, 3 ↻ in the push window, 0 re-push, no 課表待確認. Existing tests changed for it: `test_b2b.py::test_week_plan_accepted_b2b_on_the_users_days_volume_unchanged`, `test_bc_races.py::test_week_plan_and_projection_easy_runs_after_a_b_race_keep_the_easy_target` |

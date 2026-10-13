@@ -76,6 +76,7 @@
   "planmark.rule.fatigue": "Fatigue guard",
   "planmark.rule.cp": "CP changed, power targets recalculated",
   "planmark.rule.plan": "Re-planned from the latest data",
+  "planmark.rule.structure": "The card now follows its structure (one-time)",
   "planmark.field.day": "Date",
   "planmark.field.kind": "Type",
   "planmark.field.title": "Session",

@@ -185,6 +185,10 @@ class Ctx:
     sent_tl: Optional[dict] = None
 
     rpe: Optional[object] = None            # engine/rpe_load.Model; None = the stored one (SP-57)
+    # SP-437 (the owner 2026-10-13, Q1 A): the runner's own TSS per hour the easy steps count at
+    # (rate_easy: warm-up, cool-down, rests, easy targets — engine/session_structure.easy_rate);
+    # None = every step at IF² × 100 (the generic estimate, as before)
+    easy_tph: Optional[float] = None
 
     def tl_model(self):
         from backend.engine import coros_tl
@@ -1467,11 +1471,25 @@ def estimate_note(steps: dict, c: Ctx) -> str:
 NONE_IF = {"rest": 0.55, "warm": 0.65, "cool": 0.65, "other": 0.8, "work": 1.05}    # 推估
 
 
+def rate_easy(st: dict, r: Resolved) -> bool:
+    """SP-437: a step whose TSS is the runner's own easy rate (Ctx.easy_tph) — a warm-up, cool-down or
+    rest, an easy target (_easy_target: auto easy, RPE ≤ 4, an easy HR / power / pace band) or one
+    resolved at ≤ EASY_POWER_PCT of CP (Palladino EZ's top); never a 「負荷」 step (its TSS is typed)."""
+    if (st.get("dur") or {}).get("type") == "load":
+        return False
+    if st.get("kind") in ("warm", "cool", "rest"):
+        return True
+    return _easy_target(st.get("target") or {}) or (r.frac is not None and r.frac <= EASY_POWER_PCT)
+
+
 def totals(steps: dict, c: Ctx) -> dict:
     """{"sec", "open", "est" (distance converted), "tss" (估), "hard_s" (≥ 88 % CP),
     "z5_s"}: Σ s × IF² × 100 / 3600, IF = the target's middle ÷ CP (HR via Friel →
-    Palladino, 推估), no target by step kind (推估)."""
+    Palladino, 推估), no target by step kind (推估). With Ctx.easy_tph (SP-437) the easy steps
+    (rate_easy) count at that rate instead; "easy_s" = their seconds, "tss_hard" = the TSS of the
+    other steps (IF²), so tss = tss_hard + easy_s × the rate."""
     sec = tss = hard = z5 = 0.0
+    easy_s = tss_hard = 0.0
     n_open, est = 0, False
     for row in flat(steps["items"]):
         st = row["st"]
@@ -1486,13 +1504,19 @@ def totals(steps: dict, c: Ctx) -> dict:
             f = load_if(st, r)                  # = the step's TSS back (typed or by RPE)
         else:
             f = r.frac if r.frac is not None else NONE_IF.get(st["kind"], 0.7)
-        tss += s * f * f * 100.0 / 3600.0
+        if rate_easy(st, r):
+            easy_s += s
+            tss += s * (c.easy_tph if c.easy_tph else f * f * 100.0) / 3600.0
+        else:
+            tss_hard += s * f * f * 100.0 / 3600.0
+            tss += s * f * f * 100.0 / 3600.0
         if f >= 0.88:
             hard += s
         if r.frac is not None and r.frac >= Z5_FRAC and st["kind"] == "work":
             z5 += s
     return {"sec": round(sec), "open": n_open, "est": est, "tss": round(tss, 1), "hard_s": round(hard),
-            "z5_s": round(z5), "est_note": estimate_note(steps, c) if est else ""}
+            "z5_s": round(z5), "est_note": estimate_note(steps, c) if est else "",
+            "easy_s": round(easy_s), "tss_hard": round(tss_hard, 3)}
 
 
 # ---------------------------------------------------------------------------

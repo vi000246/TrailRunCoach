@@ -2052,5 +2052,7 @@
   "算不出 mFTP：測試那天以前 90 天的 Stryd 跑步不到 5 次，或 PD 模型擬合不成立（比照 WKO5，不用公式代替）": "No mFTP: fewer than 5 Stryd runs in the 90 days up to the test, or the PD model did not fit (as in WKO5, no formula stands in for it)",
   "課表的 CP 自動用同一個擬合（差 ≥ 3 W 才換；設定頁手動填的 CP 優先）": "the plan's CP uses the same fit by itself (it changes only by 3 W or more; a CP typed in Settings wins)",
   "這次測試後的 mFTP {cp} W（{m}）：結果看「本次重點」的 CP 測試卡": "mFTP after this test {cp} W ({m}): see the CP test card under Highlights",
-  "這次測試後的 mFTP {cp} W（比照 WKO5）": "mFTP after this test {cp} W (as in WKO5)"
+  "這次測試後的 mFTP {cp} W（比照 WKO5）": "mFTP after this test {cp} W (as in WKO5)",
+  "（已改）": " (edited)",
+  "課表改用推到手錶的結構：時間、TSS、目標文字照結構寫（一次性）": "The plan now follows the structure pushed to the watch: time, TSS and target text are the structure's (one-time)"
 }
