@@ -172,21 +172,24 @@ def split_days(days: int, km: float, gain_m: float, loss_m: Optional[float],
     return [{"km": km / n, "gain_m": gain_m / n, "loss_m": loss / n} for _ in range(n)]
 
 
-def predict_baiyue(*, day_plan: list[dict], eph: float, weight: float, m: float = 1.0,
-                   pack_kg: float = 12.0, hist_pack_kg: float = 5.0, aet: Optional[float] = None,
+def predict_baiyue(*, day_plan: list[dict], eph: float, weight: Optional[float], m: float = 1.0,
+                   pack_kg: Optional[float] = 12.0, hist_pack_kg: float = 5.0, aet: Optional[float] = None,
                    target_moving_h: Optional[float] = None, biggest_day: Optional[dict] = None) -> dict:
     """Walking model: moving h = EP / (EP/h_personal · M · pack factor) per day,
-    EP = km + gain/100. Energy = CC · (W + pack) kcal; water 0.7–0.8 ml/kcal."""
-    pack_factor = (weight + hist_pack_kg) / (weight + pack_kg)
+    EP = km + gain/100. Energy = CC · (W + pack) kcal; water 0.7–0.8 ml/kcal.
+    No body weight (SP-414): the pack factor is 1 and the energy / water are None
+    (both need the weight; never a default one)."""
+    has_w = bool(weight and weight > 0)
+    pack_factor = (weight + hist_pack_kg) / (weight + pack_kg) if has_w else 1.0
     rate = eph * m * pack_factor
     rows, tot = [], {"km": 0.0, "gain_m": 0.0, "loss_m": 0.0, "ep": 0.0, "moving_h": 0.0, "kcal": 0.0}
     for i, d in enumerate(day_plan, 1):
         ep = d["km"] + d["gain_m"] / 100.0
         h = ep / rate if rate > 0 else math.nan
         cc = yamamoto_cc(h, d["km"], d["gain_m"], d["loss_m"])
-        kcal = cc * (weight + pack_kg)
+        kcal = cc * (weight + pack_kg) if has_w else None
         row = {"day": i, **d, "ep": ep, "moving_h": h, "ep_per_h": rate, "cc": cc, "kcal": kcal,
-               "water_ml": [0.7 * kcal, 0.8 * kcal], "hr_cap": aet, "flags": []}
+               "water_ml": [0.7 * kcal, 0.8 * kcal] if has_w else None, "hr_cap": aet, "flags": []}
         if biggest_day:
             if ep > (biggest_day.get("ep") or 0):
                 row["flags"].append(f"EP {ep:.1f} 超過你最大的一天 {biggest_day['ep']:.1f}")
@@ -198,8 +201,11 @@ def predict_baiyue(*, day_plan: list[dict], eph: float, weight: float, m: float 
         for k_ in ("km", "gain_m", "loss_m", "ep"):
             tot[k_] += d[k_] if k_ in d else ep
         tot["moving_h"] += h
-        tot["kcal"] += kcal
-    tot["water_ml"] = [0.7 * tot["kcal"], 0.8 * tot["kcal"]]
+        if has_w:
+            tot["kcal"] += kcal
+    if not has_w:
+        tot["kcal"] = None
+    tot["water_ml"] = [0.7 * tot["kcal"], 0.8 * tot["kcal"]] if has_w else None
     out = {"kind": "baiyue", "days": rows, "total": tot, "eph_personal": eph, "eph_used": rate,
            "pack_factor": pack_factor, "pack_kg": pack_kg, "hist_pack_kg": hist_pack_kg, "M": m,
            "time_s": tot["moving_h"] * 3600.0,

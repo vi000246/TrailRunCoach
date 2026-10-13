@@ -923,9 +923,11 @@ def _plan_hike_v1(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, 
             gain = sum(s["gain_m"] or 0 for s in ss)
             loss = sum(s["loss_m"] or 0 for s in ss)
             h = sum(s["t"] for s in ss) / 3600.0
-            kcal = PR.yamamoto_cc(h, km, gain, loss) * (weight + r1["pack_kg"])
+            # SP-414: no body weight → no energy / water (CC × (W + pack) needs it)
+            kcal = PR.yamamoto_cc(h, km, gain, loss) * (weight + r1["pack_kg"]) if weight else None
             days.append({"day": n, "km": km, "gain_m": gain, "loss_m": loss, "moving_h": h,
-                         "clock_h": h / ratio, "kcal": kcal, "water_ml": [0.7 * kcal, 0.8 * kcal]})
+                         "clock_h": h / ratio, "kcal": kcal,
+                         "water_ml": [0.7 * kcal, 0.8 * kcal] if kcal is not None else None})
     else:
         for d in r1["days"]:
             days.append({"day": d["day"], "km": d["km"], "gain_m": d["gain_m"], "loss_m": d["loss_m"],
@@ -935,7 +937,7 @@ def _plan_hike_v1(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, 
             d["clock_h"] = d["moving_h"] / ratio
     km = course["totals"]["km"]
     gain = course["totals"]["gain_m"]
-    kcal = sum(d["kcal"] for d in days)
+    kcal = sum(d["kcal"] for d in days) if all(d["kcal"] is not None for d in days) else None
     cross = {"v1": {"time_s": r1["time_s"], "method": "v1 EP/h"},
              "naismith_s": HK.naismith_h(km, gain) * 3600.0,
              "ep": km + gain / 100.0}
@@ -953,11 +955,15 @@ def _plan_hike_v1(*, v1: dict, course: dict, hike_speed, inp: dict, opts: dict, 
         warnings.append((hk.get("note") or "百岳多為跟團，速度不代表個人能力，不列入目標時間推算") +
                         "：步行速度用 Tobler 先驗加上你心率 ≥ AeT 的陡坡爬升窗（推估）")
     warnings.append(f"時鐘時間 = 移動時間 ÷ {ratio:.2f}（{ratio_src}）")
-    warnings.append("背負係數是 v1 的線性假設（(體重 + 5 kg) ÷ (體重 + 背負)）；Pandolf 公式尚未對過原文")
+    if weight:
+        warnings.append("背負係數是 v1 的線性假設（(體重 + 5 kg) ÷ (體重 + 背負)）；Pandolf 公式尚未對過原文")
+    else:
+        warnings.append(_("沒有體重：步行能力模型算不出，分段用舊的步行模型（Tobler 先驗加上你的爬升窗）"))   # the pack factor / energy line comes from v1 (calc)
     summary = {"time_s": T, "clock_s": T / ratio + _stops_before(stops, km + 1), "speed_factor": lam, "km": km,
                "gain_m": gain, "loss_m": course["totals"].get("loss_m"), "M": m_v1, "pack_factor": pack,
                "eph_personal": eph, "ep_per_h": (km + gain / 100.0) / (T / 3600.0), "kcal": kcal,
-               "water_ml": [0.7 * kcal, 0.8 * kcal], "hr_cap": used.get("aet", {}).get("value"),
+               "water_ml": [0.7 * kcal, 0.8 * kcal] if kcal is not None else None,
+               "hr_cap": used.get("aet", {}).get("value"),
                "total_method": "v2" if v2_primary else "v1", "category": "hike", "mode": mode,
                "acclimatisation": accl, "moving_ratio": ratio, "badge": None if v2_primary else "推估",
                # racepower-v2.md §8: Hadley only on running segments → 百岳 keeps one heat value

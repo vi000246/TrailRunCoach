@@ -152,6 +152,10 @@ tr.hl td { background: var(--soft); }
 .kv b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
 .loading { color: var(--muted); padding: 24px 0; text-align: center; }
 .err { color: var(--bad); }
+/* SP-414: no body weight — what cannot be computed, and where to fill it in */
+.noweight { margin: 0 0 10px; padding: 8px 12px; border: 1px solid var(--watch); border-radius: 8px; color: var(--watch); font-size: 13px; }
+.noweight[hidden] { display: none; }
+.noweight a { color: inherit; font-weight: 600; white-space: nowrap; }
 details summary { cursor: pointer; color: var(--muted); font-size: 12.5px; margin: 6px 0; }
 .hidden { display: none !important; }
 .note { font-size: 12px; color: var(--muted); margin-top: 6px; }
@@ -262,6 +266,8 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
   <div class="seg tabs" id="tabs"><button data-tab="calc" class="on">計算</button><button data-tab="acc">準確度</button></div>
 </header>
 <main>
+  <!-- SP-414: shown while the settings have no body weight (INP.weight.value null) -->
+  <div id="noweight" class="noweight" role="status" hidden><span data-i18n="racepower.noweight.banner">沒有體重：跑步 RE（越野／路跑預測）、百岳能力模型、背包預設、熱量／補給、W/kg 算不出，請到 設定 → 個人資料 填寫。</span> <a href="/api/v1/wko5/settings#personal" data-i18n="racepower.noweight.link">去填體重 →</a></div>
   <section id="target-sec" class="tab-calc">
     <h2>目標 <span class="meta">從賽季計畫帶入，或自己輸入</span></h2>
     <div class="toolbar">
@@ -1509,6 +1515,8 @@ function wireEffortBar() {
   bar.addEventListener("pointercancel", done);
 }
 
+// SP-414: [lo, hi] ml → "1.2–1.4 L"; null (no body weight) → "–"
+const waterL = (w) => w ? `${(w[0] / 1000).toFixed(1)}–${(w[1] / 1000).toFixed(1)} L` : "–";
 function renderBaiyue() {
   if (PLAN.capacity) return renderBaiyueCapacity();
   const P = PLAN, s = P.summary, e = P.effort;
@@ -1517,8 +1525,8 @@ function renderBaiyue() {
   h += tile("時鐘時間", hm(s.clock_s), `移動 ÷ ${s.moving_ratio.toFixed(2)}${s.clock_s > s.time_s / s.moving_ratio + 1 ? " + 補給" : ""}`);
   h += tile("速度倍率", pct(s.speed_factor), "100% = 你平常的速度", true);
   h += tile("EP/h", s.ep_per_h.toFixed(2), `你的 ${s.eph_personal.toFixed(2)}`);
-  h += tile("熱量", n0(s.kcal) + " kcal", "Yamamoto");
-  h += tile("飲水", `${(s.water_ml[0] / 1000).toFixed(1)}–${(s.water_ml[1] / 1000).toFixed(1)} L`, "0.7–0.8 ml / kcal");
+  h += tile("熱量", ok(s.kcal) ? n0(s.kcal) + " kcal" : "–", "Yamamoto");
+  h += tile("飲水", waterL(s.water_ml), "0.7–0.8 ml / kcal");
   h += tile("心率上限", ok(s.hr_cap) ? n0(s.hr_cap) + " bpm" : "–", "AeT，爬坡時壓住");
   h += `</div><h3>難度${badge(e.badge)}${help("需要的速度 ÷ 你平常的速度。切點用你自己過去登山日 EP/h 的分佈（25%、中位數、75%、90%）。")}</h3>`;
   h += effortBar(e, true);
@@ -1526,7 +1534,7 @@ function renderBaiyue() {
   h += `<div class="tablewrap"><table><thead><tr><th>天</th><th class="n">km</th><th class="n">爬升</th><th class="n">下降</th><th class="n">移動</th><th class="n">時鐘</th><th class="n">熱量</th><th class="n">飲水</th></tr></thead><tbody>` +
     P.days.map((d) => `<tr><td>第 ${d.day} 天</td><td class="n">${f1(d.km)}</td><td class="n">${n0(d.gain_m)} m</td><td class="n">${n0(d.loss_m)} m</td>
       <td class="n">${hrs(d.moving_h)}</td><td class="n">${hrs(d.clock_h)}</td><td class="n">${n0(d.kcal)}</td>
-      <td class="n">${(d.water_ml[0] / 1000).toFixed(1)}–${(d.water_ml[1] / 1000).toFixed(1)} L</td></tr>`).join("") + `</tbody></table></div>`;
+      <td class="n">${waterL(d.water_ml)}</td></tr>`).join("") + `</tbody></table></div>`;
   const c = P.crosscheck || {};
   h += warnList(P.warnings.concat(P.course_warnings || []));
   h += `<details><summary>交叉檢查</summary><ul class="meta" style="padding-left:18px;margin:0">
@@ -1546,8 +1554,8 @@ function renderBaiyueCapacity() {
     : tile("跟團時間", "–", "需要 ≥ 3 天跟團紀錄");
   h += grpMain ? grpTile + capTile : capTile + grpTile;
   h += tile("天數", `${P.days.length} 天`, `背負 ${s.pack_by_day.map((x) => f1(x)).join(" / ")} kg${s.pack_src?.startsWith("預設") ? "（預設）" : ""}`);
-  h += tile("熱量", n0(s.kcal) + " kcal", "Yamamoto");
-  h += tile("飲水", `${(s.water_ml[0] / 1000).toFixed(1)}–${(s.water_ml[1] / 1000).toFixed(1)} L`, "0.7–0.8 ml / kcal");
+  h += tile("熱量", ok(s.kcal) ? n0(s.kcal) + " kcal" : "–", "Yamamoto");
+  h += tile("飲水", waterL(s.water_ml), "0.7–0.8 ml / kcal");
   h += tile("心率上限", ok(s.hr_cap) ? n0(s.hr_cap) + " bpm" : "–", "AeT，爬坡時壓住");
   h += `</div>`;
   // uncertainty decomposition
@@ -1570,7 +1578,7 @@ function renderBaiyueCapacity() {
   h += `<div class="tablewrap"><table><thead><tr><th>天</th><th class="n">km</th><th class="n">爬升</th><th class="n">下降</th><th class="n">背負</th><th class="n">能力移動</th><th class="n">時鐘</th><th class="n">跟團移動</th><th class="n">熱量</th><th class="n">飲水</th></tr></thead><tbody>` +
     P.days.map((d) => `<tr><td>第 ${d.day} 天</td><td class="n">${f1(d.km)}</td><td class="n">${n0(d.gain_m)} m</td><td class="n">${n0(d.loss_m)} m</td><td class="n">${f1(d.pack_kg)} kg</td>
       <td class="n">${hrs(d.moving_h)}</td><td class="n">${hrs(d.clock_h)}</td><td class="n">${d.group_h ? hrs(d.group_h) : "–"}</td><td class="n">${n0(d.kcal)}</td>
-      <td class="n">${(d.water_ml[0] / 1000).toFixed(1)}–${(d.water_ml[1] / 1000).toFixed(1)} L</td></tr>`).join("") + `</tbody></table></div>`;
+      <td class="n">${waterL(d.water_ml)}</td></tr>`).join("") + `</tbody></table></div>`;
   const cc = P.crosscheck || {};
   h += warnList(P.warnings.concat(P.course_warnings || []));
   h += `<details><summary>交叉檢查</summary><ul class="meta" style="padding-left:18px;margin:0">
@@ -1591,6 +1599,11 @@ function ftile(icon, k, v, s, tip, src, cls = "") {
 }
 function renderFuel() {
   const F = PLAN?.fuel, sec = $("fuel-sec");
+  if (F?.unavailable) {             // SP-414: no body weight — the card says so instead of numbers
+    sec.classList.toggle("hidden", ls.get("tab", "calc") !== "calc");
+    $("fuel").innerHTML = `<h2>🍽 補給</h2><div class="note noweight">${esc(F.unavailable)} <a href="/api/v1/wko5/settings#personal">${esc(T("noweight.link"))}</a></div>`;
+    return;
+  }
   if (!F || !F.kcal_band) { sec.classList.add("hidden"); return; }
   sec.classList.toggle("hidden", ls.get("tab", "calc") !== "calc");
   const hike = F.category === "hike", c = F.cho, w = F.water, na = F.sodium, ld = F.loading;
@@ -2640,7 +2653,7 @@ $("cp-sec").querySelector("details").addEventListener("toggle", (e) => { if (e.t
 $("rg-sec").querySelector("details").addEventListener("toggle", (e) => { if (e.target.open && INP) renderRiegel(); });
 document.querySelectorAll("#tabs button").forEach((b) => b.onclick = () => {
   const t = b.dataset.tab; segOn("tabs", "tab", t); ls.set("tab", t);
-  document.querySelectorAll(".tab-calc").forEach((e) => e.classList.toggle("hidden", t !== "calc" || (e.id === "profile-sec" && !PLAN?.segments?.length) || (e.id === "fuel-sec" && !PLAN?.fuel?.kcal_band) || (e.dataset.hide === "1")));
+  document.querySelectorAll(".tab-calc").forEach((e) => e.classList.toggle("hidden", t !== "calc" || (e.id === "profile-sec" && !PLAN?.segments?.length) || (e.id === "fuel-sec" && !PLAN?.fuel?.kcal_band && !PLAN?.fuel?.unavailable) || (e.dataset.hide === "1")));
   document.querySelectorAll(".tab-acc").forEach((e) => e.classList.toggle("hidden", t !== "acc"));
   if (t === "acc") renderBacktest(); else setType(type);
 });
@@ -2659,6 +2672,7 @@ document.querySelectorAll("#tabs button").forEach((b) => b.onclick = () => {
   try { INP = await j(`${API}/inputs`); }
   catch (e) { $("results").innerHTML = `<h2>預估結果</h2><div class="err">讀取資料失敗：${esc(e.message)}</div>`; return; }
   $("asof").textContent = `資料到 ${INP.today}`;
+  $("noweight").hidden = ok(INP.weight?.value);       // SP-414
   $("attrib").textContent = INP.training_conditions.attribution || "";
   renderEvents(); renderHike(); renderRE(); renderEnvChips();
   loadHikeMeta();

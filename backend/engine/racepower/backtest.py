@@ -69,6 +69,7 @@ from backend.engine.racepower import pacing as PC
 from backend.engine.racepower import re as RE
 from backend.engine.racepower import riegel as R
 from backend.engine.racepower import weather as WX
+from backend.i18n import _
 
 # trail 8 % pass / 6 % target (2026-10-02, docs/research/unsourced-rules.md §0.9: population
 # models reach 8–10 % MAPE, a 7-race median has a ±2–3 pp bootstrap interval, so 6 % cannot
@@ -1285,6 +1286,13 @@ def capacity_backtest(ds, today: Optional[dt.date] = None, progress=None, days: 
     today = today or dt.date.today()
     t0 = time.time()
     x = A.walk_capacity_inputs(ds, today)
+    if not x.get("weight") or x["weight"] <= 0:
+        # SP-414: the capacity model is in W/kg — without a body weight there is nothing to back-test
+        # (skipped and said so, not an error; never a default weight)
+        return {"version": 1, "computed_at": dt.datetime.now(WX.TZ).isoformat(timespec="seconds"),
+                "today": today.isoformat(), "skipped": "no_weight", "passed": False,
+                "reason": _("沒有體重：百岳能力模型算不出，這項回測跳過；請到 設定 → 個人資料 填寫體重"),
+                "seconds": round(time.time() - t0, 1)}
 
     def fit_without(a):
         keep = lambda ws: [w for w in ws if w.get("a") != a]
