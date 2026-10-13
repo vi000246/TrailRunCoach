@@ -463,6 +463,13 @@ def session_steps(s: dict, th: Thresholds, sent_tl: Optional[dict] = None) -> li
         # obviously not a real session; the summary goes in the overview (detail)
         return [Step(EX_WARMUP, 60, None, "課表待確認：到總覽頁同意／拒絕")]
     if kind in ("quality",):
+        from backend.engine import workout_steps as WS
+        d = WS.derive(s) if not s.get("variant_key") and WS.me_climb(s) else None
+        if d is not None:
+            # 「ME 負重爬坡」 (SP-443): warm-up, the climb, the descent — the editor's structure, pushed as it is
+            c = WS.Ctx(cp=th.cp, lthr=th.lthr, aet=th.aet, tpace=th.tpace, basis=_basis(s), hrz=th.hrz,
+                       sent_tl=sent_tl, walk=th.walk_of(s))
+            return WS.steps_to_coros(WS.normalize(d), c)
         return _quality_steps(s, th)
     if kind == "test":
         from backend.engine.aet_test import is_aet_session
