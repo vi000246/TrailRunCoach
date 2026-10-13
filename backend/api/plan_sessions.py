@@ -3076,8 +3076,11 @@ async def compliance(start: str, end: str, db: AsyncSession = Depends(get_db)):
     today = body["today"]
     inp = await _inputs()
     ph = inp.get("phase")
-    lo = min(a.isoformat(), ph["start"]) if ph else a.isoformat()
-    hi = max(b.isoformat(), ph["end"]) if ph else b.isoformat()
+    # 本週 (SP-400) is always this week, whatever the period: the range takes it in too
+    td = dt.date.fromisoformat(today)
+    mon, sun = td - dt.timedelta(days=td.weekday()), td + dt.timedelta(days=6 - td.weekday())
+    lo = min(a.isoformat(), ph["start"], mon.isoformat()) if ph else min(a.isoformat(), mon.isoformat())
+    hi = max(b.isoformat(), ph["end"], sun.isoformat()) if ph else max(b.isoformat(), sun.isoformat())
     # activities: the range and the phase so far (the phase may reach into the future)
     extras = await run_in_threadpool(_range_extras, lo, min(hi, max(today, b.isoformat())))
     rates = plan_rates(inp, every, extras.get("tph"))
@@ -3088,7 +3091,12 @@ async def compliance(start: str, end: str, db: AsyncSession = Depends(get_db)):
     phases = [p for p in extras["phases"] if p["end"] >= start and p["start"] <= end]
     weeks = _week_rows(start, end, ss, acts, phases, inp["weeks"], rates, today)
     days = _day_rows(start, end, ss, acts, rates)
-    out = C.dashboard(ss, weeks, today, start, end, phase=ph, phase_sessions=allss, day_rows=days)
+    # the plan's adjustments this week (SP-318 markers) for 課表統計's 安心句; an error -> none
+    from backend.engine import plan_marks as PMK
+    mk = await PMK.load_safe(db, every, today)
+    out = C.dashboard(ss, weeks, today, start, end, phase=ph, phase_sessions=allss, day_rows=days,
+                      week_sessions=[s for s in allss if mon.isoformat() <= s["day"] <= sun.isoformat()],
+                      all_sessions=every, marks=mk)
     return {**out, "phases": phases, "current_phase": ph, "kinds": PS.KINDS,
             "plan_phases": extras.get("plan_phases", extras["phases"]),
             "plan_start": min((s["day"] for s in every if s.get("day")), default=None)}

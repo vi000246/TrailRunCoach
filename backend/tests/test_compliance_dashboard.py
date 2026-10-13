@@ -389,3 +389,89 @@ def test_compliance_page_has_no_red_for_skipped_sp398():
     assert "--faint" in css["st-missed"] and "--bad" not in css["st-missed"]
     assert "--faint" in css["bg-missed"] and "--bad" not in css["bg-missed"]
     assert "--watch" in css["st-off_plan"]
+
+
+# ---------------------------------------------------------------------------
+# SP-400: 本週 numbers that only add up, 連續有練, the plan's adjustments this week
+# ---------------------------------------------------------------------------
+
+def _wk_done(uid, day, kind="easy", climb=0.0, km=0.0, moving_s=3600, status="green"):
+    return _s(uid, day, kind, "done", comp=_comp(status, 100 if status == "green" else 70),
+              done_by={"index": hash(uid) % 1000, "moving_s": moving_s, "tss": 50, "category_label": "越野跑",
+                       "climbing_m": climb, "distance_km": km})
+
+
+def _this_week():
+    # today Thu 10-01; the week 09-28 … 10-04: 6 sessions, 4 done, 1 skipped, 1 still ahead
+    return [_wk_done("a", "2026-09-28", climb=120, km=8.0), _wk_done("b", "2026-09-29", "quality", climb=300, km=10.5),
+            _s("c", "2026-09-30", "long", "missed", minutes=120, tss=100),
+            _wk_done("d", "2026-09-30", "strength", moving_s=1800),
+            _wk_done("e", "2026-10-01", "easy", climb=580, km=12.0, status="yellow"),
+            _s("f", "2026-10-03", "long", "active", minutes=150, tss=120)]
+
+
+def test_dashboard_this_week_adds_up_sp400():
+    ss = _this_week()
+    d = C.dashboard(ss, [], "2026-10-01", "2026-09-28", "2026-10-04", week_sessions=ss)
+    w = d["week"]
+    assert (w["start"], w["end"]) == ("2026-09-28", "2026-10-04")
+    assert w["completed"] == 4 and w["climb_m"] == 1000 and w["distance_km"] == 30.5
+    assert w["actual_hours"] == 3.0                                   # strength left out, like the week's volume
+    # one dot per session: done ones by kind and status, the skipped one not drawn, the rest still ahead
+    assert [(x["uid"], x["status"]) for x in w["dots"]] == [
+        ("a", "done"), ("b", "done"), ("d", "done"), ("e", "partial"), ("f", "upcoming")]
+    # the period's totals have the same sums
+    assert d["totals"]["climb_m"] == 1000 and d["totals"]["distance_km"] == 30.5
+
+
+def _stored(uid, day, state, kind="easy"):
+    import datetime as _dt
+    mon = (_dt.date.fromisoformat(day) - _dt.timedelta(days=_dt.date.fromisoformat(day).weekday())).isoformat()
+    return {"uid": uid, "day": day, "week_start": mon, "kind": kind, "state": state}
+
+
+def test_active_streak_counts_weeks_with_a_session_done_sp400():
+    every = [_stored("w1", "2026-09-01", "done"), _stored("w1b", "2026-09-03", "missed"),
+             # 09-07 week: nothing planned (a paused / rest week) — does not break it
+             _stored("w3", "2026-09-15", "missed"), _stored("w3b", "2026-09-17", "done", "strength"),
+             _stored("w4", "2026-09-22", "done"),
+             _stored("n", "2026-09-23", "active", "notice"),                  # the 課表待確認 reminder: never counted
+             _stored("w5", "2026-10-03", "active")]                           # this week: nothing done yet, still going
+    d = C.dashboard([], [], "2026-10-01", "2026-09-28", "2026-10-04", all_sessions=every)
+    assert d["active_streak"] == {"weeks": 3, "best": 3}
+    # a week with sessions but none done breaks it
+    every.insert(0, _stored("w0", "2026-08-25", "done"))
+    every.insert(1, _stored("w0x", "2026-08-18", "missed"))
+    every.append(_stored("w4x", "2026-09-29", "done"))                          # this week counts once one is done
+    d = C.dashboard([], [], "2026-10-01", "2026-09-28", "2026-10-04", all_sessions=every)
+    assert d["active_streak"] == {"weeks": 5, "best": 5}
+    every.append(_stored("w2x", "2026-09-10", "missed"))                         # 09-07 week: all skipped -> breaks
+    d = C.dashboard([], [], "2026-10-01", "2026-09-28", "2026-10-04", all_sessions=every)
+    assert d["active_streak"] == {"weeks": 3, "best": 3}
+
+
+def test_dashboard_lists_this_weeks_auto_adjustments_sp400():
+    ss = _this_week()
+    marks = {"f": {"state": "auto", "rule": "missed_long", "reason": "長跑延到週六：週三沒跑", "diff": []},
+             "e": {"state": "user"},
+             "x": {"state": "auto", "rule": "cp", "reason": "CP 變更"}}
+    ss = ss + [_s("x", "2026-10-02", "quality", "active")]
+    d = C.dashboard(ss, [], "2026-10-01", "2026-09-28", "2026-10-04", week_sessions=ss, marks=marks)
+    assert [(a["uid"], a["rule"], a["reason"]) for a in d["adjusted"]] == [("f", "missed_long", "長跑延到週六：週三沒跑")]
+    assert d["adjusted"][0]["day"] == "2026-10-03" and d["adjusted"][0]["title"] == "long"
+    assert C.dashboard(ss, [], "2026-10-01", "2026-09-28", "2026-10-04", week_sessions=ss)["adjusted"] == []
+
+
+def test_api_compliance_has_this_week_streak_and_adjustments_sp400(monkeypatch):
+    from backend.api import plan_sessions
+    monkeypatch.setattr(plan_sessions, "_range_extras", lambda a, b: {
+        "activities": [x for x in (ACT_929,) if a <= x["date"] <= b], "phases": []})
+    with Env(monkeypatch) as e:
+        _two_days_on(e, monkeypatch)
+        # a past range: 本週 is still this week (10-02 is a Friday: 09-28 … 10-04)
+        b = e.c.get(f"{API}/compliance?start=2026-09-01&end=2026-09-20").json()
+        w = b["week"]
+        assert (w["start"], w["end"]) == ("2026-09-28", "2026-10-04")
+        assert w["completed"] == 1 and [x["uid"] for x in w["dots"] if x["status"] != "upcoming"]
+        assert b["active_streak"]["weeks"] == 1
+        assert isinstance(b["adjusted"], list)

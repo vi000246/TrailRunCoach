@@ -5,10 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title data-i18n="compliance.page_title">課表達成率</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.5.0/echarts.min.js"></script>
+<script src="/api/v1/static/dashicons.js"></script>
 <style>
 /* 課表統計 (engine/compliance.dashboard, GET /api/v1/overview/plan/compliance): a tab of
-   課表. Period filter (incl. each phase of the plan), KPI tiles, charts (負荷比 ATL ÷ CTL,
-   planned vs actual per week, weekly completion, per kind), then a compact session list. Tokens as overview.html (light / dark / data-theme). */
+   課表. First 本週 (SP-400: numbers that only add up — no %, no denominator —, the week's
+   sessions one dot each, the 安心句 when the plan was adjusted), then the period filter (incl.
+   each phase of the plan), 教練視角 (collapsed: KPI tiles, phase, per kind, the session list),
+   charts (負荷比 ATL ÷ CTL, planned vs actual per week, weekly completion). Tokens as
+   overview.html (light / dark / data-theme). */
 :root {
   color-scheme: light;
   --bg: #f4f5f7; --panel: #fcfcfb; --text: #0b0b0b; --muted: #52514e; --faint: #8a8984; --line: #e3e3df;
@@ -116,6 +120,36 @@ h2 .meta { font-weight: 400; }
 .track i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; background: var(--accent); }
 .track b { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--text); border-radius: 1px; }
 
+/* 本週 (SP-400): four tiles that only add up, the week's sessions one dot each (done ones by
+   kind, skipped ones not drawn, the rest an empty ring), the 安心句 (plan_marks auto) */
+.acc { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 699px) { .acc { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; } }
+.dots { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.dot { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; flex: none;
+  border: 1.5px solid var(--line); color: var(--faint); background: transparent; }
+.dot svg { width: 15px; height: 15px; }
+.dot.done { border-color: var(--good); color: var(--text); background: color-mix(in srgb, var(--good) 14%, var(--panel)); }
+.dot.partial, .dot.off_plan { border-color: var(--watch); color: var(--text); background: color-mix(in srgb, var(--watch) 13%, var(--panel)); }
+.calm { margin-top: 10px; padding: 7px 11px; border-radius: 8px; border: 1px dashed var(--line); font-size: 13px; color: var(--muted); }
+.calm summary { cursor: pointer; list-style: none; display: flex; gap: 6px; align-items: baseline; }
+.calm summary::-webkit-details-marker { display: none; }
+.calm summary b { color: var(--accent); }
+.calm summary::after { content: "▸"; margin-left: auto; color: var(--faint); }
+.calm[open] summary::after { content: "▾"; }
+.calm ul { margin: 6px 0 2px; padding-left: 20px; }
+.calm li { margin: 2px 0; }
+.calm[hidden] { display: none; }
+/* 教練視角 (SP-400): the period's raw numbers, collapsed; open / closed remembered (localStorage) */
+details.coach > summary { cursor: pointer; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; font-weight: 650; font-size: 14.5px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px 16px; box-shadow: var(--shadow); list-style: none; }
+details.coach > summary::-webkit-details-marker { display: none; }
+details.coach > summary::before { content: "▸"; color: var(--faint); }
+details.coach[open] > summary::before { content: "▾"; }
+details.coach > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+details.coach > summary .meta { font-weight: 400; }
+details.coach[open] > summary { margin-bottom: 12px; }
+.coach-body { display: grid; gap: 12px; }
+
 /* phase */
 .phase { display: grid; grid-template-columns: minmax(0, 1.2fr) repeat(3, minmax(0, 1fr)); gap: 10px 18px; align-items: center; }
 @media (max-width: 860px) { .phase { grid-template-columns: 1fr 1fr; } }
@@ -211,6 +245,13 @@ h2 .meta { font-weight: 400; }
       <span><b data-i18n="compliance.tabs.templates">範本</b><small data-i18n="compliance.tabs.templates_sub">自己的課表範本</small></span></a>
   </nav>
 
+  <section id="now-card" aria-labelledby="now-h">
+    <h2 id="now-h"><span data-i18n="compliance.now.title">本週</span> <span class="meta num" id="now-sub"></span><span id="now-q"></span></h2>
+    <div class="acc" id="acc"><div class="loading" data-i18n="compliance.loading">載入中…</div></div>
+    <div class="dots" id="dots" role="img"></div>
+    <details class="calm" id="calm" hidden><summary><b aria-hidden="true">↻</b><span data-i18n="compliance.calm.title">課表已依這週的狀況調整，不用補</span></summary><ul id="calm-list"></ul></details>
+  </section>
+
   <div class="top">
     <h1 data-i18n="compliance.title">課表統計</h1>
     <div class="seg" id="period" role="group" data-i18n-attr="aria-label:compliance.period.label" aria-label="期間">
@@ -227,6 +268,9 @@ h2 .meta { font-weight: 400; }
     <span class="meta num" id="range"></span>
   </div>
 
+  <details class="coach" id="coach">
+    <summary><span data-i18n="compliance.coach.title">教練視角</span><span class="meta" data-i18n="compliance.coach.sub">完成率、達標率、依類型、每堂課</span></summary>
+    <div class="coach-body">
   <div class="kpis" id="kpis"><div class="kpi"><div class="loading" data-i18n="compliance.loading">載入中…</div></div></div>
 
   <div class="charts">
@@ -240,6 +284,16 @@ h2 .meta { font-weight: 400; }
       <div class="legend" id="st-legend" style="margin-top:10px"></div>
     </section>
   </div>
+
+  <section aria-labelledby="ls-h">
+      <h2 id="ls-h"><span data-i18n="compliance.list.title">每堂課</span> <span class="meta" id="ls-sub"></span><span id="ls-q"></span></h2>
+      <div class="filters" id="filters"></div>
+      <div class="list" id="list"></div>
+      <div class="more" id="more"></div>
+    </section>
+
+    </div>
+  </details>
 
   <section aria-labelledby="ra-h">
     <h2 id="ra-h"><span data-i18n="compliance.ratio.title">負荷比 ATL ÷ CTL</span><span id="ra-q"></span></h2>
@@ -267,13 +321,6 @@ h2 .meta { font-weight: 400; }
       <div class="plot" id="tr-plot" role="img"></div>
     </section>
   </div>
-
-  <section aria-labelledby="ls-h">
-      <h2 id="ls-h"><span data-i18n="compliance.list.title">每堂課</span> <span class="meta" id="ls-sub"></span><span id="ls-q"></span></h2>
-      <div class="filters" id="filters"></div>
-      <div class="list" id="list"></div>
-      <div class="more" id="more"></div>
-    </section>
 
   <section aria-labelledby="hs-h">
     <h2 id="hs-h"><span data-i18n="compliance.history.title">每週存檔</span> <span class="meta" id="hs-sub"></span><span id="hs-q"></span></h2>
@@ -369,8 +416,36 @@ async function load() {
     render();
     loadRatio(a, b);
   } catch (e) {
-    $("kpis").innerHTML = `<div class="kpi"><div class="err">${esc(T("load_failed", { error: e.message }))}</div></div>`;
+    $("acc").innerHTML = `<div class="kpi"><div class="err">${esc(T("load_failed", { error: e.message }))}</div></div>`;
+    $("kpis").innerHTML = "";
   }
+}
+
+// 本週 (SP-400): the session's icon (dashicons.js) by kind / 強度課 family
+const ICON_OF = (x) => (x.kind === "quality" ? (x.family === "vo2max" || x.family === "speed" ? "z5" : "z3")
+  : { easy: "easy", long: "long", hike: "hike", test: "test", strength: "strength", heat_passive: "heat" }[x.kind] || "easy");
+const di = (n) => (window.DI ? DI(n) : "");
+function renderNow() {
+  const d = S.data, w = d.week || {}, st = d.active_streak || { weeks: 0, best: 0 };
+  $("now-sub").textContent = w.start ? `${mdw(w.start)} – ${mdw(w.end)}` : "";
+  $("now-q").innerHTML = q(T("now.tip"));
+  const tile = (k, v, unit, tip) => `<div class="kpi"><div class="k"><span>${esc(k)}</span>${tip ? q(tip, k) : ""}</div><div class="v">${v}<small>${esc(unit)}</small></div></div>`;
+  $("acc").innerHTML = [
+    tile(T("now.done"), n0(w.completed || 0), T("kpi.sessions_unit")),
+    tile(T("now.hours"), h1(w.actual_hours || 0), "h"),
+    tile(T("now.climb"), n0(w.climb_m || 0), "m"),
+    tile(T("now.streak"), n0(st.weeks), T("kpi.weeks_unit"), T("kpi.streak_tip")),
+  ].join("");
+  const dots = w.dots || [];
+  const done = dots.filter((x) => x.status !== "upcoming");
+  $("dots").setAttribute("aria-label", T("now.dots_aria", { done: done.length, ahead: dots.length - done.length }));
+  $("dots").innerHTML = dots.map((x) => {
+    const word = x.status === "upcoming" ? T("now.ahead") : T("status." + x.status);
+    return `<span class="dot ${esc(x.status)}" title="${esc(`${mdw(x.day)} ${x.title} · ${word}`)}">${x.status === "upcoming" ? "" : di(ICON_OF(x))}</span>`;
+  }).join("");
+  const adj = d.adjusted || [];
+  $("calm").hidden = !adj.length;
+  $("calm-list").innerHTML = adj.map((a) => `<li>${esc(T("calm.item", { day: mdw(a.day), title: a.title, reason: a.reason }))}</li>`).join("");
 }
 
 function kpi(k, tip, v, sub, extra = "") {
@@ -379,20 +454,23 @@ function kpi(k, tip, v, sub, extra = "") {
 function render() {
   const d = S.data, t = d.totals;
   const split = STATUS.filter((s) => s !== "open" && t[s]).map((s) => `<i class="bg-${s}" style="flex:${t[s]}" title="${esc(T("status." + s))} ${t[s]}"></i>`).join("");
-  const st = d.streak;
+  const st = d.streak, ast = d.active_streak || { weeks: 0, best: 0 };
+  const unit = `<small>${esc(T("kpi.sessions_unit"))}</small>`;
+  renderNow();
   $("kpis").innerHTML = [
-    kpi(T("kpi.rate"), T("kpi.rate_tip"), t.due ? `${pc(t.rate)}<small>%</small>` : "–",
-      t.due ? esc(T("kpi.rate_sub", { done: t.completed, due: t.due })) + (t.open ? ` · ${esc(T("kpi.open", { n: t.open }))}` : "") : esc(T("empty_short")),
+    // 教練視角 (SP-400): counts on top, the rates underneath
+    kpi(T("kpi.rate"), T("kpi.rate_tip"), `${t.completed}${unit}`,
+      t.due ? esc(T("kpi.rate_due", { due: t.due, pct: pc(t.rate) })) + (t.open ? ` · ${esc(T("kpi.open", { n: t.open }))}` : "") : esc(T("empty_short")),
       t.due ? `<div class="split" role="img" aria-label="${esc(STATUS.filter((s) => s !== "open").map((s) => `${T("status." + s)} ${t[s]}`).join("，"))}">${split}</div>` : ""),
-    kpi(T("kpi.ok"), `${T("kpi.ok_tip")}\n\n${levelsTip()}`, t.due ? `${pc(t.ok_rate)}<small>%</small>` : "–",
-      esc(T("kpi.ok_sub", { n: t.done, partial: t.partial, off: t.off_plan }))),
+    kpi(T("kpi.ok"), `${T("kpi.ok_tip")}\n\n${levelsTip()}`, `${t.done}${unit}`,
+      esc(T("kpi.ok_sub", { pct: t.due ? pc(t.ok_rate) : "–", partial: t.partial, off: t.off_plan }))),
     kpi(T("kpi.tss"), T("kpi.tss_tip"), t.tss_pct != null ? `${t.tss_pct}<small>%</small>` : "–",
       esc(T("kpi.tss_sub", { a: n0(t.actual_tss), p: n0(t.planned_tss) })),
       `<div class="track" role="img" aria-label="${esc(T("kpi.tss_sub", { a: n0(t.actual_tss), p: n0(t.planned_tss) }))}"><i style="width:${Math.min(100, (t.tss_pct || 0) / 1.5)}%"></i><b style="left:${100 / 1.5}%"></b></div>`),
     kpi(T("kpi.hours"), T("kpi.hours_tip"), `${h1(t.actual_hours)}<small>/ ${h1(t.planned_hours)} h</small>`,
       esc(t.planned_hours ? T("kpi.hours_sub", { pct: Math.round(t.actual_hours / t.planned_hours * 100) }) : T("empty_short"))),
-    kpi(T("kpi.streak"), T("kpi.streak_tip", { pct: Math.round(st.threshold * 100) }), `${st.weeks}<small>${esc(T("kpi.weeks_unit"))}</small>`,
-      esc(T("kpi.streak_sub", { best: st.best }))),
+    kpi(T("kpi.streak"), T("kpi.streak_tip"), `${ast.weeks}<small>${esc(T("kpi.weeks_unit"))}</small>`,
+      esc(T("kpi.streak_sub", { best: ast.best }))),
   ].join("");
   renderPhase(d.phase);
   renderWeeks(buckets());
@@ -627,6 +705,8 @@ document.querySelectorAll(".unitsw").forEach((g) => g.addEventListener("click", 
   renderWeeks(buckets()); renderTrend(buckets(), S.data.streak);
 }));
 $("metric").addEventListener("click", (e) => { const b = e.target.closest("button[data-m]"); if (!b) return; S.metric = b.dataset.m; store.set("metric", S.metric); renderWeeks(buckets()); });
+$("coach").open = !!store.get("coach", false);
+$("coach").addEventListener("toggle", () => store.set("coach", $("coach").open));
 $("filters").addEventListener("click", (e) => { const b = e.target.closest("[data-f]"); if (!b) return; S.filter = b.dataset.f; S.limit = 40; renderList(); });
 $("more").addEventListener("click", (e) => { if (e.target.id === "more-btn") { S.limit += 80; renderList(); } });
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { if (S.data) render(); if (RATIO.rows) renderRatio(); });
