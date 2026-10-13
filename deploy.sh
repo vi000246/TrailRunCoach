@@ -1,4 +1,8 @@
 #!/bin/bash
+# Local machine only: builds the image here and runs it on localhost.
+# Do not run this on the NAS (production): its image is built on the Mac and
+# shipped with docker save / load, see docs/deploy/wko5coach.deploy.md
+# ("正式環境：NAS").
 set -e
 cd "$(dirname "$0")"
 
