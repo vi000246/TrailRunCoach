@@ -37,6 +37,8 @@
   "week.sy.outdated_why": "the session changed; push again from the schedule page",
   "week.time_pct": "time {pct}%",
   "week.intensity_pct": "intensity {pct}%",
+  "week.done_tss": "TSS done",
+  "week.plan_tss_tip": "Planned TSS {p}; done counts every activity of the week (unplanned ones too)",
   "stale.updating": "Updating",
   "stale.tip": "The data or the app was updated: showing the status computed at {at}; the new one replaces it by itself when ready",
   "stale.reload": "Refresh",

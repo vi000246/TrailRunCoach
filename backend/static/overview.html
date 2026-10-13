@@ -722,8 +722,10 @@ function renderPlan() {
   $("wk-days").innerHTML = days.join("");
   // the 課表 page's legend (SP-399): one 「? 圖例」, the same table (sesschip.js)
   if (!$("wk-legend").firstChild) $("wk-legend").innerHTML = SessChip.legend({ levels: SP.compliance_levels });
-  const wc = (SP.week_rows || [])[0]?.compliance;
-  $("wk-cp").innerHTML = wc ? `<span class="st ${{ green: "good", yellow: "watch", red: "bad" }[wc.level] || "info"}" title="到今天為止：完成 TSS ÷ 計畫 TSS（綠 ±20%、黃 20–50%、紅 > 50%）">${I({ green: "good", yellow: "watch", red: "bad" }[wc.level] || "info")}完成度 ${wc.pct}%</span>` : "";
+  // SP-416: the week only adds up, as on the 課表 page's week row (SP-398) and 課表統計 (SP-400) —
+  // 「完成 TSS n」 in the heading's neutral colour, the planned TSS in the hover; no %, no traffic light
+  const wr = (SP.week_rows || [])[0];
+  $("wk-cp").innerHTML = wr && wr.compliance ? `<span class="meta num" style="margin-left:8px" title="${esc(tO("week.plan_tss_tip", { p: n0(wr.planned_tss) }))}">${esc(tO("week.done_tss"))} <b>${n0(wr.done_tss)}</b></span>` : "";
   paintPlanLoad();
 }
 // targets / projection from the stored plan, so the user's edits show in the KPI tile and the details
