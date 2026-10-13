@@ -60,6 +60,17 @@ def zone(user_id: int = 1) -> dt.tzinfo:
     return athlete_tz(user_id)
 
 
+def local_iso(utc: Optional[dt.datetime], user_id: int = 1) -> Optional[str]:
+    """A UTC time (naive = UTC, as the tables store it; or aware) as the athlete's wall time
+    'YYYY-MM-DDTHH:MM:SS', for a page to show (SP-410): a page that slices the UTC string shows
+    the time hours off. None stays None."""
+    if utc is None:
+        return None
+    if utc.tzinfo is None:
+        utc = utc.replace(tzinfo=dt.timezone.utc)
+    return utc.astimezone(zone(user_id)).replace(tzinfo=None).isoformat(timespec="seconds")
+
+
 def today_local(user_id: int = 1) -> dt.date:
     """The athlete's calendar date now."""
     try:

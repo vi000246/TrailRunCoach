@@ -39,6 +39,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.db.models import ActivityLink, WorkoutFile
+from backend.engine.localtime import local_iso
 
 WINDOW = timedelta(minutes=2)
 MIN_DURATION_RATIO = 0.6
@@ -323,6 +324,7 @@ async def group_of(db: AsyncSession, athlete_id: int, row_id: int) -> list[dict]
     linked = {x for l in await _links(db, athlete_id) for x in (l.a_id, l.b_id)}
     return [{"id": r.id, "source": r.source, "file_format": r.file_format,
              "start": r.start_time_utc.isoformat() if r.start_time_utc else None,
+             "start_local": local_iso(r.start_time_utc, athlete_id),       # what the page shows (SP-410)
              "duration_s": r.duration_s, "distance_m": r.total_distance_m,
              "canonical": r.duplicate_of is None, "linked": r.id in linked} for r in rows]
 
@@ -348,6 +350,7 @@ async def near(db: AsyncSession, athlete_id: int, row_id: int) -> dict:
             if r.id in ids or r.duplicate_of in ids:
                 continue
             cands.append({"id": r.id, "source": r.source, "file_format": r.file_format,
-                          "start": r.start_time_utc.isoformat(), "duration_s": r.duration_s,
+                          "start": r.start_time_utc.isoformat(),
+                          "start_local": local_iso(r.start_time_utc, athlete_id), "duration_s": r.duration_s,
                           "distance_m": r.total_distance_m})
     return {"group": group, "candidates": cands}

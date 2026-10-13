@@ -2009,7 +2009,7 @@ function renderCx(r) {
   $("cx-where").textContent = T("coros.on_day", { day: r.day });
   const legs = r.legs || [], lines = r.lines || [], pv = r.previous;
   const what = r.action === "claim" ? T("coros.claim") : r.action === "restore" ? T("coros.restored")
-    : pv ? T("coros.again", { at: (pv.updated_at || "").slice(0, 16).replace("T", " ") }) : T("coros.new");
+    : pv ? T("coros.again", { at: (pv.updated_local || "").slice(0, 16).replace("T", " ") }) : T("coros.new");
   let h = `<div class="note">${esc(r.title)} · ${T("coros.n_steps", { n: lines.length })} · ${esc(what)}${pv ? " · " + cxLink(r) : ""}</div>`;
   h += cxTss(r);
   if (pv && pv.user_edited) h += `<div class="err">⚠ ${esc(T("coros.edited"))}</div>`;

@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.db.models import PlanSession
 from backend.engine import reconcile as R
+from backend.engine.localtime import local_iso
 from backend.i18n import N_, _
 
 KINDS = {"easy": "輕鬆跑", "long": "LSD", "quality": "強度課", "test": "測試",
@@ -598,6 +599,7 @@ async def upsert_external(db: AsyncSession, ext_key: str, data: dict, today: str
     if row is not None and action in ("update", "restore"):
         prev = {"uid": base["uid"], "day": base["day"], "title": base["title"], "state": base["state"],
                 "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+                "updated_local": local_iso(row.updated_at, athlete_id),          # what the page shows (SP-410)
                 "user_edited": user_edited(base)}
     new = {**base, **ch, "kind": kind, "week_start": ws, "source": str(data.get("source") or "")[:2000],
            "edited": True, "provisional": False, "state": "active", "done_by": None, "note": None, "ext_key": ext_key}
