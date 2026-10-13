@@ -22,5 +22,11 @@
   "reconsent.accept": "同意並繼續",
   "draft": "以下文件還是草稿；正式版本定稿後，會請你重新閱讀並同意。",
   "agree": "我已閱讀並同意服務條款、隱私權政策（含去識別化後的跨使用者分析）、健康風險聲明與第三方串接免責。",
-  "cancel": "取消"
+  "cancel": "取消",
+  "doc_meta": "版本 {version}・生效日 {effective}",
+  "doc_open": "在新分頁開啟全文",
+  "links.terms": "服務條款",
+  "links.privacy": "隱私權政策",
+  "links.health": "健康風險聲明",
+  "links.third_party": "第三方串接免責"
 }

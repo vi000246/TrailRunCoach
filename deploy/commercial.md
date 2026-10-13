@@ -28,7 +28,8 @@
 
 1. Google Cloud Console → 建一個專案 → **APIs & Services › OAuth consent screen**：
    - User type：External；App name；User support email；Developer contact email。
-   - **Privacy policy URL**：SP-60 的隱私權政策網址（文件要先有；沒有就先不要 Publish）。
+   - **Privacy policy URL**：`https://coach.yichlin.com/legal/privacy`（SP-60；沒登入也打得開）。**Terms of service URL** 可以填 `https://coach.yichlin.com/legal/terms`。
+   - 文件還是草稿（`backend/accounts/terms.py` 的 `DRAFT = True`，頁面標「草稿，尚待律師審閱」）時先不要 Publish；律師審閱後的版本上線再 Publish。
    - Scopes：`openid`、`.../auth/userinfo.email`、`.../auth/userinfo.profile`。
 2. **Credentials › Create credentials › OAuth client ID**：Web application。
    - Authorized redirect URIs：`https://coach.yichlin.com/oauth/google/callback`；開發時另加 `http://localhost:8000/oauth/google/callback`（SP-58 開發用，不擋這張）。
@@ -53,6 +54,7 @@
 | `/share/*`（含 `/share/calendar/<token>.ics`） | 公開分享與課表訂閱（靠長 token，§SP-232） |
 | `/api/v1/static/*` | 靜態檔 |
 | `/healthz` | 監控 |
+| `/legal`、`/legal/terms`、`/legal/privacy`、`/legal/health`、`/legal/third_party` | 四份法律文件（SP-60）；Google OAuth 同意畫面要填隱私權政策網址。只開這幾個完整路徑，旁邊的路徑（`/legal/x`、`/legal/privacy/…`）照樣要登入 |
 
 其他路徑都要登入。測試要等 SP-58。
 

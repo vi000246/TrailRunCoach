@@ -86,7 +86,8 @@ Docker network。repo 的 `docker-compose.yml` 目前是 `"8000:8000"`（所有�
 
 ### 5.3 公開路徑與 cookie
 
-`/login`、`/signup`、`/oauth/*/callback`、`/api/v1/account/login|signup|logout`、`/api/v1/session`、`/api/v1/static/*`、`/healthz`，
+`/login`、`/signup`、`/oauth/*/callback`、`/api/v1/account/login|signup|logout`、`/api/v1/session`、`/api/v1/static/*`、`/healthz`、
+四份法律文件 `/legal`、`/legal/terms|privacy|health|third_party`（SP-60，完整路徑比對），
 以及 `/share/*`（照舊讀擁有者的分享與課表訂閱，不看 session；`accounts.db` 的 `shares` 表還沒有分享頁在寫，所以還沒辦法對到別的使用者）。
 其他路徑都要登入；寫入（非 GET／HEAD）一律檢查 CSRF（`X-TRC-CSRF` 等於 CSRF cookie，跟示範模式同一套）。路徑裡有 `/./`、`/../`、`//`、
 反斜線或編碼過的 `/`、`\`、`.`（`%2f`、`%5c`、`%2e`）一律回 400。沒登入的請求沒有租戶（讀資料會失敗），不會變成擁有者。

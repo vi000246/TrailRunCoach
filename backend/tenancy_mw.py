@@ -16,7 +16,8 @@ above), per request:
   3. the session cookie (__Host-trc_session over https) -> its user (accounts.db, sha256 of the
      token only; the expiry slides, the cookie is renewed with it); a dead cookie is cleared
   4. no user and not a public path (login.PUBLIC_PATHS: /login, /signup, /oauth/*/callback,
-     /api/v1/session, /api/v1/account/login|signup|logout, /api/v1/static/*, /healthz):
+     /api/v1/session, /api/v1/account/login|signup|logout, /api/v1/static/*, /healthz, and the
+     legal documents /legal, /legal/<terms|privacy|health|third_party> — exact paths, SP-60):
      a page (a browser navigation) is sent to /login?next=<path>, anything else gets
      401 {"code": "LOGIN_REQUIRED"}
   5. a write (not GET / HEAD) must carry the CSRF header (the demo's double submit), public or not
