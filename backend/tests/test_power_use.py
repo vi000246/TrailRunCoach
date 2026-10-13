@@ -61,9 +61,9 @@ def test_repo_views_hide_only_power_charts():
     assert ("周期化訓練", "Palladino 功率區間（跑步）") in hidden
     assert ("單次活動判讀", "功率區間時間") in hidden
     assert ("單次活動判讀", "CP 測試結果（3 分／12 分）") in hidden
-    assert ("我的訓練", "有氧／無氧刺激 TIS（每次活動）") in hidden
-    assert ("我的訓練", "有氧／無氧刺激的長期與短期負荷（TIS）") in hidden
-    for keep in (("我的訓練", "狀況 Form%（TSB ÷ CTL）"), ("我的訓練", "這段時間在各區間的時數"),
+    assert ("我的訓練", "有氧／無氧刺激分數（Stimulus score）：每次活動") in hidden
+    assert ("我的訓練", "有氧／無氧刺激分數（Stimulus score）的長期與短期負荷") in hidden
+    for keep in (("我的訓練", "狀況 %（Form %）"), ("我的訓練", "這段時間在各區間的時數"),
                  ("我的訓練", "有氧效率 EF（輕鬆路跑）"), ("單次活動判讀", "心率區間時間"),
                  ("單次活動判讀", "飄移判讀"), ("單次活動判讀", "心率與功率（拖曳選一段看統計）")):
         assert keep not in hidden, keep
@@ -115,7 +115,7 @@ def test_zoned_needs_one_of_its_series():
 def test_repo_zoned_charts_have_bands():
     views = load_custom_views([REPO_VIEWS])
     zoned = [c for v in views.values() for d in v["dashboards"] for c in d["charts"] if c.get("zoned")]
-    assert {c["title"] for c in zoned} >= {"狀況 Form%（TSB ÷ CTL）", "負荷比 ATL ÷ CTL（7:42）"}
+    assert {c["title"] for c in zoned} >= {"狀況 %（Form %）", "負荷比（Load ratio）疲勞 ÷ 體能（7:42）"}
     for c in zoned:
         bands = [s for s in c["series"] if s["expression"].startswith("{")]
         assert len(bands) >= 4, c["title"]

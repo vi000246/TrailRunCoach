@@ -327,8 +327,8 @@ def pmc(ds: Dataset, begin: dt.date, end: dt.date) -> dict:
 
 
 LTHR_SWITCH_NOTE = {
-    "estimate": N_("LTHR 從這天起用你自己資料的估算；之前是推估（最大心率的 90 %），hrTSS 和體能數字在這天會跳一下"),
-    "test": N_("LTHR 從這天起用你填的值（測試）；之前是推估（最大心率的 90 %），hrTSS 和體能數字在這天會跳一下"),
+    "estimate": N_("LTHR 從這天起用你自己資料的估算；之前是推估（最大心率的 90 %），心率負荷（HR load）和體能數字在這天會跳一下"),
+    "test": N_("LTHR 從這天起用你填的值（測試）；之前是推估（最大心率的 90 %），心率負荷（HR load）和體能數字在這天會跳一下"),
 }
 
 
@@ -361,7 +361,7 @@ def project(ctl0: float, atl0: float, planned: list[float], cc: float, ac: float
 # this week's plan
 # ---------------------------------------------------------------------------
 
-SRC_RAMP = ("每週 CTL 目標：基礎期 max(2, CTL 的 5%)、專項期 max(2.5, CTL 的 7%)（推估；"
+SRC_RAMP = ("每週體能（Fitness）目標：基礎期 max(2, 體能的 5%)、專項期 max(2.5, 體能的 7%)（推估；"
             "Palladino 每週 +1～3、約 2～5% 可長期維持）")
 SRC_TEN = ("週量增幅 ≤ 10%：保守做法（推估；系統性回顧找不到「10% 法則」的證據）；受傷風險線 > 20–30%："
            "Nielsen 2014、Damsted 2019（同儕審查）")
@@ -761,10 +761,10 @@ EASY_MIN_RUNS = 3                 # = the per-category rule above (≥ 3 runs, e
 # runner 81.6, above the all-runs median it replaced; 0.80 = a lower, power-cap-like estimate), × IF² × 100
 # = 64 TSS / h. Labelled 推估 with its source.
 EASY_EST_IF = 0.80
-SRC_EASY_TSS = N_("輕鬆跑的計畫 TSS：近 180 天確實輕鬆的跑步（課別分類為輕鬆跑、或平均心率在輕鬆跑上限內；"
-                  "強度課、中強度跑不算）每小時 TSS 的中位數")
-SRC_EASY_TSS_EST = N_("推估：近 180 天確實輕鬆的跑步不到 3 筆，用 IF 0.80 換算（輕鬆強度的上緣），"
-                      "每小時 TSS = IF² × 100 ≈ 64（TrainingPeaks TSS 公式）")
+SRC_EASY_TSS = N_("輕鬆跑的計畫負荷（Load）：近 180 天確實輕鬆的跑步（課別分類為輕鬆跑、或平均心率在輕鬆跑上限內；"
+                  "強度課、中強度跑不算）每小時負荷的中位數")
+SRC_EASY_TSS_EST = N_("推估：近 180 天確實輕鬆的跑步不到 3 筆，用強度比（Intensity）0.80 換算（輕鬆強度的上緣），"
+                      "每小時負荷 = 強度比² × 100 ≈ 64（Coggan 公開的公式）")
 
 
 def _genuinely_easy(ds: Dataset, w: Workout) -> bool:
@@ -904,7 +904,7 @@ def _gate_session(gate: dict, dec: dict, th: dict, hours: Optional[float], prefs
         # a ramp week (CTL ramp at load_guard's watch line): T1's content, never a ladder step (neutral)
         f = IL.fit("z3a", cap, (), prefs, mountain)
         s = IL.session_for({**f, "equiv": False, "progress": False, "rung": "sub",
-                            "reason": "CTL 每週 ≥ +5（Friel）：本週只排閾值，不算進階"}, tth, pre, lthr_default, prefs)
+                            "reason": "體能週增量（Fitness ramp）≥ +5（Friel）：本週只排閾值，不算進階"}, tth, pre, lthr_default, prefs)
         s["title"] = QG.SUB[1]
         s["source"] = QG.source(gate, spec)
         return s
@@ -1515,7 +1515,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         need_h = need_tss / r_all
         cap = max(1.10 * cap_ref, cap_ref + 0.5)
         hours = min(max(need_h, base4), cap)
-        why.append(_("CTL {ctl:.0f} 要每週 +{ramp:.1f}，需要約 {tss:.0f} TSS（≈ {h:.1f} h）",
+        why.append(_("體能（Fitness）{ctl:.0f} 要每週 +{ramp:.1f}，需要負荷約 {tss:.0f}（≈ {h:.1f} h）",
                       ctl=ctl0, ramp=ramp_goal, tss=need_tss, h=need_h))
         if cs is not None and cs["level"] == 1:
             # SP-288: a new runner's ramp steps by the volume rule itself (+10 %, at least +0.5 h) — the
@@ -1539,14 +1539,14 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         norm_hours = hours                  # a normal week's volume (SP-97: the recovery week's usual long run)
         if tsb_today < -30 and not b2b_exempt:
             mode, hours = "recovery_week", 0.6 * base4
-            why.append(_("TSB {tsb:+.0f} < −30：改成恢復週（近 4 週的 60%）", tsb=tsb_today))
+            why.append(_("狀況（Form）{tsb:+.0f} < −30：改成恢復週（近 4 週的 60%）", tsb=tsb_today))
         elif rec_why:
             # SP-97: the 專項期 countdown / the 6-week cap — planned, so a TSB of −20…−30 doesn't skip it
             mode, hours = "recovery_week", 0.65 * statistics.mean(h for _, h, _ in hist[-3:])
             why.append(rec_why)
         elif tsb_today < -20 and not b2b_exempt:
             hours = min(hours, base4)
-            why.append(_("TSB {tsb:+.0f} < −20：先維持量，不加", tsb=tsb_today))
+            why.append(_("狀況（Form）{tsb:+.0f} < −20：先維持量，不加", tsb=tsb_today))
         elif build3:
             mode, hours = "recovery_week", 0.65 * statistics.mean(h for _, h, _ in hist[-3:])
             why.append(_("已連續 3 週加量：這週是恢復週（前 3 週平均的 65%）"))
@@ -1691,7 +1691,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     easy_tss = tph.pop("easy_info")
     if easy_tss["estimated"]:
         notes.append({"level": "info", "src": "easy_tss",
-                      "text": _("輕鬆跑的計畫 TSS 每小時 {rate:.0f}（{src}）", rate=easy_tss["rate"],
+                      "text": _("輕鬆跑的計畫負荷（Load）每小時 {rate:.0f}（{src}）", rate=easy_tss["rate"],
                                 src=_(easy_tss["source"]))})
     # the walking sessions' uphill cap (SP-115: 75 % HRmax, never below the easy-run cap)
     from backend.engine.hr_profile import walk_cap_for
@@ -2383,7 +2383,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         ti = by.get("testing")
         test_suggestions.append({
             "kind": "cp", "protocol": test_s.get("protocol"), "title": test_s["title"], "minutes": test_s["minutes"],
-            "reason": _("{why}：區間、TSS、賽事計算機都靠 CP", why=getattr(ti, "verdict", "") or _("門檻過期或沒測過")),
+            "reason": _("{why}：區間、負荷（Load）、賽事計算機都靠 CP", why=getattr(ti, "verdict", "") or _("門檻過期或沒測過")),
             "session": {k: test_s.get(k) for k in ("kind", "title", "minutes", "target", "detail", "source", "tss",
                                                    "protocol")}})
     def aet_session() -> dict:

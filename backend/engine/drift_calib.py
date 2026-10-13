@@ -125,7 +125,7 @@ CAL.register(CAL.Item(
 CAL.register(CAL.Item(
     name="drift_max_vi", label=N_("飄移：功率起伏上限（VI）"), unit="", default=1.04,
     default_src=N_("推估（單一跑者資料校正）"), k=1, min_n=10 ** 9, fit=_none, bounds=(1.01, 1.15), digits=2,
-    manual_only=True, help=N_("穩定段的 VI（NP ÷ 平均功率）超過這個值就不算穩定跑，不判讀飄移。")))
+    manual_only=True, help=N_("穩定段的 VI（加權功率 ÷ 平均功率）超過這個值就不算穩定跑，不判讀飄移。")))
 CAL.register(CAL.Item(
     name="drift_tau_s", label=N_("飄移：心率延遲 τ"), unit=N_("秒"), default=60.0,
     default_src=N_("Hunt 2015／2019、Wang & Hunt 2021：55–70 秒"), k=1, min_n=10 ** 9, fit=_none,

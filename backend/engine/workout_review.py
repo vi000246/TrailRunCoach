@@ -565,7 +565,7 @@ SE_TIP = N_("一次跑步的飄移本來就會差個幾 %，看最近幾次的�
 TAIL_TIP = ("回程市區段：從結尾往回，最後一群相隔 ≤ 6 分、離結束 ≤ 12 分、在第 20 分鐘之後的停等，從第一次停等起當緩和排除"
             "（UA／Friel 都說不含暖身和緩和；12／6 分是推估，用你的跑步校正）。錶沒按停的結尾靜止 ≥ 2 分整段裁掉，"
             "不算進 5% 停頓（推估）。")
-STABILITY_TIP = ("穩定度只算量測視窗內移動中的樣本：VI = NP30／平均功率 ≤ 1.04（VI 是 Coggan 的定義，1.04 推估、用你的跑步校正）；"
+STABILITY_TIP = ("穩定度只算量測視窗內移動中的樣本：VI = 加權功率（Weighted power，30 秒）／平均功率 ≤ 1.04（VI 是 Coggan 的定義，1.04 推估、用你的跑步校正）；"
                  "30 秒速度 < 中位速度 75% 連續 ≥ 3 分 = 跑走（推估）；後半功率和前半差 ≤ 5%（UA／Evoke 固定強度，5% 推估）。"
                  "舊的「30 秒功率變異 > 15%」沒有來源，只留數字參考。")
 RAMP_TIP = ("坡道不排除：|15 秒坡度| ≥ 3% 連續 ≥ 10 秒算一段。「去坡道」是把坡道和坡後 120 秒拿掉再算一次前後半，"
@@ -2755,9 +2755,9 @@ def cp_headline(ev: dict) -> str:
     else:
         eff = _("{m} 分 {p} W", m=f"{ev['race_s'] / 60:.0f}", p=f"{ev['race_power']:.0f}")
     if ev.get("cp") is None:
-        return _("{eff} → 算不出 mFTP", eff=eff)
+        return _("{eff} → 算不出模型閾值功率（Modelled threshold power）", eff=eff)
     pd = ev.get("pd") or {}
-    return _("{eff} → 這次測試後的 mFTP {cp} W（比照 WKO5：{d} 前 90 天 mean-max 上緣的 PD 模型，含這次測試）",
+    return _("{eff} → 這次測試後的模型閾值功率（Modelled threshold power）{cp} W（算法參考 WKO5：{d} 前 90 天 mean-max 上緣的 PD 模型，含這次測試）",
              eff=eff, cp=f"{ev['cp']:.0f}", d=pd.get("date") or ev["date"])
 
 
@@ -2933,7 +2933,7 @@ def _stat_cards(w, m: dict) -> list[dict]:
     if climb is not None and (climb >= 1 or dist):
         out.append(_card("stat", id="gain", icon="gain", label=_("爬升"), value=f"{climb:,.0f}", unit="m"))
     if tss is not None:
-        out.append(_card("stat", id="tss", icon="tss", label="TSS", value=_num(tss)))
+        out.append(_card("stat", id="tss", icon="tss", label=_("負荷（Load）"), value=_num(tss)))
     if m.get("avg_hr"):
         out.append(_card("stat", id="hr", icon="hr", label=_("平均心率"), value=_num(m["avg_hr"]), unit="bpm",
                          sub=f"AeT {_num(aet)} · LTHR {_num(lthr)}" if aet or lthr else None))
@@ -3023,16 +3023,17 @@ def _tis_basis_line(b: Optional[dict]) -> Optional[str]:
         return None
     ftp, frc, thr = b.get("mftp"), b.get("frc"), b.get("threshold")
     return _("這次用的：{ftp}、{frc}、{thr}——活動當天往前 90 天、同一運動的 PD 模型擬合值，不是設定裡的 CP。",
-             ftp=f"mFTP {ftp:.0f} W" if ftp is not None else _("{x} 算不出", x="mFTP"),
-             frc=f"FRC {frc:.1f} kJ" if frc is not None else _("{x} 算不出", x="FRC"),
-             thr=(_("門檻 {w} W（mFTP 的 85%）", w=f"{thr:.0f}") if thr is not None
+             ftp=(_("模型閾值功率（Modelled threshold power）{w} W", w=f"{ftp:.0f}") if ftp is not None
+                  else _("模型閾值功率（Modelled threshold power）算不出")),
+             frc=f"W′ {frc:.1f} kJ" if frc is not None else _("{x} 算不出", x="W′"),
+             thr=(_("門檻 {w} W（模型閾值功率的 85%）", w=f"{thr:.0f}") if thr is not None
                   else _("{x} 算不出", x=_("門檻"))))
 
 
 TIS_TIP = N_("怎麼看：越高 = 這次對那個能量系統的刺激越大；WKO5 沒有官方的分級名稱，只看數字、和自己平常的課比。\n"
-             "看什麼：長時間、接近門檻的課有氧分數高；無氧分數要功率超過門檻（mFTP 的 85%）才會加，輕鬆跑通常是 1。\n"
-             "方法：WKO5 的 TIS：以活動當天往前 90 天 PD 模型的 mFTP（有氧）與 FRC（無氧）為基準，"
-             "把平滑後的功率逐秒加權累加（和「我的訓練」的 TIS 圖同一個數字）。需要功率。")
+             "看什麼：長時間、接近門檻的課有氧分數高；無氧分數要功率超過門檻（模型閾值功率的 85%）才會加，輕鬆跑通常是 1。\n"
+             "方法：刺激分數（算法參考 WKO5）：以活動當天往前 90 天 PD 模型的模型閾值功率（有氧）與 W′（無氧）為基準，"
+             "把平滑後的功率逐秒加權累加（和「我的訓練」的刺激分數圖同一個數字）。需要功率。")
 
 
 def _tis_card(ds, w) -> Optional[dict]:
@@ -3043,13 +3044,15 @@ def _tis_card(ds, w) -> Optional[dict]:
         return None
     a, an = s
     if a is None and an is None:
-        return _card("stat", id="tis", icon="gauge", label=_("刺激 TIS"), value="–", sub=_("算不出"), power=True,
-                     tip=_("有功率，但活動前 90 天的功率資料不夠擬合 PD 模型（mFTP、FRC），TIS 算不出。") + "\n"
+        return _card("stat", id="tis", icon="gauge", label=_("刺激分數"), value="–", sub=_("算不出"), power=True,
+                     tip=_("有功率，但活動前 90 天的功率資料不夠擬合 PD 模型，算不出模型閾值功率（Modelled threshold power）和 W′，"
+                           "刺激分數（Stimulus score）也算不出。") + "\n"
                          + _(TIS_TIP))
-    return _card("stat", id="tis", icon="gauge", label=_("刺激 TIS"), value=f"{_num(a)}／{_num(an)}",
+    return _card("stat", id="tis", icon="gauge", label=_("刺激分數"), value=f"{_num(a)}／{_num(an)}",
                  sub=_("有氧／無氧（1–10）"), power=True,
                  tip="\n".join(x for x in (
-                     _("有氧 TIS {a}、無氧 TIS {an}（WKO5 的 Training Impact Score，1–10）。", a=_num(a), an=_num(an)),
+                     _("有氧刺激分數（Aerobic stimulus）{a}、無氧刺激分數（Anaerobic stimulus）{an}（算法參考 WKO5，1–10）。",
+                       a=_num(a), an=_num(an)),
                      _tis_basis_line(tis_basis(ds, w)), _(TIS_TIP)) if x))
 
 
@@ -3112,7 +3115,7 @@ def _plan_card(ds, w) -> Optional[dict]:
         tip.append(_("時間：{t} ／ 計畫 {m} 分（{pct}%）", t=_hms(mov), m=int(s['minutes']), pct=comp.get('duration_pct')))
     p_tss = est or _f(s.get("tss"))
     if p_tss and a.get("tss") is not None:
-        tip.append(_("TSS：{a:.0f} ／ 計畫 {p:.0f}（{pct}%）", a=_f(a['tss']), p=p_tss, pct=comp.get('tss_pct')))
+        tip.append(_("負荷（Load）：{a:.0f} ／ 計畫 {p:.0f}（{pct}%）", a=_f(a['tss']), p=p_tss, pct=comp.get('tss_pct')))
     if s.get("climb_m"):
         tip.append(_("爬升：{a} m ／ 計畫 {p} m", a=_num(w.metrics.get('climbing')), p=_num(s['climb_m'])))
     if s.get("target"):
@@ -3121,10 +3124,10 @@ def _plan_card(ds, w) -> Optional[dict]:
         tip.append(vs["text"])
     elif vs.get("short_text"):
         tip.append(vs["short_text"])
-    tip.append(_("顏色：時間和 TSS 偏離計畫較多的那個（±20% 內算符合，TrainingPeaks 的做法）"))
+    tip.append(_("顏色：時間和負荷偏離計畫較多的那個（±20% 內算符合，TrainingPeaks 的做法）"))
     if vs.get("intensity_pct") is not None:
         tip.append(_("強度：做到這堂課的 {pct}%（≥ 80% 算做到、50–80% 算強度不足、不到 50% 算跑成輕鬆："
-                     "時間和 TSS 都對算部分，否則算換了課）",
+                     "時間和負荷都對算部分，否則算換了課）",
                      pct=vs["intensity_pct"]))
     pct = comp.get("pct")
     return _card("status", id="plan", icon=PS.session_tag(s).get("icon"), label=_("課表"),
@@ -3194,7 +3197,7 @@ def _summary_cards(ds, w, m: dict, c: dict, lines: list[str], ev: Optional[dict]
         # SP-468: WKO5's mFTP after the test — nothing to apply
         cp = (ev or {}).get("cp")
         cards.append(_card("status", id="cp", icon="test", label="CP 測試", value=_num(cp) if cp else "–", unit="W" if cp else None,
-                           sub=_("mFTP（比照 WKO5）") if cp else _("算不出"),
+                           sub=_("模型閾值功率（Modelled threshold power）") if cp else _("算不出"),
                            level="good" if cp else "na", tip="\n".join(lines)))
     # 爬坡（越野、健行）
     if c["terrain"] in ("trail", "hike"):
@@ -4149,7 +4152,7 @@ def _cp(ds, w, m, c, base):
         rows.append(_row(f"{b['duration_s'] / 60:.0f} 分段", f"{b['power']:.0f} W（{_hms(b['start_s'])} 開始{hr}）"))
     # SP-468: the test's CP is WKO5's mFTP after it; the checks only describe the effort
     from backend.engine.cp_protocols import NO_FIT
-    rows.append(_row("mFTP", f"{ev['cp']:.0f} W · {_(ev['method_label'])}" if ev.get("cp") is not None
+    rows.append(_row(_("模型閾值功率（Modelled threshold power）"), f"{ev['cp']:.0f} W · {_(ev['method_label'])}" if ev.get("cp") is not None
                      else _(NO_FIT)))
     for k in ev.get("checks") or []:
         rows.append(_row(_("努力"), ("✓ " if k["ok"] else "✗ ") + k["text"]))
@@ -4215,17 +4218,17 @@ def _iv_verdict(ds, w, m, c, base):
         return out
     # the viewer draws `chip_rows` (one compact row per segment / reading: label + number chips + a verdict
     # chip, the long sentence behind the row's ?); `series` keeps the full sentences for the AI / API
-    wtip = e["wprime_src"] + "；dFRC = WKO5 的 dfrc 模型，跑步沒驗證（推估）"
+    wtip = e["wprime_src"] + "；W′ 電池（W′ balance）算法參考 WKO5，跑步沒驗證（推估）"
     wrow = _chip_row("W′", [f"用掉 {e['wprime_used_j'] / 1000:.1f} kJ", f"{e['wprime_used_j'] / e['wprime_j'] * 100:.0f}% W′",
-                            f"dFRC 最低 {e['dfrc_min_pct'] * 100:.0f}%"],
-                     tip=f"整趟高於 CP 的功（含回充後再用）÷ W′ {e['wprime_j'] / 1000:.1f} kJ；dFRC 最低 = 電池最低剩多少。{wtip}")
+                            f"W′ 電池最低 {e['dfrc_min_pct'] * 100:.0f}%"],
+                     tip=f"整趟高於 CP 的功（含回充後再用）÷ W′ {e['wprime_j'] / 1000:.1f} kJ；電池最低 = W′ 最低剩多少。{wtip}")
     if e.get("kind") == "test":
         rows = [_row("判定", e["verdict_label"], "測試照流程判讀：每一段是不是平均分配（不是對照目標帶的「達標」）"),
                 _row("流程", e["label"])]
         for i, r in enumerate(e["reasons"]):
             rows.append(_row("各段" if i == 0 else "", r))
         rows.append(_row("W′ 用掉", f"{e['wprime_used_j'] / 1000:.1f} kJ（{e['wprime_used_j'] / e['wprime_j'] * 100:.0f}% W′）；"
-                         f"dFRC 最低 {e['dfrc_min_pct'] * 100:.0f}%", wtip))
+                         f"W′ 電池最低 {e['dfrc_min_pct'] * 100:.0f}%", wtip))
         chips = []
         for r in e["reps"]:
             exp = r.get("expected")
@@ -4252,7 +4255,7 @@ def _iv_verdict(ds, w, m, c, base):
     for i, r in enumerate(e["reasons"]):
         rows.append(_row("理由" if i == 0 else "", r))
     rows.append(_row("W′ 用掉", f"{e['wprime_used_j'] / 1000:.1f} kJ（{e['wprime_used_j'] / e['wprime_j'] * 100:.0f}% W′）；"
-                     f"dFRC 最低 {e['dfrc_min_pct'] * 100:.0f}%", wtip))
+                     f"W′ 電池最低 {e['dfrc_min_pct'] * 100:.0f}%", wtip))
     src = {"lap": "COROS 推送的分段（lap）", "power": "功率型態（0.95 × 目標下限）", "short": "短趟偵測（≥ 95% CP）",
            "z3": "3 區偵測（≥ 0.95 × 88% CP）"}.get(e["rep_source"], "—")
     rows.append(_row("找趟", src))
@@ -4404,10 +4407,10 @@ def _iv_power(ds, w, m, c, base):
             + (f"，灰帶 = 目標帶 {e['lo'] * 100:.0f}–{e['hi'] * 100:.0f}% CP" if band and band[1] else
                f"，灰帶 = 目標 ≥ {e['lo'] * 100:.0f}% CP" if band else "")
             + (f"；淺色底 + 數字 = 第幾{'段' if test else '趟'}" if reps else "")
-            + f"。藍線 = W′ 剩多少（dFRC，右軸 %，{b['wprime_j'] / 1000:.1f} kJ = 100%）：高於 CP（{cp:.0f} W）就耗，"
-            "低於 CP 回充；dFRC 是 WKO5 的模型（30% 25 秒＋70% 300 秒回充），跑步沒驗證（推估）。"
+            + f"。藍線 = W′ 電池（W′ balance）剩多少（右軸 %，{b['wprime_j'] / 1000:.1f} kJ = 100%）：高於 CP（{cp:.0f} W）就耗，"
+            "低於 CP 回充；算法參考 WKO5（30% 25 秒＋70% 300 秒回充），跑步沒驗證（推估）。"
             f"{b['wprime_src']}。下：心率（bpm，5 秒平均，手腕光學有延遲）。滑過任一處兩格一起看同一秒。"
-            + (f"近 90 天最佳 5 分鐘 {pdc:.0f} W（{pdc / cp * 100:.0f}% CP，WKO5 的 5 Min PDC 參考）。" if pdc else ""))
+            + (f"近 90 天最佳 5 分鐘 {pdc:.0f} W（{pdc / cp * 100:.0f}% CP，參考值，做法參考 WKO5）。" if pdc else ""))
     sub = (f"W′ 最低 {b['dfrc_min_pct'] * 100:.0f}%（{_hms(trace['dfrc_min']['t'])}）· 整趟高於 CP 的功 "
            f"{b['wprime_used_j'] / 1000:.1f} kJ（{b['wprime_used_j'] / b['wprime_j'] * 100:.0f}% W′，含回充後再用）")
     return {**base, "series": [], "iv_trace": trace, "subtitle": sub, "description": desc}
@@ -4433,18 +4436,18 @@ def _iv_battery(ds, w, m, c, base, compact: bool = False):
     pct = U.meta("PERCENT")
     ser = e["series"]
     lo_t, lo_v = e["dfrc_min_t"], e["dfrc_min_pct"]
-    s = [{"name": "dFRC（WKO5）", "type": "line", "expression": "", "y_axis": "PERCENT", "unit": pct, "color": SERIES1,
+    s = [{"name": _("W′ 電池（W′ balance）"), "type": "line", "expression": "", "y_axis": "PERCENT", "unit": pct, "color": SERIES1,
           "data": {"kind": "points", "x": "seconds", "points": _thin(ser["t"], ser["dfrc_pct"])}},
          {"name": "最低", "type": "line", "expression": "", "y_axis": "PERCENT", "unit": pct, "color": SERIES1,
           "labels": [f"最低 {lo_v * 100:.0f}%"], "data": {"kind": "points", "x": "seconds",
                                                           "points": [[round(lo_t, 1), round(lo_v, 4)]]}}]
     desc = (f"電池 = 還剩多少 W′（{e['wprime_j'] / 1000:.1f} kJ = 100%）。高於 CP（{e['cp']:.0f} W）就耗電，"
-            f"休息或低於 CP 時回充。dFRC 是 WKO5 的模型（30% 25 秒＋70% 300 秒回充），"
+            f"休息或低於 CP 時回充。算法參考 WKO5（30% 25 秒＋70% 300 秒回充），"
             f"推估，跑步沒驗證。{e['wprime_src']}")
     sub = (f"整趟高於 CP 的功 {e['wprime_used_j'] / 1000:.1f} kJ（{e['wprime_used_j'] / e['wprime_j'] * 100:.0f}% W′，"
            f"含回充後再用），電池最低 {lo_v * 100:.0f}%（{_hms(lo_t)}）")
     if compact:
-        desc = "W′ 電池：dFRC（WKO5）剩多少，100% = 滿。和功率、心率疊在一起看在「間歇」分頁。" + desc
+        desc = "W′ 電池（W′ balance）：W′ 剩多少，100% = 滿。和功率、心率疊在一起看在「間歇」分頁。" + desc
     return {**base, "axes": [{"id": "PERCENT", "unit": pct, "max": 1.0}], "series": s, "description": desc,
             "subtitle": sub}
 

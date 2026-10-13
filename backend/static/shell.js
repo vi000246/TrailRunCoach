@@ -594,7 +594,12 @@
       }
     };
     // no WKO5 comparison content in the demo (owner): the help texts' WKO5 references go
-    const scrub = (s) => s.replace(/（\s*WKO5\s*）/g, "").replace(/WKO5\s*(的定義|定義)?\s*[：:]\s*/g, "")
+    // 「算法參考 WKO5」/ "based on WKO5's method" (SP-391: where a method comes from) go as a whole
+    const scrub = (s) => s.replace(/（\s*(算法參考\s*)?WKO5\s*）/g, "").replace(/[，、；]\s*算法參考\s*WKO5/g, "")
+      .replace(/算法參考\s*WKO5\s*[：:，]?\s*/g, "")
+      .replace(/\s*\(based on WKO5['’]s method\)|[,;]\s*based on WKO5['’]s method/g, "")
+      .replace(/based on WKO5['’]s method[:,]?\s*/g, "").replace(/WKO5['’]s\s+/g, "")
+      .replace(/WKO5\s*(的定義|定義)?\s*[：:]\s*/g, "")
       .replace(/(比照|對照|從)\s*WKO5\s*的?/g, "").replace(/WKO5\s*的?\s*/g, "");
     const clean = (root) => {
       if (!root) return;

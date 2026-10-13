@@ -337,12 +337,12 @@ const GLOSS = {
     "• 快速（預設，約 37 分）：暖身 12 分含 3 趟加速 → 20 分全力、配速平均 → 緩和 5 分\n" +
     "• 標準（約 70 分）：暖身 15 分 → 12 分全力 → 走路／慢跑 30 分（不要縮短）→ 3 分全力 → 緩和 10 分\n" +
     "• 用比賽：5–10 K 比賽或計時跑\n" +
-    "CP 比照 WKO5 自動計算：測試只是近 90 天功率曲線上的一次全力，課表的 CP 是這條曲線上緣擬合的 mFTP" +
+    "CP 自動計算（算法參考 WKO5）：測試只是近 90 天功率曲線上的一次全力，課表的 CP 是這條曲線上緣擬合的模型閾值功率（Modelled threshold power）" +
     "（差 3 W 以上才換），不用另外設定；每 4–6 週測一次，賽前 10 天內不要測",
   "間歇門檻": "間歇門檻：基礎期什麼時候可以排間歇（課表偏好可以選方法，每個選項的 ? 有說明）。\n\n" +
     "自動（預設）：有實測 AeT（16 週內）而且 LTHR 不是預設值 → Uphill Athlete 差距法（LTHR ÷ AeT − 1 ≤ 10%），" +
-    "或 Friel 飄移 < 5%；沒有實測 AeT → 不設門檻，每週最多 1 次，由護欄決定：低強度 ≥ 75%、CTL 每週 < +5、週增量 ≤ 10%、" +
-    "3:1 恢復週改 fartlek、TSB。劑量 5×1 分 → 6×1 → 4×3 上坡 → 5×3 → 4×4，之後閾值下 3×8／4×8 交替。\n\n" +
+    "或 Friel 飄移 < 5%；沒有實測 AeT → 不設門檻，每週最多 1 次，由護欄決定：低強度 ≥ 75%、體能（Fitness）每週 < +5、週增量 ≤ 10%、" +
+    "3:1 恢復週改 fartlek、狀況（Form）。劑量 5×1 分 → 6×1 → 4×3 上坡 → 5×3 → 4×4，之後閾值下 3×8／4×8 交替。\n\n" +
     "選了某個方法但缺資料時不會永久鎖住，改照護欄排（自訂）。",
 };
 const GLOSS_RE = new RegExp(Object.keys(GLOSS).map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"), "g");
@@ -406,26 +406,29 @@ const bar = (label, done, tgt, fmt) => `<div class="b"><span>${label}</span>
 // ---------------- KPI tiles ----------------
 const ind = (id) => (STATUS?.indicators || []).find((x) => x.id === id);
 const tipOf = (i) => i ? [i.verdict, i.why, i.action ? "→ " + i.action : "", i.source ? "來源：" + i.source : ""].filter(Boolean).join("\n") : "";
+// the 狀況 tile's line under the number: status.py's why without its leading 「<label> +5」 and the outer
+// brackets — 「TSB +5（ATL 30）」 (old) / 「狀況（Form） +5（疲勞 30）」 / "Form +5 (fatigue 30)" → 「ATL 30」 / 「疲勞 30」 / "fatigue 30"
+const formWhy = (s) => String(s).replace(/^(?:TSB|狀況（Form）|狀況|Form)[^（(]*/, "").trim().replace(/^[（(]([^]*)[）)]$/, "$1");
 function renderKpis() {
   if (!STATUS) return;
   const F = ind("fitness"), T = ind("form"), ph = ind("phase"), g = STATUS.goals;
   const out = [];
   const ramp = F?.extra?.ramp_week;
-  out.push(`<div class="kpi"><div class="k">${I("fitness")}體能 CTL${q(tipOf(F))}</div>
+  out.push(`<div class="kpi"><div class="k">${I("fitness")}${esc(tD("overview.pmc.ctl"))}${q(tipOf(F))}</div>
     <div class="row"><div class="v">${esc(F?.text ?? "–")}</div>${spark(F?.spark, F?.level)}</div>
     <div class="sub"><span class="num">${ramp == null ? "" : `本週 ${sgn(ramp, (v) => v.toFixed(1))}/週`}</span>${F ? stw(F.level, kpiWord(F)) : ""}</div></div>`);
-  out.push(`<div class="kpi"><div class="k">${I("form")}狀況 TSB${q(tipOf(T))}</div>
+  out.push(`<div class="kpi"><div class="k">${I("form")}${esc(tD("overview.pmc.tsb"))}${q(tipOf(T))}</div>
     <div class="row"><div class="v">${esc(T?.text ?? "–")}</div>${spark(T?.spark, T?.level)}</div>
-    <div class="sub"><span class="num">${T?.why ? esc(T.why.replace(/^TSB [^（]*/, "").replace(/[（）]/g, "")) : ""}</span>${T ? stw(T.level, kpiWord(T)) : ""}</div></div>`);
+    <div class="sub"><span class="num">${T?.why ? esc(formWhy(T.why)) : ""}</span>${T ? stw(T.level, kpiWord(T)) : ""}</div></div>`);
   // this week: from the stored plan once loaded (the user's edits), else the generated targets
   const S = SP?.summary, D = PLAN?.done;
   const th = S?.hours ?? PLAN?.target?.hours, tt = S?.tss ?? PLAN?.target?.tss;
   if (PLAN) {
     const f = th > 0 ? D.hours / th : 0;
-    const wtip = [...(PLAN.why || []), "時數不含肌力；TSS 以你近 6 週每小時 " + n0(PLAN.target.tss_per_hour) + " TSS 換算"].join("\n");
+    const wtip = [...(PLAN.why || []), "時數不含肌力；負荷（Load）以你近 6 週的每小時負荷 " + n0(PLAN.target.tss_per_hour) + " 換算"].join("\n");
     out.push(`<div class="kpi"><div class="k">${I("volume")}本週訓練量${q(wtip)}</div>
       <div class="row"><div class="v">${hrN(D.hours)}<small>/ ${hrs(th)}</small></div>${ring(f, f >= 1 ? "var(--good)" : "var(--accent)")}</div>
-      <div class="sub"><span class="num">TSS ${n0(D.tss)} / ${n0(tt)}</span>${stw(f >= 1 ? "good" : "info", f >= 1 ? "達成" : f >= 0.5 ? "過半" : "進行中")}</div></div>`);
+      <div class="sub"><span class="num">負荷 ${n0(D.tss)} / ${n0(tt)}</span>${stw(f >= 1 ? "good" : "info", f >= 1 ? "達成" : f >= 0.5 ? "過半" : "進行中")}</div></div>`);
   } else out.push(`<div class="kpi"><div class="k">${I("volume")}本週訓練量</div><div class="loading">…</div></div>`);
   const name = ph?.extra?.next_a;
   out.push(`<div class="kpi"><div class="k">${I("flag")}下一場 A 賽${q(ph ? [ph.text, ph.verdict, ph.why].filter(Boolean).join("\n") : "")}</div>
@@ -646,7 +649,7 @@ function verdictTxt(s) {
   const why = st === "off_plan" ? (vs.text || cp.off_text || "").replace(/^換了課：/, "") : st === "partial" && (cp.short || cp.soft) ? cp.label || "" : "";
   const pct = st === "done" || st === "partial" ? cp.pct : null;
   const head = SessChip.label(st, st === "partial" ? pct : null) + (st === "done" && pct != null ? ` ${pct}%` : "") + (why ? " · " + why : "");
-  const nums = st === "missed" ? "" : [cp.tss_pct != null ? `TSS ${cp.tss_pct}%` : "", cp.duration_pct != null ? tO("week.time_pct", { pct: cp.duration_pct }) : "",
+  const nums = st === "missed" ? "" : [cp.tss_pct != null ? tO("week.load_pct", { pct: cp.tss_pct }) : "", cp.duration_pct != null ? tO("week.time_pct", { pct: cp.duration_pct }) : "",
     cp.intensity_pct != null ? tO("week.intensity_pct", { pct: cp.intensity_pct }) : ""].filter(Boolean).join(" · ");
   return head + (nums ? `（${nums}）` : "");
 }
@@ -655,12 +658,12 @@ function sessHtml(s, today) {
   const live = s.state === "active" && s.day >= today;
   const prov = !!(s.provisional && s.state === "active");
   const est = s.tss_est ?? s.tss, cp = done ? s.compliance : null;
-  const info = done && s.done_by ? `${hm(s.done_by.moving_s)} · TSS ${n0(s.done_by.tss)}` : `${s.minutes ? s.minutes + " 分" : ""}${est ? ` · ${n0(est)}` : ""}`;
+  const info = done && s.done_by ? `${hm(s.done_by.moving_s)} · 負荷 ${n0(s.done_by.tss)}` : `${s.minutes ? s.minutes + " 分" : ""}${est ? ` · ${n0(est)}` : ""}`;
   const rated = done && s.done_by && s.done_by.self_rating ? s.done_by.self_rating.text : "";   // 自評：Hard（COROS）, SP-231
   const pm = window.PlanMark ? PlanMark.lines(s, SP && SP.kinds) : [];      // SP-318: ↻ auto / ✎ yours, as on the 課表 page
   const vd = verdictTxt(s);
   const tip = [s.title, `${SessChip.typeName(ty)}${s.origin === "custom" ? " · 自訂" : s.edited ? " · 已修改" : ""}`,
-    done && s.done_by ? `完成：${s.done_by.category_label || ""}${s.done_by.session && s.done_by.session.type_label ? " · " + s.done_by.session.type_label : ""} ${hm(s.done_by.moving_s)} · TSS 計畫 ${n0(est)} → 實際 ${n0(s.done_by.tss)}` : `${s.minutes ? s.minutes + " 分鐘" : ""}${est ? ` · TSS ${n0(est)}` : ""}`,
+    done && s.done_by ? `完成：${s.done_by.category_label || ""}${s.done_by.session && s.done_by.session.type_label ? " · " + s.done_by.session.type_label : ""} ${hm(s.done_by.moving_s)} · 負荷計畫 ${n0(est)} → 實際 ${n0(s.done_by.tss)}` : `${s.minutes ? s.minutes + " 分鐘" : ""}${est ? ` · 負荷 ${n0(est)}` : ""}`,
     vd, SessChip.hrNote(cp), prov ? SessChip.label("todo", null, { prov: true }) : "", ...pm, rated, done ? "點一下看計畫 vs 實際、開啟活動" : "",
     s.target ? "目標：" + s.target : "", live && s.detail ? s.detail : "", live && s.walk_hint ? s.walk_hint : "", live ? watchTxt(s.coros) : ""].filter(Boolean).join("\n");
   const go = done ? ` data-go="${esc(`${SCHED}?day=${s.day}&uid=${encodeURIComponent(s.uid)}`)}"` : "";
@@ -674,8 +677,8 @@ function sessHtml(s, today) {
 // a dotted card with the category's icon, a click opens it on the 課表 page (summary, match it to the plan)
 function extraHtml(a) {
   const se = a.session || {}, lab = se.type_label ? `${a.category_label} · ${se.type_label}` : a.category_label;
-  return `<button type="button" class="sx sc act" data-go="${esc(`${SCHED}?day=${a.date}&act=${a.index}`)}" data-tip="${esc(`課表外：${lab} ${hm(a.moving_s)} · TSS ${n0(a.tss)}\n點一下看摘要、配對到課表`)}">
-    ${SessChip.icon(SessChip.actKind(a))}<span class="tl sc-t">${esc(lab)}</span><span></span><span class="mn num">${hm(a.moving_s)} · TSS ${n0(a.tss)}</span></button>`;
+  return `<button type="button" class="sx sc act" data-go="${esc(`${SCHED}?day=${a.date}&act=${a.index}`)}" data-tip="${esc(`課表外：${lab} ${hm(a.moving_s)} · 負荷 ${n0(a.tss)}\n點一下看摘要、配對到課表`)}">
+    ${SessChip.icon(SessChip.actKind(a))}<span class="tl sc-t">${esc(lab)}</span><span></span><span class="mn num">${hm(a.moving_s)} · 負荷 ${n0(a.tss)}</span></button>`;
 }
 // ---- end this week card ----
 // a done session / an activity outside the plan: open it on the 課表 page (planned vs actual, the activity link)
@@ -718,12 +721,12 @@ function paintPlanLoad() {
   const weeks = SP.weeks || [];
   if ($("later")) $("later").innerHTML = weeks.length ? `之後已排到 ${md(SP.horizon_end)}（${weeks.length} 週）· <a href="/api/v1/overview/plan/schedule/page">日曆、修改、同步到 COROS →</a>` : "";
 }
-const progHtml = (D, hours, tss) => `${bar("時間", D.hours, hours, hrs)}${bar("TSS", D.tss, tss, n0)}<span class="num">${hrs(D.hours)} / ${hrs(hours)} · TSS ${n0(D.tss)} / ${n0(tss)}</span>`;
+const progHtml = (D, hours, tss) => `${bar("時間", D.hours, hours, hrs)}${bar("負荷（Load）", D.tss, tss, n0)}<span class="num">${hrs(D.hours)} / ${hrs(hours)} · 負荷 ${n0(D.tss)} / ${n0(tss)}</span>`;
 // SP-394: during a first import's back-fill CTL / TSB are not shown (null + history_pending's message)
 const HP = () => (PLAN && PLAN.history_pending) || (SP && SP.summary && SP.summary.history_pending) || (STATUS && STATUS.history_pending);
-const ctlHtml = (c0, c1) => c0 == null || c1 == null ? `CTL ${esc(HP()?.message || "–")}`
-  : `CTL <b>${n0(c0)}</b> → 週日 <b>${n0(c1)}</b>（${sgn(c1 - c0, (v) => v.toFixed(1))}/週）`;
-const tsbHtml = (t) => t == null ? "" : `下週一 TSB <b>${sgn(t)}</b>`;
+const ctlHtml = (c0, c1) => c0 == null || c1 == null ? `體能（Fitness） ${esc(HP()?.message || "–")}`
+  : `體能（Fitness） <b>${n0(c0)}</b> → 週日 <b>${n0(c1)}</b>（${sgn(c1 - c0, (v) => v.toFixed(1))}/週）`;
+const tsbHtml = (t) => t == null ? "" : `下週一狀況（Form） <b>${sgn(t)}</b>`;
 async function loadWeek() {
   const w = PLAN = await j(`${API}/weekplan`);
   $("wk-sub").textContent = `${md(w.week.start)}–${md(w.week.end)} · ${w.mode_label}`;
@@ -733,7 +736,7 @@ async function loadWeek() {
   $("week").innerHTML = `${notes ? `<div class="alerts" style="margin-top:10px">${notes}</div>` : ""}
     <details class="more"><summary>詳細</summary><div class="body">
       <div class="bars" id="wk-prog" style="display:grid;gap:4px;max-width:360px">${progHtml(D, T.hours, T.tss)}</div>
-      <ul>${w.why.map((x) => `<li>${gl(x)}</li>`).join("")}<li>時數不含肌力；TSS 以你近 6 週每小時 ${n0(T.tss_per_hour)} TSS 換算</li></ul>
+      <ul>${w.why.map((x) => `<li>${gl(x)}</li>`).join("")}<li>時數不含肌力；負荷（Load）以你近 6 週的每小時負荷 ${n0(T.tss_per_hour)} 換算</li></ul>
       <div><span id="wk-ctl">${ctlHtml(L.ctl_week_start, L.ctl_end)}</span> · <span id="wk-tsb">${tsbHtml(L.tsb_next)}</span></div>
       <div>門檻：${USE_POWER ? `CP ${n0(w.thresholds.cp)} W（${esc(w.thresholds.cp_source)}）· ` : ""}${esc(w.thresholds.easy_cap_label || `輕鬆跑上限 ${n0(w.thresholds.aet)} bpm`)}${q(w.thresholds.easy_cap_tip, "輕鬆跑上限")}${w.thresholds.aet_pm ? ` <span class="pmb">±${w.thresholds.aet_pm.pm} bpm${q(w.thresholds.aet_pm.tip, "AeT 誤差")}</span>` : ""}（${esc(w.thresholds.aet_source)}）</div>
       <div id="later"></div></div></details>`;
@@ -813,7 +816,7 @@ function renderPeriod(R) {
       ${tile("list", "次數", C.sessions, "sessions", (v) => Math.round(v * 10) / 10 + " 次")}
       ${tile("distance", "距離", km(C.distance_km), "distance_km", km)}
       ${tile("gain", "爬升", m0(C.climbing_m), "climbing_m", m0)}
-      ${tile("tss", "TSS", n0(C.tss), "tss", n0)}
+      ${tile("tss", "負荷（Load）", n0(C.tss), "tss", n0)}
       <div class="tile"><div class="k">${I("climb")}努力距離 EP ${q("km + 爬升/100（跑步、登山）")}</div><div class="v">${km(C.ep_km)}</div></div>
       <div class="tile"><div class="k">${I("check")}有練的天數</div><div class="v">${C.days}</div><div class="s">下降 ${m0(C.descending_m)}</div></div>
     </div>
@@ -825,17 +828,17 @@ function renderPeriod(R) {
         <span><i style="background:var(--mid)"></i>中 ${pct(I_.mid / I_.total)} · ${hm(I_.mid)}</span>
         <span><i style="background:var(--hi)"></i>高 ${pct(I_.high / I_.total)} · ${hm(I_.high)}</span></div></div>` : ""}
     <details class="more"><summary>詳細數字</summary><div class="body" style="color:var(--text)">
-    ${T ? `<div class="meta">平常（典型的一${unitWord}）：${hrs(T.moving_s / 3600)} · ${km(T.distance_km)} · ${m0(T.climbing_m)} · TSS ${n0(T.tss)}</div>` : ""}
+    ${T ? `<div class="meta">平常（典型的一${unitWord}）：${hrs(T.moving_s / 3600)} · ${km(T.distance_km)} · ${m0(T.climbing_m)} · 負荷 ${n0(T.tss)}</div>` : ""}
     <div class="keys">
       ${k(C.longest, "最長一次", hm(C.longest?.moving_s))}
       ${k(C.biggest_climb, "爬最多", m0(C.biggest_climb?.climbing_m))}
-      ${k(C.hardest, "負荷最大", "TSS " + n0(C.hardest?.tss))}
+      ${k(C.hardest, "負荷最大", "負荷 " + n0(C.hardest?.tss))}
     </div>
-    ${cats.length ? `<div class="tablewrap"><table><thead><tr><th>類別</th><th class="n">次數</th><th class="n">移動時間</th><th class="n">距離</th><th class="n">爬升</th><th class="n">TSS</th></tr></thead>
+    ${cats.length ? `<div class="tablewrap"><table><thead><tr><th>類別</th><th class="n">次數</th><th class="n">移動時間</th><th class="n">距離</th><th class="n">爬升</th><th class="n">負荷（Load）</th></tr></thead>
       <tbody>${cats.map(([key, v]) => `<tr><td><span class="dot" style="background:${catColor(key)}"></span>${esc(R.categories[key].label)}</td>
         <td class="n">${v.sessions}</td><td class="n">${hm(v.moving_s)}</td><td class="n">${km(v.distance_km)}</td><td class="n">${m0(v.climbing_m)}</td><td class="n">${n0(v.tss)}</td></tr>`).join("")}</tbody></table></div>`
       : `<p class="meta">這段期間沒有活動。</p>`}
-    ${C.activities.length ? `<div class="tablewrap"><table><thead><tr><th>日期</th><th>類別</th><th>類型</th><th class="n">移動時間</th><th class="n">距離</th><th class="n">爬升</th><th class="n">TSS</th></tr></thead>
+    ${C.activities.length ? `<div class="tablewrap"><table><thead><tr><th>日期</th><th>類別</th><th>類型</th><th class="n">移動時間</th><th class="n">距離</th><th class="n">爬升</th><th class="n">負荷（Load）</th></tr></thead>
       <tbody>${C.activities.map((a) => `<tr><td>${esc(a.start.slice(0, 16).replace("T", " "))}</td><td><span class="dot" style="background:${catColor(a.category)}"></span>${esc(a.category_label)}</td>
         <td class="meta">${esc(a.sport_type)}</td><td class="n">${hm(a.moving_s)}</td><td class="n">${a.distance_km ? km(a.distance_km) : "–"}</td>
         <td class="n">${a.climbing_m ? m0(a.climbing_m) : "–"}</td><td class="n">${n0(a.tss)}</td></tr>`).join("")}</tbody></table></div>` : ""}
@@ -979,13 +982,13 @@ function renderPmc() {
       axisLabel: { color: css("--muted"), fontSize: 11, hideOverlap: true } },
     yAxis: { type: "value", ...axisStyle(), splitLine: { lineStyle: { color: css("--line"), type: [3, 3] } } },
     series: [
-      { name: "TSB", type: "bar", barCategoryGap: "20%", data: rows.map((r) => ({ value: r.tsb == null ? null : Math.round(r.tsb * 10) / 10, itemStyle: { color: color(r) } })) },
-      { name: "CTL", type: "line", data: rows.map((r) => r.ctl), showSymbol: false, z: 3, lineStyle: { width: 2.5, color: ctlC }, itemStyle: { color: ctlC },
+      { id: "tsb", name: tO("pmc.tsb"), type: "bar", barCategoryGap: "20%", data: rows.map((r) => ({ value: r.tsb == null ? null : Math.round(r.tsb * 10) / 10, itemStyle: { color: color(r) } })) },
+      { id: "ctl", name: tO("pmc.ctl"), type: "line", data: rows.map((r) => r.ctl), showSymbol: false, z: 3, lineStyle: { width: 2.5, color: ctlC }, itemStyle: { color: ctlC },
         // SP-289: a dashed line on the day the LTHR prior (0.90 × max HR) was replaced; the text on hover
         markLine: { symbol: "none", silent: false, label: { show: false }, lineStyle: { type: "dashed", color: css("--muted") },
           tooltip: { formatter: (p) => esc(p.data.text) },
           data: PMC_MARKS.filter((m) => rows.some((r) => r.date === m.date)).map((m) => ({ xAxis: md(m.date), text: m.text })) } },
-      { name: "ATL", type: "line", data: rows.map((r) => r.atl), showSymbol: false, z: 3, lineStyle: { width: 1.6, color: atlC }, itemStyle: { color: atlC } },
+      { id: "atl", name: tO("pmc.atl"), type: "line", data: rows.map((r) => r.atl), showSymbol: false, z: 3, lineStyle: { width: 1.6, color: atlC }, itemStyle: { color: atlC } },
     ] }, true);
 }
 

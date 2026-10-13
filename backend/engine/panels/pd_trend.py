@@ -132,15 +132,15 @@ def render(ds, ch: dict, b: float, e: float, params: Optional[dict] = None) -> d
     no_weight = bool(pts) and len(lacking) == len(pts)
     note = None
     if no_weight:
-        note = _("沒有體重：VO2max 是每公斤（ml/kg/min），算不出；請到 設定 → 個人資料 填體重。mFTP 照樣畫。")
+        note = _("沒有體重：VO2max 是每公斤（ml/kg/min），算不出；請到 設定 → 個人資料 填體重。模型閾值功率照樣畫。")
     elif lacking:
         note = _("有 {n} 個點那天沒有體重，VO2max 只畫有體重的點。", n=len(lacking))
     empty = None if pts else _(
         "這段期間沒有 PD 模型擬合：90 天內至少要 {n} 次 Stryd 功率跑步（手錶推估功率不採用），"
-        "mFTP 與 VO2max 才算得出來。", n=CP_FIT_MIN_RUNS)
+        "模型閾值功率與 VO2max 才算得出來。", n=CP_FIT_MIN_RUNS)
     return {"title": ch.get("title"), "description": ch.get("description"), "kind": "pdtrend",
             "points": pts, "latest": pts[-1] if pts else None, "no_weight": no_weight, "note": note,
             "empty": empty,
             "x_min": day_to_date(math.floor(b)).isoformat(), "x_max": day_to_date(math.floor(e)).isoformat(),
             "method": _("每個點＝課表用的 Stryd 功率 PD 模型擬合（每 30 天一次，加上最後一次跑步那天）；"
-                        "VO2max＝WKO5 的算法 (FRC/589 + mFTP)/84.5 + 0.656 L/min ÷ 當天體重（推估）")}
+                        "VO2max＝(W′/589 + 模型閾值功率)/84.5 + 0.656 L/min ÷ 當天體重（推估，算法參考 WKO5）")}

@@ -461,7 +461,7 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
       <button class="btn" id="share">🔗 分享</button></div>
     <dialog id="coros-dlg" class="dlg">
       <h2><span data-i18n="racepower.coros.title">匯出至課表</span> <span class="meta" id="cx-prov"></span>
-        <span class="help" tabindex="0">?<span class="tip" data-i18n="racepower.coros.tip">把這場比賽的分段寫成課表上比賽日的一堂課：可以在課表頁編輯每一步，再從課表頁推到手錶。越野的手錶距離常常不準（之字形、樹林遮蔽），所以越野／百岳預設每段用「直到按下計圈」：到步驟名稱寫的地點（補給站、坡頂、坡底）按一下 lap，名稱也寫了預估時間和爬升。路跑 GPS 準，預設用距離。每段的目標跟著分段目標：功率段 ± 3 %；陡坡和走路段只看心率上限（不設推估功率，沒有心率上限就是自由）；越野下坡不設目標。百岳只帶心率（不帶功率、配速）；多日百岳不能匯出，只有單日（單攻）可以。預估 TSS 的無目標段用計算機預測的比賽心率 ÷ LTHR，比賽完成後跟實際 TSS 比對，自動算出個人校正（場數少時接近 1）。一場賽事只有一堂：再匯出會覆蓋上次匯出的課。</span></span></h2>
+        <span class="help" tabindex="0">?<span class="tip" data-i18n="racepower.coros.tip">把這場比賽的分段寫成課表上比賽日的一堂課：可以在課表頁編輯每一步，再從課表頁推到手錶。越野的手錶距離常常不準（之字形、樹林遮蔽），所以越野／百岳預設每段用「直到按下計圈」：到步驟名稱寫的地點（補給站、坡頂、坡底）按一下 lap，名稱也寫了預估時間和爬升。路跑 GPS 準，預設用距離。每段的目標跟著分段目標：功率段 ± 3 %；陡坡和走路段只看心率上限（不設推估功率，沒有心率上限就是自由）；越野下坡不設目標。百岳只帶心率（不帶功率、配速）；多日百岳不能匯出，只有單日（單攻）可以。預估負荷（Load）的無目標段用計算機預測的比賽心率 ÷ LTHR，比賽完成後跟實際負荷比對，自動算出個人校正（場數少時接近 1）。一場賽事只有一堂：再匯出會覆蓋上次匯出的課。</span></span></h2>
       <div class="toolbar"><span class="meta" data-i18n="racepower.coros.end">每段結束</span>
         <div class="seg" id="cx-mode"><button data-x="lap" data-i18n="racepower.coros.lap">直到按下計圈</button><button data-x="distance" data-i18n="racepower.coros.dist">距離</button></div>
         <span class="meta" id="cx-where"></span></div>
@@ -2128,14 +2128,14 @@ function renderCP() {
       { type: "line", data: line, symbol: "none", lineStyle: { color: css("--s2"), width: 2 } }],
   }, true);
   const rt = a.rating;
-  const sources = INP.cp.sources.map((s) => `<tr><td>${esc(s.label)}</td><td class="n">${W(s.cp)}</td><td class="n">${wkg(s.cp / INP.weight.value)}</td><td class="meta">${s.w_prime ? "W′ " + (s.w_prime / 1000).toFixed(1) + " kJ" : s.frc ? "FRC " + (s.frc / 1000).toFixed(1) + " kJ, TTE " + dur(s.tte) : ""}</td></tr>`).join("");
+  const sources = INP.cp.sources.map((s) => `<tr><td>${esc(s.label)}</td><td class="n">${W(s.cp)}</td><td class="n">${wkg(s.cp / INP.weight.value)}</td><td class="meta">${s.w_prime ? "W′ " + (s.w_prime / 1000).toFixed(1) + " kJ" : s.frc ? "W′ " + (s.frc / 1000).toFixed(1) + " kJ, TTE " + dur(s.tte) : ""}</td></tr>`).join("");
   $("cp-detail").innerHTML = `<div class="kv"><span>CP <b>${W(a.cp)}</b>（${wkg(a.cp / INP.weight.value)}）</span><span>W′ <b>${(a.w_prime / 1000).toFixed(1)} kJ</b>（${n0(rt.j_per_kg)} J/kg）</span>
     <span>R² <b>${a.r2.toFixed(4)}</b></span><span>RWC 評等 <b class="${rt.rating === "Medium" ? "ok" : "wn"}">${esc(rt.rating_zh)}（${esc(rt.rating)}）</b></span></div>
     <div class="note">評等依 ${rt.sex === "female" ? "女性" : "男性"}、${rt.wind ? "Stryd 含風阻（Wind）" : "不含風阻"} 的 J/kg 表（kJ 表：${esc(rt.rating_kj)}）。${esc(rt.note || "")}</div>
     <div class="tablewrap"><table><thead><tr><th>時間</th><th class="n">最佳功率</th><th>來自</th></tr></thead><tbody>${a.points.map((p) =>
       `<tr><td class="num">${dur(p.t)}</td><td class="n">${W(p.p)}</td><td>${esc(p.label)}</td></tr>`).join("")}</tbody></table></div>
     <h3>有效性檢查</h3><ul style="padding-left:18px;margin:0;font-size:12.5px">${a.checks.map((c) => `<li class="${c.ok ? "ok" : c.level === "warn" ? "wn" : "no"}">${c.ok ? "✓" : c.level === "warn" ? "!" : "✕"} ${esc(c.text)}</li>`).join("")}</ul>
-    ${INP.cp.dropped_365.length ? `<div class="note">排除功率異常的活動：${INP.cp.dropped_365.map((d) => esc(d.label)).join("、")}（NP ≥ 1.5 × CP 或 5 分鐘 > 2 × CP）</div>` : ""}
+    ${INP.cp.dropped_365.length ? `<div class="note">排除功率異常的活動：${INP.cp.dropped_365.map((d) => esc(d.label)).join("、")}（加權功率（Weighted power）≥ 1.5 × CP 或 5 分鐘 > 2 × CP）</div>` : ""}
     ${INP.power_source && (INP.power_source.unused || []).length ? `<div class="note">${esc(INP.power_source.unused_label)}，不進 CP／功率模型：${INP.power_source.unused.map((d) => esc(d.label)).join("、")}（設定 ${esc(INP.power_source.setting)}）</div>` : ""}
     <h3>CP 來源比較</h3><div class="tablewrap"><table><tbody>${sources}</tbody></table></div>
     ${INP.cp.lower_bound_message ? `<div class="err">${esc(INP.cp.lower_bound_message)}</div>` : ""}
@@ -2144,7 +2144,7 @@ function renderCP() {
     ${(INP.cp.tests || []).map((t) => `<div class="note">${esc(t.estimate.cp != null
       ? T("cp.test_mftp", { date: t.date, label: t.estimate.label, cp: W(t.estimate.cp) })
       : T("cp.test_nofit", { date: t.date, note: t.estimate.note || "" }))}</div>`).join("")}
-    <div class="note">預設：PD 模型（WKO5 的模型，用近 90 天 mean-max 含同步的 FIT 重算）的 mFTP / TTE 當長時間的錨點，20 分鐘以內用 CP 測試的 CP + W′；低於下限時提高到下限。</div>`;
+    <div class="note">預設：PD 模型（算法參考 WKO5，用近 90 天 mean-max 含同步的 FIT 重算）的模型閾值功率（Modelled threshold power）／TTE 當長時間的錨點，20 分鐘以內用 CP 測試的 CP + W′；低於下限時提高到下限。</div>`;
 }
 function renderRiegel() {
   const r = INP.riegel, env = INP.envelope;

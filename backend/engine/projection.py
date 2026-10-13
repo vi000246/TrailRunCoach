@@ -130,7 +130,7 @@ def week_hours(kind: str, hist: list[float], build: list[bool], ctl0: float, r: 
         h = min(max(need_h, base4), cap)
         if floor:
             h = cap                         # SP-288: the ramp steps by the volume rule (as week_plan)
-        why.append(f"CTL {ctl0:.0f} 每週 +{goal:.1f}，上限 +10%（至少 +0.5 h）→ {h:.1f} h")
+        why.append(f"體能（Fitness）{ctl0:.0f} 每週 +{goal:.1f}，上限 +10%（至少 +0.5 h）→ {h:.1f} h")
         return h, kind, why
     if kind == "taper":
         base6 = statistics.mean(hist[-6:]) if hist else 0.0

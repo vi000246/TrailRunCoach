@@ -295,7 +295,7 @@ def test_week_hours_uses_the_relative_goal():
     lo, _, _ = P.week_hours("base", [10.0] * 6, [False] * 6, 20.0, 50.0, 42.0, None)
     hi, _, why = P.week_hours("base", [10.0] * 6, [False] * 6, 100.0, 50.0, 42.0, None)
     assert lo == pytest.approx(10.0) and "+2.0" not in why[0]       # need < 4-week mean → the mean
-    assert "CTL 100 每週 +5.0" in why[0]
+    assert "體能（Fitness）100 每週 +5.0" in why[0]
 
 
 # ---------------------------------------------------------------------------
@@ -320,7 +320,7 @@ def test_adapt_rule_e_maps_to_the_block_line_not_the_watch_line():
     kept, adj = _adapt(ramp=7.0, ramp_base=60.0)
     assert kept and not adj
     kept, adj = _adapt(ramp=9.2, ramp_base=60.0)
-    assert not kept and any(a["action"] == "removed" and "CTL 60 的 15%" in a["reason"] for a in adj)
+    assert not kept and any(a["action"] == "removed" and "體能 60 的 15%" in a["reason"] for a in adj)
     kept, adj = _adapt(ramp=9.2, ramp_base=80.0)                     # block line capped at 10
     assert kept and not adj
 
@@ -331,8 +331,8 @@ def test_b2b_blocks_on_the_block_line():
                                 event={"start": "2026-12-05", "days": 2, "hours": 20.0, "name": "x"},
                                 last_recovery=True, state={"last": None, "count": 0}, tsb=-5.0,
                                 ramp=ramp, ramp_base=base)
-    assert not any("CTL 每週" in b for b in ctx(7.0, 60.0)["blocked"])
-    assert any("CTL 每週" in b for b in ctx(9.5, 60.0)["blocked"])
+    assert not any("體能週增量" in b for b in ctx(7.0, 60.0)["blocked"])
+    assert any("體能週增量" in b for b in ctx(9.5, 60.0)["blocked"])
     info = {"due": True}
     assert B2B.tsb_exempt(info, -25.0, ramp=7.0, ramp_base=60.0)
     assert B2B.tsb_exempt(info, -25.0, ramp=9.5, ramp_base=60.0) is None

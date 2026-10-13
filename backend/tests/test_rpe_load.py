@@ -288,7 +288,7 @@ def test_normalize_sets_the_tss_from_the_level_rate_and_minutes():
     assert WS.normalize(_doc({**_rpe_step(), "dur": {"type": "load", "value": 75}}))["items"][0]["dur"] == \
         {"type": "load", "value": 75}
     for bad, msg in ((_rpe_step("so-so"), "RPE 要是"), (_rpe_step("hard", 0), "分鐘"),
-                     (_rpe_step("max", 360), "超過 500 TSS")):
+                     (_rpe_step("max", 360), "超過 500：")):
         with pytest.raises(WS.StepsError) as e:
             WS.normalize(_doc(bad))
         assert any(msg in x for x in e.value.errors), e.value.errors
@@ -314,7 +314,7 @@ def test_rpe_step_is_timed_by_its_minutes_and_viewed():
     assert o["load"]["tss"] == tss and o["load"]["tl"] == round(want["tl"]) and o["sec"] == 2400
     assert o["load"]["rpe"] == {"level": "very_hard", "min": 40, "tss_h": round(_rate("very_hard")),
                                 "fitted": False, "adjusted": False, "n": 0, "err_pct": round(RL.DEFAULT_ERR * 100)}
-    assert WS.fmt_dur(st["dur"]) == f"負荷 {tss:g} TSS（很累 40 分）"
+    assert WS.fmt_dur(st["dur"]) == f"負荷 {tss:g}（很累 40 分）"
     assert v["watch"]["lines"][0]["dur"] == f"負荷 {round(want['tl'])} TL"
 
 
@@ -500,13 +500,13 @@ console.log(JSON.stringify({
     assert 'value="very_hard" selected' in h and 'data-f="lmin"' in h and 'value="40"' in h
     assert all(f'value="{k}"' in h for k in IDS)
     # each level's TSS per hour on its option (picking a level shows what it is worth)
-    assert all(f"≈ {v} TSS/h" in h for v in (55, 67, 77, 90, 121))
+    assert all(f"≈ {v} workout.load_per_h" in h for v in (55, 67, 77, 90, 121))
     # the step's TSS, marked 推估 (default level) or 本人 (fitted level), then the TL
-    assert "≈ 60 TSS（workout.load_rpe_src_default）≈ 78 TL" in h and 'data-f="tss"' not in h
-    assert "≈ 37 TSS（workout.load_rpe_src_mine）≈ 48 TL" in g["mine"]
+    assert "≈ 60 workout.load_unit（workout.load_rpe_src_default）≈ 78 TL" in h and 'data-f="tss"' not in h
+    assert "≈ 37 workout.load_unit（workout.load_rpe_src_mine）≈ 48 TL" in g["mine"]
     # a level moved only by the ordering: its own mark; every option says where its rate comes from
-    assert "≈ 45 TSS（workout.load_rpe_src_adjusted）≈ 55 TL" in g["adj"]
+    assert "≈ 45 workout.load_unit（workout.load_rpe_src_adjusted）≈ 55 TL" in g["adj"]
     assert 'value="easy" title="workout.load_rpe_src_mine"' in h and 'value="moderate" title="workout.load_rpe_src_adjusted"' in h
     assert 'value="hard" title="workout.load_rpe_src_default"' in h
-    assert "TSS/h" not in g["noCtx"] and "≈ 60 TSS" in g["noCtx"]         # an old context: no rates, still works
+    assert "workout.load_per_h" not in g["noCtx"] and "≈ 60 workout.load_unit" in g["noCtx"]         # an old context: no rates, still works
     assert 'data-f="tss"' in g["plain"] and 'value="tss" selected' in g["plain"]

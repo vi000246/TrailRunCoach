@@ -44,10 +44,10 @@ details.pdtdet table { margin-top: 4px; font-size: 11.5px; }`;
 
   function tip(p) {
     const lines = [`<b>${esc(p.date)}</b>`,
-      `mFTP <b>${num(p.mftp, 0)} W</b>`,
+      `${esc(t("viewer.pdtrend.mftp"))} <b>${num(p.mftp, 0)} W</b>`,
       p.vo2max_kg == null ? esc(t("viewer.pdtrend.tip_no_vo2"))
         : `VO2max <b>${num(p.vo2max_kg, 1)}</b> ml/kg/min (${num(p.vo2max_l, 2)} L/min)`,
-      `FRC ${num(p.frc_kj, 1)} kJ`,
+      `W′ ${num(p.frc_kj, 1)} kJ`,
       p.weight == null ? esc(t("viewer.pdtrend.tip_no_weight")) : esc(t("viewer.pdtrend.tip_weight", { kg: num(p.weight, 1) })),
       p.runs == null ? "" : esc(t("viewer.pdtrend.tip_runs", { n: p.runs }))];
     return lines.filter(Boolean).join("<br>");
@@ -83,7 +83,7 @@ details.pdtdet table { margin-top: 4px; font-size: 11.5px; }`;
         axisLabel: { color: muted, fontSize: 10, hideOverlap: true }, axisLine: { lineStyle: { color: line } } },
       yAxis: vo2 ? [yAxis("W", "left", 0), yAxis("ml/kg/min", "right", 1)] : [yAxis("W", "left", 0)],
       series: [
-        { name: "mFTP", type: "line", yAxisIndex: 0, color: c.mftp, symbol: "circle", symbolSize: 8,
+        { name: t("viewer.pdtrend.mftp"), type: "line", yAxisIndex: 0, color: c.mftp, symbol: "circle", symbolSize: 8,
           lineStyle: { width: 2 }, itemStyle: { color: c.mftp, borderColor: panel, borderWidth: 1.5 },
           data: pts.map((p) => [day(p.date), p.mftp]) },
         ...(vo2 ? [{ name: "VO2max", type: "line", yAxisIndex: 1, color: c.vo2, symbol: "diamond", symbolSize: 10,
@@ -99,8 +99,8 @@ details.pdtdet table { margin-top: 4px; font-size: 11.5px; }`;
       + `<td class="num">${num(p.vo2max_kg, 1)}</td><td class="num">${num(p.frc_kj, 1)}</td>`
       + `<td class="num">${num(p.weight, 1)}</td><td class="num">${p.runs ?? "—"}</td></tr>`);
     card.insertAdjacentHTML("beforeend", `<details class="pdtdet"><summary>${esc(t("viewer.pdtrend.table"))}</summary><table><thead><tr>
-      <th>${esc(t("viewer.pdtrend.col_date"))}</th><th class="num">mFTP (W)</th><th class="num">VO2max (ml/kg/min)</th>
-      <th class="num">FRC (kJ)</th><th class="num">${esc(t("viewer.pdtrend.col_weight"))}</th><th class="num">${esc(t("viewer.pdtrend.col_runs"))}</th></tr></thead>
+      <th>${esc(t("viewer.pdtrend.col_date"))}</th><th class="num">${esc(t("viewer.pdtrend.col_mftp"))}</th><th class="num">VO2max (ml/kg/min)</th>
+      <th class="num">W′ (kJ)</th><th class="num">${esc(t("viewer.pdtrend.col_weight"))}</th><th class="num">${esc(t("viewer.pdtrend.col_runs"))}</th></tr></thead>
       <tbody>${rows.join("")}</tbody></table></details>`);
   }
 

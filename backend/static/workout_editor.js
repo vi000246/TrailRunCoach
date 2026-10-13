@@ -112,7 +112,7 @@ dialog.sd .we input.dur { width: 4.6em; font-variant-numeric: tabular-nums; }
 dialog.sd .we input.num { width: 4.8em; font-variant-numeric: tabular-nums; }
 dialog.sd .we input.note { width: 100%; }
 .we-dur { display: flex; gap: 4px; align-items: center; min-width: 0; }
-/* a 「負荷」 step (SP-360): more fields (TSS／感覺 + the number) and the 「≈ … TL（推估 ±…）」
+/* a 「負荷」 step (SP-360): more fields (負荷 or 感覺 + the number) and the 「≈ … TL（推估 ±…）」
    conversion did not fit the duration column and spilled over the target. That row gets a wider
    duration column and grows to two lines: the fields (wrapping again only when still too narrow),
    then the conversion on its own line */
@@ -534,17 +534,17 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
     loadIn(st, r, dis) {
       const caps = provCaps(this.ctx), unit = caps ? caps.load_unit : "TL", L = r && r.load, byRpe = !!st.dur.rpe;
       const conv = !L ? "" : unit ? `≈ ${L.tl} ${esc(unit)}（推估 ±${L.err}）` : `≈ ${mmss(L.sec)}（推估）`;
-      const tip = unit ? `這裡填 TSS；推到手錶換算成 ${unit}（用你同步的活動擬合，誤差約 ±20%）。圖表和總時間用 TSS ÷（這段強度 IF² × 100）換成時間：約 ${L ? mmss(L.sec) : "?"}`
-        : "這個平台沒有負荷結束條件：推送時換成預估時間 TSS ÷（這段強度 IF² × 100）";
-      const mode = `<select data-f="lmode" aria-label="${esc(tr("workout.load_mode"))}"${dis}>${opt("tss", "TSS", byRpe ? "rpe" : "tss")}${opt("rpe", tr("workout.load_by_rpe"), byRpe ? "rpe" : "tss")}</select>`;
+      const tip = unit ? `這裡填負荷（Load）；推到手錶換算成 ${unit}（用你同步的活動擬合，誤差約 ±20%）。圖表和總時間用負荷 ÷（這段強度比² × 100）換成時間：約 ${L ? mmss(L.sec) : "?"}`
+        : "這個平台沒有負荷結束條件：推送時換成預估時間＝負荷 ÷（這段強度比² × 100）";
+      const mode = `<select data-f="lmode" aria-label="${esc(tr("workout.load_mode"))}"${dis}>${opt("tss", tr("workout.load_by_value"), byRpe ? "rpe" : "tss")}${opt("rpe", tr("workout.load_by_rpe"), byRpe ? "rpe" : "tss")}</select>`;
       if (byRpe) {
         const R = (L && L.rpe) || {}, S = (x) => (x.fitted ? "mine" : x.adjusted ? "adjusted" : "default"), lv = Object.fromEntries((((this.ctx || {}).rpe_load || {}).levels || []).filter((x) => x.tss_h != null).map((x) => [x.id, x]));   // SP-57: each level's TSS/h + source (its option); the step's TSS 推估 / 依相鄰檔調整 / 本人
         const rtip = tr("workout.load_rpe_tip", { rate: R.tss_h != null ? R.tss_h : "?", src: tr("workout.load_rpe_" + S(R), { n: R.n || 0 }) });
-        return mode + `<select data-f="lrpe" aria-label="RPE"${dis}>${RPE_LEVELS.map((k) => opt(k, tr("workout.rpe_" + k) + (lv[k] ? ` ≈ ${lv[k].tss_h} TSS/h` : ""), st.dur.rpe, lv[k] ? ` title="${esc(tr("workout.load_rpe_src_" + S(lv[k])))}"` : "")).join("")}</select>` +
+        return mode + `<select data-f="lrpe" aria-label="RPE"${dis}>${RPE_LEVELS.map((k) => opt(k, tr("workout.rpe_" + k) + (lv[k] ? ` ≈ ${lv[k].tss_h} ${tr("workout.load_per_h")}` : ""), st.dur.rpe, lv[k] ? ` title="${esc(tr("workout.load_rpe_src_" + S(lv[k])))}"` : "")).join("")}</select>` +
           `<input class="num" type="number" step="1" min="${RPE_MIN[0]}" max="${RPE_MIN[1]}" data-f="lmin" value="${st.dur.min ?? ""}" aria-label="${esc(tr("workout.load_min"))}"${dis}><span class="faint">${esc(tr("workout.load_min"))}</span>` +
-          (L ? `<span class="we-lap" title="${esc(rtip + "\n" + tip)}">≈ ${L.tss} TSS（${esc(tr("workout.load_rpe_src_" + S(R)))}）${conv}</span>` : "");
+          (L ? `<span class="we-lap" title="${esc(rtip + "\n" + tip)}">≈ ${L.tss} ${esc(tr("workout.load_unit"))}（${esc(tr("workout.load_rpe_src_" + S(R)))}）${conv}</span>` : "");
       }
-      return mode + `<input class="num" type="number" step="1" min="1" max="500" data-f="tss" value="${st.dur.value}" aria-label="負荷 TSS"${dis}><span class="faint">TSS</span>` +
+      return mode + `<input class="num" type="number" step="1" min="1" max="500" data-f="tss" value="${st.dur.value}" aria-label="${esc(tr("workout.end.load"))}"${dis}><span class="faint">${esc(tr("workout.load_unit"))}</span>` +
         (conv ? `<span class="we-lap" title="${esc(tip)}">${conv}</span>` : "");
     }
     tgHtml(st, r) {
@@ -610,7 +610,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       this.$("we-stats").innerHTML = t.sec == null ? "" :
         `<span>總時間 <b>${t.est ? "約 " : ""}${mmss(t.sec)}</b>${t.open ? "＋「直到按下計圈」段" : ""}${t.est ? q(`總時間是估的。${t.est_note || ""}`) : ""}</span>` +
         `<span>≥ 88% CP <b>${mmss(t.hard_s)}</b></span>` + (t.z5_s ? `<span>≥ 106% CP（Palladino 5 區）<b>${mmss(t.z5_s)}</b></span>` : "") +
-        `<span>TSS 估 <b>${Math.round(t.tss)}</b>${q(TIP.tss)}</span><span>這天上限 ${esc(cap)}</span>`;
+        `<span>預估負荷（Load）<b>${Math.round(t.tss)}</b>${q(TIP.tss)}</span><span>這天上限 ${esc(cap)}</span>`;
     }
     issues() {
       const v = this.view || {}, list = v.issues || [];
@@ -706,7 +706,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       const t = this.$("we-tip"), box = this.$("we-chart").getBoundingClientRect(), f = this.find(o.id);
       const st = f ? f.it : { kind: o.kind, note: "" };
       const n = o.rep.length ? o.rep.map((x) => `第 ${x.i + 1}/${x.n} 趟`).join(" · ") + " · " : "";
-      t.innerHTML = `<b>${n}${esc(KIND[o.kind] || o.kind)}</b> · ${o.open ? "直到按下計圈" : (o.load ? `負荷 ${o.load.tss} TSS · ` : "") + mmss(o.sec) + (o.est ? "（推估）" : "")}` +
+      t.innerHTML = `<b>${n}${esc(KIND[o.kind] || o.kind)}</b> · ${o.open ? "直到按下計圈" : (o.load ? `負荷 ${o.load.tss} · ` : "") + mmss(o.sec) + (o.est ? "（推估）" : "")}` +
         (km ? ` · ${esc(tr("workout.elev_km", { a: kmTxt(km[0]), b: kmTxt(km[1]) }))}` : "") + `<br>` +
         (r ? `${r.type === "none" ? "不設目標" : `${esc(r.label)} <b class="num">${esc(r.text)}</b>`}${r.sub ? ` <span class="meta">${esc(r.sub)}</span>` : ""}` : "") +
         (st.note ? `<br><span class="meta">${esc(st.note)}</span>` : "");

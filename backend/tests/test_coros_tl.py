@@ -289,7 +289,7 @@ def test_normalize_load_main_set_only():
     assert "「負荷」只能用在主課" in e.value.errors
     with pytest.raises(WS.StepsError) as e:
         WS.normalize(_doc({**LOAD_HR, "dur": {"type": "load", "value": 900}}))
-    assert any("負荷（TSS）" in x for x in e.value.errors)
+    assert any("負荷（Load）" in x for x in e.value.errors)
     with pytest.raises(WS.StepsError) as e:
         WS.normalize(_doc({**LOAD_HR, "dur": {"type": "lap"}}))
     assert e.value.errors[0] == "時長類型要是 時間／距離／直到按下計圈／負荷"
@@ -308,7 +308,7 @@ def test_load_step_time_tss_view_and_preview():
     o = next(x for x in v["order"] if x["id"] == "L")
     want = TL.Model.of().tl(75, "power", f)
     assert o["load"]["tss"] == 75 and o["load"]["tl"] == round(want["tl"]) and v["resolved"]["L"]["load"] == o["load"]
-    assert WS.fmt_dur(d["items"][1]["dur"]) == "負荷 75 TSS"
+    assert WS.fmt_dur(d["items"][1]["dur"]) == "負荷 75"
     line = v["watch"]["lines"][1]
     assert line["dur"] == f"負荷 {round(want['tl'])} TL" and line["target"] == "功率 255–285 W"
     assert any("「負荷」段" in x for x in v["watch"]["lost"])
@@ -414,7 +414,7 @@ def test_fallback_without_the_code_and_on_other_providers(monkeypatch):
     ex = spec.payload["exercises"][1]
     f = WS.hr_to_p(143 / 170)
     assert ex["targetType"] == 2 and ex["targetValue"] == round(75 * 3600 / (f * f * 100))
-    assert "負荷 75 TSS（約" in ex["name"] and spec.load_steps == []
+    assert "負荷 75（約 COROS TL" in ex["name"] and spec.load_steps == []
 
 
 def test_fingerprint_moves_only_with_a_load_steps_sent_value(monkeypatch):
@@ -425,6 +425,29 @@ def test_fingerprint_moves_only_with_a_load_steps_sent_value(monkeypatch):
     monkeypatch.setattr(TL, "current", lambda user_id=1: other)
     assert fp(PLAIN_DOC) == plain0                     # a refit never marks plain sessions 需更新
     assert fp(LOAD_DOC) != load0                       # the sent TL moved
+
+
+def test_a_load_step_pushed_with_its_old_tss_name_is_not_pushed_again():
+    """SP-391: 「第 1 趟 負荷 75 TSS」 is now 「第 1 趟 負荷 75」 — a workout pushed with the old name
+    is the same workout on COROS (WorkoutSpec.legacy_names), not 需更新 / re-pushed."""
+    import copy
+    spec = CW.session_workout(_session(LOAD_DOC), TH)
+    ex = spec.payload["exercises"][1]
+    assert ex["name"] == "第 1 趟 負荷 75"
+    old = copy.deepcopy(spec.payload)
+    old["exercises"][1]["name"] = "第 1 趟 負荷 75 TSS"
+    old_fp = CW._fingerprint(spec.day, old)
+    assert old_fp != spec.fingerprint and spec.pushed_as(old_fp) and spec.legacy_names
+    row = type("Row", (), {"status": "pushed", "fingerprint": old_fp, "program_id": "p", "id_in_plan": "i",
+                           "day": spec.day, "error": None, "plan_id": None, "pushed_at": None})()
+    assert CW.status_of(_session(LOAD_DOC), TH, row)["status"] == "pushed"
+    other = copy.deepcopy(old)
+    other["exercises"][1]["name"] = "第 1 趟 負荷 76 TSS"
+    assert not spec.pushed_as(CW._fingerprint(spec.day, other))
+    assert CW.session_workout(_session(PLAIN_DOC), TH).legacy_names == ()     # nothing renamed
+    assert CW.tss_name("第 1 趟 負荷 52（很累 40 分）", 52.0) == "第 1 趟 負荷 52 TSS（很累 40 分）"
+    assert CW.tss_name("第 1 趟 Load 52 (Hard 40 min)", 52.0) == "第 1 趟 Load 52 TSS (Hard 40 min)"
+    assert CW.tss_name("第 1 趟 負荷 75", 75.0) == "第 1 趟 負荷 75 TSS" and CW.tss_name("主課", 75.0) == "主課"
 
 
 def test_a_small_refit_keeps_the_sent_tl(monkeypatch):

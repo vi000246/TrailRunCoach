@@ -67,7 +67,7 @@ log = logging.getLogger(__name__)
 BIG_TSS_UP = 0.20           # a week's planned TSS + > 20 %
 RACE_GUARD_DAYS = 14        # removing a long / quality / test this close to an A race
 MAX_CHANGED = 3             # > 3 non-reducing changes in the push window
-BIG_TEXT = {"tss": "單週計畫 TSS 比上次推送 +20% 以上（推估）",
+BIG_TEXT = {"tss": "單週計畫負荷（Load）比上次推送 +20% 以上（推估）",
             "race": "A 賽前 14 天內拿掉長跑／強度課／測試（推估）",
             "rpe": "A 賽前 14 天內因為跑後自評延後或降階強度課（推估）",
             "too_hard": N_("A 賽前 14 天內因為輕鬆跑跑成強度課，延後或降階強度課（推估）"),
@@ -208,7 +208,7 @@ def classify(stored: list[dict], new: list[dict], items: list[dict], today: str,
         before, n0 = _week_tss(stored, ws)
         after, _n1 = _week_tss(new, ws)          # not `_`: that is the i18n function
         if n0 and before > 0 and after > before * (1 + BIG_TSS_UP):
-            out.append({"rule": "tss", "text": f"{_md(ws)} 那週計畫 TSS {before:.0f} → {after:.0f}"
+            out.append({"rule": "tss", "text": f"{_md(ws)} 那週計畫負荷 {before:.0f} → {after:.0f}"
                                                f"（+{(after / before - 1) * 100:.0f}%，> +{BIG_TSS_UP * 100:.0f}%）"})
     if days_to_race is not None and days_to_race >= 0:
         race = (dt.date.fromisoformat(today) + dt.timedelta(days=days_to_race)).isoformat()

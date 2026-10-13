@@ -54,7 +54,7 @@ def _curve(expr, unit="WATTS", x="duration"):
 def test_plateau_from_the_pd_curve_or_the_mean_max_curve():
     ev = _Ev(251.4)
     p = R.mftp_plateau(ev, [_curve("pdcurve(meanmax(runpower))")])
-    assert p == {"y": 251.4, "y_axis": "WATTS", "label": "mFTP 251 W", "tip": R.PLATEAU_TIP}
+    assert p == {"y": 251.4, "y_axis": "WATTS", "label": "模型閾值功率 251 W", "tip": R.PLATEAU_TIP}
     assert ev.calls == ["ftp(meanmax(runpower))"]
     ev = _Ev(240.0)
     assert R.mftp_plateau(ev, [_curve("meanmax(power)")])["y"] == 240.0 and ev.calls == ["ftp(meanmax(power))"]

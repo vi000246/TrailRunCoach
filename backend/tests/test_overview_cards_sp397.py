@@ -99,9 +99,9 @@ def test_no_old_marks():
 
 
 def test_the_percent_is_in_the_hover_for_every_done_session():
-    assert "完成 72%（TSS 74%" in _tip(_card(CASES["done"]))
+    assert "完成 72%（負荷 74%" in _tip(_card(CASES["done"]))
     assert "部分 72% · 強度不足" in _tip(_card(CASES["partial"]))
-    assert "TSS 74% · 時間 87% · 強度 72%" in _tip(_card(CASES["partial"]))
+    assert "負荷 74% · 時間 87% · 強度 72%" in _tip(_card(CASES["partial"]))
     assert "換了課 · 排強度課，實際騎車" in _tip(_card(CASES["off_plan"]))
     assert "跳過" in _tip(_card(CASES["missed"]))
     mn = re.search(r'<span class="mn num">(.*?)</span>', _card(CASES["partial"])).group(1)

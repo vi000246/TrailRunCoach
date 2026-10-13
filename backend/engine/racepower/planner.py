@@ -652,7 +652,7 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
         wmodel = "wko5"
     if wmodel in ("wko5", "skiba_run") and w_prime:
         if wmodel == "wko5":
-            vals, lab = PC.wbal_wko5(rows, segs, cp, w_prime), "WKO5 算法 dFRC（70 % τ 300 s + 30 % τ 25 s）"
+            vals, lab = PC.wbal_wko5(rows, segs, cp, w_prime), "W′ 電池（W′ balance，算法參考 WKO5：70 % τ 300 s + 30 % τ 25 s）"
         else:
             vals, lab = PC.wbal_skiba(rows, segs, cp, w_prime, "running"), "τ = 372·e^(−0.02·D) + 102（跑步擬合）"
         wb = {"model": wmodel, "values": vals, "label": lab, "badge": None if wmodel == "wko5" else "推估",

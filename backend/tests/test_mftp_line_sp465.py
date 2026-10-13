@@ -54,7 +54,7 @@ def test_the_line_is_the_cp_the_plan_and_the_settings_page_use(tmp_path):
     assert [s["name"] for s in res["series"][:2]] == ["MMP 曲線", "PD 模型曲線"]
     assert line["role"] == "cp_ref" and line["data"] == {"kind": "hline", "y": 191.0}
     assert line["y_axis"] == "WATTS" and line["label_end"] is True
-    assert "mFTP" in line["name"] and "191" in line["name"] and "10/08" in line["name"]
+    assert "模型閾值功率" in line["name"] and "191" in line["name"] and "10/08" in line["name"]
     assert ci["source"] in line["tip"] and "課表" in line["tip"]
     assert res["cp_ref"] == ref
     # the optional 「mFTP 線」 of the range's own PD fit (render.mftp_plateau, off by default) is not
@@ -99,7 +99,7 @@ def test_the_power_curve_asks_for_the_line():
     from backend.engine.wko5expr.customviews import CustomViewError, REPO_VIEWS, load_custom_views, parse_view
     v = load_custom_views([REPO_VIEWS])["我的訓練"]
     ch = next(c for d in v["dashboards"] for c in d["charts"] if c["id"] == "run-power-recent-bests")
-    assert ch["cp_ref"] == "mftp" and "mFTP" in ch["description"]
+    assert ch["cp_ref"] == "mftp" and "模型閾值功率" in ch["description"]
     assert "cp_ref" in CS.POST_ROOTS and "cp_ref" in CS._post(ch)
     for bad in ({"cp_ref": "lthr"}, {"cp_ref": "mftp", "kind": "zones"}):
         raw = {"name": "x", "dashboards": [{"title": "d", "charts": [{"title": "c", **bad}]}]}
@@ -161,7 +161,7 @@ def test_api_draws_the_line_on_opening(api):
     write(8)
     j = _get(client)
     line = next(s for s in j["series"] if s.get("role") == "cp_ref")
-    assert line["data"] == {"kind": "hline", "y": 191.0} and "mFTP" in line["name"]
+    assert line["data"] == {"kind": "hline", "y": 191.0} and "模型閾值功率" in line["name"]
     assert [s["name"] for s in j["series"] if s.get("role") != "cp_ref"] == ["MMP 曲線", "近 7 天新高", "PD 模型曲線"]
 
 

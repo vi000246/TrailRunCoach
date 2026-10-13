@@ -16,9 +16,9 @@ from typing import Optional
 
 SESSIONS = {
     "rest": "休息或 30–45 分鐘恢復跑（Z1）",
-    "low": "長時間輕鬆跑 / 越野長距離（Z2，功率 < 85% mFTP 或心率 < 89% LTHR）",
-    "high": "節奏跑 / 門檻間歇（85–105% mFTP，例如 3×12 分鐘），或長上坡穩定爬升",
-    "anaerobic": "短間歇 / 上坡衝刺（> 105% mFTP，例如 8×2 分鐘上坡、30/30）",
+    "low": "長時間輕鬆跑 / 越野長距離（Z2，功率 < 85% 模型閾值功率或心率 < 89% LTHR）",
+    "high": "節奏跑 / 門檻間歇（85–105% 模型閾值功率，例如 3×12 分鐘），或長上坡穩定爬升",
+    "anaerobic": "短間歇 / 上坡衝刺（> 105% 模型閾值功率，例如 8×2 分鐘上坡、30/30）",
     "grow": "維持目前的比例，週量增加 5–10%",
     "taper": "減量：維持強度、總量減 40–60%",
     "recovery": "賽後恢復：輕鬆活動為主，不排強度",
@@ -34,9 +34,9 @@ def recommend(band: Optional[dict], focus: Optional[dict], phase: Optional[str],
     reasons: list[str] = []
     r = band.get("ratio") if band else None
     if band:
-        reasons.append(f"疲勞比 ATL/CTL = {_fmt(r)}%（{band['label']}）")
+        reasons.append(f"疲勞比（疲勞 ÷ 體能）= {_fmt(r)}%（{band['label']}）")
     if tsb is not None:
-        reasons.append(f"TSB = {_fmt(tsb, 1)}")
+        reasons.append(f"狀況（Form）= {_fmt(tsb, 1)}")
 
     if band and band["key"] == "overreaching":
         return {"key": "rest", "headline": SESSIONS["rest"],
@@ -56,7 +56,7 @@ def recommend(band: Optional[dict], focus: Optional[dict], phase: Optional[str],
                        f"目標 {b['target'][0]}–{b['target'][1]}%")
         key = b["key"]
         if key != "low" and tsb is not None and tsb < -25:
-            reasons.append("TSB < -25：強度課之前先安排一天輕鬆")
+            reasons.append("狀況（Form）< -25：強度課之前先安排一天輕鬆")
         return {"key": key, "headline": SESSIONS[key], "reasons": reasons}
 
     if focus and focus.get("total"):

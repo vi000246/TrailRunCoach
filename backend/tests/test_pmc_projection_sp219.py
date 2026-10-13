@@ -148,15 +148,15 @@ def test_pmc_lines_go_on_from_today_dashed_and_stop_with_the_plan():
     res = PJ.apply(_pmc_res(), _proj(DAYS), "pmc", 42.0, 7.0, day(20))
     assert res["end"] == day(20)                                      # the axis reaches the asked end
     pj = {s["name"]: s for s in res["series"] if s.get("role") == "projection"}
-    assert set(pj) == {"CTL 體能（預估）", "ATL 疲勞（預估）", "TSB（預估）"}
+    assert set(pj) == {"CTL 體能・預估", "ATL 疲勞・預估", "狀況（Form）・預估"}
     rows = project(41.0, 48.0, [x for _, x in DAYS], 42.0, 7.0)
-    ctl = pj["CTL 體能（預估）"]
+    ctl = pj["CTL 體能・預估"]
     assert ctl["line_style"] == "dash" and ctl["color"] == "#2a78d6" and ctl["y_axis"] == "TSSPERDAY"
     assert ctl["data"]["points"][0] == [T, 41.0]                      # starts where the solid line ends
     assert [p[0] for p in ctl["data"]["points"]] == [T, day(1), day(2), day(3)]   # no line after the plan
     assert [p[1] for p in ctl["data"]["points"][1:]] == pytest.approx([r["ctl"] for r in rows])
-    assert [p[1] for p in pj["ATL 疲勞（預估）"]["data"]["points"][1:]] == pytest.approx([r["atl"] for r in rows])
-    tsb = pj["TSB（預估）"]["data"]["points"]
+    assert [p[1] for p in pj["ATL 疲勞・預估"]["data"]["points"][1:]] == pytest.approx([r["atl"] for r in rows])
+    tsb = pj["狀況（Form）・預估"]["data"]["points"]
     assert tsb[0] == [T, pytest.approx(40.0 - 50.0)]                 # today's TSB = yesterday's CTL − ATL
     assert [p[1] for p in tsb[1:]] == pytest.approx([r["tsb"] for r in rows])
     assert res["projection"]["today"] == T and res["projection"]["until"] == day(3)
@@ -274,7 +274,7 @@ def test_a_future_range_stops_the_data_at_today_and_draws_the_plan_on(api):
     ctl = _own(j, "CTL 體能")["data"]["points"]
     assert ctl[-1][0] == T and all(p[0] <= T for p in ctl)            # no falling line after today
     assert j["end"] == day(20) and j["projection"]["today"] == T and j["projection"]["until"] == day(6)
-    pctl = _pj(j, "CTL 體能（預估）")
+    pctl = _pj(j, "CTL 體能・預估")
     assert pctl["data"]["points"][0] == ctl[-1] and pctl["line_style"] == "dash"
     assert pctl["data"]["points"][-1][0] == day(6)                    # stops at the last planned session
     rows = project(ctl[-1][1], _own(j, "ATL 疲勞")["data"]["points"][-1][1],
@@ -288,7 +288,7 @@ def test_a_future_range_stops_the_data_at_today_and_draws_the_plan_on(api):
 def test_daily_tss_chart_gets_outlined_bars_equal_to_the_planned_tss(api):
     client, holder = api
     j = _chart(client, 1)
-    bars = _pj(j, "預估 TSS")
+    bars = _pj(j, "預估負荷（Load）")
     assert bars["bar_style"] == "hollow"
     assert dict(bars["data"]["points"]) == {day(1): 50.0, day(2): 0.0, day(3): 90.0, day(4): 0.0, day(5): 0.0,
                                             day(6): 0.0}
@@ -321,13 +321,13 @@ def test_an_activity_type_filter_draws_no_projection(api):
 
 def test_editing_the_plan_changes_the_projection_on_the_next_load(api):
     client, holder = api
-    before = dict(_pj(_chart(client, 1), "預估 TSS")["data"]["points"])
+    before = dict(_pj(_chart(client, 1), "預估負荷（Load）")["data"]["points"])
     holder["rows"] = [sess(day(2), "easy", 60, 0.0), sess(day(3), "long", 120, 90.0),   # moved 1 → 2
                       sess(day(4), "easy", 30, 0.0), sess(day(6), "race", 0)]             # added one
-    after = dict(_pj(_chart(client, 1), "預估 TSS")["data"]["points"])
+    after = dict(_pj(_chart(client, 1), "預估負荷（Load）")["data"]["points"])
     assert before[day(1)] == 50.0 and after[day(1)] == 0.0 and after[day(2)] == 50.0 and after[day(4)] == 25.0
     holder["rows"] = [s for s in holder["rows"] if s["day"] != day(3)]                   # deleted
-    assert dict(_pj(_chart(client, 1), "預估 TSS")["data"]["points"])[day(3)] == 0.0
+    assert dict(_pj(_chart(client, 1), "預估負荷（Load）")["data"]["points"])[day(3)] == 0.0
 
 
 def test_the_charts_bars_equal_the_calendars_estimate_day_by_day(monkeypatch, tmp_path):
@@ -355,7 +355,7 @@ def test_the_charts_bars_equal_the_calendars_estimate_day_by_day(monkeypatch, tm
         def check():
             holder["rows"] = rows()
             cal = _calendar_days(e, "2026-10-01", "2026-10-18")
-            bars = dict(_pj(_chart(c, 1, end=dt.date(2026, 10, 18)), "預估 TSS")["data"]["points"])
+            bars = dict(_pj(_chart(c, 1, end=dt.date(2026, 10, 18)), "預估負荷（Load）")["data"]["points"])
             assert cal and {d for d, v in bars.items() if v} == {d for d, v in cal.items() if v}
             for d, v in cal.items():
                 assert bars[d] == pytest.approx(v, abs=0.1), d

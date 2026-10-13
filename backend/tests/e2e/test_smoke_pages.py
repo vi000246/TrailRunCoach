@@ -585,12 +585,12 @@ def test_climb_tab_follows_the_activity_with_synced_map(app):
 
 
 def test_tis_charts(app):
-    """我的訓練 › 負荷 PMC: the aerobic / anaerobic TIS charts (power charts: shown while 使用功率 is on)."""
+    """我的訓練 › 負荷與體能: the aerobic / anaerobic stimulus score (刺激分數) charts (power charts: shown while 使用功率 is on)."""
     page, _ = app
     use_power = _json(page, "/api/v1/sync/settings").get("use_power") is not False
     open_page(page, f"{VIEWER}?view=我的訓練&dash=0")
     _viewer_loaded(page)
-    tis = page.locator("#grid section.card", has=page.locator("h2", has_text="TIS"))
+    tis = page.locator("#grid section.card", has=page.locator("h2", has_text="刺激分數"))
     if not use_power:
         expect(tis).to_have_count(0)
         return

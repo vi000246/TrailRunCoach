@@ -530,22 +530,35 @@ def session_steps(s: dict, th: Thresholds, sent_tl: Optional[dict] = None) -> li
 # ---------------------------------------------------------------------------
 
 def load_note(st: Step) -> str:
-    """「負荷 80 TSS（約 100 TL）」: what a load step pushed as estimated time says in its name."""
-    return f"負荷 {st.load_tss:g} TSS（約 {round(st.load_tl)} TL）"
+    """「負荷 80（約 COROS TL 100）」: what a load step pushed as estimated time says in its name."""
+    return f"負荷 {st.load_tss:g}（約 COROS TL {round(st.load_tl)}）"
 
 
 def native_load(st: Step) -> bool:
     return bool(st.load_tl) and COROS_TARGET_TYPE_LOAD is not None
 
 
+def tss_name(name: str, tss: float) -> str:
+    """A 「負荷」 step's name as pushed before SP-391 (「第 1 趟 負荷 80 TSS」, now 「第 1 趟 負荷 80」;
+    workout_steps.fmt_dur) — never sent, only for WorkoutSpec.legacy_names."""
+    v = f" {tss:g}"
+    for tail in ("（", " ("):
+        if v + tail in name:
+            return name.replace(v + tail, v + " TSS" + tail, 1)
+    return name + " TSS" if name.endswith(v) else name
+
+
 def _exercise(st: Step, ex_id: int, sort_no: int, group_id: str, th: Thresholds,
-              legacy_percent: bool = False) -> dict:
+              legacy_percent: bool = False, legacy_tss: bool = False) -> dict:
     """One step. `legacy_percent`: also fill an HR step's intensityPercent with bpm ÷ the app's
-    LTHR, as every payload did before SP-67 — never sent, only for legacy_fingerprint."""
+    LTHR, as every payload did before SP-67 — never sent, only for legacy_fingerprint.
+    `legacy_tss`: a 「負荷」 step's name with the 「TSS」 it had before SP-391 (legacy_names)."""
     name = st.name or STEP_NAME[st.kind]
     if st.load_tl and not native_load(st):
         # COROS_TARGET_TYPE_LOAD unset: the estimated time stands in, the name says the load
         name = f"{st.name} · {load_note(st)}" if st.name else load_note(st)
+    if legacy_tss and st.load_tss and st.name:
+        name = tss_name(name, st.load_tss)
     if native_load(st):
         ttype, tval = COROS_TARGET_TYPE_LOAD, max(1, int(round(st.load_tl)))
     else:
@@ -582,7 +595,7 @@ def _exercise(st: Step, ex_id: int, sort_no: int, group_id: str, th: Thresholds,
 
 
 def build_program(name: str, steps: list[StepLike], th: Thresholds, overview: str = "",
-                  legacy_percent: bool = False) -> dict:
+                  legacy_percent: bool = False, legacy_tss: bool = False) -> dict:
     exercises: list[dict] = []
     ex_id = 0
     total = 0
@@ -594,7 +607,7 @@ def build_program(name: str, steps: list[StepLike], th: Thresholds, overview: st
             children = []
             for j, c in enumerate(st.steps, start=1):
                 ex_id += 1
-                children.append(_exercise(c, ex_id, base + SORT_CHILD * j, str(gid), th, legacy_percent))
+                children.append(_exercise(c, ex_id, base + SORT_CHILD * j, str(gid), th, legacy_percent, legacy_tss))
             one = sum(c.seconds for c in st.steps)
             exercises.append({
                 "id": gid, "name": st.name, "overview": OVERVIEW[EX_TRAIN],
@@ -607,7 +620,7 @@ def build_program(name: str, steps: list[StepLike], th: Thresholds, overview: st
             exercises.extend(children)
             total += one * st.sets
         else:
-            exercises.append(_exercise(st, ex_id, base, "0", th, legacy_percent))
+            exercises.append(_exercise(st, ex_id, base, "0", th, legacy_percent, legacy_tss))
             total += st.seconds
     return {
         "id": "0", "idInPlan": "0", "authorId": "0", "userId": "0", "createTimestamp": 0,
@@ -635,10 +648,13 @@ class WorkoutSpec:
     # a row holding it is the same workout on COROS — owner 2026-10-05 「已推送的課不用重推」.
     # Not needed once no workout pushed before 2026-10-05 is still ahead
     legacy_fingerprint: Optional[str] = None
+    # the fingerprints it had before SP-391 renamed 「負荷 80 TSS」 steps 「負荷 80」 (legacy_tss_fps):
+    # only the step name changed, so a row holding one is the same workout on COROS — not pushed again
+    legacy_names: tuple = ()
 
     def pushed_as(self, fp: Optional[str]) -> bool:
-        """`fp` (coros_plan_push.fingerprint) is this workout, in today's or the earlier form."""
-        return bool(fp) and fp in (self.fingerprint, self.legacy_fingerprint)
+        """`fp` (coros_plan_push.fingerprint) is this workout, in today's or an earlier form."""
+        return bool(fp) and fp in (self.fingerprint, self.legacy_fingerprint, *self.legacy_names)
 
 
 def workout_name(s: dict) -> str:
@@ -665,12 +681,28 @@ def session_workout(s: dict, thresholds: Optional[dict], today: Optional[str] = 
     fp = _fingerprint(s["day"], payload)
     old = _fingerprint(s["day"], build_program(name, steps, th, s.get("detail") or "", legacy_percent=True))
     return WorkoutSpec(s["id"], s["day"], name, payload, fp, _load_records(s, th, sent),
-                       legacy_fingerprint=old if old != fp else None)
+                       legacy_fingerprint=old if old != fp else None,
+                       legacy_names=legacy_tss_fps(s["day"], name, steps, th, s.get("detail") or "", fp))
 
 
 def _fingerprint(day: Optional[str], payload: dict) -> str:
     return hashlib.sha256(json.dumps({"day": day, "program": payload}, sort_keys=True,
                                      ensure_ascii=False).encode()).hexdigest()
+
+
+def _has_load_name(steps: list[StepLike]) -> bool:
+    return any(x.load_tss and x.name for st in steps for x in (st.steps if isinstance(st, Repeat) else [st]))
+
+
+def legacy_tss_fps(day: Optional[str], name: str, steps: list[StepLike], th: Thresholds, overview: str,
+                   fp: str) -> tuple:
+    """The workout's fingerprints with its 「負荷」 step names as pushed before SP-391 (「… TSS」), in
+    today's and the pre-SP-67 form; () when no step name carries a load (nothing was renamed)."""
+    if not _has_load_name(steps):
+        return ()
+    out = [_fingerprint(day, build_program(name, steps, th, overview, legacy_percent=lp, legacy_tss=True))
+           for lp in (False, True)]
+    return tuple(x for x in dict.fromkeys(out) if x != fp)
 
 
 def _sent_tl(s: dict) -> Optional[dict]:
@@ -1012,13 +1044,14 @@ async def push_workout(db: AsyncSession, s: dict, thresholds: Optional[dict], to
     name = library_name(s)
     payload = build_program(name, steps, th, s.get("detail") or "")
     fp = _fingerprint(None, payload)
-    # the same workout as exported before SP-67 (WorkoutSpec.legacy_fingerprint)
+    # the same workout as exported before SP-67 (WorkoutSpec.legacy_fingerprint) / SP-391 (legacy_names)
     old = _fingerprint(None, build_program(name, steps, th, s.get("detail") or "", legacy_percent=True))
+    olds = (old, *legacy_tss_fps(None, name, steps, th, s.get("detail") or "", fp))
     out = {"id": s["id"], "title": s.get("title"), "day": None, "name": name, "scheduled": False}
     async with _push_lock:
         hub = hub or await TrainingHub.from_db(db, athlete_id)
         row = (await rows_by_key(db, athlete_id, [s["key"]])).get(s["key"])
-        if row is not None and row.status == "pushed" and row.fingerprint in (fp, old) and row.program_id:
+        if row is not None and row.status == "pushed" and row.fingerprint in (fp, *olds) and row.program_id:
             return {**out, "status": "pushed", "changed": False, **_row_view(row)}
         replacing = row is not None and (row.program_id or row.id_in_plan)
         if replacing:

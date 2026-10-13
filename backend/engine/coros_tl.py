@@ -75,7 +75,8 @@ LINEAR_A = 1.37
 DEFAULT_ERR = 0.20                    # 推估: ± fraction shown with a default conversion (SP-37 LOO ≈ 20 %)
 
 GROUPS = ("power", "hr", "linear")
-GROUP_LABEL = {"power": N_("功率 TSS"), "hr": N_("hrTSS（依強度）"), "linear": N_("hrTSS（比例）")}
+GROUP_LABEL = {"power": N_("功率負荷（Power load）"), "hr": N_("心率負荷（HR load，依強度）"),
+               "linear": N_("心率負荷（HR load，比例）")}
 DEFAULTS = {"power": ("C", {"a": POWER_A, "k": POWER_K}),
             "hr": ("D", {"c0": HR_C0, "c1": HR_C1, "c2": HR_C2, "if_lo": HR_IF_RANGE[0], "if_hi": HR_IF_RANGE[1]}),
             "linear": ("A", {"a": LINEAR_A})}
@@ -103,8 +104,8 @@ MAX_LOAD_SESSIONS = 100
 
 MODELS = ("A", "B", "C", "D", "E")
 MIN_N = {"A": 3, "B": 4, "C": 4, "D": 5, "E": 8}
-MODEL_TEXT = {"A": "TL = a·TSS", "B": "TL = a·TSS + b", "C": "TL = a·TSS^k",
-              "D": "TL = h·(c0 + c1·IF + c2·IF²)", "E": "TL = Σ w_i·zone-minutes"}
+MODEL_TEXT = {"A": N_("TL = a·負荷"), "B": N_("TL = a·負荷 + b"), "C": N_("TL = a·負荷^k"),
+              "D": N_("TL = h·(c0 + c1·強度比 + c2·強度比²)"), "E": "TL = Σ w_i·zone-minutes"}
 
 
 def num(v) -> Optional[float]:
@@ -593,7 +594,7 @@ def describe(stored: Optional[dict] = None, load_store: Optional[dict] = None) -
         gm, e = m.groups[g], st.get(g) or {}
         dfam, _dp = DEFAULTS[g]
         rows.append({"group": g, "label": _(GROUP_LABEL[g]), "fitted": gm.fitted, "family": gm.family or dfam,
-                     "text": MODEL_TEXT[gm.family or dfam], "default_text": MODEL_TEXT[dfam], "n": gm.n,
+                     "text": _(MODEL_TEXT[gm.family or dfam]), "default_text": _(MODEL_TEXT[dfam]), "n": gm.n,
                      "w": gm.w, "loo": e.get("loo"), "backtest": e.get("backtest"),
                      "fitted_at": e.get("fitted_at"), "err_pct": round(gm.err_frac() * 100)})
     lf = load_factor(load_store)

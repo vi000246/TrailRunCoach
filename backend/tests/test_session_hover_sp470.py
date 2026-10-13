@@ -74,7 +74,7 @@ def test_future_easy_run_sections_in_order():
     h = _pop(s)
     assert _sections(h) == ["目標", "怎麼練"]                       # nothing done yet, no change, the watch is fine
     assert '<b class="sp-t">輕鬆跑</b>' in h and '<span class="sp-sub">10/12</span>' in h      # 「輕鬆跑」 is said once
-    assert '<small>時間</small><b>45′</b>' in h and '<small>TSS</small><b>35</b>' in h
+    assert '<small>時間</small><b>45′</b>' in h and '<small>負荷（Load）</small><b>35</b>' in h
     assert "<dt>心率</dt><dd>&lt; 154 bpm</dd>" in h and "<dt>功率</dt><dd>124–153 W</dd>" in h
     assert '<p class="sp-basis"><span class="sp-k">依據</span>最近 6 次輕鬆跑' in h
     assert "<li>心率不超過輕鬆跑上限 154 bpm</li><li>全程能講話</li>" in h
@@ -85,12 +85,12 @@ def test_done_session_says_how_it_went_first():
     h = _pop({**_done(short=True), "note": "心率帶沒戴好"})
     assert _sections(h)[0] == "完成情況"
     assert 'class="sp-pill sp-partial"' in h and "部分 72%" in h and "sc-r-partial" in h
-    assert '<p class="sp-vd">強度不足<span class="sp-nums">TSS 74% · 時間 87% · 強度 72%</span></p>' in h
+    assert '<p class="sp-vd">強度不足<span class="sp-nums">負荷 74% · 時間 87% · 強度 72%</span></p>' in h
     assert '<span class="sp-k">實際</span>路跑 · Z5 間歇 0:52' in h and "強度不足：只做到這堂課的 72%" in h
     assert "⚠ 心率帶沒戴好" in h and "<b>70 → 52</b>" in h
     # green: no reason words, the numbers still say how close it was
     ok = _pop(_done("green"))
-    assert '<p class="sp-vd"><span class="sp-nums">TSS 74% · 時間 87% · 強度 72%</span></p>' in ok and "sp-pill sp-done" in ok
+    assert '<p class="sp-vd"><span class="sp-nums">負荷 74% · 時間 87% · 強度 72%</span></p>' in ok and "sp-pill sp-done" in ok
 
 
 def test_changes_and_the_watch_get_their_own_sections():
