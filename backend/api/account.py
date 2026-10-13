@@ -18,6 +18,25 @@ mounts this router.
                                  texts shown (and the account, for a new person), then a session.
                                  CSRF-checked like every write
   POST /api/v1/account/logout    the session row deleted, the cookie cleared
+
+The account's own data (SP-386; accounts/export.py, accounts/deletion.py), signed in only:
+  GET  /api/v1/account/me          who, whether the account can be deleted here (never the owner),
+                                   whether this session confirmed who it is at Google in the last
+                                   REAUTH_TTL_S, the cross-user analysis consent (None: the owner)
+  GET  /api/v1/account/export.zip  下載我的資料: the user's own data (USER + IMPORTED of the data
+                                   registry, never a credential), streamed
+  GET  /api/v1/account/reauth      「用 Google 確認身分」 before a deletion: a Google sign-in like
+                                   /account/login (purpose "reauth", the user's id kept with the
+                                   state); its callback only marks THIS session (sessions.reauth_at)
+                                   when Google's account is the signed-in user's own — no new
+                                   session, nobody signed in — and goes back to the settings page
+                                   with ?reauth=ok | mismatch | failed. Not for the owner
+  POST /api/v1/account/delete      {confirm: true}: 刪除帳號 now — 403 OWNER_PROTECTED for the owner,
+                                   403 REAUTH_REQUIRED without a confirmation in the last
+                                   REAUTH_TTL_S, 409 SYNC_BUSY while a sync runs; then the session
+                                   cookie cleared and {next: /login?deleted=1}
+  POST /api/v1/account/analysis    {analysis: false | true}: withdraw (or give again) the cross-user
+                                   analysis consent bundled with the terms — one more consents row
   GET  /legal                    the legal documents (SP-60): a list; public, signed in or not
   GET  /legal/<id>               one of them (terms.DOCUMENTS: terms, privacy, health, third_party),
                                  rendered on the server — the privacy policy's address for Google's
@@ -40,6 +59,7 @@ from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
 from backend.accounts import google, login as LG, store, terms
+from backend.accounts import deletion as DEL, export as EX
 from backend.i18n import N_, UserError, _
 from backend.i18n.pages import render_page
 from backend.security import ratelimit as RL
@@ -103,17 +123,25 @@ def start(request: Request, next: Optional[str] = None, provider: str = "google"
     _on()
     if provider != "google":
         raise HTTPException(404, "unknown provider")
+    return _to_google(request, LG.safe_next(next))
+
+
+def _to_google(request: Request, next_url: str, purpose: str = "signin", user: Optional[store.User] = None):
+    """Off to Google: a state, nonce and PKCE verifier kept server side, the browser bound by the
+    trc_oauth cookie. purpose "reauth": `user` confirming who they are (SP-386)."""
     if not LG.START_LIMIT.take(_client_key(request)):
         log.info("sign-in start refused: rate limited")
-        return _to_login("rate_limited")
+        return _to_login("rate_limited") if purpose == "signin" else _back_from_reauth("rate_limited")
     state, nonce, verifier = (_secrets.token_urlsafe(32), _secrets.token_urlsafe(32), _secrets.token_urlsafe(64))
     # one binding per browser (two sign-in tabs both come back to it)
     binding = _get(request, LG.OAUTH_COOKIE) or ""
     if not (40 <= len(binding) <= 64 and binding.replace("-", "").replace("_", "").isalnum()):
         binding = _secrets.token_urlsafe(32)
     redirect = google.redirect_uri()
-    store.put_oauth_state(state, binding, "google", nonce, verifier, redirect, LG.safe_next(next), LG.STATE_TTL_S)
-    resp = RedirectResponse(google.authorize_url(state, nonce, verifier, redirect), status_code=302)
+    store.put_oauth_state(state, binding, "google", nonce, verifier, redirect, next_url, LG.STATE_TTL_S,
+                          purpose=purpose, user_id=user.id if user is not None else None)
+    hint = user.email if user is not None else None
+    resp = RedirectResponse(google.authorize_url(state, nonce, verifier, redirect, login_hint=hint), status_code=302)
     resp.headers["Cache-Control"] = "no-store"
     _set(resp, LG.OAUTH_COOKIE, binding, LG.STATE_TTL_S)
     return resp
@@ -133,11 +161,16 @@ async def callback(request: Request, state: str = "", code: str = "", error: str
     if not LG.CALLBACK_LIMIT.take(_client_key(request)):
         log.info("sign-in callback refused: rate limited")
         return _to_login("rate_limited")
+    reauth = row.get("purpose") == "reauth"
     try:
         ident = await google.identity(code, row["code_verifier"], row["redirect_uri"], row["nonce"])
     except google.LoginFailed as e:
         log.warning("sign-in refused: %s", e.reason)
-        return _to_login("failed")
+        return _back_from_reauth("failed") if reauth else _to_login("failed")
+    if reauth:
+        resp = await run_in_threadpool(_reauth_done, request, row, ident)
+        _clear(resp, LG.OAUTH_COOKIE)
+        return resp
     out = await run_in_threadpool(LG.resolve, ident, row["next_url"])
     if out.kind == "refused":
         return _to_login(out.reason or "failed")
@@ -217,6 +250,133 @@ def logout(request: Request):
     resp = JSONResponse({"ok": True, "next": "/login?signed_out=1"})
     _clear(resp, LG.SESSION_COOKIE)
     return resp
+
+
+# ---------------------------------------------------------------------------- the account's own data (SP-386)
+
+REAUTH_TTL_S = 10 * 60             # a Google confirmation counts this long for a deletion
+SETTINGS_URL = "/api/v1/wko5/settings"
+DELETED_NEXT = "/login?deleted=1"
+
+
+def _signed_in() -> store.User:
+    u = LG.current_user()
+    if u is None:                       # the gate answers 401 first; never reached signed out
+        raise UserError(N_("請先登入"), code="LOGIN_REQUIRED", status=401)
+    return u
+
+
+def _owner_refused(u: store.User) -> None:
+    if u.is_owner:
+        raise UserError(N_("站主帳號不能從網頁刪除"), code="OWNER_PROTECTED", status=403)
+
+
+def _reauth_ok(request: Request) -> bool:
+    """This session confirmed who it is at Google within REAUTH_TTL_S."""
+    import datetime as _dt
+    at = store.reauth_at(_get(request, LG.SESSION_COOKIE))
+    if at is None:
+        return False
+    age = (_dt.datetime.now(_dt.timezone.utc) - at).total_seconds()
+    return 0 <= age < REAUTH_TTL_S
+
+
+def _back_from_reauth(outcome: str) -> RedirectResponse:
+    r = RedirectResponse(f"{SETTINGS_URL}?reauth={outcome}#account", status_code=303)
+    r.headers["Cache-Control"] = "no-store"
+    return r
+
+
+def _reauth_done(request: Request, row: dict, ident: google.Identity) -> RedirectResponse:
+    """Back from Google with a confirmation: only the signed-in user who asked for it, with their
+    own Google account, marks this session. Never a new session, never a sign-in."""
+    u = LG.current_user()
+    if u is None or u.is_owner or u.id != row.get("user_id"):
+        outcome = "failed"
+    else:
+        same = store.find_identity(ident.provider, ident.subject)
+        if same is None or same.id != u.id:
+            outcome = "mismatch"
+        else:
+            outcome = "ok" if store.mark_reauth(_get(request, LG.SESSION_COOKIE), u.id) else "failed"
+    log.info("deletion confirmation at Google: %s", outcome)
+    return _back_from_reauth(outcome)
+
+
+@router.get("/api/v1/account/me")
+def account_me(request: Request):
+    _on()
+    u = _signed_in()
+    return JSONResponse({"id": u.id, "name": u.display_name, "email": u.email, "role": u.role,
+                         "created_at": u.created_at, "can_delete": not u.is_owner,
+                         "reauth_ok": (not u.is_owner) and _reauth_ok(request), "reauth_ttl_s": REAUTH_TTL_S,
+                         "analysis": store.analysis_consent(u.id), "export_url": "/api/v1/account/export.zip"},
+                        headers={"Cache-Control": "no-store"})
+
+
+@router.get("/api/v1/account/export.zip")
+def account_export():
+    from fastapi.responses import StreamingResponse
+    from backend import membership as MS, tenancy
+    _on()
+    u = _signed_in()
+    MS.require("export:data")
+    exp = EX.prepare(u, tenancy.current())
+    log.info("data export: %d files, %d tables", exp.manifest["files"]["count"], len(exp.manifest["tables"]))
+    name = f"trailruncoach-my-data-{exp.manifest['created_at'][:10]}.zip"
+    return StreamingResponse(EX.stream(exp), media_type="application/zip",
+                             headers={"Content-Disposition": f'attachment; filename="{name}"',
+                                      "Cache-Control": "private, no-store"})
+
+
+@router.get("/api/v1/account/reauth")
+def account_reauth(request: Request):
+    _on()
+    u = _signed_in()
+    _owner_refused(u)
+    return _to_google(request, SETTINGS_URL, purpose="reauth", user=u)
+
+
+class DeleteIn(BaseModel):
+    confirm: bool = False
+
+
+@router.post("/api/v1/account/delete")
+async def account_delete(body: DeleteIn, request: Request):
+    from backend.sync import runner
+    _on()
+    u = _signed_in()
+    _owner_refused(u)
+    if not await run_in_threadpool(_reauth_ok, request):
+        raise UserError(N_("請先用 Google 再確認一次身分"), code="REAUTH_REQUIRED", status=403)
+    if not body.confirm:
+        raise UserError(N_("請先確認要刪除帳號"), code="CONFIRM_REQUIRED", status=400)
+    try:
+        out = await DEL.delete_account(u)
+    except runner.SyncBusy:
+        raise UserError(N_("同步正在進行，等它結束後再刪除帳號"), code="SYNC_BUSY", status=409) from None
+    resp = JSONResponse({"ok": True, "next": DELETED_NEXT, "disconnected": out["disconnected"],
+                         "revoked": out["revoked"], "revoke_failed": out["revoke_failed"]})
+    resp.headers["Cache-Control"] = "no-store"
+    _clear(resp, LG.SESSION_COOKIE)
+    return resp
+
+
+class AnalysisIn(BaseModel):
+    analysis: Optional[bool] = None
+
+
+@router.post("/api/v1/account/analysis")
+def account_analysis(body: AnalysisIn):
+    _on()
+    u = _signed_in()
+    now = store.analysis_consent(u.id)
+    if now is None or body.analysis is None:
+        raise UserError(N_("這個帳號沒有同意紀錄可以變更"), code="NO_CONSENT", status=409 if now is None else 400)
+    if body.analysis != now:
+        store.record_analysis(u.id, body.analysis)
+        log.info("cross-user analysis consent %s", "given again" if body.analysis else "withdrawn")
+    return JSONResponse({"analysis": store.analysis_consent(u.id)}, headers={"Cache-Control": "no-store"})
 
 
 # ---------------------------------------------------------------------------- the legal documents (SP-60)

@@ -318,7 +318,9 @@ def consent_current(u: store.User) -> bool:
 
 
 def _accepted(uid: int, documents: dict) -> None:
-    store.record_consent(uid, terms.VERSION, documents, analysis=True)
+    # the cross-user analysis comes bundled with the terms (SP-58), but a withdrawal made in 設定
+    # (SP-386) stays withdrawn when new terms are accepted: never taken back silently
+    store.record_consent(uid, terms.VERSION, documents, analysis=store.analysis_consent(uid) is not False)
     _CONSENT[uid] = (terms.VERSION, time.monotonic())
 
 

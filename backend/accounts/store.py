@@ -7,7 +7,9 @@ written on sign-in / sign-up.
               created_at, last_login_at, disabled_at / disabled_reason
               (plan / plan_expires_at: the membership, SP-330)
   identities  (provider, subject) unique; v1 only "google"
-  sessions    sha256 of the cookie token only (a stolen DB opens no session), expiry sliding
+  sessions    sha256 of the cookie token only (a stolen DB opens no session), expiry sliding;
+              reauth_at: when this session's user signed in at Google again to confirm a
+              deletion (SP-386), on this session only
   shares      public /share/<id> -> the user whose tenant holds it
   waitlist    e-mails waiting for a place once sign-up is capped (SP-58)
   usage       the free tier's counters per user / quota / period (SP-330); usage_items: what
@@ -15,13 +17,20 @@ written on sign-in / sign-up.
   api_tokens  service tokens of another project (inReachLiveTrack, SP-329): sha256 only, the
               link:* scopes they carry
   consents    each acceptance of the terms (SP-58): user, terms version, the sha256 of every
-              document shown, the cross-user analysis bundled with them, when
+              document shown, the cross-user analysis bundled with them, when; append-only:
+              action "terms" (the terms ticked) or "analysis" (the analysis consent withdrawn or
+              given again in 設定, SP-386 — the terms version and documents copied from the last
+              row). The analysis state is the last row's
   oauth_states  a Google sign-in in progress (SP-58): sha256 of the state, sha256 of the
               browser's binding cookie, the nonce, the PKCE verifier, where to go back; 10 minutes,
-              taken once
+              taken once. purpose "reauth" + user_id: a signed-in user confirming a deletion (SP-386)
   signup_tickets  signed in at Google, waiting at the terms (SP-58): sha256 of the cookie, the
               Google account (sub, e-mail, name) or the user asked to accept new terms; 30 minutes,
               taken once
+
+delete_user (SP-386) removes every row that names a person: the user row (identities, sessions,
+shares, usage, api_tokens, consents go with it, ON DELETE CASCADE), their sign-ins in progress and
+sign-up tickets, and their e-mail on the waitlist. Never the owner.
 
 Every function opens its own connection (short; WAL + busy_timeout), so it is safe from the
 event loop thread, the thread pool and the scheduler alike. User 1 is the owner, migrated in
@@ -80,7 +89,8 @@ CREATE TABLE IF NOT EXISTS sessions (
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     created_at TEXT NOT NULL,
     last_seen_at TEXT NOT NULL,
-    expires_at TEXT NOT NULL
+    expires_at TEXT NOT NULL,
+    reauth_at TEXT
 );
 CREATE INDEX IF NOT EXISTS sessions_user ON sessions(user_id);
 CREATE TABLE IF NOT EXISTS shares (
@@ -124,7 +134,8 @@ CREATE TABLE IF NOT EXISTS consents (
     terms_version TEXT NOT NULL,
     documents TEXT NOT NULL,
     analysis INTEGER NOT NULL DEFAULT 1,
-    accepted_at TEXT NOT NULL
+    accepted_at TEXT NOT NULL,
+    action TEXT NOT NULL DEFAULT 'terms'
 );
 CREATE INDEX IF NOT EXISTS consents_user ON consents(user_id);
 CREATE TABLE IF NOT EXISTS oauth_states (
@@ -135,7 +146,9 @@ CREATE TABLE IF NOT EXISTS oauth_states (
     code_verifier TEXT NOT NULL,
     redirect_uri TEXT NOT NULL,
     next_url TEXT NOT NULL,
-    expires_at TEXT NOT NULL
+    expires_at TEXT NOT NULL,
+    purpose TEXT NOT NULL DEFAULT 'signin',
+    user_id INTEGER
 );
 CREATE TABLE IF NOT EXISTS signup_tickets (
     token_hash TEXT PRIMARY KEY,
@@ -221,8 +234,26 @@ def init() -> None:
     with _LOCK, connect() as con:
         con.execute("PRAGMA journal_mode=WAL")
         con.executescript(_DDL)
+        _add_columns(con)
         con.execute("INSERT OR IGNORE INTO meta(key, value) VALUES ('schema_version', ?)", (str(SCHEMA_VERSION),))
     _READY.add(key)
+
+
+# columns added after a table was first made: CREATE TABLE IF NOT EXISTS leaves an older file's
+# table as it was, so they are added here (ALTER TABLE ADD COLUMN; existing rows take the default)
+_ADDED_COLUMNS = (
+    ("sessions", "reauth_at", "TEXT"),                                   # SP-386
+    ("oauth_states", "purpose", "TEXT NOT NULL DEFAULT 'signin'"),       # SP-386
+    ("oauth_states", "user_id", "INTEGER"),                              # SP-386
+    ("consents", "action", "TEXT NOT NULL DEFAULT 'terms'"),             # SP-386
+)
+
+
+def _add_columns(con: sqlite3.Connection) -> None:
+    for table, col, decl in _ADDED_COLUMNS:
+        have = {r[1] for r in con.execute(f"PRAGMA table_info({table})")}
+        if col not in have:
+            con.execute(f"ALTER TABLE {table} ADD COLUMN {col} {decl}")
 
 
 def _user(row: Optional[sqlite3.Row]) -> Optional[User]:
@@ -414,6 +445,28 @@ def last_seen() -> dict[int, str]:
                 if r[1]}
 
 
+def mark_reauth(token: Optional[str], uid: int) -> bool:
+    """This session's user just signed in at Google again (SP-386): noted on this session only.
+    False when the cookie is not a session of `uid`."""
+    if not token:
+        return False
+    init()
+    with _LOCK, connect() as con:
+        cur = con.execute("UPDATE sessions SET reauth_at = ? WHERE token_hash = ? AND user_id = ?",
+                          (_iso(_now()), _hash(token), int(uid)))
+        return cur.rowcount == 1
+
+
+def reauth_at(token: Optional[str]) -> Optional[dt.datetime]:
+    """When this session's user last confirmed who they are at Google (None: never)."""
+    if not token:
+        return None
+    init()
+    with connect() as con:
+        r = con.execute("SELECT reauth_at FROM sessions WHERE token_hash = ?", (_hash(token),)).fetchone()
+    return dt.datetime.fromisoformat(r[0]) if r and r[0] else None
+
+
 def delete_session(token: Optional[str]) -> None:
     if not token:
         return
@@ -467,9 +520,33 @@ def record_consent(uid: int, version: str, documents: dict, analysis: bool = Tru
     import json
     init()
     with _LOCK, connect() as con:
-        con.execute("INSERT INTO consents(user_id, terms_version, documents, analysis, accepted_at) "
-                    "VALUES (?, ?, ?, ?, ?)",
+        con.execute("INSERT INTO consents(user_id, terms_version, documents, analysis, accepted_at, action) "
+                    "VALUES (?, ?, ?, ?, ?, 'terms')",
                     (int(uid), version, json.dumps(documents, sort_keys=True), int(bool(analysis)), _iso(_now())))
+
+
+def analysis_consent(uid: int) -> Optional[bool]:
+    """The cross-user analysis consent as the last consents row has it (None: no row — the owner)."""
+    init()
+    with connect() as con:
+        r = con.execute("SELECT analysis FROM consents WHERE user_id = ? ORDER BY id DESC LIMIT 1",
+                        (int(uid),)).fetchone()
+    return None if r is None else bool(r[0])
+
+
+def record_analysis(uid: int, analysis: bool) -> None:
+    """The analysis consent withdrawn (False) or given again (True) in 設定 (SP-386; SP-326 §7.1):
+    one more row, action "analysis", the last row's terms version and documents copied (the terms
+    stay accepted). ValueError for a user who never accepted the terms (the owner)."""
+    init()
+    with _LOCK, connect() as con:
+        last = con.execute("SELECT terms_version, documents FROM consents WHERE user_id = ? ORDER BY id DESC LIMIT 1",
+                           (int(uid),)).fetchone()
+        if last is None:
+            raise ValueError(f"user {uid} has accepted no terms")
+        con.execute("INSERT INTO consents(user_id, terms_version, documents, analysis, accepted_at, action) "
+                    "VALUES (?, ?, ?, ?, ?, 'analysis')",
+                    (int(uid), last[0], last[1], int(bool(analysis)), _iso(_now())))
 
 
 def consent_version(uid: int) -> Optional[str]:
@@ -490,17 +567,18 @@ def consents(uid: int) -> list[dict]:
 # ---------------------------------------------------------------------------- sign-in in progress (SP-58)
 
 def put_oauth_state(state: str, binding: str, provider: str, nonce: str, code_verifier: str, redirect_uri: str,
-                    next_url: str, ttl_s: int) -> None:
+                    next_url: str, ttl_s: int, purpose: str = "signin", user_id: Optional[int] = None) -> None:
     """A sign-in started: kept by the sha256 of its state (the state itself travels in URLs) and
-    bound to the browser by the sha256 of its binding cookie. Expired rows are dropped here."""
+    bound to the browser by the sha256 of its binding cookie. Expired rows are dropped here.
+    purpose "reauth" (SP-386): the signed-in user `user_id` confirming who they are."""
     init()
     now = _now()
     with _LOCK, connect() as con:
         con.execute("DELETE FROM oauth_states WHERE expires_at <= ?", (_iso(now),))
         con.execute("INSERT INTO oauth_states(state_hash, binding_hash, provider, nonce, code_verifier, redirect_uri, "
-                    "next_url, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    "next_url, expires_at, purpose, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (_hash(state), _hash(binding), provider, nonce, code_verifier, redirect_uri, next_url,
-                     _iso(now + dt.timedelta(seconds=ttl_s))))
+                     _iso(now + dt.timedelta(seconds=ttl_s)), purpose, user_id))
 
 
 def pop_oauth_state(state: str) -> Optional[dict]:
@@ -644,3 +722,41 @@ def revoke_service_token(token: str) -> None:
     init()
     with _LOCK, connect() as con:
         con.execute("DELETE FROM api_tokens WHERE token_hash = ?", (_hash(token),))
+
+
+# ---------------------------------------------------------------------------- deleting an account (SP-386)
+
+def delete_user(uid: int) -> dict:
+    """Every row that names this person, in one transaction: the user row (identities, sessions,
+    shares, usage, usage_items, api_tokens and consents cascade), the sign-ins in progress and
+    sign-up tickets that are theirs (by user id or Google sub) and their e-mail on the waitlist.
+    {table: rows deleted}. ValueError for the owner (user 1) — never deleted here."""
+    init()
+    uid = int(uid)
+    with _LOCK, connect() as con:
+        con.execute("BEGIN IMMEDIATE")
+        row = con.execute("SELECT * FROM users WHERE id = ?", (uid,)).fetchone()
+        if row is None:
+            return {}
+        if uid == 1 or row["role"] == OWNER:
+            raise ValueError("the owner cannot be deleted")
+        subs = {row["google_sub"]} | {r[0] for r in con.execute("SELECT subject FROM identities WHERE user_id = ?",
+                                                                (uid,))}
+        subs.discard(None)
+        emails = {row["email"]} | {r[0] for r in con.execute("SELECT email FROM identities WHERE user_id = ?", (uid,))}
+        emails = {e.strip().lower() for e in emails if e}
+        out = {}
+        for t in ("identities", "sessions", "shares", "usage", "usage_items", "api_tokens", "consents"):
+            out[t] = con.execute(f"SELECT count(*) FROM {t} WHERE user_id = ?", (uid,)).fetchone()[0]
+        q = lambda xs: ",".join("?" * len(xs))                      # noqa: E731
+        out["signup_tickets"] = con.execute(
+            f"DELETE FROM signup_tickets WHERE user_id = ? OR subject IN ({q(subs)})", (uid, *subs)).rowcount
+        out["oauth_states"] = con.execute("DELETE FROM oauth_states WHERE user_id = ?", (uid,)).rowcount
+        out["waitlist"] = con.execute(f"DELETE FROM waitlist WHERE lower(email) IN ({q(emails)})",
+                                      tuple(emails)).rowcount if emails else 0
+        out["users"] = con.execute("DELETE FROM users WHERE id = ?", (uid,)).rowcount
+        left = [t for t in ("identities", "sessions", "shares", "usage", "usage_items", "api_tokens", "consents")
+                if con.execute(f"SELECT 1 FROM {t} WHERE user_id = ? LIMIT 1", (uid,)).fetchone()]
+        if left:                                                    # foreign keys off: never half done
+            raise RuntimeError(f"rows left after deleting user {uid}: {left}")
+        return {k: v for k, v in out.items() if v}

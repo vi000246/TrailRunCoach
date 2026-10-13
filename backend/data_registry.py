@@ -2,8 +2,10 @@
 Data registry: the class of every per-tenant file and DB table (SP-311,
 docs/research/local-first-sync.md §3.2, §11 ④).
 
-Backup (engine/backup.py) reads this list to decide what a backup holds; the device sync and
-account deletion are to read it too, instead of each keeping its own list. Data retention
+Backup (engine/backup.py) reads this list to decide what a backup holds; 下載我的資料
+(accounts/export.py, SP-386: `export_entries`, USER + IMPORTED, never SECRET / DERIVED) and the
+account deletion (accounts/deletion.py: sync_state's secret / local fields are wiped first) read it
+too; the device sync is to read it as well, instead of each keeping its own list. Data retention
 (SP-317, engine/fit_archive.py) deletes only IMPORTED fit/** originals, after their cold/**
 summaries are frozen; the DERIVED cache/fit channels of those files go with them. Classes:
 
@@ -321,9 +323,12 @@ FILES: tuple = (
     # folders sit in the server root, which is the owner's folder unless WKO5COACH_SERVER_ROOT
     # says otherwise. Never in the owner's backup: they are other people's data
     File("accounts.db", SECRET, ROOT, "accounts (backend/accounts/store.py): users (role, Google sub, "
-         "e-mail, tenant folder, plan), identities, sessions (sha256 of the cookie only), shares, waitlist, "
-         "consents (terms version and time, SP-58), and the sign-ins in progress (oauth_states: nonce and "
-         "PKCE verifier, 10 min; signup_tickets: the Google account at the terms, 30 min)",
+         "e-mail, tenant folder, plan), identities, sessions (sha256 of the cookie only; when the user last "
+         "confirmed who they are at Google, SP-386), shares, waitlist, consents (terms version and time, SP-58; "
+         "the analysis consent withdrawn / given again, SP-386), and the sign-ins in progress (oauth_states: "
+         "nonce and PKCE verifier, 10 min; signup_tickets: the Google account at the terms, 30 min). A user's "
+         "own rows (profile, consents) go into their 下載我的資料 as account.json; deleting the account "
+         "deletes every row of theirs (store.delete_user, SP-386)",
          scope=INSTANCE, deidentify=("email", "display_name", "google_sub")),
     File("accounts.db-*", SECRET, ROOT, "accounts.db's WAL / shared memory", scope=INSTANCE),
     File("site.json", USER, ROOT, "server-wide settings and state (backend/site_settings.py): the COROS "
@@ -401,6 +406,23 @@ def of_class(cls: str) -> tuple[list[Table], list[File]]:
 def backup_entries(include_fit: bool) -> list[File]:
     """What a backup holds: ALWAYS, plus OPT_IN with backup.include_fit."""
     return [f for f in FILES if f.backup == ALWAYS or (include_fit and f.backup == OPT_IN)]
+
+
+# user_settings keys that hold a credential (the 課表訂閱 ICS feed's link token, api/calendar_feed.py):
+# never in 下載我的資料 (SP-386); compare debug_view.EXPORT_EXCLUDE
+EXPORT_SECRET_SETTINGS: tuple = ("plan.calendar",)
+# columns of an exported table that are the server's, not the user's (the tenant folder's path)
+EXPORT_OMIT_FIELDS: dict = {"athletes": ("data_dir",)}
+
+
+def export_entries() -> tuple[list[Table], list[File]]:
+    """下載我的資料 (SP-386): the tables and the tenant files a user's export holds — what the user
+    made (USER) and what came in (IMPORTED); never SECRET (credentials, the server's files) nor
+    DERIVED (recomputable caches). The DB file itself is exported table by table."""
+    keep = (USER, IMPORTED)
+    return ([t for t in TABLES if t.cls in keep],
+            [f for f in FILES if f.cls in keep and f.scope == TENANT and f.where in (ROOT, BASE, SHARED)
+             and f is not DB])
 
 
 # user_settings keys (SQL LIKE) that stay on this machine: this machine's backup folder / state,

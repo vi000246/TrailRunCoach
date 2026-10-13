@@ -570,6 +570,45 @@ main > section.tab-off { display: none; }
     <p class="meta">魯地圖和等高線的主機有時不回應，地圖載不出來時換個底圖就好。</p>
   </section>
 
+  <!-- SP-386: 帳號 — 下載我的資料、跨使用者分析的同意、刪除帳號 (api/account.py). Shown only when
+       /api/v1/account/me answers (sign-in mode); the owner's app and the demo never show it -->
+  <section id="account" hidden>
+    <h2 data-i18n="settings.acct.title">帳號</h2>
+    <p class="meta" id="acct-who"></p>
+    <h3 data-i18n="settings.acct.export_title">下載我的資料</h3>
+    <p class="meta" data-i18n="settings.acct.export_intro">把你輸入的資料（設定、賽季計畫、課表、標註、傷病紀錄、上傳的 GPX）和同步、匯入的活動與 FIT 原始檔打包成一個 zip，也附上帳號資料與同意紀錄。登入憑證、記住的密碼不會放進去。檔案多的話要等一下才會開始下載。</p>
+    <div class="row"><a class="button" id="acct-export" href="/api/v1/account/export.zip" download data-i18n="settings.acct.export">下載我的資料</a></div>
+    <div id="acct-analysis" hidden>
+      <h3 data-i18n="settings.acct.analysis_title">跨使用者分析</h3>
+      <p class="meta" data-i18n="settings.acct.analysis_intro">註冊時同意條款，也一併同意把你的資料去識別化後，用在改進演算法的跨使用者分析。你可以隨時撤回。目前還沒有任何跨使用者分析在使用資料。</p>
+      <div class="row"><span id="acct-analysis-state"></span>
+        <button type="button" id="acct-analysis-btn"></button>
+        <span class="meta" id="acct-analysis-msg" role="status"></span></div>
+    </div>
+    <h3 data-i18n="settings.acct.delete_title">刪除帳號</h3>
+    <p class="meta" id="acct-del-intro" data-i18n="settings.acct.delete_intro">立即刪除你的帳號和所有資料（活動、課表、設定、上傳的檔案），無法復原。已連接的 COROS／Garmin／TrainingPeaks 會先中斷連接、刪掉登入憑證。建議先下載資料。</p>
+    <p class="meta" id="acct-owner" hidden data-i18n="settings.acct.admin">站主帳號不能從網頁刪除。</p>
+    <div class="row" id="acct-del-row"><button type="button" class="danger" id="acct-delete" data-i18n="settings.acct.delete">刪除帳號…</button>
+      <span class="meta err-text" id="acct-msg" role="status"></span></div>
+  </section>
+
+  <dialog id="acct-dlg" aria-labelledby="acct-dlg-title">
+    <h2 id="acct-dlg-title" data-i18n="settings.acct.dlg_title">刪除帳號</h2>
+    <div id="acct-step1">
+      <p class="meta" data-i18n="settings.acct.step1">為了確認是你本人，請先用 Google 再登入一次（用目前這個帳號）。確認後 10 分鐘內可以刪除。</p>
+      <div class="row"><a class="button primary" id="acct-reauth" href="/api/v1/account/reauth" data-i18n="settings.acct.reauth">用 Google 確認身分</a>
+        <button type="button" class="acct-cancel" data-i18n="settings.acct.cancel">取消</button></div>
+    </div>
+    <div id="acct-step2" hidden>
+      <p class="meta" data-i18n="settings.acct.step2">已確認身分。刪除後無法復原：你的活動、課表、設定和上傳的檔案都會立即刪除，所有裝置都會登出。</p>
+      <p class="meta"><span data-i18n="settings.acct.type">請輸入</span> <b id="acct-word"></b> <span data-i18n="settings.acct.type_after">確認：</span></p>
+      <div class="row"><input type="text" id="acct-confirm" autocomplete="off" aria-labelledby="acct-word">
+        <button type="button" class="danger primary" id="acct-ok" disabled data-i18n="settings.acct.ok">永久刪除</button>
+        <button type="button" class="acct-cancel" data-i18n="settings.acct.cancel">取消</button></div>
+      <p class="meta err-text" id="acct-dlg-msg" role="status"></p>
+    </div>
+  </dialog>
+
   <section id="calib" hidden>
     <details><summary class="meta">進階設定：自動估算的參數</summary>
       <p class="meta">這些數字會用你的資料自動估算（每次同步到新活動後重算），資料不夠時用文獻或推估的預設值。點標籤（或滑過去）看說明；只有確定時才手動指定。</p>
@@ -1948,11 +1987,85 @@ $("ar-years").onchange = async (e) => {
   catch (err) { $("ar-msg").textContent = t("settings.arch.failed", { msg: err.message.slice(0, 80) }); loadArchive(); }
 };
 
+// ---- 帳號 (SP-386, api/account.py): only in sign-in mode (/account/me answers 404 otherwise) ---
+const ACCT = "/api/v1/account";
+let acctMe = null;
+function showAccount(me) {
+  acctMe = me;
+  $("account").hidden = false;
+  $("acct-who").textContent = t("settings.acct.who", { email: me.email || me.name || "" });
+  const an = me.analysis;
+  $("acct-analysis").hidden = an == null;                  // the owner accepts no terms
+  if (an != null) {
+    $("acct-analysis-state").textContent = t(an ? "settings.acct.analysis_on" : "settings.acct.analysis_off");
+    $("acct-analysis-btn").textContent = t(an ? "settings.acct.withdraw" : "settings.acct.give");
+  }
+  $("acct-owner").hidden = me.can_delete;
+  $("acct-del-intro").hidden = !me.can_delete;
+  $("acct-del-row").hidden = !me.can_delete;
+}
+async function loadAccount() {
+  let me;
+  try {
+    const r = await fetch(`${ACCT}/me`);
+    if (!r.ok) return;                                      // the owner's app, the demo: no block
+    me = await r.json();
+  } catch { return; }
+  showAccount(me);
+  // back from 「用 Google 確認身分」: ?reauth=ok | mismatch | failed | rate_limited
+  const q = new URLSearchParams(location.search), back = q.get("reauth");
+  if (back) {
+    history.replaceState(null, "", location.pathname + location.hash);
+    if (back === "ok" && me.reauth_ok) openAcctDialog();
+    else $("acct-msg").textContent = t(`settings.acct.reauth_${back === "mismatch" ? "mismatch" : "failed"}`);
+  }
+}
+function openAcctDialog() {
+  const ok = !!(acctMe && acctMe.reauth_ok);
+  $("acct-step1").hidden = ok; $("acct-step2").hidden = !ok;
+  $("acct-word").textContent = t("settings.acct.word");
+  $("acct-confirm").value = ""; $("acct-ok").disabled = true; $("acct-dlg-msg").textContent = "";
+  $("acct-dlg").showModal();
+}
+$("acct-delete").onclick = async () => {
+  try { acctMe = await j(`${ACCT}/me`); } catch { /* keep the last answer */ }
+  openAcctDialog();
+};
+document.querySelectorAll(".acct-cancel").forEach((b) => b.onclick = () => $("acct-dlg").close());
+$("acct-confirm").oninput = (e) => {
+  const v = e.target.value.trim();
+  $("acct-ok").disabled = !(v === t("settings.acct.word") || v.toUpperCase() === "DELETE");
+};
+$("acct-ok").onclick = async () => {
+  const b = $("acct-ok");
+  b.disabled = true; b.setAttribute("aria-busy", "true");
+  try {
+    const r = await fetch(`${ACCT}/delete`, { method: "POST", headers: { "Content-Type": "application/json" },
+                                              body: JSON.stringify({ confirm: true }) });
+    const body = await r.json().catch(() => ({}));
+    if (r.ok) { location.replace(body.next || "/login?deleted=1"); return; }
+    const code = body.detail && body.detail.code;
+    if (code === "REAUTH_REQUIRED") { acctMe = { ...acctMe, reauth_ok: false }; openAcctDialog(); return; }
+    $("acct-dlg-msg").textContent = (body.detail && body.detail.message) || t("settings.acct.failed", { status: r.status });
+  } catch (e) {
+    $("acct-dlg-msg").textContent = t("settings.acct.failed", { status: e.message.slice(0, 60) });
+  } finally { b.removeAttribute("aria-busy"); b.disabled = false; }
+};
+$("acct-analysis-btn").onclick = async () => {
+  const want = !(acctMe && acctMe.analysis);
+  try {
+    const r = await j(`${ACCT}/analysis`, { method: "POST", headers: { "Content-Type": "application/json" },
+                                           body: JSON.stringify({ analysis: want }) });
+    showAccount({ ...acctMe, analysis: r.analysis });
+    $("acct-analysis-msg").textContent = t(r.analysis ? "settings.acct.given" : "settings.acct.withdrawn");
+  } catch (e) { $("acct-analysis-msg").textContent = t("settings.acct.failed", { status: e.message.slice(0, 60) }); }
+};
+
 // ---- 分頁 (SP-213) ------------------------------------------------------------------------
 // which tab each section is on; a section not listed goes to 進階設定. A URL hash picks the
 // tab: #body … or a section / element id (#sync, #thresholds, #badfiles: its tab, scrolled to)
 const TABS = {
-  personal: ["general", "sport", "map"],
+  personal: ["general", "sport", "map", "account"],
   body: ["hr", "thresholds", "power"],
   data: ["sync", "backup", "archive", "calendar"],
   advanced: ["mode", "calib", "fixes", "debugapi"],
@@ -2003,6 +2116,7 @@ window.addEventListener("hashchange", tabFromHash);
 tabFromHash();
 
 loadMode(); loadApplied(); loadProfile(); loadHr(); loadThr(); loadExclusions(); loadBackup(); loadArchive(); loadCalib(); loadCal();
+loadAccount();
 loadSyncSettings().then(loadSources).catch((e) => toast("同步設定載入失敗：" + e.message.slice(0, 80)));
 // 匯入 FIT (SP-323): the imported files sit in the 資料來源's folder, so its stats change too
 if (window.FitImport) FitImport.mount($("fit-import"), { listLink: true, onDone: (r) => { if (r.added || r.duplicate) loadSources(); } });

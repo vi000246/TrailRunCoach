@@ -2651,6 +2651,10 @@
     "draft": true,
     "src": "backend/api/auth.py:175"
   },
+  "同步正在進行，等它結束後再刪除帳號": {
+    "draft": true,
+    "src": "backend/api/account.py:357"
+  },
   "同步結果": {
     "draft": false,
     "src": "backend/engine/debug_view.py:61"
@@ -3194,6 +3198,10 @@
   "差距 {gap}% → 繼續打底，之後重測 AeT": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:1869"
+  },
+  "已封存，原始檔已移除": {
+    "draft": false,
+    "src": "backend/api/wko5views.py:1541"
   },
   "已經有這個分類": {
     "draft": false,
@@ -4855,6 +4863,10 @@
     "draft": true,
     "src": "backend/engine/base_check.py:252"
   },
+  "法律文件": {
+    "draft": false,
+    "src": "backend/api/account.py:411"
+  },
   "活動擬合": {
     "draft": true,
     "src": "backend/engine/racepower/calc.py:276"
@@ -5082,6 +5094,10 @@
   "爬最陡的坡、樓梯或跑步機最大坡度，共爬升約 {cl:.0f} m（攻頂日 {need:.0f} m 的 {f:.0f}%）；要腿先酸、呼吸不喘，心率不必拉高；背水上山、到頂把水倒掉輕裝下山，保護膝蓋；暖身 10 分。做完 3 天只排輕鬆": {
     "draft": true,
     "src": "backend/engine/specific_phase.py:473"
+  },
+  "版本 {version}・生效日 {effective}・最後更新 {updated}": {
+    "draft": false,
+    "src": "backend/api/account.py:389"
   },
   "玉山國家公園管理處〈高山生理、高山症預防及處理〉": {
     "draft": true,
@@ -5362,6 +5378,10 @@
   "突然跳動": {
     "draft": true,
     "src": "backend/engine/panels/activity_charts.py:60"
+  },
+  "站主帳號不能從網頁刪除": {
+    "draft": true,
+    "src": "backend/api/account.py:271"
   },
   "站在箱上往前跨下去、落地停住，再回箱上。箱子越高衝擊越大，從低的開始；上一個做穩了再換這個。": {
     "draft": true,
@@ -5919,9 +5939,17 @@
     "draft": true,
     "src": "backend/api/account.py:160"
   },
+  "請先用 Google 再確認一次身分": {
+    "draft": true,
+    "src": "backend/api/account.py:351"
+  },
   "請先登入": {
     "draft": true,
     "src": "backend/tenancy_mw.py:303"
+  },
+  "請先確認要刪除帳號": {
+    "draft": true,
+    "src": "backend/api/account.py:353"
   },
   "請到設定頁重新登入 TrainingPeaks": {
     "draft": true,
@@ -6599,6 +6627,10 @@
     "draft": true,
     "src": "backend/api/sync.py:507"
   },
+  "這個帳號沒有同意紀錄可以變更": {
+    "draft": true,
+    "src": "backend/api/account.py:375"
+  },
   "這個平台": {
     "draft": true,
     "src": "backend/engine/workout_steps.py:1209"
@@ -6674,6 +6706,10 @@
   "這天的時間上限放不下": {
     "draft": true,
     "src": "backend/engine/technical.py:211"
+  },
+  "這是你在 TrailRunCoach 的資料（{app}，格式 {fmt}）。\n\naccount.json：你的帳號（e-mail、名稱、建立時間）與同意條款、撤回同意的紀錄。\ntables/：你輸入或匯入的資料，一個資料表一個 JSON 檔（設定、課表、標註、傷病紀錄、活動清單等）。\nfiles/：你的檔案，照伺服器上的位置存放：賽季計畫、校正、圖表檢視、上傳的 GPX（.gz 是 gzip 壓縮），fit/ 底下是同步或匯入的 FIT 原始檔（gzip 壓縮，解壓後就是 .fit）。\n\n沒有放進來的：COROS／Garmin／TrainingPeaks 的登入憑證與記住的密碼、課表訂閱網址的金鑰（機密），以及可以重新計算的快取（衍生資料）。": {
+    "draft": true,
+    "src": "backend/accounts/export.py:103"
   },
   "這次不是間歇課（{type}，課表也沒有對應的間歇）": {
     "draft": true,

@@ -96,14 +96,17 @@ def _http() -> httpx.AsyncClient:
     return httpx.AsyncClient(**kw)
 
 
-def authorize_url(state: str, nonce: str, code_verifier: str, redirect: str) -> str:
+def authorize_url(state: str, nonce: str, code_verifier: str, redirect: str,
+                  login_hint: Optional[str] = None) -> str:
     """Google's authorization URL for this sign-in (state, nonce, the S256 code challenge). Built
-    with authlib's own helpers, the same ones its client uses, without opening an HTTP client."""
+    with authlib's own helpers, the same ones its client uses, without opening an HTTP client.
+    `login_hint`: the account to suggest (a signed-in user confirming who they are, SP-386)."""
     from authlib.oauth2.rfc6749.parameters import prepare_grant_uri
     from authlib.oauth2.rfc7636 import create_s256_code_challenge
+    extra = {"login_hint": login_hint} if login_hint else {}
     return prepare_grant_uri(AUTHORIZE_URL, client_id=client_id(), response_type="code", redirect_uri=redirect,
                              scope=SCOPE, state=state, code_challenge=create_s256_code_challenge(code_verifier),
-                             code_challenge_method="S256", nonce=nonce, prompt="select_account")
+                             code_challenge_method="S256", nonce=nonce, prompt="select_account", **extra)
 
 
 # ---------------------------------------------------------------------------- the JWKS

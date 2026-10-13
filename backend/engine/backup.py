@@ -324,6 +324,12 @@ def _user_files(roots: dict, entries: list) -> Iterable[tuple[Path, str]]:
                 yield p, rel
 
 
+def tenant_files(roots: dict, entries: list) -> list[tuple[Path, str]]:
+    """(path, path relative to its tenant folder) of every file of the given registry entries —
+    what a backup's files/ holds, and the 下載我的資料 export (accounts/export.py, SP-386)."""
+    return list(_user_files(roots, entries))
+
+
 def build_zip(db_path: Path, zip_path: Path, *, fit_root: Optional[Path] = None,
               include_fit: bool = False, roots: Optional[dict] = None, work_dir: Optional[Path] = None,
               tenant: Optional[str] = None, now: Optional[datetime] = None) -> dict:

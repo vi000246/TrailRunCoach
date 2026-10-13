@@ -346,6 +346,9 @@ SECRET_USERS = {      # the modules that may read the credential columns: login,
     "settings/secrets.py", "sync/coros_client.py", "sync/garmin_client.py", "sync/runner.py",
     "sync/session_check.py",
     "sync/tp_client.py", "data_registry.py",
+    # 刪除帳號 (SP-386): reads them only to disconnect at the platform itself, then wipes them
+    # before the tenant folder goes; nothing is returned or logged
+    "accounts/deletion.py",
 }
 SECRET_FILE_USERS = {"secret.key": {"settings/secrets.py"}, "tp_client.json": {"sync/tp_client.py"},
                      "weather.json": {"engine/racepower/weather.py"}}

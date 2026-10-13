@@ -5,6 +5,7 @@
   "google": "用 Google 帳號登入",
   "note": "我們只讀取你的 Google 帳號識別碼、名稱與 email，不會讀取其他 Google 資料。",
   "signed_out": "已登出。",
+  "deleted": "你的帳號和所有資料已經刪除。",
   "error.expired": "登入逾時或連結已失效，請重新登入。",
   "error.failed": "登入沒有完成，請重新登入。",
   "error.cancelled": "你取消了 Google 登入。",
