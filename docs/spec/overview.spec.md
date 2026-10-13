@@ -765,7 +765,12 @@ tickets is in plan-auto.spec.md):
   (`backend/engine/planning.py:529`).
 - **Multi-day 百岳** (SP-114): ME (ADS ≤ 10 %) instead of the uphill VO2max set, else general strength
   (`backend/engine/overview.py:1887`; projection `backend/engine/projection.py:730`); an old multi-day
-  event without per-day numbers gets a split hint (`backend/engine/overview.py:1708`).
+  event without per-day numbers gets a split hint (`backend/engine/overview.py:1708`). Saving one
+  (`Plan.upsert_event`) needs every day's distance and climb (`clean_day_plan`,
+  `backend/engine/planning.py:256`), except (SP-412) an edit of an event that has no per-day numbers
+  on the server with none sent: it is saved without them, still hinted (`backend/engine/planning.py:783`);
+  the 賽事周期 form then leaves the rows optional until one is filled and says so (`plan.ev.dayplan_old`,
+  `backend/static/plan.html:513`).
 - **Walking sessions' uphill cap** (SP-115): 75 % HRmax, never below the easy-run cap
   (`hr_profile.walk_cap_for`, `backend/engine/overview.py:1614`); 攻頂日模擬 and ME climb at it
   (`backend/engine/overview.py:1894`).
@@ -2534,3 +2539,4 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 | 2026-10-13 | bugfix | SP-408 | A session the B-race / post-race / 減量期 rules make 輕鬆跑 gets the week's easy-run target (`easy_target` = `tgt["z2"]` through `post_race.apply` / `bc_apply` / `taper_rules`, week_plan and the projection) and no source, instead of keeping its old target (the demo's 10/20 輕鬆跑 said 「功率 255–263 W（98–101% CP）」 while its structure and the watch had 169–208 W). Tests: `backend/tests/test_bc_races.py` (`test_b_recovery_easy_run_takes_the_easy_target`, `test_b_race_week_easy_runs_take_the_easy_target`, `test_week_plan_and_projection_easy_runs_after_a_b_race_keep_the_easy_target`), `test_post_race.py::test_first_week_easy_runs_take_the_easy_target`, `test_taper_rules.py::test_runs_made_easy_take_the_easy_target` |
 | 2026-10-13 | fix | SP-410 | `upsert_external`'s `previous` adds `updated_local` (`localtime.local_iso`: UTC → the athlete's zone, athlete_tz); the activity editor's 「其他來源的同一次運動」 (`GET /api/v1/sync/dedup/near`) rows add `start_local` and the page shows it — both used to slice the UTC string |
 | 2026-10-13 | bugfix | SP-361 | Switching 設定 → 課表心率區間 (`PUT /api/v1/plan/hr-profile` with only `model`) no longer goes through `_notify(True)`: the cached Datasets stay (the model is read live and `HRP.stamp()` is in the plan inputs', Status's and the zone / target charts' keys) and `plan_auto.after_thresholds` still re-plans / re-pushes; a manual max / resting HR still rebuilds. `threshold_confidence.check`'s Dataset memo key adds `HP.stamp()` (its 「最大心率可信度低」 warning follows the model). Synthetic 52-week demo base: 課表 calendar right after a switch 3.1–3.2 s → 2.8–2.9 s (a model used before: 2.1 s, plan-inputs cache hit); the rest is `Status` + plan inputs recomputed in full (open question above). Tests: `backend/tests/test_hr_model_switch_sp361.py` |
+| 2026-10-13 | bugfix | SP-412 | An old multi-day trip saved before SP-114 without per-day numbers can be edited again: `upsert_event` saves it without them when the event on the server has none (`day_plan_missing`, no rows) and the rows sent are all blank (`day_plan_blank`); rows filled in part, a new trip, a 1-day event made multi-day and a trip that has its numbers still go through `clean_day_plan`. The 賽事周期 form drops `required` from such a trip's rows (back on as soon as one is filled) and shows `plan.ev.dayplan_old`. Tests: `backend/tests/test_old_multiday_edit_sp412.py` |

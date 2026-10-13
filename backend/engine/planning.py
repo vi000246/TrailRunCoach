@@ -277,6 +277,13 @@ def clean_day_plan(data: dict, days: int) -> Optional[list]:
     return out
 
 
+def day_plan_blank(rows) -> bool:
+    """No per-day number sent at all (SP-412): None, [] or rows with every field empty — what the page
+    sends when the rows are left untouched."""
+    return all(all(_num(r.get(k)) is None for k in ("km", "gain_m", "loss_m")) if isinstance(r, dict) else True
+               for r in (rows or []))
+
+
 def _tier(x: float, cuts: tuple) -> int:
     return next((i for i, c in enumerate(cuts) if x < c), len(cuts))
 
@@ -769,7 +776,15 @@ class Plan:
         data["days"] = days
         data["race_format"] = ((data.get("race_format") if data.get("race_format") in RACE_FORMATS else "stage")
                                if data["kind"] in FORMAT_KINDS and days > 1 else None)
-        data["day_plan"] = clean_day_plan(data, days)
+        # SP-412: an event saved before SP-114 without its per-day numbers keeps being editable — when
+        # the one on the server has none at all and none is sent, it is saved without them (still
+        # hinted, day_plan_missing). Rows filled in part, a new trip, and a trip that has its numbers
+        # all go through clean_day_plan (SP-114's rule).
+        was = next((e for e in self.events if data.get("id") and e.id == data["id"]), None)
+        if was is not None and was.day_plan_missing and not was.day_plan and day_plan_blank(data.get("day_plan")):
+            data["day_plan"] = None
+        else:
+            data["day_plan"] = clean_day_plan(data, days)
         if data["day_plan"]:
             data["distance_km"] = round(sum(d["km"] for d in data["day_plan"]), 2)
             data["climbing_m"] = round(sum(d["gain_m"] for d in data["day_plan"]))

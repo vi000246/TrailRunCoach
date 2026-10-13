@@ -20,6 +20,7 @@
   "ev.day_loss": "Descent m (optional)",
   "ev.day_n": "Day {n}",
   "ev.dayplan_missing": "Please add each day's distance and climb",
+  "ev.dayplan_old": "This older trip has no distance and climb for each day yet; you can save it as it is. Until they are added, each day is taken as an equal share of the totals, so adding them is more accurate. To add them, fill in every day's distance and climb.",
   "ev.format": "Format",
   "ev.format_tip": "Stages: one stage a day, set by the organiser — fill in each stage's distance and climb. Non-stop: one course, you decide where to sleep — no per-day numbers; add sleep points to the aid stations in the race calculator instead.",
   "ev.format_stage": "Stages (one a day)",
