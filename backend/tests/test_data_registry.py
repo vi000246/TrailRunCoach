@@ -414,7 +414,7 @@ def test_no_api_response_carries_a_secret(tmp_path, monkeypatch):
     app = FastAPI()
     app.include_router(auth.router)
     app.include_router(sync.router)
-    skip = {"/api/v1/sync/compare", "/api/v1/auth/tp/oauth"}     # neither reads sync_state
+    skip = {"/api/v1/sync/compare"}     # does not read sync_state
     seen = {}
     with TestClient(app, raise_server_exceptions=False) as c:
         try:

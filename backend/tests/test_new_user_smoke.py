@@ -17,9 +17,9 @@ import pytest
 
 from backend.tests.fit_builder import build_run
 
-# routes that leave the app by design (OAuth redirects to TrainingPeaks) or
-# stream server-sent events
-SKIP = {"/api/v1/auth/tp/oauth", "/api/v1/auth/tp/callback"}
+# routes that leave the app by design or stream server-sent events (the TrainingPeaks
+# OAuth redirect and callback that were here are gone, SP-405)
+SKIP: set[str] = set()
 
 
 def _runs(root, today: dt.date):

@@ -212,7 +212,7 @@ async def _session_without_athlete(tmp_path):
     return async_sessionmaker(engine, expire_on_commit=False)()
 
 
-@pytest.mark.parametrize("path", ["web", "oauth", "code"])
+@pytest.mark.parametrize("path", ["web", "oauth"])
 def test_ensure_athlete_on_fresh_db_is_idempotent(tmp_path, monkeypatch, path, tp_creds):
     from pathlib import Path
     from backend.db.models import Athlete
@@ -230,10 +230,7 @@ def test_ensure_athlete_on_fresh_db_is_idempotent(tmp_path, monkeypatch, path, t
         fake = LiveShape() if path == "web" else Oauth()
         with http.use_transport(httpx.MockTransport(fake)):
             for _ in range(2):          # second login must not create a second row
-                if path == "code":
-                    await tp_client.exchange_code("abc", s, 1)
-                else:
-                    await tp_client.login_password("u@example.com", "pw", s, 1)
+                await tp_client.login_password("u@example.com", "pw", s, 1)
         rows = (await s.execute(text("SELECT id, tp_athlete_id, data_dir FROM athletes"))).all()
         assert len(rows) == 1 and rows[0][0] == 1 and rows[0][1] == 4242
         from backend.sync import storage
