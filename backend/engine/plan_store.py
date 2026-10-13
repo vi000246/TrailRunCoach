@@ -289,13 +289,23 @@ def reconcile_with_adapt(stored: list[dict], inputs: dict, decisions: Optional[d
 
 
 async def plan_reconcile(db: AsyncSession, inputs: dict, apply: bool, athlete_id: int = 1,
-                         decisions: Optional[dict] = None, adjustments: Optional[list] = None):
+                         decisions: Optional[dict] = None, adjustments: Optional[list] = None,
+                         reset: bool = False, today: Optional[str] = None):
     """(new sessions, changes). `inputs`: cur (week_plan()), weeks (projection),
     activities, today, horizon_end, blackouts (不排課日期), prefs, adapt
     (engine/adapt.py context). `decisions`: {uid: move | delete} for edited
-    sessions on a blocked day. `adjustments`: filled with adapt()'s list."""
+    sessions on a blocked day. `adjustments`: filled with adapt()'s list.
+    `reset` (SP-469, 依實際進度重排's 「也重置我改過的課」): every auto session the user edited or
+    deleted (reset_rows; `today`: the first day it touches, default inputs["today"]) goes back to
+    the generator's first — its changes carry `reverted`."""
     stored = await load(db, athlete_id)
+    uids: list[str] = []
+    if reset:
+        before = stored
+        stored, uids = reset_rows(stored, today or inputs["today"])
     new, changes = reconcile_with_adapt(stored, inputs, decisions, adjustments)
+    if uids:
+        mark_reverted(changes, before, new, uids)
     if apply:
         await save(db, new, athlete_id)
     return new, changes
@@ -470,7 +480,7 @@ def _edit_row(db: AsyncSession, rows: dict, uid: str, patch: dict, today: str, a
     if new_week != d["week_start"] and d["origin"] == "auto":
         # moved to another week: leave a tombstone so that week isn't regenerated
         # into a duplicate, and carry the session over as the user's own
-        tomb = {**d, "uid": R.new_uid(), "state": "deleted", "note": "移到別週", "ext_key": None, "ext_sig": None}
+        tomb = {**d, "uid": R.new_uid(), "state": "deleted", "note": MOVED_NOTE, "ext_key": None, "ext_sig": None}
         t = PlanSession(athlete_id=athlete_id, uid=tomb["uid"])
         db.add(t)
         _fill(t, tomb)
@@ -529,6 +539,7 @@ async def add(db: AsyncSession, data: dict, today: str, athlete_id: int = 1,
 # it back: reconcile never generates a past day, plan_match only looks at active /
 # missed rows, and plan_auto.undo never restores over it.
 USER_DELETED = "user_deleted_expired"
+MOVED_NOTE = "移到別週"            # _edit_row's tombstone: the session lives on as the user's own in another week
 
 
 def is_expired_open(s: dict, today: str) -> bool:
@@ -595,6 +606,128 @@ async def delete(db: AsyncSession, uid: str, athlete_id: int = 1, today: Optiona
         d["state"] = "removed"
     await db.commit()
     return d
+
+
+# ---------------------------------------------------------------------------
+# 還原成自動 (SP-469): an auto session the user edited (edited) or deleted (a tombstone,
+# state deleted) goes back to what the generator plans now. Only the generator's own sessions
+# (origin auto, a gen_key) from today on: a session the user added (custom), a done / missed /
+# past one, a 課表待確認 notice and the 賽事計算機's exported race (ext_key) never revert.
+# ---------------------------------------------------------------------------
+
+NOT_REVERTIBLE = (USER_DELETED, MOVED_NOTE)
+REVERT_RESET = {"state": "active", "edited": False, "note": None, "done_by": None,
+                # the user's own structure / 強度課 family / 目標用: back to the generator's (None)
+                "steps": None, "family": None, "target_basis": None}
+
+
+def revertible(s: dict, stored: list[dict], today: str) -> bool:
+    """Can 還原成自動 take this stored session back to the generator's? An edited auto session
+    from today on; or a tombstone of one (deleted on the 課表 page or by a 不排課日期 choice) whose
+    week has no other active / done session of that gen_key. Never a tombstone left by a move to
+    another week (the session lives on there as the user's own), an expired one the user deleted,
+    or the long day an accepted 賽事模擬 replaced (api/plan_sessions._accept_race_sim tombstones it;
+    it can come back once the 賽事模擬 session is deleted)."""
+    if s.get("origin") != "auto" or not s.get("gen_key") or s.get("ext_key") or s.get("kind") in NOT_LOAD:
+        return False
+    if not s.get("day") or s["day"] < today:
+        return False
+    if s.get("state") == "active":
+        return bool(s.get("edited"))
+    if s.get("state") != "deleted" or s.get("note") in NOT_REVERTIBLE:
+        return False
+    ws, key = s.get("week_start"), s["gen_key"]
+    from backend.engine.specific_phase import SRC_SIM          # an accepted 賽事模擬 keeps its sources
+    for x in stored:
+        if x is s or x.get("week_start") != ws:
+            continue
+        if x.get("gen_key") == key and x.get("state") in ("active", "done"):
+            return False                  # the week has this session already
+        if (key in ("long", "long2") and x.get("state") == "active" and x.get("origin") == "custom"
+                and str(x.get("source") or "")[:200] == SRC_SIM[:200]):
+            return False                  # an accepted 賽事模擬 is this week's long day
+    return True
+
+
+def deleted_revertible(stored: list[dict], today: str) -> list[dict]:
+    """The tombstones 還原成自動 can bring back (the 課表 page offers them on their day): one per
+    week and gen_key."""
+    out, seen = [], set()
+    for s in stored:
+        if s.get("state") != "deleted" or not revertible(s, stored, today):
+            continue
+        k = (s.get("week_start"), s.get("gen_key"))
+        if k in seen:
+            continue
+        seen.add(k)
+        out.append({k2: s.get(k2) for k2 in ("uid", "day", "kind", "title", "minutes", "gen_key", "week_start")})
+    return out
+
+
+def reset_rows(stored: list[dict], today: str, uids: Optional[set] = None) -> tuple[list[dict], list[str]]:
+    """(a copy of `stored` with the revertible sessions — all, or only `uids` — made the
+    generator's again: active, not edited, no structure / family / 目標用 of the user's; the reset
+    uids). Pure. reconcile() then gives them the generator's day and numbers (rule 2) — or
+    removes one the generator no longer plans. One tombstone per week and gen_key comes back
+    (the first one revived makes the others not revertible)."""
+    out = [dict(s) for s in stored]
+    reset: list[str] = []
+    for s in out:
+        if uids is not None and s["uid"] not in uids:
+            continue
+        if revertible(s, out, today):
+            s.update(REVERT_RESET)
+            reset.append(s["uid"])
+    return out, reset
+
+
+def mark_reverted(changes: list[dict], before: list[dict], new: list[dict], uids: list[str]) -> None:
+    """The reconcile changes of the reset sessions say so (`reverted`): a deleted
+    one that comes back is `added`; an edited one is `changed` (also when the generator's numbers
+    happen to equal the user's); a deleted one the generator no longer plans changes nothing."""
+    was = {s["uid"]: s for s in before}
+    now = {s["uid"]: s for s in new}
+    for uid in uids:
+        tomb = (was.get(uid) or {}).get("state") == "deleted"
+        mine = [c for c in changes if c.get("uid") == uid]
+        if tomb and uid not in now:
+            for c in mine:
+                changes.remove(c)         # was gone, stays gone
+            continue
+        if not mine:
+            s = now.get(uid)
+            if s is None:
+                continue
+            mine = [R._change("added" if tomb else "changed", s)]
+            changes.append(mine[0])
+        for c in mine:
+            if tomb and c["action"] == "changed":
+                c["action"] = "added"
+                c.pop("before", None)
+            c["reverted"] = True          # the 課表 page tags it 還原成自動 (its own words, i18n)
+
+
+async def revert(db: AsyncSession, uid: str, inputs: dict, today: str, athlete_id: int = 1) -> dict:
+    """還原成自動 for one session (SP-469). Only this session changes, to the generator's version
+    of it now: reconcile runs on the whole plan but nothing else of it is applied (a waiting
+    課表待確認 proposal, the other sessions' re-plan stay for 依實際進度重排). Returns the session
+    now ({…, state removed} when the generator no longer plans it) with `change` (the reconcile
+    change, reverted) and `was` (edited | deleted)."""
+    stored = await load(db, athlete_id)
+    s = next((x for x in stored if x["uid"] == uid), None)
+    if s is None:
+        raise PlanError(_("找不到這堂課"))
+    reset, uids = reset_rows(stored, today, {uid})
+    if not uids:
+        raise PlanError(_("只有改過或刪掉的自動排課（今天以後）能還原成自動；自己新增的課、已完成的課不行"))
+    new, changes = reconcile_with_adapt(reset, inputs)
+    mark_reverted(changes, stored, new, uids)
+    row = next((x for x in new if x["uid"] == uid), None)
+    await save(db, [x for x in stored if x["uid"] != uid] + ([row] if row else []), athlete_id)
+    out = dict(row) if row else {**s, "state": "removed"}
+    out["change"] = next((c for c in changes if c.get("uid") == uid), None)
+    out["was"] = "deleted" if s["state"] == "deleted" else "edited"
+    return out
 
 
 # ---------------------------------------------------------------------------

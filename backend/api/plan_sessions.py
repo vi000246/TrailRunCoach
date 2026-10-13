@@ -6,8 +6,9 @@ engine/projection.py, sync/coros_workouts.py).
   POST   /api/v1/overview/plan/sessions               add a custom session
   PATCH  /api/v1/overview/plan/sessions/{uid}         edit (day / kind / minutes / title / target / detail)
   DELETE /api/v1/overview/plan/sessions/{uid}
-  GET    /api/v1/overview/plan/reconcile              preview: added / changed / removed per day
-  POST   /api/v1/overview/plan/reconcile              apply
+  POST   /api/v1/overview/plan/sessions/{uid}/revert  還原成自動 (SP-469): an edited / deleted auto session
+  GET    /api/v1/overview/plan/reconcile?reset_edited= preview: added / changed / removed per day
+  POST   /api/v1/overview/plan/reconcile              apply ({decisions, reset_edited})
   GET    /api/v1/overview/plan/push-coros/preview?scope=day|week|phase&day=
   POST   /api/v1/overview/plan/push-coros?scope=&day= reconcile, then push the range
   DELETE /api/v1/overview/plan/push-coros?scope=&day= remove what was pushed in the range
@@ -646,8 +647,13 @@ async def _sessions_body(db: AsyncSession, inp: dict, start: Optional[str], end:
     mk = await PMK.load_safe(db, every, today)
     prefs = PS.load_prefs_safe()                # once, not per session (SP-462)
     out = {**_meta(inp), "summary": _summary(every, inp),
-           "sessions": [{**_view(s, inp, rows, today, prov, walk, prefs), "mark": PMK.of(mk, s["uid"])}
-                        for s in ss if s["state"] != "deleted" and s["state"] != "superseded"]}
+           "sessions": [{**_view(s, inp, rows, today, prov, walk, prefs), "mark": PMK.of(mk, s["uid"]),
+                         # SP-469: 還原成自動 offered on an edited auto session
+                         **({"revertible": True} if s["state"] == "active" and PS.revertible(s, every, today) else {})}
+                        for s in ss if s["state"] != "deleted" and s["state"] != "superseded"],
+           # SP-469: deleted auto sessions 還原成自動 can bring back, shown on their day
+           "deleted_auto": [d for d in PS.deleted_revertible(every, today)
+                            if not (start or end) or ((not start or d["day"] >= start) and (not end or d["day"] <= end))]}
     if inp.get("stale"):
         st = inp["stale"]
         out["stale"] = {"reason": st["reason"], "age_s": max(0, int(time.time() - st["at"])),
@@ -2171,6 +2177,22 @@ async def delete_session(uid: str, db: AsyncSession = Depends(get_db)):
     return out
 
 
+@router.post("/sessions/{uid}/revert")
+async def revert_session(uid: str, db: AsyncSession = Depends(get_db)):
+    """還原成自動 (SP-469): an auto session the user edited, or deleted (its tombstone), becomes the
+    generator's again — that day gets what the plan computes now (plan_store.revert; only this
+    session changes). The watch follows like after an edit (SP-358: a pushed copy is re-sent, with
+    自動推送 on a session in the push window is pushed); when it can't, the session shows 需更新."""
+    inp = await _inputs(db)
+    try:
+        async with _wlock():
+            out = await PS.revert(db, uid, inp, _today(inp))
+    except PS.PlanError as e:
+        raise HTTPException(400, str(e))
+    out["coros"] = await _sync_watch(db, [uid], inp)
+    return out
+
+
 @router.post("/sessions/{uid}/link")
 async def link_session(uid: str, body: dict = Body(...), db: AsyncSession = Depends(get_db)):
     """{index}: the user pairs this session with an activity (engine/plan_match.py)."""
@@ -2209,13 +2231,22 @@ async def unlink_session(uid: str, db: AsyncSession = Depends(get_db)):
     return out
 
 
+def _resettable(stored: list[dict], today: str) -> int:
+    """How many sessions 「也重置我改過的課」 would take back to the generator's (SP-469)."""
+    return len(PS.reset_rows(stored, today)[1])
+
+
 @router.get("/reconcile")
-async def reconcile_preview(db: AsyncSession = Depends(get_db)):
+async def reconcile_preview(reset_edited: bool = False, db: AsyncSession = Depends(get_db)):
+    """`reset_edited` (SP-469): the preview with 「也重置我改過的課」 ticked."""
     inp = await _inputs(db)
+    today = _today(inp)
     async with _wlock():
         await _ensure(db, inp)
-        _, changes = await PS.plan_reconcile(db, inp, apply=False)
-    return {**_meta(inp), "changes": changes, "by_day": R.by_day(changes)}
+        _, changes = await PS.plan_reconcile(db, inp, apply=False, reset=reset_edited, today=today)
+        n = _resettable(await PS.load(db), today)
+    return {**_meta(inp), "changes": changes, "by_day": R.by_day(changes), "resettable": n,
+            "reset_edited": reset_edited}
 
 
 def _decisions(body: Optional[dict]) -> dict:
@@ -2228,12 +2259,17 @@ def _decisions(body: Optional[dict]) -> dict:
 
 @router.post("/reconcile")
 async def reconcile_apply(body: Optional[dict] = Body(None), db: AsyncSession = Depends(get_db)):
+    """{decisions, reset_edited}: `reset_edited` (SP-469, 「也重置我改過的課」) first takes every auto
+    session the user edited or deleted back to the generator's (plan_store.reset_rows); sessions
+    the user added and done ones are never touched. Like every reconcile, a session whose pushed
+    copy is now different shows 需更新 until the next push."""
     dec = _decisions(body)
+    reset = bool((body or {}).get("reset_edited"))
     inp = await _inputs(db)
     async with _wlock():
         await _ensure(db, inp)
-        _, changes = await PS.plan_reconcile(db, inp, apply=True, decisions=dec)
-    return {**_meta(inp), "changes": changes, "by_day": R.by_day(changes)}
+        _, changes = await PS.plan_reconcile(db, inp, apply=True, decisions=dec, reset=reset, today=_today(inp))
+    return {**_meta(inp), "changes": changes, "by_day": R.by_day(changes), "reset_edited": reset}
 
 
 def _in_range(ss: list[dict], a: str, b: str, blocked: Optional[dict] = None) -> list[dict]:

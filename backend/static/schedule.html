@@ -242,6 +242,17 @@ body.swapping #cal .chip[draggable="true"] { cursor: copy; }
 /* SP-82: an empty planned day's 「休息」 — drag it onto another day to swap */
 .chip.rest-mv { cursor: grab; border-style: dashed; background: transparent; font-size: 12px; }
 .chip.act { cursor: default; }
+/* SP-469: a deleted auto session that 還原成自動 can bring back, faint on its day */
+.ghost-del { display: block; width: 100%; text-align: left; font: inherit; font-size: 11px; line-height: 1.3; color: var(--faint);
+  background: transparent; border: 1px dashed var(--line); border-radius: 6px; padding: 2px 5px; cursor: pointer;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ghost-del:hover, .ghost-del:focus-visible { color: var(--accent); border-color: var(--accent); }
+.ag-day .ghost-del { font-size: 12.5px; padding: 4px 8px; }
+.rv-tag { display: inline-block; font-size: 11px; padding: 0 5px; border-radius: 4px; border: 1px solid var(--accent); color: var(--accent); margin-right: 3px; }
+dialog.sd label.rc-reset, .rc-reset { display: flex; gap: 8px; color: var(--text); align-items: flex-start; margin: 8px 0 0; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; cursor: pointer; }
+.rc-reset input { width: auto; margin: 3px 0 0; flex: none; }
+.rc-reset .meta { display: block; margin-top: 2px; }
+.rc-reset.off { opacity: .6; cursor: default; }
 
 /* 推送狀態: on a card only 需更新 / 失敗 (right of the ring); every state in the legend and the dialog */
 .sy { display: inline-grid; place-items: center; width: 13px; height: 13px; flex: none; }
@@ -711,6 +722,7 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
     <div class="err" id="sd-err" role="alert"></div>
     <div class="btns">
       <button class="btn danger" type="button" id="sd-del">刪除</button>
+      <button class="btn" type="button" id="sd-revert" hidden data-i18n="schedule.rv.btn">還原成自動</button>
       <button class="btn" type="button" id="sd-push">推送這天到 COROS</button>
       <span class="spacer"></span>
       <button class="btn" type="button" data-close id="sd-cancel">取消</button>
@@ -1094,6 +1106,12 @@ function restMv(d, ss) {
   if (!(D.sessions || []).some((s) => s.state === "active" && s.day >= a && s.day <= b)) return "";
   return `<span class="chip sc fut rest-mv" draggable="true" data-rest-from="${d}" title="${esc(tt("rest.mv_tip"))}">${SessChip.icon("rest")}<span class="c-t sc-t">${esc(tt("rest.mv"))}</span></span>`;
 }
+// SP-469: the deleted auto sessions of a day (D.deleted_auto) — click to bring one back (還原成自動)
+const delOf = (d) => (D.deleted_auto || []).filter((x) => x.day === d);
+function ghostHtml(d) {
+  return delOf(d).map((x) => `<button type="button" class="ghost-del" data-revert="${esc(x.uid)}" title="${esc(tt("rv.ghost_tip", { title: x.title }))}"
+    aria-label="${esc(tt("rv.ghost_aria", { title: x.title, day: md(d) }))}">↺ ${esc(tt("rv.ghost", { title: x.title }))}</button>`).join("");
+}
 // ---- session card (SP-396) ----
 // one session = one card (sesschip.js; docs/research/schedule-chip-ui.md §8.1): the type tile (↻ / ✎ in
 // its corner) · the title · the completion ring and, on a session still to come, the watch only when it
@@ -1305,7 +1323,7 @@ function render() {
           <div class="cell-top"><button type="button" class="dnum" data-sel="${d}" aria-label="選取 ${md(d)}（週${wd(d)}）${d === D.today ? "，今天" : ""}${bo ? "，不排課" : ""}" aria-pressed="${d === S.sel}">${dOf(d).getDate() === 1 && !week ? md(d) : dOf(d).getDate()}</button>${phl}${hn ? hnTag(hn) : ""}
           ${bo && (d === bo.start || i === 0) ? boChip(bo) : ""}
           ${can ? `<button type="button" class="add" data-add="${d}" aria-label="在 ${md(d)} 新增課表" title="新增">＋</button>` : ""}</div>
-          <div class="chips">${items || (week && can ? restMv(d, ss) : "")}</div></div>`);
+          <div class="chips">${items || (week && can ? restMv(d, ss) : "")}${can ? ghostHtml(d) : ""}</div></div>`);
       }
       const ph = phaseOf(addDays(ws, 3)) || {};
       rows.push(`<div class="wk ph-${esc(w.phase || ph.kind || "none")} ${w.provisional ? "prov" : ""}" role="row" data-week="${ws}">${cells.join("")}<div class="sum" role="gridcell" aria-label="週統計">${sumHtml(w)}</div></div>`);
@@ -1356,7 +1374,7 @@ function agendaHtml(a, ss, acts) {
     const items = (ss[d] || []).map((s) => chipHtml(s, true)).join("") + (acts[d] || []).map(actHtml).join("");
     days.push(`<div class="ag-day ${d < D.today ? "past" : ""} ${d === D.today ? "today" : ""} ${d === S.sel ? "sel" : ""} ${can ? "can" : ""} ${bo ? "bo" : ""} ${bo && bo.kind === "rest" ? "rest-d" : ""}" data-day="${d}" title="${esc(dayTip(d, ss[d]))}">
       <div class="d"><button type="button" class="dnum" data-sel="${d}" aria-label="選取 ${md(d)}${bo ? "，不排課" : ""}" style="padding:0;height:auto;text-align:left">週${wd(d)}<b>${dOf(d).getDate()}</b></button>${d === D.today ? "今天" : ""}${hnOf(d) ? hnTag(hnOf(d)) : ""}</div>
-      <div class="chips">${bo ? boChip(bo) : ""}${items || (bo ? "" : restMv(d, ss) || `<span class="rest">${d < D.today ? "沒有活動" : "休息"}</span>`)}</div>
+      <div class="chips">${bo ? boChip(bo) : ""}${items || (bo ? "" : restMv(d, ss) || `<span class="rest">${d < D.today ? "沒有活動" : "休息"}</span>`)}${can ? ghostHtml(d) : ""}</div>
       ${can ? `<button type="button" class="add" data-add="${d}" aria-label="在 ${md(d)} 新增課表">＋</button>` : "<span></span>"}</div>`);
   }
   const future = a > D.today;
@@ -1489,24 +1507,49 @@ function changesHtml(byDay, decide = false) {
       `<label><input type="radio" name="${nm}" data-dec="${esc(c.uid)}" value="keep" ${to ? "" : "checked"}>先留著</label></span>`;
   };
   return `<ul class="chg">${days.map((d) => `<li><b>${d === "—" ? "—" : `週${wd(d)} ${md(d)}`}</b>：${byDay[d].map((c) =>
-    `<span class="${(ACT[c.action] || ACT.changed)[1]}">${(ACT[c.action] || ACT.changed)[0]}</span> ${gl(c.title)}${c.minutes && c.action !== "missed" ? ` ${c.minutes} 分` : ""}${bf(c)}${c.reason ? ` <span class="faint">${esc(c.reason)}</span>` : ""}${dec(c)}`).join("；")}</li>`).join("")}</ul>`;
+    `<span class="${(ACT[c.action] || ACT.changed)[1]}">${(ACT[c.action] || ACT.changed)[0]}</span> ${c.reverted ? `<span class="rv-tag">${esc(tt("rv.tag"))}</span>` : ""}${gl(c.title)}${c.minutes && c.action !== "missed" ? ` ${c.minutes} 分` : ""}${bf(c)}${c.reason ? ` <span class="faint">${esc(c.reason)}</span>` : ""}${dec(c)}`).join("；")}</li>`).join("")}</ul>`;
 }
 // the user's choices in the open preview: {uid: move | delete} ("keep" = no decision)
 const decisions = () => Object.fromEntries([...$("cf-body").querySelectorAll("input[data-dec]:checked")]
   .filter((x) => x.value !== "keep").map((x) => [x.dataset.dec, x.value]));
+// SP-469: 「也重置我改過的課」 — every auto session you edited or deleted back to the plan's; yours stay
+function resetBox(p) {
+  const k = p.resettable || 0;
+  return `<label class="rc-reset${k ? "" : " off"}"><input type="checkbox" id="rc-reset" ${k ? "" : "disabled"}>
+    <span><b>${esc(tt("rc.reset", { n: k }))}</b><span class="meta">${esc(tt(k ? "rc.reset_sub" : "rc.reset_none"))}</span></span></label>`;
+}
 async function reconcile(opts = {}) {
   if (S.busy) return;
   msg(`<span class="spin"></span> 依實際進度計算中…`);
   let p;
   try { p = await sj("GET", `${PAPI}/reconcile`); } catch (e) { return errMsg("重排", e); }
   msg("");
-  const n = (p.changes || []).length;
-  const ok = await ask(opts.title || "依實際進度重排", `<p class="meta" style="margin:0">${opts.intro || "錯過的課標成跳過，之後還沒改過的課依目前狀況重排；你改過或自己加的課會保留。"}</p>${changesHtml(p.by_day, true)}`,
-    n ? `套用 ${n} 項變動` : "", { cancel: n ? "取消" : "關閉" });
+  let n = (p.changes || []).length;
+  const main = !opts.title;                          // the toolbar's 依實際進度重排 (not 課表偏好's save)
+  const okTxt = (k) => k ? `套用 ${k} 項變動` : "";
+  const shown = ask(opts.title || "依實際進度重排", `<p class="meta" style="margin:0">${opts.intro || "錯過的課標成跳過，之後還沒改過的課依目前狀況重排；你改過或自己加的課會保留。"}</p>` +
+    (main ? resetBox(p) : "") + `<div id="rc-list">${changesHtml(p.by_day, true)}</div>`,
+    okTxt(n), { cancel: n ? "取消" : "關閉" });
+  const box = $("rc-reset");
+  if (box) box.addEventListener("change", async () => {
+    box.disabled = true;
+    $("rc-list").innerHTML = `<p class="meta" style="margin:0"><span class="spin"></span> ${esc(tt("rc.reset_loading"))}</p>`;
+    try {
+      const q = await sj("GET", `${PAPI}/reconcile?reset_edited=${box.checked ? 1 : 0}`);
+      n = (q.changes || []).length;
+      $("rc-list").innerHTML = (box.checked ? `<p class="meta rc-warn" style="margin:0 0 4px">${esc(tt("rc.reset_on"))}</p>` : "") + changesHtml(q.by_day, true);
+      $("cf-ok").textContent = okTxt(n); $("cf-ok").hidden = !n; $("cf-no").textContent = n ? "取消" : "關閉";
+    } catch (e) { $("rc-list").innerHTML = `<p class="err" style="margin:0">${esc(e.message)}</p>`; }
+    finally { box.disabled = false; }
+  });
+  const ok = await shown;
   if (!ok) { if (opts.cancelMsg) msg(n ? opts.cancelMsg : "偏好已儲存；課表不需要變動", n ? "" : "ok"); return; }
-  const dec = decisions();
+  const dec = decisions(), reset = !!(box && box.checked);
   S.busy = true; renderToolbar(); msg(`<span class="spin"></span> 套用中…`);
-  try { await sj("POST", `${PAPI}/reconcile`, { decisions: dec }); msg(`已重排：${n} 項變動`, "ok"); await load(); }
+  try {
+    await sj("POST", `${PAPI}/reconcile`, { decisions: dec, reset_edited: reset });
+    msg(reset ? esc(tt("rc.reset_done", { n })) : `已重排：${n} 項變動`, "ok"); await load();
+  }
   catch (e) { errMsg("重排", e); }
   finally { S.busy = false; renderToolbar(); }
 }
@@ -2195,6 +2238,7 @@ function openDlg(s, day) {
   $("sd-cancel").textContent = ro ? "關閉" : "取消";
   // a past session that wasn't done can be deleted too (it never comes back; off the watch)
   const del = $("sd-del"); del.hidden = !s || (ro && !expOpen(s)); del.classList.remove("armed"); del.textContent = "刪除";
+  $("sd-revert").hidden = !s || ro || !s.revertible;                // SP-469: an edited auto session
   $("sd-push").hidden = !s || ro || !(D.coros || {}).authenticated || s.kind === "strength" || s.kind === "heat_passive";
   $("sd-climbbox").hidden = !climbable(s);
   dlg.titleTouched = false;
@@ -2302,6 +2346,51 @@ $("sd-del").addEventListener("click", async () => {
   } catch (err) { errMsg(tt("del.what"), err); }
 });
 $("sd-push").addEventListener("click", () => { const s = findS(dlg.uid); if (!s) return; $("sd").close(); S.sel = s.day; render(); push("day", s.day); });
+$("sd-revert").addEventListener("click", () => { const s = findS(dlg.uid); if (!s) return; $("sd").close(); revertSession(s); });
+
+// ---- 還原成自動 (SP-469): an auto session you edited, or deleted, back to what the plan computes now ----
+const ON_WATCH = ["pushed", "updated", "outdated", "failed"];
+function revertMsg(r, title) {
+  const [w, cls] = watchNote(r.coros);
+  if (r.state === "removed") return [tt("rv.done_gone", { title }) + w, cls];
+  const t = { title: r.title || title, day: `${md(r.day)}（週${wd(r.day)}）` };
+  const moved = r.change && r.change.reason && /同一天/.test(r.change.reason);
+  return [tt(moved ? "rv.done_moved" : "rv.done", t) + w, cls];
+}
+async function revertSession(s) {
+  const pushed = s.coros && ON_WATCH.includes(s.coros.status);
+  const ok = await ask(tt("rv.title"), `<p style="margin:0">${esc(tt("rv.body", { title: s.title, day: md(s.day) }))}</p>` +
+    `<p class="meta" style="margin:6px 0 0">${esc(tt(pushed ? "rv.body_watch" : "rv.body_after"))}</p>`, tt("rv.ok"));
+  if (!ok) return;
+  S.sel = s.day;
+  try {
+    // shown at once (SP-445): the card is no longer yours (✎ goes), locked ↻ until the plan's version arrives
+    const r = await optimistic([s.uid], (ss) => ss.map((x) => (x.uid === s.uid ? { ...x, edited: false, revertible: false } : x)),
+      () => sj("POST", `${PAPI}/sessions/${encodeURIComponent(s.uid)}/revert`));
+    const [m, cls] = revertMsg(r, s.title);
+    msg(esc(m), cls);
+  } catch (e) { errMsg(tt("rv.what"), e); }
+}
+async function revertDeleted(uid) {
+  const x = (D.deleted_auto || []).find((y) => y.uid === uid);
+  if (!x || pending() || isStale()) return;
+  const ok = await ask(tt("rv.del_title"), `<p style="margin:0">${esc(tt("rv.del_body", { title: x.title, day: md(x.day) }))}</p>` +
+    `<p class="meta" style="margin:6px 0 0">${esc(tt("rv.del_note"))}</p>`, tt("rv.ok"));
+  if (!ok) return;
+  S.sel = x.day;
+  const keep = D.deleted_auto;
+  D = { ...D, deleted_auto: keep.filter((y) => y.uid !== uid) };       // the faint 已刪除 line goes at once
+  try {
+    // shown at once (SP-445): back on its day, locked ↻ until the plan's version arrives
+    const r = await optimistic([uid], (ss) => ss.concat([{ ...x, state: "active", origin: "auto", edited: false, tss: 0, coros: {} }]),
+      () => sj("POST", `${PAPI}/sessions/${encodeURIComponent(uid)}/revert`));
+    const [m, cls] = revertMsg(r, x.title);
+    msg(esc(m), cls);
+  } catch (e) {
+    if (D) { D = { ...D, deleted_auto: keep }; render(); }
+    errMsg(tt("rv.what"), e);
+  }
+}
 
 // ---------------- 課表偏好 (engine/plan_prefs.py) ----------------
 const PFF = $("pf-form");
@@ -2868,6 +2957,8 @@ $("cal").addEventListener("click", (e) => {
   if (boc) { const b = BOS().find((x) => x.id === boc.dataset.bo); if (b) openBo(b); return; }
   const hnc = e.target.closest("[data-hn]");
   if (hnc) return openHigh(hnc.dataset.hn);
+  const gh = e.target.closest("[data-revert]");
+  if (gh) return revertDeleted(gh.dataset.revert);
   const day = e.target.closest("[data-day]");
   if (e.shiftKey && day && !e.target.closest(".chip")) {    // shift-click: a range from the selected day
     const d = day.dataset.day;
@@ -3002,11 +3093,14 @@ function ctxItems(target) {
     else out.push({ act: "open", uid: s.uid, label: tt("ctx.open") });
     if (swappable(s)) out.push({ act: "swap", uid: s.uid, label: tt("ctx.swap"), sub: tt("ctx.swap_sub") });
     if (climbable(s)) out.push({ act: "climb", uid: s.uid, label: tt("ctx.to_climb"), sub: tt("ctx.to_climb_sub") });
+    if (editable(s) && s.revertible) out.push({ act: "revert", uid: s.uid, label: tt("ctx.revert"), sub: tt("ctx.revert_sub") });
     if (editable(s) || expOpen(s)) out.push({ act: "del", uid: s.uid, label: expOpen(s) ? tt("ctx.del_expired") : tt("ctx.del"), danger: true });
     return { title: `${md(s.day)} ${s.title}`, items: out };
   }
   if (!cell || target.closest(".chip[data-act]")) return null;
   const d = cell.dataset.day, bo = boOf(d), hn = hnOf(d);
+  // SP-469: a deleted auto session of this day comes back with 還原成自動
+  const back = d >= D.today && !bo ? delOf(d).map((x) => ({ act: "revert-del", uid: x.uid, label: tt("ctx.revert_del", { title: x.title }), sub: tt("ctx.revert_del_sub") })) : [];
   const high = d > D.today ? [] : hn ? [{ act: "high", day: d, label: tt("ctx.high_edit", { m: hn.m.toLocaleString() }) },
     { act: "unhigh", day: d, label: tt("ctx.high_del"), danger: true }] : [{ act: "high", day: d, label: tt("ctx.high"), sub: tt("ctx.high_sub") }];
   const title = tt("ctx.day_title", { day: md(d), wd: wd(d) });
@@ -3018,7 +3112,7 @@ function ctxItems(target) {
   if (CTX.tests) items.push({ act: "tests", day: d, label: tt("ctx.tests"),
     sub: sugFits(d) ? tt("ctx.tests_sub", { n: CTX.tests }) : tt("ctx.tests_no_day"), muted: !sugFits(d) });
   if (!busy) items.push({ act: "rest", day: d, label: tt("ctx.rest"), sub: tt("ctx.rest_sub") });
-  return { title, items: items.concat(high) };
+  return { title, items: items.concat(back, high) };
 }
 function ctxOpen(target, x, y) {
   if (!D || S.busy) return false;
@@ -3048,6 +3142,8 @@ async function ctxRun({ ctx, uid, day }) {
   if (ctx === "edit" || ctx === "open") { if (s) { S.sel = s.day; render(); openDlg(s); } }
   else if (ctx === "move") { if (s) { S.sel = s.day; render(); openDlg(s); F.day.focus(); F.day.showPicker?.(); } }
   else if (ctx === "del") { if (s) delSession(s); }
+  else if (ctx === "revert") { if (s) revertSession(s); }
+  else if (ctx === "revert-del") revertDeleted(uid);
   else if (ctx === "swap") { if (s) swapStart(s); }
   else if (ctx === "climb") { if (s) toClimb(s); }
   else if (ctx === "add") { S.sel = day; render(); openDlg(null, day); }
