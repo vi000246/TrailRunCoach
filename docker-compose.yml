@@ -1,3 +1,5 @@
+# Local machine only (./deploy.sh). The NAS runs its own compose file with
+# `image: trailruncoach` and no `build:`; see docs/deploy/wko5coach.deploy.md.
 services:
   wko5coach:
     build: .
