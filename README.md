@@ -114,6 +114,15 @@ TRC_E2E_HEADED=1 ./e2e.sh -x   # 開視窗看它跑
 頁面的 ECharts／Leaflet 從 cdnjs 載入，所以要有網路；地圖圖磚在測試裡以空白圖回應，不連圖磚伺服器。
 不會連 COROS（「抓活動」的同步由測試自己回應）。
 
+**驗收截圖**（`backend/tests/e2e/shots.py`）：同一個示範跑者、同一套環境，照一份 JSON 截圖清單拍下 UI 單改到的畫面
+（桌機／手機寬度、先點開對話框、示範資料沒有的狀態用 mock 假造），存成 WebP 放進單上的「驗收截圖」。清單格式見檔頭。
+
+```bash
+./shots.sh SP-396.json --out <資料夾>                         # 自己起伺服器（約 30 秒）
+python -m backend.tests.e2e._server --serve                    # 或先起一個，給好幾份清單共用：
+./shots.sh a.json b.json --out <資料夾> --url http://127.0.0.1:<port>
+```
+
 ---
 
 ## English summary
