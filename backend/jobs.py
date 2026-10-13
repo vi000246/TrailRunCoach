@@ -38,7 +38,10 @@ classification `single`, or `full` when most activities are recomputed, in age t
 api/activity_auto.py), the overview status (`single`, api/overview._status), the Dataset a request
 builds (`build`, `user`: wko5views._dataset), the back-fill of the older activities a hot-first
 build left out (`full` chunks at `warm` / `cold`, then `build` at `cold`: api/backfill.py), the
-back-test (`backtest`) and, once SP-317 exists, the monthly archive (`submit_archive`).
+back-test (`backtest`), the cold-data sweep queued once the classification's last tier is done
+(`full` at `cold`: the summaries of the activities older than WARM_DAYS, their per-second
+channels dropped; SP-340, wko5expr/coldstore.schedule_sweep) and, once SP-317 exists, the monthly
+archive (`submit_archive`; its job calls coldstore.prepare_archive first).
 
 A caller that needs the result waits with `call(fn, ...)`: it queues `fn` and returns its result
 (or raises its exception); with a `key`, concurrent callers share one job and its result (the
@@ -236,7 +239,9 @@ def submit_archive(fn: Callable, *, label: str = "monthly archive", key: Optiona
     `archive`, the lowest priority — after every waiting job of every other kind, the cold
     fill included; `full` (it rewrites one tenant's cold summaries and moves its old FITs).
     SP-317 runs it in its 03:00–05:00 window: one call per tenant due, `key` = ("archive",
-    tenant id, month) so a second call before it ran is the same job."""
+    tenant id, month) so a second call before it ran is the same job. Its `fn` first calls
+    wko5expr/coldstore.prepare_archive(cutoff) (SP-340: freezes the cold summaries; idempotent)
+    and deletes only the files that returns."""
     return submit(fn, cls="full", priority="archive", label=label, key=key, tenant=tenant)
 
 

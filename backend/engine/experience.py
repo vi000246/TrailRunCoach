@@ -100,11 +100,14 @@ def stamp(user_id: int = 1) -> tuple:
 
 
 def foot_days(ds, today: dt.date) -> list[dt.date]:
-    """The dates with a run or hike (overview.FOOT) up to `today`, oldest first."""
+    """The dates with a run or hike (overview.FOOT) up to `today`, oldest first — the activities
+    SP-317 archived too (their cold summaries, SP-340): the history did not get shorter."""
     from backend.engine import overview as O
     from backend.engine.wko5expr.dataset import date_to_day, day_to_date
     tday = math.floor(date_to_day(today))
-    return sorted({day_to_date(math.floor(w.day)) for w in getattr(ds, "workouts", [])
+    cold = getattr(ds, "cold", None)
+    ws = list(getattr(ds, "workouts", [])) + list(cold.archived if cold is not None else [])
+    return sorted({day_to_date(math.floor(w.day)) for w in ws
                    if math.floor(w.day) <= tday and O.category(w) in O.FOOT})
 
 

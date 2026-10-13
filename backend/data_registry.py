@@ -227,6 +227,13 @@ FILES: tuple = (
     File("views/**", USER, BASE, "the user's custom chart views (wko5expr/customviews.py)", backup=ALWAYS),
     # -- shared (tenancy.shared_path) ----------------------------------------
     FIT,
+    File("cold/**", IMPORTED, SHARED, "cold summaries (SP-340, wko5expr/coldstore.py): per FIT folder, one file "
+         "per month of the activities older than a year — each one's metrics (TSS …), mean-max curve, TIS, "
+         "achievement summary and what the estimate keys read of its file — and the month's segment (daily "
+         "TSS, best-effort envelopes, TIS sums); archive.json notes SP-317's cutoff and the left-out files. "
+         "Recomputable from the FITs only until SP-317 archives (deletes) them; the frozen months are then "
+         "the only record of those activities, so backed up like the user's files",
+         backup=ALWAYS, deidentify=("activity files / starts", "achievement footprint cells (GPS), summits")),
     File("routes/names.json", USER, SHARED, "the user's names for detected routes (engine/routes.py)",
          backup=ALWAYS, deidentify=("names (free text)",)),
     File("routes/**", DERIVED, SHARED, "route index, per-activity tracks, route weather (engine/routes.py, "

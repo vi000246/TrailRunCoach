@@ -404,7 +404,8 @@ def _low_priority(reason: str, slot: Optional[dict] = None) -> None:
     (activity_auto.job_for: its own job, `single` or `full`; read from disk when nothing
     changed; after a version change in age tiers, the hot one at the warm-up's priority —
     _hot_priority, SP-394 第 3 條 — and once its last tier is done the old series rows of this
-    tenant go, _sweep_when_done) and, owner only, the race calculator's charts
+    tenant go, _sweep_when_done, and then the cold-data sweep is queued at `cold`,
+    coldstore.schedule_sweep, SP-340) and, owner only, the race calculator's charts
     (racepower.warm_charts, `full`, after the classification's warm tier). A warm-up asked for
     while this waits only marks it to run once more (`low_again`)."""
     import logging
@@ -415,7 +416,8 @@ def _low_priority(reason: str, slot: Optional[dict] = None) -> None:
             ds = jobs.call(_calibrated, cls="full", priority="warm", label=f"warm-up calibration ({reason})")
             from backend.api import activity_auto as AA, racepower as RP
             # the classification: after a version change in age tiers, its hot tier at the warm-up's
-            # priority (SP-394 第 3 條); once its last tier is done, the old series rows go
+            # priority (SP-394 第 3 條); once its last tier is done, the old series rows go and the
+            # cold-data sweep is queued (SP-340)
             job = AA.job_for(ds, priority=_hot_priority(reason))
             _sweep_when_done(job, ds)
             RP.warm_charts(job)                  # then the race calculator's charts (SP-366; owner only)
@@ -448,9 +450,20 @@ def _hot_priority(reason: str) -> str:
 def _sweep_when_done(job, ds) -> None:
     """SP-394 第 3 條 (補完新版才刪舊版): the old series rows / files of this tenant's store go once
     the classification's last tier is done — the new version is filled in by then — instead of at
-    the end of the warm-up (dataset.sweep_series, SP-338 第 4 條 / SP-339)."""
+    the end of the warm-up (dataset.sweep_series, SP-338 第 4 條 / SP-339). Then (SP-340) the
+    cold-data sweep is queued at `cold` on this Dataset (coldstore.schedule_sweep: the summaries of
+    the activities older than a year, their channels dropped, the series rows of files gone) — at
+    once when the classification had nothing to compute; never on a hot-first Dataset whose older
+    activities are still being back-filled (coldstore.sweep skips it)."""
+    def cold() -> None:
+        try:
+            from backend.engine.wko5expr import coldstore
+            coldstore.schedule_sweep("warm-up", ds)
+        except Exception:                # noqa: BLE001 — a queued sweep never fails anything
+            pass
     when = getattr(job, "when_done", None)
     if when is None:
+        cold()
         return
     try:
         home = ds._series_home()
@@ -464,6 +477,7 @@ def _sweep_when_done(job, ds) -> None:
             D.sweep_series(stores=[home / seriesdb.FILE_NAME])
         except Exception:                # noqa: BLE001 — a cache sweep never fails anything
             pass
+        cold()
     when(sweep, key="sweep")
 
 
@@ -580,6 +594,12 @@ async def dataset_status():
     from backend.engine.wko5expr import buildstate
     src = DSRC.current_source()
     cur = buildstate.get(src).snapshot()
+    if cur.get("state") != "building":
+        # SP-340: a page re-parsing cold activities' FITs (their channels went after a year) is
+        # shown like a build (「正在從 FIT 重算較舊的活動」), `recall` true
+        rc = buildstate.recall(src).snapshot()
+        if rc.get("state") == "building":
+            cur = {**rc, "recall": True}
     # SP-394 第 4 條: this tenant's back-fill of the older activities a hot-first build left out
     return {**cur, "sources": buildstate.all_states(), "backfill": backfill.progress()}
 

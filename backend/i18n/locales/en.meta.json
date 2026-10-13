@@ -3451,6 +3451,10 @@
     "draft": true,
     "src": "backend/engine/strength_moves.py:180"
   },
+  "從 FIT 重算較舊的活動": {
+    "draft": true,
+    "src": "backend/engine/wko5expr/buildstate.py:38"
+  },
   "從最近的輕鬆跑推估 AeT 約 {v:.0f} bpm，和目前 {now:.0f} 差 {d:+.0f}：測一次確認（UA：基礎變好 AeT 會往 AnT 靠）": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:1547"
@@ -4470,6 +4474,10 @@
   "次／週": {
     "draft": true,
     "src": "backend/engine/advanced_params.py:62"
+  },
+  "正在從 FIT 重算較舊的活動（第 {n}／{total} 筆）…": {
+    "draft": true,
+    "src": "backend/engine/wko5expr/buildstate.py:106"
   },
   "正常": {
     "draft": false,
