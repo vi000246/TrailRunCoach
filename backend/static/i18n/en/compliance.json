@@ -72,7 +72,7 @@
   "kinds.tss": "TSS planned {p} → actual {a}",
   "kinds.tip": "Sessions done per type.\nHow to read: green = done, orange = partly, hatched = a different session, grey = skipped; on the right: completion and count.\nMethod: done = time and TSS within ±20% of the plan (TrainingPeaks' compliance colours).\nQuality sessions are split into aerobic intervals, VO2max intervals and speed (a session without a type is read from its steps); hover the numbers on the right for planned → actual TSS.",
   "list.title": "Sessions",
-  "list.sub": "{n} in all (newest first)",
+  "list.sub": "{n} in all (newest first, skipped ones last)",
   "list.tip": "The percentage is the compliance: actual TSS ÷ planned TSS, time when there is no TSS.\nClick to open the session on the calendar (planned vs actual, re-pair).",
   "list.all": "All",
   "list.more": "Show more ({n} left)",
