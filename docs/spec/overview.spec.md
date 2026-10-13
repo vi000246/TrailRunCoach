@@ -1661,7 +1661,11 @@ which one. The response keeps the `coros` field names.
   the streak (weeks with ≥ 80 % of the due sessions done, 推估), a compact session list (跳過 grey
   `--faint` with ○, listed after the rest; no red for a status — SP-398), a
   per-phase period filter and a zoned 負荷比 ATL ÷ CTL chart (hover 「值 · 區間（範圍）」, a dashed
-  line at 1). 每週存檔 (SP-71, `engine/plan_history.py`; `backend/static/compliance.html:649`): one
+  line at 1). A period switch (SP-446): `GET /plan/compliance` reads the stored sessions reconciled like the
+  calendar (`_reconciled`) with only the 強度課 family of the calendar's view (`_stats_view`; no watch-push status),
+  and prices the plan with the inputs' own TSS / h (`plan_rates` default; `_range_extras` skips its `tph` under
+  `_EXTRAS_TPH`); the page asks for the 負荷比 next to the stats (not after), drops an answer for a period no longer
+  picked, and 本周期 longer than 371 days shows its last 371 days. 每週存檔 (SP-71, `engine/plan_history.py`; `backend/static/compliance.html:649`): one
   row per stored week, the plan as it began and how it went; `GET /sessions` takes this week's
   snapshot / last week's result when due (`backend/api/plan_sessions.py:458`). The 基線測試 rows
   (SP-71) are in plan-auto.spec.md.
@@ -2593,3 +2597,4 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 | 2026-10-13 | feature | SP-450 | The 專項 chip (主要訓練項目, `backend/static/sportchip.js`) is in the 課表's top row too (`backend/static/schedule.html:578`): choosing 自動／越野跑／路跑・馬拉松 saves `athlete.primary_sport` and reloads; the plan's `PSP.stored()` stamp re-plans (路跑: no 爬升 week row). Demo: shown, disabled |
 | 2026-10-13 | feature | SP-467 | 設定 › 閾值 gets 「門檻變更紀錄」 (`GET /api/v1/plan/threshold-history`, `backend/engine/threshold_history.py`): which threshold changed on which day, from → to and its source (手動／測試／套用的自動估算／PD 擬合／自動估算／手錶帳號設定／心率模型), built from the plan rows, the Dataset's existing PD fits and as-of LTHR (no refit), the watch account's history; the 課表心率區間 switch is recorded from now on in the new user_settings key `plan.hr_zone_model_history` (`PUT /api/v1/plan/hr-profile`). zh-TW + en. Session format unchanged. Tests: `backend/tests/test_threshold_history_sp467.py` |
 | 2026-10-13 | bugfix | SP-468 | 測試 indicator: a CP test counts as the CP's test day by itself (its CP is WKO5's mFTP, which the 課表 uses); no 要更新 / 「套用這次的 CP」 action or button (`applyCpBtn` removed) — nothing is applied any more (`backend/engine/status.py:864`). The 90-minute AeT test's 「實測 CP」 also counts WKO5's mFTP with a CP test inside its 90-day window (`aet_test.cp_tested`, `backend/engine/aet_test.py:638`; a fit without a test still does not, owner 2026-10-06). The CP 測試 glossary says the CP is computed the WKO5 way, nothing to apply |
+| 2026-10-13 | bugfix | SP-446 | 課表統計's period switch was slow: `GET /plan/compliance` built the calendar's whole view through `sessions()` — per active session the watch-push status (`PS.push_dict` → `plan_prefs.load`, 33 sqlite reads each) — and recomputed the dataset's TSS / h (180 days of runs through the session classifier) that the plan inputs already hold. Now `_reconciled` + `_stats_view` (the 強度課 family only) and the inputs' rates; same payload on the demo athlete, 382 → 62 ms (4 週), 431 → 130 ms (12 週). The page fetches 負荷比 in parallel, drops a stale answer, and caps 本周期 at 371 days (a longer phase was 「載入失敗：at most 371 days」). |
