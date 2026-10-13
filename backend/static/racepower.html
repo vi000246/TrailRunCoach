@@ -2141,8 +2141,9 @@ function renderCP() {
     ${INP.cp.lower_bound_message ? `<div class="err">${esc(INP.cp.lower_bound_message)}</div>` : ""}
     ${INP.cp.lower_bound ? `<div class="note">下限：你在 ${dur(INP.cp.lower_bound.t_s)} 撐過 ${W(INP.cp.lower_bound.p)}（${esc(INP.cp.lower_bound.who?.label || "")}），
       依 k ${k3(INP.cp.lower_bound.k)}、TTE ${dur(INP.cp.lower_bound.tte)} 換算 CP 至少 ${W(INP.cp.lower_bound.cp_min)}。模型不會預測比你已經撐過的還低的功率。</div>` : ""}
-    ${(INP.cp.tests || []).map((t) => `<div class="note">偵測到 CP 測試 ${esc(t.date)}：${esc(t.estimate.label)} → CP ${W(t.estimate.cp)}${t.estimate.cp_range && t.estimate.cp_range[1] - t.estimate.cp_range[0] >= 1 ? "（" + W(t.estimate.cp_range[0]) + "–" + W(t.estimate.cp_range[1]) + "）" : ""}。
-      ${t.estimate.note ? esc(t.estimate.note) + "。" : ""}這只是建議，要到「賽季計畫」自己套用。</div>`).join("")}
+    ${(INP.cp.tests || []).map((t) => `<div class="note">${esc(t.estimate.cp != null
+      ? T("cp.test_mftp", { date: t.date, label: t.estimate.label, cp: W(t.estimate.cp) })
+      : T("cp.test_nofit", { date: t.date, note: t.estimate.note || "" }))}</div>`).join("")}
     <div class="note">預設：PD 模型（WKO5 的模型，用近 90 天 mean-max 含同步的 FIT 重算）的 mFTP / TTE 當長時間的錨點，20 分鐘以內用 CP 測試的 CP + W′；低於下限時提高到下限。</div>`;
 }
 function renderRiegel() {

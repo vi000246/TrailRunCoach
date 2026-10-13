@@ -431,10 +431,6 @@
     "draft": true,
     "src": "backend/engine/race_feasibility.py:504"
   },
-  "CP {cp} W 不合理": {
-    "draft": true,
-    "src": "backend/api/plan.py:764"
-  },
   "CP 心率與 MLSS 心率平均差 0.6 bpm，但個人誤差 −16～+17 bpm（Micheli 2025）：只當交叉檢查": {
     "draft": false,
     "src": "backend/engine/threshold_confidence.py:135"
@@ -754,14 +750,6 @@
   "Wehrlin & Hallén": {
     "draft": true,
     "src": "backend/engine/race_feasibility.py:206"
-  },
-  "W′ {wp} J 不合理": {
-    "draft": true,
-    "src": "backend/api/plan.py:766"
-  },
-  "W′ 只在兩點測試量得到": {
-    "draft": true,
-    "src": "backend/api/plan.py:768"
   },
   "Zone 3 {a:.0f}／{b:.0f} 分": {
     "draft": false,
@@ -4974,10 +4962,6 @@
   "測試": {
     "draft": true,
     "src": "backend/engine/workout_templates.py:444"
-  },
-  "測試日期不能在未來": {
-    "draft": true,
-    "src": "backend/api/plan.py:760"
   },
   "測試是建議，不會自動排進課表：挑一天按「排入」。": {
     "draft": true,

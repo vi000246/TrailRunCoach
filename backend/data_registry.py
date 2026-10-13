@@ -249,7 +249,8 @@ FILES: tuple = (
          "route_weather.py)", deidentify=("tracks: GPS points", "activity_weather: positions + times"),
          invalidated_by="INDEX_VERSION, the activity files' stamps; weather refetched"),
     File("cache/fit/**", DERIVED, SHARED, "FIT dataset cache: per-second channels (npz), index, estimate / "
-         "PD memos, series (series.db, SP-339), activity_auto (wko5expr/fitcache.py, fitdataset.py, "
+         "PD memos, the CP in effect (cp_hold.json, SP-468), series (series.db, SP-339), activity_auto "
+         "(wko5expr/fitcache.py, fitdataset.py, "
          "wko5expr/seriesdb.py, api/activity_auto.py)",
          deidentify=("channels: GPS", "start times"),
          invalidated_by="file stamp + per-field versions (fitcache.versions); code_hash (SP-320 ①); "

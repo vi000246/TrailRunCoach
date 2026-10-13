@@ -1,10 +1,11 @@
 """
 CP-test protocols (engine/cp_protocols.py; docs/research/cp-test-protocols.md §5):
 the 課表偏好 preference, the session per protocol, detection (the plan's
-done_by first, then the power pattern), the per-protocol analysis with its
-quality checks (incl. a synthetic 1-s 3′/12′ test), the same-method
-comparison, 「套用這次的 CP」, and the timing rules. Temp plans only — the
-user's plan thresholds are never written.
+done_by first, then the power pattern), the per-protocol reading with its
+effort checks (incl. a synthetic 1-s 3′/12′ test), and the timing rules.
+SP-468: a test's CP is WKO5's mFTP (test_cp_hold_sp468.py) — no two-point /
+0.95 × P20 / Riegel CP, no same-method comparison, no 「套用這次的 CP」.
+Temp plans only — the user's plan thresholds are never written.
 """
 import datetime as dt
 import gzip
@@ -235,45 +236,36 @@ def _bouts(parts):
     return CPP.measure_bouts(np.asarray(ch["elapsedtime"]), np.asarray(ch["power"]), np.asarray(ch["heartrate"]))
 
 
-def test_standard_two_point_when_both_bouts_are_maximal():
-    r = CPP.result(_bouts(standard_parts(p12=250.0, p3=300.0)), "standard", LTHR)
-    assert r["method"] == "2pt" and r["quality"] == "可信"
-    assert r["cp"] == approx((250 * 720 - 300 * 180) / 540, abs=0.2)
-    assert r["wprime"] == approx((300 - r["cp"]) * 180, abs=50)
+PD = {"mftp": 231.0, "frc": 14000.0, "date": "2026-09-30", "runs": 30}
 
 
-def test_standard_short_recovery_is_a_reference_only():
-    r = CPP.result(_bouts(standard_parts(rest_s=1000)), "standard", LTHR)
-    assert r["method"] == "2pt" and r["quality"] == "參考"
+def test_standard_short_recovery_is_flagged():
+    r = CPP.result(_bouts(standard_parts(rest_s=1000)), "standard", LTHR, pd=PD)
+    assert r["method"] == "pd_model" and r["cp"] == 231.0
     assert any("< 25 分" in x for x in r["reasons"])
 
 
-def test_standard_falls_back_to_one_bout_with_the_prior():
-    r = CPP.result(_bouts(standard_parts(p12=250.0, p3=245.0, hr3=150, hr12=174)), "standard", LTHR)
-    assert r["method"] == "1pt_prior" and r["quality"] == "參考" and r["wprime"] is None
-    assert r["cp"] == approx(250 - 13100 / 720, abs=0.3)
-    assert r["cp_range"] == [approx(250 - 17100 / 720, abs=0.3), approx(250 - 9100 / 720, abs=0.3)]
+def test_standard_soft_3min_is_only_described():
+    r = CPP.result(_bouts(standard_parts(p12=250.0, p3=245.0, hr3=150, hr12=174)), "standard", LTHR, pd=PD)
+    assert r["method"] == "pd_model" and r["cp"] == 231.0 and r["wprime"] is None
     assert any("推估門檻" in x and "低 24 bpm" in x for x in r["reasons"])
-    assert any("Ruiz-Alias 2025" in x for x in r["reasons"])
-    women = CPP.result(_bouts(standard_parts(p12=250.0, p3=245.0)), "standard", LTHR, sex="female")
-    assert women["cp"] == approx(250 - 6400 / 720, abs=0.3)
+    assert any("沒有高於 12 分" in x for x in r["reasons"])
+    assert (r["p3"], r["p12"]) == (approx(245.0), approx(250.0))
 
 
-def test_quick_is_095_p20_and_its_checks():
-    r = CPP.result(_bouts(quick_parts(p20=240.0)), "quick", LTHR)
-    assert r["method"] == "tt20" and r["cp"] == approx(0.95 * 240) and r["quality"] == "可信"
+def test_quick_reads_the_20min_bout_and_its_checks():
+    r = CPP.result(_bouts(quick_parts(p20=240.0)), "quick", LTHR, pd=PD)
+    assert r["method"] == "pd_model" and r["cp"] == 231.0 and r["p20"] == approx(240.0) and not r["reasons"]
     assert r["wprime"] is None
-    kick = CPP.result(_bouts(quick_parts(p20=240.0, last_min=280.0)), "quick", LTHR)   # held back, then kicked
-    assert kick["quality"] == "參考" and any("推估門檻" in x and "最後 1 分" in x for x in kick["reasons"])
-    soft = CPP.result(_bouts(quick_parts(p20=240.0, hr=150)), "quick", LTHR)          # HR far below LTHR
-    # SP-449: an app HR rule never rejects a test (was 不採用, no apply button): 參考, still applicable
-    assert soft["quality"] == "參考" and CPP.apply_payload(soft, "2026-09-30") is not None
+    kick = CPP.result(_bouts(quick_parts(p20=240.0, last_min=280.0)), "quick", LTHR, pd=PD)   # held back, then kicked
+    assert any("推估門檻" in x and "最後 1 分" in x for x in kick["reasons"])
+    soft = CPP.result(_bouts(quick_parts(p20=240.0, hr=150)), "quick", LTHR, pd=PD)          # HR far below LTHR
+    assert soft["cp"] == 231.0 and any("LTHR" in x for x in soft["reasons"])
 
 
-def test_race_is_riegel_anchored_at_30_min():
-    r = CPP.result(_bouts([(900, 150.0, 140), (1500, 245.0, 175), (600, 130.0, 130)]), "race", LTHR)
-    assert r["method"] == "race" and r["race_s"] == 1500
-    assert r["cp"] == approx(r["race_power"] * (1500 / 1800) ** 0.07)
+def test_race_finds_the_race_window():
+    r = CPP.result(_bouts([(900, 150.0, 140), (1500, 245.0, 175), (600, 130.0, 130)]), "race", LTHR, pd=PD)
+    assert r["method"] == "pd_model" and r["race_s"] == 1500 and r["cp"] == 231.0
     assert r["race_power"] == approx(245.0, abs=1.0)
     assert (1200 / 1800) ** 0.07 == approx(0.972, abs=1e-3)               # the doc's 20-min check
 
@@ -294,94 +286,37 @@ def test_cp_test_fixture_is_reproducible():
     assert MK.encode(MK.build()) == CP_TEST_FIXTURE.read_bytes()
 
 
-def test_3_12_test_with_a_soft_3min_falls_back_to_one_bout():
+def test_3_12_test_with_a_soft_3min_is_described_and_has_no_cp_without_a_fit():
     """Synthetic test: 3′ 234 W < 12′ 238 W, 3′ HR peak 152 (incl. 15 s of HR
-    lag) vs 177, 16 min of recovery → single bout, CP = 238 − 13 100 / 720 ≈ 220 W
-    (214–225), 參考. Even pacing (the 12′ bout's last minute ≈ its mean: no kick)."""
+    lag) vs 177, 16 min of recovery. SP-468: no PD fit here → no CP (was the
+    single-bout 238 − 13 100 / 720 ≈ 220 W). Even pacing (no kick)."""
     b = CPP.measure_bouts(*_frozen_cp_test())
     res = CPP.result(b, "standard", lthr=None)
-    assert res["method"] == "1pt_prior" and res["quality"] == "參考"
-    assert 219.0 <= res["cp"] <= 220.5
-    assert res["cp_range"] == [approx(214.2, abs=0.3), approx(225.4, abs=0.3)]
+    assert res["method"] == "pd_model" and res["cp"] is None and CPP.NO_FIT in res["reasons"]
     assert res["p3"] < res["p12"]
     text = " ".join(res["reasons"])
     import re
     # SP-449: the HR rule says 「可能沒全力」, no longer 「不是全力」 (it never drops the test)
     assert re.search(r"比 12 分段 177 低 2\d bpm：3 分段可能沒全力（推估門檻）", text) and "< 25 分" in text
-    assert "沒有高於 12 分" in text and not res["checks"][0]["own"]          # the model check is not ours
+    assert "沒有高於 12 分" in text and not res["checks"][0]["own"]          # the curve check is not ours
     assert not any("最後 1 分" in x for x in res["reasons"])                 # no kick
-    pay = CPP.apply_payload(res, "2026-09-30", 7)
-    assert pay["cp"] == 220 and pay["wprime"] is None and pay["cp_method"] == "1pt_prior" and "參考" in pay["label"]
 
 
 # ---------------------------------------------------------------------------
-# the same-method comparison
+# the review card (SP-468: no 「套用這次的 CP」)
 # ---------------------------------------------------------------------------
 
 T = PL.Threshold
 
 
-def test_reference_is_the_previous_result_of_the_same_method():
-    ths = [T("2026-08-01", cp=205.0, cp_method="tt20"), T("2026-08-20", cp=216.0, cp_method="2pt")]
-    r = CPP.reference(ths, "2026-09-30", "tt20")
-    assert r["same_method"] and r["cp"] == 205.0 and r["date"] == "2026-08-01"
-    r = CPP.reference(ths, "2026-09-30", "2pt")
-    assert r["same_method"] and r["cp"] == 216.0
-    # only a different method on file: converted to the same definition (外插 × 1.05)
-    r = CPP.reference(ths[:1], "2026-09-30", "2pt")
-    assert not r["same_method"] and r["converted"] and r["cp"] == approx(205.0 * 1.05)
-    # a legacy row (no cp_method) is a 3′/12′ two-point test
-    assert CPP.reference([T("2026-08-01", cp=210.0)], "2026-09-30", "2pt")["same_method"]
-    # rows on / after the test day are not "previous"
-    assert CPP.reference([T("2026-09-30", cp=204.0, cp_method="tt20")], "2026-09-30", "tt20", cp_now=190.0)["cp"] == 190.0
-
-
-def test_rotating_protocols_does_not_keep_flagging_an_update():
-    from backend.engine import status as ST
-    from backend.engine import workout_review as WR
-    # applied: a quick test in August (tt20 205), then a standard test (2pt 214) today
-    plan = PL.Plan(thresholds=[T("2026-08-10", cp=205.0, cp_method="tt20", lthr=165, aethr=150)])
-    ev = {"cp": 214.0, "method": "2pt"}
-    ref = CPP.reference(plan.thresholds, "2026-09-30", ev["method"], 205.0)
-    delta = ev["cp"] / ref["cp"] - 1
-    assert abs(delta) <= WR.CP_DELTA                        # 214 vs 205 × 1.05 = 215: not "要更新"
-    raw = ev["cp"] / 205.0 - 1
-    assert abs(raw) > WR.CP_DELTA                           # the old comparison would have flagged it
-    st = ST.Status.__new__(ST.Status)
-    st.plan, st.today, st.goals, st.ds, st.cp_protocol = plan, TODAY, {"days_to_next_a": None}, None, "quick"
-    ct = {"idx": 3, "date": "2026-09-30", "cp": 214.0, "wprime": 16000.0, "cp_range": [214, 214], "cp_now": 205.0,
-          "delta": delta, "ref": ref, "method": "2pt", "method_label": "兩點", "protocol": "standard",
-          "protocol_label": "標準", "quality": "可信", "reasons": [],
-          "apply": CPP.apply_payload({"cp": 214.0, "wprime": 16000.0, "method": "2pt", "protocol": "standard",
-                                      "quality": "可信"}, "2026-09-30", 3), "applied": False}
-    orig = WR.latest_cp_test
-    try:
-        WR.latest_cp_test = lambda ds, today: ct
-        ind = st.i_testing()
-        assert ind.text != "要更新" and ind.extra["cp_test"]["apply"]                 # still offered, not nagged
-        WR.latest_cp_test = lambda ds, today: {**ct, "cp": 230.0, "delta": 230.0 / ref["cp"] - 1}
-        assert st.i_testing().text == "要更新"                                        # a real change still flags
-    finally:
-        WR.latest_cp_test = orig
-
-
-# ---------------------------------------------------------------------------
-# the review card and 「套用這次的 CP」
-# ---------------------------------------------------------------------------
-
-def test_review_card_offers_the_apply_button():
+def test_review_card_has_no_apply_button():
     ds = _ds(_act(standard_parts()), sessions=[_sess(protocol="standard")])
     w = ds.workouts[0]
     card = R.review(ds, w, "cp_test")
     assert card["empty"] is None and card["classification"]["protocol"] == "standard"
-    a = card["action"]
-    assert a["url"] == "/api/v1/plan/thresholds/apply-cp" and a["body"]["date"] == "2026-09-30"
-    assert a["body"]["cp_method"] == "2pt" and a["body"]["wprime"] is not None
+    assert "action" not in card
     text = " ".join(s["data"]["value"] for s in card["series"] if s["data"]["kind"] == "value")
-    assert "標準" in text and "依課表對應" in text
-    # once a row of that day exists, no button
-    ds.plan.thresholds.append(T("2026-09-30", cp=a["body"]["cp"], cp_method="2pt"))
-    assert "action" not in R.review(ds, w, "cp_test")
+    assert "標準" in text and "依課表對應" in text and "算不出 mFTP" in text     # no PD fit on a fake dataset
 
 
 @pytest.fixture
@@ -397,26 +332,20 @@ def temp_plan(tmp_path, monkeypatch):
     return path
 
 
-def test_apply_cp_writes_the_test_day_row(temp_plan):
+def test_put_keeps_the_rows_apply_cp_wrote_before(temp_plan):
+    """SP-468 removed POST apply-cp; the rows it wrote before (cp_method, wprime) still
+    round-trip through the plan page's PUT."""
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
     from backend.api import plan as API
+    plan = PL.Plan.load(temp_plan)
+    plan.thresholds.append(T("2026-09-01", cp=250.0, cp_method="2pt", wprime=15000.0))
+    plan.save(temp_plan)
     app = FastAPI()
     app.include_router(API.router)
     c = TestClient(app)
-    url = "/api/v1/plan/thresholds/apply-cp"
-    r = c.post(url, json={"date": "2026-09-30", "cp": 203.7, "cp_method": "1pt_prior", "activity_index": 7,
-                          "note": "標準；單段＋W′ 先驗；品質 參考"})
-    assert r.status_code == 200
-    got = PL.Plan.load(temp_plan).thresholds
-    assert len(got) == 1                                                  # merged into that day's row
-    t = got[0]
-    assert (t.date, t.cp, t.cp_method, t.wprime, t.lthr) == ("2026-09-30", 204, "1pt_prior", None, 165.0)
-    assert "品質 參考" in t.note and "#7" in t.note
-    assert c.post(url, json={"date": "2026-09-30", "cp": 210, "cp_method": "tt20", "wprime": 12000}).status_code == 400
-    assert c.post(url, json={"date": "2999-01-01", "cp": 210, "cp_method": "tt20"}).status_code == 400
-    assert c.post(url, json={"date": "2026-09-30", "cp": 210, "cp_method": "magic"}).status_code == 400
-    assert c.post(url, json={"date": "2026-09-01", "cp": 250, "cp_method": "2pt", "wprime": 15000}).status_code == 200
+    assert c.post("/api/v1/plan/thresholds/apply-cp", json={"date": "2026-09-30", "cp": 210,
+                                                            "cp_method": "tt20"}).status_code in (404, 405)
     rows = {t.date: t for t in PL.Plan.load(temp_plan).thresholds}
     assert rows["2026-09-01"].wprime == 15000 and rows["2026-09-01"].cp_method == "2pt"
     # the plan page's PUT round-trips the new fields

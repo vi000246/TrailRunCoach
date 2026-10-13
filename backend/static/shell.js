@@ -335,7 +335,7 @@
   });
   // the edit controls of the cached pages (and anything marked data-offline-lock)
   const OFFLINE_LOCK = ["[data-offline-lock]", "button[type=submit]", "input[type=file]", "[data-approve]", "[data-reject]",
-    "[data-undo]", "[data-aet-apply]", "[data-apply-cp]", "[data-apply-at]", "[data-apply-thr]", ".sg-item [data-act=accept]",
+    "[data-undo]", "[data-aet-apply]", "[data-apply-at]", "[data-apply-thr]", ".sg-item [data-act=accept]",
     ".sg-item [data-act=dismiss]", ".sg-item [data-act=decline]", "#push-main", "#push-caret", "#pull-btn", "#rec-btn",
     "#sd-del", "#sd-push", "#sd-swap", "#sd-climb", "#ap-run", "#pf-reset", "[data-unpush]", '[data-act="del-expired"]',
     // 課表's 「＋」 on a day and the context menu's 新增 / 刪除 (they open an empty session to save)
@@ -567,7 +567,7 @@
       ["share", "#share, #share-go"],
       ["backtest", "#bt-run"],
       ["weather.key", "#cwasave, #cwakey"],
-      ["thresholds.write", "#addthr, #savethr, [data-apply-cp], [data-apply-at], [data-apply-thr]"],
+      ["thresholds.write", "#addthr, #savethr, [data-apply-at], [data-apply-thr]"],
       ["dataset.write", "#rebuild, [data-rename-route], #ex-save, #act-save, [data-exclude]"],
       ["upload.fit", "input[type=file][accept*='.fit' i]:not([accept*='.gpx' i])"],
       ["ai", "[data-ai]"],

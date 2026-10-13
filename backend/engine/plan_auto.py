@@ -1191,12 +1191,43 @@ async def wait_idle(timeout: float = 600.0) -> bool:
 
 
 def _after_thresholds() -> None:
-    """api/plan.py calls this after a threshold edit (apply-cp, the plan page):
+    """api/plan.py calls this after a threshold edit (the plan / settings page, 套用估計):
     a background run that sees the new CP (cp_of vs state["cp"]) re-zones the
     upcoming power targets and re-pushes them (plan.auto.push permitting).
     From a sync endpoint (a worker thread) the task is started on the app's
     event loop; without one (scripts) nothing happens — the next sync does it."""
     _start_run("cp_change")
+
+
+def _after_cp_moved() -> None:
+    """check_cp found the CP in effect moved since the last run (SP-468): the same background
+    run as after a threshold edit (trigger cp_change)."""
+    _start_run("cp_change")
+
+
+async def check_cp(db, inp: dict) -> bool:
+    """SP-468: the CP in effect (cp_of: the week plan's, a plan row or the Stryd PD fit — the fit
+    changes only by ≥ fitdataset.CP_HOLD_W) differs from the one the last run saw (state["cp"]),
+    while no run is going: start the cp_change run (after_cp_moved) that re-zones the stored
+    sessions and re-pushes them. A CP that moved by itself — a deploy that refits, an activity
+    excluded, a sync without a new activity — started no run before: only a threshold edit or a
+    sync that downloaded something did, so the stored sessions kept the old watts (production
+    2026-10-13: CP 191 W, easy runs still 「功率 114–140 W」 from CP 175). Opening the 課表 calls
+    this (api/plan_sessions._sessions_body, fresh inputs only). True when a run was started.
+    plan.auto.enabled off: nothing (the next enabled run catches up, as before)."""
+    if inp.get("stale"):
+        return False
+    new = cp_of(inp)
+    if not new:
+        return False
+    cfg = await settings(db)
+    if not cfg["enabled"]:
+        return False
+    old = _f((cfg["state"] or {}).get("cp"))
+    if old is None or round(new) == round(old) or busy():
+        return False
+    after_cp_moved()
+    return True
 
 
 def _after_settings() -> None:
@@ -1227,3 +1258,4 @@ def _start_run(trigger: str) -> None:
 
 after_thresholds = _after_thresholds     # the hook api/plan.py calls (tests replace it)
 after_settings = _after_settings         # the hook api/calib.py calls (tests replace it)
+after_cp_moved = _after_cp_moved         # the hook check_cp calls (tests replace it)

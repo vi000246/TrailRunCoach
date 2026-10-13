@@ -866,6 +866,17 @@ class Status:
             ds_ = [dt.date.fromisoformat(t.date) for t in self.plan.thresholds if getattr(t, name) is not None]
             return max(ds_) if ds_ else None
         cp, lt, ae = last("cp"), last("lthr"), last("aethr")
+        # the latest CP test in the data (workout_review): SP-468 — its CP is WKO5's mFTP after it and
+        # the 課表 follows that fit by itself, so the test day is the CP's test day (no plan row any
+        # more: nothing to apply)
+        try:
+            from backend.engine import workout_review as WR
+            ct = WR.latest_cp_test(self.ds, self.today)
+        except Exception:
+            ct = None
+        if ct and ct.get("date"):
+            cd = dt.date.fromisoformat(ct["date"])
+            cp = cd if cp is None or cd > cp else cp
         parts, worst = [], GOOD
         from backend.engine.planning import threshold_row
         for label, d in (("CP", cp), ("LTHR", lt), ("AeT", ae)):
@@ -924,33 +935,12 @@ class Status:
                 act = "賽前 10 天內不要測，賽後再測"
                 worst = WATCH
         v = "門檻是新的" if worst == GOOD else "門檻過期或沒測，區間和 TSS 都會跟著不準"
-        # the latest 3'/12' CP test in the data (workout_review) vs the CP in effect
         extra = {}
-        try:
-            from backend.engine import workout_review as WR
-            ct = WR.latest_cp_test(self.ds, self.today)
-        except Exception:
-            ct = None
-        if ct and ct.get("cp") is not None:
-            # compared only with the previous result of the same method
-            # (cp_protocols.reference): rotating quick / standard doesn't flag 要更新
-            applied = cp is not None and cp >= dt.date.fromisoformat(ct["date"])
-            ct = {**ct, "applied": applied}
-            if applied:
-                ct["apply"] = None
+        if ct:
             extra["cp_test"] = ct
-            dlt = ct.get("delta")
-            ref = ct.get("ref") or {}
-            vs = ("" if dlt is None else
-                  f"，和{'上一次同方法' if ref.get('same_method') else '目前'} {ref.get('cp') or 0:.0f} W"
-                  f"{'（換算）' if ref.get('converted') else ''} 差 {dlt * 100:+.1f}%")
-            if not applied and ct.get("apply") and (dlt is None or abs(dlt) > WR.CP_DELTA):
-                worst = WATCH if worst == GOOD else worst
-                txt = "要更新"
-                v = f"{ct['date']} 的 CP 測試 {ct['cp']:.0f} W（{ct.get('method_label', '')}，{ct.get('quality', '')}）{vs}"
-                act = f"套用這次的 CP（{ct['cp']:.0f} W）" + (f"；{act}" if act else "")
-            why += f"；最近一次 CP 測試 {ct['date']}：{ct['cp']:.0f} W" + \
-                (f"（{dlt * 100:+.1f}%）" if dlt is not None else "")
+            why += "；" + (_("最近一次 CP 測試 {d}：這次測試後的 mFTP {cp} W（比照 WKO5，課表自動採用）",
+                            d=ct["date"], cp=f"{ct['cp']:.0f}") if ct.get("cp") is not None else
+                          _("最近一次 CP 測試 {d}：算不出 mFTP", d=ct["date"]))
         # the latest AeT drift test (engine/aet_test.py): UA's three bands
         try:
             from backend.engine import aet_test as AT

@@ -118,8 +118,9 @@ def test_the_cp_in_effect_decides():
     assert not AT.cp_tested(p, TODAY) and AT.cp_tested(p, dt.date(2026, 8, 15))
 
 
-def test_the_manual_marker_round_trips_and_apply_cp_clears_it(tmp_path, monkeypatch):
-    """設定's PUT keeps cp_manual; 「套用這次的 CP」 on that day turns it back into a test result."""
+def test_the_manual_marker_round_trips(tmp_path, monkeypatch):
+    """設定's PUT keeps cp_manual. (SP-468 removed 「套用這次的 CP」, which turned it back into a test
+    result; a manual CP now stays the CP in effect until the user changes it.)"""
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
 
@@ -137,10 +138,8 @@ def test_the_manual_marker_round_trips_and_apply_cp_clears_it(tmp_path, monkeypa
     assert c.put("/api/v1/plan/thresholds", json=[{"date": "2026-09-01", "cp": 255, "cp_manual": True}]).status_code == 200
     t = PL.Plan.load(path).thresholds[0]
     assert t.cp_manual is True and not AT.cp_tested(PL.Plan.load(path), TODAY)
-    assert c.post("/api/v1/plan/thresholds/apply-cp",
-                  json={"date": "2026-09-01", "cp": 250, "cp_method": "2pt"}).status_code == 200
-    t = PL.Plan.load(path).thresholds[0]
-    assert t.cp_manual is None and t.cp_method == "2pt" and AT.cp_tested(PL.Plan.load(path), TODAY)
+    # a CP test since does not override a CP typed by hand (cp_tested; SP-468)
+    assert not AT.cp_tested(PL.Plan.load(path), TODAY, cp_test_date="2026-09-20")
 
 
 def test_english():

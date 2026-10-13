@@ -632,14 +632,29 @@ PACE_RE = re.compile(r"(\d+):(\d\d)\s*[–-]\s*(\d+):(\d\d)\s*/km")     # the st
 WATTS_RE = re.compile(r"(\d+)\s*[–-]\s*(\d+)\s*W\b")                     # …or power range
 
 
-def cp_tested(plan, day: dt.date) -> bool:
-    """The CP in effect on `day` counts as tested for the 90-minute test (owner 2026-10-06): the
-    latest plan row with a CP is not marked as typed by hand (planning.Threshold.cp_manual, set
-    by 設定 when the CP is typed). A test result (cp_method) and a legacy row saved before the
-    marker existed (CP, no cp_method) both count."""
+CP_TEST_FIT_DAYS = 90           # = racepower.athlete.CP_WINDOW_DAYS: the PD fit's mean-max window
+
+
+def cp_tested(plan, day: dt.date, cp_test_date: Optional[str] = None) -> bool:
+    """The CP in effect on `day` counts as tested for the 90-minute test (owner 2026-10-06).
+    With a plan row with a CP on or before `day`: the latest one is not marked as typed by hand
+    (planning.Threshold.cp_manual, set by 設定 when the CP is typed) — a row 「套用這次的 CP」 wrote
+    before SP-468 (cp_method) and a legacy row (CP, no cp_method) both count. Without one the CP
+    in effect is WKO5's mFTP (the Stryd PD fit): SP-468 (the user 2026-10-13, 「完全比照 WKO5 用
+    自動計算的」) made it a CP test's own result — nothing is applied any more — so it counts when
+    a CP test (`cp_test_date`, workout_review.latest_cp_test) is inside the fit's 90-day window;
+    a fit without a test still does not (owner 2026-10-06)."""
     rows = sorted((t for t in getattr(plan, "thresholds", None) or []
                    if t.cp is not None and str(t.date)[:10] <= day.isoformat()), key=lambda t: t.date)
-    return bool(rows) and not getattr(rows[-1], "cp_manual", None)
+    if rows:
+        return not getattr(rows[-1], "cp_manual", None)
+    if not cp_test_date:
+        return False
+    try:
+        d = dt.date.fromisoformat(str(cp_test_date)[:10])
+    except ValueError:
+        return False
+    return day - dt.timedelta(days=CP_TEST_FIT_DAYS) < d <= day
 
 
 def xu_target(th: dict) -> dict:

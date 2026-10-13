@@ -153,14 +153,16 @@ def _arr(ch, name):
     return np.array([np.nan if v is None else v for v in ch.channels[name]], float)
 
 
-def test_cp_test_two_point():
+def test_cp_test_bouts():
+    """The demo's 12′ + 3′ test: two all-out bouts, 3′ above 12′ (SP-468: its CP is the PD fit's
+    mFTP — the demo Dataset's own, not checked here; was a two-point CP of 240–275 W)."""
     from backend.engine import cp_protocols as CPP
     ch, _info = _full("cp_test")
     t = np.asarray(ch.elapsedtime, float)
     bouts = CPP.measure_bouts(t, _arr(ch, "power"), _arr(ch, "heartrate"))
     r = CPP.result(bouts, "standard", lthr=168, sex="male")
-    assert r is not None and r["cp"] is not None
-    assert 240 <= r["cp"] <= 275, r
+    assert r is not None and r["method"] == "pd_model"
+    assert r["p3"] > r["p12"] and 240 <= r["p12"] <= 300, r
     assert bouts["standard"]["long_first"]
 
 
