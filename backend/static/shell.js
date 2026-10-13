@@ -337,7 +337,9 @@
   const OFFLINE_LOCK = ["[data-offline-lock]", "button[type=submit]", "input[type=file]", "[data-approve]", "[data-reject]",
     "[data-undo]", "[data-aet-apply]", "[data-apply-cp]", "[data-apply-at]", "[data-apply-thr]", ".sg-item [data-act=accept]",
     ".sg-item [data-act=dismiss]", ".sg-item [data-act=decline]", "#push-main", "#push-caret", "#pull-btn", "#rec-btn",
-    "#sd-del", "#sd-push", "#sd-swap", "#sd-climb", "#ap-run", "#pf-reset", "[data-unpush]", '[data-act="del-expired"]'].join(", ");
+    "#sd-del", "#sd-push", "#sd-swap", "#sd-climb", "#ap-run", "#pf-reset", "[data-unpush]", '[data-act="del-expired"]',
+    // 課表's 「＋」 on a day and the context menu's 新增 / 刪除 (they open an empty session to save)
+    "[data-add]", '[data-ctx="add"]', '[data-ctx="del"]'].join(", ");
   window.AppOffline = {
     get active() { return OFF.on && !OFF.slow; }, get slow() { return OFF.on && OFF.slow; }, get at() { return OFF.at; },
     // forget this browser's copy of the person (sign-out): the worker and the caches themselves

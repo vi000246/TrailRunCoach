@@ -166,6 +166,8 @@ def test_the_shell_registers_the_worker_and_clears_the_copy_on_sign_out():
     assert 'k.startsWith("trc-u-") || k === "trc-meta"' in js
     # offline: writes are refused with the reason, never sent
     assert 'code: "OFFLINE"' in js and 'toast(offT("locked"))' in js
+    # 課表's 「＋」 and the context menu's 新增 / 刪除 are locked too (they open an empty session to save)
+    assert '"[data-add]", \'[data-ctx="add"]\', \'[data-ctx="del"]\'' in js
     assert '["link", { rel: "manifest", href: "/manifest.webmanifest" }]' in js
     sched = (STATIC / "schedule.html").read_text("utf-8")
     assert "const editable = (s) => !isStale() && !(window.AppOffline && AppOffline.active)" in sched
