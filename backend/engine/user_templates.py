@@ -501,9 +501,10 @@ def route_elevation(steps: dict, c, prof: dict) -> Optional[dict]:
 # the 插入範本 menu (workout_steps.templates)
 # ---------------------------------------------------------------------------
 
-def row(t: dict) -> dict:
+def row(t: dict, qbasis: Optional[str] = None) -> dict:
     """One 插入範本 row (the shape of workout_templates.row): key user:<id>, its family (強度課)
-    and trail kind (越野跑) for the sub-tabs, the 目標用 and the GPX it carries."""
+    and trail kind (越野跑) for the sub-tabs, the 目標用 and the GPX it carries. `qbasis`: a
+    強度課's 「自動」 for the 主課強度 filter (workout_steps.quality_auto_basis; None: read now)."""
     from backend.engine import workout_steps as WS
     from backend.engine import workout_templates as WT
     full = (t.get("steps") or {}).get("items") or []
@@ -514,16 +515,16 @@ def row(t: dict) -> dict:
          "fam_sub": fam["id"] if fam else None, "trail_sub": WT.trail_type_of(full),
          "purpose": "", "cats": t.get("cats") or [], "target_basis": t.get("target_basis"), "mine": True,
          "gpx": t.get("gpx"), "role": WS.rpe_role(full)}
-    r["target_types"] = WS.template_target_types(r)          # SP-84: the same helper as 插入範本
+    r["target_types"] = WS.template_target_types(r, qbasis=qbasis)   # SP-84: the same helper as 插入範本
     return r
 
 
-def groups(templates: list[dict]) -> list[dict]:
+def groups(templates: list[dict], qbasis: Optional[str] = None) -> list[dict]:
     """「我的範本」 groups, one per category (and 強度課 / 越野跑 sub-tab) a template is in; a
     強度課 template with no interval family is listed under every 強度課 sub-tab (sub None)."""
     out: dict = {}
     for t in templates:
-        r = row(t)
+        r = row(t, qbasis)
         for c in r["cats"]:
             sub = r["fam_sub"] if c == "quality" else r["trail_sub"] if c == "trail" else None
             g = out.setdefault((c, sub), {"group": _(MINE), "title": _(MINE), "cat": c, "sub": sub, "mine": True,

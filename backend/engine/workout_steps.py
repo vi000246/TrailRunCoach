@@ -1630,20 +1630,35 @@ def _target_type(tg: Optional[dict], basis: Optional[str]) -> str:
     return {"abs": "hr_abs", "zone": "hr_zone"}.get(mode, "hr_pct")
 
 
-def target_types(items: list, basis: Optional[str] = None, quality: bool = False) -> list[str]:
+def quality_auto_basis(prefs=None) -> str:
+    """What a 強度課 with no 目標用 of its own runs on at plan time — "power" (% CP) or "hr"
+    (% LTHR) — asked of the planner's own rule, target_policy.target_policy (SP-84, owner
+    2026-10-13: the filter's 「自動」 follows it): 課表偏好 target_basis first (hr, or the old
+    interval_target hr → HR; power → power), else 自動 (間歇／爬坡 → power) unless the 一般設定
+    power source is not Stryd (→ HR). No thresholds are passed: a missing CP / LTHR is a fallback
+    of the day's numbers, not of the template. `prefs` None: 課表偏好 read now (plan_prefs.load)."""
+    from backend.engine import target_policy as TP
+    if prefs is None:
+        from backend.engine import plan_prefs as PP
+        try:
+            prefs = PP.load()
+        except Exception:                   # noqa: BLE001
+            prefs = None
+    return "hr" if TP.target_policy({"kind": "quality"}, prefs)["basis"] == "hr" else "power"
+
+
+def target_types(items: list, basis: Optional[str] = None, quality: bool = False,
+                 qbasis: Optional[str] = None) -> list[str]:
     """The 主課強度類型 of a structure (TARGET_TYPE_IDS order): the targets of its main set —
     the work steps (inside repeats too), else the 「其他」 ones (strides), else every step — plus
     "load" when a main-set step ends on 「負荷」. Mixed main sets list each type. `basis`: the
     template's 目標用 (a library template's / a user template's target_basis), which turns a
-    「自動」 band into % CP or % LTHR; without one it stays "auto" — except on a 強度課 (`quality`,
-    owner 2026-10-07, SP-84): 間歇／爬坡 run on power when nothing else is chosen
-    (target_policy.AUTO), so its 「自動」 counts as % CP."""
+    「自動」 band into % CP or % LTHR; without one it stays "auto" — except on a 強度課 (`quality`):
+    there it takes what such a session runs on at plan time (`qbasis`, else quality_auto_basis():
+    課表偏好 hr or a non-Stryd power source → % LTHR, otherwise % CP; SP-84, owner 2026-10-07 /
+    2026-10-13)."""
     if basis not in ("hr", "power") and quality:
-        # NOTE (review L4, open with the owner): the filter follows the owner's wording (強度課 「自動」 = % CP),
-        # but at plan time target_policy.target_policy lets 課表偏好 decide first — pref_basis(prefs) == "hr"
-        # (target_basis hr, or the old interval_target hr) runs these sessions on % LTHR, and a non-Stryd power
-        # source falls back to HR. The filter does not read 課表偏好, so for those users it says % CP anyway.
-        basis = "power"
+        basis = qbasis if qbasis in ("hr", "power") else quality_auto_basis()
     steps: list = []
 
     def walk(xs):
@@ -1660,12 +1675,14 @@ def target_types(items: list, basis: Optional[str] = None, quality: bool = False
     return [k for k in TARGET_TYPE_IDS if k in got]
 
 
-def template_target_types(row: dict, cat: Optional[str] = None) -> list[str]:
+def template_target_types(row: dict, cat: Optional[str] = None, qbasis: Optional[str] = None) -> list[str]:
     """The one place that decides a template row's 主課強度類型 (SP-84) — the 範本 page's list
     (user_templates.row) and 插入範本 (templates()) both call it: its structure, its 目標用, and
-    whether it is a 強度課 (`cat`, the group it is listed in, or the user template's `cats`)."""
+    whether it is a 強度課 (`cat`, the group it is listed in, or the user template's `cats`); a
+    強度課's 「自動」 by `qbasis` (quality_auto_basis, read once per list)."""
     quality = cat == "quality" or "quality" in (row.get("cats") or [])
-    return target_types(row.get("full") or row.get("items"), row.get("basis") or row.get("target_basis"), quality)
+    return target_types(row.get("full") or row.get("items"), row.get("basis") or row.get("target_basis"), quality,
+                        qbasis)
 
 
 def _has_rest_after(rows: list, st: dict) -> bool:
@@ -2059,7 +2076,8 @@ def templates(prefs=None, user: Optional[dict] = None, warm_floor_s: int = 0) ->
     from backend.engine import user_templates as UT
     from backend.engine import workout_templates as WT
     lib = [(t, WT.row(t)) for t in WT.TEMPLATES]
-    groups = UT.groups((user or {}).get("templates") or [])
+    qb = quality_auto_basis(prefs)          # SP-84: a 強度課's 「自動」 in the 主課強度 filter, once per list
+    groups = UT.groups((user or {}).get("templates") or [], qb)
 
     def g(cat, title, rows, sub=None):
         if rows:
@@ -2131,7 +2149,7 @@ def templates(prefs=None, user: Optional[dict] = None, warm_floor_s: int = 0) ->
             # the editor badges these when there is no threshold pace (their pace is × it)
             r["needs_tpace"] = needs_tpace(r.get("full") or r.get("items"))
             # the 主課強度類型 filter (SP-84; user rows: user_templates.row, the same helper)
-            r["target_types"] = template_target_types(r, gr["cat"])
+            r["target_types"] = template_target_types(r, gr["cat"], qb)
     return {"cats": WT.cats() + list((user or {}).get("cats") or []), "groups": groups,
             "target_types": target_type_list(), "no_tpace_text": no_tpace_text()}
 
