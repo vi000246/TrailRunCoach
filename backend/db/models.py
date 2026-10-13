@@ -236,6 +236,10 @@ class PlanSession(Base):
     # (plan_store.ext_signature), so a later edit on the 課表 page is noticed before overwriting
     ext_key: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     ext_sig: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    # SP-473: the CP (W) the absolute watts in target / detail / the structure's absolute power
+    # steps were written with (plan_store.restamp_cp); plan_auto.rescale_sessions rescales from it.
+    # None = not known (a row from before SP-473, a race export): plan.auto.state.cp is used
+    cp_basis: Mapped[Optional[float]] = mapped_column(nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 

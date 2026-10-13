@@ -99,7 +99,8 @@ def to_dict(r: PlanSession) -> dict:
             "variant_reps": r.variant_reps, "variant_blocks": r.variant_blocks, "variant_adj": adj,
             "target_basis": getattr(r, "target_basis", None), "steps": _steps_of(getattr(r, "steps", None)),
             "family": getattr(r, "family", None),
-            "ext_key": getattr(r, "ext_key", None), "ext_sig": getattr(r, "ext_sig", None)}
+            "ext_key": getattr(r, "ext_key", None), "ext_sig": getattr(r, "ext_sig", None),
+            "cp_basis": getattr(r, "cp_basis", None)}
 
 
 def _steps_of(raw) -> Optional[dict]:
@@ -120,7 +121,10 @@ VARIANT_FIELDS = ("variant_key", "rung_key", "equiv", "swap", "swap_reason", "va
 
 FILL_FIELDS = ("week_start", "gen_key", "day", "kind", "title", "minutes", "target", "detail", "source",
                "tss", "origin", "edited", "provisional", "state", "note", "terrain", "distance_km", "climb_m",
-               "protocol") + VARIANT_FIELDS + ("ext_key", "ext_sig", "family") + ("done_by", "variant_adj", "steps")
+               "protocol") + VARIANT_FIELDS + ("ext_key", "ext_sig", "family", "cp_basis") + \
+    ("done_by", "variant_adj", "steps")
+# what moves updated_at (the 課表訂閱 feed's LAST-MODIFIED / SEQUENCE): cp_basis is bookkeeping (SP-473)
+SEEN_FIELDS = tuple(k for k in FILL_FIELDS if k != "cp_basis")
 
 
 def _fill(r: PlanSession, d: dict) -> None:
@@ -128,19 +132,66 @@ def _fill(r: PlanSession, d: dict) -> None:
     rewrites every row): the 課表訂閱 feed (engine/calendar_feed.py) turns it into
     LAST-MODIFIED / SEQUENCE, and each change is at least one second later than the
     previous one so SEQUENCE (whole seconds) always goes up."""
-    before = tuple(getattr(r, k, None) for k in FILL_FIELDS)
+    before = tuple(getattr(r, k, None) for k in SEEN_FIELDS)
     for k in FILL_FIELDS[:-3]:
         setattr(r, k, d.get(k))
     r.minutes = int(d.get("minutes") or 0)
     r.done_by = json.dumps(d["done_by"], ensure_ascii=False) if d.get("done_by") else None
     r.variant_adj = json.dumps(d["variant_adj"]) if d.get("variant_adj") else None
     r.steps = json.dumps(d["steps"], ensure_ascii=False) if d.get("steps") else None
-    if r.updated_at is not None and tuple(getattr(r, k, None) for k in FILL_FIELDS) == before:
+    if r.updated_at is not None and tuple(getattr(r, k, None) for k in SEEN_FIELDS) == before:
         return
     now = dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
     if r.updated_at is not None and now < r.updated_at + dt.timedelta(seconds=1):
         now = r.updated_at + dt.timedelta(seconds=1)
     r.updated_at = now
+
+
+def watt_sig(d: dict) -> tuple:
+    """The absolute watts a session carries: the numbers in target / detail (plan_auto._WATTS)
+    and the structure's absolute power steps — what a CP change rescales (SP-473)."""
+    from backend.engine.plan_auto import _WATTS
+    txt = tuple(m.group(0) for k in ("target", "detail") for m in _WATTS.finditer(d.get(k) or ""))
+    steps: list = []
+
+    def walk(items):
+        for it in items or []:
+            if it.get("kind") == "repeat":
+                walk(it.get("items"))
+                continue
+            tg = it.get("target") or {}
+            if tg.get("type") == "power" and tg.get("mode") == "abs":
+                steps.append((tg.get("lo"), tg.get("hi")))
+    walk((d.get("steps") or {}).get("items") if isinstance(d.get("steps"), dict) else None)
+    return txt, tuple(steps)
+
+
+def restamp_cp(old: Optional[dict], new: dict, cp: Optional[float], fresh: bool = False) -> dict:
+    """SP-473: `new`'s cp_basis — the CP its absolute watts were written with. A new row, one
+    written from the inputs (`fresh`: a library variant, a saved structure) or one whose watts
+    changed takes `cp` (the CP in effect; None = not known); otherwise (a move, a title / time
+    edit) it keeps `old`'s. plan_auto.rescale_sessions rescales each row from it, so a row
+    already written with the new CP is not multiplied by new / old again."""
+    if old is None or fresh or watt_sig(old) != watt_sig(new):
+        new["cp_basis"] = float(cp) if cp else None
+    else:
+        new["cp_basis"] = old.get("cp_basis")
+    return new
+
+
+def stamp_generated(new: list[dict], inputs: dict) -> list[dict]:
+    """SP-473: the rows reconcile just wrote from the generator — unedited auto, active, from today
+    on, in a generated week (engine/reconcile.py rules 2–4 replace every one of them) — carry the
+    inputs' CP (week_plan thresholds) as their cp_basis. In place; returns `new`."""
+    from backend.engine.plan_auto import cp_of
+    cp = cp_of(inputs)
+    weeks = {w["start"] for w in gen_weeks(inputs)}
+    today = inputs.get("today") or ""
+    for s in new:
+        if (s.get("origin") == "auto" and not s.get("edited") and s.get("state") == "active"
+                and (s.get("day") or "") >= today and s.get("week_start") in weeks and s.get("kind") != "notice"):
+            s["cp_basis"] = cp
+    return new
 
 
 async def _rows(db: AsyncSession, athlete_id: int) -> dict[str, PlanSession]:
@@ -233,6 +284,7 @@ def reconcile_with_adapt(stored: list[dict], inputs: dict, decisions: Optional[d
         A.annotate(changes, adj, new, stored)
     if adjustments is not None:
         adjustments.extend(adj)
+    stamp_generated(new, inputs)            # SP-473: the CP the regenerated rows' watts use
     return new, changes
 
 
@@ -349,10 +401,11 @@ def _not_blocked(day: str, blocked: Optional[dict]) -> None:
 
 
 async def edit(db: AsyncSession, uid: str, patch: dict, today: str, athlete_id: int = 1,
-               blocked: Optional[dict] = None) -> dict:
-    """`blocked`: ISO day -> label of the 不排課日期; moving onto one is refused."""
+               blocked: Optional[dict] = None, cp: Optional[float] = None) -> dict:
+    """`blocked`: ISO day -> label of the 不排課日期; moving onto one is refused. `cp`: the CP in
+    effect (plan_auto.cp_of of the inputs), the row's cp_basis when the edit writes watts (SP-473)."""
     rows = await _rows(db, athlete_id)
-    d = _edit_row(db, rows, uid, patch, today, athlete_id, blocked)
+    d = _edit_row(db, rows, uid, patch, today, athlete_id, blocked, cp)
     await db.commit()
     return d
 
@@ -385,12 +438,13 @@ async def swap(db: AsyncSession, uid_a: str, uid_b: str, today: str, athlete_id:
 
 
 def _edit_row(db: AsyncSession, rows: dict, uid: str, patch: dict, today: str, athlete_id: int,
-              blocked: Optional[dict]) -> dict:
+              blocked: Optional[dict], cp: Optional[float] = None) -> dict:
     """`edit` without the commit (swap commits its two moves together)."""
     r = rows.get(uid)
     if r is None or r.state != "active":
         raise PlanError(_("找不到這堂課（或已經完成／錯過）"))
     d = to_dict(r)
+    was = dict(d)
     ch = _clean(patch, today)
     if ch.get("kind") == "race" and d["kind"] != "race":
         raise PlanError(_(NO_RACE_ADD))
@@ -430,12 +484,14 @@ def _edit_row(db: AsyncSession, rows: dict, uid: str, patch: dict, today: str, a
     if d["kind"] == "test" and patch.get("protocol") in ("quick", "standard", "race", "aet"):
         d["protocol"] = patch["protocol"]           # the editor's 測試 → 方式 choice
     d.update(edited=True, week_start=new_week, provisional=False)
+    restamp_cp(was, d, cp, fresh=bool(patch.get("_variant") or ch.get("steps")))
     _fill(r, d)
     return d
 
 
 async def add(db: AsyncSession, data: dict, today: str, athlete_id: int = 1,
-              blocked: Optional[dict] = None) -> dict:
+              blocked: Optional[dict] = None, cp: Optional[float] = None) -> dict:
+    """`cp`: the CP in effect, the new row's cp_basis (SP-473; None = not known)."""
     data = dict(data)
     data.setdefault("kind", "easy")
     if data["kind"] in NOT_LOAD:
@@ -460,6 +516,7 @@ async def add(db: AsyncSession, data: dict, today: str, athlete_id: int = 1,
         d["source"] = str(data.get("source") or "")
     elif data.get("source"):
         d["source"] = str(data["source"])[:2000]     # an accepted suggestion keeps the generator's sources
+    restamp_cp(None, d, cp)
     r = PlanSession(athlete_id=athlete_id, uid=d["uid"])
     db.add(r)
     _fill(r, d)
@@ -606,6 +663,7 @@ async def upsert_external(db: AsyncSession, ext_key: str, data: dict, today: str
     if new["origin"] == "auto" and base.get("week_start") and base["week_start"] != ws:
         new.update(origin="custom", gen_key=None)     # moved to another week: the user's own row now
     new["ext_sig"] = ext_signature(new)
+    restamp_cp(base if row is not None else None, new, None)    # its watts: the CP not known (SP-473)
     if action == "update" and all(new.get(k) == base.get(k) for k in COMPARE):
         action = "unchanged"
     if write and action != "unchanged":

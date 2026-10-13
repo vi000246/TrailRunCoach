@@ -310,25 +310,32 @@ def _has_power(s: dict, cp: float) -> bool:
 def rescale_sessions(stored: list[dict], old: float, new: float, today: str) -> tuple[list[dict], list[dict]]:
     """CP old -> new: the upcoming active sessions' watt numbers (target /
     detail) recomputed from % CP. Returns (sessions, items) — one item per
-    session whose text or COROS power steps change (the change log rows)."""
+    session whose text or COROS power steps change (the change log rows).
+    SP-473: each row is rescaled from its own cp_basis (the CP its watts were written with:
+    the page's reconcile, a move or an add may have written it with `new` already); `old`
+    (plan.auto.state.cp) only for a row that has none. Every row comes out with cp_basis `new`."""
     out, items = [], []
     for s in stored:
         if s["state"] != "active" or s["kind"] == NOTICE_KIND or (s.get("day") or "") < today:
             out.append(s)
             continue
-        t2, d2 = rescale_watts(s.get("target"), old, new), rescale_watts(s.get("detail"), old, new)
-        x = {**s, "target": t2 or "", "detail": d2 or ""}
+        o = _f(s.get("cp_basis")) or old
+        if abs(o - new) < 0.5:
+            o = new                          # written with the new CP: nothing to rescale
+        t2, d2 = rescale_watts(s.get("target"), o, new), rescale_watts(s.get("detail"), o, new)
+        x = {**s, "target": t2 or "", "detail": d2 or "", "cp_basis": new}
         if s.get("steps"):
             # a structure saved in the editor (engine/workout_steps.py): % CP / zone steps follow
             # the new CP by themselves; the absolute watt overrides are rescaled like the text
             from backend.engine import workout_steps as WS
-            x["steps"] = WS.rescale_abs_power(s["steps"], old, new)
+            x["steps"] = WS.rescale_abs_power(s["steps"], o, new) if o != new else s["steps"]
         if t2 != s.get("target") or d2 != s.get("detail") or x.get("steps") is not s.get("steps") or \
                 _has_power(x, new):
             before = {k: s.get(k) for k in ("target", "detail") if s.get(k) != x.get(k)}
             items.append({"action": "changed", "uid": s["uid"], "day": s.get("day"), "kind": s.get("kind"),
                           "title": s.get("title"), "minutes": s.get("minutes"), "tss": s.get("tss"),
-                          "reason": f"CP {old:.0f} → {new:.0f} W：功率目標依 % CP 重算", "rule": "cp",
+                          "reason": f"CP {(old if o == new else o):.0f} → {new:.0f} W：功率目標依 % CP 重算",
+                          "rule": "cp",
                           "before": before})
         out.append(x)
     return out, sorted(items, key=lambda i: i.get("day") or "9999")
