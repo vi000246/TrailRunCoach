@@ -769,7 +769,7 @@ async function renderDup(box) {
   const id = box.dataset.dup;
   let d;
   try { d = await j(`/api/v1/sync/dedup/near/${id}`); } catch (_) { box.textContent = "—"; return; }
-  const when = (r) => r.start ? r.start.slice(11, 16) : "";
+  const when = (r) => r.start_local ? r.start_local.slice(11, 16) : "";      // the athlete's time, not UTC (SP-410)
   const km = (r) => r.distance_m ? `${(r.distance_m / 1000).toFixed(2)} km` : "";
   const min = (r) => r.duration_s ? `${Math.round(r.duration_s / 60)} min` : "";
   const line = (r, btn) => `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:2px 0">
