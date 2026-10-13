@@ -490,6 +490,7 @@ main > section.tab-off { display: none; }
       <a class="button" id="ar-dl" href="/api/v1/archive/fit.zip" download data-i18n="settings.arch.download">下載我的全部 FIT</a>
       <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.arch.download_help" title="把你所有同步、匯入的 FIT 原始檔打包成一個 zip 下載，隨時都能用，跟清理無關。檔案多的話要等一下才會開始。">?</button>
     </div>
+    <p class="meta" id="ar-note" role="status"></p>
   </section>
 
   <dialog id="restore-dlg">
@@ -1925,20 +1926,24 @@ const arWhen = (iso) => (iso ? iso.slice(0, 16).replace("T", " ") : "");
 function showArchive(s) {
   $("ar-years").innerHTML = s.choices.map((n) => `<option value="${n}" ${n === s.retention_years ? "selected" : ""}>${
     esc(t(n === s.default ? "settings.arch.years_default" : "settings.arch.years", { n }))}</option>`).join("");
-  const L = s.last, next = arWhen(s.next_run);
+  const L = s.last;
   let line;
-  if (!L) line = t("settings.arch.never", { next });
-  else if (L.status !== "ok") line = t("settings.arch.skipped", { date: arDate(L.at), next });
-  else if (!L.deleted) line = t("settings.arch.last_none", { date: arDate(L.at), next });
+  if (!L) line = t("settings.arch.never");
+  else if (L.status !== "ok") line = t("settings.arch.skipped", { date: arDate(L.at) });
+  else if (!L.deleted) line = t("settings.arch.last_none", { date: arDate(L.at) });
   else line = t("settings.arch.last", { date: arDate(L.at), n: L.deleted, from: L.first || "?", to: L.last || "?",
-                                        mb: ((L.bytes + (L.npz_bytes || 0)) / 1048576).toFixed(1), next });
+                                        mb: ((L.bytes + (L.npz_bytes || 0)) / 1048576).toFixed(1) });
+  // the kept ones belong to that cleanup: before the next date
   if (L && L.protected && L.protected.length) line += t("settings.arch.kept", { n: L.protected.length });
+  if (s.next_run) line += t("settings.arch.next", { next: arWhen(s.next_run) });
   $("ar-last").textContent = line;
 }
 async function loadArchive() {
   try { showArchive(await j(`${ARCH}/status`)); }
   catch (e) { $("ar-last").textContent = t("settings.arch.failed", { msg: e.message.slice(0, 80) }); }
 }
+// the ? buttons: their text under the block on a tap too (a phone has no hover title), as 備份 does
+$("archive").addEventListener("click", (e) => { const q = e.target.closest("button.q"); if (q) $("ar-note").textContent = q.title; });
 $("ar-years").onchange = async (e) => {
   try { showArchive(await jput(`${ARCH}/settings`, { retention_years: +e.target.value })); $("ar-msg").textContent = t("settings.arch.saved"); }
   catch (err) { $("ar-msg").textContent = t("settings.arch.failed", { msg: err.message.slice(0, 80) }); loadArchive(); }

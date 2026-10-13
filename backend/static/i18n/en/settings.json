@@ -344,11 +344,12 @@
   "arch.years_default": "{n} years (default)",
   "arch.saved": "Saved",
   "arch.failed": "Failed: {msg}",
-  "arch.never": "No cleanup yet; next cleanup: {next}",
-  "arch.skipped": "The last cleanup ({date}) was postponed: the first import is still being filled in, it will try again; next cleanup: {next}",
-  "arch.last_none": "Last cleanup: {date}, nothing past the retention; next cleanup: {next}",
-  "arch.last": "Last cleanup: {date}, {n} removed ({from} to {to}), {mb} MB freed; next cleanup: {next}",
-  "arch.kept": " ({n} used by a threshold or plan test, kept for now)",
+  "arch.never": "No cleanup yet",
+  "arch.skipped": "The last cleanup ({date}) was postponed: the first import is still being filled in, it will try again",
+  "arch.last_none": "Last cleanup: {date}, nothing past the retention",
+  "arch.last": "Last cleanup: {date}, {n} removed ({from} to {to}), {mb} MB freed",
+  "arch.kept": "; {n} more used by a threshold or plan test, kept for now",
   "arch.download": "Download all my FIT files",
-  "arch.download_help": "Packs every FIT original you synced or imported into one zip. Available any time, independent of the cleanup. With many files it takes a moment to start."
+  "arch.download_help": "Packs every FIT original you synced or imported into one zip. Available any time, independent of the cleanup. With many files it takes a moment to start.",
+  "arch.next": "; next cleanup: {next}"
 }
