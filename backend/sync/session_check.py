@@ -20,6 +20,10 @@ as a token was stored. Now:
     (SP-88: the 登入已過期 banner disappeared when the re-check after the
     CHECK_TTL_S cache could not reach COROS); only a login, an "ok" check or
     a logout clears it.
+  * Every answer, and the lock that keeps one live check at a time, belongs to the current
+    tenant (SP-431): in sign-in mode every user has their own database and their athlete is
+    id 1 in it, so (source, athlete_id) alone showed one person's 登入已過期 on another's page.
+    The owner's app (one tenant, "owner") behaves as before.
 
 Nothing here logs or returns a token or a password.
 """
@@ -45,13 +49,23 @@ UNKNOWN_TTL_S = 60           # a check that could not reach the server is retrie
 
 OK, EXPIRED, UNKNOWN, LOGGED_OUT = "ok", "expired", "unknown", "logged_out"
 
-_CACHE: dict = {}            # (source, athlete_id) -> (result, time.monotonic())
+_CACHE: dict = {}            # (tenant id, source, athlete_id) -> (result, time.monotonic())
 _LOCKS: dict = {}
+
+
+def _tid() -> str:
+    """The current tenant's id (tenancy.py): "owner" in the owner's app, "u<id>" for a user."""
+    from backend import tenancy
+    return tenancy.current().id
+
+
+def _key(source: str, athlete_id: int = 1) -> tuple:
+    return (_tid(), source, athlete_id)
 
 
 def _lock(source: str):
     loop = asyncio.get_running_loop()
-    key = (id(loop), source)
+    key = (id(loop), _tid(), source)          # per tenant: B's page never waits for A's check
     lk = _LOCKS.get(key)
     if lk is None:
         lk = _LOCKS[key] = asyncio.Lock()
@@ -60,26 +74,35 @@ def _lock(source: str):
 
 def mark_expired(source: str, athlete_id: int = 1) -> None:
     """A COROS / TP call answered auth-required (after any automatic re-login)."""
-    if _CACHE.get((source, athlete_id), (None,))[0] != EXPIRED:
+    key = _key(source, athlete_id)
+    if _CACHE.get(key, (None,))[0] != EXPIRED:
         log.warning("%s login expired", source.upper())
-    _CACHE[(source, athlete_id)] = (EXPIRED, time.monotonic())
+    _CACHE[key] = (EXPIRED, time.monotonic())
 
 
 def mark_ok(source: str, athlete_id: int = 1) -> None:
     """A fresh login (manual or automatic) was stored."""
-    _CACHE[(source, athlete_id)] = (OK, time.monotonic())
+    _CACHE[_key(source, athlete_id)] = (OK, time.monotonic())
 
 
-def forget(source: Optional[str] = None, athlete_id: Optional[int] = None) -> None:
-    """Logout (or tests): drop the cached answer."""
+def forget(source: Optional[str] = None, athlete_id: Optional[int] = None, *,
+           tenant_id: Optional[str] = None) -> None:
+    """Logout (or tests): drop the cached answers of one tenant — the current one, or `tenant_id`
+    (an account being deleted, accounts/deletion.py). Never another tenant's."""
+    tid = tenant_id if tenant_id is not None else _tid()
     for k in list(_CACHE):
-        if (source is None or k[0] == source) and (athlete_id is None or k[1] == athlete_id):
+        if k[0] == tid and (source is None or k[1] == source) and (athlete_id is None or k[2] == athlete_id):
             _CACHE.pop(k, None)
+
+
+def clear() -> None:
+    """Every tenant's answers (tests: each starts with an empty cache)."""
+    _CACHE.clear()
 
 
 def cached(source: str, athlete_id: int = 1) -> Optional[str]:
     """The cached answer while it is fresh, else None (no network)."""
-    hit = _CACHE.get((source, athlete_id))
+    hit = _CACHE.get(_key(source, athlete_id))
     if hit is None:
         return None
     result, at = hit
@@ -98,7 +121,7 @@ async def _state(db: AsyncSession, athlete_id: int) -> Optional[SyncState]:
 
 async def check(db: AsyncSession, source: str, athlete_id: int = 1) -> str:
     """ok | expired | unknown | logged_out. At most one live check per
-    CHECK_TTL_S per source; concurrent callers wait for that one."""
+    CHECK_TTL_S per source and tenant; concurrent callers wait for that one."""
     if source not in SOURCES:
         raise ValueError(f"unknown source {source!r}")
     st = await _state(db, athlete_id)
@@ -111,7 +134,8 @@ async def check(db: AsyncSession, source: str, athlete_id: int = 1) -> str:
         hit = cached(source, athlete_id)
         if hit is not None:
             return hit
-        prev = _CACHE.get((source, athlete_id), (None,))[0]      # stale answer, if any
+        key = _key(source, athlete_id)
+        prev = _CACHE.get(key, (None,))[0]       # stale answer, if any
         try:
             result = await {"coros": _check_coros, "garmin": _check_garmin, "tp": _check_tp}[source](db, athlete_id)
         except Exception as e:                   # noqa: BLE001 — a check never breaks the page
@@ -121,7 +145,7 @@ async def check(db: AsyncSession, source: str, athlete_id: int = 1) -> str:
         if result == UNKNOWN and prev == EXPIRED:
             # refused before, unreachable now: still expired, re-checked as soon as an unknown
             result, at = EXPIRED, at - (CHECK_TTL_S - UNKNOWN_TTL_S)
-        _CACHE[(source, athlete_id)] = (result, at)
+        _CACHE[key] = (result, at)
         return result
 
 

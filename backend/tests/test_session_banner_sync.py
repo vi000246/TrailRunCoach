@@ -36,7 +36,7 @@ async def _sync(s, fake, trigger="open"):
 def _age_cache(source="coros"):
     """The cached answer is older than CHECK_TTL_S (the next read checks again)."""
     for k, (v, at) in list(SC._CACHE.items()):
-        if k[0] == source:
+        if k[1] == source:                               # (tenant id, source, athlete_id)
             SC._CACHE[k] = (v, at - SC.CHECK_TTL_S - 1)
 
 
@@ -100,7 +100,7 @@ def test_the_sticky_answer_is_rechecked_soon(tmp_path, monkeypatch):
             return SC.UNKNOWN
         monkeypatch.setattr(SC, "_check_coros", unreachable)
         assert await SC.check(s, "coros", 1) == SC.EXPIRED
-        at = SC._CACHE[("coros", 1)][1]
+        at = SC._CACHE[SC._key("coros", 1)][1]
         assert time.monotonic() - at >= SC.CHECK_TTL_S - SC.UNKNOWN_TTL_S - 1   # re-checked within ~UNKNOWN_TTL_S
         SC.mark_ok("coros", 1)
         _age_cache()
@@ -143,7 +143,7 @@ def test_a_failed_auto_sync_is_not_a_sync_and_stays_visible(tmp_path):
         r = (await AUTH.session_alerts(1, s))["sync"]
         assert r["login"] == "expired" and r["problem"] == "expired"
         # had the check nothing to go on (unknown), the failed run itself is the banner
-        SC._CACHE[("coros", 1)] = (SC.UNKNOWN, time.monotonic())
+        SC._CACHE[SC._key("coros", 1)] = (SC.UNKNOWN, time.monotonic())
         r = (await AUTH.session_alerts(1, s))["sync"]
         assert r["login"] == "unknown" and r["problem"] == "failed"
         # logged in again: the auth failure is over (before the next run)

@@ -26,7 +26,8 @@ In order:
   3. every accounts.db row of the person (store.delete_user: user, identities, sessions, shares,
      usage, service tokens, consents, sign-ins in progress, sign-up tickets, the waitlist e-mail)
   4. what the server keeps by tenant id only is let go: a COROS / Garmin pause (site.json), the
-     tenant's ready mark and consent cache in this process
+     tenant's ready mark, consent cache and login-check answers (sync/session_check.py, per
+     tenant since SP-431) in this process
 A step that fails leaves the user disabled with reason "deleting" — signed out, never half usable
 — and the CLI finishes it.
 
@@ -157,7 +158,10 @@ async def _disconnect() -> dict:
 
 
 def _let_go(tid: str) -> None:
-    """4: the COROS / Garmin pause of this tenant id (site.json), if any."""
+    """4: the COROS / Garmin pause of this tenant id (site.json), if any, and the tenant's
+    login-check answers (only this tenant's: the cache is keyed by tenant, SP-431)."""
+    from backend.sync import session_check
+    session_check.forget(tenant_id=tid)
     try:
         from backend.sync import coros_limits as CL, garmin_limits as GL
         if CL.paused(tid):
