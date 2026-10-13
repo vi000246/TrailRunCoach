@@ -416,6 +416,24 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
   還缺什麼. The AeT test follows `plan.prefs.aet_test_protocol` (`replaces_long` for 徐國峰's 90′).
   A scheduled test carries `protocol` (Session field, `plan_sessions.protocol` column + migration,
   `reconcile.FIELDS`, `plan_store.to_dict` / `push_dict`).
+- **Easy-power test** (SP-471, the user 2026-10-13): when SP-449's `easy_power` note fires (the easy
+  runs' own power at the easy-run HR cap > 88 % CP), `base_check.easy_power_tests`
+  (`backend/engine/base_check.py:546`, 推估; named constants `EP_*` at `backend/engine/base_check.py:512`)
+  picks the test from the athlete's own numbers — the **AeT test** when the cap is within
+  `EP_CAP_LTHR_GAP_BPM` (5) of LTHR or at / above it, or the LTHR is an automatic estimate with low
+  confidence (`testing` extra `thr_check.lthr.confidence`) / the 0.90 × max-HR prior (then 「或 30 分鐘 LTHR
+  測試」 and the 30-min test's 安排課表 link); the **CP test** when the CP's own date is older than
+  `EP_CP_STALE_DAYS` (42) or there was no CP test (the review's or a plan CP row not typed by hand,
+  `last_cp_test_day`) and no race (`last_race_day`, not 百岳 / other) in `EP_ALL_OUT_DAYS` (42); both
+  when both; neither → the CP test. A kind done in `EP_RETEST_DAYS` (28) is left out. Not in a new
+  runner's first weeks, ≤ 10 days before an A race, a 恢復週 / 停訓後恢復期, or 減量期 / 比賽週 / 恢復期 /
+  轉換期 / 回量期 (`easy_power_blocked`). `overview.easy_power_suggestions`
+  (`backend/engine/overview.py:1373`) adds the reason to a test already suggested or builds the row like
+  the due CP / AeT test (`src: easy_power`); every such row carries `easy_power {summary, why,
+  lthr_doubt}` with the numbers (「輕鬆跑上限 154 bpm 時約 169 W ＝ 88% CP…」「心率上限 154 跟 LTHR 155
+  幾乎一樣…」). The box rows keep it (`suggestions.test_rows`; a 基線測試 row standing in takes it,
+  `carry_easy_power`); a test of that kind already in the plan ends it (`plan_sessions._suggestions`).
+  Cost: a few µs per week plan (no PD refit, no activity scan) and no extra request.
 - **間歇門檻 — quality gate** (`backend/engine/quality_gate.py`; design
   `docs/research/aerobic-base-readiness.md` §4–§5). The old 「連續 3 次輕鬆路跑飄移 < 5%」
   rule had no source and is gone (`STREAK_NEED` is legacy only,
@@ -1545,7 +1563,13 @@ which one. The response keeps the `coros` field names.
   5 區 card (full width), 待辦與警示 and, left of it, the B2B card (shown only before a multi-day /
   ≥ 6 h A event or once B2B weekends exist; `GET /overview/b2b`). Due tests, B2B weekends and zone
   retests are in the shared floating suggestion box (`static/suggestions.js`); its
-  `suggestions:changed` event reloads the week (`backend/static/overview.html:967`). No sideways
+  `suggestions:changed` event reloads the week (`backend/static/overview.html:967`).
+  SP-471: **「心率和功率對不起來：建議做測試」** — a block of its own at the top of the page, above the
+  KPI row (`backend/static/overview.html:255`, `static/eptest.js`), and on the 課表 page under its notes
+  (`backend/static/schedule.html:623`): the summary with the numbers, each suggested test (AeT / CP) with
+  its reason, a day picker, 排入 (`POST …/suggestions/accept`), the 30-min LTHR test's 安排課表 link when
+  the LTHR is the doubt, and 不要. Its rows are the floating box's (`suggestions:loaded`, fired after
+  every box GET — no request of its own); 排入 fires `suggestions:changed` and the 課表 reloads. No sideways
   scroll at phone width (long alert titles wrap).
 - **Glossary hovers**: the terms `AeT` and `CP 測試` inside engine text (actions, indicator
   verdict / why / action, week reasons, notes, the thresholds line) get a hover / tap
@@ -2610,3 +2634,4 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 | 2026-10-13 | bugfix | SP-361 | 課表心率區間 switch, the rest (owner Q1 = B): `GET /plan/calendar` serves the previous inputs marked `stale` {reason `hr`} when, of the user's settings, only the HR stamp changed (`_K_HR`, `_stale_view`, `backend/api/plan_sessions.py:72`, `:110`) and computes the new model's plan in the background (single flight); the page's 「心率區間更新中」 badge (`stale.hr`, `backend/static/schedule.html:1007`). `_status_for` (`:2715`) takes a cached Status differing only by the HR stamp (`status_but_hr`, `backend/api/overview.py:309`): switching back to a model used before no longer recomputes the Status for the calendar's phases. Synthetic 52-week demo base, 課表 calendar right after a switch: new model 1.75–2.86 s → 0.13–0.16 s (stale; the new plan 1.5–2.5 s later in the background), a model used before 2.07 s → 0.08 s. Tests: `backend/tests/test_hr_switch_stale_sp361.py` |
 | 2026-10-13 | perf | SP-462 | 課表 month switch: `_range_extras`' TSS / h per category comes from the cached plan inputs of the same dataset and day (week_plan's `tss_per_category` + `easy_tss`, the very same `overview._tss_per_hour`; computed as before when none is cached — `_dataset_tph`, `backend/api/plan_sessions.py:2755`), and the calendar reads 課表偏好 once per request instead of once per session (`plan_store.push_dict(s, prefs)`, `backend/engine/plan_store.py:759`; `_view`). Synthetic 52-week demo base, GET /calendar of another month (inputs cached): 0.34–0.46 s → 0.04–0.14 s (a month whose activities were never classified: 0.73 → 0.30 s); in Chromium 0.75–1.36 s → 0.14–0.48 s. Tests: `backend/tests/test_calendar_month_switch_sp462.py` |
 | 2026-10-13 | bugfix | SP-445 | 課表 edits show at once: a drag to another day, a save in the session dialog (no structure edit) and a delete change the calendar the moment they are sent (the card locked with ↻, or gone; `optimistic`, `backend/static/schedule.html:1064`), the toast says 「重新排課中」, and the calendar reloads quietly afterwards (`load(true)`: no grey-out, `:1038`); editing waits meanwhile (`editable`, `:1056`); a refused edit puts the calendar back and says why (the dialog reopens with what was typed). The server side is unchanged (the PATCH still waits for the watch's copy, SP-358). Tests: `backend/tests/e2e/test_schedule_instant_edit_sp445.py` |
+| 2026-10-13 | feature | SP-471 | (the user: 「我想要讓它獨立一個區塊顯眼一點」)  The easy-power conflict (SP-449's note) suggests the test it points at: AeT / LTHR when the easy-run cap is within 5 bpm of LTHR or the LTHR is a low-confidence estimate, CP when the CP is > 42 days old or there was no CP test / race in 42 days, both when both, CP otherwise (`base_check.easy_power_tests`, `EP_*` constants); not before an A race (10 days), in a 恢復週 / 停訓後恢復期 / 恢復期 etc. or a new runner's first weeks; not when that kind is in the plan or was done in 28 days. Shown with 排入 in a block of its own on 總覽 (top) and on 課表 (`static/eptest.js`; the box rows' `easy_power`, `suggestions:loaded`), reasons with the numbers (zh / en) |

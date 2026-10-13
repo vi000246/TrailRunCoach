@@ -328,5 +328,15 @@
   "fitfolder.badge.nothing_new": "No new files in the FIT folder “{name}”",
   "fitfolder.badge.settings": "Settings",
   "fitfolder.badge.close": "Close",
-  "legend.levels_note": "Walking sessions (steep power hiking, hikes): a hike, a walk or a trail run all count as the right sport.\nHow intensity is measured: with the session classifier, the higher of Zone 3 time (bar 10 min) and equivalent T@VO2max (bar 4 min); without it, the time at or above threshold (power ≥ 95 % CP or HR ≥ LTHR; bar 10 min, short intervals 60 % of the plan). The 80 %, 50 % and 1.5× bands applied to intensity are estimates; so is counting it partly done when time and TSS are on plan (intervals.icu and TrainingPeaks rate completion by load / time)."
+  "legend.levels_note": "Walking sessions (steep power hiking, hikes): a hike, a walk or a trail run all count as the right sport.\nHow intensity is measured: with the session classifier, the higher of Zone 3 time (bar 10 min) and equivalent T@VO2max (bar 4 min); without it, the time at or above threshold (power ≥ 95 % CP or HR ≥ LTHR; bar 10 min, short intervals 60 % of the plan). The 80 %, 50 % and 1.5× bands applied to intensity are estimates; so is counting it partly done when time and TSS are on plan (intervals.icu and TrainingPeaks rate completion by load / time).",
+  "eptest.title": "Heart rate and power don't agree: do a test",
+  "eptest.kind_aet": "AeT test",
+  "eptest.kind_cp": "CP test",
+  "eptest.pick": "Pick a day",
+  "eptest.accept": "Schedule",
+  "eptest.decline": "No thanks",
+  "eptest.no_day": "No suitable day in the next two weeks (too close to a long run or a hard session)",
+  "eptest.done": "Scheduled {what}",
+  "eptest.to_schedule": "see the schedule",
+  "eptest.help": "Tests are suggestions and never go into the plan by themselves: pick a day and press Schedule. The power band stays as it is; run the easy runs by heart rate for now."
 }

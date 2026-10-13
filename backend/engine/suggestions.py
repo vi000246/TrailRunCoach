@@ -108,13 +108,34 @@ def test_rows(tests: list[dict], monday: str) -> list[dict]:
     for sg in tests:
         name = "AeT" if sg["kind"] == "aet" else "CP"
         out.append({"id": f"test:{sg['kind']}:{monday}", "type": "test", "week": monday, "kind": sg["kind"],
-                    "title": f"建議做一次 {name} 測試：{sg['title']}（{sg['minutes']} 分）",
+                    # (SP-471: translated — the overview's easy-power block shows it too)
+                    "title": _("建議做一次 {test} 測試：{name}", test=name,
+                               name=_("{title}（{minutes} 分）", title=sg["title"], minutes=sg["minutes"])),
                     "reason": sg.get("reason") or "", "minutes": sg.get("minutes"),
                     "help": ("測試是建議，不會自動排進課表：挑一天按「排入」。"
                              + ("徐國峰 90 分鐘測試就是那週的長跑，會取代那天的長跑。" if sg.get("replaces_long") else
                                 "建議的日子避開長跑、強度課的前後一天。")),
-                    "pick": "day", "options": day_options(sg.get("days") or [])})
+                    "pick": "day", "options": day_options(sg.get("days") or []),
+                    # SP-471: the easy-power conflict's reason ({summary, why, lthr_doubt}) and the
+                    # 30-min LTHR test's 安排課表 link when the LTHR is the doubt
+                    **({"easy_power": sg["easy_power"]} if sg.get("easy_power") else {}),
+                    **({"links": sg["links"]} if sg.get("links") else {})})
     return out
+
+
+def carry_easy_power(rows: list[dict]) -> list[dict]:
+    """SP-471: a 基線測試 row stands in for the weekly `test` row of its kind — it takes that row's
+    easy-power reason and links along, so the overview's block still shows it. In place; returned."""
+    ep = {r["kind"]: r for r in rows if r.get("type") == "test" and r.get("easy_power")}
+    for r in rows:
+        t = ep.get(r.get("kind")) if r.get("type") == "baseline" else None
+        if t is None or r.get("easy_power"):
+            continue
+        r["easy_power"] = t["easy_power"]
+        r["reason"] = " · ".join(x for x in (r.get("reason"), t["easy_power"]["why"]) if x)
+        if t.get("links"):
+            r["links"] = list(r.get("links") or []) + t["links"]
+    return rows
 
 
 def baseline_rows(due: list[dict], monday: str, session_of, days_for) -> list[dict]:
