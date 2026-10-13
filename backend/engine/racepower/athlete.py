@@ -219,17 +219,30 @@ def _per_run_w(ds, w) -> Optional[dict]:
     return m
 
 
+def run_mass(ds, w, weight) -> float:
+    """SP-461: the mass of one run's RE — the body weight of the run's own day (the weight its
+    grade windows use, grade_samples, and the one in its cached row's key, Dataset._settings_sig),
+    so a run's RE never changes with a later weight entry and derive and the grade model rest on
+    the same weights. `weight` (today's) only says per kg or per W (all-or-nothing, RE.re_mass) and
+    stands in for a day without one (none through derive: the dated weights back-fill)."""
+    if not weight:
+        return RE.re_mass(None)
+    return RE.re_mass(ds.setting("weight", w.day) or weight)
+
+
 def run_metrics(ds, runs, weight) -> dict[int, dict]:
     """Per-run power metrics (RE, moving power, …) of the runs whose power
-    the models use (power_ok); watch-estimated power is left out. Without a body
-    weight RE is speed ÷ watts (SP-444, `_per_run_w`; its own cached compute, so the
-    per-kg rows of a runner with a weight keep their code version)."""
+    the models use (power_ok); watch-estimated power is left out. Per kg at each run's own-day
+    weight (SP-461, `run_mass`; the row's key carries it). Without a body
+    weight RE is speed ÷ watts (SP-444, `_per_run_w`; its own cached compute)."""
     out = {}
     for w in power_runs(ds, runs):
         if not weight:
             v = ds.cached_series(METRICS_KEY, w, lambda w=w: _per_run_w(ds, w))
         else:
-            v = ds.cached_series(METRICS_KEY, w, lambda w=w: _per_run(ds, w, weight))
+            mass = run_mass(ds, w, weight)
+            v = ds.cached_series(METRICS_KEY, w, lambda w=w, mass=mass: _per_run(ds, w, mass),
+                                 extra={"mass": mass})
         if v:
             out[w.idx] = v
     ds.flush_series()
@@ -1309,7 +1322,8 @@ def derive(ds, today: Optional[dt.date] = None, fetch_weather: bool = True,
                  if x >= 60]
 
     # ---- RE -------------------------------------------------------------------
-    # SP-444: per kg with a body weight; without one speed ÷ watts for every run (RE.re_mass)
+    # SP-444: per kg with a body weight; without one speed ÷ watts for every run (RE.re_mass).
+    # SP-461: per kg each run at its own day's weight (run_mass), as the grade windows
     re_unit = RE.re_unit(weight)
     road_rows, trail_rows = [], []
     for w in runs_365:
@@ -1324,7 +1338,8 @@ def derive(ds, today: Optional[dt.date] = None, fetch_weather: bool = True,
                "intensity": (cls.get(w.idx) or {}).get("cls")}
         if row["trail"]:
             if (climb or 0) >= TRAIL_MIN_CLIMB_M and m["moving_s"] >= TRAIL_MIN_MOVING_S and km:
-                row["re_trail"] = {f: RE.trail_re(km, climb, m["moving_s"], m["avg_power"], RE.re_mass(weight),
+                mass = run_mass(ds, w, weight)
+                row["re_trail"] = {f: RE.trail_re(km, climb, m["moving_s"], m["avg_power"], mass,
                                                   divisor_of(f)) for f in ("fitted_run", "itra", "scarf")}
                 trail_rows.append(row)
         elif c is not None and c < ROAD_MAX_CVI_ADJ and m["moving_s"] >= ROAD_MIN_MOVING_S \

@@ -1,6 +1,6 @@
 # Module Spec: racepower
 
-> **Last Updated**: 2026-10-12
+> **Last Updated**: 2026-10-13
 > **Status**: Active
 > **Domain Layer**: Core Domain
 
@@ -72,7 +72,11 @@ decisions on the workbook's ambiguities (D1–D10) are in
 - **Weight**: `ds.setting("weight")` (season-plan weight, else WKO5; all-or-nothing — both back-fill).
   None → every RE is speed ÷ watts (`re.unit` `per_w`, SP-444; see Prediction → No body weight).
 - **Runs**: last 365 days; CP uses the 90-day subset (`backend/engine/racepower/athlete.py:27`).
-  Per-run metrics are disk-cached (`backend/engine/racepower/athlete.py:213`). The as-of PD refits
+  Per-run metrics are disk-cached (`backend/engine/racepower/athlete.py:233`); per kg each run's RE
+  (and LSS/kg, its trail RE in derive) is at the run's own-day weight (`athlete.run_mass`, SP-461) —
+  the weight its grade windows use and the one in its cached row's key — so a new weight entry never
+  leaves older runs at the old one and the flat RE (the road RE) and the RE(g) windows share each
+  run's weight. Predictions divide by today's weight: RE per kg is what stays fixed. The as-of PD refits
   (`cp_as_of`) are disk-memoised per day on their 90-day window when the Dataset has a `pd_memo`
   (FIT dataset), so a sync refits only the days whose window changed.
 - **Implausible power** is excluded: NP > 1.5 × CP, or a 5-min best > 2 × CP
@@ -237,8 +241,7 @@ records each value and its source ("手動" when overridden).
   (`athlete.flat_re_fallback`); W/kg and LSS/kg are None; a typed RE is per kg unless `re_unit:
   "per_w"` (the page sends it when it shows per-W values) and a per-kg one is ÷ the typed weight, or
   400 「手動填的 RE 是每公斤，沒有體重換算不了…」 without one; a typed weight only gives the W/kg. With a
-  weight nothing changes (per kg, the same code and cache rows; the grade windows keep their own day's
-  weight). 百岳 still computes the time: pack factor 1,
+  weight it is per kg (each run at its own day's weight, SP-461; see Derived inputs → Runs). 百岳 still computes the time: pack factor 1,
   no default pack (`used.pack_kg` None, source 「沒有體重：背包預設算不出」), kcal / water None
   (`predict.predict_baiyue`, `planner._plan_hike_v1`), `walk_capacity` None (`athlete.walk_capacity`)
   so the EP/h falls back to Tobler and the segments to the HikeSpeed path, each said in `warnings`;
@@ -1546,3 +1549,4 @@ when set, but nothing fills it from the routes module yet.
 | 2026-10-13 | bugfix | SP-449 (the user 2026-10-13: 「比照 WKO5 算 mFTP 的判斷，不要擅自決定我做的 CP test 不算」) | Detected CP tests are never dropped: two-point when the bouts make a model (3′ > 12′, W′ within the prior ± 2 SD, `cp_protocols.two_point`), else WKO5's PD mFTP up to the test day incl. the test (`method` `pd_model`, `athlete.stryd_pd`, FRC as the short-range W′), the 12′ single bout only without a fit. HR no longer decides (was: a 3′ ≤ 12′ or a 3′ HR peak ≥ 10 bpm lower → 「3′ 不是全力」). E.g. 3′ 217 / 12′ 221 W: was 221 − 13.1 kJ/720 ≈ 203 W; now the PD fit (synthetic 90 days 179 → 196 W, `docs/research/wko5-mftp-logic.md` §6) |
 | 2026-10-13 | feature | SP-450 | The 專項 chip (主要訓練項目, `backend/static/sportchip.js`) is in the calculator's header (`backend/static/racepower.html:269`): choosing 自動／越野跑／路跑・馬拉松 saves `athlete.primary_sport` and reloads; 路跑 hides the 越野／百岳 types and presets (`applySport`). Demo: shown, disabled |
 | 2026-10-13 | bugfix | SP-468 (the user 2026-10-13) | A detected CP test's CP is always WKO5's PD mFTP up to the test day (no two-point, no single bout with the W′ prior; none without a fit, the test kept for the back-test); the page no longer says 「這只是建議，要到賽季計畫自己套用」 nor 「尚未套用」 (`backend/engine/racepower/cptest.py:107`, `backend/engine/racepower/athlete.py:1060`, `backend/static/racepower.html`) |
+| 2026-10-13 | bugfix | SP-461 | Per kg, every run's RE is at the run's own-day weight (`athlete.run_mass`): the cached per-run row (key `racepower_v1`, its key now carries the mass) was keyed on the own-day weight but computed with today's, so a new weight entry left older runs at the old "today" (a warm and a cold cache gave different road REs) and derive's RE (today's weight) and the grade windows (own-day weight) rested on two weights; the trail RE in derive and LSS/kg follow. Changes the numbers of anyone whose weight changed within the year (demo athlete 63.5 → 62.0 kg: road / trail RE +1.8–1.9 %, predicted times −2.0 %, trail plan totals unchanged, segment times up to 1.5 % (5.2 % at an extreme target)); without a weight nothing changes (bitwise). |
