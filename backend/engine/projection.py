@@ -802,7 +802,8 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
         ss = O.drop_strength_before_a(ss, s_stops, week, notes)
         # 減量期規則 (SP-96): the same rule as week_plan (overview.taper_rules)
         ss = O.taper_rules(ss, tc, week, notes, road, easy_target=tgt.get("z2", ""), cp=th.get("cp"),
-                           q_target=tgt.get("threshold", ""), prefs=PR)
+                           q_target=tgt.get("threshold", ""), prefs=PR,
+                           z3_target=O.z3_hr_text(th.get("hr_model"), th.get("aet"), th.get("lthr")))
         # 賽後的日子 (SP-98): the same rule as week_plan (post_race.apply)
         ss = PR_.apply(ss, PR_.a_windows(phases, events, week), week, notes, blocked=set(bmap),
                        easy_target=tgt.get("z2", ""))

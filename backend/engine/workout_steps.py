@@ -1207,6 +1207,11 @@ def resolve(st: dict, c: Ctx) -> Resolved:
         if it == "open":
             return Resolved("none", text="不設目標")
         if it == "easy":
+            if st.get("kind") == "warm" and c.walk:
+                # SP-474: a walking session's warm-up (ME 負重爬坡, 陡坡健走, 攻頂日模擬's 含暖身) has no
+                # target — the walk band's floor (hr_profile.walk_band) is above a warming-up HR and the
+                # watch kept alerting; its TSS takes NONE_IF["warm"] like any no-target warm-up
+                return Resolved("none", text="不設目標")
             if tg.get("plo") is not None and c.basis == "power":
                 p = _power(c, tg["plo"], tg["phi"])
                 if p:

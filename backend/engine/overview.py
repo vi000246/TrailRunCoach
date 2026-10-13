@@ -2251,7 +2251,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     sessions = drop_strength_before_a(sessions, s_stops, monday, notes)
     # 減量期規則 (SP-96): quality by days to the race, the last long run, no hard downhill / climbing
     sessions = taper_rules(sessions, t_ctx, monday, notes, road, today, easy_target=tgt.get("z2", ""),
-                           cp=tt.get("cp"), q_target=tgt.get("threshold", ""), prefs=PR)
+                           cp=tt.get("cp"), q_target=tgt.get("threshold", ""), prefs=PR,
+                           z3_target=z3_hr_text(hrz, aet, tt.get("lthr")))
     # 賽後的日子 (SP-98): no run the first 2 days, ≤ 40 min the first week, flat after a big downhill
     sessions = PR_.apply(sessions, PR_.a_windows(phs, plan_events, monday), monday, notes, today, bmap,
                          easy_target=tgt.get("z2", ""))
@@ -2899,6 +2900,8 @@ SRC_TAPER_WEEK = ("減量期課表：最後一次完整強度課賽前 10–14 �
 # 「休 N 分」, so the jog down is a rep long (workout_steps._quality_text, coros_workouts._quality_steps):
 # 15 + 3 × (10 + 10) + 10 = 85, 15 + 2 × (10 + 10) + 10 = 65 (were 60 / 50). Their TSS ≈ the
 # structure's estimate (workout_steps.totals 81.4 / 61.5): ~57 an hour, the added time being jog-downs.
+# hr_cls (SP-408, the user 2026-10-13): the trail ones are 88–95 % CP = the library's Z3sub, so their HR
+# is the Zone 3 row (z3_hr_text), not the threshold (Zone 4) row the others keep
 TAPER_FULL = {
     "road": dict(kind="quality", title="有氧間歇 2×15 分（平路）", minutes=60, terrain="road",
                  detail="減量期最後一次完整強度課：專項期熟悉的課，不加量、不做新的課；休 3 分慢跑；暖身 15 分、緩和 10 分",
@@ -2906,7 +2909,7 @@ TAPER_FULL = {
     "trail": dict(kind="quality", title="上坡節奏跑 3×10 分（緩坡）", minutes=85,
                   detail="減量期最後一次完整強度課：4–8% 緩坡、3 區（88–95% CP），慢跑下來恢復、下坡放鬆不衝；"
                          "暖身 15 分、緩和 10 分",
-                  tss=85 / 60 * 57, power_pct=(0.88, 0.95)),
+                  tss=85 / 60 * 57, power_pct=(0.88, 0.95), hr_cls="Z3sub"),
 }
 TAPER_CUT = {
     "road": dict(kind="quality", title="有氧間歇 2×10 分（平路）", minutes=50, terrain="road",
@@ -2914,7 +2917,7 @@ TAPER_CUT = {
                  tss=50 / 60 * 65, power_pct=(0.95, 1.01)),
     "trail": dict(kind="quality", title="上坡節奏跑 2×10 分（緩坡）", minutes=65,
                   detail="減量期：同一種課、量縮短（少一段）；4–8% 緩坡、3 區（88–95% CP），下坡放鬆不衝；暖身 15 分、緩和 10 分",
-                  tss=65 / 60 * 57, power_pct=(0.88, 0.95)),
+                  tss=65 / 60 * 57, power_pct=(0.88, 0.95), hr_cls="Z3sub"),
 }
 TAPER_SHORT = dict(kind="quality", title="短強度 2×3 分（平路）", minutes=35, terrain="road",
                    detail="賽前 3–5 天最後一次短強度：量減半，98–102% CP，休 2 分慢跑；暖身 15 分、緩和 10 分",
@@ -3027,17 +3030,32 @@ def carb_load_note(tc: Optional[dict], ev, weight: Optional[float], monday: dt.d
     return {"level": "info", "src": "carb_load", "text": text}
 
 
-def taper_q_target(tmpl: dict, cp: Optional[float], q_target: str = "", prefs=None) -> str:
+def z3_hr_text(hrz: Optional[dict], aet: Optional[float], lthr: Optional[float]) -> str:
+    """「心率 lo–hi bpm」 of a Zone 3 (Z3sub, 88–95 % CP) session (SP-408): the 課表心率區間's Z3
+    (hr_profile.work_band — what the push gives a library Z3sub step), else AeT–LTHR (workout_steps
+    .HR_WORK / interval_library.session_for's Z3sub); "" without an HR basis. `aet`: the week's
+    easy-run cap (week_plan / the projection's thresholds)."""
+    from backend.engine.hr_profile import work_band
+    b = work_band(hrz, "Z3sub")
+    if b is None and aet and lthr and aet < lthr:
+        b = (round(aet), round(lthr))
+    return f"心率 {b[0]}–{b[1]} bpm" if b else ""
+
+
+def taper_q_target(tmpl: dict, cp: Optional[float], q_target: str = "", prefs=None, z3_target: str = "") -> str:
     """The target text of a 減量期 quality template (SP-408): 「功率 lo–hi W（lo–hi% CP）」 from its
     power_pct × `cp` (the structure and the push read the same %; the watch gets SP-378's wider band)
-    and the 心率 part of `q_target` (the week's threshold row, as the session it replaces had), kept
-    by the 目標依據 as plan_prefs.shape does. No CP / no HR text: that part is left out."""
+    and the 心率 part of `q_target` (the week's threshold row, as the session it replaces had) — of
+    `z3_target` (z3_hr_text: the Zone 3 row, the user 2026-10-13) for a Z3sub template (hr_cls, the
+    越野 88–95 % CP ones) — kept by the 目標依據 as plan_prefs.shape does. No CP / no HR text: that
+    part is left out."""
     from backend.engine import target_policy as TP
     parts = []
     lo, hi = tmpl.get("power_pct") or (None, None)
     if cp and lo is not None and hi is not None:
         parts.append(f"功率 {lo * cp:.0f}–{hi * cp:.0f} W（{lo * 100:.0f}–{hi * 100:.0f}% CP）")
-    parts += [p.strip() for p in (q_target or "").split("·") if p.strip().startswith("心率")]
+    hr_src = z3_target if tmpl.get("hr_cls") == "Z3sub" else q_target
+    parts += [p.strip() for p in (hr_src or "").split("·") if p.strip().startswith("心率")]
     text = " · ".join(parts)
     pol = TP.target_policy({**tmpl, "id": "quality"}, prefs)
     if pol["chosen"] in ("hr", "power"):
@@ -3047,7 +3065,7 @@ def taper_q_target(tmpl: dict, cp: Optional[float], q_target: str = "", prefs=No
 
 def taper_rules(ss: list, tc: Optional[dict], monday: dt.date, notes: Optional[list] = None,
                 road: bool = False, today: Optional[dt.date] = None, easy_target: str = "",
-                cp: Optional[float] = None, q_target: str = "", prefs=None) -> list:
+                cp: Optional[float] = None, q_target: str = "", prefs=None, z3_target: str = "") -> list:
     """`ss` (Session objects or dicts, placed) with the 減量期 rules applied to the not-done sessions on
     a day of `tc`'s taper (taper_context): the quality sessions by days to the race (full ≥ 10, the
     same kind shorter, the half-volume short one 3–5 days out — moved onto an easy day there when it
@@ -3055,7 +3073,8 @@ def taper_rules(ss: list, tc: Optional[dict], monday: dt.date, notes: Optional[l
     長爬坡反覆 a flat easy run. Notes say what changed. `easy_target`: the week's easy-run target
     text, for a session made an easy run (SP-408: never the long run's / quality's own). A session made
     a 減量期 quality session takes taper_q_target (SP-408): the template's % CP in watts (`cp`) and
-    the 心率 part of `q_target` (the week's threshold row), by `prefs`' 目標依據 — never its old text."""
+    the 心率 part of `q_target` (the week's threshold row; `z3_target`, the Zone 3 row, for the 越野
+    88–95 % CP ones), by `prefs`' 目標依據 — never its old text."""
     if not tc or not ss:
         return ss
     is_d = isinstance(ss[0], dict)
@@ -3093,9 +3112,9 @@ def taper_rules(ss: list, tc: Optional[dict], monday: dt.date, notes: Optional[l
             target=easy_target or "", source="", **{k: None for k in _VARIANT_KEYS})
 
     def as_q(s, tmpl: dict):
-        t = {k: v for k, v in tmpl.items() if k != "power_pct"}
+        t = {k: v for k, v in tmpl.items() if k not in ("power_pct", "hr_cls")}
         put(s, **{**{k: None for k in _VARIANT_KEYS}, "source": SRC_TAPER_WEEK, "terrain": None, **t,
-                  "target": taper_q_target(tmpl, cp, q_target, prefs)})
+                  "target": taper_q_target(tmpl, cp, q_target, prefs, z3_target)})
 
     touched = False
     for s in sorted(ss, key=lambda x: g(x, "day") or "9"):

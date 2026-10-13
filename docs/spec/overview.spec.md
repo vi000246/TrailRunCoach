@@ -817,11 +817,24 @@ tickets is in plan-auto.spec.md):
   structure reads the same % and the watch gets SP-378's band (upper × 1.05). Before, the card kept
   the replaced session's text (the demo's 10/27 上坡節奏跑: card 247–263 W, structure 229–247 W, watch
   229–259 W), and with 目標依據 心率 the push read the old text's HR.
+- **The 越野 減量 tempo's HR is Zone 3** (SP-408, the user 2026-10-13): the trail `TAPER_FULL` /
+  `TAPER_CUT` (88–95 % CP = the library's Z3sub; `hr_cls="Z3sub"`, `backend/engine/overview.py:2912`)
+  take the 心率 part of `z3_hr_text` (`backend/engine/overview.py:3033`): the 課表心率區間's Z3
+  (`hr_profile.work_band(hrz, "Z3sub")`, what a library Z3sub step pushes), else AeT–LTHR (the
+  library's Z3sub text) — not the threshold row (Zone 4). week_plan (`backend/engine/overview.py:2255`)
+  and the projection (`backend/engine/projection.py:806`) pass it as `z3_target` from the week's
+  thresholds (`hr_model`, the easy-run cap, LTHR); the card, the structure (the text's HR) and the
+  push (目標依據 心率) read the same band. Road 95–101 % and the short 98–102 % keep the threshold row.
+  Not changed (reported): the 減量期 quality_sessions' Zone 3 track pick `TAPER_Z3` 「有氧間歇（巡航）
+  2×8 分」 (88–95 % CP) still takes the threshold row (`backend/engine/overview.py:1016`).
 - **The 減量期 templates' minutes are their structure's** (SP-411 option A, the owner 2026-10-13): the
   trail `TAPER_FULL` / `TAPER_CUT` (`backend/engine/overview.py:2835`) are 85 / 65 min (were 60 / 50) —
   their text has no 「休 N 分」, so the jog down is a rep long in the structure and the push
   (15 + 3 × (10 + 10) + 10); TSS 85 / 60 × 57 and 65 / 60 × 57 (≈ the structure's estimate). The taper
-  weeks holding them are 15–25 min longer (accepted). Road `TAPER_FULL` / `TAPER_CUT` still say 60 / 50
+  weeks holding them are 15–25 min longer (accepted); the template's TSS replaces the swapped session's
+  after the week is sized (`taper_rules` runs with the day rules), so no easy run is resized: the week's
+  TSS moves by the difference only (the demo's 10/26 taper week 276 vs 379 the week before, −27 %).
+  Road `TAPER_FULL` / `TAPER_CUT` still say 60 / 50
   against a 61 / 51 min structure (the rest after the last rep); SP-437 (minutes / TSS from the
   structure) is open.
 - **恢復期 / 回量期** (SP-98): post-race hours are a share of the level before the race, not of the
@@ -1474,7 +1487,12 @@ which one. The response keeps the `coros` field names.
   else threshold pace × 1.04–1.08) or an HR band without threshold pace; an easy session whose
   title has `N×S 秒` gets a strides repeat when ≥ 10 min remain; a 長爬坡反覆 / 陡坡健走 (SP-409) is
   pushed as `workout_steps.derive` structures it (`climb_reps` / `steep_walk`, below), so is the ME 負重爬坡
-  (SP-443, `me_climb`); other quality and test sessions get
+  (SP-443, `me_climb`) — a walking session's warm-up (its auto-easy `warm` step with a walk cap: the ME
+  session's 暖身, the 陡坡健走's 平路暖身, the 攻頂日模擬's 含暖身 N 分) has no target (SP-474,
+  `workout_steps.resolve`, `backend/engine/workout_steps.py:1210`): the walk band's floor (the easy
+  band's floor, `hr_profile.walk_band`) sat above a warming-up HR and the watch kept alerting; its
+  TSS takes the no-target warm-up IF 0.65 (`NONE_IF["warm"]`), the uphill keeps the walk band;
+  other quality and test sessions get
   their own step builders — an HR basis gives HR work steps (`_work_hr`,
   `backend/sync/coros_workouts.py:202`). Strength, rest, heat_passive and a race without steps
   (the generator's 比賽) are not pushed (skipped, with a reason); a race with steps (the 賽事計算機's
@@ -2653,3 +2671,6 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 | 2026-10-13 | feature | SP-470 | (the user: 「課表 hover 會有一大堆文字…課表描述會有寫到 B 賽的內容，不應該這樣」) 課表 card hover: the browser's plain `title` text is replaced by a laid-out card (`static/sesspop.js`, the model from `schedule.html` `popModel`): title, type · day, the status pill, then 時間／距離／爬升／TSS, and sections 完成情況 / 目標 (the target split into 心率 / 功率 / 配速 … with the basis 「最近 N 次輕鬆跑：…」 as a footnote) / 怎麼練 (the detail one bullet per 「；」「。」 clause, never inside brackets) / 調整 (plan marks) / 手錶 (needs-update / failed only); shown on a mouse hover (250 ms) or a keyboard focus, beside the card, clamped to the viewport; the chip keeps `title=""` so the day cell's title does not show; zh-TW + en (`common.sesspop.*`). A session's detail no longer carries the race rule that changed it: the B race's mini-taper / race-week / recovery easy runs get an empty detail (`post_race._as_easy`), the A race's first week 「輕鬆跑 ≤ {max} 分」 (was 「賽後第 1 週：…」), the A taper's long run / quality made easy an empty detail and the 長爬坡反覆 「平路或緩坡輕鬆跑」 (`overview.taper_rules`), the balance-only strength session 「…；平衡照做（負荷低，不累腿）」 (`balance_plan.session`); the why stays in the week's race / recovery / taper / strength-stop note. Stored rows change when reconcile next regenerates them (unedited auto sessions; their detail goes out to the watch, so those few are re-pushed); edited rows keep their text. Session format unchanged. Tests: `backend/tests/test_session_text_sp470.py`, `backend/tests/test_session_hover_sp470.py` |
 | 2026-10-13 | feature | SP-84 | 主課強度 filter: a 強度課's 「自動」 (no 目標用 on the template) follows the plan's 目標依據 (owner 2026-10-13) — `workout_steps.quality_auto_basis` (`backend/engine/workout_steps.py:1633`) is `target_policy.target_policy` for a 強度課: 課表偏好 心率 (or old 間歇目標 心率) or a non-Stryd power source → % LTHR, otherwise % CP; read once per list and passed to `template_target_types` (`:1678`) by 插入範本 (`templates`, `:2079`) and the 範本 page (`backend/api/plan_sessions.py:1834` → `user_templates.row`, `backend/engine/user_templates.py:504`); an explicit 目標用 still wins, other categories keep 自動; d7eb9df0's open-question comment removed. Tests: `backend/tests/test_template_target_types.py::test_quality_auto_follows_the_plan_basis`, `::test_api_hr_basis_both_lists_agree`, `::test_quality_auto_counts_as_pct_cp` (unchanged) |
 | 2026-10-13 | feature | SP-469 | 還原成自動 (the user: 「我想要重置我調整過後的課表，讓它能自動產生」): an edited auto session gets 「還原成自動」 (session dialog `#sd-revert`, right-click menu; `revertSession`, `backend/static/schedule.html:2332`) and a deleted one shows faint on its day as 「↺ 已刪除：…」 (`ghostHtml`, `:1110`; also in the day's right-click menu) → `POST /plan/sessions/{uid}/revert` (`backend/api/plan_sessions.py:2172`, `plan_store.revert`, `backend/engine/plan_store.py:653`): only that session becomes the generator's version now, shown at once (SP-445 `optimistic`), the watch follows like an edit or the session shows 需更新. 依實際進度重排 gets 「也重置我改過的課（N 堂）」 (`resetBox`, `:1488`; preview re-fetched with `reset_edited=1`, reverted changes tagged): every edited / deleted auto session back to automatic; custom and done sessions untouched; unticked = as before. A long day an accepted 賽事模擬 replaced is not offered while that session is there. zh-TW + en. Tests: `backend/tests/test_revert_to_auto_sp469.py`, `backend/tests/e2e/test_schedule_revert_sp469.py` |
+| 2026-10-13 | bugfix | SP-408 | The 越野 減量期 上坡節奏跑 (`TAPER_FULL` / `TAPER_CUT` trail, 88–95 % CP) takes the Zone 3 row's HR (`z3_hr_text`: the 課表心率區間's Z3, else AeT–LTHR; `taper_rules(z3_target=)` from week_plan and the projection) instead of the threshold (Zone 4) row; card, structure and push agree. Road / short taper sessions unchanged; `TAPER_Z3` (taper Zone 3 track pick, 88–95 % CP) still uses the threshold row (reported, not changed). Demo 10/27: 心率 160–168 → 151–160 bpm. `test_taper_trail_quality_minutes_are_the_structures` now builds its Ctx with the session's basis (`Ctx.of` ignored a `basis` dict key). Tests: `backend/tests/test_taper_rules.py` (`test_z3_hr_text_is_the_zone_3_row`, `test_trail_taper_tempo_card_structure_and_push_use_zone_3`, `test_other_taper_quality_keeps_the_threshold_row`, `test_week_plan_and_projection_trail_taper_tempo_take_zone_3`) |
+| 2026-10-13 | bugfix | SP-474 | Walking sessions' warm-up (ME 負重爬坡, 陡坡健走, 攻頂日模擬 with 含暖身) pushes no HR target: `workout_steps.resolve` gives an auto-easy `warm` step under a walk cap (`Ctx.walk`) 「不設目標」 instead of `hr_profile.walk_band` (easy-band floor → 75 % HRmax); the uphill / steep part keeps the band, the 陡坡健走's cool-down and running warm-ups are unchanged, an explicit target the user set stays. Structure TSS: the warm-up at IF 0.65 (`NONE_IF["warm"]`) instead of the band's ≈ 0.725 (−1.7 to −2.6 per session in the tests); card TSS unchanged. Demo: 暖身 心率 134–150 bpm → 不設目標. Tests: `backend/tests/test_walk_warmup_hr_floor_sp474.py` |
+| 2026-10-13 | test | SP-411 | The 57 TSS / h of the trail 減量 上坡節奏跑 (already in `7511cf19`) is pinned, with the road (70 / 65 an hour) and short (60 an hour) templates unchanged and the session carrying the template's TSS; the structure check (`test_taper_trail_quality_minutes_are_the_structures`) measures the session's own power basis since SP-408 (card 80.8 / 61.8 vs structure 78.7 / 59.7, within 5 %). No week is re-sized by it. Tests: `backend/tests/test_taper_rules.py::test_taper_card_tss_rates_trail_57_road_and_short_unchanged` |
