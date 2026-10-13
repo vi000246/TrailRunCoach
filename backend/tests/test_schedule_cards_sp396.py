@@ -168,3 +168,12 @@ def test_page_wiring():
     for loc in ("zh-TW", "en"):
         cat = json.loads((STATIC / "i18n" / loc / "schedule.json").read_text("utf-8"))
         assert cat.get("sy.line") and cat.get("vs.time_pct"), loc
+
+
+def test_a_narrow_month_grid_keeps_tile_bar_and_ring_only():
+    """Review shot SP-396 #7 (2026-10-13): side by side the ring was cut off in a 45 px day — stacked now."""
+    html = PAGE.read_text(encoding="utf-8")
+    phone = html[html.index("@media (max-width: 699px) {"):]
+    phone = phone[:phone.index("\n}\n")]
+    assert re.search(r"\.cal:not\(\.week\) \.chip \{ grid-template-columns: minmax\(0, 1fr\); justify-items: center;", phone)
+    assert ".cal:not(.week) .chip .c-t, .cal:not(.week) .chip .c-m, .cal:not(.week) .chip.act .c-r { display: none; }" in phone

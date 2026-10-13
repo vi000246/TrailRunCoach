@@ -129,9 +129,10 @@
   .sc-q { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--line);
     font: 600 11px/1 system-ui, sans-serif; color: var(--muted); background: var(--panel); }
   .sc-leg-pop { margin-top: 6px; max-width: 640px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); padding: 6px 10px 8px; }
-  .sc-leg table { border-collapse: collapse; width: 100%; }
+  .sc-leg table { border-collapse: collapse; width: 100%; font-size: 12px; }
+  .sc-leg th, .sc-leg td { border: 0; white-space: normal; font-size: 12px; }       /* a page's own table look stays out */
   .sc-leg th { text-align: left; color: var(--text); font-weight: 600; padding: 8px 0 3px; }
-  .sc-leg td { padding: 2px 8px 2px 0; vertical-align: top; line-height: 1.45; }
+  .sc-leg td { padding: 2px 8px 2px 0; vertical-align: top; line-height: 1.45; color: var(--muted); }
   .sc-leg td:first-child { width: 24px; }
   .sc-leg td b { color: var(--text); font-weight: 600; }
   .sc-leg-types { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 2px 12px; }
