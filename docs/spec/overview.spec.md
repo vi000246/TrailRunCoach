@@ -881,6 +881,20 @@ tickets is in plan-auto.spec.md):
   (`summary_target`: with the summary as its target the session must derive the same steps and push the
   same workout — 長爬坡反覆's step note, a test's 「休 N 分」／固定功率 keep their text); so no session is
   re-pushed by it.
+- **A race's day holds the race only** (SP-492): the placement fills any free day of the week, and the
+  減量期 rules stopped the day before the race, so a projected race week with the A race on a Tuesday
+  kept its 「有氧間歇（巡航）2×8 分」 on the race day (the projection's interval goes on Tuesday first;
+  week_plan put a 課表偏好 interval day or an easy run there too). `taper_rules` now reads the race
+  day as well (`t0 <= d <= race`, `backend/engine/overview.py:3115`): a quality session there follows
+  the race-week rule — onto an easy day 3–5 days out as the short one, else an easy run ≤ 40 min.
+  Then `post_race.apply` treats the race days (an A race's `event` phase, `a_windows` row `start`;
+  a race ending on the Sunday is in the week now) like the no-run days after them
+  (`backend/engine/post_race.py:118`): what is left there moves to a free day after the no-run days
+  (an easy run ≤ 40 min there), else it goes, said in the note (「當天只排比賽」). A race Tue / Wed: the
+  session moves to the weekend (week −5 min); a race Thu–Sun: no day after the no-run days in the
+  week, so it goes (synthetic athlete: −25 to −55 min of the race week's planned minutes besides the
+  race). B races already clear their day (`bc_apply`); a C race takes a quality session's / the long
+  run's place — unchanged.
 - **恢復期 / 回量期** (SP-98): post-race hours are a share of the level before the race, not of the
   taper weeks (`recovery_hours` `backend/engine/overview.py:524`, `rebuild_hours`
   `backend/engine/overview.py:534`, used at `backend/engine/overview.py:1489`).
@@ -2737,3 +2751,4 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 | 2026-10-13 | research | SP-493 | (the user: 「選儲備心率時不靠 LTHR，那幹嘛一直提醒我 LTHR 不準」) Inventory of what LTHR feeds under each 課表心率區間 (lthr / hrr / hrmax), read from the code: `docs/research/lthr-low-confidence-testing.md` §9. Under %HRR / %HRmax LTHR still sets the interval sessions' HR (the target text's bpm, × LTHR in `interval_library.session_for` / `quality_gate.session`, which the push reads before `work_band`), the projected weeks' target texts (`projection.target_texts`), hrTSS (runs without power / threshold pace, hikes), planned-step IF, the race calculator, the activity review and the HR-zone charts — the ticket's stop condition. **No behaviour change**: the reminders (總覽 測試 card, 建議框, 設定 LTHR card, editor badge, SP-471) are unchanged until the user picks one of §9.5's options |
 | 2026-10-13 | bugfix | SP-477 | 總覽 in English: the page title, the section jump bar (狀況／紀錄／指標／本週／待辦, `data-i18n`) and the four KPI tiles' labels, words and hover (`overview.json` `jump.*`, `kpi.*`, `level.*`, `asof`); the rest of the page (indicators, log, week, to-do texts) is still Chinese |
 | 2026-10-14 | bugfix | SP-437 | The target summary keeps the cards' meaning: a walking session's target stays the uphill cap (「心率 ≤ 爬坡上限 X bpm … 或 RPE ≤ 13」, was rewritten as an HR band with 「% LTHR」), HR bands drop the editor's 「% LTHR」 note (`session_structure.card_summary` / `_parts`). Tests updated for Q1 A (strides runs: easy steps at the easy rate, the strides at IF²): `test_easy_tss_rate.py::test_projection_default_path_prices_easy_runs_like_week_plan`, `test_integration_2026_10_06e.py` cold-start ×2 |
+| 2026-10-14 | bugfix | SP-492 | No session left on an A race's day, any weekday, week_plan and the projection: `taper_rules` reads the race day (`backend/engine/overview.py:3115`, was `d < race`: a quality session there follows the race-week rule — onto an easy day 3–5 days out as `TAPER_SHORT`, else an easy run), and `post_race.apply` clears the race days like the no-run days (`backend/engine/post_race.py:118`; `a_windows` gives `start` and keeps a race ending on the Sunday): moved to a free day after the no-run days, else dropped; the note says 「當天只排比賽」. Before, a race on a Tuesday kept the projected 「有氧間歇（巡航）2×8 分」 on the race day, and week_plan an easy run or a 課表偏好 interval. Race week minutes (synthetic): race Tue / Wed −5 min (moved to the weekend), Thu–Sun −25 to −55 min (dropped); Mon unchanged. B / C race days unchanged (already held no interval). Tests: `backend/tests/test_race_day_sp492.py` (`test_projection_leaves_an_a_race_day_to_the_race`, `test_week_plan_leaves_an_a_race_day_to_the_race`, `test_b_and_c_race_days_hold_no_quality`, `test_taper_rules_read_the_race_day`, `test_post_race_rules_clear_the_race_days`) |

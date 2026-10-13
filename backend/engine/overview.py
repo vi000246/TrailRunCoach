@@ -3098,7 +3098,8 @@ def taper_rules(ss: list, tc: Optional[dict], monday: dt.date, notes: Optional[l
     text, for a session made an easy run (SP-408: never the long run's / quality's own). A session made
     a 減量期 quality session takes taper_q_target (SP-408): the template's % CP in watts (`cp`) and
     the 心率 part of `q_target` (the week's threshold row; `z3_target`, the Zone 3 row, for the 越野
-    88–95 % CP ones), by `prefs`' 目標依據 — never its old text."""
+    88–95 % CP ones), by `prefs`' 目標依據 — never its old text. The race day is read too (SP-492: a
+    2×8′ the placement put on a Tuesday race stayed there); what is left on it post_race.apply moves on."""
     if not tc or not ss:
         return ss
     is_d = isinstance(ss[0], dict)
@@ -3122,7 +3123,9 @@ def taper_rules(ss: list, tc: Optional[dict], monday: dt.date, notes: Optional[l
         if g(s, "done") or not g(s, "day"):
             return None
         d = dt.date.fromisoformat(g(s, "day"))
-        return (race - d).days if t0 <= d < race else None
+        # the race day too (SP-492): a quality session the placement put there follows the race-week
+        # rule (onto an easy day 3–5 days out, else an easy run); post_race.apply then clears the day
+        return (race - d).days if t0 <= d <= race else None
 
     def as_easy(s, cap: float, how: str = ""):
         # `how`: what the session is (「平路或緩坡輕鬆跑」), never the taper rule that made it one — that
