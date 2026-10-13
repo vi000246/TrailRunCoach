@@ -536,10 +536,11 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
   .ag-day .chip .c-d { grid-column: 1 / -1; color: var(--muted); font-size: 12px; margin-top: 2px; white-space: normal;
     display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   .ag-day .chip .c-x { display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-  /* SP-396: a 7-column month grid this narrow has ~50 px a day — tile + bar + ring only, the title in the
-     hover / dialog (phones get the agenda list, so this only guards the grid) */
-  .cal:not(.week) .chip { grid-template-columns: 22px auto; column-gap: 4px; }
-  .cal:not(.week) .chip .c-t, .cal:not(.week) .chip .c-m { display: none; }
+  /* SP-396: a 7-column month grid this narrow has ~45 px a day — tile + bar + ring only, the ring under the
+     tile (side by side they don't fit), the title in the hover / dialog (phones get the agenda list, so
+     this only guards the grid) */
+  .cal:not(.week) .chip { grid-template-columns: minmax(0, 1fr); justify-items: center; row-gap: 2px; padding: 3px 1px; }
+  .cal:not(.week) .chip .c-t, .cal:not(.week) .chip .c-m, .cal:not(.week) .chip.act .c-r { display: none; }
 }
 @media (min-width: 700px) { #rec-btn .lbl-short, #pull-btn .lbl-short { display: none; } }
 @media (max-width: 1000px) and (min-width: 700px) { .cal { --sumw: 112px; } .cell { min-height: 104px; } .chip .c-x { display: none; } }
