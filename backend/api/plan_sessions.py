@@ -739,6 +739,12 @@ def _with_variant(data: dict, inp: dict, rung: Optional[str], day: Optional[str]
     return body
 
 
+def _cp(inp: dict):
+    """The CP in effect (plan_auto.cp_of): a written session's cp_basis (SP-473)."""
+    from backend.engine.plan_auto import cp_of
+    return cp_of(inp)
+
+
 @router.post("/sessions")
 async def add_session(data: dict = Body(...), db: AsyncSession = Depends(get_db)):
     inp = await _inputs()
@@ -748,7 +754,7 @@ async def add_session(data: dict = Body(...), db: AsyncSession = Depends(get_db)
         await _with_route(db, data["steps"], None)
     try:
         async with _wlock():
-            out = await PS.add(db, data, _today(inp), blocked=PS.blocked_map(inp))
+            out = await PS.add(db, data, _today(inp), blocked=PS.blocked_map(inp), cp=_cp(inp))
             if data.get("kind") == "test" and out.get("day") and _is_xu90(data):
                 # 徐國峰's 90′ is that day's LSD — the 「安排課表」 deep link / the 測試 dialog take the
                 # same path as 排入測試 (SP-39, owner 2026-10-04); after the add, so a refused day
@@ -824,7 +830,7 @@ async def edit_session(uid: str, patch: dict = Body(...), db: AsyncSession = Dep
         await _with_route(db, patch["steps"], (cur or {}).get("steps"))
     try:
         async with _wlock():
-            out = await PS.edit(db, uid, patch, _today(inp), blocked=PS.blocked_map(inp))
+            out = await PS.edit(db, uid, patch, _today(inp), blocked=PS.blocked_map(inp), cp=_cp(inp))
     except PS.PlanError as e:
         raise _err(e)
     if patch.get("day") and out.get("day"):
@@ -1086,7 +1092,7 @@ async def _schedule_test(db: AsyncSession, inp: dict, sg: dict, day: Optional[st
         async with _wlock():
             if sg.get("replaces_long"):
                 await _replace_long(db, day)                     # 徐國峰's test is that day's LSD
-            return await PS.add(db, data, _today(inp), blocked=PS.blocked_map(inp))
+            return await PS.add(db, data, _today(inp), blocked=PS.blocked_map(inp), cp=_cp(inp))
     except PS.PlanError as e:
         raise _err(e)
 
@@ -1440,7 +1446,8 @@ async def _accept_b2b(db: AsyncSession, inp: dict, sg: dict, day: Optional[str])
             for s, d in zip(gen, days):
                 data = {k: s.get(k) for k in ("kind", "title", "minutes", "target", "detail", "source", "tss",
                                               "terrain") if s.get(k) is not None}
-                added.append(await PS.add(db, {**data, "day": d}, _today(inp2), blocked=PS.blocked_map(inp2)))
+                added.append(await PS.add(db, {**data, "day": d}, _today(inp2), blocked=PS.blocked_map(inp2),
+                                          cp=_cp(inp2)))
             # the week's long run is B2B day 1 now: the user's edited copy of it goes too
             end = (dt.date.fromisoformat(sg["week"]) + dt.timedelta(days=6)).isoformat()
             for s in await PS.load(db):
@@ -1473,7 +1480,8 @@ async def _accept_race_sim(db: AsyncSession, inp: dict, sg: dict, day: Optional[
         async with _wlock():
             for s, d in zip(sg.get("sessions") or [], days):
                 data = {k: v for k, v in s.items() if v is not None}
-                added.append(await PS.add(db, {**data, "day": d}, _today(inp), blocked=PS.blocked_map(inp)))
+                added.append(await PS.add(db, {**data, "day": d}, _today(inp), blocked=PS.blocked_map(inp),
+                                          cp=_cp(inp)))
             for s in await PS.load(db):
                 if (s["state"] == "active" and s.get("origin") == "auto" and s.get("gen_key") in ("long", "long2")
                         and s.get("day") and week <= s["day"] <= end):

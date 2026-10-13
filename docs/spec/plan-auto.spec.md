@@ -759,15 +759,21 @@ plan's watts rescaled, unedited auto sessions regenerated with the new text (e.g
 pushed ones re-pushed (or 待推送). The CP itself changes only by ≥ 3 W (`wko5-engine.spec.md`, CP
 hold).
 
-Known issue (SP-473, open, P0): `rescale_sessions` takes `state.cp` as the old CP of every row
-(`backend/engine/plan_auto.py:815`, `:839`, `:319`). The stored rows are not all at `state.cp`:
-paths other than the run write them with the CP in effect — the 課表 page's reconcile (`_ensure`,
-`plan_reconcile`), 推送, the user's moves / adds / variant swaps copying those texts, and every
-write while `plan.auto.enabled` is off (`state.cp` then stays put). Rows already at the new CP are
-multiplied again (production 2026-10-13: custom 10/15, 10/16 「功率 124–153 W」 → 「135–167 W」,
-pushed). Unedited auto rows come out right only because reconcile regenerates them; the change
-log's `before` shows them already multiplied. Reproduced by
-`backend/tests/test_cp_rescale_once_sp473.py` (strict xfail until fixed).
+Each row is rescaled from the CP its own watts were written with (SP-473): `plan_sessions.cp_basis`
+(`backend/db/models.py:242`, migration `backend/db/database.py:171`). The rows reconcile writes from
+the generator (unedited auto, active, from today on, in a generated week) carry the inputs' CP
+(`plan_store.stamp_generated`, `backend/engine/plan_store.py:182`, from `reconcile_with_adapt`
+:287); an add, a library variant, a saved structure or an edit whose watts change take the CP in
+effect, a move (also to another week) or a title / time edit keeps it (`restamp_cp` :169, `watt_sig`
+:150; `add` / `edit` take `cp`, passed by `api/plan_sessions` `_cp`); a 賽事計算機 export that changes
+the watts clears it. `rescale_sessions` (`backend/engine/plan_auto.py:310`) takes a row's
+`cp_basis` as its old CP (`state.cp` for a row without one, e.g. rows from before SP-473), leaves a
+row already within 0.5 W of the new CP as it is, and sets `cp_basis` to the new CP. So rows the
+page's reconcile, the user's moves / adds, or the days with `plan.auto.enabled` off wrote with the
+CP in effect are not multiplied again (production 2026-10-13: custom 「功率 124–153 W」 became
+「135–167 W」), and the run's change-log `before` (the rescaled stored plan, which 復原 restores)
+no longer shows such a row multiplied. `cp_basis` never moves `updated_at` (`SEEN_FIELDS`) and is
+not pushed. Tests: `backend/tests/test_cp_rescale_once_sp473.py`.
 
 API (`backend/api/plan_auto.py`, prefix `/api/v1/overview/plan/auto`):
 - `GET ""`: settings, the pending proposal, the last entries and the thresholds
@@ -1017,3 +1023,4 @@ The owner's calls, gathered from the sections above (each is described there wit
 | 2026-10-13 | bugfix | SP-468 | A CP that changed without a run (a refit after a deploy, no new activity) re-zones the stored sessions: opening the 課表 calls `plan_auto.check_cp` (`backend/engine/plan_auto.py:1208`, from `backend/api/plan_sessions.py:611`), which starts the `cp_change` run when the CP in effect differs from `state.cp`; before, only a threshold edit or a sync with a new activity did, and the stored easy runs kept 「功率 114–140 W」 at CP 191 W |
 | 2026-10-13 | feature | SP-471 | The easy-power note (SP-449) becomes a test suggestion: `base_check.easy_power_tests` picks AeT / LTHR (cap within `EP_CAP_LTHR_GAP_BPM` 5 of LTHR, or a low-confidence LTHR estimate) and / or CP (CP > `EP_CP_STALE_DAYS` 42 days old, or no CP test / race in `EP_ALL_OUT_DAYS` 42), CP when neither; `easy_power_blocked` keeps the tests' limits; `overview.easy_power_suggestions` joins `test_suggestions` (排入 as any test, `easy_power` on the row) |
 | 2026-10-13 | test | SP-473 | Known issue documented and reproduced (strict xfail, not fixed): the `cp_change` run rescales every upcoming row by new ÷ `state.cp`, so rows already written with the new CP (page reconcile, user moves / adds) are multiplied twice (`backend/engine/plan_auto.py:839`, `backend/tests/test_cp_rescale_once_sp473.py`) |
+| 2026-10-13 | bugfix | SP-473 | The `cp_change` run rescales each row from its own `cp_basis` (new nullable column, the CP its watts were written with: reconcile's generated rows, adds, variants / structures and watt edits take the CP in effect; moves and title edits keep it), `state.cp` only for rows without one: rows already written with the new CP are no longer multiplied twice, also after `plan.auto.enabled` was off, and the change-log `before` no longer shows them multiplied (`backend/engine/plan_auto.py:310`, `backend/engine/plan_store.py:150-200`, `backend/api/plan_sessions.py:742`) |

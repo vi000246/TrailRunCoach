@@ -168,6 +168,7 @@ async def _migrate_schema():
         ("plan_sessions", "ext_key", "TEXT"),          # 賽事計算機匯出至課表 (plan_store.upsert_external)
         ("plan_sessions", "ext_sig", "TEXT"),
         ("plan_sessions", "family", "TEXT"),           # 強度課 有氧間歇 / VO2max 間歇 / 速度 (SP-79)
+        ("plan_sessions", "cp_basis", "REAL"),         # the CP its watts were written with (SP-473)
         ("activity_tags", "exclusion", "TEXT"),
         ("activity_tags", "name", "TEXT"),
         ("activity_tags", "tags_json", "TEXT"),
