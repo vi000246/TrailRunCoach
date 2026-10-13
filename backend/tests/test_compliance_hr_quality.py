@@ -5,7 +5,6 @@ it 部分, and an intensity shortfall read from it neither; `uncertain` True, an
 總覽 hover say 「心率品質不穩，依時間判定」. Synthetic data only."""
 import datetime as dt
 import json
-import re
 from pathlib import Path
 
 import numpy as np
@@ -84,7 +83,9 @@ def test_cards_dialog_and_overview_say_judged_by_time():
     assert json.loads((STATIC / "i18n" / "en" / "common.json").read_text("utf-8"))["legend.hr_uncertain"]
     s = _uncertain_session()
     chip = SCHED._run("chipHtml(DATA.s, false)", s=s)
-    assert "cp-ok" in chip and "sc-r-done" in chip and words in re.search(r'title="([^"]+)"', chip).group(1)
+    assert "cp-ok" in chip and "sc-r-done" in chip
+    # SP-470: the card's hover is sesspop.js's card from popModel (no plain title text) — same words
+    assert words in SCHED._run("popModel(DATA.s)", s=s)["hr"]
     assert words in SCHED._run("vsHtml(DATA.s)", s=s)
     assert words in OV._tip(OV._card(s))
     plain = SCHED._run("chipHtml(DATA.s, false)", s=SCHED._done("green"))
