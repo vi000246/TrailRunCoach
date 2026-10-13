@@ -309,7 +309,7 @@ main > section.tab-off { display: none; }
 
   <section id="sync">
     <h2>資料同步</h2>
-    <p class="meta">帳號密碼只在登入時送出一次、不會保存；保存的只有加密過的登入憑證（token / cookie）。<span id="keystat"></span></p>
+    <p class="meta"><span data-i18n="settings.sync.cred_note">帳號密碼只在登入時用一次，平常保存的只有加密過的登入憑證（token / cookie）。勾了「記住密碼」，密碼才會加密存在伺服器，用來自動重新登入。</span><span id="keystat"></span></p>
     <div class="row">
       <label>每日自動同步 <input type="time" id="s-daily"> <label><input type="checkbox" id="s-daily-on"> 啟用</label></label>
     </div>
@@ -365,8 +365,8 @@ main > section.tab-off { display: none; }
       <div class="row" data-f="consentrow" hidden><label style="font-weight:400"><input type="checkbox" data-f="consent">
         <span data-f="consenttxt"></span></label></div>
       <p class="meta err-text" data-f="sitemsg" role="status" hidden></p>
-      <div class="row"><label><input type="checkbox" data-f="remember"> 記住密碼</label>
-        <span class="meta">密碼以本機金鑰加密存在這台電腦；取消勾選或登出會立即刪除。勾選後，登入過期（24 小時）或憑證失效時會自動重新登入一次。</span></div>
+      <div class="row"><label><input type="checkbox" data-f="remember"> <span data-i18n="settings.sync.remember">記住密碼</span></label>
+        <span class="meta" data-i18n="settings.sync.remember_coros">密碼用伺服器的金鑰加密存在伺服器；取消勾選或登出會立即刪除。勾選後，登入過期（24 小時）或憑證失效時會自動重新登入一次。</span></div>
       <div class="row"><button data-act="logout">登出</button> <span class="meta" data-f="authmsg" role="status"></span></div>
       <dl class="kv" data-f="kv"></dl>
       <div class="row">
@@ -399,8 +399,8 @@ main > section.tab-off { display: none; }
         <div class="row" data-f="consentrow" hidden><label style="font-weight:400"><input type="checkbox" data-f="consent">
           <span data-f="consenttxt"></span></label></div>
       </div>
-      <div class="row" data-f="rememberrow"><label><input type="checkbox" data-f="remember"> 記住密碼</label>
-        <span class="meta">密碼以本機金鑰加密存在伺服器；取消勾選或中斷連接會立即刪除。勾選後，Garmin 不再接受登入憑證時會自動重新登入一次（算在每天的同步次數裡；被 Garmin 暫時鎖住的期間不會重新登入）。</span></div>
+      <div class="row" data-f="rememberrow"><label><input type="checkbox" data-f="remember"> <span data-i18n="settings.sync.remember">記住密碼</span></label>
+        <span class="meta" data-i18n="settings.sync.remember_garmin">密碼用伺服器的金鑰加密存在伺服器；取消勾選或中斷連接會立即刪除。勾選後，Garmin 不再接受登入憑證時會自動重新登入一次（算在每天的同步次數裡；被 Garmin 暫時鎖住的期間不會重新登入）。</span></div>
       <div class="row"><button data-act="logout">中斷連接</button> <span class="meta" data-f="authmsg" role="status"></span></div>
       <dl class="kv" data-f="kv"></dl>
       <div class="row">
@@ -428,8 +428,8 @@ main > section.tab-off { display: none; }
           <dt>~/.wko5coach/tp_client.json</dt><dd data-f="secretfile">…</dd></dl>
         <div class="row"><label><input type="checkbox" data-f="usewko5"> 登入時先試 OAuth</label>
           <button data-act="login" data-method="oauth">用 OAuth 登入</button></div></div>
-      <div class="row"><label><input type="checkbox" data-f="remember"> 記住密碼</label>
-        <span class="meta">密碼以本機金鑰加密存在這台電腦；取消勾選或登出會立即刪除。勾選後，登入憑證無法再更新時會自動重新登入一次。</span></div>
+      <div class="row"><label><input type="checkbox" data-f="remember"> <span data-i18n="settings.sync.remember">記住密碼</span></label>
+        <span class="meta" data-i18n="settings.sync.remember_tp">密碼用伺服器的金鑰加密存在伺服器；取消勾選或登出會立即刪除。勾選後，登入憑證無法再更新時會自動重新登入一次。</span></div>
       <div class="row"><button data-act="logout">登出</button> <span class="meta" data-f="authmsg" role="status"></span></div>
       <dl class="kv" data-f="kv"></dl>
       <div class="row">
@@ -1637,7 +1637,7 @@ async function logout(src, btn) {
 }
 for (const src of ["coros", "garmin", "tp"]) {
   f(src, "remember").onchange = async (e) => {
-    if (e.target.checked) { authMsg(src, "下次登入時會記住密碼（加密存在這台電腦）"); return; }
+    if (e.target.checked) { authMsg(src, t("settings.sync.remember_next")); return; }
     try {
       const r = await j(`/api/v1/auth/${src}/remember`, { method: "PUT", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ remember: false }) });

@@ -72,6 +72,8 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
 input, select, button, textarea { font: inherit; color: var(--text); background: var(--panel);
   border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; }
 input[type=number] { width: 84px; }
+/* SP-415: the 山頂在第幾 km hint is longer than a number (84px cut it to 「空白＝GP」) */
+#summitwrap input { width: 15em; max-width: 100%; }
 button { cursor: pointer; }
 button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 button.link { border: 0; background: none; color: var(--accent); padding: 0 4px; }
