@@ -503,3 +503,25 @@ OUT = { seen, text: await body(r), kept: caches.urls("trc-app-v1") };
 """)
     assert out["seen"] == [{"url": "https://cdnjs.cloudflare.com/ajax/libs/echarts/5.5.0/echarts.min.js", "mode": "cors", "cred": "omit"}]
     assert out["text"] == "// echarts" and out["kept"] == ["https://cdnjs.cloudflare.com/ajax/libs/echarts/5.5.0/echarts.min.js"]
+
+
+def test_status_says_which_tiers_are_still_there():
+    """設定 › 這台裝置的離線資料 (SP-322) reads status(): bytes per tier, when each was refilled, and
+    whether its cache is still there (the browser may delete one; the bookkeeping alone can't tell)."""
+    out = run(r"""
+person("alice", 7);
+const E = mk();
+const before = await E.status();
+await E.sync({});
+const kept = await E.status();
+await caches.delete("trc-u-u7-p1");                   // the browser cleared a tier
+const cleared = await E.status();
+await E.clearUser();
+const gone = await E.status();
+OUT = { before: before.present, kept: kept.present, keptTiers: Object.keys(kept.tiers), cleared: cleared.present, gone: gone.present,
+  goneUser: gone.user };
+""")
+    assert out["before"] == {"p0": False, "p1": False, "p2": False}
+    assert out["kept"] == {"p0": True, "p1": True, "p2": True} and out["keptTiers"] == ["p0", "p1", "p2"]
+    assert out["cleared"] == {"p0": True, "p1": False, "p2": True}
+    assert out["gone"] == {"p0": False, "p1": False, "p2": False} and out["goneUser"] is None

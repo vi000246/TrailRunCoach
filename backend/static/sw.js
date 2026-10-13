@@ -7,7 +7,8 @@
  *   {type: "session", session}  who the page is for; another person than before: the copy goes
  *   {type: "sync", force?}      refill p0 → p1 → p2 when due (force: p0 now, e.g. back online)
  *   {type: "logout"}            forget every person's copy (shell.js deletes the caches too)
- *   {type: "status"}            answered on the message port: whose copy, bytes per tier
+ *   {type: "status"}            answered on the message port: whose copy, bytes per tier, which
+ *                               tiers' caches are still there (設定 › 這台裝置的離線資料, SP-322)
  */
 const VERSION = "__TRC_BUILD__";
 importScripts("/api/v1/static/offline_core.js?v=" + VERSION);
