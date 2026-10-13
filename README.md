@@ -96,10 +96,10 @@ Hugging Face Docker Space（現在要付費）是其中一種，見 [`deploy/hf/
 
 ```bash
 pip install -r requirements-dev.txt
-python -m pytest backend/tests -q -m "not golden"
+python -m pytest backend/tests -q -m "not golden" -n auto
 ```
 
-預設只用合成資料，不碰 `~/.wko5coach`。
+預設只用合成資料，不碰 `~/.wko5coach`。`-n auto`（pytest-xdist）照 CPU 核心數平行跑：全套從單線的約 18 分鐘降到 2 分鐘左右（2026-10-13，18 核）；只跑幾個檔時不加比較快。
 
 **瀏覽器冒煙測試**（`backend/tests/e2e/`，Playwright）：用示範跑者的合成資料在暫存資料夾起一個本機伺服器，
 用 Chromium 打開每一頁，檢查沒有 JS 錯誤、主要區塊有畫出來、主要按鈕按得動。預設的 `pytest` 會跳過它們；
