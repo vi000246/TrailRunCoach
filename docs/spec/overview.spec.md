@@ -2169,7 +2169,12 @@ interval library and suggestions).
 test sessions, the 課表心率區間 stamp), LRU per tenant (`backend/api/overview.py:78`); the
 plan endpoints memoise their generator inputs on the dataset / day / plan key plus the
 preference, blackout, auto-replan, accepted-B2B, 主要訓練項目 and HR-profile stamps
-(`backend/api/plan_sessions.py:84`). Bad scope or day → 400 (`backend/api/plan_sessions.py:371`).
+(`backend/api/plan_sessions.py:84`). Switching the 課表心率區間 alone (`PUT /api/v1/plan/hr-profile
+{model}`) keeps the cached Datasets — only these HR-stamped keys change, and
+`threshold_confidence.check`'s Dataset memo carries the HR stamp too — and still starts the automatic
+re-plan / re-push (`plan_auto.after_thresholds`); a manual max / resting HR (a plan threshold row)
+rebuilds them as before (SP-361, `backend/api/plan.py:702`). Bad scope or day → 400
+(`backend/api/plan_sessions.py:371`).
 
 ## Debug API for AI agents (`api/debug.py`, `debug_auth.py`, SP-371)
 
@@ -2408,7 +2413,7 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 
 - [x] Show the stored plan's future TSS / CTL on the charts (SP-219) — decided 2026-10-12 and built on the 圖表分析 PMC charts (above; not the 總覽 card, the 課表 page, plan vs actual or the days after the last planned session)
 - [x] Mark which sessions the system changed, which were left alone, which the user edited (SP-318) — built (課表標記 above)
-- [ ] The 課表 page loads slowly, also after switching the 課表心率區間 in 設定 and while a sync runs (SP-361 Bug Todo, SP-362 In Progress) — not fixed
+- [ ] The 課表 page loads slowly, also after switching the 課表心率區間 in 設定 and while a sync runs (SP-361, SP-362 In Progress) — partly fixed 2026-10-13: a model switch no longer drops the cached Datasets; the next load still recomputes `Status` and the plan inputs in full (both keyed on the HR stamp, though only the HR targets follow the model) — not fixed
 - [ ] iLevel / Stryd power zones in 設定 as the 課表's default (SP-363, Todo) — not implemented
 - [x] A warm-up time in 課表偏好 added before every session and template (SP-364; 每堂課前加熱身 above)
 - [x] RPE load converted per level (TSS definition IF² × 100 / h as the default, fitted per level once there is data), decided 2026-10-07 (SP-57) — done 2026-10-08 (`DEFAULT_IF`, `backend/engine/rpe_load.py:96`; branch feat/rpe-per-level-sp57)
@@ -2528,3 +2533,4 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 | 2026-10-13 | merge | SP-398 × SP-395…402 | One source for the completion words and levels after the card line: the status words are `common.legend.status.*` (課表統計 reads them too; `compliance.status.*` keeps only `open` 待同步), the four levels are the cards' `common.legend.*_tip` plus `legend.levels_note` (how intensity / a walking session is judged) through `SessChip.levelsText` — the 課表 dialog's ? and 課表統計's 照計畫完成 ? (`compliance.html` loads sesschip.js); `common.legend.levels` is gone. `plan_match.compare`'s 「換了課：」 is stripped in the card hover / dialog; 「未完成」 → 跳過 in the reconcile preview, the link menu, 刪除所有過期跳過的課 and `plan_store`'s error; the workout review's intensity tip says 換了課. SP-404 reads SP-402's `done_by.hr_quality` "low" (the field `session_compliance` uses for `uncertain`). Tests: `test_no_old_completion_words_on_the_card_pages_sp398`, `test_fatigue_streak_reads_sp402s_hr_quality_from_the_activity_row_sp404` |
 | 2026-10-13 | bugfix | SP-408 | A session the B-race / post-race / 減量期 rules make 輕鬆跑 gets the week's easy-run target (`easy_target` = `tgt["z2"]` through `post_race.apply` / `bc_apply` / `taper_rules`, week_plan and the projection) and no source, instead of keeping its old target (the demo's 10/20 輕鬆跑 said 「功率 255–263 W（98–101% CP）」 while its structure and the watch had 169–208 W). Tests: `backend/tests/test_bc_races.py` (`test_b_recovery_easy_run_takes_the_easy_target`, `test_b_race_week_easy_runs_take_the_easy_target`, `test_week_plan_and_projection_easy_runs_after_a_b_race_keep_the_easy_target`), `test_post_race.py::test_first_week_easy_runs_take_the_easy_target`, `test_taper_rules.py::test_runs_made_easy_take_the_easy_target` |
 | 2026-10-13 | fix | SP-410 | `upsert_external`'s `previous` adds `updated_local` (`localtime.local_iso`: UTC → the athlete's zone, athlete_tz); the activity editor's 「其他來源的同一次運動」 (`GET /api/v1/sync/dedup/near`) rows add `start_local` and the page shows it — both used to slice the UTC string |
+| 2026-10-13 | bugfix | SP-361 | Switching 設定 → 課表心率區間 (`PUT /api/v1/plan/hr-profile` with only `model`) no longer goes through `_notify(True)`: the cached Datasets stay (the model is read live and `HRP.stamp()` is in the plan inputs', Status's and the zone / target charts' keys) and `plan_auto.after_thresholds` still re-plans / re-pushes; a manual max / resting HR still rebuilds. `threshold_confidence.check`'s Dataset memo key adds `HP.stamp()` (its 「最大心率可信度低」 warning follows the model). Synthetic 52-week demo base: 課表 calendar right after a switch 3.1–3.2 s → 2.8–2.9 s (a model used before: 2.1 s, plan-inputs cache hit); the rest is `Status` + plan inputs recomputed in full (open question above). Tests: `backend/tests/test_hr_model_switch_sp361.py` |

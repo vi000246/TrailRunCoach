@@ -699,8 +699,15 @@ async def put_hr_profile(body: HrProfileIn, db: AsyncSession = Depends(get_db)):
         from backend.settings.repository import SettingsRepository
         await SettingsRepository(db, current_athlete_id()).set(HP.MODEL_KEY, body.model)
         await db.commit()
-    if changed or body.model is not None:
+    if changed:
         _notify(True)          # zones / targets / the pushed workouts follow
+    elif body.model is not None:
+        # SP-361: the model alone is read live (HP.plan_model; HP.stamp() is in the keys of the plan
+        # inputs, the overview status, the zone / target charts and threshold_confidence.check), so
+        # the cached Datasets stay — dropping them made the next 課表 load redo everything memoised
+        # on the Dataset. The upcoming sessions' HR targets are re-planned / re-pushed as before.
+        from backend.engine import plan_auto as PA
+        PA.after_thresholds()
     return await run_in_threadpool(lambda: hr_profile_view(_estimate_dataset(), today_local()))
 
 
