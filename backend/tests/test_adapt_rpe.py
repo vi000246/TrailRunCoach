@@ -263,3 +263,14 @@ def test_settings_switch_round_trip(box):
         with pytest.raises(ValueError):
             await SettingsRepository(db).set("plan.auto.rpe_rule", "yes")
     run(go())
+
+
+def test_already_stepped_down_by_rule_e_is_not_stepped_again_sp404():
+    # rule E's too-hard streak (SP-404): the run before and this rated run both too hard -> the
+    # quality steps down to the recovery fartlek; rpe_hard leaves it alone (one change per session)
+    before = g("easyb", "easy", "2026-09-29", 45, tss=36, done=True,
+               done_by={"index": 6, "date": "2026-09-29", "category": "road", "tss": 40})
+    gw = wk(easy_day="2026-10-02")
+    gw[0]["sessions"].insert(0, before)
+    out, adj, _ = A.adapt(gw, [], c(rpe=rated(4), reviews={6: {"session_type": "quality", "stimulus": "z3"}}))
+    assert ids(out)["quality"]["title"] == QG.RECOVERY[1] and rpe_adj(adj) == []

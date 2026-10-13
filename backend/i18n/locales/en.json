@@ -1699,6 +1699,7 @@
   "速度÷心率（Pa:HR）": "speed ÷ HR (Pa:HR)",
   "速度低於中位 75% 的慢段，最長的一段超過這麼久就當跑走課，不判讀飄移。": "Slow stretches are below 75% of the median speed; when the longest lasts longer than this, the run counts as a run-walk and drift is not rated.",
   "連兩次黃燈（{why}）": "two yellow lights in a row ({why})",
+  "連續 {n} 堂輕鬆課跑太強（{days}）": "the last {n} easy or long runs were too hard ({days})",
   "連續賽事以兩個睡眠點之間最硬的一段來比：第 {n} 段 {km:.1f} km、爬升 {cl:.0f} m（共 {k} 段）": "A non-stop race is compared on its hardest stretch between two sleep points: stretch {n}, {km:.1f} km, climb {cl:.0f} m ({k} stretches)",
   "連續跑 30 分：已完成 {n}/{need} 次": "continuous 30 min: {n}/{need} done",
   "連續輕鬆跑 {m} 分": "continuous easy run {m} min",

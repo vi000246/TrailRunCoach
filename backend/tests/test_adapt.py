@@ -234,6 +234,121 @@ def test_two_red_trigger_is_gone_sp398():
     assert "紅" not in A.SRC_FATIGUE
 
 
+# ---- E. fatigue guard: the last two easy / long runs too hard (SP-404) -----
+
+HARD_Z3 = {"session_type": "quality", "stimulus": "z3"}       # rule D's 太強 (the classifier: Zone 3)
+
+
+def _run(gen_key, day, index, kind="easy", **extra):
+    return g(gen_key, kind, day, 120 if kind == "long" else 45, tss=100 if kind == "long" else 36, done=True,
+             done_by={"index": index, "date": day, "category": "road", "tss": 40, **extra})
+
+
+def _streak_week(*runs):
+    """Done runs early in the week (today Thu 10-01), then a quality Fri, an easy run Sat, the long run Sun."""
+    return week(list(runs) + [g("quality", "quality", "2026-10-02", 60, tss=70), g("easy3", "easy", "2026-10-03", 50),
+                              g("long", "long", "2026-10-04", 120, tss=100)])
+
+
+def _fatigue_adj(adj):
+    return [a for a in adj if a["rule"] == "fatigue"]
+
+
+def _stepped_down(out, adj):
+    s = ids(out)
+    fat = _fatigue_adj(adj)
+    return (s["quality"]["title"] == QG.RECOVERY[1] and s["easy3"]["minutes"] == 40 and s["long"]["minutes"] == 120
+            and fat and all("連續 2 堂輕鬆課跑太強" in a["reason"] for a in fat)
+            and {a["action"] for a in fat} == {"downgraded", "trimmed"})
+
+
+def test_fatigue_two_too_hard_easy_runs_step_the_week_down_sp404():
+    gw = _streak_week(_run("easy1", "2026-09-28", 1), _run("easy2", "2026-09-29", 2))
+    out, adj, _ = A.adapt(gw, [], ctx(reviews={1: HARD_Z3, 2: HARD_Z3}))
+    assert _stepped_down(out, adj)
+    q = next(a for a in _fatigue_adj(adj) if a["gen_key"] == "quality")
+    assert "恢復週 fartlek" in q["reason"] and "週一" in q["reason"] and "週二" in q["reason"]
+    # one too hard is not a streak; TSB normal, nothing else
+    out, adj, _ = A.adapt(_streak_week(_run("easy1", "2026-09-28", 1), _run("easy2", "2026-09-29", 2)), [],
+                          ctx(reviews={2: HARD_Z3}))
+    assert not _fatigue_adj(adj) and ids(out)["quality"]["title"] == "閾值 3×10 分"
+
+
+def test_fatigue_streak_counts_rpe_hard_and_overhard_sp404():
+    runs = lambda: _streak_week(_run("easy1", "2026-09-28", 1), _run("easy2", "2026-09-29", 2))  # noqa: E731
+    # one 太強, one self-rated Hard (COROS 4 = RPE 7)
+    out, adj, _ = A.adapt(runs(), [], ctx(reviews={1: HARD_Z3}, rpe={2: {"rpe": 7.0, "source": "coros", "coros_feel": 4}}))
+    assert _stepped_down(out, adj)
+    # one 太強, one 偏強 by TSS (60 > 36 + 20 %)
+    out, adj, _ = A.adapt(runs(), [], ctx(reviews={1: HARD_Z3, 2: {"tss": 60}}))
+    assert _stepped_down(out, adj)
+    # a self-rated long run counts too (rule rpe_hard reads long runs)
+    gw = _streak_week(_run("long0", "2026-09-27", 1, kind="long"), _run("easy2", "2026-09-29", 2))
+    gw[0]["sessions"][0]["done_by"]["date"] = "2026-09-28"
+    gw[0]["sessions"][0]["day"] = "2026-09-28"
+    out, adj, _ = A.adapt(gw, [], ctx(reviews={2: HARD_Z3}, rpe={1: {"rpe": 8.0, "source": "watch", "coros_feel": None}}))
+    assert ids(out)["quality"]["title"] == QG.RECOVERY[1]
+    # switched off rpe_rule: the self-rating is not read
+    out, adj, _ = A.adapt(runs(), [], ctx(reviews={1: HARD_Z3}, rpe={2: {"rpe": 7.0, "source": "coros", "coros_feel": 4}},
+                                          rpe_rule=False))
+    assert not _fatigue_adj(adj)
+
+
+def test_fatigue_streak_is_the_last_two_easy_or_long_runs_sp404():
+    hard = {1: HARD_Z3, 3: HARD_Z3}
+    # a normal easy run between the two: no streak
+    gw = _streak_week(_run("easy1", "2026-09-28", 1), _run("easy2", "2026-09-29", 2), _run("easy4", "2026-09-30", 3))
+    out, adj, _ = A.adapt(gw, [], ctx(reviews=hard))
+    assert not _fatigue_adj(adj) and ids(out)["easy3"]["minutes"] == 50
+    # a hard session done between them (not rated too hard / not too hard): still a streak
+    gw = _streak_week(_run("easy1", "2026-09-28", 1), _run("q0", "2026-09-29", 2, kind="quality"),
+                      _run("easy4", "2026-09-30", 3))
+    out, adj, _ = A.adapt(gw, [], ctx(reviews=hard))
+    assert _stepped_down(out, adj)
+    # a skipped (missed) easy run between them: still a streak
+    gw = _streak_week(_run("easy1", "2026-09-28", 1), _run("easy4", "2026-09-30", 3))
+    out, adj, _ = A.adapt(gw, [st("easy2", "easy", "2026-09-29", state="missed")], ctx(reviews=hard))
+    assert _stepped_down(out, adj)
+    # the user's own done easy runs count as well (stored, not generated)
+    own = [st("u1", "easy", "2026-09-28", state="done", origin="custom", done_by={"index": 1, "date": "2026-09-28",
+                                                                                   "category": "road", "tss": 40}),
+           st("u2", "easy", "2026-09-29", state="done", origin="custom", done_by={"index": 3, "date": "2026-09-29",
+                                                                                   "category": "road", "tss": 40})]
+    out, adj, _ = A.adapt(_streak_week(), own, ctx(reviews=hard))
+    assert _stepped_down(out, adj)
+
+
+def test_fatigue_streak_skips_hr_only_overhard_when_hr_quality_is_low_sp404():
+    # no power: 偏強 by HR alone (avg 165 > 94 % of LTHR 170); TSS on plan
+    hr = {"avg_hr": 165, "lthr": 170, "tss": 38}
+    gw = lambda q: _streak_week(_run("easy1", "2026-09-28", 1, hr_quality=q), _run("easy2", "2026-09-29", 2, hr_quality=q))  # noqa: E731
+    out, adj, _ = A.adapt(gw("low"), [], ctx(reviews={1: hr, 2: hr}))
+    assert not _fatigue_adj(adj) and ids(out)["quality"]["title"] == "閾值 3×10 分"
+    # the same with trusted HR: a streak
+    out, adj, _ = A.adapt(gw(None), [], ctx(reviews={1: hr, 2: hr}))
+    assert _stepped_down(out, adj)
+    # low HR quality but 偏強 by TSS too: still counts
+    hr_tss = {**hr, "tss": 60}
+    out, adj, _ = A.adapt(gw("low"), [], ctx(reviews={1: hr_tss, 2: hr_tss}))
+    assert _stepped_down(out, adj)
+
+
+def test_fatigue_tsb_or_ramp_wins_over_the_streak_sp404():
+    for load in ({"tsb": -35}, {"ramp": 8.5}):
+        gw = _streak_week(_run("easy1", "2026-09-28", 1), _run("easy2", "2026-09-29", 2))
+        out, adj, _ = A.adapt(gw, [], ctx(reviews={1: HARD_Z3, 2: HARD_Z3}, load=load))
+        s, fat = ids(out), _fatigue_adj(adj)
+        assert "quality" not in s and s["easy3"]["minutes"] == 40
+        assert sorted(a["action"] for a in fat) == ["removed", "trimmed"]          # one change per session
+        assert not any("太強" in a["reason"] for a in fat)
+
+
+def test_rule_e_docstring_names_the_streak_sp404():
+    doc = A.__doc__
+    e = doc[doc.index("  E. fatigue guard"):]
+    assert "連續" in e and "推估" in e and "hr_quality" in e and A.OVERHARD_STREAK == 2
+
+
 # ---- round trip through reconcile: idempotent ------------------------------
 
 def _inputs(gw_sessions, acts=(), today="2026-10-01", reviews=None):

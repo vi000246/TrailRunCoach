@@ -56,21 +56,35 @@ Rules (thresholds: source or 推估):
      and D and leaves alone any session another rule already changed (E's removal / step-down
      wins) and a run 太強 already acted on (one adjustment per session when both fire); ctx
      `rpe_rule` False = off (課表偏好 › 自動調整).
-  E. fatigue guard, on load only (SP-398, the user 2026-10-12: 「疲勞保護要看是不是有高強度或
-     TSS 過高，跟完成度沒關係」 — the old third trigger, two red-compliance sessions in a row, is
-     gone: it read too little, a bike ride for a run … as fatigue):
+  E. fatigue guard, on load and intensity, not the completion colour (SP-398, the user
+     2026-10-12: 「疲勞保護要看是不是有高強度或 TSS 過高，跟完成度沒關係」 — the old trigger
+     two red-compliance sessions in a row is gone: it read too little, a bike ride for a run …
+     as fatigue):
      TSB < −30 (Friel / TrainingPeaks, coach; when week_plan has not already
      made it a recovery week) or a CTL ramp at load_guard's BLOCK line
      (min(10, max(5, 15 % of CTL 7 days ago)); SP-63) -> the quality is removed
-     and easy minutes × 0.8. The 20 % cut is 推估. Mapping (SP-63): this rule
+     and easy minutes × 0.8.
+     「連續 2 堂輕鬆課跑太強」 (SP-404, the user 2026-10-12; rule D and rpe_hard act on
+     one run, nothing read the accumulation): this week's done easy runs and long runs — the
+     ones rule D / rpe_hard judge, the generator's and the user's own — by date; the last
+     OVERHARD_STREAK (2) both too hard -> the quality steps down to the recovery fartlek and easy
+     minutes × 0.8 (no session is cancelled: that stays for TSB / ramp, which win when they
+     fire too — one change per session). Too hard = rule D's 太強 (the classifier's hard class)
+     or 偏強 (power > 80 % CP, TSS > planned + 20 %, HR > 94 % LTHR without power) on an easy
+     run, or a self-rating ≥ Hard (rpe_hard, when `rpe_rule` is on) on an easy or long run.
+     With low optical-HR quality (done_by / the review's `hr_quality` == "low", SP-402) a 偏強
+     read from HR alone does not count. Hard sessions, strength and skipped sessions in
+     between neither count nor reset it; a normal easy / long run in between resets it.
+     The 2 runs and the trigger itself are 推估 (no controlled trial).
+     The 20 % cut is 推估. Mapping (SP-63): this rule
      used 8/week = the old block line (since 2026-10-01; 7 before that), so it
      takes the new block line, not the watch line. TSB < −30 itself is
      week_plan's existing recovery-week rule and the ramp block is quality_gate's
      existing block: those are not repeated when they already acted.
      Exception (engine/b2b.py, user-approved): during a planned B2B week and
      the easy days after one, TSB < −30 alone is the expected drop and does
-     nothing (an adjustment "note" logs why); the ramp still acts — a sign
-     beyond the expected drop.
+     nothing (an adjustment "note" logs why); the ramp and the too-hard
+     streak still act — signs beyond the expected drop.
 """
 from __future__ import annotations
 
@@ -98,6 +112,7 @@ SPACING_DAYS = 2           # plan_prefs.place(): 48 h between hard days / the lo
 # E. fatigue guard
 TSB_FLOOR = -30.0          # week_plan(): TSB < −30 -> recovery week
 FATIGUE_CUT = 0.80         # 推估: easy minutes × 0.8
+OVERHARD_STREAK = 2        # 推估 (SP-404): the last two done easy / long runs both too hard
 
 SRC_SEILER = "Seiler：easy days easy；不補課屬推估"
 SRC_SPACING = "硬課之間隔 ≥ 2 天：台灣教練（5 區一週最多 2 次、間隔至少 2 天）"
@@ -108,7 +123,7 @@ SRC_TOO_HARD = N_("課別分類（Zone 3 閾值或更強）跑成強度課，就
                   "用課別分類當「太強」的界線屬推估")
 OVERHARD_RULE = "overhard"
 SRC_FATIGUE = ("CTL ramp 到擋線（min(10, max(5, CTL 的 15%))，Friel 5–8／10 換算，推估）；"
-               "TSB < −30（Friel／TrainingPeaks）；減 20% 推估")
+               "TSB < −30（Friel／TrainingPeaks）；連續 2 堂輕鬆課跑太強、減 20% 推估")
 SRC_B2B = "Johnston（UA）B2B 後「three or four light days」；B2B 造成的 TSB 下降不觸發減量為推估"
 SRC_RPE = "跑後自評：Nuuttila 2021（心率恢復了、自覺費力仍偏高）；門檻 Hard 是使用者決定；規則與 1–5 級換算推估"
 RPE_RULE = "rpe_hard"
@@ -131,11 +146,12 @@ def _gap(a: str, b: str) -> int:
     return abs((_d(a) - _d(b)).days)
 
 
-def overhard(planned_tss: Optional[float], r: Optional[dict]) -> Optional[str]:
+def overhard(planned_tss: Optional[float], r: Optional[dict], hr: bool = True) -> Optional[str]:
     """Why a done easy run was 偏強 (rule D's label-only tier), or None. `r`: {avg_power, cp,
     avg_hr, lthr, tss}. SP-301: avg power > 80 % CP or TSS > planned + 20 %, either one; a run
     without power (no avg power or no CP) reads avg HR > 94 % LTHR instead of the power line
-    (the user 2026-10-06; no time-share condition). With power, HR is not used at all."""
+    (the user 2026-10-06; no time-share condition). With power, HR is not used at all.
+    `hr` False: the HR line is not read (rule E's streak on a run with low HR quality, SP-404)."""
     if not r:
         return None
     p, cp = r.get("avg_power"), r.get("cp")
@@ -143,10 +159,10 @@ def overhard(planned_tss: Optional[float], r: Optional[dict]) -> Optional[str]:
         if p > EASY_POWER_CAP * cp:
             return _("平均功率 {p:.0f} W > {pct:.0f}% CP（{w:.0f} W）", p=p, pct=EASY_POWER_CAP * 100,
                      w=EASY_POWER_CAP * cp)
-    else:
-        hr, lthr = r.get("avg_hr"), r.get("lthr")
-        if hr and lthr and hr > EASY_HR_LTHR * lthr:
-            return _("平均心率 {hr:.0f} > LTHR 的 {pct:.0f}%（{bpm:.0f} bpm；沒有功率才看心率）", hr=hr,
+    elif hr:
+        ahr, lthr = r.get("avg_hr"), r.get("lthr")
+        if ahr and lthr and ahr > EASY_HR_LTHR * lthr:
+            return _("平均心率 {hr:.0f} > LTHR 的 {pct:.0f}%（{bpm:.0f} bpm；沒有功率才看心率）", hr=ahr,
                      pct=EASY_HR_LTHR * 100, bpm=EASY_HR_LTHR * lthr)
     t = r.get("tss")
     if t and planned_tss and t > planned_tss * (1 + OVER_TSS):
@@ -496,13 +512,60 @@ def _rpe_hard(wk: _Week, rated: dict, th: dict, out: list) -> None:
                      SRC_RPE, before_title=old, activity=a.get("index"))
 
 
+def _hr_low(*rows) -> bool:
+    """Low optical-HR quality on the run (SP-402's `hr_quality` on done_by or the review row:
+    "low", or a dict with level "low")."""
+    for r in rows:
+        q = (r or {}).get("hr_quality")
+        if q == "low" or (isinstance(q, dict) and q.get("level") == "low"):
+            return True
+    return False
+
+
+def _done_runs(wk: _Week) -> list[dict]:
+    """This week's done easy runs and long runs with their activity (the generator's and the user's
+    own), oldest first: the runs rule D / rpe_hard judge."""
+    done = [g for g in wk.gens() if g.get("done") and (g.get("kind") in ("easy", "long") or g.get("id") == "long")
+            and isinstance(g.get("done_by"), dict)]
+    seen = {(g.get("done_by") or {}).get("index") for g in done}
+    for s in wk.st:      # the user's own easy / long sessions that are done
+        if s["state"] == "done" and s["kind"] in ("easy", "long") and isinstance(s.get("done_by"), dict) \
+                and s["done_by"].get("index") not in seen:
+            done.append({"id": s.get("gen_key") or s["uid"], "kind": s["kind"], "day": s["day"], "done": True,
+                         "tss": s.get("tss"), "done_by": s["done_by"], "title": s.get("title")})
+    return sorted(done, key=lambda g: (g["done_by"].get("date") or g.get("day") or ""))
+
+
+def _too_hard_streak(wk: _Week, ctx: dict) -> Optional[list[str]]:
+    """Rule E's streak (SP-404, module doc): the days of the last OVERHARD_STREAK done easy / long
+    runs when every one was too hard, else None."""
+    from backend.engine import coros_rpe as CR
+    reviews, rated = ctx.get("reviews") or {}, (ctx.get("rpe") or {}) if ctx.get("rpe_rule", True) else {}
+    last = _done_runs(wk)[-OVERHARD_STREAK:]
+    if len(last) < OVERHARD_STREAK:
+        return None
+    for g in last:
+        a = g["done_by"]
+        idx = a.get("index")
+        r = reviews.get(idx) or reviews.get(str(idx))
+        rr = dict(r or {})
+        if rr.get("tss") is None:
+            rr["tss"] = a.get("tss")
+        easy = g.get("kind") == "easy" and g.get("id") != "long"
+        hard = easy and bool(too_hard(rr) or overhard(g.get("tss"), rr, hr=not _hr_low(a, rr)))
+        rt = rated.get(idx) or rated.get(str(idx))
+        if not hard and not (rt and rt.get("rpe") is not None and float(rt["rpe"]) >= CR.HARD_RPE):
+            return None
+    return [g["done_by"].get("date") or g["day"] for g in last]
+
+
 def _fatigue(wk: _Week, stored: list[dict], ctx: dict, th: dict, out: list) -> None:
     load = ctx.get("load") or {}
     tsb, ramp, base = load.get("tsb"), load.get("ramp"), load.get("ramp_base")
     rest_week = ctx.get("mode") in ("recovery_week", "recovery", "taper", "event", "transition", "rebuild", "reentry")
     why, remove = None, False
     tsb_hit = tsb is not None and tsb < TSB_FLOOR and not rest_week
-    # a planned B2B (engine/b2b.py): its TSB drop is expected — only the ramp still acts
+    # a planned B2B (engine/b2b.py): its TSB drop is expected — only the ramp / too-hard streak still act
     b2b_why = _b2b_exempt(ctx.get("b2b"), wk.today) if tsb_hit else None
     if b2b_why:
         _adj(out, "b2b", wk, {"day": wk.today}, "note",
@@ -512,6 +575,9 @@ def _fatigue(wk: _Week, stored: list[dict], ctx: dict, th: dict, out: list) -> N
     elif LG.ramp_level(ramp, base) == LG.BLOCK and ctx.get("mode") != "reentry":
         # the re-entry block's 50 → 75 → 100 % steps are planned, not overload (detraining.md §6.5, 推估)
         why, remove = LG.ramp_text(ramp, base, LG.BLOCK), True
+    elif (days := _too_hard_streak(wk, ctx)):
+        # SP-404: the quality steps down (not removed), easy minutes × 0.8
+        why = _("連續 {n} 堂輕鬆課跑太強（{days}）", n=len(days), days=_("、").join(wd(d) for d in days))
     if not why:
         return
     for q in [g for g in wk.gens() if g.get("kind") == "quality" and wk.free(g) and g.get("day") and g["day"] >= wk.today]:

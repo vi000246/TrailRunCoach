@@ -526,3 +526,17 @@ def test_adapt_two_reds_do_not_act_during_a_b2b_sp398():
     out, adj, _ = A.adapt(_gw(), red, _actx(b2b={"due": True}))
     q = next(s for s in out[0]["sessions"] if s["id"] == "quality")
     assert q["title"] == "爬坡間歇 5×4 分" and not [a for a in adj if a["rule"] == "fatigue"]
+
+
+def test_adapt_too_hard_streak_still_acts_during_a_b2b_sp404():
+    # the B2B exempts its expected TSB drop, not two easy runs run too hard (a sign beyond it)
+    gw = _gw()
+    gw[0]["sessions"] += [{"id": f"e{i}", "kind": "easy", "title": "輕鬆跑", "minutes": 45, "tss": 36.0, "day": d,
+                           "done": True, "done_by": {"index": i, "date": d, "category": "road", "tss": 40}}
+                          for i, d in ((1, "2026-09-28"), (2, "2026-09-29"))]
+    hard = {"session_type": "quality", "stimulus": "z3"}
+    out, adj, _ = A.adapt(gw, [], _actx(b2b={"due": True}, reviews={1: hard, 2: hard}))
+    q = next(s for s in out[0]["sessions"] if s["id"] == "quality")
+    assert q["title"] != "爬坡間歇 5×4 分"                                   # downgraded to the recovery fartlek
+    assert any(a["rule"] == "b2b" for a in adj)
+    assert any(a["rule"] == "fatigue" and "連續 2 堂輕鬆課跑太強" in a["reason"] for a in adj)
