@@ -570,6 +570,20 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
   (user_settings, USER) — switches before SP-467 are not there (a note says so), nor the automatic max-HR
   estimate or an AeT estimate that was never applied (it does not move the 課表's ranges). Session storage
   unchanged.
+- **app 和手錶數值對照** (2026-10-06, SP-67; owner 2026-10-05: the app is the one reference, absolute bpm,
+  nothing written back to COROS): 設定 → 心率 shows a card (`#hr-cmp`, `renderHrCompare`,
+  `backend/static/settings.html:263`, `:933`; the `compare` of `GET /api/v1/plan/hr-profile`,
+  `backend/api/plan.py:666`; `backend/engine/coros_compare.py:175`) with the app's LTHR / max HR / resting HR
+  and the 課表心率區間's five upper edges beside the COROS account's (`athlete.coros_profile`; the watch's
+  zones = its ratios × its own values). A gap **more than** `ALERT_BPM` = 5 bpm (`coros_compare.py:45`;
+  5 is quiet, 6 is flagged) marks the row and writes out what to change by hand in the COROS app and
+  where: max / resting HR → the app's number; the LTHR cannot be typed in on COROS (support text, 未驗證),
+  so the app's LTHR-model zone edges are given for COROS's custom zones (whether COROS takes any edge:
+  待實測, the text says so). Hidden without a COROS account read. The account's values over time
+  (`athlete.coros_profile_history`, one entry per change, written by `coros_client.store_hr_profile`)
+  are listed in the card's 「手錶數值的變化紀錄（N 筆）」. zh-TW + en. The TL ↔ TSS refit does **not** restart on a COROS
+  threshold change (`coros_tl.since_threshold_change` looks at the app's LTHR only; open question,
+  `wko5-coros-sync.spec.md`).
 - With active preferences the template is then shaped by `plan_prefs.shape()`
   (`backend/engine/overview.py:1855`; see 課表偏好 below).
 
@@ -1504,7 +1518,12 @@ which one. The response keeps the `coros` field names.
   preview lists sessions whose % / zone pace steps have no threshold pace (`pace_notes`,
   `backend/api/plan_sessions.py:1988`).
 - **Program** (`build_program`, `backend/sync/coros_workouts.py:567`): run sport; HR targets as
-  absolute bpm with the LTHR zone scheme; names `TRC <title> <m>/<d>`, ≤ 30 chars
+  absolute bpm with the LTHR zone scheme (`isIntensityPercent false`); since SP-67 an HR step's
+  `intensityPercent` / `intensityPercentExtend` are 0 (`_exercise`, `backend/sync/coros_workouts.py:562`):
+  COROS dropped the app's bpm ÷ LTHR there and recomputed it from its own LTHR (research
+  `docs/research/coros-threshold-unification.md` §2.3). A row pushed with the old payload still
+  counts as 已推送 through `WorkoutSpec.legacy_fingerprint` (`backend/sync/coros_workouts.py:637`,
+  also in the export path `:1016`), so nothing was pushed again for it; names `TRC <title> <m>/<d>`, ≤ 30 chars
   (`workout_name`, `backend/sync/coros_workouts.py:627`). The title is the stored one read through
   `display_title`, so a 強度課 stored before SP-79 is pushed as 「TRC 有氧間歇（巡航）3×8 分 10/6」,
   not 「TRC 閾值 3×8 分 …」. The name is part of the payload and so of the fingerprint: a session
@@ -2678,3 +2697,4 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 | 2026-10-13 | bugfix | SP-408 | The 越野 減量期 上坡節奏跑 (`TAPER_FULL` / `TAPER_CUT` trail, 88–95 % CP) takes the Zone 3 row's HR (`z3_hr_text`: the 課表心率區間's Z3, else AeT–LTHR; `taper_rules(z3_target=)` from week_plan and the projection) instead of the threshold (Zone 4) row; card, structure and push agree. Road / short taper sessions unchanged; `TAPER_Z3` (taper Zone 3 track pick, 88–95 % CP) still uses the threshold row (reported, not changed). Demo 10/27: 心率 160–168 → 151–160 bpm. `test_taper_trail_quality_minutes_are_the_structures` now builds its Ctx with the session's basis (`Ctx.of` ignored a `basis` dict key). Tests: `backend/tests/test_taper_rules.py` (`test_z3_hr_text_is_the_zone_3_row`, `test_trail_taper_tempo_card_structure_and_push_use_zone_3`, `test_other_taper_quality_keeps_the_threshold_row`, `test_week_plan_and_projection_trail_taper_tempo_take_zone_3`) |
 | 2026-10-13 | bugfix | SP-474 | Walking sessions' warm-up (ME 負重爬坡, 陡坡健走, 攻頂日模擬 with 含暖身) pushes no HR target: `workout_steps.resolve` gives an auto-easy `warm` step under a walk cap (`Ctx.walk`) 「不設目標」 instead of `hr_profile.walk_band` (easy-band floor → 75 % HRmax); the uphill / steep part keeps the band, the 陡坡健走's cool-down and running warm-ups are unchanged, an explicit target the user set stays. Structure TSS: the warm-up at IF 0.65 (`NONE_IF["warm"]`) instead of the band's ≈ 0.725 (−1.7 to −2.6 per session in the tests); card TSS unchanged. Demo: 暖身 心率 134–150 bpm → 不設目標. Tests: `backend/tests/test_walk_warmup_hr_floor_sp474.py` |
 | 2026-10-13 | test | SP-411 | The 57 TSS / h of the trail 減量 上坡節奏跑 (already in `7511cf19`) is pinned, with the road (70 / 65 an hour) and short (60 an hour) templates unchanged and the session carrying the template's TSS; the structure check (`test_taper_trail_quality_minutes_are_the_structures`) measures the session's own power basis since SP-408 (card 80.8 / 61.8 vs structure 78.7 / 59.7, within 5 %). No week is re-sized by it. Tests: `backend/tests/test_taper_rules.py::test_taper_card_tss_rates_trail_57_road_and_short_unchanged` |
+| 2026-10-13 | code-sync | SP-67 | Recorded what `043624fa` (2026-10-06) shipped and the spec never said: 設定 → 心率's 「app 和手錶數值對照」 card (app vs. COROS LTHR / max / resting HR and zone edges, flagged when more than 5 bpm apart, what to change by hand in the COROS app, the account's change history) and the push payload's `intensityPercent` / `intensityPercentExtend` = 0 with `legacy_fingerprint` so rows pushed before were not pushed again. No code change. Tests: `backend/tests/test_coros_compare.py`, `backend/tests/test_coros_workouts.py::test_trail_easy_run_is_hr_capped_at_aet`, `::test_workouts_pushed_before_sp67_are_not_pushed_again` |
