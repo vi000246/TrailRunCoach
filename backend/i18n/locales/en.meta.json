@@ -6735,6 +6735,22 @@
     "draft": true,
     "src": "backend/engine/workout_review.py:2967"
   },
+  "這次用的：{ftp}、{frc}、{thr}——活動當天往前 90 天、同一運動的 PD 模型擬合值，不是設定裡的 CP。": {
+    "draft": false,
+    "src": "backend/engine/workout_review.py:3025"
+  },
+  "{x} 算不出": {
+    "draft": false,
+    "src": "backend/engine/workout_review.py:3030"
+  },
+  "門檻 {w} W（mFTP 的 85%）": {
+    "draft": false,
+    "src": "backend/engine/workout_review.py:3032"
+  },
+  "門檻": {
+    "draft": false,
+    "src": "backend/engine/workout_review.py:3033"
+  },
   "這次算{type}，但找不到一趟一趟的用力段（例如一路爬坡），沒有趟可判讀": {
     "draft": true,
     "src": "backend/engine/interval_eval.py:502"

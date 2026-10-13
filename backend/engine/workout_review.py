@@ -2992,6 +2992,47 @@ def tis_scores(ds, w) -> Optional[tuple[Optional[float], Optional[float]]]:
     return out[0], out[1]
 
 
+# SP-438: the mFTP / FRC this activity's TIS reads — the very sub-expressions of BUILTIN_EXPRS
+# (the same sport's PD model fitted to the 90 days up to the activity), not the settings' CP
+TIS_BASIS_EXPRS = {
+    "mftp": "workoutrange(begintime,endtime,@lookback:=90,"
+            "sport(sport).athleterange(date-@lookback+1,date,ftp(meanmax(power))))",
+    "frc": "workoutrange(begintime,endtime,@lookback:=90,"
+           "sport(sport).athleterange(date-@lookback+1,date,frc(meanmax(power))))",
+}
+TIS_THRESHOLD_SHARE = 0.85          # tisanaerobic's @threshold = mFTP × .85
+
+
+def tis_basis(ds, w) -> Optional[dict]:
+    """{"mftp" W, "frc" kJ, "threshold" W} this activity's TIS was computed with (SP-438), each
+    None where the PD model gives na; None without a power channel or when nothing can be read.
+    Explanation only: the scores themselves come from tis_scores."""
+    if not _has(ds.channel(w.idx, "power")):
+        return None
+    try:
+        from backend.engine.wko5expr.evaluator import Evaluator
+        d = math.floor(w.day)
+        ev = Evaluator(ds, d, d)
+        ftp, frc = (_f(ev.evaluate(TIS_BASIS_EXPRS[k], w)) for k in ("mftp", "frc"))
+    except Exception:                       # noqa: BLE001 — unreadable: the tile just says less
+        return None
+    if ftp is None and frc is None:
+        return None
+    return {"mftp": ftp, "frc": frc, "threshold": None if ftp is None else ftp * TIS_THRESHOLD_SHARE}
+
+
+def _tis_basis_line(b: Optional[dict]) -> Optional[str]:
+    """「這次用的：mFTP …、FRC …、門檻 …」 for the TIS tile's ? (SP-438); None without a basis."""
+    if not b:
+        return None
+    ftp, frc, thr = b.get("mftp"), b.get("frc"), b.get("threshold")
+    return _("這次用的：{ftp}、{frc}、{thr}——活動當天往前 90 天、同一運動的 PD 模型擬合值，不是設定裡的 CP。",
+             ftp=f"mFTP {ftp:.0f} W" if ftp is not None else _("{x} 算不出", x="mFTP"),
+             frc=f"FRC {frc:.1f} kJ" if frc is not None else _("{x} 算不出", x="FRC"),
+             thr=(_("門檻 {w} W（mFTP 的 85%）", w=f"{thr:.0f}") if thr is not None
+                  else _("{x} 算不出", x=_("門檻"))))
+
+
 TIS_TIP = N_("怎麼看：越高 = 這次對那個能量系統的刺激越大；WKO5 沒有官方的分級名稱，只看數字、和自己平常的課比。\n"
              "看什麼：長時間、接近門檻的課有氧分數高；無氧分數要功率超過門檻（mFTP 的 85%）才會加，輕鬆跑通常是 1。\n"
              "方法：WKO5 的 TIS：以活動當天往前 90 天 PD 模型的 mFTP（有氧）與 FRC（無氧）為基準，"
@@ -3011,8 +3052,9 @@ def _tis_card(ds, w) -> Optional[dict]:
                          + _(TIS_TIP))
     return _card("stat", id="tis", icon="gauge", label=_("刺激 TIS"), value=f"{_num(a)}／{_num(an)}",
                  sub=_("有氧／無氧（1–10）"), power=True,
-                 tip=_("有氧 TIS {a}、無氧 TIS {an}（WKO5 的 Training Impact Score，1–10）。",
-                       a=_num(a), an=_num(an)) + "\n" + _(TIS_TIP))
+                 tip="\n".join(x for x in (
+                     _("有氧 TIS {a}、無氧 TIS {an}（WKO5 的 Training Impact Score，1–10）。", a=_num(a), an=_num(an)),
+                     _tis_basis_line(tis_basis(ds, w)), _(TIS_TIP)) if x))
 
 
 def _stimulus_card(c: dict) -> dict:
