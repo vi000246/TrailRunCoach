@@ -577,6 +577,42 @@ def _steep_items(secs: int, ids) -> Optional[list]:
             step(ids, "cool", STEEP_COOL_S, _easy(*EASY_BAND), "平路緩和")]
 
 
+# SP-443: the multi-day 百岳's 「ME 負重爬坡」 (specific_phase.me_session, kind quality, no 「N×M 分」): 暖身
+# (its detail's 「暖身 N 分」) → 上坡 the title's climb at ME_UP_MPH with the pack → 下坡 the rest of the session
+# (ME_DOWN_MPH light + me_session's 5′ rounding). target_policy is unchanged (a walking session): the uphill
+# is the walk cap (auto easy, Ctx.walk); 「下坡看腿的感覺，不看心率」 = no HR on the watch, an RPE in the name.
+ME_DOWN_RPE = (3, 4)                    # 推估: the top = the session's RPE ≤ 13 (Borg 「有點吃力」 = CR-10 4)
+
+
+def me_climb(s: dict) -> Optional[tuple[int, Optional[float]]]:
+    """(climb m, pack kg or None) of an 「ME 負重爬坡」 session, or None."""
+    from backend.engine.target_policy import is_walk
+    if s.get("kind") != "quality" or not is_walk(s):
+        return None
+    title = s.get("title") or ""
+    climb = _num(r"爬升\s*(\d+)\s*m", title) or int(s.get("climb_m") or 0)
+    if climb <= 0:
+        return None
+    kg = re.search(r"背\s*(\d+(?:\.\d+)?)\s*kg", title)
+    return climb, (float(kg.group(1)) if kg else None)
+
+
+def _me_items(s: dict, secs: int, ids) -> Optional[list]:
+    from backend.engine.hr_profile import WALK_RPE
+    from backend.engine.specific_phase import ME_DOWN_MPH, ME_UP_MPH, ME_WARM_MIN
+    climb, kg = me_climb(s)
+    warm = _num(r"暖身\s*(\d+)\s*分", s.get("detail") or "", ME_WARM_MIN) * 60
+    up = int(round(climb * 60 / ME_UP_MPH)) * 60
+    down = secs - warm - up
+    if down < int(round(climb * 60 / ME_DOWN_MPH)) * 60:
+        return None                     # minutes cut below the written climb: nothing to guess
+    pack = f"背 {kg:g} kg " if kg else ""
+    return [step(ids, "warm", warm, _easy(*EASY_BAND)),
+            step(ids, "work", up, _easy(*EASY_BAND), f"{pack}上坡約 {climb} m · 心率或 RPE ≤ {WALK_RPE} 先到為準"),
+            step(ids, "work", down, {"type": "rpe", "lo": ME_DOWN_RPE[0], "hi": ME_DOWN_RPE[1], "down": climb},
+                 "到頂倒水、輕裝下山 · 看腿的感覺")]
+
+
 # ---------------------------------------------------------------------------
 # 每堂課前加熱身 (SP-364, engine/warmup.py): the leading warm-up block of a structure,
 # topping it up (templates, stored structures) or splitting an easy session's first minutes
@@ -711,7 +747,7 @@ def derive(s: dict, th: Optional[dict] = None) -> Optional[dict]:
         if v is not None:
             d = from_variant(v, s.get("variant_blocks") or "std", s.get("target") or "", ids)
             return {**d, "origin": "derived"}
-        items = _quality_text(s, ids)
+        items = _me_items(s, secs, ids) if me_climb(s) else _quality_text(s, ids)     # SP-443
         return doc(items) if items else None
     if kind == "test":
         from backend.engine.aet_test import is_aet_session

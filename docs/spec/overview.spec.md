@@ -799,7 +799,10 @@ tickets is in plan-auto.spec.md):
   `backend/static/plan.html:513`).
 - **Walking sessions' uphill cap** (SP-115): 75 % HRmax, never below the easy-run cap
   (`hr_profile.walk_cap_for`, `backend/engine/overview.py:1614`); 攻頂日模擬 and ME climb at it
-  (`backend/engine/overview.py:1894`).
+  (`backend/engine/overview.py:1894`). The ME session's structure (editor and COROS push, SP-443;
+  `workout_steps._me_items`, read from its title 「爬升 N m、背 K kg」 and detail 「暖身 N 分」): 暖身 → 上坡 N m ÷
+  500 m/h (the walk cap) → 下坡 the rest of the session (RPE 3–4 · 下降 N m, no watch target: 「下坡看腿的感覺，
+  不看心率」); minutes cut below the climb + 1000 m/h down derive nothing.
 - **生病** (SP-117): a cold = Z1 recovery runs only; a fever = no run until a day after the symptoms,
   then a recovery-pace first run; applied last, it wins (`injuries.illness_rule`,
   `backend/engine/overview.py:2191`, `backend/engine/overview.py:2412`).
@@ -1421,7 +1424,8 @@ which one. The response keeps the `coros` field names.
   is easy / MP / easy, the MP step a pace target (COROS `intensityType` 3, s/km: the goal pace,
   else threshold pace × 1.04–1.08) or an HR band without threshold pace; an easy session whose
   title has `N×S 秒` gets a strides repeat when ≥ 10 min remain; a 長爬坡反覆 / 陡坡健走 (SP-409) is
-  pushed as `workout_steps.derive` structures it (`climb_reps` / `steep_walk`, below); quality and test sessions get
+  pushed as `workout_steps.derive` structures it (`climb_reps` / `steep_walk`, below), so is the ME 負重爬坡
+  (SP-443, `me_climb`); other quality and test sessions get
   their own step builders — an HR basis gives HR work steps (`_work_hr`,
   `backend/sync/coros_workouts.py:202`). Strength, rest, heat_passive and a race without steps
   (the generator's 比賽) are not pushed (skipped, with a reason); a race with steps (the 賽事計算機's
@@ -2570,3 +2574,4 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 | 2026-10-13 | bugfix | SP-411 | `TAPER_FULL["trail"]` / `TAPER_CUT["trail"]` minutes 60 → 85 / 50 → 65 (the structure / pushed total: the jog-down rest = the rep), TSS 65 → 80.8 / 51.7 → 61.6 (57 an hour ≈ `workout_steps.totals`); the card no longer says 60′ for an 85:00 structure. Tests: `backend/tests/test_taper_rules.py::test_taper_trail_quality_minutes_are_the_structures` |
 | 2026-10-13 | bugfix | SP-412 | An old multi-day trip saved before SP-114 without per-day numbers can be edited again: `upsert_event` saves it without them when the event on the server has none (`day_plan_missing`, no rows) and the rows sent are all blank (`day_plan_blank`); rows filled in part, a new trip, a 1-day event made multi-day and a trip that has its numbers still go through `clean_day_plan`. The 賽事周期 form drops `required` from such a trip's rows (back on as soon as one is filled) and shows `plan.ev.dayplan_old`. Tests: `backend/tests/test_old_multiday_edit_sp412.py` |
 | 2026-10-13 | bugfix | SP-409 | 長爬坡反覆 and 陡坡健走 (kind easy, no stored steps) were derived and pushed as one block of the whole session — the 長爬坡反覆 with no target, its structure TSS at the no-target 1.05 (165 vs the card's 87). Now `workout_steps.derive` gives 暖身 15 → N ×（上坡 M＋下坡 0.6 M）→ 緩和 (the uphill with no watch target, named with the session's HR suggestion, RPE 4 / descent RPE 3–4 for the IF) and 暖身 10 → 陡坡 → 緩和 5; `coros_workouts.session_steps` pushes that structure (sessions already on the watch show 需更新 once). target_policy unchanged. Tests: `backend/tests/test_special_easy_structure_sp409.py`, `test_workout_steps.py` golden list, `test_walk_cap.py` (the steep part is step [1]) |
+| 2026-10-13 | bugfix | SP-443 | The multi-day 百岳's 「ME 負重爬坡」 (kind quality, no variant, no 「N×M 分」) derived to nothing and its push raised 「看不懂間歇結構」. Now `workout_steps.derive` gives 暖身 (detail, 10′) → 上坡 the title's climb at `ME_UP_MPH` (auto easy = the walk cap, target_policy unchanged) → 下坡 the rest of the session (RPE 3–4 + 下降 N m, `ME_DOWN_RPE` 推估), and `coros_workouts.session_steps` pushes that structure; structure TSS ≈ 0.88 × the card. Tests: `backend/tests/test_me_climb_structure_sp443.py` |
