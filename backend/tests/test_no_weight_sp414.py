@@ -169,8 +169,10 @@ def test_baiyue_plan_without_weight_answers_with_the_reason(client):
 
 
 @pytest.mark.parametrize("path", ["predict", "plan"])
-@pytest.mark.parametrize("extra", [{}, {"re": 1.0}], ids=["auto", "manual_re"])
+@pytest.mark.parametrize("extra", [{"re": 1.0}], ids=["manual_re"])
 def test_run_without_weight_is_400_with_the_reason(client, path, extra):
+    """SP-444: without a weight road / trail are predicted on speed ÷ watts
+    (test_re_without_weight_sp444.py); only a typed per-kg RE still needs one."""
     for kind in (TRAIL, {"type": "road", "distance_km": 10, "gain_m": 0}):
         r = _post(client, path, {**kind, **extra})
         assert r.status_code == 400, (kind["type"], r.status_code, r.text[:300])
@@ -178,10 +180,10 @@ def test_run_without_weight_is_400_with_the_reason(client, path, extra):
 
 
 def test_run_with_a_typed_weight_is_not_blocked_by_the_no_weight_reason(client):
-    """A weight typed into 「你的數字」 is a weight: the no-weight 400 is not given (the RE is still
-    missing — derive measured none without a weight — so it asks for that one)."""
+    """A weight typed into 「你的數字」 is a weight: the no-weight 400 is not given (SP-444: the RE is
+    measured per W without a weight, so the prediction is made)."""
     r = _post(client, "predict", {**TRAIL, "weight": 62})
-    assert r.status_code == 400 and NO_W not in r.json()["detail"]
+    assert r.status_code == 200, r.text[:300]
     r = _post(client, "predict", {**TRAIL, "weight": 62, "re": 1.0})
     assert r.status_code == 200, r.text[:300]
 
@@ -197,5 +199,6 @@ def test_page_says_what_cannot_be_computed_and_where_to_fill_it():
         cat = json.loads((static / "i18n" / loc / "racepower.json").read_text("utf-8"))
         assert cat.get("noweight.banner") and cat.get("noweight.link"), loc
     zh = json.loads((static / "i18n" / "zh-TW" / "racepower.json").read_text("utf-8"))["noweight.banner"]
-    for item in ("跑步 RE", "百岳能力模型", "背包預設", "熱量", "W/kg"):
+    for item in ("百岳能力模型", "背包預設", "熱量", "W/kg"):
         assert item in zh
+    assert "速度／瓦" in zh          # SP-444: road / trail are predicted per watt, not 「算不出」

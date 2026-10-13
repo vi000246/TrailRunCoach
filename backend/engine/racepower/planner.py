@@ -28,6 +28,7 @@ from backend.engine.racepower import env as ENV
 from backend.engine.racepower import hike as HK
 from backend.engine.racepower import pacing as PC
 from backend.engine.racepower import predict as PR
+from backend.engine.racepower import re as RE
 from backend.engine.racepower import riegel as R
 from backend.engine.racepower import runwalk as RW
 from backend.engine.racepower import weather as WX
@@ -434,6 +435,11 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
         grade_re = grade_re.for_surface(opts.get("surface"))
         surface = grade_re.surface
     weight, re_v1 = used["weight"]["value"], used["re"]["value"]
+    body_w = weight
+    if (used["re"].get("unit") or RE.PER_KG) == RE.PER_W:
+        # SP-444: RE per W (no body weight) — the power ↔ speed step divides by 1, the body
+        # weight (None, or one typed in) only gives the W/kg
+        weight = RE.re_mass(None)
     mode = opts.get("mode") or "auto"
     warnings: list[str] = []
     segs = [dict(s) for s in course["segments"]]
@@ -777,7 +783,8 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
                 warnings.append(_("分段維持平均分配：後段變慢要用你自己至少 {m} 次 ≥ {h:g} 小時的越野跑來估"
                                   "（目前 {n} 次能用，共 {a} 次 ≥ {h:g} 小時）",
                                   m=fd["min_runs"], h=fd["min_run_h"], n=fd["n_runs"], a=fd["n_long"]))
-    summary = {"time_s": T, "power": p_bar, "power_train": p_train, "pct_cp": p_bar / cp, "w_per_kg": p_bar / weight,
+    summary = {"time_s": T, "power": p_bar, "power_train": p_train, "pct_cp": p_bar / cp,
+               "w_per_kg": p_bar / body_w if body_w else None,
                "pace_s_per_km": T / km, "km": km, "gain_m": course["totals"].get("gain_m"),
                "loss_m": course["totals"].get("loss_m"), "M": mbar,
                "total_method": "trail_hr" if hr_est is not None else "v2" if v2_primary else "v1",

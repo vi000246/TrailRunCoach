@@ -69,7 +69,8 @@ decisions on the workbook's ambiguities (D1–D10) are in
 
 ## Derived inputs (`derive`)
 
-- **Weight**: `ds.setting("weight")` (season-plan weight, else WKO5).
+- **Weight**: `ds.setting("weight")` (season-plan weight, else WKO5; all-or-nothing — both back-fill).
+  None → every RE is speed ÷ watts (`re.unit` `per_w`, SP-444; see Prediction → No body weight).
 - **Runs**: last 365 days; CP uses the 90-day subset (`backend/engine/racepower/athlete.py:27`).
   Per-run metrics are disk-cached (`backend/engine/racepower/athlete.py:213`). The as-of PD refits
   (`cp_as_of`) are disk-memoised per day on their 90-day window when the Dataset has a `pd_memo`
@@ -219,8 +220,18 @@ records each value and its source ("手動" when overridden).
   course constant → kcal, water 0.7–0.8 × kcal ml, HR cap = AeT, comparison with the biggest
   past day (`backend/engine/racepower/predict.py:175`).
 - **No body weight at all** (SP-414; the settings have none and none was typed into 「你的數字」 — never
-  a default weight): road / trail `/predict` and `/plan` answer 400 「沒有體重：跑步 RE（每公斤）算不出…」
-  (RE is per kg; also with a typed RE — `calc.predict`). 百岳 still computes the time: pack factor 1,
+  a default weight). Road / trail (SP-444, docs/plans/sp444-re-without-weight.md): RE is speed ÷ watts
+  (m/s per W, `derive()["re"]["unit"] = "per_w"`, `used.re.unit`) for every run (`athlete._per_run_w`,
+  its own cached compute), every grade window (`athlete.grade_samples_per_w`) and every prediction —
+  the same formulas at a 1-kg unit mass (`re.re_mass`), so the weight cancels; the envelope, CP lower
+  bound, Riegel k and priors come back with the per-run metrics. What does not cancel: the CVI
+  adjustment is × (1 + 0.01 per category) instead of + 0.01 (`re.with_cvi`, 推估: RE ≈ 1.00 per kg);
+  the flat-RE default 1.0 becomes the running windows' RE × Minetti grade factor, median
+  (`athlete.flat_re_fallback`); W/kg and LSS/kg are None; a typed RE is per kg unless `re_unit:
+  "per_w"` (the page sends it when it shows per-W values) and a per-kg one is ÷ the typed weight, or
+  400 「手動填的 RE 是每公斤，沒有體重換算不了…」 without one; a typed weight only gives the W/kg. With a
+  weight nothing changes (per kg, the same code and cache rows; the grade windows keep their own day's
+  weight). 百岳 still computes the time: pack factor 1,
   no default pack (`used.pack_kg` None, source 「沒有體重：背包預設算不出」), kcal / water None
   (`predict.predict_baiyue`, `planner._plan_hike_v1`), `walk_capacity` None (`athlete.walk_capacity`)
   so the EP/h falls back to Tobler and the segments to the HikeSpeed path, each said in `warnings`;
@@ -1522,3 +1533,4 @@ when set, but nothing fills it from the routes module yet.
 | 2026-10-13 | fix | SP-410 | 「匯出至課表」 preview: `previous.updated_local` (the athlete's wall time of the last export, `localtime.local_iso`, `backend/engine/localtime.py:63`) next to the UTC `updated_at`; the overwrite line 「會覆蓋上次的匯出（…）」 shows it instead of slicing the UTC string (8 h early in Taipei) |
 | 2026-10-13 | fix | SP-414 (step 1) | A runner with no body weight at all (plan `weights` empty, none in the athlete settings): `cptest.w_prime_prior` returns the kJ prior unchanged and `rwc_band_j` None instead of multiplying None — GET /racepower/inputs answered 500 whenever the season plan had a fresh CP test and no detected W′ (`derive` → `cptest_prior`). No default weight is used. 百岳 /predict and /plan without a weight are still open (SP-414). |
 | 2026-10-13 | fix | SP-414 (step 2, owner B1) | No body weight: road / trail predictions answer 400 with the reason (RE is per kg; also with a typed RE — was a TypeError 500); 百岳 /predict and /plan compute the time with pack factor 1, no default pack, kcal / water / the 補給 card 「算不出」, `walk_capacity` None (Tobler / HikeSpeed, each said in the warnings; the Tobler line no longer says 「沒有跑步資料」 when the weight is what is missing); the page's one-line notice (`#noweight`, zh / en) links to 設定 → 個人資料; the 百岳 capacity back-test is skipped (`skipped: "no_weight"`), not recorded as an error. Never a default weight. |
+| 2026-10-13 | feature | SP-444 | Road / trail predictions without a body weight: RE is speed ÷ watts (`re.unit` `per_w`) for every run, grade window and prediction, so the weight cancels; CVI adjustment relative (× (1 + 0.01) per category, 推估), the flat-RE default from the windows, W/kg / LSS/kg None, a typed per-kg RE needs a weight (400 with the reason) unless sent as `re_unit: "per_w"`; the SP-414 400 「沒有體重：跑步 RE…算不出」 is gone, the page banner no longer lists running RE and says the predictions use speed per watt (zh / en). With a weight every number is unchanged (demo athlete, bitwise; the per-kg per-run cache keeps its code hash). |

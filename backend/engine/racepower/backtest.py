@@ -523,6 +523,9 @@ def evaluate_run(case: dict, ctx: dict) -> Optional[dict]:
     p_act = e_act / t_act
     inp = ctx["inputs"]
     weight = inp["weight"]["value"]
+    body_w = weight
+    if (inp["re"].get("unit") or RE.PER_KG) == RE.PER_W:
+        weight = RE.re_mass(None)          # SP-444: RE per W — the power ↔ speed step divides by 1
     trail = case["category"] == "trail"
     cls = case.get("intensity")
     gre = ctx["grade_re"]
@@ -589,7 +592,7 @@ def evaluate_run(case: dict, ctx: dict) -> Optional[dict]:
         seg_rows.append(row)
     walk_t = sum(a["walk_t"] for a in act)
     out = {"km": km, "gain_m": gain, "segments_n": len(segs), "t_act": t_act, "p_act": p_act,
-           "w_per_kg": p_act / weight, "walk_share": walk_t / t_act if t_act else None,
+           "w_per_kg": p_act / body_w if body_w else None, "walk_share": walk_t / t_act if t_act else None,
            "walk_heavy": bool(t_act and walk_t / t_act >= WALK_HEAVY),
            "t_v2": res["T"], "err_v2": res["T"] / t_act - 1.0,
            "err_v2_cls": res_cls["T"] / t_act - 1.0, "err_nogait": (res_ng["T"] / t_act - 1.0) if res_ng else None,
@@ -1094,7 +1097,12 @@ def backtest(ds, today: Optional[dt.date] = None, progress=None, tags: Optional[
                                                  surfaces=smarks)["grade_re"]
         runs = [w for w in ds.workouts if w.sport == "run"
                 and date_to_day(as_of) - A.RE_WINDOW_DAYS < w.day <= date_to_day(as_of) + 1]
-        ctx["grade_re_nogait"] = GM.fit_grade_re(A.grade_samples(ds, runs, c["exclude"]), road or 1.0)
+        gs = A.grade_samples(ds, runs, c["exclude"])
+        if (inp["re"].get("unit") or RE.PER_KG) == RE.PER_W:
+            gs = A.grade_samples_per_w(gs)          # SP-444: no body weight — RE per W
+            ctx["grade_re_nogait"] = GM.fit_grade_re(gs, road or A.flat_re_fallback(gs))
+        else:
+            ctx["grade_re_nogait"] = GM.fit_grade_re(gs, road or 1.0)
         return ctx
 
     def evaluate(c, ctx):
