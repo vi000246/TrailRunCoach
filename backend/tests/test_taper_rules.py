@@ -388,3 +388,19 @@ def test_week_plan_and_projection_trail_taper_tempo_take_zone_3():
              if x["kind"] == "quality" and not x.get("done")
              and x["title"] in (O.TAPER_FULL["trail"]["title"], O.TAPER_CUT["trail"]["title"])]
     assert trail and all(x["target"].endswith(z3) for x in trail)
+
+
+def test_taper_card_tss_rates_trail_57_road_and_short_unchanged():
+    """SP-411 (the user 2026-10-13): the 越野 減量 上坡節奏跑 cards take 57 TSS an hour (85′ ≈ 81, 65′ ≈ 62 —
+    the structure's own estimate, not the old 65 / 62 an hour: ≈ 92 / 67); the road ones (70 / 65 an hour,
+    their 1-minute gap is SP-437's) and the short one (60 an hour) are unchanged."""
+    assert O.TAPER_FULL["trail"]["tss"] == pytest.approx(85 / 60 * 57)
+    assert O.TAPER_CUT["trail"]["tss"] == pytest.approx(65 / 60 * 57)
+    assert (O.TAPER_FULL["road"]["minutes"], O.TAPER_FULL["road"]["tss"]) == (60, pytest.approx(60 / 60 * 70))
+    assert (O.TAPER_CUT["road"]["minutes"], O.TAPER_CUT["road"]["tss"]) == (50, pytest.approx(50 / 60 * 65))
+    assert (O.TAPER_SHORT["minutes"], O.TAPER_SHORT["tss"]) == (35, pytest.approx(35 / 60 * 60))
+    # the session the taper rules make carries the template's TSS (not the replaced session's)
+    for day, road, t in (("2026-10-06", False, O.TAPER_FULL["trail"]), ("2026-10-09", False, O.TAPER_CUT["trail"]),
+                         ("2026-10-06", True, O.TAPER_FULL["road"]), ("2026-10-09", True, O.TAPER_CUT["road"])):
+        assert _taper_q(day, date(2026, 10, 5), road)["tss"] == pytest.approx(t["tss"])
+    assert _taper_q("2026-10-13", date(2026, 10, 12))["tss"] == pytest.approx(O.TAPER_SHORT["tss"])
