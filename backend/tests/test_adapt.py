@@ -422,3 +422,33 @@ def test_a_downgraded_rpe_quality_session_drops_its_rpe_structure():
     r = dict(g)
     A._to_recovery(r, {})
     assert r.get("steps") is None and "技術地形" not in r["title"]
+
+
+def test_fatigue_streak_reads_sp402s_hr_quality_from_the_activity_row_sp404(monkeypatch):
+    # SP-402 writes the run's HR quality on the activity row (overview.activity_row ->
+    # workout_review.run_hr_quality: "low" / "ok"), which becomes the done session's done_by; the
+    # completion grading (compliance.session_compliance: `uncertain`) and rule E's streak read the same field
+    import datetime as dt
+    from backend.engine import compliance as C
+    from backend.engine import overview as O
+    from backend.engine import workout_review as WR
+    from backend.tests.wko5_fakes import FakeDataset, FakeWorkout
+    ws = [FakeWorkout(start=dt.datetime(2026, 9, d, 7), sport="run", tags=["running"],
+                      metrics={"distance": 8.0, "duration": 2700, "movingduration": 2700, "tss": 38.0}) for d in (28, 29)]
+    ds = FakeDataset(ws, dt.date(2026, 10, 1))
+    hr = {"avg_hr": 165, "lthr": 170, "tss": 38}                 # 偏強 by HR alone (no power), TSS on plan
+
+    def run(quality):
+        monkeypatch.setattr(WR, "run_hr_quality", lambda ds, w: quality)
+        rows = [O.activity_row(w, ds) for w in ds.workouts]
+        assert [r["hr_quality"] for r in rows] == [quality, quality]
+        runs = [g(f"easy{i}", "easy", r["date"], 45, tss=36, done=True, done_by=r) for i, r in enumerate(rows, 1)]
+        out, adj, _ = A.adapt(_streak_week(*runs), [], ctx(reviews={r["index"]: hr for r in rows}))
+        s = {"kind": "easy", "state": "done", "minutes": 45, "tss": 36, "done_by": {**rows[0], "moving_s": 2700, "tss": 20}}
+        return out, adj, C.session_compliance(s)
+
+    out, adj, comp = run("low")
+    assert comp["uncertain"] is True                              # SP-402 sees it …
+    assert not _fatigue_adj(adj) and ids(out)["quality"]["title"] == "閾值 3×10 分"   # … and so does SP-404
+    out, adj, comp = run("ok")
+    assert comp["uncertain"] is False and _stepped_down(out, adj)

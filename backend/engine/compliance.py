@@ -94,9 +94,11 @@ def level_of(dev: float) -> str:
 
 
 def session_compliance(s: dict, planned_tss: Optional[float] = None) -> Optional[dict]:
-    """{level, pct, duration_pct, tss_pct, wrong_type, label} for a done or
+    """{level, pct, duration_pct, tss_pct, wrong_type, uncertain, label} for a done or
     missed stored session (plan_store dict), None for anything else (also the
-    課表待確認 notice, which is not training)."""
+    課表待確認 notice, which is not training). `uncertain` (SP-402): the activity's HR
+    failed the quality check (`done_by.hr_quality` "low"), so the HR-based TSS doesn't
+    grade it down — time alone does, and the headline % is time's."""
     if s.get("kind") == "notice":
         return None
     if s.get("state") == "missed":
@@ -109,14 +111,17 @@ def session_compliance(s: dict, planned_tss: Optional[float] = None) -> Optional
     tss = _ratio(a.get("tss"), planned_tss if planned_tss is not None else s.get("tss"))
     cat = a.get("category")
     wrong = bool(cat) and not sport_ok(s, cat)
-    devs = [abs(r - 1.0) for r in (dur, tss) if r is not None]
+    # SP-402 (positive-compliance.md 原則 5, 不確定就不扣): the run's HR is unreliable (the whole-run
+    # SP-266 check, `hr_quality` "low") — its TSS never grades down, time alone does
+    uncertain = a.get("hr_quality") == "low" and dur is not None
+    devs = [abs(r - 1.0) for r in ((dur,) if uncertain else (dur, tss)) if r is not None]
     tt = time_tss_level(s, planned_tss)             # None unless both time and TSS are measured
     foot = wrong and foot_swap(s, cat)
     # SP-370: another foot sport with time and TSS both measured and on plan is ◐ (yellow), not ≠ (red)
     soft = foot and tt == "green"
     level = "yellow" if soft else "red" if wrong else (level_of(max(devs)) if devs else "green")
-    head = tss if tss is not None else dur
-    return {"level": level, "pct": None if head is None else round(head * 100),
+    head = dur if uncertain else tss if tss is not None else dur
+    return {"level": level, "pct": None if head is None else round(head * 100), "uncertain": uncertain,
             "duration_pct": None if dur is None else round(dur * 100),
             "tss_pct": None if tss is None else round(tss * 100),
             "wrong_type": wrong, "foot_swap": foot, "time_level": tt, "soft": "sport" if soft else None,
@@ -138,7 +143,8 @@ def with_plan_check(comp: Optional[dict], vs: Optional[dict]) -> Optional[dict]:
     the headline 完成度 (the number that explains the colour)."""
     if not comp or not vs or comp.get("level") == "missed":
         return comp
-    if not vs.get("off_plan") and not vs.get("short"):
+    # an intensity shortfall read from unreliable HR (SP-402) is no reason to grade down either
+    if not vs.get("off_plan") and (not vs.get("short") or comp.get("uncertain")):
         return {**comp, "intensity_pct": vs["intensity_pct"]} if vs.get("intensity_pct") is not None else comp
     lv = comp["level"] if comp.get("level") in ORDER else "green"
     level = ORDER[max(ORDER.index(lv), 1)]

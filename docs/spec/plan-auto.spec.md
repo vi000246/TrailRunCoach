@@ -1,6 +1,6 @@
 # Module Spec: plan-auto (自動調整課表)
 
-> **Last Updated**: 2026-10-08
+> **Last Updated**: 2026-10-13
 > **Status**: Active
 > **Domain Layer**: Core Domain
 
@@ -797,6 +797,16 @@ overview has `data-log="none"`. The settings are in 課表偏好 (above).
   mocked in `backend/tests/test_plan_auto.py` (and `backend/tests/test_plan_auto_cp.py` for the
   CP change), either with a stubbed `push_sessions` or with the scripted FakeHub.
 
+## A first import's back-fill (SP-394, owner 2026-10-13)
+
+A new user's first import is built hot first (wko5-engine.spec.md › Hot first): its Dataset holds
+the last ~90 days until the back-fill of the older activities is done, so its CTL / ATL / TSB — the
+load guard's ramp, the projection, the TSB rules — would be wrong. `run` checks after computing the
+inputs (`_history_pending`, `backend/engine/plan_auto.py:1096`): on a hot-first Dataset the run is
+postponed (`{"status": "history_pending"}`, nothing reconciled, saved or pushed) and registered with
+`backfill.when_complete`; once the complete Dataset is in, `_rerun` (`:1116`) starts the same trigger's
+run on the app's event loop in that tenant. `force` (the page's 立即重算) is postponed too.
+
 ## Known limits
 
 - A 3:1 recovery week inside the Zone 1 maintenance run is not detected from the data (only
@@ -970,5 +980,6 @@ The owner's calls, gathered from the sections above (each is described there wit
 | 2026-10-12 | feature | SP-378 | Power bands: road easy 65–80 % CP, road long 65–88 % (were 75–80 / 80–88); the watch gets an interval band's judging band (upper × 1.05, Zone 5 to 116 %), the page keeps the prescription; the editor starts an easy step's power override at 65–80 %. `backend/engine/zones.py` (`EASY_BAND`, `LONG_BAND`, `watch_band`), `backend/engine/workout_steps.py` (`_watch_band`), `backend/sync/coros_workouts.py`. Tests: `backend/tests/test_power_bands_sp378.py` |
 | 2026-10-12 | feature | SP-383 | A user's 區間 target may span zones (從–到, `zone_to`): pushed from the first zone's lower to the last zone's upper bound, as typed (no `watch_band`); one-zone steps unchanged. `backend/engine/workout_steps.py` (`zone_span`). Tests: `backend/tests/test_zone_range_sp383.py::test_the_watch_gets_the_whole_range` |
 | 2026-10-12 | feature | SP-310 | Stable ids: `plan_change_log.uid` (UUID4 hex) + `updated_at` (UTC, moved by every status / push change) and `injury_events.uid` (UUID4 hex; `updated_at` now also moves on any ORM / Core update), unique indexes, the rows from before filled by `init_db` on every tenant DB (`backend/db/stable_ids.py`); `uid` in the change-log entries and the 傷病紀錄 API (`EVENT_COLS`, `event_json`); every endpoint still takes the integer id; plan_sessions' existing `uid` confirmed as its stable id. Tests `backend/tests/test_stable_ids_sp310.py` |
+| 2026-10-13 | perf | SP-394 (owner 2026-10-13) | During a first import's back-fill an automatic run is postponed (`history_pending`) and runs once the complete Dataset is in (`backfill.when_complete` → `_rerun` on the app's loop): never with an incomplete CTL. Tests: `backend/tests/test_queue_hot_first_sp394.py::test_during_the_back_fill_the_pmc_and_the_ctl_wait_and_the_auto_plan_too` |
 | 2026-10-13 | feature | SP-398 | Rule E (fatigue guard) on load only: the 「two red-compliance sessions in a row」 trigger is gone (`adapt._fatigue`, `backend/engine/adapt.py:499`; `compliance.streak_red` removed) — the owner: fatigue is intensity / TSS, not the completion colour. TSB < −30 and the CTL ramp BLOCK act as before. The completion words are 完成／部分／換了課／跳過 (`compliance.LEVEL_LABEL`, `with_plan_check`, `plan_match.compare` text 「換了課：…」); levels unchanged. Tests: `backend/tests/test_adapt.py` (`test_fatigue_two_reds_no_longer_trigger_sp398`, `test_fatigue_tsb_and_ramp_still_act_with_two_reds_sp398`), `backend/tests/test_b2b.py` |
 | 2026-10-13 | feature | SP-404 | Rule E's new trigger 「連續 2 堂輕鬆課跑太強」: the last 2 done easy / long runs of the week both too hard (rule D 太強 / 偏強 on an easy run, a self-rating ≥ Hard on an easy / long run; a 偏強 from HR alone does not count with `hr_quality` low) -> the quality steps down to the recovery fartlek, easy minutes × 0.8; TSB / ramp win (`adapt._too_hard_streak`, `adapt.overhard(hr=)`, `OVERHARD_STREAK = 2`, 推估). It acts in a B2B week too. Tests: `backend/tests/test_adapt.py` (`*_sp404`), `backend/tests/test_adapt_rpe.py`, `backend/tests/test_b2b.py` |

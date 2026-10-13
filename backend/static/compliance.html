@@ -6,6 +6,7 @@
 <title data-i18n="compliance.page_title">課表達成率</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.5.0/echarts.min.js"></script>
 <script src="/api/v1/static/dashicons.js"></script>
+<script src="/api/v1/static/sesschip.js"></script>
 <style>
 /* 課表統計 (engine/compliance.dashboard, GET /api/v1/overview/plan/compliance): a tab of
    課表. First 本週 (SP-400: numbers that only add up — no %, no denominator —, the week's
@@ -355,13 +356,12 @@ const store = { get(k, d) { try { const v = localStorage.getItem("compliance." +
   set(k, v) { try { localStorage.setItem("compliance." + k, JSON.stringify(v)); } catch (_) { /* blocked */ } } };
 const STATUS = ["done", "partial", "off_plan", "open", "missed"];        // 跳過 last (SP-398)
 const ICON = { done: "✓", partial: "◐", off_plan: "≠", missed: "○", open: "…" };
-const sw = (s) => `<span class="st st-${s}"><span aria-hidden="true">${ICON[s]}</span><span class="lb">${esc(T("status." + s))}</span></span>`;
+// the status words: one source with the 課表 cards (common.legend.status.*, sesschip.js); 待同步 is this page's
+const SW = (s) => (s === "open" ? T("status.open") : window.I18N ? I18N.t("common.legend.status." + s) : s);
+const sw = (s) => `<span class="st st-${s}"><span aria-hidden="true">${ICON[s]}</span><span class="lb">${esc(SW(s))}</span></span>`;
 const q = (tip, label) => `<button type="button" class="q" data-tip="${esc(tip)}" aria-label="${esc(label || T("help"))}">?</button>`;
-// the four levels, one text with 課表 (SP-398, common.legend.levels); thresholds from the payload's `levels`
-const levelsTip = () => {
-  const L = (S.data && S.data.levels) || { green: 0.2, yellow: 0.5 };
-  return window.I18N ? I18N.t("common.legend.levels", { green: Math.round(L.green * 100), yellow: Math.round(L.yellow * 100) }) : "";
-};
+// the four levels: the 課表 legend's text (sesschip.js levelsText, common.legend.*_tip), thresholds from the payload
+const levelsTip = () => (window.SessChip ? SessChip.levelsText(S.data && S.data.levels) : "");
 
 const S = { period: store.get("period", "4w"), a: store.get("a", null), b: store.get("b", null), metric: store.get("metric", "tss"),
   unit: ["day", "week", "month"].includes(store.get("unit", "week")) ? store.get("unit", "week") : "week",
@@ -445,7 +445,7 @@ function renderNow() {
   const done = dots.filter((x) => x.status !== "upcoming");
   $("dots").setAttribute("aria-label", T("now.dots_aria", { done: done.length, ahead: dots.length - done.length }));
   $("dots").innerHTML = dots.map((x) => {
-    const word = x.status === "upcoming" ? T("now.ahead") : T("status." + x.status);
+    const word = x.status === "upcoming" ? T("now.ahead") : SW(x.status);
     return `<span class="dot ${esc(x.status)}" title="${esc(`${mdw(x.day)} ${x.title} · ${word}`)}">${x.status === "upcoming" ? "" : di(ICON_OF(x))}</span>`;
   }).join("");
   renderHighlight(d.highlight);
@@ -478,7 +478,7 @@ function kpi(k, tip, v, sub, extra = "") {
 }
 function render() {
   const d = S.data, t = d.totals;
-  const split = STATUS.filter((s) => s !== "open" && t[s]).map((s) => `<i class="bg-${s}" style="flex:${t[s]}" title="${esc(T("status." + s))} ${t[s]}"></i>`).join("");
+  const split = STATUS.filter((s) => s !== "open" && t[s]).map((s) => `<i class="bg-${s}" style="flex:${t[s]}" title="${esc(SW(s))} ${t[s]}"></i>`).join("");
   const ast = d.active_streak || { weeks: 0, best: 0 };
   const unit = `<small>${esc(T("kpi.sessions_unit"))}</small>`;
   renderNow();
@@ -486,7 +486,7 @@ function render() {
     // 教練視角 (SP-400): counts on top, the rates underneath
     kpi(T("kpi.rate"), T("kpi.rate_tip"), `${t.completed}${unit}`,
       t.due ? esc(T("kpi.rate_due", { due: t.due, pct: pc(t.rate) })) + (t.open ? ` · ${esc(T("kpi.open", { n: t.open }))}` : "") : esc(T("empty_short")),
-      t.due ? `<div class="split" role="img" aria-label="${esc(STATUS.filter((s) => s !== "open").map((s) => `${T("status." + s)} ${t[s]}`).join("，"))}">${split}</div>` : ""),
+      t.due ? `<div class="split" role="img" aria-label="${esc(STATUS.filter((s) => s !== "open").map((s) => `${SW(s)} ${t[s]}`).join("，"))}">${split}</div>` : ""),
     kpi(T("kpi.ok"), `${T("kpi.ok_tip")}\n\n${levelsTip()}`, `${t.done}${unit}`,
       esc(T("kpi.ok_sub", { pct: t.due ? pc(t.ok_rate) : "–", partial: t.partial, off: t.off_plan }))),
     kpi(T("kpi.tss"), T("kpi.tss_tip"), t.tss_pct != null ? `${t.tss_pct}<small>%</small>` : "–",
@@ -674,7 +674,7 @@ function renderKinds(ks) {
   if (!ks.length) { $("kinds").innerHTML = `<p class="meta">${esc(T("empty"))}</p>`; $("st-legend").innerHTML = ""; return; }
   $("kinds").innerHTML = ks.map((k) => {
     const segs = KSTAT.filter((s) => k[s]).map((s) =>
-      `<i class="bg-${s}" style="flex:${k[s]}" title="${esc(T("status." + s))} ${k[s]}"></i>`).join("");
+      `<i class="bg-${s}" style="flex:${k[s]}" title="${esc(SW(s))} ${k[s]}"></i>`).join("");
     return `<div class="kr ${kindCls(k)}"><span class="kl" title="${esc(kindName(k))}"><i></i>${esc(kindName(k))}</span>
       <div class="kbar" role="img" aria-label="${esc(T("kinds.aria", { kind: kindName(k), done: k.completed, due: k.due }))}">${segs}</div>
       <span class="n" title="${esc(T("kinds.tss", { p: n0(k.planned_tss), a: n0(k.actual_tss) }))}"><b>${k.due ? pc(k.rate) + "%" : "–"}</b> · ${k.completed}/${k.due}</span></div>`;
@@ -687,7 +687,7 @@ function renderList() {
   const counts = Object.fromEntries(STATUS.map((s) => [s, d.sessions.filter((r) => r.status === s).length]));
   $("ls-q").innerHTML = q(T("list.tip"));
   $("ls-sub").textContent = T("list.sub", { n: d.sessions.length });
-  $("filters").innerHTML = [["all", T("list.all"), d.sessions.length], ...STATUS.filter((s) => counts[s]).map((s) => [s, T("status." + s), counts[s]])]
+  $("filters").innerHTML = [["all", T("list.all"), d.sessions.length], ...STATUS.filter((s) => counts[s]).map((s) => [s, SW(s), counts[s]])]
     .map(([k, l, n]) => `<button type="button" class="fchip" data-f="${k}" aria-pressed="${S.filter === k}">${esc(l)} ${n}</button>`).join("");
   // newest first, 跳過 after the rest (SP-398: what was done comes first)
   const rows = d.sessions.filter((r) => S.filter === "all" || r.status === S.filter)

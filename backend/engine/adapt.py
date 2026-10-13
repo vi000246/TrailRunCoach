@@ -72,7 +72,7 @@ Rules (thresholds: source or 推估):
      fire too — one change per session). Too hard = rule D's 太強 (the classifier's hard class)
      or 偏強 (power > 80 % CP, TSS > planned + 20 %, HR > 94 % LTHR without power) on an easy
      run, or a self-rating ≥ Hard (rpe_hard, when `rpe_rule` is on) on an easy or long run.
-     With low optical-HR quality (done_by / the review's `hr_quality` == "low", SP-402) a 偏強
+     With low optical-HR quality (done_by.hr_quality "low", SP-402's — as compliance's `uncertain`) a 偏強
      read from HR alone does not count. Hard sessions, strength and skipped sessions in
      between neither count nor reset it; a normal easy / long run in between resets it.
      The 2 runs and the trigger itself are 推估 (no controlled trial).
@@ -513,13 +513,10 @@ def _rpe_hard(wk: _Week, rated: dict, th: dict, out: list) -> None:
 
 
 def _hr_low(*rows) -> bool:
-    """Low optical-HR quality on the run (SP-402's `hr_quality` on done_by or the review row:
-    "low", or a dict with level "low")."""
-    for r in rows:
-        q = (r or {}).get("hr_quality")
-        if q == "low" or (isinstance(q, dict) and q.get("level") == "low"):
-            return True
-    return False
+    """Low optical-HR quality on the run: SP-402's `hr_quality` "low" (workout_review.run_hr_quality,
+    carried by overview.activity_row into done_by — the field compliance.session_compliance reads
+    for `uncertain`), on done_by or the review row."""
+    return any((r or {}).get("hr_quality") == "low" for r in rows)
 
 
 def _done_runs(wk: _Week) -> list[dict]:

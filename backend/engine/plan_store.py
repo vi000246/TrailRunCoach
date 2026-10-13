@@ -511,7 +511,7 @@ async def delete_expired(db: AsyncSession, today: str, uids: Optional[list] = No
         for u in dict.fromkeys(str(x) for x in uids):
             r = rows.get(u)
             if r is None or not is_expired_open(to_dict(r), today):
-                raise PlanError(_("這堂課不是過期未完成的課：{uid}", uid=u))
+                raise PlanError(_("這堂課不是過期跳過的課：{uid}", uid=u))
             pick.append(r)
     out = [_tombstone_expired(r) for r in pick]
     await db.commit()

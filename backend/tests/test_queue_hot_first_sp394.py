@@ -670,3 +670,224 @@ def test_a_failed_hot_first_build_releases_what_it_held(first_import, monkeypatc
             F.WV._dataset()
     assert F.T.held(F.root) == frozenset() and F.backfill.progress() is None
     monkeypatch.setattr(FD.FitFolderDataset, "_apply_elevation_bonus", real)
+
+
+# ---------------------------------------------------------------------------- only a first import (owner 2026-10-13)
+
+def test_only_a_first_import_is_built_hot_first_a_re_parse_is_built_whole(first_import, monkeypatch):
+    """Owner decision 2026-10-13: a re-parse (the parse version changed) builds the whole Dataset as
+    before, so the CTL is never low meanwhile; only a folder never parsed before goes hot first."""
+    from backend.engine.wko5expr import fitcache
+    from backend.engine.wko5expr import fitdataset as FD
+    F = first_import
+    monkeypatch.setattr(FD, "HOT_FIRST_FROM", 100)
+    with tenancy.use(F.u2):
+        ds = F.WV._dataset()                             # the whole history parsed once
+    assert len(ds.workouts) == 11 and not ds.deferred
+    with tenancy.use(F.u2):
+        assert fitcache.FitStore(F.dir).files and fitcache.FitStore(F.dir).first_import is False
+    real = fitcache.versions
+    monkeypatch.setattr(fitcache, "versions", lambda: {**real(), "parse": real()["parse"] + "-new"})
+    monkeypatch.setattr(FD, "HOT_FIRST_FROM", 5)
+    F.WV._dataset_cfg.cache_clear()
+    with tenancy.use(F.u2):
+        again = F.WV._dataset()                          # every file stale again: whole, as before
+    assert len(again.workouts) == 11 and not again.deferred and F.backfill.progress() is None
+
+
+def test_a_big_import_into_an_account_with_activities_is_built_whole(first_import, monkeypatch):
+    """A big manual FIT import (SP-323) into an account that has activities already: built whole —
+    its pages already work, and its history (CTL) must stay complete."""
+    from pathlib import Path
+    from backend.engine.wko5expr import fitdataset as FD
+    F = first_import
+    moved = F.dir.parent / "later"
+    moved.mkdir()
+    old = [p for p in F.dir.rglob("*.fit") if _age(p) in OLD_AGES]
+    for p in old:
+        p.rename(moved / p.name)
+    with tenancy.use(F.u2):
+        first = F.WV._dataset()                          # 3 activities: a first import, but small
+    assert len(first.workouts) == 3
+    monkeypatch.setattr(FD, "HOT_FIRST_FROM", 5)
+    for p in moved.iterdir():                            # then 8 old files imported at once
+        day = p.name.split("_")[1]
+        dest = F.dir / day[:4] / p.name
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        p.rename(dest)
+    from backend.engine.wko5expr import datasource as DSRC
+    DSRC.files_changed()
+    with tenancy.use(F.u2):
+        ds = F.WV._dataset()
+    assert len(ds.workouts) == 11 and not ds.deferred and F.backfill.progress() is None
+    assert Path(F.dir).exists()
+
+
+def test_a_first_import_stays_hot_first_until_its_back_fill_is_done(first_import, monkeypatch):
+    """The index remembers a first import in progress (a restart, a sync meanwhile: still hot
+    first); the complete build clears it."""
+    from backend.engine.wko5expr import fitcache
+    F = first_import
+    gate = threading.Event()
+    real = F.backfill._chunk
+    monkeypatch.setattr(F.backfill, "_chunk", lambda bf, part: gate.wait(10) and real(bf, part))
+    with tenancy.use(F.u2):
+        ds = F.WV._dataset()
+    with tenancy.use(F.u2):
+        assert ds.deferred and fitcache.FitStore(F.dir).first_import is True   # on disk: survives a restart
+    F.WV._dataset_cfg.cache_clear()
+    with tenancy.use(F.u2):
+        again = F.WV._dataset()                          # a later build before the back-fill: hot first still
+    assert len(again.workouts) == len(HOT_AGES) and len(again.deferred) == len(OLD_AGES)
+    gate.set()
+    assert _wait(lambda: F.warmed, 10)
+    with tenancy.use(F.u2):
+        assert fitcache.FitStore(F.dir).first_import is False
+
+
+# ---------------------------------------------------------------------------- not shown wrong (owner 2026-10-13)
+# During a first import's back-fill CTL / ATL / TSB and whatever reads further back than the hot-first
+# Dataset holds are 「計算中（較舊的活動補算中 n／N）」 until the complete Dataset is in; what reads the
+# last 90 days only is shown at once.
+
+def _partial(today=TODAY, oldest_hot=None):
+    from backend.engine.wko5expr.dataset import date_to_day
+    deferred = [(today - dt.timedelta(days=a), f"run_{a}.fit") for a in (100, 400)]
+    return SimpleNamespace(deferred=deferred, today=float(date_to_day(today)),
+                           athlete=SimpleNamespace(ctlconstant=42.0, atlconstant=7.0))
+
+
+def test_what_reads_older_days_than_the_hot_first_dataset_holds_is_pending():
+    from backend.api import backfill as BF
+    from backend.engine.wko5expr.dataset import date_to_day
+    ds = _partial()
+    T = date_to_day(TODAY)
+    assert BF.coverage(ds) == T - 100 + 1                    # the day after the newest deferred file
+    assert BF.pending_back(ds, 28) is None and BF.pending_back(ds, 99) is None
+    p = BF.pending_back(ds, 100)
+    assert p["n_total"] == 2 and p["n_done"] == 0 and "2" in p["message"]
+    assert BF.pending(ds, None) is not None                  # the whole history: waits
+    done = SimpleNamespace(deferred=[], today=ds.today)
+    assert BF.pending(done, None) is None and BF.coverage(done) is None
+
+
+def test_charts_reading_ctl_wait_for_the_complete_dataset_short_ranges_do_not():
+    from backend.api import wko5views as WV
+    from backend.engine.wko5expr.dataset import date_to_day
+    ds = _partial()
+    T = float(date_to_day(TODAY))
+    tss_30 = {"kind": "athlete", "series": [{"expression": "tss"}]}
+    ctl_30 = {"kind": "athlete", "series": [{"expression": "ctl"}]}
+    assert WV._chart_pending(tss_30, ds, T - 30, T) is None              # the last 30 days: drawn
+    assert WV._chart_pending(tss_30, ds, T - 120, T) is not None         # 120 days back: not yet
+    assert WV._chart_pending(ctl_30, ds, T - 30, T) is not None          # CTL: 6 × 42 days of warm-up
+    done = SimpleNamespace(deferred=[], today=T, athlete=ds.athlete)
+    assert WV._chart_pending(ctl_30, done, T - 30, T) is None
+
+
+def test_the_overview_status_hides_the_history_cards_until_the_complete_dataset():
+    from backend.api import overview as OV
+    ds = _partial()
+    ind = lambda i: {"id": i, "title": i, "level": "good", "text": "42", "verdict": "ok", "why": "", "action": "",
+                     "source": "", "value": 42.0, "spark": [["2026-10-01", 40]], "extra": {"ramp_week": 1.0}}
+    d = {"today": TODAY.isoformat(), "phase": {"label": "基礎期"}, "headline": "基礎期：一切正常",
+         "indicators": [ind("fitness"), ind("form"), ind("strength"), ind("long"), ind("whatever")],
+         "actions": [{"priority": 1, "title": "a", "detail": "", "because": ["form"]},
+                     {"priority": 2, "title": "b", "detail": "", "because": ["strength"]}],
+         "counts": {}}
+    out = OV.history_mask(d, ds)
+    by = {i["id"]: i for i in out["indicators"]}
+    for i in ("fitness", "form", "long", "whatever"):      # CTL / TSB, a year, an unknown card: wait
+        assert by[i]["level"] == "na" and by[i]["value"] is None and not by[i]["spark"] and by[i]["extra"]["pending"]
+        assert "計算中" in by[i]["text"]
+    assert by["strength"]["text"] == "42"                   # 28 days: shown
+    assert [a["title"] for a in out["actions"]] == ["b"] and out["history_pending"]["n_total"] == 2
+    assert OV.history_mask(d, SimpleNamespace(deferred=[], today=ds.today)) is d
+
+
+def test_during_the_back_fill_the_pmc_and_the_ctl_wait_and_the_auto_plan_too(first_import, monkeypatch):
+    import asyncio
+    from backend.api import overview as OV
+    from backend.engine import plan_auto
+    from backend.api import plan_sessions as PSA
+    F = first_import
+    gate = threading.Event()
+    real = F.backfill._chunk
+    monkeypatch.setattr(F.backfill, "_chunk", lambda bf, part: gate.wait(10) and real(bf, part))
+    with tenancy.use(F.u2):
+        ds = F.WV._dataset()
+        assert ds.deferred
+        monkeypatch.setattr(OV, "_dataset", F.WV._dataset)
+        today = F.today.isoformat()
+        p = OV.pmc(begin=(F.today - dt.timedelta(days=30)).isoformat(), end=today)
+        assert p["pending"]["n_total"] == len(OLD_AGES) and "series" not in p          # CTL: not drawn
+        assert OV.z5_card()["pending"] and OV.feasibility()["pending"] and not OV.feasibility()["races"]
+        wk = OV.history_load({"load": {"ctl_week_start": 3.0, "ctl_end": 4.0, "tsb_next": -1.0}, "sessions": []}, ds)
+        assert wk["load"]["ctl_week_start"] is None and wk["load"]["tsb_next"] is None and wk["history_pending"]
+        # the automatic plan: never with an incomplete CTL — it runs once the back-fill is done
+        ran = []
+
+        async def inputs(db=None, blackouts=None):
+            return {"cur": {}}
+        monkeypatch.setattr(PSA, "_inputs", inputs)
+
+        async def enabled(db):
+            return {"enabled": True}
+        monkeypatch.setattr(plan_auto, "settings", enabled)
+        monkeypatch.setattr(plan_auto, "_rerun", lambda trigger: ran.append(trigger))
+        assert asyncio.run(plan_auto.run(None, trigger="sync:coros"))["status"] == "history_pending"
+    assert ran == []
+    gate.set()
+    assert _wait(lambda: F.warmed and ran == ["sync:coros"], 10)
+    with tenancy.use(F.u2):
+        p = OV.pmc(begin=(F.today - dt.timedelta(days=30)).isoformat(), end=today)
+    assert "pending" not in p and len(p["series"]) == 31                               # the complete Dataset
+
+
+def test_the_plan_summary_projection_waits_and_the_pages_show_the_message(monkeypatch):
+    from pathlib import Path
+    from backend.api import overview as OV
+    from backend.api import plan_sessions as PSA
+    ds = _partial()
+    monkeypatch.setattr(OV, "_dataset", lambda: ds)
+    out = PSA.history_summary({"hours": 5.0, "tss": 300.0, "ctl_end": 40.0, "atl_end": 50.0, "tsb_next": -10.0,
+                               "projection": [{"date": "2026-10-13", "ctl": 40.0, "atl": 50.0, "tsb": -9.0}]})
+    assert out["ctl_end"] is None and out["tsb_next"] is None and out["projection"] == [{"date": "2026-10-13"}]
+    assert out["hours"] == 5.0 and out["history_pending"]["n_total"] == 2      # the 課表's own numbers stay
+    monkeypatch.setattr(OV, "_dataset", lambda: SimpleNamespace(deferred=[], today=ds.today))
+    assert PSA.history_summary({"ctl_end": 40.0})["ctl_end"] == 40.0
+    static = Path(__file__).resolve().parents[1] / "static"
+    ov = (static / "overview.html").read_text("utf-8")
+    assert "res.pending" in ov and "R.pending" in ov and "history_pending" in ov and "location.reload()" in ov
+    assert "res.pending" in (static / "wko5_viewer.html").read_text("utf-8")
+    assert "r.pending" in (static / "plan.html").read_text("utf-8")
+
+
+def test_the_threshold_estimates_wait_for_their_305_days(monkeypatch):
+    from pathlib import Path
+    from backend.api import plan as PL
+    ds = _partial()
+    monkeypatch.setattr(PL, "_estimate_dataset", lambda: ds)
+    assert PL.threshold_estimate()["pending"]["n_total"] == 2
+    assert PL.threshold_check()["pending"]["n_total"] == 2
+    page = (Path(__file__).resolve().parents[1] / "static" / "settings.html").read_text("utf-8")
+    assert "E.pending" in page and "TC.pending" in page
+
+
+def test_a_failed_back_fill_is_tried_again_by_the_next_request(first_import, monkeypatch):
+    F = first_import
+
+    def boom(*a, **k):
+        raise RuntimeError("complete build failed")
+    with tenancy.use(F.u2):
+        real = F.WV._build_dataset
+        monkeypatch.setattr(F.WV, "_build_dataset", lambda *key, hot_first=None: boom() if hot_first is False
+                            else real(*key, hot_first=hot_first))
+        ds = F.WV._dataset()
+        assert ds.deferred
+    assert _wait(lambda: F.backfill._STATE and next(iter(F.backfill._STATE.values())).state == "error", 10)
+    monkeypatch.setattr(F.WV, "_build_dataset", real)
+    with tenancy.use(F.u2):
+        again = F.WV._dataset()                          # not the hot-first one kept for good
+    assert again is not ds and not again.deferred and len(again.workouts) == len(HOT_AGES + OLD_AGES)
+    assert F.backfill.pending(again, None) is None        # every file was parsed: built complete at once

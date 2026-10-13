@@ -227,15 +227,65 @@ def _refresh_status(key: tuple, ds, today: dt.date) -> None:
 
 def status_answer(ds, today: dt.date) -> dict:
     """GET /status: the status as a dict — or, on a miss after new data / a new day / a restart,
-    the previous one marked `stale` while the new one is computed (SP-394)."""
+    the previous one marked `stale` while the new one is computed (SP-394). During a first
+    import's back-fill the cards that read further back than its Dataset holds wait (history_mask)."""
     key, _prefs = _status_key(ds, today)
     with _lock:
         hit = _status_cache.get(key)
     if hit is None:
         old = _stale_status(key, ds, today)
         if old is not None:
-            return old
-    return _status(ds, today).to_dict()
+            return history_mask(old, ds)
+    return history_mask(_status(ds, today).to_dict(), ds)
+
+
+# SP-394 第 4 條 (owner 2026-10-13: CTL is never shown wrong): during a first import's back-fill
+# (api/backfill.py) the hot-first Dataset holds the last ~90 days only. Each status card is shown
+# when every day it reads lies inside it — the days it reads back from today, checked in
+# engine/status.py: phase (the plan) 0, data / density / descent 28, strength 35, durability 84.
+# Every other card waits for the complete Dataset: fitness / form (CTL / ATL / TSB: 6 × 42 days of
+# warm-up, chartscope.WARMUP_TAU), volume (26 weeks), efficiency (181 d), heat (119 d), long
+# (365 d), climb (every earlier activity), intensity / drift / gate / testing / level (the
+# thresholds of each day: as-of estimates over 305 days, fitdataset.ESTIMATE_LOOKBACK_DAYS) and
+# any card not listed here.
+STATUS_READS = {"phase": 0, "data": 28, "density": 28, "descent": 28, "strength": 35, "durability": 84}
+
+
+def history_mask(d: dict, ds) -> dict:
+    """`d` (a status dict) with the cards a first import's hot-first Dataset cannot answer yet
+    replaced by 「計算中（較舊的活動補算中 n／N）」 (level na, no number, no line) and the to-dos
+    they back left out; `history_pending` {n_done, n_total, message}. `d` itself when complete."""
+    from backend.api import backfill as BF
+    if BF.coverage(ds) is None:
+        return d
+    from backend.i18n import _
+    held, inds = set(), []
+    for i in d.get("indicators") or []:
+        p = BF.pending_back(ds, STATUS_READS.get(i.get("id")))
+        if p is None:
+            inds.append(i)
+            continue
+        held.add(i.get("id"))
+        inds.append({**i, "level": "na", "text": _("計算中"), "verdict": p["message"], "why": p["message"],
+                     "action": "", "value": None, "spark": [], "extra": {"pending": p}})
+    out = {**d, "indicators": inds, "actions": [a for a in d.get("actions") or []
+                                                  if not set(a.get("because") or []) & held],
+           "history_pending": BF.pending(ds, None)}
+    if held:
+        out["counts"] = {lvl: sum(1 for i in inds if i.get("level") == lvl) for lvl in (d.get("counts") or {})}
+        out["headline"] = f"{(d.get('phase') or {}).get('label') or ''}：{out['history_pending']['message']}".lstrip("：")
+    return out
+
+
+def history_load(w: dict, ds) -> dict:
+    """GET /weekplan: during a first import's back-fill its CTL / ATL / TSB (today, Monday, the
+    projection to Sunday) are None and `history_pending` says why; the sessions stay."""
+    from backend.api import backfill as BF
+    p = BF.pending(ds, None) if BF.coverage(ds) is not None else None
+    if p is None:
+        return w
+    return {**w, "load": {k: None for k in (w.get("load") or {})},
+            "projection": [{"date": r.get("date")} for r in w.get("projection") or []], "history_pending": p}
 
 
 def status_updating() -> bool:
@@ -286,7 +336,14 @@ def summary(unit: str = "week", anchor: Optional[str] = None, n: int = 12):
     ds = _dataset()
     today = O.day_to_date(ds.today)
     n = max(1, min(n, {"week": 104, "month": 60, "year": 12}[unit]))
-    return O.summary(ds, unit, _day(anchor, today), n)
+    out = O.summary(ds, unit, _day(anchor, today), n)
+    # SP-394: periods older than a first import's hot-first Dataset holds are not zero: pending
+    from backend.api import backfill as BF
+    if BF.coverage(ds) is not None and out.get("buckets"):
+        p = BF.pending(ds, O.date_to_day(dt.date.fromisoformat(out["buckets"][0]["start"])))
+        if p is not None:
+            return {**out, "pending": p}
+    return out
 
 
 @router.get("/pmc")
@@ -297,6 +354,15 @@ def pmc(begin: Optional[str] = None, end: Optional[str] = None):
     b = _day(begin, e - dt.timedelta(days=180))
     if b > e:
         raise HTTPException(400, "begin after end")
+    # SP-394: CTL / ATL / TSB read every earlier day (6 × 42 of warm-up): a first import's
+    # hot-first Dataset answers `pending` until its back-fill is done
+    from backend.api import backfill as BF
+    if BF.coverage(ds) is not None:
+        from backend.engine.wko5expr.chartscope import WARMUP_TAU
+        need = O.date_to_day(b) - 1 - WARMUP_TAU * float(ds.athlete.ctlconstant)
+        p = BF.pending(ds, need)
+        if p is not None:
+            return {"begin": b.isoformat(), "end": e.isoformat(), "pending": p}
     return O.pmc(ds, b, e)
 
 
@@ -309,8 +375,8 @@ def weekplan():
     from backend.engine import plan_prefs as PP
     # same 課表偏好, 不排課日期 and accepted B2B weekends as the 課表 page
     from backend.engine.panels.race_refs import calculator_hours
-    return O.week_plan(ds, _status(ds, today), today, prefs=PP.load(), blackouts=BL.load(),
-                       b2b_accepted=B2B.load_accepted(), race_predict=calculator_hours)
+    return history_load(O.week_plan(ds, _status(ds, today), today, prefs=PP.load(), blackouts=BL.load(),
+                                    b2b_accepted=B2B.load_accepted(), race_predict=calculator_hours), ds)
 
 
 @router.get("/z5")
@@ -320,6 +386,10 @@ def z5_card():
     from backend.engine import quality_gate as QG
     ds = _dataset()
     today = O.day_to_date(ds.today)
+    from backend.api import backfill as BF
+    p = BF.pending_back(ds, STATUS_READS.get("gate")) if BF.coverage(ds) is not None else None
+    if p is not None:                  # SP-394: the gate reads the thresholds of each day (estimates)
+        return {"today": today.isoformat(), "pending": p, "history_href": _z5_chart_href()}
     st = _status(ds, today)
     gate = next((i.extra for i in st.indicators if i.id == "gate"), None) or {}
     return {"today": today.isoformat(), **QG.z5_card(gate, today), "history_href": _z5_chart_href()}
@@ -365,6 +435,11 @@ def feasibility(event_id: Optional[str] = None):
     plan = Plan.load()                 # the season plan's events (ds.plan is empty in parity mode)
     if event_id and not any(e.id == event_id for e in plan.events):
         raise HTTPException(404, "no such event")
+    from backend.api import backfill as BF
+    p = BF.pending(ds, None) if BF.coverage(ds) is not None else None
+    if p is not None:                  # SP-394: CTL and the long-run history: after the back-fill
+        return {"today": today.isoformat(), "races": [], "pending": p,
+                "levels": {k: _(v) for k, v in RF.LEVEL_LABEL.items()}, "chart_href": _specific_chart_href()}
     return {"today": today.isoformat(), "races": RF.races(plan, ds, today, event_id=event_id),
             "levels": {k: _(v) for k, v in RF.LEVEL_LABEL.items()}, "chart_href": _specific_chart_href()}
 

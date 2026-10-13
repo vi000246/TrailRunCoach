@@ -10,9 +10,8 @@
   --bg: #f4f5f7; --panel: #fcfcfb; --text: #0b0b0b; --muted: #52514e; --faint: #8a8984; --line: #e3e3df;
   --accent: #2a78d6; --soft: #e8efff;
   --good: #1a7f37; --watch: #b45309; --bad: #c62828; --info: #52514e;
-  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4; --s6: #008300; --s7: #4a3aa7;
   --lo: #1baf7a; --mid: #eda100; --hi: #e34948; --bar: #b9b8b1;
-  --qf2: #d32f2f; --qf3: #8e24aa;
+  --ph-base: #2a78d6; --ph-specific: #eb6834; --ph-taper: #eda100; --ph-recovery: #1baf7a; --ph-transition: #4a3aa7;
   --cell: #ffffff; --out: #f7f7f5;
 }
 @media (prefers-color-scheme: dark) {
@@ -21,9 +20,8 @@
     --bg: #111110; --panel: #1a1a19; --text: #ffffff; --muted: #c3c2b7; --faint: #8f8e86; --line: #2e2e2b;
     --accent: #3987e5; --soft: #1c2a40;
     --good: #4ade80; --watch: #fbbf24; --bad: #f87171; --info: #c3c2b7;
-    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #008300; --s7: #9085e9;
     --lo: #199e70; --mid: #c98500; --hi: #e66767; --bar: #5a5954;
-    --qf2: #f0605d; --qf3: #c27ad6;
+    --ph-base: #3987e5; --ph-specific: #d95926; --ph-taper: #c98500; --ph-recovery: #199e70; --ph-transition: #9085e9;
     --cell: #1a1a19; --out: #151514;
   }
 }
@@ -32,9 +30,8 @@
   --bg: #111110; --panel: #1a1a19; --text: #ffffff; --muted: #c3c2b7; --faint: #8f8e86; --line: #2e2e2b;
   --accent: #3987e5; --soft: #1c2a40;
   --good: #4ade80; --watch: #fbbf24; --bad: #f87171; --info: #c3c2b7;
-  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #008300; --s7: #9085e9;
   --lo: #199e70; --mid: #c98500; --hi: #e66767; --bar: #5a5954;
-  --qf2: #f0605d; --qf3: #c27ad6;
+  --ph-base: #3987e5; --ph-specific: #d95926; --ph-taper: #c98500; --ph-recovery: #199e70; --ph-transition: #9085e9;
   --cell: #1a1a19; --out: #151514;
 }
 * { box-sizing: border-box; }
@@ -49,16 +46,9 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .ok { color: var(--good); }
 main { max-width: 1320px; margin: 0 auto; padding: 12px 16px 40px; display: grid; gap: 10px; }
 
-/* kind + phase palettes */
-.k-easy { --k: var(--s3); } .k-long { --k: var(--s1); } .k-quality { --k: var(--s2); }
-/* 強度課 by family (SP-79): 有氧間歇 keeps the 強度課 orange, VO2max 間歇 red, 速度 purple
-   (≥ 3:1 against --cell in both themes); one with no interval work stays orange */
-.k-quality.fam-aerobic { --k: var(--s2); } .k-quality.fam-vo2max { --k: var(--qf2); } .k-quality.fam-speed { --k: var(--qf3); }
-.k-test { --k: var(--s7); } .k-strength { --k: var(--s5); } .k-hike { --k: var(--s4); } .k-heat_passive { --k: var(--hi); } .k-race { --k: var(--hi); }
-.heat-tag { display: inline-block; margin-right: 3px; padding: 0 3px; border-radius: 3px; font-size: 10px; line-height: 14px;
-  background: color-mix(in srgb, var(--hi) 25%, transparent); color: var(--hi); font-weight: 700; }
-.ph-base { --ph: var(--s1); } .ph-specific { --ph: var(--s2); } .ph-taper { --ph: var(--s4); }
-.ph-event { --ph: var(--hi); } .ph-recovery { --ph: var(--s3); } .ph-transition { --ph: var(--s7); } .ph-rebuild { --ph: var(--s3); } .ph-none { --ph: var(--line); }
+/* phase palette (the week row's left bar, SP-399: its own tokens — a session's type is an icon, sesschip.js) */
+.ph-base { --ph: var(--ph-base); } .ph-specific { --ph: var(--ph-specific); } .ph-taper { --ph: var(--ph-taper); }
+.ph-event { --ph: var(--hi); } .ph-recovery { --ph: var(--ph-recovery); } .ph-transition { --ph: var(--ph-transition); } .ph-rebuild { --ph: var(--ph-recovery); } .ph-none { --ph: var(--line); }
 
 /* ---- buttons ---- */
 .btn { border: 1px solid var(--line); background: var(--panel); color: var(--text); border-radius: 7px;
@@ -124,7 +114,6 @@ main { max-width: 1320px; margin: 0 auto; padding: 12px 16px 40px; display: grid
 .wk { border-bottom: 1px solid var(--line); position: relative; }
 .wk:last-child { border-bottom: 0; }
 .wk::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--ph); z-index: 1; }
-.wk.prov .cell { background-image: repeating-linear-gradient(135deg, transparent 0 9px, color-mix(in srgb, var(--line) 45%, transparent) 9px 10px); }
 .cell { background: var(--cell); min-height: 118px; padding: 4px 5px 6px; border-left: 1px solid var(--line); display: flex; flex-direction: column; gap: 3px;
   position: relative; min-width: 0; cursor: default; }
 .cell:first-child { border-left: 0; padding-left: 9px; }
@@ -133,15 +122,12 @@ main { max-width: 1320px; margin: 0 auto; padding: 12px 16px 40px; display: grid
 /* past days: quietly different — a faint wash, muted date, no add cursor (only what was done shows) */
 .cell.past, .ag-day.past { background: color-mix(in srgb, var(--out) 70%, var(--cell)); cursor: default; }
 .cell.past .dnum, .ag-day.past .d { color: var(--faint); }
-.cell.past .chip:not(.st-done) { opacity: .75; }
 .cell.out .dnum { color: var(--faint); }
 .cell.sel { box-shadow: inset 0 0 0 2px var(--accent); }
 .cell.drop { background: color-mix(in srgb, var(--accent) 12%, var(--cell)); outline: 2px dashed var(--accent); outline-offset: -3px; }
-/* 不排課日期: a faint diagonal hatch (45°, so it reads apart from the 135° provisional hatch) + a label chip, no ＋ */
+/* 不排課日期: a faint diagonal hatch + a label chip, no ＋ (a provisional week has no hatch: its cards are dashed, SP-396) */
 .wk .cell.bo, .ag-day.bo { background-color: color-mix(in srgb, var(--out) 55%, var(--cell));
   background-image: repeating-linear-gradient(45deg, transparent 0 6px, color-mix(in srgb, var(--faint) 22%, transparent) 6px 7px); }
-.wk.prov .cell.bo { background-image: repeating-linear-gradient(45deg, transparent 0 6px, color-mix(in srgb, var(--faint) 22%, transparent) 6px 7px),
-  repeating-linear-gradient(135deg, transparent 0 9px, color-mix(in srgb, var(--line) 45%, transparent) 9px 10px); }
 .cell.bo .dnum, .ag-day.bo .d { color: var(--faint); }
 .bo-chip { margin-left: auto; min-width: 0; max-width: 100%; border: 1px solid color-mix(in srgb, var(--faint) 45%, transparent); background: var(--panel);
   color: var(--muted); border-radius: 9px; padding: 0 7px; font-size: 10.5px; line-height: 17px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -155,16 +141,16 @@ main { max-width: 1320px; margin: 0 auto; padding: 12px 16px 40px; display: grid
 .legend .bo-sw { display: inline-block; width: 14px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; border: 1px solid var(--line);
   background: repeating-linear-gradient(45deg, var(--cell) 0 3px, color-mix(in srgb, var(--faint) 45%, var(--cell)) 3px 4px); }
 /* 休息日 (kind rest): a plain soft-green wash with a dotted outline, no hatch — the day off you chose */
-.wk .cell.bo.rest-d, .ag-day.bo.rest-d { background-image: none; background-color: color-mix(in srgb, var(--s3) 9%, var(--cell));
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--s3) 35%, transparent); }
+.wk .cell.bo.rest-d, .ag-day.bo.rest-d { background-image: none; background-color: color-mix(in srgb, var(--good) 8%, var(--cell));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--good) 30%, transparent); }
 .wk .cell.bo.rest-d.sel, .ag-day.bo.rest-d.sel { box-shadow: inset 0 0 0 2px var(--accent); }
-.bo-chip.rest { color: color-mix(in srgb, var(--s3) 75%, var(--text)); border-color: color-mix(in srgb, var(--s3) 45%, transparent); font-weight: 600; }
+.bo-chip.rest { color: var(--good); border-color: color-mix(in srgb, var(--good) 40%, transparent); font-weight: 600; }
 .legend .rest-sw { display: inline-block; width: 14px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px;
-  background: color-mix(in srgb, var(--s3) 20%, var(--cell)); border: 1px solid color-mix(in srgb, var(--s3) 45%, transparent); }
+  background: color-mix(in srgb, var(--good) 8%, var(--cell)); border: 1px solid color-mix(in srgb, var(--good) 30%, transparent); }
 /* 睡在高處 (SP-259): a small mark on a day with a recorded night up high; click = edit */
-.hn-tag { flex: none; border: 1px solid color-mix(in srgb, var(--s4) 45%, transparent); background: var(--panel); color: var(--muted);
+.hn-tag { flex: none; border: 1px solid var(--line); background: var(--panel); color: var(--muted);
   border-radius: 9px; padding: 0 5px; font-size: 10.5px; line-height: 17px; cursor: pointer; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.hn-tag:hover { color: var(--text); border-color: var(--s4); }
+.hn-tag:hover { color: var(--text); border-color: var(--faint); }
 .hn-tag:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .ag-day .hn-tag { display: block; margin-top: 3px; font-size: 11.5px; }
 .cf-body .hn-row { display: flex; align-items: center; gap: 6px; margin: 10px 0 4px; }
@@ -222,14 +208,17 @@ dialog.sd .tp-t input { margin-top: 3px; flex: none; width: auto; }
 @media (hover: none) { .add { opacity: 1; } }
 .chips { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
 
-.chip { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 4px; align-items: center; text-align: left;
-  width: 100%; border: 0; border-left: 3px solid var(--k); border-radius: 5px; padding: 2px 5px 3px 6px; cursor: pointer;
-  background: color-mix(in srgb, var(--k) 13%, var(--cell)); color: var(--text); font-size: 11.5px; line-height: 1.3; min-width: 0; }
-.chip:hover { background: color-mix(in srgb, var(--k) 22%, var(--cell)); }
+/* session card (SP-396; docs/research/schedule-chip-ui.md §6–8): type tile · title · ring (+ watch) on the
+   first row, minutes / TSS under it. The state look (outline, left bar, grey, dashed) is sesschip.js's `.sc` */
+.chip { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; column-gap: 5px; align-items: center; text-align: left;
+  width: 100%; border-radius: 6px; padding: 3px 5px 4px 4px; cursor: pointer; font-size: 11.5px; line-height: 1.3; min-width: 0; }
+.chip:hover { background: color-mix(in srgb, var(--accent) 6%, var(--cell)); }
 .chip .c-t { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.chip .c-r { display: inline-flex; align-items: center; gap: 3px; font-variant-numeric: tabular-nums; color: var(--muted); font-size: 11px; }
-.chip .c-m { grid-column: 1 / -1; color: var(--muted); font-size: 10.5px; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chip .c-r { display: inline-flex; align-items: center; gap: 4px; font-variant-numeric: tabular-nums; color: var(--muted); font-size: 11px; }
+.chip .c-m { grid-column: 2 / -1; color: var(--muted); font-size: 10.5px; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .chip .c-x { grid-column: 1 / -1; color: var(--muted); font-size: 10.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* the month view: what was actually run, the target, the verdict are in the hover (week / agenda show them) */
+.cal:not(.week) .chip .c-x { display: none; }
 .chip[draggable="true"] { cursor: grab; }
 .chip.dragging { opacity: .4; }
 /* SP-359 交換: the session picked first, and the one a drag would swap with */
@@ -249,24 +238,10 @@ body.swapping #cal .chip[draggable="true"] { cursor: copy; }
 #swap-toast.ok { border-color: #2e8b57; }
 #swap-toast button { font: inherit; font-size: 12.5px; border: 1px solid var(--line); background: var(--panel); color: var(--text); border-radius: 6px; padding: 3px 10px; cursor: pointer; }
 /* SP-82: an empty planned day's 「休息」 — drag it onto another day to swap */
-.chip.rest-mv { cursor: grab; color: var(--faint); border: 1px dashed var(--line); background: transparent; font-size: 12px; }
-.chip.st-done { background: color-mix(in srgb, var(--k) 24%, var(--cell)); }
-.chip.st-done .c-t::before { content: "✓ "; color: var(--cpc, var(--k)); font-weight: 800; }
-/* compliance: green ±20 %, yellow 20–50 %, red > 50 % or wrong type (engine/compliance.py) */
-.cp-green { --cpc: var(--good); } .cp-yellow { --cpc: var(--watch); } .cp-red { --cpc: var(--bad); }
-.chip.st-done[class*="cp-"] { background: color-mix(in srgb, var(--cpc) 15%, var(--cell)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--cpc) 45%, transparent); }
-.chip.st-done[class*="cp-"]:hover { background: color-mix(in srgb, var(--cpc) 24%, var(--cell)); }
-.cpw { font-weight: 700; color: var(--cpc, var(--text)); }
-.chip.st-missed { background: none; border-left-color: color-mix(in srgb, var(--k) 40%, var(--line)); color: var(--faint); }
-.chip.st-missed .c-t { text-decoration: line-through; font-weight: 500; }
-.chip.st-missed .c-r::before { content: "未完成"; color: var(--bad); text-decoration: none; font-size: 10px; }
-.chip.prov { background: color-mix(in srgb, var(--k) 6%, var(--cell)); border-left-style: dashed; }
-.chip.prov .c-t { font-weight: 500; }
-.chip.act { --k: var(--bar); cursor: default; background: none; border: 1px solid var(--line); border-left: 3px solid var(--k); }
-.chip.act .c-t { font-weight: 500; }
-.chip.act .c-t::before { content: "● "; color: var(--k); }
+.chip.rest-mv { cursor: grab; border-style: dashed; background: transparent; font-size: 12px; }
+.chip.act { cursor: default; }
 
-/* 推送狀態 on a chip: a small watch (✓ is 完成 only). Up to date = neutral, 需更新 / 失敗 coloured */
+/* 推送狀態: on a card only 需更新 / 失敗 (right of the ring); every state in the legend and the dialog */
 .sy { display: inline-grid; place-items: center; width: 13px; height: 13px; flex: none; }
 .sy svg { width: 13px; height: 13px; }
 .sy-ok { color: var(--faint); } .sy-warn { color: var(--watch); } .sy-bad { color: var(--bad); } .sy-none { color: var(--faint); opacity: .8; }
@@ -310,10 +285,9 @@ body.swapping #cal .chip[draggable="true"] { cursor: copy; }
 .ag-day .add { opacity: 1; width: 32px; height: 32px; border-color: var(--line); }
 
 .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--muted); align-items: center; }
-.legend .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; background: var(--k); margin-right: 5px; vertical-align: -1px; }
 .legend .sy { vertical-align: -2px; margin-right: 3px; }
-.legend .lg-g { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding-left: 12px; border-left: 1px solid var(--line); }
-.legend .lg-h { color: var(--text); font-weight: 600; }
+.legend .ph-sw { display: inline-block; width: 4px; height: 14px; border-radius: 2px; background: var(--ph-base); vertical-align: -2px; }
+.legend .bo-sw, .legend .rest-sw { margin-right: 0; }
 
 /* glossary hover (AeT / CP) */
 .term { position: relative; border-bottom: 1px dotted currentColor; cursor: help; }
@@ -344,9 +318,10 @@ dialog.sd .err:empty { display: none; }
 .kinds legend { font-size: 12.5px; color: var(--muted); padding: 0; margin-bottom: 3px; }
 .kinds label { display: inline-flex !important; align-items: center; gap: 5px; border: 1px solid var(--line); border-radius: 14px; padding: 3px 10px 3px 8px;
   cursor: pointer; font-size: 13px !important; color: var(--text) !important; }
-.kinds label::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--k); }
+.kinds label .sc-ic { width: 18px; height: 18px; }
+.kinds label .sc-ic svg { width: 14px; height: 14px; }
 .kinds input { position: absolute; opacity: 0; width: 1px !important; height: 1px; pointer-events: none; }
-.kinds label:has(input:checked) { border-color: var(--k); background: color-mix(in srgb, var(--k) 15%, transparent); font-weight: 600; }
+.kinds label:has(input:checked) { border-color: var(--accent); background: var(--soft); font-weight: 600; }
 .kinds label:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 1px; }
 .kinds label:has(input:disabled) { cursor: default; }
 .kinds label[hidden] { display: none !important; }
@@ -356,22 +331,17 @@ dialog.sd input.locked { background: var(--soft); color: var(--muted); cursor: p
 .done-box { font-size: 13px; border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; background: var(--bg); }
 /* planned vs actual (engine/plan_match.py) */
 .vs-h { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.vs-nums { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; margin-top: 2px; }
+.sd-watch { display: flex; align-items: center; gap: 5px; font-size: 12.5px; }
+.sd-watch[hidden] { display: none; }
 .vs { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 10px; margin: 6px 0 4px; font-variant-numeric: tabular-nums; }
 .vs dt { color: var(--muted); font-size: 12px; } .vs dd { margin: 0; overflow-wrap: anywhere; }
 .vs dd.off { color: var(--watch); font-weight: 600; }
-.offp { display: inline-flex; align-items: center; gap: 3px; font-size: 12px; font-weight: 700; color: var(--watch);
-  border: 1px solid color-mix(in srgb, var(--watch) 45%, transparent); border-radius: 999px; padding: 0 7px; }
-.chip .offp-i { color: var(--watch); font-weight: 800; font-size: 11px; }
-/* 強度不足／偏強 (SP-216): counted as 部分, not 沒照課表 */
-.part { display: inline-flex; align-items: center; gap: 3px; font-size: 12px; font-weight: 600; color: var(--watch);
-  border: 1px dashed color-mix(in srgb, var(--watch) 45%, transparent); border-radius: 999px; padding: 0 7px; }
-.chip .part-i { color: var(--watch); font-weight: 700; font-size: 11px; }
 .vs dd.part { color: var(--watch); }
 .vs-act { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 6px; }
 .vs-act select { max-width: 100%; }
 a.btn { text-decoration: none; display: inline-flex; align-items: center; gap: 4px; }
 button.chip.act { cursor: pointer; }
-button.chip.act:hover { background: color-mix(in srgb, var(--k) 10%, var(--cell)); }
 /* interval library: editor templates + the 換一個 drawer (engine/interval_library.py) */
 .var-box { display: grid; gap: 6px; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
 .var-box select { width: 100%; }
@@ -426,8 +396,7 @@ dialog.sd .pd-row select { width: auto; max-width: 100%; padding: 4px 8px; font-
 .tsug-act { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 
 /* ---- 自動調整 (autoplan.js) ---- */
-.adapt-note { color: #b36b00; }
-.chip.k-notice { border-style: dashed; opacity: .85; }
+.adapt-note { color: var(--watch); }
 /* ---- 課表偏好 dialog ---- */
 dialog.sd.wide { width: min(580px, 96vw); }
 dialog.sd form { max-height: calc(100vh - 40px); overflow: auto; }
@@ -567,6 +536,10 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
   .ag-day .chip .c-d { grid-column: 1 / -1; color: var(--muted); font-size: 12px; margin-top: 2px; white-space: normal;
     display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   .ag-day .chip .c-x { display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  /* SP-396: a 7-column month grid this narrow has ~50 px a day — tile + bar + ring only, the title in the
+     hover / dialog (phones get the agenda list, so this only guards the grid) */
+  .cal:not(.week) .chip { grid-template-columns: 22px auto; column-gap: 4px; }
+  .cal:not(.week) .chip .c-t, .cal:not(.week) .chip .c-m { display: none; }
 }
 @media (min-width: 700px) { #rec-btn .lbl-short, #pull-btn .lbl-short { display: none; } }
 @media (max-width: 1000px) and (min-width: 700px) { .cal { --sumw: 112px; } .cell { min-height: 104px; } .chip .c-x { display: none; } }
@@ -616,14 +589,14 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
         </div>
       </div>
       <a class="btn login" id="login-link" href="/api/v1/wko5/settings#sync" hidden>COROS 未登入 · 到設定頁登入 →</a>
-      <button class="btn" id="rec-btn" type="button" title="依實際完成狀況重算：錯過的標成未完成，之後的課重排（你改過的保留）">
+      <button class="btn" id="rec-btn" type="button" title="依實際完成狀況重算：錯過的標成跳過，之後的課重排（你改過的保留）">
         <span class="lbl-long">依實際進度重排</span><span class="lbl-short">重排</span></button>
       <button class="btn" id="pf-btn" type="button" title="課表偏好：可練日、時間上限、課表內容、自動調整" data-i18n-attr="title:schedule.pf.btn_title" aria-haspopup="dialog">⚙<span class="lbl-long" data-i18n="schedule.pf.btn"> 課表偏好</span></button>
       <div class="more">
         <button class="btn icon" id="more-btn" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="more-menu" aria-label="更多">⋯</button>
         <div class="menu right" id="more-menu" role="menu" aria-label="更多" hidden>
           <button type="button" role="menuitem" data-act="blackout">🏖 設定不排課日期 <span class="meta">連假、出遊</span></button>
-          <button type="button" role="menuitem" data-act="del-expired"><span data-i18n="schedule.del_all.menu">刪除所有過期未完成</span> <span class="meta" id="dx-n"></span></button>
+          <button type="button" role="menuitem" data-act="del-expired"><span data-i18n="schedule.del_all.menu">刪除所有過期跳過的課</span> <span class="meta" id="dx-n"></span></button>
           <hr>
           <div class="menu-h">從 COROS 移除（只動這裡推送過的）</div>
           <button type="button" role="menuitem" data-unpush="day">這一天 <span class="meta" id="um-day"></span></button>
@@ -658,6 +631,7 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
     <div class="dh"><div><h3 id="sd-h">新增課表</h3><span class="meta" id="sd-sub"></span></div>
       <button class="x" type="button" data-close aria-label="關閉">✕</button></div>
     <div id="sd-mark" hidden></div>
+    <div class="meta sd-watch" id="sd-watch" hidden></div>
     <div class="done-box" id="sd-done" hidden></div>
     <fieldset class="kinds" id="sd-kinds"><legend>類型</legend></fieldset>
     <div class="var-box" id="sd-tb">
@@ -737,6 +711,8 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
 </dialog>
 <script src="/api/v1/static/workout_editor.js"></script>
 <script src="/api/v1/static/plan_mark.js"></script>
+<script src="/api/v1/static/dashicons.js"></script>
+<script src="/api/v1/static/sesschip.js"></script>
 <script src="/api/v1/static/syncrun.js"></script>
 
 <!-- 換一個：the equivalent variants of an interval session (interval-prescription.md §C5.4) -->
@@ -989,10 +965,9 @@ const FAM_ZH = { aerobic: "有氧間歇", vo2max: "VO2max 間歇", speed: "速�
 const ADAPT_NOTE_TIP = "自動調整：輕鬆跑偏強＝平均功率超過 80% CP（Palladino）或 TSS 超過計畫 20%（TrainingPeaks），沒有功率時看平均心率超過 LTHR 的 94%（Friel Zone 3 以上），只標示、不改課表；課別分類為閾值或更強＝跑成強度課，48 小時內的強度課延後或降一階。兩級的分法是推估。";
 const famLabel = (f) => (window.I18N ? I18N.t("schedule.family." + f, FAM_ZH[f] || f) : FAM_ZH[f] || f);
 // race: the season plan's race day, or the 賽事計算機's 「匯出至課表」 (its steps are editable here); never added by hand
-// 熱適應課 (engine/heat_plan.py): a heat run keeps kind easy / long, tagged by its title
-const isHeat = (s) => s.kind === "heat_passive" || /熱適應|熱水浴|桑拿/.test(s.title || "");
-// 推送狀態 (coros_workouts.status_of) on a future / today's chip: a small watch, kept apart from
-// 完成 (✓ + the chip's compliance colour). Up to date = neutral grey; only 需更新 / 失敗 are coloured.
+// 熱適應課 (engine/heat_plan.py) keep kind easy / long, tagged by the title: their card shows the sun (SessChip.kind)
+// 推送狀態 (coros_workouts.status_of): a small watch. A future / today's card draws it only for 需更新 /
+// 失敗 (SP-396); the legend and the session dialog (#sd-watch) name every state.
 // Labels are provider-neutral (手錶), looked up when drawn (tt is defined further down).
 const SYNC = { pushed: "ok", updated: "ok", outdated: "warn", failed: "bad", not_pushed: "none" };
 const syLabel = (st) => (SYNC[st] ? tt("sy." + (st === "updated" ? "pushed" : st)) : "");
@@ -1060,6 +1035,7 @@ async function load() {
     D = await sj("GET", `${PAPI}/calendar?start=${a}&end=${b}`);
     if (!S.anchor) S.anchor = D.today;
     render();
+    renderLegend();
     staleWatch();
     sugCount();                                    // 排入測試 ▸ in the context menu
   } catch (e) {
@@ -1076,12 +1052,41 @@ function restMv(d, ss) {
   if (d < D.today || boOf(d) || (ss[d] || []).some((s) => s.state === "active" || s.state === "done")) return "";
   const a = mondayOf(d), b = addDays(a, 6);
   if (!(D.sessions || []).some((s) => s.state === "active" && s.day >= a && s.day <= b)) return "";
-  return `<span class="chip rest-mv" draggable="true" data-rest-from="${d}" title="${esc(tt("rest.mv_tip"))}">${esc(tt("rest.mv"))}</span>`;
+  return `<span class="chip sc fut rest-mv" draggable="true" data-rest-from="${d}" title="${esc(tt("rest.mv_tip"))}">${SessChip.icon("rest")}<span class="c-t sc-t">${esc(tt("rest.mv"))}</span></span>`;
+}
+// ---- session card (SP-396) ----
+// one session = one card (sesschip.js; docs/research/schedule-chip-ui.md §8.1): the type tile (↻ / ✎ in
+// its corner) · the title · the completion ring and, on a session still to come, the watch only when it
+// needs attention (需更新 / 失敗); minutes / TSS under it. Colour = how far off (left bar, done only),
+// shape = what happened, outline = not done yet. The verdict, what was actually run, the target, the
+// ⚠ note and the push state go in the hover (and the dialog); the week view / agenda add a line or two.
+const WATCH_ON_CARD = ["outdated", "failed"];
+// a done session's reason in the status words: 強度不足 / 項目不同 / 排輕鬆跑，實際騎車 …; none when only
+// time / TSS are off (the pie's fill says how much)
+function cardWhy(s) {
+  const st = SessChip.status(s), cp = s.compliance || {}, vs = s.vs || {};
+  if (st === "off_plan") return (vs.text || cp.off_text || "").replace(/^換了課：/, "");
+  if (st === "partial" && (cp.short || cp.soft)) return cp.label || "";
+  return "";
+}
+// 「部分 72% · 強度不足」 / 「完成」 / 「換了課 · …」 / 「跳過」 — "" for a session not done yet
+function verdict(s) {
+  const st = SessChip.status(s);
+  if (st === "todo") return "";
+  const why = cardWhy(s);
+  return SessChip.label(st, st === "partial" ? (s.compliance || {}).pct : null) + (why ? " · " + why : "");
+}
+// the numbers behind it, no thresholds (those live in the legend): TSS 74% · 時間 87% · 強度 72%
+function compNums(cp) {
+  if (!cp || cp.level === "missed") return "";
+  return [cp.tss_pct != null ? `TSS ${cp.tss_pct}%` : "", cp.duration_pct != null ? tt("vs.time_pct", { pct: cp.duration_pct }) : "",
+    cp.intensity_pct != null ? tt("vs.intensity_pct", { pct: cp.intensity_pct }) : ""].filter(Boolean).join(" · ");
 }
 function chipHtml(s, big) {
   const live = editable(s);
   const c = s.coros || {};
   const done = s.state === "done" && s.done_by;
+  const st = SessChip.status(s), prov = !!(s.provisional && s.state === "active");
   const est = s.tss_est ?? s.tss;
   // "45′ · TSS 35" (planned) — "TSS 35 → 41" once done (planned → actual)
   const tss = `TSS ${n0(est)}${done && s.done_by.tss != null ? ` → ${n0(s.done_by.tss)}` : ""}`;
@@ -1093,30 +1098,37 @@ function chipHtml(s, big) {
   // session class (workout_review.classify: Z5 間歇 / Z3 閾值 / 高強度長跑 / 中強度跑 …)
   const sl = done && s.done_by.session && s.done_by.session.type_label ? ` · ${s.done_by.session.type_label}` : "";
   // + the post-run self-rating, 「自評：Hard（COROS）」 (SP-231, worded by the server)
-  const rated = done && s.done_by.self_rating ? ` · ${esc(s.done_by.self_rating.text)}` : "";
-  const line = done ? `實際 ${esc((s.done_by.category_label || "完成") + sl)} ${hm(s.done_by.moving_s)}${s.done_by.distance_km ? ` · ${(+s.done_by.distance_km).toFixed(1)} km` : ""}${rated}` : esc(s.target || "");
-  const off = done && s.vs && s.vs.off_plan;
-  const part = done && s.vs && s.vs.short;          // 強度不足 / 偏強 (SP-216): 部分, not 沒照課表
-  const cp = s.compliance;
-  const cpTip = (cp ? `\n${compTip(cp)}` : "") + (off ? `\n${s.vs.text}` : part ? `\n${s.vs.short_text}` : "");
-  const icon = s.state === "active" && s.day >= D.today ? syIcon(c.status, c.error || c.reason || "") : "";
+  const rated = done && s.done_by.self_rating ? ` · ${s.done_by.self_rating.text}` : "";
+  const actual = done ? `實際 ${(s.done_by.category_label || "完成") + sl} ${hm(s.done_by.moving_s)}${s.done_by.distance_km ? ` · ${(+s.done_by.distance_km).toFixed(1)} km` : ""}${rated}` : "";
+  const line = done ? actual : s.target || "";
+  const why = cardWhy(s), vd = verdict(s), nums = compNums(s.compliance);
+  const vdFull = vd ? vd + (nums ? `（${nums}）` : "") : "";
+  const watch = s.state === "active" && s.day >= D.today && WATCH_ON_CARD.includes(c.status) ? syIcon(c.status, c.error || c.reason || "") : "";
   const pm = window.PlanMark ? PlanMark.lines(s, KINDS) : [];      // SP-318: ↻ auto / ✎ yours (plan_mark.js)
-  const lbl = `${KINDS[s.kind] || ""}${fam ? "（" + fam.text + "）" : ""}：${s.title}，${s.minutes || 0} 分鐘，${tss.replace("→", "實際")}${s.state === "missed" ? "，未完成" : s.state === "done" ? "，已完成" : ""}${s.provisional ? "，暫定" : ""}${icon ? "，" + syLabel(c.status) : ""}${pm.length ? "，" + PlanMark.label(s) : ""}`;
-  return `<button type="button" class="chip k-${esc(s.kind)}${fam ? " fam-" + esc(fam.id) : ""}${S.swapFrom && S.swapFrom.uid === s.uid ? " swap-src" : ""}${S.swapLock && S.swapLock.has(s.uid) ? " swap-lock" : ""} st-${esc(s.state)} ${cp && cp.level !== "missed" ? "cp-" + esc(cp.level) : ""} ${s.provisional && s.state === "active" ? "prov" : ""}" data-uid="${esc(s.uid)}"
-      ${live && !(S.swapLock && S.swapLock.has(s.uid)) ? 'draggable="true"' : ""}${S.swapLock && S.swapLock.has(s.uid) ? ' aria-disabled="true"' : ""} aria-label="${esc(lbl + (cp && cp.level !== "missed" ? "，" + compTip(cp) : ""))}" title="${esc(s.title + (fam && fam.sub_label ? "\n" + fam.text : "") + "\n" + meta + cpTip + (s.target ? "\n" + s.target : "") + (s.detail ? "\n" + s.detail : "") + (s.walk_hint ? "\n" + s.walk_hint : "") + (pm.length ? "\n" + pm.join("\n") : ""))}">
-    <span class="c-t">${isHeat(s) ? '<span class="heat-tag" aria-hidden="true">熱</span>' : ""}${esc(s.title)}</span><span class="c-r">${off ? `<span class="offp-i" aria-hidden="true">≠</span>` : part ? `<span class="part-i" aria-hidden="true">◐</span>` : ""}${pm.length ? PlanMark.icon(s) : ""}${icon}</span>
-    <span class="c-m">${meta}</span>
-    ${line ? `<span class="c-x">${line}</span>` : ""}${big && off ? `<span class="c-x offp-i">≠ ${esc(s.vs.text.replace("沒照課表：", "沒照課表 · "))}</span>` : ""}${big && part ? `<span class="c-x part-i">◐ ${esc(s.vs.short_text)}</span>` : ""}${big && (s.detail || s.walk_hint) && s.state !== "done" ? `<span class="c-d">${esc([s.detail, s.walk_hint].filter(Boolean).join(" "))}</span>` : ""}${s.state === "done" && s.note ? `<span class="c-x adapt-note">⚠ ${esc(s.note)}</span>` : ""}</button>`;
+  const lock = !!(S.swapLock && S.swapLock.has(s.uid));
+  // §7.1: type：title, time, TSS, the verdict, 暫定, changed by, the watch — the reading order on screen
+  const lbl = [`${KINDS[s.kind] || ""}${fam ? "（" + fam.text + "）" : ""}：${s.title}`, `${s.minutes || 0} 分鐘`, tss.replace("→", "實際"),
+    vdFull, prov ? SessChip.label("todo", null, { prov: true }) : "", pm.length ? PlanMark.label(s) : "", watch ? syLabel(c.status) : ""].filter(Boolean).join("，");
+  const tip = [s.title, fam && fam.sub_label ? fam.text : "", meta, vdFull, SessChip.hrNote(s.compliance), st === "partial" && s.vs && s.vs.short_text ? s.vs.short_text : "",
+    actual, s.target, s.detail, s.walk_hint, s.state === "done" && s.note ? "⚠ " + s.note : "", ...pm,
+    watch ? syLabel(c.status) + (c.error || c.reason ? "\n" + (c.error || c.reason) : "") : ""].filter(Boolean).join("\n");
+  return `<button type="button" class="chip sc ${SessChip.cls(s)}${S.swapFrom && S.swapFrom.uid === s.uid ? " swap-src" : ""}${lock ? " swap-lock" : ""}" data-uid="${esc(s.uid)}" data-kind="${esc(s.kind)}"
+      ${live && !lock ? 'draggable="true"' : ""}${lock ? ' aria-disabled="true"' : ""} aria-label="${esc(lbl)}" title="${esc(tip)}">
+    ${SessChip.icon(SessChip.kind(s), { badge: pm.length ? PlanMark.icon(s, true) : "" })}<span class="c-t sc-t">${esc(s.title)}</span><span class="c-r">${SessChip.ring(st, (s.compliance || {}).pct, { prov })}${watch}</span>
+    <span class="c-m">${esc(meta)}</span>
+    ${line ? `<span class="c-x">${esc(line)}</span>` : ""}${big && why ? `<span class="c-x c-why">${esc(vd)}</span>` : ""}${big && (s.detail || s.walk_hint) && s.state !== "done" ? `<span class="c-d">${esc([s.detail, s.walk_hint].filter(Boolean).join(" "))}</span>` : ""}</button>`;
 }
-const CAT_VAR = { road: "--s1", trail: "--s2", hike: "--s4", bike: "--s7", strength: "--s5", walk: "--s6", other: "--bar" };
-// an activity no session holds: 沒排課的活動 (click: summary, open it, pair it with a session)
+// an activity no session holds: 沒排課的活動, a dotted outline + its category's icon (click: summary,
+// open it, pair it with a session)
 function actHtml(a) {
   // + the session class (workout_review.classify): Z5 間歇 / Z3 閾值 / 高強度長跑 / 中強度跑 …
   const lab = a.session && a.session.type_label ? `${a.category_label} · ${a.session.type_label}` : a.category_label;
-  return `<button type="button" class="chip act" data-act="${a.index}" style="--k:var(${CAT_VAR[a.category] || "--bar"})" aria-label="${esc(`沒排課的活動：${lab} ${hm(a.moving_s)}`)}" title="${esc(`沒排課的活動：${lab} ${a.sport_type || ""}\n移動 ${hm(a.moving_s)}${a.distance_km ? ` · ${a.distance_km.toFixed(1)} km` : ""}${a.climbing_m ? ` · 爬升 ${Math.round(a.climbing_m)} m` : ""}\n點一下看摘要或配對到課表`)}">
-    <span class="c-t">${esc(lab)}</span><span class="c-r">${hm(a.moving_s)}</span>
-    ${a.tss != null ? `<span class="c-x">TSS ${n0(a.tss)}${a.distance_km ? ` · ${a.distance_km.toFixed(1)} km` : ""}</span>` : ""}</button>`;
+  const m = [a.tss != null ? `TSS ${n0(a.tss)}` : "", a.distance_km ? `${a.distance_km.toFixed(1)} km` : ""].filter(Boolean).join(" · ");
+  return `<button type="button" class="chip sc act" data-act="${a.index}" aria-label="${esc(`沒排課的活動：${lab} ${hm(a.moving_s)}`)}" title="${esc(`沒排課的活動：${lab} ${a.sport_type || ""}\n移動 ${hm(a.moving_s)}${a.distance_km ? ` · ${a.distance_km.toFixed(1)} km` : ""}${a.climbing_m ? ` · 爬升 ${Math.round(a.climbing_m)} m` : ""}\n點一下看摘要或配對到課表`)}">
+    ${SessChip.icon(SessChip.actKind(a))}<span class="c-t sc-t">${esc(lab)}</span><span class="c-r">${hm(a.moving_s)}</span>
+    ${m ? `<span class="c-m">${esc(m)}</span>` : ""}</button>`;
 }
+// ---- end session card ----
 function byDay() {
   const ss = {}, acts = {};
   for (const s of D.sessions) (ss[s.day] ||= []).push(s);
@@ -1127,14 +1139,6 @@ function byDay() {
   return { ss, acts };
 }
 const estOf = (s) => s.tss_est ?? s.tss ?? 0;
-// plan compliance (engine/compliance.py decides the level; thresholds live there)
-function compTip(cp) {
-  if (!cp) return "";
-  if (cp.level === "missed") return "未完成";
-  const parts = [cp.tss_pct != null ? `TSS ${cp.tss_pct}%` : "", cp.duration_pct != null ? `時間 ${cp.duration_pct}%` : "",
-    cp.intensity_pct != null ? tt("vs.intensity_pct", { pct: cp.intensity_pct }) : ""].filter(Boolean).join(" · ");
-  return `完成度 ${cp.pct != null ? cp.pct + "%" : "–"}（${cp.label}${parts ? "；" + parts : ""}）`;
-}
 function dayTip(d, ss) {
   const list = (ss || []).filter((s) => ["active", "done", "missed"].includes(s.state));
   const t = list.reduce((a, s) => a + estOf(s), 0);
@@ -1297,17 +1301,23 @@ function agendaHtml(a, ss, acts) {
       ${w.compliance ? `<span title="${esc(tt("wk.plan_tss_tip", { p: n0(w.planned_tss) }))}">${esc(tt("wk.done_tss"))} <b>${n0(w.done_tss)}</b></span>` : ""}
       ${w.provisional ? `<span class="faint">暫定</span>` : ""}</div>${days.join("")}</div>`;
 }
+// the legend (SP-399; design §7): one 「? 圖例」, the table shared with the 總覽 (SessChip.legend: 類型 /
+// 完成度 / 其他) plus this page's rows — the watch (only the two states a card draws), the day grid, 交換,
+// the pairing rule. Thresholds from the payload (compliance_levels), drawn again when they change.
+let legendKey = null;
 function renderLegend() {
-  // 完成狀態 (chip colour + ✓) and 推送狀態 (the watch at the top right) are separate groups
-  const grp = (h, items, tip) => `<span class="lg-g" role="group" aria-label="${esc(h)}"><b class="lg-h">${esc(h)}${tip ? ` <button type="button" class="qtip" aria-label="${esc(h)}" data-tip="${esc(tip)}">?</button>` : ""}</b>${items}</span>`;
-  // 強度課 as its three families (SP-79), each with its own colour
-  $("legend").innerHTML = KIND_ORDER.map((k) => k === "quality"
-    ? FAMILIES.map((f) => `<span class="k-quality fam-${f}"><i class="sw"></i>${esc(famLabel(f))}</span>`).join("")
-    : `<span class="k-${k}"><i class="sw"></i>${KINDS[k]}</span>`).join("") +
-    `<span>虛線＝暫定</span><span><i class="bo-sw"></i>不排課日期</span><span><i class="rest-sw"></i>${esc(tt("rest.legend"))} <button type="button" class="qtip" aria-label="${esc(tt("rest.legend"))}" data-tip="${esc(tt("rest.legend_tip"))}">?</button></span>` +
-    `<span>⇄ ${esc(tt("swap.legend"))} <button type="button" class="qtip" aria-label="${esc(tt("swap.legend"))}" data-tip="${esc(tt("swap.legend_tip"))}">?</button></span>` +
-    grp(tt("legend.done_h"), `<span title="完成的課依實際 ÷ 計畫（時間、TSS）上色">✓ <b class="cp-green cpw">±20%</b> <b class="cp-yellow cpw">20–50%</b> <b class="cp-red cpw">&gt;50% 或類型不符</b></span><span><b class="offp-i">≠</b> 沒照課表 <button type="button" class="qtip" aria-label="沒照課表的說明" data-tip="${esc(OFF_TIP())}">?</button></span><span><b class="part-i">◐</b> ${esc(tt("vs.short_legend"))}</span><span><s class="faint">未完成</s></span><span>● 沒排課的活動 <button type="button" class="qtip" aria-label="配對規則" data-tip="${esc(MATCH_TIP)}">?</button></span>`) +
-    grp(tt("legend.watch_h"), ["pushed", "outdated", "failed", "not_pushed"].map((k) => `<span>${syIcon(k)}${esc(tt("legend." + k))}</span>`).join(""), tt("legend.watch_tip"));
+  const lv = (D && D.compliance_levels) || {};
+  const key = JSON.stringify(lv);
+  if (key === legendKey) return;
+  legendKey = key;
+  const q = (label, tip) => ` <button type="button" class="qtip" aria-label="${esc(label)}" data-tip="${esc(tip)}">?</button>`;
+  $("legend").innerHTML = SessChip.legend({ levels: lv, other: [
+    [syIcon("outdated"), esc(tt("sy.outdated"))], [syIcon("failed"), esc(tt("sy.failed")) + esc(tt("lg.failed_red"))],
+    ['<i class="bo-sw" aria-hidden="true"></i>', esc(tt("lg.blackout"))],
+    ['<i class="rest-sw" aria-hidden="true"></i>', esc(tt("rest.legend")) + q(tt("rest.legend"), tt("rest.legend_tip"))],
+    ['<span aria-hidden="true">⇄</span>', esc(tt("swap.legend")) + q(tt("swap.legend"), tt("swap.legend_tip"))],
+    ['<i class="ph-sw" aria-hidden="true"></i>', esc(tt("lg.phase"))],
+    ['<span aria-hidden="true">⇆</span>', esc(tt("lg.match")) + q(tt("lg.match"), MATCH_TIP)]] });
 }
 
 // ---------------- toolbar ----------------
@@ -1395,7 +1405,7 @@ function ask(title, html, ok = "確定", { cancel = "取消", danger = false } =
 }
 
 // ---- reconcile ----
-const ACT = { added: ["＋ 新增", "add-c"], changed: ["～ 變更", "ch-c"], removed: ["－ 移除", "rm-c"], missed: ["✕ 未完成", "rm-c"], done: ["✓ 完成", "add-c"],
+const ACT = { added: ["＋ 新增", "add-c"], changed: ["～ 變更", "ch-c"], removed: ["－ 移除", "rm-c"], missed: ["○ 跳過", "rm-c"], done: ["✓ 完成", "add-c"],
   conflict: ["⚠ 在不排課日期內", "ch-c"] };
 // `decide`: edited sessions on a 不排課日期 get a move / delete / keep choice (read by decisions())
 function changesHtml(byDay, decide = false) {
@@ -1424,7 +1434,7 @@ async function reconcile(opts = {}) {
   try { p = await sj("GET", `${PAPI}/reconcile`); } catch (e) { return errMsg("重排", e); }
   msg("");
   const n = (p.changes || []).length;
-  const ok = await ask(opts.title || "依實際進度重排", `<p class="meta" style="margin:0">${opts.intro || "錯過的課標成未完成，之後還沒改過的課依目前狀況重排；你改過或自己加的課會保留。"}</p>${changesHtml(p.by_day, true)}`,
+  const ok = await ask(opts.title || "依實際進度重排", `<p class="meta" style="margin:0">${opts.intro || "錯過的課標成跳過，之後還沒改過的課依目前狀況重排；你改過或自己加的課會保留。"}</p>${changesHtml(p.by_day, true)}`,
     n ? `套用 ${n} 項變動` : "", { cancel: n ? "取消" : "關閉" });
   if (!ok) { if (opts.cancelMsg) msg(n ? opts.cancelMsg : "偏好已儲存；課表不需要變動", n ? "" : "ok"); return; }
   const dec = decisions();
@@ -1492,7 +1502,7 @@ async function unpush(scope) {
 // ---- 抓活動: 資料來源 (COROS／TP) → 這裡 ----
 // The same run as 設定 › 立即同步 (syncrun.js, POST /sync/<src>/start): only the 資料來源 in use
 // (GET /sync/primary). The sync router isn't mounted in the demo — the button stays hidden.
-// Done: reload (new activities pair with sessions: ✓／未完成), then once more a few seconds later
+// Done: reload (new activities pair with sessions: ✓／跳過), then once more a few seconds later
 // for the background 自動調整 (plan_auto.after_sync: proposal banner / log, re-push).
 let PRI = null;                                    // { source, label, logged_in, enabled, busy }
 const PULL_REPOLL_MS = 5000;
@@ -1543,8 +1553,8 @@ let dlg = { uid: null, targetTouched: false };
 // 強度課 is offered as its three families (SP-79): each radio is kind quality + data-fam; the
 // family is saved only when you pick one (else it is read from the steps, session_family)
 $("sd-kinds").insertAdjacentHTML("beforeend", [...KIND_ORDER, "heat_passive", "race"].map((k) => k === "quality"
-  ? FAMILIES.map((f) => `<label class="k-quality fam-${f}"><input type="radio" name="kind" value="quality" data-fam="${f}">${esc(famLabel(f))}</label>`).join("")
-  : `<label class="k-${k}"${KIND_ORDER.includes(k) ? "" : " hidden"}><input type="radio" name="kind" value="${k}">${KINDS[k]}</label>`).join(""));
+  ? FAMILIES.map((f) => `<label data-kind="quality" data-fam="${f}"><input type="radio" name="kind" value="quality" data-fam="${f}">${SessChip.icon("quality", { fam: f })}${esc(famLabel(f))}</label>`).join("")
+  : `<label data-kind="${k}"${KIND_ORDER.includes(k) ? "" : " hidden"}><input type="radio" name="kind" value="${k}">${SessChip.icon(SessChip.kind({ kind: k }))}${KINDS[k]}</label>`).join(""));
 const F = $("sd-form");
 const kindVal = () => (F.querySelector('input[name="kind"]:checked') || {}).value || "easy";
 const famVal = () => { const r = F.querySelector('input[name="kind"]:checked'); return r && r.value === "quality" ? r.dataset.fam || null : null; };
@@ -1997,12 +2007,9 @@ $("vd").addEventListener("click", async (e) => {
 const MATCH_TIP = "配對：同一天、同類運動（路跑／越野）先配；一天兩筆以上時，配時間和強度最接近的課。長跑、強度課、測試在同一週別天做完也算。" +
   "一筆活動只算一堂課；沒排課那天的跑步維持獨立一筆，不會把之後的課拉過來。可以手動改配或取消，取消後這筆活動不再自動配對。" +
   "（COROS 的活動檔沒有記錄是照哪個課表跑的，所以由日期和運動類型配對。）";
-// 完成度等級 (SP-216, engine/plan_match.graded): a function — tt is defined further down. One text for
-// 課表 and 課表統計 (SP-398, common.legend.levels), the thresholds from the payload (compliance.COMPLIANCE)
-const OFF_TIP = () => {
-  const L = (D && D.compliance_levels) || { green: 0.2, yellow: 0.5 };
-  return window.I18N ? I18N.t("common.legend.levels", { green: Math.round(L.green * 100), yellow: Math.round(L.yellow * 100) }) : "";
-};
+// 完成度等級 (SP-216, engine/plan_match.graded): the legend's 完成度 section as text (sesschip.js), with
+// the payload's thresholds
+const OFF_TIP = () => SessChip.levelsText(D && D.compliance_levels);
 const INT_LB = { hard: "強度", easy: "輕鬆" };
 const VIEWER = (a) => `/api/v1/wko5/viewer?${new URLSearchParams({ workout: a.index, label: `${md(a.date)} ${a.category_label || ""} ${hm(a.moving_s)}` })}`;
 const actOf = (i) => (D.activities || []).find((a) => a.index === i);
@@ -2014,25 +2021,32 @@ function linkSelect(s, ph) {
     opts.map((a) => `<option value="${a.index}">${esc(actTxt(a))}</option>`).join("") + `</select>`;
 }
 const linkSel = (s, ph) => { const h = linkSelect(s, ph); return h ? `<div class="vs-act">${h}</div>` : ""; };
+// ---- done box (SP-396) ----
+// the dialog's 完成盒 (docs/research/schedule-chip-ui.md §8.3): the card's ring + the verdict on the
+// first line (同一套字: 部分 72% · 強度不足), the three numbers under it (no thresholds), one ? —
+// then planned vs actual and the long reason
 function vsHtml(s) {
   const a = s.done_by || {}, vs = s.vs || {}, cp = s.compliance;
+  const st = SessChip.status(s), why = cardWhy(s), nums = compNums(cp);
   const plan = [(s.kind === "quality" && s.quality_family ? s.quality_family.label : KINDS[s.kind]) || "", s.minutes ? `${s.minutes}′` : "", `TSS ${n0(s.tss_est ?? s.tss)}`, vs.planned ? INT_LB[vs.planned] : ""].filter(Boolean).join(" · ");
   const real = [a.category_label || "", hm(a.moving_s), a.distance_km ? `${(+a.distance_km).toFixed(1)} km` : "", a.climbing_m ? `↑${Math.round(a.climbing_m)} m` : "",
     a.tss != null ? `TSS ${n0(a.tss)}` : "", vs.actual ? INT_LB[vs.actual] : "", a.self_rating ? a.self_rating.text : ""].filter(Boolean).join(" · ");
   const hard = vs.hard_min != null ? `閾值以上 ${vs.hard_min} 分${vs.need_min ? `（強度課門檻 ${vs.need_min} 分）` : ""}` : "";
-  return `<div class="vs-h"><b class="ok">✓ 已完成</b><span class="meta">${esc(vs.match_label || "")}</span>` +
-    `<button type="button" class="qtip" aria-label="配對規則" data-tip="${esc(MATCH_TIP)}">?</button>` +
-    (vs.off_plan ? `<span class="offp" title="${esc(vs.text)}">≠ 沒照課表</span><button type="button" class="qtip" aria-label="沒照課表的說明" data-tip="${esc(OFF_TIP())}">?</button>` : "") +
-    (vs.short ? `<span class="part">◐ ${esc((cp && cp.label) || tt("vs.short_legend"))}</span><button type="button" class="qtip" aria-label="${esc(tt("vs.levels_aria"))}" data-tip="${esc(OFF_TIP())}">?</button>` : "") + `</div>` +
+  return `<div class="vs-h">${SessChip.ring(st, (cp || {}).pct)}<b>${esc(SessChip.label(st, st === "partial" ? (cp || {}).pct : null))}</b>` +
+    (why ? `<span class="meta">· ${esc(why)}</span>` : "") +
+    `<button type="button" class="qtip" aria-label="${esc(tt("vs.levels_aria"))}" data-tip="${esc(OFF_TIP() + "\n\n" + MATCH_TIP)}">?</button>` +
+    (vs.match_label ? `<span class="meta">${esc(vs.match_label)}</span>` : "") + `</div>` +
+    (nums ? `<div class="vs-nums">${esc(nums)}</div>` : "") +
+    (SessChip.hrNote(cp) ? `<div class="vs-nums">${esc(SessChip.hrNote(cp))}</div>` : "") +
     `<dl class="vs"><dt>計畫</dt><dd>${esc(plan)}</dd><dt>實際</dt><dd class="${vs.off_plan ? "off" : ""}">${esc(real)}</dd>` +
-    (vs.off_plan ? `<dt></dt><dd class="off">${esc(vs.text.replace("沒照課表：", ""))}</dd>` : "") +
+    (vs.off_plan ? `<dt></dt><dd class="off">${esc(vs.text.replace(/^換了課：/, ""))}</dd>` : "") +
     (vs.short ? `<dt></dt><dd class="part">${esc(vs.short_text)}</dd>` : "") +
     (hard ? `<dt></dt><dd class="meta">${esc(hard)}</dd>` : "") + `</dl>` +
-    (cp ? `<span class="cp-${esc(cp.level)}"><span class="cpw">${esc(compTip(cp))}</span></span>` : "") +
     `<div class="vs-act">${a.index != null ? `<a class="btn" href="${esc(VIEWER(a))}">📈 開啟活動</a>` : ""}` +
     `<button type="button" class="btn" data-unlink="${esc(s.uid)}" title="這筆活動不算這堂課；之後也不會再自動配對">取消配對</button>` +
     linkSelect(s, "改配到…") + `</div>`;
 }
+// ---- end done box ----
 async function doLink(uid, index) {
   try {
     await sj("POST", `${PAPI}/sessions/${encodeURIComponent(uid)}/link`, { index: +index });
@@ -2065,7 +2079,7 @@ function openAct(index) {
   $("ad-body").innerHTML = `<p class="meta" style="margin:0 0 6px">這天沒有對應的課表，算計畫外的訓練 <button type="button" class="qtip" aria-label="配對規則" data-tip="${esc(MATCH_TIP)}">?</button></p>` +
     `<dl class="vs">${rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("")}</dl>` +
     `<div class="vs-act"><a class="btn" href="${esc(VIEWER(a))}">📈 開啟活動</a>` +
-    (ss.length ? `<select id="ad-link" aria-label="配對到課表"><option value="">配對到課表…</option>${ss.map((s) => `<option value="${esc(s.uid)}">${esc(`${md(s.day)} ${s.title}${s.state === "done" ? "（改配這筆）" : s.state === "missed" ? "（未完成）" : ""}`)}</option>`).join("")}</select>` : "") +
+    (ss.length ? `<select id="ad-link" aria-label="配對到課表"><option value="">配對到課表…</option>${ss.map((s) => `<option value="${esc(s.uid)}">${esc(`${md(s.day)} ${s.title}${s.state === "done" ? "（改配這筆）" : s.state === "missed" ? "（跳過）" : ""}`)}</option>`).join("")}</select>` : "") +
     `</div>`;
   $("ad").showModal();
 }
@@ -2085,20 +2099,25 @@ function openDlg(s, day) {
   $("sd-sub").textContent = `${md(d)}（週${wd(d)}）${s && s.quality_family ? " · " + s.quality_family.text : ""}${s && s.provisional && s.state === "active" ? " · 暫定" : ""}${s && s.origin === "custom" ? " · 自訂" : s && s.edited ? " · 已修改" : ""}`;
   $("sd-mark").innerHTML = s && window.PlanMark ? PlanMark.detail(s, KINDS) : "";      // SP-318
   $("sd-mark").hidden = !$("sd-mark").innerHTML;
+  // 手錶: the push state in words (a card draws only 需更新 / 失敗; SP-396)
+  const cst = s && s.coros && s.coros.status;
+  $("sd-watch").hidden = !(cst && SYNC[cst]);
+  $("sd-watch").innerHTML = $("sd-watch").hidden ? "" : `${syIcon(cst)} ${esc(tt("sy.line", { provider: (D.coros || {}).provider_label || "COROS", label: syLabel(cst) }))}` +
+    (cst === "failed" && s.coros.error ? ` · ${esc(s.coros.error)}` : cst === "outdated" && s.coros.reason ? ` · ${esc(s.coros.reason)}` : "");
   const db = $("sd-done");
   const pastOpen = s && s.state === "active" && s.day <= D.today && (s.link_options || []).length;
   db.hidden = !(s && (s.state === "done" || s.state === "missed" || pastOpen));
   if (s && s.state === "done") db.innerHTML = vsHtml(s) +
     (s.note ? `<br><span class="adapt-note" title="${esc(window.I18N ? I18N.t("schedule.pf.adapt_note_tip", ADAPT_NOTE_TIP) : ADAPT_NOTE_TIP)}">⚠ ${esc(s.note)}</span>` : "");
-  else if (s && s.state === "missed") db.innerHTML = `<b class="err">未完成</b>：這天沒有對應的活動${s.note ? `（${esc(s.note)}）` : ""}${linkSel(s, "配對活動…")}`;
+  else if (s && s.state === "missed") db.innerHTML = `<div class="vs-h">${SessChip.ring("missed")}<b>${esc(SessChip.label("missed"))}</b><span class="meta">：這天沒有對應的活動${s.note ? `（${esc(s.note)}）` : ""}</span></div>${linkSel(s, "配對活動…")}`;
   else if (pastOpen) db.innerHTML = `<span class="meta">還沒配到活動</span>${linkSel(s, "配對活動…")}`;
   F.day.min = D.today; F.day.max = addDays(D.horizon_end > D.today ? D.horizon_end : D.today, 60);
   F.day.value = d;
   dlg.stepsFam = s ? s.steps_family || null : null;
   setKind(s ? s.kind : "easy", s && s.quality_family ? s.quality_family.id : null);
   famHint();
-  F.querySelector('#sd-kinds label.k-heat_passive').hidden = !(s && s.kind === "heat_passive");
-  F.querySelector('#sd-kinds label.k-race').hidden = !(s && s.kind === "race");
+  F.querySelector('#sd-kinds label[data-kind="heat_passive"]').hidden = !(s && s.kind === "heat_passive");
+  F.querySelector('#sd-kinds label[data-kind="race"]').hidden = !(s && s.kind === "race");
   F.title.value = s ? s.title : (D.default_titles || {}).easy || "輕鬆跑";
   F.minutes.value = s ? s.minutes : 45;
   F.target.value = s ? s.target || "" : (D.targets || {}).easy || "";

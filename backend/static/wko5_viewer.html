@@ -1322,6 +1322,14 @@ async function renderCard(card, v, di, c, q, token, opts = {}) {
       + (c.kind === "climbvam" && window.cvQuery ? cvQuery(c) : "")    // climb_vam.js
       + (STALE_OK && opts.stale !== false ? "&stale=1" : ""));
     if (token !== loadToken) return;
+    if (res.pending) {
+      // SP-394: a first import's older activities still back-filling and this chart reads them
+      // (CTL's warm-up, a long range): no line until they are in; asked again every 15 s
+      disposeCardCharts(card);
+      card.innerHTML = `<h2>${esc(res.title || c.title || c.kind)}</h2><div class="loading">${esc(res.pending.message)}</div>`;
+      setTimeout(() => { if (token === loadToken) renderCard(card, v, di, c, q, token, opts); }, 15000);
+      return;
+    }
     card._res = res;
     card._ctx = { v, di, c, q };
     disposeCardCharts(card);

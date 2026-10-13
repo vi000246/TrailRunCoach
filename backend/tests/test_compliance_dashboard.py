@@ -360,25 +360,30 @@ def test_status_words_are_neutral_sp398():
     assert C.session_compliance({"kind": "easy", "state": "missed", "day": "2026-09-29"})["label"] == "跳過"
     vs = {"off_plan": True, "text": "換了課：排強度課，實際跑輕鬆", "intensity_pct": 30}
     assert C.with_plan_check(_comp("green", 100), vs)["label"] == "換了課"
-    zh, en = _catalog("zh-TW", "compliance"), _catalog("en", "compliance")
-    assert [zh["status." + s] for s in ("done", "partial", "off_plan", "missed")] == ["完成", "部分", "換了課", "跳過"]
-    assert [en["status." + s] for s in ("done", "partial", "off_plan", "missed")] == \
+    # one source for the words: the cards' common.legend.status.* (課表統計 reads them too)
+    zc, ec = _catalog("zh-TW", "common"), _catalog("en", "common")
+    assert [zc["legend.status." + s] for s in ("done", "partial", "off_plan", "missed")] == ["完成", "部分", "換了課", "跳過"]
+    assert [ec["legend.status." + s] for s in ("done", "partial", "off_plan", "missed")] == \
         ["Done", "Partly", "Different session", "Skipped"]
-    words = ("沒做", "沒照課表", "走樣", "沒達到")
+    zh = _catalog("zh-TW", "compliance")
+    assert not [k for k in zh if k.startswith("status.") and k != "status.open"]
+    words = ("沒做", "沒照課表", "走樣", "沒達到", "未完成")
     assert not [(k, w) for k, v in zh.items() for w in words if w in v]
 
 
 def test_levels_legend_has_one_source_sp398():
-    # the four levels are written once (common.legend.levels, thresholds from the payload's
-    # compliance_levels); 課表's own copy is gone
+    # the four levels are written once — the cards' legend (common.legend.*_tip + levels_note, the
+    # thresholds from the payload) — and both 課表's dialog and 課表統計 read it through sesschip.js
     for loc in ("zh-TW", "en"):
-        lv = _catalog(loc, "common")["legend.levels"]
-        assert "{green}" in lv and "{yellow}" in lv
+        cm = _catalog(loc, "common")
+        assert "legend.levels" not in cm and cm["legend.levels_note"] and "{green}" in cm["legend.done_tip"]
         assert "vs.levels_tip" not in _catalog(loc, "schedule")
     from pathlib import Path
     static = Path(C.__file__).parents[1] / "static"
-    assert 'I18N.t("common.legend.levels"' in (static / "schedule.html").read_text("utf-8")
-    assert 'I18N.t("common.legend.levels"' in (static / "compliance.html").read_text("utf-8")
+    assert "SessChip.levelsText(" in (static / "schedule.html").read_text("utf-8")
+    comp = (static / "compliance.html").read_text("utf-8")
+    assert "SessChip.levelsText(" in comp and "/static/sesschip.js" in comp
+    assert 'T("levels_note")' in (static / "sesschip.js").read_text("utf-8")
 
 
 def test_compliance_page_has_no_red_for_skipped_sp398():
@@ -542,8 +547,25 @@ def test_schedule_week_sum_is_done_tss_without_colour_sp401():
     comp = _fn(html, "compW")
     assert "cp-" not in comp and "w.compliance.pct" not in comp and 'tt("wk.done_tss")' in comp
     assert 'tt("wk.plan_tss_tip"' in comp
-    ag = html[html.index('<div class="ag-sum'):html.index("function renderLegend")]
+    i = html.index('<div class="ag-sum')
+    ag = html[i:html.index('${days.join("")}', i)]
     assert "完成度" not in ag and "cp-${" not in ag and 'tt("wk.done_tss")' in ag
     for loc in ("zh-TW", "en"):
         sch = _catalog(loc, "schedule")
         assert sch["wk.done_tss"] and "{p}" in sch["wk.plan_tss_tip"]
+
+
+def test_no_old_completion_words_on_the_card_pages_sp398():
+    # after the card line (SP-395…402): the 課表 / 總覽 / 課表統計 pages and sesschip.js say 換了課 / 跳過;
+    # the dialog strips plan_match's 「換了課：」 (no 「沒照課表」 heading over a 「換了課：…」 line)
+    from pathlib import Path
+    static = Path(C.__file__).parents[1] / "static"
+    for f in ("schedule.html", "overview.html", "compliance.html", "sesschip.js"):
+        src = (static / f).read_text("utf-8")
+        assert "沒照課表" not in src and "未完成" not in src, f
+    sch = (static / "schedule.html").read_text("utf-8")
+    assert 'vs.text.replace(/^換了課：/, "")' in sch
+    for loc in ("zh-TW",):
+        for ns in ("schedule", "overview", "common", "compliance"):
+            cat = _catalog(loc, ns)
+            assert not [k for k, v in cat.items() if "沒照課表" in v or "未完成" in v], ns
