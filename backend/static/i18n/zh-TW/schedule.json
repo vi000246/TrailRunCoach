@@ -344,5 +344,7 @@
   "ctx.to_climb_sub": "想爬山：穩定地形、心率不超過輕鬆跑上限",
   "climb.swap_hint": "想爬山：把這堂長跑換成同樣時間的長爬坡有氧（階梯步道、樓梯、跑步機坡度；心率不超過輕鬆跑上限）。算你的修改，自動調整不會改回來。",
   "climb.swapped": "已換成「{title}」",
-  "climb.swap_what": "換成長爬坡有氧"
+  "climb.swap_what": "換成長爬坡有氧",
+  "wk.done_tss": "完成 TSS",
+  "wk.plan_tss_tip": "計畫 TSS {p}；完成的算這週所有活動（含沒排課的）"
 }

@@ -508,3 +508,42 @@ def test_api_compliance_highlight_sp403(monkeypatch):
         assert b["highlight"] == {"kind": "count", "n": 1}            # no record, no last week: the count
         monkeypatch.setattr(plan_sessions, "_run_history", lambda before: 1 / 0)
         assert e.c.get(f"{API}/compliance?start=2026-09-21&end=2026-10-04").json()["highlight"] is not None
+
+
+# ---------------------------------------------------------------------------
+# SP-401: no pass line, no denominator to fall short of
+# ---------------------------------------------------------------------------
+
+def _fn(src, name):
+    import re
+    m = re.search(r"\n(?:const %s = |function %s\()" % (name, name), src)
+    assert m, name
+    nxt = re.search(r"\n(?:function |const [A-Za-z]+ = \(|// )", src[m.end():])
+    return src[m.start(): m.end() + (nxt.start() if nxt else len(src))]
+
+
+def test_weekly_chart_counts_sessions_without_a_pass_line_sp401():
+    from pathlib import Path
+    static = Path(C.__file__).parents[1] / "static"
+    html = (static / "compliance.html").read_text("utf-8")
+    trend = _fn(html, "renderTrend")
+    assert "markLine" not in trend and "threshold" not in trend and '"bar"' in trend and "completed" in trend
+    assert "--watch" not in trend
+    # the load tile's bar: up to 100 %, no target mark
+    assert '<b style="left' not in html and "/ 1.5" not in html
+    zh, en = _catalog("zh-TW", "compliance"), _catalog("en", "compliance")
+    assert "trend.sub" not in zh and "{pct}" not in zh["trend.tip"] and "黑線" not in zh["kpi.tss_tip"]
+    assert set(k for k in zh if k.startswith("trend.")) == set(k for k in en if k.startswith("trend."))
+
+
+def test_schedule_week_sum_is_done_tss_without_colour_sp401():
+    from pathlib import Path
+    html = (Path(C.__file__).parents[1] / "static" / "schedule.html").read_text("utf-8")
+    comp = _fn(html, "compW")
+    assert "cp-" not in comp and "w.compliance.pct" not in comp and 'tt("wk.done_tss")' in comp
+    assert 'tt("wk.plan_tss_tip"' in comp
+    ag = html[html.index('<div class="ag-sum'):html.index("function renderLegend")]
+    assert "完成度" not in ag and "cp-${" not in ag and 'tt("wk.done_tss")' in ag
+    for loc in ("zh-TW", "en"):
+        sch = _catalog(loc, "schedule")
+        assert sch["wk.done_tss"] and "{p}" in sch["wk.plan_tss_tip"]

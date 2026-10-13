@@ -344,5 +344,7 @@
   "ctx.to_climb_sub": "for climbing: steady terrain, heart rate no higher than the easy-run cap",
   "climb.swap_hint": "Want to climb? Turn this long run into a long aerobic climb of the same time (stepped trails, stairs, a treadmill incline; heart rate no higher than the easy-run cap). It counts as your change: automatic adjustments won't undo it.",
   "climb.swapped": "Changed to \"{title}\"",
-  "climb.swap_what": "Make it a long aerobic climb"
+  "climb.swap_what": "Make it a long aerobic climb",
+  "wk.done_tss": "TSS done",
+  "wk.plan_tss_tip": "Planned TSS {p}; done counts every activity of the week (unplanned ones too)"
 }

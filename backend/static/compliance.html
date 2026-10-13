@@ -118,7 +118,6 @@ h2 .meta { font-weight: 400; }
 .split i { display: block; height: 100%; }
 .track { height: 8px; background: color-mix(in srgb, var(--line) 85%, transparent); border-radius: 4px; overflow: hidden; position: relative; margin-top: 6px; }
 .track i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; background: var(--accent); }
-.track b { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--text); border-radius: 1px; }
 
 /* 本週 (SP-400): four tiles that only add up, the week's sessions one dot each (done ones by
    kind, skipped ones not drawn, the rest an empty ring), the 安心句 (plan_marks auto) */
@@ -320,7 +319,7 @@ details.coach[open] > summary { margin-bottom: 12px; }
       <div class="legend" id="wk-legend"></div>
     </section>
     <section aria-labelledby="tr-h">
-      <h2 id="tr-h"><span id="tr-t" data-i18n="compliance.trend.title">每週完成率</span> <span class="meta" id="tr-sub"></span>
+      <h2 id="tr-h"><span id="tr-t" data-i18n="compliance.trend.title">每週完成堂數</span>
         <span class="seg unitsw" role="group" data-i18n-attr="aria-label:compliance.unit.label" aria-label="單位" style="margin-left:auto">
           <button type="button" data-u="day" data-i18n="compliance.unit.day">天</button><button type="button" data-u="week" data-i18n="compliance.unit.week">週</button><button type="button" data-u="month" data-i18n="compliance.unit.month">月</button>
         </span><span id="tr-q"></span></h2>
@@ -480,7 +479,7 @@ function kpi(k, tip, v, sub, extra = "") {
 function render() {
   const d = S.data, t = d.totals;
   const split = STATUS.filter((s) => s !== "open" && t[s]).map((s) => `<i class="bg-${s}" style="flex:${t[s]}" title="${esc(T("status." + s))} ${t[s]}"></i>`).join("");
-  const st = d.streak, ast = d.active_streak || { weeks: 0, best: 0 };
+  const ast = d.active_streak || { weeks: 0, best: 0 };
   const unit = `<small>${esc(T("kpi.sessions_unit"))}</small>`;
   renderNow();
   $("kpis").innerHTML = [
@@ -492,7 +491,7 @@ function render() {
       esc(T("kpi.ok_sub", { pct: t.due ? pc(t.ok_rate) : "–", partial: t.partial, off: t.off_plan }))),
     kpi(T("kpi.tss"), T("kpi.tss_tip"), t.tss_pct != null ? `${t.tss_pct}<small>%</small>` : "–",
       esc(T("kpi.tss_sub", { a: n0(t.actual_tss), p: n0(t.planned_tss) })),
-      `<div class="track" role="img" aria-label="${esc(T("kpi.tss_sub", { a: n0(t.actual_tss), p: n0(t.planned_tss) }))}"><i style="width:${Math.min(100, (t.tss_pct || 0) / 1.5)}%"></i><b style="left:${100 / 1.5}%"></b></div>`),
+      `<div class="track" role="img" aria-label="${esc(T("kpi.tss_sub", { a: n0(t.actual_tss), p: n0(t.planned_tss) }))}"><i style="width:${Math.min(100, t.tss_pct || 0)}%"></i></div>`),
     kpi(T("kpi.hours"), T("kpi.hours_tip"), `${h1(t.actual_hours)}<small>/ ${h1(t.planned_hours)} h</small>`,
       esc(t.planned_hours ? T("kpi.hours_sub", { pct: Math.round(t.actual_hours / t.planned_hours * 100) }) : T("empty_short"))),
     kpi(T("kpi.streak"), T("kpi.streak_tip"), `${ast.weeks}<small>${esc(T("kpi.weeks_unit"))}</small>`,
@@ -500,7 +499,7 @@ function render() {
   ].join("");
   renderPhase(d.phase);
   renderWeeks(buckets());
-  renderTrend(buckets(), st);
+  renderTrend(buckets());
   renderKinds(d.by_kind);
   renderList();
 }
@@ -649,24 +648,21 @@ function renderRatio() {
           borderColor: lb.c, borderWidth: 1, borderRadius: 4, padding: [2, 5], formatter: () => `${F ? F.num(last[1], 2) : last[1].toFixed(2)} ${name(lb)}` } }] } }] }, true);
 }
 
-function renderTrend(ws, st) {
-  const rows = ws.filter((w) => w.due);
-  $("tr-q").innerHTML = q(T("trend.tip" + sfx(), { pct: Math.round(st.threshold * 100) }));
-  $("tr-sub").textContent = rows.length ? T("trend.sub", { pct: Math.round(st.threshold * 100) }) : "";
+// 每週完成堂數 (SP-401): how many sessions were done per 天 / 週 / 月 — bars that only add up, no
+// pass line and no colour for falling short (docs/research/positive-compliance.md §1 #7)
+function renderTrend(ws) {
+  const rows = ws.filter((w) => w.start <= S.today && (S.unit !== "day" || w.due || w.completed));
+  $("tr-q").innerHTML = q(T("trend.tip" + sfx()));
   $("tr-plot").setAttribute("aria-label", T("trend.aria" + sfx()));
-  const th = Math.round(st.threshold * 100);
-  chart("tr-plot").setOption({ ...axisBase(), grid: { left: 40, right: 38, top: 14, bottom: 26 },
-    tooltip: { ...axisBase().tooltip, axisPointer: { type: "line", lineStyle: { color: css("--faint") } }, formatter: (ps) => {
+  chart("tr-plot").setOption({ ...axisBase(), grid: { left: 40, right: 12, top: 14, bottom: 26 },
+    tooltip: { ...axisBase().tooltip, formatter: (ps) => {
       const w = rows[ps[0].dataIndex];
-      return `<b>${esc(bHead(w))}</b><br>${esc(T("trend.rate"))} ${pc(w.rate)}%<br>${esc(T("kpi.rate_sub", { done: w.completed, due: w.due }))}` +
+      return `<b>${esc(bHead(w))}</b><br>${esc(T("trend.done", { n: w.completed || 0 }))}` +
         (w.current ? `<br>${esc(T("trend.current" + sfx()))}` : "");
     } },
-    xAxis: xAxis(rows.map(bLabel)), yAxis: yAxis({ min: 0, max: 100, axisLabel: { color: css("--muted"), fontSize: 11, formatter: "{value}%" } }),
-    series: [{ type: "line", data: rows.map((w) => ({ value: Math.round((w.rate || 0) * 100),
-        itemStyle: { color: (w.rate || 0) >= st.threshold ? css("--good") : css("--watch"), borderColor: css("--panel"), borderWidth: 2 } })),
-      symbol: "circle", symbolSize: 9, lineStyle: { width: 2, color: css("--s1") },
-      markLine: { silent: true, symbol: "none", label: { color: css("--muted"), fontSize: 11, formatter: `${th}%` },
-        lineStyle: { color: css("--faint"), type: [4, 4] }, data: [{ yAxis: th }] } }] }, true);
+    xAxis: xAxis(rows.map(bLabel)), yAxis: yAxis({ minInterval: 1 }),
+    series: [{ type: "bar", barMaxWidth: 26, data: rows.map((w) => ({ value: w.completed || 0,
+      itemStyle: { color: css("--good"), opacity: w.current ? 0.55 : 0.9, borderRadius: [4, 4, 0, 0] } })) }] }, true);
 }
 
 const KSTAT = ["done", "partial", "off_plan", "missed"];
@@ -728,7 +724,7 @@ $("c-go").onclick = () => {
 document.querySelectorAll(".unitsw").forEach((g) => g.addEventListener("click", (e) => {
   const b = e.target.closest("button[data-u]"); if (!b || !S.data) return;
   S.unit = b.dataset.u; store.set("unit", S.unit);
-  renderWeeks(buckets()); renderTrend(buckets(), S.data.streak);
+  renderWeeks(buckets()); renderTrend(buckets());
 }));
 $("metric").addEventListener("click", (e) => { const b = e.target.closest("button[data-m]"); if (!b) return; S.metric = b.dataset.m; store.set("metric", S.metric); renderWeeks(buckets()); });
 $("coach").open = !!store.get("coach", false);
