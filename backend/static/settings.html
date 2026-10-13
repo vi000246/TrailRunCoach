@@ -1921,17 +1921,16 @@ document.querySelectorAll("[data-cal-copy]").forEach((b) => b.onclick = async ()
 });
 // ---- 運動紀錄保留 (SP-317, api/archive.py) -------------------------------------------------
 const ARCH = "/api/v1/archive";
-const arDate = (iso) => (iso ? iso.slice(0, 10) : "");
 const arWhen = (iso) => (iso ? iso.slice(0, 16).replace("T", " ") : "");
 function showArchive(s) {
   $("ar-years").innerHTML = s.choices.map((n) => `<option value="${n}" ${n === s.retention_years ? "selected" : ""}>${
     esc(t(n === s.default ? "settings.arch.years_default" : "settings.arch.years", { n }))}</option>`).join("");
-  const L = s.last;
+  const L = s.last, day = (L && L.date_local) || "";   // the athlete's day (api/archive.py), not UTC's
   let line;
   if (!L) line = t("settings.arch.never");
-  else if (L.status !== "ok") line = t("settings.arch.skipped", { date: arDate(L.at) });
-  else if (!L.deleted) line = t("settings.arch.last_none", { date: arDate(L.at) });
-  else line = t("settings.arch.last", { date: arDate(L.at), n: L.deleted, from: L.first || "?", to: L.last || "?",
+  else if (L.status !== "ok") line = t("settings.arch.skipped", { date: day });
+  else if (!L.deleted) line = t("settings.arch.last_none", { date: day });
+  else line = t("settings.arch.last", { date: day, n: L.deleted, from: L.first || "?", to: L.last || "?",
                                         mb: ((L.bytes + (L.npz_bytes || 0)) / 1048576).toFixed(1) });
   // the kept ones belong to that cleanup: before the next date
   if (L && L.protected && L.protected.length) line += t("settings.arch.kept", { n: L.protected.length });
