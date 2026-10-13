@@ -748,6 +748,16 @@ tickets is in plan-auto.spec.md):
 - **B race notes** (SP-280): too many B races, a long one just before an A race, or a B race inside
   (or longer than) the next A race's 減量期 get a week note; a 百岳 B race is left out
   (`post_race.b_hints`, `backend/engine/post_race.py:383`, `backend/engine/overview.py:2164`).
+- **A session made an easy run takes the easy run's target** (SP-408): when a day rule turns a
+  quality / test / long session (or the 長爬坡反覆) into 輕鬆跑 — the B race's mini-taper and recovery
+  days (`post_race._as_easy`, `backend/engine/post_race.py:246`), the A race's first post-race week
+  (`post_race.apply`, `backend/engine/post_race.py:86`) and the 減量期 (`taper_rules`,
+  `backend/engine/overview.py:2956`) — its target is the week's easy-run text (`tgt["z2"]`, passed as
+  `easy_target` by week_plan `backend/engine/overview.py:2201` and the projection
+  `backend/engine/projection.py:811`) and its source is cleared (`post_race._easy_fields`,
+  `backend/engine/post_race.py:238`); before, it kept the old session's text (a 98–101 % CP target on
+  an easy run whose structure and watch steps had the easy band). Without an easy text the target is
+  empty, as the injury passes do.
 - **恢復期 / 回量期** (SP-98): post-race hours are a share of the level before the race, not of the
   taper weeks (`recovery_hours` `backend/engine/overview.py:524`, `rebuild_hours`
   `backend/engine/overview.py:534`, used at `backend/engine/overview.py:1489`).
@@ -2515,3 +2525,4 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 | 2026-10-13 | feature | SP-403 | 課表統計's 這週亮點: `achievements.week_highlight` (record > 連續有練 milestone > longest / highest vs last week > sessions done; None = no card), `compliance.dashboard` `highlight` (an activity that did a planned session carries its title), `GET /plan/compliance` reads the earlier runs (`_run_history`; a failure = no highlight). Tests: `backend/tests/test_week_highlight.py`, `backend/tests/test_compliance_dashboard.py` (`*_sp403`) |
 | 2026-10-13 | feature | SP-401 | 課表統計's weekly chart is the sessions done per 天／週／月 (bars, no pass line, no colour for falling short); the TSS tile's bar stops at 100 % without the black target mark. 課表's 週統計 (`compW`) and the agenda summary show 「完成 TSS n」 (the week's done TSS, no colour) with the planned TSS in the hover (`schedule.wk.*`), instead of the coloured 完成度 %. Tests: `backend/tests/test_compliance_dashboard.py` (`*_sp401`) |
 | 2026-10-13 | merge | SP-398 × SP-395…402 | One source for the completion words and levels after the card line: the status words are `common.legend.status.*` (課表統計 reads them too; `compliance.status.*` keeps only `open` 待同步), the four levels are the cards' `common.legend.*_tip` plus `legend.levels_note` (how intensity / a walking session is judged) through `SessChip.levelsText` — the 課表 dialog's ? and 課表統計's 照計畫完成 ? (`compliance.html` loads sesschip.js); `common.legend.levels` is gone. `plan_match.compare`'s 「換了課：」 is stripped in the card hover / dialog; 「未完成」 → 跳過 in the reconcile preview, the link menu, 刪除所有過期跳過的課 and `plan_store`'s error; the workout review's intensity tip says 換了課. SP-404 reads SP-402's `done_by.hr_quality` "low" (the field `session_compliance` uses for `uncertain`). Tests: `test_no_old_completion_words_on_the_card_pages_sp398`, `test_fatigue_streak_reads_sp402s_hr_quality_from_the_activity_row_sp404` |
+| 2026-10-13 | bugfix | SP-408 | A session the B-race / post-race / 減量期 rules make 輕鬆跑 gets the week's easy-run target (`easy_target` = `tgt["z2"]` through `post_race.apply` / `bc_apply` / `taper_rules`, week_plan and the projection) and no source, instead of keeping its old target (the demo's 10/20 輕鬆跑 said 「功率 255–263 W（98–101% CP）」 while its structure and the watch had 169–208 W). Tests: `backend/tests/test_bc_races.py` (`test_b_recovery_easy_run_takes_the_easy_target`, `test_b_race_week_easy_runs_take_the_easy_target`, `test_week_plan_and_projection_easy_runs_after_a_b_race_keep_the_easy_target`), `test_post_race.py::test_first_week_easy_runs_take_the_easy_target`, `test_taper_rules.py::test_runs_made_easy_take_the_easy_target` |

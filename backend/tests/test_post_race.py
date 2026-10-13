@@ -186,6 +186,16 @@ def test_no_run_two_days_then_40_minutes(monkeypatch):
     assert out[0]["terrain"] == "road" and "不跑下坡" in out[0]["detail"]
 
 
+
+def test_first_week_easy_runs_take_the_easy_target():
+    """SP-408: a quality session the first post-race week turns into 輕鬆跑 carries the easy target."""
+    r = ev(**MARA)
+    w = PR.a_windows(P.auto_phases([r], B, E, 0), [r], date(2027, 3, 8))
+    easy = "心率 < 150 bpm · 功率 169–208 W"
+    ss = [s("quality", "quality", "2027-03-11", 60, target="功率 255–263 W（98–101% CP）", source="Palladino")]
+    out = PR.apply(ss, w, date(2027, 3, 8), [], easy_target=easy)
+    assert out[0]["kind"] == "easy" and out[0]["target"] == easy and out[0]["source"] == ""
+
 def test_sessions_with_no_free_day_are_dropped():
     r = ev(**MARA)
     ph = P.auto_phases([r], B, E, 0)

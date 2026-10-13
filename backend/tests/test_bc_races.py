@@ -285,3 +285,57 @@ def test_week_plan_and_projection_with_a_b_race():
     nxt = next(w for w in weeks if w["start"] == "2026-10-12")
     early = [x for x in nxt["sessions"] if x["day"] <= "2026-10-15" and x["kind"] in O.RUN_KINDS]
     assert all(x["kind"] == "easy" for x in early)
+
+
+# ---- SP-408: a session made an easy run carries the easy run's target, not its old one ------------
+
+EASY_T = "心率 < 150 bpm · 功率 169–208 W"
+THR_T = "功率 255–263 W（98–101% CP）"
+
+
+def test_b_recovery_easy_run_takes_the_easy_target():
+    """The demo's 10/20: a quality session after the B race became 輕鬆跑 but kept 「功率 255–263 W（98–101%
+    CP）」 and its fartlek source; the structure and the watch had the easy band (65–80 % CP)."""
+    b = ev("b", "2026-10-10", **MEDIUM)
+    ss = [s("quality", "quality", "2026-10-12", 60, target=THR_T, source="Palladino 98–101% CP fartlek"),
+          s("long", "long", "2026-10-13", 120, target="心率 < 150 bpm · 功率 169–229 W")]
+    out = PR.bc_apply(ss, [b], MON, [], easy_target=EASY_T)
+    for x in out:
+        assert x["kind"] == "easy" and x["target"] == EASY_T and "CP" not in (x["source"] or "")
+    # no easy text given: the old target is gone all the same (as the injury passes do)
+    ss = [s("quality", "quality", "2026-10-12", 60, target=THR_T)]
+    assert PR.bc_apply(ss, [b], MON, [])[0]["target"] == ""
+
+
+def test_b_race_week_easy_runs_take_the_easy_target():
+    b = ev("b", "2026-10-17", **MEDIUM)
+    ss = [s("quality", "quality", "2026-10-12", 60, variant_key="x", target=THR_T),
+          s("long", "long", "2026-10-18", 120, target="心率 < 150 bpm · 功率 169–229 W"),
+          s("easy1", "easy", "2026-10-14", 40, target=EASY_T)]
+    out = PR.bc_apply(ss, [b], MON, [], easy_target=EASY_T)
+    assert all(x["target"] == EASY_T for x in out if x["kind"] == "easy")
+
+
+def test_week_plan_and_projection_easy_runs_after_a_b_race_keep_the_easy_target():
+    """End to end (SP-408): the projected week after a B race — every easy run, the downgraded ones
+    too, has the target of the week's own easy runs; none keeps a threshold (% CP) text."""
+    from backend.engine import plan_prefs as PP
+    from backend.engine import projection as PJ
+    from backend.engine.status import Status
+    from backend.tests.test_b2b import _history, _phases, _plan_with
+    from backend.tests.test_quality_gate import TODAY
+    ds = _history(TODAY)
+    plan = _plan_with("2027-06-01", 1, TODAY)
+    plan.events = list(plan.events) + [ev("b", "2026-10-10", **MEDIUM)]
+    ds.plan = plan
+    st = Status(ds, plan, TODAY, prefs=PP.Prefs()).compute()
+    wp = O.week_plan(ds, st, TODAY)
+    weeks = PJ.project_weeks(wp, _phases(plan, TODAY), date(2026, 10, 18), events=plan.events)
+    nxt = next(w for w in weeks if w["start"] == "2026-10-12")
+    easy = [x for x in nxt["sessions"] if x["kind"] == "easy" and x["title"] == "輕鬆跑"]
+    down = [x for x in easy if "只排輕鬆跑" in (x.get("detail") or "")]
+    assert down, [(x["day"], x["kind"], x["title"], x.get("target"), x.get("detail")) for x in nxt["sessions"]]
+    want = PJ.target_texts(wp["thresholds"] if "thresholds" in wp else {}).get("z2")
+    for x in down:
+        assert "CP）" not in (x.get("target") or ""), (x["day"], x.get("target"))
+        assert x["target"] == next((y["target"] for y in easy if y not in down), want or x["target"])

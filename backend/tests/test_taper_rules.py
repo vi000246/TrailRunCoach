@@ -158,6 +158,21 @@ def test_no_long_climb_repeats_and_untouched_outside_the_taper():
     assert O.taper_rules(ss, None, date(2026, 9, 28)) is ss
 
 
+
+def test_runs_made_easy_take_the_easy_target():
+    """SP-408: a long run / quality / 長爬坡反覆 the taper turns into 輕鬆跑 carries the easy run's target
+    (the long band 169–229 W stayed on a 40-minute easy run whose structure and watch were 169–208 W)."""
+    easy = "心率 < 150 bpm · 功率 169–208 W"
+    ss = [s("long", "long", "2026-10-11", 150, target="心率 < 150 bpm · 功率 169–229 W", source="Koop"),
+          s("quality", "quality", "2026-10-16", target="功率 255–263 W（98–101% CP）"),
+          s("climb", "easy", "2026-10-06", 70, target="心率約輕鬆跑上限 150 bpm（實測 AeT）")]
+    O.taper_rules(ss, tc(), date(2026, 10, 5), easy_target=easy)
+    assert [x["kind"] for x in ss] == ["easy"] * 3
+    assert all(x["target"] == easy and x["source"] == "" for x in ss)
+    ss = [s("long", "long", "2026-10-11", 150, target="心率 < 150 bpm · 功率 169–229 W")]
+    O.taper_rules(ss, tc(), date(2026, 10, 5))
+    assert ss[0]["target"] == ""
+
 def test_climb_note_follows_the_minutes():
     n = O.taper_climb_note(tc(), 1500.0, 0.5)
     assert n["src"] == "taper" and "750 m" in n["text"] and "50%" in n["text"]

@@ -808,12 +808,14 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
         n_notes = len(notes)
         ss = O.drop_strength_before_a(ss, s_stops, week, notes)
         # 減量期規則 (SP-96): the same rule as week_plan (overview.taper_rules)
-        ss = O.taper_rules(ss, tc, week, notes, road)
+        ss = O.taper_rules(ss, tc, week, notes, road, easy_target=tgt.get("z2", ""))
         # 賽後的日子 (SP-98): the same rule as week_plan (post_race.apply)
-        ss = PR_.apply(ss, PR_.a_windows(phases, events, week), week, notes, blocked=set(bmap))
+        ss = PR_.apply(ss, PR_.a_windows(phases, events, week), week, notes, blocked=set(bmap),
+                       easy_target=tgt.get("z2", ""))
         # B / C races (SP-95): the same rules as week_plan (post_race.bc_apply / b_hints)
         ss = PR_.bc_apply(ss, events or (), week, notes, blocked=set(bmap),
-                          rate=float((cur.get("tss_per_category") or {}).get("trail") or tph))
+                          rate=float((cur.get("tss_per_category") or {}).get("trail") or tph),
+                          easy_target=tgt.get("z2", ""))
         notes.extend(PR_.b_hints(events or (), week, phases=phases))     # SP-280: the planned 減量期
         # 依傷別迴避課型 (SP-270): the same pass as week_plan (overview.condition_apply)
         if inj_rule is not None:
