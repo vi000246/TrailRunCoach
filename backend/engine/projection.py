@@ -39,6 +39,7 @@ from backend.engine import overview as O
 from backend.engine import post_race as PR_
 from backend.engine import quality_gate as QG
 from backend.engine import rest_days as RD
+from backend.engine import session_structure as SST
 from backend.engine import warmup as WU
 from backend.engine.hr_profile import below, easy_cap_label, easy_cap_measured
 from backend.engine.zones import WORKOUT_TARGETS
@@ -874,6 +875,9 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
         # 每堂課前加熱身 (SP-364, engine/warmup.py): last, so the sessions the passes above add or
         # rewrite get it too (as week_plan)
         WU.apply(ss, prefs, {"easy": tph, **(rates or {})})
+        # 課表結構是唯一來源 (SP-437, engine/session_structure.py): minutes and TSS from each run session's
+        # structure (as week_plan) — before the TSS below moves the CTL that sizes the next week
+        SST.apply(ss, th, rates, prefs)
         # a session _place() found no day for has day None: keep it out of the date test
         ss = [s for s in ss if not s["day"] or _d(s["day"]) <= until] if ss else ss
         by_day = {}

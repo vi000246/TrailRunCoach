@@ -836,7 +836,25 @@ tickets is in plan-auto.spec.md):
   TSS moves by the difference only (the demo's 10/26 taper week 276 vs 379 the week before, −27 %).
   Road `TAPER_FULL` / `TAPER_CUT` still say 60 / 50
   against a 61 / 51 min structure (the rest after the last rep); SP-437 (minutes / TSS from the
-  structure) is open.
+  structure) settles them: the cards are 61 / 51 (next bullet).
+- **The structure is the session** (SP-437, the owner 2026-10-13): every run session the generator makes
+  (week_plan after the warm-up pass, `backend/engine/overview.py` `SST.apply_objs`; each projected week
+  after its warm-up pass, before its TSS moves the CTL, `backend/engine/projection.py` `SST.apply`; the
+  suggested CP / AeT tests; adapt's rewrites in `plan_store.reconcile_with_adapt`) takes its minutes and
+  TSS from its structure — the stored `steps`, else `workout_steps.derive` — i.e. what the watch gets
+  (`backend/engine/session_structure.py`). TSS (Q1 A): the warm-up, cool-down, rests and easy-target
+  steps (`workout_steps.rate_easy`) at the runner's own TSS per hour (`session_structure.kind_rate`: the
+  easy runs SP-302's rate, trail easy runs `easy_trail`, the long run the road / trail median, 越野跑 the
+  hike one, quality / tests the easy-run rate), the other steps IF² × 100 per hour; a session whose
+  structure is all easy keeps the generator's own rate, so its TSS doesn't move. Minutes (Q3 A): the text
+  intervals whose card was short of their structure (the rest after the last rep, an unwritten rest =
+  the rep) now carry the structure's: 2×15 60 → 61, 減量 2×10 50 → 51, fartlek 4×1 35 → 37, 巡航 4×3
+  45 → 49, 5×4 上坡 60 → 65 — the push does not change (its cool-down already filled the card's
+  minutes). A structure with a lap-button / distance step keeps its card. Synthetic seasons (road
+  marathon, 百岳, trail taper, base): the weekly target hours unchanged, the weekly planned TSS −0.5 to
+  +3.7 %, the taper / recovery weeks unchanged in hours (`backend/tests/test_structure_truth_sp437.py`).
+  Not yet (docs/plans/sp437-structure-truth.md §8): the auto sessions' target text as the structure's
+  summary (Q2 B).
 - **恢復期 / 回量期** (SP-98): post-race hours are a share of the level before the race, not of the
   taper weeks (`recovery_hours` `backend/engine/overview.py:524`, `rebuild_hours`
   `backend/engine/overview.py:534`, used at `backend/engine/overview.py:1489`).
@@ -2674,3 +2692,4 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 | 2026-10-13 | bugfix | SP-408 | The 越野 減量期 上坡節奏跑 (`TAPER_FULL` / `TAPER_CUT` trail, 88–95 % CP) takes the Zone 3 row's HR (`z3_hr_text`: the 課表心率區間's Z3, else AeT–LTHR; `taper_rules(z3_target=)` from week_plan and the projection) instead of the threshold (Zone 4) row; card, structure and push agree. Road / short taper sessions unchanged; `TAPER_Z3` (taper Zone 3 track pick, 88–95 % CP) still uses the threshold row (reported, not changed). Demo 10/27: 心率 160–168 → 151–160 bpm. `test_taper_trail_quality_minutes_are_the_structures` now builds its Ctx with the session's basis (`Ctx.of` ignored a `basis` dict key). Tests: `backend/tests/test_taper_rules.py` (`test_z3_hr_text_is_the_zone_3_row`, `test_trail_taper_tempo_card_structure_and_push_use_zone_3`, `test_other_taper_quality_keeps_the_threshold_row`, `test_week_plan_and_projection_trail_taper_tempo_take_zone_3`) |
 | 2026-10-13 | bugfix | SP-474 | Walking sessions' warm-up (ME 負重爬坡, 陡坡健走, 攻頂日模擬 with 含暖身) pushes no HR target: `workout_steps.resolve` gives an auto-easy `warm` step under a walk cap (`Ctx.walk`) 「不設目標」 instead of `hr_profile.walk_band` (easy-band floor → 75 % HRmax); the uphill / steep part keeps the band, the 陡坡健走's cool-down and running warm-ups are unchanged, an explicit target the user set stays. Structure TSS: the warm-up at IF 0.65 (`NONE_IF["warm"]`) instead of the band's ≈ 0.725 (−1.7 to −2.6 per session in the tests); card TSS unchanged. Demo: 暖身 心率 134–150 bpm → 不設目標. Tests: `backend/tests/test_walk_warmup_hr_floor_sp474.py` |
 | 2026-10-13 | test | SP-411 | The 57 TSS / h of the trail 減量 上坡節奏跑 (already in `7511cf19`) is pinned, with the road (70 / 65 an hour) and short (60 an hour) templates unchanged and the session carrying the template's TSS; the structure check (`test_taper_trail_quality_minutes_are_the_structures`) measures the session's own power basis since SP-408 (card 80.8 / 61.8 vs structure 78.7 / 59.7, within 5 %). No week is re-sized by it. Tests: `backend/tests/test_taper_rules.py::test_taper_card_tss_rates_trail_57_road_and_short_unchanged` |
+| 2026-10-13 | feature | SP-437 | 課表結構是唯一來源 phase 1: the generator's run sessions (week_plan, each projected week before its CTL step, the suggested tests, adapt's rewrites) take minutes / TSS from their structure (`backend/engine/session_structure.py`); `workout_steps.totals` gains `easy_s` / `tss_hard` and `Ctx.easy_tph` (the easy steps at the runner's own TSS / h, Q1 A); text intervals 1–5 min short of their structure now carry its minutes (Q3 A, road 減量 60 / 50 → 61 / 51); `week_plan(tpace=)` so a % pace step's TSS matches the editor's. A saved structure (`api/plan_sessions._with_steps`) stores its own minutes and TSS (the dialog's old-rate TSS is no longer kept) and the title's 「N×M 分／秒」 follows it, else 「（已改）」 (Q4 A, a title the user typed wins); the editor's 預估 TSS uses the same rate (`_steps_env`, the static demo's port too). Tests: `backend/tests/test_structure_truth_sp437.py` |

@@ -25,6 +25,7 @@ import numpy as np
 
 from backend.engine import cold_start as CS
 from backend.engine import load_guard as LG
+from backend.engine import session_structure as SST
 from backend.engine import warmup as WU
 from backend.engine.hr_profile import EASY_CAP_TIP, below, easy_cap_label
 from backend.engine.wko5expr.dataset import Dataset, Workout, date_to_day, day_to_date
@@ -1406,7 +1407,8 @@ def easy_power_suggestions(tests: list, ep: Optional[dict], cp_session, aet_sess
 
 
 def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, blackouts=None,
-              b2b_accepted: Optional[list] = None, race_predict=None, sport: Optional[str] = None) -> dict:
+              b2b_accepted: Optional[list] = None, race_predict=None, sport: Optional[str] = None,
+              tpace: Optional[float] = None) -> dict:
     """Target volume and sessions for the current Monday–Sunday week.
 
     `status` is a computed `backend.engine.status.Status` (phase, goals and the
@@ -1419,6 +1421,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     race_refs.calculator_hours); None = the plan's 預估移動時間.
     `sport`: 主要訓練項目 (engine/primary_sport.py,
     trail | road); None = the setting (auto = the suggestion from the data / the next A race).
+    `tpace` (s/km, thresholds.estimate_tpace): the threshold pace the structures' % pace steps take
+    for their TSS (SP-437; api/plan_sessions passes the one the editor and the push use).
     Road: no B2B, no steep-hill walk, no mountain long run or uphill interval versions; the
     專項期 long run carries a marathon-pace segment and its interval is a flat threshold run."""
     from backend.engine import b2b as B2B
@@ -2340,6 +2344,12 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     # rewrote has it; its extra minutes are in the TSS the projection below reads
     WU.apply_objs(sessions, prefs, tph)
 
+    # ---- 課表結構是唯一來源 (SP-437, engine/session_structure.py): each run session's minutes and TSS
+    # are its structure's (what the watch gets), the easy steps at this runner's own TSS / h; last, so
+    # every pass above is in it, and before the projection below reads the TSS
+    st_th = {"cp": tt.get("cp"), "lthr": tt.get("lthr"), "aet": aet, "hr_model": hrz, "walk_cap": walk, "tpace": tpace}
+    SST.apply_objs(sessions, st_th, tph, prefs)
+
     # ---- projection to Sunday -------------------------------------------
     planned_by_day = {}
     for s in sessions:
@@ -2415,8 +2425,9 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         easy_power_suggestions(test_suggestions, ep, lambda: CPP.session_for(protocol), aet_session, aet_proto)
     for t in test_suggestions:
         # 每堂課前加熱身 (SP-364): 排入 schedules the session as suggested — with the warm-up
-        if WU.apply_one(t["session"], prefs, tph):
-            t["minutes"] = t["session"]["minutes"]
+        WU.apply_one(t["session"], prefs, tph)
+        SST.apply_one(t["session"], st_th, tph, prefs)        # SP-437: the test's time / TSS = its structure
+        t["minutes"] = t["session"]["minutes"]
 
     mode_label = {"base": _("基礎期"), "specific": _("專項期"), "taper": _("減量期"), "event": _("比賽週"),
                   "recovery": _("恢復期"), "transition": _("轉換期"), "rebuild": _("回量期"), "recovery_week": _("恢復週"),
@@ -2443,6 +2454,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         "sessions": [asdict(s) for s in sorted(sessions, key=lambda s: (s.day or "9999", s.kind))],
         "long_weekday": WEEKDAYS[long_wd],
         "thresholds": {"cp": tt.get("cp"), "cp_source": tt.get("cp_source"), "lthr": tt.get("lthr"),
+                       # SP-437: the threshold pace the structures' TSS took (projection uses it too)
+                       **({"tpace": tpace} if tpace else {}),
                        # aet = the easy-run cap (not always an AeT: the 課表心率區間 Z2 top unless measured);
                        # its ± badge only when the cap IS the AeT estimate (no 課表心率區間)
                        "lthr_source": tt.get("lthr_source"), "aet": aet, "aet_source": aet_src,
