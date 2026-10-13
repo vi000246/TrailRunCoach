@@ -1115,7 +1115,9 @@ start time, aid stations. Since 2026-10-02 (賽事計算機, renamed from 賽事
 - The 熱 row toggles the per-segment heat (推估 badge; on by default). The hourly rows go with the plan
   only when the race-day temperature / humidity are the fetched values, not ones the user typed.
 - 主要訓練項目 = road (`engine/primary_sport.py`) defaults to the road model and hides the trail /
-  百岳 presets; region `intl` hides the 百岳 chips, peak lists and the CWA key.
+  百岳 presets; region `intl` hides the 百岳 chips, peak lists and the CWA key. The header's 專項 chip
+  (`backend/static/sportchip.js`, `backend/static/racepower.html:269`, SP-450; the same as 圖表分析's) switches
+  主要訓練項目 here: it saves the setting and reloads, and `init()` reads it again.
 - The static demo (`backend/demo/static_racepower.py`): `static_shim.js` answers the page's POSTs
   from precomputed answers, else from a Web Worker running calc.py in Pyodide on an exported
   `LiveContext` snapshot (`collect()` → `StaticContext`); weather is never fetched there.
@@ -1534,3 +1536,4 @@ when set, but nothing fills it from the routes module yet.
 | 2026-10-13 | fix | SP-414 (step 1) | A runner with no body weight at all (plan `weights` empty, none in the athlete settings): `cptest.w_prime_prior` returns the kJ prior unchanged and `rwc_band_j` None instead of multiplying None — GET /racepower/inputs answered 500 whenever the season plan had a fresh CP test and no detected W′ (`derive` → `cptest_prior`). No default weight is used. 百岳 /predict and /plan without a weight are still open (SP-414). |
 | 2026-10-13 | fix | SP-414 (step 2, owner B1) | No body weight: road / trail predictions answer 400 with the reason (RE is per kg; also with a typed RE — was a TypeError 500); 百岳 /predict and /plan compute the time with pack factor 1, no default pack, kcal / water / the 補給 card 「算不出」, `walk_capacity` None (Tobler / HikeSpeed, each said in the warnings; the Tobler line no longer says 「沒有跑步資料」 when the weight is what is missing); the page's one-line notice (`#noweight`, zh / en) links to 設定 → 個人資料; the 百岳 capacity back-test is skipped (`skipped: "no_weight"`), not recorded as an error. Never a default weight. |
 | 2026-10-13 | feature | SP-444 | Road / trail predictions without a body weight: RE is speed ÷ watts (`re.unit` `per_w`) for every run, grade window and prediction, so the weight cancels; CVI adjustment relative (× (1 + 0.01) per category, 推估), the flat-RE default from the windows, W/kg / LSS/kg None, a typed per-kg RE needs a weight (400 with the reason) unless sent as `re_unit: "per_w"`; the SP-414 400 「沒有體重：跑步 RE…算不出」 is gone, the page banner no longer lists running RE and says the predictions use speed per watt (zh / en). With a weight every number is unchanged (demo athlete, bitwise; the per-kg per-run cache keeps its code hash). |
+| 2026-10-13 | feature | SP-450 | The 專項 chip (主要訓練項目, `backend/static/sportchip.js`) is in the calculator's header (`backend/static/racepower.html:269`): choosing 自動／越野跑／路跑・馬拉松 saves `athlete.primary_sport` and reloads; 路跑 hides the 越野／百岳 types and presets (`applySport`). Demo: shown, disabled |

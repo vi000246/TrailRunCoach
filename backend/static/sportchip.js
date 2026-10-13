@@ -7,6 +7,9 @@
  *
  *     <span id="sport-chip"></span><script src="/api/v1/static/sportchip.js" defer></script>
  *
+ * SP-450: 賽事計算機 and 課表 mount it too (their top row): the calculator's default race type and
+ * the 自動課表 follow 主要訓練項目, and both pages read it when they load, so the reload applies it.
+ *
  * SPORTS lists the choices: a new sport (三鐵) is one more entry here and in primary_sport.py.
  * The demo can't change settings: the chip shows the sport in effect, disabled.
  *

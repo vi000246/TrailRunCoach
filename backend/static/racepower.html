@@ -264,6 +264,9 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
   <h1 data-i18n="racepower.title">賽事計算機</h1>
   <span class="meta" id="asof"></span>
   <div class="seg tabs" id="tabs"><button data-tab="calc" class="on">計算</button><button data-tab="acc">準確度</button></div>
+  <!-- SP-450: 專項 (主要訓練項目, static/sportchip.js) — road hides the 越野／百岳 types and presets
+       (applySport); changing it saves the setting and reloads, and init() reads it again -->
+  <span id="sport-chip"></span><script src="/api/v1/static/sportchip.js" defer></script>
 </header>
 <main>
   <!-- SP-414: shown while the settings have no body weight (INP.weight.value null) -->
