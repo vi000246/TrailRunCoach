@@ -2198,7 +2198,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     s_stops = strength_stops(getattr(getattr(status, "plan", None), "events", None) or (), monday, phs)
     sessions = drop_strength_before_a(sessions, s_stops, monday, notes)
     # 減量期規則 (SP-96): quality by days to the race, the last long run, no hard downhill / climbing
-    sessions = taper_rules(sessions, t_ctx, monday, notes, road, today, easy_target=tgt.get("z2", ""))
+    sessions = taper_rules(sessions, t_ctx, monday, notes, road, today, easy_target=tgt.get("z2", ""),
+                           cp=tt.get("cp"), q_target=tgt.get("threshold", ""), prefs=PR)
     # 賽後的日子 (SP-98): no run the first 2 days, ≤ 40 min the first week, flat after a big downhill
     sessions = PR_.apply(sessions, PR_.a_windows(phs, plan_events, monday), monday, notes, today, bmap,
                          easy_target=tgt.get("z2", ""))
@@ -2825,26 +2826,28 @@ TAPER_RUN_DROP = 1
 TAPER_RUN_MIN = 20                  # no taper easy run shorter (plan_prefs.MIN_EASY)
 SRC_TAPER_WEEK = ("減量期課表：最後一次完整強度課賽前 10–14 天、之後保留種類縮短、最後一次短強度賽前 3–5 天量減半、"
                   "最後一次長跑賽前 ≥ 7 天且 ≤ 90 分（Gaudette、Koop、Mujika；教練級／世界級選手）")
+# power_pct (SP-408): the template's band × CP — the card's target (taper_rules.as_q), the structure
+# and the push read the same % (the % CP in the text; a template without one parsed as threshold)
 TAPER_FULL = {
     "road": dict(kind="quality", title="有氧間歇 2×15 分（平路）", minutes=60, terrain="road",
                  detail="減量期最後一次完整強度課：專項期熟悉的課，不加量、不做新的課；休 3 分慢跑；暖身 15 分、緩和 10 分",
-                 tss=60 / 60 * 70),
+                 tss=60 / 60 * 70, power_pct=(0.95, 1.01)),
     "trail": dict(kind="quality", title="上坡節奏跑 3×10 分（緩坡）", minutes=60,
                   detail="減量期最後一次完整強度課：4–8% 緩坡、3 區（88–95% CP），慢跑下來恢復、下坡放鬆不衝；"
                          "暖身 15 分、緩和 10 分",
-                  tss=60 / 60 * 65),
+                  tss=60 / 60 * 65, power_pct=(0.88, 0.95)),
 }
 TAPER_CUT = {
     "road": dict(kind="quality", title="有氧間歇 2×10 分（平路）", minutes=50, terrain="road",
                  detail="減量期：同一種課、量縮短（少一段、每段變短）；休 3 分慢跑；暖身 15 分、緩和 10 分",
-                 tss=50 / 60 * 65),
+                 tss=50 / 60 * 65, power_pct=(0.95, 1.01)),
     "trail": dict(kind="quality", title="上坡節奏跑 2×10 分（緩坡）", minutes=50,
-                  detail="減量期：同一種課、量縮短（少一段）；4–8% 緩坡、3 區，下坡放鬆不衝；暖身 15 分、緩和 10 分",
-                  tss=50 / 60 * 62),
+                  detail="減量期：同一種課、量縮短（少一段）；4–8% 緩坡、3 區（88–95% CP），下坡放鬆不衝；暖身 15 分、緩和 10 分",
+                  tss=50 / 60 * 62, power_pct=(0.88, 0.95)),
 }
 TAPER_SHORT = dict(kind="quality", title="短強度 2×3 分（平路）", minutes=35, terrain="road",
                    detail="賽前 3–5 天最後一次短強度：量減半，98–102% CP，休 2 分慢跑；暖身 15 分、緩和 10 分",
-                   tss=35 / 60 * 60)
+                   tss=35 / 60 * 60, power_pct=(0.98, 1.02))
 _VARIANT_KEYS = ("variant_key", "rung_key", "equiv", "swap", "swap_reason", "variant_reps", "variant_blocks",
                  "variant_adj", "progress", "steps", "distance_km", "climb_m")
 
@@ -2953,14 +2956,35 @@ def carb_load_note(tc: Optional[dict], ev, weight: Optional[float], monday: dt.d
     return {"level": "info", "src": "carb_load", "text": text}
 
 
+def taper_q_target(tmpl: dict, cp: Optional[float], q_target: str = "", prefs=None) -> str:
+    """The target text of a 減量期 quality template (SP-408): 「功率 lo–hi W（lo–hi% CP）」 from its
+    power_pct × `cp` (the structure and the push read the same %; the watch gets SP-378's wider band)
+    and the 心率 part of `q_target` (the week's threshold row, as the session it replaces had), kept
+    by the 目標依據 as plan_prefs.shape does. No CP / no HR text: that part is left out."""
+    from backend.engine import target_policy as TP
+    parts = []
+    lo, hi = tmpl.get("power_pct") or (None, None)
+    if cp and lo is not None and hi is not None:
+        parts.append(f"功率 {lo * cp:.0f}–{hi * cp:.0f} W（{lo * 100:.0f}–{hi * 100:.0f}% CP）")
+    parts += [p.strip() for p in (q_target or "").split("·") if p.strip().startswith("心率")]
+    text = " · ".join(parts)
+    pol = TP.target_policy({**tmpl, "id": "quality"}, prefs)
+    if pol["chosen"] in ("hr", "power"):
+        text = TP.target_text(text, pol["basis"])
+    return text
+
+
 def taper_rules(ss: list, tc: Optional[dict], monday: dt.date, notes: Optional[list] = None,
-                road: bool = False, today: Optional[dt.date] = None, easy_target: str = "") -> list:
+                road: bool = False, today: Optional[dt.date] = None, easy_target: str = "",
+                cp: Optional[float] = None, q_target: str = "", prefs=None) -> list:
     """`ss` (Session objects or dicts, placed) with the 減量期 rules applied to the not-done sessions on
     a day of `tc`'s taper (taper_context): the quality sessions by days to the race (full ≥ 10, the
     same kind shorter, the half-volume short one 3–5 days out — moved onto an easy day there when it
     landed later, else an easy run), the long run ≤ 90 min and ≥ 7 (14 when sore) days out, the
     長爬坡反覆 a flat easy run. Notes say what changed. `easy_target`: the week's easy-run target
-    text, for a session made an easy run (SP-408: never the long run's / quality's own)."""
+    text, for a session made an easy run (SP-408: never the long run's / quality's own). A session made
+    a 減量期 quality session takes taper_q_target (SP-408): the template's % CP in watts (`cp`) and
+    the 心率 part of `q_target` (the week's threshold row), by `prefs`' 目標依據 — never its old text."""
     if not tc or not ss:
         return ss
     is_d = isinstance(ss[0], dict)
@@ -2996,7 +3020,9 @@ def taper_rules(ss: list, tc: Optional[dict], monday: dt.date, notes: Optional[l
             target=easy_target or "", source="", **{k: None for k in _VARIANT_KEYS})
 
     def as_q(s, tmpl: dict):
-        put(s, **{**{k: None for k in _VARIANT_KEYS}, "source": SRC_TAPER_WEEK, "terrain": None, **tmpl})
+        t = {k: v for k, v in tmpl.items() if k != "power_pct"}
+        put(s, **{**{k: None for k in _VARIANT_KEYS}, "source": SRC_TAPER_WEEK, "terrain": None, **t,
+                  "target": taper_q_target(tmpl, cp, q_target, prefs)})
 
     touched = False
     for s in sorted(ss, key=lambda x: g(x, "day") or "9"):
