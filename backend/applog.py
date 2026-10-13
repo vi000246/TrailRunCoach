@@ -107,7 +107,7 @@ _SHARE_WORDS = frozenset({"calendar", "data"})
 _TEMPLATE_SEG = re.compile(r"\{[A-Za-z_][\w:]*\}(?:\.\w+)?")
 # A query parameter whose name (any case, %-encoded or not, with a prefix or a
 # suffix: access_token, X-Api-Key, oauth_state) holds one of these has its value
-# masked. code / state: the TrainingPeaks OAuth callback (/api/v1/auth/tp/callback).
+# masked. code / state: the Google sign-in callback (/oauth/google/callback).
 # Erring on the masking side: the app's own parameters (day, uid, view, period, …)
 # match none of them; ?key= (an activity's start minute) is masked with the rest.
 _SECRET_PARAM = re.compile(r"token|secret|passw|pwd|key|code|state|sig|auth|session|cookie|credential|"

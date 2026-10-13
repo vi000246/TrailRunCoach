@@ -1,14 +1,12 @@
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
-from backend.db.current import current_athlete_id
 from backend.db.database import get_db
 from backend.i18n import _
-from backend.sync.tp_client import get_auth_url, exchange_code, login_password, fetch_tp_settings
+from backend.sync.tp_client import login_password, fetch_tp_settings
 from backend.sync import coros_client, session_check
 from backend.settings.secrets import SecretKeyMissing
 
@@ -527,16 +525,3 @@ async def set_remember(source: str, body: RememberBody, db: AsyncSession = Depen
     saved = bool(st and {"coros": st.coros_password_sealed, "garmin": st.garmin_password_sealed}.get(
         source, st.tp_password_sealed if st else None))
     return {"password_saved": saved}
-
-
-@router.get("/tp/oauth")
-async def tp_oauth_redirect():
-    """OAuth redirect flow (alternative to password login)."""
-    url = await get_auth_url()
-    return RedirectResponse(url)
-
-
-@router.get("/tp/callback")
-async def tp_callback(code: str, db: AsyncSession = Depends(get_db)):
-    await exchange_code(code, db, athlete_id=current_athlete_id())
-    return RedirectResponse("/?sync=authenticated")

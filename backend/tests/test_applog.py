@@ -232,10 +232,10 @@ SHARE_ID = "abcdefghijklmnopqrstuv"                      # a share id (22 chars)
     (f"/share/{SHARE_ID}", "/share/***"),
     (f"/share/{SHARE_ID}/data", "/share/***/data"),
     (f"/api/v1/racepower/shares/{SHARE_ID}", "/api/v1/racepower/shares/***"),
-    # the TrainingPeaks OAuth callback, any case, repeated, among other parameters
-    ("/api/v1/auth/tp/callback?code=c0de&state=st4te", "/api/v1/auth/tp/callback?code=***&state=***"),
-    ("/api/v1/auth/tp/callback?lang=en&CODE=c0de&State=s&code=again",
-     "/api/v1/auth/tp/callback?lang=en&CODE=***&State=***&code=***"),
+    # an OAuth callback (Google sign-in, SP-58), any case, repeated, among other parameters
+    ("/oauth/google/callback?code=c0de&state=st4te", "/oauth/google/callback?code=***&state=***"),
+    ("/oauth/google/callback?lang=en&CODE=c0de&State=s&code=again",
+     "/oauth/google/callback?lang=en&CODE=***&State=***&code=***"),
     # secret-named parameters: prefixes, suffixes, %-encoded names, ; separators
     ("/x?access_token=a&X-Api-Key=b&Password=c&client_secret=d", "/x?access_token=***&X-Api-Key=***&Password=***&client_secret=***"),
     ("/x?%74oken=abc&day=2026-10-01", "/x?%74oken=***&day=2026-10-01"),
@@ -254,8 +254,8 @@ def test_mask_url_masks_every_key(url, want):
 @pytest.mark.parametrize("text, secret", [
     (f"GET /share/calendar/{NO_DIGIT_TOK}.ics failed", NO_DIGIT_TOK),
     (f"GET /Share/{SHARE_ID}/data failed", SHARE_ID),
-    ("callback /api/v1/auth/tp/callback?CODE=c0de&state=st4te", "c0de"),
-    ("callback /api/v1/auth/tp/callback?CODE=c0de&state=st4te", "st4te"),
+    ("callback /oauth/google/callback?CODE=c0de&state=st4te", "c0de"),
+    ("callback /oauth/google/callback?CODE=c0de&state=st4te", "st4te"),
 ])
 def test_redact_masks_share_paths_and_secret_parameters(text, secret):
     out = applog.redact(text)
@@ -328,7 +328,7 @@ def test_a_real_uvicorn_server_logs_the_feed_without_its_token():
     def feed(token: str):
         return {"ok": True}
 
-    @app.get("/api/v1/auth/tp/callback")
+    @app.get("/oauth/google/callback")
     def cb(code: str = "", state: str = ""):
         return {"ok": True}
 
@@ -351,7 +351,7 @@ def test_a_real_uvicorn_server_logs_the_feed_without_its_token():
         base = f"http://127.0.0.1:{port}"
         assert httpx.get(f"{base}/share/calendar/{FEED_TOK}.ics").status_code == 200
         assert httpx.head(f"{base}/share/calendar/{NO_DIGIT_TOK}.ics?lang=en").status_code == 200
-        assert httpx.get(f"{base}/api/v1/auth/tp/callback?Code=c0de123&STATE=s7&lang=en").status_code == 200
+        assert httpx.get(f"{base}/oauth/google/callback?Code=c0de123&STATE=s7&lang=en").status_code == 200
     finally:
         server.should_exit = True
         t.join(10)
@@ -362,7 +362,7 @@ def test_a_real_uvicorn_server_logs_the_feed_without_its_token():
         assert secret not in text
     assert '"GET /share/calendar/***.ics HTTP/1.1" 200' in text
     assert '"HEAD /share/calendar/***.ics?lang=en HTTP/1.1" 200' in text
-    assert '"GET /api/v1/auth/tp/callback?Code=***&STATE=***&lang=en HTTP/1.1" 200' in text
+    assert '"GET /oauth/google/callback?Code=***&STATE=***&lang=en HTTP/1.1" 200' in text
 
 
 def test_uvicorn_error_log_message_and_traceback_are_redacted():
