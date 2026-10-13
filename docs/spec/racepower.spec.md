@@ -218,6 +218,16 @@ records each value and its source ("手動" when overridden).
   pack factor `(W + 5 kg)/(W + pack)` (pack default 6 kg single-day / 12 kg multi-day), Yamamoto
   course constant → kcal, water 0.7–0.8 × kcal ml, HR cap = AeT, comparison with the biggest
   past day (`backend/engine/racepower/predict.py:175`).
+- **No body weight at all** (SP-414; the settings have none and none was typed into 「你的數字」 — never
+  a default weight): road / trail `/predict` and `/plan` answer 400 「沒有體重：跑步 RE（每公斤）算不出…」
+  (RE is per kg; also with a typed RE — `calc.predict`). 百岳 still computes the time: pack factor 1,
+  no default pack (`used.pack_kg` None, source 「沒有體重：背包預設算不出」), kcal / water None
+  (`predict.predict_baiyue`, `planner._plan_hike_v1`), `walk_capacity` None (`athlete.walk_capacity`)
+  so the EP/h falls back to Tobler and the segments to the HikeSpeed path, each said in `warnings`;
+  the 補給 card is `{"unavailable": "沒有體重：…"}` (`calc.fuel`). The page shows one line at the top
+  while `inputs.weight.value` is null (`#noweight`, catalog `racepower.noweight.*`) with a link to
+  設定 → 個人資料. The 百岳 capacity back-test is skipped with `skipped: "no_weight"` and a reason,
+  not an error (`backtest.capacity_backtest`).
 
 ### No CP yet: 用近期比賽成績推估 (SP-293, `race_estimate.py`)
 
@@ -1511,3 +1521,4 @@ when set, but nothing fills it from the routes module yet.
 | 2026-10-12 | feature | SP-310 | `race_calc` gets `uid` (UUID4 hex, unique index `ux_race_calc_uid`, kept by every save) and `updated_at` (UTC; `saved_at` stays local time for the page): `race_calc_store.save` (`backend/engine/race_calc_store.py:95`) adds the columns to an older table and writes both; `init_db` fills the rows from before on every tenant DB (`updated_at` = `saved_at` in UTC; `backend/db/stable_ids.py:84`); `/saved` carries `uid`. Tests `backend/tests/test_stable_ids_sp310.py::test_race_calc_new_and_edited_rows`, `::test_race_calc_on_a_table_from_before_sp310`, `::test_saved_api_carries_the_uid` |
 | 2026-10-13 | fix | SP-410 | 「匯出至課表」 preview: `previous.updated_local` (the athlete's wall time of the last export, `localtime.local_iso`, `backend/engine/localtime.py:63`) next to the UTC `updated_at`; the overwrite line 「會覆蓋上次的匯出（…）」 shows it instead of slicing the UTC string (8 h early in Taipei) |
 | 2026-10-13 | fix | SP-414 (step 1) | A runner with no body weight at all (plan `weights` empty, none in the athlete settings): `cptest.w_prime_prior` returns the kJ prior unchanged and `rwc_band_j` None instead of multiplying None — GET /racepower/inputs answered 500 whenever the season plan had a fresh CP test and no detected W′ (`derive` → `cptest_prior`). No default weight is used. 百岳 /predict and /plan without a weight are still open (SP-414). |
+| 2026-10-13 | fix | SP-414 (step 2, owner B1) | No body weight: road / trail predictions answer 400 with the reason (RE is per kg; also with a typed RE — was a TypeError 500); 百岳 /predict and /plan compute the time with pack factor 1, no default pack, kcal / water / the 補給 card 「算不出」, `walk_capacity` None (Tobler / HikeSpeed, each said in the warnings; the Tobler line no longer says 「沒有跑步資料」 when the weight is what is missing); the page's one-line notice (`#noweight`, zh / en) links to 設定 → 個人資料; the 百岳 capacity back-test is skipped (`skipped: "no_weight"`), not recorded as an error. Never a default weight. |

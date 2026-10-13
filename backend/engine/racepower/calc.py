@@ -306,6 +306,11 @@ def predict(ctx: Context, body: PredictIn) -> dict:
 
     if body.type == "baiyue":
         return predict_baiyue(ctx, body, d, weight, env, used, warnings)
+    if not weight or weight <= 0:
+        # SP-414: RE is per kg and the power ↔ speed step divides by the weight — a road / trail
+        # prediction needs one (a typed RE too); never a default weight
+        raise CalcError(400, _("沒有體重：跑步 RE（每公斤）算不出，越野／路跑預測做不了；"
+                               "請到 設定 → 個人資料 填寫體重"))
 
     # CP
     srcs = {s["id"]: s for s in d["cp"]["sources"]}
@@ -446,13 +451,27 @@ def predict_baiyue(ctx: Context, body: PredictIn, d: dict, weight: float, env: d
         else:
             eph = HK.tobler_eph(body.distance_km, body.gain_m, body.loss_m)
             src = _("推估：Tobler 步行函數在這條路線的 EP/h（{note}）", note=h.get("note") or _("百岳多為跟團"))
-            warnings.append(_("整趟時間是推估：{note}；沒有跑步資料可建能力模型，用 Tobler 步行函數", note=h.get("note") or ""))
+            if not d["weight"]["value"]:
+                # SP-414: the capacity model needs the settings weight (it is in W/kg)
+                warnings.append(_("整趟時間是推估：{note}；沒有體重，步行能力模型算不出，用 Tobler 步行函數",
+                                  note=h.get("note") or ""))
+            else:
+                warnings.append(_("整趟時間是推估：{note}；沒有跑步資料可建能力模型，用 Tobler 步行函數",
+                                  note=h.get("note") or ""))
     used["eph"] = _src(eph, src)
     days = max(1, body.days or 1)
     from backend.engine.racepower import capacity as _cap
-    default_pack = _cap.pack_default(weight, days)
-    pack = body.pack_kg if body.pack_kg is not None else default_pack
-    used["pack_kg"] = _src(pack, _("手動") if body.pack_kg is not None else _("預設背負 {pack}", pack=_cap.pack_default_text(weight)))
+    if weight and weight > 0:
+        default_pack = _cap.pack_default(weight, days)
+        pack = body.pack_kg if body.pack_kg is not None else default_pack
+        used["pack_kg"] = _src(pack, _("手動") if body.pack_kg is not None else _("預設背負 {pack}", pack=_cap.pack_default_text(weight)))
+    else:
+        # SP-414: no body weight — the pack factor (W + 5 kg)/(W + pack) is 1, no default pack, no energy
+        pack = body.pack_kg
+        used["pack_kg"] = _src(pack, _("手動（沒有體重：不影響速度）") if pack is not None
+                               else _("沒有體重：背包預設算不出"))
+        warnings.append(_("沒有體重：背負係數取 1（速度不依背包重量調整），熱量、飲水算不出；"
+                          "請到 設定 → 個人資料 填寫體重"))
     used["hist_pack_kg"] = _src(body.hist_pack_kg, _("假設：過去登山日多為輕裝（約 5 kg）"))
     plan = PR.split_days(days, body.distance_km, body.gain_m, body.loss_m,
                          [x.model_dump() for x in body.day_plan] if body.day_plan else None)
@@ -742,6 +761,11 @@ def fuel(ctx: Context, body: PlanIn, out: dict) -> dict:
     """The 補給 card (engine/racepower/fuel.py) on the predicted segments;
     adds kcal / carbohydrate / water / sodium / fuel_action to each one."""
     from backend.engine.racepower import fuel as FU
+    weight = out["used"]["weight"]["value"]
+    if not weight or weight <= 0:
+        # SP-414: every number of the card needs the body weight (Pandolf / Minetti / REE / g per kg)
+        return {"unavailable": _("沒有體重：熱量、碳水、水、鈉的補給建議算不出（都要用體重）；"
+                                 "請到 設定 → 個人資料 填寫體重"), "category": "hike" if body.type == "baiyue" else None}
     inp = ctx.inputs()
     hr = None
     th = (out.get("summary") or {}).get("trail_hr")

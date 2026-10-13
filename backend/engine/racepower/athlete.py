@@ -1717,6 +1717,10 @@ def walk_capacity(ds, today: Optional[dt.date] = None, exclude: Optional[set] = 
     from backend.engine.racepower import capacity as CAP
     today = today or dt.date.today()
     x = inputs or walk_capacity_inputs(ds, today, exclude)
+    if not x.get("weight") or x["weight"] <= 0:
+        # SP-414: the model is in W/kg (Ė at AeT = weight × …): no body weight, no model — the
+        # planner takes the HikeSpeed path and the calculator says why (never a default weight)
+        return None
     cap = CAP.fit_walk_capacity(weight=x["weight"], v_run=x["v_run"], trail=x["trail"], hike=x["hike"],
                                 flat=x["flat"], hike_down=x["hike_down"], aet_of=x["aet"].get,
                                 pack_of=x["pack_of"], tech=tech, boot_reps=boot_reps, sigma_loo=sigma_loo)

@@ -1986,5 +1986,13 @@
   "；這次誤差約 ±{se:.1f} 個百分點（回歸標準誤）": "; this run's error about ±{se:.1f} percentage points (regression standard error)",
   "；長天上限 {h:g} 小時：比賽更長的部分交給 B2B 和週量": "; long-day cap {h:g} h: B2B and weekly volume cover the longer race",
   "；餘裕 {m} bpm，{basis}": "; margin {m} bpm, {basis}",
-  "🌡 {t:.0f} °C（{band}）": "🌡 {t:.0f} °C ({band})"
+  "🌡 {t:.0f} °C（{band}）": "🌡 {t:.0f} °C ({band})",
+  "沒有體重：跑步 RE（每公斤）算不出，越野／路跑預測做不了；請到 設定 → 個人資料 填寫體重": "No body weight: running RE (per kg) cannot be computed, so there is no trail / road prediction; enter your weight under Settings → Personal",
+  "整趟時間是推估：{note}；沒有體重，步行能力模型算不出，用 Tobler 步行函數": "The total time is an estimate: {note}; no body weight, so the walking-capacity model cannot be computed and Tobler's hiking function is used",
+  "手動（沒有體重：不影響速度）": "Manual (no body weight: it does not change the speed)",
+  "沒有體重：背包預設算不出": "No body weight: no default pack can be computed",
+  "沒有體重：背負係數取 1（速度不依背包重量調整），熱量、飲水算不出；請到 設定 → 個人資料 填寫體重": "No body weight: the pack factor is 1 (the speed is not adjusted for the pack), and energy and water cannot be computed; enter your weight under Settings → Personal",
+  "沒有體重：熱量、碳水、水、鈉的補給建議算不出（都要用體重）；請到 設定 → 個人資料 填寫體重": "No body weight: the energy, carbohydrate, water and sodium suggestions cannot be computed (they all need it); enter your weight under Settings → Personal",
+  "沒有體重：百岳能力模型算不出，這項回測跳過；請到 設定 → 個人資料 填寫體重": "No body weight: the Baiyue (Taiwan's 100 Peaks) walking-capacity model cannot be computed, so this back-test is skipped; enter your weight under Settings → Personal",
+  "沒有體重：步行能力模型算不出，分段用舊的步行模型（Tobler 先驗加上你的爬升窗）": "No body weight: the walking-capacity model cannot be computed, so the segments use the older walking model (Tobler prior plus your climbing windows)"
 }
