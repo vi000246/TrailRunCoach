@@ -79,17 +79,18 @@ TH = {"cp": 250.0, "lthr": 165.0, "aet": 145.0, "walk_cap": HP.walk_cap(196.0, 1
 
 def test_push_follows_the_walk_cap():
     th = CW.Thresholds.of(TH)
+    # SP-409: 暖身 10 → 陡坡 → 緩和 5; [1] is the steep part (it was the one block, [0])
     st = CW.session_steps({**STEEP, "basis": "hr"}, th)
-    assert st[0].intensity == ("hr", 124, 147) and "RPE ≤ 13" in st[0].name and "下坡" in st[0].name
+    assert st[1].intensity == ("hr", 124, 147) and "RPE ≤ 13" in st[1].name and "下坡" in st[1].name
     # a trail run keeps the easy-run cap
     for s in (TRAIL, TECH):
         assert CW.session_steps({**s, "basis": "hr"}, th)[0].intensity == ("hr", 124, 145)
     # no walk cap in the thresholds: the easy cap as before
     old = CW.Thresholds.of({k: v for k, v in TH.items() if k != "walk_cap"})
-    assert CW.session_steps({**STEEP, "basis": "hr"}, old)[0].intensity == ("hr", 124, 145)
+    assert CW.session_steps({**STEEP, "basis": "hr"}, old)[1].intensity == ("hr", 124, 145)
     # the floor: 75 % HRmax under the easy cap → the easy cap
     low = CW.Thresholds.of({**TH, "walk_cap": HP.walk_cap(180.0, 145.0)})
-    assert CW.session_steps({**STEEP, "basis": "hr"}, low)[0].intensity == ("hr", 124, 145)
+    assert CW.session_steps({**STEEP, "basis": "hr"}, low)[1].intensity == ("hr", 124, 145)
 
 
 def test_editor_steps_follow_the_walk_cap():
@@ -97,7 +98,7 @@ def test_editor_steps_follow_the_walk_cap():
     c = WS.session_ctx(STEEP, TH)
     assert c.walk and WS.easy_hr(c) == ("hr", 124, 147)
     got = WS.steps_to_coros(WS.normalize(d), c)
-    assert got[0].intensity == ("hr", 124, 147) and "RPE ≤ 13" in got[0].name
+    assert got[1].intensity == ("hr", 124, 147) and "RPE ≤ 13" in got[1].name    # SP-409: [1] = the steep part
     assert WS.zones_table(c)["hr"][0]["label"] == "≤ 爬坡上限"
     # the 陡坡健走 templates' 「≤ 輕鬆跑上限」 zone resolves to the walk cap in a walking session
     st = {"kind": "work", "dur": 600, "target": {"type": "hr", "mode": "zone", "zone": "aet"}}

@@ -552,7 +552,12 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
   which says how the race climbs it (SP-227, `race_gait`: runwalk.gait on the climb's grade × the
   race day's climbing speed, 「比賽時這段每小時約 N m、G%：用快走／走跑皆可／用跑的」; the old
   「用比賽的走／跑方式」 without a race time); a race simulation 4–3 weeks out is a suggestion
-  (`race_sim_suggestion`).
+  (`race_sim_suggestion`). Its structure (editor and COROS push, SP-409; `workout_steps._climb_items`, read
+  from the title 「長爬坡反覆 N×M 分」): 暖身 15 → N ×（上坡 M′＋下坡 M × 0.6′, a COROS group）→ 緩和 (the rest of
+  the session, ≥ 5′; else the old one block). No HR / power target on the watch (target_policy `climb: none`
+  unchanged, owner 2026-10-13): the uphill's name is 「上坡 · <the session's HR suggestion> · RPE 4」, the descent
+  「下坡用跑的 · RPE 3–4」; the RPE (no watch target) gives the structure's TSS estimate its IF (≈ 0.9 × the
+  card's rate × 1.1 × h, 推估) instead of the no-target work step's 1.05 (≈ 2 × the card).
 - **爬坡走路提示** (SP-298, `engine/walk_hint.py`; run-walk-threshold.md §5.4 #2): a planned hill easy
   run / long run (kind easy / long, terrain trail / hike or a 山路 / 越野 title; never road / flat)
   gets `walk_hint` in the 課表 API view (`api/plan_sessions._view`, shown after the detail on the 課表
@@ -568,7 +573,9 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
   the rest of the week is planned around it (day 2 out of the easy minutes, 4 easy days after).
 - **陡坡健走（模擬負重）** (`engine/steep_hill.py`): before a 百岳 / multi-day trip, one weekday
   easy run of a 專項期 week becomes a 40–50 min steep walk at the Pandolf grade that costs what
-  the pack would (no pack in training).
+  the pack would (no pack in training). Structure (editor and COROS push, SP-409; `workout_steps._steep_items`):
+  平路暖身 10′ → the steep part (the rest, at the walk cap, 「上坡心率 ≤ 爬坡上限或 RPE ≤ 13；下坡看感覺」) →
+  平路緩和 5′, as its detail says (one block, as before, under 25′).
 - **熱適應課** (`engine/heat_plan.py`): below.
 - **下坡課** (SP-99, SP-87; `engine/downhill.py`; after placement, before the 長爬坡有氧 and the
   技術地形課, in week_plan and per projected week). SP-87 (owner 2026-10-05, decision 3;
@@ -1389,7 +1396,8 @@ which one. The response keeps the `coros` field names.
   hike / easy are one time step at HR ≤ the easy cap; a 路跑 專項期 LSD with a marathon-pace segment
   is easy / MP / easy, the MP step a pace target (COROS `intensityType` 3, s/km: the goal pace,
   else threshold pace × 1.04–1.08) or an HR band without threshold pace; an easy session whose
-  title has `N×S 秒` gets a strides repeat when ≥ 10 min remain; quality and test sessions get
+  title has `N×S 秒` gets a strides repeat when ≥ 10 min remain; a 長爬坡反覆 / 陡坡健走 (SP-409) is
+  pushed as `workout_steps.derive` structures it (`climb_reps` / `steep_walk`, below); quality and test sessions get
   their own step builders — an HR basis gives HR work steps (`_work_hr`,
   `backend/sync/coros_workouts.py:202`). Strength, rest, heat_passive and a race without steps
   (the generator's 比賽) are not pushed (skipped, with a reason); a race with steps (the 賽事計算機's
@@ -2534,3 +2542,4 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 | 2026-10-13 | bugfix | SP-408 | A session the B-race / post-race / 減量期 rules make 輕鬆跑 gets the week's easy-run target (`easy_target` = `tgt["z2"]` through `post_race.apply` / `bc_apply` / `taper_rules`, week_plan and the projection) and no source, instead of keeping its old target (the demo's 10/20 輕鬆跑 said 「功率 255–263 W（98–101% CP）」 while its structure and the watch had 169–208 W). Tests: `backend/tests/test_bc_races.py` (`test_b_recovery_easy_run_takes_the_easy_target`, `test_b_race_week_easy_runs_take_the_easy_target`, `test_week_plan_and_projection_easy_runs_after_a_b_race_keep_the_easy_target`), `test_post_race.py::test_first_week_easy_runs_take_the_easy_target`, `test_taper_rules.py::test_runs_made_easy_take_the_easy_target` |
 | 2026-10-13 | fix | SP-410 | `upsert_external`'s `previous` adds `updated_local` (`localtime.local_iso`: UTC → the athlete's zone, athlete_tz); the activity editor's 「其他來源的同一次運動」 (`GET /api/v1/sync/dedup/near`) rows add `start_local` and the page shows it — both used to slice the UTC string |
 | 2026-10-13 | bugfix | SP-361 | Switching 設定 → 課表心率區間 (`PUT /api/v1/plan/hr-profile` with only `model`) no longer goes through `_notify(True)`: the cached Datasets stay (the model is read live and `HRP.stamp()` is in the plan inputs', Status's and the zone / target charts' keys) and `plan_auto.after_thresholds` still re-plans / re-pushes; a manual max / resting HR still rebuilds. `threshold_confidence.check`'s Dataset memo key adds `HP.stamp()` (its 「最大心率可信度低」 warning follows the model). Synthetic 52-week demo base: 課表 calendar right after a switch 3.1–3.2 s → 2.8–2.9 s (a model used before: 2.1 s, plan-inputs cache hit); the rest is `Status` + plan inputs recomputed in full (open question above). Tests: `backend/tests/test_hr_model_switch_sp361.py` |
+| 2026-10-13 | bugfix | SP-409 | 長爬坡反覆 and 陡坡健走 (kind easy, no stored steps) were derived and pushed as one block of the whole session — the 長爬坡反覆 with no target, its structure TSS at the no-target 1.05 (165 vs the card's 87). Now `workout_steps.derive` gives 暖身 15 → N ×（上坡 M＋下坡 0.6 M）→ 緩和 (the uphill with no watch target, named with the session's HR suggestion, RPE 4 / descent RPE 3–4 for the IF) and 暖身 10 → 陡坡 → 緩和 5; `coros_workouts.session_steps` pushes that structure (sessions already on the watch show 需更新 once). target_policy unchanged. Tests: `backend/tests/test_special_easy_structure_sp409.py`, `test_workout_steps.py` golden list, `test_walk_cap.py` (the steep part is step [1]) |

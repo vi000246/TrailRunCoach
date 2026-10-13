@@ -525,6 +525,58 @@ def heat_run(s: dict) -> bool:
     return bool(s.get("heat") or "熱適應" in (s.get("title") or ""))
 
 
+# SP-409: the planner's special easy runs as they are run, not one block of the whole session.
+# 長爬坡反覆 (specific_phase.apply_climb): 暖身 15 → N ×（上坡 rep＋下坡 rep × DOWN_SHARE）→ 緩和 (the
+# rest of the session: climb_minutes rounds the total to 5′). target_policy keeps long climbs at
+# 「none」 (no HR / power on the watch, owner 2026-10-13 SP-409 Q1 A): the uphill's name says the
+# session's HR suggestion, and it and the descent carry an RPE (no watch target, RPE_LIMIT) — the IF
+# of the structure's TSS estimate, which the no-target work step's 1.05 (NONE_IF) put at ≈ 2 × the card.
+CLIMB_WARM_S = 15 * 60                  # specific_phase.climb_minutes / climb_text: 暖身 15 分
+CLIMB_COOL_MIN_S = 5 * 60               # 推估: a shorter 緩和 = a session cut below its repeats → one block
+CLIMB_UP_RPE = (4, 4)                   # 推估: 「心率約輕鬆跑上限」 ≈ the top of RPE ≤ 4 (RPE_EASY_MAX, Seiler)
+CLIMB_DOWN_RPE = (3, 4)                 # 推估: running down easy (下坡用跑的), as the downhill session's low end
+# 陡坡健走 (steep_hill.session_text): 暖身 10 分平路 → 陡坡 N 分 → 緩和 5 分, N = the rest of the session
+STEEP_WARM_S, STEEP_COOL_S, STEEP_MIN_S = 10 * 60, 5 * 60, 10 * 60
+
+
+def climb_reps(s: dict) -> Optional[tuple[int, int]]:
+    """(n, rep minutes) of a 「長爬坡反覆 N×M 分」 easy run, or None."""
+    if s.get("kind") != "easy":
+        return None
+    m = re.search(r"長爬坡反覆\s*(\d+)\s*[×xX]\s*(\d+)\s*分", s.get("title") or "")
+    return (int(m.group(1)), int(m.group(2))) if m and int(m.group(1)) > 0 and int(m.group(2)) > 0 else None
+
+
+def steep_walk(s: dict) -> bool:
+    """A 陡坡健走 easy run (steep_hill.apply: id steep, the title)."""
+    return s.get("kind") == "easy" and (s.get("id") == "steep" or "陡坡健走" in (s.get("title") or ""))
+
+
+def _climb_items(s: dict, secs: int, ids) -> Optional[list]:
+    from backend.engine.specific_phase import DOWN_SHARE
+    n, rep_min = climb_reps(s)
+    up, down = rep_min * 60, int(round(rep_min * DOWN_SHARE)) * 60
+    cool = secs - CLIMB_WARM_S - n * (up + down)
+    if cool < CLIMB_COOL_MIN_S:
+        return None
+    hr = (s.get("target") or "").strip() or ("心率約" + EASY_CAP)
+    return [step(ids, "warm", CLIMB_WARM_S, _easy(*EASY_BAND)),
+            rep(ids, n, [step(ids, "work", up, {"type": "rpe", "lo": CLIMB_UP_RPE[0], "hi": CLIMB_UP_RPE[1]},
+                              f"上坡 · {hr}"),
+                         step(ids, "work", down, {"type": "rpe", "lo": CLIMB_DOWN_RPE[0], "hi": CLIMB_DOWN_RPE[1]},
+                              "下坡用跑的")], True, f"上坡 {n}×{rep_min} 分"),
+            step(ids, "cool", cool, _easy(*EASY_BAND))]
+
+
+def _steep_items(secs: int, ids) -> Optional[list]:
+    main = secs - STEEP_WARM_S - STEEP_COOL_S
+    if main < STEEP_MIN_S:
+        return None
+    return [step(ids, "warm", STEEP_WARM_S, _easy(*EASY_BAND), "平路暖身"),
+            step(ids, "work", main, _easy(*EASY_BAND)),
+            step(ids, "cool", STEEP_COOL_S, _easy(*EASY_BAND), "平路緩和")]
+
+
 # ---------------------------------------------------------------------------
 # 每堂課前加熱身 (SP-364, engine/warmup.py): the leading warm-up block of a structure,
 # topping it up (templates, stored structures) or splitting an easy session's first minutes
@@ -685,6 +737,11 @@ def _easy_items(s: dict, kind: str, secs: int, ids) -> Optional[list]:
     if kind in ("long", "mountain", "hike"):
         lo, hi = LONG_BAND if kind == "long" else TRAIL_BAND
         return [step(ids, "work", secs, _easy(lo, hi))]
+    # SP-409: 長爬坡反覆 / 陡坡健走 as their text says (one block, as before, when cut too short)
+    special = (_climb_items(s, secs, ids) if climb_reps(s) else
+               _steep_items(secs, ids) if steep_walk(s) else None)
+    if special is not None:
+        return special
     if kind == "easy" and heat_run(s) and secs >= 20 * 60:
         return [step(ids, "warm", HEAT_WARM_S, EASY, "熱適應：慢慢進入"),
                 step(ids, "work", secs - HEAT_WARM_S - HEAT_COOL_S, EASY, "熱適應：照心率、配速放慢"),

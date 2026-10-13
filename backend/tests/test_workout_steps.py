@@ -39,6 +39,10 @@ def _sessions():
         {"kind": "easy", "title": "輕鬆跑", "minutes": 45},
         {"kind": "easy", "title": "輕鬆跑＋熱適應", "minutes": 50},
         {"kind": "easy", "title": "輕鬆跑＋6×20 秒衝刺", "minutes": 50},
+        # SP-409: the special easy runs (warm-up, repeats / the steep part, cool-down)
+        {"kind": "easy", "id": "climb", "title": "長爬坡反覆 2×20 分（8% 坡）", "minutes": 90, "terrain": "trail",
+         "target": "心率約輕鬆跑上限 150 bpm"},
+        {"kind": "easy", "id": "steep", "title": "陡坡健走 14%（模擬負重 9 kg）", "minutes": 45, "terrain": "trail"},
         {"kind": "notice", "title": "課表待確認", "minutes": 1},
     ]
     for p in ("quick", "standard"):
