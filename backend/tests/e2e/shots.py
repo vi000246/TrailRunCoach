@@ -17,6 +17,8 @@ The shot list:
      "shots": [
        {"name": "課表頁 手機",                        # → <out>/SP-396-1-課表頁-手機.webp
         "page": "schedule",                          # a key of _server.PAGES, or "path": "/api/v1/…?x=1"
+        "ready": "#loginForm",                       # what to wait for after loading (default: the app's
+                                                     #   nav, .appnav — pages without it, like /login, need this)
         "viewport": "mobile",                        # mobile (390×844) | desktop (1400×900, default) | [w, h]
         "caption": "第二張卡片：左側色條＝類型色",      # what the reviewer should look at
         "init": "localStorage.setItem('k', 'v')",    # runs before the page's own scripts
@@ -62,7 +64,8 @@ VIEWPORTS = {
     "mobile": {"viewport": {"width": 390, "height": 844}, "device_scale_factor": 2,
                "is_mobile": True, "has_touch": True},
 }
-SHOT_KEYS = {"name", "page", "path", "viewport", "caption", "init", "mock", "steps", "clip", "full_page", "hide"}
+SHOT_KEYS = {"name", "page", "path", "ready", "viewport", "caption", "init", "mock", "steps", "clip", "full_page",
+             "hide"}
 MOCK_KEYS = {"url", "json", "status", "set"}
 STEP_KEYS = {"click", "wait", "fill", "hover", "press", "scroll", "eval", "sleep", "goto"}
 TICKET_RE = re.compile(r"^[A-Z]{2,4}-\d+$")
@@ -105,7 +108,8 @@ def check_spec(spec: dict, where: str = "spec") -> dict:
         if s.get("page") and s["page"] not in _server.PAGES:
             raise SpecError(f"{at}: page {s['page']!r} is not one of {sorted(_server.PAGES)}")
         vp = s.get("viewport", "desktop")
-        if not (vp in VIEWPORTS or (isinstance(vp, list) and len(vp) == 2 and all(isinstance(x, int) for x in vp))):
+        if not ((isinstance(vp, str) and vp in VIEWPORTS)        # a list is not hashable: no `in` on it
+                or (isinstance(vp, list) and len(vp) == 2 and all(isinstance(x, int) and x > 0 for x in vp))):
             raise SpecError(f"{at}: viewport must be mobile / desktop / [w, h]")
         if not (isinstance(s.get("hide", []), list) and all(isinstance(x, str) and x for x in s.get("hide", []))):
             raise SpecError(f"{at}: hide must be a list of selectors")
@@ -202,9 +206,15 @@ def _step(page, st: dict) -> None:
         _open(page, arg)
 
 
-def _open(page, path: str) -> None:
+def _open(page, path: str, ready: str | None = None) -> None:
     from backend.tests.e2e._browser import open_page
-    open_page(page, path)
+    if ready:                              # a page without the app's nav (/login …): wait for this instead
+        resp = page.goto(path, wait_until="load")
+        if resp is None or resp.status != 200:
+            raise RuntimeError(f"{path}: {resp.status if resp else 'no response'}")
+        page.locator(ready).first.wait_for(state="visible")
+    else:
+        open_page(page, path)
     try:
         page.wait_for_load_state("networkidle", timeout=20_000)
     except Exception:                      # noqa: BLE001 — a page that keeps polling is still drawn
@@ -233,7 +243,7 @@ def take(browser, base_url: str, spec: dict, out: Path, fmt: str = "webp") -> li
             page = ctx.new_page()
             watch = Watch(page, base_url)
             page.on("dialog", lambda d: d.accept())
-            _open(page, path)
+            _open(page, path, s.get("ready"))
             for st in s.get("steps", []):
                 _step(page, st)
             if s.get("hide"):

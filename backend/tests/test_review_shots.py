@@ -13,6 +13,16 @@ def _spec(**shot):
     return {"ticket": "SP-396", "shots": [{"name": "課表頁", "page": "schedule", **shot}]}
 
 
+@pytest.mark.parametrize("vp", ["mobile", "desktop", [1024, 768]])
+def test_every_documented_viewport_passes(vp):
+    # [w, h] once raised TypeError (a list is not hashable) instead of passing
+    assert S.check_spec(_spec(viewport=vp))
+
+
+def test_a_page_without_the_nav_names_what_to_wait_for():
+    assert S.check_spec({"ticket": "SP-58", "shots": [{"name": "登入", "path": "/login", "ready": "form"}]})
+
+
 def test_a_plain_shot_list_passes():
     spec = _spec(viewport="mobile", caption="看色條", hide=[".sugbox"],
                  mock=[{"url": "**/api/v1/session", "json": {}}, {"url": "re:.*/sessions", "set": {"0.done": True}}],
@@ -27,6 +37,8 @@ def test_a_plain_shot_list_passes():
     (_spec(page="nope"), "is not one of"),
     ({"ticket": "SP-1", "shots": [{"name": "x", "page": "schedule", "path": "/a"}]}, "exactly one of page / path"),
     (_spec(viewport="tablet"), "viewport"),
+    (_spec(viewport=[390]), "viewport"),
+    (_spec(viewport=[0, 844]), "viewport"),
     (_spec(mock=[{"url": "**/x"}]), "exactly one of json / set"),
     (_spec(mock=[{"url": "**/x", "json": {}, "body": 1}]), "unknown mock keys"),
     (_spec(steps=[{"klick": "a"}]), "a step is one of"),
