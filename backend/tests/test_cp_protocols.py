@@ -266,7 +266,8 @@ def test_quick_is_095_p20_and_its_checks():
     kick = CPP.result(_bouts(quick_parts(p20=240.0, last_min=280.0)), "quick", LTHR)   # held back, then kicked
     assert kick["quality"] == "參考" and any("推估門檻" in x and "最後 1 分" in x for x in kick["reasons"])
     soft = CPP.result(_bouts(quick_parts(p20=240.0, hr=150)), "quick", LTHR)          # HR far below LTHR
-    assert soft["quality"] == "不採用" and CPP.apply_payload(soft, "2026-09-30") is None
+    # SP-449: an app HR rule never rejects a test (was 不採用, no apply button): 參考, still applicable
+    assert soft["quality"] == "參考" and CPP.apply_payload(soft, "2026-09-30") is not None
 
 
 def test_race_is_riegel_anchored_at_30_min():
@@ -305,8 +306,9 @@ def test_3_12_test_with_a_soft_3min_falls_back_to_one_bout():
     assert res["p3"] < res["p12"]
     text = " ".join(res["reasons"])
     import re
-    assert re.search(r"比 12 分段 177 低 2\d bpm：不是全力（推估門檻）", text) and "< 25 分" in text
-    assert "不高於 12 分" in text and not res["checks"][0]["own"]            # the model check is not ours
+    # SP-449: the HR rule says 「可能沒全力」, no longer 「不是全力」 (it never drops the test)
+    assert re.search(r"比 12 分段 177 低 2\d bpm：3 分段可能沒全力（推估門檻）", text) and "< 25 分" in text
+    assert "沒有高於 12 分" in text and not res["checks"][0]["own"]          # the model check is not ours
     assert not any("最後 1 分" in x for x in res["reasons"])                 # no kick
     pay = CPP.apply_payload(res, "2026-09-30", 7)
     assert pay["cp"] == 220 and pay["wprime"] is None and pay["cp_method"] == "1pt_prior" and "參考" in pay["label"]

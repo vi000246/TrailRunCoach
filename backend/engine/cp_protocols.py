@@ -22,11 +22,17 @@ measure_bouts(t, power, hr)
     window, each bout's HR peak and last-minute power.
 result(bouts, protocol, …)
     {protocol, method, cp, wprime, cp_range, quality, checks, reasons}.
-    quality: 可信 / 參考 / 不採用.
+    quality: 可信 / 參考 (不採用 is kept for old callers; nothing produces it).
 
 Quality checks marked 推估 are our own thresholds — no study validated an HR
 or pacing rule for "not all-out" (§3.4); they are to be calibrated on the
-athlete's own tests.
+athlete's own tests. SP-449 (the user 2026-10-13, 「不要擅自決定我做的 CP test
+不算」): a test is judged the way WKO5 builds its mFTP (docs/research/
+wko5-mftp-logic.md) — WKO5 never drops an effort, it fits its PD model to the
+upper edge of the 90-day mean-max curve. So no check rejects a test: a failed
+check makes it 參考, and a 12′ + 3′ whose points make no two-point model takes
+WKO5's mFTP fitted up to the test day (method pd_model), the 12′ bout with the
+W′ prior only when there is no such fit.
 """
 from __future__ import annotations
 
@@ -95,7 +101,12 @@ GAP_S = 600                        # the 3′ window starts ≥ 10 min from the 
 HR_LAG_S = 15                      # HR peaks a few seconds after the bout
 
 METHOD_LABEL = {"2pt": "兩點（12 分＋3 分）", "1pt_prior": "單段＋W′ 先驗", "tt20": "20 分全力 × 0.95",
-                "race": "比賽換算（Riegel）"}
+                "race": "比賽換算（Riegel）",
+                # SP-449: the PD model on the 90-day mean-max envelope up to the test day (the test in it)
+                "pd_model": "比照 WKO5：PD 模型 mFTP（近 90 天 mean-max 上緣，含這次測試）"}
+# why a 12′ + 3′ whose points make no model still gives a CP (SP-449)
+PD_NOTE = ("WKO5 不判斷哪次努力算不算：每次跑步都進 90 天的 mean-max 曲線，PD 模型取曲線上緣擬合；"
+           "所以這次測試照樣算，CP 用 WKO5 的方式擬合（含這次測試）")
 
 TABLE = {
     "quick": dict(
@@ -262,7 +273,8 @@ def _hr_vs_lthr(b: dict, name: str, lthr: Optional[float]) -> Optional[dict]:
         return None
     ok = b["hr_peak"] >= lthr - HR_BELOW_LTHR_BPM
     return _check("hr", ok, f"{name}最高心率 {b['hr_peak']:.0f}，" +
-                  (f"到 LTHR {lthr:.0f} 附近" if ok else f"比 LTHR {lthr:.0f} 低 {lthr - b['hr_peak']:.0f} bpm：不像全力"))
+                  (f"到 LTHR {lthr:.0f} 附近" if ok else
+                   f"比 LTHR {lthr:.0f} 低 {lthr - b['hr_peak']:.0f} bpm：不像全力（或 LTHR 估高了）"))
 
 
 def _quality(checks: list[dict], floor: str = "可信") -> str:
@@ -274,15 +286,35 @@ def _quality(checks: list[dict], floor: str = "可信") -> str:
     return order[q]
 
 
+def two_point(p3: float, p12: float, sex: Optional[str] = None) -> dict:
+    """The 3′ / 12′ two-point model: {ok, cp, wprime, text}. ok = 3′ above 12′ (the curve falls)
+    and W′ within the W′ prior ± 2 SD (Ruiz-Alias 2025) — a point that does not fall is no
+    model, not a test that "does not count" (SP-449)."""
+    w0, sd0 = WPRIME_PRIOR.get(sex or "male", WPRIME_PRIOR["male"])
+    cp = (p12 * 720 - p3 * 180) / 540.0
+    w = (p3 - cp) * 180.0
+    ok = p3 > p12 and (w0 - 2 * sd0) <= w <= (w0 + 2 * sd0)
+    if ok:
+        text = f"3 分 {p3:.0f} W > 12 分 {p12:.0f} W、W′ {w / 1000:.1f} kJ 在先驗 ± 2 SD 內"
+    elif p3 <= p12:
+        text = (f"3 分 {p3:.0f} W 沒有高於 12 分 {p12:.0f} W：3 分這點不在功率–時間曲線的上緣，"
+                "兩點模型不成立")
+    else:
+        text = f"W′ {w / 1000:.1f} kJ 在先驗 {w0 / 1000:.1f} ± {2 * sd0 / 1000:.1f} kJ 之外：兩點模型不成立"
+    return {"ok": ok, "cp": cp, "wprime": w, "text": text}
+
+
 def _single(b: dict, prior: tuple, n: int) -> tuple[float, list]:
     w, sd = prior
     return b["power"] - w / n, [b["power"] - (w + sd) / n, b["power"] - (w - sd) / n]
 
 
 def result(bouts: Optional[dict], protocol: Optional[str], lthr: Optional[float] = None,
-           sex: Optional[str] = None) -> Optional[dict]:
+           sex: Optional[str] = None, pd=None) -> Optional[dict]:
     """The protocol's CP from measure_bouts() output. None when the activity
-    has no bout of that protocol."""
+    has no bout of that protocol. `pd`: a callable (or a dict) giving WKO5's PD
+    fit up to the test day {mftp, frc, date, runs} or None — read only when a
+    12′ + 3′ makes no two-point model (racepower.athlete.stryd_pd)."""
     if not bouts:
         return None
     p = norm(protocol)
@@ -297,41 +329,43 @@ def result(bouts: Optional[dict], protocol: Optional[str], lthr: Optional[float]
         L, S = s["long"], s["short"]
         p12, p3 = L["power"], S["power"]
         checks: list[dict] = []
-        cp2 = (p12 * 720 - p3 * 180) / 540.0
-        w2 = (p3 - cp2) * 180.0
-        model_ok = p3 > p12 and (w0 - 2 * sd0) <= w2 <= (w0 + 2 * sd0)
-        checks.append(_check("model", model_ok,
-                             f"3 分 {p3:.0f} W > 12 分 {p12:.0f} W、W′ {w2 / 1000:.1f} kJ 在先驗 ± 2 SD 內"
-                             if model_ok else
-                             (f"3 分 {p3:.0f} W 不高於 12 分 {p12:.0f} W：兩點模型不成立" if p3 <= p12 else
-                              f"W′ {w2 / 1000:.1f} kJ 在先驗 {w0 / 1000:.1f} ± {2 * sd0 / 1000:.1f} kJ 之外"), own=False))
-        hr_ok = True
+        tp = two_point(p3, p12, sex)
+        cp2, w2, model_ok = tp["cp"], tp["wprime"], tp["ok"]
+        checks.append(_check("model", model_ok, tp["text"], own=False))
         if S.get("hr_peak") is not None and L.get("hr_peak") is not None:
             gap = L["hr_peak"] - S["hr_peak"]
             hr_ok = gap <= HR_GAP_BPM
             checks.append(_check("hr", hr_ok, f"3 分段最高心率 {S['hr_peak']:.0f}，" +
                                  (f"和 12 分段 {L['hr_peak']:.0f} 相近" if hr_ok else
-                                  f"比 12 分段 {L['hr_peak']:.0f} 低 {gap:.0f} bpm：不是全力")))
+                                  f"比 12 分段 {L['hr_peak']:.0f} 低 {gap:.0f} bpm：3 分段可能沒全力")))
         pc = _pacing(L, "12 分段")
         if pc:
             checks.append(pc)
         rec_ok = s["gap_s"] >= RECOVERY_MIN_S
         checks.append(_check("recovery", rec_ok, f"兩段間隔 {s['gap_s'] / 60:.0f} 分" +
                              ("" if rec_ok else "（< 25 分，課表是 30 分）：第二段帶著疲勞"), own=False))
-        if model_ok and hr_ok:
-            q = _quality([c for c in checks if c["id"] not in ("model", "hr")])
+        order = [S, L] if not s["long_first"] else [L, S]
+        if model_ok:
+            # the HR rule is ours (推估), not WKO5's: it makes the result 參考, never drops the 3′
+            q = _quality([c for c in checks if c["id"] != "model"])
             return {**base, "method": "2pt", "cp": cp2, "wprime": w2, "cp_range": [cp2, cp2], "p3": p3, "p12": p12,
                     "quality": q, "checks": checks, "reasons": [c["text"] for c in checks if not c["ok"]],
-                    "bouts": [S, L] if not s["long_first"] else [L, S]}
-        cp, rng = _single(L, prior, 720)
+                    "bouts": order}
         hl = _hr_vs_lthr(L, "12 分段", lthr)
         if hl is not None:
-            hl["fail"] = "不採用"
             checks.append(hl)
+        fit = pd() if callable(pd) else pd
+        if fit and fit.get("mftp"):
+            mftp = float(fit["mftp"])
+            return {**base, "method": "pd_model", "cp": mftp, "wprime": None, "cp_range": [mftp, mftp],
+                    "p3": p3, "p12": p12, "pd": fit, "quality": _quality(checks, "參考"), "checks": checks,
+                    "reasons": [c["text"] for c in checks if not c["ok"]] + [PD_NOTE],
+                    "bouts": order}
+        cp, rng = _single(L, prior, 720)
         return {**base, "method": "1pt_prior", "cp": cp, "wprime": None, "wprime_prior": w0, "cp_range": rng,
                 "p3": p3, "p12": p12, "quality": _quality(checks, "參考"), "checks": checks,
-                "reasons": [c["text"] for c in checks if not c["ok"]] + [f"只用 12 分段，{prior_txt}"],
-                "bouts": [S, L] if not s["long_first"] else [L, S]}
+                "reasons": [c["text"] for c in checks if not c["ok"]] + [f"算不出 PD 模型，只用 12 分段，{prior_txt}"],
+                "bouts": order}
     if p == "quick":
         b = bouts.get("quick")
         if not b:
@@ -349,7 +383,6 @@ def result(bouts: Optional[dict], protocol: Optional[str], lthr: Optional[float]
             checks.append(pc)
         hl = _hr_vs_lthr(b, "20 分段", lthr)
         if hl is not None:
-            hl["fail"] = "不採用"
             checks.append(hl)
         return {**base, "method": "tt20", "cp": cp, "wprime": None, "wprime_prior": w0,
                 "cp_range": sorted([cp, alt]), "p20": p20, "quality": _quality(checks), "checks": checks,
@@ -378,7 +411,7 @@ def result(bouts: Optional[dict], protocol: Optional[str], lthr: Optional[float]
 
 def _basis(method: Optional[str]) -> str:
     """Which CP definition a method measures: '2pt' (3–12 min model) or '30min'."""
-    return "2pt" if method in (None, "2pt", "1pt_prior") else "30min"
+    return "2pt" if method in (None, "2pt", "1pt_prior") else "30min"     # pd_model: mFTP ≈ 30–60-min power
 
 
 def reference(thresholds, test_date: str, method: str, cp_now: Optional[float] = None) -> dict:
@@ -411,8 +444,8 @@ def reference(thresholds, test_date: str, method: str, cp_now: Optional[float] =
 
 def apply_payload(res: dict, date: str, activity_index: Optional[int] = None) -> Optional[dict]:
     """The body of POST /api/v1/plan/thresholds/apply-cp for one result, or
-    None when the result must not be applied (不採用). W′ only when measured
-    (two-point): a prior is not the athlete's W′."""
+    None without a CP (不採用 is no longer produced, SP-449). W′ only when measured
+    (two-point): a prior / an FRC is not the athlete's W′."""
     if not res or res.get("quality") == "不採用" or res.get("cp") is None:
         return None
     cp = round(float(res["cp"]))
