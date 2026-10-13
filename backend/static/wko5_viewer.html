@@ -81,11 +81,6 @@ svg.i { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor;
 .chip.go { background: var(--accent-soft); border-color: transparent; color: var(--accent); font-weight: 600; }
 .chip.go:hover { border-color: var(--accent); }
 .chip[aria-expanded="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
-.pill { display: inline-flex; align-items: center; gap: 5px; flex: none; font-size: 11.5px; padding: 2px 10px; border-radius: 12px;
-  text-decoration: none; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
-.pill:hover { background: var(--accent-soft); }
-.pill.parity { border-color: var(--warn); color: var(--warn); }
-.pill.mine { border-color: var(--ok); color: var(--ok); }
 body[data-mode="season"] .w-only, body[data-mode="workout"] .s-only { display: none !important; }
 .only-narrow { display: none !important; }
 
@@ -411,7 +406,6 @@ table.z5ev td { white-space: normal; }
   <symbol id="i-tree" viewBox="0 0 24 24"><path d="M4 5h16M4 12h16M4 19h10"/></symbol>
   <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 5 8 12l7 7"/></symbol>
   <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.3-4.3"/></symbol>
-  <symbol id="i-calc" viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8.5 7h7M8.5 11.5h.01M12 11.5h.01M15.5 11.5h.01M8.5 15.5h.01M12 15.5h.01M15.5 15.5h.01"/></symbol>
   <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
 </svg>
 <div class="tb">
@@ -430,7 +424,6 @@ table.z5ev td { white-space: normal; }
     <!-- SP-381: 專項 (主要訓練項目: auto / 越野跑 / 路跑・馬拉松) decides which charts show; changing it saves
          the setting and reloads. It replaced the 資料來源 chip (the source is set in 設定 › 資料同步) -->
     <span id="sport-chip"></span><script src="/api/v1/static/sportchip.js" defer></script>
-    <a class="pill" id="modepill" href="/api/v1/wko5/settings#mode"></a>
   </div>
   <div class="tb2">
     <button class="chip s-only" id="chip-range" aria-controls="aside"><svg class="i"><use href="#i-cal"/></svg><span class="v" id="range-txt"></span><span class="caret">▾</span></button>
@@ -670,15 +663,9 @@ async function init() {
   S.sport = ps.sport || "trail";       // 主要訓練項目 (設定): which season charts show (visCharts)
   // workout map defaults (settings page); the map's own switch overrides them per browser
   S.mapDefault = window.MapLayers ? MapLayers.fromSettings(us) : null;
-  S.parity = !!cfg.config.parity;   // switched on the settings page
+  S.parity = !!cfg.config.parity;   // switched on the settings page (設定 › 計算模式; SP-448: no pill here)
   // 使用功率 (settings, charts.power.enabled): off = power-only charts hidden, 配速／功率 toggles on pace
   S.usePower = us.use_power !== false;
-  const pill = $("modepill");
-  pill.innerHTML = `<svg class="i"><use href="#i-calc"/></svg><span>算式：${S.parity ? "比照 WKO5" : "我的"}</span>`;
-  pill.title = (S.parity ? "WKO5 對照模式：完全比照 WKO5 的公式，不套用資料校正與你的測試值"
-    : "我的算式：移動時間 hrTSS、爬升加成、套用資料校正與你的測試值") + "（點這裡到設定切換）";
-  pill.className = "pill " + (S.parity ? "parity" : "mine");
-  if ((window.TRC_SESSION || {}).mode === "demo") pill.style.display = "none";   // the demo has no formula switch (settings)
   const broken = S.views.filter((v) => v.error);
   if (broken.length) console.warn("view files with errors:", broken.map((v) => `${v.path}: ${v.error}`));
   await init0();
