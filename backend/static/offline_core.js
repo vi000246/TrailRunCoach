@@ -48,7 +48,8 @@
   const APP_FILES = [
     "/api/v1/static/shell.js", "/api/v1/static/i18n/i18n.js", "/api/v1/static/offline_core.js",
     "/api/v1/static/autosync.js", "/api/v1/static/suggestions.js", "/api/v1/static/region.js",
-    "/api/v1/static/setup_wizard.js", "/api/v1/static/dashicons.js", "/api/v1/static/z5flow.js",
+    "/api/v1/static/setup_wizard.js", "/api/v1/static/dashicons.js", "/api/v1/static/sesschip.js",
+    "/api/v1/static/z5flow.js",
     "/api/v1/static/plan_mark.js", "/api/v1/static/autoplan.js", "/api/v1/static/session_banner.js",
     "/api/v1/static/workout_editor.js", "/api/v1/static/syncrun.js", "/api/v1/static/fitimport.js",
     "/api/v1/static/painpicker.js",
