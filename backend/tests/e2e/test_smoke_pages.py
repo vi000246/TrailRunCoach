@@ -104,11 +104,12 @@ def test_schedule_calendar(app):
     open_page(page, _server.PAGES["schedule"])
     _calendar_ready(page)
     assert page.locator("#cal .chip[data-uid]").count() > 0, "no sessions on the calendar"
-    # state and compliance are separate class tokens (a glued 「st-donecp-green」 lost the ✓ and tint)
+    # state and completion are separate class tokens (a glued 「st-donecp-green」 once lost the tint);
+    # SP-396: SessChip.cls — a done card is `done cp-ok|cp-part|cp-off`
     classes = page.evaluate("() => [...document.querySelectorAll('#cal .chip[data-uid]')].map((c) => c.className)")
-    assert not [c for c in classes if re.search(r"st-\w+cp-", c)], classes
-    if page.locator("#cal .chip.st-done").count():
-        assert page.locator('#cal .chip.st-done[class*="cp-"]').count() > 0, "done chips without a compliance class"
+    assert not [c for c in classes if re.search(r"(done|fut|miss)cp-|cp-\w+swap", c)], classes
+    if page.locator("#cal .chip.done").count():
+        assert page.locator('#cal .chip.done[class*="cp-"]').count() == page.locator("#cal .chip.done").count()
     # month / week, back and forth, today
     page.click('#view-seg button[data-view="week"]')
     _calendar_ready(page)
@@ -239,11 +240,11 @@ def test_strength_session_opens_the_move_picker(app):
     page, _ = app
     open_page(page, _server.PAGES["schedule"])
     _calendar_ready(page)
-    chip = page.locator("#cal .chip.k-strength[data-uid]")
+    chip = page.locator("#cal .chip[data-kind=strength][data-uid]")
     if chip.count() == 0:
         page.click("#next")
         _calendar_ready(page)
-    page.locator("#cal .chip.k-strength[data-uid]").first.click()
+    page.locator("#cal .chip[data-kind=strength][data-uid]").first.click()
     expect(page.locator("#sd")).to_have_attribute("open", "")
     expect(page.locator("#sd-sm")).to_be_visible()
     expect(page.locator("#sd-sm-txt")).to_contain_text("目前：", timeout=20_000)
@@ -254,7 +255,7 @@ def test_strength_session_opens_the_move_picker(app):
     expect(page.locator("#sd")).not_to_have_attribute("open", "")
     # a run's editor has no such box
     page.locator("#pf [data-close]").first.click()
-    page.locator("#cal .chip.k-easy[data-uid]").first.click()
+    page.locator("#cal .chip[data-kind=easy][data-uid]").first.click()
     expect(page.locator("#sd")).to_have_attribute("open", "")
     expect(page.locator("#sd-sm")).to_be_hidden()
 
@@ -270,11 +271,11 @@ def test_schedule_phone_cards_and_editor_save(app):
         .filter((e) => e.getBoundingClientRect().height > parseFloat(getComputedStyle(e).lineHeight) * 2 + 2).length""")
     assert tall == 0
     for _ in range(4):
-        if page.locator("#cal .chip.k-quality[data-uid]").count():
+        if page.locator("#cal .chip[data-kind=quality][data-uid]").count():
             break
         page.click("#next")
         _calendar_ready(page)
-    page.locator("#cal .chip.k-quality[data-uid]").first.click()
+    page.locator("#cal .chip[data-kind=quality][data-uid]").first.click()
     expect(page.locator("#sd")).to_have_attribute("open", "")
     page.wait_for_timeout(1000)
     hit = page.evaluate("""() => { const r = document.getElementById('sd-save').getBoundingClientRect();

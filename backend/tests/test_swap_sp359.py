@@ -34,13 +34,13 @@ def _watch(e):
 def test_chip_class_list_keeps_state_and_compliance_apart():
     """The swap outline (SP-359) once glued 「st-done」 to 「cp-green」 in chipHtml's class
     template: done chips lost their ✓ and compliance tint. Every interpolation in the class
-    attribute must be its own whitespace-separated token."""
+    attribute must be its own whitespace-separated token. SP-396: the state and completion classes
+    come from SessChip.cls (`done cp-ok` …), the swap ones are appended with a leading space."""
     html = (Path(__file__).resolve().parents[1] / "static" / "schedule.html").read_text(encoding="utf-8")
-    tpl = re.search(r'class="chip k-\$\{.*?\}" data-uid=', html, re.S)
+    tpl = re.search(r'class="chip sc \$\{SessChip\.cls\(s\)\}.*?" data-uid=', html, re.S)
     assert tpl, "chipHtml's class template not found"
     cls = tpl.group(0)
-    assert re.search(r'st-\$\{esc\(s\.state\)\}\s+\$\{cp ', cls), cls
-    assert '? "cp-"' in cls and '"cp-" + esc(cp.level)' in cls
+    assert '? " swap-src" : ""' in cls and '? " swap-lock" : ""' in cls, cls
 
 
 def test_swap_in_the_week_trades_days_and_the_watch_follows(monkeypatch):
