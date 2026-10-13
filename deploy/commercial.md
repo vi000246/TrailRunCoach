@@ -53,6 +53,7 @@
 | `/share/*`（含 `/share/calendar/<token>.ics`） | 公開分享與課表訂閱（靠長 token，§SP-232） |
 | `/api/v1/static/*` | 靜態檔 |
 | `/healthz` | 監控 |
+| `/sw.js`、`/manifest.webmanifest` | 離線快取的 service worker 與加到主畫面的 manifest（SP-314；不含任何人的資料，完全比對） |
 
 其他路徑都要登入。測試要等 SP-58。
 

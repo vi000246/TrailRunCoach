@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title data-i18n="offline.title">離線</title>
+<style>
+:root { --bg: #f4f5f7; --panel: #fff; --text: #1d232b; --muted: #6a7482; --line: #e1e5ea; --accent: #2563eb; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --bg: #0f1216; --panel: #171b21; --text: #e6e9ee; --muted: #97a1ae;
+    --line: #2a313a; --accent: #60a5fa; }
+}
+:root[data-theme="dark"] { --bg: #0f1216; --panel: #171b21; --text: #e6e9ee; --muted: #97a1ae; --line: #2a313a; --accent: #60a5fa; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font: 14px/1.55 system-ui, -apple-system, "Segoe UI", "Noto Sans TC", sans-serif; }
+main { max-width: 620px; margin: 0 auto; padding: 24px 16px; }
+section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; }
+h1 { font-size: 17px; margin: 0 0 6px; }
+p { margin: 0 0 10px; }
+ul { margin: 0 0 12px; padding-left: 20px; }
+li { margin: 4px 0; }
+a { color: var(--accent); font-weight: 600; text-decoration: none; }
+a:hover { text-decoration: underline; }
+.meta { color: var(--muted); font-size: 12.5px; }
+button { font: inherit; border-radius: 6px; padding: 4px 14px; cursor: pointer; border: 1px solid var(--accent);
+  background: var(--accent); color: #fff; }
+</style>
+</head>
+<body>
+<script src="/api/v1/static/shell.js"></script>
+<main>
+  <section>
+    <h1 data-i18n="offline.heading">這一頁沒有離線資料</h1>
+    <p data-i18n="offline.text">現在連不上網路，這一頁沒有存在這台裝置上。離線時可以看這些頁（存下的資料，不能修改）：</p>
+    <ul>
+      <li><a href="/api/v1/overview/page" data-i18n="offline.home">總覽：今天的課、這週的課表與訓練狀況</a></li>
+      <li><a href="/api/v1/overview/plan/schedule/page" data-i18n="offline.schedule">課表：今天與接下來幾週的課</a></li>
+      <li><a href="/api/v1/wko5/activities/page" data-i18n="offline.activity">活動列表：每筆活動的摘要（有存到的話）</a></li>
+    </ul>
+    <p><button type="button" id="retry" data-i18n="offline.retry">重試</button></p>
+    <p class="meta" data-i18n="offline.note">連上網路後，這台裝置會自動更新存下的資料。</p>
+  </section>
+</main>
+<script>
+document.getElementById("retry").addEventListener("click", () => location.reload());
+</script>
+</body>
+</html>

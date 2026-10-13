@@ -94,6 +94,9 @@ CALLBACK_LIMIT = RL.Window(limit=10, per=15 * 60)     # callbacks past the state
 PUBLIC_PATHS = frozenset({
     "/login", "/signup", "/api/v1/session", "/healthz",
     "/api/v1/account/login", "/api/v1/account/signup", "/api/v1/account/logout",
+    # the installable app (SP-314, api/pwa.py): no one's data in either; the browser fetches the
+    # manifest without cookies, and the worker before anyone signs in
+    "/sw.js", "/manifest.webmanifest",
 })
 PUBLIC_PREFIXES = ("/api/v1/static/",)
 _OAUTH_CALLBACK = ("/oauth/", "/callback")

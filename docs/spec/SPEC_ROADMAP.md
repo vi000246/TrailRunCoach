@@ -1,6 +1,6 @@
 # Spec Roadmap
 
-> Auto-updated index. Last updated: 2026-10-08
+> Auto-updated index. Last updated: 2026-10-13
 >
 > **AI Agents**: Read this file first to decide which specs to load. Load only what's relevant to your task to avoid context bloat.
 
@@ -17,6 +17,7 @@
 | plan-auto | [plan-auto.spec.md](./plan-auto.spec.md) | Core Domain | 自動調整課表：同步後比對完成／未完成、依規則調整本週、重排後續週並推送 COROS；強度階梯、Zone 3／Zone 5 關卡（含 A 賽後重新打底）、AeT 測試、傷停與生病回歸、CP 變動重推 | — |
 | workouts | [workouts.spec.md](./workouts.spec.md) | Supporting | 單次活動中繼資料：地形分類、活動類型／努力程度／名稱／標籤／傷痛標記（自動值＋使用者覆寫）、登山杖、路況與下雨提示、COROS 跑後自評、壞檔排除、活動編輯頁 | — |
 | route-progress | [route-progress.spec.md](./route-progress.spec.md) | Supporting | 自動偵測重複路段與路線（類 Strava segments），自動命名（最近的百岳），逐次比較時間、VAM、心率、功率與天氣 | — |
+| offline-pwa | [offline-pwa.spec.md](./offline-pwa.spec.md) | Supporting | 離線唯讀快取與加到主畫面：service worker 依 P0／P1／P2 分層存目前登入者的課表與摘要（20 MB 預算、被清掉依序補回、超過從 P2 丟），離線標資料時間、停用修改；登出或換人清掉；manifest 與圖示 | — |
 
 ## Loading Guide
 
@@ -30,6 +31,7 @@
 
 | Date | Module | Feature SRS | One-line Summary |
 |------|--------|-------------|-----------------|
+| 2026-10-13 | offline-pwa | — | SP-314：新增 module spec。`/sw.js`、`/manifest.webmanifest`（登入模式公開、完全比對；示範模式不掛）；P0 課表＋總覽＋設定＋近 90 天摘要、P1 活動列表與成就、P2 介面先留；離線列與寫入攔截；登出、換人、401 清快取 |
 | 2026-10-08 | 全部 9 個模組 | — | code-sync（Obsidian tickets）：prp-spec Phase 1.5，逐模組對 code 與 Obsidian 的單（commit 帶的單號＋提到模組檔名的開著的單）；錨點全面重新核對（overview 510、workout-review 276、wko5-engine 139 處等），合併 main 的 SP-362／SP-371／SP-218 後再依 diff 平移並逐字比對；各 spec 新增 Decisions Log（使用者拍板的取捨）與 Open Questions（決定了但還沒做、還開著的單）；單上要求與 code 不符的不寫進 spec，另行回報 |
 | 2026-10-08 | plan-auto | — | code-sync：補 SP-117 生病、SP-116 A 賽後重新打底、SP-98 回量期、SP-110 疲勞保險、SP-66 單次長度上限、SP-71 每週課表存檔、SP-266 心率可疑的飄移只當參考；Known limits 新增設定變更不重排、LTHR 先驗可能被當實測；11 個錨點重指 |
 | 2026-10-04 | 全部 12 個模組 | — | code-sync：依 09-30～10-03 約 700 個 commit 刷新所有 module spec（錨點重指、補 Domain Model、新增端點與行為）；5 份 5 月的 SRS 由 `docs/spec/` 移至 `docs/srs/completed/`；5 月的 PRD／plan／SRS 全部標 CANCELED（React SPA 移除） |

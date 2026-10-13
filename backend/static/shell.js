@@ -168,6 +168,8 @@
     out.title = T("account.logout_title");
     out.addEventListener("click", async () => {
       let to = "/login";
+      // SP-314: this person's offline copy goes first (the next one to sign in never sees it)
+      try { await Promise.race([window.AppOffline.clear(), new Promise((r) => setTimeout(r, 1500))]); } catch (_) {}
       try {
         const j = await (await window.fetch("/api/v1/account/logout", { method: "POST" })).json();
         if (j && typeof j.next === "string" && j.next.startsWith("/") && !j.next.startsWith("//")) to = j.next;
@@ -309,6 +311,182 @@
       }
       return r;
     };
+  }
+
+  // ---- offline copy (SP-314; /sw.js, static/offline_core.js) ---------------------------------
+  // A service worker keeps a read-only copy of 總覽 / 課表 / 活動列表 for the person signed in
+  // here. Offline (or while the server is down) the pages read it: a bar says from when, the
+  // writes are refused here with the reason (never queued), the edit buttons are dimmed and
+  // explain on a click. Back online the copy refreshes and the bar offers 重新整理. Never in the
+  // demo. window.AppOffline: {active, slow, at, clear(), status()} (schedule.html, SP-322).
+  const OFF = { on: false, slow: false, at: null, back: false };
+  const offT = (k, p) => T("offline." + k, p);
+  const SW_OK = !DEMO && "serviceWorker" in navigator && window.isSecureContext;
+  const swPost = (msg) => {
+    if (!SW_OK) return;
+    navigator.serviceWorker.ready.then((reg) => reg.active && reg.active.postMessage(msg)).catch(() => {});
+  };
+  const swAsk = (msg) => new Promise((resolve) => {
+    if (!SW_OK || !navigator.serviceWorker.controller) return resolve(null);
+    const ch = new MessageChannel();
+    ch.port1.onmessage = (e) => resolve(e.data);
+    navigator.serviceWorker.controller.postMessage(msg, [ch.port2]);
+    setTimeout(() => resolve(null), 3000);
+  });
+  // the edit controls of the cached pages (and anything marked data-offline-lock)
+  const OFFLINE_LOCK = ["[data-offline-lock]", "button[type=submit]", "input[type=file]", "[data-approve]", "[data-reject]",
+    "[data-undo]", "[data-aet-apply]", "[data-apply-cp]", "[data-apply-at]", "[data-apply-thr]", ".sg-item [data-act=accept]",
+    ".sg-item [data-act=dismiss]", ".sg-item [data-act=decline]", "#push-main", "#push-caret", "#pull-btn", "#rec-btn",
+    "#sd-del", "#sd-push", "#sd-swap", "#sd-climb", "#ap-run", "#pf-reset", "[data-unpush]", '[data-act="del-expired"]'].join(", ");
+  window.AppOffline = {
+    get active() { return OFF.on && !OFF.slow; }, get slow() { return OFF.on && OFF.slow; }, get at() { return OFF.at; },
+    // forget this browser's copy of the person (sign-out): the worker and the caches themselves
+    clear: async () => {
+      swPost({ type: "logout" });
+      try {
+        if (!window.caches) return;
+        const ks = await caches.keys();
+        await Promise.all(ks.filter((k) => k.startsWith("trc-u-") || k === "trc-meta").map((k) => caches.delete(k)));
+      } catch (_) { /* storage blocked: nothing kept either */ }
+    },
+    status: () => swAsk({ type: "status" }),
+  };
+  if (!DEMO) {
+    st.textContent += `
+    .an-offline { position: sticky; top: var(--shell-top, 0px); z-index: 39; display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center;
+      padding: 7px 14px; font: 13px/1.45 system-ui, -apple-system, "Segoe UI", "Noto Sans TC", sans-serif; color: var(--text, #111);
+      background: color-mix(in srgb, #64748b 16%, var(--panel, #fff)); border-bottom: 1px solid var(--line, #e1e5ea); }
+    .an-offline[hidden] { display: none; }
+    .an-offline.an-o-back { background: color-mix(in srgb, #16a34a 14%, var(--panel, #fff)); }
+    .an-offline button { font: inherit; font-size: 12.5px; padding: 2px 10px; border-radius: 6px; cursor: pointer;
+      border: 1px solid var(--line, #d4d8de); background: var(--panel, #fff); color: var(--text, #111); }
+    @media (max-width: 699px) { .an-offline { top: 0; font-size: 12.5px; padding: 6px 10px; } }
+    html[data-trc-offline] :is(${OFFLINE_LOCK}) { opacity: .45 !important; cursor: not-allowed !important; }
+    .an-toast { position: fixed; left: 50%; bottom: 84px; transform: translateX(-50%); z-index: 80; max-width: min(92vw, 460px);
+      padding: 9px 14px; border-radius: 9px; background: #1f2937; color: #fff; font: 13px/1.4 system-ui, sans-serif;
+      box-shadow: 0 8px 24px rgba(0,0,0,.25); }
+    .an-toast[hidden] { display: none; }
+    `;
+    const offBar = document.createElement("div");
+    offBar.className = "an-offline"; offBar.hidden = true;
+    offBar.setAttribute("role", "status"); offBar.setAttribute("aria-live", "polite");
+    const mountOff = () => nav.after(offBar);
+    if (document.body) mountOff(); else document.addEventListener("DOMContentLoaded", mountOff);
+    const two = (n) => String(n).padStart(2, "0");
+    const when = (iso) => { const d = iso ? new Date(iso) : null; return d && !isNaN(d) ? `${d.getMonth() + 1}/${d.getDate()} ${two(d.getHours())}:${two(d.getMinutes())}` : ""; };
+    const renderOff = () => {
+      document.documentElement.toggleAttribute("data-trc-offline", OFF.on && !OFF.slow);
+      offBar.classList.toggle("an-o-back", OFF.back);
+      if (OFF.back) {
+        offBar.innerHTML = `<span></span><button type="button"></button>`;
+        offBar.querySelector("span").textContent = offT("back");
+        const b = offBar.querySelector("button");
+        b.textContent = offT("reload"); b.title = offT("reload_title");
+        b.addEventListener("click", () => location.reload());
+      } else if (OFF.on) {
+        const at = when(OFF.at);
+        offBar.textContent = OFF.slow ? offT("slow", { at }) : at ? offT("banner", { at }) : offT("banner_now");
+      }
+      offBar.hidden = !(OFF.on || OFF.back);
+    };
+    const goOffline = (at, slow) => {
+      const hard = OFF.on && !OFF.slow;
+      OFF.on = true; OFF.slow = !!slow && !hard; OFF.back = false;
+      if (at && (!OFF.at || at < OFF.at)) OFF.at = at;          // the oldest data on the page
+      renderOff();
+    };
+    const goOnline = () => {
+      if (!OFF.on) return;
+      const wasCopy = !!OFF.at || !!window.TRC_OFFLINE_PAGE;
+      OFF.on = false; OFF.slow = false; OFF.back = wasCopy;
+      renderOff();
+      swPost({ type: "sync", force: true });                    // refresh the copy now
+    };
+    // this page itself came from the copy (sw.js put it there before any script)
+    const PAGE_COPY = window.TRC_OFFLINE_PAGE;
+    if (PAGE_COPY) goOffline(PAGE_COPY.at, PAGE_COPY.reason === "slow");
+    else if (navigator.onLine === false) goOffline(null);
+    addEventListener("offline", () => goOffline(null));
+    addEventListener("online", goOnline);
+    // a click on an edit control while offline: nothing happens but the reason
+    let gesture = 0;
+    for (const ev of ["pointerdown", "keydown"]) addEventListener(ev, () => { gesture = Date.now(); }, true);
+    document.addEventListener("click", (e) => {
+      if (!(OFF.on && !OFF.slow) || !e.target.closest || !e.target.closest(OFFLINE_LOCK)) return;
+      e.preventDefault(); e.stopImmediatePropagation();
+      toast(offT("locked"));
+    }, true);
+    // writes while offline are refused here (never sent, never queued); answers from the copy say so
+    const onlineFetch = window.fetch;
+    window.fetch = async (input, init) => {
+      const method = String((init && init.method) || (input && input.method) || "GET").toUpperCase();
+      let url;
+      try { url = new URL(typeof input === "string" ? input : input.url, location.href); } catch (_) { url = null; }
+      const same = !!url && url.origin === location.origin;
+      if (same && method !== "GET" && method !== "HEAD" && OFF.on && !OFF.slow) {
+        if (Date.now() - gesture < 4000) toast(offT("locked"));
+        return new Response(JSON.stringify({ code: "OFFLINE", detail: { code: "OFFLINE", message: offT("locked") } }),
+          { status: 503, headers: { "Content-Type": "application/json" } });
+      }
+      try {
+        const r = await onlineFetch(input, init);
+        if (same) {
+          const c = r.headers.get("x-trc-cache");
+          if (c) goOffline(r.headers.get("x-trc-stored-at"), c === "slow");
+          else if (r.status < 500) goOnline();
+        }
+        return r;
+      } catch (e) {
+        if (same && !(e && e.name === "AbortError")) goOffline(null);
+        throw e;
+      }
+    };
+
+    // the worker: registered once the page has loaded; told who this page is for (another person
+    // than the copy's: the copy goes), then the copy is refilled when due
+    const STANDALONE = (window.matchMedia && matchMedia("(display-mode: standalone)").matches) || navigator.standalone === true;
+    if (SW_OK) {
+      addEventListener("load", () => {
+        navigator.serviceWorker.register("/sw.js", { scope: "/", updateViaCache: "none" }).catch(() => {});
+        if (window.TRC_SESSION) {
+          const s = SESSION;
+          swPost({ type: "session", session: { mode: s.mode, user: s.user ? { id: s.user.id } : null, login: s.login || null } });
+        } else swPost({ type: "sync" });
+        // an installed app keeps its data (Chrome / Safari decide without asking)
+        if (STANDALONE && navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+      });
+    }
+    // 加到主畫面 (SP-319): on an iPhone / iPad in Safari, once on 總覽, until 知道了
+    const IOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    let hinted = "1";
+    try { hinted = localStorage.getItem("trc.a2hs") || ""; } catch (_) {}
+    if (SW_OK && IOS && !STANDALONE && !hinted && cur && cur.id === "home") {
+      const hint = document.createElement("div");
+      hint.className = "an-offline an-o-hint";
+      hint.innerHTML = `<span></span><button type="button"></button>`;
+      hint.querySelector("span").textContent = offT("a2hs");
+      hint.querySelector("button").textContent = offT("a2hs_ok");
+      hint.querySelector("button").addEventListener("click", () => {
+        hint.remove();
+        try { localStorage.setItem("trc.a2hs", "1"); } catch (_) {}
+      });
+      const mountHint = () => offBar.after(hint);
+      if (document.body) mountHint(); else document.addEventListener("DOMContentLoaded", mountHint);
+    }
+    // the installable app: manifest, icons (the pages need no change)
+    const HEAD = [["link", { rel: "manifest", href: "/manifest.webmanifest" }],
+      ["link", { rel: "apple-touch-icon", href: "/api/v1/static/icons/apple-touch-icon.png" }],
+      ["link", { rel: "icon", type: "image/svg+xml", href: "/api/v1/static/icons/icon.svg" }],
+      ["meta", { name: "theme-color", content: "#2563eb" }],
+      ["meta", { name: "mobile-web-app-capable", content: "yes" }],
+      ["meta", { name: "apple-mobile-web-app-capable", content: "yes" }],
+      ["meta", { name: "apple-mobile-web-app-title", content: T("brand") }]];
+    for (const [tag, attrs] of HEAD) {
+      if (tag === "link" && document.head.querySelector(`link[rel="${attrs.rel}"]`)) continue;
+      const el = document.createElement(tag);
+      for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+      document.head.appendChild(el);
+    }
   }
 
   // ---- the demo banner + locked buttons ----------------------------------

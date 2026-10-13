@@ -62,5 +62,15 @@
   "demo.static_reset_title": "Drop the schedule changes saved in this browser",
   "demo.static_locked": "Read-only demo: not available here",
   "account.logout": "Sign out",
-  "account.logout_title": "Sign out on this device"
+  "account.logout_title": "Sign out on this device",
+  "offline.banner": "Offline: showing the data saved {at}; changes are off",
+  "offline.banner_now": "Offline: showing the data from when this page opened; changes are off",
+  "offline.slow": "Slow connection: showing the data saved {at} for now",
+  "offline.locked": "You're offline, so nothing can be changed; try again once you're connected",
+  "offline.back": "Back online",
+  "offline.reload": "Reload",
+  "offline.reload_title": "Load the latest data",
+  "offline.a2hs": "On iPhone: tap Share → Add to Home Screen and open the app from there. Today's session then opens without signal, and Safari won't clear the saved data after 7 days unused.",
+  "offline.a2hs_ok": "Got it",
+  "pwa.description": "Trail running training: today's session, this week's plan and your training status, also offline"
 }
