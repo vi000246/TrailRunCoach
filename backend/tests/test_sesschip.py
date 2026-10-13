@@ -147,3 +147,11 @@ def test_activity_kind_icon():
              a("road", "z5"), a("trail", "long"), a("road", "intensity"), a("bike", "z3")]
     assert _run("DATA.c.map((x) => SessChip.actKind(x))", c=cases) == [
         "bike", "hike", "hike", "strength", "other", "easy", "easy", "z5", "long", "easy", "bike"]
+
+
+def test_every_icon_has_a_name_in_both_languages():
+    keys = _run("['easy','z3','z5','long','b2b','loaded','hike','test','strength','race','heat','rest','notice','bike','other']")
+    assert _run("DATA.k.map((k) => SessChip.typeName(k))", k=keys)[:3] == ["輕鬆跑", "有氧間歇／閾值", "VO2max／速度"]
+    for loc in ("zh-TW", "en"):
+        cat = json.loads((STATIC / "i18n" / loc / "common.json").read_text("utf-8"))
+        assert all(cat.get(f"legend.type.{k}") for k in keys), loc

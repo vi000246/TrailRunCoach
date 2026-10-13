@@ -8,6 +8,7 @@
 <script src="/api/v1/static/dashicons.js"></script>
 <script src="/api/v1/static/z5flow.js"></script>
 <script src="/api/v1/static/plan_mark.js"></script>
+<script src="/api/v1/static/sesschip.js"></script>
 <style>
 :root {
   color-scheme: light;
@@ -117,28 +118,16 @@ h2 .di { font-size: 16px; color: var(--muted); }
 .dc.today .dh b { color: var(--accent); }
 .dc .now { font-size: 10.5px; font-weight: 700; color: #fff; background: var(--accent); border-radius: 8px; padding: 0 6px; }
 .dc.past:not(.today) { opacity: .92; }
-.sx { --c: var(--faint); display: grid; grid-template-columns: 26px 1fr; gap: 1px 7px; align-items: center; text-align: left; width: 100%;
-  border: 0; border-left: 3px solid var(--c); background: color-mix(in srgb, var(--c) 9%, transparent); border-radius: 6px;
-  padding: 5px 6px 5px 5px; font: inherit; color: var(--text); cursor: default; min-width: 0; }
-.sx .ic { grid-row: 1 / span 2; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 7px; background: var(--c); color: #fff; font-size: 15px; position: relative; }
+/* a session card: sesschip.js's look (`.sc`: outline, left bar, grey, dashed, dotted); the grid here (SP-397) */
+.sx { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 1px 6px; align-items: center; text-align: left; width: 100%;
+  border-radius: 6px; padding: 4px 6px 5px 4px; font: inherit; cursor: default; min-width: 0; }
 .sx .tl { font-size: 12.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-.sx .mn { font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-.sx .ok { position: absolute; right: -5px; bottom: -5px; width: 15px; height: 15px; border-radius: 50%; background: var(--good); color: #fff;
-  display: grid; place-items: center; font-size: 10px; border: 2px solid var(--panel); }
-.sx.cp-yellow .ok { background: var(--watch); } .sx.cp-red .ok { background: var(--bad); }
-.sx.missed { opacity: .55; } .sx.missed .tl { text-decoration: line-through; }
-.sx.extra { --c: var(--bar); }
-.sx .offp { color: var(--watch); font-weight: 800; }
+.sx .mn { grid-column: 2 / -1; font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .sx[data-go] { cursor: pointer; }
-.ty-easy { --c: var(--s3); } .ty-long, .ty-hike { --c: var(--s1); } .ty-z3 { --c: var(--s4); } .ty-z5 { --c: var(--s2); }
-.ty-test { --c: var(--s5); } .ty-b2b { --c: var(--s7); } .ty-loaded { --c: var(--s6); } .ty-strength, .ty-heat, .ty-notice { --c: var(--faint); }
-.ty-race { --c: var(--text); }
 .rest { margin-top: auto; margin-bottom: auto; display: flex; align-items: center; justify-content: center; gap: 5px; color: var(--faint); font-size: 12px; }
 .badges { display: flex; gap: 4px; flex-wrap: wrap; }
-.mini { font-size: 10.5px; border: 1px solid currentColor; border-radius: 8px; padding: 0 5px; color: var(--muted); white-space: nowrap; }
-.mini.pushed, .mini.updated { color: var(--good); } .mini.outdated { color: var(--watch); } .mini.failed { color: var(--bad); }
 .legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: var(--muted); margin: 8px 0 0; }
-.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+.legend span { display: inline-flex; align-items: center; gap: 2px; }
 @media (max-width: 899px) {
   .week { grid-template-columns: 1fr; gap: 6px; }
   .dc { min-height: 0; display: grid; grid-template-columns: 52px 1fr; gap: 6px; padding: 6px 8px; align-items: center; }
@@ -658,63 +647,63 @@ async function loadB2B() {
 }
 
 // ---------------- this week ----------------
-// session type -> icon + colour + label (identity is icon + word, never colour alone)
-const TYPES = {
-  easy: "輕鬆", z3: "3 區間歇", z5: "5 區間歇", long: "LSD", hike: "健行", b2b: "B2B", loaded: "負重", test: "測試",
-  strength: "肌力", race: "比賽", heat: "熱適應", notice: "提醒", rest: "休息" };
-function stype(s) {
-  const k = s.kind, t = s.title || "";
-  if (k === "test") return "test";
-  if (k === "quality") return /^z5/i.test(s.rung_key || "") || /VO2max|5 區|Z5/i.test(t) ? "z5" : "z3";
-  if (k === "race") return "race";
-  if (k === "strength") return /ME|肌耐力/.test(t) ? "loaded" : "strength";
-  if (/^B2B/.test(t) || /^long[23]$/.test(s.gen_key || "")) return "b2b";
-  if (/背\s*[\d.]+\s*kg|背包/.test(t) || /^(carry|me)$/.test(s.gen_key || "")) return "loaded";
-  if (k === "long" || k === "mountain") return "long";
-  if (k === "hike") return "hike";
-  if (k === "heat_passive" || (s.heat && k !== "easy")) return "heat";
-  if (k === "notice") return "notice";
-  return "easy";
+// ---- this week card (SP-397) ----
+// the same card as the 課表 page (sesschip.js; docs/research/schedule-chip-ui.md §8.4): the type tile
+// (no type colour; ↻ / ✎ in its corner), the title, the completion ring; time / TSS under it. Colour =
+// how far off (left bar), shape = what happened; the verdict with its %, the numbers, the watch in the hover.
+const SCHED = "/api/v1/overview/plan/schedule/page";
+const WATCH = ["pushed", "updated", "outdated", "failed", "not_pushed"];
+// the watch in words with the provider's name: 「COROS 未推送」 (never the raw key)
+function watchTxt(c) {
+  if (!c || !WATCH.includes(c.status)) return "";
+  const st = tO("week.sy." + (c.status === "updated" ? "pushed" : c.status));
+  const why = c.status === "failed" ? c.error : c.status === "outdated" ? c.reason || tO("week.sy.outdated_why") : "";
+  return tO("week.sy.line", { provider: (SP && SP.coros && SP.coros.provider_label) || "COROS", state: st }) + (why ? " · " + why : "");
 }
-// an activity's session class -> the .ty-* colour (the icon comes from the server)
-function actTy(se) {
-  if (se.type === "quality") return se.stimulus === "z5" ? "z5" : "z3";
-  if (se.type === "hard_long" || se.type === "long") return "long";
-  if ((se.type || "").startsWith("test")) return "test";
-  return "easy";
+// 「部分 72% · 強度不足」 / 「完成 92%」 / 「換了課 · 排輕鬆跑，實際騎車」 / 「跳過」 + the numbers behind it
+function verdictTxt(s) {
+  const st = SessChip.status(s), cp = s.compliance || {}, vs = s.vs || {};
+  if (st === "todo") return "";
+  const why = st === "off_plan" ? (vs.text || cp.off_text || "").replace(/^沒照課表：/, "") : st === "partial" && (cp.short || cp.soft) ? cp.label || "" : "";
+  const pct = st === "done" || st === "partial" ? cp.pct : null;
+  const head = SessChip.label(st, st === "partial" ? pct : null) + (st === "done" && pct != null ? ` ${pct}%` : "") + (why ? " · " + why : "");
+  const nums = st === "missed" ? "" : [cp.tss_pct != null ? `TSS ${cp.tss_pct}%` : "", cp.duration_pct != null ? tO("week.time_pct", { pct: cp.duration_pct }) : "",
+    cp.intensity_pct != null ? tO("week.intensity_pct", { pct: cp.intensity_pct }) : ""].filter(Boolean).join(" · ");
+  return head + (nums ? `（${nums}）` : "");
 }
-const CB = { pushed: "COROS ✓", updated: "COROS ✓", outdated: "COROS 需更新", failed: "COROS 失敗" };
 function sessHtml(s, today) {
-  const ty = stype(s), done = s.state === "done", missed = s.state === "missed";
+  const ty = SessChip.kind(s), st = SessChip.status(s), done = s.state === "done";
   const live = s.state === "active" && s.day >= today;
+  const prov = !!(s.provisional && s.state === "active");
   const est = s.tss_est ?? s.tss, cp = done ? s.compliance : null;
   const info = done && s.done_by ? `${hm(s.done_by.moving_s)} · TSS ${n0(s.done_by.tss)}` : `${s.minutes ? s.minutes + " 分" : ""}${est ? ` · ${n0(est)}` : ""}`;
   const rated = done && s.done_by && s.done_by.self_rating ? s.done_by.self_rating.text : "";   // 自評：Hard（COROS）, SP-231
   const pm = window.PlanMark ? PlanMark.lines(s, SP && SP.kinds) : [];      // SP-318: ↻ auto / ✎ yours, as on the 課表 page
-  const tip = [s.title, `${TYPES[ty]}${s.origin === "custom" ? " · 自訂" : s.edited ? " · 已修改" : ""}`,
+  const vd = verdictTxt(s);
+  const tip = [s.title, `${SessChip.typeName(ty)}${s.origin === "custom" ? " · 自訂" : s.edited ? " · 已修改" : ""}`,
     done && s.done_by ? `完成：${s.done_by.category_label || ""}${s.done_by.session && s.done_by.session.type_label ? " · " + s.done_by.session.type_label : ""} ${hm(s.done_by.moving_s)} · TSS 計畫 ${n0(est)} → 實際 ${n0(s.done_by.tss)}` : `${s.minutes ? s.minutes + " 分鐘" : ""}${est ? ` · TSS ${n0(est)}` : ""}`,
-    ...pm, rated,
-    cp ? `完成度：${cp.label}${cp.pct != null ? ` ${cp.pct}%` : ""}（實際 ÷ 計畫${cp.tss_pct != null ? `：TSS ${cp.tss_pct}%` : ""}${cp.duration_pct != null ? ` · 時間 ${cp.duration_pct}%` : ""}；綠 ±20%、黃 20–50%、紅 > 50% 或類型不符）` : "",
-    done && s.vs?.off_plan ? `≠ ${s.vs.text}` : done && s.vs?.short ? `◐ ${s.vs.short_text}` : "", done ? "點一下看計畫 vs 實際、開啟活動" : "",
-    missed ? "未完成" : "", s.target ? "目標：" + s.target : "", live && s.detail ? s.detail : "", live && s.walk_hint ? s.walk_hint : "",
-    live && s.coros?.status ? `COROS：${CB[s.coros.status] || s.coros.status}${s.coros.status === "failed" ? " " + (s.coros.error || "") : s.coros.status === "outdated" ? " " + (s.coros.reason || "課表改過，到課表頁再同步一次") : ""}` : ""].filter(Boolean).join("\n");
+    vd, prov ? SessChip.label("todo", null, { prov: true }) : "", ...pm, rated, done ? "點一下看計畫 vs 實際、開啟活動" : "",
+    s.target ? "目標：" + s.target : "", live && s.detail ? s.detail : "", live && s.walk_hint ? s.walk_hint : "", live ? watchTxt(s.coros) : ""].filter(Boolean).join("\n");
   const go = done ? ` data-go="${esc(`${SCHED}?day=${s.day}&uid=${encodeURIComponent(s.uid)}`)}"` : "";
-  return `<button type="button" class="sx ty-${ty} ${missed ? "missed" : ""} ${cp ? "cp-" + esc(cp.level) : ""}" data-tip="${esc(tip)}"${go} aria-label="${esc([...tip.split("\n").slice(0, 3), ...(pm.length ? [PlanMark.label(s)] : [])].join("，"))}">
-    <span class="ic">${I(ty)}${done ? `<span class="ok" aria-hidden="true">✓</span>` : ""}${pm.length ? PlanMark.icon(s, true) : ""}</span>
-    <span class="tl">${esc(s.title)}</span><span class="mn num">${done && s.vs?.off_plan ? `<b class="offp" aria-label="沒照課表">≠</b> ` : done && s.vs?.short ? `<b class="offp" aria-label="${esc(tO("week.short_aria"))}">◐</b> ` : ""}${info}${cp && cp.level !== "green" && cp.pct != null ? ` · ${cp.pct}%` : ""}</span></button>`;
+  // §7.1: type：title, time / TSS, the verdict, 暫定, changed by
+  const lbl = [`${SessChip.typeName(ty)}：${s.title}`, info, vd, prov ? SessChip.label("todo", null, { prov: true }) : "", pm.length ? PlanMark.label(s) : ""].filter(Boolean).join("，");
+  return `<button type="button" class="sx sc ${SessChip.cls(s)}" data-kind="${esc(s.kind)}" data-tip="${esc(tip)}"${go} aria-label="${esc(lbl)}">
+    ${SessChip.icon(ty, { badge: pm.length ? PlanMark.icon(s, true) : "" })}<span class="tl sc-t">${esc(s.title)}</span>${SessChip.ring(st, cp && cp.pct, { prov })}
+    <span class="mn num">${info}</span></button>`;
 }
-const SCHED = "/api/v1/overview/plan/schedule/page";
+// 課表外 activities carry their session class (workout_review.classify: Z5 間歇 / Z3 閾值 / 高強度長跑 / 中強度跑 …);
+// a dotted card with the category's icon, a click opens it on the 課表 page (summary, match it to the plan)
+function extraHtml(a) {
+  const se = a.session || {}, lab = se.type_label ? `${a.category_label} · ${se.type_label}` : a.category_label;
+  return `<button type="button" class="sx sc act" data-go="${esc(`${SCHED}?day=${a.date}&act=${a.index}`)}" data-tip="${esc(`課表外：${lab} ${hm(a.moving_s)} · TSS ${n0(a.tss)}\n點一下看摘要、配對到課表`)}">
+    ${SessChip.icon(SessChip.actKind(a))}<span class="tl sc-t">${esc(lab)}</span><span></span><span class="mn num">${hm(a.moving_s)} · TSS ${n0(a.tss)}</span></button>`;
+}
+// ---- end this week card ----
 // a done session / an activity outside the plan: open it on the 課表 page (planned vs actual, the activity link)
 document.addEventListener("click", (e) => { const g = e.target.closest?.(".sx[data-go]"); if (g) { e.stopImmediatePropagation(); location.href = window.TRC_STATIC ? TRC_STATIC.href(g.dataset.go) : g.dataset.go; } }, true);
 function dayHtml(iso, ss, extra, today) {
   const past = iso < today, isT = iso === today;
-  // 課表外 activities carry their session class (workout_review.classify: Z5 間歇 / Z3 閾值 / 高強度長跑 / 中強度跑 …);
-  // a click opens it on the 課表 page (summary, match it to the plan)
-  const items = ss.map((s) => sessHtml(s, today)).concat(extra.map((a) => {
-    const se = a.session || {}, lab = se.type_label ? `${a.category_label} · ${se.type_label}` : a.category_label;
-    return `<button type="button" class="sx extra ${se.icon ? "ty-" + esc(actTy(se)) : ""}" data-go="${esc(`${SCHED}?day=${a.date}&act=${a.index}`)}" data-tip="${esc(`課表外：${lab} ${hm(a.moving_s)} · TSS ${n0(a.tss)}\n點一下看摘要、配對到課表`)}">
-      <span class="ic">${I(se.icon || "check")}<span class="ok" aria-hidden="true">✓</span></span><span class="tl">${esc(lab)}</span><span class="mn num">${hm(a.moving_s)} · TSS ${n0(a.tss)}</span></button>`;
-  }));
+  const items = ss.map((s) => sessHtml(s, today)).concat(extra.map(extraHtml));
   return `<div class="dc ${isT ? "today" : ""} ${past ? "past" : ""}"><div class="dh"><b>週${wd(iso)}</b><span class="num">${md(iso)}</span>${isT ? `<span class="now">今天</span>` : ""}</div>
     <div class="sxs">${items.join("") || `<span class="rest">${I(past ? "na" : "rest")}${past ? "沒有活動" : "休息"}</span>`}</div></div>`;
 }
@@ -730,9 +719,8 @@ function renderPlan() {
     days.push(dayHtml(iso, by[iso] || [], PLAN.done.activities.filter((a) => a.date === iso && !used.has(a.index)), today));
   }
   $("wk-days").innerHTML = days.join("");
-  const seen = [...new Set(SP.sessions.filter((s) => s.day).map(stype))];
-  $("wk-legend").innerHTML = seen.map((t) => `<span><i class="ty-${t}" style="background:var(--c)"></i>${TYPES[t]}</span>`).join("") +
-    `<span>${I("good")} 完成</span>`;
+  const seen = [...new Set(SP.sessions.filter((s) => s.day).map(SessChip.kind))];
+  $("wk-legend").innerHTML = seen.map((t) => `<span>${SessChip.icon(t)}${esc(SessChip.typeName(t))}</span>`).join("");
   const wc = (SP.week_rows || [])[0]?.compliance;
   $("wk-cp").innerHTML = wc ? `<span class="st ${{ green: "good", yellow: "watch", red: "bad" }[wc.level] || "info"}" title="到今天為止：完成 TSS ÷ 計畫 TSS（綠 ±20%、黃 20–50%、紅 > 50%）">${I({ green: "good", yellow: "watch", red: "bad" }[wc.level] || "info")}完成度 ${wc.pct}%</span>` : "";
   paintPlanLoad();

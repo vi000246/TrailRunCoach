@@ -1438,9 +1438,12 @@ which one. The response keeps the `coros` field names.
   remembered per browser; SP-122, `backend/static/overview.html:899`); 做了什麼 (period totals, the tables
   behind 詳細數字); 指標 as compact cards (value, sparkline, one-line verdict; why / action /
   source behind 詳細, `loadStatus`, `backend/static/overview.html:443`); **本週** as seven
-  day-cards — one icon + colour per session type (輕鬆, 3 區, 5 區, LSD, B2B, 負重, 測試, 肌力 …),
-  ✓ and the compliance colour when done, activities outside the plan with their session class,
-  a click opens the 課表 page on that day (`dayHtml` / `renderPlan`,
+  day-cards — since SP-397 the 課表 page's card (sesschip.js: the same type icon, no type colour,
+  the same left bar and ring for the same session; `sessHtml` / `extraHtml`, block 「this week card」),
+  the % in the hover for every done session (「完成 92%（TSS … · 時間 …）」, no thresholds), the
+  watch worded with the provider (「COROS 未推送」, `overview.week.sy.*`), activities outside the plan
+  dotted with their category's icon, the type legend under it as icon + word (SP-399 turns it into the
+  shared `?`); a click opens the 課表 page on that day (`dayHtml` / `renderPlan`,
   `backend/static/overview.html:666`, `backend/static/overview.html:678`), the week notes and a 詳細
   with the bars, the reasons, CTL → Sunday, next-Monday TSB and the thresholds line (incl. the
   輕鬆跑上限 and its `?`) (`loadWeek`, `backend/static/overview.html:711`); the bottom row holds the
@@ -2450,3 +2453,4 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 | 2026-10-12 | perf | SP-394 第 4 條 | A first import (and a re-parse) builds the last 90 days first: the status and the plan inputs come before the back-fill of the older activities, whose progress shows under the nav; the PMC counts the 90 days until the complete Dataset is in. A request's Dataset build is a `build` job of the queue. Tests: `backend/tests/test_queue_hot_first_sp394.py` |
 | 2026-10-13 | feat/session-cards-sp395-402 | SP-395 (docs/research/schedule-chip-ui.md §10 ①) | Shared session-card parts `backend/static/sesschip.js` (`SessChip.kind` / `actKind` / `status` / `cls` / `label` / `ring` / `icon`, `SessChip.CSS`): type icon tile, Linear-style completion ring (check / pie to the % / slash / empty / dotted), green / yellow / grey only; `bike` / `other` in dashicons.js; `common.legend.status.*` (zh-TW + en); the mockup loads the app's scripts. Tests: `backend/tests/test_sesschip.py` |
 | 2026-10-13 | feat/session-cards-sp395-402 | SP-396 (docs/research/schedule-chip-ui.md §8.1, §8.3, §10 ②) | 課表 cards on `SessChip`: type tile instead of type colours, left bar + Linear ring by status (no ✓ / ◐ / ≠ / 熱 / 未完成 / strike-through, no red), the watch only for 需更新 / 失敗, provisional = dashed card (week hatch removed), activity cards dotted with an icon, aria-label in the §7.1 order, ⚠ note to hover + dialog; the dialog's 完成盒 = ring + verdict, the three numbers, one `?`, plus a 手錶 status line (`schedule.sy.line`, `vs.time_pct`). Tests: `backend/tests/test_schedule_cards_sp396.py`; `test_swap_sp359` class-template check and the e2e selectors follow the new classes (`data-kind`) |
+| 2026-10-13 | feat/session-cards-sp395-402 | SP-397 (docs/research/schedule-chip-ui.md §8.4, §10 ③) | 總覽 本週 cards on `SessChip` like the 課表 page (same icon, bar colour, ring): `.ty-*` type tiles, the `.ok` ✓ corner, the ≠ / ◐ prefix, the faded strike-through of a missed session and the dead `.mini.*` CSS removed; the type list (`TYPES` / `stype` / `actTy`) is sesschip.js's (`SessChip.kind`, `typeName` → `common.legend.type.*`); hover: the verdict with its % for every done session, no thresholds, the watch with `provider_label` and `not_pushed` worded (`overview.week.sy.*`); `overview.week.short_aria` removed. Tests: `backend/tests/test_overview_cards_sp397.py` (same parts as the 課表 card per status); `test_review_cards` reads the type names from `common.legend.type.*` |

@@ -1,6 +1,7 @@
 """本次重點 / 飄移判讀 as small cards (workout_review `cards`, wko5_viewer drawReviewCards).
 Synthetic data only (no WKO5 folder, no real DB)."""
 import datetime as dt
+import json
 from pathlib import Path
 
 import numpy as np
@@ -109,7 +110,7 @@ def test_viewer_draws_cards_and_hides_the_text_rows():
 
 def test_overview_is_a_dashboard():
     html = (STATIC / "overview.html").read_text(encoding="utf-8")
-    for needle in ('id="kpis"', "function renderKpis(", "function stype(", 'class="week"', "suggestions:changed", "/api/v1/static/dashicons.js"):
+    for needle in ('id="kpis"', "function renderKpis(", "SessChip.kind", 'class="week"', "suggestions:changed", "/api/v1/static/dashicons.js"):
         assert needle in html, needle
     # due tests live in the shared floating box (suggestions.js), not inline on the overview
     assert 'id="tsug"' not in html
@@ -119,6 +120,8 @@ def test_overview_is_a_dashboard():
     assert pos == sorted(pos), pos
     nav = html.split('id="jump"', 1)[1].split("</nav>", 1)[0]
     assert [a.split('"', 1)[0] for a in nav.split('href="#')[1:]] == ["s-status", "s-log", "s-ind", "s-week", "s-todo"]
-    # every session type the week can show has a label (identity = icon + word)
+    # every session type the week can show has a label (identity = icon + word); SP-397: the types and
+    # their names are sesschip.js's (SessChip.kind / typeName → common.legend.type.*), shared with 課表
+    cat = json.loads((STATIC / "i18n" / "zh-TW" / "common.json").read_text(encoding="utf-8"))
     for t in ("easy", "z3", "z5", "long", "b2b", "loaded", "test", "rest"):
-        assert f"{t}:" in html.split("const TYPES = {", 1)[1].split("};", 1)[0], t
+        assert cat.get(f"legend.type.{t}"), t

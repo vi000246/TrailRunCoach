@@ -128,5 +128,8 @@
     (document.head || document.documentElement).appendChild(st);
   }
 
-  W.SessChip = { kind, actKind, status, cls, label, ring, icon, CSS };
+  // the type's name (common.legend.type.*): the icon is never alone — hover, aria-label, legend
+  const typeName = (k) => T("type." + k);
+
+  W.SessChip = { kind, actKind, typeName, status, cls, label, ring, icon, CSS };
 })();
