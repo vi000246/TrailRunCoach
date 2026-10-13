@@ -1558,7 +1558,10 @@ which one. The response keeps the `coros` field names.
   climbing_m / distance_km; `active_streak` = `_active_streak` over every stored session: weeks with ≥ 1 session
   done, a week with nothing due neither counts nor breaks it, this week counts once one is done), the week's
   sessions one dot each (`week.dots`: done / partial / off_plan by kind icon, a skipped one not drawn, the rest
-  `upcoming`, an empty ring), and — only when this week has plan_marks `auto` sessions (a CP change alone left out,
+  `upcoming`, an empty ring), 這週亮點 (SP-403, `highlight` = `achievements.week_highlight`: one line — a record
+  (distance / climb of a run or hike, long-run time of a run; only after 10 earlier runs, 推估) > a 連續有練 milestone
+  (4, 8, 12 … weeks) > this week's longest run / most climbing beating last week's > the sessions done; none → not
+  drawn; history from `_run_history`, the dataset's metrics only; no milestone toast), and — only when this week has plan_marks `auto` sessions (a CP change alone left out,
   `adjusted`) — the 安心句 「課表已依這週的狀況調整，不用補」, opening to the list; no % and no denominator.
   Then the period filter and 教練視角 (`<details id="coach">`, open / closed in localStorage `compliance.coach`):
   KPI tiles (完成 n 堂 with 本期排了 / 完成率 below, 照計畫完成 n 堂 with 達標率, TSS, 時數, 連續有練), the current phase's
@@ -2428,3 +2431,4 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 | 2026-10-12 | perf | SP-394 第 4 條 | A first import (and a re-parse) builds the last 90 days first: the status and the plan inputs come before the back-fill of the older activities, whose progress shows under the nav; the PMC counts the 90 days until the complete Dataset is in. A request's Dataset build is a `build` job of the queue. Tests: `backend/tests/test_queue_hot_first_sp394.py` |
 | 2026-10-13 | feature | SP-398 | Neutral completion words 完成／部分／換了課／跳過 (`compliance.status.*`, `LEVEL_LABEL`, `with_plan_check`, `plan_match.compare`'s 「換了課：…」); the four levels' explanation is one text, `common.legend.levels`, with the thresholds from the payload (`compliance_levels` / `levels`) — 課表's ? (`OFF_TIP`) and 課表統計's 達標率 ?; 課表統計: 跳過 grey (`.st-missed` / `.bg-missed` `--faint`), ○ instead of ✗, listed last, no 「沒做／沒照課表／走樣／沒達到」 in its texts. Rule E's red-streak trigger is gone (plan-auto.spec.md). Tests: `backend/tests/test_compliance_dashboard.py` (`*_sp398`) |
 | 2026-10-13 | feature | SP-400 | 課表統計's first screen is 本週: 完成 n 堂 / 時間 / 爬升 / 連續有練 tiles, the week's sessions as dots, the 安心句 when the plan was adjusted this week; the old KPIs, phase, per-kind and session list move into 教練視角 (collapsed, remembered). `compliance.dashboard` returns `week`, `active_streak`, `adjusted`; `_count` sums `climb_m` / `distance_km`; the API passes this week's sessions, every stored session and the plan marks. Tests: `backend/tests/test_compliance_dashboard.py` (`*_sp400`) |
+| 2026-10-13 | feature | SP-403 | 課表統計's 這週亮點: `achievements.week_highlight` (record > 連續有練 milestone > longest / highest vs last week > sessions done; None = no card), `compliance.dashboard` `highlight` (an activity that did a planned session carries its title), `GET /plan/compliance` reads the earlier runs (`_run_history`; a failure = no highlight). Tests: `backend/tests/test_week_highlight.py`, `backend/tests/test_compliance_dashboard.py` (`*_sp403`) |

@@ -130,6 +130,11 @@ h2 .meta { font-weight: 400; }
 .dot svg { width: 15px; height: 15px; }
 .dot.done { border-color: var(--good); color: var(--text); background: color-mix(in srgb, var(--good) 14%, var(--panel)); }
 .dot.partial, .dot.off_plan { border-color: var(--watch); color: var(--text); background: color-mix(in srgb, var(--watch) 13%, var(--panel)); }
+/* 這週亮點 (SP-403): one line, only when there is one */
+.hl { display: flex; gap: 8px; align-items: baseline; margin: 10px 0 0; padding: 7px 11px; border-radius: 8px; font-size: 13px;
+  background: color-mix(in srgb, var(--good) 9%, var(--panel)); }
+.hl b { color: var(--good); white-space: nowrap; }
+.hl[hidden] { display: none; }
 .calm { margin-top: 10px; padding: 7px 11px; border-radius: 8px; border: 1px dashed var(--line); font-size: 13px; color: var(--muted); }
 .calm summary { cursor: pointer; list-style: none; display: flex; gap: 6px; align-items: baseline; }
 .calm summary::-webkit-details-marker { display: none; }
@@ -249,6 +254,7 @@ details.coach[open] > summary { margin-bottom: 12px; }
     <h2 id="now-h"><span data-i18n="compliance.now.title">本週</span> <span class="meta num" id="now-sub"></span><span id="now-q"></span></h2>
     <div class="acc" id="acc"><div class="loading" data-i18n="compliance.loading">載入中…</div></div>
     <div class="dots" id="dots" role="img"></div>
+    <p class="hl" id="hl" hidden></p>
     <details class="calm" id="calm" hidden><summary><b aria-hidden="true">↻</b><span data-i18n="compliance.calm.title">課表已依這週的狀況調整，不用補</span></summary><ul id="calm-list"></ul></details>
   </section>
 
@@ -443,9 +449,29 @@ function renderNow() {
     const word = x.status === "upcoming" ? T("now.ahead") : T("status." + x.status);
     return `<span class="dot ${esc(x.status)}" title="${esc(`${mdw(x.day)} ${x.title} · ${word}`)}">${x.status === "upcoming" ? "" : di(ICON_OF(x))}</span>`;
   }).join("");
+  renderHighlight(d.highlight);
   const adj = d.adjusted || [];
   $("calm").hidden = !adj.length;
   $("calm-list").innerHTML = adj.map((a) => `<li>${esc(T("calm.item", { day: mdw(a.day), title: a.title, reason: a.reason }))}</li>`).join("");
+}
+
+// 這週亮點 (SP-403, achievements.week_highlight): one line; none -> nothing drawn, no filler
+function hlText(h) {
+  const day = h.day ? mdw(h.day) : "", title = h.title || "";
+  const km = (x) => (F ? F.num(x, 1) : (+x).toFixed(1));
+  if (h.kind === "pr" && h.what === "distance") return T("hl.pr_distance", { day, title, km: km(h.value), prev: km(h.prev) });
+  if (h.kind === "pr" && h.what === "climb") return T("hl.pr_climb", { day, title, m: n0(h.value), prev: n0(h.prev) });
+  if (h.kind === "pr") return T("hl.pr_time", { day, title, h: hm(h.value), prev: hm(h.prev) });
+  if (h.kind === "streak") return T("hl.streak", { n: h.weeks });
+  if (h.kind === "longest") return T("hl.longest", { day, title, h: hm(h.moving_s), d: hm(h.more_s) });
+  if (h.kind === "highest") return T("hl.highest", { day, title, m: n0(h.climb_m), d: n0(h.more_m) });
+  if (h.kind === "count") return T("hl.count", { n: h.n });
+  return "";
+}
+function renderHighlight(h) {
+  const t = h ? hlText(h).replace(/\s{2,}/g, " ") : "";
+  $("hl").hidden = !t;
+  $("hl").innerHTML = t ? `<span aria-hidden="true">✨</span><span><b>${esc(T("hl.label"))}</b> · ${esc(t)}</span>` : "";
 }
 
 function kpi(k, tip, v, sub, extra = "") {

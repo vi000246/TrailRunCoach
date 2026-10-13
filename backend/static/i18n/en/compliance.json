@@ -157,5 +157,13 @@
   "calm.title": "Plan adjusted for this week — nothing to make up",
   "calm.item": "{day} {title}: {reason}",
   "coach.title": "Coach view",
-  "coach.sub": "completion, on plan, by type, every session"
+  "coach.sub": "completion, on plan, by type, every session",
+  "hl.label": "Highlight of the week",
+  "hl.pr_distance": "New record: {day} {title} {km} km, your longest distance yet (before: {prev} km)",
+  "hl.pr_climb": "New record: {day} {title} {m} m of climbing, the most yet (before: {prev} m)",
+  "hl.pr_time": "New record: {day} {title} {h}, your longest run yet (before: {prev})",
+  "hl.streak": "{n}-week streak",
+  "hl.longest": "Longest run this week: {day} {title} {h}, {d} more than last week",
+  "hl.highest": "Most climbing this week: {day} {title} ↑{m} m, {d} m more than last week",
+  "hl.count": "{n} sessions done this week"
 }

@@ -475,3 +475,36 @@ def test_api_compliance_has_this_week_streak_and_adjustments_sp400(monkeypatch):
         assert w["completed"] == 1 and [x["uid"] for x in w["dots"] if x["status"] != "upcoming"]
         assert b["active_streak"]["weeks"] == 1
         assert isinstance(b["adjusted"], list)
+
+
+# ---------------------------------------------------------------------------
+# SP-403: 這週亮點 on the dashboard
+# ---------------------------------------------------------------------------
+
+def test_dashboard_highlight_sp403():
+    ss = _this_week()
+    ss[1]["done_by"]["index"] = 77
+    ss[1]["title"] = "爬坡間歇"
+    week = [{"index": 77, "date": "2026-09-29", "category": "trail", "distance_km": 30.0, "climbing_m": 300,
+             "moving_s": 3600}]
+    before = [{"index": i, "date": f"2026-08-{i:02d}", "category": "trail", "distance_km": 10.0, "climbing_m": 500,
+               "moving_s": 3600} for i in range(1, 13)]
+    d = C.dashboard(ss, [], "2026-10-01", "2026-09-28", "2026-10-04", week_sessions=ss, week_acts=week,
+                    before_acts=before)
+    h = d["highlight"]
+    assert (h["kind"], h["what"], h["title"], h["value"]) == ("pr", "distance", "爬坡間歇", 30.0)
+    # nothing done, nothing run: no highlight
+    assert C.dashboard([], [], "2026-10-01", "2026-09-28", "2026-10-04")["highlight"] is None
+
+
+def test_api_compliance_highlight_sp403(monkeypatch):
+    from backend.api import plan_sessions
+    monkeypatch.setattr(plan_sessions, "_range_extras", lambda a, b: {
+        "activities": [x for x in (ACT_929,) if a <= x["date"] <= b], "phases": []})
+    monkeypatch.setattr(plan_sessions, "_run_history", lambda before: [])
+    with Env(monkeypatch) as e:
+        _two_days_on(e, monkeypatch)
+        b = e.c.get(f"{API}/compliance?start=2026-09-21&end=2026-10-04").json()
+        assert b["highlight"] == {"kind": "count", "n": 1}            # no record, no last week: the count
+        monkeypatch.setattr(plan_sessions, "_run_history", lambda before: 1 / 0)
+        assert e.c.get(f"{API}/compliance?start=2026-09-21&end=2026-10-04").json()["highlight"] is not None

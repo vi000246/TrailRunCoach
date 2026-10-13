@@ -157,5 +157,13 @@
   "calm.title": "課表已依這週的狀況調整，不用補",
   "calm.item": "{day} {title}：{reason}",
   "coach.title": "教練視角",
-  "coach.sub": "完成率、達標率、依類型、每堂課"
+  "coach.sub": "完成率、達標率、依類型、每堂課",
+  "hl.label": "這週亮點",
+  "hl.pr_distance": "新紀錄：{day} {title} {km} km，是目前最遠的一次（之前 {prev} km）",
+  "hl.pr_climb": "新紀錄：{day} {title} 爬升 {m} m，是目前爬最多的一次（之前 {prev} m）",
+  "hl.pr_time": "新紀錄：{day} {title} {h}，是目前跑最久的一次（之前 {prev}）",
+  "hl.streak": "連續 {n} 週有練",
+  "hl.longest": "這週最長的一跑：{day} {title} {h}，比上週多 {d}",
+  "hl.highest": "這週爬最多的一次：{day} {title} ↑{m} m，比上週多 {d} m",
+  "hl.count": "這週完成 {n} 堂"
 }

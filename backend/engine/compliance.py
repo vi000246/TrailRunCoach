@@ -350,17 +350,32 @@ def _adjusted(ws: list[dict], marks: Optional[dict]) -> list[dict]:
     return out
 
 
+def _highlight(ws: list[dict], out: dict, acts: list[dict], before: list[dict], mon: str, sun: str) -> Optional[dict]:
+    """這週亮點 (SP-403, achievements.week_highlight); an activity that did a planned session
+    carries its title."""
+    from backend.engine import achievements as AC
+    title = {(s.get("done_by") or {}).get("index"): s.get("title") for s in ws
+             if s.get("state") == "done" and isinstance(s.get("done_by"), dict)}
+    week = [{**a, "title": title.get(a.get("index")) or a.get("category_label") or ""} for a in acts
+            if mon <= (a.get("date") or "") <= sun]
+    done = out["week"]["completed"]
+    return AC.week_highlight(week, [a for a in before if (a.get("date") or "") < mon], mon,
+                             out["active_streak"]["weeks"], done > 0, done)
+
+
 def dashboard(sessions: list[dict], week_rows: list[dict], today: str, start: str, end: str,
               phase: Optional[dict] = None, phase_sessions: Optional[list[dict]] = None,
               day_rows: Optional[list[dict]] = None, week_sessions: Optional[list[dict]] = None,
-              all_sessions: Optional[list[dict]] = None, marks: Optional[dict] = None) -> dict:
+              all_sessions: Optional[list[dict]] = None, marks: Optional[dict] = None,
+              week_acts: Optional[list[dict]] = None, before_acts: Optional[list[dict]] = None) -> dict:
     """`sessions`: calendar-shaped stored sessions in [start, end] (deleted /
     superseded already left out); `week_rows`: api/plan_sessions._week_rows of the
     range (planned vs done hours / TSS per week); `day_rows`: the same per day
     (api/plan_sessions._day_rows; the page sums them into months); `phase_sessions`:
     the same shape over the current phase (its progress). SP-400: `week_sessions` the same
     shape over this week (本週), `all_sessions` every stored session (連續有練), `marks`
-    uid -> plan_marks marker (the week's adjustments)."""
+    uid -> plan_marks marker (the week's adjustments). SP-403: `week_acts` this week's activities,
+    `before_acts` the earlier ones (achievements.week_highlight: records, last week)."""
     rows = [r for r in (session_row(s, today) for s in sessions if start <= (s.get("day") or "") <= end) if r]
     rows.sort(key=lambda r: (r["day"], r["uid"]), reverse=True)
 
@@ -390,6 +405,7 @@ def dashboard(sessions: list[dict], week_rows: list[dict], today: str, start: st
            "weeks": weeks, "days": days, "streak": _streak(weeks, today), "by_kind": kinds, "phase": None,
            "levels": COMPLIANCE, "week": {"start": mon, "end": sun, **_week_view(ws, today)},
            "active_streak": _active_streak(all_sessions or [], today), "adjusted": _adjusted(ws, marks)}
+    out["highlight"] = _highlight(ws, out, week_acts or [], before_acts or [], mon, sun)
     if phase:
         a, b = phase["start"], phase["end"]
         ps = [s for s in (phase_sessions or []) if a <= (s.get("day") or "") <= b and s.get("kind") not in SKIP_KINDS
