@@ -752,7 +752,7 @@ tickets is in plan-auto.spec.md):
   quality / test / long session (or the 長爬坡反覆) into 輕鬆跑 — the B race's mini-taper and recovery
   days (`post_race._as_easy`, `backend/engine/post_race.py:246`), the A race's first post-race week
   (`post_race.apply`, `backend/engine/post_race.py:86`) and the 減量期 (`taper_rules`,
-  `backend/engine/overview.py:2956`) — its target is the week's easy-run text (`tgt["z2"]`, passed as
+  `backend/engine/overview.py:2981`) — its target is the week's easy-run text (`tgt["z2"]`, passed as
   `easy_target` by week_plan `backend/engine/overview.py:2201` and the projection
   `backend/engine/projection.py:811`) and its source is cleared (`post_race._easy_fields`,
   `backend/engine/post_race.py:238`); before, it kept the old session's text (a 98–101 % CP target on
@@ -760,16 +760,23 @@ tickets is in plan-auto.spec.md):
   empty, as the injury passes do.
 - **A 減量期 quality session takes its template's target** (SP-408 (a), the owner 2026-10-13): the
   session `taper_rules` makes `TAPER_FULL` / `TAPER_CUT` / `TAPER_SHORT` (`as_q`,
-  `backend/engine/overview.py:3022`) gets `taper_q_target` (`backend/engine/overview.py:2959`): the
+  `backend/engine/overview.py:3026`) gets `taper_q_target` (`backend/engine/overview.py:2963`): the
   template's `power_pct` × CP as 「功率 lo–hi W（lo–hi% CP）」 plus the 心率 part of the week's threshold
   row, kept by the 目標依據 as `plan_prefs.shape` does — no CP / no HR text leaves that part out, never
   the old session's text. week_plan (`backend/engine/overview.py:2201`) and the projection
   (`backend/engine/projection.py:811`) pass `cp`, `q_target = tgt["threshold"]` and the prefs. The
-  templates' `power_pct` (`backend/engine/overview.py:2831`): trail 88–95 % CP (3 區; `TAPER_CUT`'s text
+  templates' `power_pct` (`backend/engine/overview.py:2835`): trail 88–95 % CP (3 區; `TAPER_CUT`'s text
   now says it too — it was parsed as threshold 95–101 %), road 95–101 %, the short one 98–102 %. The
   structure reads the same % and the watch gets SP-378's band (upper × 1.05). Before, the card kept
   the replaced session's text (the demo's 10/27 上坡節奏跑: card 247–263 W, structure 229–247 W, watch
   229–259 W), and with 目標依據 心率 the push read the old text's HR.
+- **The 減量期 templates' minutes are their structure's** (SP-411 option A, the owner 2026-10-13): the
+  trail `TAPER_FULL` / `TAPER_CUT` (`backend/engine/overview.py:2835`) are 85 / 65 min (were 60 / 50) —
+  their text has no 「休 N 分」, so the jog down is a rep long in the structure and the push
+  (15 + 3 × (10 + 10) + 10); TSS 85 / 60 × 57 and 65 / 60 × 57 (≈ the structure's estimate). The taper
+  weeks holding them are 15–25 min longer (accepted). Road `TAPER_FULL` / `TAPER_CUT` still say 60 / 50
+  against a 61 / 51 min structure (the rest after the last rep); SP-437 (minutes / TSS from the
+  structure) is open.
 - **恢復期 / 回量期** (SP-98): post-race hours are a share of the level before the race, not of the
   taper weeks (`recovery_hours` `backend/engine/overview.py:524`, `rebuild_hours`
   `backend/engine/overview.py:534`, used at `backend/engine/overview.py:1489`).
@@ -2547,3 +2554,4 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 | 2026-10-13 | fix | SP-410 | `upsert_external`'s `previous` adds `updated_local` (`localtime.local_iso`: UTC → the athlete's zone, athlete_tz); the activity editor's 「其他來源的同一次運動」 (`GET /api/v1/sync/dedup/near`) rows add `start_local` and the page shows it — both used to slice the UTC string |
 | 2026-10-13 | bugfix | SP-361 | Switching 設定 → 課表心率區間 (`PUT /api/v1/plan/hr-profile` with only `model`) no longer goes through `_notify(True)`: the cached Datasets stay (the model is read live and `HRP.stamp()` is in the plan inputs', Status's and the zone / target charts' keys) and `plan_auto.after_thresholds` still re-plans / re-pushes; a manual max / resting HR still rebuilds. `threshold_confidence.check`'s Dataset memo key adds `HP.stamp()` (its 「最大心率可信度低」 warning follows the model). Synthetic 52-week demo base: 課表 calendar right after a switch 3.1–3.2 s → 2.8–2.9 s (a model used before: 2.1 s, plan-inputs cache hit); the rest is `Status` + plan inputs recomputed in full (open question above). Tests: `backend/tests/test_hr_model_switch_sp361.py` |
 | 2026-10-13 | bugfix | SP-408 | The 減量期 quality session (`taper_rules.as_q`) takes `taper_q_target`: its template's `power_pct` × CP (「功率 229–247 W（88–95% CP）」 for the trail tempo) plus the week's threshold-row HR, by the 目標依據; week_plan and the projection pass `cp` / `q_target` / prefs. `TAPER_CUT["trail"]`'s text says 88–95 % CP (it was parsed as 95–101 %). Before, it kept the old session's target (card 247–263 W vs structure 229–247 W; HR basis pushed the old text's HR). Tests: `backend/tests/test_taper_rules.py` (`test_taper_quality_takes_its_templates_target`, `test_taper_quality_target_follows_the_basis_and_never_keeps_the_old_text`, `test_week_plan_and_projection_taper_quality_take_the_templates_target`) |
+| 2026-10-13 | bugfix | SP-411 | `TAPER_FULL["trail"]` / `TAPER_CUT["trail"]` minutes 60 → 85 / 50 → 65 (the structure / pushed total: the jog-down rest = the rep), TSS 65 → 80.8 / 51.7 → 61.6 (57 an hour ≈ `workout_steps.totals`); the card no longer says 60′ for an 85:00 structure. Tests: `backend/tests/test_taper_rules.py::test_taper_trail_quality_minutes_are_the_structures` |

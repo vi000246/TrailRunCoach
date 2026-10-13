@@ -293,3 +293,32 @@ def test_week_plan_and_projection_taper_quality_take_the_templates_target():
     race_wk = next(w for w in weeks if w["start"] == "2026-10-05")
     pq = [x for x in race_wk["sessions"] if x["kind"] == "quality"]
     assert pq and all(x["target"].startswith(want(O.TAPER_SHORT)) for x in pq)
+
+
+# ---- SP-411: the 減量期 trail template's minutes are the structure's ---------------------------------
+
+def _pushed_seconds(steps) -> int:
+    from backend.sync import coros_workouts as CW
+    return sum(x.seconds if isinstance(x, CW.Step) else x.sets * _pushed_seconds(x.steps) for x in steps)
+
+
+@pytest.mark.parametrize("day, monday, tmpl, minutes", [
+    ("2026-10-06", date(2026, 10, 5), "full", 85),      # 15 + 3 × (10 + 10 jog down) + 10
+    ("2026-10-09", date(2026, 10, 5), "cut", 65),       # 15 + 2 × (10 + 10) + 10
+    ("2026-10-13", date(2026, 10, 12), "short", 35),    # 15 + 2 × (3 + 2) + 10 (already right; TSS untouched)
+])
+def test_taper_trail_quality_minutes_are_the_structures(day, monday, tmpl, minutes):
+    """SP-411 (A, the owner 2026-10-13): the card's minutes = the structure / watch total — the trail
+    templates said 60 / 50 while the steps (the rest = the rep when the text has no 「休 N 分」) were
+    85 / 65; the TSS follows (≈ the structure's estimate)."""
+    from backend.engine import workout_steps as WS
+    from backend.sync import coros_workouts as CW
+    t = {"full": O.TAPER_FULL["trail"], "cut": O.TAPER_CUT["trail"], "short": O.TAPER_SHORT}[tmpl]
+    x = _taper_q(day, monday)
+    assert x["minutes"] == t["minutes"] == minutes
+    th = {"cp": 260.0, "lthr": 170.0, "aet": 150.0}
+    tot = WS.totals(WS.derive(x, th), WS.Ctx.of({**th, "basis": "power"}))
+    assert tot["sec"] == minutes * 60
+    assert _pushed_seconds(CW.session_steps(x, CW.Thresholds.of(th))) == minutes * 60
+    if tmpl != "short":
+        assert x["tss"] == pytest.approx(tot["tss"], rel=0.05)

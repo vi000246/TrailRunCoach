@@ -2828,22 +2828,26 @@ SRC_TAPER_WEEK = ("減量期課表：最後一次完整強度課賽前 10–14 �
                   "最後一次長跑賽前 ≥ 7 天且 ≤ 90 分（Gaudette、Koop、Mujika；教練級／世界級選手）")
 # power_pct (SP-408): the template's band × CP — the card's target (taper_rules.as_q), the structure
 # and the push read the same % (the % CP in the text; a template without one parsed as threshold)
+# minutes (SP-411, the owner 2026-10-13 option A): the structure's total — the trail ones have no
+# 「休 N 分」, so the jog down is a rep long (workout_steps._quality_text, coros_workouts._quality_steps):
+# 15 + 3 × (10 + 10) + 10 = 85, 15 + 2 × (10 + 10) + 10 = 65 (were 60 / 50). Their TSS ≈ the
+# structure's estimate (workout_steps.totals 81.4 / 61.5): ~57 an hour, the added time being jog-downs.
 TAPER_FULL = {
     "road": dict(kind="quality", title="有氧間歇 2×15 分（平路）", minutes=60, terrain="road",
                  detail="減量期最後一次完整強度課：專項期熟悉的課，不加量、不做新的課；休 3 分慢跑；暖身 15 分、緩和 10 分",
                  tss=60 / 60 * 70, power_pct=(0.95, 1.01)),
-    "trail": dict(kind="quality", title="上坡節奏跑 3×10 分（緩坡）", minutes=60,
+    "trail": dict(kind="quality", title="上坡節奏跑 3×10 分（緩坡）", minutes=85,
                   detail="減量期最後一次完整強度課：4–8% 緩坡、3 區（88–95% CP），慢跑下來恢復、下坡放鬆不衝；"
                          "暖身 15 分、緩和 10 分",
-                  tss=60 / 60 * 65, power_pct=(0.88, 0.95)),
+                  tss=85 / 60 * 57, power_pct=(0.88, 0.95)),
 }
 TAPER_CUT = {
     "road": dict(kind="quality", title="有氧間歇 2×10 分（平路）", minutes=50, terrain="road",
                  detail="減量期：同一種課、量縮短（少一段、每段變短）；休 3 分慢跑；暖身 15 分、緩和 10 分",
                  tss=50 / 60 * 65, power_pct=(0.95, 1.01)),
-    "trail": dict(kind="quality", title="上坡節奏跑 2×10 分（緩坡）", minutes=50,
+    "trail": dict(kind="quality", title="上坡節奏跑 2×10 分（緩坡）", minutes=65,
                   detail="減量期：同一種課、量縮短（少一段）；4–8% 緩坡、3 區（88–95% CP），下坡放鬆不衝；暖身 15 分、緩和 10 分",
-                  tss=50 / 60 * 62, power_pct=(0.88, 0.95)),
+                  tss=65 / 60 * 57, power_pct=(0.88, 0.95)),
 }
 TAPER_SHORT = dict(kind="quality", title="短強度 2×3 分（平路）", minutes=35, terrain="road",
                    detail="賽前 3–5 天最後一次短強度：量減半，98–102% CP，休 2 分慢跑；暖身 15 分、緩和 10 分",
