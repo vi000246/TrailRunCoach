@@ -537,14 +537,16 @@ def _range(scope: str, day: Optional[str], inp: dict) -> tuple[str, str]:
     return today, inp["phase_push_end"]
 
 
-def _view(s: dict, inp: dict, rows: dict, today: str, prov=None, walk: Optional[dict] = None) -> dict:
+def _view(s: dict, inp: dict, rows: dict, today: str, prov=None, walk: Optional[dict] = None,
+          prefs=PS.PREFS_UNREAD) -> dict:
     """`coros` keeps its name in the API: the push status at the active provider.
     `quality_family`: a 強度課's 有氧間歇 / VO2max 間歇 / 速度 (workout_templates.session_family: the
     stored `family` the user picked, else read from the steps); `steps_family` = what the steps
     read as (the editor's 「步驟看起來像…」 hint when it differs, SP-79).
     `walk_hint` (SP-298): on a planned hill easy run / long run, 「坡度超過約 X% 用走的比較省」
     (engine/walk_hint.py, `walk` = _walk_hint) — shown next to the detail, never stored or pushed.
-    (SP-286's 「課前要吃」 line was removed, owner 2026-10-07.)"""
+    (SP-286's 「課前要吃」 line was removed, owner 2026-10-07.)
+    `prefs`: 課表偏好 read once for every session of the view (SP-462; plan_store.push_dict)."""
     prov = prov or WT.get(WT.DEFAULT)
     v = dict(s)
     from backend.engine import walk_hint as WH
@@ -555,7 +557,7 @@ def _view(s: dict, inp: dict, rows: dict, today: str, prov=None, walk: Optional[
     v["quality_family"] = WTPL.session_family(s, inp["thresholds"], derived=got)
     v["steps_family"] = got
     if s["state"] == "active":
-        v["coros"] = prov.status_of(PS.push_dict(s), inp["thresholds"], rows.get(s["uid"]), today)
+        v["coros"] = prov.status_of(PS.push_dict(s, prefs), inp["thresholds"], rows.get(s["uid"]), today)
         note = pace_note(s, inp["thresholds"])
         if note:
             v["coros"] = {**v["coros"], "pace_note": note, "tpace_link": tpace_link()}
@@ -624,8 +626,9 @@ async def _sessions_body(db: AsyncSession, inp: dict, start: Optional[str], end:
     # the push window; an error means no markers, never a failed page
     from backend.engine import plan_marks as PMK
     mk = await PMK.load_safe(db, every, today)
+    prefs = PS.load_prefs_safe()                # once, not per session (SP-462)
     out = {**_meta(inp), "summary": _summary(every, inp),
-           "sessions": [{**_view(s, inp, rows, today, prov, walk), "mark": PMK.of(mk, s["uid"])}
+           "sessions": [{**_view(s, inp, rows, today, prov, walk, prefs), "mark": PMK.of(mk, s["uid"])}
                         for s in ss if s["state"] != "deleted" and s["state"] != "superseded"]}
     if inp.get("stale"):
         st = inp["stale"]
@@ -2746,7 +2749,28 @@ def _range_extras(start: str, end: str) -> dict:
                          key=lambda p: p["start"])
     goal_d = ((st.goals.get("targets") or {}).get("climb_per_km") or {}).get("value")
     return {"activities": acts, "phases": phases, "plan_phases": plan_phases,
-            "tph": O._tss_per_hour(ds, today), "goal_climb_per_km": goal_d}
+            "tph": _dataset_tph(ds, today), "goal_climb_per_km": goal_d}
+
+
+def _dataset_tph(ds, today: dt.date) -> dict:
+    """overview._tss_per_hour(ds, today): TSS / h per category over the last 180 days. Taken from
+    the cached plan inputs of the same dataset and day when there are some — week_plan computed
+    exactly this (tss_per_category, easy_tss = its easy_info) — else computed (SP-462: the
+    session classifier over every run of 180 days on each month switch of the 課表, ≈ 190 ms on
+    the demo data)."""
+    from backend.engine import overview as O
+    head = (*_tenancy.ds_key(ds), today)
+    with _lock:
+        for k in reversed(_cache.keys()):
+            if k[:len(head)] != head:
+                continue
+            cur = (_cache.get(k) or {}).get("cur") or {}
+            if cur.get("tss_per_category") is not None:
+                out = dict(cur["tss_per_category"])
+                if cur.get("easy_tss") is not None:
+                    out["easy_info"] = cur["easy_tss"]
+                return out
+    return O._tss_per_hour(ds, today)
 
 
 def _run_history(before: str) -> list[dict]:
