@@ -994,7 +994,8 @@ function range() {
   const d = dOf(S.anchor), first = isoOf(new Date(d.getFullYear(), d.getMonth(), 1)), last = isoOf(new Date(d.getFullYear(), d.getMonth() + 1, 0));
   return [mondayOf(first), addDays(mondayOf(last), 6)];
 }
-// SP-362: after a sync / on a new day the calendar may come back `stale` — the previous plan, shown
+// SP-362: after a sync / on a new day (SP-361: or a 課表心率區間 switch, reason hr — the HR targets
+// shown are the previous model's until then) the calendar may come back `stale` — the previous plan, shown
 // at once while the new one is computed. Badge 「更新中」, editing waits (the server never writes
 // from a stale view), GET /fresh is polled and the calendar reloads when the new plan is ready.
 // Polling gives up after MAX_MS: the edit lock is dropped (the server computes fresh inputs for
@@ -1009,7 +1010,7 @@ function staleWatch() {
     if (STALE.t0 && $("sync-msg").textContent === tt("stale.wait")) msg("");
     STALE.t0 = 0; STALE.gaveUp = false; return;
   }
-  b.textContent = tt(STALE.gaveUp ? "stale.reload" : st.reason === "day" ? "stale.day" : "stale.sync");
+  b.textContent = tt(STALE.gaveUp ? "stale.reload" : st.reason === "day" ? "stale.day" : st.reason === "hr" ? "stale.hr" : "stale.sync");
   b.title = tt(STALE.gaveUp ? "stale.reload_tip" : "stale.tip", { at: localTime(st.since) || "" });
   if (STALE.gaveUp) return;
   if (!STALE.t0) STALE.t0 = Date.now();

@@ -297,6 +297,7 @@
   "rest.mv_tip": "No session this day (rest). Drag it to another day: the rest day moves there and that day's sessions move here",
   "stale.sync": "Updating after sync",
   "stale.day": "Updating for the new day",
+  "stale.hr": "Updating HR zones",
   "stale.tip": "Showing the plan computed at {at}; the new one replaces it by itself when ready. Editing waits until then",
   "stale.wait": "The plan is updating — edit again in a few seconds",
   "stale.reload": "Refresh",

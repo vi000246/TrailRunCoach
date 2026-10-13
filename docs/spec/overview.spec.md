@@ -119,7 +119,16 @@ engine config / parity mode is the same everywhere.
   `_refresh`, `:106`, `:130`): once per key; a request or `plan_auto` computing the same key is
   joined. Bounded: `_last` is an LRU of `_LAST_MAX` = 64 tenants (`:61`), a demo tenant (one per
   visitor) is never kept nor served stale, and the background computations share a 2-thread pool
-  (`_REFRESH_POOL`, `:63`). The response gets `stale: {reason: sync | day, age_s, since}`.
+  (`_REFRESH_POOL`, `:63`). The response gets `stale: {reason: sync | day | hr, age_s, since}`.
+  **SP-361 (2026-10-13, owner Q1 = B):** of the user's settings, a change of the HR stamp alone
+  (`HRP.stamp()` at `_K_HR`, `backend/api/plan_sessions.py:72` — 設定 → 課表心率區間 switched, or the
+  COROS account's max / rest HR) is served stale too, reason `hr` (`_stale_view`, `:110`): the page
+  shows the previous plan with the previous model's HR targets and 「心率區間更新中」 until the new
+  model's plan is computed (1.5–2.5 s on the demo data), then reloads. The HR stamp with any other
+  setting changed is computed in the request as before. Switching back to a model used before
+  (its inputs still cached) no longer recomputes the Status for the calendar's phases: `_status_for`
+  (`:2715`) takes a cached Status that differs only by the HR stamp (`status_but_hr`,
+  `backend/api/overview.py:309`) — the plan, phases and goals it reads do not depend on the model.
   **Display only**: no `_ensure` reconcile, no `match_only`, no 每週課表存檔, nothing saved
   (`_sessions_body`, `:579`); the phases / goal of the view come from the tenant's previous Status
   (`_status_for`, `:2604`; `status_peek`, `backend/api/overview.py:90`). Every other caller — GET
@@ -127,7 +136,7 @@ engine config / parity mode is the same everywhere.
   flight), so a write never uses stale data. A failed background computation is not retried by the
   stale path: the next calendar load computes it in the request and reports the error.
   `GET /plan/fresh` (`:615`) = `{updating}` (computes nothing). The page (`staleWatch`,
-  `backend/static/schedule.html:979`) shows a 「同步後更新中」 / 「換日更新中」 badge (`stale-badge`, the
+  `backend/static/schedule.html:1007`) shows a 「同步後更新中」 / 「換日更新中」 / 「心率區間更新中」 badge (`stale-badge`, the
   computed-at time in its hover) and, while stale, refuses drag / edit / the context menu
   (`editable`, `:1026`; the capture guard, `:3054`: 「課表更新中，幾秒後再編輯」), the suggestion
   box's 排入 (`:3063`), 推送 / 重新計算 / 刪除所有過期未完成 / 移除推送 (disabled in the toolbar);
@@ -2451,7 +2460,7 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 
 - [x] Show the stored plan's future TSS / CTL on the charts (SP-219) — decided 2026-10-12 and built on the 圖表分析 PMC charts (above; not the 總覽 card, the 課表 page, plan vs actual or the days after the last planned session)
 - [x] Mark which sessions the system changed, which were left alone, which the user edited (SP-318) — built (課表標記 above)
-- [ ] The 課表 page loads slowly, also after switching the 課表心率區間 in 設定 and while a sync runs (SP-361, SP-362 In Progress) — partly fixed 2026-10-13: a model switch no longer drops the cached Datasets; the next load still recomputes `Status` and the plan inputs in full (both keyed on the HR stamp, though only the HR targets follow the model) — not fixed
+- [ ] The 課表 page loads slowly, also after switching the 課表心率區間 in 設定 and while a sync runs (SP-361, SP-362 In Progress) — fixed for the 課表 2026-10-13 (owner Q1 = B): after a model switch the calendar answers the previous plan at once, marked 「心率區間更新中」, and the new one is computed in the background. Not done (Q1 = A, planned with SP-362): taking the HR model out of the `Status` / plan-inputs keys so a switch recomputes only the HR targets; the 總覽 status card still computes in the request after a switch
 - [ ] iLevel / Stryd power zones in 設定 as the 課表's default (SP-363, Todo) — not implemented
 - [x] A warm-up time in 課表偏好 added before every session and template (SP-364; 每堂課前加熱身 above)
 - [x] RPE load converted per level (TSS definition IF² × 100 / h as the default, fitted per level once there is data), decided 2026-10-07 (SP-57) — done 2026-10-08 (`DEFAULT_IF`, `backend/engine/rpe_load.py:96`; branch feat/rpe-per-level-sp57)
@@ -2579,3 +2588,4 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 | 2026-10-13 | bugfix | SP-443 | The multi-day 百岳's 「ME 負重爬坡」 (kind quality, no variant, no 「N×M 分」) derived to nothing and its push raised 「看不懂間歇結構」. Now `workout_steps.derive` gives 暖身 (detail, 10′) → 上坡 the title's climb at `ME_UP_MPH` (auto easy = the walk cap, target_policy unchanged) → 下坡 the rest of the session (RPE 3–4 + 下降 N m, `ME_DOWN_RPE` 推估), and `coros_workouts.session_steps` pushes that structure; structure TSS ≈ 0.88 × the card. Tests: `backend/tests/test_me_climb_structure_sp443.py` |
 | 2026-10-13 | bugfix | SP-449 | 設定 › 閾值 and the plan page show the CP the 課表 uses and its source (`effective_thresholds.cp.label`; `zones.cp_in_effect`) — they said 「WKO5 的 mFTP」 / `wko5_mftp` (null on a COROS install) while the 課表 used the Stryd PD fit; the 「沒填的話用…」 help says the PD model (zh / en) |
 | 2026-10-13 | feature | SP-450 | The 專項 chip (主要訓練項目, `backend/static/sportchip.js`) is in the 課表's top row too (`backend/static/schedule.html:578`): choosing 自動／越野跑／路跑・馬拉松 saves `athlete.primary_sport` and reloads; the plan's `PSP.stored()` stamp re-plans (路跑: no 爬升 week row). Demo: shown, disabled |
+| 2026-10-13 | bugfix | SP-361 | 課表心率區間 switch, the rest (owner Q1 = B): `GET /plan/calendar` serves the previous inputs marked `stale` {reason `hr`} when, of the user's settings, only the HR stamp changed (`_K_HR`, `_stale_view`, `backend/api/plan_sessions.py:72`, `:110`) and computes the new model's plan in the background (single flight); the page's 「心率區間更新中」 badge (`stale.hr`, `backend/static/schedule.html:1007`). `_status_for` (`:2715`) takes a cached Status differing only by the HR stamp (`status_but_hr`, `backend/api/overview.py:309`): switching back to a model used before no longer recomputes the Status for the calendar's phases. Synthetic 52-week demo base, 課表 calendar right after a switch: new model 1.75–2.86 s → 0.13–0.16 s (stale; the new plan 1.5–2.5 s later in the background), a model used before 2.07 s → 0.08 s. Tests: `backend/tests/test_hr_switch_stale_sp361.py` |
