@@ -784,7 +784,12 @@ tickets is in plan-auto.spec.md):
   (`backend/engine/planning.py:529`).
 - **Multi-day 百岳** (SP-114): ME (ADS ≤ 10 %) instead of the uphill VO2max set, else general strength
   (`backend/engine/overview.py:1887`; projection `backend/engine/projection.py:730`); an old multi-day
-  event without per-day numbers gets a split hint (`backend/engine/overview.py:1708`).
+  event without per-day numbers gets a split hint (`backend/engine/overview.py:1708`). Saving one
+  (`Plan.upsert_event`) needs every day's distance and climb (`clean_day_plan`,
+  `backend/engine/planning.py:256`), except (SP-412) an edit of an event that has no per-day numbers
+  on the server with none sent: it is saved without them, still hinted (`backend/engine/planning.py:783`);
+  the 賽事周期 form then leaves the rows optional until one is filled and says so (`plan.ev.dayplan_old`,
+  `backend/static/plan.html:513`).
 - **Walking sessions' uphill cap** (SP-115): 75 % HRmax, never below the easy-run cap
   (`hr_profile.walk_cap_for`, `backend/engine/overview.py:1614`); 攻頂日模擬 and ME climb at it
   (`backend/engine/overview.py:1894`).
@@ -2555,3 +2560,4 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 | 2026-10-13 | bugfix | SP-361 | Switching 設定 → 課表心率區間 (`PUT /api/v1/plan/hr-profile` with only `model`) no longer goes through `_notify(True)`: the cached Datasets stay (the model is read live and `HRP.stamp()` is in the plan inputs', Status's and the zone / target charts' keys) and `plan_auto.after_thresholds` still re-plans / re-pushes; a manual max / resting HR still rebuilds. `threshold_confidence.check`'s Dataset memo key adds `HP.stamp()` (its 「最大心率可信度低」 warning follows the model). Synthetic 52-week demo base: 課表 calendar right after a switch 3.1–3.2 s → 2.8–2.9 s (a model used before: 2.1 s, plan-inputs cache hit); the rest is `Status` + plan inputs recomputed in full (open question above). Tests: `backend/tests/test_hr_model_switch_sp361.py` |
 | 2026-10-13 | bugfix | SP-408 | The 減量期 quality session (`taper_rules.as_q`) takes `taper_q_target`: its template's `power_pct` × CP (「功率 229–247 W（88–95% CP）」 for the trail tempo) plus the week's threshold-row HR, by the 目標依據; week_plan and the projection pass `cp` / `q_target` / prefs. `TAPER_CUT["trail"]`'s text says 88–95 % CP (it was parsed as 95–101 %). Before, it kept the old session's target (card 247–263 W vs structure 229–247 W; HR basis pushed the old text's HR). Tests: `backend/tests/test_taper_rules.py` (`test_taper_quality_takes_its_templates_target`, `test_taper_quality_target_follows_the_basis_and_never_keeps_the_old_text`, `test_week_plan_and_projection_taper_quality_take_the_templates_target`) |
 | 2026-10-13 | bugfix | SP-411 | `TAPER_FULL["trail"]` / `TAPER_CUT["trail"]` minutes 60 → 85 / 50 → 65 (the structure / pushed total: the jog-down rest = the rep), TSS 65 → 80.8 / 51.7 → 61.6 (57 an hour ≈ `workout_steps.totals`); the card no longer says 60′ for an 85:00 structure. Tests: `backend/tests/test_taper_rules.py::test_taper_trail_quality_minutes_are_the_structures` |
+| 2026-10-13 | bugfix | SP-412 | An old multi-day trip saved before SP-114 without per-day numbers can be edited again: `upsert_event` saves it without them when the event on the server has none (`day_plan_missing`, no rows) and the rows sent are all blank (`day_plan_blank`); rows filled in part, a new trip, a 1-day event made multi-day and a trip that has its numbers still go through `clean_day_plan`. The 賽事周期 form drops `required` from such a trip's rows (back on as soon as one is filled) and shows `plan.ev.dayplan_old`. Tests: `backend/tests/test_old_multiday_edit_sp412.py` |

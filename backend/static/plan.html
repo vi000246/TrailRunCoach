@@ -83,6 +83,7 @@ button.link { border: 0; background: none; color: var(--accent); padding: 0 4px;
 .form .dayplan { flex-basis: 100%; }
 .form .dayplan[hidden] { display: none; }
 .form .dayplan td, .form .dayplan th { padding: 2px 6px; }
+.form .dayplan .hint[hidden] { display: none; }
 .hint { color: var(--warn); font-size: 12px; }
 .pri { display: inline-block; min-width: 20px; text-align: center; border-radius: 4px; font-weight: 700; font-size: 12px; padding: 0 4px; }
 .pri.A { background: var(--bad); color: #fff; } .pri.B { background: var(--warn); color: #fff; } .pri.C { background: var(--line); }
@@ -150,6 +151,8 @@ button.link { border: 0; background: none; color: var(--accent); padding: 0 4px;
       <!-- SP-114: every multi-day trip (百岳, a 分站 越野賽／其他) fills each day; the totals add up -->
       <div id="dayplanwrap" class="dayplan" hidden>
         <div class="meta" data-i18n="plan.ev.dayplan_help">每天的距離和爬升都要填（下降選填，空白＝跟爬升一樣）；總距離、總爬升會自動加總。有 GPX 而且標好每天的終點時，以 GPX 為準。</div>
+        <!-- SP-412: editing an old trip saved without them — the rows are not required, this asks for them -->
+        <div id="dayplanold" class="hint" data-i18n="plan.ev.dayplan_old" hidden>這筆舊行程還沒填每天的距離和爬升，可以先照原樣存；沒填時每天的量是用總距離、總爬升平均分的，補上會比較準。要補就每天的距離和爬升都要填。</div>
         <table><thead><tr><th></th><th class="num" data-i18n="plan.ev.day_km">距離 km</th><th class="num" data-i18n="plan.ev.day_gain">爬升 m</th>
           <th class="num" data-i18n="plan.ev.day_loss">下降 m（選填）</th></tr></thead><tbody id="dayplanrows"></tbody></table>
       </div>
@@ -414,12 +417,20 @@ $("#evform").addEventListener("submit", async (ev) => {
   body.poles = ev.target.poles.checked;
   body.day_plan = needsDayPlan() ? readDayRows().map((r) => ({ km: r.km, gain_m: r.gain_m, loss_m: r.loss_m })) : null;
   await call("PUT", "/events", body);
-  ev.target.reset(); ev.target.id.value = ""; $("#evsubmit").textContent = "新增"; $("#evcancel").hidden = true; cutoffLabels(); dayPlanForm([]);
+  ev.target.reset(); ev.target.id.value = ""; $("#evsubmit").textContent = "新增"; $("#evcancel").hidden = true; dayPlanLenient = false; dayPlanTotals = null; cutoffLabels(); dayPlanForm([]);
   toast("已儲存"); load(); loadFeas();
 });
 // SP-114: a multi-day trip (百岳, a 分站 越野賽／其他 — not 路跑, not a 連續 race) fills each day's
 // distance and climb; the totals are their sums (read-only while the rows are shown)
 const FORMAT_KINDS = ["race", "other"];
+// SP-412: editing an old multi-day trip that has no per-day numbers on the server (day_plan_missing)
+let dayPlanLenient = false, dayPlanTotals = null;
+const dayFilled = (rows) => rows.some((r) => r && ["km", "gain_m", "loss_m"].some((k) => r[k] != null));
+function dayPlanRequired(rows) { return !dayPlanLenient || dayFilled(rows || readDayRows()); }
+function syncDayRequired() {
+  const req = dayPlanRequired();
+  $("#dayplanrows").querySelectorAll('input[data-k="km"], input[data-k="gain_m"]').forEach((x) => { x.required = req; });
+}
 function needsDayPlan() {
   const f = $("#evform"), n = Number(f.days.value) || 1, k = f.kind.value;
   const cont = FORMAT_KINDS.includes(k) && f.race_format && f.race_format.value === "continuous";
@@ -439,20 +450,23 @@ function dayPlanForm(plan) {
   const tP = (k, p) => (window.I18N ? I18N.t("plan.ev." + k, p) : k);
   $("#dayplanwrap").hidden = !on;
   f.distance_km.readOnly = f.climbing_m.readOnly = on;
-  const old = plan || readDayRows();
+  const old = plan || readDayRows(), req = dayPlanRequired(old);
+  $("#dayplanold").hidden = !(on && dayPlanLenient);
   $("#dayplanrows").innerHTML = on ? Array.from({ length: n }, (_, i) => `<tr><td>${esc(tP("day_n", { n: i + 1 }))}</td>`
     + ["km", "gain_m", "loss_m"].map((k) => `<td><input type="number" data-d="${i}" data-k="${k}" step="${k === "km" ? 0.1 : 10}" min="0"`
-      + `${k !== "loss_m" ? " required" : ""} value="${old[i]?.[k] ?? ""}"></td>`).join("") + "</tr>").join("") : "";
+      + `${k !== "loss_m" && req ? " required" : ""} value="${old[i]?.[k] ?? ""}"></td>`).join("") + "</tr>").join("") : "";
   sumDays();
 }
 function sumDays() {
   if (!needsDayPlan()) return;
   const f = $("#evform"), rows = readDayRows();
   const s = (k) => rows.reduce((a, r) => a + (r && r[k] != null ? r[k] : 0), 0);
+  // SP-412: the old trip's rows emptied again → its own totals back (they are what gets saved)
+  if (dayPlanTotals && !dayFilled(rows)) { f.distance_km.value = dayPlanTotals.distance_km; f.climbing_m.value = dayPlanTotals.climbing_m; return; }
   if (rows.some((r) => r && r.km != null)) f.distance_km.value = Math.round(s("km") * 10) / 10;
   if (rows.some((r) => r && r.gain_m != null)) f.climbing_m.value = Math.round(s("gain_m"));
 }
-$("#dayplanrows").addEventListener("input", sumDays);
+$("#dayplanrows").addEventListener("input", () => { sumDays(); syncDayRequired(); });
 $("#evform").days.addEventListener("input", () => dayPlanForm());
 $("#evform").race_format.addEventListener("change", () => dayPlanForm());
 // 賽事評估 of the upcoming A / B races (static/feasibility.js; GET /api/v1/overview/feasibility):
@@ -488,7 +502,7 @@ function cutoffLabels() {
   $("#summitwrap").hidden = !hike;
 }
 $("#kindsel").addEventListener("change", () => { cutoffLabels(); dayPlanForm(); });
-$("#evcancel").onclick = () => { $("#evform").reset(); $("#evform").id.value = ""; $("#evsubmit").textContent = "新增"; $("#evcancel").hidden = true; cutoffLabels(); dayPlanForm([]); };
+$("#evcancel").onclick = () => { $("#evform").reset(); $("#evform").id.value = ""; $("#evsubmit").textContent = "新增"; $("#evcancel").hidden = true; dayPlanLenient = false; dayPlanTotals = null; cutoffLabels(); dayPlanForm([]); };
 $("#events").addEventListener("click", async (ev) => {
   const ed = ev.target.dataset.edit, del = ev.target.dataset.del;
   if (ed) {
@@ -496,6 +510,10 @@ $("#events").addEventListener("click", async (ev) => {
     for (const k of ["id", "name", "date", "kind", "priority", "days", "distance_km", "climbing_m", "est_hours", "pack_kg", "cutoff_hours", "summit_km", "trail_pct", "note"]) f[k].value = e[k] ?? "";
     f.race_format.value = e.race_format || "stage";
     f.poles.checked = !!e.poles;
+    // SP-412: an old trip saved without its per-day numbers can be saved as it is (the server lets
+    // all-blank rows through for it); filling some rows makes every day required again
+    dayPlanLenient = !!e.day_plan_missing && !(e.day_plan || []).length;
+    dayPlanTotals = dayPlanLenient ? { distance_km: f.distance_km.value, climbing_m: f.climbing_m.value } : null;
     cutoffLabels(); dayPlanForm(e.day_plan || []);
     $("#evsubmit").textContent = "更新"; $("#evcancel").hidden = false; f.scrollIntoView({ behavior: "smooth", block: "center" });
   }
