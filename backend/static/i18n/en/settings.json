@@ -224,6 +224,8 @@
   "tabs.body_note": "Max / resting HR, plan HR zones, the LTHR / AeT / CP test log, the starting CTL / ATL, and whether to use power.",
   "tabs.data_note": "COROS / TrainingPeaks login and sync, backups, the plan calendar feed.",
   "tabs.advanced_note": "Calculation mode, auto-estimated parameters, power spike fixes, excluding broken activity files. Rarely needed.",
+  "tabs.advanced_note_nomode": "Auto-estimated parameters, power spike fixes, excluding broken activity files. Rarely needed.",
+  "mode.admin_only": "Only admins see this section, a tool for testing the formulas; switching changes only your own screens and calculations. Everyone else always uses \"My formulas\".",
   "general.title": "Basic info",
   "general.age": "Age",
   "general.age_unit": "years",

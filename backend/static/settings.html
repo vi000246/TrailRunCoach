@@ -205,6 +205,8 @@ main > section.tab-off { display: none; }
   <section id="mode">
     <h2>計算模式</h2>
     <p class="meta">首頁、圖表分析和狀態判斷都會用這裡選的模式。</p>
+    <!-- SP-464: sign-in mode only — the section is an admin's testing tool (hidden for everyone else) -->
+    <p class="meta" id="mode-admin" hidden data-i18n="settings.mode.admin_only">只有管理員看得到這一區，用來測試算式；切換只影響你自己的畫面和計算，其他使用者一律用「我的算式」。</p>
     <div class="modes">
       <button class="mode" data-parity="false">
         <b>我的算式（平常用）</b>
@@ -720,8 +722,15 @@ let proposals = [];
 function toast(m) { const t = $("toast"); t.textContent = m; t.classList.add("on"); setTimeout(() => t.classList.remove("on"), 1800); }
 async function j(url, opt) { const r = await fetch(url, opt); if (!r.ok) throw new Error(`${r.status} ${await r.text()}`); return r.json(); }
 
+// SP-464: in sign-in mode 計算模式 is an admin's testing tool: hidden (PUT /config is 403 for
+// anyone else) until GET /config says can_switch; the owner's own app shows it as before
+const SIGNIN = !!(window.TRC_SESSION && window.TRC_SESSION.login);
+if (SIGNIN) $("mode").hidden = true;
 async function loadMode() {
-  const { config } = await j(`${API}/config`);
+  const { config, can_switch } = await j(`${API}/config`);
+  $("mode").hidden = can_switch === false;
+  $("mode-admin").hidden = !SIGNIN || can_switch === false;
+  tabNote();
   document.querySelectorAll(".mode").forEach((b) => b.classList.toggle("on", String(!!config.parity) === b.dataset.parity));
 }
 document.querySelectorAll(".mode").forEach((b) => b.onclick = async () => {
@@ -2161,7 +2170,14 @@ function showTab(tab, focus) {
     b.setAttribute("aria-selected", on ? "true" : "false"); b.tabIndex = on ? 0 : -1;
     if (on && focus) b.focus();
   });
-  $("tab-note").textContent = t(`settings.tabs.${tab}_note`);
+  tabNote();
+}
+// the selected tab's note; 進階設定's leaves out 計算模式 when that section is hidden (SP-464)
+function tabNote() {
+  const b = document.querySelector('.tabs [aria-selected="true"]');
+  if (!b) return;
+  const tab = b.dataset.tab;
+  $("tab-note").textContent = t(`settings.tabs.${tab}_note${tab === "advanced" && $("mode").hidden ? "_nomode" : ""}`);
 }
 function tabFromHash() {
   const h = decodeURIComponent(location.hash.slice(1));
