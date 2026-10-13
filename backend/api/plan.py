@@ -623,7 +623,11 @@ def put_profile(body: ProfileIn):
         if v is not None and v not in P.PROFILE_FIELDS[k]:
             raise HTTPException(400, f"{k} must be one of {P.PROFILE_FIELDS[k]}")
     plan = P.Plan.load()
-    plan.weights = [P.Weight(w.date, round(w.kg, 1)) for w in body.weights]
+    # who wrote each entry (SP-472): an entry sent back unchanged (same day, same kg) keeps its source
+    # (the nightly apply's apple_health, an accepted COROS weight); a new or edited one is the user's
+    kept = {(w.date[:10], round(w.kg, 1)): w.source for w in plan.weights}
+    plan.weights = [P.Weight(w.date, round(w.kg, 1), kept.get((w.date[:10], round(w.kg, 1))))
+                    for w in body.weights]
     plan.profile = {k: v for k, v in (("sex", body.sex), ("height_cm", body.height_cm),
                                       ("birth_year", birth_year), ("power_source", body.power_source),
                                       ("power_meter", None if body.power_source else body.power_meter))

@@ -29,8 +29,8 @@ def test_four_tabs_each_section_on_one():
     # what the ticket groups: personal info / physiology (heart rate …) / advanced
     assert tabs["personal"][0] == "general" and "sport" in tabs["personal"]
     assert {"hr", "thresholds", "power"} <= set(tabs["body"])
-    assert {"sync", "backup", "archive", "device", "calendar"} == set(tabs["data"])     # 運動紀錄保留 (SP-317),
-    # 這台裝置的離線資料 (SP-322)
+    assert {"sync", "weightsync", "backup", "archive", "device", "calendar"} == set(tabs["data"])     # 運動紀錄保留 (SP-317),
+    # 這台裝置的離線資料 (SP-322), 體重同步 (SP-472)
     assert {"mode", "calib", "fixes", "debugapi"} == set(tabs["advanced"])      # debugapi: SP-371
     # a section without an id would land on 進階設定 silently: there is none
     main = PAGE[PAGE.index("<main>"):PAGE.index("</main>")]

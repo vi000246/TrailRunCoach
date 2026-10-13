@@ -21,6 +21,9 @@ above), per request:
      a page (a browser navigation) is sent to /login?next=<path>, anything else gets
      401 {"code": "LOGIN_REQUIRED"}
   5. a write (not GET / HEAD) must carry the CSRF header (the demo's double submit), public or not
+     — except POST /api/v1/weight/measurements with a weight token (SP-472, weight_auth.py): the
+     token's user from accounts.db, its tenant, no session and no CSRF (no cookie is read: nothing
+     for another site to forge); that one path only
   6. a user who hasn't accepted the current terms: pages go to /signup, the rest gets
      403 {"code": "TERMS_REQUIRED"} (the owner accepts none)
   7. tenant: the user's (the owner's own for user 1; a new user's folder and DB on first use),
@@ -56,6 +59,7 @@ from starlette.concurrency import run_in_threadpool
 from starlette.requests import cookie_parser
 
 MAX_BODY = 6 * 1024 * 1024
+WEIGHT_INGEST = "/api/v1/weight/measurements"   # SP-472: the one path a weight token opens (sign-in mode)
 CSRF_COOKIE = "trc_csrf"
 CSRF_HEADER = b"x-trc-csrf"
 
@@ -326,6 +330,12 @@ class TenancyMiddleware:
             with tenancy.use(tenancy.anonymous()):
                 await self.app(scope, receive, send)
             return
+        if method == "POST" and path == WEIGHT_INGEST:
+            from backend import weight_auth as WA
+            wtok = WA.token_from_headers(_headers(scope))
+            if wtok is not None:                   # SP-472: the weight API's own token, no session
+                await self._weight_token(scope, receive, send, wtok)
+                return
         session_cookie = LG.cookie_name(LG.SESSION_COOKIE)
         token = cookie(scope, session_cookie)
         try:
@@ -388,6 +398,43 @@ class TenancyMiddleware:
         scope.setdefault("state", {})["tenant"] = tenant
         try:
             await self.app(scope, receive, send_wrapper)
+        finally:
+            LG.reset_user(utok)
+            tenancy.reset(ttok)
+
+    async def _weight_token(self, scope, receive, send, token: str):
+        """Sign-in mode, POST /api/v1/weight/measurements with a weight token (SP-472,
+        weight_auth.py): the token's user from accounts.db (scope weight:write), bound to its tenant;
+        no session and no CSRF header (nothing here reads a cookie, so another site cannot forge
+        it). The endpoint checks the token against the tenant's own row again. 401 unknown, 429 once
+        the IP failed too often, 403 TERMS_REQUIRED for a user who has not accepted new terms."""
+        from backend import weight_auth as WA
+        from backend.accounts import login as LG, store, tenants as TN
+        ip = RL.client_ip(scope)
+        try:
+            got = await run_in_threadpool(store.service_token, token)
+        except Exception as e:                     # noqa: BLE001 — accounts.db unreadable
+            import logging
+            logging.getLogger(__name__).warning("weight token lookup failed: %s", type(e).__name__)
+            await _json_response(send, 503, {"detail": {"code": "UNAVAILABLE"}}, [(b"retry-after", b"10")])
+            return
+        if got is None or WA.SCOPE not in got[1]:
+            st = WA.failed(ip)
+            await _json_response(send, st, {"detail": {"code": "BLOCKED" if st == 429 else "TOKEN_INVALID"}},
+                                 [(b"retry-after", str(WA.FAIL_BLOCK_S).encode())] if st == 429
+                                 else [(b"www-authenticate", b"Bearer")])
+            return
+        user = got[0]
+        if not await run_in_threadpool(LG.consent_current, user):
+            await _json_response(send, 403, _demo_error("TERMS_REQUIRED", _("條款已更新，請先閱讀並同意")))
+            return
+        tenant = TN.tenant_of(user)
+        await TN.ensure_ready(tenant)
+        ttok = tenancy.set_current(tenant)
+        utok = LG.set_user(user)
+        scope.setdefault("state", {})["tenant"] = tenant
+        try:
+            await self.app(scope, receive, send)
         finally:
             LG.reset_user(utok)
             tenancy.reset(ttok)
