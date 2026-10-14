@@ -229,7 +229,7 @@ async def _import_one_file(
         # wko4 is WKO5's proprietary binary format. We can read metadata (sport,
         # date) from the header but cannot decode the exercise channel data.
         # These workouts represent pre-Coros historical data; metrics cannot be
-        # computed until the format is [removed]ed further.
+        # computed from them.
         meta = parse_wko4_metadata(str(path))
         raw = None
         start_time = meta.start_time

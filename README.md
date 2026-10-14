@@ -5,7 +5,11 @@
 
 > **線上示範**：<https://vi000246.github.io/TrailRunCoach/> — 一位虛構跑者的一年資料，不用登入就能看訓練總覽、圖表、
 > 賽事計算機和週期規劃，課表可以試著改（修改只存在你的瀏覽器）。唯讀的靜態網站，沒有伺服器。
-> （repo 轉 private 之前會搬到 Cloudflare Pages，網址改成 `demo.yichlin.com`，步驟見 [`deploy/static/`](deploy/static/README.md) §2b。）
+> （會搬到 Cloudflare Pages，網址改成 `demo.yichlin.com`，步驟見 [`deploy/static/`](deploy/static/README.md) §2b。）
+
+> **公開版不含計算核心。** 完整程式在 private repo 開發；這個公開 repo（`vi000246/TrailRunCoach`）是它的自動鏡像，
+> 拿掉了計算核心（圖表運算式引擎與資料集、指標算法、WKO5 檔案讀取、內建圖表定義）和相關測試、研究文件。
+> 公開版照樣能啟動、每一頁都打得開，用到核心的地方顯示「核心未包含（公開版）」；用到核心的測試會自動跳過。
 
 ![訓練總覽](docs/screenshots/overview.webp)
 
@@ -66,7 +70,7 @@ docker compose up --build        # 掛載 ~/.wko5coach
 ```
 
 這是在自己電腦上跑。放到比較弱的伺服器（例如 NAS）時，image 在電腦上建好再傳過去，伺服器不 build：
-見 [`docs/deploy/wko5coach.deploy.md`](docs/deploy/wko5coach.deploy.md)「正式環境：NAS」。
+見 `docs/deploy/wko5coach.deploy.md`「正式環境：NAS」（只在完整版）。
 
 ### 示範模式（虛構跑者）
 
@@ -102,7 +106,7 @@ pip install -r requirements-dev.txt
 python -m pytest backend/tests -q -m "not golden" -n auto
 ```
 
-預設只用合成資料，不碰 `~/.wko5coach`。`-n auto`（pytest-xdist）照 CPU 核心數平行跑：全套從單線的約 18 分鐘降到 2 分鐘左右（2026-10-13，18 核）；只跑幾個檔時不加比較快。
+預設只用合成資料，不碰 `~/.wko5coach`。公開版沒有計算核心，用到核心的測試會顯示「核心未包含（公開版）」並跳過。`-n auto`（pytest-xdist）照 CPU 核心數平行跑：全套從單線的約 18 分鐘降到 2 分鐘左右（2026-10-13，18 核）；只跑幾個檔時不加比較快。
 
 **瀏覽器冒煙測試**（`backend/tests/e2e/`，Playwright）：用示範跑者的合成資料在暫存資料夾起一個本機伺服器，
 用 Chromium 打開每一頁，檢查沒有 JS 錯誤、主要區塊有畫出來、主要按鈕按得動。預設的 `pytest` 會跳過它們；
@@ -135,8 +139,16 @@ and road runners. It reads your watch data (COROS, TrainingPeaks or plain FIT fi
 an overview dashboard (fitness / fatigue / form chart, load ratio, status), an automatic weekly schedule you can push to a
 COROS watch, interval and heart-rate-drift analysis per activity, a race calculator (GPX + weather +
 fitness → pacing, power, finish time, fuelling), season periodisation, schedule statistics and an
-injury log. Your data stays on your machine. The public demo (a synthetic athlete) is a static,
-read-only export (GitHub Pages today, Cloudflare Pages once the repository is private):
+injury log. Your data stays on your machine.
+
+This public repository is an automatic mirror of the private repository where the program is
+developed, **without the calculation core** (the chart expression engine and dataset, the metric
+algorithms, the WKO5 file readers, the built-in chart definitions, and their tests and research
+notes). It starts and every page opens; whatever needs the core answers "核心未包含（公開版）"
+(core not included), and the tests that need it are skipped.
+
+The public demo (a synthetic athlete) is a static,
+read-only export (GitHub Pages today, moving to Cloudflare Pages):
 <https://vi000246.github.io/TrailRunCoach/>
 (`python -m backend.demo.export_static`, see `deploy/static/`); schedule edits are kept in the
 visitor's browser. The server-side demo (`WKO5COACH_MODE=demo`, per-visitor sandboxes) stays
@@ -152,17 +164,16 @@ TrainingPeaks®, TSS®, Training Stress Score®, NP®, Normalized Power®, IF®,
 
 ## License
 
-The repository is private from 2026-10 on (SP-350): new versions are not published, and using
-them needs an agreement with the author.
+Since 2026-10 the program is developed in a private repository (SP-500). This public repository
+is a mirror of it without the calculation core; the core is not published, and using it needs an
+agreement with the author.
 
-What was published stays under the license it was published with:
+- This repository's contents: [PolyForm Noncommercial 1.0.0](LICENSE) — personal use, study,
+  research, hobby projects and non-profit use are free; any commercial use needs a separate
+  license from the author.
+- Versions published before 2026-10-05 were released under the MIT license and stay under it.
 
-- Versions published before 2026-10-05: the MIT license.
-- Versions published from 2026-10-05 until the repository went private:
-  [PolyForm Noncommercial 1.0.0](LICENSE) — personal use, study, research, hobby projects and
-  non-profit use are free; any commercial use needs a separate license from the author.
-
-External contributions are no longer accepted (see [CONTRIBUTING.md](CONTRIBUTING.md)); the
+External contributions are not accepted (see [CONTRIBUTING.md](CONTRIBUTING.md)); the
 contributions received under the [Contributor License Agreement](CLA.md) keep its terms.
 
 Third-party data: GoldenCheetah OpenData and the Lovdal dataset used by the

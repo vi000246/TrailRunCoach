@@ -5,6 +5,7 @@ redirect and the callback are gone, with the code exchange behind them.
 
 Fake HTTP only, never a real account; the OAuth client credentials are the obviously
 fake ones of the `tp_creds` fixture."""
+import pytest
 from pathlib import Path
 
 import httpx
@@ -69,6 +70,7 @@ def test_a_foreign_code_on_the_old_callback_binds_nothing(tp_creds):
     assert rec.calls == []
 
 
+@pytest.mark.needs_core
 def test_no_authorization_code_exchange_is_left_in_the_backend():
     assert not hasattr(tp_client, "get_auth_url")
     assert not hasattr(tp_client, "exchange_code")

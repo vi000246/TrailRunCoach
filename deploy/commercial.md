@@ -92,7 +92,7 @@
   ```
 - 驗收：`docker logs wko5coach 2>&1 | grep -F "<secret 的前 8 個字>"` 與 `grep -rF` app.log 都找不到。
 
-## 5b. repo 轉 private 之後的部署：不需要 deploy key（SP-350）
+## 5b. 開發移到 private repo 之後的部署：不需要 deploy key（SP-350、SP-500）
 
 **結論：NAS 不需要唯讀 deploy key。** 2026-10-05 起 NAS 不再從 GitHub 拉程式、也不在 NAS 上 build：
 image 在 Mac 用本機 clone 的 `git archive HEAD` 建（`linux/amd64`），`docker save | gzip | ssh nas docker load`
@@ -103,7 +103,7 @@ image 在 Mac 用本機 clone 的 `git archive HEAD` 建（`linux/amd64`），`d
 只有**之後改回「在伺服器上 git pull + build」**（例如換一台夠力的主機、或改用雲端 VM 自動部署）時才需要；
 那時的做法：在那台主機產生一把不設密碼的 ed25519 key → GitHub repo **Settings → Deploy keys** 加 `.pub`、
 **不要勾** Allow write access → 主機的 `~/.ssh/config` 用一個 `Host github-trc` 別名指定這把 key → clone 的
-remote 改成 `git@github-trc:vi000246/TrailRunCoach.git`，`git fetch` 成功即可。
+remote 改成 `git@github-trc:vi000246/TrailRunCoach-private.git`，`git fetch` 成功即可。
 
 👤 轉 private 時順手做（不轉也無妨）：
 
@@ -111,20 +111,24 @@ remote 改成 `git@github-trc:vi000246/TrailRunCoach.git`，`git fetch` 成功�
   轉 private 後它的 `git pull` 會失敗，**可以刪掉**。刪之前先確認 NAS 的 `docker-compose.yml` 是 `image: trailruncoach`、
   沒有 `build:`（有 `build: ./src` 的話，日後誰下了 `up --build` 就會在 NAS 上 build、而且讀不到新程式）。
 
-其他會拉這個 repo 的地方（轉 private 後照常）：
+其他會拉這個 repo 的地方——2026-10-14 起分成兩個 repo（SP-500）：**開發在 private repo
+`vi000246/TrailRunCoach-private`**；原本的公開 repo `vi000246/TrailRunCoach` 保留，改成不含計算核心的自動鏡像
+（`deploy/public-mirror/README.md`，每次部署後跑一次 `sync`）。
 
-| 地方 | 轉 private 後 | 要做什麼 |
+| 地方 | 現在 | 要做什麼 |
 |---|---|---|
-| NAS 正式環境 | 不受影響：image 從 Mac 傳過去，NAS 不連 GitHub | 無（舊 `src/` clone 見上） |
-| Mac / 其他電腦的 clone | 用擁有者自己的 GitHub 帳號（`gh auth` 或 SSH key），有權限 | 無；某台的 `git pull` 跳出要帳密時，用 `gh auth login` 登入 |
-| vault 的 `repo-docs/` 鏡像 | 從本機 clone 讀，不經 GitHub | 無 |
-| Claude 的雲端 session | 靠 GitHub App 授權，App 要裝在這個 repo 上 | 轉完開一個雲端 session 試 clone 一次 |
-| GitHub Actions | 目前沒有 workflow | 無；之後加的話 private repo 每月有免費分鐘數 |
-| GitHub Pages 線上示範 | **會停用**（個人帳號的 private repo 免費方案不能用 Pages） | 先照 `deploy/static/README.md` §2b 搬到 Cloudflare Pages |
+| NAS 正式環境 | 不受影響：image 從 Mac 的 private clone 傳過去，NAS 不連 GitHub | 無（舊 `src/` clone 見上） |
+| Mac / 其他電腦的 clone | `origin` 要指 private repo；舊 clone 的 `origin` 還是公開 repo | 照 `deploy/public-mirror/README.md`「另一台電腦」改 remote，並把公開 repo 的 push 關掉 |
+| 公開鏡像的 clone（例 `~/Projects/TrailRunCoach-public`） | 只給 `public_mirror.py sync` 寫入、人推 | 部署後 `sync` → 看 → `push origin main` |
+| vault 的 `repo-docs/` 鏡像 | 從本機 clone 讀，不經 GitHub | 無（讀的是 private 的 clone，內容完整） |
+| Claude 的雲端 session | 靠 GitHub App 授權，App 要裝在 **private repo** 上 | 開一個雲端 session 試 clone private repo 一次 |
+| GitHub Actions | 目前沒有 workflow | 無；之後加在 private repo（每月有免費分鐘數） |
+| GitHub Pages 線上示範 | `gh-pages` 分支要刪（裡面有賽事計算機的引擎 zip） | 先照 `deploy/static/README.md` §2b 搬到 Cloudflare Pages；靜態匯出不再打包引擎 zip 另開單 |
 | Hugging Face Space（`deploy/hf/`） | 不連 GitHub（`make_space.py` 從本機 clone 複製） | 見下 |
 
-`deploy/hf/make_space.py` 會把 `backend/`、`views/` 的**原始碼**複製進 Space repo。Space 是 public 的話，等於把轉 private
-的程式又公開一份；要放伺服器版示範就把 Space 設成 private（或改用自己的主機，例如 `try.yichlin.com`，§1）。
+`deploy/hf/make_space.py` 會把 `backend/`、`views/` 的**原始碼**（含計算核心）從本機 private clone 複製進 Space repo。
+Space 是 public 的話，等於把核心公開一份；要放伺服器版示範就把 Space 設成 private（或改用自己的主機，例如
+`try.yichlin.com`，§1），或改成從公開鏡像（`public_mirror.py export`）複製——但公開版沒有核心，示範會算不出圖表。
 
 ## 6. 部署的營運規則
 

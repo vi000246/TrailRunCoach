@@ -93,6 +93,7 @@ def test_wko5_power_source_cache_is_versioned(ds_files, monkeypatch):
     assert once() == 1
 
 
+@pytest.mark.needs_core
 def test_the_versions_follow_the_algorithm_not_unrelated_code(monkeypatch):
     from backend.engine.wko5expr.corrections import CorrectionStore
     from backend.files.wko4_file import read_wko4
@@ -339,6 +340,7 @@ def test_achievements_cache_write_is_atomic(ach, monkeypatch):
     assert not [x for x in p.parent.iterdir() if x != p]
 
 
+@pytest.mark.needs_core
 def test_the_versions_are_the_same_in_every_process():
     """A version that followed the hash seed would drop every cache on each restart / worker."""
     import os

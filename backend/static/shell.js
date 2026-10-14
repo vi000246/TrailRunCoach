@@ -297,6 +297,25 @@
     };
   }
 
+  // ---- the public mirror (SP-500): no calculation core, so a request that needs it answers
+  // 503 CORE_NOT_INCLUDED (backend/main.py); say so once per page
+  {
+    const coreFetch = window.fetch;
+    let told = false;
+    window.fetch = async (input, init) => {
+      const r = await coreFetch(input, init);
+      if (r.status === 503 && !told) {
+        r.clone().json().then((j) => {
+          const d = j && j.detail;
+          if (!d || d.code !== "CORE_NOT_INCLUDED" || told) return;
+          told = true;
+          if (d.message) toast(d.message);
+        }).catch(() => {});
+      }
+      return r;
+    };
+  }
+
   // ---- sign-in mode (SP-58): a session that ended meanwhile (signed out elsewhere, expired,
   // disabled) answers 401 LOGIN_REQUIRED: back to the sign-in page, then to this page; new terms
   // answer 403 TERMS_REQUIRED: to the terms page, then back here

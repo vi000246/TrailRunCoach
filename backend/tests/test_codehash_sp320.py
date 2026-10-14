@@ -1,6 +1,7 @@
 """SP-320 ①: code-version hashes cover only the code a cache's value comes from
 (engine/codehash.py): an unrelated edit keeps the hash, an edit to a reached function or
 constant changes it. Fixture modules are written to tmp_path and imported under `backend.`."""
+import pytest
 import importlib.util
 import sys
 
@@ -77,6 +78,7 @@ def test_reached_code_and_constants_change_the_hash(tmp_path):
     assert _h(tmp_path, "i", LIB.replace("self.v = v", "self.v = v + 1")) != base      # constructor
 
 
+@pytest.mark.needs_core
 def test_real_cache_roots_skip_unrelated_code():
     """The caches' roots reach their computations but not unrelated functions."""
     from backend.api import activity_auto as AA
@@ -118,6 +120,7 @@ def test_render_signature_ignores_mtime(tmp_path, monkeypatch):
     assert RC._compute_code_signature() != a
 
 
+@pytest.mark.needs_core
 def test_hashes_do_not_depend_on_the_hash_seed():
     """A frozenset constant / default reprs in seed order: the hash must not (two processes,
     a restart, two workers would disagree and drop every entry)."""

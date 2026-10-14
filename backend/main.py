@@ -8,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.db.database import init_db
+from backend.engine.core_stub import CoreNotIncluded, core_included
 from backend.i18n import UserError
 from backend.i18n.pages import STATIC as PAGES_DIR, render_page
 from backend.request_context import RequestContextMiddleware
@@ -118,7 +119,9 @@ async def lifespan(app: FastAPI):
     # deploy, the users active in the last 7 days (signed in or synced) are warmed up too, one at
     # a time behind the owner (the job queue, SP-338 第 3 條, SP-394); everyone else on their first
     # visit, the overview status and the charts showing the previous values marked 更新中 meanwhile
-    await wko5views.warm_up_startup(demo)
+    # the public mirror (SP-500) has no calculation core: nothing to build
+    if core_included():
+        await wko5views.warm_up_startup(demo)
     # daily auto-sync (sync.schedule.daily_time); WKO5COACH_NO_SCHEDULER=1 disables
     if demo:
         # no sync in the demo; its janitor (expired sandboxes) and weekly data rebuild instead
@@ -132,8 +135,9 @@ async def lifespan(app: FastAPI):
         from backend.api import rain_backfill
         rain_backfill.STOP.set()
         # …and the charts' background renders (SP-336): queued ones dropped, running ones not waited for
-        from backend.engine.wko5expr import render_cache
-        render_cache.shutdown_refresh()
+        if core_included():
+            from backend.engine.wko5expr import render_cache
+            render_cache.shutdown_refresh()
         if task is not None:
             task.cancel()
             try:
@@ -145,6 +149,15 @@ async def lifespan(app: FastAPI):
 async def _user_error(request, exc: UserError):
     """UserError (backend/i18n): {"detail": {"code", "message" (translated), "params"}}."""
     return JSONResponse(status_code=exc.status, content={"detail": exc.detail()})
+
+
+async def _core_not_included(request, exc: CoreNotIncluded):
+    """The public mirror (SP-500, backend/engine/core_stub.py): a request that needs the
+    calculation core answers 503 with the UserError shape, so the pages show the message."""
+    from backend.i18n import _
+    from backend.engine.core_stub import MESSAGE
+    return JSONResponse(status_code=503, content={"detail": {
+        "code": "CORE_NOT_INCLUDED", "message": _(MESSAGE), "params": {"what": exc.what}}})
 
 
 def build_app(demo: bool | None = None) -> FastAPI:
@@ -174,6 +187,7 @@ def build_app(demo: bool | None = None) -> FastAPI:
 
 
     app.add_exception_handler(UserError, _user_error)
+    app.add_exception_handler(CoreNotIncluded, _core_not_included)
 
     owner_only = {id(r) for r in (sync.router, auth.router,
                                   plan_auto_api.router, injuries_api.router, backup_api.router, calib_api.router,

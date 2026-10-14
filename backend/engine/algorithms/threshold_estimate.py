@@ -2,8 +2,7 @@
 Estimate lactate-threshold heart rate (LTHR) from ordinary runs.
 
 WKO5 has no such estimate — "Threshold Heart Rate" is a hand-entered setting
-([removed] 5.0.587: only the input-validation strings exist, and none of the
-182 expression functions derives it). Running power gives us a way in: the
+(none of its expression functions derives it). Running power gives us a way in: the
 PD model's CP / mFTP is estimated automatically, and heart rate at a
 threshold-level effort is LTHR.
 

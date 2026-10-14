@@ -1,10 +1,12 @@
 """cached_series / flush_series are shared by concurrent chart requests."""
+import pytest
 import threading
 import types
 
 from backend.engine.wko5expr import dataset as D
 
 
+@pytest.mark.needs_core
 def test_cached_series_is_thread_safe(tmp_path, monkeypatch):
     monkeypatch.setattr(D, "_CACHE_DIR", tmp_path)
     f = tmp_path / "a.wko4"

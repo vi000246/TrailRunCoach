@@ -193,6 +193,7 @@ def test_no_threshold_pace_warns_on_pct_and_zone_pace_steps_only():
     assert all(not r["needs_tpace"] for r in rows if r["key"] in ("strides", "hill_sprints"))
 
 
+@pytest.mark.needs_core
 def test_push_preview_note_and_the_link_to_threshold_pace():
     from backend.api import plan_sessions as API
     steps = _one({"type": "pace", "mode": "pct", "lo": 0.99, "hi": 1.01})

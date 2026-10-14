@@ -97,6 +97,7 @@ def test_glossary_has_the_owner_decisions():
     assert X.glossary_violations("過度疲勞", "Overreaching") and not X.glossary_violations("過度疲勞", "high risk")
 
 
+@pytest.mark.needs_core
 def test_views_have_unique_ids_and_the_sidecar_matches():
     cov = X.views_coverage()
     assert set(cov) >= {"training", "periodization", "workout"}

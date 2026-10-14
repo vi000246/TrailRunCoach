@@ -1365,6 +1365,7 @@
   "示範模式最多 {n} 個階段": "The demo allows at most {n} phases",
   "示範模式最多 {n} 堂課": "The demo allows at most {n} sessions",
   "示範版算不出這組輸入，請換一組數字再試": "The demo cannot compute these inputs; try different numbers",
+  "核心未包含（公開版）": "Calculation core not included (public edition)",
   "示範資料準備中，請稍候": "Preparing the demo data; please wait",
   "秒": "s",
   "移動時間": "Moving time",

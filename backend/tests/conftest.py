@@ -11,7 +11,15 @@ _guard.install()
 
 import pytest  # noqa: E402
 
+from backend.engine import core_stub as _core_stub  # noqa: E402
+
 collect_ignore = [] if _guard.REALDATA else ["realdata"]
+
+# The public mirror (SP-500) has no calculation core: its modules are stubs
+# (backend/engine/core_stub.py). A test that needs the core is skipped there, not failed
+# (the hooks at the end of this file); with the core (the private repo) nothing changes.
+CORE_INCLUDED = _core_stub.core_included()
+CORE_SKIP = "核心未包含（公開版）"
 
 
 @pytest.fixture(autouse=True)
@@ -164,6 +172,9 @@ def _no_memoised_plan():
     keyed on the plan.json stamp, which is the same "missing" for every test
     without a plan file, so a plan memoised by one test would otherwise be
     served to the next one and bypass its Plan.load stub."""
+    if not CORE_INCLUDED:
+        yield
+        return
     from backend.engine.wko5expr import dataset
     dataset._PLAN_MEMO.clear()
     yield
@@ -194,9 +205,10 @@ def _fit_cache_in_tmp(monkeypatch, tmp_path_factory):
     """The FIT dataset cache (engine/wko5expr/fitcache.py) lives in a temp
     folder, never ~/.wko5coach/cache/fit; files are parsed inline (no
     process pool) unless a test asks for one."""
-    from backend.engine.wko5expr import fitcache
-    monkeypatch.setenv(fitcache.ENV_ROOT, str(tmp_path_factory.mktemp("fitcache")))
-    monkeypatch.setenv(fitcache.ENV_WORKERS, "0")
+    if CORE_INCLUDED:
+        from backend.engine.wko5expr import fitcache
+        monkeypatch.setenv(fitcache.ENV_ROOT, str(tmp_path_factory.mktemp("fitcache")))
+        monkeypatch.setenv(fitcache.ENV_WORKERS, "0")
     # an app started by a test (TestClient lifespan) never builds a Dataset in the background
     monkeypatch.setenv("WKO5COACH_NO_WARMUP", "1")
     # nor runs the daily automatic backup (it would read the real DB's backup folder)
@@ -292,3 +304,58 @@ def _site_state_per_test(monkeypatch, tmp_path_factory):
     yield
     coros_limits.reset()
     site_settings.reset_cache()
+
+
+# ---- the public mirror (SP-500): a test that needs the calculation core is skipped -------------
+# "Needs the core": it raised CoreNotIncluded, or it failed after a core stand-in was used
+# (an API answered 503, a helper swallowed the exception). Only without the core.
+_REPO = Path(__file__).resolve().parents[2]
+
+
+def _left_out_file(exc) -> bool:
+    """A repo file the test reads is missing: the mirror left it out (views/, docs/plans/…)."""
+    name = getattr(exc, "filename", None)
+    if not isinstance(exc, FileNotFoundError) or not name:
+        return False
+    try:
+        Path(name).resolve().relative_to(_REPO)
+    except ValueError:
+        return False
+    return True
+
+
+def _core_skip(rep, path, line):
+    rep.outcome = "skipped"
+    rep.longrepr = (str(path), line, f"Skipped: {CORE_SKIP}")
+
+
+if not CORE_INCLUDED:
+    def pytest_collection_modifyitems(config, items):
+        """@pytest.mark.needs_core: a test about the core that never touches a stand-in
+        (it reads the core's source, a removed function's absence, a views/ file)."""
+        for item in items:
+            if item.get_closest_marker("needs_core"):
+                item.add_marker(pytest.mark.skip(reason=CORE_SKIP))
+
+    @pytest.hookimpl(tryfirst=True)
+    def pytest_runtest_setup(item):
+        item._core_hits = _core_stub.HITS
+
+    @pytest.hookimpl(hookwrapper=True)
+    def pytest_runtest_makereport(item, call):
+        outcome = yield
+        rep = outcome.get_result()
+        if not rep.failed:
+            return
+        exc = call.excinfo.value if call.excinfo else None
+        if (exc is not None and (_core_stub.is_core_missing(exc) or _left_out_file(exc))) or \
+                _core_stub.HITS > getattr(item, "_core_hits", _core_stub.HITS):
+            _core_skip(rep, item.path, item.location[1] or 0)
+
+    @pytest.hookimpl(hookwrapper=True)
+    def pytest_make_collect_report(collector):
+        before = _core_stub.HITS
+        outcome = yield
+        rep = outcome.get_result()
+        if rep.failed and (_core_stub.HITS > before or "CoreNotIncluded" in str(rep.longrepr)):
+            _core_skip(rep, collector.path, 0)
