@@ -189,6 +189,22 @@ class Ctx:
     # (rate_easy: warm-up, cool-down, rests, easy targets — engine/session_structure.easy_rate);
     # None = every step at IF² × 100 (the generic estimate, as before)
     easy_tph: Optional[float] = None
+    # SP-511 (engine/intensity_calib.py): ≈ % CP of this runner's easy run (the anchor of v_easy,
+    # EASY_F by default) and the × of the RPE → % CP table; None = the value in effect (calibrate)
+    easy_f: Optional[float] = None
+    rpe_k: Optional[float] = None
+
+    def easy_frac(self) -> float:
+        if self.easy_f is not None:
+            return self.easy_f
+        from backend.engine import intensity_calib as ICAL
+        return ICAL.easy_if()
+
+    def rpe_scale(self) -> float:
+        if self.rpe_k is not None:
+            return self.rpe_k
+        from backend.engine import intensity_calib as ICAL
+        return ICAL.rpe_scale()
 
     def tl_model(self):
         from backend.engine import coros_tl
@@ -950,7 +966,7 @@ def normalize(d, rpe_model=None) -> dict:
             if dur.get("rpe") is not None:
                 dur = _norm_rpe_load(dur, errs, rpe_model)
             else:
-                v = _f(dur.get("value"), _("負荷（Load）"), errs, *LOAD_RANGE)
+                v = _f(dur.get("value"), _("訓練負荷（Training load）"), errs, *LOAD_RANGE)
                 dur = {"type": "load", "value": round(v, 1)} if v else {"type": "open"}
         elif dt_ == "time":
             v = _f(dur.get("value"), _("時間"), errs, 5, 6 * 3600)
@@ -1159,10 +1175,16 @@ def _from_int(it: Optional[tuple], c: Ctx, auto: bool = True, warn: str = "") ->
     return Resolved("hr", lo, hi, f, f"{lo:.0f}–{hi:.0f} bpm", sub, auto, warn, intensity=it)
 
 
-def rpe_frac(lo: float, hi: float) -> float:
-    """≈ % CP of an RPE band (the chart and the TSS estimate only; 推估)."""
+def rpe_frac(lo: float, hi: float, scale: float = 1.0) -> float:
+    """≈ % CP of an RPE band (the chart and the TSS estimate only; 推估): the table × `scale`
+    (SP-511: the runner's rpe_if_scale, Ctx.rpe_scale; 1 = the table as is)."""
     a, b = (max(RPE_MIN, min(RPE_MAX, int(round(x)))) for x in (lo, hi))
-    return (RPE_FRAC[a] + RPE_FRAC[b]) / 2.0
+    return (RPE_FRAC[a] + RPE_FRAC[b]) / 2.0 * scale
+
+
+def rpe_band(tg: dict) -> tuple:
+    """(lo, hi) of an RPE target as stored (a missing bound: the other one, else RPE_MIN)."""
+    return tg.get("lo") or RPE_MIN, tg.get("hi") or tg.get("lo") or RPE_MIN
 
 
 def rpe_text(lo, hi) -> str:
@@ -1191,11 +1213,11 @@ def rpe_hint(lo: float, hi: float, c: Ctx) -> str:
 
 
 def _rpe(tg: dict, c: Ctx) -> Resolved:
-    lo, hi = tg.get("lo") or RPE_MIN, tg.get("hi") or tg.get("lo") or RPE_MIN
+    lo, hi = rpe_band(tg)
     a, b = RPE_WORD.get(int(round(lo)), ""), RPE_WORD.get(int(round(hi)), "")
     word = a if a == b else f"{a}～{b}"
     sub = " · ".join(x for x in (climb_text(tg), word, rpe_hint(lo, hi, c)) if x)
-    return Resolved("rpe", lo, hi, rpe_frac(lo, hi), rpe_text(lo, hi), sub, auto=False,
+    return Resolved("rpe", lo, hi, rpe_frac(lo, hi, c.rpe_scale()), rpe_text(lo, hi), sub, auto=False,
                     err="RPE 下限比上限高" if lo > hi else "")
 
 
@@ -1333,25 +1355,28 @@ def flat(items: list, ctx=None) -> list[dict]:
     return out
 
 
-EASY_F = 0.78        # ≈ % CP of an easy run (Palladino EZ ≤ 80 % CP; 推估 anchor of v_easy)
+EASY_F = 0.78        # ≈ % CP of an easy run (Palladino EZ ≤ 80 % CP; 推估 anchor of v_easy); the default of
+                     # Ctx.easy_frac — the runner's own since SP-511 (engine/intensity_calib.py)
 WALK_KMH = 5.0       # a walk / rest step with no target (推估)
 
 
 def speed_kmh(f: Optional[float], c: Ctx) -> tuple[float, str]:
     """(km/h on flat road at ≈ f × CP, how). Two anchors from the athlete's own data:
-    easy speed (equivalence: median easy road runs ≤ AeT) at EASY_F, threshold pace
-    (thresholds.estimate_tpace) at 100 % CP; linear between them (running power is about
-    proportional to flat speed — Stryd), one anchor scales by f, none 6:00/km. 推估."""
+    easy speed (equivalence: median easy road runs ≤ AeT) at the runner's easy % CP (Ctx.easy_frac:
+    EASY_F, or their own median, SP-511), threshold pace (thresholds.estimate_tpace) at 100 % CP;
+    linear between them (running power is about proportional to flat speed — Stryd), one anchor
+    scales by f, none 6:00/km. 推估."""
     v_e = c.v_easy
     v_t = 3600.0 / c.tpace if c.tpace else None
+    ef = c.easy_frac()
     if f is None:
-        f = EASY_F
+        f = ef
     f = max(0.45, min(1.4, f))
     if v_e and v_t and v_t > v_e:
-        v = v_e + (f - EASY_F) / (1.0 - EASY_F) * (v_t - v_e)
+        v = v_e + (f - ef) / (1.0 - ef) * (v_t - v_e)
         how = "easy+tpace"
     elif v_e:
-        v = v_e * f / EASY_F
+        v = v_e * f / ef
         how = "easy"
     elif v_t:
         v = v_t * f
@@ -1380,7 +1405,7 @@ def _secs(st: dict, r: Resolved, c: Ctx) -> tuple[float, bool]:
             return km * (r.lo + r.hi) / 2, True
         if r.frac is None and st["kind"] == "rest":
             return km / WALK_KMH * 3600.0, True
-        f = r.frac if r.frac is not None else NONE_IF.get(st["kind"], EASY_F)
+        f = r.frac if r.frac is not None else NONE_IF.get(st["kind"], c.easy_frac())
         v, _how = speed_kmh(f, c)
         if c.terrain == "trail":
             ep = km * (1.0 + c.climb_per_km / 100.0)
@@ -1398,12 +1423,18 @@ RPE_IF_RANGE = (0.4, 1.3)        # 推估: the IF an RPE-entered load step may i
 
 def load_if(st: dict, r: Resolved) -> float:
     """The IF a 「負荷」 step is timed and converted at: its target's ≈ % CP, else the kind's.
-    Entered by feel (SP-57): the IF its TSS and minutes imply, √(TSS ÷ (100 × h))."""
+    Entered by feel (SP-57): the IF its TSS and minutes imply, √(TSS ÷ (100 × h)). An RPE target
+    (SP-511): the table as is, never the runner's rpe_if_scale — this IF sets the step's time and
+    COROS TL, i.e. what the watch gets, and a refit must not re-push a workout (the step's TSS is
+    typed, so the planned TSS doesn't depend on it)."""
     d = st["dur"]
     if d.get("type") == "load" and d.get("rpe") and d.get("min"):
         import math
         f = math.sqrt(float(d["value"]) / (100.0 * float(d["min"]) / 60.0))
         return round(max(RPE_IF_RANGE[0], min(RPE_IF_RANGE[1], f)), 4)
+    tg = st.get("target") or {}
+    if tg.get("type") == "rpe":
+        return rpe_frac(*rpe_band(tg))
     return r.frac if r.frac else NONE_IF.get(st["kind"], 0.7)
 
 
@@ -1450,7 +1481,7 @@ def estimate_note(steps: dict, c: Ctx) -> str:
     lap = any(s["dur"]["type"] == "open" and s["dur"].get("est") for s in rows)
     parts = []
     if dist:
-        _v, how = speed_kmh(EASY_F, c)
+        _v, how = speed_kmh(None, c)
         src = {"easy+tpace": f"你的輕鬆路跑速度 {c.v_easy:.1f} km/h（{c.v_easy_src or '近期紀錄'}）和閾值配速 {mmss(c.tpace or 0)}/km 之間，依每段的目標強度內插" if c.v_easy and c.tpace else "",
                "easy": f"你的輕鬆路跑速度 {(c.v_easy or 0):.1f} km/h 依目標強度等比例放大" ,
                "tpace": f"你的閾值配速 {mmss(c.tpace or 0)}/km 依目標強度換算",
@@ -2016,7 +2047,7 @@ def watch_preview(steps: dict, c: Ctx, name: str = "TRC", overview: str = "") ->
     if dist:
         lost.append(_("距離段：COROS 欄位（公分）依第三方整理，這個 app 還沒實際送過（未驗證）"))
     if any(st["dur"]["type"] == "load" for st, _ in res):
-        lost.append(_("「{x}」段：這裡填的是負荷（Load），推到 COROS 換算成它的 TL（推估，誤差約 ±20 %；"
+        lost.append(_("「{x}」段：這裡填的是訓練負荷（Training load），推到 COROS 換算成它的 TL（推估，誤差約 ±20 %；"
                       "每次同步後用你的活動重新校正）", x=_(LOAD_LABEL)))
     n = len(program["exercises"])
     if n > COROS_MAX_STEPS:

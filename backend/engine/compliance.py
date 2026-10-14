@@ -135,8 +135,9 @@ def with_plan_check(comp: Optional[dict], vs: Optional[dict]) -> Optional[dict]:
     """The intensity part of a done session (engine/plan_match.compare), on top of time / TSS:
       換了課 (was 沒照課表, SP-398; off_plan: planned intervals, ran easy — or the other way — or another sport):
         at least yellow (推估: TrainingPeaks colours time / TSS only; the kind is our addition)
-      強度不足 / 偏強 (short, SP-216: 50–80 % of the planned intensity, or an easy run up to
-        150 % of a quality dose): at least yellow, counted as 部分 — no longer 沒照課表.
+      強度不足 (short, SP-216: 50–80 % of the planned intensity): at least yellow, counted as 部分 — no
+        longer 沒照課表. An easy run up to 150 % of a quality dose is no longer 部分 偏強 (SP-484: 「偏強」
+        is rule D's alone, engine/adapt.py — a dot on the card, not a second ◐).
       跑成強度課 / 跑成輕鬆 / 項目不同 (short with `soft`, SP-370): the reversal or another foot
         sport with time and TSS both green — 部分 too (推估, see the module docstring).
     `intensity_pct` (planned hard) joins the time / TSS %; when the intensity fell short it is
@@ -155,7 +156,7 @@ def with_plan_check(comp: Optional[dict], vs: Optional[dict]) -> Optional[dict]:
     if ipct is not None and (comp.get("pct") is None or ipct < comp["pct"]):
         out["pct"] = ipct
     return {**out, "short": True, "off_text": vs.get("short_text") or "", "soft": vs.get("soft"),
-            "label": soft_label(vs) or (_("強度不足") if vs.get("grade") == "short" else _("強度偏高"))}
+            "label": soft_label(vs) or _("強度不足")}
 
 
 def soft_label(vs: dict) -> Optional[str]:

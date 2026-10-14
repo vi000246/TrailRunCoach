@@ -69,7 +69,7 @@ RWC_BANDS = {
 }
 RATINGS = ("Too Low", "Low", "Medium", "High", "Too High")
 RATING_ZH = {"Too Low": "過低", "Low": "偏低", "Medium": "中等", "High": "偏高", "Too High": "過高"}
-RATING_NOTE = {"Too Low": "W′ 過低 → CP 可能被高估", "Too High": "W′ 過高 → CP 可能被低估"}
+RATING_NOTE = {"Too Low": "無氧容量過低 → CP 可能被高估", "Too High": "無氧容量過高 → CP 可能被低估"}
 
 
 def _band(value: float, bounds) -> str:

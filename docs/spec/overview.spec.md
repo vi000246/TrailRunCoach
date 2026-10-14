@@ -1,6 +1,6 @@
 # Module Spec: overview
 
-> **Last Updated**: 2026-10-12
+> **Last Updated**: 2026-10-14
 > **Status**: Active
 > **Domain Layer**: Core Domain
 
@@ -328,7 +328,17 @@ B2B weekends, the race calculator (for the 專項期 target) and the 主要訓�
 3. Guards: TSB < −30 → recovery week (60 % of the 4-week mean); TSB < −20 → hold (TSB from the
    started PMC above — SP-63 Q3: a new user's first weeks no longer read a CTL still filling up
    from 0 as a false TSB < −30, `backend/engine/overview.py:1411`); base: three
-   building weeks in a row → recovery week (65 % of their mean, 3:1 cycle). 專項期 (SP-97): no 3:1
+   building weeks in a row → recovery week (70 % of their mean, 3:1 cycle). Both shares
+   (`RECOVERY_WEEK_SHARE` 0.70, `RECOVERY_WEEK_TSB_SHARE` 0.60) are 推估 — no study says how much a
+   recovery week should cut. SP-512 R1 (owner 2026-10-14: "the number most coaches use"): of 11
+   verified coaches / approaches the mode and the median cut is 30 % (5 of 11 at 30 %; range
+   −10…−60 %; runners' coaches mostly −15–35 %, Uphill Athlete ≈ half the hardest week; sources and
+   the baseline conversion in the constant's comment and estimated-constants-inventory.md §5.2),
+   taken on the normal-week baseline → 70 % of the 3-week mean (was 65 %). The TSB < −30 week keeps
+   60 % of the 4-week mean (the deep cuts coaches give for heavy loads; no source about a TSB).
+   Every recovery week's `why` ends with that note (option C: no personalising until ≥ 4 recovery
+   weeks of results). `projection.week_hours` and `race_feasibility.koop_run` read the same
+   constant. 專項期 (SP-97): no 3:1
    from the history — 賽前第 5、3 週 are the recovery weeks (`specific_phase.EASY_WEEKS`, FRAC's low
    points; not right after another light week), so one never takes the week 4 long day. Both:
    after 6 weeks without a recovery week the next is one (Koop; a 專項期 week waits for the
@@ -617,7 +627,9 @@ interval-library `variant_*` fields — plan-auto.spec.md §Interval library)
 - **爬坡走路提示** (SP-298, `engine/walk_hint.py`; run-walk-threshold.md §5.4 #2): a planned hill easy
   run / long run (kind easy / long, terrain trail / hike or a 山路 / 越野 title; never road / flat)
   gets `walk_hint` in the 課表 API view (`api/plan_sessions._view`, shown after the detail on the 課表
-  calendar and the overview tooltip) — 「提示：照你輕鬆心率的爬升速度（約 N m/h），坡度超過約 X% 用走的
+  calendar and the overview tooltip; SP-484: + `walk_grade` (`backend/api/plan_sessions.py:574`) — on the 課表
+  card 完整 shows the sentence as the card's line, 標準 a 「≥ X% 走」 tag in front of the detail, 精簡 nothing,
+  the hover always the sentence) — 「提示：照你輕鬆心率的爬升速度（約 N m/h），坡度超過約 X% 用走的
   比較省（預設值｜依你的跑走紀錄校正）；規則仍是心率上限」. N = the median VAM of the last 90 days' trail-run
   sustained climbs (`climb_vam`, ≥ 8 %, ≥ 8 min) with average HR ≤ the plan's easy cap, ≥ 3 climbs
   (both 推估), else no hint; X = `runwalk.walk_grade(N, shift)` — the smallest grade ≥ 3 % whose gait at
@@ -1105,7 +1117,14 @@ chips, `heat_passive` in the legend, no push button for it.
 
 The projection passes the same preferences (`week_sessions`, `backend/engine/projection.py:155`),
 rolls its history on the minutes actually planned, and returns each week's preference notes. The
-課表 page shows the notes of the weeks in view (`_plan_notes`, `backend/api/plan_sessions.py:2611`).
+課表 page shows the notes of the weeks in view (`_plan_notes`, `backend/api/plan_sessions.py:3094`) through
+`static/hints.js` (SP-484, `renderNotes` `backend/static/schedule.html:1386`): class 1 in one box, at most 3
+reminders, the rest under 「還有 N 則提醒 ▸」, ▷ / 知道了 / condition not met under 「詳細」; 「調整課表偏好 →」
+only when a 偏好 note is on the page. First, R3's 「輕鬆跑連續偏強」 (SC4, `_streak_note` `:3079`;
+`adapt.overhard_streak` `backend/engine/adapt.py:658`): 2 of the last 3 done easy runs within 14 days, or
+2 within 7 days, too hard by rule D (太強 = the session class, 偏強 = power / TSS / HR, read from the review
+rows — `_adapt_ctx` now measures the runs of the last 14 days, `:394`, only as review rows — else from the
+stored note) → one week note of this week, condition fingerprint = those runs' days; 3 / 2 / 7 / 14 推估.
 User-edited and custom sessions are never overwritten: preferences only change the
 generator's output and reconcile rule 3 keeps edited sessions.
 
@@ -1262,8 +1281,8 @@ more than `MAX_WEEKS` = 8 ahead (`backend/engine/projection.py:43`):
 - Hours per week (`week_hours`, `backend/engine/projection.py:100`): base / specific use the CTL
   ramp goal capped at +10 % (≥ +0.5 h) of max(4-week mean, last week) over normal weeks (`cap_ref`:
   `target.ref_weeks`, this week and each projected week outside a 減量期 / race / 恢復期 / 轉換期,
-  `_skip_week`; SP-73), with a 65 % recovery
-  week after 3 build weeks; taper 40–50 % of the 6-week mean; event 30 %; recovery 50 %;
+  `_skip_week`; SP-73), with a recovery week at `overview.RECOVERY_WEEK_SHARE` (70 %, SP-512)
+  after 3 build weeks; taper 40–50 % of the 6-week mean; event 30 %; recovery 50 %;
   transition 50 % of the pre-race level, the same number as week_plan (`O.transition_ref` over
   the history, this week and the projected weeks by Monday, `backend/engine/projection.py:609`;
   week_plan's `transition_ref` when its weeks are past), easy runs ≤ 60 min. A weekly-hours preference caps it
@@ -1424,8 +1443,10 @@ session／Skipped); a red level from time / TSS alone reads 部分 like its stat
 The intensity is graded, not pass / fail (SP-216; TrainingPeaks' compliance colours applied to the
 quality dose, 推估; `backend/engine/plan_match.py:60-64`): a planned hard session at ≥ 80 % of the
 dose it needs is done, 50–80 % is 強度不足, < 50 % ran easy (≠); a planned easy run with a quality
-dose ≥ 150 % ran hard (≠), below that 偏強 — 強度不足 / 偏強 count as ◐ 部分, not ≠
-(`backend/engine/compliance.py:130`).
+dose ≥ 150 % ran hard (≠), below that it counts as the easy run planned (grade `over`, `actual` easy, done —
+SP-484: 「偏強」 is rule D's alone, a dot on the card, so plan_match no longer adds a ◐ 偏強;
+`backend/engine/plan_match.py:355`, `:372`) — 強度不足 counts as ◐ 部分, not ≠
+(`backend/engine/compliance.py:134`).
 SP-370 (owner 2026-10-08; intervals.icu / TrainingPeaks rate completion by load / time, the
 combination 推估): when time **and** TSS are both measured and both within ±20 %
 (`compliance.time_tss_level`, `backend/engine/compliance.py:67-76` — None when either is missing:
@@ -2604,6 +2625,7 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 - [ ] iLevel / Stryd power zones in 設定 as the 課表's default (SP-363, Todo) — not implemented
 - [x] A warm-up time in 課表偏好 added before every session and template (SP-364; 每堂課前加熱身 above)
 - [x] RPE load converted per level (TSS definition IF² × 100 / h as the default, fitted per level once there is data), decided 2026-10-07 (SP-57) — done 2026-10-08 (`DEFAULT_IF`, `backend/engine/rpe_load.py:96`; branch feat/rpe-per-level-sp57)
+- [ ] Personalise the recovery-week share (SP-512, SP-69 item 4; estimated-constants-inventory.md §4.1 #4: TSB back above −10 after it, next week's intervals hit → −5 points, range 50–70 %) — not implemented; owner 2026-10-14 chose to revisit once ≥ 4 recovery weeks of results exist
 
 ## Change History
 
@@ -2754,3 +2776,7 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 | 2026-10-14 | bugfix | SP-492 | No session left on an A race's day, any weekday, week_plan and the projection: `taper_rules` reads the race day (`backend/engine/overview.py:3115`, was `d < race`: a quality session there follows the race-week rule — onto an easy day 3–5 days out as `TAPER_SHORT`, else an easy run), and `post_race.apply` clears the race days like the no-run days (`backend/engine/post_race.py:118`; `a_windows` gives `start` and keeps a race ending on the Sunday): moved to a free day after the no-run days, else dropped; the note says 「當天只排比賽」. Before, a race on a Tuesday kept the projected 「有氧間歇（巡航）2×8 分」 on the race day, and week_plan an easy run or a 課表偏好 interval. Race week minutes (synthetic): race Tue / Wed −5 min (moved to the weekend), Thu–Sun −25 to −55 min (dropped); Mon unchanged. B / C race days unchanged (already held no interval). Tests: `backend/tests/test_race_day_sp492.py` (`test_projection_leaves_an_a_race_day_to_the_race`, `test_week_plan_leaves_an_a_race_day_to_the_race`, `test_b_and_c_race_days_hold_no_quality`, `test_taper_rules_read_the_race_day`, `test_post_race_rules_clear_the_race_days`) |
 | 2026-10-13 | feature | SP-482 | 本週備註 through 提示多寡 (docs/spec/ui-hints.spec.md): GET /weekplan and the 課表 plan_notes carry each note with its hint fields (`hints.note`: src → OV8a–k, level kept for the colour); the overview renders them with `static/hints.js` (`drawNotes`, `backend/static/overview.html:733`) — class 1 in one box (B-race warning OV8b with 「知道了」 and its own condition fingerprint from `post_race.b_hints`), at most 3 reminders, the rest under 「還有 N 則提醒 ▸」 + 「提示太多？」, ▷ / 知道了 ones in 「詳細」 |
 | 2026-10-14 | maintenance | SP-391 | Own words instead of TrainingPeaks' registered trademarks and WKO5 metric names on every screen (owner 2026-10-13, Q1): zh 「中文（English）」 on labels / first mention, compact value chips Chinese only; TSS → 負荷（Load）(功率／配速／心率負荷), CTL／ATL／TSB → 體能（Fitness）／疲勞（Fatigue）／狀況（Form）(「狀態」「新鮮度」 unified to 狀況), PMC → 體能圖, IF／NP → 強度比（Intensity）／加權功率（Weighted power）, mFTP／TIS／FRC／dFRC → 模型閾值功率／有氧／無氧效果（Aerobic / Anaerobic effect, owner 2026-10-14）／W′／W′ 電池 (「算法參考 WKO5」); TSS® only in the TrainingPeaks source label and the fitness chart help, with the trademark notice; 「其他平台常寫成 CTL、ATL、TSB」 once. KPI cards, PMC series, the status card why (`formWhy`, `backend/static/overview.html`), status.py / guardrail / plan sentences, ICS (`負荷 {n}`), watch step names (`負荷 80`, `coros_workouts.WorkoutSpec.legacy_names` keeps already-pushed sessions pushed), units (`負荷/天`), views and their sidecar, the charts page title 圖表／Charts; API keys, ids, DB columns unchanged. README trademark notice. Tests: `backend/tests/test_own_terms_sp391.py` (no old name left on screen except the allowed comparisons) and the updated expectations |
+| 2026-10-14 | feature | SP-484 | 課表 hints (SP-305 T3; docs/spec/ui-hints.spec.md): plan_match's 偏強 (easy run, quality dose < 150 %) is no longer ◐ 部分 — done, `actual` easy (`backend/engine/plan_match.py:355`); rule D's 偏強 is a dot by the ring, 太強 a ⚠ + its line in every level (`_view` `overhard`, `adapt.note_kind` `backend/engine/adapt.py:635`; `odMark` / `cardLine` `backend/static/schedule.html:1170`); one explanation line a card (one line, 太強 may wrap; phone too — was two); 上坡改走 by 提示多寡 (`walk_grade`); the week reminders through hints.js with R3's 「輕鬆跑連續偏強」 (`_streak_note`); legend rows for the dot, ⚠ and 「≥ X% 走」. 「課前要吃」 stays removed (SP-286). Tests: `backend/tests/test_schedule_hints_sp484.py`; changed: `test_plan_match.py`, `test_plan_history.py`, `test_mobile_layout_sp376_380.py` |
+| 2026-10-14 | feature | SP-483 | 總覽的提示依提示多寡（docs/spec/ui-hints.spec.md「總覽（SP-483）」）：`GET /weekplan` 的週備註帶算好的 `smart`（R7／R11／R15，`hints.week_smart`），沒有 src 的週備註補上 src（`full_week`、`test_day`、`indicator`）；`overview.html` 的 `OVH`（`:506`）：指標卡標準只展開注意／要處理（已有待辦列的不另外展開，收成「其他 N 項正常」／「（M 項見待辦）」）、精簡只展開要處理、可信度低（R5）三段都展開；待辦拿掉測試列（R15）、本週有 OV8e 時拿掉低強度列（R16）、期別重點標準收進「詳細」精簡不顯示；測試卡與 5 區卡的測試改連到建議框（`suggestions.js` `AppSuggestions.open`），5 區卡三段都顯示整條梯子、不顯示低強度那行（`quality_gate.z5_flow` 階段多 `notes` 分類，`z5flow.js` `skip`／`testNote`／`testAction`）；B2B 卡不顯示建議框有的「本週建議」行；強度分配目標、PMC 的 LTHR 先驗標記依等級；課卡 hover 加規則 D 的 ⚠。demo 基礎期週標準 15 個提示（完整 33）。Tests: `backend/tests/test_overview_hints_sp483.py`, `backend/tests/e2e/test_overview_hints_sp483_e2e.py` |
+| 2026-10-14 | maintenance | SP-512 | Recovery-week volume source corrected, numbers kept (owner 2026-10-14, option C): `RECOVERY_WEEK_SHARE` 0.65 / `RECOVERY_WEEK_TSB_SHARE` 0.60 named in `backend/engine/overview.py` with the sources checked (runners' / Norwegian coaches −20–35 %, Uphill Athlete ≈ −50 %, its forum −40…−60 % unverified; no study); `SRC_31` no longer reads as if Uphill Athlete backed −20–35 %; a recovery week's `why` (the week target's ?) ends with the 推估 note (zh / en). Personalising waits for ≥ 4 recovery weeks (Open Questions). Tests: `backend/tests/test_recovery_week_share_sp512.py`; `test_recovery_week.py` reads the reason at `why[-2]` |
+| 2026-10-14 | maintenance | SP-512 R1 | Recovery-week share 0.65 → 0.70 (owner 2026-10-14: use the number most coaches use): 11 verified coaches / approaches (Howard, Gaudette, Norris, Hillrunner, Heins, Roche, Nichols, Burgess / USA Triathlon, the Norwegian coaches, Uphill Athlete, Roadman) — mode and median cut 30 %, range 10–60 %; unverified UA-forum / RMI numbers listed apart; no percentage from Daniels, Pfitzinger, Higdon, McMillan, Fitzgerald, Hudson, Magness, Koop, Carmichael, Friel. `RECOVERY_WEEK_TSB_SHARE` stays 0.60. `projection.week_hours` and `race_feasibility.koop_run` read `RECOVERY_WEEK_SHARE` (they repeated 0.65); the recovery-week reasons format the share; `SRC_31` and the 推估 note (zh / en) say 30 % / 70 %. Tests: `test_recovery_week_share_sp512.py` (0.65 → 0.70), `test_structure_truth_sp437.py`, `test_plan_store.py::test_projection_ramp_31_and_cap` (0.65 → 0.70) |

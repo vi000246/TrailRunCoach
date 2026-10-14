@@ -34,7 +34,8 @@ Kinds (the `type` of a row):
                「安排適應週末」 (SP-258: the weekends to sleep 2 nights up high) — information, ✕ only.
 
 Ids (the dismissal key): `b2b:<week>`, `test:<kind>:<week>`, `baseline:<kind>:<week>` (all per
-week: 「不要」 holds for that week), `zone:<detector id>`, `zone_update:<field>:<date>`,
+week: ✕ / 排入 hold for that week, 「不要」 on a B2B too — 「不要」 on a test holds that test for good, below),
+`zone:<detector id>`, `zone_update:<field>:<date>`,
 `altitude:<event id>:<start>:<max m>:<flags>` (the 1–14 day check: the flags say what the reminder
 found, so a dismissed one shows again only when that changes), `altitude_plan:<event id>:<start>`
 (the 15–28 day 安排適應週末 row, SP-258: closed once, it never shows again for that trip — prune
@@ -43,8 +44,21 @@ keeps the close until the trip's start, even on a day the row is not computed; i
 A dismissal is dropped once its suggestion is no longer computed (prune), so
 a zone suggestion that fires again later is new and shows again.
 
+稍後提醒 (SP-507, every row but injury_done, whose 「還沒」 already is one): the row is hidden for
+SNOOZE_DAYS, then shows again if it is still computed — unless a test it suggests was done since
+(`tested`: a done test session, a test the review found, a measured threshold). The record is kept
+under the row's id with `key` = snooze_key(id): a weekly id's next week (`test:cp:<next monday>`) is
+the same suggestion, and a 基線測試 and the weekly test of the same kind are one test.
+Only the box hides it: the 課表's 排入測試 ▸ still offers a test while it is held (SP-507 R1,
+`visible(..., snoozes=False)`).
+
+「不要」 on a test (SP-515, `test:` / `baseline:` ids): held by the test's kind, not the week —
+decline_key(id) = snooze_key(id) (`test:cp`; a 基線測試 and the weekly test of the same kind are one
+test), so next week's row of that test does not show either; prune keeps it. It is undone only by
+restore(key) (the settings page's 「不再建議的測試」, declined_tests).
+
 Stored as user_settings `plan.suggestions.dismissed` = {id: {action, at, week}}
-with action accepted | declined | dismissed.
+with action accepted | declined | dismissed; snoozed = {action, at, until, key, tests}.
 """
 from __future__ import annotations
 
@@ -54,8 +68,11 @@ from typing import Optional
 from backend.i18n import _, fmt
 
 KEY = "plan.suggestions.dismissed"
-ACTIONS = ("accepted", "declined", "dismissed")
+SNOOZED = "snoozed"                   # 稍後提醒 (SP-507)
+ACTIONS = ("accepted", "declined", "dismissed", SNOOZED)
+SNOOZE_DAYS = 7                       # 「一週後再提醒」 (the owner, SP-507)
 ZONE_TESTS = ("aet", "cp")            # schedulable from the box (tt30: described only)
+TEST_TYPES = ("test", "baseline", "zone_test")     # the rows that suggest a test (排入測試 ▸, the overview's 測試)
 WEEKLY = ("b2b:", "test:", "baseline:")     # ids that end in their week: a dismissal holds for that week
 PLAN_ALT = "altitude_plan:"                 # 安排適應週末 (SP-258): ends in the trip's start; held until then
 
@@ -215,7 +232,7 @@ def zone_rows(zone: dict, covered_kinds: set, scheduled: callable, days_for) -> 
     for ev in zone.get("events") or []:
         out.append({"id": f"zone_update:{ev.get('field')}:{ev.get('date')}", "type": "zone_update",
                     "title": "區間已更新", "reason": ev.get("text") or "", "pick": None,
-                    "help": "套用新的測試後，從那天起的區間、負荷（Load）都用新門檻重算（不會改到之前的日子）。"})
+                    "help": "套用新的測試後，從那天起的區間、訓練負荷（Training load）都用新門檻重算（不會改到之前的日子）。"})
     return out
 
 
@@ -332,11 +349,135 @@ def _snoozed(sid: str, d: dict, now: dt.datetime) -> bool:
         return True
 
 
-def visible(rows: list[dict], dismissed: dict, now: Optional[dt.datetime] = None) -> list[dict]:
-    """The rows not dismissed; a SNOOZE kind comes back once its days are over."""
+def snooze_key(sid: str) -> str:
+    """The suggestion a 稍後提醒 holds, across weeks: `test:cp:<week>` / `baseline:cp:<week>` → `test:cp`,
+    `b2b:<week>` → `b2b`; any other id is its own."""
+    if sid.startswith(("test:", "baseline:")):
+        parts = sid.split(":")
+        return f"test:{parts[1]}" if len(parts) >= 2 else sid
+    if sid.startswith("b2b:"):
+        return "b2b"
+    return sid
+
+
+def test_kinds(row: dict) -> list[str]:
+    """The tests a row suggests (cp / aet / tt30 / hrmax), for 「做完就不再提醒」: its kind (test, baseline), the
+    tests to pick and the 安排課表 links' tests (zone_test, the SP-471 LTHR link). [] = not a test."""
+    out = [row["kind"]] if row.get("type") in ("test", "baseline") and row.get("kind") else []
+    out += [t.get("key") for t in row.get("tests") or [] if isinstance(t, dict)]
+    out += [x.get("test") for x in row.get("links") or [] if isinstance(x, dict)]
+    return sorted({k for k in out if k})
+
+
+def tested(kinds, since: str, stored: list[dict], found: Optional[dict], measured: set) -> bool:
+    """One of these tests was done on / after `since` (ISO day): a done test session of the plan (an AeT one
+    is aet, any other is cp — as plan_sessions' scheduled()), a counted test the review found (`found`:
+    plan_sessions._latest_tests, {cp|aet: {date, ok}}), or a measured threshold since (`measured`:
+    threshold_confidence.tested_since — cp / tt30 / aet / hrmax)."""
+    from backend.engine.aet_test import is_aet_session
+    kinds = set(kinds or ())
+    got = set(measured or ())
+    for s in stored or []:
+        if s.get("kind") == "test" and s.get("state") == "done" and (s.get("day") or "") >= since:
+            got.add("aet" if is_aet_session(s) else "cp")
+    for k, f in (found or {}).items():
+        if isinstance(f, dict) and f.get("ok", True) and (f.get("date") or "")[:10] >= since:
+            got.add(k)
+    return bool(kinds & got)
+
+
+def _snooze_holds(v: dict, now: dt.datetime, tested_fn) -> bool:
+    """A 稍後提醒 still hides its row: before `until`, or after it when a test it suggests was done since."""
+    if now.date().isoformat() < str(v.get("until") or ""):
+        return True
+    return bool(tested_fn and v.get("tests") and tested_fn(v["tests"], str(v.get("at") or "")[:10]))
+
+
+DECLINE_KIND = ("test:", "baseline:")       # SP-515: 「不要」 on these holds the test (its kind), any week
+
+
+def decline_key(sid: str) -> Optional[str]:
+    """SP-515: the test a 「不要」 holds for good — `test:cp:<week>` / `baseline:cp:<week>` → `test:cp`; None for
+    any other id (its 「不要」 holds that id, as before)."""
+    return snooze_key(sid) if sid.startswith(DECLINE_KIND) else None
+
+
+def _declined_keys(dis: dict) -> dict:
+    """{decline_key: (id, record)} of the 「不要」 on tests (the latest one per test)."""
+    out: dict = {}
+    for k, v in (dis or {}).items():
+        key = decline_key(k)
+        if key and isinstance(v, dict) and v.get("action") == "declined":
+            if key not in out or str(v.get("at") or "") > str(out[key][1].get("at") or ""):
+                out[key] = (k, v)
+    return out
+
+
+def _hidden(r: dict, dis: dict, snoozes: list[dict], now: dt.datetime, tested_fn, no_keys=()) -> bool:
+    d = dis.get(r["id"])
+    if d is not None and d.get("action") != SNOOZED and _snoozed(r["id"], d, now):
+        return True
+    if no_keys and decline_key(r["id"]) in no_keys:                 # SP-515: 「不要」 on this test, any week
+        return True
+    k = snooze_key(r["id"])
+    return any(v.get("key") == k and _snooze_holds(v, now, tested_fn) for v in snoozes)
+
+
+def visible(rows: list[dict], dismissed: dict, now: Optional[dt.datetime] = None, tested_fn=None,
+            snoozes: bool = True) -> list[dict]:
+    """The rows not dismissed; a SNOOZE kind comes back once its days are over; a 稍後提醒 (SP-507) row once
+    SNOOZE_DAYS are over, unless `tested_fn(kinds, since_day)` says a test it suggests was done since.
+    `snoozes=False`: a 稍後提醒 does not hide its row — the 課表's 排入測試 ▸ (SP-507 R1: 「一樣要能排入測試」)."""
     now = now or dt.datetime.now()
     dis = dismissed or {}
-    return [r for r in rows if r["id"] not in dis or not _snoozed(r["id"], dis[r["id"]], now)]
+    held = [v for v in dis.values() if isinstance(v, dict) and v.get("action") == SNOOZED] if snoozes else []
+    no_keys = _declined_keys(dis)
+    return [r for r in rows if not _hidden(r, dis, held, now, tested_fn, no_keys)]
+
+
+def snoozed(rows: list[dict], vis: list[dict], dismissed: dict) -> list[dict]:
+    """SP-507: the rows still computed but hidden by a 稍後提醒 — [{id, type, until}]. They are still the box's: the
+    overview's 測試 keeps pointing there (SP-503's testOut does not count them as declined)."""
+    shown = {r["id"] for r in vis}
+    by_key = {v.get("key"): v for v in (dismissed or {}).values() if isinstance(v, dict) and v.get("action") == SNOOZED}
+    out = []
+    for r in rows:
+        v = by_key.get(snooze_key(r["id"]))
+        if r["id"] not in shown and v is not None and (dismissed or {}).get(r["id"], v).get("action") == SNOOZED:
+            out.append({"id": r["id"], "type": r.get("type"), "until": v.get("until")})
+    return out
+
+
+def declined(rows: list[dict], vis: list[dict], dismissed: dict) -> list[dict]:
+    """SP-503: the rows still computed but hidden by 「不要」 / ✕ — [{id, type, action}]. The overview's
+    測試 card and 待辦 point to the box for a test (R15) and take it back when the box no longer has it."""
+    shown = {r["id"] for r in vis}
+    dis = dismissed or {}
+    no_keys = _declined_keys(dis)
+    out = []
+    for r in rows:
+        if r["id"] in shown:
+            continue
+        a = (dis.get(r["id"]) or {}).get("action")
+        if a in ("declined", "dismissed"):
+            out.append({"id": r["id"], "type": r.get("type"), "action": a})
+        elif decline_key(r["id"]) in no_keys:                         # SP-515: 「不要」 on this test in another week
+            out.append({"id": r["id"], "type": r.get("type"), "action": "declined"})
+    return out
+
+
+def declined_tests(dismissed: dict) -> list[dict]:
+    """SP-515: the tests 「不要」 holds for good — [{key, kind, at}] (at: the day of the latest 「不要」), for the
+    settings page's 「不再建議的測試」 and its 恢復 (restore)."""
+    out = [{"key": key, "kind": key.split(":", 1)[1], "at": str(v.get("at") or "")[:10]}
+           for key, (_, v) in _declined_keys(dismissed).items()]
+    return sorted(out, key=lambda x: x["key"])
+
+
+def restore(dismissed: dict, key: str) -> dict:
+    """SP-515: 恢復 — drop every 「不要」 that holds the test `key` (decline_key); the test is suggested again."""
+    return {k: v for k, v in (dismissed or {}).items()
+            if not (decline_key(k) == key and isinstance(v, dict) and v.get("action") == "declined")}
 
 
 def injury_done_rows(events: list[dict], marks: list[dict], today: str) -> list[dict]:
@@ -382,16 +523,31 @@ def prune(dismissed: dict, rows: list[dict], today: str) -> dict:
     altitude_plan close before its trip starts) stay; the rest go, so a later, new suggestion shows
     again."""
     ids = {r["id"] for r in rows}
+    keys = {snooze_key(i) for i in ids}
     mon = _monday(today)
     keep = {}
     for k, v in _plan_alt_ids(dismissed or {}).items():
+        if v.get("action") == SNOOZED:
+            # SP-507: until its day, and after it while the suggestion (any week of it) is still computed
+            if str(v.get("until") or "") > today or v.get("key") in keys:
+                keep[k] = v
+            continue
+        if v.get("action") == "declined" and decline_key(k):            # SP-515: until 恢復 (restore)
+            keep[k] = v
+            continue
         if k in ids or (v.get("week") and v["week"] >= mon) or (k.startswith(PLAN_ALT) and k.rsplit(":", 1)[-1] >= today):
             keep[k] = v
     return keep
 
 
-def record(dismissed: dict, sid: str, action: str, now: dt.datetime, week: Optional[str] = None) -> dict:
+def record(dismissed: dict, sid: str, action: str, now: dt.datetime, week: Optional[str] = None,
+           tests: Optional[list] = None) -> dict:
+    """`tests`: a 稍後提醒's test kinds (test_kinds of its row)."""
     if action not in ACTIONS:
         raise ValueError(f"action must be one of {ACTIONS}")
-    return {**(dismissed or {}), sid: {"action": action, "at": now.isoformat(timespec="seconds"),
-                                       **({"week": week} if week else {})}}
+    at = now.isoformat(timespec="seconds")
+    if action == SNOOZED:
+        until = (now.date() + dt.timedelta(days=SNOOZE_DAYS)).isoformat()
+        return {**(dismissed or {}), sid: {"action": action, "at": at, "until": until, "key": snooze_key(sid),
+                                           "tests": list(tests or [])}}
+    return {**(dismissed or {}), sid: {"action": action, "at": at, **({"week": week} if week else {})}}

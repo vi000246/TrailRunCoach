@@ -10,6 +10,7 @@ server's env points away from both), no COROS / TP account is configured.
 
     python -m backend.tests.e2e._server            # build, serve, GET every page once, stop
     python -m backend.tests.e2e._server --serve    # build and keep serving (look at the e2e data by hand)
+    python -m backend.tests.e2e._server --serve --base-phase   # the same, the A race moved: today is 基礎期
 """
 from __future__ import annotations
 
@@ -44,6 +45,33 @@ def build_base(root: Path) -> Path:
     """The demo athlete (8 weeks, small) under root/base/<name>; returns the base."""
     from backend.demo import build as B
     return B.build(root, anchor=dt.date.today(), weeks=8, small=True, warm=False)
+
+
+# SP-483: the demo's A race this many weeks out, so today is an ordinary 基礎期 week (the overview's
+# hint count is for 「標準下一般基礎期週」; the demo itself sits in the 50K's 專項期)
+BASE_PHASE_WEEKS = 16
+
+
+def base_phase(base: Path, today: dt.date | None = None) -> dt.date:
+    """Move the demo's A race (示範山徑越野 50K) BASE_PHASE_WEEKS weeks out — its B race (貓空 17K) three
+    weeks before it, as the demo has it — and rebuild the phases around the A races
+    (demo.season.make_phases): today is then a plain 基礎期 week, not its first one. The activities stay
+    as they are. Returns the race's new day."""
+    from backend.demo import season as S
+    from backend.engine.planning import Plan
+    today = today or dt.date.today()
+    path = base / "plan.json"
+    plan = Plan.load(path)
+    race = S._wd(today + dt.timedelta(weeks=BASE_PHASE_WEEKS), 5)
+    for e in plan.events:
+        if e.id == "demo-50k":
+            e.date = race.isoformat()
+        elif e.id == S.MAOKONG_ID:
+            e.date = (race - dt.timedelta(days=21)).isoformat()
+    start = min(dt.date.fromisoformat(p.start) for p in plan.phases) if plan.phases else today
+    plan.phases = S.make_phases(plan.events, start)
+    plan.save(path)
+    return race
 
 
 def free_port() -> int:
@@ -124,6 +152,8 @@ def main(argv: list[str]) -> None:
     os.environ["HOME"] = os.environ["USERPROFILE"] = str(home)    # nothing under the real home
     try:
         base = build_base(home / "demo-root")
+        if "--base-phase" in argv:          # SP-483: today an ordinary 基礎期 week (base_phase)
+            print(f"A race moved to {base_phase(base)}: this week is 基礎期", flush=True)
         srv = Server(base, home / "uvicorn.log")
         try:
             if "--serve" in argv:

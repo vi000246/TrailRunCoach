@@ -68,7 +68,9 @@ class Entry:
 # id; docs/spec/ui-hints.spec.md has each row's text and is checked against this table
 # (test_hints.py). Rows the audit merges or removes keep their target display (✕✕✕ = 拿掉／併掉).
 # Added (not in the audit): RC (an untagged / old calculator warning: shown as before), RC3w / RC3h (SP-251
-# 冷風, SP-253 失溫 — implemented after the audit, registered as cls 1), RC13a (高山症, the 百岳 AMS line).
+# 冷風, SP-253 失溫 — implemented after the audit, registered as cls 1), RC13a (高山症, the 百岳 AMS line),
+# PL19 (SP-114 連續賽以哪一段來比) and PL20 (SP-292 資料少: the data source line, 「偏樂觀」) — the feasibility
+# card's lines the audit did not list (SP-486).
 _ROWS = """
 GL1 1 ●●● 4
 GL2 2 ●●● 6
@@ -99,7 +101,7 @@ OV8i 3 ●▷✕ 6
 OV8j 2 ●●▷ 2
 OV8k 3 ✕✕✕ 5
 OV9 2 ▷▷▷ 6
-OV10 2 ●◐▷ 5
+OV10 2 ●●● 5
 OV11 2 ●◐◐ 5
 OV12 2 ▷▷▷ 6
 OV13 2 ●●▷ 6
@@ -198,6 +200,8 @@ PL15 3 ●▷✕ 6
 PL16 2 ●●◐ 5
 PL17 2 ●▷▷ 6
 PL18 2 ▷▷▷ 6
+PL19 2 ●▷▷ 6
+PL20 2 ●●▷ 4
 ST1 3 ●✕✕ 6
 ST2 2 ●●● 4 alt=1
 ST3 1 ●●● 4
@@ -252,22 +256,24 @@ class Tagged(str):
     turns it into the hint object (`warnings`)."""
     hint_id: str = "RC"
     hint_cls: Optional[int] = None
+    hint_smart: bool = True          # the §5 condition (a ◐ row shows only when it holds; SP-485: RC10's R12)
 
-    def __new__(cls, hid: str, text: Any, hint_cls: Optional[int] = None):
+    def __new__(cls, hid: str, text: Any, hint_cls: Optional[int] = None, hint_smart: bool = True):
         s = super().__new__(cls, text)
-        s.hint_id, s.hint_cls = hid, hint_cls
+        s.hint_id, s.hint_cls, s.hint_smart = hid, hint_cls, bool(hint_smart)
         return s
 
     def __reduce__(self):            # copy / deepcopy / pickle (a cached result) keep the tag
-        return (Tagged, (self.hint_id, str(self), self.hint_cls))
+        return (Tagged, (self.hint_id, str(self), self.hint_cls, self.hint_smart))
 
 
-def tag(hid: str, text: Any, cls: Optional[int] = None) -> Tagged:
-    """`text` tagged with the catalog row `hid` (a KeyError for an unknown id: a typo fails loudly)."""
+def tag(hid: str, text: Any, cls: Optional[int] = None, smart: bool = True) -> Tagged:
+    """`text` tagged with the catalog row `hid` (a KeyError for an unknown id: a typo fails loudly);
+    `smart` = the row's §5 condition holds (False puts a ◐ row in 「詳細」)."""
     entry(hid)
-    if isinstance(text, Tagged) and text.hint_id == hid and cls is None:
+    if isinstance(text, Tagged) and text.hint_id == hid and cls is None and smart is True:
         return text
-    return Tagged(hid, text, cls)
+    return Tagged(hid, text, cls, smart)
 
 
 def entry(hid: str) -> Entry:
@@ -304,6 +310,18 @@ def make(hid: str, text: Any, detail: Any = None, *, smart: bool = True, cls: Op
     return out
 
 
+def flag(hid: str, *, smart: bool = True, cls: Optional[int] = None) -> dict:
+    """The display part of a hint for something that is not a sentence in a list — a chip, a badge,
+    a shaded stretch (SP-487): {id, cls, prio, show, smart}. The page asks static/hints.js
+    `Hints.where` whether it is shown, goes into 「詳細」 or is hidden (§4.4 steps 1–4, no cap)."""
+    e = entry(hid)
+    c = e.cls if cls is None else int(cls)
+    if c not in (1, 2, 3):
+        raise ValueError(f"hint class must be 1, 2 or 3, not {cls!r}")
+    return {"id": hid, "cls": c, "prio": e.prio, "smart": bool(smart),
+            "show": "●●●" if c == 1 and e.cls != 1 else e.show}
+
+
 def text(h: Any) -> str:
     """A hint's text: the object's `text`, or the old plain string (saved results, shares)."""
     if isinstance(h, dict):
@@ -322,7 +340,7 @@ def warning(w: Any, default: str = "RC") -> dict:
         return make(hid, w.get("text"), w.get("detail"), smart=w.get("smart", True) is not False,
                     cls=w.get("cls"), prio=w.get("prio"), fp=w.get("fp"), **keep)
     if isinstance(w, Tagged):
-        return make(w.hint_id, str(w), cls=w.hint_cls)
+        return make(w.hint_id, str(w), cls=w.hint_cls, smart=getattr(w, "hint_smart", True))
     return make(default, w)
 
 
@@ -360,7 +378,12 @@ NOTE_SRC: dict[str, str] = {
     "easy_tss": "OV8i", "hr_zones": "OV8i",
     "long_cap": "OV8j",
     "heat": "OV5",
+    "overhard": "SC4",               # 「輕鬆跑連續偏強」 (R3, SP-484: api/plan_sessions._streak_note)
+    # SP-483: the notes that had no src — 「剩下每天都排了」 (OV8g's class-3 line), a test day that did not
+    # fit (課表偏好's test days), and the copied indicator line (OV8k: the 待辦 OV2 says it, not shown)
+    "full_week": "OV8g", "test_day": "OV8g", "indicator": "OV8k",
 }
+CLS3_SRC = ("full_week",)            # the class-3 case of its row (OV8g alt=3)
 
 
 def note_id(note: dict) -> str:
@@ -387,6 +410,8 @@ def note(n: dict) -> dict:
     if hid == "OV8" and cls is None:
         cls = 1 if level == "bad" else 2
         prio = prio or (4 if level == "bad" else 5 if level == "watch" else 6)
+    if cls is None and n.get("src") in CLS3_SRC:
+        cls = 3
     if hid == "OV5" and level != "watch":
         prio = prio or 6             # the heat block's explanation; watch = 「本週排熱適應」 (5)
     keep = {k: v for k, v in n.items() if k not in ("id", "text", "detail", "smart", "cls", "prio", "fp",
@@ -395,8 +420,69 @@ def note(n: dict) -> dict:
                 prio=prio, fp=n.get("fp"), **keep)
 
 
-def notes(ns: Optional[Iterable]) -> list[dict]:
-    return [note(n) for n in ns or ()]
+def notes(ns: Optional[Iterable], ctx: Optional[dict] = None) -> list[dict]:
+    """The week notes with their hint fields; `ctx` (week_smart's) = the overview's §5 conditions
+    computed (SP-483), else every note's own `smart` (True when it has none)."""
+    out = [note(n) for n in ns or ()]
+    if ctx is not None:
+        for h in out:
+            h["smart"] = bool(h["smart"]) and week_smart(h, ctx)
+    return out
+
+
+# ---------------------------------------------------------------------------
+# 總覽 (SP-483, §7 T2): the §5 conditions of the week notes — a ◐ note shows only when its condition
+# holds (§4.4 step 3), else it goes into 「詳細」
+# ---------------------------------------------------------------------------
+
+HEAT_MONTHS = range(4, 11)          # R11: 4–10 月 the heat card / notes matter (推估: Taiwan's hot season)
+PHASE_FIRST_LEAD_D = 2              # R7: a phase that began on the weekend before counts this week as its
+                                    # first too (推估: two days are not a week to read the note in)
+# R15: a test suggestion lives in the suggestion box only — this note's test is the SP-471 block's
+TEST_NOTE_SRC = ("easy_power",)
+
+
+def first_week(start: Any, monday: dt.date) -> bool:
+    """R7: the week of `monday` is the first of something that began on `start` (ISO or date): the week
+    holding that day, or the next one when it began on the weekend before (PHASE_FIRST_LEAD_D)."""
+    if not start:
+        return False
+    try:
+        d = start if isinstance(start, dt.date) else dt.date.fromisoformat(str(start)[:10])
+    except ValueError:
+        return False
+    return monday - dt.timedelta(days=PHASE_FIRST_LEAD_D) <= d <= monday + dt.timedelta(days=6)
+
+
+def week_context(today: dt.date, monday: dt.date, phase_start: Any = None, cold_week: Optional[int] = None,
+                 hot_race: bool = False) -> dict:
+    """The overview week's facts the §5 conditions read: R11 heat (a hot month or a hot A / B race
+    ahead — heat_plan's), R7 the current phase's first week and the cold start's week (1 = first)."""
+    return {"heat": today.month in HEAT_MONTHS or bool(hot_race),
+            "phase_first": first_week(phase_start, monday),
+            "cold_first": cold_week is None or int(cold_week) <= 1}
+
+
+def week_smart(h: dict, ctx: dict) -> bool:
+    """The §5 condition of one week note (by its catalog row; a row without one: True):
+      OV5   R11  熱適應: the hot season or a hot race ahead
+      OV8f  R7   冷啟動: its first week only
+      OV8h  R7   轉換期／回量期／減量期: the phase's first week only
+      OV8g       偏好與排日: only the yellow ones (少了時數、改排別天); the info lines explain, and
+                 「剩下每天都排了」 (cls 3) never (推估: the audit's §1 OV8g)
+      OV8   R15  the easy-power note's test is in the suggestion box (SP-471's block): 「詳細」"""
+    hid = h.get("id")
+    if hid == "OV5":
+        return bool(ctx.get("heat"))
+    if hid == "OV8f":
+        return bool(ctx.get("cold_first", True))
+    if hid == "OV8h":
+        return bool(ctx.get("phase_first"))
+    if hid == "OV8g":
+        return h.get("cls") != 3 and h.get("level") in ("watch", "bad")
+    if hid == "OV8" and h.get("src") in TEST_NOTE_SRC:
+        return False
+    return True
 
 
 # ---------------------------------------------------------------------------

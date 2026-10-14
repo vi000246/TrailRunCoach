@@ -54,6 +54,7 @@
     "/api/v1/static/workout_editor.js", "/api/v1/static/syncrun.js", "/api/v1/static/fitimport.js",
     "/api/v1/static/painpicker.js", "/api/v1/static/sportchip.js", "/api/v1/static/fitfolder.js",
     "/api/v1/static/eptest.js", "/api/v1/static/weight_hint.js", "/api/v1/static/hints.js",
+    "/api/v1/static/racehints.js",
   ];
   // the chart library of 總覽 (fetched with CORS, never as an opaque answer)
   const CDN = ["https://cdnjs.cloudflare.com/ajax/libs/echarts/5.5.0/echarts.min.js"];

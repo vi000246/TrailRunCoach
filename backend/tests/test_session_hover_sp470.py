@@ -74,7 +74,7 @@ def test_future_easy_run_sections_in_order():
     h = _pop(s)
     assert _sections(h) == ["目標", "怎麼練"]                       # nothing done yet, no change, the watch is fine
     assert '<b class="sp-t">輕鬆跑</b>' in h and '<span class="sp-sub">10/12</span>' in h      # 「輕鬆跑」 is said once
-    assert '<small>時間</small><b>45′</b>' in h and '<small>負荷（Load）</small><b>35</b>' in h
+    assert '<small>時間</small><b>45′</b>' in h and '<small>訓練負荷（Training load）</small><b>35</b>' in h
     assert "<dt>心率</dt><dd>&lt; 154 bpm</dd>" in h and "<dt>功率</dt><dd>124–153 W</dd>" in h
     assert '<p class="sp-basis"><span class="sp-k">依據</span>最近 6 次輕鬆跑' in h
     assert "<li>心率不超過輕鬆跑上限 154 bpm</li><li>全程能講話</li>" in h

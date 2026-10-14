@@ -8,6 +8,9 @@
 // 課表 page opens its new-session dialog with that session preselected; the user picks the day).
 // Done and locked stages fold to their header in the narrow layout (tap to open).
 //   Z5Flow.html(flow, { q: "q" | "qtip" })  -> HTML string
+//     SP-483 (the 總覽, docs/spec/ui-hints.spec.md): skip: ["intensity", …] drops those parts of a stage's
+//     note (stage.notes [{kind: pause | empty | intensity | test, text, tip}]); testNote(n) / testAction(a)
+//     → HTML draw the 建議做一次測試 part and a test's 安排課表 link the page's own way (a link to the box)
 //   Z5Flow.bind(root)                         -> the fold toggles (once per page; delegated)
 (function () {
   const L = window.I18N || { t: (k) => k };
@@ -90,8 +93,24 @@
 
   const qb = (cls, s) => s ? `<button type="button" class="${cls}" aria-label="${esc(T("help"))}" data-tip="${esc(s)}">?</button>` : "";
 
-  // 「安排課表」: a plain link to the 課表 page (?add= / ?test=), which opens the new-session dialog
-  const act = (a, locked) => a && a.href && !locked ? `<a class="zf-act" href="${esc(a.href)}">${esc(T("schedule"))}</a>` : "";
+  let OPT = {};             // this html() call's options (SP-483)
+  // 「安排課表」: a plain link to the 課表 page (?add= / ?test=), which opens the new-session dialog — a test's
+  // the page's own (opt.testAction: the 總覽 links it to the suggestion box, R15)
+  const act = (a, locked) => !a || !a.href || locked ? ""
+    : a.type === "test" && OPT.testAction ? OPT.testAction(a)
+    : `<a class="zf-act" href="${esc(a.href)}">${esc(T("schedule"))}</a>`;
+  // the stage's yellow note: as it is, or (opt.skip / opt.testNote, with stage.notes) by its parts
+  function note(s, cls) {
+    if (!Array.isArray(s.notes) || !(OPT.skip || OPT.testNote)) {
+      return s.note ? `<p class="zf-note">${esc(s.note)}${qb(cls, s.note_tip)}</p>` : "";
+    }
+    const parts = s.notes.filter((n) => !(OPT.skip || []).includes(n.kind));
+    const own = parts.filter((n) => !(n.kind === "test" && OPT.testNote));
+    const test = parts.find((n) => n.kind === "test");
+    const link = test && OPT.testNote ? OPT.testNote(test) : "";
+    return (own.length ? `<p class="zf-note">${esc(own.map((n) => n.text).join("\n"))}${qb(cls, own.map((n) => n.tip).filter(Boolean).join("\n"))}</p>` : "")
+      + (link ? `<p class="zf-unl">${link}</p>` : "");
+  }
 
   function items(list, cls, locked) {
     return `<ul class="zf-list">${list.map((i) => {
@@ -119,7 +138,7 @@
           <span class="zf-tag">${esc(T("tag." + s.status))}</span><span class="cv" aria-hidden="true"></span></button>
         <div class="zf-body">
           ${s.items.length ? items(s.items, cls, locked) : ""}${any}
-          ${s.note ? `<p class="zf-note">${esc(s.note)}${qb(cls, s.note_tip)}</p>` : ""}
+          ${note(s, cls)}
           <p class="zf-unl">${esc(T(s.status === "done" ? "unlocked" : "unlocks"))} <b>${esc(s.unlocks)}</b>${qb(cls, s.tip)}</p>
         </div></li>`;
     }).join("")}</ol>`;
@@ -134,6 +153,7 @@
 
   function html(flow, opt = {}) {
     style();
+    OPT = opt || {};
     if (!flow || !flow.tracks) return "";
     const cls = opt.q || "q";
     const tr = flow.tracks.map((t) => `<section class="zf-tr" data-track="${esc(t.key)}" aria-label="${esc(t.title)}">

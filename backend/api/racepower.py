@@ -955,7 +955,7 @@ async def export_plan(body: ExportIn, db=Depends(_db)):
     except Exception:                       # noqa: BLE001 — a preview never fails on the record lookup
         old_watch = False
     ss = r["session"]
-    known = body.push or r["previous"] is not None or r["action"] == "claim"
+    known = body.push or r["previous"] is not None
     return {"day": ss["day"], "title": ss["title"], "minutes": ss["minutes"], "tss": ss["tss"], "tss_info": ex["tss"],
             "mode": ex["mode"], "legs": ex["legs"], "merged": ex["merged"], "limit": ex["limit"],
             "notes": ex["notes"] + pv["lost"], "lines": pv["lines"], "steps": pv["n"],

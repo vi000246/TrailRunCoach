@@ -10,6 +10,7 @@
 <script src="/api/v1/static/basemaps.js"></script>
 <script src="/api/v1/static/dashicons.js"></script>
 <script src="/api/v1/static/painpicker.js"></script>
+<script src="/api/v1/static/hints.js"></script>
 <style>
 :root {
   --bg: #f4f5f7; --panel: #ffffff; --text: #1d232b; --muted: #6a7482; --line: #e1e5ea;
@@ -230,6 +231,9 @@ table.zt th.num { text-align: right; }
 .verdict-pill { margin: 4px 0 8px; padding: 6px 10px; border-radius: 6px; background: var(--code); font-size: 13px; }
 .verdict-pill b { font-weight: 650; }
 .verdict-pill.good b { color: var(--ok); } .verdict-pill.warn b { color: var(--warn); } .verdict-pill.bad b { color: var(--err); }
+/* SP-521: why a verdict is short of 達到, next to it; the source line then goes under */
+.verdict-pill .why { font-weight: 500; }
+.verdict-pill .why ~ .meta { display: block; margin-top: 2px; }
 /* 間歇判讀: one compact row per segment / reading — label, number chips, a verdict chip; details behind ? (chip_rows) */
 .chiprows { display: flex; flex-direction: column; gap: 6px; margin: 2px 0 4px; }
 .chiprow { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; padding: 5px 8px; border: 1px solid var(--line);
@@ -353,7 +357,11 @@ table.z5ev td { white-space: normal; }
 .rv-tag + .rv-tag { background: var(--code); color: var(--text); font-weight: 500; }
 .rv { display: grid; grid-template-columns: repeat(auto-fill, minmax(138px, 1fr)); gap: 8px; }
 .rv-c { position: relative; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px 8px; min-width: 0; display: grid; gap: 1px; align-content: start; }
-.rv-c .k { display: flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--muted); padding-right: 20px; white-space: nowrap; overflow: hidden; }
+/* SP-502: the label's text in its own span (.kt), cut with … before the ? — overflow: hidden on .k clips at its padding
+   box, so a long name used to run on under the ? (padding-right) instead of stopping before it */
+.rv-c .k { display: flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--muted); margin-right: 20px; white-space: nowrap; overflow: hidden; }
+.rv-c .k .kt { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.rv-c.w2 { grid-column: span 2; }       /* `wide` cards (有氧／無氧訓練效果): two columns, the name and its line in full */
 .rv-c .k .di { font-size: 14px; }
 .rv-c .v { font-size: 22px; font-weight: 700; letter-spacing: -.01em; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.25; }
 .rv-c .v small { font-size: 12px; font-weight: 600; color: var(--muted); margin-left: 3px; letter-spacing: 0; }
@@ -366,7 +374,7 @@ table.z5ev td { white-space: normal; }
 .rv-c.st .k .di { color: var(--lc); } .rv-c.na .k .di, .rv-c.info .k .di { color: var(--muted); }
 .rv-c.na .v { font-size: 17px; color: var(--muted); }
 .rv-c.zn { grid-column: span 2; }
-@media (max-width: 420px) { .rv { grid-template-columns: repeat(2, minmax(0, 1fr)); } .rv-c.zn { grid-column: 1 / -1; } .rv-c .v { font-size: 19px; } }
+@media (max-width: 420px) { .rv { grid-template-columns: repeat(2, minmax(0, 1fr)); } .rv-c.zn, .rv-c.w2 { grid-column: 1 / -1; } .rv-c .v { font-size: 19px; } }
 .rv-zbar { display: flex; height: 22px; gap: 2px; border-radius: 6px; overflow: hidden; margin: 6px 0 5px; }
 .rv-zbar i { display: grid; place-items: center; color: #fff; font: 700 11px/1 system-ui, sans-serif; font-style: normal; min-width: 0; overflow: hidden; white-space: nowrap; }
 .rv-zleg { display: flex; flex-wrap: wrap; gap: 2px 12px; font-size: 12px; font-variant-numeric: tabular-nums; }
@@ -374,6 +382,8 @@ table.z5ev td { white-space: normal; }
 .rv-zleg i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
 .rv-zleg b { font-weight: 700; }
 .rv-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+/* SP-487: the chips 提示多寡 puts away (AN6), under the card */
+.rv-more { margin-top: 6px; } .rv-more > summary { cursor: pointer; color: var(--muted); font-size: 12.5px; }
 .rv-chip { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; border: 1px solid var(--line); border-radius: 14px;
   padding: 2px 4px 2px 9px; white-space: nowrap; background: var(--panel); }
 .rv-chip:not(:has(.qtip)) { padding-right: 10px; }
@@ -659,10 +669,12 @@ async function init0() {
 }
 
 async function init() {
-  const [views, sports, cfg, us, ps, pr] = await Promise.all([j(`${API}/views`), j(`${API}/sports`), j(`${API}/config`),
+  const [views, sports, cfg, us, ps, pr, hint] = await Promise.all([j(`${API}/views`), j(`${API}/sports`), j(`${API}/config`),
     j("/api/v1/sync/settings").catch(() => ({})), j(`${API}/primary-sport`).catch(() => ({})),
-    j(`${API}/plan-range`).catch(() => null)]);
+    j(`${API}/plan-range`).catch(() => null),
+    window.Hints ? Hints.state() : null]);     // 提示多寡 (SP-487: chips, HR shading, 重複路段; failed → 標準)
   S.views = views; S.sports = sports;
+  S.hint = hint; window.HINT_STATE = hint;
   S.planRange = pr;                    // SP-219: 到階段結束 / 到目標賽 (null: not offered)
   futurePresets();
   // each dashboard knows its mode: a single-activity page reads `sports` against the activity (dashSport)
@@ -790,6 +802,9 @@ function treeOpen(view, cur) {
   if (view.name in t) return t[view.name];
   return view === cur || view.source === "custom";
 }
+// SP-506 R1: a page's row has no chart count — the tree is for moving around, and a count from the page's
+// definition can't match the header (which counts the cards on the screen, shownCharts) once a card is
+// taken off. A view's header keeps its page count (pages don't come and go with the activity).
 function renderTree() {
   if (S.mode === "workout") settleActSport();     // the shown activity's kind, when the list already has it
   const q = $("q").value.trim();
@@ -814,7 +829,7 @@ function renderTree() {
           const on = view === v && i === S.dash[S.mode];
           if (!visCharts(d).length && !on) return "";
           return `<li><button class="db ${on ? "on" : ""}" data-i="${i}" title="${esc(d.title)}" ${on ? 'aria-current="page"' : ""}>
-            <span class="nm">${esc(d.title)}</span><span class="n" title="${esc(t("viewer.n_charts", { n: visCharts(d).length }))}">${visCharts(d).length}</span></button></li>`;
+            <span class="nm">${esc(d.title)}</span></button></li>`;
         }).join("")}</ul>`).join("") + `</div>`;
     }
     return `<div class="grp"><div class="grp-h">${SOURCE_LABEL[src]}${src === "wko5"
@@ -824,7 +839,7 @@ function renderTree() {
         return `<div class="vw ${open ? "open" : ""} ${view === v ? "has-cur" : ""}" data-v="${esc(view.name)}">
           <button class="vw-h" aria-expanded="${open}"><span class="nm">${esc(viewLabel(view))}</span><span class="n" title="${esc(t("viewer.n_pages", { n: view.dashboards.length }))}">${view.dashboards.length}</span></button>
           <ul>${view.dashboards.map((d, i) => !visCharts(d).length && !(view === v && i === S.dash[S.mode]) ? "" : `<li><button class="db ${view === v && i === S.dash[S.mode] ? "on" : ""}" data-i="${i}" title="${esc(d.title)}"
-            ${view === v && i === S.dash[S.mode] ? 'aria-current="page"' : ""}><span class="nm">${esc(d.title)}</span><span class="n" title="${esc(t("viewer.n_charts", { n: visCharts(d).length }))}">${visCharts(d).length}</span></button></li>`).join("")}</ul></div>`;
+            ${view === v && i === S.dash[S.mode] ? 'aria-current="page"' : ""}><span class="nm">${esc(d.title)}</span></button></li>`).join("")}</ul></div>`;
       }).join("") + `</div>`;
   }).join("") || `<div class="none">${esc(t("viewer.no_view", { mode: MODE_LABEL[S.mode] }))}</div>`;
   $("tree").querySelectorAll(".vw").forEach((el) => {
@@ -857,12 +872,25 @@ function renderSearch(q) {
     : `<div class="none">${esc(t("viewer.no_hit", { q }))}</div>`;
   $("tree").querySelectorAll(".hit").forEach((b) => b.onclick = () => { const h = shown[+b.dataset.k]; pick(h.mode, h.v.name, h.di, h.ci); });
 }
+// ---- card count (SP-506) ----
+// The header's 「N 張圖」 counts the cards on the screen, not the page's definition: a review card that
+// doesn't apply to this activity is taken off (draw → res.hide: the CP-test card off a test, AN8; the
+// interval cards on an easy run), the segments card (segments_card.js, AN12) comes and goes. load() marks
+// the grid with the page it holds; until then (no activity picked, the page not drawn yet) the definition.
+const gridPage = () => `${S.mode}|${curView()?.name ?? ""}|${S.dash[S.mode]}|${S.mode === "workout" ? S.workout : ""}`;
+function shownCharts(d) {
+  const g = $("grid");
+  return g.dataset.page === gridPage() ? g.querySelectorAll(":scope > section.card").length : visCharts(d).length;
+}
+// ---- end card count ----
 function renderCrumb() {
   const v = curView(), d = v?.dashboards[S.dash[S.mode]];
   $("crumb").innerHTML = !v ? "" : `<span class="c1">${SOURCE_LABEL[v.source || "wko5"]}</span><span class="sep">›</span>
     <span class="c2" title="${esc(viewLabel(v))}">${esc(viewLabel(v))}</span><span class="sep">›</span><b title="${esc(d?.title || "")}">${esc(d?.title || "")}</b>
-    <span class="n">${d ? esc(t("viewer.n_charts", { n: visCharts(d).length })) : ""}</span>`;
+    <span class="n">${d ? esc(t("viewer.n_charts", { n: shownCharts(d) })) : ""}</span>`;
 }
+// a card taken off or added after the page was drawn: the count follows (SP-506)
+new MutationObserver(() => { if ($("grid").dataset.page === gridPage()) renderCrumb(); }).observe($("grid"), { childList: true });
 
 // ---- page chrome: directory drawer, filter / activity panel --------------
 const UI_KEY = "wko5viewer.ui";
@@ -1075,6 +1103,7 @@ async function load() {
   // and must not invalidateSize() a removed map (Leaflet throws: _leaflet_pos of undefined)
   $("grid").querySelectorAll(".lmap").forEach((el) => { el._lmap?.remove(); el._lmap = null; });
   const grid = $("grid"), v = curView();
+  delete grid.dataset.page;                // SP-506: no page's cards on the grid (shownCharts)
   grid.innerHTML = "";
   if (!v) { grid.innerHTML = `<div class="empty">${esc(t("viewer.no_view", { mode: MODE_LABEL[S.mode] }))}</div>`; return; }
   if (S.mode === "workout" && S.workout == null) {
@@ -1123,6 +1152,8 @@ async function load() {
     grid.appendChild(card);
     return { c, card };
   });
+  grid.dataset.page = gridPage();          // SP-506: the header counts these cards from now on
+  renderCrumb();
   const focusCard = focus == null ? null : queue.find((x) => x.c.index === focus)?.card;
   if (focusCard) {
     // search hit: load that chart first, scroll to it, flash it
@@ -1536,7 +1567,9 @@ function draw(card, res) {
   // a verdict pill (間歇判讀): status = icon + label, never colour alone
   if (res.badge) {
     const b = res.badge, icon = { good: "✓", warn: "◐", bad: "✕" }[b.level] || "•";
+    // SP-521: `why` — e.g. every rep on target but the time in the zone short — so 「未達到」 and 「全部達標」 don't clash
     card.insertAdjacentHTML("beforeend", `<p class="verdict-pill ${esc(b.level || "")}"><b>${icon} ${esc(b.text)}</b>${
+      b.why ? `<span class="why"> · ${esc(b.why)}</span>` : ""}${
       b.sub ? ` <span class="meta">${esc(b.sub)}</span>` : ""}</p>`);
   }
   if (res.fixes && res.fixes.length) {
@@ -1626,23 +1659,53 @@ function drawChipRows(card, rows) {
     + `</div>`).join("")}</div>`);
 }
 
+// ---- analysis hints (SP-487) ----
+// 提示多寡 on 單次活動 (docs/research/ui-hint-audit.md §1.5, §5 R6; static/hints.js): S.hint = Hints.state()
+// ({level, acks}; failed → 標準). A mark carries its catalog row (engine/hints.py `flag`: {id, cls, show, smart});
+// none (an older answer, a card without one) → shown as before.
+const hintLevel = () => { const l = (S.hint || {}).level; return ["full", "standard", "lean"].includes(l) ? l : "standard"; };
+const hintWhere = (h) => (window.Hints ? Hints.where(h, S.hint || {}) : "show");
+// AN6 / AN4: a review card's chips → shown on the card / in its 「詳細」 (✕ = neither); 「心率可疑」 (AN4, class 1)
+// is shown in every level
+function chipSplit(chips) {
+  const out = { shown: [], detail: [] };
+  for (const c of chips || []) { const w = hintWhere(c.hint); if (w !== "hidden") out[w === "show" ? "shown" : "detail"].push(c); }
+  return out;
+}
+// AN5 / R6: which stretches the 心率與功率 chart shades and what the legend's ? says. 完整 (●): every flag;
+// 標準／精簡 (◐): only the stretches that move the numbers (activity_charts key_spans), and none when they are
+// < 1 % of the HR time (hint.smart false) — then the ? names the seconds instead
+function hrqView(HQ) {
+  if (!HQ || !(HQ.spans || []).length) return null;
+  if (!HQ.hint || !HQ.key_spans) return { spans: HQ.spans, shaded: true, tip: HQ.note };     // an answer from before SP-487
+  const sym = window.Hints ? Hints.sym(HQ.hint, hintLevel()) : "●";
+  const spans = sym === "●" ? HQ.spans : sym === "◐" && HQ.hint.smart !== false ? HQ.key_spans : [];
+  const tip = spans.length
+    ? [HQ.note, spans.length < HQ.spans.length ? HQ.key_note : "", HQ.secs_note].filter(Boolean).join("\n")
+    : [HQ.secs_note, HQ.quiet_note].filter(Boolean).join("\n");
+  return { spans, shaded: spans.length > 0, tip };
+}
+// ---- end analysis hints ----
+
 // ---- review cards (workout_review `cards`, see its "dashboard cards" block): stat / status / zones / chip / tag.
 // One glance: icon + label, a big number, a status word (✓ / ⚠ / ✕ + text); the explanation behind each card's ?
 const RV_LVL = { good: "good", warn: "watch", bad: "bad", na: "na", info: "info" };
 const rvI = (n) => window.DI ? DI(n) : "";
 const rvQ = (tip) => tip ? `<button type="button" class="qtip" aria-label="${esc(t("viewer.help"))}" data-tip="${esc(tip)}">?</button>` : "";
+const rvChip = (c) => `<span class="rv-chip ${esc(c.level || "")}" data-chip="${esc(c.id || "")}">${rvI(c.icon)}${esc(c.text)}${rvQ(c.tip)}</span>`;
 function drawReviewCards(card, res) {
   // 使用功率 off: tiles marked `power` (平均功率, 刺激 TIS) are hidden, like the power-only charts
   const C = res.cards.filter((c) => S.usePower !== false || !c.power);
   if (res.section === "summary" && !res._zoom) card.classList.add("rv-wide");
-  const tags = C.filter((c) => c.kind === "tag"), chips = C.filter((c) => c.kind === "chip");
+  const tags = C.filter((c) => c.kind === "tag"), chipsAll = C.filter((c) => c.kind === "chip");
+  const { shown: chips, detail: chipsMore } = chipSplit(chipsAll);       // SP-487: AN6 by 提示多寡
   const main = C.filter((c) => !["tag", "chip"].includes(c.kind));
   const ZC = { low: "var(--rv-lo)", mid: "var(--rv-mid)", high: "var(--rv-hi)" };
   const one = (c) => {
     if (c.kind === "zones") {
       const Z = c.zones || [];
       const tip = [c.tip, ...Z.map((z) => `${z.label}（${z.name}）${Math.round(z.share * 100)}% · ${hms(z.seconds)}`)].filter(Boolean).join("\n");
-      return `<div class="rv-c zn"><div class="k">${rvI(c.icon || "zones")}${esc(c.label || t("viewer.three_zones"))}</div>${rvQ(tip)}
+      return `<div class="rv-c zn"><div class="k">${rvI(c.icon || "zones")}<span class="kt">${esc(c.label || t("viewer.three_zones"))}</span></div>${rvQ(tip)}
         <div class="rv-zbar" role="img" aria-label="${esc(Z.map((z) => `${z.label} ${Math.round(z.share * 100)}%`).join(t("viewer.list_sep")))}">${Z.filter((z) => z.share > 0).map((z) =>
           `<i style="flex:${z.share.toFixed(4)} 1 0;background:${ZC[z.key]}">${z.share >= 0.12 ? Math.round(z.share * 100) + "%" : ""}</i>`).join("")}</div>
         <div class="rv-zleg">${Z.map((z) => `<span><i style="background:${ZC[z.key]}"></i>${esc(z.label)} <b>${Math.round(z.share * 100)}%</b> · ${hms(z.seconds)}</span>`).join("")}</div></div>`;
@@ -1651,16 +1714,17 @@ function drawReviewCards(card, res) {
     if (c.kind === "status") {
       const lv = c.level || "na";
       const ico = { good: "good", warn: "watch", bad: "bad", info: "info" }[lv] || "na";
-      return `<div class="rv-c st ${esc(lv)}"><div class="k">${rvI(c.icon)}${esc(c.label)}</div>${rvQ(c.tip)}
+      return `<div class="rv-c st ${esc(lv)}${c.wide ? " w2" : ""}"><div class="k">${rvI(c.icon)}<span class="kt">${esc(c.label)}</span></div>${rvQ(c.tip)}
         <div class="v">${val}</div>${c.sub ? `<div class="s">${rvI(ico)}${esc(c.sub)}</div>` : ""}</div>`;
     }
-    return `<div class="rv-c"><div class="k">${rvI(c.icon)}${esc(c.label)}</div>${rvQ(c.tip)}<div class="v">${val}</div>
+    return `<div class="rv-c${c.wide ? " w2" : ""}"><div class="k">${rvI(c.icon)}<span class="kt">${esc(c.label)}</span></div>${rvQ(c.tip)}<div class="v">${val}</div>
       ${c.sub ? `<div class="s" title="${esc(c.sub)}">${esc(c.sub)}</div>` : ""}</div>`;
   };
   card.insertAdjacentHTML("beforeend",
     (tags.length ? `<div class="rv-tags">${tags.map((tg) => `<span class="rv-tag">${rvI(tg.icon)}${esc(tg.text)}${rvQ(tg.tip)}</span>`).join("")}</div>` : "")
     + `<div class="rv">${main.map(one).join("")}</div>`
-    + (chips.length ? `<div class="rv-chips">${chips.map((c) => `<span class="rv-chip ${esc(c.level || "")}">${rvI(c.icon)}${esc(c.text)}${rvQ(c.tip)}</span>`).join("")}</div>` : ""));
+    + (chips.length ? `<div class="rv-chips">${chips.map(rvChip).join("")}</div>` : "")
+    + (chipsMore.length ? `<details class="rv-more"><summary>${esc(t("viewer.rv_more", { n: chipsMore.length }))}</summary><div class="rv-chips">${chipsMore.map(rvChip).join("")}</div></details>` : ""));
 }
 // append text to a card's title ? (creating it): chart explanations live there, not in caption paragraphs
 function addTip(card, text) {
@@ -1727,7 +1791,7 @@ function drawZones(card, res) {
     card.appendChild(bar);
   }
   card.insertAdjacentHTML("beforeend", `<p class="meta" style="margin:0 0 6px">
-    ${basis} ${Z.threshold == null ? esc(t("viewer.not_set")) : pace ? f(Z.threshold) + " /km" : f(Z.threshold) + " " + Z.unit}${Z.threshold_source ? `（${esc(Z.threshold_source)}）` : ""}${Z.wprime ? ` · W′ ${(Z.wprime / 1000).toFixed(1)} kJ（${esc(Z.wprime_source || "")}）` : ""} · ${esc(t("viewer.zones.recent", { days: Z.days, n: Z.runs }))}</p>
+    ${basis} ${Z.threshold == null ? esc(t("viewer.not_set")) : pace ? f(Z.threshold) + " /km" : f(Z.threshold) + " " + Z.unit}${Z.threshold_source ? `（${esc(Z.threshold_source)}）` : ""}${Z.wprime ? ` · ${esc(t("viewer.zones.wprime", { kj: (Z.wprime / 1000).toFixed(1), src: Z.wprime_source || "" }))}` : ""} · ${esc(t("viewer.zones.recent", { days: Z.days, n: Z.runs }))}</p>
     ${Z.no_data_reason ? `<p class="badge" style="margin:0 0 6px">${esc(t("viewer.no_data_is", { why: Z.no_data_reason }))}</p>` : ""}
     ${Z.threshold_is_default ? `<p class="badge" style="margin:0 0 6px">⚠ ${esc(t(Z.basis === "lthr" ? "viewer.zones.default_lthr" : "viewer.zones.default_pace", { basis }))}</p>` : ""}
     <table class="zt"><thead><tr><th>${esc(t("viewer.zt.zone"))}</th><th>${esc(t("viewer.zt.name"))}</th><th class="num">${esc(Z.unit)}</th><th class="num">% ${basis}</th>
@@ -3202,7 +3266,8 @@ function drawActHrPower(card, res) {
   const T = ACT.theme(), K = res.x.length, span = res.n, iv = ACT.interval(span);
   // SP-267: stretches where the wrist HR may be wrong (engine/hr_quality.py) — shaded, never changed
   const HQ = res.has_hr && res.hr_quality?.spans?.length ? res.hr_quality : null;
-  const hqAt = (x) => HQ ? HQ.spans.filter((r) => x >= r[0] && x < r[1]).map((r) => HQ.labels[r[2]] || r[2]) : [];
+  const HV = hrqView(HQ);                 // SP-487 (R6): what 提示多寡 shades; the legend's ? has the seconds
+  const hqAt = (x) => HV ? HV.spans.filter((r) => x >= r[0] && x < r[1]).map((r) => HQ.labels[r[2]] || r[2]) : [];
   // 使用功率 off (settings): the HR panel alone, no power stats
   const pwOn = S.usePower !== false, usePw = res.has_power && pwOn;
   if (!pwOn) { const h = card.querySelector("h2"); if (h?.firstChild?.nodeType === 3) h.firstChild.textContent = h.firstChild.textContent.replace(t("viewer.hp.hr_power"), t("viewer.hp.hr")); }
@@ -3211,7 +3276,7 @@ function drawActHrPower(card, res) {
       ${res.has_hr ? `<span><i style="border-color:${T.hr}"></i>${esc(t(pwOn ? "viewer.hp.leg_hr_top" : "viewer.hp.leg_hr"))}</span>` : ""}
       ${usePw ? `<span><i style="border-color:${T.pw}"></i>${esc(t("viewer.hp.leg_pw"))}</span>` : pwOn ? `<span>${esc(t("viewer.hp.no_power"))}</span>` : ""}
       <span><i class="dash" style="border-color:${T.ink2}"></i>${esc(t(usePw ? "viewer.hp.refs_pw" : "viewer.hp.refs"))}</span>
-      ${HQ ? `<span><i class="hrq"></i>${esc(HQ.legend)} ${rvQ(HQ.note)}</span>` : ""}
+      ${HV ? `<span data-hrq="${HV.shaded ? "shaded" : "quiet"}">${HV.shaded ? '<i class="hrq"></i>' : ""}${esc(HQ.legend)} ${rvQ(HV.tip)}</span>` : ""}
       <span class="hint">${esc(t("viewer.hp.drag"))} <button type="button" class="ac-clear" hidden>${esc(t("viewer.hp.clear"))}</button></span></div>`);
   const chart = actChart(card, "ac-hp", t("viewer.hp.aria"));
   const head = document.createElement("p"); head.className = "ac-head"; card.appendChild(head);
@@ -3272,8 +3337,8 @@ function drawActHrPower(card, res) {
       { name: t("viewer.mapchart.hr"), type: "line", xAxisIndex: 0, yAxisIndex: 0, data: pts(res.hr), showSymbol: false, connectNulls: false,
         lineStyle: { color: T.hr, width: 1.5 }, itemStyle: { color: T.hr },
         markLine: mark([ref(res.ref.aet, "AeT"), ref(res.ref.lthr, "LTHR")]),
-        ...(HQ ? { markArea: { silent: true, itemStyle: { color: css("--hrq") || "rgba(128,128,128,.22)" },
-          data: HQ.spans.map((r) => [{ xAxis: r[0] }, { xAxis: r[1] }]) } } : {}) },
+        ...(HV && HV.shaded ? { markArea: { silent: true, itemStyle: { color: css("--hrq") || "rgba(128,128,128,.22)" },
+          data: HV.spans.map((r) => [{ xAxis: r[0] }, { xAxis: r[1] }]) } } : {}) },
       ...(pwOn ? [{ name: t("viewer.mapchart.power"), type: "line", xAxisIndex: 1, yAxisIndex: 1, data: pts(usePw ? res.power : null), showSymbol: false, connectNulls: false,
         lineStyle: { color: T.pw, width: 1.5 }, itemStyle: { color: T.pw },
         markLine: mark([usePw ? ref(res.ref.cp, "CP") : null]) }] : []),

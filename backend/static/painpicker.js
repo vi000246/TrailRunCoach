@@ -14,8 +14,6 @@
   const PAGE = `${API}/page`;
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const LEVELS = [[0, "沒痛"], [1, "痠"], [2, "痛"], [3, "中斷"]];
-  const HELP = "這次跑步有沒有痛。\n「痠」是練完正常的痠，不算受傷；「痛」是會影響跑姿、配速，或跑完還在痛；「中斷」是痛到停下來。\n" +
-    "選「痛」或「中斷」會自動開一筆傷病紀錄（同部位 28 天內接到同一筆，推估），細節可以之後補。\n再點一次亮著的按鈕 = 清掉（沒填）。\n這不是診斷，持續痛請看醫師或物理治療師。";
   const CSS = `
   .pp { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
   .pp .pp-seg { display: inline-flex; border: 1px solid var(--line, #e1e5ea); border-radius: 8px; overflow: hidden; width: max-content; max-width: 100%; }

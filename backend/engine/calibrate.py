@@ -104,6 +104,7 @@ def _load_items() -> None:
     from backend.engine import drift_calib  # noqa: F401  (drift windows)
     from backend.engine import interval_calib  # noqa: F401  (SP-69: interval_in_band_tol, interval_last_fade, interval_tiz_goal)
     from backend.engine import threshold_calib  # noqa: F401  (SP-69: lthr_test_age_days, easy_hr_margin_bpm)
+    from backend.engine import intensity_calib  # noqa: F401  (SP-511: easy_run_if, rpe_if_scale)
 
 
 def validate_entry(v) -> None:

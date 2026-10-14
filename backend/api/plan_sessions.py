@@ -380,7 +380,10 @@ def _adapt_ctx(ds, st, cur: dict, monday: dt.date, today: dt.date, enabled: bool
     """engine/adapt.py's context: per-run review numbers of this week's runs
     (workout_review.measure, disk-memoised), the actual CTL ramp (status
     fitness indicator), TSB today and the first day sessions can still go on;
-    `rpe`: this week's runs with a post-run self-rating (SP-231)."""
+    `rpe`: this week's runs with a post-run self-rating (SP-231). The review numbers also cover the runs of
+    the last adapt.STREAK_LOOKBACK days before Monday (SP-484: R3's 「輕鬆跑連續偏強」 reads the last 3 easy
+    runs across the week line) — those only get a review row, never a hard day or a rating."""
+    from backend.engine import adapt as A
     from backend.engine import overview as O
     reviews: dict = {}
     rated: dict = {}
@@ -388,8 +391,18 @@ def _adapt_ctx(ds, st, cur: dict, monday: dt.date, today: dt.date, enabled: bool
     if enabled:
         try:
             from backend.engine import workout_review as WR
-            for w in O.workouts_between(ds, monday, today + dt.timedelta(days=1)):
+            lo = min(monday, today - dt.timedelta(days=A.STREAK_LOOKBACK - 1))
+            for w in O.workouts_between(ds, lo, today + dt.timedelta(days=1)):
                 if O.category(w) not in ("road", "trail", "hike"):
+                    continue
+                this_week = O.wdate(w) >= monday
+                if not this_week:
+                    if O.category(w) != "hike":
+                        m = WR.measure(ds, w) or {}
+                        sess = O.session_of(ds, w)
+                        reviews[w.idx] = {k: m.get(k) for k in ("avg_hr", "aet", "lthr", "avg_power", "cp")}
+                        reviews[w.idx].update(tss=O._n(w.metrics.get("tss")), session_type=sess.get("type"),
+                                              stimulus=sess.get("stimulus"))
                     continue
                 # a hard day done this week, planned or not (Z5 / Z3 / 高強度長跑 / CP test):
                 # adapt keeps the remaining hard sessions 48 h away from it
@@ -558,6 +571,12 @@ def _view(s: dict, inp: dict, rows: dict, today: str, prov=None, walk: Optional[
     wh = WH.for_session(s, walk)
     if wh:
         v["walk_hint"] = wh
+        v["walk_grade"] = walk.get("grade")          # SP-484: 標準 shows 「≥ X% 走」 only, the sentence in the hover
+    if s.get("state") == "done":
+        from backend.engine import adapt as A
+        od = A.note_kind(s.get("note"))              # SP-484: rule D's 偏強 (a dot) / 太強 (⚠) on the card
+        if od:
+            v["overhard"] = od
     got = WTPL.steps_family(s, inp["thresholds"])
     v["quality_family"] = WTPL.session_family(s, inp["thresholds"], derived=got)
     v["steps_family"] = got
@@ -675,9 +694,10 @@ def _summary(every: list[dict], inp: dict) -> dict:
     cur = inp["cur"]
     load = cur.get("load") or {}
     rates = plan_rates(inp, every)
-    out = PS.plan_summary(every, cur["week"]["start"], inp["today"], float(load.get("ctl_today") or 0.0),
-                          float(load.get("atl_today") or 0.0), float(inp.get("cc") or 42.0),
-                          float(inp.get("ac") or 7.0), inp.get("horizon_end"),
+    # a B / C race's predicted load (SP-504: a mark on the day, no session) counts like its session did
+    out = PS.plan_summary(every + race_rows(inp, every), cur["week"]["start"], inp["today"],
+                          float(load.get("ctl_today") or 0.0), float(load.get("atl_today") or 0.0),
+                          float(inp.get("cc") or 42.0), float(inp.get("ac") or 7.0), inp.get("horizon_end"),
                           est=lambda s: est_tss(s, rates))
     return history_summary(out)
 
@@ -985,6 +1005,7 @@ async def _suggestions(db: AsyncSession, inp: dict, dismissed: Optional[dict] = 
     """This week's due CP / AeT tests with their days. `dismissed` (the floating box's
     「不要」 / ✕, engine/suggestions.py): None = read it; {} = keep every one."""
     from backend.engine import plan_prefs as PP
+    from backend.engine import suggestions as SG
     stored = await PS.load(db)
     today = _today(inp)
     prefs = PP.load()
@@ -999,7 +1020,7 @@ async def _suggestions(db: AsyncSession, inp: dict, dismissed: Optional[dict] = 
         if any(s["kind"] == "test" and s["state"] in ("active", "done") and (s.get("day") or "") >= R.monday_of(today)
                and (is_aet_session(s) == (sg["kind"] == "aet")) for s in stored):
             continue
-        if f"test:{sg['kind']}:{mon}" in dismissed:
+        if not SG.visible([{"id": f"test:{sg['kind']}:{mon}", "type": "test"}], dismissed):    # 不要 / ✕ / 稍後提醒
             continue
         out.append({**sg, "days": suggestion_days(sg, stored, today, prefs, bl),
                     "label": f"建議做一次 {'AeT' if sg['kind'] == 'aet' else 'CP'} 測試（{sg['reason']}）— 要排在哪一天？"})
@@ -1109,14 +1130,51 @@ async def _schedule_test(db: AsyncSession, inp: dict, sg: dict, day: Optional[st
 #
 #   GET  /api/v1/overview/plan/suggestions                 every active, not dismissed suggestion
 #   POST /api/v1/overview/plan/suggestions/accept  {id, day, test?}   排入
-#   POST /api/v1/overview/plan/suggestions/dismiss {id, action: declined | dismissed}   不要 / ✕
+#   POST /api/v1/overview/plan/suggestions/dismiss {id, action: declined | dismissed | snoozed}   不要 / ✕ / 稍後提醒
+#   GET  /api/v1/overview/plan/suggestions/declined-tests   the tests 「不要」 holds for good (SP-515)
+#   POST /api/v1/overview/plan/suggestions/restore {key}     恢復 one of them
 # ---------------------------------------------------------------------------
 
 async def _dismissed(db: AsyncSession) -> dict:
+    """The stored 「不要」 / ✕ / 排入 records, read from the DB even when this session already loaded the
+    row (populate_existing: another request may have written it since — SP-509)."""
+    import json
+    from sqlalchemy import select
+    from backend.db.models import UserSetting
     from backend.engine import suggestions as SG
     from backend.settings.repository import SettingsRepository
-    v = await SettingsRepository(db).get(SG.KEY)
+    repo = SettingsRepository(db)
+    res = await db.execute(select(UserSetting).where(UserSetting.user_id == repo.user_id, UserSetting.key == SG.KEY)
+                           .execution_options(populate_existing=True))
+    row = res.scalar_one_or_none()
+    v = json.loads(row.value_json) if row is not None else {}
     return v if isinstance(v, dict) else {}
+
+
+# SP-509: `plan.suggestions.dismissed` is one JSON dict; every change reads it, changes one entry and writes it
+# back. Two at once (several 「不要」 clicked together) collided: the second INSERT of the missing row failed
+# (UNIQUE user_id + key → HTTP 500), or a write put back the dict read before the other one's write (that 「不要」
+# was lost). One change at a time, per tenant; never take _wlock while holding it (a holder of _wlock may take it).
+_slocks: dict = {}
+
+
+def _slock() -> asyncio.Lock:
+    k = _lock_key()
+    lk = _slocks.get(k)
+    if lk is None:
+        lk = _slocks[k] = asyncio.Lock()
+    return lk
+
+
+async def _edit_dismissed(db: AsyncSession, change) -> dict:
+    """Read the stored dict, `change(dict) -> dict`, save it when it changed — all under _slock. Returns it."""
+    from backend.engine import suggestions as SG
+    async with _slock():
+        cur = await _dismissed(db)
+        new = change(cur)
+        if new != cur:
+            await _save_setting(db, SG.KEY, new)
+        return new
 
 
 async def _save_setting(db: AsyncSession, key: str, value) -> None:
@@ -1299,31 +1357,101 @@ def _injury_suggestions(inp: dict, today: str, blocked: set, stored: list[dict])
     return rows
 
 
+async def _tested_fn(db: AsyncSession, inp: dict, dis: dict):
+    """SP-507: `tested(kinds, since_day)` for engine/suggestions.visible — a test of these kinds done since (a done
+    test session, a test the review found, a measured threshold: threshold_confidence.tested_since). None when no
+    稍後提醒 is stored (nothing to check)."""
+    from backend.engine import suggestions as SG
+    if not any(isinstance(v, dict) and v.get("action") == SG.SNOOZED for v in (dis or {}).values()):
+        return None
+    stored = await PS.load(db)
+
+    def plan():
+        from backend.engine.planning import Plan
+        try:
+            return Plan.load()
+        except Exception:                   # noqa: BLE001 — no measured thresholds to count
+            return None
+    pl = await run_in_threadpool(plan)
+    seen: dict = {}
+
+    def measured(since: str) -> set:
+        if since not in seen:
+            from backend.engine import threshold_confidence as TC
+            try:
+                seen[since] = TC.tested_since(pl, since) if pl is not None else set()
+            except Exception:               # noqa: BLE001
+                seen[since] = set()
+        return seen[since]
+    return lambda kinds, since: SG.tested(kinds, since, stored, inp.get("tests"), measured(since))
+
+
+async def _visible(db: AsyncSession, inp: dict, rows: list[dict], dis: Optional[dict] = None,
+                   snoozes: bool = True) -> list[dict]:
+    """The box's rows: not 不要 / ✕ / 排入, not 稍後提醒 (SP-507: nor after it when the test was done since).
+    `snoozes=False`: 稍後提醒 left out — the 課表's 排入測試 ▸ and its 排入 still offer a held test (SP-507 R1)."""
+    from backend.engine import suggestions as SG
+    dis = await _dismissed(db) if dis is None else dis
+    if not snoozes:
+        return SG.visible(rows, dis, snoozes=False)
+    return SG.visible(rows, dis, tested_fn=await _tested_fn(db, inp, dis))
+
+
 @router.get("/suggestions")
 async def suggestions(db: AsyncSession = Depends(get_db)):
     from backend.engine import suggestions as SG
     inp = await _inputs(db)
     rows = await _all_suggestions(db, inp)
-    dis = await _dismissed(db)
-    kept = SG.prune(dis, rows, _today(inp))
-    if kept != dis:
-        await _save_setting(db, SG.KEY, kept)
-    vis = SG.visible(rows, kept)
-    return {"today": _today(inp), "suggestions": vis, "count": len(vis)}
+    kept = await _edit_dismissed(db, lambda dis: SG.prune(dis, rows, _today(inp)))
+    vis = await _visible(db, inp, rows, kept)
+    shown = {r["id"] for r in vis}
+    # SP-507 R1: the tests 稍後提醒 holds, whole — the 課表's 排入測試 ▸ still offers them (schedule.html sugCount)
+    held = [r for r in SG.visible(rows, kept, snoozes=False) if r["id"] not in shown and r["type"] in SG.TEST_TYPES]
+    return {"today": _today(inp), "suggestions": vis, "count": len(vis), "declined": SG.declined(rows, vis, kept),
+            "snoozed": SG.snoozed(rows, vis, kept), "snoozed_tests": held}
 
 
 @router.post("/suggestions/dismiss")
 async def dismiss_suggestion(body: dict = Body(...), db: AsyncSession = Depends(get_db)):
+    """不要 (declined) / ✕ (dismissed) / 稍後提醒 (snoozed, SP-507: SNOOZE_DAYS; the row's tests are kept so a test
+    done meanwhile keeps it away)."""
     from backend.engine import suggestions as SG
     sid, action = str(body.get("id") or ""), body.get("action") or "dismissed"
-    if action not in ("declined", "dismissed"):
-        raise HTTPException(400, "action must be declined or dismissed")
+    if action not in ("declined", "dismissed", SG.SNOOZED):
+        raise HTTPException(400, "action must be declined, dismissed or snoozed")
     if not sid:
         raise HTTPException(400, "id required")
     inp = await _inputs(db)
     week = sid.split(":")[-1] if sid.startswith(SG.WEEKLY) else None
-    await _save_setting(db, SG.KEY, SG.record(await _dismissed(db), sid, action, dt.datetime.now(), week))
-    return {"id": sid, "action": action, "today": _today(inp)}
+    tests = None
+    if action == SG.SNOOZED:
+        row = next((r for r in await _all_suggestions(db, inp) if r["id"] == sid), None)
+        if row is None:
+            raise HTTPException(400, "現在沒有這個建議（可能已經排入或關掉了）")
+        tests = SG.test_kinds(row)
+    now = dt.datetime.now()
+    stored = await _edit_dismissed(db, lambda dis: SG.record(dis, sid, action, now, week, tests))
+    return {"id": sid, "action": action, "today": _today(inp),
+            **({"until": stored[sid]["until"]} if action == SG.SNOOZED else {})}
+
+
+@router.get("/suggestions/declined-tests")
+async def declined_tests(db: AsyncSession = Depends(get_db)):
+    """SP-515: the tests 「不要」 took out of the box for good (any week) — the settings page's 「不再建議的測試」."""
+    from backend.engine import suggestions as SG
+    return {"tests": SG.declined_tests(await _dismissed(db))}
+
+
+@router.post("/suggestions/restore")
+async def restore_test(body: dict = Body(...), db: AsyncSession = Depends(get_db)):
+    """SP-515: 恢復 {key: "test:cp"} — the box suggests that test again (when it is due)."""
+    from backend.engine import suggestions as SG
+    from backend.i18n import _
+    key = str(body.get("key") or "")
+    if key not in {t["key"] for t in SG.declined_tests(await _dismissed(db))}:
+        raise HTTPException(400, _("這個測試沒有按過「不要」"))
+    kept = await _edit_dismissed(db, lambda dis: SG.restore(dis, key))
+    return {"key": key, "tests": SG.declined_tests(kept)}
 
 
 @router.post("/suggestions/accept")
@@ -1333,7 +1461,8 @@ async def accept_suggestion(body: dict = Body(...), db: AsyncSession = Depends(g
     tpl = body.get("template") or None          # 排入測試 ▸ a template (the calendar's context menu)
     inp = await _inputs(db)
     rows = await _all_suggestions(db, inp)
-    sg = next((r for r in SG.visible(rows, await _dismissed(db)) if r["id"] == sid), None)
+    # SP-507 R1: a 稍後提醒 does not stop 排入 (the 課表's 排入測試 ▸ offers a held test)
+    sg = next((r for r in await _visible(db, inp, rows, snoozes=False) if r["id"] == sid), None)
     if sg is None:
         raise HTTPException(400, "現在沒有這個建議（可能已經排入或關掉了）")
     if sg["type"] == "b2b":
@@ -1364,14 +1493,14 @@ async def accept_suggestion(body: dict = Body(...), db: AsyncSession = Depends(g
     else:
         raise HTTPException(400, "這個建議沒有可以排的東西")
     week = sid.split(":")[-1] if sid.startswith(SG.WEEKLY) else None
-    await _save_setting(db, SG.KEY, SG.record(await _dismissed(db), sid, "accepted", dt.datetime.now(), week))
+    await _edit_dismissed(db, lambda dis: SG.record(dis, sid, "accepted", dt.datetime.now(), week))
     return {"id": sid, **out}
 
 
 @router.get("/test-options")
 async def test_options(day: str, db: AsyncSession = Depends(get_db)):
     """排入測試 ▸ on an empty calendar day: the active test suggestions (the floating box's
-    CP / AeT / zone retest items), each with ok / the reason this day doesn't suit it, and
+    CP / AeT / zone retest items, and the ones 稍後提醒 holds — SP-507 R1), each with ok / the reason this day doesn't suit it, and
     its templates (推薦 first). Accept = POST /suggestions/accept {id, day, test?, template}."""
     from backend.engine import plan_prefs as PP
     from backend.engine import suggestions as SG
@@ -1381,7 +1510,7 @@ async def test_options(day: str, db: AsyncSession = Depends(get_db)):
     stored = await PS.load(db)
     prefs = PP.load()
     bl = PS.blocked_map(inp)
-    vis = SG.visible(await _all_suggestions(db, inp), await _dismissed(db))
+    vis = await _visible(db, inp, await _all_suggestions(db, inp), snoozes=False)    # SP-507 R1: 稍後提醒 too
     due = {t["kind"]: t for t in await _suggestions(db, inp, dismissed={})}
     out = []
     for r in vis:
@@ -1516,8 +1645,8 @@ async def _b2b_cancelled(db: AsyncSession, uid: str) -> Optional[dict]:
             except PS.PlanError:
                 pass
     await _save_setting(db, B2B.ACCEPTED_KEY, [e for e in acc if e is not hit])
-    await _save_setting(db, SG.KEY, SG.record(await _dismissed(db), f"b2b:{hit['week']}", "declined",
-                                              dt.datetime.now(), hit["week"]))
+    await _edit_dismissed(db, lambda dis: SG.record(dis, f"b2b:{hit['week']}", "declined", dt.datetime.now(),
+                                                    hit["week"]))
     return hit
 
 
@@ -2838,7 +2967,11 @@ def _range_extras(start: str, end: str) -> dict:
     plan_phases = sorted(({**p, "start": max(p["start"], since)} for p in every if p["end"] >= since),
                          key=lambda p: p["start"])
     goal_d = ((st.goals.get("targets") or {}).get("climb_per_km") or {}).get("value")
-    return {"activities": acts, "phases": phases, "plan_phases": plan_phases,
+    # the plan's races in view (SP-504: the B / C ones a mark on the day; any one tags its activity)
+    races = [{"id": e.id, "name": e.name, "priority": e.priority, "kind": e.kind, "start": e.start.isoformat(),
+              "end": e.end.isoformat()}
+             for e in sorted(st.plan.events if st.plan else (), key=lambda e: e.start) if e.end >= a and e.start <= b]
+    return {"activities": acts, "phases": phases, "plan_phases": plan_phases, "races": races,
             "tph": _dataset_tph(ds, today) if _EXTRAS_TPH.get() else None, "goal_climb_per_km": goal_d}
 
 
@@ -2959,6 +3092,68 @@ def session_est_tss(s: dict, ds=None, sessions: Optional[list[dict]] = None) -> 
     return est_tss(s, rates)
 
 
+# ---- B / C races on the 課表 (SP-504) -------------------------------------------------------------
+# The generator puts no session on a race day (以賽代訓): the race is a mark on the day (post_race.race_mark,
+# week_plan / projection `races`) and its predicted TSS still counts in the week's 計畫 and the projected
+# load. A stored race session of that day (the 賽事計算機's export, or a past row from before SP-504) is
+# the race's load instead — never both.
+RACE_ACT_CATS = ("road", "trail", "hike")          # an activity on a race day that is the race
+
+
+def race_load(inp: dict) -> dict:
+    """{(event id, day): race_mark} of the generator's weeks (this one and the projected ones)."""
+    cur = inp.get("cur") or {}
+    out = {}
+    for m in list(cur.get("races") or ()) + [m for w in inp.get("weeks") or () for m in w.get("races") or ()]:
+        out[(m.get("id"), m.get("day"))] = m
+    return out
+
+
+def _race_days_held(every: list[dict]) -> set:
+    return {s["day"] for s in every if s.get("kind") == "race" and s.get("day")
+            and s.get("state") in ("active", "done", "missed")}
+
+
+def race_rows(inp: dict, every: list[dict]) -> list[dict]:
+    """The generator's race marks as load-only rows (kind race, the mark's minutes / TSS; state done once an
+    activity is on the day) for the week sums and the projection — not stored, not shown as cards, never
+    pushed. A day a stored race session holds is left out."""
+    held = _race_days_held(every)
+    return [{"uid": f"race:{m.get('id')}:{m['day']}", "kind": "race", "day": m["day"],
+             "week_start": R.monday_of(m["day"]), "minutes": int(m.get("minutes") or 0),
+             "tss": float(m.get("tss") or 0.0), "state": "done" if m.get("done") else "active",
+             "origin": "race", "edited": False, "race_mark": True}
+            for m in race_load(inp).values() if m.get("day") and m["day"] not in held]
+
+
+def race_marks(inp: dict, events: list[dict], every: list[dict]) -> list[dict]:
+    """The calendar's `races`: the plan's events in view ({id, name, priority, start, end} of _range_extras)
+    with the generator's predicted minutes / TSS (None outside the generated weeks) and `counted`: its
+    load is in the week's 計畫 (no stored race session holds the day)."""
+    gen = race_load(inp)
+    held = _race_days_held(every)
+    out = []
+    for e in events or ():
+        m = gen.get((e.get("id"), e.get("start"))) or {}
+        out.append({**e, "day": e.get("start"), "minutes": m.get("minutes"), "tss": m.get("tss"),
+                    "counted": bool(m) and e.get("start") not in held})
+    return out
+
+
+def tag_race_activities(acts: list[dict], marks: list[dict]) -> None:
+    """`race` ({id, name, priority, kind}) on each run / hike on a race's days (SP-504): the race, not an
+    unplanned activity, whatever the priority. `kind` (planning.KINDS): a 百岳 trip (baiyue) is shown as
+    行程, not 比賽 (SP-504 R1)."""
+    for a in acts:
+        d = a.get("date") or ""
+        if a.get("category") not in RACE_ACT_CATS:
+            continue
+        m = next((x for x in marks if (x.get("start") or "") <= d <= (x.get("end") or x.get("start") or "")), None)
+        if m is not None:
+            a["race"] = {"id": m.get("id"), "name": m.get("name"), "priority": m.get("priority"),
+                         "kind": m.get("kind")}
+
+
 def _climb_row(target: Optional[dict], ss: list[dict], aa: list[dict]) -> Optional[dict]:
     """The week's 爬升 (SP-87, engine/vert_target.py): {target, planned (the sessions' climb_m), done
     (the foot activities' climb), short (target − planned when the plan falls short), race, weeks_out,
@@ -2977,12 +3172,13 @@ def _climb_row(target: Optional[dict], ss: list[dict], aa: list[dict]) -> Option
 
 def _week_rows(start: str, end: str, sessions: list[dict], acts: list[dict], phases: list[dict],
                proj: list[dict], rates: dict, today: Optional[str] = None,
-               climb: Optional[dict] = None) -> list[dict]:
+               climb: Optional[dict] = None, races: Optional[list] = None) -> list[dict]:
     """Per Monday in range: planned (active + done + missed, strength time excluded
     like week_plan()) vs done (the activities), the phase of the week, and the
     week's 完成度 over the days up to today (engine/compliance.py). `climb` (SP-87): the weekly
     climb targets ({monday: vert_target.plan info}; None = no 爬升 row, e.g. 主要訓練項目 路跑) →
-    each row's `climb` (_climb_row)."""
+    each row's `climb` (_climb_row). `races` (race_rows, SP-504): the B / C races' predicted load,
+    counted in 計畫 like a session."""
     from backend.engine import compliance as C
     by_start = {w["start"]: w for w in proj}
     out = []
@@ -2992,6 +3188,8 @@ def _week_rows(start: str, end: str, sessions: list[dict], acts: list[dict], pha
         a, b = d.isoformat(), (d + dt.timedelta(days=6)).isoformat()
         ss = [s for s in sessions if s.get("day") and a <= s["day"] <= b and s["state"] in ("active", "done", "missed")
               and s["kind"] not in PS.NOT_LOAD]
+        cl = ss
+        ss = ss + [r for r in races or () if a <= r["day"] <= b]
         mins = sum(s["minutes"] or 0 for s in ss if s["kind"] != "strength")
         tss = sum(est_tss(s, rates) for s in ss)
         aa = [x for x in acts if a <= (x.get("date") or "") <= b]
@@ -3014,7 +3212,7 @@ def _week_rows(start: str, end: str, sessions: list[dict], acts: list[dict], pha
                     "done_tss": sum(float(x.get("tss") or 0) for x in aa),
                     "phase": ph["kind"] if ph else w.get("phase"), "phase_label": ph["label"] if ph else None,
                     "mode_label": w.get("mode_label"), "provisional": bool(w.get("provisional")),
-                    **({"climb": _climb_row(climb.get(a), ss, aa)} if climb is not None else {})})
+                    **({"climb": _climb_row(climb.get(a), cl, aa)} if climb is not None else {})})
         d += dt.timedelta(days=7)
     return out
 
@@ -3057,15 +3255,34 @@ async def _coros_state(db: AsyncSession, views: list[dict]) -> dict:
             "not_pushed": n("not_pushed")}
 
 
-def _plan_notes(inp: dict, start: str, end: str) -> list[dict]:
+def _streak_note(every: list[dict], inp: dict) -> Optional[dict]:
+    """R3 (SP-484; engine/adapt.overhard_streak): 「輕鬆跑連續偏強」 as a week note of this week, hint SC4, its
+    condition = the too-hard runs' days (「知道了」 holds until another run joins the streak); None without one."""
+    from backend.engine import adapt as A
+    from backend.engine import hints as H
+    from backend.i18n import _
+    today = _today(inp)
+    st = A.overhard_streak(every, (inp.get("adapt") or {}).get("reviews"), today)
+    if not st:
+        return None
+    return {"week_start": R.monday_of(today), "level": "watch", "src": "overhard", "id": "SC4",
+            "text": _("輕鬆跑連續偏強：最近 {of} 堂有 {n} 堂偏強，下一次放慢", of=st["of"], n=st["n"]),
+            "fp": H.fingerprint("SC4", ",".join(st["days"]))}
+
+
+def _plan_notes(inp: dict, start: str, end: str, streak: Optional[dict] = None) -> list[dict]:
     """The generator's notes for the weeks in view (課表偏好: capped weeks, CP test
     exempt, soft-cap excess; 不排課日期: hours lost, the step after it; 冷啟動: the questionnaire
     hint / 「能連續跑 30 分鐘之後才準」, SP-288; the easy power band vs the runner's own easy
-    power, once — SP-449), each with its week start."""
+    power, once — SP-449), each with its week start; `streak` (_streak_note, SP-484) first when its
+    week is in view."""
     cur = inp.get("cur") or {}
     weeks = [((cur.get("week") or {}).get("start"), cur.get("notes") or [])] + \
         [(w.get("start"), w.get("notes") or []) for w in inp.get("weeks") or []]
     out, easy_power = [], False
+    if streak and streak["week_start"] <= end and \
+            (dt.date.fromisoformat(streak["week_start"]) + dt.timedelta(days=6)).isoformat() >= start:
+        out.append(streak)
     for ws, notes in weeks:
         if not ws:
             continue
@@ -3179,16 +3396,20 @@ async def _calendar(start: str, end: str, db: AsyncSession, tm: dict, t0: float)
     ss = _decorate(every, extras["activities"], rates, start, end)
     _link_options(ss, every, extras["activities"], body["today"])
     tt = P.target_texts(inp["thresholds"] or {})
+    # SP-504: the races in view (a mark on the day, its predicted load in the week's 計畫) and the
+    # activity run on a race day tagged as the race
+    marks = race_marks(inp, extras.get("races") or [], every)
+    tag_race_activities(extras["activities"], marks)
     return {**{k: v for k, v in body.items() if k != "sessions"}, "start": start, "end": end,
-            "sessions": ss, "activities": extras["activities"], "phases": extras["phases"],
+            "sessions": ss, "activities": extras["activities"], "phases": extras["phases"], "races": marks,
             "week_rows": _week_rows(start, end, ss, extras["activities"], extras["phases"], inp["weeks"], rates,
-                                    body["today"], climb=_climb_targets(inp)),
+                                    body["today"], climb=_climb_targets(inp), races=race_rows(inp, every)),
             "compliance_levels": C.COMPLIANCE,
             "thresholds": inp["thresholds"], "tss_per_hour": tph, "tss_rates": rates,
             "targets": {k: tt.get(v, "") for k, v in KIND_TARGET.items()},
             "kinds": PS.KINDS, "default_titles": PS.DEFAULT_TITLES, "family_titles": PS.FAMILY_TITLES,
             "prefs": inp.get("prefs"), "goal_climb_per_km": extras.get("goal_climb_per_km"),
-            "plan_notes": _plan_notes(inp, start, end),
+            "plan_notes": _plan_notes(inp, start, end, _streak_note(every, inp)),
             "test_suggestions": sug,
             "test_templates": _test_templates(inp["thresholds"] or {}, None),
             # 睡在高處的紀錄 (SP-259, api/altitude_nights.py) of the range: a small mark on the day

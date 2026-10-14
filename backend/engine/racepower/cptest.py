@@ -100,7 +100,7 @@ def w_prime_prior(weight: Optional[float], sex: str = "male", wind: bool = False
     m, sd = W_PRIME_PRIOR_KJ[sex]
     bands = CP.RWC_BANDS[(sex, bool(wind), "jkg")]
     return {"lo": (m - sd) * 1000.0, "hi": (m + sd) * 1000.0, "mid": m * 1000.0,
-            "source": f"Ruiz-Alias 2025 業餘{'男' if sex == 'male' else '女'}性 Stryd 9/3 測試 W′ {m} ± {sd} kJ",
+            "source": f"Ruiz-Alias 2025 業餘{'男' if sex == 'male' else '女'}性 Stryd 9/3 測試無氧容量 {m} ± {sd} kJ",
             "rwc_band_j": [bands[1] * weight, bands[2] * weight] if weight and weight > 0 else None}
 
 

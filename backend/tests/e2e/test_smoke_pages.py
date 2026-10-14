@@ -470,11 +470,13 @@ def test_settings_hides_the_experience_questions_with_a_history(app):
 def test_settings_threshold_confidence(app):
     page, _ = app
     open_page(page, _server.PAGES["settings"] + "#thresholds")          # 生理數據 tab (SP-213)
-    card = page.locator("#thr-check")
-    expect(card).to_be_visible(timeout=30_000)
-    expect(card).to_contain_text("LTHR")
-    expect(card.locator(".card .v")).not_to_be_empty()
-    # 最大心率 in 心率: the demo athlete's 188 is not believable (a sustained-peak candidate)
+    # SP-488 (R5): the demo athlete's LTHR is 中 with nothing to 套用 — in 標準 (its automatic level) one line
+    # 「可信度中 ?」 beside 目前使用, the card only in 完整 (test_settings_injury_hints_sp488_e2e.py)
+    chip = page.locator('#thr-conf [data-hint-id="ST8"]')
+    expect(chip).to_be_visible(timeout=30_000)
+    expect(chip).to_contain_text("可信度中")
+    expect(page.locator("#thr-check")).to_be_hidden()
+    # 最大心率 in 心率: the demo athlete's 188 is not believable (a sustained-peak candidate) — 低: the card
     hr = page.locator("#hr-check")
     expect(hr).to_be_visible()
     expect(hr.locator("[data-tcapply]").first).to_be_visible()
@@ -590,7 +592,7 @@ def test_tis_charts(app):
     use_power = _json(page, "/api/v1/sync/settings").get("use_power") is not False
     open_page(page, f"{VIEWER}?view=我的訓練&dash=0")
     _viewer_loaded(page)
-    tis = page.locator("#grid section.card", has=page.locator("h2", has_text="有氧／無氧效果"))
+    tis = page.locator("#grid section.card", has=page.locator("h2", has_text="有氧／無氧訓練效果"))
     if not use_power:
         expect(tis).to_have_count(0)
         return

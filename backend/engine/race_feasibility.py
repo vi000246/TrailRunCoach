@@ -99,6 +99,7 @@ import datetime as dt
 import math
 from typing import Callable, Optional
 
+from backend.engine import hints as H
 from backend.i18n import N_, _
 
 LEVELS = ("unknown", "ok", "tight", "over", "late")       # worst last
@@ -107,7 +108,6 @@ LEVEL_LABEL = {"unknown": N_("資料不足"), "ok": N_("來得及"), "tight": N_
 
 STEP = 1.10                  # SP-89 decision 1: ≤ +10 % a week
 RECOVERY_EVERY = 4           # 3:1 — every 4th week a recovery week (no growth)
-RECOVERY_SHARE = 0.65        # projection.py's recovery week (65 % of the 3 before)
 BASE_WEEKS = 4
 WINDOW_DAYS = 21             # Koop: the fitness window closes 2–3 weeks out
 TAPER_WEEKS = 2              # planning.TAPER_DAYS
@@ -395,14 +395,16 @@ def koop_need(line: dict, e) -> Optional[tuple]:
 
 def koop_run(base_h: float, weeks: list[dict], race: dt.date, need: tuple) -> dict:
     """Weeks in Koop's window (from `from_wk` weeks out to the taper) at ≥ the hours, and the
-    longest run of them in a row; recovery weeks at 65 % break a run."""
+    longest run of them in a row; recovery weeks at overview.RECOVERY_WEEK_SHARE (projection.py's
+    recovery week, SP-512) break a run."""
+    from backend.engine import overview as O
     _km, hours, in_row, from_wk = need
     lo = monday_of(race) - dt.timedelta(weeks=from_wk)
     hi = monday_of(race) - dt.timedelta(weeks=TAPER_WEEKS)
     best = run = 0
     peak_h = 0.0
     for w in weeks:
-        h = base_h * STEP ** w["builds"] * (RECOVERY_SHARE if w["recovery"] else 1.0)
+        h = base_h * STEP ** w["builds"] * (O.RECOVERY_WEEK_SHARE if w["recovery"] else 1.0)
         if w["in_window"]:
             peak_h = max(peak_h, h)
         if lo <= w["monday"] < hi:
@@ -623,8 +625,8 @@ def assess(e, line: Optional[dict], today: dt.date, hist: list[dict], summit: Op
 
     if days_to < WINDOW_DAYS:
         check("late", "late", _("只剩 {n} 天：最後 3 週練不出新的體能了，只能減量休息", n=days_to))
-        out["suggestions"].append(_("建議改成 B 或 C 賽，用現在的體能去跑就好，不要臨時猛加量") if e.priority == "A"
-                                  else _("用現在的體能去跑就好，不要臨時猛加量"))
+        out["suggestions"].append(H.tag("PL8", _("建議改成 B 或 C 賽，用現在的體能去跑就好，不要臨時猛加量") if e.priority == "A"
+                                        else _("用現在的體能去跑就好，不要臨時猛加量")))
     if line is None:
         out["checks"].append({"id": "weekly", "level": "unknown", "label": _(LEVEL_LABEL["unknown"]),
                               "text": _("這場比賽沒填距離或預估時間，沒辦法估")})
@@ -651,7 +653,8 @@ def assess(e, line: Optional[dict], today: dt.date, hist: list[dict], summit: Op
             out["src"].append(_(SRC_KOOP))
             txt = _("超馬建議賽前 {w} 週開始，每週練 {h:g} 小時、連續 {n} 週；照推算最多能連續做到 {b} 週（一週最多約 {p:.1f} 小時）",
                     w=need[3], h=need[1], n=need[2], b=kr["best_run"], p=kr["peak_h"])
-            check("hours", "ok" if kr["best_run"] >= need[2] else "tight", txt)
+            check("hours", "ok" if kr["best_run"] >= need[2] else "tight", txt, run=kr["best_run"], need=need[2],
+                  need_h=need[1])
         if not low and base["km"] <= 0:
             check("weekly", "unknown", _("最近 {n} 週沒有跑步或健行紀錄，沒辦法推算", n=BASE_WEEKS))
         elif base["km"] <= 0:
@@ -690,13 +693,13 @@ def assess(e, line: Optional[dict], today: dt.date, hist: list[dict], summit: Op
                 if ratio < WEEK_OVER:
                     s = ratio / ok_at
                     out["downgrade"] = {"km": round(hd["km"] * s), "climb_m": round(hd["climb_m"] * s / 10) * 10}
-                    out["suggestions"].append(_("練量離比賽還遠，可以考慮報短一點的組別：照推算，你大約應付得了一天 {km} km、爬升 {cl} m 的比賽",
-                                                km=out["downgrade"]["km"], cl=out["downgrade"]["climb_m"]))
+                    out["suggestions"].append(H.tag("PL9", _("練量離比賽還遠，可以考慮報短一點的組別：照推算，你大約應付得了一天 {km} km、爬升 {cl} m 的比賽",
+                                                             km=out["downgrade"]["km"], cl=out["downgrade"]["climb_m"])))
                 elif lv == "tight" and days_to >= WINDOW_DAYS:     # late already says 「照現有體能跑」
                     # SP-224: no data supports slowing the first half for runners near the cutoff (SP-198
                     # §2.3: UTMB 2025's slow starters DNF'd more); stop time tracks the finish more
                     # closely than the pacing spread (Martínez-Navarro 2021 r = 0.64; Kerhervé 2015). 推估 wording
-                    out["suggestions"].append(_("照分段的心率上限跑，補給站少停"))
+                    out["suggestions"].append(H.tag("PL9", _("照分段的心率上限跑，補給站少停")))
             if r_cl is not None:
                 # SP-112: the climb as a sub-check — at most tight (推估)
                 lv = "ok" if r_cl >= CLIMB_TIGHT else "tight"
@@ -706,7 +709,8 @@ def assess(e, line: Optional[dict], today: dt.date, hist: list[dict], summit: Op
                     txt += _("：爬升練得比距離少，不到一半（推估）")
                 check("climb", lv, txt, ratio=round(r_cl, 3), tight_below=CLIMB_TIGHT)
                 if lv == "tight" and days_to >= WINDOW_DAYS:
-                    out["suggestions"].append(_("每週多排一些爬坡：長跑挑爬升多的路線"))
+                    # SP-486: how to fix a tight climb (never over) — a reminder, not a class-1 line
+                    out["suggestions"].append(H.tag("PL9", _("每週多排一些爬坡：長跑挑爬升多的路線"), cls=2))
             if need:
                 koop()
         # 跨級 (SP-112): the biggest single day of the last 24 months against the race's hardest day
@@ -725,24 +729,29 @@ def assess(e, line: Optional[dict], today: dt.date, hist: list[dict], summit: Op
                     _("：高一級，可以") if up == 1 else _("：同級或更低"))
             # SP-283: the multiple, shown only — the level stays the classes' (owner 2026-10-06)
             mult = hd_ep / best["ep"] if best["ep"] > 0 else None
+            x2 = None
             if mult is not None:
                 txt += _("。比賽最難那天是你 {m} 個月內最大單日的 {x:.1f} 倍", m=STEP_MONTHS, x=mult)
                 if up == 1 and mult >= STEP_RATIO_WARN:
-                    txt += _("。級數只高一級，但距離和爬升是兩倍以上，建議先有一次 ≥ 比賽 {p:.0f} % 的長天（{p:.0f} % 是推估）",
-                             p=STEP_LONG_SHARE * 100)
+                    x2 = _("。級數只高一級，但距離和爬升是兩倍以上，建議先有一次 ≥ 比賽 {p:.0f} % 的長天（{p:.0f} % 是推估）",
+                           p=STEP_LONG_SHARE * 100)
                 elif up == 0 and mult >= STEP_RATIO_WARN:
                     # owner 2026-10-06 (「照建議」): the same class can hide ×2 too (the wide XXL, XXS)
-                    txt += _("。級數相同，但距離和爬升是兩倍以上，建議先有一次 ≥ 比賽 {p:.0f} % 的長天（{p:.0f} % 是推估）",
-                             p=STEP_LONG_SHARE * 100)
+                    x2 = _("。級數相同，但距離和爬升是兩倍以上，建議先有一次 ≥ 比賽 {p:.0f} % 的長天（{p:.0f} % 是推估）",
+                           p=STEP_LONG_SHARE * 100)
+                if x2:
+                    txt += x2
+                    # SP-486 (PL12, class 1): the × 2 reminder is its own line on the card, in every level
+                    out["x2_note"] = x2.lstrip("。.").strip()
             check("step", lv, txt, race_class=ITRA_CLASSES[rc][0], best_class=ITRA_CLASSES[mc][0], up=up,
-                  best_ep=round(best["ep"], 1), ep_ratio=None if mult is None else round(mult, 2))
+                  best_ep=round(best["ep"], 1), ep_ratio=None if mult is None else round(mult, 2), x2=bool(x2))
             if lv == "over" and not no_data:                 # 等級 0: tight, no 「低一級」 advice (SP-292)
-                out["suggestions"].insert(0, _("先跑一場低一級（{cls}）的比賽，或把這場改成 B／C 賽",
-                                               cls=ITRA_CLASSES[max(0, rc - 1)][0]))
+                out["suggestions"].insert(0, H.tag("PL10", _("先跑一場低一級（{cls}）的比賽，或把這場改成 B／C 賽",
+                                                             cls=ITRA_CLASSES[max(0, rc - 1)][0]), cls=1))
                 # SP-284: milestones and a date, never 「N 年後」
                 ms = step_milestone(e, line, hd, rc, base, today, div)
                 out["milestone"] = ms
-                out["suggestions"].insert(1, ms["text"])
+                out["suggestions"].insert(1, H.tag("PL13", ms["text"]))
                 out["src"].append(_(SRC_MILESTONE))
         # 百岳: the climb rate and the climb power (SP-112 items 6–7) — never over
         if e.kind == "baiyue" and climb is not None:
@@ -772,7 +781,7 @@ def assess(e, line: Optional[dict], today: dt.date, hist: list[dict], summit: Op
                     txt += _("（沒有 GPX，所以假設當天的爬升都在登頂前）")
                 check("cutoff", lv, txt, eta_h=round(eta, 2), cutoff_h=cut)
                 if lv == "over" and not no_data:
-                    out["suggestions"].insert(0, _("預估還沒到山頂就得撤退：這座百岳可能還不適合現在的你。可以換短一點的路線、多排一天，或先不去"))
+                    out["suggestions"].insert(0, H.tag("PL14", _("預估還沒到山頂就得撤退：這座百岳可能還不適合現在的你。可以換短一點的路線、多排一天，或先不去")))
         elif cut and finish is not None:
             # SP-220: a trail race — the calculator's moving time + the stops against the clock-time cutoff
             fin, txt, kw = cutoff_finish(finish, float(line["hours"]), cut)
@@ -780,7 +789,7 @@ def assess(e, line: Optional[dict], today: dt.date, hist: list[dict], summit: Op
             lv = "ok" if r <= CUTOFF_TIGHT else "tight" if r <= 1.0 else "over"
             check("cutoff", lv, txt, finish_h=round(fin, 2), cutoff_h=cut, **kw)
             if lv == "over" and not no_data:
-                out["suggestions"].insert(0, _("預估會超過關門時間：建議報短一點的組別，或這場先不跑"))
+                out["suggestions"].insert(0, H.tag("PL14", _("預估會超過關門時間：建議報短一點的組別，或這場先不跑")))
         elif cut:
             fin = float(line["hours"])
             r = fin / cut
@@ -789,7 +798,7 @@ def assess(e, line: Optional[dict], today: dt.date, hist: list[dict], summit: Op
                                   f=fin, c=cut),
                   finish_h=round(fin, 2), cutoff_h=cut)
             if lv == "over" and not no_data:
-                out["suggestions"].insert(0, _("預估會超過關門時間：建議報短一點的組別，或這場先不跑"))
+                out["suggestions"].insert(0, H.tag("PL14", _("預估會超過關門時間：建議報短一點的組別，或這場先不跑")))
     out["level"] = level
     # SP-292: little data and nothing judged — 「還不知道」 (the card says what is missing), not 「資料不足」
     out["label"] = _(UNKNOWN_LABEL) if low and level == "unknown" else _(LEVEL_LABEL[level])
@@ -916,7 +925,8 @@ def readiness(e, line: Optional[dict], today: dt.date, hist: list[dict], acts: l
             run = run + 1 if w["hours"] >= need[1] else 0
             best = max(best, run)
         check("hours", "ok" if best >= need[2] else "tight",
-              _("超馬建議連續 {k} 週、每週練 {h:g} 小時；最近 {n} 週你連續做到 {b} 週", n=KOOP_WEEKS, b=best, h=need[1], k=need[2]))
+              _("超馬建議連續 {k} 週、每週練 {h:g} 小時；最近 {n} 週你連續做到 {b} 週", n=KOOP_WEEKS, b=best, h=need[1], k=need[2]),
+              run=best, need=need[2], need_h=need[1])
         out["src"].append(_(SRC_KOOP))
     # 4. B2B (multi-day / ≥ 6 h events)
     if B2B.qualifies(e) and e.kind != "road":
@@ -1151,5 +1161,50 @@ def races(plan, ds, today: dt.date, event_id: Optional[str] = None,
         # SP-114: a multi-day 百岳 is judged on the 攻頂日模擬, not the weekly volume (its own module)
         from backend.engine import baiyue_multiday as BM
         BM.apply(r, e, line, today, ds)
+        r["hints"] = card_hints(r)
         out.append(r)
+    return out
+
+
+# ---------------------------------------------------------------------------
+# the card's lines through 提示多寡 (SP-486 = docs/research/ui-hint-audit.md §7 T5)
+# ---------------------------------------------------------------------------
+
+def card_hints(r: dict) -> list[dict]:
+    """The card's lines as hint objects (engine/hints.make; static/feasibility.js puts them through
+    Hints.render — class 1 in one box in every level, at most 3 reminders, the rest in 「詳細」). The pills
+    and the numbers next to them are the verdict, not hints (feasibility.js picks them by level):
+
+      advice   the first suggestion (the main advice, as before) and every class-1 one — 只剩 N 天 (PL8),
+               報短一點的組別 / 有點趕的配速 (PL9), 跳太多 (PL10), 超過關門／撤退 (PL14); the rest (the
+               milestone PL13, a second tight advice) stay in 「詳細」 (feasibility.js lists them there)
+      × 2      PL12, class 1 (the 跨級 check's x2_note)
+      notes    PL6 每日距離爬升缺漏／超馬沒有 GPX (the event list no longer repeats them), PL15 還沒進專項期,
+               PL19 連續賽以哪一段來比, PL20 資料少 (SP-292's data source and 偏樂觀)
+    An untagged suggestion (none today) is PL9, class 1: shown as before. Each fingerprint carries the
+    event id, so a 「知道了」 on one race's line leaves another race's alone."""
+    if r.get("skipped"):
+        return []
+    eid = r.get("event_id") or ""
+    out: list[dict] = []
+
+    def add(hid: str, text, mark: str = "", cls: Optional[int] = None, kind: str = "note") -> None:
+        if text:
+            out.append(H.make(hid, text, cls=cls, fp=H.fingerprint(hid, f"{eid}\x1f{text}"), mark=mark, kind=kind,
+                              event_id=eid))
+
+    for i, s in enumerate(r.get("suggestions") or []):
+        hid = getattr(s, "hint_id", None)
+        hid = hid if hid in H.CATALOG and hid != "RC" else "PL9"
+        cls = getattr(s, "hint_cls", None) or H.CATALOG[hid].cls
+        if i == 0 or cls == 1:
+            add(hid, str(s), "→", cls=cls, kind="advice")
+    add("PL12", r.get("x2_note"), "⚠")
+    for k in ("split_note", "gpx_note"):
+        add("PL6", r.get(k), "⚠")
+    add("PL19", r.get("stretch_note"))
+    src = r.get("data_source") or {}
+    add("PL20", src.get("text"))
+    add("PL20", r.get("optimistic_note"), "⚠")
+    add("PL15", (r.get("readiness") or {}).get("note"))
     return out

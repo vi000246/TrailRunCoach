@@ -97,12 +97,15 @@ def constants() -> dict:
     from backend.engine import workout_steps as WS
     from backend.sync import coros_workouts as CW
     from backend.engine import zones as _Z
+    from backend.engine import intensity_calib as ICAL
+    rpe_k = ICAL.rpe_scale()
     return {
         "ws": {"zones": {k: [list(r) for r in v] for k, v in WS.ZONES.items()},
                "hr_work": {k: list(v) for k, v in WS.HR_WORK.items()},
                "hr_class_band": {k: list(v) for k, v in WS.HR_CLASS_BAND.items()},
                "hr_p": [list(x) for x in WS._HR_P],
-               "none_if": WS.NONE_IF, "easy_f": WS.EASY_F, "walk_kmh": WS.WALK_KMH,
+               # SP-511: the easy-run % CP and the RPE table in effect (engine/intensity_calib.py)
+               "none_if": WS.NONE_IF, "easy_f": ICAL.easy_if(), "walk_kmh": WS.WALK_KMH,
                "dist_pace_default": WS.DIST_PACE_DEFAULT, "z5_frac": WS.Z5_FRAC,
                "kind_label": WS.KIND_LABEL, "type_label": WS.TYPE_LABEL, "no_tpace": WS.no_tpace_text(),
                "max_times": WS.MAX_TIMES, "max_depth": WS.MAX_DEPTH, "max_items": WS.MAX_ITEMS,
@@ -116,7 +119,9 @@ def constants() -> dict:
                "watch": {"hi_tol": _Z.WATCH_HI_TOL, "z5_lo": _Z.Z5_LO, "z5_top": _Z.Z5_TOP},
                "step_name": {str(k): v for k, v in CW.STEP_NAME.items()},
                "rpe": {"min": WS.RPE_MIN, "max": WS.RPE_MAX, "word": {str(k): v for k, v in WS.RPE_WORD.items()},
-                       "frac": {str(k): v for k, v in WS.RPE_FRAC.items()}, "easy_max": WS.RPE_EASY_MAX,
+                       "frac": {str(k): v * rpe_k for k, v in WS.RPE_FRAC.items()},
+                       # a 「負荷」 step's IF on an RPE target: the table as is (workout_steps.load_if)
+                       "frac_default": {str(k): v for k, v in WS.RPE_FRAC.items()}, "easy_max": WS.RPE_EASY_MAX,
                        "hard_min": WS.RPE_HARD_MIN, "max_climb": WS.MAX_CLIMB_M, "limit": WS.RPE_LIMIT},
                # 「負荷」 steps (SP-38): the default TSS → COROS TL conversion (engine/coros_tl.py, 推估)
                "load": _load_table(),

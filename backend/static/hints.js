@@ -69,6 +69,18 @@
     return out;
   }
 
+  /** one mark that is not a sentence in a list (a chip, a badge, a shaded stretch; engine/hints.py `flag`,
+   *  SP-487): §4.4 steps 1–4 without the cap → "show" | "detail" | "hidden". No hint (null) → "show" */
+  function where(h, opts = {}) {
+    if (!h || typeof h !== "object") return "show";
+    const n = norm(h);
+    if (n.cls === 1) return "show";
+    const s = sym(n, opts.level);
+    if (s === "✕") return "hidden";
+    if (s === "▷" || (s === "◐" && !n.smart)) return "detail";
+    return acked(n, opts.acks) ? "detail" : "show";
+  }
+
   const demo = () => ((window.TRC_SESSION || {}).mode === "demo");
   const ackBtn = (h, undo) => (h.ack && h.id && h.fp && !demo()
     ? ` <button type="button" class="hint-ack" data-hint-ack="${esc(h.id)}" data-hint-fp="${esc(h.fp)}"${undo ? ' data-hint-undo="1"' : ""}>${esc(undo ? t("common.hints.unack") : t("common.hints.ack"))}</button>`
@@ -142,5 +154,5 @@ ul.hint-detail{margin:4px 0;padding-left:18px;font-size:12.5px;color:var(--muted
     document.head.appendChild(st);
   }
 
-  window.Hints = { LEVELS, CAP, SETTINGS_HREF, norm, text, sym, filter, render, state, ack, bind };
+  window.Hints = { LEVELS, CAP, SETTINGS_HREF, norm, text, sym, filter, where, render, state, ack, bind };
 })();

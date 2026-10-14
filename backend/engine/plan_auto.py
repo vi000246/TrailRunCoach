@@ -67,7 +67,7 @@ log = logging.getLogger(__name__)
 BIG_TSS_UP = 0.20           # a week's planned TSS + > 20 %
 RACE_GUARD_DAYS = 14        # removing a long / quality / test this close to an A race
 MAX_CHANGED = 3             # > 3 non-reducing changes in the push window
-BIG_TEXT = {"tss": "單週計畫負荷（Load）比上次推送 +20% 以上（推估）",
+BIG_TEXT = {"tss": "單週計畫訓練負荷（Training load）比上次推送 +20% 以上（推估）",
             "race": "A 賽前 14 天內拿掉長跑／強度課／測試（推估）",
             "rpe": "A 賽前 14 天內因為跑後自評延後或降階強度課（推估）",
             "too_hard": N_("A 賽前 14 天內因為輕鬆跑跑成強度課，延後或降階強度課（推估）"),
@@ -84,7 +84,7 @@ CMP = ("day", "kind", "title", "minutes", "target", "detail", "tss", "terrain", 
 STRUCTURE_V = 1
 STRUCTURE_RULE = "structure"
 STRUCTURE_KEYS = frozenset(("minutes", "tss", "target"))
-STRUCTURE_REASON = N_("課表改用推到手錶的結構：時間、負荷（Load）、目標文字照結構寫（一次性）")
+STRUCTURE_REASON = N_("課表改用推到手錶的結構：時間、訓練負荷（Training load）、目標文字照結構寫（一次性）")
 NOTICE_KIND = "notice"
 REJECTED_KEEP = 20
 

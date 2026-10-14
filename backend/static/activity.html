@@ -264,6 +264,7 @@ dialog#exp .row .sp { flex: 1; }
 <dialog id="ed" aria-labelledby="ed-title"></dialog>
 <datalist id="tag-list"></datalist>
 <script src="/api/v1/static/painpicker.js"></script>
+<script src="/api/v1/static/hints.js"></script>
 <script src="/api/v1/static/fitimport.js"></script>
 <script>
 const API = "/api/v1/wko5";
@@ -429,8 +430,9 @@ const CHART_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stro
 function srcBadge(a) {
   if (!a.origin) return "";
   const fill = S.merge && S.merge.primary && ({ coros: "coros", trainingpeaks: "tp" })[S.merge.primary] !== a.origin && a.origin !== "wko5";
-  const tip = T("src_tip", { src: S.originLabels[a.origin] || a.origin }) + (fill ? T("src_fill") : "");
-  return `<span class="badge${fill ? " fill" : ""}" title="${esc(tip)}">${esc(SRC_SHORT[a.origin] || a.origin)}</span>`;
+  const fw = fill ? acWhere("AC4") : "hidden";        // SP-487: the dashed 補資料 mark by 提示多寡
+  const tip = T("src_tip", { src: S.originLabels[a.origin] || a.origin }) + (fw !== "hidden" ? T("src_fill") : "");
+  return `<span class="badge${fw === "show" ? " fill" : ""}" title="${esc(tip)}">${esc(SRC_SHORT[a.origin] || a.origin)}</span>`;
 }
 function painBadge(a) {
   if (!S.pain || a.pain == null) return "";
@@ -655,9 +657,25 @@ const withSurface = (tags, p) => [...(tags || []).filter((t) => !isSurfaceTag(t)
 // and only on 越野跑 / 登山健行 (a.rain_kind: activity_tags.rain_kind; owner 2026-10-07).
 // the user types that make any activity a mountain day (server: activity_tags._MOUNTAIN_TYPES)
 const MOUNTAIN_TYPES = ["hike", "baiyue_group"];
+// R2 (SP-305 §5, SP-487): this is already the rule — 越野跑 / 登山健行 only (rain_kind), 路況 still 未標 —
+// so AC9 (●◐◐) shows it in every level
 const rainHint = (a) => a.rain_kind && a.rain_mm != null && S.rainHintMm != null && a.rain_mm >= S.rainHintMm && !surfaceOf(a) ? a.rain_mm : null;
-const badge = (manual, why) => manual ? `<span class="badge man" title="${esc(T("manual_tip"))}">${esc(T("manual"))}</span>`
+// ---- editor hints (SP-487) ----
+// 提示多寡 on the list and the editor (docs/research/ui-hint-audit.md §1.4, §5 R9; static/hints.js
+// Hints.where): S.hint = Hints.state() ({level, acks}; a failed answer = 標準); no hints.js → as before.
+// The catalog rows (engine/hints.py CATALOG: class, 完整／標準／精簡); test_activity_hints_sp487 keeps them equal.
+const AC_ROWS = { AC4: [3, "●▷✕"], AC5: [3, "●◐✕"], AC8: [3, "●◐✕"] };
+const acWhere = (id, smart = true) => (window.Hints
+  ? Hints.where({ id, cls: AC_ROWS[id][0], show: AC_ROWS[id][1], smart }, S.hint || {}) : "show");
+// AC5: 完整 「自動」 and 「手動」; 標準 only 「手動」 (the select's 「自動（X）」 already says it); 精簡 none
+const badge = (manual, why) => acWhere("AC5", !!manual) !== "show" ? ""
+  : manual ? `<span class="badge man" title="${esc(T("manual_tip"))}">${esc(T("manual"))}</span>`
   : `<span class="badge" title="${esc(why || T("auto_tip"))}">${esc(T("auto"))}</span>`;
+// AC8 / R9: 「再標有杖 N 次…」 only on an activity whose mark the 有杖 vs 沒杖 chart counts (a.pole_chart:
+// the trail runs and hikes — a road run's mark never counts, so never there); 標準 only while its pole
+// mark is still 未標; 精簡 never
+const poleHintShown = (a) => !!a.pole_chart && acWhere("AC8", !polesOf(a)) === "show";
+// ---- end editor hints ----
 function setMsg(t, cls) { const m = $("msg"); if (m) { m.textContent = t; m.className = "msg " + (cls || ""); } }
 
 async function openEditor(key) {
@@ -737,7 +755,8 @@ function renderEditor() {
       <div class="ctl" role="group" aria-label="${esc(T("f_poles"))}">${POLE_OPTS.map((v) =>
         `<button type="button" class="cchip" data-poles="${v}" aria-pressed="${polesOf(a) === v}">${esc(T("poles." + (v || "none")))}</button>`).join("")}${poleFromRace(a)
         ? `<span class="badge" data-pole-race title="${esc(T("poles.by_race_why", { name: a.poles_race || "" }))}">${esc(T("poles.by_race"))}</span>` : ""}</div>
-      <div class="why" data-pole-hint>${poleFromRace(a) ? esc(T("poles.by_race_why", { name: a.poles_race || "" })) + "<br>" : ""}${esc(poleHint())}</div></div>
+      <div class="why" data-pole-hint>${[poleFromRace(a) ? esc(T("poles.by_race_why", { name: a.poles_race || "" })) : "",
+        poleHintShown(a) ? esc(poleHint()) : ""].filter(Boolean).join("<br>")}</div></div>
     <div class="fld"><span class="lab">${esc(T("f_surface"))}${qt(T("help.surface"))}</span>
       <div class="ctl" role="group" aria-label="${esc(T("f_surface"))}">${SURFACE_OPTS.map((v) =>
         `<button type="button" class="cchip" data-surface="${v}" aria-pressed="${surfaceOf(a) === v}">${esc(T("surface." + (v || "none")))}</button>`).join("")}</div>
@@ -1165,12 +1184,13 @@ $("fi-open").addEventListener("click", () => {
   achP.catch(() => {});
   setTab(location.hash === "#achievements" ? "ach" : "acts");
   restorePrefs();
-  const [usePower, pain, region] = await Promise.all([
+  const [usePower, pain, region, hint] = await Promise.all([
     j("/api/v1/sync/settings").then((x) => x.use_power !== false).catch(() => true),
     PainPicker.meta(),                       // null in the demo mode: no pain column, filter or row
     j("/api/v1/region").then((x) => x.region !== "intl").catch(() => true),
+    window.Hints ? Hints.state() : null,     // 提示多寡 (SP-487 editor hints; failed → standard)
   ]);
-  S.usePower = usePower; S.pain = pain; TW = region;
+  S.usePower = usePower; S.pain = pain; TW = region; S.hint = hint;
   document.querySelectorAll("[data-pain-only]").forEach((el) => { el.hidden = !S.pain; });
   renderAchBar(); renderAch();
   try { await loadList(); } catch (e) {

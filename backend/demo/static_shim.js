@@ -413,7 +413,7 @@
               else dur = { type: "load", value: Math.max(L.range[0], tss), rpe: lvl, min: pyRound(m) };
             }
           } else {
-            const v = f(dur.value, "負荷（Load）", L.range[0], L.range[1]);
+            const v = f(dur.value, "訓練負荷（Training load）", L.range[0], L.range[1]);
             dur = v ? { type: "load", value: pyRound(v, 1) } : { type: "open" };
           }
         }
@@ -728,6 +728,9 @@
     const loadIf = (st, r, D) => {
       const d = st.dur, R = D.ws.load.rpe;
       if (d.type === "load" && d.rpe && d.min) return pyRound(Math.max(R.if_range[0], Math.min(R.if_range[1], Math.sqrt(d.value / (100 * d.min / 60)))), 4);
+      // an RPE target (SP-511): the table as is, not the runner's scale — this IF is what the watch gets
+      if ((st.target || {}).type === "rpe") { const P = D.ws.rpe, F = P.frac_default || P.frac, k = (x) => Math.max(P.min, Math.min(P.max, pyRound(x)));
+        const lo = st.target.lo || P.min, hi = st.target.hi || st.target.lo || P.min; return (F[k(lo)] + F[k(hi)]) / 2; }
       return r.frac ? r.frac : (D.ws.none_if[st.kind] ?? 0.7);
     };
     function tlConv(tss, basis, ifv, D) {
@@ -943,7 +946,7 @@
         if (Math.min(...wv) < W.rules.z5_min_rep_s) why.push("5 區每趟 < 2 分（台灣教練）");
         if (v.rest_s > Math.min(...wv) || v.rest_s > W.rules.z5_max_rest_s) why.push("組休比每趟長或 > 3 分");
         const a = wp(v, wv), b = wp(ref, wr);
-        if (b && !(IL.wprime_ratio[0] <= a / b && a / b <= IL.wprime_ratio[1])) why.push(`每趟 W′ 是標準課表的 ${fx(a / b, 2)} 倍（範圍 0.7–1.5）`);
+        if (b && !(IL.wprime_ratio[0] <= a / b && a / b <= IL.wprime_ratio[1])) why.push(`每趟用掉的無氧容量是標準課表的 ${fx(a / b, 2)} 倍（範圍 0.7–1.5）`);
       } else if (!(wv.length === 1 && !v.rest_s)) {
         if (Math.min(...wv) < W.rules.z3_min_rep_s) why.push("3 區每趟 < 3 分");
         const ratio = v.rest_s ? (sum(wv) / wv.length) / v.rest_s : null;
@@ -1085,7 +1088,7 @@
       if (res.some(([, r]) => r.need === "tpace")) lost.push(D.ws.no_tpace);
       if (unrolled) lost.push("「最後一趟不休息」或重複裡的重複：COROS 群組做不到，推送時攤平成一段一段");
       if (dist) lost.push("距離段：COROS 欄位（公分）依第三方整理，這個 app 還沒實際送過（未驗證）");
-      if (res.some(([st]) => st.dur.type === "load")) lost.push(`「${D.ws.load.label}」段：這裡填的是負荷（Load），推到 COROS 換算成它的 TL（推估，誤差約 ±20 %；每次同步後用你的活動重新校正）`);
+      if (res.some(([st]) => st.dur.type === "load")) lost.push(`「${D.ws.load.label}」段：這裡填的是訓練負荷（Training load），推到 COROS 換算成它的 TL（推估，誤差約 ±20 %；每次同步後用你的活動重新校正）`);
       if (n > D.ws.coros_max_steps) lost.push(`${n} 段超過 ${D.ws.coros_max_steps} 段：COROS 的上限未驗證`);
       return { lines, n, limits, lost, seconds: total };
     }

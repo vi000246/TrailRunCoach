@@ -220,7 +220,7 @@ def test_fatigue_two_reds_no_longer_trigger_sp398():
 def test_fatigue_tsb_and_ramp_still_act_with_two_reds_sp398():
     reds = [_red("easy1", "2026-09-28", 1), _red("easy2", "2026-09-29", 2)]
     gw = lambda: week([g("quality", "quality", "2026-10-01", 60), g("easy3", "easy", "2026-10-02", 50)])  # noqa: E731
-    for load, why in (({"tsb": -35}, "狀況（Form）-35 < -30"), ({"ramp": 8.5}, "")):
+    for load, why in (({"tsb": -35}, "負荷平衡（Load balance）-35 < -30"), ({"ramp": 8.5}, "")):
         out, adj, _ = A.adapt(gw(), reds, ctx(load=load))
         assert "quality" not in ids(out) and ids(out)["easy3"]["minutes"] == 40
         fat = [a for a in adj if a["rule"] == "fatigue"]

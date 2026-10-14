@@ -1,6 +1,7 @@
 """
 SP-95: B and C races change their weeks (engine/post_race.py): a B race's week at 75 % with no long
-run, no interval 5 days / no tempo or long run 4 days before it, the race as the week's key session,
+run, no interval 5 days / no tempo or long run 4 days before it, the race as the week's key session (a mark
+on the day, not a session — SP-504),
 the recovery after it by event size (短 3 / 中 5 / 馬拉松級+ = the A recovery), a C race in place of a
 quality session or the long run, the hints; week_plan and the projection use the same rules.
 (Two A races < 12 / < 8 weeks apart: test_post_race.py.) Synthetic.
@@ -47,14 +48,14 @@ def test_b_race_week_rules():
           s("long", "long", "2026-10-18", 120),                             # race week: no long run
           s("easy1", "easy", "2026-10-17"),                                 # the race day: goes
           s("strength1", "strength", "2026-10-15", 35)]
-    notes = []
-    out = PR.bc_apply(ss, [b], MON, notes)
+    notes, marks = [], []
+    out = PR.bc_apply(ss, [b], MON, notes, races=marks)
     by = {x["day"]: x for x in out}
     assert by["2026-10-12"]["kind"] == "easy" and by["2026-10-13"]["kind"] == "easy"
     assert by["2026-10-18"]["kind"] == "easy" and by["2026-10-18"]["minutes"] <= PR.B_EASY_MAX
-    race = by["2026-10-17"]
-    assert race["kind"] == "race" and race["minutes"] == 180 and "B 賽事：b" in race["title"]
-    assert sum(1 for x in out if x["day"] == "2026-10-17") == 1
+    # SP-504: the race day holds no session; the race is a mark with its predicted time
+    assert not [x for x in out if x["day"] == "2026-10-17"]
+    assert [(m["day"], m["priority"], m["name"], m["minutes"]) for m in marks] == [("2026-10-17", "B", "b", 180)]
     assert any("B 賽事「b」10/17" in n["text"] and "重點課" in n["text"] for n in notes)
     # a tempo 5 days out stays (only intervals are out that day)
     out = PR.bc_apply([s("quality", "quality", "2026-10-12", 60, title="節奏跑 2×10")], [b], MON)
@@ -83,10 +84,10 @@ def test_b_recovery_by_size(kw, days, a_like):
 def test_c_race_replaces_a_quality_or_the_long_run():
     ss = [s("long", "long", "2026-10-18", 120), s("quality", "quality", "2026-10-14", 60),
           s("easy1", "easy", "2026-10-17")]
-    notes = []
-    out = PR.bc_apply([dict(x) for x in ss], [ev("c", "2026-10-17", "C", **SHORT)], MON, notes)
+    notes, marks = [], []
+    out = PR.bc_apply([dict(x) for x in ss], [ev("c", "2026-10-17", "C", **SHORT)], MON, notes, races=marks)
     assert not any(x["kind"] == "quality" for x in out) and any(x["kind"] == "long" for x in out)
-    assert next(x for x in out if x["kind"] == "race")["day"] == "2026-10-17"
+    assert not any(x["kind"] == "race" for x in out) and [m["day"] for m in marks] == ["2026-10-17"]   # SP-504
     assert next(x for x in out if x["id"] == "easy1")["day"] == "2026-10-14"       # moved to the freed day
     assert "取代這週的一堂強度課" in notes[0]["text"]
     out = PR.bc_apply([dict(x) for x in ss], [ev("c", "2026-10-17", "C", **MEDIUM)], MON, [])
@@ -103,7 +104,7 @@ def test_hints():
     assert not any("長距離" in n["text"] for n in PR.b_hints([a, b2], date(2026, 10, 26)))   # short: fine
     # the CTL down > 10 % over the weeks holding a B race
     ctl = [(MON - dt.timedelta(days=i), 50.0 if i > 20 else 43.0) for i in range(56, -1, -1)]
-    assert any("體能（Fitness）從近 8 週的高點 50 掉到 43" in n["text"] for n in PR.b_hints([ev("x", "2026-09-26", **SHORT)], MON, ctl))
+    assert any("長期訓練負荷（Chronic load）從近 8 週的高點 50 掉到 43" in n["text"] for n in PR.b_hints([ev("x", "2026-09-26", **SHORT)], MON, ctl))
     assert not PR.b_hints([ev("x", "2026-09-26", **SHORT)], MON, [(MON, 50.0), (MON, 48.0)])
 
 
@@ -275,13 +276,14 @@ def test_week_plan_and_projection_with_a_b_race():
     ds.plan = plan
     st = Status(ds, plan, TODAY, prefs=PP.Prefs()).compute()
     wp = O.week_plan(ds, st, TODAY)
-    race = [x for x in wp["sessions"] if x["kind"] == "race"]
-    assert race and race[0]["day"] == "2026-10-03" and "C 賽事" in race[0]["title"]
+    assert not [x for x in wp["sessions"] if x["kind"] == "race"]                  # SP-504: a mark, no session
+    assert [(m["day"], m["priority"]) for m in wp["races"]] == [("2026-10-03", "C")]
     assert any("C 賽事「c」10/3 當訓練跑" in n["text"] for n in wp["notes"])
     weeks = PJ.project_weeks(wp, _phases(plan, TODAY), date(2026, 10, 18), events=plan.events)
     bw = next(w for w in weeks if w["start"] == "2026-10-05")
     assert any("B 賽事「b」10/10" in w and "75%" in w for w in bw["why"])
-    assert any(x["kind"] == "race" and x["day"] == "2026-10-10" for x in bw["sessions"])
+    assert not any(x["kind"] == "race" for x in bw["sessions"])
+    assert [(m["day"], m["priority"]) for m in bw["races"]] == [("2026-10-10", "B")]
     assert not any(x["kind"] == "long" for x in bw["sessions"])
     nxt = next(w for w in weeks if w["start"] == "2026-10-12")
     early = [x for x in nxt["sessions"] if x["day"] <= "2026-10-15" and x["kind"] in O.RUN_KINDS]

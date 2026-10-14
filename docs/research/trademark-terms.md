@@ -2,6 +2,7 @@
 
 > 調查日期：2026-10-12。只做調查，沒有改程式、沒有改 i18n。
 > **實作（2026-10-14，SP-391 分支 `feat/sp391-own-terms`）**：照使用者 2026-10-13 的 Q1 回答換字，中文畫面一律「中文（English）」。WKO5 功能本身（Q4）、網址 `/api/v1/wko5`、`~/.wko5coach` 還沒動；聲明放在 README 與兩處對照（TrainingPeaks 來源標籤、體能圖說明），「關於」頁與服務條款（SP-60）另做。防回歸測試：`backend/tests/test_own_terms_sp391.py`。
+> **第二階段（2026-10-14，SP-497 分支 `feat/sp497-garmin-terms`）**：使用者決定把 SP-391 的幾個字比照 Garmin 繁中再改一次，見 §8。§4 的表是 SP-391 當時的建議，現在畫面上的字以 §8.1 為準。
 > 背景：SP-343 第 8 題（`sync-platforms.md` §3.3、§6）。商業版開放註冊（SP-390）前，畫面、匯出、手錶課表、說明文字裡用到別人註冊商標的地方要先整理。
 > **標記**：**已驗證**＝今天讀了一手頁面或程式碼，引句逐字吻合；**摘要**＝搜尋引擎摘要、第三方鏡像站（Justia、uspto.report、Trademarkia）或 repo 內其他調查文件的轉述；**推估**＝我的推論；**未找到來源**＝查過，寫出試過什麼。
 > **怎麼查的**：
@@ -448,6 +449,77 @@
 **規模**：M，約 2–3 天。第 1 輪約半天；第 2 輪約 1.5 天，長句要人工看語氣，順便統一「狀況／狀態／新鮮度」；第 3 輪約半天，加上關於頁另算。i18n 的 SP-78 正在補英文，**最好在 SP-78 繼續往下翻之前先做第 1、2 輪**，免得英文翻好又要改一次。
 
 ---
+
+
+## 8. SP-497：比照 Garmin 繁中的第二階段（2026-10-14）
+
+> 起因：使用者 2026-10-14 問「那些翻譯如果是自己翻譯的，能不能比照 Garmin」、「你確定中文也是商標嗎」。
+> 調查日期 2026-10-14；標記規則同本文件開頭（已驗證／摘要／推估／未找到來源）。
+> 完整調查筆記（含每一句引文與網址）放在工作區 `scratchpad/sp497/terms-vs-garmin.md`，沒有進 repo；這一節是整理後的結論。
+
+### 8.1 定案用語（使用者 2026-10-14）
+
+格式不變：中文畫面「中文（English）」；緊湊數值 chip、手錶步驟名稱、ICS 只寫中文，維持短稱「負荷 64」。
+
+| SP-391 | SP-497（現在） | Garmin 繁中 | COROS 繁中 | 備註 |
+|---|---|---|---|---|
+| 負荷（Load） | **訓練負荷（Training load）**；chip／手錶／ICS 仍是「負荷 n」 | 運動負荷／運動負荷分數（每次活動，EPOC）；舊款「訓練負荷」是 7 天總和 | 訓練負荷（TL，每次活動） | 已驗證（Garmin Edge 540、fēnix 9、tactix 7 繁中手冊；COROS 台灣幫助中心） |
+| 功率負荷／配速負荷／心率負荷 | **不改** | 沒有對應 | 沒有對應 | 子類名稱維持短的「X 負荷」，好讀 |
+| 體能（Fitness） | **長期訓練負荷（Chronic load）**，短稱「長期負荷」 | 長期訓練負荷（只出現在負荷比的定義） | 基礎體能（長期負荷，42 天） | 已驗證 |
+| 疲勞（Fatigue） | **短期負荷（Acute load）** | 短期負荷（Acute Load） | 刺激負荷（說明中心）；COROS 的「負荷疲勞」是另一個 0–100 的指標 | 已驗證；避開 COROS「疲勞」撞名 |
+| 狀況（Form） | **負荷平衡（Load balance）**＝長期訓練負荷 − 短期負荷：正＝有餘裕，負＝還在累積疲勞 | 沒有對應（「訓練狀態」是分類；「體能表現狀況」是跑步中的即時數字） | 最接近的是「負荷疲勞」，算法與刻度不同 | 已驗證 |
+| 狀況 %（Form %） | **負荷平衡 %（Load balance %）** | 沒有對應 | 沒有對應 | |
+| 負荷比（Load ratio） | 不改；定義寫「短期負荷 ÷ 長期訓練負荷」，英文 "Load ratio (acute ÷ chronic)" | 負荷比（Load Ratio），最佳 0.8–1.4 | 強度趨勢 | 已驗證；我們的區間門檻和 Garmin 不同 |
+| 體能週增量（Fitness ramp） | **長期負荷週增量（Chronic load ramp）** | 沒有對應 | 沒有對應 | |
+| 體能圖（Fitness chart）；dashboard「負荷與體能」 | **訓練負荷圖（Training load chart）**；dashboard「訓練負荷（Training load）」 | 沒有對應 | 沒有固定名稱 | |
+| 強度比（Intensity）、加權功率（Weighted power） | **不改** | 強度係數、標準化功率（TrainingPeaks 商標 IF®、NP® 的直譯，Garmin 有授權） | 沒有對應 | 不要照抄 Garmin（§8.2） |
+| 模型閾值功率 | 不改 | 功能閾值功率（FTP） | 沒有功率的對應 | |
+| 有氧／無氧效果 | **有氧／無氧訓練效果（Aerobic / Anaerobic training effect）**；副標「1–10，跟手錶的 0–5 不同」；說明寫「算法參考 WKO5 的 TIS」 | 有氧／無氧訓練效果（0–5，Firstbeat 技術） | 有氧和無氧訓練效果（0–5+） | 名稱和手錶一樣、刻度不同，所以卡片上一定寫 1–10 與手錶不同 |
+| W′ | **無氧容量（Anaerobic capacity）** | 沒有對應 | 沒有對應 | |
+| W′ 電池（W′ balance） | **無氧儲備（Anaerobic reserve）** | 最接近的是「即時體力」（不同模型） | COROS「體力」是恢復計時，意思不同 | 「電池」容易聯想 Garmin Body Battery™，改名後不再有這個問題 |
+
+Form 區間英文名（High Risk／Optimal／Grey Zone／Fresh／Transition）與中文區間名照舊。
+
+### 8.2 商標查核（2026-10-14）
+
+**官方檢索沒查成**：USPTO Trademark Search（防機器人驗證，對照組 TRAININGPEAKS 也是 0 筆，結果無效）、USPTO TSDR（HTTP 500）、TIPO 商標檢索（新網址 https://cloud.tipo.gov.tw/S282/S282WV1/ ，查詢要送出表單，這次沒送）、英國 IPO（Captcha）。以下美國結果來自 Trademarkia 鏡像，標「摘要」。
+
+**美國（Trademarkia 鏡像，完全同名比對，摘要）**
+
+| 查的字 | 結果 |
+|---|---|
+| TRAINING EFFECT | 0 筆。Firstbeat Technologies Oy 名下只有 FIRSTBEAT 等，沒有 Training Effect；Garmin 2020 年買下 Firstbeat Analytics |
+| TRAINING LOAD／ACUTE LOAD／LOAD RATIO | 0 筆（不完全同名的有 NORMALIZED TRAINING LOAD，Predictive Fitness, Inc.，我們不用這個字） |
+| TRAINING READINESS／TRAINING STATUS／HRV STATUS | 0 筆 |
+| BODY BATTERY | 1 筆：Garmin International, Inc.，2026-02-19 申請，第 9 類，審查中 |
+| WEIGHTED POWER／FITNESS CHART／AEROBIC EFFECT／BASE FITNESS／LOAD IMPACT | 0 筆 |
+| COROS EVOLAB | 已註冊（第 9、14 類） |
+| 對照組 NORMALIZED POWER／INTENSITY FACTOR／TRAINING STRESS SCORE | 各 3 筆，都是 TrainingPeaks, LLC，第 9、41(44)、42 類，已註冊（證明搜尋有效） |
+
+0 筆只代表「沒有完全同名的美國商標」，含這段字的商標（例如加上品牌名）可能漏掉；鏡像資料可能落後官方。
+
+**Garmin 自己的商標聲明**（已驗證）：fēnix 9 英文手冊標 Body Battery™、Garmin Human Performance Lab™，並寫明 Training Stress Score™（TSS）、Intensity Factor™（IF）、Normalized Power™（NP）是 Peaksware, LLC 的商標；**沒有列** Training Effect、Training Load、Acute Load、Load Ratio、Training Status、Training Readiness、HRV Status。Edge 540 繁中手冊同樣寫 TSS／IF／NP「均為 Peaksware, LLC. 商標」。
+
+**台灣**
+
+- 搜尋引擎沒找到「訓練效果」「身體能量指數」「Body Battery」在台灣的註冊或申請紀錄（未找到來源；TIPO 官方檢索沒查成）。
+- 商標權各國分開取得：商標法第 2 條「欲取得商標權…應依本法申請註冊」；侵權以註冊商標為準（第 68 條）；著名商標例外（第 30 條第 1 項第 11 款）（已驗證，全國法規資料庫）。
+- 中外文也比近似：「混淆誤認之虞」審查基準 5.2.6.4（「Fuji」與「富士」）、5.2.10（「TEN BY TEN」與「十乘十」）（已驗證）。所以**直譯對方的商標**（標準化功率、訓練壓力分數、強度係數）有風險，SP-391 不採用是對的。
+- 只描述商品特性的字不得註冊（第 29 條第 1 項第 1 款）；以誠信方法描述自己商品的特性、非作為商標使用者，不受他人商標權拘束（第 36 條第 1 項第 1 款）（已驗證條文）。套到我們（推估）：「訓練負荷」「長期訓練負荷」「短期負荷」「負荷比」「訓練效果」這類描述指標的字，當指標名使用風險低。
+- 品牌型的名字（Body Battery™、COROS EvoLab）不拿來當我們的功能名，只能指示性提到。
+
+**還沒查的**：TIPO 官方檢索（要有人用瀏覽器查：訓練效果、Training Effect、短期負荷、負荷比、訓練負荷、標準化功率、訓練壓力分數、強度係數、TrainingPeaks、TSS、Body Battery、身體能量指數，第 9、41、42、44 類；申請人 Garmin、TrainingPeaks、Peaksware、Firstbeat、COROS／高馳）；COROS 中文 App 畫面上的實際字樣。
+
+### 8.3 主要出處（2026-10-14 讀）
+
+- Garmin fēnix 9 繁中「短期負荷」（含負荷比）：https://www8.garmin.com/manuals/webhelp/GUID-708A8F4D-9A78-49CF-9528-DE109BBCC472/ZH-TW/GUID-AEDB0872-C5A1-4378-86D5-2239734B59E8.html
+- Garmin fēnix 7 繁中「訓練狀態」（有氧／無氧訓練效果、負荷比）：https://www8.garmin.com/manuals-apac/webhelp/fenix7series/ZH-TW/GUID-D5E9D73D-DA11-4CD2-939B-918334165717-3680.html
+- Garmin Edge 540 繁中手冊（商標頁、運動負荷、FTP、體力）：https://static.garmin.com/pumac/edge540_OM_ZH-TW.pdf
+- Garmin fēnix 9 英文商標聲明：https://www8.garmin.com/manuals/webhelp/GUID-708A8F4D-9A78-49CF-9528-DE109BBCC472/EN-US/GUID-3197A9A1-B8DC-40D4-A073-4DFC6757A3E8.html
+- COROS 幫助中心〈EvoLab 體能管理系統〉：https://support.corostw.com/COROS-QA/evolab-coros-yun-dong-ke-xue/evolab-ti-neng-guan-li-xi-tong
+- COROS Taiwan〈探索體能的奧秘：COROS EvoLab 的核心技術解析〉：https://www.corostw.com/blogs/sports/152379
+- 商標法：https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=J0070001 ；混淆誤認之虞審查基準：https://www.tipo.gov.tw/wSite/public/Attachment/0/f1745832301937.pdf
+- Trademarkia 鏡像（摘要）：https://www.trademarkia.com/search/trademarks?q=%22body%20battery%22 （其他字把 q 換掉）
 
 ## 參考（全部 2026-10-12 查；「摘要」＝搜尋引擎摘要或鏡像站，今天無法直接開啟原頁）
 

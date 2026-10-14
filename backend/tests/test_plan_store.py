@@ -100,7 +100,7 @@ def test_projection_ramp_31_and_cap():
     assert "recovery_week" in modes                                 # 3:1
     i = modes.index("recovery_week", 1)                             # 3 builds, then recovery
     assert modes[i - 3:i] == ["base"] * 3
-    assert weeks[i]["hours"] == pytest.approx(0.65 * sum(w["hours"] for w in weeks[i - 3:i]) / 3)
+    assert weeks[i]["hours"] == pytest.approx(0.70 * sum(w["hours"] for w in weeks[i - 3:i]) / 3)   # SP-512 R1
     assert modes[-1] == "taper"
     taper = weeks[-1]
     # 減量期: one interval by the two-track pick (SP-31) — Zone 5 not open here, so Zone 3's 2×8′ (SP-79: 有氧間歇（巡航）)
@@ -876,27 +876,32 @@ def races(ss, ws="2026-10-05"):
     return [s for s in ss if s["kind"] == "race" and s["state"] == "active" and s["week_start"] == ws]
 
 
-def test_export_claims_the_generators_race_and_reexport_overwrites():
+def test_export_adds_its_own_race_and_reexport_overwrites():
+    """SP-504: the generator's race row (stored before SP-504) is not claimed — the export adds its own
+    row; the old one goes on the next reconcile (the generator has no race session any more)."""
     db = run(make_db())
     inp = inputs(weeks=[race_week()])
     run(PS.plan_reconcile(db, inp, apply=True))
     gen = races(run(PS.load(db)))[0]
     pv = run(PS.upsert_external(db, KEY, race_data(), "2026-09-30", write=False))
-    assert pv["action"] == "claim" and pv["previous"] is None
-    assert races(run(PS.load(db)))[0]["minutes"] == 0                     # the preview wrote nothing
+    assert pv["action"] == "add" and pv["previous"] is None
+    assert [x["uid"] for x in races(run(PS.load(db)))] == [gen["uid"]]        # the preview wrote nothing
     w = run(PS.upsert_external(db, KEY, race_data(), "2026-09-30"))
-    assert w["action"] == "claim"
+    assert w["action"] == "add"
     rs = races(run(PS.load(db)))
-    assert len(rs) == 1 and rs[0]["uid"] == gen["uid"] and rs[0]["ext_key"] == KEY and rs[0]["edited"]
-    assert rs[0]["minutes"] == 90 and rs[0]["steps"]["items"][0]["note"].startswith("→ 補給站")
-    # reconcile keeps it where it is, adds no second race, moves nothing else onto race day
+    mine = next(x for x in rs if x["uid"] != gen["uid"])
+    assert mine["ext_key"] == KEY and mine["edited"] and mine["origin"] == "custom"
+    assert mine["minutes"] == 90 and mine["steps"]["items"][0]["note"].startswith("→ 補給站")
+    # reconcile with today's generator (no race session): the old row goes, the export stays where it
+    # is, nothing else moves onto race day
+    inp = inputs(weeks=[race_week(with_race=False)])
     run(PS.plan_reconcile(db, inp, apply=True))
     ss = run(PS.load(db))
     rs = races(ss)
-    assert len(rs) == 1 and rs[0]["day"] == "2026-10-10" and rs[0]["minutes"] == 90
+    assert len(rs) == 1 and rs[0]["uid"] == mine["uid"] and rs[0]["day"] == "2026-10-10" and rs[0]["minutes"] == 90
     assert not [s for s in ss if s["state"] == "active" and s["day"] == "2026-10-10" and s["kind"] != "race"]
     # the same export: unchanged (updated_at stays); another one: the same row, updated_at moves
-    row = lambda: run(db.execute(select(PlanSession).where(PlanSession.uid == gen["uid"]))).scalar_one()   # noqa: E731
+    row = lambda: run(db.execute(select(PlanSession).where(PlanSession.uid == mine["uid"]))).scalar_one()   # noqa: E731
     t0 = row().updated_at
     assert run(PS.upsert_external(db, KEY, race_data(), "2026-09-30"))["action"] == "unchanged"
     assert row().updated_at == t0
@@ -915,10 +920,13 @@ def test_export_warns_about_an_edit_on_the_schedule_and_comes_back_after_delete(
     assert pv["action"] == "update" and pv["previous"]["user_edited"] is True
     run(PS.upsert_external(db, KEY, race_data(), "2026-09-30"))
     assert run(PS.upsert_external(db, KEY, race_data(), "2026-09-30", write=False))["previous"]["user_edited"] is False
-    # deleted on the 課表 (the claimed generator row: a tombstone) → exporting again restores it
-    assert run(PS.delete(db, s["uid"]))["state"] == "deleted"
+    # deleted on the 課表 (SP-504: the export's own custom row, no claimed generator row — removed) →
+    # exporting again adds it back, beside the old generator row of that day until a reconcile removes it
+    assert run(PS.delete(db, s["uid"]))["state"] == "removed"
     r = run(PS.upsert_external(db, KEY, race_data(), "2026-09-30"))
-    assert r["action"] == "restore" and len(races(run(PS.load(db)))) == 1
+    assert r["action"] == "add" and [x["uid"] for x in races(run(PS.load(db))) if x.get("ext_key")] == [r["session"]["uid"]]
+    run(PS.plan_reconcile(db, inputs(weeks=[race_week(with_race=False)]), apply=True))
+    assert [x["uid"] for x in races(run(PS.load(db)))] == [r["session"]["uid"]]
 
 
 def test_export_without_a_generated_race_blocks_the_later_one():

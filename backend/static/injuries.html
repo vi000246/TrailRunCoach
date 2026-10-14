@@ -107,13 +107,21 @@ dialog form { padding: 14px 16px; display: grid; gap: 10px; }
 .badge.light-yellow { color: var(--warn, #b45309); border-color: currentColor; }
 .badge.light-red { color: var(--err, #b91c1c); border-color: currentColor; }
 .badge.light-walkrun { color: var(--accent, #2563eb); border-color: currentColor; }
+/* SP-488: the pain-monitoring rule — one line; the study under 「詳細」 */
+details.mon { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+details.mon > summary { cursor: pointer; list-style: none; }
+details.mon > summary::-webkit-details-marker { display: none; }
+details.mon .mon-rule { color: var(--text); }
+details.mon .mon-more { color: var(--accent); white-space: nowrap; }
+details.mon .mon-more::after { content: " ▸"; }
+details.mon[open] .mon-more::after { content: " ▾"; }
+details.mon .mon-full { margin-top: 3px; white-space: normal; }
 </style>
 </head>
 <body>
 <script src="/api/v1/static/shell.js" data-page="injuries"></script>
 <header>
   <h1>傷病紀錄<button type="button" class="qtip" aria-label="說明" data-tip="在活動上點「痛」或「中斷」會自動開一筆紀錄（草稿），細節在這裡補。
-嚴重度用「對訓練的影響」：輕＝照練、中＝減量或改練、重＝停跑（推估的分法）。
 好了按「好了」。好了之後同部位又痛，會開新的一筆並標「復發」。
 資料只存在這台電腦：不同步、也不會出現在分享連結。">?</button></h1>
   <span class="meta" id="hdr"></span>
@@ -123,7 +131,7 @@ dialog form { padding: 14px 16px; display: grid; gap: 10px; }
 <main>
   <section class="panel" aria-label="時間軸">
     <div class="ph">
-      <h2>時間軸<button type="button" class="qtip" aria-label="說明" data-tip="灰色長條＝每週的量（可切換），線＝體能（Fitness）。
+      <h2>時間軸<button type="button" class="qtip" aria-label="說明" data-tip="灰色長條＝每週的量（可切換），線＝長期訓練負荷（Chronic load）。
 色帶＝傷病期間：顏色是部位，越深越嚴重；斜線＝還沒好。
 下面的刻度＝活動上點的「痠」（黃）、「痛／中斷」（紅），看得出痛之前有沒有連續痠。
 細線 ACWR 只參考，不預測受傷（Lövdal 2021）。">?</button></h2>
@@ -171,7 +179,7 @@ dialog form { padding: 14px 16px; display: grid; gap: 10px; }
       <span class="msg" id="set-msg"></span>
     </div>
   </details>
-  <div class="foot" id="disc">這不是醫療診斷。持續或加重的疼痛請看醫師或物理治療師。</div>
+  <div class="foot" id="disc" data-hint-id="IJ7">這不是醫療診斷。持續或加重的疼痛請看醫師或物理治療師。</div>
 </main>
 
 <dialog id="dlg" aria-label="傷病紀錄">
@@ -281,7 +289,7 @@ function drawTimeline() {
   }
   for (const w of ws) {
     const v = w[S.metric] || 0; if (!v) continue;
-    const tip = `${ymd(w.week)} 那週<br>${{ run_h: "跑步", desc: "下降", climb: "爬升", trail_h: "越野" }[S.metric]} ${unit === "h" ? v.toFixed(1) : Math.round(v)} ${unit}<br>體能 ${w.ctl ?? "—"}`;
+    const tip = `${ymd(w.week)} 那週<br>${{ run_h: "跑步", desc: "下降", climb: "爬升", trail_h: "越野" }[S.metric]} ${unit === "h" ? v.toFixed(1) : Math.round(v)} ${unit}<br>長期負荷 ${w.ctl ?? "—"}`;
     s += `<rect x="${X(w.week) + 1}" y="${Y(v)}" width="${bw}" height="${plotB - Y(v)}" fill="var(--bar)" data-tip-html="${esc(tip)}"/>`;
   }
   const line = ws.filter((w) => w.ctl != null).map((w) => `${X(w.week) + bw / 2},${YC(w.ctl)}`).join(" ");
@@ -299,7 +307,7 @@ function drawTimeline() {
   // axes
   s += `<line x1="${L}" x2="${W - R}" y1="${plotB}" y2="${plotB}" stroke="var(--line)"/>`;
   s += `<text x="${L - 4}" y="${T + 9}" text-anchor="end">${unit === "h" ? vmax.toFixed(0) : Math.round(vmax)}</text><text x="${L - 4}" y="${plotB}" text-anchor="end">0</text>`;
-  s += `<text x="${W - R + 4}" y="${T + 9}" style="fill:var(--accent)">${Math.round(cmax)}</text><text x="${W - R + 4}" y="${T + 22}" style="fill:var(--accent)">體能</text>`;
+  s += `<text x="${W - R + 4}" y="${T + 9}" style="fill:var(--accent)">${Math.round(cmax)}</text><text x="${W - R + 4}" y="${T + 22}" style="fill:var(--accent)">長期負荷</text>`;
   const step = S.months > 18 ? 6 : S.months > 6 ? 3 : 1;
   const d = new Date(t.begin); d.setDate(1); d.setMonth(d.getMonth() + 1);
   while (d.getTime() < x1) {
@@ -314,7 +322,7 @@ function drawTimeline() {
   hoverable($("tl"));
   const used = [...new Set(t.bands.map((b) => b.area))];
   $("tl-leg").innerHTML = `<span><i style="background:var(--bar)"></i>每週${{ run_h: "跑步時間", desc: "下降", climb: "爬升", trail_h: "越野時間" }[S.metric]}</span>
-    <span><i style="background:var(--accent);height:3px"></i>體能（Fitness）</span>` +
+    <span><i style="background:var(--accent);height:3px"></i>長期訓練負荷（Chronic load）</span>` +
     used.map((a) => `<span><i style="background:${areaCol(a)}"></i>${esc(areaLabel(a))}</span>`).join("") +
     `<span><i style="background:var(--warn);width:3px"></i>痠</span><span><i style="background:var(--err);width:3px"></i>痛／中斷</span>`;
 }
@@ -335,20 +343,29 @@ function renderList() {
     return;
   }
   $("cards").innerHTML = L.map((x) => `<div class="card ${x.status === "draft" ? "draft" : ""} ${S.sel === x.id ? "on" : ""}" data-id="${x.id}">
-      <div class="t"><span class="dot" style="background:${areaCol(x.area)}"></span>${esc(x.label)}${x.category === "illness" ? "" : `<span class="sev ${x.severity}" title="${esc((S.meta?.severity_help || {})[x.severity] || "")}">${esc(x.severity_label)}</span>`}
-        ${x.light ? `<span class="badge light-${esc(x.light.color)}" title="${esc(x.light.reason)}">${esc(x.light.label)}${x.light.phase === "walkrun" ? "・" + esc(walkrunText(x.light)) : ""}</span>` : ""}${x.condition_label ? `<span class="badge" title="${esc((S.meta?.labels || {}).condition || "")}">${esc(x.condition_label)}</span>` : ""}${x.kind === "acute" ? `<span class="badge">急性</span>` : ""}${x.recurrence_of ? `<span class="badge" title="同部位、上次好了 42 天內">復發</span>` : ""}</div>
+      <div class="t"><span class="dot" style="background:${areaCol(x.area)}"></span>${esc(x.label)}${x.category === "illness" ? "" : `<span class="sev ${x.severity}">${esc(x.severity_label)}</span>`}
+        ${x.light ? `<span class="badge light-${esc(x.light.color)}" data-hint-id="IJ1" title="${esc(x.light.reason)}">${esc(x.light.label)}${x.light.phase === "walkrun" ? "・" + esc(walkrunText(x.light)) : ""}</span>` : ""}${x.condition_label ? `<span class="badge" title="${esc((S.meta?.labels || {}).condition || "")}">${esc(x.condition_label)}</span>` : ""}${x.kind === "acute" ? `<span class="badge">急性</span>` : ""}${x.recurrence_of ? `<span class="badge" title="同部位、上次好了 42 天內">復發</span>` : ""}</div>
       <div class="s"><span>${ymd(x.onset_date)} – ${x.status === "resolved" ? ymd(x.resolved_date) : x.category === "illness" ? "還有症狀" : "還沒好"}</span><span>${x.day_n} 天</span>
         ${x.days_off != null ? `<span>停跑 ${x.days_off} 天${x.days_missed == null ? "（自動）" : ""}</span>` : ""}
         ${x.linked ? `<span>${x.linked} 次活動</span>` : ""}${x.pain_max != null ? `<span>最痛 ${x.pain_max}/10</span>` : ""}${x.pause_quality ? `<span>暫停強度課</span>` : ""}</div>
-      ${x.open && x.monitor ? `<div class="s" style="display:block;white-space:normal">${esc(x.monitor)}</div>` : ""}
+      ${x.open && x.monitor ? monitorLine(x) : ""}
       ${x.note ? `<div class="s" title="${esc(x.note)}" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block">${esc(x.note)}</div>` : ""}
       <div class="act">${x.status === "draft" ? `<button class="primary" data-a="edit">補細節</button>` : `<button data-a="edit">編輯</button>`}
         ${x.open ? `<button data-a="resolve">好了</button>` : ""}${walkrunBtn(x)}<button data-a="days">前 21 天</button></div></div>`).join("");
 }
-// SP-272: after a red pain light — 「可以開始走跑」 and the walk-run's stage (texts from the server)
+// SP-488 (audit IJ3): the pain-monitoring rule as one line on the card — always, in every 提示多寡 level;
+// the whole text with its study and limits under 「詳細」 (the server's monitor / monitor_rule, engine/injuries.monitor)
+function monitorLine(x) {
+  const rule = x.monitor_rule || x.monitor;
+  return `<details class="mon" data-hint-id="IJ3"><summary><span class="mon-rule">${esc(rule)}</span>${x.monitor_rule && x.monitor_rule !== x.monitor
+    ? ` <span class="mon-more">詳細</span>` : ""}</summary><div class="mon-full">${esc(x.monitor)}</div></details>`;
+}
+// SP-272: after a red pain light — 「可以開始走跑」 and the walk-run's stage (texts from the server).
+// SP-488 (IJ2): the long help is a ? beside the button (readable on a phone), not the button's hover
 function walkrunBtn(x) {
   const lab = S.meta?.labels || {};
-  return x.open && x.light && x.light.phase === "red" ? `<button data-a="walkrun" title="${esc(lab.walkrun_help || "")}">${esc(lab.walkrun_button || "可以開始走跑")}</button>` : "";
+  return x.open && x.light && x.light.phase === "red" ? `<button data-a="walkrun" data-hint-id="IJ2">${esc(lab.walkrun_button || "可以開始走跑")}</button>`
+    + (lab.walkrun_help ? `<button type="button" class="qtip" aria-label="說明" data-tip="${esc(lab.walkrun_help)}">?</button>` : "") : "";
 }
 function walkrunText(l) {
   const lab = S.meta?.labels || {};
@@ -357,7 +374,7 @@ function walkrunText(l) {
 }
 $("cards").addEventListener("click", async (e) => {
   const b = e.target.closest("button[data-a]"), c = e.target.closest(".card");
-  if (!c) return;
+  if (!c || e.target.closest("details.mon")) return;      // 「詳細」 of the monitoring rule opens in place
   const id = +c.dataset.id;
   if (!b) { pick(id); return; }
   if (b.dataset.a === "edit") openDlg(S.list.find((x) => x.id === id));
@@ -467,7 +484,7 @@ function drawAnalysis() {
 // ---- filters ----------------------------------------------------------------
 function renderFilters() {
   const sv = S.meta.severities;
-  $("an-sev").innerHTML = Object.entries(sv).map(([k, v]) => `<button data-s="${k}" aria-pressed="${S.sev.has(k)}" title="${esc(S.meta.severity_help[k])}">${esc(v)}</button>`).join("");
+  $("an-sev").innerHTML = Object.entries(sv).map(([k, v]) => `<button data-s="${k}" aria-pressed="${S.sev.has(k)}">${esc(v)}</button>`).join("");
   $("an-area").innerHTML = `<option value="">全部部位</option>` + S.meta.areas.map((a) => `<option value="${esc(a.key)}">${esc(a.label)}</option>`).join("");
   $("an-area").value = S.area;
 }

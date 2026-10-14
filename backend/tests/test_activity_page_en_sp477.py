@@ -48,7 +48,7 @@ def test_viewer_catalog_is_english_and_keeps_plurals():
 # what the SP-438 acceptance screenshot (and the SP-477 DOM scan) still showed in Chinese
 SHOT_LITERALS = ("疼痛？", "我的圖表", "張圖", "放大這張圖", "⤢ 放大", "圖例", "路線顏色", "單色", "區間模型",
                  "這一頁看什麼", "左右拖曳選一段", "清除選取", "整趟", "移動配速", "平均心率", "最高心率", "平均功率",
-                 "心率飄移（前後半）", "筆活動", "選日期", "TSS 來源", "達標（在綠框裡）", "W′ 剩多少",
+                 "心率飄移（前後半）", "筆活動", "選日期", "TSS 來源", "達標（在綠框裡）", "無氧儲備",
                  "詳細數字（", "這次（不到", "平常的中間 50%", "越右越快", "趨勢（直線迴歸）", "平均 ± 1 標準差",
                  "第幾趟", "平均功率（W）", "這次中位", "重複路段", "這次沒有經過重複的路段", "路線 →", "貢獻者",
                  "魯地圖</a>", "個建議", "關掉這個建議")
@@ -125,9 +125,9 @@ def test_interval_verdict_offer_in_english():
     with use_locale("en"):
         r = R.review(ds, ds.workouts[0], "interval_verdict")
     assert not r.get("hide")             # an easy run with power and a CP: the 「not an interval session」 card
-    assert r["badge"]["text"] == "Not an interval session" and r["badge"]["sub"] == "Easy run"
+    # SP-513: no bouts → the one sentence (it was a badge + two rows saying the same)
+    assert r["empty"] == "Not an interval session (Easy run, and the plan has no matching intervals)"
     _no_cjk([s["name"] for s in r["series"]] + [r.get("empty")], "間歇判讀 rows")
-    assert "Easy run" in r["series"][0]["data"]["value"]
 
 
 def test_interval_card_memo_is_per_language():

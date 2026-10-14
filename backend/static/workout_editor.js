@@ -534,7 +534,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
     loadIn(st, r, dis) {
       const caps = provCaps(this.ctx), unit = caps ? caps.load_unit : "TL", L = r && r.load, byRpe = !!st.dur.rpe;
       const conv = !L ? "" : unit ? `≈ ${L.tl} ${esc(unit)}（推估 ±${L.err}）` : `≈ ${mmss(L.sec)}（推估）`;
-      const tip = unit ? `這裡填負荷（Load）；推到手錶換算成 ${unit}（用你同步的活動擬合，誤差約 ±20%）。圖表和總時間用負荷 ÷（這段強度比² × 100）換成時間：約 ${L ? mmss(L.sec) : "?"}`
+      const tip = unit ? `這裡填訓練負荷（Training load）；推到手錶換算成 ${unit}（用你同步的活動擬合，誤差約 ±20%）。圖表和總時間用負荷 ÷（這段強度比² × 100）換成時間：約 ${L ? mmss(L.sec) : "?"}`
         : "這個平台沒有負荷結束條件：推送時換成預估時間＝負荷 ÷（這段強度比² × 100）";
       const mode = `<select data-f="lmode" aria-label="${esc(tr("workout.load_mode"))}"${dis}>${opt("tss", tr("workout.load_by_value"), byRpe ? "rpe" : "tss")}${opt("rpe", tr("workout.load_by_rpe"), byRpe ? "rpe" : "tss")}</select>`;
       if (byRpe) {
@@ -610,7 +610,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       this.$("we-stats").innerHTML = t.sec == null ? "" :
         `<span>總時間 <b>${t.est ? "約 " : ""}${mmss(t.sec)}</b>${t.open ? "＋「直到按下計圈」段" : ""}${t.est ? q(`總時間是估的。${t.est_note || ""}`) : ""}</span>` +
         `<span>≥ 88% CP <b>${mmss(t.hard_s)}</b></span>` + (t.z5_s ? `<span>≥ 106% CP（Palladino 5 區）<b>${mmss(t.z5_s)}</b></span>` : "") +
-        `<span>預估負荷（Load）<b>${Math.round(t.tss)}</b>${q(TIP.tss)}</span><span>這天上限 ${esc(cap)}</span>`;
+        `<span>預估訓練負荷（Training load）<b>${Math.round(t.tss)}</b>${q(TIP.tss)}</span><span>這天上限 ${esc(cap)}</span>`;
     }
     issues() {
       const v = this.view || {}, list = v.issues || [];

@@ -1229,7 +1229,7 @@ def derive(ds, today: Optional[dt.date] = None, fetch_weather: bool = True,
         e = test["estimate"]
         short = {"cp2": e["cp"], "w_prime": e["w_prime"], "label": f"偵測到的 CP 測試 {test['date']}（{e['label']}）"}
     elif pdm:
-        short = {"cp2": pdm["mftp"], "w_prime": pdm["frc"], "label": "PD 模型：模型閾值功率 + W′"}
+        short = {"cp2": pdm["mftp"], "w_prime": pdm["frc"], "label": "PD 模型：模型閾值功率 + 無氧容量"}
     else:
         short = None
 

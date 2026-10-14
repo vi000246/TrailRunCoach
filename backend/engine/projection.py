@@ -11,7 +11,7 @@ rolls the same rules forward week by week:
   * base / specific: CTL ramp goal (load_guard.ramp_goal) capped at +10 % (at least
     +0.5 h) of max(4-week mean, last week) over normal weeks (no taper / race / 恢復期 /
     轉換期 week, SP-73); after 3 build weeks a recovery
-    week at 65 % of those 3 (3:1; sources at overview.week_plan's build3)
+    week at overview.RECOVERY_WEEK_SHARE (70 %) of those 3 (3:1; sources at the constant, SP-512)
   * taper 50 % → 40 % of the 6-week mean (sources at overview.week_plan), event week 30 %, recovery 50 %,
     transition 50 % of the 4 weeks before the race's taper (SP-73;
     overview.transition_hours), each easy run <= 60 min
@@ -120,9 +120,9 @@ def week_hours(kind: str, hist: list[float], build: list[bool], ctl0: float, r: 
     why: list[str] = []
     if kind in ("base", "specific"):
         if kind == "base" and len(build) >= 3 and all(build[-3:]):
-            recovery = "連續 3 週加量後的恢復週（前 3 週平均的 65%）"
+            recovery = f"連續 3 週加量後的恢復週（前 3 週平均的 {O.RECOVERY_WEEK_SHARE:.0%}）"
         if recovery:
-            h = 0.65 * statistics.mean(hist[-3:])
+            h = O.RECOVERY_WEEK_SHARE * statistics.mean(hist[-3:])     # SP-512: overview's share
             return h, "recovery_week", [recovery]
         f7 = 1.0 - (1.0 - 1.0 / cc) ** 7
         goal = LG.ramp_goal(kind, ctl0)
@@ -131,7 +131,7 @@ def week_hours(kind: str, hist: list[float], build: list[bool], ctl0: float, r: 
         h = min(max(need_h, base4), cap)
         if floor:
             h = cap                         # SP-288: the ramp steps by the volume rule (as week_plan)
-        why.append(f"體能（Fitness）{ctl0:.0f} 每週 +{goal:.1f}，上限 +10%（至少 +0.5 h）→ {h:.1f} h")
+        why.append(f"長期訓練負荷（Chronic load）{ctl0:.0f} 每週 +{goal:.1f}，上限 +10%（至少 +0.5 h）→ {h:.1f} h")
         return h, kind, why
     if kind == "taper":
         base6 = statistics.mean(hist[-6:]) if hist else 0.0
@@ -375,7 +375,7 @@ def _place(ss: list[dict], monday: dt.date, long_wd: int, blocked=frozenset(),
             r = AT.pick_day(free, long_day, [], aet_days, weekend_ok=not AT.is_short(s))
             if r["day"] is None:
                 if notes is not None:
-                    notes.append({"level": "info", "text": r["note"]})
+                    notes.append({"level": "info", "src": "test_day", "text": r["note"]})
                 continue
             s["day"] = r["day"].isoformat()
             free.remove(r["day"])
@@ -808,10 +808,12 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
         # 賽後的日子 (SP-98): the same rule as week_plan (post_race.apply)
         ss = PR_.apply(ss, PR_.a_windows(phases, events, week), week, notes, blocked=set(bmap),
                        easy_target=tgt.get("z2", ""))
-        # B / C races (SP-95): the same rules as week_plan (post_race.bc_apply / b_hints)
+        # B / C races (SP-95): the same rules as week_plan (post_race.bc_apply / b_hints); the race a mark
+        # with its predicted load, not a session (SP-504)
+        race_marks: list[dict] = []
         ss = PR_.bc_apply(ss, events or (), week, notes, blocked=set(bmap),
                           rate=float((cur.get("tss_per_category") or {}).get("trail") or tph),
-                          easy_target=tgt.get("z2", ""))
+                          easy_target=tgt.get("z2", ""), races=race_marks)
         notes.extend(PR_.b_hints(events or (), week, phases=phases))     # SP-280: the planned 減量期
         # 依傷別迴避課型 (SP-270): the same pass as week_plan (overview.condition_apply)
         if inj_rule is not None:
@@ -884,6 +886,9 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
         for s in ss:
             if s["day"]:
                 by_day[s["day"]] = by_day.get(s["day"], 0.0) + s["tss"]
+        for m in race_marks:               # a B / C race's predicted load counts in the week (SP-504)
+            if _d(m["day"]) <= until:
+                by_day[m["day"]] = by_day.get(m["day"], 0.0) + m["tss"]
         planned = [by_day.get((week + dt.timedelta(days=i)).isoformat(), 0.0) for i in range(7)]
         proj = O.project(ctl, atl, planned, ctlconstant, atlconstant)
         ctl0 = ctl
@@ -893,6 +898,7 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
                     "tss": sum(planned), "ctl_start": ctl0, "ctl_end": ctl,
                     "provisional": week > monday + dt.timedelta(weeks=1), "why": why,
                     "sessions": [s for s in ss if s["day"]],
+                    "races": [m for m in race_marks if _d(m["day"]) <= until],
                     **({"notes": notes} if PR is not None or bmap or (heat_w or {}).get("active")
                        or kind in ("transition", "rebuild") or ph_note or tech.get("planned") is not None or s_note or user_q
                        or bc.get("planned") is not None
@@ -920,7 +926,8 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
         if PR is not None or lost:
             # what the preferences / 不排課日期 actually let through (a hard cap or
             # too few days can leave less)
-            hours = sum(s["minutes"] for s in ss if s["kind"] != "strength" and s["day"]) / 60.0
+            hours = (sum(s["minutes"] for s in ss if s["kind"] != "strength" and s["day"])
+                     + sum(m["minutes"] for m in race_marks)) / 60.0       # the race's time, as its session had (SP-504)
         # a short break (< 6 days, Daniels cat. 1: back to 100 %) doesn't lower the base the next
         # weeks ramp from — the re-entry block handles the longer ones
         h_hist = full_h if lost and mode != "reentry" else hours

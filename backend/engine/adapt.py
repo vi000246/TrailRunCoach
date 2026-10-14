@@ -116,15 +116,15 @@ OVERHARD_STREAK = 2        # 推估 (SP-404): the last two done easy / long runs
 
 SRC_SEILER = "Seiler：easy days easy；不補課屬推估"
 SRC_SPACING = "硬課之間隔 ≥ 2 天：台灣教練（5 區一週最多 2 次、間隔至少 2 天）"
-SRC_OVER = N_("平均功率 > 80% CP（z2 上限，Palladino）或負荷（Load）> 計畫 +20%（TrainingPeaks 達成度綠燈帶），"
+SRC_OVER = N_("平均功率 > 80% CP（z2 上限，Palladino）或訓練負荷（Training load）> 計畫 +20%（TrainingPeaks 達成度綠燈帶），"
               "任一項；沒有功率時改看平均心率 > LTHR 的 94%（超過 Friel 跑步 Zone 3，推估）；"
               "只標示、不動課表屬推估（使用者決定 2026-10-06）")
 SRC_TOO_HARD = N_("課別分類（Zone 3 閾值或更強）跑成強度課，就當成一堂強度課：Seiler「easy days easy」；"
                   "用課別分類當「太強」的界線屬推估")
 OVERHARD_RULE = "overhard"
-SRC_FATIGUE = ("體能週增量（Fitness ramp）到擋線（min(10, max(5, 體能的 15%))，Friel 5–8／10 換算，推估）；"
-               "狀況（Form）< −30（Friel／TrainingPeaks）；連續 2 堂輕鬆課跑太強、減 20% 推估")
-SRC_B2B = "Johnston（UA）B2B 後「three or four light days」；B2B 造成的狀況（Form）下降不觸發減量為推估"
+SRC_FATIGUE = ("長期負荷週增量（Chronic load ramp）到擋線（min(10, max(5, 長期負荷的 15%))，Friel 5–8／10 換算，推估）；"
+               "負荷平衡（Load balance）< −30（Friel／TrainingPeaks）；連續 2 堂輕鬆課跑太強、減 20% 推估")
+SRC_B2B = "Johnston（UA）B2B 後「three or four light days」；B2B 造成的負荷平衡（Load balance）下降不觸發減量為推估"
 SRC_RPE = "跑後自評：Nuuttila 2021（心率恢復了、自覺費力仍偏高）；門檻 Hard 是使用者決定；規則與 1–5 級換算推估"
 RPE_RULE = "rpe_hard"
 
@@ -566,9 +566,9 @@ def _fatigue(wk: _Week, stored: list[dict], ctx: dict, th: dict, out: list) -> N
     b2b_why = _b2b_exempt(ctx.get("b2b"), wk.today) if tsb_hit else None
     if b2b_why:
         _adj(out, "b2b", wk, {"day": wk.today}, "note",
-             f"狀況（Form）{tsb:+.0f} < {TSB_FLOOR:.0f}，但{b2b_why}：這是預期中的下降，不減量（推估）", SRC_B2B)
+             f"負荷平衡（Load balance）{tsb:+.0f} < {TSB_FLOOR:.0f}，但{b2b_why}：這是預期中的下降，不減量（推估）", SRC_B2B)
     if tsb_hit and not b2b_why:
-        why, remove = f"狀況（Form）{tsb:+.0f} < {TSB_FLOOR:.0f}", True
+        why, remove = f"負荷平衡（Load balance）{tsb:+.0f} < {TSB_FLOOR:.0f}", True
     elif LG.ramp_level(ramp, base) == LG.BLOCK and ctx.get("mode") != "reentry":
         # the re-entry block's 50 → 75 → 100 % steps are planned, not overload (detraining.md §6.5, 推估)
         why, remove = LG.ramp_text(ramp, base, LG.BLOCK), True
@@ -630,6 +630,66 @@ def _note_prefixes() -> tuple:
     for p in (NOTE_PREFIX, NOTE_TOO_HARD):
         out += [p, translate(p, "en")]
     return tuple(x for x in out if x)
+
+
+def note_kind(note: Optional[str]) -> Optional[str]:
+    """Which rule D note a done session carries: "over" (偏強, label only) / "too_hard" (太強, the next hard
+    session was looked at), in either language; None for any other note (SP-484: the card's dot / ⚠)."""
+    from backend.i18n import translate
+    n = note or ""
+    if not n:
+        return None
+    if n.startswith(tuple(x for x in (NOTE_TOO_HARD, translate(NOTE_TOO_HARD, "en")) if x)):
+        return "too_hard"
+    if n.startswith(tuple(x for x in (NOTE_PREFIX, translate(NOTE_PREFIX, "en")) if x)):
+        return "over"
+    return None
+
+
+# R3 (docs/research/ui-hint-audit.md §5, SP-484): one 偏強 changes nothing (SP-301) — it is a dot on the card;
+# a habit is worth a week note: 2 of the last 3 done easy runs, or 2 within 7 days, 偏強 or 太強 by rule D.
+# The 3 / 2 / 7 are the audit's (推估); runs older than STREAK_LOOKBACK days no longer count (推估).
+STREAK_LAST = 3
+STREAK_MIN = 2
+STREAK_DAYS = 7
+STREAK_LOOKBACK = 14
+
+
+def overhard_streak(sessions: list[dict], reviews: Optional[dict], today: str) -> Optional[dict]:
+    """R3's 「輕鬆跑連續偏強」: {"n", "of", "days"} when STREAK_MIN of the last STREAK_LAST done easy runs
+    (within STREAK_LOOKBACK days, today included) — or STREAK_MIN of those within STREAK_DAYS — were too hard
+    by rule D (太強: the session class; 偏強: power / TSS / HR, overhard()), else None. A run is judged from
+    its review row (`reviews`, api/plan_sessions._adapt_ctx, by activity index) like _overhard(); one without
+    a row by its stored rule D note (note_kind). `n` / `of` = the too-hard runs / the runs counted,
+    `days` = the too-hard runs' days (the hint's condition)."""
+    reviews = reviews or {}
+    t = _d(today)
+    lo = (t - dt.timedelta(days=STREAK_LOOKBACK - 1)).isoformat()
+    runs = []
+    for s in sessions or ():
+        a = s.get("done_by")
+        if s.get("state") != "done" or s.get("kind") != "easy" or not isinstance(a, dict):
+            continue
+        day = a.get("date") or s.get("day") or ""
+        if not (lo <= day <= today):
+            continue
+        idx = a.get("index")
+        r = reviews.get(idx) if idx in reviews else reviews.get(str(idx))
+        if r is not None:
+            rr = dict(r)
+            if rr.get("tss") is None:
+                rr["tss"] = a.get("tss")
+            hard = bool(too_hard(rr) or overhard(s.get("tss"), rr))
+        else:
+            hard = note_kind(s.get("note")) is not None
+        runs.append((day, a.get("start") or "", hard))
+    runs.sort()
+    week_lo = (t - dt.timedelta(days=STREAK_DAYS - 1)).isoformat()
+    for pick in (runs[-STREAK_LAST:], [r for r in runs if r[0] >= week_lo]):
+        hard = [r[0] for r in pick if r[2]]
+        if len(hard) >= STREAK_MIN:
+            return {"n": len(hard), "of": len(pick), "days": hard}
+    return None
 
 
 def apply_notes(sessions: list[dict], notes: dict) -> None:

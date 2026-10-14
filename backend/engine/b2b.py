@@ -90,7 +90,7 @@ SUGGEST_AHEAD_DAYS = 13        # suggestions for this week and the next (推估:
 # ---- when ------------------------------------------------------------------
 LAST_BEFORE_DAYS = 21          # last B2B day ≥ 3 weeks before the event (vert.run: none in the last 3 wk [190]; Koop 2–3 wk)
 SPACING_DAYS = 14              # 推估: never two B2B weekends < 2 weeks apart
-RECOVERY_SHARE = 0.85          # 推估: last week ≤ 85 % of the 3 before = the 3:1 recovery week (0.65)
+RECOVERY_SHARE = 0.85          # 推估: last week ≤ 85 % of the 3 before = the 3:1 recovery week (overview.RECOVERY_WEEK_SHARE 0.70)
 LONGEST_FRAC = 0.87            # base built: longest 28 d ≥ day 1 × 0.87 (1 / 1.15, the app's +15 % step)
 TSB_MIN = -20.0                # week_plan's 維持量 line
 # ---- structure ----------------------------------------------------------------
@@ -255,7 +255,7 @@ def apply_accepted(info: dict, entry: Optional[dict]) -> dict:
 
 def last_was_recovery(hours: list[float]) -> bool:
     """`hours` = complete weeks, oldest first. The last one is clearly lighter
-    than the 3 before it (the 3:1 recovery week is 0.65 of them; 0.85 推估)."""
+    than the 3 before it (the 3:1 recovery week is overview.RECOVERY_WEEK_SHARE, 0.70, of them; 0.85 推估)."""
     if len(hours) < 4:
         return False
     prev = sum(hours[-4:-1]) / 3.0
@@ -305,7 +305,7 @@ def week_context(*, kind: str, mode: str, monday: dt.date, event: Optional[dict]
         info["blocked"].append("每個 3:1 週期最多一次，排在恢復週後的第一個加量週")
         return info
     if tsb is not None and tsb < TSB_MIN:
-        info["blocked"].append(f"週初狀況（Form）{tsb:+.0f} < {TSB_MIN:.0f}：先恢復")
+        info["blocked"].append(f"週初負荷平衡（Load balance）{tsb:+.0f} < {TSB_MIN:.0f}：先恢復")
         return info
     if LG.ramp_level(ramp, ramp_base) == LG.BLOCK:
         info["blocked"].append(LG.ramp_text(ramp, ramp_base, LG.BLOCK))
@@ -460,7 +460,7 @@ def suggestion(info: Optional[dict], monday: dt.date, long_day: Optional[str] = 
             "help": (f"專項期、恢復週後的第一個加量週，下一場 A 賽事（{ev.get('name') or 'A 賽事'}）"
                      f"{'是多日' if int(ev.get('days') or 1) > 1 else '≥ 6 小時'}。第 1 天是這週的長天，第 2 天約 2/3"
                      f"（CTS 30:20），兩天都心率 ≤ {HP.EASY_CAP}；第 2 天從輕鬆跑的時間扣，這週總量不變（Koop）。"
-                     f"排入後之後 {POST_EASY_DAYS} 天只排輕鬆跑（UA），狀況（Form）下降不改成恢復週（推估）。"
+                     f"排入後之後 {POST_EASY_DAYS} 天只排輕鬆跑（UA），負荷平衡（Load balance）下降不改成恢復週（推估）。"
                      f"你選的兩天會變成你自己的課，自動調整不會動它們。"),
             "src": f"{SRC_WHEN}；{SRC_DAYS}"}
 
@@ -508,10 +508,10 @@ def tsb_exempt(info: Optional[dict], tsb: Optional[float], ramp: Optional[float]
     if LG.ramp_level(ramp, ramp_base) == LG.BLOCK:
         return None
     if info.get("due"):
-        return f"狀況（Form）{tsb:+.0f}：本週有你排入的 B2B，狀況下降是預期的，不改成恢復週、量不砍（推估）"
+        return f"負荷平衡（Load balance）{tsb:+.0f}：本週有你排入的 B2B，負荷平衡下降是預期的，不改成恢復週、量不砍（推估）"
     if info.get("post"):
         p = info["post"]
-        return (f"狀況（Form）{tsb:+.0f}：上週末 B2B（{md(p['start'])}–{md(p['end'])}）造成的預期下降，"
+        return (f"負荷平衡（Load balance）{tsb:+.0f}：上週末 B2B（{md(p['start'])}–{md(p['end'])}）造成的預期下降，"
                 f"只把之後 {POST_EASY_DAYS} 天排輕鬆、不改成恢復週，3:1 照常（推估）")
     return None
 
@@ -535,7 +535,7 @@ def post_note(info: dict) -> Optional[dict]:
         return None
     return {"level": "info", "src": "b2b",
             "text": f"上週末 B2B（{md(p['start'])}–{md(p['end'])}）：到 {md(p['until'])} 只排輕鬆跑和肌力、不排間歇和測試；"
-                    f"狀況（Form）下降是預期的，不改成恢復週，3:1 照常（{SRC_POST}）"}
+                    f"負荷平衡（Load balance）下降是預期的，不改成恢復週，3:1 照常（{SRC_POST}）"}
 
 
 # ---------------------------------------------------------------------------

@@ -11,7 +11,7 @@
 2. 其中 **17 個已經有自動校正**（`engine/calibrate.py` 的註冊項目，§2），**TL 換算和賽後 TSS 校正也已經是「先驗＋本人資料收縮」**。這些不用再規劃。
 3. `generalize-athlete.plan.md` 分過類的是 63 項，`unsourced-rules.md` §0.5 分過的是飄移、賽事功率、課表三張表。**之後新增、還沒分類的主要在課表產生這一塊**（雙軌解鎖、強度預算、CTL 目標、轉換期、專項期、B2B、技術地形、恢復期），約 175 個。
 4. 大多數不該個人化。原因有兩種：改了也不影響課表（顯示用、資料清理用），或是沒有可以量的結果（例如「幾週才解鎖 3 區」沒有對錯可驗）。真正值得做的是 **7 項**（§4.1）。
-5. 查來源時發現 **三處程式引用和原始出處對不上**（§5）：強度預算 20 % 引 Seiler 80/20，但 Seiler 的 80/20 是算「堂數」不是「時間」；恢復週 65 % 比找到的教練說法輕；Daniels「T ≤ 10 %」只找到二手整理。
+5. 查來源時發現 **三處程式引用和原始出處對不上**（§5）：強度預算 20 % 引 Seiler 80/20，但 Seiler 的 80/20 是算「堂數」不是「時間」；恢復週 65 % 比找到的教練說法輕（SP-512 核對：在跑步教練減 20–35 % 的範圍內、比 Uphill Athlete 約減一半輕；R1 再查到 11 個驗證過的來源，最常見減 30 %，改成 70 %，見 §5.2）；Daniels「T ≤ 10 %」只找到二手整理。
 6. 有 **2 個常數已經沒有被引用**，可以刪（§4.4）。
 
 ## 1. 盤點方法與範圍
@@ -90,7 +90,7 @@
 | 週量上限 | max(×1.10, +0.5 h) | `overview.py:988` | 一週最多加多少 | 推估：系統性回顧找不到「10 % 法則」的證據 [169]。spec 原本寫「UA 10 %」，SP-104 已改 | 高 | D |
 | `SEED_DAYS`、`STARTUP_DAYS` | 28、28 天 | `load_guard.py:69-70` | 新使用者的 CTL 起算 | 推估（Coggan：給起始值） | 低（只影響前 4 週） | D |
 | `SHORT_BREAK_MIN` | 3 天 | `load_guard.py:76` | 短中斷豁免 | 推估 | 低 | D |
-| 恢復週 | TSB < −30 → 4 週平均的 60 %；連 3 週加量 → 3 週平均的 65 % | `overview.py:1001-1008` | 恢復週的量 | 3:1 是 Friel／UA 的慣例，其他教練也這樣排 [199][114]，但沒有試驗比較過 3:1 和 2:1 [198]。65 %（減 35 %）在挪威教練減 25–35 % [30]、跑步教練減 20–35 % [194] 的範圍內（教練級，SP-104）。60 % 沒有來源 | **高** | A |
+| 恢復週 | TSB < −30 → 4 週平均的 60 %；連 3 週加量 → 3 週平均的 70 %（SP-512 R1，原 65 %） | `overview.py:1001-1008` | 恢復週的量 | 3:1 是 Friel／UA 的慣例，其他教練也這樣排 [199][114]，但沒有試驗比較過 3:1 和 2:1 [198]。70 %（減 30 %）是 11 個驗證過的教練與做法的眾數和中位數（SP-512 R1；範圍減 10–60 %，UA 登山課表約減一半），原本 65 %。60 % 沒有針對 TSB 的來源（教練給重負荷的深減量在這附近）。程式常數 `RECOVERY_WEEK_SHARE`／`RECOVERY_WEEK_TSB_SHARE`（SP-512，見 §5.2） | **高** | A |
 | 加量週的判斷 | 每週 ≥ 前一週的 0.95 倍，且 > 0.5 h | `overview.py` `build3`、`projection.py` `build` | 判斷「連 3 週加量」→ 恢復週 | 推估，沒有來源（掉 5 % 以內仍算加量）。SP-104 補列 | 中 | D |
 | 減量期 | 近 6 週平均的 50 %，最後 7 天 40 % | `overview.py` `week_plan`（taper）、`projection.py` `week_hours` | 減量期每週的量 | Bosquet 2007、Wang 2023 統合分析：減 41–60 %、減 ≤ 40 % 不夠、保留強度 [206][105]；Pfitzinger 中譯本比賽週減 60 % [459]；徐國峰 8–14 天 [453]（SP-104 補列，最後 7 天 40 % 之前沒列） | 中 | D |
 | 比賽週、恢復期、轉換期 | 30 %、50 %、50 %（`TRANSITION_SHARE`） | `overview.py:347, 1017-1020` | 這幾種週的量 | 轉換期「減量、不全停」有出處：輕艇選手全停 VO2max −10.1 %、減量 −4.8 % [412]；50 % 這個數字仍是推估 | 中 | D |
@@ -189,7 +189,7 @@
 | 1 | **間歇達標判定**：`IN_BAND_TOL` 0.98、`LAST_FADE` 0.05、`TIZ_GOAL` 0.85 | 每一堂間歇都用，直接決定階梯進不進階 | 0.98 換成「1 − 本人 CP 估計的誤差」（CP 測試之間的變動，或 PD 擬合的殘差）；`LAST_FADE` 用本人達標堂的最後一趟落差分布的 P90 | 20 堂間歇（`unsourced-rules.md` §0.5.3 已寫「≥ 20 堂後可調」） | 現值 |
 | 2 | **每週 CTL 目標與增幅線**：`GOAL`、`WATCH_PCT`、`BLOCK_PCT` | 決定每週排幾小時 | 用本人歷史：過去每週的 CTL 增幅，分成「之後 2 週沒有停跑 ≥ 6 天、沒有傷病紀錄」和「有」兩組；注意線取前一組的 P75、擋線取 P90，收縮到現值 | 26 週資料，其中至少 8 週有加量 | 現值（Friel 換算） |
 | 3 | **閾值多久算舊**：`LTHR_FRESH_DAYS` 84、`AET_FRESH_DAYS` 112、`TEST_AGE_DAYS` 56 | 決定 5 區會不會被重新鎖住、多久叫你測一次 | 看本人相鄰兩次測試之間閾值動了多少（bpm／月）。動得慢就拉長，動得快就縮短；上下限 8–24 週 | 3 次同類測試 | 現值 |
-| 4 | **恢復週的量**：60 %、65 % | 每 4 週用一次 | 看本人每次恢復週之後 TSB 有沒有回到 −10 以上、下一週的間歇有沒有達標。沒有 → 往下調 5 個百分點；範圍 50–70 % | 4 次恢復週 | 現值 |
+| 4 | **恢復週的量**：60 %、70 %（SP-512 R1 前是 65 %） | 每 4 週用一次 | 看本人每次恢復週之後 TSB 有沒有回到 −10 以上、下一週的間歇有沒有達標。沒有 → 往下調 5 個百分點；範圍 50–70 %。**SP-512（2026-10-14，使用者選 C）：先不做，數字不動、只更正來源說明；累積 ≥ 4 次恢復週的結果後再評估要不要做** | 4 次恢復週 | 現值 |
 | 5 | **輕鬆跑偏強的心率餘裕**：AeT +3（`OVER_HR_BPM`、`FRIEL_HR_BAND`） | 觸發後會改後面幾天的課 | 3 bpm 換成本人 AeT 聚合估計的標準誤（已經在算，`threshold_estimate.py`），下限 3（Lamberts & Lambert 2009 的日間變異） | 6 個飄移點 | 3 bpm |
 | 6 | **RPE 與沒有目標的步驟的強度**：`RPE_FRAC`、`EASY_F`、`NONE_IF` | 決定計畫 TSS，再影響週量和 TL 換算 | 用本人做完的課：輕鬆跑實際的 % CP 中位數取代 0.78；有 RPE 標記的活動擬合 RPE → % CP | 輕鬆跑 10 次；RPE 每一級 3 次 | 現值 |
 | 7 | **TSS ↔ TL 的預設係數**（給新使用者） | 現在的預設是一位跑者的擬合 | 已經會自動重新擬合；要做的只是把預設標成「單一使用者」並確認新使用者的誤差提示 | — | — |
@@ -247,6 +247,36 @@
 - Bompa & Buzzichelli 2015 沒有給恢復週的百分比（`bompa-periodization-strength.md` 對照表 #2，已驗證）。
 - 結論：這個數字目前沒有一手來源。列在 §4.1 第 4 項用本人資料校正；同時值得去讀 UA 原文確認。
 - 2026-10-05 補（SP-104，`periodization-cross-sport.md` §4.3）：挪威教練恢復週減 25–35 % [30]、跑步教練減 20–35 % [194]，65 %（減 35 %）落在這個範圍的上緣；登山減 50 % [114]、自行車減 40–60 % [199] 比較深。都是教練級，沒有試驗。程式註解和 `SRC_31` 已補上。
+- 2026-10-14 補（SP-512，逐一打開原文核對）：
+  - **已驗證**：跑步教練 Henry Howard（runspirited [194]）「weekly volume is cut by between 20% and 35%」；挪威做法（athletemonitoring.com [30]）每 3–4 週一個「easy week」減量 25–35 %，靠拿掉 1–2 堂、縮短低強度課，**只講冬季兩項、越野滑雪、划船、競速滑冰，比賽季不用**；Uphill Athlete〈Training for Mountaineering〉（Steve House [114]）恢復週「typically 50% of the training volume (time) of the most difficult week」——注意基準是**最重那一週**，不是前 3 週平均。
+  - **未驗證**：UA 論壇〈How to schedule the recovery week〉——網址現在 404，兩次搜尋摘要一致：Scott Johnston 說 50 % 只是大概，重的加量期後減 60 %、輕的減 40 %，不要死守數字。「減 40–60 %」就是這一則，仍只是搜尋摘要。自行車部落格 Roadman（[199]）「40–60% of the preceding build weeks」，文中沒有來源。
+  - **沒找到百分比**：Friel（只找到「每 3 週減量 4–5 天」的課表描述）、Pfitzinger（只找到賽後恢復，不是週期內恢復週）、Daniels；Koop（[211]）只講一段加量最多 6 週，沒講減多少。
+  - 結論：教練說法從「平常的 50 %」到「平常的 65–80 %」都有，依運動別差很多；離 app 最近的跑步教練是 65–80 %，65 % 在範圍內（深的一端）。「研究說 40–60 %、65 % 超出」的前提只對 UA 論壇（未驗證）和自行車部落格成立，**沒有比 65 % 更好的依據**，所以數字不改，只把程式註解、`SRC_31`、spec 和週目標 `?` 的說明改成「推估、沒有研究、教練說法從減 20–35 % 到減一半」。
+  - 回頭點：使用者 2026-10-14 選 C——累積 ≥ 4 次恢復週的結果（之後 TSB 有沒有回到 −10 以上、下一週間歇有沒有達標）後，再評估要不要照 §4.1 第 4 項個人化。
+- 2026-10-14 R1（SP-512，使用者：「減 40–60 太多了，找更多來源，用最多教練使用的那個數字」）：
+  - 逐一打開原文（「已驗證」＝讀到頁面本身）。減幅照各來源自己的基準；有範圍的取中點：
+
+    | # | 來源 | 原文 | 基準 | 代表值（減） |
+    |---|---|---|---|---|
+    | 1 | Henry Howard，RunSpirited（跑步教練）[194] https://www.runspirited.com/single-post/how-runners-should-do-cutback-weeks-in-training | 減 20–35 % | 平常週量 | 27.5 % |
+    | 2 | Jeff Gaudette，RunnersConnect https://runnersconnect.net/why-planned-down-weeks-are-important/ | 「Drop your weekly volume by about 20 to 40% from your recent normal」；每週 25–50 英里約減 30 % | 最近的正常週 | 30 % |
+    | 3 | Laura Norris（跑步教練） https://lauranorrisrunning.com/how-to-effectively-use-cutback-weeks-in-your-training/ | 「approximately 15-25%」 | 平常週量 | 20 % |
+    | 4 | Hillrunner（Ryan） https://www.hillrunner.com/?p=144 | 「reduce your weekly volume by 10-20%」 | 平常週量 | 15 % |
+    | 5 | Whitney Heins，The Mother Runners https://www.themotherrunners.com/the-importance-of-a-down-week-in-running/ | 15–30 %；「typically … about 20 percent」 | 平常週量 | 20 % |
+    | 6 | David Roche，Trail Runner Magazine 2016 https://www.trailrunnermag.com/training/injuries-and-treatment-training/down-weeks-running/ | 3:1（時間有限的業餘）減 20–40 %；職業選手 2:1 減 25–50 %；傳統 15–30 % | 滿量訓練週 | 30 % |
+    | 7 | Alex Nichols，iRunFar 2022 https://www.irunfar.com/taking-a-down-week | 「lower my weekly volume by about 30%」，每 4–6 週 | 平常週量 | 30 % |
+    | 8 | Dave Burgess，USA Triathlon https://www.usatriathlon.org/articles/training-tips/the-importance-of-recovery-weeks-and-rest-days | 「approximately 30% compared to the previous week」 | 前一週 | 30 % |
+    | 9 | 挪威耐力教練，athletemonitoring.com [30] | 減 25–35 %（冬季兩項等，比賽季不用） | 平常週量 | 30 % |
+    | 10 | Uphill Athlete（Steve House）[114]；另〈How to Train for Skiing〉https://uphillathlete.com/skiing/how-to-train-for-skiing/ 「reduces training load by roughly half」 | 最重那週的 50 % | 最重那週 | 50 % |
+    | 11 | Roadman Cycling（Anthony Walsh）[198] https://roadmancycling.com/blog/cycling-rest-week-guide | 減 40–60 % | 加量週 | 50 %（⚠️ 文中說這個範圍取自**減量期（taper）**的統合分析 Wang 2023，不是恢復週的研究） |
+
+  - **未驗證**（只有搜尋摘要，原頁 404／403）：Scott Johnston（UA 論壇）預設減 50 %、輕的區塊減 40 %、重的減 60 %；Jane Mackay（UA 論壇）「最後一個加量週的 50–75 %」（＝減 25–50 %）；RMI Guides「最高那週的 50 %」。另有非教練的 NextGait（減 15–30 %）、ctyeh.com（減 30–50 %）、Slowtwitch 論壇自述（平均週的 20–70 %），不算。
+  - **沒找到百分比**：Daniels（課表用「峰值里程的幾成」，沒有固定的恢復週減幅）、Pfitzinger（書內有減量週，網路上找不到可信的週里程表；只有賽後 5 週回量）、Hal Higdon（step-back 只看長跑）、Greg McMillan（「3 週加、1 週退」，沒給 %）、Matt Fitzgerald、Brad Hudson、Steve Magness、Jason Koop（[211] https://trainright.com/3-weeks-on-1-week-off-training-cycles 只講一段最多 6 週）、Carmichael／CTS、Joe Friel（R&R「3 to 5 days of reduced training load」，沒給 %）、Lydiard、Canova、Bompa。
+  - **研究**（不算進統計）：Smith 2000，*Int J Sports Med* 21(8):573–578，菁英划船：3 週 +30 % 後一週量約 75 %（減 25 %），作者說「insufficient for positive regenerative adaptations」——減 25 % 對超量訓練後不夠。仍沒有比較不同減幅的試驗。
+  - **統計**（11 個已驗證）：代表值 15、20、20、27.5、30、30、30、30、30、50、50 → **眾數 30 %（5 個）、中位數 30 %**、平均 30.2 %、範圍減 10–60 %。拿掉 Roadman（取自減量期）：中位數仍 30 %；加進 3 個未驗證的（50、37.5、50）：中位數仍 30 %；只看 7 位跑步／越野教練：中位數 27.5 %、眾數 30 %。
+  - **換算到程式的基準（前 3 週平均，推估）**：多數來源（7／11）的基準是「平常／最近的正常週」，約等於前 3 週平均，不用換算 → 70 %。「前一週」「最重那週」的基準是最後一個加量週：每週 +10 % 時 3 週是 1、1.1、1.21，平均 1.103，最後一週是平均的 1.21 ÷ 1.103 ≈ 1.10 倍（每週 +5 % 時 ≈ 1.05 倍）→ 減 30 % 約等於前 3 週平均的 73–77 %，UA 的 50 % 約等於 52–55 %。
+  - **改成**：`RECOVERY_WEEK_SHARE` 0.65 → **0.70**（最常見的減 30 %，照「平常週」基準；取 70–77 % 的深的一端，因為 Smith 2000 說減 25 % 不夠）。`RECOVERY_WEEK_TSB_SHARE` **維持 0.60**（負荷平衡 < −30 是已經太累，本來就該比一般恢復週深；驗證過的教練給重負荷的深減量：Gaudette 每週 50 英里以上減 30–40 %、Roche 重負荷 2:1 減 25–50 %、UA 約減一半，減 40 % 在這些範圍內；沒有針對 TSB 的來源，推估）。`projection.week_hours`、`race_feasibility.koop_run` 改讀同一個常數。
+  - 對擁有者課表（NAS 唯讀，2026-10-14）：存好的課表（09-28～11-30）只有 11/16 那週是恢復週；前 3 週 3.6／4.1／4.2 h，平均 3.97 h → 恢復週 2.58 h（約 155 分）→ 2.78 h（約 167 分），**約多 12 分**；長跑是 45 分下限，不變。手錶只推到 10/16，這週沒有推過，不會重推。
 
 ### 5.3 Daniels「T 跑 ≤ 週量 10 %」
 

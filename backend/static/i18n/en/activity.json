@@ -10,7 +10,7 @@
   "help.pack": "Pack carried (kg), used by the Taiwan's 100 Peaks (Baiyue) prediction; blank = not recorded.",
   "help.tags": "Free text, several allowed (30 characters each, up to 20); press Enter after each. The search above finds tags too.",
   "help.terrain": "Road or trail. Auto = by distance and climb; choosing road / trail overrides the rule, \"Auto\" restores it. With the WKO5 source the terrain is the WKO5 workout type; change it in WKO5.",
-  "help.exclude": "Excluding is only a flag: the activity stays in the list (marked \"Excluded\") and its file is not deleted, but it no longer counts in the fitness chart, power curves, race power or charts. A rule excludes likely vehicle rides or impossible power; you can exclude by hand or mark a rule-excluded one as normal.",
+  "help.exclude": "Excluding is only a flag: the activity stays in the list (marked \"Excluded\") and its file is not deleted, but it no longer counts in the training load chart, power curves, race power or charts. A rule excludes likely vehicle rides or impossible power; you can exclude by hand or mark a rule-excluded one as normal.",
   "help.power": "Read only. Stryd power is always used; watch-estimated power only when turned on in Settings — otherwise the power model and power load ignore it, HR and pace are used as usual.",
   "f.q": "Search name, tags, notes, date…",
   "f.q_label": "Search",
@@ -48,7 +48,7 @@
   "col.climb": "Climb m",
   "col.hr": "Avg HR",
   "col.pw": "Avg W",
-  "col.tss": "Load",
+  "col.tss": "Training load",
   "col.rpe": "RPE",
   "col.src": "Source",
   "col.pain": "Pain",
@@ -126,7 +126,7 @@
   "ex.back_auto": "Back to the rule",
   "ex.none": "Not excluded",
   "ex.exclude": "Exclude",
-  "ex.confirm": "Exclude this activity? It stays in the list (marked \"Excluded\") and its file is not deleted, but it no longer counts in the fitness chart, power curves, race power or charts. You can undo it here.",
+  "ex.confirm": "Exclude this activity? It stays in the list (marked \"Excluded\") and its file is not deleted, but it no longer counts in the training load chart, power curves, race power or charts. You can undo it here.",
   "power_unused": " (not used)",
   "power_none": "No power",
   "saving": "Saving…",
@@ -213,5 +213,5 @@
   "dup.unlink": "Back to automatic",
   "dup.saved": "Updated; reload to see it everywhere",
   "archived": "Archived — original file removed",
-  "archived_help": "Older than your activity retention, so its FIT original was removed in the monthly cleanup; distance, time, load and the rest come from the kept summary and still count in the fitness chart and best efforts, but its single-activity charts can no longer be opened."
+  "archived_help": "Older than your activity retention, so its FIT original was removed in the monthly cleanup; distance, time, training load and the rest come from the kept summary and still count in the training load chart and best efforts, but its single-activity charts can no longer be opened."
 }

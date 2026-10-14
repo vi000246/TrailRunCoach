@@ -21,7 +21,7 @@ class CorosProvider(WorkoutProvider):
         distance_steps=True, distance_unit="cm", max_steps=None,
         notes=(N_("功率只收絕對瓦數"), N_("配速：秒／公里（2026-10-02 手錶驗證）"),
                N_("「最後一趟不休息」的重複要攤平"), N_("距離段單位依第三方整理（未驗證）"),
-               N_("負荷（Load）：app 填負荷，送 COROS 的 TL（推估換算）")),
+               N_("訓練負荷（Training load）：app 填負荷，送 COROS 的 TL（推估換算）")),
         end_conditions=("time", "distance", "open", "load"), load_unit="TL")
 
     def build_payload(self, session: dict, thresholds: Optional[dict]) -> dict:

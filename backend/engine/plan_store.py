@@ -24,8 +24,8 @@ KINDS = {"easy": "輕鬆跑", "long": "LSD", "quality": "強度課", "test": "�
          # 課表待確認 (engine/plan_auto.py): a reminder pushed to the watch, not a
          # training session — never done / missed, no TSS, no compliance
          "notice": "課表待確認",
-         # 比賽: the generator's own race-day row (gen_key race, minutes 0) or the 賽事計算機's
-         # export (ext_key racecalc:<event id>, upsert_external) — never added by hand
+         # 比賽: the 賽事計算機's export (ext_key racecalc:<event id>, upsert_external) — never added
+         # by hand; the generator's own race-day row (gen_key race, minutes 0) only before SP-504
          "race": "比賽"}
 NOT_LOAD = ("notice",)
 EDITABLE = ("day", "kind", "title", "minutes", "target", "detail", "terrain", "distance_km", "climb_m",
@@ -399,9 +399,9 @@ def _clean(patch: dict, today: str) -> dict:
         try:
             t = float(patch["tss"])
         except (TypeError, ValueError):
-            raise PlanError(_("負荷（Load）要是數字"))
+            raise PlanError(_("訓練負荷（Training load）要是數字"))
         if not 0 <= t <= 2000:
-            raise PlanError(_("負荷（Load）要在 0–2000"))
+            raise PlanError(_("訓練負荷（Training load）要在 0–2000"))
         out["tss"] = round(t, 1)
     return out
 
@@ -762,11 +762,11 @@ async def upsert_external(db: AsyncSession, ext_key: str, data: dict, today: str
                           athlete_id: int = 1, blocked: Optional[dict] = None, write: bool = True) -> dict:
     """One stored session per `ext_key`, written as the user's own (edited: reconcile keeps it,
     rule 3). The row found, in order: this key's active row (updated); its deleted /
-    superseded row (restored); the generator's own race row of that week (gen_key race, no
-    ext_key — claimed, so the week never shows two races and nothing is pushed to another
-    day); else a new custom row. A race moved to another week (the event's date changed)
-    takes the row along. `write`=False: the preview — nothing is stored.
-    Returns {session, action add | claim | update | restore | unchanged, previous}; previous
+    superseded row (restored); else a new custom row (SP-504: the generator puts no race session on
+    the day any more, so there is none to claim — an old one of a coming day goes on the next
+    reconcile). A race moved to another week (the event's date changed) takes the row along.
+    `write`=False: the preview — nothing is stored.
+    Returns {session, action add | update | restore | unchanged, previous}; previous
     (an earlier export) carries user_edited: changed on the 課表 page since."""
     if not ext_key or len(ext_key) > 64:
         raise PlanError(_("外部 key 不對"))
@@ -783,12 +783,8 @@ async def upsert_external(db: AsyncSession, ext_key: str, data: dict, today: str
                       key=lambda r: r.updated_at or dt.datetime.min, reverse=True)
         row, action = (gone[0], "restore") if gone else (None, None)
     ws = R.monday_of(ch["day"])
-    if row is None and kind == "race":
-        own = sorted((r for r in rows.values() if r.state == "active" and r.origin == "auto" and r.gen_key == "race"
-                      and r.kind == "race" and r.week_start == ws and not getattr(r, "ext_key", None)),
-                     key=lambda r: r.day != ch["day"])
-        row = own[0] if own else None
-        action = "claim" if row is not None else "add"
+    if row is None:
+        action = "add"
     base = to_dict(row) if row is not None else \
         {"uid": R.new_uid(), "gen_key": None, "origin": "custom", "done_by": None, "note": None, "tss": 0.0}
     prev = None

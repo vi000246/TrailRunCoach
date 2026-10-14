@@ -1,6 +1,6 @@
 # Module Spec: ui-hints (提示分類、提示多寡與每頁上限)
 
-> **Last Updated**: 2026-10-13
+> **Last Updated**: 2026-10-14
 > **Status**: Active（共用底層 SP-482；各頁掛上是 SP-483～488）
 > **Domain Layer**: Supporting
 > **Source**: [docs/research/ui-hint-audit.md](../research/ui-hint-audit.md)（SP-305 調查）§1 盤點、§4 提示多寡、§5 聰明顯示、§7 T1
@@ -18,7 +18,7 @@
 | `id` | 盤點表的編號（GL1、OV8b、RC14…，見下方「每個 id」），`backend/engine/hints.py:CATALOG` |
 | `cls` | 1 會改變行動或安全（三段都顯示、不受上限）· 2 有用但不急 · 3 很少用到或重複 |
 | `prio` | §5.2 的排序：1 安全與傷病 · 2 課表已改或要確認 · 3 比賽來不來得及 · 4 資料錯到會讓建議錯 · 5 本週要做的事 · 6 其他解釋 |
-| `smart` | §5 的聰明條件（R1–R16）成立；◐ 只在成立時直接顯示。條件由各頁的單計算（SP-483～488），還沒算的是 `true` |
+| `smart` | §5 的聰明條件（R1–R16）成立；◐ 只在成立時直接顯示。條件由各頁的單計算（SP-483～488），還沒算的是 `true`；總覽週備註的見下方「總覽（SP-483）」 |
 | `show` | 三個符號，依序是完整／標準／精簡：● 直接顯示 · ◐ 條件成立才顯示 · ▷ 收進「詳細」 · ✕ 不顯示 |
 | `ack` | 可以按「知道了」。第 2、3 類都可以；第 1 類只有目錄標 `ack` 的（OV8b B 賽警告，R7） |
 | `fp` | 條件指紋：「知道了」只對同一個指紋有效，條件變了（日期、距離、比賽）就重新出現。沒給就用 id＋文字算 |
@@ -73,7 +73,7 @@
 
 ## 後端怎麼帶
 
-- **週備註**（總覽 `GET /overview/weekplan`、課表 `plan_notes`）：在 API 層把 `{level, src, text}` 加上提示欄位（`hints.note` `:377`；`backend/api/overview.py` weekplan、`backend/api/plan_sessions.py:_plan_notes`）。`src` 對到 OV8a–k（`hints.NOTE_SRC` `:348`）；沒有 src 的 watch／bad 是 OV8k（照抄指標）、info 是 OV8g；不認得的 src 用 OV8，`bad` → 第 1 類。`level` 保留給顏色。B 賽警告（`post_race.b_hints`）帶條件指紋 `fp`（B 賽／A 賽的名稱、日期、距離）。
+- **週備註**（總覽 `GET /overview/weekplan`、課表 `plan_notes`）：在 API 層把 `{level, src, text}` 加上提示欄位（`hints.note`；`backend/api/overview.py` weekplan、`backend/api/plan_sessions.py:_plan_notes`）。`src` 對到 OV8a–k（`hints.NOTE_SRC`）；SP-483 起每則週備註都有 src：「剩下每天都排了」是 `full_week`（OV8g 的第 3 類）、排不進的測試日是 `test_day`（OV8g）、照抄指標是 `indicator`（OV8k，不顯示）；沒有 src 的（舊資料）watch／bad 仍當 OV8k、info 當 OV8g；不認得的 src 用 OV8，`bad` → 第 1 類。`level` 保留給顏色。B 賽警告（`post_race.b_hints`）帶條件指紋 `fp`（B 賽／A 賽的名稱、日期、距離）。
 - **計算機警告**：引擎裡仍是字串，但每句用 `hints.tag(id, text)`（`Tagged`，`str` 的子類，舊的字串比對都照常）標上 id；回應時 `calc.respond`（`backend/engine/racepower/calc.py:792`）把 `warnings`、`course_warnings`、`fuel.warnings` 轉成物件（`/plan`、`/predict`、`/course`、`/course/event/{id}`，靜態示範的 worker 走同一個函式）。沒標的字串（舊存檔、分享）變 id `RC`、照舊顯示；前端 `racepower.html`、`share.html` 兩種格式都吃。
 - 第 1 類的特例（例如可信度低、沒有體重）由產生的地方帶 `cls=1`（`Tagged.hint_cls` 或 `make(cls=)`），`show` 會變成 `●●●`。
 
@@ -81,8 +81,98 @@
 
 | 頁 | 範圍 | 單 |
 |---|---|---|
-| 總覽 → 本週備註 | 全部週備註走 `Hints.render`：第 1 類一個框、最多 3 則提醒、「還有 N 則提醒」、▷ 和知道了的放「詳細」（`backend/static/overview.html:733` `drawNotes`） | SP-482（示範） |
-| 計算機、賽季、活動分析、設定、傷病、總覽其他區塊、課表 | 只帶欄位，畫面還沒照規則 | SP-483～488 |
+| 總覽 → 本週備註 | 全部週備註走 `Hints.render`：第 1 類一個框、最多 3 則提醒、「還有 N 則提醒」、▷ 和知道了的放「詳細」（`backend/static/overview.html:848` `drawNotes`）；`smart` 由 weekplan API 算（見「總覽（SP-483）」） | SP-482、SP-483 |
+| 總覽 → 指標、待辦、5 區、B2B、強度分配、PMC、課卡 hover | 見「總覽（SP-483）」（`overview.html:506` `OVH`） | SP-483 |
+| 課表（SP-484） | 週提醒列走 `Hints.render`（`backend/static/schedule.html:1386` `renderNotes`）：第 1 類一個框、最多 3 則、「還有 N 則提醒」、▷／知道了／條件不成立放「詳細」。課卡照 `window.HINT_STATE`（`Hints.state()`，跟日曆一起要一次）：SC4 規則 D 偏強＝環旁一個小點，理由只在完整當說明行、其他在 hover；SC5 太強＝⚠＋一行說明，三段都顯示；SC7 上坡改走：完整整句當說明行、標準「≥ X% 走」短標籤放在說明行前、精簡只在 hover；說明行最多 1 行（太強可換行）。R3：最近 3 堂輕鬆跑 2 堂偏強（或 7 天內 2 次）→ 本週一則 SC4 週提醒（`api/plan_sessions._streak_note`、`adapt.overhard_streak`），條件指紋＝那幾堂的日期 | SP-484 |
+| 賽季計畫 → 賽事評估卡（SP-486） | pill（PL7）、關門／撤退（PL14）三段都在；數字照等級（`backend/static/feasibility.js` `chipOn`）：跨級「分級 a → b」完整一律、標準在跳 ≥ 2 級或藏 × 2 時、精簡只在跳 ≥ 2 級；EP 倍數（PL11，R13）完整一律、標準 ≥ 2 倍才接在分級後、精簡不顯示；Koop 週時數（PL17）只在完整當數字、其他在「詳細」；其他數字（週量、長天、最大週量、B2B、百岳）完整／標準都在，精簡只留有點趕／不足的。卡下的句子是 `race_feasibility.card_hints`（`backend/engine/race_feasibility.py`）的提示物件走 `Hints.render`：第一條建議和第 1 類建議（PL8 只剩 N 天、PL9 報短組／有點趕的配速、PL10 跳太多、PL14 超過關門）、× 2 提醒（PL12，第 1 類）、PL6、PL15、PL19、PL20；其餘建議（里程碑 PL13、第二條有點趕的建議）照舊在「詳細」。條件指紋帶賽事 id | SP-486 |
+| 比賽計算機結果（結果卡、補給卡、分段卡算一頁） | `static/racehints.js`（`RaceHints.page`）：第 1 類一個框放在結果卡標題下（RC2 照 R1、RC3、RC3w／h、RC6、RC14、RC16、RC19–21，含補給卡的 RC20／RC21）；最多 3 則提醒；方法說明（RC1、RC7、RC8、RC9、RC11、RC15、RC22）和 ▷／條件不成立的放「這次怎麼算的」收合區。R1：`weather.rain_alert` 的 `top`，較小的雨放環境卡一行；R8：分段卡上方一句，逐段只在完整的精簡表；R10：完整每個數字標「推估」、標準每張卡一個「推估 ?」、精簡只在卡片的 `?`；R11：熱適應區塊 ≥ 1 %；R12：RC10 的 `smart`（`planner.extrap_share` ≥ 15 %）；GAP、30 秒功率改成欄名的 `?`；GPX 警告只留上傳處 | SP-485 |
+| 活動列表與編輯、分析頁（單次活動） | 見「活動與分析頁（SP-487）」 | SP-487 |
+| 設定、傷病紀錄、首次精靈（SP-488） | 見「設定與傷病（SP-488）」 | SP-488 |
+
+## 總覽（SP-483，§7 T2）
+
+**週備註的聰明條件**（`hints.week_context` / `hints.week_smart`，weekplan API 算好 `smart`；門檻是推估）：
+
+| id | 規則 | 條件成立（標準直接顯示） |
+|---|---|---|
+| OV5 | R11 | 4–10 月（`HEAT_MONTHS`），或 30 天內有熱天的 A／B 賽（`heat_plan`，weekplan `heat.active`） |
+| OV8f | R7 | 冷啟動的第 1 週（`cold_start.week ≤ 1`） |
+| OV8h | R7 | 目前期別的第一週：開始日在本週，或上週六、日（`PHASE_FIRST_LEAD_D` 2 天，推估） |
+| OV8g | — | 黃色的（watch／bad：少了時數、改排別天）；info 的說明和「剩下每天都排了」（第 3 類）收進「詳細」（推估，依 §1 OV8g） |
+| OV8 | R15 | `easy_power`（輕鬆跑功率帶偏低）那則的測試在 SP-471 的區塊和建議框：不成立，收進「詳細」 |
+
+**頁面上的版面**（`overview.html` 的 `OVH`，node 測試直接跑這段）：
+
+| id | 完整 | 標準 | 精簡 |
+|---|---|---|---|
+| OV1 指標卡 | 全部展開 | 注意／要處理的展開；**已有待辦列的不另外展開**；其餘收成「其他 N 項正常」／「其他 N 項（M 項見待辦）」 | 只展開要處理的（同樣扣掉有待辦列的） |
+| OV6 測試卡 | R5：最大心率／LTHR 可信度低且有 strong 訊號 → 第 1 類，三段都展開；R15：注意／要處理時結論改成「建議做的測試在建議框 →」（點了打開建議框，`AppSuggestions.open`），「安排課表」連結拿掉；SP-503：建議框的測試列（`test`／`baseline`／`zone_test`）都按過「不要」或 ✕ 時，結論、行動和「安排課表」照原樣 | 同左 | 同左 |
+| OV2 待辦 | 拿掉「測試」列（R15；SP-503：建議框沒有測試列、而且有按過「不要」或 ✕ 的測試列時留著，`OVH.testOut`）；本週有 OV8e 時拿掉「強度分配」列（R16） | 同左 | 同左 |
+| OV3 期別重點 | 在待辦 | 收進待辦卡的「詳細」 | 不顯示 |
+| 強度分配卡（R16） | 本週有 OV8e 時結論改成「見本週備註」，只留顏色 | 同左 | 同左 |
+| OV10 5 區卡 | 整條梯子 | 整條梯子 | 整條梯子 |
+| OV10 的註記 | 「本週低強度占比 < 75%」不顯示（R16，OV8e 有）；「建議做一次測試」改成連到建議框（R15；同一張卡的「下一步」已經連到建議框時不重複）；測試的「安排課表」改成「在建議框排入 →」；SP-508：建議框的測試列都按過「不要」或 ✕ 時（`OVH.testOut`），測試註記和「安排課表」照原樣（`OVH.z5For`） | 同左 | 同左 |
+| OV11 B2B 卡 | 建議框有的「本週建議 B2B」那行不顯示，卡片只放數字和判讀 | 同左 | 同左 |
+| OV13 LTHR 先驗標記 | 圖上虛線＋圖例 | 同左 | 只寫在圖的 `?` |
+| OV14 強度分配目標 | 標題旁一行 | 只在 `?` | 不顯示（`?` 用 `split.tip_lean`，不含目標） |
+| OV9 課卡 hover | 做完的課有規則 D 的 note 時加「⚠ …」（和課表頁 `sesspop.js` 一致） | 同左 | 同左 |
+
+**建議框按過「不要」（SP-503）**：`GET /api/v1/overview/plan/suggestions` 多回 `declined: [{id, type, action}]`（還算得出來、但被「不要」或 ✕ 藏起來的列，`engine/suggestions.declined`）；`suggestions.js` 每次 GET 發 `suggestions:loaded {rows, declined}`、按「不要」／✕ 後發 `suggestions:dismissed {id, type, action}`，總覽據此重畫待辦和測試卡。還沒拿到建議框的資料時照 R15。5 區卡的測試連結（OV10）也跟著回到原本的註記和「安排課表」（SP-508：`OVH.z5For(testOut)`，`testOut` 變了就重畫 5 區卡）。
+
+**稍後提醒（SP-507）**：建議框每則建議（`injury_done` 除外，它的「還沒」就是 7 天後再問）在「不要」旁多一顆「稍後提醒」：`POST …/suggestions/dismiss {id, action: snoozed}`，存在同一個 `plan.suggestions.dismissed`（`{action: snoozed, at, until, key, tests}`，`engine/suggestions.record`）。7 天內那則不在建議框；之後條件還成立就回來，但那則建議的測試（CP、AeT、LTHR 30 分、最大心率）在按下後做完了（計畫裡做完的測試課、檢討找到的測試、實測門檻）就不再回來。`key`（`snooze_key`）讓週次 id 的下一週、同種的基線測試一起算。`GET /suggestions` 多回 `snoozed: [{id, type, until}]`；`OVH.testOut` 把稍後提醒的測試當成還在建議框（照 SP-483 不顯示測試列）。建議框裡沒有測試、又有稍後提醒的測試時（`OVH.testLater` = 最早的 `until`），總覽測試卡的結論與 5 區卡的測試註記寫「建議做的測試 10/21 再提醒你」，不指向建議框；這段期間測試卡的建議做法、「安排課表」與 5 區卡的「安排課表」是卡片自己的（`OVH.z5Later`；課表照樣能排，R1）。到期回到建議框後照 SP-483（SP-514）。
+
+**測試的「不要」跨週（SP-515）**：測試建議（`test:<種類>:<週一>`、`baseline:<種類>:<週一>`）按「不要」照測試種類記（`suggestions.decline_key` = `snooze_key`，基線測試與同種的週測試算同一個），之後每週同種測試都不再出現，`prune` 一直留著；✕、B2B 的「不要」照舊只擋當週。之後的週次那列算在 `GET /suggestions` 的 `declined`，所以 SP-503 的待辦測試列照舊回來。恢復在設定頁「提示多寡」下面的「不再建議的測試」（`GET …/suggestions/declined-tests`、`POST …/suggestions/restore {key}`，沒有就不顯示）；建議框測試列的「不要」滑過會說可以在那裡恢復。「不要」不變。只有建議框藏：課表的「排入測試 ▸」照樣列出那個測試、可以排（R1；`GET /test-options`、`POST /suggestions/accept` 不看稍後提醒，`GET /suggestions` 的 `snoozed_tests` 是那些測試的整列，課表 `sugCount` 經 `AppSuggestions.load(fresh, true)` 一起算）。
+
+`quality_gate.z5_flow` 的 5 區解鎖階段多了 `notes: [{kind: pause | empty | intensity | test, text, tip}]`（`note` 照舊）；`Z5Flow.html(flow, {skip, testNote, testAction})` 依此畫，基礎期面板（`wko5_viewer.html`）不帶這些選項，照舊。
+
+**數量**（`backend/tests/e2e/test_overview_hints_sp483_e2e.py`，demo 跑者、A 賽移到 16 週後讓本週是一般基礎期週）：標準 15、精簡 15、完整 33。計算方式寫在該檔開頭；5 區梯子的階段標籤不算（使用者選擇一直顯示，算它的「下一步」）。
+
+## 活動與分析頁（SP-487，§7 T6）
+
+不是一句一句的提示（chip、徽章、灰底、整張卡）用 `hints.flag(id, smart=)`（`backend/engine/hints.py`）帶 `{id, cls, prio, show, smart}`，頁面問 `Hints.where(h, {level, acks})`（`backend/static/hints.js`）：`show`／`detail`／`hidden`（§4.4 第 1–4 步，不套上限）。沒帶的照舊顯示。
+
+| id | 完整 | 標準 | 精簡 | 在哪 |
+|---|---|---|---|---|
+| AC4 來源補資料 | 虛線徽章＋title | 一般徽章，「補資料」只在 title | 一般徽章，不寫補資料 | `activity.html` `srcBadge` |
+| AC5 自動／手動徽章 | 兩種都標 | 只標「手動」 | 都不標 | `activity.html` 「editor hints (SP-487)」區塊 `badge` |
+| AC8 再標有杖 N 次（R9） | 杖比較圖會算的活動（`pole_chart`：越野跑、登山健行）一律顯示 | 同左，而且杖還沒標 | 不顯示 | `poleHintShown`；路跑在三段都沒有（標了也不算） |
+| AC9 下雨標濕路（R2） | 已是 SP-299 的規則：越野跑／登山健行（`rain_kind`）、路況未標 | 同左 | 同左 | `rainHint`，沒改 |
+| AN4 心率可疑 | ● | ● | ● | 飄移卡 chip，`hint` 是第 1 類 |
+| AN5 心率灰底（R6） | 所有旗標都畫 | 只畫突然跳動、跳一階、卡住不動，或跟著步頻走單段 ≥ 60 秒（`key_spans`）；這些加起來 < 整趟有心率時間的 1% 不畫，圖例的 `?` 寫「有 N 秒可能不準」 | 同標準 | `engine/panels/activity_charts.py` `hr_quality_spans`（`HRQ_LOCK_MIN_S`、`HRQ_MIN_SHARE`，推估）；`wko5_viewer.html` `hrqView` |
+| AN6 飄移 chips | 全部 | 只留會改判讀的：溫度 > 25 °C、資料比較雜、AeT+3 以上 > 10%；其餘收進卡片下方「詳細（N）」 | 全部收進「詳細」 | `workout_review.py` 飄移卡的 `chip(smart=)`；`wko5_viewer.html` `chipSplit` |
+| AN8 這次不是 CP 測試 | 不是測試課就不出卡（`hide`） | 同左 | 同左 | `workout_review._cp` |
+| AN10 跑姿頁「參考」 | 只留頁名「跑姿與膝蓋負荷（參考）」；圖表標題、「指標」「判讀」列不再寫 | 同左 | 同左 | `views/workout.json`、`views/i18n/en.json`、`workout_review.py` |
+| AN12 重複路段卡 | 每頁最後都加，含「沒有經過重複的路段」 | 只在預設頁（本次重點）；沒有重複路段就不出卡 | 同標準 | `static/segments_card.js` |
+| AN13 前後半 | 拖曳統計和心率趨勢的數字叫「前後半效率差（含暖身）」（算的是 Pw:HR／Pa:HR 前後半的差，不是 bpm 差；使用者 2026-10-14 拍板），和飄移卡的「心率飄移」分開 | 同左 | 同左 | `viewer.st.drift` |
+
+## 設定與傷病（SP-488，§7 T7）
+
+**設定**（`backend/static/settings.html`）：頁面讀一次 `GET /profile/hint-level`（`loadHintLevel`；回來前和失敗時當標準），在個人資料換等級時整頁馬上重畫（`setLevel` → `applyLevel`）。
+
+| id | 完整 | 標準 | 精簡 |
+|---|---|---|---|
+| ST1 分頁說明（`#tab-note`） | 顯示 | 不顯示 | 不顯示 |
+| ST5 固定說明：地圖 ×2、記住密碼 ×3＋帳密說明、TP 網站登入／條款風險、課表訂閱（說明、Google／iPhone 步驟、網址要連得到） | 文字 | 收進 `?`（一句話的放在它後面，段落和清單放在標題後；`FOLD_Q`、`foldQ`）。「這個網址就是鑰匙」留著 | 同標準 |
+| ST6 最大／靜息心率的來源 | 顯示 | 顯示 | 只在滑過（`dd` 的 title）；沒有值的原因照樣顯示 |
+| ST7／ST8 可信度卡（R5） | 卡片 | 低、或有「套用」時是卡片；中／高收成數值旁一行「· 可信度高 ✓」「· 可信度中 ?」（`?` 裡是訊號和備註；`drawConf`） | 同標準 |
+| ST7／ST8 低而且有 strong 訊號 | 第 1 類：卡片紅框（`.card.must`、`data-hint-cls="1"`），三段都展開 | 同左 | 同左 |
+| ST9 app 和手錶對照卡 | 卡片 | 全部差距 ≤ 5 bpm 時收成一行「手錶設定和 app 一致 ✓」（點開是整張卡和變化紀錄，裡面不再有「詳細」）；超過就是第 1 類的整張卡 | 同標準 |
+| ST10 WKO5 預設值 | 一行紅字：LTHR 正在用 WKO5 出廠值時只在「目前使用」那行說（文字合併）；否則（只有 WKO5 自己是出廠值）在「WKO5 裡的設定」那行 | 同左 | 同左 |
+| ST11 自動估算卡 ×2 | 兩張都顯示 | 和目前用的差 ≥ 1 bpm（有「套用」）的那張顯示，其他收進一行「自動估算：LTHR 和目前一致 ✓、…」（`#thr-more`），「WKO5 裡的設定」也收在裡面 | 全部收進那一行 |
+| ST12 比賽成績「太舊了」 | 顯示 | 顯示 | 只在滑過 |
+| ST4 主要訓練項目「資料建議」 | 顯示 | 顯示 | 只在滑過（下拉選單的 title） |
+| ST15 「只在我的算式生效」 | 只在計算模式區一句（`settings.mode.only_mine`）；資料校正、排除壞掉的活動檔的兩處拿掉，閾值的 `?` 不再提（`thr.help_nomode` 併掉） | 同左 | 同左 |
+
+**數量**（`backend/tests/e2e/test_settings_injury_hints_sp488_e2e.py`，生理數據分頁、mock 成「都一致」的狀態；計算方式寫在該檔開頭）：完整 13（＝改之前的版面）、標準 7、精簡 5。
+
+**傷病紀錄**（`backend/static/injuries.html`）：不看提示多寡，IJ1–IJ3 三段都一樣。
+
+- IJ1 燈號、IJ2「可以開始走跑」：照舊；IJ2 的長說明從按鈕的滑過改成旁邊一顆 `?`。
+- IJ3 疼痛監測：卡片上一行規則（`engine/injuries.monitor` 的 `rule`、清單的 `monitor_rule`，數字直接用 `SILBERNAGEL`／`ESCULIER` 常數，條件和門檻沒有改），研究出處和限制的全文在「詳細」；小腿／脛骨沒選傷別的那句「先給醫師看」留在那一行。
+- IJ6 嚴重度說明只留對話框（`?` 和選項「輕・照練」）；頁首 `?`、卡片 title、分析篩選的 title 拿掉。
+- IJ7 免責聲明只在頁尾。IJ10 `painpicker.js` 的 `HELP` 刪掉。
+
+**首次精靈（GL6，R14）**（`backend/static/setup_wizard.js`）：只在總覽（`home`）和設定跳；其他頁在導覽列下面一行「還缺{體重…}：估算可能不準，到設定填 →」（`common.setup.line`，連到 `設定#general`），條件是體重／性別／年齡還有缺（`setup.needed`），不看「稍後再說」；示範版不顯示（沒有設定頁）。
 
 ## 每個 id
 
@@ -90,7 +180,7 @@
 
 **第 1 類一律顯示**：表上第 1 類的符號沿用盤點表（例如 OV8c 碳水負荷週 `●●▷`、RC2 降雨 `◐◐◐`），但過濾時第 1 類不看符號（驗收：第 1 類三段都顯示）；RC2 的 ◐ 是 R1 決定放頂端框還是天氣卡一行，由 SP-485 處理。
 
-**盤點表之外加的 id**：`RC`（計算機沒標 id 的句子）、`RC3w`（冷風，SP-251）、`RC3h`（失溫，SP-253）、`RC13a`（百岳高山症）。SP-251、SP-253 在盤點之後已實作（`calc.cold_reminders`），直接登記成第 1 類。
+**盤點表之外加的 id**：`RC`（計算機沒標 id 的句子）、`RC3w`（冷風，SP-251）、`RC3h`（失溫，SP-253）、`RC13a`（百岳高山症）、`PL19`（連續賽比哪一段）、`PL20`（資料少的說明，SP-292）。SP-251、SP-253 在盤點之後已實作（`calc.cold_reminders`），直接登記成第 1 類。
 
 #### 全站（每頁都可能出現）
 
@@ -130,7 +220,7 @@
 | OV8j | 「長跑縮短為 N 分：過去 30 天最長 L 分」 | 2 | ● | ● | ▷ | 2 課表改 | 可 |  |
 | OV8k | 照抄指標（「資料品質：排一次 AeT 測試」） | 3 | ✕ | ✕ | ✕ | 5 本週 | 可 | 和待辦 OV2 重複，拿掉 |
 | OV9 | 課卡的 tooltip：類型、計畫與實際、完成度公式、課前要吃、上坡改走、手錶狀態 | 2 | ▷ | ▷ | ▷ | 6 其他 | 可 |  |
-| OV10 | 5 區解鎖卡：兩條軌道、各階段標籤、勾選清單、黃字註記 | 2 | ● | ◐ | ▷ | 5 本週 | 可 |  |
+| OV10 | 5 區解鎖卡：兩條軌道、各階段標籤、勾選清單、黃字註記 | 2 | ● | ● | ● | 5 本週 | 可 | 使用者 SP-305 答案：三段都顯示整條梯子（SP-483） |
 | OV11 | B2B 卡：「本週建議 B2B…還沒排」、判讀、「暫定」 | 2 | ● | ◐ | ◐ | 5 本週 | 可 |  |
 | OV12 | 「詳細」裡的門檻列：輕鬆跑上限、±N bpm、CP 來源、「時數不含肌力」 | 2 | ▷ | ▷ | ▷ | 6 其他 | 可 |  |
 | OV13 | 體能趨勢圖上的 LTHR 先驗標記（虛線＋圖例） | 2 | ● | ● | ▷ | 6 其他 | 可 |  |
@@ -142,10 +232,10 @@
 |---|---|---|---|---|---|---|---|---|
 | SC1 | 完成度底色＋✓ | 2 | ● | ● | ● | 6 其他 | 可 |  |
 | SC2 | ≠ 沒照課表 | 2 | ● | ● | ● | 6 其他 | 可 | 說明行 ●▷▷ |
-| SC3 | ◐ 強度不足／偏強（plan_match 的定義） | 3 | ✕ | ✕ | ✕ | 6 其他 | 可 | 併入 SC4 |
-| SC4 | ⚠ 規則 D「輕鬆跑偏強（理由）」，只標示，課表不變 | 2 | ● | ◐ | ◐ | 5 本週 | 可 |  |
+| SC3 | ◐ 強度不足／偏強（plan_match 的定義） | 3 | ✕ | ✕ | ✕ | 6 其他 | 可 | 併入 SC4：plan_match 的偏強算完成，◐ 只剩強度不足（SP-484） |
+| SC4 | ⚠ 規則 D「輕鬆跑偏強（理由）」，只標示，課表不變 | 2 | ● | ◐ | ◐ | 5 本週 | 可 | 卡上一律小點；◐＝R3 連續才出週提醒（SP-484） |
 | SC5 | ⚠ 規則 D「太強」：後面的強度課延後或降級 | 1 | ● | ● | ● | 2 課表改 | — |  |
-| SC6 | 課前要吃「課前 1–4 小時吃含碳水的一餐或點心…」 | 2 | ● | ◐ | ✕ | 6 其他 | 可 | 2026-10-08 已拿掉（SP-286） |
+| SC6 | 課前要吃「課前 1–4 小時吃含碳水的一餐或點心…」 | 2 | ● | ◐ | ✕ | 6 其他 | 可 | 2026-10-08 已拿掉（SP-286）；SP-484 沒有加回 |
 | SC7 | 上坡改走「坡度超過約 X% 用走的比較省」 | 2 | ● | ◐ | ▷ | 6 其他 | 可 |  |
 | SC8 | 走跑交替課（傷後） | 1 | ● | ● | ● | 1 安全 | — |  |
 | SC9 | 標籤與圖示：熱、強度課分類、手錶推送狀態（灰／黃需更新／紅失敗）、暫定、課表外 ● | 2（cls 1：見備註） | ● | ● | ● | 2 課表改 | 可 | 推送失敗時 cls 1 |
@@ -241,7 +331,7 @@
 | PL3 | 恢復與周期備註（超馬級恢復 14 天、下坡比值…） | 2 | ● | ▷ | ▷ | 6 其他 | 可 |  |
 | PL4 | 「兩場 A 賽太近…考慮把其中一場改成 B 賽」 | 1 | ● | ● | ● | 3 比賽 | — |  |
 | PL5 | 自動排程規則（一段長的固定說明） | 3 | ● | ▷ | ✕ | 6 其他 | 可 |  |
-| PL6 | 「每日距離爬升缺漏」「超馬沒有 GPX」 | 2 | ● | ● | ▷ | 4 資料 | 可 | 只留評估卡 |
+| PL6 | 「每日距離爬升缺漏」「超馬沒有 GPX」 | 2 | ● | ● | ▷ | 4 資料 | 可 | 只留評估卡（SP-486：賽事列表只在 C 賽顯示，A／B 賽在評估卡） |
 | PL7 | 可行性與準備度 pill（來得及／有點趕／太難了；準備好了…） | 1 | ● | ● | ● | 3 比賽 | — |  |
 | PL8 | 「只剩 N 天」 | 1 | ● | ● | ● | 3 比賽 | — |  |
 | PL9 | 週量比、建議改報短組（< 0.5）、有點趕時的配速建議 | 1 | ● | ● | ● | 3 比賽 | — |  |
@@ -254,6 +344,8 @@
 | PL16 | 長天、最大週量、B2B 的實際值（≥ 0.8 夠，≥ 0.7 有點趕） | 2 | ● | ● | ◐ | 5 本週 | 可 |  |
 | PL17 | Koop 週時數（預測與實際） | 2 | ● | ▷ | ▷ | 6 其他 | 可 |  |
 | PL18 | 表單 tooltip ×7（格式、關門、用杖、背包、GPX） | 2 | ▷ | ▷ | ▷ | 6 其他 | 可 |  |
+| PL19 | 連續賽「以兩個睡眠點之間最硬的一段來比」（SP-114，`stretch_note`） | 2 | ● | ▷ | ▷ | 6 其他 | 可 | 盤點表之外（SP-486） |
+| PL20 | 資料少：「依你填的資料／資料還少」那句、「這個估法對週跑量少的人偏樂觀」（SP-292） | 2 | ● | ● | ▷ | 4 資料 | 可 | 盤點表之外（SP-486）；資料來源的 pill 三段都在 |
 
 #### 設定
 
@@ -299,8 +391,8 @@
 ## Known limits
 
 - 預設條件指紋是 id＋文字：沒帶 `fp` 的提示，切換語言後文字不同，「知道了」要重按一次；週週數字會變的句子（例如 CTL 掉了 N%）數字一變就重新出現。B 賽警告已帶自己的 `fp`，不受影響。
-- 聰明條件（R1–R16）還沒算，`smart` 都是 `true`；◐ 在標準／精簡都等於 ●，直到各頁的單補上。
-- 週備註的 OV8g 裡「剩下每天都排了」那句（第 3 類）和 OV8k，現在靠「沒有 src」辨認；`overview.py` 給它們 src 之後改成直接對應（SP-483）。
+- 聰明條件（R1–R16）：總覽週備註已算（SP-483）；活動與分析頁的 R2、R6、R9、AN6 已算（SP-487）；其他頁還沒算的 `smart` 是 `true`，◐ 在標準／精簡都等於 ●，直到各頁的單補上。課表頁 `plan_notes` 沒帶 ctx，週備註的 `smart` 仍是 `true`（SP-484）。SP-484 的 R3 是「有連續才產生這則」，所以 SC4 週提醒的 `smart` 也是 `true`。
+- 指向建議框的連結（「建議做的測試在建議框 →」）不知道使用者是否已在建議框按「不要」：按過之後連結仍在，點了建議框沒有那一則。
 
 ## Decisions Log
 
@@ -309,9 +401,24 @@
 | 2026-10-13 | 精簡只能使用者自己選，自動不會選到；有經驗的人問一次 | 使用者 |
 | 2026-10-13 | 每頁上限 3 則 | 使用者 |
 | 2026-10-13 | 第 1 類三段都顯示，不受上限；盤點表裡第 1 類的 ▷／◐（OV8c、RC2）不用在過濾 | 驗收條件 |
+| 2026-10-13 | 課前要吃 R4：標準只在 ≥ 2 h 長跑、比賽、測試課，精簡不顯示（SP-305 Q4）。但 2026-10-07 已決定整個拿掉（SP-286），SP-484 沒有加回，待使用者確認 | 使用者 |
+| 2026-10-13 | OV10 5 區解鎖卡三段都顯示整條梯子（不收成一行），目錄改 `●●●` | 使用者（SP-305 答案） |
+| 2026-10-13 | B 賽警告不考慮百岳（健走等級、TSS 很低） | 使用者（SP-305 答案） |
+| 2026-10-14 | 總覽標準／精簡：已有待辦列的指標卡不再另外展開（收進「其他 N 項（M 項見待辦）」）——同一件事只說一次，標準下才 ≤ 15 個 | SP-483 實作，待使用者確認 |
 
 ## Change History
 
 | Date | Source | Ticket | Summary |
 |------|--------|--------|---------|
 | 2026-10-13 | feature | SP-482 | 新增：`engine/hints.py`（目錄、提示物件、週備註與計算機警告轉換、自動等級）、`ui.hint_level`／`ui.hint_ack`、`GET/PUT /profile/hint-level`、`POST /profile/hint-ack`、`static/hints.js`（五步過濾、上限 3、「還有 N 則提醒」「提示太多？」「知道了」）、設定頁三選一、總覽週備註示範掛點；計算機 `warnings` 改成物件（舊字串相容）。測試：`backend/tests/test_hints.py`、`backend/tests/test_hints_js.py` |
+| 2026-10-14 | feature | SP-484 | 課表：plan_match 的偏強不再是 ◐ 部分（`backend/engine/plan_match.py:355`）；規則 D 偏強＝小點、太強＝⚠＋說明行三段都顯示（`backend/static/schedule.html:1170`）；說明行最多 1 行；上坡改走照提示多寡（`walk_grade`）；週提醒列走 `Hints.render`＋R3「輕鬆跑連續偏強」（`backend/api/plan_sessions.py:3079`、`backend/engine/adapt.py:658`）；`hints.NOTE_SRC` 加 `overhard → SC4`。測試：`backend/tests/test_schedule_hints_sp484.py` |
+| 2026-10-14 | feature | SP-487 | 活動與分析頁提示精簡：`hints.flag`＋`Hints.where`（不是一句話的標示）；活動編輯框 AC5 自動徽章依等級、AC8 再標有杖照 R9（只在杖比較圖會算的活動、標準只在未標）、AC4 補資料虛線依等級；分析頁 AN8 非測試課不出 CP 測試卡、AN5 心率灰底照 R6（`key_spans`、< 1% 不畫、圖例 `?` 寫秒數）、AN6 飄移 chips 標準 3 顆＋「詳細」、AN4 三段都顯示、AN10 跑姿圖表標題拿掉「參考」、AN12 重複路段卡只在預設頁且沒有就不出、AN13 前後半改名。測試：`backend/tests/test_activity_hints_sp487.py` |
+| 2026-10-14 | feature | SP-483 | 總覽提示精簡：週備註的聰明條件（`hints.week_context`／`week_smart`：R7 冷啟動與期別第一週、R11 熱、OV8g 黃色才顯示、R15 easy_power）由 weekplan API 算；週備註都有 src（`full_week`、`test_day`、`indicator`）；OV1 指標卡依等級展開（有待辦列的不重複）、OV2 拿掉測試列（R15）與有 OV8e 時的低強度列（R16）、OV3 期別重點標準收進「詳細」、OV6／OV10 的測試改連到建議框（`AppSuggestions.open`）、OV10 三段都顯示整條梯子（目錄 `●●●`）、OV11 建議框有的 B2B 行不顯示、OV13／OV14 依等級、OV9 課卡 hover 加規則 D ⚠；B 賽 CTL 下降那則也帶條件指紋；`_server.py --base-phase`。測試：`backend/tests/test_overview_hints_sp483.py`、`backend/tests/e2e/test_overview_hints_sp483_e2e.py` |
+| 2026-10-14 | feature | SP-486 | 賽季計畫的賽事評估卡照提示多寡：pill、關門、跳太多、× 2 三段都在；EP 倍數照 R13；還沒進專項期（PL15）、Koop 週時數（PL17）收進「詳細」；PL6 只留評估卡（賽事列表只剩 C 賽）；精簡只剩 pill、關門、跳太多和有點趕／不足的數字。新 id PL19、PL20。`race_feasibility.card_hints`、建議用 `hints.tag` 標 id（`baiyue_multiday` 也是）、跨級檢查加 `x2`／`x2_note`、Koop 檢查加 `run`／`need`／`need_h`。測試：`backend/tests/test_feasibility_card_sp486.py` |
+| 2026-10-14 | feature | SP-485 | 計算機結果照規則：`static/racehints.js`、`racepower.html` 掛上 `hints.js`；`weather.rain_alert` 加 `top`（R1，路跑門檻加倍，沒有雨量時照舊）；`hints.tag(..., smart=)`、RC10 照 R12。測試：`backend/tests/test_racehints_sp485.py`、`backend/tests/e2e/test_racepower_hints_e2e_sp485.py` |
+| 2026-10-14 | feature | SP-488 | 設定照提示多寡：ST1 分頁說明只在完整、ST5 固定說明收進 `?`、ST6／ST12／ST4 精簡只在滑過、可信度卡照 R5（中／高一行）、手錶對照卡一致時一行、自動估算卡一致時收合（和 WKO5 設定同一個收合）、ST10 兩行紅字併一行、ST15 只留計算模式一處；傷病：疼痛監測一行規則＋「詳細」（`injuries.monitor` 加 `rule`、清單加 `monitor_rule`）、嚴重度說明只留對話框、走跑說明改 `?`、`painpicker.js` 刪 `HELP`；首次精靈只在總覽和設定跳，其他頁一行（R14）。測試：`backend/tests/test_settings_injury_hints_sp488.py`、`backend/tests/e2e/test_settings_injury_hints_sp488_e2e.py` |
+| 2026-10-14 | feature | SP-508 | 建議框的測試都按過「不要」或 ✕ 之後，總覽 5 區卡的測試註記與「安排課表」回到原樣，不再連到建議框（`OVH.z5For`、`renderZ5`）。測試：`backend/tests/test_overview_z5_links_sp508.py`、`backend/tests/e2e/test_overview_z5_links_sp508_e2e.py` |
+| 2026-10-14 | feature | SP-507 | 建議框「稍後提醒」：7 天後再提醒、期間做完那項測試就不再提醒（`suggestions.snooze_key`／`test_kinds`／`tested`／`snoozed`，`GET /suggestions` 的 `snoozed`，`suggestions:snoozed` 事件，`OVH.testOut` 不把稍後提醒當成按掉）。測試：`backend/tests/test_suggestions_snooze_sp507.py`、`backend/tests/e2e/test_suggestions_snooze_sp507_e2e.py` |
+| 2026-10-14 | feature | SP-507 R1 | 稍後提醒只藏建議框：課表「排入測試 ▸」照樣列出、可以排那個測試（`suggestions.visible(snoozes=False)`、`GET /suggestions` 的 `snoozed_tests`、`AppSuggestions.load(fresh, true)`）。測試：`backend/tests/test_suggestions_snooze_r1_sp507.py`、`backend/tests/e2e/test_suggestions_snooze_r1_sp507_e2e.py` |
+| 2026-10-14 | feature | SP-514 | 稍後提醒期間，總覽測試卡結論與 5 區卡測試註記寫「建議做的測試 <日期> 再提醒你」，不指向建議框；到期回到建議框後照 SP-483（`OVH.testLater`／`z5Later`、`hint.test_later`）。測試：`backend/tests/test_overview_snoozed_test_sp514.py`、`backend/tests/e2e/test_overview_snoozed_test_sp514_e2e.py` |
+| 2026-10-14 | feature | SP-515 | 測試建議按「不要」照測試種類跨週有效（`suggestions.decline_key`／`declined_tests`／`restore`），設定頁「不再建議的測試」可以恢復（`GET …/suggestions/declined-tests`、`POST …/suggestions/restore`）；SP-503 待辦測試列照舊。測試：`backend/tests/test_suggestions_decline_kind_sp515.py`、`backend/tests/e2e/test_suggestions_decline_kind_sp515_e2e.py` |

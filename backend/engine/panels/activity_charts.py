@@ -42,6 +42,7 @@ from typing import Optional
 
 import numpy as np
 
+from backend.engine import hints as H
 from backend.engine import hr_profile as HP
 from backend.engine import zones as Z
 from backend.i18n import N_, _
@@ -64,6 +65,16 @@ HRQ_MAX_SPANS = 200      # a chart never needs more
 HRQ_LEGEND = N_("心率可能不準")
 HRQ_CHART_NOTE = N_("灰底是手腕光學心率可能不準的時段：{parts}。只是標出來，資料沒有被修改；"
                     "飄移判讀會把這些算進「可疑秒數」，太多就只當參考。")
+# R6 (docs/research/ui-hint-audit.md §5; SP-487, AN5 ●◐◐): in 標準／精簡 only the stretches that move the numbers
+# are shaded — spike, step, flat, or a cadence lock of ≥ 60 s in one stretch — and none at all when they
+# cover < 1 % of the activity's HR seconds (owner, SP-305 Q1 #6); the legend's ? then says how many
+# seconds. 完整 shades every flag as before.
+HRQ_KEY_KINDS = ("spike", "step", "flat")
+HRQ_LOCK_MIN_S = 60.0    # 推估 (R6): a shorter cadence lock barely moves an average
+HRQ_MIN_SHARE = 0.01     # 推估 (R6; owner SP-305 Q1 #6): the owner's ~3 in 10 runs with brief locks stay < 1.5 %
+HRQ_SECS_NOTE = N_("有 {n} 秒可能不準（{parts}；整趟有心率時間的 {p}）。")
+HRQ_KEY_NOTE = N_("只畫會影響數字的段落：突然跳動、跳一階沒回來、數字卡住不動，或跟著步頻走單段 ≥ 60 秒。")
+HRQ_QUIET_NOTE = N_("會影響數字的不到 1%，所以沒有畫灰底。")
 
 
 def _f(v) -> Optional[float]:
@@ -245,11 +256,15 @@ def hr_quality_spans(ds, w, G: Optional[dict] = None) -> Optional[dict]:
                   grid=G["g"] + G["t0"])
     if q is None:
         return None
-    spans, counts = [], {}
+    n_g = len(G["g"])
+    spans, key_spans, counts = [], [], {}
+    every, key = np.zeros(n_g, dtype=bool), np.zeros(n_g, dtype=bool)
     for k in HRQ_KINDS:
         m = q.masks.get(k)
         if m is None or not m.any():
             continue
+        m = np.asarray(m, dtype=bool)[:n_g]
+        every[: len(m)] |= m
         runs = []
         for a, b in HQ.runs_of(m):
             if runs and a - runs[-1][1] <= HRQ_MERGE_S:
@@ -257,13 +272,31 @@ def hr_quality_spans(ds, w, G: Optional[dict] = None) -> Optional[dict]:
             else:
                 runs.append([a, b])
         counts[k] = {"n": len(q.events.get(k) or runs), "s": int(m.sum())}
-        spans += [[float(G["g"][a]), float(G["g"][min(b, len(G["g"])) - 1] + 1.0), k] for a, b in runs]
+        for a, b in runs:
+            sp = [float(G["g"][a]), float(G["g"][min(b, n_g) - 1] + 1.0), k]
+            spans.append(sp)
+            if k in HRQ_KEY_KINDS or (k == "lock" and sp[1] - sp[0] >= HRQ_LOCK_MIN_S):   # R6
+                key_spans.append(sp)
+                key[a:min(b, n_g)] |= m[a:min(b, n_g)]
     if not spans:
         return None
     spans.sort(key=lambda r: r[0])
+    key_spans.sort(key=lambda r: r[0])
     labels = {k: _(HRQ_KIND_LABEL[k]) for k in counts}
+    hr = G.get("hr")
+    hr_s = int(np.isfinite(hr).sum()) if hr is not None else n_g
+    hr_s = max(hr_s, 1)
+    flagged_s, key_s = int(every.sum()), int(key.sum())
+    smart = bool(key_spans) and key_s / hr_s >= HRQ_MIN_SHARE
+    pct = lambda s: f"{s / hr_s * 100:.1f}%"          # noqa: E731
+    parts = _("、").join(labels[k] for k in HRQ_KINDS if k in counts)
     return {"spans": spans[:HRQ_MAX_SPANS], "labels": labels, "legend": _(HRQ_LEGEND), "counts": counts, "sep": _("、"),
-            "note": _(HRQ_CHART_NOTE, parts=_("、").join(labels[k] for k in HRQ_KINDS if k in counts))}
+            "note": _(HRQ_CHART_NOTE, parts=parts),
+            # R6 (SP-487): what 標準／精簡 shade, and the seconds the legend's ? names
+            "key_spans": key_spans[:HRQ_MAX_SPANS], "flagged_s": flagged_s, "key_s": key_s, "hr_s": hr_s,
+            "share": round(key_s / hr_s, 4), "hint": H.flag("AN5", smart=smart),
+            "secs_note": _(HRQ_SECS_NOTE, n=flagged_s, parts=parts, p=pct(flagged_s)),
+            "key_note": _(HRQ_KEY_NOTE), "quiet_note": _(HRQ_QUIET_NOTE)}
 
 
 def range_stats(res: dict, ka: int, kb: int) -> dict:

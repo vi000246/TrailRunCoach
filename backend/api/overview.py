@@ -52,8 +52,9 @@ _status_refreshing: dict = {}     # tenant id -> the key computed in the backgro
 _status_failed: dict = {}         # tenant id -> a key whose background computation failed (computed in the request next)
 STALE_REASONS = ("data", "day")
 # _status_key's layout: (tenant, dataset generation, day, then the user's own settings);
-# _SK_HR: the HR stamp (HRP.stamp(), 課表心率區間) among them (status_but_hr, SP-361)
-_SK_DAY, _SK_SETTINGS, _SK_HR = 2, 3, 6
+# _SK_HR: the HR stamp (HRP.stamp(), 課表心率區間) among them (status_but_hr, SP-361); last (_SK_LOCALE): the
+# request's language, since the status's words are made in it (SP-502)
+_SK_DAY, _SK_SETTINGS, _SK_HR, _SK_LOCALE = 2, 3, 6, -1
 
 
 def _dataset():
@@ -87,8 +88,11 @@ def _status_key(ds, today: dt.date) -> tuple:
     from backend.engine import advanced_params as AP
     # the 跑步經驗問卷 (SP-291): the 資料等級 card words its line by the answers
     from backend.engine import experience as EX
+    # SP-502: the status's words are made in the request's language (_()): an English page was answered
+    # with the Chinese status a Chinese page had computed first (and the other way round)
+    from backend.i18n import current_locale
     key = (*_tenancy.ds_key(ds), today, _plan_stamp(), prefs.stamp(), tests, HRP.stamp(),
-           None if pmc0 is None else tuple(sorted(pmc0.items())), AP.z3_rule_stamp(), EX.stamp())
+           None if pmc0 is None else tuple(sorted(pmc0.items())), AP.z3_rule_stamp(), EX.stamp(), current_locale())
     return key, prefs
 
 
@@ -308,7 +312,7 @@ def status_peek() -> Optional[Status]:
 
 def status_but_hr(ds, today: dt.date) -> Optional[Status]:
     """The cached Status of this key, else one of this tenant whose key differs only by the HR
-    stamp (_SK_HR: 課表心率區間 switched); None when neither is cached — never computes. For
+    stamp (_SK_HR: 課表心率區間 switched) and / or the language (_SK_LOCALE); None when neither is cached — never computes. For
     readers of the plan, its phases and goals only (api/plan_sessions._status_for, SP-361): none
     of them depends on the HR model, the HR targets / zones of the Status do."""
     key, _prefs = _status_key(ds, today)
@@ -317,7 +321,8 @@ def status_but_hr(ds, today: dt.date) -> Optional[Status]:
         if hit is not None:
             return hit
         for k in reversed(list(_status_cache)):
-            if k[:_SK_HR] == key[:_SK_HR] and k[_SK_HR + 1:] == key[_SK_HR + 1:]:
+            # nor the language (_SK_LOCALE): the plan, its phases and goals are the same in every one
+            if k[:_SK_HR] == key[:_SK_HR] and k[_SK_HR + 1:_SK_LOCALE] == key[_SK_HR + 1:_SK_LOCALE]:
                 return _status_cache[k]
     return None
 
@@ -392,11 +397,20 @@ def weekplan():
     from backend.engine import plan_prefs as PP
     # same 課表偏好, 不排課日期 and accepted B2B weekends as the 課表 page
     from backend.engine.panels.race_refs import calculator_hours
-    w = history_load(O.week_plan(ds, _status(ds, today), today, prefs=PP.load(), blackouts=BL.load(),
+    st = _status(ds, today)
+    w = history_load(O.week_plan(ds, st, today, prefs=PP.load(), blackouts=BL.load(),
                                  b2b_accepted=B2B.load_accepted(), race_predict=calculator_hours), ds)
-    # SP-482: each week note with its hint fields (engine/hints.py: id, cls, prio, …; static/hints.js)
+    # SP-482: each week note with its hint fields (engine/hints.py: id, cls, prio, …; static/hints.js);
+    # SP-483: with the overview's §5 conditions (R7 first week of the phase / cold start, R11 heat, R15)
     from backend.engine import hints as H
-    return {**w, "notes": H.notes(w.get("notes"))}
+    try:
+        monday = dt.date.fromisoformat(str((w.get("week") or {}).get("start"))[:10])
+    except ValueError:
+        monday = today - dt.timedelta(days=today.weekday())
+    ctx = H.week_context(today, monday, phase_start=getattr(getattr(st, "phase", None), "start", None),
+                         cold_week=(w.get("cold_start") or {}).get("week"),
+                         hot_race=bool((w.get("heat") or {}).get("active")))
+    return {**w, "notes": H.notes(w.get("notes"), ctx)}
 
 
 @router.get("/z5")

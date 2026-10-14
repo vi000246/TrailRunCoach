@@ -78,7 +78,7 @@ def wprime_prior(sex: Optional[str]) -> tuple[float, float, str]:
     key = sex if sex in WPRIME_PRIOR else "male"
     w, sd = WPRIME_PRIOR[key]
     who = f"業餘{SEX_LABEL[key]}性" if sex in WPRIME_PRIOR else "未填性別，用男性值"
-    return w, sd, f"W′ 先驗 {w / 1000:.1f} kJ（Ruiz-Alias 2025，{who}；推估）"
+    return w, sd, f"無氧容量先驗 {w / 1000:.1f} kJ（Ruiz-Alias 2025，{who}；推估）"
 RIEGEL_K = -0.07                   # the best race-like window (measure_bouts): racepower/riegel.py
 RACE_ANCHOR_S = 1800.0             # CP ≈ 30-min power
 RACE_MIN_S, RACE_MAX_S = 15 * 60, 70 * 60
@@ -93,7 +93,7 @@ HR_LAG_S = 15                      # HR peaks a few seconds after the bout
 
 # how a plan row's CP was measured (planning.Threshold.cp_method: the rows 「套用這次的 CP」 wrote
 # before SP-468 — kept for those rows' labels); a CP test's own result is always "pd_model"
-METHOD_LABEL = {"2pt": "兩點（12 分＋3 分）", "1pt_prior": "單段＋W′ 先驗", "tt20": "20 分全力 × 0.95",
+METHOD_LABEL = {"2pt": "兩點（12 分＋3 分）", "1pt_prior": "單段＋無氧容量先驗", "tt20": "20 分全力 × 0.95",
                 "race": "比賽換算（Riegel）",
                 "pd_model": N_("算法參考 WKO5：PD 模型擬合（近 90 天 mean-max 上緣，含這次測試）")}
 # a CP test without a PD fit (fewer than fitdataset.CP_FIT_MIN_RUNS Stryd runs in 90 days, or no
@@ -103,14 +103,14 @@ NO_FIT = N_("算不出模型閾值功率（Modelled threshold power）：測試�
 
 TABLE = {
     "quick": dict(
-        label="快速：20 分全力", hint="約 37 分；準確度約 ±3%（SEE 6.7 W），不測 W′",
+        label="快速：20 分全力", hint="約 37 分；準確度約 ±3%（SEE 6.7 W），不測無氧容量",
         title="CP 測試 20 分全力", minutes=37, tss=45.0,
         target="20 分鐘全力、配速平均；最後 2 分可以加速",
         detail="暖身 12 分（含 3 趟 20 秒加速）；20 分全力；緩和 5 分。平路或田徑場",
         source="Ñancupil-Andrade 2024：跑步 CP ≈ 0.95 × 20 分全力功率",
         steps="暖身 12 分 → 20 分全力 → 緩和 5 分", warm=12, bouts=(20,), rest=0, cool=5),
     "standard": dict(
-        label="標準：12 分＋休 30 分＋3 分", hint="約 70 分；兩點 CP＋W′，休息不能縮短",
+        label="標準：12 分＋休 30 分＋3 分", hint="約 70 分；兩點 CP＋無氧容量，休息不能縮短",
         title="CP 測試 12 分 + 3 分", minutes=70, tss=65.0,
         target="兩段都全力、配速平均；中間休 30 分鐘（不要縮短）",
         detail="暖身 15 分；12 分全力；休 30 分（走或極慢跑）；3 分全力；緩和 10 分。平路或田徑場",
@@ -118,7 +118,7 @@ TABLE = {
         steps="暖身 15 分 → 12 分全力 → 休 30 分 → 3 分全力 → 緩和 10 分", warm=15, bouts=(12, 3), rest=30,
         cool=10),
     "race": dict(
-        label="用比賽：5–10 K 比賽或計時跑", hint="不另外排；用 Riegel 換算（外插），不測 W′",
+        label="用比賽：5–10 K 比賽或計時跑", hint="不另外排；用 Riegel 換算（外插），不測無氧容量",
         title="CP 測試：5–10 K 比賽或計時跑", minutes=0, tss=0.0, target="", detail="", source="",
         steps="", warm=0, bouts=(), rest=0, cool=0),
 }

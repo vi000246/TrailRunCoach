@@ -273,14 +273,17 @@ def test_a_classified_hard_run_is_done_even_without_its_numbers():
     assert not vs["off_plan"] and not vs["short"] and vs["intensity_pct"] == 100
 
 
-def test_easy_run_slightly_hard_is_partial_far_too_hard_is_off_plan():
+def test_easy_run_slightly_hard_is_done_far_too_hard_is_off_plan():
+    # SP-484: 「偏強」 is rule D's alone (engine/adapt.py, a dot on the card) — plan_match's 偏強 (under the
+    # ran-hard line) is no longer a ◐ 部分 on top of it: done, as the easy run it was planned
     e = sess("e", "2026-10-01", state="done",
              done_by={**act(26, "2026-10-01", 45, tss=36), "session": _ses("quality", z3=720)})   # 1.2× the bar
     vs = PM.compare(e)
-    assert vs["short"] and not vs["off_plan"] and vs["grade"] == "over" and vs["intensity_pct"] is None
-    assert vs["short_text"] == "輕鬆跑偏強（Zone 3 12／10 分）"
+    assert not vs["short"] and not vs["off_plan"] and vs["grade"] == "over" and vs["intensity_pct"] is None
+    assert vs["short_text"] == "" and vs["actual"] == "easy" and vs["soft"] is None
     comp = C.with_plan_check(C.session_compliance(e, 36.0), vs)
-    assert comp["label"] == "強度偏高" and comp["level"] == "yellow" and comp["pct"] == 100
+    assert comp["label"] == "完成" and comp["level"] == "green" and comp["pct"] == 100 and not comp.get("short")
+    assert C.status_of(e, comp, "2026-10-02") == "done"
     e = sess("e", "2026-10-01", state="done",
              done_by={**act(27, "2026-10-01", 45, tss=50), "session": _ses("hard_long", z3=1000)})  # 1.67×, TSS +39 %
     assert PM.compare(e)["off_plan"] and PM.compare(e)["text"] == "換了課：排輕鬆跑，實際跑強度"
@@ -438,7 +441,7 @@ def test_activity_review_card_uses_the_calendars_planned_tss(monkeypatch):
     card = WR._plan_card(SimpleNamespace(today=20000.0), SimpleNamespace(idx=40, metrics={}))
     assert card["sub"] == cal["compliance"]["label"] == "跑成強度課"
     assert card["level"] == WR.PLAN_LEVEL[cal["compliance"]["level"]] == "warn"
-    assert "負荷（Load）：50 ／ 計畫 50（100%）" in card["tip"]
+    assert "訓練負荷（Training load）：50 ／ 計畫 50（100%）" in card["tip"]
     # the stored TSS alone (no estimate) would have left the TSS unmeasured: ≠ 沒照課表
     assert C.with_plan_check(C.session_compliance(s), PM.compare(s))["label"] == "換了課"
 

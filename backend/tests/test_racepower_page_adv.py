@@ -98,10 +98,10 @@ def test_main_strategy_copy_lives_in_the_panel_once_and_does_not_count_as_a_chan
 
 def test_trail_gap_is_marked_reference_only_with_its_sources():
     """SP-248: the trail segment table's GAP column says Minetti / reference only (Looney 2025, Koop);
-    road tables don't get it."""
+    road tables don't get it. SP-485: said in the GAP column's ? (no line under the table any more)."""
     src = PAGE.read_text("utf-8")
-    assert 'if (trail) h += `<div class="note" title="${esc(T("gap.tip"))}">${esc(T("gap.note"))}</div>`;' in src
-    assert '${trail ? ` title="${esc(T("gap.tip"))}"` : ""}' in src
+    assert '${trail ? `GAP / 垂直${help(esc(T("gap.tip")))}` : ""}' in src
+    assert 'T("gap.note")' not in src
     for loc in ("zh-TW", "en"):
         cat = json.loads((STATIC / "i18n" / loc / "racepower.json").read_text("utf-8"))
         assert "Minetti" in cat["gap.note"] and "Looney 2025" in cat["gap.note"] and "Koop" in cat["gap.note"]

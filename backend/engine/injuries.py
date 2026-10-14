@@ -123,6 +123,16 @@ MONITOR_SRC = {"achilles": "Silbernagel 2007", "pfp": "Esculier 2016", "plantar_
                "itb": "Ohio State Wexner", "general": "Ohio State Wexner"}
 # 小腿／脛骨: maybe a bone stress injury — no condition rules there, only 「先給醫師看」 (§4.2)
 SHIN_NOTE = N_("小腿／脛骨的痛可能是骨應力傷害（疲勞性骨折）：先給醫師看。app 不給這個部位傷別規則。")
+# The same rules as one line each (SP-488, audit IJ3: the rule stays on the card, the study and its limits go
+# into 「詳細」 = the MONITOR text). Display only: the numbers are the studies' own (SILBERNAGEL / ESCULIER).
+MONITOR_RULE = {
+    "achilles": N_("疼痛監測：跑時 ≤ {during}/10；跑完 ≤ {after}/10，隔天早上要退回原本的程度；不能一週比一週痛"),
+    "pfp": N_("疼痛監測：跑時 ≤ {during}/10；跑完 {minutes} 分鐘內回到原本的程度"),
+    "plantar_fascia": N_("疼痛監測：不能越跑越痛、不能改變跑姿、隔天不能更痛"),
+    "itb": N_("疼痛監測：不能越跑越痛、不能改變跑姿、隔天不能更痛"),
+    "general": N_("疼痛監測：不能越跑越痛、不能改變跑姿、隔天不能更痛"),
+}
+SHIN_RULE = N_("小腿／脛骨：可能是骨應力傷害，先給醫師看。")
 
 
 def demo_mode() -> bool:
@@ -278,14 +288,18 @@ def monitor(ev: Optional[dict] = None) -> dict:
     """The pain-monitoring text of an event by its condition (SP-269): 跟腱 = Silbernagel 2007 (as
     before), 膝前痛 = Esculier 2016's ≤ 2/10, the rest and no condition = the general return-to-run
     rules (Ohio State Wexner). A 小腿／脛骨 event without a condition says 「先給醫師看」 first.
-    {"key", "text", "src", "disclaimer"} — every text keeps the 「這不是醫療診斷」 line."""
+    {"key", "text", "rule", "src", "disclaimer"} — every text keeps the 「這不是醫療診斷」 line; `rule` is the same
+    rule as one line (SP-488), `text` the whole with its study."""
     ev = ev or {}
     c = ev.get("condition") if not is_illness(ev) else None
     key = c if c in MONITOR else "general"
     text = _(MONITOR[key])
+    rule = _(MONITOR_RULE[key], during=SILBERNAGEL["during_max"] if key == "achilles" else ESCULIER["during_max"],
+             after=SILBERNAGEL["after_max"], minutes=ESCULIER["after_min"])
     if c in (None, "other") and ev.get("area") == "shin_calf":
         text = _(SHIN_NOTE) + text
-    return {"key": key, "text": text, "src": MONITOR_SRC[key], "disclaimer": _(DISCLAIMER)}
+        rule = _(SHIN_RULE) + rule
+    return {"key": key, "text": text, "rule": rule, "src": MONITOR_SRC[key], "disclaimer": _(DISCLAIMER)}
 
 
 def check_dates(onset: Optional[str], resolved: Optional[str]) -> Optional[str]:
@@ -449,6 +463,7 @@ def event_json(ev: dict, today: dt.date, linked: int = 0, auto_days: Optional[in
             "walkrun_from": None if ill else ev.get("walkrun_from"),
             "condition_label": "" if ill else condition_label(ev.get("condition")),
             "monitor": None if ill else monitor(ev)["text"],
+            "monitor_rule": None if ill else monitor(ev)["rule"],
             "area_label": area_label(ev.get("area")), "label": event_label(ev),
             "severity_label": SEVERITIES.get(ev.get("severity"), ""), "kind_label": KINDS.get(ev.get("kind"), ""),
             "status_label": STATUSES.get(ev.get("status"), ""), "custom_area": is_custom(ev.get("area")),

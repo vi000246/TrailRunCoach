@@ -503,7 +503,7 @@ def test_review_summary_on_fake_easy_run():
     assert "輕鬆跑" in text and "有氧基礎穩" in text
     assert r["suggested_dashboard"] == 1
     iv = R.review(ds, w, "intervals")
-    assert iv["empty"]
+    assert iv.get("hide")             # SP-513: not an interval session → 每組 is off (間歇判讀 says so once)
 
 
 def test_review_intervals_on_fake_quality_session():

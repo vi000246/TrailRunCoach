@@ -467,7 +467,7 @@ def route_elevation(steps: dict, c, prof: dict) -> Optional[dict]:
             if r.frac is None and st["kind"] == "rest":
                 v = WS.WALK_KMH
             else:
-                f = r.frac if r.frac is not None else WS.NONE_IF.get(st["kind"], WS.EASY_F)
+                f = r.frac if r.frac is not None else WS.NONE_IF.get(st["kind"], c.easy_frac())
                 v, _how = WS.speed_kmh(f, c)
                 if c.ep_kmh and c.v_easy:
                     v = c.ep_kmh * v / c.v_easy

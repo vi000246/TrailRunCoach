@@ -125,6 +125,8 @@ h2 .di { font-size: 16px; color: var(--muted); }
 .sx .tl { font-size: 12.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .sx .mn { grid-column: 2 / -1; font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .sx[data-go] { cursor: pointer; }
+/* a race / 百岳 trip on the day (SP-517): the 課表 day cell's mark (SP-504), not a card */
+.dc .rcm { grid-column: 1 / -1; font-size: 11.5px; font-weight: 700; color: var(--hi); line-height: 1.3; overflow-wrap: anywhere; cursor: default; }
 .rest { margin-top: auto; margin-bottom: auto; display: flex; align-items: center; justify-content: center; gap: 5px; color: var(--faint); font-size: 12px; }
 .badges { display: flex; gap: 4px; flex-wrap: wrap; }
 .legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: var(--muted); margin: 8px 0 0; }
@@ -233,6 +235,16 @@ td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
 .heatbars { display: flex; align-items: flex-end; gap: 1px; height: 20px; margin: 4px 0; }
 .heatbars i { flex: 1; min-width: 1px; background: var(--hi, #e34948); opacity: .6; border-radius: 1px 1px 0 0; }
 .act { margin-top: 4px; font-size: 12px; }
+/* SP-483: the folded cards (「其他 N 項正常」) and the links to the suggestion box */
+details.ind-more { grid-column: 1 / -1; }
+details.ind-more > summary { cursor: pointer; font-size: 12.5px; color: var(--muted); list-style: none; display: inline-flex; align-items: center; gap: 4px; padding: 2px 0; }
+details.ind-more > summary::-webkit-details-marker { display: none; }
+details.ind-more > summary::before { content: "▸"; font-size: 10px; }
+details.ind-more[open] > summary::before { content: "▾"; }
+details.ind-more > .ind { margin-top: 8px; }
+.to-box { font: inherit; font-size: 12px; background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; text-align: left; }
+.to-box:hover, .to-box:focus-visible { text-decoration: underline; }
+.test-later { font-size: 12px; color: var(--muted); }
 </style>
 </head>
 <body>
@@ -264,20 +276,20 @@ td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
     <div class="kpis" id="kpis"><div class="kpi"><div class="loading" data-i18n="overview.kpi.loading">計算訓練狀況中…</div></div></div>
     <!-- PMC, the last 7 / 42 / 90 days (GET /overview/pmc): CTL / ATL lines, TSB bars in views/training.json's PMC colours -->
     <section aria-labelledby="pmc-h">
-      <h2 id="pmc-h"><span data-i18n="overview.pmc.title">體能・疲勞・狀況</span> <span class="seg" id="pmc-days" role="group"></span><span id="pmc-q"></span></h2>
+      <h2 id="pmc-h"><span data-i18n="overview.pmc.title">訓練負荷圖（Training load chart）</span> <span class="seg" id="pmc-days" role="group"></span><span id="pmc-q"></span></h2>
       <div class="legend" id="pmc-legend" style="margin:0 0 2px"></div>
       <div class="plot pmc" id="pmc" role="img"></div>
     </section>
   </div>
 
   <section data-sec id="s-log">
-    <h2>做了什麼 <span class="meta" id="per-sub"></span></h2>
+    <h2><span data-i18n="overview.sec.log">做了什麼</span> <span class="meta" id="per-sub"></span></h2>
     <div class="toolbar">
-      <div class="seg" id="unit"><button data-u="week">週</button><button data-u="month">月</button><button data-u="year">年</button></div>
+      <div class="seg" id="unit"><button data-u="week" data-i18n="overview.unit.week">週</button><button data-u="month" data-i18n="overview.unit.month">月</button><button data-u="year" data-i18n="overview.unit.year">年</button></div>
       <button class="btn" id="prev" aria-label="上一期">◀</button>
       <b id="per-label" class="num"></b>
       <button class="btn" id="next" aria-label="下一期">▶</button>
-      <button class="btn" id="now">回到現在</button>
+      <button class="btn" id="now" data-i18n="overview.now">回到現在</button>
       <button type="button" class="q" aria-label="說明" data-tip="每一期做了多少：上圖移動時間（依類別堆疊），下圖爬升（m）。&#10;怎麼看：點長條切到那一期，下方數字跟著換；◀ ▶ 換期、週／月／年換單位。&#10;看什麼：跟「平常」（詳細數字裡的典型一期）比，這期多還是少。&#10;方法：只算移動時間；類別同「我的訓練 → 訓練量」。">?</button>
     </div>
     <div class="legend" id="cat-legend" style="margin:0 0 4px"></div>
@@ -288,13 +300,13 @@ td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
   </section>
 
   <section data-sec id="s-ind">
-    <h2>指標 <span class="meta" id="ind-sub"></span></h2>
+    <h2><span data-i18n="overview.jump.ind">指標</span> <span class="meta" id="ind-sub"></span></h2>
     <div class="ind" id="ind"><div class="loading">…</div></div>
   </section>
 
   <section data-sec id="s-week" aria-labelledby="wk-h">
-    <h2 id="wk-h"><span id="wk-ic"></span>本週 <span class="meta num" id="wk-sub"></span><span id="wk-cp"></span>
-      <a class="to-sched" href="/api/v1/overview/plan/schedule/page">課表編輯 →</a></h2>
+    <h2 id="wk-h"><span id="wk-ic"></span><span data-i18n="overview.jump.week">本週</span> <span class="meta num" id="wk-sub"></span><span id="wk-cp"></span>
+      <a class="to-sched" href="/api/v1/overview/plan/schedule/page" data-i18n="overview.to_sched">課表編輯 →</a></h2>
     <div class="week" id="wk-days"><div class="loading">排本週課表中…</div></div>
     <div class="legend" id="wk-legend"></div>
     <div id="week"></div>
@@ -308,7 +320,7 @@ td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
     </section>
     <!-- 待辦與警示 at the bottom, left of B2B (full width while B2B is hidden) -->
     <section id="todocard" aria-labelledby="todo-h">
-      <h2 id="todo-h">待辦與警示 <span class="meta" id="todo-sub"></span></h2>
+      <h2 id="todo-h"><span data-i18n="overview.sec.todo">待辦與警示</span> <span class="meta" id="todo-sub"></span></h2>
       <div class="alerts" id="actions"><div class="loading">…</div></div>
       <!-- due CP / AeT tests, B2B weekends, zone retests: the shared floating box (static/suggestions.js) -->
     </section>
@@ -345,8 +357,8 @@ const GLOSS = {
     "（差 3 W 以上才換），不用另外設定；每 4–6 週測一次，賽前 10 天內不要測",
   "間歇門檻": "間歇門檻：基礎期什麼時候可以排間歇（課表偏好可以選方法，每個選項的 ? 有說明）。\n\n" +
     "自動（預設）：有實測 AeT（16 週內）而且 LTHR 不是預設值 → Uphill Athlete 差距法（LTHR ÷ AeT − 1 ≤ 10%），" +
-    "或 Friel 飄移 < 5%；沒有實測 AeT → 不設門檻，每週最多 1 次，由護欄決定：低強度 ≥ 75%、體能（Fitness）每週 < +5、週增量 ≤ 10%、" +
-    "3:1 恢復週改 fartlek、狀況（Form）。劑量 5×1 分 → 6×1 → 4×3 上坡 → 5×3 → 4×4，之後閾值下 3×8／4×8 交替。\n\n" +
+    "或 Friel 飄移 < 5%；沒有實測 AeT → 不設門檻，每週最多 1 次，由護欄決定：低強度 ≥ 75%、長期訓練負荷（Chronic load）每週 < +5、週增量 ≤ 10%、" +
+    "3:1 恢復週改 fartlek、負荷平衡（Load balance）。劑量 5×1 分 → 6×1 → 4×3 上坡 → 5×3 → 4×4，之後閾值下 3×8／4×8 交替。\n\n" +
     "選了某個方法但缺資料時不會永久鎖住，改照護欄排（自訂）。",
 };
 const GLOSS_RE = new RegExp(Object.keys(GLOSS).map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"), "g");
@@ -364,9 +376,7 @@ const m0 = (v) => v == null ? "–" : Math.round(v).toLocaleString() + " m";
 const n0 = (v) => v == null ? "–" : Math.round(v).toLocaleString();
 const sgn = (v, f = n0) => v == null ? "–" : (v > 0 ? "+" : v < 0 ? "−" : "±") + f(Math.abs(v));
 const pct = (v) => v == null ? "–" : Math.round(v * 100) + "%";
-const WD = I18N.fmt.weekdays("narrow");     // i18n.js: 一…日 / M…S, Monday first
 const md = (iso) => { const d = new Date(iso + "T00:00:00"); return `${d.getMonth() + 1}/${d.getDate()}`; };
-const wd = (iso) => WD[(new Date(iso + "T00:00:00").getDay() + 6) % 7];
 const CAT_VAR = { road: "--s1", trail: "--s2", hike: "--s3", bike: "--s4", strength: "--s5", walk: "--s6", other: "--s7" };
 const catColor = (k) => css(CAT_VAR[k] || "--s7");
 const LEVEL = { good: t("overview.level.good"), watch: t("overview.level.watch"), bad: t("overview.level.bad"),
@@ -379,6 +389,9 @@ const axisStyle = () => ({ axisLabel: { color: css("--muted"), fontSize: 11 }, a
   splitLine: { lineStyle: { color: css("--line") } }, axisTick: { show: false } });
 
 let STATUS = null, PLAN = null, SP = null;
+// 提示多寡 (SP-482 static/hints.js): GET /profile/hint-level once, at the start, in parallel with the rest
+let HST = null;
+const HSTP = window.Hints ? Hints.state() : Promise.resolve(null);
 
 // sparkline: thin line, last point marked; hover shows the last value (native title)
 function spark(pts, level, last) {
@@ -411,9 +424,10 @@ const bar = (label, done, tgt, fmt) => `<div class="b"><span>${label}</span>
 // ---------------- KPI tiles ----------------
 const ind = (id) => (STATUS?.indicators || []).find((x) => x.id === id);
 const tipOf = (i) => i ? [i.verdict, i.why, i.action ? "→ " + i.action : "", i.source ? t("overview.kpi.source", { src: i.source }) : ""].filter(Boolean).join("\n") : "";
-// the 狀況 tile's line under the number: status.py's why without its leading 「<label> +5」 and the outer
-// brackets — 「TSB +5（ATL 30）」 (old) / 「狀況（Form） +5（疲勞 30）」 / "Form +5 (fatigue 30)" → 「ATL 30」 / 「疲勞 30」 / "fatigue 30"
-const formWhy = (s) => String(s).replace(/^(?:TSB|狀況（Form）|狀況|Form)[^（(]*/, "").trim().replace(/^[（(]([^]*)[）)]$/, "$1");
+// the 負荷平衡 tile's line under the number: status.py's why without its leading 「<label> +5」 and the outer
+// brackets — 「TSB +5（ATL 30）」 / 「狀況（Form） +5（疲勞 30）」 / "Form +5 (fatigue 30)" (older) and
+// 「負荷平衡（Load balance） +5（短期負荷 30）」 / "Load balance +5 (acute load 30)" → 「短期負荷 30」 / "acute load 30"
+const formWhy = (s) => String(s).replace(/^(?:TSB|負荷平衡（Load balance）|負荷平衡|狀況（Form）|狀況|Load balance|Form)[^（(]*/, "").trim().replace(/^[（(]([^]*)[）)]$/, "$1");
 function renderKpis() {
   if (!STATUS) return;
   const F = ind("fitness"), T = ind("form"), ph = ind("phase"), g = STATUS.goals;
@@ -443,8 +457,10 @@ function renderKpis() {
   $("kpis").innerHTML = out.join("");
 }
 // one word for a KPI tile: the verdict before its first punctuation when short, else the level word
+// (SP-502: English verdicts split at , : ; too and may be longer — 「維持中」 is "maintaining")
 function kpiWord(i) {
-  const v = String(i.verdict || "").split(/[，、：（()）；]/).map((x) => x.trim()).find((x) => x && !/\d/.test(x) && x.length <= 6);
+  const v = String(i.verdict || "").split(/[，、：（()）；,:;]/).map((x) => x.trim())
+    .find((x) => x && !/\d/.test(x) && x.length <= (/[\u3400-\u9fff]/.test(x) ? 6 : 20));
   return v || LEVEL[i.level];
 }
 
@@ -485,28 +501,170 @@ async function loadStatus() {
   $("asof").textContent = t("overview.asof", { d: s.today });
   staleWatch(s);
   renderKpis();
+  HST = await HSTP;                          // 提示多寡 (asked once, at the start)
+  renderTodo();
+  renderInd();
+}
+// ---- SP-483 hint layout (docs/research/ui-hint-audit.md §7 T2, docs/spec/ui-hints.spec.md): what the
+// 提示多寡 level (完整／標準／精簡) opens, folds or drops on this page — pure, run under node by the tests ----
+const OVH = {
+  level: (st) => (st && ["full", "standard", "lean"].includes(st.level) ? st.level : "standard"),
+  // R5: an LTHR / max HR of low confidence with a strong signal is class 1 (the 測試 card opens in every level)
+  thrLow(i) {
+    const x = i && i.id === "testing" && i.extra && i.extra.thr_check;
+    return !!x && [x.lthr, x.hrmax].some((v) => v && v.confidence === "low" && (v.signals || []).some((g) => g.level === "strong"));
+  },
+  // a week note of this catalog row is on the page (R16: OV8e holds the low-intensity text)
+  hasNote: (plan, id) => !!(plan && (plan.notes || []).some((n) => n && n.id === id)),
+  // OV1: 完整 opens every card; 標準 注意／要處理, 精簡 要處理 — less the ones a 待辦 row on the page already
+  // says (ctx.todo: their ids; 「同一件事只在一處」, OV2 is where the action lives) — and R5 可信度低 in
+  // every level; the rest fold into 「其他 N 項正常」 (「…（M 項見待辦）」)
+  cardOpen(i, level, ctx = {}) {
+    if (level === "full" || OVH.thrLow(i)) return true;
+    if ((ctx.todo || []).includes(i.id)) return false;
+    return i.level === "bad" || (level === "standard" && i.level === "watch");
+  },
+  foldLine(folded, ctx = {}) {
+    const m = folded.filter((i) => (ctx.todo || []).includes(i.id)).length;
+    if (m) return tO("hint.others_todo", { n: folded.length, m });
+    return tO(folded.some((i) => i.level === "watch" || i.level === "bad") ? "hint.others_ok_lean" : "hint.others_ok", { n: folded.length });
+  },
+  cards(inds, level, ctx) {
+    const open = [], folded = [];
+    for (const i of inds || []) (OVH.cardOpen(i, level, ctx) ? open : folded).push(i);
+    return { open, folded };
+  },
+  // SP-503: the box's test is gone because of 「不要」 / ✕ — no test row left in it and one of them
+  // declined (sg: {rows, declined, snoozed}, suggestions.js "suggestions:loaded"; null = not loaded yet: R15 as
+  // is). SP-507: a 稍後提醒 test is still the box's (back there in 7 days) — not out
+  testOut(sg) {
+    const T = (r) => !!r && ["test", "baseline", "zone_test"].includes(r.type);
+    return !!sg && !(sg.rows || []).some(T) && !(sg.snoozed || []).some(T) && (sg.declined || []).some(T);
+  },
+  // SP-514: no test shown in the box and one held by 稍後提醒 — the day it is back there (the earliest `until`,
+  // ISO): the 測試 card and the 5 區 card say 「<day> 再提醒你」, not 「在建議框」; null otherwise (a test in the box:
+  // R15 as is; testOut: SP-503 / SP-508)
+  testLater(sg) {
+    const T = (r) => !!r && ["test", "baseline", "zone_test"].includes(r.type);
+    if (!sg || (sg.rows || []).some(T) || OVH.testOut(sg)) return null;
+    return (sg.snoozed || []).filter(T).map((r) => r.until).filter(Boolean).sort()[0] || null;
+  },
+  // OV2 待辦 (class 1, every level) less what lives elsewhere: a test (R15: the suggestion box; back when
+  // ctx.testOut, SP-503), the low-intensity line when OV8e says it (R16); OV3 期別重點: 完整 shown, 標準
+  // 「詳細」, 精簡 not at all
+  todos(actions, level, ctx = {}) {
+    const shown = [], detail = [];
+    for (const a of actions || []) {
+      const by = a.because || [];
+      if (by.includes("testing") && !ctx.testOut) continue;                   // R15 (SP-503: unless declined)
+      if (by.includes("intensity") && ctx.ov8e) continue;                     // R16
+      if (by.includes("phase") && level !== "full") { if (level === "standard") detail.push(a); continue; }   // OV3
+      shown.push(a);
+    }
+    return { shown, detail };
+  },
+  // OV14 強度分配目標: 完整 inline, 標準 behind its ?, 精簡 not shown
+  splitTarget: (level) => (level === "full" ? "inline" : level === "standard" ? "tip" : "none"),
+  // OV13 LTHR 先驗標記: 完整／標準 on the chart, 精簡 in the chart's ?
+  pmcMarks: (level) => (level === "lean" ? "tip" : "chart"),
+  // OV11: a B2B the box suggests is the box's (「建議框在的時候卡片只放判讀」)
+  b2bNow: (W) => !(W && W.suggest && !W.due && !W.post),
+  // OV10: the whole ladder in every level (the owner's SP-305 answer); R15 / R16 on its notes and test links
+  z5Opt: () => ({ skip: ["intensity"], testNote: true, testAction: true }),
+  // SP-508: once every test of the box was 「不要」 / ✕ (testOut, SP-503) the card's test note and its test
+  // 安排課表 are its own again (Z5Flow's plain ones), not links to a box without the test
+  z5For: (testOut) => (testOut ? { skip: OVH.z5Opt().skip } : OVH.z5Opt()),
+  // SP-514: while the box's test is held (testLater) the test note says when it is back; 安排課表 is the card's own
+  // (the 課表 still puts a held test in, SP-507 R1)
+  z5Later: () => ({ skip: OVH.z5Opt().skip, testNote: true }),
+};
+// ---- end SP-483 hint layout ----
+// a link to the suggestion box (R15: the test / B2B suggestions live there; static/suggestions.js)
+const toBox = (txt) => `<button type="button" class="to-box" data-open-sugg>${esc(txt || tO("hint.in_box"))} →</button>`;
+// SP-514: a held test (OVH.testLater): 「10/21 再提醒你」 in place of the link to the box
+const atDay = (day) => `<span class="test-later">${esc(tO("hint.test_later", { day: md(day) }))}</span>`;
+document.addEventListener("click", (e) => {
+  if (!e.target.closest("[data-open-sugg]")) return;
+  e.preventDefault();
+  if (window.AppSuggestions && AppSuggestions.open) AppSuggestions.open();
+});
+// SP-503: what the box has ({rows, declined}): a test declined there comes back to 待辦 and the 測試 card
+let SUGG = null;
+let Z5C = null;                     // the last GET /z5 card (SP-508: drawn again when testOut changes)
+const sugState = (sg) => `${OVH.testOut(sg)} ${OVH.testLater(sg)}`;       // SP-514: a 稍後提醒 day changes the cards too
+const sugRedraw = (next) => {
+  const was = sugState(SUGG);
+  SUGG = next;
+  if (was === sugState(SUGG)) return;
+  if (STATUS) { renderTodo(); renderInd(); }
+  if (Z5C) renderZ5();                                  // SP-508: the 5 區 card's test links follow
+};
+addEventListener("suggestions:loaded", (e) => sugRedraw({ rows: (e.detail || {}).rows || [], declined: (e.detail || {}).declined || [],
+  snoozed: (e.detail || {}).snoozed || [] }));
+addEventListener("suggestions:dismissed", (e) => {
+  const d = e.detail || {};
+  if (!SUGG || !d.id) return;
+  sugRedraw({ rows: SUGG.rows.filter((r) => r.id !== d.id), declined: SUGG.declined.concat([{ id: d.id, type: d.type, action: d.action }]),
+    snoozed: SUGG.snoozed || [] });
+});
+// SP-507: 稍後提醒 — the row moves to `snoozed` (still the box's: testOut stays as it was)
+addEventListener("suggestions:snoozed", (e) => {
+  const d = e.detail || {};
+  if (!SUGG || !d.id) return;
+  sugRedraw({ rows: SUGG.rows.filter((r) => r.id !== d.id), declined: SUGG.declined,
+    snoozed: (SUGG.snoozed || []).concat([{ id: d.id, type: d.type, until: d.until }]) });
+});
+function renderTodo() {
+  const s = STATUS;
+  if (!s) return;
+  const level = OVH.level(HST);
+  const { shown, detail } = OVH.todos(s.actions, level, { ov8e: OVH.hasNote(PLAN, "OV8e"), testOut: OVH.testOut(SUGG) });
   // to-do: icon + short title; the detail opens on click
   const lvl = (a) => (ind((a.because || [])[0]) || {}).level || "info";
-  $("todo-sub").textContent = s.actions.length ? `${s.actions.length} 項` : "";
-  $("actions").innerHTML = s.actions.length ? s.actions.map((a) => {
+  const row = (a) => {
     const [t, ...rest] = String(a.title).split("：");
     const l = lvl(a);
     return `<details class="al ${l}"><summary>${I(l)}<b>${gl(t)}</b><span class="s">${gl(rest.join("："))}</span></summary>
       <div class="body">${gl(a.detail)}${a.source ? ` ${q("來源：" + a.source)}` : ""}</div></details>`;
-  }).join("") : `<p class="meta">${I("good")} 沒有需要處理的項目</p>`;
+  };
+  $("todo-sub").textContent = shown.length ? tO("todo_n", { n: shown.length }) : "";
+  $("actions").innerHTML = (shown.length ? shown.map(row).join("") : `<p class="meta">${I("good")} 沒有需要處理的項目</p>`)
+    + (detail.length ? `<details class="more"><summary>${esc(tO("hint.detail"))}</summary><div class="body">${detail.map((a) =>
+      `<div><b>${gl(a.title)}</b>：${gl(a.detail)}</div>`).join("")}</div></details>` : "");
+}
+function renderInd() {
+  const s = STATUS;
+  if (!s) return;
+  const level = OVH.level(HST);
   const order = { bad: 0, watch: 1, good: 2, info: 3, na: 4 };
   const inds = [...s.indicators].sort((a, b) => order[a.level] - order[b.level]);
-  $("ind-sub").textContent = `${inds.length} 項 · 全部運動一起算`;
-  $("ind").innerHTML = inds.map((i) => {
-    const more = [i.why ? `<div>${gl(i.why)}</div>` : "", driftTier(i), i.action ? `<div class="act">→ ${gl(i.action)}</div>` : "", heatExtra(i),
-      i.source ? `<div class="faint">來源：${esc(i.source)}</div>` : ""].filter(Boolean).join("");
-    return `<div class="ic ${i.level}">
+  const ctx = { ov8e: OVH.hasNote(PLAN, "OV8e"), testOut: OVH.testOut(SUGG) };
+  ctx.todo = OVH.todos(s.actions, level, ctx).shown.flatMap((a) => a.because || []);
+  $("ind-sub").textContent = tO("ind_n", { n: inds.length });
+  const card = (i) => {
+    // R15: the 測試 card's test is the suggestion box's (SP-503: not once declined there — the card's own
+    // verdict, action and 安排課表 links again); R16: the low-intensity words are OV8e's (colour stays)
+    const test = i.id === "testing" && (i.level === "watch" || i.level === "bad") && !ctx.testOut;
+    // SP-514: held by 稍後提醒 — 「<day> 再提醒你」; its action and 安排課表 are the card's own meanwhile
+    const later = test ? OVH.testLater(SUGG) : null;
+    const box = test && !later;
+    const lowI = i.id === "intensity" && ctx.ov8e;
+    const verdict = later ? atDay(later) : box ? toBox(tO("hint.test_in_box")) : lowI ? `<span class="faint">${esc(tO("hint.see_notes"))}</span>` : i.verdict ? gl(i.verdict) : "";
+    const action = box || lowI ? "" : i.action ? `<div class="act">→ ${gl(i.action)}</div>` : "";
+    const more = [i.why ? `<div>${gl(i.why)}</div>` : "", driftTier(i), action, heatExtra(i),
+      i.source ? `<div class="faint">${esc(t("overview.kpi.source", { src: i.source }))}</div>` : ""].filter(Boolean).join("");
+    return `<div class="ic ${i.level}" data-ind="${esc(i.id)}">
       <div class="top"><span>${gl(i.title)}${i.extra && i.extra.tip ? q(i.extra.tip) : ""}</span>${stw(i.level)}</div>
       <div class="vr"><div class="v${i.extra && i.extra.verdict_level ? " vl-" + esc(i.extra.verdict_level) : ""}">${esc(i.text)}</div>${spark(i.spark, i.level)}</div>
-      ${i.verdict ? `<div class="vd" title="${esc(i.verdict)}">${gl(i.verdict)}</div>` : ""}
-      ${aetApply(i)}${thrCheck(i)}
-      ${more ? `<details class="more"><summary>詳細</summary><div class="body">${more}</div></details>` : ""}</div>`;
-  }).join("");
+      ${verdict ? `<div class="vd"${test || lowI ? "" : ` title="${esc(i.verdict)}"`}>${verdict}</div>` : ""}
+      ${aetApply(i)}${thrCheck(i, box)}
+      ${more ? `<details class="more"><summary>${esc(t("overview.hint.detail"))}</summary><div class="body">${more}</div></details>` : ""}</div>`;
+  };
+  // OV1: the folded cards behind one line — 「其他 N 項正常」, 「其他 N 項（M 項見待辦）」, 精簡 folding 注意:
+  // 「其他 N 項沒有要處理的」
+  const { open, folded } = OVH.cards(inds, level, ctx);
+  $("ind").innerHTML = open.map(card).join("") + (folded.length
+    ? `<details class="ind-more"${open.length ? "" : " open"}><summary>${esc(OVH.foldLine(folded, ctx))}</summary><div class="ind">${folded.map(card).join("")}</div></details>` : "");
 }
 
 // 熱適應 card (status.i_heat, engine/heat.py): daily heat dose bars under the S line,
@@ -559,7 +717,7 @@ document.addEventListener("click", async (ev) => {
 
 // 測試 card (SP-64): how believable the LTHR / max HR are, which one is likely wrong, and the
 // suggested test with 「安排課表」 (status.i_testing extra.thr_check; engine/threshold_confidence.py)
-function thrCheck(i) {
+function thrCheck(i, inBox) {
   const x = i.id === "testing" && i.extra && i.extra.thr_check;
   if (!x) return "";
   const conf = (c) => ({ high: tD("overview.thr.conf_high"), medium: tD("overview.thr.conf_medium"),
@@ -569,10 +727,11 @@ function thrCheck(i) {
     .map(([n, v]) => `<div>${esc(tD("overview.thr.line", { name: n, v: Math.round(v.value), c: conf(v.confidence) }))}${
       q((v.signals || []).filter((s) => s.level !== "hint").map((s) => s.text).join("\n"))}</div>`);
   const sugs = (i.extra.test_suggestions || []).filter((s) => String(s.id).startsWith("thr_check:"));
-  const links = sugs.flatMap((s) => s.links || []).map((l) => `<a class="btn" href="${esc(l.href)}">${esc(l.label)}</a>`).join(" ");
+  // R15 (SP-483): the suggested test is the suggestion box's — its 安排課表 links stay there
+  const links = inBox ? "" : sugs.flatMap((s) => s.links || []).map((l) => `<a class="btn" href="${esc(l.href)}">${esc(l.label)}</a>`).join(" ");
   if (!rows.length && !links) return "";
   const dg = x.diagnosis && x.diagnosis.text ? `<div class="meta">${esc(x.diagnosis.text)}</div>` : "";
-  const cool = sugs.some((s) => s.wait_cool) ? `<div class="meta">${esc(tD("overview.thr.wait_cool"))}</div>` : "";
+  const cool = !inBox && sugs.some((s) => s.wait_cool) ? `<div class="meta">${esc(tD("overview.thr.wait_cool"))}</div>` : "";
   return `<div class="act">${rows.join("")}${dg}${cool}${links}</div>`;
 }
 
@@ -590,7 +749,21 @@ async function loadZ5() {
   $("z5-st").innerHTML = `<span class="z5st ${esc(st)}" title="${esc(sub)}">${I(Z5_ICON[st] || "na")}${esc(tD("overview.z5.pill", { s: c.open ? tD("overview.z5.unlocked") : c.aet_ok ? tD("overview.z5.aet_ok") : c.label }))}</span>`;
   // the quest-style stage flow (static/z5flow.js, shared with the 基礎期 panel)
   Z5Flow.bind();
-  $("z5").innerHTML = Z5Flow.html(c.flow, { q: "q" });
+  Z5C = c;
+  renderZ5();
+}
+function renderZ5() {
+  const c = Z5C;
+  // SP-483: the whole ladder in every level (OV10); R16 drops its low-intensity line (OV8e says it), R15
+  // turns its test suggestion and 安排課表 test links into links to the suggestion box — SP-508: not once
+  // the box's tests were all 「不要」 / ✕ (OVH.testOut): the card's own note and 安排課表 again
+  // SP-514: held by 稍後提醒 (OVH.testLater) — the test note says the day it is back, 安排課表 is the card's own
+  const later = OVH.testLater(SUGG);
+  const o = later ? OVH.z5Later() : OVH.z5For(OVH.testOut(SUGG));
+  const linked = ((c.flow || {}).tracks || []).some((t) => t.here && t.here.action && t.here.action.type === "test");
+  $("z5").innerHTML = Z5Flow.html(c.flow, { q: "q", skip: o.skip,
+    testNote: o.testNote ? () => (later ? atDay(later) : linked ? "" : toBox(tO("hint.test_in_box"))) : undefined,
+    testAction: o.testAction ? () => toBox(tO("hint.schedule_in_box")) : undefined });
 }
 
 // ---------------- B2B (GET /b2b = engine/b2b.card): numbers + icons, the rest on click ----------------
@@ -604,7 +777,8 @@ async function loadB2B() {
   $("b2b-q").innerHTML = q(`B2B = 連續兩天、每天 ≥ 90 分的長天。\n判讀：第 2 天和第 1 天比，同 VAM 的心率差、同心率的 VAM 差。\n推估：判讀門檻 ±3 bpm、±5%、趨勢 ±2 個百分點都沒有來源。\n\n何時排：${c.rules.when}\n\n怎麼排：${c.rules.days}\n\n判讀：${c.rules.eval}`);
   let now;
   if (W.due) now = [I("b2b"), `本週第 ${W.index} 次 · ${(W.minutes || []).join("＋")} 分`, (W.why || []).join("；")];
-  else if (W.suggest) now = [I("b2b"), `本週建議 B2B（${(W.minutes || []).join("＋")} 分）`, "還沒排：在建議框挑兩天再排入"];
+  // OV11 (SP-483): a suggested B2B is the suggestion box's — the card keeps the numbers and the 判讀
+  else if (W.suggest && OVH.b2bNow(W)) now = [I("b2b"), `本週建議 B2B（${(W.minutes || []).join("＋")} 分）`, "還沒排：在建議框挑兩天再排入"];
   else if (W.post) now = [I("rest"), `B2B 後輕鬆日到 ${md(W.post.until)}`, c.rules.post];
   else if ((W.blocked || []).length && E && E.qualifies) now = [I("na"), "本週不排", W.blocked[0]];
   const ahead = c.planned.filter((p) => !p.this_week);
@@ -663,13 +837,15 @@ function sessHtml(s, today) {
   const live = s.state === "active" && s.day >= today;
   const prov = !!(s.provisional && s.state === "active");
   const est = s.tss_est ?? s.tss, cp = done ? s.compliance : null;
-  const info = done && s.done_by ? `${hm(s.done_by.moving_s)} · 負荷 ${n0(s.done_by.tss)}` : `${s.minutes ? s.minutes + " 分" : ""}${est ? ` · ${n0(est)}` : ""}`;
+  const info = done && s.done_by ? `${hm(s.done_by.moving_s)} · ${esc(tO("wk.load", { n: n0(s.done_by.tss) }))}`
+    : `${s.minutes ? esc(tO("wk.min", { n: s.minutes })) : ""}${est ? ` · ${n0(est)}` : ""}`;
   const rated = done && s.done_by && s.done_by.self_rating ? s.done_by.self_rating.text : "";   // 自評：Hard（COROS）, SP-231
   const pm = window.PlanMark ? PlanMark.lines(s, SP && SP.kinds) : [];      // SP-318: ↻ auto / ✎ yours, as on the 課表 page
   const vd = verdictTxt(s);
   const tip = [s.title, `${SessChip.typeName(ty)}${s.origin === "custom" ? " · 自訂" : s.edited ? " · 已修改" : ""}`,
     done && s.done_by ? `完成：${s.done_by.category_label || ""}${s.done_by.session && s.done_by.session.type_label ? " · " + s.done_by.session.type_label : ""} ${hm(s.done_by.moving_s)} · 負荷計畫 ${n0(est)} → 實際 ${n0(s.done_by.tss)}` : `${s.minutes ? s.minutes + " 分鐘" : ""}${est ? ` · 負荷 ${n0(est)}` : ""}`,
-    vd, SessChip.hrNote(cp), prov ? SessChip.label("todo", null, { prov: true }) : "", ...pm, rated, done ? "點一下看計畫 vs 實際、開啟活動" : "",
+    // SP-483 (OV9): rule D's ⚠ on a done session, as the 課表 page's hover (sesspop.js) has it
+    vd, SessChip.hrNote(cp), done && s.note ? "⚠ " + s.note : "", prov ? SessChip.label("todo", null, { prov: true }) : "", ...pm, rated, done ? "點一下看計畫 vs 實際、開啟活動" : "",
     s.target ? "目標：" + s.target : "", live && s.detail ? s.detail : "", live && s.walk_hint ? s.walk_hint : "", live ? watchTxt(s.coros) : ""].filter(Boolean).join("\n");
   const go = done ? ` data-go="${esc(`${SCHED}?day=${s.day}&uid=${encodeURIComponent(s.uid)}`)}"` : "";
   // §7.1: type：title, time / TSS, the verdict, 暫定, changed by
@@ -681,18 +857,31 @@ function sessHtml(s, today) {
 // 課表外 activities carry their session class (workout_review.classify: Z5 間歇 / Z3 閾值 / 高強度長跑 / 中強度跑 …);
 // a dotted card with the category's icon, a click opens it on the 課表 page (summary, match it to the plan)
 function extraHtml(a) {
+  if (a.race) {
+    // the run on a race day is the race (SP-517, as the 課表's SP-504): 比賽 / 行程, not 課表外
+    const rl = raceT(a.race, "act", { name: a.race.name });
+    return `<button type="button" class="sx sc act race" data-go="${esc(`${SCHED}?day=${a.date}&act=${a.index}`)}" data-tip="${esc(`${raceT(a.race, "act_tip", { p: a.race.priority, name: a.race.name })}\n${hm(a.moving_s)} · ${tO("wk.load", { n: n0(a.tss) })}`)}">
+    ${SessChip.icon("race")}<span class="tl sc-t">${esc(rl)}</span><span></span><span class="mn num">${hm(a.moving_s)} · ${esc(tO("wk.load", { n: n0(a.tss) }))}</span></button>`;
+  }
   const se = a.session || {}, lab = se.type_label ? `${a.category_label} · ${se.type_label}` : a.category_label;
   return `<button type="button" class="sx sc act" data-go="${esc(`${SCHED}?day=${a.date}&act=${a.index}`)}" data-tip="${esc(`課表外：${lab} ${hm(a.moving_s)} · 負荷 ${n0(a.tss)}\n點一下看摘要、配對到課表`)}">
-    ${SessChip.icon(SessChip.actKind(a))}<span class="tl sc-t">${esc(lab)}</span><span></span><span class="mn num">${hm(a.moving_s)} · 負荷 ${n0(a.tss)}</span></button>`;
+    ${SessChip.icon(SessChip.actKind(a))}<span class="tl sc-t">${esc(lab)}</span><span></span><span class="mn num">${hm(a.moving_s)} · ${esc(tO("wk.load", { n: n0(a.tss) }))}</span></button>`;
 }
 // ---- end this week card ----
 // a done session / an activity outside the plan: open it on the 課表 page (planned vs actual, the activity link)
 document.addEventListener("click", (e) => { const g = e.target.closest?.(".sx[data-go]"); if (g) { e.stopImmediatePropagation(); location.href = window.TRC_STATIC ? TRC_STATIC.href(g.dataset.go) : g.dataset.go; } }, true);
+// SP-517: the plan's races (A / B / C) and 百岳 trips on the day (the 課表 calendar's `races`, SP-504) — a mark
+// written as on the 課表's day cell (「B 賽：X」, a trip 「C 行程：X」), not a card; the day is then no rest day
+const raceT = (r, k, p) => tO(`wk.${r && r.kind === "baiyue" ? "trip" : "race"}_${k}`, p);
+const racesOn = (iso) => ((SP && SP.races) || []).filter((r) => r.start <= iso && iso <= (r.end || r.start));
+const raceMarkHtml = (r) => `<span class="rcm" tabindex="0" data-tip="${esc(raceT(r, `tip_${["A", "C"].includes(r.priority) ? r.priority.toLowerCase() : "b"}`, { name: r.name })
+  + (r.counted && r.tss != null ? "\n" + tO("wk.mark_load", { n: n0(r.tss) }) : ""))}">${esc(raceT(r, "mark", { p: r.priority, name: r.name }))}</span>`;
 function dayHtml(iso, ss, extra, today) {
-  const past = iso < today, isT = iso === today;
-  const items = ss.map((s) => sessHtml(s, today)).concat(extra.map(extraHtml));
-  return `<div class="dc ${isT ? "today" : ""} ${past ? "past" : ""}"><div class="dh"><b>週${wd(iso)}</b><span class="num">${md(iso)}</span>${isT ? `<span class="now">今天</span>` : ""}</div>
-    <div class="sxs">${items.join("") || `<span class="rest">${I(past ? "na" : "rest")}${past ? "沒有活動" : "休息"}</span>`}</div></div>`;
+  const past = iso < today, isT = iso === today, rs = racesOn(iso);
+  const items = rs.map(raceMarkHtml).concat(ss.map((s) => sessHtml(s, today)), extra.map(extraHtml));
+  // SP-502: 週一 / Mon (I18N.fmt; it was 「週」 + the narrow name, 「週M」 in English)
+  return `<div class="dc ${isT ? "today" : ""} ${past ? "past" : ""}"><div class="dh"><b>${esc(I18N.fmt.weekday(iso, "short"))}</b><span class="num">${md(iso)}</span>${isT ? `<span class="now">${esc(tO("wk.today"))}</span>` : ""}</div>
+    <div class="sxs">${items.join("") || `<span class="rest">${I(past ? "na" : "rest")}${esc(tO(past ? "wk.none" : "wk.rest"))}</span>`}</div></div>`;
 }
 function renderPlan() {
   if (!SP || !PLAN) return;
@@ -700,10 +889,12 @@ function renderPlan() {
   const by = {};
   for (const s of SP.sessions) if (s.day) (by[s.day] ||= []).push(s);
   const used = new Set(SP.sessions.filter((s) => s.done_by).map((s) => s.done_by.index));
+  const raced = new Map((SP.activities || []).filter((a) => a.race).map((a) => [a.index, a.race]));   // SP-517
   const days = [];
   for (let i = 0; i < 7; i++) {
     const iso = addDays(ws, i);
-    days.push(dayHtml(iso, by[iso] || [], PLAN.done.activities.filter((a) => a.date === iso && !used.has(a.index)), today));
+    days.push(dayHtml(iso, by[iso] || [], PLAN.done.activities.filter((a) => a.date === iso && !used.has(a.index))
+      .map((a) => raced.has(a.index) ? { ...a, race: raced.get(a.index) } : a), today));
   }
   $("wk-days").innerHTML = days.join("");
   // the 課表 page's legend (SP-399): one 「? 圖例」, the same table (sesschip.js)
@@ -726,12 +917,12 @@ function paintPlanLoad() {
   const weeks = SP.weeks || [];
   if ($("later")) $("later").innerHTML = weeks.length ? `之後已排到 ${md(SP.horizon_end)}（${weeks.length} 週）· <a href="/api/v1/overview/plan/schedule/page">日曆、修改、同步到 COROS →</a>` : "";
 }
-const progHtml = (D, hours, tss) => `${bar("時間", D.hours, hours, hrs)}${bar("負荷（Load）", D.tss, tss, n0)}<span class="num">${hrs(D.hours)} / ${hrs(hours)} · 負荷 ${n0(D.tss)} / ${n0(tss)}</span>`;
+const progHtml = (D, hours, tss) => `${bar("時間", D.hours, hours, hrs)}${bar("訓練負荷（Training load）", D.tss, tss, n0)}<span class="num">${hrs(D.hours)} / ${hrs(hours)} · 負荷 ${n0(D.tss)} / ${n0(tss)}</span>`;
 // SP-394: during a first import's back-fill CTL / TSB are not shown (null + history_pending's message)
 const HP = () => (PLAN && PLAN.history_pending) || (SP && SP.summary && SP.summary.history_pending) || (STATUS && STATUS.history_pending);
-const ctlHtml = (c0, c1) => c0 == null || c1 == null ? `體能（Fitness） ${esc(HP()?.message || "–")}`
-  : `體能（Fitness） <b>${n0(c0)}</b> → 週日 <b>${n0(c1)}</b>（${sgn(c1 - c0, (v) => v.toFixed(1))}/週）`;
-const tsbHtml = (t) => t == null ? "" : `下週一狀況（Form） <b>${sgn(t)}</b>`;
+const ctlHtml = (c0, c1) => c0 == null || c1 == null ? `長期訓練負荷（Chronic load） ${esc(HP()?.message || "–")}`
+  : `長期訓練負荷（Chronic load） <b>${n0(c0)}</b> → 週日 <b>${n0(c1)}</b>（${sgn(c1 - c0, (v) => v.toFixed(1))}/週）`;
+const tsbHtml = (t) => t == null ? "" : `下週一負荷平衡（Load balance） <b>${sgn(t)}</b>`;
 // one week note (its colour = the note's level)
 const noteHtml = (n) => `<details class="al ${esc(n.level)}"><summary>${I(n.level)}<b>${gl(String(n.text).split("：")[0])}</b><span class="s">${gl(String(n.text).split("：").slice(1).join("："))}</span></summary>
     <div class="body">${gl(n.text)}</div></details>`;
@@ -744,24 +935,26 @@ function drawNotes(w, st) {
   const r = Hints.render(w.notes || [], { ...st, item: noteHtml });
   box.innerHTML = r.html; box.hidden = !r.html;
   if (more) { more.innerHTML = r.detailHtml; more.hidden = !r.detailHtml; }
-  Hints.bind(box, (s2) => drawNotes(w, s2));
-  if (more) Hints.bind(more, (s2) => drawNotes(w, s2));
+  const redraw = (s2) => { HST = s2; drawNotes(w, s2); };
+  Hints.bind(box, redraw);
+  if (more) Hints.bind(more, redraw);
 }
 async function loadWeek() {
-  const hintsP = window.Hints ? Hints.state() : Promise.resolve(null);      // in parallel with the week
   const w = PLAN = await j(`${API}/weekplan`);
   $("wk-sub").textContent = `${md(w.week.start)}–${md(w.week.end)} · ${w.mode_label}`;
   const T = w.target, D = w.done, L = w.load;
   $("week").innerHTML = `<div class="alerts" id="wk-notes" style="margin-top:10px" hidden></div>
-    <details class="more"><summary>詳細</summary><div class="body">
+    <details class="more"><summary>${esc(t("overview.hint.detail"))}</summary><div class="body">
       <div id="wk-notes-detail" hidden></div>
       <div class="bars" id="wk-prog" style="display:grid;gap:4px;max-width:360px">${progHtml(D, T.hours, T.tss)}</div>
-      <ul>${w.why.map((x) => `<li>${gl(x)}</li>`).join("")}<li>時數不含肌力；負荷（Load）以你近 6 週的每小時負荷 ${n0(T.tss_per_hour)} 換算</li></ul>
+      <ul>${w.why.map((x) => `<li>${gl(x)}</li>`).join("")}<li>時數不含肌力；訓練負荷（Training load）以你近 6 週的每小時負荷 ${n0(T.tss_per_hour)} 換算</li></ul>
       <div><span id="wk-ctl">${ctlHtml(L.ctl_week_start, L.ctl_end)}</span> · <span id="wk-tsb">${tsbHtml(L.tsb_next)}</span></div>
       <div>門檻：${USE_POWER ? `CP ${n0(w.thresholds.cp)} W（${esc(w.thresholds.cp_source)}）· ` : ""}${esc(w.thresholds.easy_cap_label || `輕鬆跑上限 ${n0(w.thresholds.aet)} bpm`)}${q(w.thresholds.easy_cap_tip, "輕鬆跑上限")}${w.thresholds.aet_pm ? ` <span class="pmb">±${w.thresholds.aet_pm.pm} bpm${q(w.thresholds.aet_pm.tip, "AeT 誤差")}</span>` : ""}（${esc(w.thresholds.aet_source)}）</div>
       <div id="later"></div></div></details>`;
-  drawNotes(w, await hintsP);               // asked in parallel with the week: no extra wait
+  HST = await HSTP;                         // asked at the start, in parallel: no extra wait
+  drawNotes(w, HST);
   renderKpis();
+  renderTodo(); renderInd();                // SP-483: R16 reads the week (OV8e)
   // Not shown (sources live in backend/engine/overview.py SRC_*; w.rules still carries them):
   // week targets follow a weekly CTL goal of max(2, 5 %) / max(2.5, 7 %) of CTL (load_guard.ramp_goal), Uphill Athlete's
   // ≤ 10 % weekly volume step and a 3:1 build/recovery cycle; the long day goes on the weekday the
@@ -823,6 +1016,11 @@ function delta(cur, ref, fmt) {
   if (Math.abs(d) < 1e-9) return `<span class="faint">持平</span>`;
   return `<span class="${d > 0 ? "up" : "down"}">${d > 0 ? "▲" : "▼"} ${sgn(d, fmt).slice(1)}</span>`;
 }
+// OV14 (SP-483): the 強度分配 target words inline (完整), behind the ? (標準) or not at all (精簡)
+function splitHead(mode) {
+  if (mode === "inline") return `<span class="meta">${esc(tD("overview.split.target"))}</span> ${q(tD("overview.split.tip"))}`;
+  return q(tD(mode === "tip" ? "overview.split.tip" : "overview.split.tip_lean"));   // the ? says the target (標準) or not (精簡)
+}
 function renderPeriod(R) {
   const C = R.current, P = C.vs_prev, T = C.typical, unitWord = { week: "週", month: "月", year: "年" }[R.unit];
   $("per-sub").textContent = `${C.start} ～ ${C.end}${C.elapsed_share != null ? `（進行中 ${pct(C.elapsed_share)}）` : ""}`;
@@ -837,29 +1035,28 @@ function renderPeriod(R) {
       ${tile("list", "次數", C.sessions, "sessions", (v) => Math.round(v * 10) / 10 + " 次")}
       ${tile("distance", "距離", km(C.distance_km), "distance_km", km)}
       ${tile("gain", "爬升", m0(C.climbing_m), "climbing_m", m0)}
-      ${tile("tss", "負荷（Load）", n0(C.tss), "tss", n0)}
+      ${tile("tss", "訓練負荷（Training load）", n0(C.tss), "tss", n0)}
       <div class="tile"><div class="k">${I("climb")}努力距離 EP ${q("km + 爬升/100（跑步、登山）")}</div><div class="v">${km(C.ep_km)}</div></div>
       <div class="tile"><div class="k">${I("check")}有練的天數</div><div class="v">${C.days}</div><div class="s">下降 ${m0(C.descending_m)}</div></div>
     </div>
-    ${I_.total > 0 ? `<div><b style="font-size:13px">${esc(tD("overview.split.title"))}</b> <span class="meta">${esc(tD("overview.split.target"))}</span>
-      ${q(tD("overview.split.tip"))}
+    ${I_.total > 0 ? `<div><b style="font-size:13px">${esc(tD("overview.split.title"))}</b> ${splitHead(OVH.splitTarget(OVH.level(HST)))}
       <div class="split" role="img" aria-label="低 ${pct(I_.low / I_.total)}，中 ${pct(I_.mid / I_.total)}，高 ${pct(I_.high / I_.total)}">
         <i style="width:${I_.low / I_.total * 100}%;background:var(--lo)"></i><i style="width:${I_.mid / I_.total * 100}%;background:var(--mid)"></i><i style="width:${I_.high / I_.total * 100}%;background:var(--hi)"></i></div>
       <div class="legend" style="margin:0"><span><i style="background:var(--lo)"></i>低 ${pct(I_.low / I_.total)} · ${hm(I_.low)}</span>
         <span><i style="background:var(--mid)"></i>中 ${pct(I_.mid / I_.total)} · ${hm(I_.mid)}</span>
         <span><i style="background:var(--hi)"></i>高 ${pct(I_.high / I_.total)} · ${hm(I_.high)}</span></div></div>` : ""}
-    <details class="more"><summary>詳細數字</summary><div class="body" style="color:var(--text)">
+    <details class="more"><summary>${esc(tO("sec.numbers"))}</summary><div class="body" style="color:var(--text)">
     ${T ? `<div class="meta">平常（典型的一${unitWord}）：${hrs(T.moving_s / 3600)} · ${km(T.distance_km)} · ${m0(T.climbing_m)} · 負荷 ${n0(T.tss)}</div>` : ""}
     <div class="keys">
       ${k(C.longest, "最長一次", hm(C.longest?.moving_s))}
       ${k(C.biggest_climb, "爬最多", m0(C.biggest_climb?.climbing_m))}
       ${k(C.hardest, "負荷最大", "負荷 " + n0(C.hardest?.tss))}
     </div>
-    ${cats.length ? `<div class="tablewrap"><table><thead><tr><th>類別</th><th class="n">次數</th><th class="n">移動時間</th><th class="n">距離</th><th class="n">爬升</th><th class="n">負荷（Load）</th></tr></thead>
+    ${cats.length ? `<div class="tablewrap"><table><thead><tr><th>類別</th><th class="n">次數</th><th class="n">移動時間</th><th class="n">距離</th><th class="n">爬升</th><th class="n">訓練負荷（Training load）</th></tr></thead>
       <tbody>${cats.map(([key, v]) => `<tr><td><span class="dot" style="background:${catColor(key)}"></span>${esc(R.categories[key].label)}</td>
         <td class="n">${v.sessions}</td><td class="n">${hm(v.moving_s)}</td><td class="n">${km(v.distance_km)}</td><td class="n">${m0(v.climbing_m)}</td><td class="n">${n0(v.tss)}</td></tr>`).join("")}</tbody></table></div>`
       : `<p class="meta">這段期間沒有活動。</p>`}
-    ${C.activities.length ? `<div class="tablewrap"><table><thead><tr><th>日期</th><th>類別</th><th>類型</th><th class="n">移動時間</th><th class="n">距離</th><th class="n">爬升</th><th class="n">負荷（Load）</th></tr></thead>
+    ${C.activities.length ? `<div class="tablewrap"><table><thead><tr><th>日期</th><th>類別</th><th>類型</th><th class="n">移動時間</th><th class="n">距離</th><th class="n">爬升</th><th class="n">訓練負荷（Training load）</th></tr></thead>
       <tbody>${C.activities.map((a) => `<tr><td>${esc(a.start.slice(0, 16).replace("T", " "))}</td><td><span class="dot" style="background:${catColor(a.category)}"></span>${esc(a.category_label)}</td>
         <td class="meta">${esc(a.sport_type)}</td><td class="n">${hm(a.moving_s)}</td><td class="n">${a.distance_km ? km(a.distance_km) : "–"}</td>
         <td class="n">${a.climbing_m ? m0(a.climbing_m) : "–"}</td><td class="n">${n0(a.tss)}</td></tr>`).join("")}</tbody></table></div>` : ""}
@@ -986,13 +1183,15 @@ function renderPmc() {
     const f = r.prev > 0 && r.tsb != null ? r.tsb / r.prev : 0;
     return TSB_BANDS.find(([hi]) => f < hi)[1];
   };
-  $("pmc-q").innerHTML = q(tO("pmc.tip", { n: pmcDays() }));
   $("pmc").setAttribute("aria-label", tO("pmc.aria", { n: pmcDays() }));
+  // OV13 (SP-483): the LTHR prior's mark on the chart and its legend; 精簡 says it in the chart's ? only
+  const marks = PMC_MARKS.filter((m) => rows.some((r) => r.date === m.date));
+  const onChart = OVH.pmcMarks(OVH.level(HST)) === "chart";
+  $("pmc-q").innerHTML = q([tO("pmc.tip", { n: pmcDays() }), ...(onChart ? [] : marks.map((m) => `${md(m.date)} ${m.text}`))].join("\n"));
   $("pmc-legend").innerHTML = `<span><i style="background:${ctlC};height:3px"></i>${esc(tO("pmc.ctl"))}</span>`
     + `<span><i style="background:${atlC};height:3px"></i>${esc(tO("pmc.atl"))}</span>`
     + `<span><i style="background:linear-gradient(90deg,#1baf7a 50%,#e34948 50%)"></i>${esc(tO("pmc.tsb"))}</span>`
-    + PMC_MARKS.filter((m) => rows.some((r) => r.date === m.date))
-      .map((m) => `<span>┆ ${esc(md(m.date))} ${esc(m.text)}</span>`).join("");
+    + (onChart ? marks.map((m) => `<span>┆ ${esc(md(m.date))} ${esc(m.text)}</span>`).join("") : "");
   const one = (v) => v == null ? "–" : (Math.round(v * 10) / 10).toFixed(1);
   chart("pmc").setOption({ animation: false, textStyle: { fontFamily: "system-ui, sans-serif" },
     grid: { left: 36, right: 10, top: 10, bottom: 24 },
@@ -1008,7 +1207,7 @@ function renderPmc() {
         // SP-289: a dashed line on the day the LTHR prior (0.90 × max HR) was replaced; the text on hover
         markLine: { symbol: "none", silent: false, label: { show: false }, lineStyle: { type: "dashed", color: css("--muted") },
           tooltip: { formatter: (p) => esc(p.data.text) },
-          data: PMC_MARKS.filter((m) => rows.some((r) => r.date === m.date)).map((m) => ({ xAxis: md(m.date), text: m.text })) } },
+          data: (onChart ? marks : []).map((m) => ({ xAxis: md(m.date), text: m.text })) } },
       { id: "atl", name: tO("pmc.atl"), type: "line", data: rows.map((r) => r.atl), showSymbol: false, z: 3, lineStyle: { width: 1.6, color: atlC }, itemStyle: { color: atlC } },
     ] }, true);
 }

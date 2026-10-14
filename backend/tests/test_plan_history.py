@@ -274,8 +274,8 @@ def test_history_counts_the_marked_races(monkeypatch, tmp_path):
 
 def test_the_week_result_grades_intensity_like_the_compliance_page():
     """A 強度課 with 70 % of its dose is 強度不足 = 部分 (SP-216), not 沒照課表 and not done as
-    planned; one under half is 沒照課表; an easy run slightly hard is 部分 (偏強). The stored
-    result counts them exactly as compliance.dashboard on the page does."""
+    planned; one under half is 沒照課表; an easy run slightly hard is done (SP-484: 偏強 is rule D's dot, no
+    longer 部分). The stored result counts them exactly as compliance.dashboard on the page does."""
     def a(index, day, z3, typ="easy", tss=50.0):
         return {"index": index, "start": f"{day}T07:00:00", "date": day, "category": "road",
                 "category_label": "路跑", "moving_s": 3600.0, "tss": tss, "hard_s": 0.0,
@@ -290,12 +290,12 @@ def test_the_week_result_grades_intensity_like_the_compliance_page():
     inp = {"activities": acts, "activities_since": "2026-09-01"}
     plan = PH.plan_summary(every, "2026-09-28", "2026-09-28")
     r = PH._week_result("2026-09-28", plan, every, inp, "2026-10-06", {})
-    assert (r["due"], r["completed"], r["ok"], r["partial"], r["off_plan"]) == (4, 4, 1, 2, 1)
+    assert (r["due"], r["completed"], r["ok"], r["partial"], r["off_plan"]) == (4, 4, 2, 1, 1)
     assert r["quality"] == {"due": 3, "completed": 3, "ok": 1}                # only the full dose is 做到
     # the same numbers as the 課表統計 page's own dashboard of that week
     ss = PSAPI._decorate([dict(s) for s in every], acts, {}, "2026-09-28", "2026-10-04")
     by = {s["uid"]: s["compliance"] for s in ss}
     assert by["q1"]["label"] == "強度不足" and by["q1"]["pct"] == 70 and not by["q1"].get("off_plan")
-    assert by["q2"]["label"] == "換了課" and by["e1"]["label"] == "強度偏高"
+    assert by["q2"]["label"] == "換了課" and by["e1"]["label"] == "完成" and not by["e1"].get("short")
     t = C.dashboard(ss, [], "2026-10-06", "2026-09-28", "2026-10-04")["totals"]
     assert (t["done"], t["partial"], t["off_plan"]) == (r["ok"], r["partial"], r["off_plan"])

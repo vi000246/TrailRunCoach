@@ -35,7 +35,8 @@ what the session needs; the bands are TrainingPeaks' compliance colours that
 compliance.py already uses for time / TSS (±20 % / 50 %), applied to time at
 intensity as interval-prescription.md #4 / #10 propose (TIZ ÷ planned TIZ):
   planned hard: ≥ 80 % done · 50–80 % 強度不足 (partial) · < 50 % ran easy (沒照課表)
-  planned easy: a quality dose up to 150 % 偏強 (partial) · beyond: ran hard (沒照課表)
+  planned easy: a quality dose up to 150 % still fits the easy run (grade `over`, done — SP-484: 「偏強」
+    is rule D's alone, engine/adapt.py; this grade no longer makes the card ◐) · beyond: ran hard (沒照課表)
 SP-370: with time and TSS both within ±20 % (compliance.time_tss_level green) the
 「ran easy / ran hard」 and another foot sport are 部分 (short, `soft`) with the reason
 (「時間和負荷都對，但跑成強度課」); 沒照課表 stays when time or TSS is also > 20 % off, or the
@@ -340,15 +341,18 @@ def compare(s: dict, planned_tss: Optional[float] = None) -> Optional[dict]:
     """A done session vs its activity: {off_plan, short, soft, planned, actual, intensity_pct,
     text, short_text, match}. off_plan (沒照課表): the planned intensity was not run
     (排間歇、跑成輕鬆 — under 50 % of the dose — or the other way) or another sport;
-    short (部分): 強度不足 (50–80 %) or 偏強; or (SP-370, `soft` intensity / sport) the
+    short (部分): 強度不足 (50–80 %); or (SP-370, `soft` intensity / sport) the
     reversal or another foot sport while time and TSS are both within ±20 % (`planned_tss`:
     the estimate the page uses, as compliance.session_compliance). `actual` stays hard / easy
-    (short reads hard, it was intensity; 偏強 reads hard). The time / TSS colour is compliance.py's part."""
+    (short reads hard, it was intensity; `over` — an easy run a little hard — reads easy and is not short:
+    偏強 is rule D's, SP-484). The time / TSS colour is compliance.py's part."""
     a = s.get("done_by") if s.get("state") == "done" else None
     if not isinstance(a, dict):
         return None
     p, grade, d = graded(s, a)
-    got = {"short": "hard", "over": "hard"}.get(grade, grade)
+    # 偏強 (`over`, under the ran-hard line) counts as the easy run it was planned: whether it was too hard
+    # is rule D's call (engine/adapt.py, the card's dot), not a second ◐ 「偏強」 here (SP-484, audit SC3 → SC4)
+    got = {"short": "hard", "over": "easy"}.get(grade, grade)
     wrong_sport = bool(a.get("category")) and not sport_ok(s, a) and s.get("kind") not in NEVER
     reversed_ = bool(p) and grade in ("hard", "easy") and grade != p
     # time and TSS on plan: another foot sport / the reversal is 部分, not 沒照課表 (SP-370, 推估)
@@ -365,7 +369,7 @@ def compare(s: dict, planned_tss: Optional[float] = None) -> Optional[dict]:
             soft = "intensity"
         else:
             why.append(f"排{_kind_label(s)}，實際跑{'強度' if grade == 'hard' else '輕鬆'}")
-    short = not why and (soft is not None or grade in ("short", "over"))
+    short = not why and (soft is not None or grade == "short")
     pct = None if d is None or p != "hard" else round(min(d["ratio"], 9.99) * 100)
     what = _dose_text(d)
     if soft == "sport":
@@ -374,8 +378,7 @@ def compare(s: dict, planned_tss: Optional[float] = None) -> Optional[dict]:
     elif soft == "intensity":
         short_text = _("時間和負荷都對，但跑成強度課") if grade == "hard" else _("時間和負荷都對，但跑成輕鬆")
     else:
-        short_text = "" if not short else (
-            _("強度不足：只做到這堂課的 {pct}%", pct=pct) if grade == "short" else _("輕鬆跑偏強"))
+        short_text = _("強度不足：只做到這堂課的 {pct}%", pct=pct) if short else ""
     if short_text and what and soft != "sport":
         short_text += _("（{what}）", what=what)
     ter, cat = s.get("terrain"), a.get("category")

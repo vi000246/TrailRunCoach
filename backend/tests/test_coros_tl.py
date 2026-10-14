@@ -289,7 +289,7 @@ def test_normalize_load_main_set_only():
     assert "「負荷」只能用在主課" in e.value.errors
     with pytest.raises(WS.StepsError) as e:
         WS.normalize(_doc({**LOAD_HR, "dur": {"type": "load", "value": 900}}))
-    assert any("負荷（Load）" in x for x in e.value.errors)
+    assert any("訓練負荷（Training load）" in x for x in e.value.errors)
     with pytest.raises(WS.StepsError) as e:
         WS.normalize(_doc({**LOAD_HR, "dur": {"type": "lap"}}))
     assert e.value.errors[0] == "時長類型要是 時間／距離／直到按下計圈／負荷"

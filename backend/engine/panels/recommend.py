@@ -34,13 +34,13 @@ def recommend(band: Optional[dict], focus: Optional[dict], phase: Optional[str],
     reasons: list[str] = []
     r = band.get("ratio") if band else None
     if band:
-        reasons.append(f"疲勞比（疲勞 ÷ 體能）= {_fmt(r)}%（{band['label']}）")
+        reasons.append(f"負荷比（短期負荷 ÷ 長期訓練負荷）= {_fmt(r)}%（{band['label']}）")
     if tsb is not None:
-        reasons.append(f"狀況（Form）= {_fmt(tsb, 1)}")
+        reasons.append(f"負荷平衡（Load balance）= {_fmt(tsb, 1)}")
 
     if band and band["key"] == "overreaching":
         return {"key": "rest", "headline": SESSIONS["rest"],
-                "reasons": reasons + ["疲勞比 ≥ 150%：先恢復，下一課不要排強度"]}
+                "reasons": reasons + ["負荷比 ≥ 150%：先恢復，下一課不要排強度"]}
     if phase in ("taper", "event"):
         return {"key": "taper", "headline": SESSIONS["taper"],
                 "reasons": reasons + [f"目前是{'減量期' if phase == 'taper' else '賽事週'}"]}
@@ -56,12 +56,12 @@ def recommend(band: Optional[dict], focus: Optional[dict], phase: Optional[str],
                        f"目標 {b['target'][0]}–{b['target'][1]}%")
         key = b["key"]
         if key != "low" and tsb is not None and tsb < -25:
-            reasons.append("狀況（Form）< -25：強度課之前先安排一天輕鬆")
+            reasons.append("負荷平衡（Load balance）< -25：強度課之前先安排一天輕鬆")
         return {"key": key, "headline": SESSIONS[key], "reasons": reasons}
 
     if focus and focus.get("total"):
         reasons.append("4 週負荷焦點三項都在目標範圍內")
     if r is not None and r >= 100:
         return {"key": "low", "headline": SESSIONS["low"],
-                "reasons": reasons + ["疲勞比已在最佳化區間，用輕鬆量維持"]}
+                "reasons": reasons + ["負荷比已在最佳化區間，用輕鬆量維持"]}
     return {"key": "grow", "headline": SESSIONS["grow"], "reasons": reasons}

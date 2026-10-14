@@ -46,7 +46,7 @@ def test_tis_tile_with_power_matches_the_evaluator():
         assert R.tis_scores(ds, w) == (a, an)
         assert c["kind"] == "stat" and c["value"] == f"{a:.0f}／{an:.0f}" and c["power"] is True
         assert c["sub"] == "1–10，跟手錶的 0–5 不同"
-        assert f"有氧效果（Aerobic effect）{a:.0f}、無氧效果（Anaerobic effect）{an:.0f}" in c["tip"] and "怎麼看：" in c["tip"] and "方法：" in c["tip"]
+        assert f"有氧訓練效果（Aerobic training effect）{a:.0f}、無氧訓練效果（Anaerobic training effect）{an:.0f}" in c["tip"] and "怎麼看：" in c["tip"] and "方法：" in c["tip"]
     # the steady run below threshold has no anaerobic stimulus; the intervals do
     assert R.tis_scores(ds, ds.workouts[0])[1] == 1
     assert R.tis_scores(ds, ds.workouts[1])[1] > 1
@@ -79,7 +79,7 @@ def test_tis_tile_english():
     ds = FakeDataset([_run(TODAY, minutes=52, power=200.0)], TODAY, settings=SETTINGS)
     with use_locale("en"):
         c = _cards(ds)["tis"]
-    assert c["label"] == "Aerobic / Anaerobic effect" and c["sub"] == "1–10, not the watch's 0–5"
+    assert c["label"] == "Aerobic / Anaerobic training effect" and c["sub"] == "1–10, not the watch's 0–5"
     assert "How to read:" in c["tip"] and not any("一" <= ch <= "鿿" for ch in c["tip"])
 
 

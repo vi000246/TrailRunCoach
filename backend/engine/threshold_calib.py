@@ -132,7 +132,7 @@ CAL.register(CAL.Item(
     default_src=N_("推估（每天的心率本來就差約 3 bpm，Lamberts & Lambert 2009）"), k=6, min_n=MIN_POINTS,
     fit=fit_easy_margin, bounds=MARGIN_BOUNDS, digits=1,
     help=N_("有氧基礎的飄移檢查判斷「在 AeT 附近」時，上緣是 AeT 加這個數。"
-            "輕鬆跑偏強不用這個數（看功率和負荷（Load）；沒有功率時看 LTHR 的 94%）。"
+            "輕鬆跑偏強不用這個數（看功率和訓練負荷（Training load）；沒有功率時看 LTHR 的 94%）。"
             "本人值 = 你的 AeT 估得有多不準（多次輕鬆跑心率飄移回歸的標準誤），最少 3；"
             "1 筆 = 一次可用的輕鬆跑飄移（半年內）。AeT 估得越準，這個數越接近 3。")))
 

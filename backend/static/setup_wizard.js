@@ -12,6 +12,10 @@
  * already has 4 complete weeks with ≥ 3 days of running / hiking (GET /profile/detect
  * has_history). Saved with PUT /profile/experience; the race goes to the shared race list.
  *
+ * R14 (SP-488, docs/research/ui-hint-audit.md §5): the dialog interrupts only on 總覽 and 設定 (WIZARD_PAGES).
+ * Any other page gets one line at its top instead — 「還缺體重，估算可能不準 →」 (common.setup.line), linking to
+ * 設定 → 個人資料 — while the weight, the sex or the age is still missing (not in the demo: it has no 設定).
+ *
  * Extension hook (for settings owned elsewhere, e.g. 主要訓練項目 on
  * feat/primary-sport — one setting, not a second copy here): a script loaded
  * before this one may push
@@ -27,9 +31,29 @@
   const done = (later) => j(`${P}/setup`, { method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ done: !later, later: !!later }) });
   const num = (v) => (v === "" || v == null ? null : Number(v));
+  // R14: which page this is (shell.js's data-page) — the dialog only on these
+  const WIZARD_PAGES = ["home", "settings"];
+  const page = (document.querySelector("script[data-page]") || { dataset: {} }).dataset.page || "";
+  const SETTINGS_HREF = "/api/v1/wko5/settings#general";
+  function missingLine(prof) {
+    const miss = (prof.setup && prof.setup.missing) || [];
+    if (!prof.setup || !prof.setup.needed || !miss.length || (window.TRC_SESSION || {}).mode === "demo") return;
+    if (document.getElementById("sw-line")) return;
+    const st = document.createElement("style");
+    st.textContent = `.sw-line { margin: 0; padding: 6px 16px; font: 13px/1.4 system-ui, -apple-system, "Segoe UI", "Noto Sans TC", sans-serif;
+      background: color-mix(in srgb, var(--warn, #b45309) 10%, var(--panel, #fff)); border-bottom: 1px solid var(--line, #e1e5ea); }
+    .sw-line a { color: var(--warn, #b45309); text-decoration: none; font-weight: 600; }`;
+    document.head.appendChild(st);
+    const el = document.createElement("p");
+    el.id = "sw-line"; el.className = "sw-line"; el.setAttribute("role", "status"); el.dataset.hintId = "GL6";
+    el.innerHTML = `<a href="${SETTINGS_HREF}">${esc(T("line", { list: miss.map((k) => T(`f_${k}`)).join(T("sep")) }))}</a>`;
+    const nav = document.querySelector(".appnav");
+    if (nav) nav.after(el); else document.body.prepend(el);
+  }
   const fmtT = (s) => `${Math.floor(s / 3600)}:${String(Math.floor(s / 60) % 60).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 
   j(P).then(async (prof) => {
+    if (!WIZARD_PAGES.includes(page)) { missingLine(prof); return; }
     if (!prof.setup || !prof.setup.remind) return;
     const det = j(`${P}/detect`).catch(() => ({}));
     let askSurvey = !!prof.setup.survey_pending;

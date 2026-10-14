@@ -6,16 +6,22 @@
  * reminder (information).
  *
  *   「排入」 POST …/suggestions/accept {id, day, test?}
- *   「不要」 POST …/suggestions/dismiss {id, action: "declined"}
+ *   「不要」 POST …/suggestions/dismiss {id, action: "declined"} (SP-515: on a test, for every later week too —
+ *            the settings page's 不再建議的測試 has 恢復)
  *    ✕      POST …/suggestions/dismiss {id, action: "dismissed"}
+ *   「稍後提醒」 POST …/suggestions/dismiss {id, action: "snoozed"} (SP-507: back in 7 days, not if the test
+ *            was done meanwhile; every row but injury_done, whose 「還沒」 already is one)
  *
  * Dismissals live on the server (they survive reloads and devices); a
  * suggestion comes back only when a new one arises. Loaded by shell.js on
  * every page; styled from the page's tokens (--panel, --text, --muted,
  * --line, --accent). The collapsed state is a per-browser convenience
- * (localStorage). Pages can call AppSuggestions.refresh() after a change and
+ * (localStorage). Pages can call AppSuggestions.refresh() after a change (AppSuggestions.open(): the
+ * box opened, for a page's 「在建議框」 link, SP-483) and
  * listen for the "suggestions:changed" event (fired after 排入); "suggestions:loaded"
- * ({rows}) follows every GET (static/eptest.js shows the easy-power test rows from it).
+ * ({rows, declined}) follows every GET (static/eptest.js shows the easy-power test rows from it);
+ * "suggestions:dismissed" ({id, type, action}) follows a 「不要」 / ✕ (the overview's 測試, SP-503);
+ * "suggestions:snoozed" ({id, type, until}) a 稍後提醒 — still the box's (SP-507: the loaded event's `snoozed`).
  */
 (() => {
   if (window.AppSuggestions) return;
@@ -114,6 +120,13 @@
     return "";
   }
 
+  // SP-507: 稍後提醒 — not on injury_done (its 「還沒」 is the same 7 days)
+  const snoozeBtn = (r) => (r.type === "injury_done" ? "" :
+    `<button type="button" class="sg-btn" data-act="snooze" title="${esc(T(testy(r) ? "snooze_tip_test" : "snooze_tip"))}">${esc(T("snooze"))}</button>`);
+  const testy = (r) => ["test", "baseline", "zone_test"].includes(r.type) || (r.links || []).some((l) => l.test);
+  // SP-515: 「不要」 on a test holds that test in every later week (settings: 不再建議的測試 → 恢復)
+  const declineTip = (r) => (["test", "baseline"].includes(r.type) ? ` title="${esc(T("decline_tip_test"))}"` : "");
+
   function item(r) {
     const canPick = (r.pick === "pair" || r.pick === "day") ? (r.options || []).length > 0
       : r.pick === "test_day" ? (r.tests || []).some((t) => (t.options || []).length) : r.pick === "confirm";
@@ -126,10 +139,11 @@
       ${r.reason ? `<div class="sg-reason">${esc(r.reason)}</div>` : ""}
       ${r.help ? `<div class="sg-help" hidden>${esc(r.help)}</div>` : ""}
       ${(r.links || []).length ? `<div class="sg-act">${r.wait_cool ? `<span class="sg-none" style="flex-basis:100%">${esc(T("wait_cool"))}</span>` : ""}
-        ${r.links.map((l) => `<a class="sg-btn" href="${esc(l.href)}">${esc(l.label)}</a>`).join("")}</div>` : ""}
+        ${r.links.map((l) => `<a class="sg-btn" href="${esc(l.href)}">${esc(l.label)}</a>`).join("")}${r.pick ? "" : snoozeBtn(r)}</div>` : ""}
       ${r.pick ? `<div class="sg-act">${picker(r)}
         ${canPick ? `<button type="button" class="sg-btn pri" data-act="accept">${esc(r.accept_label || T("accept"))}</button>` : ""}
-        <button type="button" class="sg-btn" data-act="decline">${esc(r.decline_label || T("decline"))}</button></div>` : ""}
+        <button type="button" class="sg-btn" data-act="decline"${declineTip(r)}>${esc(r.decline_label || T("decline"))}</button>${snoozeBtn(r)}</div>`
+        : (r.links || []).length || !snoozeBtn(r) ? "" : `<div class="sg-act">${snoozeBtn(r)}</div>`}
     </div>`;
   }
 
@@ -188,8 +202,18 @@
           : `<div class="sg-ok">${esc(T("scheduled", { list: ss.map((s) => T("item", { day: md(s.day), title: s.title })).join(T("sep")) }))} <a href="${SCHEDULE}">${esc(T("to_schedule"))}</a></div>`;
         window.dispatchEvent(new CustomEvent("suggestions:changed", { detail: { id, sessions: ss } }));
         drop(id, 6000);
+      } else if (act === "snooze") {
+        const out = await post(`${API}/dismiss`, { id, action: "snoozed" });
+        const type = (rows.find((x) => x.id === id) || {}).type;
+        el.querySelectorAll(".sg-act").forEach((x, i) => { if (i) x.remove(); });
+        el.querySelector(".sg-act").outerHTML = `<div class="sg-ok">${esc(T("snoozed", { day: out.until ? md(out.until) : "" }))}</div>`;
+        window.dispatchEvent(new CustomEvent("suggestions:snoozed", { detail: { id, type, until: out.until } }));
+        drop(id, 2500);
       } else {
-        await post(`${API}/dismiss`, { id, action: act === "decline" ? "declined" : "dismissed" });
+        const action = act === "decline" ? "declined" : "dismissed";
+        await post(`${API}/dismiss`, { id, action });
+        // SP-503: a page that points here for this row (the overview's 測試) takes it back
+        window.dispatchEvent(new CustomEvent("suggestions:dismissed", { detail: { id, action, type: (rows.find((x) => x.id === id) || {}).type } }));
         drop(id);
       }
     } catch (err) {
@@ -199,16 +223,21 @@
   });
 
   // one GET per page load (SP-362): the box and the page (課表's 排入測試 ▸, schedule.html
-  // sugCount) share it; `fresh` asks again (after a change). Resolves to the rows or null.
-  let shared = null;
-  function load(fresh) {
-    if (!fresh && shared) return shared;
-    shared = fetch(API, { cache: "no-store" })
-      .then((r) => (r.ok ? r.json().then((j) => j.suggestions || []) : null))
+  // sugCount) share it; `fresh` asks again (after a change). Resolves to the rows or null — `all`: the whole
+  // answer (SP-507 R1: the 課表 also offers the tests 稍後提醒 holds, `snoozed_tests`)
+  let shared = null, sharedAll = null;
+  function load(fresh, all) {
+    if (!fresh && shared) return all ? sharedAll : shared;
+    const req = fetch(API, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
       .catch(() => null);
-    // SP-471: every load's rows, for a page's own view of them (static/eptest.js)
-    shared.then((got) => { if (got) window.dispatchEvent(new CustomEvent("suggestions:loaded", { detail: { rows: got } })); });
-    return shared;
+    sharedAll = req;
+    shared = req.then((j) => (j ? j.suggestions || [] : null));
+    // SP-471: every load's rows, for a page's own view of them (static/eptest.js); SP-503: with the
+    // rows 「不要」 / ✕ hid ({id, type, action}: the overview's 測試 待辦 row comes back for those)
+    // SP-507: and the rows 稍後提醒 hid ({id, type, until}: still the box's, the overview keeps pointing there)
+    req.then((j) => { if (j) window.dispatchEvent(new CustomEvent("suggestions:loaded", { detail: { rows: j.suggestions || [], declined: j.declined || [], snoozed: j.snoozed || [] } })); });
+    return all ? sharedAll : shared;
   }
 
   async function refresh(fresh = true) {
@@ -218,7 +247,17 @@
     render();
   }
 
-  window.AppSuggestions = { refresh, load };
+  // SP-483: a page's 「在建議框」 link — the box opened (not collapsed) and brought into view
+  function open() {
+    if (!rows.length) return false;
+    if (ls.get()) { ls.set(false); render(); }
+    const head = box.querySelector(".sg-head");
+    box.scrollIntoView && box.scrollIntoView({ block: "nearest" });
+    if (head) head.focus();
+    return true;
+  }
+
+  window.AppSuggestions = { refresh, load, open };
   window.dispatchEvent(new CustomEvent("suggestions:ready"));
   const start = () => { mount(); setTimeout(() => refresh(false), 900); };   // after the page's own first requests
   if (document.body) start(); else document.addEventListener("DOMContentLoaded", start);

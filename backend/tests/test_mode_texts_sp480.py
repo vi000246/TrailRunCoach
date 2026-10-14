@@ -3,7 +3,9 @@ reads nothing about the two modes (我的算式 / WKO5 對照模式) anywhere on
 
 - Every sentence on the page that names a mode is either inside the 計算模式 section (hidden for
   them, SP-464), a `.mode-note` (hidden by `html.nomode`), or has a mode-free twin chosen by the
-  same rule (`thr.help_nomode`, `tabs.advanced_note_nomode`, the nav's `page.settings.purpose_nomode`).
+  same rule (`tabs.advanced_note_nomode`, the nav's `page.settings.purpose_nomode`). SP-488 (ST15): 「只在
+  我的算式生效」 is said once, in 計算模式 — the two `.mode-note` spans and #thr-q's mode sentence (and
+  with it `thr.help_nomode`) are gone.
 - The rule is decided before the first paint from the session the server inlines
   (TRC_SESSION: `login` and `membership.scopes`), so nothing flashes; GET /config's can_switch
   confirms it. The admin and the owner's single-user app / the demo (no `login`): as before.
@@ -56,16 +58,18 @@ def test_nothing_a_nomode_user_sees_names_a_mode(loc):
 
 
 @pytest.mark.parametrize("loc", ["zh-TW", "en"])
-def test_the_mode_sentences_are_there_for_the_admin(loc):
-    """The same rendered page keeps every mode sentence for whoever may switch (the admin /
-    the owner's app): the .mode-note spans are only hidden by html.nomode."""
+def test_the_mode_sentence_is_there_for_the_admin(loc):
+    """The same rendered page keeps the mode sentence for whoever may switch (the admin / the owner's
+    app) — once, in 計算模式 (SP-488, ST15: it was in 資料校正, 排除壞掉的活動檔 and #thr-q's help)."""
     html = P.render("settings", loc, debug=False)
-    notes = re.findall(r'<span class="mode-note" data-i18n="settings\.mode\.only_mine">([^<]+)</span>', html)
-    assert len(notes) == 2                                        # 資料校正, 排除壞掉的活動檔
-    assert all(n == _cat(loc, "settings")["mode.only_mine"] for n in notes)
-    assert all(MODE_WORDS.search(n) for n in notes)
+    assert not re.findall(r'<span class="mode-note"', html)
+    notes = re.findall(r'<p class="meta mode-note" data-i18n="settings\.mode\.only_mine">([^<]+)</p>', html)
+    assert len(notes) == 1 and notes[0] == _cat(loc, "settings")["mode.only_mine"]
+    assert MODE_WORDS.search(notes[0])
+    mode = re.search(r'<section id="mode">.*?</section>', html, flags=re.S).group(0)
+    assert notes[0] in mode                                       # inside 計算模式 (hidden for a nomode user)
     thr = re.search(r'<button[^>]*\bid="thr-q"[^>]*\btitle="([^"]+)"', html).group(1)
-    assert MODE_WORDS.search(thr)                                 # the server-rendered title: the admin's
+    assert not MODE_WORDS.search(thr)                             # the help no longer repeats it
     assert "html.nomode .mode-note { display: none; }" in html
 
 
@@ -76,10 +80,9 @@ def test_the_nomode_rule_runs_before_the_body_and_follows_can_switch():
     assert "s.membership && s.membership.scopes" in head
     js = SETTINGS[SETTINGS.index("const SIGNIN = "):]
     js = js[:js.index('document.querySelectorAll(".mode").forEach((b) => b.onclick')]
-    # then GET /config's can_switch confirms it, and the help text follows
+    # then GET /config's can_switch confirms it; #thr-q's help names no mode any more (SP-488), nothing to swap
     assert 'document.documentElement.classList.toggle("nomode", can_switch === false);' in js
-    assert '$("thr-q").title = t(nomode ? "settings.thr.help_nomode" : "settings.thr.help");' in js
-    assert js.index("modeTexts();") < js.index("async function loadMode")          # also before /config answers
+    assert "settings.thr.help_nomode" not in SETTINGS and "modeTexts" not in SETTINGS
     # 進階設定's tab note (SP-464) still follows the hidden section
     assert '_note${tab === "advanced" && $("mode").hidden ? "_nomode" : ""}' in SETTINGS
 
@@ -93,18 +96,19 @@ def test_the_nav_purpose_of_settings_follows_the_same_rule():
 @pytest.mark.parametrize("loc", ["zh-TW", "en"])
 def test_the_mode_free_twins_name_no_mode(loc):
     st, sh = _cat(loc, "settings"), _cat(loc, "shell")
-    for cat, k in ((st, "thr.help"), (st, "tabs.advanced_note"), (sh, "page.settings.purpose")):
+    for cat, k in ((st, "tabs.advanced_note"), (sh, "page.settings.purpose")):
         assert MODE_WORDS.search(cat[k]), k                        # the admin's text names it …
         assert cat[f"{k}_nomode"] and not MODE_WORDS.search(cat[f"{k}_nomode"]), k   # … the twin does not
     assert MODE_WORDS.search(st["mode.only_mine"])
+    assert not MODE_WORDS.search(st["thr.help"]) and "thr.help_nomode" not in st     # SP-488: one text, no mode
     if loc == "en":
-        for k in ("thr.help_nomode", "mode.only_mine"):
+        for k in ("thr.help", "mode.only_mine"):
             assert not re.search(r"[一-鿿]", st[k]), k
         assert not re.search(r"[一-鿿]", sh["page.settings.purpose_nomode"])
-    # the twin is the same help minus the mode sentence
+    # the help is the old mode-free twin: the old help minus the mode sentence (SP-488)
     cut = {"zh-TW": "只在「我的算式」模式生效；「WKO5 對照模式」一律用 WKO5 裡的設定。",
            "en": 'Only in "My formulas" mode; "WKO5 parity mode" always uses the settings in WKO5. '}[loc]
-    assert st["thr.help"].replace(cut, "") == st["thr.help_nomode"]
+    assert cut not in st["thr.help"] and st["thr.help"].startswith({"zh-TW": "每次測試記一列", "en": "One row per test"}[loc])
 
 
 # ---------------------------------------------------------------------------- over HTTP (SP-58's app)

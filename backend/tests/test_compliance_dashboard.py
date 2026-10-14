@@ -545,14 +545,15 @@ def test_schedule_week_sum_is_done_tss_without_colour_sp401():
     from pathlib import Path
     html = (Path(C.__file__).parents[1] / "static" / "schedule.html").read_text("utf-8")
     comp = _fn(html, "compW")
-    assert "cp-" not in comp and "w.compliance.pct" not in comp and 'tt("wk.done_tss")' in comp
+    # SP-497: the narrow week column says 「完成的訓練負荷」 only (wk.done_col), not the bilingual wk.done_tss
+    assert "cp-" not in comp and "w.compliance.pct" not in comp and 'tt("wk.done_col")' in comp
     assert 'tt("wk.plan_tss_tip"' in comp
     i = html.index('<div class="ag-sum')
     ag = html[i:html.index('${days.join("")}', i)]
     assert "完成度" not in ag and "cp-${" not in ag and 'tt("wk.done_tss")' in ag
     for loc in ("zh-TW", "en"):
         sch = _catalog(loc, "schedule")
-        assert sch["wk.done_tss"] and "{p}" in sch["wk.plan_tss_tip"]
+        assert sch["wk.done_tss"] and sch["wk.done_col"] and "{p}" in sch["wk.plan_tss_tip"]
 
 
 def test_no_old_completion_words_on_the_card_pages_sp398():

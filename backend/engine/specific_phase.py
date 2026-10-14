@@ -327,7 +327,7 @@ def week_context(*, kind: str, mode: str, monday: dt.date, race: Optional[dict],
     if mode in ("recovery_week", "reentry"):
         info["climb_why"] = "恢復週／停訓後恢復期：不排長爬坡"
     elif tsb is not None and tsb < TSB_MIN:
-        info["climb_why"] = f"週初狀況（Form）{tsb:+.0f} < {TSB_MIN:.0f}：這週不排長爬坡"
+        info["climb_why"] = f"週初負荷平衡（Load balance）{tsb:+.0f} < {TSB_MIN:.0f}：這週不排長爬坡"
     elif (cl.get("dz") or 0) < CLIMB_MIN_GAIN:
         info["climb_why"] = "賽事沒有 GPX，或最長的爬坡不到 150 m"
     else:

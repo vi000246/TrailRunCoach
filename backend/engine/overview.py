@@ -328,8 +328,8 @@ def pmc(ds: Dataset, begin: dt.date, end: dt.date) -> dict:
 
 
 LTHR_SWITCH_NOTE = {
-    "estimate": N_("LTHR 從這天起用你自己資料的估算；之前是推估（最大心率的 90 %），心率負荷（HR load）和體能數字在這天會跳一下"),
-    "test": N_("LTHR 從這天起用你填的值（測試）；之前是推估（最大心率的 90 %），心率負荷（HR load）和體能數字在這天會跳一下"),
+    "estimate": N_("LTHR 從這天起用你自己資料的估算；之前是推估（最大心率的 90 %），心率負荷（HR load）和長期負荷數字在這天會跳一下"),
+    "test": N_("LTHR 從這天起用你填的值（測試）；之前是推估（最大心率的 90 %），心率負荷（HR load）和長期負荷數字在這天會跳一下"),
 }
 
 
@@ -362,11 +362,13 @@ def project(ctl0: float, atl0: float, planned: list[float], cc: float, ac: float
 # this week's plan
 # ---------------------------------------------------------------------------
 
-SRC_RAMP = ("每週體能（Fitness）目標：基礎期 max(2, 體能的 5%)、專項期 max(2.5, 體能的 7%)（推估；"
+SRC_RAMP = ("每週長期訓練負荷（Chronic load）目標：基礎期 max(2, 長期負荷的 5%)、專項期 max(2.5, 長期負荷的 7%)（推估；"
             "Palladino 每週 +1～3、約 2～5% 可長期維持）")
 SRC_TEN = ("週量增幅 ≤ 10%：保守做法（推估；系統性回顧找不到「10% 法則」的證據）；受傷風險線 > 20–30%："
            "Nielsen 2014、Damsted 2019（同儕審查）")
-SRC_31 = "3:1 週期（三週加量、一週恢復，恢復週減 35%，教練建議減 20–35%；Friel / Uphill Athlete 常見做法，沒有試驗比較過 3:1 和 2:1）"
+SRC_31 = ("3:1 週期（三週加量、一週恢復；Friel / Uphill Athlete 常見做法，沒有試驗比較過 3:1 和 2:1）；"
+          "恢復週是前 3 週平均的 70%（減 30%，推估，沒有研究）：查證過的 11 位教練與做法最常見減 30%"
+          "（中位數也是 30%），範圍減 10–60%：跑步教練多在 15–35%，Uphill Athlete 登山課表約減一半")
 SRC_RECOVERY_WEEK = ("恢復週保留次數和強度、每堂縮短（挪威教練）；一段加量最多 6 週（Koop）；"
                      "長跑縮到平常的 65%、專項期恢復週排在賽前第 5、3 週為推估")
 
@@ -386,6 +388,45 @@ SRC_RECOVERY_WEEK = ("恢復週保留次數和強度、每堂縮短（挪威教�
 #   and the short fartlek (quality_gate.RECOVERY 4×1′, Palladino) in both phases — the Norwegian
 #   coaches keep the sessions and their intensity and shorten each [30]; tapering keeps the
 #   intensity too (Wang 2023 [105], indirect).
+#
+# ---- 恢復週的量 (SP-512; estimated-constants-inventory.md §4.1 #4, §5.2 has the URLs) ----------
+# No study says how much a recovery week should cut (none even compares 3:1 with 2:1 [198]). The
+# owner asked for the number most coaches use (2026-10-14, R1). Cuts as written, each source's own
+# baseline; "verified" = the page itself was read (2026-10-14):
+#   verified, counted (the cut's midpoint, or the single number given):
+#   * Henry Howard (runspirited [194]) −20–35 % of the normal week → 27.5
+#   * Jeff Gaudette (RunnersConnect) −20–40 % "from your recent normal"; 25–50 mi/wk ≈ −30 % → 30
+#   * Laura Norris −15–25 % → 20;  Hillrunner −10–20 % → 15;  Whitney Heins (The Mother Runners)
+#     −15–30 %, "typically about 20 %" → 20
+#   * David Roche (Trail Runner Magazine 2016) 3:1 for time-limited athletes −20–40 % of max
+#     training (2:1 for pros −25–50 %) → 30;  Alex Nichols (iRunFar 2022) "about 30 %" → 30
+#   * Dave Burgess (USA Triathlon) ≈ −30 % vs the week before → 30;  the Norwegian endurance
+#     coaches (athletemonitoring.com [30]) −25–35 % → 30
+#   * Uphill Athlete (Steve House [114]; its skiing article too) ≈ half the hardest week → 50
+#   * Roadman Cycling [198] −40–60 % of a build week → 50 — but the page takes it from taper
+#     studies (Wang 2023), not from recovery weeks
+#   NOT verified (search summaries only — the threads 404 / 403): Scott Johnston (UA forum) −50 %,
+#   −40 … −60 % by the block; Jane Mackay (UA forum) 50–75 % of the last build week; RMI Guides
+#   50 % of the highest week. No percentage found: Daniels, Pfitzinger, Higdon, McMillan, Fitzgerald,
+#   Hudson, Magness, Koop ([211]: only "≤ 6 weeks per block"), Carmichael, Friel (R&R = 3–5 days of
+#   reduced load), Lydiard, Canova, Bompa. One study, not counted: Smith 2000 (Int J Sports Med
+#   21:573, elite rowers) — after 3 weeks at +30 %, a week at −25 % "was insufficient" to regenerate.
+#   → mode −30 % (5 of 11), median −30 % (with or without Roadman, or with the 3 unverified ones;
+#   the 7 runners' / trail coaches alone: median −27.5 %, mode −30 %), range −10 … −60 %.
+# Baselines differ: most say the normal / recent week (≈ the 3-week mean here, no conversion); a
+# cut "of the week before" or "of the hardest week" is of the last build week, which at +10 % a
+# week is 1.21 / 1.103 ≈ 1.10 × the 3-week mean (+5 %: ≈ 1.05) — so −30 % of it ≈ 77 % of the mean
+# and UA's 50 % ≈ 55 %. 推估 conversion. RECOVERY_WEEK_SHARE takes the most common −30 % on the
+# normal-week baseline: 70 % of the 3-week mean (the deeper side of 70–77 %; Smith 2000 says a −25 %
+# week is too little after an overload). Was 0.65 (SP-512 R0); R1 2026-10-14.
+# RECOVERY_WEEK_TSB_SHARE (60 %, −40 % of the 4-week mean, the TSB < −30 guard: already too tired)
+# stays: no source is about a TSB, but the deep cuts the verified coaches give for heavy loads sit
+# there (Gaudette −30–40 % at 50+ mi/wk, Roche −25–50 % for 2:1 heavy loads, UA ≈ −50 %), now
+# 10 points under the normal recovery week. Both 推估. Personalising them (inventory §4.1 #4 — TSB
+# back above −10 after it, next week's intervals hit) waits until ≥ 4 recovery weeks of results
+# (option C). projection.week_hours and race_feasibility.koop_run read RECOVERY_WEEK_SHARE.
+RECOVERY_WEEK_SHARE = 0.70          # × the mean of the 3 weeks before (3:1, 專項期 countdown, 6-week cap)
+RECOVERY_WEEK_TSB_SHARE = 0.60      # × the 4-week mean when TSB < −30
 RECOVERY_MAX_GAP = 6
 RECOVERY_DROP = 0.80
 RECOVERY_LONG_SHARE = 0.65
@@ -415,10 +456,12 @@ def recovery_reason(kind: str, monday: dt.date, race_start: Optional[dt.date], s
         return None
     w = SP.easy_week(race_start, monday) if kind == "specific" else None
     if w is not None and since >= 1:        # (not two easy weeks in a row: last week was already light)
-        return _("專項期賽前第 {w} 週是恢復週（從比賽往回數，對齊長天逐週表的低點；前 3 週平均的 65%）", w=w)
+        return _("專項期賽前第 {w} 週是恢復週（從比賽往回數，對齊長天逐週表的低點；前 3 週平均的 {share:.0%}）", w=w,
+                 share=RECOVERY_WEEK_SHARE)
     nxt = kind == "specific" and SP.easy_week(race_start, monday + dt.timedelta(weeks=1)) is not None
     if since >= RECOVERY_MAX_GAP and not nxt:
-        return _("已經連續 {n} 週沒有恢復週（Koop：一段加量最多 6 週）：這週是恢復週（前 3 週平均的 65%）", n=since)
+        return _("已經連續 {n} 週沒有恢復週（Koop：一段加量最多 6 週）：這週是恢復週（前 3 週平均的 {share:.0%}）", n=since,
+                 share=RECOVERY_WEEK_SHARE)
     return None
 
 
@@ -762,7 +805,7 @@ EASY_MIN_RUNS = 3                 # = the per-category rule above (≥ 3 runs, e
 # runner 81.6, above the all-runs median it replaced; 0.80 = a lower, power-cap-like estimate), × IF² × 100
 # = 64 TSS / h. Labelled 推估 with its source.
 EASY_EST_IF = 0.80
-SRC_EASY_TSS = N_("輕鬆跑的計畫負荷（Load）：近 180 天確實輕鬆的跑步（課別分類為輕鬆跑、或平均心率在輕鬆跑上限內；"
+SRC_EASY_TSS = N_("輕鬆跑的計畫訓練負荷（Training load）：近 180 天確實輕鬆的跑步（課別分類為輕鬆跑、或平均心率在輕鬆跑上限內；"
                   "強度課、中強度跑不算）每小時負荷的中位數")
 SRC_EASY_TSS_EST = N_("推估：近 180 天確實輕鬆的跑步不到 3 筆，用強度比（Intensity）0.80 換算（輕鬆強度的上緣），"
                       "每小時負荷 = 強度比² × 100 ≈ 64（Coggan 公開的公式）")
@@ -905,7 +948,7 @@ def _gate_session(gate: dict, dec: dict, th: dict, hours: Optional[float], prefs
         # a ramp week (CTL ramp at load_guard's watch line): T1's content, never a ladder step (neutral)
         f = IL.fit("z3a", cap, (), prefs, mountain)
         s = IL.session_for({**f, "equiv": False, "progress": False, "rung": "sub",
-                            "reason": "體能週增量（Fitness ramp）≥ +5（Friel）：本週只排閾值，不算進階"}, tth, pre, lthr_default, prefs)
+                            "reason": "長期負荷週增量（Chronic load ramp）≥ +5（Friel）：本週只排閾值，不算進階"}, tth, pre, lthr_default, prefs)
         s["title"] = QG.SUB[1]
         s["source"] = QG.source(gate, spec)
         return s
@@ -1517,8 +1560,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     why: list[str] = []
     ramp_goal = LG.ramp_goal(kind, ctl0)
     # 3:1 (SRC_31): three build weeks, each ≥ 0.95 × the one before (0.95 推估: a small dip still
-    # counts as building), → a recovery week at 65 % of them (−35 %: Norwegian coaches −25–35 %,
-    # runners' coaches −20–35 %, periodization-cross-sport.md §4.3 [30][194]; no trial of 3:1 [198])
+    # counts as building), → a recovery week at RECOVERY_WEEK_SHARE (70 %) of them — 推估, no study; most
+    # coaches cut 30 % (range −10 … −60 %) (see RECOVERY_WEEK_SHARE, SP-512; no trial of 3:1 [198])
     # 3:1 from the history: the base phase only (SP-97 — the 專項期 counts back from the race)
     build3 = kind == "base" and len(hist) >= 4 and all(hist[i][1] >= 0.95 * hist[i - 1][1] and hist[i][1] > 0.5
                                                        for i in range(len(hist) - 3, len(hist)))
@@ -1530,7 +1573,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         need_h = need_tss / r_all
         cap = max(1.10 * cap_ref, cap_ref + 0.5)
         hours = min(max(need_h, base4), cap)
-        why.append(_("體能（Fitness）{ctl:.0f} 要每週 +{ramp:.1f}，需要負荷約 {tss:.0f}（≈ {h:.1f} h）",
+        why.append(_("長期訓練負荷（Chronic load）{ctl:.0f} 要每週 +{ramp:.1f}，需要負荷約 {tss:.0f}（≈ {h:.1f} h）",
                       ctl=ctl0, ramp=ramp_goal, tss=need_tss, h=need_h))
         if cs is not None and cs["level"] == 1:
             # SP-288: a new runner's ramp steps by the volume rule itself (+10 %, at least +0.5 h) — the
@@ -1553,21 +1596,27 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
             why.append(b2b_exempt)
         norm_hours = hours                  # a normal week's volume (SP-97: the recovery week's usual long run)
         if tsb_today < -30 and not b2b_exempt:
-            mode, hours = "recovery_week", 0.6 * base4
-            why.append(_("狀況（Form）{tsb:+.0f} < −30：改成恢復週（近 4 週的 60%）", tsb=tsb_today))
+            mode, hours = "recovery_week", RECOVERY_WEEK_TSB_SHARE * base4
+            why.append(_("負荷平衡（Load balance）{tsb:+.0f} < −30：改成恢復週（近 4 週的 60%）", tsb=tsb_today))
         elif rec_why:
             # SP-97: the 專項期 countdown / the 6-week cap — planned, so a TSB of −20…−30 doesn't skip it
-            mode, hours = "recovery_week", 0.65 * statistics.mean(h for _, h, _ in hist[-3:])
+            mode, hours = "recovery_week", RECOVERY_WEEK_SHARE * statistics.mean(h for _, h, _ in hist[-3:])
             why.append(rec_why)
         elif tsb_today < -20 and not b2b_exempt:
             hours = min(hours, base4)
-            why.append(_("狀況（Form）{tsb:+.0f} < −20：先維持量，不加", tsb=tsb_today))
+            why.append(_("負荷平衡（Load balance）{tsb:+.0f} < −20：先維持量，不加", tsb=tsb_today))
         elif build3:
-            mode, hours = "recovery_week", 0.65 * statistics.mean(h for _, h, _ in hist[-3:])
-            why.append(_("已連續 3 週加量：這週是恢復週（前 3 週平均的 65%）"))
+            mode, hours = "recovery_week", RECOVERY_WEEK_SHARE * statistics.mean(h for _, h, _ in hist[-3:])
+            why.append(_("已連續 3 週加量：這週是恢復週（前 3 週平均的 {share:.0%}）", share=RECOVERY_WEEK_SHARE))
         if cs is not None and cs["level"] == 0:
             # SP-288: the week the data starts = the start level (問卷 as entered, else the default)
             mode, hours, why = kind, cs["hours"], [CS.why(cs)]
+        if mode == "recovery_week":
+            # SP-512: the share is 推估 — say so where the week's reasons are shown (the week target's ?)
+            why.append(_("恢復週減多少沒有研究可依：查證過的 11 位教練與做法最常見減 30%（範圍減 10–60%；"
+                         "跑步教練多在 15–35%，Uphill Athlete 登山課表約減一半）；"
+                         "這裡的 {share:.0%}／{tsb_share:.0%} 是推估",
+                         share=RECOVERY_WEEK_SHARE, tsb_share=RECOVERY_WEEK_TSB_SHARE))
     elif kind == "taper":
         base6 = statistics.mean(h for _, h, _ in hist[-6:]) if hist else 0.0
         days_to = goals.get("days_to_next_a")
@@ -1706,7 +1755,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     easy_tss = tph.pop("easy_info")
     if easy_tss["estimated"]:
         notes.append({"level": "info", "src": "easy_tss",
-                      "text": _("輕鬆跑的計畫負荷（Load）每小時 {rate:.0f}（{src}）", rate=easy_tss["rate"],
+                      "text": _("輕鬆跑的計畫訓練負荷（Training load）每小時 {rate:.0f}（{src}）", rate=easy_tss["rate"],
                                 src=_(easy_tss["source"]))})
     # the walking sessions' uphill cap (SP-115: 75 % HRmax, never below the easy-run cap)
     from backend.engine.hr_profile import walk_cap_for
@@ -1910,9 +1959,6 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     if dec.get("warn") and not in_reentry:
         # the low-intensity share under its floor: a warning for Zone 3, Zone 5 waits (SP-31)
         notes.append({"level": "watch", "src": "intensity", "text": dec["warn"]})
-    elif kind == "event":
-        add(id="race", kind="race", title="比賽", minutes=0, detail="賽前 2 天 20–30 分輕鬆跑＋幾趟加速",
-            source="教練常見做法（推估）")
     if (gate.get("guard") or {}).get("step_note") and kind in ("base", "specific") and not in_reentry:
         # the volume step skipped after a short break (SP-63, load_guard.short_break)
         notes.append({"level": "info", "src": "volume", "text": gate["guard"]["step_note"]})
@@ -2006,7 +2052,10 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
             s._long_day = flags.get(s.id, False)
 
     # ---- mark what is done ----------------------------------------------
-    pool = sorted(week_ws, key=lambda w: w.day)
+    # a run on a planned race's day is the race (SP-504), never a session of the week done early / late
+    r_days = PR_.race_days(plan_events, monday, sunday)
+    pool = sorted((w for w in week_ws if not (wdate(w).isoformat() in r_days and category(w) in ENDURANCE)),
+                  key=lambda w: w.day)
     used_idx: set[int] = set()
     hard_z3: Optional[dict] = None
 
@@ -2110,7 +2159,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         elif s.kind == "test" and AT.is_xu(asdict(s)):
             d = AT.pick_day_xu(avail, long_wd, getattr(prefs, "cap_weekday", None))
             if d is None:
-                notes.append({"level": "info", "text": _("徐國峰 90 分鐘測試排在週末長跑日，本週週末沒有可練的日子：這週先不測")})
+                notes.append({"level": "info", "src": "test_day",
+                              "text": _("徐國峰 90 分鐘測試排在週末長跑日，本週週末沒有可練的日子：這週先不測")})
                 continue
             put(s, d)
             avail.remove(d)
@@ -2122,7 +2172,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
                          if x.kind in ("quality", "test") and x.day and x is not s]
             r = AT.pick_day(avail, long_day, hard_days, aet_days, weekend_ok=not AT.is_short(asdict(s)))
             if r["day"] is None:
-                notes.append({"level": "info", "text": r["note"]})
+                notes.append({"level": "info", "src": "test_day", "text": r["note"]})
                 continue
             put(s, r["day"])
             avail.remove(r["day"])
@@ -2160,7 +2210,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         what = (_("本週只剩 {days} 天，{n} 次輕鬆跑（約 {m} 分鐘）排不進去——不用補，下週照常")
                 if all(s.kind == "easy" for s in unplaced) else
                 _("本週只剩 {days} 天，{n} 堂課（約 {m} 分鐘）排不進去——不用補，下週照常"))
-        notes.append({"level": "info", **({"src": "blackout"} if lost else {}),
+        notes.append({"level": "info", "src": "blackout" if lost else "prefs",
                       "text": what.format(days=len(free), n=len(unplaced), m=drop_min)})
     # strength on easy days (or free days), never the day before the long session
     easy_days = [dt.date.fromisoformat(s.day) for s in main_todo if s.kind == "easy" and s.day]
@@ -2176,7 +2226,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
             if d in avail:
                 avail.remove(d)
     if not keep_rest and free:
-        notes.append({"level": "info", "text": _("剩下的每一天都排了東西；覺得累就把一次輕鬆跑換成休息")})
+        # SP-483: its own src — OV8g's class-3 line (engine/hints.py), 「詳細」 in 標準
+        notes.append({"level": "info", "src": "full_week", "text": _("剩下的每一天都排了東西；覺得累就把一次輕鬆跑換成休息")})
     if b2b.get("due"):
         # the accepted B2B on the user's two days (engine/b2b.py place, fixed): the rest moves around them
         dd = [asdict(s) for s in sessions]
@@ -2271,11 +2322,12 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     # 賽後的日子 (SP-98): no run the first 2 days, ≤ 40 min the first week, flat after a big downhill
     sessions = PR_.apply(sessions, PR_.a_windows(phs, plan_events, monday), monday, notes, today, bmap,
                          easy_target=tgt.get("z2", ""))
-    # B / C races (SP-95): the mini-taper days, the race as the week's key session, the B recovery,
-    # a C race in place of a quality session or the long run; the hints
+    # B / C races (SP-95): the mini-taper days, the race day cleared, the B recovery, a C race in place
+    # of a quality session or the long run; the hints. The race itself is a mark, not a session (SP-504)
+    race_marks: list[dict] = []
     sessions = PR_.bc_apply(sessions, plan_events, monday, notes, today, bmap, rate=tph.get("trail") or 60.0,
                             done_days={wdate(w).isoformat() for w in week_ws if category(w) in ENDURANCE},
-                            factory=Session, easy_target=tgt.get("z2", ""))
+                            easy_target=tgt.get("z2", ""), races=race_marks)
     b_ctl = None
     if any(getattr(e, "priority", None) == "B" and monday - dt.timedelta(weeks=PR_.B_CTL_WEEKS) <= e.start < monday
            for e in plan_events):
@@ -2366,6 +2418,9 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     for s in sessions:
         if not s.done and s.day:
             planned_by_day[s.day] = planned_by_day.get(s.day, 0.0) + s.tss
+    for m in race_marks:                    # a B / C race's predicted load (SP-504: a mark, not a session)
+        if not m["done"]:
+            planned_by_day[m["day"]] = planned_by_day.get(m["day"], 0.0) + m["tss"]
     days_after = [(today + dt.timedelta(days=i)) for i in range(1, (sunday - today).days + 1)]
     # today's planned load is added to today's already-computed CTL when nothing is logged yet
     ctl_start, atl_start = ctl_today, atl_today
@@ -2396,7 +2451,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         i = by.get(iid)
         if i is not None and i.level in ("bad", "watch") and i.action \
                 and not (iid == "testing" and (test_s is not None or cs is not None)):       # SP-288: no CP test yet
-            notes.append({"level": i.level, "text": f"{i.title}：{i.action}"})
+            # SP-483: the copied indicator line is OV8k — the overview's 待辦 says it, so it is not shown
+            notes.append({"level": i.level, "src": "indicator", "text": f"{i.title}：{i.action}"})
 
     # ---- tests: suggested, not scheduled -----------------------------------
     test_suggestions = []
@@ -2404,7 +2460,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         ti = by.get("testing")
         test_suggestions.append({
             "kind": "cp", "protocol": test_s.get("protocol"), "title": test_s["title"], "minutes": test_s["minutes"],
-            "reason": _("{why}：區間、負荷（Load）、賽事計算機都靠 CP", why=getattr(ti, "verdict", "") or _("門檻過期或沒測過")),
+            "reason": _("{why}：區間、訓練負荷（Training load）、賽事計算機都靠 CP", why=getattr(ti, "verdict", "") or _("門檻過期或沒測過")),
             "session": {k: test_s.get(k) for k in ("kind", "title", "minutes", "target", "detail", "source", "tss",
                                                    "protocol")}})
     def aet_session() -> dict:
@@ -2463,6 +2519,9 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
                  "tsb_next": ctl_end - atl_end, "ramp": ctl_end - ctl0},
         "projection": proj_rows,
         "sessions": [asdict(s) for s in sorted(sessions, key=lambda s: (s.day or "9999", s.kind))],
+        # B / C races of the week (post_race.race_mark, SP-504): a mark on the day, not a session; its
+        # predicted TSS counts in the planned load (projection above, the 課表's week 計畫)
+        "races": race_marks,
         "long_weekday": WEEKDAYS[long_wd],
         "thresholds": {"cp": tt.get("cp"), "cp_source": tt.get("cp_source"), "lthr": tt.get("lthr"),
                        # SP-437: the threshold pace the structures' TSS took (projection uses it too)

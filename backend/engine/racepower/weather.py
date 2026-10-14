@@ -110,6 +110,12 @@ OM_ELEVATION = "https://api.open-meteo.com/v1/elevation"   # Copernicus GLO-90 D
 # SP-249 rain reminder: docs/research/wet-muddy-terrain.md §5 #1 (thresholds 推估; kept as proposed, owner 2026-10-06)
 RAIN_POP_PCT = 50.0               # any hour of the race window with this probability of precipitation
 RAIN_MM = 5.0                     # or this much forecast precipitation summed over the window
+# SP-485 (docs/research/ui-hint-audit.md §5 R1, owner 2026-10-13 Q1 第 5 題; 推估): the reminder goes on top of the
+# result only when the rain can change the time or the kit — PoP ≥ RAIN_POP_PCT and ≥ RAIN_TOP_MM, or
+# ≥ RAIN_TOP_MM_ALONE whatever the PoP; road twice the amounts. A lighter one is a line on the 環境 card.
+RAIN_TOP_MM = 5.0
+RAIN_TOP_MM_ALONE = 10.0
+RAIN_ROAD_FACTOR = 2.0
 OM_ARCHIVE = "https://archive-api.open-meteo.com/v1/archive"
 OM_HORIZON_DAYS = 16
 LAPSE_C_PER_M = -0.0065
@@ -652,7 +658,10 @@ def rain_alert(rows: Optional[list[dict]], window, kind: str = "trail") -> Optio
     (start, end) or a list of them): alert when any row's PoP ≥ RAIN_POP_PCT
     or their summed amount ≥ RAIN_MM. None when there is no rain data in the
     window (nothing is shown). Never touches the time. `kind` "road" gets a
-    road wording (no poles, no technical sections)."""
+    road wording (no poles, no technical sections).
+    `top` (SP-485, R1): the reminder belongs on top of the result — PoP ≥ RAIN_POP_PCT and the amount
+    ≥ RAIN_TOP_MM, or the amount ≥ RAIN_TOP_MM_ALONE (road: × RAIN_ROAD_FACTOR). Without an amount (CWA
+    gives PoP only) R1 cannot tell a drizzle from a downpour: `top` follows `alert`, as before."""
     if not rows or not window:
         return None
     wins = [window] if isinstance(window, tuple) else list(window)
@@ -671,13 +680,20 @@ def rain_alert(rows: Optional[list[dict]], window, kind: str = "trail") -> Optio
     max_pop = max(pops) if pops else None
     total = sum(mms) if mms else None
     alert = (max_pop is not None and max_pop >= RAIN_POP_PCT) or (total is not None and total >= RAIN_MM)
+    f = RAIN_ROAD_FACTOR if kind == "road" else 1.0
+    if total is None:
+        top = alert
+    else:
+        top = (max_pop is not None and max_pop >= RAIN_POP_PCT and total >= RAIN_TOP_MM * f) \
+            or total >= RAIN_TOP_MM_ALONE * f
     if not alert:
         msg = None
     elif kind == "road":
         msg = _("預報有雨：路面濕滑，轉彎和下坡注意抓地，跌倒風險較高")
     else:
         msg = _("預報有雨：下坡和技術路段可能比預估慢，跌倒風險較高；建議用杖、注意鞋底抓地")
-    return {"alert": alert, "max_pop_pct": max_pop, "total_mm": total, "rows": len(hit), "message": msg}
+    return {"alert": alert, "top": bool(alert and top), "max_pop_pct": max_pop, "total_mm": total, "rows": len(hit),
+            "message": msg}
 
 
 def hourly_at(rows: list[dict], when: dt.datetime) -> Optional[dict]:

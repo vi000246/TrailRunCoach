@@ -113,18 +113,18 @@ REC_MIN_DAYS = 7
 A_GAP_HINT_WEEKS = 12
 
 PHASES = {
-    "transition": "轉換期",
-    "base": "基礎期",
-    "specific": "專項期",
-    "taper": "減量期",
-    "event": "賽事",
-    "recovery": "恢復期",
+    "transition": N_("轉換期"),
+    "base": N_("基礎期"),
+    "specific": N_("專項期"),
+    "taper": N_("減量期"),
+    "event": N_("賽事"),
+    "recovery": N_("恢復期"),
     # SP-98: after the 恢復期 and the 轉換期, the reverse taper. Its place AFTER the 轉換期 is the
     # owner's call (2026-10-05, delegated, kept): the volume then only goes up from the race on —
     # 恢復期 (REC_SHARE 40 %) → 轉換期 (overview.TRANSITION_SHARE 50 %, ≤ 60-min runs) → 回量期
     # (REBUILD_SHARES 50 → 75 %) → 基礎期 — a monotonic order with no second dip; a 回量期 before the 轉換期 would build volume up
     # and then drop it again for the 轉換期.
-    "rebuild": "回量期",
+    "rebuild": N_("回量期"),
 }
 KINDS = {"race": "越野賽", "baiyue": "百岳", "road": "路跑賽", "other": "其他"}
 PRIORITIES = ("A", "B", "C")
@@ -598,7 +598,7 @@ class Phase:
 
     @property
     def label(self) -> str:
-        return PHASES.get(self.kind, self.kind)
+        return _(PHASES[self.kind]) if self.kind in PHASES else self.kind
 
 
 @dataclass

@@ -99,6 +99,7 @@ button.link { border: 0; background: none; color: var(--accent); padding: 0 4px;
 </head>
 <body>
 <script src="/api/v1/static/shell.js" data-page="plan"></script>
+<script src="/api/v1/static/hints.js"></script>
 <script src="/api/v1/static/feasibility.js"></script>
 <header>
   <h1>賽事周期</h1>
@@ -229,10 +230,10 @@ async function call(method, path, body) {
 async function load() { S = await call("GET", ""); manual = null; render(); }
 
 const GUIDE = {
-  recovery: ["轉換 / 恢復期", ["疲勞（Fatigue）下降、狀況（Form）回正", "每週時數低而穩定", "每週 2 次肌力"]],
+  recovery: ["轉換 / 恢復期", ["短期負荷（Acute load）下降、負荷平衡（Load balance）回正", "每週時數低而穩定", "每週 2 次肌力"]],
   base: ["基礎期", ["低強度時間佔比 ≥ 75–80%", "EF（同心率的速度）往上", "長時間輕鬆跑飄移 < 5%", "每週量增幅 ≲ 10%"]],
   specific: ["專項期", ["VAM（同心率爬更快）", "每公里爬升接近目標", "最長單次逼近目標時間", "長時間後段飄移變小"]],
-  taper: ["減量期", ["每週時數降到平常的 40–60%", "高強度時數保留", "狀況（Form）回到正值、體能（Fitness）只小降"]],
+  taper: ["減量期", ["每週時數降到平常的 40–60%", "高強度時數保留", "負荷平衡（Load balance）回到正值、長期訓練負荷（Chronic load）只小降"]],
 };
 
 function render() {
@@ -345,9 +346,11 @@ function renderEvents() {
   const t = $("#togglepast");
   if (t) t.onclick = () => { S.showPast = !S.showPast; renderEvents(); };
 }
-// SP-114: an old multi-day event without its per-day numbers (not blocked, only hinted)
+// SP-114: an old multi-day event without its per-day numbers (not blocked, only hinted). SP-486 (PL6): an
+// upcoming A / B race has them on its 賽事評估 card — only a C race (no card) keeps them here
 function evHints(e) {
   const tP = (k) => (window.I18N ? I18N.t("plan.ev." + k) : k), out = [];
+  if (e.priority === "A" || e.priority === "B") return "";
   if (e.day_plan_missing && e.days_to >= 0) out.push(tP("dayplan_missing"));
   if (e.gpx_recommended && !e.gpx && e.days_to >= 0) out.push(tP("gpx_missing"));      // an ultra without its GPX
   return out.map((x) => `<div class="hint">⚠ ${esc(x)}</div>`).join("");
@@ -479,12 +482,18 @@ $("#evform").race_format.addEventListener("change", () => dayPlanForm());
 // 賽事評估 of the upcoming A / B races (static/feasibility.js; GET /api/v1/overview/feasibility):
 // fetched apart from the plan — the first race-calculator read of the activities takes ~1 min, so the
 // section shows 「評估中」 from the start and only hides once it knows there is no A / B race
+// SP-486: 提示多寡 (static/hints.js, asked once with the races) decides what each card shows; 「知道了」
+// redraws the cards from the same answer
+let feasHint = null, feasRaces = [];
+const drawFeas = () => { $("#feas").innerHTML = feasRaces.map((x) => Feas.html(x, feasHint)).join(""); };
 async function loadFeas() {
   const sec = $("#feassec"), box = $("#feas"), tC = (k) => (window.I18N ? I18N.t("common.feas." + k) : k);
   if (!window.Feas) { sec.hidden = true; return; }
   box.innerHTML = `<p class="meta">${esc(tC("loading"))}</p>`;
   try {
+    const hp = window.Hints ? Hints.state() : null;
     const r = await Feas.load();
+    if (hp) feasHint = await hp;
     if (r.chart_href) $("#feaschart").href = r.chart_href;
     if (r.pending) {                         // SP-394: CTL and the long runs wait for the whole history
       sec.hidden = false;
@@ -492,7 +501,9 @@ async function loadFeas() {
       return;
     }
     sec.hidden = !(r.races || []).length;
-    box.innerHTML = (r.races || []).map(Feas.html).join("");
+    feasRaces = r.races || [];
+    drawFeas();
+    if (window.Hints) Hints.bind(box, (st) => { feasHint = st; drawFeas(); });
   } catch (x) {
     // an error, or no answer in 90 s (Feas.load): say so, with 重試
     sec.hidden = false;

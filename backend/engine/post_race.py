@@ -273,29 +273,40 @@ def _as_easy(ss, s, cap: float, put, easy_target: str = "") -> None:
     put(s, minutes=nm, tss=round(float(_get(s, "tss") or 0.0) * (nm / m if m else 1.0) * 0.8, 1), detail="")
 
 
-def _race_session(e, is_d: bool, rate: float, done: bool, factory=None):
+def race_mark(e, rate: float, done: bool) -> dict:
+    """A B / C race on its day (SP-504): not a session — the 課表 shows it as a mark on the day (like the A
+    race's phase label) and its predicted load (planning.event_hours × `rate`, 0 without a predicted time)
+    counts in the week's planned TSS and the projected CTL. `done`: an activity on its first day."""
     from backend.engine import planning as P
     h = P.event_hours(e)
     m = int(round(h * 60)) if h else 0
-    d = {"id": "race", "kind": "race", "title": _("{p} 賽事：{name}", p=e.priority, name=e.name), "minutes": m,
-         "target": "", "detail": _("比賽本身算這週的重點課") if e.priority == "B"
-         else _("C 賽事當訓練跑，取代這週一堂強度課或長跑"),
-         "source": _("TrainerRoad；Pfitzinger；CTS（教練級）"), "tss": round(m / 60.0 * rate, 1),
-         "day": e.start.isoformat(), "done": done, "done_by": None, "terrain": "road" if e.kind == "road" else None}
-    return d if is_d or factory is None else factory(**d)
+    return {"id": e.id, "name": e.name, "priority": e.priority, "day": e.start.isoformat(), "end": e.end.isoformat(),
+            "minutes": m, "tss": round(m / 60.0 * rate, 1), "done": done}
+
+
+def race_days(events, monday: dt.date, sunday: dt.date) -> set:
+    """ISO days of [monday, sunday] that are a planned race's (any priority, every day of a multi-day one)."""
+    out = set()
+    for e in events or ():
+        d = max(e.start, monday)
+        while d <= min(e.end, sunday):
+            out.add(d.isoformat())
+            d += dt.timedelta(days=1)
+    return out
 
 
 def bc_apply(ss: list, events, monday: dt.date, notes: Optional[list] = None, today: Optional[dt.date] = None,
-             blocked=(), rate: float = RACE_TSS_PER_H, done_days=(), factory=None, easy_target: str = "") -> list:
+             blocked=(), rate: float = RACE_TSS_PER_H, done_days=(), easy_target: str = "",
+             races: Optional[list] = None) -> list:
     """`ss` (Session objects or dicts, placed) with the B / C race rules of the week of `monday`
-    (b_week / the mini-taper days / b_windows / the C race swap). `factory` makes a Session from a
-    dict (week_plan); `done_days`: ISO days with an activity (the race then counts as done);
+    (b_week / the mini-taper days / b_windows / the C race swap). The race day holds no session (SP-504:
+    以賽代訓 — the race is not a card on the 課表): `races` gets each race of the week as a race_mark
+    (`rate`: its TSS / h; `done_days`: ISO days with an activity — the race then counts as done).
     `easy_target`: the week's easy-run target text, for a session made an easy run (SP-408)."""
     from backend.engine import planning as P
     if not events:
         return ss
     sunday = monday + dt.timedelta(days=6)
-    is_d = bool(ss) and isinstance(ss[0], dict) if ss else factory is None
 
     def put(s, **kw):
         for k, v in kw.items():
@@ -327,10 +338,10 @@ def bc_apply(ss: list, events, monday: dt.date, notes: Optional[list] = None, to
                 _as_easy(keep, s, B_EASY_MAX, put, easy_target)
                 said.append(_("賽前 {n} 天內不排間歇", n=B_INTERVAL_DAYS))
         if monday <= e.start <= sunday:
-            race_days = {(e.start + dt.timedelta(days=i)).isoformat() for i in range((e.end - e.start).days + 1)}
-            gone = [s for s in keep if not _get(s, "done") and _get(s, "day") in race_days and _get(s, "kind") != "race"]
-            keep = [s for s in keep if s not in gone and not (_get(s, "kind") == "race" and _get(s, "day") in race_days)]
-            keep.append(_race_session(e, is_d, rate, e.start.isoformat() in set(done_days), factory))
+            rdays = race_days([e], e.start, e.end)
+            keep = [s for s in keep if _get(s, "done") or _get(s, "day") not in rdays]
+            if races is not None:
+                races.append(race_mark(e, rate, e.start.isoformat() in set(done_days)))
         if notes is not None and (said or monday <= e.start <= sunday):
             notes.append({"level": "info", "src": "race",
                           "text": _("B 賽事「{race}」{date}：賽前 {a} 天不排間歇、{b} 天不排節奏跑和長跑，比賽是這週的重點課"
@@ -372,7 +383,8 @@ def bc_apply(ss: list, events, monday: dt.date, notes: Optional[list] = None, to
                 put(s, day=_get(swap, "day"))
             else:
                 keep.remove(s)
-        keep.append(_race_session(e, is_d, rate, e.start.isoformat() in set(done_days), factory))
+        if races is not None:
+            races.append(race_mark(e, rate, e.start.isoformat() in set(done_days)))
         if notes is not None:
             what = (_("長跑") if swap is not None and swap in longs else _("一堂強度課") if swap is not None else "")
             notes.append({"level": "info", "src": "race",
@@ -478,7 +490,8 @@ def b_hints(events, monday: dt.date, ctl: Optional[list] = None, phases=None,
                 peak = max(v for _d0, v in vals)
                 now = vals[-1][1]
                 if peak > 0 and 1 - now / peak > B_CTL_DROP:
-                    out.append({"level": "watch", "src": "race",
-                                "text": _("B 賽太多，等於一直在減量：體能（Fitness）從近 {w} 週的高點 {p:.0f} 掉到 {n:.0f}（−{d:.0%}；"
+                    # SP-483: 「知道了」 holds for the same B races (the CTL numbers move every week)
+                    out.append({"level": "watch", "src": "race", "fp": _fp("ctl", *(e for e in bs if lo <= e.start < monday)),
+                                "text": _("B 賽太多，等於一直在減量：長期訓練負荷（Chronic load）從近 {w} 週的高點 {p:.0f} 掉到 {n:.0f}（−{d:.0%}；"
                                           "Friel 的案例掉 13 % 就沒力）", w=B_CTL_WEEKS, p=peak, n=now, d=1 - now / peak)})
     return out

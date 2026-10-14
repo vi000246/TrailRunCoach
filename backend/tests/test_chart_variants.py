@@ -17,7 +17,7 @@ from backend.engine.wko5expr.customviews import CustomViewError, REPO_VIEWS, loa
 from backend.engine.wko5expr.fitdataset import FitFolderDataset
 from backend.tests.fit_builder import build_run
 
-TITLE = "每日負荷（Daily load，跟體能比）"
+TITLE = "每日負荷（Daily load，跟長期負荷比）"
 TODAY = dt.date(2026, 9, 30)
 
 
@@ -99,14 +99,14 @@ def _index():
 def test_daily_tss_chart_has_tss_and_pct_variants():
     _, _, ch = _index()
     tss, pct = ch["variants"]
-    assert (tss["key"], tss["label"], pct["key"], pct["label"]) == ("tss", "負荷", "pct", "% 體能")
+    assert (tss["key"], tss["label"], pct["key"], pct["label"]) == ("tss", "訓練負荷", "pct", "% 長期負荷")
     # TSS variant: the chart as it was (fixed 0–150 axis, 4 bands + CTL/ATL)
     assert tss["axes"] == [{"id": "TSS", "min": 0, "max": 150}] and len(tss["series"]) == 6
     # % CTL: auto range (no max), a 100 % line, the same 4 bands; its own explanation
     assert pct["axes"] == [{"id": "PERCENT", "min": 0}]
     assert any(s["expression"] == "(,1)" for s in pct["series"])
     assert [s["color"] for s in pct["series"][:4]] == [s["color"] for s in tss["series"][:4]]
-    assert "% 體能" in pct["label"] and "(體能+30) ÷ 體能" in pct["description"]
+    assert "% 長期負荷" in pct["label"] and "(長期負荷+30) ÷ 長期負荷" in pct["description"]
 
 
 @pytest.fixture
@@ -180,7 +180,7 @@ def test_pct_variant_matches_the_tss_variant_day_by_day(api):
         assert pb[x][0] == bi, f"day {x}: same colour in both variants"
         assert pb[x][1] == pytest.approx(tss / prev, rel=1e-6)
     # the reference line sits at 100 %
-    ref = next(s for s in p["series"] if s["name"] == "100% = 體能")
+    ref = next(s for s in p["series"] if s["name"] == "100% = 長期負荷")
     assert ref["data"]["kind"] == "hline" and ref["data"]["y"] == pytest.approx(1.0)
 
 

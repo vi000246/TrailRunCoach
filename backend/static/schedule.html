@@ -201,6 +201,10 @@ dialog.sd .tp-t input { margin-top: 3px; flex: none; width: auto; }
 .dnum:hover { background: var(--soft); }
 .cell.today .dnum { background: var(--accent); color: #fff; }
 .cell .phl { font-size: 10.5px; color: var(--ph); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* a B / C race on its day (SP-504): a mark like the A race's phase label — not a card, never dragged or pushed */
+.rcm { font-size: 10.5px; color: var(--hi); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; cursor: default; }
+.ag-day .d .rcm { display: block; margin-top: 2px; white-space: normal; }
+.cal.week .rcm { white-space: normal; line-height: 1.25; }
 .add { margin-left: auto; border: 1px solid transparent; background: none; width: 22px; height: 22px; border-radius: 6px; color: var(--faint);
   cursor: pointer; font-size: 15px; line-height: 1; opacity: 0; }
 .cell:hover .add, .add:focus-visible, .ag-day .add { opacity: 1; }
@@ -278,7 +282,17 @@ dialog.sd label.rc-reset, .rc-reset { display: flex; gap: 8px; color: var(--text
 .cal.week .chip .c-t { white-space: normal; }
 .cal.week .chip .c-x { white-space: normal; font-size: 11.5px; }
 .cal.week .chip .c-m, .ag-day .chip .c-m { font-size: 11.5px; }
-.cal.week .chip .c-d { grid-column: 1 / -1; color: var(--muted); font-size: 11px; margin-top: 2px; white-space: normal; }
+.cal.week .chip .c-d { grid-column: 1 / -1; color: var(--muted); font-size: 11px; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* SP-484: one explanation line on a card (the verdict, 太強, the detail …), the rest in the hover */
+.cal.week .chip .c-why { white-space: nowrap; }
+.chip .c-warn { color: var(--watch); }
+/* 太強 (class 1: the plan changed) is the one line allowed to wrap — cut, it would hide what changed */
+.cal.week .chip .c-d.c-warn, .ag-day .chip .c-d.c-warn { white-space: normal; }
+.od { flex: none; display: inline-block; }
+.od-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--watch); }
+.od-hard { color: var(--watch); font-size: 11px; line-height: 1; }
+.walk-tag { display: inline-block; font-size: 10.5px; line-height: 1.3; padding: 0 5px; margin-right: 5px; border-radius: 4px;
+  border: 1px solid var(--line); color: var(--text); white-space: nowrap; vertical-align: 1px; }
 
 /* agenda (phones) */
 .agenda { display: grid; }
@@ -399,8 +413,9 @@ dialog.sd .pd-row select { width: auto; max-width: 100%; padding: 4px 8px; font-
 .cf-body { font-size: 13.5px; display: grid; gap: 6px; }
 .cf-body .big { font-size: 15px; }
 
-.pnotes { margin: 0; padding: 7px 12px 7px 28px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; font-size: 13px; display: grid; gap: 2px; }
-.pnotes li.watch { color: var(--watch); }
+.pnotes { margin: 0; padding: 7px 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; font-size: 13px; display: grid; gap: 2px; }
+.pnotes .pn.watch { color: var(--watch); }
+.pnotes .pn-detail > summary { cursor: pointer; color: var(--muted); font-size: 12.5px; }
 .pnotes .wk-l { color: var(--muted); font-variant-numeric: tabular-nums; margin-right: 6px; }
 .pnotes button { border: 0; background: none; color: var(--accent); cursor: pointer; padding: 0; font-size: 12.5px; }
 .tsug { display: grid; gap: 6px; }
@@ -545,10 +560,13 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
   dialog.sd form > .btns { position: sticky; bottom: 0; z-index: 3; background: var(--panel); margin: 4px -16px 0;
     padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid var(--line); }
   #swap-toast { right: 12px; bottom: calc(84px + env(safe-area-inset-bottom, 0px)); }   /* above the bottom nav */
-  /* SP-376: a card shows its title, time / TSS and target; the note is cut to two lines (tap opens it) */
-  .ag-day .chip .c-d { grid-column: 1 / -1; color: var(--muted); font-size: 12px; margin-top: 2px; white-space: normal;
-    display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  /* SP-376: a card shows its title, time / TSS and target (two lines at most); SP-484: the explanation line
+     (the detail, the verdict, 太強) is one line — tap opens the rest */
+  .ag-day .chip .c-d { grid-column: 1 / -1; color: var(--muted); font-size: 12px; margin-top: 2px; display: block;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .ag-day .chip .c-x { display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .ag-day .chip .c-why { display: block; white-space: nowrap; text-overflow: ellipsis; }
+  .ag-day .chip .c-d.c-warn { white-space: normal; }
   /* SP-396: a 7-column month grid this narrow has ~45 px a day — tile + bar + ring only, the ring under the
      tile (side by side they don't fit), the title in the hover / dialog (phones get the agenda list, so
      this only guards the grid) */
@@ -577,14 +595,14 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
     <h1 id="cal-label">課表</h1>
     <span class="navbtns">
       <button class="btn icon" id="prev" type="button" aria-label="上個月">‹</button>
-      <button class="btn" id="go-today" type="button">今天</button>
+      <button class="btn" id="go-today" type="button" data-i18n="schedule.today">今天</button>
       <button class="btn icon" id="next" type="button" aria-label="下個月">›</button>
     </span>
     <span class="badge stale" id="stale-badge" role="status" hidden></span>
     <span class="spacer"></span>
     <span class="meta" id="phase-now"></span>
-    <div class="seg" id="view-seg" role="group" aria-label="檢視">
-      <button type="button" data-view="month" aria-pressed="true">月</button><button type="button" data-view="week" aria-pressed="false">週</button>
+    <div class="seg" id="view-seg" role="group" aria-label="檢視" data-i18n-attr="aria-label:schedule.view.aria">
+      <button type="button" data-view="month" aria-pressed="true" data-i18n="schedule.view.month">月</button><button type="button" data-view="week" aria-pressed="false" data-i18n="schedule.view.week">週</button>
     </div>
     <!-- SP-450: 專項 (主要訓練項目, static/sportchip.js) — the 自動課表 follows it (路跑: no 爬升 row,
          no B2B / steep-hill sessions); changing it saves the setting and reloads, which re-plans -->
@@ -606,8 +624,8 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
         </div>
       </div>
       <a class="btn login" id="login-link" href="/api/v1/wko5/settings#sync" hidden>COROS 未登入 · 到設定頁登入 →</a>
-      <button class="btn" id="rec-btn" type="button" title="依實際完成狀況重算：錯過的標成跳過，之後的課重排（你改過的保留）">
-        <span class="lbl-long">依實際進度重排</span><span class="lbl-short">重排</span></button>
+      <button class="btn" id="rec-btn" type="button" title="依實際完成狀況重算：錯過的標成跳過，之後的課重排（你改過的保留）" data-i18n-attr="title:schedule.rec.tip">
+        <span class="lbl-long" data-i18n="schedule.rec.btn">依實際進度重排</span><span class="lbl-short" data-i18n="schedule.rec.btn_short">重排</span></button>
       <button class="btn" id="pf-btn" type="button" title="課表偏好：可練日、時間上限、課表內容、自動調整" data-i18n-attr="title:schedule.pf.btn_title" aria-haspopup="dialog">⚙<span class="lbl-long" data-i18n="schedule.pf.btn"> 課表偏好</span></button>
       <div class="more">
         <button class="btn icon" id="more-btn" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="more-menu" aria-label="更多">⋯</button>
@@ -631,7 +649,7 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
   <div id="autoplan" data-limit="5" data-log="collapsible" style="margin-bottom:8px"></div>
   <script src="/api/v1/static/autoplan.js" defer></script>
   <script src="/api/v1/static/session_banner.js" defer></script>
-  <ul class="pnotes" id="pnotes" aria-label="課表偏好的提醒" hidden></ul>
+  <div class="pnotes" id="pnotes" role="region" aria-label="課表偏好的提醒" hidden></div>
   <!-- SP-471: the easy-power conflict's test with 排入 (static/eptest.js) -->
   <div id="eptest" hidden></div>
   <script src="/api/v1/static/eptest.js" defer></script>
@@ -702,7 +720,7 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
       <div class="row3">
         <label>距離 km<input type="number" id="eq-km" min="0" max="500" step="0.1" inputmode="decimal"></label>
         <label>爬升 m<input type="number" id="eq-gain" min="0" max="20000" step="10" inputmode="numeric"></label>
-        <label><span data-i18n="schedule.eq.load">負荷（Load）</span><input type="number" id="eq-tss" min="0" max="2000" step="1" inputmode="numeric"></label>
+        <label><span data-i18n="schedule.eq.load">訓練負荷（Training load）</span><input type="number" id="eq-tss" min="0" max="2000" step="1" inputmode="numeric"></label>
       </div>
       <div class="row2">
         <label>改其他欄位時固定<select id="eq-lock"><option value="time">鎖時間</option><option value="tss">鎖負荷</option><option value="dist">鎖距離</option></select></label>
@@ -735,6 +753,7 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
 <script src="/api/v1/static/dashicons.js"></script>
 <script src="/api/v1/static/sesschip.js"></script>
 <script src="/api/v1/static/sesspop.js"></script>
+<script src="/api/v1/static/hints.js"></script>
 <script src="/api/v1/static/syncrun.js"></script>
 
 <!-- 換一個：the equivalent variants of an interval session (interval-prescription.md §C5.4) -->
@@ -763,7 +782,7 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
         <button type="button" class="qtip" data-i18n-attr="aria-label:schedule.pf.about;data-tip:schedule.pf.runs_tip" aria-label="說明" data-tip="自動：跑步次數跟著週量走（輕鬆跑一次約 50 分），所以可練日不一定排滿，最多 6 天、至少留 1 天休息。沒排到的可練日就是休息日，會放在長跑隔天、強度課之間。想每個可練日都跑，就設定次數。">?</button>
         <span class="pf-c"><select id="pf-runs" name="runs"><option value="" data-i18n="schedule.pf.auto">自動</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option></select></span></div>
       <div class="pf-r"><label class="pf-l" for="pf-whm" data-i18n="schedule.pf.wh">每週時數</label>
-        <button type="button" class="qtip" data-i18n-attr="aria-label:schedule.pf.about;data-tip:schedule.pf.wh_tip" aria-label="說明" data-tip="自動：照體能週增量（Fitness ramp）規則加量。自訂：每週最多幾小時。">?</button>
+        <button type="button" class="qtip" data-i18n-attr="aria-label:schedule.pf.about;data-tip:schedule.pf.wh_tip" aria-label="說明" data-tip="自動：照長期負荷週增量（Chronic load ramp）規則加量。自訂：每週最多幾小時。">?</button>
         <span class="pf-c"><select id="pf-whm" name="wh_mode"><option value="auto" data-i18n="schedule.pf.auto">自動</option><option value="custom" data-i18n="schedule.pf.custom">自訂上限</option></select>
           <span class="stp" id="pf-wh-stp"><input type="number" name="weekly_hours" min="1" max="40" step="0.5" data-start="6" inputmode="decimal" data-i18n-attr="aria-label:schedule.pf.wh"><span class="u" data-i18n="schedule.pf.u_h">小時</span></span></span></div>
       <div class="pf-r"><label class="pf-l" for="pf-capw" data-i18n="schedule.pf.cap_w">平日單次上限</label>
@@ -952,13 +971,14 @@ const ls = { get(k, d) { try { const v = localStorage.getItem("schedule." + k); 
 
 // ---- dates ----
 const WD = I18N.fmt.weekdays("narrow");     // i18n.js: 一…日 / M…S, Monday first
+const WD_HEAD = I18N.fmt.weekdays("short");  // the calendar's column heads: 週一 / Mon (SP-502: was 「週」 + narrow, 「週M」)
 const isoOf = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const dOf = (iso) => new Date(iso + "T00:00:00");
 const addDays = (iso, n) => { const d = dOf(iso); d.setDate(d.getDate() + n); return isoOf(d); };
 const mondayOf = (iso) => addDays(iso, -((dOf(iso).getDay() + 6) % 7));
 const md = (iso) => { const d = dOf(iso); return `${d.getMonth() + 1}/${d.getDate()}`; };
 const wd = (iso) => WD[(dOf(iso).getDay() + 6) % 7];
-const rangeTxt = (a, b) => a === b ? `${md(a)}（週${wd(a)}）` : `${md(a)}–${md(b)}`;
+const rangeTxt = (a, b) => a === b ? I18N.fmt.date(a, "mdw") : `${md(a)}–${md(b)}`;
 const hm = (s) => { if (s == null) return "–"; const m = Math.round(s / 60); return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}`; };
 const h1 = (h) => (h || 0) >= 10 ? (h || 0).toFixed(0) : (h || 0).toFixed(1);
 const n0 = (v) => v == null ? "–" : Math.round(v).toLocaleString();
@@ -984,7 +1004,7 @@ const KINDS = { easy: "輕鬆跑", long: "LSD", quality: "強度課", test: "測
 const FAMILIES = ["aerobic", "vo2max", "speed"];
 const FAM_ZH = { aerobic: "有氧間歇", vo2max: "VO2max 間歇", speed: "速度" };
 // rule D's two tiers (SP-301): the done session's note hover
-const ADAPT_NOTE_TIP = "自動調整：輕鬆跑偏強＝平均功率超過 80% CP（Palladino）或負荷（Load）超過計畫 20%（TrainingPeaks），沒有功率時看平均心率超過 LTHR 的 94%（Friel Zone 3 以上），只標示、不改課表；課別分類為閾值或更強＝跑成強度課，48 小時內的強度課延後或降一階。兩級的分法是推估。";
+const ADAPT_NOTE_TIP = "自動調整：輕鬆跑偏強＝平均功率超過 80% CP（Palladino）或訓練負荷（Training load）超過計畫 20%（TrainingPeaks），沒有功率時看平均心率超過 LTHR 的 94%（Friel Zone 3 以上），只標示、不改課表；課別分類為閾值或更強＝跑成強度課，48 小時內的強度課延後或降一階。兩級的分法是推估。";
 const famLabel = (f) => (window.I18N ? I18N.t("schedule.family." + f, FAM_ZH[f] || f) : FAM_ZH[f] || f);
 // race: the season plan's race day, or the 賽事計算機's 「匯出至課表」 (its steps are editable here); never added by hand
 // 熱適應課 (engine/heat_plan.py) keep kind easy / long, tagged by the title: their card shows the sun (SessChip.kind)
@@ -1055,7 +1075,9 @@ async function load(quiet) {
   const [a, b] = range();
   if (quiet !== true) $("calwrap").classList.add("loading");     // SP-445: an edit's reload keeps the calendar usable
   try {
+    const hp = window.Hints && !window.HINT_STATE ? Hints.state() : null;     // SP-484: 提示多寡, once, in parallel
     D = await sj("GET", `${PAPI}/calendar?start=${a}&end=${b}`);
+    if (hp) window.HINT_STATE = await hp;
     if (!S.anchor) S.anchor = D.today;
     render();
     renderLegend();
@@ -1101,7 +1123,8 @@ async function optimistic(uids, change, send) {
 // SP-82: a future planned day with no active session is a rest day you can drag onto another day
 // (that day's sessions move here: POST /rest-days/move)
 function restMv(d, ss) {
-  if (d < D.today || boOf(d) || (ss[d] || []).some((s) => s.state === "active" || s.state === "done")) return "";
+  // a race day (SP-504) is the race's, not a rest day to move
+  if (d < D.today || boOf(d) || raceOn(d) || (ss[d] || []).some((s) => s.state === "active" || s.state === "done")) return "";
   const a = mondayOf(d), b = addDays(a, 6);
   if (!(D.sessions || []).some((s) => s.state === "active" && s.day >= a && s.day <= b)) return "";
   return `<span class="chip sc fut rest-mv" draggable="true" data-rest-from="${d}" title="${esc(tt("rest.mv_tip"))}">${SessChip.icon("rest")}<span class="c-t sc-t">${esc(tt("rest.mv"))}</span></span>`;
@@ -1140,6 +1163,32 @@ function compNums(cp) {
   return [cp.tss_pct != null ? tt("vs.load_pct", { pct: cp.tss_pct }) : "", cp.duration_pct != null ? tt("vs.time_pct", { pct: cp.duration_pct }) : "",
     cp.intensity_pct != null ? tt("vs.intensity_pct", { pct: cp.intensity_pct }) : ""].filter(Boolean).join(" · ");
 }
+// SP-484 (docs/research/ui-hint-audit.md §5 R3, R4, §5.2; 提示多寡 = window.HINT_STATE from Hints.state(),
+// 標準 until it arrives): a card has at most one explanation line, the rest is in the hover (sesspop.js).
+//   太強 (SC5: rule D, the next hard session moved / stepped down) — ⚠ by the ring + its line, every level
+//   偏強 (SC4: rule D, label only) — a dot by the ring; its reason is the line only in 完整 (the hover has it)
+//   the verdict (部分 72% · 強度不足 …) — the line of a done session otherwise
+//   上坡改走 (SC7) — 完整: the sentence is the line; 標準: a 「≥ X% 走」 tag in front of the detail; 精簡: hover only
+//   the detail (怎麼練) — the line of a session still to come, one line
+// The ◐ ring is no longer 「偏強」: plan_match's 偏強 counts as done (SP-484), so a card never has both.
+const HLV = () => { const h = window.HINT_STATE; return h && ["full", "standard", "lean"].includes(h.level) ? h.level : "standard"; };
+const odOf = (s) => (s.state === "done" && (s.overhard === "over" || s.overhard === "too_hard") ? s.overhard : null);
+function odMark(s) {
+  const od = odOf(s);
+  if (od === "too_hard") return `<span class="od od-hard" role="img" aria-label="${esc(tt("od.too_hard"))}">⚠</span>`;
+  return od === "over" ? `<span class="od od-dot" role="img" aria-label="${esc(tt("od.over"))}"></span>` : "";
+}
+function cardLine(s) {
+  const lv = HLV(), od = odOf(s);
+  if (s.state === "done") {
+    if (od === "too_hard" && s.note) return `<span class="c-d c-warn">⚠ ${esc(s.note)}</span>`;
+    if (cardWhy(s)) return `<span class="c-x c-why">${esc(verdict(s))}</span>`;
+    return od === "over" && s.note && lv === "full" ? `<span class="c-d c-warn">${esc(s.note)}</span>` : "";
+  }
+  const tag = s.walk_hint && lv === "standard" && s.walk_grade != null ? `<span class="walk-tag">${esc(tt("walk.short", { g: s.walk_grade }))}</span>` : "";
+  const txt = (s.walk_hint && lv === "full" ? s.walk_hint : "") || s.detail || "";
+  return tag || txt ? `<span class="c-d">${tag}${esc(txt)}</span>` : "";
+}
 function chipHtml(s, big) {
   const live = editable(s);
   const c = s.coros || {};
@@ -1157,21 +1206,21 @@ function chipHtml(s, big) {
   const sl = done && s.done_by.session && s.done_by.session.type_label ? ` · ${s.done_by.session.type_label}` : "";
   // + the post-run self-rating, 「自評：Hard（COROS）」 (SP-231, worded by the server)
   const rated = done && s.done_by.self_rating ? ` · ${s.done_by.self_rating.text}` : "";
-  const actual = done ? `實際 ${(s.done_by.category_label || "完成") + sl} ${hm(s.done_by.moving_s)}${s.done_by.distance_km ? ` · ${(+s.done_by.distance_km).toFixed(1)} km` : ""}${rated}` : "";
+  const actual = done ? tt("chip.actual", { what: `${(s.done_by.category_label || tt("chip.done")) + sl} ${hm(s.done_by.moving_s)}${s.done_by.distance_km ? ` · ${(+s.done_by.distance_km).toFixed(1)} km` : ""}${rated}` }) : "";
   const line = done ? actual : s.target || "";
-  const why = cardWhy(s), vd = verdict(s), nums = compNums(s.compliance);
+  const vd = verdict(s), nums = compNums(s.compliance);
   const vdFull = vd ? vd + (nums ? `（${nums}）` : "") : "";
   const watch = s.state === "active" && s.day >= D.today && WATCH_ON_CARD.includes(c.status) ? syIcon(c.status, c.error || c.reason || "") : "";
   const pm = window.PlanMark ? PlanMark.lines(s, KINDS) : [];      // SP-318: ↻ auto / ✎ yours (plan_mark.js)
   const pend = !!(S.pend && S.pend.has(s.uid)), lock = pend || !!(S.swapLock && S.swapLock.has(s.uid));
   // §7.1: type：title, time, TSS, the verdict, 暫定, changed by, the watch — the reading order on screen
   const lbl = [`${KINDS[s.kind] || ""}${fam ? "（" + fam.text + "）" : ""}：${s.title}`, `${s.minutes || 0} 分鐘`, tss.replace("→", "實際"),
-    vdFull, prov ? SessChip.label("todo", null, { prov: true }) : "", pm.length ? PlanMark.label(s) : "", watch ? syLabel(c.status) : ""].filter(Boolean).join("，");
+    vdFull, odOf(s) ? tt("od." + odOf(s)) : "", prov ? SessChip.label("todo", null, { prov: true }) : "", pm.length ? PlanMark.label(s) : "", watch ? syLabel(c.status) : ""].filter(Boolean).join("，");
   return `<button type="button" class="chip sc ${SessChip.cls(s)}${S.swapFrom && S.swapFrom.uid === s.uid ? " swap-src" : ""}${lock ? " swap-lock" : ""}${pend ? " pend" : ""}" data-uid="${esc(s.uid)}" data-kind="${esc(s.kind)}"
       ${live && !lock ? 'draggable="true"' : ""}${lock ? ' aria-disabled="true"' : ""} aria-label="${esc(lbl)}" title="">
-    ${SessChip.icon(SessChip.kind(s), { badge: pm.length ? PlanMark.icon(s, true) : "" })}<span class="c-t sc-t">${esc(s.title)}</span><span class="c-r">${SessChip.ring(st, (s.compliance || {}).pct, { prov })}${watch}</span>
+    ${SessChip.icon(SessChip.kind(s), { badge: pm.length ? PlanMark.icon(s, true) : "" })}<span class="c-t sc-t">${esc(s.title)}</span><span class="c-r">${SessChip.ring(st, (s.compliance || {}).pct, { prov })}${odMark(s)}${watch}</span>
     <span class="c-m">${esc(meta)}</span>
-    ${line ? `<span class="c-x">${esc(line)}</span>` : ""}${big && why ? `<span class="c-x c-why">${esc(vd)}</span>` : ""}${big && (s.detail || s.walk_hint) && s.state !== "done" ? `<span class="c-d">${esc([s.detail, s.walk_hint].filter(Boolean).join(" "))}</span>` : ""}</button>`;
+    ${line ? `<span class="c-x">${esc(line)}</span>` : ""}${big ? cardLine(s) : ""}</button>`;
 }
 // the hover (SP-470, sesspop.js): the card's facts as a model — header, numbers, 完成情況, 目標, 怎麼練,
 // 調整, 手錶 — laid out by SessPop.html. The chip keeps title="" so neither the browser's plain text
@@ -1206,9 +1255,16 @@ function popModel(s) {
 // an activity no session holds: 沒排課的活動, a dotted outline + its category's icon (click: summary,
 // open it, pair it with a session)
 function actHtml(a) {
+  const m = [a.tss != null ? tt("load.n", { n: n0(a.tss) }) : "", a.distance_km ? `${a.distance_km.toFixed(1)} km` : ""].filter(Boolean).join(" · ");
+  if (a.race) {
+    // the run on a race day is the race (SP-504): 比賽 (a 百岳 trip: 行程, R1), matched to the race — not 沒排課的活動
+    const rl = raceT(a.race, "race.act", { name: a.race.name });
+    return `<button type="button" class="chip sc act race" data-act="${a.index}" aria-label="${esc(`${rl} ${hm(a.moving_s)}`)}" title="${esc(raceT(a.race, "race.act_tip", { name: a.race.name, p: a.race.priority }) + `\n${a.category_label} · ${hm(a.moving_s)}`)}">
+    ${SessChip.icon("race")}<span class="c-t sc-t">${esc(rl)}</span><span class="c-r">${hm(a.moving_s)}</span>
+    ${m ? `<span class="c-m">${esc(m)}</span>` : ""}</button>`;
+  }
   // + the session class (workout_review.classify): Z5 間歇 / Z3 閾值 / 高強度長跑 / 中強度跑 …
   const lab = a.session && a.session.type_label ? `${a.category_label} · ${a.session.type_label}` : a.category_label;
-  const m = [a.tss != null ? tt("load.n", { n: n0(a.tss) }) : "", a.distance_km ? `${a.distance_km.toFixed(1)} km` : ""].filter(Boolean).join(" · ");
   return `<button type="button" class="chip sc act" data-act="${a.index}" aria-label="${esc(`沒排課的活動：${lab} ${hm(a.moving_s)}`)}" title="${esc(`沒排課的活動：${lab} ${a.sport_type || ""}\n移動 ${hm(a.moving_s)}${a.distance_km ? ` · ${a.distance_km.toFixed(1)} km` : ""}${a.climbing_m ? ` · 爬升 ${Math.round(a.climbing_m)} m` : ""}\n點一下看摘要或配對到課表`)}">
     ${SessChip.icon(SessChip.actKind(a))}<span class="c-t sc-t">${esc(lab)}</span><span class="c-r">${hm(a.moving_s)}</span>
     ${m ? `<span class="c-m">${esc(m)}</span>` : ""}</button>`;
@@ -1231,7 +1287,8 @@ function dayTip(d, ss) {
   const b = boOf(d);
   if (b && b.kind === "rest") return tt("rest.day_tip", { day: md(d), wd: wd(d) });
   if (b) return `${md(d)}（週${wd(d)}）　不排課${b.label ? `（${b.label}）` : ""}\n點標籤修改或移除`;
-  return `${md(d)}（週${wd(d)}）` + (list.length ? `　計畫負荷 ${n0(t)}${done ? ` · 完成 ${n0(done)}` : ""}` : "　沒有排課") + (d >= D.today ? "\n點空白處新增；拖曳或 Shift＋點選可設定不排課日期" : "");
+  const rc = raceMarks(d).map((r) => "\n" + raceT(r, "race.mark", { p: r.priority, name: r.name })).join("");
+  return `${md(d)}（週${wd(d)}）` + (list.length ? `　計畫負荷 ${n0(t)}${done ? ` · 完成 ${n0(done)}` : ""}` : "　沒有排課") + rc + (d >= D.today ? "\n點空白處新增；拖曳或 Shift＋點選可設定不排課日期" : "");
 }
 // 不排課日期 (engine/blackouts.py): one-off ranges, from the calendar payload
 const BOS = () => (D && D.blackouts) || [];
@@ -1244,22 +1301,33 @@ const boChip = (b) => b.kind === "rest" ? `<button type="button" class="bo-chip 
   title="${esc(tt("rest.chip_title"))}">${esc(tt("rest.chip"))}</button>` : `<button type="button" class="bo-chip" data-bo="${esc(b.id)}" aria-label="不排課 ${esc(rangeTxt(b.start, b.end))}${b.label ? "：" + esc(b.label) : ""}，修改或移除"
   title="${esc(`不排課 ${rangeTxt(b.start, b.end)}${b.label ? "（" + b.label + "）" : ""}\n點一下修改或移除`)}">🏖 ${esc(b.label || "不排課")}</button>`;
 const phaseOf = (iso) => (D.phases || []).find((p) => p.start <= iso && iso <= p.end);
+// B / C races (SP-504; api/plan_sessions.race_marks): a mark on the day, the A race has its phase label (比賽).
+// A 百岳 trip (kind baiyue) is a 行程, not a 賽 / 比賽 (SP-504 R1): its own strings (race.trip_*)
+const RACE_TRIP = { "race.mark": "race.trip_mark", "race.mark_tip_b": "race.trip_tip_b", "race.mark_tip_c": "race.trip_tip_c",
+  "race.act": "race.trip_act", "race.act_tip": "race.trip_act_tip", "race.act_note": "race.trip_act_note" };
+const raceT = (r, k, p) => tt(r && r.kind === "baiyue" ? RACE_TRIP[k] : k, p);
+const raceOn = (iso) => ((D && D.races) || []).some((r) => r.start <= iso && iso <= r.end);
+const raceMarks = (iso) => ((D && D.races) || []).filter((r) => r.priority !== "A" && r.start <= iso && iso <= r.end);
+const raceTip = (r) => raceT(r, r.priority === "C" ? "race.mark_tip_c" : "race.mark_tip_b", { name: r.name }) +
+  (r.counted && r.tss != null ? "\n" + tt("race.mark_load", { n: n0(r.tss) }) : "");
+const raceMarkHtml = (iso) => raceMarks(iso).map((r) =>
+  `<span class="rcm" title="${esc(raceTip(r))}">${esc(raceT(r, "race.mark", { p: r.priority, name: r.name }))}</span>`).join("");
 const weekRow = (ws) => (D.week_rows || []).find((w) => w.start === ws) || {};
 function sumHtml(w) {
   const future = w.start > D.today, cur = w.start <= D.today && D.today <= w.end;
   const ph = w.phase_label || w.mode_label;
   if (!future && !w.planned_hours && !w.planned_tss)          // before the stored plan existed
-    return `${ph ? `<span class="php">${esc(ph)}</span>` : ""}<div class="r"><span>完成</span><b>${h1(w.done_hours)} h</b></div>
-      <div class="r"><span>${esc(tt("load.label"))}</span><b>${n0(w.done_tss)}</b></div><span class="tag">沒有排課</span>`;
+    return `${ph ? `<span class="php">${esc(ph)}</span>` : ""}<div class="r"><span>${esc(tt("chip.done"))}</span><b>${h1(w.done_hours)} h</b></div>
+      <div class="r"><span>${esc(tt("load.col"))}</span><b>${n0(w.done_tss)}</b></div><span class="tag">${esc(tt("wk.no_plan"))}</span>`;
   const pct = (a, b) => b > 0 ? Math.min(100, a / b * 100) : 0;
   return `${ph ? `<span class="php" title="${esc(w.mode_label && w.mode_label !== ph ? `${ph} · ${w.mode_label}` : ph)}">${esc(ph)}</span>` : ""}
-    <div class="r"><span>時間</span><span>${future ? "" : `<b>${h1(w.done_hours)}</b> / `}${h1(w.planned_hours)} h</span></div>
+    <div class="r"><span>${esc(tt("wk.time"))}</span><span>${future ? "" : `<b>${h1(w.done_hours)}</b> / `}${h1(w.planned_hours)} h</span></div>
     ${future ? "" : `<div class="trk" role="img" aria-label="完成 ${h1(w.done_hours)} / 計畫 ${h1(w.planned_hours)} 小時"><i style="width:${pct(w.done_hours, w.planned_hours).toFixed(0)}%"></i></div>`}
-    <div class="r"><span>${esc(tt("load.label"))}</span><span>${future ? "" : `<b>${n0(w.done_tss)}</b> / `}${n0(w.planned_tss)}</span></div>
+    <div class="r"><span>${esc(tt("load.col"))}</span><span>${future ? "" : `<b>${n0(w.done_tss)}</b> / `}${n0(w.planned_tss)}</span></div>
     ${future ? "" : `<div class="trk" role="img" aria-label="負荷完成 ${n0(w.done_tss)} / 計畫 ${n0(w.planned_tss)}"><i style="width:${pct(w.done_tss, w.planned_tss).toFixed(0)}%"></i></div>`}
     ${climbW(w, future)}
     ${compW(w)}
-    ${w.provisional ? `<span class="tag">暫定（重排時會依進度調整）</span>` : cur ? `<span class="tag">本週</span>` : ""}`;
+    ${w.provisional ? `<span class="tag">${esc(tt("wk.provisional"))}</span>` : cur ? `<span class="tag">${esc(tt("wk.this_week"))}</span>` : ""}`;
 }
 // 每週爬升量目標 (SP-87, api/plan_sessions._climb_row; engine/vert_target.py): done / target like 時間,
 // then what the week's sessions plan and how much is missing — display only, nothing is added to the plan
@@ -1292,7 +1360,7 @@ function climbAg(w, future) {
     `<span class="clg${c.short > 0 ? " short" : ""}">${esc(climbGap(c))}</span>`;
 }
 // the week's TSS done (SP-401): a number that only adds up, no colour; the plan in the hover
-const compW = (w) => w.compliance ? `<div class="r" title="${esc(tt("wk.plan_tss_tip", { p: n0(w.planned_tss) }))}"><span>${esc(tt("wk.done_tss"))}</span><b>${n0(w.done_tss)}</b></div>` : "";
+const compW = (w) => w.compliance ? `<div class="r" title="${esc(tt("wk.plan_tss_tip", { p: n0(w.planned_tss) }))}"><span>${esc(tt("wk.done_col"))}</span><b>${n0(w.done_tss)}</b></div>` : "";
 function render() {
   const [a, b] = range();
   const { ss, acts } = byDay();
@@ -1303,7 +1371,7 @@ function render() {
   $("next").setAttribute("aria-label", week ? "下一週" : "下個月");
   document.querySelectorAll("#view-seg button").forEach((x) => x.setAttribute("aria-pressed", String(x.dataset.view === S.view)));
   const pn = phaseOf(D.today);
-  $("phase-now").innerHTML = pn ? `目前 <b class="ph-${esc(pn.kind)}" style="color:var(--ph)">${esc(pn.label)}</b> ${md(pn.start)}–${md(pn.end)}` : "";
+  $("phase-now").innerHTML = pn ? `${esc(tt("phase_now"))} <b class="ph-${esc(pn.kind)}" style="color:var(--ph)">${esc(pn.label)}</b> ${md(pn.start)}–${md(pn.end)}` : "";
   if (S.narrow) $("cal").innerHTML = agendaHtml(a, ss, acts);
   else {
     const rows = [];
@@ -1320,28 +1388,39 @@ function render() {
         const out = !week && dOf(d).getMonth() !== month;
         const items = (ss[d] || []).map((s) => chipHtml(s, week)).join("") + (acts[d] || []).map(actHtml).join("");
         cells.push(`<div class="cell ${out ? "out" : ""} ${d < D.today ? "past" : ""} ${d === D.today ? "today" : ""} ${d === S.sel ? "sel" : ""} ${can ? "can" : ""} ${bo ? "bo" : ""} ${bo && bo.kind === "rest" ? "rest-d" : ""}" role="gridcell" data-day="${d}" title="${esc(dayTip(d, ss[d]))}">
-          <div class="cell-top"><button type="button" class="dnum" data-sel="${d}" aria-label="選取 ${md(d)}（週${wd(d)}）${d === D.today ? "，今天" : ""}${bo ? "，不排課" : ""}" aria-pressed="${d === S.sel}">${dOf(d).getDate() === 1 && !week ? md(d) : dOf(d).getDate()}</button>${phl}${hn ? hnTag(hn) : ""}
+          <div class="cell-top"><button type="button" class="dnum" data-sel="${d}" aria-label="選取 ${md(d)}（週${wd(d)}）${d === D.today ? "，今天" : ""}${bo ? "，不排課" : ""}" aria-pressed="${d === S.sel}">${dOf(d).getDate() === 1 && !week ? md(d) : dOf(d).getDate()}</button>${phl}${raceMarkHtml(d)}${hn ? hnTag(hn) : ""}
           ${bo && (d === bo.start || i === 0) ? boChip(bo) : ""}
           ${can ? `<button type="button" class="add" data-add="${d}" aria-label="在 ${md(d)} 新增課表" title="新增">＋</button>` : ""}</div>
           <div class="chips">${items || (week && can ? restMv(d, ss) : "")}${can ? ghostHtml(d) : ""}</div></div>`);
       }
       const ph = phaseOf(addDays(ws, 3)) || {};
-      rows.push(`<div class="wk ph-${esc(w.phase || ph.kind || "none")} ${w.provisional ? "prov" : ""}" role="row" data-week="${ws}">${cells.join("")}<div class="sum" role="gridcell" aria-label="週統計">${sumHtml(w)}</div></div>`);
+      rows.push(`<div class="wk ph-${esc(w.phase || ph.kind || "none")} ${w.provisional ? "prov" : ""}" role="row" data-week="${ws}">${cells.join("")}<div class="sum" role="gridcell" aria-label="${esc(tt("wk.sum_col"))}">${sumHtml(w)}</div></div>`);
     }
     $("cal").innerHTML = `<div class="cal ${week ? "week" : ""}" role="grid" aria-label="${esc($("cal-label").textContent)} 課表">
-      <div class="cal-head" role="row">${[...WD].map((x, i) => `<div role="columnheader" class="${i > 4 ? "we" : ""}">週${x}${week ? ` ${md(addDays(a, i))}` : ""}</div>`).join("")}<div role="columnheader">週統計</div></div>
+      <div class="cal-head" role="row">${WD_HEAD.map((x, i) => `<div role="columnheader" class="${i > 4 ? "we" : ""}">${esc(x)}${week ? ` ${md(addDays(a, i))}` : ""}</div>`).join("")}<div role="columnheader">${esc(tt("wk.sum_col"))}</div></div>
       ${rows.join("")}</div>`;
   }
   renderToolbar();
   renderNotes();
   renderSug();
 }
+// ---- week reminders (SP-484) ----
+// the week reminders (SC10; SP-484): engine/hints.py's objects through Hints.render — the class 1 ones in one
+// box, at most 3 reminders, 「還有 N 則提醒 ▸」, ▷ / 知道了 / the condition not met in 「詳細」 (hints.js)
+const pnItem = (n) => `<span class="pn ${esc(n.level || "")}"><span class="wk-l">${esc(tt("pn.week_of", { d: md(n.week_start) }))}</span>${n.src === "blackout" ? "🏖 " : ""}${esc(n.text)}</span>`;
 function renderNotes() {
   const ns = (D.plan_notes || []).filter((n, i, all) => all.findIndex((x) => x.week_start === n.week_start && x.text === n.text) === i);
-  $("pnotes").hidden = !ns.length;
-  $("pnotes").innerHTML = ns.map((n) => `<li class="${esc(n.level)}"><span class="wk-l">${md(n.week_start)} 那週</span>${n.src === "blackout" ? "🏖 " : ""}${esc(n.text)}</li>`).join("") +
-    (ns.some((n) => n.src === "prefs") ? `<li style="list-style:none;margin-left:-16px"><button type="button" data-open-prefs>調整課表偏好 →</button></li>` : "");
+  const box = $("pnotes");
+  const r = window.Hints ? Hints.render(ns, { ...(window.HINT_STATE || {}), item: pnItem })
+    : { html: ns.map((n) => `<div class="hint-row">${pnItem(n)}</div>`).join(""), detailHtml: "", f: { must: ns, shown: [], more: [] } };
+  const seen = [...r.f.must, ...r.f.shown, ...r.f.more];
+  box.innerHTML = r.html +
+    (seen.some((n) => n.src === "prefs") ? `<div><button type="button" data-open-prefs>${esc(tt("pn.prefs"))}</button></div>` : "") +
+    (r.detailHtml ? `<details class="pn-detail"><summary>${esc(tt("pn.detail"))}</summary>${r.detailHtml}</details>` : "");
+  box.hidden = !box.innerHTML;
+  if (window.Hints) Hints.bind(box, (st) => { window.HINT_STATE = st; renderNotes(); });
 }
+// ---- end week reminders ----
 $("pnotes").addEventListener("click", (e) => { if (e.target.closest("[data-open-prefs]")) openPrefs(); });
 // due CP / AeT tests: suggested with a day picker, never put into the plan by the generator
 // superseded by the floating suggestion box (suggestions.js); kept hidden to avoid showing them twice
@@ -1351,7 +1430,7 @@ function renderSug() {
   box.hidden = !sg.length;
   box.innerHTML = sg.map((x) => `<div class="tsug-row" data-kind="${esc(x.kind)}"><span>🧪 ${esc(x.label)}</span>
     <span class="tsug-act">${x.days.length ? `<select aria-label="測試日期">${x.days.map((d) =>
-      `<option value="${esc(d.day)}">${md(d.day)}（週${wd(d.day)}）${d.note ? ` · ${esc(d.note)}` : ""}</option>`).join("")}</select>
+      `<option value="${esc(d.day)}">${esc(I18N.fmt.date(d.day, "mdw"))}${d.note ? ` · ${esc(d.note)}` : ""}</option>`).join("")}</select>
       <button class="btn primary" type="button" data-sug="${esc(x.kind)}">排入</button>` : `<span class="meta">兩週內沒有適合的日子（離長跑、強度課太近）</span>`}
       <span class="meta">${esc(x.title)} · ${x.minutes} 分</span></span></div>`).join("");
 }
@@ -1373,8 +1452,8 @@ function agendaHtml(a, ss, acts) {
     const d = addDays(a, i), bo = boOf(d), can = d >= D.today && !bo;
     const items = (ss[d] || []).map((s) => chipHtml(s, true)).join("") + (acts[d] || []).map(actHtml).join("");
     days.push(`<div class="ag-day ${d < D.today ? "past" : ""} ${d === D.today ? "today" : ""} ${d === S.sel ? "sel" : ""} ${can ? "can" : ""} ${bo ? "bo" : ""} ${bo && bo.kind === "rest" ? "rest-d" : ""}" data-day="${d}" title="${esc(dayTip(d, ss[d]))}">
-      <div class="d"><button type="button" class="dnum" data-sel="${d}" aria-label="選取 ${md(d)}${bo ? "，不排課" : ""}" style="padding:0;height:auto;text-align:left">週${wd(d)}<b>${dOf(d).getDate()}</b></button>${d === D.today ? "今天" : ""}${hnOf(d) ? hnTag(hnOf(d)) : ""}</div>
-      <div class="chips">${bo ? boChip(bo) : ""}${items || (bo ? "" : restMv(d, ss) || `<span class="rest">${d < D.today ? "沒有活動" : "休息"}</span>`)}${can ? ghostHtml(d) : ""}</div>
+      <div class="d"><button type="button" class="dnum" data-sel="${d}" aria-label="選取 ${md(d)}${bo ? "，不排課" : ""}" style="padding:0;height:auto;text-align:left">${esc(I18N.fmt.weekday(d, "short"))}<b>${dOf(d).getDate()}</b></button>${d === D.today ? esc(tt("today")) : ""}${hnOf(d) ? hnTag(hnOf(d)) : ""}${raceMarkHtml(d)}</div>
+      <div class="chips">${bo ? boChip(bo) : ""}${items || (bo || raceOn(d) ? "" : restMv(d, ss) || `<span class="rest">${esc(tt(d < D.today ? "day.none" : "day.rest"))}</span>`)}${can ? ghostHtml(d) : ""}</div>
       ${can ? `<button type="button" class="add" data-add="${d}" aria-label="在 ${md(d)} 新增課表">＋</button>` : "<span></span>"}</div>`);
   }
   const future = a > D.today;
@@ -1398,6 +1477,9 @@ function renderLegend() {
   const q = (label, tip) => ` <button type="button" class="qtip" aria-label="${esc(label)}" data-tip="${esc(tip)}">?</button>`;
   $("legend").innerHTML = SessChip.legend({ levels: lv, other: [
     [syIcon("outdated"), esc(tt("sy.outdated"))], [syIcon("failed"), esc(tt("sy.failed")) + esc(tt("lg.failed_red"))],
+    ['<span class="od od-dot" aria-hidden="true"></span>', esc(tt("lg.over"))],          // SP-484: rule D
+    ['<span class="od od-hard" aria-hidden="true">⚠</span>', esc(tt("lg.too_hard"))],
+    [`<span class="walk-tag" aria-hidden="true">${esc(tt("walk.short", { g: "X" }))}</span>`, esc(tt("lg.walk"))],
     ['<i class="bo-sw" aria-hidden="true"></i>', esc(tt("lg.blackout"))],
     ['<i class="rest-sw" aria-hidden="true"></i>', esc(tt("rest.legend")) + q(tt("rest.legend"), tt("rest.legend_tip"))],
     ['<span aria-hidden="true">⇄</span>', esc(tt("swap.legend")) + q(tt("swap.legend"), tt("swap.legend_tip"))],
@@ -1697,11 +1779,11 @@ function tssHint() {
   const o = dlg.orig;
   if (dlg.ro) {
     const act = o && o.state === "done" && o.done_by && o.done_by.tss != null ? ` → 實際 <b>${n0(o.done_by.tss)}</b>` : "";
-    $("sd-tss").innerHTML = o ? `計畫負荷（Load）<b>${n0(estOf(o))}</b>${act}` : "";
+    $("sd-tss").innerHTML = o ? `計畫訓練負荷（Training load）<b>${n0(estOf(o))}</b>${act}` : "";
     return;
   }
   const e = estDialog();
-  $("sd-tss").innerHTML = `預估負荷（Load）<b class="num">${n0(e.tss)}</b> <span class="faint">≈ ${n0(e.rate)} 負荷/小時 × ${+F.minutes.value || 0} 分${eqOn() ? "（同強度 ≤ AeT：沿用原本每小時的負荷）" : ""}</span>`;
+  $("sd-tss").innerHTML = `預估訓練負荷（Training load）<b class="num">${n0(e.tss)}</b> <span class="faint">≈ ${n0(e.rate)} 負荷/小時 × ${+F.minutes.value || 0} 分${eqOn() ? "（同強度 ≤ AeT：沿用原本每小時的負荷）" : ""}</span>`;
 }
 
 // ---------------- terrain + same-load conversion (engine/equivalence.py) ----------------
@@ -1991,7 +2073,7 @@ const WE = WorkoutEditor.mount($("sd-we"), { api: PAPI, session: weSession, onVi
   minLock(v);
   // a structure of your own: the target text and the TSS estimate come from it
   if (v && v.totals && we.dirty && v.summary) F.target.value = v.summary;
-  if (v && v.totals && mine && !dlg.ro) $("sd-tss").innerHTML = `預估負荷（Load）<b class="num">${n0(v.totals.tss)}</b> <span class="faint">依結構估（推估）</span>`;
+  if (v && v.totals && mine && !dlg.ro) $("sd-tss").innerHTML = `預估訓練負荷（Training load）<b class="num">${n0(v.totals.tss)}</b> <span class="faint">依結構估（推估）</span>`;
   rpeKind(v && mine ? v.rpe_role : null, we.dirty && !dlg.ro);
   if (v && "family" in v) { dlg.stepsFam = v.family; famHint(); }
 }, onTemplate: (row) => {
@@ -2091,7 +2173,7 @@ function openVd() {
   $("vd-rec").textContent = d.recommended_reason ? `自動會選：${d.recommended_reason}` : "";
   $("vd-eq").innerHTML = d.equivalent.map((v) => vdRow(v, d.current_key)).join("");
   $("vd-ot").innerHTML = d.other.map((v) => vdRow(v, d.current_key)).join("");
-  $("vd-tip").dataset.tip = `同等＝同一類強度、目標區時間差 ±15% 內、5 區每趟 ≥ 2 分、工休比在範圍內、每趟 W′ 相近（30/15 不算同等）。` +
+  $("vd-tip").dataset.tip = `同等＝同一類強度、目標區時間差 ±15% 內、5 區每趟 ≥ 2 分、工休比在範圍內、每趟用掉的無氧容量相近（30/15 不算同等）。` +
     `換同等的課不影響進階；換不同等的會記下來，這次不算進階。換過的課算你的修改：自動重排不會蓋掉。${d.terrain_note}`;
   $("vd-err").textContent = "";
   $("vd").showModal();
@@ -2181,12 +2263,16 @@ function openAct(index) {
   if (!a) return;
   closeMenus();
   $("ad").dataset.index = index;
-  $("ad-sub").textContent = `${md(a.date)}（週${wd(a.date)}）${a.start ? " " + a.start.slice(11, 16) : ""}`;
+  $("ad-sub").textContent = `${I18N.fmt.date(a.date, "mdw")}${a.start ? " " + a.start.slice(11, 16) : ""}`;
   const ss = D.sessions.filter((s) => (s.link_options || []).includes(index));
   const rows = [["類別", `${a.category_label || ""}${a.sport_type ? `（${a.sport_type}）` : ""}`], ["移動時間", hm(a.moving_s)],
     ["距離", a.distance_km ? `${(+a.distance_km).toFixed(1)} km` : "–"], ["爬升", a.climbing_m ? `${Math.round(a.climbing_m)} m` : "–"],
     [tt("load.label"), n0(a.tss)], ...(a.hard_s != null ? [["閾值以上", `${(a.hard_s / 60).toFixed(1)} 分`]] : [])];
-  $("ad-body").innerHTML = `<p class="meta" style="margin:0 0 6px">這天沒有對應的課表，算計畫外的訓練 <button type="button" class="qtip" aria-label="配對規則" data-tip="${esc(MATCH_TIP)}">?</button></p>` +
+  const h = $("ad-h");
+  h.dataset.def ||= h.textContent;
+  h.textContent = a.race ? raceT(a.race, "race.act", { name: a.race.name }) : h.dataset.def;
+  $("ad-body").innerHTML = (a.race ? `<p class="meta" style="margin:0 0 6px">${esc(raceT(a.race, "race.act_note", { name: a.race.name, p: a.race.priority }))}</p>`
+    : `<p class="meta" style="margin:0 0 6px">這天沒有對應的課表，算計畫外的訓練 <button type="button" class="qtip" aria-label="配對規則" data-tip="${esc(MATCH_TIP)}">?</button></p>`) +
     `<dl class="vs">${rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("")}</dl>` +
     `<div class="vs-act"><a class="btn" href="${esc(VIEWER(a))}">📈 開啟活動</a>` +
     (ss.length ? `<select id="ad-link" aria-label="配對到課表"><option value="">配對到課表…</option>${ss.map((s) => `<option value="${esc(s.uid)}">${esc(`${md(s.day)} ${s.title}${s.state === "done" ? "（改配這筆）" : s.state === "missed" ? "（跳過）" : ""}`)}</option>`).join("")}</select>` : "") +
@@ -3357,14 +3443,15 @@ async function sugCount(fresh) {
   sugAsked = true;
   let rows = null;
   try {
+    // SP-507 R1: the tests 稍後提醒 holds (out of the box for 7 days) are offered here all the same
     const box = await sugBox();
-    if (box && box.load) rows = await box.load(again);
-    else {
-      const r = await fetch(`${PAPI}/suggestions`, { cache: "no-store" });
-      rows = r.ok ? (await r.json()).suggestions || [] : null;
-    }
+    let j = null;
+    if (box && box.load) j = await box.load(again, true);
+    else { const r = await fetch(`${PAPI}/suggestions`, { cache: "no-store" }); j = r.ok ? await r.json() : null; }
+    rows = j ? (j.suggestions || []).concat(j.snoozed_tests || []) : null;
   } catch (_) { rows = null; }
-  CTX.sug = (rows || []).filter((x) => x.type === "test" || x.type === "zone_test");
+  // a 基線測試 too (SP-507 R1: a held CP 基線測試 showed 「這天都不適合」 though 排入測試 offered the day)
+  CTX.sug = (rows || []).filter((x) => ["test", "baseline", "zone_test"].includes(x.type));
   CTX.tests = CTX.sug.length;
 }
 const sugFits = (day) => (CTX.sug || []).some((x) => [...(x.options || []), ...(x.tests || []).flatMap((t) => t.options || [])]

@@ -33,6 +33,7 @@ from __future__ import annotations
 import datetime as dt
 from typing import Optional
 
+from backend.engine import hints as H
 from backend.i18n import N_, _
 
 SIM_NEED = 3                 # owner 2026-10-05: 3 summit-day simulations are enough
@@ -149,8 +150,8 @@ def feasibility(r: dict, e, line: Optional[dict], today: dt.date, rows: list[dic
     r["suggestions"] = [s for s in r["suggestions"] if s in keep]
     if any(c["id"] == "step" and c["level"] == "over" for c in r["checks"]):
         # 跨級 kept (SP-112): a 百岳 has no lower 組別 — a lower-grade route first
-        r["suggestions"].append(_("最難那天比你走過最大的一天高了兩級以上：先走一條低一級的路線（攻頂日的距離和爬升少一點）"
-                                  "累積經驗，再來這一座"))
+        r["suggestions"].append(H.tag("PL10", _("最難那天比你走過最大的一天高了兩級以上：先走一條低一級的路線（攻頂日的距離和爬升少一點）"
+                                                "累積經驗，再來這一座"), cls=1))
     for k in ("downgrade", "koop", "milestone"):     # milestone (SP-284): the weekly volume isn't judged here
         r.pop(k, None)
     r["src"] = [_(SRC_SUMMIT)]
@@ -176,9 +177,10 @@ def feasibility(r: dict, e, line: Optional[dict], today: dt.date, rows: list[dic
             kw = {"projected": pj["n"], "done": len(got["done"]), "need": SIM_NEED, "need_m": round(sd["climb_m"]),
                   "best_m": round(best)}
             if lv == "over":
-                r["suggestions"].insert(0, _("來不及練到攻頂日的爬升：可以換短一點、低一級的路線，多排一天把攻頂日拆短，或延後出發"))
+                r["suggestions"].insert(0, H.tag("PL9", _("來不及練到攻頂日的爬升：可以換短一點、低一級的路線，多排一天把攻頂日拆短，或延後出發")))
             elif lv == "tight" and r.get("days_to", 0) >= F.WINDOW_DAYS:
-                r["suggestions"].append(_("每週排一次攻頂日模擬：背行程的背包，爬升一次比一次多（每週最多 +10%）"))
+                # SP-486: how to fix a tight plan — a reminder, not a class-1 line (as the trail race's climb advice)
+                r["suggestions"].append(H.tag("PL9", _("每週排一次攻頂日模擬：背行程的背包，爬升一次比一次多（每週最多 +10%）"), cls=2))
         r["checks"].append({"id": "summit_sim", "level": lv, "label": _(F.LEVEL_LABEL[lv]), "text": txt, **kw})
     r["level"] = _level(r["checks"], F.LEVELS)
     r["label"] = _(F.LEVEL_LABEL[r["level"]])

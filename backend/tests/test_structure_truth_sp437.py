@@ -190,7 +190,7 @@ def test_generated_output_is_a_fixed_point(generated):
 
 def test_taper_and_recovery_weeks_stay_light(generated):
     """Regression: with the structures' numbers a 減量期 week is still ≤ 50 % (≤ 40 % in the race's last
-    7 days) of the 6 weeks before it and a recovery week 65 % of the 3 before it; the weekly hours are
+    7 days) of the 6 weeks before it and a recovery week 70 % (SP-512) of the 3 before it; the weekly hours are
     what they were without the pass and each week's scheduled minutes moved by the text intervals' few
     minutes at most (a taper week is not made heavier)."""
     name, _plan, wp, weeks, before = generated
@@ -206,7 +206,7 @@ def test_taper_and_recovery_weeks_stay_light(generated):
             assert w["hours"] <= 0.5 * sum(hist[-6:]) / len(hist[-6:]) + 1e-6, (name, w["start"])
             seen.add("taper")
         if w["mode"] == "recovery_week":
-            assert w["hours"] == pytest.approx(0.65 * sum(hist[-3:]) / 3, rel=1e-6), (name, w["start"])
+            assert w["hours"] == pytest.approx(0.70 * sum(hist[-3:]) / 3, rel=1e-6), (name, w["start"])
             seen.add("recovery")
         hist.append(float(w["hours"]))
     if name in ("road", "trail_taper"):

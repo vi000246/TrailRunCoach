@@ -48,10 +48,10 @@ td.flag { background: var(--flag); color: var(--warn); font-weight: 600; }
       <button class="primary" id="go" data-i18n="compare.go">比對</button>
       <span class="meta" id="msg"></span>
     </div>
-    <p class="meta" data-i18n="compare.how">同一筆活動以開始時間 ±2 分鐘配對。儲存格標色＝差異超過容差（時長 / 距離 2%、爬升 10%、加權功率（Weighted power）3%、負荷（Load）5%）。每格顯示 A / B。</p>
+    <p class="meta" data-i18n="compare.how">同一筆活動以開始時間 ±2 分鐘配對。儲存格標色＝差異超過容差（時長 / 距離 2%、爬升 10%、加權功率（Weighted power）3%、訓練負荷（Training load）5%）。每格顯示 A / B。</p>
   </section>
   <section><div class="sum" id="sum"></div></section>
-  <section class="wrap"><table><thead><tr><th data-i18n="compare.col_start">開始</th><th data-i18n="compare.col_sport">運動</th><th data-i18n="compare.col_duration">時長</th><th data-i18n="compare.col_distance">距離 km</th><th data-i18n="compare.col_climb">爬升 m</th><th data-i18n="compare.col_np">加權功率（Weighted power）W</th><th><span data-i18n="compare.col_tss">負荷（Load）</span> <span class="qm" title="滑到負荷（Load）格看兩邊怎麼算（功率／配速／心率、用的 FTP 和來源）。&#10;跑步功率負荷（Power load）跟 WKO5 不同是預期的：WKO5 用手動輸入的 FTP，不會用 PD 模型的模型閾值功率（Modelled threshold power）更新；COROS／TP 來源用你的 CP 測試，沒有測試時用 Stryd 功率 PD 模型的模型閾值功率（推估）。&#10;TSS® 是 TrainingPeaks, LLC 的註冊商標。" data-i18n-attr="title:compare.tss_tip">?</span></th></tr></thead>
+  <section class="wrap"><table><thead><tr><th data-i18n="compare.col_start">開始</th><th data-i18n="compare.col_sport">運動</th><th data-i18n="compare.col_duration">時長</th><th data-i18n="compare.col_distance">距離 km</th><th data-i18n="compare.col_climb">爬升 m</th><th data-i18n="compare.col_np">加權功率（Weighted power）W</th><th><span data-i18n="compare.col_tss">訓練負荷（Training load）</span> <span class="qm" title="滑到訓練負荷（Training load）格看兩邊怎麼算（功率／配速／心率、用的 FTP 和來源）。&#10;跑步功率負荷（Power load）跟 WKO5 不同是預期的：WKO5 用手動輸入的 FTP，不會用 PD 模型的模型閾值功率（Modelled threshold power）更新；COROS／TP 來源用你的 CP 測試，沒有測試時用 Stryd 功率 PD 模型的模型閾值功率（推估）。&#10;TSS® 是 TrainingPeaks, LLC 的註冊商標。" data-i18n-attr="title:compare.tss_tip">?</span></th></tr></thead>
     <tbody id="rows"><tr><td colspan="7" class="meta" data-i18n="compare.empty">選好兩個來源後按「比對」。</td></tr></tbody></table></section>
 </main>
 <script>

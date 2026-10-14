@@ -88,6 +88,9 @@ tr.off td { color: var(--muted); }
 .hl-grid label.is-auto { border-style: dashed; border-color: var(--accent); }
 .hl-grid .hl-auto { display: none; font-size: 11px; font-weight: 500; padding: 0 6px; border-radius: 10px; border: 1px solid var(--line); color: var(--muted); }
 .hl-grid label.is-auto .hl-auto { display: inline-block; }
+/* 不再建議的測試 (SP-515): one row per test, 恢復 on the right */
+.sd-list { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 6px; }
+.sd-list li { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; }
 .src h3 { font-size: 14px; margin: 0; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .pill { font-size: 11.5px; padding: 1px 8px; border-radius: 10px; border: 1px solid var(--line); color: var(--muted); font-weight: 500; }
 .pill.ok { color: var(--ok); border-color: var(--ok); }
@@ -150,6 +153,17 @@ main > section.tab-off { display: none; }
 @media (max-width: 480px) { .ds-kv { grid-template-columns: 1fr; gap: 0; } .ds-kv dt { margin-top: 8px; font-size: 12px; } }
 /* SP-480: the sentences about 計算模式 (我的算式 / WKO5 對照模式), hidden for whoever cannot switch it */
 html.nomode .mode-note { display: none; }
+/* SP-488 (提示多寡): a check that agrees is one line — 可信度 chips, the folded app-vs-watch card and estimates */
+.conf { white-space: nowrap; }
+.conf.ok { color: var(--ok); }
+.conf .q { margin-left: 3px; vertical-align: 1px; }
+details.fold { margin-top: 8px; }
+details.fold > summary { cursor: pointer; }
+details.fold > summary.ok, details.fold > summary .ok { color: var(--ok); }
+.est .card.must { border-color: var(--err); }
+.fold-q { margin-left: 4px; vertical-align: 1px; }
+.src.cmp.folded { border: 0; padding: 0; margin-top: 4px; }
+.src.cmp.folded details.fold { margin-top: 0; }
 </style>
 <script>
 // SP-480: a user who cannot switch 計算模式 (sign-in mode without the `admin` scope: SP-464) reads
@@ -180,7 +194,7 @@ html.nomode .mode-note { display: none; }
   </nav>
   <p class="meta tab-note" id="tab-note"></p>
   <section id="general">
-    <h2><span data-i18n="settings.general.title">基本資料</span> <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.general.help" title="資料推不出來、只有你知道的幾項。體重用在 W/kg、跑步效能 RE、功率計算機和背包預設（體重 × 13 %）；每一天用當天或之前最近的一筆體重紀錄。這裡改的是最新一筆（儲存時用你填的量測日期；同一天的那筆會被取代，之前的紀錄留著）。手動填的優先：體重同步（資料同步分頁）不會改它，也不會用那天和之前的量測蓋掉它。性別決定 W′ 先驗（女性 6.4、男性 13.1 kJ）和熱量估算；年齡用在熱量估算，沒有最大心率時也用來估爬坡心率上限（220 − 年齡，推估），存的是出生年，每年自動加一歲。功率來源：只有 Stryd 的功率會進功率模型，沒有 Stryd 就用心率（手錶推估功率要到下面「功率」的進階設定打開）。其他數字都自動估算。">?</button></h2>
+    <h2><span data-i18n="settings.general.title">基本資料</span> <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.general.help" title="資料推不出來、只有你知道的幾項。體重用在 W/kg、跑步效能 RE、功率計算機和背包預設（體重 × 13 %）；每一天用當天或之前最近的一筆體重紀錄。這裡改的是最新一筆（儲存時用你填的量測日期；同一天的那筆會被取代，之前的紀錄留著）。手動填的優先：體重同步（資料同步分頁）不會改它，也不會用那天和之前的量測蓋掉它。性別決定無氧容量（Anaerobic capacity）的先驗值（女性 6.4、男性 13.1 kJ）和熱量估算；年齡用在熱量估算，沒有最大心率時也用來估爬坡心率上限（220 − 年齡，推估），存的是出生年，每年自動加一歲。功率來源：只有 Stryd 的功率會進功率模型，沒有 Stryd 就用心率（手錶推估功率要到下面「功率」的進階設定打開）。其他數字都自動估算。">?</button></h2>
     <div class="row">
       <label><span data-i18n="settings.general.sex">性別</span> <select id="p-sex"><option value="" data-i18n="settings.general.sex_unset">（未填）</option><option value="male" data-i18n="settings.general.male">男</option><option value="female" data-i18n="settings.general.female">女</option></select></label>
       <label><span data-i18n="settings.general.height">身高</span> <input type="number" id="p-height" min="100" max="250" step="1" style="width:72px"> cm</label>
@@ -247,6 +261,13 @@ html.nomode .mode-note { display: none; }
       <p class="meta" id="hint-suggest" hidden><span data-i18n="settings.hints.suggest">你有跑步紀錄、近一年有比賽成績，也跑過 2 小時以上：提示好像比較多，要改成精簡嗎？</span>
         <button type="button" id="hint-suggest-yes" data-i18n="settings.hints.suggest_yes">改成精簡</button>
         <button type="button" id="hint-suggest-no" data-i18n="settings.hints.suggest_no">不要</button></p>
+      <!-- SP-515: the tests a "no" took out of the suggestion box for every week (engine/suggestions.declined_tests);
+           restore = POST /api/v1/overview/plan/suggestions/restore. Hidden when there is none -->
+      <div id="sugg-declined" hidden>
+        <h3 data-i18n="settings.sugg_declined.title">不再建議的測試</h3>
+        <p class="meta" data-i18n="settings.sugg_declined.intro">在建議框按過「不要」的測試，之後每週都不會再建議。按「恢復」讓建議框到時候再提醒。</p>
+        <ul class="sd-list" id="sugg-declined-list"></ul>
+      </div>
     </div>
   </section>
 
@@ -260,7 +281,7 @@ html.nomode .mode-note { display: none; }
         <b>我的算式（平常用）</b>
         <ul>
           <li>心率負荷（HR load）只算實際移動的時間</li>
-          <li>爬升加成負荷（Load）</li>
+          <li>爬升加成訓練負荷（Training load）</li>
           <li>套用你核准的資料校正</li>
           <li>用下方「閾值測試紀錄」的 LTHR／AeT／CP 測試值</li>
         </ul>
@@ -274,6 +295,8 @@ html.nomode .mode-note { display: none; }
         </ul>
       </button>
     </div>
+    <!-- SP-488 (ST15): the one place that says which settings follow the mode -->
+    <p class="meta mode-note" data-i18n="settings.mode.only_mine">資料校正、排除壞掉的活動檔和閾值測試紀錄只在「我的算式」生效；「WKO5 對照模式」一律用 WKO5 裡的設定。</p>
   </section>
 
   <section id="sport">
@@ -289,7 +312,7 @@ html.nomode .mode-note { display: none; }
     <h2>功率</h2>
     <div class="row" style="margin-top:4px">
       <label><input type="checkbox" id="u-power"> 使用功率</label>
-      <button type="button" class="q" aria-label="說明" title="預設跟著「基本資料」的功率來源：Stryd 才打開，沒有功率計或只有手錶推估功率就用心率。只用心率訓練就關掉：圖表、總覽和活動頁會藏起只跟功率／CP 有關的圖、欄位和卡片（例如功率區間、功率曲線、CP 測試、W′ 電池、間歇的功率判讀），有「配速／功率」切換的圖固定用配速。心率版的圖照常顯示，計算本身不受影響，隨時可以再打開。">?</button>
+      <button type="button" class="q" aria-label="說明" title="預設跟著「基本資料」的功率來源：Stryd 才打開，沒有功率計或只有手錶推估功率就用心率。只用心率訓練就關掉：圖表、總覽和活動頁會藏起只跟功率／CP 有關的圖、欄位和卡片（例如功率區間、功率曲線、CP 測試、無氧儲備（Anaerobic reserve）、間歇的功率判讀），有「配速／功率」切換的圖固定用配速。心率版的圖照常顯示，計算本身不受影響，隨時可以再打開。">?</button>
       <span class="meta" id="u-power-note"></span>
       <button type="button" id="u-power-auto" hidden>改回自動</button>
     </div>
@@ -320,11 +343,14 @@ html.nomode .mode-note { display: none; }
 
   <section id="thresholds">
     <h2><span data-i18n="settings.thr.title">閾值測試紀錄（LTHR／AeT／CP）</span>
-      <button type="button" class="q" id="thr-q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.thr.help" title="每次測試記一列，從測試那天起生效、不往回套（跟 WKO5 一樣）。心率負荷（HR load）、功率負荷（Power load）、輕鬆跑上限、間歇門檻、課表的心率／功率目標都用它。只在「我的算式」模式生效；「WKO5 對照模式」一律用 WKO5 裡的設定。最大心率和靜息心率在上面的「心率」設定。">?</button></h2>
+      <button type="button" class="q" id="thr-q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.thr.help" title="每次測試記一列，從測試那天起生效、不往回套（跟 WKO5 一樣）。心率負荷（HR load）、功率負荷（Power load）、輕鬆跑上限、間歇門檻、課表的心率／功率目標都用它。最大心率和靜息心率在上面的「心率」設定。">?</button></h2>
     <p class="meta" id="thr-now" role="status"></p>
     <p class="meta" id="thr-wko5"></p>
     <div class="est" id="thr-est"><span class="meta" data-i18n="settings.thr.est_loading">正在從你的跑步資料估算 LTHR / AeT…</span></div>
     <div class="est" id="thr-check" hidden></div>
+    <!-- SP-488 (ST11, R5): 標準／精簡 fold the estimate cards that match what is in use (and the WKO5 line) -->
+    <details class="fold" id="thr-more" hidden><summary class="meta" id="thr-more-sum" data-hint-id="ST11"></summary>
+      <div class="est" id="thr-more-est"></div><p class="meta" id="thr-more-wko5"></p></details>
     <div class="tw"><table class="wt">
       <thead><tr><th data-i18n="settings.thr.date">測試日期</th><th data-i18n="settings.thr.lthr">LTHR 乳酸閾值心率</th>
         <th data-i18n="settings.thr.aethr">AeT 有氧閾值心率</th><th data-i18n="settings.thr.cp">CP 跑步臨界功率 W</th>
@@ -352,13 +378,13 @@ html.nomode .mode-note { display: none; }
       <div id="thr-hist-body"><span class="meta" data-i18n="settings.pmc.loading">載入中…</span></div>
     </details>
     <div class="sub" id="pmc">
-      <b data-i18n="settings.pmc.title">起始體能（Fitness）／疲勞（Fatigue）</b>
-      <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.pmc.help" title="體能（Fitness）／疲勞（Fatigue）要有一個起點。順序：你填的值（從那天開始）→ 自動（有負荷（Load）的前 28 天平均每日負荷，體能和疲勞都用它）→ 0。總覽、圖表、體能週增量（Fitness ramp）護欄、狀況（Form）&lt; −30 改恢復週都用同一組。手動值從填的日期重新起算，那天以前照自動；資料只有幾週、但你在別的平台（例如 TrainingPeaks）知道當時的體能／疲勞時才需要填。">?</button>
+      <b data-i18n="settings.pmc.title">起始長期訓練負荷（Chronic load）／短期負荷（Acute load）</b>
+      <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.pmc.help" title="長期訓練負荷（Chronic load）／短期負荷（Acute load）要有一個起點。順序：你填的值（從那天開始）→ 自動（有訓練負荷（Training load）的前 28 天平均每日負荷，長期負荷和短期負荷都用它）→ 0。總覽、圖表、長期負荷週增量（Chronic load ramp）護欄、負荷平衡（Load balance）&lt; −30 改恢復週都用同一組。手動值從填的日期重新起算，那天以前照自動；資料只有幾週、但你在別的平台（例如 TrainingPeaks）知道當時的長期／短期負荷時才需要填。">?</button>
       <div class="est" id="pmc-card"><span class="meta" data-i18n="settings.pmc.loading">載入中…</span></div>
       <div class="row">
         <label><span data-i18n="settings.pmc.date">日期</span> <input type="date" id="pmc-date"></label>
-        <label><span data-i18n="settings.pmc.ctl">體能（Fitness）</span> <input type="number" id="pmc-ctl" min="0" max="300" step="0.1" style="width:72px"></label>
-        <label><span data-i18n="settings.pmc.atl">疲勞（Fatigue）</span> <input type="number" id="pmc-atl" min="0" max="300" step="0.1" style="width:72px"></label>
+        <label><span data-i18n="settings.pmc.ctl">長期訓練負荷（Chronic load）</span> <input type="number" id="pmc-ctl" min="0" max="300" step="0.1" style="width:72px"></label>
+        <label><span data-i18n="settings.pmc.atl">短期負荷（Acute load）</span> <input type="number" id="pmc-atl" min="0" max="300" step="0.1" style="width:72px"></label>
         <button id="pmc-save" data-i18n="settings.pmc.save">儲存</button>
         <button id="pmc-clear" data-i18n="settings.pmc.clear" hidden>改回自動</button>
       </div>
@@ -414,9 +440,9 @@ html.nomode .mode-note { display: none; }
       <div class="row"><label>課表推送到 <select id="s-push"></select></label>
         <button type="button" class="q" aria-label="說明" title="課表（手動推送和自動調整）送到哪一個平台，一次只用一個。Garmin、intervals.icu 還沒開放，先列出來。">?</button></div>
       <div class="row"><span class="meta" id="s-tl"></span>
-        <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.tl.help" title="課表的「負荷（Load）」結束條件填的是本 app 算的負荷，推到 COROS 時換算成它的 TL（Training Load）。預設係數來自一位跑者的活動（推估，誤差約 ±20%）；每次同步後用你自己有 TL 的 COROS 活動重新擬合：近期活動權重較高、門檻（CP／LTHR）大改前的活動不用，資料少時只用簡單模型並向預設靠攏（權重＝n ÷（n＋30））。新係數要在最近 30 天的活動上不比舊的差才會換上。">?</button></div>
+        <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.tl.help" title="課表的「訓練負荷（Training load）」結束條件填的是本 app 算的負荷，推到 COROS 時換算成它的 TL（Training Load）。預設係數來自一位跑者的活動（推估，誤差約 ±20%）；每次同步後用你自己有 TL 的 COROS 活動重新擬合：近期活動權重較高、門檻（CP／LTHR）大改前的活動不用，資料少時只用簡單模型並向預設靠攏（權重＝n ÷（n＋30））。新係數要在最近 30 天的活動上不比舊的差才會換上。">?</button></div>
       <div class="row"><span class="meta" id="s-rpe"></span>
-        <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.rpe_load.help" title="課表的「負荷（Load）」也可以用感覺填：選 輕鬆／稍累／累／很累／極限（對到 Borg CR-10 的 2／4／5／7／10），再填分鐘數，負荷 ＝ 這一檔的每小時負荷 × 時數。每一檔的預設是通用規則，用 Coggan 公開的公式：每小時負荷 ＝ 強度比² × 100，強度比（Intensity）是這一檔的強度（範圍參考 Seiler 用 session RPE 分的三區、Coggan 功率等級，取點是推估），不是照哪個人調的。每個人的值只從他自己有自評的活動（手錶記錄的 RPE 或 COROS 跑後自評）和實際負荷逐檔擬合：每檔滿 3 筆才開始，資料少、或是很久以前的資料時向預設靠攏；高一檔不會比低一檔少，沒有自己資料、只為了這個被調整的檔標「依相鄰檔調整」。只用來排課填目標：總覽、體能圖（Fitness chart）的負荷一律用手錶記錄，不會用 RPE 修正。">?</button></div>
+        <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.rpe_load.help" title="課表的「訓練負荷（Training load）」也可以用感覺填：選 輕鬆／稍累／累／很累／極限（對到 Borg CR-10 的 2／4／5／7／10），再填分鐘數，負荷 ＝ 這一檔的每小時負荷 × 時數。每一檔的預設是通用規則，用 Coggan 公開的公式：每小時負荷 ＝ 強度比² × 100，強度比（Intensity）是這一檔的強度（範圍參考 Seiler 用 session RPE 分的三區、Coggan 功率等級，取點是推估），不是照哪個人調的。每個人的值只從他自己有自評的活動（手錶記錄的 RPE 或 COROS 跑後自評）和實際負荷逐檔擬合：每檔滿 3 筆才開始，資料少、或是很久以前的資料時向預設靠攏；高一檔不會比低一檔少，沒有自己資料、只為了這個被調整的檔標「依相鄰檔調整」。只用來排課填目標：總覽、訓練負荷圖（Training load chart）的負荷一律用手錶記錄，不會用 RPE 修正。">?</button></div>
       <div id="s-failed-wrap" hidden><div class="row"><b data-i18n="settings.syncfail.title">下載失敗的活動</b>
         <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.syncfail.help" title="同步時下載或匯入失敗的活動會記在這裡，之後的同步只重試這幾筆，不必重新列出所有活動。每筆最多自動重試 5 次或試滿 7 天，之後停止，可以按「重試」再試。沒有 FIT 檔的手動紀錄也列在這裡，之後有檔案了可以按「重試」。">?</button></div>
         <ul class="failed" id="s-failed"></ul></div>
@@ -592,8 +618,8 @@ html.nomode .mode-note { display: none; }
 
   <!-- SP-317: 運動紀錄保留 (api/archive.py, engine/fit_archive.py) -->
   <section id="archive">
-    <h2><span data-i18n="settings.arch.title">運動紀錄保留</span> <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.arch.help" title="超過保留期限的活動，每月 1 號凌晨 3～5 點自動移除 FIT 原始檔和逐秒快取，不會事先通知。每筆活動的指標、體能圖（Fitness chart）、最佳成績、成就與百岳登頂都留在摘要裡，長期圖表不會變；活動列表照樣列出，標「已封存，原始檔已移除」，只是不能再打開單次活動圖表。被目前門檻或課表測試用到的活動會先保留。想留原始檔，請先下載。">?</button></h2>
-    <p class="meta" data-i18n="settings.arch.intro">超過期限的 FIT 原始檔每月自動移除；摘要、體能圖（Fitness chart）、最佳成績和成就都會留下。</p>
+    <h2><span data-i18n="settings.arch.title">運動紀錄保留</span> <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.arch.help" title="超過保留期限的活動，每月 1 號凌晨 3～5 點自動移除 FIT 原始檔和逐秒快取，不會事先通知。每筆活動的指標、訓練負荷圖（Training load chart）、最佳成績、成就與百岳登頂都留在摘要裡，長期圖表不會變；活動列表照樣列出，標「已封存，原始檔已移除」，只是不能再打開單次活動圖表。被目前門檻或課表測試用到的活動會先保留。想留原始檔，請先下載。">?</button></h2>
+    <p class="meta" data-i18n="settings.arch.intro">超過期限的 FIT 原始檔每月自動移除；摘要、訓練負荷圖（Training load chart）、最佳成績和成就都會留下。</p>
     <div class="row">
       <label for="ar-years" data-i18n="settings.arch.keep">保留最近</label>
       <select id="ar-years"></select>
@@ -744,7 +770,7 @@ html.nomode .mode-note { display: none; }
 
   <section id="fixes">
     <h2>資料校正</h2>
-    <p class="meta">找出功率異常尖峰（例如 1800 W）。只會列出建議，<b>按下套用才會生效</b>；不會改到 .wko4 原始檔，隨時可以撤銷。<span class="mode-note" data-i18n="settings.mode.only_mine">只在「我的算式」模式生效。</span></p>
+    <p class="meta">找出功率異常尖峰（例如 1800 W）。只會列出建議，<b>按下套用才會生效</b>；不會改到 .wko4 原始檔，隨時可以撤銷。</p>
     <div class="row">
       <button id="scanbtn">掃描壞點</button>
       <button id="fixbtn" class="primary" disabled>套用勾選的修正</button>
@@ -756,9 +782,9 @@ html.nomode .mode-note { display: none; }
 
     <h2 style="margin-top:14px" id="badfiles">排除壞掉的活動檔</h2>
     <p class="meta">跑步／登山的檔案如果速度或功率不可能是人跑出來的（例如忘了停錶就騎車、開車），整筆活動會被排除：
-      留在資料庫和活動清單（標「已排除」），但不進負荷（Load）與體能圖（Fitness chart）、功率曲線／CP、比賽功率、飄移／AeT、課表比對和圖表。
+      留在資料庫和活動清單（標「已排除」），但不進訓練負荷（Training load）與訓練負荷圖、功率曲線／CP、比賽功率、飄移／AeT、課表比對和圖表。
       門檻：持續 1 分鐘以上比同時間的世界紀錄均速快 15%（推估餘裕），或平均功率超過 10 W/kg（推估）。
-      在單次活動的「活動資訊」卡也可以手動排除或標成正常。<span class="mode-note" data-i18n="settings.mode.only_mine">只在「我的算式」模式生效。</span></p>
+      在單次活動的「活動資訊」卡也可以手動排除或標成正常。</p>
     <div class="row"><label><input type="checkbox" id="ex-on"> 自動排除疑似交通工具／騎車的活動（預設開）</label>
       <span class="meta" id="ex-msg"></span></div>
     <div class="list" id="exlist"><span class="meta">載入中…</span></div>
@@ -811,18 +837,13 @@ async function j(url, opt) { const r = await fetch(url, opt); if (!r.ok) throw n
 // anyone else) until GET /config says can_switch; the owner's own app shows it as before
 const SIGNIN = !!(window.TRC_SESSION && window.TRC_SESSION.login);
 if (SIGNIN) $("mode").hidden = true;
-// SP-480: the texts that mention the two modes, or their mode-free twins (html.nomode: set in <head>)
-function modeTexts() {
-  const nomode = document.documentElement.classList.contains("nomode");
-  $("thr-q").title = t(nomode ? "settings.thr.help_nomode" : "settings.thr.help");
-}
-modeTexts();
+// SP-480: the sentence about the two modes is in 計算模式 only (SP-488, ST15: one place), so a user who
+// cannot switch (html.nomode: set in <head>) never reads it
 async function loadMode() {
   const { config, can_switch } = await j(`${API}/config`);
   $("mode").hidden = can_switch === false;
   $("mode-admin").hidden = !SIGNIN || can_switch === false;
   document.documentElement.classList.toggle("nomode", can_switch === false);
-  modeTexts();
   tabNote();
   document.querySelectorAll(".mode").forEach((b) => b.classList.toggle("on", String(!!config.parity) === b.dataset.parity));
 }
@@ -974,7 +995,18 @@ $("saveexp").onclick = async () => {
 // ---- 提示多寡 (SP-482; engine/hints.py, GET/PUT /api/v1/plan/profile/hint-level) ----------------
 // automatic (no choice): 完整 for a new runner, else 標準 — never 精簡 (only the runner picks it)
 const HINT_API = "/api/v1/plan/profile/hint-level";
+// SP-488: this page follows the level too (docs/spec/ui-hints.spec.md「設定（SP-488）」) — 標準 until
+// GET /hint-level answers (offline / failed: 標準), redrawn when it differs or the runner picks another
+let HL = "standard";
+const FULL = () => HL === "full", LEAN = () => HL === "lean";
+function setLevel(level) {
+  const l = ["full", "standard", "lean"].includes(level) ? level : "standard";
+  if (l === HL) return;
+  HL = l;
+  applyLevel();
+}
 function renderHintLevel(s) {
+  setLevel(s.level);
   const name = (l) => t(`settings.hints.${l}`);
   document.querySelectorAll('input[name="hint-level"]').forEach((r) => {
     r.checked = !s.auto && r.value === s.level;
@@ -1006,6 +1038,29 @@ $("hint-suggest-no").onclick = async () => {           // 「不要」: never as
   } catch (e) { toast(t("settings.failed", { msg: e.message.slice(0, 80) })); }
 };
 loadHintLevel();
+// ---- 不再建議的測試 (SP-515; GET …/suggestions/declined-tests, POST …/suggestions/restore {key}) ----------
+const SUGG_API = "/api/v1/overview/plan/suggestions";
+const sdKind = (k) => ({ cp: t("settings.sugg_declined.kind_cp"), aet: t("settings.sugg_declined.kind_aet") })[k] || k.toUpperCase();
+function renderDeclined(list) {
+  $("sugg-declined").hidden = !list.length;
+  $("sugg-declined-list").innerHTML = list.map((x) => `<li><b>${esc(sdKind(x.kind))}</b>
+    <span class="meta">${esc(t("settings.sugg_declined.since", { day: x.at ? I18N.fmt.date(x.at, "md") : "" }))}</span>
+    <button type="button" data-restore="${esc(x.key)}">${esc(t("settings.sugg_declined.restore"))}</button></li>`).join("");
+}
+function loadDeclined() { return j(`${SUGG_API}/declined-tests`).then((r) => renderDeclined(r.tests || [])).catch(() => {}); }
+$("sugg-declined-list").addEventListener("click", async (e) => {
+  const b = e.target.closest("[data-restore]");
+  if (!b) return;
+  b.disabled = true;
+  try {
+    const r = await j(`${SUGG_API}/restore`, { method: "POST", headers: { "Content-Type": "application/json" },
+                                               body: JSON.stringify({ key: b.dataset.restore }) });
+    renderDeclined(r.tests || []);
+    toast(t("settings.sugg_declined.restored", { test: sdKind(b.dataset.restore.split(":")[1] || "") }));
+    window.AppSuggestions?.refresh?.();                 // the box on this page asks again
+  } catch (err) { b.disabled = false; toast(t("settings.failed", { msg: err.message.slice(0, 80) })); }
+});
+loadDeclined();
 // the newest weight entry is edited here; the older ones (the nightly weight sync's, SP-472) stay.
 // Saving sends the list back: an entry on the entered date is replaced, an emptied field removes the
 // newest one; an entry sent back unchanged keeps its source on the server (api/plan.put_profile)
@@ -1040,11 +1095,17 @@ $("saveprof").onclick = async () => {
 
 // ---- 心率 (api/plan.py hr-profile, engine/hr_profile.py) ---------------------
 const HRP = "/api/v1/plan/hr-profile";
+let HR = null;
 function renderHr(r) {
+  HR = r;
   const v = (x) => x && x.value != null ? `${Math.round(x.value)} bpm` : t("settings.hr.unset");
-  const src = (x) => x && x.source ? `<span class="meta">（${esc(x.source)}）</span>` : x && x.reason ? `<span class="meta">${esc(x.reason)}</span>` : "";
-  $("hr-kv").innerHTML = `<dt>${esc(t("settings.hr.max"))}</dt><dd>${v(r.max_hr)} ${src(r.max_hr)}</dd>
-    <dt>${esc(t("settings.hr.rest"))}</dt><dd>${v(r.rest_hr)} ${src(r.rest_hr)}</dd>`;
+  // ST6 (●●▷): where the value comes from — 精簡 on hover only; a missing value's reason stays
+  const src = (x) => x && x.source ? (LEAN() ? "" : `<span class="meta" data-hint-id="ST6">（${esc(x.source)}）</span>`)
+    : x && x.reason ? `<span class="meta" data-hint-id="ST6">${esc(x.reason)}</span>` : "";
+  const tip = (x) => (LEAN() && x && x.source ? ` title="${esc(x.source)}"` : "");
+  $("hr-kv").innerHTML = `<dt>${esc(t("settings.hr.max"))}</dt><dd${tip(r.max_hr)}>${v(r.max_hr)} ${src(r.max_hr)} <span id="hr-conf"></span></dd>
+    <dt>${esc(t("settings.hr.rest"))}</dt><dd${tip(r.rest_hr)}>${v(r.rest_hr)} ${src(r.rest_hr)}</dd>`;
+  drawConf();
   $("hr-model").innerHTML = r.models.map((m) => `<option value="${esc(m.id)}"${m.id === r.model ? " selected" : ""}>${esc(m.label)}</option>`).join("");
   const cur = r.models.find((m) => m.id === r.model);
   $("hr-model-q").title = $("hr-model-q").title.split("\n\n")[0] + (cur ? "\n\n" + cur.source : "");
@@ -1088,21 +1149,33 @@ function renderHrCompare(c) {
   const h = c.history;
   const hist = h.rows.map((r) => `<tr><td>${esc(r.day || "–")}</td><td>${bpm(r.lthr)}</td><td>${bpm(r.max_hr)}</td><td>${bpm(r.rest_hr)}</td>
     <td>${esc(r.text)}</td></tr>`).join("");
-  box.innerHTML = `<h3>${esc(t("settings.hr.cmp_title"))}
-      <span class="pill ${c.alert ? "warn" : "ok"}">${esc(t(c.alert ? "settings.hr.cmp_warn" : "settings.hr.cmp_ok", { bpm: c.alert_bpm }))}</span></h3>
-    <p>${esc(c.summary)}</p>
-    <div class="tw"><table class="wt"><thead><tr><th>${esc(t("settings.hr.cmp_item"))}</th><th>${esc(t("settings.hr.cmp_app"))}</th>
+  const histTable = hist ? `<div class="tw"><table class="wt"><thead><tr><th>${esc(t("settings.hr.cmp_hist_day"))}</th><th>LTHR</th>
+        <th>${esc(t("settings.hr.max"))}</th><th>${esc(t("settings.hr.rest"))}</th><th>${esc(t("settings.hr.cmp_hist_what"))}</th></tr></thead>
+        <tbody>${hist}</tbody></table></div>` : "";
+  const histNote = `<p class="meta">${esc(t(hist ? "settings.hr.cmp_hist_note" : "settings.hr.cmp_hist_none"))}</p>`;
+  // SP-488 (ST9, ●◐◐): 標準／精簡 fold the card into one line while every gap is within alert_bpm —
+  // the table, the note and the history inside (no 詳細 inside the 詳細, [U1]); a gap over it is class 1
+  const fold = !FULL() && !c.alert;
+  const body = `<div class="tw"><table class="wt"><thead><tr><th>${esc(t("settings.hr.cmp_item"))}</th><th>${esc(t("settings.hr.cmp_app"))}</th>
       <th>${esc(t("settings.hr.cmp_watch"))}</th><th>${esc(t("settings.hr.cmp_gap"))}</th></tr></thead>
       <tbody>${rows}${zrows}</tbody></table></div>
     ${c.fixes.length ? `<ul>${c.fixes.map((f) => `<li>${esc(f)}</li>`).join("")}</ul><p>${esc(c.where)}</p>` : ""}
     <p class="meta">${esc(c.note)}</p>
     <p class="meta">${esc([c.read_day ? t("settings.hr.cmp_read", { day: c.read_day }) : "",
-      h.last_change ? t("settings.hr.cmp_last", { day: h.last_change.day || "–", text: h.last_change.text }) : ""].filter(Boolean).join("　"))}</p>
+      h.last_change ? t("settings.hr.cmp_last", { day: h.last_change.day || "–", text: h.last_change.text }) : ""].filter(Boolean).join("　"))}</p>`;
+  box.dataset.hintId = "ST9";
+  if (c.alert) box.dataset.hintCls = "1"; else delete box.dataset.hintCls;
+  box.classList.toggle("folded", fold);
+  box.innerHTML = fold
+    ? `<details class="fold"><summary class="meta ok">${esc(t("settings.hr.cmp_same", { bpm: c.alert_bpm }))}</summary>
+        <p>${esc(c.summary)}</p>${body}
+        <p class="meta"><b>${esc(t("settings.hr.cmp_hist", { n: h.n }))}</b></p>${histTable}${histNote}</details>`
+    : `<h3>${esc(t("settings.hr.cmp_title"))}
+      <span class="pill ${c.alert ? "warn" : "ok"}">${esc(t(c.alert ? "settings.hr.cmp_warn" : "settings.hr.cmp_ok", { bpm: c.alert_bpm }))}</span></h3>
+    <p>${esc(c.summary)}</p>
+    ${body}
     <details style="margin-top:6px"><summary class="meta">${esc(t("settings.hr.cmp_hist", { n: h.n }))}</summary>
-      ${hist ? `<div class="tw"><table class="wt"><thead><tr><th>${esc(t("settings.hr.cmp_hist_day"))}</th><th>LTHR</th>
-        <th>${esc(t("settings.hr.max"))}</th><th>${esc(t("settings.hr.rest"))}</th><th>${esc(t("settings.hr.cmp_hist_what"))}</th></tr></thead>
-        <tbody>${hist}</tbody></table></div>` : ""}
-      <p class="meta">${esc(t(hist ? "settings.hr.cmp_hist_note" : "settings.hr.cmp_hist_none"))}</p></details>`;
+      ${histTable}${histNote}</details>`;
 }
 async function loadHr() {
   try { renderHr(await j(HRP)); }
@@ -1138,11 +1211,16 @@ async function loadThr() {
 }
 function renderThr() {
   const ef = TS.effective_thresholds, w = TS.wko5_settings.runthr, m = TS.wko5_settings.runmhr;
+  // ST10: 「LTHR 是 WKO5 預設值」 and 「WKO5 出廠值」 said once — the one red line where it matters (SP-488)
   $("thr-now").innerHTML = esc(t("settings.thr.now", { aet: num(ef.aethr.value), lthr: num(ef.lthr.value), cp: num(ef.cp.value) }))
-    + pmBadge(ef.aethr.pm) + (ef.lthr.wko5_default ? ` <span class="err-text">${esc(t("settings.thr.lthr_default"))}</span>` : "")
-    + (ef.cp.label ? `<span class="meta">${esc(t("settings.thr.cp_src", { src: ef.cp.label }))}</span>` : "");
-  $("thr-wko5").innerHTML = esc(t("settings.thr.wko5", { lthr: num(w && w.value), mhr: num(m && m.value) }))
-    + (w && w.is_default ? ` <span class="err-text">${esc(t("settings.thr.wko5_default", { date: w.date }))}</span>` : "");
+    + pmBadge(ef.aethr.pm) + (ef.lthr.wko5_default ? ` <span class="err-text" data-hint-id="ST10">${esc(t("settings.thr.lthr_default"))}</span>` : "")
+    + (ef.cp.label ? `<span class="meta">${esc(t("settings.thr.cp_src", { src: ef.cp.label }))}</span>` : "")
+    + ` <span id="thr-conf"></span>`;
+  WKO5_RED = !!(w && w.is_default && !ef.lthr.wko5_default);
+  WKO5_HTML = esc(t("settings.thr.wko5", { lthr: num(w && w.value), mhr: num(m && m.value) }))
+    + (WKO5_RED ? ` <span class="err-text" data-hint-id="ST10">${esc(t("settings.thr.wko5_default", { date: w.date }))}</span>` : "");
+  drawEst();
+  drawConf();
   const cell = (i, f, v) => `<td><input type="number" data-t="${i}" data-f="${f}" value="${v ?? ""}" style="width:76px"></td>`;
   $("thr").innerHTML = TS.thresholds.map((r, i) => !thrShown(r) ? "" : `<tr>
     <td><input type="date" data-t="${i}" data-f="date" value="${esc(r.date)}"></td>
@@ -1156,28 +1234,55 @@ function renderThr() {
     <td>${z.watts ? z.watts[0] + (z.watts[1] ? "–" + z.watts[1] : "+") : "–"}</td></tr>`).join("");
   $("thr-pzsrc").textContent = t("settings.thr.pz_src", { src: pz.source });
 }
+let E = null, WKO5_HTML = "", WKO5_RED = false;
 async function loadThrEstimate() {
-  let E;
   try { E = await j("/api/v1/plan/threshold-estimate"); }
-  catch { $("thr-est").innerHTML = `<span class="meta">${esc(t("settings.thr.est_failed"))}</span>`; return; }
-  // SP-394: a first import's older activities still back-filling: the estimates wait for them
-  if (E.pending) { $("thr-est").innerHTML = `<span class="meta">${esc(E.pending.message)}</span>`; return; }
+  catch { E = { failed: true }; }
+  drawEst();
+}
+// ST11 (●◐▷, SP-488): 完整 shows both estimate cards; 標準 only one that differs from what is in use (≥ 1 bpm,
+// it has 「套用」) and folds the rest; 精簡 folds them all. The WKO5 line goes in the same fold unless it is
+// the red factory-default line (ST10). The fold's one line says what is inside.
+function drawEst() {
+  if (!TS) return;
+  const more = $("thr-more"), into = (shown, folded, wko5In, sum) => {
+    $("thr-est").innerHTML = shown; $("thr-est").hidden = !shown;
+    $("thr-more-est").innerHTML = folded;
+    $("thr-wko5").innerHTML = wko5In ? "" : WKO5_HTML; $("thr-wko5").hidden = wko5In;
+    $("thr-more-wko5").innerHTML = wko5In ? WKO5_HTML : ""; $("thr-more-wko5").hidden = !wko5In;
+    $("thr-more-sum").textContent = sum; more.hidden = !(folded || wko5In);
+  };
+  const foldWko5 = !FULL() && !WKO5_RED;
+  if (!E) { into(`<span class="meta">${esc(t("settings.thr.est_loading"))}</span>`, "", foldWko5, t("settings.thr.more_wko5")); return; }
+  if (E.failed || E.pending) {      // SP-394: a first import's older activities still back-filling: the estimates wait
+    into(`<span class="meta">${esc(E.failed ? t("settings.thr.est_failed") : E.pending.message)}</span>`, "", foldWko5, t("settings.thr.more_wko5"));
+    return;
+  }
   const cur = TS.effective_thresholds;
   const card = (key, label, est, curV, help) => {
     const ok = est && est.value != null;
     const same = ok && curV != null && Math.abs(est.value - curV) < 1;
-    return `<div class="card"><div class="k">${esc(t("settings.thr.est_k", { name: label }))}</div>
+    const html = `<div class="card" data-hint-id="ST11"><div class="k">${esc(t("settings.thr.est_k", { name: label }))}</div>
       <div class="v">${ok ? est.value + " bpm" + pmBadge(est.pm) : "–"} <small>${ok && curV != null ? esc(t("settings.thr.est_cur", { v: num(curV) })) : ""}</small></div>
       <div class="s">${esc(est ? est.reason : "")}${ok && est.spread ? esc(t("settings.thr.est_spread", { lo: est.spread[0], hi: est.spread[1] })) : ""}${est && est.days ? esc(t("settings.thr.est_days", { n: est.days })) : ""}</div>
       ${help ? `<div class="s">${esc(help)}</div>` : ""}
       ${ok && !same ? `<button class="primary" data-apply="${key}" data-v="${est.value}">${esc(t("settings.thr.est_apply", { v: est.value }))}</button>`
         : ok ? `<div class="s">${esc(t("settings.thr.est_same"))}</div>` : ""}</div>`;
+    // the condition (R-less, §1 ST11): the estimate differs from what is in use by ≥ 1
+    const state = !ok ? "none" : same ? "same" : "diff";
+    return { html, state, line: t(`settings.thr.more_${state}`, { name: label, v: ok ? est.value : "" }) };
   };
-  $("thr-est").innerHTML = card("lthr", "LTHR", E.lthr, cur.lthr.value,
-      E.lthr && E.lthr.hr_at_cp ? t("settings.thr.est_cross", { hr: E.lthr.hr_at_cp, n: E.lthr.n_at_cp }) : "")
-    + card("aethr", "AeT", E.aethr, cur.aethr.source === "plan" ? cur.aethr.value : null,
-      E.aethr && E.aethr.value == null ? t("settings.thr.est_aet_none") : "");
-  $("thr-est").querySelectorAll("[data-apply]").forEach((b) => b.onclick = async () => {
+  const cards = [card("lthr", "LTHR", E.lthr, cur.lthr.value,
+      E.lthr && E.lthr.hr_at_cp ? t("settings.thr.est_cross", { hr: E.lthr.hr_at_cp, n: E.lthr.n_at_cp }) : ""),
+    card("aethr", "AeT", E.aethr, cur.aethr.source === "plan" ? cur.aethr.value : null,
+      E.aethr && E.aethr.value == null ? t("settings.thr.est_aet_none") : "")];
+  const show = (c) => FULL() || (!LEAN() && c.state === "diff");
+  const folded = cards.filter((c) => !show(c));
+  const sum = folded.length ? t("settings.thr.more_title", { list: folded.map((c) => c.line).join(t("settings.general.sep")) })
+    : t("settings.thr.more_wko5");
+  into(cards.filter(show).map((c) => c.html).join(""), folded.map((c) => c.html).join(""), foldWko5, sum);
+  $("thr-more-sum").classList.toggle("ok", folded.length > 0 && folded.every((c) => c.state === "same"));
+  document.querySelectorAll("#thr-est [data-apply], #thr-more-est [data-apply]").forEach((b) => b.onclick = async () => {
     const k = b.dataset.apply, v = Number(b.dataset.v), name = k === "lthr" ? "LTHR" : "AeT";
     if (!confirm(t("settings.thr.est_confirm", { name, v }))) return;
     try {
@@ -1220,8 +1325,36 @@ function renderThrCheck() {
       t("settings.thr.chk_apply", { v: cand.value })) : "";
   // SP-277: a manual LTHR stays 中 (no warning) with a small 「手動輸入，沒有驗證」
   const lnote = TC.warn && TC.warn.lthr && TC.warn.lthr.note ? `<div class="s">${esc(TC.warn.lthr.note)}</div>` : "";
-  box("thr-check", card("LTHR", TC.lthr, lnote + dg + tests("tt30")));
-  box("hr-check", card(t("settings.thr.chk_hrmax"), TC.hrmax, (TC.diagnosis && TC.diagnosis.outlier === "hrmax" ? dg : "") + candHtml + tests("hrmax")));
+  // R5 (SP-488): the card in 完整, when 低, or when it has something to 套用; else one line next to the value (drawConf).
+  // 低 with a strong signal is class 1 (the red edge), in every level
+  const lt = TC.lthr, hm = TC.hrmax;
+  const asCard = (v, actions) => !!v && v.value != null && (FULL() || v.confidence === "low" || actions);
+  const strong = (v) => (v.signals || []).some((x) => x.level === "strong");
+  const mark = (html, id, v) => html.replace('<div class="card">',
+    `<div class="card${v.confidence === "low" && strong(v) ? " must" : ""}" data-hint-id="${id}"${v.confidence === "low" && strong(v) ? ' data-hint-cls="1"' : ""}>`);
+  CONF.lthr = asCard(lt, res("tt30").some((r) => r.apply)) ? null : lt;
+  CONF.hrmax = asCard(hm, !!cand || res("hrmax").some((r) => r.apply)) ? null : hm;
+  box("thr-check", CONF.lthr || !lt ? "" : mark(card("LTHR", lt, lnote + dg + tests("tt30")), "ST8", lt));
+  box("hr-check", CONF.hrmax || !hm ? "" : mark(card(t("settings.thr.chk_hrmax"), hm,
+    (TC.diagnosis && TC.diagnosis.outlier === "hrmax" ? dg : "") + candHtml + tests("hrmax")), "ST7", hm));
+  CONF.why = { lthr: [...(lt && lt.signals || []).filter((x) => x.level !== "hint").map((x) => x.text), TC.warn && TC.warn.lthr && TC.warn.lthr.note,
+    TC.diagnosis && TC.diagnosis.outlier !== "hrmax" ? TC.diagnosis.text : ""].filter(Boolean),
+    hrmax: [...(hm && hm.signals || []).filter((x) => x.level !== "hint").map((x) => x.text),
+      TC.diagnosis && TC.diagnosis.outlier === "hrmax" ? TC.diagnosis.text : ""].filter(Boolean) };
+  drawConf();
+}
+// R5's one line: 「可信度高 ✓」, or 「可信度中 ?」 (the ? holds why) — beside 最大心率 (ST7) and 目前使用 (ST8)
+const CONF = { lthr: null, hrmax: null, why: { lthr: [], hrmax: [] } };
+function drawConf() {
+  for (const [key, id, hid] of [["hrmax", "hr-conf", "ST7"], ["lthr", "thr-conf", "ST8"]]) {
+    const el = $(id), v = CONF[key];
+    if (!el) continue;
+    if (!v || !v.confidence) { el.innerHTML = ""; continue; }
+    const why = CONF.why[key].join("\n") || t("settings.thr.conf_tip_none");
+    el.innerHTML = v.confidence === "high"
+      ? `<span class="conf ok" data-hint-id="${hid}">· ${esc(t("settings.thr.conf_high"))}</span>`
+      : `<span class="conf" data-hint-id="${hid}">· ${esc(t(`settings.thr.conf_${v.confidence}`))}<button type="button" class="q" aria-label="${esc(t("settings.thr.q_aria"))}" title="${esc(why)}">?</button></span>`;
+  }
 }
 document.addEventListener("click", async (ev) => {
   const b = ev.target.closest("[data-tcapply]");
@@ -1351,13 +1484,17 @@ function parseHms(v) {
   if (!p.length || p.some((x) => !Number.isFinite(x) || x < 0)) return null;
   return p.length === 3 ? p[0] * 3600 + p[1] * 60 + p[2] : p.length === 2 ? p[0] * 60 + p[1] : null;
 }
+let RACE_R = null;
 function renderRace(r) {
+  RACE_R = r;
   const c = r.current;
+  // ST12 (●●▷): 「太舊了」 — 精簡 on hover only
+  const stale = c && c.stale ? t("settings.race.stale", { d: c.age_days, n: r.stale_days }) : "";
   $("race-card").innerHTML = c
-    ? `<div class="card"><div class="k">${esc(t(c.source === "activity" ? "settings.race.k_act" : c.source === "survey" ? "settings.race.k_survey" : "settings.race.k_manual", { date: c.date, title: c.title || "" }))}</div>
+    ? `<div class="card"${stale && LEAN() ? ` title="${esc(stale)}"` : ""}><div class="k">${esc(t(c.source === "activity" ? "settings.race.k_act" : c.source === "survey" ? "settings.race.k_survey" : "settings.race.k_manual", { date: c.date, title: c.title || "" }))}</div>
       <div class="v">${esc(pace(c.e_fast))}–${esc(pace(c.e_slow))} <small>/km · VDOT ${esc(c.vdot)}</small></div>
       <div class="s">${esc(r.label)}</div>
-      ${c.stale ? `<div class="s err-text">${esc(t("settings.race.stale", { d: c.age_days, n: r.stale_days }))}</div>` : ""}</div>`
+      ${stale && !LEAN() ? `<div class="s err-text" data-hint-id="ST12">${esc(stale)}</div>` : ""}</div>`
     : `<span class="meta">${esc(t("settings.race.none"))}</span>`;
   const today = new Date().toISOString().slice(0, 10);
   $("race-date").max = today;
@@ -1679,9 +1816,18 @@ async function loadSport() {
   const ps = await j("/api/v1/wko5/primary-sport").catch(() => null);
   if (!ps) return;
   $("u-sport").value = ps.setting || "auto";
-  const sug = ps.suggested || {};
-  $("u-sport-note").textContent = ps.setting === "auto" ? `目前：${ps.label}（${sug.reason || ""}）`
-    : (sug.sport && sug.sport !== ps.sport ? `資料建議：${sug.sport === "road" ? "路跑／馬拉松" : "越野跑"}（${sug.reason || ""}）` : "");
+  SPORT = ps;
+  drawSport();
+}
+// ST4 (●●▷, SP-488): 主要訓練項目's 「資料建議」 — 精簡 on hover (the select's title) only
+let SPORT = null;
+function drawSport() {
+  const ps = SPORT, sug = (ps && ps.suggested) || {};
+  if (!ps) return;
+  const advice = ps.setting !== "auto" && sug.sport && sug.sport !== ps.sport
+    ? `資料建議：${sug.sport === "road" ? "路跑／馬拉松" : "越野跑"}（${sug.reason || ""}）` : "";
+  $("u-sport-note").textContent = ps.setting === "auto" ? `目前：${ps.label}（${sug.reason || ""}）` : LEAN() ? "" : advice;
+  $("u-sport").title = LEAN() ? advice : "";
 }
 $("u-sport").onchange = async (e) => {
   try { await putSetting({ primary_sport: e.target.value }); toast("已更新主要訓練項目：重新整理其他頁面就會套用"); loadSport(); }
@@ -2312,12 +2458,54 @@ function showTab(tab, focus) {
   });
   tabNote();
 }
-// the selected tab's note; 進階設定's leaves out 計算模式 when that section is hidden (SP-464)
+// the selected tab's note; 進階設定's leaves out 計算模式 when that section is hidden (SP-464).
+// ST1 (●✕✕, SP-488): 完整 only — the tab names say enough
 function tabNote() {
   const b = document.querySelector('.tabs [aria-selected="true"]');
   if (!b) return;
   const tab = b.dataset.tab;
-  $("tab-note").textContent = t(`settings.tabs.${tab}_note${tab === "advanced" && $("mode").hidden ? "_nomode" : ""}`);
+  $("tab-note").textContent = FULL() ? t(`settings.tabs.${tab}_note${tab === "advanced" && $("mode").hidden ? "_nomode" : ""}`) : "";
+  $("tab-note").hidden = !FULL();
+}
+// ST5 (●▷▷, SP-488): fixed explanations — 地圖 ×2, 記住密碼, the TP terms risk, 課表訂閱 — are text in 完整 and a `?`
+// in 標準／精簡: a sentence (span) gets its own `?` right after it, a paragraph / list the `?` of its heading
+// (several under one heading share one). 「這個網址就是鑰匙」 (課表訂閱) stays: it is about keeping it secret.
+const FOLD_Q = ['[data-i18n="settings.sync.cred_note"]', '[data-i18n^="settings.sync.remember_"]', "#src-tp .sub .meta",
+  "#map > p.meta", '#calendar [data-i18n="settings.cal.intro"]', "#calendar .sub ul", '#calendar [data-i18n="settings.cal.reach"]'];
+function foldQ() {
+  const groups = new Map();
+  for (const el of document.querySelectorAll(FOLD_Q.join(","))) {
+    const inline = el.tagName === "SPAN";
+    const at = inline ? el : (el.closest(".sub") || el.closest("section")).querySelector("h2, h3, b");
+    if (!at) continue;
+    if (!groups.has(at)) groups.set(at, { inline, els: [] });
+    groups.get(at).els.push(el);
+  }
+  for (const [at, g] of groups) {
+    let q = inline(at, g.inline);
+    q.title = g.els.map((el) => el.textContent.replace(/\s+/g, " ").trim()).join("\n\n");
+    q.hidden = FULL();
+    for (const el of g.els) el.hidden = !FULL();
+  }
+  function inline(at, after) {
+    const sel = (x) => x && x.matches && x.matches("button.fold-q");
+    let q = after ? (sel(at.nextElementSibling) ? at.nextElementSibling : null) : at.querySelector(":scope > button.fold-q");
+    if (q) return q;
+    q = document.createElement("button");
+    q.type = "button"; q.className = "q fold-q"; q.textContent = "?"; q.dataset.hintId = "ST5";
+    q.setAttribute("aria-label", t("settings.thr.q_aria"));
+    if (after) at.after(q); else at.appendChild(q);
+    return q;
+  }
+}
+// redraw what follows 提示多寡 (setLevel) with the answers already here
+function applyLevel() {
+  tabNote(); foldQ();
+  if (HR) renderHr(HR);
+  if (TS) renderThr();
+  if (TC) renderThrCheck();
+  if (RACE_R) renderRace(RACE_R);
+  drawSport();
 }
 function tabFromHash() {
   const h = decodeURIComponent(location.hash.slice(1));
@@ -2345,6 +2533,7 @@ document.querySelector(".tabs").addEventListener("keydown", (e) => {
 });
 window.addEventListener("hashchange", tabFromHash);
 tabFromHash();
+foldQ();
 
 loadMode(); loadApplied(); loadProfile(); loadHr(); loadThr(); loadExclusions(); loadBackup(); loadArchive(); loadCalib(); loadCal();
 loadAccount();

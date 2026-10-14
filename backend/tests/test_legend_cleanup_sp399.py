@@ -105,7 +105,7 @@ def test_legend_table_three_sections_with_the_payload_thresholds():
                   ' + "\\n" + SessChip.levelsText({ green: 0.25 }) + SessChip.hrNote({ uncertain: true })')
     h = got["out"]
     assert h.startswith('<details class="sc-leg"') and h.count("<summary") == 1 and "圖例" in h
-    assert "完成：時間和負荷（Load）都在計畫 ±25% 內" in h
+    assert "完成：時間和訓練負荷（Training load）都在計畫 ±25% 內" in h
     heads = re.findall(r'<th colspan="2"[^>]*>(.*?)</th>', h)
     assert len(heads) == 3 and heads[0].startswith("類型") and heads[1].startswith("完成度") and heads[2].startswith("其他")
     for k in ("easy", "z3", "z5", "long", "hike", "test", "strength", "race", "heat", "rest", "notice", "bike", "other"):

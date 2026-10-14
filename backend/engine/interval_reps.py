@@ -13,6 +13,9 @@ Order:
   3. no plan: count_reps (≥ 95 % CP, ≥ 40 s) for short reps, else the Zone 3
      floor (0.95 × 88 % CP) for reps ≥ Z3_MIN_S.
 
+auto_reps (SP-519, display only): the set of ≥ 3 similar efforts at ≥ 95 % CP
+with rests between that lets an easy / long run's 間歇 page show itself.
+
 Laps come from the activity's FIT: `ds.laps(idx)` when the dataset offers it
 (tests), else the FIT blob WKO5 keeps inside the .wko4 (`original_bytes`), else
 a .fit path. Lap start = lap.start_time − session.start_time (the elapsedtime
@@ -236,3 +239,103 @@ def find_reps(ds, w, s: Optional[dict], cp: Optional[float], spec=None) -> dict:
     if len(z3) >= 2:
         return {"bouts": [{**r, "source": "z3"} for r in z3], "source": "z3"}
     return {"bouts": [{**r, "source": "short"} for r in short], "source": "short" if short else None}
+
+
+
+# ---------------------------------------------------------------------------
+# SP-519: an easy / long run with a set of efforts — the 間歇 page shows itself
+# ---------------------------------------------------------------------------
+# The user (2026-10-14): 「偵測到 3 趟以上、長度差不多、強度到閾值以上的用力段，就直接顯示間歇圖表」,
+# trail climbs included (no grade filter: a climb at the intensity counts). Display only —
+# find_reps / count_reps (dose_history, the ladder, the hard-day count) are not touched.
+# 「一組」: the reps follow each other with an easier stretch between (a jog, a walk, the way back
+# down) — the owner's runs (2026-07..10) sit at 85–100 % of the fitted CP with surges ≥ 95 % CP
+# every few minutes; without the rest rule 30 of 46 runs would have shown the 間歇 page.
+AUTO_MIN_REPS = 3          # the user's rule
+AUTO_PCT = 0.95            # 推估: 強度到閾值以上 = a rep's mean ≥ 95 % CP (CP = the threshold power; the
+                           #   count_reps / 用力段 line, so a 98–101 % CP fartlek rep with a soft 10 s still counts)
+AUTO_LEN_RATIO = 1.5       # 推估: 長度差不多 = the longest rep of the set ≤ 1.5 × the shortest (detected edges
+                           #   move ±5–10 s; a 2-3-2 pyramid is one set, 1′ strides next to 5′ reps are not)
+AUTO_REST_RATIO = 0.80     # 推估: a rest averages ≤ 80 % of the power of the reps on either side of it
+AUTO_REST_X = 3.0          # 推估: a rest ≤ 3 × the longer rep next to it …
+AUTO_REST_MIN_S = 180.0    # … or ≤ 3 min — longer, and the efforts are separate climbs / surges, not a set
+AUTO_LAP_MIN_S = 30.0      # 推估: a lap shorter than this is a stride or a stray press, not a rep
+
+
+def similar_set(bouts: list[dict], ratio: float = AUTO_LEN_RATIO) -> list[dict]:
+    """The largest set of bouts whose longest ≤ `ratio` × its shortest (ties: the more time
+    in them), in time order."""
+    by_len = sorted(bouts, key=lambda b: b["duration_s"])
+    best: list[dict] = []
+    for i, b in enumerate(by_len):
+        grp = [x for x in by_len[i:] if x["duration_s"] <= ratio * b["duration_s"]]
+        if (len(grp), sum(x["duration_s"] for x in grp)) > (len(best), sum(x["duration_s"] for x in best)):
+            best = grp
+    return sorted(best, key=lambda b: b["start_s"])
+
+
+def _rest_ok(a: dict, b: dict, pg: np.ndarray) -> bool:
+    """The stretch between bouts a and b is a rest: not longer than AUTO_REST_X × the longer of
+    the two (≥ AUTO_REST_MIN_S allowed) and averaging ≤ AUTO_REST_RATIO × their power."""
+    e0, s1 = int(round(a["start_s"] + a["duration_s"])), int(round(b["start_s"]))
+    gap = s1 - e0
+    if gap > max(AUTO_REST_MIN_S, AUTO_REST_X * max(a["duration_s"], b["duration_s"])):
+        return False
+    seg = pg[max(0, e0):max(0, s1)]
+    if not len(seg):
+        return False                          # back to back: one effort cut in two, not a rep and a rest
+    return float(seg.mean()) <= AUTO_REST_RATIO * (a["power"] + b["power"]) / 2
+
+
+def best_set(bouts: list[dict], pg: np.ndarray) -> list[dict]:
+    """The largest set of similar-length bouts (similar_set) inside one run of bouts with a
+    rest between each two (_rest_ok)."""
+    chains: list[list[dict]] = []
+    for b in sorted(bouts, key=lambda x: x["start_s"]):
+        if chains and _rest_ok(chains[-1][-1], b, pg):
+            chains[-1].append(b)
+        else:
+            chains.append([b])
+    best: list[dict] = []
+    for ch in chains:
+        st = similar_set(ch)
+        if (len(st), sum(x["duration_s"] for x in st)) > (len(best), sum(x["duration_s"] for x in best)):
+            best = st
+    return best
+
+
+def _auto_laps(ds, w, pg: np.ndarray, cp: float) -> list[dict]:
+    """The laps run at ≥ AUTO_PCT × CP (their mean from the samples) and ≥ AUTO_LAP_MIN_S."""
+    out = []
+    for lp in laps_of(ds, w):
+        a, e = int(round(lp["start_s"])), int(round(lp["start_s"] + lp["duration_s"]))
+        seg = pg[max(0, a):max(0, e)]
+        v = float(seg.mean()) if len(seg) else None
+        if v is not None and v >= AUTO_PCT * cp and lp["duration_s"] >= AUTO_LAP_MIN_S:
+            out.append({"start_s": lp["start_s"], "duration_s": lp["duration_s"], "power": v, "source": "auto_lap"})
+    return out
+
+
+def auto_reps(ds, w, s: Optional[dict], cp: Optional[float]) -> Optional[dict]:
+    """SP-519: {"bouts", "source": "auto_lap" | "auto"} when the run has a set of
+    ≥ AUTO_MIN_REPS efforts at ≥ AUTO_PCT × CP, about the same length, with a rest between
+    each two (best_set) — the watch's laps first (a pushed or pressed rep is its own lap:
+    exact edges, 30-s reps too), else the power pattern (count_reps: 10-s power ≥ 95 % CP
+    for ≥ 40 s). None otherwise, and without power or CP: HR lags a 1-min rep by most of it
+    and pace on a climb says nothing of the effort, so a run without power keeps its one
+    sentence."""
+    if s is None or s.get("power") is None or not cp:
+        return None
+    t, pw = s["t"], s["power"]
+    grid, p = _grid(t, pw)
+    if grid is None or len(p) < 60:
+        return None
+    pg = np.nan_to_num(p)
+    laps = best_set(_auto_laps(ds, w, pg, cp), pg)
+    if len(laps) >= AUTO_MIN_REPS:
+        return {"bouts": laps, "source": "auto_lap"}
+    from backend.engine.quality_gate import count_reps
+    found = best_set([{**r, "source": "auto"} for r in count_reps(t, pw, cp) if r["power"] >= AUTO_PCT * cp], pg)
+    if len(found) >= AUTO_MIN_REPS:
+        return {"bouts": found, "source": "auto"}
+    return None

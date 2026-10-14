@@ -83,7 +83,7 @@ def test_reproduce_recovery_week_deleting_the_week_4_long_day():
 
 def test_specific_recovery_weeks_follow_the_countdown():
     _, _, wp5 = _week("2026-10-31", {4: LIGHT})             # 賽前第 5 週
-    assert wp5["mode"] == "recovery_week" and "賽前第 5 週" in wp5["why"][-1]
+    assert wp5["mode"] == "recovery_week" and "賽前第 5 週" in wp5["why"][-2]   # [-1]: the SP-512 source note
     assert wp5["specific"]["recovery"]
     long_s = next(s for s in wp5["sessions"] if s["id"] == "long")
     assert long_s["detail"].startswith("這次目標定數約") and "恢復週" in long_s["detail"] and "+15%" not in long_s["detail"]
@@ -148,7 +148,7 @@ def test_base_six_weeks_without_a_recovery_week_forces_one():
 def test_base_31_keeps_a_shorter_long_run_and_the_fartlek():
     ds, plan, wp = _week("2027-06-05", {4: LIGHT})
     assert wp["phase"] == "base" and wp["mode"] == "recovery_week"
-    assert "連續 3 週加量" in wp["why"][-1]
+    assert "連續 3 週加量" in wp["why"][-2]                  # [-1]: the SP-512 source note
     long_s = next(s for s in wp["sessions"] if s["id"] == "long")
     # 65 % of a normal week's long run (the base rule: ≤ 30 % of the week, ≤ the longest 150′)
     assert long_s["detail"].startswith("恢復週") and O.RECOVERY_LONG_MIN <= long_s["minutes"] <= 0.65 * 150 + 5

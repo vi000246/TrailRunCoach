@@ -143,4 +143,4 @@ def render(ds, ch: dict, b: float, e: float, params: Optional[dict] = None) -> d
             "empty": empty,
             "x_min": day_to_date(math.floor(b)).isoformat(), "x_max": day_to_date(math.floor(e)).isoformat(),
             "method": _("每個點＝課表用的 Stryd 功率 PD 模型擬合（每 30 天一次，加上最後一次跑步那天）；"
-                        "VO2max＝(W′/589 + 模型閾值功率)/84.5 + 0.656 L/min ÷ 當天體重（推估，算法參考 WKO5）")}
+                        "VO2max＝(無氧容量/589 + 模型閾值功率)/84.5 + 0.656 L/min ÷ 當天體重（推估，算法參考 WKO5）")}

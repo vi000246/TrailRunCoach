@@ -151,11 +151,11 @@ def ramp_text(ramp: float, ctl_prev: Optional[float], level: str) -> str:
     if level == BLOCK:
         line, term = block_line(c), block_term(c)
         how = {"floor": _("下限 {v:.0f}", v=BLOCK_MIN), "cap": _("上限 {v:.0f}", v=BLOCK_MAX),
-               "pct": _("體能 {c:.0f} 的 {pct:.0%}", c=c, pct=BLOCK_PCT)}[term]
+               "pct": _("長期負荷 {c:.0f} 的 {pct:.0%}", c=c, pct=BLOCK_PCT)}[term]
     else:
         line = watch_line(c)
-        how = _("下限 {v:.0f}", v=WATCH_MIN) if WATCH_PCT * c <= WATCH_MIN else _("體能 {c:.0f} 的 {pct:.0%}", c=c, pct=WATCH_PCT)
-    return _("體能週增量（Fitness ramp）+{ramp:.1f}（≥ {line:.1f}＝{how}）", ramp=ramp, line=line, how=how)
+        how = _("下限 {v:.0f}", v=WATCH_MIN) if WATCH_PCT * c <= WATCH_MIN else _("長期負荷 {c:.0f} 的 {pct:.0%}", c=c, pct=WATCH_PCT)
+    return _("長期負荷週增量（Chronic load ramp）+{ramp:.1f}（≥ {line:.1f}＝{how}）", ramp=ramp, line=line, how=how)
 
 
 # ---- PMC start values (SP-68) ---------------------------------------------------------

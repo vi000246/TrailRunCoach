@@ -387,7 +387,7 @@ def equivalent(v: Variant, ref: Optional[Variant] = None) -> tuple[bool, list[st
             why.append(_("組休比每趟長或 > 3 分"))
         wr, wref = wprime_per_rep(v), wprime_per_rep(ref)
         if wref and not WPRIME_RATIO[0] <= wr / wref <= WPRIME_RATIO[1]:
-            why.append(_("每趟 W′ 是標準課表的 {r:.2f} 倍（範圍 0.7–1.5）", r=wr / wref))
+            why.append(_("每趟用掉的無氧容量是標準課表的 {r:.2f} 倍（範圍 0.7–1.5）", r=wr / wref))
     elif not v.continuous:
         if min(v.works) < Z3_MIN_REP_S:
             why.append(_("3 區每趟 < 3 分"))

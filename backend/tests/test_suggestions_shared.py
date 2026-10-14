@@ -46,4 +46,4 @@ def test_schedule_page_uses_the_shared_request():
     html = (STATIC / "schedule.html").read_text(encoding="utf-8")
     body = html[html.index("async function sugCount"):]
     body = body[:body.index("const sugFits")]
-    assert "box.load(again)" in body and 'addEventListener("suggestions:changed", () => sugCount(true))' in html
+    assert "box.load(again, true)" in body and 'addEventListener("suggestions:changed", () => sugCount(true))' in html

@@ -39,7 +39,14 @@ new MutationObserver((ms) => { for (const m of ms) for (const n of m.addedNodes)
 } }).observe(document, { childList: true, subtree: true });"""
 
 
-def _open(page, *, signin: bool, admin: bool):
+def _open(page, *, signin: bool, admin: bool, level: str | None = None):
+    if level:       # SP-488: the tab note is 完整's only (ST1) — the level as GET /hint-level would answer it
+        def hint_level(route):
+            if route.request.method != "GET":
+                return route.continue_()
+            r = route.fetch()
+            route.fulfill(response=r, json={**r.json(), "level": level})
+        page.route("**/api/v1/plan/profile/hint-level", hint_level)
     if signin:
         page.add_init_script(f"({FAKE_SESSION})({json.dumps(admin)})")
 
@@ -54,7 +61,7 @@ def _open(page, *, signin: bool, admin: bool):
     page.add_init_script(FLASH)
     open_page(page, _server.PAGES["settings"] + "#advanced")
     # loadMode has run: GET /config answered and the section shows / stays hidden
-    page.wait_for_function("() => typeof modeTexts === 'function'")
+    page.wait_for_function("(l) => typeof tabNote === 'function' && (!l || HL === l)", arg=level)
     page.wait_for_load_state("networkidle")
 
 
@@ -85,7 +92,7 @@ def test_a_user_who_cannot_switch_reads_nothing_about_the_modes(app):
     for el in page.locator(".mode-note").all():
         expect(el).to_be_hidden()
     help_ = page.evaluate("() => $('thr-q').title")
-    assert help_ == page.evaluate("() => t('settings.thr.help_nomode')") and not MODE_WORDS.search(help_)
+    assert help_ == page.evaluate("() => t('settings.thr.help')") and not MODE_WORDS.search(help_)
     text = _all_visible_text(page)
     assert not MODE_WORDS.findall(text), MODE_WORDS.findall(text)
     assert page.evaluate("() => t('shell.page.settings.purpose_nomode')") in text
@@ -94,15 +101,15 @@ def test_a_user_who_cannot_switch_reads_nothing_about_the_modes(app):
 @pytest.mark.parametrize("signin", [True, False], ids=["signin-admin", "owner-app"])
 def test_the_admin_and_the_owners_app_keep_every_mode_text(app, signin):
     page, _ = app
-    _open(page, signin=signin, admin=True)
+    _open(page, signin=signin, admin=True, level="full")
     assert not page.evaluate("document.documentElement.classList.contains('nomode')")
     flashes = page.evaluate("window.__flash")
     assert flashes and "none" not in flashes, flashes
     expect(page.locator("#mode")).to_be_visible()
-    assert page.locator(".mode-note").count() == 2
-    for el in page.locator(".mode-note").all():
-        expect(el).to_be_visible()
-        expect(el).to_have_text("只在「我的算式」模式生效。")
+    # SP-488 (ST15): said once, in 計算模式
+    assert page.locator(".mode-note").count() == 1
+    expect(page.locator("#mode .mode-note")).to_be_visible()
+    expect(page.locator("#mode .mode-note")).to_have_text(page.evaluate("() => t('settings.mode.only_mine')"))
     assert page.evaluate("() => $('thr-q').title") == page.evaluate("() => t('settings.thr.help')")
     expect(page.locator("#tab-note")).to_have_text(page.evaluate("() => t('settings.tabs.advanced_note')"))
     expect(page.locator("#mode-admin")).to_be_visible() if signin else expect(page.locator("#mode-admin")).to_be_hidden()

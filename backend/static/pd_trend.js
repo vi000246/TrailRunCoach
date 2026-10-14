@@ -47,7 +47,7 @@ details.pdtdet table { margin-top: 4px; font-size: 11.5px; }`;
       `${esc(t("viewer.pdtrend.mftp"))} <b>${num(p.mftp, 0)} W</b>`,
       p.vo2max_kg == null ? esc(t("viewer.pdtrend.tip_no_vo2"))
         : `VO2max <b>${num(p.vo2max_kg, 1)}</b> ml/kg/min (${num(p.vo2max_l, 2)} L/min)`,
-      `W′ ${num(p.frc_kj, 1)} kJ`,
+      esc(t("viewer.pdtrend.wprime", { kj: num(p.frc_kj, 1) })),
       p.weight == null ? esc(t("viewer.pdtrend.tip_no_weight")) : esc(t("viewer.pdtrend.tip_weight", { kg: num(p.weight, 1) })),
       p.runs == null ? "" : esc(t("viewer.pdtrend.tip_runs", { n: p.runs }))];
     return lines.filter(Boolean).join("<br>");
@@ -100,7 +100,7 @@ details.pdtdet table { margin-top: 4px; font-size: 11.5px; }`;
       + `<td class="num">${num(p.weight, 1)}</td><td class="num">${p.runs ?? "—"}</td></tr>`);
     card.insertAdjacentHTML("beforeend", `<details class="pdtdet"><summary>${esc(t("viewer.pdtrend.table"))}</summary><table><thead><tr>
       <th>${esc(t("viewer.pdtrend.col_date"))}</th><th class="num">${esc(t("viewer.pdtrend.col_mftp"))}</th><th class="num">VO2max (ml/kg/min)</th>
-      <th class="num">W′ (kJ)</th><th class="num">${esc(t("viewer.pdtrend.col_weight"))}</th><th class="num">${esc(t("viewer.pdtrend.col_runs"))}</th></tr></thead>
+      <th class="num">${esc(t("viewer.pdtrend.col_wprime"))}</th><th class="num">${esc(t("viewer.pdtrend.col_weight"))}</th><th class="num">${esc(t("viewer.pdtrend.col_runs"))}</th></tr></thead>
       <tbody>${rows.join("")}</tbody></table></details>`);
   }
 

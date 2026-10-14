@@ -20,9 +20,11 @@ def test_phone_sheet_keeps_the_buttons_on_screen():
     assert "env(safe-area-inset-bottom" in css
 
 
-def test_phone_cards_cut_the_note_to_two_lines():
+def test_phone_cards_cut_the_note_to_one_line_and_the_target_to_two():
+    # SP-484 (課卡說明行最多 1 行): the explanation line is one line now (was two, SP-376); the target two
     css = _phone_css((STATIC / "schedule.html").read_text("utf-8"))
-    assert re.search(r"\.ag-day \.chip \.c-d \{[^}]*-webkit-line-clamp: 2", css)
+    assert re.search(r"\.ag-day \.chip \.c-d \{[^}]*white-space: nowrap; overflow: hidden; text-overflow: ellipsis;", css)
+    assert re.search(r"\.ag-day \.chip \.c-why \{[^}]*white-space: nowrap", css)
     assert re.search(r"\.ag-day \.chip \.c-x \{[^}]*-webkit-line-clamp: 2", css)
 
 

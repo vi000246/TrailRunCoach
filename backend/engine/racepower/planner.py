@@ -41,6 +41,7 @@ AUTO_TARGETS = {"max": 1.00, "hard": 0.95, "steady": 0.85}
 STRATEGY_SIGN = {"even": 0.0, "negative": -1.0, "positive": 1.0}
 STRATEGY_DEFAULT = {"road": {"negative": 0.02, "positive": 0.02}, "trail": {"negative": 0.02, "positive": 0.03}}
 EXTRAP_FACTOR = 1.5
+EXTRAP_HINT_SHARE = 0.15            # SP-485 R12 (推估): extrapolated segments' share of the predicted time worth a reminder
 DAMAGE_NOTE = 1.05
 MAX_COROS_STEPS = 50
 # Stryd Race Power Calculator table (help.stryd.com 6879547, verbatim, % of
@@ -217,6 +218,15 @@ def _heat_context(opts: dict) -> tuple[Optional[list], Optional[dt.datetime], Op
     if not any(lo <= dt.datetime.fromisoformat(r["t"]) <= hi for r in rows):
         return None, None, "逐時預報沒有涵蓋比賽時間"
     return rows, start, None
+
+
+def extrap_share(segs: list[dict]) -> float:
+    """SP-485 R12: the share of the predicted time on segments whose grade is outside your data
+    (`trusted` False: the target is extrapolated); 0 without time."""
+    tot = sum(float(s.get("t") or 0.0) for s in segs)
+    if tot <= 0:
+        return 0.0
+    return sum(float(s.get("t") or 0.0) for s in segs if not s.get("trusted", True)) / tot
 
 
 def _cum_times(rows) -> list[float]:
@@ -628,7 +638,7 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
     res, alpha_used, runs = st["res"], st["alpha_used"], st["runs"]
     t_whole, p_whole, t_c, p_c, mbar = st["t_whole"], st["p_whole"], st["t_c"], st["p_c"], st["mbar"]
     if alpha_used < alpha - 1e-9:
-        warnings.append(H.tag("RC15", f"上坡彈性從 +{alpha:.0%} 縮到 +{alpha_used:.1%}：否則有坡段超過 CP 太久（W′ 用超過 75 %）"))
+        warnings.append(H.tag("RC15", f"上坡彈性從 +{alpha:.0%} 縮到 +{alpha_used:.1%}：否則有坡段超過 CP 太久（無氧容量用超過 75 %）"))
     T = res["T"]
     rows = res["rows"]
     p_bar = sum(r["P"] * r["t"] for r in rows) / T
@@ -653,7 +663,7 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
         wmodel = "wko5"
     if wmodel in ("wko5", "skiba_run") and w_prime:
         if wmodel == "wko5":
-            vals, lab = PC.wbal_wko5(rows, segs, cp, w_prime), "W′ 電池（W′ balance，算法參考 WKO5：70 % τ 300 s + 30 % τ 25 s）"
+            vals, lab = PC.wbal_wko5(rows, segs, cp, w_prime), "無氧儲備（Anaerobic reserve，算法參考 WKO5：70 % τ 300 s + 30 % τ 25 s）"
         else:
             vals, lab = PC.wbal_skiba(rows, segs, cp, w_prime, "running"), "τ = 372·e^(−0.02·D) + 102（跑步擬合）"
         wb = {"model": wmodel, "values": vals, "label": lab, "badge": None if wmodel == "wko5" else "推估",
@@ -742,8 +752,11 @@ def plan_run(*, v1: dict, course: dict, grade_re, opts: dict, validated: dict,
     if gpx and not v2_primary and hr_est is None:
         warnings.append(H.tag("RC8", "分段目標是推估：回測通過前，整場時間照 v1 方法算，分段只負責分配"))
     if any(not s["trusted"] for s in out_segs):
-        # SP-246: Stryd is validated on −2 … +8 % only (grade_model.stryd_valid): descents count too
-        warnings.append(H.tag("RC10", "有上坡超過 8 % 或下坡超過 2 % 的段，你在這個坡度的資料不足：該段目標是外插"))
+        # SP-246: Stryd is validated on −2 … +8 % only (grade_model.stryd_valid): descents count too.
+        # SP-485 (ui-hint-audit.md §5 R12): a reminder only when those segments are ≥ EXTRAP_HINT_SHARE of the
+        # predicted time; fewer go to 「這次怎麼算的」 (smart False)
+        warnings.append(H.tag("RC10", "有上坡超過 8 % 或下坡超過 2 % 的段，你在這個坡度的資料不足：該段目標是外插",
+                              smart=extrap_share(out_segs) >= EXTRAP_HINT_SHARE))
     an = altitude_note(segs, accl) if gpx else None
     if an:
         warnings.append(H.tag("RC13", an))
