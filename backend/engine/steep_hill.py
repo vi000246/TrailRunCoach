@@ -138,7 +138,7 @@ def week_context(*, kind: str, mode: str, monday: dt.date, event: Optional[dict]
         info["why"].extend(injury["notes"])
         return info
     if tsb is not None and tsb < TSB_MIN:
-        info["why"].append(f"週初 TSB {tsb:+.0f} < {TSB_MIN:.0f}：這週不排")
+        info["why"].append(f"週初狀況（Form）{tsb:+.0f} < {TSB_MIN:.0f}：這週不排")
         return info
     trip = trip_kg(event, weight)
     st = stage_of(w)

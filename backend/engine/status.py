@@ -30,8 +30,8 @@ from backend.i18n import _
 GOOD, WATCH, BAD, INFO, NA = "good", "watch", "bad", "info", "na"
 
 # ---- thresholds, each with its source --------------------------------------
-SRC_PALLADINO = "Palladino（PMC 訓練負荷／Ramp rate）"
-SRC_TP_TSB = "Friel／TrainingPeaks（Simmons 2020）TSB 區間：−10～−30 有效訓練、< −30 過度（教練）；Palladino A/B/C 賽 TSB"
+SRC_PALLADINO = "Palladino（體能圖的負荷與體能週增量）"
+SRC_TP_TSB = "Friel／TrainingPeaks（Simmons 2020）狀況（Form）區間：−10～−30 有效訓練、< −30 過度（教練）；Palladino A/B/C 賽的狀況"
 # weekly volume step: > 20 % = the risk line (Nielsen et al. 2014 JOSPT 44:739, DOI 10.2519/jospt.2014.5164;
 # Damsted et al. 2019 JOSPT 49:230, DOI 10.2519/jospt.2019.8541 — peer-reviewed); 10–20 % hold = 推估, conservative.
 # The 「10 % 法則」 itself has no evidence (unsourced-rules.md §B2)
@@ -46,7 +46,7 @@ SRC_NOTES = "教練常見做法（推估）"
 
 # CTL ramp: the relative watch / block lines of engine/load_guard.py (SP-63; Friel 5–8, 10 the ceiling,
 # https://joefrieltraining.com/the-ctl-ramp-rate/ — as a share of CTL, 推估). Palladino's +1–3 long-term (display)
-SRC_RAMP_FRIEL = ("Friel：CTL ramp 每週 5–8 適合多數人、10 是上限（教練），換算成 CTL 的 10%／15%（推估）；"
+SRC_RAMP_FRIEL = ("Friel：體能週增量（Fitness ramp）每週 5–8 適合多數人、10 是上限（教練），換算成體能的 10%／15%（推估）；"
                   "Palladino：每週 +1–3 可長期維持")
 TSB_A = (10.0, 20.0)                                        # A race, taper end (Palladino)
 TSB_PRODUCTIVE = (-30.0, -10.0)                             # Friel: productive training
@@ -325,28 +325,29 @@ class Status:
         ramp, base, startup = g["ramp"], g["ctl_prev"], g["startup"]
         spark = [[self._iso(d), _n(ctl.at(d))] for d in range(self.tday - 90, self.tday + 1, 3)]
         if now is None:
-            return Indicator("fitness", "體能 CTL", NA, "–", "沒有訓練資料")
+            return Indicator("fitness", _("體能（Fitness）"), NA, "–", "沒有訓練資料")
         txt = f"{now:.0f}"
-        why = f"CTL {now:.0f}，本週 {ramp:+.1f}/週，4 週 {now - mo:+.0f}" if mo is not None and ramp is not None else f"CTL {now:.0f}"
+        why = (_("體能（Fitness） {now:.0f}，本週 {ramp:+.1f}/週，4 週 {d:+.0f}", now=now, ramp=ramp, d=now - mo)
+               if mo is not None and ramp is not None else _("體能（Fitness） {now:.0f}", now=now))
         if ramp is not None and not startup:
-            why += _("；注意線 +{watch:.1f}、擋線 +{block:.1f}（7 天前 CTL {base:.0f}）",
+            why += _("；注意線 +{watch:.1f}、擋線 +{block:.1f}（7 天前體能 {base:.0f}）",
                      watch=LG.watch_line(base), block=LG.block_line(base), base=base)
         level, verdict, action = INFO, "", ""
         k = self.kind
         lv = None if startup else LG.ramp_level(ramp, base)
         if startup:
             d = g.get("day_n")
-            verdict = (_("還沒有 TSS：不看 ramp") if d is None
-                       else _("起始 CTL 從 {date} 起算（手動設定）：前 {days} 天不看 ramp",
+            verdict = (_("還沒有負荷（Load）資料：不看體能週增量") if d is None
+                       else _("起始體能（Fitness）從 {date} 起算（手動設定）：前 {days} 天不看體能週增量",
                               date=start["date"], days=LG.MANUAL_STARTUP_DAYS)
                        if start.get("source") == LG.MANUAL
-                       else _("起算期（有 TSS 的第 {n} 天）：前 {days} 天 CTL 還在建立，不看 ramp",
+                       else _("起算期（有負荷資料的第 {n} 天）：前 {days} 天體能（Fitness）還在建立，不看體能週增量",
                               n=d + 1, days=LG.STARTUP_DAYS))
         elif ramp is not None:
             if k in ("taper", "event", "recovery", "rebuild"):
                 level, verdict = GOOD, "減量／恢復期，體能小幅下降是正常的"
                 if ramp > 1:
-                    level, verdict, action = WATCH, "減量期 CTL 還在上升，代表量沒有真的減", "把本週時數壓到減量帶內"
+                    level, verdict, action = WATCH, "減量期體能（Fitness）還在上升，代表量沒有真的減", "把本週時數壓到減量帶內"
             else:
                 if lv == LG.BLOCK:
                     level, verdict, action = (BAD, _("{ramp}：超過擋線（Friel：10 以上最多撐一週）",
@@ -362,7 +363,7 @@ class Status:
                     action = "訓練期體能沒有成長：檢查每週時數是否卡住" if k in ("base", "specific") else ""
                 else:
                     level, verdict, action = WATCH, f"每週 {ramp:+.1f}，體能在下降", "補回訓練量，或確認是否在恢復"
-        return Indicator("fitness", "體能 CTL", level, txt, verdict, why, action, SRC_RAMP_FRIEL, now, spark,
+        return Indicator("fitness", _("體能（Fitness）"), level, txt, verdict, why, action, SRC_RAMP_FRIEL, now, spark,
                          {"ramp_week": None if startup else ramp, "ramp_base": base, "ramp_level": lv,
                           "ramp_startup": startup, "pmc_start": start.get("source"),
                           "ramp_lines": None if startup else [LG.watch_line(base), LG.block_line(base)],
@@ -373,36 +374,38 @@ class Status:
         atl = self.ev.evaluate("atl")
         now, a = _n(tsb.at(self.tday)), _n(atl.at(self.tday))
         if now is None:
-            return Indicator("form", "狀況 TSB", NA, "–", "沒有訓練資料")
+            return Indicator("form", _("狀況（Form）"), NA, "–", "沒有訓練資料")
         spark = [[self._iso(d), _n(tsb.at(d))] for d in range(self.tday - 90, self.tday + 1, 3)]
         txt = f"{now:+.0f}"
-        why = f"TSB {now:+.0f}（ATL {a:.0f}）" if a is not None else f"TSB {now:+.0f}"
+        # overview.html's formWhy() strips the leading 「狀況（Form） +5」 / "Form +5" and keeps the bracket's 「疲勞 30」
+        why = (_("狀況（Form） {tsb:+.0f}（疲勞 {atl:.0f}）", tsb=now, atl=a) if a is not None
+               else _("狀況（Form） {tsb:+.0f}", tsb=now))
         k = self.kind
         g = self.goals
         days_to = g["days_to_next_a"]
         if k in ("taper", "event") and days_to is not None and days_to <= 3:
             if TSB_A[0] <= now <= TSB_A[1]:
-                lvl, v, act = GOOD, "賽前新鮮度剛好（A 賽目標 +10～+20）", ""
+                lvl, v, act = GOOD, "賽前狀況（Form）剛好（A 賽目標 +10～+20）", ""
             elif now < TSB_A[0]:
                 lvl, v, act = WATCH, "賽前還不夠新鮮", "剩下幾天只做短、輕鬆的活動"
             else:
                 lvl, v, act = WATCH, "太新鮮，可能減量太久", "賽前 2 天可以加一次短強度喚醒"
         elif k in ("taper",):
-            lvl, v, act = (GOOD, "TSB 正在回升", "") if now > -10 else (WATCH, "減量期 TSB 還很負", "再減量：時數降到平常的 40–60%")
+            lvl, v, act = (GOOD, "狀況（Form）正在回升", "") if now > -10 else (WATCH, "減量期狀況（Form）還很負", "再減量：時數降到平常的 40–60%")
         elif k in ("recovery", "transition", "rebuild"):
             lvl, v, act = (GOOD, "已經恢復", "") if now > 0 else (WATCH, "還沒恢復", "繼續休、不要急著練")
         else:  # base / specific / none
             if now < TSB_OVERREACH:
-                lvl, v, act = BAD, "TSB < −30，過度訓練風險", "本週減量到平常的一半，睡眠優先"
+                lvl, v, act = BAD, "狀況（Form）< −30，過度訓練風險", "本週減量到平常的一半，睡眠優先"
             elif TSB_PRODUCTIVE[0] <= now <= TSB_PRODUCTIVE[1]:
                 lvl, v, act = GOOD, "−30～−10：有效訓練的區間", ""
             elif now <= 5:
                 lvl, v, act = GOOD, "−10～+5：維持中", ""
             elif now <= TSB_STALE:
-                lvl, v, act = WATCH, "TSB 偏高，訓練量不足以進步", "把每週量加回來（每週 ≤ +10%）"
+                lvl, v, act = WATCH, "狀況（Form）偏高，訓練量不足以進步", "把每週量加回來（每週 ≤ +10%）"
             else:
-                lvl, v, act = WATCH, "TSB > +25，體能在流失", "恢復規律訓練"
-        return Indicator("form", "狀況 TSB", lvl, txt, v, why, act, SRC_TP_TSB, now, spark)
+                lvl, v, act = WATCH, "狀況（Form）> +25，體能在流失", "恢復規律訓練"
+        return Indicator("form", _("狀況（Form）"), lvl, txt, v, why, act, SRC_TP_TSB, now, spark)
 
     def _planned_off_days(self, lo: Optional[int] = None, hi: Optional[int] = None) -> list[int]:
         """Day indices of a chosen rest, not an unplanned break (load_guard.short_break): the
@@ -934,13 +937,13 @@ class Status:
             elif days_to is not None and days_to < 10:
                 act = "賽前 10 天內不要測，賽後再測"
                 worst = WATCH
-        v = "門檻是新的" if worst == GOOD else "門檻過期或沒測，區間和 TSS 都會跟著不準"
+        v = "門檻是新的" if worst == GOOD else "門檻過期或沒測，區間和負荷（Load）都會跟著不準"
         extra = {}
         if ct:
             extra["cp_test"] = ct
-            why += "；" + (_("最近一次 CP 測試 {d}：這次測試後的 mFTP {cp} W（比照 WKO5，課表自動採用）",
+            why += "；" + (_("最近一次 CP 測試 {d}：這次測試後的模型閾值功率（Modelled threshold power）{cp} W（算法參考 WKO5，課表自動採用）",
                             d=ct["date"], cp=f"{ct['cp']:.0f}") if ct.get("cp") is not None else
-                          _("最近一次 CP 測試 {d}：算不出 mFTP", d=ct["date"]))
+                          _("最近一次 CP 測試 {d}：算不出模型閾值功率（Modelled threshold power）", d=ct["date"]))
         # the latest AeT drift test (engine/aet_test.py): UA's three bands
         try:
             from backend.engine import aet_test as AT
@@ -1125,11 +1128,11 @@ class Status:
 
 PHASE_GOAL = {
     "transition": "恢復、重建習慣、肌力打底",
-    "recovery": "恢復——不追體能，等 TSB 回正",
+    "recovery": "恢復——不追體能，等狀況（Form）回正",
     "rebuild": "回量：量慢慢加回賽前水準，不排強度課",
     "base": "練有氧引擎：大量低強度、EF 往上",
     "specific": "練比賽需要的能力：爬坡、長時間、爬升密度接近賽事",
-    "taper": "量減 40–60%、強度保留、TSB 回正",
+    "taper": "量減 40–60%、強度保留、狀況（Form）回正",
     "event": "比賽週：短、輕鬆，補給與睡眠",
 }
 
@@ -1146,8 +1149,8 @@ PHASE_PRIORITY = {
 
 # standing focus per phase: (title, detail template, source)
 PHASE_FOCUS = {
-    "transition": ("轉換期重點", "每週 2 次肌力、量低而穩定，等 TSB 回正再進基礎期", SRC_UA),
-    "recovery": ("恢復期重點", "先休；TSB 回正、想練了再開始", SRC_UA),
+    "transition": ("轉換期重點", "每週 2 次肌力、量低而穩定，等狀況（Form）回正再進基礎期", SRC_UA),
+    "recovery": ("恢復期重點", "先休；狀況（Form）回正、想練了再開始", SRC_UA),
     "rebuild": ("回量期重點", "只排輕鬆跑和肌力，每週量照計畫慢慢加，不排強度課", "Higdon 反向減量；Koop；Uphill Athlete"),
     # the long run / AeT cap is UA's; 8–15 s hill sprints are Palladino's (UA: 8–10 s)
     "base": ("基礎期重點", "每週一次 60–90 分鐘輕鬆長跑（心率 < {aet}），其餘輕鬆跑也壓在 AeT 以下；每週一次 8–15 秒坡衝刺",

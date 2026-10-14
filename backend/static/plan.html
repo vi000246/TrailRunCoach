@@ -229,10 +229,10 @@ async function call(method, path, body) {
 async function load() { S = await call("GET", ""); manual = null; render(); }
 
 const GUIDE = {
-  recovery: ["轉換 / 恢復期", ["ATL 下降、TSB 回正", "每週時數低而穩定", "每週 2 次肌力"]],
+  recovery: ["轉換 / 恢復期", ["疲勞（Fatigue）下降、狀況（Form）回正", "每週時數低而穩定", "每週 2 次肌力"]],
   base: ["基礎期", ["低強度時間佔比 ≥ 75–80%", "EF（同心率的速度）往上", "長時間輕鬆跑飄移 < 5%", "每週量增幅 ≲ 10%"]],
   specific: ["專項期", ["VAM（同心率爬更快）", "每公里爬升接近目標", "最長單次逼近目標時間", "長時間後段飄移變小"]],
-  taper: ["減量期", ["每週時數降到平常的 40–60%", "高強度時數保留", "TSB 回到正值、CTL 只小降"]],
+  taper: ["減量期", ["每週時數降到平常的 40–60%", "高強度時數保留", "狀況（Form）回到正值、體能（Fitness）只小降"]],
 };
 
 function render() {

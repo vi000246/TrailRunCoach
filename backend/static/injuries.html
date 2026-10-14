@@ -123,7 +123,7 @@ dialog form { padding: 14px 16px; display: grid; gap: 10px; }
 <main>
   <section class="panel" aria-label="時間軸">
     <div class="ph">
-      <h2>時間軸<button type="button" class="qtip" aria-label="說明" data-tip="灰色長條＝每週的量（可切換），線＝CTL。
+      <h2>時間軸<button type="button" class="qtip" aria-label="說明" data-tip="灰色長條＝每週的量（可切換），線＝體能（Fitness）。
 色帶＝傷病期間：顏色是部位，越深越嚴重；斜線＝還沒好。
 下面的刻度＝活動上點的「痠」（黃）、「痛／中斷」（紅），看得出痛之前有沒有連續痠。
 細線 ACWR 只參考，不預測受傷（Lövdal 2021）。">?</button></h2>
@@ -281,7 +281,7 @@ function drawTimeline() {
   }
   for (const w of ws) {
     const v = w[S.metric] || 0; if (!v) continue;
-    const tip = `${ymd(w.week)} 那週<br>${{ run_h: "跑步", desc: "下降", climb: "爬升", trail_h: "越野" }[S.metric]} ${unit === "h" ? v.toFixed(1) : Math.round(v)} ${unit}<br>CTL ${w.ctl ?? "—"}`;
+    const tip = `${ymd(w.week)} 那週<br>${{ run_h: "跑步", desc: "下降", climb: "爬升", trail_h: "越野" }[S.metric]} ${unit === "h" ? v.toFixed(1) : Math.round(v)} ${unit}<br>體能 ${w.ctl ?? "—"}`;
     s += `<rect x="${X(w.week) + 1}" y="${Y(v)}" width="${bw}" height="${plotB - Y(v)}" fill="var(--bar)" data-tip-html="${esc(tip)}"/>`;
   }
   const line = ws.filter((w) => w.ctl != null).map((w) => `${X(w.week) + bw / 2},${YC(w.ctl)}`).join(" ");
@@ -299,7 +299,7 @@ function drawTimeline() {
   // axes
   s += `<line x1="${L}" x2="${W - R}" y1="${plotB}" y2="${plotB}" stroke="var(--line)"/>`;
   s += `<text x="${L - 4}" y="${T + 9}" text-anchor="end">${unit === "h" ? vmax.toFixed(0) : Math.round(vmax)}</text><text x="${L - 4}" y="${plotB}" text-anchor="end">0</text>`;
-  s += `<text x="${W - R + 4}" y="${T + 9}" style="fill:var(--accent)">${Math.round(cmax)}</text><text x="${W - R + 4}" y="${T + 22}" style="fill:var(--accent)">CTL</text>`;
+  s += `<text x="${W - R + 4}" y="${T + 9}" style="fill:var(--accent)">${Math.round(cmax)}</text><text x="${W - R + 4}" y="${T + 22}" style="fill:var(--accent)">體能</text>`;
   const step = S.months > 18 ? 6 : S.months > 6 ? 3 : 1;
   const d = new Date(t.begin); d.setDate(1); d.setMonth(d.getMonth() + 1);
   while (d.getTime() < x1) {
@@ -314,7 +314,7 @@ function drawTimeline() {
   hoverable($("tl"));
   const used = [...new Set(t.bands.map((b) => b.area))];
   $("tl-leg").innerHTML = `<span><i style="background:var(--bar)"></i>每週${{ run_h: "跑步時間", desc: "下降", climb: "爬升", trail_h: "越野時間" }[S.metric]}</span>
-    <span><i style="background:var(--accent);height:3px"></i>CTL</span>` +
+    <span><i style="background:var(--accent);height:3px"></i>體能（Fitness）</span>` +
     used.map((a) => `<span><i style="background:${areaCol(a)}"></i>${esc(areaLabel(a))}</span>`).join("") +
     `<span><i style="background:var(--warn);width:3px"></i>痠</span><span><i style="background:var(--err);width:3px"></i>痛／中斷</span>`;
 }

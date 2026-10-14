@@ -252,7 +252,7 @@ def _lthr_used(ds, w) -> dict:
             src = None
         origin = "dataset"
     return {"value": v, "source": src, "origin": origin, "as_of": day.isoformat(),
-            "why": _("hrTSS = 心率時間 × (平均心率 ÷ LTHR)²；LTHR 取當天生效的值（課表門檻列 → 資料來源設定 → 估算）")}
+            "why": _("心率負荷（HR load）= 心率時間 × (平均心率 ÷ LTHR)²；LTHR 取當天生效的值（課表門檻列 → 資料來源設定 → 估算）")}
 
 
 def activity_detail(ds, w, streams: Iterable[str] = (), every: int = 10, gps: bool = False) -> dict:
@@ -287,7 +287,7 @@ def activity_detail(ds, w, streams: Iterable[str] = (), every: int = 10, gps: bo
             th["cp"] = ds.cp_info(w)
         ftp, ftp_src = ds.tss_ftp(w)
         th["tss_ftp"] = {"value": ftp, "source": ftp_src,
-                         "why": _("功率 TSS 用的 FTP（= 當天生效的 CP）；沒有就改用 rTSS／hrTSS")}
+                         "why": _("功率負荷（Power load）用的 FTP（= 當天生效的 CP）；沒有就改用配速負荷／心率負荷")}
     except Exception as e:                  # noqa: BLE001
         th["cp_error"] = type(e).__name__
     try:

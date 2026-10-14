@@ -950,7 +950,7 @@ def normalize(d, rpe_model=None) -> dict:
             if dur.get("rpe") is not None:
                 dur = _norm_rpe_load(dur, errs, rpe_model)
             else:
-                v = _f(dur.get("value"), _("負荷（TSS）"), errs, *LOAD_RANGE)
+                v = _f(dur.get("value"), _("負荷（Load）"), errs, *LOAD_RANGE)
                 dur = {"type": "load", "value": round(v, 1)} if v else {"type": "open"}
         elif dt_ == "time":
             v = _f(dur.get("value"), _("時間"), errs, 5, 6 * 3600)
@@ -1000,7 +1000,7 @@ def _norm_rpe_load(dur: dict, errs: list, model=None) -> dict:
         return {"type": "open"}
     tss = (model or RL.current()).tss(lvl, m)
     if tss is None or tss > LOAD_RANGE[1]:
-        errs.append(_("負荷（RPE）換算超過 {max} TSS：分鐘數太多", max=LOAD_RANGE[1]))
+        errs.append(_("負荷（RPE）換算超過 {max}：分鐘數太多", max=LOAD_RANGE[1]))
         return {"type": "open"}
     return {"type": "load", "value": max(float(LOAD_RANGE[0]), tss), "rpe": lvl, "min": int(round(m))}
 
@@ -1051,9 +1051,9 @@ def fmt_dur(d: dict) -> str:
     if d.get("type") == "load":
         if d.get("rpe"):
             from backend.engine.rpe_load import LABEL
-            return _("{label} {tss:g} TSS（{rpe} {min} 分）", label=_(LOAD_LABEL), tss=d["value"],
+            return _("{label} {tss:g}（{rpe} {min} 分）", label=_(LOAD_LABEL), tss=d["value"],
                      rpe=_(LABEL.get(d["rpe"], d["rpe"])), min=d.get("min"))
-        return f"{_(LOAD_LABEL)} {d['value']:g} TSS"
+        return f"{_(LOAD_LABEL)} {d['value']:g}"
     return _(OPEN_LABEL)
 
 
@@ -1462,9 +1462,9 @@ def estimate_note(steps: dict, c: Ctx) -> str:
     if lap:
         parts.append("「直到按下計圈」段：用課表原本寫的最短時間")
     if any(s["dur"]["type"] == "load" and not s["dur"].get("rpe") for s in rows):
-        parts.append(f"「{_(LOAD_LABEL)}」段：TSS ÷（該段強度 IF² × 100）換成時間")
+        parts.append(f"「{_(LOAD_LABEL)}」段：負荷 ÷（該段強度比² × 100）換成時間")
     if any(s["dur"]["type"] == "load" and s["dur"].get("rpe") for s in rows):
-        parts.append(_("「{label}」段用 RPE 填：用你填的分鐘數，TSS ＝ 這一檔的每小時 TSS × 時數", label=_(LOAD_LABEL)))
+        parts.append(_("「{label}」段用 RPE 填：用你填的分鐘數，負荷 ＝ 這一檔的每小時負荷 × 時數", label=_(LOAD_LABEL)))
     return "；".join(parts) + "（推估）" if parts else ""
 
 
@@ -1828,7 +1828,7 @@ def equivalence(steps: dict, rung: Optional[str], c: Optional[Ctx] = None) -> Op
                 "text": f"{IL.RUNG_NAME.get(rung, rung)}：找不到有功率／心率目標的主課段，這堂不算進階"}
     ok, why = IL.equivalent(v, canon)
     load = any(r["st"]["kind"] == "work" and r["st"]["dur"]["type"] == "load" for r in flat(steps.get("items") or []))
-    est = ("（「負荷」段用 TSS 換算時間，推估）" if load else "（心率結構換算強度，推估）") if v.src_kind == "推估" else ""
+    est = ("（「負荷」段的負荷換算成時間，推估）" if load else "（心率結構換算強度，推估）") if v.src_kind == "推估" else ""
     return {"ok": ok, "why": why, "variant": v,
             "text": f"和 {IL.RUNG_NAME.get(rung, rung)} 標準課表 {IL.structure(canon)} " +
                     ("等效：這堂算進階" if ok else "不等效：這堂不算進階（" + "；".join(why) + "）") + est}
@@ -2016,7 +2016,7 @@ def watch_preview(steps: dict, c: Ctx, name: str = "TRC", overview: str = "") ->
     if dist:
         lost.append(_("距離段：COROS 欄位（公分）依第三方整理，這個 app 還沒實際送過（未驗證）"))
     if any(st["dur"]["type"] == "load" for st, _ in res):
-        lost.append(_("「{x}」段：這裡填 TSS，推到 COROS 換算成它的 TL（推估，誤差約 ±20 %；"
+        lost.append(_("「{x}」段：這裡填的是負荷（Load），推到 COROS 換算成它的 TL（推估，誤差約 ±20 %；"
                       "每次同步後用你的活動重新校正）", x=_(LOAD_LABEL)))
     n = len(program["exercises"])
     if n > COROS_MAX_STEPS:

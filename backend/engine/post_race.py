@@ -479,6 +479,6 @@ def b_hints(events, monday: dt.date, ctl: Optional[list] = None, phases=None,
                 now = vals[-1][1]
                 if peak > 0 and 1 - now / peak > B_CTL_DROP:
                     out.append({"level": "watch", "src": "race",
-                                "text": _("B 賽太多，等於一直在減量：CTL 從近 {w} 週的高點 {p:.0f} 掉到 {n:.0f}（−{d:.0%}；"
+                                "text": _("B 賽太多，等於一直在減量：體能（Fitness）從近 {w} 週的高點 {p:.0f} 掉到 {n:.0f}（−{d:.0%}；"
                                           "Friel 的案例掉 13 % 就沒力）", w=B_CTL_WEEKS, p=peak, n=now, d=1 - now / peak)})
     return out

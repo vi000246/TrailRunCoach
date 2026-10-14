@@ -149,7 +149,7 @@ def description(s: dict, link: Optional[str]) -> str:
     lines = []
     plan = [_("{m} 分", m=int(s.get("minutes") or 0))] if s.get("minutes") else []
     if s.get("tss"):
-        plan.append(f"TSS {round(float(s['tss']))}")
+        plan.append(_("負荷 {n}", n=round(float(s["tss"]))))
     if plan:
         lines.append(_("計畫：{text}", text=" · ".join(plan)))
     act = s.get("done_by") if s.get("state") == "done" and isinstance(s.get("done_by"), dict) else None
@@ -158,7 +158,7 @@ def description(s: dict, link: Optional[str]) -> str:
         if act.get("moving_s"):
             got.append(_("{m} 分", m=round(float(act["moving_s"]) / 60)))
         if act.get("tss"):
-            got.append(f"TSS {round(float(act['tss']))}")
+            got.append(_("負荷 {n}", n=round(float(act["tss"]))))
         if got:
             lines.append(_("實際：{text}", text=" · ".join(got)))
     dist = []

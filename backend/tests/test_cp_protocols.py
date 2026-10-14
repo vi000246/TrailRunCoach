@@ -316,7 +316,7 @@ def test_review_card_has_no_apply_button():
     assert card["empty"] is None and card["classification"]["protocol"] == "standard"
     assert "action" not in card
     text = " ".join(s["data"]["value"] for s in card["series"] if s["data"]["kind"] == "value")
-    assert "標準" in text and "依課表對應" in text and "算不出 mFTP" in text     # no PD fit on a fake dataset
+    assert "標準" in text and "依課表對應" in text and "算不出模型閾值功率" in text     # no PD fit on a fake dataset
 
 
 @pytest.fixture

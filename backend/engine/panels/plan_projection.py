@@ -139,9 +139,9 @@ def _race(r: dict, row: dict) -> dict:
     grade = r.get("grade") or ""
     return {**r, "ctl": row["ctl"], "tsb": row["tsb"], "band": list(band) if band else None,
             "color": COLOR.get(grade, COLOR_OTHER),
-            "text": _("{grade} 賽「{name}」：預估 CTL {ctl:.0f}、TSB {tsb:+.0f}",
+            "text": _("{grade} 賽「{name}」：預估體能（Fitness）{ctl:.0f}、狀況（Form）{tsb:+.0f}",
                       grade=grade, name=r.get("name") or "", ctl=row["ctl"], tsb=row["tsb"]),
-            "band_text": _("{grade} 賽的理想 TSB：{lo:+.0f}～{hi:+.0f}", grade=grade, lo=band[0], hi=band[1])
+            "band_text": _("{grade} 賽的理想狀況（Form）：{lo:+.0f}～{hi:+.0f}", grade=grade, lo=band[0], hi=band[1])
             if band else None}
 
 
@@ -168,22 +168,22 @@ def apply(res: dict, proj: Optional[dict], mode: str, cc: float, ac: float, end_
     dates = [d for d, _x in proj["days"]]
     tss = [float(x) for _d, x in proj["days"]]
     rows = project(c0, a0, tss, cc, ac)
-    add = [_like(ctl, _("{name}（預估）", name=ctl.get("name") or "CTL"),
+    add = [_like(ctl, _("{name}・預估", name=ctl.get("name") or _("體能（Fitness）")),
                  [[t, c0]] + [[d, r["ctl"]] for d, r in zip(dates, rows)]),
-           _like(atl, _("{name}（預估）", name=atl.get("name") or "ATL"),
+           _like(atl, _("{name}・預估", name=atl.get("name") or _("疲勞（Fatigue）")),
                  [[t, a0]] + [[d, r["atl"]] for d, r in zip(dates, rows)])]
     if mode == "pmc":
         y = (dt.date.fromisoformat(t) - dt.timedelta(days=1)).isoformat()
         cy, ay = _at(ctl, y), _at(atl, y)
         first = [[t, cy - ay]] if cy is not None and ay is not None else []
-        add.append({**_like(ctl, _("TSB（預估）"), first + [[d, r["tsb"]] for d, r in zip(dates, rows)]),
+        add.append({**_like(ctl, _("狀況（Form）・預估"), first + [[d, r["tsb"]] for d, r in zip(dates, rows)]),
                     "color": COLOR_TSB, "line_width": None})
         by_date = dict(zip(dates, rows))
         races = [_race(r, by_date[r["date"]]) for r in proj.get("races") or [] if r.get("date") in by_date]
         note = _("今天以後是照課表的預估（虛線），畫到最後一堂排好的課（{until}）", until=fmt.date(proj["until"]))
     else:
         bar = next((s for s in series if s.get("type") in ("bar", "stackedbar")), ctl)
-        add.insert(0, {**_like(bar, _("預估 TSS"), [[d, x] for d, x in zip(dates, tss)]),
+        add.insert(0, {**_like(bar, _("預估負荷（Load）"), [[d, x] for d, x in zip(dates, tss)]),
                        "type": "bar", "bar_style": "hollow", "color": COLOR_TSS, "line_style": "solid"})
         races = []
         note = _("今天以後是照課表的預估（空心長條、虛線），畫到最後一堂排好的課（{until}）",

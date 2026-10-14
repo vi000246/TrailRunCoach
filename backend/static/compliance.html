@@ -302,7 +302,7 @@ details.coach[open] > summary { margin-bottom: 12px; }
   </details>
 
   <section aria-labelledby="ra-h">
-    <h2 id="ra-h"><span data-i18n="compliance.ratio.title">負荷比 ATL ÷ CTL</span><span id="ra-q"></span></h2>
+    <h2 id="ra-h"><span data-i18n="compliance.ratio.title">負荷比（Load ratio）疲勞 ÷ 體能</span><span id="ra-q"></span></h2>
     <div class="plot ratio" id="ra-plot" role="img"></div>
   </section>
 
@@ -314,7 +314,7 @@ details.coach[open] > summary { margin-bottom: 12px; }
           <button type="button" data-u="day" data-i18n="compliance.unit.day">天</button><button type="button" data-u="week" data-i18n="compliance.unit.week">週</button><button type="button" data-u="month" data-i18n="compliance.unit.month">月</button>
         </span>
         <span class="seg" id="metric" role="group" data-i18n-attr="aria-label:compliance.weeks.metric" aria-label="指標">
-          <button type="button" data-m="tss" aria-pressed="true">TSS</button><button type="button" data-m="hours" data-i18n="compliance.weeks.hours">時數</button>
+          <button type="button" data-m="tss" aria-pressed="true" data-i18n="compliance.weeks.tss">負荷（Load）</button><button type="button" data-m="hours" data-i18n="compliance.weeks.hours">時數</button>
         </span><span id="wk-q"></span></h2>
       <div class="plot" id="wk-plot" role="img"></div>
       <div class="legend" id="wk-legend"></div>
@@ -702,8 +702,8 @@ function renderList() {
     .map((r, i) => [r, i]).sort((x, y) => (x[0].status === "missed") - (y[0].status === "missed") || x[1] - y[1]).map((x) => x[0]);
   if (!rows.length) { $("list").innerHTML = `<p class="meta">${esc(T("empty"))}</p>`; $("more").innerHTML = ""; return; }
   $("list").innerHTML = rows.slice(0, S.limit).map((r) => {
-    const act = r.actual_tss != null || r.actual_s ? `${r.actual_s ? hm(r.actual_s) : ""}${r.actual_tss != null ? ` · TSS ${n0(r.planned_tss)}→${n0(r.actual_tss)}` : ""}`
-      : `${r.minutes ? r.minutes + "′" : ""} · TSS ${n0(r.planned_tss)}`;
+    const act = r.actual_tss != null || r.actual_s ? `${r.actual_s ? hm(r.actual_s) : ""}${r.actual_tss != null ? ` · ${T("list.load", { v: `${n0(r.planned_tss)}→${n0(r.actual_tss)}` })}` : ""}`
+      : `${r.minutes ? r.minutes + "′" : ""} · ${T("list.load", { v: n0(r.planned_tss) })}`;
     const tip = [r.title, r.off_text, r.duration_pct != null ? T("list.dur_pct", { pct: r.duration_pct }) : "", r.tss_pct != null ? T("list.tss_pct", { pct: r.tss_pct }) : ""].filter(Boolean).join("\n");
     return `<a class="row ${kindCls(r)}${r.status === "missed" ? " missed" : ""}" href="${SCHED}?day=${r.day}&uid=${encodeURIComponent(r.uid)}" title="${esc(tip)}">
       <span class="d">${esc(md(r.day))}</span><span class="kd" aria-hidden="true"></span>

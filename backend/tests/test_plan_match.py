@@ -438,7 +438,7 @@ def test_activity_review_card_uses_the_calendars_planned_tss(monkeypatch):
     card = WR._plan_card(SimpleNamespace(today=20000.0), SimpleNamespace(idx=40, metrics={}))
     assert card["sub"] == cal["compliance"]["label"] == "跑成強度課"
     assert card["level"] == WR.PLAN_LEVEL[cal["compliance"]["level"]] == "warn"
-    assert "TSS：50 ／ 計畫 50（100%）" in card["tip"]
+    assert "負荷（Load）：50 ／ 計畫 50（100%）" in card["tip"]
     # the stored TSS alone (no estimate) would have left the TSS unmeasured: ≠ 沒照課表
     assert C.with_plan_check(C.session_compliance(s), PM.compare(s))["label"] == "換了課"
 

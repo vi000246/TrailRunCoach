@@ -53,8 +53,11 @@ def _md(day: Optional[str]) -> Optional[str]:
 def name(ref: dict) -> str:
     w = f"{ref['value']:.0f}"
     md = _md(ref.get("date"))
-    if ref.get("kind") == "estimate" or ref.get("source") == "WKO5 mFTP":
+    if ref.get("source") == "WKO5 mFTP":
+        # WKO5 對照模式: WKO5's own mFTP keeps its name (SP-391)
         return _("mFTP {w} W · {md}", w=w, md=md) if md else _("mFTP {w} W", w=w)
+    if ref.get("kind") == "estimate":
+        return _("模型閾值功率 {w} W · {md}", w=w, md=md) if md else _("模型閾值功率 {w} W", w=w)
     if ref.get("kind") == "test":
         return _("CP {w} W · 測試 {md}", w=w, md=md) if md else _("CP {w} W · 測試", w=w)
     return _("CP {w} W · {md}", w=w, md=md) if md else _("CP {w} W", w=w)

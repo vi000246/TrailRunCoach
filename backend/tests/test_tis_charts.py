@@ -55,16 +55,16 @@ def test_per_workout_tis_chart_renders_the_builtins(ds):
     ch = _chart("tis-per-workout")
     out = render_chart(ch, ds, ds.today - 30, ds.today)
     by = {s["name"]: s["data"] for s in out["series"]}
-    assert set(by) == {"有氧 TIS", "無氧 TIS"}
+    assert set(by) == {"有氧效果（Aerobic effect）", "無氧效果（Anaerobic effect）"}
     ev = E.Evaluator(ds, ds.today - 30, ds.today)
-    for name, expr in (("有氧 TIS", "tisaerobic"), ("無氧 TIS", "tisanaerobic")):
+    for name, expr in (("有氧效果（Aerobic effect）", "tisaerobic"), ("無氧效果（Anaerobic effect）", "tisanaerobic")):
         data = by[name]
         assert data["kind"] == "points" and data["x"] == "datetime", data
         ys = [y for _x, y in data["points"] if y is not None]
         assert len(ys) == 3                                       # the run without power is not drawn
         assert all(1 <= y <= 10 and y == int(y) for y in ys)
         assert ys == [ev.evaluate(expr, w) for w in ds.workouts[:3]]
-    ana = [y for _x, y in by["無氧 TIS"]["points"]]
+    ana = [y for _x, y in by["無氧效果（Anaerobic effect）"]["points"]]
     assert ana[0] == 1 and ana[2] > ana[0]                        # only the intervals go above threshold
 
 
@@ -91,7 +91,7 @@ def test_tis_charts_are_translated():
     en = translate_view(v, tr)
     d = next(d for d in en["dashboards"] if d["id"] == "load-pmc")
     by = {c["id"]: c for c in d["charts"]}
-    assert by["tis-per-workout"]["title"].startswith("Aerobic / anaerobic TIS")
+    assert by["tis-per-workout"]["title"].startswith("Aerobic / Anaerobic effect")
     assert [s["name"] for s in by["tis-load"]["series"]] == [
         "Aerobic long-term", "Aerobic short-term", "Anaerobic long-term", "Anaerobic short-term"]
     assert "How to read:" in by["tis-load"]["description"]

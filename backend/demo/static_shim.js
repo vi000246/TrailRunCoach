@@ -409,11 +409,11 @@
               const m = f(dur.min, "負荷（RPE）的分鐘", R.min_range[0], R.min_range[1]);
               const tss = m ? pyRound(R.tss_h[lvl] * m / 60, 1) : null;
               if (!m) dur = { type: "open" };
-              else if (tss > L.range[1]) { errs.push(`負荷（RPE）換算超過 ${L.range[1]} TSS：分鐘數太多`); dur = { type: "open" }; }
+              else if (tss > L.range[1]) { errs.push(`負荷（RPE）換算超過 ${L.range[1]}：分鐘數太多`); dur = { type: "open" }; }
               else dur = { type: "load", value: Math.max(L.range[0], tss), rpe: lvl, min: pyRound(m) };
             }
           } else {
-            const v = f(dur.value, "負荷（TSS）", L.range[0], L.range[1]);
+            const v = f(dur.value, "負荷（Load）", L.range[0], L.range[1]);
             dur = v ? { type: "load", value: pyRound(v, 1) } : { type: "open" };
           }
         }
@@ -785,8 +785,8 @@
           (c.ep_kmh ? `，用你的越野 EP 速度 ${fx(c.ep_kmh, 1)} km/h` : "，你的越野紀錄不夠，先用路跑速度"));
       }
       if (lap) parts.push("「直到按下計圈」段：用課表原本寫的最短時間");
-      if (rows.some((s) => s.dur.type === "load" && !s.dur.rpe)) parts.push(`「${D.ws.load.label}」段：TSS ÷（該段強度 IF² × 100）換成時間`);
-      if (rows.some((s) => s.dur.type === "load" && s.dur.rpe)) parts.push(`「${D.ws.load.label}」段用 RPE 填：用你填的分鐘數，TSS ＝ 這一檔的每小時 TSS × 時數`);
+      if (rows.some((s) => s.dur.type === "load" && !s.dur.rpe)) parts.push(`「${D.ws.load.label}」段：負荷 ÷（該段強度比² × 100）換成時間`);
+      if (rows.some((s) => s.dur.type === "load" && s.dur.rpe)) parts.push(`「${D.ws.load.label}」段用 RPE 填：用你填的分鐘數，負荷 ＝ 這一檔的每小時負荷 × 時數`);
       return parts.length ? parts.join("；") + "（推估）" : "";
     }
     // SP-437: workout_steps._easy_target / rate_easy — the steps whose TSS is the runner's own easy rate
@@ -1007,7 +1007,7 @@
       if (v == null) return { ok: false, why: ["找不到有強度的主課段"], text: `${name}：找不到有功率／心率目標的主課段，這堂不算進階` };
       const [ok, why] = equivalent(v, canon, D);
       const load = flat(steps.items || []).some((r) => r.st.kind === "work" && r.st.dur.type === "load");
-      const est = v.src_kind === "推估" ? (load ? "（「負荷」段用 TSS 換算時間，推估）" : "（心率結構換算強度，推估）") : "";
+      const est = v.src_kind === "推估" ? (load ? "（「負荷」段的負荷換算成時間，推估）" : "（心率結構換算強度，推估）") : "";
       return { ok, why, text: `和 ${name} 標準課表 ${structure(canon)} ` + (ok ? "等效：這堂算進階" : "不等效：這堂不算進階（" + why.join("；") + "）") + est };
     }
 
@@ -1015,7 +1015,7 @@
     const EX = { warm: 1, work: 2, other: 2, rest: 4, cool: 3 };
     const EX_LABEL = { 1: "暖身", 2: "訓練", 3: "緩和", 4: "休息" };
     const fmtDur = (d, D) => (d.type === "time" ? fmtS(d.value) : d.type === "distance" ? (d.value >= 1000 ? `${fmtG(d.value / 1000)} km` : `${d.value} m`)
-      : d.type === "load" ? `負荷 ${fmtG(d.value)} TSS` + (d.rpe ? `（${D.ws.load.rpe.label[d.rpe] || d.rpe} ${d.min} 分）` : "") : "直到按下計圈");
+      : d.type === "load" ? `負荷 ${fmtG(d.value)}` + (d.rpe ? `（${D.ws.load.rpe.label[d.rpe] || d.rpe} ${d.min} 分）` : "") : "直到按下計圈");
     function stepsToCoros(steps, c, D) {
       const em = { n: 0 }, out = [];
       const name = (st, r, grouped) => {
@@ -1085,7 +1085,7 @@
       if (res.some(([, r]) => r.need === "tpace")) lost.push(D.ws.no_tpace);
       if (unrolled) lost.push("「最後一趟不休息」或重複裡的重複：COROS 群組做不到，推送時攤平成一段一段");
       if (dist) lost.push("距離段：COROS 欄位（公分）依第三方整理，這個 app 還沒實際送過（未驗證）");
-      if (res.some(([st]) => st.dur.type === "load")) lost.push(`「${D.ws.load.label}」段：這裡填 TSS，推到 COROS 換算成它的 TL（推估，誤差約 ±20 %；每次同步後用你的活動重新校正）`);
+      if (res.some(([st]) => st.dur.type === "load")) lost.push(`「${D.ws.load.label}」段：這裡填的是負荷（Load），推到 COROS 換算成它的 TL（推估，誤差約 ±20 %；每次同步後用你的活動重新校正）`);
       if (n > D.ws.coros_max_steps) lost.push(`${n} 段超過 ${D.ws.coros_max_steps} 段：COROS 的上限未驗證`);
       return { lines, n, limits, lost, seconds: total };
     }

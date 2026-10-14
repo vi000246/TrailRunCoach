@@ -235,16 +235,16 @@ def test_options_say_what_the_data_allows():
     (dict(low_share=0.68), "block", "低強度只有 68%（< 75%，底線）"),
     (dict(low_share=0.9, power_low_share=0.7), "block", "功率 < 80% CP 只有 70%"),
     # SP-63: relative lines — CTL₋₇ 60: watch 6, block 9; CTL₋₇ 80: block capped at 10
-    (dict(ramp=6.2, ramp_base=60.0), "sub", "CTL 每週 +6.2（≥ 6.0＝CTL 60 的 10%）：本週只排閾值下"),
+    (dict(ramp=6.2, ramp_base=60.0), "sub", "體能週增量（Fitness ramp）+6.2（≥ 6.0＝體能 60 的 10%）：本週只排閾值下"),
     (dict(ramp=8.2, ramp_base=60.0), "sub", "≥ 6.0"),
-    (dict(ramp=9.1, ramp_base=60.0), "block", "≥ 9.0＝CTL 60 的 15%"),
-    (dict(ramp=9.1, ramp_base=80.0), "sub", "≥ 8.0＝CTL 80 的 10%"),
+    (dict(ramp=9.1, ramp_base=60.0), "block", "≥ 9.0＝體能 60 的 15%"),
+    (dict(ramp=9.1, ramp_base=80.0), "sub", "≥ 8.0＝體能 80 的 10%"),
     (dict(ramp=10.0, ramp_base=80.0), "block", "≥ 10.0＝上限 10"),
     (dict(ramp=5.2, ramp_base=20.0), "block", "≥ 5.0＝下限 5"),
     (dict(ramp=3.1), "sub", "≥ 3.0＝下限 3"),            # no CTL₋₇: the floors
     (dict(step=0.25), "block", "> 20%"),
     (dict(step=0.15), "hold", "10–20%"),
-    (dict(tsb=-25.0), "hold", "TSB −25"),
+    (dict(tsb=-25.0), "hold", "狀況（Form）−25"),
 ])
 def test_guardrails(kw, flag, words):
     g = QG.guard(aet=142.0, **kw)
@@ -1101,7 +1101,7 @@ def test_specific_phase_applies_the_ramp_and_volume_guardrails_to_both_tracks():
     ramp8 = {**_gate(phase=spec, by={**GOOD_BY, "fitness": _ind(extra={"ramp_week": LG.block_line(60.0) + 0.2,
                                                                          "ramp_base": 60.0})}), **both}
     d = QG.week_decision(ramp8, "specific", "specific", n=2)
-    assert not d["allow"] and not d["items"] and "CTL 60 的 15%" in d["z3_note"] and "本週不排間歇" in d["z3_note"]
+    assert not d["allow"] and not d["items"] and "體能 60 的 15%" in d["z3_note"] and "本週不排間歇" in d["z3_note"]
     vol = {**_gate(phase=spec, by={**GOOD_BY, "volume": _ind(extra={"step": 0.3, "last_week": 5.0})}), **both}
     d = QG.week_decision(vol, "specific", "specific", n=2)
     assert not d["allow"] and "上週跑步量增 +30%" in d["z3_note"]

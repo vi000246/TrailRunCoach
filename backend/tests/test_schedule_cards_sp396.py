@@ -96,7 +96,7 @@ def test_partial_card_is_a_yellow_bar_with_a_pie_and_no_old_marks():
     # SP-470: no plain title text — the hover is sesspop.js's card, from popModel (same words)
     assert 'title=""' in h
     pm = _run("popModel(DATA.s)", s=_done(short=True))
-    assert pm["label"] == "部分 72%" and pm["verdict"] == "強度不足" and pm["nums"] == "TSS 74% · 時間 87% · 強度 72%"
+    assert pm["label"] == "部分 72%" and pm["verdict"] == "強度不足" and pm["nums"] == "負荷 74% · 時間 87% · 強度 72%"
     shown = json.dumps(pm, ensure_ascii=False)
     assert "±20" not in shown and "綠" not in shown                         # no thresholds on the card
 
@@ -137,11 +137,11 @@ def test_heat_and_the_mark_live_in_the_tile():
 def test_aria_label_order():
     s = _future(provisional=True, mark={"state": "auto"}, coros={"status": "outdated"}, title="長 tempo")
     lbl = re.search(r'aria-label="([^"]+)"', _chip(s)).group(1)
-    parts = ["輕鬆跑：長 tempo", "45 分鐘", "TSS 35", "暫定", "自動調整：疲勞保護", "需更新"]
+    parts = ["輕鬆跑：長 tempo", "45 分鐘", "負荷 35", "暫定", "自動調整：疲勞保護", "需更新"]
     pos = [lbl.index(p) for p in parts]
     assert pos == sorted(pos), lbl
     done = re.search(r'aria-label="([^"]+)"', _chip(_done(short=True))).group(1)
-    assert done.index("VO2max 間歇 5×3′") < done.index("60 分鐘") < done.index("TSS 70") < done.index("部分 72%")
+    assert done.index("VO2max 間歇 5×3′") < done.index("60 分鐘") < done.index("負荷 70") < done.index("部分 72%")
 
 
 def test_activity_card_dotted_with_its_icon():
@@ -154,7 +154,7 @@ def test_done_box_one_verdict_line_three_numbers_one_question_mark():
     head = re.search(r'<div class="vs-h">.*?</div>', h, re.S).group(0)
     assert "sc-r-partial" in head and "部分 72%" in head and "強度不足" in head
     assert h.count('class="qtip"') == 1
-    assert '<div class="vs-nums">TSS 74% · 時間 87% · 強度 72%</div>' in h
+    assert '<div class="vs-nums">負荷 74% · 時間 87% · 強度 72%</div>' in h
     assert h.index('class="vs-h"') < h.index('class="vs-nums"') < h.index('<dl class="vs">')
     shown = re.sub(r'data-tip="[^"]*"', "", h)                             # the ? text is the legend's (SP-399)
     assert "已完成" not in shown and "≠" not in shown and "◐" not in shown and "完成度 7" not in shown   # no old 「完成度 72%（…）」

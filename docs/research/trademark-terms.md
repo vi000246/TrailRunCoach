@@ -1,6 +1,7 @@
 # TSS、IF、NP 等 TrainingPeaks 商標用語的盤點與替換建議（SP-391）
 
 > 調查日期：2026-10-12。只做調查，沒有改程式、沒有改 i18n。
+> **實作（2026-10-14，SP-391 分支 `feat/sp391-own-terms`）**：照使用者 2026-10-13 的 Q1 回答換字，中文畫面一律「中文（English）」。WKO5 功能本身（Q4）、網址 `/api/v1/wko5`、`~/.wko5coach` 還沒動；聲明放在 README 與兩處對照（TrainingPeaks 來源標籤、體能圖說明），「關於」頁與服務條款（SP-60）另做。防回歸測試：`backend/tests/test_own_terms_sp391.py`。
 > 背景：SP-343 第 8 題（`sync-platforms.md` §3.3、§6）。商業版開放註冊（SP-390）前，畫面、匯出、手錶課表、說明文字裡用到別人註冊商標的地方要先整理。
 > **標記**：**已驗證**＝今天讀了一手頁面或程式碼，引句逐字吻合；**摘要**＝搜尋引擎摘要、第三方鏡像站（Justia、uspto.report、Trademarkia）或 repo 內其他調查文件的轉述；**推估**＝我的推論；**未找到來源**＝查過，寫出試過什麼。
 > **怎麼查的**：
@@ -295,7 +296,7 @@
 | FRC | **W′** | **W′** | — | app 其他地方已統一用 W′ |
 | dFRC | **W′ 電池** | **W′ balance** | — | 卡片已叫「W′ 電池」，說明文字跟上 |
 | Pmax | **最大功率** | **Max power** | — | 通用 |
-| TIS（Training Impact Score） | **有氧／無氧刺激分數** | **Aerobic / anaerobic stimulus** | 「刺激分數」 | 說明裡已經寫「刺激」；出處另寫「算法參考 WKO5」 |
+| TIS（Training Impact Score） | **有氧／無氧效果**（2026-10-14 擁有者決定；原建議「有氧／無氧刺激分數」） | **Aerobic / Anaerobic effect** | 「刺激分數」 | 出處寫「算法參考 WKO5 的 TIS」；副標註明 1–10，跟手錶的 0–5 不同；不用「訓練效果／Training Effect」（Firstbeat 的商標） |
 | WKO5 對照模式 | **WKO5 檔案對照模式**（只在自架版） | **WKO5 file comparison** (self-hosted only) | 商業版直接不顯示 | 指出對方檔案格式是指示性用法 |
 | WKO5 資料夾 | **WKO5 資料夾（.wko4 檔）**（只在自架版） | **WKO5 folder (.wko4 files)** | — | 同上 |
 | 頁面標題 WKO5 View Check | **圖表** | **Charts** | — | 每個人都看得到 |
@@ -403,7 +404,7 @@
    - **建議：是。**
    - 不用「標準化功率」「強度係數」：它們是商標的直譯，中文社群雖然常用，等於還是在用對方的名稱。
 8. **mFTP、TIS、FRC、dFRC 這些 WKO5 指標名要改嗎？**
-   - **建議：改成自己的名字**（模型閾值功率、有氧／無氧刺激分數、W′、W′ 電池），出處寫「算法參考 WKO5」。
+   - **建議：改成自己的名字**（模型閾值功率、有氧／無氧刺激分數、W′、W′ 電池），出處寫「算法參考 WKO5」。（2026-10-14：TIS 改叫「有氧／無氧效果（Aerobic / Anaerobic effect）」。）
    - 原名只留在 WKO5 檔案對照模式。
 9. **要不要寫信向 TrainingPeaks／Garmin 申請 TSS 等名稱的授權？**
    - **建議：不要。** 改名比較簡單，也不受收購後政策變動影響。

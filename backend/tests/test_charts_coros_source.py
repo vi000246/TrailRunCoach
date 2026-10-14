@@ -100,7 +100,7 @@ def test_cp_plan_first_then_fit_then_unset(tmp_path):
     assert ds.cp(w30) == 204.0                           # the plan test wins from its date
     i = ds.cp_info(w20)
     assert i["cp"] == 221.5 and i["date"] == "2026-08-15" and "推估" in i["source"] and "Stryd" in i["source"]
-    assert i["wprime"] == 14000.0 and "FRC" in i["wprime_source"]
+    assert i["wprime"] == 14000.0 and "PD 模型的 W′" in i["wprime_source"]
     assert ds.cp_info(w30)["source"] == "你的測試 2026-09-30"
     assert ds.cp_info(w1)["cp"] is None
 

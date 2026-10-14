@@ -131,7 +131,7 @@ def test_overhard_detection_thresholds():
     assert A.overhard(36, {"avg_hr": 160, "aet": 150, "over_aet_s": 900, "hr_s": 3000}) is None
     assert "功率" in A.overhard(36, {"avg_power": 250, "cp": 300})
     assert A.overhard(36, {"avg_power": 230, "cp": 300}) is None
-    assert "TSS" in A.overhard(36, {"tss": 45}) and "20%" in A.overhard(36, {"tss": 45})
+    assert "負荷" in A.overhard(36, {"tss": 45}) and "20%" in A.overhard(36, {"tss": 45})
     assert A.overhard(36, {"tss": 43}) is None
 
 
@@ -148,7 +148,7 @@ def test_overhard_by_tss_only_labels_the_done_run():
     out, adj, notes = A.adapt(gw, [], ctx(today="2026-09-30", reviews={7: {"tss": 60}}))
     s = ids(out)
     assert s["easy1"]["done"] is True                         # never voided
-    assert notes[7] == "輕鬆跑偏強（TSS 60 > 計畫 36 的 +20%）：只標示，課表不變"
+    assert notes[7] == "輕鬆跑偏強（負荷 60 > 計畫 36 的 +20%）：只標示，課表不變"
     # nothing moves, steps down or shrinks
     assert out == gw
     assert [a["action"] for a in adj] == ["note"] and adj[0]["rule"] == "overhard"
@@ -220,7 +220,7 @@ def test_fatigue_two_reds_no_longer_trigger_sp398():
 def test_fatigue_tsb_and_ramp_still_act_with_two_reds_sp398():
     reds = [_red("easy1", "2026-09-28", 1), _red("easy2", "2026-09-29", 2)]
     gw = lambda: week([g("quality", "quality", "2026-10-01", 60), g("easy3", "easy", "2026-10-02", 50)])  # noqa: E731
-    for load, why in (({"tsb": -35}, "TSB -35 < -30"), ({"ramp": 8.5}, "")):
+    for load, why in (({"tsb": -35}, "狀況（Form）-35 < -30"), ({"ramp": 8.5}, "")):
         out, adj, _ = A.adapt(gw(), reds, ctx(load=load))
         assert "quality" not in ids(out) and ids(out)["easy3"]["minutes"] == 40
         fat = [a for a in adj if a["rule"] == "fatigue"]

@@ -215,7 +215,7 @@ def zone_rows(zone: dict, covered_kinds: set, scheduled: callable, days_for) -> 
     for ev in zone.get("events") or []:
         out.append({"id": f"zone_update:{ev.get('field')}:{ev.get('date')}", "type": "zone_update",
                     "title": "區間已更新", "reason": ev.get("text") or "", "pick": None,
-                    "help": "套用新的測試後，從那天起的區間、TSS 都用新門檻重算（不會改到之前的日子）。"})
+                    "help": "套用新的測試後，從那天起的區間、負荷（Load）都用新門檻重算（不會改到之前的日子）。"})
     return out
 
 

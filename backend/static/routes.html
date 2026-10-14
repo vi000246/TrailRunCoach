@@ -313,7 +313,7 @@ function renderDetail() {
   <div class="panel card"><h3>每次成績 <span class="meta">勾 A / B 兩次來比較；排名依${timeName}</span></h3>
     <div class="tablewrap"><table id="etab"></table></div>
     <div id="more"></div>
-    <div class="note">${up ? "VAM = 淨爬升 ÷ 移動時間；" : down ? "下降率 = 淨下降 ÷ 移動時間；" : ""}⚠ = 移動時間不到經過時間一半，VAM 可能偏高；心率、功率為移動中的時間加權平均；最高心率 = 這段原始取樣的最大值；30 s 功率 = 完全落在這段內的 30 秒平均最大值；hrTSS 占比 = 這段的 hrTSS ÷ 整個活動的 hrTSS（WKO5 hrTSS 算法）；錶溫為手錶感測器（受體溫、日照影響，僅供參考）。</div>
+    <div class="note">${up ? "VAM = 淨爬升 ÷ 移動時間；" : down ? "下降率 = 淨下降 ÷ 移動時間；" : ""}⚠ = 移動時間不到經過時間一半，VAM 可能偏高；心率、功率為移動中的時間加權平均；最高心率 = 這段原始取樣的最大值；30 s 功率 = 完全落在這段內的 30 秒平均最大值；心率負荷（HR load）占比 = 這段的心率負荷 ÷ 整個活動的心率負荷（算法參考 WKO5）；錶溫為手錶感測器（受體溫、日照影響，僅供參考）。</div>
     ${wxNote ? `<div class="note">${wxNote}</div>` : ""}</div>`;
   $("back").onclick = () => { document.body.classList.remove("has-detail"); history.pushState({}, "", location.pathname); };
   $("dname").onclick = rename;
@@ -464,7 +464,7 @@ function drawTable() {
     ${tk === "elapsed_s" ? "<th>移動</th>" : ""}<th>配速</th>${up ? "<th>VAM</th>" : down ? "<th>下降率</th>" : ""}<th>心率</th>
     ${hasMax ? "<th title='這段原始取樣的最高心率'>最高心率</th>" : ""}
     ${up ? "<th title='HR ÷ VAM × 1000'>HR÷VAM</th><th title='心跳次數 / 每爬 100 m'>心跳/100m</th>" : ""}
-    ${hasPw ? `<th>功率</th>${hasP30 ? "<th title='完全落在這段內的 30 秒平均功率最大值'>30 s 最大</th>" : ""}${up ? "<th title='W ÷ VAM × 1000'>W÷VAM</th>" : ""}` : ""}<th title="這段占整個活動 hrTSS 的比例">hrTSS 占比</th>
+    ${hasPw ? `<th>功率</th>${hasP30 ? "<th title='完全落在這段內的 30 秒平均功率最大值'>30 s 最大</th>" : ""}${up ? "<th title='W ÷ VAM × 1000'>W÷VAM</th>" : ""}` : ""}<th title="這段占整個活動心率負荷的比例">心率負荷（HR load）占比</th>
     ${hasWx ? "<th title='Open-Meteo 歷史資料，當時當地，依海拔修正'>氣溫</th><th>露點</th><th>濕度</th><th title='Hadley：氣溫 °F + 露點 °F；> 150 標紅點（配速約慢 4.5% 以上）'>熱</th>" : ""}
     ${hasT ? "<th title='手錶溫度感測器（受體溫、日照影響）'>錶溫</th>" : ""}<th class="l">周期</th><th class="l">運動</th></tr></thead><tbody>` +
     rows.map((e) => `<tr class="${e.rank === 1 ? "best" : ""}">

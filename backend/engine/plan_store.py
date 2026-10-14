@@ -399,9 +399,9 @@ def _clean(patch: dict, today: str) -> dict:
         try:
             t = float(patch["tss"])
         except (TypeError, ValueError):
-            raise PlanError(_("TSS 要是數字"))
+            raise PlanError(_("負荷（Load）要是數字"))
         if not 0 <= t <= 2000:
-            raise PlanError(_("TSS 要在 0–2000"))
+            raise PlanError(_("負荷（Load）要在 0–2000"))
         out["tss"] = round(t, 1)
     return out
 

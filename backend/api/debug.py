@@ -240,7 +240,7 @@ def _pair_why(s: dict) -> str:
     if comp.get("duration_pct") is not None:
         parts.append(_("時間 {p}%", p=comp["duration_pct"]))
     if comp.get("tss_pct") is not None:
-        parts.append(_("TSS {p}%", p=comp["tss_pct"]))
+        parts.append(_("負荷 {p}%", p=comp["tss_pct"]))
     if vs.get("text") or vs.get("short_text"):
         parts.append(vs.get("text") or vs.get("short_text"))
     parts.append(_("等級：|實際 ÷ 計畫 − 1| ≤ 20% 符合、≤ 50% 有點偏離（TrainingPeaks）；強度見 plan_match.compare"))

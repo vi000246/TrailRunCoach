@@ -366,19 +366,19 @@ def _chip(k: str, e: dict) -> dict:
     src = source_of(e)
     if src == "fitted":
         text = _("本人 n={n}", n=e["n"])
-        tip = _("{label}（CR-10 {cr}）每小時 {rate} TSS：本人 {n} 筆有自評的活動擬合 {personal}，權重 {w:.0%}，"
-                "其餘用預設 {default}（TSS 定義 IF² × 100，IF {if_}）。",
+        tip = _("{label}（CR-10 {cr}）每小時負荷（Load）{rate}：本人 {n} 筆有自評的活動擬合 {personal}，權重 {w:.0%}，"
+                "其餘用預設 {default}（＝強度比² × 100，Coggan 公開的公式；強度比（Intensity）{if_}）。",
                 label=lbl, cr=CR10[k], rate=rate, n=e["n"], personal=round(e["personal"] or e["tss_h"]),
                 w=float(e["w"]), default=round(DEFAULT_TSS_H[k]), if_=f"{DEFAULT_IF[k]:.2f}")
     else:
         text = _("依相鄰檔調整") if src == "adjusted" else _("預設（推估）")
-        tip = _("{label}（CR-10 {cr}）預設每小時 {rate} TSS = IF² × 100（TSS 定義），IF {if_}：{src}。"
+        tip = _("{label}（CR-10 {cr}）預設每小時負荷（Load）{rate} = 強度比² × 100（Coggan 公開的公式），強度比（Intensity）{if_}：{src}。"
                 "預設是通用規則，不是照哪個人調的；每個人的值只從他自己有自評的活動擬合，"
                 "這一檔目前 {n} 筆，滿 {min_n} 筆才開始。",
                 label=lbl, cr=CR10[k], rate=round(DEFAULT_TSS_H[k]), if_=f"{DEFAULT_IF[k]:.2f}", src=_(IF_SRC[k]),
                 n=e["n"], min_n=MIN_N)
     if e.get("adjusted"):
-        tip += " " + _("為了讓高一檔不會比低一檔少，已和相鄰的檔平均成每小時 {rate} TSS。", rate=rate)
+        tip += " " + _("為了讓高一檔不會比低一檔少，已和相鄰的檔平均成每小時負荷 {rate}。", rate=rate)
     return {"text": text, "tip": tip}
 
 

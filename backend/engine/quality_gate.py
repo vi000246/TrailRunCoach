@@ -181,7 +181,7 @@ DOSE = Z3                      # kept for callers that read the first rungs
 RECOVERY = ("r1", "恢復週 fartlek 4×1 分", 4, 1, 2, 0.98, 1.01, False, "Palladino 恢復週保留 98–101% CP fartlek")
 # the ramp-week session (CTL ramp at the watch line: threshold only) — T1's content under its own key / title so
 # it is never mistaken for a ladder rung (planned_spec: neutral)
-SUB = ("sub", "有氧間歇（巡航）3×6 分（只排閾值）", 3, 6, 1.5, 0.90, 0.95, False, "CTL ramp 到注意線（CTL 的 10%，Friel 換算）：只排閾值；90–95% CP")
+SUB = ("sub", "有氧間歇（巡航）3×6 分（只排閾值）", 3, 6, 1.5, 0.90, 0.95, False, "體能週增量（Fitness ramp）到注意線（體能的 10%，Friel 換算）：只排閾值；90–95% CP")
 ZONE3 = ("z3", "Zone 3 間歇", 3, 6, 2, None, None, False, "Uphill Athlete：先加 Zone 3（AeT–LTHR），約週有氧量的 5%")
 TRACK_LABEL = {"z3": "3 區（有氧間歇）", "z5": "5 區（VO2max 間歇）"}
 
@@ -726,7 +726,7 @@ def guard(low_share: Optional[float] = None, power_low_share: Optional[float] = 
     elif step is not None and step > STEP_HOLD:
         say("volume", f"上週跑步量增 {step * 100:+.0f}%（10–20%，推估）：間歇維持上次的量，不往上加", "", hold=True)
     if tsb is not None and -30.0 <= tsb < TSB_HOLD:
-        say("tsb", f"TSB {tsb:+.0f}（−30～−20，Friel／TrainingPeaks）：間歇維持上次的量，不往上加", "", hold=True)
+        say("tsb", f"狀況（Form）{tsb:+.0f}（−30～−20，Friel／TrainingPeaks）：間歇維持上次的量，不往上加", "", hold=True)
     return out
 
 
@@ -2619,7 +2619,7 @@ def week_decision(gate: dict, kind: str, mode: str, monday: Optional[dt.date] = 
                     return maint_off(none(v), _("護欄擋下這週的強度課"))
                 return maint_off({"allow": True, "spec": SUB, "advance": False, "adjust": None, "track": "z3", "note": v,
                                   "items": [{"track": "z3", "spec": SUB, "advance": False, "adjust": None, "first": False}],
-                                  "z3_note": ""}, _("護欄（CTL 增幅到注意線）這週只排閾值"))
+                                  "z3_note": ""}, _("護欄（體能週增量到注意線）這週只排閾值"))
         warn = ""
         had_z5 = "z5" in avail
         if levels.get("intensity") == "bad":
@@ -3036,8 +3036,8 @@ OPTION_INFO = {
               "rule": "基礎期開始後滿 N 週（預設 8，範圍 2–16）才排間歇。8 週取中間值，屬推估。解鎖的是 3 區；5 區還是要實測 AeT。",
               "todo": "不用測試；只要基礎期有起點（賽事周期）。"},
     "none": {"source": "Seiler 2010、Seiler & Tønnessen 2009、Koop／CTS",
-             "rule": "不設門檻：整個週期都有少量高強度，3 區、5 區都不用先解鎖。基礎期每週最多 1 次，由護欄決定：低強度 ≥ 75%、CTL 每週 < +5（≥ 5 只排閾值下）、"
-                     "週增量 ≤ 20%（10–20% 維持）、3:1 恢復週改 4×1 分 fartlek、TSB、離長跑 ≥ 2 天。"
+             "rule": "不設門檻：整個週期都有少量高強度，3 區、5 區都不用先解鎖。基礎期每週最多 1 次，由護欄決定：低強度 ≥ 75%、體能週增量（Fitness ramp）< +5（≥ 5 只排閾值下）、"
+                     "週增量 ≤ 20%（10–20% 維持）、3:1 恢復週改 4×1 分 fartlek、狀況（Form）、離長跑 ≥ 2 天。"
                      "兩條階梯各自進階：3 區 2×15 → 3×12 → 2×20 → 1×30（88–95% CP；量 ≤ 週量 10%，放不下排巡航版 3×6／3×8／2×12），"
                      "5 區 5×2 → 4×3 → 5×3 → 4×4（近 6 週做過 ≥ 2 堂 3 區後；推估）；"
                      "時間足夠排標準版，平日上限放不下時換同等較短版。",

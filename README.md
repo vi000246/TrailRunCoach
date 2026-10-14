@@ -19,7 +19,7 @@
 
 | | |
 |---|---|
-| **總覽 dashboard** | 體能／疲勞／狀態（PMC）、負荷比、近期最佳、狀況卡，一頁看完。 |
+| **總覽 dashboard** | 體能（Fitness）／疲勞（Fatigue）／狀況（Form）的體能圖、負荷比、近期最佳、狀況卡，一頁看完。 |
 | **自動排課＋推送 COROS** | 依週期、課表偏好、休息日自動排一週，拖曳調整，一鍵推送到手錶。 |
 | **間歇／飄移判讀** | 每趟間歇的功率對目標、心率飄移（白話說明），AeT／CP 測試自動辨識。 |
 | **賽事計算機** | 賽道 GPX＋天氣＋你的體能 → 分段配速、目標功率、完賽時間、補給；可匯出 COROS 課表。 |
@@ -132,7 +132,7 @@ python -m backend.tests.e2e._server --serve                    # 或先起一個
 
 TrailRunCoach is a self-hosted training coach for trail runners, mountain hikers (Taiwan's 百岳)
 and road runners. It reads your watch data (COROS, TrainingPeaks or plain FIT files) and gives you
-an overview dashboard (PMC, load ratio, status), an automatic weekly schedule you can push to a
+an overview dashboard (fitness / fatigue / form chart, load ratio, status), an automatic weekly schedule you can push to a
 COROS watch, interval and heart-rate-drift analysis per activity, a race calculator (GPX + weather +
 fitness → pacing, power, finish time, fuelling), season periodisation, schedule statistics and an
 injury log. Your data stays on your machine. The public demo (a synthetic athlete) is a static,
@@ -144,7 +144,11 @@ available as a Docker image (`deploy/hf/Dockerfile`) for any Docker host, e.g. a
 Docker Space (`deploy/hf/`). The UI is Traditional Chinese first, with an
 English catalog.
 
-> Not affiliated with COROS, TrainingPeaks or Stryd.
+## 商標聲明／Trademarks
+
+TrainingPeaks®、TSS®、Training Stress Score®、NP®、Normalized Power®、IF®、Intensity Factor®、WKO+® 是 TrainingPeaks, LLC 的註冊商標；WKO5 是 TrainingPeaks 的產品名稱。COROS、Garmin、Stryd、Strava 及其他名稱是各自所有人的商標。TrailRunCoach 與上述公司沒有任何關係，也沒有獲得它們的授權或背書。本服務的「負荷（Load）」「強度比（Intensity）」「加權功率（Weighted power）」「體能（Fitness）／疲勞（Fatigue）／狀況（Form）」是我們自己的指標；提到上述名稱，只是為了說明資料來源、檔案相容性，或讓你對照數字。
+
+TrainingPeaks®, TSS®, Training Stress Score®, NP®, Normalized Power®, IF®, Intensity Factor® and WKO+® are registered trademarks of TrainingPeaks, LLC; WKO5 is a TrainingPeaks product name. COROS, Garmin, Stryd, Strava and other names are trademarks of their respective owners. TrailRunCoach is not affiliated with, authorised or endorsed by any of these companies. Load, Intensity, Weighted power and Fitness / Fatigue / Form in this service are our own metrics; the names above are mentioned only to identify a data source, a compatible file format, or to let you compare numbers.
 
 ## License
 

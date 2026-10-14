@@ -784,8 +784,8 @@ def race_session(body: ExportIn, p: dict, ev, calib: Optional[dict] = None) -> t
     ex["tss"] = {**ti, "raw": ti["tss"], "tss": tss, "factor": cf["factor"], "n": cf["n"], "k": cf.get("k")}
     if ti["open_h"] > 0:
         # how the legs without a power / HR target were counted (the session note on the 課表)
-        detail += (f"；TSS 推估：無目標段 IF {ti['open_if']:.2f}（{ti['open_src']}）" if not ti["fallback"] else
-                   f"；TSS 推估：沒有心率預測，無目標段用預設 IF {WE.DEFAULT_IF:.2f}")
+        detail += (f"；負荷推估：無目標段強度比 {ti['open_if']:.2f}（{ti['open_src']}）" if not ti["fallback"] else
+                   f"；負荷推估：沒有心率預測，無目標段用預設強度比 {WE.DEFAULT_IF:.2f}")
     if cf["n"]:
         detail += f"；賽後校正 ×{cf['factor']:.2f}（{cf['n']} 場）"
     km, gain = sm.get("km"), sm.get("gain_m")

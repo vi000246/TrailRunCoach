@@ -91,7 +91,7 @@ def test_build_is_valid_and_has_the_required_properties():
     assert e["LAST-MODIFIED"] == "20261001T080000Z" and int(e["SEQUENCE"]) > 0
     assert unescape(e["SUMMARY"]) == "閾值 3×10 分"
     d = unescape(e["DESCRIPTION"])
-    assert "60 分" in d and "TSS 30" in d and "功率 280–300 W" in d and "10.0 km" in d and "爬升 120 m" in d
+    assert "60 分" in d and "負荷 30" in d and "功率 280–300 W" in d and "10.0 km" in d and "爬升 120 m" in d
     assert "暖身" in d and long_detail.strip() in d
 
 
@@ -112,7 +112,7 @@ def test_done_marker_and_actuals():
     act = {"index": 3, "date": "2026-10-02", "moving_s": 2580, "tss": 41.6}
     _cal, ev = parse(CF.build([(sess("d", "2026-10-02", state="done", done_by=act), None)], TODAY, None))
     assert unescape(ev[0]["SUMMARY"]) == "✓ 輕鬆跑"
-    assert "實際：43 分 · TSS 42" in unescape(ev[0]["DESCRIPTION"])
+    assert "實際：43 分 · 負荷 42" in unescape(ev[0]["DESCRIPTION"])
 
 
 def test_deep_link_opens_the_session():

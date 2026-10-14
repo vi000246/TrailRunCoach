@@ -1229,7 +1229,7 @@ def derive(ds, today: Optional[dt.date] = None, fetch_weather: bool = True,
         e = test["estimate"]
         short = {"cp2": e["cp"], "w_prime": e["w_prime"], "label": f"偵測到的 CP 測試 {test['date']}（{e['label']}）"}
     elif pdm:
-        short = {"cp2": pdm["mftp"], "w_prime": pdm["frc"], "label": "PD 模型 mFTP + FRC"}
+        short = {"cp2": pdm["mftp"], "w_prime": pdm["frc"], "label": "PD 模型：模型閾值功率 + W′"}
     else:
         short = None
 
@@ -1260,7 +1260,7 @@ def derive(ds, today: Optional[dt.date] = None, fetch_weather: bool = True,
 
     sources = []
     if pdm:
-        sources.append({"id": "pdmodel", "label": f"PD 模型重算（近 {CP_WINDOW_DAYS} 天 mean-max，含同步的 FIT）：mFTP "
+        sources.append({"id": "pdmodel", "label": f"PD 模型重算（近 {CP_WINDOW_DAYS} 天 mean-max，含同步的 FIT）：模型閾值功率（Modelled threshold power）"
                         f"{pdm['mftp']:.0f} W、TTE {pdm['tte'] / 60:.0f} 分", "cp": pdm["mftp"], "tte": pdm["tte"],
                         "cp2": (short or {}).get("cp2"), "w_prime": (short or {}).get("w_prime"),
                         "short_label": (short or {}).get("label"), "frc": pdm["frc"], "fit": pdm})

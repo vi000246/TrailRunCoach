@@ -335,7 +335,7 @@
     "draft": true,
     "src": "backend/engine/post_race.py:278"
   },
-  "B 賽太多，等於一直在減量：CTL 從近 {w} 週的高點 {p:.0f} 掉到 {n:.0f}（−{d:.0%}；Friel 的案例掉 13 % 就沒力）": {
+  "B 賽太多，等於一直在減量：體能（Fitness）從近 {w} 週的高點 {p:.0f} 掉到 {n:.0f}（−{d:.0%}；Friel 的案例掉 13 % 就沒力）": {
     "draft": true,
     "src": "backend/engine/post_race.py:372"
   },
@@ -451,15 +451,135 @@
     "draft": true,
     "src": "backend/engine/rpe_load.py:107"
   },
-  "CTL {c:.0f} 的 {pct:.0%}": {
+  "TL = a·負荷": {
+    "draft": false,
+    "src": "backend/engine/coros_tl.py:107"
+  },
+  "TL = a·負荷 + b": {
+    "draft": false,
+    "src": "backend/engine/coros_tl.py:107"
+  },
+  "TL = a·負荷^k": {
+    "draft": false,
+    "src": "backend/engine/coros_tl.py:107"
+  },
+  "TL = h·(c0 + c1·強度比 + c2·強度比²)": {
+    "draft": false,
+    "src": "backend/engine/coros_tl.py:108"
+  },
+  "W′ 電池（W′ balance）": {
+    "draft": false,
+    "src": "backend/engine/workout_review.py:4439"
+  },
+  "{eff} → 算不出模型閾值功率（Modelled threshold power）": {
+    "draft": false,
+    "src": "backend/engine/workout_review.py:2758"
+  },
+  "{eff} → 這次測試後的模型閾值功率（Modelled threshold power）{cp} W（算法參考 WKO5：{d} 前 90 天 mean-max 上緣的 PD 模型，含這次測試）": {
+    "draft": false,
+    "src": "backend/engine/workout_review.py:2760"
+  },
+  "有氧／無氧效果": {
+    "draft": false,
+    "src": "backend/engine/workout_review.py:3051"
+  },
+  "模型閾值功率 {w} W": {
+    "draft": false,
+    "src": "backend/engine/panels/cp_ref.py:60"
+  },
+  "模型閾值功率 {w} W · {md}": {
+    "draft": false,
+    "src": "backend/engine/panels/cp_ref.py:60"
+  },
+  "模型閾值功率（Modelled threshold power）": {
+    "draft": false,
+    "src": "backend/engine/workout_review.py:4155"
+  },
+  "模型閾值功率（Modelled threshold power）{w} W": {
+    "draft": false,
+    "src": "backend/engine/workout_review.py:3026"
+  },
+  "模型閾值功率（Modelled threshold power）算不出": {
+    "draft": false,
+    "src": "backend/engine/workout_review.py:3027"
+  },
+  "模型閾值功率（Modelled threshold power）：PD 模型（功率–時間模型，和 PD 曲線同一個擬合，算法參考 WKO5）的有氧平台，約等於撐 30–60 分鐘的功率，是 CP 的同類量。開關在圖上，預設關。": {
+    "draft": false,
+    "src": "backend/engine/wko5expr/render.py:398"
+  },
+  "每個點＝課表用的 Stryd 功率 PD 模型擬合（每 30 天一次，加上最後一次跑步那天）；VO2max＝(W′/589 + 模型閾值功率)/84.5 + 0.656 L/min ÷ 當天體重（推估，算法參考 WKO5）": {
+    "draft": false,
+    "src": "backend/engine/panels/pd_trend.py:145"
+  },
+  "沒有體重：VO2max 是每公斤（ml/kg/min），算不出；請到 設定 → 個人資料 填體重。模型閾值功率照樣畫。": {
+    "draft": false,
+    "src": "backend/engine/panels/pd_trend.py:135"
+  },
+  "疲勞（Fatigue）": {
+    "draft": false,
+    "src": "backend/engine/panels/plan_projection.py:173"
+  },
+  "算不出模型閾值功率": {
+    "draft": false,
+    "src": "backend/engine/interval_eval.py:364"
+  },
+  "算不出模型閾值功率（Modelled threshold power）：測試那天以前 90 天的 Stryd 跑步不到 5 次，或 PD 模型擬合不成立（算法參考 WKO5，不用公式代替）": {
+    "draft": false,
+    "src": "backend/engine/cp_protocols.py:101"
+  },
+  "算法參考 WKO5：PD 模型擬合（近 90 天 mean-max 上緣，含這次測試）": {
+    "draft": false,
+    "src": "backend/engine/cp_protocols.py:98"
+  },
+  "算法參考 WKO5：算不出模型閾值功率（Modelled threshold power）": {
+    "draft": false,
+    "src": "backend/engine/racepower/cptest.py:124"
+  },
+  "算法參考 WKO5：這次測試後的模型閾值功率（Modelled threshold power；{d} 前 90 天 mean-max 上緣的 PD 模型，含這次測試）": {
+    "draft": false,
+    "src": "backend/engine/racepower/cptest.py:120"
+  },
+  "課表改用推到手錶的結構：時間、負荷（Load）、目標文字照結構寫（一次性）": {
+    "draft": false,
+    "src": ""
+  },
+  "負荷 {n}": {
+    "draft": false,
+    "src": "backend/engine/calendar_feed.py:152"
+  },
+  "負荷/天": {
+    "draft": false,
+    "src": "backend/engine/wko5expr/units.py:88"
+  },
+  "負荷/天/週": {
+    "draft": false,
+    "src": "backend/engine/wko5expr/units.py:88"
+  },
+  "負荷/週": {
+    "draft": false,
+    "src": "backend/engine/wko5expr/units.py:88"
+  },
+  "這次測試後的模型閾值功率（Modelled threshold power）{cp} W（{m}）：結果看「本次重點」的 CP 測試卡": {
+    "draft": false,
+    "src": "backend/engine/interval_eval.py:370"
+  },
+  "這次測試後的模型閾值功率 {cp} W（算法參考 WKO5）": {
+    "draft": false,
+    "src": "backend/engine/interval_eval.py:367"
+  },
+  "這段期間沒有 PD 模型擬合：90 天內至少要 {n} 次 Stryd 功率跑步（手錶推估功率不採用），模型閾值功率與 VO2max 才算得出來。": {
+    "draft": false,
+    "src": "backend/engine/panels/pd_trend.py:138"
+  },
+  "體能 {c:.0f} 的 {pct:.0%}": {
     "draft": true,
     "src": "backend/engine/load_guard.py:128"
   },
-  "CTL {ctl:.0f} 要每週 +{ramp:.1f}，需要約 {tss:.0f} TSS（≈ {h:.1f} h）": {
+  "體能（Fitness）{ctl:.0f} 要每週 +{ramp:.1f}，需要負荷約 {tss:.0f}（≈ {h:.1f} h）": {
     "draft": true,
     "src": "backend/engine/overview.py:993"
   },
-  "CTL 每週 +{ramp:.1f}（≥ {line:.1f}＝{how}）": {
+  "體能週增量（Fitness ramp）+{ramp:.1f}（≥ {line:.1f}＝{how}）": {
     "draft": true,
     "src": "backend/engine/load_guard.py:129"
   },
@@ -567,11 +687,11 @@
     "draft": true,
     "src": "backend/engine/quality_gate.py:1800"
   },
-  "LTHR 從這天起用你填的值（測試）；之前是推估（最大心率的 90 %），hrTSS 和體能數字在這天會跳一下": {
+  "LTHR 從這天起用你填的值（測試）；之前是推估（最大心率的 90 %），心率負荷（HR load）和體能數字在這天會跳一下": {
     "draft": false,
     "src": "backend/engine/overview.py:323"
   },
-  "LTHR 從這天起用你自己資料的估算；之前是推估（最大心率的 90 %），hrTSS 和體能數字在這天會跳一下": {
+  "LTHR 從這天起用你自己資料的估算；之前是推估（最大心率的 90 %），心率負荷（HR load）和體能數字在這天會跳一下": {
     "draft": false,
     "src": "backend/engine/overview.py:322"
   },
@@ -659,35 +779,35 @@
     "draft": true,
     "src": "backend/engine/balance_plan.py:41"
   },
-  "TSB {tsb:+.0f} < −20：先維持量，不加": {
+  "狀況（Form）{tsb:+.0f} < −20：先維持量，不加": {
     "draft": true,
     "src": "backend/engine/overview.py:1011"
   },
-  "TSB {tsb:+.0f} < −30：改成恢復週（近 4 週的 60%）": {
+  "狀況（Form）{tsb:+.0f} < −30：改成恢復週（近 4 週的 60%）": {
     "draft": true,
     "src": "backend/engine/overview.py:1008"
   },
-  "TSB（預估）": {
+  "狀況（Form）・預估": {
     "draft": true,
     "src": "backend/engine/panels/plan_projection.py:177"
   },
-  "TSS {p}%": {
+  "負荷 {p}%": {
     "draft": false,
     "src": "backend/api/debug.py:243"
   },
-  "TSS {t:.0f} > 計畫 {plan:.0f} 的 +{pct:.0f}%": {
+  "負荷 {t:.0f} > 計畫 {plan:.0f} 的 +{pct:.0f}%": {
     "draft": false,
     "src": "backend/engine/adapt.py"
   },
-  "TSS 要在 0–2000": {
+  "負荷（Load）要在 0–2000": {
     "draft": true,
     "src": "backend/engine/plan_store.py:333"
   },
-  "TSS 要是數字": {
+  "負荷（Load）要是數字": {
     "draft": true,
     "src": "backend/engine/plan_store.py:331"
   },
-  "TSS：{a:.0f} ／ 計畫 {p:.0f}（{pct}%）": {
+  "負荷（Load）：{a:.0f} ／ 計畫 {p:.0f}（{pct}%）": {
     "draft": true,
     "src": "backend/engine/workout_review.py:2725"
   },
@@ -783,15 +903,15 @@
     "draft": false,
     "src": "backend/engine/debug_view.py:275"
   },
-  "hrTSS = 心率時間 × (平均心率 ÷ LTHR)²；LTHR 取當天生效的值（課表門檻列 → 資料來源設定 → 估算）": {
+  "心率負荷（HR load）= 心率時間 × (平均心率 ÷ LTHR)²；LTHR 取當天生效的值（課表門檻列 → 資料來源設定 → 估算）": {
     "draft": false,
     "src": "backend/engine/debug_view.py:251"
   },
-  "hrTSS（依強度）": {
+  "心率負荷（HR load，依強度）": {
     "draft": true,
     "src": "backend/engine/coros_tl.py:78"
   },
-  "hrTSS（比例）": {
+  "心率負荷（HR load，比例）": {
     "draft": true,
     "src": "backend/engine/coros_tl.py:78"
   },
@@ -907,11 +1027,11 @@
     "draft": true,
     "src": "backend/engine/panels/race_refs.py:171"
   },
-  "{grade} 賽「{name}」：預估 CTL {ctl:.0f}、TSB {tsb:+.0f}": {
+  "{grade} 賽「{name}」：預估體能（Fitness）{ctl:.0f}、狀況（Form）{tsb:+.0f}": {
     "draft": true,
     "src": "backend/engine/panels/plan_projection.py:142"
   },
-  "{grade} 賽的理想 TSB：{lo:+.0f}～{hi:+.0f}": {
+  "{grade} 賽的理想狀況（Form）：{lo:+.0f}～{hi:+.0f}": {
     "draft": true,
     "src": "backend/engine/panels/plan_projection.py:144"
   },
@@ -955,7 +1075,7 @@
     "draft": true,
     "src": "backend/engine/strength_plan.py:213"
   },
-  "{label} {tss:g} TSS（{rpe} {min} 分）": {
+  "{label} {tss:g}（{rpe} {min} 分）": {
     "draft": true,
     "src": "backend/engine/workout_steps.py:788"
   },
@@ -991,11 +1111,11 @@
     "draft": true,
     "src": "backend/engine/suggestions.py:308"
   },
-  "{label}（CR-10 {cr}）每小時 {rate} TSS：本人 {n} 筆有自評的活動擬合 {personal}，權重 {w:.0%}，其餘用預設 {default}（TSS 定義 IF² × 100，IF {if_}）。": {
+  "{label}（CR-10 {cr}）每小時負荷（Load）{rate}：本人 {n} 筆有自評的活動擬合 {personal}，權重 {w:.0%}，其餘用預設 {default}（＝強度比² × 100，Coggan 公開的公式；強度比（Intensity）{if_}）。": {
     "draft": true,
     "src": "backend/engine/rpe_load.py:341"
   },
-  "{label}（CR-10 {cr}）預設每小時 {rate} TSS = IF² × 100（TSS 定義），IF {if_}：{src}。預設是通用規則，不是照哪個人調的；每個人的值只從他自己有自評的活動擬合，這一檔目前 {n} 筆，滿 {min_n} 筆才開始。": {
+  "{label}（CR-10 {cr}）預設每小時負荷（Load）{rate} = 強度比² × 100（Coggan 公開的公式），強度比（Intensity）{if_}：{src}。預設是通用規則，不是照哪個人調的；每個人的值只從他自己有自評的活動擬合，這一檔目前 {n} 筆，滿 {min_n} 筆才開始。": {
     "draft": true,
     "src": "backend/engine/rpe_load.py:375"
   },
@@ -1143,7 +1263,7 @@
     "draft": true,
     "src": "backend/engine/strength_plan.py:59"
   },
-  "{name}（預估）": {
+  "{name}・預估": {
     "draft": true,
     "src": "backend/engine/panels/plan_projection.py:169"
   },
@@ -1355,7 +1475,7 @@
     "draft": true,
     "src": "backend/engine/racepower/cold.py:261"
   },
-  "{why}：區間、TSS、賽事計算機都靠 CP": {
+  "{why}：區間、負荷（Load）、賽事計算機都靠 CP": {
     "draft": true,
     "src": "backend/engine/overview.py:1540"
   },
@@ -1455,7 +1575,7 @@
     "draft": true,
     "src": "backend/engine/rest_days.py:120"
   },
-  "「{label}」段用 RPE 填：用你填的分鐘數，TSS ＝ 這一檔的每小時 TSS × 時數": {
+  "「{label}」段用 RPE 填：用你填的分鐘數，負荷 ＝ 這一檔的每小時負荷 × 時數": {
     "draft": true,
     "src": "backend/engine/workout_steps.py:1165"
   },
@@ -1483,7 +1603,7 @@
     "draft": true,
     "src": "backend/engine/workout_steps.py:671"
   },
-  "「{x}」段：這裡填 TSS，推到 COROS 換算成它的 TL（推估，誤差約 ±20 %；每次同步後用你的活動重新校正）": {
+  "「{x}」段：這裡填的是負荷（Load），推到 COROS 換算成它的 TL（推估，誤差約 ±20 %；每次同步後用你的活動重新校正）": {
     "draft": true,
     "src": "backend/engine/workout_steps.py:1536"
   },
@@ -2383,10 +2503,6 @@
     "draft": false,
     "src": "backend/engine/status.py:311"
   },
-  "刺激 TIS": {
-    "draft": false,
-    "src": "backend/engine/workout_review.py:2710"
-  },
   "前 1 天（可分 2 天）每天約 {lo:.0f}–{hi:.0f} g/kg 碳水": {
     "draft": true,
     "src": "backend/engine/overview.py:2437"
@@ -2467,11 +2583,11 @@
     "draft": true,
     "src": "backend/engine/overview.py:1452"
   },
-  "功率 TSS": {
+  "功率負荷（Power load）": {
     "draft": true,
     "src": "backend/engine/coros_tl.py:78"
   },
-  "功率 TSS 用的 FTP（= 當天生效的 CP）；沒有就改用 rTSS／hrTSS": {
+  "功率負荷（Power load）用的 FTP（= 當天生效的 CP）；沒有就改用配速負荷／心率負荷": {
     "draft": false,
     "src": "backend/engine/debug_view.py:286"
   },
@@ -3215,7 +3331,7 @@
     "draft": true,
     "src": "backend/engine/workout_review.py:2644"
   },
-  "平均功率 > 80% CP（z2 上限，Palladino）或 TSS > 計畫 +20%（TrainingPeaks 達成度綠燈帶），任一項；沒有功率時改看平均心率 > LTHR 的 94%（超過 Friel 跑步 Zone 3，推估）；只標示、不動課表屬推估（使用者決定 2026-10-06）": {
+  "平均功率 > 80% CP（z2 上限，Palladino）或負荷（Load）> 計畫 +20%（TrainingPeaks 達成度綠燈帶），任一項；沒有功率時改看平均心率 > LTHR 的 94%（超過 Friel 跑步 Zone 3，推估）；只標示、不動課表屬推估（使用者決定 2026-10-06）": {
     "draft": false,
     "src": "backend/engine/adapt.py"
   },
@@ -3335,7 +3451,7 @@
     "draft": true,
     "src": "backend/engine/aet_test.py:624"
   },
-  "強度：做到這堂課的 {pct}%（≥ 80% 算做到、50–80% 算強度不足、不到 50% 算跑成輕鬆：時間和 TSS 都對算部分，否則算換了課）": {
+  "強度：做到這堂課的 {pct}%（≥ 80% 算做到、50–80% 算強度不足、不到 50% 算跑成輕鬆：時間和負荷都對算部分，否則算換了課）": {
     "draft": false,
     "src": "backend/engine/workout_review.py:3088"
   },
@@ -3551,7 +3667,7 @@
     "draft": true,
     "src": "backend/engine/strength_moves.py:99"
   },
-  "怎麼看：越高 = 這次對那個能量系統的刺激越大；WKO5 沒有官方的分級名稱，只看數字、和自己平常的課比。\n看什麼：長時間、接近門檻的課有氧分數高；無氧分數要功率超過門檻（mFTP 的 85%）才會加，輕鬆跑通常是 1。\n方法：WKO5 的 TIS：以活動當天往前 90 天 PD 模型的 mFTP（有氧）與 FRC（無氧）為基準，把平滑後的功率逐秒加權累加（和「我的訓練」的 TIS 圖同一個數字）。需要功率。": {
+  "怎麼看：越高 = 這次對那個能量系統的刺激越大；WKO5 沒有官方的分級名稱，只看數字、和自己平常的課比。\n看什麼：長時間、接近門檻的課有氧分數高；無氧分數要功率超過門檻（模型閾值功率的 85%）才會加，輕鬆跑通常是 1。\n方法：算法參考 WKO5 的 TIS：以活動當天往前 90 天 PD 模型的模型閾值功率（有氧）與 W′（無氧）為基準，把平滑後的功率逐秒加權累加（和「我的訓練」的有氧／無氧效果圖同一個數字）。1–10，跟手錶的 0–5 不同。需要功率。": {
     "draft": false,
     "src": "backend/engine/workout_review.py:2693"
   },
@@ -3859,7 +3975,7 @@
     "draft": true,
     "src": "backend/engine/racepower/calc.py:396"
   },
-  "推估：近 180 天確實輕鬆的跑步不到 3 筆，用 IF 0.80 換算（輕鬆強度的上緣），每小時 TSS = IF² × 100 ≈ 64（TrainingPeaks TSS 公式）": {
+  "推估：近 180 天確實輕鬆的跑步不到 3 筆，用強度比（Intensity）0.80 換算（輕鬆強度的上緣），每小時負荷 = 強度比² × 100 ≈ 64（Coggan 公開的公式）": {
     "draft": false,
     "src": "backend/engine/overview.py"
   },
@@ -4207,6 +4323,14 @@
     "draft": true,
     "src": "backend/engine/race_feasibility.py:432"
   },
+  "最近一次 CP 測試 {d}：算不出模型閾值功率（Modelled threshold power）": {
+    "draft": false,
+    "src": "backend/engine/status.py:946"
+  },
+  "最近一次 CP 測試 {d}：這次測試後的模型閾值功率（Modelled threshold power）{cp} W（算法參考 WKO5，課表自動採用）": {
+    "draft": false,
+    "src": "backend/engine/status.py:944"
+  },
   "最近一次 {date} 飄移 {d:.0f}%": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:2138"
@@ -4259,7 +4383,7 @@
     "draft": true,
     "src": "backend/engine/workout_review.py:2683"
   },
-  "有功率，但活動前 90 天的功率資料不夠擬合 PD 模型（mFTP、FRC），TIS 算不出。": {
+  "有功率，但活動前 90 天的功率資料不夠擬合 PD 模型，算不出模型閾值功率（Modelled threshold power）和 W′，有氧／無氧效果（Aerobic / Anaerobic effect）也算不出。": {
     "draft": false,
     "src": "backend/engine/workout_review.py:2708"
   },
@@ -4275,7 +4399,7 @@
     "draft": false,
     "src": "backend/engine/panels/pole_compare.py:59"
   },
-  "有氧 TIS {a}、無氧 TIS {an}（WKO5 的 Training Impact Score，1–10）。": {
+  "有氧效果（Aerobic effect）{a}、無氧效果（Anaerobic effect）{an}（算法參考 WKO5 的 TIS，1–10，跟手錶的 0–5 不同）。": {
     "draft": false,
     "src": "backend/engine/workout_review.py:2712"
   },
@@ -4283,7 +4407,7 @@
     "draft": true,
     "src": "backend/engine/hr_profile.py:65"
   },
-  "有氧基礎的飄移檢查判斷「在 AeT 附近」時，上緣是 AeT 加這個數。輕鬆跑偏強不用這個數（看功率和 TSS；沒有功率時看 LTHR 的 94%）。本人值 = 你的 AeT 估得有多不準（多次輕鬆跑心率飄移回歸的標準誤），最少 3；1 筆 = 一次可用的輕鬆跑飄移（半年內）。AeT 估得越準，這個數越接近 3。": {
+  "有氧基礎的飄移檢查判斷「在 AeT 附近」時，上緣是 AeT 加這個數。輕鬆跑偏強不用這個數（看功率和負荷（Load）；沒有功率時看 LTHR 的 94%）。本人值 = 你的 AeT 估得有多不準（多次輕鬆跑心率飄移回歸的標準誤），最少 3；1 筆 = 一次可用的輕鬆跑飄移（半年內）。AeT 估得越準，這個數越接近 3。": {
     "draft": false,
     "src": "backend/engine/threshold_calib.py"
   },
@@ -4295,7 +4419,7 @@
     "draft": true,
     "src": "backend/engine/workout_templates.py:431"
   },
-  "有氧／無氧（1–10）": {
+  "1–10，跟手錶的 0–5 不同": {
     "draft": false,
     "src": "backend/engine/workout_review.py:2711"
   },
@@ -4967,7 +5091,7 @@
     "draft": true,
     "src": "backend/engine/panels/activity_charts.py:65"
   },
-  "為了讓高一檔不會比低一檔少，已和相鄰的檔平均成每小時 {rate} TSS。": {
+  "為了讓高一檔不會比低一檔少，已和相鄰的檔平均成每小時負荷 {rate}。": {
     "draft": true,
     "src": "backend/engine/rpe_load.py:352"
   },
@@ -5094,6 +5218,18 @@
   "版本 {version}・生效日 {effective}・最後更新 {updated}": {
     "draft": false,
     "src": "backend/api/account.py:389"
+  },
+  "狀況（Form）": {
+    "draft": false,
+    "src": "backend/engine/status.py:408"
+  },
+  "狀況（Form） {tsb:+.0f}": {
+    "draft": false,
+    "src": "backend/engine/status.py:382"
+  },
+  "狀況（Form） {tsb:+.0f}（疲勞 {atl:.0f}）": {
+    "draft": false,
+    "src": "backend/engine/status.py:381"
   },
   "玉山國家公園管理處〈高山生理、高山症預防及處理〉": {
     "draft": true,
@@ -5363,7 +5499,7 @@
     "draft": true,
     "src": "backend/engine/workout_review.py:530"
   },
-  "穩定段的 VI（NP ÷ 平均功率）超過這個值就不算穩定跑，不判讀飄移。": {
+  "穩定段的 VI（加權功率 ÷ 平均功率）超過這個值就不算穩定跑，不判讀飄移。": {
     "draft": true,
     "src": "backend/engine/drift_calib.py:128"
   },
@@ -5983,7 +6119,7 @@
     "draft": true,
     "src": "backend/engine/quality_gate.py:2607"
   },
-  "護欄（CTL 增幅到注意線）這週只排閾值": {
+  "護欄（體能週增量到注意線）這週只排閾值": {
     "draft": true,
     "src": "backend/engine/quality_gate.py:2614"
   },
@@ -5999,7 +6135,7 @@
     "draft": true,
     "src": "backend/engine/workout_steps.py:69"
   },
-  "負荷（RPE）換算超過 {max} TSS：分鐘數太多": {
+  "負荷（RPE）換算超過 {max}：分鐘數太多": {
     "draft": true,
     "src": "backend/engine/workout_steps.py:737"
   },
@@ -6007,11 +6143,11 @@
     "draft": true,
     "src": "backend/engine/workout_steps.py:732"
   },
-  "負荷（TSS）": {
+  "負荷（Load）": {
     "draft": true,
     "src": "backend/engine/workout_steps.py:672"
   },
-  "負荷：app 填 TSS，送 COROS 的 TL（推估換算）": {
+  "負荷（Load）：app 填負荷，送 COROS 的 TL（推估換算）": {
     "draft": true,
     "src": "backend/sync/workout_targets/coros.py:24"
   },
@@ -6215,11 +6351,11 @@
     "draft": true,
     "src": "backend/engine/racepower/planner.py:682"
   },
-  "起始 CTL 從 {date} 起算（手動設定）：前 {days} 天不看 ramp": {
+  "起始體能（Fitness）從 {date} 起算（手動設定）：前 {days} 天不看體能週增量": {
     "draft": true,
     "src": "backend/engine/status.py:316"
   },
-  "起算期（有 TSS 的第 {n} 天）：前 {days} 天 CTL 還在建立，不看 ramp": {
+  "起算期（有負荷資料的第 {n} 天）：前 {days} 天體能（Fitness）還在建立，不看體能週增量": {
     "draft": true,
     "src": "backend/engine/status.py:319"
   },
@@ -6495,11 +6631,11 @@
     "draft": true,
     "src": "backend/engine/threshold_calib.py:131"
   },
-  "輕鬆跑的計畫 TSS 每小時 {rate:.0f}（{src}）": {
+  "輕鬆跑的計畫負荷（Load）每小時 {rate:.0f}（{src}）": {
     "draft": false,
     "src": "backend/engine/overview.py"
   },
-  "輕鬆跑的計畫 TSS：近 180 天確實輕鬆的跑步（課別分類為輕鬆跑、或平均心率在輕鬆跑上限內；強度課、中強度跑不算）每小時 TSS 的中位數": {
+  "輕鬆跑的計畫負荷（Load）：近 180 天確實輕鬆的跑步（課別分類為輕鬆跑、或平均心率在輕鬆跑上限內；強度課、中強度跑不算）每小時負荷的中位數": {
     "draft": false,
     "src": "backend/engine/overview.py"
   },
@@ -6759,7 +6895,7 @@
     "draft": false,
     "src": "backend/engine/workout_review.py:3030"
   },
-  "門檻 {w} W（mFTP 的 85%）": {
+  "門檻 {w} W（模型閾值功率的 85%）": {
     "draft": false,
     "src": "backend/engine/workout_review.py:3032"
   },
@@ -6975,7 +7111,7 @@
     "draft": false,
     "src": "backend/engine/racepower/race_estimate.py:37"
   },
-  "還沒有 TSS：不看 ramp": {
+  "還沒有負荷（Load）資料：不看體能週增量": {
     "draft": true,
     "src": "backend/engine/status.py:315"
   },
@@ -7178,6 +7314,18 @@
   "長爬坡有氧 {m}′（跑下山 {d}′）": {
     "draft": true,
     "src": "backend/engine/base_climb.py:233"
+  },
+  "體能（Fitness）": {
+    "draft": false,
+    "src": "backend/engine/panels/plan_projection.py:171"
+  },
+  "體能（Fitness） {now:.0f}": {
+    "draft": false,
+    "src": "backend/engine/status.py:331"
+  },
+  "體能（Fitness） {now:.0f}，本週 {ramp:+.1f}/週，4 週 {d:+.0f}": {
+    "draft": false,
+    "src": "backend/engine/status.py:330"
   },
   "；下坡用走的（{why}）": {
     "draft": true,
@@ -7391,7 +7539,7 @@
     "draft": true,
     "src": "backend/engine/quality_gate.py:1619"
   },
-  "預估 TSS": {
+  "預估負荷（Load）": {
     "draft": true,
     "src": "backend/engine/panels/plan_projection.py:184"
   },
@@ -7467,7 +7615,7 @@
     "draft": true,
     "src": "backend/engine/racepower/cold.py:338"
   },
-  "顏色：時間和 TSS 偏離計畫較多的那個（±20% 內算符合，TrainingPeaks 的做法）": {
+  "顏色：時間和負荷偏離計畫較多的那個（±20% 內算符合，TrainingPeaks 的做法）": {
     "draft": true,
     "src": "backend/engine/workout_review.py:2732"
   },
@@ -7903,7 +8051,7 @@
     "draft": true,
     "src": "backend/engine/race_feasibility.py:399"
   },
-  "；注意線 +{watch:.1f}、擋線 +{block:.1f}（7 天前 CTL {base:.0f}）": {
+  "；注意線 +{watch:.1f}、擋線 +{block:.1f}（7 天前體能 {base:.0f}）": {
     "draft": true,
     "src": "backend/engine/status.py:308"
   },
@@ -8187,7 +8335,7 @@
     "draft": true,
     "src": "backend/engine/workout_review.py:4196"
   },
-  "；dFRC = WKO5 的 dfrc 模型，跑步沒驗證（推估）": {
+  "；W′ 電池（W′ balance）算法參考 WKO5，跑步沒驗證（推估）": {
     "draft": true,
     "src": "backend/engine/workout_review.py:4224"
   },
@@ -8423,7 +8571,7 @@
     "draft": true,
     "src": "backend/engine/workout_review.py:4225"
   },
-  "dFRC 最低 {pct:.0f}%": {
+  "W′ 電池最低 {pct:.0f}%": {
     "draft": true,
     "src": "backend/engine/workout_review.py:4226"
   },
@@ -8547,7 +8695,7 @@
     "draft": true,
     "src": "backend/engine/workout_review.py:4216"
   },
-  "整趟高於 CP 的功（含回充後再用）÷ W′ {kj:.1f} kJ；dFRC 最低 = 電池最低剩多少。": {
+  "整趟高於 CP 的功（含回充後再用）÷ W′ {kj:.1f} kJ；電池最低 = W′ 最低剩多少。": {
     "draft": true,
     "src": "backend/engine/workout_review.py:4227"
   },
@@ -8774,10 +8922,6 @@
   "（沒有心率，無法比較爬坡經濟性）": {
     "draft": true,
     "src": "backend/engine/workout_review.py:3723"
-  },
-  "dFRC（WKO5）": {
-    "draft": true,
-    "src": "backend/engine/workout_review.py:4447"
   },
   "已收到 {n} 筆體重（最新 {kg:.1f} kg），{at} 才會套用": {
     "draft": true,

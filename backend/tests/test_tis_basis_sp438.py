@@ -87,11 +87,11 @@ def test_tip_names_this_activitys_mftp_frc_and_threshold():
         tip = _tis_card(ds, i)["tip"]
         line = tip.split("\n")[1]
         assert line.startswith("這次用的：")
-        assert f"mFTP {b['mftp']:.0f} W" in line and f"FRC {b['frc']:.1f} kJ" in line
-        assert f"門檻 {b['threshold']:.0f} W（mFTP 的 85%）" in line
+        assert f"模型閾值功率（Modelled threshold power）{b['mftp']:.0f} W" in line and f"W′ {b['frc']:.1f} kJ" in line
+        assert f"門檻 {b['threshold']:.0f} W（模型閾值功率的 85%）" in line
         assert "不是設定裡的 CP" in line and "90 天" in line
         # the old explanation is still there after it
-        assert "怎麼看：" in tip and "方法：" in tip and tip.startswith("有氧 TIS ")
+        assert "怎麼看：" in tip and "方法：" in tip and tip.startswith("有氧效果（Aerobic effect）")
 
 
 def test_tip_english():
@@ -102,7 +102,8 @@ def test_tip_english():
     line = tip.split("\n")[1]
     assert line.startswith("Used this time:")
     # the fit gives 250.00000000000003 W → threshold 212.50000000000003 W, shown as 213
-    assert "mFTP 250 W" in line and "FRC 15.0 kJ" in line and "threshold 213 W (85% of mFTP)" in line
+    assert ("modelled threshold power 250 W" in line and "W′ 15.0 kJ" in line
+            and "threshold 213 W (85% of modelled threshold power)" in line)
     assert "not the CP in Settings" in line
     assert not any("一" <= ch <= "鿿" for ch in tip)
 
@@ -114,7 +115,7 @@ def test_tip_english_when_the_pd_model_gives_na(monkeypatch):
                         {"mftp": None, "frc": 15.0, "threshold": None})
     with use_locale("en"):
         line = _tis_card(ds, 0)["tip"].split("\n")[1]
-    assert line.startswith("Used this time: mFTP can't be computed, FRC 15.0 kJ, threshold can't be computed")
+    assert line.startswith("Used this time: modelled threshold power can't be computed, W′ 15.0 kJ, threshold can't be computed")
     assert not any("一" <= ch <= "鿿" for ch in line)
 
 
@@ -122,7 +123,7 @@ def test_tip_says_when_frc_cannot_be_fitted(monkeypatch):
     ds = _ds()
     monkeypatch.setattr(R, "tis_basis", lambda ds, w: {"mftp": 250.0, "frc": None, "threshold": 212.5})
     line = _tis_card(ds, 0)["tip"].split("\n")[1]
-    assert "mFTP 250 W" in line and "門檻 212 W" in line and "FRC 算不出" in line
+    assert "模型閾值功率（Modelled threshold power）250 W" in line and "門檻 212 W" in line and "W′ 算不出" in line
 
 
 def test_no_basis_line_when_the_basis_cannot_be_read(monkeypatch):
@@ -130,7 +131,7 @@ def test_no_basis_line_when_the_basis_cannot_be_read(monkeypatch):
     before = _tis_card(ds, 0)["tip"]
     monkeypatch.setattr(R, "tis_basis", lambda ds, w: None)
     tip = _tis_card(_ds(), 0)["tip"]
-    assert "這次用的" not in tip and tip.startswith("有氧 TIS 3、無氧 TIS 1")
+    assert "這次用的" not in tip and tip.startswith("有氧效果（Aerobic effect）3、無氧效果（Anaerobic effect）1")
     assert tip.split("\n", 1)[1] == before.split("\n", 2)[2]          # the rest as before
 
 

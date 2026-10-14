@@ -103,7 +103,7 @@ def test_hints():
     assert not any("長距離" in n["text"] for n in PR.b_hints([a, b2], date(2026, 10, 26)))   # short: fine
     # the CTL down > 10 % over the weeks holding a B race
     ctl = [(MON - dt.timedelta(days=i), 50.0 if i > 20 else 43.0) for i in range(56, -1, -1)]
-    assert any("CTL 從近 8 週的高點 50 掉到 43" in n["text"] for n in PR.b_hints([ev("x", "2026-09-26", **SHORT)], MON, ctl))
+    assert any("體能（Fitness）從近 8 週的高點 50 掉到 43" in n["text"] for n in PR.b_hints([ev("x", "2026-09-26", **SHORT)], MON, ctl))
     assert not PR.b_hints([ev("x", "2026-09-26", **SHORT)], MON, [(MON, 50.0), (MON, 48.0)])
 
 

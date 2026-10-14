@@ -51,7 +51,7 @@ def test_power_overhard_only_labels():
 def test_tss_overhard_only_labels_and_trims_nothing():
     out, adj, notes = A.adapt(wk(), [], c(reviews={7: {"tss": 60}}))
     assert out == wk() and changes(adj) == []
-    assert notes[7].startswith("輕鬆跑偏強（TSS 60 > 計畫 36")
+    assert notes[7].startswith("輕鬆跑偏強（負荷 60 > 計畫 36")
 
 
 def test_high_hr_with_normal_power_and_tss_is_not_flagged():
@@ -65,7 +65,7 @@ def test_without_power_hr_over_94_percent_lthr_is_the_fallback():
     assert A.overhard(36, {"avg_hr": 159, "lthr": 170, "aet": 150, "tss": 30}) is None     # 93.5 %
     why = A.overhard(36, {"avg_hr": 161, "lthr": 170, "aet": 150, "tss": 30})
     assert why == "平均心率 161 > LTHR 的 94%（160 bpm；沒有功率才看心率）"
-    assert A.overhard(36, {"avg_hr": 170, "aet": 150, "tss": 44}).startswith("TSS 44")        # no LTHR: TSS still
+    assert A.overhard(36, {"avg_hr": 170, "aet": 150, "tss": 44}).startswith("負荷 44")        # no LTHR: TSS still
     # power in the row: HR is not read at all, however high
     assert A.overhard(36, {"avg_hr": 175, "lthr": 170, "avg_power": 220, "cp": 300, "tss": 30}) is None
     # a power value without CP is no power: the HR fallback applies

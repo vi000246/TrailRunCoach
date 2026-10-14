@@ -80,7 +80,7 @@ def test_stryd_run_without_a_cp_test_uses_the_pd_mftp(tmp_path, env):
     w = _by_day(ds)[dt.date(2026, 9, 10)]
     m = w.metrics
     assert m["tss_source"] == "power"
-    assert m["ftp_used"] == MFTP and m["ftp_source"].startswith("推估：Stryd PD 模型 mFTP")
+    assert m["ftp_used"] == MFTP and m["ftp_source"].startswith("推估：Stryd PD 模型的模型閾值功率")
     assert m["tss"] == pytest.approx(_power_tss(w, MFTP))
     assert m["tss"] == pytest.approx((200 / MFTP) ** 2 * 50, rel=0.03)       # 30 min at 200 W
     assert ds.cp(w) == m["ftp_used"]                                          # TSS FTP == the charts' CP

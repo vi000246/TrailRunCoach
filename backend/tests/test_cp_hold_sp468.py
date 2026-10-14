@@ -284,8 +284,8 @@ def test_review_card_shows_the_mftp_and_offers_no_apply(monkeypatch):
     card = R.review(ds, w, "cp_test")
     assert card["empty"] is None and "action" not in card
     text = " ".join(s["data"]["value"] for s in card["series"] if s["data"]["kind"] == "value")
-    assert "mFTP 196 W" in text and "比照 WKO5" in text and "套用" not in text
-    assert "W′" not in text.split("mFTP")[0]                           # no two-point W′
+    assert "模型閾值功率（Modelled threshold power）196 W" in text and "算法參考 WKO5" in text and "套用" not in text
+    assert "W′" not in text.split("算法參考 WKO5")[0]                           # no two-point W′
     ev = R.cp_eval(ds, w, R.measure(ds, w), R.classify(ds, w))
     assert ev["cp"] == approx(195.5) and "apply" not in ev and "ref" not in ev
 
@@ -333,7 +333,7 @@ def test_testing_indicator_counts_the_test_and_offers_no_apply():
         WR.latest_cp_test = orig
     assert "CP 沒測過" not in ind.why and "CP 13 天前" in ind.why
     assert ind.text != "要更新" and "套用" not in (ind.action or "") and "apply" not in ind.extra["cp_test"]
-    assert "mFTP 196 W" in ind.why
+    assert "模型閾值功率（Modelled threshold power）196 W" in ind.why
 
 
 def test_cp_tested_counts_a_cp_test_in_the_fit_window():
