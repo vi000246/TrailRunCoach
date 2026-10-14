@@ -77,6 +77,14 @@ HARD_LONG = ("long", "quality", "test")
 RPE_RULE = "rpe_hard"       # engine/adapt.py: the self-rating trigger of rule D (SP-231)
 OVERHARD_RULE = "overhard"  # engine/adapt.py rule D: only its 太強 tier changes sessions (SP-301)
 CMP = ("day", "kind", "title", "minutes", "target", "detail", "tss", "terrain", "protocol")
+# SP-437 (課表結構是唯一來源): the first run on the new rule rewrites the unedited auto sessions' minutes /
+# TSS / target to their structure's (engine/session_structure.py) — a one-time relabel, not a re-plan: those
+# items carry rule STRUCTURE_RULE and don't count for 「> 3 sessions changed」; state["structure_v"] marks
+# the plan as converted (an older state = not yet)
+STRUCTURE_V = 1
+STRUCTURE_RULE = "structure"
+STRUCTURE_KEYS = frozenset(("minutes", "tss", "target"))
+STRUCTURE_REASON = N_("課表改用推到手錶的結構：時間、負荷（Load）、目標文字照結構寫（一次性）")
 NOTICE_KIND = "notice"
 REJECTED_KEEP = 20
 
@@ -234,10 +242,23 @@ def classify(stored: list[dict], new: list[dict], items: list[dict], today: str,
     # a week generated for the first time (nothing stored yet) is not a change
     known = {s.get("week_start") for s in stored if s["kind"] != NOTICE_KIND}
     win = [i for i in fw if (i.get("day") or "9999") <= window_end
-           and not (i["action"] == "added" and monday_of(i["day"]) not in known)]
+           and not (i["action"] == "added" and monday_of(i["day"]) not in known)
+           and i.get("rule") != STRUCTURE_RULE]           # SP-437's one-time relabel (mark_structure)
     if len(win) > MAX_CHANGED and not all(is_reduction(i) for i in win):
         out.append({"rule": "many", "text": f"未來 {len(win)} 堂課改變（> {MAX_CHANGED}），不全是減量"})
     return out
+
+
+def mark_structure(items: list[dict]) -> int:
+    """SP-437: the items of the first run on the structure rule that only rewrote minutes / TSS / target
+    (no adapt rule): rule STRUCTURE_RULE + its reason. The number marked."""
+    n = 0
+    for i in items:
+        b = i.get("before") or {}
+        if i["action"] == "changed" and b and set(b) <= STRUCTURE_KEYS and not i.get("rule"):
+            i["rule"], i["reason"] = STRUCTURE_RULE, i.get("reason") or _(STRUCTURE_REASON)
+            n += 1
+    return n
 
 
 def fingerprint(items: list[dict]) -> str:
@@ -847,6 +868,8 @@ async def _run(db, trigger: str, force: bool, approve_id: Optional[int], inp: di
     adj: list = []
     new, changes = PS.reconcile_with_adapt(stored, inp, adjustments=adj)
     items = diff(stored, new, changes, adj)
+    if state.get("structure_v") != STRUCTURE_V:
+        mark_structure(items)               # SP-437: the first run on the structure rule
     days = int(cfg["push_days"] or 7)
     wend = (dt.date.fromisoformat(today) + dt.timedelta(days=days - 1)).isoformat()
     phase = (inp.get("phase") or {}).get("kind")
@@ -909,6 +932,7 @@ async def _run(db, trigger: str, force: bool, approve_id: Optional[int], inp: di
         # the phase baseline moves only once a plan is applied: a held phase
         # change must stay held on the next sync
         state["phase"] = phase
+        state["structure_v"] = STRUCTURE_V          # SP-437: converted (mark_structure)
     # the watch removals of this run and any an interrupted push left (review M2): kept in the
     # state until done, so a cancel / crash before the push phase never loses them
     job["remote"] = _pending_remote(state, remote)

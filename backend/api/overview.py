@@ -392,8 +392,11 @@ def weekplan():
     from backend.engine import plan_prefs as PP
     # same 課表偏好, 不排課日期 and accepted B2B weekends as the 課表 page
     from backend.engine.panels.race_refs import calculator_hours
-    return history_load(O.week_plan(ds, _status(ds, today), today, prefs=PP.load(), blackouts=BL.load(),
-                                    b2b_accepted=B2B.load_accepted(), race_predict=calculator_hours), ds)
+    w = history_load(O.week_plan(ds, _status(ds, today), today, prefs=PP.load(), blackouts=BL.load(),
+                                 b2b_accepted=B2B.load_accepted(), race_predict=calculator_hours), ds)
+    # SP-482: each week note with its hint fields (engine/hints.py: id, cls, prio, …; static/hints.js)
+    from backend.engine import hints as H
+    return {**w, "notes": H.notes(w.get("notes"))}
 
 
 @router.get("/z5")

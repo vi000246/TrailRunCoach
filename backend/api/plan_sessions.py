@@ -226,7 +226,8 @@ def _build_inputs(key: tuple, ds, today: dt.date, prefs, bos, acc, auto_on: bool
         return hit
     st = _status(ds, today)
     from backend.engine.panels.race_refs import calculator_hours
-    cur = O.week_plan(ds, st, today, prefs=prefs, blackouts=bos, b2b_accepted=acc, race_predict=calculator_hours)
+    cur = O.week_plan(ds, st, today, prefs=prefs, blackouts=bos, b2b_accepted=acc, race_predict=calculator_hours,
+                      tpace=_tpace())
     monday = dt.date.fromisoformat(cur["week"]["start"])
     ph = st.phase
     phase_end = dt.date.fromisoformat(ph.end) if ph else None
@@ -1692,7 +1693,9 @@ def _session_of(body: dict, stored: Optional[dict]) -> dict:
     return s
 
 
-async def _steps_env(s: dict, inp: dict) -> dict:
+async def _steps_env(s: dict, inp: dict, stored: Optional[dict] = None) -> dict:
+    """The editor's / push preview's context of session `s`. `stored`: the session as stored (the TSS per
+    hour its easy steps count at, SP-437: engine/session_structure.edit_rate; None = `s` itself)."""
     from backend.engine import interval_library as IL
     from backend.engine import plan_prefs as PP
     from backend.engine import target_policy as TP
@@ -1709,6 +1712,10 @@ async def _steps_env(s: dict, inp: dict) -> dict:
     # the push target's end conditions (sync/workout_targets; 「負荷」 only where it has one)
     prov = _provider()
     c.end_conditions, c.provider_label = tuple(prov.capabilities.end_conditions), prov.label
+    # SP-437 (Q1 A): warm-up / cool-down / rests / easy steps at this runner's own TSS per hour
+    from backend.engine import session_structure as SST
+    c.easy_tph = SST.edit_rate(s, stored if stored is not None else s, th,
+                               (inp.get("cur") or {}).get("tss_per_category"), prefs)
     rung = None
     if s.get("kind") == "quality":
         rung = s.get("rung_key") or getattr(IL.get(s.get("variant_key")), "rung", None)
@@ -1755,7 +1762,7 @@ async def steps_derive(body: dict = Body(...), db: AsyncSession = Depends(get_db
     inp = await _inputs()
     stored = next((x for x in await PS.load(db) if x["uid"] == body.get("uid")), None) if body.get("uid") else None
     s = _session_of(body, stored)
-    env = await _steps_env(s, inp)
+    env = await _steps_env(s, inp, stored)
     if stored and stored.get("steps") and not body.get("rederive"):
         return {"steps": stored["steps"], "derived": False, "context": _context(env)}
     d = WS.derive(s, env["th"])
@@ -1778,7 +1785,7 @@ async def steps_check(body: dict = Body(...), db: AsyncSession = Depends(get_db)
     stored = next((x for x in await PS.load(db) if x["uid"] == body.get("uid")), None) if body.get("uid") else None
     s = _session_of(body, stored)
     st = _norm_or_400(body.get("steps"))
-    env = await _steps_env(s, inp)
+    env = await _steps_env(s, inp, stored)
     out = {**WS.view(st, env["ctx"], env["cap"], env["cap_mode"], env["rung"]),
            "basis_label": _context(env)["basis_label"], "policy": env["policy"]}
     # SP-274 / SP-277: the LTHR / HRmax badge for this session (never on a test session)
@@ -2053,7 +2060,7 @@ async def _with_steps(patch: dict, inp: dict, cur: dict) -> dict:
     from backend.engine import workout_steps as WS
     st = _norm_or_400(patch["steps"])
     s = _session_of(patch, cur)
-    env = await _steps_env(s, inp)
+    env = await _steps_env(s, inp, cur or None)
     v = WS.view(st, env["ctx"], env["cap"], env["cap_mode"], env["rung"])
     errs = [i["text"] for i in v["issues"] if i["level"] == "err"]
     if errs and not patch.get("steps_force"):
@@ -2063,10 +2070,29 @@ async def _with_steps(patch: dict, inp: dict, cur: dict) -> dict:
     st["origin"] = f"template:{var.key}" if tpl and _same_shape(st, tpl) else "user"
     out = {k: v_ for k, v_ in patch.items() if k != "steps_force"}
     out["steps"] = st
-    out.setdefault("minutes", max(1, round(v["totals"]["sec"] / 60.0)))
+    tot = v["totals"]
+    # SP-437: the structure is the session — its time (when every step is timed: a lap-button / distance
+    # step leaves the body's) and its TSS (the easy steps at this runner's own rate, _steps_env), not the
+    # dialog's old-rate estimate; the title's 「N×M」 follows it unless the user typed a title of their own
+    if tot["open"] or tot["est"]:
+        out.setdefault("minutes", max(1, round(tot["sec"] / 60.0)))
+    else:
+        out["minutes"] = max(1, round(tot["sec"] / 60.0))
     if "target" not in patch and v["summary"]:
         out["target"] = v["summary"]
-    out.setdefault("tss", v["totals"]["tss"])
+    if tot["open"]:
+        out.setdefault("tss", tot["tss"])
+    else:
+        out["tss"] = tot["tss"]
+    from backend.engine import session_structure as SST
+    was = cur.get("title") or "" if cur else ""
+    title = patch.get("title")
+    shown = PS.display_title(was, cur.get("kind")) if cur else ""
+    if cur and (title is None or title in (was, shown)) and s.get("kind") in SST.RUN_KINDS:
+        base = title if title is not None else was
+        new_t = SST.retitle(base, st)
+        if new_t != base:
+            out["title"] = new_t
     return out
 
 
@@ -3053,7 +3079,8 @@ def _plan_notes(inp: dict, start: str, end: str) -> list[dict]:
         if ep and not easy_power:
             out.append({"week_start": ws, **ep})
             easy_power = True
-    return out
+    from backend.engine import hints as H
+    return H.notes(out)            # SP-482: with the hint fields (engine/hints.py)
 
 
 def _fresh_done_by(s: dict, acts_by: dict) -> dict:

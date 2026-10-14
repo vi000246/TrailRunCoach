@@ -687,6 +687,12 @@ def threshold_row(plan: "Plan", name: str, day: dt.date) -> Optional[dict]:
 class Weight:
     date: str
     kg: float
+    # who wrote it (SP-472): None = typed on the 設定頁 (every entry before SP-472), "coros" = the
+    # COROS account's weight the user accepted (also the user's own choice), "apple_health" = the
+    # nightly apply of the weight API's measurements (api/weight.py). Not part of repr / ==: the
+    # estimate cache keys on repr(plan) (fitdataset._est_inputs), and who wrote a weight changes no
+    # number. Saved only when set, so a plan.json without it reads and writes back the same.
+    source: Optional[str] = field(default=None, repr=False, compare=False)
 
 
 PROFILE_FIELDS = {
@@ -725,7 +731,8 @@ class Plan:
             phases=[Phase(**{**p, "auto": False}) for p in raw.get("phases", [])],
             thresholds=[Threshold(**{k: v for k, v in t.items() if k in _THRESHOLD_KEYS})
                         for t in raw.get("thresholds", [])],
-            weights=[Weight(**w) for w in raw.get("weights", [])],
+            weights=[Weight(**{k: v for k, v in w.items() if k in Weight.__dataclass_fields__})
+                     for w in raw.get("weights", [])],
             profile=dict(raw.get("profile", {})),
         )
 
@@ -736,7 +743,8 @@ class Plan:
             "events": [asdict(e) for e in sorted(self.events, key=lambda e: e.date)],
             "phases": [{k: v for k, v in asdict(p).items() if k != "auto"} for p in self.phases],
             "thresholds": [asdict(t) for t in sorted(self.thresholds, key=lambda t: t.date)],
-            "weights": [asdict(w) for w in sorted(self.weights, key=lambda w: w.date)],
+            "weights": [{k: v for k, v in asdict(w).items() if k != "source" or v}
+                        for w in sorted(self.weights, key=lambda w: w.date)],
             "profile": self.profile,
         }
         tmp = path.with_suffix(".tmp")

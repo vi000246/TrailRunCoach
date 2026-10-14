@@ -275,6 +275,12 @@ def reconcile_with_adapt(stored: list[dict], inputs: dict, decisions: Optional[d
             "hard_days": ctx.get("hard_days") or [],      # done hard days, planned or not (48 h)
             # the runs' post-run self-rating and its rule's switch (SP-231)
             "rpe": ctx.get("rpe") or {}, "rpe_rule": ctx.get("rpe_rule", True)})
+        # SP-437: a session an adapt rule rewrote (shortened, a step down the ladder) takes its structure's
+        # minutes / TSS like the generator's own (engine/session_structure.py; the others are unchanged)
+        from backend.engine import session_structure as SST
+        rates = (inputs.get("cur") or {}).get("tss_per_category")
+        for w in gw:
+            SST.apply(w.get("sessions") or [], inputs.get("thresholds") or {}, rates, inputs.get("prefs"))
     new, changes = R.reconcile(stored, gw, inputs.get("activities") or [],
                                inputs["today"], inputs.get("horizon_end"), covered=inputs.get("covered"),
                                blocked=blocked, allowed_days=days, decisions=decisions,

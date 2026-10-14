@@ -405,3 +405,76 @@ def test_taper_card_tss_rates_trail_57_road_and_short_unchanged():
                          ("2026-10-06", True, O.TAPER_FULL["road"]), ("2026-10-09", True, O.TAPER_CUT["road"])):
         assert _taper_q(day, date(2026, 10, 5), road)["tss"] == pytest.approx(t["tss"])
     assert _taper_q("2026-10-13", date(2026, 10, 12))["tss"] == pytest.approx(O.TAPER_SHORT["tss"])
+
+
+# ---- SP-478: the 減量期 Zone 3 track pick 「有氧間歇（巡航）2×8 分」 (TAPER_Z3, 88–95 % CP) is Zone 3 too ---
+
+TH_Z3 = {"cp": 260.0, "lthr": 170.0, "aet": 140.0, "hr_model": HRZ}
+
+
+def _taper_pick(track, th=TH_Z3, **kw):
+    """quality_sessions' 減量期 pick (week_plan / the projection call it with the week's thresholds)."""
+    out = O.quality_sessions({}, {"items": [{"track": track}]}, "taper", th, {"threshold": TH_TARGET}, 5.0, **kw)
+    assert len(out) == 1
+    return {**out[0], "day": "2026-10-06"}
+
+
+@pytest.mark.parametrize("basis", ["auto", "hr"])
+def test_taper_z3_pick_card_structure_and_push_use_zone_3(basis):
+    """The bug (SP-478): TAPER_Z3 took the week's threshold row (Zone 4: 心率 160–168) like the 4×3′ one. Now,
+    as SP-408's 越野 上坡節奏跑, the Zone 3 row (z3_hr_text) — the card, the structure and the watch alike;
+    its power is the template's 88–95 % CP (the structure already read it from the detail)."""
+    from backend.engine import workout_steps as WS
+    from backend.sync import coros_workouts as CW
+    x = _taper_pick("z3", prefs=PP.Prefs(target_basis=basis))
+    assert x["title"] == O.TAPER_Z3["title"]
+    assert x["target"] == {"auto": "功率 229–247 W（88–95% CP） · 心率 150–159 bpm", "hr": "心率 150–159 bpm"}[basis]
+    assert "power_pct" not in x and "hr_cls" not in x                       # template-only keys
+    work = WS.derive(x, TH_Z3)["items"][1]["items"][0]["target"]
+    hr = (work["lo"], work["hi"]) if work["type"] == "hr" else tuple(work["hr"])
+    assert hr == (150, 159)                                                 # the structure = the card
+    if work["type"] != "hr":
+        assert (work["lo"], work["hi"]) == (0.88, 0.95)
+    rep = CW.session_steps({**x, "basis": "hr"}, CW.Thresholds.of(TH_Z3))[1]
+    assert rep.steps[0].intensity == ("hr", 150, 159)                       # the watch = the card
+
+
+def test_taper_z3_pick_power_basis_is_the_templates_power():
+    """目標依據 功率: only the template's 88–95 % CP in watts (taper_q_target, as plan_prefs.shape keeps it)
+    — the % the structure reads — not the threshold row's watts."""
+    x = _taper_pick("z3", prefs=PP.Prefs(target_basis="power"))
+    assert x["target"] == "功率 229–247 W（88–95% CP）"
+
+
+def test_taper_z3_pick_without_hr_model_takes_aet_to_lthr():
+    """No 課表心率區間: the Zone 3 row is AeT (the easy-run cap) – LTHR, as z3_hr_text; nothing → no HR."""
+    x = _taper_pick("z3", th={"cp": 260.0, "lthr": 170.0, "aet": 148.0})
+    assert x["target"] == "功率 229–247 W（88–95% CP） · 心率 148–170 bpm"
+    x = _taper_pick("z3", th={"cp": 260.0, "lthr": 170.0, "aet": 140.0,
+                              "easy_cap": {"value": 150.0}})                # week_plan's tt: the easy cap first
+    assert x["target"].endswith("心率 150–170 bpm")
+
+
+@pytest.mark.parametrize("track", ["z5", None])
+def test_taper_4x3_pick_keeps_the_threshold_row(track):
+    """Only the Zone 3 pick: the 4×3′ (98–102 % CP; Zone 5 or no track open) keeps the threshold row."""
+    x = _taper_pick(track)
+    assert x["title"] == O.TAPER_Q["title"] and x["target"] == TH_TARGET
+
+
+def test_week_plan_and_projection_taper_z3_pick_takes_zone_3(monkeypatch):
+    """week_plan and the projection hand quality_sessions the week's thresholds: the 2×8′ pick says the
+    Zone 3 row (z3_hr_text of the same thresholds), not the threshold row. The taper day rules are switched
+    off here so the pick itself is seen (they rewrite it on the taper's days; a pick before the taper start
+    or on a day they leave keeps it)."""
+    monkeypatch.setattr(O, "taper_rules", lambda ss, *a, **k: ss)
+    ds, plan, wp = _week("2026-10-10")          # this week (9/28–) and the next are 減量期 weeks
+    th = wp["thresholds"]
+    z3 = O.z3_hr_text(th.get("hr_model"), th.get("aet"), th.get("lthr"))
+    assert z3
+    weeks = PJ.project_weeks(wp, _phases(plan, TODAY), date(2026, 10, 11), events=plan.events)
+    cur = [x for x in wp["sessions"] if x["title"] == O.TAPER_Z3["title"]]
+    proj = [x for w in weeks for x in w["sessions"] if x["title"] == O.TAPER_Z3["title"]]
+    assert cur and proj
+    for x in cur + proj:
+        assert x["target"].endswith(z3) and "88–95% CP" in x["target"]

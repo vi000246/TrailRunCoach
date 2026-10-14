@@ -25,6 +25,7 @@ import numpy as np
 
 from backend.engine import cold_start as CS
 from backend.engine import load_guard as LG
+from backend.engine import session_structure as SST
 from backend.engine import warmup as WU
 from backend.engine.hr_profile import EASY_CAP_TIP, below, easy_cap_label
 from backend.engine.wko5expr.dataset import Dataset, Workout, date_to_day, day_to_date
@@ -1012,8 +1013,15 @@ def quality_sessions(gate: dict, dec: dict, kind: str, th: dict, tgt: dict, hour
         elif kind == "specific" and it.get("spec") is QG.SUB:
             # 專項期 under a CTL ramp at the watch line (week_decision): the threshold-only session, as in the base phase
             s = _gate_session(gate, it, th, hours, prefs, history, mountain, cap, alt_caps, notes)
+        elif kind == "taper" and t == "z3":
+            # SP-478: the Zone 3 row's HR and the template's % CP (TAPER_Z3_TARGET), as taper_rules' 越野 ones;
+            # `th` = the week's thresholds (week_plan's tt / the projection's): its easy-run cap first
+            z3 = z3_hr_text(th.get("hr_model"), (th.get("easy_cap") or {}).get("value") or th.get("aet"),
+                            th.get("lthr"))
+            s = dict(TAPER_Z3, target=taper_q_target({**TAPER_Z3, **TAPER_Z3_TARGET}, th.get("cp"),
+                                                     tgt.get("threshold", ""), prefs, z3))
         elif kind == "taper":
-            s = dict(TAPER_Z3 if t == "z3" else TAPER_Q, target=tgt.get("threshold", ""))
+            s = dict(TAPER_Q, target=tgt.get("threshold", ""))
         else:
             it = {**it, "hill": kind == "specific" and not road}        # SP-75: 越野 專項期 = the uphill version
             s = _gate_session(gate, {**it, "budget": left} if t == "z3" else it, th, hours, prefs, history, mountain,
@@ -1285,6 +1293,10 @@ TAPER_Q = dict(id="quality", kind="quality", title="有氧間歇（巡航）4×3
 TAPER_Z3 = dict(id="quality", kind="quality", title="有氧間歇（巡航）2×8 分", minutes=45,
                 detail="保留強度、量減半（88–95% CP）；休 2 分慢跑；暖身 15 分、緩和 10 分",
                 source=f"{SRC_BOSQUET}；{SRC_DANIELS}（Phase IV 保留 T）", tss=45 / 60 * 62)
+# TAPER_Z3's target (SP-478, as SP-408's 越野 上坡節奏跑): its 88–95 % CP = the library's Z3sub, so the
+# card says the template's % CP in watts and the Zone 3 row's HR (taper_q_target / z3_hr_text), not the
+# week's threshold row (Zone 4) TAPER_Q keeps; the structure and the push read the same
+TAPER_Z3_TARGET = dict(power_pct=(0.88, 0.95), hr_cls="Z3sub")
 # the base-phase strides for 路跑 (instead of hill sprints): title, detail, source suffixes
 ROAD_STRIDES = ("＋加速跑 6×20 秒", "；最後 6 趟 20 秒平路加速跑（快而放鬆，不是衝刺），慢跑回來",
                 f"；{SRC_DANIELS} strides")
@@ -1406,7 +1418,8 @@ def easy_power_suggestions(tests: list, ep: Optional[dict], cp_session, aet_sess
 
 
 def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, blackouts=None,
-              b2b_accepted: Optional[list] = None, race_predict=None, sport: Optional[str] = None) -> dict:
+              b2b_accepted: Optional[list] = None, race_predict=None, sport: Optional[str] = None,
+              tpace: Optional[float] = None) -> dict:
     """Target volume and sessions for the current Monday–Sunday week.
 
     `status` is a computed `backend.engine.status.Status` (phase, goals and the
@@ -1419,6 +1432,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     race_refs.calculator_hours); None = the plan's 預估移動時間.
     `sport`: 主要訓練項目 (engine/primary_sport.py,
     trail | road); None = the setting (auto = the suggestion from the data / the next A race).
+    `tpace` (s/km, thresholds.estimate_tpace): the threshold pace the structures' % pace steps take
+    for their TSS (SP-437; api/plan_sessions passes the one the editor and the push use).
     Road: no B2B, no steep-hill walk, no mountain long run or uphill interval versions; the
     專項期 long run carries a marathon-pace segment and its interval is a flat threshold run."""
     from backend.engine import b2b as B2B
@@ -2340,6 +2355,12 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     # rewrote has it; its extra minutes are in the TSS the projection below reads
     WU.apply_objs(sessions, prefs, tph)
 
+    # ---- 課表結構是唯一來源 (SP-437, engine/session_structure.py): each run session's minutes and TSS
+    # are its structure's (what the watch gets), the easy steps at this runner's own TSS / h; last, so
+    # every pass above is in it, and before the projection below reads the TSS
+    st_th = {"cp": tt.get("cp"), "lthr": tt.get("lthr"), "aet": aet, "hr_model": hrz, "walk_cap": walk, "tpace": tpace}
+    SST.apply_objs(sessions, st_th, tph, prefs)
+
     # ---- projection to Sunday -------------------------------------------
     planned_by_day = {}
     for s in sessions:
@@ -2415,8 +2436,9 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         easy_power_suggestions(test_suggestions, ep, lambda: CPP.session_for(protocol), aet_session, aet_proto)
     for t in test_suggestions:
         # 每堂課前加熱身 (SP-364): 排入 schedules the session as suggested — with the warm-up
-        if WU.apply_one(t["session"], prefs, tph):
-            t["minutes"] = t["session"]["minutes"]
+        WU.apply_one(t["session"], prefs, tph)
+        SST.apply_one(t["session"], st_th, tph, prefs)        # SP-437: the test's time / TSS = its structure
+        t["minutes"] = t["session"]["minutes"]
 
     mode_label = {"base": _("基礎期"), "specific": _("專項期"), "taper": _("減量期"), "event": _("比賽週"),
                   "recovery": _("恢復期"), "transition": _("轉換期"), "rebuild": _("回量期"), "recovery_week": _("恢復週"),
@@ -2443,6 +2465,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         "sessions": [asdict(s) for s in sorted(sessions, key=lambda s: (s.day or "9999", s.kind))],
         "long_weekday": WEEKDAYS[long_wd],
         "thresholds": {"cp": tt.get("cp"), "cp_source": tt.get("cp_source"), "lthr": tt.get("lthr"),
+                       # SP-437: the threshold pace the structures' TSS took (projection uses it too)
+                       **({"tpace": tpace} if tpace else {}),
                        # aet = the easy-run cap (not always an AeT: the 課表心率區間 Z2 top unless measured);
                        # its ± badge only when the cap IS the AeT estimate (no 課表心率區間)
                        "lthr_source": tt.get("lthr_source"), "aet": aet, "aet_source": aet_src,
@@ -3074,7 +3098,8 @@ def taper_rules(ss: list, tc: Optional[dict], monday: dt.date, notes: Optional[l
     text, for a session made an easy run (SP-408: never the long run's / quality's own). A session made
     a 減量期 quality session takes taper_q_target (SP-408): the template's % CP in watts (`cp`) and
     the 心率 part of `q_target` (the week's threshold row; `z3_target`, the Zone 3 row, for the 越野
-    88–95 % CP ones), by `prefs`' 目標依據 — never its old text."""
+    88–95 % CP ones), by `prefs`' 目標依據 — never its old text. The race day is read too (SP-492: a
+    2×8′ the placement put on a Tuesday race stayed there); what is left on it post_race.apply moves on."""
     if not tc or not ss:
         return ss
     is_d = isinstance(ss[0], dict)
@@ -3098,7 +3123,9 @@ def taper_rules(ss: list, tc: Optional[dict], monday: dt.date, notes: Optional[l
         if g(s, "done") or not g(s, "day"):
             return None
         d = dt.date.fromisoformat(g(s, "day"))
-        return (race - d).days if t0 <= d < race else None
+        # the race day too (SP-492): a quality session the placement put there follows the race-week
+        # rule (onto an easy day 3–5 days out, else an easy run); post_race.apply then clears the day
+        return (race - d).days if t0 <= d <= race else None
 
     def as_easy(s, cap: float, how: str = ""):
         # `how`: what the session is (「平路或緩坡輕鬆跑」), never the taper rule that made it one — that

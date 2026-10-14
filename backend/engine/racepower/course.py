@@ -21,6 +21,8 @@ from typing import Optional, Sequence
 
 import numpy as np
 
+from backend.engine import hints as H
+
 EARTH_R = 6371008.8            # mean Earth radius, m
 DUP_M = 0.5
 JUMP_MS = 60.0 / 3.6
@@ -372,7 +374,7 @@ def build_course(track, *, sigma_m: float = DEFAULT_SIGMA_M, eps_m: float = DEFA
     if official_gain_m:
         g0 = gain_loss(zs, HYST_M)[0]
         if g0 > 0 and abs(g0 - official_gain_m) / official_gain_m > 0.15:
-            warnings.append(f"官方爬升 {official_gain_m:.0f} m 與 GPX 平滑後 {g0:.0f} m 相差超過 15 %")
+            warnings.append(H.tag("RC17", f"官方爬升 {official_gain_m:.0f} m 與 GPX 平滑後 {g0:.0f} m 相差超過 15 %"))
         zs, scale = _scale_to_gain(zs, official_gain_m)
     gain, loss = gain_loss(zs, HYST_M)
     total = float(xs[-1])
@@ -389,10 +391,10 @@ def build_course(track, *, sigma_m: float = DEFAULT_SIGMA_M, eps_m: float = DEFA
     climbs = _climbs(xs, zs)
     segs = segment_rows(bounds, xs, zs, flat_pct, climbs)
     if raw_gain > 0 and abs(raw_gain - gain) / raw_gain > 0.25 and not official_gain_m:
-        warnings.append(f"平滑前後爬升相差 {abs(raw_gain - gain) / raw_gain:.0%}（原始 {raw_gain:.0f} m → {gain:.0f} m），海拔雜訊大")
+        warnings.append(H.tag("RC17", f"平滑前後爬升相差 {abs(raw_gain - gain) / raw_gain:.0%}（原始 {raw_gain:.0f} m → {gain:.0f} m），海拔雜訊大"))
     spacing = float(np.median(np.diff(td["d"]))) if len(td["d"]) > 1 else 0.0
     if spacing > 50:
-        warnings.append(f"點距中位數 {spacing:.0f} m：像是路線規劃工具畫的線，坡度會被平均掉")
+        warnings.append(H.tag("RC17", f"點距中位數 {spacing:.0f} m：像是路線規劃工具畫的線，坡度會被平均掉"))
     step = max(1, int(math.ceil(len(xs) / PROFILE_MAX)))
     idx = list(range(0, len(xs), step))
     if idx[-1] != len(xs) - 1:

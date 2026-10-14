@@ -141,7 +141,8 @@ function fuelHtml(S) {
       ev.map((e) => `<tr class="k-${e.kind}">${hike ? `<td>${e.day}</td>` : ""}<td>${esc(e.eta || "–")}</td><td class="n">${dur(e.t_s)}</td><td class="n">${f1(e.km)}</td><td>${icon(e)}</td><td class="act">${esc(e.action)}</td></tr>`).join("") +
       `</tbody></table></div>`;
   }
-  if ((F.warnings || []).length) h += `<ul class="warn">${F.warnings.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>`;
+  // a hint object (SP-482, engine/hints.py) or a string (a share made before it)
+  if ((F.warnings || []).length) h += `<ul class="warn">${F.warnings.map((x) => `<li>${esc(x && typeof x === "object" ? x.text : x)}</li>`).join("")}</ul>`;
   return h + `</section>`;
 }
 

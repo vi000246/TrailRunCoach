@@ -211,15 +211,16 @@ BASE_WEEKS = (8, 12)
 # Palladino / Friel run power bands (×CP); sub-threshold is the rung below
 # threshold (zones.WORKOUT_TARGETS has threshold 0.95–1.01, supra 1.01–1.06,
 # VO2max 1.06–1.16).
-BANDS = (("閾值下", 0.88, 0.95), ("閾值", 0.95, 1.01), ("超閾值", 1.01, 1.06),
-         ("VO2max", 1.06, 1.16), ("無氧", 1.16, 9.0))
+BANDS = ((N_("閾值下"), 0.88, 0.95), (N_("閾值"), 0.95, 1.01), (N_("超閾值"), 1.01, 1.06),
+         ("VO2max", 1.06, 1.16), (N_("無氧"), 1.16, 9.0))
 
-TYPE_LABEL = {"easy": "輕鬆跑", "long": "LSD", "quality": "間歇", "hard_long": "高強度長跑",
-              "test_cp": "CP 測試", "test_aet": "AeT 飄移測試", "strength": "肌力",
-              "bike": "騎車", "walk": "走路", "other": "其他"}
-TERRAIN_LABEL = {"road": "路跑", "trail": "越野", "hike": "登山健行"}
-PHASE_LABEL = {"transition": "轉換期", "recovery": "恢復期", "rebuild": "回量期", "base": "基礎期",
-               "specific": "專項期", "taper": "減量期", "event": "比賽週"}
+# marked only (N_): classify() keeps the Chinese (other modules read and match it); _() where shown
+TYPE_LABEL = {"easy": N_("輕鬆跑"), "long": "LSD", "quality": N_("間歇"), "hard_long": N_("高強度長跑"),
+              "test_cp": N_("CP 測試"), "test_aet": N_("AeT 飄移測試"), "strength": N_("肌力"),
+              "bike": N_("騎車"), "walk": N_("走路"), "other": N_("其他")}
+TERRAIN_LABEL = {"road": N_("路跑"), "trail": N_("越野"), "hike": N_("登山健行")}
+PHASE_LABEL = {"transition": N_("轉換期"), "recovery": N_("恢復期"), "rebuild": N_("回量期"), "base": N_("基礎期"),
+               "specific": N_("專項期"), "taper": N_("減量期"), "event": N_("比賽週")}
 
 # dashboard order in views/workout.json
 SECTIONS = ("summary", "aerobic", "intervals", "climbs", "durability", "form")
@@ -231,9 +232,9 @@ EXTRA_SECTIONS = ("grades", "pacing", "durability_curve", "cp_test",
                   "form_grades", "form_work", "form_cadence")
 SUGGESTED = {"easy": 1, "long": 1, "hard_long": 1, "test_aet": 1, "quality": 2, "test_cp": 2}
 # the session classifier's labels (docs/research/vo2max-session-detection.md §3.5; owner 2026-10-02)
-STIM_LABEL = {"z5": "Z5 間歇", "z3": "Z3 閾值"}
-HARD_LONG_HIKE = "高強度長天"
-MODERATE_LABEL = "中強度跑"           # informational: avg HR > AeT+3 without a Zone 3 / Zone 5 stimulus
+STIM_LABEL = {"z5": N_("Z5 間歇"), "z3": N_("Z3 閾值")}
+HARD_LONG_HIKE = N_("高強度長天")
+MODERATE_LABEL = N_("中強度跑")           # informational: avg HR > AeT+3 without a Zone 3 / Zone 5 stimulus
 HARD_TYPES = ("quality", "hard_long", "test_cp")   # hard days (48 h apart; plan_prefs.place)
 
 
@@ -2184,7 +2185,7 @@ def _plan_test(ds, day: dt.date) -> dict:
 SAME_DAY_BOUT = 1.05          # an unfinished test that day counts with a ≥ 3′ bout ≥ 1.05 × CP
 QUICK_PATTERN = 1.03          # 推估: a 20′ window ≥ 1.03 × CP without a test session = a 20′ all-out
 METHOD_PROTOCOL = {"2pt": "standard", "1pt_prior": "standard", "pd_model": "standard", "tt20": "quick", "race": "race"}
-CP_HINT = "功率型態像 CP 測試，但課表、標題都沒說是測試，所以不當測試、不算 CP；是的話在課表標成 CP 測試或標題寫「CP 測試」"
+CP_HINT = N_("功率型態像 CP 測試，但課表、標題都沒說是測試，所以不當測試、不算 CP；是的話在課表標成 CP 測試或標題寫「CP 測試」")
 MATCH_LABEL = {"done_by": "課表對應", "same_day": "當天課表", "race": "比賽／計時跑", "threshold": "已套用的門檻",
                "title": "標題", "pattern": "功率型態", "steady": "≥ 55 分鐘穩定跑",
                "user": "你標記為測試（活動資訊）"}
@@ -2428,13 +2429,13 @@ def classify(ds, w, m: Optional[dict] = None) -> dict:
     elif typ == "hard_long":
         label = HARD_LONG_HIKE if cat == "hike" else TYPE_LABEL["hard_long"]
     elif moderate:
-        label = MODERATE_LABEL if cat != "hike" else "中強度健行"
+        label = MODERATE_LABEL if cat != "hike" else N_("中強度健行")
     else:
-        label = "輕鬆健行" if typ == "easy" and cat == "hike" else TYPE_LABEL.get(typ, typ)
+        label = N_("輕鬆健行") if typ == "easy" and cat == "hike" else TYPE_LABEL.get(typ, typ)
     return {"type": typ, "type_label": label, "terrain": terrain, "stimulus": stimulus,
             "moderate": moderate, "stim": stim, "icon": type_icon(typ, stimulus, moderate),
             "terrain_label": TERRAIN_LABEL.get(terrain, ""), "category": cat,
-            "phase": phase, "phase_label": PHASE_LABEL.get(phase, "未設定周期"),
+            "phase": phase, "phase_label": PHASE_LABEL.get(phase, N_("未設定周期")),
             "date": day.isoformat(), "protocol": protocol, "test_match": match,
             "cp_hint": bool(runs and (std or quick) and typ != "test_cp")}
 
@@ -2770,7 +2771,7 @@ def cp_follow_line(ev: dict) -> str:
 
 def cp_lines(ev: Optional[dict], has_power: bool = True) -> list[str]:
     if not ev:
-        return ["沒有功率，算不出 CP" if not has_power else "找不到這個流程的全力段，算不出 CP"]
+        return [_("沒有功率，算不出 CP") if not has_power else _("找不到這個流程的全力段，算不出 CP")]
     lines = [cp_headline(ev)]
     if ev.get("reasons"):
         lines.append(_(ev["reasons"][0]))
@@ -2794,14 +2795,15 @@ def _col(name: str, vals: list) -> dict:
     return {"name": name, "type": "line", "expression": "", "data": {"kind": "values", "values": vals}}
 
 
-def _verdict_rows(lines: list[str], label: str = "判讀") -> list[dict]:
-    return [_row(label if i == 0 else "", ln) for i, ln in enumerate(lines[:3])]
+def _verdict_rows(lines: list[str], label: str = N_("判讀")) -> list[dict]:
+    return [_row(_(label) if i == 0 else "", ln) for i, ln in enumerate(lines[:3])]
 
 
 def _base_text(b: dict, fmt: Callable[[float], str]) -> str:
     if not b.get("ok"):
-        return f"樣本 {b.get('n', 0)} 次（< 5），不比較"
-    return f"中位 {fmt(b['median'])}（IQR {fmt(b['q1'])}～{fmt(b['q3'])}，{b['n']} 次／{b.get('weeks')} 週）"
+        return _("樣本 {n} 次（< 5），不比較", n=b.get('n', 0))
+    return _("中位 {med}（IQR {q1}～{q3}，{n} 次／{weeks} 週）", med=fmt(b['median']), q1=fmt(b['q1']), q3=fmt(b['q3']),
+             n=b['n'], weeks=b.get('weeks'))
 
 
 def review(ds, w, section: str = "summary", basis: str = "pace") -> dict:
@@ -2856,17 +2858,17 @@ def short_reason(dr: dict, basis: str = "pace") -> str:
     why = (dr.get("pw_reason") if basis == "power" and (dr.get("ok") or dr.get("ref_ok")) else dr.get("reason")) or ""
     ms = _f(dr.get("measured_s"))
     if dr.get("hot") and dr.get("temp_c") is not None:
-        return f"太熱（{dr['temp_c']:.0f} °C）"
-    for key, text in (("沒有心率或速度", "沒有心率或速度"), ("不是跑步", "不是跑步"), ("有坡", "有坡（越野）"),
-                      ("中途停了", "停太久"), ("明顯放慢", "跑走交替"), ("功率起伏大", "功率起伏大"),
-                      ("% CP", "強度太高"), ("強度沒有維持", "前後半強度不同"), ("快速結尾", "結尾加速"),
-                      ("沒有功率", "沒有功率"), ("功率只涵蓋", "功率不完整"), ("功率資料不夠", "功率不夠"),
-                      ("有效資料不夠", "資料不夠")):
+        return _("太熱（{t:.0f} °C）", t=dr['temp_c'])
+    for key, text in (("沒有心率或速度", N_("沒有心率或速度")), ("不是跑步", N_("不是跑步")), ("有坡", N_("有坡（越野）")),
+                      ("中途停了", N_("停太久")), ("明顯放慢", N_("跑走交替")), ("功率起伏大", N_("功率起伏大")),
+                      ("% CP", N_("強度太高")), ("強度沒有維持", N_("前後半強度不同")), ("快速結尾", N_("結尾加速")),
+                      ("沒有功率", N_("沒有功率")), ("功率只涵蓋", N_("功率不完整")), ("功率資料不夠", N_("功率不夠")),
+                      ("有效資料不夠", N_("資料不夠"))):
         if key in why:
-            return text
+            return _(text)
     if "暖身後只有" in why:
-        return f"太短（{int((ms or 0) // 60)} 分）" if ms is not None else "太短"
-    return "不採用"
+        return _("太短（{m} 分）", m=int((ms or 0) // 60)) if ms is not None else _("太短")
+    return _("不採用")
 
 
 def drift_caveat(dr: dict, basis: str = "pace") -> Optional[str]:
@@ -3032,26 +3034,26 @@ def _tis_basis_line(b: Optional[dict]) -> Optional[str]:
 
 TIS_TIP = N_("怎麼看：越高 = 這次對那個能量系統的刺激越大；WKO5 沒有官方的分級名稱，只看數字、和自己平常的課比。\n"
              "看什麼：長時間、接近門檻的課有氧分數高；無氧分數要功率超過門檻（模型閾值功率的 85%）才會加，輕鬆跑通常是 1。\n"
-             "方法：刺激分數（算法參考 WKO5）：以活動當天往前 90 天 PD 模型的模型閾值功率（有氧）與 W′（無氧）為基準，"
-             "把平滑後的功率逐秒加權累加（和「我的訓練」的刺激分數圖同一個數字）。需要功率。")
+             "方法：算法參考 WKO5 的 TIS：以活動當天往前 90 天 PD 模型的模型閾值功率（有氧）與 W′（無氧）為基準，"
+             "把平滑後的功率逐秒加權累加（和「我的訓練」的有氧／無氧效果圖同一個數字）。1–10，跟手錶的 0–5 不同。需要功率。")
 
 
 def _tis_card(ds, w) -> Optional[dict]:
-    """「刺激 TIS」: this activity's aerobic / anaerobic TIS; none without power (like 平均功率).
+    """「有氧／無氧效果」(was 刺激 TIS; SP-391): this activity's aerobic / anaerobic TIS; none without power (like 平均功率).
     `power` marks it for the viewer's 使用功率 switch (off = the tile is hidden)."""
     s = tis_scores(ds, w)
     if s is None:
         return None
     a, an = s
     if a is None and an is None:
-        return _card("stat", id="tis", icon="gauge", label=_("刺激分數"), value="–", sub=_("算不出"), power=True,
+        return _card("stat", id="tis", icon="gauge", label=_("有氧／無氧效果"), value="–", sub=_("算不出"), power=True,
                      tip=_("有功率，但活動前 90 天的功率資料不夠擬合 PD 模型，算不出模型閾值功率（Modelled threshold power）和 W′，"
-                           "刺激分數（Stimulus score）也算不出。") + "\n"
+                           "有氧／無氧效果（Aerobic / Anaerobic effect）也算不出。") + "\n"
                          + _(TIS_TIP))
-    return _card("stat", id="tis", icon="gauge", label=_("刺激分數"), value=f"{_num(a)}／{_num(an)}",
-                 sub=_("有氧／無氧（1–10）"), power=True,
+    return _card("stat", id="tis", icon="gauge", label=_("有氧／無氧效果"), value=_("{a}／{b}", a=_num(a), b=_num(an)),
+                 sub=_("1–10，跟手錶的 0–5 不同"), power=True,
                  tip="\n".join(x for x in (
-                     _("有氧刺激分數（Aerobic stimulus）{a}、無氧刺激分數（Anaerobic stimulus）{an}（算法參考 WKO5，1–10）。",
+                     _("有氧效果（Aerobic effect）{a}、無氧效果（Anaerobic effect）{an}（算法參考 WKO5 的 TIS，1–10，跟手錶的 0–5 不同）。",
                        a=_num(a), an=_num(an)),
                      _tis_basis_line(tis_basis(ds, w)), _(TIS_TIP)) if x))
 
@@ -3138,13 +3140,13 @@ def _plan_card(ds, w) -> Optional[dict]:
 
 def _summary_cards(ds, w, m: dict, c: dict, lines: list[str], ev: Optional[dict]) -> list[dict]:
     typ = c["type"]
-    cards = [_card("tag", id="type", icon=c.get("icon") or type_icon(typ), text=c["type_label"],
+    cards = [_card("tag", id="type", icon=c.get("icon") or type_icon(typ), text=_(c["type_label"]),
                    tip=stimulus_tip(c))]
     if c.get("terrain_label"):
         cards.append(_card("tag", id="terrain", icon="climb" if c["terrain"] in ("trail", "hike") else "distance",
-                           text=c["terrain_label"]))
+                           text=_(c["terrain_label"])))
     if c.get("phase_label"):
-        cards.append(_card("tag", id="phase", icon="flag", text=c["phase_label"]))
+        cards.append(_card("tag", id="phase", icon="flag", text=_(c["phase_label"])))
     cards += _stat_cards(w, m)
     pc = _plan_card(ds, w)
     if pc:
@@ -3156,8 +3158,8 @@ def _summary_cards(ds, w, m: dict, c: dict, lines: list[str], ev: Optional[dict]
     if tc:
         cards.append(tc)
     if typ in ("strength", "bike", "walk", "other"):
-        cards.append(_card("chip", id="only", icon="info", text="只看時間與心率", level="info",
-                           tip=f"{c['type_label']}：只看時間與心率，沒有其他判讀"))
+        cards.append(_card("chip", id="only", icon="info", text=_("只看時間與心率"), level="info",
+                           tip=_("{type}：只看時間與心率，沒有其他判讀", type=_(c["type_label"]))))
         return cards
     dr = m.get("drift") or {}
     sport_run = m.get("category") in ("road", "trail")
@@ -3175,11 +3177,11 @@ def _summary_cards(ds, w, m: dict, c: dict, lines: list[str], ev: Optional[dict]
         sh = _over_aet(m)
         if sh is not None:
             high = sh > OVER_AET_SHARE
-            cards.append(_card("status", id="intensity", icon="intensity", label="強度",
-                               value=f"{sh * 100:.0f}%", sub="太高：下次放慢" if high else "AeT+3 以下",
+            cards.append(_card("status", id="intensity", icon="intensity", label=_("強度"),
+                               value=f"{sh * 100:.0f}%", sub=_("太高：下次放慢") if high else _("AeT+3 以下"),
                                level="warn" if high else "good",
-                               tip=f"心率超過 AeT+3（{_num((m.get('aet') or 0) + AET_MARGIN)} bpm）的時間佔 {sh * 100:.0f}%；"
-                                   f"輕鬆跑、長跑 ≤ 10% 才算壓在有氧區。"))
+                               tip=_("心率超過 AeT+3（{hr} bpm）的時間佔 {pct:.0f}%；輕鬆跑、長跑 ≤ 10% 才算壓在有氧區。",
+                                     hr=_num((m.get('aet') or 0) + AET_MARGIN), pct=sh * 100)))
     if typ in ("quality", "hard_long") and c.get("stim"):
         cards.append(_stimulus_card(c))         # Z5 / Z3: the T@VO2max and Zone 3 numbers behind the label
     if typ == "quality":
@@ -3188,26 +3190,27 @@ def _summary_cards(ds, w, m: dict, c: dict, lines: list[str], ev: Optional[dict]
         lvl = "na" if not n else "info" if inb is None or not iv.get("band") else "good" if inb == n else "warn"
         il = interval_lines(m)
         rest = rest_aet_line(m)
-        cards.append(_card("status", id="intervals", icon="z3", label="間歇",
+        cards.append(_card("status", id="intervals", icon="z3", label=_("間歇"),
                            value=f"{inb}/{n}" if n and iv.get("band") else str(n) if n else "–",
-                           sub=(f"組在 {iv['band'][0]} 帶" if n and iv.get("band") else "組" if n else "沒有偵測到"),
-                           level=lvl, tip="\n".join(il) + "\n詳細在「間歇」。"
+                           sub=(_("組在 {band} 帶", band=_(iv['band'][0])) if n and iv.get("band") else _("組", n=n) if n else _("沒有偵測到")),
+                           level=lvl, tip="\n".join(il) + "\n" + _("詳細在「間歇」。")
                            + ("\n\n" + _(REST_AET_TIP) if rest and rest in il else "")))
     elif typ == "test_cp":
         # SP-468: WKO5's mFTP after the test — nothing to apply
         cp = (ev or {}).get("cp")
-        cards.append(_card("status", id="cp", icon="test", label="CP 測試", value=_num(cp) if cp else "–", unit="W" if cp else None,
+        cards.append(_card("status", id="cp", icon="test", label=_("CP 測試"), value=_num(cp) if cp else "–", unit="W" if cp else None,
                            sub=_("模型閾值功率（Modelled threshold power）") if cp else _("算不出"),
                            level="good" if cp else "na", tip="\n".join(lines)))
     # 爬坡（越野、健行）
     if c["terrain"] in ("trail", "hike"):
         cl = m.get("climbs") or []
         if cl:
-            cards.append(_card("stat", id="climbs", icon="climb", label="爬坡段", value=str(len(cl)), unit="段",
-                               sub=f"共 {sum(x['gain_m'] for x in cl):.0f} m · 每 100 m {_num(m.get('hr_per_100m'))} 下",
+            cards.append(_card("stat", id="climbs", icon="climb", label=_("爬坡段"), value=str(len(cl)), unit=_("段", n=len(cl)),
+                               sub=_("共 {gain:.0f} m · 每 100 m {hr} 下", gain=sum(x['gain_m'] for x in cl),
+                                     hr=_num(m.get('hr_per_100m'))),
                                tip="\n".join(_trail_lines(ds, w, m)) or None))
     if c.get("cp_hint"):
-        cards.append(_card("chip", id="cp_hint", icon="test", text="像 CP 測試？", level="info", tip=CP_HINT))
+        cards.append(_card("chip", id="cp_hint", icon="test", text=_("像 CP 測試？"), level="info", tip=_(CP_HINT)))
     return cards
 
 
@@ -3440,16 +3443,16 @@ def _aet_test_lines(ds, w, m, base: dict) -> Optional[list[str]]:
 def _intervals(ds, w, m, c, base):
     eff = m.get("efforts") or []
     if not eff:
-        return {**base, "empty": "沒有偵測到 ≥ 1 分鐘的用力段（需要功率）"
-                if c["type"] in ("quality", "test_cp") else f"這次是{c['type_label']}，不是間歇課"}
-    cols = [_col("組", [str(i + 1) for i in range(len(eff))]),
-            _col("開始", [_hms(e["start_s"]) for e in eff]),
-            _col("時長", [_hms(e["duration_s"]) for e in eff]),
-            _col("功率 W", [_num(e["power"]) for e in eff]),
+        return {**base, "empty": _("沒有偵測到 ≥ 1 分鐘的用力段（需要功率）")
+                if c["type"] in ("quality", "test_cp") else _("這次是{type}，不是間歇課", type=_(c['type_label']))}
+    cols = [_col(_("組"), [str(i + 1) for i in range(len(eff))]),
+            _col(_("開始"), [_hms(e["start_s"]) for e in eff]),
+            _col(_("時長"), [_hms(e["duration_s"]) for e in eff]),
+            _col(_("功率 W"), [_num(e["power"]) for e in eff]),
             _col("%CP", [_pct(e["pct_cp"], 0) if e.get("pct_cp") is not None else "–" for e in eff]),
-            _col("心率", [_num(e.get("hr")) for e in eff]),
-            _col("最高心率", [_num(e.get("hr_max")) for e in eff]),
-            _col("休 60 秒降", [_num(e.get("hr_drop60")) for e in eff])]
+            _col(_("心率"), [_num(e.get("hr")) for e in eff]),
+            _col(_("最高心率"), [_num(e.get("hr_max")) for e in eff]),
+            _col(_("休 60 秒降"), [_num(e.get("hr_drop60")) for e in eff])]
     if m.get("aet") and any(e.get("aet_back") is not None for e in eff):
         # SP-264: seconds from the rep's end to HR ≤ AeT (information only, REST_AET_TIP)
         cols.append(_col(_("回到 AeT"), [
@@ -3458,7 +3461,7 @@ def _intervals(ds, w, m, c, base):
     lines = cp_lines(cp_eval(ds, w, m, c), m.get("avg_power") is not None) if c["type"] == "test_cp" \
         else interval_lines(m)
     if c["type"] not in ("quality", "test_cp"):
-        lines = [f"這次是{c['type_label']}，下表只是偵測到的用力段"] + lines[:2]
+        lines = [_("這次是{type}，下表只是偵測到的用力段", type=_(c['type_label']))] + lines[:2]
     rows = _verdict_rows(lines)
     rest = rest_aet_line(m) if c["type"] != "test_cp" else None
     for r in rows:
@@ -3475,16 +3478,18 @@ def _trail_lines(ds, w, m) -> list[str]:
         if b.get("ok"):
             chg = hp / b["median"] - 1
             if chg < -CLIMB_BETTER:
-                lines.append(f"每 100 m 爬升 {hp:.0f} 下心跳，比近 {b['weeks']} 週中位 {b['median']:.0f} 低 {-chg * 100:.0f}%：爬坡經濟性變好")
+                lines.append(_("每 100 m 爬升 {hp:.0f} 下心跳，比近 {weeks} 週中位 {med:.0f} 低 {pct:.0f}%：爬坡經濟性變好",
+                               hp=hp, weeks=b['weeks'], med=b['median'], pct=-chg * 100))
             elif chg > CLIMB_BETTER:
-                lines.append(f"每 100 m 爬升 {hp:.0f} 下心跳，比近 {b['weeks']} 週中位 {b['median']:.0f} 高 {chg * 100:.0f}%")
+                lines.append(_("每 100 m 爬升 {hp:.0f} 下心跳，比近 {weeks} 週中位 {med:.0f} 高 {pct:.0f}%",
+                               hp=hp, weeks=b['weeks'], med=b['median'], pct=chg * 100))
             else:
-                lines.append(f"每 100 m 爬升 {hp:.0f} 下心跳，和近 {b['weeks']} 週差不多")
+                lines.append(_("每 100 m 爬升 {hp:.0f} 下心跳，和近 {weeks} 週差不多", hp=hp, weeks=b['weeks']))
         else:
-            lines.append(f"每 100 m 爬升 {hp:.0f} 下心跳（近期爬坡樣本 {b.get('n', 0)} 次，不比較）")
+            lines.append(_("每 100 m 爬升 {hp:.0f} 下心跳（近期爬坡樣本 {n} 次，不比較）", hp=hp, n=b.get('n', 0)))
     last = _last20(ds, w)
     if last is not None and last < LAST20_MIN:
-        lines.append(f"最後 20% 耐久 {last * 100:.0f}%（< 90%）：補給、配速要調整")
+        lines.append(_("最後 20% 耐久 {pct:.0f}%（< 90%）：補給、配速要調整", pct=last * 100))
     return lines
 
 
@@ -3694,7 +3699,7 @@ def _climbs(ds, w, m, c, base):
         # channel (_samples) — so the profile, the shaded climbs and the map agree (SP-218)
         prof = profile_series(s["t"], s["dist"], s["elev"], _eval(ds, w, "rgrade"), s["hr"], s["power"], walking)
     if not cl and prof is None:
-        return {**base, "empty": "這筆活動沒有海拔資料，畫不出高度圖，也找不到爬坡段"}
+        return {**base, "empty": _("這筆活動沒有海拔資料，畫不出高度圖，也找不到爬坡段")}
     cards = _climb_cards(ds, w, m) if cl else []
     if s is not None:
         cards = [{**x, "run_share": climb_run_share(s, x.get("start_km"), x.get("end_km"))} for x in cards]
@@ -3718,10 +3723,10 @@ def _climbs(ds, w, m, c, base):
                 _col("GAP /km", [_pace(x.get("gap_s_per_km")) for x in cards])]
     lines = (_trail_lines(ds, w, m) + _climb_lines(cards))[:3] if cards else []
     if cards and not lines:
-        lines = ["（沒有心率，無法比較爬坡經濟性）"]
-    note = None if cards else "這次沒有 ≥ 80 m、坡度 ≥ 3% 的連續爬坡"
+        lines = [_("（沒有心率，無法比較爬坡經濟性）")]
+    note = None if cards else _("這次沒有 ≥ 80 m、坡度 ≥ 3% 的連續爬坡")
     if prof is None:
-        note = "這筆活動沒有海拔資料，畫不出高度圖"
+        note = _("這筆活動沒有海拔資料，畫不出高度圖")
     return {**base, "series": cols + _verdict_rows(lines),
             "climb_profile": {"profile": prof, "climbs": cards, "walking": walking, "note": note,
                               "summary": climb_summary(w, m, cards),
@@ -3732,7 +3737,7 @@ def _climbs(ds, w, m, c, base):
 def _grades(ds, w, m, c, base):
     rows = m.get("grade_bins") or []
     if not rows:
-        return {**base, "empty": "沒有距離或海拔，算不出坡度"}
+        return {**base, "empty": _("沒有距離或海拔，算不出坡度")}
     pool = _pool(ds, w)
     bins = []
     for r in rows:
@@ -3740,16 +3745,16 @@ def _grades(ds, w, m, c, base):
         b = bin_baselines(pool, r["label"])
         bins.append({**{k: r.get(k) for k in ("label", "lo", "hi", "time_s", "time_pct", "distance_km")},
                      "metrics": mt, "base": b, "vs": {k: _vs(mt[k], b[k]) for k in BIN_KEYS}})
-    cols = [_col("坡度", [r["label"] for r in rows]),
-            _col("時間", [_hms(r["time_s"]) for r in rows]),
-            _col("佔比", [f"{r['time_pct']:.0f}%" for r in rows]),
-            _col("距離 km", [_num(r["distance_km"], 2) for r in rows]),
-            _col("配速 /km", [_pace(r["pace_s_per_km"]) for r in rows]),
-            _col("配速平常", [_pace(b["base"]["pace_s_per_km"].get("median")) if b["base"]["pace_s_per_km"].get("ok")
+    cols = [_col(_("坡度"), [r["label"] for r in rows]),
+            _col(_("時間"), [_hms(r["time_s"]) for r in rows]),
+            _col(_("佔比"), [f"{r['time_pct']:.0f}%" for r in rows]),
+            _col(_("距離 km"), [_num(r["distance_km"], 2) for r in rows]),
+            _col(_("配速 /km"), [_pace(r["pace_s_per_km"]) for r in rows]),
+            _col(_("配速平常"), [_pace(b["base"]["pace_s_per_km"].get("median")) if b["base"]["pace_s_per_km"].get("ok")
                              else "–" for b in bins]),
             _col("VAM m/h", [_num(r.get("vam")) for r in rows]),
-            _col("心率", [_num(r["hr"]) for r in rows]),
-            _col("功率 W", [_num(r["power"]) for r in rows])]
+            _col(_("心率"), [_num(r["hr"]) for r in rows]),
+            _col(_("功率 W"), [_num(r["power"]) for r in rows])]
     return {**base, "series": cols,
             "grade_profile": {"bins": bins, "min_s": BIN_MIN_S, "pool_weeks": list(POOL_WEEKS),
                               "walking": m.get("category") in ("hike", "walk")}}
@@ -3776,68 +3781,68 @@ def _last20(ds, w) -> Optional[float]:
 
 
 def _durability(ds, w, m, c, base):
-    rows = [_row("移動／停留", f"移動 {_hms(m.get('moving_s'))}，停留 "
-                            f"{_hms(max(0.0, (m.get('elapsed_s') or 0) - (m.get('moving_s') or 0)))}")]
+    rows = [_row(_("移動／停留"), _("移動 {moving}，停留 {stopped}", moving=_hms(m.get('moving_s')),
+                                 stopped=_hms(max(0.0, (m.get('elapsed_s') or 0) - (m.get('moving_s') or 0)))))]
     last = _last20(ds, w)
     lines = []
     if last is None:
-        rows.append(_row("耐久", "資料不夠（要有心率、功率或速度，且 ≥ 20 分鐘）"))
+        rows.append(_row(_("耐久"), _("資料不夠（要有心率、功率或速度，且 ≥ 20 分鐘）")))
     else:
-        rows.append(_row("最後 20% 耐久", f"{last * 100:.0f}%（輸出／心率，和前段相比）"))
+        rows.append(_row(_("最後 20% 耐久"), _("{pct:.0f}%（輸出／心率，和前段相比）", pct=last * 100)))
         if last < LAST20_MIN:
-            lines.append(f"最後 20% 耐久 {last * 100:.0f}%（< 90%）：補給、配速要調整")
+            lines.append(_("最後 20% 耐久 {pct:.0f}%（< 90%）：補給、配速要調整", pct=last * 100))
         else:
-            lines.append(f"最後 20% 耐久 {last * 100:.0f}%：後段撐得住")
-    rows.append(_row("補給", "沒有補給紀錄"))
+            lines.append(_("最後 20% 耐久 {pct:.0f}%：後段撐得住", pct=last * 100))
+    rows.append(_row(_("補給"), _("沒有補給紀錄")))
     return {**base, "series": rows + _verdict_rows(lines)}
 
 
 def _durability_curve(ds, w, m, c, base):
     r = _durability_pts(ds, w)
     if not r or not r["points"]:
-        return {**base, "empty": "資料不夠：要有心率和功率（或速度），且超過 20 分鐘"}
+        return {**base, "empty": _("資料不夠：要有心率和功率（或速度），且超過 20 分鐘")}
     from backend.engine.wko5expr import units as U
     pct = U.meta("PERCENT")
     xu = {"id": "HOURS", "label": "h", "kind": "number", "dec": [[0, 1]]}
     pts = [[round(x, 4), round(y / 100.0, 4)] for x, y in r["points"]]
-    s = [{"name": "同樣心率的輸出（暖身後 = 100%）", "type": "line", "expression": "", "y_axis": "PERCENT",
+    s = [{"name": _("同樣心率的輸出（暖身後 = 100%）"), "type": "line", "expression": "", "y_axis": "PERCENT",
           "unit": pct, "x_unit": xu, "color": "#2a78d6", "data": {"kind": "points", "x": "value", "points": pts}},
-         {"name": "95%：開始累（推估）", "type": "line", "expression": "", "y_axis": "PERCENT", "unit": pct,
+         {"name": _("95%：開始累（推估）"), "type": "line", "expression": "", "y_axis": "PERCENT", "unit": pct,
           "x_unit": xu, "color": "#c98a00", "line_style": "dash", "data": {"kind": "hline", "y": 0.95}},
-         {"name": "90%：明顯掉了，補給或配速要調", "type": "line", "expression": "", "y_axis": "PERCENT",
+         {"name": _("90%：明顯掉了，補給或配速要調"), "type": "line", "expression": "", "y_axis": "PERCENT",
           "unit": pct, "x_unit": xu, "color": "#c0392b", "line_style": "dash", "data": {"kind": "hline", "y": 0.9}}]
     last = _last20(ds, w)
     out = {**base, "axes": [{"id": "PERCENT", "unit": pct}], "series": s}
     if last is not None:
-        word = "後段撐得住" if last >= 0.95 else ("後段開始累" if last >= LAST20_MIN else "後段明顯掉了")
-        out["subtitle"] = f"最後 20%：{last * 100:.0f}% → {word}"
+        word = _("後段撐得住") if last >= 0.95 else (_("後段開始累") if last >= LAST20_MIN else _("後段明顯掉了"))
+        out["subtitle"] = _("最後 20%：{pct:.0f}% → {word}", pct=last * 100, word=word)
     return out
 
 
 def _pacing(ds, w, m, c, base):
     s = _samples(ds, w)
     if s is None or s["dist"] is None:
-        return {**base, "empty": "沒有距離資料"}
+        return {**base, "empty": _("沒有距離資料")}
     rows = pacing_deciles(s["t"], s["dist"], s["hr"], s["power"], s["speed"])
     if not rows:
-        return {**base, "empty": "距離太短"}
-    cols = [_col("段", [f"{r['k'] * 10}–{r['k'] * 10 + 10}%" for r in rows]),
-            _col("從 km", [_num(r["from_km"], 1) for r in rows]),
-            _col("配速 /km", [_pace(r["pace_s_per_km"]) for r in rows]),
-            _col("心率", [_num(r["hr"]) for r in rows]),
-            _col("功率 W", [_num(r["power"]) for r in rows])]
+        return {**base, "empty": _("距離太短")}
+    cols = [_col(_("段"), [f"{r['k'] * 10}–{r['k'] * 10 + 10}%" for r in rows]),
+            _col(_("從 km"), [_num(r["from_km"], 1) for r in rows]),
+            _col(_("配速 /km"), [_pace(r["pace_s_per_km"]) for r in rows]),
+            _col(_("心率"), [_num(r["hr"]) for r in rows]),
+            _col(_("功率 W"), [_num(r["power"]) for r in rows])]
     return {**base, "series": cols}
 
 
-FORM_ROWS = (("ilr", "衝擊負荷 ILR", 1), ("lss", "腿部剛性 LSS kN/m", 1), ("kleg", "kleg kN/m", 1),
-             ("gct", "觸地時間 ms", 0), ("cadence", "步頻 spm", 0), ("vo", "垂直振幅 cm", 1),
-             ("impact_g", "衝擊 G（fmax／體重）", 2))
+FORM_ROWS = (("ilr", N_("衝擊負荷 ILR"), 1), ("lss", N_("腿部剛性 LSS kN/m"), 1), ("kleg", "kleg kN/m", 1),
+             ("gct", N_("觸地時間 ms"), 0), ("cadence", N_("步頻 spm"), 0), ("vo", N_("垂直振幅 cm"), 1),
+             ("impact_g", N_("衝擊 G（fmax／體重）"), 2))
 
 
 def _form(ds, w, m, c, base):
     f = m.get("form") or {}
     if w.sport != "run" or not f:
-        return {**base, "empty": "參考：只有跑步、而且有跑步動態資料時才有這一頁"}
+        return {**base, "empty": _("參考：只有跑步、而且有跑步動態資料時才有這一頁")}
     names, first, last, chg, basecol = [], [], [], [], []
     for k, label, d in FORM_ROWS:
         v = f.get(k)
@@ -3846,25 +3851,28 @@ def _form(ds, w, m, c, base):
         if k in ("ilr", "lss") and not m.get("stryd"):
             continue
         b = baseline_for(ds, w, lambda pm, k=k: ((pm.get("form") or {}).get(k) or {}).get("change"))
-        names.append(label)
+        names.append(_(label))
         first.append(_num(v["first"], d))
         last.append(_num(v["last"], d))
         chg.append(_pct(v.get("change"), 1, sign=True))
         basecol.append(_base_text(b, lambda x: _pct(x, 1, sign=True)))
-    half = "作功" if f.get("_split") == "work" else "移動時間"
-    cols = [_col("指標（參考）", names), _col(f"前半（{half}）", first), _col(f"後半（{half}）", last),
-            _col("變化", chg), _col("同類課表變化基準", basecol)]
+    work = f.get("_split") == "work"
+    cols = [_col(_("指標（參考）"), names), _col(_("前半（作功）") if work else _("前半（移動時間）"), first),
+            _col(_("後半（作功）") if work else _("後半（移動時間）"), last),
+            _col(_("變化"), chg), _col(_("同類課表變化基準"), basecol)]
     s = _samples(ds, w)
     g = _eval(ds, w, "rgrade")
     dh = downhill_share(s["t"], g, s["dist"], s["ilr"]) if s is not None else None
     rows = []
     if dh and dh.get("time_s"):
-        rows.append(_row("陡下坡（< −10%）", f"{_hms(dh['time_s'])}（時間 {_pct(dh['time_share'], 0)}"
-                                           f"、距離 {_pct(dh.get('dist_share'), 0)}"
-                                           + (f"、衝擊量 {_pct(dh['impact_share'], 0)}" if dh.get("impact_share") is not None else "")
-                                           + "）"))
+        rows.append(_row(_("陡下坡（< −10%）"),
+                         (_("{t}（時間 {ts}、距離 {ds}、衝擊量 {imp}）", t=_hms(dh['time_s']), ts=_pct(dh['time_share'], 0),
+                            ds=_pct(dh.get('dist_share'), 0), imp=_pct(dh['impact_share'], 0))
+                          if dh.get("impact_share") is not None else
+                          _("{t}（時間 {ts}、距離 {ds}）", t=_hms(dh['time_s']), ts=_pct(dh['time_share'], 0),
+                            ds=_pct(dh.get('dist_share'), 0)))))
     if not m.get("stryd"):
-        rows.append(_row("說明", "沒有 Stryd：只看步頻、觸地、振幅、kleg、衝擊 G，無法判讀衝擊與剛性"))
+        rows.append(_row(_("說明"), _("沒有 Stryd：只看步頻、觸地、振幅、kleg、衝擊 G，無法判讀衝擊與剛性")))
     lines = []
     ilr = f.get("ilr") or {}
     if m.get("stryd") and ilr.get("change") is not None:
@@ -3872,13 +3880,13 @@ def _form(ds, w, m, c, base):
         share = (dh or {}).get("impact_share")
         share = share if share is not None else (dh or {}).get("time_share")
         if compare(ilr["change"], b) == "high" and share is not None and share > STEEP_DOWN_SHARE:
-            lines.append("參考：後段 ILR 升幅超出自己的 IQR，且陡下坡佔 > 30%：留意膝蓋，下坡放慢或縮步")
+            lines.append(_("參考：後段 ILR 升幅超出自己的 IQR，且陡下坡佔 > 30%：留意膝蓋，下坡放慢或縮步"))
     lss, gct = (f.get("lss") or {}).get("change"), (f.get("gct") or {}).get("change")
     if lss is not None and gct is not None and lss < -0.02 and gct > 0.02:
-        lines.append(f"參考：LSS {lss * 100:+.1f}%、觸地 {gct * 100:+.1f}%：疲勞跡象")
+        lines.append(_("參考：LSS {lss:+.1f}%、觸地 {gct:+.1f}%：疲勞跡象", lss=lss * 100, gct=gct * 100))
     if not lines:
-        lines.append("參考：沒有明顯的跑姿／膝蓋負荷變化")
-    return {**base, "series": cols + rows + _verdict_rows(lines, "判讀（參考）")}
+        lines.append(_("參考：沒有明顯的跑姿／膝蓋負荷變化"))
+    return {**base, "series": cols + rows + _verdict_rows(lines, N_("判讀（參考）"))}
 
 
 # 跑姿分組 (wko5_viewer drawFormProfile; res.form_profile): the form metrics per grade bin
@@ -3886,8 +3894,8 @@ def _form(ds, w, m, c, base):
 # for that bin — the same pool as 坡度分組 (_pool + pooled: same category, 8 → 12 → 26 weeks
 # until ≥ 5 activities that spent ≥ BIN_MIN_S running in the bin; 推估)
 FORM_DEC = {"ilr": 1, "impact_g": 2, "impact_km": 0, "lss": 1, "kleg": 1, "gct": 0, "cadence": 0, "vo": 1}
-FORM_LABEL = {"ilr": "ILR", "impact_g": "衝擊 G", "impact_km": "每公里衝擊量（推估）", "lss": "LSS", "kleg": "kleg",
-              "gct": "觸地時間", "cadence": "步頻", "vo": "垂直振幅"}
+FORM_LABEL = {"ilr": "ILR", "impact_g": N_("衝擊 G"), "impact_km": N_("每公里衝擊量（推估）"), "lss": "LSS", "kleg": "kleg",
+              "gct": N_("觸地時間"), "cadence": N_("步頻"), "vo": N_("垂直振幅")}
 CADENCE_HINT = "衝擊高於平常、步頻低於平常 → 可試著把步頻提高 5–10%（Heiderscheit 2011）"
 # SP-236 (docs/research/downhill-knee-load-display.md §3.2): the same pattern on a downhill bin gets the
 # downhill wording — a higher step rate lowers the cumulative load on the knee and the other tissues
@@ -3925,8 +3933,8 @@ def cadence_hint(rows: list[dict], names: list[str]) -> list[str]:
 
 
 def _hint_rows(hints: list[str]) -> list[dict]:
-    return _verdict_rows(hints, "判讀（參考）") if hints else []
-BAND_LABEL = {"all": "全部坡度", "flat": "平路 −3～+3%", "up": "上坡 ≥ 3%", "down": "下坡 < −3%"}
+    return _verdict_rows(hints, N_("判讀（參考）")) if hints else []
+BAND_LABEL = {"all": N_("全部坡度"), "flat": N_("平路 −3～+3%"), "up": N_("上坡 ≥ 3%"), "down": N_("下坡 < −3%")}
 NO_STRYD_NOTE = ("這次沒有 Stryd：ILR（衝擊負荷率）和 LSS（腿部剛性）是 Stryd 腳掌感測器算的，手錶沒有，"
                  "所以只看步頻、觸地時間、垂直振幅、kleg、衝擊 G")
 
@@ -3983,7 +3991,7 @@ def _form_keys(rows: list[dict], stryd: bool) -> list[str]:
 def _form_cell(v, b: dict, k: str) -> str:
     d = FORM_DEC[k]
     s = _num(v, d)
-    return f"{s}（平常 {_num(b['median'], d)}）" if v is not None and b.get("ok") else s
+    return _("{v}（平常 {usual}）", v=s, usual=_num(b['median'], d)) if v is not None and b.get("ok") else s
 
 
 def _form_note_rows(m: dict) -> list[dict]:
@@ -4013,12 +4021,12 @@ def _form_grades(ds, w, m, c, base):
     fb = m.get("form_bins") or {}
     rows = fb.get("grade") or []
     if w.sport != "run" or not fb:
-        return {**base, "empty": "參考：只有跑步、而且有跑步動態資料時才有這一張"}
+        return {**base, "empty": _("參考：只有跑步、而且有跑步動態資料時才有這一張")}
     if not rows:
-        return {**base, "empty": "沒有距離或海拔，算不出坡度"}
+        return {**base, "empty": _("沒有距離或海拔，算不出坡度")}
     keys = _form_keys(rows, bool(m.get("stryd")))
     if not keys:
-        return {**base, "empty": "這次沒有跑步動態資料（步頻、觸地時間…）"}
+        return {**base, "empty": _("這次沒有跑步動態資料（步頻、觸地時間…）")}
     pool = _form_pool(ds, w)
     total = sum(r["time_s"] for r in rows) or 1.0
     bins = []
@@ -4029,11 +4037,11 @@ def _form_grades(ds, w, m, c, base):
         bins.append({**{k: r[k] for k in ("label", "lo", "hi", "time_s")}, "time_pct": r["time_s"] / total * 100.0,
                      "slow_share": r.get("slow_share"),
                      "m": {k: r["m"].get(k) for k in keys}, "base": {k: b[k] for k in keys}})
-    cols = [_col("坡度", [b["label"] for b in bins]), _col(_("移動時間"), [_hms(b["time_s"]) for b in bins]),
-            _col("佔比", [f"{b['time_pct']:.0f}%" for b in bins])]
+    cols = [_col(_("坡度"), [b["label"] for b in bins]), _col(_("移動時間"), [_hms(b["time_s"]) for b in bins]),
+            _col(_("佔比"), [f"{b['time_pct']:.0f}%" for b in bins])]
     if any(b["slow_share"] is not None for b in bins):
         cols.append(_col(_(SLOW_SHARE_LABEL), [_pct(b["slow_share"], 0) for b in bins]))
-    cols += [_col(f"{FORM_LABEL[k]}（平常）", [_form_cell(b["m"][k], b["base"][k], k) for b in bins]) for k in keys]
+    cols += [_col(_("{label}（平常）", label=_(FORM_LABEL[k])), [_form_cell(b["m"][k], b["base"][k], k) for b in bins]) for k in keys]
     hint = cadence_hint(bins, [f"坡度 {b['label']}" for b in bins])     # bins carry lo / hi (SP-236)
     return {**base, "series": cols + _form_note_rows(m) + _no_impact_rows(bins, keys) + _hint_rows(hint),
             "form_profile": {"mode": "grade", "bins": bins, "keys": keys, "min_s": BIN_MIN_S,
@@ -4045,10 +4053,10 @@ def _form_work(ds, w, m, c, base):
     fb = m.get("form_bins") or {}
     work = fb.get("work") or {}
     if w.sport != "run" or not work.get("all"):
-        return {**base, "empty": "參考：只有跑步、而且有跑步動態資料時才有這一張"}
+        return {**base, "empty": _("參考：只有跑步、而且有跑步動態資料時才有這一張")}
     keys = _form_keys(work["all"], bool(m.get("stryd")))
     if not keys:
-        return {**base, "empty": "這次沒有跑步動態資料（步頻、觸地時間…）"}
+        return {**base, "empty": _("這次沒有跑步動態資料（步頻、觸地時間…）")}
     pool = _form_pool(ds, w)
     bands = {}
     for band, rows in work.items():
@@ -4063,16 +4071,16 @@ def _form_work(ds, w, m, c, base):
                         "m": {k: r["m"].get(k) for k in keys}, "base": {k: b[k] for k in keys}})
         bands[band] = out
     split = fb.get("split") or "time"
-    cols = [_col("坡度", [BAND_LABEL[b] for b, rows in bands.items() for _ in rows]),
-            _col("作功段" if split == "work" else "移動時間段", [r["label"] for rows in bands.values() for r in rows]),
+    cols = [_col(_("坡度"), [_(BAND_LABEL[b]) for b, rows in bands.items() for _r in rows]),
+            _col(_("作功段") if split == "work" else _("移動時間段"), [r["label"] for rows in bands.values() for r in rows]),
             _col(_("移動時間"), [_hms(r["time_s"]) for rows in bands.values() for r in rows])]
-    cols += [_col(f"{FORM_LABEL[k]}（平常）", [_form_cell(r["m"][k], r["base"][k], k)
+    cols += [_col(_("{label}（平常）", label=_(FORM_LABEL[k])), [_form_cell(r["m"][k], r["base"][k], k)
                                               for rows in bands.values() for r in rows]) for k in keys]
     word = "作功" if split == "work" else "時間"
     hint = cadence_hint(bands["all"], [f"{word} {r['label']}" for r in bands["all"]])
     return {**base, "series": cols + _form_note_rows(m) + _hint_rows(hint),
             "form_profile": {"mode": "work", "split": split, "bands": bands,
-                             "band_labels": {b: BAND_LABEL[b] for b in bands}, "keys": keys, "min_s": BIN_MIN_S,
+                             "band_labels": {b: _(BAND_LABEL[b]) for b in bands}, "keys": keys, "min_s": BIN_MIN_S,
                              "pool_weeks": list(POOL_WEEKS), "stryd": bool(m.get("stryd")),
                              "note": None if m.get("stryd") else NO_STRYD_NOTE}}
 
@@ -4100,12 +4108,12 @@ def _cad_pool(ds, w) -> tuple[list[list[list]], int]:
 
 def _form_cadence(ds, w, m, c, base):
     if w.sport != "run":
-        return {**base, "empty": "參考：只有跑步才有這一張"}
+        return {**base, "empty": _("參考：只有跑步才有這一張")}
     if not m.get("stryd"):
-        return {**base, "empty": "這次沒有 Stryd：ILR（衝擊負荷率）是 Stryd 腳掌感測器算的，手錶沒有，所以不畫步頻與衝擊"}
+        return {**base, "empty": _("這次沒有 Stryd：ILR（衝擊負荷率）是 Stryd 腳掌感測器算的，手錶沒有，所以不畫步頻與衝擊")}
     cw = m.get("cad_windows") or []
     if len(cw) < CW_MIN_WIN:
-        return {**base, "empty": f"這次穩定跑的 30 秒段只有 {len(cw)} 段（< {CW_MIN_WIN}），看不出步頻和衝擊的關係"}
+        return {**base, "empty": _("這次穩定跑的 30 秒段只有 {n} 段（< {need}），看不出步頻和衝擊的關係", n=len(cw), need=CW_MIN_WIN)}
     pool, weeks = _cad_pool(ds, w)
     fit = cadence_fit(pool)
     a = np.array([r[:4] for r in cw], dtype=float)
@@ -4140,11 +4148,11 @@ def _form_cadence(ds, w, m, c, base):
 
 def _cp(ds, w, m, c, base):
     if c["type"] != "test_cp":
-        return {**base, "empty": "這次不是 CP 測試（課表偏好的 CP 測試方式：20 分全力／12 分＋3 分／5–10 K 比賽）"}
+        return {**base, "empty": _("這次不是 CP 測試（課表偏好的 CP 測試方式：20 分全力／12 分＋3 分／5–10 K 比賽）")}
     ev = cp_eval(ds, w, m, c)
     if not ev:
-        return {**base, "empty": "沒有功率，算不出 CP" if m.get("avg_power") is None
-                else "找不到這個流程的全力段，算不出 CP"}
+        return {**base, "empty": _("沒有功率，算不出 CP") if m.get("avg_power") is None
+                else _("找不到這個流程的全力段，算不出 CP")}
     how = MATCH_LABEL.get(c.get("test_match"))
     rows = [_row("流程", ev["protocol_label"] + (f"（依{how}）" if how else ""))]
     for b in ev.get("bouts") or []:
@@ -4187,10 +4195,10 @@ def _offer_action(w) -> dict:
     viewer reloads the dashboard (`reload`)."""
     from backend.engine import activity_tags as AT
     from backend.engine.interval_eval import FLAG_TAG
-    return {"kind": "flag_interval", "label": "當作間歇判讀", "method": "PATCH", "url": "/api/v1/wko5/activities",
+    return {"kind": "flag_interval", "label": _("當作間歇判讀"), "method": "PATCH", "url": "/api/v1/wko5/activities",
             "body": {"items": [{"key": AT.key_of(w.entry.start), "file": getattr(w.entry, "file", None)}],
                      "add_tags": [FLAG_TAG]},
-            "done": f"已標記「{FLAG_TAG}」，重新判讀中…（到活動編輯頁移除這個標籤可以取消）", "reload": True}
+            "done": _("已標記「{tag}」，重新判讀中…（到活動編輯頁移除這個標籤可以取消）", tag=FLAG_TAG), "reload": True}
 
 
 def _thin(xs: list, ys: list, n: int = 1800) -> list:
@@ -4204,24 +4212,24 @@ def _iv_verdict(ds, w, m, c, base):
     e = IE.card_cached(ds, w)
     if not e.get("ok"):
         if e.get("state") != "offer":
-            return {**base, "empty": e.get("why") or "無法判讀"}
+            return {**base, "empty": e.get("why") or _("無法判讀")}
         n = e.get("n_bouts") or 0
-        rows = [_row("間歇", e["why"])]
+        rows = [_row(_("間歇"), e["why"])]
         if e.get("flagged"):
             return {**base, "series": rows}
-        rows.append(_row("偵測", f"偵測到 {n} 趟用力段，可以當作間歇判讀" if n else "沒有偵測到用力段，當作間歇也沒有趟可判讀",
-                         "用力段 = ≥ 95% CP、≥ 40 秒的短趟（至少 3 趟），否則 3 區以上（≥ 0.95 × 88% CP）≥ 2.5 分的段"))
-        head = "找不到趟" if c["type"] == "quality" else "這次不是間歇課"
-        out = {**base, "badge": {"text": head, "level": "", "sub": e.get("type_label") or ""}, "series": rows}
+        rows.append(_row(_("偵測"), _("偵測到 {n} 趟用力段，可以當作間歇判讀", n=n) if n else _("沒有偵測到用力段，當作間歇也沒有趟可判讀"),
+                         _("用力段 = ≥ 95% CP、≥ 40 秒的短趟（至少 3 趟），否則 3 區以上（≥ 0.95 × 88% CP）≥ 2.5 分的段")))
+        head = _("找不到趟") if c["type"] == "quality" else _("這次不是間歇課")
+        out = {**base, "badge": {"text": head, "level": "", "sub": _(e.get("type_label") or "")}, "series": rows}
         if n:
             out["action"] = _offer_action(w)
         return out
     # the viewer draws `chip_rows` (one compact row per segment / reading: label + number chips + a verdict
     # chip, the long sentence behind the row's ?); `series` keeps the full sentences for the AI / API
-    wtip = e["wprime_src"] + "；W′ 電池（W′ balance）算法參考 WKO5，跑步沒驗證（推估）"
-    wrow = _chip_row("W′", [f"用掉 {e['wprime_used_j'] / 1000:.1f} kJ", f"{e['wprime_used_j'] / e['wprime_j'] * 100:.0f}% W′",
-                            f"W′ 電池最低 {e['dfrc_min_pct'] * 100:.0f}%"],
-                     tip=f"整趟高於 CP 的功（含回充後再用）÷ W′ {e['wprime_j'] / 1000:.1f} kJ；電池最低 = W′ 最低剩多少。{wtip}")
+    wtip = e["wprime_src"] + _("；W′ 電池（W′ balance）算法參考 WKO5，跑步沒驗證（推估）")
+    wrow = _chip_row("W′", [_("用掉 {kj:.1f} kJ", kj=e['wprime_used_j'] / 1000), f"{e['wprime_used_j'] / e['wprime_j'] * 100:.0f}% W′",
+                            _("W′ 電池最低 {pct:.0f}%", pct=e['dfrc_min_pct'] * 100)],
+                     tip=_("整趟高於 CP 的功（含回充後再用）÷ W′ {kj:.1f} kJ；電池最低 = W′ 最低剩多少。", kj=e['wprime_j'] / 1000) + wtip)
     if e.get("kind") == "test":
         rows = [_row("判定", e["verdict_label"], "測試照流程判讀：每一段是不是平均分配（不是對照目標帶的「達標」）"),
                 _row("流程", e["label"])]
@@ -4249,18 +4257,19 @@ def _iv_verdict(ds, w, m, c, base):
         return {**base, "badge": {"text": e["verdict_label"], "level": e["level"], "sub": e["label"]}, "series": rows,
                 "chip_rows": chips}
     sub = f"{e['label']}" + ("" if e["planned"] else
-                             "（你標了「當作間歇」：用偵測到的趟）" if e.get("flagged") else "（沒有對應的課表：用偵測到的趟）")
+                             _("（你標了「當作間歇」：用偵測到的趟）") if e.get("flagged") else _("（沒有對應的課表：用偵測到的趟）"))
     rows = [_row("判定", e["verdict_label"], "對照「這次選的課表」本身的計畫；同等與否在選課時已決定"),
             _row("課表", sub)]
     for i, r in enumerate(e["reasons"]):
         rows.append(_row("理由" if i == 0 else "", r))
     rows.append(_row("W′ 用掉", f"{e['wprime_used_j'] / 1000:.1f} kJ（{e['wprime_used_j'] / e['wprime_j'] * 100:.0f}% W′）；"
                      f"W′ 電池最低 {e['dfrc_min_pct'] * 100:.0f}%", wtip))
-    src = {"lap": "COROS 推送的分段（lap）", "power": "功率型態（0.95 × 目標下限）", "short": "短趟偵測（≥ 95% CP）",
-           "z3": "3 區偵測（≥ 0.95 × 88% CP）"}.get(e["rep_source"], "—")
-    rows.append(_row("找趟", src))
+    src_name = {"lap": N_("COROS 推送的分段"), "power": N_("功率型態"), "short": N_("短趟偵測"), "z3": N_("3 區偵測")}.get(e["rep_source"])
+    src_rule = {"lap": "lap", "power": N_("0.95 × 目標下限"), "short": "≥ 95% CP", "z3": "≥ 0.95 × 88% CP"}.get(e["rep_source"])
+    src = _("{name}（{rule}）", name=_(src_name), rule=_(src_rule)) if src_name else "—"
+    rows.append(_row(_("找趟"), src))
     n, hit = e["n_plan"], e["hit"]
-    chips = [_chip_row("每趟", [f"{hit}/{n} 趟在目標帶"], "全部達標" if hit >= n else f"差 {n - hit} 趟",
+    chips = [_chip_row(_("每趟"), [_("{hit}/{n} 趟在目標帶", hit=hit, n=n)], _("全部達標") if hit >= n else _("差 {k} 趟", k=n - hit),
                        "good" if hit >= n else "warn",
                        # the tolerance / TIZ goal in effect and whose they are (interval_calib, SP-69)
                        _("在目標帶 = 平均 ≥ {floor:.0f} W（目標下限 {lo:.0f}% CP × {tol}，{basis}）。每趟的長條在「每趟功率」。",
@@ -4268,19 +4277,19 @@ def _iv_verdict(ds, w, m, c, base):
                          basis=e.get("in_band_basis", "")))]
     if e.get("tiz_ratio") is not None:
         ok = e["tiz_ratio"] >= e.get("tiz_goal", 0.85)
-        chips.append(_chip_row("目標區時間", [f"{e['tiz_s'] / 60:.1f} / {e['tiz_plan_s'] / 60:.0f} 分", f"{e['tiz_ratio'] * 100:.0f}%"],
-                               "夠" if ok else "不足", "good" if ok else "warn",
+        chips.append(_chip_row(_("目標區時間"), [_("{a:.1f} / {b:.0f} 分", a=e['tiz_s'] / 60, b=e['tiz_plan_s'] / 60), f"{e['tiz_ratio'] * 100:.0f}%"],
+                               _("夠") if ok else _("不足"), "good" if ok else "warn",
                                _("目標區時間 ÷ 這份課表計畫的時間；≥ {goal:.0%} 算達到，{basis}。",
                                  goal=e.get("tiz_goal", 0.85), basis=e.get("tiz_basis", ""))))
     if e.get("outcome_why"):
         lv = {"met": "good", "border": "warn"}.get(e.get("outcome"), "bad")
         from backend.engine import quality_gate as QG
-        chips.append(_chip_row("逐趟判定", [], QG.OUTCOME_LABEL.get(e.get("outcome"), e.get("outcome")), lv, e["outcome_why"]))
+        chips.append(_chip_row(_("逐趟判定"), [], _(QG.OUTCOME_LABEL.get(e.get("outcome"), e.get("outcome") or "")), lv, e["outcome_why"]))
     if e.get("fade") is not None:
-        chips.append(_chip_row("掉速", [f"{e['fade'] * 100:+.0f}%", f"Sdec {e['sdec']:.1f}%"],
-                               tip="掉速 = 最後一趟比第一趟；Sdec = 衰退分數（Glaister 2008），只顯示、不判讀。"))
+        chips.append(_chip_row(_("掉速"), [f"{e['fade'] * 100:+.0f}%", f"Sdec {e['sdec']:.1f}%"],
+                               tip=_("掉速 = 最後一趟比第一趟；Sdec = 衰退分數（Glaister 2008），只顯示、不判讀。")))
     chips.append(wrow)
-    chips.append(_chip_row("找趟", [src.split("（")[0]], tip=f"{src}。課表：{sub}"))
+    chips.append(_chip_row(_("找趟"), [_(src_name) if src_name else "—"], tip=_("{src}。課表：{sub}", src=src, sub=sub)))
     return {**base, "badge": {"text": e["verdict_label"], "level": e["level"], "sub": sub}, "series": rows,
             "chip_rows": chips}
 
@@ -4320,9 +4329,10 @@ def _iv_reps(ds, w, m, c, base):
     k_in = sum(1 for r in reps if r["status"] == "in")
     k_hi = sum(1 for r in reps if r["status"] == "high")
     k_lo = sum(1 for r in reps if r["status"] == "low")
-    head = f"{n} 趟中 {k_in} 趟在目標內" + (f"，{k_hi} 趟偏高" if k_hi else "") + (f"，{k_lo} 趟偏低" if k_lo else "")
+    head = (_("{n} 趟中 {k} 趟在目標內", n=n, k=k_in) + (_("，{k} 趟偏高", k=k_hi) if k_hi else "")
+            + (_("，{k} 趟偏低", k=k_lo) if k_lo else ""))
     if len(reps) < n:
-        head += f"，少做 {n - len(reps)} 趟"
+        head += _("，少做 {k} 趟", k=n - len(reps))
     band = (f"{e['lo'] * 100:.0f}–{e['hi'] * 100:.0f}% CP（{lo_w:.0f}–{hi_w:.0f} W）" if hi_w is not None
             else f"≥ {e['lo'] * 100:.0f}% CP（≥ {lo_w:.0f} W）")
     desc = (f"每趟一根長條（照順序），頂端 = 那趟的平均功率；綠色帶 = 目標 {band}。長條頂端落在綠色帶裡 = 達標："
@@ -4411,8 +4421,9 @@ def _iv_power(ds, w, m, c, base):
             "低於 CP 回充；算法參考 WKO5（30% 25 秒＋70% 300 秒回充），跑步沒驗證（推估）。"
             f"{b['wprime_src']}。下：心率（bpm，5 秒平均，手腕光學有延遲）。滑過任一處兩格一起看同一秒。"
             + (f"近 90 天最佳 5 分鐘 {pdc:.0f} W（{pdc / cp * 100:.0f}% CP，參考值，做法參考 WKO5）。" if pdc else ""))
-    sub = (f"W′ 最低 {b['dfrc_min_pct'] * 100:.0f}%（{_hms(trace['dfrc_min']['t'])}）· 整趟高於 CP 的功 "
-           f"{b['wprime_used_j'] / 1000:.1f} kJ（{b['wprime_used_j'] / b['wprime_j'] * 100:.0f}% W′，含回充後再用）")
+    sub = _("W′ 最低 {pct:.0f}%（{t}）· 整趟高於 CP 的功 {kj:.1f} kJ（{share:.0f}% W′，含回充後再用）",
+            pct=b['dfrc_min_pct'] * 100, t=_hms(trace['dfrc_min']['t']), kj=b['wprime_used_j'] / 1000,
+            share=b['wprime_used_j'] / b['wprime_j'] * 100)
     return {**base, "series": [], "iv_trace": trace, "subtitle": sub, "description": desc}
 
 
@@ -4438,14 +4449,14 @@ def _iv_battery(ds, w, m, c, base, compact: bool = False):
     lo_t, lo_v = e["dfrc_min_t"], e["dfrc_min_pct"]
     s = [{"name": _("W′ 電池（W′ balance）"), "type": "line", "expression": "", "y_axis": "PERCENT", "unit": pct, "color": SERIES1,
           "data": {"kind": "points", "x": "seconds", "points": _thin(ser["t"], ser["dfrc_pct"])}},
-         {"name": "最低", "type": "line", "expression": "", "y_axis": "PERCENT", "unit": pct, "color": SERIES1,
-          "labels": [f"最低 {lo_v * 100:.0f}%"], "data": {"kind": "points", "x": "seconds",
+         {"name": _("最低"), "type": "line", "expression": "", "y_axis": "PERCENT", "unit": pct, "color": SERIES1,
+          "labels": [_("最低 {pct:.0f}%", pct=lo_v * 100)], "data": {"kind": "points", "x": "seconds",
                                                           "points": [[round(lo_t, 1), round(lo_v, 4)]]}}]
     desc = (f"電池 = 還剩多少 W′（{e['wprime_j'] / 1000:.1f} kJ = 100%）。高於 CP（{e['cp']:.0f} W）就耗電，"
             f"休息或低於 CP 時回充。算法參考 WKO5（30% 25 秒＋70% 300 秒回充），"
             f"推估，跑步沒驗證。{e['wprime_src']}")
-    sub = (f"整趟高於 CP 的功 {e['wprime_used_j'] / 1000:.1f} kJ（{e['wprime_used_j'] / e['wprime_j'] * 100:.0f}% W′，"
-           f"含回充後再用），電池最低 {lo_v * 100:.0f}%（{_hms(lo_t)}）")
+    sub = _("整趟高於 CP 的功 {kj:.1f} kJ（{share:.0f}% W′，含回充後再用），電池最低 {pct:.0f}%（{t}）",
+            kj=e['wprime_used_j'] / 1000, share=e['wprime_used_j'] / e['wprime_j'] * 100, pct=lo_v * 100, t=_hms(lo_t))
     if compact:
         desc = "W′ 電池（W′ balance）：W′ 剩多少，100% = 滿。和功率、心率疊在一起看在「間歇」分頁。" + desc
     return {**base, "axes": [{"id": "PERCENT", "unit": pct, "max": 1.0}], "series": s, "description": desc,
@@ -4468,12 +4479,12 @@ def _iv_tiz(ds, w, m, c, base):
     xu = {"id": "BAR", "label": "", "kind": "number", "dec": [[0, 0]]}
     plan, act = e["tiz_plan_s"], e["tiz_s"] or 0.0
     r = e.get("tiz_ratio")
-    s = [{"name": "計畫（這份課表）", "type": "bar", "expression": "", "y_axis": "HHMMSS", "unit": du, "x_unit": xu,
-          "color": MUTED, "bar_width": 36, "labels": [f"計畫 {plan / 60:.0f} 分"],
+    s = [{"name": _("計畫（這份課表）"), "type": "bar", "expression": "", "y_axis": "HHMMSS", "unit": du, "x_unit": xu,
+          "color": MUTED, "bar_width": 36, "labels": [_("計畫 {m:.0f} 分", m=plan / 60)],
           "data": {"kind": "points", "x": "value", "points": [[1, plan]]}},
-         {"name": "實際", "type": "bar", "expression": "", "y_axis": "HHMMSS", "unit": du, "x_unit": xu,
+         {"name": _("實際"), "type": "bar", "expression": "", "y_axis": "HHMMSS", "unit": du, "x_unit": xu,
           "color": GOOD if (r or 0) >= e.get("tiz_goal", 0.85) else BAD, "bar_width": 36,
-          "labels": [f"實際 {act / 60:.1f} 分（{(r or 0) * 100:.0f}%）"],
+          "labels": [_("實際 {m:.1f} 分（{pct:.0f}%）", m=act / 60, pct=(r or 0) * 100)],
           "data": {"kind": "points", "x": "value", "points": [[2, act]]}}]
     zone = f"≥ {e['lo'] * 100:.0f}% CP" if e["z5"] else f"{e['lo'] * 100:.0f}–{e['hi'] * 105:.0f}% CP"
     return {**base, "axes": [{"id": "HHMMSS", "unit": du, "min": 0}], "series": s,
@@ -4492,14 +4503,14 @@ def _iv_hr(ds, w, m, c, base):
     bu = U.meta("BPM")
     ps = e.get("peers") or []
     if len(ps) < 2:
-        return {**base, "empty": "還沒有功率相近（±3%）的同類間歇可以比"}
+        return {**base, "empty": _("還沒有功率相近（±3%）的同類間歇可以比")}
     prev = [[p["date"], round(p["hr_end"], 1)] for p in ps if not p["current"]]
     cur = [[p["date"], round(p["hr_end"], 1)] for p in ps if p["current"]]
     med = float(np.median([p[1] for p in prev])) if prev else None
-    s = [{"name": "之前的同類間歇", "type": "line", "line_style": "none", "expression": "", "y_axis": "BPM", "unit": bu,
+    s = [{"name": _("之前的同類間歇"), "type": "line", "line_style": "none", "expression": "", "y_axis": "BPM", "unit": bu,
           "color": MUTED, "data": {"kind": "points", "x": "datetime", "points": prev}},
-         {"name": "這次", "type": "line", "expression": "", "y_axis": "BPM", "unit": bu, "color": SERIES1,
-          "labels": [f"這次 {cur[0][1]:.0f}"] if cur else None,
+         {"name": _("這次"), "type": "line", "expression": "", "y_axis": "BPM", "unit": bu, "color": SERIES1,
+          "labels": [_("這次 {v:.0f}", v=cur[0][1])] if cur else None,
           "data": {"kind": "points", "x": "datetime", "points": cur}}]
     if med:
         s.append({"name": "之前的中位 ±3%", "type": "line", "expression": "", "y_axis": "BPM", "unit": bu, "color": MUTED,

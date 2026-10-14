@@ -26,6 +26,7 @@ import math
 import re
 from typing import Optional, Sequence
 
+from backend.engine import hints as H
 from backend.engine.algorithms import minetti
 from backend.engine.racepower import hike as HK
 from backend.i18n import _
@@ -539,7 +540,7 @@ def plan_fuel(plan: dict, *, weight: float, stops: Optional[list] = None, start_
     rel = BAND_POWER * pw_share + BAND_MODEL * (1.0 - pw_share)
     fl = fletcher_check(segs, weight)
     if total and abs(total - fl["kcal"]) / fl["kcal"] > CROSS_TOL:
-        warnings.append(f"熱量交叉檢查：功率法 {total:.0f} kcal 和 Fletcher 距離法 {fl['kcal']:.0f} kcal 差超過 15 %")
+        warnings.append(H.tag("RC22", f"熱量交叉檢查：功率法 {total:.0f} kcal 和 Fletcher 距離法 {fl['kcal']:.0f} kcal 差超過 15 %"))
     kj = sum(float(x.get("power") or 0) * float(x.get("t") or 0) for x in segs) / 1000.0
     keytel = None
     if hr_bpm and body_src["age"] != "推估":
@@ -634,7 +635,7 @@ def plan_fuel(plan: dict, *, weight: float, stops: Optional[list] = None, start_
                            "action": (f"出發：到第一個有水的站約帶 {_rng(*legs[0]['carry_ml'], 'ml')}" if len(legs) > 1
                                       else f"全程沒有水站：約帶 {_rng(*legs[0]['carry_ml'], 'ml')}")})
         if not sts and kind == "trail":
-            warnings.append("沒有輸入補給站：越野賽請在「補給站」加上 km，才能算每段要帶多少水")
+            warnings.append(H.tag("RC21", "沒有輸入補給站：越野賽請在「補給站」加上 km，才能算每段要帶多少水"))
     leg_from = {lg["from_km"]: lg for lg in legs[1:]}
     for r in sts:
         sup = STOP_TYPES[r["type"]]
@@ -668,8 +669,8 @@ def plan_fuel(plan: dict, *, weight: float, stops: Optional[list] = None, start_
     drunk_l = (tot_w[0] + tot_w[1]) / 2000.0
     dehyd = (sweat_l - drunk_l) / weight if weight else None
     if dehyd is not None and dehyd > 0.02 and not thirst:
-        warnings.append(f"預估脫水約 {dehyd:.1%} 體重（流汗推估 {sweat_l:.1f} L，喝 {drunk_l:.1f} L）：> 2 % 表現會掉，"
-                        "熱天往水量上限靠，但不要喝到體重增加")
+        warnings.append(H.tag("RC20", f"預估脫水約 {dehyd:.1%} 體重（流汗推估 {sweat_l:.1f} L，喝 {drunk_l:.1f} L）：> 2 % 表現會掉，"
+                        "熱天往水量上限靠，但不要喝到體重增加"))
     intake = (tot_cho[0] + tot_cho[1]) / 2.0 * 4.0
     method_kcal = {}
     for e in en:
@@ -741,7 +742,7 @@ def _hike_fuel(plan: dict, segs: list, weight: float, cls: str, body: dict, body
         for d in days_in:
             by_day[int(d["day"])] = {"kcal_pandolf": float(d.get("kcal") or 0.0), "kcal_yamamoto": float(d.get("kcal") or 0.0),
                                      "moving_h": float(d.get("moving_h") or 0.0), "water": list(d.get("water_ml") or [0, 0])}
-        warnings.append("手動路線沒有坡度剖面：行動熱量只用 Yamamoto（Pandolf 需要逐段坡度與速度）")
+        warnings.append(H.tag("RC22", "手動路線沒有坡度剖面：行動熱量只用 Yamamoto（Pandolf 需要逐段坡度與速度）"))
     rows = [{"day": n, **v} for n, v in sorted(by_day.items())]
     daily = baiyue_daily(rows, weight, body)
     for r, d in zip(rows, daily):
@@ -751,15 +752,15 @@ def _hike_fuel(plan: dict, segs: list, weight: float, cls: str, body: dict, body
     tot_p = sum(r["kcal_pandolf"] for r in rows)
     tot_y = sum(r["kcal_yamamoto"] for r in rows)
     if tot_y and abs(tot_p - tot_y) / tot_y > CROSS_TOL:
-        warnings.append(f"行動熱量：Pandolf {tot_p:.0f} kcal、Yamamoto {tot_y:.0f} kcal 差超過 15 %"
-                        "（Pandolf 對重背負常低估，Looney 2022）；糧食取較高者")
+        warnings.append(H.tag("RC22", f"行動熱量：Pandolf {tot_p:.0f} kcal、Yamamoto {tot_y:.0f} kcal 差超過 15 %"
+                        "（Pandolf 對重背負常低估，Looney 2022）；糧食取較高者"))
     food = [d["food_kg"] for d in daily]
     mean_food = sum(food) / len(food) if food else None
     if mean_food is not None and abs(mean_food - PACK_DAILY_DROP) > 0.15:
-        warnings.append(f"每天糧食約 {mean_food:.2f} kg（每日熱量 × 85 % ÷ 4.4 kcal/g），和背負預設每天 −{PACK_DAILY_DROP:g} kg 不同")
+        warnings.append(H.tag("RC18", f"每天糧食約 {mean_food:.2f} kg（每日熱量 × 85 % ÷ 4.4 kcal/g），和背負預設每天 −{PACK_DAILY_DROP:g} kg 不同"))
     if any(v == "推估" for v in body_src.values()):
         miss = "、".join({"height_cm": "身高", "age": "年齡", "sex": "性別"}[k] for k, v in body_src.items() if v == "推估")
-        warnings.append(f"基礎代謝缺{miss}：用假設值（175 cm、40 歲、男，推估）；到設定頁「個人資料」填")
+        warnings.append(H.tag("RC28", f"基礎代謝缺{miss}：用假設值（175 cm、40 歲、男，推估）；到設定頁「個人資料」填"))
     # schedule: per day from that day's start, every 45–60 min
     events = []
     ev_s = sum(cho["every_min"]) / 2.0 * 60.0

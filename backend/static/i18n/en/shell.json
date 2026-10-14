@@ -30,6 +30,7 @@
   "page.settings.name": "Settings",
   "page.settings.short": "Settings",
   "page.settings.purpose": "Calculation mode · weight · data fixes",
+  "page.settings.purpose_nomode": "Weight · thresholds · data fixes",
   "build.preparing": "Preparing your data…",
   "build.elapsed": "{s} s so far",
   "build.failed": "Data processing failed: {error}",

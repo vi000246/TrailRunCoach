@@ -3,6 +3,9 @@
 projection.project_weeks and applied after the placement (like the 減量期 rules, overview.taper_rules).
 
 A race (its `event` phase, auto or manual):
+  * its own days hold the race only (SP-492): a session the placement put there moves like one on
+    the no-run days below, else it goes (a quality session there first follows the 減量期's race-week
+    rule, overview.taper_rules);
   * the first planning.REC_NO_RUN_DAYS days no running and no strength: a session there moves to a
     free later day of the week, else it goes (a controlled trial: a 40-min easy run from 48 h on did
     no harm [256]; Higdon: 3 days off [446] — 教練級);
@@ -56,9 +59,9 @@ def _get(p, k):
 
 
 def a_windows(phases, events, monday: dt.date) -> list[dict]:
-    """The A races whose first REC_SHORT_DAYS after their last day touch the week of `monday`:
-    [{"race", "id", "end", "no_run", "short", "flat"}] (dates; `flat` None without a big downhill).
-    `phases`: Phase objects or dicts; `events`: planning.Event (for the downhill verdict)."""
+    """The A races whose days or first REC_SHORT_DAYS after their last day touch the week of `monday`:
+    [{"race", "id", "start", "end", "no_run", "short", "flat"}] (dates; `flat` None without a big
+    downhill). `phases`: Phase objects or dicts; `events`: planning.Event (for the downhill verdict)."""
     from backend.engine import planning as P
     sunday = monday + dt.timedelta(days=6)
     by_id = {e.id: e for e in events or ()}
@@ -67,7 +70,8 @@ def a_windows(phases, events, monday: dt.date) -> list[dict]:
         if _get(p, "kind") != "event":
             continue
         end, start = _d(_get(p, "end")), _d(_get(p, "start"))
-        if not (monday - dt.timedelta(days=P.REC_SHORT_DAYS) <= end < sunday):
+        # SP-492: a race ending on the Sunday too (its race day is in the week), was `end < sunday`
+        if not (monday - dt.timedelta(days=P.REC_SHORT_DAYS) <= end and start <= sunday):
             continue
         ev = by_id.get(_get(p, "event_id")) or next((e for e in events or () if e.start == start), None)
         dh = None
@@ -76,7 +80,8 @@ def a_windows(phases, events, monday: dt.date) -> list[dict]:
                 dh = P.downhill(ev)
             except Exception:                   # noqa: BLE001 — the plan must still build
                 dh = None
-        out.append({"race": ev.name if ev is not None else _("A 賽事"), "id": _get(p, "event_id"), "end": end,
+        out.append({"race": ev.name if ev is not None else _("A 賽事"), "id": _get(p, "event_id"),
+                    "start": start, "end": end,
                     "no_run": end + dt.timedelta(days=P.REC_NO_RUN_DAYS),
                     "short": end + dt.timedelta(days=P.REC_SHORT_DAYS),
                     "flat": end + dt.timedelta(days=P.DOWNHILL_FLAT_DAYS) if dh and dh.get("big") else None})
@@ -86,8 +91,10 @@ def a_windows(phases, events, monday: dt.date) -> list[dict]:
 def apply(ss: list, wins: list, monday: dt.date, notes: Optional[list] = None, today: Optional[dt.date] = None,
           blocked=(), easy_target: str = "") -> list:
     """`ss` (Session objects or dicts, placed) with the rules of `wins` (a_windows) applied to the
-    not-done sessions: moved off / dropped from the no-run days, capped easy runs in the first week,
-    the flat days after a big downhill. Returns the kept sessions; notes say what changed.
+    not-done sessions: moved off / dropped from the race days (SP-492: an A race's day holds the race
+    only — a `start` row; b_windows rows have none, bc_apply clears a B race's day) and the no-run days,
+    capped easy runs in the first week, the flat days after a big downhill. Returns the kept sessions;
+    notes say what changed.
     `easy_target`: the week's easy-run target text, for a session made an easy run (SP-408)."""
     if not wins or not ss:
         return ss
@@ -106,15 +113,19 @@ def apply(ss: list, wins: list, monday: dt.date, notes: Optional[list] = None, t
     blocked = {str(b) for b in blocked or ()}
     keep = list(ss)
     for w in wins:
-        touched, gone = False, 0
-        # 1. the no-run days: move to a free later day, else drop
+        touched, on_race, gone = False, False, 0
+        first = w.get("start") or w["end"] + dt.timedelta(days=1)
+        # 1. the race days (SP-492) and the no-run days: move to a free later day, else drop
         for s in sorted(keep, key=lambda x: _get(x, "day") or "9"):
             if _get(s, "done") or not _get(s, "day"):
                 continue
             d = _d(_get(s, "day"))
-            if not (w["end"] < d <= w["no_run"]) or _get(s, "kind") not in RUN_KINDS + ("strength",):
+            if not (first <= d <= w["no_run"]) or _get(s, "kind") not in RUN_KINDS + ("strength",):
                 continue
-            touched = True
+            if d <= w["end"]:
+                on_race = True
+            else:
+                touched = True
             run = _get(s, "kind") in RUN_KINDS
             used = {_get(x, "day") for x in keep if x is not s and not _get(x, "done")
                     and (_get(x, "kind") in RUN_KINDS) == run}
@@ -148,14 +159,20 @@ def apply(ss: list, wins: list, monday: dt.date, notes: Optional[list] = None, t
             put(s, minutes=nm, tss=round(float(_get(s, "tss") or 0.0) * (nm / m if m else 1.0), 1), detail=detail)
             if flat:
                 put(s, terrain="road", climb_m=None)
-        if touched and notes is not None:
+        if (touched or on_race) and notes is not None:
             date = f"{w['end'].month}/{w['end'].day}"
-            if w["short"] > w["end"]:
+            if not touched:
+                # only the race day had something (SP-492): a Sunday race, or nothing after it this week
+                txt = _("{p} 賽事「{race}」{date} 當天只排比賽", p="B" if w.get("b") else "A", race=w["race"],
+                        date=f"{first.month}/{first.day}")
+            elif w["short"] > w["end"]:
                 txt = _("{p} 賽事「{race}」{date} 後：前 {n} 天不排跑步和肌力，第 1 週每次 ≤ {max} 分輕鬆跑",
                         p="B" if w.get("b") else "A", race=w["race"], date=date, n=P.REC_NO_RUN_DAYS,
                         max=P.REC_SHORT_MIN)
             else:
                 txt = _("{p} 賽事「{race}」{date} 後", p="B" if w.get("b") else "A", race=w["race"], date=date)
+            if touched and on_race:
+                txt += _("；比賽當天只排比賽")
             if w["flat"] is not None:
                 txt += _("；下坡比你近 6 週練過的多，賽後 {h} 小時內走平路、不排硬課", h=P.DOWNHILL_FLAT_DAYS * 24)
             if gone:
@@ -392,6 +409,15 @@ def _is_baiyue(e) -> bool:
     return getattr(e, "kind", None) == "baiyue"
 
 
+def _fp(kind: str, *events) -> str:
+    """The condition of a B-race warning (SP-482 「知道了」, engine/hints.py): which warning and the races'
+    names, dates and distances — a changed date or distance shows the warning again (R7)."""
+    from backend.engine import hints as H
+    return H.fingerprint("OV8b", (kind,) + tuple((getattr(x, "name", None), str(getattr(x, "start", None)),
+                                                  str(getattr(x, "end", None)), getattr(x, "distance_km", None))
+                                                 for x in events))
+
+
 def b_hints(events, monday: dt.date, ctl: Optional[list] = None, phases=None,
             taper_pref: Optional[int] = None) -> list[dict]:
     """The week notes about the B races of the week of `monday` (b_week): too many (> B_PER_MONTH in 30
@@ -410,12 +436,14 @@ def b_hints(events, monday: dt.date, ctl: Optional[list] = None, phases=None,
         near = [x for x in bs if x is not e and abs((x.start - e.start).days) < 30]
         if len(near) + 1 > B_PER_MONTH:
             out.append({"level": "watch", "src": "race",
+                        # SP-482: 「知道了」 holds while the same B races stay in the same days (R7)
+                        "fp": _fp("many", e, *near),
                         "text": _("B 賽太多，等於一直在減量：「{race}」前後 30 天內還有 {n} 場 B 賽（CTS：訓練用的比賽一個月最多 1 場）",
                                   race=e.name, n=len(near))})
         a = next((x for x in sorted(events, key=lambda x: x.start) if getattr(x, "priority", None) == "A"
                   and 0 < (x.start - e.end).days <= B_NEAR_A_DAYS), None)
         if a is not None and P.event_size(e) >= P.MEDIUM:
-            out.append({"level": "watch", "src": "race",
+            out.append({"level": "watch", "src": "race", "fp": _fp("near_a", e, a),
                         "text": _("長距離 B 賽「{race}」在 A 賽事「{a}」前 {n} 天：A 賽前 2–4 週只建議較短、地形相似的熱身賽，"
                                   "或把它改成 C 賽輕鬆跑（CTS）", race=e.name, a=a.name, n=(a.start - e.end).days)})
         # SP-280 (Runna [482], 廠商規則, 推估): the next A race's 減量期, or longer than that A race —
@@ -440,7 +468,8 @@ def b_hints(events, monday: dt.date, ctl: Optional[list] = None, phases=None,
                     "或把它改成 C 賽輕鬆跑（Runna：B 賽要比 A 賽短；廠商規則，推估）", race=e.name, a=nxt.name, cmp=longer)
         else:
             continue
-        out.append({"level": "watch", "src": "race", "text": txt})
+        out.append({"level": "watch", "src": "race", "text": txt,
+                    "fp": _fp("taper" if in_taper else "longer", e, nxt) + ("+longer" if in_taper and longer else "")})
     if ctl:
         lo = monday - dt.timedelta(weeks=B_CTL_WEEKS)
         if any(lo <= e.start < monday for e in bs):

@@ -543,3 +543,39 @@ class DebugAuthFailure(Base):
     code: Mapped[str] = mapped_column(String(20))
     count: Mapped[int] = mapped_column(Integer, default=1)
     last_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class WeightMeasurement(Base):
+    """One body-weight measurement sent in through the weight API (SP-472, api/weight.py): the iOS
+    Shortcut or Health Auto Export reading Apple Health. Every one is kept, with where it came from;
+    receiving one recomputes nothing. The nightly apply (api/weight.apply) decides whether the day's
+    last one becomes a dated entry of plan.json's weights (engine/weight_sync.choose) and marks the
+    rows it looked at: status new | applied | skipped | superseded, `note` = why skipped. A second
+    copy of the same sample (same source and time) updates the row instead of adding one. New table:
+    created by init_db's create_all."""
+    __tablename__ = "weight_measurements"
+    __table_args__ = (UniqueConstraint("source", "measured_at"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    measured_at: Mapped[datetime] = mapped_column(DateTime, index=True)      # UTC (naive)
+    day: Mapped[date] = mapped_column(Date, index=True)                       # the athlete's local date
+    kg: Mapped[float] = mapped_column(Float)
+    source: Mapped[str] = mapped_column(String(24))          # shortcut | health_auto_export
+    device: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)  # the sample's own source name
+    received_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    status: Mapped[str] = mapped_column(String(12), default="new")
+    note: Mapped[Optional[str]] = mapped_column(String(24), nullable=True)
+    applied_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+
+class WeightToken(Base):
+    """A token of the weight API (SP-472, backend/weight_auth.py): it can only send body-weight
+    measurements (scope weight:write). Only the SHA-256 is stored (shown once, when made); revoked
+    rows stay for the list. Bound to the tenant whose DB holds it. New table: create_all."""
+    __tablename__ = "weight_tokens"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(40))
+    prefix: Mapped[str] = mapped_column(String(16))
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    last_used_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)

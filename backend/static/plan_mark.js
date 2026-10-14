@@ -8,7 +8,7 @@
 (function () {
   const T = (k, p) => (window.I18N ? window.I18N.t("common.planmark." + k, p) : k);
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-  const RULES = ["missed_easy", "missed_quality", "missed_long", "overhard", "rpe_hard", "fatigue", "cp", "plan"];
+  const RULES = ["missed_easy", "missed_quality", "missed_long", "overhard", "rpe_hard", "fatigue", "cp", "plan", "structure"];
   const GLYPH = { auto: "↻", user: "✎" };
   const st = document.createElement("style");
   st.textContent = `.pmk { font-weight: 700; font-size: 11px; line-height: 1; }

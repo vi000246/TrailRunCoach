@@ -357,7 +357,9 @@ def test_week_plan_accepted_b2b_on_the_users_days_volume_unchanged():
     assert (by["long"]["day"], by["long2"]["day"]) == ("2026-10-03", "2026-10-04")       # the user's Sat + Sun
     assert by["long"]["minutes"] == 180 and by["long2"]["minutes"] == 120
     assert by["long"]["title"].startswith("B2B 第 1 天") and "30–60 g" in by["long"]["detail"]
-    assert "（共 2 天）" in by["long"]["detail"] and by["long"]["target"].startswith("心率 ≤ 輕鬆跑上限")
+    # SP-437 (Q2 B): the target is the structure's summary — the easy-run HR band up to the cap
+    assert "（共 2 天）" in by["long"]["detail"] and by["long"]["target"].startswith("心率") \
+        and "≤ 輕鬆跑上限" in by["long"]["target"]
     assert wp["b2b"]["weeks_out"] == 10 and "kg" not in by["long"]["detail"]            # no pack in training
     # Koop: the week's total is the same as without B2B (day 2 came out of the easy runs)
     main = sum(s["minutes"] for s in wp["sessions"] if s["kind"] not in ("strength",))

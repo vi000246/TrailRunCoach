@@ -47,8 +47,12 @@
   // 成就 is the 成就 tab of 活動列表 (2026-10-02); /api/v1/achievements/page redirects there
   const MORE = new Set(["activity", "routes", "injuries", "settings"]);
   for (const p of PAGES) p.more = MORE.has(p.id);
+  // SP-480: 設定's purpose names 計算模式 only for whoever may switch it (SP-464: in sign-in mode an
+  // admin; the owner's app and the demo have no `login`)
+  const NOMODE = !!SESSION.login && !((SESSION.membership && SESSION.membership.scopes) || []).includes("admin");
   for (const p of PAGES) {      // name / short / purpose: shell.json "page.<id>.*"
-    p.name = T(`page.${p.id}.name`); p.short = T(`page.${p.id}.short`); p.purpose = T(`page.${p.id}.purpose`);
+    p.name = T(`page.${p.id}.name`); p.short = T(`page.${p.id}.short`);
+    p.purpose = T(`page.${p.id}.purpose${p.id === "settings" && NOMODE ? "_nomode" : ""}`);
   }
 
   const me = document.currentScript;

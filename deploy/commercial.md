@@ -11,6 +11,7 @@
 - `coach.yichlin.com` 已經走 Cloudflare **named tunnel** 到 NAS 的 `:8000`（SP-65，2026-10-05 設好）。
 - 外網進來先經過 **Cloudflare Access**（Zero Trust）的登入頁；`/share` 另外設了 Bypass。這就是 auth plan 裡說的「密碼 proxy」。
 - 示範主機還沒有自己的 hostname（靜態示範在 GitHub Pages，SP-350 搬到 Cloudflare Pages）。
+- 部署：image 在 Mac build、傳到 NAS `docker load`，NAS 不 build、不連 GitHub（`docs/deploy/wko5coach.deploy.md`「正式環境：NAS」）。
 
 上線前，下面每一步都不能讓 `coach.yichlin.com` 少掉 Access 那一層，**拿掉 Access 只在第 3 步、和登入同一次部署**。
 
@@ -91,29 +92,39 @@
   ```
 - 驗收：`docker logs wko5coach 2>&1 | grep -F "<secret 的前 8 個字>"` 與 `grep -rF` app.log 都找不到。
 
-## 5b. repo 轉 private 之後，NAS 用唯讀 deploy key 拉 repo 👤（SP-350）
+## 5b. repo 轉 private 之後的部署：不需要 deploy key（SP-350）
 
-1. NAS 上產生一把只給這個 repo 用的 key（不設密碼，因為部署腳本要自動拉）：
-   ```bash
-   ssh-keygen -t ed25519 -f ~/.ssh/trc_deploy -C "nas-deploy trailruncoach" -N ""
-   cat ~/.ssh/trc_deploy.pub
-   ```
-2. GitHub → repo → **Settings → Deploy keys → Add deploy key**：貼上 `.pub`，**不要勾** Allow write access。
-3. NAS 的 `~/.ssh/config`：
-   ```
-   Host github-trc
-     HostName github.com
-     User git
-     IdentityFile ~/.ssh/trc_deploy
-     IdentitiesOnly yes
-   ```
-4. 把 NAS 上那份 clone 的 remote 換掉：`git remote set-url origin git@github-trc:vi000246/TrailRunCoach.git`，`git fetch` 成功。
-5. 重新部署一次（`./deploy.sh` 或 compose `up --build -d`），確認版本號（Debug API 的 `TRC_GIT_SHA`）是新的。
-6. 其他會拉這個 repo 的地方：
-   - 其他電腦的 clone：用自己的 GitHub 帳號登入（private repo 你本人有權限），不用 deploy key。
-   - vault 的 `repo-docs/` 鏡像：從本機 clone 讀，不經 GitHub，不受影響。
-   - Claude 的雲端 session：靠 GitHub App 授權，private 後照常（App 要裝在這個 repo 上）。
-   - GitHub Actions：目前沒有 workflow；之後加的話 private repo 每月有免費分鐘數。
+**結論：NAS 不需要唯讀 deploy key。** 2026-10-05 起 NAS 不再從 GitHub 拉程式、也不在 NAS 上 build：
+image 在 Mac 用本機 clone 的 `git archive HEAD` 建（`linux/amd64`），`docker save | gzip | ssh nas docker load`
+傳過去，NAS 只跑 `docker-compose up -d`（步驟：`docs/deploy/wko5coach.deploy.md`「正式環境：NAS」）。
+整條路上只有 Mac 的 clone 碰 GitHub，而 Mac 用的是擁有者自己的 GitHub 帳號，repo 轉 private 後照樣能 pull。
+
+之前的寫法（NAS 上產生 `~/.ssh/trc_deploy`、GitHub 加 Deploy key、NAS 的 clone 換 remote）**不用做**。
+只有**之後改回「在伺服器上 git pull + build」**（例如換一台夠力的主機、或改用雲端 VM 自動部署）時才需要；
+那時的做法：在那台主機產生一把不設密碼的 ed25519 key → GitHub repo **Settings → Deploy keys** 加 `.pub`、
+**不要勾** Allow write access → 主機的 `~/.ssh/config` 用一個 `Host github-trc` 別名指定這把 key → clone 的
+remote 改成 `git@github-trc:vi000246/TrailRunCoach.git`，`git fetch` 成功即可。
+
+👤 轉 private 時順手做（不轉也無妨）：
+
+- NAS 的 `/volume1/docker/trailruncoach/src/` 是 2026-10-05 第一次部署時的舊 clone，現在沒有任何步驟用它；
+  轉 private 後它的 `git pull` 會失敗，**可以刪掉**。刪之前先確認 NAS 的 `docker-compose.yml` 是 `image: trailruncoach`、
+  沒有 `build:`（有 `build: ./src` 的話，日後誰下了 `up --build` 就會在 NAS 上 build、而且讀不到新程式）。
+
+其他會拉這個 repo 的地方（轉 private 後照常）：
+
+| 地方 | 轉 private 後 | 要做什麼 |
+|---|---|---|
+| NAS 正式環境 | 不受影響：image 從 Mac 傳過去，NAS 不連 GitHub | 無（舊 `src/` clone 見上） |
+| Mac / 其他電腦的 clone | 用擁有者自己的 GitHub 帳號（`gh auth` 或 SSH key），有權限 | 無；某台的 `git pull` 跳出要帳密時，用 `gh auth login` 登入 |
+| vault 的 `repo-docs/` 鏡像 | 從本機 clone 讀，不經 GitHub | 無 |
+| Claude 的雲端 session | 靠 GitHub App 授權，App 要裝在這個 repo 上 | 轉完開一個雲端 session 試 clone 一次 |
+| GitHub Actions | 目前沒有 workflow | 無；之後加的話 private repo 每月有免費分鐘數 |
+| GitHub Pages 線上示範 | **會停用**（個人帳號的 private repo 免費方案不能用 Pages） | 先照 `deploy/static/README.md` §2b 搬到 Cloudflare Pages |
+| Hugging Face Space（`deploy/hf/`） | 不連 GitHub（`make_space.py` 從本機 clone 複製） | 見下 |
+
+`deploy/hf/make_space.py` 會把 `backend/`、`views/` 的**原始碼**複製進 Space repo。Space 是 public 的話，等於把轉 private
+的程式又公開一份；要放伺服器版示範就把 Space 設成 private（或改用自己的主機，例如 `try.yichlin.com`，§1）。
 
 ## 6. 部署的營運規則
 

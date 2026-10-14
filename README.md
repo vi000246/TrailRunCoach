@@ -65,6 +65,9 @@ python -m venv .venv
 docker compose up --build        # 掛載 ~/.wko5coach
 ```
 
+這是在自己電腦上跑。放到比較弱的伺服器（例如 NAS）時，image 在電腦上建好再傳過去，伺服器不 build：
+見 [`docs/deploy/wko5coach.deploy.md`](docs/deploy/wko5coach.deploy.md)「正式環境：NAS」。
+
 ### 示範模式（虛構跑者）
 
 ```bash

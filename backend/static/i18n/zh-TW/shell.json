@@ -30,6 +30,7 @@
   "page.settings.name": "設定",
   "page.settings.short": "設定",
   "page.settings.purpose": "計算模式・體重・資料校正",
+  "page.settings.purpose_nomode": "體重・閾值・資料校正",
   "build.preparing": "正在準備資料…",
   "build.elapsed": "已 {s} 秒",
   "build.failed": "資料處理失敗：{error}",

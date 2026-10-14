@@ -130,7 +130,8 @@ def test_what_stays_on_this_machine_is_marked_local():
     ss = R.table("sync_state")
     assert {"coros_email", "tp_username", "coros_user_id", "garmin_email"} <= set(ss.local_fields)
     assert set(ss.cursor_fields) == {"last_sync_at", "last_sync_cursor", "coros_last_sync_at", "garmin_last_sync_at"}
-    assert {t.name for t in R.TABLES if t.local} == {"debug_tokens", "debug_audit", "debug_auth_failures"}
+    assert {t.name for t in R.TABLES if t.local} == {"debug_tokens", "debug_audit", "debug_auth_failures",
+                                                     "weight_tokens"}           # SP-472: the weight API's tokens
     from backend.engine.debug_view import secret_key
     from backend.settings.repository import DEFAULTS
 
@@ -161,8 +162,8 @@ def test_workout_files_marks_its_user_fields_and_sync_state_is_secret():
     sealed = {c for t, c in secrets.SEALED_DB_COLUMNS if t == "sync_state"}
     assert sealed <= set(ss.secret_fields)
     assert {"coros_password_sealed", "tp_password_sealed"} <= set(ss.secret_fields)
-    # SP-371: the debug API's token hashes are credentials too
-    assert [t.name for t in R.of_class(R.SECRET)[0]] == ["sync_state", "debug_tokens"]
+    # SP-371: the debug API's token hashes are credentials too; SP-472: the weight API's as well
+    assert [t.name for t in R.of_class(R.SECRET)[0]] == ["sync_state", "weight_tokens", "debug_tokens"]
 
 
 # ---------------------------------------------------------------- files

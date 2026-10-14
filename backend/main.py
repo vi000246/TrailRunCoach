@@ -30,6 +30,7 @@ from backend.api import altitude_nights as altitude_nights_api
 from backend.api import debug as debug_api
 from backend.api import account as account_api
 from backend.api import pwa as pwa_api
+from backend.api import weight as weight_api
 
 
 # pages the demo never serves: the WKO5 comparison, the settings, the injury log and the sign-in page
@@ -178,7 +179,7 @@ def build_app(demo: bool | None = None) -> FastAPI:
                                   plan_auto_api.router, injuries_api.router, backup_api.router, calib_api.router,
                                   archive_api.router,
                                   calendar_api.router, calendar_api.feed_router,
-                                  debug_api.router, debug_api.admin_router)}
+                                  debug_api.router, debug_api.admin_router, weight_api.router)}
     routers = [
         workouts.router,
         sync.router, auth.router,        # owner only (sync, connect)
@@ -199,6 +200,9 @@ def build_app(demo: bool | None = None) -> FastAPI:
         # debug API for AI agents (SP-371, docs/debug-api.md): Bearer token only, 404 unless turned on;
         # its settings block (設定 › 進階). Owner only: the demo never mounts either
         debug_api.router, debug_api.admin_router,
+        # 體重同步 (SP-472): POST …/weight/measurements takes a weight-only token (iOS Shortcut / Health
+        # Auto Export), the rest is the 設定頁's; never in the demo
+        weight_api.router,
         # Google sign-in, the terms, sign-out (SP-58): 404 unless sign-in is on (accounts/login.py)
         account_api.router,
         # /sw.js and /manifest.webmanifest: the offline copy and 加到主畫面 (SP-314); not in the demo

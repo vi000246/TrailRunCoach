@@ -76,6 +76,18 @@ tr.off td { color: var(--muted); }
 .seg input { position: absolute; opacity: 0; pointer-events: none; }
 .seg label:has(input:checked) { background: var(--soft); color: var(--accent); font-weight: 600; }
 .seg label:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: -2px; }
+/* 提示多寡 (SP-482): three cards, the automatic level's outlined dashed with 「自動」 */
+.hl-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 6px 0; }
+@media (max-width: 560px) { .hl-grid { grid-template-columns: 1fr; } }
+.hl-grid label { display: grid; gap: 2px; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; cursor: pointer; }
+.hl-grid label b { display: flex; gap: 6px; align-items: center; }
+.hl-grid input { position: absolute; opacity: 0; pointer-events: none; }
+.hl-grid label:has(input:checked) { border-color: var(--accent); background: var(--soft); }
+.hl-grid label:has(input:checked) b { color: var(--accent); }
+.hl-grid label:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 1px; }
+.hl-grid label.is-auto { border-style: dashed; border-color: var(--accent); }
+.hl-grid .hl-auto { display: none; font-size: 11px; font-weight: 500; padding: 0 6px; border-radius: 10px; border: 1px solid var(--line); color: var(--muted); }
+.hl-grid label.is-auto .hl-auto { display: inline-block; }
 .src h3 { font-size: 14px; margin: 0; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .pill { font-size: 11.5px; padding: 1px 8px; border-radius: 10px; border: 1px solid var(--line); color: var(--muted); font-weight: 500; }
 .pill.ok { color: var(--ok); border-color: var(--ok); }
@@ -136,7 +148,18 @@ main > section.tab-off { display: none; }
 .ds-a2hs { margin-top: 12px; border: 1px solid var(--accent); background: var(--soft); border-radius: 8px; padding: 10px 12px; font-size: 13px; }
 .ds-a2hs p { margin: 4px 0 0; }
 @media (max-width: 480px) { .ds-kv { grid-template-columns: 1fr; gap: 0; } .ds-kv dt { margin-top: 8px; font-size: 12px; } }
+/* SP-480: the sentences about 計算模式 (我的算式 / WKO5 對照模式), hidden for whoever cannot switch it */
+html.nomode .mode-note { display: none; }
 </style>
+<script>
+// SP-480: a user who cannot switch 計算模式 (sign-in mode without the `admin` scope: SP-464) reads
+// nothing about the two modes. Decided here, before the first paint, from the session the server
+// inlined (no flash); GET /config's can_switch confirms it (loadMode). The owner's app / the demo: no `login`.
+(() => {
+  const s = window.TRC_SESSION, scopes = (s && s.membership && s.membership.scopes) || [];
+  document.documentElement.classList.toggle("nomode", !!(s && s.login) && !scopes.includes("admin"));
+})();
+</script>
 </head>
 <body>
 <script src="/api/v1/static/shell.js" data-page="settings"></script>
@@ -157,7 +180,7 @@ main > section.tab-off { display: none; }
   </nav>
   <p class="meta tab-note" id="tab-note"></p>
   <section id="general">
-    <h2><span data-i18n="settings.general.title">基本資料</span> <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.general.help" title="資料推不出來、只有你知道的幾項。體重用在 W/kg、跑步效能 RE、功率計算機和背包預設（體重 × 13 %）；只記一筆（日期＋體重），儲存會直接覆寫上一筆，所有圖表都用這個體重。性別決定 W′ 先驗（女性 6.4、男性 13.1 kJ）和熱量估算；年齡用在熱量估算，沒有最大心率時也用來估爬坡心率上限（220 − 年齡，推估），存的是出生年，每年自動加一歲。功率來源：只有 Stryd 的功率會進功率模型，沒有 Stryd 就用心率（手錶推估功率要到下面「功率」的進階設定打開）。其他數字都自動估算。">?</button></h2>
+    <h2><span data-i18n="settings.general.title">基本資料</span> <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.general.help" title="資料推不出來、只有你知道的幾項。體重用在 W/kg、跑步效能 RE、功率計算機和背包預設（體重 × 13 %）；每一天用當天或之前最近的一筆體重紀錄。這裡改的是最新一筆（儲存時用你填的量測日期；同一天的那筆會被取代，之前的紀錄留著）。手動填的優先：體重同步（資料同步分頁）不會改它，也不會用那天和之前的量測蓋掉它。性別決定 W′ 先驗（女性 6.4、男性 13.1 kJ）和熱量估算；年齡用在熱量估算，沒有最大心率時也用來估爬坡心率上限（220 − 年齡，推估），存的是出生年，每年自動加一歲。功率來源：只有 Stryd 的功率會進功率模型，沒有 Stryd 就用心率（手錶推估功率要到下面「功率」的進階設定打開）。其他數字都自動估算。">?</button></h2>
     <div class="row">
       <label><span data-i18n="settings.general.sex">性別</span> <select id="p-sex"><option value="" data-i18n="settings.general.sex_unset">（未填）</option><option value="male" data-i18n="settings.general.male">男</option><option value="female" data-i18n="settings.general.female">女</option></select></label>
       <label><span data-i18n="settings.general.height">身高</span> <input type="number" id="p-height" min="100" max="250" step="1" style="width:72px"> cm</label>
@@ -169,6 +192,9 @@ main > section.tab-off { display: none; }
       <label><span data-i18n="settings.general.weight">體重</span> <input type="number" id="p-kg" step="0.1" min="25" max="250" style="width:90px"> kg</label>
       <label><span data-i18n="settings.general.weight_date">量測日期</span> <input type="date" id="p-kgdate"></label>
     </div>
+    <p class="meta" id="wlist" hidden></p>
+    <!-- SP-472: the COROS account weight differs by 1 kg or more: ask to update (static/weight_hint.js) -->
+    <div id="weighthint" hidden></div>
     <div class="row">
       <button class="primary" id="saveprof" data-i18n="settings.general.save">儲存</button>
       <span class="meta" id="profnow"></span>
@@ -199,6 +225,28 @@ main > section.tab-off { display: none; }
       <button class="primary" id="saveexp" data-i18n="settings.general.save">儲存</button>
       <span class="meta" id="expnow"></span>
     </div>
+    </div>
+    <!-- SP-482 hint level (engine/hints.py, docs/research/ui-hint-audit.md §4; GET/PUT /api/v1/plan/profile/hint-level):
+         right under the running-experience block, the automatic level comes from it; every page's
+         "too many tips?" link lands here (#hint-level) -->
+    <div id="hint-level">
+      <h3 id="hint-level-title" data-i18n="settings.hints.title">提示多寡</h3>
+      <p class="meta" data-i18n="settings.hints.intro">決定頁面上直接顯示多少說明和提醒。會改變做法或跟安全有關的提示（疼痛紅燈、課表待確認、關門時間這類）三段都會顯示；其他的依這裡的選擇收進「詳細」。每頁最多直接顯示 3 則提醒，多的收成「還有 N 則提醒」。</p>
+      <div class="hl-grid" role="radiogroup" aria-labelledby="hint-level-title">
+        <label><input type="radio" name="hint-level" value="full"><b><span data-i18n="settings.hints.full">完整</span><span class="hl-auto" data-i18n="settings.hints.auto_tag">自動</span></b>
+          <span class="meta" data-i18n="settings.hints.full_note">每個數字怎麼來的都說明；適合剛開始跑、第一次用這個 app</span></label>
+        <label><input type="radio" name="hint-level" value="standard"><b><span data-i18n="settings.hints.standard">標準</span><span class="hl-auto" data-i18n="settings.hints.auto_tag">自動</span></b>
+          <span class="meta" data-i18n="settings.hints.standard_note">說明只在符合條件時出現，其他收進「詳細」；多數人用這個</span></label>
+        <label><input type="radio" name="hint-level" value="lean"><b><span data-i18n="settings.hints.lean">精簡</span><span class="hl-auto" data-i18n="settings.hints.auto_tag">自動</span></b>
+          <span class="meta" data-i18n="settings.hints.lean_note">只顯示會改變做法或跟安全有關的提示；適合知道課前要吃、陡坡要走、下雨路滑的老手</span></label>
+      </div>
+      <div class="row">
+        <span class="meta" id="hint-now"></span>
+        <button type="button" id="hint-auto" hidden data-i18n="settings.hints.to_auto">改回自動</button>
+      </div>
+      <p class="meta" id="hint-suggest" hidden><span data-i18n="settings.hints.suggest">你有跑步紀錄、近一年有比賽成績，也跑過 2 小時以上：提示好像比較多，要改成精簡嗎？</span>
+        <button type="button" id="hint-suggest-yes" data-i18n="settings.hints.suggest_yes">改成精簡</button>
+        <button type="button" id="hint-suggest-no" data-i18n="settings.hints.suggest_no">不要</button></p>
     </div>
   </section>
 
@@ -272,7 +320,7 @@ main > section.tab-off { display: none; }
 
   <section id="thresholds">
     <h2><span data-i18n="settings.thr.title">閾值測試紀錄（LTHR／AeT／CP）</span>
-      <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.thr.help" title="每次測試記一列，從測試那天起生效、不往回套（跟 WKO5 一樣）。心率負荷（HR load）、功率負荷（Power load）、輕鬆跑上限、間歇門檻、課表的心率／功率目標都用它。只在「我的算式」模式生效；「WKO5 對照模式」一律用 WKO5 裡的設定。最大心率和靜息心率在上面的「心率」設定。">?</button></h2>
+      <button type="button" class="q" id="thr-q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.thr.help" title="每次測試記一列，從測試那天起生效、不往回套（跟 WKO5 一樣）。心率負荷（HR load）、功率負荷（Power load）、輕鬆跑上限、間歇門檻、課表的心率／功率目標都用它。只在「我的算式」模式生效；「WKO5 對照模式」一律用 WKO5 裡的設定。最大心率和靜息心率在上面的「心率」設定。">?</button></h2>
     <p class="meta" id="thr-now" role="status"></p>
     <p class="meta" id="thr-wko5"></p>
     <div class="est" id="thr-est"><span class="meta" data-i18n="settings.thr.est_loading">正在從你的跑步資料估算 LTHR / AeT…</span></div>
@@ -477,6 +525,43 @@ main > section.tab-off { display: none; }
     </div>
   </section>
 
+  <!-- 體重同步 (SP-472; api/weight.py, logic: static/weight_sync.js) -->
+  <section id="weightsync">
+    <h2><span data-i18n="settings.wsync.title">體重同步（Apple 健康）</span> <button type="button" class="q" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.wsync.help" title="讓 iPhone 的「捷徑」或 Health Auto Export 把 Apple 健康裡的體重送進來。token 只能送體重，不能讀任何資料、也打不開其他功能；只在產生時顯示一次，伺服器只存雜湊，隨時可以撤銷。">?</button></h2>
+    <p class="meta" data-i18n="settings.wsync.intro">網頁讀不到 Apple 健康，要由 iPhone 主動送過來：產生一個 token，照下面的步驟設好捷徑，以後打開體重計 App 就會自動送出最新的體重。</p>
+    <div class="row"><label for="ws-url" data-i18n="settings.wsync.url">送到這個網址（POST）</label>
+      <input type="text" id="ws-url" readonly style="flex:1;min-width:240px">
+      <button id="ws-url-copy" data-i18n="settings.cal.copy">複製</button></div>
+    <div class="row"><label><span data-i18n="settings.wsync.name">名稱</span> <input type="text" id="ws-name" maxlength="40" value="iPhone" style="width:140px"></label>
+      <button class="primary" id="ws-new" data-i18n="settings.wsync.new">產生 token</button>
+      <button class="danger" id="ws-revoke-all" data-i18n="settings.wsync.revoke_all">全部撤銷</button></div>
+    <div class="row" id="ws-made" hidden><input type="text" id="ws-token" readonly style="flex:1;min-width:240px">
+      <button id="ws-copy" data-i18n="settings.cal.copy">複製</button>
+      <span class="meta" data-i18n="settings.wsync.once">只顯示這一次，關掉就看不到了</span></div>
+    <table class="wt"><tbody id="ws-tokens"></tbody></table>
+    <p class="meta" id="ws-rules"></p>
+    <p class="meta" id="ws-state"></p>
+    <details style="margin-top:6px" id="ws-m-box"><summary class="meta" data-i18n="settings.wsync.m_h">最近收到的量測</summary>
+      <table class="wt"><tbody id="ws-meas"></tbody></table></details>
+    <details style="margin-top:6px" id="ws-sc"><summary class="meta" data-i18n="settings.wsync.sc_h">iOS 捷徑設定步驟</summary>
+      <ol class="meta" style="margin:4px 0;padding-left:22px">
+        <li data-i18n="settings.wsync.sc_1">在上面按「產生 token」，按「複製」（token 只顯示這一次）。</li>
+        <li data-i18n="settings.wsync.sc_2">在 iPhone 打開「捷徑」App ›「捷徑」› 右上角 ＋，名稱改成「體重同步」。</li>
+        <li data-i18n="settings.wsync.sc_3">加入動作「尋找健康樣本」：類型「體重」，排序方式「開始日期」、「最新的優先」，限制「1」筆。</li>
+        <li data-i18n="settings.wsync.sc_4">加入動作「格式化日期」：日期選上一步健康樣本的「開始日期」，日期格式選「ISO 8601」，打開「包含 ISO 8601 時間」。</li>
+        <li data-i18n="settings.wsync.sc_5">加入動作「取得 URL 的內容」：網址填上面的網址；方法「POST」；標頭加一個，鍵「Authorization」、值「Bearer 」加上 token（Bearer 後面有一個空格）；請求本文選「JSON」，加三個欄位：kg（數字）＝健康樣本的「值」、unit（文字）＝健康樣本的「單位」、time（文字）＝「格式化日期」的結果。</li>
+        <li data-i18n="settings.wsync.sc_6">（建議）加入「顯示結果」，按 ▶ 執行一次：應該看到「已收到 1 筆體重…」，下面「最近收到的量測」也會出現這一筆。第一次執行時 iPhone 會問能不能讀取健康資料、連到這個網站，都選允許。</li>
+        <li data-i18n="settings.wsync.sc_7">自動化：「捷徑」App ›「自動化」› ＋ ›「App」› 選你的體重計 App（例如 Withings、Garmin Connect、小米運動健康，或「健康」），勾「已打開」，建議也勾「已關閉」（量完、App 把新體重寫進健康之後關掉時就送出這一次的量測），選「立即執行」並關掉「執行時通知」，下一步選「體重同步」。</li>
+        <li data-i18n="settings.wsync.sc_8">手機鎖著的時候 iPhone 不讓任何 App 讀健康資料，所以用「打開／關閉 App 時」觸發，不要用固定時間。同一筆重送不會重複記。</li>
+      </ol></details>
+    <details style="margin-top:6px"><summary class="meta" data-i18n="settings.wsync.hae_h">Health Auto Export（付費 App）</summary>
+      <ul class="meta" style="margin:4px 0;padding-left:18px">
+        <li data-i18n="settings.wsync.hae_1">需要 Premium。「Automations」› ＋ ›「REST API」：URL 填上面的網址；Headers 加「Authorization」＝「Bearer 」加 token；Data Type「Health Metrics」，Metrics 只選「Weight & Body Mass」；Export Format「JSON」；Date Range「Since Last Sync」。</li>
+        <li data-i18n="settings.wsync.hae_2">按「Manual Export」測試一次。它只在手機解鎖時跑，低電量模式會延後。</li>
+      </ul></details>
+    <p class="meta" data-i18n="settings.wsync.proxy">網站前面如果還有一層登入保護（例如 Cloudflare Access），手機的請求會被擋在外面：請管理者只對這一個網址開例外（token 仍然要對），或在捷徑多帶那層保護的服務 token。</p>
+  </section>
+
   <section id="backup">
     <h2>備份 <button type="button" class="q" aria-label="說明" title="把資料庫（活動紀錄、課表、設定、傷病紀錄等）和你改過的檔案（賽季計畫、校正、標註、圖表檢視、路線名稱、上傳的 GPX）打包成一個 zip，存到你選的資料夾。COROS／TrainingPeaks 的登入憑證和記住的密碼不放進備份。選雲端硬碟（iCloud Drive／OneDrive／Google 雲端硬碟／Dropbox）裡的資料夾，就由它們的同步程式自動上傳；App 不會登入任何雲端帳號。保留最近 7 天每天一份、加上最近 4 週每週一份，更舊的自動刪除——只會刪這個功能建立的備份檔，資料夾裡的其他檔案不會動。">?</button>
       <span class="pill" id="b-pill" hidden></span></h2>
@@ -659,7 +744,7 @@ main > section.tab-off { display: none; }
 
   <section id="fixes">
     <h2>資料校正</h2>
-    <p class="meta">找出功率異常尖峰（例如 1800 W）。只會列出建議，<b>按下套用才會生效</b>；不會改到 .wko4 原始檔，隨時可以撤銷。只在「我的算式」模式生效。</p>
+    <p class="meta">找出功率異常尖峰（例如 1800 W）。只會列出建議，<b>按下套用才會生效</b>；不會改到 .wko4 原始檔，隨時可以撤銷。<span class="mode-note" data-i18n="settings.mode.only_mine">只在「我的算式」模式生效。</span></p>
     <div class="row">
       <button id="scanbtn">掃描壞點</button>
       <button id="fixbtn" class="primary" disabled>套用勾選的修正</button>
@@ -673,7 +758,7 @@ main > section.tab-off { display: none; }
     <p class="meta">跑步／登山的檔案如果速度或功率不可能是人跑出來的（例如忘了停錶就騎車、開車），整筆活動會被排除：
       留在資料庫和活動清單（標「已排除」），但不進負荷（Load）與體能圖（Fitness chart）、功率曲線／CP、比賽功率、飄移／AeT、課表比對和圖表。
       門檻：持續 1 分鐘以上比同時間的世界紀錄均速快 15%（推估餘裕），或平均功率超過 10 W/kg（推估）。
-      在單次活動的「活動資訊」卡也可以手動排除或標成正常。只在「我的算式」模式生效。</p>
+      在單次活動的「活動資訊」卡也可以手動排除或標成正常。<span class="mode-note" data-i18n="settings.mode.only_mine">只在「我的算式」模式生效。</span></p>
     <div class="row"><label><input type="checkbox" id="ex-on"> 自動排除疑似交通工具／騎車的活動（預設開）</label>
       <span class="meta" id="ex-msg"></span></div>
     <div class="list" id="exlist"><span class="meta">載入中…</span></div>
@@ -726,10 +811,18 @@ async function j(url, opt) { const r = await fetch(url, opt); if (!r.ok) throw n
 // anyone else) until GET /config says can_switch; the owner's own app shows it as before
 const SIGNIN = !!(window.TRC_SESSION && window.TRC_SESSION.login);
 if (SIGNIN) $("mode").hidden = true;
+// SP-480: the texts that mention the two modes, or their mode-free twins (html.nomode: set in <head>)
+function modeTexts() {
+  const nomode = document.documentElement.classList.contains("nomode");
+  $("thr-q").title = t(nomode ? "settings.thr.help_nomode" : "settings.thr.help");
+}
+modeTexts();
 async function loadMode() {
   const { config, can_switch } = await j(`${API}/config`);
   $("mode").hidden = can_switch === false;
   $("mode-admin").hidden = !SIGNIN || can_switch === false;
+  document.documentElement.classList.toggle("nomode", can_switch === false);
+  modeTexts();
   tabNote();
   document.querySelectorAll(".mode").forEach((b) => b.classList.toggle("on", String(!!config.parity) === b.dataset.parity));
 }
@@ -878,17 +971,64 @@ $("saveexp").onclick = async () => {
     toast(t("settings.general.exp_saved")); loadProfile();
   } catch (e) { toast(t("settings.failed", { msg: e.message.slice(0, 80) })); }
 };
-// one weight only (date + kg): saving overwrites the stored list with this single entry
+// ---- 提示多寡 (SP-482; engine/hints.py, GET/PUT /api/v1/plan/profile/hint-level) ----------------
+// automatic (no choice): 完整 for a new runner, else 標準 — never 精簡 (only the runner picks it)
+const HINT_API = "/api/v1/plan/profile/hint-level";
+function renderHintLevel(s) {
+  const name = (l) => t(`settings.hints.${l}`);
+  document.querySelectorAll('input[name="hint-level"]').forEach((r) => {
+    r.checked = !s.auto && r.value === s.level;
+    r.closest("label").classList.toggle("is-auto", !!s.auto && r.value === s.level);
+  });
+  $("hint-now").textContent = s.auto
+    ? t("settings.hints.now_auto", { level: name(s.level) }) + (s.reason === "new_runner" ? t("settings.hints.why_new") : "")
+    : t("settings.hints.now_chosen", { level: name(s.level) });
+  $("hint-auto").hidden = !!s.auto;
+  $("hint-suggest").hidden = !s.suggest_lean;
+}
+async function putHintLevel(level) {
+  try {
+    renderHintLevel(await j(HINT_API, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ level }) }));
+    toast(t("settings.hints.saved"));
+  } catch (e) { toast(t("settings.failed", { msg: e.message.slice(0, 80) })); loadHintLevel(); }
+}
+function loadHintLevel() {
+  return j(HINT_API).then(renderHintLevel).catch(() => { $("hint-now").textContent = t("settings.hints.load_failed"); });
+}
+document.querySelectorAll('input[name="hint-level"]').forEach((r) => r.addEventListener("change", () => putHintLevel(r.value)));
+$("hint-auto").onclick = () => putHintLevel(null);
+$("hint-suggest-yes").onclick = () => putHintLevel("lean");
+$("hint-suggest-no").onclick = async () => {           // 「不要」: never asked again (hints.LEAN_ASK)
+  try {
+    await j("/api/v1/plan/profile/hint-ack", { method: "POST", headers: { "Content-Type": "application/json" },
+                                               body: JSON.stringify({ id: "ask.lean", fp: "1" }) });
+    $("hint-suggest").hidden = true;
+  } catch (e) { toast(t("settings.failed", { msg: e.message.slice(0, 80) })); }
+};
+loadHintLevel();
+// the newest weight entry is edited here; the older ones (the nightly weight sync's, SP-472) stay.
+// Saving sends the list back: an entry on the entered date is replaced, an emptied field removes the
+// newest one; an entry sent back unchanged keeps its source on the server (api/plan.put_profile)
 function renderWeights() {
   const last = PROF.weights.at(-1);
   $("p-kg").value = last ? last.kg : "";
   $("p-kgdate").value = last ? last.date : new Date().toISOString().slice(0, 10);
   $("p-kg").placeholder = PROF.wko5.weights.at(-1)?.kg ?? PROF.effective.weight ?? "";
+  const ws = PROF.weights.slice(-5).reverse();
+  $("wlist").hidden = PROF.weights.length < 2;
+  $("wlist").textContent = t("settings.general.wlist", { n: ws.length, list: ws.map((w) =>
+    t("settings.general.wentry", { date: w.date, kg: w.kg, src: t("settings.general.wsrc_" + (w.source || "manual")) })).join(t("settings.general.sep")) });
 }
 $("p-kg").addEventListener("change", () => { $("p-kgdate").value = new Date().toISOString().slice(0, 10); });
+function weightsToSave(kg, date) {
+  const last = PROF.weights.at(-1), pick = (w) => ({ date: w.date, kg: w.kg });
+  if (!(kg && date)) return PROF.weights.filter((w) => w !== last).map(pick);
+  return [...PROF.weights.filter((w) => w.date !== date).map(pick), { date, kg }];
+}
+document.addEventListener("weight:changed", () => loadProfile());
 $("saveprof").onclick = async () => {
   const kg = Number($("p-kg").value), date = $("p-kgdate").value;
-  const body = { weights: kg && date ? [{ date, kg }] : [],
+  const body = { weights: weightsToSave(kg, date),
     sex: $("p-sex").value || null, height_cm: $("p-height").value ? Number($("p-height").value) : null,
     age: $("p-age").value ? Number($("p-age").value) : null,
     power_source: $("p-meter").value || null };
@@ -2151,7 +2291,7 @@ $("acct-analysis-btn").onclick = async () => {
 const TABS = {
   personal: ["general", "sport", "map", "account"],
   body: ["hr", "thresholds", "power"],
-  data: ["sync", "backup", "archive", "device", "calendar"],
+  data: ["sync", "weightsync", "backup", "archive", "device", "calendar"],
   advanced: ["mode", "calib", "fixes", "debugapi"],
 };
 const TAB_OF = Object.fromEntries(Object.entries(TABS).flatMap(([k, ids]) => ids.map((id) => [id, k])));
@@ -2215,5 +2355,7 @@ if (window.FitImport) FitImport.mount($("fit-import"), { listLink: true, onDone:
 if (window.FitFolder) FitFolder.mount($("fit-folder"), { onDone: (r) => { if (r.added || r.duplicate) loadSources(); } });
 </script>
 <script src="/api/v1/static/debug_api.js"></script>
+<script src="/api/v1/static/weight_sync.js"></script>
+<script src="/api/v1/static/weight_hint.js"></script>
 </body>
 </html>

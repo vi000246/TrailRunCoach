@@ -233,7 +233,7 @@ def test_plan_fuel_baiyue_daily_and_csv_columns(client):  # noqa: F811
     assert f["category"] == "hike" and f["methods"].keys() == {"pandolf"}
     assert len(f["daily"]) == 2 and all(d["total"][0] <= d["total"][1] for d in f["daily"])
     assert f["body_src"] == {"height_cm": "推估", "age": "推估", "sex": "推估"}      # fake inputs: no profile
-    assert any("假設值" in w for w in f["warnings"])
+    assert any("假設值" in w["text"] and w["id"] == "RC28" for w in f["warnings"])      # SP-482: hint objects
     assert f["kcal_band"][0] <= f["kcal"] <= f["kcal_band"][1] and f["kcal_yamamoto"] > 0
     assert f["cho"]["per_h"] == [30.0, 50.0] and f["loading"]["kind"] == "normal"
     assert sum(1 for e in f["schedule"] if e["kind"] == "start") == 2

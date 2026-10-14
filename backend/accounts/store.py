@@ -15,7 +15,8 @@ written on sign-in / sign-up.
   usage       the free tier's counters per user / quota / period (SP-330); usage_items: what
               was counted, when a distinct item counts once a period (a chart dashboard a day)
   api_tokens  service tokens of another project (inReachLiveTrack, SP-329): sha256 only, the
-              link:* scopes they carry
+              link:* scopes they carry; and the weight API's tokens (SP-472, scope weight:write,
+              client "weight"): their own row is in the tenant DB, this one only names the user
   consents    each acceptance of the terms (SP-58): user, terms version, the sha256 of every
               document shown, the cross-user analysis bundled with them, when; append-only:
               action "terms" (the terms ticked) or "analysis" (the analysis consent withdrawn or
@@ -722,6 +723,23 @@ def revoke_service_token(token: str) -> None:
     init()
     with _LOCK, connect() as con:
         con.execute("DELETE FROM api_tokens WHERE token_hash = ?", (_hash(token),))
+
+
+def register_token_hash(uid: int, client: str, scopes: list, token_hash: str) -> None:
+    """A token made and kept elsewhere (the weight API's, SP-472: its row lives in the user's own
+    tenant DB): only its sha256, so the login gate can find whose it is. No expiry."""
+    init()
+    with _LOCK, connect() as con:
+        con.execute("INSERT OR REPLACE INTO api_tokens(token_hash, user_id, client, scopes, created_at, expires_at) "
+                    "VALUES (?, ?, ?, ?, ?, NULL)",
+                    (token_hash, int(uid), client, " ".join(sorted(set(scopes))), _iso(_now())))
+
+
+def revoke_token_hashes(uid: int, hashes: list) -> None:
+    init()
+    with _LOCK, connect() as con:
+        con.executemany("DELETE FROM api_tokens WHERE token_hash = ? AND user_id = ?",
+                        [(h, int(uid)) for h in hashes])
 
 
 # ---------------------------------------------------------------------------- deleting an account (SP-386)

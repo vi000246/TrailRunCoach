@@ -119,7 +119,9 @@ def constants() -> dict:
                        "frac": {str(k): v for k, v in WS.RPE_FRAC.items()}, "easy_max": WS.RPE_EASY_MAX,
                        "hard_min": WS.RPE_HARD_MIN, "max_climb": WS.MAX_CLIMB_M, "limit": WS.RPE_LIMIT},
                # 「負荷」 steps (SP-38): the default TSS → COROS TL conversion (engine/coros_tl.py, 推估)
-               "load": _load_table()},
+               "load": _load_table(),
+               # SP-437: workout_steps._easy_target's limits (rate_easy)
+               "easy": {"hr_pct": WS.EASY_HR_PCT, "power_pct": WS.EASY_POWER_PCT, "pace_pct": WS.EASY_PACE_PCT}},
         "il": {"class_range": {k: list(v) for k, v in IL.CLASS_RANGE.items()}, "rung_name": IL.RUNG_NAME,
                "canonical": {r: _variant(IL.canonical(r)) for r in IL.LIBRARY if IL.canonical(r)},
                "variant_rung": {k: v.rung for k, v in IL.ALL.items()},
@@ -129,11 +131,20 @@ def constants() -> dict:
     }
 
 
+def tss_rates(rates: Optional[dict]) -> dict:
+    """The easy steps' TSS per hour by category (engine/session_structure.kind_rate's table, SP-437)."""
+    from backend.engine import session_structure as SST
+    return {"easy": SST.kind_rate({"kind": "easy"}, rates), "easy_trail": SST.kind_rate({"kind": "easy", "terrain": "trail"}, rates),
+            "road": SST.kind_rate({"kind": "long"}, rates), "trail": SST.kind_rate({"kind": "mountain"}, rates),
+            "hike": SST.kind_rate({"kind": "hike"}, rates)}
+
+
 def build(th: dict, prefs, speeds: dict, auto_power_ok: bool, tpace_link: Optional[str],
-          sessions: Iterable[dict] = ()) -> dict:
+          sessions: Iterable[dict] = (), rates: Optional[dict] = None) -> dict:
     """data/steps_ctx.json. `th`: the thresholds _steps_env uses (with tpace, s/km);
     `prefs`: plan_prefs.Prefs; `sessions`: the ones whose derive() the port can't do
-    itself (stored sessions, test templates / suggestions as the dialog sends them)."""
+    itself (stored sessions, test templates / suggestions as the dialog sends them);
+    `rates`: the plan inputs' TSS / h per category (week_plan tss_per_category)."""
     from backend.api import plan_sessions as PSAPI
     from backend.engine import target_policy as TP
     from backend.engine import workout_steps as WS
@@ -157,6 +168,7 @@ def build(th: dict, prefs, speeds: dict, auto_power_ok: bool, tpace_link: Option
                   "cap_weekday": getattr(p, "cap_weekday", None), "long_cap": getattr(p, "long_cap", None),
                   "cap_mode": getattr(p, "cap_mode", "soft"), "basis": TP.pref_basis(p)},
         "auto_power_ok": bool(auto_power_ok),
+        "tss_rates": tss_rates(rates),
         **constants(),
         "derive": derive,
     }
@@ -193,4 +205,5 @@ async def collect(sessions: Iterable[dict]) -> dict:
     speeds = dict(await run_in_threadpool(PSAPI._speeds))
     prefs = await run_in_threadpool(PP.load)
     ok = await run_in_threadpool(TP._auto_power_ok)
-    return build(th, prefs, speeds, ok, PSAPI.tpace_link(), list(sessions))
+    return build(th, prefs, speeds, ok, PSAPI.tpace_link(), list(sessions),
+                 (inp.get("cur") or {}).get("tss_per_category"))

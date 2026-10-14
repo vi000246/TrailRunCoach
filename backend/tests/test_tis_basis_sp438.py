@@ -91,7 +91,7 @@ def test_tip_names_this_activitys_mftp_frc_and_threshold():
         assert f"門檻 {b['threshold']:.0f} W（模型閾值功率的 85%）" in line
         assert "不是設定裡的 CP" in line and "90 天" in line
         # the old explanation is still there after it
-        assert "怎麼看：" in tip and "方法：" in tip and tip.startswith("有氧刺激分數（Aerobic stimulus）")
+        assert "怎麼看：" in tip and "方法：" in tip and tip.startswith("有氧效果（Aerobic effect）")
 
 
 def test_tip_english():
@@ -131,7 +131,7 @@ def test_no_basis_line_when_the_basis_cannot_be_read(monkeypatch):
     before = _tis_card(ds, 0)["tip"]
     monkeypatch.setattr(R, "tis_basis", lambda ds, w: None)
     tip = _tis_card(_ds(), 0)["tip"]
-    assert "這次用的" not in tip and tip.startswith("有氧刺激分數（Aerobic stimulus）3、無氧刺激分數（Anaerobic stimulus）1")
+    assert "這次用的" not in tip and tip.startswith("有氧效果（Aerobic effect）3、無氧效果（Anaerobic effect）1")
     assert tip.split("\n", 1)[1] == before.split("\n", 2)[2]          # the rest as before
 
 

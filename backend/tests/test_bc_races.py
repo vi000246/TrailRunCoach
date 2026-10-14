@@ -6,6 +6,7 @@ quality session or the long run, the hints; week_plan and the projection use the
 (Two A races < 12 / < 8 weeks apart: test_post_race.py.) Synthetic.
 """
 import datetime as dt
+import re
 from datetime import date
 
 import pytest
@@ -338,5 +339,7 @@ def test_week_plan_and_projection_easy_runs_after_a_b_race_keep_the_easy_target(
     assert down, [(x["day"], x["kind"], x["title"], x.get("target"), x.get("detail")) for x in nxt["sessions"]]
     want = PJ.target_texts(wp["thresholds"] if "thresholds" in wp else {}).get("z2")
     for x in down:
-        assert "CP）" not in (x.get("target") or ""), (x["day"], x.get("target"))
+        # no threshold text: SP-437 (Q2 B) writes the structure's easy band (65–80 % CP), nothing above 80 %
+        assert all(int(hi) <= 80 for _lo, hi in re.findall(r"(\d+)–(\d+)% CP", x.get("target") or "")), \
+            (x["day"], x.get("target"))
         assert x["target"] == next((y["target"] for y in easy if y not in down), want or x["target"])

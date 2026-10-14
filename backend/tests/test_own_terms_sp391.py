@@ -21,7 +21,9 @@ import pytest
 from backend.scripts import i18n_extract as X
 
 OLD = re.compile(r"(?<![A-Za-z])(TSS|hrTSS|rTSS|CTL|ATL|TSB|PMC|mFTP|dFRC|FRC|TIS|NP|IF)(?![A-Za-z®])"
-                 r"|新鮮度|Form%")
+                 r"|新鮮度|Form%"
+                 r"|刺激分數|訓練效果|[Tt]raining [Ee]ffect")   # TIS = 有氧／無氧效果 (owner 2026-10-14);
+                                                             # Training Effect is Firstbeat's trademark
 
 # a string containing one of these is an allowed use of the old name
 ALLOWED = (
@@ -30,10 +32,13 @@ ALLOWED = (
     "Other platforms often call these CTL, ATL and TSB",
     "Daily % of CTL",                             # the name of a WKO5 chart (「類似 WKO5 的 Daily % of CTL」)
     "WKO5 快照 CTL",                               # the WKO5 file's own PMC snapshot (comparison mode only)
+    "WKO5 snapshot CTL",
     "WKO5 模型 mFTP（WKO5 存的快照）",               # the mFTP stored in the WKO5 file (comparison mode)
     "WKO5 今天存的 mFTP",                           # the backtest: what it does NOT use (the WKO5 file's value)
     "WKO5 mFTP",                                  # the zone / threshold source label in the WKO5 mode
     "mFTP {w} W",                                 # panels/cp_ref.py: the line label when the source is "WKO5 mFTP"
+    "WKO5 的 TIS",                                 # 有氧／無氧效果's source: 「算法參考 WKO5 的 TIS」 (owner 2026-10-14)
+    "WKO5's TIS",
 )
 
 VIEW_TEXT = ("name", "title", "description", "label", "section", "power_note")
@@ -119,3 +124,5 @@ def test_the_guard_catches_the_old_names():
     assert _bad("TSS 64") and _bad("體能 CTL") and _bad("狀況 Form%") and _bad("mFTP 線") and _bad("Normalized NP")
     assert not _bad("負荷（Load）64") and not _bad("TrainingPeaks 算的負荷（TSS®）")
     assert not _bad("tss_source") and not _bad("STSS")
+    assert _bad("刺激分數 3") and _bad("訓練效果 3.2") and _bad("Training Effect 3.2")
+    assert not _bad("有氧／無氧效果（Aerobic / Anaerobic effect）") and not _bad("算法參考 WKO5 的 TIS")

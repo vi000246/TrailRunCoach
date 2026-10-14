@@ -502,11 +502,12 @@
       if (s.distance_km && s.climb_m != null) { const a = toFloat(s.climb_m), b = toFloat(s.distance_km); if (a !== undefined && b) return a / b; }
       return null;
     }
-    function env(s, D) {
+    function env(s, D, stored, bare) {
       const th = { ...D.th };
       const pol = targetPolicy(s, D, th);
       const sp = { ...D.speeds, terrain: s.kind === "hike" || ["trail", "hike"].includes(s.terrain) ? "trail" : "road", climb_per_km: climbPerKm(s) };
       const c = ctxOf(th, pol.basis, !!pol.hr_cap, sp);
+      if (!bare) c.easy_tph = editRate(s, stored || s, D);         // SP-437 (_steps_env)
       let rung = null;
       if (s.kind === "quality") rung = s.rung_key || D.il.variant_rung[s.variant_key] || null;
       const cap = s.kind !== "test" ? dayCap(D.prefs, s.day) : null;
@@ -788,20 +789,65 @@
       if (rows.some((s) => s.dur.type === "load" && s.dur.rpe)) parts.push(`「${D.ws.load.label}」段用 RPE 填：用你填的分鐘數，負荷 ＝ 這一檔的每小時負荷 × 時數`);
       return parts.length ? parts.join("；") + "（推估）" : "";
     }
+    // SP-437: workout_steps._easy_target / rate_easy — the steps whose TSS is the runner's own easy rate
+    function easyTarget(tg, D) {
+      const ty = tg.type, mode = tg.mode, E = D.ws.easy;
+      if (ty === "auto") return tg.intent === "easy";
+      if (ty === "rpe") return (tg.hi || 99) <= D.ws.rpe.easy_max;
+      if (mode === "zone") return ["aet", "1", "2", "z1", "z2"].includes(String(tg.zone_to || tg.zone || "").toLowerCase());
+      if (mode === "pct" && ty === "hr") return (tg.hi || 9) <= E.hr_pct;
+      if (mode === "pct" && ty === "power") return (tg.hi || 9) <= E.power_pct;
+      if (mode === "pct" && ty === "pace") return (tg.lo || 0) >= E.pace_pct;
+      return false;
+    }
+    function rateEasy(st, r, D) {
+      if ((st.dur || {}).type === "load") return false;
+      if (["warm", "cool", "rest"].includes(st.kind)) return true;
+      return easyTarget(st.target || {}, D) || (r.frac != null && r.frac <= D.ws.easy.power_pct);
+    }
     function totals(steps, c, D) {
-      let sec = 0, tss = 0, hard = 0, z5 = 0, nOpen = 0, est = false;
+      let sec = 0, tss = 0, hard = 0, z5 = 0, nOpen = 0, est = false, easyS = 0, tssHard = 0;
       for (const row of flat(steps.items)) {
         const st = row.st, r = resolve(st, c, D), [s, e] = secs(st, r, c, D);
         est = est || e;
         if (st.dur.type === "open" && !s) { nOpen++; continue; }
         sec += s;
         const f = st.dur.type === "load" ? loadIf(st, r, D) : r.frac != null ? r.frac : (D.ws.none_if[st.kind] ?? 0.7);
-        tss += s * f * f * 100 / 3600;
+        if (rateEasy(st, r, D)) {
+          easyS += s;
+          tss += s * (c.easy_tph ? c.easy_tph : f * f * 100) / 3600;
+        } else {
+          tssHard += s * f * f * 100 / 3600;
+          tss += s * f * f * 100 / 3600;
+        }
         if (f >= 0.88) hard += s;
         if (r.frac != null && r.frac >= D.ws.z5_frac && st.kind === "work") z5 += s;
       }
       return { sec: pyRound(sec), open: nOpen, est, tss: pyRound(tss, 1), hard_s: pyRound(hard), z5_s: pyRound(z5),
-        est_note: est ? estimateNote(steps, c, D) : "" };
+        est_note: est ? estimateNote(steps, c, D) : "", easy_s: pyRound(easyS), tss_hard: pyRound(tssHard, 3) };
+    }
+    // engine/session_structure.kind_rate / edit_rate: the TSS per hour the easy steps count at
+    const EASY_KINDS = ["easy", "long", "hike", "mountain"];
+    const isTrail = (s) => ["trail", "hike"].includes(s.terrain) || ["hike", "mountain"].includes(s.kind) ||
+      String(s.title || "").includes("山路") || String(s.title || "").includes("越野");
+    function kindRate(s, D) {
+      const R = D.tss_rates, k = s.kind;
+      if (k === "easy") return isTrail(s) ? R.easy_trail : R.easy;
+      if (k === "long") return isTrail(s) ? R.trail : R.road;
+      if (k === "mountain") return R.trail;
+      if (k === "hike") return R.hike;
+      return R.easy;
+    }
+    const pos = (x) => { const v = toFloat(x); return v !== undefined && v > 0 ? v : null; };
+    function editRate(s, stored, D) {
+      if (stored && stored.kind === s.kind && EASY_KINDS.includes(stored.kind)) {
+        const st = stored.steps && (stored.steps.items || []).length ? stored.steps : structureHere(stored, D);
+        if (st && (st.items || []).length) {
+          const tot = totals(st, env(stored, D, null, true).ctx, D);
+          if (tot.sec && tot.easy_s === tot.sec && pos(stored.minutes) && pos(stored.tss)) return +stored.tss / +stored.minutes * 60;
+        }
+      }
+      return kindRate(s, D);
     }
 
     // ---- issues
@@ -1138,23 +1184,27 @@
       }
       return null;
     }
+    // the export's derive map, else the port's own (undefined = neither can read it)
+    function structureHere(s, D) {
+      const k = deriveSig(s);
+      return Object.prototype.hasOwnProperty.call(D.derive || {}, k) ? D.derive[k] : deriveHere(s, D);
+    }
     const NO_STEPS = "這種課不推到手錶，或標題看不出結構（用「＋ 步驟」自己排）";
     const STATIC_NO_STEPS = "示範版排不出這堂課的結構：用「插入範本」或「＋ 步驟」自己排";
 
     // POST /steps/derive and /steps/check: (body, the stored session or null, data) -> response body
     function derive(body, stored, D) {
       body = body || {};
-      const s = sessionOf(body, stored), e = env(s, D), ctx = context(e, D);
+      const s = sessionOf(body, stored), e = env(s, D, stored), ctx = context(e, D);
       if (stored && stored.steps && !body.rederive) return { steps: stored.steps, derived: false, context: ctx };
-      const k = deriveSig(s);
-      let d = Object.prototype.hasOwnProperty.call(D.derive || {}, k) ? D.derive[k] : deriveHere(s, D);
+      let d = structureHere(s, D);
       const unknown = d === undefined;
       if (unknown) d = null;
       return { steps: d, derived: true, context: ctx, reason: d ? "" : unknown ? STATIC_NO_STEPS : NO_STEPS };
     }
     function check(body, stored, D) {
       body = body || {};
-      const s = sessionOf(body, stored), st = normalize(body.steps, D), e = env(s, D);
+      const s = sessionOf(body, stored), st = normalize(body.steps, D), e = env(s, D, stored);
       return { ...view(st, e.ctx, D, e.cap, e.cap_mode, e.rung), basis_label: context(e, D).basis_label, policy: e.policy };
     }
     // GET /steps/templates/recs from data.recs (export_static.pass_steps): this length, else the day's
