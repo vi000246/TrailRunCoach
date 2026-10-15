@@ -45,7 +45,7 @@ def test_rebase_starts_after_the_recovery_and_the_transition():
 def test_no_rebuild_when_the_next_build_follows_without_a_base_phase():
     plan = _plan()
     # the next A race's 專項期 starts right after the 恢復期 (no 轉換期, no 基礎期)
-    plan.events.append(P.Event(id="r2", name="下一場", date="2026-10-17", priority="A", distance_km=21))
+    plan.events.append(P.Event(id="r2", name="下一場", date="2026-10-13", priority="A", distance_km=21))  # 10-day taper (SP-668)
     assert BC.a_race_rebase(plan, date(2026, 8, 20)) is None
 
 

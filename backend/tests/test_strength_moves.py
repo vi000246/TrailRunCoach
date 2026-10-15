@@ -214,8 +214,8 @@ def test_week_plan_and_projection_use_the_picks():
     weeks = PJ.project_weeks(wp, _phases(plan, date(2026, 9, 30)), date(2026, 11, 22), prefs=pr)
     by = {w["start"]: w for w in weeks}
     assert _strength(by["2026-10-05"]["sessions"])[0]["title"] == "肌力（後腳抬高蹲＋離心下階＋彈力帶划船）"
-    sp = _strength(by["2026-10-26"]["sessions"])
-    assert by["2026-10-26"]["phase"] == "specific" and sp[0]["title"] == "肌力維持（高踏階＋離心下階＋彈力帶划船）"
+    sp = _strength(by["2026-11-02"]["sessions"])          # 專項期 from 10/28 with the 10-day taper (SP-668)
+    assert by["2026-11-02"]["phase"] == "specific" and sp[0]["title"] == "肌力維持（高踏階＋離心下階＋彈力帶划船）"
 
 
 def test_week_plan_balance_block_uses_the_picks():

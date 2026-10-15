@@ -171,7 +171,13 @@ def test_race_day_shows_projected_ctl_tsb_and_the_grade_range():
     res = PJ.apply(_pmc_res(), _proj(DAYS, races), "pmc", 42.0, 7.0, day(20))
     rows = dict(zip([d for d, _ in DAYS], project(41.0, 48.0, [x for _, x in DAYS], 42.0, 7.0)))
     got = {r["name"]: r for r in res["projection"]["races"]}
-    assert got["山賽"]["band"] == [10.0, 20.0] and got["路跑"]["band"] == [-5.0, 5.0] and got["練習賽"]["band"] is None
+    # SP-670: the range is a share of the day before's CTL (A +10～+35 %, B −5～+5 %), drawn in TSB points
+    prev = dict(zip([d for d, _ in DAYS], [41.0] + [r["ctl"] for r in rows.values()][:-1]))
+    from backend.engine import load_guard as LG
+    assert got["山賽"]["band_pct"] == [0.10, 0.35] and got["路跑"]["band_pct"] == [-0.05, 0.05]
+    assert got["山賽"]["band"] == pytest.approx([LG.tsb_line(x, prev[day(2)]) for x in (0.10, 0.35)])
+    assert got["路跑"]["band"] == pytest.approx([LG.tsb_line(x, prev[day(3)]) for x in (-0.05, 0.05)])
+    assert got["練習賽"]["band"] is None
     for r in got.values():
         assert r["ctl"] == pytest.approx(rows[r["date"]]["ctl"]) and r["tsb"] == pytest.approx(rows[r["date"]]["tsb"])
         assert r["text"] and r["color"]
@@ -281,7 +287,9 @@ def test_a_future_range_stops_the_data_at_today_and_draws_the_plan_on(api):
                    [50.0, 0.0, 90.0, 0.0, 0.0, 0.0], 42.0, 7.0)       # the easy run: 60 min × 50 TSS / h
     assert [p[1] for p in pctl["data"]["points"][1:]] == pytest.approx([r["ctl"] for r in rows])
     race = j["projection"]["races"][0]
-    assert race["name"] == "山賽" and race["band"] == [10.0, 20.0]
+    assert race["name"] == "山賽" and race["band_pct"] == [0.10, 0.35]                 # SP-670: % of CTL
+    from backend.engine import load_guard as LG
+    assert race["band"] == pytest.approx([LG.tsb_line(x, rows[-2]["ctl"]) for x in (0.10, 0.35)])
     assert race["tsb"] == pytest.approx(rows[-1]["tsb"]) and race["ctl"] == pytest.approx(rows[-1]["ctl"])
 
 

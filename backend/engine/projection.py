@@ -692,6 +692,18 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
         if kind == "specific":
             # 中間訓練 (SP-95): the same cap as week_plan (overview.inter_cap)
             hours = O.inter_cap(phases, week, hours, why, lambda m: hours_at.get(m.isoformat()))
+        # SP-668: the week an A race's 減量期 starts in after its Monday — the same as week_plan
+        # (overview.straddle_hours): the days before the taper at most the pre-taper level, the rest its share
+        split = O.straddle_split(_d(tc["taper_start"]), week, _d(tc["start"])) \
+            if tc and kind in ("base", "specific") and not phase_light(phases, week) else None
+        if split:
+            s_base = O.taper_base(_d(tc["taper_start"]), lambda m: hours_at.get(m.isoformat()))
+            if s_base is None:
+                s_base = statistics.mean(hist[-6:]) if hist else hours
+            if pre_h is None:
+                pre_h = statistics.mean(hist[-4:]) if hist else None    # the taper's climb reference
+            hours = O.straddle_hours(hours, s_base, split[0], split[1])
+            why = why + [O.straddle_why(_d(tc["taper_start"]), split[0], s_base, split[1], hours)]
         b_f, b_why = PR_.b_week_factor(events or (), week, kind)     # a B race's week: 75 % (SP-95)
         if b_why:
             hours *= b_f
@@ -846,7 +858,7 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
                 tech = {"active": False}
         # 賽前停肌力 (SP-86): week_plan's A-event windows, the same rule (overview.drop_strength_before_a)
         n_notes = len(notes)
-        ss = O.drop_strength_before_a(ss, s_stops, week, notes)
+        ss = O.drop_strength_before_a(ss, s_stops, week, notes, blocked=set(bmap), allowed=allowed_fn)
         # 減量期規則 (SP-96): the same rule as week_plan (overview.taper_rules)
         ss = O.taper_rules(ss, tc, week, notes, road, easy_target=tgt.get("z2", ""), cp=th.get("cp"),
                            q_target=tgt.get("threshold", ""), prefs=PR,
@@ -889,7 +901,7 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
                     s["detail"] = (s.get("detail") or "") + _("；會痛的動作先不做")
             notes.append({"level": "bad", "src": "injury_light",
                           "text": _("疼痛紅燈還沒解除：這週先不排跑步，等下一次跑步標記改變燈號；交叉訓練和肌力照做")})
-        if tc and kind == "taper":
+        if tc and (kind == "taper" or split):        # SP-668: the week the taper starts in too
             n = O.taper_climb_note(tc, cur_t.get("pre_climb") if same else cur.get("climb4"),
                                    hours / (cur_t.get("pre_hours") if same else pre_h)
                                    if (cur_t.get("pre_hours") if same else pre_h) else None)

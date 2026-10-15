@@ -27,12 +27,14 @@ def test_first_taper_week_is_the_one_holding_its_monday():
     assert O.taper_first_monday(mon) == mon
 
 
-def test_base_is_the_six_weeks_before_the_first_taper_week():
-    t0 = dt.date(2026, 11, 8)                        # first taper week: Mon 11/9
-    m1 = dt.date(2026, 11, 9)
+def test_base_is_the_six_weeks_before_the_week_the_taper_starts_in():
+    """SP-668: the week holding the taper's first day takes a taper share on its taper days
+    (straddle_hours), so the base is the 6 weeks before that week (was: before the first whole taper week)."""
+    t0 = dt.date(2026, 11, 8)                        # a Sunday: its week starts Mon 11/2
+    m1 = dt.date(2026, 11, 2)
     hours = {m1 - dt.timedelta(weeks=k): 10.0 for k in range(1, 7)}
     hours[m1 - dt.timedelta(weeks=7)] = 99.0         # older: not in the base
-    hours[m1] = 7.5                                  # the taper weeks themselves: not in the base
+    hours[m1] = 7.5                                  # the week the taper starts in: not in the base
     hours[m1 + dt.timedelta(weeks=1)] = 5.0
     assert O.taper_base(t0, hours.get) == 10.0
     assert O.taper_base(t0, lambda m: None) is None

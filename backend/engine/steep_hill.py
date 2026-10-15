@@ -20,7 +20,7 @@ Planner hook (overview.week_plan, projection.project_weeks), like b2b.py:
 plan_context() / projected_context() → apply() turns one weekday easy run of a
 專項期 week into the 40–50 min session (the week's easy minutes unchanged),
 never within a day of the long day / quality, never a recovery / re-entry week,
-not when the week starts at TSB < −20, nothing in the last 7 days before the
+not when the week starts at TSB < −20 % of CTL (SP-670), nothing in the last 7 days before the
 trip. Intensity (SP-115, owner 2026-10-05: AeT is too low for climbing): uphill
 HR ≤ 75 % HRmax or RPE ≤ 13, whichever comes first (萩原・山本 2011; without a max
 HR 0.75 × (220 − age), 推估; never below the easy-run cap — hr_profile.walk_cap);
@@ -35,6 +35,8 @@ from __future__ import annotations
 import datetime as dt
 from typing import Optional
 
+from backend.engine import load_guard as LG
+
 STAGE_PCT = (0.05, 0.10)          # UA trekking: 5 %, 10 % of body weight; stage 3 = the trip pack
 STAGE_WEEKS = ((9, 1), (7, 2), (0, 3))   # w ≥ 9 → 1, 7–8 → 2, else 3 (推估)
 WEEKS = (3, 10)                   # 專項期 weeks before the trip (doc §2.1)
@@ -43,7 +45,7 @@ BASE_KMH = 3.5                    # km/h — the doc's example (§3.2)
 TREADMILL_MAX = 15.0              # % — most treadmills (doc §3.2)
 MINUTES = (40, 50)                # doc §3.2: 40–50 min
 FLOOR = 30                        # 推估: a weekday cap below 30 min → none
-TSB_MIN = -20.0                   # week_plan's 維持量 line
+TSB_MIN = LG.TSB_HOLD             # week_plan's 維持量 line: −20 % of CTL (SP-670; was −20 points)
 NO_DAYS = 7                       # nothing in the last 7 days (doc §2.5, 推估)
 DEFAULT_PCT = 0.13                # ≈ 9 kg / 70 kg (the doc's example) when there is no body weight
 SRC = ("Pandolf 1977（同代謝率的坡度）；Ludlow & Weyand 2017（代謝量和總重成正比）；"
@@ -118,8 +120,9 @@ def simulated(pct: float, grade: float = BASE_GRADE, kmh: float = BASE_KMH) -> d
 
 
 def week_context(*, kind: str, mode: str, monday: dt.date, event: Optional[dict], weight: Optional[float],
-                 tsb: Optional[float] = None, injury: Optional[dict] = None) -> dict:
-    """`injury`: injuries.condition_week's rule (SP-270) — 跟腱進行中 = no steep walk this week."""
+                 tsb: Optional[float] = None, injury: Optional[dict] = None, ctl: Optional[float] = None) -> dict:
+    """`injury`: injuries.condition_week's rule (SP-270) — 跟腱進行中 = no steep walk this week.
+    `tsb` / `ctl`: TSB at the start of the week and the CTL it is taken from (the line is a share)."""
     info = {"active": False, "event": event, "weight": weight, "monday": monday.isoformat(), "why": [], "src": SRC}
     if not qualifies(event):
         info["why"].append("下一場 A 賽事不是百岳或多日行程" if event else "沒有下一場 A 賽事")
@@ -137,8 +140,8 @@ def week_context(*, kind: str, mode: str, monday: dt.date, event: Optional[dict]
     if INJ.avoids(injury, "steep"):
         info["why"].extend(injury["notes"])
         return info
-    if tsb is not None and tsb < TSB_MIN:
-        info["why"].append(f"週初負荷平衡（Load balance）{tsb:+.0f} < {TSB_MIN:.0f}：這週不排")
+    if LG.tsb_below(tsb, ctl, TSB_MIN):
+        info["why"].append(f"週初負荷平衡（Load balance）{tsb:+.0f}＝{LG.tsb_pct_text(tsb, ctl)} < −20%：這週不排")
         return info
     trip = trip_kg(event, weight)
     st = stage_of(w)
@@ -149,7 +152,7 @@ def week_context(*, kind: str, mode: str, monday: dt.date, event: Optional[dict]
 
 
 def plan_context(ds, status, today: dt.date, monday: dt.date, mode: str, tsb: Optional[float], gate=None,
-                 injury: Optional[dict] = None) -> dict:
+                 injury: Optional[dict] = None, ctl: Optional[float] = None) -> dict:
     """week_context() from week_plan()'s data. Never raises."""
     try:
         from backend.engine import b2b as B2B
@@ -162,7 +165,7 @@ def plan_context(ds, status, today: dt.date, monday: dt.date, mode: str, tsb: Op
             except Exception:              # noqa: BLE001
                 weight = None
         return week_context(kind=status.kind or "base", mode=mode, monday=monday, event=ev, weight=weight, tsb=tsb,
-                            injury=injury)
+                            injury=injury, ctl=ctl)
     except Exception as e:                  # noqa: BLE001 — the plan must still build
         return {"active": False, "error": type(e).__name__}
 

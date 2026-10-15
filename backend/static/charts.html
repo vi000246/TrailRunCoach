@@ -3072,7 +3072,7 @@ function drawPlot(card, res, series) {
   // SP-219: the stored plan's projection on a range into the future (res.projection, panels/plan_projection.py):
   // a 「今天」 line; on the PMC each race day in it — the race's line and name (both labels along their line, so a
   // race a few days ahead never covers 今天), its projected CTL and TSB as two
-  // marked points and, for an A / B race, the TSB range its grade aims for (A +10～+20, B −5～+5) as a short band.
+  // marked points and, for an A / B race, the TSB range its grade aims for (A +10～+35 %, B −5～+5 % of CTL, in points: r.band) as a short band.
   // Unnamed series: not in the legend. A day-bucket chart (每日 TSS: one category a day) gets the 今天 line
   const PJ = res.projection && (cat ? cat === "day" : xKind === "date") ? res.projection : null;
   if (PJ) {

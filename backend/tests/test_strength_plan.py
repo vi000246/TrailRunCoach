@@ -116,7 +116,7 @@ def test_week_plan_trail_transition_is_the_aa_circuit():
 
 
 def test_week_plan_trail_base_is_max_strength_and_projection_follows():
-    # trail A race 1/02: 專項期 from 10/24
+    # trail A race 1/02: 專項期 from 10/28 (SP-668: the 10-day taper from 12/23)
     plan, wp = _week([_ev("2027-01-02")])
     assert wp["phase"] == "base"
     ss = _strength(wp["sessions"])
@@ -125,21 +125,22 @@ def test_week_plan_trail_base_is_max_strength_and_projection_follows():
     weeks = PJ.project_weeks(wp, _phases(plan, TODAY), date(2026, 11, 22))
     by = {w["start"]: w for w in weeks}
     assert _strength(by["2026-10-05"]["sessions"])[0]["title"] == "肌力（分腿蹲＋離心下階＋引體向上）"
-    sp = _strength(by["2026-10-26"]["sessions"])
-    assert by["2026-10-26"]["phase"] == "specific" and sp
+    sp = _strength(by["2026-11-02"]["sessions"])
+    assert by["2026-11-02"]["phase"] == "specific" and sp
     assert sp[0]["title"] == "肌力維持（高踏階＋離心下階＋引體向上）" and sp[0]["minutes"] == 25
     assert sp[0]["tss"] < _strength(by["2026-10-05"]["sessions"])[0]["tss"]
 
 
 def test_week_plan_specific_is_maintenance_and_taper_stops_it():
-    # trail A race 11/28: 專項期 9/19–11/13, 減量期 from 11/14
+    # trail A race 11/28: 專項期 9/23–11/17, 減量期 from Wed 11/18 (10 days, SP-668)
     plan, wp = _week([_ev("2026-11-28")])
     assert wp["phase"] == "specific"
     ss = _strength(wp["sessions"])
     assert ss and all(s["title"] == "肌力維持（高踏階＋離心下階＋引體向上）" for s in ss)
     weeks = PJ.project_weeks(wp, _phases(plan, TODAY), date(2026, 11, 29))
     by = {w["start"]: w for w in weeks}
-    assert not _strength(by["2026-11-16"]["sessions"]) and not _strength(by["2026-11-23"]["sessions"])  # SP-86
+    assert all(s["day"] < "2026-11-18" for s in _strength(by["2026-11-16"]["sessions"]))         # SP-86
+    assert not _strength(by["2026-11-23"]["sessions"])
 
 
 def test_week_plan_baiyue_specific_without_me_keeps_the_step_down():

@@ -54,7 +54,9 @@ from typing import Optional, Sequence
 import numpy as np
 
 # ---- Form%, load ratio -------------------------------------------------------
-FORM_ZONES = ((-0.30, "high_risk"), (-0.10, "optimal"), (0.05, "grey"), (0.25, "fresh"))  # upper bounds
+# the same lines as engine/load_guard.py TSB_ZONES / TSB_CTL_MIN (SP-670: +35 %, was +25 %; of 30 under CTL 30)
+FORM_ZONES = ((-0.30, "high_risk"), (-0.10, "optimal"), (0.05, "grey"), (0.35, "fresh"))  # upper bounds
+FORM_CTL_MIN = 30.0
 LOAD_RATIO_BANDS = (0.8, 1.3, 1.5)
 
 
@@ -68,10 +70,10 @@ def ewma_loads(daily: Sequence[float], const: float) -> list[float]:
 
 
 def form_pct(ctl_yesterday: float, atl_yesterday: float) -> Optional[float]:
-    """TSB / CTL as a fraction, TSB = yesterday's CTL - ATL."""
+    """TSB / CTL as a fraction, TSB = yesterday's CTL - ATL; of FORM_CTL_MIN under it."""
     if not ctl_yesterday:
         return None
-    return (ctl_yesterday - atl_yesterday) / ctl_yesterday
+    return (ctl_yesterday - atl_yesterday) / max(ctl_yesterday, FORM_CTL_MIN)
 
 
 def form_zone(f: float) -> str:

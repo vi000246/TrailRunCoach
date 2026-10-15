@@ -113,9 +113,9 @@ def maokong_event(race: dt.date):
 
 
 def make_phases(events: list, start: dt.date) -> list:
-    """Manual phases around the A events: 基礎期 → 專項期 (8 wk) → 減量期 (14 d)
+    """Manual phases around the A events: 基礎期 → 專項期 → 減量期 (planning.TAPER_DAYS, 10 d since SP-668)
     → 賽事 → 恢復期 (7 d, 14 d after a long event); as planning.py names them."""
-    from backend.engine.planning import Phase
+    from backend.engine.planning import TAPER_DAYS, Phase
     out = []
     aev = sorted((e for e in events if e.priority == "A"), key=lambda e: e.date)
     # the plan covers the whole season even when the data is shorter (tests' 8 weeks)
@@ -123,7 +123,7 @@ def make_phases(events: list, start: dt.date) -> list:
     prev_end = first - dt.timedelta(days=1)
     for e in aev:
         spec = e.start - dt.timedelta(days=56)
-        taper = e.start - dt.timedelta(days=14)
+        taper = e.start - dt.timedelta(days=TAPER_DAYS)
         if spec - prev_end > dt.timedelta(days=7):
             out.append(Phase(kind="base", start=(prev_end + dt.timedelta(days=1)).isoformat(),
                              end=(spec - dt.timedelta(days=1)).isoformat(), auto=False))

@@ -14,6 +14,8 @@ from __future__ import annotations
 
 from typing import Optional
 
+from backend.engine import load_guard as LG
+
 SESSIONS = {
     "rest": "休息或 30–45 分鐘恢復跑（Z1）",
     "low": "長時間輕鬆跑 / 越野長距離（Z2，功率 < 85% 模型閾值功率或心率 < 89% LTHR）",
@@ -30,7 +32,8 @@ def _fmt(v: Optional[float], d: int = 0) -> str:
 
 
 def recommend(band: Optional[dict], focus: Optional[dict], phase: Optional[str],
-              tsb: Optional[float] = None) -> dict:
+              tsb: Optional[float] = None, ctl: Optional[float] = None) -> dict:
+    """`ctl`: the CTL the TSB is taken from — the easy-day line is a share of it (SP-670)."""
     reasons: list[str] = []
     r = band.get("ratio") if band else None
     if band:
@@ -55,8 +58,8 @@ def recommend(band: Optional[dict], focus: Optional[dict], phase: Optional[str],
         reasons.append(f"4 週負荷焦點：{b['label']} {_fmt(b['pct'])}%，"
                        f"目標 {b['target'][0]}–{b['target'][1]}%")
         key = b["key"]
-        if key != "low" and tsb is not None and tsb < -25:
-            reasons.append("負荷平衡（Load balance）< -25：強度課之前先安排一天輕鬆")
+        if key != "low" and LG.tsb_below(tsb, ctl, LG.TSB_EASY_FIRST):
+            reasons.append(f"負荷平衡（Load balance）{LG.tsb_pct_text(tsb, ctl)} < −25%：強度課之前先安排一天輕鬆")
         return {"key": key, "headline": SESSIONS[key], "reasons": reasons}
 
     if focus and focus.get("total"):

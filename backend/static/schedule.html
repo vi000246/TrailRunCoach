@@ -908,9 +908,9 @@ Garmin 推送不變：可以在手錶加 GAP（坡度調整配速）資料欄位
 
       <section class="pf-g" aria-labelledby="pf-g8"><h4 id="pf-g8" data-i18n="schedule.pf.g.race">賽事前後</h4>
         <div class="pf-r" id="pf-tp"><label class="pf-l" for="pf-tpd" data-i18n="schedule.pf.taper">馬拉松／超馬減量期</label>
-          <button type="button" class="qtip" data-i18n-attr="aria-label:schedule.pf.about;data-tip:schedule.pf.taper_tip" aria-label="說明" data-tip="A 賽事前減量幾天。預設 14 天（統合分析 8–14 天效果最好）；路跑全馬、超馬可以拉長到最多 21 天（休閒馬拉松跑者 3 週比 2 週好，4 週沒有更好；超馬套用是推估）。其他賽事固定 14 天，2–3 天的百岳 7 天。自己設定周期時不會套用。">?</button>
+          <button type="button" class="qtip" data-i18n-attr="aria-label:schedule.pf.about;data-tip:schedule.pf.taper_tip" aria-label="說明" data-tip="A 賽事前減量幾天。預設 10 天（統合分析 8–14 天效果最好，取中間）；路跑全馬、超馬可以拉長到最多 21 天（休閒馬拉松跑者 3 週比 2 週好，4 週沒有更好；超馬套用是推估）。其他賽事固定 10 天，2–3 天的百岳 7 天。自己設定周期時不會套用。">?</button>
           <span class="pf-c"><select id="pf-tpd" name="taper_days">
-            <option value="14">14</option><option value="17">17</option><option value="21">21</option></select><span class="u" data-i18n="schedule.pf.u_days">天</span></span></div>
+            <option value="10">10</option><option value="14">14</option><option value="17">17</option><option value="21">21</option></select><span class="u" data-i18n="schedule.pf.u_days">天</span></span></div>
         <div class="pf-r" id="pf-tr"><label class="pf-l" for="pf-trw" data-i18n="schedule.pf.transition">A 賽事後轉換期</label>
           <button type="button" class="qtip" data-i18n-attr="aria-label:schedule.pf.about;data-tip:schedule.pf.transition_tip" aria-label="說明" data-tip="A 賽事的恢復期之後接幾週轉換期：只排輕鬆跑（每次 ≤ 60 分）和肌力，沒有長跑、強度課，量是賽前 4 週平均的一半（推估）；可以用交叉訓練取代輕鬆跑。Friel 一般 3–4 週、Canova 4 週。5–6 週只用在超馬級以上（預估 ≥ 6 小時）的 A 賽事，其他賽事最多 4 週：超馬教練的休息加慢慢回來合計 4–8 週（Koop、Hart、Torrence，教練級；6 週是推估）。下一場 A 賽事的專項期太近時會自動縮短或取消。自己設定周期時不會加。">?</button>
           <span class="pf-c"><select id="pf-trw" name="transition_weeks">
@@ -2777,7 +2777,7 @@ function pfFill(p) {
   PFF.elements.quality_gate_weeks.value = p.quality_gate_weeks ?? 8;
   PFF.elements.b2b.checked = p.b2b !== false;
   PFF.elements.transition_weeks.value = String(p.transition_weeks ?? 3);
-  PFF.elements.taper_days.value = String([14, 17, 21].includes(p.taper_days) ? p.taper_days : 14);
+  PFF.elements.taper_days.value = String([10, 14, 17, 21].includes(p.taper_days) ? p.taper_days : 10);
   pfSync();
 }
 function pfRead() {
@@ -2799,7 +2799,7 @@ function pfRead() {
     aet_test_protocol: radioVal("aet_test_protocol") || "auto",
     quality_gate: radioVal("quality_gate") || "auto", quality_gate_weeks: numOrNull(E.quality_gate_weeks.value) ?? 8,
     b2b: E.b2b.checked, transition_weeks: Number(E.transition_weeks.value || 3),
-    taper_days: Number(E.taper_days.value || 14),
+    taper_days: Number(E.taper_days.value || 10),
     strength_moves: smRead(), strength_no_gear: smLack() };
 }
 function pfErrKey(p) {                    // mirrors plan_prefs.check + the per-key validation: [key, vars] | null

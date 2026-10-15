@@ -34,7 +34,8 @@ Two questions, answered separately:
        first 4 weeks of data (status: ramp_week None)
      last week's running-time step against max(the week before, 4-week mean): > 20 % → none
        (Nielsen 2014, Damsted 2019); 10–20 % → hold the dose (10 % = the coaches' mode, SP-528)
-     TSB −30…−20 → hold the dose (Friel / TrainingPeaks; < −30 is already a recovery week)
+     TSB −30…−20 % of CTL → hold the dose (Friel / TrainingPeaks, a share since SP-670; < −30 % is already a
+       recovery week)
      3:1 recovery week → a 4×1′ fartlek instead of intervals (Palladino)
      48 h from the long run / other hard days → plan_prefs.place() / week_plan
    Base phase gets at most one interval session a week without a measured AeT (guardrail_mode).
@@ -123,7 +124,7 @@ LOW_SHARE_MIN = 0.75           # status.LOW_SHARE_GOOD — by time, 推估 betwe
 LOW_SHARE_BAD = 0.65           # status.LOW_SHARE_WATCH: under it the intensity level is "bad" (SP-551 says it in words)
                                # (estimated-constants-inventory.md §5.1)
 STEP_HOLD, STEP_BLOCK = LG.STEP_HOLD, LG.STEP_BLOCK   # > 20 % block: Nielsen 2014, Damsted 2019; 10 % = the coaches' mode
-TSB_HOLD = -20.0                           # Friel / TrainingPeaks TSB bands (coach)
+TSB_HOLD = LG.TSB_HOLD                     # −20 % of CTL (SP-670; was −20 points): Friel / TrainingPeaks TSB bands
 REP_PCT, REP_MIN_S, DOSE_MIN_REPS = 0.95, 40, 4   # 自訂: a short-rep session = ≥ 4 bouts ≥ 40 s at ≥ 95 % CP
 FADE = 0.05                    # workout_review.FADE
 
@@ -745,7 +746,7 @@ def low_share_detail(what: str, pct: Optional[str], aet_t: str, tested: bool, fl
 def guard(low_share: Optional[float] = None, power_low_share: Optional[float] = None,
           ramp: Optional[float] = None, step: Optional[float] = None, tsb: Optional[float] = None,
           aet: Optional[float] = None, injury: Optional[str] = None, aet_tested: bool = True,
-          ramp_base: Optional[float] = None, step_exempt: str = "") -> dict:
+          ramp_base: Optional[float] = None, step_exempt: str = "", tsb_ctl: Optional[float] = None) -> dict:
     """This week's check: {"block", "sub", "hold", "verdict", "action"} — the
     first failing rule speaks. Missing numbers don't block. `injury`: an open
     傷病紀錄 with 「受傷期間暫停強度課」 ticked (engine/injuries.pause_reason)
@@ -754,7 +755,8 @@ def guard(low_share: Optional[float] = None, power_low_share: Optional[float] = 
     it the low-intensity share is only a warning for Zone 5 too (SP-39). `ramp_base`: CTL 7 days
     ago, for the relative ramp lines (load_guard; None = the floors 3 / 5). `step_exempt`: the
     volume step comes right after a short break (status.i_volume, load_guard.short_break) — the
-    volume rule is skipped and the text goes to "step_note" (the week note)."""
+    volume rule is skipped and the text goes to "step_note" (the week note). `tsb_ctl`: yesterday's
+    CTL — the TSB hold line is a share of it (load_guard.tsb_share, SP-670; None = of 30)."""
     out = {"block": False, "sub": False, "hold": False, "verdict": "", "action": "", "rule": "", "blocks": [],
            "verdicts": {}, "warn": "", "warn_detail": "", "step_note": step_exempt or ""}
     if step_exempt:
@@ -806,8 +808,10 @@ def guard(low_share: Optional[float] = None, power_low_share: Optional[float] = 
             "本週維持上週的量", block=True)
     elif step is not None and step > STEP_HOLD:
         say("volume", f"上週跑步量增 {step * 100:+.0f}%（10–20%；10% 是教練眾數）：間歇維持上次的量，不往上加", "", hold=True)
-    if tsb is not None and -30.0 <= tsb < TSB_HOLD:
-        say("tsb", f"負荷平衡（Load balance）{tsb:+.0f}（−30～−20，Friel／TrainingPeaks）：間歇維持上次的量，不往上加", "", hold=True)
+    tsb_sh = LG.tsb_share(tsb, tsb_ctl)          # SP-670: a share of CTL (of 30 under 30)
+    if tsb_sh is not None and LG.TSB_DEEP <= tsb_sh < TSB_HOLD:
+        say("tsb", f"負荷平衡（Load balance）{tsb:+.0f}＝{LG.tsb_pct_text(tsb, tsb_ctl)}"
+                   f"（−30～−20%，Friel／TrainingPeaks）：間歇維持上次的量，不往上加", "", hold=True)
     return out
 
 
@@ -1362,7 +1366,7 @@ def evaluate(ds, plan, today: dt.date, prefs=None, by: Optional[dict] = None, ph
     g = guard(low_share=ie.get("low_share"), power_low_share=ie.get("power_low_share"),
               ramp=_extra(by, "fitness").get("ramp_week"), ramp_base=_extra(by, "fitness").get("ramp_base"),
               step=_extra(by, "volume").get("step"), step_exempt=_extra(by, "volume").get("step_exempt") or "",
-              tsb=_value(by, "form"), aet=ae["value"] if ae["measured"] else None,
+              tsb=_value(by, "form"), tsb_ctl=_extra(by, "form").get("ctl"), aet=ae["value"] if ae["measured"] else None,
               injury=_injury_pause(today), aet_tested=bool(ae.get("tested")))
     hist = []
     try:

@@ -60,5 +60,6 @@
   "guide.maintain_vt2": "每週一堂高於 VT2 的課（5 區）",
   "guide.maintain_easy": "輕鬆跑佔 ≥ 80%",
   "guide.maintain_rest": "最多 6 週排一次恢復週",
-  "guide.now_as": "（現在：{label}）"
+  "guide.now_as": "（現在：{label}）",
+  "tl.specific_src": "專項期 {n} 週的依據：Uphill Athlete 越野超馬 20 週模板是 8 週專項＋2 週減量，和這裡一樣；Pfitzinger 馬拉松約 8 週、Canova 6–8 週、Daniels 最後一期 6 週、江晏慶 4 小時以上的賽事專項巔峰約賽前 1.5 個月（教練建議）。其中 2 週是恢復週。"
 }

@@ -981,7 +981,7 @@ async function loadWeek() {
   renderKpis();
   renderTodo(); renderInd();                // SP-483: R16 reads the week (OV8e)
   // Not shown (sources live in backend/engine/overview.py SRC_*; w.rules still carries them):
-  // week targets follow a weekly CTL goal of max(2, 5 %) / max(2.5, 7 %) of CTL (load_guard.ramp_goal), Uphill Athlete's
+  // week targets follow a weekly CTL goal of max(2, 4 %) / max(2.5, 5 %) of CTL (load_guard.ramp_goal), Uphill Athlete's
   // ≤ 10 % weekly volume step and a 3:1 build/recovery cycle; the long day goes on the weekday the
   // athlete most often did long sessions in the last 12 weeks (w.long_weekday), else the last day.
 }

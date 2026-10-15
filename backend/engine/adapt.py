@@ -62,7 +62,7 @@ Rules (thresholds: source or 推估):
      2026-10-12: 「疲勞保護要看是不是有高強度或 TSS 過高，跟完成度沒關係」 — the old trigger
      two red-compliance sessions in a row is gone: it read too little, a bike ride for a run …
      as fatigue):
-     TSB < −30 (Friel / TrainingPeaks, coach; when week_plan has not already
+     TSB < −30 % of CTL (Friel / TrainingPeaks, coach, as a share since SP-670; when week_plan has not already
      made it a recovery week) or a CTL ramp at load_guard's BLOCK line
      (min(10, max(5, 15 % of CTL 7 days ago)); SP-63) -> the quality is removed
      and easy minutes × 0.8.
@@ -80,11 +80,11 @@ Rules (thresholds: source or 推估):
      The 2 runs and the trigger itself are 推估 (no controlled trial).
      The 20 % cut is 推估. Mapping (SP-63): this rule
      used 8/week = the old block line (since 2026-10-01; 7 before that), so it
-     takes the new block line, not the watch line. TSB < −30 itself is
+     takes the new block line, not the watch line. TSB < −30 % itself is
      week_plan's existing recovery-week rule and the ramp block is quality_gate's
      existing block: those are not repeated when they already acted.
      Exception (engine/b2b.py, user-approved): during a planned B2B week and
-     the easy days after one, TSB < −30 alone is the expected drop and does
+     the easy days after one, TSB < −30 % alone is the expected drop and does
      nothing (an adjustment "note" logs why); the ramp and the too-hard
      streak still act — signs beyond the expected drop.
 """
@@ -111,7 +111,7 @@ TOO_HARD_LABEL = {"z3": N_("閾值課"), "z5": N_("VO2max 課"), "hard_long": N_
 MIN_EASY_MIN = 20          # 推估: a trimmed easy run is never shorter than this (rule E)
 SPACING_DAYS = 2           # plan_prefs.place(): 48 h between hard days / the long run
 # E. fatigue guard
-TSB_FLOOR = -30.0          # week_plan(): TSB < −30 -> recovery week
+TSB_FLOOR = LG.TSB_DEEP    # week_plan(): TSB < −30 % of CTL -> recovery week (SP-670; was −30 points)
 FATIGUE_CUT = 0.80         # 推估: easy minutes × 0.8
 OVERHARD_STREAK = 2        # 推估 (SP-404): the last two done easy / long runs both too hard
 
@@ -567,16 +567,18 @@ def _too_hard_streak(wk: _Week, ctx: dict) -> Optional[list[str]]:
 def _fatigue(wk: _Week, stored: list[dict], ctx: dict, th: dict, out: list) -> None:
     load = ctx.get("load") or {}
     tsb, ramp, base = load.get("tsb"), load.get("ramp"), load.get("ramp_base")
+    ctl = load.get("ctl")                       # the CTL the TSB is taken from: the line is a share (SP-670)
     rest_week = ctx.get("mode") in ("recovery_week", "recovery", "taper", "event", "transition", "rebuild", "reentry")
     why, remove = None, False
-    tsb_hit = tsb is not None and tsb < TSB_FLOOR and not rest_week
+    tsb_hit = LG.tsb_below(tsb, ctl, TSB_FLOOR) and not rest_week
     # a planned B2B (engine/b2b.py): its TSB drop is expected — only the ramp / too-hard streak still act
     b2b_why = _b2b_exempt(ctx.get("b2b"), wk.today) if tsb_hit else None
     if b2b_why:
         _adj(out, "b2b", wk, {"day": wk.today}, "note",
-             f"負荷平衡（Load balance）{tsb:+.0f} < {TSB_FLOOR:.0f}，但{b2b_why}：這是預期中的下降，不減量（推估）", SRC_B2B)
+             f"負荷平衡（Load balance）{tsb:+.0f}＝{LG.tsb_pct_text(tsb, ctl)} < −30%，但{b2b_why}：這是預期中的下降，不減量（推估）",
+             SRC_B2B)
     if tsb_hit and not b2b_why:
-        why, remove = f"負荷平衡（Load balance）{tsb:+.0f} < {TSB_FLOOR:.0f}", True
+        why, remove = f"負荷平衡（Load balance）{tsb:+.0f}＝{LG.tsb_pct_text(tsb, ctl)} < −30%", True
     elif LG.ramp_level(ramp, base) == LG.BLOCK and ctx.get("mode") != "reentry":
         # the re-entry block's 50 → 75 → 100 % steps are planned, not overload (detraining.md §6.5, 推估)
         why, remove = LG.ramp_text(ramp, base, LG.BLOCK), True
@@ -607,7 +609,7 @@ def _fatigue(wk: _Week, stored: list[dict], ctx: dict, th: dict, out: list) -> N
 def adapt(gen_weeks: list[dict], stored: list[dict], ctx: dict) -> tuple[list[dict], list[dict], dict]:
     """(adjusted gen_weeks, adjustments, notes). `ctx`: today, first_free (first
     day sessions can go on), blocked, allowed_days, thresholds, mode (this
-    week), load {tsb, ramp, ramp_base (CTL 7 days ago)}, reviews {activity index: review metrics},
+    week), load {tsb, ctl (the CTL the TSB is taken from), ramp, ramp_base (CTL 7 days ago)}, reviews {activity index: review metrics},
     rpe {activity index: {rpe, source, coros_feel}} and rpe_rule (bool, default on): SP-231.
     `notes`: activity index -> the note for the done session it matched."""
     weeks = copy.deepcopy(gen_weeks)

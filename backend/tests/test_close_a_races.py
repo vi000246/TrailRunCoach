@@ -58,12 +58,13 @@ def test_ten_days_apart_the_second_race_keeps_its_event_and_a_taper():
     assert not of(ph, "specific", "r2") and not of(ph, "transition", "r1")
 
 
-def test_four_weeks_apart_after_an_ultra_full_taper_recovery_13_days():
+def test_four_weeks_apart_after_an_ultra_full_taper_full_recovery():
     r1, r2 = ev("r1", "2027-03-06", **LONG), ev("r2", "2027-04-03", **SHORT)
     ph = P.auto_phases([r1, r2], B, E)
     contiguous(ph)
     rec, tap = of(ph, "recovery", "r1")[0], of(ph, "taper", "r2")[0]
-    assert days(rec) == 13 and "恢復期縮短為 13 天" in rec.note
+    # SP-668: with a 10-day taper (was 14) the 14-day recovery fits whole (was cut to 13)
+    assert days(rec) == 14 and "恢復期縮短" not in rec.note
     assert days(tap) == P.TAPER_DAYS and "減量期縮短" not in tap.note
     assert "只隔 4 週" in tap.note
     # the 轉換期 note never cites a 專項期 start in the past
@@ -77,8 +78,8 @@ def test_eight_weeks_apart_shortened_specific_and_the_hint():
     rec = of(ph, "recovery", "r1")[0]
     assert days(rec) == 7
     sp = of(ph, "specific", "r2")[0]
-    assert sp.start == "2027-03-14" and days(sp) == 34
-    assert "專項期縮短為 34 天（原本 8 週）" in sp.note and "只隔 8 週" in sp.note
+    assert sp.start == "2027-03-14" and days(sp) == 38                    # SP-668: 10-day taper (was 34)
+    assert "專項期縮短為 38 天（原本 8 週）" in sp.note and "只隔 8 週" in sp.note
     # no 轉換期: its note says how long until the next race, not a past 專項期 date
     assert rec.note.startswith("沒有轉換期") and "只剩 6 週" in rec.note and "2027-0" not in rec.note
     assert days(of(ph, "taper", "r2")[0]) == P.TAPER_DAYS

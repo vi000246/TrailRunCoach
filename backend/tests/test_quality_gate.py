@@ -244,12 +244,12 @@ def test_options_say_what_the_data_allows():
     (dict(ramp=3.1), "sub", "≥ 3.0＝下限 3"),            # no CTL₋₇: the floors
     (dict(step=0.25), "block", "> 20%"),
     (dict(step=0.15), "hold", "10–20%"),
-    (dict(tsb=-25.0), "hold", "負荷平衡（Load balance）−25"),
+    (dict(tsb=-25.0, tsb_ctl=100.0), "hold", "負荷平衡（Load balance）−25＝長期負荷的 −25%"),   # SP-670: a share
 ])
 def test_guardrails(kw, flag, words):
     g = QG.guard(aet=142.0, **kw)
     assert g[flag] and words in g["verdict"].replace("-", "−")
-    assert QG.guard(low_share=0.8, ramp=3, ramp_base=40.0, step=0.05, tsb=-10)["rule"] == ""
+    assert QG.guard(low_share=0.8, ramp=3, ramp_base=40.0, step=0.05, tsb=-10, tsb_ctl=60.0)["rule"] == ""
 
 
 def test_guardrails_block_the_week_and_say_so():

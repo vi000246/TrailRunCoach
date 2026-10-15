@@ -23,7 +23,7 @@ Hooks (small, so the planner files stay readable):
     placement.
   * projection.project_weeks — the same per projected week (no TSB there:
     re-checked when the week comes).
-  * adapt._fatigue — fatigue_exempt(): TSB < −30 alone after an accepted B2B
+  * adapt._fatigue — fatigue_exempt(): TSB < −30 % (of CTL, SP-670) alone after an accepted B2B
     does not cut the week.
 
 States of one week's info: `candidate` (the rules allow it, before the base
@@ -55,8 +55,8 @@ Structure (doc §2.5):
   * no pack (the load is simulated by grade: engine/steep_hill.py); day 1
     practises race fuelling 30–60 g/h (Burke 2011).
 
-The exception (doc §2.5, user-approved): an accepted B2B pushes TSB below −30 /
-−20. week_plan would make the next week a recovery week (3:1 → 2:2); instead
+The exception (doc §2.5, user-approved): an accepted B2B pushes TSB below −30 % /
+−20 % of CTL (shares since SP-670, load_guard.week_rule). week_plan would make the next week a recovery week (3:1 → 2:2); instead
 the B2B week and the week after keep their volume, the POST_EASY_DAYS (3) days after the B2B
 are easy only (no quality / test; SP-527: Gaudette 2, Johnston 3–4 — the median), and the
 3:1 cycle continues. Not when something beyond the expected drop shows up:
@@ -92,7 +92,7 @@ LAST_BEFORE_DAYS = 21          # last B2B day ≥ 3 weeks before the event (vert
 SPACING_DAYS = 14              # 推估: never two B2B weekends < 2 weeks apart
 RECOVERY_SHARE = 0.85          # 推估: last week ≤ 85 % of the 3 before = the 3:1 recovery week (overview.RECOVERY_WEEK_SHARE 0.70)
 LONGEST_FRAC = 0.87            # base built: longest 28 d ≥ day 1 × 0.87 (1 / 1.15, the app's +15 % step)
-TSB_MIN = -20.0                # week_plan's 維持量 line
+TSB_MIN = LG.TSB_HOLD          # week_plan's 維持量 line: −20 % of CTL (SP-670; was −20 points)
 # ---- structure ----------------------------------------------------------------
 DAY2_RATIO = 0.67              # CTS 30:20 (Jones-Wilkins); 0.6–0.7 推估
 SINGLE_DAY2 = (90, 150)        # single-day ≥ 6 h event: day 2 1.5–2.5 h easy — vert.run 〈What's Back-to-Back Training〉
@@ -269,11 +269,11 @@ def last_was_recovery(hours: list[float]) -> bool:
 def week_context(*, kind: str, mode: str, monday: dt.date, event: Optional[dict], last_recovery: bool,
                  state: dict, tsb: Optional[float] = None, ramp: Optional[float] = None,
                  guard_ok: bool = True, post_from: Optional[dict] = None,
-                 ramp_base: Optional[float] = None) -> dict:
+                 ramp_base: Optional[float] = None, ctl: Optional[float] = None) -> dict:
     """Everything about B2B for one week except the base-built check (needs
     the long-run minutes: finalize()). `event`: event_json(); `state`:
     history(); `tsb`: TSB at the start of the week (Monday's, so the answer
-    doesn't change mid-week after day 1); `post_from`: the B2B that ended just
+    doesn't change mid-week after day 1), a share of `ctl` (the CTL it is taken from, SP-670); `post_from`: the B2B that ended just
     before this week (an accepted one, or a projected one)."""
     sunday = monday + dt.timedelta(days=6)
     info = {"event": event, "candidate": False, "suggest": False, "due": False, "accepted": False, "days": 2,
@@ -308,8 +308,8 @@ def week_context(*, kind: str, mode: str, monday: dt.date, event: Optional[dict]
     else:
         info["blocked"].append("每個 3:1 週期最多一次，排在恢復週後的第一個加量週")
         return info
-    if tsb is not None and tsb < TSB_MIN:
-        info["blocked"].append(f"週初負荷平衡（Load balance）{tsb:+.0f} < {TSB_MIN:.0f}：先恢復")
+    if LG.tsb_below(tsb, ctl, TSB_MIN):
+        info["blocked"].append(f"週初負荷平衡（Load balance）{tsb:+.0f}＝{LG.tsb_pct_text(tsb, ctl)} < −20%：先恢復")
         return info
     if LG.ramp_level(ramp, ramp_base) == LG.BLOCK:
         info["blocked"].append(LG.ramp_text(ramp, ramp_base, LG.BLOCK))
@@ -383,14 +383,15 @@ def plan_context(ds, status, today: dt.date, monday: dt.date, hist_hours: list[f
         lo = monday - dt.timedelta(days=28)
         longest = max((m for d, m, _ in rows if d >= lo), default=0.0)
         tsb = O._n(ctl_s.at(d_prev_sun) - atl_s.at(d_prev_sun))
+        ctl = O._n(ctl_s.at(d_prev_sun))
         fx = (getattr(by.get("fitness"), "extra", None) or {}) if by else {}
         ramp, ramp_base = fx.get("ramp_week"), fx.get("ramp_base")
         guard = ((getattr(by.get("gate"), "extra", None) or {}).get("guard") or {}) if by else {}
         info = week_context(kind=status.kind or "base", mode=mode, monday=monday, event=ev,
                             last_recovery=last_was_recovery(hist_hours), state=state, tsb=tsb, ramp=ramp,
                             guard_ok=not guard.get("block"), post_from=accepted_post(accepted, monday),
-                            ramp_base=ramp_base)
-        info.update(longest_before=longest, ramp=ramp, ramp_base=ramp_base, tsb_week_start=tsb,
+                            ramp_base=ramp_base, ctl=ctl)
+        info.update(longest_before=longest, ramp=ramp, ramp_base=ramp_base, tsb_week_start=tsb, ctl_week_start=ctl,
                     weight=status.plan.weight_on(today) if getattr(status, "plan", None) else None)
         return apply_accepted(info, accepted_for(accepted, monday))
     except Exception as e:                  # noqa: BLE001 — the plan must still build
@@ -504,10 +505,11 @@ def pair_options(monday: dt.date, first: dt.date, minutes: list, blocked=frozens
 # ---------------------------------------------------------------------------
 
 def tsb_exempt(info: Optional[dict], tsb: Optional[float], ramp: Optional[float] = None,
-               ramp_base: Optional[float] = None) -> Optional[str]:
+               ramp_base: Optional[float] = None, ctl: Optional[float] = None) -> Optional[str]:
     """Why a low TSB this week is the planned B2B's expected drop (or None).
-    A CTL ramp at load_guard's block line is beyond the expected drop: no exception."""
-    if not info or tsb is None or tsb >= TSB_MIN:
+    A CTL ramp at load_guard's block line is beyond the expected drop: no exception.
+    `ctl`: the CTL the TSB is taken from — the line is −20 % of it (SP-670)."""
+    if not info or not LG.tsb_below(tsb, ctl, TSB_MIN):
         return None
     if LG.ramp_level(ramp, ramp_base) == LG.BLOCK:
         return None
@@ -523,7 +525,7 @@ def tsb_exempt(info: Optional[dict], tsb: Optional[float], ramp: Optional[float]
 
 
 def fatigue_exempt(info: Optional[dict], today: str) -> Optional[str]:
-    """adapt rule E: the TSB < −30 trigger alone is skipped during an accepted
+    """adapt rule E: the TSB < −30 % trigger alone is skipped during an accepted
     B2B week and the easy days after one (the red streak and the ramp still act)."""
     if not info:
         return None

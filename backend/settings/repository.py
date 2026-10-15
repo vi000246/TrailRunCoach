@@ -228,8 +228,8 @@ DEFAULTS: dict[str, Any] = {
     # 轉換期 after an A race's 恢復期 (engine/planning.auto_phases, SP-73): weeks, 0 = off;
     # 5–6 only after a 超馬級+ race (planning.transition_weeks_for, SP-109), else ≤ 4
     "plan.prefs.transition_weeks": 3,
-    # 減量期天數 of a road marathon / an ultra (engine/planning.taper_days, SP-96): 14–21
-    "plan.prefs.taper_days": 14,
+    # 減量期天數 of a road marathon / an ultra (engine/planning.taper_days, SP-96): 10–21 (SP-668: default 10, was 14)
+    "plan.prefs.taper_days": 10,
     # 肌力動作 (engine/strength_moves.py, SP-191): {type: move} the athlete picked ({} = the defaults)
     # and the equipment they don't have (bar | band)
     "plan.prefs.strength_moves": {},
@@ -353,7 +353,7 @@ PREF_INTS = {                                 # key -> (lo, hi); None always all
     "plan.prefs.cooldown_min": (0, 20),
     "plan.prefs.warmup_min": (5, 30),          # = engine/warmup.MIN_RANGE
     "plan.prefs.transition_weeks": (0, 6),
-    "plan.prefs.taper_days": (14, 21),
+    "plan.prefs.taper_days": (10, 21),
 }
 
 

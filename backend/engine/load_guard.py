@@ -81,7 +81,7 @@ from typing import Optional, Sequence
 import numpy as np
 
 from backend.engine.reentry import MIN_BREAK
-from backend.i18n import N_, _
+from backend.i18n import M_, N_, _
 
 # ---- CTL ramp ---------------------------------------------------------------
 WATCH_PCT, WATCH_MIN = 0.10, 3.0               # 推估 (Friel 5–8 over CTL 60–80, the lower end)
@@ -104,7 +104,11 @@ STEP_SKIP_KINDS = ("taper", "event", "recovery", "transition", "rebuild")   # no
 STEP_LOOKBACK_WEEKS = 26               # 推估: covers taper + race + 恢復期 + a 4-week 轉換期 + 4 normal weeks
 
 # ---- planner's weekly CTL goal -------------------------------------------------
-GOAL = {"base": (0.05, 2.0), "specific": (0.07, 2.5),   # (share of CTL, floor in points) 推估
+# SP-669 (SP-664 Q3 = B): the top of Palladino's 2–5 % a week that most runners hold for weeks to months
+# (coach, running power; ≥ 7 holds only for days) — 專項期 5 %, 基礎期 4 %. Was 7 % / 5 %: 7 % came from
+# the old +4 points at CTL 55–60, not from Palladino. The point floors stay 推估; the guard lines above
+# (WATCH / BLOCK, Friel) do not move.
+GOAL = {"base": (0.04, 2.0), "specific": (0.05, 2.5),   # (share of CTL, floor in points)
         "maintain": (0.0, 0.0)}                          # SP-102 維持期: CTL held, not pushed up
 
 # ---- single-session spike (SP-66) ------------------------------------------------
@@ -162,9 +166,86 @@ def ramp_text(ramp: float, ctl_prev: Optional[float], level: str) -> str:
     return _("長期負荷週增量（Chronic load ramp）+{ramp:.1f}（≥ {line:.1f}＝{how}）", ramp=ramp, line=line, how=how)
 
 
+# ---- TSB as a share of CTL (SP-670) ----------------------------------------------------------
+# SP-664 Q4 = A (owner 2026-10-15): every TSB line is a share of the CTL the TSB is taken from
+# (TSB(d) = CTL(d − 1) − ATL(d − 1), so ÷ CTL(d − 1), as the charts' 負荷平衡 %). Same reason as the
+# ramp: a heart-rate TSS scale change (LTHR, calibration) moves CTL 30–50 % and TSB with it; only
+# TSB ÷ CTL survives it, and the app is for CTL 20 and CTL 100 alike. One copy, read by status (the
+# light), overview.week_plan (recovery week / hold), adapt rule E, quality_gate (hold), b2b /
+# specific_phase / steep_hill (no B2B, long climb, steep walk), panels/recommend, the race-day bands
+# (panels/plan_projection) and, as the same numbers, views/training.json, views/periodization.json and
+# static/pmc_chart.js.
+#   zones (intervals.icu's Friel bands as % CTL, vendor rule of thumb): < −30 % 深度疲勞,
+#     −30…−10 % 正常訓練, −10…+5 % 恢復中, +5…+35 % 比賽狀態, ≥ +35 % 休息過久
+#   planner: < −20 % hold the volume (no B2B / long climb / steep walk, intervals held), < −30 %
+#     recovery week (the old −20 / −30 points, Friel / TrainingPeaks)
+#   race day: A +10…+35 % (Palladino's +10…+20 points at CTL 60–80 ≈ +12…+33 %, and the app's own
+#     taper lands at +31…+41 % — 推估), B −5…+5 % (late-race-entry.md §2.1)
+# Under TSB_CTL_MIN the share is taken of TSB_CTL_MIN: a point floor (−30 % = −9, −20 % = −6), so
+# a CTL of 10 doesn't turn a −4 into −40 % (the ramp's floors do the same, SP-63; 推估).
+TSB_CTL_MIN = 30.0
+TSB_DEEP, TSB_HOLD = -0.30, -0.20
+TSB_PRODUCTIVE = (TSB_DEEP, -0.10)
+TSB_FRESH = 0.05               # 恢復中's top: from here 比賽狀態
+TSB_STALE = 0.35               # 休息過久 from here (was +25 % / +25 points)
+TSB_RACE = {"A": (0.10, 0.35), "B": (-0.05, 0.05)}
+TSB_EASY_FIRST = -0.25         # panels/recommend: an easy day before the intensity session (was −25 points)
+TSB_ZONES = ((TSB_DEEP, "deep"), (TSB_PRODUCTIVE[1], "productive"), (TSB_FRESH, "recovering"),
+             (TSB_STALE, "fresh"))   # upper bounds; above the last: "stale"
+
+
+def tsb_base(ctl: Optional[float]) -> float:
+    """The CTL a TSB share is taken of: the CTL, at least TSB_CTL_MIN (unknown → TSB_CTL_MIN)."""
+    return max(_base(ctl), TSB_CTL_MIN)
+
+
+def tsb_share(tsb: Optional[float], ctl: Optional[float]) -> Optional[float]:
+    """TSB ÷ CTL (−0.3 = −30 %) with the point floor; None without a TSB."""
+    try:
+        t = float(tsb)
+    except (TypeError, ValueError):
+        return None
+    return None if t != t else t / tsb_base(ctl)
+
+
+def tsb_line(share: float, ctl: Optional[float]) -> float:
+    """A share line in TSB points for this CTL (charts draw TSB in points)."""
+    return share * tsb_base(ctl)
+
+
+def tsb_below(tsb: Optional[float], ctl: Optional[float], share: float) -> bool:
+    s = tsb_share(tsb, ctl)
+    return s is not None and s < share
+
+
+def tsb_zone(share: float) -> str:
+    """deep / productive / recovering / fresh / stale — the charts' colour bands."""
+    for hi, name in TSB_ZONES:
+        if share < hi:
+            return name
+    return "stale"
+
+
+def week_rule(tsb: Optional[float], ctl: Optional[float]) -> Optional[str]:
+    """The planner's guardrail: "recovery" (< −30 %), "hold" (< −20 %) or None."""
+    if tsb_below(tsb, ctl, TSB_DEEP):
+        return "recovery"
+    if tsb_below(tsb, ctl, TSB_HOLD):
+        return "hold"
+    return None
+
+
+def tsb_pct_text(tsb: float, ctl: Optional[float]):
+    """「長期負荷的 −30%」, or under the floor 「−30%（長期負荷不到 30，以 30 計）」 (an M_ text)."""
+    s = tsb_share(tsb, ctl) or 0.0
+    if _base(ctl) < TSB_CTL_MIN:
+        return M_("{pct:+.0%}（長期負荷不到 {floor:.0f}，以 {floor:.0f} 計）", pct=s, floor=TSB_CTL_MIN)
+    return M_("長期負荷的 {pct:+.0%}", pct=s)
+
+
 # ---- PMC start values (SP-68) ---------------------------------------------------------
 # One source order for the starting CTL / ATL, read by the PMC itself (Evaluator builtins
-# ctl / atl / tsb: charts, overview, status, week_plan's TSB < −30, adapt rule E, b2b,
+# ctl / atl / tsb: charts, overview, status, week_plan's TSB < −30 %, adapt rule E, b2b,
 # projection) and so by this guardrail:
 #   1. manual — the user's CTL / ATL at the start of a date (設定 → 閾值, user_settings
 #      PMC_START_KEY). The series restarts there; days before it keep 2. / 3.

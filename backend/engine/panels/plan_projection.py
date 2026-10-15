@@ -17,10 +17,11 @@ chart with this key it adds what the stored plan says (owner 2026-10-12):
     start where the solid ones end; "pmc" a dashed TSB line too, "tss" the planned TSS as outlined
     bars (`bar_style: "hollow"`) beside the solid done ones (`apply`)
   * "pmc": each target race on a projected day (planning.Event, any grade) with its projected CTL
-    and TSB that day and the TSB range its grade aims for — A +10～+20 (status.TSB_A), B −5～+5
-    (TSB_B), C none: the owner's note PMC規劃比賽周期 (docs/research/late-race-entry.md §2.1;
-    Palladino / TrainingPeaks, rules of thumb) — in `projection.races`; the viewer draws them and
-    the 今天 line.
+    and TSB that day and the TSB range its grade aims for — a share of the CTL the day before
+    (load_guard.TSB_RACE, SP-670: A +10～+35 %, B −5～+5 %, of 30 under CTL 30; was A +10～+20 / B −5～+5
+    points), C none: the owner's note PMC規劃比賽周期 (docs/research/late-race-entry.md §2.1;
+    Palladino / TrainingPeaks, rules of thumb) — in `projection.races`, `band` in TSB points (the
+    axis), `band_pct` the shares; the viewer draws them and the 今天 line.
 
 Not drawn (owner 2026-10-12): with an activity-type filter (the plan is every sport together, the
 filtered PMC one sport's), on the % CTL variant (no CTL line to go on), after the last planned
@@ -33,10 +34,11 @@ from __future__ import annotations
 import datetime as dt
 from typing import Optional
 
+from backend.engine import load_guard as LG
 from backend.i18n import _, fmt
 
 MODES = ("pmc", "tss")
-TSB_B = (-5.0, 5.0)              # B race: TSB −5～+5, CTL still rising (PMC規劃比賽周期; late-race-entry.md §2.1)
+TSB_B = LG.TSB_RACE["B"]         # B race: TSB −5～+5 % of CTL, CTL still rising (PMC規劃比賽周期; late-race-entry.md §2.1)
 COLOR_TSB = "#6a5cc9"            # the dashed TSB line: the PMC's 比賽狀態 purple (views/training.json)
 COLOR_TSS = "#8a8984"            # the outlined planned-TSS bars: the 每日 TSS chart's 低於 CTL grey
 # the chart's own CTL / ATL series, found by expression (spaces dropped, lower case): the PMC's
@@ -77,9 +79,9 @@ def plan_rates(rows: list[dict]) -> dict[str, float]:
 
 
 def tsb_range(grade: Optional[str]) -> Optional[tuple[float, float]]:
-    """The TSB a race of this grade aims for on the day: A +10～+20, B −5～+5, C (any other) none."""
-    from backend.engine.status import TSB_A
-    return {"A": TSB_A, "B": TSB_B}.get(grade or "")
+    """The TSB a race of this grade aims for on the day, as a share of CTL: A +10～+35 %, B −5～+5 %,
+    C (any other) none."""
+    return LG.TSB_RACE.get(grade or "")
 
 
 def inputs(today: dt.date, end: dt.date, rows: Optional[list[dict]] = None, rates: Optional[dict] = None,
@@ -143,11 +145,15 @@ def _race(r: dict, row: dict) -> dict:
     from backend.engine.panels.race_refs import COLOR, COLOR_OTHER
     band = tsb_range(r.get("grade"))
     grade = r.get("grade") or ""
-    return {**r, "ctl": row["ctl"], "tsb": row["tsb"], "band": list(band) if band else None,
+    c = row.get("ctl_prev", row["ctl"])          # the race day's TSB = the day before's CTL − ATL
+    pts = [LG.tsb_line(band[0], c), LG.tsb_line(band[1], c)] if band else None
+    return {**r, "ctl": row["ctl"], "tsb": row["tsb"], "band": pts, "band_pct": list(band) if band else None,
             "color": COLOR.get(grade, COLOR_OTHER),
-            "text": _("{grade} 賽「{name}」：預估長期訓練負荷（Chronic load）{ctl:.0f}、負荷平衡（Load balance）{tsb:+.0f}",
-                      grade=grade, name=r.get("name") or "", ctl=row["ctl"], tsb=row["tsb"]),
-            "band_text": _("{grade} 賽的理想負荷平衡（Load balance）：{lo:+.0f}～{hi:+.0f}", grade=grade, lo=band[0], hi=band[1])
+            "text": _("{grade} 賽「{name}」：預估長期訓練負荷（Chronic load）{ctl:.0f}、負荷平衡（Load balance）{tsb:+.0f}（{pct}）",
+                      grade=grade, name=r.get("name") or "", ctl=row["ctl"], tsb=row["tsb"],
+                      pct=LG.tsb_pct_text(row["tsb"], c)),
+            "band_text": _("{grade} 賽的理想負荷平衡（Load balance）：長期負荷的 {lo:+.0%}～{hi:+.0%}（{plo:+.0f}～{phi:+.0f}）",
+                           grade=grade, lo=band[0], hi=band[1], plo=pts[0], phi=pts[1])
             if band else None}
 
 
@@ -184,7 +190,8 @@ def apply(res: dict, proj: Optional[dict], mode: str, cc: float, ac: float, end_
         first = [[t, cy - ay]] if cy is not None and ay is not None else []
         add.append({**_like(ctl, _("負荷平衡（Load balance）・預估"), first + [[d, r["tsb"]] for d, r in zip(dates, rows)]),
                     "color": COLOR_TSB, "line_width": None})
-        by_date = dict(zip(dates, rows))
+        prev = [c0] + [r["ctl"] for r in rows[:-1]]           # each day's TSB is taken of the CTL before it
+        by_date = {d: {**r, "ctl_prev": p} for d, r, p in zip(dates, rows, prev)}
         races = [_race(r, by_date[r["date"]]) for r in proj.get("races") or [] if r.get("date") in by_date]
         note = _("今天以後是照課表的預估（虛線），畫到最後一堂排好的課（{until}）", until=fmt.date(proj["until"]))
     else:

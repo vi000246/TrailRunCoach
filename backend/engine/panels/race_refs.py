@@ -265,7 +265,7 @@ def line_name(ln: dict) -> str:
 def guide(lines: list, band: Optional[dict]) -> str:
     """The chart's ?: how to use the lines (owner 2026-10-02: a few short lines; the formula
     on the last one). Sourcing (docs/research/back-to-back-and-long-day.md §2.2): the specific
-    phase = 賽前 10–3 週 (planning: 8-week specific + 14-day taper); 80–100 % at 6–3 weeks is
+    phase = 賽前 10–3 週 (planning: 8-week specific + a 10-day taper, SP-668); 80–100 % at 6–3 weeks is
     推估 (江晏慶 「抓比賽距離爬升的七成」 about 1.5 months out, CTS's longest block 4–6 weeks
     out, Koop: don't force it in the last 2–3 weeks); taper 2 weeks: UA / Koop."""
     out = [_("虛線＝接下來 {n} 場賽事一天的難度（紅 A、橘 B、藍其他；多天行程用每天平均）；滑過線看整趟和每一天",

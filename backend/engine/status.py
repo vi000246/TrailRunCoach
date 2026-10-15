@@ -31,7 +31,8 @@ GOOD, WATCH, BAD, INFO, NA = "good", "watch", "bad", "info", "na"
 
 # ---- thresholds, each with its source --------------------------------------
 SRC_PALLADINO = "Palladino（訓練負荷圖的負荷與長期負荷週增量）"
-SRC_TP_TSB = "Friel／TrainingPeaks（Simmons 2020）負荷平衡（Load balance）區間：−10～−30 有效訓練、< −30 過度（教練）；Palladino A/B/C 賽的負荷平衡"
+SRC_TP_TSB = ("Friel／TrainingPeaks（Simmons 2020）負荷平衡（Load balance）區間，換成長期負荷的 %（intervals.icu）："
+              "−30～−10% 有效訓練、< −30% 過度；A 賽 +10～+35%（Palladino +10～+20 的換算，推估）；長期負荷不到 30 以 30 計")
 # weekly volume step: > 20 % = the risk line (Nielsen et al. 2014 JOSPT 44:739, DOI 10.2519/jospt.2014.5164;
 # Damsted et al. 2019 JOSPT 49:230, DOI 10.2519/jospt.2019.8541 — peer-reviewed); 10 % = the coaches' mode and median
 # (COROS, Runna, Koop / CTS, UA, Fitzgerald, Gaudette …, SP-528 coach-consensus-sp518 A §1), 10–20 % hold, conservative.
@@ -54,10 +55,11 @@ SRC_NOTES = "教練常見做法（推估）"
 # https://joefrieltraining.com/the-ctl-ramp-rate/ — as a share of CTL, 推估). Palladino's +1–3 long-term (display)
 SRC_RAMP_FRIEL = ("Friel：長期負荷週增量（Chronic load ramp）每週 5–8 適合多數人、10 是上限（教練），換算成長期負荷的 10%／15%（推估）；"
                   "Palladino：每週 +1–3 可長期維持")
-TSB_A = (10.0, 20.0)                                        # A race, taper end (Palladino)
-TSB_PRODUCTIVE = (-30.0, -10.0)                             # Friel: productive training
-TSB_OVERREACH = -30.0
-TSB_STALE = 25.0
+# TSB lines: shares of CTL, one copy in load_guard (SP-670; was A +10～+20, −30～−10, −30, +25 points)
+TSB_A = LG.TSB_RACE["A"]                                     # A race, taper end: +10～+35 %
+TSB_PRODUCTIVE = LG.TSB_PRODUCTIVE                           # Friel: productive training, −30～−10 %
+TSB_OVERREACH = LG.TSB_DEEP
+TSB_STALE = LG.TSB_STALE
 LOW_SHARE_GOOD, LOW_SHARE_WATCH = 0.75, 0.65                 # by time, 推估 (SRC_LOW_SHARE: between Campos 2022
                                                              # ≥ 70 % and 80/20 / UA / CTS ≈ 80 %); Palladino
 TAPER_BAND = (0.40, 0.59)                                   # Bosquet: -41…-60%
@@ -418,41 +420,48 @@ class Status:
     def i_form(self) -> Indicator:
         tsb = self.ev.evaluate("tsb")
         atl = self.ev.evaluate("atl")
+        ctl = self.ev.evaluate("ctl")
         now, a = _n(tsb.at(self.tday)), _n(atl.at(self.tday))
         if now is None:
             return Indicator("form", _("負荷平衡（Load balance）"), NA, "–", _("沒有訓練資料"))
         spark = [[self._iso(d), _n(tsb.at(d))] for d in range(self.tday - 90, self.tday + 1, 3)]
         txt = f"{now:+.0f}"
-        # overview.html's formWhy() strips the leading 「狀況（Form） +5」 / "Form +5" and keeps the bracket's 「疲勞 30」
-        why = (_("負荷平衡（Load balance） {tsb:+.0f}（短期負荷 {atl:.0f}）", tsb=now, atl=a) if a is not None
-               else _("負荷平衡（Load balance） {tsb:+.0f}", tsb=now))
+        # SP-670: every line is a share of yesterday's CTL (TSB = yesterday's CTL − ATL), of 30 under 30
+        c_prev = _n(ctl.at(self.tday - 1))
+        sh = LG.tsb_share(now, c_prev)
+        pct = LG.tsb_pct_text(now, c_prev)
+        # overview.html's formWhy() strips the leading 「負荷平衡（Load balance） +5」 and keeps the bracket
+        why = (_("負荷平衡（Load balance） {tsb:+.0f}（{pct}，短期負荷 {atl:.0f}）", tsb=now, pct=pct, atl=a)
+               if a is not None else _("負荷平衡（Load balance） {tsb:+.0f}（{pct}）", tsb=now, pct=pct))
         k = self.kind
         g = self.goals
         days_to = g["days_to_next_a"]
+        zone = LG.tsb_zone(sh)
         if k in ("taper", "event") and days_to is not None and days_to <= 3:
-            if TSB_A[0] <= now <= TSB_A[1]:
-                lvl, v, act = GOOD, _("賽前負荷平衡（Load balance）剛好（A 賽目標 +10～+20）"), ""
-            elif now < TSB_A[0]:
+            if TSB_A[0] <= sh <= TSB_A[1]:
+                lvl, v, act = GOOD, _("賽前負荷平衡（Load balance）剛好（A 賽目標：長期負荷的 +10～+35%）"), ""
+            elif sh < TSB_A[0]:
                 lvl, v, act = WATCH, _("賽前還不夠新鮮"), _("剩下幾天只做短、輕鬆的活動")
             else:
                 lvl, v, act = WATCH, _("太新鮮，可能減量太久"), _("賽前 2 天可以加一次短強度喚醒")
         elif k in ("taper",):
-            lvl, v, act = ((GOOD, _("負荷平衡（Load balance）正在回升"), "") if now > -10
+            lvl, v, act = ((GOOD, _("負荷平衡（Load balance）正在回升"), "") if sh > TSB_PRODUCTIVE[1]
                             else (WATCH, _("減量期負荷平衡（Load balance）還很負"), _("再減量：時數降到平常的 40–60%")))
         elif k in ("recovery", "transition", "rebuild"):
             lvl, v, act = (GOOD, _("已經恢復"), "") if now > 0 else (WATCH, _("還沒恢復"), _("繼續休、不要急著練"))
         else:  # base / specific / none
-            if now < TSB_OVERREACH:
-                lvl, v, act = BAD, _("負荷平衡（Load balance）< −30，過度訓練風險"), _("本週減量到平常的一半，睡眠優先")
-            elif TSB_PRODUCTIVE[0] <= now <= TSB_PRODUCTIVE[1]:
-                lvl, v, act = GOOD, _("−30～−10：有效訓練的區間"), ""
-            elif now <= 5:
-                lvl, v, act = GOOD, _("−10～+5：維持中"), ""
-            elif now <= TSB_STALE:
+            if zone == "deep":
+                lvl, v, act = BAD, _("負荷平衡（Load balance）< 長期負荷的 −30%，過度訓練風險"), _("本週減量到平常的一半，睡眠優先")
+            elif zone == "productive":
+                lvl, v, act = GOOD, _("長期負荷的 −30～−10%：有效訓練的區間"), ""
+            elif zone == "recovering":
+                lvl, v, act = GOOD, _("長期負荷的 −10～+5%：維持中"), ""
+            elif zone == "fresh":
                 lvl, v, act = WATCH, _("負荷平衡（Load balance）偏高，訓練量不足以進步"), _("把每週量加回來（每週 ≤ +10%）")
             else:
-                lvl, v, act = WATCH, _("負荷平衡（Load balance）> +25，體能在流失"), _("恢復規律訓練")
-        return Indicator("form", _("負荷平衡（Load balance）"), lvl, txt, v, why, act, SRC_TP_TSB, now, spark)
+                lvl, v, act = WATCH, _("負荷平衡（Load balance）> 長期負荷的 +35%，體能在流失"), _("恢復規律訓練")
+        return Indicator("form", _("負荷平衡（Load balance）"), lvl, txt, v, why, act, SRC_TP_TSB, now, spark,
+                         {"share": sh, "ctl": c_prev, "zone": zone})
 
     def _planned_off_days(self, lo: Optional[int] = None, hi: Optional[int] = None) -> list[int]:
         """Day indices of a chosen rest, not an unplanned break (load_guard.short_break): the
@@ -763,7 +772,7 @@ class Status:
                 else:
                     lvl, v, act = BAD, "最長訓練離比賽太遠", f"接下來每 2 週一次長天，逐步拉到 {g['value'] * SPECIFIC_SHARE:.1f} h"
             elif self.kind == "taper":
-                lvl, v, act = (GOOD, "減量期不需要長天", "") if ratio < 0.6 else (WATCH, "減量期還在做長天", "賽前兩週最長不超過 2 小時")
+                lvl, v, act = (GOOD, "減量期不需要長天", "") if ratio < 0.6 else (WATCH, "減量期還在做長天", "減量期長跑最多 90 分")
             else:
                 lvl, v, act = INFO, "基礎期慢慢加長就好", ""
         else:

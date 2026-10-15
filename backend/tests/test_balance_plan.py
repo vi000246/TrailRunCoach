@@ -96,15 +96,21 @@ def test_week_plan_trail_race_strength_carries_it_road_none():
 
 
 def test_taper_and_race_week_keep_balance_when_strength_stops():
-    # trail A race Sat 10/17: 減量期 from 10/03 — SP-86 stops strength; balance stays (one a week)
+    # trail A race Sat 10/17: 減量期 from Wed 10/07 (10 days, SP-668) — SP-86 stops strength; balance stays
+    # (one a week)
     plan, wp = _week([_ev("2026-10-17")])
     weeks = PJ.project_weeks(wp, _phases(plan, TODAY), date(2026, 10, 18))
     by = {w["start"]: w for w in weeks}
-    for mon in ("2026-10-05", "2026-10-12"):
-        w = by[mon]
-        assert w["phase"] == "taper"
-        st = _strength(w["sessions"])
-        assert [s["id"] for s in st] == ["balance"] and st[0]["day"] < "2026-10-17" and st[0]["minutes"] == 12
+    w = by["2026-10-12"]
+    assert w["phase"] == "taper"
+    st = _strength(w["sessions"])
+    assert [s["id"] for s in st] == ["balance"] and st[0]["day"] < "2026-10-17" and st[0]["minutes"] == 12
+    # the week the taper starts in: strength as usual before the taper's first day, after it only the
+    # taper's one short maintenance session (SP-671) or the balance-only one; the balance block is there
+    t0 = wp["strength_stop"][0]["from"]
+    st = _strength(by["2026-10-05"]["sessions"])
+    assert st and all(s["day"] < t0 or s["id"] == "balance" or "減量期維持" in s["title"] for s in st)
+    assert any(s["id"] == "balance" or TAG in s["title"] for s in st)
 
 
 def test_projection_specific_baiyue_gets_the_pack_line():

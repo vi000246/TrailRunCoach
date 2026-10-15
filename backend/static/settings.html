@@ -427,7 +427,7 @@ details.fold > summary.ok, details.fold > summary .ok { color: var(--ok); }
     </details>
     <div class="sub" id="pmc">
       <b data-i18n="settings.pmc.title">起始長期訓練負荷（Chronic load）／短期負荷（Acute load）</b>
-      <button type="button" class="q" data-manual="schedule#weekly-load" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.pmc.help" title="長期訓練負荷（Chronic load）／短期負荷（Acute load）要有一個起點。順序：你填的值（從那天開始）→ 自動（有訓練負荷（Training load）的前 28 天平均每日負荷，長期負荷和短期負荷都用它）→ 0。總覽、圖表、長期負荷週增量（Chronic load ramp）護欄、負荷平衡（Load balance）&lt; −30 改恢復週都用同一組。手動值從填的日期重新起算，那天以前照自動；資料只有幾週、但你在別的平台（例如 TrainingPeaks）知道當時的長期／短期負荷時才需要填。">?</button>
+      <button type="button" class="q" data-manual="schedule#weekly-load" aria-label="說明" data-i18n-attr="aria-label:settings.thr.q_aria;title:settings.pmc.help" title="長期訓練負荷（Chronic load）／短期負荷（Acute load）要有一個起點。順序：你填的值（從那天開始）→ 自動（有訓練負荷（Training load）的前 28 天平均每日負荷，長期負荷和短期負荷都用它）→ 0。總覽、圖表、長期負荷週增量（Chronic load ramp）護欄、負荷平衡（Load balance）&lt; 長期負荷的 −30% 改恢復週都用同一組。手動值從填的日期重新起算，那天以前照自動；資料只有幾週、但你在別的平台（例如 TrainingPeaks）知道當時的長期／短期負荷時才需要填。">?</button>
       <div class="est" id="pmc-card"><span class="meta" data-i18n="settings.pmc.loading">載入中…</span></div>
       <div class="row">
         <label><span data-i18n="settings.pmc.date">日期</span> <input type="date" id="pmc-date"></label>

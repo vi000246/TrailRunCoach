@@ -428,6 +428,7 @@ def _adapt_ctx(ds, st, cur: dict, monday: dt.date, today: dt.date, enabled: bool
     load = cur.get("load") or {}
     done_today = any(a.get("date") == today.isoformat() for a in (cur.get("done") or {}).get("activities") or [])
     return {"enabled": enabled, "reviews": reviews, "ramp": ramp, "ramp_base": ramp_base, "tsb": load.get("tsb_today"),
+            "tsb_ctl": load.get("ctl_yesterday"),
             "hard_days": sorted(hard_days), "rpe": rated, "rpe_rule": rpe_on,
             "first_free": (today + dt.timedelta(days=1 if done_today else 0)).isoformat()}
 

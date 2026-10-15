@@ -45,10 +45,13 @@ from __future__ import annotations
 import datetime as dt
 from typing import Callable, Optional
 
+from backend.engine import load_guard as LG
 from backend.engine.load_guard import LONG_CAP
 from backend.i18n import N_, _
 
-WEEKS = (3, 10)                     # 專項期 weeks before the race (planning: 8-week specific + 14-day taper)
+WEEKS = (3, 10)                     # 專項期 weeks before the race (planning: 8-week specific + taper; SP-668: with the
+                                    # 10-day taper 賽前第 2 週 is a 專項期 week by its Monday, its volume the taper's —
+                                    # overview.straddle_hours — and no 專項期 long day of its own)
 # 推估. The low points (賽前第 5、3 週) are the 專項期's recovery weeks (EASY_WEEKS, SP-97): there the
 # long day is overview.recovery_long_minutes (65 % of the usual, ≤ this share); the share stays for
 # a week 5 / 3 that isn't one (the week right after another recovery-like week).
@@ -68,7 +71,7 @@ SIM_WEEKS = (6, 4)
 ROAD_SIM_WEEKS = (4, 3)
 STEP = LONG_CAP                     # ≤ +10 % over the longest of the last 30 days (Frandsen 2025, SP-66)
 FLOOR_MIN = 90.0                    # the 專項期 long day's old floor (never over STEP, SP-66)
-TSB_MIN = -20.0                     # week_plan's 維持量 line
+TSB_MIN = LG.TSB_HOLD               # week_plan's 維持量 line: −20 % of CTL (SP-670; was −20 points)
 CLIMB_TOL_M = 30.0                  # 推估: a dip < 30 m doesn't end a continuous climb
 CLIMB_MIN_GAIN = 150.0              # 推估: a race whose longest climb is < 150 m gets no climb session
 STEEP_MIN_DROP = 100.0              # 推估: the steepest descent counts from 100 m of drop
@@ -318,7 +321,8 @@ def race_day(plan, today: dt.date, predict: Optional[Callable] = None, gpx: Opti
 # ---------------------------------------------------------------------------
 
 def week_context(*, kind: str, mode: str, monday: dt.date, race: Optional[dict], tsb: Optional[float] = None,
-                 longest28: Optional[float] = None, sport: str = "trail") -> dict:
+                 longest28: Optional[float] = None, sport: str = "trail", ctl: Optional[float] = None) -> dict:
+    """`tsb` / `ctl`: TSB at the start of the week and the CTL it is taken from (the line is a share)."""
     road = sport == "road"
     info = {"active": False, "race": race, "why": [], "src": SRC_ROAD if road else SRC, "monday": monday.isoformat(),
             "longest28": longest28, "sport": "road" if road else "trail"}
@@ -344,8 +348,8 @@ def week_context(*, kind: str, mode: str, monday: dt.date, race: Optional[dict],
     cl = f.get("climb") or {}
     if mode in ("recovery_week", "reentry"):
         info["climb_why"] = "恢復週／停訓後恢復期：不排長爬坡"
-    elif tsb is not None and tsb < TSB_MIN:
-        info["climb_why"] = f"週初負荷平衡（Load balance）{tsb:+.0f} < {TSB_MIN:.0f}：這週不排長爬坡"
+    elif LG.tsb_below(tsb, ctl, TSB_MIN):
+        info["climb_why"] = f"週初負荷平衡（Load balance）{tsb:+.0f}＝{LG.tsb_pct_text(tsb, ctl)} < −20%：這週不排長爬坡"
     elif (cl.get("dz") or 0) < CLIMB_MIN_GAIN:
         info["climb_why"] = "賽事沒有 GPX，或最長的爬坡不到 150 m"
     else:
@@ -354,12 +358,13 @@ def week_context(*, kind: str, mode: str, monday: dt.date, race: Optional[dict],
 
 
 def plan_context(status, today: dt.date, monday: dt.date, mode: str, tsb: Optional[float],
-                 longest28: Optional[float], predict: Optional[Callable] = None, sport: str = "trail") -> dict:
+                 longest28: Optional[float], predict: Optional[Callable] = None, sport: str = "trail",
+                 ctl: Optional[float] = None) -> dict:
     """week_context() from week_plan()'s data. Never raises."""
     try:
         race = race_day(status.plan, today, predict)
         return week_context(kind=status.kind or "base", mode=mode, monday=monday, race=race, tsb=tsb,
-                            longest28=longest28, sport=sport)
+                            longest28=longest28, sport=sport, ctl=ctl)
     except Exception as e:                  # noqa: BLE001 — the plan must still build
         return {"active": False, "error": type(e).__name__}
 

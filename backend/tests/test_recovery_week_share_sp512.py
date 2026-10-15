@@ -55,7 +55,7 @@ def test_tsb_guard_week_is_the_tsb_share_of_the_4_week_mean(monkeypatch):
     assert wp["load"]["tsb_today"] < -30 and wp["mode"] == "recovery_week"
     h4 = [w["hours"] for w in wp["history"]][-4:]
     assert wp["target"]["hours"] == pytest.approx(O.RECOVERY_WEEK_TSB_SHARE * statistics.mean(h4))
-    assert any("< −30：改成恢復週（近 4 週的 60%）" in w for w in wp["why"])
+    assert any("< −30%：改成恢復週（近 4 週的 60%）" in w for w in wp["why"])      # SP-670: a share of CTL
     assert all(w in wp["why"][-1] for w in NOTE_WORDS)
 
 

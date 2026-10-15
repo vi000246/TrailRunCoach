@@ -235,7 +235,9 @@ def test_week_plan_and_projection_follow_the_target(store):
     sg = wp["race_sim_suggestion"]                                             # 賽前第 6 週: a simulation week (SP-523)
     assert sg and [SP.weeks_out(date(2026, 11, 7), date.fromisoformat(w)) for w in sg["weeks"]] == [6, 4]
     weeks = P.project_weeks(wp, _phases(plan, TODAY), date(2026, 11, 8))
-    spec = [w for w in weeks if w["phase"] == "specific"]
+    # SP-668: 賽前第 2 週 (10/26) is a 專項期 week too now (the 10-day taper starts Wed 10/28), not a 專項期
+    # target week (specific_phase.WEEKS) — its volume is the taper's (overview.straddle_hours)
+    spec = [w for w in weeks if w["phase"] == "specific" and w.get("specific")]
     assert [w["mode"] for w in spec] == ["recovery_week", "specific", "recovery_week"]     # 賽前第 5、4、3 週
     longs = [next((x for x in w["sessions"] if x["id"] == "long"), None) for w in spec]
     assert all(x is not None and x["detail"].startswith("這次目標定數約") for x in longs)
@@ -346,7 +348,8 @@ def test_split_specific_phase_climb_gait_and_picked_moves_coexist(store):
     wp = O.week_plan(ds, st, TODAY, prefs=pr)
     weeks = [{"start": wp["week"]["start"], "phase": wp["phase"], "sessions": wp["sessions"]}] + \
         P.project_weeks(wp, _phases(plan, TODAY), date(2026, 11, 22), prefs=pr)
-    build = [w for w in weeks if w["phase"] == "specific"
+    # (SP-668: not 賽前第 2 週 — the 10-day taper starts in it, Wed 11/18 — its volume is the taper's)
+    build = [w for w in weeks if w["phase"] == "specific" and w["start"] < "2026-11-16"
              and not any("恢復週" in (s.get("title") or "") for s in w["sessions"])]
     assert len(build) >= 4
     climbs = 0

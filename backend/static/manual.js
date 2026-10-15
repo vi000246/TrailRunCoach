@@ -179,7 +179,7 @@
         marks: [{ date: s.today, text: t("chart.today") }],
         names: { ctl: t("chart.ctl"), atl: t("chart.atl"), tsb: t("chart.tsb") } }), true);
       const bal = end.ctl - end.atl;                          // the balance the day after the two weeks
-      const b = PmcChart.band(end.ctl > 0 ? bal / end.ctl : 0);
+      const b = PmcChart.band(PmcChart.pct(bal, end.ctl));
       ui.querySelector(".mc-out").innerHTML =
         `<div><small>${esc(t("chart.ctl"))}</small><b>${one(end.ctl)}</b> <small>${esc(t("chart.vs_today", { d: sgn(end.ctl - atToday.prev, one) }))}</small></div>` +
         `<div><small>${esc(t("chart.atl"))}</small><b>${one(end.atl)}</b></div>` +
@@ -187,9 +187,10 @@
         // SP-559: the glossary's 負荷比 (Load ratio) = acute ÷ chronic, with the chart's bands
         (ratio ? `<div><small>${esc(t("chart.ratio"))}</small><b>${end.ctl > 0 ? (end.atl / end.ctl).toFixed(2) : "–"}</b></div>` : "");
       const rule = ui.querySelector(".mc-rule");
-      const k = bal < -30 ? "recovery" : bal < -20 ? "hold" : "ok";
+      const k = PmcChart.rule(bal, end.ctl);               // SP-670: a share of chronic load, as the schedule
       rule.className = "mc-rule " + k;
-      rule.textContent = t("chart.rule_" + k, { tsb: sgn(bal, (v) => v.toFixed(0)) });
+      rule.textContent = t("chart.rule_" + k, { tsb: sgn(bal, (v) => v.toFixed(0)),
+        pct: sgn(Math.round(PmcChart.pct(bal, end.ctl) * 100), (v) => v.toFixed(0)) });
     }
     r1.addEventListener("input", render);
     r2.addEventListener("input", render);

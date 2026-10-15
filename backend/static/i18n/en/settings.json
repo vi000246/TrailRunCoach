@@ -108,7 +108,7 @@
   "thr.chk_cand_note": "Highest HR held {hold} s ({date}, estimate)",
   "thr.chk_confirm": "Set {name} to {v} bpm (from {date})? Zones and workout HR targets will be recalculated",
   "pmc.title": "Starting chronic / acute load",
-  "pmc.help": "Chronic load / acute load need a starting point. Order: your value (from its date) → automatic (the mean daily load of the first 28 days with training load, used for both chronic and acute load) → 0. The overview, the charts, the chronic load ramp guardrail and the load balance < −30 recovery week all use the same one. A manual value restarts the training load chart on its date; before that date the automatic start applies. Only needed when you have a few weeks of data here but know your chronic / acute load at that time from another platform (e.g. TrainingPeaks).",
+  "pmc.help": "Chronic load / acute load need a starting point. Order: your value (from its date) → automatic (the mean daily load of the first 28 days with training load, used for both chronic and acute load) → 0. The overview, the charts, the chronic load ramp guardrail and the load balance < −30% of chronic load recovery week all use the same one. A manual value restarts the training load chart on its date; before that date the automatic start applies. Only needed when you have a few weeks of data here but know your chronic / acute load at that time from another platform (e.g. TrainingPeaks).",
   "pmc.loading": "Loading…",
   "pmc.date": "Date",
   "pmc.ctl": "Chronic load",

@@ -40,19 +40,19 @@ def test_transition_follows_the_recovery_and_its_length_is_a_setting():
 
 def test_next_a_race_specific_phase_wins_transition_shortened_or_skipped():
     b, e = date(2026, 6, 1), date(2027, 6, 1)
-    # race 2's 專項期 starts 1/14 (race − 14 d − 8 weeks): 10 days of 轉換期 are left
+    # race 2's 專項期 starts 1/18 (race − 10 d − 8 weeks; SP-668: 10-day taper): 14 days of 轉換期 are left
     r2 = ev("r2", "2027-03-25", est_hours=4)
     ph = P.auto_phases([RACE, r2], b, e)
     tr = [p for p in ph if p.kind == "transition" and p.event_id == "r1"][0]
-    assert (tr.start, tr.end) == ("2027-01-04", "2027-01-13")
-    assert "縮短為 10 天" in tr.note and "r2" in tr.note
+    assert (tr.start, tr.end) == ("2027-01-04", "2027-01-17")
+    assert "縮短為 14 天" in tr.note and "r2" in tr.note
     sp = [p for p in ph if p.kind == "specific" and p.event_id == "r2"][0]
-    assert sp.start == "2027-01-14"                                  # unchanged by the 轉換期
+    assert sp.start == "2027-01-18"                                  # unchanged by the 轉換期
     assert kinds(P.auto_phases([RACE, r2], b, e, 0)) != kinds(ph)
     assert [p for p in P.auto_phases([RACE, r2], b, e, 0) if p.kind == "specific" and p.event_id == "r2"][0].start \
-        == "2027-01-14"
+        == "2027-01-18"
     # race 2's 專項期 starts 1/8: < 7 days → no 轉換期, the recovery phase says why
-    r3 = ev("r3", "2027-03-19", est_hours=4)
+    r3 = ev("r3", "2027-03-15", est_hours=4)                         # SP-668: 10-day taper (was 3/19)
     ph = P.auto_phases([RACE, r3], b, e)
     assert not any(p.kind == "transition" and p.event_id == "r1" for p in ph)
     rec = [p for p in ph if p.kind == "recovery" and p.event_id == "r1"][0]
@@ -103,9 +103,9 @@ def test_prefs_field_is_not_shaping_and_validated():
 
 def test_pre_race_mondays_and_transition_hours():
     ph = P.auto_phases([RACE], date(2026, 6, 1), date(2027, 4, 1))
-    # taper 12/6 (Sun) → its week starts 11/30; the 4 complete weeks before it
-    assert P.pre_race_mondays(ph, date(2027, 1, 10)) == [date(2026, 11, 2), date(2026, 11, 9),
-                                                         date(2026, 11, 16), date(2026, 11, 23)]
+    # taper 12/10 (Thu; 10 days, SP-668) → its week starts 12/07; the 4 complete weeks before it
+    assert P.pre_race_mondays(ph, date(2027, 1, 10)) == [date(2026, 11, 9), date(2026, 11, 16),
+                                                         date(2026, 11, 23), date(2026, 11, 30)]
     assert P.pre_race_mondays(ph, date(2026, 12, 1)) == []           # no race before it
     h, why = O.transition_hours(8.0, 3.0)
     assert h == pytest.approx(4.0) and "賽前 4 週平均 8.0 h × 50%" in why
@@ -133,7 +133,7 @@ def test_week_plan_and_projection_agree_on_the_transition_weeks():
     assert st.kind == "transition"
     wp = O.week_plan(ds, st, TODAY)
     ref = wp["transition_ref"]
-    assert ref["mondays"] == ["2026-08-03", "2026-08-10", "2026-08-17", "2026-08-24"]
+    assert ref["mondays"] == ["2026-08-10", "2026-08-17", "2026-08-24", "2026-08-31"]   # taper from Thu 9/10
     assert ref["hours"] == pytest.approx(370 / 60.0)                 # the build weeks: 50+60+50+150+60 min
     assert wp["target"]["hours"] == pytest.approx(0.5 * 370 / 60.0)
     assert wp["mode"] == "transition" and wp["mode_label"] == "轉換期"

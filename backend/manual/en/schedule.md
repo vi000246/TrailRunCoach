@@ -124,7 +124,7 @@ Travelling: ⋯ → "Set no-training days": no sessions those days, and the week
 
 ## Where each week's volume comes from {#weekly-load}
 
-How much the schedule adds each week depends on your **Chronic load** and your **Load balance**. Move the two sliders below (this week's and next week's volume): two weeks of too much and the Load balance drops below −30 — the schedule then plans a recovery week by itself.
+How much the schedule adds each week depends on your **Chronic load** and your **Load balance**. Move the two sliders below (this week's and next week's volume): two weeks of too much and the Load balance drops below −30 % of Chronic load — the schedule then plans a recovery week by itself.
 
 :::chart pmc
 This is the overview's Training load chart, drawn by the same code; the data is a made-up season. Blue line = Chronic load, orange line = Acute load, bars = Load balance (coloured by its share of the Chronic load).
@@ -141,13 +141,13 @@ With each day's Training load x:
 It starts from your own value (Settings › Physiology › the starting Chronic load, counted from its date), else the mean daily load of the first 28 days with a Training load.
 
 ### How the schedule uses it
-- Load balance < −30: a recovery week at 60 % of the last 4 weeks' mean (not in a week with a planned B2B).
-- Load balance < −20: the volume is held, not raised.
+- Load balance < −30 % of Chronic load: a recovery week at 60 % of the last 4 weeks' mean (not in a week with a planned B2B).
+- Load balance < −20 % of Chronic load: the volume is held, not raised.
 - In Base, a recovery week after every 3 weeks (70 % of their mean); in Build the recovery weeks count back from the race, with one at least every 6 weeks.
-- The cap on adding (the Chronic load ramp): Chronic load +5 % a week in Base (at least +2), +7 % in Build (at least +2.5); weekly hours at most 110 % of the reference (or +0.5 h).
+- The cap on adding (the Chronic load ramp): Chronic load +4 % a week in Base (at least +2), +5 % in Build (at least +2.5); weekly hours at most 110 % of the reference (or +0.5 h).
 
 ### The colour bands
-A bar's colour is the Load balance ÷ yesterday's Chronic load: < −30 % High Risk, −30 … −10 % Optimal, −10 … +5 % Grey Zone, +5 … +25 % Fresh, > +25 % Transition (bands common in the industry). Note that the recovery-week rule looks at the Load balance **number** (−30), not at this share.
+A bar's colour is the Load balance ÷ yesterday's Chronic load: < −30 % High Risk, −30 … −10 % Optimal, −10 … +5 % Grey Zone, +5 … +35 % Fresh, > +35 % Transition (bands common in the industry). The recovery-week and hold rules and the race-day targets use this same share; under a Chronic load of 30 it is taken of 30.
 :::
 
 ## Sending the schedule to the watch {#push}
@@ -213,4 +213,13 @@ The schedule has to fit your life: which days you can train, how many hours a we
 - Over the cap: "Try to stay under" puts what does not fit on the long-run day; "Never exceed" trains less that week and tells you.
 
 Preferences only change the sessions the app plans; your changed and added sessions stay as they are.
+
+### Strength in the taper
+In an A race's taper, "Weekly strength" and "Strength on" don't apply as usual:
+
+- One short maintenance session in the taper's first 3 days: up to 20 minutes, 2–3 moves you already do, never to failure, no new moves, no heavy eccentric work (slow lowering, jumping down, step-downs). When none falls on those 3 days, one from the taper days of that week moves to an easy-run day among them.
+- No strength from 7 days before the race (the balance / ankle block stays). A 7-day taper (a 2–3 day Baiyue trip) has none at all.
+- B and C races: as usual.
+
+Basis: Bompa & Buzzichelli's taper chapter, "2 short sessions in week 1, none in week 2"; Berryman 2020: middle-distance runners kept their running-economy gain after 4 weeks without strength, so one session fewer is safe. One session and 20 minutes are an estimate — running itself has plenty of eccentric load, and sore legs before a race cost more than one session less.
 :::

@@ -68,7 +68,9 @@ def test_course_constant_and_itra():
 def test_form_and_ewma():
     assert CM.form_pct(50, 65) == pytest.approx(-0.30)
     assert CM.form_zone(-0.31) == "high_risk" and CM.form_zone(-0.2) == "optimal"
-    assert CM.form_zone(0.0) == "grey" and CM.form_zone(0.1) == "fresh" and CM.form_zone(0.3) == "transition"
+    assert CM.form_zone(0.0) == "grey" and CM.form_zone(0.1) == "fresh" and CM.form_zone(0.3) == "fresh"
+    assert CM.form_zone(0.35) == "transition"                                  # SP-670: +35 %, was +25 %
+    assert CM.form_pct(20, 26) == pytest.approx(-0.20)                         # CTL < 30: of 30
     v = CM.ewma_loads([100] * 500, 42)
     assert v[41] == pytest.approx(100 * (1 - (41 / 42) ** 42))
     assert v[-1] == pytest.approx(100, rel=1e-4)

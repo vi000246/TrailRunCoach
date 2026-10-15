@@ -1,5 +1,5 @@
 """
-SP-96: the 減量期 by event (14 days, 7 before a 2–3 day 百岳, up to 21 by 課表偏好 for a road
+SP-96: the 減量期 by event (10 days since SP-668 — was 14 —, 7 before a 2–3 day 百岳, up to 21 by 課表偏好 for a road
 marathon / an ultra), the run count kept, the race-week rules (overview.taper_rules), the climb
 following the minutes, and the strength stop / phases following the real taper. Synthetic.
 """
@@ -29,13 +29,13 @@ def ev(**kw):
 @pytest.mark.parametrize("kw, pref, days", [
     (dict(kind="baiyue", days=2), None, 7), (dict(kind="baiyue", days=3), 21, 7),
     (dict(kind="baiyue", days=5), 21, 10),                                       # longer trips: 10 (SP-114)
-    (dict(kind="baiyue", days=1), 21, 14),                                       # 單攻: the default
+    (dict(kind="baiyue", days=1), 21, 10),                                       # 單攻: the default (SP-668: 10)
     (dict(kind="road", distance_km=42.2, est_hours=4.0), 21, 21),                # road marathon
-    (dict(kind="road", distance_km=21.1, est_hours=1.9), 21, 14),                # half: the default
+    (dict(kind="road", distance_km=21.1, est_hours=1.9), 21, 10),                # half: the default
     (dict(kind="race", distance_km=50, climbing_m=3000, est_hours=9.0), 18, 18),  # ultra
-    (dict(kind="race", distance_km=25, climbing_m=1000, est_hours=3.5), 21, 14),
+    (dict(kind="race", distance_km=25, climbing_m=1000, est_hours=3.5), 21, 10),
     (dict(kind="road", distance_km=42.2, est_hours=4.0), 30, 21),                # capped at 21
-    (dict(kind="road", distance_km=42.2, est_hours=4.0), None, 14),
+    (dict(kind="road", distance_km=42.2, est_hours=4.0), None, 10),
 ])
 def test_taper_days_by_event(kw, pref, days):
     assert P.taper_days(ev(**kw), pref) == days
@@ -183,7 +183,7 @@ def test_climb_note_follows_the_minutes():
 def test_taper_context_and_sore():
     e = Event("e1", "越野賽", RACE, kind="race", priority="A", distance_km=30, climbing_m=2000, est_hours=5.0)
     c = O.taper_context([], [e], date(2026, 10, 5))
-    assert c["taper_start"] == "2026-10-03" and c["sore"] and c["long_days"] == 14
+    assert c["taper_start"] == "2026-10-07" and c["sore"] and c["long_days"] == 14     # SP-668: 10 days
     assert O.taper_context([], [e], date(2026, 9, 21)) is None
     flat = Event("e2", "城市馬", RACE, kind="road", priority="A", distance_km=42.2, climbing_m=50, est_hours=4.0)
     c = O.taper_context([], [flat], date(2026, 10, 5))
@@ -380,7 +380,7 @@ def test_other_taper_quality_keeps_the_threshold_row(day, monday, road):
 def test_week_plan_and_projection_trail_taper_tempo_take_zone_3():
     """week_plan and the projection pass the week's Zone 3 row (z3_hr_text of its thresholds) to the taper
     rules: the 越野 上坡節奏跑 says it, the short one keeps the threshold row."""
-    ds, plan, wp = _week("2026-10-17")          # 10/03–10/16 taper: this week's 10/02– gets the full one
+    ds, plan, wp = _week("2026-10-15")          # SP-668: Thu — 10/05–10/14 taper, next week's Tue gets the cut one
     th = wp["thresholds"]
     z3 = O.z3_hr_text(th.get("hr_model"), th.get("aet"), th.get("lthr"))
     assert z3

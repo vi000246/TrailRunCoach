@@ -223,9 +223,21 @@
     "draft": true,
     "src": "backend/engine/post_race.py:57"
   },
-  "A 賽事「{race}」前 {days} 天不排肌力（{start} 起，含比賽週；課表偏好的每週肌力／肌力日也一樣）：把體力留給比賽——長距離耐力項目主要比賽前 2 週停肌力，停 4 週以上才會退步（Bompa & Buzzichelli）": {
+  "A 賽事「{race}」賽前 {days} 天是減量期（{start} 起）：肌力只在開始 3 天內留 1 堂 {m} 分內的維持課（不做到力竭、不加新動作、不做大量離心），賽前 7 天起不排；課表偏好的每週肌力／肌力日也一樣。依據：Bompa & Buzzichelli 減量章（第 1 週 2 堂短課、第 2 週停）；Berryman 2020（停 2–4 週肌力，跑步經濟性沒有掉）": {
     "draft": true,
-    "src": "backend/engine/overview.py:1716"
+    "src": "backend/engine/overview.py"
+  },
+  "肌力：減量期維持課（{m} 分內）": {
+    "draft": true,
+    "src": "backend/engine/overview.py"
+  },
+  "平常做過的 2–3 個動作各 2 組（例如高踏階、划船或引體、核心），每組留 2–3 下、不做到力竭；不加新動作；不做大量離心（慢速下放、跳下、下台階）——比賽前不要讓腿痠": {
+    "draft": true,
+    "src": "backend/engine/overview.py"
+  },
+  "Bompa & Buzzichelli 2015 減量章（第 1 週 2 堂短課、第 2 週停）；Berryman 2020（停 2–4 週肌力，跑步經濟性沒有掉）；只留 1 堂、20 分是推估": {
+    "draft": true,
+    "src": "backend/engine/overview.py"
   },
   "A 賽前 14 天內因為輕鬆跑跑成強度課，延後或降階強度課（推估）": {
     "draft": false,
@@ -955,11 +967,11 @@
     "draft": true,
     "src": "backend/engine/balance_plan.py:41"
   },
-  "負荷平衡（Load balance）{tsb:+.0f} < −20：先維持量，不加": {
+  "負荷平衡（Load balance）{tsb:+.0f}＝{pct} < −20%：先維持量，不加": {
     "draft": true,
     "src": "backend/engine/overview.py:1011"
   },
-  "負荷平衡（Load balance）{tsb:+.0f} < −30：改成恢復週（近 4 週的 60%）": {
+  "負荷平衡（Load balance）{tsb:+.0f}＝{pct} < −30%：改成恢復週（近 4 週的 60%）": {
     "draft": true,
     "src": "backend/engine/overview.py:1008"
   },
@@ -1207,11 +1219,11 @@
     "draft": true,
     "src": "backend/engine/panels/race_refs.py:171"
   },
-  "{grade} 賽「{name}」：預估長期訓練負荷（Chronic load）{ctl:.0f}、負荷平衡（Load balance）{tsb:+.0f}": {
+  "{grade} 賽「{name}」：預估長期訓練負荷（Chronic load）{ctl:.0f}、負荷平衡（Load balance）{tsb:+.0f}（{pct}）": {
     "draft": true,
     "src": "backend/engine/panels/plan_projection.py:142"
   },
-  "{grade} 賽的理想負荷平衡（Load balance）：{lo:+.0f}～{hi:+.0f}": {
+  "{grade} 賽的理想負荷平衡（Load balance）：長期負荷的 {lo:+.0%}～{hi:+.0%}（{plo:+.0f}～{phi:+.0f}）": {
     "draft": true,
     "src": "backend/engine/panels/plan_projection.py:144"
   },
@@ -5451,7 +5463,7 @@
     "draft": true,
     "src": "backend/engine/planning.py:593"
   },
-  "減量期（A 賽事「{race}」前 {days} 天）：跑步次數照舊、每次變短；最後一次完整強度課在賽前 10–14 天，之後同一種課縮短，賽前 3–5 天一次量減半的短強度；最後一次長跑賽前 ≥ {long} 天、≤ {max} 分": {
+  "減量期（A 賽事「{race}」前 {days} 天）：跑步次數照舊、每次變短；最後一次完整強度課在賽前 {full} 天以前，之後同一種課縮短，賽前 3–5 天一次量減半的短強度；最後一次長跑賽前 ≥ {long} 天、≤ {max} 分": {
     "draft": true,
     "src": "backend/engine/overview.py:2002"
   },
@@ -5635,11 +5647,11 @@
     "draft": false,
     "src": "backend/engine/status.py:408"
   },
-  "負荷平衡（Load balance） {tsb:+.0f}": {
+  "負荷平衡（Load balance） {tsb:+.0f}（{pct}）": {
     "draft": false,
     "src": "backend/engine/status.py:382"
   },
-  "負荷平衡（Load balance） {tsb:+.0f}（短期負荷 {atl:.0f}）": {
+  "負荷平衡（Load balance） {tsb:+.0f}（{pct}，短期負荷 {atl:.0f}）": {
     "draft": false,
     "src": "backend/engine/status.py:381"
   },
@@ -9603,7 +9615,7 @@
     "draft": true,
     "src": "backend/engine/status.py:1072"
   },
-  "賽前負荷平衡（Load balance）剛好（A 賽目標 +10～+20）": {
+  "賽前負荷平衡（Load balance）剛好（A 賽目標：長期負荷的 +10～+35%）": {
     "draft": true,
     "src": "backend/engine/status.py:389"
   },
@@ -9659,7 +9671,7 @@
     "draft": true,
     "src": "backend/engine/status.py:398"
   },
-  "負荷平衡（Load balance）< −30，過度訓練風險": {
+  "負荷平衡（Load balance）< 長期負荷的 −30%，過度訓練風險": {
     "draft": true,
     "src": "backend/engine/status.py:401"
   },
@@ -9667,7 +9679,7 @@
     "draft": true,
     "src": "backend/engine/status.py:401"
   },
-  "−30～−10：有效訓練的區間": {
+  "長期負荷的 −30～−10%：有效訓練的區間": {
     "draft": true,
     "src": "backend/engine/status.py:403"
   },
@@ -9675,7 +9687,7 @@
     "draft": true,
     "src": "backend/engine/status.py:361"
   },
-  "−10～+5：維持中": {
+  "長期負荷的 −10～+5%：維持中": {
     "draft": true,
     "src": "backend/engine/status.py:405"
   },
@@ -9699,7 +9711,7 @@
     "draft": true,
     "src": "backend/engine/status.py:407"
   },
-  "負荷平衡（Load balance）> +25，體能在流失": {
+  "負荷平衡（Load balance）> 長期負荷的 +35%，體能在流失": {
     "draft": true,
     "src": "backend/engine/status.py:409"
   },
@@ -10354,5 +10366,29 @@
   "Cairn 會讀：你路線的天氣（功能還沒上線）。": {
     "draft": true,
     "src": "backend/accounts/links.py"
+  },
+  "{pct:+.0%}（長期負荷不到 {floor:.0f}，以 {floor:.0f} 計）": {
+    "draft": true,
+    "src": "backend/engine/load_guard.py"
+  },
+  "長期負荷的 {pct:+.0%}": {
+    "draft": true,
+    "src": "backend/engine/load_guard.py"
+  },
+  "減量期 {date} 開始：前 {pre} 天照減量前的量（平常 {h:.1f} h），之後 {n} 天 × {share:.0%} → {hours:.1f} h": {
+    "draft": true,
+    "src": "backend/engine/overview.py"
+  },
+  "賽事下坡多，賽前 {n} 天內不跑長跑": {
+    "draft": true,
+    "src": "backend/engine/overview.py"
+  },
+  "A 賽事「{race}」{rule}：這週的長跑改成輕鬆跑（最後一次長跑在賽前 {n} 天以前）": {
+    "draft": true,
+    "src": "backend/engine/overview.py"
+  },
+  "這週 {day} 已有強度課，減量期的日子不再排第二堂": {
+    "draft": true,
+    "src": "backend/engine/overview.py"
   }
 }

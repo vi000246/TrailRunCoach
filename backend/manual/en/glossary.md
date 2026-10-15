@@ -115,17 +115,18 @@ Bars = Load balance, coloured by its share of the Chronic load. Drag two big wee
 | Red | < −30 % | High Risk |
 | Green | −30 to −10 % | Optimal |
 | Light purple | −10 to +5 % | Grey Zone |
-| Purple | +5 to +25 % | Fresh |
-| Yellow | > +25 % | Transition |
+| Purple | +5 to +35 % | Fresh |
+| Yellow | > +35 % | Transition |
 
 :::deep
 ### Formula
 Load balance (today) = yesterday's Chronic load − yesterday's Acute load. “Yesterday” because today's training is not done yet: the number you see in the morning is how you head out.
 
 ### How the schedule uses it
-- Load balance < −30: the next week becomes a recovery week (60 % of the last 4 weeks' average).
-- Load balance < −20: the volume is held, not increased.
-- The colours use the share, but the recovery-week rule uses the **value** (−30). See [Where each week's volume comes from](schedule.md#weekly-load) in the Schedule chapter.
+- Load balance < −30 % of Chronic load: the next week becomes a recovery week (60 % of the last 4 weeks' average).
+- Load balance < −20 % of Chronic load: the volume is held, not increased.
+- Race-day target: A race +10 to +35 %, B race −5 to +5 %.
+- The colours, the schedule's rules and the race-day targets all use the same share; under a Chronic load of 30 it is taken of 30, so small swings are not blown up. See [Where each week's volume comes from](schedule.md#weekly-load) in the Schedule chapter.
 
 ### Sources
 Banister's model (1975): performance = fitness − fatigue; the five colour bands are an industry-common split (Friel's rule of thumb) — a direction, not a diagnosis.
@@ -145,14 +146,14 @@ Chronic load ramp
 
 :::deep
 ### The schedule's caps
-- Base: Chronic load +5 % a week (at least +2).
-- Build: +7 % a week (at least +2.5).
+- Base: Chronic load +4 % a week (at least +2).
+- Build: +5 % a week (at least +2.5).
 - Weekly hours at most 110 % of the reference (or +0.5 hours).
 
 The Overview's “this week +x/wk” is this number. Over the cap, the schedule does not add volume the next week.
 
 ### Sources
-Joe Friel's advice on the weekly increase (*The Triathlete's Training Bible*); the actual limits are estimates.
+How much to add follows Palladino: most runners can hold about +2–5 % a week for weeks to months, and the schedule takes the top end; “at least +2 / +2.5” is an estimate. The warning and blocking lines follow Joe Friel's advice on the weekly increase (*The Triathlete's Training Bible*); the actual limits are estimates.
 :::
 
 ## Load ratio {#load-ratio}
@@ -632,8 +633,9 @@ A season comes in parts, each with its own focus: **Base** builds the aerobic fo
 ### How the schedule plans it
 - Phases are on the Season plan page, counted back from your A race.
 - In Base, 1 recovery week after every 3 (70 % of the 3 weeks' average); in Build, counted back from the race, at most 6 weeks without one.
-- A [Load balance](#load-balance) below −30 also turns a week into a recovery week.
+- A [Load balance](#load-balance) below −30 % of Chronic load also turns a week into a recovery week.
+- The last 10 days before an A race are the Taper (studies find 8–14 days best; 10 is the middle; a road marathon or an ultra can go up to 21 days in the plan preferences, a 2–3 day Baiyue trip 7): half the usual volume 8–10 days out, 40 % in the race week, intensity sessions kept but shorter. The taper usually starts mid-week the week before the race, so that week tapers only in its second half.
 
 ### Sources
-Periodisation: Bompa & Haff, *Periodization* (2009); Friel's 3 + 1 cycle.
+Periodisation: Bompa & Haff, *Periodization* (2009); Friel's 3 + 1 cycle. Taper length: Bosquet 2007 and Wang 2023 meta-analyses.
 :::

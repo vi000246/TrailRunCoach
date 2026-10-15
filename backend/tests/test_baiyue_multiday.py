@@ -135,7 +135,7 @@ def test_races_hook_and_trail_races_unchanged(monkeypatch):
 def test_taper_7_to_10_days():
     assert P.taper_days(trip()) == 7 and P.taper_days(trip(days=2, day_plan=DXB[:2])) == 7
     assert P.taper_days(trip(days=5, day_plan=DXB + DXB[:2])) == 10
-    assert P.taper_days(trip(days=1, day_plan=None)) == 14
+    assert P.taper_days(trip(days=1, day_plan=None)) == P.TAPER_DAYS == 10           # SP-668 (was 14)
 
 
 # ---- the 專項期 schedules the simulation ------------------------------------------------------

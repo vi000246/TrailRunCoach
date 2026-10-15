@@ -30,6 +30,7 @@ from backend.engine import warmup as WU
 from backend.engine.hr_profile import EASY_CAP_TIP, below, easy_cap_label
 from backend.engine.wko5expr.dataset import Dataset, Workout, date_to_day, day_to_date
 from backend.engine.wko5expr.evaluator import WS, Evaluator
+from backend.engine.planning import TAPER_DAYS as _TAPER_DAYS
 from backend.i18n import M_, N_, _
 
 # ---------------------------------------------------------------------------
@@ -362,8 +363,8 @@ def project(ctl0: float, atl0: float, planned: list[float], cc: float, ac: float
 # this week's plan
 # ---------------------------------------------------------------------------
 
-SRC_RAMP = ("每週長期訓練負荷（Chronic load）目標：基礎期 max(2, 長期負荷的 5%)、專項期 max(2.5, 長期負荷的 7%)（推估；"
-            "Palladino 每週 +1～3、約 2～5% 可長期維持）")
+SRC_RAMP = ("每週長期訓練負荷（Chronic load）目標：基礎期 max(2, 長期負荷的 4%)、專項期 max(2.5, 長期負荷的 5%)"
+            "（Palladino：多數跑者每週約 2～5% 可撐幾週到幾個月，取上緣；至少 +2／+2.5 點是推估）")
 SRC_TEN = ("週量增幅 ≤ 10%：保守做法（推估；系統性回顧找不到「10% 法則」的證據）；受傷風險線 > 20–30%："
            "Nielsen 2014、Damsted 2019（同儕審查）")
 SRC_31 = ("3:1 週期（三週加量、一週恢復；Friel / Uphill Athlete 常見做法，沒有試驗比較過 3:1 和 2:1）；"
@@ -383,7 +384,7 @@ SRC_RECOVERY_WEEK = ("恢復週保留次數和強度、每堂縮短（挪威教�
 #   (load_guard.STEP_SKIP_KINDS, SP-98's 回量期 included) or its
 #   hours are ≤ RECOVERY_DROP × the (up to 3) weeks before it (runners cut 20–35 % [194]: 80 % is
 #   the edge of that range, 推估).
-# * The TSB < −30 protection is unchanged.
+# * The TSB < −30 % protection is unchanged (a share of CTL since SP-670, load_guard.week_rule).
 # * The week keeps a shorter long run (RECOVERY_LONG_SHARE of the usual, the ticket's 60–70 %, 推估)
 #   and the short fartlek (quality_gate.RECOVERY 4×1′, Palladino) in both phases — the Norwegian
 #   coaches keep the sessions and their intensity and shorten each [30]; tapering keeps the
@@ -419,14 +420,14 @@ SRC_RECOVERY_WEEK = ("恢復週保留次數和強度、每堂縮短（挪威教�
 # and UA's 50 % ≈ 55 %. 推估 conversion. RECOVERY_WEEK_SHARE takes the most common −30 % on the
 # normal-week baseline: 70 % of the 3-week mean (the deeper side of 70–77 %; Smith 2000 says a −25 %
 # week is too little after an overload). Was 0.65 (SP-512 R0); R1 2026-10-14.
-# RECOVERY_WEEK_TSB_SHARE (60 %, −40 % of the 4-week mean, the TSB < −30 guard: already too tired)
+# RECOVERY_WEEK_TSB_SHARE (60 %, −40 % of the 4-week mean, the TSB < −30 % guard: already too tired)
 # stays: no source is about a TSB, but the deep cuts the verified coaches give for heavy loads sit
 # there (Gaudette −30–40 % at 50+ mi/wk, Roche −25–50 % for 2:1 heavy loads, UA ≈ −50 %), now
 # 10 points under the normal recovery week. Both 推估. Personalising them (inventory §4.1 #4 — TSB
 # back above −10 after it, next week's intervals hit) waits until ≥ 4 recovery weeks of results
 # (option C). projection.week_hours and race_feasibility.koop_run read RECOVERY_WEEK_SHARE.
 RECOVERY_WEEK_SHARE = 0.70          # × the mean of the 3 weeks before (3:1, 專項期 countdown, 6-week cap)
-RECOVERY_WEEK_TSB_SHARE = 0.60      # × the 4-week mean when TSB < −30
+RECOVERY_WEEK_TSB_SHARE = 0.60      # × the 4-week mean when TSB < −30 % of CTL (load_guard.week_rule)
 RECOVERY_MAX_GAP = 6
 RECOVERY_DROP = 0.80
 RECOVERY_LONG_SHARE = 0.65
@@ -459,6 +460,13 @@ def weeks_since_recovery(hours: list, skip: list) -> int:
 # The base is the level before the taper, not a rolling 6-week mean: rolled each week, the 2nd taper
 # week's base already held the 1st one's cut (≈ 0.4 × 0.92 ≈ 37 % of the usual, deeper than written).
 # The coaches cut from the peak / pre-taper week; the 6-week mean is ≈ 90–95 % of the peak (推估).
+# SP-668 (the default taper 10 days, was 14; 跑步周期化標準（SP-664）§1): the table is kept — the days
+# 8–10 out take 50 %, the race week 40 %. A 10-day taper starts mid-week unless the race is on a Thursday,
+# so the week holding its first day (a 專項期 week by its Monday) is not a build week any more: its days
+# before the taper at most the pre-taper level, its taper days at the taper's first share (straddle_split
+# / straddle_hours; e.g. a Sunday race: Mon–Wed 100 %, Thu–Sun 50 % ≈ 71 % of the week). Over the 10 days
+# ≈ 44 % of the usual volume — inside Bosquet 2007 / Wang 2023's −41–60 %. The same for any A taper that
+# starts after a Monday (14 / 17 / 21 days, a 百岳's 7 / 10).
 TAPER_SHARES = ((7, 0.40), (14, 0.50), (21, 0.75))
 TAPER_BASE_WEEKS = 6
 
@@ -498,11 +506,38 @@ def taper_first_monday(taper_start: dt.date) -> dt.date:
 
 def taper_base(taper_start: dt.date, hours_of) -> Optional[float]:
     """The pre-taper level (SP-524): the mean weekly hours of the TAPER_BASE_WEEKS weeks before the
-    first 減量期 week, `hours_of(monday)` → hours or None (a week it doesn't know); None without any."""
-    m1 = taper_first_monday(taper_start)
+    week holding the taper's first day (SP-668: that week takes a taper share too, straddle_hours, so it is
+    not in its own base), `hours_of(monday)` → hours or None (a week it doesn't know); None without any."""
+    m1 = taper_start - dt.timedelta(days=taper_start.weekday())
     hs = [hours_of(m1 - dt.timedelta(weeks=k)) for k in range(TAPER_BASE_WEEKS, 0, -1)]
     hs = [float(h) for h in hs if h is not None]
     return statistics.mean(hs) if hs else None
+
+
+def straddle_split(taper_start: dt.date, monday: dt.date, race: dt.date) -> Optional[tuple[int, float]]:
+    """(the days before the taper, the taper's share) of the week of `monday` when an A race's 減量期 starts
+    after that Monday and the race is after its Sunday (SP-668: a 10-day taper starts mid-week unless the
+    race is on a Thursday) — the share by the taper's own first day (taper_share of its length: 10 → 50 %);
+    None for any other week."""
+    sunday = monday + dt.timedelta(days=6)
+    if not (monday < taper_start <= sunday) or race <= sunday:
+        return None
+    return (taper_start - monday).days, taper_share((race - taper_start).days)
+
+
+def straddle_hours(pre_level: float, base: float, pre_days: int, share: float) -> float:
+    """The week the 減量期 starts in (SP-668): its `pre_days` days before the taper at `pre_level` (the week's
+    own target), never over the pre-taper level `base` (no build right before the taper), the rest at
+    `share` of `base` — by days of the week."""
+    pre = min(float(pre_level), float(base))
+    return (pre_days * pre + (7 - pre_days) * float(base) * share) / 7.0
+
+
+def straddle_why(taper_start: dt.date, pre_days: int, base: float, share: float, hours: float):
+    """The week's reason for straddle_hours (M_, translated where shown)."""
+    return M_("減量期 {date} 開始：前 {pre} 天照減量前的量（平常 {h:.1f} h），之後 {n} 天 × {share:.0%} → {hours:.1f} h",
+              date=f"{taper_start.month}/{taper_start.day}", pre=pre_days, h=base, n=7 - pre_days, share=share,
+              hours=hours)
 
 
 def recovery_reason(kind: str, monday: dt.date, race_start: Optional[dt.date], since: int) -> Optional[str]:
@@ -648,7 +683,17 @@ def next_a_start(phases: list, monday: dt.date) -> Optional[dt.date]:
         if kind == "event" and s >= monday and (out is None or s < out):
             out = s
     return out
-SRC_BOSQUET = "Bosquet 2007、Wang 2023 統合分析：減量 2 週、量減 41–60%、強度與次數維持"
+
+
+def _phase_kind_on(phases: list, day: dt.date) -> Optional[str]:
+    """The kind of the phase (Phase or dict) holding `day`; None outside every phase."""
+    for p in phases or ():
+        g = (lambda k: p.get(k)) if isinstance(p, dict) else (lambda k: getattr(p, k, None))
+        if str(g("start"))[:10] <= day.isoformat() <= str(g("end"))[:10]:
+            return g("kind")
+    return None
+
+SRC_BOSQUET = "Bosquet 2007、Wang 2023 統合分析：減量 8–14 天（app 預設 10 天）、量減 41–60%、強度與次數維持"
 SRC_UA = "Uphill Athlete"
 SRC_KOOP = "Koop《Training Essentials for Ultrarunning》"
 SRC_PALLADINO = "Palladino 功率區間"
@@ -810,7 +855,7 @@ def _mmss(sec: float) -> str:
     s = int(round(sec))
     return f"{s // 60}:{s % 60:02d}"
 
-# the weekly CTL goal: load_guard.ramp_goal(kind, CTL) = base max(2, 5 %), specific max(2.5, 7 %) (SP-63, 推估)
+# the weekly CTL goal: load_guard.ramp_goal(kind, CTL) = base max(2, 4 %), specific max(2.5, 5 %) (SP-669, Palladino)
 WEEKDAYS = "一二三四五六日"
 
 
@@ -1723,6 +1768,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     tday = int(date_to_day(today))
     ctl_today, atl_today = _n(ctl_s.at(tday)) or 0.0, _n(atl_s.at(tday)) or 0.0
     tsb_today = _n(ctl_s.at(tday - 1) - atl_s.at(tday - 1)) or 0.0
+    ctl_yday = _n(ctl_s.at(tday - 1))         # SP-670: the TSB lines are shares of it (load_guard.tsb_share)
+    tsb_rule = LG.week_rule(tsb_today, ctl_yday)
 
     # ---- volume target ---------------------------------------------------
     f7 = 1.0 - (1.0 - 1.0 / cc) ** 7
@@ -1764,20 +1811,22 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         b2b = {} if road or mw else B2B.plan_context(ds, status, today, monday, [h for _, h, _ in hist], ctl_s, atl_s,
                                                d_prev_sun, by, "recovery_week" if build3 or rec_why else kind,
                                                accepted=b2b_accepted)
-        b2b_exempt = B2B.tsb_exempt(b2b, tsb_today, b2b.get("ramp"), b2b.get("ramp_base"))
+        b2b_exempt = B2B.tsb_exempt(b2b, tsb_today, b2b.get("ramp"), b2b.get("ramp_base"), ctl=ctl_yday)
         if b2b_exempt:
             why.append(b2b_exempt)
         norm_hours = hours                  # a normal week's volume (SP-97: the recovery week's usual long run)
-        if tsb_today < -30 and not b2b_exempt:
+        if tsb_rule == "recovery" and not b2b_exempt:
             mode, hours = "recovery_week", RECOVERY_WEEK_TSB_SHARE * base4
-            why.append(M_("負荷平衡（Load balance）{tsb:+.0f} < −30：改成恢復週（近 4 週的 60%）", tsb=tsb_today))
+            why.append(M_("負荷平衡（Load balance）{tsb:+.0f}＝{pct} < −30%：改成恢復週（近 4 週的 60%）",
+                          tsb=tsb_today, pct=LG.tsb_pct_text(tsb_today, ctl_yday)))
         elif rec_why:
-            # SP-97: the 專項期 countdown / the 6-week cap — planned, so a TSB of −20…−30 doesn't skip it
+            # SP-97: the 專項期 countdown / the 6-week cap — planned, so a TSB of −20…−30 % doesn't skip it
             mode, hours = "recovery_week", RECOVERY_WEEK_SHARE * statistics.mean(h for _, h, _ in hist[-3:])
             why.append(rec_why)
-        elif tsb_today < -20 and not b2b_exempt:
+        elif tsb_rule in ("recovery", "hold") and not b2b_exempt:
             hours = min(hours, base4)
-            why.append(M_("負荷平衡（Load balance）{tsb:+.0f} < −20：先維持量，不加", tsb=tsb_today))
+            why.append(M_("負荷平衡（Load balance）{tsb:+.0f}＝{pct} < −20%：先維持量，不加",
+                          tsb=tsb_today, pct=LG.tsb_pct_text(tsb_today, ctl_yday)))
         elif build3:
             mode, hours = "recovery_week", RECOVERY_WEEK_SHARE * statistics.mean(h for _, h, _ in hist[-3:])
             why.append(M_("已連續 3 週加量：這週是恢復週（前 3 週平均的 {share:.0%}）", share=RECOVERY_WEEK_SHARE))
@@ -1827,6 +1876,27 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     if kind == "specific":
         # 中間訓練 between two A races < 12 weeks apart (SP-95): ≤ a share of the first one's pre-taper level
         hours = inter_cap(phs, monday, hours, why, lambda m: _week_hours(ds, m)[0] if m < monday else None)
+    # SP-668: the week an A race's 減量期 starts in after its Monday (a 10-day taper: most race days) — its
+    # days before the taper at most the pre-taper level, the taper days at the taper's first share. The
+    # same target whether today is before the taper (專項期) or in it (減量期): seen from the taper days the
+    # days before it are the pre-taper level, or the 專項期's recovery week when that week is one
+    split = straddle_split(dt.date.fromisoformat(t_ctx["taper_start"]), monday,
+                           dt.date.fromisoformat(t_ctx["start"])) if t_ctx and bp is None else None
+    if split and kind in ("base", "specific", "taper"):
+        t0 = dt.date.fromisoformat(t_ctx["taper_start"])
+        sbase = taper_base(t0, lambda m: _week_hours(ds, m)[0] if m < monday else None)
+        if sbase is None:
+            sbase = statistics.mean(h for _, h, _ in hist[-6:]) if hist else hours
+        pre_level = hours
+        if kind == "taper":
+            mk = _phase_kind_on(phs, monday)
+            rr = recovery_reason(mk, monday, next_a_start(phs, monday), rec_since) if mk in ("base", "specific") \
+                else None
+            pre_level = RECOVERY_WEEK_SHARE * statistics.mean(h for _, h, _ in hist[-3:]) if rr and hist else sbase
+            if why:
+                why.pop()                   # the taper branch's 「減量期：平常 … × …」: replaced below
+        hours = straddle_hours(pre_level, sbase, split[0], split[1])
+        why.append(straddle_why(t0, split[0], sbase, split[1], hours))
     from backend.engine import post_race as PR_
     plan_events = getattr(getattr(status, "plan", None), "events", None) or ()
     b_f, b_why = PR_.b_week_factor(plan_events, monday, kind)       # a B race's week: 75 % (SP-95)
@@ -2035,7 +2105,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     # 專項期 (engine/specific_phase.py): the long day follows the next A race's コース定數
     from backend.engine import specific_phase as SP
     sp = SP.plan_context(status, today, monday, mode, _n(ctl_s.at(d_prev_sun) - atl_s.at(d_prev_sun)), longest28,
-                         race_predict, sport=sport) if kind == "specific" else {"active": False}
+                         race_predict, sport=sport, ctl=_n(ctl_s.at(d_prev_sun))) if kind == "specific" else {"active": False}
     if (sp.get("race") or {}).get("split_hint"):
         # SP-114: an old multi-day event without its per-day numbers — the 專項期 targets an equal split
         notes.append({"level": "watch", "src": "specific", "text": sp["race"]["split_hint"]})
@@ -2463,7 +2533,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     # (主要訓練項目 = 路跑: no steep walk — it simulates a mountain pack)
     lc = {"active": False, "why": _("主要訓練項目：路跑")} if road else \
         SH.plan_context(ds, status, today, monday, mode, _n(ctl_s.at(d_prev_sun) - atl_s.at(d_prev_sun)), gate,
-                        injury=inj_rule)
+                        injury=inj_rule, ctl=_n(ctl_s.at(d_prev_sun)))
     if lc.get("active"):
         try:
             dd = [asdict(s) for s in sessions]
@@ -2518,7 +2588,8 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
     # (SP-95) — rest days are placed above already (SP-82); illness last, it wins (SP-117)
     # 賽前停肌力 (SP-86): no strength in an A event's last STRENGTH_STOP_DAYS days (projection: the same)
     s_stops = strength_stops(getattr(getattr(status, "plan", None), "events", None) or (), monday, phs)
-    sessions = drop_strength_before_a(sessions, s_stops, monday, notes)
+    sessions = drop_strength_before_a(sessions, s_stops, monday, notes, today=today, blocked=set(bmap),
+                                      allowed=allowed_fn)      # SP-671: the taper's one maintenance session
     # 減量期規則 (SP-96): quality by days to the race, the last long run, no hard downhill / climbing
     sessions = taper_rules(sessions, t_ctx, monday, notes, road, today, easy_target=tgt.get("z2", ""),
                            cp=tt.get("cp"), q_target=tgt.get("threshold", ""), prefs=PR,
@@ -2575,7 +2646,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         sessions = illness_apply(sessions, INJ.load_events(), cap_txt)
     except Exception:                       # noqa: BLE001 — the plan must still build
         pass
-    if t_ctx and kind == "taper":
+    if t_ctx and (kind == "taper" or split):          # SP-668: the week the taper starts in too
         n = taper_climb_note(t_ctx, t_ref.get("climb"), hours / t_ref["hours"] if t_ref.get("hours") else None)
         if n:
             notes.append(n)
@@ -2733,7 +2804,7 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
         "rules": [SRC_RAMP, SRC_TEN, SRC_31] if kind in ("base", "specific") else [SRC_BOSQUET if kind == "taper" else SRC_UA],
         "history": [{"start": s.isoformat(), "hours": h, "tss": t} for s, h, t in hist],
         "load": {"ctl_week_start": ctl0, "ctl_today": ctl_today, "atl_today": atl_today,
-                 "tsb_today": tsb_today, "ctl_end": ctl_end, "atl_end": atl_end,
+                 "tsb_today": tsb_today, "ctl_yesterday": ctl_yday, "ctl_end": ctl_end, "atl_end": atl_end,
                  "tsb_next": ctl_end - atl_end, "ramp": ctl_end - ctl0},
         "projection": proj_rows,
         "sessions": [asdict(s) for s in sorted(sessions, key=lambda s: (s.day or "9999", s.kind))],
@@ -2819,12 +2890,13 @@ def week_plan(ds: Dataset, status, today: Optional[dt.date] = None, prefs=None, 
 
 # ---- 賽前停肌力 (SP-86; Bompa & Buzzichelli p.184 / p.327) ------------------------------------
 # No strength session in an A event's 減量期 + the race itself (STRENGTH_STOP_DAYS = the default
-# 14-day taper; SP-96: the window follows the actual taper — 7 days before a 2–3 day 百岳, up to 21
+# taper, 10 days since SP-668 — inside it SP-671 keeps one short session, taper_strength_days; SP-96: the window
+# follows the actual taper — 7 days before a 2–3 day 百岳, up to 21
 # by 課表偏好, shorter when two A races are close, SP-90): the book's 「主要比賽」, so B / C events keep theirs (applying it to them would be 推估).
 # Shared by week_plan and projection (week_plan's `strength_stop` → project_weeks), applied after
 # the placement: a strength session the week placed (課表偏好 每週肌力 / 肌力日 included) on a day
 # in the window is dropped — a reduction, so auto-adjust removes a stored one without asking.
-STRENGTH_STOP_DAYS = 14
+STRENGTH_STOP_DAYS = _TAPER_DAYS
 
 
 def strength_stops(events, since: dt.date, phases: Optional[list] = None) -> list[dict]:
@@ -3144,45 +3216,133 @@ def walkrun_apply(ss: list, lt: Optional[dict], today: dt.date, blocked=(), note
     return out
 
 
-def drop_strength_before_a(ss: list, stops: list, monday: dt.date, notes: Optional[list] = None) -> list:
+# ---- 減量期肌力 (SP-671; 跑步周期化標準（SP-664）§5, the owner's B' 2026-10-15) ------------------------
+# SP-86 stopped strength for the whole 減量期 (Bompa & Buzzichelli p.184). Their taper chapter (p.327)
+# keeps 2 short sessions in the taper's first week and none in the second; Berryman, Mujika & Bosquet
+# 2020 (8 middle-distance runners) kept the running-economy gain after 4 weeks without strength, so one
+# session fewer is safe. Now: ONE short maintenance session in the taper's first TAPER_STRENGTH_KEEP_DAYS
+# days (≤ TAPER_STRENGTH_MAX_MIN min, no sets to failure, no new move, no heavy eccentric — soreness is
+# the risk before a race, more so a downhill one), none from STRENGTH_STOP_RACE_DAYS days before the race
+# (a 7-day 百岳 taper: none at all). Counted from the taper's first day and the race (strength_stops'
+# "from" / "days"), never a fixed taper length (10 days since SP-668, 14 before it). A 3-day window across
+# two weeks belongs to one of them (most weekdays — a weekend holds the long runs —, then most days), so
+# whichever week is planned there is one.
+# The session is the week's own strength session on a day of the window, else the window's strength
+# session moved to an easy-run day (or a free, allowed day) of it; none is added from nothing.
+# A events only: B / C races unchanged.
+TAPER_STRENGTH_KEEP_DAYS = 3
+TAPER_STRENGTH_MAX_MIN = 20
+STRENGTH_STOP_RACE_DAYS = 7
+TAPER_STRENGTH_TITLE = N_("肌力：減量期維持課（{m} 分內）")
+TAPER_STRENGTH_DETAIL = N_("平常做過的 2–3 個動作各 2 組（例如高踏階、划船或引體、核心），每組留 2–3 下、不做到力竭；"
+                           "不加新動作；不做大量離心（慢速下放、跳下、下台階）——比賽前不要讓腿痠")
+SRC_TAPER_STRENGTH = N_("Bompa & Buzzichelli 2015 減量章（第 1 週 2 堂短課、第 2 週停）；Berryman 2020（停 2–4 週肌力，"
+                        "跑步經濟性沒有掉）；只留 1 堂、20 分是推估")
+
+
+def taper_strength_days(stop: dict) -> list[str]:
+    """The days (ISO) an A event's 減量期 may hold its one maintenance strength session (SP-671): the
+    taper's first TAPER_STRENGTH_KEEP_DAYS days, none within STRENGTH_STOP_RACE_DAYS of the race,
+    only those in one week — the one holding most of its weekdays, then most of its days, then the
+    earlier. [] without the stop's "days"."""
+    if stop.get("days") is None:
+        return []
+    t0 = dt.date.fromisoformat(stop["from"][:10])
+    race = t0 + dt.timedelta(days=int(stop["days"]))
+    last = min(t0 + dt.timedelta(days=TAPER_STRENGTH_KEEP_DAYS - 1),
+               race - dt.timedelta(days=STRENGTH_STOP_RACE_DAYS + 1))
+    by: dict = {}
+    d = t0
+    while d <= last:
+        by.setdefault(d - dt.timedelta(days=d.weekday()), []).append(d)
+        d += dt.timedelta(days=1)
+    if not by:
+        return []
+    # the week with most weekdays of it (a weekend is the long-run days), then most days, then the earlier
+    own = max(sorted(by), key=lambda m: (sum(1 for x in by[m] if x.weekday() < 5), len(by[m])))
+    return [x.isoformat() for x in by[own]]
+
+
+def drop_strength_before_a(ss: list, stops: list, monday: dt.date, notes: Optional[list] = None,
+                           today: Optional[dt.date] = None, blocked=None, allowed=None) -> list:
     """`ss` without the not-done strength sessions on a day in an A event's no-strength window
-    (strength_stops; one with no day is dropped when the window touches the week), and a week
-    note when any went. Session objects or dicts."""
+    (strength_stops; one with no day is dropped when the window touches the week) — except the one
+    short maintenance session of the taper's first days (SP-671, taper_strength_days): the week's
+    strength session on one of them, else one from the window moved to an easy-run day of them (not
+    before `today`, not a `blocked` day; a free day only when `allowed(date)`); none when a done one is
+    there. A week note when any went or was kept. Session objects or dicts."""
     days = [(monday + dt.timedelta(days=i)).isoformat() for i in range(7)]
     hit = {d: x for x in stops or () for d in days if x["from"] <= d <= x["to"]}
     if not hit:
         return ss
-    g = (lambda s, k: s.get(k)) if ss and isinstance(ss[0], dict) else getattr
-    out, gone = [], []
-    for s in ss:
-        day = g(s, "day")
-        if g(s, "kind") == "strength" and not g(s, "done") and (day in hit or not day):
-            gone.append(s)
-        else:
-            out.append(s)
-    if gone and notes is not None:
-        x = hit[min(hit)]
+    is_d = bool(ss) and isinstance(ss[0], dict)
+    g = (lambda s, k: s.get(k)) if is_d else getattr
+
+    def put(s, **kw):
+        for k, v in kw.items():
+            if is_d:
+                s[k] = v
+            else:
+                setattr(s, k, v)
+    keep = {d: x for x in stops or () for d in taper_strength_days(x)
+            if d in days and (today is None or d >= today.isoformat()) and d not in (blocked or ())}
+
+    def strength(s):
+        return g(s, "kind") == "strength" and g(s, "id") != "balance"
+    gone = [s for s in ss if g(s, "kind") == "strength" and not g(s, "done") and (g(s, "day") in hit or not g(s, "day"))]
+    maint = None
+    if keep and not any(strength(s) and g(s, "done") and g(s, "day") in keep for s in ss):
+        cand = sorted((s for s in gone if strength(s) and g(s, "day")), key=lambda s: g(s, "day"))
+        on = [s for s in cand if g(s, "day") in keep]
+        if on:
+            maint = on[0]
+        elif cand:
+            rest = [s for s in ss if not any(s is x for x in gone) and not g(s, "done") and g(s, "day")]
+            kinds = {d: {g(s, "kind") for s in rest if g(s, "day") == d} for d in keep}
+            easy = [d for d in sorted(keep) if "easy" in kinds[d]]
+            free = [d for d in sorted(keep) if not kinds[d] and allowed is not None
+                    and allowed(dt.date.fromisoformat(d))]
+            day = (easy or free or [None])[0]
+            if day:
+                maint = cand[0]
+                put(maint, day=day)
+    if maint is not None:
+        m0 = int(g(maint, "minutes") or 0)
+        nm = min(m0, TAPER_STRENGTH_MAX_MIN) if m0 else TAPER_STRENGTH_MAX_MIN
+        put(maint, title=_(TAPER_STRENGTH_TITLE, m=TAPER_STRENGTH_MAX_MIN), minutes=nm,
+            tss=round(float(g(maint, "tss") or 0.0) * (nm / m0 if m0 else 1.0), 1),
+            detail=_(TAPER_STRENGTH_DETAIL), source=_(SRC_TAPER_STRENGTH))
+    out = [s for s in ss if s is maint or not any(s is x for x in gone)]
+    if (len(out) < len(ss) or maint is not None) and notes is not None:
+        x = keep[g(maint, "day")] if maint is not None else hit[min(hit)]
         notes.append({"level": "info", "src": "strength",
-                      "text": _("A 賽事「{race}」前 {days} 天不排肌力（{start} 起，含比賽週；"
-                                "課表偏好的每週肌力／肌力日也一樣）：把體力留給比賽——長距離耐力項目主要比賽前 2 週停肌力，"
-                                "停 4 週以上才會退步（Bompa & Buzzichelli）",
-                                race=x["race"], days=x.get("days", STRENGTH_STOP_DAYS), start=x["from"][5:])})
+                      "text": _("A 賽事「{race}」賽前 {days} 天是減量期（{start} 起）：肌力只在開始 3 天內留 1 堂 {m} 分內的"
+                                "維持課（不做到力竭、不加新動作、不做大量離心），賽前 7 天起不排；課表偏好的每週肌力／肌力日也一樣。"
+                                "依據：Bompa & Buzzichelli 減量章（第 1 週 2 堂短課、第 2 週停）；Berryman 2020"
+                                "（停 2–4 週肌力，跑步經濟性沒有掉）",
+                                race=x["race"], days=x.get("days", STRENGTH_STOP_DAYS), start=x["from"][5:],
+                                m=TAPER_STRENGTH_MAX_MIN)})
     return out
 
 
 # ---- 減量期規則 (SP-96; periodization-cross-sport.md §4.5.1, §4.5.2, §6.1「SP-96 減量期」) ----------
 # Shared by week_plan and projection, applied after the placement (like the strength stop) to every
 # not-done session on a day of the next A race's 減量期 (planning.taper_start — its real length:
-# 14 days, 7 before a 2–3 day 百岳, up to 21 by 課表偏好, shorter when two A races are close):
-#   * the last FULL quality session ≥ TAPER_FULL_Q_DAYS out (10–14 = the taper's first week), a
-#     familiar specific one — road: the 專項期 flat threshold 2×15′; trail / 百岳: uphill tempo, not
-#     short hard climbing (Gaudette, Koop — 教練級 [420][421]); never a new or maximal session;
+# 10 days (SP-668, was 14), 7 before a 2–3 day 百岳, up to 21 by 課表偏好, shorter when two A races are close):
+#   * the last FULL quality session ≥ TAPER_FULL_Q_DAYS (10) out, a familiar specific one — with the
+#     10-day taper that is the 專項期's last session 11–14 days out (left as it is: the familiar specific
+#     one) or, on the taper's first day, the template — road: the 專項期 flat threshold 2×15′; trail /
+#     百岳: uphill tempo, not short hard climbing (Gaudette, Koop — 教練級 [420][421]; Spilsbury 2015 /
+#     world-class runners [416]: the intensity kept, the volume cut in the last 7–10 days); never a new
+#     or maximal session;
 #   * after it the same kind, shorter (one segment fewer, Koop [419], 教練級);
 #   * the last short intensity TAPER_SHORT_Q_DAYS (3–5) out at half the volume (world-class runners,
 #     已驗證 [416]; recreational runners 推估); nothing hard in the last 2 days;
 #   * the last long run ≥ TAPER_LONG_DAYS (7) out and ≤ TAPER_LONG_MAX_MIN easy ([421], 教練級);
 #     ≥ TAPER_LONG_SORE_DAYS (14) when the long day leaves you clearly sore — detected as an A race
-#     descending ≥ SORE_DESCENT_M_PER_KM (its long days copy that descent, specific_phase) ([422]);
+#     descending ≥ SORE_DESCENT_M_PER_KM (its long days copy that descent, specific_phase) ([422]); with a
+#     10-day taper (SP-668) that reaches before the taper: a long run 11–13 days out is an easy run too
+#     (taper_context / taper_rules read the long run from race − long_days);
 #   * no hard downhill, no short hard climbing ([422]; 江晏慶 [454], 教練級): the 長爬坡反覆 (its
 #     run-down at race grade) becomes a flat easy run.
 # The run count is kept (taper_easy_count): ≥ the pre-taper runs − TAPER_RUN_DROP, each shorter —
@@ -3197,8 +3357,9 @@ TAPER_LONG_MAX_MIN = 90
 SORE_DESCENT_M_PER_KM = 40.0        # 推估: steeper than most trail races' average descent (~25–35 m/km)
 TAPER_RUN_DROP = 1
 TAPER_RUN_MIN = 20                  # no taper easy run shorter (plan_prefs.MIN_EASY)
-SRC_TAPER_WEEK = ("減量期課表：最後一次完整強度課賽前 10–14 天、之後保留種類縮短、最後一次短強度賽前 3–5 天量減半、"
-                  "最後一次長跑賽前 ≥ 7 天且 ≤ 90 分（Gaudette、Koop、Mujika；教練級／世界級選手）")
+SRC_TAPER_WEEK = ("減量期課表：最後一次完整強度課在賽前 10 天以前（減量期 10 天時是專項期最後一堂）、之後保留種類縮短、"
+                  "最後一次短強度賽前 3–5 天量減半、最後一次長跑賽前 ≥ 7 天且 ≤ 90 分（Gaudette、Koop、Mujika；"
+                  "教練級／世界級選手）")
 # power_pct (SP-408): the template's band × CP — the card's target (taper_rules.as_q), the structure
 # and the push read the same % (the % CP in the text; a template without one parsed as threshold)
 # minutes (SP-411, the owner 2026-10-13 option A): the structure's total — the trail ones have no
@@ -3232,17 +3393,20 @@ _VARIANT_KEYS = ("variant_key", "rung_key", "equiv", "swap", "swap_reason", "var
 
 
 def taper_context(phases: list, events, monday: dt.date) -> Optional[dict]:
-    """The next A race whose 減量期 touches the week of `monday` (planning.taper_start):
+    """The next A race whose 減量期 touches the week of `monday` (planning.taper_start) — or, for a sore
+    race (SP-668), its last-long-run window (race − TAPER_LONG_SORE_DAYS, before a 10-day taper):
     {"race", "id", "start", "taper_start", "days", "trail", "sore", "long_days"}; None without one."""
     from backend.engine import planning as P
     sunday = monday + dt.timedelta(days=6)
     for e in sorted((e for e in events or () if getattr(e, "priority", None) == "A" and e.start > monday),
                     key=lambda e: e.start):
         t0 = P.taper_start(phases or (), e)
-        if t0 > sunday:
-            return None
         trail = e.kind != "road"
+        if t0 > sunday and (not trail or e.start - dt.timedelta(days=TAPER_LONG_SORE_DAYS) > sunday):
+            return None
         sore = trail and _descent_per_km(e) >= SORE_DESCENT_M_PER_KM
+        if t0 > sunday and not sore:
+            return None
         return {"race": e.name, "id": e.id, "start": e.start.isoformat(), "taper_start": t0.isoformat(),
                 "days": (e.start - t0).days, "trail": trail, "sore": sore,
                 "long_days": TAPER_LONG_SORE_DAYS if sore else TAPER_LONG_DAYS}
@@ -3396,9 +3560,16 @@ def taper_rules(ss: list, tc: Optional[dict], monday: dt.date, notes: Optional[l
                 setattr(s, k, v)
 
     race, t0 = dt.date.fromisoformat(tc["start"]), dt.date.fromisoformat(tc["taper_start"])
+    # SP-668: a sore race's last long run ≥ 14 days out reaches before a 10-day taper — the long runs are
+    # read from there, everything else from the taper's first day
+    t_long = min(t0, race - dt.timedelta(days=int(tc["long_days"])))
     lo = today or monday
     terr = "road" if road or not tc.get("trail") else "trail"
     said: list[str] = []
+    pre_said: list[str] = []
+
+    def is_long(s) -> bool:
+        return g(s, "kind") == "long" or g(s, "id") in ("long", "long2")
 
     def out_of(s) -> Optional[int]:
         if g(s, "done") or not g(s, "day"):
@@ -3406,7 +3577,7 @@ def taper_rules(ss: list, tc: Optional[dict], monday: dt.date, notes: Optional[l
         d = dt.date.fromisoformat(g(s, "day"))
         # the race day too (SP-492): a quality session the placement put there follows the race-week
         # rule (onto an easy day 3–5 days out, else an easy run); post_race.apply then clears the day
-        return (race - d).days if t0 <= d <= race else None
+        return (race - d).days if (t_long if is_long(s) else t0) <= d <= race else None
 
     def as_easy(s, cap: float, how: str = ""):
         # `how`: what the session is (「平路或緩坡輕鬆跑」), never the taper rule that made it one — that
@@ -3424,14 +3595,26 @@ def taper_rules(ss: list, tc: Optional[dict], monday: dt.date, notes: Optional[l
         put(s, **{**{k: None for k in _VARIANT_KEYS}, "source": SRC_TAPER_WEEK, "terrain": None, **t,
                   "target": taper_q_target(tmpl, cp, q_target, prefs, z3_target)})
 
+    # SP-668: the week the taper starts in keeps one quality session — when the 專項期 days before the taper
+    # already hold one (the last full one, 11–14 days out), a quality session on its taper days is an easy run
+    sunday = monday + dt.timedelta(days=6)
+    q_before = next((g(x, "day") for x in sorted(ss, key=lambda x: g(x, "day") or "9")
+                     if g(x, "kind") in ("quality", "test") and g(x, "day")
+                     and monday.isoformat() <= g(x, "day") < t0.isoformat()), None) if monday < t0 <= sunday else None
     touched = False
     for s in sorted(ss, key=lambda x: g(x, "day") or "9"):
         out = out_of(s)
         if out is None:
             continue
-        touched = True
         k, sid = g(s, "kind"), g(s, "id")
-        if k == "long" or sid in ("long", "long2"):
+        if dt.date.fromisoformat(g(s, "day")) < t0:
+            # before the taper: only a sore race's long run (SP-668), an easy run with its own note
+            if out < tc["long_days"]:
+                as_easy(s, 60, _("平路或緩坡輕鬆跑"))
+                pre_said.append(_("賽事下坡多，賽前 {n} 天內不跑長跑", n=tc["long_days"]))
+            continue
+        touched = True
+        if is_long(s):
             if out < tc["long_days"]:
                 as_easy(s, 60)
                 said.append(_("賽前 {n} 天內不跑長跑", n=tc["long_days"]))
@@ -3444,6 +3627,10 @@ def taper_rules(ss: list, tc: Optional[dict], monday: dt.date, notes: Optional[l
                 if tc.get("sore"):
                     put(s, terrain="road")
                 said.append(_("最後一次長跑 ≤ {max} 分", max=TAPER_LONG_MAX_MIN))
+        elif k == "quality" and q_before and dt.date.fromisoformat(g(s, "day")) <= sunday:
+            as_easy(s, 60)
+            said.append(_("這週 {day} 已有強度課，減量期的日子不再排第二堂",
+                          day=f"{int(q_before[5:7])}/{int(q_before[8:10])}"))
         elif k == "quality":
             if out >= TAPER_FULL_Q_DAYS:
                 as_q(s, TAPER_FULL[terr])
@@ -3472,11 +3659,16 @@ def taper_rules(ss: list, tc: Optional[dict], monday: dt.date, notes: Optional[l
             # the 長爬坡反覆 runs down at race grade: no hard downhill in the taper
             as_easy(s, g(s, "minutes") or 60, _("平路或緩坡輕鬆跑"))
             said.append(_("不排長爬坡反覆"))
+    if notes is not None and pre_said and not touched:
+        notes.append({"level": "info", "src": "taper",
+                      "text": _("A 賽事「{race}」{rule}：這週的長跑改成輕鬆跑（最後一次長跑在賽前 {n} 天以前）",
+                                race=tc["race"], rule="、".join(dict.fromkeys(pre_said)), n=tc["long_days"])})
     if notes is not None and touched:
+        said = pre_said + said
         notes.append({"level": "info", "src": "taper",
                       "text": _("減量期（A 賽事「{race}」前 {days} 天）：跑步次數照舊、每次變短；最後一次完整強度課在賽前 "
-                                "10–14 天，之後同一種課縮短，賽前 3–5 天一次量減半的短強度；最後一次長跑賽前 ≥ {long} 天、"
-                                "≤ {max} 分", race=tc["race"], days=tc["days"], long=tc["long_days"],
-                                max=TAPER_LONG_MAX_MIN)
+                                "{full} 天以前，之後同一種課縮短，賽前 3–5 天一次量減半的短強度；最後一次長跑賽前 ≥ {long} 天、"
+                                "≤ {max} 分", race=tc["race"], days=tc["days"], full=TAPER_FULL_Q_DAYS,
+                                long=tc["long_days"], max=TAPER_LONG_MAX_MIN)
                       + ("（" + "、".join(dict.fromkeys(said)) + "）" if said else "")})
     return ss

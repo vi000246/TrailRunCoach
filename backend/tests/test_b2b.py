@@ -228,11 +228,12 @@ def test_detect_consecutive_long_days():
 def test_post_b2b_week_and_tsb_exempt():
     c = ctx(last_recovery=False, post_from={"start": "2026-09-26", "end": "2026-09-27"})
     assert c["post"]["until"] == "2026-09-30"                               # 3 easy days (SP-527)
-    assert "不改成恢復週" in B2B.tsb_exempt(c, -34.0)
-    assert B2B.tsb_exempt(c, -34.0, ramp=9.0) is None                       # ramp beyond the limit
-    assert B2B.tsb_exempt(c, -10.0) is None
-    assert B2B.tsb_exempt({"due": True}, -31.0)
-    assert B2B.tsb_exempt({}, -31.0) is None
+    # SP-670: the line is −20 % of the CTL the TSB is taken from (60 here: −12)
+    assert "不改成恢復週" in B2B.tsb_exempt(c, -34.0, ctl=60.0)
+    assert B2B.tsb_exempt(c, -34.0, ramp=9.0, ctl=60.0) is None              # ramp beyond the limit
+    assert B2B.tsb_exempt(c, -10.0, ctl=60.0) is None
+    assert B2B.tsb_exempt({"due": True}, -31.0, ctl=60.0)
+    assert B2B.tsb_exempt({}, -31.0, ctl=60.0) is None
     # an older B2B is not "just before this week"
     assert ctx(post_from={"start": "2026-09-19", "end": "2026-09-20"})["post"] is None
 

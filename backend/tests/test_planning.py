@@ -13,9 +13,9 @@ def test_auto_phases_backwards_from_a_event():
     e = ev("race", "2026-12-20", distance_km=50, climbing_m=3000)
     ph = P.auto_phases([e], dt.date(2026, 6, 1), dt.date(2027, 2, 1))
     kinds = [(p.kind, p.start, p.end) for p in ph]
-    assert kinds[0] == ("base", "2026-06-01", "2026-10-10")
-    assert kinds[1] == ("specific", "2026-10-11", "2026-12-05")     # 8 weeks
-    assert kinds[2] == ("taper", "2026-12-06", "2026-12-19")        # 14 days
+    assert kinds[0] == ("base", "2026-06-01", "2026-10-14")
+    assert kinds[1] == ("specific", "2026-10-15", "2026-12-09")     # 8 weeks
+    assert kinds[2] == ("taper", "2026-12-10", "2026-12-19")        # 10 days (SP-668, was 14)
     assert kinds[3] == ("event", "2026-12-20", "2026-12-20")
     assert kinds[4] == ("recovery", "2026-12-21", "2027-01-03")     # 50 km: long -> 14 d
     assert kinds[5] == ("transition", "2027-01-04", "2027-01-24")   # SP-73: 3 weeks by default

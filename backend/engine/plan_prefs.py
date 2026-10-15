@@ -185,9 +185,10 @@ class Prefs:
     # 轉換期 (SP-73; engine/planning.auto_phases): weeks of 轉換期 after an A race's 恢復期, 0 = off.
     # Default 3 (Friel 一般 3–4 週, Canova 4 週; the low end, 推估). Not part of `active`.
     transition_weeks: int = 3
-    # 減量期天數 (SP-96; planning.taper_days): 14 (default, Wang 2023: 8–14 days best) up to 21 for a road
+    # 減量期天數 (SP-96; planning.taper_days): 10 (default since SP-668, was 14; Bosquet 2007 / Wang 2023:
+    # 8–14 days best) up to 21 for a road
     # marathon or an ultra (Strava: 3 weeks > 2; ≥ 22 days no effect). Not part of `active`.
-    taper_days: int = 14
+    taper_days: int = 10
     # 肌力動作 (SP-191, engine/strength_moves.py): ((type, move), …) the athlete picked — a type's
     # default is never stored, () = every default; strength_no_gear: the equipment they don't have
     # (bar / band), a move that needs it gives way to one that doesn't. Not part of `active`.

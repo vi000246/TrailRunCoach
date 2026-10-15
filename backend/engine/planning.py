@@ -6,14 +6,16 @@ Stored as a user overlay at ~/.wko5coach/plan.json — nothing here touches the
 WKO5 files. Phases are generated backwards from each A event unless the user
 has saved manual phases:
 
-    base  →  specific (8 wk)  →  taper (2 wk)  →  event  →  recovery  →  transition (3 wk)  →  rebuild
+    base  →  specific (8 wk)  →  taper (10 d)  →  event  →  recovery  →  transition (3 wk)  →  rebuild
 
 Sources (docs/research/periodization-phase-metrics.md):
-  * taper 14 days — Bosquet et al. 2007 meta-analysis (8–14 days most effective)
-    (SP-96: 7 days before a 2–3 day 百岳, up to 21 by 課表偏好 for a road marathon / an ultra — taper_days)
+  * taper 10 days — Bosquet et al. 2007 / Wang 2023 meta-analyses (8–14 days most effective; SP-668: the
+    middle, was 14) (SP-96: 7 days before a 2–3 day 百岳, up to 21 by 課表偏好 for a road marathon / an
+    ultra — taper_days)
   * specific block before the taper, general → specific — Koop; Uphill Athlete; its 8 weeks
-    (SPECIFIC_WEEKS) — Friel Build 8–9 wk, Canova 6–8 wk, vert.run last 8–10 wk, 江晏慶 強化
-    2–3 wk + 巔峰 ~6 wk (coaches; periodization-cross-sport.md §6.1 [18][130][131][454])
+    (SPECIFIC_WEEKS) — Uphill Athlete ultra template 8 + 2 taper, Pfitzinger ~8, Canova 6–8,
+    Daniels 6, Friel Build 8–9 wk, vert.run last 8–10 wk, 江晏慶 強化 2–3 wk + 巔峰 ~6 wk
+    (coaches; periodization-cross-sport.md §6.1 [18][130][131][454]; SP-664 §2, SP-669)
   * recovery / transition after the goal event — Uphill Athlete (2–4 weeks);
     shortened to 1 week below 超馬級 (event_size: ~6 h predicted, else EP 60 — SP-111; a
     heuristic, not a finding)
@@ -52,9 +54,11 @@ def plan_path() -> Path:
     from backend import tenancy
     return tenancy.private_path("plan.json")
 
-TAPER_DAYS = 14
-# 減量期長度 (SP-96; periodization-cross-sport.md §4.5.1, §6.1): 14 days by default (Wang 2023
-# meta-analysis: 8–14 days best); a 2–3 day 百岳 trip 7 days ([114], 教練級); 課表偏好 taper_days
+TAPER_DAYS = 10
+# 減量期長度 (SP-96; periodization-cross-sport.md §4.5.1, §6.1): 10 days by default — SP-668 (owner
+# 2026-10-15, SP-664 Q1; 跑步周期化標準（SP-664）§1): Bosquet 2007 / Wang 2023 meta-analyses 8–14 days best,
+# 10 the middle, and closer to Palladino's 「CTL down ≤ a week」 than 14 (was 14); a 2–3 day 百岳 trip
+# 7 days ([114], 教練級); 課表偏好 taper_days
 # lengthens a road marathon / an ultra up to 21 days (Strava: 3 weeks > 2, 4 no better; ≥ 22 days
 # no effect in the meta-analysis — opening it to ultras is 推估)
 BAIYUE_TAPER_DAYS = 7
@@ -65,7 +69,16 @@ BAIYUE_SHORT_DAYS = (2, 3)
 BAIYUE_LONG_TAPER_DAYS = 10
 TAPER_DAYS_RANGE = (TAPER_DAYS, 21)
 TAPER_SETTING = "plan.prefs.taper_days"
-SPECIFIC_WEEKS = 8           # coaches 6–10 wk, 8 inside all of them (module docstring; 江晏慶 → 8 is 推估)
+# 專項期 8 weeks (SP-669; SP-664 Q2 = A, kept — running coaches put it at 6–8 weeks + a 2–3 week taper):
+#   * Uphill Athlete, Intro to Ultra Marathons 20 weeks: 8 weeks running-specific + 2 weeks taper — the
+#     same 8＋2 as here (coach)
+#   * Pfitzinger 18-week marathon: lactate threshold + endurance ~weeks 8–11, race prep 12–15 (~8 weeks),
+#     3-week taper (coach, second-hand)
+#   * Canova: special 6–8 weeks → specific 6–8 weeks (coach, second-hand)
+#   * Daniels: 4 phases × 6 weeks, the last (Final Quality) 6 weeks with the race (coach)
+#   * 江晏慶: races ≥ 4 h — 1 week 亞強化 + 2 weeks 強化, the specific peak ~1.5 months out (coach)
+# 2 of the 8 are recovery weeks (specific_phase.EASY_WEEKS), so 6 load — inside the cycling 6–8 too.
+SPECIFIC_WEEKS = 8
 # B event's mini-taper (coaches, periodization-cross-sport.md §4.8.1): TrainerRoad race-week taper
 # [362]; Friel 2–3 rest days [431]; Pfitzinger no intervals 5 d / tempo + long 4 d before [437] (二手轉述)
 MINI_TAPER_DAYS = 5          # B event: no interval in the 5 days before, no tempo / long run in 4 (SP-95;
@@ -1093,7 +1106,7 @@ def auto_phases(events: list[Event], begin: dt.date, end: dt.date,
 # A C race never makes a phase. The 維持期 is entered only outside a B race's 專項塊 window.
 MAINTAIN_B_POLICY = "b_light"
 B_PREP_WEEKS = 4             # 推估 (owner: about 3–4 weeks before the B race)
-B_PREP_TAPER_DAYS = 7        # 推估 (owner: about 1 week; an A race's 14–21 days are not copied)
+B_PREP_TAPER_DAYS = 7        # 推估 (owner: about 1 week; an A race's 10–21 days are not copied)
 B_PREP_MIN_DAYS = 7          # less room before the B race's taper → no 專項塊 (推估)
 B_PREP_LABEL = N_("B 賽輕量準備")
 B_TAPER_LABEL = N_("B 賽減量")

@@ -11,6 +11,9 @@
  *                                 o.atlDays (7); balance = yesterday's chronic − yesterday's acute
  *   PmcChart.band(f)              the band of a balance share f (balance ÷ yesterday's chronic load):
  *                                 {key: high_risk | optimal | grey | fresh | transition, color}
+ *   PmcChart.pct(tsb, ctl)        that share, of CTL_MIN under it (engine/load_guard.tsb_share, SP-670)
+ *   PmcChart.rule(tsb, ctl)       the schedule's guardrail: "recovery" (< −30 %), "hold" (< −20 %), "ok"
+ *                                 (load_guard.week_rule)
  */
 (function (root, factory) {
   const api = factory();
@@ -20,10 +23,14 @@
   "use strict";
 
   // [upper bound of balance ÷ yesterday's chronic load, colour, name]
+  // the same numbers as engine/load_guard.py (TSB_ZONES, TSB_CTL_MIN, TSB_DEEP / TSB_HOLD; SP-670)
   const BANDS = [[-0.3, "#e34948", "high_risk"], [-0.1, "#1baf7a", "optimal"], [0.05, "#a9a1e6", "grey"],
-    [0.25, "#6a5cc9", "fresh"], [Infinity, "#eda100", "transition"]];
+    [0.35, "#6a5cc9", "fresh"], [Infinity, "#eda100", "transition"]];
+  const CTL_MIN = 30;
   const band = (f) => { const b = BANDS.find(([hi]) => f < hi); return { key: b[2], color: b[1] }; };
-  const share = (r) => (r.prev > 0 && r.tsb != null ? r.tsb / r.prev : 0);
+  const pct = (tsb, ctl) => (tsb == null ? 0 : tsb / Math.max(ctl > 0 ? ctl : 0, CTL_MIN));
+  const rule = (tsb, ctl) => { const f = pct(tsb, ctl); return f < -0.3 ? "recovery" : f < -0.2 ? "hold" : "ok"; };
+  const share = (r) => pct(r.tsb, r.prev);
   const one = (v) => (v == null ? "–" : (Math.round(v * 10) / 10).toFixed(1));
 
   function option(rows, ctx) {
@@ -68,5 +75,5 @@
     return rows;
   }
 
-  return { BANDS, band, share, option, simulate, one };
+  return { BANDS, CTL_MIN, band, pct, rule, share, option, simulate, one };
 });

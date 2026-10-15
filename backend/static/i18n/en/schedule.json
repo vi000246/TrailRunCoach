@@ -219,7 +219,7 @@
   "pf.transition_tip": "Weeks of transition after an A race's recovery: easy runs only (≤ 60 min each) and strength, no long run or intervals, half the 4 weeks before the race (estimate); cross-training can replace easy runs. Friel usually 3–4 weeks, Canova 4. 5–6 weeks apply only after an ultra-size A race (predicted ≥ 6 h); other races get at most 4: ultra coaches' rest plus the easy return add up to 4–8 weeks (Koop, Hart, Torrence, coach level; the 6 is an estimate). Shortened or skipped automatically when the next A race's build phase is too close. Not added when you set the phases yourself.",
   "pf.tr_off": "Off",
   "pf.taper": "Taper for marathons / ultras",
-  "pf.taper_tip": "How many days to taper before an A race. Default 14 (the meta-analysis found 8–14 days best); a road marathon or an ultra can go up to 21 days (recreational marathoners did better with 3 weeks than 2, 4 was no better; applying it to ultras is an estimate). Other races stay at 14 days, a 2–3 day mountain trip (Baiyue) 7. Not applied when you set the phases yourself.",
+  "pf.taper_tip": "How many days to taper before an A race. Default 10 (the meta-analyses found 8–14 days best; 10 is the middle); a road marathon or an ultra can go up to 21 days (recreational marathoners did better with 3 weeks than 2, 4 was no better; applying it to ultras is an estimate). Other races stay at 10 days, a 2–3 day mountain trip (Baiyue) 7. Not applied when you set the phases yourself.",
   "pf.est": "Est.",
   "pf.reset": "Reset to defaults",
   "pf.cancel": "Cancel",

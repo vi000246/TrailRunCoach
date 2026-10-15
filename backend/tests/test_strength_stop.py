@@ -1,6 +1,6 @@
 """
-SP-86: no strength in the 14 days before an A event (Bompa & Buzzichelli p.184 / p.327) — the
-減量期 and the race week, in week_plan and in the projection alike, 課表偏好 每週肌力 / 肌力日
+SP-86: no strength in the 減量期 of an A event (Bompa & Buzzichelli p.184 / p.327; 10 days since SP-668,
+was 14) — the 減量期 and the race week, in week_plan and in the projection alike, 課表偏好 每週肌力 / 肌力日
 included; B / C events unchanged. Synthetic.
 """
 import datetime as dt
@@ -20,10 +20,10 @@ def _ev(day, prio="A", name="越野賽"):
     return Event("e1", name, day, kind="race", priority=prio, distance_km=30, climbing_m=2000, est_hours=5.0)
 
 
-def test_strength_stops_a_events_only_from_14_days_before():
+def test_strength_stops_a_events_only_from_the_taper():
     evs = [_ev("2026-10-24"), _ev("2026-10-31", "B", "B 賽"), _ev("2026-09-01", name="過去")]
     st = O.strength_stops(evs, date(2026, 9, 28))
-    assert st == [{"from": "2026-10-10", "to": "2026-10-24", "race": "越野賽", "days": 14}]
+    assert st == [{"from": "2026-10-14", "to": "2026-10-24", "race": "越野賽", "days": 10}]
 
 
 def test_drop_strength_before_a_keeps_done_and_days_before_the_window():
@@ -37,7 +37,7 @@ def test_drop_strength_before_a_keeps_done_and_days_before_the_window():
     out = O.drop_strength_before_a(ss, stops, mon, notes)
     assert [s["id"] for s in out] == ["strength1", "strength3", "easy1"]
     assert len(notes) == 1 and notes[0]["src"] == "strength" and "越野賽" in notes[0]["text"]
-    assert "14 天" in notes[0]["text"]
+    assert "10 天" in notes[0]["text"]                                  # STRENGTH_STOP_DAYS (SP-668)
     # a week the window doesn't touch: unchanged, no note
     notes = []
     assert O.drop_strength_before_a(ss, stops, date(2026, 9, 28), notes) == ss and not notes
@@ -60,11 +60,13 @@ def _strength(ss):
 
 
 def test_week_plan_race_week_and_taper_have_no_strength_b_race_keeps_it():
-    # A race Sat 10/10: this week (9/28–10/4) is inside its 14 days
+    # A race Sat 10/10: its 10-day taper starts today (Wed 9/30) — this week only the taper's one short
+    # maintenance session (SP-671) in its first 3 days
     plan, wp = _plan("2026-10-10")
-    assert not _strength(wp["sessions"])
+    st = _strength(wp["sessions"])
+    assert len(st) == 1 and "2026-09-30" <= st[0]["day"] <= "2026-10-02" and "減量期維持" in st[0]["title"]
     assert any(n.get("src") == "strength" for n in wp["notes"])
-    assert wp["strength_stop"] == [{"from": "2026-09-26", "to": "2026-10-10", "race": "越野賽", "days": 14}]
+    assert wp["strength_stop"] == [{"from": "2026-09-30", "to": "2026-10-10", "race": "越野賽", "days": 10}]
     weeks = PJ.project_weeks(wp, _phases(plan, TODAY), date(2026, 10, 25))
     by = {w["start"]: w for w in weeks}
     assert not _strength(by["2026-10-05"]["sessions"])                              # race week
@@ -76,21 +78,25 @@ def test_week_plan_race_week_and_taper_have_no_strength_b_race_keeps_it():
 
 
 def test_projection_and_preferences_respect_the_window():
-    # A race Sat 11/07: no strength on 10/24–11/07, before it the weeks keep theirs
+    # A race Sat 11/07: in its 減量期 only one short maintenance session in the first 3 days (SP-671),
+    # before it the weeks keep theirs — by the window week_plan gives (the taper's real length)
     prefs = PP.Prefs(strength=2, strength_days=(1, 5))                             # Tue + Sat
     plan, wp = _plan("2026-11-07", prefs=prefs)
     assert _strength(wp["sessions"])
+    t0 = wp["strength_stop"][0]["from"]
+    first3 = (date.fromisoformat(t0) + dt.timedelta(days=2)).isoformat()
     weeks = PJ.project_weeks(wp, _phases(plan, TODAY), date(2026, 11, 8), prefs=prefs)
-    days = [s["day"] for w in weeks for s in _strength(w["sessions"])]
-    assert days and not any("2026-10-24" <= d <= "2026-11-07" for d in days)
+    st = [s for w in weeks for s in _strength(w["sessions"])]
+    assert any(s["day"] < t0 for s in st)
+    inside = [s for s in st if t0 <= s["day"] <= "2026-11-07"]
+    assert len(inside) == 1 and inside[0]["day"] <= first3 and "減量期維持" in inside[0]["title"]
     by = {w["start"]: w for w in weeks}
-    w19 = by["2026-10-19"]                       # Tue 10/20 kept, Sat 10/24 (in the window) dropped
-    assert [s["day"] for s in _strength(w19["sessions"])] == ["2026-10-20"]
-    assert any(n.get("src") == "strength" for n in w19["notes"])
-    assert not _strength(by["2026-10-26"]["sessions"]) and not _strength(by["2026-11-02"]["sessions"])
+    w0 = by[(date.fromisoformat(t0) - dt.timedelta(days=date.fromisoformat(t0).weekday())).isoformat()]
+    assert any(n.get("src") == "strength" for n in w0["notes"])
+    assert not _strength(by["2026-11-02"]["sessions"])
     # SP-120: the balance-only session stays in the stopped weeks, before the race
     bal = [s for w in weeks for s in w["sessions"] if s.get("id") == "balance"]
-    assert bal and all("2026-10-24" <= s["day"] < "2026-11-07" for s in bal)
+    assert bal and all(t0 <= s["day"] < "2026-11-07" for s in bal)
 
 
 def test_auto_adjust_removes_stored_strength_without_asking():

@@ -45,10 +45,10 @@ def test_ultra_gets_six_weeks_others_four_with_a_note():
 
 
 def test_next_a_race_still_shortens_or_skips_it():
-    # the next race's 專項期 starts 2027-01-23 (4/3 − 14 d − 8 wk): 20 days of the 6 weeks are left
+    # the next race's 專項期 starts 2027-01-27 (4/3 − 10 d − 8 wk, SP-668): 24 days of the 6 weeks are left
     nxt = ev("n", "2027-04-03", est_hours=4.0)
     t = tr(P.auto_phases([ULTRA, nxt], B, E, 6), "u")[0]
-    assert (t.start, t.end) == ("2027-01-03", "2027-01-22") and "縮短為 20 天" in t.note
-    close = ev("c", "2027-03-20", est_hours=4.0)                      # 專項期 from 1/9: 6 days → none
+    assert (t.start, t.end) == ("2027-01-03", "2027-01-26") and "縮短為 24 天" in t.note
+    close = ev("c", "2027-03-16", est_hours=4.0)                      # 專項期 from 1/9 (10-day taper): 6 days → none
     ph = P.auto_phases([ULTRA, close], B, E, 6)
     assert not tr(ph, "u")

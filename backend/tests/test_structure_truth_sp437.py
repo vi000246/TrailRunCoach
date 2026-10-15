@@ -209,7 +209,9 @@ def test_taper_and_recovery_weeks_stay_light(generated):
             assert w["hours"] == pytest.approx(0.70 * sum(hist[-3:]) / 3, rel=1e-6), (name, w["start"])
             seen.add("recovery")
         hist.append(float(w["hours"]))
-    if name in ("road", "trail_taper"):
+    if name == "trail_taper":
+        # (SP-668: the road marathon, Sat 12/05, tapers from Wed 11/25 — the projection's last week, 11/23,
+        # is the week it starts in, a 專項期 week by its Monday)
         assert "taper" in seen
     assert "recovery" in seen
 

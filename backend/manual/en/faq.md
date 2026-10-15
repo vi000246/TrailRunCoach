@@ -107,14 +107,14 @@ Automatic adjustment and replanning never change the content of sessions you edi
 
 ## Why is this a recovery week? {#recovery-week}
 
-Two things plan a recovery week: **the rhythm** (in Base, 1 week after every 3), or **Load balance below −30** (you trained a lot more than usual lately and fatigue has built up). A recovery week is about 60–70 % of the usual volume.
+Two things plan a recovery week: **the rhythm** (in Base, 1 week after every 3), or **Load balance below −30 % of Chronic load** (you trained a lot more than usual lately and fatigue has built up). A recovery week is about 60–70 % of the usual volume.
 
 More: [Where each week's volume comes from](schedule.md#weekly-load) (with a chart you can drag), and [Load balance](glossary.md#load-balance) in the glossary.
 
 :::deep
 ### Two kinds
 - Rhythm: in Base 1 week in 4 (70 % of the 3 weeks' average); in Build, counted back from the race, at most 6 weeks without one.
-- Fatigue: Load balance < −30 turns the next week into a recovery week (60 % of the last 4 weeks' average; weeks with a back-to-back excepted); between −30 and −20 the volume is held.
+- Fatigue: Load balance < −30 % of Chronic load turns the next week into a recovery week (60 % of the last 4 weeks' average; weeks with a back-to-back excepted); between −30 % and −20 % the volume is held.
 
 If you don't feel tired, you can change the recovery week's sessions; the app remembers they are yours.
 :::

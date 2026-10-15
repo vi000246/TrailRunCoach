@@ -281,8 +281,8 @@ def test_a_genuine_volume_spike_still_blocks():
 # ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize("kind, ctl, goal", [
-    ("base", 20.0, 2.0), ("base", 60.0, 3.0), ("base", 100.0, 5.0),
-    ("specific", 20.0, 2.5), ("specific", 57.0, 3.99), ("specific", 100.0, 7.0),
+    ("base", 20.0, 2.0), ("base", 60.0, 2.4), ("base", 100.0, 4.0),          # SP-669: 5 % → 4 %
+    ("specific", 20.0, 2.5), ("specific", 57.0, 2.85), ("specific", 100.0, 5.0),   # SP-669: 7 % → 5 %
     ("taper", 60.0, None),
 ])
 def test_ramp_goal(kind, ctl, goal):
@@ -295,7 +295,7 @@ def test_week_hours_uses_the_relative_goal():
     lo, _, _ = P.week_hours("base", [10.0] * 6, [False] * 6, 20.0, 50.0, 42.0, None)
     hi, _, why = P.week_hours("base", [10.0] * 6, [False] * 6, 100.0, 50.0, 42.0, None)
     assert lo == pytest.approx(10.0) and "+2.0" not in why[0]       # need < 4-week mean → the mean
-    assert "長期訓練負荷（Chronic load）100 每週 +5.0" in why[0]
+    assert "長期訓練負荷（Chronic load）100 每週 +4.0" in why[0]   # SP-669: base 4 %
 
 
 # ---------------------------------------------------------------------------
