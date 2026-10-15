@@ -37,6 +37,7 @@ from backend.engine import specific_phase as SP
 from backend.engine import steep_hill as SH
 from backend.engine import strength_plan as STP
 from backend.engine import overview as O
+from backend.engine import planning as PLN
 from backend.engine import post_race as PR_
 from backend.engine import quality_gate as QG
 from backend.engine import rest_days as RD
@@ -81,6 +82,24 @@ def target_texts(th: dict) -> dict[str, str]:
     return O._targets({"rows": rows})
 
 
+def phase_maintain(phases: list, day: dt.date) -> bool:
+    """The phase holding `day` is a 維持期 (SP-102: a base phase with maintain_from)."""
+    for p in phases:
+        s, e = _d(p["start"] if isinstance(p, dict) else p.start), _d(p["end"] if isinstance(p, dict) else p.end)
+        if s <= day <= e:
+            return bool(p.get("maintain_from") if isinstance(p, dict) else getattr(p, "maintain_from", None))
+    return False
+
+
+def phase_light(phases: list, day: dt.date) -> bool:
+    """The phase holding `day` is a B race's light preparation (SP-102: Phase.light)."""
+    for p in phases:
+        s, e = _d(p["start"] if isinstance(p, dict) else p.start), _d(p["end"] if isinstance(p, dict) else p.end)
+        if s <= day <= e:
+            return bool(p.get("light") if isinstance(p, dict) else getattr(p, "light", False))
+    return False
+
+
 def phase_kind(phases: list, day: dt.date) -> str:
     for p in phases:
         s, e = _d(p["start"] if isinstance(p, dict) else p.start), _d(p["end"] if isinstance(p, dict) else p.end)
@@ -114,7 +133,7 @@ def week_hours(kind: str, hist: list[float], build: list[bool], ctl0: float, r: 
                cc: float, days_to_a: Optional[int], tr_ref: Optional[float] = None,
                cap_ref: Optional[float] = None, rebuild: Optional[tuple] = None,
                recovery: Optional[str] = None, floor: Optional[float] = None,
-               taper_base: Optional[float] = None) -> tuple[float, str, list[str]]:
+               taper_base: Optional[float] = None, maintain: bool = False) -> tuple[float, str, list[str]]:
     """(hours, mode, why) for one projected week; `hist` = weekly hours, oldest first.
     `tr_ref`: a 轉換期 / 恢復期 / 回量期 week's pre-race level (overview.transition_ref; None = the old
     rules). `rebuild`: a 回量期 week's (share, index, weeks) (planning.rebuild_share, SP-98).
@@ -125,7 +144,9 @@ def week_hours(kind: str, hist: list[float], build: list[bool], ctl0: float, r: 
     `floor` (冷啟動, engine/cold_start.py SP-288): a new runner's ramp weeks — the start level stands for
     the weeks before the data, as week_plan: the base and the cap's reference are at least it.
     `taper_base` (SP-524): a 減量期 week's pre-taper level (overview.taper_base: the 6 weeks before the
-    first taper week); None = the last 6 weeks of `hist`."""
+    first taper week); None = the last 6 weeks of `hist`.
+    `maintain` (SP-102): a base week of the 維持期 — the CTL goal is 0 (held, load_guard.GOAL), the 3:1 and
+    the 6-week cap stay."""
     base4 = statistics.mean(hist[-4:]) if hist else 0.0
     last = hist[-1] if hist else 0.0
     ref = cap_ref if cap_ref else max(base4, last)
@@ -141,12 +162,16 @@ def week_hours(kind: str, hist: list[float], build: list[bool], ctl0: float, r: 
             # SP-512 R2: the 「the share is 推估」 line too, as the week plan's recovery week
             return h, "recovery_week", [recovery, O.recovery_share_note()]
         f7 = 1.0 - (1.0 - 1.0 / cc) ** 7
-        goal = LG.ramp_goal(kind, ctl0)
+        maintain = maintain and kind == "base"
+        goal = LG.ramp_goal("maintain" if maintain else kind, ctl0)
         need_h = 7.0 * (ctl0 + goal / f7) / max(r, 1.0)
         cap = O.volume_cap(ref)             # SP-527: +10 %, at least +0.5 h but ≤ +20 % (as week_plan)
         h = min(max(need_h, base4), cap)
         if floor:
             h = cap                         # SP-288: the ramp steps by the volume rule (as week_plan)
+        if maintain and not floor:
+            why.append(O.maintain_volume_why(ctl0, h))
+            return h, kind, why
         why.append(M_("長期訓練負荷（Chronic load）{ctl:.0f} 每週 +{goal:.1f}，上限 +10%（至少 +0.5 h、最多 +20%）→ {h:.1f} h",
                       ctl=ctl0, goal=goal, h=h))
         return h, kind, why
@@ -182,7 +207,8 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
                   sport: str = "trail", goal_pace: Optional[float] = None,
                   aet_measured: bool = False, taper: Optional[dict] = None,
                   transition_week: Optional[int] = None, strength: Optional[dict] = None,
-                  mp: Optional[dict] = None, cold: Optional[dict] = None, warm_prefs=None) -> list[dict]:
+                  mp: Optional[dict] = None, cold: Optional[dict] = None, warm_prefs=None,
+                  tpace: Optional[float] = None) -> list[dict]:
     """The week_plan() session template for a projected week, placed on days.
     `transition_week`: which week of its 轉換期 this is (overview.transition_week; SP-103 strides from 2).
     `strength` (SP-119): the week's strength_plan.week_context — the strength session's stage
@@ -244,7 +270,8 @@ def week_sessions(monday: dt.date, kind: str, mode: str, hours: float, tph: floa
         elif CS.no_long(cold, long_min, total, rec_wk):
             pass                                    # SP-288: all easy runs (the long one wouldn't be longer)
         elif road:
-            add(**O.road_long_session(long_min, "base" if rec_wk else kind, aet, tph, goal_pace, aet_measured, mp),
+            add(**O.road_long_session(long_min, "base" if rec_wk else kind, aet, tph, goal_pace, aet_measured, mp,
+                                      tpace=tpace),
                 target=tgt.get("long", ""))
         else:
             add(id="long", kind="long", title="LSD" + ("（山路）" if mountain else ""),
@@ -452,14 +479,15 @@ def _gate_inputs(cur: dict) -> dict:
 
 
 def allow_quality(kind: str, gate: dict, monday: Optional[dt.date] = None, step=None,
-                  mode: Optional[str] = None, n: int = 1) -> dict:
+                  mode: Optional[str] = None, n: int = 1, prefer: Optional[str] = None) -> dict:
     """week_plan()'s rule for one projected week: quality_gate.week_decision
     with the week's phase, mode (a recovery week gets the fartlek) and Monday
     (weeks mode, the Zone 3 gate's time path, the 1-a-week turn) and the track steps
     reached by then ({"z3", "z5", "met"}; an int = the Zone 3 step); this week's ramp /
-    volume / TSB guardrails are not carried forward (re-checked when the week comes)."""
+    volume / TSB guardrails are not carried forward (re-checked when the week comes). `prefer`: the
+    維持期's Zone 5 (SP-102, quality_gate.week_decision)."""
     from backend.engine import quality_gate as QG
-    return QG.week_decision(gate, kind, mode or kind, monday, step, first=False, n=n)
+    return QG.week_decision(gate, kind, mode or kind, monday, step, first=False, n=n, prefer=prefer)
 
 
 def IL_track(q: dict) -> Optional[str]:
@@ -624,6 +652,7 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
     week = monday + dt.timedelta(weeks=1)
     while week <= until:
         kind = phase_kind(phases, week)
+        mw = PLN.maintain_week(phases, week) if kind == "base" else None      # SP-102 維持期
         inj_rule = INJ.condition_week(inj_events, week) if inj_events else None     # SP-270
         tc = O.taper_context(phases, events, week) if events is not None else None
         same = bool(tc and cur_t.get("id") == tc["id"])
@@ -650,8 +679,16 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
             days_to = (_d(tc["start"]) - week).days
         hours, mode, why = week_hours(kind, hist, build, ctl, tph, ctlconstant, days_to, tr_h,
                                       LG.step_base(norm) if norm else None, rebuild=rb, recovery=rec,
-                                      floor=ramp["hours"] if ramp else None, taper_base=t_base)
+                                      floor=ramp["hours"] if ramp else None, taper_base=t_base,
+                                      maintain=mw is not None)
+        if kind == "taper" and phase_light(phases, week):
+            # B 賽減量 (SP-102): SP-95's B week share of the level before it, not an A race's 40–50 %
+            base6 = statistics.mean(hist[-6:]) if hist else 0.0
+            hours, mode = base6 * O.B_PREP_TAPER_SHARE, kind
+            why = [M_("B 賽減量：平常 {h:.1f} h × {share:.0%}（推估）", h=base6, share=O.B_PREP_TAPER_SHARE)]
         notes: list = []
+        if mw is not None:
+            notes.append({"level": "info", "src": "maintain", "text": mw["text"]})
         if kind == "specific":
             # 中間訓練 (SP-95): the same cap as week_plan (overview.inter_cap)
             hours = O.inter_cap(phases, week, hours, why, lambda m: hours_at.get(m.isoformat()))
@@ -687,7 +724,7 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
                 why = why + [M_("不排課 {range}：少 {n} 個可練日，週量 × {f:.0%}", range=BL.range_text(lost), n=len(lost), f=f)]
                 notes.append(BL.week_note(bmap, lost, lost_h))
         q_n = O.quality_per_week(PR, kind, mode, gate)
-        dec = allow_quality(kind, gate, week, dict(steps), mode, q_n)
+        dec = allow_quality(kind, gate, week, dict(steps), mode, q_n, prefer="z5" if mw is not None else None)
         # the user's own RPE ≥ 7 技術地形 sessions this week: in the 20 % first (technical.py, SP-74)
         user_q = TECH.user_quality(user_rows, week) \
             if kind in ("base", "specific") and mode != "recovery_week" else []
@@ -711,7 +748,8 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
             q_cap, q_alt = O.quality_caps(PR, PP_long(PR, long_wd))
             base_q = O.quality_sessions(gate, dec, kind, th, tgt, hours, prefs, vhist,
                                         mountain if kind == "base" else not road, road, q_cap, q_alt,
-                                        reserved=user_min)
+                                        reserved=user_min,
+                                        hill=(mw["focus"] == "hill") if mw is not None else None)
             for q, it in _paired(base_q, dec["items"]):
                 if it.get("track") == "z3":
                     steps["z3_dates"].append(week.isoformat())
@@ -736,7 +774,7 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
                            prefs=PR, rates=rates, notes=notes, blocked=set(bmap),
                            quality_cap=1 if kind == "base" and QG.guardrail_mode(gate) else None,
                            aet_test_days=getattr(prefs, "aet_test_days", None), xu_test=xu_q, b2b=b2b,
-                           long_min=sp_long, sport=sport, goal_pace=cur.get("mp_goal_pace_s"),
+                           long_min=sp_long, sport=sport, goal_pace=cur.get("mp_goal_pace_s"), tpace=th.get("tpace"),
                            aet_measured=th_meas,
                            taper={"runs": cur_t.get("pre_runs") if same else last_runs, "sore": tc.get("sore"),
                                   "long": (_d(tc["start"]) - week).days > tc["long_days"]}
@@ -823,6 +861,7 @@ def project_weeks(cur: dict, phases: list, until: dt.date, ctlconstant: float = 
                           rate=float((cur.get("tss_per_category") or {}).get("trail") or tph),
                           easy_target=tgt.get("z2", ""), races=race_marks)
         notes.extend(PR_.b_hints(events or (), week, phases=phases))     # SP-280: the planned 減量期
+        notes.extend(PR_.c_hints(events or (), week, maintain=mw is not None))   # SP-102: ≤ 1 C race a month
         # 依傷別迴避課型 (SP-270): the same pass as week_plan (overview.condition_apply)
         if inj_rule is not None:
             ss = O.condition_apply(ss, inj_events, notes)

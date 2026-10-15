@@ -21,7 +21,7 @@ from typing import Optional
 from backend.engine import data_level as DL
 from backend.engine import load_guard as LG
 from backend.engine.reentry import MIN_BREAK
-from backend.engine.planning import KINDS, PHASES, Plan, goals, phase_label, phase_on
+from backend.engine.planning import KINDS, PHASES, Plan, goals, maintain_why, phase_label, phase_on
 from backend.engine.wko5expr.dataset import Dataset, Workout, date_to_day
 from backend.engine.wko5expr.evaluator import WS, Evaluator
 from backend.files.wko5_athlete import day_to_date
@@ -315,6 +315,18 @@ class Status:
                              "到「賽事周期」頁加一場 A 賽事，周期會自動排出來", source=SRC_UA)
         left = (dt.date.fromisoformat(p.end) - self.today).days
         txt = phase_label(p, self.plan.events)        # an A 百岳 trip's days: 行程 (SP-504 R2)
+        if getattr(p, "light", False):
+            # SP-102 B 賽輕量準備 / B 賽減量: the phase note says what and asks 「要不要改成 A？」
+            return Indicator("phase", _("周期"), INFO, txt, _(B_PREP_GOAL), p.note or "",
+                             extra={"kind": p.kind, "light": True, "event_id": p.event_id, "days_left": left,
+                                    "next_a": None, "days_to_next_a": g["days_to_next_a"]})
+        if getattr(p, "maintain", False):
+            # SP-102 維持期: what it is and why, in plain words; the phase's note says from when
+            why = maintain_why() + (_("。{note}", note=p.note) if p.note else "") + \
+                _("。到「賽事周期」頁加一場 A 賽事，周期會自動排出來")
+            return Indicator("phase", _("周期"), INFO, txt, _(MAINTAIN_GOAL), why,
+                             extra={"kind": p.kind, "maintain": True, "maintain_from": p.maintain_from,
+                                    "days_left": left, "next_a": None, "days_to_next_a": g["days_to_next_a"]})
         if nxt:
             why = f"{p.start} ～ {p.end}，還有 {left} 天；下一場 A 賽事「{nxt.name}」倒數 {g['days_to_next_a']} 天"
         else:
@@ -390,6 +402,8 @@ class Status:
                                               _("下週安排恢復週"))
                 elif ramp >= 1:
                     level, verdict = GOOD, _("每週 +{ramp:.1f}，可長期維持的增幅（1–3；菁英 3–5）", ramp=ramp)
+                elif ramp > -1 and getattr(self.phase, "maintain", False):
+                    level, verdict = GOOD, _("維持期：長期負荷持平就是目標")         # SP-102
                 elif ramp > -1:
                     level, verdict = WATCH, _("長期負荷持平") if (k in ("base", "specific")) else _("持平")
                     action = _("訓練期長期負荷沒有成長：檢查每週時數是否卡住") if k in ("base", "specific") else ""
@@ -1134,7 +1148,7 @@ class Status:
     # ---- output ------------------------------------------------------------
     def headline(self) -> str:
         p = self.phase
-        head = PHASES[p.kind] if p else "未設定周期"
+        head = phase_label(p, self.plan.events) if p else "未設定周期"
         bad = [i for i in self.indicators if i.level == BAD]
         watch = [i for i in self.indicators if i.level == WATCH]
         if bad:
@@ -1148,7 +1162,14 @@ class Status:
             "today": self.today.isoformat(),
             "phase": None if self.phase is None else {
                 "kind": self.phase.kind, "label": phase_label(self.phase, self.plan.events),
-                "start": self.phase.start, "end": self.phase.end, "goal": PHASE_GOAL[self.phase.kind]},
+                "start": self.phase.start, "end": self.phase.end,
+                "goal": _(MAINTAIN_GOAL) if getattr(self.phase, "maintain", False) else
+                _(B_PREP_GOAL) if getattr(self.phase, "light", False) else PHASE_GOAL[self.phase.kind],
+                "light": bool(getattr(self.phase, "light", False)),
+                # SP-102 維持期: the overview says it and why (no A race ahead to count down to)
+                "maintain": bool(getattr(self.phase, "maintain", False)),
+                "why": maintain_why() if getattr(self.phase, "maintain", False) else
+                (self.phase.note or None) if getattr(self.phase, "light", False) else None},
             "goals": self.goals,
             "headline": self.headline(),
             "indicators": [asdict(i) for i in self.indicators],
@@ -1160,6 +1181,11 @@ class Status:
             "counts": {lvl: sum(1 for i in self.indicators if i.level == lvl) for lvl in (GOOD, WATCH, BAD, INFO, NA)},
         }
 
+
+# SP-102 B 賽輕量準備 (no A race ahead): the goal line
+B_PREP_GOAL = N_("把 B 賽當這段的目標：幾週專項塊＋1 週減量，不走 A 賽的完整周期")
+# SP-102 維持期 (a base phase with maintain_from): the goal line
+MAINTAIN_GOAL = N_("維持體能：量不再往上加，每週一堂高強度，重點輪替；等下一場 A 賽事再加量")
 
 PHASE_GOAL = {
     "transition": "恢復、重建習慣、肌力打底",

@@ -8,7 +8,13 @@
  *   we.rederive(extra)              a new library template was chosen in the dialog
  *   we.payload()                    {steps} to save, {steps: null} to clear, or null (untouched)
  *   we.load(doc, {ro})              show a given structure (the 範本 page: a template, not a session)
+ *   we.setDoc(doc)                  a structure made elsewhere as this session's own (SP-641, the 路線 page)
  *
+ * ▲ 路線 (SP-640, opts.routes !== false): the route is picked per session, not per template — the
+ * uploaded GPX routes and 「我的路段」 (GET …/routes/library, …/routes/mine); POST …/steps/route returns
+ * the steps with the route's profile copy (`route`: src, the climb, rep_km) and each hill repeat's
+ * climb ending with the lap button at the top, named 「爬 120 m · 約 6′」. The climb can be changed or
+ * left out on the line under the tools; the watch gets the steps only.
  * 插入範本: 類型, its 類別 right under it (›), and 主課強度 as a dropdown on the 類型 line (SP-643,
  * tplFilters, also the 範本 page's; SP-84: each row's `target_types`, workout_steps.target_types;
  * kept per viewer in localStorage under the 範本 page's key), then the 推薦 block (of the 類別
@@ -94,6 +100,21 @@ dialog.sd.we-wide { width: min(880px, 96vw); }
 .we-tools { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .we-tools .sp { flex: 1; }
 .we-menu { position: relative; display: inline-flex; align-items: center; }
+/* ▲ 路線 (SP-640): the picker and the line under the tools */
+.we-rline { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; font-size: 12.5px; padding: 5px 8px; border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 7%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 25%, var(--line)); }
+.we-rline b { font-weight: 600; }
+.we-rline select { font-size: 12.5px; padding: 1px 4px; max-width: 100%; }
+.we-rline .meta { color: var(--muted); font-size: 11.5px; flex-basis: 100%; }
+.we-rline button { font: inherit; font-size: 12px; border: 1px solid var(--line); background: var(--panel); color: var(--muted); border-radius: 6px; padding: 1px 8px; cursor: pointer; }
+.we-pop .rh { font-size: 11.5px; font-weight: 600; color: var(--muted); padding: 6px 6px 2px; display: flex; justify-content: space-between; gap: 8px; }
+.we-pop .rh a { color: var(--accent); font-weight: 400; text-decoration: none; }
+.we-pop button.r { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 8px; width: 100%; text-align: left; border: 0; background: none; color: var(--text);
+  border-radius: 7px; padding: 5px 6px; cursor: pointer; font-size: 13px; }
+.we-pop button.r:hover, .we-pop button.r:focus-visible { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.we-pop button.r[aria-current="true"] { box-shadow: inset 3px 0 0 var(--accent); }
+.we-pop button.r small { grid-column: 1 / -1; color: var(--muted); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.we-pop .rn { font-size: 12px; color: var(--muted); padding: 4px 6px; }
 .we .btn.we-tplbtn { font-weight: 700; }
 .we-sumtpl { margin-left: auto; font-size: 12px; padding: 2px 9px; border-radius: 12px; border: 1px solid var(--accent); color: var(--accent); background: none; cursor: pointer; }
 .we-sumtpl:hover, .we-sumtpl:focus-visible { background: color-mix(in srgb, var(--accent) 12%, transparent); }
@@ -373,6 +394,8 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
           <div class="we-tools" id="we-tools">
             <span class="we-menu" id="we-tpl"><button class="btn primary we-tplbtn" type="button" data-a="tpl" id="we-tplbtn" aria-haspopup="true" aria-expanded="false">＋ 插入範本 ▾</button>${q(TIP.tpl)}
               <div class="we-pop" id="we-pop" hidden></div></span>
+            <span class="we-menu" id="we-route"${opts.routes === false ? " hidden" : ""}><button class="btn" type="button" data-a="route" id="we-routebtn" aria-haspopup="true" aria-expanded="false">${esc(tr("workout.route_btn"))}</button>
+              <div class="we-pop" id="we-rpop" hidden></div></span>
             <button class="btn" type="button" data-a="add-step">＋ 步驟</button>
             <button class="btn" type="button" data-a="add-rep">＋ 重複</button>
             <span class="sp"></span>
@@ -380,6 +403,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
             <button class="btn" type="button" data-a="savetpl" id="we-savetpl"${opts.saveTemplate === false ? " hidden" : ""}>${esc(tr("workout.save_tpl"))}</button>
             ${q(TIP.basis)}
           </div>
+          <div class="we-rline" id="we-rline" hidden></div>
           <div class="we-save" id="we-save" hidden></div>
           <div class="we-chart" id="we-chart"><svg id="we-svg" role="img" aria-label="區段圖：強度隨時間"></svg><div class="we-tip" id="we-tip" hidden></div></div>
           <div class="we-legend" id="we-legend"></div>
@@ -397,12 +421,23 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
     sess() { return this.o.session() || {}; }
     sig(s) { return JSON.stringify([s.kind, s.title, s.minutes, s.target, s.detail, s.protocol, s.variant_key, s.terrain]); }
     async open({ uid, ro, kind } = {}) {
-      this.dirty = false; this.cleared = false; this.sel = null; this.openT = null; this.auto = {};
+      this.dirty = false; this.cleared = false; this.sel = null; this.openT = null; this.auto = {}; this.rinfo = null;
       this.ro = !!ro; this.uid = uid || null;
       this.root.classList.toggle("we-ro", this.ro);
       this.root.closest("dialog")?.classList.add("we-wide");
       this.$("we-box").open = true;     // 結構 is expanded by default
-      await this.derive({});
+      this.opening = this.derive({});
+      await this.opening;
+    }
+    // a structure made elsewhere as this session's own (SP-641: the 路線 page's 「從這條路線產生課」, the server's
+    // steps with the route's profile copy): shown and saved like an edit, once the open's derive is in
+    async setDoc(doc) {
+      if (this.opening) await this.opening;
+      ++this.seq;
+      this.doc = { origin: "user", items: doc.items, route: doc.route };
+      this.rinfo = null; this.stored = false;
+      this.$("we-box").open = true;
+      this.touch();
     }
     async derive(extra) {
       const s = this.sess(), my = ++this.seq;
@@ -443,7 +478,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
     }
     // the 範本 page: show a given structure (a template), with the context of a derive for the session fields
     async load(doc, { ro } = {}) {
-      this.dirty = false; this.cleared = false; this.sel = null; this.openT = null; this.auto = {};
+      this.dirty = false; this.cleared = false; this.sel = null; this.openT = null; this.auto = {}; this.rinfo = null;
       this.ro = !!ro; this.uid = null;
       this.root.classList.toggle("we-ro", this.ro);
       this.$("we-box").open = true;
@@ -544,6 +579,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
     // ---------------- render ----------------
     render() {
       const v = this.view, d = this.doc;
+      this.routeLine();
       if (!d) {
         this.$("we-sum").textContent = this.reason || "沒有結構";
         ["we-list", "we-issues", "we-stats", "we-legend", "we-wbody"].forEach((x) => (this.$(x).innerHTML = ""));
@@ -698,7 +734,10 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       const cap = c.cap ? `${Math.round(c.cap)} 分（${c.cap_mode === "hard" ? "硬上限" : "軟上限"}）` : "不限";
       this.$("we-stats").innerHTML = t.sec == null ? "" :
         `<span>總時間 <b>${t.est ? "約 " : ""}${mmss(t.sec)}</b>${t.open ? "＋「直到按下計圈」段" : ""}${t.est ? q(`總時間是估的。${t.est_note || ""}`) : ""}</span>` +
-        `<span>${esc(tr("workout.hard_time"))} <b>${mmss(t.hard_s)}</b></span>` + (t.z5_s ? `<span>${esc(tr("workout.z5_time"))} <b>${mmss(t.z5_s)}</b></span>` : "") +
+        // SP-646: 中強度 / 高強度 / 5 區 (workout_steps.totals: Palladino's three zones; marathon pace = 中強度)
+        `<span>${esc(tr("workout.mod_time"))} <b>${mmss(t.mod_s || 0)}</b></span>` +
+        `<span>${esc(tr("workout.hard_time"))} <b>${mmss(t.hard_s)}</b></span>` +
+        `<span>${esc(tr("workout.z5_time"))} <b>${mmss(t.z5_s || 0)}</b>${q(tr("workout.intensity_tip"))}</span>` +
         `<span>預估訓練負荷（Training load）<b>${Math.round(t.tss)}</b>${q(TIP.tss)}</span><span>這天上限 ${esc(cap)}</span>`;
     }
     issues() {
@@ -856,6 +895,19 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
         this.legend(); this.chart();
       });
       this.$("we-pop").addEventListener("click", (e) => this.onTpl(e));
+      this.$("we-rpop").addEventListener("click", (e) => {
+        const b = e.target.closest("button[data-rs]"); if (!b) return;
+        const [src, ...id] = b.dataset.rs.split(":");
+        this.$("we-rpop").hidden = true; this.$("we-routebtn").setAttribute("aria-expanded", "false");
+        this.pickRoute({ src, id: id.join(":") });
+      });
+      this.$("we-rline").addEventListener("change", (e) => {
+        const c = e.target.closest("select[data-climb]"); if (!c || this.ro) return;
+        const r = (this.doc || {}).route || {};
+        if (r.src) this.pickRoute({ src: r.src.kind, id: r.src.id, climb: +c.value });
+      });
+      this.$("we-rline").addEventListener("click", (e) => { if (e.target.closest("[data-rdel]") && !this.ro) this.pickRoute(null); });
+      document.addEventListener("click", (e) => { if (e.target.isConnected && !e.target.closest("#we-route")) this.$("we-rpop").hidden = true; });
       this.$("we-pop").addEventListener("change", (e) => {          // 主課強度 (SP-643: a dropdown)
         const t = e.target.closest("select[data-tt]"); if (!t) return;
         this.tplTT = t.value; ttSave(this.tplTT); this.menuHtml(); this.$("we-pop").querySelector("select[data-tt]")?.focus();
@@ -1002,11 +1054,65 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
       const b = e.target.closest("button[data-a]"); if (!b || this.ro) return;
       const a = b.dataset.a;
       if (a === "tpl") { this.menu(b); return; }
+      if (a === "route") { this.routeMenu(b); return; }
       if (a === "savetpl") { this.saveForm(); return; }
       if (!this.doc) this.doc = { origin: "user", items: [] };
       if (a === "add-step") { const s = this.newStep("work"); this.doc.items.splice(this.insertAt(), 0, s); this.sel = s.id; this.touch(); }
       else if (a === "add-rep") { this.doc.items.splice(this.insertAt(), 0, this.newRep()); this.touch(); }
       else if (a === "reset") { this.cleared = true; this.dirty = false; this.stored = false; this.$("we-reset").hidden = true; this.derive({ rederive: true }).then(() => { this.cleared = true; this.render(); this.o.onView && this.o.onView(this.view, this); }); }
+    }
+    // ▲ 路線 (SP-640): the uploaded routes and 「我的路段」, fetched once per editor
+    async routeMenu(btn) {
+      const pop = this.$("we-rpop");
+      if (!pop.hidden) { pop.hidden = true; btn.setAttribute("aria-expanded", "false"); return; }
+      this.$("we-pop").hidden = true;
+      if (!this.routes) {
+        pop.innerHTML = `<p class="rn">${esc(tr("workout.route_loading"))}</p>`; pop.hidden = false;
+        const [g, m] = await Promise.all([req("GET", `${this.o.api}/routes/library`), req("GET", `${this.o.api}/routes/mine`)]);
+        this.routes = { gpx: g.ok ? g.body.routes : [], mine: m.ok ? m.body.rows : [] };
+      }
+      const cur = ((this.doc || {}).route || {}).src || {};
+      const km = (v) => `${(+v || 0).toFixed(1)} km`;
+      const row = (rs, name, sub, on) => `<button type="button" class="r" data-rs="${esc(rs)}" aria-current="${on}"><span>${esc(name)}</span><small>${esc(sub)}</small></button>`;
+      const page = `${this.o.api}/routes/page`;
+      const G = this.routes.gpx, M = this.routes.mine;
+      pop.innerHTML = `<div class="rh"><span>${esc(tr("workout.route_gpx"))}</span><a href="${esc(page)}">${esc(tr("workout.route_page"))}</a></div>` +
+        (G.length ? G.map((r) => row(`gpx:${r.id}`, r.name, `${km(r.km)} · +${Math.round(r.gain_m || 0)} m · ${tr("workout.route_nclimbs", { n: r.n_climbs || 0 })}`,
+          cur.kind === "gpx" && cur.id === String(r.id))).join("") : `<p class="rn">${esc(tr("workout.route_none_gpx"))}</p>`) +
+        `<div class="rh"><span>${esc(tr("workout.route_mine"))}</span></div>` +
+        (M.length ? M.map((r) => row(`seg:${r.id}`, (r.fav ? "★ " : "") + r.name, `${km((r.length_m || 0) / 1000)} · ${(r.gain_m || 0) < 0 ? "−" + Math.round(-r.gain_m) : "+" + Math.round(r.gain_m || 0)} m · ${tr("workout.route_times", { n: r.n_efforts || 0 })}`,
+          cur.kind === "seg" && cur.id === String(r.id))).join("") : `<p class="rn">${esc(tr("workout.route_none_mine"))}</p>`);
+      pop.hidden = false; btn.setAttribute("aria-expanded", "true");
+    }
+    // pick (null: drop) the route: the server puts it on the structure (POST /steps/route)
+    async pickRoute(pick) {
+      if (!this.doc) this.doc = { origin: "user", items: [] };
+      const my = ++this.seq;
+      const r = await req("POST", `${this.o.api}/steps/route`, { ...this.sess(), uid: this.uid, steps: this.stepsDoc(),
+        route: pick ? { src: pick.src, id: pick.id, climb: pick.climb } : null });
+      if (my !== this.seq) return;
+      if (!r.ok) {
+        const d = r.body.detail || {};
+        this.$("we-sum").textContent = tr("workout.route_failed", { msg: (d.errors || [typeof d === "string" ? d : ""]).join("；") });
+        return;
+      }
+      this.doc = { origin: "user", items: r.body.steps.items, route: r.body.steps.route };
+      this.rinfo = pick ? { climbs: r.body.climbs || [], applied: r.body.applied } : null;
+      this.touch();
+    }
+    routeLine() {
+      const box = this.$("we-rline"), r = (this.doc || {}).route;
+      if (!r || !r.src || this.o.routes === false) { box.hidden = true; box.innerHTML = ""; return; }
+      const cl = r.climb, info = this.rinfo || {};
+      const climbs = info.climbs && info.climbs.length ? info.climbs : cl ? [cl] : [];
+      const lab = (c) => tr("workout.route_climb_opt", { no: c.no, m: Math.round(c.gain_m), km: ((c.dist_m || 0) / 1000).toFixed(1), g: Math.round((c.grade || 0) * 100) });
+      const sel = this.ro ? (cl ? esc(lab(cl)) : esc(tr("workout.route_noclimb")))
+        : `<select data-climb aria-label="${esc(tr("workout.route_climb"))}">${climbs.map((c) => `<option value="${c.no}"${cl && cl.no === c.no ? " selected" : ""}>${esc(lab(c))}</option>`).join("")}` +
+          `<option value="0"${cl ? "" : " selected"}>${esc(tr("workout.route_noclimb"))}</option></select>`;
+      box.hidden = false;
+      box.innerHTML = `<span>▲ <b>${esc(r.name || "")}</b> · ${esc(tr(r.src.kind === "seg" ? "workout.route_kind_seg" : "workout.route_kind_gpx"))}</span>` +
+        `<label>${esc(tr("workout.route_climb"))} ${sel}</label>` + (this.ro ? "" : `<button type="button" data-rdel>${esc(tr("workout.route_remove"))}</button>`) +
+        `<span class="meta">${esc(tr(cl ? "workout.route_tip" : "workout.route_tip_noclimb"))}</span>`;
     }
     // 插入範本: category tabs (default: this session's kind), 強度課 split 有氧間歇／VO2max 間歇／速度
     // (workout_templates.family_of), one row per template with a mini chart, its 訓練目的 and its source
@@ -1066,8 +1172,7 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
         ? ` <span class="we-tpb" title="${esc(T.no_tpace_text || noTpaceText())}">⚠ ${esc(tr("workout.no_tpace_badge"))}</span>` : "") +
         (hw && usesLthr(r.full || r.items, !!(((this.ctx || {}).thresholds) || {}).aet_measured) ? ` <span class="we-tpb" title="${esc(hw)}">⚠ ${esc(tr("workout.thr_low_badge"))}</span>` : "");
       // 技術地形／下坡 rows: how the scheduler counts them (workout_steps.rpe_role)
-      const fsub = (r) => (r.mine ? ` <span class="mine">${esc(tr("workout.mine"))}</span>` : "") + (r.gpx ? ` <span class="fam">▲ GPX</span>` : "") +
-        (r.family && r.family.sub_label ? ` <span class="fam">${esc(r.family.sub_label)}</span>` : "") +
+      const fsub = (r) => (r.mine ? ` <span class="mine">${esc(tr("workout.mine"))}</span>` : "") +         (r.family && r.family.sub_label ? ` <span class="fam">${esc(r.family.sub_label)}</span>` : "") +
         (r.role ? ` <span class="fam">${r.role === "quality" ? "算強度課" : "算輕鬆課"}</span>` : "");
       const btn = (r, at, sub) => `<button type="button" class="t" data-t="${at}">${this.mini(r.full || r.items)}<span>${esc(r.label)}${fsub(r)}${r.src_kind === "推估" ? ` <span class="faint">（推估）</span>` : ""}${tpBadge(r)}</span>` +
         `${r.purpose ? `<span class="pur">${esc(r.purpose)}</span>` : ""}<span class="src${sub ? " why" : ""}">${esc(sub || r.src || "")}</span></button>`;
@@ -1152,13 +1257,18 @@ dialog.sd .we-rep-h input[type=checkbox] { width: auto; }
         while (z > a && items[z - 1].kind === "cool") z--;
         items.splice(a, z - a, ...fresh(row.items));
       }
-      // a user template with a route GPX: the structure keeps its id (the chart's elevation; the
-      // session's own copy of the profile is taken from it on save); another template replacing
-      // the whole structure drops both
-      if (row.mine && row.gpx) { this.doc.tpl = row.id; delete this.doc.route; }
-      else if (this.tplFull || !items.length) { delete this.doc.tpl; delete this.doc.route; }
+      // SP-640: a template is a structure only (no route of its own); a route picked for this session
+      // stays and goes on the new structure (its climbs to the top again)
+      delete this.doc.tpl;
       this.$("we-pop").hidden = true;
-      this.touch();
+      const r = this.doc.route;
+      if (r && r.src && this.o.routes !== false) {
+        this.dirty = true;
+        this.pickRoute({ src: r.src.kind, id: r.src.id, climb: r.climb ? r.climb.no : 0 });
+      } else {
+        delete this.doc.route;
+        this.touch();
+      }
       this.o.onTemplate && this.o.onTemplate(row, this.tplFull);
     }
     // a template by its key (the 課表 page's ?add= deep link, SP-39 「安排課表」): the whole session

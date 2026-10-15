@@ -269,7 +269,8 @@ DEFAULTS: dict[str, Any] = {
     "injury.reentry_step_up": True,
     "injury.custom_areas": [],
     # activities the user unlinked from a planned session (engine/plan_match.py):
-    # [{start, index}] — never auto-matched again (start: the activity's local start)
+    # [{start, index, uid}] — never auto-matched again (start: the activity's local start; uid: the
+    # session it was unlinked from, which is linked by hand only — SP-647)
     "plan.match.unlinked": [],
     # 備份 (engine/backup.py, api/backup.py): target folder (absolute; None = not set up),
     # daily automatic backup, include the synced FIT originals (進階),

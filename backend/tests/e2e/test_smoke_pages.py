@@ -271,12 +271,13 @@ def test_schedule_phone_cards_and_editor_save(app):
     tall = page.evaluate("""() => [...document.querySelectorAll('.ag-day .chip .c-d')]
         .filter((e) => e.getBoundingClientRect().height > parseFloat(getComputedStyle(e).lineHeight) * 2 + 2).length""")
     assert tall == 0
-    for _ in range(4):
-        if page.locator("#cal .chip[data-kind=quality][data-uid]").count():
+    # a coming session (a done one opens read-only, without 儲存): the 強度課 if this week still has one
+    # (the demo's recovery fartlek is done the day before — SP-530), else the LSD, else any
+    for sel in ("[data-kind=quality]", "[data-kind=long]", ""):
+        chip = page.locator(f"#cal .chip.fut{sel}[data-uid]")
+        if chip.count():
             break
-        page.click("#next")
-        _calendar_ready(page)
-    page.locator("#cal .chip[data-kind=quality][data-uid]").first.click()
+    chip.first.click()
     expect(page.locator("#sd")).to_have_attribute("open", "")
     page.wait_for_timeout(1000)
     hit = page.evaluate("""() => { const r = document.getElementById('sd-save').getBoundingClientRect();

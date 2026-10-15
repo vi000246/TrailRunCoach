@@ -50,5 +50,15 @@
   "ev.cairn_toast": "Imported from Cairn ({days} days)",
   "ev.cairn_use": "Use Cairn",
   "ev.split_btn": "Days",
-  "ev.splits_saved": "Day ends saved: {days} days"
+  "ev.splits_saved": "Day ends saved: {days} days",
+  "ev.priority_help": "A = main goal (the phases count back from it). B = secondary: with an A race ahead, a 5-day mini-taper before it and a recovery by its size after it, the phases unchanged; with no A race, a 4-week light prep + a 1-week taper before it. C = training (replaces a hard session or the long run), the phases unchanged.",
+  "ev.priority_help_n": "A = main goal (the phases count back from it). B = secondary: with an A race ahead, a 5-day mini-taper before it and a recovery by its size after it, the phases unchanged; with no A race, a {w}-week light prep + a {d}-day taper before it (estimate). C = training (replaces a hard session or the long run), the phases unchanged.",
+  "now.dash_maintain": " (maintenance uses the base-phase charts)",
+  "now.dash_light": " ({label} uses this one)",
+  "guide.maintain": "Maintenance",
+  "guide.maintain_ctl": "Chronic load flat, no longer raised",
+  "guide.maintain_vt2": "One session above VT2 (zone 5) a week",
+  "guide.maintain_easy": "Easy running ≥ 80%",
+  "guide.maintain_rest": "A recovery week at least every 6 weeks",
+  "guide.now_as": " (now: {label})"
 }

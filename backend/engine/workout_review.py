@@ -2380,6 +2380,20 @@ def _planned_quality(ds, w) -> bool:
         return False
 
 
+def _planned_mp_s(ds, w) -> int:
+    """SP-646: the marathon-pace seconds of the 課表 long run done by this activity (0 = none):
+    `ds.plan_mp_rows` when set (tests), else plan_store.done_mp_long."""
+    try:
+        from backend.engine import workout_steps as WS
+        rows = getattr(ds, "plan_mp_rows", None)
+        if rows is None:
+            from backend.engine.plan_store import done_mp_long
+            rows = done_mp_long()
+        return WS.mp_seconds(rows.get(w.idx) or {})
+    except Exception:                       # noqa: BLE001 — no plan / an unreadable row: no MP
+        return 0
+
+
 def _stimulus(ds, w, m: dict, cat: str) -> dict:
     """session_stimulus.verdict for this run; HRpeak is looked up only when the HR
     path could change the answer (it reads every run's measure once per dataset)."""
@@ -2401,6 +2415,10 @@ def _stimulus(ds, w, m: dict, cat: str) -> dict:
             and any((st.get("hr_path") or {}).get("secs") or []):
         hp, src = hr_peak(ds, w)
     v = SS.verdict(st, cat, hp, easy_hr)
+    if v.get("stimulus") == "z3":
+        # SP-646: the 課表's marathon-pace long run run as planned — its MP block is 中強度, not a
+        # 高強度長跑 (session_stimulus.planned_mp; the planned session decides, as _planned_quality above)
+        v = SS.planned_mp(v, _planned_mp_s(ds, w))
     return {**v, "hrpeak_source": src, "easy_hr": easy_hr, "easy_cap": (cap or {}).get("value"),
             "bouts": (st or {}).get("vo2_bouts") or [], "top_pct_cp": (st or {}).get("top_pct_cp"),
             "power_valid_share": (st or {}).get("power_valid_share")}
@@ -3198,7 +3216,7 @@ def _plan_card(ds, w) -> Optional[dict]:
     if vs.get("off_plan") or vs.get("short"):           # 沒照課表 / 強度不足 (SP-216)
         comp = CO.with_plan_check(comp, vs)
     tip = [_("課表：{title}（{day}，{match}）", title=s.get('title'), day=s.get('day'),
-             match=vs.get('match_label') or PM.MATCH_LABEL.get('day'))]
+             match=vs.get('match_label') or _(PM.MATCH_LABEL['day']))]
     mov = _f(a.get("moving_s"))
     if s.get("minutes") and mov is not None:
         tip.append(_("時間：{t} ／ 計畫 {m} 分（{pct}%）", t=_hms(mov), m=int(s['minutes']), pct=comp.get('duration_pct')))
@@ -4418,7 +4436,9 @@ def _iv_verdict(ds, w, m, c, base):
                                # SP-521: why every rep can be 達標 while the time is short (interval_eval.tiz_seconds)
                                + _("每趟達標看的是整趟平均；目標區時間看每一秒的 10 秒功率有沒有在 {band} 裡，"
                                    "連續 ≥ {s} 秒才算，所以每趟都達標、時間還是可能不夠。",
-                                   band=_tiz_band(e), s=f"{e.get('tiz_run_s') or IE.TIZ_RUN_S:g}")))
+                                   band=_tiz_band(e), s=f"{e.get('tiz_run_s') or IE.TIZ_RUN_S:g}")
+                               + (_("恢復週 fartlek 的目標區從 Palladino 3B 下緣 {lo:.0f}% CP 算，和課表判完成同一條線。",
+                                    lo=e["tiz_lo"] * 100) if e.get("tiz_recovery") else "")))
     if e.get("outcome_why"):
         lv = {"met": "good", "border": "warn"}.get(e.get("outcome"), "bad")
         from backend.engine import quality_gate as QG
@@ -4434,9 +4454,10 @@ def _iv_verdict(ds, w, m, c, base):
 
 
 def _tiz_band(e: dict) -> str:
-    """The watts the time in the zone counts (interval_eval.tiz_seconds): lo·CP to hi·CP × 1.05, Zone 5 open-ended."""
+    """The watts the time in the zone counts (interval_eval.tiz_seconds): lo·CP to hi·CP × 1.05, Zone 5 open-ended
+    (lo: interval_eval.tiz_lower's — the recovery fartlek's is Zone 3B's lower edge, SP-647)."""
     from backend.engine import interval_eval as IE
-    a = e["lo"] * e["cp"]
+    a = e.get("tiz_lo", e["lo"]) * e["cp"]
     if e.get("z5") or e.get("hi") is None:
         return _("{a:.0f} W 以上", a=a)
     return f"{a:.0f}–{e['hi'] * e['cp'] * IE.TIZ_HI_TOL:.0f} W"
@@ -4638,7 +4659,8 @@ def _iv_tiz(ds, w, m, c, base):
           "color": GOOD if (r or 0) >= e.get("tiz_goal", IE.TIZ_GOAL) else BAD, "bar_width": 36,
           "labels": [_("實際 {m:.1f} 分（{pct:.0f}%）", m=act / 60, pct=(r or 0) * 100)],
           "data": {"kind": "points", "x": "value", "points": [[2, act]]}}]
-    zone = f"≥ {e['lo'] * 100:.0f}% CP" if e["z5"] else f"{e['lo'] * 100:.0f}–{e['hi'] * 105:.0f}% CP"
+    tlo = e.get("tiz_lo", e["lo"])                  # SP-647: the recovery fartlek from Zone 3B's lower edge
+    zone = f"≥ {tlo * 100:.0f}% CP" if e["z5"] else f"{tlo * 100:.0f}–{e['hi'] * 105:.0f}% CP"
     return {**base, "axes": [{"id": "HHMMSS", "unit": du, "min": 0}], "series": s,
             "description": f"目標區 = 10 秒功率 {zone}、連續 ≥ {e.get('tiz_run_s') or IE.TIZ_RUN_S:g} 秒才算（推估）。"
                            + _("≥ {goal:.0%} 算達到，{basis}（TrainingPeaks、intervals.icu、TrainerPlan 的「完成」都從 80% 起）。",

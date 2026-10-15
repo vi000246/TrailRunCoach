@@ -8,20 +8,20 @@
 :root {
   --bg: #f4f5f7; --panel: #fff; --text: #1d232b; --muted: #6a7482; --line: #e1e5ea;
   --accent: #2563eb; --soft: #e8efff; --warn: #b45309; --bad: #dc2626;
-  --p-transition: #94a3b8; --p-recovery: #94a3b8; --p-rebuild: #7dd3fc; --p-base: #16a34a; --p-specific: #d97706;
+  --p-transition: #94a3b8; --p-recovery: #94a3b8; --p-rebuild: #7dd3fc; --p-base: #16a34a; --p-maintain: #0d9488; --p-bprep: #ca8a04; --p-specific: #d97706;
   --p-taper: #2563eb; --p-event: #dc2626;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg: #0f1216; --panel: #171b21; --text: #e6e9ee; --muted: #97a1ae; --line: #2a313a;
     --accent: #60a5fa; --soft: #1c2a40; --warn: #f59e0b; --bad: #f87171;
-    --p-base: #22c55e; --p-specific: #f59e0b; --p-taper: #60a5fa; --p-event: #f87171;
+    --p-base: #22c55e; --p-maintain: #2dd4bf; --p-bprep: #facc15; --p-specific: #f59e0b; --p-taper: #60a5fa; --p-event: #f87171;
   }
 }
 :root[data-theme="dark"] {
   --bg: #0f1216; --panel: #171b21; --text: #e6e9ee; --muted: #97a1ae; --line: #2a313a;
   --accent: #60a5fa; --soft: #1c2a40; --warn: #f59e0b; --bad: #f87171;
-  --p-base: #22c55e; --p-specific: #f59e0b; --p-taper: #60a5fa; --p-event: #f87171;
+  --p-base: #22c55e; --p-maintain: #2dd4bf; --p-bprep: #facc15; --p-specific: #f59e0b; --p-taper: #60a5fa; --p-event: #f87171;
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--text);
@@ -138,7 +138,7 @@ button.link { border: 0; background: none; color: var(--accent); padding: 0 4px;
 
   <section>
     <h2>目標賽事 / <span data-intl-text="多日登山">百岳</span></h2>
-    <p class="meta">A = 主要目標（周期從它往回排）；B = 次要（前 5 天小減量、後 3 天恢復，不改周期）；C = 當訓練。</p>
+    <p class="meta" id="prihelp" data-i18n="plan.ev.priority_help">A = 主要目標（周期從它往回排）。B = 次要：有 A 賽時，賽前 5 天小減量、賽後依大小恢復，不改周期；沒有 A 賽時，賽前 4 週輕量準備＋1 週減量。C = 當訓練（取代一堂強度課或長跑），不改周期。</p>
     <div class="tablewrap"><table>
       <thead><tr><th></th><th>日期</th><th>名稱</th><th>類型</th><th class="num">天數</th><th class="num">距離 km</th>
         <th class="num">爬升 m</th><th class="num">m/km</th><th class="num">預估時間 h</th><th class="num">倒數</th><th>備註</th><th>路線 GPX</th><th></th></tr></thead>
@@ -238,6 +238,9 @@ const fmt = (v, d = 0) => v == null ? "–" : Number(v).toLocaleString("zh-TW", 
 const day = (s) => new Date(s + "T00:00:00");
 const ddiff = (a, b) => Math.round((day(b) - day(a)) / 86400000);
 const PCOL = (k) => `var(--p-${k})`;
+// SP-102: a 維持期 (base with maintain_from) and a B race's light 專項塊 have their own colour; the label is the server's
+const PKEY = (p) => p.maintain ? "maintain" : p.light && p.kind === "specific" ? "bprep" : p.kind;
+const PLAB = (p) => p.label || S.phase_labels[p.kind];
 // 「± N bpm」 badge for an estimated AeT (zones.aet_uncertainty: {pm, tip}); nothing when measured
 const pmBadge = (p) => p && p.pm ? ` <span class="pm" tabindex="0" title="${esc(p.tip)}" aria-label="誤差 ±${p.pm} bpm：${esc(p.tip)}">±${p.pm} bpm<b>?</b></span>` : "";
 
@@ -255,6 +258,9 @@ const GUIDE = {
   specific: ["專項期", ["VAM（同心率爬更快）", "每公里爬升接近目標", "最長單次逼近目標時間", "長時間後段飄移變小"]],
   taper: ["減量期", ["每週時數降到平常的 40–60%", "高強度時數保留", "負荷平衡（Load balance）回到正值、長期訓練負荷（Chronic load）只小降"]],
 };
+// SP-102: the 維持期's card (translated at render time: t() is ready by then)
+const GUIDE_MAINTAIN = () => [t("plan.guide.maintain"), [t("plan.guide.maintain_ctl"), t("plan.guide.maintain_vt2"),
+  t("plan.guide.maintain_easy"), t("plan.guide.maintain_rest")]];
 
 function render() {
   $("#todayinfo").textContent = "今天 " + S.today;
@@ -264,11 +270,13 @@ function render() {
 function renderNow() {
   const c = S.current_phase, g = S.goals, next = S.events.find((e) => e.id === g.next_a);
   const cards = [];
-  cards.push(`<div class="card"><div class="k">目前周期</div><div class="v" style="color:${c ? PCOL(c.kind) : "inherit"}">${c ? esc(c.label) : "未設定"}</div>
-    <div class="s">${!c ? "新增一場 A 賽事就會自動排周期" : next ? `${c.start} ～ ${c.end}，還有 ${c.days_left} 天` : "沒有目標賽事，預設為基礎期"}</div></div>`);
+  cards.push(`<div class="card"><div class="k">目前周期</div><div class="v" style="color:${c ? PCOL(PKEY(c)) : "inherit"}">${c ? esc(c.label) : "未設定"}</div>
+    <div class="s">${!c ? "新增一場 A 賽事就會自動排周期" : (c.maintain || c.light) && c.note ? esc(c.note) : next ? `${c.start} ～ ${c.end}，還有 ${c.days_left} 天` : "沒有目標賽事，預設為基礎期"}</div></div>`);
   cards.push(`<div class="card"><div class="k">下一場 A 賽事</div><div class="v">${next ? esc(next.name) : "–"}</div>
     <div class="s">${next ? `${next.date}，倒數 ${next.days_to} 天` : ""}</div></div>`);
-  if (c && c.dashboard) cards.push(`<div class="card"><div class="k">現在該看的圖</div><div class="v" style="font-size:16px">${esc(c.dashboard)}</div>
+  // SP-102: the 維持期 / B 賽輕量準備 have no dashboard of their own — say whose they use
+  const dashOf = c && c.maintain ? t("plan.now.dash_maintain") : c && c.light ? t("plan.now.dash_light", { label: c.label }) : "";
+  if (c && c.dashboard) cards.push(`<div class="card"><div class="k">現在該看的圖</div><div class="v" style="font-size:16px">${esc(c.dashboard)}${dashOf ? `<span class="meta" style="font-size:12px">${esc(dashOf)}</span>` : ""}</div>
     <div class="s"><a href="/api/v1/app/viewer?view=${encodeURIComponent("周期化訓練")}&dash=${encodeURIComponent(c.dashboard)}">圖表分析 → 我的圖表 → 周期化訓練</a></div></div>`);
   const th = S.effective_thresholds;   // not `t`: that is the i18n t()
   cards.push(`<div class="card"><div class="k">目前區間用的門檻</div><div class="v" style="font-size:16px">AeT ${fmt(th.aethr.value)}${pmBadge(th.aethr.pm)} / LTHR ${fmt(th.lthr.value)} / CP ${fmt(th.cp.value)} W</div>
@@ -300,7 +308,7 @@ function renderTimeline() {
   let h = "";
   for (const p of phases) {
     const l = pos(p.start), w = Math.max(0.3, pos(p.end) + 100 / span - l);
-    h += `<div class="seg" style="left:${l}%;width:${w}%;background:${PCOL(p.kind)}" title="${esc(S.phase_labels[p.kind])} ${p.start}～${p.end}${p.note ? "\n" + esc(p.note) : ""}">${w > 6 ? esc(S.phase_labels[p.kind]) : ""}</div>`;
+    h += `<div class="seg" style="left:${l}%;width:${w}%;background:${PCOL(PKEY(p))}" title="${esc(PLAB(p))} ${p.start}～${p.end}${p.note ? "\n" + esc(p.note) : ""}">${w > 6 ? esc(PLAB(p)) : ""}</div>`;
   }
   for (const w of S.b_windows) {
     const l = pos(w.start), wd = pos(w.end) + 100 / span - l;
@@ -322,13 +330,16 @@ function renderTimeline() {
   stackTlLabels();
   $("#legend").innerHTML = ["recovery", "rebuild", "base", "specific", "taper", "event"].map((k) =>
     `<span><i style="background:${PCOL(k)}"></i>${S.phase_labels[k]}</span>`).join("") +
+    // SP-102: the 維持期 / B 賽輕量準備 keys only when the timeline has one
+    ["maintain", "bprep"].map((k) => phases.find((p) => PKEY(p) === k)).filter(Boolean)
+      .map((p) => `<span><i style="background:${PCOL(PKEY(p))}"></i>${esc(p.label)}</span>`).join("") +
     `<span><i style="background:var(--muted);height:4px"></i>B 賽事小減量 / 恢復</span>`;
   const r = S.rules;
   $("#tlnote").textContent = S.manual_phases ? "手動周期。" :
     `自動排程：每場 A 賽事前 ${r.taper_days} 天減量（多天的百岳 ${r.baiyue_taper_days} 天，4 天以上 ${r.baiyue_long_taper_days} 天${r.taper_pref_days > r.taper_days ? `；路跑全馬、超馬照課表偏好 ${r.taper_pref_days} 天` : ""}）、再往前 ${r.specific_weeks} 週專項期，其餘是基礎期；賽後恢復 1 週、馬拉松級再加 1 週回量期，超馬級恢復 2 週，100 英里級恢復 2 週＋回量 2 週（超馬級：預估 ≥ ${r.long_event_hours} 小時——先用賽事計算器、再用你填的預估時間；都沒有時看努力距離 EP ≥ ${r.long_event_ep}（公里＋爬升換算）；多日行程也算）；比賽的下坡遠超過你近 6 週練過的，恢復再多一級。回量期排在轉換期之後，只有輕鬆跑和肌力。`;
   // phases cut short around two A races close together, a skipped 轉換期 (SP-90, SP-73)
   const pn = S.manual_phases ? [] : phases.filter((p) => p.note && p.end >= S.today);
-  $("#phnotes").innerHTML = pn.map((p) => `<li>${esc(S.phase_labels[p.kind])} ${p.start.slice(5)}～${p.end.slice(5)}：${esc(p.note)}</li>`).join("");
+  $("#phnotes").innerHTML = pn.map((p) => `<li>${esc(PLAB(p))} ${p.start.slice(5)}～${p.end.slice(5)}：${esc(p.note)}</li>`).join("");
 }
 
 function renderGoals() {
@@ -475,7 +486,7 @@ function renderPhases() {
       <td><input type="date" data-i="${i}" data-f="end" value="${p.end}"></td>
       <td class="num">${ddiff(p.start, p.end) + 1}</td><td>${esc(evName(p.event_id))}</td>
       <td><button class="link" data-rm="${i}">移除</button></td></tr>` : `<tr>
-      <td><span class="dot" style="background:${PCOL(p.kind)}"></span>${esc(p.label)}</td><td>${p.start}</td><td>${p.end}</td>
+      <td><span class="dot" style="background:${PCOL(PKEY(p))}"></span>${esc(p.label)}</td><td>${p.start}</td><td>${p.end}</td>
       <td class="num">${p.days}</td><td>${esc(evName(p.event_id))}</td><td></td></tr>`).join("");
   $("#phasemode").textContent = manual ? "手動編輯中：改完按「儲存周期」。儲存後就不再自動排程，直到按「恢復自動排程」。"
     : S.manual_phases ? "目前是手動周期。" : "目前是自動排程（從 A 賽事往回推）。";
@@ -494,9 +505,19 @@ function renderThr() {
 }
 
 function renderGuide() {
-  const cur = S.current_phase && (S.current_phase.kind === "event" ? "taper" : ["transition", "rebuild"].includes(S.current_phase.kind) ? "recovery" : S.current_phase.kind);
-  $("#guide").innerHTML = Object.entries(GUIDE).map(([k, [t, items]]) =>
-    `<div style="border-left-color:${PCOL(k)};${k === cur ? "background:var(--soft)" : ""}"><b>${t}${k === cur ? "（現在）" : ""}</b><ul>${items.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>`).join("");
+  const c = S.current_phase;
+  const cur = c && (c.maintain ? "maintain" : c.kind === "event" ? "taper" : ["transition", "rebuild"].includes(c.kind) ? "recovery" : c.kind);
+  const g = { ...GUIDE };
+  const order = Object.keys(g);
+  g.maintain = GUIDE_MAINTAIN();
+  order.splice(order.indexOf("base") + 1, 0, "maintain");          // 維持期 next to 基礎期
+  // a B race's light prep (SP-102) uses the 專項期 / 減量期 card, which says so
+  const now = (k) => k !== cur ? "" : c.light ? t("plan.guide.now_as", { label: c.label }) : "（現在）";
+  $("#guide").innerHTML = order.map((k) => [k, g[k]]).map(([k, [title, items]]) =>
+    `<div style="border-left-color:${PCOL(k)};${k === cur ? "background:var(--soft)" : ""}"><b>${esc(title)}${esc(now(k))}</b><ul>${items.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>`).join("");
+  // the B row's help follows the plan's numbers (SP-102: light prep without an A race)
+  const r = S.rules || {};
+  if (r.b_prep_weeks) $("#prihelp").textContent = t("plan.ev.priority_help_n", { w: r.b_prep_weeks, d: r.b_prep_taper_days });
 }
 
 // ---- events ----

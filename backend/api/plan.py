@@ -183,7 +183,9 @@ def get_plan(begin: Optional[str] = None, end: Optional[str] = None):
                   # SP-96: a 2–3 day 百岳's taper; 課表偏好 taper_days for a road marathon / an ultra
                   "baiyue_taper_days": P.BAIYUE_TAPER_DAYS, "taper_pref_days": P.taper_days_setting(),
                   # SP-114: a ≥ 4 day 百岳
-                  "baiyue_long_taper_days": P.BAIYUE_LONG_TAPER_DAYS},
+                  "baiyue_long_taper_days": P.BAIYUE_LONG_TAPER_DAYS,
+                  # SP-102: a B race's light prep when no A race is ahead (the event table's help)
+                  "b_prep_weeks": P.B_PREP_WEEKS, "b_prep_taper_days": P.B_PREP_TAPER_DAYS},
     }
 
 

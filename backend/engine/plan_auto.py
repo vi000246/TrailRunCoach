@@ -206,6 +206,15 @@ def _week_tss(ss: list[dict], ws: str) -> tuple[float, int]:
     return sum(PS.session_tss(s) for s in xs), len(xs)
 
 
+def phase_token(phase: Optional[dict]) -> Optional[str]:
+    """The phase a run compares with the last one's (classify's 「周期改變」): its kind, "maintain" for a
+    base phase that is a 維持期 (SP-102 — the switch into it changes every week's sessions, so it is held
+    for the user like any phase change); None without a phase."""
+    if not phase:
+        return None
+    return "maintain" if phase.get("maintain") else phase.get("kind")
+
+
 def classify(stored: list[dict], new: list[dict], items: list[dict], today: str, window_end: str,
              phase: Optional[str], last_phase: Optional[str], days_to_race: Optional[int],
              reentry_weeks: Optional[set] = None) -> list[dict]:
@@ -1018,7 +1027,7 @@ async def _run(db, trigger: str, force: bool, approve_id: Optional[int], inp: di
         mark_structure(items)               # SP-437: the first run on the structure rule
     days = int(cfg["push_days"] or 7)
     wend = (dt.date.fromisoformat(today) + dt.timedelta(days=days - 1)).isoformat()
-    phase = (inp.get("phase") or {}).get("kind")
+    phase = phase_token(inp.get("phase"))
     big = classify(stored, new, items, today, wend, phase, state.get("phase"), inp.get("days_to_next_a"),
                    reentry_weeks(inp))
     await _log_states(db, inp, state, trigger)

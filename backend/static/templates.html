@@ -8,10 +8,9 @@
 /* 範本 (SP-36; engine/user_templates.py, api/plan_sessions.py /steps/templates/user): the third tab of
    課表. Left: every template (我的 + the built-in library) filtered by category; right: the chosen one
    in the structured editor (static/workout_editor.js) with its name, categories (several, built-in and
-   the user's own), 目標用 and route GPX. Under the categories, 主課強度 (SP-84): the main set's target
+   the user's own) and 目標用 — a structure only (SP-640: the route is picked when it is put on a day,
+   課表 › 路線 keeps the routes; a template's old GPX was moved there, the box says where). Under the categories, 主課強度 (SP-84): the main set's target
    types (workout_steps.target_types, each row's `target_types`), only the ones in the listed rows;
-   SP-639: under the GPX box its 坡段表 (GET …/gpx/segments: the climbs and grade segments, pace / time
-   at the easy run or the template's main intensity — computed on the server);
    the choice is kept per viewer (localStorage, shared with 插入範本 in workout_editor.js). SP-643: the
    filters are 插入範本's own (WorkoutEditor.tplFilters): 類型, its 類別 under it (強度課 / 越野跑),
    主課強度 as a dropdown. Built-in templates are read-only: 複製成我的範本 to change one.
@@ -69,7 +68,8 @@ h1 { margin: 0; font-size: 20px; }
 .modesw .mcard[aria-current="page"] svg, .modesw .mcard[aria-current="page"] small { color: #fff; }
 .modesw .mcard[aria-current="page"] small { opacity: .85; }
 .modesw .mcard:focus-visible { outline: 2px solid var(--mc); outline-offset: 2px; }
-@media (max-width: 620px) { .modesw .mcard small { display: none; } .modesw .mcard { padding: 6px 12px 6px 9px; } }
+@media (max-width: 620px) { .modesw .mcard small { display: none; } .modesw .mcard { padding: 6px 10px 6px 8px; gap: 6px; } .modesw .mcard svg { width: 18px; height: 18px; } }
+.modesw { flex-wrap: wrap; max-width: 100%; }
 
 .tm { display: grid; grid-template-columns: minmax(260px, 340px) minmax(0, 1fr); gap: 12px; align-items: start; }
 @media (max-width: 860px) { .tm { grid-template-columns: minmax(0, 1fr); } }
@@ -103,22 +103,7 @@ ul.items .tag.mine { border-color: var(--accent); color: var(--accent); }
 .ed .srcl a { color: var(--accent); }
 .gpx { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; font-size: 13px; padding: 8px 10px; border: 1px dashed var(--line); border-radius: 8px; }
 .ed > * { min-width: 0; }
-.crs { min-width: 0; max-width: 100%; }
-.crs > summary { cursor: pointer; font-size: 13px; padding: 2px 0; }
-.crs > summary b { font-weight: 600; }
-.crs .lv { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; font-size: 12.5px; margin: 6px 0; }
-.crs .lv select { font-size: 13px; padding: 2px 6px; border-radius: 6px; color: var(--text); background: var(--bg); border: 1px solid var(--line); }
-.crs .tw { overflow-x: auto; max-width: 100%; }
-.crs table { border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; width: 100%; }
-.crs th, .crs td { padding: 3px 8px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
-.crs th { color: var(--muted); font-weight: 500; font-size: 11.5px; }
-.crs th:first-child, .crs td:first-child, .crs td.k { text-align: left; }
-.crs h4 { margin: 10px 0 4px; font-size: 12.5px; color: var(--muted); font-weight: 600; }
-.crs .ref { color: var(--faint); }
-.crs tr.climb td:first-child { color: var(--accent); font-weight: 600; }
-.crs .rule { font-size: 11.5px; color: var(--muted); margin-top: 6px; }
-@media (max-width: 600px) { .crs th:nth-child(2), .crs td:nth-child(2) { display: none; } .crs th, .crs td { padding: 3px 5px; } }
-.msg { font-size: 12.5px; } .msg.err { color: var(--bad); } .msg.ok { color: var(--good); } .msg:empty { display: none; }
+@media (max-width: 600px) { .msg { font-size: 12.5px; } .msg.err { color: var(--bad); } .msg.ok { color: var(--good); } .msg:empty { display: none; }
 .empty { color: var(--muted); padding: 24px 8px; text-align: center; }
 details.cm > summary { cursor: pointer; font-size: 12.5px; color: var(--muted); }
 details.cm ul { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 4px; }
@@ -151,6 +136,9 @@ details.cm li input { flex: 1; min-width: 0; font-size: 13px; padding: 3px 6px; 
     <a class="mcard" href="/api/v1/overview/plan/templates/page" aria-current="page">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
       <span><b data-i18n="templates.tabs.templates">範本</b><small data-i18n="templates.tabs.templates_sub">自己的課表範本</small></span></a>
+    <a class="mcard" href="/api/v1/overview/plan/routes/page">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 19 5.5-9 4 6 3-4.5L21 19z"/><circle cx="17" cy="6" r="2"/></svg>
+      <span><b data-i18n="templates.tabs.routes">路線</b><small data-i18n="templates.tabs.routes_sub">GPX 與我的路段</small></span></a>
   </nav>
   <div class="bar">
     <h1 data-i18n="templates.title">課表範本</h1>
@@ -189,7 +177,6 @@ details.cm li input { flex: 1; min-width: 0; font-size: 13px; padding: 3px 6px; 
           <span class="meta" data-i18n="templates.basis_hint">套用時這堂課的「目標用」跟著範本；標「自動」的段依課表類型</span></div>
         <div class="row"><span class="lbl" data-i18n="templates.note">備註</span><input class="text" id="tm-note" maxlength="200" style="flex:1" data-i18n-attr="aria-label:templates.note" aria-label="備註"></div>
         <div class="gpx" id="tm-gpx"></div>
-        <details class="crs" id="tm-crs" hidden></details>
         <div id="tm-we"></div>
         <div class="row">
           <button class="btn primary" type="button" id="tm-save" data-i18n="templates.save">儲存</button>
@@ -197,7 +184,6 @@ details.cm li input { flex: 1; min-width: 0; font-size: 13px; padding: 3px 6px; 
           <button class="btn danger" type="button" id="tm-del" data-i18n="templates.del">刪除</button>
           <span class="msg" id="tm-msg" aria-live="polite"></span>
         </div>
-        <input type="file" id="tm-gpx-file" accept=".gpx,.fit,application/gpx+xml" hidden>
       </div>
     </section>
   </div>
@@ -209,6 +195,7 @@ const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const PAPI = "/api/v1/overview/plan";
 const UAPI = PAPI + "/steps/templates/user";
+const ROUTES = PAPI + "/routes/page";
 const req = (m, u, b) => WorkoutEditor.request(m, u, b);
 const errText = (r) => { const d = r.body.detail || {}; return (d.errors || [typeof d === "string" ? d : (r.body.message || T("failed"))]).join("；"); };
 const KIND_OF = (cats) => cats.includes("quality") ? "quality" : cats.includes("test") ? "test" : cats.includes("trail") ? "hike" : "easy";
@@ -217,17 +204,19 @@ const KIND_OF = (cats) => cats.includes("quality") ? "quality" : cats.includes("
 const TT_KEY = "templates.target_type";
 const ttLoad = () => { try { return localStorage.getItem(TT_KEY) || "all"; } catch (e) { return "all"; } };
 const ttSave = (v) => { try { localStorage.setItem(TT_KEY, v); } catch (e) { /* not kept */ } };
-const S = { src: "all", cat: "all", sub: null, tt: ttLoad(), q: "", mine: [], lib: [], cats: [], tts: [], sel: null, form: null };
+const S = { moved: {}, src: "all", cat: "all", sub: null, tt: ttLoad(), q: "", mine: [], lib: [], cats: [], tts: [], sel: null, form: null };
 // the template being edited: {kind: "mine" | "lib" | "new", id?, key?, name, cats, basis, note, gpx}
-const WE = WorkoutEditor.mount($("tm-we"), { api: PAPI, saveTemplate: false, session: () => {
+const WE = WorkoutEditor.mount($("tm-we"), { api: PAPI, saveTemplate: false, routes: false, session: () => {
   const f = S.form || { cats: [] };
   return { kind: KIND_OF(f.cats || []), title: f.name || "", minutes: 0, target: "", detail: "",
     target_basis: f.basis && f.basis !== "auto" ? f.basis : undefined,
-    terrain: (f.cats || []).includes("trail") || f.gpx ? "trail" : undefined };
+    terrain: (f.cats || []).includes("trail") ? "trail" : undefined };
 } });
 
 async function load() {
-  const [u, b] = await Promise.all([req("GET", UAPI), req("GET", PAPI + "/steps/templates")]);
+  const [u, b, rl] = await Promise.all([req("GET", UAPI), req("GET", PAPI + "/steps/templates"), req("GET", PAPI + "/routes/library")]);
+  // a template's GPX moved to 課表 › 路線 (SP-640): template id → route id
+  S.moved = Object.fromEntries(((rl.ok && rl.body.routes) || []).filter((r) => r.from_tpl).map((r) => [r.from_tpl, r.id]));
   S.mine = u.ok ? u.body.templates : [];
   S.cats = u.ok ? u.body.cats : [];
   S.tts = (u.ok && u.body.target_types) || (b.ok && b.body.target_types) || [];
@@ -280,7 +269,7 @@ function renderList() {
     `${tag ? `<span class="tag${mineTag ? " mine" : ""}">${esc(tag)}</span>` : ""}<span class="src">${esc(src || "")}</span></button></li>`;
   let h = "";
   if (mine.length) h += `<li class="grp">${esc(T("group_mine"))}</li>` + mine.map((t) => li(`data-id="${t.id}"`, cur.kind === "mine" && cur.id === t.id, t.name,
-    t.gpx ? "▲ GPX" : T("tag_mine"), true, t.cats.map(catLabel).join("・"))).join("");
+    T("tag_mine"), true, t.cats.map(catLabel).join("・"))).join("");
   if (lib.length) h += `<li class="grp">${esc(T("group_lib"))}</li>` + lib.map((r) => li(`data-key="${esc(r.key)}"`, cur.kind === "lib" && cur.key === r.key, r.label,
     catLabel(r.cat) + (r.family && r.family.label ? "・" + r.family.label : ""), false, r.src)).join("");
   $("tm-items").innerHTML = h || `<li class="empty">${esc(S.src === "mine" && !S.mine.length ? T("none_mine") : T("none"))}</li>`;
@@ -315,58 +304,16 @@ function renderPick() {
   const f = S.form, ro = f.kind === "lib";
   $("tm-pick").innerHTML = S.cats.map((c) => `<label class="${ro ? "ro" : ""}"><input type="checkbox" value="${esc(c.id)}"${f.cats.includes(c.id) ? " checked" : ""}${ro ? " disabled" : ""}>${esc(c.label)}</label>`).join("");
 }
-// SP-639: the route's 坡段表 (GET …/gpx/segments). Every number comes from the server.
-const CRS = { tid: null, body: null, lv: "easy", seq: 0 };
-const pace = (s) => s ? `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}` : "–";
-const hms = (s) => { s = Math.round(s || 0); const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60;
-  return h ? `${h}:${String(m).padStart(2, "0")}:${String(x).padStart(2, "0")}` : `${m}:${String(x).padStart(2, "0")}`; };
-const pct = (g) => `${Math.round((g || 0) * 1000) / 10}%`;
-async function loadCourse() {
-  const f = S.form, box = $("tm-crs");
-  if (!f || f.kind !== "mine" || !f.gpx) { box.hidden = true; CRS.tid = null; CRS.body = null; return; }
-  const seq = ++CRS.seq;
-  const r = await req("GET", `${UAPI}/${f.id}/gpx/segments`);
-  if (seq !== CRS.seq || !S.form || S.form.id !== f.id) return;
-  if (!r.ok) { box.hidden = true; return; }
-  CRS.tid = f.id; CRS.body = r.body;
-  if (!(r.body.levels || []).some((l) => l.key === CRS.lv)) CRS.lv = "easy";
-  renderCourse();
-}
-function renderCourse() {
-  const b = CRS.body, box = $("tm-crs");
-  if (!b) { box.hidden = true; return; }
-  const lv = (b.levels || []).find((l) => l.key === CRS.lv) || (b.levels || [])[0] || {};
-  const e = (x) => (x.est || {})[lv.key] || {};
-  const w = (x) => { const v = e(x); return v.power ? `${v.power} W` : v.power_ref ? `<span class="ref">${v.power_ref} W ${esc(T("crs_ref"))}</span>` : "–"; };
-  const climbs = b.climbs || [], segs = b.segments || [];
-  const rule = b.rule || {};
-  box.hidden = false;
-  box.innerHTML = `<summary><b>${esc(T("crs_title"))}</b> <span class="meta">${esc(T("crs_sum", { n: segs.length, c: climbs.length }))}</span></summary>` +
-    `<div class="lv"><label>${esc(T("crs_level"))} <select id="tm-crs-lv">${(b.levels || []).map((l) => `<option value="${esc(l.key)}"${l.key === lv.key ? " selected" : ""}>${esc(l.label)}</option>`).join("")}</select></label>` +
-    `<span>${esc(T("crs_gap", { p: pace(lv.flat_pace_s_per_km) }))}${lv.power ? ` · ${esc(T("crs_power", { w: lv.power }))}` : ""}</span></div>` +
-    `<h4>${esc(T("crs_climbs"))}</h4>` + (climbs.length ? `<div class="tw"><table><thead><tr><th>#</th><th>km</th><th>${esc(T("crs_dist"))}</th><th>${esc(T("crs_gain"))}</th><th>${esc(T("crs_grade"))}</th><th>${esc(T("crs_pace"))}</th><th>${esc(T("crs_time"))}</th></tr></thead><tbody>` +
-      climbs.map((c) => `<tr class="climb"><td>⛰ ${c.no}</td><td>${(+c.start_km).toFixed(2)}–${(+c.end_km).toFixed(2)}</td><td>${Math.round(c.dist_m)} m</td><td>+${Math.round(c.gain_m)} m</td><td>${pct(c.grade)}</td>` +
-        `<td>${pace(e(c).pace_s_per_km)}/km</td><td>${hms(e(c).t_s)}</td></tr>`).join("") + `</tbody></table></div>`
-      : `<p class="meta">${esc(T("crs_no_climb"))}</p>`) +
-    `<h4>${esc(T("crs_segs"))}</h4><div class="tw"><table><thead><tr><th>#</th><th>km</th><th>${esc(T("crs_dist"))}</th><th>${esc(T("crs_updown"))}</th><th>${esc(T("crs_grade"))}</th><th>${esc(T("crs_kind"))}</th><th>${esc(T("crs_pace"))}</th><th>${esc(T("crs_time"))}</th><th>${esc(T("crs_w"))}</th></tr></thead><tbody>` +
-      segs.map((x) => `<tr><td>${x.i}${x.climb_no ? ` <span class="faint">⛰${x.climb_no}</span>` : ""}</td><td>${(+x.start_km).toFixed(2)}–${(+x.end_km).toFixed(2)}</td><td>${Math.round(x.dist_m)} m</td>` +
-        `<td>+${Math.round(x.gain_m)} / −${Math.round(x.loss_m)} m</td><td>${pct(x.grade)} <span class="faint">(${pct(x.max_grade)})</span></td><td class="k">${esc(x.kind_label || "")}</td>` +
-        `<td>${pace(e(x).pace_s_per_km)}/km</td><td>${hms(e(x).t_s)}</td><td>${w(x)}</td></tr>`).join("") + `</tbody></table></div>` +
-    `<p class="rule">${esc(T("crs_rule", { g: Math.round((rule.min_grade || 0) * 100), m: Math.round(rule.min_gain_m || 0), d: Math.round(rule.drop_m || 0), f: Math.round((rule.drop_frac || 0) * 100) }))}<br>${esc(b.note || "")}</p>`;
-}
-$("tm-crs").addEventListener("change", (e) => { if (e.target.id === "tm-crs-lv") { CRS.lv = e.target.value; renderCourse(); $("tm-crs").open = true; } });
+// SP-640: a template is a structure only; the route is picked when it is put on a day (課表 › 路線
+// keeps them). A template that had a GPX (SP-36): it was moved to the routes page — the box links it.
 function renderGpx() {
   const f = S.form, g = f.gpx, box = $("tm-gpx");
-  if (!f || f.kind !== "mine" || !g) { $("tm-crs").hidden = true; CRS.body = null; }
-  else if (CRS.tid !== f.id) { $("tm-crs").hidden = true; CRS.body = null; loadCourse(); }
   box.hidden = f.kind === "lib";
   if (f.kind === "lib") return;
-  if (f.kind === "new") { box.innerHTML = `<span class="meta">${esc(T("gpx_save_first"))}</span>`; return; }
-  box.innerHTML = `<b>${esc(T("gpx"))}</b>` + (g
-    ? `<span>${esc(g.filename || "")} · ${(+g.km || 0).toFixed(1)} km · +${Math.round(g.gain_m || 0)} m</span>` +
-      `<a class="btn" href="${UAPI}/${f.id}/gpx/file">${esc(T("gpx_download"))}</a><button class="btn" type="button" id="tm-gpx-up">${esc(T("gpx_replace"))}</button>` +
-      `<button class="btn danger" type="button" id="tm-gpx-del">${esc(T("gpx_remove"))}</button>`
-    : `<span class="meta">${esc(T("gpx_none"))}</span><button class="btn" type="button" id="tm-gpx-up">${esc(T("gpx_upload"))}</button>`);
+  const moved = g ? S.moved[f.id] : null;
+  box.innerHTML = `<span class="meta">${esc(T("route_note"))}</span>` +
+    (g ? `<span>${esc(T("route_moved", { name: g.filename || "" }))}</span>` : "") +
+    `<a class="btn" href="${ROUTES}${moved ? "#g" + moved : ""}">${esc(T(moved ? "route_open" : "route_page"))}</a>`;
 }
 async function select(sel) {
   S.sel = sel;
@@ -376,7 +323,7 @@ async function select(sel) {
     if (!t) return;
     S.form = { kind: "mine", id: t.id, name: t.name, cats: [...t.cats], basis: t.target_basis || "auto", note: t.note, gpx: t.gpx };
     renderForm(); renderList();
-    await WE.load({ items: t.steps.items, tpl: t.gpx ? t.id : undefined });
+    await WE.load({ items: t.steps.items });
     history.replaceState(null, "", "#" + t.id);
   } else if (sel.kind === "lib") {
     const r = S.lib.find((x) => x.key === sel.key);
@@ -436,7 +383,6 @@ $("tm-save").addEventListener("click", async () => {
     const r = f.kind === "new" ? await req("POST", UAPI, body) : await req("PATCH", `${UAPI}/${f.id}`, body);
     if (!r.ok) { setMsg(errText(r), "err"); return; }
     await load();
-    CRS.tid = null;                                   // the main intensity may have changed: the 坡段表 again
     await select({ kind: "mine", id: r.body.id });
     setMsg(T("saved", { name: r.body.name }), "ok");
   } finally { $("tm-save").disabled = false; }
@@ -459,35 +405,6 @@ $("tm-del").addEventListener("click", async () => {
   history.replaceState(null, "", location.pathname);
   await load();
 });
-$("tm-gpx").addEventListener("click", async (e) => {
-  if (e.target.closest("#tm-gpx-up")) { $("tm-gpx-file").click(); return; }
-  if (e.target.closest("#tm-gpx-del")) {
-    const r = await req("DELETE", `${UAPI}/${S.form.id}/gpx`);
-    if (!r.ok) { setMsg(errText(r), "err"); return; }
-    await afterGpx(r.body);
-  }
-});
-$("tm-gpx-file").addEventListener("change", async (e) => {
-  const file = e.target.files[0]; e.target.value = "";
-  if (!file || !S.form || S.form.kind !== "mine") return;
-  setMsg(T("gpx_uploading"));
-  const fd = new FormData(); fd.append("file", file);
-  const resp = await fetch(`${UAPI}/${S.form.id}/gpx`, { method: "POST", body: fd });
-  const body = await resp.json().catch(() => ({}));
-  if (!resp.ok) { setMsg(errText({ body }), "err"); return; }
-  await afterGpx(body);
-  setMsg(T("gpx_done"), "ok");
-});
-// a new / removed GPX: the template's row, and the chart's elevation (the structure's tpl)
-async function afterGpx(t) {
-  const i = S.mine.findIndex((x) => x.id === t.id);
-  if (i >= 0) S.mine[i] = { ...S.mine[i], gpx: t.gpx };
-  S.form.gpx = t.gpx;
-  CRS.tid = null;
-  renderGpx(); renderList();
-  if (WE.doc) { if (t.gpx) WE.doc.tpl = t.id; else delete WE.doc.tpl; WE.refreshSoon(); }
-  setMsg("");
-}
 // custom categories: add / rename / delete
 $("tm-cat-add").addEventListener("click", async () => {
   const v = $("tm-cat-new").value.trim(), m = $("tm-cm-msg");

@@ -50,5 +50,15 @@
   "ev.cairn_toast": "已從 Cairn 匯入（{days} 天）",
   "ev.cairn_use": "改用 Cairn",
   "ev.split_btn": "分日",
-  "ev.splits_saved": "分日已存：{days} 天"
+  "ev.splits_saved": "分日已存：{days} 天",
+  "ev.priority_help": "A = 主要目標（周期從它往回排）。B = 次要：有 A 賽時，賽前 5 天小減量、賽後依大小恢復，不改周期；沒有 A 賽時，賽前 4 週輕量準備＋1 週減量。C = 當訓練（取代一堂強度課或長跑），不改周期。",
+  "ev.priority_help_n": "A = 主要目標（周期從它往回排）。B = 次要：有 A 賽時，賽前 5 天小減量、賽後依大小恢復，不改周期；沒有 A 賽時，賽前 {w} 週輕量準備＋{d} 天減量（推估）。C = 當訓練（取代一堂強度課或長跑），不改周期。",
+  "now.dash_maintain": "（維持期沿用基礎期的圖）",
+  "now.dash_light": "（{label}沿用這張圖）",
+  "guide.maintain": "維持期",
+  "guide.maintain_ctl": "長期訓練負荷（Chronic load）持平，不再往上加",
+  "guide.maintain_vt2": "每週一堂高於 VT2 的課（5 區）",
+  "guide.maintain_easy": "輕鬆跑佔 ≥ 80%",
+  "guide.maintain_rest": "最多 6 週排一次恢復週",
+  "guide.now_as": "（現在：{label}）"
 }

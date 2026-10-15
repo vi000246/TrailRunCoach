@@ -98,6 +98,7 @@ h2 .di { font-size: 16px; color: var(--muted); }
 .kpi .v { font-size: 32px; font-weight: 700; letter-spacing: -.02em; line-height: 1.1; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .kpi .v small { font-size: 15px; font-weight: 600; color: var(--muted); letter-spacing: 0; margin-left: 2px; }
 .kpi .sub { font-size: 12px; color: var(--muted); display: flex; gap: 8px; align-items: center; justify-content: space-between; flex-wrap: wrap; min-width: 0; }
+.kpi .sub.why { display: block; margin-top: 4px; line-height: 1.4; }   /* SP-102: the 維持期's plain why */
 .kpi .sub > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .kpi svg.spark { width: 46%; max-width: 140px; height: 34px; flex: none; overflow: visible; }
 .kpi .ring { width: 46px; height: 46px; flex: none; }
@@ -465,7 +466,10 @@ function renderKpis() {
   out.push(`<div class="kpi"><div class="k">${I("flag")}${esc(t("overview.kpi.next_a"))}${q(ph ? [ph.text, ph.verdict, ph.why].filter(Boolean).join("\n") : "")}</div>
     ${g.next_a ? `<div class="row"><div class="v">${g.days_to_next_a}<small>${esc(t("overview.kpi.days", { n: g.days_to_next_a }))}</small></div></div>
       <div class="sub"><span>${esc(name || "")}</span>${STATUS.phase ? stw("info", STATUS.phase.label).replace(I("info"), I("flag")) : ""}</div>`
-      : `<div class="row"><div class="v">–</div></div><div class="sub"><a href="/api/v1/plan/page">${esc(t("overview.kpi.add_race"))}</a></div>`}</div>`);
+      : `<div class="row"><div class="v">–</div></div><div class="sub"><a href="/api/v1/plan/page">${esc(t("overview.kpi.add_race"))}</a>${
+        // SP-102: no A race — the 維持期 / a B race's light prep says so, with its plain why
+        STATUS.phase && (STATUS.phase.maintain || STATUS.phase.light) ? stw("info", STATUS.phase.label).replace(I("info"), I("flag")) : ""}</div>${
+        STATUS.phase && (STATUS.phase.maintain || STATUS.phase.light) && STATUS.phase.why ? `<div class="sub why">${esc(STATUS.phase.why)}</div>` : ""}`}</div>`);
   $("kpis").innerHTML = out.join("");
 }
 // one word for a KPI tile: the verdict before its first punctuation when short, else the level word
@@ -840,7 +844,7 @@ function watchTxt(c) {
 function verdictTxt(s) {
   const st = SessChip.status(s), cp = s.compliance || {}, vs = s.vs || {};
   if (st === "todo") return "";
-  const why = st === "off_plan" ? (vs.text || cp.off_text || "").replace(/^換了課：/, "") : st === "partial" && (cp.short || cp.soft) ? cp.label || "" : "";
+  const why = st === "off_plan" ? vs.off_why || cp.off_why || (vs.text || cp.off_text || "").replace(/^換了課：/, "") : st === "partial" && (cp.short || cp.soft) ? cp.label || "" : "";
   const pct = st === "done" || st === "partial" ? cp.pct : null;
   const head = SessChip.label(st, st === "partial" ? pct : null) + (st === "done" && pct != null ? ` ${pct}%` : "") + (why ? " · " + why : "");
   const nums = st === "missed" ? "" : [cp.tss_pct != null ? tO("week.load_pct", { pct: cp.tss_pct }) : "", cp.duration_pct != null ? tO("week.time_pct", { pct: cp.duration_pct }) : "",

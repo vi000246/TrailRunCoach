@@ -1,6 +1,7 @@
-"""SP-639 on the demo athlete: a template with the demo's 貓空 17K GPX — the step chart's 距離 | 時間
-switch, a hill repeat drawn up and back (the tooltip's climb and time), the 坡段表 under the GPX
-box, and no page-wide horizontal scroll on a phone.
+"""SP-639 on the demo athlete: a hill-repeat session on the demo's 貓空 17K GPX — the step chart's
+距離 | 時間 switch, a hill repeat drawn up and back (the tooltip's climb and time), the 坡段表, and
+no page-wide horizontal scroll on a phone. SP-640: the route is picked for the session (課表 ›
+路線), not kept on the template, so the chart is the 課表 editor's and the 坡段表 the routes page's.
 
 The numbers (Minetti, the repeat walk, the climb thresholds) are covered by
 backend/tests/test_user_templates_sp639.py.
@@ -19,8 +20,8 @@ from backend.tests.e2e import _server  # noqa: E402
 
 pytestmark = pytest.mark.e2e
 
-PAGE = _server.PAGES["templates"]
-UAPI = "/api/v1/overview/plan/steps/templates/user"
+PAGE = _server.PAGES["schedule"]
+PAPI = "/api/v1/overview/plan"
 GPX = (Path(__file__).resolve().parents[2] / "demo" / "data" / "maokong_17k.gpx").read_bytes()
 
 
@@ -28,26 +29,39 @@ def st(kind, sec, target=None, note=""):
     return {"kind": kind, "dur": {"type": "time", "value": sec}, "target": target or {"type": "none"}, "note": note}
 
 
-HILL = {"name": "SP-639 登山王", "cats": ["trail"], "target_basis": "hr", "steps": {"items": [
+HILL = {"items": [
     st("warm", 12 * 60, None, "暖身到坡底"),
     {"kind": "repeat", "times": 4, "last_rest": True, "items": [
         st("work", 7 * 60, {"type": "hr", "mode": "pct", "lo": 0.95, "hi": 1.02}, "上坡"),
         st("rest", 7 * 60, None, "走下來")]},
-    st("cool", 5 * 60, None, "收操")]}}
+    st("cool", 5 * 60, None, "收操")]}
 
 
-def _template(page) -> int:
-    r = page.request.post(UAPI, data=HILL)
+def _template(page) -> tuple[str, int]:
+    """(a hike session on the route, the route's id): the route uploaded on 課表 › 路線, put on the
+    structure (POST /steps/route: the climbs to the top), the session saved with it."""
+    r = page.request.post(f"{PAPI}/routes/library", multipart={"file": {"name": "maokong_17k.gpx",
+                                                                       "mimeType": "application/gpx+xml", "buffer": GPX}})
     assert r.ok, r.text()
-    tid = r.json()["id"]
-    r = page.request.post(f"{UAPI}/{tid}/gpx", multipart={"file": {"name": "maokong_17k.gpx",
-                                                                    "mimeType": "application/gpx+xml", "buffer": GPX}})
-    assert r.ok, r.text()
-    return tid
+    rid = r.json()["id"]
+    a = page.request.post(f"{PAPI}/steps/route", data={"kind": "hike", "steps": HILL, "route": {"src": "gpx", "id": rid}})
+    assert a.ok, a.text()
+    day = page.evaluate("() => new Date(Date.now() + 6 * 864e5).toISOString().slice(0, 10)")
+    s = page.request.post(f"{PAPI}/sessions", data={"day": day, "kind": "hike", "title": "SP-639 登山王", "minutes": 90,
+                                                    "steps": a.json()["steps"]})
+    assert s.ok, s.text()
+    return s.json()["uid"], rid
 
 
-def _open(page, tid):
-    page.goto(f"{PAGE}?t={tid}#{tid}")
+def _open(page, uid):
+    page.goto(PAGE)
+    # the session's week (a phone shows fewer days): S.anchor on its day, then wait for it
+    page.wait_for_function("() => typeof D !== 'undefined' && D && D.sessions", timeout=120_000)
+    day = page.evaluate("(u) => fetch('/api/v1/overview/plan/sessions').then((r) => r.json())"
+                        ".then((b) => b.sessions.find((s) => s.uid === u).day)", uid)
+    page.evaluate("([u, d]) => { if (!findS(u)) { S.anchor = d; S.sel = d; load(); } }", [uid, day])
+    page.wait_for_function("(u) => findS(u)", arg=uid, timeout=120_000)
+    page.evaluate("(u) => openDlg(findS(u))", uid)
     page.wait_for_selector("#we-svg rect.blk", state="attached", timeout=120_000)
     page.evaluate("document.getElementById('we-box').open = true")
 
@@ -55,8 +69,8 @@ def _open(page, tid):
 def test_axis_switch_tooltip_and_segment_table(app):
     page, _ = app
     page.goto(PAGE)
-    tid = _template(page)
-    _open(page, tid)
+    uid, rid = _template(page)
+    _open(page, uid)
     sw = page.locator("#we-legend [data-ax]")
     expect(sw).to_have_count(2)
     expect(page.locator('#we-legend [data-ax="dist"]')).to_have_attribute("aria-pressed", "true")
@@ -65,9 +79,7 @@ def test_axis_switch_tooltip_and_segment_table(app):
     expect(page.locator('#we-legend [data-ax="time"]')).to_have_attribute("aria-pressed", "true")
     expect(page.locator("#we-svg text", has_text="′").first).to_be_attached()
     # kept per viewer
-    page.reload()
-    page.wait_for_selector("#we-svg rect.blk", state="attached")
-    page.evaluate("document.getElementById('we-box').open = true")
+    _open(page, uid)
     expect(page.locator('#we-legend [data-ax="time"]')).to_have_attribute("aria-pressed", "true")
     page.click('#we-legend [data-ax="dist"]')
     # the 2nd climb's tooltip: climb, grade, time, route km
@@ -79,29 +91,25 @@ def test_axis_switch_tooltip_and_segment_table(app):
     expect(tip).to_contain_text("路線")
     # the drawn profile: one area per stretch on the route
     assert page.locator("#we-svg path[fill='var(--we-elev)']").count() >= 1
-    # the 坡段表
-    crs = page.locator("#tm-crs")
-    expect(crs).to_be_visible()
-    expect(crs.locator("summary")).to_contain_text("坡段表")
-    page.evaluate("document.getElementById('tm-crs').open = true")
+    # the 坡段表: on the routes page (SP-640)
+    page.goto(f"{_server.PAGES['routelib']}#g{rid}")
+    crs = page.locator("#rl-det .crs")
+    expect(crs).to_be_visible(timeout=60_000)
     assert crs.locator("tr.climb").count() >= 1 and crs.locator("tbody tr").count() > 10
-    page.select_option("#tm-crs-lv", "main")
-    expect(crs.locator("#tm-crs-lv")).to_have_value("main")
 
 
 def test_phone_tap_and_no_page_scroll(app, e2e_browser, e2e_server):
     page, _ = app
     page.goto(PAGE)
-    tid = _template(page)
+    uid, _rid = _template(page)
     ctx = e2e_browser.new_context(base_url=e2e_server.url, viewport={"width": 390, "height": 844}, has_touch=True,
                                   is_mobile=True, locale="zh-TW", timezone_id="Asia/Taipei")
     try:
         m = ctx.new_page()
-        _open(m, tid)
+        _open(m, uid)
         m.locator("#we-svg rect.blk").nth(1).tap()
         expect(m.locator("#we-tip")).to_be_visible()
         expect(m.locator("#we-tip")).to_contain_text("爬升")
-        m.evaluate("document.getElementById('tm-crs').open = true")
         assert m.evaluate("document.documentElement.scrollWidth") <= 390
     finally:
         ctx.close()

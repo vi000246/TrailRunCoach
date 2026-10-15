@@ -71,7 +71,8 @@ h2 .meta { font-weight: 400; }
 .modesw .mcard[aria-current="page"] svg, .modesw .mcard[aria-current="page"] small { color: #fff; }
 .modesw .mcard[aria-current="page"] small { opacity: .85; }
 .modesw .mcard:focus-visible { outline: 2px solid var(--mc); outline-offset: 2px; }
-@media (max-width: 620px) { .modesw .mcard small { display: none; } .modesw .mcard { padding: 6px 12px 6px 9px; } }
+@media (max-width: 620px) { .modesw .mcard small { display: none; } .modesw .mcard { padding: 6px 10px 6px 8px; gap: 6px; } .modesw .mcard svg { width: 18px; height: 18px; } }
+.modesw { flex-wrap: wrap; max-width: 100%; }
 /* the plan's phases in the period filter: a colour dot per phase kind */
 #phases[hidden] { display: none; }
 #phases { flex-wrap: wrap; max-width: 100%; row-gap: 4px; }
@@ -248,6 +249,9 @@ details.coach[open] > summary { margin-bottom: 12px; }
     <a class="mcard" href="/api/v1/overview/plan/templates/page">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
       <span><b data-i18n="compliance.tabs.templates">範本</b><small data-i18n="compliance.tabs.templates_sub">自己的課表範本</small></span></a>
+    <a class="mcard" href="/api/v1/overview/plan/routes/page">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 19 5.5-9 4 6 3-4.5L21 19z"/><circle cx="17" cy="6" r="2"/></svg>
+      <span><b data-i18n="compliance.tabs.routes">路線</b><small data-i18n="compliance.tabs.routes_sub">GPX 與我的路段</small></span></a>
   </nav>
 
   <section id="now-card" aria-labelledby="now-h">

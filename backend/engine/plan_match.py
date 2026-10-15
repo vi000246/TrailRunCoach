@@ -27,7 +27,10 @@ Matching, one activity <-> one session:
   3. same day, any other endurance activity (planned a run, rode a bike): still
      linked, shown as 類型不符.
   An activity the user unlinked (`unlinked`) is never auto-matched again; the
-  user can link it by hand (plan_store.link).
+  user can link it by hand (plan_store.link). Nor is the session they unlinked it from
+  (its uid in `unlinked` too, SP-647): passes 1–3 skip it — its day may be the one pass 2
+  moved it to, where another run of that day would take it at once — it still becomes
+  missed, and a manual link frees it.
 
 Planned vs actual intensity is graded, not pass / fail (SP-216: a session run
 at 99 % of its intensity was 「沒照課表」). dose() = the run's quality work over
@@ -50,14 +53,14 @@ import datetime as dt
 from typing import Optional
 
 from backend.engine import compliance as C
-from backend.i18n import _
+from backend.i18n import N_, _
 
 ENDURANCE = {"road", "trail", "hike", "bike"}
 NEVER = ("heat_passive", "notice")          # a bath / sauna / the 課表待確認 reminder: the user ticks it
 HARD = ("quality", "test")
 HARD_MIN_S = 600                            # overview.HARD_SESSION_S: ≥ 10 min at/above threshold
 EASY_KINDS = ("easy", "long", "hike")
-MATCH_LABEL = {"manual": "手動配對", "day": "同一天", "plan": "同一週（課表自動對到）"}
+MATCH_LABEL = {"manual": N_("手動配對"), "day": N_("同一天"), "plan": N_("同一週（課表自動對到）")}   # msgids: _() when shown
 # intensity bands (SP-216): TrainingPeaks' compliance colours (green 80–120 %, yellow 50–79 % /
 # 121–150 %; competitor-charts.md §1.2), here on the quality dose — 推估 for intensity
 INTENSITY_DONE = 0.80            # planned hard: ≥ 80 % of the dose it needs = done
@@ -99,6 +102,17 @@ def hard_need(s: dict) -> float:
         return HARD_MIN_S
 
 
+def threshold_rule(s: dict) -> bool:
+    """A planned hard session judged only by the generator's own done rule (seconds at ≥ 95 % CP ÷
+    hard_need), not the classifier's Zone 3 / Zone 5 bars: the recovery week's fartlek (4×1′ at 98–101 %
+    CP, Palladino Zone 3B) is neither, so the classifier reads it an easy run (SP-647)."""
+    try:
+        from backend.engine import quality_gate as QG
+        return QG.is_recovery_fartlek(s.get("title"), s.get("variant_key"))
+    except Exception:                       # noqa: BLE001 — a bad title never breaks matching
+        return False
+
+
 def is_aet(s: dict) -> bool:
     from backend.engine.aet_test import is_aet_session
     return is_aet_session(s)
@@ -118,15 +132,19 @@ def actual_intensity(a: dict, need: float = HARD_MIN_S) -> Optional[str]:
     return "hard" if h >= need else "easy"
 
 
-def dose(a: dict, need: float = HARD_MIN_S) -> Optional[dict]:
+def dose(a: dict, need: float = HARD_MIN_S, by_threshold: bool = False) -> Optional[dict]:
     """How much quality work the run holds against what a quality session needs:
     {ratio, by, done_s, need_s}. With the session classifier's row (as actual_intensity:
     it decides first) the better of Zone 3 time ÷ 10 min and equivalent T@VO2max ÷ 4 min —
     its own bars (session_stimulus.Z3_NEED_S / Z5_MIN_S, vo2max-session-detection.md §3.5) —
     and at least 1 when it classed the run hard; without one (or without its numbers) the
-    seconds at threshold ÷ `need` (the generator's done rule). None: nothing measured."""
+    seconds at threshold ÷ `need` (the generator's done rule). `by_threshold` (a session the
+    classifier has no bar for: the recovery fartlek, SP-647): the generator's rule whenever the
+    run has its seconds at threshold. None: nothing measured."""
     ses = a.get("session") or {}
     t = ses.get("type")
+    if by_threshold and _f(a.get("hard_s")) is not None:
+        t = None
     if t:
         from backend.engine import session_stimulus as SS
         cands = [(v / q, by, v, q) for by, v, q in (("z3", _f(ses.get("z3_s")), SS.Z3_NEED_S),
@@ -149,7 +167,7 @@ def graded(s: dict, a: dict) -> tuple[Optional[str], Optional[str], Optional[dic
     if p is None:
         return None, None, None
     if p == "hard":
-        d = dose(a, hard_need(s))
+        d = dose(a, hard_need(s), by_threshold=threshold_rule(s))
         if d is None:
             return p, None, None
         r = d["ratio"]
@@ -275,6 +293,7 @@ def assign(out: list[dict], activities: list[dict], today: str, gen_done: dict,
     dedupe(out, by_index, today, covered, changes)
     used = {i for i in (_done_index(s) for s in out) if i is not None}
     free = lambda a: a.get("index") not in used and a.get("index") not in unlinked   # noqa: E731
+    auto = lambda s: s.get("uid") not in unlinked     # noqa: E731  SP-647: an unlinked session is linked by hand
     open_ = [s for s in out if s["state"] in ("active", "missed") and s.get("kind") not in NEVER
              and s.get("day") and s["day"] <= today]
     open_ += [s for s in out if s["state"] == "active" and s.get("kind") not in NEVER
@@ -299,7 +318,7 @@ def assign(out: list[dict], activities: list[dict], today: str, gen_done: dict,
     def same_day(strict: bool):
         pairs = []
         for s in open_:
-            if s["state"] == "done" or s["day"] > today:
+            if s["state"] == "done" or s["day"] > today or not auto(s):
                 continue
             for a in activities:
                 if a.get("date") != s["day"] or not free(a):
@@ -315,7 +334,7 @@ def assign(out: list[dict], activities: list[dict], today: str, gen_done: dict,
     same_day(True)
     for s in sorted(open_, key=lambda s: s.get("day") or ""):
         h = hint.get(s["uid"])
-        if s["state"] == "done" or h is None or not key_session(s):
+        if s["state"] == "done" or h is None or not key_session(s) or not auto(s):
             continue
         a = by_index.get(h.get("index")) or h
         if free(a) and can_match(s, a):
@@ -334,7 +353,7 @@ def assign(out: list[dict], activities: list[dict], today: str, gen_done: dict,
 # planned vs actual (the 課表 page)
 # ---------------------------------------------------------------------------
 
-INTENSITY_LABEL = {"hard": "強度", "easy": "輕鬆"}
+INTENSITY_LABEL = {"hard": N_("強度"), "easy": N_("輕鬆")}
 
 
 def compare(s: dict, planned_tss: Optional[float] = None) -> Optional[dict]:
@@ -363,12 +382,13 @@ def compare(s: dict, planned_tss: Optional[float] = None) -> Optional[dict]:
         if on_plan and C.foot_swap(s, a.get("category")):
             soft = "sport"
         else:
-            why.append(f"排{_kind_label(s)}，實際{a.get('category_label') or a.get('category')}")
+            why.append(_("排{kind}，實際{act}", kind=_kind_label(s), act=a.get("category_label") or a.get("category")))
     elif reversed_:
         if on_plan:
             soft = "intensity"
         else:
-            why.append(f"排{_kind_label(s)}，實際跑{'強度' if grade == 'hard' else '輕鬆'}")
+            why.append(_("排{kind}，實際跑強度", kind=_kind_label(s)) if grade == "hard"
+                       else _("排{kind}，實際跑輕鬆", kind=_kind_label(s)))
     short = not why and (soft is not None or grade == "short")
     pct = None if d is None or p != "hard" else round(min(d["ratio"], 9.99) * 100)
     what = _dose_text(d)
@@ -386,16 +406,21 @@ def compare(s: dict, planned_tss: Optional[float] = None) -> Optional[dict]:
     hs = _f(a.get("hard_s"))
     return {"off_plan": bool(why), "short": short, "soft": soft, "planned": p, "actual": got, "grade": grade,
             "intensity_pct": pct, "wrong_sport": wrong_sport,
-            "terrain_off": terrain_off, "text": "換了課：" + why[0] if why else "",
+            "terrain_off": terrain_off, "text": _("換了課：{why}", why=why[0]) if why else "",
+            "off_why": why[0] if why else "",       # the reason alone (the pages that show 換了課 beside it)
             "short_text": short_text,
             "hard_min": None if hs is None else round(hs / 60.0, 1),
             "need_min": round(hard_need(s) / 60.0, 1) if p == "hard" else None,
-            "match": a.get("match") or "day", "match_label": MATCH_LABEL.get(a.get("match") or "day", "")}
+            "match": a.get("match") or "day", "match_label": _match_label(a.get("match") or "day")}
+
+
+def _match_label(m: str) -> str:
+    return _(MATCH_LABEL[m]) if m in MATCH_LABEL else ""
 
 
 def _kind_label(s: dict) -> str:
-    from backend.engine.plan_store import KINDS
-    return KINDS.get(s.get("kind"), s.get("kind") or "")
+    from backend.engine.plan_store import kind_label
+    return kind_label(s.get("kind"))
 
 
 def candidates(s: dict, activities: list[dict], used: set, days: int = 1) -> list[dict]:

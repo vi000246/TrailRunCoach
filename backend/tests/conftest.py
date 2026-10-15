@@ -128,6 +128,9 @@ def _no_real_event_gpx(monkeypatch, tmp_path_factory):
     # nor a user template's route GPX files (engine/user_templates.py)
     from backend.engine import user_templates
     monkeypatch.setattr(user_templates, "ROOT", tmp_path_factory.mktemp("template_gpx"))
+    # nor the training routes' files (engine/route_library.py, SP-640)
+    from backend.engine import route_library
+    monkeypatch.setattr(route_library, "ROOT", tmp_path_factory.mktemp("route_gpx"))
     # nor the race calculator's saved inputs (engine/race_calc_store.py)
     from backend.engine import race_calc_store
     monkeypatch.setattr(race_calc_store, "_default_db", lambda: None)

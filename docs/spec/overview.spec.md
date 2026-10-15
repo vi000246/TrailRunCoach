@@ -2145,6 +2145,39 @@ which one. The response keeps the `coros` field names.
   `backend/static/workout_editor.js:604`) places the bars by `x` with km ticks and the step's km
   range in the tooltip, the elevation behind them as a light area + thin line with its own m scale
   (`elev`, `backend/static/workout_editor.js:659`), in the chart viewer's neutral elevation colour.
+  **SP-640 — routes apart from templates (課表 › 路線)**: a template is a structure only; the route
+  is picked when the structure is put on a day. The routes page (`backend/static/routelib.html`,
+  GET /routes/page, the fourth 課表 tab) lists the uploaded GPX routes (`training_routes`,
+  `backend/engine/route_library.py`: upload / rename / delete / download, `<HOME>/route_gpx/<id>.gz`
+  per tenant, the profile and SP-639 坡段表 cached) and 「我的路段」 (`engine/routes.py`'s segments
+  and routes done ≥ 2 times, climbs first; their profile from the reference effort's compact track),
+  each with its elevation profile (climbs marked) and 坡段表 at the easy run. A template's GPX
+  (SP-36) moves to the library once, on the first read of the list (`_move_templates`; the
+  template's own row and file are kept, `training_routes_moved` stops a deleted one coming back);
+  the 範本 page's GPX box links to it. The editor's **▲ 路線** (`routeMenu` / `pickRoute`,
+  `backend/static/workout_editor.js`) posts POST /steps/route (`backend/api/route_library.py`):
+  the steps come back with the route's profile copy (`route` + `src` {kind gpx | seg, id}, the
+  climb, `rep_km`) and, with a hill repeat (a work leg that ends with the lap button or lasts ≥ 90 s),
+  each rep's climb ends with the lap button at the top (its estimated time kept as `est`), named
+  「爬 120 m · 約 6′」 (the climb's gain; the time at the step's intensity by Minetti, 推估); the
+  biggest climb unless another is picked, 0 = none. `route_elevation` starts the first repeat at
+  `rep_km` (the climb's foot). Pushing sends the steps and their names only — no route
+  (COROS / Garmin step names: the note, ≤ `MAX_NOTE` 60; neither provider's own limit is enforced).
+  **SP-641 — a session from a whole route**: the routes page's 「從這條路線產生課」 (an uploaded GPX or
+  a 「我的路段」) picks a day and shows the steps POST /steps/from-route makes
+  (`backend/api/route_library.py`, `backend/engine/route_session.py`; nothing saved), then opens the
+  課表 page's new-session dialog with them (`schedule/page?day=&route=gpx:<id> | seg:<id>`,
+  `openRoute`; `WorkoutEditor.setDoc`): 越野跑, the route's km and climb, the time from the steps.
+  Saved with 儲存 it is a session of the user's own (origin custom, reconcile rules 3–4: kept; an
+  automatic session that day moves to a free day). Legs: each climb of SP-639's rule one step;
+  between climbs descents (≤ −3 %) and flat / rolling stretches; a leg < 200 m goes into the
+  neighbour with the nearer net grade; ≤ `watch_export.LAP_MAX` 25 steps (shortest neighbours first,
+  two climbs last). Targets at the easy run by the ground with the most time in the leg (SP-632):
+  runnable (−3 … +15 %, `watch_export.ep_ok`) power in the easy band (`power_zone_plan.easy_band`;
+  no CP: HR ≤ the easy cap) with `ep` = GAP ± 3 % (COROS Effort Pace); steep HR ≤ the easy cap
+  (no HR: RPE 3–4 with the climb); descents none (kind other, 「控制、安全」). Every step 「直到按下計圈」
+  with `est` walked on the session's route copy at the chart's speed (so each bar sits on its
+  stretch), named 「爬 120 m · 約 6′」 / 「下坡 … m」 / 「平路／起伏 … km」. The watch gets steps and targets only.
   **我的範本 in 推薦** (2026-10-04 follow-up, the user's decision): GET /steps/templates/recs
   (`backend/api/plan_sessions.py:1700`) ranks the user's templates with the built-ins by the same
   `_score` rules (family, Zone 5, phase, the ladder rung's 同一類 bonus, time, terrain, type); the
@@ -2823,3 +2856,5 @@ Open tickets that touch this module. Not implemented unless the line says otherw
 | 2026-10-14 | feature | SP-527 | Coach consensus (owner 2026-10-14, SP-518 A / C): the weekly-hours cap's +0.5 h floor at most +20 % — `volume_cap(ref) = max(1.10 × ref, min(ref + 0.5, 1.20 × ref))` (no reference volume: 0.5 h, as before), in week_plan, the cold-start ramp (資料等級 1) and projection.week_hours; under 2.5 h a week the old floor went past +20 % and the next week `load_guard.STEP_BLOCK` blocked the intervals (2 h → 2.4 h, was 2.5 h; ≥ 2.5 h unchanged); the cap lines say 「至少 +0.5 h、最多 +20%」 (zh-TW, en). `b2b.POST_EASY_DAYS` 4 → 3 (Gaudette 48–72 h, Johnston 3–4: median 3; the 48-h hard-day gap still holds). `backend/tests/test_volume_cap_b2b_sp527.py`; expectations changed in test_load_guard, test_b2b. |
 | 2026-10-14 | bugfix | SP-569 | 熱適應 automatic only (user 2026-10-14: nothing to tick or keep up by hand): no 熱適應課 / hot bath / sauna in `week_plan` or `project_weeks` (`engine/heat_plan.py` removed; `hot_race` moved to `heat_data`), no 熱適應 preferences (`plan.prefs.heat*` gone; an old page's `heat` / `heat_method` are ignored by `plan_prefs.from_body`, `RETIRED`), stored heat rows replanned by reconcile's rules (auto unedited → plain / removed; edited, custom, done kept). `i_heat` keeps the hot-race flag with a race-day action. Tests: `backend/tests/test_heat_auto_sp569.py`, `test_heat_events.py` |
 | 2026-10-14 | bugfix | SP-569 ②–⑤ | 設定 › 心率 ? says the max-HR order the code uses (yours → watch → 365-day runs → age formula); the settings' 資料同步 rows and source boxes, the 課表 toolbar (push ▾, ⋯, status line) and the replan preview read the catalog (English: "Sync now", "Tue 10/27" — `wdl()` = the short weekday, was 「週」 + the narrow letter, 「週T」); the push ▾ items carry `data-range` (they had `data-scope`, which shell.js locked as plan scopes: disabled for everyone since SP-330); a free user's locked TrainingPeaks login says it is the site's own (`scope.site_only`), 「訂閱後可用」 only for `membership.upgrade_scopes`. Tests: `backend/tests/test_sp569_texts.py` |
+| 2026-10-15 | feature | SP-640 | 課表 › 路線: uploaded GPX routes and 「我的路段」 on their own page (profile, 坡段表, upload / rename / delete), apart from the templates; a template's GPX moved there once; the route picked per session in the editor (POST /steps/route): each hill repeat's climb to the top with the lap button, named 「爬 … m · 約 …′」, the repeats drawn from the climb's foot; the watch gets steps only; per-tenant table and folder; zh-TW + en |
+| 2026-10-15 | feature | SP-641 | 課表 › 路線 「從這條路線產生課」: one step per climb (SP-639's rule), legs < 200 m into the nearer-grade neighbour, ≤ 25 steps, each to the lap button named 「爬 … m · 約 …′」; targets by SP-632 (runnable power + Effort Pace, steep HR / RPE, descents none); opens the 課表 editor on the chosen day, saved as the user's own session; the watch gets steps only; zh-TW + en |

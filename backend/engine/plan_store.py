@@ -19,14 +19,25 @@ from backend.engine import reconcile as R
 from backend.engine.localtime import local_iso
 from backend.i18n import N_, _
 
-KINDS = {"easy": "輕鬆跑", "long": "LSD", "quality": "強度課", "test": "測試",
-         "hike": "越野跑", "strength": "肌力", "heat_passive": "被動熱適應",
+# the schedule's type words (msgids: shown through kind_label / kind_labels, SP-648)
+KINDS = {"easy": N_("輕鬆跑"), "long": N_("LSD"), "quality": N_("強度課"), "test": N_("測試"),
+         "hike": N_("越野跑"), "strength": N_("肌力"), "heat_passive": N_("被動熱適應"),
          # 課表待確認 (engine/plan_auto.py): a reminder pushed to the watch, not a
          # training session — never done / missed, no TSS, no compliance
-         "notice": "課表待確認",
+         "notice": N_("課表待確認"),
          # 比賽: the 賽事計算機's export (ext_key racecalc:<event id>, upsert_external) — never added
          # by hand; the generator's own race-day row (gen_key race, minutes 0) only before SP-504
-         "race": "比賽"}
+         "race": N_("比賽")}
+
+
+def kind_label(kind: Optional[str]) -> str:
+    """A session kind's type word in the request's language (an unknown kind: itself)."""
+    return _(KINDS[kind]) if kind in KINDS else (kind or "")
+
+
+def kind_labels() -> dict:
+    """{kind: type word} in the request's language — the `kinds` of the 課表 API responses."""
+    return {k: _(v) for k, v in KINDS.items()}
 NOT_LOAD = ("notice",)
 EDITABLE = ("day", "kind", "title", "minutes", "target", "detail", "terrain", "distance_km", "climb_m",
             "target_basis", "steps", "family")
@@ -823,16 +834,43 @@ UNLINKED_KEY = "plan.match.unlinked"
 
 
 def unlinked_indexes(entries: list, activities: list[dict]) -> set:
-    """The stored unlinks ([{start, index}]) as current activity indexes (by start,
+    """The stored unlinks ([{start, index, uid}]) as current activity indexes (by start,
     so a late-synced older activity that shifts the indexes keeps them right; the
-    nearest start within ±3 min, so the same run from another source matches too)."""
+    nearest start within ±3 min, so the same run from another source matches too),
+    plus the uids (str) of the sessions they were unlinked from (plan_match.assign: a
+    session the user unlinked is linked by hand only, SP-647)."""
     from backend.engine import activity_key as AK
     idx = AK.StartIndex((a.get("start"), a.get("index")) for a in activities if a.get("start"))
-    out = set()
+    out: set = set()
     for e in entries or []:
         i = idx.find(e.get("start"))
         if i is not None:
             out.add(i)
+        if e.get("uid"):
+            out.add(str(e["uid"]))
+    return out
+
+
+def unlink_entries(entries: list, activity: dict, uid: Optional[str]) -> list:
+    """`entries` after unlinking session `uid` from `activity` (an activity_row): one entry per activity
+    start, the newest 200 (SP-647: with the session's uid)."""
+    ents = [e for e in entries or [] if e.get("start") != activity["start"]]
+    e = {"start": activity["start"], "index": activity.get("index")}
+    if uid:
+        e["uid"] = uid
+    return (ents + [e])[-200:]
+
+
+def link_entries(entries: list, activity: dict, uid: Optional[str]) -> list:
+    """`entries` after the user linked session `uid` to `activity` by hand: that activity is no longer
+    unlinked, and the session is free to be matched again (its uid dropped from the other entries)."""
+    out = []
+    for e in entries or []:
+        if e.get("start") == activity.get("start"):
+            continue
+        if uid and e.get("uid") == uid:
+            e = {k: v for k, v in e.items() if k != "uid"}
+        out.append(e)
     return out
 
 
@@ -1084,6 +1122,22 @@ def done_plan(db_path=None) -> dict:
     return out
 
 
+_MP_CACHE: dict = {}
+
+
+def done_mp_long(db_path=None) -> dict:
+    """SP-646: {activity index: row} of the done long runs with a marathon-pace segment (its title's
+    「馬拉松配速 N 分」 or a stored structure's MP steps, workout_steps.mp_seconds) — kept apart from
+    done_plan, whose rows quality_gate reads as planned interval sessions."""
+    from backend.engine import workout_steps as WS
+    out: dict = {}
+    for r in _plan_rows(db_path, ("long",), _MP_CACHE):
+        d = r.get("done_by")
+        if r.get("state") == "done" and isinstance(d, dict) and d.get("index") is not None and WS.mp_seconds(r):
+            out[d["index"]] = r
+    return out
+
+
 _INUSE_CACHE: dict = {}
 
 
@@ -1162,13 +1216,13 @@ def session_tag(s: dict) -> dict:
     """The small 課表類型 tag of a session for an activity list: {kind, label, icon}
     (label = the schedule's type word; icon = a dashicons.js name, as on 總覽)."""
     k, t = s.get("kind") or "", s.get("title") or ""
-    label, icon = KINDS.get(k, k), {"easy": "easy", "long": "long", "test": "test", "hike": "hike",
+    label, icon = kind_label(k), {"easy": "easy", "long": "long", "test": "test", "hike": "hike",
                                      "strength": "strength", "heat_passive": "heat"}.get(k, "easy")
     if k == "quality":
         z5 = str(s.get("rung_key") or "").lower().startswith("z5") or any(x in t for x in ("VO2max", "5 區", "Z5"))
         icon = "z5" if z5 else "z3"
     elif t.startswith("陡坡健走"):          # engine/steep_hill.py (kind easy)
-        label, icon = "陡坡健走", "climb"
+        label, icon = _("陡坡健走"), "climb"
     return {"kind": k, "label": label, "icon": icon}
 
 

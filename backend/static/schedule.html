@@ -183,7 +183,8 @@ dialog.sd .tp-t input { margin-top: 3px; flex: none; width: auto; }
 .modesw .mcard[aria-current="page"] svg, .modesw .mcard[aria-current="page"] small { color: #fff; }
 .modesw .mcard[aria-current="page"] small { opacity: .85; }
 .modesw .mcard:focus-visible { outline: 2px solid var(--mc); outline-offset: 2px; }
-@media (max-width: 620px) { .modesw .mcard small { display: none; } .modesw .mcard { padding: 6px 12px 6px 9px; } }
+@media (max-width: 620px) { .modesw .mcard small { display: none; } .modesw .mcard { padding: 6px 10px 6px 8px; gap: 6px; } .modesw .mcard svg { width: 18px; height: 18px; } }
+.modesw { flex-wrap: wrap; max-width: 100%; }
 .chg .dec { display: inline-flex; flex-wrap: wrap; gap: 2px 10px; margin-left: 4px; }
 .chg .dec label { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; color: var(--text); }
 .chg .dec input { width: auto; margin: 0; }
@@ -601,6 +602,9 @@ dialog.sd input.anchor { border-color: var(--accent); box-shadow: inset 0 0 0 1p
     <a class="mcard" href="/api/v1/overview/plan/templates/page">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
       <span><b data-i18n="schedule.tabs.templates">範本</b><small data-i18n="schedule.tabs.templates_sub">自己的課表範本</small></span></a>
+    <a class="mcard" href="/api/v1/overview/plan/routes/page">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 19 5.5-9 4 6 3-4.5L21 19z"/><circle cx="17" cy="6" r="2"/></svg>
+      <span><b data-i18n="schedule.tabs.routes">路線</b><small data-i18n="schedule.tabs.routes_sub">GPX 與我的路段</small></span></a>
   </nav>
   <div class="bar calnav">
     <h1 id="cal-label">課表</h1>
@@ -1187,7 +1191,7 @@ const WATCH_ON_CARD = ["outdated", "failed"];
 // time / TSS are off (the pie's fill says how much)
 function cardWhy(s) {
   const st = SessChip.status(s), cp = s.compliance || {}, vs = s.vs || {};
-  if (st === "off_plan") return (vs.text || cp.off_text || "").replace(/^換了課：/, "");
+  if (st === "off_plan") return vs.off_why || cp.off_why || (vs.text || cp.off_text || "").replace(/^換了課：/, "");
   if (st === "partial" && (cp.short || cp.soft)) return cp.label || "";
   return "";
 }
@@ -2305,7 +2309,7 @@ function vsHtml(s) {
     (nums ? `<div class="vs-nums">${esc(nums)}</div>` : "") +
     (SessChip.hrNote(cp) ? `<div class="vs-nums">${esc(SessChip.hrNote(cp))}</div>` : "") +
     `<dl class="vs"><dt>計畫</dt><dd>${esc(plan)}</dd><dt>實際</dt><dd class="${vs.off_plan ? "off" : ""}">${esc(real)}</dd>` +
-    (vs.off_plan ? `<dt></dt><dd class="off">${esc(vs.text.replace(/^換了課：/, ""))}</dd>` : "") +
+    (vs.off_plan ? `<dt></dt><dd class="off">${esc(vs.off_why || vs.text.replace(/^換了課：/, ""))}</dd>` : "") +
     (vs.short ? `<dt></dt><dd class="part">${esc(vs.short_text)}</dd>` : "") +
     (hard ? `<dt></dt><dd class="meta">${esc(hard)}</dd>` : "") + `</dl>` +
     `<div class="vs-act">${a.index != null ? `<a class="btn" href="${esc(VIEWER(a))}">📈 開啟活動</a>` : ""}` +
@@ -3720,7 +3724,43 @@ loadPrimary();
   // 「安排課表」 from the 3 區／5 區 flow (SP-39): ?add=<template / variant key>[&proto=] or
   // ?test=aet|cp&proto=<protocol> opens the new-session dialog with that session preselected
   else if (D && (qp.get("add") || qp.get("test"))) openPreset(qp.get("add"), qp.get("test"), qp.get("proto"), q);
+  // 「從這條路線產生課」 from the 路線 page (SP-641): ?route=gpx:<id> | seg:<id>&day=
+  else if (D && qp.get("route")) openRoute(qp.get("route"), q);
 })();
+// SP-641: the new-session dialog (越野跑) with the session the server makes from the whole route — one step per
+// climb, each ending with the lap button (POST /steps/from-route, engine/route_session.py). Nothing is stored
+// until 儲存: it is then a session of your own (自訂) beside what is scheduled that day.
+async function openRoute(spec, day) {
+  const i = String(spec).indexOf(":"), src = String(spec).slice(0, i), id = String(spec).slice(i + 1);
+  const d = day && /^\d{4}-\d\d-\d\d$/.test(day) && day >= D.today ? day : D.today;
+  S.sel = d; render();
+  openDlg(null, d);
+  dlg.preset = true;                     // the route's session, not the day's suggestion
+  const r = setKind("hike");
+  if (r) r.dispatchEvent(new Event("change", { bubbles: true }));
+  const sub = $("sd-sub").textContent;
+  $("sd-sub").textContent = sub + " · " + tt("route.loading");
+  let b;
+  try {
+    b = await sj("POST", `${PAPI}/steps/from-route`, { ...weSession(), kind: "hike", terrain: "trail", route: { src, id } });
+  } catch (e) { $("sd-sub").textContent = sub; $("sd-err").textContent = tt("route.failed", { msg: e.message }); return; }
+  if (!$("sd").open) return;
+  F.title.value = b.title; dlg.titleTouched = true;
+  if (eqOn()) {
+    EQS.needFill = false;
+    $("eq-free").checked = true;         // the route gives km and climb, the structure the time: nothing re-derived
+    if (b.km > 0) EQS.d = b.gain_m / b.km;
+    eqSet({ km: b.km, gain: b.gain_m, d: EQS.d });
+    eqRender();
+  }
+  await WE.setDoc(b.steps);
+  $("sd-sub").textContent = sub + " · " + tt("route.sub", { name: b.name, n: (b.legs || []).length });
+  const el = $("sd-sug");
+  el.classList.remove("warn");
+  el.textContent = tt("route.hint") + " " + (b.notes || []).join(" ");
+  el.hidden = false;
+  F.day.focus();
+}
 async function openPreset(add, test, proto, day) {
   const d = day && /^\d{4}-\d\d-\d\d$/.test(day) && day >= D.today ? day : D.today;
   const pickKind = (k, fam) => {

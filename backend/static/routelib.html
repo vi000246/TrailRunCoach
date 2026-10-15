@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title data-i18n="routelib.page_title">路線</title>
+<style>
+/* 路線 (SP-640; engine/route_library.py, api/route_library.py): the fourth tab of 課表. The training
+   routes, apart from the templates (a template is a structure only; the route is picked in the
+   課表 editor when the structure is put on a day). Left: the uploaded GPX routes and 「我的路段」
+   (the climbs and routes found in the activities, engine/routes.py); right: the chosen one — its
+   elevation profile with the climbs marked, and the 坡段表 (SP-639's climbs and grade segments at the
+   easy run; every number from the server). Upload, rename, download and delete the uploaded ones;
+   a segment links to its 路線進步 page. 「從這條路線產生課」 (SP-641): pick a day, see the steps the server
+   makes (POST /steps/from-route: one step per climb, each to the lap button), then the 課表 editor opens
+   with them (?route=) — saved there as the user's own session. Tokens as templates.html (light / dark / data-theme). */
+:root {
+  color-scheme: light;
+  --bg: #f4f5f7; --panel: #fcfcfb; --text: #0b0b0b; --muted: #52514e; --faint: #8a8984; --line: #e3e3df;
+  --accent: #2a78d6; --soft: #e8efff; --elev: #77756f; --climb: #b45309;
+  --good: #1a7f37; --bad: #c62828;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #111110; --panel: #1a1a19; --text: #ffffff; --muted: #c3c2b7; --faint: #8f8e86; --line: #2e2e2b;
+    --accent: #3987e5; --soft: #1c2a40; --elev: #9a9890; --climb: #f59e0b;
+    --good: #4ade80; --bad: #f87171;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #111110; --panel: #1a1a19; --text: #ffffff; --muted: #c3c2b7; --faint: #8f8e86; --line: #2e2e2b;
+  --accent: #3987e5; --soft: #1c2a40; --elev: #9a9890; --climb: #f59e0b;
+  --good: #4ade80; --bad: #f87171;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 system-ui, -apple-system, "Segoe UI", "Noto Sans TC", sans-serif; }
+button, input, select { font: inherit; color: inherit; }
+.meta { color: var(--muted); font-size: 12.5px; }
+.faint { color: var(--faint); }
+main { max-width: 1320px; margin: 0 auto; padding: 12px 16px 40px; display: grid; gap: 10px; }
+h1 { margin: 0; font-size: 20px; }
+.bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.spacer { flex: 1; }
+.btn { border: 1px solid var(--line); background: var(--panel); color: var(--text); border-radius: 7px;
+  padding: 5px 12px; cursor: pointer; font-size: 13px; line-height: 1.3; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; text-decoration: none; }
+.btn:hover { background: color-mix(in srgb, var(--accent) 7%, var(--panel)); }
+.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.btn[disabled] { opacity: .5; cursor: default; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.btn.danger { color: var(--bad); }
+.btn.danger.armed { background: var(--bad); border-color: var(--bad); color: #fff; }
+/* page switch 日曆 | 課表統計 | 範本 | 路線 (schedule.html .modesw) */
+.modesw { display: inline-flex; flex-wrap: wrap; gap: 6px; justify-self: start; padding: 4px; border-radius: 12px; max-width: 100%;
+  background: color-mix(in srgb, #b4530f 9%, var(--bg)); --mc: #b4530f; --mc2: #8f3f0a; }
+.modesw .mcard { display: flex; align-items: center; gap: 9px; text-decoration: none; text-align: left;
+  padding: 6px 14px 6px 10px; border-radius: 9px; background: var(--panel); color: var(--text);
+  box-shadow: 0 1px 2px rgba(0,0,0,.08); transition: background .18s, color .18s, box-shadow .18s, transform .08s; }
+.modesw .mcard svg { width: 22px; height: 22px; flex: none; color: var(--mc); }
+.modesw .mcard b { display: block; font-size: 14px; line-height: 1.2; }
+.modesw .mcard small { display: block; font-size: 11px; color: var(--muted); line-height: 1.25; white-space: nowrap; }
+.modesw .mcard:hover { box-shadow: 0 0 0 1.5px var(--mc), 0 2px 6px rgba(0,0,0,.12); }
+.modesw .mcard[aria-current="page"] { background: linear-gradient(180deg, var(--mc), var(--mc2)); color: #fff; box-shadow: 0 3px 8px rgba(143,63,10,.35); }
+.modesw .mcard[aria-current="page"] svg, .modesw .mcard[aria-current="page"] small { color: #fff; }
+.modesw .mcard[aria-current="page"] small { opacity: .85; }
+.modesw .mcard:focus-visible { outline: 2px solid var(--mc); outline-offset: 2px; }
+@media (max-width: 620px) { .modesw .mcard small { display: none; } .modesw .mcard { padding: 6px 10px 6px 8px; gap: 6px; } .modesw .mcard svg { width: 18px; height: 18px; } }
+
+.rl { display: grid; grid-template-columns: minmax(260px, 360px) minmax(0, 1fr); gap: 12px; align-items: start; }
+@media (max-width: 860px) { .rl { grid-template-columns: minmax(0, 1fr); } }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px; min-width: 0; }
+.rl-list { display: grid; gap: 10px; position: sticky; top: 8px; max-height: calc(100vh - 24px); overflow: auto; }
+@media (max-width: 860px) { .rl-list { position: static; max-height: none; } }
+.rl-list h2 { font-size: 13.5px; margin: 0; display: flex; gap: 8px; align-items: baseline; }
+.rl-list h2 .meta { font-weight: 400; }
+.rl-list h2 a { margin-left: auto; font-weight: 400; font-size: 12px; color: var(--accent); text-decoration: none; }
+ul.items { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; }
+ul.items li button { width: 100%; text-align: left; border: 1px solid transparent; background: none; color: var(--text); border-radius: 8px; padding: 6px 8px; cursor: pointer;
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 8px; font-size: 13px; }
+ul.items li button:hover { background: var(--soft); }
+ul.items li button[aria-current="true"] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--panel)); }
+ul.items .nm { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+ul.items .sub { grid-column: 1 / -1; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tag { font-size: 11px; border: 1px solid var(--line); border-radius: 8px; padding: 0 6px; color: var(--muted); align-self: center; white-space: nowrap; }
+.tag.up { border-color: color-mix(in srgb, var(--climb) 50%, var(--line)); color: var(--climb); }
+.tag.gpx { border-color: var(--accent); color: var(--accent); }
+.empty { color: var(--muted); padding: 10px 6px; font-size: 12.5px; }
+.det { display: grid; gap: 10px; min-width: 0; }
+.det > * { min-width: 0; }
+.det .head { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+.det .head h2 { margin: 0; font-size: 18px; overflow-wrap: anywhere; }
+.det .head input.text { font-size: 16px; font-weight: 600; flex: 1 1 220px; min-width: 0; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 7px; padding: 4px 8px; }
+.stats { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 13px; color: var(--muted); }
+.stats b { color: var(--text); font-variant-numeric: tabular-nums; }
+.acts { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.prof { width: 100%; height: auto; display: block; }
+.prof text { font-size: 11px; fill: var(--muted); font-variant-numeric: tabular-nums; }
+.prof .ax { stroke: var(--line); }
+.prof .cl { fill: var(--climb); fill-opacity: .13; }
+.prof .cll { fill: var(--climb); font-weight: 600; }
+.prof .ar { fill: var(--elev); fill-opacity: .22; }
+.prof .ln { fill: none; stroke: var(--elev); stroke-width: 1.5; }
+.crs .tw { overflow-x: auto; max-width: 100%; }
+.crs table { border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; width: 100%; }
+.crs th, .crs td { padding: 3px 8px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+.crs th { color: var(--muted); font-weight: 500; font-size: 11.5px; }
+.crs th:first-child, .crs td:first-child, .crs td.k { text-align: left; }
+.crs h3 { margin: 10px 0 4px; font-size: 12.5px; color: var(--muted); font-weight: 600; }
+.crs .ref { color: var(--faint); }
+.crs tr.climb td:first-child { color: var(--climb); font-weight: 600; }
+.crs .rule { font-size: 11.5px; color: var(--muted); margin-top: 6px; }
+.crs details > summary { cursor: pointer; font-size: 12.5px; color: var(--muted); margin-top: 8px; }
+@media (max-width: 600px) { .crs th.km, .crs td.km { display: none; } .crs th, .crs td { padding: 3px 5px; } }
+.hint { font-size: 12.5px; color: var(--muted); border-left: 3px solid var(--accent); padding: 4px 10px; background: color-mix(in srgb, var(--accent) 6%, transparent); border-radius: 0 6px 6px 0; }
+/* 從這條路線產生課 (SP-641): pick a day, the steps the server makes, then the 課表 editor */
+.gen { border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line)); border-radius: 10px; padding: 10px 12px; display: grid; gap: 8px;
+  background: color-mix(in srgb, var(--accent) 5%, var(--panel)); }
+.gen h3 { margin: 0; font-size: 14px; }
+.gen .row { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; }
+.gen input[type=date] { border: 1px solid var(--line); border-radius: 7px; padding: 4px 8px; background: var(--bg); color: var(--text); }
+.gen ol { margin: 0; padding-left: 22px; display: grid; gap: 2px; font-size: 12.5px; }
+.gen ol li { overflow-wrap: anywhere; }
+.gen > * { min-width: 0; }
+.gen ol .tg { color: var(--muted); font-size: 11.5px; margin-left: 6px; overflow-wrap: anywhere; }
+.gen ol li.up::marker { color: var(--climb); font-weight: 700; }
+.btn.gen-btn { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.msg { font-size: 12.5px; } .msg.err { color: var(--bad); } .msg.ok { color: var(--good); } .msg:empty { display: none; }
+</style>
+</head>
+<body>
+<script src="/api/v1/static/shell.js" data-page="schedule"></script>
+<main>
+  <nav class="modesw" data-i18n-attr="aria-label:routelib.tabs.label" aria-label="課表檢視">
+    <a class="mcard" href="/api/v1/overview/plan/schedule/page">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>
+      <span><b data-i18n="routelib.tabs.calendar">日曆</b><small data-i18n="routelib.tabs.calendar_sub">每天排了什麼課</small></span></a>
+    <a class="mcard" href="/api/v1/overview/plan/compliance/page">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 17v-5M12 17V8M17 17v-8"/></svg>
+      <span><b data-i18n="routelib.tabs.compliance">課表統計</b><small data-i18n="routelib.tabs.compliance_sub">計畫 vs 實際、負荷</small></span></a>
+    <a class="mcard" href="/api/v1/overview/plan/templates/page">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
+      <span><b data-i18n="routelib.tabs.templates">範本</b><small data-i18n="routelib.tabs.templates_sub">自己的課表範本</small></span></a>
+    <a class="mcard" href="/api/v1/overview/plan/routes/page" aria-current="page">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 19 5.5-9 4 6 3-4.5L21 19z"/><circle cx="17" cy="6" r="2"/></svg>
+      <span><b data-i18n="routelib.tabs.routes">路線</b><small data-i18n="routelib.tabs.routes_sub">GPX 與我的路段</small></span></a>
+  </nav>
+  <div class="bar">
+    <h1 data-i18n="routelib.title">訓練路線</h1>
+    <span class="meta" data-i18n="routelib.lead">上傳的 GPX 和系統從運動紀錄找出的「我的路段」。範本只放結構，套到某天的課表時，在課表編輯器的「路線」選一條。</span>
+    <span class="spacer"></span>
+    <button class="btn primary" type="button" id="rl-up" data-i18n="routelib.upload">＋ 上傳 GPX</button>
+    <input type="file" id="rl-file" accept=".gpx,.fit,application/gpx+xml" hidden>
+  </div>
+  <div class="msg" id="rl-msg" aria-live="polite"></div>
+  <div class="rl">
+    <aside class="card rl-list" id="rl-list" data-i18n-attr="aria-label:routelib.list" aria-label="路線清單">
+      <section>
+        <h2><span data-i18n="routelib.sec_gpx">上傳的路線</span> <span class="meta" id="rl-ngpx"></span></h2>
+        <ul class="items" id="rl-gpx"></ul>
+      </section>
+      <section>
+        <h2><span data-i18n="routelib.sec_mine">我的路段</span> <span class="meta" id="rl-nmine"></span>
+          <a href="/api/v1/routes/page" data-i18n="routelib.mine_all">路線進步 →</a></h2>
+        <p class="meta" data-i18n="routelib.mine_lead" style="margin:2px 0 4px">系統從你的運動紀錄找出、跑過 2 次以上的爬坡、路線與路段。</p>
+        <ul class="items" id="rl-mine"></ul>
+      </section>
+    </aside>
+    <section class="card">
+      <p class="empty" id="rl-empty" data-i18n="routelib.empty">從左邊選一條路線，或按「上傳 GPX」。</p>
+      <div class="det" id="rl-det" hidden></div>
+    </section>
+  </div>
+</main>
+<script>
+const T = (k, p) => (window.I18N ? I18N.t("routelib." + k, p) : k);
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const PAPI = "/api/v1/overview/plan";
+const LAPI = PAPI + "/routes/library";
+async function req(method, url, body) {
+  const r = await fetch(url, { method, headers: body ? { "Content-Type": "application/json" } : {}, body: body ? JSON.stringify(body) : undefined });
+  let b = {};
+  try { b = await r.json(); } catch (e) { /* not JSON */ }
+  return { ok: r.ok, status: r.status, body: b };
+}
+const errText = (r) => { const d = r.body.detail || {}; return (d.errors || [typeof d === "string" ? d : T("failed")]).join("；"); };
+const km = (v) => v == null ? "–" : `${(+v).toFixed(+v < 10 ? 2 : 1)} km`;
+const hms = (s) => { if (s == null) return "–"; s = Math.round(s); const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60;
+  return h ? `${h}:${String(m).padStart(2, "0")}:${String(x).padStart(2, "0")}` : `${m}:${String(x).padStart(2, "0")}`; };
+const pace = (s) => s ? `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}` : "–";
+const pct = (g) => `${Math.round((g || 0) * 1000) / 10}%`;
+const gainTxt = (m) => (m || 0) < 0 ? `−${Math.round(-m)} m` : `+${Math.round(m || 0)} m`;     // a descent's is negative
+// an automatic name is written in Chinese on the server (engine/routes.py auto_name): its kind word is
+// translated (as routes.html nameOf); the user's own names stay as they are
+const AUTO_WORDS = { "爬坡": "climb", "下坡": "descent", "路段": "stretch", "路線": "route" };
+const nameOf = (r) => r.renamed || !window.I18N || I18N.locale === "zh-TW" ? r.name
+  : String(r.name).replace(/(^|\s)(爬坡|下坡|路段|路線)(?=\s|$)/, (m, sp, w) => sp + T("kind." + AUTO_WORDS[w]));
+const S = { gpx: [], mine: [], sel: null, det: null, seq: 0, genSeq: 0, genDay: null };
+function setMsg(t, cls) { const m = $("rl-msg"); m.textContent = t || ""; m.className = "msg" + (cls ? " " + cls : ""); }
+
+async function load() {
+  const [g, m] = await Promise.all([req("GET", LAPI), req("GET", PAPI + "/routes/mine")]);
+  S.gpx = g.ok ? g.body.routes : [];
+  S.mine = m.ok ? m.body.rows : [];
+  renderList();
+}
+function renderList() {
+  const cur = S.sel || {};
+  $("rl-ngpx").textContent = S.gpx.length ? T("n", { n: S.gpx.length }) : "";
+  $("rl-nmine").textContent = S.mine.length ? T("n", { n: S.mine.length }) : "";
+  $("rl-gpx").innerHTML = S.gpx.length ? S.gpx.map((r) => `<li><button type="button" data-g="${r.id}" aria-current="${cur.src === "gpx" && cur.id === r.id}">` +
+    `<span class="nm">${esc(r.name)}</span><span class="tag gpx">GPX</span>` +
+    `<span class="sub">${km(r.km)} · +${Math.round(r.gain_m || 0)} m · ${esc(T("n_climbs", { n: r.n_climbs || 0 }))}${r.from_tpl ? ` · ${esc(T("from_tpl"))}` : ""}</span></button></li>`).join("")
+    : `<li class="empty">${esc(T("none_gpx"))}</li>`;
+  $("rl-mine").innerHTML = S.mine.length ? S.mine.map((r) => `<li><button type="button" data-m="${esc(r.id)}" aria-current="${cur.src === "seg" && cur.id === r.id}">` +
+    `<span class="nm">${r.fav ? "★ " : ""}${esc(nameOf(r))}</span><span class="tag ${r.kind === "climb" ? "up" : ""}">${esc(T("kind." + r.kind))}</span>` +
+    `<span class="sub">${km((r.length_m || 0) / 1000)} · ${gainTxt(r.gain_m)} · ${esc(T("n_times", { n: r.n_efforts || 0 }))} · ${esc(T("best"))} ${hms(r.best_s)}</span></button></li>`).join("")
+    : `<li class="empty">${esc(T("none_mine"))}</li>`;
+}
+
+// ---- the elevation profile, the climbs marked (inline SVG; numbers from the server)
+function profile(p, climbs) {
+  const xs = p.km || [], zs = p.z || [];
+  if (xs.length < 2) return "";
+  const W = 640, H = 170, L = 40, R = 8, TOP = 16, B = 22;
+  const x0 = xs[0], x1 = xs[xs.length - 1], zmin = Math.min(...zs), zmax = Math.max(...zs);
+  const zr = Math.max(20, zmax - zmin), lo = zmin - zr * 0.08, hi = zmax + zr * 0.12;
+  const X = (k) => L + (k - x0) / ((x1 - x0) || 1) * (W - L - R), Y = (z) => TOP + (hi - z) / (hi - lo) * (H - TOP - B);
+  const pts = xs.map((k, i) => `${X(k).toFixed(1)},${Y(zs[i]).toFixed(1)}`);
+  const step = [0.5, 1, 2, 5, 10, 20, 50].find((s) => (x1 - x0) / s <= 8) || 100;
+  let ticks = "";
+  for (let k = Math.ceil(x0 / step) * step; k <= x1 + 1e-9; k += step) ticks += `<text x="${X(k).toFixed(1)}" y="${H - 6}" text-anchor="middle">${+k.toFixed(1)}</text>`;
+  const bands = (climbs || []).map((c) => `<rect class="cl" x="${X(c.start_km).toFixed(1)}" y="${TOP}" width="${Math.max(1, X(c.end_km) - X(c.start_km)).toFixed(1)}" height="${H - TOP - B}"/>` +
+    `<text class="cll" x="${((X(c.start_km) + X(c.end_km)) / 2).toFixed(1)}" y="${TOP - 4}" text-anchor="middle">⛰${c.no}</text>`).join("");
+  return `<svg class="prof" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(T("prof_aria", { lo: Math.round(zmin), hi: Math.round(zmax), km: (x1 - x0).toFixed(1) }))}">` +
+    `<line class="ax" x1="${L}" y1="${H - B}" x2="${W - R}" y2="${H - B}"/>${bands}` +
+    `<path class="ar" d="M${X(x0).toFixed(1)},${H - B} L${pts.join(" L")} L${X(x1).toFixed(1)},${H - B} Z"/><path class="ln" d="M${pts.join(" L")}"/>` +
+    `<text x="${L - 4}" y="${(Y(zmax) + 4).toFixed(1)}" text-anchor="end">${Math.round(zmax)}</text><text x="${L - 4}" y="${(Y(zmin) + 4).toFixed(1)}" text-anchor="end">${Math.round(zmin)}</text>` +
+    `${ticks}<text x="${W - R}" y="${H - B - 4}" text-anchor="end">km</text></svg>`;
+}
+
+// ---- the 坡段表 (SP-639's, as the 範本 page had it)
+function courseTable(b) {
+  const lv = (b.levels || [])[0] || {};
+  const e = (x) => (x.est || {})[lv.key] || {};
+  const w = (x) => { const v = e(x); return v.power ? `${v.power} W` : v.power_ref ? `<span class="ref">${v.power_ref} W ${esc(T("crs_ref"))}</span>` : "–"; };
+  const climbs = b.climbs || [], segs = b.segments || [], rule = b.rule || {};
+  return `<div class="crs"><div class="meta">${esc(T("crs_at", { lv: lv.label || "", p: pace(lv.flat_pace_s_per_km) }))}${lv.power ? ` · ${esc(T("crs_power", { w: lv.power }))}` : ""}</div>` +
+    `<h3>${esc(T("crs_climbs"))}</h3>` + (climbs.length ? `<div class="tw"><table><thead><tr><th>#</th><th class="km">km</th><th>${esc(T("crs_dist"))}</th><th>${esc(T("crs_gain"))}</th><th>${esc(T("crs_grade"))}</th><th>${esc(T("crs_pace"))}</th><th>${esc(T("crs_time"))}</th><th>${esc(T("crs_label"))}</th></tr></thead><tbody>` +
+      climbs.map((c) => `<tr class="climb"><td>⛰ ${c.no}</td><td class="km">${(+c.start_km).toFixed(2)}–${(+c.end_km).toFixed(2)}</td><td>${Math.round(c.dist_m)} m</td><td>+${Math.round(c.gain_m)} m</td><td>${pct(c.grade)}</td>` +
+        `<td>${pace(e(c).pace_s_per_km)}/km</td><td>${hms(e(c).t_s)}</td><td>${esc(c.label || "")}</td></tr>`).join("") + `</tbody></table></div>`
+      : `<p class="meta">${esc(T("crs_no_climb"))}</p>`) +
+    `<details${segs.length <= 12 ? " open" : ""}><summary>${esc(T("crs_segs_n", { n: segs.length }))}</summary><div class="tw"><table><thead><tr><th>#</th><th class="km">km</th><th>${esc(T("crs_dist"))}</th><th>${esc(T("crs_updown"))}</th><th>${esc(T("crs_grade"))}</th><th>${esc(T("crs_kind"))}</th><th>${esc(T("crs_pace"))}</th><th>${esc(T("crs_time"))}</th><th>${esc(T("crs_w"))}</th></tr></thead><tbody>` +
+      segs.map((x) => `<tr><td>${x.i}${x.climb_no ? ` <span class="faint">⛰${x.climb_no}</span>` : ""}</td><td class="km">${(+x.start_km).toFixed(2)}–${(+x.end_km).toFixed(2)}</td><td>${Math.round(x.dist_m)} m</td>` +
+        `<td>+${Math.round(x.gain_m)} / −${Math.round(x.loss_m)} m</td><td>${pct(x.grade)} <span class="faint">(${pct(x.max_grade)})</span></td><td class="k">${esc(x.kind_label || "")}</td>` +
+        `<td>${pace(e(x).pace_s_per_km)}/km</td><td>${hms(e(x).t_s)}</td><td>${w(x)}</td></tr>`).join("") + `</tbody></table></div></details>` +
+    `<p class="rule">${esc(T("crs_rule", { g: Math.round((rule.min_grade || 0) * 100), m: Math.round(rule.min_gain_m || 0), d: Math.round(rule.drop_m || 0), f: Math.round((rule.drop_frac || 0) * 100) }))}<br>${esc(b.note || "")}</p></div>`;
+}
+
+// ---- one route
+async function select(sel) {
+  S.sel = sel; renderList(); setMsg("");
+  const seq = ++S.seq;
+  $("rl-empty").hidden = true; $("rl-det").hidden = false;
+  $("rl-det").innerHTML = `<p class="meta">${esc(T("loading"))}</p>`;
+  const r = await req("GET", sel.src === "gpx" ? `${LAPI}/${sel.id}` : `${PAPI}/routes/mine/${encodeURIComponent(sel.id)}`);
+  if (seq !== S.seq) return;
+  if (!r.ok) { $("rl-det").innerHTML = `<p class="msg err">${esc(errText(r))}</p>`; return; }
+  S.det = r.body;
+  renderDetail();
+  history.replaceState(null, "", `#${sel.src === "gpx" ? "g" : "m"}${sel.id}`);
+  if (matchMedia("(max-width: 860px)").matches) $("rl-det").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+function renderDetail() {
+  const d = S.det, gpx = S.sel.src === "gpx", tb = d.table || {};
+  const climbs = tb.climbs || [];
+  const gain = gpx ? d.gain_m : (d.totals || {}).gain_m ?? d.gain_m;
+  const len = gpx ? d.km : (d.length_m || 0) / 1000;
+  $("rl-det").innerHTML = `<div class="head">` + (gpx
+      ? `<input class="text" id="rl-name" maxlength="60" value="${esc(d.name)}" aria-label="${esc(T("name"))}"><button class="btn" type="button" id="rl-ren">${esc(T("rename"))}</button><span class="tag gpx">GPX</span>`
+      : `<h2>${esc(nameOf(d))}</h2><span class="tag ${d.kind === "climb" ? "up" : ""}">${esc(T("kind." + d.kind))}</span>`) + `</div>` +
+    `<div class="stats"><span>${esc(T("st_len"))} <b>${km(len)}</b></span><span>${esc(T("st_gain"))} <b>${gainTxt(gain)}</b></span>` +
+    (gpx ? `<span>${esc(T("st_loss"))} <b>−${Math.round(d.loss_m || 0)} m</b></span><span>${esc(T("st_file"))} <b>${esc(d.filename || "")}</b></span>`
+      : `<span>${esc(T("n_times", { n: d.n_efforts || 0 }))}</span><span>${esc(T("best"))} <b>${hms(d.best_s)}</b></span><span>${esc(T("last"))} <b>${hms(d.last_s)}</b>${d.last_date ? ` (${esc(d.last_date.slice(0, 10))})` : ""}</span>`) + `</div>` +
+    `<div class="acts">` + (gpx
+      ? `<a class="btn" href="${LAPI}/${d.id}/file">${esc(T("download"))}</a><button class="btn danger" type="button" id="rl-del">${esc(T("del"))}</button>`
+      : `<a class="btn" href="${esc(d.link)}">${esc(T("history"))}</a>`) +
+    `<button class="btn gen-btn" type="button" id="rl-gen-btn" aria-expanded="false" aria-controls="rl-gen">▶ ${esc(T("gen_btn"))}</button></div>` +
+    `<section class="gen" id="rl-gen" hidden aria-labelledby="rl-gen-h"><h3 id="rl-gen-h">${esc(T("gen_title"))}</h3>` +
+    `<p class="meta" style="margin:0">${esc(T("gen_lead"))}</p>` +
+    `<div class="row"><label>${esc(T("gen_day"))} <input type="date" id="rl-gen-day" min="${today()}" value="${S.genDay || today()}"></label>` +
+    `<button class="btn primary" type="button" id="rl-gen-go">${esc(T("gen_go"))}</button></div>` +
+    `<div id="rl-gen-prev" aria-live="polite"></div><p class="meta" style="margin:0">${esc(T("gen_note"))}</p></section>` +
+    profile(d.profile || {}, climbs) +
+    `<p class="hint">${esc(T("use_hint"))}</p>` + courseTable(tb);
+}
+
+// ---- 從這條路線產生課 (SP-641): the steps the server makes (POST /steps/from-route), shown here; the 課表
+// editor opens with them on the chosen day (?route=) and nothing is saved until 儲存 there
+const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
+function tgText(t) {
+  t = t || {};
+  const base = t.type === "power" ? `${T("tg_power")} ${Math.round(t.lo * 100)}–${Math.round(t.hi * 100)}% CP` : t.type === "hr" ? T("tg_hr")
+    : t.type === "rpe" ? T("tg_rpe", { lo: t.lo, hi: t.hi }) : T("tg_none");
+  return t.ep ? `${base} · ${T("tg_ep")} ${pace(t.ep[0])}–${pace(t.ep[1])}/km` : base;
+}
+async function genPreview() {
+  const box = $("rl-gen-prev"), sel = S.sel, seq = ++S.genSeq;
+  box.innerHTML = `<p class="meta" style="margin:0">${esc(T("gen_loading"))}</p>`;
+  const r = await req("POST", `${PAPI}/steps/from-route`, { kind: "hike", terrain: "trail", day: $("rl-gen-day").value, route: { src: sel.src, id: sel.id } });
+  if (seq !== S.genSeq || S.sel !== sel) return;
+  if (!r.ok) { box.innerHTML = `<p class="msg err">${esc(T("gen_failed", { msg: errText(r) }))}</p>`; return; }
+  const b = r.body;
+  box.innerHTML = `<div class="meta"><b>${esc(b.title)}</b> · ${esc(T("gen_sum", { n: b.legs.length, min: b.minutes, km: (+b.km).toFixed(1), gain: Math.round(b.gain_m) }))}</div>` +
+    `<ol>${b.legs.map((lg) => `<li class="${lg.type === "climb" ? "up" : ""}">${esc(lg.name)}<span class="tg">${esc(tgText(lg.target))}</span></li>`).join("")}</ol>`;
+}
+function genGo() {
+  const d = $("rl-gen-day").value || today();
+  location.href = `${PAPI}/schedule/page?${new URLSearchParams({ day: d, route: `${S.sel.src}:${S.sel.id}` })}`;
+}
+
+// ---- events
+$("rl-list").addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  if (b.dataset.g) select({ src: "gpx", id: +b.dataset.g });
+  else if (b.dataset.m) select({ src: "seg", id: b.dataset.m });
+});
+$("rl-det").addEventListener("click", async (e) => {
+  const gb = e.target.closest("#rl-gen-btn");
+  if (gb) {
+    const box = $("rl-gen"), open = box.hidden;
+    box.hidden = !open; gb.setAttribute("aria-expanded", String(open));
+    if (open) { genPreview(); $("rl-gen-day").focus(); }
+    return;
+  }
+  if (e.target.closest("#rl-gen-go")) { genGo(); return; }
+  if (e.target.closest("#rl-ren")) {
+    const r = await req("PATCH", `${LAPI}/${S.det.id}`, { name: $("rl-name").value });
+    if (!r.ok) { setMsg(errText(r), "err"); return; }
+    S.det.name = r.body.name; await load(); setMsg(T("renamed", { name: r.body.name }), "ok");
+    return;
+  }
+  const del = e.target.closest("#rl-del");
+  if (del) {
+    if (!del.classList.contains("armed")) { del.classList.add("armed"); del.textContent = T("del_confirm"); return; }
+    const r = await req("DELETE", `${LAPI}/${S.det.id}`);
+    if (!r.ok) { setMsg(errText(r), "err"); return; }
+    S.sel = null; S.det = null; $("rl-det").hidden = true; $("rl-empty").hidden = false;
+    history.replaceState(null, "", location.pathname);
+    await load(); setMsg(T("deleted"), "ok");
+  }
+});
+$("rl-det").addEventListener("change", (e) => { if (e.target.id === "rl-gen-day") { S.genDay = e.target.value; genPreview(); } });
+$("rl-det").addEventListener("keydown", (e) => { if (e.target.id === "rl-name" && e.key === "Enter") $("rl-ren").click(); });
+$("rl-up").addEventListener("click", () => $("rl-file").click());
+$("rl-file").addEventListener("change", async (e) => {
+  const file = e.target.files[0]; e.target.value = "";
+  if (!file) return;
+  setMsg(T("uploading"));
+  const fd = new FormData(); fd.append("file", file);
+  const resp = await fetch(LAPI, { method: "POST", body: fd });
+  const body = await resp.json().catch(() => ({}));
+  if (!resp.ok) { setMsg(errText({ body }), "err"); return; }
+  await load();
+  await select({ src: "gpx", id: body.id });
+  setMsg(T("uploaded", { name: body.name }), "ok");
+});
+
+load().then(() => {
+  const h = location.hash.slice(1);
+  if (h[0] === "g" && S.gpx.some((r) => r.id === +h.slice(1))) select({ src: "gpx", id: +h.slice(1) });
+  else if (h[0] === "m" && h.length > 1) select({ src: "seg", id: decodeURIComponent(h.slice(1)) });
+});
+</script>
+</body>
+</html>

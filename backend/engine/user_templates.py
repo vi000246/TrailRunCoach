@@ -376,10 +376,20 @@ def parse_profile(data: bytes, filename: str = "") -> dict:
     """{"totals", "profile": {"km", "z"}, "course": {segments, climbs}} of a GPX / FIT course: the
     race calculator's reader and builder (no parser of its own), split by grade (its 坡段) and the
     climbs under the template rule (climb_rule, SP-639). TemplateError on a file that isn't a course."""
-    from backend.engine.racepower import course as CO
     from backend.engine.racepower import gpx as GPX
     try:
         tr = GPX.parse(data, filename)
+    except (GPX.GpxError, ValueError) as e:
+        raise TemplateError([str(e)])
+    return parse_track(tr)
+
+
+def parse_track(tr) -> dict:
+    """parse_profile of an already-read track (racepower/gpx.Track): also 「我的路段」's reference
+    effort (engine/route_library.py, SP-640). TemplateError when it can't be a course."""
+    from backend.engine.racepower import course as CO
+    from backend.engine.racepower import gpx as GPX
+    try:
         c = CO.build_course(tr, split="grade", osm_huts=False, climb_kw=_climb_kw())
     except (GPX.GpxError, ValueError) as e:
         raise TemplateError([str(e)])
@@ -656,6 +666,15 @@ class _Walk:
         return pos, t, d, gain, loss, pts
 
 
+def _foot(prof: dict, k0: float, end: float) -> Optional[float]:
+    """The route copy's `rep_km` (where the hill repeats start) on the 0-based km, None without one."""
+    try:
+        v = float(prof.get("rep_km")) - k0
+    except (TypeError, ValueError):
+        return None
+    return v if 0.0 <= v < end else None
+
+
 PATH_OUT = 600                   # elevation-path points sent with a chart
 
 
@@ -690,6 +709,9 @@ def route_elevation(steps: dict, c, prof: dict) -> Optional[dict]:
     xs, xt, ss, ups, downs, rr = [0.0], [0.0], [], [], [], []
     path = [(0.0, 0.0, 0.0, True)]               # (km covered, route pos, s, keep)
     reps: dict = {}
+    # SP-640: the climb picked for the hill repeats (route_library.apply): the first repeat starts at its
+    # foot, whatever the warm-up covered (推估: you get there before the first rep)
+    foot = _foot(prof, k0, w.end)
     for row in WS.flat(steps["items"]):
         st = row["st"]
         inner = row["rep"][-1] if row["rep"] else None
@@ -698,6 +720,8 @@ def route_elevation(steps: dict, c, prof: dict) -> Optional[dict]:
             rid, pi, _n = inner
             rs = reps.get(rid)
             if rs is None:
+                if foot is not None and not reps:
+                    pos = foot
                 rs = reps[rid] = {"base": pos, "hill": None, "pass": pi}
             elif pi != rs["pass"]:
                 rs["pass"] = pi

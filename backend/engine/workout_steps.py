@@ -62,7 +62,8 @@ from backend.engine import interval_library as IL
 from backend.engine.hr_profile import EASY_CAP
 from backend.engine.hr_profile import ZONE_IDS as HR_MODEL_ZONES
 from backend.i18n import N_, _
-from backend.engine.zones import EASY_BAND, FRIEL_HR, FRIEL_PACE, LONG_BAND, PALLADINO_POWER_ZONES, TRAIL_BAND, watch_band
+from backend.engine.zones import (EASY_BAND, FRIEL_HR, FRIEL_PACE, LONG_BAND, PALLADINO_3ZONE, PALLADINO_POWER_ZONES,
+                                  TRAIL_BAND, watch_band)
 
 V = 1
 KINDS = ("warm", "work", "rest", "cool", "other")
@@ -131,6 +132,14 @@ HR_Z6_OPEN = 1.10                # × LTHR: zone 6's open top without a max HR (
 # Z5 / Z3 rules (interval_library §C2): 台灣教練 ≥ 2 min; Buchheit rest; Haugen ≥ 3 min
 Z5_MIN_REP_S, Z3_MIN_REP_S, Z5_MAX_REST_S = IL.Z5_MIN_REP_S, IL.Z3_MIN_REP_S, IL.Z5_MAX_REST_S
 Z5_FRAC = IL.CLASS_RANGE["Z5"][0]
+# SP-646 (SP-644, the owner 2026-10-15, option B): the editor's totals in three cells — 中強度 MOD_FRAC–
+# HARD_FRAC, 高強度 ≥ HARD_FRAC, 5 區 ≥ Z5_FRAC (inside 高強度). The bands are Palladino's three-zone summary
+# (low < 80 % CP, moderate 80–95 %, high ≥ 95 %; engine/zones.PALLADINO_3ZONE) — Seiler's zone 2 between
+# the two thresholds (Seiler & Kjerland 2006, Seiler 2010), Haugen 2022's MIT. Marathon pace sits there in
+# every system (Daniels' M, Pfitzinger's MP, Friel's tempo), so an MP step (is_mp_step) is 中強度 whatever
+# its % CP; the 88 % edge (Palladino 3A) stays the Zone 3 ladder's and the done-side classifier's.
+MOD_FRAC = PALLADINO_3ZONE["low"]
+HARD_FRAC = PALLADINO_3ZONE["high"]
 HR_WORK = {"Z3sub": ("aet", 1.00), "Z3near": (0.95, 1.00), "Z4": (1.00, 1.03), "Z5": (1.00, 1.05)}    # = coros_workouts.HR_WORK
 
 WARM_NAME = {"city": "輕鬆跑暖身", "river": "輕鬆跑→漸進", "drills": "動態伸展／drill"}
@@ -593,6 +602,38 @@ def mp_target(s: dict) -> dict:
 def mp_minutes(s: dict) -> Optional[int]:
     """The marathon-pace minutes of a road long run, from its title; None = an all-easy long run."""
     return _num(r"馬拉松配速\s*(\d+)\s*分", s.get("title") or "")
+
+
+MP_NOTE = "馬拉松配速"
+
+
+def is_mp_step(st: dict) -> bool:
+    """SP-646: the marathon-pace step of a road long run (derive writes its note MP_NOTE; the % threshold
+    pace target carries the HR fallback `hrp`)."""
+    return MP_NOTE in (st.get("note") or "") or bool((st.get("target") or {}).get("hrp"))
+
+
+def mp_seconds(s: dict) -> int:
+    """SP-646: the planned marathon-pace seconds of a long run — its stored structure's MP steps (time
+    steps), else the title's 「馬拉松配速 N 分」; 0 = none (not a long run, an all-easy one)."""
+    if s.get("kind") != "long":
+        return 0
+    st = s.get("steps")
+    if isinstance(st, dict) and st.get("items"):
+        rows = [r["st"] for r in flat(st["items"]) if is_mp_step(r["st"])]
+        if rows:
+            return int(sum(float((r.get("dur") or {}).get("value") or 0) for r in rows
+                           if (r.get("dur") or {}).get("type") == "time"))
+    return int(mp_minutes(s) or 0) * 60
+
+
+def mp_tss_per_hour(goal_pace: Optional[float] = None, tpace: Optional[float] = None) -> float:
+    """SP-646: the MP segment's TSS per hour as totals counts it (IF² × 100, IF = the target's middle ÷
+    threshold): the goal pace against the threshold pace when both are known, else MP_PACE's middle
+    (threshold pace × 1.06, 推估). Without a threshold pace the structure runs the HR fallback and its
+    own HR ↔ power conversion (SP-642) — the card's number before session_structure replaces it."""
+    f = (tpace / goal_pace) if goal_pace and tpace else 1.0 / (sum(MP_PACE) / 2.0)
+    return f * f * 100.0
 
 
 HEAT_WARM_S, HEAT_COOL_S = 600, 300      # the easy heat run: warm-up 10 / main / walk cool-down 5
@@ -1136,6 +1177,26 @@ def _norm_route(r) -> Optional[dict]:
         if math.isfinite(v) and 0 <= v < 1e6:
             out[k] = round(v, 2)
     out["name"] = str(r.get("name") or "")[:200]
+    # SP-640: where it was picked from (route_library: an uploaded GPX or 「我的路段」), the climb the
+    # hill repeats go up and the km they start at; anything malformed is dropped
+    src = r.get("src")
+    if isinstance(src, dict) and src.get("kind") in ("gpx", "seg") and isinstance(src.get("id"), (str, int)) \
+            and not isinstance(src.get("id"), bool) and str(src["id"]).strip():
+        out["src"] = {"kind": src["kind"], "id": str(src["id"])[:40]}
+    cl = r.get("climb")
+    if isinstance(cl, dict):
+        try:
+            c = {"no": int(cl["no"]), **{k: round(float(cl[k]), 4) for k in ("gain_m", "dist_m", "grade", "start_km", "end_km")}}
+            if all(math.isfinite(v) for v in c.values()) and 0 < c["no"] < 1000:
+                out["climb"] = c
+        except (KeyError, TypeError, ValueError):
+            pass
+    try:
+        rk = float(r.get("rep_km"))
+    except (TypeError, ValueError):
+        rk = None
+    if rk is not None and math.isfinite(rk) and km[0] <= rk < km[-1]:
+        out["rep_km"] = round(rk, 3)
     return out
 
 
@@ -1648,12 +1709,12 @@ def rate_easy(st: dict, r: Resolved) -> bool:
 
 
 def totals(steps: dict, c: Ctx) -> dict:
-    """{"sec", "open", "est" (distance converted), "tss" (估), "hard_s" (≥ 88 % CP),
-    "z5_s"}: Σ s × IF² × 100 / 3600, IF = the target's middle ÷ CP (HR via hr_to_p: the
+    """{"sec", "open", "est" (distance converted), "tss" (估), "mod_s" (中強度: MOD_FRAC ≤ IF < HARD_FRAC
+    and every MP step, not the easy steps — SP-646), "hard_s" (高強度: IF ≥ HARD_FRAC), "z5_s"}: Σ s × IF² × 100 / 3600, IF = the target's middle ÷ CP (HR via hr_to_p: the
     runner's own relation, else Friel's HR ↔ pace zones, 推估 — SP-642), no target by step kind (推估). With Ctx.easy_tph (SP-437) the easy steps
     (rate_easy) count at that rate instead; "easy_s" = their seconds, "tss_hard" = the TSS of the
     other steps (IF²), so tss = tss_hard + easy_s × the rate."""
-    sec = tss = hard = z5 = 0.0
+    sec = tss = hard = z5 = mod = 0.0
     easy_s = tss_hard = 0.0
     n_open, est = 0, False
     for row in flat(steps["items"]):
@@ -1669,18 +1730,23 @@ def totals(steps: dict, c: Ctx) -> dict:
             f = load_if(st, r)                  # = the step's TSS back (typed or by RPE)
         else:
             f = r.frac if r.frac is not None else NONE_IF.get(st["kind"], 0.7)
-        if rate_easy(st, r):
+        easy = rate_easy(st, r)
+        if easy:
             easy_s += s
             tss += s * (c.easy_tph if c.easy_tph else f * f * 100.0) / 3600.0
         else:
             tss_hard += s * f * f * 100.0 / 3600.0
             tss += s * f * f * 100.0 / 3600.0
-        if f >= 0.88:
+        if is_mp_step(st) and f >= MOD_FRAC:
+            mod += s                            # marathon pace: 中強度 whatever its % CP (SP-646)
+        elif f >= HARD_FRAC:
             hard += s
+        elif f >= MOD_FRAC and not easy:
+            mod += s
         if r.frac is not None and r.frac >= Z5_FRAC and st["kind"] == "work":
             z5 += s
     return {"sec": round(sec), "open": n_open, "est": est, "tss": round(tss, 1), "hard_s": round(hard),
-            "z5_s": round(z5), "est_note": estimate_note(steps, c) if est else "",
+            "mod_s": round(mod), "z5_s": round(z5), "est_note": estimate_note(steps, c) if est else "",
             "easy_s": round(easy_s), "tss_hard": round(tss_hard, 3)}
 
 

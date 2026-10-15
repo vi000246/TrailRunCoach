@@ -25,14 +25,14 @@ from __future__ import annotations
 
 from typing import Optional
 
-from backend.i18n import _
+from backend.i18n import N_, _
 
 # |actual / planned − 1| upper bounds per level (TrainingPeaks ±20 % / 50 %)
 COMPLIANCE = {"green": 0.20, "yellow": 0.50}
 # the words (SP-398, docs/research/schedule-chip-ui.md §9.1): the 課表統計 page's statuses —
 # 完成 / 部分 / 換了課 / 跳過 —, neutral; a red level from time / TSS alone is 部分 there
 # (status_of), 換了課 comes from with_plan_check / the wrong kind. The level itself is unchanged.
-LEVEL_LABEL = {"green": "完成", "yellow": "部分", "red": "部分", "missed": "跳過"}
+LEVEL_LABEL = {"green": N_("完成"), "yellow": N_("部分"), "red": N_("部分"), "missed": N_("跳過")}   # msgids: _() when shown
 
 RUN = {"road", "trail"}
 # activity categories (engine/overview.CATEGORIES) that count as the planned kind
@@ -103,7 +103,7 @@ def session_compliance(s: dict, planned_tss: Optional[float] = None) -> Optional
         return None
     if s.get("state") == "missed":
         return {"level": "missed", "pct": 0, "duration_pct": None, "tss_pct": None,
-                "wrong_type": False, "label": LEVEL_LABEL["missed"]}
+                "wrong_type": False, "label": _(LEVEL_LABEL["missed"])}
     a = s.get("done_by") if s.get("state") == "done" else None
     if not isinstance(a, dict):
         return None
@@ -125,7 +125,7 @@ def session_compliance(s: dict, planned_tss: Optional[float] = None) -> Optional
             "duration_pct": None if dur is None else round(dur * 100),
             "tss_pct": None if tss is None else round(tss * 100),
             "wrong_type": wrong, "foot_swap": foot, "time_level": tt, "soft": "sport" if soft else None,
-            "label": _("項目不同") if soft else "類型不符" if wrong else LEVEL_LABEL[level]}
+            "label": _("項目不同") if soft else _("類型不符") if wrong else _(LEVEL_LABEL[level])}
 
 
 ORDER = ("green", "yellow", "red")
@@ -151,7 +151,8 @@ def with_plan_check(comp: Optional[dict], vs: Optional[dict]) -> Optional[dict]:
     level = ORDER[max(ORDER.index(lv), 1)]
     out = {**comp, "level": level, "intensity_pct": vs.get("intensity_pct")}
     if vs.get("off_plan"):
-        return {**out, "off_plan": True, "label": "換了課", "off_text": vs.get("text") or ""}
+        return {**out, "off_plan": True, "label": _("換了課"), "off_text": vs.get("text") or "",
+                "off_why": vs.get("off_why") or ""}
     ipct = vs.get("intensity_pct")
     if ipct is not None and (comp.get("pct") is None or ipct < comp["pct"]):
         out["pct"] = ipct

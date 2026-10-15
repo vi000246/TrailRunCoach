@@ -104,7 +104,8 @@ STEP_SKIP_KINDS = ("taper", "event", "recovery", "transition", "rebuild")   # no
 STEP_LOOKBACK_WEEKS = 26               # 推估: covers taper + race + 恢復期 + a 4-week 轉換期 + 4 normal weeks
 
 # ---- planner's weekly CTL goal -------------------------------------------------
-GOAL = {"base": (0.05, 2.0), "specific": (0.07, 2.5)}   # (share of CTL, floor in points) 推估
+GOAL = {"base": (0.05, 2.0), "specific": (0.07, 2.5),   # (share of CTL, floor in points) 推估
+        "maintain": (0.0, 0.0)}                          # SP-102 維持期: CTL held, not pushed up
 
 # ---- single-session spike (SP-66) ------------------------------------------------
 LONG_CAP = 1.10                # Frandsen 2025 (BJSM, peer-reviewed): ≤ +10 % over the longest of 30 days

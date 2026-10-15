@@ -453,6 +453,29 @@ def _fp(kind: str, *events) -> str:
                                                  for x in events))
 
 
+C_PER_MONTH = 1                # SP-102 維持期: a C race as the week's hard session, ≤ 1 a month (CTS [433], 教練級)
+
+
+def c_hints(events, monday: dt.date, maintain: bool = False) -> list[dict]:
+    """SP-102: in a 維持期 week (`maintain`), a C race of the week with more than C_PER_MONTH C races within
+    30 days → one note (CTS: a training race at most once a month); [] otherwise. A 百岳 trip is left out
+    (hiking-level, as b_hints)."""
+    if not maintain:
+        return []
+    sunday = monday + dt.timedelta(days=6)
+    cs = sorted((e for e in events or () if getattr(e, "priority", None) == "C" and not _is_baiyue(e)),
+                key=lambda e: e.start)
+    out = []
+    for e in (x for x in cs if monday <= x.start <= sunday):
+        near = [x for x in cs if x is not e and abs((x.start - e.start).days) < 30]
+        if len(near) + 1 > C_PER_MONTH:
+            out.append({"level": "watch", "src": "race", "fp": _fp("c_many", e, *near),
+                        "text": _("維持期 C 賽一個月最多 1 場（CTS）：「{race}」前後 30 天內還有「{others}」。每場都會取代一堂強度課或長跑，"
+                                  "太密就變成一直在比賽；挑一場當硬課，其他改成輕鬆跑或拿掉",
+                                  race=e.name, others="、".join(x.name for x in near))})
+    return out
+
+
 def b_hints(events, monday: dt.date, ctl: Optional[list] = None, phases=None,
             taper_pref: Optional[int] = None) -> list[dict]:
     """The week notes about the B races of the week of `monday` (b_week): too many (> B_PER_MONTH in 30

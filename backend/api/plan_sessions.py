@@ -233,7 +233,9 @@ def _build_inputs(key: tuple, ds, today: dt.date, prefs, bos, acc, auto_on: bool
     monday = dt.date.fromisoformat(cur["week"]["start"])
     ph = st.phase
     phase_end = dt.date.fromisoformat(ph.end) if ph else None
-    phases = [{"kind": p.kind, "start": p.start, "end": p.end, "note": p.note}
+    phases = [{"kind": p.kind, "start": p.start, "end": p.end, "note": p.note,
+               "maintain_from": getattr(p, "maintain_from", None),           # SP-102 維持期
+               "light": bool(getattr(p, "light", False)), "event_id": p.event_id}   # SP-102 B 賽輕量準備
               for p in planning.phases(st.plan, today - dt.timedelta(days=400), today + dt.timedelta(days=400))]
     horizon = horizon_of(monday, today, phase_end, phases)
     weeks = P.project_weeks(cur, phases, horizon, ds.athlete.ctlconstant, ds.athlete.atlconstant, prefs=prefs,
@@ -255,7 +257,8 @@ def _build_inputs(key: tuple, ds, today: dt.date, prefs, bos, acc, auto_on: bool
                           # SP-64 (engine/threshold_confidence.py): LTHR / HRmax not believable →
                           # the editor badges HR-target templates and sessions
                           "thr_warn": _thr_warn(st)},
-           "phase": None if ph is None else {"kind": ph.kind, "label": ph.label, "start": ph.start, "end": ph.end},
+           "phase": None if ph is None else {"kind": ph.kind, "label": ph.label, "start": ph.start, "end": ph.end,
+                                             "maintain": bool(getattr(ph, "maintain", False))},
            "phase_push_end": phase_push_end(today, phase_end).isoformat(),
            "max_weeks": P.MAX_WEEKS, "last_activity": last_act.isoformat() if last_act else None,
            "cc": ds.athlete.ctlconstant, "ac": ds.athlete.atlconstant, "prefs": prefs.to_dict(),
@@ -465,7 +468,8 @@ async def _inputs(db: Optional[AsyncSession] = None, blackouts: Optional[list] =
 
 
 async def _unlinked(db: AsyncSession, acts: list[dict]) -> set:
-    """Activity indexes the user unlinked from a session (plan_match: never auto-matched)."""
+    """Activity indexes the user unlinked from a session, and those sessions' uids (plan_match: never
+    auto-matched)."""
     from backend.settings.repository import SettingsRepository
     try:
         entries = await SettingsRepository(db).get(PS.UNLINKED_KEY)
@@ -2505,8 +2509,7 @@ async def link_session(uid: str, body: dict = Body(...), db: AsyncSession = Depe
         async with _wlock():
             out = await PS.link(db, uid, a, _today(inp))
             repo = SettingsRepository(db)
-            left = [e for e in (await repo.get(PS.UNLINKED_KEY) or []) if e.get("start") != a.get("start")]
-            await repo.set(PS.UNLINKED_KEY, left)
+            await repo.set(PS.UNLINKED_KEY, PS.link_entries(await repo.get(PS.UNLINKED_KEY) or [], a, uid))
             await db.commit()
     except PS.PlanError as e:
         raise HTTPException(400, str(e))
@@ -2515,7 +2518,8 @@ async def link_session(uid: str, body: dict = Body(...), db: AsyncSession = Depe
 
 @router.delete("/sessions/{uid}/link")
 async def unlink_session(uid: str, db: AsyncSession = Depends(get_db)):
-    """Undo the pairing; the activity becomes an unplanned run (not auto-matched again)."""
+    """Undo the pairing; the activity becomes an unplanned run and the session stays open — neither is
+    auto-matched again (SP-647: the session is linked by hand)."""
     from backend.settings.repository import SettingsRepository
     inp = await _inputs(db)
     try:
@@ -2523,8 +2527,7 @@ async def unlink_session(uid: str, db: AsyncSession = Depends(get_db)):
             out, a = await PS.unlink(db, uid, _today(inp))
             if a and a.get("start"):
                 repo = SettingsRepository(db)
-                ents = [e for e in (await repo.get(PS.UNLINKED_KEY) or []) if e.get("start") != a["start"]]
-                await repo.set(PS.UNLINKED_KEY, (ents + [{"start": a["start"], "index": a.get("index")}])[-200:])
+                await repo.set(PS.UNLINKED_KEY, PS.unlink_entries(await repo.get(PS.UNLINKED_KEY) or [], a, uid))
                 await db.commit()
     except PS.PlanError as e:
         raise HTTPException(400, str(e))
@@ -3565,7 +3568,7 @@ async def _calendar(start: str, end: str, db: AsyncSession, tm: dict, t0: float)
             "week_why_hint": H.flag("SC15"),
             "thresholds": inp["thresholds"], "tss_per_hour": tph, "tss_rates": rates,
             "targets": {k: tt.get(v, "") for k, v in KIND_TARGET.items()},
-            "kinds": PS.KINDS, "default_titles": PS.DEFAULT_TITLES, "family_titles": PS.FAMILY_TITLES,
+            "kinds": PS.kind_labels(), "default_titles": PS.DEFAULT_TITLES, "family_titles": PS.FAMILY_TITLES,
             "prefs": inp.get("prefs"), "goal_climb_per_km": extras.get("goal_climb_per_km"),
             "plan_notes": _plan_notes(inp, start, end, _streak_note(every, inp)),
             "test_suggestions": sug,
@@ -3658,7 +3661,7 @@ async def compliance(start: str, end: str, db: AsyncSession = Depends(get_db)):
     out = C.dashboard(ss, weeks, today, start, end, phase=ph, phase_sessions=allss, day_rows=days,
                       week_sessions=[s for s in allss if mon.isoformat() <= s["day"] <= sun.isoformat()],
                       all_sessions=every, marks=mk, week_acts=extras["activities"], before_acts=before)
-    return {**out, "phases": phases, "current_phase": ph, "kinds": PS.KINDS,
+    return {**out, "phases": phases, "current_phase": ph, "kinds": PS.kind_labels(),
             "plan_phases": extras.get("plan_phases", extras["phases"]),
             "plan_start": min((s["day"] for s in every if s.get("day")), default=None)}
 
@@ -3681,7 +3684,7 @@ async def plan_history(limit: int = 26, db: AsyncSession = Depends(get_db)):
     from backend.engine import activity_tags as AT
     from backend.engine import plan_history as PH
     races = await run_in_threadpool(lambda: sum(1 for t in AT.load() if AT.user_type(t) == "race"))
-    return {"weeks": await PH.history(db, limit), "final_days": PH.FINAL_DAYS, "kinds": PS.KINDS,
+    return {"weeks": await PH.history(db, limit), "final_days": PH.FINAL_DAYS, "kinds": PS.kind_labels(),
             "marked_races": races}
 
 

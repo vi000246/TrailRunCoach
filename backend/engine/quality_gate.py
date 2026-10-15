@@ -188,6 +188,11 @@ LEGACY_TITLES = ("短間歇 5×1 分", "短間歇 6×1 分", "爬坡間歇 4×3 
 LEGACY_ANY = frozenset(LEGACY_TITLES) | frozenset(_IL.renamed(t) for t in LEGACY_TITLES)
 DOSE = Z3                      # kept for callers that read the first rungs
 RECOVERY = ("r1", "恢復週 fartlek 4×1 分", 4, 1, 2, 0.98, 1.01, False, "Palladino 恢復週保留 98–101% CP fartlek")
+# SP-647: how the recovery fartlek is judged done — neither a Zone 3 nor a Zone 5 session, so not by the session
+# classifier's bars (plan_match.dose) and not by its 3 %-wide band second by second (interval_eval.tiz_lower):
+# by Palladino Zone 3B's lower edge (zones.PALLADINO_POWER_ZONES, 95–101 % CP), the ≥ 95 % CP line the
+# generator counts it done by (overview.HARD_EXPRS["power"], hard_need: 60 % of the reps)
+RECOVERY_JUDGE_LO = 0.95
 # the ramp-week session (CTL ramp at the watch line: threshold only) — T1's content under its own key / title so
 # it is never mistaken for a ladder rung (planned_spec: neutral)
 SUB = ("sub", "有氧間歇（巡航）3×6 分（只排閾值）", 3, 6, 1.5, 0.90, 0.95, False, "長期負荷週增量（Chronic load ramp）到注意線（長期負荷的 10%，Friel 換算）：只排閾值；90–95% CP")
@@ -531,6 +536,12 @@ def spec_by_title(title: Optional[str]) -> Optional[tuple]:
     return next((s for s in LADDER + (TP, RECOVERY, SUB) if s[1] == t), None)
 
 
+def is_recovery_fartlek(title: Optional[str], variant_key: Optional[str] = None) -> bool:
+    """The planned session is the recovery week's fartlek (RECOVERY; a library variant never is): judged by
+    RECOVERY_JUDGE_LO, not by the classifier's Zone 3 / Zone 5 bars (SP-647)."""
+    return not variant_key and spec_by_title(title) is RECOVERY
+
+
 def row_track(h: dict) -> Optional[str]:
     """The track a dose_history row belongs to: "z3" / "z5", None for an unplanned run of a
     stored plan (neutral on both). By the stored rung / variant / edited structure / title; a
@@ -644,7 +655,8 @@ def dose_history(ds, today: dt.date, days: int = LOOKBACK_DAYS) -> list[dict]:
             plan_tiz = sum(works_of(spec))
             # Zone 5 by the band middle on Palladino (≥ 106 % CP; interval_library.CLASS_RANGE)
             z5 = (lo + (hi if hi is not None else lo)) / 2 >= _IL.CLASS_RANGE["Z5"][0]
-            t_in = IE.tiz_seconds(s["t"], s["power"], m["cp"], lo, hi, z5, min(works_of(spec), default=None))
+            t_in = IE.tiz_seconds(s["t"], s["power"], m["cp"], IE.tiz_lower(spec, lo), hi, z5,    # SP-647
+                                  min(works_of(spec), default=None))
             tiz_ratio = (t_in / plan_tiz) if t_in is not None and plan_tiz else None
         out.append({"idx": w.idx, "date": WR._wdate(w).isoformat(), "title": row.get("title"),
                     **{k: row.get(k) for k in ("variant_key", "rung_key", "equiv", "swap", "variant_reps",
@@ -2639,7 +2651,7 @@ def _week_index(monday: Optional[dt.date]) -> int:
 
 
 def week_decision(gate: dict, kind: str, mode: str, monday: Optional[dt.date] = None,
-                  step=None, first: bool = True, n: int = 1) -> dict:
+                  step=None, first: bool = True, n: int = 1, prefer: Optional[str] = None) -> dict:
     """One week's interval sessions (SP-31: two tracks). {"allow", "items", "spec",
     "advance", "adjust", "track", "note", "z3_note"}; `items` = [{"track" z3 | z5 | None,
     "spec", "advance", "adjust", "first"}] in schedule order and `spec` / `advance` /
@@ -2653,7 +2665,9 @@ def week_decision(gate: dict, kind: str, mode: str, monday: Optional[dt.date] = 
     the Zone 5 track already under way; the same flag as the flow). `step["z3_dates"]`: the
     Zone 3 session dates a projected week counts. One a week with both open: alternate by
     gate["ratio"] (track_ratio), by week.
-    `z3_note`: why this week has no Zone 3 session (the 總覽／課表 note), "" when it has one."""
+    `z3_note`: why this week has no Zone 3 session (the 總覽／課表 note), "" when it has one.
+    `prefer` (SP-102, the base phase's 維持期: "z5"): one a week takes that track whenever it is open (the
+    week's session above VT2) instead of the alternation."""
     kind = kind or "base"
     levels = gate.get("levels") or {}
     gi = gate.get("guard") or {}
@@ -2808,7 +2822,8 @@ def week_decision(gate: dict, kind: str, mode: str, monday: Optional[dt.date] = 
             s3 = min(s3, max(0, int(d3["done"]) - 1))
         if d5.get("done"):
             s5 = min(s5, max(0, int(d5["done"]) - 1))
-    items = _pick_tracks(avail, n, monday, gate, s3, s5, d3, first and step is None and not hold, met, d5)
+    items = _pick_tracks(avail, n, monday, gate, s3, s5, d3, first and step is None and not hold, met, d5,
+                         prefer=prefer)
     if hold:
         items = [{**it, "advance": False} for it in items]
     out = _decision(items, avail, gate, n, monday, lock, zt)
@@ -2818,7 +2833,8 @@ def week_decision(gate: dict, kind: str, mode: str, monday: Optional[dt.date] = 
 
 
 def _pick_tracks(avail: list, n: int, monday: Optional[dt.date], gate: dict, s3: int, s5: int, d3: dict,
-                 tweak: bool, met: int, d5: Optional[dict] = None, ratio: Optional[dict] = None) -> list[dict]:
+                 tweak: bool, met: int, d5: Optional[dict] = None, ratio: Optional[dict] = None,
+                 prefer: Optional[str] = None) -> list[dict]:
     """The week's items: n ≥ 2 → every open track (Zone 3 first); one a week with both open →
     the track gate["ratio"] gives this week (Zone 3 the first `z3` weeks of each cycle); else the
     open one. `tweak`: this week's state-machine tweak (d3 / d5 "adjust") applies.
@@ -2835,6 +2851,8 @@ def _pick_tracks(avail: list, n: int, monday: Optional[dt.date], gate: dict, s3:
     maint = z5_maint_due(r) and "z5" in avail
     if n >= 2 or len(avail) == 1:
         tracks = list(avail)
+    elif prefer in avail:
+        tracks = [prefer]                   # SP-102 維持期: the week's session above VT2
     elif maint:
         tracks = ["z5"]
     else:

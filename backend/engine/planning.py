@@ -111,6 +111,30 @@ TRANSITION_SETTING = "plan.prefs.transition_weeks"
 # apart (§4.8, §6.2); closer ones get a hint to make one of them a B race.
 REC_MIN_DAYS = 7
 A_GAP_HINT_WEEKS = 12
+# 維持期 (SP-102; periodization-cross-sport.md §4.8, §4.8.1, §6.1「SP-102 維持模式」): no A race for more
+# than MAINTAIN_AFTER_WEEKS → the open-ended base after it turns into 「維持＋輪替重點」 — CTL held, not pushed
+# up every week (load_guard.GOAL["maintain"]), ≥ 1 session above VT2 a week (Zone 5; Alves 2021 [426], the
+# minimum dose [234]), easy running ≥ 80 % [416], no race-pace volume, the 3:1 / 6-week recovery weeks
+# (Koop [211]) and C races as the week's hard session (SP-95, ≤ 1 a month, CTS [433]). Why: well-trained
+# distance runners stopped improving vVO2max / vVT2 after ~6 months of continuous training (Alves 2021,
+# 已驗證) — 24 weeks ≈ 6 months is 推估. Counted from the start of that base (the day after the last A
+# race's 恢復期 / 轉換期 / 回量期), or — no A race on record — from the first day of training data
+# (SINCE_OF, installed by the app). It stays `kind` "base" (every base rule — strides, strength 2×, the
+# AeT test, the gate — still applies); Phase.maintain_from marks it. A new A race brings the 專項期 and the
+# 減量期 back (the base before it is a normal base again). Never a peak: no taper inside it, the peak
+# window is only 2–3 weeks [432].
+MAINTAIN_AFTER_WEEKS = 24
+# 輪替重點 (推估; no study of a recreational maintenance block): MAINTAIN_BLOCK_WEEKS-week blocks from the
+# 維持期's first Monday, the weekly Zone 5 session alternating its focus — 速度 (flat reps) and 爬坡 (the
+# rung's uphill version, as the 越野 專項期 uses: Koop ~80 % of intervals uphill). 4 weeks = the 3:1 cycle,
+# inside Koop's ≤ 6-week block [211].
+MAINTAIN_BLOCK_WEEKS = 4
+MAINTAIN_FOCUS = ("speed", "hill")
+MAINTAIN_FOCUS_LABEL = {"speed": N_("速度"), "hill": N_("爬坡")}
+MAINTAIN_LABEL = N_("維持期")
+# The first day of training data of the current tenant (the app installs it: install_size_inputs); None
+# = not known (tests, a pure engine) → without any A race on record there is no 維持期
+SINCE_OF = None              # Callable[[], Optional[dt.date]]
 
 PHASES = {
     "transition": N_("轉換期"),
@@ -577,10 +601,43 @@ def transition_weeks_for(ev, weeks: Optional[int]) -> int:
     return int(min(int(weeks), cap))
 
 
+_SINCE_CACHE: dict = {}
+
+
+def first_activity_day() -> Optional[dt.date]:
+    """The first day with an activity in the current tenant's database (workout_files, duplicates of
+    another source left out), read-only, cached on the file's stamp; None without one (SP-102)."""
+    import sqlite3
+    from backend.db.filestamp import db_stamp
+    from backend.engine.wko5expr.datasource import _db_path
+    p = _db_path()
+    if p is None:
+        return None
+    mt = db_stamp(p)
+    if mt is None:
+        return None
+    hit = _SINCE_CACHE.get(str(p))
+    if hit and hit[0] == mt:
+        return hit[1]
+    try:
+        con = sqlite3.connect(f"file:{p}?mode=ro", uri=True)
+        try:
+            row = con.execute("SELECT MIN(workout_date) FROM workout_files WHERE duplicate_of IS NULL").fetchone()
+        finally:
+            con.close()
+    except sqlite3.Error:
+        return None
+    day = _d(row[0]) if row and row[0] else None
+    if len(_SINCE_CACHE) > 256:
+        _SINCE_CACHE.clear()
+    _SINCE_CACHE[str(p)] = (mt, day)
+    return day
+
+
 def install_size_inputs() -> None:
     """The app's 賽事大小 inputs: the race calculator (memoised per tenant / event / day, 10 min)
     and the personal climb divisor. Called once at startup; tests leave them unset."""
-    global HOURS_OF, DIVISOR_OF
+    global HOURS_OF, DIVISOR_OF, SINCE_OF
     import contextvars
     import threading
     import time
@@ -614,6 +671,8 @@ def install_size_inputs() -> None:
         return terrain_calib.divisor()
 
     HOURS_OF, DIVISOR_OF = hours_of, divisor_of
+    # SP-102: the first day of training data (the 維持期 without any A race counts from it)
+    SINCE_OF = first_activity_day
     # 下坡升級 (SP-111 phase 1, SP-98): the race's and the athlete's downhill impact
     from backend.engine import downhill_recovery
     downhill_recovery.install()
@@ -628,9 +687,23 @@ class Phase:
     auto: bool = True
     # why an automatic phase is not the standard length (SP-73: a shortened / skipped 轉換期)
     note: str = ""
+    # SP-102: a base phase that is a 維持期 — the ISO day the 維持期 started (its true start, not cut by
+    # the window asked for: the 輪替重點 blocks count from it); None = a normal phase
+    maintain_from: Optional[str] = None
+    # SP-102: a B race's light preparation (its 專項塊 = kind specific, its 減量 = kind taper; event_id = the
+    # B race) when no A race is ahead (MAINTAIN_B_POLICY)
+    light: bool = False
+
+    @property
+    def maintain(self) -> bool:
+        return bool(self.maintain_from)
 
     @property
     def label(self) -> str:
+        if self.maintain:
+            return _(MAINTAIN_LABEL)
+        if self.light:
+            return _(B_PREP_LABEL) if self.kind == "specific" else _(B_TAPER_LABEL)
         return _(PHASES[self.kind]) if self.kind in PHASES else self.kind
 
 
@@ -774,7 +847,9 @@ class Plan:
         path.parent.mkdir(parents=True, exist_ok=True)
         data = {
             "events": [asdict(e) for e in sorted(self.events, key=lambda e: e.date)],
-            "phases": [{k: v for k, v in asdict(p).items() if k != "auto"} for p in self.phases],
+            "phases": [{k: v for k, v in asdict(p).items()
+                        if k != "auto" and not (k in ("maintain_from", "light") and not v)}
+                       for p in self.phases],
             "thresholds": [asdict(t) for t in sorted(self.thresholds, key=lambda t: t.date)],
             "weights": [{k: v for k, v in asdict(w).items() if k != "source" or v}
                         for w in sorted(self.weights, key=lambda w: w.date)],
@@ -867,7 +942,8 @@ class Plan:
 # ---------------------------------------------------------------------------
 
 def auto_phases(events: list[Event], begin: dt.date, end: dt.date,
-                transition_weeks: int = TRANSITION_WEEKS, taper_pref: Optional[int] = None) -> list[Phase]:
+                transition_weeks: int = TRANSITION_WEEKS, taper_pref: Optional[int] = None,
+                since: Optional[dt.date] = None, _maintain: bool = True) -> list[Phase]:
     """Phases covering [begin, end], built backwards from each A event; each taper taper_days(ev,
     `taper_pref`) long (SP-96: 7 for a 2–3 day 百岳, up to 21 by 課表偏好).
     After each A event's recovery: `transition_weeks` of 轉換期 (0 = none), ending before
@@ -878,7 +954,11 @@ def auto_phases(events: list[Event], begin: dt.date, end: dt.date,
     (recovery_and_taper) — the second race keeps its event days and a taper, its 專項期 gets what
     is left, and the phases say so (`note`, shown with the week plan and on the timeline), with a
     hint when they are < A_GAP_HINT_WEEKS apart. A race starting inside the previous one's own
-    days has nothing left to plan and is skipped."""
+    days has nothing left to plan and is skipped.
+
+    SP-102: the open-ended base after the last A race (none ahead) becomes a 維持期 MAINTAIN_AFTER_WEEKS
+    after it started (maintain_start: the day after that race's post-race phases, whatever `begin`;
+    without any A race `since`, the first day of training data; None = no 維持期)."""
     one = dt.timedelta(days=1)
     a_events = sorted((e for e in events if e.priority == "A"), key=lambda e: e.start)
     out: list[Phase] = []
@@ -988,8 +1068,169 @@ def auto_phases(events: list[Event], begin: dt.date, end: dt.date,
         if rec is not None:
             rec.note = "；".join(rec_notes + [rp["text"]])
     if cursor <= end:
-        add("base", cursor, end)    # no A event ahead: open-ended base
+        # no A event ahead: open-ended base — a 維持期 from MAINTAIN_AFTER_WEEKS after it started (SP-102);
+        # maintain_segments is the one place deciding when it starts and what a B race in it does
+        anchor = None
+        if _maintain:
+            anchor = cursor if prev is not None else \
+                trailing_base_start(events, transition_weeks, taper_pref) if a_events else since
+        for x in maintain_segments(events, cursor, end, anchor, bool(a_events)):
+            p = add(x["kind"], x["start"], x["end"], x.get("event_id"), note=x.get("note") or "")
+            if p is not None and x.get("maintain_from"):
+                p.maintain_from = x["maintain_from"].isoformat()
+            if p is not None and x.get("light"):
+                p.light = True
     return [p for p in out if _d(p.start) <= end]
+
+
+# What a B race does when no A race is ahead (SP-102, owner 2026-10-15 — change it here only):
+#   "b_light"  the nearest B race is the goal, prepared the light way: a B_PREP_WEEKS-week 專項塊 (kind
+#              specific, Phase.light) then a B_PREP_TAPER_DAYS 減量 (kind taper, Phase.light) — not an A
+#              race's full cycle (no 8-week 專項期, no 2–3 week taper). SP-95's B rules stay (mini-taper,
+#              race week, recovery, too-many hint: post_race). The phase note asks 「要不要改成 A？」; made an
+#              A race it gets the full 專項期 and 減量期. After the race and its recovery: base / 維持期 again.
+#   "sp95"     no phase for a B race: the 維持期 / base go on, SP-95's week rules only.
+# A C race never makes a phase. The 維持期 is entered only outside a B race's 專項塊 window.
+MAINTAIN_B_POLICY = "b_light"
+B_PREP_WEEKS = 4             # 推估 (owner: about 3–4 weeks before the B race)
+B_PREP_TAPER_DAYS = 7        # 推估 (owner: about 1 week; an A race's 14–21 days are not copied)
+B_PREP_MIN_DAYS = 7          # less room before the B race's taper → no 專項塊 (推估)
+B_PREP_LABEL = N_("B 賽輕量準備")
+B_TAPER_LABEL = N_("B 賽減量")
+
+
+def maintain_entry(anchor: Optional[dt.date]) -> Optional[dt.date]:
+    """The first day of the 維持期 for an open-ended base counted from `anchor` (SP-102: the base's start
+    after the last A race, else the first day of data): MAINTAIN_AFTER_WEEKS later; None without an anchor."""
+    return None if anchor is None else anchor + dt.timedelta(weeks=MAINTAIN_AFTER_WEEKS)
+
+
+def b_prep_blocks(events: list, start: dt.date, end: dt.date) -> list[dict]:
+    """The light preparation of the B races in an open-ended base [start, end] (MAINTAIN_B_POLICY
+    "b_light"): [{"event", "spec": (s, e) or None, "taper": (s, e) or None, "free": first day after the
+    race's recovery}] in date order. A B race whose window overlaps the previous one's race + recovery gets
+    what is left (none when nothing)."""
+    if MAINTAIN_B_POLICY != "b_light":
+        return []
+    one = dt.timedelta(days=1)
+    out, free = [], start
+    for e in sorted((e for e in events if e.priority == "B" and start < e.start), key=lambda e: e.start):
+        t0 = e.start - dt.timedelta(days=B_PREP_TAPER_DAYS)
+        s0 = t0 - dt.timedelta(weeks=B_PREP_WEEKS)
+        if s0 > end:
+            break
+        spec = (max(s0, free), t0 - one) if (t0 - max(s0, free)).days >= B_PREP_MIN_DAYS else None
+        tap = (max(t0, free), e.start - one) if max(t0, free) <= e.start - one else None
+        if spec is None and tap is None:
+            continue
+        out.append({"event": e, "spec": spec, "taper": tap,
+                    "free": e.end + dt.timedelta(days=recovery_plan(e, b=True)["days"]) + one})
+        free = max(free, out[-1]["free"])
+    return out
+
+
+def b_prep_note(e) -> str:
+    """The note of a B race's light preparation (SP-102): what it is, and 「要不要改成 A？」."""
+    return _("沒有 A 賽事，把 B 賽「{name}」{date} 當目標輕量準備：賽前 {w} 週專項塊＋{d} 天減量（推估），"
+             "不走 A 賽的完整周期。目前沒有 A 賽，這場 B 賽要不要改成 A？改成 A 就照常排完整的專項期和減量期",
+             name=e.name, date=_md(e.start), w=B_PREP_WEEKS, d=B_PREP_TAPER_DAYS)
+
+
+def maintain_segments(events: list, start: dt.date, end: dt.date, anchor: Optional[dt.date],
+                      after_a: bool) -> list[dict]:
+    """The open-ended base [start, end] after the last A race (none ahead) as phases [{"kind", "start",
+    "end", "maintain_from", "note", "event_id", "light"}] (SP-102) — the one place deciding when the 維持期
+    starts (maintain_entry(anchor); only outside a B race's 專項塊) and what a B race does
+    (MAINTAIN_B_POLICY: b_prep_blocks). `after_a`: the anchor is the base after an A race (else the first
+    day of data) — the 維持期 note says which."""
+    if start > end:
+        return []
+    one = dt.timedelta(days=1)
+    m = maintain_entry(anchor)
+    note = "" if m is None else (
+        _("沒有 A 賽事已超過 {w} 週（從上一場 A 賽事恢復後的 {date} 起算）：改成維持＋輪替重點，"
+          "不再每週加量（{w} 週為推估）", w=MAINTAIN_AFTER_WEEKS, date=anchor.isoformat())
+        if after_a else
+        _("沒有 A 賽事已超過 {w} 週（從訓練資料的第一天 {date} 起算）：改成維持＋輪替重點，"
+          "不再每週加量（{w} 週為推估）", w=MAINTAIN_AFTER_WEEKS, date=anchor.isoformat()))
+    out: list[dict] = []
+
+    def free(a: dt.date, b: dt.date) -> None:
+        # base, then the 維持期 from `m`
+        if a > b:
+            return
+        if m is None or m > b:
+            out.append({"kind": "base", "start": a, "end": b})
+            return
+        if a < m:
+            out.append({"kind": "base", "start": a, "end": m - one})
+        out.append({"kind": "base", "start": max(a, m), "end": b, "maintain_from": m, "note": note})
+    cur = start
+    for blk in b_prep_blocks(events, start, end):
+        e = blk["event"]
+        first = (blk["spec"] or blk["taper"])[0]
+        free(cur, first - one)
+        bn = b_prep_note(e)
+        if blk["spec"]:
+            out.append({"kind": "specific", "start": blk["spec"][0], "end": blk["spec"][1], "event_id": e.id,
+                        "light": True, "note": bn})
+        if blk["taper"]:
+            out.append({"kind": "taper", "start": blk["taper"][0], "end": blk["taper"][1], "event_id": e.id,
+                        "light": True, "note": "" if blk["spec"] else bn})
+        cur = e.start                       # the race and its recovery: base / 維持期 (SP-95's day rules)
+    free(cur, end)
+    return [x for x in out if x["start"] <= end]
+
+
+def trailing_base_start(events: list, transition_weeks: int = TRANSITION_WEEKS,
+                        taper_pref: Optional[int] = None) -> Optional[dt.date]:
+    """The first day of the open-ended base after the last A race (SP-102): the day after its 恢復期 /
+    轉換期 / 回量期, planned from before the first A race so it doesn't depend on the window asked for;
+    None without an A race."""
+    a = [e for e in events if e.priority == "A"]
+    if not a:
+        return None
+    first = min(e.start for e in a) - dt.timedelta(days=1)
+    last = max(e.end for e in a) + dt.timedelta(weeks=TRANSITION_WEEKS_ULTRA_MAX + 12)
+    ps = auto_phases(events, first, last, transition_weeks, taper_pref, _maintain=False)
+    tail = ps[-1] if ps else None
+    return _d(tail.start) if tail is not None and tail.kind == "base" else None
+
+
+def maintain_week(phases_: list, monday: dt.date) -> Optional[dict]:
+    """The 維持期 week of `monday` (SP-102), or None when the phase holding it isn't one: {"from" (ISO, the
+    維持期's first day), "week" (0 = its first week), "block" (1-based), "week_in_block" (1-based),
+    "focus" (MAINTAIN_FOCUS), "label" (its name, translated), "text" (the week's line)}. The 輪替重點 blocks
+    count MAINTAIN_BLOCK_WEEKS weeks from the Monday of its first day. `phases_`: Phase objects or dicts."""
+    def get(p, k):
+        return p.get(k) if isinstance(p, dict) else getattr(p, k, None)
+    ph = next((p for p in phases_ or () if get(p, "maintain_from") and _d(get(p, "start")) <= monday + dt.timedelta(days=6)
+               and _d(get(p, "end")) >= monday), None)
+    if ph is None:
+        return None
+    m0 = _d(get(ph, "maintain_from"))
+    m0 -= dt.timedelta(days=m0.weekday())
+    week = max(0, (monday - m0).days // 7)
+    block = week // MAINTAIN_BLOCK_WEEKS
+    focus = MAINTAIN_FOCUS[block % len(MAINTAIN_FOCUS)]
+    label = _(MAINTAIN_FOCUS_LABEL[focus])
+    nxt = _(MAINTAIN_FOCUS_LABEL[MAINTAIN_FOCUS[(block + 1) % len(MAINTAIN_FOCUS)]])
+    left = MAINTAIN_BLOCK_WEEKS - week % MAINTAIN_BLOCK_WEEKS
+    text = (_("維持期：這 {n} 週的重點是「{focus}」（第 {i}/{n} 週，之後換「{next}」）：每週一堂 5 區的課（{what}），"
+              "其他照輕鬆跑；量不再往上加。沒有 A 賽事超過 {w} 週，繼續加量已經練不太上去，先維持體能、"
+              "等下一場 A 賽事再走專項期和減量（輪替方式、週數為推估）",
+              n=MAINTAIN_BLOCK_WEEKS, focus=label, i=week % MAINTAIN_BLOCK_WEEKS + 1, next=nxt,
+              what=_("平路間歇") if focus == "speed" else _("上坡間歇"), w=MAINTAIN_AFTER_WEEKS))
+    return {"from": get(ph, "maintain_from"), "week": week, "block": block + 1,
+            "week_in_block": week % MAINTAIN_BLOCK_WEEKS + 1, "weeks_left": left, "focus": focus,
+            "label": label, "text": text}
+
+
+def maintain_why() -> str:
+    """The 維持期 in one plain sentence (SP-102), for the plan page and the overview."""
+    return _("沒有 A 賽事超過 {w} 週：量維持、不再每週往上加，每週保留一堂高強度課，重點每 {n} 週輪替一次（速度、爬坡）。"
+             "持續加量約半年後體能就不太會再進步；加一場 A 賽事，就會照常排專項期和減量",
+             w=MAINTAIN_AFTER_WEEKS, n=MAINTAIN_BLOCK_WEEKS)
 
 
 def recovery_and_taper(free: int, rec_days: int, taper_days: int) -> tuple[int, int]:
@@ -1095,7 +1336,19 @@ def phases(plan: Plan, begin: dt.date, end: dt.date, transition_weeks: Optional[
         return plan.phases
     tw = transition_weeks_setting() if transition_weeks is None else transition_weeks
     tp = taper_days_setting() if taper_pref is None else taper_pref
-    return auto_phases(plan.events, begin, end, tw, tp)
+    return auto_phases(plan.events, begin, end, tw, tp, since=training_since())
+
+
+def training_since() -> Optional[dt.date]:
+    """SINCE_OF (the first day of training data, installed by the app); None when not installed or on
+    any error (SP-102: then no 維持期 without an A race on record)."""
+    if SINCE_OF is None:
+        return None
+    try:
+        v = SINCE_OF()
+    except Exception:                       # noqa: BLE001 — phases must still build
+        return None
+    return _d(v) if v else None
 
 
 def phase_on(plan: Plan, day: dt.date, begin: Optional[dt.date] = None,
@@ -1252,6 +1505,10 @@ def phase_label(p, events=()) -> str:
     event starting on its first day) is 行程, not 賽事 (SP-504 R2). `p`: a Phase or a dict."""
     g = (lambda k: p.get(k)) if isinstance(p, dict) else (lambda k: getattr(p, k, None))
     kind = g("kind")
+    if g("maintain_from"):
+        return _(MAINTAIN_LABEL)                    # SP-102: a base phase that is a 維持期
+    if g("light"):                                  # SP-102: a B race's light preparation
+        return _(B_PREP_LABEL) if kind == "specific" else _(B_TAPER_LABEL)
     if kind == "event":
         eid, start = g("event_id"), str(g("start") or "")[:10]
         ev = next((e for e in events or () if eid and e.id == eid), None) \
@@ -1263,5 +1520,5 @@ def phase_label(p, events=()) -> str:
 
 def phase_json(p: Phase, events=()) -> dict:
     """`events`: the plan's (phase_label: an A 百岳 trip's phase is 行程)."""
-    return {**asdict(p), "label": phase_label(p, events),
+    return {**asdict(p), "label": phase_label(p, events), "maintain": p.maintain,
             "days": (_d(p.end) - _d(p.start)).days + 1}

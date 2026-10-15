@@ -124,6 +124,10 @@ TABLES: tuple = (
     Table("workout_templates_user", USER, "the user's 課表範本 (SP-36); the route GPX is template_gpx/",
           deidentify=("name", "note", "gpx_filename")),
     Table("workout_template_cats", USER, "categories the user added to the 範本 page", deidentify=("label",)),
+    Table("training_routes", USER, "the user's training routes (SP-640, 課表 › 路線): an uploaded course's "
+          "name, totals and cached profile / 坡段表; the file is route_gpx/", deidentify=("name", "filename")),
+    Table("training_routes_moved", USER, "which templates' GPX were moved to training_routes (SP-640), so a "
+          "moved route the user deleted is not brought back"),
     Table("race_calc", USER, "the race calculator's saved inputs + last result per event",
           deidentify=("saved_at", "updated_at")),
     Table("event_gpx", USER, "metadata of an event's uploaded course (the file is event_gpx/<id>.gz)",
@@ -239,6 +243,9 @@ FILES: tuple = (
          deidentify=("GPS track",)),
     File("template_gpx/**", IMPORTED, ROOT, "uploaded training-route GPX of a 範本, gzip "
          "(engine/user_templates.py); backed up like event_gpx", backup=ALWAYS,
+         deidentify=("GPS track (start / end)",)),
+    File("route_gpx/**", IMPORTED, ROOT, "uploaded training routes, gzip (engine/route_library.py, SP-640; "
+         "a 範本's GPX moved here); backed up like event_gpx", backup=ALWAYS,
          deidentify=("GPS track (start / end)",)),
     File("archive_log.json", DERIVED, ROOT, "the monthly archive's runs (SP-317, engine/fit_archive.py): per run "
          "its time, cutoff, files deleted (count, date range, bytes), the activities kept (no summary, referenced "

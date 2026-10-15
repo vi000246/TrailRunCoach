@@ -91,12 +91,15 @@ WRITE_ALLOW: list[tuple[frozenset, re.Pattern]] = [(frozenset(m.split()), re.com
     ("POST DELETE", _P + r"/sessions/[^/]+/link"),
     ("POST", _P + r"/sessions/expired/delete"),
     ("POST", _P + r"/(test-suggestions/schedule|suggestions/dismiss|suggestions/accept|steps-preview|steps/derive"
-             r"|steps/check|reconcile|prefs/conflicts|blackouts/preview|equivalence/design|rest-days)"),
+             r"|steps/check|steps/route|reconcile|prefs/conflicts|blackouts/preview|equivalence/design|rest-days)"),
     ("DELETE", _P + r"/rest-days/[^/]+"),
     # 範本 (SP-36): the visitor's own templates, categories and route GPX, in the sandbox
     ("POST", _P + r"/steps/templates/(user|user/copy|cats)"),
     ("PATCH DELETE", _P + r"/steps/templates/(user|cats)/[^/]+"),
     ("POST DELETE", _P + r"/steps/templates/user/[^/]+/gpx"),
+    # 課表 › 路線 (SP-640): the visitor's own routes, in the sandbox
+    ("POST", _P + r"/routes/library"),
+    ("PATCH DELETE", _P + r"/routes/library/[^/]+"),
     ("POST", _P + r"/sessions/[^/]+/save-as-template"),
     ("PUT", _P + r"/(prefs|blackouts)"),
     ("PUT", r"/api/v1/plan/(events|phases)"),
@@ -109,7 +112,7 @@ WRITE_ALLOW: list[tuple[frozenset, re.Pattern]] = [(frozenset(m.split()), re.com
 ]]
 # writes that need no sandbox (they change nothing stored)
 NO_SANDBOX = re.compile(r"/api/v1/(demo/reset|racepower/(predict|course|plan)"
-                        r"|overview/plan/(steps-preview|steps/check|blackouts/preview|prefs/conflicts))$")
+                        r"|overview/plan/(steps-preview|steps/check|steps/route|blackouts/preview|prefs/conflicts))$")
 HEAVY = re.compile(r"/api/v1/(racepower/(predict|course|plan)|racepower/course/event/[^/]+"
                    r"|overview/plan/(equivalence/design|reconcile|steps-preview))$")
 

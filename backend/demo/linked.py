@@ -83,10 +83,13 @@ def _secs(st: dict, default: int) -> int:
     return int(d.get("value")) if d.get("type") == "time" and d.get("value") else default
 
 
-def segments(steps: dict, cp: float, small: bool = False) -> list[Segment]:
+def segments(steps: dict, cp: float, small: bool = False, keep_main: bool = False) -> list[Segment]:
     """The session's steps (workout_steps format) as run: warm-up / cool-down easy,
     each work step inside its band (REP_POS; the last rep at LAST_REP, a little fade),
-    the rests a jog / walk; one lap per step (the watch laps each pushed step)."""
+    the rests a jog / walk; one lap per step (the watch laps each pushed step).
+    `small` quarters each step (≥ 30 s); with `keep_main` (the interval run) only the
+    cool-down: quartered reps miss the 課表 match — 4×1′ as 4×30″ is 98 s at ≥ 95 % CP
+    against the 144 s quality_gate.hard_need asks for (SP-530)."""
     from backend.engine import workout_steps as WS
     flat = [f["st"] for f in WS.flat(steps.get("items") or [])]
     works = [i for i, st in enumerate(flat) if st.get("kind") == "work"]
@@ -113,7 +116,9 @@ def segments(steps: dict, cp: float, small: bool = False) -> list[Segment]:
         else:
             out.append(Segment(dur, 0.62))
     if small:
-        out = [Segment(max(30, s.dur_s // 4), s.frac, s.lap, s.fade, s.label) for s in out]
+        cool = [st.get("kind") not in ("warm", "work", "rest") for st in flat]
+        out = [s if keep_main and not c else Segment(max(30, s.dur_s // 4), s.frac, s.lap, s.fade, s.label)
+               for s, c in zip(out, cool)]
     return out
 
 
@@ -125,7 +130,7 @@ def build_fit(seed: int, k: int, kind: str, session: dict, day: dt.date, hour: f
     steps = session.get("steps") or WS.derive(session)
     if not steps:
         raise ValueError(f"session {session.get('title')!r} has no structure")
-    segs = segments(steps, cp, small)
+    segs = segments(steps, cp, small, keep_main=kind == "interval_plan")
     minutes = sum(s.dur_s for s in segs) / 60.0
     if kind == "interval_plan":
         p = S.Planned(date=day, kind="interval", minutes=minutes, sport="run", name=session.get("title") or "",

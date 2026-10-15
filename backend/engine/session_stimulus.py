@@ -261,3 +261,22 @@ def verdict(stim: Optional[dict], category: str, hrpeak: Optional[float] = None,
                                                  f"等效 T@VO2max {eq / 60:.1f} 分 < {Z5_MIN_S // 60} 分"}
     return {**out, "stimulus": None, "why": "平均心率 ≤ 輕鬆跑上限+3" if easy_hr else
             f"Zone 3 {z3 / 60:.0f} 分 < {Z3_NEED_S // 60} 分、等效 T@VO2max {eq / 60:.1f} 分 < {Z5_MIN_S // 60} 分"}
+
+
+def planned_mp(v: dict, mp_s: Optional[float]) -> dict:
+    """SP-646 (SP-644 option B): a planned marathon-pace long run run as planned is no Zone 3 session.
+    Marathon pace (≈ 94 % CP) is 中強度 — Seiler's zone 2, Palladino's moderate 80–95 % — but its
+    30-s power is over Zone 3's 88 % edge, so the MP block alone reads 「Zone 3 ≥ 10 min」 and, with a
+    high-enough average HR, 高強度長跑 (and the 課表 card ◐ 跑成強度課). As workout_review._planned_quality
+    does for a planned interval session, what was planned decides: with `mp_s` planned MP seconds, a
+    "z3" verdict whose Zone 3 time beyond the planned MP is under Z3_NEED_S (that much alone would not
+    make a Zone 3 session) has no stimulus. Zone 5 and the other verdicts are kept as they are."""
+    from backend.i18n import _
+    if not mp_s or (v or {}).get("stimulus") != "z3":
+        return v
+    z3 = float(v.get("z3_s") or 0.0)
+    if z3 - float(mp_s) >= Z3_NEED_S:
+        return v
+    return {**v, "stimulus": None, "planned_mp": True,
+            "why": _("Zone 3 {a:.0f} 分在課表的馬拉松配速段內（{b:.0f} 分）：照課表的中強度，不算強度課",
+                     a=z3 / 60.0, b=float(mp_s) / 60.0)}

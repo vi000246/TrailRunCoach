@@ -1,12 +1,12 @@
-"""SP-519: 圖表分析 › 單次活動判讀 › 間歇 — the automatic interval display leaves the run's first 10 minutes out.
+"""SP-519: 圖表分析 › 單次活動判讀 › 間歇 — an easy run with a set of efforts shows the 間歇 page by itself.
 
-On the demo athlete: 「恢復週 fartlek 4×1 分」 (the linked interval run of the recovery week, not matched to
-its session — SP-530 — so it is classified an easy run). The e2e build quarters its steps, the 15′ warm-up
-too: its four 30″ efforts all start in the first 10 minutes, so R1 (the user 2026-10-14: 「排除開跑前 10 分」)
-leaves them out and the page keeps SP-513's one sentence instead of showing itself — in Chinese and English.
-The display itself (≥ 3 similar efforts at ≥ 95 % CP after minute 10 → the charts, without 「當作間歇判讀」)
-is checked on the review's answer in test_interval_auto_sp519.py: the demo has no unplanned run with such a
-set after its first 10 minutes. A plain run: test_interval_page_sp513_e2e.py.
+On the demo athlete: 「恢復週 fartlek 4×1 分」, the linked interval run of the recovery week. It is matched to
+its 課表 session (SP-530: the e2e build keeps its 15′ warm-up, 4×1′ and rests as planned, only the cool-down
+is quartered), so its 間歇 page judges it against the plan. Taken off the session (取消配對) it is an unplanned
+run with four 1′ efforts at ≥ 95 % CP after minute 10: the page shows its charts by itself, saying it was
+reviewed automatically, without 「當作間歇判讀」 — in Chinese and English. Paired back afterwards (the e2e
+server is shared by every test). R1 (efforts in the first 10 minutes don't count, the user 2026-10-14) is
+checked on the review's answer in test_interval_auto_sp519.py. A plain run: test_interval_page_sp513_e2e.py.
 
 Run: ./e2e.sh -k interval_auto_sp519 (see conftest.py)."""
 from __future__ import annotations
@@ -19,18 +19,43 @@ from backend.tests.e2e.test_interval_page_sp513_e2e import _open, _workouts  # n
 
 pytestmark = pytest.mark.e2e
 
+SESSIONS = "/api/v1/overview/plan/sessions"
+
 
 def _fartlek(rows: list[dict]) -> dict:
     return next(a for a in rows if "fartlek" in str(a.get("name")))
 
 
-def test_efforts_in_the_first_ten_minutes_do_not_show_the_charts(app):
+def _row(page, index: int) -> dict:
+    return next(x for x in _workouts(page) if x["index"] == index)
+
+
+def _open_fresh(page, a: dict, lang: str = "") -> dict:
+    """_open after the pairing changed: the viewer first shows each chart's previous drawing (更新中, the
+    render cache's stale-while-revalidate) — wait until none is stale, then read the page again."""
+    _open(page, a, lang)
+    page.wait_for_function("() => !document.querySelector('#grid > section.card.is-stale')", timeout=120_000)
+    return _open(page, a, lang)
+
+
+def test_unpaired_from_its_session_the_set_shows_the_charts(app):
     page, _ = app
     a = _fartlek(_workouts(page))
-    assert not (a.get("plan") or {}).get("kind"), a                 # still unmatched (SP-530)
+    assert (a.get("plan") or {}).get("kind") == "quality", a        # matched to its session (SP-530)
+    ss = page.request.get(SESSIONS).json()["sessions"]
+    s = next(s for s in ss if (s.get("done_by") or {}).get("index") == a["index"])
     st = _open(page, a)
-    assert st["ids"] == ["間歇判讀"] and st["header"] == "1 張圖", st
-    assert "這次不是間歇課" in st["text"] and "自動判讀" not in st["text"], st
-    st = _open(page, a, "en")
-    assert len(st["ids"]) == 1 and "Not an interval session" in st["text"], st
-    assert "reviewed automatically" not in st["text"], st
+    assert len(st["ids"]) > 1 and "這次不是間歇課" not in st["text"] and "自動判讀" not in st["text"], st
+    assert page.request.delete(f"{SESSIONS}/{s['uid']}/link").ok
+    try:
+        a = _row(page, a["index"])
+        assert not (a.get("plan") or {}).get("kind"), a
+        st = _open_fresh(page, a)
+        assert len(st["ids"]) > 1 and "自動判讀" in st["text"], st
+        assert "這次不是間歇課" not in st["text"] and "當作間歇判讀" not in st["text"], st
+        st = _open_fresh(page, a, "en")
+        assert len(st["ids"]) > 1 and "reviewed automatically" in st["text"], st
+        assert "Not an interval session" not in st["text"], st
+    finally:
+        assert page.request.post(f"{SESSIONS}/{s['uid']}/link", data={"index": a["index"]}).ok
+    assert (_row(page, a["index"]).get("plan") or {}).get("kind") == "quality"

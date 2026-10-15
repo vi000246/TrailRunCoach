@@ -520,6 +520,35 @@ class WorkoutTemplateUser(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class TrainingRoute(Base):
+    """The user's training routes (SP-640, engine/route_library.py; 課表 › 路線, static/routelib.html):
+    an uploaded GPX / FIT course, apart from the templates — picked when a structure is put on a day.
+    The file: <HOME>/route_gpx/<id>.gz (per tenant); its profile and 坡段表 (SP-639's segments + climbs)
+    cached here. `from_tpl`: the template whose GPX (SP-36) was moved here, so it moves once. New
+    table: created by init_db's create_all (and route_library._ensure on an older DB)."""
+    __tablename__ = "training_routes"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(80))
+    filename: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    sha1: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
+    km: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    gain_m: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    loss_m: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    profile_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)    # {"km": [...], "z": [...]}
+    course_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)     # user_templates._course_rows
+    from_tpl: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class TrainingRouteMoved(Base):
+    """Templates whose GPX was already moved to training_routes (SP-640): a moved route the user
+    deleted is not brought back."""
+    __tablename__ = "training_routes_moved"
+    tpl_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    route_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+
+
 class WorkoutTemplateCat(Base):
     """A category the user added to the 範本 page (SP-36), id c<id> in a template's cats."""
     __tablename__ = "workout_template_cats"

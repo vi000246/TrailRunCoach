@@ -10066,5 +10066,169 @@
   "這個測試帳號的假資料還在產生中，請稍後再試": {
     "draft": true,
     "src": "backend/api/account.py:285"
+  },
+  "路線最多 {n} 條": {
+    "draft": false,
+    "src": "backend/engine/route_library.py"
+  },
+  "路線名稱最多 {n} 字": {
+    "draft": false,
+    "src": "backend/engine/route_library.py"
+  },
+  "沒有這段坡": {
+    "draft": false,
+    "src": "backend/api/route_library.py"
+  },
+  "路線名稱不能空白": {
+    "draft": false,
+    "src": "backend/engine/route_library.py"
+  },
+  "這條路線沒有高度剖面": {
+    "draft": false,
+    "src": "backend/engine/route_library.py"
+  },
+  "這個路段沒有可用的軌跡": {
+    "draft": false,
+    "src": "backend/engine/route_library.py"
+  },
+  "要選上傳的路線或我的路段": {
+    "draft": false,
+    "src": "backend/api/route_library.py"
+  },
+  "找不到這條路線": {
+    "draft": false,
+    "src": "backend/engine/route_library.py"
+  },
+  "下坡 {m} m · 約 {t}": {
+    "draft": false,
+    "src": "backend/engine/route_session.py"
+  },
+  "平路 {km} km · 約 {t}": {
+    "draft": false,
+    "src": "backend/engine/route_session.py"
+  },
+  "起伏 {km} km · 約 {t}": {
+    "draft": false,
+    "src": "backend/engine/route_session.py"
+  },
+  "控制、安全": {
+    "draft": false,
+    "src": "backend/engine/route_session.py"
+  },
+  "路線：{name}": {
+    "draft": false,
+    "src": "backend/engine/route_session.py"
+  },
+  "強度是輕鬆跑（Z2）：可跑的坡看功率（COROS 可改 Effort Pace），陡坡看心率上限，下坡不設目標": {
+    "draft": false,
+    "src": "backend/engine/route_session.py"
+  },
+  "B 賽「{name}」輕量準備（{w} 週專項塊，推估）：長跑後段練比賽配速，強度課照階梯": {
+    "draft": true,
+    "src": "SP-102"
+  },
+  "B 賽「{name}」輕量準備（{w} 週專項塊，推估）：間歇排上坡版練長爬坡，長跑後段練比賽配速、照比賽計畫補給": {
+    "draft": true,
+    "src": "SP-102"
+  },
+  "B 賽減量": {
+    "draft": true,
+    "src": "SP-102"
+  },
+  "B 賽減量：平常 {h:.1f} h × {share:.0%}（推估）": {
+    "draft": true,
+    "src": "SP-102"
+  },
+  "B 賽輕量準備": {
+    "draft": true,
+    "src": "SP-102"
+  },
+  "B 賽輕量準備：最後 20–30 分用比賽配速{pace}": {
+    "draft": true,
+    "src": "SP-102"
+  },
+  "B 賽輕量準備：選有長爬坡的路線，最後 20–30 分用比賽配速{pace}；全程照比賽的補給計畫吃喝（補給演練）": {
+    "draft": true,
+    "src": "SP-102"
+  },
+  "。{note}": {
+    "draft": true,
+    "src": "SP-102"
+  },
+  "。到「賽事周期」頁加一場 A 賽事，周期會自動排出來": {
+    "draft": true,
+    "src": "SP-102"
+  },
+  "上坡間歇": {
+    "draft": true,
+    "src": "SP-102"
+  },
+  "平路間歇": {
+    "draft": true,
+    "src": "SP-102"
+  },
+  "把 B 賽當這段的目標：幾週專項塊＋1 週減量，不走 A 賽的完整周期": {
+    "draft": true,
+    "src": "SP-102"
+  },
+  "沒有 A 賽事已超過 {w} 週（從上一場 A 賽事恢復後的 {date} 起算）：改成維持＋輪替重點，不再每週加量（{w} 週為推估）": {
+    "draft": true,
+    "src": "SP-102"
+  },
+  "沒有 A 賽事已超過 {w} 週（從訓練資料的第一天 {date} 起算）：改成維持＋輪替重點，不再每週加量（{w} 週為推估）": {
+    "draft": true,
+    "src": "SP-102"
+  },
+  "沒有 A 賽事超過 {w} 週：量維持、不再每週往上加，每週保留一堂高強度課，重點每 {n} 週輪替一次（速度、爬坡）。持續加量約半年後體能就不太會再進步；加一場 A 賽事，就會照常排專項期和減量": {
+    "draft": true,
+    "src": "SP-102"
+  },
+  "沒有 A 賽事，把 B 賽「{name}」{date} 當目標輕量準備：賽前 {w} 週專項塊＋{d} 天減量（推估），不走 A 賽的完整周期。目前沒有 A 賽，這場 B 賽要不要改成 A？改成 A 就照常排完整的專項期和減量期": {
+    "draft": true,
+    "src": "SP-102"
+  },
+  "爬坡": {
+    "draft": true,
+    "src": "SP-102"
+  },
+  "維持期": {
+    "draft": true,
+    "src": "SP-102"
+  },
+  "維持期 C 賽一個月最多 1 場（CTS）：「{race}」前後 30 天內還有「{others}」。每場都會取代一堂強度課或長跑，太密就變成一直在比賽；挑一場當硬課，其他改成輕鬆跑或拿掉": {
+    "draft": true,
+    "src": "SP-102"
+  },
+  "維持期每週要有一堂高於 VT2 的課（5 區），但 5 區還沒開放、3 區也還沒解鎖：這週只排輕鬆跑和長跑": {
+    "draft": true,
+    "src": "SP-102"
+  },
+  "維持期每週要有一堂高於 VT2 的課（5 區），但 5 區還沒開放或這週被護欄擋下：先用 3 區那一堂代替": {
+    "draft": true,
+    "src": "SP-102"
+  },
+  "維持期：每週的強度課排 5 區（高於第二換氣閾值 VT2），3 區這段時間先不排": {
+    "draft": true,
+    "src": "SP-102"
+  },
+  "維持期：這 {n} 週的重點是「{focus}」（第 {i}/{n} 週，之後換「{next}」）：每週一堂 5 區的課（{what}），其他照輕鬆跑；量不再往上加。沒有 A 賽事超過 {w} 週，繼續加量已經練不太上去，先維持體能、等下一場 A 賽事再走專項期和減量（輪替方式、週數為推估）": {
+    "draft": true,
+    "src": "SP-102"
+  },
+  "維持期：長期訓練負荷（Chronic load）{ctl:.0f} 維持住，不再每週往上加 → {h:.1f} h（近 4 週的量為底）": {
+    "draft": true,
+    "src": "SP-102"
+  },
+  "維持期：長期負荷持平就是目標": {
+    "draft": true,
+    "src": "SP-102"
+  },
+  "維持體能：量不再往上加，每週一堂高強度，重點輪替；等下一場 A 賽事再加量": {
+    "draft": true,
+    "src": "SP-102"
+  },
+  "（目標 {p}/km）": {
+    "draft": true,
+    "src": "SP-102"
   }
 }
