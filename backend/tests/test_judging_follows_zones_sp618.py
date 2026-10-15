@@ -150,7 +150,8 @@ def test_the_editor_offers_the_sets_zones():
     cl = [r for r in WS.zones_table(WS.Ctx(cp=CP, pzm=pm("classic")))["power"] if not r.get("legacy")]
     assert [r["id"] for r in cl] == [f"C{i}" for i in range(1, 8)] and cl[3]["label"] == "L4 閾值"
     pe = [r for r in WS.zones_table(WS.Ctx(cp=CP, pzm=personal_pm()))["power"] if not r.get("legacy")]
-    assert [r["id"] for r in pe] == [f"P{i}" for i in range(1, 10)] and pe[3]["label"] == "L4 甜蜜點"
+    # SP-661: the running levels, R1–R10
+    assert [r["id"] for r in pe] == [f"R{i}" for i in range(1, 11)] and pe[4]["label"] == "L5 準閾值"
 
 
 def test_with_palladino_the_editor_is_as_before():
@@ -178,10 +179,17 @@ def test_a_set_zone_resolves_saves_and_ranges():
     old = {**st, "target": {"type": "power", "mode": "zone", "zone": "3B"}}
     assert (WS.resolve(old, c).lo, WS.resolve(old, c).hi) == (238, 252)
     # a 個人化區間 id needs that set in effect
-    p3 = {**st, "target": {"type": "power", "mode": "zone", "zone": "P5"}}
+    p3 = {**st, "target": {"type": "power", "mode": "zone", "zone": "R6"}}
     assert WS.resolve(p3, c).err
     rp = WS.resolve(p3, WS.Ctx(cp=CP, basis="power", pzm=personal_pm()))
-    assert (rp.lo, rp.hi) == (round(0.95 * 250), round(1.05 * 250))
+    assert (rp.lo, rp.hi) == (round(0.95 * 250), round(1.02 * 250))
+    # SP-661: a step saved with the 9 cycling levels' id (P5 閾值 95–105 %) reads as the running 閾值
+    old5 = {**st, "target": {"type": "power", "mode": "zone", "zone": "P5"}}
+    ro = WS.resolve(old5, WS.Ctx(cp=CP, basis="power", pzm=personal_pm()))
+    assert (ro.lo, ro.hi) == (rp.lo, rp.hi)
+    errs = []
+    assert WS._norm_target({"type": "power", "mode": "zone", "zone": "P2", "zone_to": "P3"}, errs) == \
+        {"type": "power", "mode": "zone", "zone": "R2", "zone_to": "R4"} and not errs
 
 
 def test_the_editor_words_name_no_wko5():
@@ -200,8 +208,9 @@ def test_the_classifier_edges_follow_the_set():
     assert PZP.class_edges(pm("classic")) == {"z3": 0.91, "p_lo": 1.03, "p_hi": 1.06}
     e = PZP.class_edges(personal_pm(260.0))
     k = 250.0 / 260.0
-    assert e["z3"] == pytest.approx(0.88 * k, abs=1e-4) and e["p_hi"] == pytest.approx(1.05 * k, abs=1e-4)
-    assert e["p_lo"] == pytest.approx(min(1.03 * k, 1.05 * k), abs=1e-4)
+    # SP-661: Zone 5's floor is the running levels' FRC/FTP, 102 % of the model's FTP (was 105 %)
+    assert e["z3"] == pytest.approx(0.88 * k, abs=1e-4) and e["p_hi"] == pytest.approx(1.02 * k, abs=1e-4)
+    assert e["p_lo"] == pytest.approx(min(1.03 * k, 1.02 * k), abs=1e-4)
 
 
 def test_vo2_bouts_and_zone3_time_use_the_edges():

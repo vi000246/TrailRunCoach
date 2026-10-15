@@ -74,8 +74,10 @@ def _now() -> dt.datetime:
 
 
 def snapshot(plan: dict, *, title: str, include_weight: bool = False, expires_days: Optional[int] = None,
-             request: Optional[dict] = None, now: Optional[dt.datetime] = None) -> dict:
-    """The frozen, whitelisted view of a /plan result."""
+             request: Optional[dict] = None, now: Optional[dt.datetime] = None,
+             cairn_curve: Optional[dict] = None) -> dict:
+    """The frozen, whitelisted view of a /plan result. `cairn_curve` (SP-653, cairn_curve.py): the
+    時間曲線 for 疊石 Cairn, only when the athlete ticked it — a share has none by default."""
     if expires_days not in EXPIRY_DAYS:
         raise ShareError(f"有效期限只能是 {EXPIRY_DAYS}")
     now = now or _now()
@@ -101,7 +103,7 @@ def snapshot(plan: dict, *, title: str, include_weight: bool = False, expires_da
     prof = plan.get("profile") or None
     stops = [{k: st.get(k) for k in ("km", "type", "name", "minutes")} for st in req.get("stops") or []]
     env_to = ((plan.get("env") or {}).get("to") or {})
-    return scrub_health({
+    out = {
         "v": VERSION, "title": (title or "").strip()[:80] or "賽事計畫",
         "created": now.isoformat(), "expires": (now + dt.timedelta(days=expires_days)).isoformat() if expires_days else None,
         "type": plan.get("type"),
@@ -116,7 +118,10 @@ def snapshot(plan: dict, *, title: str, include_weight: bool = False, expires_da
         "days": [{k: d.get(k) for k in ("day", "km", "gain_m", "loss_m", "moving_h", "clock_h")} for d in plan.get("days") or []],
         "profile": {"km": prof["km"], "z": prof["z"]} if prof and prof.get("km") else None,
         "fuel": fuel,
-    })
+    }
+    if cairn_curve:
+        out["cairn_curve"] = cairn_curve
+    return scrub_health(out)
 
 
 def _path(sid: str, root: Optional[Path] = None) -> Path:

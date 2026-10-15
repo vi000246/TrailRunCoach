@@ -37,7 +37,9 @@ above), per request:
      which never reads the session cookie: POST /api/v1/link/<project>/token with no tenant (the
      endpoint checks the project's shared secret); a GET / HEAD of a route in links.ROUTES with
      `Authorization: Bearer <service token>` whose scopes hold the route's, of a user still linked
-     with that project, bound to that user's tenant (the token's, never one the caller names);
+     with that project — and for a feature that asks on its own (links.FEATURES, SP-654) switched
+     on by the person (403 CONSENT_REQUIRED) —, bound to that user's tenant (the token's, never one
+     the caller names);
      anything else there 401 TOKEN_INVALID (429 once the IP failed too often)
   6. a user who hasn't accepted the current terms: pages go to /signup, the rest gets
      403 {"code": "TERMS_REQUIRED"} (the owner accepts none)
@@ -552,6 +554,11 @@ class TenancyMiddleware:
             return
         if not await run_in_threadpool(LK.is_linked, user, c):
             await refuse(403, "LINK_REVOKED")
+            return
+        if need in LK.FEATURES and not await run_in_threadpool(LK.allowed, user, c, need):
+            # SP-654: a feature the person allows on its own, switched off (or never on)
+            await refuse(403, "CONSENT_REQUIRED", scope=need, text=_(LK.SCOPE_TEXT[need]),
+                         link_url=LK.link_url(c, need))
             return
         if not await run_in_threadpool(LG.consent_current, user):
             await refuse(403, "TERMS_REQUIRED")

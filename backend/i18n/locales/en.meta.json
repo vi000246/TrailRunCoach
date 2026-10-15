@@ -10023,9 +10023,73 @@
     "draft": true,
     "src": "backend/accounts/links.py"
   },
-  "同步 GPX 路線與行程": {
+  "把你的賽事路線、過夜點與腳程推到 Cairn（建立或更新行程）": {
     "draft": true,
     "src": "backend/accounts/links.py"
+  },
+  "第 {n} 晚": {
+    "draft": true,
+    "src": "backend/accounts/cairn_push.py"
+  },
+  "找不到這場賽事": {
+    "draft": true,
+    "src": "backend/accounts/cairn_push.py"
+  },
+  "這場賽事沒有存 GPX": {
+    "draft": true,
+    "src": "backend/accounts/cairn_push.py"
+  },
+  "這份 GPX 不是 UTF-8 文字檔，疊石 Cairn 收不了": {
+    "draft": true,
+    "src": "backend/accounts/cairn_push.py"
+  },
+  "賽事的 GPX 換過了：用新的 GPX 重算一次再推": {
+    "draft": true,
+    "src": "backend/accounts/cairn_push.py"
+  },
+  "推到疊石 Cairn 還沒開放": {
+    "draft": true,
+    "src": "backend/accounts/cairn_push.py"
+  },
+  "先在設定連結疊石 Cairn 才能推": {
+    "draft": true,
+    "src": "backend/accounts/cairn_push.py"
+  },
+  "推之前要你同意：{text}": {
+    "draft": true,
+    "src": "backend/accounts/cairn_push.py"
+  },
+  "正在推，請稍候": {
+    "draft": true,
+    "src": "backend/accounts/cairn_push.py"
+  },
+  "疊石 Cairn 暫時連不上，稍後再試": {
+    "draft": true,
+    "src": "backend/accounts/cairn_push.py"
+  },
+  "疊石 Cairn 的回應看不懂，稍後再試": {
+    "draft": true,
+    "src": "backend/accounts/cairn_push.py"
+  },
+  "你在疊石 Cairn 是免費方案：推行程要 Cairn 的基本會員以上": {
+    "draft": true,
+    "src": "backend/accounts/cairn_push.py"
+  },
+  "今天推到疊石 Cairn 的次數用完了，明天再推": {
+    "draft": true,
+    "src": "backend/accounts/cairn_push.py"
+  },
+  "疊石 Cairn 找不到你的帳號：先用同一個 Google 帳號登入 Cairn 一次": {
+    "draft": true,
+    "src": "backend/accounts/cairn_push.py"
+  },
+  "疊石 Cairn 上的這條行程找不到了（可能已經刪掉）。再按一次會建一條新的。": {
+    "draft": true,
+    "src": "backend/accounts/cairn_push.py"
+  },
+  "疊石 Cairn 不收這份資料：{why}": {
+    "draft": true,
+    "src": "backend/accounts/cairn_push.py"
   },
   "讀你路線的天氣": {
     "draft": true,
@@ -10040,6 +10104,14 @@
     "src": "backend/api/link.py"
   },
   "這個服務還沒開放連結": {
+    "draft": true,
+    "src": "backend/api/link.py"
+  },
+  "沒有這個項目": {
+    "draft": true,
+    "src": "backend/api/link.py"
+  },
+  "要先連結才能開啟": {
     "draft": true,
     "src": "backend/api/link.py"
   },
@@ -10230,5 +10302,57 @@
   "（目標 {p}/km）": {
     "draft": true,
     "src": "SP-102"
+  },
+  "Cairn 只讀 GPX：這個檔案不是 GPX": {
+    "draft": true,
+    "src": "backend/engine/racepower/cairn_curve.py:87"
+  },
+  "算不出 Cairn 的腳程：路線沒有距離或沒有移動時間": {
+    "draft": true,
+    "src": "backend/engine/racepower/cairn_curve.py:225"
+  },
+  "這次計算沒有分段時間，做不出時間曲線": {
+    "draft": true,
+    "src": "backend/engine/racepower/cairn_curve.py:304"
+  },
+  "GPX 裡沒有軌跡點（trkpt）：Cairn 只讀軌跡點": {
+    "draft": true,
+    "src": "backend/engine/racepower/cairn_curve.py:307"
+  },
+  "這次計算的路線長度跟 GPX 對不上（差超過 1 %）：重算一次再拿曲線": {
+    "draft": true,
+    "src": "backend/engine/racepower/cairn_curve.py:312"
+  },
+  "時間曲線要用賽事存的 GPX 算：這次計算不是用 GPX 路線": {
+    "draft": true,
+    "src": "backend/engine/racepower/cairn_curve.py:377"
+  },
+  "時間曲線要用賽事存的 GPX 算：這場賽事沒有存 GPX": {
+    "draft": true,
+    "src": "backend/engine/racepower/cairn_curve.py:384"
+  },
+  "賽事的 GPX 換過了：用新的 GPX 重算一次再拿曲線": {
+    "draft": true,
+    "src": "backend/engine/racepower/cairn_curve.py:386"
+  },
+  "這場賽事還沒有存過計算結果": {
+    "draft": true,
+    "src": "backend/engine/racepower/cairn_curve.py:400"
+  },
+  "Cairn 會讀：你在這裡是免費還是訂閱、到期日。不讀信箱或其他個資。": {
+    "draft": true,
+    "src": "backend/accounts/links.py"
+  },
+  "Cairn 會讀：你對同一份 GPX 存過的賽事計算與配速曲線，用你的體能推估各點的時刻。不讀活動、心率或其他健康資料。": {
+    "draft": true,
+    "src": "backend/accounts/links.py"
+  },
+  "會寫到 Cairn：你在賽事頁按「推到 Cairn」時，那場的路線、過夜點與腳程曲線，建立或更新 Cairn 上的一條行程。不寫時刻，也不改你在 Cairn 自己建的行程。": {
+    "draft": true,
+    "src": "backend/accounts/links.py"
+  },
+  "Cairn 會讀：你路線的天氣（功能還沒上線）。": {
+    "draft": true,
+    "src": "backend/accounts/links.py"
   }
 }

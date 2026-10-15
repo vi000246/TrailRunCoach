@@ -20,8 +20,10 @@ def _sections() -> list[str]:
 
 
 def test_four_tabs_each_section_on_one():
+    """…and 疊石 Cairn (SP-666), a fifth shown in sign-in mode only (test_cairn_tab_sp666.py)."""
     tabs = _tabs()
-    assert list(tabs) == ["personal", "body", "data", "advanced"]
+    assert list(tabs) == ["personal", "body", "data", "advanced", "cairn"]
+    assert tabs["cairn"] == ["cairn"]
     placed = [i for ids in tabs.values() for i in ids]
     assert len(placed) == len(set(placed))                          # one tab per section
     secs = _sections()

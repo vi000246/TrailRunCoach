@@ -74,7 +74,7 @@ def test_cp_fit_uses_stryd_runs_only(tmp_path, monkeypatch):
     assert [ds.power_source(w) for w in ds.workouts] == ["stryd"] * 5 + ["watch"]
     seen = []
 
-    def fake_pd(ds_, day, runs, ref_cp, any_power=False):
+    def fake_pd(ds_, day, runs, ref_cp, any_power=False, stryd_only=False):
         seen.append((day, [w.entry.start.day for w in runs], any_power))
         return {"mftp": 210.0, "frc": 15000.0, "n_points": 40}
     monkeypatch.setattr(A, "pd_model", fake_pd)

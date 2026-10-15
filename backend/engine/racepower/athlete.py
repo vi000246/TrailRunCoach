@@ -424,7 +424,7 @@ def _pd_mftp(ds, day: dt.date) -> Optional[float]:
     if key not in _cp_memo:
         from backend.engine.wko5expr.dataset import date_to_day
         tday = date_to_day(day)
-        runs = [w for w in ds.workouts if w.sport == "run" and tday - CP_WINDOW_DAYS < w.day < tday + 1]
+        runs = [w for w in ds.workouts if w.sport == "run" and in_cp_window(w.day, tday)]
         try:
             # this CP only locates the Friel window of the LTHR estimate
             # (thresholds.estimate, an HR threshold): the power the models use
@@ -980,19 +980,35 @@ def cptest_prior(weight: float, sex: str) -> dict:
     return T.w_prime_prior(weight, sex)
 
 
-def pd_model(ds, today: dt.date, runs_90, ref_cp: Optional[float], any_power: bool = False) -> Optional[dict]:
-    """WKO5's default PD model (algorithms/wko5_pdmodel, reproduces WKO5's own
-    mFTP 175.7 vs snapshot 175.6 W; docs/research/cp-test-protocols.md §1B.2)
-    refitted on the raw 90-day mean-max of the runs (implausible power
-    dropped) plus the synced running FIT files not yet in WKO5 (cptest.curves),
-    as of `today`. Returns mFTP, TTE, FRC and the curve's source. Watch-
-    estimated power (runs and FIT files) is left out unless `any_power` or
-    power.accept_watch_power."""
-    from backend.engine.algorithms import wko5_pdmodel as PDM
+def in_cp_window(day: float, tday: float) -> bool:
+    """A run of Dataset day `day` (a time of day in its fraction) is one of the CP_WINDOW_DAYS calendar
+    days up to `tday` — WKO5's 90 days, and cptest.curves'. SP-667: `tday - 90 < day` also let in a
+    run from the 91st day back (its day number has a fraction)."""
+    d = math.floor(day)
+    return tday - CP_WINDOW_DAYS < d <= tday
+
+
+def _synced_curves(ds, today: dt.date, any_power: bool = False, stryd_only: bool = False) -> list[dict]:
+    """The synced running FIT files' mean-max (cptest.curves) on the 90 days up to `today`, for a
+    Dataset that does not read them itself (WKO5 as the 資料來源: what WKO5 has not imported yet).
+    A FIT-folder Dataset (adds_synced_fit False) reads the same files: none (SP-667 — each run was
+    read twice, once through fit_reader). The files' power follows the runs' rule: Stryd only for a
+    Stryd-only fit, else watch power only with `any_power` or power.accept_watch_power."""
     from backend.engine.racepower import cptest as T
-    accept = any_power or getattr(ds, "accept_watch_power", True)
-    # WKO5's own duration grid (the PD fit is sensitive to point spacing; on
-    # this grid the port reproduces WKO5's mFTP): the longest cached curve's xs
+    if not getattr(ds, "adds_synced_fit", True):
+        return []
+    accept = not stryd_only and (any_power or getattr(ds, "accept_watch_power", True))
+    try:
+        return T.curves(WX.home(), today - dt.timedelta(days=CP_WINDOW_DAYS - 1), today, accept_watch=accept)
+    except Exception:                       # noqa: BLE001
+        return []
+
+
+def _pd_points(ds, today: dt.date, runs_90, ref_cp: Optional[float], any_power: bool = False,
+               stryd_only: bool = False) -> tuple[list, list]:
+    """(the 90-day mean-max envelope points pd_model fits, the synced FIT curves added to it).
+    WKO5's own duration grid (the PD fit is sensitive to point spacing; on this grid the port
+    reproduces WKO5's mFTP): the longest cached curve's xs."""
     curves_ = []
     for w in runs_90:
         c = _curve(ds, w, any_power=any_power)
@@ -1003,7 +1019,7 @@ def pd_model(ds, today: dt.date, runs_90, ref_cp: Optional[float], any_power: bo
             if ok_.sum() >= 2 and not implausible(w, xs[ok_], ys[ok_], ref_cp):
                 curves_.append((xs[ok_], ys[ok_]))
     if not curves_:
-        return None
+        return [], []
     grid = max((c[0] for c in curves_), key=len)
     best = np.full(len(grid), np.nan)
     for xs, ys in curves_:
@@ -1011,11 +1027,7 @@ def pd_model(ds, today: dt.date, runs_90, ref_cp: Optional[float], any_power: bo
         vals = np.interp(grid[m], xs, ys)
         cur = best[m]
         best[m] = np.where(np.isfinite(cur), np.maximum(cur, vals), vals)
-    extra = []
-    try:
-        extra = T.curves(WX.home(), today - dt.timedelta(days=CP_WINDOW_DAYS - 1), today, accept_watch=accept)
-    except Exception:                       # noqa: BLE001
-        extra = []
+    extra = _synced_curves(ds, today, any_power, stryd_only)
     for c in extra:
         xs, ys = np.array(c["xs"]), np.array(c["ys"])
         if len(xs) < 2:
@@ -1027,7 +1039,22 @@ def pd_model(ds, today: dt.date, runs_90, ref_cp: Optional[float], any_power: bo
         cur = best[m]
         best[m] = np.where(np.isfinite(cur), np.maximum(cur, vals), vals)
     ok = np.isfinite(best)
-    pts = [(float(x), float(y)) for x, y in zip(grid[ok], best[ok])]
+    return [(float(x), float(y)) for x, y in zip(grid[ok], best[ok])], extra
+
+
+def pd_model(ds, today: dt.date, runs_90, ref_cp: Optional[float], any_power: bool = False,
+             stryd_only: bool = False) -> Optional[dict]:
+    """WKO5's default PD model (algorithms/wko5_pdmodel, reproduces WKO5's own
+    mFTP 175.7 vs snapshot 175.6 W; docs/research/cp-test-protocols.md §1B.2)
+    refitted on the raw 90-day mean-max of the runs (implausible power
+    dropped) plus, for a Dataset that does not read them itself, the synced running FIT files
+    not yet in WKO5 (_synced_curves), as of `today`. Returns mFTP, TTE, FRC and the curve's
+    source. Watch-estimated power (runs and FIT files) is left out unless `any_power` or
+    power.accept_watch_power; `stryd_only` (the caller's runs are Stryd only): Stryd files only."""
+    from backend.engine.algorithms import wko5_pdmodel as PDM
+    pts, extra = _pd_points(ds, today, runs_90, ref_cp, any_power, stryd_only)
+    if not pts:
+        return None
     try:
         f = PDM.fit(pts)
     except Exception:                       # noqa: BLE001
@@ -1045,52 +1072,14 @@ CP_FIT_MIN_RUNS = 5              # = fitdataset.CP_FIT_MIN_RUNS (a Dataset witho
 
 
 def pd_model_params(ds, today: dt.date, runs_90, ref_cp: Optional[float] = None,
-                    any_power: bool = False) -> Optional[dict]:
+                    any_power: bool = False, stryd_only: bool = False) -> Optional[dict]:
     """pd_model with the whole model: {"mftp", "tte", "frc", "pmax", "params" [FRC, tau1, FTP, tau2,
     TTE, D]} — the 個人化區間 (algorithms/wko5_levels, SP-363) need tau1 and the model itself. The
-    same points and fit as pd_model, line for line (test_personal_zones_sp363 pins that they agree):
-    pd_model itself stays as it is, its code is in the PD memo's key (fitdataset.pd_code) and an edit
-    would refit every day of every tenant."""
+    same points and fit as pd_model, line for line (test_personal_zones_sp363 pins that they agree)."""
     from backend.engine.algorithms import wko5_pdmodel as PDM
-    from backend.engine.racepower import cptest as T
-    accept = any_power or getattr(ds, "accept_watch_power", True)
-    # WKO5's own duration grid (the PD fit is sensitive to point spacing; on
-    # this grid the port reproduces WKO5's mFTP): the longest cached curve's xs
-    curves_ = []
-    for w in runs_90:
-        c = _curve(ds, w, any_power=any_power)
-        if c and c[0]:
-            xs = np.array(c[0], float)
-            ys = np.array([np.nan if v is None else v for v in c[1]], float)
-            ok_ = np.isfinite(ys)
-            if ok_.sum() >= 2 and not implausible(w, xs[ok_], ys[ok_], ref_cp):
-                curves_.append((xs[ok_], ys[ok_]))
-    if not curves_:
+    pts, extra = _pd_points(ds, today, runs_90, ref_cp, any_power, stryd_only)
+    if not pts:
         return None
-    grid = max((c[0] for c in curves_), key=len)
-    best = np.full(len(grid), np.nan)
-    for xs, ys in curves_:
-        m = grid <= xs[-1]
-        vals = np.interp(grid[m], xs, ys)
-        cur = best[m]
-        best[m] = np.where(np.isfinite(cur), np.maximum(cur, vals), vals)
-    extra = []
-    try:
-        extra = T.curves(WX.home(), today - dt.timedelta(days=CP_WINDOW_DAYS - 1), today, accept_watch=accept)
-    except Exception:                       # noqa: BLE001
-        extra = []
-    for c in extra:
-        xs, ys = np.array(c["xs"]), np.array(c["ys"])
-        if len(xs) < 2:
-            continue
-        if ref_cp and ((xs[-1] >= 300 and np.interp(300.0, xs, ys) > 2.0 * ref_cp)):
-            continue
-        m = grid <= xs[-1]
-        vals = np.interp(grid[m], xs, ys)
-        cur = best[m]
-        best[m] = np.where(np.isfinite(cur), np.maximum(cur, vals), vals)
-    ok = np.isfinite(best)
-    pts = [(float(x), float(y)) for x, y in zip(grid[ok], best[ok])]
     try:
         f = PDM.fit(pts)
     except Exception:                       # noqa: BLE001
@@ -1118,7 +1107,7 @@ def stryd_pd(ds, day: dt.date) -> Optional[dict]:
                                        "runs": r["runs"], "n_points": r.get("n_points")}
         from backend.engine.wko5expr.dataset import date_to_day
         tday = date_to_day(day)
-        runs = [w for w in ds.workouts if w.sport == "run" and tday - CP_WINDOW_DAYS < w.day < tday + 1
+        runs = [w for w in ds.workouts if w.sport == "run" and in_cp_window(w.day, tday)
                 and power_ok(ds, w) and power_source(ds, w) != "none"]
         if len(runs) < CP_FIT_MIN_RUNS:
             return None

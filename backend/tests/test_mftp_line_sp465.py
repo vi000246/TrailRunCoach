@@ -127,7 +127,7 @@ def api(monkeypatch, tmp_path, _fit_root_in_tmp):
         for i in range(n):
             start = datetime(2026, 10, 8, 0, tzinfo=timezone.utc) - dt.timedelta(days=6 * i)
             (d / f"{i}_run.fit").write_bytes(build_run(start=start, seconds=1800, power=170, stryd=True))
-    monkeypatch.setattr(A, "pd_model", lambda ds, day, runs, ref, any_power=False:
+    monkeypatch.setattr(A, "pd_model", lambda ds, day, runs, ref, any_power=False, stryd_only=False:
                         {"mftp": 191.04, "frc": 9000.0, "n_points": 40})
     monkeypatch.setattr(WV, "RENDER_CACHE", RenderCache(tmp_path / "render-cache"))
     monkeypatch.setattr(WV, "ATHLETE_DIR", tmp_path / "no-wko5")

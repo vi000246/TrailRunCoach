@@ -96,12 +96,22 @@ PACE_ZONES = [(z, lo if lo is not None else 0.85, hi if hi is not None else 1.45
 ZONES = {"power": POWER_ZONES, "hr": HR_ZONES, "pace": PACE_ZONES}
 # The power 區間 choice follows 設定 → 課表功率區間 (SP-618, engine/power_zone_plan): with Stryd / the
 # classic 7 levels / 個人化區間 in effect the editor offers that set's zones — ids with the set's
-# letter (S1–S5, C1–C7, P1–P9), × CP — and the Palladino ids above stay valid for steps saved before
+# letter (S1–S5, C1–C7, R1–R10), × CP — and the Palladino ids above stay valid for steps saved before
 # (marked legacy, shown only on a step that has one), as the HR choice does with the Friel ids.
-PZ_PREFIX = {"stryd": "S", "classic": "C", "personal": "P"}
+# SP-661: the 個人化區間 became WKO5's running levels (10, R1–R10); a step saved with the 9 cycling levels'
+# ids (P1–P9, SP-618) reads as the running level overlapping it the most (PZ_LEGACY: 56–76 % → 暖身
+# 65–75, 76–88 → 耐力 80.1–88, 95–105 → 閾值 95–102, the four above threshold one up).
+PZ_PREFIX = {"stryd": "S", "classic": "C", "personal": "R"}
 PZ_OPEN_TOP = 1.8                # × CP: an open top level's upper bound (as POWER_ZONES)
 PZ_FLOOR = 0.40                  # × CP: a level starting at 0 W starts here on a target (推估, as Z1A's 50 %)
-PZ_IDS = {f"{p}{i}" for p, n in (("S", 5), ("C", 7), ("P", 9)) for i in range(1, n + 1)}
+PZ_LEGACY = {"P1": "R1", "P2": "R2", "P3": "R4", "P4": "R5", "P5": "R6", "P6": "R7", "P7": "R8", "P8": "R9",
+             "P9": "R10"}
+PZ_IDS = {f"{p}{i}" for p, n in (("S", 5), ("C", 7), ("R", 10)) for i in range(1, n + 1)}
+
+
+def pz_canon(zid):
+    """A 課表功率區間 zone id as the current tables have it (a 9-level P… id → its R…, SP-661)."""
+    return PZ_LEGACY.get(zid, zid) if isinstance(zid, str) else zid
 
 
 def power_set_zones(system: Optional[str], pzm: Optional[dict] = None) -> Optional[list]:
@@ -1011,11 +1021,11 @@ def _norm_target0(t, errs: list) -> dict:
     if mode == "zone":
         known = {r[0] for r in ZONES[ty]} | (set(HR_MODEL_ZONES) if ty == "hr" else set()) | \
             (PZ_IDS if ty == "power" else set())
-        z = str(t.get("zone") or "")
+        z = str(pz_canon(t.get("zone")) or "") if ty == "power" else str(t.get("zone") or "")
         if z not in known:
             errs.append(_("沒有這個區間：{x}", x=repr(z)))
         out["zone"] = z
-        zt = str(t.get("zone_to") or "")
+        zt = str((pz_canon(t.get("zone_to")) if ty == "power" else t.get("zone_to")) or "")
         if zt and zt != z and z in known:
             # 從–到 (SP-383): a run of zones inside one set, stored easy → hard — a 「到」 below the
             # 「從」 is swapped, not refused; 「到」 = 「從」 or empty is one zone (no zone_to)
@@ -1252,6 +1262,8 @@ def zone_span(ty: str, zid: str, zto: Optional[str] = None, pzm: Optional[dict] 
     fastest to its slowest edge). (None, None) for an id the table lacks and the easy-run cap.
     Power ids of a 課表功率區間 (S… / C… / P…, SP-618): that set's table (P… needs `pzm`, the
     個人化區間 in effect)."""
+    if ty == "power":
+        zid, zto = pz_canon(zid), pz_canon(zto)
     sys_ = _set_of(str(zid or "")) if ty == "power" else None
     if sys_ is not None:
         rows = power_set_zones(sys_, pzm) or []
@@ -1275,6 +1287,8 @@ def zone_set(ty: str, zid: str) -> list:
     (SP-383): Palladino power, Friel pace, Friel HR (not the easy-run cap) or the 課表心率區間's Z1–Z6."""
     if ty == "hr" and zid in HR_MODEL_ZONES:
         return list(HR_MODEL_ZONES)
+    if ty == "power":
+        zid = pz_canon(zid)
     sys_ = _set_of(str(zid or "")) if ty == "power" else None
     if sys_ is not None:
         p = PZ_PREFIX[sys_]
@@ -1284,7 +1298,7 @@ def zone_set(ty: str, zid: str) -> list:
 
 def zone_range_text(tg: dict) -> str:
     """「Z1B–Z2」 of a zone-range target (SP-383); "" for one zone."""
-    z, zt = str(tg.get("zone") or ""), str(tg.get("zone_to") or "")
+    z, zt = str(pz_canon(tg.get("zone")) or ""), str(pz_canon(tg.get("zone_to")) or "")
     if not zt or zt == z:
         return ""
     return "–".join(x if x in HR_MODEL_ZONES or x in PZ_IDS else f"Z{x}" for x in (z, zt))

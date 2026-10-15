@@ -38,7 +38,7 @@ BOUT_MIN_RATIO = 1.3           # 推估: a bout is ≥ 1.3 × the median power o
 HR_GAP_BPM = 10.0              # 推估, see the module docstring
 FRESH_DAYS = 90                # as PLAN_CP_MAX_AGE_DAYS
 CACHE_NAME = "racepower_cptests.json"
-_KEY_VERSION = 2
+_KEY_VERSION = 3              # SP-667: fit_reader no longer carries a value over the edges / gaps
 
 
 def _mean_max(p: np.ndarray, n: int) -> Optional[float]:

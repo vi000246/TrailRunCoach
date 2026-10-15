@@ -150,8 +150,9 @@ def test_linking_and_unlinking_are_consent_rows_and_unlinking_ends_the_tokens(c,
         assert _token(srv, "g-a").status_code == 404                   # no new one either
     rows = store.consents(uid)
     assert [(x["action"], x["client"]) for x in rows] == [("terms", None), ("link", "cairn"), ("unlink", "cairn")]
-    assert json.loads(rows[1]["documents"])["scopes"] == ["link:account", "link:calc", "link:gpx_sync",
-                                                          "link:weather"]
+    # link:calc is not granted by the link: it asks on its own (SP-654, links.FEATURES)
+    # link:calc (SP-654) and link:gpx_sync (SP-655) ask on their own: not granted by the link
+    assert json.loads(rows[1]["documents"])["scopes"] == ["link:account", "link:weather"]
     # the terms and the analysis consent read as before (a link row says neither)
     assert store.consent_version(uid) == version and store.analysis_consent(uid) is True
     assert c.get("/api/v1/plan").status_code == 200
@@ -306,7 +307,8 @@ def test_cairns_plan_is_asked_only_for_a_linked_user(c, app, cairn):
     assert row["linked"] is False and "remote" not in row and cairn.calls == []
     _link(c)
     row = c.get(LINKS_URL).json()["clients"][0]
-    assert row["linked"] is True and row["remote"] == {"plan": "pro", "plan_expires_at": None}
+    assert row["linked"] is True and row["remote"] == {"plan": "pro", "plan_expires_at": None,
+                                                        "push_per_day": 100}   # SP-666: Cairn's pushes a day
     assert len(cairn.calls) == 1
     req = cairn.calls[0]
     assert req.url.host == "cairn.example.test" and req.url.params["sub"] == "g-a"

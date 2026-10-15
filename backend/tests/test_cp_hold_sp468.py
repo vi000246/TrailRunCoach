@@ -108,7 +108,7 @@ def test_the_dataset_keeps_its_cp_across_syncs(tmp_path, monkeypatch):
     課表 keeps 191.0 W and says the fit is the 10/08 one; the remembered CP is on disk."""
     from backend.engine.racepower import athlete as A
     fits = {D(2026, 10, 8): 191.0, D(2026, 10, 10): 192.5}
-    monkeypatch.setattr(A, "pd_model", lambda ds_, day, runs, ref, any_power=False:
+    monkeypatch.setattr(A, "pd_model", lambda ds_, day, runs, ref, any_power=False, stryd_only=False:
                         {"mftp": fits.get(day, 175.4), "frc": 5000.0, "n_points": 40})
     ds = _fit_ds(tmp_path, D(2026, 10, 8))
     ds._estimate_cp(D(2026, 8, 14), D(2026, 10, 8))
@@ -127,11 +127,13 @@ def test_the_dataset_keeps_its_cp_across_syncs(tmp_path, monkeypatch):
 
 def test_the_estimate_memo_keeps_the_raw_fits_and_holds_on_every_read(tmp_path, monkeypatch):
     import json
+    from backend.engine.wko5expr import fitdataset as FD
     from backend.engine.wko5expr.fitdataset import FitFolderDataset
     ds = _fit_ds(tmp_path, D(2026, 10, 8))
     (ds._store.home).mkdir(parents=True, exist_ok=True)
     (ds._store.home / "cp_hold.json").write_text(json.dumps(
-        {"date": "2026-10-08", "cp": 191.0, "frc_j": 15000.0, "runs": 49, "n_points": 40}), "utf-8")
+        {"date": "2026-10-08", "cp": 191.0, "frc_j": 15000.0, "runs": 49, "n_points": 40,
+         "v": FD.CP_HOLD_V}), "utf-8")                                    # held by this fit code (SP-667)
     raw = [_fit(D(2026, 9, 13), 175.4), _fit(D(2026, 10, 10), 192.5)]
 
     def fake(self):

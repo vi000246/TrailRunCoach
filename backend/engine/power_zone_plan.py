@@ -8,10 +8,11 @@
                Power Meter: < 55 active recovery, 56–75 endurance, 76–90 tempo, 91–105 threshold,
                106–120 VO2max, 121–150 anaerobic capacity, > 150 neuromuscular; here the threshold
                power is the 課表's CP)
-    personal   個人化區間: 9 levels from the runner's own power–duration model (Stryd PD fit in effect:
-               the model's threshold power, anaerobic capacity and its time constant) — the algorithm
-               is in the calculation core (algorithms/wko5_levels); without the core (the public
-               mirror) or without a fit, the 課表 falls back to Palladino and says so
+    personal   個人化區間: 10 levels from the runner's own power–duration model (Stryd PD fit in effect:
+               the model's threshold power, anaerobic capacity and its time constant) — WKO5's
+               running iLevels (SP-661; until then its cycling ones, 9 levels); the algorithm is in
+               the calculation core (algorithms/wko5_levels); without the core (the public mirror) or
+               without a fit, the 課表 falls back to Palladino and says so
 
 How a session follows the chosen set (the user 2026-10-15, SP-363 Q2-4 a): each kind keeps its
 intent and takes the nearest level of the set —
@@ -35,6 +36,7 @@ are cached) follow it too.
 """
 from __future__ import annotations
 
+import datetime as dt
 import json
 import math
 from typing import Optional
@@ -63,12 +65,17 @@ CLASSIC_LEVELS = [
 CLASSIC_SOURCE = ("Allen & Coggan, Training and Racing with a Power Meter (classic power levels, "
                   "% threshold power)")
 
-# 個人化區間's level names — the ONE place they are written (the user settled them 2026-10-15, SP-363
-# Q2-3: 恢復／耐力／節奏／甜蜜點／閾值／閾值以上（VO2max）／無氧容量／無氧衝刺／最大功率; English in
-# backend/i18n/locales/en.json)
-PERSONAL_NAMES = (N_("恢復"), N_("耐力"), N_("節奏"), N_("甜蜜點"), N_("閾值"), N_("閾值以上（VO2max）"),
-                  N_("無氧容量"), N_("無氧衝刺"), N_("最大功率"))
-PERSONAL_SOURCE = N_("依你的功率–時間模型（Stryd 功率 PD 模型：模型閾值功率、無氧容量、時間常數）算出的 9 級")
+# 個人化區間's level names — the ONE place they are written. SP-363 Q2-3 settled nine for the cycling
+# table; the running table (SP-661) has ten, in the same style: Warm-up / Easy Aerobic → 暖身／輕鬆有氧,
+# Extensive / Intensive Threshold → 準閾值／閾值, the four above threshold as before. English in
+# backend/i18n/locales/en.json.
+PERSONAL_NAMES = (N_("恢復"), N_("暖身"), N_("輕鬆有氧"), N_("耐力"), N_("準閾值"), N_("閾值"),
+                  N_("超閾值（VO2max）"), N_("無氧容量"), N_("無氧衝刺"), N_("最大功率"))
+PERSONAL_SOURCE = N_("依你的功率–時間模型（Stryd 功率 PD 模型：模型閾值功率、無氧容量、時間常數）算出的 10 級")
+# which table the 個人化區間 are cut with — in stamp(): a cache keyed on the setting must not serve the
+# old (9-level cycling) targets
+PERSONAL_TABLE = "run10"
+BASIS_DAYS = 90                  # the fit's window (racepower.athlete.CP_WINDOW_DAYS), shown with the basis
 NO_FIT = N_("沒有功率–時間模型（近 90 天的 Stryd 跑步不夠），課表先用 Palladino 區間")
 NO_CORE = N_("這個版本沒有個人化區間的計算，課表先用 Palladino 區間")
 
@@ -94,7 +101,8 @@ def setting(user_id: int = 1) -> str:
 
 def stamp(user_id: int = 1) -> str:
     """For cache keys (the plan inputs, the charts): a switch must not serve the old targets."""
-    return json.dumps(["pz", setting(user_id)])
+    st = setting(user_id)
+    return json.dumps(["pz", st, PERSONAL_TABLE] if st == "personal" else ["pz", st])
 
 
 def choices() -> list[dict]:
@@ -114,8 +122,9 @@ def static_levels(system: str) -> Optional[list[list]]:
 
 
 def personal_levels(ds, day, cp: Optional[float]) -> dict:
-    """{"levels": [[id, name, lo, hi]] × `cp`, "basis": {date, mftp, pmax, tte}} of the 個人化區間 on
-    `day`, or {"reason": text} (no core / no fit / no CP)."""
+    """{"levels": [[id, name, lo, hi]] × `cp`, "durations": [None | (short s, long s)],
+    "basis": {date, mftp, pmax, tte, days, from}} of the 個人化區間 on `day`, or {"reason": text}
+    (no core / no fit / no CP)."""
     from backend.engine.core_stub import core_included
     if not core_included():
         return {"reason": NO_CORE}
@@ -129,6 +138,7 @@ def personal_levels(ds, day, cp: Optional[float]) -> dict:
     if not pd or not pd.get("params"):
         return {"reason": NO_FIT}
     from backend.engine.algorithms.wko5_levels import levels
+    from backend.engine.algorithms.wko5_levels import level_durations
     lv = levels(pd["params"])
     if not lv:
         return {"reason": NO_FIT}
@@ -136,13 +146,17 @@ def personal_levels(ds, day, cp: Optional[float]) -> dict:
     for i, ((lo, hi), name) in enumerate(zip(lv, PERSONAL_NAMES)):
         rows.append([str(i + 1), name, lo / cp, None if hi != hi else hi / cp])
     d = pd.get("date")
+    first = d - dt.timedelta(days=BASIS_DAYS - 1) if isinstance(d, dt.date) else None
     # the levels are the model's (its own FTP); a session's intent (% of a threshold) is read against
     # them in that frame: scale = the model's FTP ÷ the CP the rows are written in (band())
     return {"levels": rows, "scale": float(pd["params"][2]) / cp,
             # the model itself, for the 個人化間歇 (SP-590, optimized())
             "pd": {"params": [float(x) for x in pd["params"]], "tte": float(pd.get("tte") or pd["params"][4])},
+            "durations": level_durations(pd["params"]),
+            # what the levels stand on (SP-661: shown above the table, to compare with WKO5's)
             "basis": {"date": d.isoformat() if hasattr(d, "isoformat") else d,
-                      "mftp": pd.get("mftp"), "pmax": pd.get("pmax"), "tte": pd.get("tte")}}
+                      "mftp": pd.get("mftp"), "pmax": pd.get("pmax"), "tte": pd.get("tte"),
+                      "days": BASIS_DAYS, "from": first.isoformat() if first else None}}
 
 
 # ---- 個人化間歇 (SP-590): the intervals above threshold take the model's rep duration and power ----------
@@ -307,7 +321,8 @@ def plan_model(ds=None, day=None, cp: Optional[float] = None, chosen: Optional[s
     if st == "personal":
         p = personal_levels(ds, day, cp)
         if "levels" in p:
-            return {**out, "levels": p["levels"], "basis": p["basis"], "scale": p["scale"], "pd": p["pd"]}
+            return {**out, "levels": p["levels"], "basis": p["basis"], "scale": p["scale"], "pd": p["pd"],
+                    "durations": p.get("durations")}
         out = {**out, "system": DEFAULT, "fallback": p["reason"]}
     return {**out, "levels": static_levels(out["system"])}
 
@@ -390,9 +405,19 @@ def label(pm: Optional[dict]) -> str:
 
 
 def rows_json(pm: dict, cp: Optional[float]) -> list[dict]:
-    """The set's levels for the settings page: [{id, name, lo, hi, watts}]."""
+    """The set's levels for the settings page: [{id, name, lo, hi, watts}]; the 個人化區間 add
+    "pct_model" ([lo, hi] × the model's threshold power, as WKO5 shows them) and "dur" ([short s | None,
+    long s] above threshold, else None)."""
     out = []
-    for z, n, lo, hi in pm.get("levels") or []:
-        out.append({"id": z, "name": _(n), "lo": lo, "hi": hi,
-                    "watts": None if not cp else [round((lo or 0) * cp), None if hi is None else round(hi * cp)]})
+    personal = pm.get("system") == "personal"
+    k = float(pm.get("scale") or 1.0)
+    durs = pm.get("durations") or []
+    for i, (z, n, lo, hi) in enumerate(pm.get("levels") or []):
+        r = {"id": z, "name": _(n), "lo": lo, "hi": hi,
+             "watts": None if not cp else [round((lo or 0) * cp), None if hi is None else round(hi * cp)]}
+        if personal:
+            r["pct_model"] = [round((lo or 0) / k, 4), None if hi is None else round(hi / k, 4)]
+            d = durs[i] if i < len(durs) else None
+            r["dur"] = None if not d else [None if d[0] is None else round(d[0]), round(d[1])]
+        out.append(r)
     return out

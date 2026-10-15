@@ -537,7 +537,8 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
       <span class="meta bf" id="splits-line"></span>
       <button class="btn rf" id="unlock">解除全部鎖定</button>
       <button class="btn primary" id="coros" data-i18n="racepower.coros.btn">📅 匯出至課表</button><span class="meta" id="coros-why" hidden></span>
-      <button class="btn" id="share">🔗 分享</button></div>
+      <button class="btn" id="share">🔗 分享</button>
+      <button class="btn hidden" id="cairn-push" type="button" data-i18n="racepower.cpush.btn">⛰ 推到 Cairn</button></div>
     <!-- SP-533: camp / hut waypoints (every pass) as day-end candidates; a mismatch of day ends and days -->
     <div class="note hidden" id="split-cands"></div>
     <dialog id="coros-dlg" class="dlg">
@@ -550,6 +551,15 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
       <div class="toolbar" style="justify-content:flex-end;margin-top:10px"><span class="meta" id="cx-msg"></span>
         <button class="btn primary" id="cx-go" data-i18n="racepower.coros.go">確認匯出</button><button class="btn" id="cx-close" autofocus data-i18n="racepower.close">關閉</button></div>
     </dialog>
+    <!-- SP-655: 推到 Cairn — the event's route, nights and pace curve as a Cairn trip (created once, then updated) -->
+    <dialog id="cp-dlg" class="dlg">
+      <h2><span data-i18n="racepower.cpush.title">推到疊石 Cairn</span>
+        <span class="help" tabindex="0">?<span class="tip" data-i18n="racepower.cpush.tip">把這場賽事存的 GPX、分日的過夜點和這次計算的腳程曲線推到疊石 Cairn，建立一條行程。抵達時刻由 Cairn 用這條曲線自己推估，TrailRunCoach 不寫時刻。第一次推會建立行程，之後再推都是更新同一條，不會多建。</span></span></h2>
+      <div id="cp-body" class="meta"></div>
+      <label class="f hidden" id="cp-consent-row"><span><input type="checkbox" id="cp-consent"> <span id="cp-consent-text"></span></span></label>
+      <div class="toolbar" style="justify-content:flex-end;margin-top:10px"><span class="meta" id="cp-msg" aria-live="polite"></span>
+        <button class="btn primary" id="cp-go" type="button" data-i18n="racepower.cpush.go">推送</button><button class="btn" id="cp-close" type="button" autofocus data-i18n="racepower.close">關閉</button></div>
+    </dialog>
     <dialog id="share-dlg">
       <h2>🔗 分享計算結果 <span class="meta">唯讀，不會重新計算</span>
         <span class="help" tabindex="0">?<span class="tip">把目前的結果（剖面、分段、分段目標、補給）凍結成一份快照，產生一個無法猜到的連結。拿到連結的人只看得到這份快照，看不到你的活動、設定或其他資料。不勾「包含體重」時，體重和會透露體重的數字（W/kg、超補的公克數）都不會出現；身高、年齡、性別一律不會出現。外面的人要經過你的 Cloudflare tunnel，tunnel 的密碼保護要放行 /share/ 開頭的路徑。</span></span></h2>
@@ -557,6 +567,8 @@ dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
         <label style="grid-column:1/-1">標題<input id="share-title" maxlength="80" placeholder="例 春季半馬 計畫"></label>
         <label>有效期限<select id="share-exp"><option value="">不過期</option><option value="7">7 天</option><option value="30">30 天</option><option value="90">90 天</option></select></label>
         <label class="f" style="align-self:end"><span><input type="checkbox" id="share-weight"> 包含體重</span></label>
+        <label class="f" style="grid-column:1/-1"><span><input type="checkbox" id="share-curve"> <span data-i18n="racepower.share.cairn_curve">附上給疊石 Cairn 的時間曲線</span></span>
+          <span class="help" tabindex="0">?<span class="tip" data-i18n="racepower.share.cairn_curve_tip">沿路線的累積移動時間（不含座標、停留），讓 Cairn 用 TrailRunCoach 的腳程推估抵達時刻。只有賽季計畫賽事存的 GPX 才能附；拿到連結的人也看得到你的腳程。</span></span></label>
       </div>
       <div class="toolbar" style="margin-top:10px"><button class="btn primary" id="share-go">建立連結</button><span class="meta" id="share-msg"></span></div>
       <div class="toolbar hidden" id="share-out"><input id="share-link" readonly style="flex:1;min-width:240px"><button class="btn" id="share-copy">複製</button></div>
@@ -2666,6 +2678,59 @@ $("cx-close").onclick = () => $("coros-dlg").close();
 $("cx-go").onclick = corosPush;
 document.querySelectorAll("#cx-mode button").forEach((b) => b.onclick = () => { CX_MODE = b.dataset.x; corosPreview(); });
 
+// ---------------- SP-655: 推到 Cairn ----------------
+// shown only where it can be used: sign-in on (404 otherwise), Cairn configured, a paid plan here
+const CPUSH = "/api/v1/account/links/cairn/events/";
+let CP_ST = null;
+async function cpushRefresh() {
+  const eid = $("event").value, b = $("cairn-push");
+  CP_ST = null;
+  if (!eid) { b.classList.add("hidden"); return; }
+  try { CP_ST = await j(CPUSH + encodeURIComponent(eid)); } catch { CP_ST = null; }
+  if ($("event").value !== eid) return;
+  b.classList.toggle("hidden", !(CP_ST && CP_ST.available && CP_ST.plan_ok));
+  b.textContent = CP_ST?.pushed ? T("cpush.btn_again") : T("cpush.btn");
+}
+function cpRender() {
+  const st = CP_ST, go = $("cp-go");
+  $("cp-consent-row").classList.add("hidden"); $("cp-consent").checked = false;
+  go.hidden = !!st && !st.linked;            // not linked: only the way to link
+  if (!st) { $("cp-body").innerHTML = `<div class="err">${esc(T("cpush.fail"))}</div>`; go.disabled = true; return; }
+  if (!st.linked) {
+    $("cp-body").innerHTML = `<p>${esc(T("cpush.link_first"))}</p><p><a href="${esc(st.link_url)}">${esc(T("cpush.link_go"))}</a></p>`;
+    go.disabled = true; return;
+  }
+  let h = `<p>${esc(T("cpush.what"))}</p>`;
+  h += st.pushed ? `<p>${esc(T("cpush.pushed", { at: String(st.pushed.at || "").slice(0, 16) }))} <a href="${esc(st.pushed.url)}" target="_blank" rel="noopener noreferrer">${esc(T("cpush.open"))}</a><br>${esc(T("cpush.again"))}</p>`
+    : `<p>${esc(T("cpush.first"))}</p>`;
+  if (!st.ready) h += `<p class="err">${esc(st.why || T("cpush.not_ready"))}</p>`;
+  $("cp-body").innerHTML = h;
+  if (!st.allowed) {
+    $("cp-consent-text").textContent = T("cpush.consent", { text: st.consent_text });
+    $("cp-consent-row").classList.remove("hidden");
+  }
+  go.textContent = st.allowed ? (st.pushed ? T("cpush.go_again") : T("cpush.go")) : T("cpush.go_consent");
+  go.disabled = !st.ready || !st.allowed;
+}
+$("cp-consent").onchange = () => { $("cp-go").disabled = !(CP_ST?.ready && $("cp-consent").checked); };
+$("cairn-push").onclick = async () => {
+  $("cp-msg").textContent = ""; $("cp-body").textContent = T("cpush.loading"); $("cp-dlg").showModal();
+  await cpushRefresh(); cpRender();
+};
+$("cp-close").onclick = () => $("cp-dlg").close();
+$("cp-go").onclick = async () => {
+  const eid = $("event").value; if (!eid) return;
+  $("cp-go").disabled = true; $("cp-msg").textContent = T("cpush.sending");
+  try {
+    const r = await post(CPUSH + encodeURIComponent(eid) + "/push", { consent: !CP_ST?.allowed && $("cp-consent").checked });
+    await cpushRefresh(); cpRender();
+    $("cp-msg").innerHTML = `<span class="ok">${esc(T(r.action === "updated" ? "cpush.done_updated" : "cpush.done_created"))} ✓</span> <a href="${esc(r.url)}" target="_blank" rel="noopener noreferrer">${esc(T("cpush.open"))}</a>`;
+  } catch (e) {
+    $("cp-msg").innerHTML = `<span class="err">${esc(e.message)}</span>`;
+    await cpushRefresh(); cpRender();
+  }
+};
+
 // ---------------- read-only share links ----------------
 const shareUrl = (u) => location.origin + u;
 async function loadShares() {
@@ -2692,7 +2757,7 @@ $("share-go").onclick = async () => {
   $("share-msg").textContent = "建立中…"; $("share-go").disabled = true;
   try {
     const r = await post(`${API}/share`, { ...planBody(), share_title: $("share-title").value || null,
-      include_weight: $("share-weight").checked, expires_days: $("share-exp").value ? Number($("share-exp").value) : null });
+      include_weight: $("share-weight").checked, include_cairn_curve: $("share-curve").checked, expires_days: $("share-exp").value ? Number($("share-exp").value) : null });
     $("share-link").value = shareUrl(r.url); $("share-out").classList.remove("hidden");
     $("share-msg").innerHTML = `<span class="ok">已建立 ✓</span>${r.expires ? " 到期 " + esc(r.expires.slice(0, 10)) : ""}`;
     loadShares();
@@ -3075,7 +3140,7 @@ function saveEvent() {
     try {
       const r = await j(`${API}/saved/${encodeURIComponent(eid)}`, { method: "PUT", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ inputs, result }) });
-      if ($("event").value === eid) $("saved-line").textContent = "✓ " + T("saved", { at: (r.saved_at || "").slice(5, 16) });
+      if ($("event").value === eid) { $("saved-line").textContent = "✓ " + T("saved", { at: (r.saved_at || "").slice(5, 16) }); cpushRefresh(); }
     } catch (e) { $("saved-line").innerHTML = `<span class="err">${esc(e.message)}</span>`; }
   }, 800);
 }
@@ -3100,6 +3165,7 @@ function applyEventDefaults(e) {
 async function chooseEvent(eid) {
   ls.set("event", eid || "");
   $("saved-line").textContent = "";
+  cpushRefresh();                           // SP-655: 推到 Cairn for this event (or hidden)
   const e = (INP.events || []).find((x) => x.id === eid);
   if (!e) { await run(); return; }
   let saved = null;

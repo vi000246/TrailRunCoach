@@ -269,7 +269,7 @@ def test_pd_refits_are_memoised_per_day_window(tmp_path, monkeypatch):
     monkeypatch.setattr(WX, "HOME", tmp_path / "home")          # no real synced FIT folder
     root = _folder(tmp_path)
     fits = []
-    monkeypatch.setattr(A, "pd_model", lambda ds, day, runs, ref, any_power=False:
+    monkeypatch.setattr(A, "pd_model", lambda ds, day, runs, ref, any_power=False, stryd_only=False:
                         fits.append(day) or {"mftp": 200.0 + len(runs)})
     a = _build(root)
     d1, d2 = dt.date(2026, 9, 5), dt.date(2026, 8, 1)
@@ -299,7 +299,7 @@ def test_chart_cp_fits_use_the_pd_cache_and_the_estimate_memo(tmp_path, monkeypa
                                         stryd=True))       # the estimate grid runs to here
     root = tmp_path / "fit" / "coros"
     fits = []
-    monkeypatch.setattr(A, "pd_model", lambda ds, day, runs, ref, any_power=False:
+    monkeypatch.setattr(A, "pd_model", lambda ds, day, runs, ref, any_power=False, stryd_only=False:
                         fits.append((day, any_power)) or {"mftp": 210.0, "frc": 15000.0, "n_points": 40, "tte": 1})
     mk = lambda: FitFolderDataset(root, config=EngineConfig(parity=False), today=TODAY, classifications={},
                                   athlete_settings=[], estimate_thresholds=True)

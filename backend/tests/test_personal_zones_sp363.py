@@ -40,20 +40,21 @@ def bands(p) -> dict:
 # the levels
 # ---------------------------------------------------------------------------
 
-def test_personal_levels_are_the_pd_models_nine_levels():
-    """formulas.md §6.9: ≤ FTP fixed fractions of the model's FTP; above it the model's power at
-    tC (aerobic share 0.632), 3·ln2·τ1 and ln2·τ1; the top open."""
+def test_personal_levels_are_the_pd_models_ten_running_levels():
+    """WKO5's running iLevels (SP-661; formulas.md §6.9 for the part above threshold): ≤ threshold fixed
+    fractions of the model's FTP; above it the model's power at tC (aerobic share 0.632), 3·ln2·τ1 and
+    ln2·τ1; the top open."""
     from backend.engine.algorithms import wko5_levels as L
     from backend.engine.algorithms.wko5_pdmodel import aerobic, model
     lv = L.levels(PARAMS)
     F = PARAMS[2]
-    assert len(lv) == 9 and lv[0][0] == 0.0 and math.isnan(lv[-1][1])
-    assert [hi for _lo, hi in lv[:5]] == pytest.approx([0.56 * F, 0.76 * F, 0.88 * F, 0.95 * F, 1.05 * F])
+    assert len(lv) == 10 and lv[0][0] == 0.0 and math.isnan(lv[-1][1])
+    assert [hi for _lo, hi in lv[:6]] == pytest.approx([x * F for x in (0.65, 0.75, 0.801, 0.88, 0.95, 1.02)])
     d = L.durations(PARAMS)
     assert d["tA"] == pytest.approx(math.log(2) * 20.0) and d["tB"] == pytest.approx(3 * math.log(2) * 20.0)
     assert aerobic(PARAMS, d["tC"]) / model(PARAMS, d["tC"]) == pytest.approx(0.632, abs=1e-6)
-    assert lv[5] == (pytest.approx(1.05 * F), pytest.approx(model(PARAMS, d["tC"])))
-    assert lv[6][1] == pytest.approx(model(PARAMS, d["tB"])) and lv[7][1] == pytest.approx(model(PARAMS, d["tA"]))
+    assert lv[6] == (pytest.approx(1.02 * F), pytest.approx(model(PARAMS, d["tC"])))
+    assert lv[7][1] == pytest.approx(model(PARAMS, d["tB"])) and lv[8][1] == pytest.approx(model(PARAMS, d["tA"]))
     for (_a, hi), (lo, _b) in zip(lv, lv[1:]):
         assert hi == pytest.approx(lo)                       # contiguous, easy → hard
     assert L.levels(None) is None and L.levels([1, 0, 0, 25, 2400, 0]) is None
@@ -67,8 +68,8 @@ def test_the_evaluator_reads_the_same_table():
     c = model_curve()
     ours = L.levels(e._fit(c)["params"])
     got = e._ilevels(c)
-    assert [g[0] for g in got] == ["Recovery", "Endurance", "Tempo", "Sweetspot", "FTP", "FRC/FTP", "FRC",
-                                   "Pmax/FRC", "Pmax"]
+    assert [g[0] for g in got] == ["Recovery", "Warm-up", "Easy Aerobic", "Endurance", "Extensive Threshold",
+                                   "Intensive Threshold", "FRC/FTP", "FRC", "Pmax/FRC", "Pmax"]
     for (_n, lo, hi), (a, b) in zip(got, ours):
         assert lo == pytest.approx(a) and (hi == pytest.approx(b) or (math.isnan(hi) and math.isnan(b)))
 
@@ -112,10 +113,12 @@ def test_personal_bands():
     p = personal_pm()
     b = bands(p)
     lv = p["levels"]
-    assert b["recovery"] == (None, 0.76) and b["z2"] == b["long"] == b["trail"] == (0.56, 0.76)
-    assert b["climb"] == (0.88, 0.95)                         # sweet spot
-    assert b["threshold"] == b["supra"] == b["hill"] == (0.95, 1.05)
-    assert b["vo2"] == (1.05, round(lv[5][3], 4))             # above threshold (VO2max): 1.05 F – P(tC)
+    # SP-661 (running levels): easy kinds → warm-up 65–75 %, 恢復跑 up to 75 %
+    assert b["recovery"] == (None, 0.75) and b["z2"] == b["long"] == b["trail"] == (0.65, 0.75)
+    assert b["climb"] == (0.88, 0.95)                         # sub-threshold
+    assert b["threshold"] == b["hill"] == (0.95, 1.02)
+    # supra 101–106 % overlaps above threshold (VO2max) 1.02 F – P(tC) the most (was the FTP level 95–105)
+    assert b["vo2"] == b["supra"] == (1.02, round(lv[6][3], 4))
 
 
 def test_a_mapped_band_maps_to_itself():
@@ -254,13 +257,13 @@ def test_personal_reads_the_pd_fit_in_effect(monkeypatch):
     monkeypatch.setattr(PZP, "setting", lambda user_id=1: "personal")
     m = PZP.plan_model(DS(), dt.date(2026, 9, 30), 260.0)
     assert m["system"] == "personal" and m["basis"]["date"] == "2026-09-01"
-    assert m["levels"][1][2:] == [pytest.approx(0.56 * 250 / 260), pytest.approx(0.76 * 250 / 260)]
+    assert m["levels"][1][2:] == [pytest.approx(0.65 * 250 / 260), pytest.approx(0.75 * 250 / 260)]
     assert m["levels"][-1][3] is None
-    # the intent is read in the model's own frame: an easy run → endurance (56–76 % of the model's FTP),
-    # a threshold session → the FTP level (95–105 %), whatever the plan's CP — written × the CP (260)
+    # the intent is read in the model's own frame: an easy run → warm-up (65–75 % of the model's FTP),
+    # a threshold session → the threshold level (95–102 %), whatever the plan's CP — written × the CP (260)
     k = 250 / 260
-    assert PZP.target_band("z2", 0.65, 0.80, m) == (round(0.56 * k, 4), round(0.76 * k, 4))
-    assert PZP.target_band("threshold", 0.95, 1.01, m) == (round(0.95 * k, 4), round(1.05 * k, 4))
+    assert PZP.target_band("z2", 0.65, 0.80, m) == (round(0.65 * k, 4), round(0.75 * k, 4))
+    assert PZP.target_band("threshold", 0.95, 1.01, m) == (round(0.95 * k, 4), round(1.02 * k, 4))
     assert m["scale"] == pytest.approx(k)
 
 

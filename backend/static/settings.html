@@ -107,7 +107,29 @@ ul.failed { list-style: none; margin: 4px 0; padding: 0; font-size: 13px; }
 ul.failed li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; padding: 3px 0; }
 .sub { border-top: 1px dashed var(--line); margin-top: 10px; padding-top: 8px; }
 .link-row ul { margin: 4px 0 6px; padding-left: 20px; }
-.link-row.link-asked { outline: 2px solid var(--accent, #2a7); outline-offset: 4px; border-radius: 4px; }
+.link-row.link-asked, .link-asked { outline: 2px solid var(--accent, #2a7); outline-offset: 4px; border-radius: 4px; }
+/* 疊石 Cairn (SP-666): its own tab — the link, what each scope lets Cairn read / write, plans, trips pushed */
+#cairn h3 { margin: 16px 0 4px; }
+#cairn .cairn-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+.cairn-item { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 2px 6px; align-items: start;
+  padding: 8px 2px; border-top: 1px dashed var(--line); }
+.cairn-item > input { margin: 3px 0 0; }
+.cairn-item > .cairn-lock { color: var(--muted); font-size: 13px; line-height: 20px; text-align: center; }
+.cairn-item .cairn-what { font-weight: 600; font-size: 14px; overflow-wrap: anywhere; }
+.cairn-item .cairn-detail { grid-column: 2; margin: 0; overflow-wrap: anywhere; }
+.cairn-dir { display: inline-block; font-size: 11.5px; font-weight: 600; padding: 0 6px; border: 1px solid;
+  border-radius: 9px; margin-right: 6px; vertical-align: 1px; white-space: nowrap; }
+.cairn-dir.read { color: var(--accent); border-color: var(--accent); }
+.cairn-dir.write { color: var(--warn); border-color: var(--warn); }
+.cairn-tag { font-size: 12px; color: var(--muted); font-weight: 400; margin-left: 6px; white-space: nowrap; }
+#cairn-plan .kv { grid-template-columns: minmax(84px, max-content) minmax(0, 1fr); }
+#cairn-plan dd { overflow-wrap: anywhere; }
+ul.cairn-pushes { list-style: none; margin: 4px 0 0; padding: 0; }
+ul.cairn-pushes li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; padding: 7px 2px;
+  border-top: 1px dashed var(--line); font-size: 13.5px; }
+ul.cairn-pushes .nm { font-weight: 600; flex: 1 1 14em; min-width: 0; overflow-wrap: anywhere; }
+ul.cairn-pushes .nm.gone { font-weight: 400; color: var(--muted); }
+ul.cairn-pushes a { white-space: nowrap; }
 .sub b { font-size: 13px; }
 progress { width: 220px; height: 10px; }
 .log { max-height: 150px; overflow: auto; font: 12px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace;
@@ -194,6 +216,7 @@ details.fold > summary.ok, details.fold > summary .ok { color: var(--ok); }
     <button type="button" role="tab" id="tab-body" data-tab="body" data-i18n="settings.tabs.body">生理數據</button>
     <button type="button" role="tab" id="tab-data" data-tab="data" data-i18n="settings.tabs.data">資料同步</button>
     <button type="button" role="tab" id="tab-advanced" data-tab="advanced" data-i18n="settings.tabs.advanced">進階設定</button>
+    <button type="button" role="tab" id="tab-cairn" data-tab="cairn" data-i18n="settings.tabs.cairn" hidden>疊石 Cairn</button>
   </nav>
   <p class="meta tab-note" id="tab-note"></p>
   <section id="general">
@@ -381,8 +404,9 @@ details.fold > summary.ok, details.fold > summary .ok { color: var(--ok); }
     <details style="margin-top:6px"><summary class="meta" data-i18n="settings.thr.pz_h">功率區間（Palladino／Stryd，依目前 CP）</summary>
       <div id="thr-pz-plan-box" hidden>
         <p class="meta"><span id="thr-pz-plan-h"></span> <span class="badge" data-i18n="settings.thr.pz_in_use">課表用這張</span></p>
+        <p class="meta" id="thr-pz-plan-basis" hidden></p>
         <div class="tw"><table class="wt"><thead><tr><th data-i18n="settings.thr.pz_zone">區間</th><th data-i18n="settings.thr.pz_name">名稱</th>
-          <th>% CP</th><th>W</th></tr></thead>
+          <th id="thr-pz-plan-pct">% CP</th><th>W</th><th id="thr-pz-plan-dur" data-i18n="settings.thr.pz_dur" hidden>持續時間</th></tr></thead>
         <tbody id="thr-pz-plan"></tbody></table></div>
         <p class="meta" id="thr-pz-plan-src"></p>
       </div>
@@ -796,9 +820,10 @@ details.fold > summary.ok, details.fold > summary .ok { color: var(--ok); }
         <span class="meta" id="acct-analysis-msg" role="status"></span></div>
     </div>
     <!-- SP-329: 已連結的服務 (api/link.py) — another project of ours on the same Google account;
-         linked only here, by the person, and unlinked here (a consents row each) -->
+         linked only here, by the person, and unlinked here (a consents row each). 疊石 Cairn has its
+         own tab (SP-666, section#cairn below); only the other services would show here -->
     <div id="acct-links" hidden>
-      <h3 id="links" data-i18n="settings.acct.links_title">已連結的服務</h3>
+      <h3 id="acct-links-title" data-i18n="settings.acct.links_title">已連結的服務</h3>
       <p class="meta" data-i18n="settings.acct.links_intro">用同一個 Google 帳號登入的其他服務。連結後，對方可以讀下面列出的內容，不會讀你的活動、心率或其他健康資料。隨時可以在這裡解除連結，解除後對方就讀不到了。</p>
       <p class="meta" id="acct-links-ask" role="status" hidden></p>
       <div id="acct-links-list"></div>
@@ -809,6 +834,24 @@ details.fold > summary.ok, details.fold > summary .ok { color: var(--ok); }
     <p class="meta" id="acct-owner" hidden data-i18n="settings.acct.admin">站主帳號不能從網頁刪除。</p>
     <div class="row" id="acct-del-row"><button type="button" class="danger" id="acct-delete" data-i18n="settings.acct.delete">刪除帳號…</button>
       <span class="meta err-text" id="acct-msg" role="status"></span></div>
+  </section>
+
+  <!-- SP-666: 疊石 Cairn — its own tab, only in sign-in mode (GET /api/v1/account/links answers;
+       never the owner's app or the demo). #links: the anchor of every link_url Cairn has (SP-329,
+       SP-654); ?link=cairn[&allow=<scope>] opens this tab and highlights what is asked -->
+  <section id="cairn" hidden>
+    <h2 id="links" data-i18n="settings.cairn.title">疊石 Cairn</h2>
+    <p class="meta" data-i18n="settings.cairn.intro">疊石 Cairn 是我們的登山行程服務，用同一個 Google 帳號登入。連結後，Cairn 只能讀或寫下面列出的項目，不會讀你的活動、心率或其他健康資料。隨時可以在這裡關掉某一項或解除連結。</p>
+    <p class="meta" id="cairn-ask" role="status" hidden></p>
+    <div class="sub" id="cairn-status"></div>
+    <h3 data-i18n="settings.cairn.features_title">Cairn 能讀或寫什麼</h3>
+    <p class="meta" id="cairn-features-note"></p>
+    <div id="cairn-features"></div>
+    <h3 data-i18n="settings.cairn.plan_title">方案與每日次數</h3>
+    <div id="cairn-plan"></div>
+    <h3 data-i18n="settings.cairn.pushes_title">推過的行程</h3>
+    <div id="cairn-pushes"></div>
+    <p class="meta" id="cairn-msg" role="status"></p>
   </section>
 
   <dialog id="acct-dlg" aria-labelledby="acct-dlg-title">
@@ -1286,12 +1329,25 @@ function renderPz(r) {
   $("thr-pz-plan-box").hidden = !own;
   if (!own) return;
   $("thr-pz-plan-h").textContent = r.title;
-  $("thr-pz-plan").innerHTML = r.levels.map((z) => `<tr><td>${esc(z.id)}</td><td>${esc(z.name)}</td>
-    <td>${Math.round((z.lo || 0) * 100)}${z.hi ? "–" + Math.round(z.hi * 100) : "+"}%</td>
-    <td>${z.watts ? z.watts[0] + (z.watts[1] ? "–" + z.watts[1] : "+") : "–"}</td></tr>`).join("");
+  // SP-661: the 個人化區間 show % of the model's threshold power (as the reference tool does) and the durations above it
+  const pers = r.system === "personal";
+  const pc = (x) => { const v = Math.round(x * 1000) / 10; return Number.isInteger(v) ? String(v) : v.toFixed(1); };
+  const mmss = (s) => s == null ? "" : `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
+  $("thr-pz-plan-pct").textContent = pers ? t("settings.thr.pz_pct_model") : "% CP";
+  $("thr-pz-plan-dur").hidden = !pers;
+  $("thr-pz-plan").innerHTML = r.levels.map((z) => {
+    const p = pers && z.pct_model ? z.pct_model : [z.lo, z.hi];
+    const pct = pers ? `${pc(p[0] || 0)}${p[1] != null ? "–" + pc(p[1]) : "+"}%`
+      : `${Math.round((z.lo || 0) * 100)}${z.hi ? "–" + Math.round(z.hi * 100) : "+"}%`;
+    const dur = pers ? `<td>${z.dur ? (z.dur[0] != null ? mmss(z.dur[0]) + "–" : "≤ ") + mmss(z.dur[1]) : ""}</td>` : "";
+    return `<tr><td>${esc(z.id)}</td><td>${esc(z.name)}</td><td>${pct}</td>
+    <td>${z.watts ? z.watts[0] + (z.watts[1] ? "–" + z.watts[1] : "+") : "–"}</td>${dur}</tr>`;
+  }).join("");
   const b = r.basis;
-  $("thr-pz-plan-src").textContent = [r.source ? t("settings.thr.pz_src_plain", { src: r.source }) : "",
-    b ? t("settings.thr.pz_personal_basis", { w: Math.round(b.mftp || 0), date: b.date || "" }) : ""].filter(Boolean).join(" ");
+  $("thr-pz-plan-basis").hidden = !b;
+  $("thr-pz-plan-basis").textContent = b ? t("settings.thr.pz_personal_basis",
+    { w: Math.round(b.mftp || 0), date: b.date || "", from: b.from || "", days: b.days || 90 }) : "";
+  $("thr-pz-plan-src").textContent = r.source ? t("settings.thr.pz_src_plain", { src: r.source }) : "";
 }
 async function loadPz() {
   try { renderPz(await j(PZM)); } catch (e) { $("pz-model-note").textContent = t("settings.failed", { msg: e.message.slice(0, 80) }); }
@@ -2573,9 +2629,9 @@ async function loadAccount() {
   let me;
   try {
     const r = await fetch(`${ACCT}/me`);
-    if (!r.ok) return;                                      // the owner's app, the demo: no block
+    if (!r.ok) { cairnTab(null); return; }                  // the owner's app, the demo: no block, no Cairn tab
     me = await r.json();
-  } catch { return; }
+  } catch { cairnTab(null); return; }
   showAccount(me);
   loadLinks();
   // back from 「用 Google 確認身分」: ?reauth=ok | mismatch | failed | rate_limited
@@ -2617,8 +2673,10 @@ $("acct-ok").onclick = async () => {
     $("acct-dlg-msg").textContent = t("settings.acct.failed", { status: e.message.slice(0, 60) });
   } finally { b.removeAttribute("aria-busy"); b.disabled = false; }
 };
-// ---- 已連結的服務 (SP-329, api/link.py) ------------------------------------------------------
-// ?link=cairn: sent here by that project the first time it needs this account — its row asks
+// ---- 已連結的服務 (SP-329, api/link.py): the other services; 疊石 Cairn has its own tab (SP-666) --
+// ?link=<project>: sent here by that project the first time it needs this account — its row asks
+const linkMsg = (c) => $(c.id === "cairn" ? "cairn-msg" : "acct-links-msg");
+const linkAsk = (c) => $(c.id === "cairn" ? "cairn-ask" : "acct-links-ask");
 function linkRow(c) {
   const row = document.createElement("div");
   row.className = "sub link-row"; row.dataset.client = c.id;
@@ -2632,21 +2690,42 @@ function linkRow(c) {
   const ul = document.createElement("ul"); ul.className = "meta";
   for (const s of c.scopes || []) { const li = document.createElement("li"); li.textContent = s.text; ul.appendChild(li); }
   row.append(head, allows, ul);
+  // SP-654: features that ask on their own (links.FEATURES) — off until the person ticks them
+  const feats = c.features || [];
+  if (feats.length) {
+    const fh = document.createElement("p"); fh.className = "meta";
+    fh.textContent = t(c.linked ? "settings.acct.link_features" : "settings.acct.link_features_later", { name: c.name });
+    row.appendChild(fh);
+    for (const f of feats) {
+      const lab = document.createElement("label"); lab.className = "row link-feature"; lab.dataset.linkScope = f.scope;   // not data-scope: shell.js locks those (membership scopes)
+      const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = !!f.allowed; cb.disabled = !c.linked;
+      const tx = document.createElement("span");
+      tx.textContent = t("settings.acct.link_feature_allow", { name: c.name, text: f.text })
+        + (f.plan ? " " + t("settings.acct.link_feature_plan") : "");
+      cb.onchange = () => setFeature(c, f, cb);
+      lab.append(cb, tx); row.appendChild(lab);
+    }
+  }
   if (c.linked && c.remote && c.remote.plan) {
     const rp = document.createElement("p"); rp.className = "meta";
     rp.textContent = t("settings.acct.link_remote", { name: c.name, plan: c.remote.plan });
     row.appendChild(rp);
   }
   const act = document.createElement("div"); act.className = "row";
+  act.append(...linkButton(c));
+  row.appendChild(act);
+  return row;
+}
+// 同意並連結 / 解除連結 (or the link not open yet: the button off, why next to it)
+function linkButton(c) {
   const b = document.createElement("button"); b.type = "button";
   if (c.linked) { b.textContent = t("settings.acct.unlink_btn"); }
   else if (c.available) { b.textContent = t("settings.acct.link_btn"); b.className = "primary"; }
   else { b.textContent = t("settings.acct.link_btn"); b.disabled = true;
          const na = document.createElement("span"); na.className = "meta"; na.textContent = t("settings.acct.link_unavailable");
-         act.append(b, na); row.appendChild(act); return row; }
+         return [b, na]; }
   b.onclick = () => setLink(c, !c.linked, b);
-  act.appendChild(b); row.appendChild(act);
-  return row;
+  return [b];
 }
 async function setLink(c, want, b) {
   b.disabled = true;
@@ -2654,27 +2733,184 @@ async function setLink(c, want, b) {
     await j(`${ACCT}/links/${encodeURIComponent(c.id)}`, { method: "POST", headers: { "Content-Type": "application/json" },
                                                          body: JSON.stringify({ linked: want }) });
     await loadLinks();
-    $("acct-links-ask").hidden = true;
-    $("acct-links-msg").textContent = t(want ? "settings.acct.linked" : "settings.acct.unlinked", { name: c.name });
+    linkAsk(c).hidden = true;
+    linkMsg(c).textContent = t(want ? "settings.acct.linked" : "settings.acct.unlinked", { name: c.name });
   } catch (e) {
-    $("acct-links-msg").textContent = t("settings.acct.failed", { status: e.message.slice(0, 60) });
+    linkMsg(c).textContent = t("settings.acct.failed", { status: e.message.slice(0, 60) });
     b.disabled = false;
   }
 }
+async function setFeature(c, f, cb) {
+  cb.disabled = true;
+  try {
+    await j(`${ACCT}/links/${encodeURIComponent(c.id)}/scopes`, { method: "POST", headers: { "Content-Type": "application/json" },
+                                                                 body: JSON.stringify({ scope: f.scope, allowed: cb.checked }) });
+    f.allowed = cb.checked;
+    linkAsk(c).hidden = true;
+    const lab = cb.closest(".link-asked"); if (lab) lab.classList.remove("link-asked");
+    linkMsg(c).textContent = t(cb.checked ? "settings.acct.link_feature_on" : "settings.acct.link_feature_off",
+                               { name: c.name, text: f.text });
+  } catch (e) {
+    cb.checked = !cb.checked;
+    linkMsg(c).textContent = t("settings.acct.failed", { status: e.message.slice(0, 60) });
+  } finally { cb.disabled = false; }
+}
 async function loadLinks() {
   let r;
-  try { r = await j(`${ACCT}/links`); } catch { return; }
+  try { r = await j(`${ACCT}/links`); } catch { cairnTab(null); return; }
+  const all = r.clients || [];
+  const others = all.filter((c) => c.id !== "cairn");
   const list = $("acct-links-list");
-  list.replaceChildren(...(r.clients || []).map(linkRow));
-  $("acct-links").hidden = !(r.clients || []).length;
+  list.replaceChildren(...others.map(linkRow));
+  $("acct-links").hidden = !others.length;
+  cairnTab(all.find((c) => c.id === "cairn") || null);
   const ask = new URLSearchParams(location.search).get("link");
-  const c = ask && (r.clients || []).find((x) => x.id === ask);
+  const c = ask && others.find((x) => x.id === ask);
   if (c && !c.linked && c.available) {
     $("acct-links-ask").textContent = t("settings.acct.link_ask", { name: c.name });
     $("acct-links-ask").hidden = false;
     const row = list.querySelector(`[data-client="${CSS.escape(c.id)}"]`);
     if (row) { row.classList.add("link-asked"); row.scrollIntoView({ block: "center" }); }
   }
+  // ?link=<project>&allow=<scope>: the project asks for one feature (403 CONSENT_REQUIRED's link_url)
+  const want = new URLSearchParams(location.search).get("allow");
+  const f = c && c.linked && want && (c.features || []).find((x) => x.scope === want && !x.allowed);
+  if (f) {
+    $("acct-links-ask").textContent = t("settings.acct.link_feature_ask", { name: c.name, text: f.text });
+    $("acct-links-ask").hidden = false;
+    const lab = list.querySelector(`[data-client="${CSS.escape(c.id)}"] [data-link-scope="${CSS.escape(f.scope)}"]`);
+    if (lab) { lab.classList.add("link-asked"); lab.scrollIntoView({ block: "center" }); }
+  }
+}
+
+// ---- 疊石 Cairn (SP-666): its own tab — the link, what each scope lets Cairn read or write (the
+// features one switch each), the plans and Cairn's pushes a day, the races pushed (cairn_push).
+// Only when GET /account/links answers with Cairn (sign-in mode; never the owner's app / the demo)
+let CAIRN = null;
+const CAIRN_PLANS = ["guest", "free", "basic", "pro", "owner"];       // Cairn's plan ids (its PLAN_LABEL)
+function cel(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text != null) e.textContent = text;
+  return e;
+}
+function cairnTab(c) {
+  CAIRN = c;
+  $("tab-cairn").hidden = !c; $("cairn").hidden = !c;
+  if (!c) {
+    const on = document.querySelector('.tabs [aria-selected="true"]');
+    if (on && on.dataset.tab === "cairn") showTab("personal");
+    return;
+  }
+  drawCairn();
+  loadCairnPushes();
+  if (hashTab().tab === "cairn") tabFromHash();       // a Cairn link_url, #links, #cairn: the tab now that it is there
+  cairnAsk();
+}
+function drawCairn() {
+  const c = CAIRN;
+  const head = cel("div", "cairn-head");
+  head.append(cel("b", null, t("settings.cairn.status_label")),
+              cel("span", c.linked ? "ok-text" : "meta",
+                  c.linked ? t("settings.acct.link_on", { at: (c.at || "").slice(0, 10) }) : t("settings.acct.link_off")),
+              ...linkButton(c));
+  $("cairn-status").replaceChildren(head, cel("p", "meta", t(c.linked ? "settings.cairn.linked_note" : "settings.cairn.unlinked_note")));
+  // what linking gives (account, weather) first, then the features asked one by one
+  const items = [...(c.scopes || []).map((s) => ({ ...s, byLink: true })), ...(c.features || [])];
+  $("cairn-features-note").textContent = t(c.linked ? "settings.cairn.features_note" : "settings.cairn.features_note_off");
+  $("cairn-features").replaceChildren(...items.map(cairnItem));
+  drawCairnPlan();
+}
+function cairnItem(f) {
+  const c = CAIRN;
+  const box = cel(f.byLink ? "div" : "label", "cairn-item");
+  box.dataset.linkScope = f.scope;          // not data-scope: shell.js locks those (membership scopes)
+  let first;
+  if (f.byLink) {
+    first = cel("span", "cairn-lock", c.linked ? "✓" : "–"); first.setAttribute("aria-hidden", "true");
+  } else {
+    first = cel("input"); first.type = "checkbox"; first.checked = !!f.allowed; first.disabled = !c.linked;
+    first.onchange = () => setFeature(c, f, first);
+  }
+  const what = cel("span", "cairn-what");
+  what.append(cel("span", `cairn-dir ${f.kind === "write" ? "write" : "read"}`,
+                  t(f.kind === "write" ? "settings.cairn.dir_write" : "settings.cairn.dir_read")),
+              document.createTextNode(f.text));
+  if (f.byLink) what.append(cel("span", "cairn-tag", t("settings.cairn.by_link")));
+  else if (f.plan) what.append(cel("span", "cairn-tag", t("settings.acct.link_feature_plan")));
+  box.append(first, what, cel("p", "meta cairn-detail", f.detail || ""));
+  return box;
+}
+const cairnPlanName = (p) => CAIRN_PLANS.includes(p) ? t(`settings.cairn.cairn_plan_${p}`) : p;
+function drawCairnPlan() {
+  const c = CAIRN, here = c.plan_here || {}, rem = (c.linked && c.remote) || null;
+  const dl = cel("dl", "kv");
+  const add = (k, ...v) => { const dd = cel("dd"); dd.append(...v); dl.append(cel("dt", null, k), dd); };
+  const mine = [t(`settings.cairn.here_${here.role === "owner" ? "owner" : here.plan_ok ? "paid" : "free"}`)];
+  if (!here.plan_ok) {
+    mine.push(" " + t("settings.cairn.here_need"));
+    if (here.upgrade) { const a = cel("a", null, t("settings.cairn.see_plans")); a.href = "/plans"; mine.push(" ", a); }
+  }
+  add(t("settings.cairn.plan_here"), ...mine);
+  let theirs;
+  if (!c.linked) theirs = t("settings.cairn.cairn_after_link");
+  else if (!rem || !rem.plan) theirs = t("settings.cairn.cairn_unknown");
+  else theirs = cairnPlanName(rem.plan) + (rem.plan_expires_at ? " " + t("settings.cairn.until", { at: rem.plan_expires_at.slice(0, 10) }) : "");
+  add(t("settings.cairn.plan_cairn"), theirs);
+  let per;
+  if (rem && "push_per_day" in rem) {
+    per = rem.push_per_day == null ? t("settings.cairn.per_day_unlimited")
+      : rem.push_per_day > 0 ? t("settings.cairn.per_day", { n: rem.push_per_day })
+      : t("settings.cairn.per_day_none", { plan: cairnPlanName(rem.plan) });
+  } else per = t("settings.cairn.per_day_table");
+  add(t("settings.cairn.per_day_label"), per);
+  $("cairn-plan").replaceChildren(dl, cel("p", "meta", t("settings.cairn.plan_note")));
+}
+async function loadCairnPushes() {
+  const box = $("cairn-pushes");
+  let r;
+  try { r = await j(`${ACCT}/links/cairn/pushes`); }
+  catch (e) { box.replaceChildren(cel("p", "meta err-text", t("settings.acct.failed", { status: e.message.slice(0, 60) }))); return; }
+  const list = r.pushes || [];
+  if (!list.length) {
+    const p = cel("p", "meta", t("settings.cairn.pushes_none") + " ");
+    const a = cel("a", null, t("settings.cairn.pushes_where")); a.href = "/api/v1/racepower/page";
+    p.append(a);
+    box.replaceChildren(p);
+    return;
+  }
+  const ul = cel("ul", "cairn-pushes");
+  for (const x of list) {
+    const li = cel("li"); li.dataset.event = x.event_id;
+    li.append(cel("span", x.gone ? "nm gone" : "nm", x.gone ? t("settings.cairn.push_gone") : (x.name || x.event_id)));
+    if (x.date) li.append(cel("span", "meta", t("settings.cairn.push_race_date", { date: x.date })));
+    li.append(cel("span", "meta", t("settings.cairn.push_at", { at: (x.at || "").slice(0, 16) })));
+    const a = cel("a", null, t("settings.cairn.open")); a.href = x.url; a.target = "_blank"; a.rel = "noopener";
+    li.append(a);
+    ul.append(li);
+  }
+  box.replaceChildren(cel("p", "meta", t("settings.cairn.pushes_intro")), ul);
+}
+// ?link=cairn[&allow=<scope>] (Cairn's link_url, SP-329 / SP-654): what it asks for, highlighted
+function cairnAsk() {
+  const q = new URLSearchParams(location.search), c = CAIRN;
+  if (!c || q.get("link") !== "cairn") return;
+  document.querySelectorAll("#cairn .link-asked").forEach((e) => e.classList.remove("link-asked"));
+  const want = q.get("allow");
+  const f = want && (c.features || []).find((x) => x.scope === want);
+  const item = f && $("cairn-features").querySelector(`[data-link-scope="${CSS.escape(f.scope)}"]`);
+  let at = null, msg = "";
+  if (!c.linked && c.available) {
+    at = $("cairn-status");
+    msg = f ? t("settings.cairn.ask_link_then", { name: c.name, text: f.text }) : t("settings.acct.link_ask", { name: c.name });
+    if (item) item.classList.add("link-asked");
+  } else if (c.linked && f && !f.allowed) {
+    at = item;
+    msg = t("settings.acct.link_feature_ask", { name: c.name, text: f.text });
+  }
+  $("cairn-ask").textContent = msg;
+  $("cairn-ask").hidden = !msg;
+  if (at) { at.classList.add("link-asked"); at.scrollIntoView({ block: "center" }); }
 }
 $("acct-analysis-btn").onclick = async () => {
   const want = !(acctMe && acctMe.analysis);
@@ -2688,12 +2924,15 @@ $("acct-analysis-btn").onclick = async () => {
 
 // ---- 分頁 (SP-213) ------------------------------------------------------------------------
 // which tab each section is on; a section not listed goes to 進階設定. A URL hash picks the
-// tab: #body … or a section / element id (#sync, #thresholds, #badfiles: its tab, scrolled to)
+// tab: #body … or a section / element id (#sync, #thresholds, #badfiles: its tab, scrolled to).
+// 疊石 Cairn (SP-666): sign-in mode only — its button stays hidden otherwise (cairnTab), and a
+// hidden tab is never shown (個人資料 instead)
 const TABS = {
   personal: ["general", "sport", "map", "account"],
   body: ["hr", "thresholds", "power"],
   data: ["sync", "weightsync", "backup", "archive", "device", "calendar"],
   advanced: ["mode", "calib", "fixes", "debugapi", "upstream"],
+  cairn: ["cairn"],
 };
 const TAB_OF = Object.fromEntries(Object.entries(TABS).flatMap(([k, ids]) => ids.map((id) => [id, k])));
 const tabOf = (sec) => TAB_OF[sec.id] || "advanced";
@@ -2703,13 +2942,18 @@ document.querySelectorAll("main > section").forEach((sec) => {
 });
 tabBtns().forEach((b) => b.setAttribute("aria-controls",
   [...document.querySelectorAll("main > section")].filter((sec) => tabOf(sec) === b.dataset.tab && sec.id).map((sec) => sec.id).join(" ")));
+const tabHidden = (tab) => { const b = $(`tab-${tab}`); return !b || b.hidden; };
 function showTab(tab, focus) {
-  if (!TABS[tab]) tab = "personal";
+  if (!TABS[tab] || tabHidden(tab)) tab = "personal";
   document.querySelectorAll("main > section").forEach((sec) => sec.classList.toggle("tab-off", tabOf(sec) !== tab));
   tabBtns().forEach((b) => {
     const on = b.dataset.tab === tab;
     b.setAttribute("aria-selected", on ? "true" : "false"); b.tabIndex = on ? 0 : -1;
     if (on && focus) b.focus();
+    // a phone's tab bar scrolls sideways (5 tabs in English): the selected one in view, the page not moved
+    const bar = b.parentElement;
+    if (on && (b.offsetLeft < bar.scrollLeft || b.offsetLeft + b.offsetWidth > bar.scrollLeft + bar.clientWidth))
+      bar.scrollLeft = Math.max(0, b.offsetLeft - bar.offsetLeft - 8);
   });
   tabNote();
 }
@@ -2762,13 +3006,19 @@ function applyLevel() {
   if (RACE_R) renderRace(RACE_R);
   drawSport();
 }
-function tabFromHash() {
+// the tab the URL asks for: Cairn's link_url (?link=cairn[&allow=…]#links) its tab whatever the hash
+function hashTab() {
   const h = decodeURIComponent(location.hash.slice(1));
-  if (TABS[h]) { showTab(h); return; }
+  if (new URLSearchParams(location.search).get("link") === "cairn") return { tab: "cairn", el: $("links") };
+  if (TABS[h]) return { tab: h, el: null };
   const el = h ? document.getElementById(h) : null;
   const sec = el && el.closest("main > section");
-  showTab(sec ? tabOf(sec) : "personal");
-  if (sec) el.scrollIntoView();
+  return sec ? { tab: tabOf(sec), el } : { tab: "personal", el: null };
+}
+function tabFromHash() {
+  const { tab, el } = hashTab();
+  showTab(tab);
+  if (el && !tabHidden(tab)) el.scrollIntoView();
 }
 document.querySelector(".tabs").addEventListener("click", (e) => {
   const b = e.target.closest('[role="tab"]'); if (!b) return;
@@ -2787,6 +3037,9 @@ document.querySelector(".tabs").addEventListener("keydown", (e) => {
   history.replaceState(null, "", "#" + b.dataset.tab);
 });
 window.addEventListener("hashchange", tabFromHash);
+// sign-in mode (the inlined session's `login`; never the owner's app or the demo): the Cairn tab is
+// shown before GET /account/links answers, so a link_url lands on it at once (cairnTab confirms)
+if (window.TRC_SESSION && TRC_SESSION.login && TRC_SESSION.login.signed_in) $("tab-cairn").hidden = false;
 tabFromHash();
 foldQ();
 

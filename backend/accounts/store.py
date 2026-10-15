@@ -25,7 +25,9 @@ written on sign-in / sign-up.
               given again in 設定, SP-386 — the terms version and documents copied from the last
               row). The analysis state is the last such row's. Action "link" / "unlink" (SP-329): the
               user let another project (`client`, e.g. "cairn") use their account here, or took it
-              back in 設定; `documents` holds {"scopes": [...]} granted then. The terms and analysis
+              back in 設定; `documents` holds {"scopes": [...]} granted then. Action "allow" /
+              "disallow" (SP-654): one feature of a linked project (`documents` {"scopes": [scope]})
+              switched on / off in 設定, counted only after the last "link". The terms and analysis
               readers skip these rows
   oauth_states  a Google sign-in in progress (SP-58): sha256 of the state, sha256 of the
               browser's binding cookie, the nonce, the PKCE verifier, where to go back; 10 minutes,
@@ -952,6 +954,37 @@ def link_state(uid: int, client: str) -> Optional[dict]:
     except (ValueError, AttributeError):
         scopes = ()
     return {"linked": r["action"] == "link", "at": r["accepted_at"], "scopes": scopes}
+
+
+def record_link_scope(uid: int, client: str, scope: str, allowed: bool) -> None:
+    """One feature of a linked project allowed or no longer (SP-654: each feature asks on its own,
+    links.FEATURES): a consents row, action "allow" / "disallow", client, documents {"scopes":
+    [scope]}; the last terms version and analysis state copied like record_link."""
+    import json
+    init()
+    with _LOCK, connect() as con:
+        con.execute("BEGIN IMMEDIATE")
+        last = con.execute(f"SELECT terms_version, analysis FROM consents WHERE user_id = ? AND {_TERMS_ROWS} "
+                           "ORDER BY id DESC LIMIT 1", (int(uid),)).fetchone()
+        con.execute("INSERT INTO consents(user_id, terms_version, documents, analysis, accepted_at, action, client) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (int(uid), last[0] if last else "", json.dumps({"scopes": [scope]}),
+                     int(last[1]) if last else 0, _iso(_now()), "allow" if allowed else "disallow", client))
+
+
+def link_scope_allowed(uid: int, client: str, scope: str) -> bool:
+    """The feature `scope` of `client` allowed since the last link: the last allow / disallow row
+    for it is an "allow" newer than the last link row (linking again asks again)."""
+    init()
+    with connect() as con:
+        lk = con.execute("SELECT max(id) FROM consents WHERE user_id = ? AND client = ? AND action = 'link'",
+                         (int(uid), client)).fetchone()[0]
+        if lk is None:
+            return False
+        r = con.execute("SELECT action FROM consents WHERE user_id = ? AND client = ? AND id > ? "
+                        "AND action IN ('allow', 'disallow') AND json_extract(documents, '$.scopes[0]') = ? "
+                        "ORDER BY id DESC LIMIT 1", (int(uid), client, int(lk), scope)).fetchone()
+    return bool(r and r[0] == "allow")
 
 
 def consents(uid: int) -> list[dict]:

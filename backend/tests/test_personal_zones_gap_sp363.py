@@ -1,7 +1,7 @@
 """SP-363 completion (問答 Q3-1 (a)+(c), Q2-3, Q3-2; the user 2026-10-15):
 - the 個人化區間 stay on the model's threshold power; when it is more than GAP_WARN (10 %) away from the
   課表's CP the settings page says so (engine/power_zone_plan.gap_warning, api/plan.power_zones_view);
-- the nine level names are the ones the user settled;
+- the level names are the ones the user settled (ten since SP-661, the running table);
 - the comparison with WKO5's own numbers: the skeleton reads a fixture the user writes and skips
   without it (backend/tests/realdata/fixtures/personal_levels_wko5.json).
 Synthetic only."""
@@ -32,7 +32,8 @@ def _personal(cp: float, mftp: float = 250.0) -> dict:
 
 def test_the_base_stays_the_model_threshold_power(monkeypatch):
     """(a): the levels are fractions of the model's FTP whatever the 課表's CP — the CP only writes them
-    as % CP (the demo: model FTP 198 W, CP 260 W → the threshold level 188–208 W, not 247–273)."""
+    as % CP (the demo: model FTP 198 W, CP 260 W → the threshold level 188–202 W, not 247–265; SP-661:
+    running levels, 95–102 %)."""
     from backend.engine.core_stub import core_included
     if not core_included():
         pytest.skip("needs the calculation core")
@@ -44,8 +45,8 @@ def test_the_base_stays_the_model_threshold_power(monkeypatch):
             return {"params": p, "pmax": 700.0, "tte": 2400.0, "mftp": 198.0, "date": dt.date(2026, 9, 1)}
     monkeypatch.setattr(PZP, "setting", lambda user_id=1: "personal")
     m = PZP.plan_model(DS(), dt.date(2026, 9, 30), 260.0)
-    lo, hi = m["levels"][4][2:]
-    assert (round(lo * 260), round(hi * 260)) == (188, 208)
+    lo, hi = m["levels"][5][2:]
+    assert (round(lo * 260), round(hi * 260)) == (188, 202)
     w = PZP.gap_warning(m, 260.0)
     assert "198" in w and "260" in w and "24%" in w
 
@@ -93,12 +94,13 @@ def test_the_warning_in_english_has_no_wko5_words():
 # ---------------------------------------------------------------------------
 
 def test_the_level_names_are_the_ones_the_user_settled():
-    assert PZP.PERSONAL_NAMES == ("恢復", "耐力", "節奏", "甜蜜點", "閾值", "閾值以上（VO2max）", "無氧容量",
-                                  "無氧衝刺", "最大功率")
+    """SP-363 Q2-3's style, ten for the running table (SP-661)."""
+    assert PZP.PERSONAL_NAMES == ("恢復", "暖身", "輕鬆有氧", "耐力", "準閾值", "閾值", "超閾值（VO2max）",
+                                  "無氧容量", "無氧衝刺", "最大功率")
     en = json.loads((ROOT / "backend" / "i18n" / "locales" / "en.json").read_text("utf-8"))
-    assert [en[n] for n in PZP.PERSONAL_NAMES] == ["Recovery", "Endurance", "Tempo", "Sweet spot", "Threshold",
-                                                   "Above threshold (VO2max)", "Anaerobic capacity",
-                                                   "Anaerobic sprint", "Max power"]
+    assert [en[n] for n in PZP.PERSONAL_NAMES] == ["Recovery", "Warm-up", "Easy aerobic", "Endurance",
+                                                   "Sub-threshold", "Threshold", "Supra-threshold (VO2max)",
+                                                   "Anaerobic capacity", "Anaerobic sprint", "Max power"]
 
 
 # ---------------------------------------------------------------------------
@@ -110,13 +112,13 @@ def _wko5() -> dict:
         pytest.skip(f"no WKO5 level numbers yet: write {WKO5_FIXTURE.relative_to(ROOT)} from WKO5's screen "
                     "(backend/tests/realdata/test_real_personal_levels.py's doc)")
     ref = json.loads(WKO5_FIXTURE.read_text("utf-8"))
-    assert len(ref["levels"]) == 9
+    assert len(ref["levels"]) == 10           # WKO5's running iLevels (SP-661)
     return ref
 
 
 def test_wko5_levels_up_to_threshold_are_its_threshold_power_times_the_fixed_fractions():
-    """Levels 1–5 need only WKO5's modelled threshold power (its 「mftp」 on the same screen, else the
-    one its own level 5 implies): 0.56 / 0.76 / 0.88 / 0.95 / 1.05 × it, within 1 W — the constants and
+    """Levels 1–6 need only WKO5's modelled threshold power (its 「mftp」 on the same screen, else the
+    one its own level 5 implies): 0.65 / 0.75 / 0.801 / 0.88 / 0.95 / 1.02 × it, within 1 W — the constants and
     which end is inclusive."""
     from backend.engine.core_stub import core_included
     if not core_included():
@@ -132,7 +134,7 @@ def test_wko5_levels_up_to_threshold_are_its_threshold_power_times_the_fixed_fra
 
 
 def test_wko5_levels_from_its_model_parameters():
-    """All nine from the model's parameters, when the fixture carries them (「params」: FRC J, τ1, mFTP,
+    """All ten from the model's parameters, when the fixture carries them (「params」: FRC J, τ1, mFTP,
     τ2, TTE, D — e.g. from a WKO5 table chart of the model's parameters); skips without them."""
     from backend.engine.core_stub import core_included
     if not core_included():

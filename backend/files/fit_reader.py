@@ -14,6 +14,11 @@ from typing import Optional
 
 import numpy as np
 
+# SP-667 (推估): the longest gap between two readings the 1-s resample bridges linearly — a
+# smart-recording step (a few seconds); a longer gap is a pause or a dropout and stays empty
+# (power 0, the other channels NaN), as WKO5 / the FIT dataset leave it (fit_to_channels).
+MAX_BRIDGE_S = 5.0
+
 
 @dataclass
 class RawWorkout:
@@ -372,11 +377,24 @@ def _build_raw_workout(
     total_s = int(np.ceil(raw_time[-1]))
     uniform_time = np.arange(0, total_s + 1, dtype=np.float64)
 
-    def resample(values: np.ndarray) -> np.ndarray:
+    def resample(values: np.ndarray, empty: float = np.nan) -> np.ndarray:
+        """SP-667: linear between readings at most MAX_BRIDGE_S apart; `empty` before the first
+        reading, after the last one and inside a longer gap (a pause, a dropout). np.interp alone
+        carried the first value back over the seconds before a sensor connected: a Stryd start
+        spike became an 8–12 s plateau in the mean-max (SP-665). A channel with no reading at
+        all stays zeros (has_power / has_hr … False)."""
         valid = ~np.isnan(values)
         if not np.any(valid):
             return np.zeros(len(uniform_time))
-        return np.interp(uniform_time, raw_time[valid], values[valid])
+        t, v = raw_time[valid], values[valid]
+        out = np.interp(uniform_time, t, v)
+        i = np.searchsorted(t, uniform_time, side="right")      # t[i-1] <= second < t[i]
+        prev = t[np.maximum(i - 1, 0)]
+        nxt = t[np.minimum(i, len(t) - 1)]
+        within = (uniform_time >= t[0]) & (uniform_time <= t[-1])
+        keep = within & ((uniform_time == prev) | (nxt - prev <= MAX_BRIDGE_S))
+        out[~keep] = empty
+        return out
 
     if start_time is None and hasattr(records[0]["timestamp"], "replace"):
         start_time = records[0]["timestamp"]
@@ -387,7 +405,7 @@ def _build_raw_workout(
         start_time=start_time,
         device=device,
         time_s=uniform_time,
-        power_w=resample(power),
+        power_w=resample(power, 0.0),            # no power = 0 W, as the FIT dataset / WKO5 read it
         heart_rate_bpm=resample(hr),
         cadence_rpm=resample(cadence),
         distance_m=resample(distance),

@@ -969,6 +969,7 @@ class ShareIn(PlanIn):
     share_title: Optional[str] = Field(None, max_length=80)
     include_weight: bool = False
     expires_days: Optional[int] = None
+    include_cairn_curve: bool = False       # SP-653: the 時間曲線 for 疊石 Cairn, only when ticked
 
 
 @router.post("/share")
@@ -978,9 +979,17 @@ def create_share(body: ShareIn):
     req = {"date": body.date, "start_time": body.start_time, "stops": [x.model_dump() for x in body.stops]}
     title = body.share_title or p.get("course_name") or \
         f"{ {'road': '路跑', 'trail': '越野', 'baiyue': '百岳'}.get(body.type, '')} {p['summary']['km']:.1f} km"
+    curve = None
+    if body.include_cairn_curve:
+        from backend.engine.racepower import cairn_curve as CC
+        try:
+            curve = CC.for_plan(p, body.course.event_id if body.course else None, body.start_time,
+                                computed_at=SH._now().isoformat())
+        except CC.CurveError as e:
+            raise HTTPException(400, str(e))
     try:
         snap = SH.snapshot(p, title=title, include_weight=body.include_weight, expires_days=body.expires_days,
-                           request=req)
+                           request=req, cairn_curve=curve)
         sid = SH.save(snap)
     except SH.ShareError as e:
         raise HTTPException(400, str(e))
@@ -1247,6 +1256,22 @@ def get_saved(eid: str):
         return {"saved": RC.get(eid)}
     except RC.RaceCalcError as e:
         raise HTTPException(400, str(e))
+
+
+@router.get("/saved/{eid}/cairn-curve")
+def saved_cairn_curve(eid: str, download: bool = False):
+    """SP-653: the 時間曲線 for 疊石 Cairn (cairn-curve v1, docs/spec/cairn-curve.md) of the event's saved
+    calculation on its stored GPX. 404 NO_RESULT; 409 NO_GPX / GPX_CHANGED / GPX_MISMATCH / NO_TRACK."""
+    from fastapi.responses import JSONResponse
+    from backend.engine.racepower import cairn_curve as CC
+    try:
+        curve = CC.for_saved(eid)
+    except CC.CurveError as e:
+        raise HTTPException(e.status, {"code": e.code, "message": str(e)})
+    headers = {"Cache-Control": "no-store"}
+    if download:
+        headers["Content-Disposition"] = f'attachment; filename="cairn-curve-{eid}.json"'
+    return JSONResponse(curve, headers=headers)
 
 
 @router.put("/saved/{eid}")

@@ -50,7 +50,7 @@ def env(monkeypatch, tmp_path):
     monkeypatch.setattr(planning.Plan, "load", classmethod(lambda cls, *a, **k: PLAN))
     monkeypatch.setattr(WX, "HOME", tmp_path / "home")          # no synced FIT folder for cptest.curves
     fitted = []
-    monkeypatch.setattr(A, "pd_model", lambda ds, day, runs, ref, any_power=False:
+    monkeypatch.setattr(A, "pd_model", lambda ds, day, runs, ref, any_power=False, stryd_only=False:
                         fitted.append(list(runs)) or {"mftp": MFTP, "frc": 15000.0, "n_points": 40})
     monkeypatch.setattr(TH, "estimate", lambda ds, day, cp_of=None: {})
     return fitted

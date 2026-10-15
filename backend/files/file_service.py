@@ -166,8 +166,10 @@ def elevation_gain(raw) -> Optional[float]:
             return float(ta)
         except (TypeError, ValueError):
             pass
-    if len(raw.altitude_m) > 1:
-        diffs = np.diff(raw.altitude_m)
+    alt = np.asarray(raw.altitude_m, float)
+    alt = alt[~np.isnan(alt)]                 # SP-667: no altitude across a pause (fit_reader)
+    if len(alt) > 1:
+        diffs = np.diff(alt)
         return round(float(np.sum(diffs[diffs > 0])), 1)
     return None
 

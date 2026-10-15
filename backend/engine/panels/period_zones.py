@@ -406,7 +406,7 @@ def _zone_rows(items: list[dict], m: dict, kind: str) -> tuple[list[dict], float
     elif m["basis"] == "coros":
         from backend.engine import hr_profile as HP
         zs = [(i, n, None, None) for i, n in zip(HP.ZONE_IDS, HP.ZONE_NAMES)]
-    elif m["basis"] == "personal":          # SP-363: the 個人化區間's 9 levels (no model in the period)
+    elif m["basis"] == "personal":          # SP-363: the 個人化區間's levels (10 since SP-661; no model in the period)
         from backend.engine import power_zone_plan as PZP
         zs = [(str(i + 1), n, None, None) for i, n in enumerate(PZP.PERSONAL_NAMES)]
     else:                                   # seiler3: the names _bounds gives its rows
